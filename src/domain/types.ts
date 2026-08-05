@@ -1,0 +1,252 @@
+// Entidades núcleo — Sprint 1 (mundo/fundación) + Sprint 2 (población/construcción/almacén)
+// + Sprint 3 (economía) + Sprint 4 (estructura política) + Sprint 5 (guerra) + Sprint 6 (cierre).
+// Ver Consideraciones/Plan_Implementacion_Tecnica.md para el modelo de datos completo.
+// Murallas/torres/puerto (edificios estratégicos de colocación manual, Doc 4.2) quedan fuera de Fase 0.
+
+export interface Point {
+  x: number;
+  y: number;
+}
+
+export type RecursoTipo =
+  | 'madera'
+  | 'piedra'
+  | 'trigo'
+  | 'cobre'
+  | 'estano'
+  | 'oro'
+  | 'livestock';
+
+export type Rareza = 'comun' | 'intermedio' | 'raro';
+
+/** Cargos de nivel Facción (Doc 2.2): Rey (vasallaje, políticas superiores) y Embajador (designado por el Rey). */
+export interface Faccion {
+  id: string;
+  nombre: string;
+  reyId: string | null;
+  embajadorId: string | null;
+  /** Sube según actividad de la Facción (Doc 1.7) — ver NIVEL_FACCION en constants.ts para el criterio placeholder. */
+  nivel: number;
+  /** Ciudadanía (Doc 2.5): jugadores con ciudadanía en ESTA Facción (no se extiende a toda la Liga). */
+  ciudadanosIds: string[];
+  /** Score de confiabilidad PÚBLICO -100..+100 (Doc 2.7), decae hacia 0 sin eventos nuevos. */
+  reputacion: number;
+}
+
+/** 3 clases de población NPC — Doc 4.1. Los Jugadores son una categoría separada. */
+export interface Poblacion {
+  pesants: number;
+  artesanos: number;
+  nobleza: number;
+}
+
+export interface RecursoAlmacenado {
+  cantidad: number;
+  capacidad: number;
+}
+
+export type EdificioTipo =
+  | 'vivienda'
+  | 'granja'
+  | 'cantera'
+  | 'lenera'
+  | 'almacen'
+  | 'taller'
+  | 'mina'
+  | 'minaCobre'
+  | 'fundicion'
+  | 'granFundicion';
+
+export type EstadoEdificio = 'en_cola' | 'en_construccion' | 'activo';
+
+export interface Edificio {
+  id: string;
+  tipo: EdificioTipo;
+  posicion: Point;
+  estado: EstadoEdificio;
+  ticksRestantes: number;
+  /** Nodo de recurso o zona de bosque que explota (cantera/lenera), si aplica. */
+  fuenteId?: string;
+}
+
+/** Cargos de nivel asentamiento (Doc 2.2), uno de cada, designados por el Gobernador salvo él mismo. */
+export interface CargosAsentamiento {
+  gobernadorId: string | null;
+  tesoreroId: string | null;
+  generalId: string | null;
+  maestroObrasId: string | null;
+  sacerdoteId: string | null;
+}
+
+export type TropaTier = 1 | 2 | 3 | 4;
+export type OrigenTropa = 'pesants' | 'artesanos' | 'nobleza';
+
+/**
+ * Escuadrón (Doc 5.1/5.4): el jugador lidera una tropa de unidades NPC, nunca combate individualmente.
+ * El SQUAD (nombre, veteranía) persiste aunque `cantidad` llegue a 0 (aniquilado) — se puede rellenar reclutando
+ * más del mismo origen en el asentamiento. PERMADEATH: las bajas reducen `cantidad` de forma permanente.
+ */
+export interface Escuadron {
+  id: string;
+  nombre: string;
+  origen: OrigenTropa;
+  tier: TropaTier;
+  cantidad: number;
+  /** Sube combatiendo (carril combate real, Doc 4.1/5.5); Nobleza no la usa (progresión plana). */
+  veterania: number;
+  /** Moral 0-100 por suministro de raciones (Doc 5.4); a 0 hay deserción permanente continua. */
+  moral: number;
+  /** Debuff temporal tras perder en mundo abierto (Doc 5.2.2), penaliza poder de combate mientras dura. */
+  heridoHastaTick?: number;
+}
+
+export interface Asentamiento {
+  id: string;
+  faccionId: string;
+  jugadoresFundadoresIds: string[];
+  posicion: Point;
+  nivel: number;
+  fundadoEnTick: number;
+  /** Radio "potencial" de la zona de influencia si no hubiera fronteras vecinas; crece con el tiempo/nivel. */
+  radioPotencial: number;
+  poblacion: Poblacion;
+  /** Recurso -> cantidad almacenada y capacidad actual (Doc 4.3). */
+  almacen: Record<string, RecursoAlmacenado>;
+  edificios: Edificio[];
+  cargos: CargosAsentamiento;
+  /** Jugadores que compraron casa aquí (Doc 2.5), vía de ciudadanía distinta de fundar. */
+  casasCompradas: string[];
+  politicasActivas: PoliticaActiva[];
+  escuadrones: Escuadron[];
+  /** Mantenimiento (Doc 4.5): medidor 0-100, empieza en 100; a 0 el asentamiento cae en ruinas (se elimina). */
+  medidorMantenimiento: number;
+}
+
+export interface ZonaInfluencia {
+  asentamientoId: string;
+  /** Polígono resultante de recortar el círculo potencial contra las fronteras con asentamientos rivales. */
+  poligono: Point[];
+}
+
+export interface NodoRecurso {
+  id: string;
+  tipo: RecursoTipo;
+  rareza: Rareza;
+  posicion: Point;
+  cantidad: number;
+}
+
+/** Bosques: representados como zonas (polígono/círculo), no puntos — fuente de madera. */
+export interface ZonaBosque {
+  id: string;
+  centro: Point;
+  radio: number;
+  densidad: number; // 0-1, afecta rendimiento de madera
+}
+
+export interface WorldConfig {
+  ancho: number;
+  alto: number;
+  seed: number;
+}
+
+export interface World {
+  config: WorldConfig;
+  recursos: NodoRecurso[];
+  bosques: ZonaBosque[];
+  /** Campo de fertilidad continuo, consultable en cualquier punto (0-1). Usado por Granjas (Sprint 2) para trigo. */
+  fertilidadEn: (p: Point) => number;
+}
+
+// --- Sprint 3: Economía (Doc 3) ---
+
+export type CaravanaTipo = 'comercial' | 'militar' | 'construccion' | 'contrabando';
+
+export interface Caravana {
+  id: string;
+  tipo: CaravanaTipo;
+  origenAsentamientoId: string;
+  destinoAsentamientoId: string;
+  contenido: Record<string, number>;
+  posicionActual: Point;
+  /** 0-1, avance a lo largo de la ruta origen->destino. */
+  progreso: number;
+  /** Acuerdo de trueque que generó esta caravana (Doc 3.2) — indica a qué lado del acuerdo pertenece. */
+  origenAcuerdoId?: string;
+  ladoAcuerdo?: 'A' | 'B';
+}
+
+/**
+ * Contrato marco abierto en el tiempo entre dos asentamientos (Doc 3.2). "Funciona en ambas direcciones":
+ * A se compromete a entregar cantidadTotalA de recursoA, B se compromete a entregar cantidadTotalB de recursoB;
+ * cada lado despacha sus propias caravanas de forma independiente hasta cumplir su cupo o expirar el plazo.
+ */
+export interface AcuerdoTrueque {
+  id: string;
+  asentamientoAId: string;
+  asentamientoBId: string;
+  recursoA: string;
+  recursoB: string;
+  cantidadTotalA: number;
+  cantidadTotalB: number;
+  cantidadEntregadaA: number;
+  cantidadEntregadaB: number;
+  creadoEnTick: number;
+  expiraEnTick: number;
+  estado: 'activo' | 'cumplido' | 'expirado';
+}
+
+/** Orden de compra/venta en el Mercado de un asentamiento, pagada en oro (Doc 3.3/3.4). */
+export interface OrdenMercado {
+  id: string;
+  asentamientoId: string;
+  tipo: 'compra' | 'venta';
+  recurso: string;
+  cantidad: number;
+  cantidadCumplida: number;
+  precioUnitario: number;
+  creadoEnTick: number;
+  estado: 'activa' | 'cumplida';
+}
+
+// --- Sprint 4: Estructura política (Doc 2) ---
+
+export type CargoTipo = 'gobernador' | 'tesorero' | 'general' | 'maestroObras' | 'sacerdote';
+
+/** Política activa en un asentamiento (Doc 4.4): slots/pools por cargo, duración fija, no cancelable antes de tiempo. */
+export interface PoliticaActiva {
+  id: string;
+  politicaId: string;
+  cargo: CargoTipo;
+  activadaEnTick: number;
+  expiraEnTick: number;
+}
+
+/**
+ * Vasallaje o Alianza ENTRE FACCIONES (nunca entre asentamientos sueltos, Doc 0/2.4). En vasallaje,
+ * faccionAId es la Facción señora y faccionBId la vasalla; en alianza la relación es simétrica.
+ * La Liga (Doc 0) no se guarda como entidad propia: se DERIVA de la red de relaciones activas (ver engine/liga.ts).
+ */
+export interface RelacionPolitica {
+  id: string;
+  tipo: 'vasallaje' | 'alianza';
+  faccionAId: string;
+  faccionBId: string;
+  /** Tributo periódico del vasallo al señor (Doc 2.4), solo aplica a vasallaje. */
+  tributo?: { recurso: string; cantidadPorTick: number };
+  creadoEnTick: number;
+  estado: 'activa' | 'rota';
+}
+
+// --- Sprint 6: Cierre (Doc 2.7/2.9, mantenimiento Doc 4.5) ---
+
+/**
+ * Título dinámico de PRESTIGIO (Doc 2.9): sin beneficio mecánico, recalculado periódicamente según poder
+ * relativo. Se deriva bajo demanda (no se persiste como estado propio) — ver engine/titulos.ts.
+ */
+export interface Titulo {
+  nombre: string;
+  /** Facción (o, según el título, jugador) que lo ostenta actualmente. */
+  poseedorId: string;
+  valorMetrica: number;
+}

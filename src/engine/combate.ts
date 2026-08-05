@@ -1,0 +1,207 @@
+import type { Asentamiento, Caravana, Escuadron, Faccion, RelacionPolitica } from '../domain/types';
+import { MILITAR, REPUTACION, TROPA_CATALOGO } from '../constants';
+import { agregarRecurso } from './almacen';
+import { edificiosPorTipoYEstado } from './asentamientoQuery';
+import { ascenderTierSiCorresponde } from './tropas';
+import { aplicarAjustesReputacion } from './reputacion';
+
+function estanAliadas(relaciones: RelacionPolitica[], aId: string, bId: string): boolean {
+  return relaciones.some(
+    (r) => r.estado === 'activa' && r.tipo === 'alianza' && ((r.faccionAId === aId && r.faccionBId === bId) || (r.faccionAId === bId && r.faccionBId === aId))
+  );
+}
+
+export class CombateInvalidoError extends Error {}
+
+/** Poder de combate (Doc 5.1: héroe-comandante liderando tropa; el resultado es CÁLCULO, no combate visual, Doc 5.10). */
+export function poderEscuadron(e: Escuadron, tickActual: number): number {
+  const base = TROPA_CATALOGO[e.tier]!.poderBase * e.cantidad;
+  const conVeterania = base * (1 + e.veterania * MILITAR.bonusVeteraniaPorPunto);
+  const herido = e.heridoHastaTick !== undefined && tickActual < e.heridoHastaTick;
+  return herido ? conVeterania * MILITAR.penalizacionHerido : conVeterania;
+}
+
+function poderTotal(escuadrones: Escuadron[], tickActual: number, bonusCohesion: boolean): number {
+  const suma = escuadrones.reduce((acc, e) => acc + poderEscuadron(e, tickActual), 0);
+  if (!bonusCohesion || escuadrones.length <= 1) return suma;
+  // Cohesión entre escuadrones defendiendo juntos (Doc 5.3), abstraída sin formaciones renderizadas (Fase 0).
+  return suma * (1 + MILITAR.bonusCohesionPorEscuadronExtra * (escuadrones.length - 1));
+}
+
+function aplicarBajas(escuadrones: Escuadron[], fraccionBajas: number, victoria: boolean, tickActual: number): Escuadron[] {
+  return escuadrones.map((e) => {
+    const bajas = Math.round(e.cantidad * fraccionBajas);
+    const cantidad = Math.max(0, e.cantidad - bajas);
+    const veterania = e.veterania + (victoria ? MILITAR.veteraniaGanadaPorVictoria : MILITAR.veteraniaGanadaPorDerrota);
+    const heridoHastaTick = victoria ? e.heridoHastaTick : tickActual + MILITAR.duracionHeridoTicks;
+    return { ...e, cantidad, veterania, heridoHastaTick };
+  });
+}
+
+export interface ResultadoCombate {
+  ganador: 'atacante' | 'defensor';
+  atacantes: Escuadron[];
+  defensores: Escuadron[];
+  eventos: string[];
+}
+
+/**
+ * Resolución numérica de combate (Doc 5.2/5.10): "mismo motor" para asedio/mundo abierto/caravanas.
+ * PERMADEATH real (Doc 5.4): las bajas son permanentes; sin empates (jitter aleatorio rompe la igualdad).
+ */
+export function resolverCombate(atacantes: Escuadron[], defensores: Escuadron[], tickActual: number): ResultadoCombate {
+  if (atacantes.length === 0) throw new CombateInvalidoError('El atacante no tiene escuadrones con los que combatir.');
+  if (defensores.length === 0) throw new CombateInvalidoError('El defensor no tiene escuadrones con los que combatir.');
+
+  const jitterA = 1 + (Math.random() * 2 - 1) * MILITAR.varianzaCombate;
+  const jitterD = 1 + (Math.random() * 2 - 1) * MILITAR.varianzaCombate;
+  const poderA = poderTotal(atacantes, tickActual, false) * jitterA;
+  const poderD = poderTotal(defensores, tickActual, true) * jitterD;
+
+  const ganador: 'atacante' | 'defensor' = poderA > poderD ? 'atacante' : 'defensor';
+  const ratio = Math.min(poderA, poderD) / Math.max(poderA, poderD, 1);
+  // Cuanto más ajustado el combate, más bajas sufre el bando ganador; el perdedor siempre pierde más.
+  const bajasGanador = 0.05 + 0.15 * ratio;
+  const bajasPerdedor = 0.3 + 0.4 * (1 - ratio);
+
+  const atacantesResultado = aplicarBajas(atacantes, ganador === 'atacante' ? bajasGanador : bajasPerdedor, ganador === 'atacante', tickActual);
+  const defensoresResultado = aplicarBajas(defensores, ganador === 'defensor' ? bajasGanador : bajasPerdedor, ganador === 'defensor', tickActual);
+
+  return {
+    ganador,
+    atacantes: atacantesResultado,
+    defensores: defensoresResultado,
+    eventos: [`Combate resuelto: gana el ${ganador} (poder ${poderA.toFixed(0)} vs ${poderD.toFixed(0)}).`],
+  };
+}
+
+function seleccionarEscuadrones(asentamiento: Asentamiento, ids: string[]): Escuadron[] {
+  const seleccionados = asentamiento.escuadrones.filter((e) => ids.includes(e.id) && e.cantidad > 0);
+  if (seleccionados.length === 0) throw new CombateInvalidoError('No hay escuadrones válidos seleccionados.');
+  return seleccionados;
+}
+
+function reemplazarEscuadrones(asentamiento: Asentamiento, actualizados: Escuadron[], fundicionActiva: boolean): Escuadron[] {
+  const porId = new Map(actualizados.map((e) => [e.id, ascenderTierSiCorresponde(e, fundicionActiva)]));
+  return asentamiento.escuadrones.map((e) => porId.get(e.id) ?? e);
+}
+
+/**
+ * Asedio de asentamientos (Doc 5.2.1): mortalidad severa, sin instancia visual (Fase 0 = cálculo). La conquista
+ * exacta tras ganar el asedio queda PENDIENTE en el diseño (Preguntas_Abiertas) — Fase 0 asume CAPTURA directa
+ * (reasignación de Facción), la opción más simple de las citadas ahí (captura/destrucción/vasallaje automático).
+ */
+export function iniciarAsedio(
+  atacante: Asentamiento,
+  defensor: Asentamiento,
+  escuadronIdsAtacantes: string[],
+  facciones: Faccion[],
+  relaciones: RelacionPolitica[],
+  tickActual: number
+): { atacante: Asentamiento; defensor: Asentamiento; facciones: Faccion[]; eventos: string[]; conquistado: boolean } {
+  if (atacante.faccionId === defensor.faccionId) {
+    throw new CombateInvalidoError('No se puede asediar un asentamiento de la propia Facción.');
+  }
+  if (!atacante.cargos.generalId) throw new CombateInvalidoError('El atacante necesita un General para asediar.');
+
+  const escuadronesAtacantes = seleccionarEscuadrones(atacante, escuadronIdsAtacantes);
+  const escuadronesDefensores = seleccionarEscuadrones(defensor, defensor.escuadrones.map((e) => e.id));
+
+  const resultado = resolverCombate(escuadronesAtacantes, escuadronesDefensores, tickActual);
+  const fundicionAtacante = edificiosPorTipoYEstado(atacante, 'fundicion').length > 0;
+  const fundicionDefensor = edificiosPorTipoYEstado(defensor, 'fundicion').length > 0;
+
+  const conquistado = resultado.ganador === 'atacante';
+  const eventos = [
+    ...resultado.eventos,
+    conquistado ? `${atacante.id} conquista ${defensor.id}.` : `${defensor.id} resiste el asedio de ${atacante.id}.`,
+  ];
+
+  // Atacar a un Aliado sin romper la relación antes es la penalización MÁS SEVERA de reputación (Doc 2.7).
+  const faccionesFinal = estanAliadas(relaciones, atacante.faccionId, defensor.faccionId)
+    ? aplicarAjustesReputacion(facciones, [
+        { faccionId: atacante.faccionId, delta: REPUTACION.penalizacionAtacarAliado, razon: 'atacar a un Aliado' },
+      ])
+    : facciones;
+
+  return {
+    atacante: { ...atacante, escuadrones: reemplazarEscuadrones(atacante, resultado.atacantes, fundicionAtacante) },
+    defensor: {
+      ...defensor,
+      faccionId: conquistado ? atacante.faccionId : defensor.faccionId,
+      escuadrones: reemplazarEscuadrones(defensor, resultado.defensores, fundicionDefensor),
+    },
+    facciones: faccionesFinal,
+    eventos,
+    conquistado,
+  };
+}
+
+/** Mundo abierto (Doc 5.2.2): choque de patrullas/ejércitos sin cambio de territorio; el perdedor queda "Herido". */
+export function combateCampoAbierto(
+  asentamientoA: Asentamiento,
+  escuadronIdsA: string[],
+  asentamientoB: Asentamiento,
+  escuadronIdsB: string[],
+  facciones: Faccion[],
+  relaciones: RelacionPolitica[],
+  tickActual: number
+): { asentamientoA: Asentamiento; asentamientoB: Asentamiento; facciones: Faccion[]; eventos: string[] } {
+  const escuadronesA = seleccionarEscuadrones(asentamientoA, escuadronIdsA);
+  const escuadronesB = seleccionarEscuadrones(asentamientoB, escuadronIdsB);
+  const resultado = resolverCombate(escuadronesA, escuadronesB, tickActual);
+
+  const fundicionA = edificiosPorTipoYEstado(asentamientoA, 'fundicion').length > 0;
+  const fundicionB = edificiosPorTipoYEstado(asentamientoB, 'fundicion').length > 0;
+
+  const faccionesFinal = estanAliadas(relaciones, asentamientoA.faccionId, asentamientoB.faccionId)
+    ? aplicarAjustesReputacion(facciones, [
+        { faccionId: asentamientoA.faccionId, delta: REPUTACION.penalizacionAtacarAliado, razon: 'atacar a un Aliado' },
+      ])
+    : facciones;
+
+  return {
+    asentamientoA: { ...asentamientoA, escuadrones: reemplazarEscuadrones(asentamientoA, resultado.atacantes, fundicionA) },
+    asentamientoB: { ...asentamientoB, escuadrones: reemplazarEscuadrones(asentamientoB, resultado.defensores, fundicionB) },
+    facciones: faccionesFinal,
+    eventos: resultado.eventos,
+  };
+}
+
+/**
+ * Defensa/intercepción de caravanas (Doc 3.10): escolta no modelada individualmente en Fase 0 (sin jugadores
+ * reales escoltando) — se usa una defensa base fija como placeholder. Captura al 50% del contenido si gana.
+ */
+export function interceptarCaravana(
+  atacante: Asentamiento,
+  escuadronIdsAtacantes: string[],
+  caravana: Caravana,
+  tickActual: number
+): { atacante: Asentamiento; eventos: string[]; caravanaCapturada: boolean } {
+  if (!atacante.cargos.generalId) throw new CombateInvalidoError('El atacante necesita un General para interceptar.');
+  const escuadrones = seleccionarEscuadrones(atacante, escuadronIdsAtacantes);
+  const jitter = 1 + (Math.random() * 2 - 1) * MILITAR.varianzaCombate;
+  const poderAtacante = escuadrones.reduce((acc, e) => acc + poderEscuadron(e, tickActual), 0) * jitter;
+  const gana = poderAtacante > MILITAR.defensaBaseCaravana;
+
+  const fundicionActiva = edificiosPorTipoYEstado(atacante, 'fundicion').length > 0;
+  const fraccionBajas = gana ? 0.05 : 0.25;
+  const escuadronesActualizados = aplicarBajas(escuadrones, fraccionBajas, gana, tickActual);
+
+  let almacen = atacante.almacen;
+  const eventos: string[] = [];
+  if (gana) {
+    for (const [recurso, cantidad] of Object.entries(caravana.contenido)) {
+      almacen = agregarRecurso(almacen, recurso, cantidad * MILITAR.umbralCapturaCaravana);
+    }
+    eventos.push(`${atacante.id} intercepta la caravana ${caravana.id} y captura ${MILITAR.umbralCapturaCaravana * 100}% de su carga.`);
+  } else {
+    eventos.push(`${atacante.id} falla la intercepción de la caravana ${caravana.id} y sufre bajas.`);
+  }
+
+  return {
+    atacante: { ...atacante, almacen, escuadrones: reemplazarEscuadrones(atacante, escuadronesActualizados, fundicionActiva) },
+    eventos,
+    caravanaCapturada: gana,
+  };
+}

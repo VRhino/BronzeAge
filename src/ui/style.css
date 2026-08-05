@@ -1,0 +1,100 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: #1b1a17;
+  color: #e8e2d0;
+}
+
+#app {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 12px;
+  padding: 12px;
+  height: 100vh;
+}
+
+.map-panel {
+  position: relative;
+  border: 1px solid #4a4436;
+  background: #2a2721;
+}
+
+#world-canvas {
+  display: block;
+  cursor: crosshair;
+}
+
+.side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: #2a2721;
+  border: 1px solid #4a4436;
+  border-radius: 4px;
+}
+
+.controls label {
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+button, select, input {
+  font-family: inherit;
+  font-size: 13px;
+  padding: 6px;
+  background: #3a3529;
+  color: #e8e2d0;
+  border: 1px solid #4a4436;
+  border-radius: 3px;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:hover {
+  background: #4a4436;
+}
+
+.log-panel {
+  flex: 1;
+  padding: 10px;
+  background: #2a2721;
+  border: 1px solid #4a4436;
+  border-radius: 4px;
+  overflow-y: auto;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.log-panel div {
+  border-bottom: 1px solid #3a3529;
+  padding: 2px 0;
+}
+
+h1 {
+  font-size: 15px;
+  margin: 0 0 4px;
+}
+
+h2 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #b8ae90;
+  margin: 0;
+}
