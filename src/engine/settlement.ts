@@ -10,9 +10,10 @@ function dentroDelMapa(p: Point, world: World): boolean {
 }
 
 /**
- * Fundación libre — Doc 1.2/1.3. Hasta 5 jugadores pueden fundar juntos, todos reciben ciudadanía
- * inmediata de la Facción fundadora (Doc 2.5). Respeta el cap de fundación por Facción (Doc 1.7):
- * no aplica a conquista/anexión (fuera de alcance aquí), solo a fundación directa.
+ * Fundación libre — Doc 1.2/1.3. Hasta 5 jugadores pueden fundar juntos; cada uno recibe automáticamente
+ * una casa en el asentamiento recién fundado (ocupa cupo de vivienda, Doc 2.5) y, con ella, ciudadanía
+ * inmediata de la Facción fundadora. Respeta el cap de fundación por Facción (Doc 1.7): no aplica a
+ * conquista/anexión (fuera de alcance aquí), solo a fundación directa.
  */
 export function fundarAsentamiento(
   world: World,
@@ -63,7 +64,7 @@ export function fundarAsentamiento(
     almacen: almacenInicial,
     edificios: [],
     cargos: { gobernadorId: null, tesoreroId: null, generalId: null, maestroObrasId: null, sacerdoteId: null },
-    casasCompradas: [],
+    casasCompradas: [...jugadoresFundadoresIds],
     politicasActivas: [],
     escuadrones: [],
     medidorMantenimiento: MANTENIMIENTO.medidorInicial,

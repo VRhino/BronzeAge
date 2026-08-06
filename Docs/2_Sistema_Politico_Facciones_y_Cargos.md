@@ -43,7 +43,7 @@ Una Facción puede someter a otra Facción entera como vasalla, o federarse con 
 
 ## 2.5 Ciudadanía
 - Se liga a la FACCIÓN del jugador (NO a la Liga completa — los vasallos mantienen ciudadanía separada de su señor).
-- Obtención: (1) fundar un asentamiento (todos los fundadores reciben ciudadanía inmediata), (2) comprar una casa en un asentamiento de la propia Facción (espacios limitados según nivel/tamaño).
+- Obtención: (1) fundar un asentamiento — cada fundador recibe automáticamente una casa en el asentamiento recién fundado, ocupando un espacio del mismo cupo de vivienda que (2), y con ella ciudadanía inmediata; (2) comprar una casa en un asentamiento de la propia Facción (espacios limitados según nivel/tamaño). El cupo base de un asentamiento recién fundado es de 5 casas — igual al máximo de jugadores que pueden fundar juntos (Doc 1.2/1.3) — así que siempre hay sitio para todos los fundadores; si fundan menos de 5, los espacios restantes quedan libres para que otros jugadores compren casa después (p. ej. 2 fundadores dejan 3/5 libres).
 - Beneficios: ejercer cargo, iniciar caravanas en Mercados de la Facción, votar políticas, reclutar tropas (solo donde la ciudadanía lo permite), comisiones de comercio más bajas dentro de la misma Facción.
 - PENDIENTE: residencia en cualquier asentamiento de la Facción, protección militar, voz en política exterior; nivel intermedio de comisiones para Facciones aliadas/vasallas.
 

@@ -13,13 +13,22 @@ function distance(a: Point, b: Point): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-/** Rejection sampling: coloca `cantidad` puntos respetando espaciado mínimo entre sí. */
+function dentroDeAlgunBosque(p: Point, bosques: ZonaBosque[]): boolean {
+  return bosques.some((b) => distance(p, b.centro) < b.radio);
+}
+
+/**
+ * Rejection sampling: coloca `cantidad` puntos respetando espaciado mínimo entre sí y evitando los bosques
+ * (simplificación visual deliberada: un nodo mineral dentro del círculo de un bosque se leía como si fuera
+ * "parte" del bosque, confundiendo qué representa cada uno).
+ */
 function placeWithSpacing(
   rng: RandomFn,
   config: WorldConfig,
   cantidad: number,
   espacioMinimo: number,
   yaColocados: Point[],
+  bosques: ZonaBosque[],
   intentosPorPunto = 30
 ): Point[] {
   const nuevos: Point[] = [];
@@ -31,7 +40,7 @@ function placeWithSpacing(
         x: randRange(rng, 0, config.ancho),
         y: randRange(rng, 0, config.alto),
       };
-      if (todos.every((p) => distance(p, candidato) >= espacioMinimo)) {
+      if (!dentroDeAlgunBosque(candidato, bosques) && todos.every((p) => distance(p, candidato) >= espacioMinimo)) {
         colocado = candidato;
         break;
       }
@@ -48,13 +57,14 @@ function generarRecursosDeRareza(
   rng: RandomFn,
   config: WorldConfig,
   rareza: Rareza,
-  colocadosGlobal: Point[]
+  colocadosGlobal: Point[],
+  bosques: ZonaBosque[]
 ): NodoRecurso[] {
   const { cantidadBase, espacioMinimo } = RECURSO_RAREZA[rareza];
   const tipos = RECURSO_TIPOS_POR_RAREZA[rareza];
   const nodos: NodoRecurso[] = [];
   for (const tipo of tipos) {
-    const posiciones = placeWithSpacing(rng, config, cantidadBase, espacioMinimo, colocadosGlobal);
+    const posiciones = placeWithSpacing(rng, config, cantidadBase, espacioMinimo, colocadosGlobal, bosques);
     const rango = RECURSO_CANTIDAD_NODO[tipo as keyof typeof RECURSO_CANTIDAD_NODO];
     for (const posicion of posiciones) {
       colocadosGlobal.push(posicion);
@@ -70,8 +80,8 @@ function generarRecursosDeRareza(
   return nodos;
 }
 
-function generarLivestock(rng: RandomFn, config: WorldConfig, colocadosGlobal: Point[]): NodoRecurso[] {
-  const posiciones = placeWithSpacing(rng, config, LIVESTOCK.cantidadBase, LIVESTOCK.espacioMinimo, colocadosGlobal);
+function generarLivestock(rng: RandomFn, config: WorldConfig, colocadosGlobal: Point[], bosques: ZonaBosque[]): NodoRecurso[] {
+  const posiciones = placeWithSpacing(rng, config, LIVESTOCK.cantidadBase, LIVESTOCK.espacioMinimo, colocadosGlobal, bosques);
   return posiciones.map((posicion, i) => {
     colocadosGlobal.push(posicion);
     return {
@@ -124,14 +134,16 @@ export function generateWorld(config: WorldConfig): World {
   const rng = createRng(config.seed);
   const colocadosGlobal: Point[] = [];
 
+  // Los bosques se generan primero para que los nodos minerales/livestock puedan evitarlos (ver placeWithSpacing).
+  const bosques = generarBosques(rng, config);
+
   const recursos: NodoRecurso[] = [
-    ...generarRecursosDeRareza(rng, config, 'comun', colocadosGlobal),
-    ...generarRecursosDeRareza(rng, config, 'intermedio', colocadosGlobal),
-    ...generarRecursosDeRareza(rng, config, 'raro', colocadosGlobal),
-    ...generarLivestock(rng, config, colocadosGlobal),
+    ...generarRecursosDeRareza(rng, config, 'comun', colocadosGlobal, bosques),
+    ...generarRecursosDeRareza(rng, config, 'intermedio', colocadosGlobal, bosques),
+    ...generarRecursosDeRareza(rng, config, 'raro', colocadosGlobal, bosques),
+    ...generarLivestock(rng, config, colocadosGlobal, bosques),
   ];
 
-  const bosques = generarBosques(rng, config);
   const fertilidadEn = crearCampoFertilidad(rng);
 
   return { config, recursos, bosques, fertilidadEn };

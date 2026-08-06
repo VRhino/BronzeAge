@@ -2,17 +2,23 @@ import type { Asentamiento, Caravana, EdificioTipo, Faccion, RecursoTipo, World,
 
 export const FACCION_COLORES = ['#c0392b', '#2980b9', '#27ae60', '#8e44ad', '#d35400', '#16a085'];
 
-const RECURSO_COLOR: Record<RecursoTipo, string> = {
-  madera: '#3f7d3a',
+// Paleta elegida para que cada recurso sea distinguible a simple vista (evitar tonos casi iguales,
+// ej. trigo/oro ambos amarillentos) — madera no se dibuja como punto en el mapa (ver Doc 1.4: viene de
+// bosques, no de nodos), pero conserva un color propio para paneles de almacén/mercado.
+export const RECURSO_COLOR: Record<RecursoTipo, string> = {
+  madera: '#6b4226',
   piedra: '#8d8d8d',
-  trigo: '#d4b106',
-  cobre: '#c0703c',
-  estano: '#b8b8d0',
-  oro: '#f1c40f',
-  livestock: '#e0a458',
+  trigo: '#c9a227',
+  cobre: '#b5651d',
+  estano: '#7f95a3',
+  oro: '#ffd700',
+  livestock: '#b5658a',
 };
 
-const EDIFICIO_COLOR: Record<EdificioTipo, string> = {
+/** Tipos de recurso que SÍ se dibujan como punto en el mapa (para la leyenda) — trigo y madera no lo son. */
+export const RECURSOS_EN_MAPA: RecursoTipo[] = ['piedra', 'cobre', 'estano', 'oro', 'livestock'];
+
+export const EDIFICIO_COLOR: Record<EdificioTipo, string> = {
   vivienda: '#e8e2d0',
   granja: '#d4b106',
   cantera: '#8d8d8d',

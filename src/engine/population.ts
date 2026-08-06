@@ -41,10 +41,11 @@ export function crecerPoblacion(asentamiento: Asentamiento): { poblacion: Poblac
     }
   }
 
-  // Nobleza (Doc 4.1): único requisito es una cantidad mínima de ciudadanos (jugadores) en el asentamiento
-  // (fundadores + quienes compraron casa aquí, Doc 2.5). Sacerdote puede acelerar el crecimiento vía política.
+  // Nobleza (Doc 4.1): único requisito es una cantidad mínima de ciudadanos (jugadores) en el asentamiento.
+  // `casasCompradas` ya incluye a los fundadores (reciben casa automática al fundar, Doc 2.5) además de
+  // quienes compraron casa después, así que basta con su longitud. Sacerdote puede acelerar el crecimiento vía política.
   let nuevaNobleza = 0;
-  const ciudadanosEnAsentamiento = asentamiento.jugadoresFundadoresIds.length + asentamiento.casasCompradas.length;
+  const ciudadanosEnAsentamiento = asentamiento.casasCompradas.length;
   const cumpleRequisitoNobleza = ciudadanosEnAsentamiento >= POBLACION.nobleza.minCiudadanos;
   if (cumpleRequisitoNobleza && espacioLibreFactor > 0) {
     if (asentamiento.poblacion.nobleza === 0) {

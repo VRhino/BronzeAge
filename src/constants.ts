@@ -7,6 +7,9 @@ export const WORLD_DEFAULT: { ancho: number; alto: number } = {
 };
 
 // Trigo NO genera nodo: depende del campo de fertilidad (ver FERTILIDAD) + Granja (Sprint 2).
+// Madera TAMPOCO genera nodo propio (Doc 1.4: "proviene de BOSQUES, representados como ZONAS, no puntos") —
+// solo se generaban aquí por error de implementación (Sprint 1): un nodo "madera" sin ningún uso en el motor
+// (la lenera siempre lee de world.bosques, nunca de world.recursos), y visualmente confundible con los bosques.
 // Cantidad de nodos por 1000x1000 y espaciado mínimo entre nodos de la misma rareza (unidades de mapa).
 export const RECURSO_RAREZA = {
   comun: { cantidadBase: 60, espacioMinimo: 20 },
@@ -15,13 +18,12 @@ export const RECURSO_RAREZA = {
 } as const;
 
 export const RECURSO_TIPOS_POR_RAREZA: Record<keyof typeof RECURSO_RAREZA, string[]> = {
-  comun: ['madera', 'piedra'],
+  comun: ['piedra'],
   intermedio: ['cobre'],
   raro: ['estano', 'oro'],
 };
 
 export const RECURSO_CANTIDAD_NODO = {
-  madera: { min: 200, max: 500 },
   piedra: { min: 200, max: 500 },
   cobre: { min: 100, max: 300 },
   estano: { min: 50, max: 150 },
@@ -171,8 +173,10 @@ export const NIVEL_FACCION = {
 export const CAP_FUNDACION_POR_NIVEL = [1, 2, 3, 3, 4, 5, 5, 6, 6, 7] as const;
 
 export const CIUDADANIA = {
-  // Espacios de "casas" compradas por asentamiento (Doc 2.5), limitados según nivel/tamaño — placeholder.
-  casasBasePorAsentamiento: 3,
+  // Espacios de "casas" por asentamiento (Doc 2.5): el cupo base coincide con el máximo de jugadores que
+  // pueden fundar juntos (FUNDACION.maxJugadoresFundacionGrupal) — así el asentamiento siempre nace con
+  // sitio para todos sus fundadores, y el resto queda libre para compras posteriores.
+  casasBasePorAsentamiento: FUNDACION.maxJugadoresFundacionGrupal,
   casasPorNivelAdicional: 2,
 };
 

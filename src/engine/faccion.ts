@@ -49,7 +49,7 @@ export function otorgarCiudadania(faccion: Faccion, jugadorId: string): Faccion 
   return { ...faccion, ciudadanosIds: [...faccion.ciudadanosIds, jugadorId] };
 }
 
-function capacidadCasas(asentamiento: Asentamiento): number {
+export function capacidadCasas(asentamiento: Asentamiento): number {
   return CIUDADANIA.casasBasePorAsentamiento + (asentamiento.nivel - 1) * CIUDADANIA.casasPorNivelAdicional;
 }
 
