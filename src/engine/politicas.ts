@@ -94,3 +94,19 @@ export const factorCrecimientoNobleza = (a: Asentamiento): number => productoFac
 export const factorTiempoConstruccion = (a: Asentamiento): number => productoFactor(a, 'factorTiempoConstruccion');
 export const factorComisionExterna = (a: Asentamiento): number => productoFactor(a, 'factorComisionExterna');
 export const factorCostoReclutamiento = (a: Asentamiento): number => productoFactor(a, 'factorCostoReclutamiento');
+
+/**
+ * Campos "objetivo" (no multiplicativos): en vez de multiplicar factores, toman el mayor valor propuesto
+ * por cualquier política activa. Sirve para políticas como "Protección de Riesgos" (Doc 4.2/4.4 — no es
+ * un factor de tasa, es un mínimo a alcanzar antes de permitir cualquier otra auto-construcción).
+ */
+function valorMaximoPolitica(asentamiento: Asentamiento, campo: 'minimoLenerasPrioritario'): number {
+  return asentamiento.politicasActivas.reduce((max, activa) => {
+    const def = POLITICA_CATALOGO.find((p) => p.id === activa.politicaId);
+    const valor = def ? (def as Record<string, unknown>)[campo] : undefined;
+    return typeof valor === 'number' && valor > max ? valor : max;
+  }, 0);
+}
+
+/** >0 si el Maestro de Obras activó "Protección de Riesgos": mínimo de Leñeras a priorizar sobre cualquier otra necesidad. */
+export const minimoLenerasPrioritario = (a: Asentamiento): number => valorMaximoPolitica(a, 'minimoLenerasPrioritario');

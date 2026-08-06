@@ -9,14 +9,22 @@ import type {
   CargoTipo,
   Caravana,
   Faccion,
+  NodoRecurso,
   OrdenMercado,
   RecursoTipo,
   RelacionPolitica,
   Titulo,
   World,
+  WorldConfig,
+  ZonaBosque,
   ZonaInfluencia,
 } from '../domain/types';
-import { POLITICA_CATALOGO, WORLD_DEFAULT } from '../constants';
+import { FUNDACION, MANTENIMIENTO, NECESIDADES, NIVEL_ASENTAMIENTO, POLITICAS, POLITICA_CATALOGO, WORLD_DEFAULT } from '../constants';
+import { poblacionTotal } from '../engine/asentamientoQuery';
+import { encontrarCapital, calcularCostoMantenimiento } from '../engine/mantenimiento';
+import { slotsDisponibles } from '../engine/politicas';
+import { listarCamposBalance, actualizarCampoBalance, restaurarBalancePorDefecto, type CampoBalance } from './balanceConfig';
+export type { CampoBalance } from './balanceConfig';
 import { generateWorld } from '../engine/world';
 import { fundarAsentamiento as fundarAsentamientoEngine, FundacionInvalidaError } from '../engine/settlement';
 import { computeTodasLasZonas } from '../engine/zones';
@@ -58,6 +66,23 @@ export interface GameState {
   historialJugadores: Record<string, EventoLog[]>;
 }
 
+/** Formato de archivo para exportar/importar una simulación completa (ver `exportarSimulacion`/`importarSimulacion`). */
+export interface SimulacionExportada {
+  version: 1;
+  exportadoEn: string;
+  tick: number;
+  world: { config: WorldConfig; recursos: NodoRecurso[]; bosques: ZonaBosque[] };
+  asentamientos: Asentamiento[];
+  facciones: Faccion[];
+  caravanas: Caravana[];
+  acuerdos: AcuerdoTrueque[];
+  ordenes: OrdenMercado[];
+  relaciones: RelacionPolitica[];
+  titulos: Titulo[];
+  log: EventoLog[];
+  historialJugadores: Record<string, EventoLog[]>;
+}
+
 /** Catálogos de referencia (listas fijas, sin comportamiento) que la interfaz necesita para construir formularios. */
 export const CATALOGOS = {
   cargos: ['gobernador', 'tesorero', 'general', 'maestroObras', 'sacerdote'] as CargoTipo[],
@@ -65,6 +90,10 @@ export const CATALOGOS = {
   recursosTrueque: ['madera', 'piedra', 'trigo', 'cobre', 'estano', 'oro', 'livestock'] as RecursoTipo[],
   recursosMercado: ['madera', 'piedra', 'trigo', 'cobre', 'estano', 'livestock'] as RecursoTipo[],
   politicas: POLITICA_CATALOGO,
+  duracionPoliticaTicks: POLITICAS.duracionTicksPorDefecto,
+  slotsPorCargoBase: POLITICAS.slotsPorCargo,
+  nivelFaccionPorSlotExtraGobernador: POLITICAS.nivelFaccionPorSlotExtraGobernador,
+  maximoEdificiosEnCola: NECESIDADES.maximoEnCola,
 };
 
 type Listener = () => void;
@@ -89,6 +118,10 @@ export class GameStore {
   private state: GameState;
   private listeners = new Set<Listener>();
   private contadorAcciones = 0;
+  /** Una foto completa del estado al final de cada tick (índice = número de tick) — alimenta el slider de línea de tiempo. */
+  private historial: GameState[] = [];
+  /** Tick más antiguo con foto disponible. 0 en una partida normal; el tick importado tras un `importarSimulacion` (no hay fotos de ticks previos a ese punto). */
+  private historialDesde = 0;
 
   constructor() {
     this.state = {
@@ -105,10 +138,21 @@ export class GameStore {
       historialJugadores: {},
     };
     this.registrar('Mundo generado. Selecciona una facción y haz clic en el mapa para fundar.');
+    this.notify();
   }
 
   getState(): Readonly<GameState> {
     return this.state;
+  }
+
+  /** Foto de solo lectura del estado tal como estaba al final del tick `tick`, o `undefined` si no existe. */
+  getSnapshot(tick: number): Readonly<GameState> | undefined {
+    return this.historial[tick];
+  }
+
+  /** Rango con fotos disponibles para el slider de línea de tiempo. */
+  getTickRange(): { min: number; max: number } {
+    return { min: this.historialDesde, max: this.state.tick };
   }
 
   subscribe(listener: Listener): () => void {
@@ -116,7 +160,29 @@ export class GameStore {
     return () => this.listeners.delete(listener);
   }
 
+  /**
+   * Clon profundo del estado actual para guardar en el historial. `world.recursos` se clona porque
+   * la construcción agota nodos mutándolos in-place (Doc 4.2); `config`/`bosques`/`fertilidadEn` son
+   * inmutables desde la generación del mundo, así que se comparten por referencia sin riesgo.
+   */
+  private clonarEstadoActual(): GameState {
+    return {
+      world: { ...this.state.world, recursos: structuredClone(this.state.world.recursos) },
+      asentamientos: structuredClone(this.state.asentamientos),
+      facciones: structuredClone(this.state.facciones),
+      caravanas: structuredClone(this.state.caravanas),
+      acuerdos: structuredClone(this.state.acuerdos),
+      ordenes: structuredClone(this.state.ordenes),
+      relaciones: structuredClone(this.state.relaciones),
+      titulos: structuredClone(this.state.titulos),
+      tick: this.state.tick,
+      log: structuredClone(this.state.log),
+      historialJugadores: structuredClone(this.state.historialJugadores),
+    };
+  }
+
   private notify(): void {
+    this.historial[this.state.tick] = this.clonarEstadoActual();
     for (const listener of this.listeners) listener();
   }
 
@@ -131,13 +197,15 @@ export class GameStore {
   }
 
   // --- Derivados de solo lectura (evitan que la interfaz importe funciones del motor) ---
+  // Todos aceptan datos opcionales para poder calcularse tanto sobre el estado en vivo como
+  // sobre una foto del historial (vista de línea de tiempo) — por defecto usan el estado en vivo.
 
-  getZonas(): ZonaInfluencia[] {
-    return computeTodasLasZonas(this.state.asentamientos);
+  getZonas(asentamientos: Asentamiento[] = this.state.asentamientos): ZonaInfluencia[] {
+    return computeTodasLasZonas(asentamientos);
   }
 
-  getLigas(): LigaInfo[] {
-    return computeLigas(this.state.relaciones, this.state.facciones);
+  getLigas(relaciones: RelacionPolitica[] = this.state.relaciones, facciones: Faccion[] = this.state.facciones): LigaInfo[] {
+    return computeLigas(relaciones, facciones);
   }
 
   capFundacion(nivel: number): number {
@@ -148,14 +216,48 @@ export class GameStore {
     return capacidadCasas(asentamiento);
   }
 
-  precioReferencia(recurso: string): number {
-    return calcularPrecioReferencia(recurso, this.state.asentamientos);
+  precioReferencia(recurso: string, asentamientos: Asentamiento[] = this.state.asentamientos): number {
+    return calcularPrecioReferencia(recurso, asentamientos);
+  }
+
+  /**
+   * Progreso de nivel de asentamiento (Doc placeholder, mismo criterio que nivel de Facción): puntos
+   * acumulados por población + edificios activos, y cuántos hacen falta para el próximo nivel.
+   */
+  nivelAsentamientoInfo(asentamiento: Asentamiento): { nivel: number; puntos: number; puntosParaSiguiente: number; puntosPorNivel: number; esMaximo: boolean } {
+    const edificiosActivos = asentamiento.edificios.filter((e) => e.estado === 'activo').length;
+    const puntos = Math.floor(poblacionTotal(asentamiento) / NIVEL_ASENTAMIENTO.poblacionPorPunto) + edificiosActivos * NIVEL_ASENTAMIENTO.puntosPorEdificioActivo;
+    const esMaximo = asentamiento.nivel >= NIVEL_ASENTAMIENTO.nivelMaximo;
+    const puntosParaSiguiente = puntos % NIVEL_ASENTAMIENTO.puntosPorNivel;
+    return { nivel: asentamiento.nivel, puntos, puntosParaSiguiente, puntosPorNivel: NIVEL_ASENTAMIENTO.puntosPorNivel, esMaximo };
+  }
+
+  /** Coste de mantenimiento del tick actual, recurso por recurso, con lo disponible y si alcanza a cubrirlo. */
+  mantenimientoInfo(asentamiento: Asentamiento): {
+    enGracia: boolean;
+    ticksParaFinGracia: number;
+    items: { recurso: string; costoPorTick: number; disponible: number; cubierto: boolean }[];
+  } {
+    const ticksDesdeFundacion = this.state.tick - asentamiento.fundadoEnTick;
+    const enGracia = ticksDesdeFundacion < MANTENIMIENTO.graciaTicks;
+    const capital = encontrarCapital(asentamiento.faccionId, this.state.asentamientos);
+    const costo = calcularCostoMantenimiento(asentamiento, capital);
+    const items = Object.entries(costo).map(([recurso, cantidad]) => {
+      const disponible = asentamiento.almacen[recurso]?.cantidad ?? 0;
+      return { recurso, costoPorTick: cantidad ?? 0, disponible, cubierto: disponible >= (cantidad ?? 0) };
+    });
+    return { enGracia, ticksParaFinGracia: Math.max(0, MANTENIMIENTO.graciaTicks - ticksDesdeFundacion), items };
+  }
+
+  /** Slots de política disponibles para `cargo` según el nivel de Facción (el Gobernador escala con el nivel). */
+  slotsPoliticaDisponibles(cargo: CargoTipo, nivelFaccion: number): number {
+    return slotsDisponibles(cargo, nivelFaccion);
   }
 
   // --- Acciones (una por intención de usuario) ---
 
   fundarAsentamiento(faccionId: string, posicion: { x: number; y: number }, numJugadores: number): void {
-    const n = Math.min(5, Math.max(1, numJugadores || 1));
+    const n = Math.min(FUNDACION.maxJugadoresFundacionGrupal, Math.max(1, numJugadores || 1));
     const jugadoresIds = Array.from({ length: n }, (_, i) => `jugador-${faccionId}-${i + 1}`);
     try {
       const resultado = fundarAsentamientoEngine(
@@ -496,6 +598,8 @@ export class GameStore {
   }
 
   regenerarMundo(seed: number): void {
+    this.historial = [];
+    this.historialDesde = 0;
     this.state = {
       world: generateWorld({ ...WORLD_DEFAULT, seed }),
       asentamientos: [],
@@ -510,6 +614,95 @@ export class GameStore {
       historialJugadores: {},
     };
     this.registrar(`Mundo regenerado con seed ${seed}.`);
+    this.notify();
+  }
+
+  /** Serializa la simulación completa (mundo, asentamientos, facciones, log, historial de jugadores...) a JSON. */
+  exportarSimulacion(): string {
+    const payload: SimulacionExportada = {
+      version: 1,
+      exportadoEn: new Date().toISOString(),
+      tick: this.state.tick,
+      world: { config: this.state.world.config, recursos: this.state.world.recursos, bosques: this.state.world.bosques },
+      asentamientos: this.state.asentamientos,
+      facciones: this.state.facciones,
+      caravanas: this.state.caravanas,
+      acuerdos: this.state.acuerdos,
+      ordenes: this.state.ordenes,
+      relaciones: this.state.relaciones,
+      titulos: this.state.titulos,
+      log: this.state.log,
+      historialJugadores: this.state.historialJugadores,
+    };
+    return JSON.stringify(payload, null, 2);
+  }
+
+  /**
+   * Reemplaza la simulación completa por la contenida en `json` (formato de `exportarSimulacion`).
+   * `fertilidadEn` no es serializable (es una función) — se reconstruye regenerando el mundo desde
+   * `world.config` (determinista por seed, Doc 1.1) y luego se le superponen los `recursos`/`bosques`
+   * exportados (que sí pueden venir ya modificados, p. ej. yacimientos agotados).
+   * Cualquier problema de formato se reporta en el log como una acción rechazada más — nunca se
+   * propaga a la interfaz — porque a diferencia del resto de acciones, el origen del dato es un
+   * archivo externo no confiable, no el propio estado ya validado de la simulación.
+   */
+  importarSimulacion(json: string): void {
+    try {
+      const payload = JSON.parse(json) as Partial<SimulacionExportada>;
+      if (
+        payload?.version !== 1 ||
+        !payload.world?.config ||
+        !Array.isArray(payload.world.recursos) ||
+        !Array.isArray(payload.world.bosques) ||
+        !Array.isArray(payload.asentamientos) ||
+        !Array.isArray(payload.facciones)
+      ) {
+        throw new Error('el archivo no tiene el formato esperado de una simulación exportada.');
+      }
+
+      const worldRegenerado = generateWorld(payload.world.config);
+      this.historial = [];
+      this.historialDesde = payload.tick ?? 0;
+      this.state = {
+        world: { ...worldRegenerado, recursos: payload.world.recursos, bosques: payload.world.bosques },
+        asentamientos: payload.asentamientos,
+        facciones: payload.facciones,
+        caravanas: payload.caravanas ?? [],
+        acuerdos: payload.acuerdos ?? [],
+        ordenes: payload.ordenes ?? [],
+        relaciones: payload.relaciones ?? [],
+        titulos: payload.titulos ?? [],
+        tick: payload.tick ?? 0,
+        log: payload.log ?? [],
+        historialJugadores: payload.historialJugadores ?? {},
+      };
+      this.registrar(`Simulación importada (tick ${this.state.tick}).`);
+    } catch (err) {
+      const razon = err instanceof Error ? err.message : 'formato desconocido';
+      this.registrar(`Importación rechazada: ${razon}`);
+    }
+    this.notify();
+  }
+
+  /** Todos los valores de balance editables (ver `balanceConfig.ts`), agrupados como aparecen en constants.ts. */
+  getBalance(): CampoBalance[] {
+    return listarCamposBalance();
+  }
+
+  /** Cambia un valor de balance en caliente. Afecta de inmediato a toda acción/tick posterior del motor. */
+  actualizarBalance(path: string, valor: number): void {
+    if (actualizarCampoBalance(path, valor)) {
+      this.registrar(`Balance actualizado: ${path} = ${valor}.`);
+    } else {
+      this.registrar(`Valor de balance rechazado: "${path}" no es un campo válido.`);
+    }
+    this.notify();
+  }
+
+  /** Vuelve todos los valores de balance a los de fábrica (los que tenían al cargar la página). */
+  restaurarBalance(): void {
+    restaurarBalancePorDefecto();
+    this.registrar('Valores de balance restaurados a los de fábrica.');
     this.notify();
   }
 }

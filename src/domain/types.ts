@@ -46,6 +46,7 @@ export interface RecursoAlmacenado {
 }
 
 export type EdificioTipo =
+  | 'centroUrbano'
   | 'vivienda'
   | 'granja'
   | 'cantera'
@@ -54,6 +55,7 @@ export type EdificioTipo =
   | 'taller'
   | 'mina'
   | 'minaCobre'
+  | 'minaEstano'
   | 'fundicion'
   | 'granFundicion';
 

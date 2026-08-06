@@ -26,7 +26,7 @@
 ## 1.4 Fuentes de recursos por tipo
 - CULTIVOS (trigo): NO son un nodo recolectable directo. Dependen de la FERTILIDAD DEL SUELO de la zona (atributo de terreno); requieren construir una Granja para aprovecharse.
 - MADERA: proviene de BOSQUES, representados como ZONAS del mapa (no puntos), con densidad variable.
-- MINERALES (cobre, estaño, oro): en Fase 0, dado el terreno plano, están DISPERSOS aleatoriamente siguiendo las reglas de rareza de 1.1. En fases avanzadas (con relieve) estarán ligados a cordilleras/montañas sueltas, no dispersos al azar.
+- MINERALES (cobre, estaño, oro): en Fase 0, dado el terreno plano, están DISPERSOS aleatoriamente siguiendo las reglas de rareza de 1.1. En fases avanzadas (con relieve) estarán ligados a cordilleras/montañas sueltas, no dispersos al azar. Cada uno tiene su propio edificio de extracción (cantera para piedra, mina de oro, mina de cobre, mina de estaño — este último añadido en un rebalance posterior a Sprint 6: el estaño se generaba en el mundo desde el Sprint 1 pero no tenía forma de extraerse, solo de comerciarse).
 - LIVESTOCK (ovejas, vacas, caballos + especies adicionales por definir): fauna LIBRE en el mapa, debe CAPTURARSE para aprovecharse. Cría/domesticación pospuesta a fases avanzadas (en Fase 0 se trata como recurso consumible/finito). Rendimientos: ovejas = carne+leche; vacas = carne+leche+cuero; caballos = fuente de entrenamiento de tropas montadas (caballería ligera, carros de guerra), no dan recurso de consumo.
 - MADERA y PIEDRA: materiales base de construcción de edificios e insumo de materiales derivados.
 - COMMODITIES DE NOBLEZA (uvas/olivas → vino/aceite): no son alimento básico, requeridas para felicidad de la Nobleza; su déficit arriesga rebelión/estancamiento, no hambruna.

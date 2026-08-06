@@ -1,4 +1,4 @@
-import type { Asentamiento, Faccion, Point, RecursoAlmacenado, World } from '../domain/types';
+import type { Asentamiento, Edificio, Faccion, Point, RecursoAlmacenado, World } from '../domain/types';
 import { ALMACEN, FUNDACION, MANTENIMIENTO, POBLACION, ZONA_INFLUENCIA } from '../constants';
 import { posicionLibreParaFundar } from './zones';
 import { calcularCapFundacion, otorgarCiudadania } from './faccion';
@@ -7,6 +7,62 @@ export class FundacionInvalidaError extends Error {}
 
 function dentroDelMapa(p: Point, world: World): boolean {
   return p.x >= 0 && p.x <= world.config.ancho && p.y >= 0 && p.y <= world.config.alto;
+}
+
+/** Reparte `cantidad` puntos en un anillo alrededor de `centro`, a `radio` de distancia. */
+function anilloDePosiciones(centro: Point, cantidad: number, radio: number): Point[] {
+  return Array.from({ length: cantidad }, (_, i) => {
+    const angulo = (i / cantidad) * Math.PI * 2;
+    return { x: centro.x + Math.cos(angulo) * radio, y: centro.y + Math.sin(angulo) * radio };
+  });
+}
+
+/**
+ * Mejor casilla de fertilidad en un pequeño radio alrededor del centro (Doc 1.4), para la Granja inicial.
+ * Simplificación deliberada respecto a la auto-construcción (`sitioMejorFertilidad` en construction.ts):
+ * al fundar todavía no existe zona de influencia recortada contra rivales que consultar, así que basta
+ * con muestrear el propio radio inicial (garantizado libre, ya lo validó `posicionLibreParaFundar`).
+ */
+function mejorPuntoFertilidadCercano(world: World, centro: Point, radio: number, muestras: number): Point {
+  let mejor = centro;
+  let mejorFertilidad = -1;
+  for (let i = 0; i < muestras; i++) {
+    const angulo = (i / muestras) * Math.PI * 2;
+    const candidato: Point = { x: centro.x + Math.cos(angulo) * radio, y: centro.y + Math.sin(angulo) * radio };
+    const fertilidad = world.fertilidadEn(candidato);
+    if (fertilidad > mejorFertilidad) {
+      mejorFertilidad = fertilidad;
+      mejor = candidato;
+    }
+  }
+  return mejor;
+}
+
+/** Edificios con los que nace todo asentamiento nuevo (Doc 1.3): ya "activo", sin pasar por la cola. */
+function edificiosIniciales(world: World, centro: Point, idBase: string): Edificio[] {
+  const radioAnillo = ZONA_INFLUENCIA.radioInicial * 0.5;
+  const viviendas: Edificio[] = anilloDePosiciones(centro, FUNDACION.viviendasIniciales, radioAnillo).map((posicion, i) => ({
+    id: `edificio-${idBase}-vivienda-inicial-${i}`,
+    tipo: 'vivienda',
+    posicion,
+    estado: 'activo',
+    ticksRestantes: 0,
+  }));
+  const granja: Edificio = {
+    id: `edificio-${idBase}-granja-inicial`,
+    tipo: 'granja',
+    posicion: mejorPuntoFertilidadCercano(world, centro, radioAnillo, 12),
+    estado: 'activo',
+    ticksRestantes: 0,
+  };
+  const centroUrbano: Edificio = {
+    id: `edificio-${idBase}-centro-urbano`,
+    tipo: 'centroUrbano',
+    posicion: centro,
+    estado: 'activo',
+    ticksRestantes: 0,
+  };
+  return [centroUrbano, granja, ...viviendas];
 }
 
 /**
@@ -52,8 +108,10 @@ export function fundarAsentamiento(
     };
   }
 
+  const id = `asentamiento-${asentamientosExistentes.length}-${Math.round(posicion.x)}-${Math.round(posicion.y)}`;
+
   const asentamiento: Asentamiento = {
-    id: `asentamiento-${asentamientosExistentes.length}-${Math.round(posicion.x)}-${Math.round(posicion.y)}`,
+    id,
     faccionId,
     jugadoresFundadoresIds,
     posicion,
@@ -62,7 +120,7 @@ export function fundarAsentamiento(
     radioPotencial: ZONA_INFLUENCIA.radioInicial,
     poblacion: { pesants: POBLACION.pesants.inicial, artesanos: 0, nobleza: 0 },
     almacen: almacenInicial,
-    edificios: [],
+    edificios: edificiosIniciales(world, posicion, id),
     cargos: { gobernadorId: null, tesoreroId: null, generalId: null, maestroObrasId: null, sacerdoteId: null },
     casasCompradas: [...jugadoresFundadoresIds],
     politicasActivas: [],

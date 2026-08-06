@@ -4,8 +4,8 @@
 // de dominio: eso es responsabilidad exclusiva de `gameStore`. Los tipos de `./domain/types` se
 // importan solo como `type` para tipar lo que se lee — no acoplan a ninguna lógica.
 import type { Asentamiento, CargoTipo, Faccion } from './domain/types';
-import { CATALOGOS, gameStore, type GameState } from './app/gameStore';
-import { draw, faccionColor, RECURSO_COLOR, RECURSOS_EN_MAPA, EDIFICIO_COLOR, FACCION_COLORES, type DrawState } from './ui/canvas';
+import { CATALOGOS, gameStore, type GameState, type CampoBalance } from './app/gameStore';
+import { draw, drawFiltroFertilidad, faccionColor, RECURSO_COLOR, RECURSOS_EN_MAPA, EDIFICIO_COLOR, FACCION_COLORES, type DrawState } from './ui/canvas';
 
 const CANVAS_SIZE = 800;
 
@@ -20,6 +20,7 @@ const RECURSO_NOMBRE: Record<string, string> = {
 };
 
 const EDIFICIO_NOMBRE: Record<string, string> = {
+  centroUrbano: 'Centro Urbano',
   vivienda: 'Vivienda',
   granja: 'Granja',
   cantera: 'Cantera',
@@ -28,14 +29,62 @@ const EDIFICIO_NOMBRE: Record<string, string> = {
   taller: 'Taller',
   mina: 'Mina de oro',
   minaCobre: 'Mina de cobre',
+  minaEstano: 'Mina de estaño',
   fundicion: 'Fundición',
   granFundicion: 'Gran Fundición',
 };
 
+const EDIFICIO_FUNCION: Record<string, string> = {
+  centroUrbano: 'Marca el centro fundacional del asentamiento. Único: solo se obtiene al fundar, nunca se puede construir después.',
+  vivienda: 'Amplía la capacidad de población (15 habitantes c/u).',
+  granja: 'Produce trigo (comida) según la fertilidad del suelo donde se ubica.',
+  cantera: 'Extrae piedra de un yacimiento cercano hasta agotarlo.',
+  lenera: 'Extrae madera de un bosque cercano (no se agota).',
+  almacen: 'Amplía la capacidad de almacenamiento de todos los recursos.',
+  taller: 'Habilita la aparición de Artesanos en el asentamiento.',
+  mina: 'Extrae oro de un yacimiento cercano hasta agotarlo.',
+  minaCobre: 'Extrae cobre de un yacimiento cercano hasta agotarlo.',
+  minaEstano: 'Extrae estaño de un yacimiento cercano hasta agotarlo.',
+  fundicion: 'Edificio militar (colocación manual) — base para producción de tropas.',
+  granFundicion: 'Edificio militar de élite (colocación manual) — requiere nivel de Facción alto; habilita tropas de Nobleza.',
+};
+
+/** Campos de factor que puede traer una política del catálogo (ver CATALOGOS.politicas), con etiqueta legible. */
+const FACTOR_LABEL: Record<string, string> = {
+  factorConsumoComida: 'Consumo de comida',
+  factorCrecimientoNobleza: 'Crecimiento de Nobleza',
+  factorTiempoConstruccion: 'Tiempo de construcción',
+  factorComisionExterna: 'Comisión de comercio externo',
+  factorCostoReclutamiento: 'Costo de reclutamiento',
+};
+
+/** Describe en una línea qué mueve una política del catálogo (multiplicador sobre el factor correspondiente,
+ * o el efecto especial de campos no multiplicativos como `minimoLenerasPrioritario`). */
+function efectoPolitica(politica: (typeof CATALOGOS.politicas)[number]): string {
+  const registro = politica as unknown as Record<string, unknown>;
+  const efectos: string[] = [];
+  if (typeof registro.minimoLenerasPrioritario === 'number') {
+    efectos.push(`Prioriza Leñeras: bloquea el resto de auto-construcción hasta tener ${registro.minimoLenerasPrioritario} (activas o en curso)`);
+  }
+  efectos.push(
+    ...Object.keys(FACTOR_LABEL)
+      .filter((campo) => typeof registro[campo] === 'number')
+      .map((campo) => `${FACTOR_LABEL[campo]} ×${registro[campo]}`)
+  );
+  return efectos.length ? efectos.join(', ') : 'Sin efecto mecánico modelado todavía (solo flag de postura).';
+}
+
 // --- Estado de vista (qué se muestra, no simulación): vive solo aquí, nunca en el store. ---
-let tabActivo: 'acciones' | 'asentamientos' | 'jugadores' = 'acciones';
+let tabActivo: 'acciones' | 'asentamientos' | 'jugadores' | 'politicas' | 'balance' = 'acciones';
 let asentamientoSeleccionadoId: string | null = null;
 let jugadorSeleccionadoId: string | null = null;
+/** Tick que el slider de línea de tiempo está mostrando. Sigue al tick en vivo salvo que el usuario arrastre hacia atrás. */
+let viewedTick = 0;
+let ultimoTickEnVivo = 0;
+let mostrarFiltroFertilidad = false;
+/** Grupos de la pestaña "Valores de simulación" que el usuario dejó expandidos (persiste solo en esta vista). */
+const balanceGruposAbiertos = new Set<string>();
+let balanceFiltro = '';
 
 const app = document.getElementById('app')!;
 app.innerHTML = `
@@ -45,6 +94,8 @@ app.innerHTML = `
       <button class="tab-btn" data-tab="acciones">Acciones</button>
       <button class="tab-btn" data-tab="asentamientos">Asentamientos</button>
       <button class="tab-btn" data-tab="jugadores">Jugadores</button>
+      <button class="tab-btn" data-tab="politicas">Políticas</button>
+      <button class="tab-btn" data-tab="balance">Valores de simulación</button>
     </div>
 
     <div class="tab-panel" id="tab-acciones">
@@ -63,15 +114,12 @@ app.innerHTML = `
           Seed del mundo
           <input id="seed-input" type="number" value="1" />
         </label>
-        <button id="regenerar-btn">Regenerar mundo</button>
-        <button id="tick-btn">Avanzar tick</button>
-        <div id="tick-counter">Tick: 0</div>
       </div>
 
       <div class="controls">
         <h2>Cargos (Doc 2.2)</h2>
         <label>Facción <select id="cargo-faccion"></select></label>
-        <label>Jugador (id) <input id="cargo-jugador" type="text" placeholder="jugador-faccion-1-1" /></label>
+        <label>Jugador (ciudadano de la facción) <select id="cargo-jugador"></select></label>
         <button id="rey-btn">Asignar Rey</button>
         <button id="embajador-btn">Asignar Embajador</button>
         <label>Asentamiento <select id="cargo-asentamiento"></select></label>
@@ -167,18 +215,52 @@ app.innerHTML = `
     <div class="tab-panel" id="tab-jugadores" hidden>
       <div id="jugadores-tab"></div>
     </div>
+
+    <div class="tab-panel" id="tab-politicas" hidden>
+      <div class="section-title">Catálogo de políticas (Doc 4.4)</div>
+      <p class="legend-note">El Gobernador puede activar cualquier política del catálogo completo; el resto de cargos solo las de su propio pool. Duración fija de ${CATALOGOS.duracionPoliticaTicks} ticks, sin cancelación anticipada.</p>
+      <div id="politicas-tab" class="controls-grid"></div>
+    </div>
+
+    <div class="tab-panel" id="tab-balance" hidden>
+      <div class="section-title-row">
+        <div class="section-title">Valores de simulación</div>
+        <button type="button" id="restaurar-balance-btn">Restaurar valores de fábrica</button>
+      </div>
+      <p class="legend-note">Placeholders de balance (Doc — ver Consideraciones/Preguntas_Abiertas.md). Se editan en caliente: afectan de inmediato a la próxima acción o tick, sin necesidad de regenerar el mundo (salvo el grupo "Mundo"/generación, que solo se aplica al fundar un mundo nuevo).</p>
+      <div class="balance-toolbar">
+        <input type="search" id="balance-search" placeholder="Buscar campo o grupo…" />
+        <span class="balance-count" id="balance-count"></span>
+      </div>
+      <div id="balance-tab" class="balance-groups"></div>
+    </div>
   </div>
 
   <div class="map-column">
     <div class="map-panel">
       <canvas id="world-canvas" width="${CANVAS_SIZE}" height="${CANVAS_SIZE}"></canvas>
+      <label class="fertilidad-toggle"><input type="checkbox" id="fertilidad-checkbox" /> Filtro de fertilidad</label>
       <div class="legend" id="legend">
         <div class="legend-header" id="legend-toggle">Leyenda ▾</div>
         <div class="legend-body" id="legend-body"></div>
       </div>
     </div>
 
-    <div class="section-title">Estado de la simulación</div>
+    <div class="section-title-row">
+      <div class="section-title">Estado de la simulación</div>
+      <div class="time-travel">
+        <button type="button" id="regenerar-btn">Regenerar mundo</button>
+        <button type="button" id="tick-btn">Avanzar tick</button>
+        <span class="time-travel-divider"></span>
+        <span id="tick-slider-label">Tick: 0</span>
+        <input type="range" id="tick-slider" min="0" max="0" value="0" step="1" disabled />
+        <button type="button" id="volver-presente-btn" hidden>Volver al presente</button>
+        <span class="time-travel-divider"></span>
+        <button type="button" id="exportar-btn">Exportar</button>
+        <button type="button" id="importar-btn">Importar</button>
+        <input type="file" id="importar-input" accept="application/json,.json" hidden />
+      </div>
+    </div>
     <div class="logs-grid">
       <div class="log-card">
         <h2>Asentamientos</h2>
@@ -216,7 +298,10 @@ const logEl = document.getElementById('log')!;
 const asentamientosPanelEl = document.getElementById('asentamientos-panel')!;
 const politicaPanelEl = document.getElementById('politica-panel')!;
 const economiaPanelEl = document.getElementById('economia-panel')!;
-const tickCounterEl = document.getElementById('tick-counter')!;
+const tickSliderEl = document.getElementById('tick-slider') as HTMLInputElement;
+const tickSliderLabelEl = document.getElementById('tick-slider-label')!;
+const volverPresenteBtn = document.getElementById('volver-presente-btn') as HTMLButtonElement;
+const controlsPanelEl = document.querySelector('.controls-panel')!;
 const faccionSelect = document.getElementById('faccion-select') as HTMLSelectElement;
 const seedInput = document.getElementById('seed-input') as HTMLInputElement;
 const jugadoresInput = document.getElementById('jugadores-input') as HTMLInputElement;
@@ -235,7 +320,7 @@ const mercadoCantidadInput = document.getElementById('mercado-cantidad') as HTML
 const mercadoPrecioInput = document.getElementById('mercado-precio') as HTMLInputElement;
 
 const cargoFaccionSelect = document.getElementById('cargo-faccion') as HTMLSelectElement;
-const cargoJugadorInput = document.getElementById('cargo-jugador') as HTMLInputElement;
+const cargoJugadorSelect = document.getElementById('cargo-jugador') as HTMLSelectElement;
 const cargoAsentamientoSelect = document.getElementById('cargo-asentamiento') as HTMLSelectElement;
 const cargoTipoSelect = document.getElementById('cargo-tipo') as HTMLSelectElement;
 
@@ -282,6 +367,19 @@ function etiquetaAsentamiento(a: Asentamiento, facciones: Faccion[]): string {
   return `${a.id} (${nombreFaccion})`;
 }
 
+/** El combo "Jugador" de Cargos solo ofrece ciudadanos de la Facción elegida en el combo de al lado. */
+function actualizarCargoJugadorSelect(state: GameState): void {
+  const faccion = state.facciones.find((f) => f.id === cargoFaccionSelect.value);
+  const ciudadanos = faccion?.ciudadanosIds ?? [];
+  const seleccionPrevia = cargoJugadorSelect.value;
+  cargoJugadorSelect.innerHTML = ciudadanos.length
+    ? ciudadanos.map((id) => `<option value="${id}">${id}</option>`).join('')
+    : '<option value="">Sin ciudadanos en esta facción</option>';
+  if (ciudadanos.includes(seleccionPrevia)) cargoJugadorSelect.value = seleccionPrevia;
+}
+
+cargoFaccionSelect.addEventListener('change', () => actualizarCargoJugadorSelect(gameStore.getState()));
+
 function actualizarSelects(state: GameState): void {
   const opcionesAsentamientos = state.asentamientos.map((a) => `<option value="${a.id}">${etiquetaAsentamiento(a, state.facciones)}</option>`).join('');
   for (const select of [
@@ -312,6 +410,8 @@ function actualizarSelects(state: GameState): void {
     select.innerHTML = opcionesFacciones;
     if (state.facciones.some((f) => f.id === seleccionPrevia)) select.value = seleccionPrevia;
   }
+
+  actualizarCargoJugadorSelect(state);
 
   const seleccionPreviaFaccionActiva = faccionSelect.value;
   faccionSelect.innerHTML = state.facciones
@@ -374,31 +474,79 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
     })
     .join('');
 
-  const edificiosPorTipo = new Map<string, { activo: number; en_construccion: number; en_cola: number }>();
+  // La cola de construcción es única y compartida por TODO el asentamiento (no una por tipo de edificio):
+  // el motor evalúa todos los "en_cola" en el mismo orden del array cada tick (ver Doc engine/construction.ts).
+  const colaGlobal = a.edificios.filter((e) => e.estado === 'en_cola');
+  const posicionEnCola = new Map(colaGlobal.map((e, i) => [e.id, i + 1]));
+
+  const edificiosPorTipo = new Map<string, { activos: number; enConstruccion: number[]; enCola: number[] }>();
   for (const e of a.edificios) {
-    const entry = edificiosPorTipo.get(e.tipo) ?? { activo: 0, en_construccion: 0, en_cola: 0 };
-    entry[e.estado] += 1;
+    const entry = edificiosPorTipo.get(e.tipo) ?? { activos: 0, enConstruccion: [], enCola: [] };
+    if (e.estado === 'activo') entry.activos += 1;
+    else if (e.estado === 'en_construccion') entry.enConstruccion.push(e.ticksRestantes);
+    else entry.enCola.push(posicionEnCola.get(e.id)!);
     edificiosPorTipo.set(e.tipo, entry);
   }
   const edificiosHtml = edificiosPorTipo.size
     ? `<table class="mini-table">
-        <thead><tr><th>Edificio</th><th>Activos</th><th>En construcción</th><th>En cola</th></tr></thead>
+        <thead><tr><th>Edificio</th><th>Función</th><th>Activos</th><th>En construcción</th><th>En cola (${colaGlobal.length}/${CATALOGOS.maximoEdificiosEnCola})</th></tr></thead>
         <tbody>
           ${Array.from(edificiosPorTipo.entries())
-            .map(
-              ([tipo, e]) =>
-                `<tr><td>${EDIFICIO_NOMBRE[tipo] ?? tipo}</td><td>${e.activo}</td><td>${e.en_construccion}</td><td>${e.en_cola}</td></tr>`
-            )
+            .map(([tipo, e]) => {
+              const construccionTxt = e.enConstruccion.length
+                ? e.enConstruccion.map((t) => `${t}t`).join(', ')
+                : '—';
+              const colaTxt = e.enCola.length ? e.enCola.map((p) => `#${p} de ${colaGlobal.length}`).join(', ') : '—';
+              return `<tr><td>${EDIFICIO_NOMBRE[tipo] ?? tipo}</td><td>${EDIFICIO_FUNCION[tipo] ?? '—'}</td><td>${e.activos}</td><td>${construccionTxt}</td><td>${colaTxt}</td></tr>`;
+            })
             .join('')}
         </tbody>
       </table>`
     : '<p class="legend-note">Sin edificios.</p>';
 
-  const politicasHtml = a.politicasActivas.length
-    ? `<div class="chip-row">${a.politicasActivas
-        .map((p) => `<span class="chip">${CATALOGOS.politicas.find((c) => c.id === p.politicaId)?.nombre ?? p.politicaId} (hasta t${p.expiraEnTick})</span>`)
-        .join('')}</div>`
+  const politicasActivasHtml = a.politicasActivas.length
+    ? `<table class="mini-table">
+        <thead><tr><th>Política</th><th>Cargo</th><th>Efecto</th><th>Expira</th></tr></thead>
+        <tbody>
+          ${a.politicasActivas
+            .map((p) => {
+              const def = CATALOGOS.politicas.find((c) => c.id === p.politicaId);
+              return `<tr><td>${def?.nombre ?? p.politicaId}</td><td>${p.cargo}</td><td>${def ? efectoPolitica(def) : '—'}</td><td>t${p.expiraEnTick}</td></tr>`;
+            })
+            .join('')}
+        </tbody>
+      </table>`
     : '<p class="legend-note">Sin políticas activas.</p>';
+
+  const slotsHtml = CATALOGOS.cargos
+    .map((c) => {
+      const activasDeCargo = a.politicasActivas.filter((p) => p.cargo === c).length;
+      const limite = gameStore.slotsPoliticaDisponibles(c, faccion?.nivel ?? 1);
+      return `<div class="kv-row"><span>${c}</span><span>${activasDeCargo}/${limite}</span></div>`;
+    })
+    .join('');
+  const politicasHtml = `${politicasActivasHtml}<div class="kv-grid" style="margin-top:8px">${slotsHtml}</div>`;
+
+  const nivelInfo = gameStore.nivelAsentamientoInfo(a);
+  const nivelPorcentaje = nivelInfo.esMaximo ? 100 : Math.round((nivelInfo.puntosParaSiguiente / nivelInfo.puntosPorNivel) * 100);
+  const nivelTexto = nivelInfo.esMaximo ? 'Nivel máximo' : `${nivelInfo.puntosParaSiguiente}/${nivelInfo.puntosPorNivel} puntos para el nivel ${nivelInfo.nivel + 1}`;
+
+  const mantenimiento = gameStore.mantenimientoInfo(a);
+  const mantenimientoHtml = mantenimiento.enGracia
+    ? `<p class="legend-note">En periodo de gracia (recién fundado): sin coste todavía — ${mantenimiento.ticksParaFinGracia} ticks restantes.</p>`
+    : mantenimiento.items.length
+      ? `<table class="mini-table">
+          <thead><tr><th>Recurso</th><th>Coste/tick</th><th>Disponible</th></tr></thead>
+          <tbody>
+            ${mantenimiento.items
+              .map(
+                (i) =>
+                  `<tr class="${i.cubierto ? '' : 'fila-deficit'}"><td>${RECURSO_NOMBRE[i.recurso] ?? i.recurso}</td><td>${i.costoPorTick.toFixed(1)}</td><td>${i.disponible.toFixed(0)}</td></tr>`
+              )
+              .join('')}
+          </tbody>
+        </table>`
+      : '<p class="legend-note">Sin coste de mantenimiento.</p>';
 
   const escuadronesHtml = a.escuadrones.length
     ? `<table class="mini-table">
@@ -424,8 +572,15 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
           <div class="kv-row"><span>Radio potencial</span><span>${Math.round(a.radioPotencial)}</span></div>
           <div class="kv-row"><span>Fundado en tick</span><span>${a.fundadoEnTick}</span></div>
         </div>
+        <div class="kv-row" style="margin-top:6px"><span>Progreso de nivel</span><span>${nivelTexto}</span></div>
+        <div class="mantenimiento-bar"><div class="mantenimiento-fill" style="width:${nivelPorcentaje}%"></div></div>
         <div class="kv-row" style="margin-top:6px"><span>Mantenimiento</span><span>${a.medidorMantenimiento.toFixed(0)}/100</span></div>
         <div class="mantenimiento-bar"><div class="mantenimiento-fill" style="width:${Math.max(0, Math.min(100, a.medidorMantenimiento))}%"></div></div>
+      </div>
+
+      <div class="detail-section">
+        <h3>Mantenimiento — consumo por tick</h3>
+        ${mantenimientoHtml}
       </div>
 
       <div class="detail-section">
@@ -460,7 +615,7 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
       </div>
 
       <div class="detail-section">
-        <h3>Políticas activas</h3>
+        <h3>Políticas activas y slots por cargo</h3>
         ${politicasHtml}
       </div>
 
@@ -508,7 +663,7 @@ function renderAsentamientosTab(state: GameState): void {
   cont.querySelectorAll('.settlement-tab-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       asentamientoSeleccionadoId = (btn as HTMLElement).dataset.settlement!;
-      renderAsentamientosTab(gameStore.getState());
+      render();
     });
   });
 }
@@ -615,10 +770,134 @@ function renderJugadoresTab(state: GameState): void {
   cont.querySelectorAll('.settlement-tab-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       jugadorSeleccionadoId = (btn as HTMLElement).dataset.jugador!;
-      renderJugadoresTab(gameStore.getState());
+      render();
     });
   });
 }
+
+function renderPoliticasTab(): void {
+  const cont = document.getElementById('politicas-tab')!;
+  const gobernadorSlots = CATALOGOS.slotsPorCargoBase.gobernador;
+  const notaGobernador = `<div class="controls">
+    <h2>Gobernador</h2>
+    <p class="legend-note">Pool completa: puede activar cualquier política del catálogo, no solo las de su propio cargo.</p>
+    <div class="kv-row"><span>Slots simultáneos</span><span>${gobernadorSlots.base}–${gobernadorSlots.maximo} (escala +1 cada ${CATALOGOS.nivelFaccionPorSlotExtraGobernador} niveles de Facción)</span></div>
+  </div>`;
+
+  const tarjetasPolitica = CATALOGOS.politicas
+    .map((p) => {
+      const slots = CATALOGOS.slotsPorCargoBase[p.cargo as keyof typeof CATALOGOS.slotsPorCargoBase];
+      return `<div class="controls">
+        <h2>${p.nombre}</h2>
+        <div class="kv-row"><span>Cargo</span><span>${p.cargo}</span></div>
+        <div class="kv-row"><span>Slots simultáneos (${p.cargo})</span><span>${slots.base} (fijo)</span></div>
+        <div class="kv-row"><span>Duración</span><span>${CATALOGOS.duracionPoliticaTicks} ticks</span></div>
+        <p class="legend-note">${efectoPolitica(p)}</p>
+      </div>`;
+    })
+    .join('');
+
+  cont.innerHTML = notaGobernador + tarjetasPolitica;
+}
+
+/** Agrupa los campos de balance tal como los expone el store, preservando su orden de aparición. */
+function agruparPorGrupo(campos: CampoBalance[]): Map<string, CampoBalance[]> {
+  const grupos = new Map<string, CampoBalance[]>();
+  for (const campo of campos) {
+    const lista = grupos.get(campo.grupo) ?? [];
+    lista.push(campo);
+    grupos.set(campo.grupo, lista);
+  }
+  return grupos;
+}
+
+function renderBalanceTab(): void {
+  const cont = document.getElementById('balance-tab')!;
+  const countEl = document.getElementById('balance-count')!;
+  const todosLosCampos = gameStore.getBalance();
+  const filtro = balanceFiltro.trim().toLowerCase();
+  const grupos = agruparPorGrupo(todosLosCampos);
+
+  let camposCoincidentes = 0;
+  const gruposHtml = Array.from(grupos.entries())
+    .map(([grupo, campos]) => {
+      const camposFiltrados = filtro
+        ? campos.filter((c) => c.etiqueta.toLowerCase().includes(filtro) || grupo.toLowerCase().includes(filtro))
+        : campos;
+      if (camposFiltrados.length === 0) return '';
+      camposCoincidentes += camposFiltrados.length;
+
+      const modificados = campos.filter((c) => c.valor !== c.defecto).length;
+      const abierto = filtro !== '' || balanceGruposAbiertos.has(grupo);
+
+      const camposHtml = camposFiltrados
+        .map((c) => {
+          const modificado = c.valor !== c.defecto;
+          return `<div class="balance-field${modificado ? ' is-modified' : ''}">
+            <label>
+              <span class="balance-field-label">${c.etiqueta}</span>
+              <span class="balance-field-row">
+                <input type="number" step="any" data-path="${c.path}" value="${c.valor}" title="Valor de fábrica: ${c.defecto}" />
+                ${modificado ? `<button type="button" class="balance-field-reset" data-reset-path="${c.path}" data-default="${c.defecto}" title="Restaurar a ${c.defecto}">↺</button>` : ''}
+              </span>
+            </label>
+          </div>`;
+        })
+        .join('');
+
+      return `<details class="balance-group" data-grupo="${grupo}"${abierto ? ' open' : ''}>
+        <summary>
+          <span class="grupo-nombre">${grupo}</span>
+          <span class="badge">${campos.length}</span>
+          ${modificados ? `<span class="badge badge-modified">${modificados} modificado${modificados > 1 ? 's' : ''}</span>` : ''}
+        </summary>
+        <div class="balance-fields">${camposHtml}</div>
+      </details>`;
+    })
+    .join('');
+
+  cont.innerHTML = gruposHtml || '<p class="legend-note">Sin coincidencias para el filtro actual.</p>';
+  countEl.textContent = filtro
+    ? `${camposCoincidentes} de ${todosLosCampos.length} campos coinciden`
+    : `${todosLosCampos.length} campos en ${grupos.size} grupos`;
+
+  cont.querySelectorAll<HTMLDetailsElement>('.balance-group').forEach((el) => {
+    el.addEventListener('toggle', () => {
+      const grupo = el.dataset.grupo!;
+      if (el.open) balanceGruposAbiertos.add(grupo);
+      else balanceGruposAbiertos.delete(grupo);
+    });
+  });
+}
+
+document.getElementById('balance-tab')!.addEventListener('change', (ev) => {
+  const input = ev.target as HTMLInputElement;
+  const path = input.dataset.path;
+  if (!path) return;
+  gameStore.actualizarBalance(path, Number(input.value));
+  renderBalanceTab();
+});
+
+document.getElementById('balance-tab')!.addEventListener('click', (ev) => {
+  const btn = (ev.target as HTMLElement).closest('.balance-field-reset') as HTMLButtonElement | null;
+  if (!btn) return;
+  const path = btn.dataset.resetPath;
+  const defecto = btn.dataset.default;
+  if (!path || defecto === undefined) return;
+  gameStore.actualizarBalance(path, Number(defecto));
+  renderBalanceTab();
+});
+
+const balanceSearchInput = document.getElementById('balance-search') as HTMLInputElement;
+balanceSearchInput.addEventListener('input', () => {
+  balanceFiltro = balanceSearchInput.value;
+  renderBalanceTab();
+});
+
+document.getElementById('restaurar-balance-btn')!.addEventListener('click', () => {
+  gameStore.restaurarBalance();
+  renderBalanceTab();
+});
 
 function renderPanelPolitica(state: GameState): void {
   const facH = state.facciones
@@ -636,7 +915,7 @@ function renderPanelPolitica(state: GameState): void {
       return `<div>${r.tipo} [${r.estado}]: ${a} → ${b}${trib}</div>`;
     })
     .join('');
-  const ligas = gameStore.getLigas();
+  const ligas = gameStore.getLigas(state.relaciones, state.facciones);
   const ligasH = ligas
     .map((liga, i) => {
       const nombres = liga.miembrosFaccionIds.map((id) => state.facciones.find((f) => f.id === id)?.nombre ?? id).join(', ');
@@ -672,7 +951,7 @@ function renderPanelProgresion(state: GameState): void {
 }
 
 function renderPanelEconomia(state: GameState): void {
-  const preciosHtml = CATALOGOS.recursosMercado.map((r) => `${r}: ${gameStore.precioReferencia(r).toFixed(2)}`).join(' · ');
+  const preciosHtml = CATALOGOS.recursosMercado.map((r) => `${r}: ${gameStore.precioReferencia(r, state.asentamientos).toFixed(2)}`).join(' · ');
   const acuerdosHtml = state.acuerdos
     .map(
       (t) =>
@@ -739,12 +1018,16 @@ function actualizarTabs(): void {
   document.getElementById('tab-acciones')!.hidden = tabActivo !== 'acciones';
   document.getElementById('tab-asentamientos')!.hidden = tabActivo !== 'asentamientos';
   document.getElementById('tab-jugadores')!.hidden = tabActivo !== 'jugadores';
+  document.getElementById('tab-politicas')!.hidden = tabActivo !== 'politicas';
+  document.getElementById('tab-balance')!.hidden = tabActivo !== 'balance';
+  if (tabActivo === 'balance') renderBalanceTab();
+  if (tabActivo === 'politicas') renderPoliticasTab();
 }
 
 document.getElementById('main-tabs')!.addEventListener('click', (ev) => {
   const btn = (ev.target as HTMLElement).closest('.tab-btn') as HTMLButtonElement | null;
   if (!btn) return;
-  tabActivo = btn.dataset.tab as 'acciones' | 'asentamientos' | 'jugadores';
+  tabActivo = btn.dataset.tab as 'acciones' | 'asentamientos' | 'jugadores' | 'politicas' | 'balance';
   actualizarTabs();
 });
 actualizarTabs();
@@ -755,12 +1038,37 @@ document.getElementById('legend-toggle')!.addEventListener('click', () => {
   toggle.textContent = legendEl.classList.contains('collapsed') ? 'Leyenda ▸' : 'Leyenda ▾';
 });
 
+document.getElementById('fertilidad-checkbox')!.addEventListener('change', (ev) => {
+  mostrarFiltroFertilidad = (ev.target as HTMLInputElement).checked;
+  render();
+});
+
 function render(): void {
-  const state = gameStore.getState();
-  const drawState: DrawState = { world: state.world, asentamientos: state.asentamientos, zonas: gameStore.getZonas(), facciones: state.facciones, caravanas: state.caravanas };
+  const liveState = gameStore.getState();
+
+  // El tick en vivo solo puede avanzar mientras se está viendo el presente (las acciones se
+  // deshabilitan en el pasado, ver más abajo), así que si cambió, el slider lo sigue automáticamente.
+  if (liveState.tick !== ultimoTickEnVivo) {
+    ultimoTickEnVivo = liveState.tick;
+    viewedTick = liveState.tick;
+  }
+
+  const viendoPasado = viewedTick !== liveState.tick;
+  const state = viendoPasado ? (gameStore.getSnapshot(viewedTick) ?? liveState) : liveState;
+
+  const rangoTicks = gameStore.getTickRange();
+  tickSliderEl.min = String(rangoTicks.min);
+  tickSliderEl.max = String(rangoTicks.max);
+  tickSliderEl.value = String(viewedTick);
+  tickSliderEl.disabled = rangoTicks.min === rangoTicks.max;
+  tickSliderLabelEl.textContent = viendoPasado ? `Viendo tick ${viewedTick} de ${liveState.tick}` : `Tick: ${liveState.tick}`;
+  volverPresenteBtn.hidden = !viendoPasado;
+  controlsPanelEl.classList.toggle('viendo-pasado', viendoPasado);
+
+  const drawState: DrawState = { world: state.world, asentamientos: state.asentamientos, zonas: gameStore.getZonas(state.asentamientos), facciones: state.facciones, caravanas: state.caravanas };
   draw(ctx, canvas, drawState);
-  tickCounterEl.textContent = `Tick: ${state.tick}`;
-  actualizarSelects(state);
+  if (mostrarFiltroFertilidad) drawFiltroFertilidad(ctx, canvas, state.world);
+  actualizarSelects(liveState);
   renderPanelAsentamientos(state);
   renderAsentamientosTab(state);
   renderJugadoresTab(state);
@@ -776,6 +1084,16 @@ function render(): void {
 // vuelve a llamar `render()` manualmente tras una acción — eso sería recrear el acoplamiento.
 gameStore.subscribe(render);
 
+tickSliderEl.addEventListener('input', () => {
+  viewedTick = Number(tickSliderEl.value);
+  render();
+});
+
+volverPresenteBtn.addEventListener('click', () => {
+  viewedTick = gameStore.getState().tick;
+  render();
+});
+
 function idsDeInput(input: HTMLInputElement): string {
   return input.value;
 }
@@ -790,15 +1108,15 @@ canvas.addEventListener('click', (ev) => {
 });
 
 document.getElementById('rey-btn')!.addEventListener('click', () => {
-  gameStore.asignarRey(cargoFaccionSelect.value, cargoJugadorInput.value.trim());
+  gameStore.asignarRey(cargoFaccionSelect.value, cargoJugadorSelect.value);
 });
 
 document.getElementById('embajador-btn')!.addEventListener('click', () => {
-  gameStore.asignarEmbajador(cargoFaccionSelect.value, cargoJugadorInput.value.trim());
+  gameStore.asignarEmbajador(cargoFaccionSelect.value, cargoJugadorSelect.value);
 });
 
 document.getElementById('cargo-local-btn')!.addEventListener('click', () => {
-  gameStore.asignarCargoLocal(cargoAsentamientoSelect.value, cargoTipoSelect.value as CargoTipo, cargoJugadorInput.value.trim());
+  gameStore.asignarCargoLocal(cargoAsentamientoSelect.value, cargoTipoSelect.value as CargoTipo, cargoJugadorSelect.value);
 });
 
 document.getElementById('casa-btn')!.addEventListener('click', () => {
@@ -891,6 +1209,32 @@ document.getElementById('tick-btn')!.addEventListener('click', () => {
 
 document.getElementById('regenerar-btn')!.addEventListener('click', () => {
   gameStore.regenerarMundo(Number(seedInput.value) || 0);
+});
+
+document.getElementById('exportar-btn')!.addEventListener('click', () => {
+  const json = gameStore.exportarSimulacion();
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const enlace = document.createElement('a');
+  enlace.href = url;
+  enlace.download = `bronze-age-sim-tick${gameStore.getState().tick}.json`;
+  enlace.click();
+  URL.revokeObjectURL(url);
+});
+
+const importarInput = document.getElementById('importar-input') as HTMLInputElement;
+document.getElementById('importar-btn')!.addEventListener('click', () => {
+  importarInput.click();
+});
+importarInput.addEventListener('change', () => {
+  const archivo = importarInput.files?.[0];
+  importarInput.value = '';
+  if (!archivo) return;
+  const lector = new FileReader();
+  lector.onload = () => {
+    gameStore.importarSimulacion(String(lector.result));
+  };
+  lector.readAsText(archivo);
 });
 
 render();

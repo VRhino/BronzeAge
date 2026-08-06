@@ -1,4 +1,4 @@
-import type { Asentamiento } from '../domain/types';
+import type { Asentamiento, RecursoTipo } from '../domain/types';
 import { MANTENIMIENTO, NIVEL_ASENTAMIENTO } from '../constants';
 import { poblacionTotal } from './asentamientoQuery';
 import { descontarRecursos } from './almacen';
@@ -47,6 +47,19 @@ export function calcularCostoMantenimiento(asentamiento: Asentamiento, capital: 
   if (nivel >= MANTENIMIENTO.nivelParaPiedra) costo.piedra = MANTENIMIENTO.piedraBase * escala;
   if (nivel >= MANTENIMIENTO.nivelParaOro) costo.oro = MANTENIMIENTO.oroBase * escala;
   return costo;
+}
+
+/**
+ * Qué recursos cobra Mantenimiento a este nivel de asentamiento — igual criterio que `calcularCostoMantenimiento`
+ * pero sin necesitar `capital`/distancia (esos solo afectan el MONTO, no qué recursos aparecen). Lo usa
+ * `engine/construction.ts` para saber qué recursos debe respetar la reserva mínima de construcción
+ * (`RESERVA_CONSTRUCCION`) en un momento dado — "los recursos que consuma el asentamiento en ese momento".
+ */
+export function recursosProtegidosPorMantenimiento(nivel: number): RecursoTipo[] {
+  const recursos: RecursoTipo[] = ['madera', 'trigo'];
+  if (nivel >= MANTENIMIENTO.nivelParaPiedra) recursos.push('piedra');
+  if (nivel >= MANTENIMIENTO.nivelParaOro) recursos.push('oro');
+  return recursos;
 }
 
 function fraccionCubierta(almacen: Asentamiento['almacen'], costo: Partial<Record<string, number>>): number {

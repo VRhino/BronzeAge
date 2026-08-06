@@ -49,7 +49,7 @@ RESUELTO: protección temporal para asentamientos recién fundados = período de
 - Referencias estéticas concretas (micénica, hitita, mesopotámica...)
 
 ## 10. Recursos y cadenas de producción
-RESUELTO (parcialmente): qué pasa en déficit sostenido de un asentamiento — ver sistema unificado de Mantenimiento (medidor 0-100, coste escalonado de madera/comida/piedra/oro según nivel, degradación proporcional, destrucción a 0; umbral de oro ahora en nivel 8, no 6). RESUELTO: agotamiento de recursos finitos (cantera/mina de oro/mina de cobre/lenera) — se reemplazan automáticamente hasta un máximo ligado al nivel del asentamiento (ver Doc 4.2 y `Correcciones_Durante_Desarrollo.md`).
+RESUELTO (parcialmente): qué pasa en déficit sostenido de un asentamiento — ver sistema unificado de Mantenimiento (medidor 0-100, coste escalonado de madera/comida/piedra/oro según nivel, degradación proporcional, destrucción a 0; umbral de oro ahora en nivel 8, no 6). RESUELTO: agotamiento de recursos finitos (cantera/mina de oro/mina de cobre/mina de estaño/lenera) — se reemplazan automáticamente hasta un máximo ligado al nivel del asentamiento (ver Doc 4.2 y `Correcciones_Durante_Desarrollo.md`). RESUELTO (rebalance posterior a Sprint 6): la auto-construcción priorizaba mal Vivienda/Granja/Cantera por delante de la Leñera y podía copar la cola de construcción, dejando la única fuente de madera sin forma de construirse — corregido con reordenamiento de prioridades, un slot de cola reservado para recursos de supervivencia (Granja/Leñera) y una reserva mínima de recursos que la construcción nunca puede tocar mientras Mantenimiento los necesite (ver Doc 4.2/4.5 y `Correcciones_Durante_Desarrollo.md`). RESUELTO: el estaño no tenía edificio de extracción propio — añadida `minaEstano`, mismo patrón que cantera/mina/minaCobre.
 
 Pendiente:
 - ¿Más cultivos/ganado además de lo confirmado?
@@ -62,8 +62,10 @@ Pendiente (menor):
 - Criterio exacto de la cola de prioridad de reclutamiento
 
 ## 12. Políticas — cerrado (mayormente)
+RESUELTO (parcialmente, ejemplos ilustrativos no exhaustivos): hay un puñado de políticas concretas implementadas con efecto mecánico real, no solo flags — incluye "Protección de Riesgos" (Maestro de Obras, rebalance posterior a Sprint 6), que fuerza a la auto-construcción a priorizar Leñeras hasta un mínimo antes de construir cualquier otra cosa (ver Doc 4.2/4.4).
+
 Pendiente:
-- Catálogo concreto de políticas dentro de cada pool
+- Catálogo concreto de políticas dentro de cada pool (más allá de los ejemplos ya implementados)
 - Si son excluyentes entre sí dentro de un mismo slot
 
 ## 13. Cap de asentamientos y fusión de Facciones — cerrado (mayormente)

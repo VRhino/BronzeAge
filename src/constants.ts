@@ -61,22 +61,35 @@ export const ZONA_INFLUENCIA = {
 
 export const FUNDACION = {
   maxJugadoresFundacionGrupal: 5,
-  // La caravana de fundación (Doc 1.3) trae una reserva básica para arrancar la primera construcción
-  // (sin esto, ningún edificio podría levantarse: la lenera que produce madera también cuesta madera).
-  materialesIniciales: { madera: 60, piedra: 20 } as Record<string, number>,
+  // La caravana de fundación (Doc 1.3) trae una reserva inicial generosa: además de materiales básicos,
+  // trigo suficiente para no entrar en déficit de comida desde el primer tick y oro para las primeras
+  // operaciones de mercado/trueque.
+  materialesIniciales: { madera: 50, piedra: 20, trigo: 100, oro: 100 } as Record<string, number>,
+  // Edificios que nacen ya activos con el asentamiento (Doc 1.3): un Centro Urbano (marcador único, no
+  // se puede construir por ningún otro medio) + una Granja + 3 Viviendas, para no depender del todo de
+  // la auto-construcción en los primeros ticks.
+  viviendasIniciales: 3,
 };
 
 // --- Sprint 2: Población, construcción automática y almacenamiento (Doc 4) ---
 
 export const POBLACION = {
-  pesants: { inicial: 20, tasaCrecimientoBase: 0.05 },
-  artesanos: { tasaCrecimientoBase: 0.03, capacidadPorTaller: 15 },
+  // Tasas subidas (rebalance post-Fase 0): con 0.05/0.03 la población tardaba muchísimos más ticks en
+  // duplicarse que un asentamiento en subir de nivel (dominado por el conteo de edificios activos, ver
+  // NIVEL_ASENTAMIENTO) o que una caravana en cruzar el mapa — la población nunca alcanzaba a "sostener"
+  // el nivel del asentamiento.
+  pesants: { inicial: 20, tasaCrecimientoBase: 0.12 },
+  artesanos: { tasaCrecimientoBase: 0.05, capacidadPorTaller: 15 },
   // "Cantidad mínima de ciudadanos" sin número fijado en el diseño (ver Preguntas_Abiertas) — placeholder.
   nobleza: { minCiudadanos: 3, tasaCrecimientoBase: 0.01 },
   consumoComidaPorHabitante: 0.1, // trigo/tick por habitante (pesants+artesanos+nobleza)
 };
 
 export const EDIFICIO_CATALOGO = {
+  // Único edificio que NO pasa por la cola de construcción (ni automática ni manual, Doc 1.3): nace
+  // ya activo al fundar. costo/tiempoConstruccionTicks quedan en 0 solo por consistencia de forma con
+  // el resto del catálogo — nunca se leen, porque construirlo por otra vía no es posible.
+  centroUrbano: { costo: {}, tiempoConstruccionTicks: 0 },
   vivienda: { costo: { madera: 40, piedra: 20 }, tiempoConstruccionTicks: 4, capacidadHabitantes: 15 },
   granja: { costo: { madera: 30 }, tiempoConstruccionTicks: 5, produccionBaseTrigo: 6, trabajadoresRequeridos: 4 },
   cantera: { costo: { madera: 20 }, tiempoConstruccionTicks: 5, produccionBasePiedra: 5, trabajadoresRequeridos: 4 },
@@ -89,6 +102,9 @@ export const EDIFICIO_CATALOGO = {
   mina: { costo: { madera: 40 }, tiempoConstruccionTicks: 6, produccionBaseOro: 2, trabajadoresRequeridos: 4 },
   // Cobre (Doc 1.1/5.7): "relativamente abundante" — igual patrón que cantera/mina pero sobre nodos de cobre.
   minaCobre: { costo: { madera: 30 }, tiempoConstruccionTicks: 5, produccionBaseCobre: 4, trabajadoresRequeridos: 4 },
+  // Estaño (Doc 1.1/5.7): raro y concentrado (menos nodos que cobre/oro, ver RECURSO_RAREZA.raro) — costo más
+  // alto y producción base más baja que el resto de minas, coherente con ser el cuello de botella del bronce.
+  minaEstano: { costo: { madera: 50 }, tiempoConstruccionTicks: 7, produccionBaseEstano: 1.5, trabajadoresRequeridos: 4 },
   // Fundición/Gran Fundición (Doc 5.7): edificios de colocación MANUAL (decisión militar deliberada, no
   // auto-construcción por necesidad). Curtidor-Armero/Carpintería se abstraen dentro de estas dos (cadenas
   // de producción invisibles, Doc 4.2) — Fase 0 no necesita rastrear cada oficio como edificio separado.
@@ -107,6 +123,12 @@ export const NECESIDADES = {
   umbralComidaTicksReserva: 5,
   umbralAlmacenAmpliacion: 0.9,
   pesantsParaHabilitarTaller: 30, // placeholder: sustituye a un disparador de excedente de cobre aún no modelado
+  maximoEnCola: 3, // tope de edificios en estado 'en_cola' simultáneos (auto-construcción y manual comparten el mismo cupo)
+  // Rebalance: sin esto, Vivienda/Almacén/Taller podían copar los `maximoEnCola` slots con proyectos
+  // atascados por falta de recursos y dejar a Granja/Leñera —los recursos "de supervivencia" de los que
+  // depende TODO lo demás, incluido el Mantenimiento— sin hueco para encolarse nunca (interbloqueo real
+  // detectado en juego: asentamientos cayendo en ruinas por falta de madera con la Leñera siempre última).
+  slotsReservadosSupervivencia: 1,
 };
 
 // Colocación de edificios: crecimiento concéntrico desde el centro (Doc 4.2).
@@ -203,6 +225,10 @@ export const POLITICA_CATALOGO = [
   { id: 'culto_fertilidad', cargo: 'sacerdote', nombre: 'Culto a la Fertilidad', factorCrecimientoNobleza: 1.5 },
   { id: 'via_rapida', cargo: 'maestroObras', nombre: 'Vía Rápida de Construcción', factorTiempoConstruccion: 0.75 },
   { id: 'postura_defensiva', cargo: 'maestroObras', nombre: 'Postura Defensiva' }, // flag de layout, Doc 4.2 — sin efecto visual en Fase 0
+  // Modo de emergencia ante escasez de madera (ver NECESIDADES.slotsReservadosSupervivencia): mientras esté
+  // activa, la auto-construcción SOLO evalúa Leñeras hasta llegar a este mínimo (activas + en curso/cola),
+  // ignorando cualquier otra necesidad detectada ese tick.
+  { id: 'proteccion_riesgos', cargo: 'maestroObras', nombre: 'Protección de Riesgos', minimoLenerasPrioritario: 3 },
   { id: 'comercio_abierto', cargo: 'tesorero', nombre: 'Comercio Abierto', factorComisionExterna: 0.6 },
   { id: 'aranceles', cargo: 'tesorero', nombre: 'Aranceles Proteccionistas', factorComisionExterna: 1.5 },
   { id: 'leva_forzosa', cargo: 'general', nombre: 'Leva Forzosa', factorCostoReclutamiento: 0.7 },
@@ -257,10 +283,16 @@ export const MILITAR = {
 
 // Nivel de asentamiento: "qué lo hace subir" no está cerrado en el diseño — mismo criterio placeholder que
 // el nivel de Facción (NIVEL_FACCION), aplicado aquí a escala de un solo asentamiento.
+// Rebalance post-Fase 0: con poblacionPorPunto=40/puntosPorNivel=3 el nivel subía casi solo con los 5
+// edificios ya activos al fundar (Doc 1.3: Centro Urbano + Granja + 3 Viviendas dan 5 puntos de entrada),
+// muy por delante de lo que tarda en completarse una construcción (4-10 ticks) o en llegar una caravana
+// (velocidad 5-12 unidades/tick sobre un mapa de 1000x1000). poblacionPorPunto baja para que la población
+// (ya con tasa de crecimiento más alta, ver POBLACION) pese más en el cómputo; puntosPorNivel sube para que
+// cada nivel exija progreso acumulado real en vez de uno o dos edificios.
 export const NIVEL_ASENTAMIENTO = {
-  poblacionPorPunto: 40,
+  poblacionPorPunto: 20,
   puntosPorEdificioActivo: 1,
-  puntosPorNivel: 3,
+  puntosPorNivel: 8,
   nivelMaximo: 10,
 };
 
@@ -291,6 +323,25 @@ export const MANTENIMIENTO = {
   // asentamiento nuevo entra en déficit desde el tick 1 (antes de que la Granja llegue a construirse) y cae
   // en ruinas pase lo que pase. La gracia cubre el tiempo típico de estabilizar la economía base.
   graciaTicks: 60,
+};
+
+/**
+ * Reserva mínima que la auto-construcción (y la manual) NUNCA puede tocar en los recursos que en ese
+ * momento cobra Mantenimiento (madera+trigo siempre, +piedra/oro según nivel — ver `MANTENIMIENTO` y
+ * `recursosProtegidosPorMantenimiento` en engine/mantenimiento.ts). Un edificio en cola solo arranca si
+ * `disponible - costo >= reserva` en cada recurso protegido de su costo; si no, se queda esperando en cola
+ * (mismo comportamiento que ya existía cuando faltaban recursos del todo).
+ *
+ * Excepción deliberada: Granja no respeta la reserva de trigo, ni Leñera la de madera (ver
+ * `engine/construction.ts`) — son las únicas vías reales de recuperar esos recursos, así que bloquearlas
+ * por la misma escasez que deben resolver sería un huevo-y-la-gallina sin salida (rompería en seco la
+ * política "Protección de Riesgos").
+ */
+export const RESERVA_CONSTRUCCION = {
+  madera: 30,
+  trigo: 20,
+  piedra: 20,
+  oro: 10,
 };
 
 /**

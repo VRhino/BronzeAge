@@ -65,6 +65,42 @@ Registro de los bugs reales encontrados —la mayoría probando en el navegador,
 
 ---
 
+## Post-Sprint 6 — Rebalance de progresión, cola de construcción y estabilidad económica
+
+Sesión de rebalance posterior al cierre de Sprint 6, motivada por partidas de prueba: los asentamientos subían de nivel casi instantáneamente y muchos morían por falta de madera pese a poder construir más de una Leñera.
+
+### 10. Asentamientos subían de nivel casi instantáneamente
+- **Error:** con `poblacionPorPunto=40` y `puntosPorNivel=3`, los 5 edificios activos con los que nace todo asentamiento (Centro Urbano + Granja + 3 Viviendas, Doc 1.3) ya sumaban 5 puntos de nivel — el asentamiento arrancaba en nivel 2 antes del primer tick, muy por delante de lo que tarda una construcción (4-10 ticks) o una caravana en cruzar el mapa (velocidad 5-12 unidades/tick sobre un mapa de 1000x1000). La población, con una tasa de crecimiento de apenas 0.05, nunca llegaba a "sostener" ese nivel.
+- **Cómo se detectó:** reportado por el usuario jugando; confirmado simulando 60 ticks (el asentamiento ya nacía en nivel 2, sin haber avanzado ningún tick).
+- **Solución:** `NIVEL_ASENTAMIENTO.puntosPorNivel` subido de 3 a 8, `poblacionPorPunto` bajado de 40 a 20 (la población pesa más en el cómputo), y la tasa de crecimiento base de Pesants subida de 0.05 a 0.12 (Artesanos de 0.03 a 0.05). Verificado en 60 ticks simulados: el asentamiento ahora nace en nivel 1 y tarda ~22 ticks en subir a nivel 2, con la población creciendo de forma visible cada 1-2 ticks en vez de estancarse.
+
+### 11. Interbloqueo de prioridad: la Leñera nunca llegaba a construirse, asentamientos morían por falta de madera
+- **Error:** `evaluarNecesidades` comprobaba las necesidades en un orden fijo (Vivienda → Granja → Cantera → Leñera → Almacén → Taller → minas) y la cola global tenía un tope de 3 edificios `en_cola` (ver punto sobre el tope de cola más abajo). Un proyecto que no podía pagarse se quedaba parado en cola **para siempre** — nada lo saca de ahí si nunca junta los recursos. Como Vivienda/Granja/Cantera se re-disparaban casi todos los ticks y se evaluaban primero, podían copar los 3 slots con proyectos atascados por falta de madera, dejando a la Leñera —la única fuente de madera del asentamiento— sin hueco para encolarse nunca. Sin Leñera nueva entrando en juego, el déficit de madera no se corregía y Mantenimiento (que cobra madera desde el primer tick tras el período de gracia) acababa destruyendo el asentamiento.
+- **Cómo se detectó:** reportado por el usuario ("muchos de los asentamientos se destruyen por la mala gestión de la construcción automática... siempre la dejan de última"); confirmado en pruebas: asentamientos cayendo en ruinas con la Leñera nunca construida pese a haber bosques disponibles en su zona.
+- **Solución:** dos cambios en `evaluarNecesidades` (`engine/construction.ts`): (a) se reordenó la evaluación para comprobar primero Granja/Leñera (recursos de supervivencia: comida y madera), luego los extractores secundarios (Cantera, Cobre, Oro, Estaño), y al final Vivienda/Almacén/Taller (crecimiento); (b) de los 3 slots de la cola, 1 queda reservado EXCLUSIVAMENTE para Granja/Leñera (`NECESIDADES.slotsReservadosSupervivencia`), así Vivienda/Almacén/Taller nunca pueden copar los 3 y dejarlas sin hueco.
+
+### 12. Nueva política "Protección de Riesgos" (Maestro de Obras) — con su propio interbloqueo detectado al probarla
+- **Contexto:** a petición del usuario, se añadió al catálogo una política de emergencia (Doc 4.4): mientras esté activa, la auto-construcción ignora cualquier otra necesidad hasta tener 3 Leñeras (activas o en curso/cola).
+- **Error detectado al probarla:** si no había NINGÚN bosque libre en la zona de influencia todavía, la política bloqueaba TODO indefinidamente — 0 progreso posible durante los 150 ticks que dura la política, peor que no activarla.
+- **Cómo se detectó:** probando en el navegador con un asentamiento fundado sin bosque cercano: 50 ticks seguidos sin construir absolutamente nada.
+- **Solución:** la política solo bloquea el resto de necesidades si hay progreso real hacia el objetivo (una Leñera ya en cola/construcción, o se puede encolar una nueva ese mismo tick); si no hay ningún sitio de bosque disponible todavía, deja pasar la evaluación normal y retoma la prioridad en cuanto la zona de influencia crezca lo suficiente para alcanzar un bosque.
+
+### 13. Reserva mínima de recursos para construcción (nueva mecánica, a petición del usuario)
+- **Contexto:** aunque el punto 11 reduce el riesgo, seguía siendo posible que Vivienda/Almacén/Taller gastaran hasta el último punto de madera o trigo disponible, dejando a Mantenimiento sin nada que cobrar justo ese tick.
+- **Solución:** un edificio en cola solo puede empezar a construirse si, además de poder pagar el costo completo, no deja ningún recurso protegido por Mantenimiento en ese momento (madera+trigo siempre; +piedra desde nivel 3; +oro desde nivel 8 — mismo criterio que usa el propio Mantenimiento) por debajo de una reserva mínima (`RESERVA_CONSTRUCCION`: madera 30, trigo 20, piedra 20, oro 10). Excepción deliberada: Granja no respeta la reserva de trigo, ni Leñera la de madera — son la única vía real de recuperar esos recursos, así que bloquearlas por la misma escasez que deben resolver habría sido otro interbloqueo sin salida (rompería en seco a la política del punto 12).
+- **Cómo se verificó:** un asentamiento sin bosque alcanzable mantuvo la madera clavada exactamente en 30 durante más de 40 ticks (Vivienda/Taller parados en cola sin tocarla) con el medidor de Mantenimiento en 100/100 todo el tiempo — el mismo caso que antes terminaba en ruinas.
+
+### 14. Tope de la cola de construcción
+- **Contexto:** antes de los puntos 11-13, la cola de edificios `en_cola` de un asentamiento no tenía límite superior.
+- **Solución:** se fijó un máximo de 3 edificios `en_cola` simultáneos por asentamiento (`NECESIDADES.maximoEnCola`), compartido entre auto-construcción y construcción manual (Fundición/Gran Fundición) — construir manualmente por encima del tope se rechaza con un mensaje explícito en vez de fallar en silencio.
+
+### 15. No existía ninguna forma de extraer estaño
+- **Error:** el estaño se genera en el mundo con el mismo criterio de rareza que cobre/oro (Doc 1.1), es comerciable, y es coste de las tropas de Nobleza (Doc 5) — pero nunca se implementó un edificio de extracción para él (solo `mina` para oro y `minaCobre` para cobre, ver punto 6). Cualquier asentamiento con un nodo de estaño en su propia zona de influencia no podía aprovecharlo jamás; la única forma de conseguir estaño era comerciándolo con otra Facción.
+- **Cómo se detectó:** reportado por el usuario revisando la simulación.
+- **Solución:** se añadió el edificio `minaEstano`, con el mismo patrón de autoconstrucción, colocación junto al nodo más cercano y producción/agotamiento que `cantera`/`mina`/`minaCobre`.
+
+---
+
 ## Nota general
 
 Todas las correcciones anteriores son de **diseño/balance**, no de sintaxis: el proyecto compiló sin errores de TypeScript en todo momento salvo en los pasos intermedios normales de refactor (añadir un campo a un tipo y luego actualizar todos los lugares que lo instancian), que se resolvieron sobre la marcha y no se listan aquí por ser rutinarios.

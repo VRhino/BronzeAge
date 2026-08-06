@@ -10,7 +10,7 @@ export const RECURSO_COLOR: Record<RecursoTipo, string> = {
   piedra: '#8d8d8d',
   trigo: '#c9a227',
   cobre: '#b5651d',
-  estano: '#7f95a3',
+  estano: '#2f6fd1',
   oro: '#ffd700',
   livestock: '#b5658a',
 };
@@ -19,6 +19,7 @@ export const RECURSO_COLOR: Record<RecursoTipo, string> = {
 export const RECURSOS_EN_MAPA: RecursoTipo[] = ['piedra', 'cobre', 'estano', 'oro', 'livestock'];
 
 export const EDIFICIO_COLOR: Record<EdificioTipo, string> = {
+  centroUrbano: '#9b59b6',
   vivienda: '#e8e2d0',
   granja: '#d4b106',
   cantera: '#8d8d8d',
@@ -27,6 +28,7 @@ export const EDIFICIO_COLOR: Record<EdificioTipo, string> = {
   taller: '#c0703c',
   mina: '#f1c40f',
   minaCobre: '#c0703c',
+  minaEstano: '#2f6fd1',
   fundicion: '#b33a3a',
   granFundicion: '#7a1f1f',
 };
@@ -42,6 +44,27 @@ export interface DrawState {
   zonas: ZonaInfluencia[];
   facciones: Faccion[];
   caravanas: Caravana[];
+}
+
+/**
+ * Filtro visual de fertilidad (Doc 1.4/4.2): rejilla semitransparente sobre el mapa, verde más intenso =
+ * suelo más fértil. Se dibuja ENCIMA de todo lo demás a propósito (es un "filtro" que se puede apagar),
+ * no una capa base — por eso vive aparte de `draw()` y el caller decide si llamarlo.
+ */
+export function drawFiltroFertilidad(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, world: World): void {
+  const scale = canvas.width / world.config.ancho;
+  const celdas = 40;
+  const tamanoMundo = world.config.ancho;
+  const tamanoCelda = tamanoMundo / celdas;
+
+  for (let fila = 0; fila < celdas; fila++) {
+    for (let col = 0; col < celdas; col++) {
+      const centro = { x: (col + 0.5) * tamanoCelda, y: (fila + 0.5) * tamanoCelda };
+      const fertilidad = world.fertilidadEn(centro);
+      ctx.fillStyle = `rgba(46, 204, 64, ${fertilidad * 0.45})`;
+      ctx.fillRect(col * tamanoCelda * scale, fila * tamanoCelda * scale, tamanoCelda * scale, tamanoCelda * scale);
+    }
+  }
 }
 
 export function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, state: DrawState): void {
