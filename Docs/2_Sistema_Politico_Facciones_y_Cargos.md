@@ -79,3 +79,21 @@ PENDIENTE: valores numéricos exactos de cada evento, velocidad de decaimiento, 
 
 ## 2.9 Progresión sin condición de victoria
 El juego es un SANDBOX de guerra persistente, SIN condiciones de victoria ni final de servidor (hasta que se vacíe). En vez de victoria, existen TÍTULOS DINÁMICOS de PRESTIGIO (sin beneficio mecánico, solo prestigio) que cambian de mano según el poder relativo, recalculados PERIÓDICAMENTE (no en tiempo real). Ejemplos de referencia (lista abierta, no cerrada): imperio/Facción más grande, general con más victorias, Facción con mayor poder económico, ejército más grande, "Gran Rey". El histórico de títulos se narra por los AEDAS/POETAS (ver Doc 6), consultable vía interfaz dedicada Y eventos in-game.
+
+## 2.10 Gremios (edificios especiales, escasos a nivel de servidor)
+No todos los asentamientos pueden tenerlos — solo las ciudades más importantes. Se obtienen cuando el gremio correspondiente "propone" colocar una sede, mediante TIRADA PERIÓDICA mientras se cumplan los requisitos (no es una barra de progreso).
+
+**Requisitos (distintos por gremio, misma naturaleza de 3 ejes):**
+1. Score de reputación de Facción por encima de un umbral (ref. inicial: >90).
+2. Título de servidor específico (uno de los Títulos Dinámicos de Prestigio).
+3. Nivel mínimo de asentamiento / mantenimiento alto (ref. inicial: >90%).
+
+**Pérdida:** si deja de cumplirse alguna condición, el gremio se va y se pierden sus beneficios. PENDIENTE: si hay margen de gracia antes de irse.
+
+**Los 4 gremios:**
+- **Comerciantes:** comisiones aún más bajas y/o slot extra de órdenes de mercado y/o rutas/Aedas comerciales especiales (detalle pendiente).
+- **Artesanos:** recetas/equipo de tier superior exclusivo y/o bonus de producción en Fundición/Curtidor-Armero (detalle pendiente).
+- **Constructores:** bonus adicional de velocidad de auto-construcción y/o edificios únicos (detalle pendiente).
+- **Ladrones (confirmado):** información sobre acuerdos de comercio de OTRAS Facciones, información general de caravanas, e información de otras Facciones no visible de otra forma. NO revive el sistema de rumores/espionaje general (sigue descartado como mecánica base) — es un beneficio específico y acotado, diseñado para no ser demasiado diferenciador.
+
+PENDIENTE: valores numéricos exactos por gremio, título de servidor asociado a cada uno, detalle de beneficios de los 3 gremios no confirmados, duración del margen de gracia.

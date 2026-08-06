@@ -18,12 +18,17 @@ Leer en este orden:
 10. **`Consideraciones/Roadmap_Escalado.md`** — fases posteriores a Fase 0 (Fase 1 mapa de campaña en Unity/C#, Fase final integración total).
 11. **`Consideraciones/Checklist_Mecanicas.md`** — estado de completitud (cerrado/pendiente) de cada sistema.
 12. **`Consideraciones/Preguntas_Abiertas.md`** — lo que sigue sin resolver. Usar valores placeholder razonables para estos puntos, no bloquear la implementación por ellos.
+13. **`Consideraciones/Correcciones_Durante_Desarrollo.md`** — bugs de diseño/lógica encontrados y corregidos al implementar Fase 0; varios resuelven preguntas que estaban marcadas como pendientes.
 
 ## Estado general del diseño
 
 El **núcleo de simulación** (economía, población, construcción automática, políticas, cargos, vasallaje/Facción, mantenimiento, generación de mundo Fase 0) está **cerrado** y listo para implementar. Los huecos que quedan son mayoritariamente **ajustes numéricos** (cantidades exactas, curvas de escalado, catálogos detallados de políticas) más que decisiones de diseño pendientes — ver `Consideraciones/Preguntas_Abiertas.md` para el detalle completo.
 
 Contenido explícitamente **fuera de Fase 0** (no implementar aún): representación 3D/escenas, combate instanciado visual, exploración con niebla de guerra, identidad visual/audio, comercio marítimo, relieve de terreno (montañas/ríos/mar).
+
+## Estado de implementación
+
+Fase 0 (Sprints 1-6) ya está **implementada** en TypeScript (`src/`) y validada jugando en el navegador. Ver **`Consideraciones/Correcciones_Durante_Desarrollo.md`** para el registro de bugs de diseño/lógica encontrados y corregidos durante la implementación — varios de ellos resolvieron preguntas que estaban marcadas como pendientes en esta documentación (protección temporal de asentamientos nuevos, reemplazo de recursos agotados, calibración de Mantenimiento), y ya están reflejados en los Docs 1, 2, 4 y 5.
 
 ## Estructura del repositorio
 
@@ -42,5 +47,6 @@ Consideraciones/                                   Alcance, plan técnico y esta
   Roadmap_Escalado.md
   Checklist_Mecanicas.md
   Preguntas_Abiertas.md
-src/                                                (a crear) Código fuente del prototipo Fase 0 en TypeScript
+  Correcciones_Durante_Desarrollo.md
+src/                                                Código fuente del prototipo Fase 0 en TypeScript (implementado)
 ```

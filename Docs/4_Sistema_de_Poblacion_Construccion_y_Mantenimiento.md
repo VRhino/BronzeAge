@@ -20,6 +20,8 @@ Cada clase tiene FÓRMULA DE CRECIMIENTO INDEPENDIENTE (no comparten los mismos 
 - El jugador NO elige ubicación ni tipo de edificio, EXCEPTO: edificio de fundación, y edificios estratégicos (murallas, torres, puerto) que sí se colocan manualmente.
 - Algoritmo de colocación: reglas por tipo de edificio (ej. granja cerca de tierra fértil, herrería cerca de mina+camino), elige la mejor casilla disponible dentro de la zona de influencia.
 - Crecimiento disparado por NECESIDAD REAL: más población → necesidad de comida → granja automática; excedente de recurso → mercado/almacén.
+- **Escalado por demanda continua** (confirmado durante implementación de Fase 0): la construcción automática no se limita a "construir una vez si no existe ninguna" — vuelve a evaluarse continuamente. Ej. Granja: si la reserva de trigo proyectada (trigo disponible ÷ consumo actual) cae por debajo de un umbral, se encola una Granja ADICIONAL, incluso si ya existe al menos una (bug detectado en Sprint 2: sin esto, la población entraba en hambruna silenciosa al crecer más allá de lo que una sola Granja podía sostener).
+- **Reemplazo de fuentes agotadas** (nueva mecánica, confirmada durante implementación): los extractores de recursos finitos (cantera, mina de oro, mina de cobre) pueden agotar su nodo fuente. La lógica de disparo cuenta cuántos extractores tienen FUENTE VIVA (no solo cuántos existen en total) — si un yacimiento se agota, se encola automáticamente un extractor de reemplazo (buscando un nuevo nodo del mismo recurso), hasta un MÁXIMO ligado al NIVEL DEL ASENTAMIENTO. Mismo criterio aplicado a cantera, mina de oro, mina de cobre y lenera (bosques también se agotan). Sin esto, agotar el único yacimiento condenaba al asentamiento a un déficit permanente e irreversible.
 - Excepción permanente: el COMERCIO/CARAVANAS nunca se crea automáticamente, siempre es acción manual del jugador.
 - Cadenas de producción (materia prima → producto) son lógica INTERNA invisible — el jugador solo ve materiales almacenados y necesidades activas (déficits).
 - Cargo MAESTRO DE OBRAS gestiona las prioridades de auto-construcción, da bonus a tiempos de construcción.
@@ -43,15 +45,17 @@ Límites de almacenaje por recurso, ampliables construyendo más capacidad. El s
 
 ## 4.5 Mantenimiento de asentamientos (sistema unificado, incluye ex-"Coste de Gobernanza")
 - MEDIDOR 0-100 por asentamiento, empieza en 100.
+- **Período de gracia al fundar** (confirmado durante implementación, resuelve pregunta antes pendiente — ver Doc 1.3): durante un número de ticks tras la fundación, NO se cobra mantenimiento. Sin esto, todo asentamiento nuevo caía en ruinas de forma sistemática (~9 ticks) antes de tener Granja/trigo, sin importar la gestión.
 - COSTE PERIÓDICO en recursos + oro, que escala por (a) NIVEL del asentamiento y (b) DISTANCIA al centro de poder de la Facción (más lejos = más caro; mecanismo anti-snowball).
 - Escalado del coste por nivel (se van SUMANDO materiales, no reemplazando):
   - Niveles iniciales: madera + comida.
   - Niveles medios: sube cantidad + se añade piedra.
-  - Niveles avanzados: sube cantidad de nuevo + se añade oro.
-  - Niveles tardíos: todos los materiales simultáneos, escalando.
+  - Niveles avanzados: sube cantidad de nuevo + se añade oro. **Ajustado durante implementación**: el umbral de nivel en que empieza a exigirse oro se retrasó de NIVEL 6 a NIVEL 8, para evitar condenar de forma temprana a asentamientos aislados sin mina de oro propia (recurso raro por diseño).
+  - Niveles tardíos: todos los materiales anteriores simultáneos, escalando.
 - Si NO se cumple algún pago, el medidor BAJA de 100 a 0 de forma PROPORCIONAL al déficit (degradación gradual, no corte binario).
 - Al llegar a 0: el asentamiento se DESTRUYE y cae en RUINAS → se limpia la zona → queda disponible para otro jugador/grupo. Esta es la MISMA ruta mecánica que el caso de abandono total (sea el asentamiento literalmente abandonado o simplemente mal gestionado mientras sigue activo).
-- PENDIENTE: cantidades exactas por nivel, velocidad exacta de degradación, si hay recuperación posible antes de llegar a 0.
+- **Calibración** (ajustada durante implementación, sigue siendo placeholder): el coste base de trigo/madera y la velocidad de degradación se redujeron respecto a la versión inicial (que generaba espiral de déficit incluso en asentamientos bien gestionados); se subió también la velocidad de regeneración cuando el pago es íntegro.
+- PENDIENTE: cantidades exactas finales por nivel, velocidad exacta de degradación/regeneración, duración exacta del período de gracia inicial — todo sigue siendo ajustable, validado solo como jugable en pruebas de 150-300 ticks.
 
 ## 4.6 Entrada tardía y mundo lleno
 El mapa es deliberadamente difícil de saturar por completo. Cuando un servidor se llena lo suficiente, se abre uno nuevo. El deterioro por mal mantenimiento/abandono libera continuamente zonas para nuevos jugadores.

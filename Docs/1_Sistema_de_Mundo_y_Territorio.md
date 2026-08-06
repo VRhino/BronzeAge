@@ -20,7 +20,8 @@
 ## 1.3 Onboarding de nuevos jugadores
 - Jugador nuevo aparece en un punto ALEATORIO del mapa con una "caravana de asentamiento" para fundar donde decida.
 - FUNDACIÓN GRUPAL: hasta 5 jugadores pueden organizarse para aparecer juntos en el mismo punto, compartiendo una caravana, fundando el asentamiento entre los 5. Los 5 reciben Ciudadanía de inmediato.
-- PENDIENTE: protección temporal (inmunidad a ataque) para asentamientos recién fundados.
+- MATERIALES INICIALES (confirmado durante implementación de Fase 0): la caravana de fundación entrega una reserva inicial de madera y piedra al fundar, suficiente para arrancar la primera construcción. Sin esto el asentamiento queda bloqueado permanentemente (el edificio que produce madera también cuesta madera para construirse — deadlock detectado y corregido en Sprint 2, ver `Correcciones_Durante_Desarrollo.md`).
+- PROTECCIÓN TEMPORAL — RESUELTO durante implementación (ya no es pregunta pendiente): existe un período de gracia en ticks tras la fundación durante el cual NO se cobra Mantenimiento (ver Doc 4.5). Sin esto, todo asentamiento nuevo caía en ruinas de forma sistemática antes de que su economía pudiera arrancar. Duración exacta: placeholder ajustable.
 
 ## 1.4 Fuentes de recursos por tipo
 - CULTIVOS (trigo): NO son un nodo recolectable directo. Dependen de la FERTILIDAD DEL SUELO de la zona (atributo de terreno); requieren construir una Granja para aprovecharse.

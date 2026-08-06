@@ -42,17 +42,19 @@ Pendiente:
 ## 7. Interfaz de decisiones del jugador — cerrado
 Sin preguntas pendientes.
 
-## 8. Nuevo jugador / curva de aprendizaje
-- ¿Protección temporal (inmunidad a ataque) para asentamientos recién fundados?
+## 8. Nuevo jugador / curva de aprendizaje — RESUELTO (durante implementación)
+RESUELTO: protección temporal para asentamientos recién fundados = período de gracia en ticks durante el cual no se cobra Mantenimiento (ver Doc 1.3 y Doc 4.5). Se descubrió como necesidad real al implementar: sin esto, todo asentamiento nuevo caía en ruinas sistemáticamente en pocos ticks. Duración exacta del período sigue siendo placeholder ajustable. Ver `Correcciones_Durante_Desarrollo.md` para el detalle del bug que lo originó.
 
 ## 9. Identidad visual y de audio — sin abordar
 - Referencias estéticas concretas (micénica, hitita, mesopotámica...)
 
 ## 10. Recursos y cadenas de producción
+RESUELTO (parcialmente): qué pasa en déficit sostenido de un asentamiento — ver sistema unificado de Mantenimiento (medidor 0-100, coste escalonado de madera/comida/piedra/oro según nivel, degradación proporcional, destrucción a 0; umbral de oro ahora en nivel 8, no 6). RESUELTO: agotamiento de recursos finitos (cantera/mina de oro/mina de cobre/lenera) — se reemplazan automáticamente hasta un máximo ligado al nivel del asentamiento (ver Doc 4.2 y `Correcciones_Durante_Desarrollo.md`).
+
 Pendiente:
 - ¿Más cultivos/ganado además de lo confirmado?
 - ¿Cuántos pasos de procesamiento tienen las cadenas de producción?
-- Cantidades exactas de mantenimiento por nivel, velocidad de degradación del medidor, posibilidad de recuperación antes de 0
+- Cantidades exactas finales de mantenimiento por nivel, velocidad exacta de degradación/regeneración, duración exacta del período de gracia inicial (validado como jugable en pruebas de 150-300 ticks, pero sigue siendo placeholder)
 
 ## 11. Población: clases sociales — cerrado
 Pendiente (menor):
@@ -68,3 +70,12 @@ Pendiente:
 Pendiente (menor):
 - Qué hace subir exactamente el "nivel de Facción"; curva/números exactos entre cap 3 y cap 7
 - ¿Se requiere aceptación mutua explícita para fusión/anexión, o la Opción 1 se puede forzar unilateralmente?
+
+## 14. Gremios (edificios especiales)
+RESUELTO (parcialmente): 4 gremios (Comerciantes, Artesanos, Constructores, Ladrones), edificios escasos a nivel de servidor. Disparador por tirada periódica mientras se cumplan 3 requisitos (score de reputación >90, título de servidor específico, nivel/mantenimiento del asentamiento >90%). Se pierden si se incumple alguna condición. Gremio de Ladrones confirmado: info de acuerdos comerciales/caravanas/Facciones ajenas, acotado para no ser desequilibrante (NO revive el sistema de rumores general, que sigue descartado). Ver Doc 2.10.
+
+Pendiente:
+- Valores numéricos exactos de cada requisito por gremio
+- Título de servidor específico asociado a cada gremio
+- Detalle exacto de beneficios de Comerciantes, Artesanos y Constructores
+- Duración del margen de gracia antes de perder el gremio (si existe)

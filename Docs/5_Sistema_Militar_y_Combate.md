@@ -40,7 +40,7 @@ No hay árbol tecnológico abstracto — el tipo de unidad reclutable depende de
 - Sacerdote (ya es cargo de jugador, no NPC nuevo): buff de área.
 
 **Edificios:**
-- Fundición (edificio base) y Gran Fundición (único edificio de tier élite, exclusivo de asentamientos/Facciones de mayor nivel).
+- Fundición (edificio base) y Gran Fundición (único edificio de tier élite, exclusivo de asentamientos/Facciones de mayor nivel — sin nombre "Taller Real", descartado).
 - Establos: ligados a CARROS DE GUERRA, no caballería montada (coherente con la época).
 - Taller de Carpintería: armas de asedio + carros de guerra.
 
@@ -75,3 +75,7 @@ El Gobernador puede decretar exilio de jugadores enemigos de su territorio; cost
 
 ## 5.10 Fuera de alcance de Fase 0
 Todo lo instanciado/visual (combate real en escena, formaciones renderizadas, modo entrenamiento, attack timer con UI) pertenece a Fase 1+. En Fase 0, el combate se resuelve como CÁLCULO/LOG DE TEXTO (quién gana, bajas resultantes), sin representación gráfica.
+
+**Mina de cobre** (confirmada durante implementación de Fase 0): edificio extractor de cobre, mismo patrón de auto-construcción/colocación/agotamiento que Cantera (piedra) y Mina de Oro. Es el único extractor de cobre del juego — sin él, el reclutamiento militar es imposible (todo tipo de tropa requiere cobre para su equipo de bronce). Se descubrió su ausencia durante el Sprint 5 al intentar reclutar la primera tropa de una partida de prueba.
+
+**Extractores finitos y su reemplazo automático** (ver también Doc 4.2): Cantera, Mina de Oro, Mina de Cobre y Lenera explotan nodos/zonas con cantidad finita. Cuando la fuente se agota, la auto-construcción encola un extractor de reemplazo automáticamente (buscando un nuevo nodo del mismo recurso), hasta un máximo ligado al nivel del asentamiento — evita que agotar el único yacimiento condene al asentamiento a un déficit irreversible.

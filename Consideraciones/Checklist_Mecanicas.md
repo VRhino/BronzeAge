@@ -2,6 +2,8 @@
 
 Lista completa de mecánicas diseñadas, organizadas por sistema. ✅ = cerrado/decidido. 🔶 = en discusión, con hueco pendiente. ❌ = descartado explícitamente.
 
+**ESTADO:** Fase 0 (Sprints 1-6) ya fue **implementada** en TypeScript y validada jugando en el navegador. Ver `Correcciones_Durante_Desarrollo.md` para los ajustes de diseño que surgieron durante la implementación (varios resolvieron preguntas antes pendientes).
+
 Ver `Docs/0_Glosario_de_Entidades_Politicas.md` para las definiciones centrales.
 
 ## Concepto y ambientación
@@ -13,8 +15,8 @@ Ver `Docs/0_Glosario_de_Entidades_Politicas.md` para las definiciones centrales.
 - ✅ Onboarding: spawn aleatorio + fundación grupal (hasta 5 jugadores)
 - ✅ Chokepoints estratégicos (fases con relieve)
 - ✅ Cap de fundación por Facción (escala con nivel de Facción, 1→3 fácil, hasta 7 tardío)
+- ✅ Protección temporal: período de gracia sin cobro de Mantenimiento al fundar (RESUELTO durante implementación Fase 0)
 - 🔶 Qué hace subir el "nivel de Facción" exactamente; curva exacta entre cap 3 y cap 7
-- 🔶 Protección temporal para asentamientos recién fundados
 
 ## Tecnología
 - ✅ Tres vías de acceso (comercio, desarrollo propio, Aedas); sistema de Aedas completo; tecnología se compra con oro
@@ -42,7 +44,8 @@ Ver `Docs/0_Glosario_de_Entidades_Politicas.md` para las definiciones centrales.
 
 ## Construcción automática
 - ✅ Jugador no elige ubicación/tipo (excepto fundación y edificios estratégicos)
-- ✅ Algoritmo por reglas; crecimiento por necesidad; Maestro de Obras; layout dinámico por política
+- ✅ Algoritmo por reglas; crecimiento por necesidad, con reevaluación CONTINUA (no solo "construir una vez"): granjas adicionales si la reserva proyectada cae bajo el umbral; Maestro de Obras; layout dinámico por política
+- ✅ Reemplazo automático de extractores (cantera/mina de oro/mina de cobre/lenera) cuando su fuente se agota, hasta un máximo según nivel del asentamiento
 
 ## Escala social y política
 - ✅ Glosario central: Jugador → Facción → Asentamientos; Liga = red de Facciones
@@ -59,8 +62,11 @@ Ver `Docs/0_Glosario_de_Entidades_Politicas.md` para las definiciones centrales.
 - ✅ Multi-cargo permitido; liberación tras 1 semana de inactividad
 
 ## Mantenimiento
-- ✅ Sistema unificado: medidor 0-100, coste escalonado por nivel y distancia, degradación proporcional, destrucción a 0
-- 🔶 Cantidades exactas por nivel, velocidad de degradación, posibilidad de recuperación antes de 0
+- ✅ Sistema unificado: medidor 0-100, coste periódico escalonado por nivel (madera+comida → +piedra → +oro desde nivel 8, todos simultáneos en niveles tardíos) y por distancia al centro de poder de la Facción
+- ✅ Período de gracia al fundar (sin cobro de mantenimiento los primeros ticks) — validado en implementación, resuelve protección temporal de asentamientos nuevos
+- ✅ Degradación proporcional del medidor si no se cumple el pago; al llegar a 0 el asentamiento se destruye y cae en ruinas (conecta con abandono total)
+- ✅ Cifras recalibradas durante implementación (coste base y velocidad de degradación reducidos, umbral de oro movido de nivel 6 a 8) para evitar espirales de déficit en asentamientos bien gestionados
+- 🔶 Cantidades exactas finales por nivel, velocidad exacta de degradación/regeneración, duración exacta del período de gracia — siguen siendo placeholder
 
 ## Entrada tardía y mundo lleno
 - ✅ Mapa difícil de saturar; nuevos servidores; deterioro libera zonas
@@ -85,6 +91,9 @@ Ver `Docs/0_Glosario_de_Entidades_Politicas.md` para las definiciones centrales.
 ## Fusión y crecimiento de Facciones
 - ✅ Menú con 2 opciones (Anexión / Fusión), reglas de Rey y cargos resultantes
 - 🔶 Aceptación mutua obligatoria vs. anexión forzable unilateralmente
+
+## Gremios (edificios especiales, nuevo)
+- 🔶 4 gremios (Comerciantes, Artesanos, Constructores, Ladrones): escasos a nivel de servidor, tirada periódica según 3 requisitos (score >90, título de servidor, nivel/mantenimiento >90%), se pierden si se incumple algún requisito. Gremio de Ladrones confirmado (info de acuerdos/caravanas/Facciones ajenas, acotado). Resto de beneficios y números exactos pendientes.
 
 ## Roadmap / escalado
 - ✅ Eje de fidelidad visual (Fase 0 → Fase 1 → Fase final); eje naval (terrestre → con mar)
