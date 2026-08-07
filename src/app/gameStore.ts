@@ -19,7 +19,7 @@ import type {
   ZonaBosque,
   ZonaInfluencia,
 } from '../domain/types';
-import { FUNDACION, MANTENIMIENTO, NECESIDADES, POLITICAS, POLITICA_CATALOGO, WORLD_DEFAULT } from '../constants';
+import { FUNDACION, MANTENIMIENTO, NECESIDADES, POLITICAS, POLITICA_CATALOGO, TROPAS_RECLUTABLES, WORLD_DEFAULT } from '../constants';
 import {
   produccionPorTick,
   manoObraInfo as calcularManoObraInfo,
@@ -30,6 +30,7 @@ import {
 } from '../engine/asentamientoQuery';
 export type { ProduccionItem, ManoObraInfo } from '../engine/asentamientoQuery';
 import { encontrarCapital, calcularCostoMantenimiento } from '../engine/mantenimiento';
+import { consumoComidaPoblacion } from '../engine/population';
 import { slotsDisponibles } from '../engine/politicas';
 import { listarCamposBalance, actualizarCampoBalance, restaurarBalancePorDefecto, type CampoBalance } from './balanceConfig';
 export type { CampoBalance } from './balanceConfig';
@@ -51,7 +52,7 @@ import {
 } from '../engine/diplomacia';
 import { computeLigas, type LigaInfo } from '../engine/liga';
 import { anexionar as anexionarEngine, fusionar as fusionarEngine, FusionInvalidaError } from '../engine/fusion';
-import { reclutar as reclutarEngine, ReclutamientoInvalidoError } from '../engine/tropas';
+import { reclutar as reclutarEngine, reclutarTropa as reclutarTropaEngine, ReclutamientoInvalidoError, consumoRacionTropas } from '../engine/tropas';
 import { construirManualmente as construirManualmenteEngine, ConstruccionManualInvalidaError } from '../engine/construction';
 import { iniciarAsedio as iniciarAsedioEngine, combateCampoAbierto as combateCampoAbiertoEngine, interceptarCaravana as interceptarCaravanaEngine, CombateInvalidoError } from '../engine/combate';
 
@@ -94,7 +95,8 @@ export interface SimulacionExportada {
 /** Catálogos de referencia (listas fijas, sin comportamiento) que la interfaz necesita para construir formularios. */
 export const CATALOGOS = {
   cargos: ['gobernador', 'tesorero', 'general', 'maestroObras', 'sacerdote'] as CargoTipo[],
-  origenesTropa: ['pesants', 'artesanos', 'nobleza'] as const,
+  origenesTropa: ['artesanos', 'nobleza'] as const,
+  tropasReclutables: TROPAS_RECLUTABLES,
   recursosTrueque: ['madera', 'piedra', 'trigo', 'cobre', 'estano', 'oro', 'livestock'] as RecursoTipo[],
   recursosMercado: ['madera', 'piedra', 'trigo', 'cobre', 'estano', 'livestock'] as RecursoTipo[],
   politicas: POLITICA_CATALOGO,
@@ -250,6 +252,12 @@ export class GameStore {
       const disponible = asentamiento.almacen[recurso]?.cantidad ?? 0;
       return { recurso, costoPorTick: cantidad ?? 0, disponible, cubierto: disponible >= (cantidad ?? 0) };
     });
+    // El trigo NO viene de `calcularCostoMantenimiento` (ya no lo cobra Mantenimiento directamente, ver
+    // engine/mantenimiento.ts) — el "apartado de trigo" que se muestra aquí es la suma real de consumo de
+    // comida de la población + raciones de tropas, que se descuenta en `consumirComida`/`avanzarMantenimientoTropas`.
+    const costoTrigo = consumoComidaPoblacion(asentamiento) + consumoRacionTropas(asentamiento);
+    const trigoDisponible = asentamiento.almacen['trigo']?.cantidad ?? 0;
+    items.push({ recurso: 'trigo', costoPorTick: costoTrigo, disponible: trigoDisponible, cubierto: trigoDisponible >= costoTrigo });
     return { enGracia, ticksParaFinGracia: Math.max(0, MANTENIMIENTO.graciaTicks - ticksDesdeFundacion), items };
   }
 
@@ -496,12 +504,26 @@ export class GameStore {
     this.notify();
   }
 
-  reclutar(asentamientoId: string, origen: 'pesants' | 'artesanos' | 'nobleza', cantidad: number): void {
+  reclutar(asentamientoId: string, origen: 'artesanos' | 'nobleza', cantidad: number): void {
     try {
       const asentamiento = this.state.asentamientos.find((a) => a.id === asentamientoId)!;
       const actualizado = reclutarEngine(asentamiento, origen, cantidad, this.state.tick, this.contadorAcciones++);
       this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === actualizado.id ? actualizado : a));
       this.registrar(`${asentamiento.id}: recluta ${cantidad} de ${origen}.`);
+    } catch (err) {
+      if (err instanceof ReclutamientoInvalidoError) this.registrar(`Reclutamiento rechazado: ${err.message}`);
+      else throw err;
+    }
+    this.notify();
+  }
+
+  /** Reclutamiento por equipo (Doc 5.7/5.8, rediseño): recluta una tropa específica vía Barracón/Galería de tiro. */
+  reclutarTropa(asentamientoId: string, tropaId: string, cantidad: number): void {
+    try {
+      const asentamiento = this.state.asentamientos.find((a) => a.id === asentamientoId)!;
+      const actualizado = reclutarTropaEngine(asentamiento, tropaId, cantidad, this.state.tick, this.contadorAcciones++);
+      this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === actualizado.id ? actualizado : a));
+      this.registrar(`${asentamiento.id}: recluta ${cantidad} de la tropa "${tropaId}".`);
     } catch (err) {
       if (err instanceof ReclutamientoInvalidoError) this.registrar(`Reclutamiento rechazado: ${err.message}`);
       else throw err;

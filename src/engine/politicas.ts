@@ -79,7 +79,13 @@ export function avanzarPoliticas(asentamiento: Asentamiento, tickActual: number)
   return { asentamiento: vigentes.length === asentamiento.politicasActivas.length ? asentamiento : { ...asentamiento, politicasActivas: vigentes }, eventos };
 }
 
-type CampoFactor = 'factorConsumoComida' | 'factorCrecimientoNobleza' | 'factorTiempoConstruccion' | 'factorComisionExterna' | 'factorCostoReclutamiento';
+type CampoFactor =
+  | 'factorConsumoComida'
+  | 'factorCrecimientoNobleza'
+  | 'factorTiempoConstruccion'
+  | 'factorComisionExterna'
+  | 'factorCostoReclutamiento'
+  | 'factorProduccionTrigo';
 
 function productoFactor(asentamiento: Asentamiento, campo: CampoFactor): number {
   return asentamiento.politicasActivas.reduce((acc, activa) => {
@@ -94,6 +100,8 @@ export const factorCrecimientoNobleza = (a: Asentamiento): number => productoFac
 export const factorTiempoConstruccion = (a: Asentamiento): number => productoFactor(a, 'factorTiempoConstruccion');
 export const factorComisionExterna = (a: Asentamiento): number => productoFactor(a, 'factorComisionExterna');
 export const factorCostoReclutamiento = (a: Asentamiento): number => productoFactor(a, 'factorCostoReclutamiento');
+/** Edicto de Cosecha (Gobernador): multiplica la producción de trigo de todas las Granjas — madera/piedra sin cambios. */
+export const factorProduccionTrigo = (a: Asentamiento): number => productoFactor(a, 'factorProduccionTrigo');
 
 /**
  * Campos "objetivo" (no multiplicativos): en vez de multiplicar factores, toman el mayor valor propuesto

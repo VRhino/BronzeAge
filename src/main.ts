@@ -218,6 +218,9 @@ app.innerHTML = `
         <label>Reclutar de <select id="reclutar-origen"></select></label>
         <label>Cantidad <input id="reclutar-cantidad" type="number" value="10" min="1" /></label>
         <button id="reclutar-btn">Reclutar</button>
+        <label>Reclutar tropa (Barracón/Galería de tiro) <select id="reclutar-tropa"></select></label>
+        <label>Cantidad de unidades <input id="reclutar-tropa-cantidad" type="number" value="10" min="1" /></label>
+        <button id="reclutar-tropa-btn">Reclutar tropa</button>
         <button id="gran-fundicion-btn">Construir Gran Fundición</button>
 
         <label>Escuadrones propios (ids separados por coma) <input id="guerra-escuadrones" type="text" placeholder="escuadron-..." /></label>
@@ -369,6 +372,8 @@ const fusionReyInput = document.getElementById('fusion-rey') as HTMLInputElement
 const guerraAsentamientoSelect = document.getElementById('guerra-asentamiento') as HTMLSelectElement;
 const reclutarOrigenSelect = document.getElementById('reclutar-origen') as HTMLSelectElement;
 const reclutarCantidadInput = document.getElementById('reclutar-cantidad') as HTMLInputElement;
+const reclutarTropaSelect = document.getElementById('reclutar-tropa') as HTMLSelectElement;
+const reclutarTropaCantidadInput = document.getElementById('reclutar-tropa-cantidad') as HTMLInputElement;
 const guerraEscuadronesInput = document.getElementById('guerra-escuadrones') as HTMLInputElement;
 const guerraObjetivoSelect = document.getElementById('guerra-objetivo') as HTMLSelectElement;
 const guerraEscuadronesObjetivoInput = document.getElementById('guerra-escuadrones-objetivo') as HTMLInputElement;
@@ -384,6 +389,14 @@ truequeRecursoASelect.innerHTML = CATALOGOS.recursosTrueque.map((r) => `<option 
 truequeRecursoBSelect.innerHTML = CATALOGOS.recursosTrueque.map((r) => `<option value="${r}">${r}</option>`).join('');
 mercadoRecursoSelect.innerHTML = CATALOGOS.recursosMercado.map((r) => `<option value="${r}">${r}</option>`).join('');
 reclutarOrigenSelect.innerHTML = CATALOGOS.origenesTropa.map((o) => `<option value="${o}">${o}</option>`).join('');
+reclutarTropaSelect.innerHTML = CATALOGOS.tropasReclutables
+  .map((t) => {
+    const costoTxt = Object.entries(t.costoEquipo)
+      .map(([r, c]) => `${c} ${RECURSO_NOMBRE[r] ?? r}`)
+      .join(' + ');
+    return `<option value="${t.id}">${t.nombre} — ${EDIFICIO_NOMBRE[t.edificio] ?? t.edificio} nivel ${t.nivelRequerido} (${costoTxt})</option>`;
+  })
+  .join('');
 
 function etiquetaAsentamiento(a: Asentamiento, facciones: Faccion[]): string {
   const nombreFaccion = facciones.find((f) => f.id === a.faccionId)?.nombre ?? a.faccionId;
@@ -1252,7 +1265,11 @@ document.getElementById('mercado-btn')!.addEventListener('click', () => {
 });
 
 document.getElementById('reclutar-btn')!.addEventListener('click', () => {
-  gameStore.reclutar(guerraAsentamientoSelect.value, reclutarOrigenSelect.value as 'pesants' | 'artesanos' | 'nobleza', Number(reclutarCantidadInput.value) || 0);
+  gameStore.reclutar(guerraAsentamientoSelect.value, reclutarOrigenSelect.value as 'artesanos' | 'nobleza', Number(reclutarCantidadInput.value) || 0);
+});
+
+document.getElementById('reclutar-tropa-btn')!.addEventListener('click', () => {
+  gameStore.reclutarTropa(guerraAsentamientoSelect.value, reclutarTropaSelect.value, Number(reclutarTropaCantidadInput.value) || 0);
 });
 
 document.getElementById('gran-fundicion-btn')!.addEventListener('click', () => {

@@ -123,6 +123,12 @@ export interface Escuadron {
   moral: number;
   /** Debuff temporal tras perder en mundo abierto (Doc 5.2.2), penaliza poder de combate mientras dura. */
   heridoHastaTick?: number;
+  /** Tropa reclutada vía Barracón/Galería de tiro (Doc 5.7/5.8, ver TROPAS_RECLUTABLES en constants.ts) — solo
+   * presente para escuadrones de Pesants reclutados por equipo. Determina el poderBase (ver `poderEscuadron`,
+   * engine/combate.ts) en vez de TROPA_CATALOGO[tier], y desactiva el ascenso automático de tier por veteranía
+   * (ver `ascenderTierSiCorresponde`, engine/tropas.ts) — "mejorar" pasa a ser reclutar una tropa mejor cuando
+   * el edificio suba de nivel interno, no ascender el mismo escuadrón. Ausente para Artesanos/Nobleza. */
+  tropaId?: string;
 }
 
 export interface Asentamiento {

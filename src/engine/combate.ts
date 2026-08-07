@@ -1,5 +1,5 @@
 import type { Asentamiento, Caravana, Escuadron, Faccion, RelacionPolitica } from '../domain/types';
-import { MILITAR, REPUTACION, TROPA_CATALOGO } from '../constants';
+import { MILITAR, REPUTACION, TROPA_CATALOGO, TROPAS_RECLUTABLES } from '../constants';
 import { agregarRecurso } from './almacen';
 import { edificiosPorTipoYEstado } from './asentamientoQuery';
 import { ascenderTierSiCorresponde } from './tropas';
@@ -13,9 +13,12 @@ function estanAliadas(relaciones: RelacionPolitica[], aId: string, bId: string):
 
 export class CombateInvalidoError extends Error {}
 
-/** Poder de combate (Doc 5.1: héroe-comandante liderando tropa; el resultado es CÁLCULO, no combate visual, Doc 5.10). */
+/** Poder de combate (Doc 5.1: héroe-comandante liderando tropa; el resultado es CÁLCULO, no combate visual, Doc 5.10).
+ * Tropas de equipo (Barracón/Galería, `tropaId` presente, rediseño Doc 5.7/5.8) usan su propio poderBase de
+ * `TROPAS_RECLUTABLES` en vez de `TROPA_CATALOGO[tier]` — Artesanos/Nobleza no cambian. */
 export function poderEscuadron(e: Escuadron, tickActual: number): number {
-  const base = TROPA_CATALOGO[e.tier]!.poderBase * e.cantidad;
+  const poderBase = e.tropaId ? TROPAS_RECLUTABLES.find((t) => t.id === e.tropaId)!.poderBase : TROPA_CATALOGO[e.tier]!.poderBase;
+  const base = poderBase * e.cantidad;
   const conVeterania = base * (1 + e.veterania * MILITAR.bonusVeteraniaPorPunto);
   const herido = e.heridoHastaTick !== undefined && tickActual < e.heridoHastaTick;
   return herido ? conVeterania * MILITAR.penalizacionHerido : conVeterania;

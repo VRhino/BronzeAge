@@ -122,7 +122,7 @@ export const EDIFICIO_CATALOGO = {
   // el resto del catálogo — nunca se leen, porque construirlo por otra vía no es posible.
   centroUrbano: { costo: {}, tiempoConstruccionTicks: 0 },
   vivienda: { costo: { madera: 10 }, tiempoConstruccionTicks: 4, capacidadHabitantes: 15 },
-  granja: { costo: { madera: 30 }, tiempoConstruccionTicks: 6, produccionBaseTrigo: 5, trabajadoresRequeridos: 4 },
+  granja: { costo: { madera: 30 }, tiempoConstruccionTicks: 6, produccionBaseTrigo: 15, trabajadoresRequeridos: 4 },
   cantera: { costo: { madera: 20 }, tiempoConstruccionTicks: 5, produccionBasePiedra: 5, trabajadoresRequeridos: 4 },
   lenera: { costo: { madera: 10 }, tiempoConstruccionTicks: 3, produccionBaseMadera: 5, trabajadoresRequeridos: 4 },
   almacen: { costo: { madera: 50, piedra: 30 }, tiempoConstruccionTicks: 6, capacidadPorRecursoAdicional: 300 },
@@ -325,7 +325,10 @@ export const ALMACEN = {
 // Umbrales que disparan auto-construcción por necesidad (Doc 4.2). Placeholders razonables.
 export const NECESIDADES = {
   umbralViviendaOcupada: 0.85,
-  umbralComidaTicksReserva: 5,
+  // Máximo de Granjas simultáneas `en_cola`/`en_construccion` mientras el asentamiento esté en déficit de
+  // trigo (producción actual < consumo actual, ver `evaluarNecesidades`) — fuera de déficit, solo 1 a la vez
+  // (mismo criterio que el resto de edificios de supervivencia).
+  maximoGranjasPendientesEnDeficit: 3,
   umbralAlmacenAmpliacion: 0.9,
   maximoEnCola: 4, // tope de edificios en estado 'en_cola' simultáneos (auto-construcción y manual comparten el mismo cupo)
   // Rebalance: sin esto, Vivienda/Almacén/Taller podían copar los `maximoEnCola` slots con proyectos
@@ -465,6 +468,9 @@ export const POLITICA_CATALOGO = [
   { id: 'construir_barracon', cargo: 'general', nombre: 'Construir Barracón', desbloqueaEdificio: 'barracon' },
   { id: 'construir_galeria_tiro', cargo: 'general', nombre: 'Construir Galería de Tiro', desbloqueaEdificio: 'galeriaDeTiro' },
   { id: 'construir_palacio', cargo: 'gobernador', nombre: 'Construir Palacio', desbloqueaEdificio: 'palacio' },
+  // A petición del usuario: sube la producción de trigo de TODAS las Granjas activas ×1.5 (madera/piedra sin
+  // cambios) — ver `factorProduccionTrigo` en engine/politicas.ts, aplicado en `avanzarConstruccion`.
+  { id: 'edicto_cosecha', cargo: 'gobernador', nombre: 'Edicto de Cosecha', factorProduccionTrigo: 1.5 },
 ] as const;
 
 // --- Sprint 5: Guerra simplificada (Doc 5) ---
@@ -477,15 +483,43 @@ export const TROPA_CATALOGO: Record<number, { nombre: string; poderBase: number 
 };
 
 /**
- * Reclutamiento (Doc 4.1/5.7): Pesants nacen Tier 1, Artesanos nacen Tier 2 (no necesitan veteranizar),
- * Nobleza nace Tier 4 directo (progresión plana, requiere Gran Fundición). El ascenso 1→2→3 por veterania
- * vía combate real se define en ASCENSO_TROPA. Costos PLACEHOLDER (sin cifras cerradas en el diseño).
+ * Reclutamiento (Doc 4.1/5.7): Artesanos nacen Tier 2 (no necesitan veteranizar), Nobleza nace Tier 4 directo
+ * (progresión plana, requiere Gran Fundición). El ascenso 1→2→3 por veterania vía combate real se define en
+ * ASCENSO_TROPA. Costos PLACEHOLDER (sin cifras cerradas en el diseño). Pesants ya NO recluta aquí — ver
+ * TROPAS_RECLUTABLES (reclutamiento por equipo vía Barracón/Galería de tiro, rediseño Doc 5.7/5.8).
  */
 export const RECLUTAMIENTO = {
-  pesants: { tierInicial: 1 as const, costo: { cobre: 1 } },
   artesanos: { tierInicial: 2 as const, costo: { cobre: 2 } },
   nobleza: { tierInicial: 4 as const, costo: { cobre: 4, estano: 2, oro: 3 }, requiereEdificio: 'granFundicion' as const },
 };
+
+/**
+ * Catálogo de TROPAS reclutables por equipo (Doc 5.7/5.8, rediseño de reclutamiento): cada tropa se recluta
+ * de una vez vía Barracón (cuerpo a cuerpo) o Galería de tiro (a distancia), según el nivel interno del
+ * edificio, pagando el equipo fabricado en Armería (ver engine/tropas.ts `reclutarTropa`). Reemplaza
+ * `RECLUTAMIENTO.pesants` — Artesanos/Nobleza no se ven afectados. `poderBase` es PLACEHOLDER: no estaba en el
+ * diseño original (solo equipo/nivel), interpolado a partir de la progresión ya existente en TROPA_CATALOGO
+ * (3 → 6 → 12 → 25 en 4 tiers) repartida en estas 10 tropas a lo largo de 3 niveles.
+ */
+export const TROPAS_RECLUTABLES: {
+  id: string;
+  nombre: string;
+  edificio: 'barracon' | 'galeriaDeTiro';
+  nivelRequerido: number;
+  costoEquipo: Partial<Record<string, number>>;
+  poderBase: number;
+}[] = [
+  { id: 'lanceros_mimbre', nombre: 'Lanceros con escudo de mimbre', edificio: 'barracon', nivelRequerido: 1, costoEquipo: { armaCobre: 1 }, poderBase: 3 },
+  { id: 'espadachines_cobre', nombre: 'Espadachines de espada corta de cobre', edificio: 'barracon', nivelRequerido: 1, costoEquipo: { armaCobre: 1, armaduraBasica: 1 }, poderBase: 4 },
+  { id: 'hacheros_ligeros', nombre: 'Hacheros ligeros', edificio: 'barracon', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraBasica: 1 }, poderBase: 7 },
+  { id: 'espadachines_bronce', nombre: 'Espadachines con espadas y escudos de bronce', edificio: 'barracon', nivelRequerido: 2, costoEquipo: { armaBronce: 2, armaduraIntermedia: 1 }, poderBase: 9 },
+  { id: 'lanceros_pesados', nombre: 'Lanceros pesados micénicos', edificio: 'barracon', nivelRequerido: 3, costoEquipo: { armaBronce: 2, armaduraIntermedia: 2 }, poderBase: 14 },
+  { id: 'hacheros_armados', nombre: 'Hacheros armados', edificio: 'barracon', nivelRequerido: 3, costoEquipo: { armaBronce: 1, armaduraIntermedia: 1 }, poderBase: 12 },
+  { id: 'honderos', nombre: 'Honderos', edificio: 'galeriaDeTiro', nivelRequerido: 1, costoEquipo: { armaduraBasica: 1 }, poderBase: 5 },
+  { id: 'escaramuzadores_jabalina', nombre: 'Escaramuzadores con jabalina', edificio: 'galeriaDeTiro', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraBasica: 1 }, poderBase: 8 },
+  { id: 'arqueros', nombre: 'Arqueros', edificio: 'galeriaDeTiro', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraIntermedia: 1 }, poderBase: 9 },
+  { id: 'arqueros_compuesto', nombre: 'Arqueros con arco compuesto', edificio: 'galeriaDeTiro', nivelRequerido: 3, costoEquipo: { armaBronce: 3, armaduraIntermedia: 2 }, poderBase: 15 },
+];
 
 export const ASCENSO_TROPA = {
   veteraniaParaTier2: 3,
@@ -535,10 +569,11 @@ export const NIVEL_ASENTAMIENTO = {
  */
 export const MANTENIMIENTO = {
   medidorInicial: 100,
-  // Trigo deliberadamente bajo: compite por la misma Granja que ya alimenta a la población (Doc 4.1) y con
-  // varios edificios de extracción repartiéndose el mismo pool de Pesants (Doc 4.2) — un coste alto aquí
-  // hacía que CUALQUIER asentamiento entrase en espiral de déficit sin importar la gestión, no solo el abandono.
-  costoBase: { madera: 3, trigo: 1 },
+  // Trigo NO va aquí (fix: era una "mecánica repetida" — Mantenimiento cobraba este valor fijo ADEMÁS del
+  // consumo real de comida que ya se descuenta en `consumirComida`/`avanzarMantenimientoTropas`, duplicando
+  // el gasto). El "apartado de trigo" que se muestra en el panel de Mantenimiento ahora es la suma real de
+  // consumo de población + tropas (ver `gameStore.mantenimientoInfo`), no un placeholder desconectado.
+  costoBase: { madera: 3 },
   // Rediseño de progreso (Fase 0): con el tope de nivel bajando de 10 a 3 (ver NIVEL_ASENTAMIENTO), los
   // umbrales de piedra/oro (antes nivel 3 y nivel 8, pensados para un rango 1-10) se recalibran al rango 1-3
   // para que los 3 niveles tengan una escalada de coste real — cifra exacta PLACEHOLDER pendiente de

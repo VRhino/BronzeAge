@@ -1,5 +1,6 @@
 import type { Asentamiento, Edificio, EdificioTipo, World } from '../domain/types';
 import { EDIFICIO_CATALOGO, NIVEL_ASENTAMIENTO } from '../constants';
+import { factorProduccionTrigo } from './politicas';
 
 export function edificiosPorTipoYEstado(
   asentamiento: Asentamiento,
@@ -161,8 +162,9 @@ export function produccionPorTick(asentamiento: Asentamiento, world: World): Pro
 
   const granjas = edificiosPorTipoYEstado(asentamiento, 'granja');
   if (granjas.length) {
+    const factorTrigo = factorProduccionTrigo(asentamiento);
     const total = granjas.reduce(
-      (acc, e) => acc + EDIFICIO_CATALOGO.granja.produccionBaseTrigo * world.fertilidadEn(e.posicion) * ratioMano,
+      (acc, e) => acc + EDIFICIO_CATALOGO.granja.produccionBaseTrigo * world.fertilidadEn(e.posicion) * ratioMano * factorTrigo,
       0
     );
     items.push({ tipo: 'granja', recurso: 'trigo', activos: granjas.length, cantidadPorTick: total });

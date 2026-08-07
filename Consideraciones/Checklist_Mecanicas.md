@@ -51,6 +51,7 @@ Ver `Docs/0_Glosario_de_Entidades_Politicas.md` para las definiciones centrales.
 - ✅ Algoritmo por reglas; crecimiento por necesidad, con reevaluación CONTINUA (no solo "construir una vez"): granjas adicionales si la reserva proyectada cae bajo el umbral; Maestro de Obras; layout dinámico por política
 - ✅ Reemplazo automático de extractores (cantera/mina de oro/mina de cobre/mina de estaño/lenera/Corral) cuando su fuente se agota, hasta un máximo por tipo — rediseño Fase 0: desacoplado del nivel del asentamiento (antes escalaba 1:1 con él), ahora número fijo pendiente de calibración (ver Doc 4.2)
 - ✅ Rediseño Fase 0: catálogo ampliado con 8 edificios nuevos (Corral, Armería, Curtiduría, Carpintería, Palacio, Barracón, Galería de tiro; Murallas sigue fuera de alcance) con recetas multi-nivel — ver Doc 4.2.1. Curtiduría/Armería/Fundición/Carpintería son auto-construcción; Barracón/Galería de tiro/Palacio van vía política dedicada con cluster de cola aparte (ver Doc 4.4)
+- ✅ Cola de PRIORIDAD al gastar recursos (fix post rediseño de progreso): el arranque de construcciones `en_cola` se resuelve por categoría (supervivencia > extractores > general), no por orden de inserción — antes Curtiduría/Armería podían llevarse la madera disponible antes que una Granja/Leñera nueva encolada más tarde, pese a haber recursos de sobra para ambas (ver Doc 4.2 y `Correcciones_Durante_Desarrollo.md`)
 
 ## Escala social y política
 - ✅ Glosario central: Jugador → Facción → Asentamientos; Liga = red de Facciones
@@ -72,6 +73,7 @@ Ver `Docs/0_Glosario_de_Entidades_Politicas.md` para las definiciones centrales.
 - ✅ Rediseño Fase 0: con el tope bajando a 3, los umbrales de piedra/oro (antes nivel 3 y nivel 8, pensados para rango 1-10) se recalibran al rango 1-3 — cifra exacta pendiente de calibración (ver Doc 4.5)
 - ✅ Período de gracia al fundar (sin cobro de mantenimiento los primeros ticks) — validado en implementación, resuelve protección temporal de asentamientos nuevos
 - ✅ Degradación proporcional del medidor si no se cumple el pago; al llegar a 0 el asentamiento se destruye y cae en ruinas (conecta con abandono total)
+- ✅ Fix de mecánica repetida (post rediseño de progreso): el trigo ya NO es un coste fijo dentro de Mantenimiento (duplicaba el consumo real de comida/raciones que ya se descontaba aparte) — el "apartado de trigo" mostrado ahora es la suma real `consumo de comida de población + ración de tropas` (fijo por habitante, ver sección Población), y se descuenta una sola vez donde siempre se descontó. Efecto colateral: un déficit de trigo ya no degrada el medidor directamente, solo frena el crecimiento poblacional — el medidor pasa a depender solo de madera/piedra/oro. Producción base de Granja duplicada (5→10 trigo/tick) como primera calibración (ver Doc 4.5 y `Correcciones_Durante_Desarrollo.md`)
 - ✅ Cifras recalibradas durante implementación (coste base y velocidad de degradación reducidos) para evitar espirales de déficit en asentamientos bien gestionados — validación corresponde al modelo de nivel anterior, pendiente de repetirse tras el rediseño
 - 🔶 Cantidades exactas finales por nivel, en qué nivel exacto (1-3) empiezan a exigirse piedra y oro, velocidad exacta de degradación/regeneración, duración exacta del período de gracia, tope exacto de extractores por tipo (ver Doc 4.2) — siguen siendo placeholder
 
@@ -80,9 +82,9 @@ Ver `Docs/0_Glosario_de_Entidades_Politicas.md` para las definiciones centrales.
 
 ## Guerra, diplomacia y mundo
 - ✅ Guerra: combate héroe+tropa, formaciones/cohesión, 4 modalidades, permadeath+squad, doble carril, attack timer (pospuesto), exilio. Adaptación temática completa (cobre/estaño)
-- ✅ Rediseño Fase 0: roster reemplaza los 4 tiers genéricos — reclutamiento por edificio (Barracón/Galería de tiro) según su nivel interno (1-3), con costo en equipo fabricado en Armería; Nobleza sin cambios (vía Gran Fundición). Ver Doc 5.7/5.8
+- ✅ Rediseño Fase 0 IMPLEMENTADO: roster reemplaza los 4 tiers genéricos — reclutamiento de tropas por edificio (Barracón/Galería de tiro) según su nivel interno (1-3), con costo en equipo fabricado en Armería; Nobleza sin cambios (vía Gran Fundición). Veteranía sigue dando bonus de poder pero ya no asciende de tier automáticamente a las tropas de equipo — "mejorar" es reclutar una tropa mejor cuando el edificio suba de nivel. Ver Doc 5.7/5.8, `constants.ts` `TROPAS_RECLUTABLES`, `engine/tropas.ts` `reclutarTropa`.
 - 🔶 Guerra (detalle): declaración formal, conquista exacta tras asedio, unidades navales
-- 🔶 Mapeo exacto entre nivel interno del edificio y el mecanismo de veteranía por combate real ya existente; Establos/carros de guerra sin edificio de reclutamiento definido tras el rediseño (ver Doc 5.8)
+- 🔶 Establos/carros de guerra sin edificio de reclutamiento definido tras el rediseño; poderBase de las 10 tropas nuevas es placeholder pendiente de calibración (ver Doc 5.8)
 - ✅ Diplomacia: score de confiabilidad de Facción (-100 a +100) completo; exilio resuelto; rumores/espionaje descartado
 - ✅ Generación del mundo (Fase 0) resuelta
 - 🔶 Generación del mundo (fases avanzadas): mapa fijo vs procedural con relieve, puntos de interés, biomas

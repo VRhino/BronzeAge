@@ -1,5 +1,5 @@
 import type { Asentamiento, Edificio, EdificioTipo, Faccion, Point, RecursoAlmacenado, World } from '../domain/types';
-import { EDIFICIO_CATALOGO, EXTRACCION_MAXIMOS, NECESIDADES, POBLACION, RESERVA_CONSTRUCCION, SITIO } from '../constants';
+import { EDIFICIO_CATALOGO, EXTRACCION_MAXIMOS, NECESIDADES, RESERVA_CONSTRUCCION, SITIO } from '../constants';
 import { pointInPolygon } from './zones';
 import {
   capacidadHabitacional,
@@ -11,7 +11,9 @@ import {
 } from './asentamientoQuery';
 import { agregarRecurso, descontarRecursos, tieneRecursos } from './almacen';
 import { recursosProtegidosPorMantenimiento } from './mantenimiento';
-import { factorTiempoConstruccion, minimoLenerasPrioritario, politicaActivaDesbloqueaEdificio } from './politicas';
+import { factorProduccionTrigo, factorTiempoConstruccion, minimoLenerasPrioritario, politicaActivaDesbloqueaEdificio } from './politicas';
+import { consumoComidaPoblacion } from './population';
+import { consumoRacionTropas } from './tropas';
 
 /**
  * Recurso propio de cada tipo de edificio "de supervivencia": Granja no respeta la reserva mínima de
@@ -250,12 +252,26 @@ function evaluarNecesidades(asentamiento: Asentamiento, zonaPoligono: Point[], w
     }
   }
 
-  // Granja: al menos una, y más si la reserva de trigo no alcanza para sostener a la población actual (Doc 4.2).
-  const granjasActivas = edificiosPorTipoYEstado(asentamiento, 'granja').length;
-  const consumoTotal = poblacionTotal(asentamiento) * POBLACION.consumoComidaPorHabitante;
-  const trigoDisponible = asentamiento.almacen['trigo']?.cantidad ?? 0;
-  const reservaTicks = consumoTotal > 0 ? trigoDisponible / consumoTotal : Number.POSITIVE_INFINITY;
-  if ((granjasActivas === 0 || reservaTicks < NECESIDADES.umbralComidaTicksReserva) && !hayProyectoPendiente(asentamiento, 'granja')) {
+  // Granja: al menos una, y más si estoy en DÉFICIT de trigo — producción actual de todas las Granjas activas
+  // (fertilidad + mano de obra + Edicto de Cosecha, mismo cálculo que la producción real, ver más abajo) por
+  // debajo del consumo actual (población + tropas, Doc 4.1/5.4) — no "cuántos ticks de reserva quedan al
+  // ritmo de hoy" (esa estimación era optimista: el consumo sigue creciendo con la población mientras se
+  // construye, y no contaba las raciones de tropas).
+  const granjasActivasEdificios = edificiosPorTipoYEstado(asentamiento, 'granja');
+  const ratioManoActual = ratioManoObra(asentamiento);
+  const factorTrigoActual = factorProduccionTrigo(asentamiento);
+  const produccionTrigoActual = granjasActivasEdificios.reduce(
+    (acc, e) => acc + EDIFICIO_CATALOGO.granja.produccionBaseTrigo * world.fertilidadEn(e.posicion) * ratioManoActual * factorTrigoActual,
+    0
+  );
+  const consumoTrigoActual = consumoComidaPoblacion(asentamiento) + consumoRacionTropas(asentamiento);
+  const enDeficitTrigo = produccionTrigoActual < consumoTrigoActual;
+  // En déficit se permite tener varias Granjas en camino a la vez (hasta el tope), no solo una: sin esto, un
+  // déficit severo solo podía corregirse construyendo Granjas en SERIE (una cada 6 ticks), quedándose muy por
+  // detrás de la necesidad real.
+  const granjasPendientes = asentamiento.edificios.filter((e) => e.tipo === 'granja' && e.estado !== 'activo').length;
+  const limiteGranjasPendientes = enDeficitTrigo ? NECESIDADES.maximoGranjasPendientesEnDeficit : 1;
+  if ((granjasActivasEdificios.length === 0 || enDeficitTrigo) && granjasPendientes < limiteGranjasPendientes) {
     const sitio = sitioMejorFertilidad(asentamiento, zonaPoligono, world, ocupados());
     if (sitio) encolar(crearEdificioEnCola('granja', sitio, nextId()));
   }
@@ -462,10 +478,12 @@ export function avanzarConstruccion(
 ): { asentamiento: Asentamiento; eventos: string[] } {
   const eventos: string[] = [];
   let almacen = asentamiento.almacen;
-  const edificiosActualizados: Edificio[] = [];
+  const resultados = new Map<string, Edificio>();
 
   const ratioMano = ratioManoObra(asentamiento);
 
+  // Paso 1 (orden original): progreso de construcciones en curso + producción de edificios activos. Los
+  // `en_cola` se resuelven en un segundo paso por PRIORIDAD (ver abajo), no aquí.
   for (const edificio of asentamiento.edificios) {
     if (edificio.estado === 'en_construccion') {
       const restantes = edificio.ticksRestantes - 1;
@@ -477,30 +495,18 @@ export function avanzarConstruccion(
             almacen = { ...almacen, [recurso]: { ...almacen[recurso]!, capacidad: almacen[recurso]!.capacidad + bonus } };
           }
         }
-        edificiosActualizados.push({ ...edificio, estado: 'activo', ticksRestantes: 0 });
+        resultados.set(edificio.id, { ...edificio, estado: 'activo', ticksRestantes: 0 });
       } else {
-        edificiosActualizados.push({ ...edificio, ticksRestantes: restantes });
+        resultados.set(edificio.id, { ...edificio, ticksRestantes: restantes });
       }
       continue;
     }
 
-    if (edificio.estado === 'en_cola') {
-      const costo = EDIFICIO_CATALOGO[edificio.tipo].costo as Partial<Record<string, number>>;
-      if (puedeIniciarConstruccion(almacen, costo, edificio.tipo, asentamiento.nivel)) {
-        almacen = descontarRecursos(almacen, costo);
-        eventos.push(`Comienza construcción de ${edificio.tipo}.`);
-        // Vía Rápida de Construcción (Maestro de Obras, Doc 2.2/4.4) acelera el tiempo restante al arrancar.
-        const ticks = Math.max(1, Math.round(EDIFICIO_CATALOGO[edificio.tipo].tiempoConstruccionTicks * factorTiempoConstruccion(asentamiento)));
-        edificiosActualizados.push({ ...edificio, estado: 'en_construccion', ticksRestantes: ticks });
-      } else {
-        edificiosActualizados.push(edificio);
-      }
-      continue;
-    }
+    if (edificio.estado === 'en_cola') continue;
 
     // activo: producción
     if (edificio.tipo === 'granja') {
-      const yieldTrigo = EDIFICIO_CATALOGO.granja.produccionBaseTrigo * world.fertilidadEn(edificio.posicion) * ratioMano;
+      const yieldTrigo = EDIFICIO_CATALOGO.granja.produccionBaseTrigo * world.fertilidadEn(edificio.posicion) * ratioMano * factorProduccionTrigo(asentamiento);
       almacen = agregarRecurso(almacen, 'trigo', yieldTrigo);
     } else if (edificio.tipo === 'cantera') {
       const nodo = world.recursos.find((n) => n.id === edificio.fuenteId);
@@ -549,8 +555,36 @@ export function avanzarConstruccion(
         if (nodo.cantidad <= 0) eventos.push('El manada de livestock del corral se ha agotado.');
       }
     }
-    edificiosActualizados.push(edificio);
+    resultados.set(edificio.id, edificio);
   }
+
+  // Paso 2: arranque de construcciones en cola, en orden de PRIORIDAD (supervivencia > extractores > general)
+  // en vez de orden de inserción — bug real detectado jugando: Curtidería/Armería/Fundición no tienen gate de
+  // nivel y se encolan casi desde el tick 1, con un costo de madera (80) muy superior al de Granja/Leñera
+  // (30/10); si quedaban antes en el array que una Granja/Leñera nueva encolada más tarde por crecimiento de
+  // población, se llevaban la madera disponible primero aunque conceptualmente su categoría (general) tenga
+  // menos prioridad que supervivencia — dejando el asentamiento sin margen para sostenerse a sí mismo. El
+  // `sort` es estable: dentro de la misma categoría se respeta el orden de inserción de siempre.
+  const categoriaPrioridad = (tipo: EdificioTipo): number =>
+    TIPOS_SUPERVIVENCIA.has(tipo) ? 0 : TIPOS_EXTRACTORES_BASE.has(tipo) ? 1 : 2;
+  const enColaPorPrioridad = asentamiento.edificios
+    .filter((e) => e.estado === 'en_cola')
+    .sort((a, b) => categoriaPrioridad(a.tipo) - categoriaPrioridad(b.tipo));
+
+  for (const edificio of enColaPorPrioridad) {
+    const costo = EDIFICIO_CATALOGO[edificio.tipo].costo as Partial<Record<string, number>>;
+    if (puedeIniciarConstruccion(almacen, costo, edificio.tipo, asentamiento.nivel)) {
+      almacen = descontarRecursos(almacen, costo);
+      eventos.push(`Comienza construcción de ${edificio.tipo}.`);
+      // Vía Rápida de Construcción (Maestro de Obras, Doc 2.2/4.4) acelera el tiempo restante al arrancar.
+      const ticks = Math.max(1, Math.round(EDIFICIO_CATALOGO[edificio.tipo].tiempoConstruccionTicks * factorTiempoConstruccion(asentamiento)));
+      resultados.set(edificio.id, { ...edificio, estado: 'en_construccion', ticksRestantes: ticks });
+    } else {
+      resultados.set(edificio.id, edificio);
+    }
+  }
+
+  const edificiosActualizados = asentamiento.edificios.map((e) => resultados.get(e.id)!);
 
   // Rediseño de progreso (Fase 0, Doc 4.2.1): recetas de crafting de los edificios de transformación activos.
   almacen = avanzarRecetas({ ...asentamiento, edificios: edificiosActualizados }, almacen);

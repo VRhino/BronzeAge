@@ -75,9 +75,17 @@ export function crecerPoblacion(asentamiento: Asentamiento): { poblacion: Poblac
   };
 }
 
+/** Consumo de comida de la población (Doc 4.1 implícito): tasa FIJA por habitante (`consumoComidaPorHabitante`)
+ * sumada por el total de habitantes (pesants+artesanos+nobleza); Racionamiento (Sacerdote) la reduce. Usada
+ * tanto para descontarla en `consumirComida` como para el "apartado de trigo" de Mantenimiento (ver
+ * `gameStore.mantenimientoInfo`), que suma esto con `consumoRacionTropas` (engine/tropas.ts). */
+export function consumoComidaPoblacion(asentamiento: Asentamiento): number {
+  return poblacionTotal(asentamiento) * POBLACION.consumoComidaPorHabitante * factorConsumoComida(asentamiento);
+}
+
 /** Consumo de comida (Doc 4.1 implícito): cada habitante consume trigo por tick. Racionamiento (Sacerdote) lo reduce. */
 export function consumirComida(asentamiento: Asentamiento): Asentamiento {
-  const consumo = poblacionTotal(asentamiento) * POBLACION.consumoComidaPorHabitante * factorConsumoComida(asentamiento);
+  const consumo = consumoComidaPoblacion(asentamiento);
   const trigo = asentamiento.almacen['trigo'];
   if (!trigo) return asentamiento;
   return {

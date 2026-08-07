@@ -41,6 +41,11 @@ export function encontrarCapital(faccionId: string, asentamientos: Asentamiento[
 /**
  * Coste de mantenimiento (Doc 4.5): escala por nivel (los materiales se SUMAN, no se reemplazan) y por
  * distancia a la capital (mecanismo anti-snowball: más lejos = más caro).
+ *
+ * El trigo NO forma parte de este coste (fix: antes había una "mecánica repetida" — Mantenimiento cobraba un
+ * valor fijo de trigo ADEMÁS del que ya se descontaba por separado en `consumirComida`/`avanzarMantenimientoTropas`,
+ * duplicando el gasto). El consumo real de trigo (población + tropas) se sigue descontando únicamente en esas
+ * dos funciones; para mostrarlo en el panel de Mantenimiento, ver `gameStore.mantenimientoInfo`.
  */
 export function calcularCostoMantenimiento(asentamiento: Asentamiento, capital: Asentamiento | undefined): Partial<Record<string, number>> {
   const nivel = asentamiento.nivel;
@@ -51,7 +56,6 @@ export function calcularCostoMantenimiento(asentamiento: Asentamiento, capital: 
 
   const costo: Partial<Record<string, number>> = {
     madera: MANTENIMIENTO.costoBase.madera * escala,
-    trigo: MANTENIMIENTO.costoBase.trigo * escala,
   };
   if (nivel >= MANTENIMIENTO.nivelParaPiedra) costo.piedra = MANTENIMIENTO.piedraBase * escala;
   if (nivel >= MANTENIMIENTO.nivelParaOro) costo.oro = MANTENIMIENTO.oroBase * escala;
@@ -63,9 +67,10 @@ export function calcularCostoMantenimiento(asentamiento: Asentamiento, capital: 
  * pero sin necesitar `capital`/distancia (esos solo afectan el MONTO, no qué recursos aparecen). Lo usa
  * `engine/construction.ts` para saber qué recursos debe respetar la reserva mínima de construcción
  * (`RESERVA_CONSTRUCCION`) en un momento dado — "los recursos que consuma el asentamiento en ese momento".
+ * Trigo no aparece aquí (Mantenimiento ya no lo cobra directamente, ver `calcularCostoMantenimiento`).
  */
 export function recursosProtegidosPorMantenimiento(nivel: number): RecursoTipo[] {
-  const recursos: RecursoTipo[] = ['madera', 'trigo'];
+  const recursos: RecursoTipo[] = ['madera'];
   if (nivel >= MANTENIMIENTO.nivelParaPiedra) recursos.push('piedra');
   if (nivel >= MANTENIMIENTO.nivelParaOro) recursos.push('oro');
   return recursos;

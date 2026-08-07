@@ -55,32 +55,37 @@ No hay árbol tecnológico abstracto — el tipo de unidad reclutable depende de
 
 ## 5.8 Roster de tropas (rediseño Fase 0: reclutamiento por edificio + nivel interno, ver Doc 4.2.1)
 
-El roster ya no se organiza por Tier abstracto (inspiración Total War Troy, foco Egeo/Grecia) — cada unidad se recluta en Barracón o Galería de tiro, según el NIVEL INTERNO del edificio (1-3, ver Doc 4.2.1), pagando el equipo correspondiente fabricado en Armería: AC = Arma de Cobre, AB = Arma de Bronce, ABC = Arma de Bronce de Calidad, AmB = Armadura Básica, AmI = Armadura Intermedia, AaBr = Armadura de Bronce.
+**IMPLEMENTADO** (ver `constants.ts` `TROPAS_RECLUTABLES`, `engine/tropas.ts` `reclutarTropa`). Terminología (Doc 0/Glosario, igual criterio que Iberia): una **tropa** es el tipo de escuadrón que se recluta de una vez (ej. "Lanceros con escudo de mimbre"); una **unidad** es cada soldado individual dentro de una tropa (el número de unidades no se modela individualmente en Fase 0, solo como contador — `Escuadron.cantidad`).
+
+El roster ya no se organiza por Tier abstracto (inspiración Total War Troy, foco Egeo/Grecia) — cada tropa se recluta en Barracón o Galería de tiro, según el NIVEL INTERNO del edificio (1-3, ver Doc 4.2.1), pagando el equipo correspondiente fabricado en Armería: AC = Arma de Cobre, AB = Arma de Bronce, ABC = Arma de Bronce de Calidad, AmB = Armadura Básica, AmI = Armadura Intermedia, AaBr = Armadura de Bronce.
 
 **Barracón (cuerpo a cuerpo) — carril Pesants, combate real (Doc 4.1/5.5):**
 
-| Nivel | Unidad | Costo |
-|---|---|---|
-| 1 | Lanceros con escudo de mimbre | 1 AC |
-| 1 | Espadachines de espada corta de cobre | 1 AC + 1 AmB |
-| 2 | Hacheros ligeros | 1 AB + 1 AmB |
-| 2 | Espadachines con espadas y escudos de bronce | 2 AB + 1 AmI |
-| 3 | Lanceros pesados micénicos (escudos grandes) | 2 AB + 2 AmI |
-| 3 | Hacheros armados (armadura media) | 1 AB + 1 AmI |
+| Nivel | Tropa | Costo | poderBase |
+|---|---|---|---|
+| 1 | Lanceros con escudo de mimbre | 1 AC | 3 |
+| 1 | Espadachines de espada corta de cobre | 1 AC + 1 AmB | 4 |
+| 2 | Hacheros ligeros | 1 AB + 1 AmB | 7 |
+| 2 | Espadachines con espadas y escudos de bronce | 2 AB + 1 AmI | 9 |
+| 3 | Lanceros pesados micénicos (escudos grandes) | 2 AB + 2 AmI | 14 |
+| 3 | Hacheros armados (armadura media) | 1 AB + 1 AmI | 12 |
 
 **Galería de tiro (a distancia) — carril Pesants, combate real:**
 
-| Nivel | Unidad | Costo |
-|---|---|---|
-| 1 | Honderos (escaramuzadores) | 1 AmB |
-| 2 | Escaramuzadores con jabalina | 1 AB + 1 AmB |
-| 2 | Arqueros | 1 AB + 1 AmI |
-| 3 | Arqueros con arco compuesto | 3 AB + 2 AmI |
+| Nivel | Tropa | Costo | poderBase |
+|---|---|---|---|
+| 1 | Honderos (escaramuzadores) | 1 AmB | 5 |
+| 2 | Escaramuzadores con jabalina | 1 AB + 1 AmB | 8 |
+| 2 | Arqueros | 1 AB + 1 AmI | 9 |
+| 3 | Arqueros con arco compuesto | 3 AB + 2 AmI | 15 |
+
+`poderBase` es PLACEHOLDER: no estaba en el diseño original (solo equipo/nivel), interpolado a partir de la progresión ya existente del roster anterior (3 → 6 → 12 → 25 en 4 tiers) repartida en estas 10 tropas a lo largo de 3 niveles — pendiente de calibración por simulación.
 
 **Nobleza (progresión plana) — sin cambios respecto a la versión ya implementada**: se sigue reclutando exclusivamente vía Gran Fundición, con su costo actual (cobre+estaño+oro) y conversión instantánea a élite — el rediseño de Barracón/Galería de tiro no la afecta.
 
+RESUELTO: mapeo entre el nivel interno del edificio y la veteranía por combate real ya existente (Doc 5.5/ASCENSO_TROPA) — conviven, pero con roles distintos. La veteranía sigue dando bonus de poder al escuadrón (`poderBase * (1 + veterania * bonusVeteraniaPorPunto)`, fórmula sin cambios) pero YA NO asciende de tier automáticamente a los escuadrones reclutados como tropa de equipo — "mejorar" para ellos es reclutar una tropa mejor cuando Barracón/Galería de tiro suba de nivel interno, no un ascenso automático del mismo escuadrón. El ascenso automático de tier por veteranía (`ascenderTierSiCorresponde`) se sigue aplicando sin cambios a Artesanos/Nobleza (que no reclutan por este sistema).
+
 PENDIENTE:
-- Mapeo exacto entre el nivel interno del edificio (1-3, desbloquea qué unidades se pueden reclutar) y el mecanismo de veteranía por combate real ya existente (Doc 5.5/ASCENSO_TROPA) — si conviven ambos ejes (nivel de edificio desbloquea la receta/unidad, veteranía sigue dando bonus de poder al squad) o si uno reemplaza al otro.
 - Establos / unidades de carro de guerra (Carros escaramuzadores, Carros de guerra reforzados del roster anterior): sin edificio de reclutamiento definido en el rediseño — Carpintería solo cubre armas de asedio (ariete, torre de asedio), no carros. Queda sin resolver si se retiran de Fase 0 o necesitan su propio edificio.
 
 ## 5.9 Exilio como política de soberanía (heredado de Iberia, ver también Doc 2.8)
