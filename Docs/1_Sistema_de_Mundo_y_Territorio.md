@@ -14,11 +14,13 @@
 ## 1.2 Fundación de asentamientos
 - El jugador elige LIBREMENTE dónde colocar el edificio de fundación.
 - Al fundar se genera automáticamente una ZONA DE INFLUENCIA (círculo/polígono) = nodo.
+- TAMAÑO: nace con un radio inicial de 30 unidades y crece gradualmente cada tick hacia un TECHO que escala con el NIVEL del asentamiento (ver Doc 4.5 para el modelo de nivel): nivel 1 → 60, nivel 2 → 90, nivel 3 → 120 (tope de Fase 0, ver 4.5). Subir de nivel no hace saltar el radio de golpe — solo levanta el techo hacia el que la zona ya venía creciendo.
 - Reglas de construcción: solo se puede construir dentro de una zona de influencia existente (ampliándola si es del mismo bando) o fuera de cualquier zona (creando una nueva).
 - FRONTERAS: al chocar dos zonas en expansión se genera un LÍMITE DURO — ninguna zona sigue creciendo en esa dirección. Solo se rompe si el asentamiento rival cae o su zona se debilita/reduce (guerra u otros medios). Las fronteras son "vivas", reflejan el poder relativo de cada bando en cada momento.
 
 ## 1.3 Onboarding de nuevos jugadores
 - Jugador nuevo aparece en un punto ALEATORIO del mapa con una "caravana de asentamiento" para fundar donde decida.
+- EDIFICIOS INICIALES: todo asentamiento nace con un Centro Urbano (marcador único, no construible por ningún otro medio), una Granja y 3 Viviendas, ya ACTIVOS sin pasar por la cola de construcción. Si hay un bosque alcanzable cerca del punto de fundación, se añade también una Leñera inicial (condicional, no garantizada si no hay bosque cercano) — reduce el riesgo de déficit de madera en los primeros ticks (ver 4.2 y `Correcciones_Durante_Desarrollo.md`, bug #1 del deadlock de madera).
 - FUNDACIÓN GRUPAL: hasta 5 jugadores pueden organizarse para aparecer juntos en el mismo punto, compartiendo una caravana, fundando el asentamiento entre los 5. Los 5 reciben Ciudadanía de inmediato.
 - MATERIALES INICIALES (confirmado durante implementación de Fase 0): la caravana de fundación entrega una reserva inicial de madera y piedra al fundar, suficiente para arrancar la primera construcción. Sin esto el asentamiento queda bloqueado permanentemente (el edificio que produce madera también cuesta madera para construirse — deadlock detectado y corregido en Sprint 2, ver `Correcciones_Durante_Desarrollo.md`).
 - PROTECCIÓN TEMPORAL — RESUELTO durante implementación (ya no es pregunta pendiente): existe un período de gracia en ticks tras la fundación durante el cual NO se cobra Mantenimiento (ver Doc 4.5). Sin esto, todo asentamiento nuevo caía en ruinas de forma sistemática antes de que su economía pudiera arrancar. Duración exacta: placeholder ajustable.

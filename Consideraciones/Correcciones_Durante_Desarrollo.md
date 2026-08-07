@@ -101,6 +101,37 @@ Sesión de rebalance posterior al cierre de Sprint 6, motivada por partidas de p
 
 ---
 
+## Post-Sprint 6 — Implementación del rediseño de progreso/arranque de asentamientos
+
+Sesión de implementación del rediseño documentado en Docs/1, 4, 5, 6 (nuevo modelo de nivel por gates, catálogo de edificios de transformación con crafting multi-nivel, Corral, disparador de Artesanos, políticas de desbloqueo de edificios especiales). Bugs detectados jugando la simulación durante la implementación, no solo leyendo el código.
+
+### 16. Interbloqueo: Curtiduría/Armería copaban la cola general y dejaban a Cantera sin hueco
+- **Error:** con el rediseño, Curtiduría/Armería/Fundición se evaluaban en el mismo cupo general de la cola que Cantera/minas. Curtiduría y Armería (siembran su sitio con `sitioConcentrico`, no dependen de un nodo de recurso) conseguían encolarse en el tick 1, antes de que la zona de influencia creciera lo suficiente para alcanzar un nodo de piedra — ocupando los 2 slots generales disponibles. Como ambas necesitan piedra para completarse y Cantera (su única fuente) nunca conseguía un hueco para encolarse, el asentamiento quedaba parado para siempre sin piedra.
+- **Cómo se detectó:** simulando 150-300 ticks, un asentamiento se quedó con piedra clavada en 20 y Curtiduría/Armería en cola indefinidamente.
+- **Solución:** mismo patrón que el interbloqueo de Granja/Leñera (punto 11): nuevo slot reservado EXCLUSIVAMENTE para extractores base (cantera/minaCobre/mina/minaEstano/corral) — `NECESIDADES.slotsReservadosExtractores`, con `maximoEnCola` subido de 3 a 4 para no restar concurrencia al resto.
+
+### 17. Segundo interbloqueo: Curtiduría+Armería+Fundición también podían dejar a Vivienda sin hueco
+- **Error:** el fix del punto 16 no bastaba — en 2-3 ticks, las 3 transformación podían terminar ocupando igualmente los slots generales (uno por tick), y si quedaban atascadas esperando piedra en un punto de fundación pobre en ese recurso, permanecían en cola para siempre, dejando a Vivienda (que no necesita piedra) sin hueco y a la población estancada permanentemente en el tope de vivienda inicial.
+- **Cómo se detectó:** simulando 300-600 ticks en un punto sin piedra alcanzable: población clavada en 45 (capacidad de 3 Viviendas) durante cientos de ticks pese a cumplirse el umbral de ocupación.
+- **Solución:** Vivienda/Almacén se evalúan ANTES que Curtiduría/Armería/Fundición, y como máximo UNA de las tres puede estar `en_cola` A LA VEZ (no solo "una nueva por tick") — se comprueba `hayProyectoPendiente` sobre las tres como grupo antes de intentar encolar cualquiera.
+
+### 18. Recalibración: tope de extractores demasiado bajo para la tasa de crecimiento de población existente
+- **Error:** `EXTRACCION_MAXIMOS.porTipo` se fijó en 5 como placeholder inicial. Con la tasa de crecimiento de Pesants ya existente (12%/tick, sin tope salvo Vivienda) y Vivienda ya sin bloqueo (punto 17), la población crecía sin freno mientras la extracción de recursos quedaba capada en 5 instancias por tipo — todo asentamiento probado colapsaba por déficit de Mantenimiento entre el tick 74 y el 674 (variable por el redondeo estocástico del crecimiento poblacional), incluso en ubicaciones con buen acceso a recursos.
+- **Cómo se detectó:** simulando 300-600 ticks en múltiples ubicaciones (con y sin piedra cercana): todas cayeron en ruinas.
+- **Solución:** subido a 10 (mismo techo que permitía el `nivelMaximo` anterior de 10, antes de que el rediseño lo bajara a 3) — sigue siendo PLACEHOLDER, pendiente de más calibración.
+
+### 19. Panel de Almacén no mostraba los recursos intermedios de crafting
+- **Error:** `main.ts` listaba el Almacén iterando `CATALOGOS.recursosTrueque` (7 recursos comerciables) en vez de los recursos realmente presentes en `asentamiento.almacen` — los 12 tipos nuevos (lingotes, cuero, armas, armaduras) nunca aparecían en el panel aunque se estuvieran produciendo, haciendo invisible el resultado del nuevo sistema de crafting.
+- **Cómo se detectó:** tras confirmar que Curtiduría/Armería/Fundición se construían y activaban Artesanos, el panel de Almacén seguía mostrando solo los 7 recursos de siempre.
+- **Solución:** el panel de Almacén ahora itera `Object.keys(asentamiento.almacen)` (todo lo que exista, sea comerciable o no); `CATALOGOS.recursosTrueque`/`recursosMercado` se dejan intactos para los formularios de trueque/mercado, que sí deben quedarse limitados a los recursos base.
+
+### 20. Edificios de transformación: gate de construcción BASE vs. gate de mejora de nivel interno
+- **Aclaración de diseño durante la implementación (no bug, releyendo la spec original con más cuidado):** los "Requisitos nivel 2/3" de Curtiduría/Armería/Fundición en el diseño original son gates para MEJORAR el edificio a su nivel interno 2/3, no para construirlo por primera vez — solo Carpintería y Palacio gatean su construcción base. Es coherente: el propio gate de nivel 2 de asentamiento exige TENER construidas Armería/Curtiduría/Fundición, así que tienen que poder construirse antes de alcanzar ese nivel.
+
+Verificado en el navegador tras estas correcciones: Corral/Curtiduría/Armería/Fundición se auto-construyen sin bloquear Granja/Leñera/Vivienda; Artesanos aparecen al completarse el primer edificio de transformación; el gate de nivel de asentamiento refleja correctamente población y edificios pendientes; Barracón se encola y completa vía política en su cluster de cola aparte sin desplazar la cola general; sin errores de consola ni de compilación (`tsc --noEmit` limpio) en ningún punto.
+
+---
+
 ## Nota general
 
 Todas las correcciones anteriores son de **diseño/balance**, no de sintaxis: el proyecto compiló sin errores de TypeScript en todo momento salvo en los pasos intermedios normales de refactor (añadir un campo a un tipo y luego actualizar todos los lugares que lo instancian), que se resolvieron sobre la marcha y no se listan aquí por ser rutinarios.

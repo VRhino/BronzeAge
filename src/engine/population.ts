@@ -1,6 +1,6 @@
 import type { Asentamiento, Poblacion } from '../domain/types';
 import { POBLACION } from '../constants';
-import { capacidadHabitacional, edificiosPorTipoYEstado, poblacionTotal } from './asentamientoQuery';
+import { capacidadArtesanos, capacidadHabitacional, edificiosPorTipoYEstado, poblacionTotal } from './asentamientoQuery';
 import { factorConsumoComida, factorCrecimientoNobleza } from './politicas';
 
 /** Incremento entero esperado = actual*tasa, con redondeo estocástico para no estancarse con poblaciones pequeñas. */
@@ -29,24 +29,30 @@ export function crecerPoblacion(asentamiento: Asentamiento): { poblacion: Poblac
   const tasaPesants = POBLACION.pesants.tasaCrecimientoBase * comidaFactor * espacioLibreFactor * estabilidad * felicidad;
   const nuevosPesants = crecimientoEstocastico(asentamiento.poblacion.pesants, tasaPesants);
 
-  const capacidadArtesanos = edificiosPorTipoYEstado(asentamiento, 'taller').length * POBLACION.artesanos.capacidadPorTaller;
+  // Rediseño de progreso (Fase 0, Doc 4.1/4.2.1): el tope ya no depende de un edificio genérico "Taller" —
+  // es la suma de trabajadoresRequeridos de los edificios de transformación activos (Curtiduría/Armería/
+  // Fundición/Carpintería, según su nivel interno). Sin ninguno activo, no crecen artesanos nuevos.
+  const capacidadArtesanosActual = capacidadArtesanos(asentamiento);
   let nuevosArtesanos = 0;
-  if (capacidadArtesanos > asentamiento.poblacion.artesanos && espacioLibreFactor > 0) {
+  if (capacidadArtesanosActual > asentamiento.poblacion.artesanos && espacioLibreFactor > 0) {
     nuevosArtesanos = Math.max(
       1,
-      crecimientoEstocastico(capacidadArtesanos - asentamiento.poblacion.artesanos, POBLACION.artesanos.tasaCrecimientoBase)
+      crecimientoEstocastico(capacidadArtesanosActual - asentamiento.poblacion.artesanos, POBLACION.artesanos.tasaCrecimientoBase)
     );
     if (nuevosArtesanos > 0 && asentamiento.poblacion.artesanos === 0) {
-      eventos.push('Los primeros Artesanos se establecen gracias al Taller.');
+      eventos.push('Los primeros Artesanos se establecen gracias a los primeros edificios de transformación.');
     }
   }
 
-  // Nobleza (Doc 4.1): único requisito es una cantidad mínima de ciudadanos (jugadores) en el asentamiento.
-  // `casasCompradas` ya incluye a los fundadores (reciben casa automática al fundar, Doc 2.5) además de
-  // quienes compraron casa después, así que basta con su longitud. Sacerdote puede acelerar el crecimiento vía política.
+  // Nobleza (Doc 4.1, rediseño de progreso Fase 0): además del mínimo de ciudadanos ya existente, ahora
+  // también exige Palacio construido (Doc 4.2.1 — "desbloquea la aparición de la población noble"). Sin
+  // Palacio, ningún número de ciudadanos hace aparecer Nobleza. `casasCompradas` ya incluye a los fundadores
+  // (reciben casa automática al fundar, Doc 2.5) además de quienes compraron casa después, así que basta con
+  // su longitud. Sacerdote puede acelerar el crecimiento vía política.
   let nuevaNobleza = 0;
   const ciudadanosEnAsentamiento = asentamiento.casasCompradas.length;
-  const cumpleRequisitoNobleza = ciudadanosEnAsentamiento >= POBLACION.nobleza.minCiudadanos;
+  const tienePalacio = edificiosPorTipoYEstado(asentamiento, 'palacio').length > 0;
+  const cumpleRequisitoNobleza = ciudadanosEnAsentamiento >= POBLACION.nobleza.minCiudadanos && tienePalacio;
   if (cumpleRequisitoNobleza && espacioLibreFactor > 0) {
     if (asentamiento.poblacion.nobleza === 0) {
       nuevaNobleza = 1;

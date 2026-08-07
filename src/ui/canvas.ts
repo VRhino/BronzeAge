@@ -13,6 +13,20 @@ export const RECURSO_COLOR: Record<RecursoTipo, string> = {
   estano: '#2f6fd1',
   oro: '#ffd700',
   livestock: '#b5658a',
+  // Rediseño de progreso (Fase 0, Doc 4.2.1): recursos intermedios de las cadenas de crafting — no se dibujan
+  // como nodo en el mapa (RECURSOS_EN_MAPA), pero conservan color propio para paneles de almacén/producción.
+  lingoteCobre: '#d98a4a',
+  lingoteEstano: '#5a8fd9',
+  lingoteBronce: '#a97142',
+  cuero: '#8a5a3c',
+  cueroCurtido: '#6b4226',
+  cueroCalidad: '#4a2e18',
+  armaCobre: '#c98a4a',
+  armaBronce: '#a97142',
+  armaBronceCalidad: '#8a5a2e',
+  armaduraBasica: '#a9a9a9',
+  armaduraIntermedia: '#8d8d8d',
+  armaduraBronce: '#6b6b6b',
 };
 
 /** Tipos de recurso que SÍ se dibujan como punto en el mapa (para la leyenda) — trigo y madera no lo son. */
@@ -25,12 +39,19 @@ export const EDIFICIO_COLOR: Record<EdificioTipo, string> = {
   cantera: '#8d8d8d',
   lenera: '#3f7d3a',
   almacen: '#7a5c3a',
-  taller: '#c0703c',
   mina: '#f1c40f',
   minaCobre: '#c0703c',
   minaEstano: '#2f6fd1',
   fundicion: '#b33a3a',
   granFundicion: '#7a1f1f',
+  // Rediseño de progreso (Fase 0, Doc 4.2.1): edificios nuevos.
+  corral: '#b5658a',
+  curtiduria: '#8a5a3c',
+  armeria: '#a83232',
+  carpinteria: '#6b4226',
+  barracon: '#8b3a3a',
+  galeriaDeTiro: '#4a7a4a',
+  palacio: '#c9a227',
 };
 
 export function faccionColor(faccionId: string, facciones: Faccion[]): string {

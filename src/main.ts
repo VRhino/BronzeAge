@@ -17,6 +17,18 @@ const RECURSO_NOMBRE: Record<string, string> = {
   estano: 'Estaño',
   oro: 'Oro',
   livestock: 'Livestock',
+  lingoteCobre: 'Lingote de Cobre',
+  lingoteEstano: 'Lingote de Estaño',
+  lingoteBronce: 'Lingote de Bronce',
+  cuero: 'Cuero',
+  cueroCurtido: 'Cuero Curtido',
+  cueroCalidad: 'Cuero de Calidad',
+  armaCobre: 'Arma de Cobre',
+  armaBronce: 'Arma de Bronce',
+  armaBronceCalidad: 'Arma de Bronce de Calidad',
+  armaduraBasica: 'Armadura Básica',
+  armaduraIntermedia: 'Armadura Intermedia',
+  armaduraBronce: 'Armadura de Bronce',
 };
 
 const EDIFICIO_NOMBRE: Record<string, string> = {
@@ -26,11 +38,17 @@ const EDIFICIO_NOMBRE: Record<string, string> = {
   cantera: 'Cantera',
   lenera: 'Leñera',
   almacen: 'Almacén',
-  taller: 'Taller',
   mina: 'Mina de oro',
   minaCobre: 'Mina de cobre',
   minaEstano: 'Mina de estaño',
+  corral: 'Corral',
   fundicion: 'Fundición',
+  curtiduria: 'Curtiduría',
+  armeria: 'Armería',
+  carpinteria: 'Carpintería',
+  barracon: 'Barracón',
+  galeriaDeTiro: 'Galería de Tiro',
+  palacio: 'Palacio',
   granFundicion: 'Gran Fundición',
 };
 
@@ -41,11 +59,17 @@ const EDIFICIO_FUNCION: Record<string, string> = {
   cantera: 'Extrae piedra de un yacimiento cercano hasta agotarlo.',
   lenera: 'Extrae madera de un bosque cercano (no se agota).',
   almacen: 'Amplía la capacidad de almacenamiento de todos los recursos.',
-  taller: 'Habilita la aparición de Artesanos en el asentamiento.',
   mina: 'Extrae oro de un yacimiento cercano hasta agotarlo.',
   minaCobre: 'Extrae cobre de un yacimiento cercano hasta agotarlo.',
   minaEstano: 'Extrae estaño de un yacimiento cercano hasta agotarlo.',
-  fundicion: 'Edificio militar (colocación manual) — base para producción de tropas.',
+  corral: 'Extrae livestock de una manada cercana hasta agotarla.',
+  fundicion: 'Fabrica lingotes de cobre/estaño/bronce a partir de mineral. Dispara la aparición de Artesanos si es el primero de su tipo.',
+  curtiduria: 'Trata cuero a partir de livestock. Dispara la aparición de Artesanos si es el primero de su tipo.',
+  armeria: 'Fabrica armas y armaduras a partir de lingotes y cuero. Dispara la aparición de Artesanos si es el primero de su tipo.',
+  carpinteria: 'Recluta armas de asedio y habilita mejoras de otros edificios (Armería/Barracón/Galería de tiro nivel 2, Palacio).',
+  barracon: 'Reclutamiento de tropas cuerpo a cuerpo. Solo se construye mientras la política del General esté activa.',
+  galeriaDeTiro: 'Reclutamiento de tropas a distancia. Solo se construye mientras la política del General esté activa.',
+  palacio: 'Desbloquea la aparición de Nobleza. Solo se construye mientras la política del Gobernador esté activa.',
   granFundicion: 'Edificio militar de élite (colocación manual) — requiere nivel de Facción alto; habilita tropas de Nobleza.',
 };
 
@@ -194,7 +218,6 @@ app.innerHTML = `
         <label>Reclutar de <select id="reclutar-origen"></select></label>
         <label>Cantidad <input id="reclutar-cantidad" type="number" value="10" min="1" /></label>
         <button id="reclutar-btn">Reclutar</button>
-        <button id="fundicion-btn">Construir Fundición</button>
         <button id="gran-fundicion-btn">Construir Gran Fundición</button>
 
         <label>Escuadrones propios (ids separados por coma) <input id="guerra-escuadrones" type="text" placeholder="escuadron-..." /></label>
@@ -460,7 +483,10 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
   const totalPoblacion = pesants + artesanos + nobleza;
   const otrasCasas = a.casasCompradas.filter((id) => !a.jugadoresFundadoresIds.includes(id));
 
-  const almacenHtml = CATALOGOS.recursosTrueque
+  // Muestra TODOS los recursos presentes en el almacén (incluidos los intermedios de crafting del rediseño
+  // de progreso, Doc 4.2.1) — no solo los tradeables de CATALOGOS.recursosTrueque, que se quedan cortos aquí
+  // adrede (esos intermedios no son comerciables en Fase 0).
+  const almacenHtml = Object.keys(a.almacen)
     .map((r) => {
       const info = a.almacen[r];
       return `<div class="kv-row"><span>${RECURSO_NOMBRE[r] ?? r}</span><span>${Math.floor(info?.cantidad ?? 0)}/${info?.capacidad ?? 0}</span></div>`;
@@ -504,6 +530,22 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
       </table>`
     : '<p class="legend-note">Sin edificios.</p>';
 
+  const produccion = gameStore.produccionInfo(a);
+  const manoObra = gameStore.manoObraInfo(a);
+  const produccionHtml = produccion.length
+    ? `<table class="mini-table">
+        <thead><tr><th>Edificio</th><th>Activos</th><th>Recurso</th><th>Producción/tick</th></tr></thead>
+        <tbody>
+          ${produccion
+            .map(
+              (p) =>
+                `<tr><td>${EDIFICIO_NOMBRE[p.tipo] ?? p.tipo}</td><td>${p.activos}</td><td>${RECURSO_NOMBRE[p.recurso] ?? p.recurso}</td><td>${p.cantidadPorTick.toFixed(1)}</td></tr>`
+            )
+            .join('')}
+        </tbody>
+      </table>`
+    : '<p class="legend-note">Sin edificios productores activos.</p>';
+
   const politicasActivasHtml = a.politicasActivas.length
     ? `<table class="mini-table">
         <thead><tr><th>Política</th><th>Cargo</th><th>Efecto</th><th>Expira</th></tr></thead>
@@ -528,8 +570,20 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
   const politicasHtml = `${politicasActivasHtml}<div class="kv-grid" style="margin-top:8px">${slotsHtml}</div>`;
 
   const nivelInfo = gameStore.nivelAsentamientoInfo(a);
-  const nivelPorcentaje = nivelInfo.esMaximo ? 100 : Math.round((nivelInfo.puntosParaSiguiente / nivelInfo.puntosPorNivel) * 100);
-  const nivelTexto = nivelInfo.esMaximo ? 'Nivel máximo' : `${nivelInfo.puntosParaSiguiente}/${nivelInfo.puntosPorNivel} puntos para el nivel ${nivelInfo.nivel + 1}`;
+  let nivelPorcentaje = 100;
+  let nivelTexto = 'Nivel máximo';
+  if (!nivelInfo.esMaximo && nivelInfo.siguiente) {
+    const s = nivelInfo.siguiente;
+    const ratioPesants = Math.min(1, s.pesants.actual / s.pesants.requerido);
+    const ratioArtesanos = Math.min(1, s.artesanos.actual / s.artesanos.requerido);
+    const edificiosListos = s.edificiosRequeridos - s.edificiosFaltantes.length;
+    const ratioEdificios = s.edificiosRequeridos > 0 ? edificiosListos / s.edificiosRequeridos : 1;
+    nivelPorcentaje = Math.round(((ratioPesants + ratioArtesanos + ratioEdificios) / 3) * 100);
+    const faltantesTexto = s.edificiosFaltantes.length
+      ? `; faltan: ${s.edificiosFaltantes.map((tipo) => EDIFICIO_NOMBRE[tipo] ?? tipo).join(', ')}`
+      : '';
+    nivelTexto = `Nivel ${s.nivelObjetivo}: ${s.pesants.actual}/${s.pesants.requerido} pesants, ${s.artesanos.actual}/${s.artesanos.requerido} artesanos${faltantesTexto}`;
+  }
 
   const mantenimiento = gameStore.mantenimientoInfo(a);
   const mantenimientoHtml = mantenimiento.enGracia
@@ -605,6 +659,23 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
       </div>
 
       <div class="detail-section">
+        <h3>Mano de obra en producción primaria</h3>
+        <div class="kv-grid">
+          <div class="kv-row"><span>Puestos requeridos</span><span>${manoObra.trabajadoresRequeridos}</span></div>
+          <div class="kv-row"><span>Pesants ocupados</span><span>${manoObra.ocupados.toFixed(0)}</span></div>
+          <div class="kv-row"><span>Pesants excedentes</span><span>${manoObra.excedente.toFixed(0)}</span></div>
+          <div class="kv-row"><span>Ratio de mano de obra</span><span>${Math.round(manoObra.ratioMano * 100)}%</span></div>
+        </div>
+        ${
+          manoObra.ratioMano < 1
+            ? `<p class="legend-note">Faltan pesants: la producción de granja/cantera/leñera/minas se reduce a un ${Math.round(manoObra.ratioMano * 100)}% del máximo.</p>`
+            : manoObra.excedente > 0
+              ? `<p class="legend-note">Pool de pesants para reclutamiento: ${manoObra.excedente.toFixed(0)}.</p>`
+              : ''
+        }
+      </div>
+
+      <div class="detail-section">
         <h3>Almacén</h3>
         <div class="kv-grid">${almacenHtml}</div>
       </div>
@@ -612,6 +683,11 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
       <div class="detail-section">
         <h3>Edificios</h3>
         ${edificiosHtml}
+      </div>
+
+      <div class="detail-section">
+        <h3>Producción — por tick</h3>
+        ${produccionHtml}
       </div>
 
       <div class="detail-section">
@@ -1179,9 +1255,6 @@ document.getElementById('reclutar-btn')!.addEventListener('click', () => {
   gameStore.reclutar(guerraAsentamientoSelect.value, reclutarOrigenSelect.value as 'pesants' | 'artesanos' | 'nobleza', Number(reclutarCantidadInput.value) || 0);
 });
 
-document.getElementById('fundicion-btn')!.addEventListener('click', () => {
-  gameStore.construirManualmente(guerraAsentamientoSelect.value, 'fundicion');
-});
 document.getElementById('gran-fundicion-btn')!.addEventListener('click', () => {
   gameStore.construirManualmente(guerraAsentamientoSelect.value, 'granFundicion');
 });

@@ -4,6 +4,8 @@ Lista completa de mecánicas diseñadas, organizadas por sistema. ✅ = cerrado/
 
 **ESTADO:** Fase 0 (Sprints 1-6) ya fue **implementada** en TypeScript y validada jugando en el navegador. Ver `Correcciones_Durante_Desarrollo.md` para los ajustes de diseño que surgieron durante la implementación (varios resolvieron preguntas antes pendientes).
 
+**NOTA (rediseño de progreso y arranque, post Sprint 6):** el nivel de asentamiento, el catálogo de edificios, el disparador de Artesanos y el reclutamiento militar fueron rediseñados y documentados en Docs/1, 4 y 5 (ver detalle en cada sección de abajo) — la implementación en código (`src/`) de este rediseño es un paso posterior, todavía PENDIENTE.
+
 Ver `Docs/0_Glosario_de_Entidades_Politicas.md` para las definiciones centrales.
 
 ## Concepto y ambientación
@@ -16,7 +18,8 @@ Ver `Docs/0_Glosario_de_Entidades_Politicas.md` para las definiciones centrales.
 - ✅ Chokepoints estratégicos (fases con relieve)
 - ✅ Cap de fundación por Facción (escala con nivel de Facción, 1→3 fácil, hasta 7 tardío)
 - ✅ Protección temporal: período de gracia sin cobro de Mantenimiento al fundar (RESUELTO durante implementación Fase 0)
-- 🔶 Qué hace subir el "nivel de Facción" exactamente; curva exacta entre cap 3 y cap 7
+- ✅ Rediseño Fase 0: radio inicial de zona de influencia sube a 30, techo escala con el nivel de asentamiento (60/90/120); Leñera inicial condicional a bosque cercano (ver Doc 1.2/1.3)
+- 🔶 Qué hace subir el "nivel de Facción" exactamente; curva exacta entre cap 3 y cap 7 (distinto del nivel de ASENTAMIENTO, ver sección Mantenimiento — ese sí quedó resuelto para Fase 0)
 
 ## Tecnología
 - ✅ Tres vías de acceso (comercio, desarrollo propio, Aedas); sistema de Aedas completo; tecnología se compra con oro
@@ -40,12 +43,14 @@ Ver `Docs/0_Glosario_de_Entidades_Politicas.md` para las definiciones centrales.
 ## Población
 - ✅ 3 clases (Pesants, Artesanos, Nobleza) con roles, condiciones de aparición y fórmulas propias
 - ✅ Jugadores como entidad separada; reclutamiento por pool específico (combate real vs progresión plana)
+- ✅ Rediseño Fase 0: disparador de Artesanos pasa de Taller genérico a "el primero construido entre Curtiduría/Armería/Fundición/Carpintería"; tope de población = suma de trabajadoresRequeridos de los edificios de transformación activos (ver Doc 4.1/4.2.1)
 - 🔶 Fórmula exacta de crecimiento de Artesanos; criterio exacto de cola de prioridad de reclutamiento
 
 ## Construcción automática
 - ✅ Jugador no elige ubicación/tipo (excepto fundación y edificios estratégicos)
 - ✅ Algoritmo por reglas; crecimiento por necesidad, con reevaluación CONTINUA (no solo "construir una vez"): granjas adicionales si la reserva proyectada cae bajo el umbral; Maestro de Obras; layout dinámico por política
-- ✅ Reemplazo automático de extractores (cantera/mina de oro/mina de cobre/lenera) cuando su fuente se agota, hasta un máximo según nivel del asentamiento
+- ✅ Reemplazo automático de extractores (cantera/mina de oro/mina de cobre/mina de estaño/lenera/Corral) cuando su fuente se agota, hasta un máximo por tipo — rediseño Fase 0: desacoplado del nivel del asentamiento (antes escalaba 1:1 con él), ahora número fijo pendiente de calibración (ver Doc 4.2)
+- ✅ Rediseño Fase 0: catálogo ampliado con 8 edificios nuevos (Corral, Armería, Curtiduría, Carpintería, Palacio, Barracón, Galería de tiro; Murallas sigue fuera de alcance) con recetas multi-nivel — ver Doc 4.2.1. Curtiduría/Armería/Fundición/Carpintería son auto-construcción; Barracón/Galería de tiro/Palacio van vía política dedicada con cluster de cola aparte (ver Doc 4.4)
 
 ## Escala social y política
 - ✅ Glosario central: Jugador → Facción → Asentamientos; Liga = red de Facciones
@@ -62,18 +67,22 @@ Ver `Docs/0_Glosario_de_Entidades_Politicas.md` para las definiciones centrales.
 - ✅ Multi-cargo permitido; liberación tras 1 semana de inactividad
 
 ## Mantenimiento
-- ✅ Sistema unificado: medidor 0-100, coste periódico escalonado por nivel (madera+comida → +piedra → +oro desde nivel 8, todos simultáneos en niveles tardíos) y por distancia al centro de poder de la Facción
+- ✅ Sistema unificado: medidor 0-100, coste periódico escalonado por nivel (madera+comida → +piedra → +oro, todos simultáneos en niveles tardíos) y por distancia al centro de poder de la Facción
+- ✅ Nivel de asentamiento — rediseño Fase 0: modelo por gates (población + edificios específicos), reemplaza la fórmula de puntos anterior. Tope de Fase 0 = nivel 3. Nivel 2 = 200 pesants + 50 artesanos + Armería/Curtiduría/Fundición construidas; Nivel 3 = 500 pesants + 200 artesanos + Carpintería/Barracón/Galería de tiro construidas (ver Doc 4.5)
+- ✅ Rediseño Fase 0: con el tope bajando a 3, los umbrales de piedra/oro (antes nivel 3 y nivel 8, pensados para rango 1-10) se recalibran al rango 1-3 — cifra exacta pendiente de calibración (ver Doc 4.5)
 - ✅ Período de gracia al fundar (sin cobro de mantenimiento los primeros ticks) — validado en implementación, resuelve protección temporal de asentamientos nuevos
 - ✅ Degradación proporcional del medidor si no se cumple el pago; al llegar a 0 el asentamiento se destruye y cae en ruinas (conecta con abandono total)
-- ✅ Cifras recalibradas durante implementación (coste base y velocidad de degradación reducidos, umbral de oro movido de nivel 6 a 8) para evitar espirales de déficit en asentamientos bien gestionados
-- 🔶 Cantidades exactas finales por nivel, velocidad exacta de degradación/regeneración, duración exacta del período de gracia — siguen siendo placeholder
+- ✅ Cifras recalibradas durante implementación (coste base y velocidad de degradación reducidos) para evitar espirales de déficit en asentamientos bien gestionados — validación corresponde al modelo de nivel anterior, pendiente de repetirse tras el rediseño
+- 🔶 Cantidades exactas finales por nivel, en qué nivel exacto (1-3) empiezan a exigirse piedra y oro, velocidad exacta de degradación/regeneración, duración exacta del período de gracia, tope exacto de extractores por tipo (ver Doc 4.2) — siguen siendo placeholder
 
 ## Entrada tardía y mundo lleno
 - ✅ Mapa difícil de saturar; nuevos servidores; deterioro libera zonas
 
 ## Guerra, diplomacia y mundo
-- ✅ Guerra: combate héroe+tropa, formaciones/cohesión, 4 modalidades, permadeath+squad, doble carril, attack timer (pospuesto), exilio. Adaptación temática completa (cobre/estaño) y roster de 4 tiers
+- ✅ Guerra: combate héroe+tropa, formaciones/cohesión, 4 modalidades, permadeath+squad, doble carril, attack timer (pospuesto), exilio. Adaptación temática completa (cobre/estaño)
+- ✅ Rediseño Fase 0: roster reemplaza los 4 tiers genéricos — reclutamiento por edificio (Barracón/Galería de tiro) según su nivel interno (1-3), con costo en equipo fabricado en Armería; Nobleza sin cambios (vía Gran Fundición). Ver Doc 5.7/5.8
 - 🔶 Guerra (detalle): declaración formal, conquista exacta tras asedio, unidades navales
+- 🔶 Mapeo exacto entre nivel interno del edificio y el mecanismo de veteranía por combate real ya existente; Establos/carros de guerra sin edificio de reclutamiento definido tras el rediseño (ver Doc 5.8)
 - ✅ Diplomacia: score de confiabilidad de Facción (-100 a +100) completo; exilio resuelto; rumores/espionaje descartado
 - ✅ Generación del mundo (Fase 0) resuelta
 - 🔶 Generación del mundo (fases avanzadas): mapa fijo vs procedural con relieve, puntos de interés, biomas

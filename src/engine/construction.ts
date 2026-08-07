@@ -1,10 +1,17 @@
 import type { Asentamiento, Edificio, EdificioTipo, Faccion, Point, RecursoAlmacenado, World } from '../domain/types';
-import { EDIFICIO_CATALOGO, NECESIDADES, POBLACION, RESERVA_CONSTRUCCION, SITIO } from '../constants';
+import { EDIFICIO_CATALOGO, EXTRACCION_MAXIMOS, NECESIDADES, POBLACION, RESERVA_CONSTRUCCION, SITIO } from '../constants';
 import { pointInPolygon } from './zones';
-import { capacidadHabitacional, edificiosPorTipoYEstado, hayProyectoPendiente, poblacionTotal } from './asentamientoQuery';
+import {
+  capacidadHabitacional,
+  edificiosPorTipoYEstado,
+  hayProyectoPendiente,
+  poblacionTotal,
+  ratioManoObra,
+  ratioManoObraArtesanos,
+} from './asentamientoQuery';
 import { agregarRecurso, descontarRecursos, tieneRecursos } from './almacen';
 import { recursosProtegidosPorMantenimiento } from './mantenimiento';
-import { factorTiempoConstruccion, minimoLenerasPrioritario } from './politicas';
+import { factorTiempoConstruccion, minimoLenerasPrioritario, politicaActivaDesbloqueaEdificio } from './politicas';
 
 /**
  * Recurso propio de cada tipo de edificio "de supervivencia": Granja no respeta la reserva mínima de
@@ -129,10 +136,11 @@ function crearEdificioEnCola(tipo: EdificioTipo, posicion: Point, id: string, fu
 }
 
 /**
- * Un extractor (cantera/mina/minaCobre) necesita otra instancia si NINGUNA fuente propia sigue viva (Doc 1.4:
- * escasez real por ubicación — sin esto, agotado el único yacimiento el asentamiento se queda sin ese recurso
- * PARA SIEMPRE) o si el nivel del asentamiento ya soporta más capacidad de extracción de la que tiene activa
- * (el coste de Mantenimiento escala con el nivel, Doc 4.5; la producción no puede quedarse fija mientras tanto).
+ * Un extractor (cantera/mina/minaCobre/minaEstano/corral) necesita otra instancia si NINGUNA fuente propia
+ * sigue viva (Doc 1.4: escasez real por ubicación — sin esto, agotado el único yacimiento el asentamiento se
+ * queda sin ese recurso PARA SIEMPRE) o si el asentamiento todavía no llegó al tope de extractores del tipo
+ * (rediseño de progreso Fase 0: `EXTRACCION_MAXIMOS.porTipo`, desacoplado del nivel de asentamiento — antes
+ * escalaba 1:1 con él, pero con el tope de nivel bajando a 3 se quedaría corto).
  */
 function necesitaNuevoExtractor(asentamiento: Asentamiento, tipo: EdificioTipo, world: World): boolean {
   const existentes = asentamiento.edificios.filter((e) => e.tipo === tipo);
@@ -141,7 +149,7 @@ function necesitaNuevoExtractor(asentamiento: Asentamiento, tipo: EdificioTipo, 
     return nodo && nodo.cantidad > 0;
   });
   if (conFuenteViva.length === 0) return true;
-  return conFuenteViva.length < asentamiento.nivel;
+  return conFuenteViva.length < EXTRACCION_MAXIMOS.porTipo;
 }
 
 function fuentesReclamadas(asentamiento: Asentamiento, tipo: EdificioTipo): Set<string> {
@@ -151,6 +159,10 @@ function fuentesReclamadas(asentamiento: Asentamiento, tipo: EdificioTipo): Set<
 /** Tipos cuya producción es "de supervivencia": entrada de la que dependen el resto de construcciones
  * (madera) y el Mantenimiento (madera + trigo), o la comida de la población. Ver `slotsReservadosSupervivencia`. */
 const TIPOS_SUPERVIVENCIA = new Set<EdificioTipo>(['granja', 'lenera']);
+
+/** Extractores base cuyo recurso (piedra/cobre/oro/estaño/livestock) es insumo de otros edificios (Doc 4.2.1,
+ * rediseño de progreso Fase 0) — ver `slotsReservadosExtractores`. */
+const TIPOS_EXTRACTORES_BASE = new Set<EdificioTipo>(['cantera', 'minaCobre', 'mina', 'minaEstano', 'corral']);
 
 function intentarSitioBosque(asentamiento: Asentamiento, zonaPoligono: Point[], world: World, nextId: () => string): Edificio | null {
   if (hayProyectoPendiente(asentamiento, 'lenera')) return null;
@@ -162,19 +174,23 @@ function intentarSitioBosque(asentamiento: Asentamiento, zonaPoligono: Point[], 
  * Evalúa déficits reales (Doc 4.2) y encola como máximo un proyecto nuevo por tipo de edificio por tick,
  * respetando el cupo global de `NECESIDADES.maximoEnCola` edificios `en_cola` simultáneos.
  *
- * Reparto de la cola en dos cupos (rebalance — antes Vivienda/Almacén/Taller podían copar los 3 slots con
+ * Reparto de la cola en tres cupos (rebalance — antes Vivienda/Almacén/Taller podían copar los slots con
  * proyectos atascados por falta de recursos y dejar a Granja/Leñera sin hueco para encolarse NUNCA, un
  * interbloqueo real: sin Leñera nueva entrando en juego, el déficit de madera no se corregía y el
- * asentamiento caía en ruinas por Mantenimiento impago):
+ * asentamiento caía en ruinas por Mantenimiento impago; el mismo patrón reapareció con el rediseño de
+ * progreso Fase 0 — Curtiduría/Armería podían copar los slots generales esperando piedra, sin dejarle nunca
+ * un hueco a Cantera, su única fuente):
  * - `slotsReservadosSupervivencia` solo lo pueden usar Granja/Leñera (recursos de los que depende TODO lo
  *   demás: madera para construir y para Mantenimiento, trigo para no morir de hambre).
- * - El resto del cupo es de libre concurrencia entre cualquier tipo, incluidas Granja/Leñera si el
+ * - `slotsReservadosExtractores` solo lo pueden usar Cantera/MinaCobre/Mina/MinaEstaño/Corral (sus recursos
+ *   son insumo de Vivienda/Almacén/Curtiduría/Armería, Doc 4.2.1).
+ * - El resto del cupo es de libre concurrencia entre cualquier tipo, incluidos los anteriores si su
  *   reservado ya está ocupado.
  *
- * Orden de evaluación: primero los recursos de supervivencia (Granja, Leñera), luego los extractores
- * secundarios (necesarios para construir pero no bloquean Mantenimiento a corto plazo), y al final los
- * edificios de crecimiento/lujo (Vivienda, Almacén, Taller) — antes iban primero y eran los que más a
- * menudo acababan copando la cola.
+ * Orden de evaluación: primero los recursos de supervivencia (Granja, Leñera), luego los extractores base,
+ * luego los edificios de transformación (Curtiduría/Armería/Fundición/Carpintería), y al final los edificios
+ * de crecimiento/lujo (Vivienda, Almacén) — antes Vivienda/Almacén iban primero y eran los que más a menudo
+ * acababan copando la cola.
  */
 function evaluarNecesidades(asentamiento: Asentamiento, zonaPoligono: Point[], world: World): Edificio[] {
   const nuevos: Edificio[] = [];
@@ -184,14 +200,25 @@ function evaluarNecesidades(asentamiento: Asentamiento, zonaPoligono: Point[], w
 
   const enCola = asentamiento.edificios.filter((e) => e.estado === 'en_cola');
   const enColaSupervivencia = enCola.filter((e) => TIPOS_SUPERVIVENCIA.has(e.tipo)).length;
+  const enColaExtractores = enCola.filter((e) => TIPOS_EXTRACTORES_BASE.has(e.tipo)).length;
+  const enColaGeneral = enCola.length - enColaSupervivencia - enColaExtractores;
   let espacioReservado = Math.max(0, NECESIDADES.slotsReservadosSupervivencia - enColaSupervivencia);
-  let espacioGeneral = Math.max(0, NECESIDADES.maximoEnCola - NECESIDADES.slotsReservadosSupervivencia - (enCola.length - enColaSupervivencia));
+  let espacioExtractores = Math.max(0, NECESIDADES.slotsReservadosExtractores - enColaExtractores);
+  let espacioGeneral = Math.max(
+    0,
+    NECESIDADES.maximoEnCola - NECESIDADES.slotsReservadosSupervivencia - NECESIDADES.slotsReservadosExtractores - enColaGeneral
+  );
 
   const encolar = (edificio: Edificio | null): void => {
     if (!edificio) return;
     if (TIPOS_SUPERVIVENCIA.has(edificio.tipo) && espacioReservado > 0) {
       nuevos.push(edificio);
       espacioReservado -= 1;
+      return;
+    }
+    if (TIPOS_EXTRACTORES_BASE.has(edificio.tipo) && espacioExtractores > 0) {
+      nuevos.push(edificio);
+      espacioExtractores -= 1;
       return;
     }
     if (espacioGeneral > 0) {
@@ -233,14 +260,20 @@ function evaluarNecesidades(asentamiento: Asentamiento, zonaPoligono: Point[], w
     if (sitio) encolar(crearEdificioEnCola('granja', sitio, nextId()));
   }
 
-  // Lenera: escala con el nivel igual que los extractores minerales (los bosques no se agotan, Doc 1.4).
-  if (edificiosPorTipoYEstado(asentamiento, 'lenera').length < asentamiento.nivel) {
+  // Lenera: mismo tope que los extractores minerales (los bosques no se agotan, Doc 1.4).
+  if (edificiosPorTipoYEstado(asentamiento, 'lenera').length < EXTRACCION_MAXIMOS.porTipo) {
     encolar(intentarSitioBosque(asentamiento, zonaPoligono, world, nextId));
   }
 
   if (necesitaNuevoExtractor(asentamiento, 'cantera', world) && !hayProyectoPendiente(asentamiento, 'cantera')) {
     const sitio = sitioCercaDeNodo(asentamiento, zonaPoligono, world, 'piedra', fuentesReclamadas(asentamiento, 'cantera'));
     if (sitio) encolar(crearEdificioEnCola('cantera', sitio.posicion, nextId(), sitio.fuenteId));
+  }
+
+  // Corral (Doc 4.2.1, rediseño de progreso Fase 0): extractor de livestock, mismo patrón que cantera/minas.
+  if (necesitaNuevoExtractor(asentamiento, 'corral', world) && !hayProyectoPendiente(asentamiento, 'corral')) {
+    const sitio = sitioCercaDeNodo(asentamiento, zonaPoligono, world, 'livestock', fuentesReclamadas(asentamiento, 'corral'));
+    if (sitio) encolar(crearEdificioEnCola('corral', sitio.posicion, nextId(), sitio.fuenteId));
   }
 
   // Mina de cobre (Doc 1.1/5.7): mismo patrón, necesaria para reclutamiento militar (Sprint 5).
@@ -277,16 +310,144 @@ function evaluarNecesidades(asentamiento: Asentamiento, zonaPoligono: Point[], w
     if (sitio) encolar(crearEdificioEnCola('almacen', sitio, nextId()));
   }
 
+  // Edificios de transformación (Doc 4.2.1, rediseño de progreso Fase 0): reemplazan al antiguo Taller
+  // genérico. Curtiduría/Armería/Fundición no tienen gate de nivel para su construcción BASE — solo sus
+  // mejoras de nivel interno lo exigen (ver `avanzarMejoras` más abajo) — porque el propio gate de nivel 2 del
+  // asentamiento exige tenerlas construidas, así que tienen que poder construirse desde el principio.
+  // Se evalúan DESPUÉS de Vivienda/Almacén y como máximo UNA de las tres puede estar EN COLA A LA VEZ (no solo
+  // "una nueva por tick" — bug detectado en simulación: con solo eso, en 2 ticks igual se acumulaban 2-3
+  // atascadas esperando piedra en un punto de fundación pobre en ese recurso, copando los slots generales y
+  // dejando a Vivienda sin hueco para siempre). Mismo espíritu que el resto de protecciones de esta función.
+  const transformacionEnCurso = (['curtiduria', 'armeria', 'fundicion'] as const).some(
+    (tipo) => hayProyectoPendiente(asentamiento, tipo)
+  );
+  if (!transformacionEnCurso) {
+    for (const tipo of ['curtiduria', 'armeria', 'fundicion'] as const) {
+      if (edificiosPorTipoYEstado(asentamiento, tipo).length === 0) {
+        const sitio = sitioConcentrico(asentamiento, zonaPoligono, ocupados());
+        if (sitio) {
+          encolar(crearEdificioEnCola(tipo, sitio, nextId()));
+          break;
+        }
+      }
+    }
+  }
+
+  // Carpintería: a diferencia de los otros 3, su construcción BASE sí exige nivel de asentamiento
+  // (`requisitoNivelAsentamientoConstruccion`) — habilita Armería/Barracón/Galería de tiro nivel 2.
+  const requisitoCarpinteria = (EDIFICIO_CATALOGO.carpinteria as { requisitoNivelAsentamientoConstruccion?: number }).requisitoNivelAsentamientoConstruccion ?? 0;
   if (
-    asentamiento.poblacion.pesants >= NECESIDADES.pesantsParaHabilitarTaller &&
-    edificiosPorTipoYEstado(asentamiento, 'taller').length === 0 &&
-    !hayProyectoPendiente(asentamiento, 'taller')
+    asentamiento.nivel >= requisitoCarpinteria &&
+    edificiosPorTipoYEstado(asentamiento, 'carpinteria').length === 0 &&
+    !hayProyectoPendiente(asentamiento, 'carpinteria')
   ) {
     const sitio = sitioConcentrico(asentamiento, zonaPoligono, ocupados());
-    if (sitio) encolar(crearEdificioEnCola('taller', sitio, nextId()));
+    if (sitio) encolar(crearEdificioEnCola('carpinteria', sitio, nextId()));
   }
 
   return nuevos;
+}
+
+/**
+ * Edificios especiales vía política (Doc 4.4/4.2.1, rediseño de progreso Fase 0): Barracón, Galería de tiro y
+ * Palacio NO son auto-construcción — solo se encolan mientras la política de desbloqueo correspondiente esté
+ * activa (ver `politicaActivaDesbloqueaEdificio`) y se cumpla su gate de nivel/edificio previo. Van en un
+ * CLUSTER DE COLA APARTE: no cuentan contra `NECESIDADES.maximoEnCola` ni compiten con `evaluarNecesidades`.
+ */
+function evaluarEdificiosEspeciales(asentamiento: Asentamiento, zonaPoligono: Point[]): Edificio[] {
+  const nuevos: Edificio[] = [];
+  let contador = asentamiento.edificios.length + 1000; // rango separado para no colisionar con evaluarNecesidades
+  const nextId = () => `edificio-${asentamiento.id}-especial-${contador++}`;
+  const ocupados = () => [...asentamiento.edificios, ...nuevos];
+
+  const candidatos: { tipo: 'barracon' | 'galeriaDeTiro' | 'palacio'; requisitoNivel: number }[] = [
+    { tipo: 'barracon', requisitoNivel: 0 },
+    { tipo: 'galeriaDeTiro', requisitoNivel: 0 },
+    { tipo: 'palacio', requisitoNivel: (EDIFICIO_CATALOGO.palacio as { requisitoNivelAsentamientoConstruccion?: number }).requisitoNivelAsentamientoConstruccion ?? 0 },
+  ];
+
+  for (const { tipo, requisitoNivel } of candidatos) {
+    if (!politicaActivaDesbloqueaEdificio(asentamiento, tipo)) continue;
+    if (asentamiento.nivel < requisitoNivel) continue;
+    if (edificiosPorTipoYEstado(asentamiento, tipo).length > 0 || hayProyectoPendiente(asentamiento, tipo)) continue;
+    const sitio = sitioConcentrico(asentamiento, zonaPoligono, ocupados());
+    if (sitio) nuevos.push(crearEdificioEnCola(tipo, sitio, nextId()));
+  }
+
+  return nuevos;
+}
+
+/** Tipos de edificio de transformación con tiers (Doc 4.2.1): mejoran de nivelInterno y ejecutan recetas. */
+const EDIFICIOS_CON_NIVELES = ['fundicion', 'curtiduria', 'armeria', 'carpinteria', 'barracon', 'galeriaDeTiro'] as const;
+
+function nivelesDe(tipo: EdificioTipo): Record<number, { trabajadoresRequeridos: number; recetas: { produce: string; produccionBase: number; consumePorUnidad: Partial<Record<string, number>> }[]; costoMejora?: Partial<Record<string, number>>; requisitoNivelAsentamiento?: number; requiereEdificio?: string; requiereEdificioNivel?: number }> | undefined {
+  return (EDIFICIO_CATALOGO[tipo] as { niveles?: Record<number, any> }).niveles;
+}
+
+/**
+ * Mejora de nivel interno de un edificio de transformación activo (Doc 4.2.1, rediseño de progreso Fase 0):
+ * instantánea — si se cumple el gate del siguiente nivel (nivel de asentamiento + edificio previo, si aplica)
+ * y hay fondos para `costoMejora` (respetando la misma reserva mínima que protege el inicio de construcción),
+ * se paga y sube `nivelInterno` en el mismo tick. No hay tiempo de mejora especificado en el diseño original.
+ */
+function avanzarMejoras(asentamiento: Asentamiento, almacen: Record<string, RecursoAlmacenado>): { asentamiento: Asentamiento; almacen: Record<string, RecursoAlmacenado>; eventos: string[] } {
+  const eventos: string[] = [];
+  let almacenActual = almacen;
+  const edificios = asentamiento.edificios.map((edificio) => {
+    if (edificio.estado !== 'activo' || !(EDIFICIOS_CON_NIVELES as readonly string[]).includes(edificio.tipo)) return edificio;
+    const niveles = nivelesDe(edificio.tipo);
+    if (!niveles) return edificio;
+    const nivelActual = edificio.nivelInterno ?? 1;
+    const siguiente = niveles[nivelActual + 1];
+    if (!siguiente) return edificio;
+    if (siguiente.requisitoNivelAsentamiento && asentamiento.nivel < siguiente.requisitoNivelAsentamiento) return edificio;
+    if (siguiente.requiereEdificio) {
+      const previo = edificiosPorTipoYEstado(asentamiento, siguiente.requiereEdificio as EdificioTipo);
+      if (previo.length === 0) return edificio;
+      if (siguiente.requiereEdificioNivel && (previo[0]!.nivelInterno ?? 1) < siguiente.requiereEdificioNivel) return edificio;
+    }
+    const costo = siguiente.costoMejora ?? {};
+    if (!puedeIniciarConstruccion(almacenActual, costo, edificio.tipo, asentamiento.nivel)) return edificio;
+    almacenActual = descontarRecursos(almacenActual, costo);
+    eventos.push(`${edificio.tipo} mejora a nivel interno ${nivelActual + 1}.`);
+    return { ...edificio, nivelInterno: nivelActual + 1 };
+  });
+  return { asentamiento: { ...asentamiento, edificios }, almacen: almacenActual, eventos };
+}
+
+/**
+ * Recetas de crafting de los edificios de transformación activos (Doc 4.2.1, rediseño de progreso Fase 0):
+ * recorre las recetas del `nivelInterno` actual EN ORDEN (permite que una receta consuma el output de otra
+ * del mismo tick, ej. Lingote de Bronce consumiendo Lingote de Cobre/Estaño recién producidos). La producción
+ * real se limita por `min(produccionBase * ratioManoObraArtesanos, insumo_disponible / consumePorUnidad)`,
+ * mismo criterio que ya usan los extractores minerales contra `nodo.cantidad`.
+ */
+function avanzarRecetas(asentamiento: Asentamiento, almacen: Record<string, RecursoAlmacenado>): Record<string, RecursoAlmacenado> {
+  const ratioArtesano = ratioManoObraArtesanos(asentamiento);
+  let almacenActual = almacen;
+  for (const edificio of asentamiento.edificios) {
+    if (edificio.estado !== 'activo') continue;
+    const niveles = nivelesDe(edificio.tipo);
+    if (!niveles) continue;
+    const nivel = niveles[edificio.nivelInterno ?? 1];
+    if (!nivel) continue;
+    for (const receta of nivel.recetas) {
+      let cantidad = receta.produccionBase * ratioArtesano;
+      for (const [insumo, porUnidad] of Object.entries(receta.consumePorUnidad)) {
+        if (!porUnidad) continue;
+        const disponible = almacenActual[insumo]?.cantidad ?? 0;
+        cantidad = Math.min(cantidad, disponible / porUnidad);
+      }
+      if (cantidad <= 0) continue;
+      const consumo: Partial<Record<string, number>> = {};
+      for (const [insumo, porUnidad] of Object.entries(receta.consumePorUnidad)) {
+        if (porUnidad) consumo[insumo] = porUnidad * cantidad;
+      }
+      almacenActual = descontarRecursos(almacenActual, consumo);
+      almacenActual = agregarRecurso(almacenActual, receta.produce, cantidad);
+    }
+  }
+  return almacenActual;
 }
 
 /**
@@ -303,15 +464,7 @@ export function avanzarConstruccion(
   let almacen = asentamiento.almacen;
   const edificiosActualizados: Edificio[] = [];
 
-  const activos = edificiosPorTipoYEstado(asentamiento, 'granja').concat(
-    edificiosPorTipoYEstado(asentamiento, 'cantera'),
-    edificiosPorTipoYEstado(asentamiento, 'lenera'),
-    edificiosPorTipoYEstado(asentamiento, 'mina'),
-    edificiosPorTipoYEstado(asentamiento, 'minaCobre'),
-    edificiosPorTipoYEstado(asentamiento, 'minaEstano')
-  );
-  const trabajadoresRequeridos = activos.reduce((acc, e) => acc + (EDIFICIO_CATALOGO[e.tipo] as { trabajadoresRequeridos?: number }).trabajadoresRequeridos! , 0);
-  const ratioMano = trabajadoresRequeridos <= 0 ? 1 : Math.min(1, asentamiento.poblacion.pesants / trabajadoresRequeridos);
+  const ratioMano = ratioManoObra(asentamiento);
 
   for (const edificio of asentamiento.edificios) {
     if (edificio.estado === 'en_construccion') {
@@ -387,18 +540,33 @@ export function avanzarConstruccion(
         almacen = agregarRecurso(almacen, 'estano', extraido);
         if (nodo.cantidad <= 0) eventos.push('El yacimiento de estaño se ha agotado.');
       }
+    } else if (edificio.tipo === 'corral') {
+      const nodo = world.recursos.find((n) => n.id === edificio.fuenteId);
+      if (nodo && nodo.cantidad > 0) {
+        const extraido = Math.min(EDIFICIO_CATALOGO.corral.produccionBaseLivestock * ratioMano, nodo.cantidad);
+        nodo.cantidad -= extraido;
+        almacen = agregarRecurso(almacen, 'livestock', extraido);
+        if (nodo.cantidad <= 0) eventos.push('El manada de livestock del corral se ha agotado.');
+      }
     }
     edificiosActualizados.push(edificio);
   }
 
-  const asentamientoConProgreso: Asentamiento = { ...asentamiento, almacen, edificios: edificiosActualizados };
+  // Rediseño de progreso (Fase 0, Doc 4.2.1): recetas de crafting de los edificios de transformación activos.
+  almacen = avanzarRecetas({ ...asentamiento, edificios: edificiosActualizados }, almacen);
+
+  // Mejora de nivel interno (Doc 4.2.1): evalúa después de las recetas, con el almacén ya actualizado por ellas.
+  const trasMejoras = avanzarMejoras({ ...asentamiento, edificios: edificiosActualizados }, almacen);
+  almacen = trasMejoras.almacen;
+  eventos.push(...trasMejoras.eventos);
+
+  const asentamientoConProgreso: Asentamiento = { ...trasMejoras.asentamiento, almacen };
   const nuevosProyectos = evaluarNecesidades(asentamientoConProgreso, zonaPoligono, world);
-  if (nuevosProyectos.length > 0) {
-    for (const p of nuevosProyectos) eventos.push(`Nueva necesidad detectada: se encola ${p.tipo}.`);
-  }
+  const nuevosEspeciales = evaluarEdificiosEspeciales(asentamientoConProgreso, zonaPoligono);
+  for (const p of [...nuevosProyectos, ...nuevosEspeciales]) eventos.push(`Nueva necesidad detectada: se encola ${p.tipo}.`);
 
   return {
-    asentamiento: { ...asentamientoConProgreso, edificios: [...edificiosActualizados, ...nuevosProyectos] },
+    asentamiento: { ...asentamientoConProgreso, edificios: [...asentamientoConProgreso.edificios, ...nuevosProyectos, ...nuevosEspeciales] },
     eventos,
   };
 }
@@ -406,15 +574,16 @@ export function avanzarConstruccion(
 export class ConstruccionManualInvalidaError extends Error {}
 
 /**
- * Fundición/Gran Fundición (Doc 4.2/5.7): a diferencia del resto de edificios, son de colocación MANUAL —
- * decisión militar deliberada del jugador, no auto-construcción por necesidad. El sitio sigue eligiéndose
- * solo (Doc 4.2: el jugador no elige ubicación salvo fundación y edificios estratégicos).
+ * Gran Fundición (Doc 4.2/5.7): a diferencia del resto de edificios, es de colocación MANUAL — decisión
+ * militar deliberada del jugador, no auto-construcción por necesidad. El sitio sigue eligiéndose solo (Doc
+ * 4.2: el jugador no elige ubicación salvo fundación y edificios estratégicos). Rediseño de progreso (Fase
+ * 0): Fundición deja de ser manual — ahora es auto-construcción con recetas reales (ver `evaluarNecesidades`).
  */
 export function construirManualmente(
   asentamiento: Asentamiento,
   faccion: Faccion,
   zonaPoligono: Point[],
-  tipo: 'fundicion' | 'granFundicion',
+  tipo: 'granFundicion',
   contador = 0
 ): Asentamiento {
   if (edificiosPorTipoYEstado(asentamiento, tipo).length > 0 || hayProyectoPendiente(asentamiento, tipo)) {

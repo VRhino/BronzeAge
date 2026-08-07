@@ -53,9 +53,11 @@ export const FERTILIDAD = {
 
 // Zona de influencia: radio inicial al fundar, crecimiento por tick y tope máximo (escalará con nivel en sprints futuros).
 export const ZONA_INFLUENCIA = {
-  radioInicial: 15,
+  // Rediseño de progreso (Fase 0): radio inicial sube de 15 a 30, y el techo de crecimiento deja de ser un
+  // único radioMaximo fijo — ahora escala con el nivel del asentamiento (ver NIVEL_ASENTAMIENTO, Doc 1.2/4.5).
+  radioInicial: 30,
   crecimientoPorTick: 1.5,
-  radioMaximo: 120,
+  radioMaximoPorNivel: { 1: 60, 2: 90, 3: 120 } as Record<number, number>,
   segmentosPoligono: 48, // resolución del círculo aproximado como polígono
 };
 
@@ -75,42 +77,245 @@ export const FUNDACION = {
 
 export const POBLACION = {
   // Tasas subidas (rebalance post-Fase 0): con 0.05/0.03 la población tardaba muchísimos más ticks en
-  // duplicarse que un asentamiento en subir de nivel (dominado por el conteo de edificios activos, ver
-  // NIVEL_ASENTAMIENTO) o que una caravana en cruzar el mapa — la población nunca alcanzaba a "sostener"
-  // el nivel del asentamiento.
+  // duplicarse que un asentamiento en subir de nivel o que una caravana en cruzar el mapa — la población
+  // nunca alcanzaba a "sostener" el nivel del asentamiento.
   pesants: { inicial: 20, tasaCrecimientoBase: 0.12 },
-  artesanos: { tasaCrecimientoBase: 0.05, capacidadPorTaller: 15 },
+  // Rediseño de progreso (Fase 0): capacidadPorTaller se retira — el tope de Artesanos ya no depende de un
+  // edificio genérico "Taller", ver `capacidadArtesanos` en engine/asentamientoQuery.ts.
+  artesanos: { tasaCrecimientoBase: 0.05 },
   // "Cantidad mínima de ciudadanos" sin número fijado en el diseño (ver Preguntas_Abiertas) — placeholder.
+  // Rediseño de progreso (Fase 0): además de este mínimo, ahora también requiere Palacio construido
+  // (Doc 4.2.1 — "desbloquea la aparición de la población noble"), ver engine/population.ts.
   nobleza: { minCiudadanos: 3, tasaCrecimientoBase: 0.01 },
   consumoComidaPorHabitante: 0.1, // trigo/tick por habitante (pesants+artesanos+nobleza)
 };
+
+/**
+ * Receta de crafting de un edificio de transformación (Doc 4.2.1, rediseño de progreso Fase 0): `produccionBase`
+ * es la tasa objetivo por tick (mismo criterio que produccionBaseTrigo/produccionBasePiedra etc.);
+ * `consumePorUnidad` es cuánto de cada insumo hace falta por cada unidad de output, derivado de la proporción
+ * de la receta original documentada (ej. "8 Lingote de Cobre + 2 Lingote de Estaño -> 5 Lingote de Bronce" con
+ * produccionBase 1 LB/tick => consumePorUnidad { lingoteCobre: 1.6, lingoteEstano: 0.4 }). La producción real de
+ * cada tick se limita por `min(produccionBase * ratioManoObraArtesanos, insumo_disponible / consumePorUnidad)`,
+ * mismo criterio que ya usan los extractores minerales contra `nodo.cantidad` (ver engine/construction.ts).
+ */
+interface RecetaProduccion {
+  produce: string;
+  produccionBase: number;
+  consumePorUnidad: Partial<Record<string, number>>;
+}
+
+/** Un nivel interno de un edificio de transformación con tiers (Fundición/Curtiduría/Armería/Carpintería/
+ * Barracón/Galería de tiro, Doc 4.2.1). El nivel 1 no lleva `costoMejora`/gates (ya se pagaron al construir). */
+interface NivelEdificioTransformacion {
+  trabajadoresRequeridos: number;
+  recetas: RecetaProduccion[];
+  costoMejora?: Partial<Record<string, number>>;
+  requisitoNivelAsentamiento?: number;
+  requiereEdificio?: string;
+  requiereEdificioNivel?: number;
+}
 
 export const EDIFICIO_CATALOGO = {
   // Único edificio que NO pasa por la cola de construcción (ni automática ni manual, Doc 1.3): nace
   // ya activo al fundar. costo/tiempoConstruccionTicks quedan en 0 solo por consistencia de forma con
   // el resto del catálogo — nunca se leen, porque construirlo por otra vía no es posible.
   centroUrbano: { costo: {}, tiempoConstruccionTicks: 0 },
-  vivienda: { costo: { madera: 40, piedra: 20 }, tiempoConstruccionTicks: 4, capacidadHabitantes: 15 },
-  granja: { costo: { madera: 30 }, tiempoConstruccionTicks: 5, produccionBaseTrigo: 6, trabajadoresRequeridos: 4 },
+  vivienda: { costo: { madera: 10 }, tiempoConstruccionTicks: 4, capacidadHabitantes: 15 },
+  granja: { costo: { madera: 30 }, tiempoConstruccionTicks: 6, produccionBaseTrigo: 5, trabajadoresRequeridos: 4 },
   cantera: { costo: { madera: 20 }, tiempoConstruccionTicks: 5, produccionBasePiedra: 5, trabajadoresRequeridos: 4 },
-  lenera: { costo: { madera: 10 }, tiempoConstruccionTicks: 4, produccionBaseMadera: 5, trabajadoresRequeridos: 4 },
+  lenera: { costo: { madera: 10 }, tiempoConstruccionTicks: 3, produccionBaseMadera: 5, trabajadoresRequeridos: 4 },
   almacen: { costo: { madera: 50, piedra: 30 }, tiempoConstruccionTicks: 6, capacidadPorRecursoAdicional: 300 },
-  // Genérico: representa cualquier edificio de producción especializada (Fundición/Curtidor/Carpintería, ver Doc 5.7)
-  // que dispara la aparición de Artesanos; se especializa en Sprint 5 (militar).
-  taller: { costo: { madera: 60, piedra: 20 }, tiempoConstruccionTicks: 8 },
   // Oro: metal precioso en bruto, origen en minas igual que cualquier otro recurso (Doc 3.1).
-  mina: { costo: { madera: 40 }, tiempoConstruccionTicks: 6, produccionBaseOro: 2, trabajadoresRequeridos: 4 },
+  mina: { costo: { madera: 40, piedra: 10 }, tiempoConstruccionTicks: 6, produccionBaseOro: 2, trabajadoresRequeridos: 6 },
   // Cobre (Doc 1.1/5.7): "relativamente abundante" — igual patrón que cantera/mina pero sobre nodos de cobre.
-  minaCobre: { costo: { madera: 30 }, tiempoConstruccionTicks: 5, produccionBaseCobre: 4, trabajadoresRequeridos: 4 },
+  minaCobre: { costo: { madera: 30, piedra: 5 }, tiempoConstruccionTicks: 4, produccionBaseCobre: 5, trabajadoresRequeridos: 8 },
   // Estaño (Doc 1.1/5.7): raro y concentrado (menos nodos que cobre/oro, ver RECURSO_RAREZA.raro) — costo más
   // alto y producción base más baja que el resto de minas, coherente con ser el cuello de botella del bronce.
-  minaEstano: { costo: { madera: 50 }, tiempoConstruccionTicks: 7, produccionBaseEstano: 1.5, trabajadoresRequeridos: 4 },
-  // Fundición/Gran Fundición (Doc 5.7): edificios de colocación MANUAL (decisión militar deliberada, no
-  // auto-construcción por necesidad). Curtidor-Armero/Carpintería se abstraen dentro de estas dos (cadenas
-  // de producción invisibles, Doc 4.2) — Fase 0 no necesita rastrear cada oficio como edificio separado.
-  fundicion: { costo: { madera: 80, piedra: 40 }, tiempoConstruccionTicks: 10 },
+  minaEstano: { costo: { madera: 50, piedra: 20 }, tiempoConstruccionTicks: 7, produccionBaseEstano: 1.5, trabajadoresRequeridos: 8 },
+  // Corral (Doc 4.2.1, rediseño de progreso Fase 0): extractor de livestock, mismo patrón que cantera/minas —
+  // liga a un nodo finito de livestock (Doc 1.4), con reemplazo automático al agotarse (ver EXTRACCION_MAXIMOS).
+  corral: { costo: { madera: 30 }, tiempoConstruccionTicks: 6, produccionBaseLivestock: 3, trabajadoresRequeridos: 4 },
   // "Único edificio de tier élite, exclusivo de asentamientos/Facciones de mayor nivel" — gate por nivel de Facción.
+  // Se mantiene sin cambios (Doc 4.2, rediseño de progreso): queda para iteraciones posteriores la integración
+  // con la nueva Fundición.
   granFundicion: { costo: { madera: 150, piedra: 100, oro: 50 }, tiempoConstruccionTicks: 20, nivelFaccionMinimo: 3 },
+
+  // --- Edificios de transformación (Doc 4.2.1, rediseño de progreso Fase 0): auto-construcción (sin gate de
+  // nivel para la construcción BASE — solo las mejoras de nivel interno lo exigen), disparan Artesanos (Doc
+  // 4.1) y cuentan para los gates de nivel de asentamiento (ver NIVEL_ASENTAMIENTO). En Fase 0 no exigen
+  // "Planos"/Aedas (Doc 6.5). Fundición reemplaza y amplía la Fundición manual anterior (antes sin producción). ---
+
+  fundicion: {
+    costo: { madera: 80, piedra: 40 },
+    tiempoConstruccionTicks: 6,
+    niveles: {
+      1: {
+        trabajadoresRequeridos: 4,
+        recetas: [{ produce: 'lingoteCobre', produccionBase: 5, consumePorUnidad: { cobre: 2 } }],
+      },
+      2: {
+        requisitoNivelAsentamiento: 2,
+        costoMejora: { madera: 150, piedra: 100 },
+        trabajadoresRequeridos: 8,
+        recetas: [
+          { produce: 'lingoteCobre', produccionBase: 5, consumePorUnidad: { cobre: 2 } },
+          { produce: 'lingoteEstano', produccionBase: 3, consumePorUnidad: { estano: 5 } },
+          { produce: 'lingoteBronce', produccionBase: 1, consumePorUnidad: { lingoteCobre: 1.6, lingoteEstano: 0.4 } },
+        ],
+      },
+    } as Record<number, NivelEdificioTransformacion>,
+  },
+
+  curtiduria: {
+    costo: { madera: 80, piedra: 30 },
+    tiempoConstruccionTicks: 8,
+    niveles: {
+      1: {
+        trabajadoresRequeridos: 4,
+        recetas: [{ produce: 'cuero', produccionBase: 4, consumePorUnidad: { livestock: 0.5 } }],
+      },
+      2: {
+        requisitoNivelAsentamiento: 2,
+        costoMejora: { madera: 150, piedra: 100 },
+        trabajadoresRequeridos: 6,
+        recetas: [
+          { produce: 'cuero', produccionBase: 4, consumePorUnidad: { livestock: 1 / 3 } },
+          { produce: 'cueroCurtido', produccionBase: 2, consumePorUnidad: { cuero: 3 } },
+        ],
+      },
+      3: {
+        requisitoNivelAsentamiento: 3,
+        costoMejora: { madera: 450, piedra: 200 },
+        trabajadoresRequeridos: 8,
+        recetas: [
+          { produce: 'cuero', produccionBase: 6, consumePorUnidad: { livestock: 0.25 } },
+          { produce: 'cueroCurtido', produccionBase: 3, consumePorUnidad: { cuero: 3 } },
+          { produce: 'cueroCalidad', produccionBase: 1, consumePorUnidad: { cueroCurtido: 2, cuero: 1 } },
+        ],
+      },
+    } as Record<number, NivelEdificioTransformacion>,
+  },
+
+  // Nivel 1 "3 AC" (corrección aplicada durante implementación): el diseño original decía "3 LC" en la
+  // producción base de nivel 1, pero Lingote de Cobre es un INSUMO de Armería (lo produce Fundición), no algo
+  // que fabrique — confirmado con el usuario que era un error de tipeo por "Arma de Cobre" (AC).
+  armeria: {
+    costo: { madera: 80, piedra: 30 },
+    tiempoConstruccionTicks: 6,
+    niveles: {
+      1: {
+        trabajadoresRequeridos: 4,
+        recetas: [
+          { produce: 'armaCobre', produccionBase: 3, consumePorUnidad: { lingoteCobre: 1, madera: 1 } },
+          { produce: 'armaduraBasica', produccionBase: 3, consumePorUnidad: { cuero: 5 } },
+        ],
+      },
+      2: {
+        requisitoNivelAsentamiento: 2,
+        requiereEdificio: 'carpinteria',
+        costoMejora: { madera: 150, piedra: 100 },
+        trabajadoresRequeridos: 8,
+        recetas: [
+          { produce: 'armaCobre', produccionBase: 3, consumePorUnidad: { lingoteCobre: 1, madera: 1 } },
+          { produce: 'armaduraBasica', produccionBase: 3, consumePorUnidad: { cuero: 5 } },
+          { produce: 'armaBronce', produccionBase: 2, consumePorUnidad: { lingoteBronce: 1, madera: 2 } },
+          { produce: 'armaduraIntermedia', produccionBase: 2, consumePorUnidad: { lingoteCobre: 1, cueroCurtido: 5 } },
+        ],
+      },
+      3: {
+        requisitoNivelAsentamiento: 3,
+        requiereEdificio: 'palacio',
+        costoMejora: { madera: 450, piedra: 200 },
+        trabajadoresRequeridos: 20,
+        recetas: [
+          { produce: 'armaCobre', produccionBase: 3, consumePorUnidad: { lingoteCobre: 1, madera: 1 } },
+          { produce: 'armaduraBasica', produccionBase: 3, consumePorUnidad: { cuero: 5 } },
+          { produce: 'armaBronce', produccionBase: 2, consumePorUnidad: { lingoteBronce: 1, madera: 2 } },
+          { produce: 'armaduraIntermedia', produccionBase: 2, consumePorUnidad: { lingoteCobre: 1, cueroCurtido: 5 } },
+          { produce: 'armaBronceCalidad', produccionBase: 1, consumePorUnidad: { lingoteBronce: 5, madera: 5 } },
+          { produce: 'armaduraBronce', produccionBase: 1, consumePorUnidad: { lingoteBronce: 1, cueroCalidad: 5 } },
+        ],
+      },
+    } as Record<number, NivelEdificioTransformacion>,
+  },
+
+  // Sin cifras en el diseño original más allá del gate de nivel — costo/tiempo/mejora son PLACEHOLDER (ver
+  // Preguntas_Abiertas.md). A diferencia del resto de edificios de transformación, la construcción BASE sí
+  // exige nivel de asentamiento (requisitoNivelAsentamientoConstruccion): habilita Armería/Barracón/Galería de
+  // tiro nivel 2, así que tiene sentido que llegue un poco después que ellos. Sin recetas: arietes/torres de
+  // asedio no se modelan en Fase 0 (combate resuelto como cálculo/log, Doc 5.10).
+  carpinteria: {
+    costo: { madera: 60, piedra: 20 },
+    tiempoConstruccionTicks: 6,
+    requisitoNivelAsentamientoConstruccion: 2,
+    niveles: {
+      1: { trabajadoresRequeridos: 0, recetas: [] },
+      2: { requisitoNivelAsentamiento: 3, costoMejora: { madera: 120, piedra: 60 }, trabajadoresRequeridos: 0, recetas: [] },
+    } as Record<number, NivelEdificioTransformacion>,
+  },
+
+  // --- Edificios especiales vía política (Doc 4.4, rediseño de progreso Fase 0): NO son auto-construcción —
+  // solo se encolan mientras la política de desbloqueo correspondiente esté activa (ver engine/politicas.ts
+  // `politicaActivaDesbloqueaEdificio`), en un cluster de cola aparte que no cuenta contra
+  // NECESIDADES.maximoEnCola. Sin recetas: el reclutamiento por equipo de Barracón/Galería de tiro queda fuera
+  // de alcance de este plan (ver Doc 5.7/5.8 PENDIENTE), Palacio solo desbloquea Nobleza (engine/population.ts). ---
+
+  barracon: {
+    costo: { madera: 30 },
+    tiempoConstruccionTicks: 6,
+    niveles: {
+      1: { trabajadoresRequeridos: 0, recetas: [] },
+      2: {
+        requisitoNivelAsentamiento: 2,
+        requiereEdificio: 'carpinteria',
+        costoMejora: { madera: 100, piedra: 60 },
+        trabajadoresRequeridos: 0,
+        recetas: [],
+      },
+      3: {
+        requisitoNivelAsentamiento: 3,
+        requiereEdificio: 'palacio',
+        costoMejora: { madera: 300, piedra: 200 },
+        trabajadoresRequeridos: 0,
+        recetas: [],
+      },
+    } as Record<number, NivelEdificioTransformacion>,
+  },
+
+  // Gate de nivel 3 INTENCIONALMENTE distinto a Armería/Barracón (pide Carpintería nivel 2, no Palacio) —
+  // Galería de tiro sigue su propio camino de progresión, confirmado con el usuario que no se uniforma.
+  galeriaDeTiro: {
+    costo: { madera: 50 },
+    tiempoConstruccionTicks: 6,
+    niveles: {
+      1: { trabajadoresRequeridos: 0, recetas: [] },
+      2: {
+        requisitoNivelAsentamiento: 2,
+        requiereEdificio: 'carpinteria',
+        costoMejora: { madera: 140, piedra: 20 },
+        trabajadoresRequeridos: 0,
+        recetas: [],
+      },
+      3: {
+        requisitoNivelAsentamiento: 3,
+        requiereEdificio: 'carpinteria',
+        requiereEdificioNivel: 2,
+        costoMejora: { madera: 400, piedra: 100 },
+        trabajadoresRequeridos: 0,
+        recetas: [],
+      },
+    } as Record<number, NivelEdificioTransformacion>,
+  },
+
+  // Único tier — desbloquea la aparición de Nobleza (además del mínimo de ciudadanos ya existente, ver
+  // engine/population.ts). requisitoNivelAsentamientoConstruccion gatea la construcción BASE (no hay mejoras).
+  palacio: {
+    costo: { madera: 1500, piedra: 1000 },
+    tiempoConstruccionTicks: 20,
+    requisitoNivelAsentamientoConstruccion: 3,
+    capacidadNobles: 200,
+  },
 } as const;
 
 export const ALMACEN = {
@@ -122,13 +327,35 @@ export const NECESIDADES = {
   umbralViviendaOcupada: 0.85,
   umbralComidaTicksReserva: 5,
   umbralAlmacenAmpliacion: 0.9,
-  pesantsParaHabilitarTaller: 30, // placeholder: sustituye a un disparador de excedente de cobre aún no modelado
-  maximoEnCola: 3, // tope de edificios en estado 'en_cola' simultáneos (auto-construcción y manual comparten el mismo cupo)
+  maximoEnCola: 4, // tope de edificios en estado 'en_cola' simultáneos (auto-construcción y manual comparten el mismo cupo)
   // Rebalance: sin esto, Vivienda/Almacén/Taller podían copar los `maximoEnCola` slots con proyectos
   // atascados por falta de recursos y dejar a Granja/Leñera —los recursos "de supervivencia" de los que
   // depende TODO lo demás, incluido el Mantenimiento— sin hueco para encolarse nunca (interbloqueo real
   // detectado en juego: asentamientos cayendo en ruinas por falta de madera con la Leñera siempre última).
   slotsReservadosSupervivencia: 1,
+  // Rediseño de progreso (Fase 0, bug detectado en simulación): con Curtiduría/Armería/Fundición compitiendo
+  // por los mismos slots generales que Cantera/minas, ambas podían quedar atascadas esperando piedra
+  // (Curtiduría/Armería cuestan piedra) sin que Cantera —su única fuente— consiguiera nunca un hueco para
+  // encolarse, porque Curtiduría/Armería ya ocupaban los slots generales desde antes de que hubiera zona
+  // suficiente para alcanzar un nodo de piedra. Mismo patrón que el interbloqueo de Granja/Leñera: 1 slot
+  // reservado EXCLUSIVAMENTE para los extractores base (cantera/minaCobre/mina/minaEstano/corral) — maximoEnCola
+  // sube de 3 a 4 para no reducir la concurrencia general disponible al resto de edificios.
+  slotsReservadosExtractores: 1,
+};
+
+/**
+ * Tope de extractores por tipo (cantera/mina/minaCobre/minaEstano/lenera/Corral, Doc 4.2, rediseño de
+ * progreso Fase 0): antes escalaba 1:1 con el nivel del asentamiento (hasta 10, el nivelMaximo anterior); con
+ * el tope de nivel bajando a 3 (ver NIVEL_ASENTAMIENTO) un máximo ligado al nivel se quedaría corto, así que
+ * se desacopla a un número fijo. Calibrado por simulación (150-600 ticks): con porTipo=5 y la tasa de
+ * crecimiento de Pesants ya existente (12%/tick, sin tope salvo Vivienda), todo asentamiento colapsaba por
+ * déficit de Mantenimiento hacia el tick 200-700 — el tope de extracción se quedaba corto frente a una
+ * población sin límite real, algo que el sistema anterior evitaba dejando llegar hasta 10 extractores por
+ * tipo. Sube a 10 (mismo techo que el nivelMaximo anterior) para no perder ese margen. Sigue siendo
+ * PLACEHOLDER pendiente de más calibración (ver Preguntas_Abiertas.md).
+ */
+export const EXTRACCION_MAXIMOS = {
+  porTipo: 10,
 };
 
 // Colocación de edificios: crecimiento concéntrico desde el centro (Doc 4.2).
@@ -232,6 +459,12 @@ export const POLITICA_CATALOGO = [
   { id: 'comercio_abierto', cargo: 'tesorero', nombre: 'Comercio Abierto', factorComisionExterna: 0.6 },
   { id: 'aranceles', cargo: 'tesorero', nombre: 'Aranceles Proteccionistas', factorComisionExterna: 1.5 },
   { id: 'leva_forzosa', cargo: 'general', nombre: 'Leva Forzosa', factorCostoReclutamiento: 0.7 },
+  // Desbloqueo de edificios especiales (Doc 4.4, rediseño de progreso Fase 0): mientras esté activa, el
+  // edificio correspondiente puede encolarse en un cluster de cola aparte (no cuenta contra
+  // NECESIDADES.maximoEnCola) — ver `politicaActivaDesbloqueaEdificio` en engine/politicas.ts.
+  { id: 'construir_barracon', cargo: 'general', nombre: 'Construir Barracón', desbloqueaEdificio: 'barracon' },
+  { id: 'construir_galeria_tiro', cargo: 'general', nombre: 'Construir Galería de Tiro', desbloqueaEdificio: 'galeriaDeTiro' },
+  { id: 'construir_palacio', cargo: 'gobernador', nombre: 'Construir Palacio', desbloqueaEdificio: 'palacio' },
 ] as const;
 
 // --- Sprint 5: Guerra simplificada (Doc 5) ---
@@ -281,19 +514,18 @@ export const MILITAR = {
 
 // --- Sprint 6: Cierre (Doc 4.5 mantenimiento, Doc 2.7 reputación, Doc 2.9 progresión) ---
 
-// Nivel de asentamiento: "qué lo hace subir" no está cerrado en el diseño — mismo criterio placeholder que
-// el nivel de Facción (NIVEL_FACCION), aplicado aquí a escala de un solo asentamiento.
-// Rebalance post-Fase 0: con poblacionPorPunto=40/puntosPorNivel=3 el nivel subía casi solo con los 5
-// edificios ya activos al fundar (Doc 1.3: Centro Urbano + Granja + 3 Viviendas dan 5 puntos de entrada),
-// muy por delante de lo que tarda en completarse una construcción (4-10 ticks) o en llegar una caravana
-// (velocidad 5-12 unidades/tick sobre un mapa de 1000x1000). poblacionPorPunto baja para que la población
-// (ya con tasa de crecimiento más alta, ver POBLACION) pese más en el cómputo; puntosPorNivel sube para que
-// cada nivel exija progreso acumulado real en vez de uno o dos edificios.
+/**
+ * Nivel de asentamiento — rediseño de progreso (Fase 0): reemplaza por completo la fórmula de puntos anterior
+ * (población/edificios activos). Ahora es un modelo de GATES: para subir de nivel hace falta cumplir a la vez
+ * un mínimo de población (pesants + artesanos) Y tener construidos (activos) los edificios listados. Tope de
+ * Fase 0 = nivel 3 (Doc 4.5). El nivel sube de forma MONÓTONA (nunca baja si la población cae después).
+ */
 export const NIVEL_ASENTAMIENTO = {
-  poblacionPorPunto: 20,
-  puntosPorEdificioActivo: 1,
-  puntosPorNivel: 8,
-  nivelMaximo: 10,
+  nivelMaximo: 3,
+  requisitos: {
+    2: { pesants: 200, artesanos: 50, edificios: ['armeria', 'curtiduria', 'fundicion'] },
+    3: { pesants: 500, artesanos: 200, edificios: ['carpinteria', 'barracon', 'galeriaDeTiro'] },
+  } as Record<number, { pesants: number; artesanos: number; edificios: string[] }>,
 };
 
 /**
@@ -307,12 +539,13 @@ export const MANTENIMIENTO = {
   // varios edificios de extracción repartiéndose el mismo pool de Pesants (Doc 4.2) — un coste alto aquí
   // hacía que CUALQUIER asentamiento entrase en espiral de déficit sin importar la gestión, no solo el abandono.
   costoBase: { madera: 3, trigo: 1 },
-  nivelParaPiedra: 3,
+  // Rediseño de progreso (Fase 0): con el tope de nivel bajando de 10 a 3 (ver NIVEL_ASENTAMIENTO), los
+  // umbrales de piedra/oro (antes nivel 3 y nivel 8, pensados para un rango 1-10) se recalibran al rango 1-3
+  // para que los 3 niveles tengan una escalada de coste real — cifra exacta PLACEHOLDER pendiente de
+  // calibración por simulación (ver Preguntas_Abiertas.md).
+  nivelParaPiedra: 2,
   piedraBase: 3,
-  // Nivel 8 (no 6): el oro es un recurso RARO por diseño (Doc 1.1) — exigirlo demasiado pronto condena a
-  // cualquier asentamiento sin mina de oro local a la ruina salvo que ya tenga una red de trueque activa
-  // (Doc 3.9, dependencia logística real). Se deja como concern de nivel tardío, no del arranque en solitario.
-  nivelParaOro: 8,
+  nivelParaOro: 3,
   oroBase: 2,
   factorCrecimientoPorNivel: 0.15,
   escalaDistancia: 400,

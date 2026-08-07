@@ -15,7 +15,20 @@ export type RecursoTipo =
   | 'cobre'
   | 'estano'
   | 'oro'
-  | 'livestock';
+  | 'livestock'
+  // --- Rediseño de progreso (Fase 0): cadenas de crafting de los edificios de transformación (Doc 4.2.1) ---
+  | 'lingoteCobre'
+  | 'lingoteEstano'
+  | 'lingoteBronce'
+  | 'cuero'
+  | 'cueroCurtido'
+  | 'cueroCalidad'
+  | 'armaCobre'
+  | 'armaBronce'
+  | 'armaBronceCalidad'
+  | 'armaduraBasica'
+  | 'armaduraIntermedia'
+  | 'armaduraBronce';
 
 export type Rareza = 'comun' | 'intermedio' | 'raro';
 
@@ -52,12 +65,19 @@ export type EdificioTipo =
   | 'cantera'
   | 'lenera'
   | 'almacen'
-  | 'taller'
   | 'mina'
   | 'minaCobre'
   | 'minaEstano'
   | 'fundicion'
-  | 'granFundicion';
+  | 'granFundicion'
+  // --- Rediseño de progreso (Fase 0, Doc 4.2.1): reemplaza a 'taller' ---
+  | 'corral'
+  | 'armeria'
+  | 'curtiduria'
+  | 'carpinteria'
+  | 'palacio'
+  | 'barracon'
+  | 'galeriaDeTiro';
 
 export type EstadoEdificio = 'en_cola' | 'en_construccion' | 'activo';
 
@@ -67,8 +87,11 @@ export interface Edificio {
   posicion: Point;
   estado: EstadoEdificio;
   ticksRestantes: number;
-  /** Nodo de recurso o zona de bosque que explota (cantera/lenera), si aplica. */
+  /** Nodo de recurso o zona de bosque que explota (cantera/lenera/corral), si aplica. */
   fuenteId?: string;
+  /** Nivel interno de mejora (Doc 4.2.1): solo edificios de transformación con tiers (Fundición, Curtiduría,
+   * Armería, Carpintería, Barracón, Galería de tiro). Ausente/1 para el resto. */
+  nivelInterno?: number;
 }
 
 /** Cargos de nivel asentamiento (Doc 2.2), uno de cada, designados por el Gobernador salvo él mismo. */

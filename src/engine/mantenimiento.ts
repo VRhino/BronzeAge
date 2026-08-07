@@ -1,19 +1,28 @@
-import type { Asentamiento, RecursoTipo } from '../domain/types';
+import type { Asentamiento, EdificioTipo, RecursoTipo } from '../domain/types';
 import { MANTENIMIENTO, NIVEL_ASENTAMIENTO } from '../constants';
-import { poblacionTotal } from './asentamientoQuery';
+import { edificiosPorTipoYEstado } from './asentamientoQuery';
 import { descontarRecursos } from './almacen';
 
 function distancia(a: { x: number; y: number }, b: { x: number; y: number }): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-/** Nivel de asentamiento: mismo criterio placeholder que el de Facción, a escala de un solo asentamiento. */
+/**
+ * Nivel de asentamiento — rediseño de progreso (Fase 0, Doc 4.5): reemplaza la fórmula de puntos anterior por
+ * un modelo de GATES (población + edificios activos requeridos, ver NIVEL_ASENTAMIENTO.requisitos). Sube de
+ * forma MONÓTONA: nunca baja aunque la población caiga después, evalúa gate por gate desde el nivel actual.
+ */
 export function calcularNivelAsentamiento(asentamiento: Asentamiento): number {
-  const edificiosActivos = asentamiento.edificios.filter((e) => e.estado === 'activo').length;
-  const puntos =
-    Math.floor(poblacionTotal(asentamiento) / NIVEL_ASENTAMIENTO.poblacionPorPunto) +
-    edificiosActivos * NIVEL_ASENTAMIENTO.puntosPorEdificioActivo;
-  return Math.min(NIVEL_ASENTAMIENTO.nivelMaximo, 1 + Math.floor(puntos / NIVEL_ASENTAMIENTO.puntosPorNivel));
+  let nivel = asentamiento.nivel;
+  while (nivel < NIVEL_ASENTAMIENTO.nivelMaximo) {
+    const requisito = NIVEL_ASENTAMIENTO.requisitos[nivel + 1];
+    if (!requisito) break;
+    const cumplePoblacion = asentamiento.poblacion.pesants >= requisito.pesants && asentamiento.poblacion.artesanos >= requisito.artesanos;
+    const cumpleEdificios = requisito.edificios.every((tipo) => edificiosPorTipoYEstado(asentamiento, tipo as EdificioTipo).length > 0);
+    if (!cumplePoblacion || !cumpleEdificios) break;
+    nivel += 1;
+  }
+  return nivel;
 }
 
 export function avanzarNivelAsentamiento(asentamiento: Asentamiento): { asentamiento: Asentamiento; eventos: string[] } {

@@ -110,3 +110,15 @@ function valorMaximoPolitica(asentamiento: Asentamiento, campo: 'minimoLenerasPr
 
 /** >0 si el Maestro de Obras activó "Protección de Riesgos": mínimo de Leñeras a priorizar sobre cualquier otra necesidad. */
 export const minimoLenerasPrioritario = (a: Asentamiento): number => valorMaximoPolitica(a, 'minimoLenerasPrioritario');
+
+/**
+ * Desbloqueo de edificios especiales (Doc 4.4/4.2.1, rediseño de progreso Fase 0): true si alguna política
+ * activa del asentamiento tiene `desbloqueaEdificio === tipo` — usado por `evaluarEdificiosEspeciales`
+ * (engine/construction.ts) para encolar Barracón/Galería de tiro/Palacio en su cluster de cola aparte.
+ */
+export function politicaActivaDesbloqueaEdificio(asentamiento: Asentamiento, tipo: string): boolean {
+  return asentamiento.politicasActivas.some((activa) => {
+    const def = POLITICA_CATALOGO.find((p) => p.id === activa.politicaId);
+    return (def as Record<string, unknown> | undefined)?.desbloqueaEdificio === tipo;
+  });
+}

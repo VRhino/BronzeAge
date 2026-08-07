@@ -20,3 +20,6 @@ Además de la función tecnológica, los Aedas/Poetas generan el LORE DEL SERVID
 
 ## 6.4 Reputación de Facción y Aedas
 Una Facción con score de confiabilidad muy bajo (ver Doc 2.7) tiene más difícil atraer Aedas residentes.
+
+## 6.5 Fase 0: fuera de alcance
+El sistema de Aedas no tiene implementación real en Fase 0 (existe solo como texto de sabor en la narración de cambios de título, Doc 2.9). Consecuencia directa para el catálogo de edificios (Doc 4.2.1, rediseño de progreso de asentamientos): ningún edificio exige "Planos de X" para construirse ni para mejorar de nivel interno — todos los gates de mejora se resuelven solo con nivel de asentamiento y/o edificios previos, sin depender de Aedas/Planos. Se retoma en una fase posterior junto con la implementación real del sistema descrito en 6.1-6.4.

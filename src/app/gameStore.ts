@@ -19,8 +19,16 @@ import type {
   ZonaBosque,
   ZonaInfluencia,
 } from '../domain/types';
-import { FUNDACION, MANTENIMIENTO, NECESIDADES, NIVEL_ASENTAMIENTO, POLITICAS, POLITICA_CATALOGO, WORLD_DEFAULT } from '../constants';
-import { poblacionTotal } from '../engine/asentamientoQuery';
+import { FUNDACION, MANTENIMIENTO, NECESIDADES, POLITICAS, POLITICA_CATALOGO, WORLD_DEFAULT } from '../constants';
+import {
+  produccionPorTick,
+  manoObraInfo as calcularManoObraInfo,
+  progresoNivelAsentamiento,
+  type ProduccionItem,
+  type ManoObraInfo,
+  type ProgresoNivelAsentamiento,
+} from '../engine/asentamientoQuery';
+export type { ProduccionItem, ManoObraInfo } from '../engine/asentamientoQuery';
 import { encontrarCapital, calcularCostoMantenimiento } from '../engine/mantenimiento';
 import { slotsDisponibles } from '../engine/politicas';
 import { listarCamposBalance, actualizarCampoBalance, restaurarBalancePorDefecto, type CampoBalance } from './balanceConfig';
@@ -221,15 +229,11 @@ export class GameStore {
   }
 
   /**
-   * Progreso de nivel de asentamiento (Doc placeholder, mismo criterio que nivel de Facción): puntos
-   * acumulados por población + edificios activos, y cuántos hacen falta para el próximo nivel.
+   * Progreso de nivel de asentamiento (modelo de gates, Doc 4.5, rediseño de progreso Fase 0): población
+   * actual vs. requerida y qué edificios de la lista todavía faltan por tener activos, para el siguiente nivel.
    */
-  nivelAsentamientoInfo(asentamiento: Asentamiento): { nivel: number; puntos: number; puntosParaSiguiente: number; puntosPorNivel: number; esMaximo: boolean } {
-    const edificiosActivos = asentamiento.edificios.filter((e) => e.estado === 'activo').length;
-    const puntos = Math.floor(poblacionTotal(asentamiento) / NIVEL_ASENTAMIENTO.poblacionPorPunto) + edificiosActivos * NIVEL_ASENTAMIENTO.puntosPorEdificioActivo;
-    const esMaximo = asentamiento.nivel >= NIVEL_ASENTAMIENTO.nivelMaximo;
-    const puntosParaSiguiente = puntos % NIVEL_ASENTAMIENTO.puntosPorNivel;
-    return { nivel: asentamiento.nivel, puntos, puntosParaSiguiente, puntosPorNivel: NIVEL_ASENTAMIENTO.puntosPorNivel, esMaximo };
+  nivelAsentamientoInfo(asentamiento: Asentamiento): ProgresoNivelAsentamiento {
+    return progresoNivelAsentamiento(asentamiento);
   }
 
   /** Coste de mantenimiento del tick actual, recurso por recurso, con lo disponible y si alcanza a cubrirlo. */
@@ -252,6 +256,16 @@ export class GameStore {
   /** Slots de política disponibles para `cargo` según el nivel de Facción (el Gobernador escala con el nivel). */
   slotsPoliticaDisponibles(cargo: CargoTipo, nivelFaccion: number): number {
     return slotsDisponibles(cargo, nivelFaccion);
+  }
+
+  /** Producción por tick de cada edificio activo de extracción/producción primaria, agrupada por tipo. */
+  produccionInfo(asentamiento: Asentamiento): ProduccionItem[] {
+    return produccionPorTick(asentamiento, this.state.world);
+  }
+
+  /** Demanda de mano de obra agregada (pesants) frente a lo que piden los edificios productores activos. */
+  manoObraInfo(asentamiento: Asentamiento): ManoObraInfo {
+    return calcularManoObraInfo(asentamiento);
   }
 
   // --- Acciones (una por intención de usuario) ---
@@ -495,7 +509,7 @@ export class GameStore {
     this.notify();
   }
 
-  construirManualmente(asentamientoId: string, tipo: 'fundicion' | 'granFundicion'): void {
+  construirManualmente(asentamientoId: string, tipo: 'granFundicion'): void {
     try {
       const asentamiento = this.state.asentamientos.find((a) => a.id === asentamientoId)!;
       const faccion = this.state.facciones.find((f) => f.id === asentamiento.faccionId)!;

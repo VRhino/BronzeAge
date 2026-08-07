@@ -39,36 +39,49 @@ No hay árbol tecnológico abstracto — el tipo de unidad reclutable depende de
 - Maestro de Armas: entrena y mejora estadísticas de tropas.
 - Sacerdote (ya es cargo de jugador, no NPC nuevo): buff de área.
 
-**Edificios:**
-- Fundición (edificio base) y Gran Fundición (único edificio de tier élite, exclusivo de asentamientos/Facciones de mayor nivel — sin nombre "Taller Real", descartado).
-- Establos: ligados a CARROS DE GUERRA, no caballería montada (coherente con la época).
-- Taller de Carpintería: armas de asedio + carros de guerra.
+**Edificios** (catálogo completo con costos/recetas en Doc 4.2.1, rediseño Fase 0):
+- Fundición: fabricación de lingotes de cobre/estaño/bronce — auto-construcción, ya no manual (ver Doc 4.2).
+- Curtiduría: tratamiento de cuero (livestock → cuero → cuero curtido → cuero de calidad).
+- Armería: fabricación de armas y armaduras a partir de lingotes y cuero — insumo directo del reclutamiento de Barracón/Galería de tiro.
+- Carpintería: recluta armas de asedio (ariete, torre de asedio) y habilita construir/mejorar Palacio, Armería, Barracón y Galería de tiro de nivel 2+.
+- Barracón: reclutamiento de tropas cuerpo a cuerpo (ver roster 5.8). Construcción vía política del General (Doc 4.4).
+- Galería de tiro: reclutamiento de tropas a distancia (ver roster 5.8). Construcción vía política del General (Doc 4.4).
+- Gran Fundición: único edificio de tier élite, sin cambios respecto a la versión ya implementada (queda para iteraciones posteriores la integración con la nueva Fundición).
+- PENDIENTE: Establos (ligados a carros de guerra) no tiene equivalente en el catálogo del rediseño — las unidades de carro de guerra del roster anterior (ver 5.8) quedan sin edificio de reclutamiento definido.
 
 **Materiales limitantes (clave anti-"ejército meta universal"):**
 - COBRE: relativamente abundante.
 - ESTAÑO: raro, concentrado en pocas ubicaciones (base histórica real: la disrupción de rutas de estaño es una teoría real del colapso de la Edad de Bronce). El bronce de calidad — y por tanto las tropas de tier alto — depende del acceso a estaño.
 
-## 5.8 Roster de tropas (inspirado en Total War Troy, foco Egeo/Grecia)
+## 5.8 Roster de tropas (rediseño Fase 0: reclutamiento por edificio + nivel interno, ver Doc 4.2.1)
 
-**Tier 1 — Pesants:**
-- Honderos (escaramuza)
-- Lanceros con escudo de mimbre/cuero
-- Espadachines con espada corta de bronce
+El roster ya no se organiza por Tier abstracto (inspiración Total War Troy, foco Egeo/Grecia) — cada unidad se recluta en Barracón o Galería de tiro, según el NIVEL INTERNO del edificio (1-3, ver Doc 4.2.1), pagando el equipo correspondiente fabricado en Armería: AC = Arma de Cobre, AB = Arma de Bronce, ABC = Arma de Bronce de Calidad, AmB = Armadura Básica, AmI = Armadura Intermedia, AaBr = Armadura de Bronce.
 
-**Tier 2 — Pesants veteranizados o Artesanos:**
-- Hacheros ligeros
-- Escaramuzadores con jabalina
-- Arqueros con arco compuesto
+**Barracón (cuerpo a cuerpo) — carril Pesants, combate real (Doc 4.1/5.5):**
 
-**Tier 3 — Requiere Fundición + veteranía o buen equipo:**
-- Lanceros pesados con escudo grande (tipo "en 8"/torre, icónico micénico)
-- Hacheros armados (armadura media)
-- Carros escaramuzadores (jabalina)
+| Nivel | Unidad | Costo |
+|---|---|---|
+| 1 | Lanceros con escudo de mimbre | 1 AC |
+| 1 | Espadachines de espada corta de cobre | 1 AC + 1 AmB |
+| 2 | Hacheros ligeros | 1 AB + 1 AmB |
+| 2 | Espadachines con espadas y escudos de bronce | 2 AB + 1 AmI |
+| 3 | Lanceros pesados micénicos (escudos grandes) | 2 AB + 2 AmI |
+| 3 | Hacheros armados (armadura media) | 1 AB + 1 AmI |
 
-**Tier 4/Élite — Nobleza (progresión plana):**
-- Carros de guerra reforzados (lanza)
-- Guerreros de élite con armadura de bronce laminado y casco de colmillos de jabalí (ref. armadura de Dendra, cascos micénicos)
-- Arqueros nobles
+**Galería de tiro (a distancia) — carril Pesants, combate real:**
+
+| Nivel | Unidad | Costo |
+|---|---|---|
+| 1 | Honderos (escaramuzadores) | 1 AmB |
+| 2 | Escaramuzadores con jabalina | 1 AB + 1 AmB |
+| 2 | Arqueros | 1 AB + 1 AmI |
+| 3 | Arqueros con arco compuesto | 3 AB + 2 AmI |
+
+**Nobleza (progresión plana) — sin cambios respecto a la versión ya implementada**: se sigue reclutando exclusivamente vía Gran Fundición, con su costo actual (cobre+estaño+oro) y conversión instantánea a élite — el rediseño de Barracón/Galería de tiro no la afecta.
+
+PENDIENTE:
+- Mapeo exacto entre el nivel interno del edificio (1-3, desbloquea qué unidades se pueden reclutar) y el mecanismo de veteranía por combate real ya existente (Doc 5.5/ASCENSO_TROPA) — si conviven ambos ejes (nivel de edificio desbloquea la receta/unidad, veteranía sigue dando bonus de poder al squad) o si uno reemplaza al otro.
+- Establos / unidades de carro de guerra (Carros escaramuzadores, Carros de guerra reforzados del roster anterior): sin edificio de reclutamiento definido en el rediseño — Carpintería solo cubre armas de asedio (ariete, torre de asedio), no carros. Queda sin resolver si se retiran de Fase 0 o necesitan su propio edificio.
 
 ## 5.9 Exilio como política de soberanía (heredado de Iberia, ver también Doc 2.8)
 El Gobernador puede decretar exilio de jugadores enemigos de su territorio; coste de reubicación (pérdida parcial de materiales, desplazamiento físico para recuperarlos).
