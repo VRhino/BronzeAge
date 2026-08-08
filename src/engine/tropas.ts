@@ -1,5 +1,5 @@
-import type { Asentamiento, Escuadron, OrigenTropa } from '../domain/types';
-import { ASCENSO_TROPA, MILITAR, RECLUTAMIENTO, TROPA_CATALOGO, TROPAS_RECLUTABLES } from '../constants';
+import type { Asentamiento, Escuadron } from '../domain/types';
+import { ASCENSO_TROPA, MILITAR, TROPAS_RECLUTABLES } from '../constants';
 import { descontarRecursos, tieneRecursos } from './almacen';
 import { edificiosPorTipoYEstado, poblacionTotal } from './asentamientoQuery';
 import { factorCostoReclutamiento } from './politicas';
@@ -7,75 +7,17 @@ import { factorCostoReclutamiento } from './politicas';
 export class ReclutamientoInvalidoError extends Error {}
 
 /**
- * Reclutamiento (Doc 4.1/5.7): requiere General designado (mando militar, Doc 2.2). Artesanos nacen Tier 2
- * directo; suben de tier veteranizando en combate (ver ASCENSO_TROPA). Nobleza nace Tier 4 (progresión plana,
- * conversión instantánea) y exige Gran Fundición activa. Pesants ya NO recluta aquí — ver `reclutarTropa`
- * (reclutamiento por equipo vía Barracón/Galería de tiro, rediseño Doc 5.7/5.8).
- */
-export function reclutar(
-  asentamiento: Asentamiento,
-  origen: Exclude<OrigenTropa, 'pesants'>,
-  cantidad: number,
-  tickActual: number,
-  contador = 0
-): Asentamiento {
-  if (!asentamiento.cargos.generalId) {
-    throw new ReclutamientoInvalidoError('El asentamiento necesita un General para reclutar tropas.');
-  }
-  if (cantidad <= 0) throw new ReclutamientoInvalidoError('La cantidad debe ser mayor que 0.');
-  if (asentamiento.poblacion[origen] < cantidad) {
-    throw new ReclutamientoInvalidoError(`No hay suficientes ${origen} disponibles.`);
-  }
-
-  const config = RECLUTAMIENTO[origen];
-  if ('requiereEdificio' in config && config.requiereEdificio) {
-    if (edificiosPorTipoYEstado(asentamiento, config.requiereEdificio).length === 0) {
-      throw new ReclutamientoInvalidoError(`Se necesita ${config.requiereEdificio} activa para reclutar de ${origen}.`);
-    }
-  }
-
-  const factorCosto = factorCostoReclutamiento(asentamiento);
-  const costoTotal = Object.fromEntries(
-    Object.entries(config.costo).map(([recurso, cantidadUnitaria]) => [recurso, cantidadUnitaria * cantidad * factorCosto])
-  );
-  if (!tieneRecursos(asentamiento.almacen, costoTotal)) {
-    throw new ReclutamientoInvalidoError('No hay materiales suficientes para el reclutamiento.');
-  }
-
-  const tier = config.tierInicial;
-  const existente = asentamiento.escuadrones.find((e) => e.origen === origen && e.tier === tier);
-  const escuadrones = existente
-    ? asentamiento.escuadrones.map((e) => (e.id === existente.id ? { ...e, cantidad: e.cantidad + cantidad } : e))
-    : [
-        ...asentamiento.escuadrones,
-        {
-          id: `escuadron-${asentamiento.id}-${tickActual}-${contador}`,
-          nombre: `${TROPA_CATALOGO[tier]!.nombre} de ${asentamiento.id}`,
-          origen,
-          tier,
-          cantidad,
-          veterania: 0,
-          moral: 100,
-        } satisfies Escuadron,
-      ];
-
-  return {
-    ...asentamiento,
-    poblacion: { ...asentamiento.poblacion, [origen]: asentamiento.poblacion[origen] - cantidad },
-    almacen: descontarRecursos(asentamiento.almacen, costoTotal),
-    escuadrones,
-  };
-}
-
-/**
- * Reclutamiento por equipo (Doc 5.7/5.8, rediseño): recluta una tropa específica vía Barracón/Galería de
- * tiro, según el nivel interno del edificio, pagando el equipo fabricado en Armería en vez de cobre directo.
- * Siempre origen Pesants, tier 1 fijo — "mejorar" no es ascenso automático por veteranía (ver
+ * Reclutamiento por equipo (Doc 5.7/5.8): recluta una tropa específica vía Barracón/Galería de tiro, según
+ * el nivel interno del edificio, pagando el equipo fabricado en Armería en vez de cobre directo. Pesants Y
+ * Artesanos pueden reclutar por este carril (a petición del usuario, ambos edificios reclutan de los dos
+ * pools — reemplaza el antiguo reclutamiento directo de Artesanos con cobre a secas, y el de Nobleza vía Gran
+ * Fundición, ambos retirados). Tier 1 fijo — "mejorar" no es ascenso automático por veteranía (ver
  * `ascenderTierSiCorresponde`), es reclutar una tropa mejor cuando el edificio suba de nivel interno.
  */
 export function reclutarTropa(
   asentamiento: Asentamiento,
   tropaId: string,
+  origen: 'pesants' | 'artesanos',
   cantidad: number,
   tickActual: number,
   contador = 0
@@ -86,8 +28,8 @@ export function reclutarTropa(
   if (cantidad <= 0) throw new ReclutamientoInvalidoError('La cantidad debe ser mayor que 0.');
   const tropa = TROPAS_RECLUTABLES.find((t) => t.id === tropaId);
   if (!tropa) throw new ReclutamientoInvalidoError('La tropa no existe en el catálogo.');
-  if (asentamiento.poblacion.pesants < cantidad) {
-    throw new ReclutamientoInvalidoError('No hay suficientes pesants disponibles.');
+  if (asentamiento.poblacion[origen] < cantidad) {
+    throw new ReclutamientoInvalidoError(`No hay suficientes ${origen} disponibles.`);
   }
 
   const edificio = edificiosPorTipoYEstado(asentamiento, tropa.edificio)[0];
@@ -113,7 +55,7 @@ export function reclutarTropa(
         {
           id: `escuadron-${asentamiento.id}-${tickActual}-${contador}`,
           nombre: `${tropa.nombre} de ${asentamiento.id}`,
-          origen: 'pesants' as const,
+          origen,
           tier: 1 as const,
           cantidad,
           veterania: 0,
@@ -124,7 +66,7 @@ export function reclutarTropa(
 
   return {
     ...asentamiento,
-    poblacion: { ...asentamiento.poblacion, pesants: asentamiento.poblacion.pesants - cantidad },
+    poblacion: { ...asentamiento.poblacion, [origen]: asentamiento.poblacion[origen] - cantidad },
     almacen: descontarRecursos(asentamiento.almacen, costoTotal),
     escuadrones,
   };

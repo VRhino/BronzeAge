@@ -14,8 +14,15 @@ export function hayProyectoPendiente(asentamiento: Asentamiento, tipo: EdificioT
   return asentamiento.edificios.some((e) => e.tipo === tipo && e.estado !== 'activo');
 }
 
-export function capacidadHabitacional(asentamiento: Asentamiento): number {
-  return edificiosPorTipoYEstado(asentamiento, 'vivienda').length * EDIFICIO_CATALOGO.vivienda.capacidadHabitantes;
+/** Cupo de Pesants (Doc 4.1/4.2.1): SEPARADO del de Artesanos — cada Vivienda activa aporta el suyo propio. */
+export function capacidadViviendaPesants(asentamiento: Asentamiento): number {
+  return edificiosPorTipoYEstado(asentamiento, 'vivienda').length * EDIFICIO_CATALOGO.vivienda.capacidadPesants;
+}
+
+/** Cupo de Artesanos (Doc 4.1/4.2.1): SEPARADO del de Pesants, mismo edificio Vivienda pero otro sub-pool —
+ * evita que Pesants (crece ~2.4x más rápido) acapare todo el cupo y deje a Artesanos varado. */
+export function capacidadViviendaArtesanos(asentamiento: Asentamiento): number {
+  return edificiosPorTipoYEstado(asentamiento, 'vivienda').length * EDIFICIO_CATALOGO.vivienda.capacidadArtesanos;
 }
 
 export function poblacionTotal(asentamiento: Asentamiento): number {
@@ -26,8 +33,9 @@ export function poblacionTotal(asentamiento: Asentamiento): number {
 const EDIFICIOS_PRODUCTORES: EdificioTipo[] = ['granja', 'cantera', 'lenera', 'mina', 'minaCobre', 'minaEstano', 'corral'];
 
 /** Edificios de transformación con tiers (Doc 4.2.1, rediseño de progreso Fase 0): consumen mano de obra de
- * Artesanos (no Pesants), disparan su aparición, y cuentan para los gates de nivel de asentamiento. */
-const EDIFICIOS_TRANSFORMACION: EdificioTipo[] = ['fundicion', 'curtiduria', 'armeria', 'carpinteria'];
+ * Artesanos (no Pesants), disparan su aparición (ver `engine/population.ts`), y cuentan para los gates de
+ * nivel de asentamiento. Exportado: `population.ts` lo usa para saber si ya hay al menos uno activo. */
+export const EDIFICIOS_TRANSFORMACION: EdificioTipo[] = ['fundicion', 'curtiduria', 'armeria', 'carpinteria'];
 
 function nivelInternoActual(edificio: Pick<Edificio, 'nivelInterno'>): number {
   return edificio.nivelInterno ?? 1;
@@ -35,9 +43,10 @@ function nivelInternoActual(edificio: Pick<Edificio, 'nivelInterno'>): number {
 
 /**
  * Suma de `trabajadoresRequeridos` (según el `nivelInterno` actual de cada uno) de los edificios de
- * transformación activos — usada tanto como demanda de mano de obra (`ratioManoObraArtesanos`) como tope de
- * crecimiento de población de Artesanos (`capacidadArtesanos`, ver `engine/population.ts`), mismo espíritu
- * que `trabajadoresRequeridosTotal` para Pesants.
+ * transformación activos — demanda de mano de obra que escala la producción real (`ratioManoObraArtesanos`).
+ * Ya NO limita cuánta población de Artesanos puede aparecer (rediseño a petición del usuario, ver
+ * `crecerPoblacion` en `engine/population.ts`: ahora solo necesita el primer edificio de transformación
+ * activo para empezar a crecer, sin tope ligado a este número).
  */
 function trabajadoresRequeridosTransformacion(asentamiento: Asentamiento): number {
   const activos = EDIFICIOS_TRANSFORMACION.flatMap((tipo) => edificiosPorTipoYEstado(asentamiento, tipo));
@@ -52,11 +61,6 @@ function trabajadoresRequeridosTransformacion(asentamiento: Asentamiento): numbe
 export function ratioManoObraArtesanos(asentamiento: Asentamiento): number {
   const requeridos = trabajadoresRequeridosTransformacion(asentamiento);
   return requeridos <= 0 ? 1 : Math.min(1, asentamiento.poblacion.artesanos / requeridos);
-}
-
-/** Tope de crecimiento de población de Artesanos (rediseño Fase 0, reemplaza `capacidadPorTaller * count`). */
-export function capacidadArtesanos(asentamiento: Asentamiento): number {
-  return trabajadoresRequeridosTransformacion(asentamiento);
 }
 
 export interface ProgresoNivelAsentamiento {

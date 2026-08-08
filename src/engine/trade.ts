@@ -76,6 +76,12 @@ function avanzarCaravanas(
   const restantes: Caravana[] = [];
 
   for (const caravana of caravanas) {
+    if (!caravana.destinoAsentamientoId) {
+      // Caravana de Fundación (Doc 1.8): su destino es un punto del mapa, no un asentamiento — la avanza
+      // `avanzarCaravanasFundacion` (engine/expansion.ts), no esta función. Se deja pasar sin tocar.
+      restantes.push(caravana);
+      continue;
+    }
     const origen = asentamientosPorId.get(caravana.origenAsentamientoId);
     const destino = asentamientosPorId.get(caravana.destinoAsentamientoId);
     if (!origen || !destino) continue; // asentamiento desaparecido (fuera de alcance de Fase 0 aún)

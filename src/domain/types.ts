@@ -197,7 +197,8 @@ export interface Caravana {
   id: string;
   tipo: CaravanaTipo;
   origenAsentamientoId: string;
-  destinoAsentamientoId: string;
+  /** Ausente en caravanas de fundación (Doc 1.8): el destino todavía no es un asentamiento, ver `destinoPosicion`. */
+  destinoAsentamientoId?: string;
   contenido: Record<string, number>;
   posicionActual: Point;
   /** 0-1, avance a lo largo de la ruta origen->destino. */
@@ -205,6 +206,11 @@ export interface Caravana {
   /** Acuerdo de trueque que generó esta caravana (Doc 3.2) — indica a qué lado del acuerdo pertenece. */
   origenAcuerdoId?: string;
   ladoAcuerdo?: 'A' | 'B';
+  /** Caravana de Fundación (Doc 1.8, tipo 'construccion'): punto del mapa donde fundará al llegar, en vez
+   * de un asentamiento ya existente — ver `engine/expansion.ts`. */
+  destinoPosicion?: Point;
+  /** Caravana de Fundación: ciudadanos ya existentes de la Facción que fundarán el nuevo asentamiento al llegar. */
+  jugadoresFundadoresIds?: string[];
 }
 
 /**

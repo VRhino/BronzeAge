@@ -108,7 +108,7 @@ export const factorProduccionTrigo = (a: Asentamiento): number => productoFactor
  * por cualquier política activa. Sirve para políticas como "Protección de Riesgos" (Doc 4.2/4.4 — no es
  * un factor de tasa, es un mínimo a alcanzar antes de permitir cualquier otra auto-construcción).
  */
-function valorMaximoPolitica(asentamiento: Asentamiento, campo: 'minimoLenerasPrioritario'): number {
+function valorMaximoPolitica(asentamiento: Asentamiento, campo: 'minimoLenerasPrioritario' | 'minimoGranjasPrioritario'): number {
   return asentamiento.politicasActivas.reduce((max, activa) => {
     const def = POLITICA_CATALOGO.find((p) => p.id === activa.politicaId);
     const valor = def ? (def as Record<string, unknown>)[campo] : undefined;
@@ -118,6 +118,8 @@ function valorMaximoPolitica(asentamiento: Asentamiento, campo: 'minimoLenerasPr
 
 /** >0 si el Maestro de Obras activó "Protección de Riesgos": mínimo de Leñeras a priorizar sobre cualquier otra necesidad. */
 export const minimoLenerasPrioritario = (a: Asentamiento): number => valorMaximoPolitica(a, 'minimoLenerasPrioritario');
+/** >0 si el Maestro de Obras activó "Protección de Riesgos": mínimo de Granjas a priorizar sobre cualquier otra necesidad. */
+export const minimoGranjasPrioritario = (a: Asentamiento): number => valorMaximoPolitica(a, 'minimoGranjasPrioritario');
 
 /**
  * Desbloqueo de edificios especiales (Doc 4.4/4.2.1, rediseño de progreso Fase 0): true si alguna política

@@ -1,9 +1,9 @@
 import type { AcuerdoTrueque, Asentamiento, Caravana, Faccion, OrdenMercado, RelacionPolitica, Titulo, World } from '../domain/types';
-import { avanzarCrecimientoZonas } from './settlement';
 import { computeTodasLasZonas } from './zones';
 import { avanzarConstruccion } from './construction';
 import { consumirComida, crecerPoblacion } from './population';
 import { avanzarComercio } from './trade';
+import { avanzarCaravanasFundacion } from './expansion';
 import { avanzarMercado } from './market';
 import { avanzarPoliticas } from './politicas';
 import { avanzarTributos } from './diplomacia';
@@ -33,7 +33,9 @@ export interface ResultadoTick extends EstadoSimulacion {
  * reputación y títulos dinámicos (Sprint 6, cierre).
  */
 export function avanzarSimulacion(estado: EstadoSimulacion, world: World, tickActual: number): ResultadoTick {
-  const crecidos = avanzarCrecimientoZonas(estado.asentamientos);
+  // El crecimiento de la zona de influencia ya no es puramente temporal (rediseño Doc 1.2, a petición del
+  // usuario): ahora se dispara al completarse cada edificio, dentro de `avanzarConstruccion`.
+  const crecidos = estado.asentamientos;
   const zonas = computeTodasLasZonas(crecidos);
   const eventos: string[] = [];
 
@@ -72,13 +74,18 @@ export function avanzarSimulacion(estado: EstadoSimulacion, world: World, tickAc
   const trasComercio = avanzarComercio(actualizados, estado.facciones, estado.caravanas, estado.acuerdos, tickActual);
   eventos.push(...trasComercio.eventos);
 
-  const trasMercado = avanzarMercado(trasComercio.asentamientos, estado.ordenes);
+  // Caravanas de Fundación (Doc 1.8): expanden una Facción más allá de su primer asentamiento — se avanzan
+  // aparte de las comerciales (destino es un punto del mapa, no un asentamiento existente).
+  const trasExpansion = avanzarCaravanasFundacion(trasComercio.caravanas, world, trasComercio.facciones, trasComercio.asentamientos, tickActual);
+  eventos.push(...trasExpansion.eventos);
+
+  const trasMercado = avanzarMercado(trasExpansion.asentamientos, estado.ordenes);
   eventos.push(...trasMercado.eventos);
 
   const trasTributos = avanzarTributos(estado.relaciones, trasMercado.asentamientos);
   eventos.push(...trasTributos.eventos);
 
-  const trasNivelFaccion = avanzarNivelesFaccion(trasComercio.facciones, trasTributos.asentamientos);
+  const trasNivelFaccion = avanzarNivelesFaccion(trasExpansion.facciones, trasTributos.asentamientos);
   eventos.push(...trasNivelFaccion.eventos);
 
   const faccionesFinal = avanzarReputacion(trasNivelFaccion.facciones, estado.relaciones);
@@ -89,7 +96,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, world: World, tickAc
   return {
     asentamientos: trasTributos.asentamientos,
     facciones: faccionesFinal,
-    caravanas: trasComercio.caravanas,
+    caravanas: trasExpansion.caravanas,
     acuerdos: trasComercio.acuerdos,
     ordenes: trasMercado.ordenes,
     relaciones: estado.relaciones,

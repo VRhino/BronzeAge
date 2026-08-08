@@ -1,17 +1,23 @@
-import type { Asentamiento, Edificio, EdificioTipo, Faccion, Point, RecursoAlmacenado, World } from '../domain/types';
-import { EDIFICIO_CATALOGO, EXTRACCION_MAXIMOS, NECESIDADES, RESERVA_CONSTRUCCION, SITIO } from '../constants';
+import type { Asentamiento, Edificio, EdificioTipo, Faccion, Point, RecursoAlmacenado, World, ZonaBosque } from '../domain/types';
+import { BOSQUE, EDIFICIO_CATALOGO, EXTRACCION_MAXIMOS, NECESIDADES, NIVEL_ASENTAMIENTO, RESERVA_CONSTRUCCION, SITIO, ZONA_INFLUENCIA } from '../constants';
 import { pointInPolygon } from './zones';
 import {
-  capacidadHabitacional,
+  capacidadViviendaArtesanos,
+  capacidadViviendaPesants,
   edificiosPorTipoYEstado,
   hayProyectoPendiente,
-  poblacionTotal,
   ratioManoObra,
   ratioManoObraArtesanos,
 } from './asentamientoQuery';
 import { agregarRecurso, descontarRecursos, tieneRecursos } from './almacen';
 import { recursosProtegidosPorMantenimiento } from './mantenimiento';
-import { factorProduccionTrigo, factorTiempoConstruccion, minimoLenerasPrioritario, politicaActivaDesbloqueaEdificio } from './politicas';
+import {
+  factorProduccionTrigo,
+  factorTiempoConstruccion,
+  minimoGranjasPrioritario,
+  minimoLenerasPrioritario,
+  politicaActivaDesbloqueaEdificio,
+} from './politicas';
 import { consumoComidaPoblacion } from './population';
 import { consumoRacionTropas } from './tropas';
 
@@ -112,18 +118,77 @@ function sitioCercaDeNodo(
   return elegido ? { posicion: elegido.posicion, fuenteId: elegido.id } : null;
 }
 
-/** Lenera: junto al bosque más cercano (sin repetir uno ya explotado por otra lenera propia) dentro de la zona. */
+/** Cuántas Leñeras admite un bosque a la vez según su tamaño (Doc 1.4/4.2, a petición del usuario): bosques
+ * grandes permiten más de una Leñera trabajándolo en paralelo, mín 1 / máx 3 (`BOSQUE.capacidadLenerasPorRadio`). */
+function capacidadLenerasBosque(bosque: ZonaBosque): number {
+  if (bosque.radio >= BOSQUE.capacidadLenerasPorRadio.umbral3) return 3;
+  if (bosque.radio >= BOSQUE.capacidadLenerasPorRadio.umbral2) return 2;
+  return 1;
+}
+
+/** Leñeras ya colocadas por bosque (fuenteId -> cantidad), para respetar `capacidadLenerasBosque`. */
+function conteoLenerasPorBosque(asentamiento: Asentamiento): Map<string, number> {
+  const conteo = new Map<string, number>();
+  for (const e of asentamiento.edificios) {
+    if (e.tipo === 'lenera' && e.fuenteId) conteo.set(e.fuenteId, (conteo.get(e.fuenteId) ?? 0) + 1);
+  }
+  return conteo;
+}
+
+/**
+ * Punto utilizable de un bosque que caiga DENTRO de la zona de influencia (Doc 1.4). Bug real detectado
+ * jugando (reportado por el usuario): antes solo se comprobaba si el CENTRO exacto del bosque caía dentro de
+ * la zona (`pointInPolygon(bosque.centro, zonaPoligono)`) — pero los bosques tienen radio (30-80) y el radio
+ * de zona tiene un TOPE por nivel (60/90/120, ver ZONA_INFLUENCIA). Un bosque grande cuyo borde ya está bien
+ * dentro de la zona pero cuyo centro exacto queda un poco más allá del tope de nivel era invisible para
+ * siempre — el asentamiento nunca conseguía Leñera pese a que la zona "tocaba" el bosque, y acababa cayendo
+ * en ruinas por falta de madera para Mantenimiento. Ahora se prueba primero el punto preferido (centro, o un
+ * punto con offset si el bosque ya tiene otras Leñeras — ver `capacidadLenerasBosque`) y, si ese cae fuera de
+ * la zona, se muestrean puntos en anillos crecientes dentro del propio bosque hasta encontrar uno que sí esté
+ * dentro — el mismo bosque puede "entrar en contacto" con la zona por un punto distinto de su centro.
+ */
+function puntoEnBosqueDentroDeZona(bosque: ZonaBosque, zonaPoligono: Point[], indiceOcupacion: number): Point | null {
+  const preferido =
+    indiceOcupacion === 0
+      ? bosque.centro
+      : {
+          x: bosque.centro.x + Math.cos((indiceOcupacion / 3) * Math.PI * 2) * bosque.radio * 0.4,
+          y: bosque.centro.y + Math.sin((indiceOcupacion / 3) * Math.PI * 2) * bosque.radio * 0.4,
+        };
+  if (pointInPolygon(preferido, zonaPoligono)) return preferido;
+
+  const muestrasPorAnillo = 12;
+  for (let anillo = 1; anillo <= 3; anillo++) {
+    const radio = (bosque.radio * anillo) / 3;
+    for (let i = 0; i < muestrasPorAnillo; i++) {
+      const angulo = (i / muestrasPorAnillo) * Math.PI * 2;
+      const candidato: Point = { x: bosque.centro.x + Math.cos(angulo) * radio, y: bosque.centro.y + Math.sin(angulo) * radio };
+      if (pointInPolygon(candidato, zonaPoligono)) return candidato;
+    }
+  }
+  return null;
+}
+
+/** Lenera: junto al bosque más cercano que tenga hueco libre según su capacidad (varias Leñeras pueden
+ * compartir un bosque grande, ver `capacidadLenerasBosque`) Y algún punto suyo dentro de la zona de
+ * influencia (ver `puntoEnBosqueDentroDeZona` — no exige que sea justo el centro). */
 function sitioEnBosque(
   asentamiento: Asentamiento,
   zonaPoligono: Point[],
   world: World,
-  fuentesExcluidas: Set<string>
+  conteoPorBosque: Map<string, number>
 ): { posicion: Point; fuenteId: string } | null {
   const candidatos = world.bosques
-    .filter((b) => !fuentesExcluidas.has(b.id) && pointInPolygon(b.centro, zonaPoligono))
-    .sort((a, b) => distancia(a.centro, asentamiento.posicion) - distancia(b.centro, asentamiento.posicion));
+    .map((bosque) => {
+      const ocupadas = conteoPorBosque.get(bosque.id) ?? 0;
+      if (ocupadas >= capacidadLenerasBosque(bosque)) return null;
+      const punto = puntoEnBosqueDentroDeZona(bosque, zonaPoligono, ocupadas);
+      return punto ? { bosque, punto } : null;
+    })
+    .filter((c): c is { bosque: ZonaBosque; punto: Point } => c !== null)
+    .sort((a, b) => distancia(a.bosque.centro, asentamiento.posicion) - distancia(b.bosque.centro, asentamiento.posicion));
   const elegido = candidatos[0];
-  return elegido ? { posicion: elegido.centro, fuenteId: elegido.id } : null;
+  return elegido ? { posicion: elegido.punto, fuenteId: elegido.bosque.id } : null;
 }
 
 function crearEdificioEnCola(tipo: EdificioTipo, posicion: Point, id: string, fuenteId?: string): Edificio {
@@ -168,7 +233,7 @@ const TIPOS_EXTRACTORES_BASE = new Set<EdificioTipo>(['cantera', 'minaCobre', 'm
 
 function intentarSitioBosque(asentamiento: Asentamiento, zonaPoligono: Point[], world: World, nextId: () => string): Edificio | null {
   if (hayProyectoPendiente(asentamiento, 'lenera')) return null;
-  const sitio = sitioEnBosque(asentamiento, zonaPoligono, world, fuentesReclamadas(asentamiento, 'lenera'));
+  const sitio = sitioEnBosque(asentamiento, zonaPoligono, world, conteoLenerasPorBosque(asentamiento));
   return sitio ? crearEdificioEnCola('lenera', sitio.posicion, nextId(), sitio.fuenteId) : null;
 }
 
@@ -229,26 +294,56 @@ function evaluarNecesidades(asentamiento: Asentamiento, zonaPoligono: Point[], w
     }
   };
 
-  // Protección de Riesgos (política de Maestro de Obras): mientras esté activa y no se llegue al mínimo de
-  // Leñeras (activas + en curso/cola), SOLO se evalúa esa necesidad — se ignora cualquier otra este tick.
-  // Excepción: si no hay NINGÚN bosque libre en la zona (`sitioEnBosque` no encuentra sitio) y tampoco hay
-  // ya una Leñera en camino, bloquear igual sería un interbloqueo sin salida (0 progreso posible durante
-  // toda la duración de la política) — en ese caso se deja pasar la evaluación normal de abajo.
+  // Protección de Riesgos (política de Maestro de Obras, a petición del usuario: "construye 2 Leñeras y 3
+  // Granjas, prioriza esto y no construyas nada más hasta que se cumpla"): mientras esté activa y falte
+  // cualquiera de los dos objetivos (activas + en curso/cola, por tipo), SOLO se evalúan Leñera/Granja —
+  // se ignora cualquier otra necesidad este tick. Ambas se evalúan en la misma pasada (no hace falta terminar
+  // la Leñera antes de empezar la Granja): cada una respeta su propio límite normal de una instancia en vuelo
+  // a la vez (`hayProyectoPendiente`).
+  // Excepción: si NINGUNA de las dos pudo avanzar este tick (sin sitio disponible para la que falte, y
+  // ninguna ya en camino), bloquear igual sería un interbloqueo sin salida (0 progreso posible durante toda la
+  // duración de la política) — en ese caso se deja pasar la evaluación normal de abajo.
   const objetivoLenerasPrioritario = minimoLenerasPrioritario(asentamiento);
-  if (objetivoLenerasPrioritario > 0) {
+  const objetivoGranjasPrioritario = minimoGranjasPrioritario(asentamiento);
+  if (objetivoLenerasPrioritario > 0 || objetivoGranjasPrioritario > 0) {
     const lenerasActivas = edificiosPorTipoYEstado(asentamiento, 'lenera').length;
     const lenerasPendientes = asentamiento.edificios.filter((e) => e.tipo === 'lenera' && e.estado !== 'activo').length;
-    if (lenerasActivas + lenerasPendientes < objetivoLenerasPrioritario) {
-      if (hayProyectoPendiente(asentamiento, 'lenera')) {
-        return nuevos; // ya hay una Leñera en camino hacia el objetivo: seguimos bloqueando el resto.
+    const lenerasFaltan = lenerasActivas + lenerasPendientes < objetivoLenerasPrioritario;
+
+    const granjasActivasPrioridad = edificiosPorTipoYEstado(asentamiento, 'granja').length;
+    const granjasPendientesPrioridad = asentamiento.edificios.filter((e) => e.tipo === 'granja' && e.estado !== 'activo').length;
+    const granjasFaltan = granjasActivasPrioridad + granjasPendientesPrioridad < objetivoGranjasPrioritario;
+
+    if (lenerasFaltan || granjasFaltan) {
+      let progresando = false;
+
+      if (lenerasFaltan) {
+        if (hayProyectoPendiente(asentamiento, 'lenera')) {
+          progresando = true; // ya hay una Leñera en camino hacia el objetivo.
+        } else {
+          const sitio = sitioEnBosque(asentamiento, zonaPoligono, world, conteoLenerasPorBosque(asentamiento));
+          if (sitio) {
+            encolar(crearEdificioEnCola('lenera', sitio.posicion, nextId(), sitio.fuenteId));
+            progresando = true;
+          }
+        }
       }
-      const sitio = sitioEnBosque(asentamiento, zonaPoligono, world, fuentesReclamadas(asentamiento, 'lenera'));
-      if (sitio) {
-        encolar(crearEdificioEnCola('lenera', sitio.posicion, nextId(), sitio.fuenteId));
-        return nuevos;
+
+      if (granjasFaltan) {
+        if (hayProyectoPendiente(asentamiento, 'granja')) {
+          progresando = true; // ya hay una Granja en camino hacia el objetivo.
+        } else {
+          const sitio = sitioMejorFertilidad(asentamiento, zonaPoligono, world, ocupados());
+          if (sitio) {
+            encolar(crearEdificioEnCola('granja', sitio, nextId()));
+            progresando = true;
+          }
+        }
       }
-      // Sin bosque disponible todavía: no bloquear el resto — se retomará la prioridad en cuanto la
-      // zona de influencia crezca lo suficiente para alcanzar un bosque.
+
+      if (progresando) return nuevos;
+      // Ni Leñera ni Granja pudieron avanzar este tick: no bloquear el resto — se retomará la prioridad en
+      // cuanto haya sitio disponible (ej. la zona de influencia crezca lo suficiente para alcanzar un bosque).
     }
   }
 
@@ -310,10 +405,17 @@ function evaluarNecesidades(asentamiento: Asentamiento, zonaPoligono: Point[], w
     if (sitio) encolar(crearEdificioEnCola('minaEstano', sitio.posicion, nextId(), sitio.fuenteId));
   }
 
-  const capacidadVivienda = capacidadHabitacional(asentamiento);
-  const total = poblacionTotal(asentamiento);
-  const ocupacion = capacidadVivienda <= 0 ? 1 : total / capacidadVivienda;
-  if ((capacidadVivienda === 0 || ocupacion >= NECESIDADES.umbralViviendaOcupada) && !hayProyectoPendiente(asentamiento, 'vivienda')) {
+  // Cupos separados por clase (ver `crecerPoblacion`, engine/population.ts): una Vivienda nueva amplía
+  // ambos a la vez, así que basta con que CUALQUIERA de los dos ya esté saturado para dispararla.
+  const capacidadPesantsVivienda = capacidadViviendaPesants(asentamiento);
+  const capacidadArtesanosVivienda = capacidadViviendaArtesanos(asentamiento);
+  const ocupacionPesants = capacidadPesantsVivienda <= 0 ? 1 : asentamiento.poblacion.pesants / capacidadPesantsVivienda;
+  const ocupacionArtesanos = capacidadArtesanosVivienda <= 0 ? 1 : asentamiento.poblacion.artesanos / capacidadArtesanosVivienda;
+  const ocupacionMaxima = Math.max(ocupacionPesants, ocupacionArtesanos);
+  if (
+    (capacidadPesantsVivienda === 0 || ocupacionMaxima >= NECESIDADES.umbralViviendaOcupada) &&
+    !hayProyectoPendiente(asentamiento, 'vivienda')
+  ) {
     const sitio = sitioConcentrico(asentamiento, zonaPoligono, ocupados());
     if (sitio) encolar(crearEdificioEnCola('vivienda', sitio, nextId()));
   }
@@ -481,6 +583,9 @@ export function avanzarConstruccion(
   const resultados = new Map<string, Edificio>();
 
   const ratioMano = ratioManoObra(asentamiento);
+  // Crecimiento de zona ligado a construcción activa (Doc 1.2, rediseño a petición del usuario): ya no es
+  // puramente temporal — cada edificio completado este tick empuja el radio hacia el techo de su nivel.
+  let edificiosCompletadosEsteTick = 0;
 
   // Paso 1 (orden original): progreso de construcciones en curso + producción de edificios activos. Los
   // `en_cola` se resuelven en un segundo paso por PRIORIDAD (ver abajo), no aquí.
@@ -489,6 +594,7 @@ export function avanzarConstruccion(
       const restantes = edificio.ticksRestantes - 1;
       if (restantes <= 0) {
         eventos.push(`${edificio.tipo} completado.`);
+        edificiosCompletadosEsteTick += 1;
         if (edificio.tipo === 'almacen') {
           const bonus = EDIFICIO_CATALOGO.almacen.capacidadPorRecursoAdicional;
           for (const recurso of Object.keys(almacen)) {
@@ -594,7 +700,11 @@ export function avanzarConstruccion(
   almacen = trasMejoras.almacen;
   eventos.push(...trasMejoras.eventos);
 
-  const asentamientoConProgreso: Asentamiento = { ...trasMejoras.asentamiento, almacen };
+  const radioPotencial = Math.min(
+    ZONA_INFLUENCIA.radioMaximoPorNivel[asentamiento.nivel] ?? ZONA_INFLUENCIA.radioMaximoPorNivel[NIVEL_ASENTAMIENTO.nivelMaximo]!,
+    asentamiento.radioPotencial + ZONA_INFLUENCIA.crecimientoPorEdificioCompletado * edificiosCompletadosEsteTick
+  );
+  const asentamientoConProgreso: Asentamiento = { ...trasMejoras.asentamiento, almacen, radioPotencial };
   const nuevosProyectos = evaluarNecesidades(asentamientoConProgreso, zonaPoligono, world);
   const nuevosEspeciales = evaluarEdificiosEspeciales(asentamientoConProgreso, zonaPoligono);
   for (const p of [...nuevosProyectos, ...nuevosEspeciales]) eventos.push(`Nueva necesidad detectada: se encola ${p.tipo}.`);

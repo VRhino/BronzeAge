@@ -1,5 +1,5 @@
 import type { Asentamiento, Edificio, Faccion, Point, RecursoAlmacenado, World } from '../domain/types';
-import { ALMACEN, FUNDACION, MANTENIMIENTO, NIVEL_ASENTAMIENTO, POBLACION, ZONA_INFLUENCIA } from '../constants';
+import { ALMACEN, FUNDACION, MANTENIMIENTO, POBLACION, ZONA_INFLUENCIA } from '../constants';
 import { posicionLibreParaFundar } from './zones';
 import { calcularCapFundacion, otorgarCiudadania } from './faccion';
 
@@ -38,19 +38,6 @@ function mejorPuntoFertilidadCercano(world: World, centro: Point, radio: number,
   return mejor;
 }
 
-/**
- * Bosque más cercano dentro de `radio` de `centro` (Doc 1.4), para la Leñera inicial de fundación (rediseño
- * de progreso Fase 0). Misma simplificación deliberada que `mejorPuntoFertilidadCercano`: sin recortar contra
- * zonas rivales, solo distancia — al fundar todavía no hay zona de influencia recortada que consultar.
- */
-function bosqueCercano(world: World, centro: Point, radio: number): { posicion: Point; fuenteId: string } | null {
-  const candidatos = world.bosques
-    .filter((b) => Math.hypot(b.centro.x - centro.x, b.centro.y - centro.y) <= radio + b.radio)
-    .sort((a, b) => Math.hypot(a.centro.x - centro.x, a.centro.y - centro.y) - Math.hypot(b.centro.x - centro.x, b.centro.y - centro.y));
-  const elegido = candidatos[0];
-  return elegido ? { posicion: elegido.centro, fuenteId: elegido.id } : null;
-}
-
 /** Edificios con los que nace todo asentamiento nuevo (Doc 1.3): ya "activo", sin pasar por la cola. */
 function edificiosIniciales(world: World, centro: Point, idBase: string): Edificio[] {
   const radioAnillo = ZONA_INFLUENCIA.radioInicial * 0.5;
@@ -75,22 +62,10 @@ function edificiosIniciales(world: World, centro: Point, idBase: string): Edific
     estado: 'activo',
     ticksRestantes: 0,
   };
-  // Leñera inicial condicional (rediseño de progreso Fase 0, Doc 1.3): solo si hay un bosque alcanzable cerca
-  // del punto de fundación — reduce el riesgo de déficit de madera en los primeros ticks, sin garantizarlo.
-  const bosque = bosqueCercano(world, centro, radioAnillo);
-  const lenera: Edificio[] = bosque
-    ? [
-        {
-          id: `edificio-${idBase}-lenera-inicial`,
-          tipo: 'lenera',
-          posicion: bosque.posicion,
-          estado: 'activo',
-          ticksRestantes: 0,
-          fuenteId: bosque.fuenteId,
-        },
-      ]
-    : [];
-  return [centroUrbano, granja, ...lenera, ...viviendas];
+  // Leñera inicial: DEPRECADA (a petición del usuario) — la reserva de materiales iniciales (madera+piedra,
+  // ver `almacenInicial` más abajo) ya es suficiente por sí sola para evitar el deadlock de madera (bug #1,
+  // `Correcciones_Durante_Desarrollo.md`); esta mitigación extra dejó de ser necesaria.
+  return [centroUrbano, granja, ...viviendas];
 }
 
 /**
@@ -174,19 +149,4 @@ export function fundarAsentamiento(
     asentamiento,
     facciones: facciones.map((f) => (f.id === faccionId ? faccionActualizada : f)),
   };
-}
-
-/**
- * Avanza el crecimiento de la zona de influencia potencial de cada asentamiento en `deltaTicks` ticks, hacia
- * el techo del nivel ACTUAL (rediseño de progreso Fase 0, Doc 1.2/4.5) — subir de nivel no salta el radio de
- * golpe, solo levanta el techo hacia el que la zona ya venía creciendo gradualmente.
- */
-export function avanzarCrecimientoZonas(asentamientos: Asentamiento[], deltaTicks = 1): Asentamiento[] {
-  return asentamientos.map((a) => ({
-    ...a,
-    radioPotencial: Math.min(
-      ZONA_INFLUENCIA.radioMaximoPorNivel[a.nivel] ?? ZONA_INFLUENCIA.radioMaximoPorNivel[NIVEL_ASENTAMIENTO.nivelMaximo]!,
-      a.radioPotencial + ZONA_INFLUENCIA.crecimientoPorTick * deltaTicks
-    ),
-  }));
 }

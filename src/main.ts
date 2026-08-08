@@ -54,7 +54,7 @@ const EDIFICIO_NOMBRE: Record<string, string> = {
 
 const EDIFICIO_FUNCION: Record<string, string> = {
   centroUrbano: 'Marca el centro fundacional del asentamiento. Único: solo se obtiene al fundar, nunca se puede construir después.',
-  vivienda: 'Amplía la capacidad de población (15 habitantes c/u).',
+  vivienda: 'Amplía la capacidad de población: 15 cupos de Pesants + 5 de Artesanos c/u (cupos separados).',
   granja: 'Produce trigo (comida) según la fertilidad del suelo donde se ubica.',
   cantera: 'Extrae piedra de un yacimiento cercano hasta agotarlo.',
   lenera: 'Extrae madera de un bosque cercano (no se agota).',
@@ -141,6 +141,17 @@ app.innerHTML = `
       </div>
 
       <div class="controls">
+        <h2>Caravana de Fundación (Doc 1.8)</h2>
+        <label>Asentamiento de origen (nivel ≥2) <select id="expansion-origen"></select></label>
+        <label><input type="checkbox" id="expansion-modo-clic" /> Elegir destino con clic en el mapa</label>
+        <label>Destino elegido <input id="expansion-destino" type="text" readonly placeholder="clic en el mapa…" /></label>
+        <label>Ciudadanos que fundarán (1-5) <input id="expansion-jugadores" type="number" value="1" min="1" max="5" /></label>
+        <button id="expansion-lanzar-btn">Lanzar Caravana de Fundación</button>
+        <label>Caravana de Fundación en tránsito <select id="expansion-caravana"></select></label>
+        <button id="expansion-desarmar-btn">Desarmar (reembolso íntegro)</button>
+      </div>
+
+      <div class="controls">
         <h2>Cargos (Doc 2.2)</h2>
         <label>Facción <select id="cargo-faccion"></select></label>
         <label>Jugador (ciudadano de la facción) <select id="cargo-jugador"></select></label>
@@ -215,10 +226,8 @@ app.innerHTML = `
       <div class="controls">
         <h2>Guerra (Doc 5)</h2>
         <label>Asentamiento <select id="guerra-asentamiento"></select></label>
-        <label>Reclutar de <select id="reclutar-origen"></select></label>
-        <label>Cantidad <input id="reclutar-cantidad" type="number" value="10" min="1" /></label>
-        <button id="reclutar-btn">Reclutar</button>
         <label>Reclutar tropa (Barracón/Galería de tiro) <select id="reclutar-tropa"></select></label>
+        <label>Origen <select id="reclutar-tropa-origen"></select></label>
         <label>Cantidad de unidades <input id="reclutar-tropa-cantidad" type="number" value="10" min="1" /></label>
         <button id="reclutar-tropa-btn">Reclutar tropa</button>
         <button id="gran-fundicion-btn">Construir Gran Fundición</button>
@@ -332,6 +341,13 @@ const faccionSelect = document.getElementById('faccion-select') as HTMLSelectEle
 const seedInput = document.getElementById('seed-input') as HTMLInputElement;
 const jugadoresInput = document.getElementById('jugadores-input') as HTMLInputElement;
 
+const expansionOrigenSelect = document.getElementById('expansion-origen') as HTMLSelectElement;
+const expansionModoClicCheckbox = document.getElementById('expansion-modo-clic') as HTMLInputElement;
+const expansionDestinoInput = document.getElementById('expansion-destino') as HTMLInputElement;
+const expansionJugadoresInput = document.getElementById('expansion-jugadores') as HTMLInputElement;
+const expansionCaravanaSelect = document.getElementById('expansion-caravana') as HTMLSelectElement;
+let expansionDestino: { x: number; y: number } | null = null;
+
 const truequeASelect = document.getElementById('trueque-a') as HTMLSelectElement;
 const truequeBSelect = document.getElementById('trueque-b') as HTMLSelectElement;
 const truequeRecursoASelect = document.getElementById('trueque-recurso-a') as HTMLSelectElement;
@@ -370,9 +386,8 @@ const fusionNombreInput = document.getElementById('fusion-nombre') as HTMLInputE
 const fusionReyInput = document.getElementById('fusion-rey') as HTMLInputElement;
 
 const guerraAsentamientoSelect = document.getElementById('guerra-asentamiento') as HTMLSelectElement;
-const reclutarOrigenSelect = document.getElementById('reclutar-origen') as HTMLSelectElement;
-const reclutarCantidadInput = document.getElementById('reclutar-cantidad') as HTMLInputElement;
 const reclutarTropaSelect = document.getElementById('reclutar-tropa') as HTMLSelectElement;
+const reclutarTropaOrigenSelect = document.getElementById('reclutar-tropa-origen') as HTMLSelectElement;
 const reclutarTropaCantidadInput = document.getElementById('reclutar-tropa-cantidad') as HTMLInputElement;
 const guerraEscuadronesInput = document.getElementById('guerra-escuadrones') as HTMLInputElement;
 const guerraObjetivoSelect = document.getElementById('guerra-objetivo') as HTMLSelectElement;
@@ -388,7 +403,7 @@ diploTributoRecursoSelect.innerHTML = CATALOGOS.recursosTrueque.map((r) => `<opt
 truequeRecursoASelect.innerHTML = CATALOGOS.recursosTrueque.map((r) => `<option value="${r}">${r}</option>`).join('');
 truequeRecursoBSelect.innerHTML = CATALOGOS.recursosTrueque.map((r) => `<option value="${r}">${r}</option>`).join('');
 mercadoRecursoSelect.innerHTML = CATALOGOS.recursosMercado.map((r) => `<option value="${r}">${r}</option>`).join('');
-reclutarOrigenSelect.innerHTML = CATALOGOS.origenesTropa.map((o) => `<option value="${o}">${o}</option>`).join('');
+reclutarTropaOrigenSelect.innerHTML = CATALOGOS.origenesTropa.map((o) => `<option value="${o}">${o}</option>`).join('');
 reclutarTropaSelect.innerHTML = CATALOGOS.tropasReclutables
   .map((t) => {
     const costoTxt = Object.entries(t.costoEquipo)
@@ -434,11 +449,30 @@ function actualizarSelects(state: GameState): void {
   }
 
   const opcionesCaravanas = state.caravanas
-    .map((c) => `<option value="${c.id}">${c.id} (${c.origenAsentamientoId} → ${c.destinoAsentamientoId})</option>`)
+    .map((c) => {
+      const destinoTxt = c.destinoPosicion ? `(${Math.round(c.destinoPosicion.x)}, ${Math.round(c.destinoPosicion.y)})` : c.destinoAsentamientoId;
+      return `<option value="${c.id}">${c.id} (${c.origenAsentamientoId} → ${destinoTxt})</option>`;
+    })
     .join('');
   const caravanaPrevia = guerraCaravanaSelect.value;
   guerraCaravanaSelect.innerHTML = opcionesCaravanas;
   if (state.caravanas.some((c) => c.id === caravanaPrevia)) guerraCaravanaSelect.value = caravanaPrevia;
+
+  const opcionesAsentamientosNivel2 = state.asentamientos
+    .filter((a) => a.nivel >= 2)
+    .map((a) => `<option value="${a.id}">${etiquetaAsentamiento(a, state.facciones)} (nivel ${a.nivel})</option>`)
+    .join('');
+  const origenPrevio = expansionOrigenSelect.value;
+  expansionOrigenSelect.innerHTML = opcionesAsentamientosNivel2 || '<option value="">Ningún asentamiento en nivel ≥2</option>';
+  if (state.asentamientos.some((a) => a.id === origenPrevio && a.nivel >= 2)) expansionOrigenSelect.value = origenPrevio;
+
+  const caravanasFundacion = state.caravanas.filter((c) => c.tipo === 'construccion' && c.destinoPosicion);
+  const opcionesCaravanasFundacion = caravanasFundacion
+    .map((c) => `<option value="${c.id}">${c.id} (${c.origenAsentamientoId} → (${Math.round(c.destinoPosicion!.x)}, ${Math.round(c.destinoPosicion!.y)}))</option>`)
+    .join('');
+  const caravanaFundacionPrevia = expansionCaravanaSelect.value;
+  expansionCaravanaSelect.innerHTML = opcionesCaravanasFundacion || '<option value="">Ninguna en tránsito</option>';
+  if (caravanasFundacion.some((c) => c.id === caravanaFundacionPrevia)) expansionCaravanaSelect.value = caravanaFundacionPrevia;
 
   const opcionesFacciones = state.facciones.map((f) => `<option value="${f.id}">${f.nombre}</option>`).join('');
   for (const select of [cargoFaccionSelect, diploASelect, diploBSelect, fusionASelect, fusionBSelect]) {
@@ -1193,7 +1227,24 @@ canvas.addEventListener('click', (ev) => {
   const scale = state.world.config.ancho / canvas.width;
   const worldX = (ev.clientX - rect.left) * scale;
   const worldY = (ev.clientY - rect.top) * scale;
+  if (expansionModoClicCheckbox.checked) {
+    expansionDestino = { x: worldX, y: worldY };
+    expansionDestinoInput.value = `(${Math.round(worldX)}, ${Math.round(worldY)})`;
+    return;
+  }
   gameStore.fundarAsentamiento(faccionSelect.value, { x: worldX, y: worldY }, Number(jugadoresInput.value) || 1);
+});
+
+document.getElementById('expansion-lanzar-btn')!.addEventListener('click', () => {
+  if (!expansionDestino) return;
+  gameStore.lanzarCaravanaFundacion(expansionOrigenSelect.value, expansionDestino, Number(expansionJugadoresInput.value) || 1);
+  expansionDestino = null;
+  expansionDestinoInput.value = '';
+  expansionModoClicCheckbox.checked = false;
+});
+
+document.getElementById('expansion-desarmar-btn')!.addEventListener('click', () => {
+  gameStore.desarmarCaravanaFundacion(expansionCaravanaSelect.value);
 });
 
 document.getElementById('rey-btn')!.addEventListener('click', () => {
@@ -1264,12 +1315,13 @@ document.getElementById('mercado-btn')!.addEventListener('click', () => {
   );
 });
 
-document.getElementById('reclutar-btn')!.addEventListener('click', () => {
-  gameStore.reclutar(guerraAsentamientoSelect.value, reclutarOrigenSelect.value as 'artesanos' | 'nobleza', Number(reclutarCantidadInput.value) || 0);
-});
-
 document.getElementById('reclutar-tropa-btn')!.addEventListener('click', () => {
-  gameStore.reclutarTropa(guerraAsentamientoSelect.value, reclutarTropaSelect.value, Number(reclutarTropaCantidadInput.value) || 0);
+  gameStore.reclutarTropa(
+    guerraAsentamientoSelect.value,
+    reclutarTropaSelect.value,
+    reclutarTropaOrigenSelect.value as 'pesants' | 'artesanos',
+    Number(reclutarTropaCantidadInput.value) || 0
+  );
 });
 
 document.getElementById('gran-fundicion-btn')!.addEventListener('click', () => {

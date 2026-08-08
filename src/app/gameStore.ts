@@ -52,9 +52,14 @@ import {
 } from '../engine/diplomacia';
 import { computeLigas, type LigaInfo } from '../engine/liga';
 import { anexionar as anexionarEngine, fusionar as fusionarEngine, FusionInvalidaError } from '../engine/fusion';
-import { reclutar as reclutarEngine, reclutarTropa as reclutarTropaEngine, ReclutamientoInvalidoError, consumoRacionTropas } from '../engine/tropas';
+import { reclutarTropa as reclutarTropaEngine, ReclutamientoInvalidoError, consumoRacionTropas } from '../engine/tropas';
 import { construirManualmente as construirManualmenteEngine, ConstruccionManualInvalidaError } from '../engine/construction';
 import { iniciarAsedio as iniciarAsedioEngine, combateCampoAbierto as combateCampoAbiertoEngine, interceptarCaravana as interceptarCaravanaEngine, CombateInvalidoError } from '../engine/combate';
+import {
+  lanzarCaravanaFundacion as lanzarCaravanaFundacionEngine,
+  desarmarCaravanaFundacion as desarmarCaravanaFundacionEngine,
+  ExpansionInvalidaError,
+} from '../engine/expansion';
 
 export interface EventoLog {
   tick: number;
@@ -95,7 +100,7 @@ export interface SimulacionExportada {
 /** Catálogos de referencia (listas fijas, sin comportamiento) que la interfaz necesita para construir formularios. */
 export const CATALOGOS = {
   cargos: ['gobernador', 'tesorero', 'general', 'maestroObras', 'sacerdote'] as CargoTipo[],
-  origenesTropa: ['artesanos', 'nobleza'] as const,
+  origenesTropa: ['pesants', 'artesanos'] as const,
   tropasReclutables: TROPAS_RECLUTABLES,
   recursosTrueque: ['madera', 'piedra', 'trigo', 'cobre', 'estano', 'oro', 'livestock'] as RecursoTipo[],
   recursosMercado: ['madera', 'piedra', 'trigo', 'cobre', 'estano', 'livestock'] as RecursoTipo[],
@@ -305,6 +310,49 @@ export class GameStore {
     this.notify();
   }
 
+  /** Caravana de Fundación (Doc 1.8): expande una Facción más allá de su primer asentamiento. Lleva consigo
+   * a ciudadanos ya existentes de la Facción (no jugadores nuevos) y reserva de inmediato un cupo del Cap
+   * de Fundación (Doc 1.7) mientras esté en tránsito. */
+  lanzarCaravanaFundacion(origenAsentamientoId: string, destino: { x: number; y: number }, numJugadores: number): void {
+    try {
+      const origen = this.state.asentamientos.find((a) => a.id === origenAsentamientoId)!;
+      const faccion = this.state.facciones.find((f) => f.id === origen.faccionId)!;
+      const resultado = lanzarCaravanaFundacionEngine(
+        origen,
+        faccion,
+        destino,
+        this.state.asentamientos,
+        this.state.caravanas,
+        numJugadores,
+        this.state.tick,
+        this.contadorAcciones++
+      );
+      this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === origen.id ? resultado.origenActualizado : a));
+      this.state.caravanas = [...this.state.caravanas, resultado.caravana];
+      this.registrar(`${origen.id}: lanza una Caravana de Fundación hacia (${Math.round(destino.x)}, ${Math.round(destino.y)}).`);
+    } catch (err) {
+      if (err instanceof ExpansionInvalidaError) this.registrar(`Caravana de Fundación rechazada: ${err.message}`);
+      else throw err;
+    }
+    this.notify();
+  }
+
+  /** Desarma una Caravana de Fundación en tránsito y reembolsa su contenido íntegro al asentamiento de origen. */
+  desarmarCaravanaFundacion(caravanaId: string): void {
+    try {
+      const caravana = this.state.caravanas.find((c) => c.id === caravanaId)!;
+      const origen = this.state.asentamientos.find((a) => a.id === caravana.origenAsentamientoId)!;
+      const actualizado = desarmarCaravanaFundacionEngine(origen, caravana);
+      this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === origen.id ? actualizado : a));
+      this.state.caravanas = this.state.caravanas.filter((c) => c.id !== caravanaId);
+      this.registrar(`${origen.id}: desarma la Caravana de Fundación ${caravanaId} y recupera su contenido.`);
+    } catch (err) {
+      if (err instanceof ExpansionInvalidaError) this.registrar(`No se pudo desarmar la caravana: ${err.message}`);
+      else throw err;
+    }
+    this.notify();
+  }
+
   asignarRey(faccionId: string, jugadorId: string): void {
     try {
       const faccion = this.state.facciones.find((f) => f.id === faccionId)!;
@@ -504,26 +552,14 @@ export class GameStore {
     this.notify();
   }
 
-  reclutar(asentamientoId: string, origen: 'artesanos' | 'nobleza', cantidad: number): void {
+  /** Reclutamiento por equipo (Doc 5.7/5.8): recluta una tropa específica vía Barracón/Galería de tiro, de
+   * origen Pesants o Artesanos. Nobleza ya no recluta tropas (sigue existiendo como clase de población, Doc 4.1). */
+  reclutarTropa(asentamientoId: string, tropaId: string, origen: 'pesants' | 'artesanos', cantidad: number): void {
     try {
       const asentamiento = this.state.asentamientos.find((a) => a.id === asentamientoId)!;
-      const actualizado = reclutarEngine(asentamiento, origen, cantidad, this.state.tick, this.contadorAcciones++);
+      const actualizado = reclutarTropaEngine(asentamiento, tropaId, origen, cantidad, this.state.tick, this.contadorAcciones++);
       this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === actualizado.id ? actualizado : a));
-      this.registrar(`${asentamiento.id}: recluta ${cantidad} de ${origen}.`);
-    } catch (err) {
-      if (err instanceof ReclutamientoInvalidoError) this.registrar(`Reclutamiento rechazado: ${err.message}`);
-      else throw err;
-    }
-    this.notify();
-  }
-
-  /** Reclutamiento por equipo (Doc 5.7/5.8, rediseño): recluta una tropa específica vía Barracón/Galería de tiro. */
-  reclutarTropa(asentamientoId: string, tropaId: string, cantidad: number): void {
-    try {
-      const asentamiento = this.state.asentamientos.find((a) => a.id === asentamientoId)!;
-      const actualizado = reclutarTropaEngine(asentamiento, tropaId, cantidad, this.state.tick, this.contadorAcciones++);
-      this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === actualizado.id ? actualizado : a));
-      this.registrar(`${asentamiento.id}: recluta ${cantidad} de la tropa "${tropaId}".`);
+      this.registrar(`${asentamiento.id}: recluta ${cantidad} de la tropa "${tropaId}" (${origen}).`);
     } catch (err) {
       if (err instanceof ReclutamientoInvalidoError) this.registrar(`Reclutamiento rechazado: ${err.message}`);
       else throw err;

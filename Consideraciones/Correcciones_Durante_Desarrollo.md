@@ -150,6 +150,82 @@ Verificado en ambos casos: `tsc --noEmit` limpio, sin errores de consola, compor
 
 ---
 
+## Post-Sprint 6 — Calibración adicional de trigo, políticas nuevas y fix de alcance de bosques
+
+Sesión de seguimiento tras la corrección #22: el usuario pidió calibrar mejor el disparador de Granja, añadir una política de refuerzo de trigo, ampliar "Protección de Riesgos" y permitir más de una Leñera por bosque — y, jugando con esos cambios ya activos, reportó un colapso por falta de madera que llevó a un bug real de más peso que los cambios pedidos.
+
+### 23. Disparador de Granja: de "reserva estimada" a déficit real, y hasta 3 a la vez
+- **Contexto (a petición del usuario):** el disparador de una Granja adicional (corrección #2/Sprint 2) comparaba `trigo disponible ÷ consumo actual` contra un umbral de 5 ticks — una estimación que no tenía en cuenta que el consumo sigue subiendo con la población mientras la Granja se construye (6 ticks), ni las raciones de tropas (`consumoRacionTropas`), así que podía disparar tarde.
+- **Solución:** se reemplazó por una comparación directa: `producción actual de trigo (todas las Granjas activas) < consumo actual (población + tropas)`. Además, se permite tener hasta 3 Granjas `en_cola`/`en_construccion` a la vez mientras haya déficit (antes solo 1, obligando a corregir un déficit severo en serie).
+- **Verificado:** simulando con un asentamiento sin política de refuerzo, en tick 70 se observaron 2 Granjas no activas simultáneas (`en_construccion` + `en_cola`) reaccionando a un déficit real antes de que el trigo llegara a 0 — el asentamiento nunca colapsó.
+
+### 24. Nueva política "Edicto de Cosecha" (Gobernador) — a petición del usuario
+- **Contexto:** además de recalibrar el disparador, el usuario pidió una política que suba la producción de trigo ×1.5, sin tocar madera ni piedra.
+- **Solución:** nuevo campo multiplicativo `factorProduccionTrigo` en el sistema de políticas (mismo patrón que Racionamiento/Vía Rápida), aplicado solo en la fórmula de producción de Granja.
+- **Verificado:** midiendo la producción de la misma Granja antes/después de activar la política en el mismo asentamiento (aislando el resto de variables): 3.0 → 4.5 trigo/tick, exactamente ×1.5.
+
+### 25. "Protección de Riesgos" ampliada a 2 Leñeras + 3 Granjas — a petición del usuario
+- **Contexto:** la política (corrección #12) solo exigía 3 Leñeras. El usuario pidió que exigiera 2 Leñeras Y 3 Granjas, bloqueando cualquier otra auto-construcción hasta cumplir ambas.
+- **Solución:** se generalizó la lógica a ambos tipos, evaluados en la misma pasada (no hace falta terminar uno para empezar el otro), con la misma válvula de escape que ya existía (si NINGUNO de los dos objetivos puede avanzar ese tick, se deja pasar la evaluación normal para no congelar el asentamiento sin salida).
+- **Verificado (a petición del usuario, tarea de verificación explícita):** con dos bosques cercanos entre sí, la política bloqueó todo lo demás hasta llegar a 2/3 exactos y soltó el bloqueo en el mismo tick que se cumplió; con un solo bosque alcanzable, el objetivo de Leñeras quedó permanentemente en 1 y la política soltó el bloqueo igual en cuanto Granja llegó a 3 (válvula de escape) — el usuario confirmó que ese comportamiento es el deseado.
+
+### 26. Capacidad de Leñeras por tamaño de bosque (1-3) — a petición del usuario
+- **Contexto:** hasta ahora un bosque solo admitía una Leñera, sin importar su tamaño. El usuario pidió que un bosque grande admita más de una, hasta 3.
+- **Solución:** capacidad por bosque = función de su radio (`BOSQUE.capacidadLenerasPorRadio`: <45 → 1, 45-64 → 2, ≥65 → 3). Las Leñeras que comparten un bosque se colocan en puntos distintos dentro de su radio (solo para no dibujarse superpuestas — la producción sigue usando `bosque.densidad`, no la posición).
+- **Verificado:** un asentamiento rodeado de 3 bosques de distinto tamaño terminó con exactamente 3 Leñeras en el bosque grande y 2 en cada uno de los medianos, estable desde el tick 10, cada uno parado en su propia capacidad.
+
+### 27. Bug real: el alcance de un bosque solo comprobaba su centro, no su solapamiento con la zona
+- **Error:** reportado por el usuario ("he visto simulaciones que un asentamiento... crece su zona de influencia y entra en contacto con un bosque, pero aun así no crea la leñera y se destruye"). La búsqueda de sitio para Leñera (`sitioEnBosque`) solo comprobaba si el CENTRO exacto del bosque caía dentro del polígono de zona — pero los bosques tienen radio (30-80) y el radio de zona tiene un TOPE por nivel (60/90/120). Un bosque grande cuyo borde ya estaba bien dentro de la zona, pero cuyo centro quedaba un poco más allá del tope, era invisible PARA SIEMPRE — el asentamiento nunca conseguía Leñera pese a que la zona ya tocaba el bosque físicamente, agotaba su madera inicial en cuanto Mantenimiento empezaba a cobrarla (fin del período de gracia) y caía en ruinas. La Leñera inicial de fundación no tenía este problema porque usa un chequeo distinto y ya correcto (`bosqueCercano`, por radios).
+- **Cómo se detectó:** reproducido a propósito: se fundó un asentamiento a una distancia del bosque más cercano tal que su borde quedaba dentro del radio inicial de zona pero su centro nunca entraba dentro del tope de radio de nivel 1 (60). Resultado: `radioPotencial` se estancó en 60 desde el tick 20, la Leñera se quedó en 0 para siempre, la madera inicial se agotó a partir del tick 60 (fin de gracia) y el asentamiento colapsó hacia el tick 85-90 — reproducción exacta del reporte del usuario.
+- **Solución:** `sitioEnBosque` ahora acepta cualquier punto del bosque que caiga dentro de la zona (no solo el centro) — primero prueba el punto "ideal" (centro, o el punto con offset si el bosque ya tiene otras Leñeras) y, si ese queda fuera, muestrea puntos en anillos crecientes dentro del propio bosque hasta encontrar uno que sí esté dentro de la zona.
+- **Verificado:** repitiendo el mismo escenario exacto con el fix aplicado, la Leñera aparece en el tick 20 (en cuanto la zona toca el bosque) y el medidor de Mantenimiento se mantiene en 100/100 hasta el tick 100, sin colapso.
+
+Verificado en conjunto: `tsc --noEmit` limpio en cada paso, sin errores de consola, todas las verificaciones anteriores confirmadas en el navegador con escenarios reproducibles (no solo lectura de código).
+
+---
+
+## Post-Sprint 6 — Sincronización con la reestructuración de Notion (Docs 1-6) y cambios de mecánica derivados
+
+El usuario reestructuró y limpió los 6 documentos numerados directamente en Notion (fuente de verdad para esa sesión). Al sincronizar el repo contra esa versión aparecieron varias contradicciones reales entre el texto nuevo y el código existente — el usuario decidió, para cada una, si el código debía cambiar para alinearse con el nuevo diseño o si el texto de Notion tenía un error. Las correcciones #28-30 son los cambios de código resultantes de esas decisiones; la #31 es un riesgo real detectado al verificarlos que el usuario decidió aceptar tal cual.
+
+### 28. Zona de influencia: de crecimiento temporal a ligado a construcción activa — decisión real del usuario
+- **Contexto:** Notion redefinió el crecimiento de la zona de influencia (Doc 1.2) como ligado a CONSTRUCCIÓN ACTIVA ("cada edificio completado empuja el radio"), contradiciendo el código real (`avanzarCrecimientoZonas`, un incremento FIJO por tick sin relación con construcción). Consultado, el usuario confirmó que era una decisión real de diseño, no un error de Notion.
+- **Solución:** se retiró `avanzarCrecimientoZonas` (crecimiento temporal) y se movió la lógica al punto donde `avanzarConstruccion` marca un edificio como `activo` — cada uno completado ese tick suma `ZONA_INFLUENCIA.crecimientoPorEdificioCompletado` (placeholder: 5) al radio, con el mismo tope por nivel de siempre (60/90/120).
+- **Verificado:** un asentamiento de prueba se quedó en radio 30 mientras nada se completaba (varios ticks con una Cantera todavía `en_construccion`), y saltó a exactamente 35 en el tick en que la Cantera terminó — confirma que el disparador es la finalización, no el paso del tiempo.
+
+### 29. Leñera inicial condicional retirada — decisión real del usuario
+- **Contexto:** Notion marcó la Leñera inicial condicional (Doc 1.3, corrección #1 original) como "DEPRECADA / YA NO NECESARIA": la reserva de materiales iniciales (madera+piedra) ya es suficiente por sí sola para evitar el deadlock de madera que la originó. El código todavía la construía activamente. El usuario confirmó retirarla del código.
+- **Solución:** se eliminó `bosqueCercano` y la construcción condicional de Leñera en `edificiosIniciales` (`engine/settlement.ts`) — todo asentamiento nuevo nace solo con Centro Urbano + Granja + 3 Viviendas.
+- **Verificado:** un asentamiento recién fundado no tiene ninguna Leñera en su lista de edificios iniciales, incluso fundado junto a un bosque.
+
+### 30. Reclutamiento: Artesanos se suma al carril de equipo, Nobleza deja de reclutar tropas — decisión real del usuario
+- **Contexto:** Notion (Doc 4.1) afirmaba que "ambos edificios [Barracón/Galería] reclutan de los dos pools [Pesants y Artesanos]", contradiciendo el código (`reclutarTropa` fijado a `origen:'pesants'`) y al propio Doc 5.8 de Notion (tablas tituladas "carril Pesants"). Por separado, Notion (Doc 5.8) marcaba el reclutamiento de Nobleza como "fuera de alcance de Fase 0", contradiciendo el reclutamiento de Nobleza vía Gran Fundición ya implementado y funcional. Consultado sobre ambas, el usuario confirmó: (a) es una decisión real — Artesanos también debe reclutar por equipo, la etiqueta "carril Pesants" es lo que está mal en Notion; (b) es una decisión real — pero aclaró explícitamente que NO se elimina Nobleza como clase de población (crecimiento, requisito de Palacio, ciudadanos mínimos, etc. siguen intactos), solo se retira la posibilidad de reclutar tropas que consuman el pool de Nobleza.
+- **Solución:** `reclutarTropa` (`engine/tropas.ts`) ahora acepta `origen: 'pesants' | 'artesanos'` en vez de estar fijado a Pesants. Se eliminó por completo la función `reclutar()` (el reclutamiento antiguo por tier directo) y la constante `RECLUTAMIENTO`, ya que tras sacar a Artesanos de ese camino y retirar Nobleza, no les quedaba ningún origen válido — limpieza en cascada en `balanceConfig.ts` (grupo "Reclutamiento" y rutas excluidas asociadas). En la UI, el formulario viejo "Reclutar de [origen] / Cantidad / Reclutar" se retiró; el formulario "Reclutar tropa" (equipo) ganó un selector de Origen (Pesants/Artesanos).
+- **Verificado:** el selector de Origen en "Reclutar tropa" ofrece exactamente `pesants`/`artesanos`; reclutamiento de Pesants probado de punta a punta (Barracón nivel 1, "Lanceros con escudo de mimbre") tras construir el edificio vía política — funciona igual que antes del refactor. El camino de Artesanos usa la misma función parametrizada, sin lógica especial por origen más allá de qué pool de población descuenta.
+
+### 31. Riesgo aceptado: un asentamiento sin bosque en su radio inicial puede quedar sin madera y sin forma de crecer la zona
+- **Hallazgo (al verificar #28+#29 juntas):** un asentamiento fundado sin ningún bosque dentro del radio inicial (30) puede quedar completamente bloqueado: sin Leñera inicial no hay ingreso de madera; la única Leñera posible depende de que la zona alcance un bosque; pero la zona solo crece al completar edificios, y sin madera no puede completarse nada más allá de lo que alcance la reserva de materiales iniciales. Es un bucle sin salida — antes no ocurría porque cualquiera de las dos redes de seguridad (Leñera inicial o crecimiento de zona puramente temporal) bastaba para evitarlo por separado.
+- **Reproducido:** un asentamiento fundado a distancia 97 del bosque más cercano (radio inicial 30, tope de zona en nivel 1 = 60) completó una Cantera (dejando la madera exactamente en la reserva mínima, 30) y a partir de ahí no pudo completar nada más — ni una Leñera (bosque inalcanzable) ni el Barracón encolado vía política (madera insuficiente por encima de la reserva). Sin producción de madera, Mantenimiento (que no respeta esa reserva) acabaría agotándola tras el período de gracia, condenando al asentamiento.
+- **Decisión del usuario:** riesgo ACEPTADO tal cual — un asentamiento mal ubicado (sin bosque cercano) debe poder fracasar como consecuencia real de una mala elección de fundación, sin ninguna red de seguridad adicional. No se aplicó ningún cambio de código para esto.
+
+Verificado en conjunto: `tsc --noEmit` limpio en cada paso, sin errores de consola, todo confirmado en el navegador con escenarios reproducibles.
+
+---
+
+## Hallazgo posterior: competencia de Vivienda entre Pesants y Artesanos (sometido al Consejo LLM)
+
+Tras un rediseño de crecimiento poblacional (las 3 clases pasan a usar la misma fórmula proporcional `comida × cupo libre × tasa propia`, tasas 0.12/0.05/0.01; se retira `capacidadArtesanos`), un batch de 100 simulaciones + una traza de 8000 ticks reveló un efecto colateral real: con Pesants y Artesanos compartiendo el mismo cupo de Vivienda, y Pesants creciendo ~2.4× más rápido, Artesanos quedaba varado en 1 unidad indefinidamente una vez saturada la vivienda (verificado 7600 ticks sin moverse de 1.0 mientras Pesants estaba fijo en 599). No era un bug — era consecuencia fiel de las reglas dadas, pero contradecía el propósito funcional de Artesanos en el resto del diseño (Doc 4/5: Tier 2 del roster militar, operación de edificios de transformación).
+
+**Decisión (sometida a consejo LLM, ver transcripción de la sesión de diseño en Notion)**: Vivienda pasa a otorgar cupos SEPARADOS por clase (15 Pesants + 5 Artesanos por unidad de Vivienda, escalando linealmente con más Viviendas) en vez de un pool compartido único. Resuelve el problema de raíz sin necesitar una reserva mínima "parche" ni rediseñar cuánta Vivienda total existe.
+
+**Implementado:** `capacidadHabitacional` (`engine/asentamientoQuery.ts`) se divide en `capacidadViviendaPesants`/`capacidadViviendaArtesanos`; `crecerPoblacion` (`engine/population.ts`) calcula el factor de cupo libre por separado para cada clase; el disparador de auto-construcción de Vivienda (`engine/construction.ts`) se dispara si CUALQUIERA de los dos sub-cupos supera el umbral de ocupación, ya que una Vivienda nueva amplía ambos a la vez. `EDIFICIO_CATALOGO.vivienda.capacidadHabitantes` (constants.ts) se divide en `capacidadPesants: 15` + `capacidadArtesanos: 5`.
+
+**Verificado:** re-corrida la misma batería de 100 simulaciones tras el cambio — el `tsc --noEmit` sigue limpio y aparecen subidas de nivel de asentamiento reales por primera vez (34 eventos "sube a nivel" en el batch, 0 antes del fix; algunos asentamientos llegan a colapsar ya en nivel 2 o 3, algo que antes era matemáticamente imposible). Efecto colateral observado, no corregido en esta sesión: al desbloquearse el progreso, aparece una segunda ola de colapsos más tardía (ticks 100-500) en asentamientos que suben de nivel pero no aseguran a tiempo el coste de Mantenimiento adicional (piedra desde nivel 2, oro desde nivel 3) — la tasa de colapso total del batch sube de 52.3% a 63.3%. Queda como posible foco de una futura sesión de calibración.
+
+**Idea derivada, no implementada todavía**: una política que permita redistribuir esa proporción 15/5 por Vivienda (ver Doc 4.4, "Redistribución de Vivienda").
+
+---
+
 ## Nota general
 
 Todas las correcciones anteriores son de **diseño/balance**, no de sintaxis: el proyecto compiló sin errores de TypeScript en todo momento salvo en los pasos intermedios normales de refactor (añadir un campo a un tipo y luego actualizar todos los lugares que lo instancian), que se resolvieron sobre la marcha y no se listan aquí por ser rutinarios.

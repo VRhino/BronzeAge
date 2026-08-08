@@ -43,6 +43,10 @@ export const BOSQUE = {
   radioMax: 80,
   densidadMin: 0.4,
   densidadMax: 1.0,
+  // Capacidad de Leñeras por bosque según su tamaño (a petición del usuario): un bosque grande admite más de
+  // una Leñera trabajando en él a la vez, mín 1 / máx 3 — ver `capacidadLenerasBosque` en engine/construction.ts.
+  // Umbrales repartidos en tercios del rango radioMin-radioMax (30-80): <45 -> 1, 45-64 -> 2, >=65 -> 3.
+  capacidadLenerasPorRadio: { umbral2: 45, umbral3: 65 },
 };
 
 // Fertilidad: ruido continuo por suma de funciones seno con distintas frecuencias (sin dependencias externas).
@@ -51,12 +55,16 @@ export const FERTILIDAD = {
   escala: 0.006,
 };
 
-// Zona de influencia: radio inicial al fundar, crecimiento por tick y tope máximo (escalará con nivel en sprints futuros).
+// Zona de influencia: radio inicial al fundar, crecimiento por edificio completado y tope máximo (escalará con nivel).
 export const ZONA_INFLUENCIA = {
   // Rediseño de progreso (Fase 0): radio inicial sube de 15 a 30, y el techo de crecimiento deja de ser un
   // único radioMaximo fijo — ahora escala con el nivel del asentamiento (ver NIVEL_ASENTAMIENTO, Doc 1.2/4.5).
   radioInicial: 30,
-  crecimientoPorTick: 1.5,
+  // Rediseño a petición del usuario (Doc 1.2): el crecimiento deja de ser puramente temporal (antes: fijo por
+  // tick, sin relación con nada más) y pasa a estar ligado a CONSTRUCCIÓN ACTIVA — cada edificio nuevo
+  // completado (auto-construcción o manual) empuja el radio hacia su techo. Ver `avanzarConstruccion`
+  // (engine/construction.ts), donde se aplica al completarse cada edificio. PLACEHOLDER sin calibrar todavía.
+  crecimientoPorEdificioCompletado: 5,
   radioMaximoPorNivel: { 1: 60, 2: 90, 3: 120 } as Record<number, number>,
   segmentosPoligono: 48, // resolución del círculo aproximado como polígono
 };
@@ -71,6 +79,9 @@ export const FUNDACION = {
   // se puede construir por ningún otro medio) + una Granja + 3 Viviendas, para no depender del todo de
   // la auto-construcción en los primeros ticks.
   viviendasIniciales: 3,
+  // Caravana de Fundación (Doc 1.8): coste extra sobre materialesIniciales + costo de los edificios de
+  // arranque, representando fabricar la caravana en sí — placeholder sin calibrar por simulación todavía.
+  costoMaderaExtraCaravana: 50,
 };
 
 // --- Sprint 2: Población, construcción automática y almacenamiento (Doc 4) ---
@@ -80,8 +91,10 @@ export const POBLACION = {
   // duplicarse que un asentamiento en subir de nivel o que una caravana en cruzar el mapa — la población
   // nunca alcanzaba a "sostener" el nivel del asentamiento.
   pesants: { inicial: 20, tasaCrecimientoBase: 0.12 },
-  // Rediseño de progreso (Fase 0): capacidadPorTaller se retira — el tope de Artesanos ya no depende de un
-  // edificio genérico "Taller", ver `capacidadArtesanos` en engine/asentamientoQuery.ts.
+  // Rediseño a petición del usuario: Artesanos crece con la MISMA fórmula proporcional que Pesants (ver
+  // `crecerPoblacion` en engine/population.ts), solo que a esta tasa más lenta — ya no hay un tope numérico
+  // ligado a `trabajadoresRequeridos` de los edificios de transformación (antes `capacidadArtesanos`,
+  // retirada); esos edificios ahora solo GATILLAN la primera aparición, no limitan cuánto puede crecer después.
   artesanos: { tasaCrecimientoBase: 0.05 },
   // "Cantidad mínima de ciudadanos" sin número fijado en el diseño (ver Preguntas_Abiertas) — placeholder.
   // Rediseño de progreso (Fase 0): además de este mínimo, ahora también requiere Palacio construido
@@ -121,7 +134,10 @@ export const EDIFICIO_CATALOGO = {
   // ya activo al fundar. costo/tiempoConstruccionTicks quedan en 0 solo por consistencia de forma con
   // el resto del catálogo — nunca se leen, porque construirlo por otra vía no es posible.
   centroUrbano: { costo: {}, tiempoConstruccionTicks: 0 },
-  vivienda: { costo: { madera: 10 }, tiempoConstruccionTicks: 4, capacidadHabitantes: 15 },
+  // Cupos SEPARADOS por clase (a petición del usuario, ver Correcciones): antes un único pool compartido
+  // entre Pesants y Artesanos hacía que Pesants (crece ~2.4x más rápido) acaparara todo el cupo y dejara a
+  // Artesanos varado — cada Vivienda ahora aporta 15 espacios de Pesants Y, por separado, 5 de Artesanos.
+  vivienda: { costo: { madera: 10 }, tiempoConstruccionTicks: 4, capacidadPesants: 15, capacidadArtesanos: 5 },
   granja: { costo: { madera: 30 }, tiempoConstruccionTicks: 6, produccionBaseTrigo: 15, trabajadoresRequeridos: 4 },
   cantera: { costo: { madera: 20 }, tiempoConstruccionTicks: 5, produccionBasePiedra: 5, trabajadoresRequeridos: 4 },
   lenera: { costo: { madera: 10 }, tiempoConstruccionTicks: 3, produccionBaseMadera: 5, trabajadoresRequeridos: 4 },
@@ -455,10 +471,10 @@ export const POLITICA_CATALOGO = [
   { id: 'culto_fertilidad', cargo: 'sacerdote', nombre: 'Culto a la Fertilidad', factorCrecimientoNobleza: 1.5 },
   { id: 'via_rapida', cargo: 'maestroObras', nombre: 'Vía Rápida de Construcción', factorTiempoConstruccion: 0.75 },
   { id: 'postura_defensiva', cargo: 'maestroObras', nombre: 'Postura Defensiva' }, // flag de layout, Doc 4.2 — sin efecto visual en Fase 0
-  // Modo de emergencia ante escasez de madera (ver NECESIDADES.slotsReservadosSupervivencia): mientras esté
-  // activa, la auto-construcción SOLO evalúa Leñeras hasta llegar a este mínimo (activas + en curso/cola),
-  // ignorando cualquier otra necesidad detectada ese tick.
-  { id: 'proteccion_riesgos', cargo: 'maestroObras', nombre: 'Protección de Riesgos', minimoLenerasPrioritario: 3 },
+  // Modo de emergencia ante escasez de madera/comida (a petición del usuario): mientras esté activa, la
+  // auto-construcción SOLO evalúa Leñera/Granja hasta llegar a estos mínimos (activas + en curso/cola por
+  // tipo), ignorando cualquier otra necesidad detectada ese tick — ver `evaluarNecesidades` en construction.ts.
+  { id: 'proteccion_riesgos', cargo: 'maestroObras', nombre: 'Protección de Riesgos', minimoLenerasPrioritario: 2, minimoGranjasPrioritario: 3 },
   { id: 'comercio_abierto', cargo: 'tesorero', nombre: 'Comercio Abierto', factorComisionExterna: 0.6 },
   { id: 'aranceles', cargo: 'tesorero', nombre: 'Aranceles Proteccionistas', factorComisionExterna: 1.5 },
   { id: 'leva_forzosa', cargo: 'general', nombre: 'Leva Forzosa', factorCostoReclutamiento: 0.7 },
@@ -483,21 +499,13 @@ export const TROPA_CATALOGO: Record<number, { nombre: string; poderBase: number 
 };
 
 /**
- * Reclutamiento (Doc 4.1/5.7): Artesanos nacen Tier 2 (no necesitan veteranizar), Nobleza nace Tier 4 directo
- * (progresión plana, requiere Gran Fundición). El ascenso 1→2→3 por veterania vía combate real se define en
- * ASCENSO_TROPA. Costos PLACEHOLDER (sin cifras cerradas en el diseño). Pesants ya NO recluta aquí — ver
- * TROPAS_RECLUTABLES (reclutamiento por equipo vía Barracón/Galería de tiro, rediseño Doc 5.7/5.8).
- */
-export const RECLUTAMIENTO = {
-  artesanos: { tierInicial: 2 as const, costo: { cobre: 2 } },
-  nobleza: { tierInicial: 4 as const, costo: { cobre: 4, estano: 2, oro: 3 }, requiereEdificio: 'granFundicion' as const },
-};
-
-/**
  * Catálogo de TROPAS reclutables por equipo (Doc 5.7/5.8, rediseño de reclutamiento): cada tropa se recluta
  * de una vez vía Barracón (cuerpo a cuerpo) o Galería de tiro (a distancia), según el nivel interno del
- * edificio, pagando el equipo fabricado en Armería (ver engine/tropas.ts `reclutarTropa`). Reemplaza
- * `RECLUTAMIENTO.pesants` — Artesanos/Nobleza no se ven afectados. `poderBase` es PLACEHOLDER: no estaba en el
+ * edificio, pagando el equipo fabricado en Armería (ver engine/tropas.ts `reclutarTropa`). Tanto Pesants como
+ * Artesanos reclutan por este carril (a petición del usuario — reemplaza también el antiguo reclutamiento
+ * directo de Artesanos con cobre a secas, `RECLUTAMIENTO.artesanos`, ya retirado). El reclutamiento de Nobleza
+ * (vía Gran Fundición) también se retiró — Nobleza como clase de población sigue existiendo sin cambios (Doc
+ * 4.1), solo se quitó la posibilidad de convertirla en tropa. `poderBase` es PLACEHOLDER: no estaba en el
  * diseño original (solo equipo/nivel), interpolado a partir de la progresión ya existente en TROPA_CATALOGO
  * (3 → 6 → 12 → 25 en 4 tiers) repartida en estas 10 tropas a lo largo de 3 niveles.
  */

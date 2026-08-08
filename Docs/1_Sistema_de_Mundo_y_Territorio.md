@@ -14,7 +14,7 @@
 ## 1.2 Fundación de asentamientos
 - El jugador elige LIBREMENTE dónde colocar el edificio de fundación.
 - Al fundar se genera automáticamente una ZONA DE INFLUENCIA (círculo/polígono) = nodo.
-- TAMAÑO: nace con un radio inicial de 30 unidades y crece gradualmente cada tick hacia un TECHO que escala con el NIVEL del asentamiento (ver Doc 4.5 para el modelo de nivel): nivel 1 → 60, nivel 2 → 90, nivel 3 → 120 (tope de Fase 0, ver 4.5). Subir de nivel no hace saltar el radio de golpe — solo levanta el techo hacia el que la zona ya venía creciendo.
+- TAMAÑO: nace con un radio inicial de 30 unidades y crece gradualmente cada tick hacia un TECHO que escala con el NIVEL del asentamiento (ver Doc 4.5 para el modelo de nivel): nivel 1 → 60, nivel 2 → 90, nivel 3 → 120 (tope de Fase 0, ver 4.5). Subir de nivel no hace saltar el radio de golpe — solo levanta el techo hacia el que la zona ya venía creciendo. NIVEL 4 Y 5: planeados a futuro (fuera del rango original de nivel de asentamiento pensado en diseño), pero NO IMPLEMENTADOS en Fase 0 — no tienen gates de población/edificios definidos ni techo de radio propio todavía. No inventar valores hasta que se definan junto con sus gates correspondientes en Doc 4.5.
 - Reglas de construcción: solo se puede construir dentro de una zona de influencia existente (ampliándola si es del mismo bando) o fuera de cualquier zona (creando una nueva).
 - FRONTERAS: al chocar dos zonas en expansión se genera un LÍMITE DURO — ninguna zona sigue creciendo en esa dirección. Solo se rompe si el asentamiento rival cae o su zona se debilita/reduce (guerra u otros medios). Las fronteras son "vivas", reflejan el poder relativo de cada bando en cada momento.
 
@@ -34,7 +34,7 @@
 - COMMODITIES DE NOBLEZA (uvas/olivas → vino/aceite): no son alimento básico, requeridas para felicidad de la Nobleza; su déficit arriesga rebelión/estancamiento, no hambruna.
 
 ## 1.5 Chokepoints estratégicos (heredado de Iberia, fases con relieve)
-Pasos de montaña, puentes, gargantas generan puntos de control natural donde una Facción que los domina militarmente puede cobrar peajes, escoltar caravanas aliadas o bloquear el suministro de una Facción/Liga rival entera.
+NO IMPLEMENTADO EN FASE 0 (el terreno de Fase 0 es plano, sin relieve — ver 1.1). Pasos de montaña, puentes, gargantas generan puntos de control natural donde una Facción que los domina militarmente puede cobrar peajes, escoltar caravanas aliadas o bloquear el suministro de una Facción/Liga rival entera. Aplica a partir de fases con relieve.
 
 ## 1.6 Caminos comerciales automáticos
 - Al establecer una relación comercial entre asentamientos se genera AUTOMÁTICAMENTE un camino físico en el mapa (el jugador no lo construye manualmente).
@@ -47,4 +47,28 @@ Pasos de montaña, puentes, gargantas generan puntos de control natural donde un
 - ESCALA con el NIVEL DE FACCIÓN: progresión fácil de 1 a 3, luego se complica progresivamente hasta un MÁXIMO DE 7 en etapa tardía.
 - Complementa (no sustituye) al sistema de Mantenimiento/Coste de Gobernanza (ver Doc 4).
 - Da incentivo mecánico a preferir vasallaje/conquista sobre fundación directa una vez alcanzado el cap.
-- PENDIENTE: qué hace subir exactamente el "nivel de Facción"; curva numérica exacta entre cap 3 y cap 7.
+- ESTADO DE IMPLEMENTACIÓN: sin verificar. No aparece registrado en `Correcciones_Durante_Desarrollo.md` pese a estar en el alcance del Sprint 4 — no hay evidencia de que se haya probado en simulación real, a diferencia del resto de sistemas de ese sprint.
+- PENDIENTE: qué hace subir exactamente el "nivel de Facción"; curva numérica exacta entre cap 3 y cap 7; verificar implementación real.
+
+## 1.8 Caravana de Fundación (mecanismo de expansión más allá del primer asentamiento, sometido a consejo LLM)
+
+Mecanismo COMPLEMENTARIO al Cap de Fundación (1.7) — ambos coexisten, no se sustituyen. El objetivo es que fundar un asentamiento adicional cueste recursos reales y se sienta orgánico, evitando fundación en cadena sin fricción.
+
+**COSTE** = suma de tres componentes:
+1. Los materiales iniciales que recibe todo asentamiento nuevo al fundar (ver 1.3: reserva de madera+piedra).
+2. El coste de construcción de los edificios que nacen automáticamente con la fundación (Centro Urbano, Granja, 3 Viviendas — ver Doc 4.2.1).
+3. +50 de madera extra, representando el coste de fabricar la caravana en sí (placeholder, sin calibrar por simulación todavía).
+
+**GATES DE ORIGEN (ambos necesarios simultáneamente):**
+- Solo puede lanzarse desde un asentamiento que PUEDA PAGAR el coste completo.
+- Solo puede lanzarse desde un asentamiento en NIVEL 2 como mínimo (no Nivel 1) — gate estructural independiente del coste, pensado como salvaguarda robusta ante futuras recalibraciones de precios (no depende de números ajustables).
+
+**NATURALEZA:**
+- Se lanza por ACCIÓN MANUAL EXPLÍCITA del jugador desde la interfaz (elige destino y confirma) — a diferencia del trueque/mercado, que en Fase 0 se despachan automáticamente (ver Doc 3.2/3.3). Es la única caravana donde la intencionalidad del jugador es el punto central del diseño.
+- INTERCEPTABLE Y ESCOLTABLE igual que cualquier otra caravana (Doc 3.10) — mismas reglas de combate asimétrico y umbral de captura del 50%, sin regla especial.
+
+**CASOS RESUELTOS (vía consejo LLM):**
+- Si el punto de destino elegido deja de estar disponible en tránsito (ej. otra Facción funda ahí primero): en fases con movimiento libre de caravana por el mapa (Fase 1+), el jugador simplemente MUEVE la caravana ya en marcha hacia otro punto válido y funda allí — no se pierde el viaje ni el coste.
+- CANCELACIÓN: el jugador puede DESARMAR la caravana de fundación en el asentamiento de origen y recuperar el contenido COMPLETO — sin pérdida por cambiar de opinión antes de fundar.
+
+PENDIENTE: número de 50 madera sin validar por simulación todavía (igual que el resto de cifras del proyecto).

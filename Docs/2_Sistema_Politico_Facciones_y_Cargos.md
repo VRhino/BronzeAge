@@ -1,7 +1,13 @@
 # 2. Sistema Político: Facciones, Cargos y Diplomacia
 
-## 2.1 Glosario rápido
-Ver `0_Glosario_de_Entidades_Politicas.md` para el detalle completo.
+## 2.1 Glosario rápido (ver página "Glosario de Entidades Políticas" para el detalle completo)
+- **Jugador**: pertenece a 1 y solo 1 Facción.
+- **Asentamiento**: pertenece a 1 y solo 1 Facción.
+- **Facción**: entidad política soberana, agrupa jugadores y asentamientos. Tiene cargos de nivel Facción (Rey, Embajador).
+- **Liga**: red de Facciones conectadas entre sí (por vasallaje y/o alianza). NO tiene cargos ni ciudadanía propia.
+- **Vasallo/Señor**: relación ATADA entre 2 Facciones.
+- **Aliado**: relación LIBRE y revocable entre 2 Facciones.
+- **Gran Rey**: título de PRESTIGIO (no cargo mecánico) del Rey cuya Facción domina otras Facciones enteras.
 
 ## 2.2 Cargos
 
@@ -86,9 +92,11 @@ No todos los asentamientos pueden tenerlos — solo las ciudades más importante
 **Requisitos (distintos por gremio, misma naturaleza de 3 ejes):**
 1. Score de reputación de Facción por encima de un umbral (ref. inicial: >90).
 2. Título de servidor específico (uno de los Títulos Dinámicos de Prestigio).
-3. Nivel mínimo de asentamiento / mantenimiento alto (ref. inicial: >90%).
+3. AMBOS a la vez (confirmado): Nivel de asentamiento en el máximo (Nivel 3 en Fase 0, ver Doc 4.5) Y medidor de Mantenimiento por encima de un umbral (ref. inicial: >90%). No es uno u otro — son dos condiciones independientes que deben cumplirse simultáneamente.
 
-**Pérdida:** si deja de cumplirse alguna condición, el gremio se va y se pierden sus beneficios. PENDIENTE: si hay margen de gracia antes de irse.
+**Pérdida (RESUELTO, dos mecanismos distintos según la causa):**
+1. **Pérdida del Título de servidor**: el título SOLO se evalúa en el momento de la tirada de aparición inicial — una vez construido el gremio, el título deja de vigilarse en tiempo real. En su lugar, el gremio tiene una DURACIÓN MÍNIMA garantizada en la ciudad. Al cumplirse ese plazo, SI el dueño actual ya no posee el título, se lanza el evento de tirada a cualquier otra Facción/asentamiento que cumpla las 4 condiciones en ese momento. Si un nuevo candidato ACEPTA construir el gremio, el dueño anterior lo PIERDE (transferencia real a la nueva sede).
+2. **Pérdida de Score de reputación, Nivel de asentamiento, o Mantenimiento** (los otros 3 requisitos): si se incumple cualquiera de estos EN CUALQUIER MOMENTO (sin esperar a la duración mínima), el gremio se va y el asentamiento se queda SIN SEDE de ese gremio — no hay transferencia automática a otro candidato; el gremio queda disponible en el servidor hasta que alguna Facción/asentamiento vuelva a cumplir las 4 condiciones y gane la siguiente tirada periódica.
 
 **Los 4 gremios:**
 - **Comerciantes:** comisiones aún más bajas y/o slot extra de órdenes de mercado y/o rutas/Aedas comerciales especiales (detalle pendiente).
@@ -96,4 +104,4 @@ No todos los asentamientos pueden tenerlos — solo las ciudades más importante
 - **Constructores:** bonus adicional de velocidad de auto-construcción y/o edificios únicos (detalle pendiente).
 - **Ladrones (confirmado):** información sobre acuerdos de comercio de OTRAS Facciones, información general de caravanas, e información de otras Facciones no visible de otra forma. NO revive el sistema de rumores/espionaje general (sigue descartado como mecánica base) — es un beneficio específico y acotado, diseñado para no ser demasiado diferenciador.
 
-PENDIENTE: valores numéricos exactos por gremio, título de servidor asociado a cada uno, detalle de beneficios de los 3 gremios no confirmados, duración del margen de gracia.
+PENDIENTE: valores numéricos exactos por gremio, título de servidor asociado a cada uno, detalle de beneficios de los 3 gremios no confirmados, duración exacta de la duración mínima garantizada (nueva, ver mecanismo de pérdida por título).

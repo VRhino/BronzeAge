@@ -30,7 +30,6 @@ import {
   POLITICA_CATALOGO,
   PRECIO_BASE,
   PRECIO_REFERENCIA,
-  RECLUTAMIENTO,
   RECURSO_CANTIDAD_NODO,
   RECURSO_RAREZA,
   REPUTACION,
@@ -89,7 +88,6 @@ const GRUPOS: Array<[string, string, unknown]> = [
   ['Políticas — slots', 'POLITICAS', POLITICAS],
   ['Catálogo de políticas', 'POLITICA_CATALOGO', POLITICA_CATALOGO],
   ['Catálogo de tropas', 'TROPA_CATALOGO', TROPA_CATALOGO],
-  ['Reclutamiento', 'RECLUTAMIENTO', RECLUTAMIENTO],
   ['Ascenso de tropa', 'ASCENSO_TROPA', ASCENSO_TROPA],
   ['Militar', 'MILITAR', MILITAR],
   ['Nivel de asentamiento', 'NIVEL_ASENTAMIENTO', NIVEL_ASENTAMIENTO],
@@ -99,15 +97,12 @@ const GRUPOS: Array<[string, string, unknown]> = [
 ];
 
 /**
- * Rutas excluidas a propósito: son "claves foráneas" hacia otra tabla (el tier con el que nace una
- * tropa, usado como índice directo en TROPA_CATALOGO), no un número de balance libre — ponerles un
- * valor que no exista en TROPA_CATALOGO rompería el reclutamiento en tiempo de ejecución.
+ * Rutas excluidas a propósito: "claves foráneas" hacia otra tabla, no un número de balance libre —
+ * ponerles un valor que no exista en la tabla referenciada rompería algo en tiempo de ejecución.
+ * Vacío por ahora (RECLUTAMIENTO, la única entrada anterior, se retiró junto con el reclutamiento de
+ * Nobleza/Artesanos por tier directo — ver `engine/tropas.ts`).
  */
-const RUTAS_EXCLUIDAS = new Set([
-  'RECLUTAMIENTO.pesants.tierInicial',
-  'RECLUTAMIENTO.artesanos.tierInicial',
-  'RECLUTAMIENTO.nobleza.tierInicial',
-]);
+const RUTAS_EXCLUIDAS = new Set<string>([]);
 
 const campos: CampoInterno[] = [];
 
