@@ -23,11 +23,22 @@ export const RECURSO_TIPOS_POR_RAREZA: Record<keyof typeof RECURSO_RAREZA, strin
   raro: ['estano', 'oro'],
 };
 
+/**
+ * Piedra/oro recalibrados (overhaul de auto-construcción, verificación batch): Mantenimiento cobra piedra
+ * desde nivel 2 y oro desde nivel 3 de forma PERPETUA (todos los ticks, para siempre), pero los nodos son
+ * finitos — ningún ajuste de tasa de extracción "resuelve" esto del todo, solo compra tiempo (el jugador
+ * real tiene comercio/trueque para importar lo que le falte). El diagnóstico mostró que con los valores
+ * viejos (piedra 200-500) el problema NO era la tasa (una sola Cantera a 5/tick ya supera cómodamente el
+ * costo de Mantenimiento de nivel 2, ~3.45-6.9/tick) sino que el nodo se agotaba en 40-100 ticks y ahí
+ * quedaba en 0 para siempre — nodos ×3 dan un margen mucho más realista antes de necesitar una segunda
+ * fuente o comercio. Oro sí tenía además un problema de TASA (ver `produccionBaseOro` en EDIFICIO_CATALOGO):
+ * nodos ×4-5 (ya de por sí "raros", RECURSO_RAREZA.raro) para la misma razón que piedra.
+ */
 export const RECURSO_CANTIDAD_NODO = {
-  piedra: { min: 200, max: 500 },
+  piedra: { min: 600, max: 1200 },
   cobre: { min: 100, max: 300 },
   estano: { min: 50, max: 150 },
-  oro: { min: 30, max: 100 },
+  oro: { min: 150, max: 400 },
 } as const;
 
 // Livestock: fauna libre, no sigue las mismas reglas de rareza (no ligada a minerales).
@@ -142,8 +153,13 @@ export const EDIFICIO_CATALOGO = {
   cantera: { costo: { madera: 20 }, tiempoConstruccionTicks: 5, produccionBasePiedra: 5, trabajadoresRequeridos: 4 },
   lenera: { costo: { madera: 10 }, tiempoConstruccionTicks: 3, produccionBaseMadera: 5, trabajadoresRequeridos: 4 },
   almacen: { costo: { madera: 50, piedra: 30 }, tiempoConstruccionTicks: 6, capacidadPorRecursoAdicional: 300 },
-  // Oro: metal precioso en bruto, origen en minas igual que cualquier otro recurso (Doc 3.1).
-  mina: { costo: { madera: 40, piedra: 10 }, tiempoConstruccionTicks: 6, produccionBaseOro: 2, trabajadoresRequeridos: 6 },
+  // Oro: metal precioso en bruto, origen en minas igual que cualquier otro recurso (Doc 3.1). produccionBaseOro
+  // recalibrado (verificación batch del overhaul de auto-construcción): a 2/tick, una sola Mina (2) ya no
+  // alcanzaba a cubrir el costo de Mantenimiento de oro a nivel 3 (`MANTENIMIENTO.oroBase` × escala ≈
+  // 2.6-5.2/tick) ni siquiera con el nodo recién descubierto — a diferencia de piedra/Cantera, este era un
+  // problema real de TASA, no solo de tamaño de nodo. Sube a 4 para dar el mismo margen que Cantera tiene
+  // sobre su propio costo de Mantenimiento (~1.4-1.5×) en la distancia base.
+  mina: { costo: { madera: 40, piedra: 10 }, tiempoConstruccionTicks: 6, produccionBaseOro: 4, trabajadoresRequeridos: 6 },
   // Cobre (Doc 1.1/5.7): "relativamente abundante" — igual patrón que cantera/mina pero sobre nodos de cobre.
   minaCobre: { costo: { madera: 30, piedra: 5 }, tiempoConstruccionTicks: 4, produccionBaseCobre: 5, trabajadoresRequeridos: 8 },
   // Estaño (Doc 1.1/5.7): raro y concentrado (menos nodos que cobre/oro, ver RECURSO_RAREZA.raro) — costo más
@@ -346,20 +362,32 @@ export const NECESIDADES = {
   // (mismo criterio que el resto de edificios de supervivencia).
   maximoGranjasPendientesEnDeficit: 3,
   umbralAlmacenAmpliacion: 0.9,
-  maximoEnCola: 4, // tope de edificios en estado 'en_cola' simultáneos (auto-construcción y manual comparten el mismo cupo)
-  // Rebalance: sin esto, Vivienda/Almacén/Taller podían copar los `maximoEnCola` slots con proyectos
-  // atascados por falta de recursos y dejar a Granja/Leñera —los recursos "de supervivencia" de los que
-  // depende TODO lo demás, incluido el Mantenimiento— sin hueco para encolarse nunca (interbloqueo real
-  // detectado en juego: asentamientos cayendo en ruinas por falta de madera con la Leñera siempre última).
-  slotsReservadosSupervivencia: 1,
-  // Rediseño de progreso (Fase 0, bug detectado en simulación): con Curtiduría/Armería/Fundición compitiendo
-  // por los mismos slots generales que Cantera/minas, ambas podían quedar atascadas esperando piedra
-  // (Curtiduría/Armería cuestan piedra) sin que Cantera —su única fuente— consiguiera nunca un hueco para
-  // encolarse, porque Curtiduría/Armería ya ocupaban los slots generales desde antes de que hubiera zona
-  // suficiente para alcanzar un nodo de piedra. Mismo patrón que el interbloqueo de Granja/Leñera: 1 slot
-  // reservado EXCLUSIVAMENTE para los extractores base (cantera/minaCobre/mina/minaEstano/corral) — maximoEnCola
-  // sube de 3 a 4 para no reducir la concurrencia general disponible al resto de edificios.
-  slotsReservadosExtractores: 1,
+  // Overhaul de auto-construcción (modelo "pago al encolar", ver engine/construction.ts): dos cupos con
+  // significado físico separado, en vez del único `maximoEnCola` + slots reservados por categoría de antes.
+  // `maximoEnCola`: cuántos proyectos pueden estar PAGADOS Y A LA ESPERA de un hueco de obra (`en_cola`).
+  // `maximoEnConstruccionSimultanea`: cuántos proyectos pueden estar construyéndose activamente a la vez
+  // (`en_construccion`, contando ticks) — representa cuadrillas de obra limitadas: evita que un tick con el
+  // almacén lleno dispare media docena de construcciones en paralelo y vacíe todos los recursos protegidos
+  // a la vez. Con el pago ya comprometido al encolar (ver `puedeIniciarConstruccion`), ya no hace falta
+  // reservar slots por categoría (`slotsReservadosSupervivencia`/`slotsReservadosExtractores`, retirados):
+  // el orden por score (ver `SCORE_BANDAS`) ya garantiza que supervivencia gana el reparto cuando escasea.
+  maximoEnCola: 4,
+  maximoEnConstruccionSimultanea: 2,
+};
+
+/**
+ * Bandas de score para la auto-construcción (overhaul, reemplaza los buckets `categoriaPrioridad` +
+ * slots reservados de antes): cada candidato elegible recibe `base` de su banda + una `urgencia` 0-100 que
+ * refleja qué tan crítica es la necesidad en este momento (ver `evaluarNecesidades`, engine/construction.ts).
+ * Las bandas NO se solapan (diferencia de 500+ entre la urgencia máxima de una banda y la base de la
+ * siguiente) para preservar la garantía ya probada en juego: supervivencia SIEMPRE gana el reparto de
+ * recursos frente a crecimiento/lujo, sin importar cuán urgente esté este último.
+ */
+export const SCORE_BANDAS = {
+  supervivencia: 10000, // granja, lenera
+  extractorBase: 5000, // cantera, minaCobre, mina, minaEstano, corral
+  crecimiento: 1000, // vivienda, almacen
+  transformacion: 500, // curtiduria, armeria, fundicion, carpinteria
 };
 
 /**
@@ -602,22 +630,28 @@ export const MANTENIMIENTO = {
 };
 
 /**
- * Reserva mínima que la auto-construcción (y la manual) NUNCA puede tocar en los recursos que en ese
- * momento cobra Mantenimiento (madera+trigo siempre, +piedra/oro según nivel — ver `MANTENIMIENTO` y
- * `recursosProtegidosPorMantenimiento` en engine/mantenimiento.ts). Un edificio en cola solo arranca si
- * `disponible - costo >= reserva` en cada recurso protegido de su costo; si no, se queda esperando en cola
- * (mismo comportamiento que ya existía cuando faltaban recursos del todo).
+ * Reserva mínima que la auto-construcción (y la manual) NUNCA puede tocar al COMPROMETER (pagar) un proyecto
+ * nuevo (ver `puedeIniciarConstruccion`/`evaluarNecesidades` en engine/construction.ts). Overhaul: reemplaza
+ * los umbrales fijos anteriores (madera 30, trigo 20, piedra 20, oro 10 — pensados para el asentamiento
+ * inicial, sin escalar nunca) por una reserva PROYECTADA: cuánto va a cobrar Mantenimiento/comida en los
+ * próximos N ticks (ver `reservaDinamicaConstruccion`, engine/mantenimiento.ts, que reutiliza
+ * `calcularCostoMantenimiento`). Corrige un colapso real documentado: tras subir de nivel (piedra/oro
+ * entran a cobrarse) la reserva fija se quedaba corta frente al mantenimiento real ya escalado. Cifras de
+ * horizonte PLACEHOLDER (ver Preguntas_Abiertas.md), calibradas contra `FUNDACION.materialesIniciales`: con
+ * el stock inicial de madera (50) y el costo base de Mantenimiento a nivel 1 (3/tick), un horizonte de 15
+ * ticks reservaría 45 — casi todo el stock inicial, congelando cualquier construcción no exenta (Vivienda,
+ * extractores...) durante los primeros ticks incluso en un asentamiento sano con acceso a bosque. 8 ticks dan
+ * un margen real (protege contra el patrón de colapso post-ascenso de nivel ya documentado) sin dejar al
+ * asentamiento recién fundado sin margen de maniobra.
  *
- * Excepción deliberada: Granja no respeta la reserva de trigo, ni Leñera la de madera (ver
+ * Excepción deliberada (sin cambios): Granja no respeta la reserva de trigo, ni Leñera la de madera (ver
  * `engine/construction.ts`) — son las únicas vías reales de recuperar esos recursos, así que bloquearlas
  * por la misma escasez que deben resolver sería un huevo-y-la-gallina sin salida (rompería en seco la
  * política "Protección de Riesgos").
  */
 export const RESERVA_CONSTRUCCION = {
-  madera: 30,
-  trigo: 20,
-  piedra: 20,
-  oro: 10,
+  horizonteTicksMantenimiento: 8,
+  horizonteTicksComida: 8,
 };
 
 /**

@@ -92,6 +92,11 @@ export interface Edificio {
   /** Nivel interno de mejora (Doc 4.2.1): solo edificios de transformación con tiers (Fundición, Curtiduría,
    * Armería, Carpintería, Barracón, Galería de tiro). Ausente/1 para el resto. */
   nivelInterno?: number;
+  /** Overhaul de auto-construcción: score de necesidad (ver `SCORE_BANDAS`, constants.ts) capturado en el
+   * momento en que el proyecto se comprometió (pagó) y entró `en_cola` — determina el orden real en que
+   * arranca la construcción cuando compite por un hueco de `maximoEnConstruccionSimultanea`. Ausente para
+   * edificios que nunca pasan por la cola (ej. `centroUrbano`). */
+  prioridad?: number;
 }
 
 /** Cargos de nivel asentamiento (Doc 2.2), uno de cada, designados por el Gobernador salvo él mismo. */
@@ -151,6 +156,10 @@ export interface Asentamiento {
   escuadrones: Escuadron[];
   /** Mantenimiento (Doc 4.5): medidor 0-100, empieza en 100; a 0 el asentamiento cae en ruinas (se elimina). */
   medidorMantenimiento: number;
+  /** Overhaul de auto-construcción: mientras esté en `true`, el motor deja de detectar/comprometer NUEVAS
+   * necesidades (`evaluarNecesidades`/`evaluarEdificiosEspeciales`) — lo ya pagado (`en_cola`/`en_construccion`)
+   * sigue avanzando normal. La construcción manual (Gran Fundición) no se ve afectada. Ausente/`false` = activa. */
+  autoConstruccionPausada?: boolean;
 }
 
 export interface ZonaInfluencia {

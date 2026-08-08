@@ -19,11 +19,14 @@ import type {
   ZonaBosque,
   ZonaInfluencia,
 } from '../domain/types';
-import { FUNDACION, MANTENIMIENTO, NECESIDADES, POLITICAS, POLITICA_CATALOGO, TROPAS_RECLUTABLES, WORLD_DEFAULT } from '../constants';
+import { EDIFICIO_CATALOGO, FUNDACION, MANTENIMIENTO, NECESIDADES, POLITICAS, POLITICA_CATALOGO, TROPAS_RECLUTABLES, WORLD_DEFAULT } from '../constants';
 import {
   produccionPorTick,
   manoObraInfo as calcularManoObraInfo,
   progresoNivelAsentamiento,
+  capacidadViviendaPesants,
+  capacidadViviendaArtesanos,
+  edificiosPorTipoYEstado,
   type ProduccionItem,
   type ManoObraInfo,
   type ProgresoNivelAsentamiento,
@@ -109,6 +112,7 @@ export const CATALOGOS = {
   slotsPorCargoBase: POLITICAS.slotsPorCargo,
   nivelFaccionPorSlotExtraGobernador: POLITICAS.nivelFaccionPorSlotExtraGobernador,
   maximoEdificiosEnCola: NECESIDADES.maximoEnCola,
+  maximoEnConstruccionSimultanea: NECESIDADES.maximoEnConstruccionSimultanea,
 };
 
 type Listener = () => void;
@@ -279,6 +283,22 @@ export class GameStore {
   /** Demanda de mano de obra agregada (pesants) frente a lo que piden los edificios productores activos. */
   manoObraInfo(asentamiento: Asentamiento): ManoObraInfo {
     return calcularManoObraInfo(asentamiento);
+  }
+
+  /** Población actual vs. límite por clase (Doc 4.1): Pesants/Artesanos limitados por cupos de Vivienda
+   * (separados por clase, ver `capacidadViviendaPesants`/`capacidadViviendaArtesanos`), Nobleza por la
+   * `capacidadNobles` del Palacio — solo lectura, no altera el motor. */
+  poblacionInfo(asentamiento: Asentamiento): {
+    pesants: { actual: number; limite: number };
+    artesanos: { actual: number; limite: number };
+    nobleza: { actual: number; limite: number };
+  } {
+    const palaciosActivos = edificiosPorTipoYEstado(asentamiento, 'palacio').length;
+    return {
+      pesants: { actual: asentamiento.poblacion.pesants, limite: capacidadViviendaPesants(asentamiento) },
+      artesanos: { actual: asentamiento.poblacion.artesanos, limite: capacidadViviendaArtesanos(asentamiento) },
+      nobleza: { actual: asentamiento.poblacion.nobleza, limite: palaciosActivos * EDIFICIO_CATALOGO.palacio.capacidadNobles },
+    };
   }
 
   // --- Acciones (una por intención de usuario) ---
@@ -572,13 +592,35 @@ export class GameStore {
       const asentamiento = this.state.asentamientos.find((a) => a.id === asentamientoId)!;
       const faccion = this.state.facciones.find((f) => f.id === asentamiento.faccionId)!;
       const zona = this.getZonas().find((z) => z.asentamientoId === asentamiento.id);
-      const actualizado = construirManualmenteEngine(asentamiento, faccion, zona?.poligono ?? [], tipo, this.contadorAcciones++);
+      const capital = encontrarCapital(asentamiento.faccionId, this.state.asentamientos);
+      const actualizado = construirManualmenteEngine(asentamiento, faccion, zona?.poligono ?? [], tipo, this.contadorAcciones++, capital);
       this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === actualizado.id ? actualizado : a));
-      this.registrar(`${asentamiento.id}: se encola ${tipo} (construcción manual).`);
+      this.registrar(`${asentamiento.id}: se compromete ${tipo} (construcción manual, pagada).`);
     } catch (err) {
       if (err instanceof ConstruccionManualInvalidaError) this.registrar(`Construcción rechazada: ${err.message}`);
       else throw err;
     }
+    this.notify();
+  }
+
+  /** Overhaul de auto-construcción: pausa/reanuda la detección de NUEVAS necesidades en un asentamiento — lo
+   * ya pagado (`en_cola`/`en_construccion`) sigue avanzando normal (ver `Asentamiento.autoConstruccionPausada`,
+   * `engine/construction.ts`). */
+  pausarAutoConstruccion(asentamientoId: string): void {
+    const asentamiento = this.state.asentamientos.find((a) => a.id === asentamientoId)!;
+    this.state.asentamientos = this.state.asentamientos.map((a) =>
+      a.id === asentamientoId ? { ...a, autoConstruccionPausada: true } : a
+    );
+    this.registrar(`${asentamiento.id}: auto-construcción pausada.`);
+    this.notify();
+  }
+
+  reanudarAutoConstruccion(asentamientoId: string): void {
+    const asentamiento = this.state.asentamientos.find((a) => a.id === asentamientoId)!;
+    this.state.asentamientos = this.state.asentamientos.map((a) =>
+      a.id === asentamientoId ? { ...a, autoConstruccionPausada: false } : a
+    );
+    this.registrar(`${asentamiento.id}: auto-construcción reanudada.`);
     this.notify();
   }
 

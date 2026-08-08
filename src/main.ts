@@ -547,10 +547,13 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
     })
     .join('');
 
-  // La cola de construcción es única y compartida por TODO el asentamiento (no una por tipo de edificio):
-  // el motor evalúa todos los "en_cola" en el mismo orden del array cada tick (ver Doc engine/construction.ts).
+  // La cola de construcción es única y compartida por TODO el asentamiento (no una por tipo de edificio).
+  // Overhaul de auto-construcción: los "en_cola" ya están PAGADOS (el pago ocurre al comprometerse, no al
+  // arrancar obra) y el motor los devuelve ordenados por `prioridad` (score de necesidad) — el índice en el
+  // array SÍ coincide con el orden real en que competirán por un hueco de obra (ver engine/construction.ts).
   const colaGlobal = a.edificios.filter((e) => e.estado === 'en_cola');
   const posicionEnCola = new Map(colaGlobal.map((e, i) => [e.id, i + 1]));
+  const enConstruccionCount = a.edificios.filter((e) => e.estado === 'en_construccion').length;
 
   const edificiosPorTipo = new Map<string, { activos: number; enConstruccion: number[]; enCola: number[] }>();
   for (const e of a.edificios) {
@@ -579,6 +582,7 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
 
   const produccion = gameStore.produccionInfo(a);
   const manoObra = gameStore.manoObraInfo(a);
+  const poblacion = gameStore.poblacionInfo(a);
   const produccionHtml = produccion.length
     ? `<table class="mini-table">
         <thead><tr><th>Edificio</th><th>Activos</th><th>Recurso</th><th>Producción/tick</th></tr></thead>
@@ -699,9 +703,9 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
       <div class="detail-section">
         <h3>Población (total ${totalPoblacion})</h3>
         <div class="kv-grid">
-          <div class="kv-row"><span>Pesants</span><span>${pesants}</span></div>
-          <div class="kv-row"><span>Artesanos</span><span>${artesanos}</span></div>
-          <div class="kv-row"><span>Nobleza</span><span>${nobleza}</span></div>
+          <div class="kv-row"><span>Pesants</span><span>${poblacion.pesants.actual}/${poblacion.pesants.limite}</span></div>
+          <div class="kv-row"><span>Artesanos</span><span>${poblacion.artesanos.actual}/${poblacion.artesanos.limite}</span></div>
+          <div class="kv-row"><span>Nobleza</span><span>${poblacion.nobleza.actual}/${poblacion.nobleza.limite}</span></div>
         </div>
       </div>
 
@@ -729,6 +733,17 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
 
       <div class="detail-section">
         <h3>Edificios</h3>
+        <div class="kv-row">
+          <span>Auto-construcción: ${a.autoConstruccionPausada ? 'pausada' : 'activa'}</span>
+          <button type="button" class="auto-construccion-toggle-btn" data-settlement="${a.id}">
+            ${a.autoConstruccionPausada ? 'Reanudar' : 'Pausar'}
+          </button>
+        </div>
+        <p class="legend-note">
+          ${a.autoConstruccionPausada
+            ? 'No se detectan nuevas necesidades. Lo ya pagado (en cola/en construcción) sigue avanzando.'
+            : `Cupo de obras activas simultáneas: ${enConstruccionCount}/${CATALOGOS.maximoEnConstruccionSimultanea}.`}
+        </p>
         ${edificiosHtml}
       </div>
 
@@ -787,6 +802,15 @@ function renderAsentamientosTab(state: GameState): void {
     btn.addEventListener('click', () => {
       asentamientoSeleccionadoId = (btn as HTMLElement).dataset.settlement!;
       render();
+    });
+  });
+
+  cont.querySelectorAll('.auto-construccion-toggle-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = (btn as HTMLElement).dataset.settlement!;
+      const asentamiento = state.asentamientos.find((a) => a.id === id)!;
+      if (asentamiento.autoConstruccionPausada) gameStore.reanudarAutoConstruccion(id);
+      else gameStore.pausarAutoConstruccion(id);
     });
   });
 }

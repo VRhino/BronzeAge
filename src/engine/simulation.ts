@@ -48,7 +48,8 @@ export function avanzarSimulacion(estado: EstadoSimulacion, world: World, tickAc
     const { asentamiento: trasConstruccion, eventos: eventosConstruccion } = avanzarConstruccion(
       asentamiento,
       zona?.poligono ?? [],
-      world
+      world,
+      capitalesPorFaccion.get(asentamiento.faccionId)
     );
 
     const { asentamiento: trasPoliticas, eventos: eventosPoliticas } = avanzarPoliticas(trasConstruccion, tickActual);

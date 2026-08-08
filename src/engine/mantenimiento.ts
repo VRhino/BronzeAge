@@ -1,7 +1,9 @@
 import type { Asentamiento, EdificioTipo, RecursoTipo } from '../domain/types';
-import { MANTENIMIENTO, NIVEL_ASENTAMIENTO } from '../constants';
+import { MANTENIMIENTO, NIVEL_ASENTAMIENTO, RESERVA_CONSTRUCCION } from '../constants';
 import { edificiosPorTipoYEstado } from './asentamientoQuery';
 import { descontarRecursos } from './almacen';
+import { consumoComidaPoblacion } from './population';
+import { consumoRacionTropas } from './tropas';
 
 function distancia(a: { x: number; y: number }, b: { x: number; y: number }): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
@@ -74,6 +76,28 @@ export function recursosProtegidosPorMantenimiento(nivel: number): RecursoTipo[]
   if (nivel >= MANTENIMIENTO.nivelParaPiedra) recursos.push('piedra');
   if (nivel >= MANTENIMIENTO.nivelParaOro) recursos.push('oro');
   return recursos;
+}
+
+/**
+ * Reserva mínima que la auto-construcción no puede tocar al comprometer (pagar) un proyecto nuevo — overhaul
+ * de auto-construcción: reemplaza los umbrales fijos anteriores (`RESERVA_CONSTRUCCION` ya no lleva cifras
+ * por recurso) por una proyección real de cuánto va a cobrar Mantenimiento + consumo de comida en los
+ * próximos `horizonteTicks*` ticks (ver `RESERVA_CONSTRUCCION` en constants.ts). Así el margen de seguridad
+ * escala solo con el mantenimiento/población real del asentamiento en vez de quedarse en un número fijo
+ * pensado para el asentamiento inicial (causa real de colapsos tras subir de nivel, ver bitácora de bugs).
+ */
+export function reservaDinamicaConstruccion(
+  asentamiento: Asentamiento,
+  capital: Asentamiento | undefined
+): Partial<Record<RecursoTipo, number>> {
+  const costoMantenimiento = calcularCostoMantenimiento(asentamiento, capital);
+  const reserva: Partial<Record<RecursoTipo, number>> = {};
+  for (const [recurso, cantidad] of Object.entries(costoMantenimiento)) {
+    reserva[recurso as RecursoTipo] = (cantidad ?? 0) * RESERVA_CONSTRUCCION.horizonteTicksMantenimiento;
+  }
+  reserva.trigo =
+    (consumoComidaPoblacion(asentamiento) + consumoRacionTropas(asentamiento)) * RESERVA_CONSTRUCCION.horizonteTicksComida;
+  return reserva;
 }
 
 function fraccionCubierta(almacen: Asentamiento['almacen'], costo: Partial<Record<string, number>>): number {
