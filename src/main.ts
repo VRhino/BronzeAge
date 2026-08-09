@@ -108,7 +108,7 @@ function efectoPolitica(politica: (typeof CATALOGOS.politicas)[number]): string 
 }
 
 // --- Estado de vista (qué se muestra, no simulación): vive solo aquí, nunca en el store. ---
-let tabActivo: 'acciones' | 'guerra' | 'asentamientos' | 'jugadores' | 'politicas' | 'balance' = 'acciones';
+let tabActivo: 'acciones' | 'guerra' | 'comercio' | 'asentamientos' | 'jugadores' | 'politicas' | 'balance' = 'acciones';
 let asentamientoSeleccionadoId: string | null = null;
 let jugadorSeleccionadoId: string | null = null;
 /** Tick que el slider de línea de tiempo está mostrando. Sigue al tick en vivo salvo que el usuario arrastre hacia atrás. */
@@ -126,6 +126,7 @@ app.innerHTML = `
     <div class="tabs" id="main-tabs">
       <button class="tab-btn" data-tab="acciones">Acciones</button>
       <button class="tab-btn" data-tab="guerra">Guerra</button>
+      <button class="tab-btn" data-tab="comercio">Comercio</button>
       <button class="tab-btn" data-tab="asentamientos">Asentamientos</button>
       <button class="tab-btn" data-tab="jugadores">Jugadores</button>
       <button class="tab-btn" data-tab="politicas">Políticas</button>
@@ -211,37 +212,6 @@ app.innerHTML = `
         <button id="fusion-btn">Fusionar en Facción nueva</button>
       </div>
 
-      <div class="controls">
-        <h2>Trueque (Doc 3.2)</h2>
-        <label>Asentamiento A <select id="trueque-a"></select></label>
-        <label>Recurso que entrega A <select id="trueque-recurso-a"></select></label>
-        <label>Cantidad de A <input id="trueque-cantidad-a" type="number" value="50" min="1" /></label>
-        <label>Asentamiento B <select id="trueque-b"></select></label>
-        <label>Recurso que entrega B <select id="trueque-recurso-b"></select></label>
-        <label>Cantidad de B <input id="trueque-cantidad-b" type="number" value="50" min="1" /></label>
-        <button id="trueque-btn">Proponer trueque</button>
-      </div>
-
-      <div class="controls">
-        <h2>Orden de Mercado (Doc 3.3)</h2>
-        <label>Asentamiento <select id="mercado-asentamiento"></select></label>
-        <label>Tipo
-          <select id="mercado-tipo"><option value="venta">Venta</option><option value="compra">Compra</option></select>
-        </label>
-        <label>Recurso <select id="mercado-recurso"></select></label>
-        <label>Cantidad <input id="mercado-cantidad" type="number" value="30" min="1" /></label>
-        <label>Precio unitario (vacío = precio de referencia) <input id="mercado-precio" type="number" min="0" step="0.1" /></label>
-        <button id="mercado-btn">Colocar orden</button>
-      </div>
-
-      <div class="controls">
-        <h2>Flota de Caravanas (Doc 3.2, ampliación de comercio)</h2>
-        <label>Asentamiento <select id="flota-asentamiento"></select></label>
-        <div class="tropa-info" id="flota-info"></div>
-        <button id="flota-construir-btn">Construir caravana (50 madera)</button>
-        <p class="legend-note">Requiere Mercado activo y cupo libre. Las caravanas propias no se pueden desmantelar — solo se pierden si las capturan en combate.</p>
-      </div>
-
     </div>
     </div>
 
@@ -273,6 +243,46 @@ app.innerHTML = `
     <div class="detail-section roster-section">
       <h3>Roster de tropas (Doc 5.8)</h3>
       <div id="roster-tropas" class="table-scroll"></div>
+    </div>
+    </div>
+
+    <div class="tab-panel" id="tab-comercio" hidden>
+    <div class="controls-grid">
+      <div class="controls">
+        <h2>Trueque (Doc 3.2)</h2>
+        <label>Asentamiento A <select id="trueque-a"></select></label>
+        <label>Recurso que entrega A <select id="trueque-recurso-a"></select></label>
+        <label>Cantidad de A <input id="trueque-cantidad-a" type="number" value="50" min="1" /></label>
+        <label>Asentamiento B <select id="trueque-b"></select></label>
+        <label>Recurso que entrega B <select id="trueque-recurso-b"></select></label>
+        <label>Cantidad de B <input id="trueque-cantidad-b" type="number" value="50" min="1" /></label>
+        <button id="trueque-btn">Proponer trueque</button>
+      </div>
+
+      <div class="controls">
+        <h2>Orden de Mercado (Doc 3.3)</h2>
+        <label>Asentamiento <select id="mercado-asentamiento"></select></label>
+        <label>Tipo
+          <select id="mercado-tipo"><option value="venta">Venta</option><option value="compra">Compra</option></select>
+        </label>
+        <label>Recurso <select id="mercado-recurso"></select></label>
+        <label>Cantidad <input id="mercado-cantidad" type="number" value="30" min="1" /></label>
+        <label>Precio unitario (vacío = precio de referencia) <input id="mercado-precio" type="number" min="0" step="0.1" /></label>
+        <button id="mercado-btn">Colocar orden</button>
+      </div>
+
+      <div class="controls">
+        <h2>Flota de Caravanas (Doc 3.2, ampliación de comercio)</h2>
+        <label>Asentamiento <select id="flota-asentamiento"></select></label>
+        <div class="tropa-info" id="flota-info"></div>
+        <button id="flota-construir-btn">Construir caravana (50 madera)</button>
+        <p class="legend-note">Requiere Mercado activo y cupo libre. Las caravanas propias no se pueden desmantelar — solo se pierden si las capturan en combate.</p>
+      </div>
+    </div>
+
+    <div class="detail-section">
+      <h3>Info de comercio (Doc 3.2/3.3)</h3>
+      <div id="economia-panel" class="log-panel"></div>
     </div>
     </div>
 
@@ -345,10 +355,6 @@ app.innerHTML = `
       <div class="log-card">
         <h2>Militar</h2>
         <div class="log-panel" id="militar-panel"></div>
-      </div>
-      <div class="log-card">
-        <h2>Economía</h2>
-        <div class="log-panel" id="economia-panel"></div>
       </div>
       <div class="log-card">
         <h2>Registro</h2>
@@ -1291,6 +1297,7 @@ function actualizarTabs(): void {
   document.getElementById('tab-acciones')!.hidden = tabActivo !== 'acciones';
   document.getElementById('tab-guerra')!.hidden = tabActivo !== 'guerra';
   if (tabActivo === 'guerra') renderRosterTropas();
+  document.getElementById('tab-comercio')!.hidden = tabActivo !== 'comercio';
   document.getElementById('tab-asentamientos')!.hidden = tabActivo !== 'asentamientos';
   document.getElementById('tab-jugadores')!.hidden = tabActivo !== 'jugadores';
   document.getElementById('tab-politicas')!.hidden = tabActivo !== 'politicas';
@@ -1302,7 +1309,7 @@ function actualizarTabs(): void {
 document.getElementById('main-tabs')!.addEventListener('click', (ev) => {
   const btn = (ev.target as HTMLElement).closest('.tab-btn') as HTMLButtonElement | null;
   if (!btn) return;
-  tabActivo = btn.dataset.tab as 'acciones' | 'guerra' | 'asentamientos' | 'jugadores' | 'politicas' | 'balance';
+  tabActivo = btn.dataset.tab as 'acciones' | 'guerra' | 'comercio' | 'asentamientos' | 'jugadores' | 'politicas' | 'balance';
   actualizarTabs();
 });
 actualizarTabs();

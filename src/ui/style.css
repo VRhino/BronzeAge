@@ -417,7 +417,8 @@ body {
   background: #4a4436;
 }
 
-.controls-panel.viendo-pasado .tab-panel#tab-acciones {
+.controls-panel.viendo-pasado .tab-panel#tab-acciones,
+.controls-panel.viendo-pasado .tab-panel#tab-comercio {
   position: relative;
   pointer-events: none;
   opacity: 0.45;
