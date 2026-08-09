@@ -1,4 +1,5 @@
-import type { Asentamiento, Edificio, EdificioTipo, World } from '../domain/types';
+import type { Asentamiento, Edificio, EdificioTipo } from '../domain/types';
+import type { Mapa } from '../world/mapa';
 import { EDIFICIO_CATALOGO, NIVEL_ASENTAMIENTO } from '../constants';
 import { cupoCaravanaExtra, factorProduccionTrigo } from './politicas';
 
@@ -179,9 +180,9 @@ export interface ProduccionItem {
 /**
  * Producción por tick de cada edificio activo de extracción/producción primaria, agrupada por tipo
  * de edificio. Solo lectura: no descuenta nodos de recurso (a diferencia de `avanzarConstruccion`,
- * que sí muta `world.recursos` al aplicar la producción real).
+ * que sí llama a `mapa.extraer` al aplicar la producción real).
  */
-export function produccionPorTick(asentamiento: Asentamiento, world: World): ProduccionItem[] {
+export function produccionPorTick(asentamiento: Asentamiento, mapa: Mapa): ProduccionItem[] {
   const ratioMano = ratioManoObra(asentamiento);
   const items: ProduccionItem[] = [];
 
@@ -189,7 +190,7 @@ export function produccionPorTick(asentamiento: Asentamiento, world: World): Pro
   if (granjas.length) {
     const factorTrigo = factorProduccionTrigo(asentamiento);
     const total = granjas.reduce(
-      (acc, e) => acc + EDIFICIO_CATALOGO.granja.produccionBaseTrigo * world.fertilidadEn(e.posicion) * ratioMano * factorTrigo,
+      (acc, e) => acc + EDIFICIO_CATALOGO.granja.produccionBaseTrigo * mapa.fertilidadEn(e.posicion) * ratioMano * factorTrigo,
       0
     );
     items.push({ tipo: 'granja', recurso: 'trigo', activos: granjas.length, cantidadPorTick: total });
@@ -198,7 +199,7 @@ export function produccionPorTick(asentamiento: Asentamiento, world: World): Pro
   const leneras = edificiosPorTipoYEstado(asentamiento, 'lenera');
   if (leneras.length) {
     const total = leneras.reduce((acc, e) => {
-      const bosque = world.bosques.find((b) => b.id === e.fuenteId);
+      const bosque = mapa.bosque(e.fuenteId);
       return acc + (bosque ? EDIFICIO_CATALOGO.lenera.produccionBaseMadera * bosque.densidad * ratioMano : 0);
     }, 0);
     items.push({ tipo: 'lenera', recurso: 'madera', activos: leneras.length, cantidadPorTick: total });
@@ -215,9 +216,11 @@ export function produccionPorTick(asentamiento: Asentamiento, world: World): Pro
     const edificios = edificiosPorTipoYEstado(asentamiento, tipo);
     if (!edificios.length) continue;
     const total = edificios.reduce((acc, e) => {
-      const nodo = world.recursos.find((n) => n.id === e.fuenteId);
-      if (!nodo || nodo.cantidad <= 0) return acc;
-      return acc + Math.min(base * ratioMano, nodo.cantidad);
+      // Lo que queda en el yacimiento, no lo que tenía al generarse: un nodo casi agotado rinde ese resto
+      // y no su tasa nominal — mismo tope que aplica la producción real (`mapa.extraer`).
+      const restante = mapa.stock(e.fuenteId);
+      if (restante <= 0) return acc;
+      return acc + Math.min(base * ratioMano, restante);
     }, 0);
     items.push({ tipo, recurso, activos: edificios.length, cantidadPorTick: total });
   }

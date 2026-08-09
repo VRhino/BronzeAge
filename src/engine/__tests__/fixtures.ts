@@ -1,15 +1,14 @@
-// Fixtures compartidas para los tests de regresión del motor: construyen mundo/facción/asentamiento
-// usando las funciones REALES del motor (generateWorld/crearFaccion/fundarAsentamiento), nunca objetos
+// Fixtures compartidas para los tests de regresión del motor: construyen mapa/facción/asentamiento
+// usando las funciones REALES del motor (generarMapa/crearFaccion/fundarAsentamiento), nunca objetos
 // inventados a mano — así un test que pasa hoy sigue significando "el motor real produce esto".
-import { WORLD_DEFAULT } from '../../constants';
-import type { Asentamiento, Faccion, World } from '../../domain/types';
+import type { Asentamiento, Faccion } from '../../domain/types';
+import { createRng, generarMapa, MAPA_DEFAULT } from '../../worldgen';
+import { crearMapa, type Mapa } from '../../world/mapa';
 import { crearFaccion } from '../faccion';
-import { createRng } from '../rng';
 import { evaluarViabilidadFundacion, fundarAsentamiento } from '../settlement';
-import { generateWorld } from '../world';
 
-export function crearMundoDeterminista(seed: number): World {
-  return generateWorld({ ancho: WORLD_DEFAULT.ancho, alto: WORLD_DEFAULT.alto, seed });
+export function crearMapaDeterminista(seed: number): Mapa {
+  return crearMapa(generarMapa({ ancho: MAPA_DEFAULT.ancho, alto: MAPA_DEFAULT.alto, seed }));
 }
 
 /**
@@ -18,14 +17,14 @@ export function crearMundoDeterminista(seed: number): World {
  * un bosque cerca del origen (0,0).
  */
 export function posicionRecomendable(
-  world: World,
+  mapa: Mapa,
   asentamientosExistentes: Asentamiento[] = [],
   paso = 40
 ): { x: number; y: number } {
-  for (let x = paso; x < world.config.ancho; x += paso) {
-    for (let y = paso; y < world.config.alto; y += paso) {
+  for (let x = paso; x < mapa.limites.ancho; x += paso) {
+    for (let y = paso; y < mapa.limites.alto; y += paso) {
       const posicion = { x, y };
-      if (evaluarViabilidadFundacion(world, posicion, asentamientosExistentes).recomendable) return posicion;
+      if (evaluarViabilidadFundacion(mapa, posicion, asentamientosExistentes).recomendable) return posicion;
     }
   }
   throw new Error('No se encontró posición recomendable en la grilla de test — revisa el seed/paso.');
@@ -33,15 +32,15 @@ export function posicionRecomendable(
 
 /** Funda un asentamiento de un solo jugador en una posición recomendable (o la indicada), vía el motor real. */
 export function fundarAsentamientoDeTest(
-  world: World,
+  mapa: Mapa,
   facciones: Faccion[],
   faccionId: string,
   asentamientosExistentes: Asentamiento[],
   tickActual = 0,
   posicion?: { x: number; y: number }
 ): { asentamiento: Asentamiento; facciones: Faccion[] } {
-  const pos = posicion ?? posicionRecomendable(world, asentamientosExistentes);
-  return fundarAsentamiento(world, facciones, faccionId, pos, [`jugador-${faccionId}-1`], asentamientosExistentes, tickActual);
+  const pos = posicion ?? posicionRecomendable(mapa, asentamientosExistentes);
+  return fundarAsentamiento(mapa, facciones, faccionId, pos, [`jugador-${faccionId}-1`], asentamientosExistentes, tickActual);
 }
 
 export function crearFacciones(): Faccion[] {

@@ -14,12 +14,13 @@ import type {
   RecursoTipo,
   RelacionPolitica,
   Titulo,
-  World,
   WorldConfig,
   ZonaBosque,
   ZonaInfluencia,
 } from '../domain/types';
-import { EDIFICIO_CATALOGO, FUNDACION, MANTENIMIENTO, NECESIDADES, POLITICAS, POLITICA_CATALOGO, TROPAS_RECLUTABLES, WORLD_DEFAULT } from '../constants';
+import { EDIFICIO_CATALOGO, FUNDACION, MANTENIMIENTO, NECESIDADES, POLITICAS, POLITICA_CATALOGO, TROPAS_RECLUTABLES } from '../constants';
+import { generarMapa, MAPA_DEFAULT, WORLDGEN_VERSION, type MapaGenerado } from '../worldgen';
+import { crearEstadoMapa, crearMapa, type EstadoMapa, type Mapa } from '../world/mapa';
 import {
   produccionPorTick,
   manoObraInfo as calcularManoObraInfo,
@@ -39,7 +40,6 @@ import { consumoComidaPoblacion } from '../engine/population';
 import { slotsDisponibles } from '../engine/politicas';
 import { listarCamposBalance, actualizarCampoBalance, restaurarBalancePorDefecto, type CampoBalance } from './balanceConfig';
 export type { CampoBalance } from './balanceConfig';
-import { generateWorld } from '../engine/world';
 import {
   fundarAsentamiento as fundarAsentamientoEngine,
   evaluarViabilidadFundacion,
@@ -78,7 +78,14 @@ export interface EventoLog {
 }
 
 export interface GameState {
-  world: World;
+  /**
+   * El mapa como DATOS PUROS (ver `src/worldgen/`): clonable y serializable, a diferencia de la fachada
+   * `Mapa`, que es un objeto con índices. La fachada se deriva de aquí con `getMapa()` — el estado nunca
+   * la guarda, para que una foto del historial siga siendo un objeto de datos y nada más.
+   */
+  mapa: MapaGenerado;
+  /** Lo único del mapa que cambia jugando: cuánto se lleva extraído de cada yacimiento. */
+  estadoMapa: EstadoMapa;
   asentamientos: Asentamiento[];
   facciones: Faccion[];
   caravanas: Caravana[];
@@ -91,12 +98,27 @@ export interface GameState {
   historialJugadores: Record<string, EventoLog[]>;
 }
 
+/**
+ * Nodo tal como viaja en el ARCHIVO: con `cantidad` = lo que le queda. En memoria el nodo es inmutable y
+ * lleva `cantidadInicial`, y lo consumido vive aparte (`EstadoMapa`) — el archivo aplana las dos cosas en
+ * un solo número porque es lo que ya guardaban las partidas existentes y no hay motivo para romperlas.
+ */
+export type NodoExportado = Omit<NodoRecurso, 'cantidadInicial'> & { cantidad: number };
+
 /** Formato de archivo para exportar/importar una simulación completa (ver `exportarSimulacion`/`importarSimulacion`). */
 export interface SimulacionExportada {
   version: 1;
   exportadoEn: string;
   tick: number;
-  world: { config: WorldConfig; recursos: NodoRecurso[]; bosques: ZonaBosque[] };
+  /**
+   * Versión del ALGORITMO de generación con el que se creó este mundo (ver `WORLDGEN_VERSION`). El archivo
+   * no guarda el mapa completo, solo la seed y los datos ya modificados en partida: la fertilidad se
+   * REGENERA al importar. Si el algoritmo cambiase, la misma seed daría otro campo de fertilidad y el save
+   * se cargaría como un mundo distinto sin avisar — este campo permite detectarlo y rechazarlo.
+   * Ausente en archivos exportados antes de que existiera el campo; se asumen de la versión 1.
+   */
+  worldgenVersion?: number;
+  world: { config: WorldConfig; recursos: NodoExportado[]; bosques: ZonaBosque[] };
   asentamientos: Asentamiento[];
   facciones: Faccion[];
   caravanas: Caravana[];
@@ -149,10 +171,17 @@ export class GameStore {
   private historial: GameState[] = [];
   /** Tick más antiguo con foto disponible. 0 en una partida normal; el tick importado tras un `importarSimulacion` (no hay fotos de ticks previos a ese punto). */
   private historialDesde = 0;
+  /**
+   * Fachadas `Mapa` ya construidas, indexadas por el ESTADO del que salen (ver `getMapa`). La clave es el
+   * estado y no el mundo generado porque todas las fotos del historial comparten el mismo `MapaGenerado`
+   * por referencia — indexar por él devolvería la fachada de la partida en curso al pedir la de una foto.
+   */
+  private mapasPorEstado = new WeakMap<EstadoMapa, Mapa>();
 
   constructor() {
     this.state = {
-      world: generateWorld({ ...WORLD_DEFAULT, seed: 1 }),
+      estadoMapa: crearEstadoMapa(),
+      mapa: generarMapa({ ...MAPA_DEFAULT, seed: 1 }),
       asentamientos: [],
       facciones: crearFaccionesIniciales(),
       caravanas: [],
@@ -172,6 +201,19 @@ export class GameStore {
     return this.state;
   }
 
+  /**
+   * Fachada de consulta del mapa (índices + consultas espaciales) para un estado dado; por defecto, el
+   * estado en vivo. Se cachea por objeto `MapaGenerado`, así que la partida en curso reutiliza siempre la
+   * misma instancia y cada foto del historial construye la suya solo si alguien llega a dibujarla.
+   */
+  getMapa(estado: Readonly<GameState> = this.state): Mapa {
+    const cacheado = this.mapasPorEstado.get(estado.estadoMapa);
+    if (cacheado) return cacheado;
+    const mapa = crearMapa(estado.mapa, estado.estadoMapa);
+    this.mapasPorEstado.set(estado.estadoMapa, mapa);
+    return mapa;
+  }
+
   /** Foto de solo lectura del estado tal como estaba al final del tick `tick`, o `undefined` si no existe. */
   getSnapshot(tick: number): Readonly<GameState> | undefined {
     return this.historial[tick];
@@ -188,13 +230,14 @@ export class GameStore {
   }
 
   /**
-   * Clon profundo del estado actual para guardar en el historial. `world.recursos` se clona porque
-   * la construcción agota nodos mutándolos in-place (Doc 4.2); `config`/`bosques`/`fertilidadEn` son
-   * inmutables desde la generación del mundo, así que se comparten por referencia sin riesgo.
+   * Clon profundo del estado actual para guardar en el historial. El MUNDO (`mapa`) se comparte por
+   * referencia sin clonar nada: es inmutable desde que se genera. Lo único que hay que fotografiar es
+   * `estadoMapa`, un registro de números — antes esto obligaba a clonar los ~117 objetos-nodo cada tick.
    */
   private clonarEstadoActual(): GameState {
     return {
-      world: { ...this.state.world, recursos: structuredClone(this.state.world.recursos) },
+      mapa: this.state.mapa,
+      estadoMapa: { extraido: { ...this.state.estadoMapa.extraido } },
       asentamientos: structuredClone(this.state.asentamientos),
       facciones: structuredClone(this.state.facciones),
       caravanas: structuredClone(this.state.caravanas),
@@ -253,7 +296,7 @@ export class GameStore {
    * `evaluarViabilidadFundacion`). NO bloquea nada: alimenta el aviso previo de la interfaz.
    */
   viabilidadFundacion(posicion: { x: number; y: number }): ViabilidadFundacion {
-    return evaluarViabilidadFundacion(this.state.world, posicion, this.state.asentamientos);
+    return evaluarViabilidadFundacion(this.getMapa(), posicion, this.state.asentamientos);
   }
 
   /**
@@ -294,7 +337,7 @@ export class GameStore {
 
   /** Producción por tick de cada edificio activo de extracción/producción primaria, agrupada por tipo. */
   produccionInfo(asentamiento: Asentamiento): ProduccionItem[] {
-    return produccionPorTick(asentamiento, this.state.world);
+    return produccionPorTick(asentamiento, this.getMapa());
   }
 
   /** Demanda de mano de obra agregada (pesants) frente a lo que piden los edificios productores activos. */
@@ -325,7 +368,7 @@ export class GameStore {
     const jugadoresIds = Array.from({ length: n }, (_, i) => `jugador-${faccionId}-${i + 1}`);
     try {
       const resultado = fundarAsentamientoEngine(
-        this.state.world,
+        this.getMapa(),
         this.state.facciones,
         faccionId,
         posicion,
@@ -749,7 +792,7 @@ export class GameStore {
         relaciones: this.state.relaciones,
         titulos: this.state.titulos,
       },
-      this.state.world,
+      this.getMapa(),
       this.state.tick
     );
     this.state.asentamientos = resultado.asentamientos;
@@ -767,7 +810,8 @@ export class GameStore {
     this.historial = [];
     this.historialDesde = 0;
     this.state = {
-      world: generateWorld({ ...WORLD_DEFAULT, seed }),
+      estadoMapa: crearEstadoMapa(),
+      mapa: generarMapa({ ...MAPA_DEFAULT, seed }),
       asentamientos: [],
       facciones: crearFaccionesIniciales(),
       caravanas: [],
@@ -789,7 +833,10 @@ export class GameStore {
       version: 1,
       exportadoEn: new Date().toISOString(),
       tick: this.state.tick,
-      world: { config: this.state.world.config, recursos: this.state.world.recursos, bosques: this.state.world.bosques },
+      worldgenVersion: this.state.mapa.version,
+      // El archivo guarda de cada nodo la cantidad RESTANTE (no la inicial): es el único dato del mapa que
+      // la partida modifica y que no se puede recuperar regenerando desde la seed.
+      world: { config: this.state.mapa.config, recursos: this.getMapa().nodosConStock(), bosques: this.state.mapa.bosques },
       asentamientos: this.state.asentamientos,
       facciones: this.state.facciones,
       caravanas: this.state.caravanas,
@@ -805,9 +852,10 @@ export class GameStore {
 
   /**
    * Reemplaza la simulación completa por la contenida en `json` (formato de `exportarSimulacion`).
-   * `fertilidadEn` no es serializable (es una función) — se reconstruye regenerando el mundo desde
-   * `world.config` (determinista por seed, Doc 1.1) y luego se le superponen los `recursos`/`bosques`
-   * exportados (que sí pueden venir ya modificados, p. ej. yacimientos agotados).
+   * El archivo no lleva el mapa entero: se REGENERA desde `world.config` (determinista por seed, Doc 1.1)
+   * y luego se le superponen los `recursos`/`bosques` exportados, que sí pueden venir ya modificados
+   * (p. ej. yacimientos agotados). Lo único que no se puede superponer es el campo de fertilidad, que se
+   * recrea — de ahí la comprobación de `worldgenVersion`.
    * Cualquier problema de formato se reporta en el log como una acción rechazada más — nunca se
    * propaga a la interfaz — porque a diferencia del resto de acciones, el origen del dato es un
    * archivo externo no confiable, no el propio estado ya validado de la simulación.
@@ -826,11 +874,32 @@ export class GameStore {
         throw new Error('el archivo no tiene el formato esperado de una simulación exportada.');
       }
 
-      const worldRegenerado = generateWorld(payload.world.config);
+      // Se rechaza en vez de cargarlo a medias: con otro algoritmo de generación, la misma seed produce un
+      // campo de fertilidad distinto y las granjas del save rendirían otra cosa, sin ninguna señal visible.
+      const versionMapa = payload.worldgenVersion ?? 1;
+      if (versionMapa !== WORLDGEN_VERSION) {
+        throw new Error(
+          `el mundo se generó con la versión ${versionMapa} del generador y esta build usa la ${WORLDGEN_VERSION}; ` +
+            'el mapa no se puede reconstruir igual a partir de la seed.'
+        );
+      }
+
+      const mapaRegenerado = generarMapa(payload.world.config);
+      // El mundo se recupera entero de la seed; del archivo solo se lee cuánto se había extraído ya de cada
+      // yacimiento (diferencia entre lo que tenía al generarse y lo que el archivo dice que le quedaba).
+      const extraido: Record<string, number> = {};
+      for (const nodo of payload.world.recursos) {
+        const original = mapaRegenerado.nodos.find((n) => n.id === nodo.id);
+        if (!original) continue;
+        const gastado = original.cantidadInicial - nodo.cantidad;
+        if (gastado > 0) extraido[nodo.id] = gastado;
+      }
+
       this.historial = [];
       this.historialDesde = payload.tick ?? 0;
       this.state = {
-        world: { ...worldRegenerado, recursos: payload.world.recursos, bosques: payload.world.bosques },
+        mapa: mapaRegenerado,
+        estadoMapa: { extraido },
         asentamientos: payload.asentamientos,
         facciones: payload.facciones,
         caravanas: payload.caravanas ?? [],

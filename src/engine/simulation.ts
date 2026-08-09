@@ -1,6 +1,7 @@
-import type { AcuerdoTrueque, Asentamiento, Caravana, Faccion, OrdenMercado, RelacionPolitica, Titulo, World } from '../domain/types';
+import type { AcuerdoTrueque, Asentamiento, Caravana, Faccion, OrdenMercado, RelacionPolitica, Titulo } from '../domain/types';
+import type { Mapa } from '../world/mapa';
 import { computeTodasLasZonas } from './zones';
-import { avanzarConstruccion } from './construction';
+import { avanzarConstruccion, reclamosDeFuentes } from './construction';
 import { consumirComida, crecerPoblacion } from './population';
 import { avanzarComercio } from './trade';
 import { avanzarCaravanasFundacion } from './expansion';
@@ -32,7 +33,7 @@ export interface ResultadoTick extends EstadoSimulacion {
  * mantenimiento (por asentamiento) y, a nivel global, comercio, mercado, tributos, nivel de Facción,
  * reputación y títulos dinámicos (Sprint 6, cierre).
  */
-export function avanzarSimulacion(estado: EstadoSimulacion, world: World, tickActual: number): ResultadoTick {
+export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, tickActual: number): ResultadoTick {
   // El crecimiento de la zona de influencia ya no es puramente temporal (rediseño Doc 1.2, a petición del
   // usuario): ahora se dispara al completarse cada edificio, dentro de `avanzarConstruccion`.
   const crecidos = estado.asentamientos;
@@ -43,13 +44,19 @@ export function avanzarSimulacion(estado: EstadoSimulacion, world: World, tickAc
     [...new Set(crecidos.map((a) => a.faccionId))].map((faccionId) => [faccionId, encontrarCapital(faccionId, crecidos)])
   );
 
+  // Fuentes del mapa ya tomadas por CUALQUIER asentamiento (ver `reclamosDeFuentes`): se calcula una vez y
+  // se va actualizando según cada asentamiento compromete obra, para que dos que se procesan en el mismo
+  // tick no se adjudiquen el mismo yacimiento.
+  const reclamos = reclamosDeFuentes(crecidos);
+
   const procesados = crecidos.map((asentamiento) => {
     const zona = zonas.find((z) => z.asentamientoId === asentamiento.id);
     const { asentamiento: trasConstruccion, eventos: eventosConstruccion } = avanzarConstruccion(
       asentamiento,
       zona?.poligono ?? [],
-      world,
-      capitalesPorFaccion.get(asentamiento.faccionId)
+      mapa,
+      capitalesPorFaccion.get(asentamiento.faccionId),
+      reclamos
     );
 
     const { asentamiento: trasPoliticas, eventos: eventosPoliticas } = avanzarPoliticas(trasConstruccion, tickActual);
@@ -77,7 +84,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, world: World, tickAc
 
   // Caravanas de Fundación (Doc 1.8): expanden una Facción más allá de su primer asentamiento — se avanzan
   // aparte de las comerciales (destino es un punto del mapa, no un asentamiento existente).
-  const trasExpansion = avanzarCaravanasFundacion(trasComercio.caravanas, world, trasComercio.facciones, trasComercio.asentamientos, tickActual);
+  const trasExpansion = avanzarCaravanasFundacion(trasComercio.caravanas, mapa, trasComercio.facciones, trasComercio.asentamientos, tickActual);
   eventos.push(...trasExpansion.eventos);
 
   const trasMercado = avanzarMercado(trasExpansion.asentamientos, estado.ordenes);

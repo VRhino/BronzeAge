@@ -181,7 +181,13 @@ export interface NodoRecurso {
   tipo: RecursoTipo;
   rareza: Rareza;
   posicion: Point;
-  cantidad: number;
+  /**
+   * Unidades con las que el yacimiento NACE al generarse el mundo. No es lo que le queda: el agotamiento
+   * es estado de partida y vive en `EstadoMapa.extraido` (ver `src/world/mapa.ts`) — para lo que queda de
+   * verdad, `mapa.stock(id)`. Separados a propósito: mientras fueron el mismo campo, guardar una foto del
+   * historial obligaba a clonar el mapa entero cada tick.
+   */
+  cantidadInicial: number;
 }
 
 /** Bosques: representados como zonas (polígono/círculo), no puntos — fuente de madera. */
@@ -198,13 +204,9 @@ export interface WorldConfig {
   seed: number;
 }
 
-export interface World {
-  config: WorldConfig;
-  recursos: NodoRecurso[];
-  bosques: ZonaBosque[];
-  /** Campo de fertilidad continuo, consultable en cualquier punto (0-1). Usado por Granjas (Sprint 2) para trigo. */
-  fertilidadEn: (p: Point) => number;
-}
+// El antiguo `World` (config + recursos + bosques + `fertilidadEn`) ya no existe: la generación devuelve
+// `MapaGenerado` (datos puros, ver `src/worldgen/`) y el motor consulta el mapa a través de la fachada
+// `Mapa` (`src/world/mapa.ts`), nunca de los arrays crudos.
 
 // --- Sprint 3: Economía (Doc 3) ---
 

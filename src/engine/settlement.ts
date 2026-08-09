@@ -1,13 +1,10 @@
-import type { Asentamiento, Edificio, Faccion, Point, RecursoAlmacenado, World } from '../domain/types';
+import type { Asentamiento, Edificio, Faccion, Point, RecursoAlmacenado } from '../domain/types';
 import { ALMACEN, FUNDACION, MANTENIMIENTO, POBLACION, ZONA_INFLUENCIA } from '../constants';
+import type { Mapa } from '../world/mapa';
 import { posicionLibreParaFundar } from './zones';
 import { calcularCapFundacion, otorgarCiudadania } from './faccion';
 
 export class FundacionInvalidaError extends Error {}
-
-function dentroDelMapa(p: Point, world: World): boolean {
-  return p.x >= 0 && p.x <= world.config.ancho && p.y >= 0 && p.y <= world.config.alto;
-}
 
 /** Reparte `cantidad` puntos en un anillo alrededor de `centro`, a `radio` de distancia. */
 function anilloDePosiciones(centro: Point, cantidad: number, radio: number): Point[] {
@@ -23,23 +20,12 @@ function anilloDePosiciones(centro: Point, cantidad: number, radio: number): Poi
  * al fundar todavía no existe zona de influencia recortada contra rivales que consultar, así que basta
  * con muestrear el propio radio inicial (garantizado libre, ya lo validó `posicionLibreParaFundar`).
  */
-function mejorPuntoFertilidadCercano(world: World, centro: Point, radio: number, muestras: number): Point {
-  let mejor = centro;
-  let mejorFertilidad = -1;
-  for (let i = 0; i < muestras; i++) {
-    const angulo = (i / muestras) * Math.PI * 2;
-    const candidato: Point = { x: centro.x + Math.cos(angulo) * radio, y: centro.y + Math.sin(angulo) * radio };
-    const fertilidad = world.fertilidadEn(candidato);
-    if (fertilidad > mejorFertilidad) {
-      mejorFertilidad = fertilidad;
-      mejor = candidato;
-    }
-  }
-  return mejor;
+function mejorPuntoFertilidadCercano(mapa: Mapa, centro: Point, radio: number, muestras: number): Point {
+  return mapa.mejorPorFertilidad(anilloDePosiciones(centro, muestras, radio))?.punto ?? centro;
 }
 
 /** Edificios con los que nace todo asentamiento nuevo (Doc 1.3): ya "activo", sin pasar por la cola. */
-function edificiosIniciales(world: World, centro: Point, idBase: string): Edificio[] {
+function edificiosIniciales(mapa: Mapa, centro: Point, idBase: string): Edificio[] {
   const radioAnillo = ZONA_INFLUENCIA.radioInicial * 0.5;
   const viviendas: Edificio[] = anilloDePosiciones(centro, FUNDACION.viviendasIniciales, radioAnillo).map((posicion, i) => ({
     id: `edificio-${idBase}-vivienda-inicial-${i}`,
@@ -51,7 +37,7 @@ function edificiosIniciales(world: World, centro: Point, idBase: string): Edific
   const granja: Edificio = {
     id: `edificio-${idBase}-granja-inicial`,
     tipo: 'granja',
-    posicion: mejorPuntoFertilidadCercano(world, centro, radioAnillo, 12),
+    posicion: mejorPuntoFertilidadCercano(mapa, centro, radioAnillo, 12),
     estado: 'activo',
     ticksRestantes: 0,
   };
@@ -97,26 +83,21 @@ export interface ViabilidadFundacion {
  * la libertad de fundar en un mal sitio a sabiendas.
  */
 export function evaluarViabilidadFundacion(
-  world: World,
+  mapa: Mapa,
   posicion: Point,
   asentamientosExistentes: Asentamiento[]
 ): ViabilidadFundacion {
-  const enMapa = dentroDelMapa(posicion, world);
+  const enMapa = mapa.dentroDelMapa(posicion);
   const libre = posicionLibreParaFundar(posicion, asentamientosExistentes);
   const radio = ZONA_INFLUENCIA.radioInicial;
 
-  // Un bosque es alcanzable si su BORDE entra en el radio inicial (no hace falta que lo esté su centro —
-  // mismo criterio que `puntoEnBosqueDentroDeZona` en engine/construction.ts, que coloca la Leñera en
-  // cualquier punto del bosque que caiga dentro de la zona).
-  const bosqueAlcanzable = world.bosques.some(
-    (b) => Math.hypot(b.centro.x - posicion.x, b.centro.y - posicion.y) < radio + b.radio
-  );
+  // Un bosque es alcanzable si su BORDE entra en el radio inicial, no hace falta que lo esté su centro —
+  // criterio único del mapa (`hayBosqueEnRadio`), el mismo que usa la colocación de Leñeras.
+  const bosqueAlcanzable = mapa.hayBosqueEnRadio(posicion, radio);
 
   const porTipo = new Map<string, number>();
-  for (const nodo of world.recursos) {
-    if (Math.hypot(nodo.posicion.x - posicion.x, nodo.posicion.y - posicion.y) <= radio) {
-      porTipo.set(nodo.tipo, (porTipo.get(nodo.tipo) ?? 0) + 1);
-    }
+  for (const nodo of mapa.nodosEnRadio(posicion, radio)) {
+    porTipo.set(nodo.tipo, (porTipo.get(nodo.tipo) ?? 0) + 1);
   }
 
   const fundable = enMapa && libre;
@@ -138,7 +119,7 @@ export function evaluarViabilidadFundacion(
  * conquista/anexión (fuera de alcance aquí), solo a fundación directa.
  */
 export function fundarAsentamiento(
-  world: World,
+  mapa: Mapa,
   facciones: Faccion[],
   faccionId: string,
   posicion: Point,
@@ -151,7 +132,7 @@ export function fundarAsentamiento(
       `La fundación grupal admite entre 1 y ${FUNDACION.maxJugadoresFundacionGrupal} jugadores.`
     );
   }
-  if (!dentroDelMapa(posicion, world)) {
+  if (!mapa.dentroDelMapa(posicion)) {
     throw new FundacionInvalidaError('La posición cae fuera de los límites del mapa.');
   }
   if (!posicionLibreParaFundar(posicion, asentamientosExistentes)) {
@@ -195,7 +176,7 @@ export function fundarAsentamiento(
     radioPotencial: ZONA_INFLUENCIA.radioInicial,
     poblacion: { pesants: POBLACION.pesants.inicial, artesanos: 0, nobleza: 0 },
     almacen: almacenInicial,
-    edificios: edificiosIniciales(world, posicion, id),
+    edificios: edificiosIniciales(mapa, posicion, id),
     cargos: { gobernadorId: null, tesoreroId: null, generalId: null, maestroObrasId: null, sacerdoteId: null },
     casasCompradas: [...jugadoresFundadoresIds],
     politicasActivas: [],

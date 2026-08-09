@@ -1,4 +1,5 @@
-import type { Asentamiento, Caravana, EdificioTipo, Faccion, RecursoTipo, World, ZonaInfluencia } from '../domain/types';
+import type { Asentamiento, Caravana, EdificioTipo, Faccion, RecursoTipo, ZonaInfluencia } from '../domain/types';
+import type { Mapa } from '../world/mapa';
 
 export const FACCION_COLORES = ['#c0392b', '#2980b9', '#27ae60', '#8e44ad', '#d35400', '#16a085'];
 
@@ -62,7 +63,7 @@ export function faccionColor(faccionId: string, facciones: Faccion[]): string {
 }
 
 export interface DrawState {
-  world: World;
+  mapa: Mapa;
   asentamientos: Asentamiento[];
   zonas: ZonaInfluencia[];
   facciones: Faccion[];
@@ -74,16 +75,16 @@ export interface DrawState {
  * suelo más fértil. Se dibuja ENCIMA de todo lo demás a propósito (es un "filtro" que se puede apagar),
  * no una capa base — por eso vive aparte de `draw()` y el caller decide si llamarlo.
  */
-export function drawFiltroFertilidad(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, world: World): void {
-  const scale = canvas.width / world.config.ancho;
+export function drawFiltroFertilidad(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, mapa: Mapa): void {
+  const scale = canvas.width / mapa.limites.ancho;
   const celdas = 40;
-  const tamanoMundo = world.config.ancho;
+  const tamanoMundo = mapa.limites.ancho;
   const tamanoCelda = tamanoMundo / celdas;
 
   for (let fila = 0; fila < celdas; fila++) {
     for (let col = 0; col < celdas; col++) {
       const centro = { x: (col + 0.5) * tamanoCelda, y: (fila + 0.5) * tamanoCelda };
-      const fertilidad = world.fertilidadEn(centro);
+      const fertilidad = mapa.fertilidadEn(centro);
       ctx.fillStyle = `rgba(46, 204, 64, ${fertilidad * 0.45})`;
       ctx.fillRect(col * tamanoCelda * scale, fila * tamanoCelda * scale, tamanoCelda * scale, tamanoCelda * scale);
     }
@@ -106,10 +107,10 @@ export interface PreviewFundacion {
 export function drawPreviewFundacion(
   ctx: CanvasRenderingContext2D,
   canvas: HTMLCanvasElement,
-  world: World,
+  mapa: Mapa,
   preview: PreviewFundacion
 ): void {
-  const scale = canvas.width / world.config.ancho;
+  const scale = canvas.width / mapa.limites.ancho;
   const color = !preview.fundable ? '#c0392b' : preview.bosqueAlcanzable ? '#27ae60' : '#e0a020';
 
   ctx.beginPath();
@@ -129,7 +130,7 @@ export function drawPreviewFundacion(
 }
 
 export function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, state: DrawState): void {
-  const scale = canvas.width / state.world.config.ancho;
+  const scale = canvas.width / state.mapa.limites.ancho;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   // Límites del mapa
@@ -137,7 +138,7 @@ export function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, s
   ctx.strokeRect(0, 0, canvas.width, canvas.height);
 
   // Bosques (zonas)
-  for (const bosque of state.world.bosques) {
+  for (const bosque of state.mapa.listarBosques()) {
     ctx.beginPath();
     ctx.arc(bosque.centro.x * scale, bosque.centro.y * scale, bosque.radio * scale, 0, Math.PI * 2);
     ctx.fillStyle = `rgba(63, 125, 58, ${0.12 + bosque.densidad * 0.18})`;
@@ -145,7 +146,7 @@ export function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, s
   }
 
   // Nodos de recurso
-  for (const nodo of state.world.recursos) {
+  for (const nodo of state.mapa.listarNodos()) {
     ctx.beginPath();
     ctx.arc(nodo.posicion.x * scale, nodo.posicion.y * scale, 3, 0, Math.PI * 2);
     ctx.fillStyle = RECURSO_COLOR[nodo.tipo];

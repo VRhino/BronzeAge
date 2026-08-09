@@ -1,69 +1,21 @@
 // Valores numéricos PLACEHOLDER — ver Consideraciones/Preguntas_Abiertas.md.
 // Centralizados aquí para poder re-balancear sin tocar la lógica del motor.
-
-export const WORLD_DEFAULT: { ancho: number; alto: number } = {
-  ancho: 1000,
-  alto: 1000,
-};
-
-// Trigo NO genera nodo: depende del campo de fertilidad (ver FERTILIDAD) + Granja (Sprint 2).
-// Madera TAMPOCO genera nodo propio (Doc 1.4: "proviene de BOSQUES, representados como ZONAS, no puntos") —
-// solo se generaban aquí por error de implementación (Sprint 1): un nodo "madera" sin ningún uso en el motor
-// (la lenera siempre lee de world.bosques, nunca de world.recursos), y visualmente confundible con los bosques.
-// Cantidad de nodos por 1000x1000 y espaciado mínimo entre nodos de la misma rareza (unidades de mapa).
-export const RECURSO_RAREZA = {
-  comun: { cantidadBase: 60, espacioMinimo: 20 },
-  intermedio: { cantidadBase: 20, espacioMinimo: 40 },
-  raro: { cantidadBase: 6, espacioMinimo: 120 },
-} as const;
-
-export const RECURSO_TIPOS_POR_RAREZA: Record<keyof typeof RECURSO_RAREZA, string[]> = {
-  comun: ['piedra'],
-  intermedio: ['cobre'],
-  raro: ['estano', 'oro'],
-};
+//
+// NO están aquí los parámetros de GENERACIÓN de mundo (tamaño del mapa, rareza/cantidad de nodos, bosques,
+// fertilidad): viven congelados en `src/worldgen/config.ts`. Todo lo de este archivo es editable en caliente
+// desde el panel de balance (ver `app/balanceConfig.ts`), y la generación no puede serlo — la partida
+// guardada solo almacena la seed y regenera el mapa al cargar. Ver el encabezado de `worldgen/config.ts`.
 
 /**
- * Piedra/oro recalibrados (overhaul de auto-construcción, verificación batch): Mantenimiento cobra piedra
- * desde nivel 2 y oro desde nivel 3 de forma PERPETUA (todos los ticks, para siempre), pero los nodos son
- * finitos — ningún ajuste de tasa de extracción "resuelve" esto del todo, solo compra tiempo (el jugador
- * real tiene comercio/trueque para importar lo que le falte). El diagnóstico mostró que con los valores
- * viejos (piedra 200-500) el problema NO era la tasa (una sola Cantera a 5/tick ya supera cómodamente el
- * costo de Mantenimiento de nivel 2, ~3.45-6.9/tick) sino que el nodo se agotaba en 40-100 ticks y ahí
- * quedaba en 0 para siempre — nodos ×3 dan un margen mucho más realista antes de necesitar una segunda
- * fuente o comercio. Oro sí tenía además un problema de TASA (ver `produccionBaseOro` en EDIFICIO_CATALOGO):
- * nodos ×4-5 (ya de por sí "raros", RECURSO_RAREZA.raro) para la misma razón que piedra.
+ * Capacidad de Leñeras por bosque según su tamaño (a petición del usuario): un bosque grande admite más de
+ * una Leñera trabajando en él a la vez, mín 1 / máx 3 — ver `capacidadLenerasBosque` en engine/construction.ts.
+ * Umbrales repartidos en tercios del rango de radio con que se generan los bosques (30-80, ver
+ * `BOSQUE` en worldgen/config.ts): <45 -> 1, 45-64 -> 2, >=65 -> 3.
+ * Es balance de EXPLOTACIÓN, no de generación: cambiarlo no altera el mapa, solo cuántas Leñeras caben.
  */
-export const RECURSO_CANTIDAD_NODO = {
-  piedra: { min: 600, max: 1200 },
-  cobre: { min: 100, max: 300 },
-  estano: { min: 50, max: 150 },
-  oro: { min: 150, max: 400 },
-} as const;
-
-// Livestock: fauna libre, no sigue las mismas reglas de rareza (no ligada a minerales).
-export const LIVESTOCK = {
-  cantidadBase: 25,
-  espacioMinimo: 30,
-  cantidadPorManada: { min: 10, max: 40 },
-};
-
-export const BOSQUE = {
-  cantidad: 25,
-  radioMin: 30,
-  radioMax: 80,
-  densidadMin: 0.4,
-  densidadMax: 1.0,
-  // Capacidad de Leñeras por bosque según su tamaño (a petición del usuario): un bosque grande admite más de
-  // una Leñera trabajando en él a la vez, mín 1 / máx 3 — ver `capacidadLenerasBosque` en engine/construction.ts.
-  // Umbrales repartidos en tercios del rango radioMin-radioMax (30-80): <45 -> 1, 45-64 -> 2, >=65 -> 3.
-  capacidadLenerasPorRadio: { umbral2: 45, umbral3: 65 },
-};
-
-// Fertilidad: ruido continuo por suma de funciones seno con distintas frecuencias (sin dependencias externas).
-export const FERTILIDAD = {
-  octavas: 3,
-  escala: 0.006,
+export const LENERA_POR_BOSQUE = {
+  umbral2: 45,
+  umbral3: 65,
 };
 
 // Zona de influencia: radio inicial al fundar, crecimiento por edificio completado y tope máximo (escalará con nivel).

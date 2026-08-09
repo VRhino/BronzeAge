@@ -1,0 +1,127 @@
+// Ciclo exportar -> importar de una partida.
+//
+// El archivo NO guarda el mapa entero: guarda la seed, los nodos y los bosques, y al importar se REGENERA
+// el mundo desde la seed para recuperar lo único que no viaja en el archivo — el campo de fertilidad, que
+// son parámetros de ruido, no una lista de valores. Toda la corrección de este mecanismo descansa en que
+// `generarMapa` sea determinista por seed; por eso los parámetros de generación están congelados fuera del
+// panel de balance (ver `src/worldgen/config.ts`) y por eso el archivo lleva `worldgenVersion`.
+//
+// Lo que se verifica aquí es justo esa cadena: que una partida importada es indistinguible de la original,
+// incluida la fertilidad regenerada y el agotamiento de yacimientos ya ocurrido.
+
+import { describe, expect, it } from 'vitest';
+import { GameStore, type SimulacionExportada } from '../gameStore';
+import { WORLDGEN_VERSION } from '../../worldgen';
+
+/** Partida arrancada, con un asentamiento fundado en un sitio viable y unos cuantos ticks corridos. */
+function partidaEnMarcha(ticks = 30): GameStore {
+  const store = new GameStore();
+
+  // Se busca un emplazamiento recomendable barriendo una grilla, igual que las fixtures del motor: así el
+  // test no depende de que la seed por defecto tenga un bosque cerca de un punto elegido a mano.
+  const { ancho, alto } = store.getMapa().limites;
+  let fundado = false;
+  for (let x = 40; x < ancho && !fundado; x += 40) {
+    for (let y = 40; y < alto && !fundado; y += 40) {
+      if (store.viabilidadFundacion({ x, y }).recomendable) {
+        store.fundarAsentamiento('faccion-1', { x, y }, 1);
+        fundado = true;
+      }
+    }
+  }
+  expect(fundado).toBe(true);
+
+  for (let i = 0; i < ticks; i++) store.avanzarTick();
+  return store;
+}
+
+function fertilidadMuestreada(store: GameStore): string[] {
+  const mapa = store.getMapa();
+  const { ancho, alto } = mapa.limites;
+  const muestras: string[] = [];
+  for (let i = 0; i < 50; i++) {
+    muestras.push(mapa.fertilidadEn({ x: ((i * 97) % ancho) + 0.5, y: ((i * 61) % alto) + 0.5 }).toFixed(10));
+  }
+  return muestras;
+}
+
+describe('exportar / importar una simulación', () => {
+  it('la partida importada es idéntica a la original, con la fertilidad regenerada desde la seed', () => {
+    const original = partidaEnMarcha();
+    const json = original.exportarSimulacion();
+
+    const importada = new GameStore();
+    importada.importarSimulacion(json);
+
+    const antes = original.getState();
+    const despues = importada.getState();
+
+    expect(despues.tick).toBe(antes.tick);
+    expect(despues.asentamientos).toEqual(antes.asentamientos);
+    expect(despues.facciones).toEqual(antes.facciones);
+    expect(despues.caravanas).toEqual(antes.caravanas);
+    expect(despues.mapa.config).toEqual(antes.mapa.config);
+    expect(despues.mapa.bosques).toEqual(antes.mapa.bosques);
+    // El mundo se regenera desde la seed y sale idéntico...
+    expect(despues.mapa.nodos).toEqual(antes.mapa.nodos);
+    // ...y el agotamiento acumulado, que no se puede regenerar, viaja en el archivo.
+    expect(despues.estadoMapa.extraido).toEqual(antes.estadoMapa.extraido);
+    // La fertilidad SÍ se regenera. Es el punto frágil del formato y el motivo de `worldgenVersion`.
+    expect(fertilidadMuestreada(importada)).toEqual(fertilidadMuestreada(original));
+
+    expect(despues.log[0]?.mensaje).toContain('Simulación importada');
+  });
+
+  it('el agotamiento de yacimientos sobrevive al viaje', () => {
+    const original = partidaEnMarcha();
+    const mapaOriginal = original.getMapa();
+    // Se agota un nodo a mano para garantizar que hay algo que preservar aunque la partida corta no haya
+    // vaciado ninguno por sí sola.
+    const nodo = original.getState().mapa.nodos.find((n) => n.tipo === 'piedra')!;
+    mapaOriginal.extraer(nodo.id, nodo.cantidadInicial);
+    expect(mapaOriginal.nodoProductivo(nodo.id)).toBe(false);
+
+    const importada = new GameStore();
+    importada.importarSimulacion(original.exportarSimulacion());
+
+    expect(importada.getMapa().nodoProductivo(nodo.id)).toBe(false);
+    expect(importada.getMapa().stock(nodo.id)).toBe(0);
+  });
+
+  it('rechaza un archivo generado con otra versión del generador, en vez de cargar otro mundo en silencio', () => {
+    const original = partidaEnMarcha(5);
+    const payload = JSON.parse(original.exportarSimulacion()) as SimulacionExportada;
+    expect(payload.worldgenVersion).toBe(WORLDGEN_VERSION);
+    payload.worldgenVersion = WORLDGEN_VERSION + 1;
+
+    const destino = new GameStore();
+    const tickAntes = destino.getState().tick;
+    destino.importarSimulacion(JSON.stringify(payload));
+
+    expect(destino.getState().tick).toBe(tickAntes);
+    expect(destino.getState().asentamientos).toHaveLength(0);
+    expect(destino.getState().log[0]?.mensaje).toContain('Importación rechazada');
+  });
+
+  it('acepta archivos antiguos sin `worldgenVersion` (se asumen de la versión 1)', () => {
+    const original = partidaEnMarcha(5);
+    const payload = JSON.parse(original.exportarSimulacion()) as Partial<SimulacionExportada>;
+    delete payload.worldgenVersion;
+
+    const destino = new GameStore();
+    destino.importarSimulacion(JSON.stringify(payload));
+
+    expect(destino.getState().tick).toBe(original.getState().tick);
+    expect(destino.getState().asentamientos).toEqual(original.getState().asentamientos);
+  });
+
+  it('un archivo corrupto se rechaza sin romper la partida en curso', () => {
+    const store = partidaEnMarcha(5);
+    const asentamientosAntes = store.getState().asentamientos;
+
+    store.importarSimulacion('{"esto": "no es una simulación"}');
+
+    expect(store.getState().asentamientos).toEqual(asentamientosAntes);
+    expect(store.getState().log[0]?.mensaje).toContain('Importación rechazada');
+  });
+});

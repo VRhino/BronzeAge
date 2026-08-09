@@ -1,5 +1,10 @@
 import type { Asentamiento, Point, ZonaInfluencia } from '../domain/types';
 import { ZONA_INFLUENCIA } from '../constants';
+import { pointInPolygon } from '../world/geometria';
+
+// `pointInPolygon` es geometría pura y vive en `world/geometria.ts` (la usa también la fachada `Mapa`);
+// se reexporta desde aquí porque el motor la consume históricamente por esta vía.
+export { pointInPolygon };
 
 function circlePolygon(center: Point, radius: number, segments: number): Point[] {
   const pts: Point[] = [];
@@ -79,18 +84,6 @@ export function computeZonaInfluencia(
 
 export function computeTodasLasZonas(asentamientos: Asentamiento[]): ZonaInfluencia[] {
   return asentamientos.map((a) => computeZonaInfluencia(a, asentamientos));
-}
-
-export function pointInPolygon(p: Point, polygon: Point[]): boolean {
-  let inside = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const pi = polygon[i]!;
-    const pj = polygon[j]!;
-    const intersects =
-      pi.y > p.y !== pj.y > p.y && p.x < ((pj.x - pi.x) * (p.y - pi.y)) / (pj.y - pi.y) + pi.x;
-    if (intersects) inside = !inside;
-  }
-  return inside;
 }
 
 /** Un punto está libre para fundar si no cae dentro de la zona de influencia ya recortada de ningún asentamiento existente. */

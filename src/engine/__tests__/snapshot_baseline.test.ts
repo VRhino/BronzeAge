@@ -8,7 +8,7 @@ import type { Asentamiento, Faccion } from '../../domain/types';
 import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
 import {
   crearFacciones,
-  crearMundoDeterminista,
+  crearMapaDeterminista,
   fundarAsentamientoDeTest,
   mockMathRandomDeterminista,
   posicionRecomendable,
@@ -55,10 +55,10 @@ describe('snapshot de regresión general', () => {
   });
 
   it('resumen del estado en ticks de referencia coincide con el baseline versionado', () => {
-    const world = crearMundoDeterminista(SEED);
+    const mapa = crearMapaDeterminista(SEED);
     const facciones = crearFacciones();
-    const posicion = posicionRecomendable(world);
-    const { asentamiento, facciones: faccionesTrasFundar } = fundarAsentamientoDeTest(world, facciones, 'faccion-1', [], 0, posicion);
+    const posicion = posicionRecomendable(mapa);
+    const { asentamiento, facciones: faccionesTrasFundar } = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', [], 0, posicion);
 
     let estado: EstadoSimulacion = {
       asentamientos: [asentamiento],
@@ -72,7 +72,7 @@ describe('snapshot de regresión general', () => {
 
     const cortes: Record<number, unknown> = {};
     for (let tick = 1; tick <= Math.max(...TICKS_DE_CORTE); tick++) {
-      estado = avanzarSimulacion(estado, world, tick);
+      estado = avanzarSimulacion(estado, mapa, tick);
       if (TICKS_DE_CORTE.includes(tick)) {
         cortes[tick] = {
           asentamientos: estado.asentamientos.map(resumirAsentamiento),

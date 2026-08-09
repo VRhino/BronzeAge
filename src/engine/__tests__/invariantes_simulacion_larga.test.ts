@@ -4,11 +4,12 @@
 // esto debe fallar aunque el test específico de esa regresión histórica (ver `regresiones_historicas.test.ts`)
 // no exista todavía para el caso concreto.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { Asentamiento, Faccion, World } from '../../domain/types';
+import type { Asentamiento, Faccion } from '../../domain/types';
+import type { Mapa } from '../../world/mapa';
 import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
 import {
   crearFacciones,
-  crearMundoDeterminista,
+  crearMapaDeterminista,
   fundarAsentamientoDeTest,
   mockMathRandomDeterminista,
   posicionRecomendable,
@@ -20,12 +21,12 @@ const SEED = 7;
 // fijas (`crearFacciones`), el máximo fundable de una sola vez sin subir de nivel es 3.
 const NUM_ASENTAMIENTOS = 3;
 
-function fundarVarios(world: World, facciones: Faccion[]): Asentamiento[] {
+function fundarVarios(mapa: Mapa, facciones: Faccion[]): Asentamiento[] {
   const asentamientos: Asentamiento[] = [];
   for (let i = 0; i < NUM_ASENTAMIENTOS; i++) {
     const faccion = facciones[i % facciones.length]!;
-    const posicion = posicionRecomendable(world, asentamientos);
-    const { asentamiento } = fundarAsentamientoDeTest(world, facciones, faccion.id, asentamientos, 0, posicion);
+    const posicion = posicionRecomendable(mapa, asentamientos);
+    const { asentamiento } = fundarAsentamientoDeTest(mapa, facciones, faccion.id, asentamientos, 0, posicion);
     asentamientos.push(asentamiento);
   }
   return asentamientos;
@@ -47,9 +48,9 @@ describe('invariantes del motor en una simulación larga', () => {
   });
 
   it(`se mantienen tras ${TICKS} ticks con ${NUM_ASENTAMIENTOS} asentamientos (recursos, población, mantenimiento, nivel)`, () => {
-    const world = crearMundoDeterminista(SEED);
+    const mapa = crearMapaDeterminista(SEED);
     const facciones = crearFacciones();
-    const asentamientosIniciales = fundarVarios(world, facciones);
+    const asentamientosIniciales = fundarVarios(mapa, facciones);
 
     let estado: EstadoSimulacion = {
       asentamientos: asentamientosIniciales,
@@ -64,7 +65,7 @@ describe('invariantes del motor en una simulación larga', () => {
     const ultimoNivelVisto = new Map<string, number>();
 
     for (let tick = 1; tick <= TICKS; tick++) {
-      const resultado = avanzarSimulacion(estado, world, tick);
+      const resultado = avanzarSimulacion(estado, mapa, tick);
       estado = resultado;
 
       for (const asentamiento of resultado.asentamientos) {

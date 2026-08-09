@@ -1,5 +1,6 @@
-import type { Asentamiento, Edificio, EdificioTipo, Faccion, Point, RecursoAlmacenado, RecursoTipo, World, ZonaBosque } from '../domain/types';
-import { BOSQUE, EDIFICIO_CATALOGO, EXTRACCION_MAXIMOS, NECESIDADES, NIVEL_ASENTAMIENTO, SCORE_BANDAS, SITIO, ZONA_INFLUENCIA } from '../constants';
+import type { Asentamiento, Edificio, EdificioTipo, Faccion, Point, RecursoAlmacenado, RecursoTipo } from '../domain/types';
+import { EDIFICIO_CATALOGO, EXTRACCION_MAXIMOS, NECESIDADES, NIVEL_ASENTAMIENTO, SCORE_BANDAS, SITIO, ZONA_INFLUENCIA } from '../constants';
+import type { Mapa } from '../world/mapa';
 import { pointInPolygon } from './zones';
 import {
   capacidadViviendaArtesanos,
@@ -28,6 +29,42 @@ import { consumoRacionTropas } from './tropas';
  * sería un huevo-y-la-gallina sin salida.
  */
 const RECURSO_PROPIO: Partial<Record<EdificioTipo, string>> = { granja: 'trigo', lenera: 'madera' };
+
+/**
+ * Edificios que extraen contra un NODO finito del mapa y se quedan sin nada cuando lo agotan (Doc 1.4:
+ * escasez real por ubicación). Granja y Leñera no están aquí: una produce del campo de fertilidad y la otra
+ * de un bosque, y ninguno de los dos se agota.
+ *
+ * `produccionBase` es una función y no un número porque `EDIFICIO_CATALOGO` se edita en caliente desde el
+ * panel de balance: hay que leer el valor en el momento de producir, no al cargar el módulo.
+ */
+const EXTRACTORES: Partial<Record<EdificioTipo, { recurso: RecursoTipo; produccionBase: () => number; mensajeAgotado: string }>> = {
+  cantera: {
+    recurso: 'piedra',
+    produccionBase: () => EDIFICIO_CATALOGO.cantera.produccionBasePiedra,
+    mensajeAgotado: 'El yacimiento de piedra de la cantera se ha agotado.',
+  },
+  mina: {
+    recurso: 'oro',
+    produccionBase: () => EDIFICIO_CATALOGO.mina.produccionBaseOro,
+    mensajeAgotado: 'El yacimiento de oro de la mina se ha agotado.',
+  },
+  minaCobre: {
+    recurso: 'cobre',
+    produccionBase: () => EDIFICIO_CATALOGO.minaCobre.produccionBaseCobre,
+    mensajeAgotado: 'El yacimiento de cobre se ha agotado.',
+  },
+  minaEstano: {
+    recurso: 'estano',
+    produccionBase: () => EDIFICIO_CATALOGO.minaEstano.produccionBaseEstano,
+    mensajeAgotado: 'El yacimiento de estaño se ha agotado.',
+  },
+  corral: {
+    recurso: 'livestock',
+    produccionBase: () => EDIFICIO_CATALOGO.corral.produccionBaseLivestock,
+    mensajeAgotado: 'El manada de livestock del corral se ha agotado.',
+  },
+};
 
 /**
  * Un proyecto solo puede COMPROMETERSE (pagarse, overhaul de auto-construcción: ver `evaluarNecesidades`) si,
@@ -82,11 +119,12 @@ function sitioConcentrico(asentamiento: Asentamiento, zonaPoligono: Point[], ocu
 function sitioMejorFertilidad(
   asentamiento: Asentamiento,
   zonaPoligono: Point[],
-  world: World,
+  mapa: Mapa,
   ocupados: Edificio[]
 ): Point | null {
-  let mejor: Point | null = null;
-  let mejorFertilidad = -1;
+  // Qué puntos son elegibles lo decide el motor (zona de influencia + sitios ya ocupados); cuál de ellos es
+  // el más fértil, el mapa.
+  const candidatos: Point[] = [];
   for (let i = 0; i < SITIO.muestrasFertilidad; i++) {
     const angulo = (i / SITIO.muestrasFertilidad) * Math.PI * 2;
     const radio = (i % 5) / 5 * asentamiento.radioPotencial;
@@ -95,101 +133,80 @@ function sitioMejorFertilidad(
       y: asentamiento.posicion.y + Math.sin(angulo) * radio,
     };
     if (!pointInPolygon(candidato, zonaPoligono) || !sitioLibre(candidato, ocupados)) continue;
-    const fertilidad = world.fertilidadEn(candidato);
-    if (fertilidad > mejorFertilidad) {
-      mejorFertilidad = fertilidad;
-      mejor = candidato;
-    }
+    candidatos.push(candidato);
   }
-  return mejor;
+  return mapa.mejorPorFertilidad(candidatos)?.punto ?? null;
 }
 
 /** Cantera/edificio de extracción: junto al nodo de recurso más cercano SIN reclamar ya (Doc 4.2, ej. herrería cerca de mina). */
 function sitioCercaDeNodo(
   asentamiento: Asentamiento,
   zonaPoligono: Point[],
-  world: World,
+  mapa: Mapa,
   tipoRecurso: string,
   fuentesExcluidas: Set<string>
 ): { posicion: Point; fuenteId: string } | null {
-  const candidatos = world.recursos
-    .filter((n) => n.tipo === tipoRecurso && n.cantidad > 0 && !fuentesExcluidas.has(n.id) && pointInPolygon(n.posicion, zonaPoligono))
-    .sort((a, b) => distancia(a.posicion, asentamiento.posicion) - distancia(b.posicion, asentamiento.posicion));
-  const elegido = candidatos[0];
+  const elegido = mapa.nodosEnPoligono(zonaPoligono, {
+    tipo: tipoRecurso,
+    conStock: true,
+    excluir: fuentesExcluidas,
+    ordenarPorCercaniaA: asentamiento.posicion,
+  })[0];
   return elegido ? { posicion: elegido.posicion, fuenteId: elegido.id } : null;
 }
 
-/** Cuántas Leñeras admite un bosque a la vez según su tamaño (Doc 1.4/4.2, a petición del usuario): bosques
- * grandes permiten más de una Leñera trabajándolo en paralelo, mín 1 / máx 3 (`BOSQUE.capacidadLenerasPorRadio`). */
-function capacidadLenerasBosque(bosque: ZonaBosque): number {
-  if (bosque.radio >= BOSQUE.capacidadLenerasPorRadio.umbral3) return 3;
-  if (bosque.radio >= BOSQUE.capacidadLenerasPorRadio.umbral2) return 2;
-  return 1;
+/**
+ * Fuentes del mapa ya tomadas, sumando TODOS los asentamientos vivos.
+ *
+ * Antes esto se calculaba por asentamiento, mirando solo sus propios edificios. Entre facciones distintas
+ * daba igual (las zonas de influencia se recortan y no se solapan, ver `engine/zones.ts`), pero dos
+ * asentamientos de la MISMA facción sí solapan zona: los dos veían el mismo yacimiento libre y los dos le
+ * plantaban una mina encima, drenándolo al doble de velocidad y dejando a ambos sin recurso mucho antes de
+ * lo que ninguna cuenta del diseño preveía. Con el conteo global, quien llega primero se lo queda.
+ *
+ * Se calcula una vez por tick y se MUTA a medida que cada asentamiento compromete obra (ver
+ * `registrarReclamo`), para que dos asentamientos procesados en el mismo tick tampoco choquen entre sí.
+ */
+export interface ReclamosFuentes {
+  /** Yacimientos con un extractor ya asignado (mina/cantera/corral...). Exclusivos: uno por nodo. */
+  nodos: Set<string>;
+  /** Leñeras por bosque. NO son exclusivas: un bosque grande admite hasta 3 (ver `mapa.capacidadLeneras`). */
+  lenerasPorBosque: Map<string, number>;
 }
 
-/** Leñeras ya colocadas por bosque (fuenteId -> cantidad), para respetar `capacidadLenerasBosque`. */
-function conteoLenerasPorBosque(asentamiento: Asentamiento): Map<string, number> {
-  const conteo = new Map<string, number>();
-  for (const e of asentamiento.edificios) {
-    if (e.tipo === 'lenera' && e.fuenteId) conteo.set(e.fuenteId, (conteo.get(e.fuenteId) ?? 0) + 1);
+export function reclamosDeFuentes(asentamientos: Asentamiento[]): ReclamosFuentes {
+  const reclamos: ReclamosFuentes = { nodos: new Set(), lenerasPorBosque: new Map() };
+  for (const asentamiento of asentamientos) {
+    for (const edificio of asentamiento.edificios) {
+      registrarReclamo(reclamos, edificio);
+    }
   }
-  return conteo;
+  return reclamos;
+}
+
+/** Anota la fuente que ocupa un edificio (si ocupa alguna). Idempotente para nodos, acumulativo para bosques. */
+function registrarReclamo(reclamos: ReclamosFuentes, edificio: Edificio): void {
+  if (!edificio.fuenteId) return;
+  if (edificio.tipo === 'lenera') {
+    reclamos.lenerasPorBosque.set(edificio.fuenteId, (reclamos.lenerasPorBosque.get(edificio.fuenteId) ?? 0) + 1);
+  } else {
+    reclamos.nodos.add(edificio.fuenteId);
+  }
 }
 
 /**
- * Punto utilizable de un bosque que caiga DENTRO de la zona de influencia (Doc 1.4). Bug real detectado
- * jugando (reportado por el usuario): antes solo se comprobaba si el CENTRO exacto del bosque caía dentro de
- * la zona (`pointInPolygon(bosque.centro, zonaPoligono)`) — pero los bosques tienen radio (30-80) y el radio
- * de zona tiene un TOPE por nivel (60/90/120, ver ZONA_INFLUENCIA). Un bosque grande cuyo borde ya está bien
- * dentro de la zona pero cuyo centro exacto queda un poco más allá del tope de nivel era invisible para
- * siempre — el asentamiento nunca conseguía Leñera pese a que la zona "tocaba" el bosque, y acababa cayendo
- * en ruinas por falta de madera para Mantenimiento. Ahora se prueba primero el punto preferido (centro, o un
- * punto con offset si el bosque ya tiene otras Leñeras — ver `capacidadLenerasBosque`) y, si ese cae fuera de
- * la zona, se muestrean puntos en anillos crecientes dentro del propio bosque hasta encontrar uno que sí esté
- * dentro — el mismo bosque puede "entrar en contacto" con la zona por un punto distinto de su centro.
+ * Leñera: junto al bosque más cercano que tenga hueco libre según su capacidad (varias Leñeras pueden
+ * compartir un bosque grande) Y algún punto suyo dentro de la zona de influencia — no exige que sea justo
+ * el centro del bosque. Ambos criterios los resuelve el mapa (`bosqueParaLenera`); aquí solo se aporta el
+ * dato que el mapa no puede saber: cuántas Leñeras tiene ya cada bosque, que es estado del asentamiento.
  */
-function puntoEnBosqueDentroDeZona(bosque: ZonaBosque, zonaPoligono: Point[], indiceOcupacion: number): Point | null {
-  const preferido =
-    indiceOcupacion === 0
-      ? bosque.centro
-      : {
-          x: bosque.centro.x + Math.cos((indiceOcupacion / 3) * Math.PI * 2) * bosque.radio * 0.4,
-          y: bosque.centro.y + Math.sin((indiceOcupacion / 3) * Math.PI * 2) * bosque.radio * 0.4,
-        };
-  if (pointInPolygon(preferido, zonaPoligono)) return preferido;
-
-  const muestrasPorAnillo = 12;
-  for (let anillo = 1; anillo <= 3; anillo++) {
-    const radio = (bosque.radio * anillo) / 3;
-    for (let i = 0; i < muestrasPorAnillo; i++) {
-      const angulo = (i / muestrasPorAnillo) * Math.PI * 2;
-      const candidato: Point = { x: bosque.centro.x + Math.cos(angulo) * radio, y: bosque.centro.y + Math.sin(angulo) * radio };
-      if (pointInPolygon(candidato, zonaPoligono)) return candidato;
-    }
-  }
-  return null;
-}
-
-/** Lenera: junto al bosque más cercano que tenga hueco libre según su capacidad (varias Leñeras pueden
- * compartir un bosque grande, ver `capacidadLenerasBosque`) Y algún punto suyo dentro de la zona de
- * influencia (ver `puntoEnBosqueDentroDeZona` — no exige que sea justo el centro). */
 function sitioEnBosque(
   asentamiento: Asentamiento,
   zonaPoligono: Point[],
-  world: World,
+  mapa: Mapa,
   conteoPorBosque: Map<string, number>
 ): { posicion: Point; fuenteId: string } | null {
-  const candidatos = world.bosques
-    .map((bosque) => {
-      const ocupadas = conteoPorBosque.get(bosque.id) ?? 0;
-      if (ocupadas >= capacidadLenerasBosque(bosque)) return null;
-      const punto = puntoEnBosqueDentroDeZona(bosque, zonaPoligono, ocupadas);
-      return punto ? { bosque, punto } : null;
-    })
-    .filter((c): c is { bosque: ZonaBosque; punto: Point } => c !== null)
-    .sort((a, b) => distancia(a.bosque.centro, asentamiento.posicion) - distancia(b.bosque.centro, asentamiento.posicion));
-  const elegido = candidatos[0];
-  return elegido ? { posicion: elegido.punto, fuenteId: elegido.bosque.id } : null;
+  return mapa.bosqueParaLenera(zonaPoligono, conteoPorBosque, asentamiento.posicion);
 }
 
 function crearEdificioEnCola(tipo: EdificioTipo, posicion: Point, id: string, fuenteId?: string): Edificio {
@@ -210,19 +227,13 @@ function crearEdificioEnCola(tipo: EdificioTipo, posicion: Point, id: string, fu
  * (rediseño de progreso Fase 0: `EXTRACCION_MAXIMOS.porTipo`, desacoplado del nivel de asentamiento — antes
  * escalaba 1:1 con él, pero con el tope de nivel bajando a 3 se quedaría corto).
  */
-function necesitaNuevoExtractor(asentamiento: Asentamiento, tipo: EdificioTipo, world: World): boolean {
+function necesitaNuevoExtractor(asentamiento: Asentamiento, tipo: EdificioTipo, mapa: Mapa): boolean {
   const existentes = asentamiento.edificios.filter((e) => e.tipo === tipo);
-  const conFuenteViva = existentes.filter((e) => {
-    const nodo = world.recursos.find((n) => n.id === e.fuenteId);
-    return nodo && nodo.cantidad > 0;
-  });
+  const conFuenteViva = existentes.filter((e) => mapa.nodoProductivo(e.fuenteId));
   if (conFuenteViva.length === 0) return true;
   return conFuenteViva.length < EXTRACCION_MAXIMOS.porTipo;
 }
 
-function fuentesReclamadas(asentamiento: Asentamiento, tipo: EdificioTipo): Set<string> {
-  return new Set(asentamiento.edificios.filter((e) => e.tipo === tipo && e.fuenteId).map((e) => e.fuenteId!));
-}
 
 interface Candidato {
   edificio: Edificio;
@@ -253,8 +264,9 @@ function conUrgencia(base: number, urgencia: number): number {
 function evaluarNecesidades(
   asentamiento: Asentamiento,
   zonaPoligono: Point[],
-  world: World,
-  reserva: Partial<Record<RecursoTipo, number>>
+  mapa: Mapa,
+  reserva: Partial<Record<RecursoTipo, number>>,
+  reclamos: ReclamosFuentes
 ): { nuevos: Edificio[]; almacen: Record<string, RecursoAlmacenado> } {
   const candidatos: Candidato[] = [];
   let contador = asentamiento.edificios.length;
@@ -291,7 +303,7 @@ function evaluarNecesidades(
         if (hayProyectoPendiente(asentamiento, 'lenera')) {
           progresando = true; // ya hay una Leñera en camino hacia el objetivo.
         } else {
-          const sitio = sitioEnBosque(asentamiento, zonaPoligono, world, conteoLenerasPorBosque(asentamiento));
+          const sitio = sitioEnBosque(asentamiento, zonaPoligono, mapa, reclamos.lenerasPorBosque);
           if (sitio) {
             proponer(crearEdificioEnCola('lenera', sitio.posicion, nextId(), sitio.fuenteId), SCORE_BANDAS.supervivencia + 100);
             progresando = true;
@@ -303,7 +315,7 @@ function evaluarNecesidades(
         if (hayProyectoPendiente(asentamiento, 'granja')) {
           progresando = true; // ya hay una Granja en camino hacia el objetivo.
         } else {
-          const sitio = sitioMejorFertilidad(asentamiento, zonaPoligono, world, ocupados());
+          const sitio = sitioMejorFertilidad(asentamiento, zonaPoligono, mapa, ocupados());
           if (sitio) {
             proponer(crearEdificioEnCola('granja', sitio, nextId()), SCORE_BANDAS.supervivencia + 100);
             progresando = true;
@@ -325,7 +337,7 @@ function evaluarNecesidades(
     const ratioManoActual = ratioManoObra(asentamiento);
     const factorTrigoActual = factorProduccionTrigo(asentamiento);
     const produccionTrigoActual = granjasActivasEdificios.reduce(
-      (acc, e) => acc + EDIFICIO_CATALOGO.granja.produccionBaseTrigo * world.fertilidadEn(e.posicion) * ratioManoActual * factorTrigoActual,
+      (acc, e) => acc + EDIFICIO_CATALOGO.granja.produccionBaseTrigo * mapa.fertilidadEn(e.posicion) * ratioManoActual * factorTrigoActual,
       0
     );
     const consumoTrigoActual = consumoComidaPoblacion(asentamiento) + consumoRacionTropas(asentamiento);
@@ -335,7 +347,7 @@ function evaluarNecesidades(
     const granjasPendientes = asentamiento.edificios.filter((e) => e.tipo === 'granja' && e.estado !== 'activo').length;
     const limiteGranjasPendientes = enDeficitTrigo ? NECESIDADES.maximoGranjasPendientesEnDeficit : 1;
     if ((granjasActivasEdificios.length === 0 || enDeficitTrigo) && granjasPendientes < limiteGranjasPendientes) {
-      const sitio = sitioMejorFertilidad(asentamiento, zonaPoligono, world, ocupados());
+      const sitio = sitioMejorFertilidad(asentamiento, zonaPoligono, mapa, ocupados());
       if (sitio) {
         const deficitRatio = consumoTrigoActual > 0 ? (consumoTrigoActual - produccionTrigoActual) / consumoTrigoActual : 1;
         const urgencia = granjasActivasEdificios.length === 0 ? 100 : deficitRatio * 100;
@@ -348,7 +360,7 @@ function evaluarNecesidades(
     // para llegar al tope.
     const leneras = edificiosPorTipoYEstado(asentamiento, 'lenera');
     if (leneras.length < EXTRACCION_MAXIMOS.porTipo && !hayProyectoPendiente(asentamiento, 'lenera')) {
-      const sitio = sitioEnBosque(asentamiento, zonaPoligono, world, conteoLenerasPorBosque(asentamiento));
+      const sitio = sitioEnBosque(asentamiento, zonaPoligono, mapa, reclamos.lenerasPorBosque);
       if (sitio) {
         const maderaBajoReserva = (asentamiento.almacen.madera?.cantidad ?? 0) < (reserva.madera ?? 0);
         const urgencia = leneras.length === 0 ? 100 : maderaBajoReserva ? 90 : 30;
@@ -366,15 +378,12 @@ function evaluarNecesidades(
       { tipo: 'minaEstano', recurso: 'estano' },
     ];
     for (const { tipo, recurso } of extractores) {
-      if (necesitaNuevoExtractor(asentamiento, tipo, world) && !hayProyectoPendiente(asentamiento, tipo)) {
-        const sitio = sitioCercaDeNodo(asentamiento, zonaPoligono, world, recurso, fuentesReclamadas(asentamiento, tipo));
+      if (necesitaNuevoExtractor(asentamiento, tipo, mapa) && !hayProyectoPendiente(asentamiento, tipo)) {
+        const sitio = sitioCercaDeNodo(asentamiento, zonaPoligono, mapa, recurso, reclamos.nodos);
         if (sitio) {
           const conFuenteViva = asentamiento.edificios
             .filter((e) => e.tipo === tipo)
-            .some((e) => {
-              const nodo = world.recursos.find((n) => n.id === e.fuenteId);
-              return nodo && nodo.cantidad > 0;
-            });
+            .some((e) => mapa.nodoProductivo(e.fuenteId));
           proponer(
             crearEdificioEnCola(tipo, sitio.posicion, nextId(), sitio.fuenteId),
             conUrgencia(SCORE_BANDAS.extractorBase, conFuenteViva ? 40 : 100)
@@ -460,6 +469,9 @@ function evaluarNecesidades(
     if (!puedeIniciarConstruccion(almacenActual, costo, candidato.edificio.tipo, reserva)) continue;
     almacenActual = descontarRecursos(almacenActual, costo);
     nuevos.push({ ...candidato.edificio, prioridad: candidato.score });
+    // La fuente queda tomada en el momento en que se PAGA el proyecto, no al proponerlo: un candidato que
+    // no llega a comprometerse (sin fondos o sin cupo) no debe bloquear el yacimiento a nadie más.
+    registrarReclamo(reclamos, candidato.edificio);
     cupoDisponible -= 1;
   }
 
@@ -593,8 +605,8 @@ function avanzarRecetas(asentamiento: Asentamiento, almacen: Record<string, Recu
 
 /**
  * Progresa colas/construcción/producción de un tick y evalúa nuevas necesidades.
- * NOTA: los nodos de recurso del `world` se agotan mutando `cantidad` in-place (simplificación deliberada de Fase 0
- * para evitar clonar cientos de nodos cada tick); el resto del estado se trata de forma inmutable.
+ * NOTA: los yacimientos se agotan mutando el mapa in-place vía `mapa.extraer` (simplificación deliberada de
+ * Fase 0 para evitar clonar cientos de nodos cada tick); el resto del estado se trata de forma inmutable.
  * `capital` (overhaul de auto-construcción): asentamiento "capital" de la Facción, ya calculado en
  * `simulation.ts` — se usa para proyectar la reserva mínima dinámica (ver `reservaDinamicaConstruccion`,
  * engine/mantenimiento.ts, que reutiliza `calcularCostoMantenimiento`, sensible a la distancia a la capital).
@@ -602,8 +614,9 @@ function avanzarRecetas(asentamiento: Asentamiento, almacen: Record<string, Recu
 export function avanzarConstruccion(
   asentamiento: Asentamiento,
   zonaPoligono: Point[],
-  world: World,
-  capital: Asentamiento | undefined
+  mapa: Mapa,
+  capital: Asentamiento | undefined,
+  reclamos: ReclamosFuentes
 ): { asentamiento: Asentamiento; eventos: string[] } {
   const eventos: string[] = [];
   let almacen = asentamiento.almacen;
@@ -639,53 +652,21 @@ export function avanzarConstruccion(
 
     // activo: producción
     if (edificio.tipo === 'granja') {
-      const yieldTrigo = EDIFICIO_CATALOGO.granja.produccionBaseTrigo * world.fertilidadEn(edificio.posicion) * ratioMano * factorProduccionTrigo(asentamiento);
+      const yieldTrigo = EDIFICIO_CATALOGO.granja.produccionBaseTrigo * mapa.fertilidadEn(edificio.posicion) * ratioMano * factorProduccionTrigo(asentamiento);
       almacen = agregarRecurso(almacen, 'trigo', yieldTrigo);
-    } else if (edificio.tipo === 'cantera') {
-      const nodo = world.recursos.find((n) => n.id === edificio.fuenteId);
-      if (nodo && nodo.cantidad > 0) {
-        const extraido = Math.min(EDIFICIO_CATALOGO.cantera.produccionBasePiedra * ratioMano, nodo.cantidad);
-        nodo.cantidad -= extraido;
-        almacen = agregarRecurso(almacen, 'piedra', extraido);
-        if (nodo.cantidad <= 0) eventos.push('El yacimiento de piedra de la cantera se ha agotado.');
-      }
     } else if (edificio.tipo === 'lenera') {
-      const bosque = world.bosques.find((b) => b.id === edificio.fuenteId);
+      // Los bosques no se agotan (Doc 1.4): la Leñera no extrae contra un stock, rinde según la densidad.
+      const bosque = mapa.bosque(edificio.fuenteId);
       if (bosque) {
         const yieldMadera = EDIFICIO_CATALOGO.lenera.produccionBaseMadera * bosque.densidad * ratioMano;
         almacen = agregarRecurso(almacen, 'madera', yieldMadera);
       }
-    } else if (edificio.tipo === 'mina') {
-      const nodo = world.recursos.find((n) => n.id === edificio.fuenteId);
-      if (nodo && nodo.cantidad > 0) {
-        const extraido = Math.min(EDIFICIO_CATALOGO.mina.produccionBaseOro * ratioMano, nodo.cantidad);
-        nodo.cantidad -= extraido;
-        almacen = agregarRecurso(almacen, 'oro', extraido);
-        if (nodo.cantidad <= 0) eventos.push('El yacimiento de oro de la mina se ha agotado.');
-      }
-    } else if (edificio.tipo === 'minaCobre') {
-      const nodo = world.recursos.find((n) => n.id === edificio.fuenteId);
-      if (nodo && nodo.cantidad > 0) {
-        const extraido = Math.min(EDIFICIO_CATALOGO.minaCobre.produccionBaseCobre * ratioMano, nodo.cantidad);
-        nodo.cantidad -= extraido;
-        almacen = agregarRecurso(almacen, 'cobre', extraido);
-        if (nodo.cantidad <= 0) eventos.push('El yacimiento de cobre se ha agotado.');
-      }
-    } else if (edificio.tipo === 'minaEstano') {
-      const nodo = world.recursos.find((n) => n.id === edificio.fuenteId);
-      if (nodo && nodo.cantidad > 0) {
-        const extraido = Math.min(EDIFICIO_CATALOGO.minaEstano.produccionBaseEstano * ratioMano, nodo.cantidad);
-        nodo.cantidad -= extraido;
-        almacen = agregarRecurso(almacen, 'estano', extraido);
-        if (nodo.cantidad <= 0) eventos.push('El yacimiento de estaño se ha agotado.');
-      }
-    } else if (edificio.tipo === 'corral') {
-      const nodo = world.recursos.find((n) => n.id === edificio.fuenteId);
-      if (nodo && nodo.cantidad > 0) {
-        const extraido = Math.min(EDIFICIO_CATALOGO.corral.produccionBaseLivestock * ratioMano, nodo.cantidad);
-        nodo.cantidad -= extraido;
-        almacen = agregarRecurso(almacen, 'livestock', extraido);
-        if (nodo.cantidad <= 0) eventos.push('El manada de livestock del corral se ha agotado.');
+    } else {
+      const extraccion = EXTRACTORES[edificio.tipo];
+      if (extraccion && mapa.nodoProductivo(edificio.fuenteId)) {
+        const extraido = mapa.extraer(edificio.fuenteId, extraccion.produccionBase() * ratioMano);
+        almacen = agregarRecurso(almacen, extraccion.recurso, extraido);
+        if (!mapa.nodoProductivo(edificio.fuenteId)) eventos.push(extraccion.mensajeAgotado);
       }
     }
     resultados.set(edificio.id, edificio);
@@ -739,7 +720,7 @@ export function avanzarConstruccion(
   let nuevosEspeciales: Edificio[] = [];
   let almacenFinal = asentamientoConProgreso.almacen;
   if (!asentamiento.autoConstruccionPausada) {
-    const trasNecesidades = evaluarNecesidades(asentamientoConProgreso, zonaPoligono, world, reserva);
+    const trasNecesidades = evaluarNecesidades(asentamientoConProgreso, zonaPoligono, mapa, reserva, reclamos);
     nuevosProyectos = trasNecesidades.nuevos;
     almacenFinal = trasNecesidades.almacen;
     const trasEspeciales = evaluarEdificiosEspeciales(

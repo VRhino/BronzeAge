@@ -305,7 +305,7 @@ app.innerHTML = `
         <div class="section-title">Valores de simulación</div>
         <button type="button" id="restaurar-balance-btn">Restaurar valores de fábrica</button>
       </div>
-      <p class="legend-note">Placeholders de balance (Doc — ver Consideraciones/Preguntas_Abiertas.md). Se editan en caliente: afectan de inmediato a la próxima acción o tick, sin necesidad de regenerar el mundo (salvo el grupo "Mundo"/generación, que solo se aplica al fundar un mundo nuevo).</p>
+      <p class="legend-note">Placeholders de balance (Doc — ver Consideraciones/Preguntas_Abiertas.md). Se editan en caliente: afectan de inmediato a la próxima acción o tick. Los parámetros de generación del mundo (tamaño, nodos, bosques, fertilidad) no están aquí a propósito: son fijos por diseño para que una seed dé siempre el mismo mapa — ver <code>src/worldgen/config.ts</code>.</p>
       <div class="balance-toolbar">
         <input type="search" id="balance-search" placeholder="Buscar campo o grupo…" />
         <span class="balance-count" id="balance-count"></span>
@@ -1347,9 +1347,9 @@ function render(): void {
   volverPresenteBtn.hidden = !viendoPasado;
   controlsPanelEl.classList.toggle('viendo-pasado', viendoPasado);
 
-  const drawState: DrawState = { world: state.world, asentamientos: state.asentamientos, zonas: gameStore.getZonas(state.asentamientos), facciones: state.facciones, caravanas: state.caravanas };
+  const drawState: DrawState = { mapa: gameStore.getMapa(state), asentamientos: state.asentamientos, zonas: gameStore.getZonas(state.asentamientos), facciones: state.facciones, caravanas: state.caravanas };
   draw(ctx, canvas, drawState);
-  if (mostrarFiltroFertilidad) drawFiltroFertilidad(ctx, canvas, state.world);
+  if (mostrarFiltroFertilidad) drawFiltroFertilidad(ctx, canvas, gameStore.getMapa(state));
   renderViabilidadFundacion(viendoPasado);
   actualizarSelects(liveState);
   actualizarInfoFlota(state);
@@ -1384,7 +1384,7 @@ function renderViabilidadFundacion(viendoPasado: boolean): void {
   }
 
   const v = gameStore.viabilidadFundacion(hoverFundacion);
-  drawPreviewFundacion(ctx, canvas, gameStore.getState().world, {
+  drawPreviewFundacion(ctx, canvas, gameStore.getMapa(), {
     posicion: hoverFundacion,
     radioInicial: v.radioInicial,
     fundable: v.fundable,
@@ -1430,7 +1430,7 @@ function idsDeInput(input: HTMLInputElement): string {
 /** Coordenadas de mundo bajo el puntero, a partir de un evento de ratón sobre el canvas. */
 function posicionMundoDesdeEvento(ev: MouseEvent): { x: number; y: number } {
   const rect = canvas.getBoundingClientRect();
-  const scale = gameStore.getState().world.config.ancho / canvas.width;
+  const scale = gameStore.getMapa().limites.ancho / canvas.width;
   return { x: (ev.clientX - rect.left) * scale, y: (ev.clientY - rect.top) * scale };
 }
 
@@ -1447,7 +1447,7 @@ canvas.addEventListener('mouseleave', () => {
 canvas.addEventListener('click', (ev) => {
   const state = gameStore.getState();
   const rect = canvas.getBoundingClientRect();
-  const scale = state.world.config.ancho / canvas.width;
+  const scale = gameStore.getMapa(state).limites.ancho / canvas.width;
   const worldX = (ev.clientX - rect.left) * scale;
   const worldY = (ev.clientY - rect.top) * scale;
   if (expansionModoClicCheckbox.checked) {

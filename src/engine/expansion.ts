@@ -1,4 +1,5 @@
-import type { Asentamiento, Caravana, Faccion, Point, World } from '../domain/types';
+import type { Asentamiento, Caravana, Faccion, Point } from '../domain/types';
+import type { Mapa } from '../world/mapa';
 import { CARAVANA_CATALOGO, EDIFICIO_CATALOGO, FUNDACION } from '../constants';
 import { agregarRecurso, descontarRecursos, tieneRecursos } from './almacen';
 import { posicionLibreParaFundar } from './zones';
@@ -126,7 +127,7 @@ export function desarmarCaravanaFundacion(origen: Asentamiento, caravana: Carava
  */
 export function avanzarCaravanasFundacion(
   caravanas: Caravana[],
-  world: World,
+  mapa: Mapa,
   facciones: Faccion[],
   asentamientos: Asentamiento[],
   tickActual: number
@@ -166,7 +167,7 @@ export function avanzarCaravanasFundacion(
 
     try {
       const resultado = fundarAsentamiento(
-        world,
+        mapa,
         faccionesActuales,
         origen.faccionId,
         caravana.destinoPosicion,

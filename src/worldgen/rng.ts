@@ -1,4 +1,7 @@
 // PRNG determinista (mulberry32) — mundo reproducible a partir de un seed.
+// Vive en `worldgen/` porque la generación es su consumidor principal y la razón de que exista, pero es
+// una utilidad genérica: los tests del motor también lo usan para sustituir `Math.random` y poder comparar
+// dos corridas (ver `__tests__/fixtures.ts`).
 
 export type RandomFn = () => number;
 

@@ -6,15 +6,15 @@
 // diverjan en producción sin que ningún test de valores concretos lo note.
 import { describe, expect, it } from 'vitest';
 import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
-import { crearFacciones, crearMundoDeterminista, fundarAsentamientoDeTest, mockMathRandomDeterminista } from './fixtures';
+import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, mockMathRandomDeterminista } from './fixtures';
 
 const TICKS = 80;
 
 function correrSimulacion(seed: number) {
   const restaurar = mockMathRandomDeterminista(seed);
   try {
-    const world = crearMundoDeterminista(seed);
-    const { asentamiento, facciones } = fundarAsentamientoDeTest(world, crearFacciones(), 'faccion-1', []);
+    const mapa = crearMapaDeterminista(seed);
+    const { asentamiento, facciones } = fundarAsentamientoDeTest(mapa, crearFacciones(), 'faccion-1', []);
 
     let estado: EstadoSimulacion = {
       asentamientos: [asentamiento],
@@ -27,7 +27,7 @@ function correrSimulacion(seed: number) {
     };
     const eventosPorTick: string[][] = [];
     for (let tick = 1; tick <= TICKS; tick++) {
-      const resultado = avanzarSimulacion(estado, world, tick);
+      const resultado = avanzarSimulacion(estado, mapa, tick);
       eventosPorTick.push(resultado.eventos);
       estado = resultado;
     }

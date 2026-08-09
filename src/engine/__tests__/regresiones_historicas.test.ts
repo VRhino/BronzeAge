@@ -6,7 +6,7 @@ import type { EdificioTipo } from '../../domain/types';
 import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
 import {
   crearFacciones,
-  crearMundoDeterminista,
+  crearMapaDeterminista,
   fundarAsentamientoDeTest,
   mockMathRandomDeterminista,
   posicionRecomendable,
@@ -15,9 +15,9 @@ import {
 const SEED = 11;
 
 function estadoInicialConUnAsentamiento(posicion?: { x: number; y: number }) {
-  const world = crearMundoDeterminista(SEED);
+  const mapa = crearMapaDeterminista(SEED);
   const facciones = crearFacciones();
-  const { asentamiento, facciones: faccionesTrasFundar } = fundarAsentamientoDeTest(world, facciones, 'faccion-1', [], 0, posicion);
+  const { asentamiento, facciones: faccionesTrasFundar } = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', [], 0, posicion);
   const estado: EstadoSimulacion = {
     asentamientos: [asentamiento],
     facciones: faccionesTrasFundar,
@@ -27,7 +27,7 @@ function estadoInicialConUnAsentamiento(posicion?: { x: number; y: number }) {
     relaciones: [],
     titulos: [],
   };
-  return { world, estado };
+  return { mapa, estado };
 }
 
 function contarPorTipo(edificios: { tipo: EdificioTipo; estado: string }[], tipo: EdificioTipo): number {
@@ -51,12 +51,12 @@ describe('regresiones históricas (Correcciones_Durante_Desarrollo.md)', () => {
   it('un asentamiento recién fundado no puede caer en ruinas durante la gracia de mantenimiento, sin importar su emplazamiento', () => {
     // Posición deliberadamente sin garantía de bosque cercano (a diferencia de `posicionRecomendable`):
     // si la gracia no protegiera, este sería justo el caso que colapsaría en ~9 ticks.
-    const { world, estado: estadoInicial } = estadoInicialConUnAsentamiento({ x: 500, y: 500 });
+    const { mapa, estado: estadoInicial } = estadoInicialConUnAsentamiento({ x: 500, y: 500 });
     let estado = estadoInicial;
     const graciaTicks = 60;
 
     for (let tick = 1; tick < graciaTicks; tick++) {
-      estado = avanzarSimulacion(estado, world, tick);
+      estado = avanzarSimulacion(estado, mapa, tick);
       expect(estado.asentamientos, `tick ${tick}: el asentamiento sigue en pie durante la gracia`).toHaveLength(1);
       expect(estado.asentamientos[0]!.medidorMantenimiento, `tick ${tick}: medidor intacto durante la gracia`).toBe(100);
     }
@@ -68,12 +68,12 @@ describe('regresiones históricas (Correcciones_Durante_Desarrollo.md)', () => {
   // prioridad correcta. La corrección (reserva inicial de materiales + prioridad de supervivencia) debe
   // permitir que la auto-construcción avance más allá del set inicial de edificios (centroUrbano/granja/vivienda).
   it('la auto-construcción no se congela: una Leñera llega a activarse en un emplazamiento con bosque alcanzable', () => {
-    const { world, estado: estadoInicial } = estadoInicialConUnAsentamiento(posicionRecomendable(crearMundoDeterminista(SEED)));
+    const { mapa, estado: estadoInicial } = estadoInicialConUnAsentamiento(posicionRecomendable(crearMapaDeterminista(SEED)));
     let estado = estadoInicial;
 
     let leneraActiva = false;
     for (let tick = 1; tick <= 40 && !leneraActiva; tick++) {
-      estado = avanzarSimulacion(estado, world, tick);
+      estado = avanzarSimulacion(estado, mapa, tick);
       const asentamiento = estado.asentamientos[0];
       leneraActiva = !!asentamiento && asentamiento.edificios.some((e) => e.tipo === 'lenera' && e.estado === 'activo');
     }
@@ -86,13 +86,13 @@ describe('regresiones históricas (Correcciones_Durante_Desarrollo.md)', () => {
   // disparara ninguna respuesta automática. La corrección hace que la auto-construcción encole Granjas
   // adicionales mientras la producción de trigo esté por debajo del consumo (ver `enDeficitTrigo`, construction.ts).
   it('la Granja escala con la demanda: aparece más de una según crece la población', () => {
-    const posicion = posicionRecomendable(crearMundoDeterminista(SEED));
-    const { world, estado: estadoInicial } = estadoInicialConUnAsentamiento(posicion);
+    const posicion = posicionRecomendable(crearMapaDeterminista(SEED));
+    const { mapa, estado: estadoInicial } = estadoInicialConUnAsentamiento(posicion);
     let estado = estadoInicial;
 
     let maxGranjas = 0;
     for (let tick = 1; tick <= 300; tick++) {
-      estado = avanzarSimulacion(estado, world, tick);
+      estado = avanzarSimulacion(estado, mapa, tick);
       if (estado.asentamientos.length === 0) break; // se arruinó — no es lo que este test evalúa.
       maxGranjas = Math.max(maxGranjas, contarPorTipo(estado.asentamientos[0]!.edificios, 'granja'));
     }

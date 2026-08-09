@@ -12,14 +12,12 @@
 import {
   ALMACEN,
   ASCENSO_TROPA,
-  BOSQUE,
   CAP_FUNDACION_POR_NIVEL,
   CIUDADANIA,
   COMISION,
   EDIFICIO_CATALOGO,
-  FERTILIDAD,
   FUNDACION,
-  LIVESTOCK,
+  LENERA_POR_BOSQUE,
   MANTENIMIENTO,
   MILITAR,
   NECESIDADES,
@@ -30,14 +28,11 @@ import {
   POLITICA_CATALOGO,
   PRECIO_BASE,
   PRECIO_REFERENCIA,
-  RECURSO_CANTIDAD_NODO,
-  RECURSO_RAREZA,
   REPUTACION,
   RESERVA_CONSTRUCCION,
   SITIO,
   TROPA_CATALOGO,
   TRUEQUE,
-  WORLD_DEFAULT,
   ZONA_INFLUENCIA,
 } from '../constants';
 
@@ -65,12 +60,12 @@ interface CampoInterno {
  * compartan nombres de clave interna (p. ej. NIVEL_FACCION y NIVEL_ASENTAMIENTO comparten "nivelMaximo").
  */
 const GRUPOS: Array<[string, string, unknown]> = [
-  ['Mundo', 'WORLD_DEFAULT', WORLD_DEFAULT],
-  ['Recursos — rareza', 'RECURSO_RAREZA', RECURSO_RAREZA],
-  ['Recursos — cantidad por nodo', 'RECURSO_CANTIDAD_NODO', RECURSO_CANTIDAD_NODO],
-  ['Livestock', 'LIVESTOCK', LIVESTOCK],
-  ['Bosques', 'BOSQUE', BOSQUE],
-  ['Fertilidad', 'FERTILIDAD', FERTILIDAD],
+  // Los parámetros de generación de mundo (tamaño, rareza/cantidad de nodos, bosques, fertilidad) NO están
+  // aquí a propósito: son fijos por diseño, ver `src/worldgen/config.ts`. Se editaban en caliente desde este
+  // panel, y eso rompía en silencio los saves — la partida guarda solo la seed y regenera el mapa al cargar,
+  // así que tocar cualquiera de esos números hacía que un save anterior se recuperase como otro mundo
+  // (distinto campo de fertilidad, distintas granjas). Para cambiarlos hay que tocar el código.
+  ['Leñeras por bosque', 'LENERA_POR_BOSQUE', LENERA_POR_BOSQUE],
   ['Zona de influencia', 'ZONA_INFLUENCIA', ZONA_INFLUENCIA],
   ['Fundación', 'FUNDACION', FUNDACION],
   ['Población', 'POBLACION', POBLACION],
