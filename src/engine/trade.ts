@@ -1,11 +1,13 @@
 import type { AcuerdoTrueque, Asentamiento, Caravana, Faccion, Point } from '../domain/types';
-import { CARAVANA_CATALOGO, COMISION, REPUTACION, TRUEQUE } from '../constants';
-import { agregarRecurso, cantidadDisponible, descontarRecursos } from './almacen';
+import { ASIGNACION_CARAVANA, CARAVANA_CATALOGO, COMISION, REPUTACION, TRUEQUE } from '../constants';
+import { agregarRecurso, cantidadDisponible, descontarRecursos, tieneRecursos } from './almacen';
 import { calcularPrecioReferencia } from './market';
-import { factorComisionExterna } from './politicas';
+import { cupoCaravanas, tieneMercadoActivo } from './asentamientoQuery';
+import { factorCapacidadCaravana, factorComisionExterna, factorVelocidadCaravana } from './politicas';
 import { aplicarAjustesReputacion, factorComisionPorReputacion, type AjusteReputacion } from './reputacion';
 
 export class TruequeInvalidoError extends Error {}
+export class CaravanaInvalidaError extends Error {}
 
 function distancia(a: Point, b: Point): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
@@ -53,6 +55,45 @@ export function proponerTrueque(
   };
 }
 
+/**
+ * Construye una caravana comercial propia (ampliación de comercio, a petición del usuario): a diferencia del
+ * resto de tipos de caravana (todavía efímeros), esta es un activo PERSISTENTE que el asentamiento conserva y
+ * cuenta contra su `cupoCaravanas` (Mercado + política "Ampliación de Flota", ver asentamientoQuery.ts) hasta
+ * que se pierda capturada en combate (Doc 3.10) — no se puede desmantelar voluntariamente (confirmado con el
+ * usuario). Nace 'disponible', parada en el propio asentamiento, lista para que `asignarCaravanasATrueque`
+ * la asigne a un envío.
+ */
+export function construirCaravanaComercial(
+  asentamiento: Asentamiento,
+  caravanasExistentes: Caravana[],
+  tickActual: number,
+  contador = 0
+): { asentamiento: Asentamiento; caravana: Caravana } {
+  if (!tieneMercadoActivo(asentamiento)) {
+    throw new CaravanaInvalidaError('El asentamiento necesita un Mercado activo para construir caravanas.');
+  }
+  const cupo = cupoCaravanas(asentamiento);
+  const propias = caravanasExistentes.filter((c) => c.tipo === 'comercial' && c.origenAsentamientoId === asentamiento.id).length;
+  if (propias >= cupo) {
+    throw new CaravanaInvalidaError(`Cupo de caravanas alcanzado (${propias}/${cupo}).`);
+  }
+  const costo = CARAVANA_CATALOGO.comercial.costoConstruccion as Partial<Record<string, number>>;
+  if (!tieneRecursos(asentamiento.almacen, costo)) {
+    throw new CaravanaInvalidaError('No hay recursos suficientes para construir la caravana.');
+  }
+  const almacen = descontarRecursos(asentamiento.almacen, costo);
+  const caravana: Caravana = {
+    id: `caravana-comercial-${asentamiento.id}-${tickActual}-${contador}`,
+    tipo: 'comercial',
+    origenAsentamientoId: asentamiento.id,
+    contenido: {},
+    posicionActual: asentamiento.posicion,
+    progreso: 0,
+    estado: 'disponible',
+  };
+  return { asentamiento: { ...asentamiento, almacen }, caravana };
+}
+
 /** Tasa base (Doc 3.5); si es externa, el Tesorero del destino (quien cobra la comisión) puede modularla. */
 function tasaComision(origen: Asentamiento, destino: Asentamiento): number {
   if (origen.faccionId === destino.faccionId) return COMISION.tasaMismaFaccion;
@@ -77,8 +118,10 @@ function avanzarCaravanas(
 
   for (const caravana of caravanas) {
     if (!caravana.destinoAsentamientoId) {
-      // Caravana de Fundación (Doc 1.8): su destino es un punto del mapa, no un asentamiento — la avanza
-      // `avanzarCaravanasFundacion` (engine/expansion.ts), no esta función. Se deja pasar sin tocar.
+      // Sin destino todavía: o es una Caravana de Fundación (Doc 1.8, destino = punto del mapa, la avanza
+      // `avanzarCaravanasFundacion` en engine/expansion.ts, no esta función), o es una caravana comercial
+      // propia 'disponible' (ampliación de comercio, construida pero sin asignar todavía, Doc 3.2). Ambas se
+      // dejan pasar sin tocar — una disponible no se mueve hasta que `asignarCaravanasATrueque` la asigne.
       restantes.push(caravana);
       continue;
     }
@@ -87,7 +130,10 @@ function avanzarCaravanas(
     if (!origen || !destino) continue; // asentamiento desaparecido (fuera de alcance de Fase 0 aún)
 
     const distanciaTotal = Math.max(1, distancia(origen.posicion, destino.posicion));
-    const velocidad = CARAVANA_CATALOGO[caravana.tipo].velocidad;
+    const velocidadBase = CARAVANA_CATALOGO[caravana.tipo].velocidad;
+    // "Rutas Rápidas" (Tesorero, ampliación de comercio) solo aplica a la flota comercial propia — no a
+    // Caravanas de Fundación ni a los tipos todavía sin uso real (militar/contrabando, Doc 3.6).
+    const velocidad = caravana.tipo === 'comercial' ? velocidadBase * factorVelocidadCaravana(origen) : velocidadBase;
     const progreso = Math.min(1, caravana.progreso + velocidad / distanciaTotal);
 
     if (progreso < 1) {
@@ -142,22 +188,79 @@ function avanzarCaravanas(
         acuerdosPorId.set(acuerdo.id, actualizado);
       }
     }
+
+    if (caravana.tipo === 'comercial') {
+      // Flota propia (ampliación de comercio): vuelve a 'disponible' en el origen en vez de desaparecer — es
+      // un activo persistente y con costo (`construirCaravanaComercial`), no un objeto de un solo uso como el
+      // resto de tipos de caravana.
+      restantes.push({
+        ...caravana,
+        estado: 'disponible',
+        contenido: {},
+        destinoAsentamientoId: undefined,
+        origenAcuerdoId: undefined,
+        ladoAcuerdo: undefined,
+        progreso: 0,
+        posicionActual: origen.posicion,
+      });
+    }
+    // Resto de tipos (militar/contrabando, sin uso real todavía, Doc 3.6; Caravana de Fundación no llega
+    // aquí, ver arriba): comportamiento sin cambios, la caravana se pierde al entregar.
   }
 
   return restantes;
 }
 
-/** Despacha nuevas caravanas para acuerdos activos que aún tengan cupo pendiente y stock disponible en origen. */
-function despacharTrueques(
+interface LadoPendiente {
+  acuerdo: AcuerdoTrueque;
+  lado: 'A' | 'B';
+  origenId: string;
+  destinoId: string;
+  recurso: string;
+  total: number;
+  entregado: number;
+}
+
+/**
+ * Score de prioridad (ampliación de comercio, a petición del usuario) para decidir, cuando hay menos
+ * caravanas disponibles que envíos pendientes en un mismo asentamiento, cuál se sirve primero. Tres factores
+ * normalizados a 0-100 y ponderados (ver `ASIGNACION_CARAVANA`, constants.ts):
+ * - Urgencia por expiración: cuánto del plazo del acuerdo ya se consumió.
+ * - Urgencia por volumen: qué fracción del total pactado sigue pendiente.
+ * - Cercanía: destinos más cercanos rinden más envíos por caravana disponible (round-trip más corto).
+ */
+function scoreAsignacion(l: LadoPendiente, origen: Asentamiento, destino: Asentamiento, tickActual: number): number {
+  const plazoTotal = l.acuerdo.expiraEnTick - l.acuerdo.creadoEnTick;
+  const ticksRestantes = Math.max(0, l.acuerdo.expiraEnTick - tickActual);
+  const urgenciaExpiracion = plazoTotal > 0 ? 100 * (1 - ticksRestantes / plazoTotal) : 100;
+  const pendiente = l.total - l.entregado;
+  const urgenciaVolumen = l.total > 0 ? 100 * Math.min(1, pendiente / l.total) : 0;
+  const dist = distancia(origen.posicion, destino.posicion);
+  const cercania = 100 * (1 - Math.min(1, dist / ASIGNACION_CARAVANA.distanciaReferencia));
+  return (
+    urgenciaExpiracion * ASIGNACION_CARAVANA.pesoUrgenciaExpiracion +
+    urgenciaVolumen * ASIGNACION_CARAVANA.pesoUrgenciaVolumen +
+    cercania * ASIGNACION_CARAVANA.pesoCercania
+  );
+}
+
+/**
+ * Asigna caravanas 'disponibles' de la flota propia a los lados pendientes de trueque (ampliación de
+ * comercio, a petición del usuario — "solo simulación", Doc 3.2: en el diseño objetivo el jugador elige la
+ * caravana, la carga y la escolta a mano; esto es el sustituto automático de Fase 0). Ya NO crea caravanas de
+ * la nada como antes — si un asentamiento no tiene ninguna disponible este tick, el envío simplemente espera.
+ * Cuando compiten varios envíos por menos caravanas de las que hacen falta, se asignan por `scoreAsignacion`
+ * descendente, caravana por caravana, hasta agotar el pool disponible de ese asentamiento.
+ */
+function asignarCaravanasATrueque(
   acuerdosPorId: Map<string, AcuerdoTrueque>,
   asentamientosPorId: Map<string, Asentamiento>,
-  caravanasEnTransito: Caravana[],
+  caravanas: Caravana[],
   tickActual: number,
   eventos: string[],
   ajustesReputacion: AjusteReputacion[]
 ): Caravana[] {
-  const nuevas: Caravana[] = [];
-  let contador = 0;
+  const pendientesPorOrigen = new Map<string, LadoPendiente[]>();
 
   for (const acuerdo of acuerdosPorId.values()) {
     if (acuerdo.estado !== 'activo') continue;
@@ -176,41 +279,66 @@ function despacharTrueques(
       continue;
     }
 
-    const lados: Array<{ lado: 'A' | 'B'; origenId: string; destinoId: string; recurso: string; total: number; entregado: number }> = [
-      { lado: 'A', origenId: acuerdo.asentamientoAId, destinoId: acuerdo.asentamientoBId, recurso: acuerdo.recursoA, total: acuerdo.cantidadTotalA, entregado: acuerdo.cantidadEntregadaA },
-      { lado: 'B', origenId: acuerdo.asentamientoBId, destinoId: acuerdo.asentamientoAId, recurso: acuerdo.recursoB, total: acuerdo.cantidadTotalB, entregado: acuerdo.cantidadEntregadaB },
+    const lados: LadoPendiente[] = [
+      { acuerdo, lado: 'A', origenId: acuerdo.asentamientoAId, destinoId: acuerdo.asentamientoBId, recurso: acuerdo.recursoA, total: acuerdo.cantidadTotalA, entregado: acuerdo.cantidadEntregadaA },
+      { acuerdo, lado: 'B', origenId: acuerdo.asentamientoBId, destinoId: acuerdo.asentamientoAId, recurso: acuerdo.recursoB, total: acuerdo.cantidadTotalB, entregado: acuerdo.cantidadEntregadaB },
     ];
 
     for (const l of lados) {
       if (l.entregado >= l.total) continue;
-      const enTransito = caravanasEnTransito.some((c) => c.origenAcuerdoId === acuerdo.id && c.ladoAcuerdo === l.lado);
-      if (enTransito) continue;
-
-      const origen = asentamientosPorId.get(l.origenId);
-      if (!origen) continue;
-      const disponible = cantidadDisponible(origen.almacen, l.recurso);
-      const pendiente = l.total - l.entregado;
-      const capacidad = CARAVANA_CATALOGO.comercial.capacidad;
-      const cantidad = Math.min(disponible, pendiente, capacidad);
-      if (cantidad <= 0) continue;
-
-      asentamientosPorId.set(origen.id, { ...origen, almacen: descontarRecursos(origen.almacen, { [l.recurso]: cantidad }) });
-      nuevas.push({
-        id: `caravana-${acuerdo.id}-${l.lado}-${tickActual}-${contador++}`,
-        tipo: 'comercial',
-        origenAsentamientoId: l.origenId,
-        destinoAsentamientoId: l.destinoId,
-        contenido: { [l.recurso]: cantidad },
-        posicionActual: origen.posicion,
-        progreso: 0,
-        origenAcuerdoId: acuerdo.id,
-        ladoAcuerdo: l.lado,
-      });
-      eventos.push(`Caravana comercial parte de ${l.origenId} hacia ${l.destinoId} con ${cantidad.toFixed(0)} ${l.recurso}.`);
+      const yaEnTransito = caravanas.some((c) => c.origenAcuerdoId === acuerdo.id && c.ladoAcuerdo === l.lado && c.estado === 'en_transito');
+      if (yaEnTransito) continue;
+      const arr = pendientesPorOrigen.get(l.origenId) ?? [];
+      arr.push(l);
+      pendientesPorOrigen.set(l.origenId, arr);
     }
   }
 
-  return nuevas;
+  const caravanasPorId = new Map(caravanas.map((c) => [c.id, c]));
+
+  for (const [origenId, pendientes] of pendientesPorOrigen) {
+    const origen = asentamientosPorId.get(origenId);
+    if (!origen) continue;
+
+    const disponibles = caravanas.filter((c) => c.tipo === 'comercial' && c.estado === 'disponible' && c.origenAsentamientoId === origenId);
+    if (disponibles.length === 0) continue;
+
+    const conScore = pendientes
+      .map((l) => {
+        const destino = asentamientosPorId.get(l.destinoId);
+        return destino ? { l, destino, score: scoreAsignacion(l, origen, destino, tickActual) } : null;
+      })
+      .filter((x): x is { l: LadoPendiente; destino: Asentamiento; score: number } => x !== null)
+      .sort((a, b) => b.score - a.score);
+
+    let idx = 0;
+    for (const { l, destino } of conScore) {
+      if (idx >= disponibles.length) break;
+      const caravana = disponibles[idx]!;
+
+      const disponibleStock = cantidadDisponible(origen.almacen, l.recurso);
+      const pendiente = l.total - l.entregado;
+      const capacidad = CARAVANA_CATALOGO.comercial.capacidad * factorCapacidadCaravana(origen);
+      const cantidad = Math.min(disponibleStock, pendiente, capacidad);
+      if (cantidad <= 0) continue; // sin stock suficiente todavía: la caravana se reintenta el siguiente tick, no consume su turno
+
+      idx++;
+      asentamientosPorId.set(origen.id, { ...origen, almacen: descontarRecursos(origen.almacen, { [l.recurso]: cantidad }) });
+      caravanasPorId.set(caravana.id, {
+        ...caravana,
+        estado: 'en_transito',
+        destinoAsentamientoId: l.destinoId,
+        contenido: { [l.recurso]: cantidad },
+        origenAcuerdoId: l.acuerdo.id,
+        ladoAcuerdo: l.lado,
+        posicionActual: origen.posicion,
+        progreso: 0,
+      });
+      eventos.push(`Caravana comercial de ${origenId} sale hacia ${destino.id} con ${cantidad.toFixed(0)} ${l.recurso}.`);
+    }
+  }
+
+  return [...caravanasPorId.values()];
 }
 
 export function avanzarComercio(
@@ -225,13 +353,13 @@ export function avanzarComercio(
   const asentamientosPorId = new Map(asentamientos.map((a) => [a.id, { ...a }]));
   const acuerdosPorId = new Map(acuerdos.map((a) => [a.id, a]));
 
-  const enTransitoTrasEntrega = avanzarCaravanas(caravanas, asentamientosPorId, acuerdosPorId, facciones, eventos, ajustesReputacion);
-  const nuevas = despacharTrueques(acuerdosPorId, asentamientosPorId, enTransitoTrasEntrega, tickActual, eventos, ajustesReputacion);
+  const trasMovimiento = avanzarCaravanas(caravanas, asentamientosPorId, acuerdosPorId, facciones, eventos, ajustesReputacion);
+  const trasAsignacion = asignarCaravanasATrueque(acuerdosPorId, asentamientosPorId, trasMovimiento, tickActual, eventos, ajustesReputacion);
 
   return {
     asentamientos: asentamientos.map((a) => asentamientosPorId.get(a.id)!),
     facciones: aplicarAjustesReputacion(facciones, ajustesReputacion),
-    caravanas: [...enTransitoTrasEntrega, ...nuevas],
+    caravanas: trasAsignacion,
     acuerdos: [...acuerdosPorId.values()],
     eventos,
   };

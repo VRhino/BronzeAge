@@ -85,7 +85,9 @@ type CampoFactor =
   | 'factorTiempoConstruccion'
   | 'factorComisionExterna'
   | 'factorCostoReclutamiento'
-  | 'factorProduccionTrigo';
+  | 'factorProduccionTrigo'
+  | 'factorCapacidadCaravana'
+  | 'factorVelocidadCaravana';
 
 function productoFactor(asentamiento: Asentamiento, campo: CampoFactor): number {
   return asentamiento.politicasActivas.reduce((acc, activa) => {
@@ -102,6 +104,25 @@ export const factorComisionExterna = (a: Asentamiento): number => productoFactor
 export const factorCostoReclutamiento = (a: Asentamiento): number => productoFactor(a, 'factorCostoReclutamiento');
 /** Edicto de Cosecha (Gobernador): multiplica la producción de trigo de todas las Granjas — madera/piedra sin cambios. */
 export const factorProduccionTrigo = (a: Asentamiento): number => productoFactor(a, 'factorProduccionTrigo');
+/** "Carga Ampliada" (Tesorero): multiplica la capacidad de carga de las caravanas propias del asentamiento. */
+export const factorCapacidadCaravana = (a: Asentamiento): number => productoFactor(a, 'factorCapacidadCaravana');
+/** "Rutas Rápidas" (Tesorero): multiplica la velocidad de las caravanas propias del asentamiento. */
+export const factorVelocidadCaravana = (a: Asentamiento): number => productoFactor(a, 'factorVelocidadCaravana');
+
+/**
+ * Campos ADITIVOS (a diferencia de `productoFactor`, que multiplica): suman lo que aporte cada política
+ * activa en vez de escalar un factor base. Sirve para bonos de cupo tipo "+N" en vez de "×N" (Doc 4.4).
+ */
+function sumaFactorPolitica(asentamiento: Asentamiento, campo: string): number {
+  return asentamiento.politicasActivas.reduce((acc, activa) => {
+    const def = POLITICA_CATALOGO.find((p) => p.id === activa.politicaId);
+    const valor = def ? (def as Record<string, unknown>)[campo] : undefined;
+    return typeof valor === 'number' ? acc + valor : acc;
+  }, 0);
+}
+
+/** "Ampliación de Flota" (Tesorero): cupo extra de caravanas propias, sumado al que ya da el nivel de Mercado. */
+export const cupoCaravanaExtra = (a: Asentamiento): number => sumaFactorPolitica(a, 'cupoCaravanaExtra');
 
 /**
  * Campos "objetivo" (no multiplicativos): en vez de multiplicar factores, toman el mayor valor propuesto

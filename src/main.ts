@@ -51,6 +51,7 @@ const EDIFICIO_NOMBRE: Record<string, string> = {
   galeriaDeTiro: 'Galería de Tiro',
   palacio: 'Palacio',
   granFundicion: 'Gran Fundición',
+  mercado: 'Mercado',
 };
 
 const EDIFICIO_FUNCION: Record<string, string> = {
@@ -72,6 +73,7 @@ const EDIFICIO_FUNCION: Record<string, string> = {
   galeriaDeTiro: 'Reclutamiento de tropas a distancia. Solo se construye mientras la política del General esté activa.',
   palacio: 'Desbloquea la aparición de Nobleza. Solo se construye mientras la política del Gobernador esté activa.',
   granFundicion: 'Edificio militar de élite (colocación manual) — requiere nivel de Facción alto; habilita tropas de Nobleza.',
+  mercado: 'Exige poder colocar órdenes de mercado y construir caravanas comerciales propias. Su nivel interno fija el cupo de flota. Solo se construye mientras la política del Tesorero esté activa.',
 };
 
 /** Campos de factor que puede traer una política del catálogo (ver CATALOGOS.politicas), con etiqueta legible. */
@@ -81,6 +83,9 @@ const FACTOR_LABEL: Record<string, string> = {
   factorTiempoConstruccion: 'Tiempo de construcción',
   factorComisionExterna: 'Comisión de comercio externo',
   factorCostoReclutamiento: 'Costo de reclutamiento',
+  factorProduccionTrigo: 'Producción de trigo',
+  factorCapacidadCaravana: 'Capacidad de carga de caravanas',
+  factorVelocidadCaravana: 'Velocidad de caravanas',
 };
 
 /** Describe en una línea qué mueve una política del catálogo (multiplicador sobre el factor correspondiente,
@@ -90,6 +95,9 @@ function efectoPolitica(politica: (typeof CATALOGOS.politicas)[number]): string 
   const efectos: string[] = [];
   if (typeof registro.minimoLenerasPrioritario === 'number') {
     efectos.push(`Prioriza Leñeras: bloquea el resto de auto-construcción hasta tener ${registro.minimoLenerasPrioritario} (activas o en curso)`);
+  }
+  if (typeof registro.cupoCaravanaExtra === 'number') {
+    efectos.push(`+${registro.cupoCaravanaExtra} cupo de caravanas`);
   }
   efectos.push(
     ...Object.keys(FACTOR_LABEL)
@@ -224,6 +232,14 @@ app.innerHTML = `
         <label>Cantidad <input id="mercado-cantidad" type="number" value="30" min="1" /></label>
         <label>Precio unitario (vacío = precio de referencia) <input id="mercado-precio" type="number" min="0" step="0.1" /></label>
         <button id="mercado-btn">Colocar orden</button>
+      </div>
+
+      <div class="controls">
+        <h2>Flota de Caravanas (Doc 3.2, ampliación de comercio)</h2>
+        <label>Asentamiento <select id="flota-asentamiento"></select></label>
+        <div class="tropa-info" id="flota-info"></div>
+        <button id="flota-construir-btn">Construir caravana (50 madera)</button>
+        <p class="legend-note">Requiere Mercado activo y cupo libre. Las caravanas propias no se pueden desmantelar — solo se pierden si las capturan en combate.</p>
       </div>
 
     </div>
@@ -416,6 +432,8 @@ const guerraObjetivoSelect = document.getElementById('guerra-objetivo') as HTMLS
 const guerraEscuadronesObjetivoInput = document.getElementById('guerra-escuadrones-objetivo') as HTMLInputElement;
 const guerraCaravanaSelect = document.getElementById('guerra-caravana') as HTMLSelectElement;
 const militarPanelEl = document.getElementById('militar-panel')!;
+const flotaAsentamientoSelect = document.getElementById('flota-asentamiento') as HTMLSelectElement;
+const flotaInfoEl = document.getElementById('flota-info')!;
 const progresionPanelEl = document.getElementById('progresion-panel')!;
 
 cargoTipoSelect.innerHTML = CATALOGOS.cargos.map((c) => `<option value="${c}">${c}</option>`).join('');
@@ -470,6 +488,25 @@ function actualizarInfoTropa(): void {
 }
 reclutarTropaSelect.addEventListener('change', actualizarInfoTropa);
 actualizarInfoTropa();
+
+/** Info de flota (ampliación de comercio, pestaña Acciones): mercado activo, cupo y cuántas caravanas propias
+ * hay disponibles/en tránsito. Se refresca al cambiar de asentamiento y en cada `render()` (los conteos
+ * cambian tick a tick, no solo con una acción del jugador). */
+function actualizarInfoFlota(state: GameState): void {
+  const asentamiento = state.asentamientos.find((a) => a.id === flotaAsentamientoSelect.value);
+  if (!asentamiento) {
+    flotaInfoEl.innerHTML = '<div class="kv-row"><span>Info:</span><span>Selecciona un asentamiento.</span></div>';
+    return;
+  }
+  const info = gameStore.caravanasInfo(asentamiento);
+  flotaInfoEl.innerHTML = `
+    <div class="kv-row"><span>Mercado activo</span><span>${info.mercadoActivo ? 'Sí' : 'No'}</span></div>
+    <div class="kv-row"><span>Cupo de flota</span><span>${info.cupo}</span></div>
+    <div class="kv-row"><span>Disponibles</span><span>${info.disponibles}</span></div>
+    <div class="kv-row"><span>En tránsito</span><span>${info.enTransito}</span></div>
+  `;
+}
+flotaAsentamientoSelect.addEventListener('change', () => actualizarInfoFlota(gameStore.getState()));
 
 /** Secciones del roster completo (Doc 5.8), agrupadas por edificio de reclutamiento — la pestaña Guerra las
  * muestra siempre visibles, a diferencia del segmento "Info:" que solo detalla la tropa seleccionada. */
@@ -530,6 +567,7 @@ function actualizarSelects(state: GameState): void {
     politicaAsentamientoSelect,
     guerraAsentamientoSelect,
     guerraObjetivoSelect,
+    flotaAsentamientoSelect,
   ]) {
     const seleccionPrevia = select.value;
     select.innerHTML = opcionesAsentamientos;
@@ -1307,6 +1345,7 @@ function render(): void {
   if (mostrarFiltroFertilidad) drawFiltroFertilidad(ctx, canvas, state.world);
   renderViabilidadFundacion(viendoPasado);
   actualizarSelects(liveState);
+  actualizarInfoFlota(state);
   renderPanelAsentamientos(state);
   renderAsentamientosTab(state);
   renderJugadoresTab(state);
@@ -1490,6 +1529,10 @@ document.getElementById('mercado-btn')!.addEventListener('click', () => {
     Number(mercadoCantidadInput.value) || 0,
     precio
   );
+});
+
+document.getElementById('flota-construir-btn')!.addEventListener('click', () => {
+  gameStore.crearCaravana(flotaAsentamientoSelect.value);
 });
 
 document.getElementById('reclutar-tropa-btn')!.addEventListener('click', () => {

@@ -487,10 +487,14 @@ function evaluarEdificiosEspeciales(
   const ocupados = () => [...asentamiento.edificios, ...nuevos];
   let almacenActual = almacen;
 
-  const candidatos: { tipo: 'barracon' | 'galeriaDeTiro' | 'palacio'; requisitoNivel: number }[] = [
+  const candidatos: { tipo: 'barracon' | 'galeriaDeTiro' | 'palacio' | 'mercado'; requisitoNivel: number }[] = [
     { tipo: 'barracon', requisitoNivel: 0 },
     { tipo: 'galeriaDeTiro', requisitoNivel: 0 },
     { tipo: 'palacio', requisitoNivel: (EDIFICIO_CATALOGO.palacio as { requisitoNivelAsentamientoConstruccion?: number }).requisitoNivelAsentamientoConstruccion ?? 0 },
+    // Ampliación de comercio (a petición del usuario): mismo patrón que Barracón/Galería — vía política del
+    // Tesorero ("Construir Mercado"), sin gate de nivel de asentamiento para la construcción BASE (solo sus
+    // mejoras de nivel interno lo exigen, ver EDIFICIO_CATALOGO.mercado.niveles).
+    { tipo: 'mercado', requisitoNivel: 0 },
   ];
 
   for (const { tipo, requisitoNivel } of candidatos) {
@@ -508,8 +512,10 @@ function evaluarEdificiosEspeciales(
   return { nuevos, almacen: almacenActual };
 }
 
-/** Tipos de edificio de transformación con tiers (Doc 4.2.1): mejoran de nivelInterno y ejecutan recetas. */
-const EDIFICIOS_CON_NIVELES = ['fundicion', 'curtiduria', 'armeria', 'carpinteria', 'barracon', 'galeriaDeTiro'] as const;
+/** Tipos de edificio de transformación con tiers (Doc 4.2.1): mejoran de nivelInterno y ejecutan recetas.
+ * Mercado se suma aquí solo por el mecanismo de MEJORA de nivel interno (`avanzarMejoras`) — sus "recetas"
+ * están vacías, el nivel interno solo cambia `cupoCaravanas` (ver `cupoCaravanas`, asentamientoQuery.ts). */
+const EDIFICIOS_CON_NIVELES = ['fundicion', 'curtiduria', 'armeria', 'carpinteria', 'barracon', 'galeriaDeTiro', 'mercado'] as const;
 
 function nivelesDe(tipo: EdificioTipo): Record<number, { trabajadoresRequeridos: number; recetas: { produce: string; produccionBase: number; consumePorUnidad: Partial<Record<string, number>> }[]; costoMejora?: Partial<Record<string, number>>; requisitoNivelAsentamiento?: number; requiereEdificio?: string; requiereEdificioNivel?: number }> | undefined {
   return (EDIFICIO_CATALOGO[tipo] as { niveles?: Record<number, any> }).niveles;

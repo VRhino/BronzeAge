@@ -2,6 +2,7 @@ import type { Asentamiento, OrdenMercado } from '../domain/types';
 import { COMISION, PRECIO_BASE, PRECIO_REFERENCIA } from '../constants';
 import { agregarRecurso, cantidadDisponible, descontarRecursos } from './almacen';
 import { factorComisionExterna } from './politicas';
+import { tieneMercadoActivo } from './asentamientoQuery';
 
 export class OrdenInvalidaError extends Error {}
 
@@ -28,6 +29,12 @@ export function colocarOrdenMercado(
 ): OrdenMercado {
   const asentamiento = asentamientos.find((a) => a.id === asentamientoId);
   if (!asentamiento) throw new OrdenInvalidaError('El asentamiento no existe.');
+  // Ampliación de comercio (a petición del usuario, Doc 3.3): antes cualquier asentamiento podía colocar
+  // órdenes desde el tick 0, sin edificio — ahora exige Mercado activo, igual que Trueque exige caravanas
+  // propias (ver `construirCaravanaComercial`, engine/trade.ts).
+  if (!tieneMercadoActivo(asentamiento)) {
+    throw new OrdenInvalidaError('El asentamiento necesita un Mercado activo para colocar órdenes.');
+  }
   if (cantidad <= 0) throw new OrdenInvalidaError('La cantidad debe ser mayor que 0.');
   if (tipo === 'venta' && cantidadDisponible(asentamiento.almacen, recurso) < cantidad) {
     throw new OrdenInvalidaError('No hay suficiente stock para vender esa cantidad.');

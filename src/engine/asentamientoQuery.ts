@@ -1,6 +1,6 @@
 import type { Asentamiento, Edificio, EdificioTipo, World } from '../domain/types';
 import { EDIFICIO_CATALOGO, NIVEL_ASENTAMIENTO } from '../constants';
-import { factorProduccionTrigo } from './politicas';
+import { cupoCaravanaExtra, factorProduccionTrigo } from './politicas';
 
 export function edificiosPorTipoYEstado(
   asentamiento: Asentamiento,
@@ -28,6 +28,27 @@ export function capacidadViviendaArtesanos(asentamiento: Asentamiento): number {
 export function poblacionTotal(asentamiento: Asentamiento): number {
   const { pesants, artesanos, nobleza } = asentamiento.poblacion;
   return pesants + artesanos + nobleza;
+}
+
+/** Ampliación de comercio (a petición del usuario, Doc 3.3): sin Mercado activo no se pueden colocar
+ * órdenes de mercado ni construir caravanas propias — ver `colocarOrdenMercado` (engine/market.ts) y
+ * `construirCaravanaComercial` (engine/trade.ts). */
+export function tieneMercadoActivo(asentamiento: Asentamiento): boolean {
+  return edificiosPorTipoYEstado(asentamiento, 'mercado').length > 0;
+}
+
+/**
+ * Cupo de caravanas propias (ampliación de comercio, a petición del usuario): `cupoCaravanas` del nivel
+ * interno actual de Mercado + el bonus aditivo de la política "Ampliación de Flota" (`cupoCaravanaExtra`).
+ * 0 si no hay Mercado activo. Cuenta contra este cupo cualquier caravana `tipo: 'comercial'` que el
+ * asentamiento tenga construida, esté 'disponible' o 'en_transito' (ver `engine/trade.ts`).
+ */
+export function cupoCaravanas(asentamiento: Asentamiento): number {
+  const mercado = edificiosPorTipoYEstado(asentamiento, 'mercado')[0];
+  if (!mercado) return 0;
+  const niveles = (EDIFICIO_CATALOGO.mercado as { niveles?: Record<number, { cupoCaravanas?: number }> }).niveles;
+  const base = niveles?.[nivelInternoActual(mercado)]?.cupoCaravanas ?? 0;
+  return base + cupoCaravanaExtra(asentamiento);
 }
 
 const EDIFICIOS_PRODUCTORES: EdificioTipo[] = ['granja', 'cantera', 'lenera', 'mina', 'minaCobre', 'minaEstano', 'corral'];

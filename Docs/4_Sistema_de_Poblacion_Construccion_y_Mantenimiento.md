@@ -127,6 +127,13 @@ Van por AUTO-CONSTRUCCIÓN (igual que Granja/Cantera), disparadas en cuanto se c
 - Requisito nivel 2: Asentamiento nivel 2 + poseer Carpintería. Requisito nivel 3: Asentamiento nivel 3 + Carpintería nivel 2 (asimetría INTENCIONAL respecto a Armería/Barracón, que piden Palacio — Galería de tiro sigue su propio camino de progresión, no se uniforma).
 - Costo: construcción 50 madera; mejora 1: 140 madera + 20 piedra; mejora 2: 400 madera + 100 piedra. Tiempo de construcción: 6 ticks.
 
+### Comercio
+
+**Mercado** (ampliación de comercio, a petición del usuario, Doc 3.3) — gatea colocar órdenes de mercado y construir caravanas comerciales propias (ver Doc 3.12). Sin recetas: no fabrica nada, sus niveles internos administran el cupo de flota, no producción. Construcción vía política del Tesorero (ver 4.4), no auto-construcción — mismo patrón que Barracón/Galería de tiro/Palacio.
+- Sin gate de nivel de asentamiento para la construcción BASE. Requisito nivel 2 (mejora): Asentamiento nivel 2. Requisito nivel 3 (mejora): Asentamiento nivel 3.
+- Costo: construcción 100 madera + 40 piedra; mejora 1: 150 madera + 100 piedra; mejora 2: 450 madera + 200 piedra. Tiempo de construcción: 8 ticks.
+- Cupo de caravanas por nivel interno: nivel 1 → 2; nivel 2 → 4; nivel 3 → 6 (más el bonus aditivo de la política "Ampliación de Flota", ver 4.4).
+
 ## 4.3 Almacenamiento
 Límites de almacenaje por recurso, ampliables construyendo más capacidad. El superávit que excede el límite dispara construcción automática de más almacenamiento.
 
@@ -144,11 +151,13 @@ Límites de almacenaje por recurso, ampliables construyendo más capacidad. El s
 - **"Edicto de Cosecha"** (Gobernador, nueva, a petición del usuario): multiplica ×1.5 la producción de trigo de todas las Granjas activas del asentamiento. No afecta a madera ni piedra. Ver 4.2.1 (Granja) y 4.5 (panel de producción).
 - **"Racionamiento"** (Sacerdote, implementada, pendiente de haber sido documentada aquí): reduce el consumo de trigo de la población (×0.8). No afecta al consumo/ración de tropas (Doc 5.4). Ver 4.1.
 - **Redistribución de Vivienda** (IDEA nueva, a petición del usuario, NO implementada todavía): política que permitiría modificar la proporción fija 15/5 de cupo Pesants/Artesanos dentro de cada Vivienda (ej. favorecer más Artesanos en un asentamiento orientado a producción especializada). Pool y cargo responsable sin definir todavía — candidato natural: Maestro de Obras (mismo pool que Vivienda) o Sacerdote (mismo pool que gestiona población, ver 4.1). PENDIENTE: mecánica exacta (¿desplaza cupo de una clase a otra manteniendo el total, o añade cupo extra?), valores numéricos, y a qué cargo pertenece.
-- **Desbloqueo de edificios especiales** (nuevo, rediseño Fase 0): 3 políticas nuevas, una por edificio, cada una en el pool del cargo indicado (ver catálogo completo en 4.2.1). Mientras la política esté activa, la construcción del edificio correspondiente salta la cola normal de auto-construcción/manual (tope de 3 slots, ver 4.2) y usa un CLUSTER DE COLA APARTE dedicado solo a estos 3 edificios:
+- **Desbloqueo de edificios especiales** (rediseño Fase 0 + ampliación de comercio, a petición del usuario): 4 políticas, una por edificio, cada una en el pool del cargo indicado (ver catálogo completo en 4.2.1). Mientras la política esté activa, la construcción del edificio correspondiente salta la cola normal de auto-construcción/manual (tope de 3 slots, ver 4.2) y usa un CLUSTER DE COLA APARTE dedicado solo a estos edificios:
   - "Construir Barracón" — pool General.
   - "Construir Galería de tiro" — pool General.
   - "Construir Palacio" — pool Gobernador.
+  - "Construir Mercado" — pool Tesorero (ampliación de comercio, ver 4.2.1/Doc 3.12).
   Curtiduría/Armería/Fundición/Carpintería NO usan este mecanismo — son auto-construcción normal (ver 4.2), compitiendo por la cola de 3 slots como cualquier otro edificio.
+- **Políticas de flota de caravanas** (Tesorero, ampliación de comercio, a petición del usuario, ver Doc 3.12): "Ampliación de Flota" suma +1 al cupo de caravanas propias (aditivo, no multiplicativo — a diferencia del resto de políticas de este catálogo); "Carga Ampliada" multiplica ×1.5 la capacidad de carga de las caravanas propias; "Rutas Rápidas" multiplica ×1.5 su velocidad.
 - PENDIENTE: catálogo concreto de políticas dentro de cada pool (más allá de los ejemplos ya implementados); si son excluyentes entre sí dentro de un slot.
 
 ## 4.5 Mantenimiento de asentamientos (sistema unificado, incluye ex-"Coste de Gobernanza")

@@ -53,6 +53,7 @@ export const EDIFICIO_COLOR: Record<EdificioTipo, string> = {
   barracon: '#8b3a3a',
   galeriaDeTiro: '#4a7a4a',
   palacio: '#c9a227',
+  mercado: '#2d9c8f',
 };
 
 export function faccionColor(faccionId: string, facciones: Faccion[]): string {

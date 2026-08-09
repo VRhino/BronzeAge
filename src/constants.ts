@@ -138,6 +138,10 @@ interface NivelEdificioTransformacion {
   requisitoNivelAsentamiento?: number;
   requiereEdificio?: string;
   requiereEdificioNivel?: number;
+  /** Solo Mercado (ampliación de comercio, a petición del usuario): cupo de caravanas propias que administra
+   * este nivel — ver `cupoCaravanas`, engine/asentamientoQuery.ts. Mercado no fabrica nada (recetas: []),
+   * así que este campo reemplaza al de producción como "qué desbloquea" cada nivel para ese edificio. */
+  cupoCaravanas?: number;
 }
 
 /**
@@ -372,6 +376,33 @@ export const EDIFICIO_CATALOGO = {
     requisitoNivelAsentamientoConstruccion: 3,
     capacidadNobles: 200,
   },
+
+  // Ampliación de comercio (a petición del usuario, Doc 3.3): vía política del Tesorero ("Construir Mercado"),
+  // mismo patrón que Barracón/Galería de tiro — cluster de cola aparte, no auto-construcción. Sin recetas: no
+  // fabrica nada, sus niveles administran `cupoCaravanas` (ver `cupoCaravanas`, engine/asentamientoQuery.ts).
+  // Gatea, además de la flota, las órdenes de Mercado (`colocarOrdenMercado`, engine/market.ts) — sin Mercado
+  // activo no se puede ni construir una caravana ni colocar una orden.
+  mercado: {
+    costo: { madera: 100, piedra: 40 },
+    tiempoConstruccionTicks: 8,
+    niveles: {
+      1: { trabajadoresRequeridos: 0, recetas: [], cupoCaravanas: 2 },
+      2: {
+        requisitoNivelAsentamiento: 2,
+        costoMejora: { madera: 150, piedra: 100 },
+        trabajadoresRequeridos: 0,
+        recetas: [],
+        cupoCaravanas: 4,
+      },
+      3: {
+        requisitoNivelAsentamiento: 3,
+        costoMejora: { madera: 450, piedra: 200 },
+        trabajadoresRequeridos: 0,
+        recetas: [],
+        cupoCaravanas: 6,
+      },
+    } as Record<number, NivelEdificioTransformacion>,
+  },
 } as const;
 
 export const ALMACEN = {
@@ -441,12 +472,39 @@ export const SITIO = {
 
 // 4 categorías de caravana (Doc 3.6). Militar/construcción se activan en sprints posteriores
 // (logística de guerra y fundación/ascenso respectivamente); Sprint 3 solo despacha 'comercial'.
+// Velocidad ×2 en las 4 categorías (a petición del usuario, ampliación de comercio): el batch de diagnóstico
+// mostró que a la velocidad original un trueque de tamaño moderado a distancia media podía necesitar más
+// ticks de viaje (varios envíos en serie, uno por vez por cada lado del acuerdo, ver `asignarCaravanasATrueque`
+// en engine/trade.ts) que `TRUEQUE.plazoTicksPorDefecto` — el acuerdo expiraba antes de poder completarse
+// pase lo que pase. Doblar la velocidad de las 4 a la vez mantiene el catálogo consistente entre sí.
 export const CARAVANA_CATALOGO = {
-  comercial: { capacidad: 60, velocidad: 8 },
-  militar: { capacidad: 40, velocidad: 6 },
-  construccion: { capacidad: 150, velocidad: 5 },
-  contrabando: { capacidad: 20, velocidad: 12 },
+  // costoConstruccion (nuevo, ampliación de comercio): solo 'comercial' es un activo persistente que el
+  // jugador construye y conserva (flota propia, ver `construirCaravanaComercial`) — militar/construccion/
+  // contrabando siguen siendo instanciadas por su propio mecanismo (reclutamiento militar sin implementar
+  // todavía; Caravana de Fundación, Doc 1.8) y no tienen costo de flota propio.
+  comercial: { capacidad: 60, velocidad: 16, costoConstruccion: { madera: 50 } },
+  militar: { capacidad: 40, velocidad: 12 },
+  construccion: { capacidad: 150, velocidad: 10 },
+  contrabando: { capacidad: 20, velocidad: 24 },
 } as const;
+
+/**
+ * Scoring de asignación de caravanas disponibles a lados pendientes de trueque (ampliación de comercio, a
+ * petición del usuario — "solo simulación": en el diseño objetivo el jugador elige la caravana y la carga a
+ * mano, Doc 3.2; esto es el sustituto automático de Fase 0, ver `asignarCaravanasATrueque` en engine/trade.ts).
+ * Cada peso pondera un factor normalizado a 0-100; el score final ordena qué lado pendiente se sirve primero
+ * cuando hay menos caravanas disponibles que envíos por hacer. Pesos y `distanciaReferencia` PLACEHOLDER,
+ * confirmados con el usuario, sin calibrar por simulación todavía.
+ */
+export const ASIGNACION_CARAVANA = {
+  pesoUrgenciaExpiracion: 0.5,
+  pesoUrgenciaVolumen: 0.3,
+  pesoCercania: 0.2,
+  // Distancia a partir de la cual el bonus de cercanía se satura en 0 — mismo orden de magnitud que
+  // COMISION.distanciaParaBonusMax (600), pero constante propia porque mide algo distinto (eficiencia de
+  // asignación, no bonificación de comisión).
+  distanciaReferencia: 600,
+};
 
 export const TRUEQUE = {
   // "expirar un plazo" sin número fijado en el diseño (ver Preguntas_Abiertas) — placeholder.
@@ -536,6 +594,14 @@ export const POLITICA_CATALOGO = [
   { id: 'construir_barracon', cargo: 'general', nombre: 'Construir Barracón', desbloqueaEdificio: 'barracon' },
   { id: 'construir_galeria_tiro', cargo: 'general', nombre: 'Construir Galería de Tiro', desbloqueaEdificio: 'galeriaDeTiro' },
   { id: 'construir_palacio', cargo: 'gobernador', nombre: 'Construir Palacio', desbloqueaEdificio: 'palacio' },
+  { id: 'construir_mercado', cargo: 'tesorero', nombre: 'Construir Mercado', desbloqueaEdificio: 'mercado' },
+  // Ampliación de comercio (a petición del usuario, Doc 3.3): flota de caravanas propias, ver
+  // `cupoCaravanas`/`factorCapacidadCaravana`/`factorVelocidadCaravana` en engine/asentamientoQuery.ts y
+  // engine/politicas.ts. `cupoCaravanaExtra` es ADITIVO (no multiplicativo, ver `sumaFactorPolitica`), a
+  // diferencia del resto de campos `factor*` de este catálogo.
+  { id: 'cupo_caravana_extra', cargo: 'tesorero', nombre: 'Ampliación de Flota', cupoCaravanaExtra: 1 },
+  { id: 'carga_ampliada', cargo: 'tesorero', nombre: 'Carga Ampliada', factorCapacidadCaravana: 1.5 },
+  { id: 'rutas_rapidas', cargo: 'tesorero', nombre: 'Rutas Rápidas', factorVelocidadCaravana: 1.5 },
   // A petición del usuario: sube la producción de trigo de TODAS las Granjas activas ×1.5 (madera/piedra sin
   // cambios) — ver `factorProduccionTrigo` en engine/politicas.ts, aplicado en `avanzarConstruccion`.
   { id: 'edicto_cosecha', cargo: 'gobernador', nombre: 'Edicto de Cosecha', factorProduccionTrigo: 1.5 },

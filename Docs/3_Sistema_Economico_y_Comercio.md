@@ -10,14 +10,16 @@
 
 ## 3.2 Trueque de materiales (acuerdos entre Facciones) — 🔷 implementado con simplificación intencional
 - Contrato MARCO abierto en el tiempo: `proponerTrueque` crea el acuerdo (cantidad total pactada por lado, plazo por defecto 200 ticks).
-- **SIMPLIFICACIÓN DE FASE 0 (intencional, confirmada)**: el diseño objetivo dice que un jugador debe TOMAR una caravana y MOVERLA físicamente. En Fase 0, `despacharTrueques` genera la caravana AUTOMÁTICAMENTE en cuanto hay stock disponible y cupo pendiente en el acuerdo — sin acción manual del jugador. **Plan: pasar a movimiento manual en Fase 1+**, tal como está descrito el diseño objetivo.
-- La caravana sí viaja de verdad por el mapa (progreso según distancia/velocidad) y entrega proporcionalmente al llegar — solo el disparo inicial es automático, no el viaje en sí.
+- **SIMPLIFICACIÓN DE FASE 0, revisada (ampliación de comercio, a petición del usuario)**: el diseño objetivo dice que un jugador debe TOMAR una caravana y MOVERLA físicamente — Fase 0 ya no genera caravanas de la nada como antes. Ahora exige tener una caravana PROPIA construida y **'disponible'** en el asentamiento origen (ver 3.12); `asignarCaravanasATrueque` la asigna automáticamente al envío pendiente, sustituyendo por ahora la elección manual del jugador ("solo simulación": en el diseño objetivo el jugador elige la caravana, la carga y la escolta a mano). Si no hay ninguna disponible, el envío simplemente espera al siguiente tick. **Plan: pasar a asignación/carga manual en Fase 1+**, tal como está descrito el diseño objetivo.
+- Cuando hay menos caravanas disponibles que envíos pendientes en un mismo asentamiento (varios acuerdos compitiendo a la vez), se prioriza por un SCORE ponderado (ver 3.12: urgencia por expiración del acuerdo, urgencia por volumen pendiente, cercanía del destino) — no por orden de llegada.
+- La caravana sí viaja de verdad por el mapa (progreso según distancia/velocidad, ahora ×2 respecto a la velocidad original — ver 3.6) y entrega proporcionalmente al llegar. Al entregar, la caravana propia vuelve a estar 'disponible' en el origen — no desaparece, es un activo persistente y con costo (3.12), no un objeto de un solo uso.
 - Cumplir o incumplir un trueque ajusta el score de reputación de Facción (Doc 2.7) — esto sí está conectado.
 
 ## 3.3 Órdenes de mercado (comercio abierto) — 🔷 implementado con simplificación intencional
 - Un asentamiento coloca órdenes de compra/venta; cualquier jugador puede dejar lo pedido o comprar lo ofrecido.
 - Se pagan con ORO.
-- **SIMPLIFICACIÓN DE FASE 0 (intencional, documentada en el propio código)**: las órdenes se EMPAREJAN Y LIQUIDAN AL INSTANTE entre cualquier par de asentamientos — no hay transporte/caravana modelado en absoluto para este flujo (a diferencia del trueque, que sí simula el viaje). **Plan: pasar a requerir transporte físico en Fase 1+**, coherente con el resto del sistema de comercio.
+- **Gate nuevo (ampliación de comercio, a petición del usuario)**: colocar una orden ahora exige tener un Mercado activo (ver 3.12) — antes cualquier asentamiento podía hacerlo desde el tick 0, sin edificio.
+- **SIMPLIFICACIÓN DE FASE 0 que sigue en pie (documentada en el propio código)**: las órdenes se EMPAREJAN Y LIQUIDAN AL INSTANTE entre cualquier par de asentamientos — no hay transporte/caravana modelado para este flujo (a diferencia del trueque, que sí usa la flota de caravanas, ver 3.2/3.12). **Plan: pasar a requerir transporte físico en Fase 1+**, coherente con el resto del sistema de comercio.
 
 ## 3.4 Precios dinámicos — ✅ implementado
 - Precio de referencia por defecto: precio base escalado por escasez/abundancia GLOBAL (stock objetivo de referencia = 500, con clamp entre ×0.4 y ×3).
@@ -28,12 +30,13 @@
 - Comisión del 3% dentro de la misma Facción vs. 8% externa, aplicada tanto en trueque como en mercado, modulable por política ("Aranceles/Comercio Abierto") y por reputación de Facción.
 - PENDIENTE (sin cambios): en qué se usa la riqueza acumulada; nivel intermedio de comisión para Facciones aliadas/vasallas de la misma Liga.
 
-## 3.6 Categorías de caravana (heredado de Iberia) — 🔶 parcial: catálogo existe, solo 1 de 4 se usa
-1. **Comercial**: ✅ implementada y en uso — la única categoría que el motor instancia realmente.
+## 3.6 Categorías de caravana (heredado de Iberia) — 🔶 parcial: catálogo existe, solo 1-2 de 4 se usan
+1. **Comercial**: ✅ implementada y en uso — única categoría que el motor instancia realmente para Trueque/Mercado, y la única que ahora es un activo PROPIO y persistente (`costoConstruccion`, ver 3.12), en vez de efímera.
 2. **Militar**: catálogo definido (capacidad/velocidad propias) pero el motor NUNCA la dispara ni le da comportamiento distinto.
-3. **De construcción**: igual — solo datos, sin uso real.
-4. **De contrabando**: igual — solo datos, sin uso real.
-- PENDIENTE: conectar las 3 categorías restantes a sus disparadores correspondientes (equipo militar antes de asedio, materiales de fundación/ascenso, mecánica de detección reducida).
+3. **De construcción**: sí tiene uso real (Caravana de Fundación, Doc 1.8), pero es un mecanismo aparte del de Trueque/Mercado — no forma parte de la flota propia de 3.12.
+4. **De contrabando**: solo datos, sin uso real.
+- **Velocidad ×2 en las 4 categorías (ampliación de comercio, a petición del usuario)**: el diagnóstico mostró que a la velocidad original un trueque de tamaño moderado a distancia media podía necesitar más ticks de viaje (varios envíos en serie, ver 3.2) que el plazo por defecto del acuerdo (200 ticks) — expiraba antes de poder completarse pase lo que pase. Se dobló la velocidad de las 4 categorías a la vez para no dejar el catálogo inconsistente entre sí, aunque solo Comercial (y Construcción, Doc 1.8) tienen uso real hoy.
+- PENDIENTE: conectar Militar/Contrabando a sus disparadores correspondientes (equipo militar antes de asedio, mecánica de detección reducida).
 
 ## 3.7 Transporte individual espontáneo (heredado de Iberia) — ❌ no implementado
 No existe inventario personal de jugador ni transporte sin pasar por Mercado/acuerdo. Sigue siendo diseño puro, sin código.
@@ -52,3 +55,25 @@ No hay un sistema que detecte explícitamente "cortar una ruta" como evento de g
 
 ## 3.11 Comercio marítimo — ❌ fuera de alcance (correcto, según diseño)
 Requiere tecnología de barcos + puertos. Nada implementado — consistente con que Fase 0 es 100% terrestre (eje naval pospuesto a fase completa).
+
+## 3.12 Mercado como edificio y flota de caravanas propias — ✅ implementado (ampliación de comercio, a petición del usuario)
+
+**Contexto:** hasta esta ampliación, "Mercado" era solo el nombre de la mecánica de órdenes (3.3) — no existía como edificio en ningún catálogo, pese a que el diseño original (Doc 0/2) ya describía al Tesorero como responsable de "trueque + Mercado" como dos cosas separadas. Al mismo tiempo, las caravanas de Trueque se creaban de la nada en cada envío, sin ningún concepto de cuántas tenía un asentamiento, activas o no. Ambos huecos se cierran juntos.
+
+**Mercado (edificio, Doc 4.2.1)**: vía política del Tesorero ("Construir Mercado"), mismo patrón que Barracón/Galería de tiro/Palacio — no auto-construcción, cluster de cola aparte. Gatea DOS cosas: colocar órdenes de mercado (3.3) y construir caravanas propias (más abajo). Con niveles internos que administran el cupo de flota — ver catálogo completo en Doc 4.2.1.
+
+**Flota de caravanas propias**: `construirCaravanaComercial` — activo persistente, no efímero, que cuesta 50 madera y cuenta contra `cupoCaravanas` (nivel de Mercado + política "Ampliación de Flota", +1 aditivo) hasta que se pierda capturada en combate (3.10). **No se puede desmantelar voluntariamente** (decisión confirmada con el usuario). Nace 'disponible' en el asentamiento; al ser asignada a un envío pasa a 'en_transito'; al entregar, vuelve a 'disponible' en el origen — se reutiliza, no se reconstruye en cada viaje.
+
+**Scoring de asignación** (`asignarCaravanasATrueque`, ver 3.2): cuando hay menos caravanas disponibles que envíos pendientes en un asentamiento, se ordenan por un score 0-100 ponderado:
+- Urgencia por expiración del acuerdo (50%): cuánto del plazo ya se consumió.
+- Urgencia por volumen pendiente (30%): qué fracción del total pactado sigue sin entregar.
+- Cercanía del destino (20%): destinos más cercanos rinden más envíos por caravana disponible.
+
+Pesos y la distancia de referencia (600 unidades) son PLACEHOLDER, confirmados con el usuario, sin calibrar por simulación todavía.
+
+**Políticas nuevas (Tesorero, Doc 4.4)**:
+- "Ampliación de Flota": +1 cupo de caravanas (aditivo).
+- "Carga Ampliada": ×1.5 la capacidad de carga de las caravanas propias.
+- "Rutas Rápidas": ×1.5 la velocidad de las caravanas propias.
+
+**Verificado en el navegador** de punta a punta: colocar una orden o construir una caravana sin Mercado se rechaza; tras construir el Mercado (política + auto-construcción especial), construir una caravana consume 50 madera y la deja 'disponible'; un trueque activo la asigna automáticamente (`asignarCaravanasATrueque`) y la hace viajar a la velocidad ×2 (tiempo de viaje observado coincide exactamente con distancia/velocidad); al entregar, vuelve a 'disponible' en vez de desaparecer. Sin errores de consola.

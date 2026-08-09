@@ -27,6 +27,8 @@ import {
   capacidadViviendaPesants,
   capacidadViviendaArtesanos,
   edificiosPorTipoYEstado,
+  cupoCaravanas as cupoCaravanasEngine,
+  tieneMercadoActivo as tieneMercadoActivoEngine,
   type ProduccionItem,
   type ManoObraInfo,
   type ProgresoNivelAsentamiento,
@@ -47,7 +49,7 @@ import {
 export type { ViabilidadFundacion } from '../engine/settlement';
 import { computeTodasLasZonas } from '../engine/zones';
 import { avanzarSimulacion } from '../engine/simulation';
-import { proponerTrueque as proponerTruequeEngine, TruequeInvalidoError } from '../engine/trade';
+import { proponerTrueque as proponerTruequeEngine, construirCaravanaComercial as construirCaravanaComercialEngine, CaravanaInvalidaError, TruequeInvalidoError } from '../engine/trade';
 import { colocarOrdenMercado as colocarOrdenMercadoEngine, calcularPrecioReferencia, OrdenInvalidaError } from '../engine/market';
 import { crearFaccion, comprarCasa as comprarCasaEngine, calcularCapFundacion, capacidadCasas, FaccionInvalidaError } from '../engine/faccion';
 import { asignarRey as asignarReyEngine, asignarEmbajador as asignarEmbajadorEngine, asignarCargoLocal as asignarCargoLocalEngine, CargoInvalidoError } from '../engine/cargos';
@@ -585,6 +587,39 @@ export class GameStore {
       else throw err;
     }
     this.notify();
+  }
+
+  /** Ampliación de comercio (a petición del usuario): construye una caravana comercial propia — cuesta
+   * madera, exige Mercado activo y respeta el cupo de flota del asentamiento (Doc 3.3). */
+  crearCaravana(asentamientoId: string): void {
+    try {
+      const asentamiento = this.state.asentamientos.find((a) => a.id === asentamientoId)!;
+      const { asentamiento: actualizado, caravana } = construirCaravanaComercialEngine(
+        asentamiento,
+        this.state.caravanas,
+        this.state.tick,
+        this.contadorAcciones++
+      );
+      this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === actualizado.id ? actualizado : a));
+      this.state.caravanas = [...this.state.caravanas, caravana];
+      this.registrar(`${asentamientoId}: construye una caravana comercial (${caravana.id}).`);
+    } catch (err) {
+      if (err instanceof CaravanaInvalidaError) this.registrar(`Caravana rechazada: ${err.message}`);
+      else throw err;
+    }
+    this.notify();
+  }
+
+  /** Solo lectura, para la pestaña Guerra/Acciones: cupo de flota, cuántas caravanas propias tiene el
+   * asentamiento y en qué estado (Doc 3.3, ampliación de comercio). */
+  caravanasInfo(asentamiento: Asentamiento): { mercadoActivo: boolean; cupo: number; disponibles: number; enTransito: number } {
+    const propias = this.state.caravanas.filter((c) => c.tipo === 'comercial' && c.origenAsentamientoId === asentamiento.id);
+    return {
+      mercadoActivo: tieneMercadoActivoEngine(asentamiento),
+      cupo: cupoCaravanasEngine(asentamiento),
+      disponibles: propias.filter((c) => c.estado === 'disponible').length,
+      enTransito: propias.filter((c) => c.estado === 'en_transito').length,
+    };
   }
 
   /** Reclutamiento por equipo (Doc 5.7/5.8): recluta una tropa específica vía Barracón/Galería de tiro, de

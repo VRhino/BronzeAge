@@ -81,7 +81,11 @@ export type EdificioTipo =
   | 'carpinteria'
   | 'palacio'
   | 'barracon'
-  | 'galeriaDeTiro';
+  | 'galeriaDeTiro'
+  // Ampliación de comercio (a petición del usuario): gatea las órdenes de Mercado (Doc 3.3) y aloja el cupo
+  // de la flota de caravanas propias (ver CARAVANA_CATALOGO.comercial, engine/trade.ts). Vía política del
+  // Tesorero, mismo patrón que Barracón/Galería de tiro/Palacio — no auto-construcción.
+  | 'mercado';
 
 export type EstadoEdificio = 'en_cola' | 'en_construccion' | 'activo';
 
@@ -224,6 +228,13 @@ export interface Caravana {
   destinoPosicion?: Point;
   /** Caravana de Fundación: ciudadanos ya existentes de la Facción que fundarán el nuevo asentamiento al llegar. */
   jugadoresFundadoresIds?: string[];
+  /** Flota de caravanas propias (ampliación de comercio, a petición del usuario): solo para `tipo: 'comercial'`
+   * construidas vía Mercado (ver `construirCaravanaComercial`, engine/trade.ts) — un activo persistente y con
+   * costo, no un objeto efímero. 'disponible' = construida, parada en `origenAsentamientoId`, sin asignar.
+   * 'en_transito' = cargada y en ruta hacia `destinoAsentamientoId`. Al entregar, vuelve a 'disponible' en vez
+   * de desaparecer (a diferencia del resto de tipos de caravana, que siguen siendo efímeros). Ausente para
+   * caravanas de Fundación y para los tipos de caravana todavía sin uso real (militar/contrabando, Doc 3.6). */
+  estado?: 'disponible' | 'en_transito';
 }
 
 /**
