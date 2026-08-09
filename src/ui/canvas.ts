@@ -21,6 +21,7 @@ export const RECURSO_COLOR: Record<RecursoTipo, string> = {
   cuero: '#8a5a3c',
   cueroCurtido: '#6b4226',
   cueroCalidad: '#4a2e18',
+  armaMadera: '#7a5c3a',
   armaCobre: '#c98a4a',
   armaBronce: '#a97142',
   armaBronceCalidad: '#8a5a2e',
@@ -86,6 +87,44 @@ export function drawFiltroFertilidad(ctx: CanvasRenderingContext2D, canvas: HTML
       ctx.fillRect(col * tamanoCelda * scale, fila * tamanoCelda * scale, tamanoCelda * scale, tamanoCelda * scale);
     }
   }
+}
+
+export interface PreviewFundacion {
+  posicion: { x: number; y: number };
+  radioInicial: number;
+  fundable: boolean;
+  bosqueAlcanzable: boolean;
+}
+
+/**
+ * Previsualización del emplazamiento bajo el cursor, antes de fundar. Verde = fundable y con bosque al
+ * alcance; ámbar = legal pero SIN madera alcanzable (se puede fundar, pero el asentamiento casi siempre
+ * acaba en ruinas — ver `evaluarViabilidadFundacion`); rojo = no se puede fundar ahí.
+ * Se dibuja encima de todo, igual que el filtro de fertilidad, y el caller decide cuándo llamarlo.
+ */
+export function drawPreviewFundacion(
+  ctx: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  world: World,
+  preview: PreviewFundacion
+): void {
+  const scale = canvas.width / world.config.ancho;
+  const color = !preview.fundable ? '#c0392b' : preview.bosqueAlcanzable ? '#27ae60' : '#e0a020';
+
+  ctx.beginPath();
+  ctx.arc(preview.posicion.x * scale, preview.posicion.y * scale, preview.radioInicial * scale, 0, Math.PI * 2);
+  ctx.fillStyle = color + '22';
+  ctx.fill();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([5, 4]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.beginPath();
+  ctx.arc(preview.posicion.x * scale, preview.posicion.y * scale, 3, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
 }
 
 export function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, state: DrawState): void {

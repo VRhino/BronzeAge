@@ -68,6 +68,69 @@ function edificiosIniciales(world: World, centro: Point, idBase: string): Edific
   return [centroUrbano, granja, ...viviendas];
 }
 
+export interface ViabilidadFundacion {
+  /** Radio de la zona con la que nacería el asentamiento — lo devuelve la consulta para que la interfaz
+   * pueda dibujar la previsualización sin tener que conocer `ZONA_INFLUENCIA`. */
+  radioInicial: number;
+  dentroDelMapa: boolean;
+  posicionLibre: boolean;
+  /** Hay al menos un bosque cuyo borde entra en el radio inicial — condición crítica, ver `evaluarViabilidadFundacion`. */
+  bosqueAlcanzable: boolean;
+  /** Nodos de recurso que caen dentro del radio inicial, agrupados por tipo. */
+  recursosEnRadio: { tipo: string; nodos: number }[];
+  /** Se puede fundar aquí (lo que valida `fundarAsentamiento`): dentro del mapa y sin solapar otra zona. */
+  fundable: boolean;
+  /** Además de fundable, el emplazamiento es SOSTENIBLE (tiene madera al alcance). */
+  recomendable: boolean;
+}
+
+/**
+ * Evalúa un emplazamiento ANTES de fundar — solo lectura, no altera nada. Existe por un resultado de
+ * simulación (ver `Diario_Simulaciones_Batch_500_Transformacion.md` y el análisis del escalón militar): la
+ * madera es el recurso maestro del juego temprano — paga Mantenimiento desde el tick 1, y es el costo
+ * dominante de Leñera/Granja/Vivienda/Barracón. Fundar sin un bosque al alcance del radio inicial es una
+ * sentencia: en 200 runs × 900 ticks, exigir bosque alcanzable bajó el colapso del 70% al 47% y subió la
+ * proporción de asentamientos que llegan a tener tropa del 50% al 98%.
+ *
+ * Deliberadamente NO bloquea la fundación (decisión de diseño confirmada con el usuario): `fundarAsentamiento`
+ * sigue aceptando cualquier posición legal. Esto solo alimenta el aviso de la interfaz — el jugador conserva
+ * la libertad de fundar en un mal sitio a sabiendas.
+ */
+export function evaluarViabilidadFundacion(
+  world: World,
+  posicion: Point,
+  asentamientosExistentes: Asentamiento[]
+): ViabilidadFundacion {
+  const enMapa = dentroDelMapa(posicion, world);
+  const libre = posicionLibreParaFundar(posicion, asentamientosExistentes);
+  const radio = ZONA_INFLUENCIA.radioInicial;
+
+  // Un bosque es alcanzable si su BORDE entra en el radio inicial (no hace falta que lo esté su centro —
+  // mismo criterio que `puntoEnBosqueDentroDeZona` en engine/construction.ts, que coloca la Leñera en
+  // cualquier punto del bosque que caiga dentro de la zona).
+  const bosqueAlcanzable = world.bosques.some(
+    (b) => Math.hypot(b.centro.x - posicion.x, b.centro.y - posicion.y) < radio + b.radio
+  );
+
+  const porTipo = new Map<string, number>();
+  for (const nodo of world.recursos) {
+    if (Math.hypot(nodo.posicion.x - posicion.x, nodo.posicion.y - posicion.y) <= radio) {
+      porTipo.set(nodo.tipo, (porTipo.get(nodo.tipo) ?? 0) + 1);
+    }
+  }
+
+  const fundable = enMapa && libre;
+  return {
+    radioInicial: radio,
+    dentroDelMapa: enMapa,
+    posicionLibre: libre,
+    bosqueAlcanzable,
+    recursosEnRadio: [...porTipo.entries()].map(([tipo, nodos]) => ({ tipo, nodos })),
+    fundable,
+    recomendable: fundable && bosqueAlcanzable,
+  };
+}
+
 /**
  * Fundación libre — Doc 1.2/1.3. Hasta 5 jugadores pueden fundar juntos; cada uno recibe automáticamente
  * una casa en el asentamiento recién fundado (ocupa cupo de vivienda, Doc 2.5) y, con ella, ciudadanía
@@ -111,7 +174,7 @@ export function fundarAsentamiento(
     // capacidad 0 la primera vez que algo intente producirlos, capando la producción en silencio para siempre).
     'lingoteCobre', 'lingoteEstano', 'lingoteBronce',
     'cuero', 'cueroCurtido', 'cueroCalidad',
-    'armaCobre', 'armaBronce', 'armaBronceCalidad',
+    'armaMadera', 'armaCobre', 'armaBronce', 'armaBronceCalidad',
     'armaduraBasica', 'armaduraIntermedia', 'armaduraBronce',
   ]) {
     almacenInicial[tipo] = {

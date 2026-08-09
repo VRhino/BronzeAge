@@ -104,12 +104,13 @@ Van por AUTO-CONSTRUCCIÓN (igual que Granja/Cantera), disparadas en cuanto se c
 
 **Armería** — fabricación de armas y armaduras.
 - Requisito nivel 2: Asentamiento nivel 2 + poseer Carpintería. Requisito nivel 3: Asentamiento nivel 3 + poseer Palacio.
-- Recetas nivel 1: 1 Lingote de Cobre + 1 madera → 1 Arma de Cobre; 5 Cuero → 1 Armadura Básica.
-- Recetas nivel 2 (añade): 1 Lingote de Bronce + 2 madera → 1 Arma de Bronce; 1 Lingote de Cobre + 5 Cuero Curtido → 1 Armadura Intermedia.
-- Recetas nivel 3 (añade): 5 Lingote de Bronce + 5 madera → 1 Arma de Bronce de Calidad; 1 Lingote de Bronce + 5 Cuero de Calidad → 1 Armadura de Bronce.
+- Recetas nivel 1: 1 Lingote de Cobre + 1 madera → 1 Arma de Cobre; 5 Cuero → 1 Armadura Básica; 2 madera → 1 Arma de Madera.
+- Recetas nivel 2 (añade, sobre las de nivel 1): 1 Lingote de Bronce + 2 madera → 1 Arma de Bronce; 1 Lingote de Cobre + 5 Cuero Curtido → 1 Armadura Intermedia.
+- Recetas nivel 3 (añade, sobre las de nivel 2): 5 Lingote de Bronce + 5 madera → 1 Arma de Bronce de Calidad; 1 Lingote de Bronce + 5 Cuero de Calidad → 1 Armadura de Bronce.
+- **Arma de Madera** (post Sprint 6, ver `Correcciones_Durante_Desarrollo.md` #32): escalón de entrada sin metalurgia, disponible en LOS 3 NIVELES (a diferencia del resto de recetas, que se acumulan por nivel, esta se repite explícitamente en cada uno — las recetas se REEMPLAZAN al mejorar el edificio, no se acumulan solas; sin repetirla, mejorar la Armería quitaría la capacidad de armar milicia). Cifras deliberadamente modestas (produccionBase 2 a cambio de 2 madera/unidad): la producción de recetas no respeta la reserva mínima de Mantenimiento, así que una tasa alta la convertiría en vía de colapso por falta de madera.
 - Costo: construcción 80 madera + 30 piedra; mejora 1: 150 madera + 100 piedra; mejora 2: 450 madera + 200 piedra. Tiempo de construcción: 6 ticks.
 - Trabajadores: nivel 1 → 4; nivel 2 → 8; nivel 3 → 20 artesanos.
-- Producción base: nivel 1 → 3 Lingote de Cobre + 3 Armadura Básica; nivel 2 → + 2 Arma de Bronce + 2 Armadura Intermedia; nivel 3 → + 1 Arma de Bronce de Calidad + 1 Armadura de Bronce (acumulativo sobre el nivel anterior).
+- Producción base: nivel 1 → 3 Arma de Cobre + 3 Armadura Básica + 2 Arma de Madera; nivel 2 → + 2 Arma de Bronce + 2 Armadura Intermedia (Arma de Madera se mantiene); nivel 3 → + 1 Arma de Bronce de Calidad + 1 Armadura de Bronce (acumulativo sobre el nivel anterior, Arma de Madera se mantiene).
 
 ### Militares
 

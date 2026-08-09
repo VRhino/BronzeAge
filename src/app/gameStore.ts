@@ -38,7 +38,13 @@ import { slotsDisponibles } from '../engine/politicas';
 import { listarCamposBalance, actualizarCampoBalance, restaurarBalancePorDefecto, type CampoBalance } from './balanceConfig';
 export type { CampoBalance } from './balanceConfig';
 import { generateWorld } from '../engine/world';
-import { fundarAsentamiento as fundarAsentamientoEngine, FundacionInvalidaError } from '../engine/settlement';
+import {
+  fundarAsentamiento as fundarAsentamientoEngine,
+  evaluarViabilidadFundacion,
+  FundacionInvalidaError,
+  type ViabilidadFundacion,
+} from '../engine/settlement';
+export type { ViabilidadFundacion } from '../engine/settlement';
 import { computeTodasLasZonas } from '../engine/zones';
 import { avanzarSimulacion } from '../engine/simulation';
 import { proponerTrueque as proponerTruequeEngine, TruequeInvalidoError } from '../engine/trade';
@@ -237,6 +243,15 @@ export class GameStore {
 
   precioReferencia(recurso: string, asentamientos: Asentamiento[] = this.state.asentamientos): number {
     return calcularPrecioReferencia(recurso, asentamientos);
+  }
+
+  /**
+   * Evalúa un emplazamiento antes de fundar (solo lectura): si es legal y, sobre todo, si tiene madera al
+   * alcance — sin bosque en el radio inicial el asentamiento casi siempre acaba en ruinas (ver
+   * `evaluarViabilidadFundacion`). NO bloquea nada: alimenta el aviso previo de la interfaz.
+   */
+  viabilidadFundacion(posicion: { x: number; y: number }): ViabilidadFundacion {
+    return evaluarViabilidadFundacion(this.state.world, posicion, this.state.asentamientos);
   }
 
   /**
@@ -573,12 +588,14 @@ export class GameStore {
   }
 
   /** Reclutamiento por equipo (Doc 5.7/5.8): recluta una tropa específica vía Barracón/Galería de tiro, de
-   * origen Pesants o Artesanos. Nobleza ya no recluta tropas (sigue existiendo como clase de población, Doc 4.1). */
-  reclutarTropa(asentamientoId: string, tropaId: string, origen: 'pesants' | 'artesanos', cantidad: number): void {
+   * origen Pesants o Artesanos. Nobleza ya no recluta tropas (sigue existiendo como clase de población, Doc 4.1).
+   * La cantidad de soldados es fija por tropa (`TROPAS_RECLUTABLES[].unidadesPorDefecto`), no la elige el jugador. */
+  reclutarTropa(asentamientoId: string, tropaId: string, origen: 'pesants' | 'artesanos'): void {
     try {
       const asentamiento = this.state.asentamientos.find((a) => a.id === asentamientoId)!;
-      const actualizado = reclutarTropaEngine(asentamiento, tropaId, origen, cantidad, this.state.tick, this.contadorAcciones++);
+      const actualizado = reclutarTropaEngine(asentamiento, tropaId, origen, this.state.tick, this.contadorAcciones++);
       this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === actualizado.id ? actualizado : a));
+      const cantidad = TROPAS_RECLUTABLES.find((t) => t.id === tropaId)?.unidadesPorDefecto ?? 0;
       this.registrar(`${asentamiento.id}: recluta ${cantidad} de la tropa "${tropaId}" (${origen}).`);
     } catch (err) {
       if (err instanceof ReclutamientoInvalidoError) this.registrar(`Reclutamiento rechazado: ${err.message}`);

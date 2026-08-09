@@ -120,6 +120,33 @@ body {
   margin-top: 2px;
 }
 
+/* Aviso previo de emplazamiento al fundar (no bloquea: solo informa, ver renderViabilidadFundacion). */
+.fundacion-viabilidad {
+  font-size: 11px;
+  line-height: 1.45;
+  color: #b8ae90;
+  padding: 6px 8px;
+  border: 1px solid #4a4436;
+  border-left-width: 3px;
+  border-radius: 3px;
+  background: #1f1d19;
+}
+
+.fundacion-viabilidad.ok {
+  color: #a8d69a;
+  border-left-color: #27ae60;
+}
+
+.fundacion-viabilidad.aviso {
+  color: #e8c98a;
+  border-left-color: #e0a020;
+}
+
+.fundacion-viabilidad.no-fundable {
+  color: #e07a6b;
+  border-left-color: #c0392b;
+}
+
 .swatch {
   flex: none;
   width: 10px;
@@ -247,6 +274,23 @@ body {
   font-size: 12px;
 }
 
+/* Segmento "Info:" bajo el combo de reclutar tropa (pestaña Guerra) — mismo look que .detail-section. */
+.tropa-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: #2a2721;
+  border: 1px solid #4a4436;
+  border-left: 3px solid #b8ae90;
+  border-radius: 3px;
+  padding: 8px 10px;
+  margin: -2px 0 4px;
+}
+
+.tropa-info .kv-row span:first-child {
+  color: #b8ae90;
+}
+
 .kv-row span:first-child {
   color: #b8ae90;
 }
@@ -269,6 +313,28 @@ body {
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
+}
+
+/* Envoltorio de seguridad para tablas con columnas de texto largo (ej. roster de tropas, pestaña Guerra):
+   si el contenido no cabe en el ancho disponible, desplaza en horizontal DENTRO del propio bloque en vez de
+   desbordar el layout de la página (ver <preview_tools> "Responsive": ninguna tabla ancha debe hacer scrollear
+   el body). */
+.table-scroll {
+  overflow-x: auto;
+}
+
+/* Roster de tropas (pestaña Guerra): fuera del controls-grid estrecho (min 230px) a propósito — con 5
+   columnas y nombres de tropa largos, encajarlo en una celda de grid angosta forzaba desbordamiento. */
+.roster-section {
+  margin-top: 10px;
+}
+
+.roster-section h3 {
+  margin: 0 0 6px;
+}
+
+.roster-section h3:not(:first-child) {
+  margin-top: 14px;
 }
 
 .mini-table th,

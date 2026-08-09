@@ -12,6 +12,7 @@ Pendiente:
 - Ventana horaria exacta del Attack Timer (pospuesto, no bloqueante para Fase 0)
 - Establos / carros de guerra del roster anterior: sin edificio de reclutamiento definido en el rediseño — retirar de Fase 0 o crear edificio propio
 - `poderBase` de las 10 tropas nuevas es placeholder (interpolado del roster anterior), pendiente de calibración por simulación
+- Añadida una 11ª tropa, `milicia_lanceros` (Barracón nv1, `madera: 2`, sin metalurgia — ver Correcciones #32), y una receta `armaMadera` en Armería (`produccionBase: 2` / `madera: 2` por unidad): ambas cifras son placeholder conservador (verificado que no degradan el colapso general), no una calibración fina
 
 ## 2. Diplomacia y alianzas — cerrado (mayormente)
 Pendiente (menor): valores numéricos exactos de cada evento que mueve el score de reputación, velocidad del decaimiento, umbrales exactos de cada uso.

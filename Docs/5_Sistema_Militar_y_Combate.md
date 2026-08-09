@@ -40,6 +40,7 @@ No hay árbol tecnológico abstracto — el tipo de unidad reclutable depende de
 - Sacerdote (ya es cargo de jugador, no NPC nuevo): buff de área.
 
 **Edificios** (catálogo completo con costos/recetas en Doc 4.2.1, rediseño Fase 0):
+- Centro Urbano: reclutamiento de la defensa mínima (Milicia de lanceros, ver roster 5.8) — a petición del usuario, decisión post Sprint 6: la tropa de entrada NO depende de Barracón (que exige nivel de asentamiento + política del General antes de existir siquiera), sino del único edificio que nace `activo` con el asentamiento desde el tick de fundación, sin cola de construcción ni gate. Así todo asentamiento puede defenderse desde el minuto uno, así sea con la unidad más débil del roster.
 - Fundición: fabricación de lingotes de cobre/estaño/bronce — auto-construcción, ya no manual (ver Doc 4.2).
 - Curtiduría: tratamiento de cuero (livestock → cuero → cuero curtido → cuero de calidad).
 - Armería: fabricación de armas y armaduras a partir de lingotes y cuero — insumo directo del reclutamiento de Barracón/Galería de tiro.
@@ -56,33 +57,45 @@ No hay árbol tecnológico abstracto — el tipo de unidad reclutable depende de
 
 ## 5.8 Roster de tropas (rediseño Fase 0: reclutamiento por edificio + nivel interno, ver Doc 4.2.1)
 
-**IMPLEMENTADO** (ver `constants.ts` `TROPAS_RECLUTABLES`, `engine/tropas.ts` `reclutarTropa`). Terminología (Doc 0/Glosario, igual criterio que Iberia): una **tropa** es el tipo de escuadrón que se recluta de una vez (ej. "Lanceros con escudo de mimbre"); una **unidad** es cada soldado individual dentro de una tropa (el número de unidades no se modela individualmente en Fase 0, solo como contador — `Escuadron.cantidad`).
+**IMPLEMENTADO** (ver `constants.ts` `TROPAS_RECLUTABLES`, `engine/tropas.ts` `reclutarTropa`). Terminología (Doc 0/Glosario, igual criterio que Iberia): una **tropa** es el tipo de escuadrón que se recluta de una vez (ej. "Lanceros con escudo de mimbre"); una **unidad** es cada soldado individual dentro de una tropa. A diferencia de una versión anterior de esta sección, el número de unidades **NO lo elige el jugador** (ver "Unidades por defecto" más abajo) — cada tropa reclutada añade siempre el mismo tamaño de escuadrón fijo.
 
-El roster ya no se organiza por Tier abstracto (inspiración Total War Troy, foco Egeo/Grecia) — cada tropa se recluta en Barracón o Galería de tiro, según el NIVEL INTERNO del edificio (1-3, ver Doc 4.2.1), pagando el equipo correspondiente fabricado en Armería: AC = Arma de Cobre, AB = Arma de Bronce, ABC = Arma de Bronce de Calidad, AmB = Armadura Básica, AmI = Armadura Intermedia, AaBr = Armadura de Bronce. Cada tropa tiene además un `poderBase` (PLACEHOLDER, ver más abajo) usado en el cálculo de combate en vez del poderBase por tier del roster anterior.
+El roster ya no se organiza por Tier abstracto (inspiración Total War Troy, foco Egeo/Grecia) — cada tropa se recluta en Centro Urbano, Barracón o Galería de tiro, según el NIVEL INTERNO del edificio (1-3, ver Doc 4.2.1; Centro Urbano no tiene niveles), pagando el equipo correspondiente fabricado en Armería (ver catálogo completo de recetas en Doc 4.2.1). "Costo" en las tablas de abajo es POR SOLDADO — el costo real de reclutar es ese valor × "Unidades". Cada tropa tiene además un `poderBase` (PLACEHOLDER, ver más abajo) usado en el cálculo de combate en vez del poderBase por tier del roster anterior.
 
-**Barracón (cuerpo a cuerpo) — carril Pesants, combate real (Doc 4.1/5.5):**
+**Centro Urbano (defensa mínima, sin edificio dedicado) — carril Pesants + Artesanos:**
 
-| Nivel | Tropa | Costo | poderBase |
+| Tropa | Costo (por soldado) | poderBase | Unidades |
 |---|---|---|---|
-| 1 | Lanceros con escudo de mimbre | 1 AC | 3 |
-| 1 | Espadachines de espada corta de cobre | 1 AC + 1 AmB | 4 |
-| 2 | Hacheros ligeros | 1 AB + 1 AmB | 7 |
-| 2 | Espadachines con espadas y escudos de bronce | 2 AB + 1 AmI | 9 |
-| 3 | Lanceros pesados micénicos (escudos grandes) | 2 AB + 2 AmI | 14 |
-| 3 | Hacheros armados (armadura media) | 1 AB + 1 AmI | 12 |
+| Milicia de lanceros | 2 Madera (en bruto, sin pasar por Armería) | 2 | 25 |
 
-**Galería de tiro (a distancia) — carril Pesants, combate real:**
+**Barracón (cuerpo a cuerpo) — carril Pesants + Artesanos, combate real (Doc 4.1/5.5):**
 
-| Nivel | Tropa | Costo | poderBase |
-|---|---|---|---|
-| 1 | Honderos (escaramuzadores) | 1 AmB | 5 |
-| 2 | Escaramuzadores con jabalina | 1 AB + 1 AmB | 8 |
-| 2 | Arqueros | 1 AB + 1 AmI | 9 |
-| 3 | Arqueros con arco compuesto | 3 AB + 2 AmI | 15 |
+| Nivel | Tropa | Costo (por soldado) | poderBase | Unidades |
+|---|---|---|---|---|
+| 1 | Lanceros con escudo de mimbre | 1 Arma de Madera | 3 | 20 |
+| 1 | Espadachines de espada corta de cobre | 1 Arma de Cobre + 1 Armadura Básica | 4 | 20 |
+| 2 | Hacheros ligeros | 1 Arma de Bronce + 1 Armadura Básica | 7 | 18 |
+| 2 | Espadachines con espadas y escudos de bronce | 2 Arma de Bronce + 1 Armadura Intermedia | 9 | 18 |
+| 3 | Lanceros pesados micénicos (escudos grandes) | 2 Arma de Bronce + 2 Armadura Intermedia | 14 | 15 |
+| 3 | Hacheros armados (armadura media) | 1 Arma de Bronce + 1 Armadura Intermedia | 12 | 15 |
+
+**Galería de tiro (a distancia) — carril Pesants + Artesanos, combate real:**
+
+| Nivel | Tropa | Costo (por soldado) | poderBase | Unidades |
+|---|---|---|---|---|
+| 1 | Honderos (escaramuzadores) | 1 Arma de Madera | 5 | 25 |
+| 2 | Escaramuzadores con jabalina | 1 Arma de Bronce + 1 Armadura Básica | 8 | 20 |
+| 2 | Arqueros | 1 Arma de Bronce + 1 Armadura Intermedia | 9 | 25 |
+| 3 | Arqueros con arco compuesto | 3 Arma de Bronce + 2 Armadura Intermedia | 15 | 20 |
 
 `poderBase` es PLACEHOLDER: no estaba en el diseño original (solo equipo/nivel), interpolado a partir de la progresión ya existente del roster anterior (3 → 6 → 12 → 25 en 4 tiers) repartida en estas 10 tropas a lo largo de 3 niveles — pendiente de calibración por simulación.
 
-**Nobleza (progresión plana) — sin cambios respecto a la versión ya implementada**: se sigue reclutando exclusivamente vía Gran Fundición, con su costo actual (cobre+estaño+oro) y conversión instantánea a élite — el rediseño de Barracón/Galería de tiro no la afecta.
+**Unidades por defecto** (`unidadesPorDefecto`, a petición del usuario — corrige una contradicción real con la propia definición de "tropa" de arriba, que ya decía "se recluta de una vez" mientras el motor aceptaba una `cantidad` libre): cada tropa forma/amplía su escuadrón en bloques de tamaño FIJO al reclutarse, el jugador ya no elige cuántos soldados reclutar. `costoEquipo` sigue siendo por soldado, así que el costo real pagado de una vez es "Costo (por soldado)" × "Unidades" de la tabla — ej. Milicia de lanceros cuesta 2 Madera/soldado × 25 = 50 Madera por reclutamiento. Cifras PLACEHOLDER sin calibrar por simulación todavía. En la UI (pestaña Guerra), el segmento "Info:" bajo el selector de tropa muestra ambos desgloses (por soldado y total del escuadrón) antes de confirmar.
+
+**Milicia de lanceros y Arma de Madera** (post Sprint 6, decisión real del usuario tras diagnóstico por simulación — ver `Correcciones_Durante_Desarrollo.md` #32): antes, las 3 tropas de nivel 1 exigían la cadena metalúrgica o del cuero COMPLETA (Mina de Cobre/Corral → Fundición/Curtiduría → Armería), y menos del 6% de los asentamientos nace con un nodo de cobre o livestock dentro de su zona inicial — la primera tropa tardaba una mediana de ~196 ticks y solo la conseguía el 5.7% de los asentamientos en un batch de 200 runs × 900 ticks. "Milicia de lanceros" se paga con madera en bruto (sin pasar por Armería) y es deliberadamente la más débil del roster (poderBase 2) — existe para que el bucle de juego arranque pronto, no para ganar batallas. "Lanceros con escudo de mimbre" y "Honderos" se recostearon de Arma de Cobre/Armadura Básica a Arma de Madera (corrige además una incoherencia temática: un escudo de mimbre pagado con tecnología de cobre, y una honda pagada con armadura de cuero). Con el cambio shipeado, el mismo diagnóstico sube a 44.3% de asentamientos con al menos una tropa, mediana tick 21.
+
+**Milicia de lanceros pasa de Barracón a Centro Urbano** (corrección posterior, a petición del usuario — la defensa mínima seguía dependiendo de un edificio con su propio gate: nivel de asentamiento indirecto + política "Construir Barracón" del General + cola de construcción, ver `Correcciones_Durante_Desarrollo.md` #36): "Milicia de lanceros" ahora se recluta vía Centro Urbano, el único edificio que nace `activo` con el asentamiento desde el tick de fundación (Doc 1.3), sin cola ni política. El único requisito que queda es tener un General asignado (igual que cualquier reclutamiento, Doc 2.2) y los 25 soldados de población + 50 madera del escuadrón — verificado en el navegador: reclutable en el tick 11 (en cuanto la población alcanza 25 pesants desde los 20 iniciales), muy por delante de cuándo Barracón podría siquiera empezar a construirse.
+
+**Nobleza (progresión plana) — YA NO recluta tropas** (decisión real del usuario, ver `Correcciones_Durante_Desarrollo.md` #30 — corrige el texto anterior de esta sección, que seguía describiendo el reclutamiento vía Gran Fundición como vigente): Nobleza sigue existiendo sin cambios como clase de población (crecimiento, requisito de Palacio, ciudadanos mínimos), pero se retiró por completo la posibilidad de convertirla en tropa. El único carril de reclutamiento militar en Fase 0 es el de equipo (Centro Urbano/Barracón/Galería de tiro), abierto a Pesants y Artesanos.
 
 **Relación entre tropas ya reclutadas y el edificio que las produjo**: CONFIRMADO — NO existe ninguna relación posterior al reclutamiento. Una vez una tropa está reclutada y en el mundo, es independiente del edificio (Barracón/Galería de tiro) que la originó. Si el edificio sube de nivel después, los escuadrones ya existentes NO se ven afectados de ninguna forma — ni mejoran ni empeoran. "Mejorar" solo significa poder reclutar tropas nuevas de mayor nivel a partir de ese momento (ver párrafo de RESUELTO más abajo).
 

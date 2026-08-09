@@ -5,7 +5,7 @@
 // importan solo como `type` para tipar lo que se lee — no acoplan a ninguna lógica.
 import type { Asentamiento, CargoTipo, Faccion } from './domain/types';
 import { CATALOGOS, gameStore, type GameState, type CampoBalance } from './app/gameStore';
-import { draw, drawFiltroFertilidad, faccionColor, RECURSO_COLOR, RECURSOS_EN_MAPA, EDIFICIO_COLOR, FACCION_COLORES, type DrawState } from './ui/canvas';
+import { draw, drawFiltroFertilidad, drawPreviewFundacion, faccionColor, RECURSO_COLOR, RECURSOS_EN_MAPA, EDIFICIO_COLOR, FACCION_COLORES, type DrawState } from './ui/canvas';
 
 const CANVAS_SIZE = 800;
 
@@ -23,6 +23,7 @@ const RECURSO_NOMBRE: Record<string, string> = {
   cuero: 'Cuero',
   cueroCurtido: 'Cuero Curtido',
   cueroCalidad: 'Cuero de Calidad',
+  armaMadera: 'Arma de Madera',
   armaCobre: 'Arma de Cobre',
   armaBronce: 'Arma de Bronce',
   armaBronceCalidad: 'Arma de Bronce de Calidad',
@@ -65,7 +66,7 @@ const EDIFICIO_FUNCION: Record<string, string> = {
   corral: 'Extrae livestock de una manada cercana hasta agotarla.',
   fundicion: 'Fabrica lingotes de cobre/estaño/bronce a partir de mineral. Dispara la aparición de Artesanos si es el primero de su tipo.',
   curtiduria: 'Trata cuero a partir de livestock. Dispara la aparición de Artesanos si es el primero de su tipo.',
-  armeria: 'Fabrica armas y armaduras a partir de lingotes y cuero. Dispara la aparición de Artesanos si es el primero de su tipo.',
+  armeria: 'Fabrica armas y armaduras a partir de lingotes y cuero, además de armas de madera en bruto (escalón de entrada, sin metalurgia). Dispara la aparición de Artesanos si es el primero de su tipo.',
   carpinteria: 'Recluta armas de asedio y habilita mejoras de otros edificios (Armería/Barracón/Galería de tiro nivel 2, Palacio).',
   barracon: 'Reclutamiento de tropas cuerpo a cuerpo. Solo se construye mientras la política del General esté activa.',
   galeriaDeTiro: 'Reclutamiento de tropas a distancia. Solo se construye mientras la política del General esté activa.',
@@ -99,7 +100,7 @@ function efectoPolitica(politica: (typeof CATALOGOS.politicas)[number]): string 
 }
 
 // --- Estado de vista (qué se muestra, no simulación): vive solo aquí, nunca en el store. ---
-let tabActivo: 'acciones' | 'asentamientos' | 'jugadores' | 'politicas' | 'balance' = 'acciones';
+let tabActivo: 'acciones' | 'guerra' | 'asentamientos' | 'jugadores' | 'politicas' | 'balance' = 'acciones';
 let asentamientoSeleccionadoId: string | null = null;
 let jugadorSeleccionadoId: string | null = null;
 /** Tick que el slider de línea de tiempo está mostrando. Sigue al tick en vivo salvo que el usuario arrastre hacia atrás. */
@@ -116,6 +117,7 @@ app.innerHTML = `
     <h1>Bronze Age Collapse — Fase 0</h1>
     <div class="tabs" id="main-tabs">
       <button class="tab-btn" data-tab="acciones">Acciones</button>
+      <button class="tab-btn" data-tab="guerra">Guerra</button>
       <button class="tab-btn" data-tab="asentamientos">Asentamientos</button>
       <button class="tab-btn" data-tab="jugadores">Jugadores</button>
       <button class="tab-btn" data-tab="politicas">Políticas</button>
@@ -134,6 +136,7 @@ app.innerHTML = `
           Jugadores fundadores (fundación grupal, 1-5)
           <input id="jugadores-input" type="number" value="1" min="1" max="5" />
         </label>
+        <div id="fundacion-viabilidad" class="fundacion-viabilidad">Pasa el cursor por el mapa para evaluar un emplazamiento.</div>
         <label>
           Seed del mundo
           <input id="seed-input" type="number" value="1" />
@@ -223,15 +226,24 @@ app.innerHTML = `
         <button id="mercado-btn">Colocar orden</button>
       </div>
 
-      <div class="controls">
-        <h2>Guerra (Doc 5)</h2>
-        <label>Asentamiento <select id="guerra-asentamiento"></select></label>
-        <label>Reclutar tropa (Barracón/Galería de tiro) <select id="reclutar-tropa"></select></label>
-        <label>Origen <select id="reclutar-tropa-origen"></select></label>
-        <label>Cantidad de unidades <input id="reclutar-tropa-cantidad" type="number" value="10" min="1" /></label>
-        <button id="reclutar-tropa-btn">Reclutar tropa</button>
-        <button id="gran-fundicion-btn">Construir Gran Fundición</button>
+    </div>
+    </div>
 
+    <div class="tab-panel" id="tab-guerra" hidden>
+    <div class="controls-grid">
+      <div class="controls">
+        <h2>Reclutamiento (Doc 5.7/5.8)</h2>
+        <label>Asentamiento <select id="guerra-asentamiento"></select></label>
+        <label>Reclutar tropa (Centro Urbano/Barracón/Galería de tiro) <select id="reclutar-tropa"></select></label>
+        <div class="tropa-info" id="reclutar-tropa-info"></div>
+        <label>Origen <select id="reclutar-tropa-origen"></select></label>
+        <button id="reclutar-tropa-btn">Reclutar tropa</button>
+        <p class="legend-note">Cada tropa se recluta en bloque, al tamaño de escuadrón fijo indicado en "Info" arriba — no se elige la cantidad.</p>
+        <button id="gran-fundicion-btn">Construir Gran Fundición</button>
+      </div>
+
+      <div class="controls">
+        <h2>Combate (Doc 5.2/5.10)</h2>
         <label>Escuadrones propios (ids separados por coma) <input id="guerra-escuadrones" type="text" placeholder="escuadron-..." /></label>
         <label>Asentamiento objetivo/rival <select id="guerra-objetivo"></select></label>
         <label>Escuadrones del objetivo (solo campo abierto) <input id="guerra-escuadrones-objetivo" type="text" /></label>
@@ -240,6 +252,11 @@ app.innerHTML = `
         <label>Caravana a interceptar <select id="guerra-caravana"></select></label>
         <button id="interceptar-btn">Interceptar caravana</button>
       </div>
+    </div>
+
+    <div class="detail-section roster-section">
+      <h3>Roster de tropas (Doc 5.8)</h3>
+      <div id="roster-tropas" class="table-scroll"></div>
     </div>
     </div>
 
@@ -341,6 +358,10 @@ const faccionSelect = document.getElementById('faccion-select') as HTMLSelectEle
 const seedInput = document.getElementById('seed-input') as HTMLInputElement;
 const jugadoresInput = document.getElementById('jugadores-input') as HTMLInputElement;
 
+const fundacionViabilidadEl = document.getElementById('fundacion-viabilidad')!;
+/** Posición del cursor sobre el mapa, para previsualizar el emplazamiento antes de fundar (ver `render`). */
+let hoverFundacion: { x: number; y: number } | null = null;
+
 const expansionOrigenSelect = document.getElementById('expansion-origen') as HTMLSelectElement;
 const expansionModoClicCheckbox = document.getElementById('expansion-modo-clic') as HTMLInputElement;
 const expansionDestinoInput = document.getElementById('expansion-destino') as HTMLInputElement;
@@ -388,7 +409,8 @@ const fusionReyInput = document.getElementById('fusion-rey') as HTMLInputElement
 const guerraAsentamientoSelect = document.getElementById('guerra-asentamiento') as HTMLSelectElement;
 const reclutarTropaSelect = document.getElementById('reclutar-tropa') as HTMLSelectElement;
 const reclutarTropaOrigenSelect = document.getElementById('reclutar-tropa-origen') as HTMLSelectElement;
-const reclutarTropaCantidadInput = document.getElementById('reclutar-tropa-cantidad') as HTMLInputElement;
+const reclutarTropaInfoEl = document.getElementById('reclutar-tropa-info')!;
+const rosterTropasEl = document.getElementById('roster-tropas')!;
 const guerraEscuadronesInput = document.getElementById('guerra-escuadrones') as HTMLInputElement;
 const guerraObjetivoSelect = document.getElementById('guerra-objetivo') as HTMLSelectElement;
 const guerraEscuadronesObjetivoInput = document.getElementById('guerra-escuadrones-objetivo') as HTMLInputElement;
@@ -409,9 +431,75 @@ reclutarTropaSelect.innerHTML = CATALOGOS.tropasReclutables
     const costoTxt = Object.entries(t.costoEquipo)
       .map(([r, c]) => `${c} ${RECURSO_NOMBRE[r] ?? r}`)
       .join(' + ');
-    return `<option value="${t.id}">${t.nombre} — ${EDIFICIO_NOMBRE[t.edificio] ?? t.edificio} nivel ${t.nivelRequerido} (${costoTxt})</option>`;
+    return `<option value="${t.id}">${t.nombre} — ${edificioRequeridoTxt(t)} (${costoTxt})</option>`;
   })
   .join('');
+
+/** Centro Urbano no tiene nivel interno (nace `activo` con el asentamiento, sin cola ni política, Doc 4.2.1)
+ * — a diferencia de Barracón/Galería de tiro, mostrar "nivel 1" ahí sería ruido sin significado real. */
+function edificioRequeridoTxt(tropa: (typeof CATALOGOS.tropasReclutables)[number]): string {
+  const nombreEdificio = EDIFICIO_NOMBRE[tropa.edificio] ?? tropa.edificio;
+  return tropa.edificio === 'centroUrbano' ? nombreEdificio : `${nombreEdificio} nivel ${tropa.nivelRequerido}`;
+}
+
+/** Desglose de costo de una tropa, por soldado y para el escuadrón completo (`unidadesPorDefecto`, tamaño fijo). */
+function costoTropaTxt(tropa: (typeof CATALOGOS.tropasReclutables)[number], porSoldado: boolean): string {
+  const entradas = Object.entries(tropa.costoEquipo);
+  if (entradas.length === 0) return '—';
+  return entradas
+    .map(([r, c]) => `${(c ?? 0) * (porSoldado ? 1 : tropa.unidadesPorDefecto)} ${RECURSO_NOMBRE[r] ?? r}`)
+    .join(' + ');
+}
+
+/** Segmento "Info:" bajo el combo de reclutamiento (a petición del usuario): toda la info de la tropa
+ * seleccionada — edificio/nivel exigido, tamaño fijo del escuadrón, costo por soldado y total, poder base. */
+function actualizarInfoTropa(): void {
+  const tropa = CATALOGOS.tropasReclutables.find((t) => t.id === reclutarTropaSelect.value);
+  if (!tropa) {
+    reclutarTropaInfoEl.innerHTML = '';
+    return;
+  }
+  reclutarTropaInfoEl.innerHTML = `
+    <div class="kv-row"><span>Info:</span><span>${tropa.nombre}</span></div>
+    <div class="kv-row"><span>Edificio requerido</span><span>${edificioRequeridoTxt(tropa)}</span></div>
+    <div class="kv-row"><span>Unidades por escuadrón</span><span>${tropa.unidadesPorDefecto} (tamaño fijo, no elegible)</span></div>
+    <div class="kv-row"><span>Costo por soldado</span><span>${costoTropaTxt(tropa, true)}</span></div>
+    <div class="kv-row"><span>Costo total del escuadrón</span><span>${costoTropaTxt(tropa, false)}</span></div>
+    <div class="kv-row"><span>Poder base (por soldado)</span><span>${tropa.poderBase}</span></div>
+  `;
+}
+reclutarTropaSelect.addEventListener('change', actualizarInfoTropa);
+actualizarInfoTropa();
+
+/** Secciones del roster completo (Doc 5.8), agrupadas por edificio de reclutamiento — la pestaña Guerra las
+ * muestra siempre visibles, a diferencia del segmento "Info:" que solo detalla la tropa seleccionada. */
+const ROSTER_SECCIONES: { edificio: 'centroUrbano' | 'barracon' | 'galeriaDeTiro'; titulo: string }[] = [
+  { edificio: 'centroUrbano', titulo: 'Centro Urbano (defensa mínima, sin edificio dedicado)' },
+  { edificio: 'barracon', titulo: 'Barracón (cuerpo a cuerpo)' },
+  { edificio: 'galeriaDeTiro', titulo: 'Galería de tiro (a distancia)' },
+];
+
+function renderRosterTropas(): void {
+  const filas = (edificio: (typeof ROSTER_SECCIONES)[number]['edificio']) =>
+    CATALOGOS.tropasReclutables
+      .filter((t) => t.edificio === edificio)
+      .map(
+        (t) =>
+          `<tr><td>${t.nivelRequerido}</td><td>${t.nombre}</td><td>${costoTropaTxt(t, true)}</td><td>${t.poderBase}</td><td>${t.unidadesPorDefecto}</td></tr>`
+      )
+      .join('');
+  const tabla = (titulo: string, edificio: (typeof ROSTER_SECCIONES)[number]['edificio']) => {
+    const cuerpo = filas(edificio);
+    if (!cuerpo) return '';
+    return `
+    <h3>${titulo}</h3>
+    <table class="mini-table">
+      <thead><tr><th>Nvl</th><th>Tropa</th><th>Costo/soldado</th><th>Poder</th><th>Uds.</th></tr></thead>
+      <tbody>${cuerpo}</tbody>
+    </table>`;
+  };
+  rosterTropasEl.innerHTML = ROSTER_SECCIONES.map(({ edificio, titulo }) => tabla(titulo, edificio)).join('');
+}
 
 function etiquetaAsentamiento(a: Asentamiento, facciones: Faccion[]): string {
   const nombreFaccion = facciones.find((f) => f.id === a.faccionId)?.nombre ?? a.faccionId;
@@ -1163,6 +1251,8 @@ function actualizarTabs(): void {
     btn.classList.toggle('active', btn.dataset.tab === tabActivo);
   });
   document.getElementById('tab-acciones')!.hidden = tabActivo !== 'acciones';
+  document.getElementById('tab-guerra')!.hidden = tabActivo !== 'guerra';
+  if (tabActivo === 'guerra') renderRosterTropas();
   document.getElementById('tab-asentamientos')!.hidden = tabActivo !== 'asentamientos';
   document.getElementById('tab-jugadores')!.hidden = tabActivo !== 'jugadores';
   document.getElementById('tab-politicas')!.hidden = tabActivo !== 'politicas';
@@ -1174,7 +1264,7 @@ function actualizarTabs(): void {
 document.getElementById('main-tabs')!.addEventListener('click', (ev) => {
   const btn = (ev.target as HTMLElement).closest('.tab-btn') as HTMLButtonElement | null;
   if (!btn) return;
-  tabActivo = btn.dataset.tab as 'acciones' | 'asentamientos' | 'jugadores' | 'politicas' | 'balance';
+  tabActivo = btn.dataset.tab as 'acciones' | 'guerra' | 'asentamientos' | 'jugadores' | 'politicas' | 'balance';
   actualizarTabs();
 });
 actualizarTabs();
@@ -1215,6 +1305,7 @@ function render(): void {
   const drawState: DrawState = { world: state.world, asentamientos: state.asentamientos, zonas: gameStore.getZonas(state.asentamientos), facciones: state.facciones, caravanas: state.caravanas };
   draw(ctx, canvas, drawState);
   if (mostrarFiltroFertilidad) drawFiltroFertilidad(ctx, canvas, state.world);
+  renderViabilidadFundacion(viendoPasado);
   actualizarSelects(liveState);
   renderPanelAsentamientos(state);
   renderAsentamientosTab(state);
@@ -1225,6 +1316,51 @@ function render(): void {
   renderPanelEconomia(state);
   renderLeyenda(state);
   renderRegistro(state);
+}
+
+const RECURSO_NOMBRE_CORTO: Record<string, string> = {
+  piedra: 'piedra', cobre: 'cobre', estano: 'estaño', oro: 'oro', livestock: 'ganado',
+};
+
+/**
+ * Aviso previo de emplazamiento (no bloquea nada, ver `evaluarViabilidadFundacion`): dibuja el radio inicial
+ * bajo el cursor y explica en texto si el sitio es sostenible. El criterio duro es la madera — sin bosque al
+ * alcance el asentamiento casi siempre acaba en ruinas, y es con diferencia el mejor predictor de si llegará
+ * a construir Leñera/Barracón y, con ello, a tener tropa.
+ */
+function renderViabilidadFundacion(viendoPasado: boolean): void {
+  if (!hoverFundacion || viendoPasado) {
+    fundacionViabilidadEl.textContent = viendoPasado
+      ? 'Vuelve al presente para evaluar emplazamientos.'
+      : 'Pasa el cursor por el mapa para evaluar un emplazamiento.';
+    fundacionViabilidadEl.className = 'fundacion-viabilidad';
+    return;
+  }
+
+  const v = gameStore.viabilidadFundacion(hoverFundacion);
+  drawPreviewFundacion(ctx, canvas, gameStore.getState().world, {
+    posicion: hoverFundacion,
+    radioInicial: v.radioInicial,
+    fundable: v.fundable,
+    bosqueAlcanzable: v.bosqueAlcanzable,
+  });
+
+  const recursos = v.recursosEnRadio
+    .map((r) => `${r.nodos}× ${RECURSO_NOMBRE_CORTO[r.tipo] ?? r.tipo}`)
+    .join(', ');
+
+  if (!v.fundable) {
+    fundacionViabilidadEl.textContent = !v.dentroDelMapa
+      ? '✖ Fuera de los límites del mapa.'
+      : '✖ Dentro de una zona de influencia existente.';
+    fundacionViabilidadEl.className = 'fundacion-viabilidad no-fundable';
+  } else if (!v.bosqueAlcanzable) {
+    fundacionViabilidadEl.textContent = `⚠ Sin bosque al alcance: no podrá construir Leñera, y la madera paga Mantenimiento desde el primer tick. Se puede fundar igual, pero es el emplazamiento con más riesgo de acabar en ruinas.${recursos ? ` En el radio: ${recursos}.` : ''}`;
+    fundacionViabilidadEl.className = 'fundacion-viabilidad aviso';
+  } else {
+    fundacionViabilidadEl.textContent = `✔ Emplazamiento sostenible: bosque al alcance.${recursos ? ` Además en el radio: ${recursos}.` : ' Sin nodos minerales en el radio inicial (la zona crece al construir).'}`;
+    fundacionViabilidadEl.className = 'fundacion-viabilidad ok';
+  }
 }
 
 // Única suscripción: cualquier acción del store dispara un re-render. La interfaz nunca
@@ -1244,6 +1380,23 @@ volverPresenteBtn.addEventListener('click', () => {
 function idsDeInput(input: HTMLInputElement): string {
   return input.value;
 }
+
+/** Coordenadas de mundo bajo el puntero, a partir de un evento de ratón sobre el canvas. */
+function posicionMundoDesdeEvento(ev: MouseEvent): { x: number; y: number } {
+  const rect = canvas.getBoundingClientRect();
+  const scale = gameStore.getState().world.config.ancho / canvas.width;
+  return { x: (ev.clientX - rect.left) * scale, y: (ev.clientY - rect.top) * scale };
+}
+
+canvas.addEventListener('mousemove', (ev) => {
+  hoverFundacion = posicionMundoDesdeEvento(ev);
+  render();
+});
+
+canvas.addEventListener('mouseleave', () => {
+  hoverFundacion = null;
+  render();
+});
 
 canvas.addEventListener('click', (ev) => {
   const state = gameStore.getState();
@@ -1340,12 +1493,7 @@ document.getElementById('mercado-btn')!.addEventListener('click', () => {
 });
 
 document.getElementById('reclutar-tropa-btn')!.addEventListener('click', () => {
-  gameStore.reclutarTropa(
-    guerraAsentamientoSelect.value,
-    reclutarTropaSelect.value,
-    reclutarTropaOrigenSelect.value as 'pesants' | 'artesanos',
-    Number(reclutarTropaCantidadInput.value) || 0
-  );
+  gameStore.reclutarTropa(guerraAsentamientoSelect.value, reclutarTropaSelect.value, reclutarTropaOrigenSelect.value as 'pesants' | 'artesanos');
 });
 
 document.getElementById('gran-fundicion-btn')!.addEventListener('click', () => {

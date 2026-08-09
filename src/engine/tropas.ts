@@ -13,23 +13,27 @@ export class ReclutamientoInvalidoError extends Error {}
  * pools — reemplaza el antiguo reclutamiento directo de Artesanos con cobre a secas, y el de Nobleza vía Gran
  * Fundición, ambos retirados). Tier 1 fijo — "mejorar" no es ascenso automático por veteranía (ver
  * `ascenderTierSiCorresponde`), es reclutar una tropa mejor cuando el edificio suba de nivel interno.
+ *
+ * La cantidad de soldados YA NO la elige el jugador (a petición del usuario, corrige una contradicción con el
+ * propio diseño: Doc 0/Glosario define "tropa" como "el tipo de escuadrón que se recluta DE UNA VEZ") — cada
+ * reclutamiento forma/amplía el escuadrón en bloques de `tropa.unidadesPorDefecto` soldados, tamaño fijo del
+ * catálogo (`TROPAS_RECLUTABLES`, constants.ts). `costoEquipo` sigue siendo por soldado.
  */
 export function reclutarTropa(
   asentamiento: Asentamiento,
   tropaId: string,
   origen: 'pesants' | 'artesanos',
-  cantidad: number,
   tickActual: number,
   contador = 0
 ): Asentamiento {
   if (!asentamiento.cargos.generalId) {
     throw new ReclutamientoInvalidoError('El asentamiento necesita un General para reclutar tropas.');
   }
-  if (cantidad <= 0) throw new ReclutamientoInvalidoError('La cantidad debe ser mayor que 0.');
   const tropa = TROPAS_RECLUTABLES.find((t) => t.id === tropaId);
   if (!tropa) throw new ReclutamientoInvalidoError('La tropa no existe en el catálogo.');
+  const cantidad = tropa.unidadesPorDefecto;
   if (asentamiento.poblacion[origen] < cantidad) {
-    throw new ReclutamientoInvalidoError(`No hay suficientes ${origen} disponibles.`);
+    throw new ReclutamientoInvalidoError(`No hay suficientes ${origen} disponibles (hacen falta ${cantidad}).`);
   }
 
   const edificio = edificiosPorTipoYEstado(asentamiento, tropa.edificio)[0];

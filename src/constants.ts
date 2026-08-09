@@ -140,6 +140,27 @@ interface NivelEdificioTransformacion {
   requiereEdificioNivel?: number;
 }
 
+/**
+ * Arma simple de madera endurecida — escalón de entrada de la Armería (verificado por simulación, ver
+ * `Diario_Simulaciones_Batch_500_Transformacion.md`): antes, TODAS las tropas de nivel 1 exigían la cadena
+ * metalúrgica o la del cuero entera (Mina de Cobre → Fundición → Armería, o Corral → Curtiduría → Armería),
+ * y como solo ~6% de los asentamientos nace con un nodo de cobre/livestock dentro de su zona, la primera
+ * tropa llegaba en el tick ~196 y solo al 5.7% de los asentamientos. Esta receta rompe esa dependencia:
+ * madera es el único recurso al que casi todo asentamiento viable tiene acceso.
+ *
+ * Va la ÚLTIMA en las tres listas de recetas de Armería a propósito: las recetas se ejecutan en orden sobre
+ * el mismo almacén, así que armaCobre/armaBronce (que también consumen madera) se sirven primero y esta
+ * absorbe el sobrante — el arma de madera es el fallback, no la que compite por la materia prima buena.
+ * Se repite en los 3 niveles porque las recetas se REEMPLAZAN al mejorar, no se acumulan: sin esto, mejorar
+ * la Armería quitaría la capacidad de armar milicia.
+ *
+ * Cifras deliberadamente modestas (2/tick a cambio de 4 madera/tick): `avanzarRecetas` NO respeta la reserva
+ * dinámica de Mantenimiento (a diferencia de la construcción, ver `puedeIniciarConstruccion`) — vacía el
+ * stock hasta donde llegue. Una tasa más alta convertiría la Armería en una vía de colapso por falta de
+ * madera para Mantenimiento.
+ */
+const RECETA_ARMA_MADERA = { produce: 'armaMadera', produccionBase: 2, consumePorUnidad: { madera: 2 } };
+
 export const EDIFICIO_CATALOGO = {
   // Único edificio que NO pasa por la cola de construcción (ni automática ni manual, Doc 1.3): nace
   // ya activo al fundar. costo/tiempoConstruccionTicks quedan en 0 solo por consistencia de forma con
@@ -241,6 +262,7 @@ export const EDIFICIO_CATALOGO = {
         recetas: [
           { produce: 'armaCobre', produccionBase: 3, consumePorUnidad: { lingoteCobre: 1, madera: 1 } },
           { produce: 'armaduraBasica', produccionBase: 3, consumePorUnidad: { cuero: 5 } },
+          RECETA_ARMA_MADERA,
         ],
       },
       2: {
@@ -253,6 +275,7 @@ export const EDIFICIO_CATALOGO = {
           { produce: 'armaduraBasica', produccionBase: 3, consumePorUnidad: { cuero: 5 } },
           { produce: 'armaBronce', produccionBase: 2, consumePorUnidad: { lingoteBronce: 1, madera: 2 } },
           { produce: 'armaduraIntermedia', produccionBase: 2, consumePorUnidad: { lingoteCobre: 1, cueroCurtido: 5 } },
+          RECETA_ARMA_MADERA,
         ],
       },
       3: {
@@ -267,6 +290,7 @@ export const EDIFICIO_CATALOGO = {
           { produce: 'armaduraIntermedia', produccionBase: 2, consumePorUnidad: { lingoteCobre: 1, cueroCurtido: 5 } },
           { produce: 'armaBronceCalidad', produccionBase: 1, consumePorUnidad: { lingoteBronce: 5, madera: 5 } },
           { produce: 'armaduraBronce', produccionBase: 1, consumePorUnidad: { lingoteBronce: 1, cueroCalidad: 5 } },
+          RECETA_ARMA_MADERA,
         ],
       },
     } as Record<number, NivelEdificioTransformacion>,
@@ -536,25 +560,47 @@ export const TROPA_CATALOGO: Record<number, { nombre: string; poderBase: number 
  * 4.1), solo se quitó la posibilidad de convertirla en tropa. `poderBase` es PLACEHOLDER: no estaba en el
  * diseño original (solo equipo/nivel), interpolado a partir de la progresión ya existente en TROPA_CATALOGO
  * (3 → 6 → 12 → 25 en 4 tiers) repartida en estas 10 tropas a lo largo de 3 niveles.
+ *
+ * `unidadesPorDefecto` (a petición del usuario — antes el jugador elegía libremente `cantidad` al reclutar,
+ * contradiciendo la propia terminología del diseño: "una tropa es el tipo de escuadrón que se recluta DE UNA
+ * VEZ", Doc 0/Glosario y Doc 5.8): cada tropa forma un escuadrón de un tamaño fijo al reclutarse — `costoEquipo`
+ * sigue siendo POR SOLDADO, así que el coste total de reclutar se multiplica por este número (ver
+ * `reclutarTropa`, engine/tropas.ts). Cifras PLACEHOLDER sin calibrar por simulación todavía.
  */
 export const TROPAS_RECLUTABLES: {
   id: string;
   nombre: string;
-  edificio: 'barracon' | 'galeriaDeTiro';
+  edificio: 'centroUrbano' | 'barracon' | 'galeriaDeTiro';
   nivelRequerido: number;
   costoEquipo: Partial<Record<string, number>>;
   poderBase: number;
+  unidadesPorDefecto: number;
 }[] = [
-  { id: 'lanceros_mimbre', nombre: 'Lanceros con escudo de mimbre', edificio: 'barracon', nivelRequerido: 1, costoEquipo: { armaCobre: 1 }, poderBase: 3 },
-  { id: 'espadachines_cobre', nombre: 'Espadachines de espada corta de cobre', edificio: 'barracon', nivelRequerido: 1, costoEquipo: { armaCobre: 1, armaduraBasica: 1 }, poderBase: 4 },
-  { id: 'hacheros_ligeros', nombre: 'Hacheros ligeros', edificio: 'barracon', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraBasica: 1 }, poderBase: 7 },
-  { id: 'espadachines_bronce', nombre: 'Espadachines con espadas y escudos de bronce', edificio: 'barracon', nivelRequerido: 2, costoEquipo: { armaBronce: 2, armaduraIntermedia: 1 }, poderBase: 9 },
-  { id: 'lanceros_pesados', nombre: 'Lanceros pesados micénicos', edificio: 'barracon', nivelRequerido: 3, costoEquipo: { armaBronce: 2, armaduraIntermedia: 2 }, poderBase: 14 },
-  { id: 'hacheros_armados', nombre: 'Hacheros armados', edificio: 'barracon', nivelRequerido: 3, costoEquipo: { armaBronce: 1, armaduraIntermedia: 1 }, poderBase: 12 },
-  { id: 'honderos', nombre: 'Honderos', edificio: 'galeriaDeTiro', nivelRequerido: 1, costoEquipo: { armaduraBasica: 1 }, poderBase: 5 },
-  { id: 'escaramuzadores_jabalina', nombre: 'Escaramuzadores con jabalina', edificio: 'galeriaDeTiro', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraBasica: 1 }, poderBase: 8 },
-  { id: 'arqueros', nombre: 'Arqueros', edificio: 'galeriaDeTiro', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraIntermedia: 1 }, poderBase: 9 },
-  { id: 'arqueros_compuesto', nombre: 'Arqueros con arco compuesto', edificio: 'galeriaDeTiro', nivelRequerido: 3, costoEquipo: { armaBronce: 3, armaduraIntermedia: 2 }, poderBase: 15 },
+  // Escalón de entrada (a petición del usuario: la defensa mínima no debe depender de Barracón — que exige la
+  // política "Construir Barracón" del General ANTES de siquiera empezar a construirse, ver `politicas.ts`
+  // `politicaActivaDesbloqueaEdificio` — sino de Centro Urbano, el único edificio que nace `activo` con el
+  // asentamiento desde el tick de fundación, sin cola de construcción ni gate alguno, ver `settlement.ts`
+  // `edificiosIniciales`). Así CUALQUIER asentamiento fundado puede defenderse desde el minuto uno, así sea
+  // con la tropa más débil del roster — antes dependía indirectamente de tener madera de sobra para pagar el
+  // Barracón (30 madera) y de que el General activara esa política primero. Se paga con madera EN BRUTO, sin
+  // pasar por Armería. Débil a propósito (poderBase 2, por debajo de todo lo demás): existe para que el bucle
+  // de juego arranque y las primeras escaramuzas ocurran pronto, no para ganar batallas. Sigue exigiendo un
+  // General asignado (`reclutarTropa` en engine/tropas.ts) — eso no cambia, solo el edificio.
+  { id: 'milicia_lanceros', nombre: 'Milicia de lanceros', edificio: 'centroUrbano', nivelRequerido: 1, costoEquipo: { madera: 2 }, poderBase: 2, unidadesPorDefecto: 25 },
+  // Recosteadas a `armaMadera` (ver RECETA_ARMA_MADERA): antes exigían la cadena del cobre/cuero entera, lo
+  // que era además temáticamente incoherente — un escudo de MIMBRE pagado con un arma de cobre, y unos
+  // Honderos (una honda y una piedra) pagados con armadura de cuero. El cobre pasa a ser la MEJORA
+  // (`espadachines_cobre`, que sí lo conserva), no el ticket de entrada.
+  { id: 'lanceros_mimbre', nombre: 'Lanceros con escudo de mimbre', edificio: 'barracon', nivelRequerido: 1, costoEquipo: { armaMadera: 1 }, poderBase: 3, unidadesPorDefecto: 20 },
+  { id: 'espadachines_cobre', nombre: 'Espadachines de espada corta de cobre', edificio: 'barracon', nivelRequerido: 1, costoEquipo: { armaCobre: 1, armaduraBasica: 1 }, poderBase: 4, unidadesPorDefecto: 20 },
+  { id: 'hacheros_ligeros', nombre: 'Hacheros ligeros', edificio: 'barracon', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraBasica: 1 }, poderBase: 7, unidadesPorDefecto: 18 },
+  { id: 'espadachines_bronce', nombre: 'Espadachines con espadas y escudos de bronce', edificio: 'barracon', nivelRequerido: 2, costoEquipo: { armaBronce: 2, armaduraIntermedia: 1 }, poderBase: 9, unidadesPorDefecto: 18 },
+  { id: 'lanceros_pesados', nombre: 'Lanceros pesados micénicos', edificio: 'barracon', nivelRequerido: 3, costoEquipo: { armaBronce: 2, armaduraIntermedia: 2 }, poderBase: 14, unidadesPorDefecto: 15 },
+  { id: 'hacheros_armados', nombre: 'Hacheros armados', edificio: 'barracon', nivelRequerido: 3, costoEquipo: { armaBronce: 1, armaduraIntermedia: 1 }, poderBase: 12, unidadesPorDefecto: 15 },
+  { id: 'honderos', nombre: 'Honderos', edificio: 'galeriaDeTiro', nivelRequerido: 1, costoEquipo: { armaMadera: 1 }, poderBase: 5, unidadesPorDefecto: 25 },
+  { id: 'escaramuzadores_jabalina', nombre: 'Escaramuzadores con jabalina', edificio: 'galeriaDeTiro', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraBasica: 1 }, poderBase: 8, unidadesPorDefecto: 20 },
+  { id: 'arqueros', nombre: 'Arqueros', edificio: 'galeriaDeTiro', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraIntermedia: 1 }, poderBase: 9, unidadesPorDefecto: 25 },
+  { id: 'arqueros_compuesto', nombre: 'Arqueros con arco compuesto', edificio: 'galeriaDeTiro', nivelRequerido: 3, costoEquipo: { armaBronce: 3, armaduraIntermedia: 2 }, poderBase: 15, unidadesPorDefecto: 20 },
 ];
 
 export const ASCENSO_TROPA = {

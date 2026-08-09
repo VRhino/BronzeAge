@@ -23,6 +23,10 @@ export type RecursoTipo =
   | 'cuero'
   | 'cueroCurtido'
   | 'cueroCalidad'
+  // Escalón de entrada militar (ver TROPAS_RECLUTABLES en constants.ts): arma simple de madera endurecida,
+  // fabricada en Armería nivel 1 sin depender de la cadena metalúrgica — es lo que permite que un
+  // asentamiento recién fundado pueda armar tropa antes de encontrar cobre.
+  | 'armaMadera'
   | 'armaCobre'
   | 'armaBronce'
   | 'armaBronceCalidad'
@@ -128,7 +132,7 @@ export interface Escuadron {
   moral: number;
   /** Debuff temporal tras perder en mundo abierto (Doc 5.2.2), penaliza poder de combate mientras dura. */
   heridoHastaTick?: number;
-  /** Tropa reclutada vía Barracón/Galería de tiro (Doc 5.7/5.8, ver TROPAS_RECLUTABLES en constants.ts) — solo
+  /** Tropa reclutada vía Centro Urbano/Barracón/Galería de tiro (Doc 5.7/5.8, ver TROPAS_RECLUTABLES en constants.ts) — solo
    * presente para escuadrones de Pesants reclutados por equipo. Determina el poderBase (ver `poderEscuadron`,
    * engine/combate.ts) en vez de TROPA_CATALOGO[tier], y desactiva el ascenso automático de tier por veteranía
    * (ver `ascenderTierSiCorresponde`, engine/tropas.ts) — "mejorar" pasa a ser reclutar una tropa mejor cuando
