@@ -6,12 +6,14 @@
 import type {
   AcuerdoTrueque,
   Asentamiento,
+  CaminoComercial,
   CargoTipo,
   Caravana,
   Faccion,
   NodoRecurso,
   OrdenMercado,
   RecursoTipo,
+  RegionId,
   RelacionPolitica,
   Titulo,
   WorldConfig,
@@ -50,6 +52,8 @@ export type { ViabilidadFundacion } from '../engine/settlement';
 import { computeTodasLasZonas } from '../engine/zones';
 import { avanzarSimulacion } from '../engine/simulation';
 import { proponerTrueque as proponerTruequeEngine, construirCaravanaComercial as construirCaravanaComercialEngine, CaravanaInvalidaError, TruequeInvalidoError } from '../engine/trade';
+import { asegurarCaminoComercial } from '../engine/caminos';
+import { controladorDeChokepoint } from '../engine/chokepoints';
 import { colocarOrdenMercado as colocarOrdenMercadoEngine, calcularPrecioReferencia, OrdenInvalidaError } from '../engine/market';
 import { crearFaccion, comprarCasa as comprarCasaEngine, calcularCapFundacion, capacidadCasas, FaccionInvalidaError } from '../engine/faccion';
 import { asignarRey as asignarReyEngine, asignarEmbajador as asignarEmbajadorEngine, asignarCargoLocal as asignarCargoLocalEngine, CargoInvalidoError } from '../engine/cargos';
@@ -93,6 +97,8 @@ export interface GameState {
   ordenes: OrdenMercado[];
   relaciones: RelacionPolitica[];
   titulos: Titulo[];
+  /** Caminos comerciales (Fase 0.3, Doc 1.6) — ver `engine/caminos.ts`. */
+  caminos: CaminoComercial[];
   tick: number;
   log: EventoLog[];
   historialJugadores: Record<string, EventoLog[]>;
@@ -126,6 +132,8 @@ export interface SimulacionExportada {
   ordenes: OrdenMercado[];
   relaciones: RelacionPolitica[];
   titulos: Titulo[];
+  /** Ausente en archivos exportados antes de Fase 0.3 — se asume sin caminos todavía (`?? []` al importar). */
+  caminos?: CaminoComercial[];
   log: EventoLog[];
   historialJugadores: Record<string, EventoLog[]>;
 }
@@ -189,6 +197,7 @@ export class GameStore {
       ordenes: [],
       relaciones: [],
       titulos: [],
+      caminos: [],
       tick: 0,
       log: [],
       historialJugadores: {},
@@ -245,6 +254,7 @@ export class GameStore {
       ordenes: structuredClone(this.state.ordenes),
       relaciones: structuredClone(this.state.relaciones),
       titulos: structuredClone(this.state.titulos),
+      caminos: structuredClone(this.state.caminos),
       tick: this.state.tick,
       log: structuredClone(this.state.log),
       historialJugadores: structuredClone(this.state.historialJugadores),
@@ -272,6 +282,21 @@ export class GameStore {
 
   getZonas(asentamientos: Asentamiento[] = this.state.asentamientos): ZonaInfluencia[] {
     return computeTodasLasZonas(asentamientos);
+  }
+
+  /**
+   * Chokepoint id -> asentamiento que lo controla (Fase 0.3, Doc 1.5): mismo criterio que las fronteras,
+   * derivado de las zonas de influencia (ver `engine/chokepoints.ts` `controladorDeChokepoint`). Solo
+   * lectura, para pintar el mapa (`ui/canvas.ts`) — la interfaz nunca debe recalcular esta regla por su
+   * cuenta, solo leerla de aquí (acoplamiento 0 entre interfaz y motor).
+   */
+  chokepointsControl(zonas: ZonaInfluencia[] = this.getZonas()): Map<string, string> {
+    const resultado = new Map<string, string>();
+    for (const chokepoint of this.getMapa().listarChokepoints()) {
+      const controladorId = controladorDeChokepoint(chokepoint, zonas);
+      if (controladorId) resultado.set(chokepoint.id, controladorId);
+    }
+    return resultado;
   }
 
   getLigas(relaciones: RelacionPolitica[] = this.state.relaciones, facciones: Faccion[] = this.state.facciones): LigaInfo[] {
@@ -398,6 +423,7 @@ export class GameStore {
       const origen = this.state.asentamientos.find((a) => a.id === origenAsentamientoId)!;
       const faccion = this.state.facciones.find((f) => f.id === origen.faccionId)!;
       const resultado = lanzarCaravanaFundacionEngine(
+        this.getMapa(),
         origen,
         faccion,
         destino,
@@ -613,6 +639,18 @@ export class GameStore {
       );
       this.state.acuerdos = [...this.state.acuerdos, nuevo];
       this.registrar(`Trueque propuesto: ${nuevo.id}.`);
+
+      // Camino Comercial (Doc 1.6, Fase 0.3): se genera al establecer la relación comercial, no cada vez
+      // que se propone un trueque nuevo — `asegurarCaminoComercial` no hace nada si el par ya tiene uno.
+      const asentamientoA = this.state.asentamientos.find((a) => a.id === asentamientoAId);
+      const asentamientoB = this.state.asentamientos.find((a) => a.id === asentamientoBId);
+      if (asentamientoA && asentamientoB) {
+        const caminosPrevios = this.state.caminos.length;
+        this.state.caminos = asegurarCaminoComercial(this.state.caminos, this.getMapa(), asentamientoA, asentamientoB);
+        if (this.state.caminos.length > caminosPrevios) {
+          this.registrar(`Nuevo camino comercial entre ${asentamientoA.id} y ${asentamientoB.id}.`);
+        }
+      }
     } catch (err) {
       if (err instanceof TruequeInvalidoError) this.registrar(`Trueque rechazado: ${err.message}`);
       else throw err;
@@ -791,6 +829,7 @@ export class GameStore {
         ordenes: this.state.ordenes,
         relaciones: this.state.relaciones,
         titulos: this.state.titulos,
+        caminos: this.state.caminos,
       },
       this.getMapa(),
       this.state.tick
@@ -802,16 +841,17 @@ export class GameStore {
     this.state.ordenes = resultado.ordenes;
     this.state.relaciones = resultado.relaciones;
     this.state.titulos = resultado.titulos;
+    this.state.caminos = resultado.caminos;
     for (const evento of resultado.eventos) this.registrar(evento);
     this.notify();
   }
 
-  regenerarMundo(seed: number): void {
+  regenerarMundo(seed: number, region?: RegionId): void {
     this.historial = [];
     this.historialDesde = 0;
     this.state = {
       estadoMapa: crearEstadoMapa(),
-      mapa: generarMapa({ ...MAPA_DEFAULT, seed }),
+      mapa: generarMapa({ ...MAPA_DEFAULT, seed, region }),
       asentamientos: [],
       facciones: crearFaccionesIniciales(),
       caravanas: [],
@@ -819,6 +859,7 @@ export class GameStore {
       ordenes: [],
       relaciones: [],
       titulos: [],
+      caminos: [],
       tick: 0,
       log: [],
       historialJugadores: {},
@@ -844,6 +885,7 @@ export class GameStore {
       ordenes: this.state.ordenes,
       relaciones: this.state.relaciones,
       titulos: this.state.titulos,
+      caminos: this.state.caminos,
       log: this.state.log,
       historialJugadores: this.state.historialJugadores,
     };
@@ -907,6 +949,7 @@ export class GameStore {
         ordenes: payload.ordenes ?? [],
         relaciones: payload.relaciones ?? [],
         titulos: payload.titulos ?? [],
+        caminos: payload.caminos ?? [],
         tick: payload.tick ?? 0,
         log: payload.log ?? [],
         historialJugadores: payload.historialJugadores ?? {},

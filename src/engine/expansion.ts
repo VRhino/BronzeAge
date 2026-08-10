@@ -1,7 +1,9 @@
 import type { Asentamiento, Caravana, Faccion, Point } from '../domain/types';
 import type { Mapa } from '../world/mapa';
+import { calcularRuta } from '../world/rutas';
 import { CARAVANA_CATALOGO, EDIFICIO_CATALOGO, FUNDACION } from '../constants';
 import { agregarRecurso, descontarRecursos, tieneRecursos } from './almacen';
+import { avanzarPosicionEnRuta } from './movimiento';
 import { posicionLibreParaFundar } from './zones';
 import { calcularCapFundacion } from './faccion';
 import { fundarAsentamiento, FundacionInvalidaError } from './settlement';
@@ -50,6 +52,7 @@ function asentamientosEfectivos(faccionId: string, asentamientos: Asentamiento[]
  * nuevos inventados.
  */
 export function lanzarCaravanaFundacion(
+  mapa: Mapa,
   origen: Asentamiento,
   faccion: Faccion,
   destino: Point,
@@ -95,6 +98,9 @@ export function lanzarCaravanaFundacion(
     progreso: 0,
     destinoPosicion: destino,
     jugadoresFundadoresIds,
+    // Ruta calculada al lanzar (Fase 0.3, ver `world/rutas.ts`): rodea terreno costoso en vez de ir en
+    // línea recta hacia el punto de fundación elegido.
+    ruta: calcularRuta(mapa, origen.posicion, destino),
   };
 
   return { origenActualizado: { ...origen, almacen: descontarRecursos(origen.almacen, costo) }, caravana };
@@ -149,19 +155,27 @@ export function avanzarCaravanasFundacion(
       continue;
     }
 
-    const distanciaTotal = Math.max(1, distancia(origen.posicion, caravana.destinoPosicion));
     const velocidad = CARAVANA_CATALOGO.construccion.velocidad;
-    const progreso = Math.min(1, caravana.progreso + velocidad / distanciaTotal);
+
+    // Con `ruta` (Fase 0.3, calculada al lanzar — ver `lanzarCaravanaFundacion`): avance real por coste de
+    // terreno. Sin `ruta` (partidas guardadas antes de Fase 0.3): línea recta, comportamiento sin cambios.
+    let progreso: number;
+    let posicionActual: Point;
+    if (caravana.ruta && caravana.ruta.length >= 2) {
+      const avance = avanzarPosicionEnRuta(mapa, caravana.ruta, caravana.progreso, velocidad);
+      progreso = avance.progreso;
+      posicionActual = avance.posicion;
+    } else {
+      const distanciaTotal = Math.max(1, distancia(origen.posicion, caravana.destinoPosicion));
+      progreso = Math.min(1, caravana.progreso + velocidad / distanciaTotal);
+      posicionActual = {
+        x: origen.posicion.x + (caravana.destinoPosicion.x - origen.posicion.x) * progreso,
+        y: origen.posicion.y + (caravana.destinoPosicion.y - origen.posicion.y) * progreso,
+      };
+    }
 
     if (progreso < 1) {
-      restantes.push({
-        ...caravana,
-        progreso,
-        posicionActual: {
-          x: origen.posicion.x + (caravana.destinoPosicion.x - origen.posicion.x) * progreso,
-          y: origen.posicion.y + (caravana.destinoPosicion.y - origen.posicion.y) * progreso,
-        },
-      });
+      restantes.push({ ...caravana, progreso, posicionActual });
       continue;
     }
 

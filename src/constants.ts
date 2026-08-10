@@ -488,6 +488,14 @@ export const COMISION = {
   distanciaParaBonusMax: 600,
 };
 
+// Peaje de chokepoints (Fase 0.3, Doc 1.5): se cobra al asentamiento DESTINO por cada chokepoint controlado
+// por una Facción rival que la ruta de la caravana atraviesa, y se abona al asentamiento controlador — ver
+// `engine/chokepoints.ts`. Placeholder sin calibrar por simulación, mismo criterio que el resto de cifras
+// nuevas del proyecto. Bloqueo/escolta militar quedan PENDIENTE (ver `Preguntas_Abiertas.md`).
+export const CHOKEPOINTS_PEAJE = {
+  oro: 15,
+};
+
 // --- Sprint 4: Estructura política (Doc 2) ---
 
 // "Qué hace subir el nivel de Facción" no está cerrado en el diseño (Doc 1.7/Preguntas_Abiertas) — placeholder:

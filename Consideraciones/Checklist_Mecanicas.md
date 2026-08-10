@@ -15,7 +15,7 @@ Ver `Docs/0_Glosario_de_Entidades_Politicas.md` para las definiciones centrales.
 ## Fundación y zonas de influencia
 - ✅ Fundación libre, zona de influencia automática, reglas de construcción, fronteras con límite duro
 - ✅ Onboarding: spawn aleatorio + fundación grupal (hasta 5 jugadores)
-- ✅ Chokepoints estratégicos (fases con relieve)
+- ✅ Chokepoints estratégicos (fases con relieve) — IMPLEMENTADO en Fase 0.3: puertos de montaña detectados por punto de silla del campo de elevación, control por zona de influencia + peaje en oro a Facciones rivales (ver `Fase_0_3_Definicion.md`); bloqueo/escolta militar sigue pendiente (necesita concepto de guerra activa)
 - ✅ Cap de fundación por Facción (escala con nivel de Facción, 1→3 fácil, hasta 7 tardío)
 - ✅ Protección temporal: período de gracia sin cobro de Mantenimiento al fundar (RESUELTO durante implementación Fase 0)
 - ✅ Rediseño Fase 0: radio inicial de zona de influencia sube a 30, techo escala con el nivel de asentamiento (60/90/120); Leñera inicial condicional a bosque cercano (ver Doc 1.2/1.3)
@@ -31,7 +31,7 @@ Ver `Docs/0_Glosario_de_Entidades_Politicas.md` para las definiciones centrales.
 - ✅ Economía dual (oro + trueque); oro = metal precioso, origen en minas
 - ✅ Acuerdos de trueque; órdenes de mercado; precios dinámicos; comisiones más bajas intra-Facción
 - ✅ Categorías de caravana; transporte individual; bonificación por distancia; dependencia logística
-- ✅ Caminos comerciales automáticos
+- ✅ Caminos comerciales automáticos — IMPLEMENTADO en Fase 0.3: se generan al proponer trueque entre dos asentamientos (pathfinding que evita terreno costoso), dan bonus de velocidad a las caravanas que los siguen (ver `Fase_0_3_Definicion.md`); qué pasa si se rompe la relación que lo originó sigue pendiente (el camino queda como infraestructura permanente por ahora)
 - 🔶 Uso de riqueza por comisiones; fórmula exacta de comisión
 
 ## Recursos

@@ -286,6 +286,16 @@ Se discutieron 6 parámetros con el usuario antes de implementar nada (ver tambi
 
 ---
 
+## Fase 0.3 — Movimiento con terreno, caminos comerciales y chokepoints
+
+### 39. Acoplamiento interfaz/motor en el render de control de chokepoints — corregido a petición del usuario
+- **Error:** al implementar el anillo de color que marca qué Facción controla un chokepoint (Doc 1.5), la regla de control ("qué zona de influencia lo cubre") se calculó DENTRO de `ui/canvas.ts` — importando `pointInPolygon` de `world/geometria.ts` y recorriendo `state.zonas` a mano — en vez de reutilizar `controladorDeChokepoint` (`engine/chokepoints.ts`), que ya implementaba exactamente esa regla para el peaje. Violaba el mismo principio de "acoplamiento 0 entre interfaz y motor" que el usuario ya había recordado explícitamente durante la corrección #38 (Ampliación de comercio): la interfaz solo debe pintar datos ya resueltos por `gameStore`, nunca reimplementar una regla de juego por su cuenta. El riesgo concreto: si la regla de control cambiara alguna vez (p. ej. añadir empate por reputación), habría que recordar tocarla en DOS sitios, y `ui/canvas.ts` habría importado lógica de `world/` con el propósito de decidir política de juego (distinto de las lecturas de geometría/terreno ya existentes, que sí son datos puros para pintar).
+- **Cómo se detectó:** el usuario, revisando el cambio, señaló la importancia de mantener ese acoplamiento en cero — no fue un fallo de compilación ni de test (`tsc`/`vitest` no detectan duplicación de lógica de negocio entre capas).
+- **Solución:** nuevo método de solo lectura `GameStore.chokepointsControl(zonas?)` (`app/gameStore.ts`) que llama a `controladorDeChokepoint` (`engine/chokepoints.ts`) y devuelve un `Map<chokepointId, asentamientoControladorId>` ya resuelto. `DrawState` (`ui/canvas.ts`) gana el campo `chokepointsControl: Map<string, string>`; el bucle que dibuja el anillo pasa de recorrer `state.zonas` con `pointInPolygon` a un simple `state.chokepointsControl.get(chokepoint.id)`. Se retira el import de `pointInPolygon` de `ui/canvas.ts` — ya no queda ningún import de `world/*` en la capa de interfaz salvo el tipo `Mapa` (que la propia fachada, ver `world/mapa.ts`, declara explícitamente como el único puente compartido entre motor e interfaz). `main.ts` pasa a calcular `chokepointsControl` vía `gameStore.chokepointsControl(zonas)` al construir `DrawState`, reutilizando las `zonas` ya obtenidas para esa misma llamada.
+- **Verificado:** `tsc --noEmit` limpio; suite completa (118 tests) sigue en verde sin tocar ningún test (el cambio es interno a cómo se calcula un dato de render, no a la regla en sí); en el navegador, fundar un asentamiento y avanzar tick no genera errores de consola y el anillo de control se sigue pintando igual que antes del refactor.
+
+---
+
 ## Nota general
 
 Todas las correcciones anteriores son de **diseño/balance**, no de sintaxis: el proyecto compiló sin errores de TypeScript en todo momento salvo en los pasos intermedios normales de refactor (añadir un campo a un tipo y luego actualizar todos los lugares que lo instancian), que se resolvieron sobre la marcha y no se listan aquí por ser rutinarios.

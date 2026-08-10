@@ -68,6 +68,7 @@ describe('snapshot de regresión general', () => {
       ordenes: [],
       relaciones: [],
       titulos: [],
+      caminos: [],
     };
 
     const cortes: Record<number, unknown> = {};

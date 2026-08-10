@@ -16,8 +16,9 @@
 // le pasan como parámetro — el motor sigue mandando.
 
 import { LENERA_POR_BOSQUE } from '../constants';
-import type { BiomaTipo, NodoRecurso, Point, RioZona, TerrenoTipo, ZonaBosque } from '../domain/types';
+import type { BiomaTipo, Chokepoint, NodoRecurso, Point, RegionId, RioZona, TerrenoTipo, ZonaBosque } from '../domain/types';
 import {
+  costeEnPunto,
   distanciaARioMasCercano,
   evaluarBioma,
   evaluarElevacion,
@@ -147,6 +148,13 @@ export class Mapa {
     return this.generado.config.seed;
   }
 
+  /** Región geográfica con la que se generó este mundo (Fase 0.2), `undefined` = mundo libre. Expuesta
+   * junto a `seed` por la misma razón: `terrenoCacheParaFrame` (`main.ts`) la necesita en su clave de
+   * cache — dos mundos con la MISMA seed pero región distinta tienen una capa de terreno distinta. */
+  get region(): RegionId | undefined {
+    return this.generado.config.region;
+  }
+
   dentroDelMapa(p: Point): boolean {
     return p.x >= 0 && p.x <= this.generado.config.ancho && p.y >= 0 && p.y <= this.generado.config.alto;
   }
@@ -169,6 +177,12 @@ export class Mapa {
     return evaluarBioma(this.generado.elevacion, this.generado.fertilidad, this.generado.rios, p);
   }
 
+  /** Multiplicador de coste de movimiento en un punto (Fase 0.3) — ver `costeEnPunto`. Lo consulta el
+   * pathfinding (`world/rutas.ts`) y el avance por tick de las caravanas (`engine/movimiento.ts`). */
+  costeEnPunto(p: Point): number {
+    return costeEnPunto(this.generado.elevacion, p);
+  }
+
   // --- Ríos ---
 
   listarRios(): readonly RioZona[] {
@@ -182,6 +196,23 @@ export class Mapa {
     for (const rio of this.generado.rios) {
       const d = distanciaARioMasCercano([rio], p);
       if (!mejor || d < mejor.distancia) mejor = { rio, distancia: d };
+    }
+    return mejor;
+  }
+
+  // --- Chokepoints (Fase 0.3) ---
+
+  listarChokepoints(): readonly Chokepoint[] {
+    return this.generado.chokepoints;
+  }
+
+  /** Chokepoint más cercano a un punto y la distancia hasta él. `null` si el mundo no tiene chokepoints.
+   * Recorrido lineal: mismo criterio que `rioMasCercano` (`CHOKEPOINTS.cantidad` es pequeño). */
+  chokepointMasCercano(p: Point): { chokepoint: Chokepoint; distancia: number } | null {
+    let mejor: { chokepoint: Chokepoint; distancia: number } | null = null;
+    for (const chokepoint of this.generado.chokepoints) {
+      const d = distancia(chokepoint.posicion, p);
+      if (!mejor || d < mejor.distancia) mejor = { chokepoint, distancia: d };
     }
     return mejor;
   }

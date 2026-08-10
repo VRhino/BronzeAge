@@ -24,6 +24,7 @@ function correrSimulacion(seed: number) {
       ordenes: [],
       relaciones: [],
       titulos: [],
+      caminos: [],
     };
     const eventosPorTick: string[][] = [];
     for (let tick = 1; tick <= TICKS; tick++) {

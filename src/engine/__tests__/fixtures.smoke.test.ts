@@ -18,6 +18,7 @@ describe('fixtures de test', () => {
       ordenes: [],
       relaciones: [],
       titulos: [],
+      caminos: [],
     };
 
     const resultado = avanzarSimulacion(estado, mapa, 1);

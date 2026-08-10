@@ -2,8 +2,9 @@
 // `domain/types` (entidades compartidas) y de su propia configuración — se puede ejecutar, testear y
 // versionar por separado.
 
-import type { NodoRecurso, RioZona, WorldConfig, ZonaBosque } from '../domain/types';
+import type { Chokepoint, NodoRecurso, RioZona, WorldConfig, ZonaBosque } from '../domain/types';
 import type { CampoRuido } from './ruido';
+import type { RegionGeografica } from './regiones';
 
 // Los dos campos continuos del mundo son ruido fractal (ver `ruido.ts`): mismo tipo de dato, distintos
 // parámetros (ver `FERTILIDAD`/`ELEVACION` en `config.ts`). Se mantienen como alias con nombre propio
@@ -13,8 +14,16 @@ import type { CampoRuido } from './ruido';
 /** Campo continuo de fertilidad del suelo. Se consulta con `evaluarFertilidad`. */
 export type CampoFertilidad = CampoRuido;
 
-/** Campo continuo de relieve. Se consulta con `evaluarElevacion`/`evaluarTerreno`. */
-export type CampoElevacion = CampoRuido;
+/**
+ * Campo continuo de relieve. Se consulta con `evaluarElevacion`/`evaluarTerreno`. Deja de ser un simple
+ * alias de `CampoRuido` en Fase 0.2: `region` (opcional) es la guía geográfica de la región elegida al
+ * generar el mundo (ver `regiones.ts`) — `undefined` reproduce el mundo libre de siempre, byte a byte
+ * (`evaluarElevacion` solo consulta `ruido` en ese caso). Sigue siendo DATOS PUROS, sin funciones.
+ */
+export interface CampoElevacion {
+  ruido: CampoRuido;
+  region?: RegionGeografica;
+}
 
 /**
  * Resultado completo de la generación: DATOS PUROS, sin funciones ni estado de partida. Todo lo que el
@@ -41,6 +50,10 @@ export interface MapaGenerado {
   /** Ríos como polilíneas (Fase 0.1). El bioma se deriva de esto + elevación + fertilidad bajo demanda
    * (`evaluarBioma`) — no existe un campo de bioma guardado. */
   rios: RioZona[];
+  /** Chokepoints estratégicos (Fase 0.3, Doc 1.5): puertos de montaña, geometría determinista por seed —
+   * ver `worldgen/chokepoints.ts`. Quién los controla y el peaje son estado de partida, no de aquí (ver
+   * `engine/chokepoints.ts`). */
+  chokepoints: Chokepoint[];
 }
 
 /**
@@ -60,5 +73,15 @@ export interface MapaGenerado {
  * `ruido.ts`) — el mundo entero cambia de forma, no solo de números: el relieve deja de ser un enrejado
  * regular. Umbrales de terreno/bioma recalibrados contra la nueva distribución. El import ya rechaza duro
  * por `worldgenVersion` en vez de migrar (contrato existente, ver `gameStore.importarSimulacion`).
+ * v6: la fertilidad se genera ANTES que los bosques (se movió por delante de `generarBosques` en el
+ * pipeline) para que `generarBosques` pueda consultarla — la densidad de cada bosque ahora pondera la
+ * fertilidad del suelo en su centro en vez de salir de un sorteo uniforme puro (ver `bosques.ts`). Mismo
+ * cambio de categoría que v2/v4: no toca cuántas veces se llama a `randRange`, pero mueve CUÁNDO se llama
+ * `generarCampoFertilidad` (que sí consume RNG) respecto al bucle de bosques, así que desplaza el consumo
+ * de PRNG de ahí en adelante para toda seed.
+ * v7 (Fase 0.3): nuevo paso `generarChokepoints` (puertos de montaña, geometría determinista — ver
+ * `chokepoints.ts`), añadido al final del pipeline (después de nodos/livestock) para no desplazar el
+ * consumo de PRNG de ningún paso ya calibrado — pero SÍ consume RNG propio (la colocación de candidatos),
+ * así que toda seed produce nodos/bosques/ríos idénticos a v6 y un mundo distinto solo a partir de ahí.
  */
-export const WORLDGEN_VERSION = 5;
+export const WORLDGEN_VERSION = 7;

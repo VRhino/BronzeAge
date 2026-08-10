@@ -144,6 +144,14 @@ export const ELEVACION = congelar({
 // vez de quedar atrapado en cada hoyo del detalle fractal. `gradienteMinimo` es el umbral por debajo del
 // cual se considera que ya no hay pendiente clara y el río termina en lago (la mediana del gradiente del
 // campo es ~1e-3, así que 2e-4 solo detiene un cauce en un extremo local de verdad).
+// Navegabilidad (comercio fluvial de fases futuras, ver `RioZona.navegable`): candidato = desemboca de
+// verdad (`!terminaEnLago`, no un charco atrapado en una hondonada de montaña) — de esos, el 40% MÁS LARGO
+// se marca navegable. Se eligió PROPORCIONAL al número de ríos con desembocadura de ese mundo, no un umbral
+// de longitud fijo: medido sobre 7 seeds, el número de ríos con desembocadura real varía mucho de un mundo a
+// otro (6 a 18 de los 24 generados), así que un umbral absoluto daba de 2 a 17 navegables según la seed —
+// muy lejos de "algunos, no todos" en varias de ellas. La proporción da un resultado consistente (~2-7
+// navegables) sea cual sea la seed. Ancho/profundidad son metros de exportación (tallado del heightmap en
+// fases futuras, ver Doc de export a Unity/Godot), no afectan nada del motor 2D actual.
 export const RIOS = congelar({
   cantidad: 24,
   espacioMinimoEntreNacimientos: 150,
@@ -151,6 +159,11 @@ export const RIOS = congelar({
   pasoGradiente: 50,
   gradienteMinimo: 0.0002,
   pasosMax: 700,
+  proporcionNavegable: 0.4,
+  anchoMetros: 10,
+  profundidadMetros: 3,
+  anchoNavegableMetros: 30,
+  profundidadNavegableMetros: 6,
 });
 
 // Bioma (Fase 0.1): terreno llano se reparte entre estepa/llanuraFertil por fertilidad alta o cercanía a
@@ -186,4 +199,50 @@ export const RECURSO_BIOMA_PERMITIDO: Record<string, BiomaTipo[]> = congelar({
  * (bioma + espaciado a la vez), y unos intentos más baratos de más reducen cuánto se cae al fallback. */
 export const COLOCACION = congelar({
   intentosPorPunto: 40,
+});
+
+// Coste de movimiento por terreno (Fase 0.3, ver `worldgen/costeMovimiento.ts`): multiplicador sobre la
+// velocidad base de una caravana (1 = sin penalización). agua/cima muy altos mas no INFINITY a propósito:
+// un coste finito, aunque prohibitivo, deja que A* (`world/rutas.ts`) SIEMPRE encuentre algún camino en vez
+// de fallar cuando el mapa obliga a cruzar un borde de agua/cima estrecho — se prefiere una ruta carísima
+// (y por tanto evitada casi siempre por el propio algoritmo) a un pathfinding que pueda no converger.
+// Cifras PLACEHOLDER sin calibrar por simulación todavía, mismo criterio que el resto de constantes nuevas.
+export const COSTE_MOVIMIENTO = congelar({
+  llano: 1,
+  costa: 1.1,
+  colina: 1.8,
+  montana: 3.5,
+  cima: 12,
+  agua: 15,
+  /** Multiplicador (<1 = más rápido) mientras la posición está sobre/cerca de un `CaminoComercial` (Doc
+   * 1.6, ver `engine/caminos.ts`) — el camino ya construido compensa el coste del terreno que atraviesa. */
+  factorCamino: 0.5,
+  /** Distancia máxima a un tramo de camino comercial para contar como "sobre el camino" (ver
+   * `distanciaASegmento` en `worldgen/colocacion.ts`). */
+  radioCamino: 15,
+});
+
+// Chokepoints (Fase 0.3, Doc 1.5): puertos de montaña detectados como puntos de silla del campo de
+// elevación (ver `worldgen/chokepoints.ts`). `pasoHessiano` (80) es mayor que la octava más fina de
+// `ELEVACION` (~37 unidades) a propósito, mismo motivo que `RIOS.pasoGradiente`: promedia el detalle fino
+// del ruido fractal para que el test de silla capture la forma general de la cordillera (un puerto de
+// verdad), no un pliegue diminuto del terreno. `curvaturaMinima` descarta puntos de silla "de mentira" donde
+// ambas curvaturas son casi cero (ruido de redondeo numérico, no una silla real pronunciada) — MEDIDO (no
+// estimado): con `pasoHessiano`=80, la curvatura media del campo (|exx|/|eyy|) es ~7e-6; 2e-6 recorta solo
+// el cuartil más plano mientras deja ~11% de los puntos en colina/montaña como candidato válido de silla
+// (~99% de probabilidad de encontrar al menos uno en los 40 intentos de `colocarConEspaciado`, ver
+// `COLOCACION.intentosPorPunto`) — el primer valor probado (0.02) resultó ~3 órdenes de magnitud por encima
+// de la curvatura real del campo y descartaba el 100% de los candidatos, cayendo siempre al fallback sin
+// filtro de terreno (ver diagnóstico en el commit que fijó este valor). `cantidad`/`espacioMinimo`
+// deliberadamente escasos frente a `RIOS`: un chokepoint es un punto de control estratégico, no un
+// accidente geográfico común.
+// `peajeOro` (balance de PARTIDA, no de generación) vive en `constants.ts` (`CHOKEPOINTS_PEAJE`), no aquí —
+// mismo criterio documentado arriba: este archivo es solo para parámetros que, de cambiar, invalidarían una
+// seed ya generada; el peaje no afecta qué chokepoints existen, solo cuánto cuesta cruzarlos.
+export const CHOKEPOINTS = congelar({
+  cantidad: 14,
+  espacioMinimo: 150,
+  pasoHessiano: 80,
+  curvaturaMinima: 0.000002,
+  radio: 40,
 });

@@ -1,9 +1,53 @@
 import type { Point, RioZona } from '../domain/types';
 import { RIOS } from './config';
-import { colocarConEspaciado, distancia, type Limites } from './colocacion';
+import { colocarConEspaciado, distancia, distanciaASegmento, type Limites } from './colocacion';
 import { evaluarTerreno, gradienteElevacion } from './elevacion';
+import type { RioTroncalDef } from './regiones';
 import type { RandomFn } from './rng';
 import type { CampoElevacion } from './types';
+
+/** Longitud total de la polilínea de un río, sumando cada segmento. */
+function longitudRio(puntos: readonly Point[]): number {
+  let total = 0;
+  for (let i = 0; i < puntos.length - 1; i++) total += distancia(puntos[i]!, puntos[i + 1]!);
+  return total;
+}
+
+/** Puntos de paso por tramo (entre cada par de waypoints autorados) al densificar un río troncal. */
+const TRONCAL_SUBDIVISIONES = 8;
+
+/**
+ * Construye la polilínea de un río troncal (Nilo, Tigris, Éufrates — ver `RioTroncalDef`) a partir de sus
+ * puntos de paso YA RESUELTOS a unidades de mapa. A diferencia de los ríos normales, NO desciende por
+ * gradiente: sigue el trazo autorado, pero con un meandro lateral pequeño y determinista (perpendicular al
+ * tramo, cero en cada waypoint autorado y máximo a mitad de camino — `sin(π·t)`) para que no se lea como una
+ * polilínea de 3-4 segmentos perfectamente recta. `navegable` y `!terminaEnLago` son fijos: un río de esta
+ * escala es navegable y desemboca por definición, no por sorteo (ver `RIOS.proporcionNavegable`).
+ */
+function generarRioTroncal(rng: RandomFn, def: RioTroncalDef, limites: Limites): RioZona {
+  const meandro = Math.min(limites.ancho, limites.alto) * 0.015;
+  const puntos: Point[] = [];
+
+  for (let tramo = 0; tramo < def.puntos.length - 1; tramo++) {
+    const a = def.puntos[tramo]!;
+    const b = def.puntos[tramo + 1]!;
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const largo = Math.hypot(dx, dy) || 1;
+    const nx = -dy / largo;
+    const ny = dx / largo;
+
+    // `inicio`: el primer tramo incluye su extremo t=0, los siguientes lo omiten (ya lo puso el tramo
+    // anterior como su t=1) — evita el punto duplicado en cada waypoint compartido.
+    for (let paso = tramo === 0 ? 0 : 1; paso <= TRONCAL_SUBDIVISIONES; paso++) {
+      const t = paso / TRONCAL_SUBDIVISIONES;
+      const desplazamiento = (rng() * 2 - 1) * meandro * Math.sin(Math.PI * t);
+      puntos.push({ x: a.x + dx * t + nx * desplazamiento, y: a.y + dy * t + ny * desplazamiento });
+    }
+  }
+
+  return { id: def.id, puntos, terminaEnLago: false, navegable: true };
+}
 
 /**
  * Ríos (Fase 0.1): polilíneas, no celdas — nacen en un punto de montaña y descienden por gradiente de
@@ -29,7 +73,7 @@ export function generarRios(rng: RandomFn, limites: Limites, elevacion: CampoEle
     }
   );
 
-  return nacimientos.map((fuente, i) => {
+  const rios = nacimientos.map((fuente, i) => {
     const puntos: Point[] = [fuente];
     let actual = fuente;
     let terminaEnLago = true;
@@ -68,16 +112,23 @@ export function generarRios(rng: RandomFn, limites: Limites, elevacion: CampoEle
 
     return { id: `rio-${i}`, puntos, terminaEnLago };
   });
-}
 
-/** Distancia mínima de un punto a un segmento (proyección clampeada al segmento). */
-function distanciaASegmento(p: Point, a: Point, b: Point): number {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const largoCuadrado = dx * dx + dy * dy;
-  if (largoCuadrado === 0) return distancia(p, a);
-  const t = Math.min(1, Math.max(0, ((p.x - a.x) * dx + (p.y - a.y) * dy) / largoCuadrado));
-  return distancia(p, { x: a.x + t * dx, y: a.y + t * dy });
+  // Navegabilidad (ver comentario de `RIOS.proporcionNavegable` en `config.ts`): candidatos = los que
+  // desembocan de verdad, ordenados por longitud descendente; se marca navegable el `proporcionNavegable`
+  // superior. Solo sobre los ríos ALEATORIOS de arriba — los troncales (abajo) no compiten por este cupo,
+  // son navegables por definición. No consume RNG — es puramente derivado de la geometría ya generada arriba.
+  const candidatos = rios.filter((r) => !r.terminaEnLago).sort((a, b) => longitudRio(b.puntos) - longitudRio(a.puntos));
+  const numNavegables = Math.round(candidatos.length * RIOS.proporcionNavegable);
+  const idsNavegables = new Set(candidatos.slice(0, numNavegables).map((r) => r.id));
+  const riosAleatorios = rios.map((rio) => ({ ...rio, navegable: idsNavegables.has(rio.id) }));
+
+  // Troncales (Fase 0.2, Nilo/Mesopotamia — ver `RegionGeografica.riosTroncales`): se generan DESPUÉS y
+  // aparte de los aleatorios, así que regiones sin ellos (o el mundo libre) consumen el RNG exactamente
+  // igual que antes de que existiera esta pieza — ninguna seed ya calibrada (Grecia, Anatolia, Egeo) se
+  // desplaza por este añadido.
+  const troncales = (elevacion.region?.riosTroncales ?? []).map((def) => generarRioTroncal(rng, def, limites));
+
+  return [...riosAleatorios, ...troncales];
 }
 
 /**

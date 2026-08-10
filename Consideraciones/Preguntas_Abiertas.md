@@ -18,7 +18,14 @@ Pendiente:
 Pendiente (menor): valores numéricos exactos de cada evento que mueve el score de reputación, velocidad del decaimiento, umbrales exactos de cada uso.
 
 ## 3. Generación del mundo — resuelto para Fase 0
-Pendiente (fases posteriores): mapa fijo vs. procedural con relieve; puntos de interés fijos; distribución de climas/biomas; especies adicionales de livestock; qué pasa con un camino comercial si se rompe la relación que lo originó.
+RESUELTO (Fase 0.3): movimiento de caravana sensible al terreno (coste continuo por tipo de terreno, ver `worldgen/costeMovimiento.ts`), pathfinding compartido (`world/rutas.ts`), caminos comerciales automáticos (Doc 1.6) y chokepoints estratégicos como puertos de montaña con control por zona de influencia + peaje en oro (Doc 1.5) — ver `Consideraciones/Fase_0_3_Definicion.md`. RESUELTO también (parcialmente) la pregunta pendiente sobre caminos comerciales: si se rompe la relación que originó un camino, el camino queda como infraestructura física permanente (no se elimina) — decisión pragmática sin validar por simulación.
+
+Pendiente (fases posteriores): mapa fijo vs. procedural con relieve; puntos de interés fijos; distribución de climas/biomas; especies adicionales de livestock.
+
+Pendiente (Fase 0.3, nuevo):
+- Bloqueo/escolta militar de chokepoints (Doc 1.5): solo se implementó el peaje — el bloqueo necesita un concepto de "guerra activa" entre Facciones que no existe hoy (el combate es cálculo puntual, no presencia física continua en el mapa).
+- Vados de río como chokepoint: esta pasada solo detecta puertos de montaña (puntos de silla del campo de elevación); un vado necesitaría su propio criterio de detección sobre `RioZona`.
+- Calibración por simulación de `COSTE_MOVIMIENTO` (coste por tipo de terreno, bonus de camino) y `CHOKEPOINTS_PEAJE.oro`: valores placeholder, igual que el resto de cifras nuevas del proyecto.
 
 ## 4. Exploración — sin abordar
 - ¿Niebla de guerra / mapa oculto hasta explorarlo?

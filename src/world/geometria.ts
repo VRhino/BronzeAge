@@ -21,6 +21,18 @@ export function pointInPolygon(p: Point, polygon: Point[]): boolean {
   return inside;
 }
 
+/** Distancia mínima de un punto a un segmento (proyección clampeada al segmento) — mismo cálculo que
+ * `distanciaASegmento` en `worldgen/colocacion.ts` (`worldgen/` no puede importar de `world/`, así que se
+ * duplica esta primitiva pequeña en vez de romper esa capa, ver `Fase_0_1_Definicion.md`). */
+export function distanciaASegmento(p: Point, a: Point, b: Point): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const largoCuadrado = dx * dx + dy * dy;
+  if (largoCuadrado === 0) return distancia(p, a);
+  const t = Math.min(1, Math.max(0, ((p.x - a.x) * dx + (p.y - a.y) * dy) / largoCuadrado));
+  return distancia(p, { x: a.x + t * dx, y: a.y + t * dy });
+}
+
 /** Caja envolvente de un polígono, para poder acotar qué celdas del índice espacial hay que mirar. */
 export function boundingBox(polygon: Point[]): { minX: number; minY: number; maxX: number; maxY: number } | null {
   if (polygon.length === 0) return null;

@@ -60,6 +60,7 @@ describe('invariantes del motor en una simulación larga', () => {
       ordenes: [],
       relaciones: [],
       titulos: [],
+      caminos: [],
     };
 
     const ultimoNivelVisto = new Map<string, number>();

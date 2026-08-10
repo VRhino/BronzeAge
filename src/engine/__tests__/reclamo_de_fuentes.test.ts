@@ -15,7 +15,13 @@ import { reclamosDeFuentes } from '../construction';
 import { evaluarViabilidadFundacion } from '../settlement';
 import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, mockMathRandomDeterminista } from './fixtures';
 
-const SEED = 7;
+// Antes SEED=7: con el reordenamiento de PRNG de WORLDGEN_VERSION v6 (fertilidad antes que bosques, ver
+// `worldgen/types.ts`) el mundo de esa seed desplazó los nodos minerales lejos del primer par de
+// emplazamientos que encuentra el barrido de `dosAsentamientosDeLaMismaFaccion` — ninguno llegaba a
+// construir un extractor en 200 ticks y el guard de "test vacío" (línea ~106) saltaba. 42 es la seed que ya
+// usan los tests de determinismo del propio generador (ver `worldgen_caracterizacion.test.ts`) y sí produce
+// mineral alcanzable para ambos asentamientos.
+const SEED = 42;
 const TICKS = 200;
 
 /** Extractores (no Leñeras) agrupados por la fuente que explotan: fuenteId -> ids de asentamiento. */
@@ -88,6 +94,7 @@ describe('reclamo de fuentes del mapa', () => {
       ordenes: [],
       relaciones: [],
       titulos: [],
+      caminos: [],
     };
 
     for (let tick = 1; tick <= TICKS; tick++) {
@@ -117,6 +124,7 @@ describe('reclamo de fuentes del mapa', () => {
       ordenes: [],
       relaciones: [],
       titulos: [],
+      caminos: [],
     };
 
     let lenerasVistas = 0;

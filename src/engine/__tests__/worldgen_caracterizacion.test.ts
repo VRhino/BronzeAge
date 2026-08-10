@@ -10,9 +10,11 @@
 //  2. INVARIANTES: el contrato que debe seguir cumpliéndose aunque el snapshot se regenere a propósito
 //     (ids únicos para los `fuenteId` de los edificios, nodos dentro del mapa, fertilidad normalizada...).
 import { describe, expect, it } from 'vitest';
-import { evaluarBioma, evaluarElevacion, evaluarFertilidad, evaluarTerreno, generarMapa, type MapaGenerado } from '../../worldgen';
+import type { RegionId } from '../../domain/types';
+import { evaluarBioma, evaluarElevacion, evaluarFertilidad, evaluarTerreno, generarMapa, REGIONES, type MapaGenerado } from '../../worldgen';
 import {
   BOSQUE,
+  CHOKEPOINTS,
   LIVESTOCK,
   MAPA_DEFAULT,
   RECURSO_BIOMA_PERMITIDO,
@@ -79,7 +81,7 @@ function digest(world: MapaGenerado) {
 
   const rios = world.rios.map((r) => {
     const extremo = r.puntos[r.puntos.length - 1]!;
-    return `${r.id} n=${r.puntos.length} fin=(${extremo.x.toFixed(6)},${extremo.y.toFixed(6)}) lago=${r.terminaEnLago}`;
+    return `${r.id} n=${r.puntos.length} fin=(${extremo.x.toFixed(6)},${extremo.y.toFixed(6)}) lago=${r.terminaEnLago} navegable=${r.navegable}`;
   });
 
   // Cumplimiento de bioma por tipo de recurso: informativo, NO se asume 100% — `colocarConEspaciado` tiene
@@ -93,7 +95,12 @@ function digest(world: MapaGenerado) {
     cumplimientoBiomaPorTipo[tipo] = `${enBioma}/${deEsteTipo.length}`;
   }
 
-  return { conteoPorTipo, nodosDentroDeBosque, cumplimientoBiomaPorTipo, bosques, nodos, rios, fertilidad, elevacion };
+  // Chokepoints (Fase 0.3, v7): puertos de montaña, geometría determinista — ver `worldgen/chokepoints.ts`.
+  const chokepoints = world.chokepoints.map(
+    (c) => `${c.id} p=(${c.posicion.x.toFixed(6)},${c.posicion.y.toFixed(6)}) r=${c.radio.toFixed(6)}`
+  );
+
+  return { conteoPorTipo, nodosDentroDeBosque, cumplimientoBiomaPorTipo, bosques, nodos, rios, chokepoints, fertilidad, elevacion };
 }
 
 describe('caracterización de la generación de mundo', () => {
@@ -272,6 +279,212 @@ describe('invariantes de la generación de mundo', () => {
           expect(p.y).toBeLessThanOrEqual(world.config.alto);
         }
       }
+    }
+  });
+
+  it('solo los ríos con desembocadura real pueden ser navegables (comercio fluvial, fases futuras)', () => {
+    // Un río atrapado en un lago de montaña (`terminaEnLago`) no tiene por dónde salir un barco — nunca debe
+    // salir navegable, sin importar cuán largo sea (ver comentario de `RIOS.proporcionNavegable`).
+    for (const seed of SEEDS) {
+      const world = crear(seed);
+      for (const rio of world.rios) {
+        if (rio.terminaEnLago) expect(rio.navegable).toBe(false);
+      }
+    }
+  });
+});
+
+describe('generación regional (Fase 0.2 — región geográfica opcional)', () => {
+  // Rejilla más fina que `CELDAS_FERTILIDAD`: aquí lo que importa es medir composición de terreno (% agua,
+  // % montaña...) sobre una muestra grande, no capturar un snapshot legible línea a línea.
+  const CELDAS_COMPOSICION = 60;
+
+  function composicionDeTerreno(world: MapaGenerado): Record<string, number> {
+    const conteo: Record<string, number> = {};
+    const pasoX = world.config.ancho / CELDAS_COMPOSICION;
+    const pasoY = world.config.alto / CELDAS_COMPOSICION;
+    for (let fila = 0; fila < CELDAS_COMPOSICION; fila++) {
+      for (let col = 0; col < CELDAS_COMPOSICION; col++) {
+        const t = evaluarTerreno(world.elevacion, { x: (col + 0.5) * pasoX, y: (fila + 0.5) * pasoY });
+        conteo[t] = (conteo[t] ?? 0) + 1;
+      }
+    }
+    return conteo;
+  }
+
+  it('sin `region`, generarMapa produce EXACTAMENTE el mismo mundo que antes de Fase 0.2', () => {
+    // La garantía de compatibilidad más importante de esta feature: `region` es opcional y su ausencia no
+    // debe desplazar ni un bit de lo que ya generaba el motor (mismo consumo de RNG, mismo `evaluarElevacion`
+    // sin mezcla). Comparado contra el propio `crear(seed)` de arriba, que nunca pasa `region`.
+    for (const seed of SEEDS) {
+      const libre = crear(seed);
+      const explicito = generarMapa({ ancho: MAPA_DEFAULT.ancho, alto: MAPA_DEFAULT.alto, seed, region: undefined });
+      expect(explicito).toEqual(libre);
+    }
+  });
+
+  const TODAS_LAS_REGIONES = Object.keys(REGIONES) as RegionId[];
+
+  it.each(TODAS_LAS_REGIONES)('%s es determinista por seed, igual que el mundo libre', (region) => {
+    for (const seed of SEEDS) {
+      const a = generarMapa({ ancho: MAPA_DEFAULT.ancho, alto: MAPA_DEFAULT.alto, seed, region });
+      const b = generarMapa({ ancho: MAPA_DEFAULT.ancho, alto: MAPA_DEFAULT.alto, seed, region });
+      expect(b).toEqual(a);
+    }
+  });
+
+  it.each(TODAS_LAS_REGIONES)('%s da seeds DISTINTAS entre sí (la guía no aplasta toda la variedad)', (region) => {
+    const a = generarMapa({ ancho: MAPA_DEFAULT.ancho, alto: MAPA_DEFAULT.alto, seed: 1, region });
+    const b = generarMapa({ ancho: MAPA_DEFAULT.ancho, alto: MAPA_DEFAULT.alto, seed: 2, region });
+    expect(a).not.toEqual(b);
+  });
+
+  it.each(TODAS_LAS_REGIONES)(
+    '%s no rompe la generación de bosques/nodos (misma cantidad que el mundo libre) ni deja nodos fuera del mapa',
+    (region) => {
+      // La región solo sesga ELEVACIÓN (y, para Nilo/Mesopotamia, añade ríos troncales aparte — ver el
+      // describe de abajo) — bosques/nodos (que vienen de `config.ts`, no de la elevación) deben seguir
+      // intactos en cantidad aunque el terreno sobre el que caen sea distinto.
+      for (const seed of SEEDS) {
+        const world = generarMapa({ ancho: MAPA_DEFAULT.ancho, alto: MAPA_DEFAULT.alto, seed, region });
+        expect(world.bosques).toHaveLength(BOSQUE.cantidad);
+        for (const nodo of world.nodos) {
+          expect(nodo.posicion.x).toBeGreaterThanOrEqual(0);
+          expect(nodo.posicion.x).toBeLessThanOrEqual(world.config.ancho);
+        }
+      }
+    }
+  );
+
+  /** Composición agregada por bandas de terreno "que se puede pisar" vs "agua/costa", para comparar el
+   * carácter de una región contra el mundo libre en las mismas seeds. */
+  function resumenTerreno(world: MapaGenerado) {
+    const c = composicionDeTerreno(world);
+    return {
+      montanoso: (c.colina ?? 0) + (c.montana ?? 0) + (c.cima ?? 0),
+      agua: (c.agua ?? 0) + (c.costa ?? 0),
+      llano: c.llano ?? 0,
+    };
+  }
+
+  it('greciaContinental sale más montañosa y con más agua que el mundo libre, para las mismas seeds', () => {
+    // No es un valor exacto (dependería de la calibración fina de `regiones.ts`, que puede seguir
+    // ajustándose) — es el contrato de fondo: la región tiene que notarse, no solo existir. Medido en
+    // `regiones.ts` (comentario de `GRECIA_CONTINENTAL`): colina+montaña+cima ~55-58% vs ~26-28% libre.
+    for (const seed of SEEDS) {
+      const libre = resumenTerreno(crear(seed));
+      const grecia = resumenTerreno(generarMapa({ ancho: MAPA_DEFAULT.ancho, alto: MAPA_DEFAULT.alto, seed, region: 'greciaContinental' }));
+      expect(grecia.montanoso).toBeGreaterThan(libre.montanoso);
+      expect(grecia.agua).toBeGreaterThan(libre.agua);
+    }
+  });
+
+  it('anatolia sale más montañosa que el mundo libre (cordilleras norte/sur), con meseta abierta de por medio', () => {
+    for (const seed of SEEDS) {
+      const libre = resumenTerreno(crear(seed));
+      const anatolia = resumenTerreno(generarMapa({ ancho: MAPA_DEFAULT.ancho, alto: MAPA_DEFAULT.alto, seed, region: 'anatolia' }));
+      expect(anatolia.montanoso).toBeGreaterThan(libre.montanoso);
+      // A diferencia de Grecia, la meseta interior deja bastante 'llano' real — no es solo montaña.
+      expect(anatolia.llano).toBeGreaterThan(20);
+    }
+  });
+
+  it('egeo sale abrumadoramente más acuático que el mundo libre (archipiélago)', () => {
+    for (const seed of SEEDS) {
+      const libre = resumenTerreno(crear(seed));
+      const egeo = resumenTerreno(generarMapa({ ancho: MAPA_DEFAULT.ancho, alto: MAPA_DEFAULT.alto, seed, region: 'egeo' }));
+      expect(egeo.agua).toBeGreaterThan(libre.agua * 2);
+    }
+  });
+
+  it.each(['nilo', 'mesopotamia'] as const)(
+    '%s sale más llana y con MENOS montaña que el mundo libre (valle fluvial en llanura árida)',
+    (region) => {
+      for (const seed of SEEDS) {
+        const libre = resumenTerreno(crear(seed));
+        const mundo = resumenTerreno(generarMapa({ ancho: MAPA_DEFAULT.ancho, alto: MAPA_DEFAULT.alto, seed, region }));
+        expect(mundo.llano).toBeGreaterThan(libre.llano);
+        expect(mundo.montanoso).toBeLessThan(libre.montanoso);
+      }
+    }
+  );
+});
+
+describe('ríos troncales (Fase 0.2 — Nilo/Mesopotamia, ver RegionGeografica.riosTroncales)', () => {
+  const CASOS: { region: RegionId; ids: string[] }[] = [
+    { region: 'nilo', ids: ['nilo'] },
+    { region: 'mesopotamia', ids: ['tigris', 'eufrates'] },
+  ];
+
+  function longitudRio(puntos: { x: number; y: number }[]): number {
+    let total = 0;
+    for (let i = 0; i < puntos.length - 1; i++) total += Math.hypot(puntos[i + 1]!.x - puntos[i]!.x, puntos[i + 1]!.y - puntos[i]!.y);
+    return total;
+  }
+
+  it.each(CASOS)('$region genera sus ríos troncales, navegables, con desembocadura real y cruzando casi todo el mapa', ({ region, ids }) => {
+    for (const seed of SEEDS) {
+      const world = generarMapa({ ancho: MAPA_DEFAULT.ancho, alto: MAPA_DEFAULT.alto, seed, region });
+      for (const id of ids) {
+        const rio = world.rios.find((r) => r.id === id);
+        expect(rio, `${region}/seed ${seed}: falta el río troncal '${id}'`).toBeDefined();
+        expect(rio!.navegable).toBe(true);
+        expect(rio!.terminaEnLago).toBe(false);
+        // >90% del alto del mapa: los troncales autorados van de borde norte a borde sur (ver `NILO`/
+        // `MESOPOTAMIA` en regiones.ts), no en diagonal — cruzan de un extremo al otro, no son un afluente.
+        expect(longitudRio(rio!.puntos)).toBeGreaterThan(world.config.alto * 0.9);
+      }
+    }
+  });
+
+  it('mesopotamia: los ríos troncales no rompen el cupo normal de RIOS.cantidad (se suman aparte)', () => {
+    for (const seed of SEEDS) {
+      const world = generarMapa({ ancho: MAPA_DEFAULT.ancho, alto: MAPA_DEFAULT.alto, seed, region: 'mesopotamia' });
+      expect(world.rios).toHaveLength(RIOS.cantidad + 2);
+    }
+  });
+
+  it('nilo: el río troncal no rompe el cupo normal de RIOS.cantidad (se suma aparte)', () => {
+    for (const seed of SEEDS) {
+      const world = generarMapa({ ancho: MAPA_DEFAULT.ancho, alto: MAPA_DEFAULT.alto, seed, region: 'nilo' });
+      expect(world.rios).toHaveLength(RIOS.cantidad + 1);
+    }
+  });
+});
+
+describe('chokepoints (Fase 0.3 — puertos de montaña, Doc 1.5)', () => {
+  it('hay exactamente CHOKEPOINTS.cantidad chokepoints, todos dentro del mapa', () => {
+    for (const seed of SEEDS) {
+      const world = crear(seed);
+      expect(world.chokepoints).toHaveLength(CHOKEPOINTS.cantidad);
+      for (const chokepoint of world.chokepoints) {
+        expect(chokepoint.posicion.x).toBeGreaterThanOrEqual(0);
+        expect(chokepoint.posicion.x).toBeLessThanOrEqual(world.config.ancho);
+        expect(chokepoint.posicion.y).toBeGreaterThanOrEqual(0);
+        expect(chokepoint.posicion.y).toBeLessThanOrEqual(world.config.alto);
+        expect(chokepoint.radio).toBe(CHOKEPOINTS.radio);
+      }
+    }
+  });
+
+  it('es determinista por seed, igual que el resto del pipeline', () => {
+    const a = crear(42);
+    const b = crear(42);
+    expect(b.chokepoints).toEqual(a.chokepoints);
+    expect(crear(42).chokepoints).not.toEqual(crear(43).chokepoints);
+  });
+
+  it('la mayoría de los chokepoints cae en terreno colina/montaña, no en llano/agua/cima', () => {
+    // Informativo, no 100% (mismo motivo que `cumplimientoBiomaPorTipo` arriba): `colocarConEspaciado`
+    // tiene un último recurso que ignora el filtro de terreno si el mapa está saturado de candidatos ya
+    // colocados — puertos de montaña de verdad deben ser la abrumadora mayoría, no el 100% garantizado.
+    for (const seed of SEEDS) {
+      const world = crear(seed);
+      const enTerrenoMontanoso = world.chokepoints.filter((c) => {
+        const t = evaluarTerreno(world.elevacion, c.posicion);
+        return t === 'colina' || t === 'montana';
+      }).length;
+      expect(enTerrenoMontanoso).toBeGreaterThanOrEqual(Math.ceil(world.chokepoints.length * 0.8));
     }
   });
 });

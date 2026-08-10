@@ -1,8 +1,14 @@
-import type { AcuerdoTrueque, Asentamiento, Caravana, Faccion, Point } from '../domain/types';
-import { ASIGNACION_CARAVANA, CARAVANA_CATALOGO, COMISION, REPUTACION, TRUEQUE } from '../constants';
+import type { AcuerdoTrueque, Asentamiento, CaminoComercial, Caravana, Faccion, Point, ZonaInfluencia } from '../domain/types';
+import { ASIGNACION_CARAVANA, CARAVANA_CATALOGO, CHOKEPOINTS_PEAJE, COMISION, REPUTACION, TRUEQUE } from '../constants';
+import { COSTE_MOVIMIENTO } from '../worldgen';
+import type { Mapa } from '../world/mapa';
+import { calcularRuta } from '../world/rutas';
 import { agregarRecurso, cantidadDisponible, descontarRecursos, tieneRecursos } from './almacen';
+import { buscarCamino } from './caminos';
+import { chokepointsDePeajeEnRuta } from './chokepoints';
 import { calcularPrecioReferencia } from './market';
 import { cupoCaravanas, tieneMercadoActivo } from './asentamientoQuery';
+import { avanzarPosicionEnRuta } from './movimiento';
 import { factorCapacidadCaravana, factorComisionExterna, factorVelocidadCaravana } from './politicas';
 import { aplicarAjustesReputacion, factorComisionPorReputacion, type AjusteReputacion } from './reputacion';
 
@@ -108,6 +114,9 @@ function bonusPorDistancia(dist: number): number {
 /** Avanza caravanas en tránsito: movimiento y, al llegar, entrega + comisión con bonificación por distancia (Doc 3.8). */
 function avanzarCaravanas(
   caravanas: Caravana[],
+  mapa: Mapa,
+  caminos: readonly CaminoComercial[],
+  zonas: readonly ZonaInfluencia[],
   asentamientosPorId: Map<string, Asentamiento>,
   acuerdosPorId: Map<string, AcuerdoTrueque>,
   facciones: Faccion[],
@@ -129,22 +138,39 @@ function avanzarCaravanas(
     const destino = asentamientosPorId.get(caravana.destinoAsentamientoId);
     if (!origen || !destino) continue; // asentamiento desaparecido (fuera de alcance de Fase 0 aún)
 
+    // Distancia en línea recta: sigue siendo la base de la bonificación por distancia de la comisión (más
+    // abajo) y del movimiento de fallback sin `ruta` — NO de cuántos ticks tarda una caravana con ruta, que
+    // ahora depende de la longitud real de la polilínea (puede rodear terreno costoso).
     const distanciaTotal = Math.max(1, distancia(origen.posicion, destino.posicion));
     const velocidadBase = CARAVANA_CATALOGO[caravana.tipo].velocidad;
     // "Rutas Rápidas" (Tesorero, ampliación de comercio) solo aplica a la flota comercial propia — no a
     // Caravanas de Fundación ni a los tipos todavía sin uso real (militar/contrabando, Doc 3.6).
     const velocidad = caravana.tipo === 'comercial' ? velocidadBase * factorVelocidadCaravana(origen) : velocidadBase;
-    const progreso = Math.min(1, caravana.progreso + velocidad / distanciaTotal);
+
+    // Con `ruta` (Fase 0.3, calculada al lanzar la caravana — ver `asignarCaravanasATrueque`): avance real
+    // por coste de terreno, sobre la longitud de la polilínea. Sin `ruta` (caravanas de partidas guardadas
+    // antes de Fase 0.3): línea recta a velocidad constante, comportamiento sin cambios.
+    let progreso: number;
+    let posicionActual: Point;
+    if (caravana.ruta && caravana.ruta.length >= 2) {
+      // Bonus de Camino Comercial (Doc 1.6): si existe un camino ya construido para este par de
+      // asentamientos, la caravana lo está siguiendo (ver `asignarCaravanasATrueque`, que reusa su
+      // polilínea como `ruta`) — todo el trayecto cuenta como "sobre el camino".
+      const enCaminoComercial = buscarCamino(caminos, origen.id, destino.id) !== undefined;
+      const factorCosteExtra = enCaminoComercial ? COSTE_MOVIMIENTO.factorCamino : 1;
+      const avance = avanzarPosicionEnRuta(mapa, caravana.ruta, caravana.progreso, velocidad, factorCosteExtra);
+      progreso = avance.progreso;
+      posicionActual = avance.posicion;
+    } else {
+      progreso = Math.min(1, caravana.progreso + velocidad / distanciaTotal);
+      posicionActual = {
+        x: origen.posicion.x + (destino.posicion.x - origen.posicion.x) * progreso,
+        y: origen.posicion.y + (destino.posicion.y - origen.posicion.y) * progreso,
+      };
+    }
 
     if (progreso < 1) {
-      restantes.push({
-        ...caravana,
-        progreso,
-        posicionActual: {
-          x: origen.posicion.x + (destino.posicion.x - origen.posicion.x) * progreso,
-          y: origen.posicion.y + (destino.posicion.y - origen.posicion.y) * progreso,
-        },
-      });
+      restantes.push({ ...caravana, progreso, posicionActual });
       continue;
     }
 
@@ -168,6 +194,27 @@ function avanzarCaravanas(
         .map(([r, c]) => `${c.toFixed(0)} ${r}`)
         .join(', ')} (comisión +${comision.toFixed(1)} oro).`
     );
+
+    // Peaje de chokepoints (Doc 1.5, Fase 0.3): chokepoints controlados por una Facción rival que la ruta
+    // atraviesa cobran al DESTINO en el momento de la entrega — ver `engine/chokepoints.ts`.
+    const rutaParaPeaje = caravana.ruta && caravana.ruta.length >= 2 ? caravana.ruta : [origen.posicion, destino.posicion];
+    const peajes = chokepointsDePeajeEnRuta(mapa.listarChokepoints(), zonas, rutaParaPeaje, origen.faccionId, asentamientosPorId);
+    if (peajes.length > 0) {
+      const chokepointsPorControlador = new Map<string, number>();
+      for (const p of peajes) chokepointsPorControlador.set(p.controladorId, (chokepointsPorControlador.get(p.controladorId) ?? 0) + 1);
+
+      for (const [controladorId, cantidadChokepoints] of chokepointsPorControlador) {
+        if (controladorId === destino.id) continue; // el propio destino domina el paso: no se cobra a sí mismo
+        const controlador = asentamientosPorId.get(controladorId);
+        if (!controlador) continue;
+        const monto = Math.min(cantidadChokepoints * CHOKEPOINTS_PEAJE.oro, cantidadDisponible(almacenDestino, 'oro'));
+        if (monto <= 0) continue;
+        almacenDestino = descontarRecursos(almacenDestino, { oro: monto });
+        asentamientosPorId.set(controlador.id, { ...controlador, almacen: agregarRecurso(controlador.almacen, 'oro', monto) });
+        eventos.push(`Peaje: ${destino.id} paga ${monto.toFixed(1)} oro a ${controlador.id} por ${cantidadChokepoints} chokepoint(s) en la ruta.`);
+      }
+      asentamientosPorId.set(destino.id, { ...destino, almacen: almacenDestino });
+    }
 
     if (caravana.origenAcuerdoId && caravana.ladoAcuerdo) {
       const acuerdo = acuerdosPorId.get(caravana.origenAcuerdoId);
@@ -253,6 +300,8 @@ function scoreAsignacion(l: LadoPendiente, origen: Asentamiento, destino: Asenta
  * descendente, caravana por caravana, hasta agotar el pool disponible de ese asentamiento.
  */
 function asignarCaravanasATrueque(
+  mapa: Mapa,
+  caminos: readonly CaminoComercial[],
   acuerdosPorId: Map<string, AcuerdoTrueque>,
   asentamientosPorId: Map<string, Asentamiento>,
   caravanas: Caravana[],
@@ -333,6 +382,11 @@ function asignarCaravanasATrueque(
         ladoAcuerdo: l.lado,
         posicionActual: origen.posicion,
         progreso: 0,
+        // Ruta calculada al lanzar (Fase 0.3): rodea terreno costoso en vez de ir en línea recta — ver
+        // `world/rutas.ts`. Si ya existe un Camino Comercial para este par (Doc 1.6, ver `engine/caminos.ts`),
+        // reusa su polilínea en vez de recalcular — es literalmente "seguir el camino ya construido", y es
+        // lo que le da el bonus de velocidad en `avanzarCaravanas` (mismo par -> mismo camino encontrado).
+        ruta: buscarCamino(caminos, origen.id, destino.id)?.puntos ?? calcularRuta(mapa, origen.posicion, destino.posicion),
       });
       eventos.push(`Caravana comercial de ${origenId} sale hacia ${destino.id} con ${cantidad.toFixed(0)} ${l.recurso}.`);
     }
@@ -346,6 +400,9 @@ export function avanzarComercio(
   facciones: Faccion[],
   caravanas: Caravana[],
   acuerdos: AcuerdoTrueque[],
+  mapa: Mapa,
+  caminos: readonly CaminoComercial[],
+  zonas: readonly ZonaInfluencia[],
   tickActual: number
 ): { asentamientos: Asentamiento[]; facciones: Faccion[]; caravanas: Caravana[]; acuerdos: AcuerdoTrueque[]; eventos: string[] } {
   const eventos: string[] = [];
@@ -353,8 +410,8 @@ export function avanzarComercio(
   const asentamientosPorId = new Map(asentamientos.map((a) => [a.id, { ...a }]));
   const acuerdosPorId = new Map(acuerdos.map((a) => [a.id, a]));
 
-  const trasMovimiento = avanzarCaravanas(caravanas, asentamientosPorId, acuerdosPorId, facciones, eventos, ajustesReputacion);
-  const trasAsignacion = asignarCaravanasATrueque(acuerdosPorId, asentamientosPorId, trasMovimiento, tickActual, eventos, ajustesReputacion);
+  const trasMovimiento = avanzarCaravanas(caravanas, mapa, caminos, zonas, asentamientosPorId, acuerdosPorId, facciones, eventos, ajustesReputacion);
+  const trasAsignacion = asignarCaravanasATrueque(mapa, caminos, acuerdosPorId, asentamientosPorId, trasMovimiento, tickActual, eventos, ajustesReputacion);
 
   return {
     asentamientos: asentamientos.map((a) => asentamientosPorId.get(a.id)!),

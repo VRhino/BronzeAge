@@ -34,6 +34,7 @@ function estadoInicialConUnAsentamiento(posicion?: { x: number; y: number }) {
     ordenes: [],
     relaciones: [],
     titulos: [],
+    caminos: [],
   };
   return { mapa, estado };
 }

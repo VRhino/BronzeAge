@@ -11,6 +11,17 @@ export function distancia(a: Point, b: Point): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
+/** Distancia mínima de un punto a un segmento (proyección clampeada al segmento). Compartida por `rios.ts`
+ * (distancia a cauce) y `regiones.ts` (crestas/bahías de la guía geográfica) — misma primitiva, dos usos. */
+export function distanciaASegmento(p: Point, a: Point, b: Point): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const largoCuadrado = dx * dx + dy * dy;
+  if (largoCuadrado === 0) return distancia(p, a);
+  const t = Math.min(1, Math.max(0, ((p.x - a.x) * dx + (p.y - a.y) * dy) / largoCuadrado));
+  return distancia(p, { x: a.x + t * dx, y: a.y + t * dy });
+}
+
 export function dentroDeAlgunBosque(p: Point, bosques: ZonaBosque[]): boolean {
   return bosques.some((b) => distancia(p, b.centro) < b.radio);
 }

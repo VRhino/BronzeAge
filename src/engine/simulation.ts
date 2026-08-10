@@ -1,4 +1,4 @@
-import type { AcuerdoTrueque, Asentamiento, Caravana, Faccion, OrdenMercado, RelacionPolitica, Titulo } from '../domain/types';
+import type { AcuerdoTrueque, Asentamiento, CaminoComercial, Caravana, Faccion, OrdenMercado, RelacionPolitica, Titulo } from '../domain/types';
 import type { Mapa } from '../world/mapa';
 import { computeTodasLasZonas } from './zones';
 import { avanzarConstruccion, reclamosDeFuentes } from './construction';
@@ -22,6 +22,10 @@ export interface EstadoSimulacion {
   ordenes: OrdenMercado[];
   relaciones: RelacionPolitica[];
   titulos: Titulo[];
+  /** Caminos comerciales (Fase 0.3, Doc 1.6) — se crean fuera del tick, al proponer trueque (ver
+   * `GameStore.proponerTrueque`/`engine/caminos.ts`); el tick solo los LEE para el bonus de velocidad de
+   * caravana (`engine/trade.ts`), nunca los modifica. */
+  caminos: CaminoComercial[];
 }
 
 export interface ResultadoTick extends EstadoSimulacion {
@@ -79,7 +83,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, tickActu
   // Ruinas por abandono/mal mantenimiento (Doc 4.5): el asentamiento se elimina, su zona queda libre.
   const actualizados = procesados.filter((p) => !p.destruido).map((p) => p.asentamiento);
 
-  const trasComercio = avanzarComercio(actualizados, estado.facciones, estado.caravanas, estado.acuerdos, tickActual);
+  const trasComercio = avanzarComercio(actualizados, estado.facciones, estado.caravanas, estado.acuerdos, mapa, estado.caminos, zonas, tickActual);
   eventos.push(...trasComercio.eventos);
 
   // Caravanas de Fundación (Doc 1.8): expanden una Facción más allá de su primer asentamiento — se avanzan
@@ -109,6 +113,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, tickActu
     ordenes: trasMercado.ordenes,
     relaciones: estado.relaciones,
     titulos: titulosActuales,
+    caminos: estado.caminos,
     eventos,
   };
 }

@@ -224,12 +224,38 @@ export interface RioZona {
   /** true si el descenso terminó en un mínimo local (gradiente ~0) en vez de llegar a 'agua' o al borde
    * del mapa — informativo, no cambia el trazo. */
   terminaEnLago: boolean;
+  /** true si el río es lo bastante largo y de verdad desemboca (no `terminaEnLago`) como para ser
+   * navegable — pensado para el comercio fluvial con barcos de fases futuras (ver `RIOS.proporcionNavegable`
+   * en `worldgen/config.ts` y `generarRios`). No afecta la geometría del trazo, solo cómo se interpreta. */
+  navegable: boolean;
 }
+
+/**
+ * Chokepoint estratégico (Fase 0.3, Doc 1.5): puerto de montaña detectado como punto de silla del campo de
+ * elevación (ver `worldgen/chokepoints.ts`) — geometría, no arista de un grafo (ver `Fase_0_1_Definicion.md`).
+ * `radio` es la zona de influencia del propio chokepoint: qué zona de asentamiento lo controla
+ * (`engine/chokepoints.ts`) y a qué distancia de una ruta cuenta como "la ruta pasa por aquí" para el peaje.
+ */
+export interface Chokepoint {
+  id: string;
+  posicion: Point;
+  radio: number;
+}
+
+/**
+ * Región geográfica opcional (Fase 0.2, ver `worldgen/regiones.ts`): sesga la generación de elevación para
+ * que se parezca al carácter conocido de una zona real del Egeo/Levante de la Edad de Bronce, en vez del
+ * mundo libre de siempre. Vive aquí (no en `worldgen/`) porque `WorldConfig` es una entidad de dominio y
+ * `worldgen/` depende de `domain/types`, nunca al revés.
+ */
+export type RegionId = 'greciaContinental' | 'anatolia' | 'egeo' | 'nilo' | 'mesopotamia';
 
 export interface WorldConfig {
   ancho: number;
   alto: number;
   seed: number;
+  /** `undefined` = generación libre de siempre (comportamiento sin cambios). */
+  region?: RegionId;
 }
 
 // El antiguo `World` (config + recursos + bosques + `fertilidadEn`) ya no existe: la generación devuelve
@@ -250,6 +276,11 @@ export interface Caravana {
   posicionActual: Point;
   /** 0-1, avance a lo largo de la ruta origen->destino. */
   progreso: number;
+  /** Polilínea calculada al lanzar la caravana (Fase 0.3, ver `world/rutas.ts` `calcularRuta` y
+   * `engine/movimiento.ts`) — rodea terreno costoso en vez de ir en línea recta, y determina sobre qué
+   * longitud real se mide `progreso`. Ausente en caravanas de partidas guardadas antes de Fase 0.3: esas
+   * siguen moviéndose en línea recta sin coste de terreno, comportamiento sin cambios. */
+  ruta?: Point[];
   /** Acuerdo de trueque que generó esta caravana (Doc 3.2) — indica a qué lado del acuerdo pertenece. */
   origenAcuerdoId?: string;
   ladoAcuerdo?: 'A' | 'B';
@@ -285,6 +316,20 @@ export interface AcuerdoTrueque {
   creadoEnTick: number;
   expiraEnTick: number;
   estado: 'activo' | 'cumplido' | 'expirado';
+}
+
+/**
+ * Camino comercial (Fase 0.3, Doc 1.6): se genera automáticamente al establecer la primera relación
+ * comercial entre dos asentamientos (ver `engine/caminos.ts`, disparado desde `GameStore.proponerTrueque`).
+ * Estado de PARTIDA, no de mundo generado — depende de qué relaciones existen, no de la seed. Persiste
+ * aunque el `AcuerdoTrueque` que lo originó expire o se cumpla (PENDIENTE en `Preguntas_Abiertas.md`: qué
+ * pasa si se rompe la relación — de momento el camino queda como infraestructura física permanente).
+ */
+export interface CaminoComercial {
+  id: string;
+  asentamientoAId: string;
+  asentamientoBId: string;
+  puntos: Point[];
 }
 
 /** Orden de compra/venta en el Mercado de un asentamiento, pagada en oro (Doc 3.3/3.4). */

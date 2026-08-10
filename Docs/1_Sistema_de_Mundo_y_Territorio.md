@@ -3,13 +3,13 @@
 ## 1.1 Generación del mundo (Fase 0)
 - Mapa CUADRADO, espacio de coordenadas continuo (no grid discreto).
 - Tamaño base: 1000x1000 unidades, PARAMETRIZABLE.
-- Terreno completamente plano en Fase 0: sin ríos, sin mar, sin relieve montañoso (pospuesto a fases posteriores).
+- Terreno con RELIEVE REAL desde Fase 0.1 (ya no plano): campo de ELEVACIÓN continuo por ruido fractal, clasificado en bandas agua/costa/llano/colina/montaña/cima; RÍOS como polilíneas que nacen en montaña y descienden por gradiente de máxima pendiente; BIOMA derivado de terreno+fertilidad+humedad — ver `Consideraciones/Fase_0_1_Definicion.md`. El coste de moverse por el mapa depende del tipo de terreno desde Fase 0.3 (ver 1.5/1.6 y Doc 3.6). Opcionalmente sesgado a una región geográfica real desde Fase 0.2 (Grecia continental/Anatolia/Egeo/Nilo/Mesopotamia — "Libre", sin sesgo, sigue siendo el valor por defecto). Sigue sin mar navegable (eje naval en fase inicial, ver `Roadmap_Escalado.md`).
 - Generación PROCEDURAL de recursos por niveles de rareza:
   - Común (alta frecuencia, disperso): Madera (bosques, ver 1.4), Piedra, Trigo (vía fertilidad, ver 1.4).
   - Intermedio (frecuencia media, varios clusters): Cobre.
   - Raro (baja frecuencia, pocos clusters, espaciado mínimo forzado entre ellos): Estaño, Oro.
 - Spawn de jugadores nuevos: posición aleatoria uniforme, INDEPENDIENTE de la ubicación de recursos.
-- Fases avanzadas (fuera de alcance Fase 0): mapa con relieve, ríos, mar; posible mapa fijo diseñado a mano en vez de procedural; puntos de interés fijos (ruinas, maravillas); biomas/clima.
+- Fases avanzadas (fuera de alcance Fase 0): mar navegable; posible mapa fijo diseñado a mano en vez de procedural; puntos de interés fijos (ruinas, maravillas); clima (el relieve/ríos/biomas de terreno ya se implementaron en Fase 0.1, ver arriba).
 
 ## 1.2 Fundación de asentamientos
 - El jugador elige LIBREMENTE dónde colocar el edificio de fundación.
@@ -28,19 +28,21 @@
 ## 1.4 Fuentes de recursos por tipo
 - CULTIVOS (trigo): NO son un nodo recolectable directo. Dependen de la FERTILIDAD DEL SUELO de la zona (atributo de terreno); requieren construir una Granja para aprovecharse.
 - MADERA: proviene de BOSQUES, representados como ZONAS del mapa (no puntos), con densidad variable.
-- MINERALES (cobre, estaño, oro): en Fase 0, dado el terreno plano, están DISPERSOS aleatoriamente siguiendo las reglas de rareza de 1.1. En fases avanzadas (con relieve) estarán ligados a cordilleras/montañas sueltas, no dispersos al azar. Cada uno tiene su propio edificio de extracción (cantera para piedra, mina de oro, mina de cobre, mina de estaño — este último añadido en un rebalance posterior a Sprint 6: el estaño se generaba en el mundo desde el Sprint 1 pero no tenía forma de extraerse, solo de comerciarse).
+- MINERALES (cobre, estaño, oro): desde Fase 0.1, CONDICIONADOS AL RELIEVE en vez de dispersos al azar — cobre/estaño en colina o montaña, oro solo en montaña (el más exclusivo, es el más raro); piedra se deja permisiva (colina/montaña/llanura fértil/estepa) para no comprometer el recurso común más consumido — ver `RECURSO_BIOMA_PERMITIDO` en `worldgen/config.ts`. Cada uno tiene su propio edificio de extracción (cantera para piedra, mina de oro, mina de cobre, mina de estaño — este último añadido en un rebalance posterior a Sprint 6: el estaño se generaba en el mundo desde el Sprint 1 pero no tenía forma de extraerse, solo de comerciarse).
 - LIVESTOCK (ovejas, vacas, caballos + especies adicionales por definir): fauna LIBRE en el mapa, debe CAPTURARSE para aprovecharse. Cría/domesticación pospuesta a fases avanzadas (en Fase 0 se trata como recurso consumible/finito). Rendimientos: ovejas = carne+leche; vacas = carne+leche+cuero; caballos = fuente de entrenamiento de tropas montadas (caballería ligera, carros de guerra), no dan recurso de consumo.
 - MADERA y PIEDRA: materiales base de construcción de edificios e insumo de materiales derivados.
 - COMMODITIES DE NOBLEZA (uvas/olivas → vino/aceite): no son alimento básico, requeridas para felicidad de la Nobleza; su déficit arriesga rebelión/estancamiento, no hambruna.
 
-## 1.5 Chokepoints estratégicos (heredado de Iberia, fases con relieve)
-NO IMPLEMENTADO EN FASE 0 (el terreno de Fase 0 es plano, sin relieve — ver 1.1). Pasos de montaña, puentes, gargantas generan puntos de control natural donde una Facción que los domina militarmente puede cobrar peajes, escoltar caravanas aliadas o bloquear el suministro de una Facción/Liga rival entera. Aplica a partir de fases con relieve.
+## 1.5 Chokepoints estratégicos (heredado de Iberia) — 🔷 implementado con alcance reducido (Fase 0.3)
+IMPLEMENTADO desde Fase 0.3 (la condición "aplica a partir de fases con relieve" ya se cumple: el relieve real llegó en Fase 0.1). Puertos de montaña detectados como PUNTOS DE SILLA del campo de elevación (mínimo local a lo largo de la cresta, máximo local en la dirección perpendicular — geometría determinista por seed, ver `worldgen/chokepoints.ts`). El asentamiento cuya zona de influencia CUBRE un chokepoint lo controla; las caravanas comerciales de una Facción rival cuya ruta pasa cerca pagan un PEAJE EN ORO al controlador, cobrado al llegar a destino (ver `engine/chokepoints.ts`, `Consideraciones/Fase_0_3_Definicion.md`).
+PENDIENTE (alcance confirmado con el usuario para esta pasada): escoltar caravanas aliadas y bloquear el suministro de una Facción/Liga rival — el diseño original completo necesita un concepto de "guerra activa" entre Facciones que no existe todavía (el combate en Fase 0 es cálculo puntual: asedio/campo abierto/intercepción, sin presencia física continua en el mapa, ver Doc 5.10). Vados de río como chokepoint: esta pasada solo detecta puertos de montaña.
 
-## 1.6 Caminos comerciales automáticos
-- Al establecer una relación comercial entre asentamientos se genera AUTOMÁTICAMENTE un camino físico en el mapa (el jugador no lo construye manualmente).
-- El camino AFECTA LA VELOCIDAD de caravanas/tropas que lo recorren (más rápido que campo abierto).
-- MEJORABLE vía Políticas.
-- PENDIENTE: qué pasa con el camino si se rompe la relación comercial que lo originó.
+## 1.6 Caminos comerciales automáticos — ✅ implementado (Fase 0.3)
+- Al proponer un trueque entre dos asentamientos se genera AUTOMÁTICAMENTE un camino físico — una polilínea calculada con pathfinding (A* sobre coste de terreno) que rodea relieve costoso en vez de ir en línea recta, mismo algoritmo que usa cualquier caravana para su propia ruta (ver 1.1, Doc 3.6, `world/rutas.ts`) — el jugador no lo construye manualmente (`engine/caminos.ts`).
+- El camino AFECTA LA VELOCIDAD de las caravanas que lo siguen (más rápido que campo abierto — ver Doc 3.6).
+- MEJORABLE vía Políticas: cubierto por la política ya existente "Rutas Rápidas" (Tesorero, Doc 3.12) — no hizo falta ninguna política nueva.
+- RESUELTO: si se rompe la relación comercial que originó el camino, el camino queda como infraestructura física PERMANENTE (no se elimina) — decisión pragmática sin validar por simulación (ver `Consideraciones/Preguntas_Abiertas.md`).
+- Tropas: fuera de alcance todavía — el movimiento militar físico por el mapa sigue sin existir en Fase 0 (Doc 5.10).
 
 ## 1.7 Cap de fundación de asentamientos por Facción (inspirado en Rise of Nations)
 - Límite DURO de asentamientos que una Facción puede FUNDAR (no aplica a conquista/anexión, que no tiene límite).

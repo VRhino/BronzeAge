@@ -3,9 +3,9 @@
 // (dibujo/color, puramente presentacional). Nunca importa nada de `./engine/*` ni captura errores
 // de dominio: eso es responsabilidad exclusiva de `gameStore`. Los tipos de `./domain/types` se
 // importan solo como `type` para tipar lo que se lee — no acoplan a ninguna lógica.
-import type { Asentamiento, BiomaTipo, CargoTipo, Faccion } from './domain/types';
+import type { Asentamiento, BiomaTipo, CargoTipo, Faccion, RegionId } from './domain/types';
 import { CATALOGOS, gameStore, type GameState, type CampoBalance } from './app/gameStore';
-import { draw, drawFiltroFertilidad, drawPreviewFundacion, drawTerreno, faccionColor, BIOMA_COLOR, RECURSO_COLOR, RECURSOS_EN_MAPA, EDIFICIO_COLOR, FACCION_COLORES, type DrawState } from './ui/canvas';
+import { draw, drawFiltroFertilidad, drawPreviewFundacion, drawTerreno, faccionColor, BIOMA_COLOR, BIOMA_COLOR_SIMPLE, RECURSO_COLOR, RECURSOS_EN_MAPA, EDIFICIO_COLOR, FACCION_COLORES, type DrawState } from './ui/canvas';
 
 // Subido de 800 a 900 junto con el mapa 2000x2000 (Fase 0.1): el mundo más grande necesitaba algo más de
 // resolución física para que la capa de terreno/ríos no perdiera nitidez.
@@ -34,13 +34,35 @@ const RECURSO_NOMBRE: Record<string, string> = {
   armaduraBronce: 'Armadura de Bronce',
 };
 
-/** Biomas (Fase 0.1) en orden de elevación creciente — así la leyenda se lee como una escala de altura. */
+/** Regiones geográficas disponibles (Fase 0.2, ver `worldgen/regiones.ts`) — nombre para el selector del
+ * mundo. Mantenido a mano, igual que `BIOMA_NOMBRE`/`EDIFICIO_NOMBRE`: es presentación pura, no se deriva de
+ * `worldgen/` (este archivo no puede importar de ahí, ver la nota de frontera arriba). */
+const REGION_NOMBRE: Record<RegionId, string> = {
+  greciaContinental: 'Grecia continental',
+  anatolia: 'Anatolia',
+  egeo: 'Egeo (archipiélago)',
+  nilo: 'Nilo',
+  mesopotamia: 'Mesopotamia',
+};
+
+/** Biomas (Fase 0.1) en orden de elevación creciente — así la leyenda se lee como una escala de altura.
+ * Usado con el toggle "Detalle de biomas" activado (`mostrarDetalleBiomas`, ver `BIOMA_COLOR`). */
 const BIOMA_NOMBRE: [BiomaTipo, string][] = [
   ['agua', 'Agua (lagos y cauces)'],
   ['costa', 'Ribera'],
   ['estepa', 'Estepa (llano seco)'],
   ['llanuraFertil', 'Llanura fértil'],
   ['colina', 'Colina'],
+  ['montana', 'Montaña'],
+  ['cima', 'Cima (inhabitable)'],
+];
+
+/** Leyenda con el toggle de detalle DESACTIVADO (por defecto): solo las tres bandas que cambian qué se
+ * puede hacer en el terreno; costa/estepa/llanuraFertil/colina se resumen en una única fila (ver
+ * `BIOMA_COLOR_SIMPLE`). */
+const BIOMA_NOMBRE_SIMPLE: [BiomaTipo, string][] = [
+  ['agua', 'Agua (lagos y cauces)'],
+  ['costa', 'Tierra habitable'],
   ['montana', 'Montaña'],
   ['cima', 'Cima (inhabitable)'],
 ];
@@ -128,9 +150,13 @@ let jugadorSeleccionadoId: string | null = null;
 let viewedTick = 0;
 let ultimoTickEnVivo = 0;
 let mostrarFiltroFertilidad = false;
+/** `false` = paleta de biomas simplificada (agua/montaña/cima distintas, resto de tierra en un solo tono —
+ * ver `BIOMA_COLOR_SIMPLE`); `true` = paleta completa de siempre. Por defecto simplificada. */
+let mostrarDetalleBiomas = false;
 /** Cache de la capa de terreno (Fase 0.1): `drawTerreno` es cara (~900 muestras de bioma) para llamarla en
  * cada `render()` (dispara en cada mousemove sobre el canvas), así que se pinta una vez a un canvas
- * offscreen y se reusa mientras no cambien seed/tamaño — es un artefacto de render, no dato de juego. */
+ * offscreen y se reusa mientras no cambien seed/tamaño/detalle de biomas — es un artefacto de render, no
+ * dato de juego. */
 let terrenoCache: { key: string; canvas: HTMLCanvasElement } | null = null;
 /** Grupos de la pestaña "Valores de simulación" que el usuario dejó expandidos (persiste solo en esta vista). */
 const balanceGruposAbiertos = new Set<string>();
@@ -166,6 +192,15 @@ app.innerHTML = `
         <label>
           Seed del mundo
           <input id="seed-input" type="number" value="1" />
+        </label>
+        <label>
+          Región geográfica (Fase 0.2)
+          <select id="region-select">
+            <option value="">Libre (procedural, sin sesgo)</option>
+            ${Object.entries(REGION_NOMBRE)
+              .map(([id, nombre]) => `<option value="${id}">${nombre}</option>`)
+              .join('')}
+          </select>
         </label>
       </div>
 
@@ -334,7 +369,10 @@ app.innerHTML = `
   <div class="map-column">
     <div class="map-panel">
       <canvas id="world-canvas" width="${CANVAS_SIZE}" height="${CANVAS_SIZE}"></canvas>
-      <label class="fertilidad-toggle"><input type="checkbox" id="fertilidad-checkbox" /> Filtro de fertilidad</label>
+      <div class="map-toggles">
+        <label class="fertilidad-toggle"><input type="checkbox" id="fertilidad-checkbox" /> Filtro de fertilidad</label>
+        <label class="fertilidad-toggle"><input type="checkbox" id="biomas-checkbox" /> Detalle de biomas</label>
+      </div>
       <div class="legend" id="legend">
         <div class="legend-header" id="legend-toggle">Leyenda ▾</div>
         <div class="legend-body" id="legend-body"></div>
@@ -395,6 +433,7 @@ const volverPresenteBtn = document.getElementById('volver-presente-btn') as HTML
 const controlsPanelEl = document.querySelector('.controls-panel')!;
 const faccionSelect = document.getElementById('faccion-select') as HTMLSelectElement;
 const seedInput = document.getElementById('seed-input') as HTMLInputElement;
+const regionSelect = document.getElementById('region-select') as HTMLSelectElement;
 const jugadoresInput = document.getElementById('jugadores-input') as HTMLInputElement;
 
 const fundacionViabilidadEl = document.getElementById('fundacion-viabilidad')!;
@@ -1272,10 +1311,13 @@ function renderLeyenda(state: GameState): void {
     (tipo) => `<div class="legend-row"><span class="swatch" style="background:${RECURSO_COLOR[tipo]}"></span>${RECURSO_NOMBRE[tipo] ?? tipo}</div>`
   ).join('');
 
-  // Terreno: los biomas son la capa de FONDO del mapa (ver `drawTerreno`), así que van primero en la leyenda.
-  const biomasHtml = BIOMA_NOMBRE.map(
-    ([bioma, nombre]) => `<div class="legend-row"><span class="swatch-poly" style="background:${BIOMA_COLOR[bioma]}"></span>${nombre}</div>`
-  ).join('');
+  // Terreno: los biomas son la capa de FONDO del mapa (ver `drawTerreno`), así que van primero en la
+  // leyenda. Sigue al toggle "Detalle de biomas": misma paleta/lista que se está pintando en el canvas.
+  const paletaBiomas = mostrarDetalleBiomas ? BIOMA_COLOR : BIOMA_COLOR_SIMPLE;
+  const nombresBiomas = mostrarDetalleBiomas ? BIOMA_NOMBRE : BIOMA_NOMBRE_SIMPLE;
+  const biomasHtml = nombresBiomas
+    .map(([bioma, nombre]) => `<div class="legend-row"><span class="swatch-poly" style="background:${paletaBiomas[bioma]}"></span>${nombre}</div>`)
+    .join('');
 
   const edificiosHtml = Object.entries(EDIFICIO_COLOR)
     .map(([tipo, color]) => `<div class="legend-row"><span class="swatch-square" style="background:${color}"></span>${EDIFICIO_NOMBRE[tipo] ?? tipo}</div>`)
@@ -1290,7 +1332,7 @@ function renderLeyenda(state: GameState): void {
     <div class="legend-group">
       <h3>Terreno (de menor a mayor altura)</h3>
       ${biomasHtml}
-      <div class="legend-row"><span class="swatch-poly" style="background:rgba(38,90,145,0.9)"></span>Río</div>
+      <div class="legend-row"><span class="swatch-poly" style="background:rgba(38,90,145,0.9)"></span>Río (grueso = navegable, futuro comercio fluvial)</div>
       <div class="legend-note">El relieve se sombrea con luz desde el noroeste: la ladera clara mira a la luz, la oscura queda a la sombra. En Cima no se puede fundar ni extraer.</div>
     </div>
     <div class="legend-group">
@@ -1353,15 +1395,23 @@ document.getElementById('fertilidad-checkbox')!.addEventListener('change', (ev) 
   render();
 });
 
+document.getElementById('biomas-checkbox')!.addEventListener('change', (ev) => {
+  mostrarDetalleBiomas = (ev.target as HTMLInputElement).checked;
+  terrenoCache = null; // fuerza a repintar la capa de terreno con la paleta nueva (ver `terrenoCacheParaFrame`).
+  renderLeyenda(gameStore.getState());
+  render();
+});
+
 /** Devuelve el canvas offscreen con la capa de terreno para este mundo/tamaño, regenerándolo solo si
- * cambió la seed o el tamaño del canvas visible (ver `terrenoCache`). */
+ * cambió la seed, la región (Fase 0.2 — misma seed con región distinta es un mundo distinto, ver
+ * `Mapa.region`), el tamaño del canvas visible o el toggle de detalle de biomas (ver `terrenoCache`). */
 function terrenoCacheParaFrame(mapa: DrawState['mapa']): HTMLCanvasElement {
-  const key = `${mapa.seed}-${canvas.width}x${canvas.height}`;
+  const key = `${mapa.seed}-${mapa.region ?? 'libre'}-${canvas.width}x${canvas.height}-${mostrarDetalleBiomas}`;
   if (terrenoCache?.key !== key) {
     const off = document.createElement('canvas');
     off.width = canvas.width;
     off.height = canvas.height;
-    drawTerreno(off.getContext('2d')!, off, mapa);
+    drawTerreno(off.getContext('2d')!, off, mapa, mostrarDetalleBiomas);
     terrenoCache = { key, canvas: off };
   }
   return terrenoCache.canvas;
@@ -1389,7 +1439,16 @@ function render(): void {
   volverPresenteBtn.hidden = !viendoPasado;
   controlsPanelEl.classList.toggle('viendo-pasado', viendoPasado);
 
-  const drawState: DrawState = { mapa: gameStore.getMapa(state), asentamientos: state.asentamientos, zonas: gameStore.getZonas(state.asentamientos), facciones: state.facciones, caravanas: state.caravanas };
+  const zonas = gameStore.getZonas(state.asentamientos);
+  const drawState: DrawState = {
+    mapa: gameStore.getMapa(state),
+    asentamientos: state.asentamientos,
+    zonas,
+    facciones: state.facciones,
+    caravanas: state.caravanas,
+    caminos: state.caminos,
+    chokepointsControl: gameStore.chokepointsControl(zonas),
+  };
   draw(ctx, canvas, drawState, terrenoCacheParaFrame(drawState.mapa));
   if (mostrarFiltroFertilidad) drawFiltroFertilidad(ctx, canvas, gameStore.getMapa(state));
   renderViabilidadFundacion(viendoPasado);
@@ -1616,7 +1675,8 @@ document.getElementById('tick-btn')!.addEventListener('click', () => {
 });
 
 document.getElementById('regenerar-btn')!.addEventListener('click', () => {
-  gameStore.regenerarMundo(Number(seedInput.value) || 0);
+  const region = regionSelect.value as RegionId | '';
+  gameStore.regenerarMundo(Number(seedInput.value) || 0, region || undefined);
 });
 
 document.getElementById('exportar-btn')!.addEventListener('click', () => {

@@ -13,6 +13,7 @@
 
 import type { NodoRecurso, Point, WorldConfig } from '../domain/types';
 import { generarBosques } from './bosques';
+import { generarChokepoints } from './chokepoints';
 import { generarCampoElevacion } from './elevacion';
 import { generarCampoFertilidad } from './fertilidad';
 import { generarLivestock, generarNodosDeRareza } from './nodos';
@@ -21,10 +22,13 @@ import { createRng } from './rng';
 import { WORLDGEN_VERSION, type MapaGenerado } from './types';
 
 export { evaluarBioma } from './biomas';
+export { generarChokepoints } from './chokepoints';
+export { costeEnPunto } from './costeMovimiento';
 export { evaluarElevacion, evaluarTerreno, gradienteElevacion } from './elevacion';
 export { evaluarFertilidad } from './fertilidad';
 export { distanciaARioMasCercano } from './rios';
-export { MAPA_DEFAULT } from './config';
+export { MAPA_DEFAULT, COSTE_MOVIMIENTO, CHOKEPOINTS } from './config';
+export { REGIONES } from './regiones';
 export { createRng, randInt, randRange, type RandomFn } from './rng';
 export { WORLDGEN_VERSION, type CampoElevacion, type CampoFertilidad, type MapaGenerado } from './types';
 export { type CampoRuido } from './ruido';
@@ -34,19 +38,22 @@ export function generarMapa(config: WorldConfig): MapaGenerado {
   const limites = { ancho: config.ancho, alto: config.alto };
   const colocadosGlobal: Point[] = [];
 
-  // Elevación primero: bosques, ríos y colocación de nodos la necesitan (Fase 0.1).
-  const elevacion = generarCampoElevacion(rng);
+  // Elevación primero: bosques, ríos y colocación de nodos la necesitan (Fase 0.1). `config.region`
+  // (Fase 0.2, opcional) sesga la silueta hacia una zona real conocida — ver `generarCampoElevacion`.
+  const elevacion = generarCampoElevacion(rng, limites, config.region);
 
   // Ríos: solo dependen de elevación. Van antes de bosques/nodos porque ambos consultan el bioma, que usa
   // ríos como proxy de humedad.
   const rios = generarRios(rng, limites, elevacion);
 
-  // Los bosques van primero para que los nodos minerales/livestock puedan evitarlos (ver `colocarConEspaciado`).
-  // Condicionados al terreno desde Fase 0.1 (ver `generarBosques`).
-  const bosques = generarBosques(rng, limites, elevacion);
-
-  // Fertilidad se genera antes que los nodos (Fase 0.1): la colocación condicionada al bioma la necesita.
+  // Fertilidad (Fase 0.1 / v6): antes de bosques y nodos, porque AMBOS la consultan — nodos para la
+  // colocación condicionada al bioma, bosques (desde v6) para ponderar cuán denso sale cada uno (ver
+  // `generarBosques`).
   const fertilidad = generarCampoFertilidad(rng);
+
+  // Los bosques van primero para que los nodos minerales/livestock puedan evitarlos (ver `colocarConEspaciado`).
+  // Condicionados al terreno desde Fase 0.1, y desde v6 también a la fertilidad del suelo (ver `generarBosques`).
+  const bosques = generarBosques(rng, limites, elevacion, fertilidad);
 
   const nodos: NodoRecurso[] = [
     ...generarNodosDeRareza(rng, limites, 'comun', colocadosGlobal, bosques, elevacion, fertilidad, rios),
@@ -55,5 +62,9 @@ export function generarMapa(config: WorldConfig): MapaGenerado {
     ...generarLivestock(rng, limites, colocadosGlobal, bosques, elevacion, fertilidad, rios),
   ];
 
-  return { version: WORLDGEN_VERSION, config, bosques, nodos, fertilidad, elevacion, rios };
+  // Chokepoints (Fase 0.3, v7): al final del pipeline — solo depende de elevación, así que colocarlo aquí
+  // no desplaza el consumo de PRNG de ningún paso anterior ya calibrado (ver `WORLDGEN_VERSION`).
+  const chokepoints = generarChokepoints(rng, limites, elevacion);
+
+  return { version: WORLDGEN_VERSION, config, bosques, nodos, fertilidad, elevacion, rios, chokepoints };
 }

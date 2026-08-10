@@ -1,4 +1,4 @@
-import type { Asentamiento, BiomaTipo, Caravana, EdificioTipo, Faccion, RecursoTipo, ZonaInfluencia } from '../domain/types';
+import type { Asentamiento, BiomaTipo, CaminoComercial, Caravana, EdificioTipo, Faccion, RecursoTipo, ZonaInfluencia } from '../domain/types';
 import type { Mapa } from '../world/mapa';
 
 export const FACCION_COLORES = ['#c0392b', '#2980b9', '#27ae60', '#8e44ad', '#d35400', '#16a085'];
@@ -47,14 +47,38 @@ export const BIOMA_COLOR: Record<BiomaTipo, string> = {
   cima: '#e9edf0',
 };
 
-/** `BIOMA_COLOR` precalculado a componentes RGB: el pintado del terreno escribe en un `ImageData` píxel a
- * píxel (mucho más rápido que un `fillRect` por celda) y ahí hacen falta los canales sueltos, no el hex. */
-const BIOMA_RGB = Object.fromEntries(
-  Object.entries(BIOMA_COLOR).map(([bioma, hex]) => [
-    bioma,
-    [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)] as const,
-  ])
-) as Record<BiomaTipo, readonly [number, number, number]>;
+/**
+ * Paleta SIMPLIFICADA (vista por defecto): agua/montaña/cima son las tres bandas que de verdad cambian
+ * qué se puede hacer en el terreno (fundar, extraer, atravesar a pie), así que conservan su color propio;
+ * costa/estepa/llanuraFertil/colina son variaciones de "tierra habitable normal" y comparten un único tono
+ * neutro para que el mapa se lea de un vistazo. El detalle completo (`BIOMA_COLOR`) queda detrás del
+ * toggle "Detalle de biomas" para cuando sí importa distinguirlas (ver `mostrarDetalleBiomas` en `main.ts`).
+ */
+const BIOMA_TIERRA_PLANA = '#93c26b';
+export const BIOMA_COLOR_SIMPLE: Record<BiomaTipo, string> = {
+  agua: BIOMA_COLOR.agua,
+  costa: BIOMA_TIERRA_PLANA,
+  estepa: BIOMA_TIERRA_PLANA,
+  llanuraFertil: BIOMA_TIERRA_PLANA,
+  colina: BIOMA_TIERRA_PLANA,
+  montana: BIOMA_COLOR.montana,
+  cima: BIOMA_COLOR.cima,
+};
+
+/** Precalcula una paleta de biomas a componentes RGB: el pintado del terreno escribe en un `ImageData`
+ * píxel a píxel (mucho más rápido que un `fillRect` por celda) y ahí hacen falta los canales sueltos, no
+ * el hex. */
+function paletaARgb(paleta: Record<BiomaTipo, string>): Record<BiomaTipo, readonly [number, number, number]> {
+  return Object.fromEntries(
+    Object.entries(paleta).map(([bioma, hex]) => [
+      bioma,
+      [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)] as const,
+    ])
+  ) as Record<BiomaTipo, readonly [number, number, number]>;
+}
+
+const BIOMA_RGB = paletaARgb(BIOMA_COLOR);
+const BIOMA_RGB_SIMPLE = paletaARgb(BIOMA_COLOR_SIMPLE);
 
 // --- Capa de terreno: color de bioma + sombreado de relieve (hillshade) ---
 //
@@ -80,8 +104,10 @@ const RES_BIOMA = 128;
  */
 const ESCALA_RELIEVE = 350;
 
-/** Color de bioma en una rejilla `RES_BIOMA`², sin sombrear. */
-function pintarBiomas(mapa: Mapa): HTMLCanvasElement {
+/** Color de bioma en una rejilla `RES_BIOMA`², sin sombrear. `detalle` elige la paleta (ver `BIOMA_COLOR`
+ * vs `BIOMA_COLOR_SIMPLE`) — el resto del pintado (resolución, sombreado) no cambia entre una y otra. */
+function pintarBiomas(mapa: Mapa, detalle: boolean): HTMLCanvasElement {
+  const tabla = detalle ? BIOMA_RGB : BIOMA_RGB_SIMPLE;
   const capa = document.createElement('canvas');
   capa.width = RES_BIOMA;
   capa.height = RES_BIOMA;
@@ -91,7 +117,7 @@ function pintarBiomas(mapa: Mapa): HTMLCanvasElement {
 
   for (let fila = 0; fila < RES_BIOMA; fila++) {
     for (let col = 0; col < RES_BIOMA; col++) {
-      const [r, g, b] = BIOMA_RGB[mapa.biomaEn({ x: (col + 0.5) * paso, y: (fila + 0.5) * paso })];
+      const [r, g, b] = tabla[mapa.biomaEn({ x: (col + 0.5) * paso, y: (fila + 0.5) * paso })];
       const i = (fila * RES_BIOMA + col) * 4;
       img.data[i] = r;
       img.data[i + 1] = g;
@@ -169,23 +195,29 @@ function aplicarSombreado(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasEleme
  * `drawFiltroFertilidad` (overlay opcional, dibujado ENCIMA de todo) esta es la base: el caller la pinta
  * ANTES que bosques/nodos/zonas/edificios. Coste alto (`RES_BIOMA`² consultas de bioma + una pasada de
  * elevación por píxel) — el caller debe cachearla en un canvas offscreen en vez de llamarla en cada
- * `render()` (ver `main.ts`).
+ * `render()` (ver `main.ts`), y esa cache debe incluir `detalleBiomas` en su clave (cambia el resultado).
+ *
+ * `detalleBiomas`: `false` (por defecto en `main.ts`) pinta la paleta simplificada — agua/montaña/cima
+ * distintas, el resto de tierra habitable en un único tono (`BIOMA_COLOR_SIMPLE`) — `true` pinta la
+ * paleta completa (`BIOMA_COLOR`), siete tonos distintos.
  */
-export function drawTerreno(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, mapa: Mapa): void {
+export function drawTerreno(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, mapa: Mapa, detalleBiomas: boolean): void {
   const scale = canvas.width / mapa.limites.ancho;
 
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(pintarBiomas(mapa), 0, 0, canvas.width, canvas.height);
+  ctx.drawImage(pintarBiomas(mapa, detalleBiomas), 0, 0, canvas.width, canvas.height);
   aplicarSombreado(ctx, canvas, mapa);
 
-  // Ríos encima del relieve ya compuesto — no deben teñirse por el sombreado.
+  // Ríos encima del relieve ya compuesto — no deben teñirse por el sombreado. Los navegables (Doc comercio
+  // fluvial, fases futuras — ver `RioZona.navegable`) se dibujan más gruesos: es la única señal hoy de que
+  // ya existe esa distinción bajo el capó, antes de que haya barcos que la usen de verdad.
   ctx.strokeStyle = 'rgba(38, 90, 145, 0.9)';
-  ctx.lineWidth = 2.5;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   for (const rio of mapa.listarRios()) {
     if (rio.puntos.length < 2) continue;
+    ctx.lineWidth = rio.navegable ? 5 : 2.5;
     ctx.beginPath();
     rio.puntos.forEach((p, i) => {
       const x = p.x * scale;
@@ -193,6 +225,25 @@ export function drawTerreno(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasEle
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     });
+    ctx.stroke();
+  }
+
+  // Chokepoints (Fase 0.3, Doc 1.5): geometría del mundo (determinista por seed), así que van en esta capa
+  // cacheada — QUIÉN los controla es estado de partida y se marca aparte, en `draw()` (ver `dibujarChokepointsControl`).
+  ctx.fillStyle = 'rgba(224, 160, 32, 0.5)';
+  ctx.strokeStyle = 'rgba(60, 45, 10, 0.85)';
+  ctx.lineWidth = 1.5;
+  for (const chokepoint of mapa.listarChokepoints()) {
+    const x = chokepoint.posicion.x * scale;
+    const y = chokepoint.posicion.y * scale;
+    const r = 6;
+    ctx.beginPath();
+    ctx.moveTo(x, y - r);
+    ctx.lineTo(x + r, y);
+    ctx.lineTo(x, y + r);
+    ctx.lineTo(x - r, y);
+    ctx.closePath();
+    ctx.fill();
     ctx.stroke();
   }
 }
@@ -231,6 +282,13 @@ export interface DrawState {
   zonas: ZonaInfluencia[];
   facciones: Faccion[];
   caravanas: Caravana[];
+  /** Caminos comerciales (Fase 0.3, Doc 1.6) — estado de PARTIDA, a diferencia de los ríos/chokepoints
+   * (mundo generado): se dibujan en `draw()` en vivo, nunca en la capa cacheada `drawTerreno`. */
+  caminos: CaminoComercial[];
+  /** Chokepoint id -> asentamiento controlador (Fase 0.3, Doc 1.5), YA CALCULADO por el motor
+   * (`GameStore.chokepointsControl`) — `canvas.ts` solo lo pinta, nunca recalcula la regla de control por
+   * su cuenta (acoplamiento 0 entre interfaz y motor). */
+  chokepointsControl: Map<string, string>;
 }
 
 /**
@@ -292,6 +350,41 @@ export function drawPreviewFundacion(
   ctx.fill();
 }
 
+// --- Glifos de árbol para la capa de bosques ---
+//
+// `hashSemilla`/`mulberry32`: PRNG determinista y barato para dispersar los árboles dentro de cada bosque.
+// Se deriva del `id` del bosque (no del RNG del juego, que `draw()` no debe consumir) para que las
+// posiciones sean estables entre frames y al hacer pan/zoom, en vez de recalcularse al azar cada vez.
+function hashSemilla(texto: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < texto.length; i++) {
+    h ^= texto.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function mulberry32(semilla: number): () => number {
+  let a = semilla;
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** Silueta diminuta de árbol (copa triangular + tronco) centrada en (x, y), del tamaño de canvas dado. */
+function dibujarGlifoArbol(ctx: CanvasRenderingContext2D, x: number, y: number, tamano: number): void {
+  ctx.beginPath();
+  ctx.moveTo(x, y - tamano);
+  ctx.lineTo(x + tamano * 0.65, y + tamano * 0.55);
+  ctx.lineTo(x - tamano * 0.65, y + tamano * 0.55);
+  ctx.closePath();
+  ctx.fill();
+}
+
 /**
  * `terrenoCache`: canvas offscreen ya pintado por `drawTerreno` (ver `main.ts`) — parámetro aparte de
  * `DrawState` a propósito, porque es un artefacto de RENDER (cacheado por seed+tamaño), no dato de juego.
@@ -307,18 +400,31 @@ export function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, s
   ctx.strokeStyle = '#4a4436';
   ctx.strokeRect(0, 0, canvas.width, canvas.height);
 
-  // Bosques (zonas). Se apoyan en el CONTORNO más que en el relleno: con 100 bosques sobre un relieve ya
-  // detallado, un relleno opaco tapaba el terreno y el mapa se volvía una masa verde. El contorno propio es
-  // lo que los hace legibles sin depender de contrastar con el bioma de debajo (varios son verdes/caqui
-  // parecidos), y el relleno translúcido solo insinúa la densidad de madera.
+  // Bosques (zonas). El relleno da la forma de la zona (sin contorno: los glifos de árbol sembrados encima
+  // ya marcan el borde por densidad) — la densidad de madera se lee tanto en la opacidad del relleno como en
+  // la cantidad de árboles, dando a los bosques una silueta propia, distinguible de otras capas translúcidas
+  // (fertilidad, zonas de influencia) que comparten el mismo vocabulario de "círculo/polígono semitransparente".
   for (const bosque of state.mapa.listarBosques()) {
+    const cx = bosque.centro.x * scale;
+    const cy = bosque.centro.y * scale;
+    const radioPx = bosque.radio * scale;
+
     ctx.beginPath();
-    ctx.arc(bosque.centro.x * scale, bosque.centro.y * scale, bosque.radio * scale, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(38, 92, 40, ${0.1 + bosque.densidad * 0.2})`;
+    ctx.arc(cx, cy, radioPx, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(38, 92, 40, ${0.18 + bosque.densidad * 0.22})`;
     ctx.fill();
-    ctx.strokeStyle = 'rgba(24, 66, 26, 0.75)';
-    ctx.lineWidth = 1.2;
-    ctx.stroke();
+
+    // Cantidad de árboles ∝ área*densidad; posiciones deterministas por id de bosque (ver `mulberry32`
+    // arriba) así no bailan entre frames. Muestreo uniforme en disco: r = radio·√rand, no r = radio·rand
+    // (que amontonaría los puntos en el centro).
+    const rand = mulberry32(hashSemilla(bosque.id));
+    const numArboles = Math.round(Math.min(60, Math.max(4, (radioPx * radioPx * bosque.densidad) / 22)));
+    ctx.fillStyle = 'rgba(22, 62, 24, 0.9)';
+    for (let i = 0; i < numArboles; i++) {
+      const angulo = rand() * Math.PI * 2;
+      const r = radioPx * Math.sqrt(rand());
+      dibujarGlifoArbol(ctx, cx + Math.cos(angulo) * r, cy + Math.sin(angulo) * r, 2.2);
+    }
   }
 
   // Nodos de recurso
@@ -345,6 +451,42 @@ export function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, s
     ctx.fillStyle = color + '33';
     ctx.fill();
     ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  // Caminos comerciales (Fase 0.3, Doc 1.6): estado de partida, no del mundo generado — a diferencia de los
+  // ríos, se dibujan aquí en vivo. Trazo discontinuo para distinguirlos de ríos (sólido, azul) y fronteras
+  // de zona (sólido, color de Facción). Marrón tierra deliberadamente distinto del ámbar de los chokepoints
+  // (`rgba(224, 160, 32, ...)` en `drawTerreno`) — con tonos parecidos eran indistinguibles de un vistazo.
+  ctx.strokeStyle = 'rgba(139, 90, 43, 0.9)';
+  ctx.lineWidth = 2.5;
+  ctx.setLineDash([6, 4]);
+  for (const camino of state.caminos) {
+    if (camino.puntos.length < 2) continue;
+    ctx.beginPath();
+    camino.puntos.forEach((p, i) => {
+      const x = p.x * scale;
+      const y = p.y * scale;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  // Control de chokepoints (Doc 1.5): anillo del color de la Facción del asentamiento controlador — el
+  // control ya viene calculado por el motor (`state.chokepointsControl`, ver `GameStore.chokepointsControl`
+  // / `engine/chokepoints.ts`), aquí solo se pinta. La geometría del chokepoint en sí (el rombo) ya viene
+  // pintada en la capa cacheada de `drawTerreno`.
+  for (const chokepoint of state.mapa.listarChokepoints()) {
+    const controladorId = state.chokepointsControl.get(chokepoint.id);
+    if (!controladorId) continue;
+    const asentamiento = state.asentamientos.find((a) => a.id === controladorId);
+    if (!asentamiento) continue;
+    ctx.beginPath();
+    ctx.arc(chokepoint.posicion.x * scale, chokepoint.posicion.y * scale, 10, 0, Math.PI * 2);
+    ctx.strokeStyle = faccionColor(asentamiento.faccionId, state.facciones);
     ctx.lineWidth = 2;
     ctx.stroke();
   }
@@ -380,6 +522,22 @@ export function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, s
     ctx.fill();
     ctx.strokeStyle = '#1b1a17';
     ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+
+  // Ruta de caravana en tránsito (Fase 0.3): traza tenue detrás del punto — ayuda a depurar visualmente que
+  // el pathfinding rodea montaña/agua en vez de ir en línea recta (ver `world/rutas.ts`).
+  ctx.strokeStyle = 'rgba(241, 230, 200, 0.35)';
+  ctx.lineWidth = 1.5;
+  for (const caravana of state.caravanas) {
+    if (!caravana.ruta || caravana.ruta.length < 2) continue;
+    ctx.beginPath();
+    caravana.ruta.forEach((p, i) => {
+      const x = p.x * scale;
+      const y = p.y * scale;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
     ctx.stroke();
   }
 
