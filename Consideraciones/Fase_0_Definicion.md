@@ -26,4 +26,8 @@ Objetivo: validar la simulación core (reglas, economía, crecimiento) sin inver
 - Combate visual/animado (el resultado numérico sí se prueba, pero no la representación)
 - Exploración con niebla de guerra o cualquier cosa que dependa de recorrer el mapa en primera/tercera persona
 - Todo lo estético (identidad visual, culturas de referencia)
-- Comercio marítimo, relieve de terreno (montañas/ríos/mar)
+- Comercio marítimo, mar
+- ~~Relieve de terreno (montañas/ríos)~~ — adelantado parcialmente en Fase 0.1 (ver
+  `Fase_0_1_Definicion.md`): el generador de mundo pasa a tener elevación/ríos/biomas, como preparación de
+  bajo costo para el mapa de campaña de Fase 1. Sigue sin haber mar ni movimiento/pathfinding sobre el
+  terreno.

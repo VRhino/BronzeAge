@@ -3,11 +3,13 @@
 // (dibujo/color, puramente presentacional). Nunca importa nada de `./engine/*` ni captura errores
 // de dominio: eso es responsabilidad exclusiva de `gameStore`. Los tipos de `./domain/types` se
 // importan solo como `type` para tipar lo que se lee — no acoplan a ninguna lógica.
-import type { Asentamiento, CargoTipo, Faccion } from './domain/types';
+import type { Asentamiento, BiomaTipo, CargoTipo, Faccion } from './domain/types';
 import { CATALOGOS, gameStore, type GameState, type CampoBalance } from './app/gameStore';
-import { draw, drawFiltroFertilidad, drawPreviewFundacion, faccionColor, RECURSO_COLOR, RECURSOS_EN_MAPA, EDIFICIO_COLOR, FACCION_COLORES, type DrawState } from './ui/canvas';
+import { draw, drawFiltroFertilidad, drawPreviewFundacion, drawTerreno, faccionColor, BIOMA_COLOR, RECURSO_COLOR, RECURSOS_EN_MAPA, EDIFICIO_COLOR, FACCION_COLORES, type DrawState } from './ui/canvas';
 
-const CANVAS_SIZE = 800;
+// Subido de 800 a 900 junto con el mapa 2000x2000 (Fase 0.1): el mundo más grande necesitaba algo más de
+// resolución física para que la capa de terreno/ríos no perdiera nitidez.
+const CANVAS_SIZE = 900;
 
 const RECURSO_NOMBRE: Record<string, string> = {
   madera: 'Madera',
@@ -31,6 +33,17 @@ const RECURSO_NOMBRE: Record<string, string> = {
   armaduraIntermedia: 'Armadura Intermedia',
   armaduraBronce: 'Armadura de Bronce',
 };
+
+/** Biomas (Fase 0.1) en orden de elevación creciente — así la leyenda se lee como una escala de altura. */
+const BIOMA_NOMBRE: [BiomaTipo, string][] = [
+  ['agua', 'Agua (lagos y cauces)'],
+  ['costa', 'Ribera'],
+  ['estepa', 'Estepa (llano seco)'],
+  ['llanuraFertil', 'Llanura fértil'],
+  ['colina', 'Colina'],
+  ['montana', 'Montaña'],
+  ['cima', 'Cima (inhabitable)'],
+];
 
 const EDIFICIO_NOMBRE: Record<string, string> = {
   centroUrbano: 'Centro Urbano',
@@ -115,6 +128,10 @@ let jugadorSeleccionadoId: string | null = null;
 let viewedTick = 0;
 let ultimoTickEnVivo = 0;
 let mostrarFiltroFertilidad = false;
+/** Cache de la capa de terreno (Fase 0.1): `drawTerreno` es cara (~900 muestras de bioma) para llamarla en
+ * cada `render()` (dispara en cada mousemove sobre el canvas), así que se pinta una vez a un canvas
+ * offscreen y se reusa mientras no cambien seed/tamaño — es un artefacto de render, no dato de juego. */
+let terrenoCache: { key: string; canvas: HTMLCanvasElement } | null = null;
 /** Grupos de la pestaña "Valores de simulación" que el usuario dejó expandidos (persiste solo en esta vista). */
 const balanceGruposAbiertos = new Set<string>();
 let balanceFiltro = '';
@@ -1255,6 +1272,11 @@ function renderLeyenda(state: GameState): void {
     (tipo) => `<div class="legend-row"><span class="swatch" style="background:${RECURSO_COLOR[tipo]}"></span>${RECURSO_NOMBRE[tipo] ?? tipo}</div>`
   ).join('');
 
+  // Terreno: los biomas son la capa de FONDO del mapa (ver `drawTerreno`), así que van primero en la leyenda.
+  const biomasHtml = BIOMA_NOMBRE.map(
+    ([bioma, nombre]) => `<div class="legend-row"><span class="swatch-poly" style="background:${BIOMA_COLOR[bioma]}"></span>${nombre}</div>`
+  ).join('');
+
   const edificiosHtml = Object.entries(EDIFICIO_COLOR)
     .map(([tipo, color]) => `<div class="legend-row"><span class="swatch-square" style="background:${color}"></span>${EDIFICIO_NOMBRE[tipo] ?? tipo}</div>`)
     .join('');
@@ -1265,6 +1287,12 @@ function renderLeyenda(state: GameState): void {
       .join('') || '<div class="legend-note">Sin Facciones.</div>';
 
   legendBodyEl.innerHTML = `
+    <div class="legend-group">
+      <h3>Terreno (de menor a mayor altura)</h3>
+      ${biomasHtml}
+      <div class="legend-row"><span class="swatch-poly" style="background:rgba(38,90,145,0.9)"></span>Río</div>
+      <div class="legend-note">El relieve se sombrea con luz desde el noroeste: la ladera clara mira a la luz, la oscura queda a la sombra. En Cima no se puede fundar ni extraer.</div>
+    </div>
     <div class="legend-group">
       <h3>Recursos</h3>
       ${recursosHtml}
@@ -1325,6 +1353,20 @@ document.getElementById('fertilidad-checkbox')!.addEventListener('change', (ev) 
   render();
 });
 
+/** Devuelve el canvas offscreen con la capa de terreno para este mundo/tamaño, regenerándolo solo si
+ * cambió la seed o el tamaño del canvas visible (ver `terrenoCache`). */
+function terrenoCacheParaFrame(mapa: DrawState['mapa']): HTMLCanvasElement {
+  const key = `${mapa.seed}-${canvas.width}x${canvas.height}`;
+  if (terrenoCache?.key !== key) {
+    const off = document.createElement('canvas');
+    off.width = canvas.width;
+    off.height = canvas.height;
+    drawTerreno(off.getContext('2d')!, off, mapa);
+    terrenoCache = { key, canvas: off };
+  }
+  return terrenoCache.canvas;
+}
+
 function render(): void {
   const liveState = gameStore.getState();
 
@@ -1348,7 +1390,7 @@ function render(): void {
   controlsPanelEl.classList.toggle('viendo-pasado', viendoPasado);
 
   const drawState: DrawState = { mapa: gameStore.getMapa(state), asentamientos: state.asentamientos, zonas: gameStore.getZonas(state.asentamientos), facciones: state.facciones, caravanas: state.caravanas };
-  draw(ctx, canvas, drawState);
+  draw(ctx, canvas, drawState, terrenoCacheParaFrame(drawState.mapa));
   if (mostrarFiltroFertilidad) drawFiltroFertilidad(ctx, canvas, gameStore.getMapa(state));
   renderViabilidadFundacion(viendoPasado);
   actualizarSelects(liveState);
@@ -1398,7 +1440,9 @@ function renderViabilidadFundacion(viendoPasado: boolean): void {
   if (!v.fundable) {
     fundacionViabilidadEl.textContent = !v.dentroDelMapa
       ? '✖ Fuera de los límites del mapa.'
-      : '✖ Dentro de una zona de influencia existente.';
+      : !v.terrenoValido
+        ? '✖ Terreno de cima: inhabitable, no se puede fundar aquí.'
+        : '✖ Dentro de una zona de influencia existente.';
     fundacionViabilidadEl.className = 'fundacion-viabilidad no-fundable';
   } else if (!v.bosqueAlcanzable) {
     fundacionViabilidadEl.textContent = `⚠ Sin bosque al alcance: no podrá construir Leñera, y la madera paga Mantenimiento desde el primer tick. Se puede fundar igual, pero es el emplazamiento con más riesgo de acabar en ruinas.${recursos ? ` En el radio: ${recursos}.` : ''}`;

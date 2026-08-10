@@ -1,4 +1,4 @@
-import type { Asentamiento, Caravana, EdificioTipo, Faccion, RecursoTipo, ZonaInfluencia } from '../domain/types';
+import type { Asentamiento, BiomaTipo, Caravana, EdificioTipo, Faccion, RecursoTipo, ZonaInfluencia } from '../domain/types';
 import type { Mapa } from '../world/mapa';
 
 export const FACCION_COLORES = ['#c0392b', '#2980b9', '#27ae60', '#8e44ad', '#d35400', '#16a085'];
@@ -33,6 +33,169 @@ export const RECURSO_COLOR: Record<RecursoTipo, string> = {
 
 /** Tipos de recurso que SÍ se dibujan como punto en el mapa (para la leyenda) — trigo y madera no lo son. */
 export const RECURSOS_EN_MAPA: RecursoTipo[] = ['piedra', 'cobre', 'estano', 'oro', 'livestock'];
+
+// Paleta de biomas (Fase 0.1) — tonos de terreno, deliberadamente más apagados que RECURSO_COLOR para que
+// nodos/bosques/edificios sigan destacando encima. 'cima' pálida (aspecto de nieve): señal visual de "aquí
+// no se puede fundar ni extraer" (ver `evaluarViabilidadFundacion`).
+export const BIOMA_COLOR: Record<BiomaTipo, string> = {
+  agua: '#3a6ea5',
+  costa: '#c9b98a',
+  estepa: '#b0a15a',
+  llanuraFertil: '#5a8f4a',
+  colina: '#7a6b4a',
+  montana: '#6b6b6b',
+  cima: '#e9edf0',
+};
+
+/** `BIOMA_COLOR` precalculado a componentes RGB: el pintado del terreno escribe en un `ImageData` píxel a
+ * píxel (mucho más rápido que un `fillRect` por celda) y ahí hacen falta los canales sueltos, no el hex. */
+const BIOMA_RGB = Object.fromEntries(
+  Object.entries(BIOMA_COLOR).map(([bioma, hex]) => [
+    bioma,
+    [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)] as const,
+  ])
+) as Record<BiomaTipo, readonly [number, number, number]>;
+
+// --- Capa de terreno: color de bioma + sombreado de relieve (hillshade) ---
+//
+// El COLOR y el RELIEVE se muestrean a resoluciones distintas a propósito, porque cuestan cosas muy
+// diferentes: `biomaEn` es cara (fertilidad + distancia a cada segmento de cada río) y no necesita detalle
+// fino (son manchas grandes), mientras que `elevacionEn` es barata (4 octavas de seno) y sí lo necesita —
+// el relieve es lo que aporta el detalle, y a baja resolución se ve escalonado. El color se pinta pequeño
+// y se escala con el suavizado del navegador (así no quedan bordes de bloque); el sombreado se calcula a
+// resolución del canvas y se multiplica sobre el resultado.
+
+/** Resolución de muestreo del COLOR de bioma. */
+const RES_BIOMA = 128;
+
+/**
+ * Convierte la elevación normalizada 0-1 en una ALTURA en unidades de mapa, para que `dz/dx` sea una
+ * pendiente geométrica real con la que el modelo Lambert tenga sentido.
+ *
+ * MEDIDO, no estimado: el gradiente del campo (`|∇elevación|` por unidad de mapa, seed 1) es p50 ≈ 1.1e-3,
+ * p90 ≈ 2.1e-3, máx ≈ 3.2e-3. Con 350 la pendiente típica queda en ~0.39 (≈21°) y la máxima en ~1.1 (≈48°):
+ * rango donde el sombreado modela volumen de verdad sin que toda ladera sature. Los primeros intentos de
+ * esta capa fallaron justo aquí — con una escala ~6x mayor cualquier ladera daba 60-80° y el resultado eran
+ * bandas duras en vez de relieve.
+ */
+const ESCALA_RELIEVE = 350;
+
+/** Color de bioma en una rejilla `RES_BIOMA`², sin sombrear. */
+function pintarBiomas(mapa: Mapa): HTMLCanvasElement {
+  const capa = document.createElement('canvas');
+  capa.width = RES_BIOMA;
+  capa.height = RES_BIOMA;
+  const cctx = capa.getContext('2d')!;
+  const img = cctx.createImageData(RES_BIOMA, RES_BIOMA);
+  const paso = mapa.limites.ancho / RES_BIOMA;
+
+  for (let fila = 0; fila < RES_BIOMA; fila++) {
+    for (let col = 0; col < RES_BIOMA; col++) {
+      const [r, g, b] = BIOMA_RGB[mapa.biomaEn({ x: (col + 0.5) * paso, y: (fila + 0.5) * paso })];
+      const i = (fila * RES_BIOMA + col) * 4;
+      img.data[i] = r;
+      img.data[i + 1] = g;
+      img.data[i + 2] = b;
+      img.data[i + 3] = 255;
+    }
+  }
+  cctx.putImageData(img, 0, 0);
+  return capa;
+}
+
+/**
+ * Multiplica el sombreado de relieve sobre los píxeles YA pintados del canvas (el color de bioma).
+ *
+ * Se hace leyendo y reescribiendo el `ImageData` en vez de componer dos capas con
+ * `globalCompositeOperation`: 'multiply' oscurecería el mapa entero (nada puede aclarar) y 'overlay' —que sí
+ * aclara y oscurece— arrastra los tonos hacia el gris medio, dejando el mapa lavado. Multiplicando a mano se
+ * controla el factor exacto: <1 oscurece la ladera en sombra, >1 aclara la iluminada, y el color de bioma
+ * conserva su saturación.
+ *
+ * Modelo Lambert estándar de cartografía: normal de la superficie `(-dz/dx, -dz/dy, 1)` contra una luz fija
+ * en azimut 315° (noroeste) y 45° sobre el horizonte. El noroeste es la convención de los mapas de relieve
+ * porque el cerebro interpreta "luz desde arriba-izquierda" como volumen saliente; con la luz desde el sur
+ * el relieve se invierte visualmente (las montañas se leen como cráteres).
+ */
+function aplicarSombreado(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, mapa: Mapa): void {
+  const ancho = canvas.width;
+  const alto = canvas.height;
+  const paso = mapa.limites.ancho / ancho;
+
+  // Alturas precalculadas: cada píxel consulta a sus 4 vecinos para el gradiente, así que muestrear al vuelo
+  // repetiría cada punto ~5 veces.
+  const alturas = new Float64Array(ancho * alto);
+  for (let fila = 0; fila < alto; fila++) {
+    const y = (fila + 0.5) * paso;
+    for (let col = 0; col < ancho; col++) {
+      alturas[fila * ancho + col] = mapa.elevacionEn({ x: (col + 0.5) * paso, y }) * ESCALA_RELIEVE;
+    }
+  }
+
+  // Vector unitario hacia la luz (azimut 315°, altitud 45°) en coordenadas de pantalla (+x este, +y sur).
+  const luzX = -0.5;
+  const luzY = -0.5;
+  const luzZ = Math.SQRT1_2;
+  /** Iluminación de una superficie horizontal: el factor de una zona llana debe ser 1 (color intacto). */
+  const lambertPlano = luzZ;
+
+  const img = ctx.getImageData(0, 0, ancho, alto);
+  const datos = img.data;
+
+  for (let fila = 0; fila < alto; fila++) {
+    const arriba = Math.max(0, fila - 1) * ancho;
+    const abajo = Math.min(alto - 1, fila + 1) * ancho;
+    const actual = fila * ancho;
+    for (let col = 0; col < ancho; col++) {
+      const dzdx = (alturas[actual + Math.min(ancho - 1, col + 1)]! - alturas[actual + Math.max(0, col - 1)]!) / (2 * paso);
+      const dzdy = (alturas[abajo + col]! - alturas[arriba + col]!) / (2 * paso);
+      const longitud = Math.hypot(dzdx, dzdy, 1);
+      const lambert = Math.max(0, (-dzdx * luzX - dzdy * luzY + luzZ) / longitud);
+      // Suelo en 0.35 para que la cara en sombra conserve algo de color en vez de irse a negro — el
+      // equivalente barato de una luz ambiente.
+      const factor = Math.max(0.35, lambert / lambertPlano);
+
+      const i = (actual + col) * 4;
+      datos[i] = Math.min(255, datos[i]! * factor);
+      datos[i + 1] = Math.min(255, datos[i + 1]! * factor);
+      datos[i + 2] = Math.min(255, datos[i + 2]! * factor);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+/**
+ * Capa de FONDO de terreno: color de bioma + sombreado de relieve + ríos. A diferencia de
+ * `drawFiltroFertilidad` (overlay opcional, dibujado ENCIMA de todo) esta es la base: el caller la pinta
+ * ANTES que bosques/nodos/zonas/edificios. Coste alto (`RES_BIOMA`² consultas de bioma + una pasada de
+ * elevación por píxel) — el caller debe cachearla en un canvas offscreen en vez de llamarla en cada
+ * `render()` (ver `main.ts`).
+ */
+export function drawTerreno(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, mapa: Mapa): void {
+  const scale = canvas.width / mapa.limites.ancho;
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(pintarBiomas(mapa), 0, 0, canvas.width, canvas.height);
+  aplicarSombreado(ctx, canvas, mapa);
+
+  // Ríos encima del relieve ya compuesto — no deben teñirse por el sombreado.
+  ctx.strokeStyle = 'rgba(38, 90, 145, 0.9)';
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  for (const rio of mapa.listarRios()) {
+    if (rio.puntos.length < 2) continue;
+    ctx.beginPath();
+    rio.puntos.forEach((p, i) => {
+      const x = p.x * scale;
+      const y = p.y * scale;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  }
+}
 
 export const EDIFICIO_COLOR: Record<EdificioTipo, string> = {
   centroUrbano: '#9b59b6',
@@ -129,20 +292,33 @@ export function drawPreviewFundacion(
   ctx.fill();
 }
 
-export function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, state: DrawState): void {
+/**
+ * `terrenoCache`: canvas offscreen ya pintado por `drawTerreno` (ver `main.ts`) — parámetro aparte de
+ * `DrawState` a propósito, porque es un artefacto de RENDER (cacheado por seed+tamaño), no dato de juego.
+ * `undefined` = no pintar capa de terreno (p. ej. mientras se genera el primer frame).
+ */
+export function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, state: DrawState, terrenoCache?: HTMLCanvasElement): void {
   const scale = canvas.width / state.mapa.limites.ancho;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (terrenoCache) ctx.drawImage(terrenoCache, 0, 0);
 
   // Límites del mapa
   ctx.strokeStyle = '#4a4436';
   ctx.strokeRect(0, 0, canvas.width, canvas.height);
 
-  // Bosques (zonas)
+  // Bosques (zonas). Se apoyan en el CONTORNO más que en el relleno: con 100 bosques sobre un relieve ya
+  // detallado, un relleno opaco tapaba el terreno y el mapa se volvía una masa verde. El contorno propio es
+  // lo que los hace legibles sin depender de contrastar con el bioma de debajo (varios son verdes/caqui
+  // parecidos), y el relleno translúcido solo insinúa la densidad de madera.
   for (const bosque of state.mapa.listarBosques()) {
     ctx.beginPath();
     ctx.arc(bosque.centro.x * scale, bosque.centro.y * scale, bosque.radio * scale, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(63, 125, 58, ${0.12 + bosque.densidad * 0.18})`;
+    ctx.fillStyle = `rgba(38, 92, 40, ${0.1 + bosque.densidad * 0.2})`;
     ctx.fill();
+    ctx.strokeStyle = 'rgba(24, 66, 26, 0.75)';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
   }
 
   // Nodos de recurso

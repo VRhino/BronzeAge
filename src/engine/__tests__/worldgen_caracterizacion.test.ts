@@ -10,14 +10,22 @@
 //  2. INVARIANTES: el contrato que debe seguir cumpliéndose aunque el snapshot se regenere a propósito
 //     (ids únicos para los `fuenteId` de los edificios, nodos dentro del mapa, fertilidad normalizada...).
 import { describe, expect, it } from 'vitest';
-import { evaluarFertilidad, generarMapa, type MapaGenerado } from '../../worldgen';
-import { BOSQUE, LIVESTOCK, MAPA_DEFAULT, RECURSO_RAREZA, RECURSO_TIPOS_POR_RAREZA } from '../../worldgen/config';
+import { evaluarBioma, evaluarElevacion, evaluarFertilidad, evaluarTerreno, generarMapa, type MapaGenerado } from '../../worldgen';
+import {
+  BOSQUE,
+  LIVESTOCK,
+  MAPA_DEFAULT,
+  RECURSO_BIOMA_PERMITIDO,
+  RECURSO_RAREZA,
+  RECURSO_TIPOS_POR_RAREZA,
+  RIOS,
+} from '../../worldgen/config';
 
 /** Seeds fijos: 1 es el de la partida por defecto (`gameStore`), 42 el de los tests de determinismo, 7 uno suelto. */
 const SEEDS = [1, 42, 7];
 
-/** Resolución del muestreo del campo de fertilidad. 20x20 = 400 puntos, suficiente para que dos campos
- * distintos no puedan coincidir por casualidad, y compacto de leer en el snapshot. */
+/** Resolución del muestreo del campo de fertilidad/elevación. 20x20 = 400 puntos, suficiente para que dos
+ * campos distintos no puedan coincidir por casualidad, y compacto de leer en el snapshot. */
 const CELDAS_FERTILIDAD = 20;
 
 function crear(seed: number): MapaGenerado {
@@ -62,7 +70,30 @@ function digest(world: MapaGenerado) {
     world.bosques.some((b) => distancia(n.posicion, b.centro) < b.radio)
   ).length;
 
-  return { conteoPorTipo, nodosDentroDeBosque, bosques, nodos, fertilidad };
+  // Campo de elevación muestreado igual que fertilidad — misma rejilla, mismo criterio de precisión.
+  const elevacion = Array.from({ length: CELDAS_FERTILIDAD }, (_, fila) =>
+    Array.from({ length: CELDAS_FERTILIDAD }, (_, col) =>
+      evaluarElevacion(world.elevacion, { x: (col + 0.5) * paso, y: (fila + 0.5) * paso }).toFixed(6)
+    ).join(' ')
+  );
+
+  const rios = world.rios.map((r) => {
+    const extremo = r.puntos[r.puntos.length - 1]!;
+    return `${r.id} n=${r.puntos.length} fin=(${extremo.x.toFixed(6)},${extremo.y.toFixed(6)}) lago=${r.terminaEnLago}`;
+  });
+
+  // Cumplimiento de bioma por tipo de recurso: informativo, NO se asume 100% — `colocarConEspaciado` tiene
+  // el mismo fallback de "mapa saturado, coloca igual" que ya usa `nodosDentroDeBosque` arriba.
+  const cumplimientoBiomaPorTipo: Record<string, string> = {};
+  for (const tipo of Object.keys(RECURSO_BIOMA_PERMITIDO)) {
+    const deEsteTipo = world.nodos.filter((n) => n.tipo === tipo);
+    if (deEsteTipo.length === 0) continue;
+    const permitido = RECURSO_BIOMA_PERMITIDO[tipo]!;
+    const enBioma = deEsteTipo.filter((n) => permitido.includes(evaluarBioma(world.elevacion, world.fertilidad, world.rios, n.posicion))).length;
+    cumplimientoBiomaPorTipo[tipo] = `${enBioma}/${deEsteTipo.length}`;
+  }
+
+  return { conteoPorTipo, nodosDentroDeBosque, cumplimientoBiomaPorTipo, bosques, nodos, rios, fertilidad, elevacion };
 }
 
 describe('caracterización de la generación de mundo', () => {
@@ -173,5 +204,74 @@ describe('invariantes de la generación de mundo', () => {
     const min = Math.min(...muestras);
     const max = Math.max(...muestras);
     expect(max - min).toBeGreaterThan(0.2);
+  });
+
+  // --- Fase 0.1: relieve, ríos y bioma ---
+
+  it('el campo de elevación devuelve valores normalizados 0-1 en todo el mapa, incluido fuera de límites', () => {
+    for (const seed of SEEDS) {
+      const world = crear(seed);
+      const puntos = [
+        { x: 0, y: 0 },
+        { x: world.config.ancho, y: world.config.alto },
+        { x: -200, y: -200 },
+        { x: world.config.ancho + 200, y: world.config.alto + 200 },
+        { x: 500.5, y: 123.25 },
+      ];
+      for (const p of puntos) {
+        const valor = evaluarElevacion(world.elevacion, p);
+        expect(valor).toBeGreaterThanOrEqual(0);
+        expect(valor).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
+  it('el campo de elevación tiene variación real (no es una constante)', () => {
+    const world = crear(1);
+    const muestras = Array.from({ length: 200 }, (_, i) =>
+      evaluarElevacion(world.elevacion, { x: (i * 37) % world.config.ancho, y: (i * 53) % world.config.alto })
+    );
+    const min = Math.min(...muestras);
+    const max = Math.max(...muestras);
+    expect(max - min).toBeGreaterThan(0.2);
+  });
+
+  it('terrenoEn/evaluarBioma siempre devuelven un valor definido, incluido fuera de límites', () => {
+    const TERRENOS = ['agua', 'costa', 'llano', 'colina', 'montana', 'cima'];
+    const BIOMAS = ['agua', 'costa', 'estepa', 'llanuraFertil', 'colina', 'montana', 'cima'];
+    for (const seed of SEEDS) {
+      const world = crear(seed);
+      const puntos = [
+        { x: 0, y: 0 },
+        { x: world.config.ancho, y: world.config.alto },
+        { x: -200, y: -200 },
+        { x: world.config.ancho + 200, y: world.config.alto + 200 },
+        { x: 500.5, y: 123.25 },
+      ];
+      for (const p of puntos) {
+        expect(TERRENOS).toContain(evaluarTerreno(world.elevacion, p));
+        expect(BIOMAS).toContain(evaluarBioma(world.elevacion, world.fertilidad, world.rios, p));
+      }
+    }
+  });
+
+  it('hay exactamente RIOS.cantidad ríos y todo punto de todo río cae dentro del mapa', () => {
+    // >=1 es la garantía estructural (`generarRios` siempre empuja el nacimiento); un río de un solo punto
+    // es un nacimiento sin pendiente clara alrededor (colocación condicionada al gradiente, ver `rios.ts`,
+    // o el fallback de "mapa saturado" que comparte con `colocarConEspaciado`) — no se renderiza como línea
+    // (`canvas.ts` lo salta), pero no es un error de generación.
+    for (const seed of SEEDS) {
+      const world = crear(seed);
+      expect(world.rios).toHaveLength(RIOS.cantidad);
+      for (const rio of world.rios) {
+        expect(rio.puntos.length).toBeGreaterThanOrEqual(1);
+        for (const p of rio.puntos) {
+          expect(p.x).toBeGreaterThanOrEqual(0);
+          expect(p.x).toBeLessThanOrEqual(world.config.ancho);
+          expect(p.y).toBeGreaterThanOrEqual(0);
+          expect(p.y).toBeLessThanOrEqual(world.config.alto);
+        }
+      }
+    }
   });
 });

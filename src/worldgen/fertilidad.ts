@@ -1,22 +1,22 @@
 import type { Point } from '../domain/types';
 import { FERTILIDAD } from './config';
-import { randRange, type RandomFn } from './rng';
+import { evaluarRuido, generarCampoRuido } from './ruido';
+import type { RandomFn } from './rng';
 import type { CampoFertilidad } from './types';
 
 /**
- * Campo de fertilidad continuo (0-1) por suma de senos con fase aleatoria — sin dependencias externas.
+ * Campo de fertilidad continuo (0-1): ruido fractal de gradiente (ver `ruido.ts`), con menos octavas y
+ * formaciones más grandes que la elevación — la fertilidad son manchas amplias, no terreno accidentado.
  * Devuelve los PARÁMETROS del campo, no una función ya cerrada sobre ellos: así el campo es serializable,
  * comparable entre dos generaciones e inspeccionable desde un test. Para consultarlo, `evaluarFertilidad`.
  */
 export function generarCampoFertilidad(rng: RandomFn): CampoFertilidad {
-  const octavas = Array.from({ length: FERTILIDAD.octavas }, (_, i) => ({
-    freq: FERTILIDAD.escala * (i + 1),
-    faseX: randRange(rng, 0, Math.PI * 2),
-    faseY: randRange(rng, 0, Math.PI * 2),
-    peso: 1 / (i + 1),
-  }));
-  const pesoTotal = octavas.reduce((acc, o) => acc + o.peso, 0);
-  return { octavas, pesoTotal };
+  return generarCampoRuido(rng, {
+    octavas: FERTILIDAD.octavas,
+    frecuenciaBase: FERTILIDAD.escala,
+    lacunaridad: FERTILIDAD.lacunaridad,
+    persistencia: FERTILIDAD.persistencia,
+  });
 }
 
 /**
@@ -25,10 +25,5 @@ export function generarCampoFertilidad(rng: RandomFn): CampoFertilidad {
  * muestreos en anillo del motor (colocación de Granjas) pueden salirse del borde.
  */
 export function evaluarFertilidad(campo: CampoFertilidad, p: Point): number {
-  let valor = 0;
-  for (const o of campo.octavas) {
-    const s = Math.sin(p.x * o.freq + o.faseX) * Math.cos(p.y * o.freq + o.faseY);
-    valor += ((s + 1) / 2) * o.peso;
-  }
-  return valor / campo.pesoTotal;
+  return evaluarRuido(campo, p);
 }

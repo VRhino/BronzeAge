@@ -198,6 +198,34 @@ export interface ZonaBosque {
   densidad: number; // 0-1, afecta rendimiento de madera
 }
 
+/**
+ * Relieve (Fase 0.1, Doc `Fase_0_1_Definicion.md`). Deriva de `CampoElevacion` por umbral — nunca se guarda
+ * por punto, se consulta con `Mapa.terrenoEn`/`evaluarTerreno`. 'agua' aquí es "elevación baja" (lago/cauce),
+ * no mar — comercio marítimo sigue fuera de alcance. 'cima' es la franja de elevación MÁS alta, por encima de
+ * 'montana': terreno inhabitable — no se puede fundar ahí (`evaluarViabilidadFundacion`/`fundarAsentamiento`)
+ * ni se generan recursos ahí (`RECURSO_BIOMA_PERMITIDO`/`BOSQUE_TERRENO_PERMITIDO` nunca la listan).
+ */
+export type TerrenoTipo = 'agua' | 'costa' | 'llano' | 'colina' | 'montana' | 'cima';
+
+/**
+ * Bioma (Fase 0.1): terreno + fertilidad + humedad (proxy = cercanía a río). Nunca se guarda por punto —
+ * ver `evaluarBioma`. Mismo nivel de granularidad que `Rareza`.
+ */
+export type BiomaTipo = 'agua' | 'costa' | 'estepa' | 'llanuraFertil' | 'colina' | 'montana' | 'cima';
+
+/**
+ * Río (Fase 0.1): polilínea de puntos, no celdas — nace en un punto alto y desciende por gradiente de
+ * máxima pendiente del campo de elevación hasta agua/borde del mapa, o queda atrapado en un mínimo local
+ * (lago) — ver `generarRios`.
+ */
+export interface RioZona {
+  id: string;
+  puntos: Point[];
+  /** true si el descenso terminó en un mínimo local (gradiente ~0) en vez de llegar a 'agua' o al borde
+   * del mapa — informativo, no cambia el trazo. */
+  terminaEnLago: boolean;
+}
+
 export interface WorldConfig {
   ancho: number;
   alto: number;

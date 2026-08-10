@@ -29,7 +29,7 @@ exports[`snapshot de regresión general > resumen del estado en ticks de referen
             "recurso": "piedra",
           },
           {
-            "cantidad": 102.5,
+            "cantidad": 105.13,
             "recurso": "trigo",
           },
           {
@@ -86,7 +86,7 @@ exports[`snapshot de regresión general > resumen del estado en ticks de referen
         },
         "recursosClave": [
           {
-            "cantidad": 41.8,
+            "cantidad": 37.75,
             "recurso": "madera",
           },
           {
@@ -94,7 +94,7 @@ exports[`snapshot de regresión general > resumen del estado en ticks de referen
             "recurso": "piedra",
           },
           {
-            "cantidad": 118.62,
+            "cantidad": 144.89,
             "recurso": "trigo",
           },
           {
@@ -139,32 +139,32 @@ exports[`snapshot de regresión general > resumen del estado en ticks de referen
           "armeria:activo": 1,
           "cantera:activo": 1,
           "centroUrbano:activo": 1,
+          "corral:activo": 1,
           "curtiduria:activo": 1,
           "fundicion:activo": 1,
-          "granja:activo": 4,
+          "granja:activo": 3,
           "lenera:activo": 3,
-          "vivienda:activo": 12,
-          "vivienda:en_construccion": 1,
+          "vivienda:activo": 13,
         },
         "escuadrones": 0,
         "medidorMantenimiento": 100,
         "nivel": 1,
         "poblacion": {
-          "artesanos": 10,
+          "artesanos": 6,
           "nobleza": 0,
-          "pesants": 164,
+          "pesants": 168,
         },
         "recursosClave": [
           {
-            "cantidad": 249.15,
+            "cantidad": 83.7,
             "recurso": "madera",
           },
           {
-            "cantidad": 275,
+            "cantidad": 220,
             "recurso": "piedra",
           },
           {
-            "cantidad": 643.99,
+            "cantidad": 605.21,
             "recurso": "trigo",
           },
           {
@@ -205,12 +205,10 @@ exports[`snapshot de regresión general > resumen del estado en ticks de referen
     "asentamientos": [
       {
         "edificios": {
-          "cantera:activo": 1,
+          "cantera:en_construccion": 1,
           "centroUrbano:activo": 1,
-          "curtiduria:en_construccion": 1,
+          "corral:activo": 1,
           "granja:activo": 1,
-          "granja:en_cola": 1,
-          "granja:en_construccion": 1,
           "lenera:activo": 3,
           "vivienda:activo": 4,
         },
@@ -224,15 +222,15 @@ exports[`snapshot de regresión general > resumen del estado en ticks de referen
         },
         "recursosClave": [
           {
-            "cantidad": 24.39,
+            "cantidad": 101.98,
             "recurso": "madera",
           },
           {
-            "cantidad": 30,
+            "cantidad": 20,
             "recurso": "piedra",
           },
           {
-            "cantidad": 125.74,
+            "cantidad": 191.43,
             "recurso": "trigo",
           },
           {
@@ -248,7 +246,7 @@ exports[`snapshot de regresión general > resumen del estado en ticks de referen
             "recurso": "oro",
           },
           {
-            "cantidad": 0,
+            "cantidad": 15,
             "recurso": "livestock",
           },
         ],
@@ -274,12 +272,14 @@ exports[`snapshot de regresión general > resumen del estado en ticks de referen
       {
         "edificios": {
           "almacen:activo": 1,
-          "armeria:activo": 1,
+          "armeria:en_construccion": 1,
           "cantera:activo": 1,
           "centroUrbano:activo": 1,
+          "corral:activo": 1,
           "curtiduria:activo": 1,
-          "fundicion:en_cola": 1,
-          "granja:activo": 4,
+          "granja:activo": 1,
+          "granja:en_cola": 1,
+          "granja:en_construccion": 1,
           "lenera:activo": 3,
           "vivienda:activo": 6,
         },
@@ -289,19 +289,19 @@ exports[`snapshot de regresión general > resumen del estado en ticks de referen
         "poblacion": {
           "artesanos": 2,
           "nobleza": 0,
-          "pesants": 71,
+          "pesants": 79,
         },
         "recursosClave": [
           {
-            "cantidad": 30.86,
+            "cantidad": 33.83,
             "recurso": "madera",
           },
           {
-            "cantidad": 55,
+            "cantidad": 40,
             "recurso": "piedra",
           },
           {
-            "cantidad": 220.55,
+            "cantidad": 194.78,
             "recurso": "trigo",
           },
           {
@@ -317,7 +317,7 @@ exports[`snapshot de regresión general > resumen del estado en ticks de referen
             "recurso": "oro",
           },
           {
-            "cantidad": 0,
+            "cantidad": 35,
             "recurso": "livestock",
           },
         ],

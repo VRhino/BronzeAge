@@ -64,7 +64,10 @@ export interface ViabilidadFundacion {
   bosqueAlcanzable: boolean;
   /** Nodos de recurso que caen dentro del radio inicial, agrupados por tipo. */
   recursosEnRadio: { tipo: string; nodos: number }[];
-  /** Se puede fundar aquí (lo que valida `fundarAsentamiento`): dentro del mapa y sin solapar otra zona. */
+  /** `false` si el terreno es 'cima' (Fase 0.1) — banda de elevación más alta, inhabitable. */
+  terrenoValido: boolean;
+  /** Se puede fundar aquí (lo que valida `fundarAsentamiento`): dentro del mapa, sin solapar otra zona y en
+   * terreno habitable (no 'cima'). */
   fundable: boolean;
   /** Además de fundable, el emplazamiento es SOSTENIBLE (tiene madera al alcance). */
   recomendable: boolean;
@@ -89,6 +92,8 @@ export function evaluarViabilidadFundacion(
 ): ViabilidadFundacion {
   const enMapa = mapa.dentroDelMapa(posicion);
   const libre = posicionLibreParaFundar(posicion, asentamientosExistentes);
+  // Fase 0.1: 'cima' (banda de elevación más alta) es inhabitable — no se puede fundar ahí.
+  const terrenoValido = mapa.terrenoEn(posicion) !== 'cima';
   const radio = ZONA_INFLUENCIA.radioInicial;
 
   // Un bosque es alcanzable si su BORDE entra en el radio inicial, no hace falta que lo esté su centro —
@@ -100,13 +105,14 @@ export function evaluarViabilidadFundacion(
     porTipo.set(nodo.tipo, (porTipo.get(nodo.tipo) ?? 0) + 1);
   }
 
-  const fundable = enMapa && libre;
+  const fundable = enMapa && libre && terrenoValido;
   return {
     radioInicial: radio,
     dentroDelMapa: enMapa,
     posicionLibre: libre,
     bosqueAlcanzable,
     recursosEnRadio: [...porTipo.entries()].map(([tipo, nodos]) => ({ tipo, nodos })),
+    terrenoValido,
     fundable,
     recomendable: fundable && bosqueAlcanzable,
   };
@@ -137,6 +143,9 @@ export function fundarAsentamiento(
   }
   if (!posicionLibreParaFundar(posicion, asentamientosExistentes)) {
     throw new FundacionInvalidaError('La posición está dentro de una zona de influencia existente.');
+  }
+  if (mapa.terrenoEn(posicion) === 'cima') {
+    throw new FundacionInvalidaError('La posición cae en terreno de cima — inhabitable.');
   }
 
   const faccion = facciones.find((f) => f.id === faccionId);

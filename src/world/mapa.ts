@@ -16,8 +16,15 @@
 // le pasan como parámetro — el motor sigue mandando.
 
 import { LENERA_POR_BOSQUE } from '../constants';
-import type { NodoRecurso, Point, ZonaBosque } from '../domain/types';
-import { evaluarFertilidad, type MapaGenerado } from '../worldgen';
+import type { BiomaTipo, NodoRecurso, Point, RioZona, TerrenoTipo, ZonaBosque } from '../domain/types';
+import {
+  distanciaARioMasCercano,
+  evaluarBioma,
+  evaluarElevacion,
+  evaluarFertilidad,
+  evaluarTerreno,
+  type MapaGenerado,
+} from '../worldgen';
 import { boundingBox, distancia, pointInPolygon } from './geometria';
 
 /**
@@ -144,13 +151,39 @@ export class Mapa {
     return p.x >= 0 && p.x <= this.generado.config.ancho && p.y >= 0 && p.y <= this.generado.config.alto;
   }
 
+  /** Elevación continua 0-1 en un punto cualquiera (Fase 0.1) — ver `evaluarElevacion`. */
+  elevacionEn(p: Point): number {
+    return evaluarElevacion(this.generado.elevacion, p);
+  }
+
   /**
-   * Tipo de terreno en un punto. Fase 0 tiene el terreno completamente plano (Doc 1.1: sin relieve, ríos ni
-   * mar), así que hoy siempre responde 'llano'. Existe para que las fases con relieve tengan dónde entrar
-   * sin volver a repartir conocimiento del mapa por todo el motor — ver Doc 1.5 (chokepoints).
+   * Tipo de terreno en un punto (Fase 0.1: relieve real, derivado del campo de elevación por umbral —
+   * antes era un stub fijo a 'llano'). Ver Doc 1.5 (chokepoints) para el consumidor futuro de esto.
    */
-  terrenoEn(_p: Point): 'llano' {
-    return 'llano';
+  terrenoEn(p: Point): TerrenoTipo {
+    return evaluarTerreno(this.generado.elevacion, p);
+  }
+
+  /** Bioma en un punto (Fase 0.1) — terreno + fertilidad + humedad, ver `evaluarBioma`. */
+  biomaEn(p: Point): BiomaTipo {
+    return evaluarBioma(this.generado.elevacion, this.generado.fertilidad, this.generado.rios, p);
+  }
+
+  // --- Ríos ---
+
+  listarRios(): readonly RioZona[] {
+    return this.generado.rios;
+  }
+
+  /** Río más cercano a un punto y la distancia mínima a su trazo. `null` si el mundo no tiene ríos.
+   * Recorrido lineal: ~6 ríos no justifica un índice espacial, igual que bosques hoy. */
+  rioMasCercano(p: Point): { rio: RioZona; distancia: number } | null {
+    let mejor: { rio: RioZona; distancia: number } | null = null;
+    for (const rio of this.generado.rios) {
+      const d = distanciaARioMasCercano([rio], p);
+      if (!mejor || d < mejor.distancia) mejor = { rio, distancia: d };
+    }
+    return mejor;
   }
 
   // --- Fertilidad ---

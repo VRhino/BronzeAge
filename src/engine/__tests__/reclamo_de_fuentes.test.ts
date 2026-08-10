@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Asentamiento } from '../../domain/types';
 import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
 import { reclamosDeFuentes } from '../construction';
+import { evaluarViabilidadFundacion } from '../settlement';
 import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, mockMathRandomDeterminista } from './fixtures';
 
 const SEED = 7;
@@ -44,10 +45,14 @@ function dosAsentamientosDeLaMismaFaccion() {
 
   // Par de emplazamientos separados 70 unidades: lo bastante lejos para que el segundo no caiga dentro de
   // la zona inicial del primero (radio 30) y lo bastante cerca para que ambas zonas acaben solapándose al
-  // crecer (hasta 60 en nivel 1), que es cuando aparece la disputa por un mismo nodo.
+  // crecer (hasta 60 en nivel 1), que es cuando aparece la disputa por un mismo nodo. El primero se filtra
+  // por `recomendable` (fundable + bosque alcanzable, igual que `posicionRecomendable`): desde Fase 0.1 el
+  // mapa ya no tiene recursos repartidos uniformemente, así que el primer hueco fundable de la rejilla ya
+  // no garantiza tener nada extraíble cerca — sin este filtro el test queda vacío (nunca se construye nada).
   const { ancho, alto } = mapa.limites;
   for (let x = 60; x < ancho - 100; x += 20) {
     for (let y = 60; y < alto - 100; y += 20) {
+      if (!evaluarViabilidadFundacion(mapa, { x, y }, []).recomendable) continue;
       try {
         const primero = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', [], 0, { x, y });
         const existentes = [primero.asentamiento];

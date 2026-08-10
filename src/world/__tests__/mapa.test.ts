@@ -12,7 +12,17 @@
 import { describe, expect, it } from 'vitest';
 import type { NodoRecurso, Point, ZonaBosque } from '../../domain/types';
 import { LENERA_POR_BOSQUE } from '../../constants';
-import { createRng, generarMapa, MAPA_DEFAULT, type MapaGenerado, type RandomFn } from '../../worldgen';
+import {
+  createRng,
+  distanciaARioMasCercano,
+  evaluarBioma,
+  evaluarElevacion,
+  evaluarTerreno,
+  generarMapa,
+  MAPA_DEFAULT,
+  type MapaGenerado,
+  type RandomFn,
+} from '../../worldgen';
 import { crearEstadoMapa, crearMapa, type EstadoMapa, type Mapa } from '../mapa';
 import { pointInPolygon } from '../geometria';
 
@@ -384,11 +394,60 @@ describe('Mapa — extracción de yacimientos', () => {
   });
 });
 
-describe('Mapa — terreno (costura para fases con relieve)', () => {
-  it('todo el mapa es llano en Fase 0', () => {
-    const { mapa, rng } = conMapa(1);
-    for (let i = 0; i < 20; i++) {
-      expect(mapa.terrenoEn(puntoAleatorio(rng))).toBe('llano');
+describe('Mapa — elevación y terreno (Fase 0.1)', () => {
+  it('elevacionEn coincide con evaluarElevacion sobre el campo generado', () => {
+    for (const seed of SEEDS) {
+      const { generado, mapa, rng } = conMapa(seed);
+      for (let i = 0; i < CONSULTAS; i++) {
+        const p = puntoAleatorio(rng);
+        expect(mapa.elevacionEn(p)).toBe(evaluarElevacion(generado.elevacion, p));
+      }
+    }
+  });
+
+  it('terrenoEn coincide con evaluarTerreno sobre el campo generado', () => {
+    for (const seed of SEEDS) {
+      const { generado, mapa, rng } = conMapa(seed);
+      for (let i = 0; i < CONSULTAS; i++) {
+        const p = puntoAleatorio(rng);
+        expect(mapa.terrenoEn(p)).toBe(evaluarTerreno(generado.elevacion, p));
+      }
+    }
+  });
+
+  it('biomaEn coincide con evaluarBioma(elevacion, fertilidad, rios, p)', () => {
+    for (const seed of SEEDS) {
+      const { generado, mapa, rng } = conMapa(seed);
+      for (let i = 0; i < CONSULTAS; i++) {
+        const p = puntoAleatorio(rng);
+        expect(mapa.biomaEn(p)).toBe(evaluarBioma(generado.elevacion, generado.fertilidad, generado.rios, p));
+      }
+    }
+  });
+});
+
+describe('Mapa — ríos (Fase 0.1)', () => {
+  it('listarRios devuelve los ríos del mundo generado, en orden', () => {
+    for (const seed of SEEDS) {
+      const { generado, mapa } = conMapa(seed);
+      expect(mapa.listarRios()).toEqual(generado.rios);
+    }
+  });
+
+  it('rioMasCercano coincide con un recorrido lineal por distancia mínima punto-polilínea', () => {
+    for (const seed of SEEDS) {
+      const { generado, mapa, rng } = conMapa(seed);
+      for (let i = 0; i < CONSULTAS; i++) {
+        const p = puntoAleatorio(rng);
+        let esperado: { rio: (typeof generado.rios)[number]; distancia: number } | null = null;
+        for (const rio of generado.rios) {
+          const d = distanciaARioMasCercano([rio], p);
+          if (!esperado || d < esperado.distancia) esperado = { rio, distancia: d };
+        }
+        const resultado = mapa.rioMasCercano(p);
+        expect(resultado?.rio.id).toBe(esperado?.rio.id);
+        expect(resultado?.distancia).toBe(esperado?.distancia);
+      }
     }
   });
 });

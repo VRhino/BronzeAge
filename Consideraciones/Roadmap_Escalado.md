@@ -7,6 +7,11 @@ Desarrollo por fases, desde un prototipo de datos puros hasta la visión final d
 ### Fase 0 — Prototipo de datos puro
 Sin gráficos 3D, sin escenas, sin mapas visuales reales. Todo corre como simulación de datos: mapa 2D top-down con formas simples (círculos, polígonos, líneas) y paneles de texto/UI de debug. Objetivo: validar la simulación misma antes de invertir en arte o escenas. Ver `Fase_0_Definicion.md`.
 
+#### Fase 0.1 — Evolución del generador de mundo
+Sigue siendo datos puros y 2D. Añade elevación/ríos/biomas/colocación de recursos realista al generador de
+mundo, construido como campos continuos + geometría vectorial (nunca tiles ni rejilla horneada) para que
+sea la base de menor fricción hacia el mapa de campaña de Fase 1. Ver `Fase_0_1_Definicion.md`.
+
 ### Fase 1 — Mapa de campaña (MVP visual, Unity/C#)
 - Mapa de mundo estilo Total War (vista de campaña)
 - El jugador coloca su asentamiento libremente en el mapa

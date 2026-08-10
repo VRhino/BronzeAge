@@ -103,16 +103,22 @@ describe('exportar / importar una simulación', () => {
     expect(destino.getState().log[0]?.mensaje).toContain('Importación rechazada');
   });
 
-  it('acepta archivos antiguos sin `worldgenVersion` (se asumen de la versión 1)', () => {
+  it('rechaza archivos antiguos sin `worldgenVersion` (se asumen de la versión 1, y la actual ya no lo es)', () => {
+    // Antes de Fase 0.1 (WORLDGEN_VERSION 1) un archivo sin el campo se aceptaba porque "ausente = versión
+    // 1" coincidía con la versión vigente. Ahora que WORLDGEN_VERSION es 2, ese mismo archivo sigue
+    // asumiéndose versión 1 — pero ya no coincide, así que debe rechazarse como cualquier otra versión
+    // distinta (mismo camino que el test de arriba), no cargarse en silencio con un mundo distinto.
     const original = partidaEnMarcha(5);
     const payload = JSON.parse(original.exportarSimulacion()) as Partial<SimulacionExportada>;
     delete payload.worldgenVersion;
 
     const destino = new GameStore();
+    const tickAntes = destino.getState().tick;
     destino.importarSimulacion(JSON.stringify(payload));
 
-    expect(destino.getState().tick).toBe(original.getState().tick);
-    expect(destino.getState().asentamientos).toEqual(original.getState().asentamientos);
+    expect(destino.getState().tick).toBe(tickAntes);
+    expect(destino.getState().asentamientos).toHaveLength(0);
+    expect(destino.getState().log[0]?.mensaje).toContain('Importación rechazada');
   });
 
   it('un archivo corrupto se rechaza sin romper la partida en curso', () => {

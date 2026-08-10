@@ -2,25 +2,19 @@
 // `domain/types` (entidades compartidas) y de su propia configuración — se puede ejecutar, testear y
 // versionar por separado.
 
-import type { NodoRecurso, WorldConfig, ZonaBosque } from '../domain/types';
+import type { NodoRecurso, RioZona, WorldConfig, ZonaBosque } from '../domain/types';
+import type { CampoRuido } from './ruido';
 
-/**
- * Una octava del campo de fertilidad: seno/coseno con frecuencia y fase propias. Se guarda como DATO
- * (no como la función ya cerrada sobre él) para que el campo sea serializable y comparable — ver
- * `evaluarFertilidad` en `fertilidad.ts`.
- */
-export interface OctavaFertilidad {
-  freq: number;
-  faseX: number;
-  faseY: number;
-  peso: number;
-}
+// Los dos campos continuos del mundo son ruido fractal (ver `ruido.ts`): mismo tipo de dato, distintos
+// parámetros (ver `FERTILIDAD`/`ELEVACION` en `config.ts`). Se mantienen como alias con nombre propio
+// porque el resto del código habla de "el campo de fertilidad" y "el campo de elevación", no de "ruido" —
+// y porque nada fuera de `fertilidad.ts`/`elevacion.ts` debe depender de su forma interna.
 
-export interface CampoFertilidad {
-  octavas: OctavaFertilidad[];
-  /** Suma de pesos, precalculada: normaliza el resultado a 0-1. */
-  pesoTotal: number;
-}
+/** Campo continuo de fertilidad del suelo. Se consulta con `evaluarFertilidad`. */
+export type CampoFertilidad = CampoRuido;
+
+/** Campo continuo de relieve. Se consulta con `evaluarElevacion`/`evaluarTerreno`. */
+export type CampoElevacion = CampoRuido;
 
 /**
  * Resultado completo de la generación: DATOS PUROS, sin funciones ni estado de partida. Todo lo que el
@@ -41,7 +35,30 @@ export interface MapaGenerado {
   bosques: ZonaBosque[];
   nodos: NodoRecurso[];
   fertilidad: CampoFertilidad;
+  /** Campo continuo de relieve (Fase 0.1). Consultar con `evaluarElevacion`/`evaluarTerreno` — nunca se
+   * itera como rejilla, ver `Fase_0_1_Definicion.md`. */
+  elevacion: CampoElevacion;
+  /** Ríos como polilíneas (Fase 0.1). El bioma se deriva de esto + elevación + fertilidad bajo demanda
+   * (`evaluarBioma`) — no existe un campo de bioma guardado. */
+  rios: RioZona[];
 }
 
-/** Se sube cuando cambia el pipeline de generación de forma que altere el mundo para una seed dada. */
-export const WORLDGEN_VERSION = 1;
+/**
+ * Se sube cuando cambia el pipeline de generación de forma que altere el mundo para una seed dada.
+ * v2 (Fase 0.1): se inserta generación de elevación y ríos, se reordena fertilidad, y bosques/nodos pasan a
+ * condicionar su colocación al terreno — cambia el orden de consumo del PRNG de arriba a abajo del
+ * pipeline, así que TODAS las seeds/mundos guardados producen un mundo distinto.
+ * v3: `MAPA_DEFAULT` pasa de 1000x1000 a 2000x2000 y las cantidades de bosques/nodos/livestock/ríos suben
+ * ×4 (misma densidad por área) — aunque estos son valores de `config.ts` y no reordenan el PRNG, cambian
+ * cuántos puntos se sortean en cada paso, así que también desplazan todo lo generado después para la misma
+ * seed.
+ * v4: nueva banda de elevación `cima` (por encima de `montana`, inhabitable — ver `ELEVACION.umbralCima`)
+ * excluida de todo predicado de colocación (`RECURSO_BIOMA_PERMITIDO`/`BOSQUE_TERRENO_PERMITIDO` nunca la
+ * listan) — el rejection-sampling rechaza algunos candidatos que antes aceptaba, así que necesita más
+ * intentos en algunos puntos y el PRNG se desplaza otra vez.
+ * v5: elevación y fertilidad pasan de suma de senos alineados a los ejes a RUIDO FRACTAL DE GRADIENTE (ver
+ * `ruido.ts`) — el mundo entero cambia de forma, no solo de números: el relieve deja de ser un enrejado
+ * regular. Umbrales de terreno/bioma recalibrados contra la nueva distribución. El import ya rechaza duro
+ * por `worldgenVersion` en vez de migrar (contrato existente, ver `gameStore.importarSimulacion`).
+ */
+export const WORLDGEN_VERSION = 5;

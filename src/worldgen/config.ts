@@ -8,6 +8,8 @@
 // Se congelan en tiempo de ejecución (no solo con `as const`, que es un candado de tipos) para que ninguna
 // vía dinámica —como la que usa `app/balanceConfig.ts` para el resto de constantes— pueda escribirlos.
 
+import type { BiomaTipo, TerrenoTipo } from '../domain/types';
+
 function congelar<T>(obj: T): T {
   for (const valor of Object.values(obj as Record<string, unknown>)) {
     if (valor && typeof valor === 'object') congelar(valor);
@@ -15,21 +17,35 @@ function congelar<T>(obj: T): T {
   return Object.freeze(obj);
 }
 
-/** Tamaño por defecto del mapa. Doc 1.1: mapa CUADRADO, espacio continuo, parametrizable. */
+/**
+ * Tamaño por defecto del mapa. Doc 1.1: mapa CUADRADO, espacio continuo, parametrizable.
+ * 2000x2000 (2x lineal / 4x área) a partir de Fase 0.1: el mapa de 1000x1000 no daba sitio para que se
+ * notaran varias formaciones de relieve distintas (la octava más baja de `ELEVACION` tiene una longitud de
+ * onda de ~1571 unidades, más que la diagonal del mapa viejo) y los bosques/ríos quedaban visualmente
+ * apretados. `ELEVACION`/`FERTILIDAD` NO cambian de escala a propósito: el mapa más grande es lo que hace
+ * que quepan más "colinas" de ruido dentro del mundo, no un reescalado del ruido en sí.
+ */
 export const MAPA_DEFAULT: { ancho: number; alto: number } = congelar({
-  ancho: 1000,
-  alto: 1000,
+  ancho: 2000,
+  alto: 2000,
 });
 
 // Trigo NO genera nodo: depende del campo de fertilidad (ver FERTILIDAD) + Granja.
 // Madera TAMPOCO genera nodo propio (Doc 1.4: "proviene de BOSQUES, representados como ZONAS, no puntos") —
 // solo se generaban aquí por error de implementación (Sprint 1): un nodo "madera" sin ningún uso en el motor
 // (la lenera siempre lee de los bosques, nunca de los nodos), y visualmente confundible con los bosques.
-// Cantidad de nodos por 1000x1000 y espaciado mínimo entre nodos de la misma rareza (unidades de mapa).
+//
+// Cantidades ×4 respecto al mapa 1000x1000 original (área ×4 con `MAPA_DEFAULT` a 2000x2000) para mantener
+// la MISMA densidad de recursos por unidad de área — sin este ajuste, doblar el mapa sin tocar las
+// cantidades absolutas los habría dejado 4x más dispersos, justo lo contrario de lo buscado.
+// `espacioMinimo` NO se escala: es una distancia (unidades de mapa), no una densidad — si se duplicara junto
+// con la cantidad, el área que cada punto "reclama" (∝ espacioMinimo²) crecería x4 y la cantidad de puntos
+// también x4, exigiendo 4x más área de la que el mapa 4x más grande realmente aporta. Dejarlo fijo preserva
+// la misma dificultad de encaje del rejection-sampling que ya estaba calibrada (ver `ELEVACION`).
 export const RECURSO_RAREZA = congelar({
-  comun: { cantidadBase: 60, espacioMinimo: 20 },
-  intermedio: { cantidadBase: 20, espacioMinimo: 40 },
-  raro: { cantidadBase: 6, espacioMinimo: 120 },
+  comun: { cantidadBase: 240, espacioMinimo: 20 },
+  intermedio: { cantidadBase: 80, espacioMinimo: 40 },
+  raro: { cantidadBase: 24, espacioMinimo: 120 },
 } as const);
 
 export const RECURSO_TIPOS_POR_RAREZA: Record<keyof typeof RECURSO_RAREZA, string[]> = congelar({
@@ -56,28 +72,118 @@ export const RECURSO_CANTIDAD_NODO = congelar({
   oro: { min: 150, max: 400 },
 } as const);
 
-// Livestock: fauna libre, no sigue las mismas reglas de rareza (no ligada a minerales).
+// Livestock: fauna libre, no sigue las mismas reglas de rareza (no ligada a minerales). cantidadBase ×4,
+// espacioMinimo sin tocar — mismo criterio de densidad que RECURSO_RAREZA.
 export const LIVESTOCK = congelar({
-  cantidadBase: 25,
+  cantidadBase: 100,
   espacioMinimo: 30,
   cantidadPorManada: { min: 10, max: 40 },
 });
 
+// cantidad ×4 (misma densidad de bosques por área); radio/densidad de cada bosque individual no cambian —
+// el tamaño de UN bosque no depende del tamaño del mapa.
 export const BOSQUE = congelar({
-  cantidad: 25,
+  cantidad: 100,
   radioMin: 30,
   radioMax: 80,
   densidadMin: 0.4,
   densidadMax: 1.0,
 });
 
-// Fertilidad: ruido continuo por suma de funciones seno con distintas frecuencias (sin dependencias externas).
+/** Bandas de terreno donde se permite el CENTRO de un bosque (Fase 0.1) — elevación media-baja. Solo
+ * filtro de elevación: no se exige cercanía a río como filtro duro, forzarlo agotaría el rejection-sampling
+ * casi siempre y degeneraría en "coloca igual" (ver `colocarConEspaciado`). */
+export const BOSQUE_TERRENO_PERMITIDO: TerrenoTipo[] = congelar(['llano', 'colina']);
+
+// Fertilidad: ruido fractal de gradiente (ver `worldgen/ruido.ts`). Menos octavas y formación base más
+// grande que la elevación — la fertilidad son manchas amplias de suelo bueno/malo, no terreno accidentado.
+// `escala` es 1/tamaño de la formación más gruesa: 0.002 ≈ manchas de ~500 unidades sobre un mapa de 2000.
 export const FERTILIDAD = congelar({
   octavas: 3,
-  escala: 0.006,
+  escala: 0.002,
+  lacunaridad: 2,
+  persistencia: 0.5,
 });
 
-/** Intentos de rejection sampling por punto antes de rendirse y colocarlo igualmente (ver `colocacion.ts`). */
+// Elevación (Fase 0.1): ruido fractal de gradiente (ver `worldgen/ruido.ts`). `escala` es 1/tamaño de la
+// formación más gruesa — 0.00167 ≈ cordilleras/valles de ~600 unidades sobre un mapa de 2000 — y cada
+// octava añade detalle a la mitad de escala (600, 300, 150, 75, 37 unidades) con la mitad de peso. Cinco
+// octavas es el punto donde el relieve tiene textura fina sin que el detalle llegue a mover las bandas de
+// terreno: la octava más fina pesa 1/16, o sea ±0.03 de elevación.
+//
+// Umbrales de `evaluarTerreno` CALIBRADOS contra la distribución real del campo, no repartidos por el rango
+// nominal 0-1. El ruido fractal se concentra alrededor de 0.5 (la normalización usa la cota teórica, ver
+// `evaluarRuido`), así que umbrales "razonables a ojo" caerían casi todos en percentiles extremos: una banda
+// de montaña en el percentil 99 sería una franja casi puntual donde no caben los 120 de
+// `RECURSO_RAREZA.raro.espacioMinimo` que piden los nodos de oro/estaño, y todos acabarían en el fallback
+// de "mapa saturado, coloca igual" (ver `colocarConEspaciado`) — la colocación condicionada dejaría de
+// tener efecto real.
+export const ELEVACION = congelar({
+  octavas: 5,
+  escala: 0.00167,
+  lacunaridad: 2,
+  persistencia: 0.5,
+  // Percentiles observados (medidos sobre rejilla 400², seeds 1/42/7 — muy estables entre seeds):
+  // agua ~7%, costa ~11%, llano ~50%, colina ~18%, montaña ~11%, cima ~3%.
+  umbralAgua: 0.375,
+  umbralCosta: 0.42,
+  umbralColina: 0.545,
+  umbralMontana: 0.6,
+  // Franja MÁS alta del campo: cima inhabitable — no se puede fundar ni extraer ahí (ver
+  // settlement.ts/construction.ts). Deliberadamente estrecha: la banda 'montana' de abajo sigue siendo
+  // amplia y minable, esto solo recorta la punta.
+  umbralCima: 0.685,
+});
+
+// Ríos (Fase 0.1): nacen en montaña y descienden por gradiente de máxima pendiente (ver worldgen/rios.ts).
+// `cantidad` ×4 (misma densidad de ríos por área que el mapa 1000x1000 original); `espacioMinimoEntreNacimientos`
+// sin tocar, mismo criterio de densidad que RECURSO_RAREZA. `pasosMax`=700 * `pasoDescenso`=8 = 5600, más que
+// la diagonal de un mapa 2000x2000 (~2828): cubre el peor caso sin dejar caminatas sin terminar.
+// `pasoGradiente`=50 mide la pendiente sobre una distancia MAYOR que las octavas finas del relieve (la más
+// fina son formaciones de ~37 unidades, ver `ELEVACION`): así el cauce sigue la forma general del valle en
+// vez de quedar atrapado en cada hoyo del detalle fractal. `gradienteMinimo` es el umbral por debajo del
+// cual se considera que ya no hay pendiente clara y el río termina en lago (la mediana del gradiente del
+// campo es ~1e-3, así que 2e-4 solo detiene un cauce en un extremo local de verdad).
+export const RIOS = congelar({
+  cantidad: 24,
+  espacioMinimoEntreNacimientos: 150,
+  pasoDescenso: 8,
+  pasoGradiente: 50,
+  gradienteMinimo: 0.0002,
+  pasosMax: 700,
+});
+
+// Bioma (Fase 0.1): terreno llano se reparte entre estepa/llanuraFertil por fertilidad alta o cercanía a
+// río (humedad) — el resto de bandas de terreno (agua/costa/colina/montana) SON el bioma, sin más criterio.
+// `umbralFertilLlanura`=0.52 ≈ percentil 57 del campo de fertilidad medido: algo menos de la mitad del
+// llano sale fértil, más lo que gane por cercanía a río.
+export const BIOMA = congelar({
+  umbralFertilLlanura: 0.52,
+  radioHumedadRio: 40,
+});
+
+/**
+ * Biomas donde SE PERMITE que aparezca cada tipo de recurso (colocación condicionada al terreno, Fase 0.1).
+ * Piedra se deja permisivo a propósito: es el recurso común (60/seed) y no debe faltar. Los metales
+ * (cobre/estaño/oro) quedan restringidos a colina/montaña — "metales en montaña" pedido explícitamente.
+ * Oro se deja SOLO en montaña (el más exclusivo, es el más raro); cobre/estaño se permiten también en
+ * colina porque, con `RECURSO_RAREZA.raro.espacioMinimo`=120 y solo 6 nodos por tipo, restringir dos
+ * tipos a la vez a la banda de montaña (más pequeña) hacía que casi todos cayeran en el fallback de mapa
+ * saturado sin más sitio donde encajar — el filtro dejaba de tener efecto real.
+ * El conteo por tipo sigue siendo `RECURSO_RAREZA[rareza].cantidadBase`: esta tabla solo condiciona DÓNDE
+ * caen, no cuántos hay (ver `colocarConEspaciado`, que mantiene su fallback de mapa saturado).
+ */
+export const RECURSO_BIOMA_PERMITIDO: Record<string, BiomaTipo[]> = congelar({
+  piedra: ['colina', 'montana', 'llanuraFertil', 'estepa'],
+  cobre: ['colina', 'montana'],
+  estano: ['colina', 'montana'],
+  oro: ['montana'],
+  livestock: ['llanuraFertil', 'estepa'],
+});
+
+/** Intentos de rejection sampling por punto antes de rendirse y colocarlo igualmente (ver `colocacion.ts`).
+ * Subido de 30 a 40 en Fase 0.1: la colocación condicionada al terreno reduce el área válida por candidato
+ * (bioma + espaciado a la vez), y unos intentos más baratos de más reducen cuánto se cae al fallback. */
 export const COLOCACION = congelar({
-  intentosPorPunto: 30,
+  intentosPorPunto: 40,
 });

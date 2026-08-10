@@ -146,12 +146,17 @@ function sitioCercaDeNodo(
   tipoRecurso: string,
   fuentesExcluidas: Set<string>
 ): { posicion: Point; fuenteId: string } | null {
-  const elegido = mapa.nodosEnPoligono(zonaPoligono, {
-    tipo: tipoRecurso,
-    conStock: true,
-    excluir: fuentesExcluidas,
-    ordenarPorCercaniaA: asentamiento.posicion,
-  })[0];
+  // 'cima' (Fase 0.1) es inhabitable: la generación ya evita colocar nodos ahí (`RECURSO_BIOMA_PERMITIDO`
+  // nunca la lista), pero el rejection-sampling tiene un fallback de "mapa saturado, coloca igual" — este
+  // filtro es la garantía dura de que, aun en ese caso raro, nunca se planta un extractor ahí.
+  const elegido = mapa
+    .nodosEnPoligono(zonaPoligono, {
+      tipo: tipoRecurso,
+      conStock: true,
+      excluir: fuentesExcluidas,
+      ordenarPorCercaniaA: asentamiento.posicion,
+    })
+    .find((n) => mapa.terrenoEn(n.posicion) !== 'cima');
   return elegido ? { posicion: elegido.posicion, fuenteId: elegido.id } : null;
 }
 
@@ -270,11 +275,40 @@ function evaluarNecesidades(
 ): { nuevos: Edificio[]; almacen: Record<string, RecursoAlmacenado> } {
   const candidatos: Candidato[] = [];
   let contador = asentamiento.edificios.length;
-  const nextId = () => `edificio-${asentamiento.id}-${contador++}`;
+  /**
+   * Ids únicos DENTRO del asentamiento, verificado contra los que ya existen.
+   *
+   * El contador arranca en `edificios.length`, pero cada candidato PROPUESTO consume un número aunque
+   * luego no se comprometa (sin fondos o sin cupo). Como el contador del tick siguiente vuelve a partir de
+   * la longitud real, esos números se reutilizan: bastaba una pasada que propusiera 3 y comprometiera solo
+   * el de mayor score para que un tick posterior repitiera una id ya usada. El edificio duplicado aparecía
+   * DOS VECES en `edificios` (el mapa por id de `avanzarConstruccion` resuelve las dos posiciones al mismo
+   * objeto), y con él se duplicaban su producción y su reclamo de fuente — se veía como un bosque con más
+   * Leñeras de las que admite o un yacimiento con dos extractores.
+   */
+  const idsUsadas = new Set(asentamiento.edificios.map((e) => e.id));
+  const nextId = (): string => {
+    let id = `edificio-${asentamiento.id}-${contador++}`;
+    while (idsUsadas.has(id)) id = `edificio-${asentamiento.id}-${contador++}`;
+    idsUsadas.add(id);
+    return id;
+  };
   const ocupados = () => [...asentamiento.edificios, ...candidatos.map((c) => c.edificio)];
   const proponer = (edificio: Edificio | null, score: number): void => {
     if (edificio) candidatos.push({ edificio, score });
   };
+  /**
+   * ¿Hay ya un proyecto de este tipo en el asentamiento, O propuesto en esta misma pasada?
+   *
+   * Mirar solo `asentamiento.edificios` (que es lo que hace `hayProyectoPendiente`) no basta: varias ramas
+   * de esta función pueden proponer el mismo tipo en el mismo tick — p. ej. Leñera por la vía de Protección
+   * de Riesgos y otra vez por la de expansión — y como la fuente no se reclama hasta el commit
+   * (`registrarReclamo`, al final), las dos elegían el MISMO bosque o yacimiento. El resultado eran bosques
+   * con más Leñeras de las que admite su capacidad y nodos con dos extractores encima, justo lo que
+   * `reclamosDeFuentes` existe para impedir entre asentamientos distintos.
+   */
+  const proyectoEnCurso = (tipo: EdificioTipo): boolean =>
+    hayProyectoPendiente(asentamiento, tipo) || candidatos.some((c) => c.edificio.tipo === tipo);
 
   // Protección de Riesgos (política de Maestro de Obras, a petición del usuario: "construye 2 Leñeras y 3
   // Granjas, prioriza esto y no construyas nada más hasta que se cumpla"): mientras esté activa y falte
@@ -300,7 +334,7 @@ function evaluarNecesidades(
       let progresando = false;
 
       if (lenerasFaltan) {
-        if (hayProyectoPendiente(asentamiento, 'lenera')) {
+        if (proyectoEnCurso('lenera')) {
           progresando = true; // ya hay una Leñera en camino hacia el objetivo.
         } else {
           const sitio = sitioEnBosque(asentamiento, zonaPoligono, mapa, reclamos.lenerasPorBosque);
@@ -312,7 +346,7 @@ function evaluarNecesidades(
       }
 
       if (granjasFaltan) {
-        if (hayProyectoPendiente(asentamiento, 'granja')) {
+        if (proyectoEnCurso('granja')) {
           progresando = true; // ya hay una Granja en camino hacia el objetivo.
         } else {
           const sitio = sitioMejorFertilidad(asentamiento, zonaPoligono, mapa, ocupados());
@@ -359,7 +393,7 @@ function evaluarNecesidades(
     // si no hay ninguna, alta si la reserva proyectada de madera ya está comprometida, baja si solo falta
     // para llegar al tope.
     const leneras = edificiosPorTipoYEstado(asentamiento, 'lenera');
-    if (leneras.length < EXTRACCION_MAXIMOS.porTipo && !hayProyectoPendiente(asentamiento, 'lenera')) {
+    if (leneras.length < EXTRACCION_MAXIMOS.porTipo && !proyectoEnCurso('lenera')) {
       const sitio = sitioEnBosque(asentamiento, zonaPoligono, mapa, reclamos.lenerasPorBosque);
       if (sitio) {
         const maderaBajoReserva = (asentamiento.almacen.madera?.cantidad ?? 0) < (reserva.madera ?? 0);
@@ -378,7 +412,7 @@ function evaluarNecesidades(
       { tipo: 'minaEstano', recurso: 'estano' },
     ];
     for (const { tipo, recurso } of extractores) {
-      if (necesitaNuevoExtractor(asentamiento, tipo, mapa) && !hayProyectoPendiente(asentamiento, tipo)) {
+      if (necesitaNuevoExtractor(asentamiento, tipo, mapa) && !proyectoEnCurso(tipo)) {
         const sitio = sitioCercaDeNodo(asentamiento, zonaPoligono, mapa, recurso, reclamos.nodos);
         if (sitio) {
           const conFuenteViva = asentamiento.edificios
@@ -495,7 +529,16 @@ function evaluarEdificiosEspeciales(
 ): { nuevos: Edificio[]; almacen: Record<string, RecursoAlmacenado> } {
   const nuevos: Edificio[] = [];
   let contador = asentamiento.edificios.length + 1000; // rango separado para no colisionar con evaluarNecesidades
-  const nextId = () => `edificio-${asentamiento.id}-especial-${contador++}`;
+  // Mismo riesgo de reutilización de id que en `evaluarNecesidades` (ver allí el detalle): un candidato que
+  // no llega a comprometerse consume número igual, y el contador del tick siguiente vuelve a partir de la
+  // longitud real.
+  const idsUsadas = new Set(asentamiento.edificios.map((e) => e.id));
+  const nextId = (): string => {
+    let id = `edificio-${asentamiento.id}-especial-${contador++}`;
+    while (idsUsadas.has(id)) id = `edificio-${asentamiento.id}-especial-${contador++}`;
+    idsUsadas.add(id);
+    return id;
+  };
   const ocupados = () => [...asentamiento.edificios, ...nuevos];
   let almacenActual = almacen;
 
