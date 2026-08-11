@@ -289,11 +289,12 @@ app.innerHTML = `
       <div class="controls">
         <h2>Reclutamiento (Doc 5.7/5.8)</h2>
         <label>Asentamiento <select id="guerra-asentamiento"></select></label>
+        <label>Jugador (residente de este asentamiento) <select id="reclutar-tropa-jugador"></select></label>
         <label>Reclutar tropa (Centro Urbano/Barracón/Galería de tiro) <select id="reclutar-tropa"></select></label>
         <div class="tropa-info" id="reclutar-tropa-info"></div>
         <label>Origen <select id="reclutar-tropa-origen"></select></label>
         <button id="reclutar-tropa-btn">Reclutar tropa</button>
-        <p class="legend-note">Cada tropa se recluta en bloque, al tamaño de escuadrón fijo indicado en "Info" arriba — no se elige la cantidad.</p>
+        <p class="legend-note">Cada escuadrón es del jugador elegido (Doc 2.5) — tope fijo por tropa (ver "Info" arriba); si ya tiene bajas, reclutar repone solo lo que falta hasta el tope.</p>
         <button id="gran-fundicion-btn">Construir Gran Fundición</button>
       </div>
 
@@ -512,6 +513,7 @@ const fusionNombreInput = document.getElementById('fusion-nombre') as HTMLInputE
 const fusionReyInput = document.getElementById('fusion-rey') as HTMLInputElement;
 
 const guerraAsentamientoSelect = document.getElementById('guerra-asentamiento') as HTMLSelectElement;
+const reclutarTropaJugadorSelect = document.getElementById('reclutar-tropa-jugador') as HTMLSelectElement;
 const reclutarTropaSelect = document.getElementById('reclutar-tropa') as HTMLSelectElement;
 const reclutarTropaOrigenSelect = document.getElementById('reclutar-tropa-origen') as HTMLSelectElement;
 const reclutarTropaInfoEl = document.getElementById('reclutar-tropa-info')!;
@@ -570,24 +572,35 @@ function costoTropaTxt(tropa: (typeof CATALOGOS.tropasReclutables)[number], porS
 }
 
 /** Segmento "Info:" bajo el combo de reclutamiento (a petición del usuario): toda la info de la tropa
- * seleccionada — edificio/nivel exigido, tamaño fijo del escuadrón, costo por soldado y total, poder base. */
-function actualizarInfoTropa(): void {
+ * seleccionada — edificio/nivel exigido, tamaño fijo del escuadrón, costo por soldado y total, poder base.
+ * Depende también del Jugador elegido (Doc 2.5): si ya tiene el escuadrón por debajo del tope, muestra cuánto
+ * falta y el costo de reponer solo eso, en vez del costo de un escuadrón completo desde cero. */
+function actualizarInfoTropa(state: GameState): void {
   const tropa = CATALOGOS.tropasReclutables.find((t) => t.id === reclutarTropaSelect.value);
   if (!tropa) {
     reclutarTropaInfoEl.innerHTML = '';
     return;
   }
+  const asentamiento = state.asentamientos.find((a) => a.id === guerraAsentamientoSelect.value);
+  const existente = asentamiento?.escuadrones.find((e) => e.jugadorId === reclutarTropaJugadorSelect.value && e.tropaId === tropa.id);
+  const faltante = tropa.unidadesPorDefecto - (existente?.cantidad ?? 0);
+  const filaCantidad =
+    existente && faltante > 0
+      ? `<div class="kv-row"><span>Escuadrón actual</span><span>${existente.cantidad}/${tropa.unidadesPorDefecto} — repone ${faltante}</span></div>`
+      : `<div class="kv-row"><span>Unidades por escuadrón</span><span>${tropa.unidadesPorDefecto} (tamaño fijo, no elegible)</span></div>`;
   reclutarTropaInfoEl.innerHTML = `
     <div class="kv-row"><span>Info:</span><span>${tropa.nombre}</span></div>
     <div class="kv-row"><span>Edificio requerido</span><span>${edificioRequeridoTxt(tropa)}</span></div>
-    <div class="kv-row"><span>Unidades por escuadrón</span><span>${tropa.unidadesPorDefecto} (tamaño fijo, no elegible)</span></div>
+    ${filaCantidad}
     <div class="kv-row"><span>Costo por soldado</span><span>${costoTropaTxt(tropa, true)}</span></div>
-    <div class="kv-row"><span>Costo total del escuadrón</span><span>${costoTropaTxt(tropa, false)}</span></div>
+    <div class="kv-row"><span>Costo de este reclutamiento</span><span>${faltante > 0 ? costoTropaTxt({ ...tropa, unidadesPorDefecto: faltante }, false) : '— (al tope)'}</span></div>
     <div class="kv-row"><span>Poder base (por soldado)</span><span>${tropa.poderBase}</span></div>
   `;
 }
-reclutarTropaSelect.addEventListener('change', actualizarInfoTropa);
-actualizarInfoTropa();
+reclutarTropaSelect.addEventListener('change', () => actualizarInfoTropa(gameStore.getState()));
+reclutarTropaJugadorSelect.addEventListener('change', () => actualizarInfoTropa(gameStore.getState()));
+guerraAsentamientoSelect.addEventListener('change', () => actualizarInfoTropa(gameStore.getState()));
+actualizarInfoTropa(gameStore.getState());
 
 /** Info de flota (ampliación de comercio, pestaña Acciones): mercado activo, cupo y cuántas caravanas propias
  * hay disponibles/en tránsito. Se refresca al cambiar de asentamiento y en cada `render()` (los conteos
@@ -688,13 +701,28 @@ function actualizarCargoJugadorSelect(state: GameState): void {
   if (ciudadanos.includes(seleccionPrevia)) cargoJugadorSelect.value = seleccionPrevia;
 }
 
+/** El combo "Jugador" de Reclutamiento solo ofrece residentes (fundadores o casa comprada, Doc 2.5) del
+ * asentamiento elegido en el combo de al lado — reclutar es beneficio de residencia, no de cargo. */
+function actualizarReclutamientoJugadorSelect(): void {
+  const residentes = gameStore.jugadoresDeAsentamiento(guerraAsentamientoSelect.value);
+  const seleccionPrevia = reclutarTropaJugadorSelect.value;
+  reclutarTropaJugadorSelect.innerHTML = residentes.length
+    ? residentes.map((id) => `<option value="${id}">${id}</option>`).join('')
+    : '<option value="">Sin residentes en este asentamiento</option>';
+  if (residentes.includes(seleccionPrevia)) reclutarTropaJugadorSelect.value = seleccionPrevia;
+}
+guerraAsentamientoSelect.addEventListener('change', actualizarReclutamientoJugadorSelect);
+
 cargoFaccionSelect.addEventListener('change', () => actualizarCargoJugadorSelect(gameStore.getState()));
 
 /** Selector de escuadrones propios en Combate (a petición del usuario): cascada Facción → Asentamiento →
- * chips de escuadrones, en vez de escribir ids de escuadrón a mano. El asentamiento solo ofrece los de la
- * Facción elegida (mismo patrón que `actualizarCargoJugadorSelect`); los chips seleccionados llevan borde
- * verde, el resto borde blanco. La selección se limpia sola si el escuadrón deja de existir (aniquilado,
- * o cambia la Facción/Asentamiento elegido). */
+ * escuadrones agrupados por Jugador (Doc 2.5 — cada escuadrón es de UN jugador, ver `Escuadron.jugadorId`),
+ * con chips seleccionables debajo de cada uno, en vez de escribir ids de escuadrón a mano. El objetivo es que
+ * la selección de chips represente "qué jugadores se unen al combate y con cuál tropa cada uno": marcar 1+
+ * chips bajo el jugador A y 1+ bajo el jugador B ya es "A y B se unen, cada uno con sus tropas elegidas". El
+ * asentamiento solo ofrece los de la Facción elegida (mismo patrón que `actualizarCargoJugadorSelect`); los
+ * chips seleccionados llevan borde verde, el resto borde blanco. La selección se limpia sola si el escuadrón
+ * deja de existir (aniquilado, o cambia la Facción/Asentamiento elegido). */
 function actualizarCombateEscuadrones(state: GameState): void {
   const asentamientosDeFaccion = state.asentamientos.filter((a) => a.faccionId === combateFaccionSelect.value);
 
@@ -712,12 +740,28 @@ function actualizarCombateEscuadrones(state: GameState): void {
     if (!escuadrones.some((e) => e.id === id)) combateEscuadronesSeleccionados.delete(id);
   }
 
-  combateEscuadronesChipsEl.innerHTML = escuadrones.length
-    ? escuadrones
-        .map((e) => {
-          const nombreTropa = CATALOGOS.tropasReclutables.find((t) => t.id === e.tropaId)?.nombre ?? e.nombre;
-          const seleccionado = combateEscuadronesSeleccionados.has(e.id) ? ' selected' : '';
-          return `<button type="button" class="chip-escuadron${seleccionado}" data-escuadron="${e.id}">${nombreTropa} (${e.cantidad})</button>`;
+  const porJugador = new Map<string, typeof escuadrones>();
+  for (const e of escuadrones) {
+    const grupo = porJugador.get(e.jugadorId) ?? [];
+    grupo.push(e);
+    porJugador.set(e.jugadorId, grupo);
+  }
+
+  combateEscuadronesChipsEl.innerHTML = porJugador.size
+    ? [...porJugador.entries()]
+        .map(([jugadorId, escuadronesDeJugador]) => {
+          const chips = escuadronesDeJugador
+            .map((e) => {
+              const nombreTropa = CATALOGOS.tropasReclutables.find((t) => t.id === e.tropaId)?.nombre ?? e.nombre;
+              const seleccionado = combateEscuadronesSeleccionados.has(e.id) ? ' selected' : '';
+              return `<button type="button" class="chip-escuadron${seleccionado}" data-escuadron="${e.id}">${nombreTropa} (${e.cantidad})</button>`;
+            })
+            .join('');
+          return `
+            <div class="combate-jugador-grupo">
+              <div class="combate-jugador-nombre">${jugadorId}</div>
+              <div class="chip-row">${chips}</div>
+            </div>`;
         })
         .join('')
     : '<p class="legend-note">Sin escuadrones en este asentamiento.</p>';
@@ -806,6 +850,8 @@ function actualizarSelects(state: GameState): void {
   }
 
   actualizarCargoJugadorSelect(state);
+  actualizarReclutamientoJugadorSelect();
+  actualizarInfoTropa(state);
   actualizarCombateEscuadrones(state);
 
   const seleccionPreviaFaccionActiva = faccionSelect.value;
@@ -980,12 +1026,12 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
 
   const escuadronesHtml = a.escuadrones.length
     ? `<table class="mini-table">
-        <thead><tr><th>Escuadrón</th><th>Origen</th><th>Nivel</th><th>Cantidad</th><th>Veteranía</th><th>Moral</th></tr></thead>
+        <thead><tr><th>Escuadrón</th><th>Jugador</th><th>Origen</th><th>Nivel</th><th>Cantidad</th><th>Veteranía</th><th>Moral</th></tr></thead>
         <tbody>
           ${a.escuadrones
             .map(
               (e) =>
-                `<tr><td>${e.nombre}${e.heridoHastaTick ? ' (herido)' : ''}</td><td>${e.origen}</td><td>${nivelTropaTxt(e.tropaId)}</td><td>${e.cantidad}</td><td>${e.veterania.toFixed(1)}</td><td>${e.moral.toFixed(0)}</td></tr>`
+                `<tr><td>${e.nombre}${e.heridoHastaTick ? ' (herido)' : ''}</td><td>${e.jugadorId}</td><td>${e.origen}</td><td>${nivelTropaTxt(e.tropaId)}</td><td>${e.cantidad}</td><td>${e.veterania.toFixed(1)}</td><td>${e.moral.toFixed(0)}</td></tr>`
             )
             .join('')}
         </tbody>
@@ -1505,7 +1551,7 @@ function renderPanelMilitar(state: GameState): void {
         a.escuadrones
           .map(
             (e) =>
-              `<div>${e.id} — ${e.nombre} (${nivelTropaTxt(e.tropaId)}, ${e.origen}) · cantidad ${e.cantidad} · veterania ${e.veterania.toFixed(1)} · moral ${e.moral.toFixed(0)}${e.heridoHastaTick ? ` · herido hasta t${e.heridoHastaTick}` : ''}</div>`
+              `<div>${e.id} — ${e.nombre} de ${e.jugadorId} (${nivelTropaTxt(e.tropaId)}, ${e.origen}) · cantidad ${e.cantidad} · veterania ${e.veterania.toFixed(1)} · moral ${e.moral.toFixed(0)}${e.heridoHastaTick ? ` · herido hasta t${e.heridoHastaTick}` : ''}</div>`
           )
           .join('') || '<div>Sin escuadrones.</div>';
       return `<div><strong>${etiquetaAsentamiento(a, state.facciones)}</strong> — Fundición: ${tieneFundicion ? 'sí' : 'no'} · Gran Fundición: ${tieneGranFundicion ? 'sí' : 'no'}${escuadronesHtml}</div>`;
@@ -1909,7 +1955,12 @@ document.getElementById('flota-construir-btn')!.addEventListener('click', () => 
 });
 
 document.getElementById('reclutar-tropa-btn')!.addEventListener('click', () => {
-  gameStore.reclutarTropa(guerraAsentamientoSelect.value, reclutarTropaSelect.value, reclutarTropaOrigenSelect.value as 'pesants' | 'artesanos');
+  gameStore.reclutarTropa(
+    guerraAsentamientoSelect.value,
+    reclutarTropaJugadorSelect.value,
+    reclutarTropaSelect.value,
+    reclutarTropaOrigenSelect.value as 'pesants' | 'artesanos'
+  );
 });
 
 document.getElementById('gran-fundicion-btn')!.addEventListener('click', () => {

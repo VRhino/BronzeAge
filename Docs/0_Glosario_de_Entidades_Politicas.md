@@ -3,7 +3,7 @@
 Consultar este documento ante cualquier duda de terminología — el resto de documentos asume estas definiciones.
 
 ## Jugador
-Persona real que juega. Pertenece a 1 y SOLO 1 Facción en todo momento.
+Persona real que juega. Pertenece a 1 y SOLO 1 Facción en todo momento, y reside en 1 y SOLO 1 asentamiento a la vez (Doc 2.5) — es lo que le permite tener como mucho un escuadrón propio de cada tropa (Doc 5.8).
 
 ## Asentamiento
 Unidad territorial con zona de influencia, edificios (auto-construidos), población NPC (Pesants/Artesanos/Nobleza), y cargos LOCALES (Gobernador, Tesorero, General, Maestro de Obras, Sacerdote). Pertenece a 1 y SOLO 1 Facción. Una Facción puede tener muchos asentamientos.

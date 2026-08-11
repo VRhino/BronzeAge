@@ -124,12 +124,19 @@ export type OrigenTropa = 'pesants' | 'artesanos' | 'nobleza';
 
 /**
  * Escuadrón (Doc 5.1/5.4): el jugador lidera una tropa de unidades NPC, nunca combate individualmente.
+ * Escuadrón de UN jugador (Doc 2.5, a petición del usuario — corrige el bug donde dos jugadores reclutando la
+ * misma tropa en el mismo asentamiento se fundían en un solo escuadrón): `jugadorId` + `tropaId` identifican de
+ * forma única al escuadrón dentro de `Asentamiento.escuadrones` — un jugador solo puede tener UNO por tropa,
+ * porque solo pertenece a un asentamiento (Doc 2.1) y ahí solo puede tener sus propias tropas.
  * El SQUAD (nombre, veteranía) persiste aunque `cantidad` llegue a 0 (aniquilado) — se puede rellenar reclutando
  * más del mismo origen en el asentamiento. PERMADEATH: las bajas reducen `cantidad` de forma permanente.
  */
 export interface Escuadron {
   id: string;
   nombre: string;
+  /** Dueño del escuadrón (Doc 2.5) — reclutar ya no depende del cargo de General, cualquier jugador residente
+   * del asentamiento (fundador o con casa comprada) recluta y amplía SU PROPIO escuadrón. */
+  jugadorId: string;
   origen: OrigenTropa;
   cantidad: number;
   /** Sube combatiendo (carril combate real, Doc 4.1/5.5): da un bonus de poder continuo al MISMO escuadrón

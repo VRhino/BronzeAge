@@ -59,12 +59,19 @@ export function capacidadCasas(asentamiento: Asentamiento): number {
  * Compra de casa (Doc 2.5): segunda vía de ciudadanía, dentro de un asentamiento de la PROPIA Facción del jugador.
  * En Fase 0 no existe todavía un registro global de "a qué Facción pertenece cada jugador" fuera de las listas
  * de ciudadanos, así que la única validación de "un jugador, una Facción" es no estar ya en OTRA lista.
+ *
+ * Un jugador reside en UN solo asentamiento (Doc 2.1, a petición del usuario: es lo que le permite tener como
+ * mucho un escuadrón de cada tropa — ver `Escuadron.jugadorId`, domain/types.ts) — por eso necesita la lista
+ * COMPLETA de asentamientos, no solo el de destino, para comprobar que el jugador no reside ya en otro.
  */
 export function comprarCasa(
   facciones: Faccion[],
-  asentamiento: Asentamiento,
+  asentamientos: Asentamiento[],
+  asentamientoId: string,
   jugadorId: string
 ): { facciones: Faccion[]; asentamiento: Asentamiento } {
+  const asentamiento = asentamientos.find((a) => a.id === asentamientoId);
+  if (!asentamiento) throw new FaccionInvalidaError('El asentamiento no existe.');
   const faccion = facciones.find((f) => f.id === asentamiento.faccionId);
   if (!faccion) throw new FaccionInvalidaError('La Facción del asentamiento no existe.');
 
@@ -74,6 +81,12 @@ export function comprarCasa(
   }
   if (asentamiento.casasCompradas.includes(jugadorId)) {
     throw new FaccionInvalidaError('El jugador ya tiene casa en este asentamiento.');
+  }
+  const yaResideEnOtroAsentamiento = asentamientos.some(
+    (a) => a.id !== asentamiento.id && (a.jugadoresFundadoresIds.includes(jugadorId) || a.casasCompradas.includes(jugadorId))
+  );
+  if (yaResideEnOtroAsentamiento) {
+    throw new FaccionInvalidaError('El jugador ya reside en otro asentamiento (Doc 2.1: 1 jugador, 1 asentamiento).');
   }
   if (asentamiento.casasCompradas.length >= capacidadCasas(asentamiento)) {
     throw new FaccionInvalidaError('No quedan espacios de vivienda para ciudadanos en este asentamiento.');

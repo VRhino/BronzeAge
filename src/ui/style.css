@@ -305,6 +305,18 @@ body {
   color: #d9f2d9;
 }
 
+.combate-jugador-grupo {
+  margin: 4px 0 10px;
+  padding: 6px 8px;
+  border-left: 2px solid #444;
+}
+
+.combate-jugador-nombre {
+  font-size: 12px;
+  color: #aaa;
+  margin-bottom: 4px;
+}
+
 .settlement-detail {
   margin-top: 14px;
   display: flex;

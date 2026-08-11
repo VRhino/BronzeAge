@@ -16,24 +16,36 @@ export class ReclutamientoInvalidoError extends Error {}
  * de nivel interno — ver `poderEscuadron` en engine/combate.ts, que aplica el bonus de veteranía sin tocar
  * nunca `tropaId`.
  *
- * La cantidad de soldados YA NO la elige el jugador (a petición del usuario, corrige una contradicción con el
- * propio diseño: Doc 0/Glosario define "tropa" como "el tipo de escuadrón que se recluta DE UNA VEZ") — cada
- * reclutamiento forma/amplía el escuadrón en bloques de `tropa.unidadesPorDefecto` soldados, tamaño fijo del
- * catálogo (`TROPAS_RECLUTABLES`, constants.ts). `costoEquipo` sigue siendo por soldado.
+ * Escuadrón de UN jugador, no del asentamiento (Doc 2.5, a petición del usuario — corrige el bug donde dos
+ * jugadores reclutando la misma tropa en el mismo asentamiento se fundían en un solo escuadrón compartido):
+ * cada jugador residente (fundador o con casa comprada, ver `Asentamiento.jugadoresFundadoresIds`/
+ * `casasCompradas`) tiene como mucho UN escuadrón por `tropaId`, tope `tropa.unidadesPorDefecto`. Reclutar ya
+ * no es un gate del cargo de General (Doc 2.2 vs 2.5 — 2.5 ganó la ambigüedad: reclutar es beneficio de
+ * ciudadanía/residencia, no de cargo): cualquier residente puede reclutar o reponer SU propio escuadrón.
+ * "Reponer bajas" no es un mecanismo aparte: si el jugador ya tiene el escuadrón por debajo del tope, reclutar
+ * de nuevo paga y añade solo las unidades que faltan hasta el tope (mismo costo por soldado que reclutar desde
+ * cero) en vez de sumar otro bloque completo.
  */
 export function reclutarTropa(
   asentamiento: Asentamiento,
+  jugadorId: string,
   tropaId: string,
   origen: 'pesants' | 'artesanos',
   tickActual: number,
   contador = 0
 ): Asentamiento {
-  if (!asentamiento.cargos.generalId) {
-    throw new ReclutamientoInvalidoError('El asentamiento necesita un General para reclutar tropas.');
+  const esResidente = asentamiento.jugadoresFundadoresIds.includes(jugadorId) || asentamiento.casasCompradas.includes(jugadorId);
+  if (!esResidente) {
+    throw new ReclutamientoInvalidoError('Solo un jugador residente de este asentamiento puede reclutar aquí.');
   }
   const tropa = TROPAS_RECLUTABLES.find((t) => t.id === tropaId);
   if (!tropa) throw new ReclutamientoInvalidoError('La tropa no existe en el catálogo.');
-  const cantidad = tropa.unidadesPorDefecto;
+
+  const existente = asentamiento.escuadrones.find((e) => e.jugadorId === jugadorId && e.tropaId === tropaId);
+  const cantidad = tropa.unidadesPorDefecto - (existente?.cantidad ?? 0);
+  if (cantidad <= 0) {
+    throw new ReclutamientoInvalidoError('Este escuadrón ya está al tope de unidades.');
+  }
   if (asentamiento.poblacion[origen] < cantidad) {
     throw new ReclutamientoInvalidoError(`No hay suficientes ${origen} disponibles (hacen falta ${cantidad}).`);
   }
@@ -53,14 +65,14 @@ export function reclutarTropa(
     throw new ReclutamientoInvalidoError('No hay equipo suficiente para reclutar esta tropa.');
   }
 
-  const existente = asentamiento.escuadrones.find((e) => e.tropaId === tropaId);
   const escuadrones = existente
     ? asentamiento.escuadrones.map((e) => (e.id === existente.id ? { ...e, cantidad: e.cantidad + cantidad } : e))
     : [
         ...asentamiento.escuadrones,
         {
           id: `escuadron-${asentamiento.id}-${tickActual}-${contador}`,
-          nombre: `${tropa.nombre} de ${asentamiento.id}`,
+          nombre: `${tropa.nombre} de ${jugadorId}`,
+          jugadorId,
           origen,
           cantidad,
           veterania: 0,

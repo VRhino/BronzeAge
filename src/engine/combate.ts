@@ -208,6 +208,11 @@ export function interceptarCaravana(
  * (el llamador debe quitarlo del estado, ver `campamentoDestruido`) y entrega una recompensa fija en
  * recursos; si pierde, los escuadrones sufren bajas (mismo `aplicarBajas` que el resto del combate) y el
  * campamento sigue en pie.
+ *
+ * SIN gate de General (corrección — a diferencia de asediar/interceptar, ver `iniciarAsedio`/
+ * `interceptarCaravana`): un campamento bandido es una amenaza NPC de mundo abierto, no una acción de
+ * guerra entre Facciones que necesite coordinación de mando. Cualquier escuadrón propio elegido (de
+ * cualquier jugador residente, Doc 2.5) puede atacarlo — basta con vencerlo en combate.
  */
 export function atacarCampamentoBandidos(
   atacante: Asentamiento,
@@ -215,7 +220,6 @@ export function atacarCampamentoBandidos(
   campamento: CampamentoBandido,
   tickActual: number
 ): { atacante: Asentamiento; eventos: string[]; campamentoDestruido: boolean } {
-  if (!atacante.cargos.generalId) throw new CombateInvalidoError('El atacante necesita un General para atacar un campamento.');
   const escuadrones = seleccionarEscuadrones(atacante, escuadronIdsAtacantes);
   const jitter = 1 + (Math.random() * 2 - 1) * MILITAR.varianzaCombate;
   const poderAtacante = poderTotal(escuadrones, tickActual, false) * jitter;

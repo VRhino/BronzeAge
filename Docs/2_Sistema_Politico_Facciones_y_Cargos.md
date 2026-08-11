@@ -1,7 +1,7 @@
 # 2. Sistema Político: Facciones, Cargos y Diplomacia
 
 ## 2.1 Glosario rápido (ver página "Glosario de Entidades Políticas" para el detalle completo)
-- **Jugador**: pertenece a 1 y solo 1 Facción.
+- **Jugador**: pertenece a 1 y solo 1 Facción, y reside en 1 y solo 1 asentamiento (Doc 2.5, a petición del usuario — es lo que le permite tener como mucho un escuadrón de cada tropa, ver Doc 5.8).
 - **Asentamiento**: pertenece a 1 y solo 1 Facción.
 - **Facción**: entidad política soberana, agrupa jugadores y asentamientos. Tiene cargos de nivel Facción (Rey, Embajador).
 - **Liga**: red de Facciones conectadas entre sí (por vasallaje y/o alianza). NO tiene cargos ni ciudadanía propia.
@@ -18,7 +18,7 @@
 ### Nivel asentamiento (uno de cada por asentamiento, designados por el Gobernador salvo este)
 - **Gobernador**: ELECTO por ciudadanos, máxima autoridad del asentamiento, designa al resto de cargos. Ve y controla la cola de auto-construcción (ver Doc 4.2).
 - **Tesorero**: gestión económica completa (trueque + Mercado).
-- **General**: mando militar del asentamiento.
+- **General**: mando militar del asentamiento — coordina el combate conjunto (ver Doc 5.2/5.10), pero NO es un gate de reclutamiento (corrección a petición del usuario, cierra la ambigüedad que había con 2.5: reclutar tropas es beneficio de RESIDENCIA, no de cargo — cualquier jugador residente recluta y amplía SU PROPIO escuadrón sin necesidad de que exista un General asignado).
 - **Maestro de Obras**: gestiona prioridades de auto-construcción, bonus a tiempos de construcción. Puede reordenar, añadir y quitar proyectos de la cola — nunca elegir su ubicación (ver Doc 4.2).
 - **Sacerdote**: acelerador de aparición de Nobleza (no requisito) + bonificación de felicidad.
 
@@ -50,8 +50,9 @@ Una Facción puede someter a otra Facción entera como vasalla, o federarse con 
 ## 2.5 Ciudadanía
 - Se liga a la FACCIÓN del jugador (NO a la Liga completa — los vasallos mantienen ciudadanía separada de su señor).
 - Obtención: (1) fundar un asentamiento — cada fundador recibe automáticamente una casa en el asentamiento recién fundado, ocupando un espacio del mismo cupo de vivienda que (2), y con ella ciudadanía inmediata; (2) comprar una casa en un asentamiento de la propia Facción (espacios limitados según nivel/tamaño). El cupo base de un asentamiento recién fundado es de 5 casas — igual al máximo de jugadores que pueden fundar juntos (Doc 1.2/1.3) — así que siempre hay sitio para todos los fundadores; si fundan menos de 5, los espacios restantes quedan libres para que otros jugadores compren casa después (p. ej. 2 fundadores dejan 3/5 libres).
-- Beneficios: ejercer cargo, iniciar caravanas en Mercados de la Facción, votar políticas, reclutar tropas (solo donde la ciudadanía lo permite), comisiones de comercio más bajas dentro de la misma Facción.
-- PENDIENTE: residencia en cualquier asentamiento de la Facción, protección militar, voz en política exterior; nivel intermedio de comisiones para Facciones aliadas/vasallas.
+- Beneficios: ejercer cargo, iniciar caravanas en Mercados de la Facción, votar políticas, reclutar tropas (RESUELTO, a petición del usuario — únicamente en el asentamiento donde el jugador reside, nunca en otro; ver Doc 5.8 para el detalle del escuadrón resultante), comisiones de comercio más bajas dentro de la misma Facción.
+- RESUELTO (a petición del usuario, cierra la ambigüedad anterior de esta línea): residencia es en UN solo asentamiento a la vez, nunca varios — comprar una segunda casa se rechaza mientras el jugador siga residiendo en otro (`comprarCasa`, engine/faccion.ts).
+- PENDIENTE: protección militar, voz en política exterior; nivel intermedio de comisiones para Facciones aliadas/vasallas.
 
 ## 2.6 Fusión/anexión voluntaria entre 2 Facciones
 Menú con 2 opciones al ejecutar la acción:
@@ -91,7 +92,7 @@ El juego es un SANDBOX de guerra persistente, SIN condiciones de victoria PARA E
 ## 2.10 Gremios (edificios especiales, escasos a nivel de servidor)
 No todos los asentamientos pueden tenerlos — solo las ciudades más importantes. Se obtienen cuando el gremio correspondiente "propone" colocar una sede, mediante TIRADA PERIÓDICA mientras se cumplan los requisitos (no es una barra de progreso).
 
-**Requisitos (distintos por gremio, misma naturaleza de 3 ejes):**
+**Requisitos (distintos por gremio, misma naturaleza de 4 condiciones independientes agrupadas en 3 puntos):**
 1. Score de reputación de Facción por encima de un umbral (ref. inicial: >90).
 2. Título de servidor específico (uno de los Títulos Dinámicos de Prestigio).
 3. AMBOS a la vez (confirmado): Nivel de asentamiento en el máximo (Nivel 3 en Fase 0, ver Doc 4.5) Y medidor de Mantenimiento por encima de un umbral (ref. inicial: >90%). No es uno u otro — son dos condiciones independientes que deben cumplirse simultáneamente.

@@ -55,7 +55,7 @@ Fase 0 descarta por completo los requisitos de "Planos de X" (vía Aedas, Doc 6)
 
 ### Alojamiento
 
-**Palacio** — desbloquea la aparición de Nobleza. Construcción vía política del Gobernador (ver 4.4), no auto-construcción.
+**Palacio** — desbloquea la aparición de Nobleza. Adición MANUAL de Gobernador/Maestro de Obras a la cola (ver 4.2), no auto-construcción — las políticas de desbloqueo que gateaban este edificio antes se retiraron (ver 4.4).
 - Requisito: Asentamiento nivel 3.
 - Capacidad: 200 nobles. Costo: 1500 madera + 1000 piedra. Tiempo: 20 ticks.
 
@@ -123,28 +123,28 @@ Van por AUTO-CONSTRUCCIÓN (igual que Granja/Cantera), disparadas en cuanto se c
 - Nivel 1: recluta Arietes. Nivel 2: recluta Torre de asedio.
 - PENDIENTE: costo/tiempo/trabajadores de construcción — sin cifra en el diseño original, solo el gate de nivel.
 
-**Barracón** — reclutamiento de tropas cuerpo a cuerpo (unidades y costo en equipo: ver Doc 5). Construcción vía política del General (ver 4.4), no auto-construcción.
+**Barracón** — reclutamiento de tropas cuerpo a cuerpo (unidades y costo en equipo: ver Doc 5). Adición MANUAL de Gobernador/Maestro de Obras a la cola (ver 4.2), no auto-construcción — las políticas de desbloqueo que gateaban este edificio antes se retiraron (ver 4.4).
 - Requisito nivel 2: Asentamiento nivel 2 + poseer Carpintería. Requisito nivel 3: Asentamiento nivel 3 + poseer Palacio.
 - Costo: construcción 30 madera; mejora 1: 100 madera + 60 piedra; mejora 2: 300 madera + 200 piedra. Tiempo de construcción: 6 ticks.
 
-**Galería de tiro** — reclutamiento de tropas a distancia (unidades y costo en equipo: ver Doc 5). Construcción vía política del General (ver 4.4), no auto-construcción.
+**Galería de tiro** — reclutamiento de tropas a distancia (unidades y costo en equipo: ver Doc 5). Adición MANUAL de Gobernador/Maestro de Obras a la cola (ver 4.2), no auto-construcción — las políticas de desbloqueo que gateaban este edificio antes se retiraron (ver 4.4).
 - Requisito nivel 2: Asentamiento nivel 2 + poseer Carpintería. Requisito nivel 3: Asentamiento nivel 3 + Carpintería nivel 2 (asimetría INTENCIONAL respecto a Armería/Barracón, que piden Palacio — Galería de tiro sigue su propio camino de progresión, no se uniforma).
 - Costo: construcción 50 madera; mejora 1: 140 madera + 20 piedra; mejora 2: 400 madera + 100 piedra. Tiempo de construcción: 6 ticks.
 
 ### Comercio
 
-**Mercado** (ampliación de comercio, a petición del usuario, Doc 3.3) — gatea colocar órdenes de mercado y construir caravanas comerciales propias (ver Doc 3.12). Sin recetas: no fabrica nada, sus niveles internos administran el cupo de flota, no producción. Construcción vía política del Tesorero (ver 4.4), no auto-construcción — mismo patrón que Barracón/Galería de tiro/Palacio.
+**Mercado** (ampliación de comercio, a petición del usuario, Doc 3.3) — gatea colocar órdenes de mercado y construir caravanas comerciales propias (ver Doc 3.12). Sin recetas: no fabrica nada, sus niveles internos administran el cupo de flota, no producción. Adición MANUAL de Gobernador/Maestro de Obras a la cola (ver 4.2), no auto-construcción — mismo patrón que Barracón/Galería de tiro/Palacio; la política "Construir Mercado" que gateaba este edificio antes se retiró (ver 4.4).
 - Sin gate de nivel de asentamiento para la construcción BASE. Requisito nivel 2 (mejora): Asentamiento nivel 2. Requisito nivel 3 (mejora): Asentamiento nivel 3.
 - Costo: construcción 100 madera + 40 piedra; mejora 1: 150 madera + 100 piedra; mejora 2: 450 madera + 200 piedra. Tiempo de construcción: 8 ticks.
 - Cupo de caravanas por nivel interno: nivel 1 → 2; nivel 2 → 4; nivel 3 → 6 (más el bonus aditivo de la política "Ampliación de Flota", ver 4.4).
 
 ### Trofeo
 
-**Maravilla** (Roadmap_Escalado.md Eje 4, a petición del usuario — IMPLEMENTADO solo el edificio en esta pasada, ver más abajo) — edificio único de coste extremo, sin recetas ni producción: es un trofeo, no un edificio productivo. Disponible vía control manual de cola (Gobernador/Maestro de Obras, ver 4.2), no auto-construcción.
+**Maravilla** (`Roadmap_Escalado.md` Eje 4, a petición del usuario — IMPLEMENTADO solo el edificio en esta pasada, ver más abajo) — edificio único de coste extremo, sin recetas ni producción: es un trofeo, no un edificio productivo. Disponible vía control manual de cola (Gobernador/Maestro de Obras, ver 4.2), no auto-construcción.
 - Requisito: Asentamiento en nivel MÁXIMO (nivel 3, tope de Fase 0).
 - Costo: 5000 madera + 5000 piedra + 500 oro + 300 cobre + 200 estaño + 200 livestock (PLACEHOLDER — todos los recursos EN BRUTO del catálogo actual, varias veces el costo de Palacio, el más caro hasta ahora). Tiempo: 200 ticks.
 - El diseño original pide además materiales EXÓTICOS (fuera del catálogo estándar) — NO implementados todavía, no existe ese tipo de recurso en el juego; el costo actual usa solo recursos ya existentes.
-- El CICLO de servidor que se cerraría al completarla (reset del mundo + la Facción ganadora persistiendo como legado NPC) queda fuera de esta pasada — ver Roadmap_Escalado.md Eje 4 para el diseño completo, todavía sin implementar (requiere infraestructura de servidor/multi-instancia que Fase 0 no tiene).
+- El CICLO de servidor que se cerraría al completarla (reset del mundo + la Facción ganadora persistiendo como legado NPC) queda fuera de esta pasada — ver `Roadmap_Escalado.md` Eje 4 para el diseño completo, todavía sin implementar (requiere infraestructura de servidor/multi-instancia que Fase 0 no tiene).
 
 ## 4.3 Almacenamiento
 Límites de almacenaje por recurso, ampliables construyendo más capacidad. El superávit que excede el límite dispara construcción automática de más almacenamiento.

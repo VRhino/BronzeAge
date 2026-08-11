@@ -559,12 +559,11 @@ export class GameStore {
 
   comprarCasa(asentamientoId: string, jugadorId: string): void {
     try {
-      const asentamiento = this.state.asentamientos.find((a) => a.id === asentamientoId)!;
-      const resultado = comprarCasaEngine(this.state.facciones, asentamiento, jugadorId);
+      const resultado = comprarCasaEngine(this.state.facciones, this.state.asentamientos, asentamientoId, jugadorId);
       this.state.facciones = resultado.facciones;
-      this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === asentamiento.id ? resultado.asentamiento : a));
-      this.registrar(`${jugadorId} compra casa en ${asentamiento.id} y obtiene ciudadanía.`);
-      this.registrarJugador(jugadorId, `Compra casa en ${asentamiento.id} y obtiene ciudadanía.`);
+      this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === resultado.asentamiento.id ? resultado.asentamiento : a));
+      this.registrar(`${jugadorId} compra casa en ${asentamientoId} y obtiene ciudadanía.`);
+      this.registrarJugador(jugadorId, `Compra casa en ${asentamientoId} y obtiene ciudadanía.`);
     } catch (err) {
       if (err instanceof FaccionInvalidaError) this.registrar(`Compra de casa rechazada: ${err.message}`);
       else throw err;
@@ -762,19 +761,31 @@ export class GameStore {
 
   /** Reclutamiento por equipo (Doc 5.7/5.8): recluta una tropa específica vía Barracón/Galería de tiro, de
    * origen Pesants o Artesanos. Nobleza ya no recluta tropas (sigue existiendo como clase de población, Doc 4.1).
-   * La cantidad de soldados es fija por tropa (`TROPAS_RECLUTABLES[].unidadesPorDefecto`), no la elige el jugador. */
-  reclutarTropa(asentamientoId: string, tropaId: string, origen: 'pesants' | 'artesanos'): void {
+   * Escuadrón de UN jugador (Doc 2.5, a petición del usuario): `jugadorId` debe ser residente de `asentamientoId`.
+   * La cantidad de soldados reclutada es el faltante hasta `TROPAS_RECLUTABLES[].unidadesPorDefecto` (repone bajas
+   * si el jugador ya tenía el escuadrón por debajo del tope), no la elige el jugador. */
+  reclutarTropa(asentamientoId: string, jugadorId: string, tropaId: string, origen: 'pesants' | 'artesanos'): void {
     try {
       const asentamiento = this.state.asentamientos.find((a) => a.id === asentamientoId)!;
-      const actualizado = reclutarTropaEngine(asentamiento, tropaId, origen, this.state.tick, this.contadorAcciones++);
+      const antes = asentamiento.escuadrones.find((e) => e.jugadorId === jugadorId && e.tropaId === tropaId)?.cantidad ?? 0;
+      const actualizado = reclutarTropaEngine(asentamiento, jugadorId, tropaId, origen, this.state.tick, this.contadorAcciones++);
       this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === actualizado.id ? actualizado : a));
-      const cantidad = TROPAS_RECLUTABLES.find((t) => t.id === tropaId)?.unidadesPorDefecto ?? 0;
-      this.registrar(`${asentamiento.id}: recluta ${cantidad} de la tropa "${tropaId}" (${origen}).`);
+      const despues = actualizado.escuadrones.find((e) => e.jugadorId === jugadorId && e.tropaId === tropaId)?.cantidad ?? 0;
+      this.registrar(`${asentamiento.id}: ${jugadorId} recluta ${despues - antes} de la tropa "${tropaId}" (${origen}).`);
     } catch (err) {
       if (err instanceof ReclutamientoInvalidoError) this.registrar(`Reclutamiento rechazado: ${err.message}`);
       else throw err;
     }
     this.notify();
+  }
+
+  /** Residentes de un asentamiento (Doc 2.5): fundadores + casas compradas, deduplicado — cualquiera de ellos
+   * puede reclutar o reponer SU escuadrón ahí (ver `reclutarTropa`). Usado por la UI para el selector de Jugador
+   * en Reclutamiento y para agrupar los chips de Combate por jugador. */
+  jugadoresDeAsentamiento(asentamientoId: string): string[] {
+    const asentamiento = this.state.asentamientos.find((a) => a.id === asentamientoId);
+    if (!asentamiento) return [];
+    return [...new Set([...asentamiento.jugadoresFundadoresIds, ...asentamiento.casasCompradas])];
   }
 
   /**
