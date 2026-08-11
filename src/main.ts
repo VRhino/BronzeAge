@@ -179,6 +179,12 @@ app.innerHTML = `
     <div class="tab-panel" id="tab-acciones">
     <div class="controls-grid">
       <div class="controls">
+        <h2>Facciones (Doc 0)</h2>
+        <label>Nombre de la nueva Facción <input id="faccion-crear-nombre" type="text" placeholder="Nombre de la Facción" /></label>
+        <button id="faccion-crear-btn">Fundar Facción</button>
+      </div>
+
+      <div class="controls">
         <h2>Mundo</h2>
         <label>
           Facción activa (clic en el mapa funda aquí)
@@ -432,6 +438,7 @@ const tickSliderLabelEl = document.getElementById('tick-slider-label')!;
 const volverPresenteBtn = document.getElementById('volver-presente-btn') as HTMLButtonElement;
 const controlsPanelEl = document.querySelector('.controls-panel')!;
 const faccionSelect = document.getElementById('faccion-select') as HTMLSelectElement;
+const faccionCrearNombreInput = document.getElementById('faccion-crear-nombre') as HTMLInputElement;
 const seedInput = document.getElementById('seed-input') as HTMLInputElement;
 const regionSelect = document.getElementById('region-select') as HTMLSelectElement;
 const jugadoresInput = document.getElementById('jugadores-input') as HTMLInputElement;
@@ -1609,6 +1616,11 @@ document.getElementById('diplo-romper-btn')!.addEventListener('click', () => {
 
 document.getElementById('diplo-rebelion-btn')!.addEventListener('click', () => {
   gameStore.rebelionVasallo(diploRelacionSelect.value);
+});
+
+document.getElementById('faccion-crear-btn')!.addEventListener('click', () => {
+  gameStore.crearFaccion(faccionCrearNombreInput.value.trim());
+  faccionCrearNombreInput.value = '';
 });
 
 document.getElementById('anexion-btn')!.addEventListener('click', () => {

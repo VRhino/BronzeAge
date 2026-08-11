@@ -5,7 +5,9 @@ import { poblacionTotal } from './asentamientoQuery';
 export class FaccionInvalidaError extends Error {}
 
 export function crearFaccion(id: string, nombre: string): Faccion {
-  return { id, nombre, reyId: null, embajadorId: null, nivel: 1, ciudadanosIds: [], reputacion: 0 };
+  const nombreLimpio = nombre.trim();
+  if (!nombreLimpio) throw new FaccionInvalidaError('El nombre de la Facción no puede estar vacío.');
+  return { id, nombre: nombreLimpio, reyId: null, embajadorId: null, nivel: 1, ciudadanosIds: [], reputacion: 0 };
 }
 
 function asentamientosDe(faccionId: string, asentamientos: Asentamiento[]): Asentamiento[] {

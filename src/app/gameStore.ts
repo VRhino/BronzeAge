@@ -55,7 +55,7 @@ import { proponerTrueque as proponerTruequeEngine, construirCaravanaComercial as
 import { asegurarCaminoComercial } from '../engine/caminos';
 import { controladorDeChokepoint } from '../engine/chokepoints';
 import { colocarOrdenMercado as colocarOrdenMercadoEngine, calcularPrecioReferencia, OrdenInvalidaError } from '../engine/market';
-import { crearFaccion, comprarCasa as comprarCasaEngine, calcularCapFundacion, capacidadCasas, FaccionInvalidaError } from '../engine/faccion';
+import { crearFaccion as crearFaccionEngine, comprarCasa as comprarCasaEngine, calcularCapFundacion, capacidadCasas, FaccionInvalidaError } from '../engine/faccion';
 import { asignarRey as asignarReyEngine, asignarEmbajador as asignarEmbajadorEngine, asignarCargoLocal as asignarCargoLocalEngine, CargoInvalidoError } from '../engine/cargos';
 import { activarPolitica as activarPoliticaEngine, PoliticaInvalidaError } from '../engine/politicas';
 import {
@@ -156,7 +156,7 @@ export const CATALOGOS = {
 type Listener = () => void;
 
 function crearFaccionesIniciales(): Faccion[] {
-  return [crearFaccion('faccion-1', 'Micenas'), crearFaccion('faccion-2', 'Troya'), crearFaccion('faccion-3', 'Ugarit')];
+  return [crearFaccionEngine('faccion-1', 'Micenas'), crearFaccionEngine('faccion-2', 'Troya'), crearFaccionEngine('faccion-3', 'Ugarit')];
 }
 
 function idsNoVacios(csv: string): string[] {
@@ -454,6 +454,22 @@ export class GameStore {
       this.registrar(`${origen.id}: desarma la Caravana de Fundación ${caravanaId} y recupera su contenido.`);
     } catch (err) {
       if (err instanceof ExpansionInvalidaError) this.registrar(`No se pudo desarmar la caravana: ${err.message}`);
+      else throw err;
+    }
+    this.notify();
+  }
+
+  /** Creación libre de Facción (Doc 0): cualquier nombre no vacío y no repetido, sin límite de cantidad. */
+  crearFaccion(nombre: string): void {
+    try {
+      const nombreLimpio = nombre.trim();
+      const yaExiste = this.state.facciones.some((f) => f.nombre.toLowerCase() === nombreLimpio.toLowerCase());
+      if (yaExiste) throw new FaccionInvalidaError(`Ya existe una Facción llamada "${nombreLimpio}".`);
+      const nueva = crearFaccionEngine(`faccion-custom-${this.contadorAcciones++}`, nombreLimpio);
+      this.state.facciones = [...this.state.facciones, nueva];
+      this.registrar(`Nueva Facción fundada: ${nueva.nombre}.`);
+    } catch (err) {
+      if (err instanceof FaccionInvalidaError) this.registrar(`Creación de Facción rechazada: ${err.message}`);
       else throw err;
     }
     this.notify();
