@@ -11,7 +11,6 @@
 // este módulo es la única puerta explícita que sí puede escribir, vía casteos a `any` acotados a este archivo.
 import {
   ALMACEN,
-  ASCENSO_TROPA,
   CAP_FUNDACION_POR_NIVEL,
   CIUDADANIA,
   COMISION,
@@ -31,7 +30,6 @@ import {
   REPUTACION,
   RESERVA_CONSTRUCCION,
   SITIO,
-  TROPA_CATALOGO,
   TRUEQUE,
   ZONA_INFLUENCIA,
 } from '../constants';
@@ -82,8 +80,6 @@ const GRUPOS: Array<[string, string, unknown]> = [
   ['Ciudadanía', 'CIUDADANIA', CIUDADANIA],
   ['Políticas — slots', 'POLITICAS', POLITICAS],
   ['Catálogo de políticas', 'POLITICA_CATALOGO', POLITICA_CATALOGO],
-  ['Catálogo de tropas', 'TROPA_CATALOGO', TROPA_CATALOGO],
-  ['Ascenso de tropa', 'ASCENSO_TROPA', ASCENSO_TROPA],
   ['Militar', 'MILITAR', MILITAR],
   ['Nivel de asentamiento', 'NIVEL_ASENTAMIENTO', NIVEL_ASENTAMIENTO],
   ['Mantenimiento', 'MANTENIMIENTO', MANTENIMIENTO],

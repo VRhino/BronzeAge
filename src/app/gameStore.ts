@@ -7,8 +7,10 @@ import type {
   AcuerdoTrueque,
   Asentamiento,
   CaminoComercial,
+  CampamentoBandido,
   CargoTipo,
   Caravana,
+  EdificioTipo,
   Faccion,
   NodoRecurso,
   OrdenMercado,
@@ -20,7 +22,7 @@ import type {
   ZonaBosque,
   ZonaInfluencia,
 } from '../domain/types';
-import { EDIFICIO_CATALOGO, FUNDACION, MANTENIMIENTO, NECESIDADES, POLITICAS, POLITICA_CATALOGO, TROPAS_RECLUTABLES } from '../constants';
+import { CAMPAMENTOS_BANDIDOS, EDIFICIO_CATALOGO, FUNDACION, MANTENIMIENTO, NECESIDADES, POLITICAS, POLITICA_CATALOGO, TROPAS_RECLUTABLES } from '../constants';
 import { generarMapa, MAPA_DEFAULT, WORLDGEN_VERSION, type MapaGenerado } from '../worldgen';
 import { crearEstadoMapa, crearMapa, type EstadoMapa, type Mapa } from '../world/mapa';
 import {
@@ -68,8 +70,20 @@ import {
 import { computeLigas, type LigaInfo } from '../engine/liga';
 import { anexionar as anexionarEngine, fusionar as fusionarEngine, FusionInvalidaError } from '../engine/fusion';
 import { reclutarTropa as reclutarTropaEngine, ReclutamientoInvalidoError, consumoRacionTropas } from '../engine/tropas';
-import { construirManualmente as construirManualmenteEngine, ConstruccionManualInvalidaError } from '../engine/construction';
-import { iniciarAsedio as iniciarAsedioEngine, combateCampoAbierto as combateCampoAbiertoEngine, interceptarCaravana as interceptarCaravanaEngine, CombateInvalidoError } from '../engine/combate';
+import {
+  anadirEdificioManualmente as anadirEdificioManualmenteEngine,
+  quitarDeCola as quitarDeColaEngine,
+  moverEnCola as moverEnColaEngine,
+  reclamosDeFuentes as reclamosDeFuentesEngine,
+  ConstruccionManualInvalidaError,
+} from '../engine/construction';
+import {
+  iniciarAsedio as iniciarAsedioEngine,
+  combateCampoAbierto as combateCampoAbiertoEngine,
+  interceptarCaravana as interceptarCaravanaEngine,
+  atacarCampamentoBandidos as atacarCampamentoBandidosEngine,
+  CombateInvalidoError,
+} from '../engine/combate';
 import {
   lanzarCaravanaFundacion as lanzarCaravanaFundacionEngine,
   desarmarCaravanaFundacion as desarmarCaravanaFundacionEngine,
@@ -99,6 +113,9 @@ export interface GameState {
   titulos: Titulo[];
   /** Caminos comerciales (Fase 0.3, Doc 1.6) — ver `engine/caminos.ts`. */
   caminos: CaminoComercial[];
+  /** Campamentos de bandidos (Doc 1.9) — ver `engine/bandidos.ts`. */
+  campamentosBandidos: CampamentoBandido[];
+  bandidosProximoSpawnTick: number;
   tick: number;
   log: EventoLog[];
   historialJugadores: Record<string, EventoLog[]>;
@@ -134,6 +151,9 @@ export interface SimulacionExportada {
   titulos: Titulo[];
   /** Ausente en archivos exportados antes de Fase 0.3 — se asume sin caminos todavía (`?? []` al importar). */
   caminos?: CaminoComercial[];
+  /** Ausente en archivos exportados antes de esta mecánica — se asume sin campamentos todavía al importar. */
+  campamentosBandidos?: CampamentoBandido[];
+  bandidosProximoSpawnTick?: number;
   log: EventoLog[];
   historialJugadores: Record<string, EventoLog[]>;
 }
@@ -151,13 +171,30 @@ export const CATALOGOS = {
   nivelFaccionPorSlotExtraGobernador: POLITICAS.nivelFaccionPorSlotExtraGobernador,
   maximoEdificiosEnCola: NECESIDADES.maximoEnCola,
   maximoEnConstruccionSimultanea: NECESIDADES.maximoEnConstruccionSimultanea,
+  // Control manual de cola (Doc 4.2, a petición del usuario): catálogo completo salvo Centro Urbano, que
+  // nunca pasa por cola (Doc 1.3) — usado por el selector de "añadir a la cola" de Gobernador/Maestro de
+  // Obras Y por el segmento "Info:" que muestra costo/tiempo/gates antes de confirmar (mismo patrón que
+  // `tropasReclutables` para el reclutamiento).
+  catalogoEdificios: (Object.keys(EDIFICIO_CATALOGO) as EdificioTipo[])
+    .filter((tipo) => tipo !== 'centroUrbano')
+    .map((tipo) => {
+      const def = EDIFICIO_CATALOGO[tipo] as {
+        costo: Partial<Record<string, number>>;
+        tiempoConstruccionTicks: number;
+        requisitoNivelAsentamientoConstruccion?: number;
+        nivelFaccionMinimo?: number;
+      };
+      return {
+        tipo,
+        costo: def.costo,
+        tiempoConstruccionTicks: def.tiempoConstruccionTicks,
+        requisitoNivelAsentamiento: def.requisitoNivelAsentamientoConstruccion ?? 0,
+        requisitoNivelFaccion: def.nivelFaccionMinimo ?? 0,
+      };
+    }),
 };
 
 type Listener = () => void;
-
-function crearFaccionesIniciales(): Faccion[] {
-  return [crearFaccionEngine('faccion-1', 'Micenas'), crearFaccionEngine('faccion-2', 'Troya'), crearFaccionEngine('faccion-3', 'Ugarit')];
-}
 
 function idsNoVacios(csv: string): string[] {
   return csv
@@ -191,13 +228,15 @@ export class GameStore {
       estadoMapa: crearEstadoMapa(),
       mapa: generarMapa({ ...MAPA_DEFAULT, seed: 1 }),
       asentamientos: [],
-      facciones: crearFaccionesIniciales(),
+      facciones: [],
       caravanas: [],
       acuerdos: [],
       ordenes: [],
       relaciones: [],
       titulos: [],
       caminos: [],
+      campamentosBandidos: [],
+      bandidosProximoSpawnTick: 0,
       tick: 0,
       log: [],
       historialJugadores: {},
@@ -255,6 +294,8 @@ export class GameStore {
       relaciones: structuredClone(this.state.relaciones),
       titulos: structuredClone(this.state.titulos),
       caminos: structuredClone(this.state.caminos),
+      campamentosBandidos: structuredClone(this.state.campamentosBandidos),
+      bandidosProximoSpawnTick: this.state.bandidosProximoSpawnTick,
       tick: this.state.tick,
       log: structuredClone(this.state.log),
       historialJugadores: structuredClone(this.state.historialJugadores),
@@ -736,17 +777,62 @@ export class GameStore {
     this.notify();
   }
 
-  construirManualmente(asentamientoId: string, tipo: 'granFundicion'): void {
+  /**
+   * Control manual de cola (Doc 4.2, a petición del usuario — reemplaza el mecanismo de política de
+   * desbloqueo que tenían Barracón/Galería de tiro/Palacio/Mercado): Gobernador o Maestro de Obras añaden
+   * CUALQUIER edificio del catálogo a la cola, siempre que el asentamiento pueda pagarlo — la ubicación la
+   * sigue decidiendo siempre el algoritmo de colocación, nunca el jugador.
+   */
+  anadirEdificioManualmente(asentamientoId: string, cargo: 'gobernador' | 'maestroObras', tipo: EdificioTipo): void {
     try {
       const asentamiento = this.state.asentamientos.find((a) => a.id === asentamientoId)!;
       const faccion = this.state.facciones.find((f) => f.id === asentamiento.faccionId)!;
       const zona = this.getZonas().find((z) => z.asentamientoId === asentamiento.id);
       const capital = encontrarCapital(asentamiento.faccionId, this.state.asentamientos);
-      const actualizado = construirManualmenteEngine(asentamiento, faccion, zona?.poligono ?? [], tipo, this.contadorAcciones++, capital);
+      const reclamos = reclamosDeFuentesEngine(this.state.asentamientos);
+      const actualizado = anadirEdificioManualmenteEngine(
+        asentamiento,
+        faccion,
+        cargo,
+        tipo,
+        zona?.poligono ?? [],
+        this.getMapa(),
+        capital,
+        reclamos,
+        this.contadorAcciones++
+      );
       this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === actualizado.id ? actualizado : a));
-      this.registrar(`${asentamiento.id}: se compromete ${tipo} (construcción manual, pagada).`);
+      this.registrar(`${asentamiento.id}: ${cargo} añade ${tipo} a la cola (pagado).`);
     } catch (err) {
-      if (err instanceof ConstruccionManualInvalidaError) this.registrar(`Construcción rechazada: ${err.message}`);
+      if (err instanceof ConstruccionManualInvalidaError) this.registrar(`Añadir a la cola rechazado: ${err.message}`);
+      else throw err;
+    }
+    this.notify();
+  }
+
+  /** Quita un proyecto `en_cola` (solo si aún no empezó a construirse) y devuelve el costo completo pagado. */
+  quitarDeCola(asentamientoId: string, cargo: 'gobernador' | 'maestroObras', edificioId: string): void {
+    try {
+      const asentamiento = this.state.asentamientos.find((a) => a.id === asentamientoId)!;
+      const actualizado = quitarDeColaEngine(asentamiento, cargo, edificioId);
+      this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === actualizado.id ? actualizado : a));
+      this.registrar(`${asentamiento.id}: ${cargo} quita un proyecto de la cola (recursos devueltos).`);
+    } catch (err) {
+      if (err instanceof ConstruccionManualInvalidaError) this.registrar(`Quitar de la cola rechazado: ${err.message}`);
+      else throw err;
+    }
+    this.notify();
+  }
+
+  /** Mueve un proyecto `en_cola` una posición arriba/abajo en el orden de arranque. */
+  moverEnCola(asentamientoId: string, cargo: 'gobernador' | 'maestroObras', edificioId: string, direccion: 'arriba' | 'abajo'): void {
+    try {
+      const asentamiento = this.state.asentamientos.find((a) => a.id === asentamientoId)!;
+      const actualizado = moverEnColaEngine(asentamiento, cargo, edificioId, direccion);
+      this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === actualizado.id ? actualizado : a));
+      this.registrar(`${asentamiento.id}: ${cargo} reordena la cola de construcción.`);
+    } catch (err) {
+      if (err instanceof ConstruccionManualInvalidaError) this.registrar(`Reordenar cola rechazado: ${err.message}`);
       else throw err;
     }
     this.notify();
@@ -834,6 +920,26 @@ export class GameStore {
     this.notify();
   }
 
+  /** Ataque de un jugador a un campamento de bandidos (Doc 1.9): si gana, se quita del mundo y se agenda el
+   * plazo de reaparición (`CAMPAMENTOS_BANDIDOS.ticksRespawn`) — el spawn en sí lo evalúa `avanzarTick`. */
+  atacarCampamentoBandidos(atacanteId: string, escuadronesCsv: string, campamentoId: string): void {
+    try {
+      const atacante = this.state.asentamientos.find((a) => a.id === atacanteId)!;
+      const campamento = this.state.campamentosBandidos.find((c) => c.id === campamentoId)!;
+      const resultado = atacarCampamentoBandidosEngine(atacante, idsNoVacios(escuadronesCsv), campamento, this.state.tick);
+      this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === resultado.atacante.id ? resultado.atacante : a));
+      if (resultado.campamentoDestruido) {
+        this.state.campamentosBandidos = this.state.campamentosBandidos.filter((c) => c.id !== campamento.id);
+        this.state.bandidosProximoSpawnTick = this.state.tick + CAMPAMENTOS_BANDIDOS.ticksRespawn;
+      }
+      for (const e of resultado.eventos) this.registrar(e);
+    } catch (err) {
+      if (err instanceof CombateInvalidoError) this.registrar(`Ataque a campamento rechazado: ${err.message}`);
+      else throw err;
+    }
+    this.notify();
+  }
+
   avanzarTick(): void {
     this.state.tick += 1;
     const resultado = avanzarSimulacion(
@@ -846,6 +952,8 @@ export class GameStore {
         relaciones: this.state.relaciones,
         titulos: this.state.titulos,
         caminos: this.state.caminos,
+        campamentosBandidos: this.state.campamentosBandidos,
+        bandidosProximoSpawnTick: this.state.bandidosProximoSpawnTick,
       },
       this.getMapa(),
       this.state.tick
@@ -858,6 +966,8 @@ export class GameStore {
     this.state.relaciones = resultado.relaciones;
     this.state.titulos = resultado.titulos;
     this.state.caminos = resultado.caminos;
+    this.state.campamentosBandidos = resultado.campamentosBandidos;
+    this.state.bandidosProximoSpawnTick = resultado.bandidosProximoSpawnTick;
     for (const evento of resultado.eventos) this.registrar(evento);
     this.notify();
   }
@@ -869,13 +979,15 @@ export class GameStore {
       estadoMapa: crearEstadoMapa(),
       mapa: generarMapa({ ...MAPA_DEFAULT, seed, region }),
       asentamientos: [],
-      facciones: crearFaccionesIniciales(),
+      facciones: [],
       caravanas: [],
       acuerdos: [],
       ordenes: [],
       relaciones: [],
       titulos: [],
       caminos: [],
+      campamentosBandidos: [],
+      bandidosProximoSpawnTick: 0,
       tick: 0,
       log: [],
       historialJugadores: {},
@@ -902,6 +1014,8 @@ export class GameStore {
       relaciones: this.state.relaciones,
       titulos: this.state.titulos,
       caminos: this.state.caminos,
+      campamentosBandidos: this.state.campamentosBandidos,
+      bandidosProximoSpawnTick: this.state.bandidosProximoSpawnTick,
       log: this.state.log,
       historialJugadores: this.state.historialJugadores,
     };
@@ -966,6 +1080,8 @@ export class GameStore {
         relaciones: payload.relaciones ?? [],
         titulos: payload.titulos ?? [],
         caminos: payload.caminos ?? [],
+        campamentosBandidos: payload.campamentosBandidos ?? [],
+        bandidosProximoSpawnTick: payload.bandidosProximoSpawnTick ?? 0,
         tick: payload.tick ?? 0,
         log: payload.log ?? [],
         historialJugadores: payload.historialJugadores ?? {},

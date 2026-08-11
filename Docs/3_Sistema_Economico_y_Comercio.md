@@ -53,6 +53,7 @@ No hay un sistema que detecte explícitamente "cortar una ruta" como evento de g
 - Requiere el cargo de General. Calcula poder del atacante contra una defensa base de caravana FIJA (placeholder) — la escolta de jugadores reales (hasta 15, ver diseño original) NO está modelada todavía, es un valor fijo sustituto.
 - Captura exactamente el 50% de la carga si el atacante gana (umbral de captura, coincide con el diseño).
 - NO hay reparación NPC tras derrota — la caravana simplemente se elimina si es capturada (el diseño original preveía reparación; simplificado en Fase 0).
+- **Amenaza NPC nueva — IMPLEMENTADO (a petición del usuario, ver Doc 1.9)**: campamentos de bandidos en bosques no reclamados atacan caravanas que pasen cerca, con la misma resolución de combate asimétrico que la intercepción entre Facciones, pero contra un bando NPC — ver Doc 1.9 para spawn, recompensa y reaparición, `engine/bandidos.ts` para la implementación.
 
 ## 3.11 Comercio marítimo — ❌ fuera de alcance (correcto, según diseño)
 Requiere tecnología de barcos + puertos. Nada implementado — consistente con que Fase 0 es 100% terrestre (eje naval pospuesto a fase completa).
@@ -61,7 +62,7 @@ Requiere tecnología de barcos + puertos. Nada implementado — consistente con 
 
 **Contexto:** hasta esta ampliación, "Mercado" era solo el nombre de la mecánica de órdenes (3.3) — no existía como edificio en ningún catálogo, pese a que el diseño original (Doc 0/2) ya describía al Tesorero como responsable de "trueque + Mercado" como dos cosas separadas. Al mismo tiempo, las caravanas de Trueque se creaban de la nada en cada envío, sin ningún concepto de cuántas tenía un asentamiento, activas o no. Ambos huecos se cierran juntos.
 
-**Mercado (edificio, Doc 4.2.1)**: vía política del Tesorero ("Construir Mercado"), mismo patrón que Barracón/Galería de tiro/Palacio — no auto-construcción, cluster de cola aparte. Gatea DOS cosas: colocar órdenes de mercado (3.3) y construir caravanas propias (más abajo). Con niveles internos que administran el cupo de flota — ver catálogo completo en Doc 4.2.1.
+**Mercado (edificio, Doc 4.2.1)**: adición MANUAL de Gobernador/Maestro de Obras (ver Doc 4.2, cambio de base a petición del usuario — la política "Construir Mercado" que existía antes se retiró), mismo patrón que Barracón/Galería de tiro/Palacio — no auto-construcción. Gatea DOS cosas: colocar órdenes de mercado (3.3) y construir caravanas propias (más abajo). Con niveles internos que administran el cupo de flota — ver catálogo completo en Doc 4.2.1.
 
 **Flota de caravanas propias**: `construirCaravanaComercial` — activo persistente, no efímero, que cuesta 50 madera y cuenta contra `cupoCaravanas` (nivel de Mercado + política "Ampliación de Flota", +1 aditivo) hasta que se pierda capturada en combate (3.10). **No se puede desmantelar voluntariamente** (decisión confirmada con el usuario). Nace 'disponible' en el asentamiento; al ser asignada a un envío pasa a 'en_transito'; al entregar, vuelve a 'disponible' en el origen — se reutiliza, no se reconstruye en cada viaje.
 

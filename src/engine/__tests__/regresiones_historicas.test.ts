@@ -35,6 +35,8 @@ function estadoInicialConUnAsentamiento(posicion?: { x: number; y: number }) {
     relaciones: [],
     titulos: [],
     caminos: [],
+    campamentosBandidos: [],
+    bandidosProximoSpawnTick: 0,
   };
   return { mapa, estado };
 }

@@ -16,10 +16,10 @@
 - **Embajador**: crea alianzas y declara guerras. Designado directamente por el Rey.
 
 ### Nivel asentamiento (uno de cada por asentamiento, designados por el Gobernador salvo este)
-- **Gobernador**: ELECTO por ciudadanos, máxima autoridad del asentamiento, designa al resto de cargos.
+- **Gobernador**: ELECTO por ciudadanos, máxima autoridad del asentamiento, designa al resto de cargos. Ve y controla la cola de auto-construcción (ver Doc 4.2).
 - **Tesorero**: gestión económica completa (trueque + Mercado).
 - **General**: mando militar del asentamiento.
-- **Maestro de Obras**: gestiona prioridades de auto-construcción, bonus a tiempos de construcción.
+- **Maestro de Obras**: gestiona prioridades de auto-construcción, bonus a tiempos de construcción. Puede reordenar, añadir y quitar proyectos de la cola — nunca elegir su ubicación (ver Doc 4.2).
 - **Sacerdote**: acelerador de aparición de Nobleza (no requisito) + bonificación de felicidad.
 
 ### Reglas generales de cargos
@@ -84,7 +84,9 @@ PENDIENTE: valores numéricos exactos de cada evento, velocidad de decaimiento, 
 - **Identidad visual**: cada Facción tiene su propio sigilo/estandarte; una Liga puede tener uno colectivo.
 
 ## 2.9 Progresión sin condición de victoria
-El juego es un SANDBOX de guerra persistente, SIN condiciones de victoria ni final de servidor (hasta que se vacíe). En vez de victoria, existen TÍTULOS DINÁMICOS de PRESTIGIO (sin beneficio mecánico, solo prestigio) que cambian de mano según el poder relativo, recalculados PERIÓDICAMENTE (no en tiempo real). Ejemplos de referencia (lista abierta, no cerrada): imperio/Facción más grande, general con más victorias, Facción con mayor poder económico, ejército más grande, "Gran Rey". El histórico de títulos se narra por los AEDAS/POETAS (ver Doc 6), consultable vía interfaz dedicada Y eventos in-game.
+El juego es un SANDBOX de guerra persistente, SIN condiciones de victoria PARA EL JUGADOR. En vez de victoria personal, existen TÍTULOS DINÁMICOS de PRESTIGIO (sin beneficio mecánico, solo prestigio) que cambian de mano según el poder relativo, recalculados PERIÓDICAMENTE (no en tiempo real). Ejemplos de referencia (lista abierta, no cerrada): imperio/Facción más grande, general con más victorias, Facción con mayor poder económico, ejército más grande, "Gran Rey". El histórico de títulos se narra por los AEDAS/POETAS (ver Doc 6), consultable vía interfaz dedicada Y eventos in-game.
+
+**NOTA (ampliación, a petición del usuario — inspirado en análisis comparativo con Travian, ver `Roadmap_Escalado.md` Eje 4)**: lo de arriba sigue siendo cierto a nivel de JUGADOR — nadie "gana" la partida. Pero cada INSTANCIA DE SERVIDOR sí tiene un ciclo de vida acotado (~12 meses, o antes si una Facción completa la Maravilla del ciclo) que termina en un reseteo del mundo. Ver `Roadmap_Escalado.md` Eje 4 para el mecanismo completo, incluyendo el legado NPC de la Facción que completa la Maravilla.
 
 ## 2.10 Gremios (edificios especiales, escasos a nivel de servidor)
 No todos los asentamientos pueden tenerlos — solo las ciudades más importantes. Se obtienen cuando el gremio correspondiente "propone" colocar una sede, mediante TIRADA PERIÓDICA mientras se cumplan los requisitos (no es una barra de progreso).

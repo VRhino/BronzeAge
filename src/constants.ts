@@ -267,11 +267,12 @@ export const EDIFICIO_CATALOGO = {
     } as Record<number, NivelEdificioTransformacion>,
   },
 
-  // --- Edificios especiales vía política (Doc 4.4, rediseño de progreso Fase 0): NO son auto-construcción —
-  // solo se encolan mientras la política de desbloqueo correspondiente esté activa (ver engine/politicas.ts
-  // `politicaActivaDesbloqueaEdificio`), en un cluster de cola aparte que no cuenta contra
-  // NECESIDADES.maximoEnCola. Sin recetas: el reclutamiento por equipo de Barracón/Galería de tiro queda fuera
-  // de alcance de este plan (ver Doc 5.7/5.8 PENDIENTE), Palacio solo desbloquea Nobleza (engine/population.ts). ---
+  // --- Edificios especiales (Doc 4.4, rediseño de progreso Fase 0 + cambio de base del control de cola, a
+  // petición del usuario): NO son auto-construcción por necesidad — solo se añaden a la cola por decisión
+  // MANUAL de Gobernador/Maestro de Obras (`anadirEdificioManualmente`, engine/construction.ts), igual que
+  // cualquier otro edificio del catálogo (el mecanismo de política dedicada que existía antes se retiró por
+  // completo). Sin recetas: el reclutamiento por equipo de Barracón/Galería de tiro queda fuera de alcance de
+  // este plan (ver Doc 5.7/5.8 PENDIENTE), Palacio solo desbloquea Nobleza (engine/population.ts). ---
 
   barracon: {
     costo: { madera: 30 },
@@ -329,9 +330,9 @@ export const EDIFICIO_CATALOGO = {
     capacidadNobles: 200,
   },
 
-  // Ampliación de comercio (a petición del usuario, Doc 3.3): vía política del Tesorero ("Construir Mercado"),
-  // mismo patrón que Barracón/Galería de tiro — cluster de cola aparte, no auto-construcción. Sin recetas: no
-  // fabrica nada, sus niveles administran `cupoCaravanas` (ver `cupoCaravanas`, engine/asentamientoQuery.ts).
+  // Ampliación de comercio (a petición del usuario, Doc 3.3): adición MANUAL de Gobernador/Maestro de Obras,
+  // mismo patrón que Barracón/Galería de tiro — no auto-construcción por necesidad. Sin recetas: no fabrica
+  // nada, sus niveles administran `cupoCaravanas` (ver `cupoCaravanas`, engine/asentamientoQuery.ts).
   // Gatea, además de la flota, las órdenes de Mercado (`colocarOrdenMercado`, engine/market.ts) — sin Mercado
   // activo no se puede ni construir una caravana ni colocar una orden.
   mercado: {
@@ -354,6 +355,21 @@ export const EDIFICIO_CATALOGO = {
         cupoCaravanas: 6,
       },
     } as Record<number, NivelEdificioTransformacion>,
+  },
+
+  // Maravilla (Roadmap_Escalado.md Eje 4, a petición del usuario) — SOLO el edificio en esta pasada: el ciclo
+  // de servidor de 12 meses que se cierra al completarla (reset + Facción ganadora persistiendo como legado
+  // NPC) queda fuera de alcance, requiere infraestructura de servidor/multi-instancia que Fase 0 no tiene (ver
+  // Roadmap_Escalado.md). Único edificio: nivel de asentamiento MÁXIMO (3, tope de Fase 0) requerido para
+  // construirla, coste PLACEHOLDER deliberadamente extremo (varias veces el de Palacio, el más caro hasta
+  // ahora) usando TODOS los recursos en bruto del catálogo — Doc dice "todos los materiales conocidos más
+  // algunos exóticos"; los materiales EXÓTICOS quedan PENDIENTES (no existe todavía ningún recurso/extractor
+  // exótico en el juego, añadirlos es trabajo aparte) — ver `Preguntas_Abiertas.md`. Sin recetas ni niveles:
+  // es un trofeo, no un edificio productivo.
+  maravilla: {
+    costo: { madera: 5000, piedra: 5000, oro: 500, cobre: 300, estano: 200, livestock: 200 },
+    tiempoConstruccionTicks: 200,
+    requisitoNivelAsentamientoConstruccion: 3,
   },
 } as const;
 
@@ -394,6 +410,11 @@ export const SCORE_BANDAS = {
   supervivencia: 10000, // granja, lenera
   extractorBase: 5000, // cantera, minaCobre, mina, minaEstano, corral
   crecimiento: 1000, // vivienda, almacen
+  // Control manual de cola (Doc 4.2, a petición del usuario): banda para edificios añadidos manualmente por
+  // Gobernador/Maestro de Obras (`anadirEdificioManualmente`, engine/construction.ts) — siempre por debajo de
+  // extractorBase, así una necesidad de supervivencia/extracción detectada automáticamente el próximo tick
+  // nunca queda por detrás de una decisión manual (mismo invariante que ya protegía crecimiento/transformación).
+  manual: 900,
   transformacion: 500, // curtiduria, armeria, fundicion, carpinteria
 };
 
@@ -548,13 +569,11 @@ export const POLITICA_CATALOGO = [
   { id: 'comercio_abierto', cargo: 'tesorero', nombre: 'Comercio Abierto', factorComisionExterna: 0.6 },
   { id: 'aranceles', cargo: 'tesorero', nombre: 'Aranceles Proteccionistas', factorComisionExterna: 1.5 },
   { id: 'leva_forzosa', cargo: 'general', nombre: 'Leva Forzosa', factorCostoReclutamiento: 0.7 },
-  // Desbloqueo de edificios especiales (Doc 4.4, rediseño de progreso Fase 0): mientras esté activa, el
-  // edificio correspondiente puede encolarse en un cluster de cola aparte (no cuenta contra
-  // NECESIDADES.maximoEnCola) — ver `politicaActivaDesbloqueaEdificio` en engine/politicas.ts.
-  { id: 'construir_barracon', cargo: 'general', nombre: 'Construir Barracón', desbloqueaEdificio: 'barracon' },
-  { id: 'construir_galeria_tiro', cargo: 'general', nombre: 'Construir Galería de Tiro', desbloqueaEdificio: 'galeriaDeTiro' },
-  { id: 'construir_palacio', cargo: 'gobernador', nombre: 'Construir Palacio', desbloqueaEdificio: 'palacio' },
-  { id: 'construir_mercado', cargo: 'tesorero', nombre: 'Construir Mercado', desbloqueaEdificio: 'mercado' },
+  // Retirado (a petición del usuario, cambio de base del control de cola): las 4 políticas "Construir
+  // Barracón/Galería de Tiro/Palacio/Mercado" y el mecanismo `politicaActivaDesbloqueaEdificio` que las leía
+  // desaparecen por completo. Barracón/Galería de tiro/Palacio/Mercado dejan de depender de una política
+  // activa — pasan al mismo carril de adición MANUAL que cualquier otro edificio del catálogo (ver
+  // `anadirEdificioManualmente`, engine/construction.ts), disponible para Gobernador y Maestro de Obras.
   // Ampliación de comercio (a petición del usuario, Doc 3.3): flota de caravanas propias, ver
   // `cupoCaravanas`/`factorCapacidadCaravana`/`factorVelocidadCaravana` en engine/asentamientoQuery.ts y
   // engine/politicas.ts. `cupoCaravanaExtra` es ADITIVO (no multiplicativo, ver `sumaFactorPolitica`), a
@@ -569,13 +588,6 @@ export const POLITICA_CATALOGO = [
 
 // --- Sprint 5: Guerra simplificada (Doc 5) ---
 
-export const TROPA_CATALOGO: Record<number, { nombre: string; poderBase: number }> = {
-  1: { nombre: 'Lanceros', poderBase: 3 },
-  2: { nombre: 'Arqueros', poderBase: 6 },
-  3: { nombre: 'Lanceros Pesados', poderBase: 12 },
-  4: { nombre: 'Guerreros de Élite', poderBase: 25 },
-};
-
 /**
  * Catálogo de TROPAS reclutables por equipo (Doc 5.7/5.8, rediseño de reclutamiento): cada tropa se recluta
  * de una vez vía Barracón (cuerpo a cuerpo) o Galería de tiro (a distancia), según el nivel interno del
@@ -584,8 +596,9 @@ export const TROPA_CATALOGO: Record<number, { nombre: string; poderBase: number 
  * directo de Artesanos con cobre a secas, `RECLUTAMIENTO.artesanos`, ya retirado). El reclutamiento de Nobleza
  * (vía Gran Fundición) también se retiró — Nobleza como clase de población sigue existiendo sin cambios (Doc
  * 4.1), solo se quitó la posibilidad de convertirla en tropa. `poderBase` es PLACEHOLDER: no estaba en el
- * diseño original (solo equipo/nivel), interpolado a partir de la progresión ya existente en TROPA_CATALOGO
- * (3 → 6 → 12 → 25 en 4 tiers) repartida en estas 10 tropas a lo largo de 3 niveles.
+ * diseño original (solo equipo/nivel), interpolado a partir de la progresión del roster de 4 tiers genérico
+ * anterior al rediseño (3 → 6 → 12 → 25, ya retirado del código — ver Doc 5.8) repartida en estas 10 tropas a
+ * lo largo de 3 niveles.
  *
  * `unidadesPorDefecto` (a petición del usuario — antes el jugador elegía libremente `cantidad` al reclutar,
  * contradiciendo la propia terminología del diseño: "una tropa es el tipo de escuadrón que se recluta DE UNA
@@ -602,13 +615,13 @@ export const TROPAS_RECLUTABLES: {
   poderBase: number;
   unidadesPorDefecto: number;
 }[] = [
-  // Escalón de entrada (a petición del usuario: la defensa mínima no debe depender de Barracón — que exige la
-  // política "Construir Barracón" del General ANTES de siquiera empezar a construirse, ver `politicas.ts`
-  // `politicaActivaDesbloqueaEdificio` — sino de Centro Urbano, el único edificio que nace `activo` con el
-  // asentamiento desde el tick de fundación, sin cola de construcción ni gate alguno, ver `settlement.ts`
-  // `edificiosIniciales`). Así CUALQUIER asentamiento fundado puede defenderse desde el minuto uno, así sea
-  // con la tropa más débil del roster — antes dependía indirectamente de tener madera de sobra para pagar el
-  // Barracón (30 madera) y de que el General activara esa política primero. Se paga con madera EN BRUTO, sin
+  // Escalón de entrada (a petición del usuario: la defensa mínima no debe depender de Barracón — que exige
+  // añadirlo MANUALMENTE a la cola vía Gobernador/Maestro de Obras antes de siquiera empezar a construirse,
+  // ver `anadirEdificioManualmente` en engine/construction.ts — sino de Centro Urbano, el único edificio que
+  // nace `activo` con el asentamiento desde el tick de fundación, sin cola de construcción ni gate alguno, ver
+  // `settlement.ts` `edificiosIniciales`). Así CUALQUIER asentamiento fundado puede defenderse desde el minuto
+  // uno, así sea con la tropa más débil del roster — antes dependía indirectamente de tener madera de sobra
+  // para pagar el Barracón (30 madera) y de que alguien lo añadiera a la cola primero. Se paga con madera EN BRUTO, sin
   // pasar por Armería. Débil a propósito (poderBase 2, por debajo de todo lo demás): existe para que el bucle
   // de juego arranque y las primeras escaramuzas ocurran pronto, no para ganar batallas. Sigue exigiendo un
   // General asignado (`reclutarTropa` en engine/tropas.ts) — eso no cambia, solo el edificio.
@@ -629,12 +642,6 @@ export const TROPAS_RECLUTABLES: {
   { id: 'arqueros_compuesto', nombre: 'Arqueros con arco compuesto', edificio: 'galeriaDeTiro', nivelRequerido: 3, costoEquipo: { armaBronce: 3, armaduraIntermedia: 2 }, poderBase: 15, unidadesPorDefecto: 20 },
 ];
 
-export const ASCENSO_TROPA = {
-  veteraniaParaTier2: 3,
-  // Tier 2 -> 3 requiere ADEMÁS Fundición activa en el asentamiento (Doc 5.8: "Requiere Fundición + veteranía").
-  veteraniaParaTier3: 8,
-};
-
 export const MILITAR = {
   racionPorSoldadoPorTick: 0.15,
   regeneracionMoralPorTick: 5,
@@ -652,6 +659,31 @@ export const MILITAR = {
   // Combate de caravanas (Doc 3.10): umbral de captura del 50% y defensa base de una escolta no modelada en detalle.
   umbralCapturaCaravana: 0.5,
   defensaBaseCaravana: 15,
+};
+
+/**
+ * Campamentos de bandidos (Doc 1.9, a petición del usuario — inspirado en análisis comparativo con Travian):
+ * amenaza NPC en bosques no reclamados que ataca caravanas cercanas. Todas las cifras son PLACEHOLDER, sin
+ * calibrar por simulación todavía (ver `Preguntas_Abiertas.md` #14c) — mismo criterio que el resto del proyecto.
+ */
+export const CAMPAMENTOS_BANDIDOS = {
+  // Poder de combate fijo del campamento — referencia: una Milicia de lanceros recién reclutada (25 unidades,
+  // poderBase 2) ronda 50 de poder sin veteranía, así que este valor la deja en desventaja pero no indefensa.
+  poder: 30,
+  // Radio (unidades del mapa) dentro del cual un campamento ataca a una caravana que pase cerca.
+  radioAtaqueCaravana: 40,
+  // Radio de cobertura (a petición del usuario): un asentamiento se considera "atendido" si ya tiene un
+  // campamento dentro de este radio — así el spawn reparte como mucho un campamento por asentamiento (su
+  // bosque no reclamado más cercano, ver `engine/bandidos.ts`) en vez de amontonarlos todos junto al mismo.
+  // Sin techo máximo de distancia: si el bosque no reclamado más cercano de un asentamiento está lejos porque
+  // está rodeado de zonas de otras Facciones, se spawnea igual ahí — "más cercano" ya es la mejor opción
+  // disponible, un techo adicional solo dejaría a ese asentamiento sin campamento nunca.
+  distanciaCobertura: 600,
+  // Ticks tras destruirse un campamento antes de que pueda aparecer uno nuevo ("N días" del diseño, Doc 1.9,
+  // expresado en ticks — Fase 0 no tiene mapeo tick-a-tiempo-real todavía).
+  ticksRespawn: 60,
+  // Recompensa fija al destruirlo (botín).
+  recompensa: { madera: 40, piedra: 20, oro: 15 } as Partial<Record<string, number>>,
 };
 
 // --- Sprint 6: Cierre (Doc 4.5 mantenimiento, Doc 2.7 reputación, Doc 2.9 progresión) ---

@@ -16,6 +16,8 @@ import { WORLDGEN_VERSION } from '../../worldgen';
 /** Partida arrancada, con un asentamiento fundado en un sitio viable y unos cuantos ticks corridos. */
 function partidaEnMarcha(ticks = 30): GameStore {
   const store = new GameStore();
+  store.crearFaccion('Faccion Test');
+  const faccionId = store.getState().facciones[0]!.id;
 
   // Se busca un emplazamiento recomendable barriendo una grilla, igual que las fixtures del motor: así el
   // test no depende de que la seed por defecto tenga un bosque cerca de un punto elegido a mano.
@@ -24,7 +26,7 @@ function partidaEnMarcha(ticks = 30): GameStore {
   for (let x = 40; x < ancho && !fundado; x += 40) {
     for (let y = 40; y < alto && !fundado; y += 40) {
       if (store.viabilidadFundacion({ x, y }).recomendable) {
-        store.fundarAsentamiento('faccion-1', { x, y }, 1);
+        store.fundarAsentamiento(faccionId, { x, y }, 1);
         fundado = true;
       }
     }

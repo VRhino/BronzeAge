@@ -1,5 +1,5 @@
 import type { Asentamiento, Escuadron } from '../domain/types';
-import { ASCENSO_TROPA, MILITAR, TROPAS_RECLUTABLES } from '../constants';
+import { MILITAR, TROPAS_RECLUTABLES } from '../constants';
 import { descontarRecursos, tieneRecursos } from './almacen';
 import { edificiosPorTipoYEstado, poblacionTotal } from './asentamientoQuery';
 import { factorCostoReclutamiento } from './politicas';
@@ -11,8 +11,10 @@ export class ReclutamientoInvalidoError extends Error {}
  * el nivel interno del edificio, pagando el equipo fabricado en Armería en vez de cobre directo. Pesants Y
  * Artesanos pueden reclutar por este carril (a petición del usuario, ambos edificios reclutan de los dos
  * pools — reemplaza el antiguo reclutamiento directo de Artesanos con cobre a secas, y el de Nobleza vía Gran
- * Fundición, ambos retirados). Tier 1 fijo — "mejorar" no es ascenso automático por veteranía (ver
- * `ascenderTierSiCorresponde`), es reclutar una tropa mejor cuando el edificio suba de nivel interno.
+ * Fundición, ambos retirados). Una tropa NUNCA cambia de identidad (Doc 5.8, a petición del usuario): "mejorar"
+ * no es ascenso automático del mismo escuadrón, es reclutar una tropa DISTINTA y mejor cuando el edificio suba
+ * de nivel interno — ver `poderEscuadron` en engine/combate.ts, que aplica el bonus de veteranía sin tocar
+ * nunca `tropaId`.
  *
  * La cantidad de soldados YA NO la elige el jugador (a petición del usuario, corrige una contradicción con el
  * propio diseño: Doc 0/Glosario define "tropa" como "el tipo de escuadrón que se recluta DE UNA VEZ") — cada
@@ -60,7 +62,6 @@ export function reclutarTropa(
           id: `escuadron-${asentamiento.id}-${tickActual}-${contador}`,
           nombre: `${tropa.nombre} de ${asentamiento.id}`,
           origen,
-          tier: 1 as const,
           cantidad,
           veterania: 0,
           moral: 100,
@@ -74,20 +75,6 @@ export function reclutarTropa(
     almacen: descontarRecursos(asentamiento.almacen, costoTotal),
     escuadrones,
   };
-}
-
-/** Asciende de tier por veteranía (carril combate real, Doc 4.1/5.5); Nobleza no aplica (progresión plana).
- * Tropas de equipo (Barracón/Galería, `tropaId` presente) tampoco ascienden así — "mejorar" es reclutar una
- * tropa mejor cuando el edificio suba de nivel interno (Doc 5.8 PENDIENTE, resuelto en el rediseño). */
-export function ascenderTierSiCorresponde(escuadron: Escuadron, fundicionActiva: boolean): Escuadron {
-  if (escuadron.origen === 'nobleza' || escuadron.tropaId) return escuadron;
-  if (escuadron.tier === 1 && escuadron.veterania >= ASCENSO_TROPA.veteraniaParaTier2) {
-    return { ...escuadron, tier: 2 };
-  }
-  if (escuadron.tier === 2 && escuadron.veterania >= ASCENSO_TROPA.veteraniaParaTier3 && fundicionActiva) {
-    return { ...escuadron, tier: 3 };
-  }
-  return escuadron;
 }
 
 /** Ración total de trigo/tick que exigen los escuadrones activos (Doc 5.4) — usada tanto para descontarla

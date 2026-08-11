@@ -85,7 +85,11 @@ export type EdificioTipo =
   // Ampliación de comercio (a petición del usuario): gatea las órdenes de Mercado (Doc 3.3) y aloja el cupo
   // de la flota de caravanas propias (ver CARAVANA_CATALOGO.comercial, engine/trade.ts). Vía política del
   // Tesorero, mismo patrón que Barracón/Galería de tiro/Palacio — no auto-construcción.
-  | 'mercado';
+  | 'mercado'
+  // Maravilla (Roadmap_Escalado.md Eje 4, a petición del usuario): edificio único de coste extremo, solo el
+  // EDIFICIO en sí — el ciclo de servidor de 12 meses que cierra al completarla queda fuera de esta pasada
+  // (requiere infraestructura de servidor/multi-instancia que Fase 0 no tiene, ver Roadmap_Escalado.md).
+  | 'maravilla';
 
 export type EstadoEdificio = 'en_cola' | 'en_construccion' | 'activo';
 
@@ -116,7 +120,6 @@ export interface CargosAsentamiento {
   sacerdoteId: string | null;
 }
 
-export type TropaTier = 1 | 2 | 3 | 4;
 export type OrigenTropa = 'pesants' | 'artesanos' | 'nobleza';
 
 /**
@@ -128,20 +131,21 @@ export interface Escuadron {
   id: string;
   nombre: string;
   origen: OrigenTropa;
-  tier: TropaTier;
   cantidad: number;
-  /** Sube combatiendo (carril combate real, Doc 4.1/5.5); Nobleza no la usa (progresión plana). */
+  /** Sube combatiendo (carril combate real, Doc 4.1/5.5): da un bonus de poder continuo al MISMO escuadrón
+   * (`poderEscuadron`, engine/combate.ts) — NUNCA cambia `tropaId` (Doc 5.8, a petición del usuario: una tropa
+   * jamás cambia de identidad al ganar veteranía). Nobleza no la usa (progresión plana). */
   veterania: number;
   /** Moral 0-100 por suministro de raciones (Doc 5.4); a 0 hay deserción permanente continua. */
   moral: number;
   /** Debuff temporal tras perder en mundo abierto (Doc 5.2.2), penaliza poder de combate mientras dura. */
   heridoHastaTick?: number;
-  /** Tropa reclutada vía Centro Urbano/Barracón/Galería de tiro (Doc 5.7/5.8, ver TROPAS_RECLUTABLES en constants.ts) — solo
-   * presente para escuadrones de Pesants reclutados por equipo. Determina el poderBase (ver `poderEscuadron`,
-   * engine/combate.ts) en vez de TROPA_CATALOGO[tier], y desactiva el ascenso automático de tier por veteranía
-   * (ver `ascenderTierSiCorresponde`, engine/tropas.ts) — "mejorar" pasa a ser reclutar una tropa mejor cuando
-   * el edificio suba de nivel interno, no ascender el mismo escuadrón. Ausente para Artesanos/Nobleza. */
-  tropaId?: string;
+  /** Tropa reclutada vía Centro Urbano/Barracón/Galería de tiro (Doc 5.7/5.8, ver TROPAS_RECLUTABLES en
+   * constants.ts) — determina el poderBase (`poderEscuadron`, engine/combate.ts). Único origen de escuadrones
+   * en el motor (`reclutarTropa`, engine/tropas.ts), por eso es obligatorio: "mejorar" una tropa siempre es
+   * reclutar una tropa DISTINTA y mejor cuando el edificio suba de nivel interno, nunca transformar el
+   * escuadrón existente. */
+  tropaId: string;
 }
 
 export interface Asentamiento {
@@ -165,8 +169,9 @@ export interface Asentamiento {
   /** Mantenimiento (Doc 4.5): medidor 0-100, empieza en 100; a 0 el asentamiento cae en ruinas (se elimina). */
   medidorMantenimiento: number;
   /** Overhaul de auto-construcción: mientras esté en `true`, el motor deja de detectar/comprometer NUEVAS
-   * necesidades (`evaluarNecesidades`/`evaluarEdificiosEspeciales`) — lo ya pagado (`en_cola`/`en_construccion`)
-   * sigue avanzando normal. La construcción manual (Gran Fundición) no se ve afectada. Ausente/`false` = activa. */
+   * necesidades (`evaluarNecesidades`) — lo ya pagado (`en_cola`/`en_construccion`) sigue avanzando normal.
+   * La adición MANUAL de edificios (`anadirEdificioManualmente`, Gobernador/Maestro de Obras) no se ve
+   * afectada. Ausente/`false` = activa. */
   autoConstruccionPausada?: boolean;
 }
 
@@ -296,6 +301,22 @@ export interface Caravana {
    * de desaparecer (a diferencia del resto de tipos de caravana, que siguen siendo efímeros). Ausente para
    * caravanas de Fundación y para los tipos de caravana todavía sin uso real (militar/contrabando, Doc 3.6). */
   estado?: 'disponible' | 'en_transito';
+}
+
+/**
+ * Campamento de bandidos (Doc 1.9, a petición del usuario — inspirado en análisis comparativo con Travian):
+ * aparece en un bosque sin ninguna zona de influencia encima (territorio no reclamado por ninguna Facción).
+ * Ataca caravanas que pasen cerca mientras sigue en pie (`engine/bandidos.ts`); un jugador puede destruirlo
+ * con sus escuadrones para obtener recompensa (`atacarCampamentoBandidos`, engine/combate.ts).
+ */
+export interface CampamentoBandido {
+  id: string;
+  posicion: Point;
+  /** Bosque que ocupa (Doc 1.4/1.9) — determina dónde puede aparecer, no se agota por esto. */
+  bosqueId: string;
+  /** Poder de combate fijo (placeholder, ver `CAMPAMENTOS_BANDIDOS` en constants.ts) — mismo tipo de
+   * resolución que el resto del combate (Doc 5.2/5.10), sin escuadrones propios que sufran bajas graduales. */
+  poder: number;
 }
 
 /**

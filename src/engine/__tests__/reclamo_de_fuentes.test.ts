@@ -95,6 +95,8 @@ describe('reclamo de fuentes del mapa', () => {
       relaciones: [],
       titulos: [],
       caminos: [],
+      campamentosBandidos: [],
+      bandidosProximoSpawnTick: 0,
     };
 
     for (let tick = 1; tick <= TICKS; tick++) {
@@ -125,6 +127,8 @@ describe('reclamo de fuentes del mapa', () => {
       relaciones: [],
       titulos: [],
       caminos: [],
+      campamentosBandidos: [],
+      bandidosProximoSpawnTick: 0,
     };
 
     let lenerasVistas = 0;

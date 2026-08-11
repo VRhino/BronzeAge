@@ -69,6 +69,8 @@ describe('snapshot de regresión general', () => {
       relaciones: [],
       titulos: [],
       caminos: [],
+      campamentosBandidos: [],
+      bandidosProximoSpawnTick: 0,
     };
 
     const cortes: Record<number, unknown> = {};

@@ -3,7 +3,7 @@
 Lo que sigue sin resolver del todo. La mayoría son ajustes numéricos/de balance, no decisiones de diseño pendientes — usar valores placeholder razonables donde se necesiten para implementar, y ajustar después.
 
 ## 1. Guerra y combate — mayormente [RESUELTO]
-[RESUELTO] (rediseño Fase 0, progreso de asentamientos) — IMPLEMENTADO: reclutamiento pasa de tiers genéricos a tropas específicas reclutadas en Barracón/Galería de tiro según el nivel interno del edificio (1-3), con costo en equipo fabricado en Armería (ver Doc 5.7/5.8, `TROPAS_RECLUTABLES`); Nobleza sin cambios (vía Gran Fundición). [RESUELTO] también: mapeo entre nivel interno del edificio y veteranía (ASCENSO_TROPA) — conviven con roles distintos, veteranía da bonus de poder pero ya no asciende de tier a las tropas de equipo (ver Doc 5.8).
+[RESUELTO] (rediseño Fase 0, progreso de asentamientos) — IMPLEMENTADO: reclutamiento pasa de tiers genéricos a tropas específicas reclutadas en Barracón/Galería de tiro según el nivel interno del edificio (1-3), con costo en equipo fabricado en Armería (ver Doc 5.7/5.8, `TROPAS_RECLUTABLES`); Nobleza sin cambios (vía Gran Fundición). [RESUELTO Y LIMPIADO, a petición del usuario — fix de tropas]: una tropa NUNCA cambia de identidad al ganar veteranía — solo gana poder dentro del mismo `tropaId`. El antiguo sistema de ascenso de tier por veteranía (`ASCENSO_TROPA`, `TROPA_CATALOGO`, `ascenderTierSiCorresponde`) era código muerto (nunca se ejecutaba) y se retiró por completo del código, junto con el campo `Escuadron.tier` (ver Doc 5.8).
 
 Pendiente:
 - ¿Cómo se declara una guerra? ¿Requiere condición previa (frontera compartida, casus belli) o es libre?
@@ -98,6 +98,36 @@ Pendiente:
 Pendiente (menor):
 - Qué hace subir exactamente el "nivel de Facción"; curva/números exactos entre cap 3 y cap 7
 - ¿Se requiere aceptación mutua explícita para fusión/anexión, o la Opción 1 se puede forzar unilateralmente?
+
+## 14b. Control manual de cola de construcción — [RESUELTO] e IMPLEMENTADO en motor Y en interfaz (cambio de base, a petición del usuario)
+[RESUELTO]: Gobernador y Maestro de Obras ven, reordenan, añaden y quitan proyectos de la cola — nunca eligen ubicación (ver Doc 2.2/4.2). [RESUELTO] también: las 4 políticas "Construir Barracón/Galería de tiro/Palacio/Mercado" y su cluster de cola aparte se RETIRARON por completo — esos 4 edificios pasan al mismo carril de adición manual que cualquier otro edificio del catálogo, sin gate de política. Añadir respeta los mismos gates de nivel/edificio previo del catálogo y la reserva mínima de Mantenimiento. Quitar solo aplica a `en_cola` (nunca `en_construccion`) y devuelve el costo completo pagado. Implementado en `engine/construction.ts` (`anadirEdificioManualmente`, `quitarDeCola`, `moverEnCola`) y expuesto por completo en la pestaña Asentamientos de la interfaz: tabla de cola con botones ▲/▼/Quitar, selector de cargo + tipo + botón "Añadir a la cola", y segmento "Info:" con costo/tiempo/requisitos del tipo seleccionado antes de confirmar (`CATALOGOS.catalogoEdificios` en `app/gameStore.ts`). Verificado en el navegador de punta a punta, sin errores de consola.
+
+Pendiente (menor):
+- Qué pasa con los recursos ya comprometidos de un proyecto `en_construccion` si se necesitara cancelarlo a mitad de obra (fuera de alcance: `en_construccion` no se puede cancelar, decisión ya cerrada).
+
+## 14c. Campamentos de bandidos — [RESUELTO] e IMPLEMENTADO (a petición del usuario)
+[RESUELTO] e IMPLEMENTADO: spawnean en bosques no reclamados (sin zona de influencia encima), atacan caravanas mientras siguen en pie, dan recompensa al destruirse (acción manual del jugador, pestaña Guerra), reaparecen pasados N ticks (ver Doc 1.9). [RESUELTO] también (rediseño a petición del usuario, corrige el placeholder inicial de "1 campamento fijo en todo el mundo, posición aleatoria"): el tope pasa a ser UNO por asentamiento vivo, apareciendo en SU bosque no reclamado MÁS CERCANO — nunca en la otra punta del mapa sin nadie cerca, nunca dentro de una zona de influencia. Implementado en `engine/bandidos.ts` (spawn/respawn + ataque a caravanas, automáticos cada tick) y `engine/combate.ts` (`atacarCampamentoBandidos`, manual). Verificado en el navegador con 2 asentamientos en esquinas opuestas: cada uno recibió su propio campamento cercano (69 y 103 unidades respectivamente), tope respetado en 2, reaparición exacta en el tick esperado.
+
+Pendiente (calibración por simulación, no diseño):
+- Poder de combate del campamento (placeholder: 30, fijo — sin escalado por región).
+- Composición/tamaño de la recompensa (placeholder: 40 madera + 20 piedra + 15 oro).
+- Cadencia exacta de reaparición (placeholder: 60 ticks).
+- Radio de cobertura que decide cuándo un asentamiento ya está "atendido" (placeholder: 600, sin techo máximo real de distancia).
+
+## 14d. Ciclo de servidor y Maravilla — EL EDIFICIO IMPLEMENTADO, el ciclo sigue sin implementar (a petición del usuario)
+[RESUELTO] la decisión de diseño: ciclo de 12 meses, cerrado antes de tiempo por la primera Facción que complete la Maravilla del ciclo (coste extremo, solo en asentamiento de nivel máximo, materiales conocidos + exóticos); al resetear, la Facción ganadora permanece como Facción-legado NPC de solo mantenimiento y comercio (ver `Roadmap_Escalado.md` Eje 4).
+
+[IMPLEMENTADO, a petición del usuario — "solo la parte básica"]: el edificio Maravilla en sí, SIN el ciclo/reset/legado. Añadido a `EDIFICIO_CATALOGO` (constants.ts), único, nivel de asentamiento 3 requerido, disponible vía control manual de cola (Doc 4.2). Coste PLACEHOLDER con recursos ya existentes (5000 madera + 5000 piedra + 500 oro + 300 cobre + 200 estaño + 200 livestock, 200 ticks) — los materiales EXÓTICOS del diseño original NO están implementados (no existe ese tipo de recurso todavía en el juego). Verificado en el navegador: Info correcta en el selector, rechazo correcto por nivel de asentamiento insuficiente.
+
+Pendiente: TODO lo demás del ciclo — ver lista completa en `Roadmap_Escalado.md` Eje 4 (catálogo de materiales exóticos, que la Maravilla cambie de ciclo a ciclo, si el timer cierra el ciclo sin ganador, destino de las Facciones no ganadoras, si la Facción-legado es atacable, posición en el nuevo mapa, cómo se genera la Maravilla de cada ciclo, y la infraestructura de servidor/reset en sí — nada de esto tiene código todavía).
+
+## 14e. Curva de progresión inicial / onboarding (nuevo, riesgo detectado en análisis comparativo con Travian)
+El usuario confirma la necesidad: el inicio del juego debe ser SUAVE, con sistemas desbloqueándose progresivamente en vez de exponer toda la profundidad (7 cargos, Liga/vasallaje, reputación, gremios, chokepoints...) desde el primer tick — a diferencia de Travian, que resuelve el día 1 en dos acciones (construir, atacar oasis).
+
+Sin resolver todavía — es una decisión de diseño real pendiente, no solo un ajuste numérico:
+- Qué sistemas se desbloquean primero y cuáles se difieren (candidatos naturales para diferir: Liga/vasallaje, gremios, chokepoints, fusión/anexión — todos ya dependen de condiciones que tardan en cumplirse por sí mismas, pero no está confirmado si eso basta o hace falta un gate explícito).
+- Si el desbloqueo se ata al NIVEL DE ASENTAMIENTO (1-3, Doc 4.5), al NIVEL DE FACCIÓN (1-7, Doc 1.7), a tiempo transcurrido, o a una combinación.
+- Si aplica solo a la INTERFAZ (ocultar opciones no relevantes todavía) o también a las REGLAS (bloquear mecánicamente el acceso).
 
 ## 14. Gremios (edificios especiales)
 [RESUELTO] (parcialmente): 4 gremios (Comerciantes, Artesanos, Constructores, Ladrones), edificios escasos a nivel de servidor. Disparador por tirada periódica mientras se cumplan 3 requisitos (score de reputación >90, título de servidor específico, nivel/mantenimiento del asentamiento >90%). Se pierden si se incumple alguna condición. Gremio de Ladrones confirmado: info de acuerdos comerciales/caravanas/Facciones ajenas, acotado para no ser desequilibrante (NO revive el sistema de rumores general, que sigue descartado). Ver Doc 2.10.

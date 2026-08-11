@@ -1,8 +1,6 @@
-import type { Asentamiento, Caravana, Escuadron, Faccion, RelacionPolitica } from '../domain/types';
-import { MILITAR, REPUTACION, TROPA_CATALOGO, TROPAS_RECLUTABLES } from '../constants';
+import type { Asentamiento, CampamentoBandido, Caravana, Escuadron, Faccion, RelacionPolitica } from '../domain/types';
+import { CAMPAMENTOS_BANDIDOS, MILITAR, REPUTACION, TROPAS_RECLUTABLES } from '../constants';
 import { agregarRecurso } from './almacen';
-import { edificiosPorTipoYEstado } from './asentamientoQuery';
-import { ascenderTierSiCorresponde } from './tropas';
 import { aplicarAjustesReputacion } from './reputacion';
 
 function estanAliadas(relaciones: RelacionPolitica[], aId: string, bId: string): boolean {
@@ -14,10 +12,10 @@ function estanAliadas(relaciones: RelacionPolitica[], aId: string, bId: string):
 export class CombateInvalidoError extends Error {}
 
 /** Poder de combate (Doc 5.1: héroe-comandante liderando tropa; el resultado es CÁLCULO, no combate visual, Doc 5.10).
- * Tropas de equipo (Barracón/Galería, `tropaId` presente, rediseño Doc 5.7/5.8) usan su propio poderBase de
- * `TROPAS_RECLUTABLES` en vez de `TROPA_CATALOGO[tier]` — Artesanos/Nobleza no cambian. */
+ * `poderBase` sale siempre del catálogo `TROPAS_RECLUTABLES` vía `tropaId` (Doc 5.7/5.8) — toda tropa lo tiene,
+ * nunca cambia de identidad al ganar veteranía (Doc 5.8, a petición del usuario). */
 export function poderEscuadron(e: Escuadron, tickActual: number): number {
-  const poderBase = e.tropaId ? TROPAS_RECLUTABLES.find((t) => t.id === e.tropaId)!.poderBase : TROPA_CATALOGO[e.tier]!.poderBase;
+  const poderBase = TROPAS_RECLUTABLES.find((t) => t.id === e.tropaId)!.poderBase;
   const base = poderBase * e.cantidad;
   const conVeterania = base * (1 + e.veterania * MILITAR.bonusVeteraniaPorPunto);
   const herido = e.heridoHastaTick !== undefined && tickActual < e.heridoHastaTick;
@@ -84,8 +82,8 @@ function seleccionarEscuadrones(asentamiento: Asentamiento, ids: string[]): Escu
   return seleccionados;
 }
 
-function reemplazarEscuadrones(asentamiento: Asentamiento, actualizados: Escuadron[], fundicionActiva: boolean): Escuadron[] {
-  const porId = new Map(actualizados.map((e) => [e.id, ascenderTierSiCorresponde(e, fundicionActiva)]));
+function reemplazarEscuadrones(asentamiento: Asentamiento, actualizados: Escuadron[]): Escuadron[] {
+  const porId = new Map(actualizados.map((e) => [e.id, e]));
   return asentamiento.escuadrones.map((e) => porId.get(e.id) ?? e);
 }
 
@@ -111,8 +109,6 @@ export function iniciarAsedio(
   const escuadronesDefensores = seleccionarEscuadrones(defensor, defensor.escuadrones.map((e) => e.id));
 
   const resultado = resolverCombate(escuadronesAtacantes, escuadronesDefensores, tickActual);
-  const fundicionAtacante = edificiosPorTipoYEstado(atacante, 'fundicion').length > 0;
-  const fundicionDefensor = edificiosPorTipoYEstado(defensor, 'fundicion').length > 0;
 
   const conquistado = resultado.ganador === 'atacante';
   const eventos = [
@@ -128,11 +124,11 @@ export function iniciarAsedio(
     : facciones;
 
   return {
-    atacante: { ...atacante, escuadrones: reemplazarEscuadrones(atacante, resultado.atacantes, fundicionAtacante) },
+    atacante: { ...atacante, escuadrones: reemplazarEscuadrones(atacante, resultado.atacantes) },
     defensor: {
       ...defensor,
       faccionId: conquistado ? atacante.faccionId : defensor.faccionId,
-      escuadrones: reemplazarEscuadrones(defensor, resultado.defensores, fundicionDefensor),
+      escuadrones: reemplazarEscuadrones(defensor, resultado.defensores),
     },
     facciones: faccionesFinal,
     eventos,
@@ -154,9 +150,6 @@ export function combateCampoAbierto(
   const escuadronesB = seleccionarEscuadrones(asentamientoB, escuadronIdsB);
   const resultado = resolverCombate(escuadronesA, escuadronesB, tickActual);
 
-  const fundicionA = edificiosPorTipoYEstado(asentamientoA, 'fundicion').length > 0;
-  const fundicionB = edificiosPorTipoYEstado(asentamientoB, 'fundicion').length > 0;
-
   const faccionesFinal = estanAliadas(relaciones, asentamientoA.faccionId, asentamientoB.faccionId)
     ? aplicarAjustesReputacion(facciones, [
         { faccionId: asentamientoA.faccionId, delta: REPUTACION.penalizacionAtacarAliado, razon: 'atacar a un Aliado' },
@@ -164,8 +157,8 @@ export function combateCampoAbierto(
     : facciones;
 
   return {
-    asentamientoA: { ...asentamientoA, escuadrones: reemplazarEscuadrones(asentamientoA, resultado.atacantes, fundicionA) },
-    asentamientoB: { ...asentamientoB, escuadrones: reemplazarEscuadrones(asentamientoB, resultado.defensores, fundicionB) },
+    asentamientoA: { ...asentamientoA, escuadrones: reemplazarEscuadrones(asentamientoA, resultado.atacantes) },
+    asentamientoB: { ...asentamientoB, escuadrones: reemplazarEscuadrones(asentamientoB, resultado.defensores) },
     facciones: faccionesFinal,
     eventos: resultado.eventos,
   };
@@ -187,7 +180,6 @@ export function interceptarCaravana(
   const poderAtacante = escuadrones.reduce((acc, e) => acc + poderEscuadron(e, tickActual), 0) * jitter;
   const gana = poderAtacante > MILITAR.defensaBaseCaravana;
 
-  const fundicionActiva = edificiosPorTipoYEstado(atacante, 'fundicion').length > 0;
   const fraccionBajas = gana ? 0.05 : 0.25;
   const escuadronesActualizados = aplicarBajas(escuadrones, fraccionBajas, gana, tickActual);
 
@@ -203,8 +195,49 @@ export function interceptarCaravana(
   }
 
   return {
-    atacante: { ...atacante, almacen, escuadrones: reemplazarEscuadrones(atacante, escuadronesActualizados, fundicionActiva) },
+    atacante: { ...atacante, almacen, escuadrones: reemplazarEscuadrones(atacante, escuadronesActualizados) },
     eventos,
     caravanaCapturada: gana,
+  };
+}
+
+/**
+ * Ataque de un jugador a un campamento de bandidos (Doc 1.9, a petición del usuario) — mismo patrón que el
+ * resto del combate (Doc 5.2/5.10): poder de los escuadrones elegidos, con jitter, contra el `poder` fijo
+ * del campamento (placeholder, ver `CAMPAMENTOS_BANDIDOS`, constants.ts). Si gana, el campamento se destruye
+ * (el llamador debe quitarlo del estado, ver `campamentoDestruido`) y entrega una recompensa fija en
+ * recursos; si pierde, los escuadrones sufren bajas (mismo `aplicarBajas` que el resto del combate) y el
+ * campamento sigue en pie.
+ */
+export function atacarCampamentoBandidos(
+  atacante: Asentamiento,
+  escuadronIdsAtacantes: string[],
+  campamento: CampamentoBandido,
+  tickActual: number
+): { atacante: Asentamiento; eventos: string[]; campamentoDestruido: boolean } {
+  if (!atacante.cargos.generalId) throw new CombateInvalidoError('El atacante necesita un General para atacar un campamento.');
+  const escuadrones = seleccionarEscuadrones(atacante, escuadronIdsAtacantes);
+  const jitter = 1 + (Math.random() * 2 - 1) * MILITAR.varianzaCombate;
+  const poderAtacante = poderTotal(escuadrones, tickActual, false) * jitter;
+  const gana = poderAtacante > campamento.poder;
+
+  const fraccionBajas = gana ? 0.05 : 0.25;
+  const escuadronesActualizados = aplicarBajas(escuadrones, fraccionBajas, gana, tickActual);
+
+  let almacen = atacante.almacen;
+  const eventos: string[] = [];
+  if (gana) {
+    for (const [recurso, cantidad] of Object.entries(CAMPAMENTOS_BANDIDOS.recompensa)) {
+      if (cantidad) almacen = agregarRecurso(almacen, recurso, cantidad);
+    }
+    eventos.push(`${atacante.id} destruye el campamento de bandidos ${campamento.id} y obtiene botín.`);
+  } else {
+    eventos.push(`${atacante.id} falla el ataque al campamento de bandidos ${campamento.id} y sufre bajas.`);
+  }
+
+  return {
+    atacante: { ...atacante, almacen, escuadrones: reemplazarEscuadrones(atacante, escuadronesActualizados) },
+    eventos,
+    campamentoDestruido: gana,
   };
 }

@@ -1,4 +1,4 @@
-import type { Asentamiento, BiomaTipo, CaminoComercial, Caravana, EdificioTipo, Faccion, RecursoTipo, ZonaInfluencia } from '../domain/types';
+import type { Asentamiento, BiomaTipo, CaminoComercial, CampamentoBandido, Caravana, EdificioTipo, Faccion, RecursoTipo, ZonaInfluencia } from '../domain/types';
 import type { Mapa } from '../world/mapa';
 
 export const FACCION_COLORES = ['#c0392b', '#2980b9', '#27ae60', '#8e44ad', '#d35400', '#16a085'];
@@ -269,6 +269,7 @@ export const EDIFICIO_COLOR: Record<EdificioTipo, string> = {
   galeriaDeTiro: '#4a7a4a',
   palacio: '#c9a227',
   mercado: '#2d9c8f',
+  maravilla: '#ffd700',
 };
 
 export function faccionColor(faccionId: string, facciones: Faccion[]): string {
@@ -285,6 +286,8 @@ export interface DrawState {
   /** Caminos comerciales (Fase 0.3, Doc 1.6) — estado de PARTIDA, a diferencia de los ríos/chokepoints
    * (mundo generado): se dibujan en `draw()` en vivo, nunca en la capa cacheada `drawTerreno`. */
   caminos: CaminoComercial[];
+  /** Campamentos de bandidos (Doc 1.9) — estado de partida, se dibujan en vivo igual que las caravanas. */
+  campamentosBandidos: CampamentoBandido[];
   /** Chokepoint id -> asentamiento controlador (Fase 0.3, Doc 1.5), YA CALCULADO por el motor
    * (`GameStore.chokepointsControl`) — `canvas.ts` solo lo pinta, nunca recalcula la regla de control por
    * su cuenta (acoplamiento 0 entre interfaz y motor). */
@@ -551,6 +554,25 @@ export function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, s
     ctx.fill();
     ctx.strokeStyle = '#1b1a17';
     ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  // Campamentos de bandidos (Doc 1.9): marcador en forma de diamante, distinto de asentamientos (círculos) y
+  // caravanas (puntos claros) para que se reconozca de un vistazo como amenaza, no como activo propio.
+  for (const campamento of state.campamentosBandidos) {
+    const x = campamento.posicion.x * scale;
+    const y = campamento.posicion.y * scale;
+    const r = 6;
+    ctx.beginPath();
+    ctx.moveTo(x, y - r);
+    ctx.lineTo(x + r, y);
+    ctx.lineTo(x, y + r);
+    ctx.lineTo(x - r, y);
+    ctx.closePath();
+    ctx.fillStyle = '#8b1a1a';
+    ctx.fill();
+    ctx.strokeStyle = '#1b1a17';
+    ctx.lineWidth = 1.5;
     ctx.stroke();
   }
 }

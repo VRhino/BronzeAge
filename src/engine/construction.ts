@@ -17,7 +17,6 @@ import {
   factorTiempoConstruccion,
   minimoGranjasPrioritario,
   minimoLenerasPrioritario,
-  politicaActivaDesbloqueaEdificio,
 } from './politicas';
 import { consumoComidaPoblacion } from './population';
 import { consumoRacionTropas } from './tropas';
@@ -512,61 +511,6 @@ function evaluarNecesidades(
   return { nuevos, almacen: almacenActual };
 }
 
-/**
- * Edificios especiales vía política (Doc 4.4/4.2.1, rediseño de progreso Fase 0): Barracón, Galería de tiro y
- * Palacio NO son auto-construcción — solo se encolan mientras la política de desbloqueo correspondiente esté
- * activa (ver `politicaActivaDesbloqueaEdificio`) y se cumpla su gate de nivel/edificio previo. Van en un
- * CLUSTER DE COLA APARTE: no cuentan contra `NECESIDADES.maximoEnCola` ni compiten con `evaluarNecesidades`
- * por ese cupo — pero, overhaul de auto-construcción, pagan de inmediato al comprometerse igual que el resto
- * (ver `puedeIniciarConstruccion`), y sí cuentan contra `maximoEnConstruccionSimultanea` al arrancar obra
- * (comparten cuadrillas con el resto de proyectos, Paso 2 de `avanzarConstruccion`).
- */
-function evaluarEdificiosEspeciales(
-  asentamiento: Asentamiento,
-  zonaPoligono: Point[],
-  reserva: Partial<Record<RecursoTipo, number>>,
-  almacen: Record<string, RecursoAlmacenado>
-): { nuevos: Edificio[]; almacen: Record<string, RecursoAlmacenado> } {
-  const nuevos: Edificio[] = [];
-  let contador = asentamiento.edificios.length + 1000; // rango separado para no colisionar con evaluarNecesidades
-  // Mismo riesgo de reutilización de id que en `evaluarNecesidades` (ver allí el detalle): un candidato que
-  // no llega a comprometerse consume número igual, y el contador del tick siguiente vuelve a partir de la
-  // longitud real.
-  const idsUsadas = new Set(asentamiento.edificios.map((e) => e.id));
-  const nextId = (): string => {
-    let id = `edificio-${asentamiento.id}-especial-${contador++}`;
-    while (idsUsadas.has(id)) id = `edificio-${asentamiento.id}-especial-${contador++}`;
-    idsUsadas.add(id);
-    return id;
-  };
-  const ocupados = () => [...asentamiento.edificios, ...nuevos];
-  let almacenActual = almacen;
-
-  const candidatos: { tipo: 'barracon' | 'galeriaDeTiro' | 'palacio' | 'mercado'; requisitoNivel: number }[] = [
-    { tipo: 'barracon', requisitoNivel: 0 },
-    { tipo: 'galeriaDeTiro', requisitoNivel: 0 },
-    { tipo: 'palacio', requisitoNivel: (EDIFICIO_CATALOGO.palacio as { requisitoNivelAsentamientoConstruccion?: number }).requisitoNivelAsentamientoConstruccion ?? 0 },
-    // Ampliación de comercio (a petición del usuario): mismo patrón que Barracón/Galería — vía política del
-    // Tesorero ("Construir Mercado"), sin gate de nivel de asentamiento para la construcción BASE (solo sus
-    // mejoras de nivel interno lo exigen, ver EDIFICIO_CATALOGO.mercado.niveles).
-    { tipo: 'mercado', requisitoNivel: 0 },
-  ];
-
-  for (const { tipo, requisitoNivel } of candidatos) {
-    if (!politicaActivaDesbloqueaEdificio(asentamiento, tipo)) continue;
-    if (asentamiento.nivel < requisitoNivel) continue;
-    if (edificiosPorTipoYEstado(asentamiento, tipo).length > 0 || hayProyectoPendiente(asentamiento, tipo)) continue;
-    const sitio = sitioConcentrico(asentamiento, zonaPoligono, ocupados());
-    if (!sitio) continue;
-    const costo = EDIFICIO_CATALOGO[tipo].costo as Partial<Record<string, number>>;
-    if (!puedeIniciarConstruccion(almacenActual, costo, tipo, reserva)) continue;
-    almacenActual = descontarRecursos(almacenActual, costo);
-    nuevos.push({ ...crearEdificioEnCola(tipo, sitio, nextId()), prioridad: SCORE_BANDAS.crecimiento });
-  }
-
-  return { nuevos, almacen: almacenActual };
-}
-
 /** Tipos de edificio de transformación con tiers (Doc 4.2.1): mejoran de nivelInterno y ejecutan recetas.
  * Mercado se suma aquí solo por el mecanismo de MEJORA de nivel interno (`avanzarMejoras`) — sus "recetas"
  * están vacías, el nivel interno solo cambia `cupoCaravanas` (ver `cupoCaravanas`, asentamientoQuery.ts). */
@@ -758,26 +702,19 @@ export function avanzarConstruccion(
 
   // Paso 3: compromiso de necesidades (overhaul — reemplaza el viejo "encolar sin pagar"). Pausable por el
   // jugador (ver `Asentamiento.autoConstruccionPausada`): mientras está pausada, no se detectan/comprometen
-  // NUEVAS necesidades, pero lo ya pagado (Paso 1/2 de arriba) sigue avanzando normal.
+  // NUEVAS necesidades, pero lo ya pagado (Paso 1/2 de arriba) sigue avanzando normal. Barracón/Galería de
+  // tiro/Palacio/Mercado ya NO se auto-detectan aquí (política de desbloqueo retirada, a petición del
+  // usuario) — solo se añaden por decisión manual (ver `anadirEdificioManualmente` más abajo).
   let nuevosProyectos: Edificio[] = [];
-  let nuevosEspeciales: Edificio[] = [];
   let almacenFinal = asentamientoConProgreso.almacen;
   if (!asentamiento.autoConstruccionPausada) {
     const trasNecesidades = evaluarNecesidades(asentamientoConProgreso, zonaPoligono, mapa, reserva, reclamos);
     nuevosProyectos = trasNecesidades.nuevos;
     almacenFinal = trasNecesidades.almacen;
-    const trasEspeciales = evaluarEdificiosEspeciales(
-      { ...asentamientoConProgreso, almacen: almacenFinal },
-      zonaPoligono,
-      reserva,
-      almacenFinal
-    );
-    nuevosEspeciales = trasEspeciales.nuevos;
-    almacenFinal = trasEspeciales.almacen;
   }
-  for (const p of [...nuevosProyectos, ...nuevosEspeciales]) eventos.push(`Nueva necesidad detectada: se compromete ${p.tipo} (pagado).`);
+  for (const p of nuevosProyectos) eventos.push(`Nueva necesidad detectada: se compromete ${p.tipo} (pagado).`);
 
-  const edificiosFinal = [...asentamientoConProgreso.edificios, ...nuevosProyectos, ...nuevosEspeciales];
+  const edificiosFinal = [...asentamientoConProgreso.edificios, ...nuevosProyectos];
   // Reordena los `en_cola` por `prioridad` (mismo criterio que el Paso 2) para que la posición mostrada en la
   // UI (ver main.ts) coincida con el orden real en que arrancarán en el próximo tick.
   const enColaOrdenados = edificiosFinal.filter((e) => e.estado === 'en_cola').sort((a, b) => (b.prioridad ?? 0) - (a.prioridad ?? 0));
@@ -792,25 +729,89 @@ export function avanzarConstruccion(
 
 export class ConstruccionManualInvalidaError extends Error {}
 
+/** Tipos que solo admiten UNA instancia por asentamiento (progresan por `nivelInterno` en vez de repetirse) —
+ * añadir una segunda no tiene sentido estructural, sea cual sea el mecanismo (auto o manual). */
+const EDIFICIOS_UNICOS = new Set<EdificioTipo>([
+  'fundicion',
+  'curtiduria',
+  'armeria',
+  'carpinteria',
+  'barracon',
+  'galeriaDeTiro',
+  'palacio',
+  'mercado',
+  'granFundicion',
+  'maravilla',
+]);
+
+/** Requisito de NIVEL DE ASENTAMIENTO para la construcción BASE de un tipo (Doc 4.2.1) — no confundir con los
+ * gates de MEJORA de nivel interno, que viven en `niveles[n].requisitoNivelAsentamiento` y no aplican aquí
+ * (una mejora nunca pasa por la cola, ver `avanzarMejoras`). Solo Carpintería y Palacio lo tienen. */
+function requisitoNivelBase(tipo: EdificioTipo): number {
+  const catalogo = EDIFICIO_CATALOGO[tipo] as { requisitoNivelAsentamientoConstruccion?: number };
+  return catalogo.requisitoNivelAsentamientoConstruccion ?? 0;
+}
+
+/** Resuelve dónde iría un tipo de edificio si se añade manualmente — mismos algoritmos de colocación que la
+ * auto-construcción (Doc 4.2: la ubicación NUNCA la elige el jugador, ni siquiera al añadir manualmente). */
+function sitioParaTipo(
+  tipo: EdificioTipo,
+  asentamiento: Asentamiento,
+  zonaPoligono: Point[],
+  mapa: Mapa,
+  reclamos: ReclamosFuentes
+): { posicion: Point; fuenteId?: string } | null {
+  if (tipo === 'granja') {
+    const posicion = sitioMejorFertilidad(asentamiento, zonaPoligono, mapa, asentamiento.edificios);
+    return posicion ? { posicion } : null;
+  }
+  if (tipo === 'lenera') {
+    return sitioEnBosque(asentamiento, zonaPoligono, mapa, reclamos.lenerasPorBosque);
+  }
+  const recursoExtractor = EXTRACTORES[tipo]?.recurso;
+  if (recursoExtractor) {
+    return sitioCercaDeNodo(asentamiento, zonaPoligono, mapa, recursoExtractor, reclamos.nodos);
+  }
+  const posicion = sitioConcentrico(asentamiento, zonaPoligono, asentamiento.edificios);
+  return posicion ? { posicion } : null;
+}
+
+function cargoOcupado(asentamiento: Asentamiento, cargo: 'gobernador' | 'maestroObras'): string | null {
+  return cargo === 'gobernador' ? asentamiento.cargos.gobernadorId : asentamiento.cargos.maestroObrasId;
+}
+
 /**
- * Gran Fundición (Doc 4.2/5.7): a diferencia del resto de edificios, es de colocación MANUAL — decisión
- * militar deliberada del jugador, no auto-construcción por necesidad. El sitio sigue eligiéndose solo (Doc
- * 4.2: el jugador no elige ubicación salvo fundación y edificios estratégicos). Rediseño de progreso (Fase
- * 0): Fundición deja de ser manual — ahora es auto-construcción con recetas reales (ver `evaluarNecesidades`).
- * Overhaul de auto-construcción: paga de inmediato al comprometerse, igual que el resto — rechaza con
- * `ConstruccionManualInvalidaError` si no alcanzan los fondos (respetando la reserva proyectada) en vez de
- * dejarla atascada `en_cola` esperando.
+ * Añade CUALQUIER edificio del catálogo (salvo Centro Urbano, que nunca pasa por cola, Doc 1.3) a la cola de
+ * construcción por decisión MANUAL de Gobernador o Maestro de Obras (Doc 4.2, cambio de base a petición del
+ * usuario — reemplaza el mecanismo de desbloqueo vía política que tenían Barracón/Galería de tiro/Palacio/
+ * Mercado: ahora conviven en el mismo carril manual que cualquier otro edificio, incluida Gran Fundición).
+ * Respeta exactamente las mismas reglas que la auto-construcción: paga de inmediato (igual que
+ * `evaluarNecesidades`), respeta la reserva mínima de Mantenimiento, nunca elige ubicación (la decide
+ * `sitioParaTipo`, mismos algoritmos que usa el motor), y cuenta contra el mismo cupo `NECESIDADES.maximoEnCola`.
  */
-export function construirManualmente(
+export function anadirEdificioManualmente(
   asentamiento: Asentamiento,
   faccion: Faccion,
+  cargo: 'gobernador' | 'maestroObras',
+  tipo: EdificioTipo,
   zonaPoligono: Point[],
-  tipo: 'granFundicion',
-  contador = 0,
-  capital: Asentamiento | undefined = undefined
+  mapa: Mapa,
+  capital: Asentamiento | undefined,
+  reclamos: ReclamosFuentes,
+  contador = 0
 ): Asentamiento {
-  if (edificiosPorTipoYEstado(asentamiento, tipo).length > 0 || hayProyectoPendiente(asentamiento, tipo)) {
+  if (!cargoOcupado(asentamiento, cargo)) {
+    throw new ConstruccionManualInvalidaError(`Se necesita un ${cargo} asignado para añadir edificios a la cola.`);
+  }
+  if (tipo === 'centroUrbano') {
+    throw new ConstruccionManualInvalidaError('El Centro Urbano nunca pasa por la cola de construcción.');
+  }
+  if (EDIFICIOS_UNICOS.has(tipo) && (edificiosPorTipoYEstado(asentamiento, tipo).length > 0 || hayProyectoPendiente(asentamiento, tipo))) {
     throw new ConstruccionManualInvalidaError(`Ya existe (o está en curso) una ${tipo} en este asentamiento.`);
+  }
+  const requisito = requisitoNivelBase(tipo);
+  if (asentamiento.nivel < requisito) {
+    throw new ConstruccionManualInvalidaError(`Requiere nivel de asentamiento ${requisito} (actual: ${asentamiento.nivel}).`);
   }
   if (tipo === 'granFundicion' && faccion.nivel < EDIFICIO_CATALOGO.granFundicion.nivelFaccionMinimo) {
     throw new ConstruccionManualInvalidaError(
@@ -821,7 +822,7 @@ export function construirManualmente(
   if (enColaActual >= NECESIDADES.maximoEnCola) {
     throw new ConstruccionManualInvalidaError(`La cola de construcción está llena (máximo ${NECESIDADES.maximoEnCola}).`);
   }
-  const sitio = sitioConcentrico(asentamiento, zonaPoligono, asentamiento.edificios);
+  const sitio = sitioParaTipo(tipo, asentamiento, zonaPoligono, mapa, reclamos);
   if (!sitio) throw new ConstruccionManualInvalidaError('No hay sitio disponible dentro de la zona de influencia.');
 
   const costo = EDIFICIO_CATALOGO[tipo].costo as Partial<Record<string, number>>;
@@ -831,6 +832,66 @@ export function construirManualmente(
   }
 
   const almacen = descontarRecursos(asentamiento.almacen, costo);
-  const nuevo = { ...crearEdificioEnCola(tipo, sitio, `edificio-${asentamiento.id}-manual-${contador}`), prioridad: SCORE_BANDAS.crecimiento };
+  const nuevo = {
+    ...crearEdificioEnCola(tipo, sitio.posicion, `edificio-${asentamiento.id}-manual-${contador}`, sitio.fuenteId),
+    prioridad: SCORE_BANDAS.manual,
+  };
   return { ...asentamiento, almacen, edificios: [...asentamiento.edificios, nuevo] };
+}
+
+/**
+ * Quita un proyecto `en_cola` de la cola (Doc 4.2, a petición del usuario) — SOLO antes de que arranque la
+ * obra (`en_construccion` ya no se puede quitar; qué pasa con los recursos comprometidos a mitad de obra
+ * queda PENDIENTE, ver Preguntas_Abiertas.md #14b). Devuelve el costo COMPLETO pagado al comprometerse
+ * (overhaul de auto-construcción: el pago ocurrió al encolar, no al empezar a construir).
+ */
+export function quitarDeCola(asentamiento: Asentamiento, cargo: 'gobernador' | 'maestroObras', edificioId: string): Asentamiento {
+  if (!cargoOcupado(asentamiento, cargo)) {
+    throw new ConstruccionManualInvalidaError(`Se necesita un ${cargo} asignado para modificar la cola.`);
+  }
+  const edificio = asentamiento.edificios.find((e) => e.id === edificioId);
+  if (!edificio) throw new ConstruccionManualInvalidaError('Ese proyecto no existe en este asentamiento.');
+  if (edificio.estado !== 'en_cola') {
+    throw new ConstruccionManualInvalidaError('Solo se puede quitar un proyecto que aún no empezó a construirse.');
+  }
+  const costo = EDIFICIO_CATALOGO[edificio.tipo].costo as Partial<Record<string, number>>;
+  let almacen = asentamiento.almacen;
+  for (const [recurso, cantidad] of Object.entries(costo)) {
+    if (cantidad) almacen = agregarRecurso(almacen, recurso, cantidad);
+  }
+  return { ...asentamiento, almacen, edificios: asentamiento.edificios.filter((e) => e.id !== edificioId) };
+}
+
+/**
+ * Mueve un proyecto `en_cola` una posición arriba/abajo en el orden de arranque (Doc 4.2, a petición del
+ * usuario) — intercambia su `prioridad` con la del vecino inmediato en ese sentido dentro de la lista
+ * ordenada por prioridad descendente (mismo orden que `avanzarConstruccion` usa para decidir quién arranca
+ * obra primero). No hace nada si el proyecto ya está en el extremo correspondiente. La ubicación de
+ * construcción nunca se ve afectada por este orden.
+ */
+export function moverEnCola(
+  asentamiento: Asentamiento,
+  cargo: 'gobernador' | 'maestroObras',
+  edificioId: string,
+  direccion: 'arriba' | 'abajo'
+): Asentamiento {
+  if (!cargoOcupado(asentamiento, cargo)) {
+    throw new ConstruccionManualInvalidaError(`Se necesita un ${cargo} asignado para modificar la cola.`);
+  }
+  const enCola = asentamiento.edificios.filter((e) => e.estado === 'en_cola').sort((a, b) => (b.prioridad ?? 0) - (a.prioridad ?? 0));
+  const indice = enCola.findIndex((e) => e.id === edificioId);
+  if (indice === -1) throw new ConstruccionManualInvalidaError('Ese proyecto no está en la cola.');
+  const vecinoIndice = direccion === 'arriba' ? indice - 1 : indice + 1;
+  if (vecinoIndice < 0 || vecinoIndice >= enCola.length) return asentamiento;
+
+  const actual = enCola[indice]!;
+  const vecino = enCola[vecinoIndice]!;
+  const prioridadActual = actual.prioridad ?? 0;
+  const prioridadVecino = vecino.prioridad ?? 0;
+  const edificios = asentamiento.edificios.map((e) => {
+    if (e.id === actual.id) return { ...e, prioridad: prioridadVecino };
+    if (e.id === vecino.id) return { ...e, prioridad: prioridadActual };
+    return e;
+  });
+  return { ...asentamiento, edificios };
 }

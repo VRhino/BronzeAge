@@ -61,6 +61,8 @@ describe('invariantes del motor en una simulación larga', () => {
       relaciones: [],
       titulos: [],
       caminos: [],
+      campamentosBandidos: [],
+      bandidosProximoSpawnTick: 0,
     };
 
     const ultimoNivelVisto = new Map<string, number>();

@@ -19,6 +19,8 @@ describe('fixtures de test', () => {
       relaciones: [],
       titulos: [],
       caminos: [],
+      campamentosBandidos: [],
+      bandidosProximoSpawnTick: 0,
     };
 
     const resultado = avanzarSimulacion(estado, mapa, 1);

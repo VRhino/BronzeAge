@@ -59,12 +59,21 @@ body {
 #world-canvas {
   display: block;
   flex: none;
+  /* Fija la altura al bitmap del canvas: sin esto, `align-items: stretch` del `.map-panel` lo estira (y
+     deforma, porque el bitmap no cambia de resolución) cada vez que la leyenda crece más que el mapa —
+     p. ej. con muchas Facciones creadas en partida. */
+  align-self: flex-start;
   cursor: crosshair;
 }
 
 .legend {
   flex: none;
   width: 240px;
+  /* Techo independiente del contenido (no depende de que `.map-panel` tenga altura definida, que no la
+     tiene): con muchas Facciones, la leyenda deja de crecer sin límite y `.legend-body` scrollea. Igualado
+     a la altura del mapa (`--legend-max-height`, fijado inline desde `CANVAS_SIZE`) para que el panel quede
+     justo, con `calc(100vh - 24px)` como respaldo si esa variable no llegara a fijarse. */
+  max-height: var(--legend-max-height, calc(100vh - 24px));
   background: rgba(26, 24, 20, 0.92);
   border-left: 1px solid #4a4436;
   font-size: 11px;
@@ -87,12 +96,42 @@ body {
   border-bottom: 1px solid #4a4436;
 }
 
+.legend-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 6px 10px 0;
+  border-bottom: 1px solid #4a4436;
+}
+
+.legend-tab-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  color: #b8ae90;
+  font-size: 11px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.legend-tab-btn:hover {
+  background: #2a2721;
+}
+
+.legend-tab-btn.active {
+  background: #2a2721;
+  border-color: #4a4436;
+  color: #e8e2d0;
+}
+
 .legend-body {
   flex: 1;
+  min-height: 0;
   padding: 8px 10px;
   overflow-y: auto;
 }
 
+.legend.collapsed .legend-tabs,
 .legend.collapsed .legend-body {
   display: none;
 }
@@ -242,6 +281,28 @@ body {
   background: #4a4436;
   border-color: #b8ae90;
   color: #e8e2d0;
+}
+
+/* Chips de escuadrones propios en Combate (Doc 5.2/5.10, a petición del usuario): borde blanco sin
+   seleccionar, verde al seleccionar — ver `actualizarCombateEscuadrones` en main.ts. */
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0 10px;
+}
+
+.chip-escuadron {
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: 12px;
+  border: 1.5px solid #ffffff;
+}
+
+.chip-escuadron.selected {
+  border-color: #4caf50;
+  background: #223a22;
+  color: #d9f2d9;
 }
 
 .settlement-detail {

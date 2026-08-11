@@ -21,7 +21,11 @@ Cada clase tiene FÓRMULA DE CRECIMIENTO INDEPENDIENTE (no comparten los mismos 
 - Cola de PRIORIDAD cuando la demanda excede el pool disponible (criterio exacto pendiente).
 
 ## 4.2 Auto-construcción por necesidad
-- El jugador NO elige ubicación ni tipo de edificio, EXCEPTO: edificio de fundación, y edificios estratégicos (murallas, torres, puerto) que sí se colocan manualmente.
+- El jugador NO elige UBICACIÓN de edificio, EXCEPTO: edificio de fundación, y edificios estratégicos (murallas, torres, puerto) que sí se colocan manualmente — la ubicación sigue siendo siempre automática, sin excepciones nuevas (ver control de cola más abajo, que NO toca este punto).
+- **Control manual de la cola de auto-construcción — IMPLEMENTADO (cambio de base a petición del usuario, inspirado en análisis comparativo con Travian)**: Gobernador y Maestro de Obras (ver Doc 2.2) ven la cola completa (`en_cola`) desde su interfaz, REORDENAN las entradas ya encoladas (arriba/abajo), y AÑADEN o QUITAN proyectos manualmente. Esto da control sobre el TIPO y el ORDEN de lo que se construye — la UBICACIÓN sigue sin poder elegirse nunca, la decide siempre el algoritmo de colocación (ver más abajo).
+  - **Añadir**: CUALQUIER edificio del catálogo (salvo Centro Urbano, que nunca pasa por cola) se puede añadir manualmente, incluidos Barracón/Galería de tiro/Palacio/Mercado — las 4 políticas de desbloqueo que antes gateaban estos 4 edificios se RETIRARON por completo (ver 4.4), junto con su cluster de cola aparte: ahora compiten por el mismo cupo `NECESIDADES.maximoEnCola` que cualquier otro edificio. Respeta los mismos gates de nivel/edificio previo del catálogo (Doc 4.2.1) y la reserva mínima de Mantenimiento — solo se añade "si el asentamiento puede pagarlo ahora mismo".
+  - **Quitar**: SOLO un proyecto `en_cola` (no `en_construccion` — nunca se puede cancelar una vez arrancada la obra). Devuelve el COSTO COMPLETO pagado al comprometerse (overhaul de auto-construcción: el pago ocurrió al encolar, no al empezar a construir).
+  - **Reordenar**: mueve un proyecto `en_cola` una posición arriba/abajo respecto al resto de la cola.
 - Algoritmo de colocación: reglas por tipo de edificio (ej. granja cerca de tierra fértil, herrería cerca de mina+camino), elige la mejor casilla disponible dentro de la zona de influencia.
 - Crecimiento disparado por NECESIDAD REAL: más población → necesidad de comida → granja automática; excedente de recurso → mercado/almacén.
 - **Escalado por demanda continua** (confirmado durante implementación de Fase 0): la construcción automática no se limita a "construir una vez si no existe ninguna" — vuelve a evaluarse continuamente. Ej. Granja: se encola una adicional en cuanto haga falta, incluso si ya existe al menos una (bug detectado en Sprint 2: sin esto, la población entraba en hambruna silenciosa al crecer más allá de lo que una sola Granja podía sostener).
@@ -134,6 +138,14 @@ Van por AUTO-CONSTRUCCIÓN (igual que Granja/Cantera), disparadas en cuanto se c
 - Costo: construcción 100 madera + 40 piedra; mejora 1: 150 madera + 100 piedra; mejora 2: 450 madera + 200 piedra. Tiempo de construcción: 8 ticks.
 - Cupo de caravanas por nivel interno: nivel 1 → 2; nivel 2 → 4; nivel 3 → 6 (más el bonus aditivo de la política "Ampliación de Flota", ver 4.4).
 
+### Trofeo
+
+**Maravilla** (Roadmap_Escalado.md Eje 4, a petición del usuario — IMPLEMENTADO solo el edificio en esta pasada, ver más abajo) — edificio único de coste extremo, sin recetas ni producción: es un trofeo, no un edificio productivo. Disponible vía control manual de cola (Gobernador/Maestro de Obras, ver 4.2), no auto-construcción.
+- Requisito: Asentamiento en nivel MÁXIMO (nivel 3, tope de Fase 0).
+- Costo: 5000 madera + 5000 piedra + 500 oro + 300 cobre + 200 estaño + 200 livestock (PLACEHOLDER — todos los recursos EN BRUTO del catálogo actual, varias veces el costo de Palacio, el más caro hasta ahora). Tiempo: 200 ticks.
+- El diseño original pide además materiales EXÓTICOS (fuera del catálogo estándar) — NO implementados todavía, no existe ese tipo de recurso en el juego; el costo actual usa solo recursos ya existentes.
+- El CICLO de servidor que se cerraría al completarla (reset del mundo + la Facción ganadora persistiendo como legado NPC) queda fuera de esta pasada — ver Roadmap_Escalado.md Eje 4 para el diseño completo, todavía sin implementar (requiere infraestructura de servidor/multi-instancia que Fase 0 no tiene).
+
 ## 4.3 Almacenamiento
 Límites de almacenaje por recurso, ampliables construyendo más capacidad. El superávit que excede el límite dispara construcción automática de más almacenamiento.
 
@@ -151,12 +163,7 @@ Límites de almacenaje por recurso, ampliables construyendo más capacidad. El s
 - **"Edicto de Cosecha"** (Gobernador, nueva, a petición del usuario): multiplica ×1.5 la producción de trigo de todas las Granjas activas del asentamiento. No afecta a madera ni piedra. Ver 4.2.1 (Granja) y 4.5 (panel de producción).
 - **"Racionamiento"** (Sacerdote, implementada, pendiente de haber sido documentada aquí): reduce el consumo de trigo de la población (×0.8). No afecta al consumo/ración de tropas (Doc 5.4). Ver 4.1.
 - **Redistribución de Vivienda** (IDEA nueva, a petición del usuario, NO implementada todavía): política que permitiría modificar la proporción fija 15/5 de cupo Pesants/Artesanos dentro de cada Vivienda (ej. favorecer más Artesanos en un asentamiento orientado a producción especializada). Pool y cargo responsable sin definir todavía — candidato natural: Maestro de Obras (mismo pool que Vivienda) o Sacerdote (mismo pool que gestiona población, ver 4.1). PENDIENTE: mecánica exacta (¿desplaza cupo de una clase a otra manteniendo el total, o añade cupo extra?), valores numéricos, y a qué cargo pertenece.
-- **Desbloqueo de edificios especiales** (rediseño Fase 0 + ampliación de comercio, a petición del usuario): 4 políticas, una por edificio, cada una en el pool del cargo indicado (ver catálogo completo en 4.2.1). Mientras la política esté activa, la construcción del edificio correspondiente salta la cola normal de auto-construcción/manual (tope de 3 slots, ver 4.2) y usa un CLUSTER DE COLA APARTE dedicado solo a estos edificios:
-  - "Construir Barracón" — pool General.
-  - "Construir Galería de tiro" — pool General.
-  - "Construir Palacio" — pool Gobernador.
-  - "Construir Mercado" — pool Tesorero (ampliación de comercio, ver 4.2.1/Doc 3.12).
-  Curtiduría/Armería/Fundición/Carpintería NO usan este mecanismo — son auto-construcción normal (ver 4.2), compitiendo por la cola de 3 slots como cualquier otro edificio.
+- **Desbloqueo de edificios especiales — RETIRADO (cambio de base del control de cola, a petición del usuario)**: las 4 políticas "Construir Barracón/Galería de tiro/Palacio/Mercado" y el cluster de cola aparte que gateaban ya NO EXISTEN. Barracón, Galería de tiro, Palacio y Mercado pasan al mismo carril de ADICIÓN MANUAL que cualquier otro edificio del catálogo (ver "Control manual de la cola" en 4.2) — disponibles para Gobernador y Maestro de Obras sin necesitar ninguna política activa. Curtiduría/Armería/Fundición/Carpintería no cambian: siguen siendo auto-construcción normal (ver 4.2).
 - **Políticas de flota de caravanas** (Tesorero, ampliación de comercio, a petición del usuario, ver Doc 3.12): "Ampliación de Flota" suma +1 al cupo de caravanas propias (aditivo, no multiplicativo — a diferencia del resto de políticas de este catálogo); "Carga Ampliada" multiplica ×1.5 la capacidad de carga de las caravanas propias; "Rutas Rápidas" multiplica ×1.5 su velocidad.
 - PENDIENTE: catálogo concreto de políticas dentro de cada pool (más allá de los ejemplos ya implementados); si son excluyentes entre sí dentro de un slot.
 

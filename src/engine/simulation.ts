@@ -1,4 +1,4 @@
-import type { AcuerdoTrueque, Asentamiento, CaminoComercial, Caravana, Faccion, OrdenMercado, RelacionPolitica, Titulo } from '../domain/types';
+import type { AcuerdoTrueque, Asentamiento, CaminoComercial, CampamentoBandido, Caravana, Faccion, OrdenMercado, RelacionPolitica, Titulo } from '../domain/types';
 import type { Mapa } from '../world/mapa';
 import { computeTodasLasZonas } from './zones';
 import { avanzarConstruccion, reclamosDeFuentes } from './construction';
@@ -13,6 +13,7 @@ import { avanzarMantenimientoTropas } from './tropas';
 import { avanzarNivelAsentamiento, avanzarMantenimiento, encontrarCapital } from './mantenimiento';
 import { avanzarReputacion } from './reputacion';
 import { calcularTitulos, narrarCambiosDeTitulo } from './titulos';
+import { avanzarAtaquesBandidos, avanzarSpawnBandidos } from './bandidos';
 
 export interface EstadoSimulacion {
   asentamientos: Asentamiento[];
@@ -26,6 +27,11 @@ export interface EstadoSimulacion {
    * `GameStore.proponerTrueque`/`engine/caminos.ts`); el tick solo los LEE para el bonus de velocidad de
    * caravana (`engine/trade.ts`), nunca los modifica. */
   caminos: CaminoComercial[];
+  /** Campamentos de bandidos activos (Doc 1.9) — ver `engine/bandidos.ts`. */
+  campamentosBandidos: CampamentoBandido[];
+  /** Tick a partir del cual puede aparecer un campamento nuevo si hay menos de `maximoSimultaneos` activos
+   * (Doc 1.9) — se adelanta cada vez que un jugador destruye uno (`GameStore.atacarCampamentoBandidos`). */
+  bandidosProximoSpawnTick: number;
 }
 
 export interface ResultadoTick extends EstadoSimulacion {
@@ -91,6 +97,14 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, tickActu
   const trasExpansion = avanzarCaravanasFundacion(trasComercio.caravanas, mapa, trasComercio.facciones, trasComercio.asentamientos, tickActual);
   eventos.push(...trasExpansion.eventos);
 
+  // Campamentos de bandidos (Doc 1.9): spawn/respawn primero, después atacan cualquier caravana ya movida
+  // este tick (comercial o de fundación) que pase cerca — mismo orden que el resto del tick, sobre posiciones
+  // ya actualizadas.
+  const trasSpawnBandidos = avanzarSpawnBandidos(estado.campamentosBandidos, estado.bandidosProximoSpawnTick, zonas, trasExpansion.asentamientos, mapa, tickActual);
+  eventos.push(...trasSpawnBandidos.eventos);
+  const trasAtaquesBandidos = avanzarAtaquesBandidos(trasSpawnBandidos.campamentos, trasExpansion.caravanas);
+  eventos.push(...trasAtaquesBandidos.eventos);
+
   const trasMercado = avanzarMercado(trasExpansion.asentamientos, estado.ordenes);
   eventos.push(...trasMercado.eventos);
 
@@ -108,12 +122,14 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, tickActu
   return {
     asentamientos: trasTributos.asentamientos,
     facciones: faccionesFinal,
-    caravanas: trasExpansion.caravanas,
+    caravanas: trasAtaquesBandidos.caravanas,
     acuerdos: trasComercio.acuerdos,
     ordenes: trasMercado.ordenes,
     relaciones: estado.relaciones,
     titulos: titulosActuales,
     caminos: estado.caminos,
+    campamentosBandidos: trasSpawnBandidos.campamentos,
+    bandidosProximoSpawnTick: estado.bandidosProximoSpawnTick,
     eventos,
   };
 }

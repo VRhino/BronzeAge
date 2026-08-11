@@ -74,3 +74,24 @@ Mecanismo COMPLEMENTARIO al Cap de Fundación (1.7) — ambos coexisten, no se s
 - CANCELACIÓN: el jugador puede DESARMAR la caravana de fundación en el asentamiento de origen y recuperar el contenido COMPLETO — sin pérdida por cambiar de opinión antes de fundar.
 
 PENDIENTE: número de 50 madera sin validar por simulación todavía (igual que el resto de cifras del proyecto).
+
+## 1.9 Campamentos de bandidos — IMPLEMENTADO (nuevo, a petición del usuario — inspirado en análisis comparativo con Travian)
+
+- Aparecen únicamente en BOSQUES (ver 1.4) que NO se solapan con ninguna zona de influencia existente — territorio no reclamado por ninguna Facción. Simplificación de implementación: se chequea el CENTRO del bosque contra los polígonos de zona (mismo criterio que `posicionLibreParaFundar`), no el círculo completo.
+- **UNO por asentamiento (rediseño a petición del usuario)**: el tope ya no es un número fijo de campamentos en todo el mundo — es UNO por cada asentamiento vivo, apareciendo en SU bosque no reclamado MÁS CERCANO. Así nunca aparece en la otra punta del mapa sin ningún asentamiento cerca (irrelevante: nadie puede atacarlo, ninguna caravana pasa por ahí) ni pegado a una zona de influencia (ya excluido por la regla de "no reclamado"). Un asentamiento se considera "atendido" (no recibe un segundo campamento) si ya tiene uno dentro de su radio de cobertura (placeholder, ver más abajo); mientras haya asentamientos sin cubrir y se cumpla el plazo de reaparición, cada tick se cubre como mucho uno.
+- Mientras el campamento sigue en pie, ATACA CARAVANAS (ver 1.6, Doc 3.6/3.10) que pasen dentro de un radio fijo de su posición, evaluado cada tick — mismo tipo de resolución de combate asimétrico que la intercepción entre Facciones (Doc 3.10: poder fijo con jitter contra la defensa base de caravana), pero contra un bando NPC en vez de un rival jugador. Si gana, la caravana se pierde por completo (nadie la recibe: el bandido no tiene almacén propio).
+- Al ser DESTRUIDO (acción militar MANUAL del jugador — elige campamento y escuadrones propios, pestaña Guerra — mismo cálculo de combate sin representación gráfica que el resto de Fase 0, ver Doc 5.10), entrega una RECOMPENSA (loot) fija a quien lo destruye y se agenda el plazo de reaparición.
+- REAPARICIÓN: tras destruirse, aparece un campamento nuevo pasados N ticks — cerca del primer asentamiento sin cobertura que encuentre (no necesariamente el mismo que perdió el suyo).
+- Implementado en `engine/bandidos.ts` (spawn/respawn automático y ataque a caravanas, evaluados cada tick dentro de `avanzarSimulacion`) y `engine/combate.ts` (`atacarCampamentoBandidos`, ataque manual del jugador). Marcador visible en el mapa (diamante rojo) y selector dedicado en la pestaña Guerra. Verificado en el navegador con 2 asentamientos en esquinas opuestas de un mapa 2000×2000: cada uno recibió su propio campamento en su bosque más cercano (69 y 103 unidades de distancia respectivamente, nunca en la zona del otro asentamiento), tope respetado en 2 (= número de asentamientos), y ataque/destrucción/botín/reaparición verificados de punta a punta.
+
+Cifras actuales, todas PLACEHOLDER sin calibrar por simulación (`CAMPAMENTOS_BANDIDOS`, constants.ts):
+- Poder de combate: 30 (fijo, sin escalado por región).
+- Radio de ataque a caravanas: 40 unidades del mapa.
+- Radio de cobertura (a partir del cual un asentamiento ya se considera atendido): 600 unidades — sin techo máximo real: si el bosque no reclamado más cercano de un asentamiento queda lejos porque está rodeado de zonas de otras Facciones, se spawnea igual ahí (la mejor opción disponible, no bloquear la mecánica).
+- Recompensa: 40 madera + 20 piedra + 15 oro.
+- Reaparición: 60 ticks tras destruirse.
+
+PENDIENTE (calibración, no diseño):
+- Ajustar poder/radio/recompensa/cadencia/radio de cobertura por simulación.
+- Si el campamento debería escalar con región/proximidad a Facciones fuertes, o seguir fijo.
+- Si el campamento tiene algún efecto pasivo sobre el bosque que ocupa (ej. bloquear su explotación) o solo amenaza caravanas de paso — actualmente NO bloquea nada, solo amenaza caravanas.
