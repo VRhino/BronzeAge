@@ -157,6 +157,12 @@ export interface Escuadron {
 
 export interface Asentamiento {
   id: string;
+  /** Nombre editable por el jugador (a petición del usuario) — puramente de presentación, igual que
+   * `Faccion.nombre`. `id` sigue siendo la llave interna estable (lookups, `origenAsentamientoId` /
+   * `destinoAsentamientoId` de `Caravana`, `asentamientoId` de `AcuerdoTrueque`/`OrdenMercado`/
+   * `CaminoComercial`/`ZonaInfluencia`, etc.) y NUNCA cambia al renombrar. Ausente = usar `id` como display
+   * (asentamientos ya existentes de partidas guardadas antes de esta función). */
+  nombre?: string;
   faccionId: string;
   jugadoresFundadoresIds: string[];
   posicion: Point;
@@ -180,6 +186,12 @@ export interface Asentamiento {
    * La adición MANUAL de edificios (`anadirEdificioManualmente`, Gobernador/Maestro de Obras) no se ve
    * afectada. Ausente/`false` = activa. */
   autoConstruccionPausada?: boolean;
+  /** Reserva manual por recurso (0-999, a petición del usuario), calibrada por el Tesorero: se SUMA a
+   * `reservaDinamicaConstruccion` (engine/mantenimiento.ts) y solo la respeta el camino AUTOMÁTICO de
+   * construcción (`avanzarConstruccion`/`avanzarMejoras`, engine/construction.ts) — `anadirEdificioManualmente`
+   * queda exenta a propósito, ya que el jugador la autoriza explícitamente al usarla. Ausente = sin reserva
+   * manual extra (comportamiento sin cambios). */
+  reservaManual?: Partial<Record<RecursoTipo, number>>;
 }
 
 export interface ZonaInfluencia {
@@ -304,10 +316,13 @@ export interface Caravana {
   /** Flota de caravanas propias (ampliación de comercio, a petición del usuario): solo para `tipo: 'comercial'`
    * construidas vía Mercado (ver `construirCaravanaComercial`, engine/trade.ts) — un activo persistente y con
    * costo, no un objeto efímero. 'disponible' = construida, parada en `origenAsentamientoId`, sin asignar.
-   * 'en_transito' = cargada y en ruta hacia `destinoAsentamientoId`. Al entregar, vuelve a 'disponible' en vez
-   * de desaparecer (a diferencia del resto de tipos de caravana, que siguen siendo efímeros). Ausente para
-   * caravanas de Fundación y para los tipos de caravana todavía sin uso real (militar/contrabando, Doc 3.6). */
-  estado?: 'disponible' | 'en_transito';
+   * 'en_transito' = cargada y en ruta hacia `destinoAsentamientoId`. Al entregar, en vez de desaparecer O de
+   * reaparecer instantáneamente en `origenAsentamientoId` (bug corregido a petición del usuario: una caravana
+   * NUNCA se teletransporta), pasa a 'retornando' — recorre la MISMA `ruta` en sentido inverso (ver
+   * `avanzarCaravanas`, engine/trade.ts) de vuelta a `origenAsentamientoId`, vacía, y solo entonces vuelve a
+   * 'disponible'. Ausente para caravanas de Fundación y para los tipos de caravana todavía sin uso real
+   * (militar/contrabando, Doc 3.6). */
+  estado?: 'disponible' | 'en_transito' | 'retornando';
 }
 
 /**
@@ -321,6 +336,11 @@ export interface CampamentoBandido {
   posicion: Point;
   /** Bosque que ocupa (Doc 1.4/1.9) — determina dónde puede aparecer, no se agota por esto. */
   bosqueId: string;
+  /** Asentamiento al que este campamento "atiende" (Doc 1.9) — el spawn asigna como mucho un campamento
+   * por asentamiento SIEMPRE, con independencia de si otro asentamiento cercano ya tiene el suyo (ver
+   * `engine/bandidos.ts`). Reemplaza a un criterio anterior por distancia que dejaba asentamientos vecinos
+   * sin campamento propio para siempre si compartían radio de cobertura con otro. */
+  asentamientoId: string;
   /** Poder de combate fijo (placeholder, ver `CAMPAMENTOS_BANDIDOS` en constants.ts) — mismo tipo de
    * resolución que el resto del combate (Doc 5.2/5.10), sin escuadrones propios que sufran bajas graduales. */
   poder: number;

@@ -97,6 +97,10 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, tickActu
   const trasExpansion = avanzarCaravanasFundacion(trasComercio.caravanas, mapa, trasComercio.facciones, trasComercio.asentamientos, tickActual);
   eventos.push(...trasExpansion.eventos);
 
+  // Regeneración de yacimientos agotados (a petición del usuario): muta `mapa` directamente, mismo patrón
+  // que `mapa.extraer` dentro de `avanzarConstruccion` más arriba en este mismo tick.
+  eventos.push(...mapa.avanzarRegeneracion(tickActual));
+
   // Campamentos de bandidos (Doc 1.9): spawn/respawn primero, después atacan cualquier caravana ya movida
   // este tick (comercial o de fundación) que pase cerca — mismo orden que el resto del tick, sobre posiciones
   // ya actualizadas.

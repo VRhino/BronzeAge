@@ -285,7 +285,10 @@ export class GameStore {
   private clonarEstadoActual(): GameState {
     return {
       mapa: this.state.mapa,
-      estadoMapa: { extraido: { ...this.state.estadoMapa.extraido } },
+      estadoMapa: {
+        extraido: { ...this.state.estadoMapa.extraido },
+        regeneraEnTick: { ...this.state.estadoMapa.regeneraEnTick },
+      },
       asentamientos: structuredClone(this.state.asentamientos),
       facciones: structuredClone(this.state.facciones),
       caravanas: structuredClone(this.state.caravanas),
@@ -749,13 +752,14 @@ export class GameStore {
 
   /** Solo lectura, para la pestaña Guerra/Acciones: cupo de flota, cuántas caravanas propias tiene el
    * asentamiento y en qué estado (Doc 3.3, ampliación de comercio). */
-  caravanasInfo(asentamiento: Asentamiento): { mercadoActivo: boolean; cupo: number; disponibles: number; enTransito: number } {
+  caravanasInfo(asentamiento: Asentamiento): { mercadoActivo: boolean; cupo: number; disponibles: number; enTransito: number; retornando: number } {
     const propias = this.state.caravanas.filter((c) => c.tipo === 'comercial' && c.origenAsentamientoId === asentamiento.id);
     return {
       mercadoActivo: tieneMercadoActivoEngine(asentamiento),
       cupo: cupoCaravanasEngine(asentamiento),
       disponibles: propias.filter((c) => c.estado === 'disponible').length,
       enTransito: propias.filter((c) => c.estado === 'en_transito').length,
+      retornando: propias.filter((c) => c.estado === 'retornando').length,
     };
   }
 
@@ -867,6 +871,37 @@ export class GameStore {
       a.id === asentamientoId ? { ...a, autoConstruccionPausada: false } : a
     );
     this.registrar(`${asentamiento.id}: auto-construcción reanudada.`);
+    this.notify();
+  }
+
+  /** Calibra la reserva manual de un recurso (0-999, a petición del usuario, ver `Asentamiento.reservaManual`)
+   * — tope que el camino AUTOMÁTICO de construcción no puede tocar (`engine/construction.ts`); la
+   * construcción manual queda exenta a propósito. Requiere Tesorero asignado (mismo criterio que exigen las
+   * políticas por cargo, ver `engine/politicas.ts`). */
+  calibrarReservaManual(asentamientoId: string, recurso: RecursoTipo, valor: number): void {
+    const asentamiento = this.state.asentamientos.find((a) => a.id === asentamientoId)!;
+    if (!asentamiento.cargos.tesoreroId) {
+      this.registrar(`Calibrar reserva rechazado: ${asentamiento.id} necesita un Tesorero asignado.`);
+      this.notify();
+      return;
+    }
+    const limpio = Math.max(0, Math.min(999, Math.round(valor)));
+    this.state.asentamientos = this.state.asentamientos.map((a) =>
+      a.id === asentamientoId ? { ...a, reservaManual: { ...a.reservaManual, [recurso]: limpio } } : a
+    );
+    this.notify();
+  }
+
+  /** Renombra un asentamiento (a petición del usuario) — solo `nombre` (presentación), `id` nunca cambia:
+   * sigue siendo la llave interna estable que usan caravanas/acuerdos/caminos/zonas. Vacío = vuelve a
+   * mostrar `id` (ver `etiquetaAsentamiento`, main.ts). */
+  renombrarAsentamiento(asentamientoId: string, nombre: string): void {
+    const asentamiento = this.state.asentamientos.find((a) => a.id === asentamientoId)!;
+    const nombreLimpio = nombre.trim();
+    this.state.asentamientos = this.state.asentamientos.map((a) =>
+      a.id === asentamientoId ? { ...a, nombre: nombreLimpio || undefined } : a
+    );
+    this.registrar(`${asentamiento.id}: renombrado a "${nombreLimpio || asentamiento.id}".`);
     this.notify();
   }
 
@@ -1082,7 +1117,7 @@ export class GameStore {
       this.historialDesde = payload.tick ?? 0;
       this.state = {
         mapa: mapaRegenerado,
-        estadoMapa: { extraido },
+        estadoMapa: { extraido, regeneraEnTick: {} },
         asentamientos: payload.asentamientos,
         facciones: payload.facciones,
         caravanas: payload.caravanas ?? [],

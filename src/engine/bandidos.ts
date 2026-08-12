@@ -14,15 +14,15 @@ function distancia(a: Point, b: Point): number {
 }
 
 /**
- * Asentamiento vivo sin ningún campamento ya asignado cerca (Doc 1.9, a petición del usuario) — "cerca" se
- * mide con el mismo `distanciaCobertura` que decide cuándo un asentamiento ya está atendido, así un
- * asentamiento no acumula varios campamentos mientras otros se quedan sin ninguno. Devuelve el PRIMERO sin
- * cubrir (orden estable) — cuál exactamente no importa, el respawn ya reparte uno por tick.
+ * Asentamiento vivo sin campamento ASIGNADO todavía (Doc 1.9, a petición del usuario) — por `asentamientoId`,
+ * no por distancia: un criterio anterior basado en radio dejaba asentamientos vecinos (a menos de la
+ * distancia de cobertura de otro) sin campamento propio para siempre, porque el primero que aparecía
+ * "cubría" a los demás sin que ninguno tuviera el suyo (bug real detectado con 3 asentamientos cercanos,
+ * donde solo llegaba a aparecer 1). Devuelve el PRIMERO sin cubrir (orden estable) — cuál exactamente no
+ * importa, el respawn ya reparte uno por tick.
  */
-function asentamientoSinCampamentoCercano(asentamientos: Asentamiento[], campamentos: CampamentoBandido[]): Asentamiento | undefined {
-  return asentamientos.find(
-    (a) => !campamentos.some((c) => distancia(c.posicion, a.posicion) <= CAMPAMENTOS_BANDIDOS.distanciaCobertura)
-  );
+function asentamientoSinCampamento(asentamientos: Asentamiento[], campamentos: CampamentoBandido[]): Asentamiento | undefined {
+  return asentamientos.find((a) => !campamentos.some((c) => c.asentamientoId === a.id));
 }
 
 /**
@@ -42,10 +42,12 @@ function bosqueNoReclamadoMasCercano(mapa: Mapa, zonas: ZonaInfluencia[], ocupad
  * Spawn/respawn de campamentos de bandidos (Doc 1.9, a petición del usuario) — UNO por asentamiento, tomando
  * como referencia SU bosque no reclamado más cercano: ni en la otra punta del mapa sin nadie cerca para
  * atacarlo, ni dentro de una zona de influencia (ya excluido por `bosqueNoReclamadoMasCercano`). El tope deja
- * de ser un número fijo — es el número de asentamientos vivos, cada uno con como mucho un campamento dentro
- * de su radio de cobertura. Mientras se haya cumplido el plazo de reaparición, cada tick se cubre COMO MUCHO
- * un asentamiento sin campamento cercano (mismo ritmo que antes) — si no queda ningún bosque libre para él
- * ese tick, simplemente no aparece nada y se reintenta el siguiente (sin bloquear la simulación ni lanzar error).
+ * de ser un número fijo — es el número de asentamientos vivos, cada uno con SU PROPIO campamento asignado
+ * (`asentamientoId`), sin importar lo cerca que esté de otro asentamiento ya atendido (bug corregido: un
+ * criterio anterior por radio dejaba asentamientos vecinos sin campamento propio para siempre). Mientras se
+ * haya cumplido el plazo de reaparición, cada tick se cubre COMO MUCHO un asentamiento sin campamento (mismo
+ * ritmo que antes) — si no queda ningún bosque libre para él ese tick, simplemente no aparece nada y se
+ * reintenta el siguiente (sin bloquear la simulación ni lanzar error).
  */
 export function avanzarSpawnBandidos(
   campamentos: CampamentoBandido[],
@@ -59,7 +61,7 @@ export function avanzarSpawnBandidos(
   if (campamentos.length >= asentamientos.length || tickActual < proximoSpawnEnTick) {
     return { campamentos, eventos: [] };
   }
-  const asentamientoObjetivo = asentamientoSinCampamentoCercano(asentamientos, campamentos);
+  const asentamientoObjetivo = asentamientoSinCampamento(asentamientos, campamentos);
   if (!asentamientoObjetivo) return { campamentos, eventos: [] };
 
   const ocupados = new Set(campamentos.map((c) => c.bosqueId));
@@ -70,6 +72,7 @@ export function avanzarSpawnBandidos(
     id: `campamento-${tickActual}-${contador}`,
     posicion: bosque.centro,
     bosqueId: bosque.id,
+    asentamientoId: asentamientoObjetivo.id,
     poder: CAMPAMENTOS_BANDIDOS.poder,
   };
   return {

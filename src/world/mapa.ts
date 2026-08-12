@@ -15,7 +15,7 @@
 // Los filtros que dependen del estado del asentamiento (edificios ya colocados, fuentes ya reclamadas) se
 // le pasan como parámetro — el motor sigue mandando.
 
-import { LENERA_POR_BOSQUE } from '../constants';
+import { LENERA_POR_BOSQUE, REGENERACION_NODOS } from '../constants';
 import type { BiomaTipo, Chokepoint, NodoRecurso, Point, RegionId, RioZona, TerrenoTipo, ZonaBosque } from '../domain/types';
 import {
   costeEnPunto,
@@ -59,10 +59,13 @@ export interface OpcionesNodos {
 export interface EstadoMapa {
   /** Cuánto se lleva sacado de cada yacimiento (id de nodo -> unidades). Ausente = intacto. */
   extraido: Record<string, number>;
+  /** Tick en el que un yacimiento agotado (stock 0) vuelve a aparecer con su `cantidadInicial` completa
+   * (id de nodo -> tick, ver `Mapa.avanzarRegeneracion`). Ausente = productivo o todavía sin agendar. */
+  regeneraEnTick: Record<string, number>;
 }
 
 export function crearEstadoMapa(): EstadoMapa {
-  return { extraido: {} };
+  return { extraido: {}, regeneraEnTick: {} };
 }
 
 export class Mapa {
@@ -292,6 +295,34 @@ export class Mapa {
   /** `true` si el nodo existe y todavía tiene stock. */
   nodoProductivo(id: string | undefined): boolean {
     return this.stock(id) > 0;
+  }
+
+  /**
+   * Avanza la regeneración de yacimientos agotados (a petición del usuario): SEGUNDA y única otra vía de
+   * mutación del mapa además de `extraer`. Un nodo que llega a stock 0 agenda su reaparición para
+   * `tickActual + N` (N según su tipo, `REGENERACION_NODOS`) la primera vez que se detecta agotado; cuando
+   * ese tick llega, vuelve a stock completo (se borra lo extraído) y se olvida el calendario. Un nodo
+   * agotado de una partida guardada ANTES de que existiera este sistema (sin entrada en `regeneraEnTick`)
+   * se agenda solo la primera vez que corre esto — autocurativo, no hace falta migrar datos.
+   */
+  avanzarRegeneracion(tickActual: number): string[] {
+    const eventos: string[] = [];
+    for (const nodo of this.generado.nodos) {
+      if (this.stock(nodo.id) > 0) continue;
+      const pendiente = this.estado.regeneraEnTick[nodo.id];
+      if (pendiente === undefined) {
+        const cooldown =
+          nodo.tipo === 'livestock' ? REGENERACION_NODOS.livestock.ticksCooldown : REGENERACION_NODOS.metales.ticksCooldown;
+        this.estado.regeneraEnTick[nodo.id] = tickActual + cooldown;
+        continue;
+      }
+      if (tickActual >= pendiente) {
+        delete this.estado.extraido[nodo.id];
+        delete this.estado.regeneraEnTick[nodo.id];
+        eventos.push(`El yacimiento de ${nodo.tipo} (${nodo.id}) se regenera.`);
+      }
+    }
+    return eventos;
   }
 
   /**

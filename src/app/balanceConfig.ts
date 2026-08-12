@@ -11,12 +11,14 @@
 // este módulo es la única puerta explícita que sí puede escribir, vía casteos a `any` acotados a este archivo.
 import {
   ALMACEN,
+  CAMPAMENTOS_BANDIDOS,
   CAP_FUNDACION_POR_NIVEL,
   CIUDADANIA,
   COMISION,
   EDIFICIO_CATALOGO,
   FUNDACION,
   LENERA_POR_BOSQUE,
+  LINEAS_PRODUCCION,
   MANTENIMIENTO,
   MILITAR,
   NECESIDADES,
@@ -27,6 +29,7 @@ import {
   POLITICA_CATALOGO,
   PRECIO_BASE,
   PRECIO_REFERENCIA,
+  REGENERACION_NODOS,
   REPUTACION,
   RESERVA_CONSTRUCCION,
   SITIO,
@@ -70,6 +73,7 @@ const GRUPOS: Array<[string, string, unknown]> = [
   ['Edificios', 'EDIFICIO_CATALOGO', EDIFICIO_CATALOGO],
   ['Almacén', 'ALMACEN', ALMACEN],
   ['Necesidades (auto-construcción)', 'NECESIDADES', NECESIDADES],
+  ['Líneas de producción', 'LINEAS_PRODUCCION', LINEAS_PRODUCCION],
   ['Colocación de edificios', 'SITIO', SITIO],
   ['Trueque', 'TRUEQUE', TRUEQUE],
   ['Precio base', 'PRECIO_BASE', PRECIO_BASE],
@@ -85,6 +89,8 @@ const GRUPOS: Array<[string, string, unknown]> = [
   ['Mantenimiento', 'MANTENIMIENTO', MANTENIMIENTO],
   ['Reserva mínima de construcción', 'RESERVA_CONSTRUCCION', RESERVA_CONSTRUCCION],
   ['Reputación', 'REPUTACION', REPUTACION],
+  ['Campamentos de bandidos', 'CAMPAMENTOS_BANDIDOS', CAMPAMENTOS_BANDIDOS],
+  ['Regeneración de nodos', 'REGENERACION_NODOS', REGENERACION_NODOS],
 ];
 
 /**

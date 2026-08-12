@@ -215,6 +215,17 @@ body {
   border-radius: 2px;
 }
 
+/* Caravanas (a petición del usuario): triángulo en vez de círculo/diamante — el color real en el mapa varía
+   por Facción de origen (ver `faccionColor`, ui/canvas.ts); aquí se usa uno de la paleta como muestra. */
+.swatch-triangle {
+  flex: none;
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 10px solid #c0392b;
+}
+
 .controls-panel {
   display: flex;
   flex-direction: column;
@@ -351,6 +362,30 @@ body {
   justify-content: space-between;
   gap: 8px;
   font-size: 12px;
+}
+
+/* Reserva manual por recurso (Almacén, a petición del usuario) — un slider 0-999 por recurso, mismo ritmo
+   visual que .kv-grid. */
+.reserva-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px 12px;
+  margin-top: 4px;
+}
+
+.reserva-slider {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+}
+
+.reserva-slider input[type='range'] {
+  width: 100%;
+}
+
+.reserva-valor {
+  color: #b8ae90;
 }
 
 /* Segmento "Info:" bajo el combo de reclutar tropa (pestaña Guerra) — mismo look que .detail-section. */
@@ -677,6 +712,12 @@ button:hover {
   border: 1px solid #4a4436;
   border-radius: 4px;
   min-width: 0;
+}
+
+/* Registro general de sitio (a petición del usuario): movido a la cabeza de `.map-column`, visible sin
+   scroll — el acento lo distingue del resto de log-cards que quedaron abajo, en `.logs-grid`. */
+.log-card-registro {
+  border-left: 3px solid #b8ae90;
 }
 
 .log-card h2 {

@@ -75,7 +75,7 @@ export const POBLACION = {
  * cada tick se limita por `min(produccionBase * ratioManoObraArtesanos, insumo_disponible / consumePorUnidad)`,
  * mismo criterio que ya usan los extractores minerales contra `nodo.cantidad` (ver engine/construction.ts).
  */
-interface RecetaProduccion {
+export interface RecetaProduccion {
   produce: string;
   produccionBase: number;
   consumePorUnidad: Partial<Record<string, number>>;
@@ -419,6 +419,28 @@ export const SCORE_BANDAS = {
 };
 
 /**
+ * Líneas de producción (Doc 4.2.1, a petición del usuario): la distancia dentro del asentamiento entre un
+ * edificio de transformación y la fuente más cercana de cada insumo de su receta penaliza CUÁNTO produce ese
+ * tick — nunca lo que consume por unidad (`consumePorUnidad` no cambia) — simulando que el insumo tarda más
+ * en llegar cuanto más lejos está su origen. Ver `factorPorDistancia`/`factorLineaProduccion`,
+ * engine/construction.ts. PLACEHOLDER sin cifras de diseño previas (ver Preguntas_Abiertas.md), calibrado a
+ * ojo contra `ZONA_INFLUENCIA.radioMaximoPorNivel` (hasta 120) y `SITIO.anillos`.
+ */
+export const LINEAS_PRODUCCION = {
+  // Por debajo de esta distancia, sin penalización (factor 1) — cubre colocaciones ya cercanas por azar.
+  distanciaSinPenalizacion: 25,
+  // A partir de esta distancia, el factor no baja más (suelo en `factorMinimo`) — más o menos el diámetro de
+  // una zona de nivel 3.
+  distanciaMaxima: 150,
+  // Producción nunca cae por debajo de este % solo por distancia, aunque la fuente esté en el otro extremo
+  // del asentamiento — evita que la penalización por sí sola pueda parar una línea de producción del todo.
+  factorMinimo: 0.4,
+  // Distancia asumida cuando el insumo no tiene NINGUNA fuente propia en el asentamiento (llega solo por
+  // trueque/caravana) — ni cerca ni lejos, un valor medio-alto a falta de una posición real que medir.
+  distanciaEstandarSinFuente: 90,
+};
+
+/**
  * Tope de extractores por tipo (cantera/mina/minaCobre/minaEstano/lenera/Corral, Doc 4.2, rediseño de
  * progreso Fase 0): antes escalaba 1:1 con el nivel del asentamiento (hasta 10, el nivelMaximo anterior); con
  * el tope de nivel bajando a 3 (ver NIVEL_ASENTAMIENTO) un máximo ligado al nivel se quedaría corto, así que
@@ -566,6 +588,12 @@ export const POLITICA_CATALOGO = [
   // auto-construcción SOLO evalúa Leñera/Granja hasta llegar a estos mínimos (activas + en curso/cola por
   // tipo), ignorando cualquier otra necesidad detectada ese tick — ver `evaluarNecesidades` en construction.ts.
   { id: 'proteccion_riesgos', cargo: 'maestroObras', nombre: 'Protección de Riesgos', minimoLenerasPrioritario: 2, minimoGranjasPrioritario: 3 },
+  // A petición del usuario, líneas de producción (Doc 4.2.1): mientras esté activa, la auto-construcción sitúa
+  // los edificios de transformación nuevos (Fundición/Curtiduría/Armería) en el hueco de su zona que minimiza
+  // la penalización de distancia a la fuente de sus insumos (`sitioConcentricoLineaProduccion`,
+  // engine/construction.ts) en vez del primer hueco libre del barrido de anillos de siempre. Compite por el
+  // único slot de Maestro de Obras con Vía Rápida/Protección de Riesgos — no se puede tener las tres a la vez.
+  { id: 'lineas_produccion', cargo: 'maestroObras', nombre: 'Líneas de Producción', lineasProduccionPriorizadas: true },
   { id: 'comercio_abierto', cargo: 'tesorero', nombre: 'Comercio Abierto', factorComisionExterna: 0.6 },
   { id: 'aranceles', cargo: 'tesorero', nombre: 'Aranceles Proteccionistas', factorComisionExterna: 1.5 },
   { id: 'leva_forzosa', cargo: 'general', nombre: 'Leva Forzosa', factorCostoReclutamiento: 0.7 },
@@ -672,18 +700,24 @@ export const CAMPAMENTOS_BANDIDOS = {
   poder: 30,
   // Radio (unidades del mapa) dentro del cual un campamento ataca a una caravana que pase cerca.
   radioAtaqueCaravana: 40,
-  // Radio de cobertura (a petición del usuario): un asentamiento se considera "atendido" si ya tiene un
-  // campamento dentro de este radio — así el spawn reparte como mucho un campamento por asentamiento (su
-  // bosque no reclamado más cercano, ver `engine/bandidos.ts`) en vez de amontonarlos todos junto al mismo.
-  // Sin techo máximo de distancia: si el bosque no reclamado más cercano de un asentamiento está lejos porque
-  // está rodeado de zonas de otras Facciones, se spawnea igual ahí — "más cercano" ya es la mejor opción
-  // disponible, un techo adicional solo dejaría a ese asentamiento sin campamento nunca.
-  distanciaCobertura: 600,
   // Ticks tras destruirse un campamento antes de que pueda aparecer uno nuevo ("N días" del diseño, Doc 1.9,
   // expresado en ticks — Fase 0 no tiene mapeo tick-a-tiempo-real todavía).
   ticksRespawn: 60,
   // Recompensa fija al destruirlo (botín).
   recompensa: { madera: 40, piedra: 20, oro: 15 } as Partial<Record<string, number>>,
+};
+
+/**
+ * Regeneración de yacimientos agotados (a petición del usuario): un `NodoRecurso` que llega a stock 0
+ * (`Mapa.stock`, ver `world/mapa.ts`) vuelve a aparecer con su `cantidadInicial` completa pasados N ticks —
+ * mismo patrón que la reaparición de campamentos de bandidos (`CAMPAMENTOS_BANDIDOS.ticksRespawn`). Dos
+ * cadencias: `livestock` (fauna, se recupera por reproducción/migración) el DOBLE de rápido que `metales`
+ * (todo el resto de nodos: piedra/cobre/estaño/oro — yacimientos minerales, se repone mucho más despacio).
+ * Cifras PLACEHOLDER, sin calibrar por simulación todavía, mismo criterio que el resto del proyecto.
+ */
+export const REGENERACION_NODOS = {
+  metales: { ticksCooldown: 200 },
+  livestock: { ticksCooldown: 100 },
 };
 
 // --- Sprint 6: Cierre (Doc 4.5 mantenimiento, Doc 2.7 reputación, Doc 2.9 progresión) ---

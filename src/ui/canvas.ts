@@ -544,13 +544,23 @@ export function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, s
     ctx.stroke();
   }
 
-  // Caravanas en tránsito (Doc 3.2/3.6): punto moviéndose entre origen y destino.
+  // Caravanas en tránsito (Doc 3.2/3.6, a petición del usuario): antes un punto crema fijo, indistinguible
+  // entre facciones — ahora un triángulo (distinto de los círculos de asentamiento y del diamante de
+  // campamentos de bandidos, ver abajo) coloreado según la Facción del asentamiento de ORIGEN (dueño real de
+  // la flota, `origenAsentamientoId` nunca cambia — ver `estado` en domain/types.ts), para poder identificar
+  // de un vistazo a quién pertenece cada una.
   for (const caravana of state.caravanas) {
     const x = caravana.posicionActual.x * scale;
     const y = caravana.posicionActual.y * scale;
+    const origenCaravana = state.asentamientos.find((a) => a.id === caravana.origenAsentamientoId);
+    const color = origenCaravana ? faccionColor(origenCaravana.faccionId, state.facciones) : '#f1e6c8';
+    const r = 4.5;
     ctx.beginPath();
-    ctx.arc(x, y, 3.5, 0, Math.PI * 2);
-    ctx.fillStyle = '#f1e6c8';
+    ctx.moveTo(x, y - r);
+    ctx.lineTo(x + r, y + r);
+    ctx.lineTo(x - r, y + r);
+    ctx.closePath();
+    ctx.fillStyle = color;
     ctx.fill();
     ctx.strokeStyle = '#1b1a17';
     ctx.lineWidth = 1;

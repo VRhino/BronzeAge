@@ -1,6 +1,6 @@
 import type { Asentamiento, Edificio, EdificioTipo } from '../domain/types';
 import type { Mapa } from '../world/mapa';
-import { EDIFICIO_CATALOGO, NIVEL_ASENTAMIENTO } from '../constants';
+import { EDIFICIO_CATALOGO, NIVEL_ASENTAMIENTO, type RecetaProduccion } from '../constants';
 import { cupoCaravanaExtra, factorProduccionTrigo } from './politicas';
 
 export function edificiosPorTipoYEstado(
@@ -42,7 +42,9 @@ export function tieneMercadoActivo(asentamiento: Asentamiento): boolean {
  * Cupo de caravanas propias (ampliación de comercio, a petición del usuario): `cupoCaravanas` del nivel
  * interno actual de Mercado + el bonus aditivo de la política "Ampliación de Flota" (`cupoCaravanaExtra`).
  * 0 si no hay Mercado activo. Cuenta contra este cupo cualquier caravana `tipo: 'comercial'` que el
- * asentamiento tenga construida, esté 'disponible' o 'en_transito' (ver `engine/trade.ts`).
+ * asentamiento tenga construida, en CUALQUIER estado — 'disponible', 'en_transito' o 'retornando' (ver
+ * `construirCaravanaComercial`, engine/trade.ts, que no filtra por estado): es un activo persistente del
+ * asentamiento pase lo que pase, nunca deja de contar mientras exista.
  */
 export function cupoCaravanas(asentamiento: Asentamiento): number {
   const mercado = edificiosPorTipoYEstado(asentamiento, 'mercado')[0];
@@ -178,9 +180,52 @@ export interface ProduccionItem {
 }
 
 /**
- * Producción por tick de cada edificio activo de extracción/producción primaria, agrupada por tipo
- * de edificio. Solo lectura: no descuenta nodos de recurso (a diferencia de `avanzarConstruccion`,
- * que sí llama a `mapa.extraer` al aplicar la producción real).
+ * Producción de recursos intermedios (lingotes/cuero/armas/armaduras) de los edificios de
+ * transformación activos (Fundición/Curtiduría/Armería) para el tick actual — mismo criterio que
+ * `avanzarRecetas` (engine/construction.ts, que sí aplica el cambio real al almacén): recorre las
+ * recetas del `nivelInterno` en orden sobre una copia local de las cantidades disponibles, así que
+ * una receta puede consumir el output de otra calculada antes en este mismo tick (ej. Lingote de
+ * Bronce sobre Lingote de Cobre/Estaño). Solo lectura: no toca `asentamiento.almacen`.
+ */
+function produccionRecetas(asentamiento: Asentamiento): ProduccionItem[] {
+  const ratioArtesano = ratioManoObraArtesanos(asentamiento);
+  const disponible = new Map<string, number>();
+  for (const [recurso, r] of Object.entries(asentamiento.almacen)) disponible.set(recurso, r.cantidad);
+
+  const items: ProduccionItem[] = [];
+  for (const edificio of asentamiento.edificios) {
+    if (edificio.estado !== 'activo') continue;
+    const niveles = (EDIFICIO_CATALOGO[edificio.tipo] as { niveles?: Record<number, { recetas: RecetaProduccion[] }> })
+      .niveles;
+    const nivel = niveles?.[edificio.nivelInterno ?? 1];
+    if (!nivel) continue;
+
+    for (const receta of nivel.recetas) {
+      let cantidad = receta.produccionBase * ratioArtesano;
+      for (const [insumo, porUnidad] of Object.entries(receta.consumePorUnidad)) {
+        if (!porUnidad) continue;
+        cantidad = Math.min(cantidad, (disponible.get(insumo) ?? 0) / porUnidad);
+      }
+      if (cantidad <= 0) continue;
+
+      for (const [insumo, porUnidad] of Object.entries(receta.consumePorUnidad)) {
+        if (porUnidad) disponible.set(insumo, (disponible.get(insumo) ?? 0) - porUnidad * cantidad);
+      }
+      disponible.set(receta.produce, (disponible.get(receta.produce) ?? 0) + cantidad);
+
+      const existente = items.find((it) => it.tipo === edificio.tipo && it.recurso === receta.produce);
+      if (existente) existente.cantidadPorTick += cantidad;
+      else items.push({ tipo: edificio.tipo, recurso: receta.produce, activos: edificiosPorTipoYEstado(asentamiento, edificio.tipo).length, cantidadPorTick: cantidad });
+    }
+  }
+  return items;
+}
+
+/**
+ * Producción por tick de cada edificio activo de extracción/producción primaria Y de transformación
+ * (recursos intermedios, ver `produccionRecetas`), agrupada por tipo de edificio. Solo lectura: no
+ * descuenta nodos de recurso ni almacén (a diferencia de `avanzarConstruccion`/`avanzarRecetas`, que
+ * sí aplican la producción real).
  */
 export function produccionPorTick(asentamiento: Asentamiento, mapa: Mapa): ProduccionItem[] {
   const ratioMano = ratioManoObra(asentamiento);
@@ -225,5 +270,5 @@ export function produccionPorTick(asentamiento: Asentamiento, mapa: Mapa): Produ
     items.push({ tipo, recurso, activos: edificios.length, cantidadPorTick: total });
   }
 
-  return items;
+  return [...items, ...produccionRecetas(asentamiento)];
 }

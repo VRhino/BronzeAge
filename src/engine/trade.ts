@@ -138,10 +138,19 @@ function avanzarCaravanas(
     const destino = asentamientosPorId.get(caravana.destinoAsentamientoId);
     if (!origen || !destino) continue; // asentamiento desaparecido (fuera de alcance de Fase 0 aún)
 
+    // Retorno real tras entregar (a petición del usuario: una caravana NUNCA se teletransporta) — recorre la
+    // MISMA ruta que la llevó a `destino`, pero en sentido inverso, de vuelta a `origen` (su asentamiento de
+    // origen permanente, ver `estado` en domain/types.ts). `origenAsentamientoId`/`destinoAsentamientoId` NO
+    // se tocan durante el retorno (siguen siendo origen real / destino real de la entrega ya hecha) — solo se
+    // invierten los puntos de inicio/fin del movimiento de este tick.
+    const retornando = caravana.estado === 'retornando';
+    const puntoInicio = retornando ? destino.posicion : origen.posicion;
+    const puntoFin = retornando ? origen.posicion : destino.posicion;
+
     // Distancia en línea recta: sigue siendo la base de la bonificación por distancia de la comisión (más
     // abajo) y del movimiento de fallback sin `ruta` — NO de cuántos ticks tarda una caravana con ruta, que
     // ahora depende de la longitud real de la polilínea (puede rodear terreno costoso).
-    const distanciaTotal = Math.max(1, distancia(origen.posicion, destino.posicion));
+    const distanciaTotal = Math.max(1, distancia(puntoInicio, puntoFin));
     const velocidadBase = CARAVANA_CATALOGO[caravana.tipo].velocidad;
     // "Rutas Rápidas" (Tesorero, ampliación de comercio) solo aplica a la flota comercial propia — no a
     // Caravanas de Fundación ni a los tipos todavía sin uso real (militar/contrabando, Doc 3.6).
@@ -155,7 +164,8 @@ function avanzarCaravanas(
     if (caravana.ruta && caravana.ruta.length >= 2) {
       // Bonus de Camino Comercial (Doc 1.6): si existe un camino ya construido para este par de
       // asentamientos, la caravana lo está siguiendo (ver `asignarCaravanasATrueque`, que reusa su
-      // polilínea como `ruta`) — todo el trayecto cuenta como "sobre el camino".
+      // polilínea como `ruta`) — todo el trayecto cuenta como "sobre el camino". Simétrico en ambos
+      // sentidos: el mismo camino sirve para ir y volver.
       const enCaminoComercial = buscarCamino(caminos, origen.id, destino.id) !== undefined;
       const factorCosteExtra = enCaminoComercial ? COSTE_MOVIMIENTO.factorCamino : 1;
       const avance = avanzarPosicionEnRuta(mapa, caravana.ruta, caravana.progreso, velocidad, factorCosteExtra);
@@ -164,13 +174,31 @@ function avanzarCaravanas(
     } else {
       progreso = Math.min(1, caravana.progreso + velocidad / distanciaTotal);
       posicionActual = {
-        x: origen.posicion.x + (destino.posicion.x - origen.posicion.x) * progreso,
-        y: origen.posicion.y + (destino.posicion.y - origen.posicion.y) * progreso,
+        x: puntoInicio.x + (puntoFin.x - puntoInicio.x) * progreso,
+        y: puntoInicio.y + (puntoFin.y - puntoInicio.y) * progreso,
       };
     }
 
     if (progreso < 1) {
       restantes.push({ ...caravana, progreso, posicionActual });
+      continue;
+    }
+
+    if (retornando) {
+      // Llegada de vuelta a `origen`: disponible de nuevo para un nuevo envío — sin entrega, comisión ni
+      // peaje (viaje vacío, no hay contenido que cobrar). `ruta` se limpia: la siguiente asignación calcula
+      // una nueva desde `origen`.
+      restantes.push({
+        ...caravana,
+        estado: 'disponible',
+        contenido: {},
+        destinoAsentamientoId: undefined,
+        origenAcuerdoId: undefined,
+        ladoAcuerdo: undefined,
+        progreso: 0,
+        posicionActual: origen.posicion,
+        ruta: undefined,
+      });
       continue;
     }
 
@@ -237,18 +265,20 @@ function avanzarCaravanas(
     }
 
     if (caravana.tipo === 'comercial') {
-      // Flota propia (ampliación de comercio): vuelve a 'disponible' en el origen en vez de desaparecer — es
-      // un activo persistente y con costo (`construirCaravanaComercial`), no un objeto de un solo uso como el
-      // resto de tipos de caravana.
+      // Flota propia (ampliación de comercio): en vez de desaparecer O de reaparecer instantáneamente en
+      // `origen` (bug corregido a petición del usuario), arranca el viaje de vuelta real — misma `ruta`
+      // invertida, ver `retornando` arriba — y solo al completarlo vuelve a 'disponible'. Es un activo
+      // persistente y con costo (`construirCaravanaComercial`), no un objeto de un solo uso como el resto de
+      // tipos de caravana.
       restantes.push({
         ...caravana,
-        estado: 'disponible',
+        estado: 'retornando',
         contenido: {},
-        destinoAsentamientoId: undefined,
         origenAcuerdoId: undefined,
         ladoAcuerdo: undefined,
         progreso: 0,
-        posicionActual: origen.posicion,
+        posicionActual: destino.posicion,
+        ruta: caravana.ruta && caravana.ruta.length >= 2 ? [...caravana.ruta].reverse() : undefined,
       });
     }
     // Resto de tipos (militar/contrabando, sin uso real todavía, Doc 3.6; Caravana de Fundación no llega
@@ -372,6 +402,22 @@ function asignarCaravanasATrueque(
       if (cantidad <= 0) continue; // sin stock suficiente todavía: la caravana se reintenta el siguiente tick, no consume su turno
 
       idx++;
+      // Ruta calculada al lanzar (Fase 0.3): rodea terreno costoso en vez de ir en línea recta — ver
+      // `world/rutas.ts`. Si ya existe un Camino Comercial para este par (Doc 1.6, ver `engine/caminos.ts`),
+      // reusa su polilínea en vez de recalcular — es literalmente "seguir el camino ya construido", y es lo
+      // que le da el bonus de velocidad en `avanzarCaravanas` (mismo par -> mismo camino encontrado).
+      // `buscarCamino` empareja el par en CUALQUIER orden pero devuelve `puntos` siempre en el orden en que
+      // se guardó (`asentamientoAId` -> `asentamientoBId`) — bug corregido a petición del usuario: cuando el
+      // camino se reutiliza en el sentido CONTRARIO (esta caravana va de B a A), había que invertir la
+      // polilínea; si no, `progreso: 0` caía en el extremo del camino más cercano al DESTINO en vez del
+      // propio origen, y la caravana "saltaba" allí en su primer paso de movimiento (ver `avanzarPosicionEnRuta`,
+      // que siempre mide el progreso desde `ruta[0]` hacia adelante).
+      const caminoExistente = buscarCamino(caminos, origen.id, destino.id);
+      const rutaOrientada = caminoExistente
+        ? caminoExistente.asentamientoAId === origen.id
+          ? caminoExistente.puntos
+          : [...caminoExistente.puntos].reverse()
+        : undefined;
       asentamientosPorId.set(origen.id, { ...origen, almacen: descontarRecursos(origen.almacen, { [l.recurso]: cantidad }) });
       caravanasPorId.set(caravana.id, {
         ...caravana,
@@ -382,11 +428,7 @@ function asignarCaravanasATrueque(
         ladoAcuerdo: l.lado,
         posicionActual: origen.posicion,
         progreso: 0,
-        // Ruta calculada al lanzar (Fase 0.3): rodea terreno costoso en vez de ir en línea recta — ver
-        // `world/rutas.ts`. Si ya existe un Camino Comercial para este par (Doc 1.6, ver `engine/caminos.ts`),
-        // reusa su polilínea en vez de recalcular — es literalmente "seguir el camino ya construido", y es
-        // lo que le da el bonus de velocidad en `avanzarCaravanas` (mismo par -> mismo camino encontrado).
-        ruta: buscarCamino(caminos, origen.id, destino.id)?.puntos ?? calcularRuta(mapa, origen.posicion, destino.posicion),
+        ruta: rutaOrientada ?? calcularRuta(mapa, origen.posicion, destino.posicion),
       });
       eventos.push(`Caravana comercial de ${origenId} sale hacia ${destino.id} con ${cantidad.toFixed(0)} ${l.recurso}.`);
     }

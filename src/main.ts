@@ -3,7 +3,7 @@
 // (dibujo/color, puramente presentacional). Nunca importa nada de `./engine/*` ni captura errores
 // de dominio: eso es responsabilidad exclusiva de `gameStore`. Los tipos de `./domain/types` se
 // importan solo como `type` para tipar lo que se lee — no acoplan a ninguna lógica.
-import type { Asentamiento, BiomaTipo, CargoTipo, EdificioTipo, Faccion, RegionId } from './domain/types';
+import type { Asentamiento, BiomaTipo, CargoTipo, EdificioTipo, Faccion, RecursoTipo, RegionId } from './domain/types';
 import { CATALOGOS, gameStore, type GameState, type CampoBalance } from './app/gameStore';
 import { draw, drawFiltroFertilidad, drawPreviewFundacion, drawTerreno, faccionColor, BIOMA_COLOR, BIOMA_COLOR_SIMPLE, RECURSO_COLOR, RECURSOS_EN_MAPA, EDIFICIO_COLOR, FACCION_COLORES, type DrawState } from './ui/canvas';
 
@@ -390,6 +390,11 @@ app.innerHTML = `
   </div>
 
   <div class="map-column">
+    <div class="log-card log-card-registro">
+      <h2>Registro</h2>
+      <div class="log-panel" id="log"></div>
+    </div>
+
     <div class="map-panel">
       <canvas id="world-canvas" width="${CANVAS_SIZE}" height="${CANVAS_SIZE}"></canvas>
       <div class="map-toggles">
@@ -437,10 +442,6 @@ app.innerHTML = `
       <div class="log-card">
         <h2>Militar</h2>
         <div class="log-panel" id="militar-panel"></div>
-      </div>
-      <div class="log-card">
-        <h2>Registro</h2>
-        <div class="log-panel" id="log"></div>
       </div>
     </div>
   </div>
@@ -617,6 +618,7 @@ function actualizarInfoFlota(state: GameState): void {
     <div class="kv-row"><span>Cupo de flota</span><span>${info.cupo}</span></div>
     <div class="kv-row"><span>Disponibles</span><span>${info.disponibles}</span></div>
     <div class="kv-row"><span>En tránsito</span><span>${info.enTransito}</span></div>
+    <div class="kv-row"><span>Volviendo</span><span>${info.retornando}</span></div>
   `;
 }
 flotaAsentamientoSelect.addEventListener('change', () => actualizarInfoFlota(gameStore.getState()));
@@ -687,7 +689,7 @@ function renderRosterTropas(): void {
 
 function etiquetaAsentamiento(a: Asentamiento, facciones: Faccion[]): string {
   const nombreFaccion = facciones.find((f) => f.id === a.faccionId)?.nombre ?? a.faccionId;
-  return `${a.id} (${nombreFaccion})`;
+  return `${a.nombre ?? a.id} (${nombreFaccion})`;
 }
 
 /** El combo "Jugador" de Cargos solo ofrece ciudadanos de la Facción elegida en el combo de al lado. */
@@ -911,6 +913,22 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
     })
     .join('');
 
+  // Reserva manual por recurso (a petición del usuario, ver Asentamiento.reservaManual): tope 0-999 que la
+  // auto-construcción no puede tocar (construcción manual exenta) — solo calibrable con Tesorero asignado,
+  // mismo criterio que exigen las políticas por cargo.
+  const reservaHtml = a.cargos.tesoreroId
+    ? `<div class="reserva-grid">${CATALOGOS.recursosTrueque
+        .map((r) => {
+          const valor = a.reservaManual?.[r] ?? 0;
+          return `<label class="reserva-slider">
+            <span>${RECURSO_NOMBRE[r] ?? r} <span class="reserva-valor" data-recurso-valor="${r}">${valor}</span></span>
+            <input type="range" min="0" max="999" step="1" value="${valor}" class="reserva-input" data-settlement="${a.id}" data-recurso="${r}" />
+          </label>`;
+        })
+        .join('')}</div>
+      <p class="legend-note">La auto-construcción nunca gasta por debajo de esta reserva (la construcción manual queda exenta).</p>`
+    : '<p class="legend-note">Requiere un Tesorero asignado para calibrar la reserva.</p>';
+
   const cargosHtml = CATALOGOS.cargos
     .map((c) => {
       const id = a.cargos[`${c}Id` as keyof typeof a.cargos];
@@ -1041,7 +1059,11 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
   return `
     <div class="settlement-detail">
       <div class="detail-section">
-        <h3>${a.id}</h3>
+        <h3>${a.nombre ?? a.id}${a.nombre ? ` <span class="legend-note" style="font-weight:normal">(${a.id})</span>` : ''}</h3>
+        <div class="kv-row" style="margin-top:2px; margin-bottom:6px; gap:6px; align-items:center;">
+          <input type="text" id="renombrar-asentamiento-input" placeholder="Nuevo nombre…" value="${a.nombre ?? ''}" data-settlement="${a.id}" />
+          <button type="button" id="renombrar-asentamiento-btn" data-settlement="${a.id}">Renombrar</button>
+        </div>
         <div class="kv-grid">
           <div class="kv-row"><span>Facción</span><span>${faccion?.nombre ?? a.faccionId}</span></div>
           <div class="kv-row"><span>Nivel</span><span>${a.nivel}</span></div>
@@ -1100,6 +1122,8 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
       <div class="detail-section">
         <h3>Almacén</h3>
         <div class="kv-grid">${almacenHtml}</div>
+        <div class="kv-row" style="margin-top:10px"><strong>Reserva manual (Tesorero)</strong></div>
+        ${reservaHtml}
       </div>
 
       <div class="detail-section">
@@ -1206,7 +1230,7 @@ function renderAsentamientosTab(state: GameState): void {
     .filter((a) => a.faccionId === faccionFiltroId)
     .map(
       (a) =>
-        `<button type="button" class="settlement-tab-btn${a.id === asentamientoSeleccionadoId ? ' active' : ''}" data-settlement="${a.id}">${a.id}</button>`
+        `<button type="button" class="settlement-tab-btn${a.id === asentamientoSeleccionadoId ? ' active' : ''}" data-settlement="${a.id}">${a.nombre ?? a.id}</button>`
     )
     .join('');
   const gruposHtml = `<div class="faccion-group">
@@ -1228,6 +1252,27 @@ function renderAsentamientosTab(state: GameState): void {
     btn.addEventListener('click', () => {
       asentamientoSeleccionadoId = (btn as HTMLElement).dataset.settlement!;
       render();
+    });
+  });
+
+  const renombrarBtn = document.getElementById('renombrar-asentamiento-btn') as HTMLButtonElement | null;
+  const renombrarInput = document.getElementById('renombrar-asentamiento-input') as HTMLInputElement | null;
+  renombrarBtn?.addEventListener('click', () => {
+    gameStore.renombrarAsentamiento(renombrarBtn.dataset.settlement!, renombrarInput!.value);
+  });
+  renombrarInput?.addEventListener('keydown', (ev) => {
+    if ((ev as KeyboardEvent).key === 'Enter') renombrarBtn?.click();
+  });
+
+  cont.querySelectorAll<HTMLInputElement>('.reserva-input').forEach((input) => {
+    // Actualiza el número en vivo mientras se arrastra (DOM puro, sin re-render) — confirma en gameStore
+    // solo al soltar ('change'), evitando reconstruir todo el panel en cada paso del slider.
+    input.addEventListener('input', () => {
+      const valorEl = cont.querySelector(`[data-recurso-valor="${input.dataset.recurso}"]`);
+      if (valorEl) valorEl.textContent = input.value;
+    });
+    input.addEventListener('change', () => {
+      gameStore.calibrarReservaManual(input.dataset.settlement!, input.dataset.recurso as RecursoTipo, Number(input.value));
     });
   });
 
@@ -1305,6 +1350,26 @@ function renderDetalleJugador(jugadorId: string, state: GameState): string {
     ? `<div class="log-panel">${historial.map((e) => `<div>[t${e.tick}] ${e.mensaje}</div>`).join('')}</div>`
     : '<p class="legend-note">Sin actividad registrada todavía.</p>';
 
+  // Escuadrones reclutados por este jugador (Doc 2.5): cada uno vive en el `asentamiento.escuadrones` donde
+  // fue reclutado, así que hay que recorrer TODOS los asentamientos y filtrar por `jugadorId` — un jugador
+  // puede tener escuadrones en más de una residencia.
+  const escuadronesJugador = state.asentamientos.flatMap((a) =>
+    a.escuadrones.filter((e) => e.jugadorId === jugadorId).map((e) => ({ asentamientoId: a.id, escuadron: e }))
+  );
+  const escuadronesJugadorHtml = escuadronesJugador.length
+    ? `<table class="mini-table">
+        <thead><tr><th>Escuadrón</th><th>Asentamiento</th><th>Origen</th><th>Nivel</th><th>Cantidad</th><th>Veteranía</th><th>Moral</th></tr></thead>
+        <tbody>
+          ${escuadronesJugador
+            .map(
+              ({ asentamientoId, escuadron: e }) =>
+                `<tr><td>${e.nombre}${e.heridoHastaTick ? ' (herido)' : ''}</td><td>${asentamientoId}</td><td>${e.origen}</td><td>${nivelTropaTxt(e.tropaId)}</td><td>${e.cantidad}</td><td>${e.veterania.toFixed(1)}</td><td>${e.moral.toFixed(0)}</td></tr>`
+            )
+            .join('')}
+        </tbody>
+      </table>`
+    : '<p class="legend-note">Sin escuadrones reclutados.</p>';
+
   return `
     <div class="settlement-detail">
       <div class="detail-section">
@@ -1325,6 +1390,11 @@ function renderDetalleJugador(jugadorId: string, state: GameState): string {
       <div class="detail-section">
         <h3>Residencias</h3>
         ${residenciasHtml}
+      </div>
+
+      <div class="detail-section">
+        <h3>Escuadrones</h3>
+        ${escuadronesJugadorHtml}
       </div>
 
       <div class="detail-section">
@@ -1572,6 +1642,35 @@ function renderPanelProgresion(state: GameState): void {
       .join('') || '<div>Sin títulos calculados todavía (avanza un tick).</div>';
 }
 
+/** Caravanas realmente en movimiento (a petición del usuario: punto de partida, destino, carga, % de viaje
+ * completado y ahora también coordenadas exactas de `posicionActual`, para ubicarlas en el mapa sin ambigüedad
+ * — ver el marcador triangular por Facción en `ui/canvas.ts`) — excluye las 'disponibles' paradas en su
+ * asentamiento (nada que mostrar de un viaje) y las Caravanas de Fundación (`destinoPosicion`, no
+ * `destinoAsentamientoId`: no son parte del comercio, ya tienen su propio bloque en la pestaña Acciones). No
+ * incluye columna de "escolta": Fase 0 no modela escolta de jugadores en caravanas todavía (ver
+ * `engine/bandidos.ts`) — se avisa en la nota al pie en vez de inventar un dato. */
+function caravanasEnRutaHtml(state: GameState): string {
+  const enRuta = state.caravanas.filter((c) => c.destinoAsentamientoId);
+  if (enRuta.length === 0) return '<p class="legend-note">Ninguna caravana en ruta.</p>';
+  const nombreAsentamiento = (id: string) => state.asentamientos.find((a) => a.id === id)?.nombre ?? id;
+  const filas = enRuta
+    .map((c) => {
+      const cargaTxt =
+        Object.entries(c.contenido)
+          .map(([r, cant]) => `${cant.toFixed(0)} ${RECURSO_NOMBRE[r] ?? r}`)
+          .join(', ') || (c.estado === 'retornando' ? 'vacía' : '—');
+      const estadoTxt = c.estado === 'retornando' ? 'Volviendo a origen' : c.estado === 'en_transito' ? 'En tránsito' : (c.estado ?? '—');
+      const coordsTxt = `(${Math.round(c.posicionActual.x)}, ${Math.round(c.posicionActual.y)})`;
+      return `<tr><td>${c.id}</td><td>${nombreAsentamiento(c.origenAsentamientoId!)}</td><td>${nombreAsentamiento(c.destinoAsentamientoId!)}</td><td>${estadoTxt}</td><td>${cargaTxt}</td><td>${coordsTxt}</td><td>${Math.round(c.progreso * 100)}%</td></tr>`;
+    })
+    .join('');
+  return `<table class="mini-table">
+      <thead><tr><th>Caravana</th><th>Origen</th><th>Destino</th><th>Estado</th><th>Carga</th><th>Coordenadas</th><th>Viaje completado</th></tr></thead>
+      <tbody>${filas}</tbody>
+    </table>
+    <p class="legend-note">Escolta: no modelada todavía en Fase 0 (ver Doc 3.2/3.6 — el diseño objetivo la deja a elección del jugador).</p>`;
+}
+
 function renderPanelEconomia(state: GameState): void {
   const preciosHtml = CATALOGOS.recursosMercado.map((r) => `${r}: ${gameStore.precioReferencia(r, state.asentamientos).toFixed(2)}`).join(' · ');
   const acuerdosHtml = state.acuerdos
@@ -1587,7 +1686,8 @@ function renderPanelEconomia(state: GameState): void {
     )
     .join('');
   economiaPanelEl.innerHTML = `<div><strong>Precios de referencia</strong> — ${preciosHtml}</div>
-    <div><strong>Caravanas en tránsito:</strong> ${state.caravanas.length}</div>
+    <h3>Caravanas en ruta</h3>
+    ${caravanasEnRutaHtml(state)}
     ${acuerdosHtml}
     ${ordenesHtml}`;
 }
@@ -1634,7 +1734,7 @@ function renderLeyenda(state: GameState): void {
     </div>
     <div class="legend-group">
       <h3>Otros</h3>
-      <div class="legend-row"><span class="swatch" style="background:#f1e6c8"></span>Caravana en tránsito</div>
+      <div class="legend-row"><span class="swatch-triangle"></span>Caravana en tránsito (color = Facción de origen)</div>
       <div class="legend-row"><span class="swatch-poly" style="background:#8b1a1a"></span>Campamento de bandidos</div>
     </div>
   `;

@@ -1,5 +1,15 @@
 import type { Asentamiento, Edificio, EdificioTipo, Faccion, Point, RecursoAlmacenado, RecursoTipo } from '../domain/types';
-import { EDIFICIO_CATALOGO, EXTRACCION_MAXIMOS, NECESIDADES, NIVEL_ASENTAMIENTO, SCORE_BANDAS, SITIO, ZONA_INFLUENCIA } from '../constants';
+import type { RecetaProduccion } from '../constants';
+import {
+  EDIFICIO_CATALOGO,
+  EXTRACCION_MAXIMOS,
+  LINEAS_PRODUCCION,
+  NECESIDADES,
+  NIVEL_ASENTAMIENTO,
+  SCORE_BANDAS,
+  SITIO,
+  ZONA_INFLUENCIA,
+} from '../constants';
 import type { Mapa } from '../world/mapa';
 import { pointInPolygon } from './zones';
 import {
@@ -15,6 +25,7 @@ import { reservaDinamicaConstruccion } from './mantenimiento';
 import {
   factorProduccionTrigo,
   factorTiempoConstruccion,
+  lineasProduccionPriorizadas,
   minimoGranjasPrioritario,
   minimoLenerasPrioritario,
 } from './politicas';
@@ -96,8 +107,12 @@ function sitioLibre(p: Point, ocupados: Edificio[]): boolean {
   return ocupados.every((e) => distancia(e.posicion, p) >= SITIO.espacioMinimoEntreEdificios);
 }
 
-/** Crecimiento concéntrico desde el centro (Doc 4.2): recorre anillos de radio creciente buscando hueco libre. */
-function sitioConcentrico(asentamiento: Asentamiento, zonaPoligono: Point[], ocupados: Edificio[]): Point | null {
+/** Anillos de radio creciente desde el centro (Doc 4.2), TODOS los huecos libres dentro de la zona, en el
+ * mismo orden de barrido que usaba `sitioConcentrico` (anillo más cercano primero, luego ángulo). Compartido
+ * por `sitioConcentrico` (primer hueco) y `sitioConcentricoLineaProduccion` (mejor hueco, política del
+ * Maestro de Obras) para no duplicar la geometría del barrido. */
+function puntosConcentricos(asentamiento: Asentamiento, zonaPoligono: Point[], ocupados: Edificio[]): Point[] {
+  const puntos: Point[] = [];
   for (let anillo = 0; anillo < SITIO.anillos; anillo++) {
     const radio = ((anillo + 1) / SITIO.anillos) * asentamiento.radioPotencial;
     for (let m = 0; m < SITIO.muestrasPorAnillo; m++) {
@@ -106,12 +121,42 @@ function sitioConcentrico(asentamiento: Asentamiento, zonaPoligono: Point[], ocu
         x: asentamiento.posicion.x + Math.cos(angulo) * radio,
         y: asentamiento.posicion.y + Math.sin(angulo) * radio,
       };
-      if (pointInPolygon(candidato, zonaPoligono) && sitioLibre(candidato, ocupados)) {
-        return candidato;
-      }
+      if (pointInPolygon(candidato, zonaPoligono) && sitioLibre(candidato, ocupados)) puntos.push(candidato);
     }
   }
-  return null;
+  return puntos;
+}
+
+/** Crecimiento concéntrico desde el centro (Doc 4.2): primer hueco libre según el barrido de `puntosConcentricos`. */
+export function sitioConcentrico(asentamiento: Asentamiento, zonaPoligono: Point[], ocupados: Edificio[]): Point | null {
+  return puntosConcentricos(asentamiento, zonaPoligono, ocupados)[0] ?? null;
+}
+
+/**
+ * "Líneas de Producción" (política de Maestro de Obras, a petición del usuario): mismos huecos candidatos
+ * que `sitioConcentrico`, pero en vez de quedarse con el primero, evalúa TODOS y devuelve el que minimiza la
+ * penalización de distancia (`factorLineaProduccion`, mismo criterio del eslabón más débil que ya usa la
+ * producción en marcha) contra las recetas del NIVEL 1 de `tipo` — un edificio de transformación colocado
+ * aquí producirá a mejor ritmo desde el primer tick, sin esperar a que otra política lo mueva. Si `tipo` no
+ * tiene recetas (Carpintería) cualquier hueco es igual de bueno y se comporta como `sitioConcentrico`.
+ */
+export function sitioConcentricoLineaProduccion(
+  asentamiento: Asentamiento,
+  zonaPoligono: Point[],
+  ocupados: Edificio[],
+  tipo: EdificioTipo
+): Point | null {
+  const recetas = nivelesDe(tipo)?.[1]?.recetas ?? [];
+  const candidatos = puntosConcentricos(asentamiento, zonaPoligono, ocupados);
+  if (recetas.length === 0) return candidatos[0] ?? null;
+
+  let mejor: { punto: Point; score: number } | null = null;
+  for (const punto of candidatos) {
+    const edificioSimulado: Edificio = { id: '', tipo, posicion: punto, estado: 'activo', ticksRestantes: 0 };
+    const score = Math.min(...recetas.map((r) => factorLineaProduccion(edificioSimulado, r, asentamiento)));
+    if (!mejor || score > mejor.score) mejor = { punto, score };
+  }
+  return mejor?.punto ?? null;
 }
 
 /** Granja: mejor casilla disponible según fertilidad del suelo (Doc 1.4/4.2). */
@@ -158,6 +203,23 @@ function sitioCercaDeNodo(
     .find((n) => mapa.terrenoEn(n.posicion) !== 'cima');
   return elegido ? { posicion: elegido.posicion, fuenteId: elegido.id } : null;
 }
+
+/**
+ * Recurso base -> tipo de edificio que lo extrae directamente del mapa (mismos siete recursos "crudos" de
+ * EXTRACTORES + granja/lenera, que quedan fuera de ese mapa por no agotar nodo, ver arriba). Usado por
+ * `fuentesDeRecurso` (líneas de producción, Doc 4.2.1) para saber dónde buscar el origen de un insumo crudo
+ * dentro del asentamiento — los insumos que NO aparecen aquí son intermedios de cadena (lingoteCobre, cuero,
+ * ...) y su fuente es el transformador que los fabrica, no un extractor.
+ */
+const RECURSO_A_EXTRACTOR: Partial<Record<string, EdificioTipo>> = {
+  piedra: 'cantera',
+  oro: 'mina',
+  cobre: 'minaCobre',
+  estano: 'minaEstano',
+  livestock: 'corral',
+  madera: 'lenera',
+  trigo: 'granja',
+};
 
 /**
  * Fuentes del mapa ya tomadas, sumando TODOS los asentamientos vivos.
@@ -238,6 +300,24 @@ function necesitaNuevoExtractor(asentamiento: Asentamiento, tipo: EdificioTipo, 
   return conFuenteViva.length < EXTRACCION_MAXIMOS.porTipo;
 }
 
+/**
+ * Insumo "de arranque" para auto-construir un edificio de transformación (Doc 4.2.1, a petición del usuario):
+ * exige tener YA en almacén (cantidad > 0, sea de extracción propia o de trueque — no se distingue origen) al
+ * menos uno de los insumos directos de la receta de NIVEL 1. Sin esto, un asentamiento sin ningún nodo de
+ * cobre/estaño/livestock en su zona (la mayoría, ver comentario de `RECETA_ARMA_MADERA` en constants.ts —
+ * solo ~6% nace con uno) auto-construía Curtiduría/Fundición igual y se quedaba con el edificio produciendo 0
+ * para siempre, además de bloquear el turno de Armería en el orden fijo de abajo. Armería queda exenta en la
+ * práctica: su receta de nivel 1 incluye `armaMadera`, que solo pide madera — casi siempre > 0.
+ *
+ * Solo aplica a la AUTO-construcción (`evaluarNecesidades`, más abajo). La construcción MANUAL
+ * (`anadirEdificioManualmente`) no la respeta a propósito: es una decisión informada de Gobernador/Maestro de
+ * Obras, no un heurístico que deba protegerla de sí misma.
+ */
+export function tieneInsumoDeArranque(asentamiento: Asentamiento, tipo: EdificioTipo): boolean {
+  const receta = nivelesDe(tipo)?.[1]?.recetas ?? [];
+  if (receta.length === 0) return true;
+  return receta.some((r) => Object.keys(r.consumePorUnidad).some((insumo) => (asentamiento.almacen[insumo]?.cantidad ?? 0) > 0));
+}
 
 interface Candidato {
   edificio: Edificio;
@@ -455,18 +535,24 @@ function evaluarNecesidades(
     // tienen gate de nivel para su construcción BASE — solo sus mejoras de nivel interno lo exigen (ver
     // `avanzarMejoras`). Como máximo UNA de las tres puede estar en vuelo a la vez (bug detectado en
     // simulación: sin este límite, varias podían acumularse atascadas esperando piedra en un punto de
-    // fundación pobre en ese recurso).
+    // fundación pobre en ese recurso). Además, cada una exige tener ya el insumo de arranque en almacén (ver
+    // `tieneInsumoDeArranque`) — si Curtiduría no lo tiene, el bucle sigue probando Armería/Fundición en el
+    // mismo tick en vez de detenerse ahí. Política "Líneas de Producción" del Maestro de Obras: sitúa el
+    // edificio nuevo cerca de la fuente de sus insumos en vez del primer hueco libre de siempre (ver
+    // `sitioConcentricoLineaProduccion`).
     const transformacionEnCurso = (['curtiduria', 'armeria', 'fundicion'] as const).some(
       (tipo) => hayProyectoPendiente(asentamiento, tipo)
     );
     if (!transformacionEnCurso) {
       for (const tipo of ['curtiduria', 'armeria', 'fundicion'] as const) {
-        if (edificiosPorTipoYEstado(asentamiento, tipo).length === 0) {
-          const sitio = sitioConcentrico(asentamiento, zonaPoligono, ocupados());
-          if (sitio) {
-            proponer(crearEdificioEnCola(tipo, sitio, nextId()), SCORE_BANDAS.transformacion);
-            break;
-          }
+        if (edificiosPorTipoYEstado(asentamiento, tipo).length > 0) continue;
+        if (!tieneInsumoDeArranque(asentamiento, tipo)) continue;
+        const sitio = lineasProduccionPriorizadas(asentamiento)
+          ? sitioConcentricoLineaProduccion(asentamiento, zonaPoligono, ocupados(), tipo)
+          : sitioConcentrico(asentamiento, zonaPoligono, ocupados());
+        if (sitio) {
+          proponer(crearEdificioEnCola(tipo, sitio, nextId()), SCORE_BANDAS.transformacion);
+          break;
         }
       }
     }
@@ -556,11 +642,69 @@ function avanzarMejoras(
 }
 
 /**
+ * Posiciones de los edificios ACTIVOS del asentamiento que producen `recurso` — un extractor dedicado si es
+ * un recurso crudo (ver `RECURSO_A_EXTRACTOR`), o cualquier transformador cuya receta del `nivelInterno`
+ * ACTUAL lo tenga como `produce` si es un intermedio de cadena (ej. Fundición -> lingoteCobre, insumo de
+ * Armería). Líneas de producción (Doc 4.2.1, a petición del usuario): usado por `factorLineaProduccion` para
+ * medir qué tan lejos tiene que "viajar" cada insumo de una receta dentro del asentamiento.
+ */
+function fuentesDeRecurso(asentamiento: Asentamiento, recurso: string): Point[] {
+  const extractorTipo = RECURSO_A_EXTRACTOR[recurso];
+  if (extractorTipo) {
+    return asentamiento.edificios.filter((e) => e.tipo === extractorTipo && e.estado === 'activo').map((e) => e.posicion);
+  }
+  const posiciones: Point[] = [];
+  for (const e of asentamiento.edificios) {
+    if (e.estado !== 'activo') continue;
+    const nivel = nivelesDe(e.tipo)?.[e.nivelInterno ?? 1];
+    if (nivel?.recetas.some((r) => r.produce === recurso)) posiciones.push(e.posicion);
+  }
+  return posiciones;
+}
+
+/**
+ * Factor 0..1 de producción según la distancia a la fuente más cercana de UN insumo (`LINEAS_PRODUCCION`,
+ * constants.ts): 1 hasta `distanciaSinPenalizacion`, decae linealmente hasta `factorMinimo` en
+ * `distanciaMaxima`. Nunca toca `consumePorUnidad` — solo cuánto se produce ese tick, simulando que el
+ * insumo tarda más en llegar cuanto más lejos está su origen dentro del asentamiento.
+ */
+export function factorPorDistancia(distanciaFuente: number): number {
+  const { distanciaSinPenalizacion, distanciaMaxima, factorMinimo } = LINEAS_PRODUCCION;
+  if (distanciaFuente <= distanciaSinPenalizacion) return 1;
+  if (distanciaFuente >= distanciaMaxima) return factorMinimo;
+  const progreso = (distanciaFuente - distanciaSinPenalizacion) / (distanciaMaxima - distanciaSinPenalizacion);
+  return 1 - progreso * (1 - factorMinimo);
+}
+
+/**
+ * Factor de línea de producción de UNA receta completa: el insumo más penalizado manda (el eslabón más
+ * débil de la cadena), no un promedio — así una receta con varios insumos no "diluye" el efecto de tener
+ * uno de ellos lejos. Si un insumo no tiene ninguna fuente propia en el asentamiento (llega solo por
+ * trueque/caravana), se usa `LINEAS_PRODUCCION.distanciaEstandarSinFuente` en su lugar.
+ */
+export function factorLineaProduccion(edificio: Edificio, receta: RecetaProduccion, asentamiento: Asentamiento): number {
+  const insumos = Object.entries(receta.consumePorUnidad)
+    .filter(([, porUnidad]) => !!porUnidad)
+    .map(([insumo]) => insumo);
+  if (insumos.length === 0) return 1;
+  return Math.min(
+    ...insumos.map((insumo) => {
+      const fuentes = fuentesDeRecurso(asentamiento, insumo);
+      const distanciaFuente =
+        fuentes.length > 0 ? Math.min(...fuentes.map((p) => distancia(edificio.posicion, p))) : LINEAS_PRODUCCION.distanciaEstandarSinFuente;
+      return factorPorDistancia(distanciaFuente);
+    })
+  );
+}
+
+/**
  * Recetas de crafting de los edificios de transformación activos (Doc 4.2.1, rediseño de progreso Fase 0):
  * recorre las recetas del `nivelInterno` actual EN ORDEN (permite que una receta consuma el output de otra
  * del mismo tick, ej. Lingote de Bronce consumiendo Lingote de Cobre/Estaño recién producidos). La producción
  * real se limita por `min(produccionBase * ratioManoObraArtesanos, insumo_disponible / consumePorUnidad)`,
- * mismo criterio que ya usan los extractores minerales contra `nodo.cantidad`.
+ * mismo criterio que ya usan los extractores minerales contra `nodo.cantidad`, multiplicado además por el
+ * factor de línea de producción (`factorLineaProduccion`, Doc 4.2.1) — nunca al revés: la penalización de
+ * distancia reduce cuánto se produce, no cuánto insumo hace falta por unidad.
  */
 function avanzarRecetas(asentamiento: Asentamiento, almacen: Record<string, RecursoAlmacenado>): Record<string, RecursoAlmacenado> {
   const ratioArtesano = ratioManoObraArtesanos(asentamiento);
@@ -572,7 +716,7 @@ function avanzarRecetas(asentamiento: Asentamiento, almacen: Record<string, Recu
     const nivel = niveles[edificio.nivelInterno ?? 1];
     if (!nivel) continue;
     for (const receta of nivel.recetas) {
-      let cantidad = receta.produccionBase * ratioArtesano;
+      let cantidad = receta.produccionBase * ratioArtesano * factorLineaProduccion(edificio, receta, asentamiento);
       for (const [insumo, porUnidad] of Object.entries(receta.consumePorUnidad)) {
         if (!porUnidad) continue;
         const disponible = almacenActual[insumo]?.cantidad ?? 0;
@@ -688,6 +832,12 @@ export function avanzarConstruccion(
   almacen = avanzarRecetas({ ...asentamiento, edificios: edificiosActualizados }, almacen);
 
   const reserva = reservaDinamicaConstruccion({ ...asentamiento, edificios: edificiosActualizados, almacen }, capital);
+  // Reserva manual del Tesorero (a petición del usuario, ver `Asentamiento.reservaManual`): se SUMA a la
+  // dinámica y solo aplica a este camino AUTOMÁTICO (avanzarMejoras + evaluarNecesidades más abajo) —
+  // `anadirEdificioManualmente` calcula su propia reserva sin esta suma, exenta a propósito.
+  for (const [recurso, valor] of Object.entries(asentamiento.reservaManual ?? {})) {
+    if (valor) reserva[recurso as RecursoTipo] = (reserva[recurso as RecursoTipo] ?? 0) + valor;
+  }
 
   // Mejora de nivel interno (Doc 4.2.1): evalúa después de las recetas, con el almacén ya actualizado por ellas.
   const trasMejoras = avanzarMejoras({ ...asentamiento, edificios: edificiosActualizados }, almacen, reserva);
