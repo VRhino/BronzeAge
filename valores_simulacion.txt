@@ -1,0 +1,11 @@
+Modificaciones de balance en caliente:
+
++ campamentos de bandidos
+    ticksRespawn: 10
++ regeneracion de nodos
+    metales > ticksCooldown: 10
+    livestock > ticksCooldown: 3
++ edificios
+    minaEstano > produccionBaseEstano: 3
++ Poblacion
+    artesanos > tasaCrecimientoBase: 0.1

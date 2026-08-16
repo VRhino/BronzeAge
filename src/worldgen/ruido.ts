@@ -164,3 +164,33 @@ export function evaluarRuido(campo: CampoRuido, p: Point): number {
   const normalizado = valor / (campo.amplitudTotal * S);
   return Math.min(1, Math.max(0, (normalizado + 1) / 2));
 }
+
+/**
+ * Como `evaluarRuido`, pero sumando solo las `octavasMax` primeras octavas (las de frecuencia más gruesa)
+ * en vez de las `campo.octavas` completas — la MISMA tabla de permutación/desplazamientos, así que el
+ * resultado es una versión de baja frecuencia coherente del mismo campo, no un ruido independiente. Usado
+ * por `elevacion.ts` (Fase 0.4.2) para obtener una versión "suave" del relieve sin el detalle fino de las
+ * octavas altas — nunca perfectamente plana (a diferencia de cuantizar/aplanar el VALOR), porque las
+ * octavas gruesas que sí quedan siguen aportando ondulación y gradiente real.
+ *
+ * Normaliza con la suma de amplitudes de SOLO esas octavas (no `campo.amplitudTotal`, calculada para el
+ * total): usar la del campo completo subestimaría el rango cubierto y sesgaría el resultado hacia 0.5.
+ */
+export function evaluarRuidoParcial(campo: CampoRuido, p: Point, octavasMax: number): number {
+  const octavas = Math.min(octavasMax, campo.octavas);
+  let valor = 0;
+  let amplitud = 1;
+  let amplitudTotal = 0;
+  let frecuencia = campo.frecuenciaBase;
+
+  for (let i = 0; i < octavas; i++) {
+    const desplazamiento = campo.desplazamientos[i]!;
+    valor += ruidoGradiente(campo.permutacion, p.x * frecuencia + desplazamiento.dx, p.y * frecuencia + desplazamiento.dy) * amplitud;
+    amplitudTotal += amplitud;
+    frecuencia *= campo.lacunaridad;
+    amplitud *= campo.persistencia;
+  }
+
+  const normalizado = valor / (amplitudTotal * S);
+  return Math.min(1, Math.max(0, (normalizado + 1) / 2));
+}

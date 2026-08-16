@@ -584,15 +584,11 @@ export const POLITICA_CATALOGO = [
   { id: 'culto_fertilidad', cargo: 'sacerdote', nombre: 'Culto a la Fertilidad', factorCrecimientoNobleza: 1.5 },
   { id: 'via_rapida', cargo: 'maestroObras', nombre: 'Vía Rápida de Construcción', factorTiempoConstruccion: 0.75 },
   { id: 'postura_defensiva', cargo: 'maestroObras', nombre: 'Postura Defensiva' }, // flag de layout, Doc 4.2 — sin efecto visual en Fase 0
-  // Modo de emergencia ante escasez de madera/comida (a petición del usuario): mientras esté activa, la
-  // auto-construcción SOLO evalúa Leñera/Granja hasta llegar a estos mínimos (activas + en curso/cola por
-  // tipo), ignorando cualquier otra necesidad detectada ese tick — ver `evaluarNecesidades` en construction.ts.
-  { id: 'proteccion_riesgos', cargo: 'maestroObras', nombre: 'Protección de Riesgos', minimoLenerasPrioritario: 2, minimoGranjasPrioritario: 3 },
   // A petición del usuario, líneas de producción (Doc 4.2.1): mientras esté activa, la auto-construcción sitúa
   // los edificios de transformación nuevos (Fundición/Curtiduría/Armería) en el hueco de su zona que minimiza
   // la penalización de distancia a la fuente de sus insumos (`sitioConcentricoLineaProduccion`,
   // engine/construction.ts) en vez del primer hueco libre del barrido de anillos de siempre. Compite por el
-  // único slot de Maestro de Obras con Vía Rápida/Protección de Riesgos — no se puede tener las tres a la vez.
+  // único slot de Maestro de Obras con Vía Rápida de Construcción — no se pueden tener las dos a la vez.
   { id: 'lineas_produccion', cargo: 'maestroObras', nombre: 'Líneas de Producción', lineasProduccionPriorizadas: true },
   { id: 'comercio_abierto', cargo: 'tesorero', nombre: 'Comercio Abierto', factorComisionExterna: 0.6 },
   { id: 'aranceles', cargo: 'tesorero', nombre: 'Aranceles Proteccionistas', factorComisionExterna: 1.5 },
@@ -784,8 +780,7 @@ export const MANTENIMIENTO = {
  *
  * Excepción deliberada (sin cambios): Granja no respeta la reserva de trigo, ni Leñera la de madera (ver
  * `engine/construction.ts`) — son las únicas vías reales de recuperar esos recursos, así que bloquearlas
- * por la misma escasez que deben resolver sería un huevo-y-la-gallina sin salida (rompería en seco la
- * política "Protección de Riesgos").
+ * por la misma escasez que deben resolver sería un huevo-y-la-gallina sin salida.
  */
 export const RESERVA_CONSTRUCCION = {
   horizonteTicksMantenimiento: 8,

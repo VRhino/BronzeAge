@@ -96,9 +96,25 @@ export type EstadoEdificio = 'en_cola' | 'en_construccion' | 'activo';
 export interface Edificio {
   id: string;
   tipo: EdificioTipo;
+  /**
+   * Posición del edificio EN SU PROPIO ESPACIO (ver `ambito`):
+   * - `ambito: 'asentamiento'` (por defecto): coordenada LOCAL del espacio plano del asentamiento (Vista de
+   *   Asentamiento, a petición del usuario) — origen `(0,0)` en el Centro Urbano, radio del disco = el
+   *   `radioPotencial` del asentamiento. NO son coordenadas del mapa general y NO se dibujan en él.
+   * - `ambito: 'mapa'`: coordenada del MAPA GENERAL, como siempre — solo los extractores minerales
+   *   (mina/minaCobre/minaEstano/cantera), que se plantan sobre su nodo del mapa (`ambitoDe`, engine/construction.ts).
+   */
   posicion: Point;
   estado: EstadoEdificio;
   ticksRestantes: number;
+  /**
+   * Espacio lógico en el que vive el edificio (Vista de Asentamiento). Ausente = `'asentamiento'` (el caso
+   * común: casi todo edificio se construye DENTRO del espacio plano del asentamiento). Solo los extractores
+   * minerales llevan `'mapa'`, porque se construyen sobre su yacimiento en el mapa general. Granja, Leñera y
+   * Corral son `'asentamiento'` aunque su producción/elegibilidad dependa de rasgos del mapa dentro de la
+   * zona de influencia (bosque/fertilidad/livestock) — ver `ambitoDe` y `evaluarNecesidades`, engine/construction.ts.
+   */
+  ambito?: 'asentamiento' | 'mapa';
   /** Nodo de recurso o zona de bosque que explota (cantera/lenera/corral), si aplica. */
   fuenteId?: string;
   /** Nivel interno de mejora (Doc 4.2.1): solo edificios de transformación con tiers (Fundición, Curtiduría,

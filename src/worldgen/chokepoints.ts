@@ -53,6 +53,13 @@ function esPuertoDeMontana(campo: CampoElevacion, p: Point): boolean {
  * que ríos/bosques/nodos) sobre terreno 'colina'/'montana' (no 'cima': inhabitable, ver
  * `ELEVACION.umbralCima`), filtrados por el test de punto de silla. Único consumo de RNG: la colocación de
  * candidatos — el test de silla en sí es puramente determinista sobre `elevacion`.
+ *
+ * Restringido a solo 'montana' brevemente en v13 (Fase 0.4.1, terraceo): 'colina' quedaba como meseta
+ * CONSTANTE, sin curvatura real. El terraceo se retiró en Fase 0.4.2 (ver
+ * `Consideraciones/Fase_0_4_Definicion_Relieve_Jugable.md`) a favor de un suavizado que SIEMPRE conserva
+ * ondulación real (nunca aplana del todo) — 'colina' vuelve a tener curvatura de sobra para el test de silla
+ * (medido: 14/14 chokepoints en colina/montana en las 3 seeds de referencia, frente al 65-100% del terraceo),
+ * así que se restaura el filtro original.
  */
 export function generarChokepoints(rng: RandomFn, limites: Limites, elevacion: CampoElevacion): Chokepoint[] {
   const puntos = colocarConEspaciado(rng, limites, CHOKEPOINTS.cantidad, CHOKEPOINTS.espacioMinimo, [], [], (p) => {

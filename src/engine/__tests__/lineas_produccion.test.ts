@@ -14,7 +14,6 @@ import { LINEAS_PRODUCCION } from '../../constants';
 import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
 import { factorLineaProduccion, factorPorDistancia, sitioConcentrico, sitioConcentricoLineaProduccion, tieneInsumoDeArranque } from '../construction';
 import { activarPolitica, lineasProduccionPriorizadas } from '../politicas';
-import { computeTodasLasZonas } from '../zones';
 import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, mockMathRandomDeterminista } from './fixtures';
 
 const SEED = 42;
@@ -85,15 +84,18 @@ describe('gate de materia prima para auto-construcción de transformación', () 
         bandidosProximoSpawnTick: 0,
       };
 
+      // 100, no 40: presupuesto con margen sobre el sitio de fundación real de este seed (ver comentario
+      // equivalente más abajo, en el test de líneas de producción) — evita que el test dependa del filo
+      // exacto de cuántos ticks tarda la auto-construcción en llegar a Fundición para este mundo concreto.
       let fundicionVista = false;
-      for (let tick = 1; tick <= 40; tick++) {
+      for (let tick = 1; tick <= 100; tick++) {
         estado = avanzarSimulacion(estado, mapa, tick);
         const propios = estado.asentamientos[0]!.edificios;
         expect(propios.some((e) => e.tipo === 'curtiduria'), `tick ${tick}: Curtiduría apareció sin livestock en almacén`).toBe(false);
         if (propios.some((e) => e.tipo === 'fundicion')) fundicionVista = true;
       }
 
-      expect(fundicionVista, 'Fundición nunca se auto-construyó en 40 ticks pese a tener cobre y piedra disponibles').toBe(true);
+      expect(fundicionVista, 'Fundición nunca se auto-construyó en 100 ticks pese a tener cobre y piedra disponibles').toBe(true);
     } finally {
       restaurarMathRandom();
     }
@@ -180,76 +182,91 @@ describe('política "Líneas de Producción" del Maestro de Obras', () => {
   it('sitioConcentricoLineaProduccion nunca elige un hueco peor que el que elegiría sitioConcentrico', () => {
     const mapa = crearMapaDeterminista(SEED);
     const { asentamiento: base } = fundarAsentamientoDeTest(mapa, crearFacciones(), 'faccion-1', []);
-    const zona = computeTodasLasZonas([base]).find((z) => z.asentamientoId === base.id)!.poligono;
 
-    // Mina de cobre pegada al borde de la zona, lejos del centro — el primer hueco libre de sitioConcentrico
-    // (anillo 0, radio pequeño) queda necesariamente más lejos de ella que el mejor hueco posible.
-    const minaCobre: Edificio = {
-      id: 'mina-test',
-      tipo: 'minaCobre',
-      posicion: { x: base.posicion.x + base.radioPotencial * 0.95, y: base.posicion.y },
+    // Vista de Asentamiento: la optimización de "líneas de producción" solo aplica a fuentes del MISMO espacio
+    // (interno). La Curtiduría (interna) consume `livestock`, que produce el Corral (interno). Colocamos el
+    // Corral pegado al borde del espacio plano local: el primer hueco de sitioConcentrico (anillo interior)
+    // queda necesariamente más lejos de él que el mejor hueco posible.
+    const corral: Edificio = {
+      id: 'corral-test',
+      tipo: 'corral',
+      posicion: { x: base.radioPotencial * 0.95, y: 0 }, // coords LOCALES (origen = Centro Urbano)
       estado: 'activo',
       ticksRestantes: 0,
+      ambito: 'asentamiento',
+      fuenteId: 'nodo-livestock-inexistente', // basta el tipo/estado para `fuentesDeRecurso`; no se extrae aquí
     };
-    const conMina = { ...base, edificios: [...base.edificios, minaCobre] };
+    const conCorral = { ...base, edificios: [...base.edificios, corral] };
 
-    const plano = sitioConcentrico(conMina, zona, conMina.edificios);
-    const optimizado = sitioConcentricoLineaProduccion(conMina, zona, conMina.edificios, 'fundicion');
+    const plano = sitioConcentrico(conCorral, conCorral.edificios);
+    const optimizado = sitioConcentricoLineaProduccion(conCorral, conCorral.edificios, 'curtiduria');
     expect(plano).not.toBeNull();
     expect(optimizado).not.toBeNull();
 
-    const distPlano = dist(plano!, minaCobre.posicion);
-    const distOptimizado = dist(optimizado!, minaCobre.posicion);
+    const distPlano = dist(plano!, corral.posicion);
+    const distOptimizado = dist(optimizado!, corral.posicion);
     expect(distOptimizado).toBeLessThanOrEqual(distPlano);
     expect(factorPorDistancia(distOptimizado)).toBeGreaterThanOrEqual(factorPorDistancia(distPlano));
   });
 
   it('con la política activa, la auto-construcción sitúa Fundición cerca de la mina; sin ella, en el hueco genérico', () => {
-    const mapa = crearMapaDeterminista(SEED);
-    const facciones = crearFacciones();
-    const { asentamiento: base, facciones: facs } = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', []);
-    const minaCobre: Edificio = {
-      id: 'mina-test',
-      tipo: 'minaCobre',
-      posicion: { x: base.posicion.x + base.radioPotencial * 0.95, y: base.posicion.y },
-      estado: 'activo',
-      ticksRestantes: 0,
-    };
+    // Mockeado como el resto de tests "en simulación real" de este archivo (ver arriba): sin esto, la
+    // varianza de `Math.random()` en el crecimiento de población (`population.ts`) puede retrasar lo
+    // suficiente la disponibilidad de mano de obra como para que Fundición no se proponga dentro del
+    // presupuesto de ticks — el test no verifica timing de población, solo DÓNDE se sitúa Fundición.
+    const restaurarMathRandom = mockMathRandomDeterminista(SEED);
+    try {
+      const mapa = crearMapaDeterminista(SEED);
+      const facciones = crearFacciones();
+      const { asentamiento: base, facciones: facs } = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', []);
+      const minaCobre: Edificio = {
+        id: 'mina-test',
+        tipo: 'minaCobre',
+        posicion: { x: base.posicion.x + base.radioPotencial * 0.95, y: base.posicion.y },
+        estado: 'activo',
+        ticksRestantes: 0,
+      };
 
-    function fundicionPropuesta(conPolitica: boolean): { x: number; y: number } {
-      let asentamiento: Asentamiento = {
-        ...base,
-        edificios: [...base.edificios, minaCobre],
-        almacen: { ...base.almacen, cobre: { cantidad: 10, capacidad: 200 }, piedra: { cantidad: 200, capacidad: 200 } },
-      };
-      if (conPolitica) {
-        asentamiento = { ...asentamiento, cargos: { ...asentamiento.cargos, maestroObrasId: 'jugador-test' } };
-        const faccion = facs.find((f) => f.id === 'faccion-1')!;
-        asentamiento = activarPolitica(asentamiento, faccion, 'maestroObras', 'lineas_produccion', 1);
+      function fundicionPropuesta(conPolitica: boolean): { x: number; y: number } {
+        let asentamiento: Asentamiento = {
+          ...base,
+          edificios: [...base.edificios, minaCobre],
+          almacen: { ...base.almacen, cobre: { cantidad: 10, capacidad: 200 }, piedra: { cantidad: 200, capacidad: 200 } },
+        };
+        if (conPolitica) {
+          asentamiento = { ...asentamiento, cargos: { ...asentamiento.cargos, maestroObrasId: 'jugador-test' } };
+          const faccion = facs.find((f) => f.id === 'faccion-1')!;
+          asentamiento = activarPolitica(asentamiento, faccion, 'maestroObras', 'lineas_produccion', 1);
+        }
+        let estado: EstadoSimulacion = {
+          asentamientos: [asentamiento],
+          facciones: facs,
+          caravanas: [],
+          acuerdos: [],
+          ordenes: [],
+          relaciones: [],
+          titulos: [],
+          caminos: [],
+          campamentosBandidos: [],
+          bandidosProximoSpawnTick: 0,
+        };
+        // 100, no 40: con el sitio de fundación real de esta seed, ambas ramas tardan ~76-77 ticks en
+        // encontrarle sitio a Fundición detrás de Armería (solo una transformación en vuelo a la vez, ver
+        // comentario en `construction.ts`) — margen para que no dependa del filo exacto del fixture.
+        for (let tick = 1; tick <= 100; tick++) {
+          estado = avanzarSimulacion(estado, mapa, tick);
+          const fundicion = estado.asentamientos[0]!.edificios.find((e) => e.tipo === 'fundicion');
+          if (fundicion) return fundicion.posicion;
+        }
+        throw new Error('Fundición nunca se propuso en 100 ticks — revisa el fixture del test.');
       }
-      let estado: EstadoSimulacion = {
-        asentamientos: [asentamiento],
-        facciones: facs,
-        caravanas: [],
-        acuerdos: [],
-        ordenes: [],
-        relaciones: [],
-        titulos: [],
-        caminos: [],
-        campamentosBandidos: [],
-        bandidosProximoSpawnTick: 0,
-      };
-      for (let tick = 1; tick <= 40; tick++) {
-        estado = avanzarSimulacion(estado, mapa, tick);
-        const fundicion = estado.asentamientos[0]!.edificios.find((e) => e.tipo === 'fundicion');
-        if (fundicion) return fundicion.posicion;
-      }
-      throw new Error('Fundición nunca se propuso en 40 ticks — revisa el fixture del test.');
+
+      const posicionConPolitica = fundicionPropuesta(true);
+      const posicionSinPolitica = fundicionPropuesta(false);
+
+      expect(dist(posicionConPolitica, minaCobre.posicion)).toBeLessThanOrEqual(dist(posicionSinPolitica, minaCobre.posicion));
+    } finally {
+      restaurarMathRandom();
     }
-
-    const posicionConPolitica = fundicionPropuesta(true);
-    const posicionSinPolitica = fundicionPropuesta(false);
-
-    expect(dist(posicionConPolitica, minaCobre.posicion)).toBeLessThanOrEqual(dist(posicionSinPolitica, minaCobre.posicion));
   });
 });

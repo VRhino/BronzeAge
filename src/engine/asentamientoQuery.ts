@@ -1,7 +1,8 @@
-import type { Asentamiento, Edificio, EdificioTipo } from '../domain/types';
+import type { Asentamiento, Edificio, EdificioTipo, Point } from '../domain/types';
 import type { Mapa } from '../world/mapa';
 import { EDIFICIO_CATALOGO, NIVEL_ASENTAMIENTO, type RecetaProduccion } from '../constants';
 import { cupoCaravanaExtra, factorProduccionTrigo } from './politicas';
+import { mejorFertilidadEnZona } from './zones';
 
 export function edificiosPorTipoYEstado(
   asentamiento: Asentamiento,
@@ -227,15 +228,18 @@ function produccionRecetas(asentamiento: Asentamiento): ProduccionItem[] {
  * descuenta nodos de recurso ni almacén (a diferencia de `avanzarConstruccion`/`avanzarRecetas`, que
  * sí aplican la producción real).
  */
-export function produccionPorTick(asentamiento: Asentamiento, mapa: Mapa): ProduccionItem[] {
+export function produccionPorTick(asentamiento: Asentamiento, mapa: Mapa, zonaPoligono: Point[] = []): ProduccionItem[] {
   const ratioMano = ratioManoObra(asentamiento);
   const items: ProduccionItem[] = [];
 
   const granjas = edificiosPorTipoYEstado(asentamiento, 'granja');
   if (granjas.length) {
     const factorTrigo = factorProduccionTrigo(asentamiento);
+    // Vista de Asentamiento: las Granjas viven en el espacio plano local (sin fertilidad propia) y rinden
+    // todas con la MEJOR fertilidad que la zona toca en el mapa general (ver `mejorFertilidadEnZona`).
+    const fertilidadZona = mejorFertilidadEnZona(asentamiento, zonaPoligono, mapa);
     const total = granjas.reduce(
-      (acc, e) => acc + EDIFICIO_CATALOGO.granja.produccionBaseTrigo * mapa.fertilidadEn(e.posicion) * ratioMano * factorTrigo,
+      (acc, _e) => acc + EDIFICIO_CATALOGO.granja.produccionBaseTrigo * fertilidadZona * ratioMano * factorTrigo,
       0
     );
     items.push({ tipo: 'granja', recurso: 'trigo', activos: granjas.length, cantidadPorTick: total });

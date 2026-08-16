@@ -3,6 +3,7 @@
 // versionar por separado.
 
 import type { Chokepoint, NodoRecurso, RioZona, WorldConfig, ZonaBosque } from '../domain/types';
+import type { Limites } from './colocacion';
 import type { CampoRuido } from './ruido';
 import type { RegionGeografica } from './regiones';
 
@@ -23,6 +24,9 @@ export type CampoFertilidad = CampoRuido;
 export interface CampoElevacion {
   ruido: CampoRuido;
   region?: RegionGeografica;
+  /** Borde natural del mundo libre (Fase 0.4, ver `elevacion.ts`/`ELEVACION_BORDE` en `config.ts`):
+   * `undefined` cuando el mundo tiene `region` (las regiones autoradas ya definen su propio borde). */
+  borde?: { ruido: CampoRuido; limites: Limites };
 }
 
 /**
@@ -83,5 +87,42 @@ export interface MapaGenerado {
  * `chokepoints.ts`), añadido al final del pipeline (después de nodos/livestock) para no desplazar el
  * consumo de PRNG de ningún paso ya calibrado — pero SÍ consume RNG propio (la colocación de candidatos),
  * así que toda seed produce nodos/bosques/ríos idénticos a v6 y un mundo distinto solo a partir de ahí.
+ * v8 (Fase 0.4): tres cambios de relieve/bosques a la vez. (1) `evaluarElevacion` comprime la variación
+ * dentro de la banda jugable (llano/colina) — ver `ELEVACION.factorAplanadoJugable`. (2) mundo libre (sin
+ * `region`) genera un segundo campo de ruido de borde (`generarCampoElevacion` llama a `generarCampoRuido`
+ * una vez más antes de devolver) que fuerza los bordes del mapa a costa profunda o montaña empinada — ver
+ * `ELEVACION_BORDE`; consume RNG propio, así que desplaza TODO lo generado después para mundos sin región
+ * (con región, sigue sin consumirlo — mismo criterio que `riosTroncales` en v-anterior). (3) `BOSQUE.cantidad`
+ * sube de 100 a 170 (más radio/densidad también) — más puntos sorteados en el bucle de bosques. Los tres
+ * cambian el mundo resultante de toda seed existente; ninguno reordena qué se genera, solo cuánto/cómo.
+ * v9 (Fase 0.4.1): reemplaza el aplanado parcial de v8 por TERRACEO — `evaluarElevacion` cuantiza la banda
+ * jugable (llano/colina) en `ELEVACION_TERRAZAS.niveles` mesetas de altura CONSTANTE, con una rampa corta
+ * solo al entrar a cada una (ver `elevacionTerraceada` en `elevacion.ts`), pedido explícito de diseño tras
+ * ver el mapa 3D en Unity (mapas de campaña tipo Total War: llano de verdad, no "menos accidentado"). No
+ * consume RNG ni reordena el pipeline — pura función de `e`, mismo criterio de categoría que v3/v4/v8(1).
+ * v10: `ELEVACION_TERRAZAS.niveles` de 4 a 1, EXPERIMENTAL (a petición del usuario, para ver el caso límite
+ * de una sola meseta jugable) — mismo mecanismo de v9, sin cambios de código, solo el parámetro.
+ * v11: `ELEVACION_TERRAZAS` a 2 niveles con `anchoTransicion` ancho (0.45) — rampa notablemente más suave
+ * entre ambas mesetas, a petición del usuario tras ver v10. Solo parámetros, mismo mecanismo.
+ * v12: `anchoTransicion` único (0.45, compartido por la rampa de entrada Y la de salida a montaña) se
+ * separa en `anchoTransicionEntrada`(0.7)/`anchoTransicionSalida`(0.1) — con un solo valor compartido, la
+ * meseta alta (única con las dos rampas) se quedaba casi sin núcleo plano y la transición se seguía leyendo
+ * empinada. Solo parámetros/cómo se leen en `elevacionTerraceada`, mismo mecanismo.
+ * v13: `generarChokepoints` deja de aceptar terreno 'colina' como candidato (solo 'montana') — consecuencia
+ * directa del terraceo (v9+): 'colina' es ahora una meseta constante sin curvatura real, así que casi nunca
+ * pasaba el test de punto de silla y solo desperdiciaba intentos de `colocarConEspaciado` antes de caer al
+ * fallback de "mapa saturado" (bajó el % de chokepoints en terreno montañoso por debajo del 80% exigido por
+ * el test de invariantes). Cambia CUÁNDO cada candidato encuentra hueco dentro de sus intentos, así que
+ * desplaza el consumo de PRNG de ahí en adelante — mismo criterio que v4 (nueva banda 'cima' excluida).
+ * v14 (Fase 0.4.2): retira POR COMPLETO el terraceo de v9-v13 (`ELEVACION_TERRAZAS`/`elevacionTerraceada`,
+ * eliminados, no dejados como opción desactivable — decisión explícita del usuario) y lo reemplaza por
+ * SUAVIZADO: `evaluarElevacion` mezcla el ruido completo con una versión de menos octavas del mismo campo
+ * (`ELEVACION_SUAVIZADO`, `evaluarRuidoParcial` en `ruido.ts`) — ver
+ * `Consideraciones/Fase_0_4_Definicion_Relieve_Jugable.md` para el porqué (la referencia real —mapa de
+ * campaña de Total War: Troy— pedía relieve ondulado y continuo, no mesetas escalonadas). El suavizado
+ * nunca aplana del todo (a diferencia del terraceo), así que `generarChokepoints` recupera 'colina' como
+ * terreno válido (restringida a solo 'montana' en v13) — medido: 14/14 chokepoints en colina/montana en las
+ * 3 seeds de referencia. Cambia CUÁNDO cada candidato de chokepoint encuentra hueco dentro de sus intentos
+ * (terrain check distinto), así que desplaza el consumo de PRNG de ahí en adelante — mismo criterio que v13.
  */
-export const WORLDGEN_VERSION = 7;
+export const WORLDGEN_VERSION = 14;

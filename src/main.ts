@@ -4,8 +4,8 @@
 // de dominio: eso es responsabilidad exclusiva de `gameStore`. Los tipos de `./domain/types` se
 // importan solo como `type` para tipar lo que se lee — no acoplan a ninguna lógica.
 import type { Asentamiento, BiomaTipo, CargoTipo, EdificioTipo, Faccion, RecursoTipo, RegionId } from './domain/types';
-import { CATALOGOS, gameStore, type GameState, type CampoBalance } from './app/gameStore';
-import { draw, drawFiltroFertilidad, drawPreviewFundacion, drawTerreno, faccionColor, BIOMA_COLOR, BIOMA_COLOR_SIMPLE, RECURSO_COLOR, RECURSOS_EN_MAPA, EDIFICIO_COLOR, FACCION_COLORES, type DrawState } from './ui/canvas';
+import { CATALOGOS, gameStore, UNITY_EXPORT_DEFAULT, type GameState, type CampoBalance } from './app/gameStore';
+import { draw, drawAsentamiento, drawFiltroFertilidad, drawPreviewFundacion, drawTerreno, faccionColor, BIOMA_COLOR, BIOMA_COLOR_SIMPLE, RECURSO_COLOR, RECURSOS_EN_MAPA, EDIFICIO_COLOR, FACCION_COLORES, type DrawState } from './ui/canvas';
 
 // Subido de 800 a 900 junto con el mapa 2000x2000 (Fase 0.1): el mundo más grande necesitaba algo más de
 // resolución física para que la capa de terreno/ríos no perdiera nitidez.
@@ -126,12 +126,12 @@ const FACTOR_LABEL: Record<string, string> = {
 };
 
 /** Describe en una línea qué mueve una política del catálogo (multiplicador sobre el factor correspondiente,
- * o el efecto especial de campos no multiplicativos como `minimoLenerasPrioritario`). */
+ * o el efecto especial de campos no multiplicativos como `cupoCaravanaExtra`). */
 function efectoPolitica(politica: (typeof CATALOGOS.politicas)[number]): string {
   const registro = politica as unknown as Record<string, unknown>;
   const efectos: string[] = [];
-  if (typeof registro.minimoLenerasPrioritario === 'number') {
-    efectos.push(`Prioriza Leñeras: bloquea el resto de auto-construcción hasta tener ${registro.minimoLenerasPrioritario} (activas o en curso)`);
+  if (typeof registro.lineasProduccionPriorizadas === 'boolean' && registro.lineasProduccionPriorizadas) {
+    efectos.push('Sitúa Fundición/Curtiduría/Armería nuevas cerca de la fuente de sus insumos, no en el primer hueco libre');
   }
   if (typeof registro.cupoCaravanaExtra === 'number') {
     efectos.push(`+${registro.cupoCaravanaExtra} cupo de caravanas`);
@@ -159,6 +159,10 @@ const combateEscuadronesSeleccionados = new Set<string>();
 let viewedTick = 0;
 let ultimoTickEnVivo = 0;
 let mostrarFiltroFertilidad = false;
+/** Vista del canvas principal (a petición del usuario): 'mundo' = mapa general de siempre; 'asentamiento' =
+ * espacio plano local del asentamiento seleccionado (`asentamientoSeleccionadoId`), donde se ve con detalle la
+ * ubicación de construcción. Es estado de vista puro, nunca de simulación. */
+let vistaMapa: 'mundo' | 'asentamiento' = 'mundo';
 /** `false` = paleta de biomas simplificada (agua/montaña/cima distintas, resto de tierra en un solo tono —
  * ver `BIOMA_COLOR_SIMPLE`); `true` = paleta completa de siempre. Por defecto simplificada. */
 let mostrarDetalleBiomas = false;
@@ -398,8 +402,13 @@ app.innerHTML = `
     <div class="map-panel">
       <canvas id="world-canvas" width="${CANVAS_SIZE}" height="${CANVAS_SIZE}"></canvas>
       <div class="map-toggles">
-        <label class="fertilidad-toggle"><input type="checkbox" id="fertilidad-checkbox" /> Filtro de fertilidad</label>
-        <label class="fertilidad-toggle"><input type="checkbox" id="biomas-checkbox" /> Detalle de biomas</label>
+        <div class="vista-mapa-toggle" id="vista-mapa-toggle">
+          <button type="button" class="vista-btn active" data-vista="mundo">Mundo</button>
+          <button type="button" class="vista-btn" data-vista="asentamiento">Asentamiento</button>
+        </div>
+        <select id="vista-asentamiento-select" hidden></select>
+        <label class="fertilidad-toggle vista-mundo-only"><input type="checkbox" id="fertilidad-checkbox" /> Filtro de fertilidad</label>
+        <label class="fertilidad-toggle vista-mundo-only"><input type="checkbox" id="biomas-checkbox" /> Detalle de biomas</label>
       </div>
       <div class="legend" id="legend" style="--legend-max-height:${CANVAS_SIZE}px">
         <div class="legend-header" id="legend-toggle">Leyenda ▾</div>
@@ -423,6 +432,11 @@ app.innerHTML = `
         <span class="time-travel-divider"></span>
         <button type="button" id="exportar-btn">Exportar</button>
         <button type="button" id="importar-btn">Importar</button>
+        <button type="button" id="exportar-unity-btn">Exportar mapa (Unity Terrain)</button>
+        <label class="altura-unity-label" for="exportar-unity-altura" title="Altura en metros a la que corresponde el punto más alto del mapa (elevación 1.0)">
+          Altura máx. (m):
+          <input type="number" id="exportar-unity-altura" min="1" step="10" value="${UNITY_EXPORT_DEFAULT.alturaMaximaMetros}" />
+        </label>
         <input type="file" id="importar-input" accept="application/json,.json" hidden />
       </div>
     </div>
@@ -1805,6 +1819,46 @@ document.getElementById('biomas-checkbox')!.addEventListener('change', (ev) => {
   render();
 });
 
+// Toggle de vista Mundo/Asentamiento (a petición del usuario): cambia qué dibuja el canvas principal.
+const vistaAsentamientoSelectEl = document.getElementById('vista-asentamiento-select') as HTMLSelectElement;
+document.getElementById('vista-mapa-toggle')!.addEventListener('click', (ev) => {
+  const btn = (ev.target as HTMLElement).closest('.vista-btn') as HTMLButtonElement | null;
+  if (!btn) return;
+  vistaMapa = btn.dataset.vista as 'mundo' | 'asentamiento';
+  // Al entrar a la vista de asentamiento sin ninguno elegido, cae al primero disponible.
+  if (vistaMapa === 'asentamiento' && !asentamientoSeleccionadoId) {
+    asentamientoSeleccionadoId = gameStore.getState().asentamientos[0]?.id ?? null;
+  }
+  hoverFundacion = null; // el aviso de fundación no aplica en la vista de asentamiento.
+  render();
+});
+vistaAsentamientoSelectEl.addEventListener('change', () => {
+  asentamientoSeleccionadoId = vistaAsentamientoSelectEl.value || null;
+  render();
+});
+
+/** Sincroniza los controles de la barra del mapa con la vista activa: botón resaltado, opciones del selector
+ * de asentamiento y visibilidad de los toggles que solo tienen sentido en el mapa general. */
+function actualizarControlesVista(state: GameState): void {
+  document.querySelectorAll<HTMLButtonElement>('#vista-mapa-toggle .vista-btn').forEach((b) => {
+    b.classList.toggle('active', b.dataset.vista === vistaMapa);
+  });
+  const enAsentamiento = vistaMapa === 'asentamiento';
+  vistaAsentamientoSelectEl.hidden = !enAsentamiento;
+  document.querySelectorAll<HTMLElement>('.vista-mundo-only').forEach((el) => {
+    el.style.display = enAsentamiento ? 'none' : '';
+  });
+  if (enAsentamiento) {
+    const opciones = state.asentamientos
+      .map((a) => `<option value="${a.id}">${etiquetaAsentamiento(a, state.facciones)}</option>`)
+      .join('');
+    vistaAsentamientoSelectEl.innerHTML = opciones || '<option value="">— sin asentamientos —</option>';
+    if (asentamientoSeleccionadoId && state.asentamientos.some((a) => a.id === asentamientoSeleccionadoId)) {
+      vistaAsentamientoSelectEl.value = asentamientoSeleccionadoId;
+    }
+  }
+}
+
 /** Devuelve el canvas offscreen con la capa de terreno para este mundo/tamaño, regenerándolo solo si
  * cambió la seed, la región (Fase 0.2 — misma seed con región distinta es un mundo distinto, ver
  * `Mapa.region`), el tamaño del canvas visible o el toggle de detalle de biomas (ver `terrenoCache`). */
@@ -1842,20 +1896,31 @@ function render(): void {
   volverPresenteBtn.hidden = !viendoPasado;
   controlsPanelEl.classList.toggle('viendo-pasado', viendoPasado);
 
-  const zonas = gameStore.getZonas(state.asentamientos);
-  const drawState: DrawState = {
-    mapa: gameStore.getMapa(state),
-    asentamientos: state.asentamientos,
-    zonas,
-    facciones: state.facciones,
-    caravanas: state.caravanas,
-    caminos: state.caminos,
-    campamentosBandidos: state.campamentosBandidos,
-    chokepointsControl: gameStore.chokepointsControl(zonas),
-  };
-  draw(ctx, canvas, drawState, terrenoCacheParaFrame(drawState.mapa));
-  if (mostrarFiltroFertilidad) drawFiltroFertilidad(ctx, canvas, gameStore.getMapa(state));
-  renderViabilidadFundacion(viendoPasado);
+  actualizarControlesVista(state);
+  // Si el asentamiento en vista ya no existe (p. ej. cayó en ruinas o se importó otra partida), se vuelve al mapa general.
+  const asentamientoEnVista = state.asentamientos.find((a) => a.id === asentamientoSeleccionadoId);
+  if (vistaMapa === 'asentamiento' && asentamientoEnVista) {
+    drawAsentamiento(ctx, canvas, {
+      asentamiento: asentamientoEnVista,
+      facciones: state.facciones,
+      etiqueta: etiquetaAsentamiento(asentamientoEnVista, state.facciones),
+    });
+  } else {
+    const zonas = gameStore.getZonas(state.asentamientos);
+    const drawState: DrawState = {
+      mapa: gameStore.getMapa(state),
+      asentamientos: state.asentamientos,
+      zonas,
+      facciones: state.facciones,
+      caravanas: state.caravanas,
+      caminos: state.caminos,
+      campamentosBandidos: state.campamentosBandidos,
+      chokepointsControl: gameStore.chokepointsControl(zonas),
+    };
+    draw(ctx, canvas, drawState, terrenoCacheParaFrame(drawState.mapa));
+    if (mostrarFiltroFertilidad) drawFiltroFertilidad(ctx, canvas, gameStore.getMapa(state));
+    renderViabilidadFundacion(viendoPasado);
+  }
   actualizarSelects(liveState);
   actualizarInfoFlota(state);
   renderPanelAsentamientos(state);
@@ -1942,16 +2007,19 @@ function posicionMundoDesdeEvento(ev: MouseEvent): { x: number; y: number } {
 }
 
 canvas.addEventListener('mousemove', (ev) => {
+  if (vistaMapa === 'asentamiento') return; // el aviso de fundación no aplica en el espacio plano del asentamiento.
   hoverFundacion = posicionMundoDesdeEvento(ev);
   render();
 });
 
 canvas.addEventListener('mouseleave', () => {
+  if (vistaMapa === 'asentamiento') return;
   hoverFundacion = null;
   render();
 });
 
 canvas.addEventListener('click', (ev) => {
+  if (vistaMapa === 'asentamiento') return; // fundar/seleccionar destino solo tiene sentido en el mapa general.
   const state = gameStore.getState();
   const rect = canvas.getBoundingClientRect();
   const scale = gameStore.getMapa(state).limites.ancho / canvas.width;
@@ -2108,6 +2176,67 @@ document.getElementById('exportar-btn')!.addEventListener('click', () => {
   enlace.download = `bronze-age-sim-tick${gameStore.getState().tick}.json`;
   enlace.click();
   URL.revokeObjectURL(url);
+});
+
+function descargarBlob(blob: Blob, nombreArchivo: string): void {
+  const url = URL.createObjectURL(blob);
+  const enlace = document.createElement('a');
+  enlace.href = url;
+  enlace.download = nombreArchivo;
+  enlace.click();
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Peso 0-255 por celda -> PNG en escala de grises (R=G=B=peso, A=255), vía `<canvas>` fuera del DOM. El
+ * cálculo del peso vive en `world/exportUnity.ts` (sin DOM, testeable en Node); rasterizar a imagen es
+ * trabajo de interfaz, así que vive aquí.
+ */
+function pesosAPng(pesos: Uint8Array, resolucion: number): Promise<Blob> {
+  const canvas = document.createElement('canvas');
+  canvas.width = resolucion;
+  canvas.height = resolucion;
+  const ctx = canvas.getContext('2d')!;
+  const imagen = ctx.createImageData(resolucion, resolucion);
+  for (let i = 0; i < pesos.length; i++) {
+    const peso = pesos[i]!;
+    const base = i * 4;
+    imagen.data[base] = peso;
+    imagen.data[base + 1] = peso;
+    imagen.data[base + 2] = peso;
+    imagen.data[base + 3] = 255;
+  }
+  ctx.putImageData(imagen, 0, 0);
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('No se pudo generar el PNG del splatmap'))), 'image/png');
+  });
+}
+
+const exportarUnityBtn = document.getElementById('exportar-unity-btn') as HTMLButtonElement;
+const exportarUnityAlturaInput = document.getElementById('exportar-unity-altura') as HTMLInputElement;
+exportarUnityBtn.addEventListener('click', async () => {
+  const textoOriginal = exportarUnityBtn.textContent;
+  exportarUnityBtn.disabled = true;
+  try {
+    exportarUnityBtn.textContent = 'Generando heightmap…';
+    // Deja que el navegador repinte el botón deshabilitado antes de la generación síncrona del heightmap
+    // (~1s a resolución 4097, ver `world/exportUnity.ts`).
+    await new Promise((r) => setTimeout(r, 0));
+    const alturaMaximaMetros = Number(exportarUnityAlturaInput.value) || UNITY_EXPORT_DEFAULT.alturaMaximaMetros;
+    const { heightmapRaw, splatmap, metadata, nombreBase } = gameStore.exportarMapaUnity({ alturaMaximaMetros });
+
+    descargarBlob(new Blob([heightmapRaw], { type: 'application/octet-stream' }), `${nombreBase}.raw`);
+    descargarBlob(new Blob([JSON.stringify(metadata, null, 2)], { type: 'application/json' }), `${nombreBase}.json`);
+
+    for (const [bioma, pesos] of Object.entries(splatmap.capas)) {
+      exportarUnityBtn.textContent = `Generando splatmap (${bioma})…`;
+      const png = await pesosAPng(pesos, splatmap.resolucion);
+      descargarBlob(png, `${nombreBase}-splat-${bioma}.png`);
+    }
+  } finally {
+    exportarUnityBtn.disabled = false;
+    exportarUnityBtn.textContent = textoOriginal;
+  }
 });
 
 const importarInput = document.getElementById('importar-input') as HTMLInputElement;

@@ -124,24 +124,6 @@ function sumaFactorPolitica(asentamiento: Asentamiento, campo: string): number {
 /** "Ampliación de Flota" (Tesorero): cupo extra de caravanas propias, sumado al que ya da el nivel de Mercado. */
 export const cupoCaravanaExtra = (a: Asentamiento): number => sumaFactorPolitica(a, 'cupoCaravanaExtra');
 
-/**
- * Campos "objetivo" (no multiplicativos): en vez de multiplicar factores, toman el mayor valor propuesto
- * por cualquier política activa. Sirve para políticas como "Protección de Riesgos" (Doc 4.2/4.4 — no es
- * un factor de tasa, es un mínimo a alcanzar antes de permitir cualquier otra auto-construcción).
- */
-function valorMaximoPolitica(asentamiento: Asentamiento, campo: 'minimoLenerasPrioritario' | 'minimoGranjasPrioritario'): number {
-  return asentamiento.politicasActivas.reduce((max, activa) => {
-    const def = POLITICA_CATALOGO.find((p) => p.id === activa.politicaId);
-    const valor = def ? (def as Record<string, unknown>)[campo] : undefined;
-    return typeof valor === 'number' && valor > max ? valor : max;
-  }, 0);
-}
-
-/** >0 si el Maestro de Obras activó "Protección de Riesgos": mínimo de Leñeras a priorizar sobre cualquier otra necesidad. */
-export const minimoLenerasPrioritario = (a: Asentamiento): number => valorMaximoPolitica(a, 'minimoLenerasPrioritario');
-/** >0 si el Maestro de Obras activó "Protección de Riesgos": mínimo de Granjas a priorizar sobre cualquier otra necesidad. */
-export const minimoGranjasPrioritario = (a: Asentamiento): number => valorMaximoPolitica(a, 'minimoGranjasPrioritario');
-
 /** Campos FLAG (a diferencia de `productoFactor`/`sumaFactorPolitica`/`valorMaximoPolitica`): true si CUALQUIER
  * política activa lo declara `true`, sin escalar ni sumar nada — sirve para políticas de tipo interruptor. */
 function algunaPoliticaActiva(asentamiento: Asentamiento, campo: string): boolean {

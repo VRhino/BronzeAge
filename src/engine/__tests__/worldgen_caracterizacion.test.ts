@@ -478,6 +478,10 @@ describe('chokepoints (Fase 0.3 — puertos de montaña, Doc 1.5)', () => {
     // Informativo, no 100% (mismo motivo que `cumplimientoBiomaPorTipo` arriba): `colocarConEspaciado`
     // tiene un último recurso que ignora el filtro de terreno si el mapa está saturado de candidatos ya
     // colocados — puertos de montaña de verdad deben ser la abrumadora mayoría, no el 100% garantizado.
+    // Umbral bajado a 65% en Fase 0.4.1 (terraceo) porque 'colina' quedaba plana, sin curvatura real —
+    // restaurado a 80% en Fase 0.4.2 (suavizado reemplaza al terraceo, ver
+    // `Consideraciones/Fase_0_4_Definicion_Relieve_Jugable.md`): 'colina' vuelve a tener curvatura de sobra,
+    // medido 14/14 en las 3 seeds de este test.
     for (const seed of SEEDS) {
       const world = crear(seed);
       const enTerrenoMontanoso = world.chokepoints.filter((c) => {

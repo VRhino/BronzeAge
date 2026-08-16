@@ -1,5 +1,6 @@
 import type { Asentamiento, Point, ZonaInfluencia } from '../domain/types';
-import { ZONA_INFLUENCIA } from '../constants';
+import type { Mapa } from '../world/mapa';
+import { SITIO, ZONA_INFLUENCIA } from '../constants';
 import { pointInPolygon } from '../world/geometria';
 
 // `pointInPolygon` es geometría pura y vive en `world/geometria.ts` (la usa también la fachada `Mapa`);
@@ -90,4 +91,29 @@ export function computeTodasLasZonas(asentamientos: Asentamiento[]): ZonaInfluen
 export function posicionLibreParaFundar(p: Point, asentamientos: Asentamiento[]): boolean {
   const zonas = computeTodasLasZonas(asentamientos);
   return zonas.every((z) => !pointInPolygon(p, z.poligono));
+}
+
+/**
+ * Fertilidad de REFERENCIA de un asentamiento para sus Granjas (Vista de Asentamiento, a petición del
+ * usuario). Las Granjas se construyen DENTRO del espacio plano del asentamiento (sin campo de fertilidad
+ * propio), pero rinden como si estuvieran sobre el mejor suelo que la zona de influencia toca en el mapa
+ * general: se muestrea el radio potencial (mismo patrón que la antigua colocación por fertilidad),
+ * quedándose con la fertilidad MÁS ALTA de los puntos que caen dentro del polígono de zona. Ese único valor
+ * lo comparten TODAS las Granjas del asentamiento (`avanzarConstruccion`/`produccionPorTick`).
+ *
+ * `zonaPoligono` vacío (sin zona calculada) o sin ningún punto dentro cae al valor del propio centro —
+ * nunca devuelve 0 por falta de muestras.
+ */
+export function mejorFertilidadEnZona(asentamiento: Asentamiento, zonaPoligono: Point[], mapa: Mapa): number {
+  const candidatos: Point[] = [asentamiento.posicion];
+  for (let i = 0; i < SITIO.muestrasFertilidad; i++) {
+    const angulo = (i / SITIO.muestrasFertilidad) * Math.PI * 2;
+    const radio = ((i % 5) / 5) * asentamiento.radioPotencial;
+    const p: Point = {
+      x: asentamiento.posicion.x + Math.cos(angulo) * radio,
+      y: asentamiento.posicion.y + Math.sin(angulo) * radio,
+    };
+    if (zonaPoligono.length === 0 || pointInPolygon(p, zonaPoligono)) candidatos.push(p);
+  }
+  return mapa.mejorPorFertilidad(candidatos)?.fertilidad ?? mapa.fertilidadEn(asentamiento.posicion);
 }

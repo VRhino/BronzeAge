@@ -42,6 +42,42 @@ body {
   gap: 6px;
 }
 
+/* Toggle de vista Mundo/Asentamiento (Vista de Asentamiento). */
+.vista-mapa-toggle {
+  display: inline-flex;
+  border: 1px solid #4a4436;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.vista-btn {
+  padding: 5px 11px;
+  background: rgba(26, 24, 20, 0.85);
+  border: none;
+  color: #e8e2d0;
+  font-size: 11px;
+  cursor: pointer;
+}
+.vista-btn + .vista-btn {
+  border-left: 1px solid #4a4436;
+}
+.vista-btn:hover {
+  background: rgba(60, 54, 44, 0.9);
+}
+.vista-btn.active {
+  background: #c9a227;
+  color: #1a1814;
+  font-weight: 600;
+}
+#vista-asentamiento-select {
+  padding: 5px 9px;
+  background: rgba(26, 24, 20, 0.85);
+  border: 1px solid #4a4436;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #e8e2d0;
+  max-width: 220px;
+}
+
 .fertilidad-toggle {
   display: flex;
   align-items: center;
@@ -529,6 +565,23 @@ body {
   width: 1px;
   align-self: stretch;
   background: #4a4436;
+}
+
+.altura-unity-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.altura-unity-label input[type='number'] {
+  width: 60px;
+  font-size: 11px;
+  padding: 3px 5px;
+  background: rgba(26, 24, 20, 0.85);
+  border: 1px solid #4a4436;
+  color: #e8e0c8;
+  border-radius: 3px;
 }
 
 .controls-panel.viendo-pasado .tab-panel#tab-acciones,

@@ -15,38 +15,43 @@ function anilloDePosiciones(centro: Point, cantidad: number, radio: number): Poi
 }
 
 /**
- * Mejor casilla de fertilidad en un pequeño radio alrededor del centro (Doc 1.4), para la Granja inicial.
- * Simplificación deliberada respecto a la auto-construcción (`sitioMejorFertilidad` en construction.ts):
- * al fundar todavía no existe zona de influencia recortada contra rivales que consultar, así que basta
- * con muestrear el propio radio inicial (garantizado libre, ya lo validó `posicionLibreParaFundar`).
+ * Edificios con los que nace todo asentamiento nuevo (Doc 1.3): ya "activo", sin pasar por la cola.
+ *
+ * Vista de Asentamiento (a petición del usuario): TODOS son internos (`ambito: 'asentamiento'`) y nacen en
+ * coordenadas LOCALES del espacio plano — el Centro Urbano en el origen `(0,0)`, las Viviendas en un anillo a
+ * su alrededor y la Granja en un hueco algo más externo (su producción usa la fertilidad de zona, no la de su
+ * posición, ver `mejorFertilidadEnZona`). El punto de fundación en el MAPA GENERAL vive en `asentamiento.posicion`.
  */
-function mejorPuntoFertilidadCercano(mapa: Mapa, centro: Point, radio: number, muestras: number): Point {
-  return mapa.mejorPorFertilidad(anilloDePosiciones(centro, muestras, radio))?.punto ?? centro;
-}
-
-/** Edificios con los que nace todo asentamiento nuevo (Doc 1.3): ya "activo", sin pasar por la cola. */
-function edificiosIniciales(mapa: Mapa, centro: Point, idBase: string): Edificio[] {
+function edificiosIniciales(idBase: string): Edificio[] {
+  const origen: Point = { x: 0, y: 0 };
   const radioAnillo = ZONA_INFLUENCIA.radioInicial * 0.5;
-  const viviendas: Edificio[] = anilloDePosiciones(centro, FUNDACION.viviendasIniciales, radioAnillo).map((posicion, i) => ({
+  const viviendas: Edificio[] = anilloDePosiciones(origen, FUNDACION.viviendasIniciales, radioAnillo).map((posicion, i) => ({
     id: `edificio-${idBase}-vivienda-inicial-${i}`,
     tipo: 'vivienda',
     posicion,
     estado: 'activo',
     ticksRestantes: 0,
+    ambito: 'asentamiento',
   }));
   const granja: Edificio = {
     id: `edificio-${idBase}-granja-inicial`,
     tipo: 'granja',
-    posicion: mejorPuntoFertilidadCercano(mapa, centro, radioAnillo, 12),
+    // Anillo exterior desfasado medio sector respecto a las Viviendas para no solaparse con ellas.
+    posicion: {
+      x: Math.cos(Math.PI / FUNDACION.viviendasIniciales) * radioAnillo * 1.6,
+      y: Math.sin(Math.PI / FUNDACION.viviendasIniciales) * radioAnillo * 1.6,
+    },
     estado: 'activo',
     ticksRestantes: 0,
+    ambito: 'asentamiento',
   };
   const centroUrbano: Edificio = {
     id: `edificio-${idBase}-centro-urbano`,
     tipo: 'centroUrbano',
-    posicion: centro,
+    posicion: origen,
     estado: 'activo',
     ticksRestantes: 0,
+    ambito: 'asentamiento',
   };
   // Leñera inicial: DEPRECADA (a petición del usuario) — la reserva de materiales iniciales (madera+piedra,
   // ver `almacenInicial` más abajo) ya es suficiente por sí sola para evitar el deadlock de madera (bug #1,
@@ -185,7 +190,7 @@ export function fundarAsentamiento(
     radioPotencial: ZONA_INFLUENCIA.radioInicial,
     poblacion: { pesants: POBLACION.pesants.inicial, artesanos: 0, nobleza: 0 },
     almacen: almacenInicial,
-    edificios: edificiosIniciales(mapa, posicion, id),
+    edificios: edificiosIniciales(id),
     cargos: { gobernadorId: null, tesoreroId: null, generalId: null, maestroObrasId: null, sacerdoteId: null },
     casasCompradas: [...jugadoresFundadoresIds],
     politicasActivas: [],

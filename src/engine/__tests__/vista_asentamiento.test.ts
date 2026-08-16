@@ -1,0 +1,132 @@
+// Vista de Asentamiento (a petición del usuario): dos espacios lógicos separados. Casi todo edificio se
+// construye DENTRO del espacio plano del asentamiento (coords locales, origen en el Centro Urbano); solo los
+// extractores minerales (mina/minaCobre/minaEstano/cantera) viven en el MAPA GENERAL, sobre su nodo. Granja/
+// Leñera/Corral son internos aunque su producción dependa de rasgos de la zona en el mapa general.
+import { describe, expect, it } from 'vitest';
+import type { Asentamiento, Edificio } from '../../domain/types';
+import { ZONA_INFLUENCIA } from '../../constants';
+import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
+import { migrarEdificiosAEspacioLocal } from '../construction';
+import { computeTodasLasZonas, mejorFertilidadEnZona } from '../zones';
+import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, mockMathRandomDeterminista } from './fixtures';
+
+const SEED = 42;
+const EXTERNOS = new Set(['mina', 'minaCobre', 'minaEstano', 'cantera']);
+const modulo = (p: { x: number; y: number }) => Math.hypot(p.x, p.y);
+
+function estadoInicial(asentamiento: Asentamiento, facciones: ReturnType<typeof crearFacciones>): EstadoSimulacion {
+  return {
+    asentamientos: [asentamiento],
+    facciones,
+    caravanas: [],
+    acuerdos: [],
+    ordenes: [],
+    relaciones: [],
+    titulos: [],
+    caminos: [],
+    campamentosBandidos: [],
+    bandidosProximoSpawnTick: 0,
+  };
+}
+
+describe('Vista de Asentamiento — fundación en espacio local', () => {
+  it('todo edificio inicial es interno, con el Centro Urbano en el origen (0,0) y dentro del radio inicial', () => {
+    const { asentamiento } = fundarAsentamientoDeTest(crearMapaDeterminista(SEED), crearFacciones(), 'faccion-1', []);
+    const centro = asentamiento.edificios.find((e) => e.tipo === 'centroUrbano')!;
+
+    expect(centro.ambito).toBe('asentamiento');
+    expect(centro.posicion).toEqual({ x: 0, y: 0 });
+
+    for (const e of asentamiento.edificios) {
+      expect(e.ambito).toBe('asentamiento');
+      // Coords LOCALES: nada que ver con la posición del asentamiento en el mapa general (~500,500).
+      expect(modulo(e.posicion)).toBeLessThanOrEqual(ZONA_INFLUENCIA.radioInicial + 1e-6);
+    }
+  });
+});
+
+describe('Vista de Asentamiento — colocación tras simulación', () => {
+  it('los edificios internos quedan dentro del disco local; las minas/cantera van al mapa general sobre su nodo', () => {
+    const mapa = crearMapaDeterminista(SEED);
+    const facciones = crearFacciones();
+    const restaurar = mockMathRandomDeterminista(SEED);
+    try {
+      const { asentamiento } = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', []);
+      let estado = estadoInicial(asentamiento, facciones);
+      for (let tick = 1; tick <= 90; tick++) estado = avanzarSimulacion(estado, mapa, tick);
+
+      const a = estado.asentamientos[0]!;
+      // Debe haber crecido más allá de los edificios iniciales (prueba que la auto-construcción coloca en local).
+      expect(a.edificios.length).toBeGreaterThan(5);
+
+      for (const e of a.edificios) {
+        if (EXTERNOS.has(e.tipo)) {
+          // Externo: en el mapa general, plantado exactamente sobre su nodo de recurso.
+          expect(e.ambito).toBe('mapa');
+          const nodo = mapa.nodo(e.fuenteId);
+          expect(nodo).toBeDefined();
+          expect(e.posicion).toEqual(nodo!.posicion);
+        } else {
+          // Interno: coords locales dentro del disco de radio `radioPotencial`.
+          expect(e.ambito ?? 'asentamiento').toBe('asentamiento');
+          expect(modulo(e.posicion)).toBeLessThanOrEqual(a.radioPotencial + 1e-6);
+        }
+      }
+    } finally {
+      restaurar();
+    }
+  });
+});
+
+describe('Vista de Asentamiento — fertilidad de zona para las Granjas', () => {
+  it('mejorFertilidadEnZona devuelve la MEJOR fertilidad de la zona (única, compartida por todas las Granjas)', () => {
+    const mapa = crearMapaDeterminista(SEED);
+    const { asentamiento } = fundarAsentamientoDeTest(mapa, crearFacciones(), 'faccion-1', []);
+    const zona = computeTodasLasZonas([asentamiento]).find((z) => z.asentamientoId === asentamiento.id)!.poligono;
+
+    const fertilidad = mejorFertilidadEnZona(asentamiento, zona, mapa);
+    expect(fertilidad).toBeGreaterThan(0);
+    // No debe ser menor que la fertilidad del propio centro (que siempre es candidato).
+    expect(fertilidad).toBeGreaterThanOrEqual(mapa.fertilidadEn(asentamiento.posicion) - 1e-9);
+  });
+});
+
+describe('Vista de Asentamiento — migración de saves antiguos', () => {
+  it('convierte edificios en coords de mapa/sin ambito a coords locales, y es idempotente', () => {
+    const { asentamiento } = fundarAsentamientoDeTest(crearMapaDeterminista(SEED), crearFacciones(), 'faccion-1', []);
+    const centro = asentamiento.posicion; // punto de fundación en el mapa general
+
+    // Simula un save ANTERIOR a la Vista de Asentamiento: todos los edificios en coords de mundo, sin `ambito`.
+    // (Reconstruye a partir del asentamiento nuevo: internos vuelven a mundo sumando el centro; se añade una
+    // mina de mundo suelta para cubrir la rama `ambito: 'mapa'`.)
+    const minaMundo: Edificio = {
+      id: 'mina-vieja', tipo: 'minaCobre', posicion: { x: centro.x + 40, y: centro.y - 12 }, estado: 'activo', ticksRestantes: 0, fuenteId: 'nodo-x',
+    };
+    const viejo: Asentamiento = {
+      ...asentamiento,
+      edificios: [
+        ...asentamiento.edificios.map(({ ambito: _a, ...e }) => ({
+          ...e,
+          posicion: { x: e.posicion.x + centro.x, y: e.posicion.y + centro.y },
+        })),
+        minaMundo,
+      ],
+    };
+
+    const [migrado] = migrarEdificiosAEspacioLocal([viejo]);
+    const centroUrbano = migrado!.edificios.find((e) => e.tipo === 'centroUrbano')!;
+    const minaMigrada = migrado!.edificios.find((e) => e.id === 'mina-vieja')!;
+
+    // Internos: ambito 'asentamiento' y posición de vuelta a local (el Centro Urbano al origen).
+    expect(centroUrbano.ambito).toBe('asentamiento');
+    expect(centroUrbano.posicion.x).toBeCloseTo(0, 6);
+    expect(centroUrbano.posicion.y).toBeCloseTo(0, 6);
+    // La mina conserva ambito 'mapa' y su posición de mundo intacta.
+    expect(minaMigrada.ambito).toBe('mapa');
+    expect(minaMigrada.posicion).toEqual(minaMundo.posicion);
+
+    // Idempotente: volver a migrar no cambia nada (todos ya traen `ambito`).
+    const [reMigrado] = migrarEdificiosAEspacioLocal([migrado!]);
+    expect(reMigrado).toEqual(migrado);
+  });
+});

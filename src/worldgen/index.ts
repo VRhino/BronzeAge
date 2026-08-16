@@ -27,7 +27,7 @@ export { costeEnPunto } from './costeMovimiento';
 export { evaluarElevacion, evaluarTerreno, gradienteElevacion } from './elevacion';
 export { evaluarFertilidad } from './fertilidad';
 export { distanciaARioMasCercano } from './rios';
-export { MAPA_DEFAULT, COSTE_MOVIMIENTO, CHOKEPOINTS } from './config';
+export { MAPA_DEFAULT, COSTE_MOVIMIENTO, CHOKEPOINTS, RIOS, BIOMA } from './config';
 export { REGIONES } from './regiones';
 export { createRng, randInt, randRange, type RandomFn } from './rng';
 export { WORLDGEN_VERSION, type CampoElevacion, type CampoFertilidad, type MapaGenerado } from './types';

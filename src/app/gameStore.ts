@@ -25,6 +25,9 @@ import type {
 import { CAMPAMENTOS_BANDIDOS, EDIFICIO_CATALOGO, FUNDACION, MANTENIMIENTO, NECESIDADES, POLITICAS, POLITICA_CATALOGO, TROPAS_RECLUTABLES } from '../constants';
 import { generarMapa, MAPA_DEFAULT, WORLDGEN_VERSION, type MapaGenerado } from '../worldgen';
 import { crearEstadoMapa, crearMapa, type EstadoMapa, type Mapa } from '../world/mapa';
+import { exportarParaUnityTerrain, UNITY_EXPORT_DEFAULT, type ExportUnityResultado, type OpcionesExportUnity } from '../world/exportUnity';
+
+export { UNITY_EXPORT_DEFAULT };
 import {
   produccionPorTick,
   manoObraInfo as calcularManoObraInfo,
@@ -75,6 +78,7 @@ import {
   quitarDeCola as quitarDeColaEngine,
   moverEnCola as moverEnColaEngine,
   reclamosDeFuentes as reclamosDeFuentesEngine,
+  migrarEdificiosAEspacioLocal,
   ConstruccionManualInvalidaError,
 } from '../engine/construction';
 import {
@@ -406,7 +410,8 @@ export class GameStore {
 
   /** Producción por tick de cada edificio activo de extracción/producción primaria, agrupada por tipo. */
   produccionInfo(asentamiento: Asentamiento): ProduccionItem[] {
-    return produccionPorTick(asentamiento, this.getMapa());
+    const zona = this.getZonas().find((z) => z.asentamientoId === asentamiento.id);
+    return produccionPorTick(asentamiento, this.getMapa(), zona?.poligono ?? []);
   }
 
   /** Demanda de mano de obra agregada (pesants) frente a lo que piden los edificios productores activos. */
@@ -1069,6 +1074,15 @@ export class GameStore {
   }
 
   /**
+   * Heightmap (RAW 16-bit) + metadata (posiciones de nodos/bosques/ríos/chokepoints/asentamientos en metros)
+   * del mapa actual, listos para Unity Terrain — ver `world/exportUnity.ts`. Puro respecto al estado: no
+   * muta nada, solo deriva del `mapa` y los `asentamientos` en vivo.
+   */
+  exportarMapaUnity(opciones?: OpcionesExportUnity): ExportUnityResultado {
+    return exportarParaUnityTerrain(this.state.mapa, this.state.asentamientos, opciones);
+  }
+
+  /**
    * Reemplaza la simulación completa por la contenida en `json` (formato de `exportarSimulacion`).
    * El archivo no lleva el mapa entero: se REGENERA desde `world.config` (determinista por seed, Doc 1.1)
    * y luego se le superponen los `recursos`/`bosques` exportados, que sí pueden venir ya modificados
@@ -1118,7 +1132,9 @@ export class GameStore {
       this.state = {
         mapa: mapaRegenerado,
         estadoMapa: { extraido, regeneraEnTick: {} },
-        asentamientos: payload.asentamientos,
+        // Vista de Asentamiento: los saves anteriores traían los edificios en coords del mapa general y sin
+        // `ambito` — se migran a coords locales del espacio plano (idempotente, ver `migrarEdificiosAEspacioLocal`).
+        asentamientos: migrarEdificiosAEspacioLocal(payload.asentamientos),
         facciones: payload.facciones,
         caravanas: payload.caravanas ?? [],
         acuerdos: payload.acuerdos ?? [],

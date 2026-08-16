@@ -11,7 +11,7 @@ import {
   ZONA_INFLUENCIA,
 } from '../constants';
 import type { Mapa } from '../world/mapa';
-import { pointInPolygon } from './zones';
+import { mejorFertilidadEnZona } from './zones';
 import {
   capacidadViviendaArtesanos,
   capacidadViviendaPesants,
@@ -22,13 +22,7 @@ import {
 } from './asentamientoQuery';
 import { agregarRecurso, descontarRecursos, tieneRecursos } from './almacen';
 import { reservaDinamicaConstruccion } from './mantenimiento';
-import {
-  factorProduccionTrigo,
-  factorTiempoConstruccion,
-  lineasProduccionPriorizadas,
-  minimoGranjasPrioritario,
-  minimoLenerasPrioritario,
-} from './politicas';
+import { factorProduccionTrigo, factorTiempoConstruccion, lineasProduccionPriorizadas } from './politicas';
 import { consumoComidaPoblacion } from './population';
 import { consumoRacionTropas } from './tropas';
 
@@ -39,6 +33,27 @@ import { consumoRacionTropas } from './tropas';
  * sería un huevo-y-la-gallina sin salida.
  */
 const RECURSO_PROPIO: Partial<Record<EdificioTipo, string>> = { granja: 'trigo', lenera: 'madera' };
+
+/**
+ * Vista de Asentamiento (a petición del usuario): dos espacios lógicos separados. Casi todo edificio se
+ * construye DENTRO del espacio plano del asentamiento (coords locales, origen en el Centro Urbano, ver
+ * `Edificio.ambito`); las ÚNICAS excepciones son los extractores minerales, que se plantan sobre su nodo del
+ * MAPA GENERAL. Granja/Leñera/Corral son internos aunque su producción/elegibilidad dependa de rasgos del
+ * mapa (fertilidad/bosque/livestock) dentro de la zona de influencia — el vínculo con el mapa lo lleva su
+ * `fuenteId` (Leñera/Corral) o la fertilidad de zona (Granja), no su posición.
+ */
+const EDIFICIOS_EN_MAPA = new Set<EdificioTipo>(['mina', 'minaCobre', 'minaEstano', 'cantera']);
+
+/** Espacio lógico en el que vive un tipo de edificio (ver `EDIFICIOS_EN_MAPA`). */
+function ambitoDe(tipo: EdificioTipo): 'asentamiento' | 'mapa' {
+  return EDIFICIOS_EN_MAPA.has(tipo) ? 'mapa' : 'asentamiento';
+}
+
+/** Edificios que viven en el espacio plano del asentamiento (coords locales) — para el chequeo de espaciado
+ * entre huecos locales, que nunca debe compararse contra los extractores del mapa general. */
+function edificiosInternos(edificios: Edificio[]): Edificio[] {
+  return edificios.filter((e) => (e.ambito ?? 'asentamiento') === 'asentamiento');
+}
 
 /**
  * Edificios que extraen contra un NODO finito del mapa y se quedan sin nada cuando lo agotan (Doc 1.4:
@@ -107,79 +122,58 @@ function sitioLibre(p: Point, ocupados: Edificio[]): boolean {
   return ocupados.every((e) => distancia(e.posicion, p) >= SITIO.espacioMinimoEntreEdificios);
 }
 
-/** Anillos de radio creciente desde el centro (Doc 4.2), TODOS los huecos libres dentro de la zona, en el
- * mismo orden de barrido que usaba `sitioConcentrico` (anillo más cercano primero, luego ángulo). Compartido
- * por `sitioConcentrico` (primer hueco) y `sitioConcentricoLineaProduccion` (mejor hueco, política del
- * Maestro de Obras) para no duplicar la geometría del barrido. */
-function puntosConcentricos(asentamiento: Asentamiento, zonaPoligono: Point[], ocupados: Edificio[]): Point[] {
+/**
+ * Anillos de radio creciente desde el centro del ESPACIO PLANO del asentamiento (Vista de Asentamiento, Doc
+ * 4.2): origen `(0,0)` (el Centro Urbano), radio del disco = `radioPotencial`, TODOS los huecos locales
+ * libres en orden de barrido (anillo más cercano primero, luego ángulo). Ya NO recorta contra el polígono de
+ * zona de influencia: el espacio interno es plano y privado, no lo limitan las fronteras con rivales — solo
+ * el espaciado mínimo contra los OTROS edificios internos (`edificiosInternos`, nunca los extractores del
+ * mapa general). Compartido por `sitioConcentrico` (primer hueco) y `sitioConcentricoLineaProduccion`.
+ */
+function puntosConcentricos(asentamiento: Asentamiento, ocupados: Edificio[]): Point[] {
+  const internos = edificiosInternos(ocupados);
   const puntos: Point[] = [];
   for (let anillo = 0; anillo < SITIO.anillos; anillo++) {
     const radio = ((anillo + 1) / SITIO.anillos) * asentamiento.radioPotencial;
     for (let m = 0; m < SITIO.muestrasPorAnillo; m++) {
       const angulo = (m / SITIO.muestrasPorAnillo) * Math.PI * 2 + anillo * 0.3;
-      const candidato: Point = {
-        x: asentamiento.posicion.x + Math.cos(angulo) * radio,
-        y: asentamiento.posicion.y + Math.sin(angulo) * radio,
-      };
-      if (pointInPolygon(candidato, zonaPoligono) && sitioLibre(candidato, ocupados)) puntos.push(candidato);
+      const candidato: Point = { x: Math.cos(angulo) * radio, y: Math.sin(angulo) * radio };
+      if (sitioLibre(candidato, internos)) puntos.push(candidato);
     }
   }
   return puntos;
 }
 
-/** Crecimiento concéntrico desde el centro (Doc 4.2): primer hueco libre según el barrido de `puntosConcentricos`. */
-export function sitioConcentrico(asentamiento: Asentamiento, zonaPoligono: Point[], ocupados: Edificio[]): Point | null {
-  return puntosConcentricos(asentamiento, zonaPoligono, ocupados)[0] ?? null;
+/** Crecimiento concéntrico dentro del espacio plano del asentamiento (Doc 4.2): primer hueco LOCAL libre
+ * según el barrido de `puntosConcentricos`. Devuelve coordenadas locales (origen en el Centro Urbano). */
+export function sitioConcentrico(asentamiento: Asentamiento, ocupados: Edificio[]): Point | null {
+  return puntosConcentricos(asentamiento, ocupados)[0] ?? null;
 }
 
 /**
- * "Líneas de Producción" (política de Maestro de Obras, a petición del usuario): mismos huecos candidatos
- * que `sitioConcentrico`, pero en vez de quedarse con el primero, evalúa TODOS y devuelve el que minimiza la
- * penalización de distancia (`factorLineaProduccion`, mismo criterio del eslabón más débil que ya usa la
- * producción en marcha) contra las recetas del NIVEL 1 de `tipo` — un edificio de transformación colocado
- * aquí producirá a mejor ritmo desde el primer tick, sin esperar a que otra política lo mueva. Si `tipo` no
- * tiene recetas (Carpintería) cualquier hueco es igual de bueno y se comporta como `sitioConcentrico`.
+ * "Líneas de Producción" (política de Maestro de Obras, a petición del usuario): mismos huecos LOCALES
+ * candidatos que `sitioConcentrico`, pero en vez de quedarse con el primero, evalúa TODOS y devuelve el que
+ * minimiza la penalización de distancia (`factorLineaProduccion`, mismo criterio del eslabón más débil que ya
+ * usa la producción en marcha) contra las recetas del NIVEL 1 de `tipo` — un edificio de transformación
+ * colocado aquí producirá a mejor ritmo desde el primer tick. Si `tipo` no tiene recetas (Carpintería)
+ * cualquier hueco es igual de bueno y se comporta como `sitioConcentrico`.
  */
 export function sitioConcentricoLineaProduccion(
   asentamiento: Asentamiento,
-  zonaPoligono: Point[],
   ocupados: Edificio[],
   tipo: EdificioTipo
 ): Point | null {
   const recetas = nivelesDe(tipo)?.[1]?.recetas ?? [];
-  const candidatos = puntosConcentricos(asentamiento, zonaPoligono, ocupados);
+  const candidatos = puntosConcentricos(asentamiento, ocupados);
   if (recetas.length === 0) return candidatos[0] ?? null;
 
   let mejor: { punto: Point; score: number } | null = null;
   for (const punto of candidatos) {
-    const edificioSimulado: Edificio = { id: '', tipo, posicion: punto, estado: 'activo', ticksRestantes: 0 };
+    const edificioSimulado: Edificio = { id: '', tipo, posicion: punto, estado: 'activo', ticksRestantes: 0, ambito: 'asentamiento' };
     const score = Math.min(...recetas.map((r) => factorLineaProduccion(edificioSimulado, r, asentamiento)));
     if (!mejor || score > mejor.score) mejor = { punto, score };
   }
   return mejor?.punto ?? null;
-}
-
-/** Granja: mejor casilla disponible según fertilidad del suelo (Doc 1.4/4.2). */
-function sitioMejorFertilidad(
-  asentamiento: Asentamiento,
-  zonaPoligono: Point[],
-  mapa: Mapa,
-  ocupados: Edificio[]
-): Point | null {
-  // Qué puntos son elegibles lo decide el motor (zona de influencia + sitios ya ocupados); cuál de ellos es
-  // el más fértil, el mapa.
-  const candidatos: Point[] = [];
-  for (let i = 0; i < SITIO.muestrasFertilidad; i++) {
-    const angulo = (i / SITIO.muestrasFertilidad) * Math.PI * 2;
-    const radio = (i % 5) / 5 * asentamiento.radioPotencial;
-    const candidato: Point = {
-      x: asentamiento.posicion.x + Math.cos(angulo) * radio,
-      y: asentamiento.posicion.y + Math.sin(angulo) * radio,
-    };
-    if (!pointInPolygon(candidato, zonaPoligono) || !sitioLibre(candidato, ocupados)) continue;
-    candidatos.push(candidato);
-  }
-  return mapa.mejorPorFertilidad(candidatos)?.punto ?? null;
 }
 
 /** Cantera/edificio de extracción: junto al nodo de recurso más cercano SIN reclamar ya (Doc 4.2, ej. herrería cerca de mina). */
@@ -282,6 +276,7 @@ function crearEdificioEnCola(tipo: EdificioTipo, posicion: Point, id: string, fu
     posicion,
     estado: 'en_cola',
     ticksRestantes: EDIFICIO_CATALOGO[tipo].tiempoConstruccionTicks,
+    ambito: ambitoDe(tipo),
   };
   return fuenteId ? { ...edificio, fuenteId } : edificio;
 }
@@ -379,196 +374,150 @@ function evaluarNecesidades(
   /**
    * ¿Hay ya un proyecto de este tipo en el asentamiento, O propuesto en esta misma pasada?
    *
-   * Mirar solo `asentamiento.edificios` (que es lo que hace `hayProyectoPendiente`) no basta: varias ramas
-   * de esta función pueden proponer el mismo tipo en el mismo tick — p. ej. Leñera por la vía de Protección
-   * de Riesgos y otra vez por la de expansión — y como la fuente no se reclama hasta el commit
-   * (`registrarReclamo`, al final), las dos elegían el MISMO bosque o yacimiento. El resultado eran bosques
-   * con más Leñeras de las que admite su capacidad y nodos con dos extractores encima, justo lo que
-   * `reclamosDeFuentes` existe para impedir entre asentamientos distintos.
+   * Mirar solo `asentamiento.edificios` (que es lo que hace `hayProyectoPendiente`) no basta: como la fuente
+   * no se reclama hasta el commit (`registrarReclamo`, al final), dos ramas que propusieran el mismo tipo en
+   * el mismo tick elegirían el MISMO bosque o yacimiento — bosques con más Leñeras de las que admite su
+   * capacidad, nodos con dos extractores encima. Esta es la misma garantía que `reclamosDeFuentes` da entre
+   * asentamientos distintos, pero DENTRO de un único asentamiento en el mismo tick.
    */
   const proyectoEnCurso = (tipo: EdificioTipo): boolean =>
     hayProyectoPendiente(asentamiento, tipo) || candidatos.some((c) => c.edificio.tipo === tipo);
 
-  // Protección de Riesgos (política de Maestro de Obras, a petición del usuario: "construye 2 Leñeras y 3
-  // Granjas, prioriza esto y no construyas nada más hasta que se cumpla"): mientras esté activa y falte
-  // cualquiera de los dos objetivos, esta pasada SOLO propone Leñera/Granja — el resto de la función no se
-  // evalúa este tick. Ambas se evalúan en la misma pasada (no hace falta terminar la Leñera antes de empezar
-  // la Granja).
-  // Excepción: si NINGUNA de las dos pudo avanzar este tick (sin sitio disponible para la que falte, y
-  // ninguna ya en camino), bloquear igual sería un interbloqueo sin salida — en ese caso se deja pasar la
-  // evaluación normal de abajo.
-  const objetivoLenerasPrioritario = minimoLenerasPrioritario(asentamiento);
-  const objetivoGranjasPrioritario = minimoGranjasPrioritario(asentamiento);
-  let soloSupervivencia = false;
-  if (objetivoLenerasPrioritario > 0 || objetivoGranjasPrioritario > 0) {
-    const lenerasActivas = edificiosPorTipoYEstado(asentamiento, 'lenera').length;
-    const lenerasPendientes = asentamiento.edificios.filter((e) => e.tipo === 'lenera' && e.estado !== 'activo').length;
-    const lenerasFaltan = lenerasActivas + lenerasPendientes < objetivoLenerasPrioritario;
+  // Fertilidad de referencia de la zona (Vista de Asentamiento): las Granjas se construyen DENTRO del espacio
+  // plano, pero todas rinden con la mejor fertilidad que la zona toca en el mapa general (ver `mejorFertilidadEnZona`).
+  const fertilidadZona = mejorFertilidadEnZona(asentamiento, zonaPoligono, mapa);
 
-    const granjasActivasPrioridad = edificiosPorTipoYEstado(asentamiento, 'granja').length;
-    const granjasPendientesPrioridad = asentamiento.edificios.filter((e) => e.tipo === 'granja' && e.estado !== 'activo').length;
-    const granjasFaltan = granjasActivasPrioridad + granjasPendientesPrioridad < objetivoGranjasPrioritario;
-
-    if (lenerasFaltan || granjasFaltan) {
-      let progresando = false;
-
-      if (lenerasFaltan) {
-        if (proyectoEnCurso('lenera')) {
-          progresando = true; // ya hay una Leñera en camino hacia el objetivo.
-        } else {
-          const sitio = sitioEnBosque(asentamiento, zonaPoligono, mapa, reclamos.lenerasPorBosque);
-          if (sitio) {
-            proponer(crearEdificioEnCola('lenera', sitio.posicion, nextId(), sitio.fuenteId), SCORE_BANDAS.supervivencia + 100);
-            progresando = true;
-          }
-        }
-      }
-
-      if (granjasFaltan) {
-        if (proyectoEnCurso('granja')) {
-          progresando = true; // ya hay una Granja en camino hacia el objetivo.
-        } else {
-          const sitio = sitioMejorFertilidad(asentamiento, zonaPoligono, mapa, ocupados());
-          if (sitio) {
-            proponer(crearEdificioEnCola('granja', sitio, nextId()), SCORE_BANDAS.supervivencia + 100);
-            progresando = true;
-          }
-        }
-      }
-
-      soloSupervivencia = progresando;
-      // Si NO progresando: ni Leñera ni Granja pudieron avanzar este tick — no bloquear el resto, cae a la
-      // evaluación normal de abajo (misma zona de escape que antes).
+  // Granja: al menos una, y más si estoy en DÉFICIT de trigo — producción actual de todas las Granjas
+  // activas (fertilidad de zona + mano de obra + Edicto de Cosecha) por debajo del consumo actual (población +
+  // tropas, Doc 4.1/5.4) — no "cuántos ticks de reserva quedan al ritmo de hoy".
+  const granjasActivasEdificios = edificiosPorTipoYEstado(asentamiento, 'granja');
+  const ratioManoActual = ratioManoObra(asentamiento);
+  const factorTrigoActual = factorProduccionTrigo(asentamiento);
+  const produccionTrigoActual =
+    granjasActivasEdificios.length * EDIFICIO_CATALOGO.granja.produccionBaseTrigo * fertilidadZona * ratioManoActual * factorTrigoActual;
+  const consumoTrigoActual = consumoComidaPoblacion(asentamiento) + consumoRacionTropas(asentamiento);
+  const enDeficitTrigo = produccionTrigoActual < consumoTrigoActual;
+  // En déficit se permite tener varias Granjas en camino a la vez (hasta el tope), no solo una: sin esto, un
+  // déficit severo solo podía corregirse construyendo Granjas en SERIE, quedándose muy por detrás.
+  const granjasPendientes = asentamiento.edificios.filter((e) => e.tipo === 'granja' && e.estado !== 'activo').length;
+  const limiteGranjasPendientes = enDeficitTrigo ? NECESIDADES.maximoGranjasPendientesEnDeficit : 1;
+  if ((granjasActivasEdificios.length === 0 || enDeficitTrigo) && granjasPendientes < limiteGranjasPendientes) {
+    const sitio = sitioConcentrico(asentamiento, ocupados());
+    if (sitio) {
+      const deficitRatio = consumoTrigoActual > 0 ? (consumoTrigoActual - produccionTrigoActual) / consumoTrigoActual : 1;
+      const urgencia = granjasActivasEdificios.length === 0 ? 100 : deficitRatio * 100;
+      proponer(crearEdificioEnCola('granja', sitio, nextId()), conUrgencia(SCORE_BANDAS.supervivencia, urgencia));
     }
   }
 
-  if (!soloSupervivencia) {
-    // Granja: al menos una, y más si estoy en DÉFICIT de trigo — producción actual de todas las Granjas
-    // activas (fertilidad + mano de obra + Edicto de Cosecha) por debajo del consumo actual (población +
-    // tropas, Doc 4.1/5.4) — no "cuántos ticks de reserva quedan al ritmo de hoy".
-    const granjasActivasEdificios = edificiosPorTipoYEstado(asentamiento, 'granja');
-    const ratioManoActual = ratioManoObra(asentamiento);
-    const factorTrigoActual = factorProduccionTrigo(asentamiento);
-    const produccionTrigoActual = granjasActivasEdificios.reduce(
-      (acc, e) => acc + EDIFICIO_CATALOGO.granja.produccionBaseTrigo * mapa.fertilidadEn(e.posicion) * ratioManoActual * factorTrigoActual,
-      0
-    );
-    const consumoTrigoActual = consumoComidaPoblacion(asentamiento) + consumoRacionTropas(asentamiento);
-    const enDeficitTrigo = produccionTrigoActual < consumoTrigoActual;
-    // En déficit se permite tener varias Granjas en camino a la vez (hasta el tope), no solo una: sin esto, un
-    // déficit severo solo podía corregirse construyendo Granjas en SERIE, quedándose muy por detrás.
-    const granjasPendientes = asentamiento.edificios.filter((e) => e.tipo === 'granja' && e.estado !== 'activo').length;
-    const limiteGranjasPendientes = enDeficitTrigo ? NECESIDADES.maximoGranjasPendientesEnDeficit : 1;
-    if ((granjasActivasEdificios.length === 0 || enDeficitTrigo) && granjasPendientes < limiteGranjasPendientes) {
-      const sitio = sitioMejorFertilidad(asentamiento, zonaPoligono, mapa, ocupados());
+  // Lenera: mismo tope que los extractores minerales (los bosques no se agotan, Doc 1.4). Urgencia máxima
+  // si no hay ninguna, alta si la reserva proyectada de madera ya está comprometida, baja si solo falta
+  // para llegar al tope.
+  const leneras = edificiosPorTipoYEstado(asentamiento, 'lenera');
+  if (leneras.length < EXTRACCION_MAXIMOS.porTipo && !proyectoEnCurso('lenera')) {
+    // Elegibilidad y `fuenteId` siguen saliendo del bosque que toca la zona en el mapa general (`sitioEnBosque`);
+    // la Leñera se COLOCA dentro del espacio plano del asentamiento (posición local), no sobre el bosque.
+    const fuente = sitioEnBosque(asentamiento, zonaPoligono, mapa, reclamos.lenerasPorBosque);
+    const local = fuente ? sitioConcentrico(asentamiento, ocupados()) : null;
+    if (fuente && local) {
+      const maderaBajoReserva = (asentamiento.almacen.madera?.cantidad ?? 0) < (reserva.madera ?? 0);
+      const urgencia = leneras.length === 0 ? 100 : maderaBajoReserva ? 90 : 30;
+      proponer(crearEdificioEnCola('lenera', local, nextId(), fuente.fuenteId), conUrgencia(SCORE_BANDAS.supervivencia, urgencia));
+    }
+  }
+
+  // Extractores base (cantera/corral/minaCobre/mina/minaEstano, Doc 1.1/1.4/3.1/4.2.1/5.7): mismo patrón —
+  // urgencia máxima si NINGUNA fuente propia sigue viva, moderada si solo falta para llegar al tope.
+  const extractores: { tipo: EdificioTipo; recurso: string }[] = [
+    { tipo: 'cantera', recurso: 'piedra' },
+    { tipo: 'corral', recurso: 'livestock' },
+    { tipo: 'minaCobre', recurso: 'cobre' },
+    { tipo: 'mina', recurso: 'oro' },
+    { tipo: 'minaEstano', recurso: 'estano' },
+  ];
+  for (const { tipo, recurso } of extractores) {
+    if (necesitaNuevoExtractor(asentamiento, tipo, mapa) && !proyectoEnCurso(tipo)) {
+      const sitio = sitioCercaDeNodo(asentamiento, zonaPoligono, mapa, recurso, reclamos.nodos);
       if (sitio) {
-        const deficitRatio = consumoTrigoActual > 0 ? (consumoTrigoActual - produccionTrigoActual) / consumoTrigoActual : 1;
-        const urgencia = granjasActivasEdificios.length === 0 ? 100 : deficitRatio * 100;
-        proponer(crearEdificioEnCola('granja', sitio, nextId()), conUrgencia(SCORE_BANDAS.supervivencia, urgencia));
+        // Minas/Cantera se plantan SOBRE su nodo del mapa general (posición del nodo, `ambito:'mapa'`); el
+        // Corral es interno (Vista de Asentamiento): conserva el `fuenteId` del nodo de livestock de la zona,
+        // pero se coloca dentro del espacio plano. Si no hay hueco local, no se propone este tick.
+        const posicion = ambitoDe(tipo) === 'mapa' ? sitio.posicion : sitioConcentrico(asentamiento, ocupados());
+        if (!posicion) continue;
+        const conFuenteViva = asentamiento.edificios
+          .filter((e) => e.tipo === tipo)
+          .some((e) => mapa.nodoProductivo(e.fuenteId));
+        proponer(
+          crearEdificioEnCola(tipo, posicion, nextId(), sitio.fuenteId),
+          conUrgencia(SCORE_BANDAS.extractorBase, conFuenteViva ? 40 : 100)
+        );
       }
     }
+  }
 
-    // Lenera: mismo tope que los extractores minerales (los bosques no se agotan, Doc 1.4). Urgencia máxima
-    // si no hay ninguna, alta si la reserva proyectada de madera ya está comprometida, baja si solo falta
-    // para llegar al tope.
-    const leneras = edificiosPorTipoYEstado(asentamiento, 'lenera');
-    if (leneras.length < EXTRACCION_MAXIMOS.porTipo && !proyectoEnCurso('lenera')) {
-      const sitio = sitioEnBosque(asentamiento, zonaPoligono, mapa, reclamos.lenerasPorBosque);
+  // Cupos separados por clase (ver `crecerPoblacion`, engine/population.ts): una Vivienda nueva amplía
+  // ambos a la vez, así que basta con que CUALQUIERA de los dos ya esté saturado para dispararla. Urgencia
+  // escala con el % de ocupación.
+  const capacidadPesantsVivienda = capacidadViviendaPesants(asentamiento);
+  const capacidadArtesanosVivienda = capacidadViviendaArtesanos(asentamiento);
+  const ocupacionPesants = capacidadPesantsVivienda <= 0 ? 1 : asentamiento.poblacion.pesants / capacidadPesantsVivienda;
+  const ocupacionArtesanos = capacidadArtesanosVivienda <= 0 ? 1 : asentamiento.poblacion.artesanos / capacidadArtesanosVivienda;
+  const ocupacionMaxima = Math.max(ocupacionPesants, ocupacionArtesanos);
+  if (
+    (capacidadPesantsVivienda === 0 || ocupacionMaxima >= NECESIDADES.umbralViviendaOcupada) &&
+    !hayProyectoPendiente(asentamiento, 'vivienda')
+  ) {
+    const sitio = sitioConcentrico(asentamiento, ocupados());
+    if (sitio) proponer(crearEdificioEnCola('vivienda', sitio, nextId()), conUrgencia(SCORE_BANDAS.crecimiento, ocupacionMaxima * 100));
+  }
+
+  // Almacén: urgencia escala con el % de ocupación del recurso más lleno.
+  const ocupacionAlmacenes = Object.values(asentamiento.almacen)
+    .filter((r) => r.capacidad > 0)
+    .map((r) => r.cantidad / r.capacidad);
+  const ocupacionAlmacenMaxima = ocupacionAlmacenes.length ? Math.max(...ocupacionAlmacenes) : 0;
+  if (ocupacionAlmacenMaxima >= NECESIDADES.umbralAlmacenAmpliacion && !hayProyectoPendiente(asentamiento, 'almacen')) {
+    const sitio = sitioConcentrico(asentamiento, ocupados());
+    if (sitio) proponer(crearEdificioEnCola('almacen', sitio, nextId()), conUrgencia(SCORE_BANDAS.crecimiento, ocupacionAlmacenMaxima * 100));
+  }
+
+  // Edificios de transformación (Doc 4.2.1, rediseño de progreso Fase 0): Curtiduría/Armería/Fundición no
+  // tienen gate de nivel para su construcción BASE — solo sus mejoras de nivel interno lo exigen (ver
+  // `avanzarMejoras`). Como máximo UNA de las tres puede estar en vuelo a la vez (bug detectado en
+  // simulación: sin este límite, varias podían acumularse atascadas esperando piedra en un punto de
+  // fundación pobre en ese recurso). Además, cada una exige tener ya el insumo de arranque en almacén (ver
+  // `tieneInsumoDeArranque`) — si Curtiduría no lo tiene, el bucle sigue probando Armería/Fundición en el
+  // mismo tick en vez de detenerse ahí. Política "Líneas de Producción" del Maestro de Obras: sitúa el
+  // edificio nuevo cerca de la fuente de sus insumos en vez del primer hueco libre de siempre (ver
+  // `sitioConcentricoLineaProduccion`).
+  const transformacionEnCurso = (['curtiduria', 'armeria', 'fundicion'] as const).some(
+    (tipo) => hayProyectoPendiente(asentamiento, tipo)
+  );
+  if (!transformacionEnCurso) {
+    for (const tipo of ['curtiduria', 'armeria', 'fundicion'] as const) {
+      if (edificiosPorTipoYEstado(asentamiento, tipo).length > 0) continue;
+      if (!tieneInsumoDeArranque(asentamiento, tipo)) continue;
+      const sitio = lineasProduccionPriorizadas(asentamiento)
+        ? sitioConcentricoLineaProduccion(asentamiento, ocupados(), tipo)
+        : sitioConcentrico(asentamiento, ocupados());
       if (sitio) {
-        const maderaBajoReserva = (asentamiento.almacen.madera?.cantidad ?? 0) < (reserva.madera ?? 0);
-        const urgencia = leneras.length === 0 ? 100 : maderaBajoReserva ? 90 : 30;
-        proponer(crearEdificioEnCola('lenera', sitio.posicion, nextId(), sitio.fuenteId), conUrgencia(SCORE_BANDAS.supervivencia, urgencia));
+        proponer(crearEdificioEnCola(tipo, sitio, nextId()), SCORE_BANDAS.transformacion);
+        break;
       }
     }
+  }
 
-    // Extractores base (cantera/corral/minaCobre/mina/minaEstano, Doc 1.1/1.4/3.1/4.2.1/5.7): mismo patrón —
-    // urgencia máxima si NINGUNA fuente propia sigue viva, moderada si solo falta para llegar al tope.
-    const extractores: { tipo: EdificioTipo; recurso: string }[] = [
-      { tipo: 'cantera', recurso: 'piedra' },
-      { tipo: 'corral', recurso: 'livestock' },
-      { tipo: 'minaCobre', recurso: 'cobre' },
-      { tipo: 'mina', recurso: 'oro' },
-      { tipo: 'minaEstano', recurso: 'estano' },
-    ];
-    for (const { tipo, recurso } of extractores) {
-      if (necesitaNuevoExtractor(asentamiento, tipo, mapa) && !proyectoEnCurso(tipo)) {
-        const sitio = sitioCercaDeNodo(asentamiento, zonaPoligono, mapa, recurso, reclamos.nodos);
-        if (sitio) {
-          const conFuenteViva = asentamiento.edificios
-            .filter((e) => e.tipo === tipo)
-            .some((e) => mapa.nodoProductivo(e.fuenteId));
-          proponer(
-            crearEdificioEnCola(tipo, sitio.posicion, nextId(), sitio.fuenteId),
-            conUrgencia(SCORE_BANDAS.extractorBase, conFuenteViva ? 40 : 100)
-          );
-        }
-      }
-    }
-
-    // Cupos separados por clase (ver `crecerPoblacion`, engine/population.ts): una Vivienda nueva amplía
-    // ambos a la vez, así que basta con que CUALQUIERA de los dos ya esté saturado para dispararla. Urgencia
-    // escala con el % de ocupación.
-    const capacidadPesantsVivienda = capacidadViviendaPesants(asentamiento);
-    const capacidadArtesanosVivienda = capacidadViviendaArtesanos(asentamiento);
-    const ocupacionPesants = capacidadPesantsVivienda <= 0 ? 1 : asentamiento.poblacion.pesants / capacidadPesantsVivienda;
-    const ocupacionArtesanos = capacidadArtesanosVivienda <= 0 ? 1 : asentamiento.poblacion.artesanos / capacidadArtesanosVivienda;
-    const ocupacionMaxima = Math.max(ocupacionPesants, ocupacionArtesanos);
-    if (
-      (capacidadPesantsVivienda === 0 || ocupacionMaxima >= NECESIDADES.umbralViviendaOcupada) &&
-      !hayProyectoPendiente(asentamiento, 'vivienda')
-    ) {
-      const sitio = sitioConcentrico(asentamiento, zonaPoligono, ocupados());
-      if (sitio) proponer(crearEdificioEnCola('vivienda', sitio, nextId()), conUrgencia(SCORE_BANDAS.crecimiento, ocupacionMaxima * 100));
-    }
-
-    // Almacén: urgencia escala con el % de ocupación del recurso más lleno.
-    const ocupacionAlmacenes = Object.values(asentamiento.almacen)
-      .filter((r) => r.capacidad > 0)
-      .map((r) => r.cantidad / r.capacidad);
-    const ocupacionAlmacenMaxima = ocupacionAlmacenes.length ? Math.max(...ocupacionAlmacenes) : 0;
-    if (ocupacionAlmacenMaxima >= NECESIDADES.umbralAlmacenAmpliacion && !hayProyectoPendiente(asentamiento, 'almacen')) {
-      const sitio = sitioConcentrico(asentamiento, zonaPoligono, ocupados());
-      if (sitio) proponer(crearEdificioEnCola('almacen', sitio, nextId()), conUrgencia(SCORE_BANDAS.crecimiento, ocupacionAlmacenMaxima * 100));
-    }
-
-    // Edificios de transformación (Doc 4.2.1, rediseño de progreso Fase 0): Curtiduría/Armería/Fundición no
-    // tienen gate de nivel para su construcción BASE — solo sus mejoras de nivel interno lo exigen (ver
-    // `avanzarMejoras`). Como máximo UNA de las tres puede estar en vuelo a la vez (bug detectado en
-    // simulación: sin este límite, varias podían acumularse atascadas esperando piedra en un punto de
-    // fundación pobre en ese recurso). Además, cada una exige tener ya el insumo de arranque en almacén (ver
-    // `tieneInsumoDeArranque`) — si Curtiduría no lo tiene, el bucle sigue probando Armería/Fundición en el
-    // mismo tick en vez de detenerse ahí. Política "Líneas de Producción" del Maestro de Obras: sitúa el
-    // edificio nuevo cerca de la fuente de sus insumos en vez del primer hueco libre de siempre (ver
-    // `sitioConcentricoLineaProduccion`).
-    const transformacionEnCurso = (['curtiduria', 'armeria', 'fundicion'] as const).some(
-      (tipo) => hayProyectoPendiente(asentamiento, tipo)
-    );
-    if (!transformacionEnCurso) {
-      for (const tipo of ['curtiduria', 'armeria', 'fundicion'] as const) {
-        if (edificiosPorTipoYEstado(asentamiento, tipo).length > 0) continue;
-        if (!tieneInsumoDeArranque(asentamiento, tipo)) continue;
-        const sitio = lineasProduccionPriorizadas(asentamiento)
-          ? sitioConcentricoLineaProduccion(asentamiento, zonaPoligono, ocupados(), tipo)
-          : sitioConcentrico(asentamiento, zonaPoligono, ocupados());
-        if (sitio) {
-          proponer(crearEdificioEnCola(tipo, sitio, nextId()), SCORE_BANDAS.transformacion);
-          break;
-        }
-      }
-    }
-
-    // Carpintería: a diferencia de los otros 3, su construcción BASE sí exige nivel de asentamiento
-    // (`requisitoNivelAsentamientoConstruccion`) — habilita Armería/Barracón/Galería de tiro nivel 2.
-    const requisitoCarpinteria =
-      (EDIFICIO_CATALOGO.carpinteria as { requisitoNivelAsentamientoConstruccion?: number }).requisitoNivelAsentamientoConstruccion ?? 0;
-    if (
-      asentamiento.nivel >= requisitoCarpinteria &&
-      edificiosPorTipoYEstado(asentamiento, 'carpinteria').length === 0 &&
-      !hayProyectoPendiente(asentamiento, 'carpinteria')
-    ) {
-      const sitio = sitioConcentrico(asentamiento, zonaPoligono, ocupados());
-      if (sitio) proponer(crearEdificioEnCola('carpinteria', sitio, nextId()), SCORE_BANDAS.transformacion);
-    }
+  // Carpintería: a diferencia de los otros 3, su construcción BASE sí exige nivel de asentamiento
+  // (`requisitoNivelAsentamientoConstruccion`) — habilita Armería/Barracón/Galería de tiro nivel 2.
+  const requisitoCarpinteria =
+    (EDIFICIO_CATALOGO.carpinteria as { requisitoNivelAsentamientoConstruccion?: number }).requisitoNivelAsentamientoConstruccion ?? 0;
+  if (
+    asentamiento.nivel >= requisitoCarpinteria &&
+    edificiosPorTipoYEstado(asentamiento, 'carpinteria').length === 0 &&
+    !hayProyectoPendiente(asentamiento, 'carpinteria')
+  ) {
+    const sitio = sitioConcentrico(asentamiento, ocupados());
+    if (sitio) proponer(crearEdificioEnCola('carpinteria', sitio, nextId()), SCORE_BANDAS.transformacion);
   }
 
   // Commit único: ordena todos los candidatos de este tick por score descendente y paga en ese orden
@@ -647,15 +596,23 @@ function avanzarMejoras(
  * ACTUAL lo tenga como `produce` si es un intermedio de cadena (ej. Fundición -> lingoteCobre, insumo de
  * Armería). Líneas de producción (Doc 4.2.1, a petición del usuario): usado por `factorLineaProduccion` para
  * medir qué tan lejos tiene que "viajar" cada insumo de una receta dentro del asentamiento.
+ *
+ * Vista de Asentamiento: solo se devuelven fuentes DEL MISMO ESPACIO que el consumidor (`ambitoConsumidor`),
+ * porque las coordenadas de los dos espacios (plano del asentamiento vs. mapa general) no son comparables.
+ * Una fuente cruzada — p. ej. una Fundición interna que consume `cobre` de una Mina del mapa general — cuenta
+ * como "sin fuente local" y cae a `LINEAS_PRODUCCION.distanciaEstandarSinFuente` (ver `factorLineaProduccion`).
  */
-function fuentesDeRecurso(asentamiento: Asentamiento, recurso: string): Point[] {
+function fuentesDeRecurso(asentamiento: Asentamiento, recurso: string, ambitoConsumidor: 'asentamiento' | 'mapa'): Point[] {
+  const mismoAmbito = (e: Edificio): boolean => (e.ambito ?? 'asentamiento') === ambitoConsumidor;
   const extractorTipo = RECURSO_A_EXTRACTOR[recurso];
   if (extractorTipo) {
-    return asentamiento.edificios.filter((e) => e.tipo === extractorTipo && e.estado === 'activo').map((e) => e.posicion);
+    return asentamiento.edificios
+      .filter((e) => e.tipo === extractorTipo && e.estado === 'activo' && mismoAmbito(e))
+      .map((e) => e.posicion);
   }
   const posiciones: Point[] = [];
   for (const e of asentamiento.edificios) {
-    if (e.estado !== 'activo') continue;
+    if (e.estado !== 'activo' || !mismoAmbito(e)) continue;
     const nivel = nivelesDe(e.tipo)?.[e.nivelInterno ?? 1];
     if (nivel?.recetas.some((r) => r.produce === recurso)) posiciones.push(e.posicion);
   }
@@ -687,9 +644,10 @@ export function factorLineaProduccion(edificio: Edificio, receta: RecetaProducci
     .filter(([, porUnidad]) => !!porUnidad)
     .map(([insumo]) => insumo);
   if (insumos.length === 0) return 1;
+  const ambitoConsumidor = edificio.ambito ?? 'asentamiento';
   return Math.min(
     ...insumos.map((insumo) => {
-      const fuentes = fuentesDeRecurso(asentamiento, insumo);
+      const fuentes = fuentesDeRecurso(asentamiento, insumo, ambitoConsumidor);
       const distanciaFuente =
         fuentes.length > 0 ? Math.min(...fuentes.map((p) => distancia(edificio.posicion, p))) : LINEAS_PRODUCCION.distanciaEstandarSinFuente;
       return factorPorDistancia(distanciaFuente);
@@ -754,6 +712,10 @@ export function avanzarConstruccion(
   const resultados = new Map<string, Edificio>();
 
   const ratioMano = ratioManoObra(asentamiento);
+  // Fertilidad de referencia de la zona (Vista de Asentamiento): todas las Granjas del asentamiento rinden con
+  // este único valor (la mejor fertilidad que la zona toca en el mapa general), porque viven en el espacio
+  // plano local y ya no muestrean fertilidad bajo su propia posición (ver `mejorFertilidadEnZona`).
+  const fertilidadZona = mejorFertilidadEnZona(asentamiento, zonaPoligono, mapa);
   // Crecimiento de zona ligado a construcción activa (Doc 1.2, rediseño a petición del usuario): ya no es
   // puramente temporal — cada edificio completado este tick empuja el radio hacia el techo de su nivel.
   let edificiosCompletadosEsteTick = 0;
@@ -783,7 +745,7 @@ export function avanzarConstruccion(
 
     // activo: producción
     if (edificio.tipo === 'granja') {
-      const yieldTrigo = EDIFICIO_CATALOGO.granja.produccionBaseTrigo * mapa.fertilidadEn(edificio.posicion) * ratioMano * factorProduccionTrigo(asentamiento);
+      const yieldTrigo = EDIFICIO_CATALOGO.granja.produccionBaseTrigo * fertilidadZona * ratioMano * factorProduccionTrigo(asentamiento);
       almacen = agregarRecurso(almacen, 'trigo', yieldTrigo);
     } else if (edificio.tipo === 'lenera') {
       // Los bosques no se agotan (Doc 1.4): la Leñera no extrae contra un stock, rinde según la densidad.
@@ -911,18 +873,29 @@ function sitioParaTipo(
   mapa: Mapa,
   reclamos: ReclamosFuentes
 ): { posicion: Point; fuenteId?: string } | null {
+  // Vista de Asentamiento: Granja y el resto de urbanos van a un hueco LOCAL concéntrico. Leñera/Corral
+  // conservan su `fuenteId` del mapa general (bosque/livestock en la zona) pero también se colocan dentro.
+  // Solo las Minas/Cantera se plantan sobre su nodo del mapa general (posición del nodo).
   if (tipo === 'granja') {
-    const posicion = sitioMejorFertilidad(asentamiento, zonaPoligono, mapa, asentamiento.edificios);
+    const posicion = sitioConcentrico(asentamiento, asentamiento.edificios);
     return posicion ? { posicion } : null;
   }
   if (tipo === 'lenera') {
-    return sitioEnBosque(asentamiento, zonaPoligono, mapa, reclamos.lenerasPorBosque);
+    const fuente = sitioEnBosque(asentamiento, zonaPoligono, mapa, reclamos.lenerasPorBosque);
+    if (!fuente) return null;
+    const posicion = sitioConcentrico(asentamiento, asentamiento.edificios);
+    return posicion ? { posicion, fuenteId: fuente.fuenteId } : null;
   }
   const recursoExtractor = EXTRACTORES[tipo]?.recurso;
   if (recursoExtractor) {
-    return sitioCercaDeNodo(asentamiento, zonaPoligono, mapa, recursoExtractor, reclamos.nodos);
+    const sitio = sitioCercaDeNodo(asentamiento, zonaPoligono, mapa, recursoExtractor, reclamos.nodos);
+    if (!sitio) return null;
+    if (ambitoDe(tipo) === 'mapa') return sitio;
+    // Corral: interno — posición local, `fuenteId` del nodo de livestock de la zona.
+    const posicion = sitioConcentrico(asentamiento, asentamiento.edificios);
+    return posicion ? { posicion, fuenteId: sitio.fuenteId } : null;
   }
-  const posicion = sitioConcentrico(asentamiento, zonaPoligono, asentamiento.edificios);
+  const posicion = sitioConcentrico(asentamiento, asentamiento.edificios);
   return posicion ? { posicion } : null;
 }
 
@@ -1044,4 +1017,25 @@ export function moverEnCola(
     return e;
   });
   return { ...asentamiento, edificios };
+}
+
+/**
+ * Migración de saves anteriores a la Vista de Asentamiento (a petición del usuario). Las partidas guardadas
+ * antes de que existieran los dos espacios lógicos traían TODOS los edificios en coordenadas del mapa general
+ * y sin `ambito`. Aquí se asigna a cada edificio su `ambito` por tipo (`ambitoDe`) y, a los INTERNOS, se les
+ * convierte la posición a coordenada LOCAL (relativa al Centro Urbano = `asentamiento.posicion`), preservando
+ * su disposición relativa; los extractores minerales conservan su posición del mapa. Idempotente: un edificio
+ * que ya trae `ambito` (save nuevo o ya migrado) no se toca. Se aplica al importar (ver `gameStore.importarSimulacion`).
+ */
+export function migrarEdificiosAEspacioLocal(asentamientos: Asentamiento[]): Asentamiento[] {
+  return asentamientos.map((a) => {
+    if (a.edificios.every((e) => e.ambito !== undefined)) return a;
+    const edificios = a.edificios.map((e) => {
+      if (e.ambito !== undefined) return e;
+      const ambito = ambitoDe(e.tipo);
+      if (ambito === 'mapa') return { ...e, ambito };
+      return { ...e, ambito, posicion: { x: e.posicion.x - a.posicion.x, y: e.posicion.y - a.posicion.y } };
+    });
+    return { ...a, edificios };
+  });
 }

@@ -1,4 +1,4 @@
-import type { Asentamiento, BiomaTipo, CaminoComercial, CampamentoBandido, Caravana, EdificioTipo, Faccion, RecursoTipo, ZonaInfluencia } from '../domain/types';
+import type { Asentamiento, BiomaTipo, CaminoComercial, CampamentoBandido, Caravana, Edificio, EdificioTipo, Faccion, Point, RecursoTipo, ZonaInfluencia } from '../domain/types';
 import type { Mapa } from '../world/mapa';
 
 export const FACCION_COLORES = ['#c0392b', '#2980b9', '#27ae60', '#8e44ad', '#d35400', '#16a085'];
@@ -248,6 +248,30 @@ export function drawTerreno(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasEle
   }
 }
 
+/** Nombre legible de cada tipo de edificio para las etiquetas de la Vista de Asentamiento. */
+export const EDIFICIO_ETIQUETA: Record<EdificioTipo, string> = {
+  centroUrbano: 'Centro Urbano',
+  vivienda: 'Vivienda',
+  granja: 'Granja',
+  cantera: 'Cantera',
+  lenera: 'Leñera',
+  almacen: 'Almacén',
+  mina: 'Mina (oro)',
+  minaCobre: 'Mina (cobre)',
+  minaEstano: 'Mina (estaño)',
+  fundicion: 'Fundición',
+  granFundicion: 'Gran Fundición',
+  corral: 'Corral',
+  curtiduria: 'Curtiduría',
+  armeria: 'Armería',
+  carpinteria: 'Carpintería',
+  palacio: 'Palacio',
+  barracon: 'Barracón',
+  galeriaDeTiro: 'Galería de tiro',
+  mercado: 'Mercado',
+  maravilla: 'Maravilla',
+};
+
 export const EDIFICIO_COLOR: Record<EdificioTipo, string> = {
   centroUrbano: '#9b59b6',
   vivienda: '#e8e2d0',
@@ -495,9 +519,13 @@ export function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, s
   }
 
   // Edificios (Doc 4.2): cuadrado relleno = activo, semitransparente = en construcción, solo contorno = en cola.
+  // Vista de Asentamiento (a petición del usuario): en el mapa general SOLO se dibujan los edificios de
+  // `ambito: 'mapa'` (extractores minerales, plantados sobre su nodo). Todo lo demás vive en el espacio plano
+  // del asentamiento (coords locales) y se dibuja en `drawAsentamiento`, nunca aquí.
   const tamanoEdificio = 6;
   for (const asentamiento of state.asentamientos) {
     for (const edificio of asentamiento.edificios) {
+      if ((edificio.ambito ?? 'asentamiento') !== 'mapa') continue;
       const x = edificio.posicion.x * scale;
       const y = edificio.posicion.y * scale;
       const color = EDIFICIO_COLOR[edificio.tipo];
@@ -585,4 +613,119 @@ export function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, s
     ctx.lineWidth = 1.5;
     ctx.stroke();
   }
+}
+
+// --- Vista de Asentamiento (espacio plano local, a petición del usuario) ---
+//
+// Un espacio lógico SEPARADO del mapa general: plano (sin relieve/biomas/ríos), centrado en el Centro Urbano
+// y con radio = `radioPotencial` del asentamiento (crece con el nivel). Aquí se dibujan, con detalle y
+// etiquetas, TODOS los edificios internos (`ambito !== 'mapa'`), a sus coordenadas LOCALES (origen `(0,0)` en
+// el centro). Los extractores minerales (`ambito: 'mapa'`) NO viven aquí — se ven en el mapa general.
+//
+// Acoplamiento 0: recibe solo datos de dominio ya calculados (asentamiento + facciones), nunca consulta el
+// motor. La colocación local la decide `engine/construction.ts`; esto solo la pinta.
+
+export interface DrawAsentamientoState {
+  asentamiento: Asentamiento;
+  facciones: Faccion[];
+  /** Nombre a mostrar (el `nombre` del asentamiento o su `id`) — lo resuelve el caller. */
+  etiqueta: string;
+}
+
+/** Marcador + etiqueta de un edificio interno en la Vista de Asentamiento. Relleno = activo, semitransparente
+ * = en construcción, solo contorno = en cola (mismo vocabulario que el mapa general, pero más grande). */
+function dibujarEdificioLocal(
+  ctx: CanvasRenderingContext2D,
+  edificio: Edificio,
+  aPantalla: (p: Point) => Point,
+  lado: number
+): void {
+  const { x, y } = aPantalla(edificio.posicion);
+  const color = EDIFICIO_COLOR[edificio.tipo];
+  const esCentro = edificio.tipo === 'centroUrbano';
+  const l = esCentro ? lado * 1.5 : lado;
+
+  ctx.lineWidth = esCentro ? 2 : 1.4;
+  ctx.strokeStyle = esCentro ? '#1b1a17' : color;
+  if (edificio.estado === 'activo') {
+    ctx.fillStyle = color;
+    ctx.fillRect(x - l / 2, y - l / 2, l, l);
+    if (esCentro) ctx.strokeRect(x - l / 2, y - l / 2, l, l);
+  } else if (edificio.estado === 'en_construccion') {
+    ctx.fillStyle = color + '88';
+    ctx.fillRect(x - l / 2, y - l / 2, l, l);
+    ctx.strokeRect(x - l / 2, y - l / 2, l, l);
+  } else {
+    ctx.setLineDash([3, 2]);
+    ctx.strokeRect(x - l / 2, y - l / 2, l, l);
+    ctx.setLineDash([]);
+  }
+
+  // Etiqueta: solo el nombre para edificios "singulares" (todo menos Vivienda), para no saturar de "Vivienda"
+  // repetida — las Viviendas se reconocen por su color claro y son las más numerosas.
+  if (edificio.tipo !== 'vivienda') {
+    ctx.fillStyle = '#1b1a17';
+    ctx.font = '10px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText(EDIFICIO_ETIQUETA[edificio.tipo], x, y + l / 2 + 2);
+  }
+}
+
+/**
+ * Pinta el espacio plano de UN asentamiento a pantalla completa del canvas. `terrenoCache` no aplica aquí:
+ * este espacio no tiene terreno que cachear (es plano por definición).
+ */
+export function drawAsentamiento(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, state: DrawAsentamientoState): void {
+  const { asentamiento, facciones, etiqueta } = state;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Fondo plano: tono de tierra cultivable, deliberadamente distinto de cualquier bioma del mapa general para
+  // que se lea de un vistazo "estás dentro del asentamiento, no en el mundo".
+  ctx.fillStyle = '#d8cca8';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const radio = asentamiento.radioPotencial > 0 ? asentamiento.radioPotencial : 60;
+  const usable = canvas.width * 0.92;
+  const escala = usable / (radio * 2);
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+  const aPantalla = (p: Point): Point => ({ x: cx + p.x * escala, y: cy + p.y * escala });
+
+  const colorFaccion = faccionColor(asentamiento.faccionId, facciones);
+
+  // Disco construible (radio potencial) + anillos guía tenues: hacen legible el crecimiento concéntrico.
+  ctx.strokeStyle = colorFaccion + '55';
+  ctx.lineWidth = 1;
+  for (let i = 1; i <= 4; i++) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, (radio * escala * i) / 4, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.beginPath();
+  ctx.arc(cx, cy, radio * escala, 0, Math.PI * 2);
+  ctx.fillStyle = colorFaccion + '11';
+  ctx.fill();
+  ctx.strokeStyle = colorFaccion;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Edificios internos (ambito !== 'mapa'), a coords locales. Se dibujan las Viviendas primero para que las
+  // etiquetas de los edificios singulares queden por encima.
+  const internos = asentamiento.edificios.filter((e) => (e.ambito ?? 'asentamiento') !== 'mapa');
+  const lado = Math.max(9, Math.min(16, radio * escala * 0.06));
+  for (const edificio of internos.filter((e) => e.tipo === 'vivienda')) dibujarEdificioLocal(ctx, edificio, aPantalla, lado);
+  for (const edificio of internos.filter((e) => e.tipo !== 'vivienda')) dibujarEdificioLocal(ctx, edificio, aPantalla, lado);
+
+  // Título y nota.
+  ctx.fillStyle = '#1b1a17';
+  ctx.font = 'bold 15px system-ui, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillText(`${etiqueta} · nivel ${asentamiento.nivel}`, 12, 12);
+  ctx.font = '11px system-ui, sans-serif';
+  ctx.fillStyle = '#4a4436';
+  ctx.fillText('Espacio plano del asentamiento · las minas y canteras se construyen en el mapa general', 12, 32);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
 }

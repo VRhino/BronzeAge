@@ -82,11 +82,17 @@ export const LIVESTOCK = congelar({
 
 // cantidad ×4 (misma densidad de bosques por área); radio/densidad de cada bosque individual no cambian —
 // el tamaño de UN bosque no depende del tamaño del mapa.
+// Subido en Fase 0.4 (cantidad 100->170, radio 30-80->45-120, densidadMin 0.4->0.55): pedido explícito de
+// diseño de que el mapa se vea "más cubierto de bosques en las zonas que le toca" — más círculos, más
+// grandes y de base más densa, así que se solapan más dentro de `BOSQUE_TERRENO_PERMITIDO` (llano/colina) en
+// vez de quedar como manchas dispersas. No cambia DÓNDE se permiten (sigue siendo solo llano/colina, por
+// terreno) ni el criterio de densidad (sigue ponderando fertilidad, ver `generarBosques`), solo cuánto/cuán
+// grande sale cada uno.
 export const BOSQUE = congelar({
-  cantidad: 100,
-  radioMin: 30,
-  radioMax: 80,
-  densidadMin: 0.4,
+  cantidad: 170,
+  radioMin: 45,
+  radioMax: 120,
+  densidadMin: 0.55,
   densidadMax: 1.0,
 });
 
@@ -133,6 +139,53 @@ export const ELEVACION = congelar({
   // settlement.ts/construction.ts). Deliberadamente estrecha: la banda 'montana' de abajo sigue siendo
   // amplia y minable, esto solo recorta la punta.
   umbralCima: 0.685,
+});
+
+// Suavizado de espacios jugables (Fase 0.4.2 — reemplaza por completo el terraceo de Fase 0.4.1
+// (`ELEVACION_TERRAZAS`, retirado): mesetas de altura CONSTANTE se veían bien en el heightmap pero no eran
+// lo que pedía la referencia real (captura del mapa de campaña de Total War: Troy, ver
+// `Consideraciones/Fase_0_4_Definicion_Relieve_Jugable.md`) — ahí el terreno jugable es ONDULADO y CONTINUO,
+// sin escalones visibles; y el terraceo además atascaba ríos en las mesetas perfectamente planas (gradiente
+// ~0, ver `RIOS.gradienteMinimo`).
+//
+// En vez de cuantizar el VALOR de elevación, `evaluarElevacion` mezcla el ruido completo con una versión
+// del MISMO ruido evaluada con menos octavas (`octavasSuaves`, ver `evaluarRuidoParcial` en `ruido.ts`) —
+// quita el detalle fino (las octavas de longitud de onda corta, ~37-150 unidades, que se leían como bultos
+// accidentados) pero conserva la ondulación ancha (~300-600 unidades) de las octavas gruesas, así que el
+// gradiente nunca es exactamente cero en ningún punto: los ríos siguen teniendo pendiente real que seguir.
+// Investigado (ver el documento de arriba): es la técnica de "redistribución/reducción de detalle" que usa
+// la industria para terreno jugable de aspecto natural (Red Blob Games, *Making Maps with Noise
+// Functions*), más simple que simular erosión hidráulica de verdad — que exigiría una rejilla horneada,
+// rompiendo el contrato de campo continuo evaluable en cualquier punto (`Fase_0_1_Definicion.md`).
+//
+// `octavasSuaves: 2` dejan las dos octavas más gruesas de las 5 de `ELEVACION` — la forma ancha del relieve,
+// sin las 3 octavas finas. `pesoMaximo` NO es 1.0 a propósito: incluso en el centro de la banda jugable
+// queda un 10% del ruido completo mezclado, para que de cerca no se note un cambio de textura demasiado
+// limpio/artificial entre el mundo suavizado y el terreno de montaña sin tocar.
+export const ELEVACION_SUAVIZADO = congelar({
+  octavasSuaves: 2,
+  pesoMaximo: 0.9,
+});
+
+// Borde natural del mundo LIBRE (Fase 0.4, sin región — ver `elevacion.ts`): sin esto, los bordes del mapa
+// eran un corte arbitrario del ruido fractal, tan probable que cayera en llano como en agua o montaña. Un
+// segundo campo de ruido, de frecuencia mucho más gruesa que `ELEVACION` (para que decida en tramos largos
+// del perímetro, no punto a punto — como las bahías/crestas de `regiones.ts`), decide si cada tramo del borde
+// es costa profunda o pared de montaña; el peso decae suavemente desde el borde hacia adentro (`anchoFraccion`
+// del tamaño del mapa) para que la transición no sea un muro artificial de un pixel. Solo se genera/aplica
+// para el mundo libre: las regiones autoradas de `REGIONES` ya definen su propio borde a mano (p. ej. los
+// ríos troncales de Nilo/Mesopotamia cruzan el borde norte/sur — un borde genérico de montaña ahí rompería
+// ese diseño). `objetivoMontana` muy alto (por encima de `umbralCima`) y `objetivoCosta` muy bajo (por debajo
+// de `umbralAgua`) a propósito: el borde debe leerse inequívocamente como "empinado"/"profundo", no como una
+// colina o una playa más.
+export const ELEVACION_BORDE = congelar({
+  anchoFraccion: 0.09,
+  octavas: 2,
+  escala: 0.0012,
+  lacunaridad: 2,
+  persistencia: 0.5,
+  objetivoCosta: 0.12,
+  objetivoMontana: 0.97,
 });
 
 // Ríos (Fase 0.1): nacen en montaña y descienden por gradiente de máxima pendiente (ver worldgen/rios.ts).
