@@ -4,6 +4,7 @@ import {
   EDIFICIO_CATALOGO,
   EXTRACCION_MAXIMOS,
   LINEAS_PRODUCCION,
+  MERCADO_PUESTOS_POR_NIVEL,
   NECESIDADES,
   NIVEL_ASENTAMIENTO,
   produccionTrigoDeGranja,
@@ -277,6 +278,51 @@ function crearEdificioEnCola(tipo: EdificioTipo, posicion: Point, id: string, fu
 }
 
 /**
+ * Puestos que se añaden a la ZONA de Mercado al alcanzar `nivel` (a petición del usuario, ver
+ * Consideraciones/Vista_Asentamiento_Trazado_Urbano.md). Nacen GRATIS y ya `activo`: son parte del Mercado que
+ * ya se pagó, no obras independientes — encolarlos metería 7 entradas de golpe en la cola al subir a nivel 2 y
+ * competirían por el cupo de obras simultáneas.
+ *
+ * `existentes` debe incluir todo lo que ya ocupa suelo (incluidos los puestos creados en esta misma llamada,
+ * que se van acumulando) para que `sitioEnBarrio` no proponga dos veces la misma celda. Si un puesto no
+ * encuentra hueco se salta en silencio: la zona es superficie, no función — el cupo de flota lo da el nivel de
+ * la pieza principal, tenga o no todo su acompañamiento.
+ */
+function crearPuestosDeMercado(
+  asentamiento: Pick<Asentamiento, 'id' | 'radioPotencial'>,
+  nivel: number,
+  existentes: Edificio[]
+): Edificio[] {
+  const formas = MERCADO_PUESTOS_POR_NIVEL[nivel] ?? [];
+  if (formas.length === 0) return [];
+
+  // Ids únicos verificados contra los que ya existen: mismo criterio que `nextId` en `evaluarNecesidades`, que
+  // documenta el bug de ids repetidas que duplicaba edificios (y con ellos su producción).
+  const idsUsadas = new Set(existentes.map((e) => e.id));
+  let contador = existentes.length;
+  const nuevos: Edificio[] = [];
+
+  for (const forma of formas) {
+    const posicion = sitioEnTrazado(asentamiento, [...existentes, ...nuevos], 'puestoMercado', forma);
+    if (!posicion) continue;
+    let id = `edificio-${asentamiento.id}-${contador++}`;
+    while (idsUsadas.has(id)) id = `edificio-${asentamiento.id}-${contador++}`;
+    idsUsadas.add(id);
+    nuevos.push({
+      id,
+      tipo: 'puestoMercado',
+      posicion,
+      estado: 'activo',
+      ticksRestantes: 0,
+      ambito: 'asentamiento',
+      // En un puesto `nivelInterno` no es progresión: identifica su FORMA (ver `PUESTO_MERCADO_FORMA`).
+      nivelInterno: forma,
+    });
+  }
+  return nuevos;
+}
+
+/**
  * Un extractor (cantera/mina/minaCobre/minaEstano/corral) necesita otra instancia si NINGUNA fuente propia
  * sigue viva (Doc 1.4: escasez real por ubicación — sin esto, agotado el único yacimiento el asentamiento se
  * queda sin ese recurso PARA SIEMPRE) o si el asentamiento todavía no llegó al tope de extractores del tipo
@@ -303,6 +349,21 @@ function necesitaNuevoExtractor(asentamiento: Asentamiento, tipo: EdificioTipo, 
  * (`anadirEdificioManualmente`) no la respeta a propósito: es una decisión informada de Gobernador/Maestro de
  * Obras, no un heurístico que deba protegerla de sí misma.
  */
+/**
+ * ¿El asentamiento ya llegó a su tope de Almacenes (a petición del usuario)? La capacidad de almacenamiento no
+ * puede crecer sin límite: cada nivel de asentamiento admite un número fijo
+ * (`NECESIDADES.maximoAlmacenesPorNivel`).
+ *
+ * Cuenta los de CUALQUIER estado —activo, en obra y en cola— para que el tope no se pueda saltar encolando
+ * varios a la vez, y se aplica igual a la auto-construcción y a la adición manual: es una regla del juego, no
+ * un heurístico interno.
+ */
+export function alcanzoTopeDeAlmacenes(asentamiento: Asentamiento): boolean {
+  const tope = NECESIDADES.maximoAlmacenesPorNivel[asentamiento.nivel];
+  if (tope === undefined) return false;
+  return asentamiento.edificios.filter((e) => e.tipo === 'almacen').length >= tope;
+}
+
 export function tieneInsumoDeArranque(asentamiento: Asentamiento, tipo: EdificioTipo): boolean {
   const receta = nivelesDe(tipo)?.[1]?.recetas ?? [];
   if (receta.length === 0) return true;
@@ -470,12 +531,16 @@ function evaluarNecesidades(
     if (sitio) proponer(crearEdificioEnCola('vivienda', sitio, nextId()), conUrgencia(SCORE_BANDAS.crecimiento, ocupacionMaxima * 100));
   }
 
-  // Almacén: urgencia escala con el % de ocupación del recurso más lleno.
+  // Almacén: urgencia escala con el % de ocupación del recurso más lleno, con tope por nivel de asentamiento.
   const ocupacionAlmacenes = Object.values(asentamiento.almacen)
     .filter((r) => r.capacidad > 0)
     .map((r) => r.cantidad / r.capacidad);
   const ocupacionAlmacenMaxima = ocupacionAlmacenes.length ? Math.max(...ocupacionAlmacenes) : 0;
-  if (ocupacionAlmacenMaxima >= NECESIDADES.umbralAlmacenAmpliacion && !hayProyectoPendiente(asentamiento, 'almacen')) {
+  if (
+    ocupacionAlmacenMaxima >= NECESIDADES.umbralAlmacenAmpliacion &&
+    !hayProyectoPendiente(asentamiento, 'almacen') &&
+    !alcanzoTopeDeAlmacenes(asentamiento)
+  ) {
     const sitio = sitioEnBarrio(asentamiento, ocupados(), 'almacen');
     if (sitio) proponer(crearEdificioEnCola('almacen', sitio, nextId()), conUrgencia(SCORE_BANDAS.crecimiento, ocupacionAlmacenMaxima * 100));
   }
@@ -607,6 +672,10 @@ function avanzarMejoras(
     almacenActual = descontarRecursos(almacenActual, costo);
     eventos.push(`${edificio.tipo} mejora a nivel interno ${nivelSiguiente}.`);
     edificios[indice] = { ...edificio, nivelInterno: nivelSiguiente, posicion };
+
+    // La zona de Mercado se puebla al subir de nivel: los puestos se añaden a ESTA misma lista, no a una
+    // aparte, para que las mejoras que queden por evaluar en este mismo tick vean sus celdas ya ocupadas.
+    if (edificio.tipo === 'mercado') edificios.push(...crearPuestosDeMercado(asentamiento, nivelSiguiente, edificios));
   }
   return { asentamiento: { ...asentamiento, edificios }, almacen: almacenActual, eventos };
 }
@@ -731,6 +800,9 @@ export function avanzarConstruccion(
   const eventos: string[] = [];
   let almacen = asentamiento.almacen;
   const resultados = new Map<string, Edificio>();
+  // Puestos de la zona de Mercado creados en este tick (ver `crearPuestosDeMercado`) — se añaden al final,
+  // junto a los proyectos nuevos, porque no estaban en `asentamiento.edificios` al empezar.
+  const puestosNuevos: Edificio[] = [];
 
   const ratioMano = ratioManoObra(asentamiento);
   // Fertilidad de referencia de la zona (Vista de Asentamiento): todas las Granjas del asentamiento rinden con
@@ -754,6 +826,11 @@ export function avanzarConstruccion(
           for (const recurso of Object.keys(almacen)) {
             almacen = { ...almacen, [recurso]: { ...almacen[recurso]!, capacidad: almacen[recurso]!.capacidad + bonus } };
           }
+        }
+        // El Mercado no nace solo: al terminarse aparece con los puestos de su nivel 1 (a petición del
+        // usuario, es una ZONA). Los de niveles 2 y 3 los añade `avanzarMejoras` al subir de nivel interno.
+        if (edificio.tipo === 'mercado') {
+          puestosNuevos.push(...crearPuestosDeMercado(asentamiento, 1, [...asentamiento.edificios, ...puestosNuevos]));
         }
         resultados.set(edificio.id, { ...edificio, estado: 'activo', ticksRestantes: 0 });
       } else {
@@ -809,7 +886,7 @@ export function avanzarConstruccion(
     cupoObraDisponible -= 1;
   }
 
-  const edificiosActualizados = asentamiento.edificios.map((e) => resultados.get(e.id)!);
+  const edificiosActualizados = [...asentamiento.edificios.map((e) => resultados.get(e.id)!), ...puestosNuevos];
 
   // Rediseño de progreso (Fase 0, Doc 4.2.1): recetas de crafting de los edificios de transformación activos.
   almacen = avanzarRecetas({ ...asentamiento, edificios: edificiosActualizados }, almacen);
@@ -950,8 +1027,16 @@ export function anadirEdificioManualmente(
   if (tipo === 'centroUrbano') {
     throw new ConstruccionManualInvalidaError('El Centro Urbano nunca pasa por la cola de construcción.');
   }
+  if (tipo === 'puestoMercado') {
+    throw new ConstruccionManualInvalidaError('Los puestos son parte de la zona de Mercado: aparecen solos al subir su nivel interno.');
+  }
   if (EDIFICIOS_UNICOS.has(tipo) && (edificiosPorTipoYEstado(asentamiento, tipo).length > 0 || hayProyectoPendiente(asentamiento, tipo))) {
     throw new ConstruccionManualInvalidaError(`Ya existe (o está en curso) una ${tipo} en este asentamiento.`);
+  }
+  if (tipo === 'almacen' && alcanzoTopeDeAlmacenes(asentamiento)) {
+    throw new ConstruccionManualInvalidaError(
+      `Este asentamiento ya tiene el máximo de Almacenes para su nivel (${NECESIDADES.maximoAlmacenesPorNivel[asentamiento.nivel]}).`
+    );
   }
   const requisito = requisitoNivelBase(tipo);
   if (asentamiento.nivel < requisito) {
@@ -1050,13 +1135,42 @@ export function moverEnCola(
  */
 export function migrarEdificiosAEspacioLocal(asentamientos: Asentamiento[]): Asentamiento[] {
   return asentamientos.map((a) => {
-    if (a.edificios.every((e) => e.ambito !== undefined)) return a;
-    const edificios = a.edificios.map((e) => {
-      if (e.ambito !== undefined) return e;
-      const ambito = ambitoDe(e.tipo);
-      if (ambito === 'mapa') return { ...e, ambito };
-      return { ...e, ambito, posicion: { x: e.posicion.x - a.posicion.x, y: e.posicion.y - a.posicion.y } };
-    });
-    return { ...a, edificios };
+    const necesitaAmbito = a.edificios.some((e) => e.ambito === undefined);
+    const edificios = necesitaAmbito
+      ? a.edificios.map((e) => {
+          if (e.ambito !== undefined) return e;
+          const ambito = ambitoDe(e.tipo);
+          if (ambito === 'mapa') return { ...e, ambito };
+          return { ...e, ambito, posicion: { x: e.posicion.x - a.posicion.x, y: e.posicion.y - a.posicion.y } };
+        })
+      : a.edificios;
+    const conPuestos = completarPuestosDeMercado({ ...a, edificios });
+    return conPuestos === edificios && !necesitaAmbito ? a : { ...a, edificios: conPuestos };
   });
+}
+
+/**
+ * Rellena los puestos que le falten a la zona de Mercado. Sirve para partidas guardadas ANTES de que el
+ * Mercado fuera una zona (traen la pieza principal suelta, sin acompañamiento) y para cualquier save cuyo
+ * Mercado subiera de nivel antes de existir este sistema.
+ *
+ * Idempotente: cuenta los puestos que ya hay y solo añade la diferencia hasta los que le tocan por nivel, así
+ * que aplicarla dos veces no duplica nada. Devuelve el MISMO array si no hay nada que añadir.
+ */
+function completarPuestosDeMercado(asentamiento: Asentamiento): Edificio[] {
+  const mercado = asentamiento.edificios.find((e) => e.tipo === 'mercado');
+  if (!mercado) return asentamiento.edificios;
+
+  const nivel = mercado.nivelInterno ?? 1;
+  const esperados: number[] = [];
+  for (let n = 1; n <= nivel; n++) esperados.push(...(MERCADO_PUESTOS_POR_NIVEL[n] ?? []));
+  const faltan = esperados.length - asentamiento.edificios.filter((e) => e.tipo === 'puestoMercado').length;
+  if (faltan <= 0) return asentamiento.edificios;
+
+  // Se piden por nivel para respetar la mezcla de formas, quedándose solo con los que falten.
+  const nuevos: Edificio[] = [];
+  for (let n = 1; n <= nivel && nuevos.length < faltan; n++) {
+    nuevos.push(...crearPuestosDeMercado(asentamiento, n, [...asentamiento.edificios, ...nuevos]));
+  }
+  return [...asentamiento.edificios, ...nuevos.slice(0, faltan)];
 }

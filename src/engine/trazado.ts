@@ -1,5 +1,5 @@
 import type { Asentamiento, Edificio, EdificioTipo, Point } from '../domain/types';
-import { EDIFICIO_CATALOGO, EDIFICIO_TAMANO, REJILLA_ASENTAMIENTO, TRAZADO } from '../constants';
+import { EDIFICIO_CATALOGO, EDIFICIO_TAMANO, PUESTO_MERCADO_FORMA, REJILLA_ASENTAMIENTO, TRAZADO } from '../constants';
 
 /**
  * TRAZADO URBANO DINÁMICO de la Vista de Asentamiento (a petición del usuario).
@@ -73,6 +73,8 @@ export function tamanoEdificio(tipo: EdificioTipo, nivelInterno?: number): Taman
     const niveles = EDIFICIO_CATALOGO.granja.niveles as Record<number, { tamano?: TamanoEdificio }>;
     return niveles[nivelInterno ?? 1]?.tamano ?? { ancho: 1, alto: 1 };
   }
+  // Puesto de Mercado: `nivelInterno` no es progresión, identifica qué FORMA tiene esta pieza de la zona.
+  if (tipo === 'puestoMercado') return PUESTO_MERCADO_FORMA[nivelInterno ?? 1] ?? { ancho: 1, alto: 1 };
   return EDIFICIO_TAMANO[tipo] ?? { ancho: 1, alto: 1 };
 }
 
@@ -283,6 +285,9 @@ export const CATEGORIA_POR_TIPO: Partial<Record<EdificioTipo, CategoriaAsentamie
   galeriaDeTiro: 'militar',
   carpinteria: 'militar',
   mercado: 'mercado',
+  // Los puestos comparten el barrio del Mercado: así la acreción que ya existe (`distanciaAlBarrio`) los
+  // agrupa alrededor de la pieza principal sola, sin ninguna regla nueva de "quedar pegados".
+  puestoMercado: 'mercado',
 };
 
 const CATEGORIAS_ASENTAMIENTO: CategoriaAsentamiento[] = ['residencial', 'industria', 'militar', 'mercado', 'almacenaje'];
@@ -331,6 +336,16 @@ const TIPOS_AFUERAS = new Set<EdificioTipo>(['granja', 'corral']);
 
 export function esDeAfueras(tipo: EdificioTipo): boolean {
   return TIPOS_AFUERAS.has(tipo);
+}
+
+/**
+ * Hasta dónde llegan las afueras. Nunca menos que `radioAfuerasMin + anchoBandaAfueras`, aunque la zona de
+ * influencia sea más chica: el campo de una ciudad está FUERA de su zona de influencia, y si el tope fuera el
+ * de la zona, al fundar (radio inicial 30, radio vedado 60) no habría ningún hueco válido para la Granja
+ * inicial y caería al fallback del origen, encima del Centro Urbano.
+ */
+function radioMaximoAfueras(radioPotencial: number): number {
+  return Math.max(radioPotencial, TRAZADO.radioAfuerasMin + TRAZADO.anchoBandaAfueras);
 }
 
 // --- Crecimiento de la red ---
@@ -656,7 +671,7 @@ export function sitiosParaTipo(
   const red = redDeCalles(asentamiento.id, ocupados);
 
   if (esDeAfueras(tipo)) {
-    const candidatos = candidatosLibres(asentamiento.radioPotencial, null, tamano, ocupadas, red, TRAZADO.radioAfuerasMin);
+    const candidatos = candidatosLibres(radioMaximoAfueras(asentamiento.radioPotencial), null, tamano, ocupadas, red, TRAZADO.radioAfuerasMin);
     return porDistanciaAlOrigen(candidatos, true).map((c) => c.punto);
   }
   if (tipo === 'palacio') {
@@ -718,8 +733,10 @@ export function reubicarPorTamano(
   const tamano = tamanoEdificio(edificio.tipo, nivelInternoNuevo);
   const ocupadas = celdasOcupadas(todos, edificio.id);
   const red = redDeCalles(asentamiento.id, todos);
-  const distanciaMinima = esDeAfueras(edificio.tipo) ? TRAZADO.radioAfuerasMin : 0;
-  const candidatos = candidatosLibres(asentamiento.radioPotencial, null, tamano, ocupadas, red, distanciaMinima);
+  const afueras = esDeAfueras(edificio.tipo);
+  const distanciaMinima = afueras ? TRAZADO.radioAfuerasMin : 0;
+  const radioMaximo = afueras ? radioMaximoAfueras(asentamiento.radioPotencial) : asentamiento.radioPotencial;
+  const candidatos = candidatosLibres(radioMaximo, null, tamano, ocupadas, red, distanciaMinima);
   if (candidatos.length === 0) return null;
 
   let mejor = candidatos[0]!;

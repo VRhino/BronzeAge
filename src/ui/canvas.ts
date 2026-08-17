@@ -269,6 +269,7 @@ export const EDIFICIO_ETIQUETA: Record<EdificioTipo, string> = {
   barracon: 'Barracón',
   galeriaDeTiro: 'Galería de tiro',
   mercado: 'Mercado',
+  puestoMercado: 'Puesto de mercado',
   maravilla: 'Maravilla',
 };
 
@@ -293,6 +294,9 @@ export const EDIFICIO_COLOR: Record<EdificioTipo, string> = {
   galeriaDeTiro: '#4a7a4a',
   palacio: '#c9a227',
   mercado: '#2d9c8f',
+  // Tono más claro del Mercado a propósito: los puestos son piezas de SU zona, y con la etiqueta de texto
+  // retirada del lienzo el color es lo único que agrupa el conjunto a la vista.
+  puestoMercado: '#7fc9bf',
   maravilla: '#ffd700',
 };
 
@@ -649,8 +653,11 @@ export interface DrawAsentamientoState {
 }
 
 /**
- * Marcador + etiqueta de un edificio interno en la Vista de Asentamiento. Relleno = activo, semitransparente
- * = en construcción, solo contorno = en cola (mismo vocabulario que el mapa general, pero más grande).
+ * Marcador de un edificio interno en la Vista de Asentamiento. Relleno = activo, semitransparente = en
+ * construcción, solo contorno = en cola (mismo vocabulario que el mapa general, pero más grande).
+ *
+ * SIN etiqueta de texto (a petición del usuario): el tipo se identifica por color, y el rótulo bajo cada
+ * edificio ensuciaba la vista ahora que la ciudad es densa y las manzanas se leen como bloques.
  *
  * `huella` es el rectángulo que ocupa el edificio, en píxeles de pantalla, ya calculado por el motor: cada
  * tipo tiene su tamaño y Granja además cambia con el nivel. Se dibuja con un margen HACIA ADENTRO porque los
@@ -684,16 +691,6 @@ function dibujarEdificioLocal(
     ctx.setLineDash([3, 2]);
     ctx.strokeRect(x, y, ancho, alto);
     ctx.setLineDash([]);
-  }
-
-  // Etiqueta: solo el nombre para edificios "singulares" (todo menos Vivienda), para no saturar de "Vivienda"
-  // repetida — las Viviendas se reconocen por su color claro y son las más numerosas.
-  if (edificio.tipo !== 'vivienda') {
-    ctx.fillStyle = '#1b1a17';
-    ctx.font = '10px system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    ctx.fillText(EDIFICIO_ETIQUETA[edificio.tipo], x + ancho / 2, y + alto + 2);
   }
 }
 

@@ -187,8 +187,10 @@ export const CATALOGOS = {
   // nunca pasa por cola (Doc 1.3) — usado por el selector de "añadir a la cola" de Gobernador/Maestro de
   // Obras Y por el segmento "Info:" que muestra costo/tiempo/gates antes de confirmar (mismo patrón que
   // `tropasReclutables` para el reclutamiento).
+  // `puestoMercado` también fuera: no se construye, lo crea el motor al subir de nivel el Mercado (ver
+  // `crearPuestosDeMercado`, engine/construction.ts).
   catalogoEdificios: (Object.keys(EDIFICIO_CATALOGO) as EdificioTipo[])
-    .filter((tipo) => tipo !== 'centroUrbano')
+    .filter((tipo) => tipo !== 'centroUrbano' && tipo !== 'puestoMercado')
     .map((tipo) => {
       const def = EDIFICIO_CATALOGO[tipo] as {
         costo: Partial<Record<string, number>>;

@@ -87,6 +87,7 @@ const EDIFICIO_NOMBRE: Record<string, string> = {
   palacio: 'Palacio',
   granFundicion: 'Gran Fundición',
   mercado: 'Mercado',
+  puestoMercado: 'Puesto de mercado',
   maravilla: 'Maravilla',
 };
 
@@ -110,6 +111,7 @@ const EDIFICIO_FUNCION: Record<string, string> = {
   palacio: 'Desbloquea la aparición de Nobleza. Solo se añade a la cola manualmente (Gobernador/Maestro de Obras).',
   granFundicion: 'Edificio militar de élite — requiere nivel de Facción alto; habilita tropas de Nobleza. Solo se añade a la cola manualmente (Gobernador/Maestro de Obras).',
   mercado: 'Exige poder colocar órdenes de mercado y construir caravanas comerciales propias. Su nivel interno fija el cupo de flota. Solo se añade a la cola manualmente (Gobernador/Maestro de Obras).',
+  puestoMercado: 'Pieza de la zona de Mercado: no se construye ni cuesta nada, aparece sola al completarse el Mercado y al subir cada nivel interno. Solo ocupa suelo — el cupo de flota lo fija la pieza principal.',
   maravilla: 'Edificio trofeo de coste extremo — requiere asentamiento en nivel máximo (3). Solo se añade a la cola manualmente (Gobernador/Maestro de Obras). El ciclo de servidor que se cerraría al completarla no está implementado todavía.',
 };
 

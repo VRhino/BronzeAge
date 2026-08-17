@@ -4,9 +4,10 @@
 // Leñera/Corral son internos aunque su producción dependa de rasgos de la zona en el mapa general.
 import { describe, expect, it } from 'vitest';
 import type { Asentamiento, Edificio } from '../../domain/types';
-import { ZONA_INFLUENCIA } from '../../constants';
+import { REJILLA_ASENTAMIENTO, TRAZADO, ZONA_INFLUENCIA } from '../../constants';
 import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
 import { migrarEdificiosAEspacioLocal } from '../construction';
+import { esDeAfueras } from '../trazado';
 import { computeTodasLasZonas, mejorFertilidadEnZona } from '../zones';
 import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, mockMathRandomDeterminista } from './fixtures';
 
@@ -40,7 +41,13 @@ describe('Vista de Asentamiento — fundación en espacio local', () => {
     for (const e of asentamiento.edificios) {
       expect(e.ambito).toBe('asentamiento');
       // Coords LOCALES: nada que ver con la posición del asentamiento en el mapa general (~500,500).
-      expect(modulo(e.posicion)).toBeLessThanOrEqual(ZONA_INFLUENCIA.radioInicial + 1e-6);
+      //
+      // Granja y Corral se miden contra otro techo: viven A LAS AFUERAS, fuera del radio vedado de
+      // `TRAZADO.radioAfuerasMin`, que es mayor que el radio inicial de la zona de influencia. El campo de una
+      // ciudad está fuera de su zona de influencia, no dentro (ver `radioMaximoAfueras`, engine/trazado.ts).
+      const techo = esDeAfueras(e.tipo) ? TRAZADO.radioAfuerasMin + TRAZADO.anchoBandaAfueras : ZONA_INFLUENCIA.radioInicial;
+      expect(modulo(e.posicion)).toBeLessThanOrEqual(techo + 1e-6);
+      if (esDeAfueras(e.tipo)) expect(modulo(e.posicion)).toBeGreaterThanOrEqual(TRAZADO.radioAfuerasMin);
     }
   });
 });
@@ -67,9 +74,12 @@ describe('Vista de Asentamiento — colocación tras simulación', () => {
           expect(nodo).toBeDefined();
           expect(e.posicion).toEqual(nodo!.posicion);
         } else {
-          // Interno: coords locales dentro del disco de radio `radioPotencial`.
+          // Interno: coords locales dentro del disco local. Granja y Corral se salen a propósito del
+          // `radioPotencial` —están a las afueras, fuera del radio vedado— así que su techo es el del lienzo.
           expect(e.ambito ?? 'asentamiento').toBe('asentamiento');
-          expect(modulo(e.posicion)).toBeLessThanOrEqual(a.radioPotencial + 1e-6);
+          const techo = esDeAfueras(e.tipo) ? REJILLA_ASENTAMIENTO.radioMapa : a.radioPotencial;
+          expect(modulo(e.posicion)).toBeLessThanOrEqual(techo + 1e-6);
+          if (esDeAfueras(e.tipo)) expect(modulo(e.posicion)).toBeGreaterThanOrEqual(TRAZADO.radioAfuerasMin);
         }
       }
     } finally {

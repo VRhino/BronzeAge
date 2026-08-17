@@ -86,6 +86,12 @@ export type EdificioTipo =
   // de la flota de caravanas propias (ver CARAVANA_CATALOGO.comercial, engine/trade.ts). Vía política del
   // Tesorero, mismo patrón que Barracón/Galería de tiro/Palacio — no auto-construcción.
   | 'mercado'
+  // Pieza satélite de la ZONA de Mercado (a petición del usuario, ver
+  // Consideraciones/Vista_Asentamiento_Trazado_Urbano.md): el Mercado no es un edificio suelto sino una zona
+  // que se puebla de puestos al subir de nivel interno. Deliberadamente un tipo APARTE de 'mercado': así el
+  // comercio (cupoCaravanas, tieneMercadoActivo, EDIFICIOS_UNICOS) sigue viendo exactamente UNA instancia de
+  // Mercado y no hay que tocarlo. Un puesto no se construye, no progresa y no gatea nada — solo ocupa suelo.
+  | 'puestoMercado'
   // Maravilla (Roadmap_Escalado.md Eje 4, a petición del usuario): edificio único de coste extremo, solo el
   // EDIFICIO en sí — el ciclo de servidor de 12 meses que cierra al completarla queda fuera de esta pasada
   // (requiere infraestructura de servidor/multi-instancia que Fase 0 no tiene, ver Roadmap_Escalado.md).

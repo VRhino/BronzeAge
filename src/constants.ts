@@ -133,14 +133,16 @@ export const EDIFICIO_CATALOGO = {
   // Artesanos varado — cada Vivienda ahora aporta 15 espacios de Pesants Y, por separado, 5 de Artesanos.
   vivienda: { costo: { madera: 10 }, tiempoConstruccionTicks: 4, capacidadPesants: 15, capacidadArtesanos: 5 },
   /**
-   * Granja: 4 niveles internos (a petición del usuario, trazado urbano dinámico). Cada salto DUPLICA el costo
-   * en materiales respecto al anterior, tomando como base su `costo` de construcción (madera 30 → 60, 120,
-   * 240), y duplica también su rinde de trigo — una granja de nivel 4 ocupa 36 celdas contra la única del
-   * nivel 1, así que producir lo mismo convertiría la mejora en gasto puro. El tamaño por nivel vive aquí
-   * mismo (`tamano`) y no en `EDIFICIO_TAMANO`, porque es el único tipo cuya huella cambia con el nivel.
+   * Granja: 4 niveles internos (a petición del usuario, trazado urbano dinámico). El costo en materiales
+   * DUPLICA en cada salto, tomando como base su `costo` de construcción (madera 30 → 60, 120, 240).
    *
-   * `trabajadoresRequeridos` se repite igual en los 4 niveles (el valor plano que Granja ya tenía): sube el
-   * rinde por granja, no la mano de obra que exige.
+   * El rinde de trigo sube MUCHO más despacio que el costo, a petición del usuario tras ver que duplicarlo
+   * también desbalanceaba la comida: los multiplicadores son sobre el nivel 1, no acumulativos —
+   * ×1 / ×1.5 / ×2 / ×3 (15 → 22.5 → 30 → 45). Una granja de nivel 4 cuesta 8 veces la de nivel 1 y rinde 3.
+   *
+   * El tamaño por nivel vive aquí mismo (`tamano`) y no en `EDIFICIO_TAMANO`, porque es el único tipo cuya
+   * huella cambia con el nivel. `trabajadoresRequeridos` se repite igual en los 4 (el valor plano que Granja
+   * ya tenía): sube el rinde por granja, no la mano de obra que exige.
    */
   granja: {
     costo: { madera: 30 },
@@ -148,10 +150,10 @@ export const EDIFICIO_CATALOGO = {
     produccionBaseTrigo: 15,
     trabajadoresRequeridos: 4,
     niveles: {
-      1: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 15, tamano: { ancho: 1, alto: 1 } },
-      2: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 30, tamano: { ancho: 2, alto: 3 }, costoMejora: { madera: 60 } },
-      3: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 60, tamano: { ancho: 4, alto: 3 }, costoMejora: { madera: 120 } },
-      4: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 120, tamano: { ancho: 6, alto: 6 }, costoMejora: { madera: 240 } },
+      1: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 15, tamano: { ancho: 2, alto: 2 } },
+      2: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 22.5, tamano: { ancho: 2, alto: 3 }, costoMejora: { madera: 60 } },
+      3: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 30, tamano: { ancho: 4, alto: 3 }, costoMejora: { madera: 120 } },
+      4: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 45, tamano: { ancho: 6, alto: 6 }, costoMejora: { madera: 240 } },
     } as Record<number, NivelEdificioTransformacion>,
   },
   cantera: { costo: { madera: 20 }, tiempoConstruccionTicks: 5, produccionBasePiedra: 5, trabajadoresRequeridos: 4 },
@@ -384,6 +386,12 @@ export const EDIFICIO_CATALOGO = {
     } as Record<number, NivelEdificioTransformacion>,
   },
 
+  // Pieza satélite de la zona de Mercado (a petición del usuario). NO se construye: la crea el motor sola,
+  // gratis y ya activa, cuando el Mercado alcanza cada nivel interno (ver `crearPuestosDeMercado`,
+  // engine/construction.ts). El costo y el tiempo van a cero por la misma razón que en centroUrbano — la
+  // entrada existe solo porque `EDIFICIO_CATALOGO[tipo]` se indexa con `EdificioTipo` en varios sitios.
+  puestoMercado: { costo: {}, tiempoConstruccionTicks: 0 },
+
   // Maravilla (Roadmap_Escalado.md Eje 4, a petición del usuario) — SOLO el edificio en esta pasada: el ciclo
   // de servidor de 12 meses que se cierra al completarla (reset + Facción ganadora persistiendo como legado
   // NPC) queda fuera de alcance, requiere infraestructura de servidor/multi-instancia que Fase 0 no tiene (ver
@@ -412,6 +420,16 @@ export const NECESIDADES = {
   // (mismo criterio que el resto de edificios de supervivencia).
   maximoGranjasPendientesEnDeficit: 3,
   umbralAlmacenAmpliacion: 0.9,
+  /**
+   * Tope de Almacenes por nivel de asentamiento (a petición del usuario): sin él, la ampliación de capacidad
+   * no tenía techo — cada vez que el recurso más lleno pasaba el umbral se encolaba otro Almacén, y la
+   * capacidad podía crecer sin límite mientras hubiera madera y piedra.
+   *
+   * Cuenta los Almacenes en CUALQUIER estado (activos, en obra y en cola) para que el tope no se pueda saltar
+   * encolando varios de golpe. Aplica tanto a la auto-construcción como a la adición manual: no es un
+   * heurístico que proteja a la IA de sí misma, es una regla del juego.
+   */
+  maximoAlmacenesPorNivel: { 1: 4, 2: 8, 3: 16 } as Record<number, number>,
   // Overhaul de auto-construcción (modelo "pago al encolar", ver engine/construction.ts): dos cupos con
   // significado físico separado, en vez del único `maximoEnCola` + slots reservados por categoría de antes.
   // `maximoEnCola`: cuántos proyectos pueden estar PAGADOS Y A LA ESPERA de un hueco de obra (`en_cola`).
@@ -515,8 +533,8 @@ export const REJILLA_ASENTAMIENTO = {
 
 /**
  * Huella de cada tipo de edificio en la rejilla local, en celdas (a petición del usuario). Un tipo ausente
- * mide 1x1 — el caso por defecto (Vivienda, Leñera, Almacén). Granja NO está aquí: es el único tipo cuya
- * huella cambia con el nivel interno, y vive en `EDIFICIO_CATALOGO.granja.niveles[n].tamano`.
+ * mide 1x1 — el caso por defecto (Vivienda, Leñera). Granja NO está aquí: es el único tipo cuya huella cambia
+ * con el nivel interno, y vive en `EDIFICIO_CATALOGO.granja.niveles[n].tamano`.
  *
  * Se lee siempre a través de `tamanoEdificio` (engine/trazado.ts), nunca directo, para que el caso de Granja
  * quede resuelto en un solo sitio.
@@ -532,6 +550,32 @@ export const EDIFICIO_TAMANO: Record<string, { ancho: number; alto: number }> = 
   mercado: { ancho: 3, alto: 2 },
   palacio: { ancho: 4, alto: 4 },
   corral: { ancho: 4, alto: 3 },
+  almacen: { ancho: 2, alto: 1 },
+};
+
+/**
+ * Formas que puede tener un puesto de Mercado (a petición del usuario: la zona se compone de piezas de tamaños
+ * distintos). El discriminador es `Edificio.nivelInterno`, que en un puesto NO es progresión: identifica qué
+ * forma tiene. Se reutiliza así el mecanismo que ya existe para Granja (`tamanoEdificio(tipo, nivelInterno)`,
+ * engine/trazado.ts) en vez de persistir el tamaño en el `Edificio` — el tamaño siempre se DERIVA del tipo.
+ */
+export const PUESTO_MERCADO_FORMA: Record<number, { ancho: number; alto: number }> = {
+  1: { ancho: 2, alto: 2 },
+  2: { ancho: 3, alto: 2 },
+  3: { ancho: 1, alto: 1 },
+};
+
+/**
+ * Puestos que se AÑADEN al alcanzar cada nivel interno de Mercado, como lista de formas
+ * (`PUESTO_MERCADO_FORMA`). No es acumulativo: cada nivel suma los suyos a los que ya había.
+ *
+ * Con la pieza principal (el propio Mercado, 3x2) la zona queda en 3 piezas en nivel 1, 10 en nivel 2 y 12 en
+ * nivel 3, que es la composición acordada en Consideraciones/Vista_Asentamiento_Trazado_Urbano.md.
+ */
+export const MERCADO_PUESTOS_POR_NIVEL: Record<number, number[]> = {
+  1: [1, 1],
+  2: [3, 3, 3, 3, 1, 1, 1],
+  3: [2, 2],
 };
 
 /** Rinde de trigo de UNA Granja según su nivel interno — la mejora duplica producción y costo a la vez (ver
@@ -552,17 +596,20 @@ export function produccionTrigoDeGranja(nivelInterno: number | undefined): numbe
  *   en engine/trazado.ts), nunca `Math.random()`. El fondo de la manzana no se configura: son siempre dos
  *   hileras, una a cada calle, porque más atrás ya no se puede construir sin traer otra calle
  *   (`FONDO_MANZANA`, engine/trazado.ts).
- * - `radioAfuerasMin`: distancia mínima al Centro Urbano para Granja y Corral, "a las afueras" (§8 del doc).
- *   Es solo un SUELO: lo que de verdad las manda afuera es que ambas prefieren siempre el hueco MÁS LEJANO
- *   disponible, así que acompañan al borde de la ciudad a medida que crece. El suelo existe para el caso en
- *   que las afueras estén llenas — sin él, la granja caería pegada al Centro Urbano, que es justo el bug que
- *   se reportó. Vale 24 = 4 celdas, justo fuera del Centro Urbano (3x3 = 18 unidades de lado), para que la
- *   Granja inicial siga entrando en el `ZONA_INFLUENCIA.radioInicial` de 30 al fundar.
+ * - `radioAfuerasMin`: radio VEDADO alrededor del Centro Urbano — dentro de él no puede aparecer ninguna
+ *   Granja ni ningún Corral (§8 del doc). Son **10 celdas** a petición del usuario, que seguía viendo granjas
+ *   demasiado cerca del centro con el suelo anterior de 4: no basta con que prefieran el hueco más lejano, hay
+ *   que prohibir el cercano.
+ * - `anchoBandaAfueras`: las afueras llegan al menos hasta `radioAfuerasMin + anchoBandaAfueras`, aunque la
+ *   zona de influencia todavía sea más chica. Sin esto, al fundar (`ZONA_INFLUENCIA.radioInicial` = 30) no
+ *   habría NINGÚN hueco válido para la Granja inicial y caería al fallback del origen, encima del Centro
+ *   Urbano. Y tiene sentido de fondo: el campo de una ciudad está fuera de su zona de influencia, no dentro.
  */
 export const TRAZADO = {
   largoFilaMin: 4,
   largoFilaMax: 8,
-  radioAfuerasMin: 24,
+  radioAfuerasMin: 60,
+  anchoBandaAfueras: 36,
 };
 
 // --- Sprint 3: Economía (Doc 3) ---
