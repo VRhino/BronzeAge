@@ -12,7 +12,7 @@ import type { Asentamiento, Edificio, RecursoAlmacenado } from '../../domain/typ
 import type { RecetaProduccion } from '../../constants';
 import { LINEAS_PRODUCCION } from '../../constants';
 import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
-import { factorLineaProduccion, factorPorDistancia, sitioConcentrico, sitioConcentricoLineaProduccion, tieneInsumoDeArranque } from '../construction';
+import { angulosDeBarrios, factorLineaProduccion, factorPorDistancia, sitioEnBarrio, sitioEnBarrioLineaProduccion, tieneInsumoDeArranque } from '../construction';
 import { activarPolitica, lineasProduccionPriorizadas } from '../politicas';
 import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, mockMathRandomDeterminista } from './fixtures';
 
@@ -179,18 +179,23 @@ describe('política "Líneas de Producción" del Maestro de Obras', () => {
     expect(lineasProduccionPriorizadas(conPolitica)).toBe(true);
   });
 
-  it('sitioConcentricoLineaProduccion nunca elige un hueco peor que el que elegiría sitioConcentrico', () => {
+  it('sitioEnBarrioLineaProduccion nunca elige un hueco peor que el que elegiría sitioEnBarrio', () => {
     const mapa = crearMapaDeterminista(SEED);
     const { asentamiento: base } = fundarAsentamientoDeTest(mapa, crearFacciones(), 'faccion-1', []);
 
-    // Vista de Asentamiento: la optimización de "líneas de producción" solo aplica a fuentes del MISMO espacio
-    // (interno). La Curtiduría (interna) consume `livestock`, que produce el Corral (interno). Colocamos el
-    // Corral pegado al borde del espacio plano local: el primer hueco de sitioConcentrico (anillo interior)
-    // queda necesariamente más lejos de él que el mejor hueco posible.
+    // Vista de Asentamiento (rejilla de celdas, a petición del usuario): Curtiduría y Corral comparten barrio
+    // ('industria') — ver CATEGORIA_POR_TIPO. Ambos buscan SOLO dentro de la cuña de la dirección asignada a
+    // ESTE asentamiento (aleatoria por asentamiento, ver `angulosDeBarrios`), así que el Corral se coloca en
+    // esa MISMA dirección, pegado al borde: el hueco por defecto de `sitioEnBarrio` (barrio vacío, prefiere el
+    // más cercano al centro) queda necesariamente más lejos de él que el mejor hueco posible del barrio.
+    const anguloIndustria = angulosDeBarrios(base.id).industria;
     const corral: Edificio = {
       id: 'corral-test',
       tipo: 'corral',
-      posicion: { x: base.radioPotencial * 0.95, y: 0 }, // coords LOCALES (origen = Centro Urbano)
+      posicion: {
+        x: Math.cos(anguloIndustria) * base.radioPotencial * 0.95,
+        y: Math.sin(anguloIndustria) * base.radioPotencial * 0.95,
+      }, // coords LOCALES (origen = Centro Urbano)
       estado: 'activo',
       ticksRestantes: 0,
       ambito: 'asentamiento',
@@ -198,8 +203,8 @@ describe('política "Líneas de Producción" del Maestro de Obras', () => {
     };
     const conCorral = { ...base, edificios: [...base.edificios, corral] };
 
-    const plano = sitioConcentrico(conCorral, conCorral.edificios);
-    const optimizado = sitioConcentricoLineaProduccion(conCorral, conCorral.edificios, 'curtiduria');
+    const plano = sitioEnBarrio(conCorral, conCorral.edificios, 'curtiduria');
+    const optimizado = sitioEnBarrioLineaProduccion(conCorral, conCorral.edificios, 'curtiduria');
     expect(plano).not.toBeNull();
     expect(optimizado).not.toBeNull();
 

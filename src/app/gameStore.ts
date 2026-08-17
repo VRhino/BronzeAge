@@ -22,7 +22,7 @@ import type {
   ZonaBosque,
   ZonaInfluencia,
 } from '../domain/types';
-import { CAMPAMENTOS_BANDIDOS, EDIFICIO_CATALOGO, FUNDACION, MANTENIMIENTO, NECESIDADES, POLITICAS, POLITICA_CATALOGO, TROPAS_RECLUTABLES } from '../constants';
+import { CAMPAMENTOS_BANDIDOS, EDIFICIO_CATALOGO, FUNDACION, MANTENIMIENTO, NECESIDADES, POLITICAS, POLITICA_CATALOGO, REJILLA_ASENTAMIENTO, TROPAS_RECLUTABLES } from '../constants';
 import { generarMapa, MAPA_DEFAULT, WORLDGEN_VERSION, type MapaGenerado } from '../worldgen';
 import { crearEstadoMapa, crearMapa, type EstadoMapa, type Mapa } from '../world/mapa';
 import { exportarParaUnityTerrain, UNITY_EXPORT_DEFAULT, type ExportUnityResultado, type OpcionesExportUnity } from '../world/exportUnity';
@@ -81,6 +81,14 @@ import {
   migrarEdificiosAEspacioLocal,
   ConstruccionManualInvalidaError,
 } from '../engine/construction';
+import {
+  celdaMinimaDeEdificio,
+  edificiosInternos,
+  redDeCalles,
+  segmentosDeRed,
+  tamanoDeEdificio,
+  type SegmentoTrazado,
+} from '../engine/trazado';
 import {
   iniciarAsedio as iniciarAsedioEngine,
   combateCampoAbierto as combateCampoAbiertoEngine,
@@ -196,6 +204,14 @@ export const CATALOGOS = {
         requisitoNivelFaccion: def.nivelFaccionMinimo ?? 0,
       };
     }),
+  /** Vista de Asentamiento (a petición del usuario): tamaño de celda de la rejilla local — solo dato, sin
+   * comportamiento; `ui/canvas.ts` lo usa para dibujar (tamaño de edificio, paso de la cuadrícula), nunca para
+   * decidir colocación, eso es del motor. */
+  tamanoCeldaAsentamiento: REJILLA_ASENTAMIENTO.tamanoCelda,
+  /** Radio ESTÁTICO del lienzo de la Vista de Asentamiento (a petición del usuario) — no depende de
+   * `asentamiento.radioPotencial` (eso crece con nivel/construcción, ver `ZONA_INFLUENCIA`). Ver comentario en
+   * `REJILLA_ASENTAMIENTO.radioMapa`, constants.ts. */
+  radioMapaAsentamiento: REJILLA_ASENTAMIENTO.radioMapa,
 };
 
 type Listener = () => void;
@@ -330,6 +346,34 @@ export class GameStore {
 
   getZonas(asentamientos: Asentamiento[] = this.state.asentamientos): ZonaInfluencia[] {
     return computeTodasLasZonas(asentamientos);
+  }
+
+  /**
+   * Trazado urbano de UN asentamiento, ya resuelto a coordenadas locales para dibujar: los tramos de calle y
+   * de camino, y el rectángulo que ocupa cada edificio (por id). Todo derivado en el motor
+   * (`engine/trazado.ts`), nada persistido — ver `Consideraciones/Vista_Asentamiento_Trazado_Urbano.md`.
+   *
+   * Acoplamiento 0: `ui/canvas.ts` recibe esto ya masticado y no sabe nada de celdas, aristas, barrios ni
+   * manzanas. La interfaz nunca decide un trazado, solo lo pinta.
+   */
+  getTrazadoAsentamiento(asentamiento: Asentamiento): {
+    calles: SegmentoTrazado[];
+    caminos: SegmentoTrazado[];
+    huellas: Record<string, { x: number; y: number; ancho: number; alto: number }>;
+  } {
+    const { calles, caminos } = segmentosDeRed(redDeCalles(asentamiento.id, asentamiento.edificios));
+    const huellas: Record<string, { x: number; y: number; ancho: number; alto: number }> = {};
+    for (const edificio of edificiosInternos(asentamiento.edificios)) {
+      const min = celdaMinimaDeEdificio(edificio);
+      const tamano = tamanoDeEdificio(edificio);
+      huellas[edificio.id] = {
+        x: min.col * CATALOGOS.tamanoCeldaAsentamiento,
+        y: min.row * CATALOGOS.tamanoCeldaAsentamiento,
+        ancho: tamano.ancho * CATALOGOS.tamanoCeldaAsentamiento,
+        alto: tamano.alto * CATALOGOS.tamanoCeldaAsentamiento,
+      };
+    }
+    return { calles, caminos, huellas };
   }
 
   /**

@@ -617,47 +617,72 @@ export function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, s
 
 // --- Vista de Asentamiento (espacio plano local, a petición del usuario) ---
 //
-// Un espacio lógico SEPARADO del mapa general: plano (sin relieve/biomas/ríos), centrado en el Centro Urbano
-// y con radio = `radioPotencial` del asentamiento (crece con el nivel). Aquí se dibujan, con detalle y
-// etiquetas, TODOS los edificios internos (`ambito !== 'mapa'`), a sus coordenadas LOCALES (origen `(0,0)` en
-// el centro). Los extractores minerales (`ambito: 'mapa'`) NO viven aquí — se ven en el mapa general.
+// Un espacio lógico SEPARADO del mapa general: plano (sin relieve/biomas/ríos), centrado en el Centro Urbano.
+// Aquí se dibujan, con detalle y etiquetas, TODOS los edificios internos (`ambito !== 'mapa'`), a sus
+// coordenadas LOCALES (origen `(0,0)` en el centro). Los extractores minerales (`ambito: 'mapa'`) NO viven
+// aquí — se ven en el mapa general.
 //
-// Acoplamiento 0: recibe solo datos de dominio ya calculados (asentamiento + facciones), nunca consulta el
-// motor. La colocación local la decide `engine/construction.ts`; esto solo la pinta.
+// ACOPLAMIENTO 0, y en esta vista importa especialmente: este archivo NO sabe qué es una celda ocupada, una
+// arista, un barrio ni una manzana. Todo el trazado urbano (qué rectángulo ocupa cada edificio, por dónde
+// pasan las calles y los caminos) lo calcula el motor en `engine/trazado.ts` y llega ya resuelto a
+// coordenadas locales vía `gameStore.getTrazadoAsentamiento`. Aquí solo se pinta. Si algo del dibujo parece
+// mal colocado, el arreglo va en el motor, nunca aquí.
 
 export interface DrawAsentamientoState {
   asentamiento: Asentamiento;
-  facciones: Faccion[];
   /** Nombre a mostrar (el `nombre` del asentamiento o su `id`) — lo resuelve el caller. */
   etiqueta: string;
+  /** Tramos de calle urbana, en coordenadas locales — `gameStore.getTrazadoAsentamiento`. */
+  calles: { desde: Point; hasta: Point }[];
+  /** Tramos de camino rural (a Granja/Corral, en las afueras): clase aparte de la calle, más fina. */
+  caminos: { desde: Point; hasta: Point }[];
+  /** Rectángulo que ocupa cada edificio interno, por id, en unidades locales (esquina superior izquierda +
+   * ancho/alto). Los tamaños varían por tipo y, en Granja, por nivel interno. */
+  huellas: Record<string, { x: number; y: number; ancho: number; alto: number }>;
+  /** Tamaño de celda de la rejilla local (unidades locales) — `CATALOGOS.tamanoCeldaAsentamiento`. */
+  tamanoCelda: number;
+  /** Radio ESTÁTICO del espacio de la Vista de Asentamiento (unidades locales) — `CATALOGOS.radioMapaAsentamiento`
+   * / `REJILLA_ASENTAMIENTO.radioMapa`. A petición del usuario: define la escala del lienzo en vez de
+   * `asentamiento.radioPotencial` (que crece con nivel/construcción) para que el mapa NO haga zoom a medida que
+   * el asentamiento crece — el espacio se ve fijo desde el principio, solo se va llenando. */
+  radioMapa: number;
 }
 
-/** Marcador + etiqueta de un edificio interno en la Vista de Asentamiento. Relleno = activo, semitransparente
- * = en construcción, solo contorno = en cola (mismo vocabulario que el mapa general, pero más grande). */
+/**
+ * Marcador + etiqueta de un edificio interno en la Vista de Asentamiento. Relleno = activo, semitransparente
+ * = en construcción, solo contorno = en cola (mismo vocabulario que el mapa general, pero más grande).
+ *
+ * `huella` es el rectángulo que ocupa el edificio, en píxeles de pantalla, ya calculado por el motor: cada
+ * tipo tiene su tamaño y Granja además cambia con el nivel. Se dibuja con un margen HACIA ADENTRO porque los
+ * edificios van pared con pared: sin ese margen, la calle —que corre justo sobre el borde compartido— quedaría
+ * tapada y el dibujo se leería como una masa continua en vez de una manzana.
+ */
 function dibujarEdificioLocal(
   ctx: CanvasRenderingContext2D,
   edificio: Edificio,
-  aPantalla: (p: Point) => Point,
-  lado: number
+  huella: { x: number; y: number; ancho: number; alto: number }
 ): void {
-  const { x, y } = aPantalla(edificio.posicion);
   const color = EDIFICIO_COLOR[edificio.tipo];
   const esCentro = edificio.tipo === 'centroUrbano';
-  const l = esCentro ? lado * 1.5 : lado;
+  const margen = Math.min(1.5, huella.ancho * 0.12, huella.alto * 0.12);
+  const x = huella.x + margen;
+  const y = huella.y + margen;
+  const ancho = Math.max(2, huella.ancho - margen * 2);
+  const alto = Math.max(2, huella.alto - margen * 2);
 
   ctx.lineWidth = esCentro ? 2 : 1.4;
   ctx.strokeStyle = esCentro ? '#1b1a17' : color;
   if (edificio.estado === 'activo') {
     ctx.fillStyle = color;
-    ctx.fillRect(x - l / 2, y - l / 2, l, l);
-    if (esCentro) ctx.strokeRect(x - l / 2, y - l / 2, l, l);
+    ctx.fillRect(x, y, ancho, alto);
+    if (esCentro) ctx.strokeRect(x, y, ancho, alto);
   } else if (edificio.estado === 'en_construccion') {
     ctx.fillStyle = color + '88';
-    ctx.fillRect(x - l / 2, y - l / 2, l, l);
-    ctx.strokeRect(x - l / 2, y - l / 2, l, l);
+    ctx.fillRect(x, y, ancho, alto);
+    ctx.strokeRect(x, y, ancho, alto);
   } else {
     ctx.setLineDash([3, 2]);
-    ctx.strokeRect(x - l / 2, y - l / 2, l, l);
+    ctx.strokeRect(x, y, ancho, alto);
     ctx.setLineDash([]);
   }
 
@@ -668,8 +693,31 @@ function dibujarEdificioLocal(
     ctx.font = '10px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    ctx.fillText(EDIFICIO_ETIQUETA[edificio.tipo], x, y + l / 2 + 2);
+    ctx.fillText(EDIFICIO_ETIQUETA[edificio.tipo], x + ancho / 2, y + alto + 2);
   }
+}
+
+/** Pinta una tanda de tramos ya resueltos por el motor. No decide ningún trazado: solo une los puntos que le
+ * llegan, que siempre forman segmentos horizontales o verticales sobre las líneas de la rejilla. */
+function dibujarTramos(
+  ctx: CanvasRenderingContext2D,
+  tramos: { desde: Point; hasta: Point }[],
+  aPantalla: (p: Point) => Point,
+  color: string,
+  grosor: number
+): void {
+  if (tramos.length === 0) return;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = grosor;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  for (const tramo of tramos) {
+    const a = aPantalla(tramo.desde);
+    const b = aPantalla(tramo.hasta);
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+  }
+  ctx.stroke();
 }
 
 /**
@@ -677,55 +725,75 @@ function dibujarEdificioLocal(
  * este espacio no tiene terreno que cachear (es plano por definición).
  */
 export function drawAsentamiento(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, state: DrawAsentamientoState): void {
-  const { asentamiento, facciones, etiqueta } = state;
+  const { asentamiento, etiqueta, calles, caminos, huellas, tamanoCelda, radioMapa } = state;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // Fondo plano: tono de tierra cultivable, deliberadamente distinto de cualquier bioma del mapa general para
-  // que se lea de un vistazo "estás dentro del asentamiento, no en el mundo".
-  ctx.fillStyle = '#d8cca8';
+  // Fondo verde llano: mismo tono que la tierra habitable del mapa general en su paleta simplificada — la
+  // ciudad es "el mismo mundo", no un espacio de otro color que rompa la continuidad visual.
+  ctx.fillStyle = BIOMA_TIERRA_PLANA;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  const radio = asentamiento.radioPotencial > 0 ? asentamiento.radioPotencial : 60;
+  // Escala FIJA sobre `radioMapa` (a petición del usuario), nunca sobre `asentamiento.radioPotencial`: ese
+  // crece con nivel/construcción y haría que el lienzo hiciera zoom con el tiempo — el espacio de la Vista de
+  // Asentamiento es estático, solo se va llenando de edificios.
   const usable = canvas.width * 0.92;
-  const escala = usable / (radio * 2);
+  const escala = usable / (radioMapa * 2);
   const cx = canvas.width / 2;
   const cy = canvas.height / 2;
   const aPantalla = (p: Point): Point => ({ x: cx + p.x * escala, y: cy + p.y * escala });
 
-  const colorFaccion = faccionColor(asentamiento.faccionId, facciones);
-
-  // Disco construible (radio potencial) + anillos guía tenues: hacen legible el crecimiento concéntrico.
-  ctx.strokeStyle = colorFaccion + '55';
+  // Cuadrícula de fondo (a petición del usuario): mismas celdas que usa la colocación (`tamanoCelda`) — da
+  // referencia visual de escala real y de dónde puede caer el próximo edificio. Cubre el lienzo entero (no solo
+  // `radioMapa`), para no dejar un borde sin marcar.
+  ctx.strokeStyle = 'rgba(27, 26, 23, 0.08)';
   ctx.lineWidth = 1;
-  for (let i = 1; i <= 4; i++) {
-    ctx.beginPath();
-    ctx.arc(cx, cy, (radio * escala * i) / 4, 0, Math.PI * 2);
-    ctx.stroke();
-  }
+  const pasoPantalla = tamanoCelda * escala;
+  const celdasX = Math.ceil(cx / pasoPantalla) + 1;
+  const celdasY = Math.ceil(cy / pasoPantalla) + 1;
   ctx.beginPath();
-  ctx.arc(cx, cy, radio * escala, 0, Math.PI * 2);
-  ctx.fillStyle = colorFaccion + '11';
-  ctx.fill();
-  ctx.strokeStyle = colorFaccion;
-  ctx.lineWidth = 2;
+  for (let i = -celdasX; i <= celdasX; i++) {
+    const x = cx + i * pasoPantalla;
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, canvas.height);
+  }
+  for (let j = -celdasY; j <= celdasY; j++) {
+    const y = cy + j * pasoPantalla;
+    ctx.moveTo(0, y);
+    ctx.lineTo(canvas.width, y);
+  }
   ctx.stroke();
 
-  // Edificios internos (ambito !== 'mapa'), a coords locales. Se dibujan las Viviendas primero para que las
-  // etiquetas de los edificios singulares queden por encima.
+  // Edificios internos (ambito !== 'mapa'), a coords locales.
   const internos = asentamiento.edificios.filter((e) => (e.ambito ?? 'asentamiento') !== 'mapa');
-  const lado = Math.max(9, Math.min(16, radio * escala * 0.06));
-  for (const edificio of internos.filter((e) => e.tipo === 'vivienda')) dibujarEdificioLocal(ctx, edificio, aPantalla, lado);
-  for (const edificio of internos.filter((e) => e.tipo !== 'vivienda')) dibujarEdificioLocal(ctx, edificio, aPantalla, lado);
 
-  // Título y nota.
+  // Trazado: caminos primero (más finos, van por debajo) y calles encima. Los tramos vienen ya resueltos del
+  // motor; aquí no se decide por dónde pasa ninguno.
+  dibujarTramos(ctx, caminos, aPantalla, 'rgba(140, 118, 88, 0.55)', 1.5);
+  dibujarTramos(ctx, calles, aPantalla, 'rgba(120, 92, 58, 0.75)', 3);
+
+  // Edificios: cada uno con su huella real (varía por tipo, y por nivel interno en Granja). Se dibujan las
+  // Viviendas primero para que las etiquetas de los edificios singulares queden por encima.
+  const enPantalla = (id: string): { x: number; y: number; ancho: number; alto: number } | null => {
+    const huella = huellas[id];
+    if (!huella) return null;
+    const origen = aPantalla({ x: huella.x, y: huella.y });
+    return { x: origen.x, y: origen.y, ancho: huella.ancho * escala, alto: huella.alto * escala };
+  };
+  for (const edificio of [...internos.filter((e) => e.tipo === 'vivienda'), ...internos.filter((e) => e.tipo !== 'vivienda')]) {
+    const huella = enPantalla(edificio.id);
+    if (huella) dibujarEdificioLocal(ctx, edificio, huella);
+  }
+
+  // Título y nota, abajo (para no solaparse con el toggle Mundo/Asentamiento que flota sobre la esquina
+  // superior izquierda del lienzo, ver `.map-toggles` en style.css).
   ctx.fillStyle = '#1b1a17';
   ctx.font = 'bold 15px system-ui, sans-serif';
   ctx.textAlign = 'left';
-  ctx.textBaseline = 'top';
-  ctx.fillText(`${etiqueta} · nivel ${asentamiento.nivel}`, 12, 12);
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(`${etiqueta} · nivel ${asentamiento.nivel}`, 12, canvas.height - 24);
   ctx.font = '11px system-ui, sans-serif';
   ctx.fillStyle = '#4a4436';
-  ctx.fillText('Espacio plano del asentamiento · las minas y canteras se construyen en el mapa general', 12, 32);
+  ctx.fillText('Vista de asentamiento (ciudad) · minas y cantera pertenecen a la región (mapa general)', 12, canvas.height - 8);
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
 }

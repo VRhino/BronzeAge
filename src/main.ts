@@ -1900,10 +1900,15 @@ function render(): void {
   // Si el asentamiento en vista ya no existe (p. ej. cayó en ruinas o se importó otra partida), se vuelve al mapa general.
   const asentamientoEnVista = state.asentamientos.find((a) => a.id === asentamientoSeleccionadoId);
   if (vistaMapa === 'asentamiento' && asentamientoEnVista) {
+    const trazado = gameStore.getTrazadoAsentamiento(asentamientoEnVista);
     drawAsentamiento(ctx, canvas, {
       asentamiento: asentamientoEnVista,
-      facciones: state.facciones,
       etiqueta: etiquetaAsentamiento(asentamientoEnVista, state.facciones),
+      calles: trazado.calles,
+      caminos: trazado.caminos,
+      huellas: trazado.huellas,
+      tamanoCelda: CATALOGOS.tamanoCeldaAsentamiento,
+      radioMapa: CATALOGOS.radioMapaAsentamiento,
     });
   } else {
     const zonas = gameStore.getZonas(state.asentamientos);

@@ -94,6 +94,12 @@ interface NivelEdificioTransformacion {
    * este nivel — ver `cupoCaravanas`, engine/asentamientoQuery.ts. Mercado no fabrica nada (recetas: []),
    * así que este campo reemplaza al de producción como "qué desbloquea" cada nivel para ese edificio. */
   cupoCaravanas?: number;
+  /** Solo Granja (trazado urbano dinámico, a petición del usuario): rinde trigo en vez de ejecutar recetas
+   * (recetas: []), así que su producción escala por nivel aquí — ver `produccionTrigoDeGranja`. */
+  produccionBaseTrigo?: number;
+  /** Solo Granja: su huella en la rejilla CRECE con el nivel interno (1x1 → 6x6), a diferencia del resto de
+   * tipos, cuyo tamaño es fijo (`EDIFICIO_TAMANO`). Ver `tamanoEdificio`, engine/trazado.ts. */
+  tamano?: { ancho: number; alto: number };
 }
 
 /**
@@ -126,7 +132,28 @@ export const EDIFICIO_CATALOGO = {
   // entre Pesants y Artesanos hacía que Pesants (crece ~2.4x más rápido) acaparara todo el cupo y dejara a
   // Artesanos varado — cada Vivienda ahora aporta 15 espacios de Pesants Y, por separado, 5 de Artesanos.
   vivienda: { costo: { madera: 10 }, tiempoConstruccionTicks: 4, capacidadPesants: 15, capacidadArtesanos: 5 },
-  granja: { costo: { madera: 30 }, tiempoConstruccionTicks: 6, produccionBaseTrigo: 15, trabajadoresRequeridos: 4 },
+  /**
+   * Granja: 4 niveles internos (a petición del usuario, trazado urbano dinámico). Cada salto DUPLICA el costo
+   * en materiales respecto al anterior, tomando como base su `costo` de construcción (madera 30 → 60, 120,
+   * 240), y duplica también su rinde de trigo — una granja de nivel 4 ocupa 36 celdas contra la única del
+   * nivel 1, así que producir lo mismo convertiría la mejora en gasto puro. El tamaño por nivel vive aquí
+   * mismo (`tamano`) y no en `EDIFICIO_TAMANO`, porque es el único tipo cuya huella cambia con el nivel.
+   *
+   * `trabajadoresRequeridos` se repite igual en los 4 niveles (el valor plano que Granja ya tenía): sube el
+   * rinde por granja, no la mano de obra que exige.
+   */
+  granja: {
+    costo: { madera: 30 },
+    tiempoConstruccionTicks: 6,
+    produccionBaseTrigo: 15,
+    trabajadoresRequeridos: 4,
+    niveles: {
+      1: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 15, tamano: { ancho: 1, alto: 1 } },
+      2: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 30, tamano: { ancho: 2, alto: 3 }, costoMejora: { madera: 60 } },
+      3: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 60, tamano: { ancho: 4, alto: 3 }, costoMejora: { madera: 120 } },
+      4: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 120, tamano: { ancho: 6, alto: 6 }, costoMejora: { madera: 240 } },
+    } as Record<number, NivelEdificioTransformacion>,
+  },
   cantera: { costo: { madera: 20 }, tiempoConstruccionTicks: 5, produccionBasePiedra: 5, trabajadoresRequeridos: 4 },
   lenera: { costo: { madera: 10 }, tiempoConstruccionTicks: 3, produccionBaseMadera: 5, trabajadoresRequeridos: 4 },
   almacen: { costo: { madera: 50, piedra: 30 }, tiempoConstruccionTicks: 6, capacidadPorRecursoAdicional: 300 },
@@ -424,7 +451,7 @@ export const SCORE_BANDAS = {
  * tick — nunca lo que consume por unidad (`consumePorUnidad` no cambia) — simulando que el insumo tarda más
  * en llegar cuanto más lejos está su origen. Ver `factorPorDistancia`/`factorLineaProduccion`,
  * engine/construction.ts. PLACEHOLDER sin cifras de diseño previas (ver Preguntas_Abiertas.md), calibrado a
- * ojo contra `ZONA_INFLUENCIA.radioMaximoPorNivel` (hasta 120) y `SITIO.anillos`.
+ * ojo contra `ZONA_INFLUENCIA.radioMaximoPorNivel` (hasta 120).
  */
 export const LINEAS_PRODUCCION = {
   // Por debajo de esta distancia, sin penalización (factor 1) — cubre colocaciones ya cercanas por azar.
@@ -456,11 +483,86 @@ export const EXTRACCION_MAXIMOS = {
 };
 
 // Colocación de edificios: crecimiento concéntrico desde el centro (Doc 4.2).
+/** Muestreo angular para estimar la mejor fertilidad dentro de una zona (ver `engine/zones.ts`) — sin
+ * relación con la colocación de edificios (eso vive en `REJILLA_ASENTAMIENTO`). */
 export const SITIO = {
-  anillos: 6,
-  muestrasPorAnillo: 16,
   muestrasFertilidad: 40,
-  espacioMinimoEntreEdificios: 8,
+};
+
+/**
+ * Vista de Asentamiento (a petición del usuario): el espacio plano local es una REJILLA de celdas cuadradas,
+ * no coordenadas continuas — cada edificio ocupa un RECTÁNGULO de celdas (`EDIFICIO_TAMANO`, abajo), así que
+ * "nunca uno dentro de otro" se comprueba por celdas ocupadas, sin geometría de colisión. `Edificio.posicion`
+ * es el CENTRO de ese rectángulo (para un 1x1 coincide con el centro de su celda, ver `celdaAPunto` en
+ * engine/trazado.ts). El Centro Urbano es la única excepción: su posición (0,0) es el VÉRTICE de su esquina
+ * inferior izquierda, no su centro (a petición del usuario) — ver `celdasDeEdificio`, engine/trazado.ts.
+ *
+ * Ya no hay `margenCalle`: las calles corren sobre las ARISTAS de la rejilla (no ocupan celdas) y la red nace
+ * con el perímetro del Centro Urbano, que hace de calle alrededor del centro por construcción. Ver
+ * `Consideraciones/Vista_Asentamiento_Trazado_Urbano.md`.
+ *
+ * `radioMapa` (a petición del usuario): el espacio de la Vista de Asentamiento es ESTÁTICO — no crece con la
+ * zona de influencia (`asentamiento.radioPotencial`, que sí cambia con nivel/construcción, ver
+ * `ZONA_INFLUENCIA`). `ui/canvas.ts` usa este radio fijo (nunca `radioPotencial`) para calcular la escala del
+ * lienzo, así que el zoom no varía a medida que el asentamiento crece — solo se va llenando. Debe cubrir con
+ * margen el mayor `radioPotencial` alcanzable (tope 120, nivel 3 — ver `ZONA_INFLUENCIA.radioMaximoPorNivel`),
+ * para que ningún edificio colocado por `sitioEnBarrio` quede jamás fuera del área dibujada.
+ */
+export const REJILLA_ASENTAMIENTO = {
+  tamanoCelda: 6,
+  radioMapa: 150,
+};
+
+/**
+ * Huella de cada tipo de edificio en la rejilla local, en celdas (a petición del usuario). Un tipo ausente
+ * mide 1x1 — el caso por defecto (Vivienda, Leñera, Almacén). Granja NO está aquí: es el único tipo cuya
+ * huella cambia con el nivel interno, y vive en `EDIFICIO_CATALOGO.granja.niveles[n].tamano`.
+ *
+ * Se lee siempre a través de `tamanoEdificio` (engine/trazado.ts), nunca directo, para que el caso de Granja
+ * quede resuelto en un solo sitio.
+ */
+export const EDIFICIO_TAMANO: Record<string, { ancho: number; alto: number }> = {
+  centroUrbano: { ancho: 3, alto: 3 },
+  carpinteria: { ancho: 5, alto: 4 },
+  fundicion: { ancho: 2, alto: 2 },
+  curtiduria: { ancho: 2, alto: 2 },
+  armeria: { ancho: 2, alto: 3 },
+  barracon: { ancho: 2, alto: 2 },
+  galeriaDeTiro: { ancho: 2, alto: 4 },
+  mercado: { ancho: 3, alto: 2 },
+  palacio: { ancho: 4, alto: 4 },
+  corral: { ancho: 4, alto: 3 },
+};
+
+/** Rinde de trigo de UNA Granja según su nivel interno — la mejora duplica producción y costo a la vez (ver
+ * `EDIFICIO_CATALOGO.granja.niveles`). Punto único de lectura: la producción de trigo se calcula en tres
+ * sitios distintos (engine/construction.ts y engine/asentamientoQuery.ts) y no pueden divergir. */
+export function produccionTrigoDeGranja(nivelInterno: number | undefined): number {
+  const niveles = EDIFICIO_CATALOGO.granja.niveles as Record<number, NivelEdificioTransformacion>;
+  return niveles[nivelInterno ?? 1]?.produccionBaseTrigo ?? EDIFICIO_CATALOGO.granja.produccionBaseTrigo;
+}
+
+/**
+ * Trazado urbano dinámico (a petición del usuario) — ver `Consideraciones/Vista_Asentamiento_Trazado_Urbano.md`.
+ * Nada de esto pre-genera un plano: son los límites que hacen que las manzanas EMERJAN mientras la ciudad se
+ * construye edificio a edificio.
+ *
+ * - `largoFilaMin`/`largoFilaMax`: ANCHO de manzana en celdas — cada cuántas columnas cae una calle
+ *   transversal. Se sortea por asentamiento dentro de este rango (determinista por su id, ver `largoMaxFila`
+ *   en engine/trazado.ts), nunca `Math.random()`. El fondo de la manzana no se configura: son siempre dos
+ *   hileras, una a cada calle, porque más atrás ya no se puede construir sin traer otra calle
+ *   (`FONDO_MANZANA`, engine/trazado.ts).
+ * - `radioAfuerasMin`: distancia mínima al Centro Urbano para Granja y Corral, "a las afueras" (§8 del doc).
+ *   Es solo un SUELO: lo que de verdad las manda afuera es que ambas prefieren siempre el hueco MÁS LEJANO
+ *   disponible, así que acompañan al borde de la ciudad a medida que crece. El suelo existe para el caso en
+ *   que las afueras estén llenas — sin él, la granja caería pegada al Centro Urbano, que es justo el bug que
+ *   se reportó. Vale 24 = 4 celdas, justo fuera del Centro Urbano (3x3 = 18 unidades de lado), para que la
+ *   Granja inicial siga entrando en el `ZONA_INFLUENCIA.radioInicial` de 30 al fundar.
+ */
+export const TRAZADO = {
+  largoFilaMin: 4,
+  largoFilaMax: 8,
+  radioAfuerasMin: 24,
 };
 
 // --- Sprint 3: Economía (Doc 3) ---

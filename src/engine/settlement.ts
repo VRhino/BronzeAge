@@ -2,61 +2,61 @@ import type { Asentamiento, Edificio, Faccion, Point, RecursoAlmacenado } from '
 import { ALMACEN, FUNDACION, MANTENIMIENTO, POBLACION, ZONA_INFLUENCIA } from '../constants';
 import type { Mapa } from '../world/mapa';
 import { posicionLibreParaFundar } from './zones';
+import { sitioEnBarrio } from './construction';
 import { calcularCapFundacion, otorgarCiudadania } from './faccion';
 
 export class FundacionInvalidaError extends Error {}
-
-/** Reparte `cantidad` puntos en un anillo alrededor de `centro`, a `radio` de distancia. */
-function anilloDePosiciones(centro: Point, cantidad: number, radio: number): Point[] {
-  return Array.from({ length: cantidad }, (_, i) => {
-    const angulo = (i / cantidad) * Math.PI * 2;
-    return { x: centro.x + Math.cos(angulo) * radio, y: centro.y + Math.sin(angulo) * radio };
-  });
-}
 
 /**
  * Edificios con los que nace todo asentamiento nuevo (Doc 1.3): ya "activo", sin pasar por la cola.
  *
  * Vista de Asentamiento (a petición del usuario): TODOS son internos (`ambito: 'asentamiento'`) y nacen en
- * coordenadas LOCALES del espacio plano — el Centro Urbano en el origen `(0,0)`, las Viviendas en un anillo a
- * su alrededor y la Granja en un hueco algo más externo (su producción usa la fertilidad de zona, no la de su
- * posición, ver `mejorFertilidadEnZona`). El punto de fundación en el MAPA GENERAL vive en `asentamiento.posicion`.
+ * coordenadas LOCALES del espacio plano — el Centro Urbano en el origen `(0,0)`; Viviendas y Granja usan la
+ * MISMA rejilla de celdas y reparto de barrios por dirección (`sitioEnBarrio`, engine/construction.ts) que el
+ * crecimiento posterior, para que la ciudad se lea consistente desde el tick 0 (y no en un anillo aparte que
+ * ignora las direcciones aleatorias del asentamiento). El punto de fundación en el MAPA GENERAL vive en
+ * `asentamiento.posicion`.
  */
 function edificiosIniciales(idBase: string): Edificio[] {
-  const origen: Point = { x: 0, y: 0 };
-  const radioAnillo = ZONA_INFLUENCIA.radioInicial * 0.5;
-  const viviendas: Edificio[] = anilloDePosiciones(origen, FUNDACION.viviendasIniciales, radioAnillo).map((posicion, i) => ({
-    id: `edificio-${idBase}-vivienda-inicial-${i}`,
-    tipo: 'vivienda',
-    posicion,
-    estado: 'activo',
-    ticksRestantes: 0,
-    ambito: 'asentamiento',
-  }));
-  const granja: Edificio = {
-    id: `edificio-${idBase}-granja-inicial`,
-    tipo: 'granja',
-    // Anillo exterior desfasado medio sector respecto a las Viviendas para no solaparse con ellas.
-    posicion: {
-      x: Math.cos(Math.PI / FUNDACION.viviendasIniciales) * radioAnillo * 1.6,
-      y: Math.sin(Math.PI / FUNDACION.viviendasIniciales) * radioAnillo * 1.6,
-    },
-    estado: 'activo',
-    ticksRestantes: 0,
-    ambito: 'asentamiento',
-  };
+  const contexto = { id: idBase, radioPotencial: ZONA_INFLUENCIA.radioInicial };
   const centroUrbano: Edificio = {
     id: `edificio-${idBase}-centro-urbano`,
     tipo: 'centroUrbano',
-    posicion: origen,
+    posicion: { x: 0, y: 0 },
     estado: 'activo',
     ticksRestantes: 0,
     ambito: 'asentamiento',
   };
+
+  const edificios: Edificio[] = [centroUrbano];
+  for (let i = 0; i < FUNDACION.viviendasIniciales; i++) {
+    // `sitioEnBarrio` siempre encuentra hueco aquí (fundación: solo el Centro Urbano ocupa celda todavía),
+    // pero el fallback al origen es defensivo — nunca debe dejar una vivienda sin `Point`.
+    const posicion = sitioEnBarrio(contexto, edificios, 'vivienda') ?? { x: 0, y: 0 };
+    edificios.push({
+      id: `edificio-${idBase}-vivienda-inicial-${i}`,
+      tipo: 'vivienda',
+      posicion,
+      estado: 'activo',
+      ticksRestantes: 0,
+      ambito: 'asentamiento',
+    });
+  }
+
+  const posicionGranja = sitioEnBarrio(contexto, edificios, 'granja') ?? { x: 0, y: 0 };
+  edificios.push({
+    id: `edificio-${idBase}-granja-inicial`,
+    tipo: 'granja',
+    posicion: posicionGranja,
+    estado: 'activo',
+    ticksRestantes: 0,
+    ambito: 'asentamiento',
+  });
+
   // Leñera inicial: DEPRECADA (a petición del usuario) — la reserva de materiales iniciales (madera+piedra,
   // ver `almacenInicial` más abajo) ya es suficiente por sí sola para evitar el deadlock de madera (bug #1,
   // `Correcciones_Durante_Desarrollo.md`); esta mitigación extra dejó de ser necesaria.
-  return [centroUrbano, granja, ...viviendas];
+  return edificios;
 }
 
 export interface ViabilidadFundacion {

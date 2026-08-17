@@ -136,9 +136,9 @@ exports[`snapshot de regresión general > resumen del estado en ticks de referen
       {
         "edificios": {
           "centroUrbano:activo": 1,
-          "granja:activo": 4,
+          "granja:activo": 1,
           "lenera:activo": 3,
-          "vivienda:activo": 12,
+          "vivienda:activo": 13,
           "vivienda:en_construccion": 1,
         },
         "escuadrones": 0,
@@ -147,7 +147,7 @@ exports[`snapshot de regresión general > resumen del estado en ticks de referen
         "poblacion": {
           "artesanos": 0,
           "nobleza": 0,
-          "pesants": 165,
+          "pesants": 175,
         },
         "recursosClave": [
           {
@@ -159,7 +159,7 @@ exports[`snapshot de regresión general > resumen del estado en ticks de referen
             "recurso": "piedra",
           },
           {
-            "cantidad": 183.7,
+            "cantidad": 182.8,
             "recurso": "trigo",
           },
           {
@@ -215,7 +215,7 @@ exports[`snapshot de regresión general > resumen del estado en ticks de referen
         },
         "recursosClave": [
           {
-            "cantidad": 182.83,
+            "cantidad": 122.83,
             "recurso": "madera",
           },
           {

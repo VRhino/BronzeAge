@@ -1,6 +1,6 @@
 import type { Asentamiento, Edificio, EdificioTipo, Point } from '../domain/types';
 import type { Mapa } from '../world/mapa';
-import { EDIFICIO_CATALOGO, NIVEL_ASENTAMIENTO, type RecetaProduccion } from '../constants';
+import { EDIFICIO_CATALOGO, produccionTrigoDeGranja, NIVEL_ASENTAMIENTO, type RecetaProduccion } from '../constants';
 import { cupoCaravanaExtra, factorProduccionTrigo } from './politicas';
 import { mejorFertilidadEnZona } from './zones';
 
@@ -238,8 +238,10 @@ export function produccionPorTick(asentamiento: Asentamiento, mapa: Mapa, zonaPo
     // Vista de Asentamiento: las Granjas viven en el espacio plano local (sin fertilidad propia) y rinden
     // todas con la MEJOR fertilidad que la zona toca en el mapa general (ver `mejorFertilidadEnZona`).
     const fertilidadZona = mejorFertilidadEnZona(asentamiento, zonaPoligono, mapa);
+    // Por granja, no `nº granjas × base`: cada una rinde según su propio nivel interno (§7 del trazado urbano,
+    // ver `produccionTrigoDeGranja`).
     const total = granjas.reduce(
-      (acc, _e) => acc + EDIFICIO_CATALOGO.granja.produccionBaseTrigo * fertilidadZona * ratioMano * factorTrigo,
+      (acc, e) => acc + produccionTrigoDeGranja(e.nivelInterno) * fertilidadZona * ratioMano * factorTrigo,
       0
     );
     items.push({ tipo: 'granja', recurso: 'trigo', activos: granjas.length, cantidadPorTick: total });
