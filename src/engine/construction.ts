@@ -3,6 +3,7 @@ import type { RecetaProduccion } from '../constants';
 import {
   EDIFICIO_CATALOGO,
   EXTRACCION_MAXIMOS,
+  EXTRACTOR_DESEMPATE,
   LINEAS_PRODUCCION,
   MERCADO_PUESTOS_POR_NIVEL,
   NECESIDADES,
@@ -21,10 +22,11 @@ import {
   capacidadViviendaPesants,
   edificiosPorTipoYEstado,
   hayProyectoPendiente,
+  nivelActualDe,
   ratioManoObra,
   ratioManoObraArtesanos,
 } from './asentamientoQuery';
-import { agregarRecurso, descontarRecursos, tieneRecursos } from './almacen';
+import { agregarRecurso, agregarRecursoConSobrante, descontarRecursos, tieneRecursos } from './almacen';
 import { reservaDinamicaConstruccion } from './mantenimiento';
 import { factorProduccionTrigo, factorTiempoConstruccion, lineasProduccionPriorizadas } from './politicas';
 import { consumoComidaPoblacion } from './population';
@@ -201,7 +203,7 @@ function sitioCercaDeNodo(
  * dentro del asentamiento — los insumos que NO aparecen aquí son intermedios de cadena (lingoteCobre, cuero,
  * ...) y su fuente es el transformador que los fabrica, no un extractor.
  */
-const RECURSO_A_EXTRACTOR: Partial<Record<string, EdificioTipo>> = {
+export const RECURSO_A_EXTRACTOR: Partial<Record<string, EdificioTipo>> = {
   piedra: 'cantera',
   oro: 'mina',
   cobre: 'minaCobre',
@@ -359,9 +361,50 @@ function necesitaNuevoExtractor(asentamiento: Asentamiento, tipo: EdificioTipo, 
  * un heurístico interno.
  */
 export function alcanzoTopeDeAlmacenes(asentamiento: Asentamiento): boolean {
-  const tope = NECESIDADES.maximoAlmacenesPorNivel[asentamiento.nivel];
+  // nivelActual (Doc Fase_0_5 §6.2), no nivelAlcanzado: un asentamiento degradado no puede seguir ampliando
+  // almacenaje hasta recuperar nivel, aunque ya haya "desbloqueado" un tope mayor alguna vez.
+  const tope = NECESIDADES.maximoAlmacenesPorNivel[nivelActualDe(asentamiento)];
   if (tope === undefined) return false;
   return asentamiento.edificios.filter((e) => e.tipo === 'almacen').length >= tope;
+}
+
+/**
+ * Máximo de Viviendas útil en `nivel` (a petición del usuario): a diferencia de Almacenes, no es un número
+ * fijo por nivel — se DERIVA de la población que exige alcanzar el SIGUIENTE nivel
+ * (`NIVEL_ASENTAMIENTO.requisitos[nivel+1]`) entre la capacidad de una Vivienda.
+ *
+ * Se calcula el tope necesario para PESANTS (`.pesants / capacidadPesants`) y para ARTESANOS
+ * (`.artesanos / capacidadArtesanos`) por separado y se toma el MAYOR de los dos — no basta con pesants:
+ * una Vivienda da 15 cupos de pesants pero solo 5 de artesanos (proporción 3:1), y el gate de nivel 3 pide
+ * 500 pesants / 200 artesanos (proporción 2.5:1, más artesanos de lo que esa proporción de vivienda regala).
+ * Usar solo el tope por pesants (34 Viviendas ahí) daba una capacidad de solo 170 artesanos — por debajo de
+ * los 200 exigidos, un DEADLOCK real detectado por el usuario: nunca se podía subir a nivel 3 porque el
+ * propio tope de Vivienda impedía construir las Viviendas de más que hacían falta solo para alojar artesanos
+ * (con el mayor de los dos, 40 Viviendas, se cubren los dos cupos: 600 pesants y 200 artesanos).
+ *
+ * En el nivel MÁXIMO (sin "siguiente" requisito) se usa el techo de población de ese propio nivel
+ * (`techoPoblacion`) como referencia para pesants, ya que ahí no hay otro nivel que fije la meta y no hay
+ * gate de artesanos posterior con el que pueda entrar en conflicto.
+ */
+export function maximoViviendasPorNivel(nivel: number): number {
+  const requisitoSiguiente = NIVEL_ASENTAMIENTO.requisitos[nivel + 1];
+  if (!requisitoSiguiente) {
+    const techo = NIVEL_ASENTAMIENTO.techoPoblacion[nivel];
+    return techo === undefined ? Infinity : Math.ceil(techo / EDIFICIO_CATALOGO.vivienda.capacidadPesants);
+  }
+  const topePorPesants = Math.ceil(requisitoSiguiente.pesants / EDIFICIO_CATALOGO.vivienda.capacidadPesants);
+  const topePorArtesanos = Math.ceil(requisitoSiguiente.artesanos / EDIFICIO_CATALOGO.vivienda.capacidadArtesanos);
+  return Math.max(topePorPesants, topePorArtesanos);
+}
+
+/**
+ * ¿El asentamiento ya llegó a su tope de Viviendas para su nivel? Mismo criterio que `alcanzoTopeDeAlmacenes`:
+ * cuenta CUALQUIER estado (activo/en obra/en cola) y usa `nivelActual` (no `nivel`/nivelAlcanzado), para que
+ * un asentamiento degradado no pueda seguir construyendo Viviendas de más hasta recuperar nivel.
+ */
+export function alcanzoTopeDeViviendas(asentamiento: Asentamiento): boolean {
+  const tope = maximoViviendasPorNivel(nivelActualDe(asentamiento));
+  return asentamiento.edificios.filter((e) => e.tipo === 'vivienda').length >= tope;
 }
 
 export function tieneInsumoDeArranque(asentamiento: Asentamiento, tipo: EdificioTipo): boolean {
@@ -376,9 +419,11 @@ interface Candidato {
 }
 
 /** Score final de un candidato dentro de su banda (ver `SCORE_BANDAS`, constants.ts): `base` + hasta 100 de
- * urgencia — clamp evita que un urgencia mal calculada cruce a la banda siguiente. */
-function conUrgencia(base: number, urgencia: number): number {
-  return base + Math.max(0, Math.min(100, urgencia));
+ * urgencia (clamp evita que una urgencia mal calculada cruce a la banda siguiente) + `bonus` opcional (ver
+ * `EXTRACTOR_DESEMPATE`) que SÍ puede salir de 0-100 a propósito, para poder ganarle el desempate a un
+ * candidato empatado en urgencia máxima. */
+function conUrgencia(base: number, urgencia: number, bonus = 0): number {
+  return base + Math.max(0, Math.min(100, urgencia)) + bonus;
 }
 
 /**
@@ -402,7 +447,7 @@ function evaluarNecesidades(
   mapa: Mapa,
   reserva: Partial<Record<RecursoTipo, number>>,
   reclamos: ReclamosFuentes
-): { nuevos: Edificio[]; almacen: Record<string, RecursoAlmacenado> } {
+): { nuevos: Edificio[]; almacen: Record<string, RecursoAlmacenado>; extractoresTicksSinCupo: Partial<Record<EdificioTipo, number>> } {
   const candidatos: Candidato[] = [];
   let contador = asentamiento.edificios.length;
   /**
@@ -495,6 +540,10 @@ function evaluarNecesidades(
     { tipo: 'mina', recurso: 'oro' },
     { tipo: 'minaEstano', recurso: 'estano' },
   ];
+  // Ids de los candidatos de extractor propuestos este tick, por tipo (a lo sumo uno por tipo, ver
+  // `proyectoEnCurso`) — tras el commit final se usa para saber cuáles consiguieron cupo y actualizar
+  // `extractoresTicksSinCupo` (ver `EXTRACTOR_DESEMPATE`).
+  const extractorCandidatoIds: Partial<Record<EdificioTipo, string>> = {};
   for (const { tipo, recurso } of extractores) {
     if (necesitaNuevoExtractor(asentamiento, tipo, mapa) && !proyectoEnCurso(tipo)) {
       const sitio = sitioCercaDeNodo(asentamiento, zonaPoligono, mapa, recurso, reclamos.nodos);
@@ -507,10 +556,11 @@ function evaluarNecesidades(
         const conFuenteViva = asentamiento.edificios
           .filter((e) => e.tipo === tipo)
           .some((e) => mapa.nodoProductivo(e.fuenteId));
-        proponer(
-          crearEdificioEnCola(tipo, posicion, nextId(), sitio.fuenteId),
-          conUrgencia(SCORE_BANDAS.extractorBase, conFuenteViva ? 40 : 100)
-        );
+        const ticksSinCupo = asentamiento.extractoresTicksSinCupo?.[tipo] ?? 0;
+        const bonusDesempate = Math.min(ticksSinCupo * EXTRACTOR_DESEMPATE.bonusPorTickStarved, EXTRACTOR_DESEMPATE.bonusMaximo);
+        const edificio = crearEdificioEnCola(tipo, posicion, nextId(), sitio.fuenteId);
+        extractorCandidatoIds[tipo] = edificio.id;
+        proponer(edificio, conUrgencia(SCORE_BANDAS.extractorBase, conFuenteViva ? 40 : 100, bonusDesempate));
       }
     }
   }
@@ -525,7 +575,8 @@ function evaluarNecesidades(
   const ocupacionMaxima = Math.max(ocupacionPesants, ocupacionArtesanos);
   if (
     (capacidadPesantsVivienda === 0 || ocupacionMaxima >= NECESIDADES.umbralViviendaOcupada) &&
-    !hayProyectoPendiente(asentamiento, 'vivienda')
+    !hayProyectoPendiente(asentamiento, 'vivienda') &&
+    !alcanzoTopeDeViviendas(asentamiento)
   ) {
     const sitio = sitioEnBarrio(asentamiento, ocupados(), 'vivienda');
     if (sitio) proponer(crearEdificioEnCola('vivienda', sitio, nextId()), conUrgencia(SCORE_BANDAS.crecimiento, ocupacionMaxima * 100));
@@ -545,10 +596,11 @@ function evaluarNecesidades(
     if (sitio) proponer(crearEdificioEnCola('almacen', sitio, nextId()), conUrgencia(SCORE_BANDAS.crecimiento, ocupacionAlmacenMaxima * 100));
   }
 
-  // Edificios de transformación (Doc 4.2.1, rediseño de progreso Fase 0): Curtiduría/Armería/Fundición no
-  // tienen gate de nivel para su construcción BASE — solo sus mejoras de nivel interno lo exigen (ver
-  // `avanzarMejoras`). Como máximo UNA de las tres puede estar en vuelo a la vez (bug detectado en
-  // simulación: sin este límite, varias podían acumularse atascadas esperando piedra en un punto de
+  // Edificios de transformación (Doc 4.2.1, rediseño de progreso Fase 0; gate de nivel añadido en Doc
+  // Fase_0_6): Curtiduría/Armería/Fundición ahora sí exigen nivel de asentamiento 2 para su construcción
+  // BASE (antes construibles desde nivel 1) — mismo mecanismo que ya usaba Carpintería, ver
+  // `requisitoNivelBase` más abajo. Como máximo UNA de las tres puede estar en vuelo a la vez (bug detectado
+  // en simulación: sin este límite, varias podían acumularse atascadas esperando piedra en un punto de
   // fundación pobre en ese recurso). Además, cada una exige tener ya el insumo de arranque en almacén (ver
   // `tieneInsumoDeArranque`) — si Curtiduría no lo tiene, el bucle sigue probando Armería/Fundición en el
   // mismo tick en vez de detenerse ahí. Política "Líneas de Producción" del Maestro de Obras: sitúa el
@@ -557,7 +609,7 @@ function evaluarNecesidades(
   const transformacionEnCurso = (['curtiduria', 'armeria', 'fundicion'] as const).some(
     (tipo) => hayProyectoPendiente(asentamiento, tipo)
   );
-  if (!transformacionEnCurso) {
+  if (!transformacionEnCurso && nivelActualDe(asentamiento) >= requisitoNivelBase('fundicion')) {
     for (const tipo of ['curtiduria', 'armeria', 'fundicion'] as const) {
       if (edificiosPorTipoYEstado(asentamiento, tipo).length > 0) continue;
       if (!tieneInsumoDeArranque(asentamiento, tipo)) continue;
@@ -576,7 +628,7 @@ function evaluarNecesidades(
   const requisitoCarpinteria =
     (EDIFICIO_CATALOGO.carpinteria as { requisitoNivelAsentamientoConstruccion?: number }).requisitoNivelAsentamientoConstruccion ?? 0;
   if (
-    asentamiento.nivel >= requisitoCarpinteria &&
+    nivelActualDe(asentamiento) >= requisitoCarpinteria &&
     edificiosPorTipoYEstado(asentamiento, 'carpinteria').length === 0 &&
     !hayProyectoPendiente(asentamiento, 'carpinteria')
   ) {
@@ -607,7 +659,18 @@ function evaluarNecesidades(
     cupoDisponible -= 1;
   }
 
-  return { nuevos, almacen: almacenActual };
+  // Actualiza el desempate anti-inanición (ver `EXTRACTOR_DESEMPATE`): un tipo que se propuso este tick pero
+  // no llegó a comprometerse (perdió el desempate o se quedó sin fondos/cupo) suma un tick a su contador; uno
+  // que sí consiguió cupo lo resetea a 0. Los tipos que ni siquiera se propusieron este tick (sin sitio, o ya
+  // sin necesidad) conservan su contador tal cual — no hay inanición nueva que registrar, pero tampoco se
+  // pierde el historial de una racha interrumpida por, p. ej., quedarse un tick sin sitio libre.
+  const idsComprometidos = new Set(nuevos.map((n) => n.id));
+  const extractoresTicksSinCupo: Partial<Record<EdificioTipo, number>> = { ...asentamiento.extractoresTicksSinCupo };
+  for (const [tipo, id] of Object.entries(extractorCandidatoIds) as [EdificioTipo, string][]) {
+    extractoresTicksSinCupo[tipo] = idsComprometidos.has(id) ? 0 : (asentamiento.extractoresTicksSinCupo?.[tipo] ?? 0) + 1;
+  }
+
+  return { nuevos, almacen: almacenActual, extractoresTicksSinCupo };
 }
 
 /** Tipos de edificio de transformación con tiers (Doc 4.2.1): mejoran de nivelInterno y ejecutan recetas.
@@ -646,7 +709,9 @@ function avanzarMejoras(
     const nivelSiguiente = nivelActual + 1;
     const siguiente = niveles[nivelSiguiente];
     if (!siguiente) continue;
-    if (siguiente.requisitoNivelAsentamiento && asentamiento.nivel < siguiente.requisitoNivelAsentamiento) continue;
+    // nivelActual del ASENTAMIENTO (Doc Fase_0_5 §6.2) — no confundir con `nivelActual` de arriba (nivel
+    // INTERNO del edificio): un asentamiento degradado no puede seguir mejorando edificios de nivel alto.
+    if (siguiente.requisitoNivelAsentamiento && nivelActualDe(asentamiento) < siguiente.requisitoNivelAsentamiento) continue;
     if (siguiente.requiereEdificio) {
       const previo = edificiosPorTipoYEstado(asentamiento, siguiente.requiereEdificio as EdificioTipo);
       if (previo.length === 0) continue;
@@ -754,9 +819,13 @@ export function factorLineaProduccion(edificio: Edificio, receta: RecetaProducci
  * factor de línea de producción (`factorLineaProduccion`, Doc 4.2.1) — nunca al revés: la penalización de
  * distancia reduce cuánto se produce, no cuánto insumo hace falta por unidad.
  */
-function avanzarRecetas(asentamiento: Asentamiento, almacen: Record<string, RecursoAlmacenado>): Record<string, RecursoAlmacenado> {
+function avanzarRecetas(
+  asentamiento: Asentamiento,
+  almacen: Record<string, RecursoAlmacenado>
+): { almacen: Record<string, RecursoAlmacenado>; pausados: Set<string> } {
   const ratioArtesano = ratioManoObraArtesanos(asentamiento);
   let almacenActual = almacen;
+  const pausados = new Set<string>();
   for (const edificio of asentamiento.edificios) {
     if (edificio.estado !== 'activo') continue;
     const niveles = nivelesDe(edificio.tipo);
@@ -776,10 +845,12 @@ function avanzarRecetas(asentamiento: Asentamiento, almacen: Record<string, Recu
         if (porUnidad) consumo[insumo] = porUnidad * cantidad;
       }
       almacenActual = descontarRecursos(almacenActual, consumo);
-      almacenActual = agregarRecurso(almacenActual, receta.produce, cantidad);
+      const resultado = agregarRecursoConSobrante(almacenActual, receta.produce, cantidad);
+      almacenActual = resultado.almacen;
+      if (resultado.sobrante > 0) pausados.add(edificio.id);
     }
   }
-  return almacenActual;
+  return { almacen: almacenActual, pausados };
 }
 
 /**
@@ -796,7 +867,7 @@ export function avanzarConstruccion(
   mapa: Mapa,
   capital: Asentamiento | undefined,
   reclamos: ReclamosFuentes
-): { asentamiento: Asentamiento; eventos: string[] } {
+): { asentamiento: Asentamiento; eventos: string[]; edificiosCompletados: number } {
   const eventos: string[] = [];
   let almacen = asentamiento.almacen;
   const resultados = new Map<string, Edificio>();
@@ -842,25 +913,32 @@ export function avanzarConstruccion(
     if (edificio.estado === 'en_cola') continue;
 
     // activo: producción
+    let pausadoPorAlmacenLleno = false;
     if (edificio.tipo === 'granja') {
       const yieldTrigo = produccionTrigoDeGranja(edificio.nivelInterno) * fertilidadZona * ratioMano * factorProduccionTrigo(asentamiento);
-      almacen = agregarRecurso(almacen, 'trigo', yieldTrigo);
+      const resultado = agregarRecursoConSobrante(almacen, 'trigo', yieldTrigo);
+      almacen = resultado.almacen;
+      pausadoPorAlmacenLleno = resultado.sobrante > 0;
     } else if (edificio.tipo === 'lenera') {
       // Los bosques no se agotan (Doc 1.4): la Leñera no extrae contra un stock, rinde según la densidad.
       const bosque = mapa.bosque(edificio.fuenteId);
       if (bosque) {
         const yieldMadera = EDIFICIO_CATALOGO.lenera.produccionBaseMadera * bosque.densidad * ratioMano;
-        almacen = agregarRecurso(almacen, 'madera', yieldMadera);
+        const resultado = agregarRecursoConSobrante(almacen, 'madera', yieldMadera);
+        almacen = resultado.almacen;
+        pausadoPorAlmacenLleno = resultado.sobrante > 0;
       }
     } else {
       const extraccion = EXTRACTORES[edificio.tipo];
       if (extraccion && mapa.nodoProductivo(edificio.fuenteId)) {
         const extraido = mapa.extraer(edificio.fuenteId, extraccion.produccionBase() * ratioMano);
-        almacen = agregarRecurso(almacen, extraccion.recurso, extraido);
+        const resultado = agregarRecursoConSobrante(almacen, extraccion.recurso, extraido);
+        almacen = resultado.almacen;
+        pausadoPorAlmacenLleno = resultado.sobrante > 0;
         if (!mapa.nodoProductivo(edificio.fuenteId)) eventos.push(extraccion.mensajeAgotado);
       }
     }
-    resultados.set(edificio.id, edificio);
+    resultados.set(edificio.id, pausadoPorAlmacenLleno !== !!edificio.pausadoPorAlmacenLleno ? { ...edificio, pausadoPorAlmacenLleno } : edificio);
   }
 
   // Paso 2: arranque de obra. Overhaul de auto-construcción: los `en_cola` ya están PAGADOS (el pago ocurrió
@@ -886,10 +964,15 @@ export function avanzarConstruccion(
     cupoObraDisponible -= 1;
   }
 
-  const edificiosActualizados = [...asentamiento.edificios.map((e) => resultados.get(e.id)!), ...puestosNuevos];
+  let edificiosActualizados = [...asentamiento.edificios.map((e) => resultados.get(e.id)!), ...puestosNuevos];
 
   // Rediseño de progreso (Fase 0, Doc 4.2.1): recetas de crafting de los edificios de transformación activos.
-  almacen = avanzarRecetas({ ...asentamiento, edificios: edificiosActualizados }, almacen);
+  const recetasResultado = avanzarRecetas({ ...asentamiento, edificios: edificiosActualizados }, almacen);
+  almacen = recetasResultado.almacen;
+  edificiosActualizados = edificiosActualizados.map((e) => {
+    const pausado = recetasResultado.pausados.has(e.id);
+    return pausado !== !!e.pausadoPorAlmacenLleno ? { ...e, pausadoPorAlmacenLleno: pausado } : e;
+  });
 
   const reserva = reservaDinamicaConstruccion({ ...asentamiento, edificios: edificiosActualizados, almacen }, capital);
   // Reserva manual del Tesorero (a petición del usuario, ver `Asentamiento.reservaManual`): se SUMA a la
@@ -917,10 +1000,12 @@ export function avanzarConstruccion(
   // usuario) — solo se añaden por decisión manual (ver `anadirEdificioManualmente` más abajo).
   let nuevosProyectos: Edificio[] = [];
   let almacenFinal = asentamientoConProgreso.almacen;
+  let extractoresTicksSinCupo = asentamiento.extractoresTicksSinCupo;
   if (!asentamiento.autoConstruccionPausada) {
     const trasNecesidades = evaluarNecesidades(asentamientoConProgreso, zonaPoligono, mapa, reserva, reclamos);
     nuevosProyectos = trasNecesidades.nuevos;
     almacenFinal = trasNecesidades.almacen;
+    extractoresTicksSinCupo = trasNecesidades.extractoresTicksSinCupo;
   }
   for (const p of nuevosProyectos) eventos.push(`Nueva necesidad detectada: se compromete ${p.tipo} (pagado).`);
 
@@ -932,8 +1017,11 @@ export function avanzarConstruccion(
   const edificiosOrdenados = edificiosFinal.map((e) => (e.estado === 'en_cola' ? enColaOrdenados[indiceEnCola++]! : e));
 
   return {
-    asentamiento: { ...asentamientoConProgreso, almacen: almacenFinal, edificios: edificiosOrdenados },
+    asentamiento: { ...asentamientoConProgreso, almacen: almacenFinal, edificios: edificiosOrdenados, extractoresTicksSinCupo },
     eventos,
+    // Doc Fase_0_5 §8: cuántos edificios completó ESTE asentamiento este tick — el llamador (simulation.ts)
+    // lo usa para otorgar experiencia de Facción (`NIVEL_FACCION.xp.edificioCompletado`).
+    edificiosCompletados: edificiosCompletadosEsteTick,
   };
 }
 
@@ -952,11 +1040,15 @@ const EDIFICIOS_UNICOS = new Set<EdificioTipo>([
   'mercado',
   'granFundicion',
   'maravilla',
+  // Muralla (Doc Fase_0_6): una sola por asentamiento, mismo patrón que Palacio/Mercado — no auto-
+  // construcción, se añade manualmente (Gobernador/Maestro de Obras).
+  'muralla',
 ]);
 
 /** Requisito de NIVEL DE ASENTAMIENTO para la construcción BASE de un tipo (Doc 4.2.1) — no confundir con los
  * gates de MEJORA de nivel interno, que viven en `niveles[n].requisitoNivelAsentamiento` y no aplican aquí
- * (una mejora nunca pasa por la cola, ver `avanzarMejoras`). Solo Carpintería y Palacio lo tienen. */
+ * (una mejora nunca pasa por la cola, ver `avanzarMejoras`). Lo tienen Carpintería, Palacio, Maravilla y
+ * (Doc Fase_0_6) Fundición/Curtiduría/Armería y Muralla. */
 function requisitoNivelBase(tipo: EdificioTipo): number {
   const catalogo = EDIFICIO_CATALOGO[tipo] as { requisitoNivelAsentamientoConstruccion?: number };
   return catalogo.requisitoNivelAsentamientoConstruccion ?? 0;
@@ -1035,12 +1127,20 @@ export function anadirEdificioManualmente(
   }
   if (tipo === 'almacen' && alcanzoTopeDeAlmacenes(asentamiento)) {
     throw new ConstruccionManualInvalidaError(
-      `Este asentamiento ya tiene el máximo de Almacenes para su nivel (${NECESIDADES.maximoAlmacenesPorNivel[asentamiento.nivel]}).`
+      `Este asentamiento ya tiene el máximo de Almacenes para su nivel (${NECESIDADES.maximoAlmacenesPorNivel[nivelActualDe(asentamiento)]}).`
     );
   }
+  if (tipo === 'vivienda' && alcanzoTopeDeViviendas(asentamiento)) {
+    throw new ConstruccionManualInvalidaError(
+      `Este asentamiento ya tiene el máximo de Viviendas para su nivel (${maximoViviendasPorNivel(nivelActualDe(asentamiento))}).`
+    );
+  }
+  // nivelActual (Doc Fase_0_5 §6.2), no nivelAlcanzado: un asentamiento degradado no puede construir
+  // manualmente edificios de nivel alto hasta recuperarse, aunque su `nivel` histórico ya los desbloqueara.
   const requisito = requisitoNivelBase(tipo);
-  if (asentamiento.nivel < requisito) {
-    throw new ConstruccionManualInvalidaError(`Requiere nivel de asentamiento ${requisito} (actual: ${asentamiento.nivel}).`);
+  const nivelOperativo = nivelActualDe(asentamiento);
+  if (nivelOperativo < requisito) {
+    throw new ConstruccionManualInvalidaError(`Requiere nivel de asentamiento ${requisito} (actual: ${nivelOperativo}).`);
   }
   if (tipo === 'granFundicion' && faccion.nivel < EDIFICIO_CATALOGO.granFundicion.nivelFaccionMinimo) {
     throw new ConstruccionManualInvalidaError(

@@ -1,5 +1,5 @@
 import type { Asentamiento, Poblacion } from '../domain/types';
-import { EDIFICIO_CATALOGO, POBLACION } from '../constants';
+import { EDIFICIO_CATALOGO, NIVEL_ASENTAMIENTO, POBLACION } from '../constants';
 import {
   EDIFICIOS_TRANSFORMACION,
   capacidadViviendaArtesanos,
@@ -85,11 +85,21 @@ export function crecerPoblacion(asentamiento: Asentamiento): { poblacion: Poblac
     }
   }
 
+  // Techo de población por nivel (Doc Fase_0_5 §3.1, a petición del usuario): por encima de este total, la
+  // Vivienda/Palacio dejan de dar cupo efectivo aunque tengan capacidad física de sobra — el nivel es lo que
+  // abre el techo de habitantes, no solo una llave de edificios. Escala hacia abajo el crecimiento de este
+  // tick proporcionalmente entre las 3 clases si juntas se pasarían del techo (nunca purga población ya
+  // asentada, solo limita cuánta puede sumarse este tick).
+  const techo = NIVEL_ASENTAMIENTO.techoPoblacion[asentamiento.nivel] ?? Infinity;
+  const espacioBajoTecho = Math.max(0, techo - poblacionTotal(asentamiento));
+  const crecimientoBruto = nuevosPesants + nuevosArtesanos + nuevaNobleza;
+  const factorTecho = crecimientoBruto > espacioBajoTecho && crecimientoBruto > 0 ? espacioBajoTecho / crecimientoBruto : 1;
+
   return {
     poblacion: {
-      pesants: asentamiento.poblacion.pesants + nuevosPesants,
-      artesanos: asentamiento.poblacion.artesanos + nuevosArtesanos,
-      nobleza: asentamiento.poblacion.nobleza + nuevaNobleza,
+      pesants: asentamiento.poblacion.pesants + Math.floor(nuevosPesants * factorTecho),
+      artesanos: asentamiento.poblacion.artesanos + Math.floor(nuevosArtesanos * factorTecho),
+      nobleza: asentamiento.poblacion.nobleza + Math.floor(nuevaNobleza * factorTecho),
     },
     eventos,
   };

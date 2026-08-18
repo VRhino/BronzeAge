@@ -7,8 +7,14 @@
 //  - La capacidad de almacenamiento tiene techo: un tope de Almacenes por nivel de asentamiento.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Asentamiento, Edificio } from '../../domain/types';
-import { EDIFICIO_CATALOGO, NECESIDADES, produccionTrigoDeGranja } from '../../constants';
-import { alcanzoTopeDeAlmacenes, anadirEdificioManualmente, ConstruccionManualInvalidaError } from '../construction';
+import { EDIFICIO_CATALOGO, NECESIDADES, NIVEL_ASENTAMIENTO, produccionTrigoDeGranja } from '../../constants';
+import {
+  alcanzoTopeDeAlmacenes,
+  alcanzoTopeDeViviendas,
+  anadirEdificioManualmente,
+  ConstruccionManualInvalidaError,
+  maximoViviendasPorNivel,
+} from '../construction';
 import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
 import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, mockMathRandomDeterminista, posicionRecomendable } from './fixtures';
 
@@ -64,7 +70,9 @@ describe('Almacén: tope por nivel de asentamiento', () => {
 
     for (const [nivelTexto, tope] of Object.entries(NECESIDADES.maximoAlmacenesPorNivel)) {
       const nivel = Number(nivelTexto);
-      const enNivel = { ...asentamiento, nivel };
+      // `alcanzoTopeDeAlmacenes` lee nivelActual (Doc Fase_0_5 §6.2), no nivel (nivelAlcanzado) — hay que
+      // pisar los dos para simular "el asentamiento está en nivel X" a todos los efectos.
+      const enNivel = { ...asentamiento, nivel, nivelActual: nivel };
       expect(alcanzoTopeDeAlmacenes(conAlmacenes(enNivel, tope - 1)), `nivel ${nivel}, ${tope - 1} almacenes`).toBe(false);
       expect(alcanzoTopeDeAlmacenes(conAlmacenes(enNivel, tope)), `nivel ${nivel}, ${tope} almacenes`).toBe(true);
     }
@@ -142,5 +150,117 @@ describe('Almacén: tope por nivel de asentamiento', () => {
     expect(maximoVisto, 'con el almacén lleno tiene que llegar al tope de su nivel').toBeGreaterThanOrEqual(
       NECESIDADES.maximoAlmacenesPorNivel[1]!
     );
+  });
+});
+
+// Bug detectado por el usuario: no existía ningún límite de Viviendas por nivel de asentamiento — el tope se
+// deriva de cuántos pesants exige el SIGUIENTE nivel (`NIVEL_ASENTAMIENTO.requisitos[nivel+1].pesants`) entre
+// la capacidad de una Vivienda (`EDIFICIO_CATALOGO.vivienda.capacidadPesants`), ver `maximoViviendasPorNivel`.
+describe('Vivienda: tope por nivel de asentamiento', () => {
+  let restaurar: () => void;
+
+  beforeEach(() => {
+    restaurar = mockMathRandomDeterminista(SEED);
+  });
+
+  afterEach(() => {
+    restaurar();
+  });
+
+  function conViviendas(base: Asentamiento, cuantas: number, estado: Edificio['estado'] = 'activo'): Asentamiento {
+    const viviendas: Edificio[] = Array.from({ length: cuantas }, (_, i) => ({
+      id: `vivienda-${base.id}-${i}`,
+      tipo: 'vivienda',
+      posicion: { x: 30 + i * 12, y: 0 },
+      estado,
+      ticksRestantes: 0,
+      ambito: 'asentamiento',
+    }));
+    return { ...base, edificios: [...base.edificios, ...viviendas] };
+  }
+
+  it('el tope de nivel 1 es el mismo cálculo que hizo el usuario: 200 pesants ÷ 15/Vivienda = 14', () => {
+    expect(NIVEL_ASENTAMIENTO.requisitos[2]!.pesants).toBe(200);
+    expect(EDIFICIO_CATALOGO.vivienda.capacidadPesants).toBe(15);
+    expect(maximoViviendasPorNivel(1)).toBe(14);
+  });
+
+  // Bug detectado por el usuario: el primer cálculo del tope solo miraba pesants (nivel 2→3: 500/15=34
+  // Viviendas), lo que daba una capacidad de artesanos de 34×5=170 — por debajo de los 200 que exige nivel 3,
+  // un DEADLOCK real (nunca se podía subir a nivel 3). Este test fija el invariante para TODOS los niveles
+  // con requisito siguiente: el tope de Viviendas debe dar cupo suficiente para AMBOS, pesants y artesanos,
+  // del gate al que apunta — así una futura recalibración de cifras no puede reintroducir el mismo deadlock.
+  it('el tope de Viviendas nunca deja sin cupo suficiente ni a pesants ni a artesanos del siguiente nivel', () => {
+    for (const nivelTexto of Object.keys(NIVEL_ASENTAMIENTO.requisitos)) {
+      const nivelSiguiente = Number(nivelTexto);
+      const nivel = nivelSiguiente - 1;
+      const requisito = NIVEL_ASENTAMIENTO.requisitos[nivelSiguiente]!;
+      const tope = maximoViviendasPorNivel(nivel);
+      const capacidadPesants = tope * EDIFICIO_CATALOGO.vivienda.capacidadPesants;
+      const capacidadArtesanos = tope * EDIFICIO_CATALOGO.vivienda.capacidadArtesanos;
+      expect(capacidadPesants, `nivel ${nivel}: cupo de pesants`).toBeGreaterThanOrEqual(requisito.pesants);
+      expect(capacidadArtesanos, `nivel ${nivel}: cupo de artesanos`).toBeGreaterThanOrEqual(requisito.artesanos);
+    }
+  });
+
+  it('el tope se alcanza justo en el número calculado para cada nivel con requisito de nivel siguiente', () => {
+    const mapa = crearMapaDeterminista(SEED);
+    const { asentamiento: fundado } = fundarAsentamientoDeTest(mapa, crearFacciones(), 'faccion-1', []);
+    // Fundar ya trae `FUNDACION.viviendasIniciales` Viviendas activas — se descartan para partir de 0 y que
+    // `conViviendas` controle el total exacto que se está probando.
+    const asentamiento = { ...fundado, edificios: fundado.edificios.filter((e) => e.tipo !== 'vivienda') };
+
+    for (const nivelTexto of Object.keys(NIVEL_ASENTAMIENTO.requisitos)) {
+      const nivelSiguiente = Number(nivelTexto);
+      const nivel = nivelSiguiente - 1;
+      const tope = maximoViviendasPorNivel(nivel);
+      const enNivel = { ...asentamiento, nivel, nivelActual: nivel };
+      expect(alcanzoTopeDeViviendas(conViviendas(enNivel, tope - 1)), `nivel ${nivel}, ${tope - 1} viviendas`).toBe(false);
+      expect(alcanzoTopeDeViviendas(conViviendas(enNivel, tope)), `nivel ${nivel}, ${tope} viviendas`).toBe(true);
+    }
+  });
+
+  it('los que están en cola o en obra cuentan para el tope, no solo los activos', () => {
+    const mapa = crearMapaDeterminista(SEED);
+    const { asentamiento: fundado } = fundarAsentamientoDeTest(mapa, crearFacciones(), 'faccion-1', []);
+    const asentamiento = { ...fundado, edificios: fundado.edificios.filter((e) => e.tipo !== 'vivienda') };
+    const tope = maximoViviendasPorNivel(1);
+    expect(alcanzoTopeDeViviendas(conViviendas({ ...asentamiento, nivel: 1, nivelActual: 1 }, tope, 'en_cola'))).toBe(true);
+  });
+
+  it('la construcción manual rechaza la Vivienda que pasaría del tope', () => {
+    const mapa = crearMapaDeterminista(SEED);
+    const facciones = crearFacciones();
+    const { asentamiento: fundado, facciones: facs } = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', []);
+    const base = { ...fundado, edificios: fundado.edificios.filter((e) => e.tipo !== 'vivienda') };
+    const tope = maximoViviendasPorNivel(1);
+    const lleno: Asentamiento = {
+      ...conViviendas({ ...base, nivel: 1, nivelActual: 1 }, tope),
+      cargos: { ...base.cargos, gobernadorId: 'jugador-faccion-1-1' },
+    };
+    expect(() =>
+      anadirEdificioManualmente(lleno, facs[0]!, 'gobernador', 'vivienda', [], mapa, undefined, {
+        nodos: new Set(),
+        lenerasPorBosque: new Map(),
+      })
+    ).toThrow(ConstruccionManualInvalidaError);
+  });
+
+  /**
+   * La auto-construcción llega al mismo `alcanzoTopeDeViviendas` que la manual (ver `evaluarNecesidades`,
+   * construction.ts) — no se ejercita aquí con una simulación completa porque a nivel 1 el espacio físico del
+   * trazado urbano (`radioPotencial`, independiente de este cambio) ya limita cuántas Viviendas caben mucho
+   * antes de llegar al tope de población (14): en la práctica, a nivel 1 se topa primero con "sin sitio
+   * libre" que con este tope. El tope de población importa a partir de niveles con más radio/espacio.
+   */
+  it('la auto-construcción de Vivienda deja de proponerse en cuanto se alcanza el tope', () => {
+    const mapa = crearMapaDeterminista(SEED);
+    const { asentamiento: fundado } = fundarAsentamientoDeTest(mapa, crearFacciones(), 'faccion-1', []);
+    const tope = maximoViviendasPorNivel(1);
+    const asentamiento = {
+      ...conViviendas({ ...fundado, nivel: 1, nivelActual: 1, edificios: fundado.edificios.filter((e) => e.tipo !== 'vivienda') }, tope),
+      poblacion: { ...fundado.poblacion, pesants: 100000 },
+    };
+    expect(alcanzoTopeDeViviendas(asentamiento)).toBe(true);
   });
 });

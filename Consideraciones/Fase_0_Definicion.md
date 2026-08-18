@@ -7,7 +7,7 @@ Objetivo: validar la simulación core (reglas, economía, crecimiento) sin inver
 ## Sistemas totalmente testeables en Fase 0 (todos como datos puros)
 
 - **Fundación y zonas de influencia** — punto de fundación → círculo/polígono de zona de influencia, expansión, colisión de fronteras (línea/borde de color).
-- **Auto-construcción por necesidad** — lista/contador de "edificios lógicos" en panel, sin renderizar edificios reales. Colocación = "mejor casilla disponible según reglas", marcada como icono/color simple.
+- ~~**Auto-construcción por necesidad** — lista/contador de "edificios lógicos" en panel, sin renderizar edificios reales. Colocación = "mejor casilla disponible según reglas", marcada como icono/color simple.~~ — SUPERADO durante Fase 0 (a petición del usuario): se implementó el trazado urbano completo con posición exacta por edificio en vez del contador/icono previsto aquí (ver nota en "Lo que NO cabe en Fase 0" abajo y `Consideraciones/Vista_Asentamiento_Trazado_Urbano.md`).
 - **Recursos** — trigo/commodities de nobleza/madera/piedra/livestock, con ubicación (nodo, zona de bosque, o atributo de fertilidad según el tipo — ver Doc 1). Cadenas de producción invisibles (solo inputs/outputs netos visibles).
 - **Población** — 3 clases con sus fórmulas de crecimiento.
 - **Almacenamiento** — límites por recurso, disparo de construcción por superávit.
@@ -22,7 +22,7 @@ Objetivo: validar la simulación core (reglas, economía, crecimiento) sin inver
 
 ## Lo que NO cabe en Fase 0 (queda para Fase 1 o posterior)
 
-- Cualquier cosa que dependa de ver el asentamiento "por dentro" (edificios individuales con posición exacta, barrios, disposición visual real)
+- ~~Cualquier cosa que dependa de ver el asentamiento "por dentro" (edificios individuales con posición exacta, barrios, disposición visual real)~~ — SUPERADO durante Fase 0 (a petición del usuario, cambio de alcance respecto a este documento original): se implementó un trazado urbano completo y persistente por asentamiento — calles derivadas del perímetro del Centro Urbano, barrios por categoría de edificio, manzanas con medianera, posición y tamaño exactos por edificio, renderizado dedicado en `ui/canvas.ts`. Diseño completo documentado en `Consideraciones/Vista_Asentamiento_Trazado_Urbano.md`; implementación en `engine/trazado.ts`.
 - Combate visual/animado (el resultado numérico sí se prueba, pero no la representación)
 - Exploración con niebla de guerra o cualquier cosa que dependa de recorrer el mapa en primera/tercera persona
 - Todo lo estético (identidad visual, culturas de referencia)

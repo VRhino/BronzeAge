@@ -89,6 +89,7 @@ const EDIFICIO_NOMBRE: Record<string, string> = {
   mercado: 'Mercado',
   puestoMercado: 'Puesto de mercado',
   maravilla: 'Maravilla',
+  muralla: 'Muralla',
 };
 
 const EDIFICIO_FUNCION: Record<string, string> = {
@@ -112,7 +113,8 @@ const EDIFICIO_FUNCION: Record<string, string> = {
   granFundicion: 'Edificio militar de élite — requiere nivel de Facción alto; habilita tropas de Nobleza. Solo se añade a la cola manualmente (Gobernador/Maestro de Obras).',
   mercado: 'Exige poder colocar órdenes de mercado y construir caravanas comerciales propias. Su nivel interno fija el cupo de flota. Solo se añade a la cola manualmente (Gobernador/Maestro de Obras).',
   puestoMercado: 'Pieza de la zona de Mercado: no se construye ni cuesta nada, aparece sola al completarse el Mercado y al subir cada nivel interno. Solo ocupa suelo — el cupo de flota lo fija la pieza principal.',
-  maravilla: 'Edificio trofeo de coste extremo — requiere asentamiento en nivel máximo (3). Solo se añade a la cola manualmente (Gobernador/Maestro de Obras). El ciclo de servidor que se cerraría al completarla no está implementado todavía.',
+  maravilla: 'Edificio trofeo de coste extremo — requiere asentamiento en nivel máximo (5). Solo se añade a la cola manualmente (Gobernador/Maestro de Obras). El ciclo de servidor que se cerraría al completarla no está implementado todavía.',
+  muralla: 'Implementación mínima: ocupa 1 celda, cuesta solo piedra. Sin efecto mecánico en combate/asedio todavía. Requisito para subir a nivel de asentamiento 4. Solo se añade a la cola manualmente (Gobernador/Maestro de Obras).',
 };
 
 /** Campos de factor que puede traer una política del catálogo (ver CATALOGOS.politicas), con etiqueta legible. */
@@ -147,8 +149,9 @@ function efectoPolitica(politica: (typeof CATALOGOS.politicas)[number]): string 
 }
 
 // --- Estado de vista (qué se muestra, no simulación): vive solo aquí, nunca en el store. ---
-let tabActivo: 'acciones' | 'guerra' | 'comercio' | 'asentamientos' | 'jugadores' | 'politicas' | 'balance' = 'acciones';
+let tabActivo: 'acciones' | 'guerra' | 'comercio' | 'asentamientos' | 'facciones' | 'jugadores' | 'politicas' | 'balance' = 'acciones';
 let asentamientoSeleccionadoId: string | null = null;
+let faccionSeleccionadaId: string | null = null;
 let jugadorSeleccionadoId: string | null = null;
 /** Filtro de Facción (a petición del usuario): con muchas Facciones, listar el grupo de cada una a la vez
  * dejaba de caber en pantalla — las pestañas Asentamientos/Jugadores filtran a una Facción por combobox. */
@@ -188,6 +191,7 @@ app.innerHTML = `
       <button class="tab-btn" data-tab="guerra">Guerra</button>
       <button class="tab-btn" data-tab="comercio">Comercio</button>
       <button class="tab-btn" data-tab="asentamientos">Asentamientos</button>
+      <button class="tab-btn" data-tab="facciones">Facción</button>
       <button class="tab-btn" data-tab="jugadores">Jugadores</button>
       <button class="tab-btn" data-tab="politicas">Políticas</button>
       <button class="tab-btn" data-tab="balance">Valores de simulación</button>
@@ -369,6 +373,10 @@ app.innerHTML = `
 
     <div class="tab-panel" id="tab-asentamientos" hidden>
       <div id="asentamientos-tab"></div>
+    </div>
+
+    <div class="tab-panel" id="tab-facciones" hidden>
+      <div id="facciones-tab"></div>
     </div>
 
     <div class="tab-panel" id="tab-jugadores" hidden>
@@ -1032,14 +1040,24 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
     const s = nivelInfo.siguiente;
     const ratioPesants = Math.min(1, s.pesants.actual / s.pesants.requerido);
     const ratioArtesanos = Math.min(1, s.artesanos.actual / s.artesanos.requerido);
-    const edificiosListos = s.edificiosRequeridos - s.edificiosFaltantes.length;
-    const ratioEdificios = s.edificiosRequeridos > 0 ? edificiosListos / s.edificiosRequeridos : 1;
+    // s.edificiosRequeridos puede ser MENOR que la cantidad de candidatos en s.edificiosFaltantes (gate tipo
+    // "al menos N de M", Doc Fase_0_6 nivel 2: 3 de 6 edificios de extracción) — el ratio va sobre cuántos
+    // YA están construidos, no sobre cuántos faltan de la lista completa de candidatos.
+    const ratioEdificios = s.edificiosRequeridos > 0 ? Math.min(1, s.edificiosConstruidos / s.edificiosRequeridos) : 1;
     nivelPorcentaje = Math.round(((ratioPesants + ratioArtesanos + ratioEdificios) / 3) * 100);
-    const faltantesTexto = s.edificiosFaltantes.length
-      ? `; faltan: ${s.edificiosFaltantes.map((tipo) => EDIFICIO_NOMBRE[tipo] ?? tipo).join(', ')}`
-      : '';
+    const faltantesTexto =
+      s.edificiosConstruidos < s.edificiosRequeridos && s.edificiosFaltantes.length
+        ? `; ${s.edificiosConstruidos}/${s.edificiosRequeridos} edificios, de: ${s.edificiosFaltantes.map((tipo) => EDIFICIO_NOMBRE[tipo] ?? tipo).join(', ')}`
+        : '';
     nivelTexto = `Nivel ${s.nivelObjetivo}: ${s.pesants.actual}/${s.pesants.requerido} pesants, ${s.artesanos.actual}/${s.artesanos.requerido} artesanos${faltantesTexto}`;
   }
+  // Cumple gates pero no sube: el cupo de nivel de su Facción está lleno (Doc Fase_0_5 §5) — se queda
+  // "elegible, esperando cupo" hasta que la Facción suba de nivel (combate/conquista/construcción) o libere
+  // un cupo. Sin este aviso el jugador solo ve "100%" y ningún ascenso, sin saber por qué.
+  const cupoBloqueo = gameStore.cupoNivelInfo(a);
+  const cupoBloqueoHtml = cupoBloqueo
+    ? `<div class="fundacion-viabilidad aviso" style="margin-top:6px">Cumple los requisitos para nivel ${cupoBloqueo.nivelObjetivo}, pero el cupo de la Facción para ese nivel está lleno (${cupoBloqueo.ocupados}/${cupoBloqueo.cupoTotal}) — sube cuando la Facción alcance un nivel mayor (combate, conquista o edificios nuevos) o se libere un cupo.</div>`
+    : '';
 
   const mantenimiento = gameStore.mantenimientoInfo(a);
   const mantenimientoHtml = mantenimiento.enGracia
@@ -1088,6 +1106,7 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
         </div>
         <div class="kv-row" style="margin-top:6px"><span>Progreso de nivel</span><span>${nivelTexto}</span></div>
         <div class="mantenimiento-bar"><div class="mantenimiento-fill" style="width:${nivelPorcentaje}%"></div></div>
+        ${cupoBloqueoHtml}
         <div class="kv-row" style="margin-top:6px"><span>Mantenimiento</span><span>${a.medidorMantenimiento.toFixed(0)}/100</span></div>
         <div class="mantenimiento-bar"><div class="mantenimiento-fill" style="width:${Math.max(0, Math.min(100, a.medidorMantenimiento))}%"></div></div>
       </div>
@@ -1327,6 +1346,146 @@ function renderAsentamientosTab(state: GameState): void {
   });
   colaTipoSelect?.addEventListener('change', actualizarInfoEdificioCola);
   actualizarInfoEdificioCola();
+}
+
+function renderDetalleFaccion(faccion: Faccion, state: GameState): string {
+  const nivelFaccion = gameStore.nivelFaccionInfo(faccion);
+  const cupo = gameStore.cupoAsentamientosFaccion(faccion);
+  const cap = gameStore.capFundacion(faccion.nivel);
+  const propios = state.asentamientos.filter((a) => a.faccionId === faccion.id);
+
+  const xpTexto = nivelFaccion.esMaximo
+    ? 'Nivel máximo'
+    : `${nivelFaccion.experiencia}/${nivelFaccion.umbralSiguiente} XP (desde ${nivelFaccion.umbralActual})`;
+  const xpPorcentaje = nivelFaccion.esMaximo
+    ? 100
+    : Math.round(((nivelFaccion.experiencia - nivelFaccion.umbralActual) / (nivelFaccion.umbralSiguiente! - nivelFaccion.umbralActual)) * 100);
+
+  const asentamientosHtml = propios.length
+    ? `<table class="mini-table">
+        <thead><tr><th>Asentamiento</th><th>Nivel</th><th>Nivel operativo</th><th>Población</th></tr></thead>
+        <tbody>
+          ${propios
+            .map((a) => {
+              const totalPob = a.poblacion.pesants + a.poblacion.artesanos + a.poblacion.nobleza;
+              return `<tr><td>${a.nombre ?? a.id}</td><td>${a.nivel}</td><td>${a.nivelActual ?? a.nivel}</td><td>${totalPob}</td></tr>`;
+            })
+            .join('')}
+        </tbody>
+      </table>`
+    : '<p class="legend-note">Sin asentamientos.</p>';
+
+  const relacionesDeLaFaccion = state.relaciones.filter((r) => r.faccionAId === faccion.id || r.faccionBId === faccion.id);
+  const relacionesHtml = relacionesDeLaFaccion.length
+    ? `<table class="mini-table">
+        <thead><tr><th>Tipo</th><th>Con</th><th>Rol</th><th>Estado</th><th>Tributo</th></tr></thead>
+        <tbody>
+          ${relacionesDeLaFaccion
+            .map((r) => {
+              const esA = r.faccionAId === faccion.id;
+              const otraId = esA ? r.faccionBId : r.faccionAId;
+              const otraNombre = state.facciones.find((f) => f.id === otraId)?.nombre ?? otraId;
+              const rol = r.tipo === 'vasallaje' ? (esA ? 'Señora' : 'Vasalla') : '—';
+              const tributo = r.tributo ? `${r.tributo.cantidadPorTick}/tick ${RECURSO_NOMBRE[r.tributo.recurso] ?? r.tributo.recurso}` : '—';
+              return `<tr><td>${r.tipo}</td><td>${otraNombre}</td><td>${rol}</td><td>${r.estado}</td><td>${tributo}</td></tr>`;
+            })
+            .join('')}
+        </tbody>
+      </table>`
+    : '<p class="legend-note">Sin relaciones diplomáticas.</p>';
+
+  const ligas = gameStore.getLigas(state.relaciones, state.facciones);
+  const ligaDeLaFaccion = ligas.find((l) => l.miembrosFaccionIds.includes(faccion.id));
+  const ligaHtml = ligaDeLaFaccion
+    ? `<div class="kv-row"><span>Miembros</span><span>${ligaDeLaFaccion.miembrosFaccionIds.map((id) => state.facciones.find((f) => f.id === id)?.nombre ?? id).join(', ')}</span></div>
+       ${
+         ligaDeLaFaccion.tieneVasallaje
+           ? `<div class="kv-row"><span>Gran Rey</span><span>${state.facciones.find((f) => f.id === ligaDeLaFaccion.granReyFaccionId)?.reyId ?? '—'}</span></div>`
+           : ''
+       }`
+    : '<p class="legend-note">No pertenece a ninguna Liga.</p>';
+
+  const titulosDeLaFaccion = state.titulos.filter((t) => t.poseedorId === faccion.id);
+  const titulosHtml = titulosDeLaFaccion.length
+    ? `<div class="chip-row">${titulosDeLaFaccion.map((t) => `<span class="chip">${t.nombre}</span>`).join('')}</div>`
+    : '<p class="legend-note">Sin títulos.</p>';
+
+  return `
+    <div class="settlement-detail">
+      <div class="detail-section">
+        <h3>${faccion.nombre}</h3>
+        <div class="kv-grid">
+          <div class="kv-row"><span>Nivel</span><span>${faccion.nivel}</span></div>
+          <div class="kv-row"><span>Rey</span><span>${faccion.reyId ?? '—'}</span></div>
+          <div class="kv-row"><span>Embajador</span><span>${faccion.embajadorId ?? '—'}</span></div>
+          <div class="kv-row"><span>Ciudadanos</span><span>${faccion.ciudadanosIds.length}</span></div>
+          <div class="kv-row"><span>Reputación</span><span>${faccion.reputacion.toFixed(0)}</span></div>
+        </div>
+        <div class="kv-row" style="margin-top:6px"><span>Progreso de nivel de Facción</span><span>${xpTexto}</span></div>
+        <div class="mantenimiento-bar"><div class="mantenimiento-fill" style="width:${xpPorcentaje}%"></div></div>
+      </div>
+
+      <div class="detail-section">
+        <h3>Cupo de expansión (Doc 1.7/Fase_0_5 §5)</h3>
+        <div class="kv-grid">
+          <div class="kv-row"><span>Cap de fundación</span><span>${propios.length}/${cap}</span></div>
+          <div class="kv-row"><span>Cupo asentamientos nivel 2</span><span>${cupo.nivel2.ocupados}/${cupo.nivel2.total}</span></div>
+          <div class="kv-row"><span>Cupo asentamientos nivel 3</span><span>${cupo.nivel3.ocupados}/${cupo.nivel3.total}</span></div>
+        </div>
+        <p class="legend-note">El cupo de nivel 2/3 sube con el nivel de Facción (combate, conquista o edificios nuevos completados) — un asentamiento propio que ya cumple los gates pero no tiene cupo libre se queda "elegible" hasta que la Facción suba de nivel o se libere uno.</p>
+      </div>
+
+      <div class="detail-section">
+        <h3>Asentamientos (${propios.length})</h3>
+        ${asentamientosHtml}
+      </div>
+
+      <div class="detail-section">
+        <h3>Relaciones diplomáticas</h3>
+        ${relacionesHtml}
+      </div>
+
+      <div class="detail-section">
+        <h3>Liga</h3>
+        ${ligaHtml}
+      </div>
+
+      <div class="detail-section">
+        <h3>Títulos (Doc 2.9)</h3>
+        ${titulosHtml}
+      </div>
+    </div>
+  `;
+}
+
+function renderFaccionesTab(state: GameState): void {
+  const cont = document.getElementById('facciones-tab')!;
+
+  if (state.facciones.length === 0) {
+    faccionSeleccionadaId = null;
+    cont.innerHTML = '<p class="legend-note">Aún no hay Facciones fundadas.</p>';
+    return;
+  }
+
+  if (!faccionSeleccionadaId || !state.facciones.some((f) => f.id === faccionSeleccionadaId)) {
+    faccionSeleccionadaId = state.facciones[0]!.id;
+  }
+
+  const botones = state.facciones
+    .map(
+      (f) =>
+        `<button type="button" class="settlement-tab-btn${f.id === faccionSeleccionadaId ? ' active' : ''}" data-faccion="${f.id}">${f.nombre}</button>`
+    )
+    .join('');
+  const seleccionada = state.facciones.find((f) => f.id === faccionSeleccionadaId)!;
+  cont.innerHTML = `<div class="settlement-tab-row">${botones}</div>${renderDetalleFaccion(seleccionada, state)}`;
+
+  cont.querySelectorAll('.settlement-tab-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      faccionSeleccionadaId = (btn as HTMLElement).dataset.faccion!;
+      render();
+    });
+  });
 }
 
 function renderDetalleJugador(jugadorId: string, state: GameState): string {
@@ -1778,6 +1937,7 @@ function actualizarTabs(): void {
   if (tabActivo === 'guerra') renderRosterTropas();
   document.getElementById('tab-comercio')!.hidden = tabActivo !== 'comercio';
   document.getElementById('tab-asentamientos')!.hidden = tabActivo !== 'asentamientos';
+  document.getElementById('tab-facciones')!.hidden = tabActivo !== 'facciones';
   document.getElementById('tab-jugadores')!.hidden = tabActivo !== 'jugadores';
   document.getElementById('tab-politicas')!.hidden = tabActivo !== 'politicas';
   document.getElementById('tab-balance')!.hidden = tabActivo !== 'balance';
@@ -1788,7 +1948,7 @@ function actualizarTabs(): void {
 document.getElementById('main-tabs')!.addEventListener('click', (ev) => {
   const btn = (ev.target as HTMLElement).closest('.tab-btn') as HTMLButtonElement | null;
   if (!btn) return;
-  tabActivo = btn.dataset.tab as 'acciones' | 'guerra' | 'comercio' | 'asentamientos' | 'jugadores' | 'politicas' | 'balance';
+  tabActivo = btn.dataset.tab as 'acciones' | 'guerra' | 'comercio' | 'asentamientos' | 'facciones' | 'jugadores' | 'politicas' | 'balance';
   actualizarTabs();
 });
 actualizarTabs();
@@ -1932,6 +2092,7 @@ function render(): void {
   actualizarInfoFlota(state);
   renderPanelAsentamientos(state);
   renderAsentamientosTab(state);
+  renderFaccionesTab(state);
   renderJugadoresTab(state);
   renderPanelPolitica(state);
   renderPanelProgresion(state);

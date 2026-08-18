@@ -186,6 +186,8 @@ export function fundarAsentamiento(
     jugadoresFundadoresIds,
     posicion,
     nivel: 1,
+    nivelActual: 1,
+    rachaMantenimientoSano: 0,
     fundadoEnTick: tickActual,
     radioPotencial: ZONA_INFLUENCIA.radioInicial,
     poblacion: { pesants: POBLACION.pesants.inicial, artesanos: 0, nobleza: 0 },

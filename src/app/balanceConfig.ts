@@ -32,6 +32,7 @@ import {
   REGENERACION_NODOS,
   REPUTACION,
   RESERVA_CONSTRUCCION,
+  SIMULACION_AUTO_COMERCIO,
   SITIO,
   TRUEQUE,
   ZONA_INFLUENCIA,
@@ -91,6 +92,9 @@ const GRUPOS: Array<[string, string, unknown]> = [
   ['Reputación', 'REPUTACION', REPUTACION],
   ['Campamentos de bandidos', 'CAMPAMENTOS_BANDIDOS', CAMPAMENTOS_BANDIDOS],
   ['Regeneración de nodos', 'REGENERACION_NODOS', REGENERACION_NODOS],
+  // ⚠️ Solo para simulación — ver constants.ts. `activo: 0` por defecto; el juego real no lo ve encendido
+  // salvo que se active a propósito desde este panel.
+  ['Auto-comercio (solo simulación)', 'SIMULACION_AUTO_COMERCIO', SIMULACION_AUTO_COMERCIO],
 ];
 
 /**

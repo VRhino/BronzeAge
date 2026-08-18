@@ -1,28 +1,26 @@
 import type { Asentamiento, Faccion } from '../domain/types';
-import { CAP_FUNDACION_POR_NIVEL, CIUDADANIA, NIVEL_FACCION } from '../constants';
-import { poblacionTotal } from './asentamientoQuery';
+import { CAP_FUNDACION_POR_NIVEL, CIUDADANIA, CUPO_NIVEL_ASENTAMIENTO, NIVEL_FACCION } from '../constants';
 
 export class FaccionInvalidaError extends Error {}
 
 export function crearFaccion(id: string, nombre: string): Faccion {
   const nombreLimpio = nombre.trim();
   if (!nombreLimpio) throw new FaccionInvalidaError('El nombre de la Facción no puede estar vacío.');
-  return { id, nombre: nombreLimpio, reyId: null, embajadorId: null, nivel: 1, ciudadanosIds: [], reputacion: 0 };
-}
-
-function asentamientosDe(faccionId: string, asentamientos: Asentamiento[]): Asentamiento[] {
-  return asentamientos.filter((a) => a.faccionId === faccionId);
+  return { id, nombre: nombreLimpio, reyId: null, embajadorId: null, nivel: 1, experiencia: 0, ciudadanosIds: [], reputacion: 0 };
 }
 
 /**
- * Nivel de Facción (Doc 1.7): "qué lo hace subir" no está cerrado en el diseño — placeholder que combina
- * nº de asentamientos propios y población NPC total. Recalculado cada tick a partir del estado actual.
+ * Nivel de Facción por EXPERIENCIA (Doc 1.7, rediseño Fase 0.5): puramente derivado de `faccion.experiencia`
+ * (ya monótona por construcción, ver `aplicarAjustesExperiencia`) contra la curva de umbrales acumulados
+ * `NIVEL_FACCION.xpParaNivel`.
  */
-export function calcularNivelFaccion(faccion: Faccion, asentamientos: Asentamiento[]): number {
-  const propios = asentamientosDe(faccion.id, asentamientos);
-  const poblacion = propios.reduce((acc, a) => acc + poblacionTotal(a), 0);
-  const puntos = propios.length * NIVEL_FACCION.puntosPorAsentamiento + Math.floor(poblacion / NIVEL_FACCION.poblacionPorPunto);
-  return Math.min(NIVEL_FACCION.nivelMaximo, 1 + Math.floor(puntos / NIVEL_FACCION.puntosPorNivel));
+export function calcularNivelFaccion(faccion: Faccion): number {
+  let nivel = 1;
+  for (const umbral of NIVEL_FACCION.xpParaNivel) {
+    if (faccion.experiencia < umbral) break;
+    nivel += 1;
+  }
+  return Math.min(NIVEL_FACCION.nivelMaximo, nivel);
 }
 
 /** Cap de fundación (Doc 1.7): límite duro de asentamientos FUNDADOS (no aplica a conquista/anexión). */
@@ -31,11 +29,35 @@ export function calcularCapFundacion(nivel: number): number {
   return CAP_FUNDACION_POR_NIVEL[idx] ?? CAP_FUNDACION_POR_NIVEL[CAP_FUNDACION_POR_NIVEL.length - 1]!;
 }
 
-/** Recalcula el nivel de todas las Facciones a partir del estado actual de asentamientos; devuelve eventos de subida. */
-export function avanzarNivelesFaccion(facciones: Faccion[], asentamientos: Asentamiento[]): { facciones: Faccion[]; eventos: string[] } {
+/** Cupo de asentamientos en nivel 2 o 3 según el nivel de Facción (Doc Fase_0_5 §5). Nivel 1 no tiene cupo. */
+export function calcularCupoNivel(nivelFaccion: number, nivelObjetivo: 2 | 3): number {
+  const curva = nivelObjetivo === 2 ? CUPO_NIVEL_ASENTAMIENTO.maxNivel2 : CUPO_NIVEL_ASENTAMIENTO.maxNivel3;
+  const idx = Math.min(curva.length, Math.max(1, nivelFaccion)) - 1;
+  return curva[idx] ?? curva[curva.length - 1]!;
+}
+
+export interface AjusteExperiencia {
+  faccionId: string;
+  delta: number;
+  razon: string;
+}
+
+/** Aplica una lista de ganancias de experiencia (Doc Fase_0_5 §8: combate/construcción/conquista/caravanas). */
+export function aplicarAjustesExperiencia(facciones: Faccion[], ajustes: AjusteExperiencia[]): Faccion[] {
+  if (ajustes.length === 0) return facciones;
+  const porId = new Map(facciones.map((f) => [f.id, f]));
+  for (const { faccionId, delta } of ajustes) {
+    const faccion = porId.get(faccionId);
+    if (faccion && delta > 0) porId.set(faccionId, { ...faccion, experiencia: faccion.experiencia + delta });
+  }
+  return facciones.map((f) => porId.get(f.id)!);
+}
+
+/** Recalcula el nivel de todas las Facciones a partir de su experiencia actual; devuelve eventos de subida. */
+export function avanzarNivelesFaccion(facciones: Faccion[]): { facciones: Faccion[]; eventos: string[] } {
   const eventos: string[] = [];
   const actualizadas = facciones.map((f) => {
-    const nuevoNivel = calcularNivelFaccion(f, asentamientos);
+    const nuevoNivel = calcularNivelFaccion(f);
     if (nuevoNivel > f.nivel) eventos.push(`${f.nombre} sube a nivel de Facción ${nuevoNivel}.`);
     return nuevoNivel === f.nivel ? f : { ...f, nivel: nuevoNivel };
   });

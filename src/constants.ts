@@ -28,7 +28,9 @@ export const ZONA_INFLUENCIA = {
   // completado (auto-construcción o manual) empuja el radio hacia su techo. Ver `avanzarConstruccion`
   // (engine/construction.ts), donde se aplica al completarse cada edificio. PLACEHOLDER sin calibrar todavía.
   crecimientoPorEdificioCompletado: 5,
-  radioMaximoPorNivel: { 1: 60, 2: 90, 3: 120 } as Record<number, number>,
+  // Niveles 4/5 (Doc Fase_0_6): placeholder continuando el incremento fijo de +30 que ya usaban los 3
+  // niveles anteriores — pendiente de calibrar por simulación, igual que el resto de cifras de esta fase.
+  radioMaximoPorNivel: { 1: 60, 2: 90, 3: 120, 4: 150, 5: 180 } as Record<number, number>,
   segmentosPoligono: 48, // resolución del círculo aproximado como polígono
 };
 
@@ -58,7 +60,9 @@ export const POBLACION = {
   // `crecerPoblacion` en engine/population.ts), solo que a esta tasa más lenta — ya no hay un tope numérico
   // ligado a `trabajadoresRequeridos` de los edificios de transformación (antes `capacidadArtesanos`,
   // retirada); esos edificios ahora solo GATILLAN la primera aparición, no limitan cuánto puede crecer después.
-  artesanos: { tasaCrecimientoBase: 0.05 },
+  // Subida de 0.05 a 0.1 (pruebas del usuario) — con 0.05 los Artesanos tardaban demasiado en poblar la
+  // capacidad de Vivienda que ya tenían disponible frente al resto de ritmos del juego.
+  artesanos: { tasaCrecimientoBase: 0.1 },
   // "Cantidad mínima de ciudadanos" sin número fijado en el diseño (ver Preguntas_Abiertas) — placeholder.
   // Rediseño de progreso (Fase 0): además de este mínimo, ahora también requiere Palacio construido
   // (Doc 4.2.1 — "desbloquea la aparición de la población noble"), ver engine/population.ts.
@@ -151,26 +155,35 @@ export const EDIFICIO_CATALOGO = {
     trabajadoresRequeridos: 4,
     niveles: {
       1: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 15, tamano: { ancho: 2, alto: 2 } },
-      2: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 22.5, tamano: { ancho: 2, alto: 3 }, costoMejora: { madera: 60 } },
-      3: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 30, tamano: { ancho: 4, alto: 3 }, costoMejora: { madera: 120 } },
-      4: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 45, tamano: { ancho: 6, alto: 6 }, costoMejora: { madera: 240 } },
+      // Piedra añadida a las mejoras (Doc Fase_0_6, a petición del usuario): antes 100% madera. Sin gate de
+      // nivel de asentamiento — las 4 mejoras siguen alcanzables estando en nivel 1.
+      2: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 22.5, tamano: { ancho: 2, alto: 3 }, costoMejora: { madera: 60, piedra: 20 } },
+      3: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 30, tamano: { ancho: 4, alto: 3 }, costoMejora: { madera: 120, piedra: 40 } },
+      4: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 45, tamano: { ancho: 6, alto: 6 }, costoMejora: { madera: 240, piedra: 80 } },
     } as Record<number, NivelEdificioTransformacion>,
   },
   cantera: { costo: { madera: 20 }, tiempoConstruccionTicks: 5, produccionBasePiedra: 5, trabajadoresRequeridos: 4 },
   lenera: { costo: { madera: 10 }, tiempoConstruccionTicks: 3, produccionBaseMadera: 5, trabajadoresRequeridos: 4 },
-  almacen: { costo: { madera: 50, piedra: 30 }, tiempoConstruccionTicks: 6, capacidadPorRecursoAdicional: 300 },
+  // Sin piedra en la construcción BASE (Doc Fase_0_6, a petición del usuario): nivel 1 completo se paga solo
+  // en madera — la piedra recién se introduce en nivel 2 (ver EDIFICIO_CATALOGO.fundicion/curtiduria/armeria).
+  almacen: { costo: { madera: 50 }, tiempoConstruccionTicks: 6, capacidadPorRecursoAdicional: 300 },
   // Oro: metal precioso en bruto, origen en minas igual que cualquier otro recurso (Doc 3.1). produccionBaseOro
   // recalibrado (verificación batch del overhaul de auto-construcción): a 2/tick, una sola Mina (2) ya no
   // alcanzaba a cubrir el costo de Mantenimiento de oro a nivel 3 (`MANTENIMIENTO.oroBase` × escala ≈
   // 2.6-5.2/tick) ni siquiera con el nodo recién descubierto — a diferencia de piedra/Cantera, este era un
   // problema real de TASA, no solo de tamaño de nodo. Sube a 4 para dar el mismo margen que Cantera tiene
   // sobre su propio costo de Mantenimiento (~1.4-1.5×) en la distancia base.
-  mina: { costo: { madera: 40, piedra: 10 }, tiempoConstruccionTicks: 6, produccionBaseOro: 4, trabajadoresRequeridos: 6 },
+  // Sin piedra en la construcción BASE (Doc Fase_0_6): las 3 minas son extractores de nivel 1, tienen que ser
+  // alcanzables sin piedra — es justo lo que hace falta construir para cumplir el gate de subir a nivel 2
+  // (NIVEL_ASENTAMIENTO.requisitos[2], ≥3 edificios de extracción).
+  mina: { costo: { madera: 40 }, tiempoConstruccionTicks: 6, produccionBaseOro: 4, trabajadoresRequeridos: 6 },
   // Cobre (Doc 1.1/5.7): "relativamente abundante" — igual patrón que cantera/mina pero sobre nodos de cobre.
-  minaCobre: { costo: { madera: 30, piedra: 5 }, tiempoConstruccionTicks: 4, produccionBaseCobre: 5, trabajadoresRequeridos: 8 },
+  minaCobre: { costo: { madera: 30 }, tiempoConstruccionTicks: 4, produccionBaseCobre: 5, trabajadoresRequeridos: 8 },
   // Estaño (Doc 1.1/5.7): raro y concentrado (menos nodos que cobre/oro, ver RECURSO_RAREZA.raro) — costo más
   // alto y producción base más baja que el resto de minas, coherente con ser el cuello de botella del bronce.
-  minaEstano: { costo: { madera: 50, piedra: 20 }, tiempoConstruccionTicks: 7, produccionBaseEstano: 1.5, trabajadoresRequeridos: 8 },
+  // produccionBaseEstano subido de 1.5 a 3 (pruebas del usuario) — el estaño era el cuello de botella más
+  // duro de la cadena de bronce, más de lo que el diseño original pretendía.
+  minaEstano: { costo: { madera: 50 }, tiempoConstruccionTicks: 7, produccionBaseEstano: 3, trabajadoresRequeridos: 8 },
   // Corral (Doc 4.2.1, rediseño de progreso Fase 0): extractor de livestock, mismo patrón que cantera/minas —
   // liga a un nodo finito de livestock (Doc 1.4), con reemplazo automático al agotarse (ver EXTRACCION_MAXIMOS).
   corral: { costo: { madera: 30 }, tiempoConstruccionTicks: 6, produccionBaseLivestock: 3, trabajadoresRequeridos: 4 },
@@ -187,6 +200,10 @@ export const EDIFICIO_CATALOGO = {
   fundicion: {
     costo: { madera: 80, piedra: 40 },
     tiempoConstruccionTicks: 6,
+    // Doc Fase_0_6 (a petición del usuario): construcción BASE gateada a nivel 2 — antes era construible
+    // desde nivel 1. Con esto la responsabilidad de "producir transformación" queda exclusivamente en manos
+    // de los edificios de nivel 2.
+    requisitoNivelAsentamientoConstruccion: 2,
     niveles: {
       1: {
         trabajadoresRequeridos: 4,
@@ -208,6 +225,8 @@ export const EDIFICIO_CATALOGO = {
   curtiduria: {
     costo: { madera: 80, piedra: 30 },
     tiempoConstruccionTicks: 8,
+    // Doc Fase_0_6: construcción BASE gateada a nivel 2 (ver nota en `fundicion`).
+    requisitoNivelAsentamientoConstruccion: 2,
     niveles: {
       1: {
         trabajadoresRequeridos: 4,
@@ -241,6 +260,8 @@ export const EDIFICIO_CATALOGO = {
   armeria: {
     costo: { madera: 80, piedra: 30 },
     tiempoConstruccionTicks: 6,
+    // Doc Fase_0_6: construcción BASE gateada a nivel 2 (ver nota en `fundicion`).
+    requisitoNivelAsentamientoConstruccion: 2,
     niveles: {
       1: {
         trabajadoresRequeridos: 4,
@@ -283,13 +304,14 @@ export const EDIFICIO_CATALOGO = {
 
   // Sin cifras en el diseño original más allá del gate de nivel — costo/tiempo/mejora son PLACEHOLDER (ver
   // Preguntas_Abiertas.md). A diferencia del resto de edificios de transformación, la construcción BASE sí
-  // exige nivel de asentamiento (requisitoNivelAsentamientoConstruccion): habilita Armería/Barracón/Galería de
-  // tiro nivel 2, así que tiene sentido que llegue un poco después que ellos. Sin recetas: arietes/torres de
-  // asedio no se modelan en Fase 0 (combate resuelto como cálculo/log, Doc 5.10).
+  // exige nivel de asentamiento (requisitoNivelAsentamientoConstruccion). Sin recetas: arietes/torres de
+  // asedio no se modelan en Fase 0 (combate resuelto como cálculo/log, Doc 5.10). Gate subido de nivel 2 a
+  // nivel 3 (Doc Fase_0_6, a petición del usuario): habilita Armería/Barracón/Galería de tiro nivel 2 igual
+  // que antes, pero ahora llega un escalón más tarde — se desbloquea junto con Murallas en nivel 3.
   carpinteria: {
     costo: { madera: 60, piedra: 20 },
     tiempoConstruccionTicks: 6,
-    requisitoNivelAsentamientoConstruccion: 2,
+    requisitoNivelAsentamientoConstruccion: 3,
     niveles: {
       1: { trabajadoresRequeridos: 0, recetas: [] },
       2: { requisitoNivelAsentamiento: 3, costoMejora: { madera: 120, piedra: 60 }, trabajadoresRequeridos: 0, recetas: [] },
@@ -350,12 +372,24 @@ export const EDIFICIO_CATALOGO = {
     } as Record<number, NivelEdificioTransformacion>,
   },
 
+  // Muralla (Doc Fase_0_6, a petición del usuario): implementación MÍNIMA a propósito — 1 celda (tamaño por
+  // defecto, no está en EDIFICIO_TAMANO), solo piedra, sin niveles ni recetas, sin efecto mecánico en
+  // combate/asedio todavía (no interactúa con `engine/combate.ts` en esta pasada — existe como edificio
+  // construible, nada más, ver Doc 5.10 para cuándo se le dé mecánica real). Gate de construcción nivel 3
+  // (junto con Carpintería); construirla es requisito para subir a nivel 4 (NIVEL_ASENTAMIENTO.requisitos).
+  muralla: {
+    costo: { piedra: 2000 },
+    tiempoConstruccionTicks: 15,
+    requisitoNivelAsentamientoConstruccion: 3,
+  },
+
   // Único tier — desbloquea la aparición de Nobleza (además del mínimo de ciudadanos ya existente, ver
   // engine/population.ts). requisitoNivelAsentamientoConstruccion gatea la construcción BASE (no hay mejoras).
+  // Gate subido de nivel 3 a nivel 4 (Doc Fase_0_6): construirlo pasa a ser requisito para subir a nivel 5.
   palacio: {
     costo: { madera: 1500, piedra: 1000 },
     tiempoConstruccionTicks: 20,
-    requisitoNivelAsentamientoConstruccion: 3,
+    requisitoNivelAsentamientoConstruccion: 4,
     capacidadNobles: 200,
   },
 
@@ -365,7 +399,17 @@ export const EDIFICIO_CATALOGO = {
   // Gatea, además de la flota, las órdenes de Mercado (`colocarOrdenMercado`, engine/market.ts) — sin Mercado
   // activo no se puede ni construir una caravana ni colocar una orden.
   mercado: {
-    costo: { madera: 100, piedra: 40 },
+    // Sin piedra en la construcción BASE (a petición del usuario, corrige un deadlock real detectado
+    // instrumentando `engine/simulacionAutoComercio.ts`): un asentamiento sin mineral alcanzable en su zona
+    // (la MAYORÍA en nivel 1, ver diagnóstico de alcance de minerales) nunca junta más de los 20 piedra de
+    // reserva inicial (Doc 1.3) — con el Mercado pidiendo 40, no podía construirlo NUNCA, y sin Mercado no
+    // puede tener caravana propia, y sin caravana propia no puede entregar su lado de NINGÚN trueque (cada
+    // lado envía desde su propio origen, ver `asignarCaravanasATrueque`, engine/trade.ts) — ni para recibir
+    // ni para dar. El comercio es precisamente el mecanismo que debería resolver la falta de piedra, así que
+    // no puede depender de tenerla ya. Las MEJORAS de Mercado (nivel 2/3, más abajo) sí siguen pidiendo
+    // piedra sin cambios — para entonces el asentamiento ya tuvo tiempo de conseguirla, por extracción propia
+    // o por el propio comercio que el Mercado nivel 1 acaba de destrabar.
+    costo: { madera: 100 },
     tiempoConstruccionTicks: 8,
     niveles: {
       1: { trabajadoresRequeridos: 0, recetas: [], cupoCaravanas: 2 },
@@ -395,8 +439,8 @@ export const EDIFICIO_CATALOGO = {
   // Maravilla (Roadmap_Escalado.md Eje 4, a petición del usuario) — SOLO el edificio en esta pasada: el ciclo
   // de servidor de 12 meses que se cierra al completarla (reset + Facción ganadora persistiendo como legado
   // NPC) queda fuera de alcance, requiere infraestructura de servidor/multi-instancia que Fase 0 no tiene (ver
-  // Roadmap_Escalado.md). Único edificio: nivel de asentamiento MÁXIMO (3, tope de Fase 0) requerido para
-  // construirla, coste PLACEHOLDER deliberadamente extremo (varias veces el de Palacio, el más caro hasta
+  // Roadmap_Escalado.md). Único edificio: nivel de asentamiento MÁXIMO (5, Doc Fase_0_6 — antes 3) requerido
+  // para construirla, coste PLACEHOLDER deliberadamente extremo (varias veces el de Palacio, el más caro hasta
   // ahora) usando TODOS los recursos en bruto del catálogo — Doc dice "todos los materiales conocidos más
   // algunos exóticos"; los materiales EXÓTICOS quedan PENDIENTES (no existe todavía ningún recurso/extractor
   // exótico en el juego, añadirlos es trabajo aparte) — ver `Preguntas_Abiertas.md`. Sin recetas ni niveles:
@@ -404,7 +448,7 @@ export const EDIFICIO_CATALOGO = {
   maravilla: {
     costo: { madera: 5000, piedra: 5000, oro: 500, cobre: 300, estano: 200, livestock: 200 },
     tiempoConstruccionTicks: 200,
-    requisitoNivelAsentamientoConstruccion: 3,
+    requisitoNivelAsentamientoConstruccion: 5,
   },
 } as const;
 
@@ -429,7 +473,9 @@ export const NECESIDADES = {
    * encolando varios de golpe. Aplica tanto a la auto-construcción como a la adición manual: no es un
    * heurístico que proteja a la IA de sí misma, es una regla del juego.
    */
-  maximoAlmacenesPorNivel: { 1: 4, 2: 8, 3: 16 } as Record<number, number>,
+  // Niveles 4/5 (Doc Fase_0_6): placeholder desacelerando la duplicación anterior (4→8→16) a +50%/+33% —
+  // pendiente de calibrar por simulación.
+  maximoAlmacenesPorNivel: { 1: 4, 2: 8, 3: 16, 4: 24, 5: 32 } as Record<number, number>,
   // Overhaul de auto-construcción (modelo "pago al encolar", ver engine/construction.ts): dos cupos con
   // significado físico separado, en vez del único `maximoEnCola` + slots reservados por categoría de antes.
   // `maximoEnCola`: cuántos proyectos pueden estar PAGADOS Y A LA ESPERA de un hueco de obra (`en_cola`).
@@ -461,6 +507,26 @@ export const SCORE_BANDAS = {
   // nunca queda por detrás de una decisión manual (mismo invariante que ya protegía crecimiento/transformación).
   manual: 900,
   transformacion: 500, // curtiduria, armeria, fundicion, carpinteria
+};
+
+/**
+ * Desempate anti-inanición para los extractores base (cantera/corral/minaCobre/mina/minaEstano): los 5
+ * comparten banda de score y, apenas fundado el asentamiento, también urgencia (100, ninguno tiene fuente
+ * propia todavía) — sin esto, `Array.prototype.sort` (estable) hace ganar SIEMPRE al primero del array fijo
+ * `extractores` (`cantera`, ver `evaluarNecesidades`, engine/construction.ts) cuando `NECESIDADES.maximoEnCola`
+ * no da cupo para todos el mismo tick, y los perdedores nunca lo compensan porque su urgencia tampoco baja de
+ * 100 mientras sigan sin fuente propia (issue: `issues/extractores_minerales_nunca_se_construyen.md`).
+ *
+ * Cada tick que un extractor se propone como candidato válido (sitio disponible) pero NO se llega a
+ * comprometer (perdió el desempate o no había fondos) suma un tick a su contador
+ * `Asentamiento.extractoresTicksSinCupo`; ese contador se traduce en un bonus de score que rompe el empate a
+ * su favor cada vez más fuerte, y se resetea a 0 en cuanto el tipo consigue cupo. `bonusMaximo` deja un
+ * margen amplio por debajo de la siguiente banda hacia arriba (`SCORE_BANDAS.supervivencia`, 10000) para que
+ * el bonus nunca pueda hacer que un extractor le gane el turno a Granja/Leñera.
+ */
+export const EXTRACTOR_DESEMPATE = {
+  bonusPorTickStarved: 1,
+  bonusMaximo: 400,
 };
 
 /**
@@ -690,17 +756,70 @@ export const CHOKEPOINTS_PEAJE = {
 
 // --- Sprint 4: Estructura política (Doc 2) ---
 
-// "Qué hace subir el nivel de Facción" no está cerrado en el diseño (Doc 1.7/Preguntas_Abiertas) — placeholder:
-// combina nº de asentamientos propios y población NPC total de la Facción.
+/**
+ * Nivel de Facción por EXPERIENCIA (Doc 1.7, rediseño Fase 0.5, a petición del usuario — reemplaza la fórmula
+ * anterior de población total, que dejaba que fundar asentamientos de nivel 1 regalara cupos de nivel alto,
+ * ver `Fase_0_5_Definicion_Especializacion_y_Cupos.md` §8). Sube por actividad real: combate, construcción,
+ * conquista, defensa/ataque de caravana (`engine/faccion.ts` `aplicarAjustesExperiencia`) — MONÓTONO, nunca
+ * baja. `xpParaNivel[i]` es el umbral ACUMULADO de experiencia para alcanzar el nivel `i+2` (índice 0 = nivel
+ * 2, ..., índice 8 = nivel 10) — curva geométrica ×~1.6 por nivel ("cada nivel cuesta mucho más que el
+ * anterior", a petición del usuario), placeholder sin calibrar por simulación.
+ */
 export const NIVEL_FACCION = {
-  puntosPorAsentamiento: 1,
-  poblacionPorPunto: 60,
-  puntosPorNivel: 2,
   nivelMaximo: 10,
+  xpParaNivel: [50, 90, 150, 240, 380, 600, 950, 1500, 2400],
+  // Experiencia otorgada por evento (placeholder). `combate` cubre asedio/campo abierto/interceptar caravana/
+  // atacar campamento de bandidos por igual (participación, no solo victoria) — ver `engine/combate.ts`. Los
+  // valores de abajo son POR JUGADOR PARTICIPANTE (a petición del usuario, Doc Fase_0_5 §8): si 3 jugadores
+  // atacan juntos un campamento, la Facción recibe 3×`combate`, no un monto plano — ver
+  // `jugadoresParticipantes` en `engine/combate.ts`. Excepción: `defensaCaravana` no se multiplica todavía
+  // (la escolta de una caravana no tiene escuadrones/jugadores reales, Doc 3.10), y `edificioCompletado`
+  // tampoco (un edificio no tiene "jugadores que lo completaron" en el modelo actual).
+  xp: {
+    combate: 5,
+    edificioCompletado: 1,
+    conquista: 20,
+    defensaCaravana: 3,
+    ataqueCaravana: 3,
+  },
 };
 
 // Cap de fundación (Doc 1.7): "progresión fácil de 1 a 3, luego se complica hasta un máximo de 7" — curva placeholder.
 export const CAP_FUNDACION_POR_NIVEL = [1, 2, 3, 3, 4, 5, 5, 6, 6, 7] as const;
+
+/**
+ * Cupo de asentamientos por NIVEL, derivado del nivel de Facción (Doc Fase_0_5 §5, a petición del usuario) —
+ * no todos los asentamientos pueden ser de nivel alto: cada uno ocupa ÚNICAMENTE el cupo de SU
+ * `nivelActual` operativo (subir de 2 a 3 libera el cupo de 2 que ocupaba; DEGRADAR también lo libera, ver
+ * `engine/simulation.ts` — el cupo se cuenta contra `nivelActual`, no contra `nivel`/nivelAlcanzado, para que
+ * una ciudad hundida por mal mantenimiento no bloquee un cupo para siempre). Nivel 1 no tiene cupo — el
+ * invariante `maxNivel2[i] + maxNivel3[i] = CAP_FUNDACION_POR_NIVEL[i] - 1` garantiza que siempre queda al
+ * menos un asentamiento obligatoriamente en nivel 1 (el granero/aserradero que nunca se puede convertir en
+ * Ciudad) — cubierto por un test dedicado que falla si se rompe (ver `__tests__/cupo_nivel_invariante.test.ts`).
+ * EXCEPCIÓN a ese invariante en Facción nivel 1 (a petición del usuario, corrige un deadlock real): ahí
+ * `CAP_FUNDACION_POR_NIVEL` ya es 1 — solo se puede tener UN asentamiento fundado, así que no hay un segundo
+ * al que reservarle el puesto de granero. Reservar el "-1" de todos modos dejaba `maxNivel2[0] = 0`, y como
+ * lanzar una Caravana de Fundación exige nivelActual 2, una Facción nueva quedaba encerrada CON UN SOLO
+ * asentamiento para siempre — la única salida era ganar XP de Facción sin depender de expandirse, algo lento
+ * y solo viable jugando de forma activa (combate), no para una Facción pacífica. En Facción nivel 1 el
+ * presupuesto de cupo es `CAP_FUNDACION_POR_NIVEL[0]` completo (1), no `CAP_FUNDACION_POR_NIVEL[0] - 1` (0).
+ * Enforcement de la PROMOCIÓN (subir `nivel`/nivelAlcanzado): `avanzarNivelAsentamiento`
+ * (engine/mantenimiento.ts) solo promueve si hay cupo libre en el nivel objetivo — un asentamiento que
+ * cumple los gates pero no tiene cupo se queda "elegible" (nunca se bloquea ni se le baja nada) y reintenta
+ * cada tick hasta que se libere uno. Conquista NO se re-evalúa contra este cupo — CONFIRMADO por el usuario
+ * como intencional (Fase_0_5_Definicion...md §7 punto #2): incentiva la guerra como vía para saltarse el
+ * cupo, igual criterio que `CAP_FUNDACION_POR_NIVEL` (Doc 1.7) ya aplicaba a la fundación. Placeholder sin
+ * calibrar por simulación, igual que el resto de curvas del proyecto.
+ */
+export const CUPO_NIVEL_ASENTAMIENTO = {
+  // Facción nivel 1 arranca en 1 (no 0, ver la excepción documentada arriba) — resuelve el deadlock de
+  // expansión: la única Facción de una Facción nueva puede llegar a nivel 2 y lanzar su primera Caravana de
+  // Fundación sin depender de ganar XP primero.
+  maxNivel2: [1, 1, 1, 1, 2, 2, 2, 3, 3, 3] as const,
+  // Corrección (consejo LLM detectó que la suma no cuadraba con CAP_FUNDACION_POR_NIVEL-1 en Facción nivel 3
+  // y 6 — sin test que lo cubriera): antes [0,0,0,1,1,1,2,2,2,3], ahora +1 en nivel 3 y +1 en nivel 6.
+  maxNivel3: [0, 0, 1, 1, 1, 2, 2, 2, 2, 3] as const,
+};
 
 export const CIUDADANIA = {
   // Espacios de "casas" por asentamiento (Doc 2.5): el cupo base coincide con el máximo de jugadores que
@@ -846,8 +965,10 @@ export const CAMPAMENTOS_BANDIDOS = {
   // Radio (unidades del mapa) dentro del cual un campamento ataca a una caravana que pase cerca.
   radioAtaqueCaravana: 40,
   // Ticks tras destruirse un campamento antes de que pueda aparecer uno nuevo ("N días" del diseño, Doc 1.9,
-  // expresado en ticks — Fase 0 no tiene mapeo tick-a-tiempo-real todavía).
-  ticksRespawn: 60,
+  // expresado en ticks — Fase 0 no tiene mapeo tick-a-tiempo-real todavía). Bajado de 60 a 10 (pruebas del
+  // usuario) — a 60 ticks el farming de XP de Facción vía campamentos era demasiado lento frente al resto
+  // de fuentes de experiencia.
+  ticksRespawn: 10,
   // Recompensa fija al destruirlo (botín).
   recompensa: { madera: 40, piedra: 20, oro: 15 } as Partial<Record<string, number>>,
 };
@@ -856,13 +977,36 @@ export const CAMPAMENTOS_BANDIDOS = {
  * Regeneración de yacimientos agotados (a petición del usuario): un `NodoRecurso` que llega a stock 0
  * (`Mapa.stock`, ver `world/mapa.ts`) vuelve a aparecer con su `cantidadInicial` completa pasados N ticks —
  * mismo patrón que la reaparición de campamentos de bandidos (`CAMPAMENTOS_BANDIDOS.ticksRespawn`). Dos
- * cadencias: `livestock` (fauna, se recupera por reproducción/migración) el DOBLE de rápido que `metales`
- * (todo el resto de nodos: piedra/cobre/estaño/oro — yacimientos minerales, se repone mucho más despacio).
+ * cadencias: `livestock` (fauna, se recupera por reproducción/migración) más rápido que `metales` (todo el
+ * resto de nodos: piedra/cobre/estaño/oro — yacimientos minerales, se repone más despacio). Bajadas de
+ * 200/100 a 10/3 (pruebas del usuario) — a las cifras viejas, agotar un nodo dejaba al extractor parado
+ * demasiado tiempo frente al resto del ritmo del juego ya recalibrado esta sesión.
  * Cifras PLACEHOLDER, sin calibrar por simulación todavía, mismo criterio que el resto del proyecto.
  */
 export const REGENERACION_NODOS = {
-  metales: { ticksCooldown: 200 },
-  livestock: { ticksCooldown: 100 },
+  metales: { ticksCooldown: 10 },
+  livestock: { ticksCooldown: 3 },
+};
+
+/**
+ * ⚠️ SOLO PARA SIMULACIÓN — NO ES PARTE DEL JUEGO REAL (Fase_0_5_Definicion_Especializacion_y_Cupos.md §"lo
+ * primero que hay que hacer"). El juego real sigue siendo 100% manual: un Tesorero/Gobernador humano propone
+ * el trueque desde la UI (Doc 3.2). Este interruptor activa `engine/simulacionAutoComercio.ts`, un NPC
+ * virtual que hace ese mismo trabajo automáticamente dentro de una Facción — para poder correr batches
+ * largos y medir si la dependencia entre niveles/asentamientos (excedente de un asentamiento cubriendo el
+ * déficit de otro) funciona, sin depender de que haya un jugador humano interactuando en cada tick.
+ * `activo: 0` (apagado) por defecto — el juego real nunca lo ve encendido a menos que se active a propósito
+ * desde este panel de balance. Para ELIMINAR este mecanismo por completo: borra este bloque, borra
+ * `engine/simulacionAutoComercio.ts`, y borra la llamada gateada en `gameStore.ts` (buscar
+ * "SIMULACION_AUTO_COMERCIO").
+ */
+export const SIMULACION_AUTO_COMERCIO = {
+  activo: 0,
+  // Colchón mínimo de stock (fracción de la capacidad) que un asentamiento debe conservar de un recurso
+  // antes de poder ofrecerlo como excedente a otro — evita que el NPC vacíe su propia reserva de seguridad.
+  colchonExcedente: 0.3,
+  // Cantidad pactada por lado en cada trueque automático propuesto (placeholder, sin calibrar).
+  cantidadPorTrueque: 30,
 };
 
 // --- Sprint 6: Cierre (Doc 4.5 mantenimiento, Doc 2.7 reputación, Doc 2.9 progresión) ---
@@ -870,15 +1014,56 @@ export const REGENERACION_NODOS = {
 /**
  * Nivel de asentamiento — rediseño de progreso (Fase 0): reemplaza por completo la fórmula de puntos anterior
  * (población/edificios activos). Ahora es un modelo de GATES: para subir de nivel hace falta cumplir a la vez
- * un mínimo de población (pesants + artesanos) Y tener construidos (activos) los edificios listados. Tope de
- * Fase 0 = nivel 3 (Doc 4.5). El nivel sube de forma MONÓTONA (nunca baja si la población cae después).
+ * un mínimo de población (pesants + artesanos) Y tener construidos (activos) al menos `edificiosMinimo`
+ * tipos DISTINTOS del conjunto `edificios` (si se omite, por defecto son TODOS — mismo comportamiento que
+ * antes de Doc Fase_0_6). El nivel sube de forma MONÓTONA (nunca baja si la población cae después).
+ *
+ * Tope subido de nivel 3 a nivel 5 (Doc Fase_0_6, a petición del usuario) — reestructura completa de qué pide
+ * cada escalón:
+ * - Nivel 2: ≥3 de los 6 tipos de EXTRACCIÓN (antes pedía los 3 de transformación) — mismo criterio de
+ *   "variedad, no instancias repetidas" que ya usaba el cupo de asentamientos (Fase_0_5).
+ * - Nivel 3: los 3 de TRANSFORMACIÓN + los 2 MILITARES a la vez (antes solo pedía carpintería+barracón+
+ *   galería). Como ambos subconjuntos exigen "todos los suyos", `edificiosMinimo` se omite (por defecto pide
+ *   los 5 completos) — ver engine/mantenimiento.ts `calcularNivelAsentamiento`.
+ * - Nivel 4 (nuevo): Muralla construida.
+ * - Nivel 5 (nuevo, tope): Palacio construido.
+ * Población de niveles 4/5 PLACEHOLDER, continuando la progresión de 2/3 (pesants ×2, artesanos ×2) —
+ * pendiente de calibrar por simulación, igual que el resto de cifras de esta fase.
  */
 export const NIVEL_ASENTAMIENTO = {
-  nivelMaximo: 3,
+  nivelMaximo: 5,
   requisitos: {
-    2: { pesants: 200, artesanos: 50, edificios: ['armeria', 'curtiduria', 'fundicion'] },
-    3: { pesants: 500, artesanos: 200, edificios: ['carpinteria', 'barracon', 'galeriaDeTiro'] },
-  } as Record<number, { pesants: number; artesanos: number; edificios: string[] }>,
+    // Sin artesanos (Doc Fase_0_6, deadlock real detectado por el usuario): Artesanos no aparece hasta el
+    // primer edificio de transformación activo (engine/population.ts) — pero Fundición/Curtidería/Armería
+    // ahora exigen nivel 2 para construirse (ver §2 de Fase_0_6). Pedir artesanos aquí también habría hecho
+    // el gate imposible de cumplir: sin nivel 2 no hay transformación, sin transformación no hay artesanos,
+    // sin artesanos no hay nivel 2. Pesants se mantiene — no depende de ningún edificio de nivel 2.
+    // `granja` se sumó a la lista (3 de 7, no 3 de 6): un asentamiento con cantera+lenera+granja debía poder
+    // subir de nivel con solo esos tres (caso real detectado por el usuario) sin depender de tener un
+    // recurso raro (cobre/estaño/oro/livestock) alcanzable, que muchos asentamientos nunca tienen cerca.
+    2: {
+      pesants: 200,
+      artesanos: 0,
+      edificios: ['cantera', 'lenera', 'granja', 'mina', 'minaCobre', 'minaEstano', 'corral'],
+      edificiosMinimo: 3,
+    },
+    3: { pesants: 500, artesanos: 200, edificios: ['armeria', 'curtiduria', 'fundicion', 'barracon', 'galeriaDeTiro'] },
+    4: { pesants: 1000, artesanos: 400, edificios: ['muralla'] },
+    5: { pesants: 2000, artesanos: 800, edificios: ['palacio'] },
+  } as Record<number, { pesants: number; artesanos: number; edificios: string[]; edificiosMinimo?: number }>,
+  /**
+   * Techo de POBLACIÓN TOTAL (pesants+artesanos+nobleza) por nivel (Doc Fase_0_5 §3.1, a petición del
+   * usuario) — por encima de este número, la Vivienda/Palacio dejan de dar cupo efectivo aunque tengan
+   * capacidad física de sobra: el nivel pasa a ser lo que abre el techo de habitantes, no solo una llave de
+   * edificios. Pieza central del rediseño de dependencia: un nivel 3 en su techo (6000 hab) consume 600
+   * trigo/tick contra un techo agrícola real de 150-450 (ver diagnóstico en Fase_0_5_Definicion...md §1) —
+   * no puede sostenerse sin importar. Ligado a `asentamiento.nivel` (nivelAlcanzado, nunca baja — Doc §6.2:
+   * un fallo de suministro NUNCA purga población ya asentada, solo congela capacidad de construir/mejorar).
+   * Niveles 4/5 (Doc Fase_0_6): desacelera el múltiplo anterior (×5, ×4) a ×2/×1.7, asumiendo que son
+   * niveles de "cierre de partida" más que de crecimiento bruto. Cifras PLACEHOLDER sin calibrar por
+   * simulación.
+   */
+  techoPoblacion: { 1: 300, 2: 1500, 3: 6000, 4: 12000, 5: 20000 } as Record<number, number>,
 };
 
 /**
@@ -901,7 +1086,18 @@ export const MANTENIMIENTO = {
   piedraBase: 3,
   nivelParaOro: 3,
   oroBase: 2,
-  factorCrecimientoPorNivel: 0.15,
+  // Escala por POBLACIÓN real, no por nivel (Doc Fase_0_5 §3.2, reemplaza `factorCrecimientoPorNivel`, a
+  // petición del usuario: "más allá de al tamaño del asentamiento y a la cantidad de edificios" — un nivel 3
+  // con 6000 habitantes paga mucho más que un nivel 1 con 250, con o sin ascender de nivel; el nivel en sí ya
+  // NO multiplica el coste directamente, ver §6.2: `nivelActual` degradado no reduce el mantenimiento porque
+  // la misma gente sigue comiendo/gastando lo mismo). `factorPoblacion = 1 + poblacionTotal/poblacionReferencia`.
+  // Se retira la idea (descartada) de sumar coste por Nº DE EDIFICIOS: chocaba con el factor de distancia de
+  // abajo, que ya es el mecanismo real de "imperio disperso cuesta más" — sumar ambos habría castigado DOBLE
+  // al imperio distribuido que el diseño quiere fomentar (ver Fase_0_5_Definicion...md §5.1). Placeholder sin
+  // calibrar: a poblacionReferencia=500, nivel 1 en su techo (300 hab) paga factor 1.6; nivel 3 en su techo
+  // (6000 hab) paga factor 13 — frente a un techo de extracción propia de ~50 madera/tick, el mantenimiento
+  // solo ya se come casi toda la producción bruta de una ciudad llena, antes de sumar comida/ejército/mejoras.
+  poblacionReferencia: 500,
   escalaDistancia: 400,
   factorDistanciaMax: 2,
   degradacionPorDeficitTotal: 10,
@@ -910,6 +1106,13 @@ export const MANTENIMIENTO = {
   // asentamiento nuevo entra en déficit desde el tick 1 (antes de que la Granja llegue a construirse) y cae
   // en ruinas pase lo que pase. La gracia cubre el tiempo típico de estabilizar la economía base.
   graciaTicks: 60,
+  // nivelActual (Doc Fase_0_5 §6.2, rediseño a petición del usuario): al tocar 0 el medidor, `nivelActual`
+  // baja un escalón (nivel 3→2→1→ruinas, solo cae en ruinas ya en nivelActual 1) EN VEZ de destruirse
+  // directamente, y el medidor se reinicia a `medidorInicial` — el asentamiento sigue vivo y produciendo,
+  // solo pierde capacidad de construir/mejorar/reclutar de nivel alto hasta recuperarse. Solo vuelve a subir
+  // tras `ticksSanosParaRecuperarNivel` ticks SEGUIDOS con mantenimiento pagado en full (no cada tick que
+  // esté sano) — evita el yo-yo de subir/bajar por un solo bache. Placeholder sin calibrar por simulación.
+  ticksSanosParaRecuperarNivel: 30,
 };
 
 /**

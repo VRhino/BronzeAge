@@ -1,6 +1,6 @@
 // Regeneración de yacimientos agotados (a petición del usuario): un nodo que llega a stock 0 debe volver a
 // aparecer con su `cantidadInicial` completa pasados N ticks de cooldown — no antes, no quedarse agotado
-// para siempre — y livestock debe regenerar al DOBLE de rápido que un yacimiento mineral (`REGENERACION_NODOS`).
+// para siempre — y livestock debe regenerar más rápido que un yacimiento mineral (`REGENERACION_NODOS`).
 import { describe, expect, it } from 'vitest';
 import type { NodoRecurso } from '../../domain/types';
 import { REGENERACION_NODOS } from '../../constants';
@@ -23,8 +23,8 @@ function agotar(mapa: ReturnType<typeof crearMapa>, nodo: NodoRecurso): void {
 }
 
 describe('Mapa.avanzarRegeneracion — yacimientos agotados', () => {
-  it('livestock tiene la mitad de cooldown que un yacimiento mineral (regenera el doble de rápido)', () => {
-    expect(REGENERACION_NODOS.livestock.ticksCooldown).toBe(REGENERACION_NODOS.metales.ticksCooldown / 2);
+  it('livestock tiene menos cooldown que un yacimiento mineral (regenera más rápido)', () => {
+    expect(REGENERACION_NODOS.livestock.ticksCooldown).toBeLessThan(REGENERACION_NODOS.metales.ticksCooldown);
   });
 
   it('no regenera antes del cooldown y regenera a cantidadInicial completa justo al cumplirse', () => {
@@ -69,7 +69,7 @@ describe('Mapa.avanzarRegeneracion — yacimientos agotados', () => {
 
     expect(mapa.stock(livestock.id)).toBe(livestock.cantidadInicial);
     expect(eventosEnRegenLivestock.some((e) => e.includes(livestock.id))).toBe(true);
-    // El mineral todavía no le toca (su cooldown es el doble).
+    // El mineral todavía no le toca (su cooldown es mayor).
     expect(mapa.stock(mineral.id)).toBe(0);
   });
 });

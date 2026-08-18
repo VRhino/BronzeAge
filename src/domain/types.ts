@@ -42,8 +42,15 @@ export interface Faccion {
   nombre: string;
   reyId: string | null;
   embajadorId: string | null;
-  /** Sube según actividad de la Facción (Doc 1.7) — ver NIVEL_FACCION en constants.ts para el criterio placeholder. */
+  /** Derivado de `experiencia` vía `calcularNivelFaccion` (Doc 1.7, rediseño Fase 0.5) — nunca se guarda
+   * "suelto", se recalcula cada tick a partir de la XP. Sube el cupo de asentamientos por nivel (Doc
+   * Fase_0_5_Definicion_Especializacion_y_Cupos.md §5) y el cap de fundación (`CAP_FUNDACION_POR_NIVEL`). */
   nivel: number;
+  /** Experiencia acumulada MONÓTONA (nunca baja, Doc Fase_0_5 §8): combate, construcción, conquista, defensa/
+   * ataque de caravana (`engine/faccion.ts` `aplicarAjustesExperiencia`, `NIVEL_FACCION.xp`). Reemplaza la
+   * fórmula anterior basada en población total — esa dejaba que fundar asentamientos de nivel 1 regalara
+   * cupos de nivel alto, en vez de exigir actividad real de la Facción. */
+  experiencia: number;
   /** Ciudadanía (Doc 2.5): jugadores con ciudadanía en ESTA Facción (no se extiende a toda la Liga). */
   ciudadanosIds: string[];
   /** Score de confiabilidad PÚBLICO -100..+100 (Doc 2.7), decae hacia 0 sin eventos nuevos. */
@@ -95,7 +102,11 @@ export type EdificioTipo =
   // Maravilla (Roadmap_Escalado.md Eje 4, a petición del usuario): edificio único de coste extremo, solo el
   // EDIFICIO en sí — el ciclo de servidor de 12 meses que cierra al completarla queda fuera de esta pasada
   // (requiere infraestructura de servidor/multi-instancia que Fase 0 no tiene, ver Roadmap_Escalado.md).
-  | 'maravilla';
+  | 'maravilla'
+  // Muralla (Doc Fase_0_6, a petición del usuario): implementación mínima a propósito — solo el edificio
+  // (1 celda, cuesta piedra), sin niveles ni efecto mecánico en combate/asedio todavía. Gatea subir a
+  // nivel de asentamiento 4 (ver NIVEL_ASENTAMIENTO.requisitos).
+  | 'muralla';
 
 export type EstadoEdificio = 'en_cola' | 'en_construccion' | 'activo';
 
@@ -131,6 +142,11 @@ export interface Edificio {
    * arranca la construcción cuando compite por un hueco de `maximoEnConstruccionSimultanea`. Ausente para
    * edificios que nunca pasan por la cola (ej. `centroUrbano`). */
   prioridad?: number;
+  /** Recalculado cada tick en `avanzarConstruccion` (Doc 4.2, instrumentación de excedente): true si este
+   * edificio produjo algo este tick que no cupo en el almacén (capacidad llena) — la producción sobrante se
+   * pierde en vez de acumularse (ver `agregarRecursoConSobrante`, engine/almacen.ts). Solo informativo/UI,
+   * no bloquea nada por sí mismo. Ausente/false si no aplica o produjo sin tope. */
+  pausadoPorAlmacenLleno?: boolean;
 }
 
 /** Cargos de nivel asentamiento (Doc 2.2), uno de cada, designados por el Gobernador salvo él mismo. */
@@ -188,7 +204,26 @@ export interface Asentamiento {
   faccionId: string;
   jugadoresFundadoresIds: string[];
   posicion: Point;
+  /** NIVEL ALCANZADO (Doc Fase_0_5 §6.2): histórico, MONÓTONO, nunca baja — sube por gates de
+   * población+edificios (`calcularNivelAsentamiento`/`avanzarNivelAsentamiento`, engine/mantenimiento.ts).
+   * De aquí salen el techo de POBLACIÓN (`NIVEL_ASENTAMIENTO.techoPoblacion`) y el techo de RADIO de zona de
+   * influencia (`ZONA_INFLUENCIA.radioMaximoPorNivel`) — ninguno de los dos se purga por una crisis de
+   * mantenimiento temporal. Distinto de `nivelActual` (abajo), que sí puede bajar. */
   nivel: number;
+  /** NIVEL ACTUAL / operativo (Doc Fase_0_5 §6.2, nuevo): puede subir y bajar según la salud sostenida del
+   * mantenimiento — nunca por encima de `nivel` (nivelAlcanzado). De aquí sale qué se puede
+   * CONSTRUIR/MEJORAR/RECLUTAR ahora mismo (gates de nivel en `engine/construction.ts`/`engine/expansion.ts`).
+   * Baja un escalón cuando el medidor de Mantenimiento toca 0 (en vez de caer en ruinas directamente, salvo
+   * ya en nivel 1); solo sube tras mantenimiento sano varios ticks seguidos (`rachaMantenimientoSano`), no
+   * cada tick — evita el yo-yo de subir/bajar por un solo bache. Los edificios YA construidos de un nivel
+   * superior a `nivelActual` SIGUEN PRODUCIENDO con normalidad — esto solo congela construcción/mejora nueva,
+   * nunca apaga nada ni purga población. Ausente en partidas guardadas antes de este campo = tratar como
+   * igual a `nivel` (ver `nivelActualDe`, engine/mantenimiento.ts). */
+  nivelActual?: number;
+  /** Racha de ticks CONSECUTIVOS con Mantenimiento pagado en full (Doc Fase_0_5 §6.2) — al llegar a
+   * `MANTENIMIENTO.ticksSanosParaRecuperarNivel` sube `nivelActual` un escalón (tope `nivel`) y se reinicia a
+   * 0; cualquier tick en déficit también la reinicia a 0. Ausente = 0. */
+  rachaMantenimientoSano?: number;
   fundadoEnTick: number;
   /** Radio "potencial" de la zona de influencia si no hubiera fronteras vecinas; crece con el tiempo/nivel. */
   radioPotencial: number;
@@ -214,6 +249,11 @@ export interface Asentamiento {
    * queda exenta a propósito, ya que el jugador la autoriza explícitamente al usarla. Ausente = sin reserva
    * manual extra (comportamiento sin cambios). */
   reservaManual?: Partial<Record<RecursoTipo, number>>;
+  /** Desempate anti-inanición de extractores base (ver `EXTRACTOR_DESEMPATE`, constants.ts): ticks
+   * CONSECUTIVOS que cada tipo (cantera/corral/minaCobre/mina/minaEstano) lleva proponiéndose como candidato
+   * válido en `evaluarNecesidades` sin conseguir cupo — se resetea a 0 en cuanto el tipo consigue cupo o deja
+   * de ser candidato. Ausente/tipo ausente = 0 (comportamiento sin cambios: sin historial de inanición). */
+  extractoresTicksSinCupo?: Partial<Record<EdificioTipo, number>>;
 }
 
 export interface ZonaInfluencia {

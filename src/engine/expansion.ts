@@ -7,6 +7,7 @@ import { avanzarPosicionEnRuta } from './movimiento';
 import { posicionLibreParaFundar } from './zones';
 import { calcularCapFundacion } from './faccion';
 import { fundarAsentamiento, FundacionInvalidaError } from './settlement';
+import { nivelActualDe } from './asentamientoQuery';
 
 export class ExpansionInvalidaError extends Error {}
 
@@ -65,7 +66,9 @@ export function lanzarCaravanaFundacion(
   if (origen.faccionId !== faccion.id) {
     throw new ExpansionInvalidaError('El asentamiento de origen no pertenece a esta Facción.');
   }
-  if (origen.nivel < 2) {
+  // nivelActual (Doc Fase_0_5 §6.2), no nivelAlcanzado: un origen degradado por debajo de nivel 2 no puede
+  // lanzar una Caravana de Fundación hasta recuperarse, aunque haya llegado a nivel 2 alguna vez.
+  if (nivelActualDe(origen) < 2) {
     throw new ExpansionInvalidaError('El asentamiento de origen debe estar en nivel 2 como mínimo para lanzar una Caravana de Fundación.');
   }
   if (!posicionLibreParaFundar(destino, asentamientosExistentes)) {

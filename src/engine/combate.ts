@@ -1,7 +1,8 @@
 import type { Asentamiento, CampamentoBandido, Caravana, Escuadron, Faccion, RelacionPolitica } from '../domain/types';
-import { CAMPAMENTOS_BANDIDOS, MILITAR, REPUTACION, TROPAS_RECLUTABLES } from '../constants';
+import { CAMPAMENTOS_BANDIDOS, MILITAR, NIVEL_FACCION, REPUTACION, TROPAS_RECLUTABLES } from '../constants';
 import { agregarRecurso } from './almacen';
 import { aplicarAjustesReputacion } from './reputacion';
+import { aplicarAjustesExperiencia, type AjusteExperiencia } from './faccion';
 
 function estanAliadas(relaciones: RelacionPolitica[], aId: string, bId: string): boolean {
   return relaciones.some(
@@ -88,6 +89,21 @@ function reemplazarEscuadrones(asentamiento: Asentamiento, actualizados: Escuadr
 }
 
 /**
+ * XP de Facción por JUGADOR, versión mínima (Doc Fase_0_5 §8, a petición del usuario): si 3 jugadores atacan
+ * juntos, la Facción recibe 3× la XP de ese evento, no un monto plano por combate. Se calcula al vuelo
+ * contando `jugadorId` DISTINTOS entre los escuadrones que participaron en un bando — NO se guarda XP de
+ * jugador por separado (eso exigiría una entidad `Jugador` que hoy no existe en el motor; queda pendiente si
+ * llega a necesitar un propósito propio más allá de alimentar la XP de Facción).
+ *
+ * Aplica en los bandos con escuadrones REALES (asedio y campo abierto en ambos lados; campamento de bandidos
+ * e interceptar caravana solo en el atacante). La defensa de una caravana NO se multiplica — Doc 3.10: la
+ * escolta no está modelada con escuadrones/jugadores reales todavía, es una defensa fija placeholder.
+ */
+function jugadoresParticipantes(escuadrones: Escuadron[]): number {
+  return new Set(escuadrones.map((e) => e.jugadorId)).size;
+}
+
+/**
  * Asedio de asentamientos (Doc 5.2.1): mortalidad severa, sin instancia visual (Fase 0 = cálculo). La conquista
  * exacta tras ganar el asedio queda PENDIENTE en el diseño (Preguntas_Abiertas) — Fase 0 asume CAPTURA directa
  * (reasignación de Facción), la opción más simple de las citadas ahí (captura/destrucción/vasallaje automático).
@@ -117,11 +133,30 @@ export function iniciarAsedio(
   ];
 
   // Atacar a un Aliado sin romper la relación antes es la penalización MÁS SEVERA de reputación (Doc 2.7).
-  const faccionesFinal = estanAliadas(relaciones, atacante.faccionId, defensor.faccionId)
+  const faccionesConReputacion = estanAliadas(relaciones, atacante.faccionId, defensor.faccionId)
     ? aplicarAjustesReputacion(facciones, [
         { faccionId: atacante.faccionId, delta: REPUTACION.penalizacionAtacarAliado, razon: 'atacar a un Aliado' },
       ])
     : facciones;
+
+  // Doc Fase_0_5 §8: participación en combate otorga XP de Facción a ambos bandos; conquistar suma además el
+  // bonus de conquista al atacante. Nota: el cupo de asentamientos por nivel (§5) NO se re-evalúa aquí — un
+  // asentamiento conquistado conserva su `nivel` sin verificar cupo del conquistador, mismo criterio que
+  // `CAP_FUNDACION_POR_NIVEL` (Doc 1.7, no aplica a conquista) — punto abierto #2 del documento de diseño.
+  const ajustesXp: AjusteExperiencia[] = [
+    {
+      faccionId: atacante.faccionId,
+      delta: NIVEL_FACCION.xp.combate * jugadoresParticipantes(escuadronesAtacantes),
+      razon: 'combate (asedio)',
+    },
+    {
+      faccionId: defensor.faccionId,
+      delta: NIVEL_FACCION.xp.combate * jugadoresParticipantes(escuadronesDefensores),
+      razon: 'combate (asedio)',
+    },
+  ];
+  if (conquistado) ajustesXp.push({ faccionId: atacante.faccionId, delta: NIVEL_FACCION.xp.conquista, razon: 'conquista' });
+  const faccionesFinal = aplicarAjustesExperiencia(faccionesConReputacion, ajustesXp);
 
   return {
     atacante: { ...atacante, escuadrones: reemplazarEscuadrones(atacante, resultado.atacantes) },
@@ -150,11 +185,24 @@ export function combateCampoAbierto(
   const escuadronesB = seleccionarEscuadrones(asentamientoB, escuadronIdsB);
   const resultado = resolverCombate(escuadronesA, escuadronesB, tickActual);
 
-  const faccionesFinal = estanAliadas(relaciones, asentamientoA.faccionId, asentamientoB.faccionId)
+  const faccionesConReputacion = estanAliadas(relaciones, asentamientoA.faccionId, asentamientoB.faccionId)
     ? aplicarAjustesReputacion(facciones, [
         { faccionId: asentamientoA.faccionId, delta: REPUTACION.penalizacionAtacarAliado, razon: 'atacar a un Aliado' },
       ])
     : facciones;
+
+  const faccionesFinal = aplicarAjustesExperiencia(faccionesConReputacion, [
+    {
+      faccionId: asentamientoA.faccionId,
+      delta: NIVEL_FACCION.xp.combate * jugadoresParticipantes(escuadronesA),
+      razon: 'combate (campo abierto)',
+    },
+    {
+      faccionId: asentamientoB.faccionId,
+      delta: NIVEL_FACCION.xp.combate * jugadoresParticipantes(escuadronesB),
+      razon: 'combate (campo abierto)',
+    },
+  ]);
 
   return {
     asentamientoA: { ...asentamientoA, escuadrones: reemplazarEscuadrones(asentamientoA, resultado.atacantes) },
@@ -172,8 +220,10 @@ export function interceptarCaravana(
   atacante: Asentamiento,
   escuadronIdsAtacantes: string[],
   caravana: Caravana,
-  tickActual: number
-): { atacante: Asentamiento; eventos: string[]; caravanaCapturada: boolean } {
+  tickActual: number,
+  facciones: Faccion[],
+  asentamientos: Asentamiento[]
+): { atacante: Asentamiento; facciones: Faccion[]; eventos: string[]; caravanaCapturada: boolean } {
   if (!atacante.cargos.generalId) throw new CombateInvalidoError('El atacante necesita un General para interceptar.');
   const escuadrones = seleccionarEscuadrones(atacante, escuadronIdsAtacantes);
   const jitter = 1 + (Math.random() * 2 - 1) * MILITAR.varianzaCombate;
@@ -194,8 +244,24 @@ export function interceptarCaravana(
     eventos.push(`${atacante.id} falla la intercepción de la caravana ${caravana.id} y sufre bajas.`);
   }
 
+  // Doc Fase_0_5 §8: ataque de caravana otorga XP al atacante; defensa de caravana otorga XP a la Facción
+  // dueña de la caravana (resuelta vía `origenAsentamientoId`, ausente solo en partidas antiguas sin dueño).
+  const duenoId = asentamientos.find((a) => a.id === caravana.origenAsentamientoId)?.faccionId;
+  const ajustesXp: AjusteExperiencia[] = [
+    {
+      faccionId: atacante.faccionId,
+      delta: NIVEL_FACCION.xp.ataqueCaravana * jugadoresParticipantes(escuadrones),
+      razon: 'ataque a caravana',
+    },
+  ];
+  if (duenoId && duenoId !== atacante.faccionId) {
+    // Sin multiplicar (a diferencia del atacante): la escolta no tiene escuadrones/jugadores reales todavía.
+    ajustesXp.push({ faccionId: duenoId, delta: NIVEL_FACCION.xp.defensaCaravana, razon: 'defensa de caravana' });
+  }
+
   return {
     atacante: { ...atacante, almacen, escuadrones: reemplazarEscuadrones(atacante, escuadronesActualizados) },
+    facciones: aplicarAjustesExperiencia(facciones, ajustesXp),
     eventos,
     caravanaCapturada: gana,
   };
@@ -218,8 +284,9 @@ export function atacarCampamentoBandidos(
   atacante: Asentamiento,
   escuadronIdsAtacantes: string[],
   campamento: CampamentoBandido,
-  tickActual: number
-): { atacante: Asentamiento; eventos: string[]; campamentoDestruido: boolean } {
+  tickActual: number,
+  facciones: Faccion[]
+): { atacante: Asentamiento; facciones: Faccion[]; eventos: string[]; campamentoDestruido: boolean } {
   const escuadrones = seleccionarEscuadrones(atacante, escuadronIdsAtacantes);
   const jitter = 1 + (Math.random() * 2 - 1) * MILITAR.varianzaCombate;
   const poderAtacante = poderTotal(escuadrones, tickActual, false) * jitter;
@@ -239,8 +306,19 @@ export function atacarCampamentoBandidos(
     eventos.push(`${atacante.id} falla el ataque al campamento de bandidos ${campamento.id} y sufre bajas.`);
   }
 
+  // Doc Fase_0_5 §8: combate contra un campamento NPC otorga XP igual que contra otra Facción — no hay
+  // defensor de Facción rival al que dar XP (el campamento no es una Facción).
+  const faccionesFinal = aplicarAjustesExperiencia(facciones, [
+    {
+      faccionId: atacante.faccionId,
+      delta: NIVEL_FACCION.xp.combate * jugadoresParticipantes(escuadrones),
+      razon: 'combate (campamento de bandidos)',
+    },
+  ]);
+
   return {
     atacante: { ...atacante, almacen, escuadrones: reemplazarEscuadrones(atacante, escuadronesActualizados) },
+    facciones: faccionesFinal,
     eventos,
     campamentoDestruido: gana,
   };

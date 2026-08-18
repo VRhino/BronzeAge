@@ -8,9 +8,11 @@ import { avanzarCaravanasFundacion } from './expansion';
 import { avanzarMercado } from './market';
 import { avanzarPoliticas } from './politicas';
 import { avanzarTributos } from './diplomacia';
-import { avanzarNivelesFaccion } from './faccion';
+import { avanzarNivelesFaccion, aplicarAjustesExperiencia, calcularCupoNivel, type AjusteExperiencia } from './faccion';
+import { NIVEL_FACCION } from '../constants';
 import { avanzarMantenimientoTropas } from './tropas';
 import { avanzarNivelAsentamiento, avanzarMantenimiento, encontrarCapital } from './mantenimiento';
+import { nivelActualDe } from './asentamientoQuery';
 import { avanzarReputacion } from './reputacion';
 import { calcularTitulos, narrarCambiosDeTitulo } from './titulos';
 import { avanzarAtaquesBandidos, avanzarSpawnBandidos } from './bandidos';
@@ -59,19 +61,68 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, tickActu
   // tick no se adjudiquen el mismo yacimiento.
   const reclamos = reclamosDeFuentes(crecidos);
 
+  // Doc Fase_0_5 §8: experiencia de Facción por construcción — se acumula aquí (un asentamiento por vez, sabe
+  // su propia `faccionId`) y se aplica junto al resto de ajustes de experiencia más abajo en el tick.
+  const ajustesExperiencia: AjusteExperiencia[] = [];
+
+  // Doc Fase_0_5 §5: cupo de asentamientos en nivel 2/3 por Facción, derivado de su nivel actual (el de
+  // INICIO de este tick — se recalcula al final vía XP, ver más abajo). Se parte de cuántos asentamientos YA
+  // ocupan cada nivel — contra `nivelActual` (operativo), NO `nivel` (nivelAlcanzado, monótono): así una
+  // ciudad hundida por mal mantenimiento libera su cupo de verdad al degradarse, en vez de bloquearlo para
+  // siempre solo porque alguna vez llegó a ese nivel (bug detectado por el consejo LLM — el comentario de
+  // `CUPO_NIVEL_ASENTAMIENTO` en constants.ts ya prometía esta liberación, el código no la cumplía). Se va
+  // consumiendo/liberando según se conceden promociones dentro de este mismo tick (subir de 2 a 3 libera el
+  // cupo de 2 que se abandona, disponible para otro asentamiento propio en la misma pasada).
+  const cupoRestante = new Map<string, number>();
+  for (const faccion of estado.facciones) {
+    const propios = crecidos.filter((a) => a.faccionId === faccion.id);
+    cupoRestante.set(`${faccion.id}:2`, calcularCupoNivel(faccion.nivel, 2) - propios.filter((a) => nivelActualDe(a) === 2).length);
+    cupoRestante.set(`${faccion.id}:3`, calcularCupoNivel(faccion.nivel, 3) - propios.filter((a) => nivelActualDe(a) === 3).length);
+  }
+
   const procesados = crecidos.map((asentamiento) => {
     const zona = zonas.find((z) => z.asentamientoId === asentamiento.id);
-    const { asentamiento: trasConstruccion, eventos: eventosConstruccion } = avanzarConstruccion(
+    const { asentamiento: trasConstruccion, eventos: eventosConstruccion, edificiosCompletados } = avanzarConstruccion(
       asentamiento,
       zona?.poligono ?? [],
       mapa,
       capitalesPorFaccion.get(asentamiento.faccionId),
       reclamos
     );
+    if (edificiosCompletados > 0) {
+      ajustesExperiencia.push({
+        faccionId: asentamiento.faccionId,
+        delta: edificiosCompletados * NIVEL_FACCION.xp.edificioCompletado,
+        razon: 'edificio completado',
+      });
+    }
 
     const { asentamiento: trasPoliticas, eventos: eventosPoliticas } = avanzarPoliticas(trasConstruccion, tickActual);
     const { asentamiento: trasTropas, eventos: eventosTropas } = avanzarMantenimientoTropas(trasPoliticas);
-    const { asentamiento: trasNivel, eventos: eventosNivel } = avanzarNivelAsentamiento(trasTropas);
+    // `avanzarNivelAsentamiento` sube de a un escalón por llamada, en orden creciente — para llegar a pedir
+    // cupo de nivel 3, el asentamiento tuvo que pasar por (y consumir) el cupo de nivel 2 primero, sea porque
+    // ya estaba ahí desde antes de este tick, o porque acaba de conseguirlo en la llamada anterior de este
+    // mismo bucle. En ambos casos toca liberar ese cupo de 2 al conceder el de 3 — nunca hace falta mirar de
+    // dónde venía, el orden de las llamadas ya lo garantiza (Doc Fase_0_5 §5).
+    const tieneCupoParaNivel = (nivelObjetivo: number): boolean => {
+      // CUPO_NIVEL_ASENTAMIENTO (Doc Fase_0_5 §5) solo tiene curva definida para nivel 2 y 3 de asentamiento
+      // — Doc Fase_0_6 sube el tope de nivel a 5 pero deliberadamente NO extiende esta curva todavía (queda
+      // pendiente de que el usuario defina cupos para 4/5 en una pasada aparte). Sin este `> 3` los niveles
+      // 4/5 leerían `cupoRestante.get(...)` como `undefined ?? 0` y NUNCA podrían subir — bloqueo silencioso
+      // detectado por el consejo LLM antes de implementar. Niveles 4/5 quedan sin cupo (ilimitados) mientras
+      // tanto, igual que nivel 1.
+      if (nivelObjetivo < 2 || nivelObjetivo > 3) return true;
+      const clave = `${asentamiento.faccionId}:${nivelObjetivo}`;
+      const libre = cupoRestante.get(clave) ?? 0;
+      if (libre <= 0) return false;
+      cupoRestante.set(clave, libre - 1);
+      if (nivelObjetivo === 3) {
+        const claveN2 = `${asentamiento.faccionId}:2`;
+        cupoRestante.set(claveN2, (cupoRestante.get(claveN2) ?? 0) + 1);
+      }
+      return true;
+    };
+    const { asentamiento: trasNivel, eventos: eventosNivel } = avanzarNivelAsentamiento(trasTropas, tieneCupoParaNivel);
     const trasConsumo = consumirComida(trasNivel);
     const { poblacion, eventos: eventosPoblacion } = crecerPoblacion(trasConsumo);
     const conPoblacion = { ...trasConsumo, poblacion };
@@ -115,7 +166,10 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, tickActu
   const trasTributos = avanzarTributos(estado.relaciones, trasMercado.asentamientos);
   eventos.push(...trasTributos.eventos);
 
-  const trasNivelFaccion = avanzarNivelesFaccion(trasExpansion.facciones, trasTributos.asentamientos);
+  // Doc Fase_0_5 §8: se aplica la XP de construcción acumulada arriba junto a la del resto del tick (combate/
+  // caravanas, aplicadas ya directamente sobre `facciones` en `engine/combate.ts`) antes de recalcular nivel.
+  const faccionesConXp = aplicarAjustesExperiencia(trasExpansion.facciones, ajustesExperiencia);
+  const trasNivelFaccion = avanzarNivelesFaccion(faccionesConXp);
   eventos.push(...trasNivelFaccion.eventos);
 
   const faccionesFinal = avanzarReputacion(trasNivelFaccion.facciones, estado.relaciones);

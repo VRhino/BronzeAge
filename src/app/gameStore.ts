@@ -22,7 +22,7 @@ import type {
   ZonaBosque,
   ZonaInfluencia,
 } from '../domain/types';
-import { CAMPAMENTOS_BANDIDOS, EDIFICIO_CATALOGO, FUNDACION, MANTENIMIENTO, NECESIDADES, POLITICAS, POLITICA_CATALOGO, REJILLA_ASENTAMIENTO, TROPAS_RECLUTABLES } from '../constants';
+import { CAMPAMENTOS_BANDIDOS, EDIFICIO_CATALOGO, FUNDACION, MANTENIMIENTO, NECESIDADES, NIVEL_FACCION, POLITICAS, POLITICA_CATALOGO, REJILLA_ASENTAMIENTO, SIMULACION_AUTO_COMERCIO, TROPAS_RECLUTABLES } from '../constants';
 import { generarMapa, MAPA_DEFAULT, WORLDGEN_VERSION, type MapaGenerado } from '../worldgen';
 import { crearEstadoMapa, crearMapa, type EstadoMapa, type Mapa } from '../world/mapa';
 import { exportarParaUnityTerrain, UNITY_EXPORT_DEFAULT, type ExportUnityResultado, type OpcionesExportUnity } from '../world/exportUnity';
@@ -37,12 +37,13 @@ import {
   edificiosPorTipoYEstado,
   cupoCaravanas as cupoCaravanasEngine,
   tieneMercadoActivo as tieneMercadoActivoEngine,
+  nivelActualDe,
   type ProduccionItem,
   type ManoObraInfo,
   type ProgresoNivelAsentamiento,
 } from '../engine/asentamientoQuery';
 export type { ProduccionItem, ManoObraInfo } from '../engine/asentamientoQuery';
-import { encontrarCapital, calcularCostoMantenimiento } from '../engine/mantenimiento';
+import { encontrarCapital, calcularCostoMantenimiento, calcularNivelAsentamiento } from '../engine/mantenimiento';
 import { consumoComidaPoblacion } from '../engine/population';
 import { slotsDisponibles } from '../engine/politicas';
 import { listarCamposBalance, actualizarCampoBalance, restaurarBalancePorDefecto, type CampoBalance } from './balanceConfig';
@@ -56,11 +57,12 @@ import {
 export type { ViabilidadFundacion } from '../engine/settlement';
 import { computeTodasLasZonas } from '../engine/zones';
 import { avanzarSimulacion } from '../engine/simulation';
+import { avanzarAutoComercioSimulado } from '../engine/simulacionAutoComercio';
 import { proponerTrueque as proponerTruequeEngine, construirCaravanaComercial as construirCaravanaComercialEngine, CaravanaInvalidaError, TruequeInvalidoError } from '../engine/trade';
 import { asegurarCaminoComercial } from '../engine/caminos';
 import { controladorDeChokepoint } from '../engine/chokepoints';
 import { colocarOrdenMercado as colocarOrdenMercadoEngine, calcularPrecioReferencia, OrdenInvalidaError } from '../engine/market';
-import { crearFaccion as crearFaccionEngine, comprarCasa as comprarCasaEngine, calcularCapFundacion, capacidadCasas, FaccionInvalidaError } from '../engine/faccion';
+import { crearFaccion as crearFaccionEngine, comprarCasa as comprarCasaEngine, calcularCapFundacion, calcularCupoNivel, capacidadCasas, FaccionInvalidaError } from '../engine/faccion';
 import { asignarRey as asignarReyEngine, asignarEmbajador as asignarEmbajadorEngine, asignarCargoLocal as asignarCargoLocalEngine, CargoInvalidoError } from '../engine/cargos';
 import { activarPolitica as activarPoliticaEngine, PoliticaInvalidaError } from '../engine/politicas';
 import {
@@ -401,6 +403,34 @@ export class GameStore {
     return calcularCapFundacion(nivel);
   }
 
+  /**
+   * Progreso de nivel de FACCIÓN (Doc 1.7/Fase_0_5 §8): experiencia acumulada contra el umbral que falta
+   * para el siguiente nivel — mismo dato que decide `cupoAsentamientosFaccion`/`capFundacion` de esta Facción.
+   */
+  nivelFaccionInfo(faccion: Faccion): { nivel: number; esMaximo: boolean; experiencia: number; umbralActual: number; umbralSiguiente: number | null } {
+    const esMaximo = faccion.nivel >= NIVEL_FACCION.nivelMaximo;
+    return {
+      nivel: faccion.nivel,
+      esMaximo,
+      experiencia: faccion.experiencia,
+      umbralActual: faccion.nivel > 1 ? NIVEL_FACCION.xpParaNivel[faccion.nivel - 2]! : 0,
+      umbralSiguiente: esMaximo ? null : NIVEL_FACCION.xpParaNivel[faccion.nivel - 1]!,
+    };
+  }
+
+  /**
+   * Cupo de asentamientos en nivel 2/3 que le corresponde a esta Facción por su nivel actual (Doc Fase_0_5
+   * §5, ver `CUPO_NIVEL_ASENTAMIENTO`) contra cuántos de sus asentamientos YA ocupan cada uno (por
+   * `nivelActual` operativo, no `nivel`/nivelAlcanzado — igual criterio que `engine/simulation.ts`).
+   */
+  cupoAsentamientosFaccion(faccion: Faccion): { nivel2: { ocupados: number; total: number }; nivel3: { ocupados: number; total: number } } {
+    const propios = this.state.asentamientos.filter((a) => a.faccionId === faccion.id);
+    return {
+      nivel2: { ocupados: propios.filter((a) => nivelActualDe(a) === 2).length, total: calcularCupoNivel(faccion.nivel, 2) },
+      nivel3: { ocupados: propios.filter((a) => nivelActualDe(a) === 3).length, total: calcularCupoNivel(faccion.nivel, 3) },
+    };
+  }
+
   cupoVivienda(asentamiento: Asentamiento): number {
     return capacidadCasas(asentamiento);
   }
@@ -424,6 +454,27 @@ export class GameStore {
    */
   nivelAsentamientoInfo(asentamiento: Asentamiento): ProgresoNivelAsentamiento {
     return progresoNivelAsentamiento(asentamiento);
+  }
+
+  /**
+   * Por qué un asentamiento que YA cumple los gates de nivel (población + edificios) no sube: cupo de nivel
+   * ocupado por su Facción (Doc Fase_0_5 §5) — `avanzarNivelAsentamiento` (engine/mantenimiento.ts) exige gates
+   * Y cupo libre a la vez, y se queda "elegible, esperando cupo" indefinidamente si no lo hay (nunca se
+   * bloquea ni se le baja nada). Devuelve `null` cuando el cupo NO es el motivo: nivel máximo, gates todavía
+   * sin cumplir, o nivel objetivo fuera de la curva de cupo definida hoy (solo 2 y 3, ver `engine/simulation.ts`
+   * — 1, 4 y 5 no tienen tope).
+   */
+  cupoNivelInfo(asentamiento: Asentamiento): { nivelObjetivo: number; ocupados: number; cupoTotal: number } | null {
+    const nivelElegible = calcularNivelAsentamiento(asentamiento);
+    if (nivelElegible <= asentamiento.nivel) return null;
+    const nivelObjetivo = asentamiento.nivel + 1;
+    if (nivelObjetivo < 2 || nivelObjetivo > 3) return null;
+    const faccion = this.state.facciones.find((f) => f.id === asentamiento.faccionId);
+    if (!faccion) return null;
+    const cupoTotal = calcularCupoNivel(faccion.nivel, nivelObjetivo as 2 | 3);
+    const ocupados = this.state.asentamientos.filter((a) => a.faccionId === asentamiento.faccionId && nivelActualDe(a) === nivelObjetivo).length;
+    if (ocupados < cupoTotal) return null;
+    return { nivelObjetivo, ocupados, cupoTotal };
   }
 
   /** Coste de mantenimiento del tick actual, recurso por recurso, con lo disponible y si alcanza a cubrirlo. */
@@ -1006,8 +1057,16 @@ export class GameStore {
     try {
       const atacante = this.state.asentamientos.find((a) => a.id === atacanteId)!;
       const caravana = this.state.caravanas.find((c) => c.id === caravanaId)!;
-      const resultado = interceptarCaravanaEngine(atacante, idsNoVacios(escuadronesCsv), caravana, this.state.tick);
+      const resultado = interceptarCaravanaEngine(
+        atacante,
+        idsNoVacios(escuadronesCsv),
+        caravana,
+        this.state.tick,
+        this.state.facciones,
+        this.state.asentamientos
+      );
       this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === resultado.atacante.id ? resultado.atacante : a));
+      this.state.facciones = resultado.facciones;
       if (resultado.caravanaCapturada) this.state.caravanas = this.state.caravanas.filter((c) => c.id !== caravana.id);
       for (const e of resultado.eventos) this.registrar(e);
     } catch (err) {
@@ -1023,8 +1082,9 @@ export class GameStore {
     try {
       const atacante = this.state.asentamientos.find((a) => a.id === atacanteId)!;
       const campamento = this.state.campamentosBandidos.find((c) => c.id === campamentoId)!;
-      const resultado = atacarCampamentoBandidosEngine(atacante, idsNoVacios(escuadronesCsv), campamento, this.state.tick);
+      const resultado = atacarCampamentoBandidosEngine(atacante, idsNoVacios(escuadronesCsv), campamento, this.state.tick, this.state.facciones);
       this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === resultado.atacante.id ? resultado.atacante : a));
+      this.state.facciones = resultado.facciones;
       if (resultado.campamentoDestruido) {
         this.state.campamentosBandidos = this.state.campamentosBandidos.filter((c) => c.id !== campamento.id);
         this.state.bandidosProximoSpawnTick = this.state.tick + CAMPAMENTOS_BANDIDOS.ticksRespawn;
@@ -1066,6 +1126,31 @@ export class GameStore {
     this.state.campamentosBandidos = resultado.campamentosBandidos;
     this.state.bandidosProximoSpawnTick = resultado.bandidosProximoSpawnTick;
     for (const evento of resultado.eventos) this.registrar(evento);
+
+    // SIMULACION_AUTO_COMERCIO (ver constants.ts): NPC de trueque solo-para-simulación, apagado por defecto.
+    // No forma parte de `avanzarSimulacion` a propósito — el juego real sigue siendo 100% manual (Doc 3.2).
+    if (SIMULACION_AUTO_COMERCIO.activo) {
+      const trasAutoComercio = avanzarAutoComercioSimulado(
+        {
+          asentamientos: this.state.asentamientos,
+          facciones: this.state.facciones,
+          caravanas: this.state.caravanas,
+          acuerdos: this.state.acuerdos,
+          ordenes: this.state.ordenes,
+          relaciones: this.state.relaciones,
+          titulos: this.state.titulos,
+          caminos: this.state.caminos,
+          campamentosBandidos: this.state.campamentosBandidos,
+          bandidosProximoSpawnTick: this.state.bandidosProximoSpawnTick,
+        },
+        this.getMapa(),
+        this.state.tick
+      );
+      this.state.asentamientos = trasAutoComercio.asentamientos;
+      this.state.caravanas = trasAutoComercio.caravanas;
+      this.state.acuerdos = trasAutoComercio.acuerdos;
+    }
+
     this.notify();
   }
 

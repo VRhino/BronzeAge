@@ -13,6 +13,7 @@
 
 ## 1.2 Fundación de asentamientos
 - El jugador elige LIBREMENTE dónde colocar el edificio de fundación.
+- **Aviso de viabilidad al fundar** (ayuda de UI, no bloqueante, a petición del usuario): al mover el ratón sobre el mapa antes de confirmar, se dibuja una previsualización del radio inicial (30 unidades, ver TAMAÑO abajo) coloreada según viabilidad — VERDE si la posición es fundable y hay bosque alcanzable dentro del radio (madera garantizada desde el principio), ÁMBAR si es fundable pero sin madera al alcance (el asentamiento tendrá que arrancar solo con la reserva de materiales iniciales, ver 1.3), ROJO si la posición no es válida (fuera del mapa o solapa una zona de influencia existente). No impide fundar en ámbar ni en ningún punto válido — es solo información para decidir mejor, el jugador puede ignorarla. Implementado en `evaluarViabilidadFundacion` (`engine/settlement.ts`) y `drawPreviewFundacion` (`ui/canvas.ts`); también comprueba qué nodos minerales caen dentro del radio inicial.
 - Al fundar se genera automáticamente una ZONA DE INFLUENCIA (círculo/polígono) = nodo.
 - TAMAÑO: nace con un radio inicial de 30 unidades y crece gradualmente cada tick hacia un TECHO que escala con el NIVEL del asentamiento (ver Doc 4.5 para el modelo de nivel): nivel 1 → 60, nivel 2 → 90, nivel 3 → 120 (tope de Fase 0, ver 4.5). Subir de nivel no hace saltar el radio de golpe — solo levanta el techo hacia el que la zona ya venía creciendo. NIVEL 4 Y 5: planeados a futuro (fuera del rango original de nivel de asentamiento pensado en diseño), pero NO IMPLEMENTADOS en Fase 0 — no tienen gates de población/edificios definidos ni techo de radio propio todavía. No inventar valores hasta que se definan junto con sus gates correspondientes en Doc 4.5.
 - Reglas de construcción: solo se puede construir dentro de una zona de influencia existente (ampliándola si es del mismo bando) o fuera de cualquier zona (creando una nueva).
@@ -51,7 +52,8 @@ PENDIENTE (alcance confirmado con el usuario para esta pasada): escoltar caravan
 - Complementa (no sustituye) al sistema de Mantenimiento/Coste de Gobernanza (ver Doc 4).
 - Da incentivo mecánico a preferir vasallaje/conquista sobre fundación directa una vez alcanzado el cap.
 - ESTADO DE IMPLEMENTACIÓN: implementado y enforced (`calcularCapFundacion`/`CAP_FUNDACION_POR_NIVEL`, `engine/faccion.ts`/`constants.ts`) — `fundarAsentamiento` rechaza con `FundacionInvalidaError` si la Facción ya está en el cap de su nivel. Curva actual: `[1, 2, 3, 3, 4, 5, 5, 6, 6, 7]` para niveles de Facción 1 a 10 (progresión fácil de 1 a 3, luego se complica hasta el máximo de 7). Cubierto por test de unidad y por `invariantes_simulacion_larga.test.ts`.
-- PENDIENTE: qué hace subir exactamente el "nivel de Facción" (la curva de cap ya está fijada, pero el criterio de progresión de nivel de Facción en sí sigue sin definir, distinto del nivel de asentamiento de Doc 4.5); calibración final de la curva por simulación.
+- **Qué hace subir el nivel de Facción — RESUELTO**: por experiencia acumulada (combate, edificio completado, conquista, defensa/ataque de caravana), ver Doc 2.2.1 para el criterio completo, la curva de umbrales y el cupo de asentamientos nivel 2/3 que también depende de este mismo nivel.
+- PENDIENTE: calibración final de la curva de cap y de los umbrales de XP por simulación.
 
 ## 1.8 Caravana de Fundación (mecanismo de expansión más allá del primer asentamiento, sometido a consejo LLM)
 

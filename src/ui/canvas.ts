@@ -271,6 +271,7 @@ export const EDIFICIO_ETIQUETA: Record<EdificioTipo, string> = {
   mercado: 'Mercado',
   puestoMercado: 'Puesto de mercado',
   maravilla: 'Maravilla',
+  muralla: 'Muralla',
 };
 
 export const EDIFICIO_COLOR: Record<EdificioTipo, string> = {
@@ -298,6 +299,8 @@ export const EDIFICIO_COLOR: Record<EdificioTipo, string> = {
   // retirada del lienzo el color es lo único que agrupa el conjunto a la vista.
   puestoMercado: '#7fc9bf',
   maravilla: '#ffd700',
+  // Muralla (Doc Fase_0_6): gris piedra oscuro, distinto del gris de Cantera para no confundirlos.
+  muralla: '#5a5a5a',
 };
 
 export function faccionColor(faccionId: string, facciones: Faccion[]): string {

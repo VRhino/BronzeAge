@@ -4,6 +4,14 @@ import { EDIFICIO_CATALOGO, produccionTrigoDeGranja, NIVEL_ASENTAMIENTO, type Re
 import { cupoCaravanaExtra, factorProduccionTrigo } from './politicas';
 import { mejorFertilidadEnZona } from './zones';
 
+/** Nivel ACTUAL / operativo (Doc Fase_0_5 §6.2): gates de construcción/mejora/reclutamiento/expansión leen
+ * este valor, no `asentamiento.nivel` (nivelAlcanzado) directamente — `nivelActual` puede bajar tras un
+ * fallo de mantenimiento sostenido, `nivel` nunca. Ausente (partidas guardadas antes de este campo) = igual
+ * a `nivel`, sin degradación previa que reconstruir. */
+export function nivelActualDe(asentamiento: Asentamiento): number {
+  return asentamiento.nivelActual ?? asentamiento.nivel;
+}
+
 export function edificiosPorTipoYEstado(
   asentamiento: Asentamiento,
   tipo: EdificioTipo,
@@ -95,7 +103,13 @@ export interface ProgresoNivelAsentamiento {
     nivelObjetivo: number;
     pesants: { actual: number; requerido: number };
     artesanos: { actual: number; requerido: number };
+    /** Candidatos del conjunto que todavía NO están construidos — informativo: con `edificiosMinimo` (Doc
+     * Fase_0_6) no hace falta tenerlos TODOS, basta con `edificiosConstruidos >= edificiosRequeridos`. */
     edificiosFaltantes: string[];
+    /** Cuántos tipos DISTINTOS del conjunto ya están construidos — junto a `edificiosRequeridos` reemplaza
+     * el cálculo previo "requeridos - faltantes.length", que asumía "hacen falta todos" y rompía con gates
+     * de tipo "al menos N de M" (Doc Fase_0_6, nivel 2: 3 de 6 edificios de extracción). */
+    edificiosConstruidos: number;
     edificiosRequeridos: number;
   };
 }
@@ -123,7 +137,8 @@ export function progresoNivelAsentamiento(asentamiento: Asentamiento): ProgresoN
       pesants: { actual: asentamiento.poblacion.pesants, requerido: requisito.pesants },
       artesanos: { actual: asentamiento.poblacion.artesanos, requerido: requisito.artesanos },
       edificiosFaltantes,
-      edificiosRequeridos: requisito.edificios.length,
+      edificiosConstruidos: requisito.edificios.length - edificiosFaltantes.length,
+      edificiosRequeridos: requisito.edificiosMinimo ?? requisito.edificios.length,
     },
   };
 }

@@ -60,6 +60,9 @@ export function fusionar(
     reyId: nuevoReyId,
     embajadorId: null,
     nivel: 1,
+    // Igual criterio que reputación (Doc 2.7, ver abajo): la fusión da a luz una Facción nueva, sin
+    // historial propio de actividad todavía (Doc Fase_0_5 §8) — no hereda la XP de ninguna de las dos.
+    experiencia: 0,
     ciudadanosIds: ciudadanosC,
     // Reputación (Doc 2.7) arranca en 0: la fusión da a luz una Facción nueva, sin historial propio todavía.
     reputacion: 0,

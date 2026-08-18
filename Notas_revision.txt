@@ -65,13 +65,15 @@ el mapa de asentamiento es una espacio logico que se genera tomando en cuenta el
 + Ubicacion de las construcciones por defecto:
     + las minas(oro, cobre, estaño), corrales y cantera aparecen en su nodo.
     + leñeras aparecen dentro del bosque que extraen.  
-    + las granjas siempre se construyen en el borde de la zona de influencia, 
+    + las granjas siempre se construyen en el borde del espacio exterior del asentamiento, a las afueras de la "ciudad", pero dentro del espacio del asentamiento, 
     + las viviendas lo mas cerca posible al centro urbano agrupadas juntas.
     + almacenes: lo mas cerca posible al centro urbano
     + edificios de transformacion(armeria, fundicion, curtiduria) cerca del centro urbano.
     + edificios militares (galeria de tiro, barracon, carpinteria) cerca del centro urbano
     + palacio: punto mas elevado dentro de la zona del asentamiento
     + mecado: cerca de los edificios de transformacion
+-------------------
++ cambiar la forma en se ubican los edificios, siempre primero queriendo llenar los alrededores del centro urbano pero respetando los barrios, aparte cuando se sube de nivel se agregan edificios de decoracion solos a la ciudad como plazas y esas cosas
 + Politicas de cambio:
     + barrios: asigna un espacio del circulo dela zuna de influencia partiendo del centro urbano a cada tipo de edificacion a partes iguales(exepto las de extraccion y el palacio) (militar, transformacion y viviendas) y todas las costrucciones de ese tipo se construyen dentro de ese espacio. todo lo demas queda igual.
 + el pathfinder de las rutas para las caravanas debe buscar evitar bosques(rodearlos) o rios(no los puede atravesar) y montañas

@@ -65,12 +65,14 @@ describe('gate de materia prima para auto-construcción de transformación', () 
     // Inyecta cobre (simula stock de trueque) + piedra (evita que el gate se confunda con la restricción,
     // ya existente, de que el asentamiento no pueda pagar el COSTO de construcción — esa es otra condición,
     // no la que este gate prueba). Livestock se deja en 0 a propósito: Curtiduría nunca debe aparecer.
+    // nivel: 2 forzado (Doc Fase_0_6): Fundición/Curtiduría ahora exigen nivel de asentamiento 2 para su
+    // construcción BASE — este test prueba el gate de INSUMO, no el de nivel, así que arranca ya en nivel 2.
     const mapa = crearMapaDeterminista(SEED);
     const facciones = crearFacciones();
     const restaurarMathRandom = mockMathRandomDeterminista(SEED);
     try {
       const { asentamiento: base } = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', []);
-      const asentamiento = conAlmacen(base, { cobre: 10, piedra: 200 });
+      const asentamiento = conAlmacen({ ...base, nivel: 2, nivelActual: 2 }, { cobre: 10, piedra: 200 });
       let estado: EstadoSimulacion = {
         asentamientos: [asentamiento],
         facciones,
@@ -233,8 +235,12 @@ describe('política "Líneas de Producción" del Maestro de Obras', () => {
       };
 
       function fundicionPropuesta(conPolitica: boolean): { x: number; y: number } {
+        // nivel: 2 forzado (Doc Fase_0_6): Fundición exige nivel de asentamiento 2 para construcción BASE —
+        // este test prueba DÓNDE se coloca, no el gate de nivel, así que arranca ya en nivel 2.
         let asentamiento: Asentamiento = {
           ...base,
+          nivel: 2,
+          nivelActual: 2,
           edificios: [...base.edificios, minaCobre],
           almacen: { ...base.almacen, cobre: { cantidad: 10, capacidad: 200 }, piedra: { cantidad: 200, capacidad: 200 } },
         };
