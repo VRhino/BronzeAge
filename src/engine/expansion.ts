@@ -7,7 +7,7 @@ import { avanzarPosicionEnRuta } from './movimiento';
 import { posicionLibreParaFundar } from './zones';
 import { calcularCapFundacion } from './faccion';
 import { fundarAsentamiento, FundacionInvalidaError } from './settlement';
-import { nivelActualDe } from './asentamientoQuery';
+import { nivelActualDe, puedeCrearCaravana, ticksCooldownCaravanaRestantes } from './asentamientoQuery';
 
 export class ExpansionInvalidaError extends Error {}
 
@@ -74,6 +74,11 @@ export function lanzarCaravanaFundacion(
   if (!posicionLibreParaFundar(destino, asentamientosExistentes)) {
     throw new ExpansionInvalidaError('El destino cae dentro de una zona de influencia existente.');
   }
+  if (!puedeCrearCaravana(origen, tickActual)) {
+    throw new ExpansionInvalidaError(
+      `Cooldown de creación de caravanas: faltan ${ticksCooldownCaravanaRestantes(origen, tickActual)} ticks para poder crear otra desde este asentamiento.`
+    );
+  }
 
   const cap = calcularCapFundacion(faccion.nivel);
   const efectivos = asentamientosEfectivos(faccion.id, asentamientosExistentes, caravanasExistentes);
@@ -106,7 +111,10 @@ export function lanzarCaravanaFundacion(
     ruta: calcularRuta(mapa, origen.posicion, destino),
   };
 
-  return { origenActualizado: { ...origen, almacen: descontarRecursos(origen.almacen, costo) }, caravana };
+  return {
+    origenActualizado: { ...origen, almacen: descontarRecursos(origen.almacen, costo), ultimaCaravanaCreadaEnTick: tickActual },
+    caravana,
+  };
 }
 
 /** Desarma una Caravana de Fundación en tránsito y reembolsa su contenido íntegro al asentamiento de origen. */

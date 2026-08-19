@@ -91,6 +91,15 @@ Fuente: `EDIFICIO_CATALOGO` (`src/constants.ts`). "Gate construcción" = `requis
   `requisitoNivelAsentamientoConstruccion: 2` (hoy no lo tienen, se pueden construir desde nivel 1). Con esto
   la responsabilidad de "producir transformación" queda exclusivamente en manos de los edificios de nivel 2,
   sin que haga falta prohibirlo en ningún otro sitio.
+- **Se desbloquea también la construcción BASE de `barracon` y `galeriaDeTiro`** — ganan igualmente
+  `requisitoNivelAsentamientoConstruccion: 2`. Añadido después de Fase 0.6, al diseñar el trazado por anclas
+  (ver `Vista_Asentamiento_Trazado_Urbano.md` §5.7.1): son los dos tipos capaces de abrir el grupo militar y
+  arrastrar consigo la Plaza de Armas, y al fundar (disco urbano de 5 celdas) no hay ningún hueco que respete
+  la separación mínima entre anclas — el núcleo militar nacía pegado al Centro Urbano y ahí se quedaba, porque
+  ningún ancla se muda nunca. Sin gate era alcanzable en el tick 1: el Barracón cuesta 30 de madera y la
+  caravana de fundación entrega 50. **No adelanta ni retrasa nada para el jugador**: nivel 2 ya era el suelo
+  real, porque las tres tropas de `nivelRequerido: 1` piden armaMadera/armaCobre/armaduraBasica y las tres las
+  fabrica solo la Armería, que ya exigía nivel 2. Estos dos NO llevan piedra: siguen costando solo madera.
 - **Alcance de la piedra confirmado**: la piedra que "se introduce" en este nivel es la que ya llevaban de
   fábrica `fundicion`/`curtiduria`/`armeria` (80+40, 80+30, 80+30) — no se añade piedra retroactivamente a
   ningún tipo de nivel 1 (`granja`, `cantera`, `lenera`, `vivienda`, `corral`, `mina`, `minaCobre`,
@@ -99,9 +108,18 @@ Fuente: `EDIFICIO_CATALOGO` (`src/constants.ts`). "Gate construcción" = `requis
 - **Gate para subir a nivel 3**: 3 edificios de transformación (`fundicion`+`curtiduria`+`armeria`, los 3 —
   con el set actual eso es la totalidad) **+ 2 edificios militares** (`barracon`+`galeriaDeTiro`, ambos) **+
   el umbral de población que ya existe hoy para nivel 3** (500 pesants + 200 artesanos). `barracon`/
-  `galeriaDeTiro` **no cambian su propia regla de construcción** (se pueden seguir construyendo desde nivel 1
-  como hoy, sin gate nuevo) — lo único que cambia es que ahora cuentan como requisito para avanzar de nivel,
-  no solo como edificios sueltos.
+  `galeriaDeTiro` pasan además a exigir nivel 2 para su propia construcción BASE (ver el bullet de Nivel 2
+  arriba; en la redacción original de Fase 0.6 no llevaban gate y se construían desde nivel 1). Eso no afecta
+  a este gate: para llegar a nivel 3 hay que pasar por nivel 2 igualmente, así que el conjunto de
+  asentamientos capaces de cumplirlo es el mismo. Lo que sí cambia respecto a antes de Fase 0.6 es que ahora
+  cuentan como requisito para avanzar de nivel, no solo como edificios sueltos.
+
+  > ⚠️ **Este gate está roto para cualquier asentamiento sin jugador humano**, y la causa es este cambio:
+  > `barracon` y `galeriaDeTiro` **no se auto-construyen** (su política de desbloqueo se retiró y no se
+  > sustituyó) y la gobernanza NPC solo añade `mercado`, así que los 5 edificios exigidos no se reúnen nunca.
+  > Antes de Fase 0.6 el gate eran los 3 de transformación, que sí se auto-construyen, y el nivel 3 se
+  > alcanzaba. Diagnóstico completo, evidencia de batch a ambos lados del cambio y opciones de arreglo en
+  > [issues/nivel_3_inalcanzable_sin_jugador_humano.md](../issues/nivel_3_inalcanzable_sin_jugador_humano.md).
 
 ### Nivel 3 — carpintería y murallas
 
@@ -142,8 +160,8 @@ hoy. Los umbrales de nivel 2 y 3 son los que ya existen; los de nivel 4 y 5 son 
 
 | Nivel | Se desbloquea construir | Piedra en construcción BASE desde aquí |
 |---|---|---|
-| 1 | todo lo demás (extracción, granja, vivienda, almacén, mercado, barracón, galería de tiro) | no, solo madera |
-| 2 | `fundicion`, `curtiduria`, `armeria` | sí, en esos 3 tipos únicamente |
+| 1 | todo lo demás (extracción, granja, vivienda, almacén, mercado) | no, solo madera |
+| 2 | `fundicion`, `curtiduria`, `armeria`, `barracon`, `galeriaDeTiro` | sí, en esos 3 primeros únicamente |
 | 3 | `carpinteria`, `muralla` | sí (ya la llevaban / la lleva `muralla`) |
 | 4 | `palacio` | sí (ya la llevaba) |
 | 5 | `maravilla` | sí (ya la llevaba) |

@@ -2,7 +2,7 @@ import type { AcuerdoTrueque, Asentamiento, CaminoComercial, CampamentoBandido, 
 import type { Mapa } from '../world/mapa';
 import { computeTodasLasZonas } from './zones';
 import { avanzarConstruccion, reclamosDeFuentes } from './construction';
-import { consumirComida, crecerPoblacion } from './population';
+import { avanzarNutricionPoblacion, crecerPoblacion } from './population';
 import { avanzarComercio } from './trade';
 import { avanzarCaravanasFundacion } from './expansion';
 import { avanzarMercado } from './market';
@@ -98,7 +98,6 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, tickActu
     }
 
     const { asentamiento: trasPoliticas, eventos: eventosPoliticas } = avanzarPoliticas(trasConstruccion, tickActual);
-    const { asentamiento: trasTropas, eventos: eventosTropas } = avanzarMantenimientoTropas(trasPoliticas);
     // `avanzarNivelAsentamiento` sube de a un escalón por llamada, en orden creciente — para llegar a pedir
     // cupo de nivel 3, el asentamiento tuvo que pasar por (y consumir) el cupo de nivel 2 primero, sea porque
     // ya estaba ahí desde antes de este tick, o porque acaba de conseguirlo en la llamada anterior de este
@@ -122,15 +121,25 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, tickActu
       }
       return true;
     };
-    const { asentamiento: trasNivel, eventos: eventosNivel } = avanzarNivelAsentamiento(trasTropas, tieneCupoParaNivel);
-    const trasConsumo = consumirComida(trasNivel);
-    const { poblacion, eventos: eventosPoblacion } = crecerPoblacion(trasConsumo);
-    const conPoblacion = { ...trasConsumo, poblacion };
+    const { asentamiento: trasNivel, eventos: eventosNivel } = avanzarNivelAsentamiento(trasPoliticas, tieneCupoParaNivel);
+    // Población COME ANTES que Tropas (a petición del usuario — mano de obra/reclutamiento a futuro con
+    // jugadores reales): antes el orden era al revés y las Tropas se llevaban su ración aseguradas mientras
+    // la Población civil se quedaba con lo que sobrara. Los civiles son quienes producen (trabajan Granja/
+    // Cantera/Fundición/...); las Tropas no producen nada. Invertido así, bajo escasez sostenida la moral
+    // militar colapsa y empieza la deserción (`avanzarMantenimientoTropas`, `engine/tropas.ts`) MUCHO antes
+    // de que la nutrición civil llegue a comprometerse — para que los civiles se quedaran sin nada, la
+    // producción tendría que caer por debajo de SOLO su propio consumo, un escalón de escasez peor que el
+    // que ya habría vaciado el ejército. El shock lo absorbe la parte del sistema que no es productiva antes
+    // de tocar la que sí lo es. Ver `Consideraciones/NPC_Gobernanza_Facciones_Controladas.md` §"Abierto".
+    const { asentamiento: trasNutricion, eventos: eventosNutricion } = avanzarNutricionPoblacion(trasNivel);
+    const { asentamiento: trasTropas, eventos: eventosTropas } = avanzarMantenimientoTropas(trasNutricion);
+    const { poblacion, eventos: eventosPoblacion } = crecerPoblacion(trasTropas);
+    const conPoblacion = { ...trasTropas, poblacion };
 
     const capital = capitalesPorFaccion.get(asentamiento.faccionId);
     const { asentamiento: trasMantenimiento, eventos: eventosMantenimiento, destruido } = avanzarMantenimiento(conPoblacion, capital, tickActual);
 
-    for (const e of [...eventosConstruccion, ...eventosPoliticas, ...eventosTropas, ...eventosNivel, ...eventosPoblacion, ...eventosMantenimiento]) {
+    for (const e of [...eventosConstruccion, ...eventosPoliticas, ...eventosTropas, ...eventosNivel, ...eventosNutricion, ...eventosPoblacion, ...eventosMantenimiento]) {
       eventos.push(`${asentamiento.id}: ${e}`);
     }
 

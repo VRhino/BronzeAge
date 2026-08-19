@@ -19,6 +19,7 @@ Leer en este orden:
 11. **`Consideraciones/Checklist_Mecanicas.md`** — estado de completitud (cerrado/pendiente) de cada sistema.
 12. **`Consideraciones/Preguntas_Abiertas.md`** — lo que sigue sin resolver. Usar valores placeholder razonables para estos puntos, no bloquear la implementación por ellos.
 13. **`Consideraciones/Correcciones_Durante_Desarrollo.md`** — bugs de diseño/lógica encontrados y corregidos al implementar Fase 0; varios resuelven preguntas que estaban marcadas como pendientes.
+14. **`Consideraciones/NPC_Gobernanza_Facciones_Controladas.md`** — herramienta de la interfaz (no mecánica de juego): ceder una Facción a un NPC que la gobierna sola mientras se juegan otras a mano, con acoplamiento cero con el motor.
 
 ## Estado general del diseño
 

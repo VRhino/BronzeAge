@@ -1,7 +1,8 @@
 import type { Asentamiento, Escuadron } from '../domain/types';
-import { MILITAR, TROPAS_RECLUTABLES } from '../constants';
+import { MILITAR, RESERVA_CONSTRUCCION, TROPAS_RECLUTABLES } from '../constants';
 import { descontarRecursos, tieneRecursos } from './almacen';
-import { edificiosPorTipoYEstado, poblacionTotal } from './asentamientoQuery';
+import { edificiosPorTipoYEstado, poblacionDisponibleParaReclutar, poblacionTotal } from './asentamientoQuery';
+import { consumoComidaPoblacion } from './population';
 import { factorCostoReclutamiento } from './politicas';
 
 export class ReclutamientoInvalidoError extends Error {}
@@ -46,8 +47,17 @@ export function reclutarTropa(
   if (cantidad <= 0) {
     throw new ReclutamientoInvalidoError('Este escuadrón ya está al tope de unidades.');
   }
-  if (asentamiento.poblacion[origen] < cantidad) {
-    throw new ReclutamientoInvalidoError(`No hay suficientes ${origen} disponibles (hacen falta ${cantidad}).`);
+  // El pool de reclutamiento NO es la población total: es la población menos la que ya hace falta para cubrir
+  // la mano de obra vigente (a petición del usuario, tras encontrar en pruebas asentamientos colapsando porque
+  // el NPC reclutaba pesants que ya estaban ocupados produciendo — ver `poblacionDisponibleParaReclutar`,
+  // `engine/asentamientoQuery.ts`, que es el mismo número que la UI ya mostraba como "Pool de pesants para
+  // reclutamiento" sin que el motor lo hiciera cumplir). Regla del motor: aplica igual a reclutamiento manual y
+  // al de la gobernanza NPC.
+  const disponible = poblacionDisponibleParaReclutar(asentamiento, origen);
+  if (disponible < cantidad) {
+    throw new ReclutamientoInvalidoError(
+      `No hay suficientes ${origen} disponibles para reclutar sin desproteger la producción (hacen falta ${cantidad}, disponibles ${disponible} tras cubrir mano de obra).`
+    );
   }
 
   const edificio = edificiosPorTipoYEstado(asentamiento, tropa.edificio)[0];
@@ -63,6 +73,26 @@ export function reclutarTropa(
   );
   if (!tieneRecursos(asentamiento.almacen, costoTotal)) {
     throw new ReclutamientoInvalidoError('No hay equipo suficiente para reclutar esta tropa.');
+  }
+
+  // Reserva de trigo ANTES de reclutar (a petición del usuario — mano de obra/reclutamiento a futuro con
+  // jugadores reales, no solo el NPC): reclutar (o reponer) una tropa exige que el trigo en almacén cubra
+  // `horizonteTicksComida` ticks del consumo YA PROYECTADO CON la tropa nueva sumada — mismo patrón y mismo
+  // horizonte que `reservaDinamicaConstruccion` (`engine/mantenimiento.ts`) exige para construir, extendido
+  // aquí a trigo. Es una regla del MOTOR, no un heurístico del NPC (como Vivienda: aplica igual a
+  // reclutamiento manual y automático) — reemplaza el throttle "1 residente por tick en nivel 1" que antes
+  // vivía en `app/npcGobernanza.ts`: en vez de un límite artificial por nivel, el límite real es si el
+  // asentamiento tiene margen de comida de verdad. Con la Granja produciendo, el margen crece solo; bajo
+  // escasez, se cierra antes de que reclutar termine de romper nada — ver
+  // `issues/granjas_no_escalan_con_poblacion.md` y `Consideraciones/NPC_Gobernanza_Facciones_Controladas.md`
+  // §"Abierto" para el diagnóstico completo (colapso masivo medido en batch con el throttle viejo).
+  const consumoConNuevaTropa = consumoComidaPoblacion(asentamiento) + consumoRacionTropas(asentamiento) + cantidad * MILITAR.racionPorSoldadoPorTick;
+  const reservaTrigoRequerida = consumoConNuevaTropa * RESERVA_CONSTRUCCION.horizonteTicksComida;
+  const trigoDisponible = asentamiento.almacen['trigo']?.cantidad ?? 0;
+  if (trigoDisponible < reservaTrigoRequerida) {
+    throw new ReclutamientoInvalidoError(
+      `No hay reserva de trigo suficiente para sostener esta tropa sin poner en riesgo al asentamiento (hacen falta ${Math.ceil(reservaTrigoRequerida)}, hay ${Math.floor(trigoDisponible)}).`
+    );
   }
 
   const escuadrones = existente

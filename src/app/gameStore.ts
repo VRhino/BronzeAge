@@ -36,6 +36,7 @@ import {
   capacidadViviendaArtesanos,
   edificiosPorTipoYEstado,
   cupoCaravanas as cupoCaravanasEngine,
+  ticksCooldownCaravanaRestantes as ticksCooldownCaravanaRestantesEngine,
   tieneMercadoActivo as tieneMercadoActivoEngine,
   nivelActualDe,
   type ProduccionItem,
@@ -57,6 +58,7 @@ import {
 export type { ViabilidadFundacion } from '../engine/settlement';
 import { computeTodasLasZonas } from '../engine/zones';
 import { avanzarSimulacion } from '../engine/simulation';
+import { avanzarNpcGobernanza } from './npcGobernanza';
 import { avanzarAutoComercioSimulado } from '../engine/simulacionAutoComercio';
 import { proponerTrueque as proponerTruequeEngine, construirCaravanaComercial as construirCaravanaComercialEngine, CaravanaInvalidaError, TruequeInvalidoError } from '../engine/trade';
 import { asegurarCaminoComercial } from '../engine/caminos';
@@ -130,6 +132,14 @@ export interface GameState {
   /** Campamentos de bandidos (Doc 1.9) — ver `engine/bandidos.ts`. */
   campamentosBandidos: CampamentoBandido[];
   bandidosProximoSpawnTick: number;
+  /**
+   * Facciones que juega el NPC de gobernanza (`app/npcGobernanza.ts`) en vez del jugador humano — se
+   * enciende/apaga por Facción desde la pestaña Facción, en caliente y en ambos sentidos. Vive aquí, en la
+   * capa de aplicación, y NO en `Faccion` (domain/types.ts) a propósito: es una decisión de quién maneja los
+   * mandos, no un dato del mundo simulado. El `EstadoSimulacion` que recibe `avanzarSimulacion` se construye
+   * campo a campo en `avanzarTick` y no incluye esto, así que el motor ni sabe que existe.
+   */
+  faccionesNpcIds: string[];
   tick: number;
   log: EventoLog[];
   historialJugadores: Record<string, EventoLog[]>;
@@ -168,6 +178,8 @@ export interface SimulacionExportada {
   /** Ausente en archivos exportados antes de esta mecánica — se asume sin campamentos todavía al importar. */
   campamentosBandidos?: CampamentoBandido[];
   bandidosProximoSpawnTick?: number;
+  /** Ausente en archivos exportados antes de esta mecánica — se asume que ninguna Facción es NPC al importar. */
+  faccionesNpcIds?: string[];
   log: EventoLog[];
   historialJugadores: Record<string, EventoLog[]>;
 }
@@ -261,6 +273,7 @@ export class GameStore {
       caminos: [],
       campamentosBandidos: [],
       bandidosProximoSpawnTick: 0,
+      faccionesNpcIds: [],
       tick: 0,
       log: [],
       historialJugadores: {},
@@ -323,6 +336,7 @@ export class GameStore {
       caminos: structuredClone(this.state.caminos),
       campamentosBandidos: structuredClone(this.state.campamentosBandidos),
       bandidosProximoSpawnTick: this.state.bandidosProximoSpawnTick,
+      faccionesNpcIds: [...this.state.faccionesNpcIds],
       tick: this.state.tick,
       log: structuredClone(this.state.log),
       historialJugadores: structuredClone(this.state.historialJugadores),
@@ -336,6 +350,15 @@ export class GameStore {
 
   private registrar(mensaje: string): void {
     this.state.log = [{ tick: this.state.tick, mensaje }, ...this.state.log];
+  }
+
+  /**
+   * Descarta ids de `faccionesNpcIds` cuya Facción ya no existe — una anexión o fusión (`engine/fusion.ts`)
+   * hace desaparecer una de las dos Facciones, y la fusión además crea una TERCERA nueva, que nace bajo
+   * control manual: si el jugador quiere que también la juegue el NPC, la marca a mano.
+   */
+  private sincronizarFaccionesNpc(): void {
+    this.state.faccionesNpcIds = this.state.faccionesNpcIds.filter((id) => this.state.facciones.some((f) => f.id === id));
   }
 
   private registrarJugador(jugadorId: string, mensaje: string): void {
@@ -493,7 +516,7 @@ export class GameStore {
     });
     // El trigo NO viene de `calcularCostoMantenimiento` (ya no lo cobra Mantenimiento directamente, ver
     // engine/mantenimiento.ts) — el "apartado de trigo" que se muestra aquí es la suma real de consumo de
-    // comida de la población + raciones de tropas, que se descuenta en `consumirComida`/`avanzarMantenimientoTropas`.
+    // comida de la población + raciones de tropas, que se descuenta en `avanzarNutricionPoblacion`/`avanzarMantenimientoTropas`.
     const costoTrigo = consumoComidaPoblacion(asentamiento) + consumoRacionTropas(asentamiento);
     const trigoDisponible = asentamiento.almacen['trigo']?.cantidad ?? 0;
     items.push({ recurso: 'trigo', costoPorTick: costoTrigo, disponible: trigoDisponible, cubierto: trigoDisponible >= costoTrigo });
@@ -619,6 +642,35 @@ export class GameStore {
       else throw err;
     }
     this.notify();
+  }
+
+  /**
+   * Cede al NPC de gobernanza (`app/npcGobernanza.ts`) el control de una Facción, o lo retoma. Es solo un id
+   * dentro o fuera de una lista que se lee al principio de cada `avanzarTick`, así que funciona en caliente y
+   * en ambos sentidos a mitad de partida: el NPC no deja nada que impida volver a jugarla a mano (cargos,
+   * reservas, Mercado y tropas son estado normal del juego, creado con las mismas funciones del motor que usa
+   * el jugador humano).
+   */
+  alternarFaccionNpc(faccionId: string, activo: boolean): void {
+    const faccion = this.state.facciones.find((f) => f.id === faccionId);
+    if (!faccion) return;
+    const yaEsNpc = this.state.faccionesNpcIds.includes(faccionId);
+    if (activo === yaEsNpc) return;
+
+    this.state.faccionesNpcIds = activo
+      ? [...this.state.faccionesNpcIds, faccionId]
+      : this.state.faccionesNpcIds.filter((id) => id !== faccionId);
+    this.registrar(
+      activo
+        ? `${faccion.nombre}: pasa a estar controlada por el NPC de gobernanza (juega sola).`
+        : `${faccion.nombre}: vuelve a control manual del jugador.`
+    );
+    this.notify();
+  }
+
+  /** ¿Esta Facción la juega el NPC? (`GameState.faccionesNpcIds`, para la pestaña Facción). */
+  esFaccionNpc(faccionId: string): boolean {
+    return this.state.faccionesNpcIds.includes(faccionId);
   }
 
   asignarRey(faccionId: string, jugadorId: string): void {
@@ -749,6 +801,7 @@ export class GameStore {
       const resultado = anexionarEngine(this.state.facciones, this.state.asentamientos, faccionAId, faccionBId);
       this.state.facciones = resultado.facciones;
       this.state.asentamientos = resultado.asentamientos;
+      this.sincronizarFaccionesNpc();
       for (const e of resultado.eventos) this.registrar(e);
     } catch (err) {
       if (err instanceof FusionInvalidaError) this.registrar(`Anexión rechazada: ${err.message}`);
@@ -770,6 +823,7 @@ export class GameStore {
       );
       this.state.facciones = resultado.facciones;
       this.state.asentamientos = resultado.asentamientos;
+      this.sincronizarFaccionesNpc();
       for (const e of resultado.eventos) this.registrar(e);
     } catch (err) {
       if (err instanceof FusionInvalidaError) this.registrar(`Fusión rechazada: ${err.message}`);
@@ -853,8 +907,16 @@ export class GameStore {
   }
 
   /** Solo lectura, para la pestaña Guerra/Acciones: cupo de flota, cuántas caravanas propias tiene el
-   * asentamiento y en qué estado (Doc 3.3, ampliación de comercio). */
-  caravanasInfo(asentamiento: Asentamiento): { mercadoActivo: boolean; cupo: number; disponibles: number; enTransito: number; retornando: number } {
+   * asentamiento y en qué estado (Doc 3.3, ampliación de comercio), y el cooldown de creación (compartido con
+   * la Caravana de Fundación, `CARAVANA_COOLDOWN.ticksCooldown` — a petición del usuario). */
+  caravanasInfo(asentamiento: Asentamiento): {
+    mercadoActivo: boolean;
+    cupo: number;
+    disponibles: number;
+    enTransito: number;
+    retornando: number;
+    ticksCooldownRestantes: number;
+  } {
     const propias = this.state.caravanas.filter((c) => c.tipo === 'comercial' && c.origenAsentamientoId === asentamiento.id);
     return {
       mercadoActivo: tieneMercadoActivoEngine(asentamiento),
@@ -862,6 +924,7 @@ export class GameStore {
       disponibles: propias.filter((c) => c.estado === 'disponible').length,
       enTransito: propias.filter((c) => c.estado === 'en_transito').length,
       retornando: propias.filter((c) => c.estado === 'retornando').length,
+      ticksCooldownRestantes: ticksCooldownCaravanaRestantesEngine(asentamiento, this.state.tick),
     };
   }
 
@@ -1151,7 +1214,49 @@ export class GameStore {
       this.state.acuerdos = trasAutoComercio.acuerdos;
     }
 
+    this.avanzarFaccionesNpc();
+
     this.notify();
+  }
+
+  /**
+   * Turno del NPC de gobernanza (`app/npcGobernanza.ts`) para las Facciones cedidas, DESPUÉS del tick del
+   * motor — mismo orden que usan los scripts de batch. El NPC no es parte de `avanzarSimulacion` a propósito:
+   * decide con las funciones públicas del motor exactamente igual que este store cuando el jugador pulsa un
+   * botón, y solo sobre `faccionesNpcIds`. Sin Facciones cedidas no se llama a nada.
+   */
+  private avanzarFaccionesNpc(): void {
+    if (this.state.faccionesNpcIds.length === 0) return;
+
+    const resultado = avanzarNpcGobernanza(
+      {
+        asentamientos: this.state.asentamientos,
+        facciones: this.state.facciones,
+        caravanas: this.state.caravanas,
+        acuerdos: this.state.acuerdos,
+        ordenes: this.state.ordenes,
+        relaciones: this.state.relaciones,
+        titulos: this.state.titulos,
+        caminos: this.state.caminos,
+        campamentosBandidos: this.state.campamentosBandidos,
+        bandidosProximoSpawnTick: this.state.bandidosProximoSpawnTick,
+      },
+      this.getMapa(),
+      this.state.tick,
+      { faccionesIds: this.state.faccionesNpcIds, contadorInicial: this.contadorAcciones }
+    );
+
+    this.state.asentamientos = resultado.estado.asentamientos;
+    this.state.facciones = resultado.estado.facciones;
+    this.state.caravanas = resultado.estado.caravanas;
+    this.state.acuerdos = resultado.estado.acuerdos;
+    this.state.campamentosBandidos = resultado.estado.campamentosBandidos;
+    this.state.bandidosProximoSpawnTick = resultado.estado.bandidosProximoSpawnTick;
+    // Los ids que el motor generó dentro del NPC salieron de este mismo contador: se adelanta para que la
+    // próxima acción manual del jugador no reutilice uno (ver `ConfigNpcGobernanza.contadorInicial`).
+    this.contadorAcciones = resultado.contadorFinal;
+
+    for (const evento of resultado.eventos) this.registrar(`[NPC] ${evento}`);
   }
 
   regenerarMundo(seed: number, region?: RegionId): void {
@@ -1170,6 +1275,7 @@ export class GameStore {
       caminos: [],
       campamentosBandidos: [],
       bandidosProximoSpawnTick: 0,
+      faccionesNpcIds: [],
       tick: 0,
       log: [],
       historialJugadores: {},
@@ -1198,6 +1304,7 @@ export class GameStore {
       caminos: this.state.caminos,
       campamentosBandidos: this.state.campamentosBandidos,
       bandidosProximoSpawnTick: this.state.bandidosProximoSpawnTick,
+      faccionesNpcIds: this.state.faccionesNpcIds,
       log: this.state.log,
       historialJugadores: this.state.historialJugadores,
     };
@@ -1275,6 +1382,9 @@ export class GameStore {
         caminos: payload.caminos ?? [],
         campamentosBandidos: payload.campamentosBandidos ?? [],
         bandidosProximoSpawnTick: payload.bandidosProximoSpawnTick ?? 0,
+        // Se filtra contra las Facciones que el archivo trae de verdad: un id huérfano dejaría una entrada
+        // muerta que volvería a activarse sola si alguien creara después una Facción con ese mismo id.
+        faccionesNpcIds: (payload.faccionesNpcIds ?? []).filter((id) => payload.facciones!.some((f) => f.id === id)),
         tick: payload.tick ?? 0,
         log: payload.log ?? [],
         historialJugadores: payload.historialJugadores ?? {},

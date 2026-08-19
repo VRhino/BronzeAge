@@ -45,7 +45,8 @@ Ver `Docs/0_Glosario_de_Entidades_Politicas.md` para las definiciones centrales.
 - ✅ 3 clases (Pesants, Artesanos, Nobleza) con roles, condiciones de aparición y fórmulas propias
 - ✅ Jugadores como entidad separada; reclutamiento por pool específico (combate real vs progresión plana)
 - ✅ Rediseño Fase 0: disparador de Artesanos pasa de Taller genérico a "el primero construido entre Curtiduría/Armería/Fundición/Carpintería"; tope de población = suma de trabajadoresRequeridos de los edificios de transformación activos (ver Doc 4.1/4.2.1)
-- 🔶 Fórmula exacta de crecimiento de Artesanos; criterio exacto de cola de prioridad de reclutamiento
+- ✅ Hambruna (a petición del usuario): no sostener el consumo de trigo ya tiene efecto negativo real, no solo frena el crecimiento. Medidor `nutricionPoblacion` (0-100, espejo de la moral de tropas por ración) sube/baja según la fracción de consumo cubierta cada tick; por encima de 0 escala linealmente el factor de crecimiento (0.2-1, reemplaza el viejo booleano trigo>0?1:0.2); en 0 sostenido cuesta 5%/tick de pesants+artesanos (nobleza protegida). Ver Doc 4.1.
+- 🔶 Fórmula exacta de crecimiento de Artesanos; criterio exacto de cola de prioridad de reclutamiento; calibración de las cifras de Hambruna (`POBLACION.hambre`) por simulación
 
 ## Construcción automática
 - ✅ Jugador no elige ubicación/tipo (excepto fundación y edificios estratégicos)

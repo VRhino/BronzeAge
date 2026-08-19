@@ -20,6 +20,37 @@ El combate ocurre en INSTANCIAS separadas del mapa global (aunque se desencadene
 - PERMADEATH individual (excepto modo entrenamiento): bajas son permanentes.
 - El SQUAD (nombre, nivel veterano) persiste aunque el regimiento sea aniquilado — se puede rellenar con nuevos reclutas conservando el progreso.
 - DESERCIÓN POR HAMBRE: tropas consumen raciones continuamente; sin suministro, la moral colapsa y desertan permanentemente (mismo efecto que perderlas en combate).
+- **Población civil come ANTES que las Tropas** (rediseño, a petición del usuario — pensando en escala
+  multijugador real: cantidad de jugadores por asentamiento y presión militar PvP crecen con el servidor,
+  mientras que la producción de comida está acotada por espacio construido; ver
+  `Consideraciones/NPC_Gobernanza_Facciones_Controladas.md` §"Abierto" para el diagnóstico completo).
+  `avanzarNutricionPoblacion` corre antes que `avanzarMantenimientoTropas` en el tick (`engine/simulation.ts`)
+  — antes era al revés. Los civiles son quienes producen (Granja/Cantera/Fundición/...); las Tropas no
+  producen nada, así que bajo escasez sostenida el shock lo absorbe primero la parte del sistema que no es
+  productiva: la moral militar colapsa y empieza la deserción MUCHO antes de que la nutrición civil llegue a
+  comprometerse — para que los civiles se quedaran sin nada, la producción tendría que caer por debajo de
+  SOLO su propio consumo, un escalón de escasez peor que el que ya habría vaciado el ejército.
+- **Reclutar exige reserva de trigo proyectada** (`reclutarTropa`, `engine/tropas.ts`): antes de aceptar un
+  reclutamiento o reposición, el trigo en almacén debe cubrir `RESERVA_CONSTRUCCION.horizonteTicksComida` (8)
+  ticks del consumo YA PROYECTADO CON la tropa nueva sumada (civiles + tropas existentes + la que se está
+  reclutando). Es una regla del MOTOR, no un heurístico del NPC — igual que Vivienda acota cuánta población
+  civil puede aparecer, esto acota cuánta tropa puede sostenerse, sin importar cuántos jugadores residen en el
+  asentamiento ni cuánto pesants tenga cada uno disponible en el momento. Reemplaza un throttle anterior que
+  vivía solo en la gobernanza NPC (1 residente reclutando por tick mientras el asentamiento estuviera en
+  nivel 1, los 5 a la vez desde nivel 2) — ese interruptor binario por nivel quedó retirado: con la reserva
+  real, si varios residentes intentan reclutar el mismo tick, los primeros agotan el margen y el resto falla
+  limpio, sin necesidad de un tope artificial.
+- **El pool de reclutamiento es población MENOS la ya ocupada en producción, no la población total**
+  (`poblacionDisponibleParaReclutar`, `engine/asentamientoQuery.ts`, consumida por `reclutarTropa`,
+  `engine/tropas.ts`). La reserva de trigo del punto anterior protege el CONSUMO proyectado, pero no evitaba
+  que reclutar sacara pesants que ya estaban cubriendo `trabajadoresRequeridos` de Granja/Cantera/Leñera/
+  minas/Corral (`ratioManoObra`) — ni artesanos que ya cubrían Fundición/Curtiduría/Armería/Carpintería
+  (`ratioManoObraArtesanos`). La UI ya mostraba el número correcto ("Pool de pesants para reclutamiento",
+  `manoObraInfo.excedente`) sin que el motor lo hiciera cumplir; ahora el motor lee exactamente ese número. Es
+  simétrico entre pesants y artesanos, y aplica igual a reclutamiento manual y al de la gobernanza NPC.
+  Medido en batch: de la mayoría del colapso de transición a nivel 2 que quedaba abierto (11/20 asentamientos
+  de prueba), este arreglo por sí solo lo baja a 3/20 — detalle en
+  `issues/granjas_no_escalan_con_poblacion.md`, sección "Tercera continuación".
 
 ## 5.5 Doble carril de progresión (ver también Doc 4, sección 4.1)
 - Carril COMBATE REAL (Pesants + Artesanos): tropas Tier bajo/medio, deben veteranizar combatiendo de verdad.

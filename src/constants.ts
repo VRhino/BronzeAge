@@ -68,6 +68,27 @@ export const POBLACION = {
   // (Doc 4.2.1 — "desbloquea la aparición de la población noble"), ver engine/population.ts.
   nobleza: { minCiudadanos: 3, tasaCrecimientoBase: 0.01 },
   consumoComidaPorHabitante: 0.1, // trigo/tick por habitante (pesants+artesanos+nobleza)
+  /**
+   * Hambruna (a petición del usuario): efecto negativo de no poder mantener a la población con trigo — espejo
+   * deliberado de `MILITAR.regeneracionMoralPorTick`/`degradacionMoralSinRacion`/`desercionFraccionPorTickSinMoral`
+   * (mismo diseño ya validado para tropas, ver engine/tropas.ts). El medidor de nutrición sube/baja con la
+   * fracción de consumo cubierta cada tick (`avanzarNutricionPoblacion`, engine/population.ts); con estos
+   * valores, trigo en 0 sostenido colapsa el medidor en 100/20 = 5 ticks, igual que la moral de tropas.
+   * PLACEHOLDER sin calibrar por simulación todavía, igual que el resto de esta fase.
+   */
+  hambre: {
+    nutricionInicial: 100,
+    regeneracionPorTick: 5,
+    degradacionSinComida: 20,
+    // Suelo del factor de crecimiento cuando la nutrición está en 0 (Doc 4.1: antes era un booleano
+    // trigo>0?1:0.2 — ahora escala linealmente entre este suelo y 1 según `nutricionPoblacion`/100).
+    factorCrecimientoMinimo: 0.2,
+    // Nutrición <= este umbral empieza a costar población real, no solo crecimiento.
+    umbralMuertePorHambre: 0,
+    // Fracción de pesants+artesanos (nobleza protegida) perdida por tick mientras la nutrición sigue en el
+    // umbral — mismo valor que la deserción de tropas sin moral, por coherencia entre ambos sistemas.
+    fraccionMuertePorTickHambre: 0.05,
+  },
 };
 
 /**
@@ -328,6 +349,15 @@ export const EDIFICIO_CATALOGO = {
   barracon: {
     costo: { madera: 30 },
     tiempoConstruccionTicks: 6,
+    // Construcción BASE gateada a nivel 2 (trazado de anclas, ver Vista_Asentamiento_Trazado_Urbano.md §5.7.1):
+    // el primer edificio militar arrastra tras de sí la Plaza de Armas, y al fundar (disco urbano de 5 celdas)
+    // no existe ningún hueco que respete la separación mínima entre anclas — el núcleo militar nacía pegado al
+    // Centro Urbano y, como ningún ancla se muda nunca, se quedaba ahí el resto de la partida. Sin gate esto
+    // era alcanzable en el tick 1: 30 de madera contra los 50 que entrega la caravana de fundación.
+    // No le quita nada al jugador: nivel 2 ya era el suelo REAL de facto, porque las tres tropas de
+    // `nivelRequerido: 1` piden armaMadera/armaCobre/armaduraBasica y las tres las fabrica solo la Armería,
+    // que ya exigía nivel 2 (ver `reclutarTropa`, engine/tropas.ts — no comprueba nivel de asentamiento).
+    requisitoNivelAsentamientoConstruccion: 2,
     niveles: {
       1: { trabajadoresRequeridos: 0, recetas: [] },
       2: {
@@ -352,6 +382,9 @@ export const EDIFICIO_CATALOGO = {
   galeriaDeTiro: {
     costo: { madera: 50 },
     tiempoConstruccionTicks: 6,
+    // Mismo gate y mismo motivo que Barracón (ver arriba): es el otro tipo capaz de abrir el grupo militar y
+    // arrastrar la Plaza de Armas consigo.
+    requisitoNivelAsentamientoConstruccion: 2,
     niveles: {
       1: { trabajadoresRequeridos: 0, recetas: [] },
       2: {
@@ -676,6 +709,17 @@ export const TRAZADO = {
   largoFilaMax: 8,
   radioAfuerasMin: 60,
   anchoBandaAfueras: 36,
+  // Anclas y satélites, Etapa 2 (Consideraciones/Vista_Asentamiento_Trazado_Urbano.md §5.3/5.7): separación
+  // mínima en celdas entre centros de ancla. `radioMaximoNucleo = separacionMinimaAnclas / 2` (engine/trazado.ts,
+  // `sitiosPorAtraccionDura`) es lo que evita que dos núcleos vecinos se invadan. Sin calibrar por simulación
+  // todavía — ver "Abierto" en el doc.
+  separacionMinimaAnclas: 6,
+  // Zona de seguridad entre anclas (a petición del usuario): un PISO DURO, no relajable — a diferencia de
+  // `separacionMinimaAnclas`, que el doc describe como negociable, esta nunca cede. Ningún ancla real nueva
+  // (Mercado, Carpintería — `ANCLAS_REALES`, engine/trazado.ts) puede colocarse a menos de esta distancia,
+  // centro a centro, de OTRA ancla ya construida (`sitiosParaTipo`). Si ningún hueco la cumple, no hay sitio
+  // válido en ese tick — la colocación se salta o se reintenta, igual que cualquier otro "no cabe" del trazado.
+  separacionSeguridadAnclas: 2,
 };
 
 // --- Sprint 3: Economía (Doc 3) ---
@@ -697,6 +741,19 @@ export const CARAVANA_CATALOGO = {
   construccion: { capacidad: 150, velocidad: 10 },
   contrabando: { capacidad: 20, velocidad: 24 },
 } as const;
+
+/**
+ * Cooldown de creación de caravanas (a petición del usuario): tras crear una caravana desde un asentamiento
+ * —Fundación (`lanzarCaravanaFundacion`, engine/expansion.ts) o comercial (`construirCaravanaComercial`,
+ * engine/trade.ts), COMPARTIDO entre las dos— hay que esperar `ticksCooldown` ticks antes de poder crear otra
+ * desde el mismo asentamiento. Evita que se spamee la creación cuando una caravana recién salida es destruida
+ * (bandidos, `engine/bandidos.ts`; intercepción de otra Facción, `engine/combate.ts`) y el cupo/recursos
+ * vuelven a estar disponibles de inmediato. Mismo patrón que `CAMPAMENTOS_BANDIDOS.ticksRespawn` /
+ * `REGENERACION_NODOS.*.ticksCooldown` — un solo número parametrizable, sin calibrar por simulación todavía.
+ */
+export const CARAVANA_COOLDOWN = {
+  ticksCooldown: 10,
+};
 
 /**
  * Scoring de asignación de caravanas disponibles a lados pendientes de trueque (ampliación de comercio, a
@@ -1074,7 +1131,7 @@ export const NIVEL_ASENTAMIENTO = {
 export const MANTENIMIENTO = {
   medidorInicial: 100,
   // Trigo NO va aquí (fix: era una "mecánica repetida" — Mantenimiento cobraba este valor fijo ADEMÁS del
-  // consumo real de comida que ya se descuenta en `consumirComida`/`avanzarMantenimientoTropas`, duplicando
+  // consumo real de comida que ya se descuenta en `avanzarNutricionPoblacion`/`avanzarMantenimientoTropas`, duplicando
   // el gasto). El "apartado de trigo" que se muestra en el panel de Mantenimiento ahora es la suma real de
   // consumo de población + tropas (ver `gameStore.mantenimientoInfo`), no un placeholder desconectado.
   costoBase: { madera: 3 },

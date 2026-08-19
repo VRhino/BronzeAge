@@ -1,23 +1,33 @@
 import * as fs from 'fs';
-import type { Asentamiento, Faccion, Point } from '../src/domain/types';
+import type { Asentamiento, Edificio, Faccion, Point } from '../src/domain/types';
 import { generarMapa, MAPA_DEFAULT } from '../src/worldgen';
 import { crearMapa, crearEstadoMapa, type Mapa } from '../src/world/mapa';
 import { avanzarSimulacion, type EstadoSimulacion } from '../src/engine/simulation';
 import { crearFaccion } from '../src/engine/faccion';
 import { evaluarViabilidadFundacion, fundarAsentamiento } from '../src/engine/settlement';
-import { nivelActualDe, tieneMercadoActivo, edificiosPorTipoYEstado } from '../src/engine/asentamientoQuery';
+import { nivelActualDe, tieneMercadoActivo, edificiosPorTipoYEstado, nutricionPoblacionDe } from '../src/engine/asentamientoQuery';
 import { calcularNivelAsentamiento } from '../src/engine/mantenimiento';
 import { mockMathRandomDeterminista } from '../src/engine/__tests__/fixtures';
-import { avanzarNpcGobernanza, type ConfigNpcGobernanza } from '../simulaciones-batch/npcGobernanza';
+import { avanzarNpcGobernanza, type ConfigNpcGobernanza, MINERALES_BONUS_FUNDACION } from '../src/app/npcGobernanza';
+import { CATEGORIA_POR_TIPO, edificiosInternos, redDeCalles, segmentosDeRed } from '../src/engine/trazado';
+import { REJILLA_ASENTAMIENTO } from '../src/constants';
 
-const SEED = 7;
-const NUM_FACCIONES = 100;
+/** Overrides por entorno para poder hacer pasadas cortas de humo sin esperar la corrida completa
+ * (`BATCH_TICKS=200 BATCH_FACCIONES=10 node ...`). Sin variables, los valores son los de siempre — ninguna
+ * corrida existente cambia de resultado. */
+const num = (nombre: string, porDefecto: number) => {
+  const crudo = process.env[nombre];
+  const valor = crudo === undefined ? NaN : Number(crudo);
+  return Number.isFinite(valor) && valor > 0 ? Math.floor(valor) : porDefecto;
+};
+
+const SEED = num('BATCH_SEED', 7);
+const NUM_FACCIONES = num('BATCH_FACCIONES', 100);
 const JUGADORES_POR_ASENTAMIENTO = 5;
-const TICKS = 3000;
-const FOTO_CADA = 100;
+const TICKS = num('BATCH_TICKS', 3000);
+const FOTO_CADA = num('BATCH_FOTO_CADA', 100);
 const MIN_SEPARACION = 100;
 
-const OTROS_MINERALES = ['cobre', 'estano', 'livestock'];
 const TIPOS_EXTRACTOR = ['cantera', 'lenera', 'mina', 'minaCobre', 'minaEstano', 'corral'] as const;
 
 function distancia(a: Point, b: Point): number {
@@ -31,6 +41,27 @@ interface CandidatoFundacion {
   score: number;
 }
 
+/**
+ * Selección de posiciones para la fundación INICIAL del batch — alineada con
+ * `buscarPosicionFundacionInicialPorDefecto` (`src/app/npcGobernanza.ts`), que ya resolvió las mismas dos
+ * decisiones para la partida real. La divergencia previa entre ambas (piedra como puntuación blanda en vez de
+ * requisito, y un barrido que arrancaba en paso 100) hacía que el 76% de los asentamientos del batch fundaran
+ * sin piedra alcanzable — sin Cantera, el gate de nivel 2 (Doc Fase_0_6: 3 de 6 extractores) es inalcanzable
+ * sin importar cuánto avance la simulación (ver `issues/granjas_no_escalan_con_poblacion.md`, que arrancó
+ * investigando por qué el batch nunca alcanzaba nivel 2).
+ *
+ * - **Piedra es requisito, no puntuación**: un candidato sin ningún nodo de piedra en el radio inicial NO
+ *   entra en el pool. Mismo criterio que el NPC, misma razón: sin Cantera, ese asentamiento ya nació sin
+ *   poder cumplir el gate.
+ * - **El barrido no pasa de paso 25** — más grueso que eso se salta clusters de recursos enteros entre dos
+ *   puntos consecutivos, el mismo hallazgo que documenta `PASO_BUSQUEDA_FUNDACION_INICIAL` en el NPC. Un paso
+ *   más fino (10) sigue disponible como refuerzo SOLO si 25 no basta para separar `cantidad` posiciones — el
+ *   batch, a diferencia del NPC, tiene que colocar muchas a la vez y necesita más candidatos que el NPC
+ *   (que solo busca una).
+ * - **El desempate usa `MINERALES_BONUS_FUNDACION`** (importada de `npcGobernanza.ts`, no duplicada): cuenta
+ *   de 0 a 4 según cuántos de esos minerales tiene alcanzables, igual que el NPC — antes el batch usaba su
+ *   propia lista de 3 sin oro, que además es uno de los 6 tipos del gate de nivel 2 (`mina`).
+ */
 function recolectarCandidatos(mapa: Mapa, paso: number): CandidatoFundacion[] {
   const candidatos: CandidatoFundacion[] = [];
   for (let x = paso; x < mapa.limites.ancho; x += paso) {
@@ -39,8 +70,11 @@ function recolectarCandidatos(mapa: Mapa, paso: number): CandidatoFundacion[] {
       const viabilidad = evaluarViabilidadFundacion(mapa, posicion, []);
       if (!viabilidad.recomendable) continue;
       const tienePiedra = viabilidad.recursosEnRadio.some((r) => r.tipo === 'piedra' && r.nodos > 0);
-      const tieneOtroMineral = viabilidad.recursosEnRadio.some((r) => OTROS_MINERALES.includes(r.tipo) && r.nodos > 0);
-      candidatos.push({ posicion, tienePiedra, tieneOtroMineral, score: (tienePiedra ? 2 : 0) + (tieneOtroMineral ? 1 : 0) });
+      if (!tienePiedra) continue;
+      const bonusMinerales = MINERALES_BONUS_FUNDACION.filter((tipo) =>
+        viabilidad.recursosEnRadio.some((r) => r.tipo === tipo && r.nodos > 0)
+      ).length;
+      candidatos.push({ posicion, tienePiedra, tieneOtroMineral: bonusMinerales > 0, score: bonusMinerales });
     }
   }
   return candidatos;
@@ -48,7 +82,7 @@ function recolectarCandidatos(mapa: Mapa, paso: number): CandidatoFundacion[] {
 
 function elegirPosicionesFundacion(mapa: Mapa, cantidad: number): CandidatoFundacion[] {
   const elegidas: CandidatoFundacion[] = [];
-  for (const paso of [100, 50, 25, 10]) {
+  for (const paso of [25, 10]) {
     if (elegidas.length >= cantidad) break;
     const pool = recolectarCandidatos(mapa, paso).sort((a, b) => b.score - a.score);
     for (const candidato of pool) {
@@ -61,16 +95,104 @@ function elegirPosicionesFundacion(mapa: Mapa, cantidad: number): CandidatoFunda
   return elegidas;
 }
 
-function buscarDestinoFundacion(origen: Asentamiento, mapa: Mapa, asentamientos: Asentamiento[]): Point | undefined {
-  for (let radio = 150; radio <= 600; radio += 150) {
-    for (let angulo = 0; angulo < 360; angulo += 20) {
-      const rad = (angulo * Math.PI) / 180;
-      const posicion = { x: origen.posicion.x + Math.cos(rad) * radio, y: origen.posicion.y + Math.sin(rad) * radio };
-      if (posicion.x < 0 || posicion.y < 0 || posicion.x >= mapa.limites.ancho || posicion.y >= mapa.limites.alto) continue;
-      if (evaluarViabilidadFundacion(mapa, posicion, asentamientos).recomendable) return posicion;
+// --- Métricas de TRAZADO URBANO (Etapa 0 del rediseño "anclas y satélites") ---
+//
+// Existen para tener LÍNEA BASE del sistema de barrios ANTES de tocar la colocación. Sin ellas no hay forma
+// de decir si el rediseño mejora o empeora la ciudad: "se ve peor" no es medible, y el consejo que revisó la
+// mecánica coincidió en que reescribir el núcleo de colocación sin una línea base es un acto de fe.
+// Especificación de lo que se va a medir: `Consideraciones/Vista_Asentamiento_Trazado_Urbano.md`.
+//
+// Las tres se calculan SOLO sobre el trazado ya existente — no anticipan nada del rediseño, así que sirven
+// igual para el "antes" (barrios) y para el "después" (anclas).
+
+const CELDA = REJILLA_ASENTAMIENTO.tamanoCelda;
+
+/** Union-find mínimo sobre claves de texto, para contar componentes conexas sin traer una dependencia. */
+function crearUnionFind() {
+  const padre = new Map<string, string>();
+  const raiz = (x: string): string => {
+    let actual = padre.get(x) ?? x;
+    if (!padre.has(x)) padre.set(x, x);
+    while (actual !== (padre.get(actual) ?? actual)) actual = padre.get(actual)!;
+    padre.set(x, actual);
+    return actual;
+  };
+  return {
+    agregar: (x: string) => raiz(x),
+    unir: (a: string, b: string) => {
+      const ra = raiz(a);
+      const rb = raiz(b);
+      if (ra !== rb) padre.set(ra, rb);
+    },
+    componentes: () => new Set([...padre.keys()].map(raiz)).size,
+  };
+}
+
+/**
+ * Manzanas cerradas = ciclos independientes de la red de calles. Sale de la fórmula de Euler para grafos
+ * planos (`ciclos = aristas − vértices + componentes`), así que no hay que buscar los ciclos: basta contarlos.
+ *
+ * Es el GUARDIÁN DE REGRESIÓN del rediseño. `candidatosLibres` (engine/trazado.ts) documenta una regresión ya
+ * medida: sin preferir la continuación de fila, la ciudad crece como un borrón compacto y solo 3 de 50
+ * edificios llegaban a cerrar manzana. La prioridad "pegado al ancla" (§5.3) vuelve a poner presión justo
+ * ahí, y esta métrica es lo que avisará si la reintroduce.
+ */
+function manzanasCerradas(asentamiento: Asentamiento): number {
+  const { calles } = segmentosDeRed(redDeCalles(asentamiento.id, asentamiento.edificios));
+  if (calles.length === 0) return 0;
+
+  const uf = crearUnionFind();
+  const clave = (p: Point) => `${Math.round(p.x)},${Math.round(p.y)}`;
+  const vertices = new Set<string>();
+  for (const segmento of calles) {
+    const a = clave(segmento.desde);
+    const b = clave(segmento.hasta);
+    vertices.add(a);
+    vertices.add(b);
+    uf.agregar(a);
+    uf.agregar(b);
+    uf.unir(a, b);
+  }
+  return calles.length - vertices.size + uf.componentes();
+}
+
+/**
+ * Cuántos GRUPOS SEPARADOS forma una categoría dentro del asentamiento (enlace simple: dos edificios caen en
+ * el mismo grupo si sus centros están a `umbralCeldas` o menos).
+ *
+ * Es la métrica del OBJETIVO del rediseño. Con barrios, una categoría es una sola mancha que crece
+ * radialmente y este número debería quedarse pegado a 1; con núcleos debería subir a medida que la ciudad
+ * abre anclas nuevas. El umbral es arbitrario pero constante entre el "antes" y el "después", que es lo único
+ * que hace falta para que la comparación signifique algo.
+ */
+function componentesDeCategoria(edificios: Edificio[], umbralCeldas: number): number {
+  if (edificios.length === 0) return 0;
+  const uf = crearUnionFind();
+  edificios.forEach((_, i) => uf.agregar(String(i)));
+  for (let i = 0; i < edificios.length; i++) {
+    for (let j = i + 1; j < edificios.length; j++) {
+      if (distancia(edificios[i]!.posicion, edificios[j]!.posicion) / CELDA <= umbralCeldas) {
+        uf.unir(String(i), String(j));
+      }
     }
   }
-  return undefined;
+  return uf.componentes();
+}
+
+/** Umbral de enlace simple para `componentesDeCategoria`, en celdas. Del orden del diámetro que tendría un
+ * núcleo con `separacionMinimaAnclas = 6` (§5.3: `radioMaximoNucleo = separacionMinimaAnclas / 2`). */
+const UMBRAL_COMPONENTE_CELDAS = 4;
+
+const CATEGORIAS_MEDIDAS = ['residencial', 'industria', 'militar', 'mercado', 'almacenaje'] as const;
+
+/** Distancia media, en celdas, de cada satélite a su pieza de referencia. `null` si no hay ningún par que
+ * medir (el asentamiento no tiene todavía ese edificio). Mide la DERIVA: el defecto (b) que motiva el
+ * rediseño es que la acreción mira al vecino más cercano de la categoría, no a la pieza que debería ordenar
+ * el grupo, así que la cadena puede alejarse paso a paso. */
+function dispersionMedia(satelites: Edificio[], referencia: Edificio | undefined): number | null {
+  if (!referencia || satelites.length === 0) return null;
+  const suma = satelites.reduce((acc, s) => acc + distancia(s.posicion, referencia.posicion) / CELDA, 0);
+  return suma / satelites.length;
 }
 
 interface Foto {
@@ -99,6 +221,38 @@ interface Foto {
   truequesSupervivenciaAcumulados: number;
   acuerdosActivos: number;
   acuerdosCumplidos: number;
+  // --- Trazado urbano (línea base para el rediseño "anclas y satélites") ---
+  /** Ciclos de la red de calles por asentamiento, promediado. Guardián de regresión de la alineación. */
+  manzanasCerradasMedia: number;
+  /** Asentamientos con al menos una manzana cerrada — el promedio solo no distingue "pocas ciudades con
+   * muchas manzanas" de "muchas ciudades con una". */
+  conAlgunaManzanaCerrada: number;
+  /** Distancia media puesto→Mercado en celdas, sobre los asentamientos que tienen ambos. Mide la deriva. */
+  dispersionPuestoMercado: number | null;
+  /** Distancia media Vivienda→Centro Urbano en celdas. La otra relación ancla/satélite que ya existe hoy. */
+  dispersionViviendaCentro: number | null;
+  /** Grupos separados que forma cada categoría, promediado sobre los asentamientos que tienen esa categoría.
+   * Con barrios debería rondar 1 (una sola mancha); con núcleos debería crecer. */
+  componentesPorCategoria: Record<string, number | null>;
+  // --- Población contra el gate de nivel 2 (diagnóstico del estancamiento en nivel 1) ---
+  /** Viviendas activas por asentamiento. El tope en nivel 1 es 14 (`maximoViviendasPorNivel`), que da 210 de
+   * capacidad de pesants contra los 200 que pide el gate: si esto no llega a 14, el gate es inalcanzable por
+   * falta de capacidad, no por falta de crecimiento. */
+  viviendasMedia: number;
+  /** Granjas por asentamiento: activas (produciendo), en obra/cola (pagadas, todavía no producen), y nivel
+   * interno medio de las activas (1-4, ver §7 del trazado — el rinde sube ×1/×1.5/×2/×3 con el nivel sin
+   * aumentar `trabajadoresRequeridos`). Faltaba en la instrumentación: hasta ahora el diagnóstico de hambre se
+   * apoyaba solo en nutrición/pesants, nunca en contar Granjas de verdad — este campo lo cierra. */
+  granjasActivasMedia: number;
+  granjasPendientesMedia: number;
+  granjasNivelInternoMedia: number | null;
+  /** Pesants por asentamiento, promedio y máximo. El máximo es el que dice si ALGÚN asentamiento se acerca
+   * siquiera a los 200 del gate — el promedio lo esconde. */
+  pesantsMedia: number;
+  pesantsMaximo: number;
+  /** Nutrición media (0-100). Entra como factor multiplicativo directo del crecimiento
+   * (`comidaFactor`, engine/population.ts), así que una nutrición baja frena el pool aunque sobre capacidad. */
+  nutricionMedia: number;
 }
 
 function construirFotoResumen(
@@ -140,6 +294,26 @@ function construirFotoResumen(
   let tropasVivas = 0;
   const extraccionPorTipoActivosTotal: Record<string, number> = Object.fromEntries(TIPOS_EXTRACTOR.map((t) => [t, 0]));
 
+  // Trazado urbano: se acumulan suma y contador por separado porque cada métrica solo aplica a los
+  // asentamientos que tienen las piezas que mide (un asentamiento sin Mercado no aporta dispersión de puestos,
+  // y promediarlo como 0 mentiría hacia abajo).
+  let manzanasSuma = 0;
+  let conAlgunaManzanaCerrada = 0;
+  let dispersionPuestoSuma = 0;
+  let dispersionPuestoN = 0;
+  let dispersionViviendaSuma = 0;
+  let dispersionViviendaN = 0;
+  const componentesSuma: Record<string, number> = Object.fromEntries(CATEGORIAS_MEDIDAS.map((c) => [c, 0]));
+  const componentesN: Record<string, number> = Object.fromEntries(CATEGORIAS_MEDIDAS.map((c) => [c, 0]));
+  let viviendasSuma = 0;
+  let pesantsSuma = 0;
+  let pesantsMaximo = 0;
+  let nutricionSuma = 0;
+  let granjasActivasSuma = 0;
+  let granjasPendientesSuma = 0;
+  let granjasNivelSuma = 0;
+  let granjasNivelN = 0;
+
   for (const a of estado.asentamientos) {
     const nivel = nivelActualDe(a);
     nivelesAsentamiento[String(nivel)] = (nivelesAsentamiento[String(nivel)] ?? 0) + 1;
@@ -154,7 +328,57 @@ function construirFotoResumen(
     for (const tipo of TIPOS_EXTRACTOR) {
       extraccionPorTipoActivosTotal[tipo] = (extraccionPorTipoActivosTotal[tipo] ?? 0) + edificiosPorTipoYEstado(a, tipo).length;
     }
+
+    viviendasSuma += edificiosPorTipoYEstado(a, 'vivienda').length;
+    pesantsSuma += a.poblacion.pesants;
+    if (a.poblacion.pesants > pesantsMaximo) pesantsMaximo = a.poblacion.pesants;
+
+    const granjasActivas = edificiosPorTipoYEstado(a, 'granja');
+    granjasActivasSuma += granjasActivas.length;
+    granjasPendientesSuma += a.edificios.filter((e) => e.tipo === 'granja' && e.estado !== 'activo').length;
+    for (const g of granjasActivas) {
+      granjasNivelSuma += g.nivelInterno ?? 1;
+      granjasNivelN++;
+    }
+    nutricionSuma += nutricionPoblacionDe(a);
+
+    // --- Trazado urbano ---
+    const manzanas = manzanasCerradas(a);
+    manzanasSuma += manzanas;
+    if (manzanas > 0) conAlgunaManzanaCerrada++;
+
+    // `edificiosInternos` descarta lo que vive en el mapa general (minas, cantera): no ocupan la rejilla local
+    // y contarlos falsearía tanto la dispersión como las componentes.
+    const internos = edificiosInternos(a.edificios);
+
+    const dispersionPuesto = dispersionMedia(
+      internos.filter((e) => e.tipo === 'puestoMercado'),
+      internos.find((e) => e.tipo === 'mercado')
+    );
+    if (dispersionPuesto !== null) {
+      dispersionPuestoSuma += dispersionPuesto;
+      dispersionPuestoN++;
+    }
+
+    const dispersionVivienda = dispersionMedia(
+      internos.filter((e) => e.tipo === 'vivienda'),
+      internos.find((e) => e.tipo === 'centroUrbano')
+    );
+    if (dispersionVivienda !== null) {
+      dispersionViviendaSuma += dispersionVivienda;
+      dispersionViviendaN++;
+    }
+
+    for (const categoria of CATEGORIAS_MEDIDAS) {
+      const deLaCategoria = internos.filter((e) => CATEGORIA_POR_TIPO[e.tipo] === categoria);
+      if (deLaCategoria.length === 0) continue;
+      componentesSuma[categoria] = (componentesSuma[categoria] ?? 0) + componentesDeCategoria(deLaCategoria, UMBRAL_COMPONENTE_CELDAS);
+      componentesN[categoria] = (componentesN[categoria] ?? 0) + 1;
+    }
   }
+
+  const redondear = (x: number) => Math.round(x * 100) / 100;
+  const media = (suma: number, n: number): number | null => (n === 0 ? null : redondear(suma / n));
 
   const acuerdosActivos = estado.acuerdos.filter((ac) => ac.estado === 'activo').length;
   const acuerdosCumplidos = estado.acuerdos.filter((ac) => ac.estado === 'cumplido').length;
@@ -185,6 +409,20 @@ function construirFotoResumen(
     truequesSupervivenciaAcumulados,
     acuerdosActivos,
     acuerdosCumplidos,
+    manzanasCerradasMedia: vivos === 0 ? 0 : redondear(manzanasSuma / vivos),
+    conAlgunaManzanaCerrada,
+    dispersionPuestoMercado: media(dispersionPuestoSuma, dispersionPuestoN),
+    dispersionViviendaCentro: media(dispersionViviendaSuma, dispersionViviendaN),
+    componentesPorCategoria: Object.fromEntries(
+      CATEGORIAS_MEDIDAS.map((c) => [c, media(componentesSuma[c] ?? 0, componentesN[c] ?? 0)])
+    ),
+    viviendasMedia: vivos === 0 ? 0 : redondear(viviendasSuma / vivos),
+    granjasActivasMedia: vivos === 0 ? 0 : redondear(granjasActivasSuma / vivos),
+    granjasPendientesMedia: vivos === 0 ? 0 : redondear(granjasPendientesSuma / vivos),
+    granjasNivelInternoMedia: media(granjasNivelSuma, granjasNivelN),
+    pesantsMedia: vivos === 0 ? 0 : redondear(pesantsSuma / vivos),
+    pesantsMaximo,
+    nutricionMedia: vivos === 0 ? 0 : redondear(nutricionSuma / vivos),
   };
 }
 
@@ -231,7 +469,19 @@ async function main() {
     bandidosProximoSpawnTick: 0,
   };
 
-  const config: ConfigNpcGobernanza = { buscarDestinoFundacion };
+  // Palancas de EXPERIMENTO, ninguna cambia el comportamiento por defecto:
+  // - `BATCH_SIN_RECLUTAMIENTO=1`: apunta `tropaId` a una tropa que no existe en `TROPAS_RECLUTABLES`, así
+  //   que `reclutarTropa` lanza `ReclutamientoInvalidoError` y `reclutarParaTodos` lo traga en silencio —
+  //   reclutamiento desactivado sin tocar una línea de la lógica del NPC.
+  // - `BATCH_SIN_ATAQUES=1`: `atacarCampamentos: false` — el NPC deja de atacar campamentos de bandidos.
+  // Sirven para aislar qué sostiene el reclutamiento continuo medido en el batch (`reclutamientosAcumulados`
+  // sube sin que `tropasVivas` crezca): ¿deserción por hambre (moral colapsada, `avanzarMantenimientoTropas`)
+  // o reposición de bajas de combate (`atacarCampamentosCercanos`, permadeath real)? Con las dos activas a la
+  // vez se aísla cada mecanismo por separado — ver `issues/granjas_no_escalan_con_poblacion.md`.
+  const config: ConfigNpcGobernanza = {
+    ...(process.env['BATCH_SIN_RECLUTAMIENTO'] === '1' ? { tropaId: '__experimento_sin_reclutamiento__' } : {}),
+    ...(process.env['BATCH_SIN_ATAQUES'] === '1' ? { atacarCampamentos: false } : {}),
+  };
 
   const fotos: Foto[] = [];
   let excepcionesAcumuladas = 0;

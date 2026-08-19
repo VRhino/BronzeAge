@@ -1,6 +1,13 @@
 import type { Asentamiento, Edificio, EdificioTipo, Point } from '../domain/types';
 import type { Mapa } from '../world/mapa';
-import { EDIFICIO_CATALOGO, produccionTrigoDeGranja, NIVEL_ASENTAMIENTO, type RecetaProduccion } from '../constants';
+import {
+  CARAVANA_COOLDOWN,
+  EDIFICIO_CATALOGO,
+  produccionTrigoDeGranja,
+  NIVEL_ASENTAMIENTO,
+  POBLACION,
+  type RecetaProduccion,
+} from '../constants';
 import { cupoCaravanaExtra, factorProduccionTrigo } from './politicas';
 import { mejorFertilidadEnZona } from './zones';
 
@@ -40,6 +47,12 @@ export function poblacionTotal(asentamiento: Asentamiento): number {
   return pesants + artesanos + nobleza;
 }
 
+/** Nutrición de la población (Doc 4.1, hambruna): ausente (partidas guardadas antes de este campo) = 100,
+ * mismo criterio que `nivelActualDe` para campos opcionales nuevos. */
+export function nutricionPoblacionDe(asentamiento: Asentamiento): number {
+  return asentamiento.nutricionPoblacion ?? POBLACION.hambre.nutricionInicial;
+}
+
 /** Ampliación de comercio (a petición del usuario, Doc 3.3): sin Mercado activo no se pueden colocar
  * órdenes de mercado ni construir caravanas propias — ver `colocarOrdenMercado` (engine/market.ts) y
  * `construirCaravanaComercial` (engine/trade.ts). */
@@ -61,6 +74,25 @@ export function cupoCaravanas(asentamiento: Asentamiento): number {
   const niveles = (EDIFICIO_CATALOGO.mercado as { niveles?: Record<number, { cupoCaravanas?: number }> }).niveles;
   const base = niveles?.[nivelInternoActual(mercado)]?.cupoCaravanas ?? 0;
   return base + cupoCaravanaExtra(asentamiento);
+}
+
+/**
+ * Ticks que faltan para que este asentamiento pueda crear otra caravana (Fundación o comercial) — 0 si ya
+ * puede. Cooldown COMPARTIDO entre los dos mecanismos (`CARAVANA_COOLDOWN.ticksCooldown`, a petición del
+ * usuario): evita spam de creación cuando una caravana recién salida es destruida y el cupo/recursos vuelven a
+ * estar disponibles de inmediato. Informativo para la UI (`gameStore.caravanasInfo`); la comprobación real que
+ * bloquea la creación vive en `lanzarCaravanaFundacion` (engine/expansion.ts) y `construirCaravanaComercial`
+ * (engine/trade.ts), que llaman a `puedeCrearCaravana` más abajo.
+ */
+export function ticksCooldownCaravanaRestantes(asentamiento: Pick<Asentamiento, 'ultimaCaravanaCreadaEnTick'>, tickActual: number): number {
+  if (asentamiento.ultimaCaravanaCreadaEnTick === undefined) return 0;
+  return Math.max(0, asentamiento.ultimaCaravanaCreadaEnTick + CARAVANA_COOLDOWN.ticksCooldown - tickActual);
+}
+
+/** ¿Puede este asentamiento crear una caravana nueva (Fundación o comercial) ahora mismo? Ver
+ * `ticksCooldownCaravanaRestantes`. */
+export function puedeCrearCaravana(asentamiento: Pick<Asentamiento, 'ultimaCaravanaCreadaEnTick'>, tickActual: number): boolean {
+  return ticksCooldownCaravanaRestantes(asentamiento, tickActual) === 0;
 }
 
 const EDIFICIOS_PRODUCTORES: EdificioTipo[] = ['granja', 'cantera', 'lenera', 'mina', 'minaCobre', 'minaEstano', 'corral'];
@@ -186,6 +218,24 @@ export function manoObraInfo(asentamiento: Asentamiento): ManoObraInfo {
   const excedente = Math.max(0, pesants - trabajadoresRequeridos);
   const ratioMano = trabajadoresRequeridos <= 0 ? 1 : Math.min(1, pesants / trabajadoresRequeridos);
   return { pesants, trabajadoresRequeridos, ocupados, excedente, ratioMano };
+}
+
+/**
+ * Pool real de reclutamiento (a petición del usuario, tras encontrar en pruebas asentamientos colapsando
+ * porque el NPC reclutaba población que ya estaba cubriendo producción): población general MENOS la que ya
+ * hace falta para cubrir la demanda de mano de obra vigente — para pesants, exactamente
+ * `manoObraInfo(asentamiento).excedente` (el mismo número que la UI ya le mostraba al jugador como "Pool de
+ * pesants para reclutamiento", `ui`/`main.ts`, sin que el motor lo hiciera cumplir); para artesanos, el
+ * equivalente contra `trabajadoresRequeridosTransformacion` (fundición/curtiduría/armería/carpintería).
+ *
+ * Regla del MOTOR, no del NPC (`engine/tropas.ts`, `reclutarTropa`): aplica igual al reclutamiento manual y al
+ * de la gobernanza NPC — mismo criterio que la reserva de trigo antes de reclutar.
+ */
+export function poblacionDisponibleParaReclutar(asentamiento: Asentamiento, origen: 'pesants' | 'artesanos'): number {
+  if (origen === 'artesanos') {
+    return Math.max(0, asentamiento.poblacion.artesanos - trabajadoresRequeridosTransformacion(asentamiento));
+  }
+  return manoObraInfo(asentamiento).excedente;
 }
 
 export interface ProduccionItem {

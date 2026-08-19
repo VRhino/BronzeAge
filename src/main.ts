@@ -643,6 +643,7 @@ function actualizarInfoFlota(state: GameState): void {
     <div class="kv-row"><span>Disponibles</span><span>${info.disponibles}</span></div>
     <div class="kv-row"><span>En tránsito</span><span>${info.enTransito}</span></div>
     <div class="kv-row"><span>Volviendo</span><span>${info.retornando}</span></div>
+    <div class="kv-row"><span>Cooldown de creación</span><span>${info.ticksCooldownRestantes > 0 ? `${info.ticksCooldownRestantes} ticks` : 'Listo'}</span></div>
   `;
 }
 flotaAsentamientoSelect.addEventListener('change', () => actualizarInfoFlota(gameStore.getState()));
@@ -1109,6 +1110,8 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
         ${cupoBloqueoHtml}
         <div class="kv-row" style="margin-top:6px"><span>Mantenimiento</span><span>${a.medidorMantenimiento.toFixed(0)}/100</span></div>
         <div class="mantenimiento-bar"><div class="mantenimiento-fill" style="width:${Math.max(0, Math.min(100, a.medidorMantenimiento))}%"></div></div>
+        <div class="kv-row" style="margin-top:6px"><span>Nutrición</span><span>${(a.nutricionPoblacion ?? 100).toFixed(0)}/100</span></div>
+        <div class="mantenimiento-bar"><div class="mantenimiento-fill" style="width:${Math.max(0, Math.min(100, a.nutricionPoblacion ?? 100))}%"></div></div>
       </div>
 
       <div class="detail-section">
@@ -1348,7 +1351,7 @@ function renderAsentamientosTab(state: GameState): void {
   actualizarInfoEdificioCola();
 }
 
-function renderDetalleFaccion(faccion: Faccion, state: GameState): string {
+function renderDetalleFaccion(faccion: Faccion, state: GameState, viendoPasado: boolean): string {
   const nivelFaccion = gameStore.nivelFaccionInfo(faccion);
   const cupo = gameStore.cupoAsentamientosFaccion(faccion);
   const cap = gameStore.capFundacion(faccion.nivel);
@@ -1410,10 +1413,32 @@ function renderDetalleFaccion(faccion: Faccion, state: GameState): string {
     ? `<div class="chip-row">${titulosDeLaFaccion.map((t) => `<span class="chip">${t.nombre}</span>`).join('')}</div>`
     : '<p class="legend-note">Sin títulos.</p>';
 
+  // Ceder la Facción al NPC de gobernanza (`app/npcGobernanza.ts`). Se lee de la foto que se esté viendo
+  // (`state`), pero solo se puede cambiar en el presente: sobre el pasado no hay nada que ceder.
+  const esNpc = state.faccionesNpcIds.includes(faccion.id);
+  const controlHtml = `
+      <div class="detail-section">
+        <h3>Control</h3>
+        <label class="npc-toggle">
+          <input type="checkbox" id="faccion-npc-toggle" data-faccion="${faccion.id}" ${esNpc ? 'checked' : ''} ${viendoPasado ? 'disabled' : ''} />
+          Controlada por NPC (juega sola)
+        </label>
+        <p class="legend-note">
+          El NPC asume el papel de Gobernador/Tesorero/Rey de esta Facción a partir del próximo tick: si todavía
+          no tiene ningún asentamiento se funda uno solo (5 fundadores propios); luego cargos y reserva de
+          madera, Mercado y caravana propia, trueques de supervivencia (solo con otras Facciones NPC),
+          reclutamiento, ataque a campamentos de bandidos y expansión con Caravanas de Fundación. Se puede
+          retomar el control manual en cualquier momento. El trueque de especialización entre asentamientos
+          propios requiere además <code>SIMULACION_AUTO_COMERCIO.activo = 1</code> en la pestaña "Valores de
+          simulación".
+        </p>
+      </div>`;
+
   return `
     <div class="settlement-detail">
+      ${controlHtml}
       <div class="detail-section">
-        <h3>${faccion.nombre}</h3>
+        <h3>${faccion.nombre}${esNpc ? ' <span class="chip">NPC</span>' : ''}</h3>
         <div class="kv-grid">
           <div class="kv-row"><span>Nivel</span><span>${faccion.nivel}</span></div>
           <div class="kv-row"><span>Rey</span><span>${faccion.reyId ?? '—'}</span></div>
@@ -1458,7 +1483,7 @@ function renderDetalleFaccion(faccion: Faccion, state: GameState): string {
   `;
 }
 
-function renderFaccionesTab(state: GameState): void {
+function renderFaccionesTab(state: GameState, viendoPasado: boolean): void {
   const cont = document.getElementById('facciones-tab')!;
 
   if (state.facciones.length === 0) {
@@ -1474,17 +1499,24 @@ function renderFaccionesTab(state: GameState): void {
   const botones = state.facciones
     .map(
       (f) =>
-        `<button type="button" class="settlement-tab-btn${f.id === faccionSeleccionadaId ? ' active' : ''}" data-faccion="${f.id}">${f.nombre}</button>`
+        `<button type="button" class="settlement-tab-btn${f.id === faccionSeleccionadaId ? ' active' : ''}" data-faccion="${f.id}">${f.nombre}${
+          state.faccionesNpcIds.includes(f.id) ? ' · NPC' : ''
+        }</button>`
     )
     .join('');
   const seleccionada = state.facciones.find((f) => f.id === faccionSeleccionadaId)!;
-  cont.innerHTML = `<div class="settlement-tab-row">${botones}</div>${renderDetalleFaccion(seleccionada, state)}`;
+  cont.innerHTML = `<div class="settlement-tab-row">${botones}</div>${renderDetalleFaccion(seleccionada, state, viendoPasado)}`;
 
   cont.querySelectorAll('.settlement-tab-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       faccionSeleccionadaId = (btn as HTMLElement).dataset.faccion!;
       render();
     });
+  });
+
+  const npcToggle = cont.querySelector('#faccion-npc-toggle') as HTMLInputElement | null;
+  npcToggle?.addEventListener('change', () => {
+    gameStore.alternarFaccionNpc(npcToggle.dataset.faccion!, npcToggle.checked);
   });
 }
 
@@ -2092,7 +2124,7 @@ function render(): void {
   actualizarInfoFlota(state);
   renderPanelAsentamientos(state);
   renderAsentamientosTab(state);
-  renderFaccionesTab(state);
+  renderFaccionesTab(state, viendoPasado);
   renderJugadoresTab(state);
   renderPanelPolitica(state);
   renderPanelProgresion(state);

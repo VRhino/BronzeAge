@@ -64,9 +64,10 @@ Mecanismo COMPLEMENTARIO al Cap de Fundación (1.7) — ambos coexisten, no se s
 2. El coste de construcción de los edificios que nacen automáticamente con la fundación (Centro Urbano, Granja, 3 Viviendas — ver Doc 4.2.1).
 3. +50 de madera extra, representando el coste de fabricar la caravana en sí (placeholder, sin calibrar por simulación todavía).
 
-**GATES DE ORIGEN (ambos necesarios simultáneamente):**
+**GATES DE ORIGEN (todos necesarios simultáneamente):**
 - Solo puede lanzarse desde un asentamiento que PUEDA PAGAR el coste completo.
 - Solo puede lanzarse desde un asentamiento en NIVEL 2 como mínimo (no Nivel 1) — gate estructural independiente del coste, pensado como salvaguarda robusta ante futuras recalibraciones de precios (no depende de números ajustables).
+- **Cooldown de creación (2026-08-20, a petición del usuario)**: tras lanzar una Caravana de Fundación —o construir una comercial (Doc 3.12), mismo cooldown COMPARTIDO entre las dos— el asentamiento de origen no puede crear otra hasta que pasen `CARAVANA_COOLDOWN.ticksCooldown` (`constants.ts`, 10 ticks, parametrizable). Evita spam de creación cuando la caravana recién lanzada es destruida (bandidos, Doc 1.9; intercepción, Doc 3.10) y el Cap de Fundación/recursos vuelven a estar disponibles de inmediato. Regla del MOTOR (`puedeCrearCaravana`, `engine/asentamientoQuery.ts`), no de la interfaz ni del NPC — gatea igual el lanzamiento manual y el de la gobernanza NPC.
 
 **NATURALEZA:**
 - Se lanza por ACCIÓN MANUAL EXPLÍCITA del jugador desde la interfaz (elige destino y confirma) — a diferencia del trueque/mercado, que en Fase 0 se despachan automáticamente (ver Doc 3.2/3.3). Es la única caravana donde la intencionalidad del jugador es el punto central del diseño.

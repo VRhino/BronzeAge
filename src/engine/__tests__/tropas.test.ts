@@ -24,7 +24,10 @@ function asentamientoDeTest(): Asentamiento {
   const facciones = crearFacciones();
   const posicion = posicionRecomendable(mapa);
   const { asentamiento } = fundarAsentamiento(mapa, facciones, 'faccion-1', posicion, ['jugador-a', 'jugador-b'], [], 0);
-  return conRecursos(asentamiento, 50, 200);
+  // 60, no 50: con el pool de reclutamiento acotado por mano de obra (`poblacionDisponibleParaReclutar`,
+  // engine/asentamientoQuery.ts), el asentamiento de fundación ya tiene una Granja activa reservando 4 pesants
+  // — 50 solo alcanzaba para UN escuadrón de 25, y este fixture lo comparten dos tests que reclutan dos veces.
+  return conRecursos(asentamiento, 60, 200);
 }
 
 describe('reclutarTropa — escuadrones por jugador (Doc 2.5)', () => {

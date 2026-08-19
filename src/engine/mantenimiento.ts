@@ -82,7 +82,7 @@ export function encontrarCapital(faccionId: string, asentamientos: Asentamiento[
  * recursos se cobran (`nivelParaPiedra`/`nivelParaOro`, abajo) — eso no baja nunca porque `nivel` no baja.
  *
  * El trigo NO forma parte de este coste (fix: antes había una "mecánica repetida" — Mantenimiento cobraba un
- * valor fijo de trigo ADEMÁS del que ya se descontaba por separado en `consumirComida`/`avanzarMantenimientoTropas`,
+ * valor fijo de trigo ADEMÁS del que ya se descontaba por separado en `avanzarNutricionPoblacion`/`avanzarMantenimientoTropas`,
  * duplicando el gasto). El consumo real de trigo (población + tropas) se sigue descontando únicamente en esas
  * dos funciones; para mostrarlo en el panel de Mantenimiento, ver `gameStore.mantenimientoInfo`.
  */

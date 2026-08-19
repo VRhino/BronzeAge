@@ -238,6 +238,15 @@ export interface Asentamiento {
   escuadrones: Escuadron[];
   /** Mantenimiento (Doc 4.5): medidor 0-100, empieza en 100; a 0 el asentamiento cae en ruinas (se elimina). */
   medidorMantenimiento: number;
+  /** Nutrición de la población (Doc 4.1, hambruna — a petición del usuario, espejo de la moral de tropas por
+   * ración, ver `Escuadron.moral`): medidor 0-100 que sube mientras el trigo alcanza para el consumo del
+   * tick y baja cuando no alcanza (`avanzarNutricionPoblacion`, engine/population.ts). Por encima de 0 solo
+   * frena el crecimiento; al tocar 0 y mantenerse ahí empieza a costar población real (pesants+artesanos,
+   * nobleza protegida — "los nobles comen primero"). Distinto de la `felicidad` de política/Sacerdote
+   * (placeholder aparte en `crecerPoblacion`, aún sin implementar) — esto es solo comida, no bienestar
+   * general. Ausente (partidas guardadas antes de este campo) = tratar como 100 (neutro, sin hambre previa
+   * que reconstruir), ver `nutricionPoblacionDe` en engine/asentamientoQuery.ts. */
+  nutricionPoblacion?: number;
   /** Overhaul de auto-construcción: mientras esté en `true`, el motor deja de detectar/comprometer NUEVAS
    * necesidades (`evaluarNecesidades`) — lo ya pagado (`en_cola`/`en_construccion`) sigue avanzando normal.
    * La adición MANUAL de edificios (`anadirEdificioManualmente`, Gobernador/Maestro de Obras) no se ve
@@ -254,6 +263,12 @@ export interface Asentamiento {
    * válido en `evaluarNecesidades` sin conseguir cupo — se resetea a 0 en cuanto el tipo consigue cupo o deja
    * de ser candidato. Ausente/tipo ausente = 0 (comportamiento sin cambios: sin historial de inanición). */
   extractoresTicksSinCupo?: Partial<Record<EdificioTipo, number>>;
+  /** Último tick en el que este asentamiento creó una caravana (Fundación o comercial) — cooldown compartido
+   * entre los dos mecanismos (`CARAVANA_COOLDOWN.ticksCooldown`, constants.ts): evita que se spamee la
+   * creación cuando una caravana recién salida es destruida (bandidos, intercepción) y el cupo/recursos
+   * vuelven a estar disponibles de inmediato (a petición del usuario). Ausente = nunca creó ninguna, así que el
+   * cooldown no aplica. Ver `puedeCrearCaravana`/`ticksCooldownCaravanaRestantes`, engine/asentamientoQuery.ts. */
+  ultimaCaravanaCreadaEnTick?: number;
 }
 
 export interface ZonaInfluencia {

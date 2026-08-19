@@ -5,6 +5,7 @@ import {
   capacidadViviendaArtesanos,
   capacidadViviendaPesants,
   edificiosPorTipoYEstado,
+  nutricionPoblacionDe,
   poblacionTotal,
 } from './asentamientoQuery';
 import { factorConsumoComida, factorCrecimientoNobleza } from './politicas';
@@ -34,8 +35,14 @@ function crecimientoEstocastico(actual: number, tasa: number): number {
 export function crecerPoblacion(asentamiento: Asentamiento): { poblacion: Poblacion; eventos: string[] } {
   const eventos: string[] = [];
 
-  const trigoDisponible = asentamiento.almacen['trigo']?.cantidad ?? 0;
-  const comidaFactor = trigoDisponible > 0 ? 1 : 0.2;
+  // Hambruna (Doc 4.1, a petición del usuario): el factor de comida ya no es un booleano trigo>0?1:0.2 sino
+  // que escala con el medidor de nutrición (`avanzarNutricionPoblacion`, corre antes en el mismo tick — ver
+  // simulation.ts) — entre `factorCrecimientoMinimo` (nutrición en 0, hambre sostenida) y 1 (nutrición 100,
+  // bien alimentado). `felicidad` sigue aparte como placeholder de política/Sacerdote (Sprint 4+, sin
+  // implementar todavía) — nutrición es solo comida, no bienestar general.
+  const nutricion = nutricionPoblacionDe(asentamiento);
+  const { factorCrecimientoMinimo } = POBLACION.hambre;
+  const comidaFactor = factorCrecimientoMinimo + (1 - factorCrecimientoMinimo) * (nutricion / 100);
   const estabilidad = 1;
   const felicidad = 1;
 
@@ -107,22 +114,55 @@ export function crecerPoblacion(asentamiento: Asentamiento): { poblacion: Poblac
 
 /** Consumo de comida de la población (Doc 4.1 implícito): tasa FIJA por habitante (`consumoComidaPorHabitante`)
  * sumada por el total de habitantes (pesants+artesanos+nobleza); Racionamiento (Sacerdote) la reduce. Usada
- * tanto para descontarla en `consumirComida` como para el "apartado de trigo" de Mantenimiento (ver
+ * tanto para descontarla en `avanzarNutricionPoblacion` como para el "apartado de trigo" de Mantenimiento (ver
  * `gameStore.mantenimientoInfo`), que suma esto con `consumoRacionTropas` (engine/tropas.ts). */
 export function consumoComidaPoblacion(asentamiento: Asentamiento): number {
   return poblacionTotal(asentamiento) * POBLACION.consumoComidaPorHabitante * factorConsumoComida(asentamiento);
 }
 
-/** Consumo de comida (Doc 4.1 implícito): cada habitante consume trigo por tick. Racionamiento (Sacerdote) lo reduce. */
-export function consumirComida(asentamiento: Asentamiento): Asentamiento {
+/**
+ * Consumo de comida + hambruna (Doc 4.1, negativo por no sostener trigo — a petición del usuario, espejo de
+ * `avanzarMantenimientoTropas` en engine/tropas.ts): descuenta lo que el trigo alcance a cubrir del consumo
+ * del tick (nunca negativo) y actualiza `nutricionPoblacion` según la fracción cubierta — sube si el pago fue
+ * íntegro, baja proporcional al déficit si no. Mientras la nutrición se mantiene en
+ * `POBLACION.hambre.umbralMuertePorHambre` (0), cada tick cuesta una fracción de pesants+artesanos
+ * (`fraccionMuertePorTickHambre`) — la nobleza queda protegida ("los nobles comen primero"), igual que
+ * `nivel`/población ya asentada nunca se purga por un solo bache de Mantenimiento (Doc §6.2).
+ */
+export function avanzarNutricionPoblacion(asentamiento: Asentamiento): { asentamiento: Asentamiento; eventos: string[] } {
+  const eventos: string[] = [];
+  const { hambre } = POBLACION;
+
   const consumo = consumoComidaPoblacion(asentamiento);
   const trigo = asentamiento.almacen['trigo'];
-  if (!trigo) return asentamiento;
-  return {
-    ...asentamiento,
-    almacen: {
-      ...asentamiento.almacen,
-      trigo: { ...trigo, cantidad: Math.max(0, trigo.cantidad - consumo) },
-    },
-  };
+  const trigoDisponible = trigo?.cantidad ?? 0;
+  const factorSuministro = consumo > 0 ? Math.min(1, trigoDisponible / consumo) : 1;
+
+  const almacen = trigo
+    ? { ...asentamiento.almacen, trigo: { ...trigo, cantidad: Math.max(0, trigoDisponible - consumo) } }
+    : asentamiento.almacen;
+
+  const nutricionPrevia = nutricionPoblacionDe(asentamiento);
+  const nutricionPoblacion =
+    factorSuministro >= 1
+      ? Math.min(100, nutricionPrevia + hambre.regeneracionPorTick)
+      : Math.max(0, nutricionPrevia - hambre.degradacionSinComida * (1 - factorSuministro));
+
+  let poblacion = asentamiento.poblacion;
+  if (nutricionPoblacion <= hambre.umbralMuertePorHambre) {
+    const afectados = poblacion.pesants + poblacion.artesanos;
+    if (afectados > 0) {
+      const muertes = Math.min(afectados, Math.ceil(afectados * hambre.fraccionMuertePorTickHambre));
+      const muertesPesants = Math.round(muertes * (poblacion.pesants / afectados));
+      const muertesArtesanos = muertes - muertesPesants;
+      poblacion = {
+        ...poblacion,
+        pesants: poblacion.pesants - muertesPesants,
+        artesanos: poblacion.artesanos - muertesArtesanos,
+      };
+      eventos.push(`${muertes} habitantes mueren de hambre por falta sostenida de trigo.`);
+    }
+  }
+
+  return { asentamiento: { ...asentamiento, almacen, poblacion, nutricionPoblacion }, eventos };
 }

@@ -7,7 +7,7 @@ import { agregarRecurso, cantidadDisponible, descontarRecursos, tieneRecursos } 
 import { buscarCamino } from './caminos';
 import { chokepointsDePeajeEnRuta } from './chokepoints';
 import { calcularPrecioReferencia } from './market';
-import { cupoCaravanas, tieneMercadoActivo } from './asentamientoQuery';
+import { cupoCaravanas, puedeCrearCaravana, ticksCooldownCaravanaRestantes, tieneMercadoActivo } from './asentamientoQuery';
 import { avanzarPosicionEnRuta } from './movimiento';
 import { factorCapacidadCaravana, factorComisionExterna, factorVelocidadCaravana } from './politicas';
 import { aplicarAjustesReputacion, factorComisionPorReputacion, type AjusteReputacion } from './reputacion';
@@ -78,6 +78,11 @@ export function construirCaravanaComercial(
   if (!tieneMercadoActivo(asentamiento)) {
     throw new CaravanaInvalidaError('El asentamiento necesita un Mercado activo para construir caravanas.');
   }
+  if (!puedeCrearCaravana(asentamiento, tickActual)) {
+    throw new CaravanaInvalidaError(
+      `Cooldown de creación de caravanas: faltan ${ticksCooldownCaravanaRestantes(asentamiento, tickActual)} ticks para poder crear otra desde este asentamiento.`
+    );
+  }
   const cupo = cupoCaravanas(asentamiento);
   const propias = caravanasExistentes.filter((c) => c.tipo === 'comercial' && c.origenAsentamientoId === asentamiento.id).length;
   if (propias >= cupo) {
@@ -97,7 +102,7 @@ export function construirCaravanaComercial(
     progreso: 0,
     estado: 'disponible',
   };
-  return { asentamiento: { ...asentamiento, almacen }, caravana };
+  return { asentamiento: { ...asentamiento, almacen, ultimaCaravanaCreadaEnTick: tickActual }, caravana };
 }
 
 /** Tasa base (Doc 3.5); si es externa, el Tesorero del destino (quien cobra la comisión) puede modularla. */

@@ -502,14 +502,49 @@ function evaluarNecesidades(
   );
   const consumoTrigoActual = consumoComidaPoblacion(asentamiento) + consumoRacionTropas(asentamiento);
   const enDeficitTrigo = produccionTrigoActual < consumoTrigoActual;
-  // En déficit se permite tener varias Granjas en camino a la vez (hasta el tope), no solo una: sin esto, un
-  // déficit severo solo podía corregirse construyendo Granjas en SERIE, quedándose muy por detrás.
+  // Objetivo PROACTIVO (a petición del usuario, issues/granjas_no_escalan_con_poblacion.md): además del
+  // déficit reactivo de arriba (población YA asentada), un segundo umbral más generoso mide contra la
+  // capacidad de Vivienda ya construida/en camino (`capacidadViviendaPesants`/`capacidadViviendaArtesanos`),
+  // no la población que ya llegó — mismo criterio proactivo que Vivienda ya usa contra su propio umbral de
+  // ocupación (85%): construir ANTES de saturarse, no reaccionar después. `Math.max` garantiza que nunca sea
+  // MENOS estricto que el reactivo. A propósito NO desbloqueaba por sí solo el modo ráfaga
+  // (`maximoGranjasPendientesEnDeficit`, más abajo): la capacidad de Vivienda casi SIEMPRE va por delante de
+  // la población real (así está diseñada), así que tratar ese margen normal como una emergencia de varias
+  // Granjas a la vez sobre-construía (verificado en simulación: 4 Granjas en vez de 1, diluyendo mano de obra
+  // y material que otros edificios de transformación necesitaban). El proactivo solo adelanta CUÁNDO se pide
+  // la siguiente Granja (una a la vez), la ráfaga sigue reservada a un déficit REAL ya ocurrido.
+  const poblacionObjetivo = {
+    ...asentamiento.poblacion,
+    pesants: Math.max(asentamiento.poblacion.pesants, capacidadViviendaPesants(asentamiento)),
+    artesanos: Math.max(asentamiento.poblacion.artesanos, capacidadViviendaArtesanos(asentamiento)),
+  };
+  const consumoTrigoObjetivo = consumoComidaPoblacion({ ...asentamiento, poblacion: poblacionObjetivo }) + consumoRacionTropas(asentamiento);
+  const enDeficitProyectado = produccionTrigoActual < consumoTrigoObjetivo;
+  // Prioridad real a MEJORAR sobre CONSTRUIR (a petición del usuario) — no el orden accidental de que
+  // `avanzarMejoras` corra antes en el mismo tick, que el costo geométrico de la mejora (×2 por nivel) podía
+  // anular en la práctica. Si alguna Granja activa por debajo de nivel máximo puede pagar YA su siguiente
+  // mejora (misma reserva que protege el resto de construcción), esa es la vía: sube el rinde sin sumar nada
+  // al denominador compartido de `ratioManoObra` (`trabajadoresRequeridos` fijo en los 4 niveles) — construir
+  // una Granja nueva encima solo diluiría la mano de obra de las que ya existen. Con 0 Granjas activas esto es
+  // trivialmente falso (nada que mejorar todavía): el arranque nunca se bloquea.
+  const nivelesGranja = nivelesDe('granja');
+  const hayMejoraGranjaDisponible = granjasActivasEdificios.some((g) => {
+    const siguiente = nivelesGranja?.[(g.nivelInterno ?? 1) + 1];
+    return !!siguiente && puedeIniciarConstruccion(asentamiento.almacen, siguiente.costoMejora ?? {}, 'granja', reserva);
+  });
+  // En déficit REACTIVO (no el proyectado) se permite tener varias Granjas en camino a la vez (hasta el
+  // tope), no solo una: sin esto, un déficit severo ya ocurrido solo podía corregirse construyendo Granjas en
+  // SERIE, quedándose muy por detrás.
   const granjasPendientes = asentamiento.edificios.filter((e) => e.tipo === 'granja' && e.estado !== 'activo').length;
   const limiteGranjasPendientes = enDeficitTrigo ? NECESIDADES.maximoGranjasPendientesEnDeficit : 1;
-  if ((granjasActivasEdificios.length === 0 || enDeficitTrigo) && granjasPendientes < limiteGranjasPendientes) {
+  if (
+    (granjasActivasEdificios.length === 0 || enDeficitProyectado) &&
+    !hayMejoraGranjaDisponible &&
+    granjasPendientes < limiteGranjasPendientes
+  ) {
     const sitio = sitioEnBarrio(asentamiento, ocupados(), 'granja');
     if (sitio) {
-      const deficitRatio = consumoTrigoActual > 0 ? (consumoTrigoActual - produccionTrigoActual) / consumoTrigoActual : 1;
+      const deficitRatio = consumoTrigoObjetivo > 0 ? (consumoTrigoObjetivo - produccionTrigoActual) / consumoTrigoObjetivo : 1;
       const urgencia = granjasActivasEdificios.length === 0 ? 100 : deficitRatio * 100;
       proponer(crearEdificioEnCola('granja', sitio, nextId()), conUrgencia(SCORE_BANDAS.supervivencia, urgencia));
     }

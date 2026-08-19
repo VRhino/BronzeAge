@@ -801,3 +801,22 @@ h2 {
   color: #b8ae90;
   margin: 0;
 }
+
+/* Cesión de una Facción al NPC de gobernanza (pestaña Facción, ver `app/npcGobernanza.ts`). */
+.npc-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #e8e2d0;
+  cursor: pointer;
+}
+
+.npc-toggle input[disabled] {
+  cursor: not-allowed;
+}
+
+.npc-toggle:has(input[disabled]) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
