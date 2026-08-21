@@ -16,7 +16,7 @@ import type { Mapa } from '../world/mapa';
 import { mejorFertilidadEnZona } from './zones';
 // `sitioParaTipo` del trazado se importa con alias: en este archivo ya existe una función con ese nombre, la
 // que resuelve la colocación de la construcción MANUAL (que a su vez llama a esta para los tipos internos).
-import { CATEGORIA_POR_TIPO, reubicarPorTamano, sitioParaTipo as sitioEnTrazado, sitiosParaTipo, tamanoEdificio } from './trazado';
+import { anclaNacidaTrasSemilla, CATEGORIA_POR_TIPO, reubicarPorTamano, sitioParaTipo as sitioEnTrazado, sitiosParaTipo, tamanoEdificio } from './trazado';
 import {
   capacidadViviendaArtesanos,
   capacidadViviendaPesants,
@@ -325,6 +325,31 @@ function crearPuestosDeMercado(
 }
 
 /**
+ * Talleres que se añaden a la ZONA de Carpintería al completarse (§9 del doc de trazado urbano, Etapa 3 de
+ * anclas y satélites): 2 piezas gratis, ya activas, iguales entre sí — a diferencia del Mercado, Carpintería
+ * no tiene recetas que progresen por nivel interno, así que no hay nada que escalonar: los 2 talleres nacen
+ * juntos, una sola vez, al completarse la pieza principal (no en las subidas de nivel interno posteriores).
+ *
+ * `existentes` debe incluir todo lo que ya ocupa suelo, mismo criterio que `crearPuestosDeMercado`. Si un
+ * taller no encuentra hueco se salta en silencio: la zona es superficie, no función.
+ */
+function crearTalleresDeCarpinteria(asentamiento: Pick<Asentamiento, 'id' | 'radioPotencial'>, existentes: Edificio[]): Edificio[] {
+  const idsUsadas = new Set(existentes.map((e) => e.id));
+  let contador = existentes.length;
+  const nuevos: Edificio[] = [];
+
+  for (let i = 0; i < 2; i++) {
+    const posicion = sitioEnTrazado(asentamiento, [...existentes, ...nuevos], 'tallerCarpinteria');
+    if (!posicion) continue;
+    let id = `edificio-${asentamiento.id}-${contador++}`;
+    while (idsUsadas.has(id)) id = `edificio-${asentamiento.id}-${contador++}`;
+    idsUsadas.add(id);
+    nuevos.push({ id, tipo: 'tallerCarpinteria', posicion, estado: 'activo', ticksRestantes: 0, ambito: 'asentamiento' });
+  }
+  return nuevos;
+}
+
+/**
  * Un extractor (cantera/mina/minaCobre/minaEstano/corral) necesita otra instancia si NINGUNA fuente propia
  * sigue viva (Doc 1.4: escasez real por ubicación — sin esto, agotado el único yacimiento el asentamiento se
  * queda sin ese recurso PARA SIEMPRE) o si el asentamiento todavía no llegó al tope de extractores del tipo
@@ -424,6 +449,22 @@ interface Candidato {
  * candidato empatado en urgencia máxima. */
 function conUrgencia(base: number, urgencia: number, bonus = 0): number {
   return base + Math.max(0, Math.min(100, urgencia)) + bonus;
+}
+
+/** Gate de nivel de asentamiento para el mecanismo de semilla/saturación de anclas (Etapa 3, §5.7.1): por
+ * debajo de este nivel, un núcleo sin ancla alcanzable cae al reparto de barrio de siempre (comportamiento de
+ * antes de la Etapa 3) en vez de fijar un ancla nueva mal colocada en un disco todavía pequeño. Se aplica al
+ * MECANISMO de spawn, no a tipos de edificio concretos (a diferencia de lo que el doc propone para
+ * Barracón/Galería de tiro): así protege también al núcleo residencial (Vivienda) sin gatear su construcción,
+ * que rompería el crecimiento de población inicial. */
+const NIVEL_GATE_ANCLAS = 2;
+
+/** Si `nuevo` (ya comprometido/colocado, incluido en `edificios`) hizo nacer un ancla de saturación al
+ * colocarse (Etapa 3, §5.4/5.6), la devuelve — o `null` si no aplica (nivel insuficiente, categoría sin ancla
+ * de saturación, ya había una alcanzable, o no se encontró sitio válido, ver `anclaNacidaTrasSemilla`). */
+function anclaSiNace(asentamiento: Asentamiento, edificios: Edificio[], nuevo: Edificio, id: string): Edificio | null {
+  if (nivelActualDe(asentamiento) < NIVEL_GATE_ANCLAS) return null;
+  return anclaNacidaTrasSemilla(asentamiento, edificios, nuevo, id);
 }
 
 /**
@@ -646,7 +687,7 @@ function evaluarNecesidades(
   );
   if (!transformacionEnCurso && nivelActualDe(asentamiento) >= requisitoNivelBase('fundicion')) {
     for (const tipo of ['curtiduria', 'armeria', 'fundicion'] as const) {
-      if (edificiosPorTipoYEstado(asentamiento, tipo).length > 0) continue;
+      if (alcanzoTopeDeTransformacion(asentamiento, tipo)) continue;
       if (!tieneInsumoDeArranque(asentamiento, tipo)) continue;
       const sitio = lineasProduccionPriorizadas(asentamiento)
         ? sitioEnBarrioLineaProduccion(asentamiento, ocupados(), tipo)
@@ -664,7 +705,7 @@ function evaluarNecesidades(
     (EDIFICIO_CATALOGO.carpinteria as { requisitoNivelAsentamientoConstruccion?: number }).requisitoNivelAsentamientoConstruccion ?? 0;
   if (
     nivelActualDe(asentamiento) >= requisitoCarpinteria &&
-    edificiosPorTipoYEstado(asentamiento, 'carpinteria').length === 0 &&
+    !alcanzoTopeDeTransformacion(asentamiento, 'carpinteria') &&
     !hayProyectoPendiente(asentamiento, 'carpinteria')
   ) {
     const sitio = sitioEnBarrio(asentamiento, ocupados(), 'carpinteria');
@@ -684,10 +725,22 @@ function evaluarNecesidades(
   const nuevos: Edificio[] = [];
   for (const candidato of [...candidatos].sort((a, b) => b.score - a.score)) {
     if (cupoDisponible <= 0) break;
+    if (
+      TIPOS_TRANSFORMACION.includes(candidato.edificio.tipo) &&
+      alcanzoTopeDeTransformacion(asentamiento, candidato.edificio.tipo, nuevos)
+    ) {
+      continue;
+    }
     const costo = EDIFICIO_CATALOGO[candidato.edificio.tipo].costo as Partial<Record<string, number>>;
     if (!puedeIniciarConstruccion(almacenActual, costo, candidato.edificio.tipo, reserva)) continue;
     almacenActual = descontarRecursos(almacenActual, costo);
-    nuevos.push({ ...candidato.edificio, prioridad: candidato.score });
+    const comprometido = { ...candidato.edificio, prioridad: candidato.score };
+    nuevos.push(comprometido);
+    // Semilla de grupo (Etapa 3, §5.4/5.6): si este compromiso hizo nacer un ancla nueva, se añade gratis en
+    // el mismo tick — mismo criterio que `crearPuestosDeMercado` (nace ya activa, no pasa por cola, no cuenta
+    // contra `cupoDisponible`).
+    const ancla = anclaSiNace(asentamiento, [...asentamiento.edificios, ...nuevos], comprometido, nextId());
+    if (ancla) nuevos.push(ancla);
     // La fuente queda tomada en el momento en que se PAGA el proyecto, no al proponerlo: un candidato que
     // no llega a comprometerse (sin fondos o sin cupo) no debe bloquear el yacimiento a nadie más.
     registrarReclamo(reclamos, candidato.edificio);
@@ -719,6 +772,33 @@ function nivelesDe(tipo: EdificioTipo): Record<number, { trabajadoresRequeridos:
   return (EDIFICIO_CATALOGO[tipo] as { niveles?: Record<number, any> }).niveles;
 }
 
+/** Resultado de evaluar SOLO los gates de la siguiente mejora (nivel de asentamiento + edificio previo, si
+ * aplica) — no comprueba fondos. `null` si el edificio no puede evaluarse (inactivo, tipo sin niveles) o si ya
+ * está en su nivel máximo, o si no cumple algún gate del siguiente nivel. Extraído de `avanzarMejoras` para que
+ * `estadoMejoraEdificio`/`mejorarEdificioManualmente` (mejora manual, a petición del usuario) compartan el
+ * mismo criterio de elegibilidad que el camino automático. */
+function elegibleParaMejora(
+  asentamiento: Asentamiento,
+  edificio: Edificio
+): { nivelActual: number; nivelSiguiente: number; costo: Partial<Record<string, number>> } | null {
+  if (edificio.estado !== 'activo' || !(EDIFICIOS_CON_NIVELES as readonly string[]).includes(edificio.tipo)) return null;
+  const niveles = nivelesDe(edificio.tipo);
+  if (!niveles) return null;
+  const nivelActual = edificio.nivelInterno ?? 1;
+  const nivelSiguiente = nivelActual + 1;
+  const siguiente = niveles[nivelSiguiente];
+  if (!siguiente) return null;
+  // nivelActual del ASENTAMIENTO (Doc Fase_0_5 §6.2) — no confundir con `nivelActual` de arriba (nivel
+  // INTERNO del edificio): un asentamiento degradado no puede seguir mejorando edificios de nivel alto.
+  if (siguiente.requisitoNivelAsentamiento && nivelActualDe(asentamiento) < siguiente.requisitoNivelAsentamiento) return null;
+  if (siguiente.requiereEdificio) {
+    const previo = edificiosPorTipoYEstado(asentamiento, siguiente.requiereEdificio as EdificioTipo);
+    if (previo.length === 0) return null;
+    if (siguiente.requiereEdificioNivel && (previo[0]!.nivelInterno ?? 1) < siguiente.requiereEdificioNivel) return null;
+  }
+  return { nivelActual, nivelSiguiente, costo: siguiente.costoMejora ?? {} };
+}
+
 /**
  * Mejora de nivel interno de un edificio de transformación activo (Doc 4.2.1, rediseño de progreso Fase 0):
  * instantánea — si se cumple el gate del siguiente nivel (nivel de asentamiento + edificio previo, si aplica)
@@ -737,22 +817,9 @@ function avanzarMejoras(
   const edificios = [...asentamiento.edificios];
   for (let indice = 0; indice < edificios.length; indice++) {
     const edificio = edificios[indice]!;
-    if (edificio.estado !== 'activo' || !(EDIFICIOS_CON_NIVELES as readonly string[]).includes(edificio.tipo)) continue;
-    const niveles = nivelesDe(edificio.tipo);
-    if (!niveles) continue;
-    const nivelActual = edificio.nivelInterno ?? 1;
-    const nivelSiguiente = nivelActual + 1;
-    const siguiente = niveles[nivelSiguiente];
-    if (!siguiente) continue;
-    // nivelActual del ASENTAMIENTO (Doc Fase_0_5 §6.2) — no confundir con `nivelActual` de arriba (nivel
-    // INTERNO del edificio): un asentamiento degradado no puede seguir mejorando edificios de nivel alto.
-    if (siguiente.requisitoNivelAsentamiento && nivelActualDe(asentamiento) < siguiente.requisitoNivelAsentamiento) continue;
-    if (siguiente.requiereEdificio) {
-      const previo = edificiosPorTipoYEstado(asentamiento, siguiente.requiereEdificio as EdificioTipo);
-      if (previo.length === 0) continue;
-      if (siguiente.requiereEdificioNivel && (previo[0]!.nivelInterno ?? 1) < siguiente.requiereEdificioNivel) continue;
-    }
-    const costo = siguiente.costoMejora ?? {};
+    const info = elegibleParaMejora(asentamiento, edificio);
+    if (!info) continue;
+    const { nivelActual, nivelSiguiente, costo } = info;
     if (!puedeIniciarConstruccion(almacenActual, costo, edificio.tipo, reserva)) continue;
 
     // Mudanza por crecimiento de huella (hoy solo Granja, §7 del trazado urbano): al subir de nivel ocupa más
@@ -938,6 +1005,11 @@ export function avanzarConstruccion(
         if (edificio.tipo === 'mercado') {
           puestosNuevos.push(...crearPuestosDeMercado(asentamiento, 1, [...asentamiento.edificios, ...puestosNuevos]));
         }
+        // Carpintería tampoco nace sola (§9, Etapa 3 de anclas y satélites): al completarse aparecen sus 2
+        // talleres de una vez (no progresan por nivel interno, a diferencia del Mercado).
+        if (edificio.tipo === 'carpinteria') {
+          puestosNuevos.push(...crearTalleresDeCarpinteria(asentamiento, [...asentamiento.edificios, ...puestosNuevos]));
+        }
         resultados.set(edificio.id, { ...edificio, estado: 'activo', ticksRestantes: 0 });
       } else {
         resultados.set(edificio.id, { ...edificio, ticksRestantes: restantes });
@@ -1065,10 +1137,6 @@ export class ConstruccionManualInvalidaError extends Error {}
 /** Tipos que solo admiten UNA instancia por asentamiento (progresan por `nivelInterno` en vez de repetirse) —
  * añadir una segunda no tiene sentido estructural, sea cual sea el mecanismo (auto o manual). */
 const EDIFICIOS_UNICOS = new Set<EdificioTipo>([
-  'fundicion',
-  'curtiduria',
-  'armeria',
-  'carpinteria',
   'barracon',
   'galeriaDeTiro',
   'palacio',
@@ -1079,6 +1147,23 @@ const EDIFICIOS_UNICOS = new Set<EdificioTipo>([
   // construcción, se añade manualmente (Gobernador/Maestro de Obras).
   'muralla',
 ]);
+
+/** Cupo de cada tipo de edificio de transformaciÃ³n por nivel operativo del asentamiento.
+ * Los niveles 4 y 5 mantienen el mismo tope que el nivel 3 hasta que se definan nuevos escalones. */
+const MAXIMO_TRANSFORMACION_POR_NIVEL: Partial<Record<number, number>> = {
+  2: 3,
+  3: 5,
+  4: 5,
+  5: 5,
+};
+const TIPOS_TRANSFORMACION: readonly EdificioTipo[] = ['fundicion', 'curtiduria', 'armeria', 'carpinteria'];
+
+function alcanzoTopeDeTransformacion(asentamiento: Asentamiento, tipo: EdificioTipo, adicionales: Edificio[] = []): boolean {
+  const tope = MAXIMO_TRANSFORMACION_POR_NIVEL[nivelActualDe(asentamiento)];
+  if (tope === undefined) return false;
+  const cantidad = asentamiento.edificios.filter((e) => e.tipo === tipo).length + adicionales.filter((e) => e.tipo === tipo).length;
+  return cantidad >= tope;
+}
 
 /** Requisito de NIVEL DE ASENTAMIENTO para la construcción BASE de un tipo (Doc 4.2.1) — no confundir con los
  * gates de MEJORA de nivel interno, que viven en `niveles[n].requisitoNivelAsentamiento` y no aplican aquí
@@ -1177,6 +1262,11 @@ export function anadirEdificioManualmente(
   if (nivelOperativo < requisito) {
     throw new ConstruccionManualInvalidaError(`Requiere nivel de asentamiento ${requisito} (actual: ${nivelOperativo}).`);
   }
+  if (TIPOS_TRANSFORMACION.includes(tipo) && alcanzoTopeDeTransformacion(asentamiento, tipo)) {
+    throw new ConstruccionManualInvalidaError(
+      `Este asentamiento ya tiene el m\u00e1ximo de ${tipo} para su nivel (${MAXIMO_TRANSFORMACION_POR_NIVEL[nivelOperativo]}).`
+    );
+  }
   if (tipo === 'granFundicion' && faccion.nivel < EDIFICIO_CATALOGO.granFundicion.nivelFaccionMinimo) {
     throw new ConstruccionManualInvalidaError(
       `Requiere nivel de Facción ${EDIFICIO_CATALOGO.granFundicion.nivelFaccionMinimo} (actual: ${faccion.nivel}).`
@@ -1200,7 +1290,11 @@ export function anadirEdificioManualmente(
     ...crearEdificioEnCola(tipo, sitio.posicion, `edificio-${asentamiento.id}-manual-${contador}`, sitio.fuenteId),
     prioridad: SCORE_BANDAS.manual,
   };
-  return { ...asentamiento, almacen, edificios: [...asentamiento.edificios, nuevo] };
+  const edificiosConNuevo = [...asentamiento.edificios, nuevo];
+  // Semilla de grupo (Etapa 3, §5.4/5.6): igual que en auto-construcción, un edificio añadido a mano puede ser
+  // el que abre un núcleo nuevo o satura uno existente.
+  const ancla = anclaSiNace(asentamiento, edificiosConNuevo, nuevo, `edificio-${asentamiento.id}-manual-${contador}-ancla`);
+  return { ...asentamiento, almacen, edificios: ancla ? [...edificiosConNuevo, ancla] : edificiosConNuevo };
 }
 
 /**
@@ -1260,52 +1354,73 @@ export function moverEnCola(
   return { ...asentamiento, edificios };
 }
 
-/**
- * Migración de saves anteriores a la Vista de Asentamiento (a petición del usuario). Las partidas guardadas
- * antes de que existieran los dos espacios lógicos traían TODOS los edificios en coordenadas del mapa general
- * y sin `ambito`. Aquí se asigna a cada edificio su `ambito` por tipo (`ambitoDe`) y, a los INTERNOS, se les
- * convierte la posición a coordenada LOCAL (relativa al Centro Urbano = `asentamiento.posicion`), preservando
- * su disposición relativa; los extractores minerales conservan su posición del mapa. Idempotente: un edificio
- * que ya trae `ambito` (save nuevo o ya migrado) no se toca. Se aplica al importar (ver `gameStore.importarSimulacion`).
- */
-export function migrarEdificiosAEspacioLocal(asentamientos: Asentamiento[]): Asentamiento[] {
-  return asentamientos.map((a) => {
-    const necesitaAmbito = a.edificios.some((e) => e.ambito === undefined);
-    const edificios = necesitaAmbito
-      ? a.edificios.map((e) => {
-          if (e.ambito !== undefined) return e;
-          const ambito = ambitoDe(e.tipo);
-          if (ambito === 'mapa') return { ...e, ambito };
-          return { ...e, ambito, posicion: { x: e.posicion.x - a.posicion.x, y: e.posicion.y - a.posicion.y } };
-        })
-      : a.edificios;
-    const conPuestos = completarPuestosDeMercado({ ...a, edificios });
-    return conPuestos === edificios && !necesitaAmbito ? a : { ...a, edificios: conPuestos };
-  });
+/** Estado de la próxima mejora de un edificio, para mostrar en UI y para validar `mejorarEdificioManualmente`
+ * (mejora manual, a petición del usuario) — `null` si el edificio no tiene mejora posible (tipo sin niveles,
+ * inactivo, o ya en su nivel máximo/gate de nivel de asentamiento o edificio previo no cumplido). Si no es
+ * `null`, `elegible` indica si HOY hay fondos suficientes (misma reserva exenta de `reservaManual` que usa
+ * `anadirEdificioManualmente` — la mejora manual es, igual que añadir a la cola, una acción exenta a propósito). */
+export interface EstadoMejoraEdificio {
+  nivelActual: number;
+  nivelSiguiente: number;
+  costo: Partial<Record<string, number>>;
+  elegible: boolean;
+  motivoBloqueo?: string;
+}
+
+export function estadoMejoraEdificio(
+  asentamiento: Asentamiento,
+  edificio: Edificio,
+  capital: Asentamiento | undefined
+): EstadoMejoraEdificio | null {
+  const info = elegibleParaMejora(asentamiento, edificio);
+  if (!info) return null;
+  const reserva = reservaDinamicaConstruccion(asentamiento, capital);
+  const elegible = puedeIniciarConstruccion(asentamiento.almacen, info.costo, edificio.tipo, reserva);
+  return {
+    ...info,
+    elegible,
+    motivoBloqueo: elegible ? undefined : 'No hay fondos suficientes (respetando la reserva de mantenimiento) para pagarla ahora.',
+  };
 }
 
 /**
- * Rellena los puestos que le falten a la zona de Mercado. Sirve para partidas guardadas ANTES de que el
- * Mercado fuera una zona (traen la pieza principal suelta, sin acompañamiento) y para cualquier save cuyo
- * Mercado subiera de nivel antes de existir este sistema.
- *
- * Idempotente: cuenta los puestos que ya hay y solo añade la diferencia hasta los que le tocan por nivel, así
- * que aplicarla dos veces no duplica nada. Devuelve el MISMO array si no hay nada que añadir.
+ * Fuerza la mejora de UN edificio concreto por decisión MANUAL de Gobernador o Maestro de Obras (Doc 4.2, a
+ * petición del usuario — la mejora automática de `avanzarMejoras` sigue corriendo cada tick igual que antes;
+ * esto solo permite adelantar la de un edificio elegido en vez de esperar a que el bucle automático llegue a
+ * él). Mismos gates y costo que la ruta automática (`elegibleParaMejora`/`estadoMejoraEdificio`), incluida la
+ * mudanza por crecimiento de huella (hoy solo Granja).
  */
-function completarPuestosDeMercado(asentamiento: Asentamiento): Edificio[] {
-  const mercado = asentamiento.edificios.find((e) => e.tipo === 'mercado');
-  if (!mercado) return asentamiento.edificios;
-
-  const nivel = mercado.nivelInterno ?? 1;
-  const esperados: number[] = [];
-  for (let n = 1; n <= nivel; n++) esperados.push(...(MERCADO_PUESTOS_POR_NIVEL[n] ?? []));
-  const faltan = esperados.length - asentamiento.edificios.filter((e) => e.tipo === 'puestoMercado').length;
-  if (faltan <= 0) return asentamiento.edificios;
-
-  // Se piden por nivel para respetar la mezcla de formas, quedándose solo con los que falten.
-  const nuevos: Edificio[] = [];
-  for (let n = 1; n <= nivel && nuevos.length < faltan; n++) {
-    nuevos.push(...crearPuestosDeMercado(asentamiento, n, [...asentamiento.edificios, ...nuevos]));
+export function mejorarEdificioManualmente(
+  asentamiento: Asentamiento,
+  cargo: 'gobernador' | 'maestroObras',
+  edificioId: string,
+  capital: Asentamiento | undefined
+): Asentamiento {
+  if (!cargoOcupado(asentamiento, cargo)) {
+    throw new ConstruccionManualInvalidaError(`Se necesita un ${cargo} asignado para forzar una mejora.`);
   }
-  return [...asentamiento.edificios, ...nuevos.slice(0, faltan)];
+  const edificio = asentamiento.edificios.find((e) => e.id === edificioId);
+  if (!edificio) throw new ConstruccionManualInvalidaError('Ese edificio no existe en este asentamiento.');
+  if (edificio.estado !== 'activo') {
+    throw new ConstruccionManualInvalidaError('Solo se puede forzar la mejora de un edificio activo.');
+  }
+  const estado = estadoMejoraEdificio(asentamiento, edificio, capital);
+  if (!estado) throw new ConstruccionManualInvalidaError('Ya está en su nivel máximo (o no tiene mejoras disponibles).');
+  if (!estado.elegible) throw new ConstruccionManualInvalidaError(estado.motivoBloqueo!);
+
+  const { nivelActual, nivelSiguiente, costo } = estado;
+  const tamanoActual = tamanoEdificio(edificio.tipo, nivelActual);
+  const tamanoNuevo = tamanoEdificio(edificio.tipo, nivelSiguiente);
+  let posicion = edificio.posicion;
+  if (tamanoNuevo.ancho !== tamanoActual.ancho || tamanoNuevo.alto !== tamanoActual.alto) {
+    const destino = reubicarPorTamano(asentamiento, edificio, asentamiento.edificios, nivelSiguiente);
+    if (!destino) throw new ConstruccionManualInvalidaError('No hay espacio para reubicar el edificio en su nuevo tamaño.');
+    posicion = destino;
+  }
+
+  const almacen = descontarRecursos(asentamiento.almacen, costo);
+  let edificios = asentamiento.edificios.map((e) => (e.id === edificioId ? { ...e, nivelInterno: nivelSiguiente, posicion } : e));
+  if (edificio.tipo === 'mercado') edificios = [...edificios, ...crearPuestosDeMercado(asentamiento, nivelSiguiente, edificios)];
+
+  return { ...asentamiento, almacen, edificios };
 }

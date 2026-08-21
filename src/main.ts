@@ -3,8 +3,8 @@
 // (dibujo/color, puramente presentacional). Nunca importa nada de `./engine/*` ni captura errores
 // de dominio: eso es responsabilidad exclusiva de `gameStore`. Los tipos de `./domain/types` se
 // importan solo como `type` para tipar lo que se lee — no acoplan a ninguna lógica.
-import type { Asentamiento, BiomaTipo, CargoTipo, EdificioTipo, Faccion, RecursoTipo, RegionId } from './domain/types';
-import { CATALOGOS, gameStore, UNITY_EXPORT_DEFAULT, type GameState, type CampoBalance } from './app/gameStore';
+import type { Asentamiento, BiomaTipo, CargoTipo, Edificio, EdificioTipo, Faccion, RecursoTipo, RegionId } from './domain/types';
+import { CATALOGOS, gameStore, UNITY_EXPORT_DEFAULT, type GameState, type CampoBalance, type EstadoMejoraEdificio } from './app/gameStore';
 import { draw, drawAsentamiento, drawFiltroFertilidad, drawPreviewFundacion, drawTerreno, faccionColor, BIOMA_COLOR, BIOMA_COLOR_SIMPLE, RECURSO_COLOR, RECURSOS_EN_MAPA, EDIFICIO_COLOR, FACCION_COLORES, type DrawState } from './ui/canvas';
 
 // Subido de 800 a 900 junto con el mapa 2000x2000 (Fase 0.1): el mundo más grande necesitaba algo más de
@@ -67,6 +67,13 @@ const BIOMA_NOMBRE_SIMPLE: [BiomaTipo, string][] = [
   ['cima', 'Cima (inhabitable)'],
 ];
 
+const RECURSO_ICONO: Record<string, string> = {
+  madera: '🪵', piedra: '🪨', trigo: '🌾', cobre: '🟠', estano: '⚙️', oro: '🪙', livestock: '🐄',
+  lingoteCobre: '🔶', lingoteEstano: '🔩', lingoteBronce: '🟫', cuero: '🟤', cueroCurtido: '🧵',
+  cueroCalidad: '✨', armaMadera: '🏹', armaCobre: '🗡️', armaBronce: '⚔️', armaBronceCalidad: '🛡️',
+  armaduraBasica: '🥋', armaduraIntermedia: '🛡️', armaduraBronce: '🛡️',
+};
+
 const EDIFICIO_NOMBRE: Record<string, string> = {
   centroUrbano: 'Centro Urbano',
   vivienda: 'Vivienda',
@@ -90,6 +97,10 @@ const EDIFICIO_NOMBRE: Record<string, string> = {
   puestoMercado: 'Puesto de mercado',
   maravilla: 'Maravilla',
   muralla: 'Muralla',
+  plaza: 'Plaza',
+  plazaDeArmas: 'Plaza de Armas',
+  patioDeGremios: 'Patio de Gremios',
+  tallerCarpinteria: 'Taller de carpintería',
 };
 
 const EDIFICIO_FUNCION: Record<string, string> = {
@@ -115,6 +126,10 @@ const EDIFICIO_FUNCION: Record<string, string> = {
   puestoMercado: 'Pieza de la zona de Mercado: no se construye ni cuesta nada, aparece sola al completarse el Mercado y al subir cada nivel interno. Solo ocupa suelo — el cupo de flota lo fija la pieza principal.',
   maravilla: 'Edificio trofeo de coste extremo — requiere asentamiento en nivel máximo (5). Solo se añade a la cola manualmente (Gobernador/Maestro de Obras). El ciclo de servidor que se cerraría al completarla no está implementado todavía.',
   muralla: 'Implementación mínima: ocupa 1 celda, cuesta solo piedra. Sin efecto mecánico en combate/asedio todavía. Requisito para subir a nivel de asentamiento 4. Solo se añade a la cola manualmente (Gobernador/Maestro de Obras).',
+  plaza: 'Ancla de saturación del núcleo residencial: no se construye ni cuesta nada, aparece sola cuando el núcleo de Vivienda alrededor del Centro Urbano se llena. Solo ocupa suelo.',
+  plazaDeArmas: 'Ancla del núcleo militar: no se construye ni cuesta nada, aparece sola frente al primer edificio militar (Barracón/Galería de tiro/Carpintería/Muralla) que se construye. Solo ocupa suelo.',
+  patioDeGremios: 'Ancla del núcleo de industria: no se construye ni cuesta nada, aparece sola frente al primer edificio de transformación (Fundición/Curtiduría/Armería/Gran Fundición/Maravilla) que se construye. Solo ocupa suelo.',
+  tallerCarpinteria: 'Pieza de la zona de Carpintería: no se construye ni cuesta nada, aparecen dos al completarse la Carpintería. Solo ocupa suelo.',
 };
 
 /** Campos de factor que puede traer una política del catálogo (ver CATALOGOS.politicas), con etiqueta legible. */
@@ -149,8 +164,11 @@ function efectoPolitica(politica: (typeof CATALOGOS.politicas)[number]): string 
 }
 
 // --- Estado de vista (qué se muestra, no simulación): vive solo aquí, nunca en el store. ---
-let tabActivo: 'acciones' | 'guerra' | 'comercio' | 'asentamientos' | 'facciones' | 'jugadores' | 'politicas' | 'balance' = 'acciones';
+let tabActivo: 'acciones' | 'guerra' | 'comercio' | 'asentamientos' | 'facciones' | 'jugadores' | 'politicas' | 'balance' | 'registros' | 'generacionMundo' = 'acciones';
+let comercioDetalleTab: 'acciones' | 'info' = 'acciones';
 let asentamientoSeleccionadoId: string | null = null;
+let asentamientoDetalleTab: 'general' | 'edificios' | 'produccion' | 'militar' = 'general';
+let reservaProtegidaAbierta = false;
 let faccionSeleccionadaId: string | null = null;
 let jugadorSeleccionadoId: string | null = null;
 /** Filtro de Facción (a petición del usuario): con muchas Facciones, listar el grupo de cada una a la vez
@@ -185,7 +203,17 @@ let balanceFiltro = '';
 const app = document.getElementById('app')!;
 app.innerHTML = `
   <div class="controls-panel">
-    <h1>Bronze Age Collapse — Fase 0</h1>
+    <div class="admin-titlebar">
+      <h1>Bronze Age Collapse — Fase 0</h1>
+      <div class="admin-title-actions" aria-label="Controles de simulación">
+        <span id="tick-slider-label">Tick: 0</span>
+        <input type="range" id="tick-slider" min="0" max="0" value="0" step="1" disabled />
+        <button type="button" id="volver-presente-btn" hidden>Volver al presente</button>
+        <button type="button" id="exportar-btn">Exportar</button>
+        <button type="button" id="importar-btn">Importar</button>
+        <button type="button" id="tick-btn">Avanzar tick</button>
+      </div>
+    </div>
     <div class="tabs" id="main-tabs">
       <button class="tab-btn" data-tab="acciones">Acciones</button>
       <button class="tab-btn" data-tab="guerra">Guerra</button>
@@ -195,6 +223,8 @@ app.innerHTML = `
       <button class="tab-btn" data-tab="jugadores">Jugadores</button>
       <button class="tab-btn" data-tab="politicas">Políticas</button>
       <button class="tab-btn" data-tab="balance">Valores de simulación</button>
+      <button class="tab-btn" data-tab="registros">Registros</button>
+      <button class="tab-btn" data-tab="generacionMundo">Generación de mundo</button>
     </div>
 
     <div class="tab-panel" id="tab-acciones">
@@ -216,19 +246,6 @@ app.innerHTML = `
           <input id="jugadores-input" type="number" value="1" min="1" max="5" />
         </label>
         <div id="fundacion-viabilidad" class="fundacion-viabilidad">Pasa el cursor por el mapa para evaluar un emplazamiento.</div>
-        <label>
-          Seed del mundo
-          <input id="seed-input" type="number" value="1" />
-        </label>
-        <label>
-          Región geográfica (Fase 0.2)
-          <select id="region-select">
-            <option value="">Libre (procedural, sin sesgo)</option>
-            ${Object.entries(REGION_NOMBRE)
-              .map(([id, nombre]) => `<option value="${id}">${nombre}</option>`)
-              .join('')}
-          </select>
-        </label>
       </div>
 
       <div class="controls">
@@ -332,20 +349,37 @@ app.innerHTML = `
     </div>
 
     <div class="tab-panel" id="tab-comercio" hidden>
-    <div class="controls-grid">
-      <div class="controls">
+    <div class="commerce-detail-tabs" role="tablist" aria-label="Secciones de comercio">
+      <button type="button" class="commerce-detail-tab active" data-commerce-detail-tab="acciones" role="tab" aria-selected="true">⚒️ Acciones</button>
+      <button type="button" class="commerce-detail-tab" data-commerce-detail-tab="info" role="tab" aria-selected="false">📈 Información</button>
+    </div>
+
+    <div class="commerce-detail-panel active" data-commerce-detail-panel="acciones" role="tabpanel">
+    <div class="controls-grid commerce-actions-grid">
+      <div class="controls trade-barter-card">
         <h2>Trueque (Doc 3.2)</h2>
+        <p class="trade-card-intro">Intercambia recursos entre dos asentamientos mediante caravanas comerciales.</p>
+        <div class="trade-side trade-side-a">
+          <div class="trade-side-heading"><span>🟦</span><strong>Asentamiento A</strong><small>entrega</small></div>
         <label>Asentamiento A <select id="trueque-a"></select></label>
+        <div class="trade-settlement-info" id="trueque-a-info"></div>
         <label>Recurso que entrega A <select id="trueque-recurso-a"></select></label>
         <label>Cantidad de A <input id="trueque-cantidad-a" type="number" value="50" min="1" /></label>
+        </div>
+        <div class="trade-exchange-mark" aria-hidden="true">⇄</div>
+        <div class="trade-side trade-side-b">
+          <div class="trade-side-heading"><span>🟧</span><strong>Asentamiento B</strong><small>entrega</small></div>
         <label>Asentamiento B <select id="trueque-b"></select></label>
+        <div class="trade-settlement-info" id="trueque-b-info"></div>
         <label>Recurso que entrega B <select id="trueque-recurso-b"></select></label>
         <label>Cantidad de B <input id="trueque-cantidad-b" type="number" value="50" min="1" /></label>
+        </div>
         <button id="trueque-btn">Proponer trueque</button>
       </div>
 
-      <div class="controls">
+      <div class="controls trade-card trade-market-card">
         <h2>Orden de Mercado (Doc 3.3)</h2>
+        <p class="trade-card-intro">Publica una orden de compra o venta con precio unitario en oro.</p>
         <label>Asentamiento <select id="mercado-asentamiento"></select></label>
         <label>Tipo
           <select id="mercado-tipo"><option value="venta">Venta</option><option value="compra">Compra</option></select>
@@ -356,18 +390,22 @@ app.innerHTML = `
         <button id="mercado-btn">Colocar orden</button>
       </div>
 
-      <div class="controls">
+      <div class="controls trade-card trade-fleet-card">
         <h2>Flota de Caravanas (Doc 3.2, ampliación de comercio)</h2>
+        <p class="trade-card-intro">Administra la capacidad logÃ­stica y crea caravanas para transportar mercancÃ­as.</p>
         <label>Asentamiento <select id="flota-asentamiento"></select></label>
         <div class="tropa-info" id="flota-info"></div>
         <button id="flota-construir-btn">Construir caravana (50 madera)</button>
         <p class="legend-note">Requiere Mercado activo y cupo libre. Las caravanas propias no se pueden desmantelar — solo se pierden si las capturan en combate.</p>
       </div>
     </div>
+    </div>
 
-    <div class="detail-section">
+    <div class="commerce-detail-panel" data-commerce-detail-panel="info" role="tabpanel" hidden>
+    <div class="detail-section trade-overview">
       <h3>Info de comercio (Doc 3.2/3.3)</h3>
       <div id="economia-panel" class="log-panel"></div>
+    </div>
     </div>
     </div>
 
@@ -401,6 +439,60 @@ app.innerHTML = `
       </div>
       <div id="balance-tab" class="balance-groups"></div>
     </div>
+
+    <div class="tab-panel" id="tab-generacionMundo" hidden>
+      <div class="section-title registros-heading">Generación de mundo</div>
+      <p class="legend-note registros-intro">Regenera el mapa procedural y exporta su terreno para utilizarlo fuera de la simulación.</p>
+      <div class="controls-grid world-generation-grid">
+        <div class="controls">
+          <h2>Regenerar mundo</h2>
+          <p class="legend-note">Configura la seed y la región antes de crear un mundo nuevo.</p>
+          <label>Seed del mundo <input id="seed-input" type="number" value="1" /></label>
+          <label>Región geográfica (Fase 0.2)
+            <select id="region-select">
+              <option value="">Libre (procedural, sin sesgo)</option>
+              ${Object.entries(REGION_NOMBRE)
+                .map(([id, nombre]) => `<option value="${id}">${nombre}</option>`)
+                .join('')}
+            </select>
+          </label>
+          <button type="button" id="regenerar-btn">Regenerar mundo</button>
+        </div>
+        <div class="controls">
+          <h2>Exportar mapa</h2>
+          <p class="legend-note">Genera el terreno para Unity con la altura máxima indicada.</p>
+          <label class="altura-unity-label" for="exportar-unity-altura" title="Altura máxima del mapa">
+            Altura máx. (m):
+            <input type="number" id="exportar-unity-altura" min="1" step="10" value="${UNITY_EXPORT_DEFAULT.alturaMaximaMetros}" />
+          </label>
+          <button type="button" id="exportar-unity-btn">Exportar mapa (Unity Terrain)</button>
+        </div>
+      </div>
+      <input type="file" id="importar-input" accept="application/json,.json" hidden />
+    </div>
+
+    <div class="tab-panel" id="tab-registros" hidden>
+      <div class="section-title registros-heading">Registros de la simulación</div>
+      <p class="legend-note registros-intro">Información de solo lectura sobre el estado actual del mundo.</p>
+      <div class="logs-grid registros-grid">
+        <div class="log-card">
+          <h2>Asentamientos</h2>
+          <div class="log-panel" id="asentamientos-panel"></div>
+        </div>
+        <div class="log-card">
+          <h2>Política</h2>
+          <div class="log-panel" id="politica-panel"></div>
+        </div>
+        <div class="log-card">
+          <h2>Progresión (Doc 2.9)</h2>
+          <div class="log-panel" id="progresion-panel"></div>
+        </div>
+        <div class="log-card">
+          <h2>Militar</h2>
+          <div class="log-panel" id="militar-panel"></div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="map-column">
@@ -411,6 +503,7 @@ app.innerHTML = `
 
     <div class="map-panel">
       <canvas id="world-canvas" width="${CANVAS_SIZE}" height="${CANVAS_SIZE}"></canvas>
+      <div id="settlement-building-tooltip" class="settlement-building-tooltip" hidden></div>
       <div class="map-toggles">
         <div class="vista-mapa-toggle" id="vista-mapa-toggle">
           <button type="button" class="vista-btn active" data-vista="mundo">Mundo</button>
@@ -430,49 +523,13 @@ app.innerHTML = `
       </div>
     </div>
 
-    <div class="section-title-row">
-      <div class="section-title">Estado de la simulación</div>
-      <div class="time-travel">
-        <button type="button" id="regenerar-btn">Regenerar mundo</button>
-        <button type="button" id="tick-btn">Avanzar tick</button>
-        <span class="time-travel-divider"></span>
-        <span id="tick-slider-label">Tick: 0</span>
-        <input type="range" id="tick-slider" min="0" max="0" value="0" step="1" disabled />
-        <button type="button" id="volver-presente-btn" hidden>Volver al presente</button>
-        <span class="time-travel-divider"></span>
-        <button type="button" id="exportar-btn">Exportar</button>
-        <button type="button" id="importar-btn">Importar</button>
-        <button type="button" id="exportar-unity-btn">Exportar mapa (Unity Terrain)</button>
-        <label class="altura-unity-label" for="exportar-unity-altura" title="Altura en metros a la que corresponde el punto más alto del mapa (elevación 1.0)">
-          Altura máx. (m):
-          <input type="number" id="exportar-unity-altura" min="1" step="10" value="${UNITY_EXPORT_DEFAULT.alturaMaximaMetros}" />
-        </label>
-        <input type="file" id="importar-input" accept="application/json,.json" hidden />
-      </div>
-    </div>
-    <div class="logs-grid">
-      <div class="log-card">
-        <h2>Asentamientos</h2>
-        <div class="log-panel" id="asentamientos-panel"></div>
-      </div>
-      <div class="log-card">
-        <h2>Política</h2>
-        <div class="log-panel" id="politica-panel"></div>
-      </div>
-      <div class="log-card">
-        <h2>Progresión (Doc 2.9)</h2>
-        <div class="log-panel" id="progresion-panel"></div>
-      </div>
-      <div class="log-card">
-        <h2>Militar</h2>
-        <div class="log-panel" id="militar-panel"></div>
-      </div>
-    </div>
   </div>
 `;
 
 const canvas = document.getElementById('world-canvas') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
+const mapPanelEl = document.querySelector('.map-panel') as HTMLElement;
+const settlementBuildingTooltipEl = document.getElementById('settlement-building-tooltip') as HTMLDivElement;
 const legendEl = document.getElementById('legend')!;
 const legendBodyEl = document.getElementById('legend-body')!;
 const logEl = document.getElementById('log')!;
@@ -502,6 +559,8 @@ let expansionDestino: { x: number; y: number } | null = null;
 
 const truequeASelect = document.getElementById('trueque-a') as HTMLSelectElement;
 const truequeBSelect = document.getElementById('trueque-b') as HTMLSelectElement;
+const truequeAInfoEl = document.getElementById('trueque-a-info')!;
+const truequeBInfoEl = document.getElementById('trueque-b-info')!;
 const truequeRecursoASelect = document.getElementById('trueque-recurso-a') as HTMLSelectElement;
 const truequeRecursoBSelect = document.getElementById('trueque-recurso-b') as HTMLSelectElement;
 const truequeCantidadAInput = document.getElementById('trueque-cantidad-a') as HTMLInputElement;
@@ -647,6 +706,26 @@ function actualizarInfoFlota(state: GameState): void {
   `;
 }
 flotaAsentamientoSelect.addEventListener('change', () => actualizarInfoFlota(gameStore.getState()));
+
+/** Materiales comerciables disponibles de cada asentamiento seleccionado en el formulario de trueque. */
+function actualizarInfoTruequeAsentamientos(state: GameState): void {
+  const renderInfo = (select: HTMLSelectElement): string => {
+    const asentamiento = state.asentamientos.find((a) => a.id === select.value);
+    if (!asentamiento) return '<div class="legend-note">Selecciona un asentamiento.</div>';
+    const recursos = CATALOGOS.recursosTrueque
+      .map((recurso) => ({ recurso, cantidad: asentamiento.almacen[recurso]?.cantidad ?? 0 }))
+      .filter((item) => item.cantidad > 0);
+    if (recursos.length === 0) return '<div class="legend-note">Sin materiales comerciables disponibles.</div>';
+    return `<div class="trade-settlement-info-title">Materiales disponibles</div><div class="trade-material-list">${recursos
+      .map((item) => `<span class="trade-material-pill"><span aria-hidden="true">${RECURSO_ICONO[item.recurso] ?? '📦'}</span>${RECURSO_NOMBRE[item.recurso] ?? item.recurso}<strong>${item.cantidad.toFixed(0)}</strong></span>`)
+      .join('')}</div>`;
+  };
+  truequeAInfoEl.innerHTML = renderInfo(truequeASelect);
+  truequeBInfoEl.innerHTML = renderInfo(truequeBSelect);
+}
+
+truequeASelect.addEventListener('change', () => actualizarInfoTruequeAsentamientos(gameStore.getState()));
+truequeBSelect.addEventListener('change', () => actualizarInfoTruequeAsentamientos(gameStore.getState()));
 
 /** Desglose de costo de un edificio del catálogo (para el segmento "Info:" del selector de "añadir a la cola"). */
 function costoEdificioTxt(entrada: (typeof CATALOGOS.catalogoEdificios)[number]): string {
@@ -932,11 +1011,23 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
   // de progreso, Doc 4.2.1) — no solo los tradeables de CATALOGOS.recursosTrueque, que se quedan cortos aquí
   // adrede (esos intermedios no son comerciables en Fase 0).
   const almacenHtml = Object.keys(a.almacen)
+    .filter((r) => (a.almacen[r]?.cantidad ?? 0) > 0)
     .map((r) => {
       const info = a.almacen[r];
-      return `<div class="kv-row"><span>${RECURSO_NOMBRE[r] ?? r}</span><span>${Math.floor(info?.cantidad ?? 0)}/${info?.capacidad ?? 0}</span></div>`;
+      const cantidad = Math.floor(info?.cantidad ?? 0);
+      const capacidad = info?.capacidad ?? 0;
+      const porcentaje = capacidad > 0 ? Math.min(100, Math.round((cantidad / capacidad) * 100)) : 0;
+      const nombre = RECURSO_NOMBRE[r] ?? r;
+      return `<div class="storage-resource-card" title="${nombre}">
+        <div class="storage-resource-heading">
+          <span class="storage-resource-icon" aria-hidden="true">${RECURSO_ICONO[r] ?? '📦'}</span>
+          <span class="storage-resource-name">${nombre}</span>
+          <strong>${cantidad}<small> / ${capacidad}</small></strong>
+        </div>
+        <div class="storage-capacity-track" aria-label="${porcentaje}% de capacidad ocupada"><span style="width:${porcentaje}%"></span></div>
+      </div>`;
     })
-    .join('');
+    .join('') || '<p class="legend-note">Almacén vacío.</p>';
 
   // Reserva manual por recurso (a petición del usuario, ver Asentamiento.reservaManual): tope 0-999 que la
   // auto-construcción no puede tocar (construcción manual exenta) — solo calibrable con Tesorero asignado,
@@ -994,7 +1085,57 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
       </table>`
     : '<p class="legend-note">Sin edificios.</p>';
 
+  // Mejora manual de un edificio individual (Doc 4.2, a petición del usuario): la mejora automática de
+  // `avanzarMejoras` sigue corriendo cada tick — esto solo deja adelantar la de un edificio elegido. Solo
+  // aparecen los edificios activos con una mejora posible (ver `gameStore.infoMejoraEdificio`).
+  const mejorasDisponibles: { edificio: Edificio; info: EstadoMejoraEdificio }[] = [];
+  for (const e of a.edificios) {
+    if (e.estado !== 'activo') continue;
+    const info = gameStore.infoMejoraEdificio(a, e.id);
+    if (info) mejorasDisponibles.push({ edificio: e, info });
+  }
+  const mejorasHtml = mejorasDisponibles.length
+    ? `<table class="mini-table">
+        <thead><tr><th>Edificio</th><th>Nivel</th><th>Costo</th><th></th></tr></thead>
+        <tbody>
+          ${mejorasDisponibles
+            .map(({ edificio, info }) => {
+              const costoTxt =
+                Object.entries(info.costo)
+                  .map(([r, c]) => `${RECURSO_NOMBRE[r] ?? r}: ${c}`)
+                  .join(', ') || '—';
+              return `<tr>
+                <td>${EDIFICIO_NOMBRE[edificio.tipo] ?? edificio.tipo}</td>
+                <td>${info.nivelActual} &rarr; ${info.nivelSiguiente}</td>
+                <td>${costoTxt}</td>
+                <td><button type="button" class="mejora-btn" data-settlement="${a.id}" data-edificio="${edificio.id}" title="${info.elegible ? '' : (info.motivoBloqueo ?? '')}">Mejorar ahora</button></td>
+              </tr>`;
+            })
+            .join('')}
+        </tbody>
+      </table>`
+    : '<p class="legend-note">Sin mejoras disponibles ahora mismo.</p>';
+
   const produccion = gameStore.produccionInfo(a);
+  const consumoPorTipoYRecurso = new Map<string, { tipo: string; recurso: string; activos: number; cantidadPorTick: number }>();
+  for (const edificio of a.edificios) {
+    if (edificio.estado !== 'activo') continue;
+    const economia = gameStore.edificioEconomiaInfo(a, edificio);
+    for (const item of economia.consumoTotal) {
+      const clave = `${edificio.tipo}:${item.recurso}`;
+      const anterior = consumoPorTipoYRecurso.get(clave);
+      if (anterior) anterior.cantidadPorTick += item.cantidadPorTick;
+      else {
+        consumoPorTipoYRecurso.set(clave, {
+          tipo: edificio.tipo,
+          recurso: item.recurso,
+          activos: a.edificios.filter((e) => e.estado === 'activo' && e.tipo === edificio.tipo).length,
+          cantidadPorTick: item.cantidadPorTick,
+        });
+      }
+    }
+  }
+  const consumo = [...consumoPorTipoYRecurso.values()];
   const manoObra = gameStore.manoObraInfo(a);
   const poblacion = gameStore.poblacionInfo(a);
   const produccionHtml = produccion.length
@@ -1004,12 +1145,40 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
           ${produccion
             .map(
               (p) =>
-                `<tr><td>${EDIFICIO_NOMBRE[p.tipo] ?? p.tipo}</td><td>${p.activos}</td><td>${RECURSO_NOMBRE[p.recurso] ?? p.recurso}</td><td>${p.cantidadPorTick.toFixed(1)}</td></tr>`
+                `<tr><td>${EDIFICIO_NOMBRE[p.tipo] ?? p.tipo}</td><td>${p.activos}</td><td><span class="resource-inline-icon" aria-hidden="true">${RECURSO_ICONO[p.recurso] ?? '📦'}</span>${RECURSO_NOMBRE[p.recurso] ?? p.recurso}</td><td>${Math.floor(p.cantidadPorTick)}</td></tr>`
             )
             .join('')}
         </tbody>
       </table>`
     : '<p class="legend-note">Sin edificios productores activos.</p>';
+
+  const consumoHtml = consumo.length
+    ? `<table class="mini-table">
+        <thead><tr><th>Edificio</th><th>Activos</th><th>Recurso</th><th>Consumo/total</th></tr></thead>
+        <tbody>
+          ${consumo
+            .map(
+              (c) => {
+                const producidoEsteTick = produccion
+                  .filter((item) => item.recurso === c.recurso)
+                  .reduce((total, item) => total + item.cantidadPorTick, 0);
+                const disponibleParaConsumo = a.almacen[c.recurso]?.cantidad ?? 0;
+                const consumosAnteriores = consumo
+                  .slice(0, consumo.indexOf(c))
+                  .filter((item) => item.recurso === c.recurso)
+                  .reduce((total, item) => total + item.cantidadPorTick, 0);
+                const cubierto = Math.min(
+                  c.cantidadPorTick,
+                  Math.max(0, disponibleParaConsumo + producidoEsteTick - consumosAnteriores)
+                );
+                const formatearCantidad = (cantidad: number) => Math.floor(cantidad).toString();
+                return `<tr><td>${EDIFICIO_NOMBRE[c.tipo] ?? c.tipo}</td><td>${c.activos}</td><td><span class="resource-inline-icon" aria-hidden="true">${RECURSO_ICONO[c.recurso] ?? '📦'}</span>${RECURSO_NOMBRE[c.recurso] ?? c.recurso}</td><td>${formatearCantidad(cubierto)}/${formatearCantidad(c.cantidadPorTick)}</td></tr>`;
+              }
+            )
+            .join('')}
+        </tbody>
+      </table>`
+    : '<p class="legend-note">Sin edificios consumidores activos.</p>';
 
   const politicasActivasHtml = a.politicasActivas.length
     ? `<table class="mini-table">
@@ -1061,22 +1230,31 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
     : '';
 
   const mantenimiento = gameStore.mantenimientoInfo(a);
+  const produccionPorRecurso = new Map<string, number>();
+  for (const item of gameStore.produccionInfo(a)) {
+    produccionPorRecurso.set(item.recurso, (produccionPorRecurso.get(item.recurso) ?? 0) + item.cantidadPorTick);
+  }
   const mantenimientoHtml = mantenimiento.enGracia
     ? `<p class="legend-note">En periodo de gracia (recién fundado): sin coste todavía — ${mantenimiento.ticksParaFinGracia} ticks restantes.</p>`
     : mantenimiento.items.length
       ? `<table class="mini-table">
-          <thead><tr><th>Recurso</th><th>Coste/tick</th><th>Disponible</th></tr></thead>
+          <thead><tr><th>Recurso</th><th>Disponible</th><th>Producción/tick</th><th>Coste/tick</th><th>Valor (producción-coste)</th></tr></thead>
           <tbody>
             ${mantenimiento.items
               .map(
-                (i) =>
-                  `<tr class="${i.cubierto ? '' : 'fila-deficit'}"><td>${RECURSO_NOMBRE[i.recurso] ?? i.recurso}</td><td>${i.costoPorTick.toFixed(1)}</td><td>${i.disponible.toFixed(0)}</td></tr>`
+                (i) => {
+                  const produccion = produccionPorRecurso.get(i.recurso) ?? 0;
+                  const valor = produccion - i.costoPorTick;
+                  const nombre = RECURSO_NOMBRE[i.recurso] ?? i.recurso;
+                  return `<tr class="${i.cubierto ? '' : 'fila-deficit'}"><td><span class="resource-inline-icon" aria-hidden="true">${RECURSO_ICONO[i.recurso] ?? '📦'}</span>${nombre}</td><td>${i.disponible.toFixed(0)}</td><td>${produccion.toFixed(1)}</td><td>${i.costoPorTick.toFixed(1)}</td><td class="${valor < 0 ? 'valor-negativo' : ''}">${valor.toFixed(1)}</td></tr>`;
+                }
               )
               .join('')}
           </tbody>
         </table>`
       : '<p class="legend-note">Sin coste de mantenimiento.</p>';
 
+  const poderMilitar = gameStore.poderMilitarInfo(a);
   const escuadronesHtml = a.escuadrones.length
     ? `<table class="mini-table">
         <thead><tr><th>Escuadrón</th><th>Jugador</th><th>Origen</th><th>Nivel</th><th>Cantidad</th><th>Veteranía</th><th>Moral</th></tr></thead>
@@ -1088,11 +1266,67 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
             )
             .join('')}
         </tbody>
-      </table>`
+      </table>
+      <div class="military-summary">
+        <span>Total de soldados: <strong>${poderMilitar.soldados}</strong></span>
+        <span>Nivel de poder: <strong>${poderMilitar.poder.toFixed(1)}</strong></span>
+      </div>`
     : '<p class="legend-note">Sin escuadrones.</p>';
+
+  const truequesActivos = state.acuerdos.filter(
+    (acuerdo) => acuerdo.estado === 'activo' && (acuerdo.asentamientoAId === a.id || acuerdo.asentamientoBId === a.id)
+  );
+  const truequesHtml = truequesActivos.length
+    ? `<table class="mini-table">
+        <thead><tr><th>Intercambio</th><th>CompletaciÃ³n</th><th>Caravanas asignadas</th><th>Expira</th></tr></thead>
+        <tbody>
+          ${truequesActivos
+            .map((acuerdo) => {
+              const asentamientoOtroId = acuerdo.asentamientoAId === a.id ? acuerdo.asentamientoBId : acuerdo.asentamientoAId;
+              const otro = state.asentamientos.find((asentamiento) => asentamiento.id === asentamientoOtroId);
+              const progresoA = acuerdo.cantidadTotalA > 0 ? Math.min(1, acuerdo.cantidadEntregadaA / acuerdo.cantidadTotalA) : 1;
+              const progresoB = acuerdo.cantidadTotalB > 0 ? Math.min(1, acuerdo.cantidadEntregadaB / acuerdo.cantidadTotalB) : 1;
+              const porcentaje = Math.round(((progresoA + progresoB) / 2) * 100);
+              const caravanasAsignadas = state.caravanas.filter(
+                (caravana) => caravana.tipo === 'comercial' && caravana.origenAcuerdoId === acuerdo.id
+              ).length;
+              return `<tr>
+                <td>${RECURSO_NOMBRE[acuerdo.recursoA] ?? acuerdo.recursoA} ↔ ${RECURSO_NOMBRE[acuerdo.recursoB] ?? acuerdo.recursoB}<br/><span class="legend-note">con ${otro?.nombre ?? otro?.id ?? asentamientoOtroId}</span></td>
+                <td>${porcentaje}%<br/><span class="legend-note">A: ${acuerdo.cantidadEntregadaA}/${acuerdo.cantidadTotalA} · B: ${acuerdo.cantidadEntregadaB}/${acuerdo.cantidadTotalB}</span></td>
+                <td>${caravanasAsignadas}</td>
+                <td>t${acuerdo.expiraEnTick}</td>
+              </tr>`;
+            })
+            .join('')}
+        </tbody>
+      </table>`
+    : '<p class="legend-note">Sin trueques activos.</p>';
 
   return `
     <div class="settlement-detail">
+      <div class="detail-section settlement-storage-summary">
+        <div class="storage-section-heading">
+          <span class="storage-section-icon" aria-hidden="true">📦</span>
+          <div><h3>AlmacÃ©n</h3><p>Existencias actuales y capacidad disponible</p></div>
+        </div>
+        <div class="storage-resource-grid">${almacenHtml}</div>
+        <details class="storage-reserve-section">
+          <summary class="storage-section-heading storage-reserve-heading">
+            <span class="storage-section-icon" aria-hidden="true">🔒</span>
+            <div><h3>Reserva protegida</h3><p>Material que la auto-construcciÃ³n no puede gastar</p></div>
+            <span class="storage-reserve-chevron" aria-hidden="true">▸</span>
+          </summary>
+          <div class="storage-reserve-content">${reservaHtml}</div>
+        </details>
+      </div>
+      <div class="settlement-detail-tabs" role="tablist" aria-label="Información del asentamiento">
+        <button type="button" class="settlement-detail-tab${asentamientoDetalleTab === 'general' ? ' active' : ''}" data-settlement-detail-tab="general" role="tab" aria-selected="${asentamientoDetalleTab === 'general'}">General</button>
+        <button type="button" class="settlement-detail-tab${asentamientoDetalleTab === 'edificios' ? ' active' : ''}" data-settlement-detail-tab="edificios" role="tab" aria-selected="${asentamientoDetalleTab === 'edificios'}">Edificios</button>
+        <button type="button" class="settlement-detail-tab${asentamientoDetalleTab === 'produccion' ? ' active' : ''}" data-settlement-detail-tab="produccion" role="tab" aria-selected="${asentamientoDetalleTab === 'produccion'}">Producción</button>
+        <button type="button" class="settlement-detail-tab${asentamientoDetalleTab === 'militar' ? ' active' : ''}" data-settlement-detail-tab="militar" role="tab" aria-selected="${asentamientoDetalleTab === 'militar'}">Militar</button>
+      </div>
+
+      <div class="settlement-detail-panel${asentamientoDetalleTab === 'general' ? ' active' : ''}" data-settlement-detail-panel="general" role="tabpanel">
       <div class="detail-section">
         <h3>${a.nombre ?? a.id}${a.nombre ? ` <span class="legend-note" style="font-weight:normal">(${a.id})</span>` : ''}</h3>
         <div class="kv-row" style="margin-top:2px; margin-bottom:6px; gap:6px; align-items:center;">
@@ -1158,12 +1392,18 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
       </div>
 
       <div class="detail-section">
-        <h3>Almacén</h3>
-        <div class="kv-grid">${almacenHtml}</div>
-        <div class="kv-row" style="margin-top:10px"><strong>Reserva manual (Tesorero)</strong></div>
-        ${reservaHtml}
+        <h3>Trueques activos</h3>
+        ${truequesHtml}
       </div>
 
+      <div class="detail-section">
+        <h3>Políticas activas y slots por cargo</h3>
+        ${politicasHtml}
+      </div>
+
+      </div>
+
+      <div class="settlement-detail-panel${asentamientoDetalleTab === 'edificios' ? ' active' : ''}" data-settlement-detail-panel="edificios" role="tabpanel">
       <div class="detail-section">
         <h3>Edificios</h3>
         <div class="kv-row">
@@ -1178,6 +1418,12 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
             : `Cupo de obras activas simultáneas: ${enConstruccionCount}/${CATALOGOS.maximoEnConstruccionSimultanea}.`}
         </p>
         ${edificiosHtml}
+      </div>
+
+      <div class="detail-section">
+        <h3>Mejoras de edificios — control manual (Gobernador / Maestro de Obras)</h3>
+        <p class="legend-note">La mejora automática sigue evaluando cada tick; esto solo adelanta la de un edificio elegido. Usa el mismo selector de cargo de la cola, más abajo.</p>
+        ${mejorasHtml}
       </div>
 
       <div class="detail-section">
@@ -1218,19 +1464,25 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
         <div class="tropa-info" id="cola-tipo-info"></div>
       </div>
 
+      </div>
+
+      <div class="settlement-detail-panel${asentamientoDetalleTab === 'produccion' ? ' active' : ''}" data-settlement-detail-panel="produccion" role="tabpanel">
       <div class="detail-section">
         <h3>Producción — por tick</h3>
         ${produccionHtml}
       </div>
 
       <div class="detail-section">
-        <h3>Políticas activas y slots por cargo</h3>
-        ${politicasHtml}
+        <h3>Consumo — consumo/total</h3>
+        ${consumoHtml}
+      </div>
       </div>
 
+      <div class="settlement-detail-panel${asentamientoDetalleTab === 'militar' ? ' active' : ''}" data-settlement-detail-panel="militar" role="tabpanel">
       <div class="detail-section">
         <h3>Escuadrones</h3>
         ${escuadronesHtml}
+      </div>
       </div>
     </div>
   `;
@@ -1267,8 +1519,14 @@ function renderAsentamientosTab(state: GameState): void {
   const botones = state.asentamientos
     .filter((a) => a.faccionId === faccionFiltroId)
     .map(
-      (a) =>
-        `<button type="button" class="settlement-tab-btn${a.id === asentamientoSeleccionadoId ? ' active' : ''}" data-settlement="${a.id}">${a.nombre ?? a.id}</button>`
+      (a) => {
+        const mantenimiento = gameStore.mantenimientoInfo(a);
+        const mantenimientoIncumplido = !mantenimiento.enGracia && mantenimiento.items.some((item) => !item.cubierto);
+        const avisoMantenimiento = mantenimientoIncumplido
+          ? '<span class="settlement-warning-icon" title="Mantenimiento no cubierto" aria-label="Mantenimiento no cubierto">⚠</span>'
+          : '';
+        return `<button type="button" class="settlement-tab-btn${a.id === asentamientoSeleccionadoId ? ' active' : ''}" data-settlement="${a.id}">${a.nombre ?? a.id}${avisoMantenimiento}</button>`;
+      }
     )
     .join('');
   const gruposHtml = `<div class="faccion-group">
@@ -1277,7 +1535,17 @@ function renderAsentamientosTab(state: GameState): void {
   </div>`;
 
   const seleccionado = state.asentamientos.find((a) => a.id === asentamientoSeleccionadoId)!;
+  const reservaActual = cont.querySelector<HTMLDetailsElement>('.storage-reserve-section');
+  if (reservaActual) reservaProtegidaAbierta = reservaActual.open;
   cont.innerHTML = `${gruposHtml}${renderDetalleAsentamiento(seleccionado, state)}`;
+
+  const reservaNueva = cont.querySelector<HTMLDetailsElement>('.storage-reserve-section');
+  if (reservaNueva) {
+    reservaNueva.open = reservaProtegidaAbierta;
+    reservaNueva.addEventListener('toggle', () => {
+      reservaProtegidaAbierta = reservaNueva.open;
+    });
+  }
 
   document.getElementById('asentamientos-faccion-select')?.addEventListener('change', (ev) => {
     asentamientosFaccionFiltroId = (ev.target as HTMLSelectElement).value;
@@ -1290,6 +1558,20 @@ function renderAsentamientosTab(state: GameState): void {
     btn.addEventListener('click', () => {
       asentamientoSeleccionadoId = (btn as HTMLElement).dataset.settlement!;
       render();
+    });
+  });
+
+  cont.querySelectorAll<HTMLButtonElement>('[data-settlement-detail-tab]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      asentamientoDetalleTab = btn.dataset.settlementDetailTab as 'general' | 'edificios' | 'produccion' | 'militar';
+      cont.querySelectorAll<HTMLButtonElement>('[data-settlement-detail-tab]').forEach((tab) => {
+        const activa = tab === btn;
+        tab.classList.toggle('active', activa);
+        tab.setAttribute('aria-selected', String(activa));
+      });
+      cont.querySelectorAll<HTMLElement>('[data-settlement-detail-panel]').forEach((panel) => {
+        panel.classList.toggle('active', panel.dataset.settlementDetailPanel === asentamientoDetalleTab);
+      });
     });
   });
 
@@ -1342,6 +1624,13 @@ function renderAsentamientosTab(state: GameState): void {
     });
   });
 
+  cont.querySelectorAll('.mejora-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const el = btn as HTMLButtonElement;
+      gameStore.mejorarEdificioAhora(el.dataset.settlement!, cargoSeleccionado(), el.dataset.edificio!);
+    });
+  });
+
   const colaAddBtn = document.getElementById('cola-add-btn') as HTMLButtonElement | null;
   const colaTipoSelect = document.getElementById('cola-tipo-select') as HTMLSelectElement | null;
   colaAddBtn?.addEventListener('click', () => {
@@ -1371,7 +1660,7 @@ function renderDetalleFaccion(faccion: Faccion, state: GameState, viendoPasado: 
           ${propios
             .map((a) => {
               const totalPob = a.poblacion.pesants + a.poblacion.artesanos + a.poblacion.nobleza;
-              return `<tr><td>${a.nombre ?? a.id}</td><td>${a.nivel}</td><td>${a.nivelActual ?? a.nivel}</td><td>${totalPob}</td></tr>`;
+              return `<tr><td>${a.nombre ?? a.id}</td><td>${a.nivel}</td><td>${a.nivelActual}</td><td>${totalPob}</td></tr>`;
             })
             .join('')}
         </tbody>
@@ -1880,23 +2169,65 @@ function caravanasEnRutaHtml(state: GameState): string {
 
 function renderPanelEconomia(state: GameState): void {
   const preciosHtml = CATALOGOS.recursosMercado.map((r) => `${r}: ${gameStore.precioReferencia(r, state.asentamientos).toFixed(2)}`).join(' · ');
-  const acuerdosHtml = state.acuerdos
-    .map(
-      (t) =>
-        `<div>Trueque ${t.id} [${t.estado}] — A entrega ${t.cantidadEntregadaA.toFixed(0)}/${t.cantidadTotalA} ${t.recursoA}, B entrega ${t.cantidadEntregadaB.toFixed(0)}/${t.cantidadTotalB} ${t.recursoB}</div>`
-    )
-    .join('');
+  const nombreAsentamiento = (id: string) => {
+    const asentamiento = state.asentamientos.find((a) => a.id === id);
+    return asentamiento?.nombre ?? id;
+  };
+  const nombreFaccion = (asentamientoId: string) => {
+    const asentamiento = state.asentamientos.find((a) => a.id === asentamientoId);
+    return state.facciones.find((f) => f.id === asentamiento?.faccionId)?.nombre ?? asentamiento?.faccionId ?? '—';
+  };
+  const acuerdosActivos = state.acuerdos.filter((acuerdo) => acuerdo.estado === 'activo');
+  const acuerdosHtml = acuerdosActivos.length
+    ? `<div class="trade-active-list">
+        ${acuerdosActivos
+          .map((t) => {
+            const progresoA = t.cantidadTotalA > 0 ? Math.min(1, t.cantidadEntregadaA / t.cantidadTotalA) : 1;
+            const progresoB = t.cantidadTotalB > 0 ? Math.min(1, t.cantidadEntregadaB / t.cantidadTotalB) : 1;
+            const porcentaje = Math.round(((progresoA + progresoB) / 2) * 100);
+            const caravanas = state.caravanas.filter((c) => c.tipo === 'comercial' && c.origenAcuerdoId === t.id);
+            const caravanasHtml = caravanas.length
+              ? caravanas
+                  .map((c) => {
+                    const destino = c.destinoAsentamientoId ? nombreAsentamiento(c.destinoAsentamientoId) : 'sin destino';
+                    const estado = c.estado === 'en_transito' ? 'en tránsito' : c.estado === 'retornando' ? 'retornando' : 'disponible';
+                    return `<div class="trade-caravan-item">
+                      <span class="trade-caravan-icon" aria-hidden="true">🚚</span>
+                      <div class="trade-caravan-route"><strong>${c.id}</strong><small>${nombreAsentamiento(c.origenAsentamientoId)} → ${destino}</small></div>
+                      <span class="trade-caravan-status">${estado}</span>
+                    </div>`;
+                  })
+                  .join('')
+              : '<div class="trade-caravan-empty">Ninguna asignada</div>';
+            return `<div class="trade-active-card">
+              <div class="trade-active-card-title"><div><small>ACUERDO DE TRUEQUE</small><strong>${t.id}</strong></div><span>${porcentaje}% completado</span></div>
+              <div class="trade-route-banner">
+                <div class="trade-route-place"><small>ORIGEN A</small><strong>${nombreAsentamiento(t.asentamientoAId)}</strong><span>${nombreFaccion(t.asentamientoAId)}</span></div>
+                <span class="trade-route-arrow" aria-hidden="true">⇄</span>
+                <div class="trade-route-place trade-route-place-right"><small>ORIGEN B</small><strong>${nombreAsentamiento(t.asentamientoBId)}</strong><span>${nombreFaccion(t.asentamientoBId)}</span></div>
+              </div>
+              <div class="trade-active-metrics">
+                <div class="trade-delivery-card"><span>📦 Entrega de A</span><strong>${t.cantidadEntregadaA.toFixed(0)} <small>/ ${t.cantidadTotalA} ${RECURSO_NOMBRE[t.recursoA] ?? t.recursoA}</small></strong></div>
+                <div class="trade-delivery-card"><span>📦 Entrega de B</span><strong>${t.cantidadEntregadaB.toFixed(0)} <small>/ ${t.cantidadTotalB} ${RECURSO_NOMBRE[t.recursoB] ?? t.recursoB}</small></strong></div>
+                <div class="trade-lifetime-card"><span>⏳ Vigencia</span><strong>t${t.creadoEnTick} → t${t.expiraEnTick}</strong><small>${Math.max(0, t.expiraEnTick - state.tick)} ticks restantes</small></div>
+              </div>
+              <div class="trade-caravans-block"><div class="trade-subsection-title">🚚 Caravanas asignadas <span>${caravanas.length}</span></div>${caravanasHtml}</div>
+              <div class="mantenimiento-bar"><div class="mantenimiento-fill" style="width:${porcentaje}%"></div></div>
+            </div>`;
+          })
+          .join('')}
+      </div>`
+    : '<p class="legend-note">No hay trueques activos.</p>';
   const ordenesHtml = state.ordenes
     .map(
       (o) =>
-        `<div>Orden ${o.id} [${o.estado}] — ${o.tipo} ${o.cantidadCumplida.toFixed(0)}/${o.cantidad} ${o.recurso} @ ${o.precioUnitario.toFixed(2)} oro</div>`
+        `<div class="trade-order-card"><span class="trade-order-icon">${o.tipo === 'venta' ? '↗' : '↙'}</span><div><strong>${o.tipo === 'venta' ? 'Venta' : 'Compra'} · ${o.recurso}</strong><small>Orden ${o.id} · ${o.estado}</small></div><span class="trade-order-amount">${o.cantidadCumplida.toFixed(0)}/${o.cantidad}<small> @ ${o.precioUnitario.toFixed(2)} oro</small></span></div>`
     )
     .join('');
-  economiaPanelEl.innerHTML = `<div><strong>Precios de referencia</strong> — ${preciosHtml}</div>
-    <h3>Caravanas en ruta</h3>
-    ${caravanasEnRutaHtml(state)}
-    ${acuerdosHtml}
-    ${ordenesHtml}`;
+  economiaPanelEl.innerHTML = `<div class="trade-reference-strip"><span class="trade-reference-icon">🪙</span><div><strong>Precios de referencia</strong><small>Valor orientativo por unidad</small></div><span>${preciosHtml}</span></div>
+    <section class="trade-overview-block"><h3>🔄 Trueques activos</h3>${acuerdosHtml}</section>
+    <section class="trade-overview-block"><h3>🚚 Caravanas en ruta</h3>${caravanasEnRutaHtml(state)}</section>
+    ${ordenesHtml ? `<section class="trade-overview-block"><h3>📋 Órdenes del mercado</h3><div class="trade-orders-list">${ordenesHtml}</div></section>` : ''}`;
 }
 
 function renderLeyenda(state: GameState): void {
@@ -1973,6 +2304,8 @@ function actualizarTabs(): void {
   document.getElementById('tab-jugadores')!.hidden = tabActivo !== 'jugadores';
   document.getElementById('tab-politicas')!.hidden = tabActivo !== 'politicas';
   document.getElementById('tab-balance')!.hidden = tabActivo !== 'balance';
+  document.getElementById('tab-registros')!.hidden = tabActivo !== 'registros';
+  document.getElementById('tab-generacionMundo')!.hidden = tabActivo !== 'generacionMundo';
   if (tabActivo === 'balance') renderBalanceTab();
   if (tabActivo === 'politicas') renderPoliticasTab();
 }
@@ -1980,9 +2313,26 @@ function actualizarTabs(): void {
 document.getElementById('main-tabs')!.addEventListener('click', (ev) => {
   const btn = (ev.target as HTMLElement).closest('.tab-btn') as HTMLButtonElement | null;
   if (!btn) return;
-  tabActivo = btn.dataset.tab as 'acciones' | 'guerra' | 'comercio' | 'asentamientos' | 'facciones' | 'jugadores' | 'politicas' | 'balance';
+  tabActivo = btn.dataset.tab as 'acciones' | 'guerra' | 'comercio' | 'asentamientos' | 'facciones' | 'jugadores' | 'politicas' | 'balance' | 'registros' | 'generacionMundo';
   actualizarTabs();
 });
+
+document.getElementById('tab-comercio')!.addEventListener('click', (ev) => {
+  const btn = (ev.target as HTMLElement).closest('[data-commerce-detail-tab]') as HTMLButtonElement | null;
+  if (!btn) return;
+  comercioDetalleTab = btn.dataset.commerceDetailTab as 'acciones' | 'info';
+  document.querySelectorAll<HTMLButtonElement>('[data-commerce-detail-tab]').forEach((tab) => {
+    const activo = tab.dataset.commerceDetailTab === comercioDetalleTab;
+    tab.classList.toggle('active', activo);
+    tab.setAttribute('aria-selected', String(activo));
+  });
+  document.querySelectorAll<HTMLElement>('[data-commerce-detail-panel]').forEach((panel) => {
+    const activo = panel.dataset.commerceDetailPanel === comercioDetalleTab;
+    panel.hidden = !activo;
+    panel.classList.toggle('active', activo);
+  });
+});
+
 actualizarTabs();
 
 document.getElementById('legend-toggle')!.addEventListener('click', () => {
@@ -2024,10 +2374,12 @@ document.getElementById('vista-mapa-toggle')!.addEventListener('click', (ev) => 
     asentamientoSeleccionadoId = gameStore.getState().asentamientos[0]?.id ?? null;
   }
   hoverFundacion = null; // el aviso de fundación no aplica en la vista de asentamiento.
+  ocultarTooltipEdificioAsentamiento();
   render();
 });
 vistaAsentamientoSelectEl.addEventListener('change', () => {
   asentamientoSeleccionadoId = vistaAsentamientoSelectEl.value || null;
+  ocultarTooltipEdificioAsentamiento();
   render();
 });
 
@@ -2121,6 +2473,7 @@ function render(): void {
     renderViabilidadFundacion(viendoPasado);
   }
   actualizarSelects(liveState);
+  actualizarInfoTruequeAsentamientos(liveState);
   actualizarInfoFlota(state);
   renderPanelAsentamientos(state);
   renderAsentamientosTab(state);
@@ -2206,14 +2559,80 @@ function posicionMundoDesdeEvento(ev: MouseEvent): { x: number; y: number } {
   return { x: (ev.clientX - rect.left) * scale, y: (ev.clientY - rect.top) * scale };
 }
 
+function ocultarTooltipEdificioAsentamiento(): void {
+  settlementBuildingTooltipEl.hidden = true;
+}
+
+function actualizarTooltipEdificioAsentamiento(ev: MouseEvent): void {
+  if (vistaMapa !== 'asentamiento') {
+    ocultarTooltipEdificioAsentamiento();
+    return;
+  }
+
+  const liveState = gameStore.getState();
+  const state = viewedTick !== liveState.tick ? gameStore.getSnapshot(viewedTick) ?? liveState : liveState;
+  const asentamiento = state.asentamientos.find((a) => a.id === asentamientoSeleccionadoId);
+  if (!asentamiento) {
+    ocultarTooltipEdificioAsentamiento();
+    return;
+  }
+
+  const trazado = gameStore.getTrazadoAsentamiento(asentamiento);
+  const rect = canvas.getBoundingClientRect();
+  const pixelX = (ev.clientX - rect.left) * (canvas.width / rect.width);
+  const pixelY = (ev.clientY - rect.top) * (canvas.height / rect.height);
+  const escala = (canvas.width * 0.92) / (CATALOGOS.radioMapaAsentamiento * 2);
+  const localX = (pixelX - canvas.width / 2) / escala;
+  const localY = (pixelY - canvas.height / 2) / escala;
+  const edificio = [...asentamiento.edificios]
+    .reverse()
+    .find((e) => {
+      if ((e.ambito ?? 'asentamiento') === 'mapa') return false;
+      const huella = trazado.huellas[e.id];
+      return !!huella && localX >= huella.x && localX <= huella.x + huella.ancho && localY >= huella.y && localY <= huella.y + huella.alto;
+    });
+
+  if (!edificio) {
+    ocultarTooltipEdificioAsentamiento();
+    return;
+  }
+
+  const economia = gameStore.edificioEconomiaInfo(asentamiento, edificio);
+  const estado = edificio.estado === 'activo' ? 'Activo' : edificio.estado === 'en_construccion' ? 'En construcción' : 'En cola';
+  const filasEconomia = (items: { recurso: string; cantidadPorTick: number }[], vacio: string) =>
+    items.length
+      ? items.map((item) => `<div><span>${RECURSO_NOMBRE[item.recurso] ?? item.recurso}</span><strong>${item.cantidadPorTick.toFixed(1)}/tick</strong></div>`).join('')
+      : `<span class="settlement-tooltip-muted">${vacio}</span>`;
+
+  settlementBuildingTooltipEl.innerHTML = `
+    <div class="settlement-tooltip-title">${EDIFICIO_NOMBRE[edificio.tipo] ?? edificio.tipo}</div>
+    <div class="settlement-tooltip-meta">Nivel ${edificio.nivelInterno ?? 1} · ${estado}</div>
+    <div class="settlement-tooltip-group"><span>Producción</span>${filasEconomia(economia.produccion, 'Sin producción modelada')}</div>
+    <div class="settlement-tooltip-group"><span>Consumo</span>${filasEconomia(economia.consumo, 'Sin consumo modelado')}</div>
+  `;
+  settlementBuildingTooltipEl.hidden = false;
+
+  const panelRect = mapPanelEl.getBoundingClientRect();
+  const maxLeft = Math.max(8, mapPanelEl.clientWidth - settlementBuildingTooltipEl.offsetWidth - 8);
+  const maxTop = Math.max(8, mapPanelEl.clientHeight - settlementBuildingTooltipEl.offsetHeight - 8);
+  settlementBuildingTooltipEl.style.left = `${Math.min(maxLeft, Math.max(8, ev.clientX - panelRect.left + 14))}px`;
+  settlementBuildingTooltipEl.style.top = `${Math.min(maxTop, Math.max(8, ev.clientY - panelRect.top + 14))}px`;
+}
+
 canvas.addEventListener('mousemove', (ev) => {
-  if (vistaMapa === 'asentamiento') return; // el aviso de fundación no aplica en el espacio plano del asentamiento.
+  if (vistaMapa === 'asentamiento') {
+    actualizarTooltipEdificioAsentamiento(ev);
+    return;
+  } // el aviso de fundación no aplica en el espacio plano del asentamiento.
   hoverFundacion = posicionMundoDesdeEvento(ev);
   render();
 });
 
 canvas.addEventListener('mouseleave', () => {
-  if (vistaMapa === 'asentamiento') return;
+  if (vistaMapa === 'asentamiento') {
+    ocultarTooltipEdificioAsentamiento();
+    return;
+  }
   hoverFundacion = null;
   render();
 });

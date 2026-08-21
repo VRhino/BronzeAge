@@ -10,6 +10,7 @@ import type {
   CampamentoBandido,
   CargoTipo,
   Caravana,
+  Edificio,
   EdificioTipo,
   Faccion,
   NodoRecurso,
@@ -39,6 +40,7 @@ import {
   ticksCooldownCaravanaRestantes as ticksCooldownCaravanaRestantesEngine,
   tieneMercadoActivo as tieneMercadoActivoEngine,
   nivelActualDe,
+  ratioManoObraArtesanos,
   type ProduccionItem,
   type ManoObraInfo,
   type ProgresoNivelAsentamiento,
@@ -81,10 +83,14 @@ import {
   anadirEdificioManualmente as anadirEdificioManualmenteEngine,
   quitarDeCola as quitarDeColaEngine,
   moverEnCola as moverEnColaEngine,
+  mejorarEdificioManualmente as mejorarEdificioManualmenteEngine,
+  estadoMejoraEdificio as estadoMejoraEdificioEngine,
   reclamosDeFuentes as reclamosDeFuentesEngine,
-  migrarEdificiosAEspacioLocal,
+  factorLineaProduccion,
   ConstruccionManualInvalidaError,
+  type EstadoMejoraEdificio,
 } from '../engine/construction';
+export type { EstadoMejoraEdificio } from '../engine/construction';
 import {
   celdaMinimaDeEdificio,
   edificiosInternos,
@@ -98,6 +104,7 @@ import {
   combateCampoAbierto as combateCampoAbiertoEngine,
   interceptarCaravana as interceptarCaravanaEngine,
   atacarCampamentoBandidos as atacarCampamentoBandidosEngine,
+  poderEscuadron,
   CombateInvalidoError,
 } from '../engine/combate';
 import {
@@ -152,9 +159,12 @@ export interface GameState {
  */
 export type NodoExportado = Omit<NodoRecurso, 'cantidadInicial'> & { cantidad: number };
 
-/** Formato de archivo para exportar/importar una simulación completa (ver `exportarSimulacion`/`importarSimulacion`). */
+/** Formato de archivo para exportar/importar una simulación completa (ver `exportarSimulacion`/`importarSimulacion`).
+ * `version` se sube cada vez que la forma de estos datos cambia de forma incompatible — sin migración interna
+ * para digerir versiones viejas, un archivo con otra `version` se rechaza de entrada (a petición del usuario:
+ * el proyecto está en desarrollo continuo, las partidas viejas se abandonan, no se migran). */
 export interface SimulacionExportada {
-  version: 1;
+  version: 2;
   exportadoEn: string;
   tick: number;
   /**
@@ -202,9 +212,19 @@ export const CATALOGOS = {
   // Obras Y por el segmento "Info:" que muestra costo/tiempo/gates antes de confirmar (mismo patrón que
   // `tropasReclutables` para el reclutamiento).
   // `puestoMercado` también fuera: no se construye, lo crea el motor al subir de nivel el Mercado (ver
-  // `crearPuestosDeMercado`, engine/construction.ts).
+  // `crearPuestosDeMercado`, engine/construction.ts). Mismo trato para las anclas de Etapa 3
+  // (`plaza`/`plazaDeArmas`/`patioDeGremios`, marcadores gratis que nacen por la regla de semilla de grupo,
+  // engine/trazado.ts) y `tallerCarpinteria` (nace al completarse la Carpintería, `crearTalleresDeCarpinteria`).
   catalogoEdificios: (Object.keys(EDIFICIO_CATALOGO) as EdificioTipo[])
-    .filter((tipo) => tipo !== 'centroUrbano' && tipo !== 'puestoMercado')
+    .filter(
+      (tipo) =>
+        tipo !== 'centroUrbano' &&
+        tipo !== 'puestoMercado' &&
+        tipo !== 'plaza' &&
+        tipo !== 'plazaDeArmas' &&
+        tipo !== 'patioDeGremios' &&
+        tipo !== 'tallerCarpinteria'
+    )
     .map((tipo) => {
       const def = EDIFICIO_CATALOGO[tipo] as {
         costo: Partial<Record<string, number>>;
@@ -532,6 +552,39 @@ export class GameStore {
   produccionInfo(asentamiento: Asentamiento): ProduccionItem[] {
     const zona = this.getZonas().find((z) => z.asentamientoId === asentamiento.id);
     return produccionPorTick(asentamiento, this.getMapa(), zona?.poligono ?? []);
+  }
+
+  /** Producción y consumo estimados del edificio individual para el tooltip de la vista urbana. */
+  edificioEconomiaInfo(asentamiento: Asentamiento, edificio: Pick<Edificio, 'tipo' | 'nivelInterno' | 'estado' | 'posicion' | 'ambito'>): {
+    produccion: { recurso: string; cantidadPorTick: number }[];
+    consumo: { recurso: string; cantidadPorTick: number }[];
+    consumoTotal: { recurso: string; cantidadPorTick: number }[];
+  } {
+    const activosDelTipo = asentamiento.edificios.filter((e) => e.tipo === edificio.tipo && e.estado === 'activo').length;
+    if ((edificio.estado !== undefined && edificio.estado !== 'activo') || activosDelTipo === 0 || edificio.tipo === 'centroUrbano') return { produccion: [], consumo: [], consumoTotal: [] };
+
+    const produccionAgregada = this.produccionInfo(asentamiento).filter((item) => item.tipo === edificio.tipo);
+    const produccion = produccionAgregada.map((item) => ({ recurso: item.recurso, cantidadPorTick: item.cantidadPorTick / activosDelTipo }));
+    const definicion = EDIFICIO_CATALOGO[edificio.tipo] as { niveles?: Record<number, { recetas?: { produce: string; produccionBase: number; consumePorUnidad: Record<string, number> }[] }> };
+    const recetas = definicion.niveles?.[edificio.nivelInterno ?? 1]?.recetas ?? [];
+    const consumo = recetas.flatMap((receta) => {
+      const salida = produccion.find((item) => item.recurso === receta.produce)?.cantidadPorTick ?? 0;
+      return Object.entries(receta.consumePorUnidad).map(([recurso, cantidad]) => ({ recurso, cantidadPorTick: cantidad * salida }));
+    });
+    const ratioArtesano = ratioManoObraArtesanos(asentamiento);
+    const consumoTotal = recetas.flatMap((receta) => {
+      const salidaTotal = receta.produccionBase * ratioArtesano * factorLineaProduccion(edificio as Edificio, receta, asentamiento);
+      return Object.entries(receta.consumePorUnidad).map(([recurso, cantidad]) => ({ recurso, cantidadPorTick: cantidad * salidaTotal }));
+    });
+    return { produccion, consumo, consumoTotal };
+  }
+
+  /** Resumen militar de solo lectura para la interfaz del asentamiento. */
+  poderMilitarInfo(asentamiento: Asentamiento): { soldados: number; poder: number } {
+    return {
+      soldados: asentamiento.escuadrones.reduce((total, escuadron) => total + escuadron.cantidad, 0),
+      poder: asentamiento.escuadrones.reduce((total, escuadron) => total + poderEscuadron(escuadron, this.state.tick), 0),
+    };
   }
 
   /** Demanda de mano de obra agregada (pesants) frente a lo que piden los edificios productores activos. */
@@ -1018,6 +1071,33 @@ export class GameStore {
     this.notify();
   }
 
+  /** Fuerza la mejora de un edificio concreto (Doc 4.2, mejora manual a petición del usuario) — la mejora
+   * automática de `avanzarMejoras` sigue corriendo cada tick igual que antes; esto solo adelanta la de un
+   * edificio elegido. Requiere Gobernador o Maestro de Obras asignado, mismos gates y costo que la ruta
+   * automática (ver `infoMejoraEdificio` para el estado que se le muestra al jugador antes de pulsar el botón). */
+  mejorarEdificioAhora(asentamientoId: string, cargo: 'gobernador' | 'maestroObras', edificioId: string): void {
+    try {
+      const asentamiento = this.state.asentamientos.find((a) => a.id === asentamientoId)!;
+      const capital = encontrarCapital(asentamiento.faccionId, this.state.asentamientos);
+      const actualizado = mejorarEdificioManualmenteEngine(asentamiento, cargo, edificioId, capital);
+      this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === actualizado.id ? actualizado : a));
+      this.registrar(`${asentamiento.id}: ${cargo} fuerza la mejora de un edificio.`);
+    } catch (err) {
+      if (err instanceof ConstruccionManualInvalidaError) this.registrar(`Mejorar edificio rechazado: ${err.message}`);
+      else throw err;
+    }
+    this.notify();
+  }
+
+  /** Estado de la próxima mejora de un edificio concreto (nivel, costo, si hay fondos hoy) — `null` si el
+   * edificio no existe o no tiene mejora posible. Usado por la UI para mostrar el botón "Mejorar ahora". */
+  infoMejoraEdificio(asentamiento: Asentamiento, edificioId: string): EstadoMejoraEdificio | null {
+    const edificio = asentamiento.edificios.find((e) => e.id === edificioId);
+    if (!edificio) return null;
+    const capital = encontrarCapital(asentamiento.faccionId, this.state.asentamientos);
+    return estadoMejoraEdificioEngine(asentamiento, edificio, capital);
+  }
+
   /** Overhaul de auto-construcción: pausa/reanuda la detección de NUEVAS necesidades en un asentamiento — lo
    * ya pagado (`en_cola`/`en_construccion`) sigue avanzando normal (ver `Asentamiento.autoConstruccionPausada`,
    * `engine/construction.ts`). */
@@ -1287,7 +1367,7 @@ export class GameStore {
   /** Serializa la simulación completa (mundo, asentamientos, facciones, log, historial de jugadores...) a JSON. */
   exportarSimulacion(): string {
     const payload: SimulacionExportada = {
-      version: 1,
+      version: 2,
       exportadoEn: new Date().toISOString(),
       tick: this.state.tick,
       worldgenVersion: this.state.mapa.version,
@@ -1333,8 +1413,15 @@ export class GameStore {
   importarSimulacion(json: string): void {
     try {
       const payload = JSON.parse(json) as Partial<SimulacionExportada>;
+      // Rechazo explícito por versión, separado del resto de la validación de formato (a petición del
+      // usuario: desarrollo continuo, sin migración de partidas guardadas — un archivo de otra versión se
+      // rechaza con un mensaje propio, no se intenta adaptar).
+      if (payload?.version !== 2) {
+        throw new Error(
+          `esta partida es de una versión de guardado anterior (${payload?.version ?? 'desconocida'}) y ya no es compatible — hay que empezar una partida nueva.`
+        );
+      }
       if (
-        payload?.version !== 1 ||
         !payload.world?.config ||
         !Array.isArray(payload.world.recursos) ||
         !Array.isArray(payload.world.bosques) ||
@@ -1370,9 +1457,7 @@ export class GameStore {
       this.state = {
         mapa: mapaRegenerado,
         estadoMapa: { extraido, regeneraEnTick: {} },
-        // Vista de Asentamiento: los saves anteriores traían los edificios en coords del mapa general y sin
-        // `ambito` — se migran a coords locales del espacio plano (idempotente, ver `migrarEdificiosAEspacioLocal`).
-        asentamientos: migrarEdificiosAEspacioLocal(payload.asentamientos),
+        asentamientos: payload.asentamientos,
         facciones: payload.facciones,
         caravanas: payload.caravanas ?? [],
         acuerdos: payload.acuerdos ?? [],

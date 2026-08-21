@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 import type { Asentamiento, Edificio } from '../../domain/types';
 import { MERCADO_PUESTOS_POR_NIVEL, PUESTO_MERCADO_FORMA, ZONA_INFLUENCIA } from '../../constants';
 import { cupoCaravanas, tieneMercadoActivo } from '../asentamientoQuery';
-import { anadirEdificioManualmente, ConstruccionManualInvalidaError, migrarEdificiosAEspacioLocal } from '../construction';
+import { anadirEdificioManualmente, ConstruccionManualInvalidaError } from '../construction';
 import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
 import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, mockMathRandomDeterminista } from './fixtures';
 
@@ -23,13 +23,14 @@ function piezasEsperadas(nivel: number): number {
 }
 
 /**
- * Asentamiento con un Mercado de nivel interno `nivelInterno` y SIN puestos — la forma en que se ven los saves
- * anteriores a que el Mercado fuera una zona.
+ * Asentamiento con un Mercado de nivel interno `nivelInterno` y su zona de puestos completa. Los puestos se
+ * construyen aquí a mano (no vía el algoritmo real de colocación, que es privado a `construction.ts`) porque
+ * a estos tests solo les importa el CONTEO y la FORMA (`nivelInterno` de cada puesto, tabla
+ * `MERCADO_PUESTOS_POR_NIVEL`), no su posición real en el barrio.
  *
  * El asentamiento se pone en el nivel que ese Mercado exigiría (los gates de mejora del catálogo piden nivel 2
- * y 3), con el radio de influencia que le corresponde. No es decoración del test: la zona de nivel 3 son 36
- * celdas de puestos y no caben en la cuña del barrio con el radio inicial de 30 — se colocarían solo algunos y
- * el resto se saltaría, que es el comportamiento correcto pero no lo que este test quiere medir.
+ * y 3), con el radio de influencia que le corresponde — aunque aquí no afecta a la colocación (es manual), se
+ * mantiene por consistencia con el resto del fixture.
  */
 function conMercado(base: Asentamiento, nivelInterno: number): Asentamiento {
   const mercado: Edificio = {
@@ -41,11 +42,25 @@ function conMercado(base: Asentamiento, nivelInterno: number): Asentamiento {
     ambito: 'asentamiento',
     nivelInterno,
   };
+  const puestos: Edificio[] = [];
+  for (let n = 1; n <= nivelInterno; n++) {
+    for (const [i, forma] of (MERCADO_PUESTOS_POR_NIVEL[n] ?? []).entries()) {
+      puestos.push({
+        id: `puesto-${base.id}-${n}-${i}`,
+        tipo: 'puestoMercado',
+        posicion: { x: 30 + puestos.length + 1, y: 0 },
+        estado: 'activo',
+        ticksRestantes: 0,
+        ambito: 'asentamiento',
+        nivelInterno: forma,
+      });
+    }
+  }
   return {
     ...base,
     nivel: nivelInterno,
     radioPotencial: ZONA_INFLUENCIA.radioMaximoPorNivel[nivelInterno] ?? base.radioPotencial,
-    edificios: [...base.edificios, mercado],
+    edificios: [...base.edificios, mercado, ...puestos],
   };
 }
 
@@ -66,21 +81,14 @@ describe('Mercado como zona de varias piezas', () => {
     }
   });
 
-  it('la migración completa los puestos que le faltan a un Mercado de save viejo, y es idempotente', () => {
+  it('el fixture de zona completa produce el conteo de piezas esperado por nivel', () => {
     const mapa = crearMapaDeterminista(SEED);
     const { asentamiento } = fundarAsentamientoDeTest(mapa, crearFacciones(), 'faccion-1', []);
 
     for (const nivel of [1, 2, 3]) {
-      const conZonaIncompleta = conMercado(asentamiento, nivel);
-      expect(puestos(conZonaIncompleta)).toHaveLength(0);
-
-      const [migrado] = migrarEdificiosAEspacioLocal([conZonaIncompleta]);
-      const piezas = puestos(migrado!).length + 1;
+      const conZona = conMercado(asentamiento, nivel);
+      const piezas = puestos(conZona).length + 1;
       expect(piezas, `nivel ${nivel}`).toBe(piezasEsperadas(nivel));
-
-      // Idempotente: volver a migrar no añade ni una pieza más.
-      const [reMigrado] = migrarEdificiosAEspacioLocal([migrado!]);
-      expect(puestos(reMigrado!)).toHaveLength(puestos(migrado!).length);
     }
   });
 
@@ -90,23 +98,23 @@ describe('Mercado como zona de varias piezas', () => {
     const cupoPorNivel: Record<number, number> = { 1: 2, 2: 4, 3: 6 };
 
     for (const nivel of [1, 2, 3]) {
-      const [conZona] = migrarEdificiosAEspacioLocal([conMercado(asentamiento, nivel)]);
-      expect(conZona!.edificios.filter((e) => e.tipo === 'mercado')).toHaveLength(1);
-      expect(tieneMercadoActivo(conZona!)).toBe(true);
-      expect(cupoCaravanas(conZona!), `cupo en nivel ${nivel}`).toBe(cupoPorNivel[nivel]);
+      const conZona = conMercado(asentamiento, nivel);
+      expect(conZona.edificios.filter((e) => e.tipo === 'mercado')).toHaveLength(1);
+      expect(tieneMercadoActivo(conZona)).toBe(true);
+      expect(cupoCaravanas(conZona), `cupo en nivel ${nivel}`).toBe(cupoPorNivel[nivel]);
     }
   });
 
   it('ningún puesto se cuela como Mercado ni progresa de nivel por su cuenta', () => {
     const mapa = crearMapaDeterminista(SEED);
     const { asentamiento } = fundarAsentamientoDeTest(mapa, crearFacciones(), 'faccion-1', []);
-    const [conZona] = migrarEdificiosAEspacioLocal([conMercado(asentamiento, 3)]);
+    const conZona = conMercado(asentamiento, 3);
 
     // `nivelInterno` en un puesto identifica su FORMA, no una progresión: nunca puede salirse de la tabla.
-    for (const puesto of puestos(conZona!)) {
+    for (const puesto of puestos(conZona)) {
       expect(PUESTO_MERCADO_FORMA[puesto.nivelInterno ?? 1]).toBeDefined();
     }
-    expect(conZona!.edificios.filter((e) => e.tipo === 'mercado')).toHaveLength(1);
+    expect(conZona.edificios.filter((e) => e.tipo === 'mercado')).toHaveLength(1);
   });
 
   it('al completarse la construcción del Mercado aparecen los puestos de su nivel 1', () => {

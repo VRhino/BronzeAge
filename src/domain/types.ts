@@ -106,7 +106,19 @@ export type EdificioTipo =
   // Muralla (Doc Fase_0_6, a petición del usuario): implementación mínima a propósito — solo el edificio
   // (1 celda, cuesta piedra), sin niveles ni efecto mecánico en combate/asedio todavía. Gatea subir a
   // nivel de asentamiento 4 (ver NIVEL_ASENTAMIENTO.requisitos).
-  | 'muralla';
+  | 'muralla'
+  // Anclas y satélites, Etapa 3 (Consideraciones/Vista_Asentamiento_Trazado_Urbano.md §5): "marcadores
+  // gratis" — mismo patrón que 'puestoMercado' (costo {}, nacen ya activos, nunca pasan por cola, no se
+  // pueden añadir a mano). 'plaza' es el ancla de saturación del núcleo residencial (nunca ancla primaria:
+  // Centro Urbano ya cumple ese papel desde la fundación); 'plazaDeArmas'/'patioDeGremios' son ancla
+  // primaria Y de saturación de sus categorías (militar/industria no tienen ancla de fundación). Nacen por
+  // la regla de semilla de grupo (§5.4/5.5), no por construcción normal.
+  | 'plaza'
+  | 'plazaDeArmas'
+  | 'patioDeGremios'
+  // Pieza satélite de la zona de Carpintería (§9, mismo patrón que 'puestoMercado'): al completarse la
+  // Carpintería (ahora la pieza principal de su propia zona, 4x2) nacen 2 talleres gratis a su alrededor.
+  | 'tallerCarpinteria';
 
 export type EstadoEdificio = 'en_cola' | 'en_construccion' | 'activo';
 
@@ -217,9 +229,8 @@ export interface Asentamiento {
    * ya en nivel 1); solo sube tras mantenimiento sano varios ticks seguidos (`rachaMantenimientoSano`), no
    * cada tick — evita el yo-yo de subir/bajar por un solo bache. Los edificios YA construidos de un nivel
    * superior a `nivelActual` SIGUEN PRODUCIENDO con normalidad — esto solo congela construcción/mejora nueva,
-   * nunca apaga nada ni purga población. Ausente en partidas guardadas antes de este campo = tratar como
-   * igual a `nivel` (ver `nivelActualDe`, engine/mantenimiento.ts). */
-  nivelActual?: number;
+   * nunca apaga nada ni purga población. */
+  nivelActual: number;
   /** Racha de ticks CONSECUTIVOS con Mantenimiento pagado en full (Doc Fase_0_5 §6.2) — al llegar a
    * `MANTENIMIENTO.ticksSanosParaRecuperarNivel` sube `nivelActual` un escalón (tope `nivel`) y se reinicia a
    * 0; cualquier tick en déficit también la reinicia a 0. Ausente = 0. */
@@ -377,10 +388,11 @@ export interface Caravana {
   posicionActual: Point;
   /** 0-1, avance a lo largo de la ruta origen->destino. */
   progreso: number;
-  /** Polilínea calculada al lanzar la caravana (Fase 0.3, ver `world/rutas.ts` `calcularRuta` y
-   * `engine/movimiento.ts`) — rodea terreno costoso en vez de ir en línea recta, y determina sobre qué
-   * longitud real se mide `progreso`. Ausente en caravanas de partidas guardadas antes de Fase 0.3: esas
-   * siguen moviéndose en línea recta sin coste de terreno, comportamiento sin cambios. */
+  /** Polilínea calculada al lanzar la caravana (ver `world/rutas.ts` `calcularRuta` y `engine/movimiento.ts`)
+   * — rodea terreno costoso en vez de ir en línea recta, y determina sobre qué longitud real se mide
+   * `progreso`. Toda caravana con `destinoAsentamientoId`/`destinoPosicion` (en movimiento) la trae puesta al
+   * despacharse. Ausente solo en estado `'disponible'` (flota propia sin asignar todavía, Doc 3.2): ahí no
+   * hay trayecto que recorrer hasta la siguiente asignación. */
   ruta?: Point[];
   /** Acuerdo de trueque que generó esta caravana (Doc 3.2) — indica a qué lado del acuerdo pertenece. */
   origenAcuerdoId?: string;

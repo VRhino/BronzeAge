@@ -11,10 +11,6 @@ import { nivelActualDe, puedeCrearCaravana, ticksCooldownCaravanaRestantes } fro
 
 export class ExpansionInvalidaError extends Error {}
 
-function distancia(a: Point, b: Point): number {
-  return Math.hypot(a.x - b.x, a.y - b.y);
-}
-
 /** Coste total de una Caravana de Fundación (Doc 1.8): materiales iniciales + edificios de arranque
  * (Centro Urbano no cuesta nada) + madera extra por fabricar la caravana en sí. */
 export function costoCaravanaFundacion(): Partial<Record<string, number>> {
@@ -168,22 +164,11 @@ export function avanzarCaravanasFundacion(
 
     const velocidad = CARAVANA_CATALOGO.construccion.velocidad;
 
-    // Con `ruta` (Fase 0.3, calculada al lanzar — ver `lanzarCaravanaFundacion`): avance real por coste de
-    // terreno. Sin `ruta` (partidas guardadas antes de Fase 0.3): línea recta, comportamiento sin cambios.
-    let progreso: number;
-    let posicionActual: Point;
-    if (caravana.ruta && caravana.ruta.length >= 2) {
-      const avance = avanzarPosicionEnRuta(mapa, caravana.ruta, caravana.progreso, velocidad);
-      progreso = avance.progreso;
-      posicionActual = avance.posicion;
-    } else {
-      const distanciaTotal = Math.max(1, distancia(origen.posicion, caravana.destinoPosicion));
-      progreso = Math.min(1, caravana.progreso + velocidad / distanciaTotal);
-      posicionActual = {
-        x: origen.posicion.x + (caravana.destinoPosicion.x - origen.posicion.x) * progreso,
-        y: origen.posicion.y + (caravana.destinoPosicion.y - origen.posicion.y) * progreso,
-      };
-    }
+    // Avance real por coste de terreno sobre la polilínea calculada al lanzar la caravana (ver
+    // `lanzarCaravanaFundacion`) — toda Caravana de Fundación en tránsito trae `ruta`.
+    const avance = avanzarPosicionEnRuta(mapa, caravana.ruta!, caravana.progreso, velocidad);
+    const progreso = avance.progreso;
+    const posicionActual = avance.posicion;
 
     if (progreso < 1) {
       restantes.push({ ...caravana, progreso, posicionActual });

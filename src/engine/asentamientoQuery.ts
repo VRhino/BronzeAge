@@ -13,10 +13,9 @@ import { mejorFertilidadEnZona } from './zones';
 
 /** Nivel ACTUAL / operativo (Doc Fase_0_5 §6.2): gates de construcción/mejora/reclutamiento/expansión leen
  * este valor, no `asentamiento.nivel` (nivelAlcanzado) directamente — `nivelActual` puede bajar tras un
- * fallo de mantenimiento sostenido, `nivel` nunca. Ausente (partidas guardadas antes de este campo) = igual
- * a `nivel`, sin degradación previa que reconstruir. */
+ * fallo de mantenimiento sostenido, `nivel` nunca. */
 export function nivelActualDe(asentamiento: Asentamiento): number {
-  return asentamiento.nivelActual ?? asentamiento.nivel;
+  return asentamiento.nivelActual;
 }
 
 export function edificiosPorTipoYEstado(

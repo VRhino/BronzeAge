@@ -272,6 +272,10 @@ export const EDIFICIO_ETIQUETA: Record<EdificioTipo, string> = {
   puestoMercado: 'Puesto de mercado',
   maravilla: 'Maravilla',
   muralla: 'Muralla',
+  plaza: 'Plaza',
+  plazaDeArmas: 'Plaza de Armas',
+  patioDeGremios: 'Patio de Gremios',
+  tallerCarpinteria: 'Taller de carpintería',
 };
 
 export const EDIFICIO_COLOR: Record<EdificioTipo, string> = {
@@ -301,6 +305,12 @@ export const EDIFICIO_COLOR: Record<EdificioTipo, string> = {
   maravilla: '#ffd700',
   // Muralla (Doc Fase_0_6): gris piedra oscuro, distinto del gris de Cantera para no confundirlos.
   muralla: '#5a5a5a',
+  // Anclas y satélites, Etapa 3: tonos más claros de sus propias categorías (mismo criterio que puestoMercado
+  // frente a mercado) — marcan visualmente que son piezas de zona, no edificios independientes.
+  plaza: '#f0e8c8',
+  plazaDeArmas: '#c97a7a',
+  patioDeGremios: '#c99a6b',
+  tallerCarpinteria: '#a87850',
 };
 
 export function faccionColor(faccionId: string, facciones: Faccion[]): string {

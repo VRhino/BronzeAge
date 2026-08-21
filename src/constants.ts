@@ -251,14 +251,14 @@ export const EDIFICIO_CATALOGO = {
     niveles: {
       1: {
         trabajadoresRequeridos: 4,
-        recetas: [{ produce: 'cuero', produccionBase: 4, consumePorUnidad: { livestock: 0.5 } }],
+        recetas: [{ produce: 'cuero', produccionBase: 8, consumePorUnidad: { livestock: 0.5 } }],
       },
       2: {
         requisitoNivelAsentamiento: 2,
         costoMejora: { madera: 150, piedra: 100 },
         trabajadoresRequeridos: 6,
         recetas: [
-          { produce: 'cuero', produccionBase: 4, consumePorUnidad: { livestock: 1 / 3 } },
+          { produce: 'cuero', produccionBase: 12, consumePorUnidad: { livestock: 1 / 3 } },
           { produce: 'cueroCurtido', produccionBase: 2, consumePorUnidad: { cuero: 3 } },
         ],
       },
@@ -469,6 +469,15 @@ export const EDIFICIO_CATALOGO = {
   // entrada existe solo porque `EDIFICIO_CATALOGO[tipo]` se indexa con `EdificioTipo` en varios sitios.
   puestoMercado: { costo: {}, tiempoConstruccionTicks: 0 },
 
+  // Anclas y satélites, Etapa 3 (Consideraciones/Vista_Asentamiento_Trazado_Urbano.md §5): "marcadores
+  // gratis", mismo patrón que puestoMercado — nunca pasan por cola ni se añaden a mano, nacen ya activos por
+  // la regla de semilla de grupo (engine/trazado.ts).
+  plaza: { costo: {}, tiempoConstruccionTicks: 0 },
+  plazaDeArmas: { costo: {}, tiempoConstruccionTicks: 0 },
+  patioDeGremios: { costo: {}, tiempoConstruccionTicks: 0 },
+  // Pieza satélite de la zona de Carpintería (§9) — mismo patrón que puestoMercado, ver `crearTalleresDeCarpinteria`.
+  tallerCarpinteria: { costo: {}, tiempoConstruccionTicks: 0 },
+
   // Maravilla (Roadmap_Escalado.md Eje 4, a petición del usuario) — SOLO el edificio en esta pasada: el ciclo
   // de servidor de 12 meses que se cierra al completarla (reset + Facción ganadora persistiendo como legado
   // NPC) queda fuera de alcance, requiere infraestructura de servidor/multi-instancia que Fase 0 no tiene (ver
@@ -640,7 +649,9 @@ export const REJILLA_ASENTAMIENTO = {
  */
 export const EDIFICIO_TAMANO: Record<string, { ancho: number; alto: number }> = {
   centroUrbano: { ancho: 3, alto: 3 },
-  carpinteria: { ancho: 5, alto: 4 },
+  // 5x4 → 4x2 (Etapa 3, §9): Carpintería pasa a ser la PIEZA PRINCIPAL de su propia zona de tres piezas — los
+  // otros dos talleres (`tallerCarpinteria`) ocupan el resto de lo que antes era un bloque monolítico único.
+  carpinteria: { ancho: 4, alto: 2 },
   fundicion: { ancho: 2, alto: 2 },
   curtiduria: { ancho: 2, alto: 2 },
   armeria: { ancho: 2, alto: 3 },
@@ -650,6 +661,12 @@ export const EDIFICIO_TAMANO: Record<string, { ancho: number; alto: number }> = 
   palacio: { ancho: 4, alto: 4 },
   corral: { ancho: 4, alto: 3 },
   almacen: { ancho: 2, alto: 1 },
+  // Anclas y satélites, Etapa 3 (§5.1/§6): las tres anclas nuevas miden 2x2.
+  plaza: { ancho: 2, alto: 2 },
+  plazaDeArmas: { ancho: 2, alto: 2 },
+  patioDeGremios: { ancho: 2, alto: 2 },
+  // Taller de carpintería (§9): 2x2, igual que las otras piezas satélite pequeñas.
+  tallerCarpinteria: { ancho: 2, alto: 2 },
 };
 
 /**

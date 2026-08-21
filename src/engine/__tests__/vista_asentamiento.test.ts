@@ -3,10 +3,9 @@
 // extractores minerales (mina/minaCobre/minaEstano/cantera) viven en el MAPA GENERAL, sobre su nodo. Granja/
 // Leñera/Corral son internos aunque su producción dependa de rasgos de la zona en el mapa general.
 import { describe, expect, it } from 'vitest';
-import type { Asentamiento, Edificio } from '../../domain/types';
+import type { Asentamiento } from '../../domain/types';
 import { REJILLA_ASENTAMIENTO, TRAZADO, ZONA_INFLUENCIA } from '../../constants';
 import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
-import { migrarEdificiosAEspacioLocal } from '../construction';
 import { esDeAfueras } from '../trazado';
 import { computeTodasLasZonas, mejorFertilidadEnZona } from '../zones';
 import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, mockMathRandomDeterminista } from './fixtures';
@@ -98,45 +97,5 @@ describe('Vista de Asentamiento — fertilidad de zona para las Granjas', () => 
     expect(fertilidad).toBeGreaterThan(0);
     // No debe ser menor que la fertilidad del propio centro (que siempre es candidato).
     expect(fertilidad).toBeGreaterThanOrEqual(mapa.fertilidadEn(asentamiento.posicion) - 1e-9);
-  });
-});
-
-describe('Vista de Asentamiento — migración de saves antiguos', () => {
-  it('convierte edificios en coords de mapa/sin ambito a coords locales, y es idempotente', () => {
-    const { asentamiento } = fundarAsentamientoDeTest(crearMapaDeterminista(SEED), crearFacciones(), 'faccion-1', []);
-    const centro = asentamiento.posicion; // punto de fundación en el mapa general
-
-    // Simula un save ANTERIOR a la Vista de Asentamiento: todos los edificios en coords de mundo, sin `ambito`.
-    // (Reconstruye a partir del asentamiento nuevo: internos vuelven a mundo sumando el centro; se añade una
-    // mina de mundo suelta para cubrir la rama `ambito: 'mapa'`.)
-    const minaMundo: Edificio = {
-      id: 'mina-vieja', tipo: 'minaCobre', posicion: { x: centro.x + 40, y: centro.y - 12 }, estado: 'activo', ticksRestantes: 0, fuenteId: 'nodo-x',
-    };
-    const viejo: Asentamiento = {
-      ...asentamiento,
-      edificios: [
-        ...asentamiento.edificios.map(({ ambito: _a, ...e }) => ({
-          ...e,
-          posicion: { x: e.posicion.x + centro.x, y: e.posicion.y + centro.y },
-        })),
-        minaMundo,
-      ],
-    };
-
-    const [migrado] = migrarEdificiosAEspacioLocal([viejo]);
-    const centroUrbano = migrado!.edificios.find((e) => e.tipo === 'centroUrbano')!;
-    const minaMigrada = migrado!.edificios.find((e) => e.id === 'mina-vieja')!;
-
-    // Internos: ambito 'asentamiento' y posición de vuelta a local (el Centro Urbano al origen).
-    expect(centroUrbano.ambito).toBe('asentamiento');
-    expect(centroUrbano.posicion.x).toBeCloseTo(0, 6);
-    expect(centroUrbano.posicion.y).toBeCloseTo(0, 6);
-    // La mina conserva ambito 'mapa' y su posición de mundo intacta.
-    expect(minaMigrada.ambito).toBe('mapa');
-    expect(minaMigrada.posicion).toEqual(minaMundo.posicion);
-
-    // Idempotente: volver a migrar no cambia nada (todos ya traen `ambito`).
-    const [reMigrado] = migrarEdificiosAEspacioLocal([migrado!]);
-    expect(reMigrado).toEqual(migrado);
   });
 });

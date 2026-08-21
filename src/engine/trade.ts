@@ -152,37 +152,26 @@ function avanzarCaravanas(
     const puntoInicio = retornando ? destino.posicion : origen.posicion;
     const puntoFin = retornando ? origen.posicion : destino.posicion;
 
-    // Distancia en línea recta: sigue siendo la base de la bonificación por distancia de la comisión (más
-    // abajo) y del movimiento de fallback sin `ruta` — NO de cuántos ticks tarda una caravana con ruta, que
-    // ahora depende de la longitud real de la polilínea (puede rodear terreno costoso).
+    // Distancia en línea recta: base de la bonificación por distancia de la comisión (más abajo) — NO de
+    // cuántos ticks tarda la caravana, que depende de la longitud real de la polilínea de `ruta` (puede
+    // rodear terreno costoso).
     const distanciaTotal = Math.max(1, distancia(puntoInicio, puntoFin));
     const velocidadBase = CARAVANA_CATALOGO[caravana.tipo].velocidad;
     // "Rutas Rápidas" (Tesorero, ampliación de comercio) solo aplica a la flota comercial propia — no a
     // Caravanas de Fundación ni a los tipos todavía sin uso real (militar/contrabando, Doc 3.6).
     const velocidad = caravana.tipo === 'comercial' ? velocidadBase * factorVelocidadCaravana(origen) : velocidadBase;
 
-    // Con `ruta` (Fase 0.3, calculada al lanzar la caravana — ver `asignarCaravanasATrueque`): avance real
-    // por coste de terreno, sobre la longitud de la polilínea. Sin `ruta` (caravanas de partidas guardadas
-    // antes de Fase 0.3): línea recta a velocidad constante, comportamiento sin cambios.
-    let progreso: number;
-    let posicionActual: Point;
-    if (caravana.ruta && caravana.ruta.length >= 2) {
-      // Bonus de Camino Comercial (Doc 1.6): si existe un camino ya construido para este par de
-      // asentamientos, la caravana lo está siguiendo (ver `asignarCaravanasATrueque`, que reusa su
-      // polilínea como `ruta`) — todo el trayecto cuenta como "sobre el camino". Simétrico en ambos
-      // sentidos: el mismo camino sirve para ir y volver.
-      const enCaminoComercial = buscarCamino(caminos, origen.id, destino.id) !== undefined;
-      const factorCosteExtra = enCaminoComercial ? COSTE_MOVIMIENTO.factorCamino : 1;
-      const avance = avanzarPosicionEnRuta(mapa, caravana.ruta, caravana.progreso, velocidad, factorCosteExtra);
-      progreso = avance.progreso;
-      posicionActual = avance.posicion;
-    } else {
-      progreso = Math.min(1, caravana.progreso + velocidad / distanciaTotal);
-      posicionActual = {
-        x: puntoInicio.x + (puntoFin.x - puntoInicio.x) * progreso,
-        y: puntoInicio.y + (puntoFin.y - puntoInicio.y) * progreso,
-      };
-    }
+    // Avance real por coste de terreno, sobre la longitud de la polilínea calculada al lanzar la caravana
+    // (ver `asignarCaravanasATrueque`) — toda caravana en movimiento (con `destinoAsentamientoId`) trae `ruta`.
+    // Bonus de Camino Comercial (Doc 1.6): si existe un camino ya construido para este par de asentamientos,
+    // la caravana lo está siguiendo (ver `asignarCaravanasATrueque`, que reusa su polilínea como `ruta`) —
+    // todo el trayecto cuenta como "sobre el camino". Simétrico en ambos sentidos: el mismo camino sirve para
+    // ir y volver.
+    const enCaminoComercial = buscarCamino(caminos, origen.id, destino.id) !== undefined;
+    const factorCosteExtra = enCaminoComercial ? COSTE_MOVIMIENTO.factorCamino : 1;
+    const avance = avanzarPosicionEnRuta(mapa, caravana.ruta!, caravana.progreso, velocidad, factorCosteExtra);
+    const progreso = avance.progreso;
+    const posicionActual = avance.posicion;
 
     if (progreso < 1) {
       restantes.push({ ...caravana, progreso, posicionActual });
@@ -230,8 +219,7 @@ function avanzarCaravanas(
 
     // Peaje de chokepoints (Doc 1.5, Fase 0.3): chokepoints controlados por una Facción rival que la ruta
     // atraviesa cobran al DESTINO en el momento de la entrega — ver `engine/chokepoints.ts`.
-    const rutaParaPeaje = caravana.ruta && caravana.ruta.length >= 2 ? caravana.ruta : [origen.posicion, destino.posicion];
-    const peajes = chokepointsDePeajeEnRuta(mapa.listarChokepoints(), zonas, rutaParaPeaje, origen.faccionId, asentamientosPorId);
+    const peajes = chokepointsDePeajeEnRuta(mapa.listarChokepoints(), zonas, caravana.ruta!, origen.faccionId, asentamientosPorId);
     if (peajes.length > 0) {
       const chokepointsPorControlador = new Map<string, number>();
       for (const p of peajes) chokepointsPorControlador.set(p.controladorId, (chokepointsPorControlador.get(p.controladorId) ?? 0) + 1);
@@ -283,7 +271,7 @@ function avanzarCaravanas(
         ladoAcuerdo: undefined,
         progreso: 0,
         posicionActual: destino.posicion,
-        ruta: caravana.ruta && caravana.ruta.length >= 2 ? [...caravana.ruta].reverse() : undefined,
+        ruta: [...caravana.ruta!].reverse(),
       });
     }
     // Resto de tipos (militar/contrabando, sin uso real todavía, Doc 3.6; Caravana de Fundación no llega

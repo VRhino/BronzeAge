@@ -1,4 +1,4 @@
-Notas:
+#### Notas:
 
 separa el generador de mundo del motor general del juego
 # General
@@ -60,9 +60,9 @@ separa el generador de mundo del motor general del juego
     + [resuelto]lineas de produccion: ubicacion y proximidad entre extractores y transformadores, y almacenes
     + [resuelto]opcion de exportar mapa existe pero no tiene opcion en la interfaz
 ------- revision 4
-+ vista asentamiento (para ver con mas detalle la ubicacion de construccion), hay que separar la zona del asentamiento y el mapa general, son ubicaciones logicas diferentes, el mapa general es que estamos usando hasta ahora,
++ [resuelto]vista asentamiento (para ver con mas detalle la ubicacion de construccion), hay que separar la zona del asentamiento y el mapa general, son ubicaciones logicas diferentes, el mapa general es que estamos usando hasta ahora,
 el mapa de asentamiento es una espacio logico que se genera tomando en cuenta el mapa general, en el punto donde se fundo el asentamiento y generando un espacio con el centro urbano al medio
-+ Ubicacion de las construcciones por defecto:
++ [resuelto]Ubicacion de las construcciones por defecto:
     + las minas(oro, cobre, estaño), corrales y cantera aparecen en su nodo.
     + leñeras aparecen dentro del bosque que extraen.  
     + las granjas siempre se construyen en el borde del espacio exterior del asentamiento, a las afueras de la "ciudad", pero dentro del espacio del asentamiento, 
@@ -73,8 +73,47 @@ el mapa de asentamiento es una espacio logico que se genera tomando en cuenta el
     + palacio: punto mas elevado dentro de la zona del asentamiento
     + mecado: cerca de los edificios de transformacion
 -------------------
-+ cambiar la forma en se ubican los edificios, siempre primero queriendo llenar los alrededores del centro urbano pero respetando los barrios, aparte cuando se sube de nivel se agregan edificios de decoracion solos a la ciudad como plazas y esas cosas
-+ Politicas de cambio:
-    + barrios: asigna un espacio del circulo dela zuna de influencia partiendo del centro urbano a cada tipo de edificacion a partes iguales(exepto las de extraccion y el palacio) (militar, transformacion y viviendas) y todas las costrucciones de ese tipo se construyen dentro de ese espacio. todo lo demas queda igual.
-+ el pathfinder de las rutas para las caravanas debe buscar evitar bosques(rodearlos) o rios(no los puede atravesar) y montañas
-+ politicas de ubicacion de construccion: 
++ [REVISION] mecanica de anclas y satelites en el auto construir
++ Correciones:
+    + [NPC]hay veces cuando un asentamiento es fundado por npc este no tiene acceso a la madera aun cuando el script de fundacion deberia prioriza q si o si tenga madera en distancia de zona de influencia, porq cuando va a construir la leñera le sale el mensaje de que no tiene bosque en su zona de influencia
+    + [COMERCIO]mirar en profundidad como funcionan las comisiones de comercio
+    + [ANCLA]el funcionamiento del ancla cuando no se puede cumplir a n0, ir ampliando para simpre construi cerca.
+    + [ANCLA]los edifcios se contruyen siempre en la misma orientacion
+    + [ANCLA]tomar en cuenta la orientacion encuanto a ancla satelite, siempre intentando tener la maro cantidad de celdas adyacentes al ancla
+    + [ANCLA]las anclas tienen q salir en direcciones sin reclamar del asenteamiento, es decir, el centro urbano al centro, la siguiente toma una de las direcciones (N,S,E,O,NE,NO,SE,SO) y se construye en esa direccion, la siguiente ancla de tipo diferente toma otra direccion q no haya sido tomada y asi sucesivamente, aplica solo a anclas de diferentes tipos, y para aunmentar aun mas la diferencia entre ciudades, el eje de partida q define q es sur, norte, este y oeste, lo movemos algunos grados de forma aleatoria, por ejempo 10 grados o 45 o 33 grados asi es mad dificl encontrar ciudades iguales.
+    + [ANCLA] el credimiento de las viviendas tiene que tratar de conseguir crecer para rellenar los espacios en todas direcciones para que el centro urbano este simpre lo mas rodeado posible 
+    + [BALANCE]cooldown de creacion de caravanas creado pero no parametrizable
+    + [PRODUCCION-IMPORTANTE]revisar produccion de armaduras, no funciona correctamente
+    + [FUNDACION]error cuadno se funda un segundo asentamiento no se elige quienes van en la caravana de fundacion para asignarlos al nuevo y quitarlos de anterior
+    + [DEGRADACION-IMPORTANTE]los asentamientos no se estan degradando hasta volver a ruinas, simpelemente se estan destruyendo al llegar a 0, cuando mantenimiento al llegar a 0 deberia bajar de nivel primero y luego destruir
++ Interfaz:
+    + [COMERCIO/RESUELTO]mostar en pestaña comercio, segmento con todos los trueques activos con todos la info correspondiente, tiempo de vida, los involucrados, caravanas asignadas
+    + [COMERCIO/RESUELTO]mejora en interfaz de trueque, cuando se elige un asentamiento en los combos, muestre de bajo una info box con los materiales que posee disponibles dicho asentamiento para comerciar
+    + [ASENTAMIENTO/RESUELTO] cambiar la vista de asentamiento de un scroll infinito, a pestañas para separa la info general, edificios, militar(escuadrones y demas),
+    + [ASENTAMIENTO-Vista/RESUELTO]mejora en la interfaz de vista asentamiento, cuando pasa el cursor sobre un edificio, un tooltip con informacion sobre el mismo, nivel, nombre, produccion y consumo
+    + [ASENTAMIENTO/RESUELTO] en el espacio de escuadrones del asentamiento mostrar abajo de la lista el total de soldados y nIvel de poder
+    + [ASENTAMIENTO/RESUELTO] pestaña de mantenimiento mostra tambien aparte de coste por tick y disponible la produccion por tick
+    + [ASENTAMIENTO/RESUELTO] mostrar en interfaz de asentamiento, trueques activos, % de completacion y caravanas asignadas
+    + [ASENTAMIENTO/RESUELTO] en la interfaz de asentamientos, dentro del cuadro de seleccion de asentamientO(donde sale el nombre, agregar un icono de warning en rojo cuando no se esta cumpliendo el mantenimiento)
++ Add Up:
+    + [ASENTAMIENTO]cuando se sube de nivel de asentamiento se agregan edificios de decoracion solos a la ciudad como plazas y esas cosas
+    + [RUTAS]el pathfinder de las rutas para las caravanas debe buscar evitar bosques(rodearlos) o rios(no los puede atravesar) y montañas
+    + [POLITICAS]politicas de ubicacion de construccion.
+    + [TRUEQUE]trueque compuesto de varios materiales
+    + [REGISTRO-MOTOR]cuando motor de un mensaje de fondos insufiecientes para reealiza cualquier accion, q muestre lo que falta
+    + [ZONA/interfaz] las zonas de influencia de la misma faccion no se fusionan en un solo poligono en el mapa de asentamiento
+    + [GUERRA] Los ejércitos también se mueven por el mapa para atacar como las caravanas, con un símbolo q los identifique por ejemplo un rombo, uno por cada jugador q va en el ejército, uno detrás de otro medio superpuestos y cada rombo del color de su faccion.
+
+
+
+
+
+
+
+
+
+
+
+
+
+

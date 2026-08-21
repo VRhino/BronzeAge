@@ -310,7 +310,7 @@ const ANGULO_DIRECCION: Record<DireccionCardinal, number> = Object.fromEntries(
 /** Categoría funcional (barrio) de cada tipo de edificio "urbano". Ausente = sin barrio fijo: Granja/Corral
  * van a las afueras y Palacio junto al centro (ver `sitiosParaTipo`); Centro Urbano es el origen;
  * mina/minaCobre/minaEstano/cantera viven en el mapa general (`ambito: 'mapa'`), fuera de esta rejilla. */
-export type CategoriaAsentamiento = 'residencial' | 'industria' | 'militar' | 'mercado' | 'almacenaje';
+export type CategoriaAsentamiento = 'residencial' | 'industria' | 'militar' | 'mercado' | 'almacenaje' | 'carpinteria';
 
 /** Categoría (barrio) de cada tipo — exportado para que `app/gameStore.ts` pueda pasárselo a `ui/canvas.ts`
  * (acoplamiento 0: la UI solo lee este dato, nunca lo decide). */
@@ -334,27 +334,79 @@ export const CATEGORIA_POR_TIPO: Partial<Record<EdificioTipo, CategoriaAsentamie
   // Los puestos comparten el barrio del Mercado: así la acreción que ya existe (`distanciaAlBarrio`) los
   // agrupa alrededor de la pieza principal sola, sin ninguna regla nueva de "quedar pegados".
   puestoMercado: 'mercado',
+  // Mismo truco que puestoMercado/mercado (Etapa 3, §9): categoría propia cuyo único ancla es la Carpintería
+  // misma, así el mecanismo de ancla de una sola instancia sirve sin tocarlo para pegar los talleres a ella.
+  tallerCarpinteria: 'carpinteria',
 };
 
-const CATEGORIAS_ASENTAMIENTO: CategoriaAsentamiento[] = ['residencial', 'industria', 'militar', 'mercado', 'almacenaje'];
+const CATEGORIAS_ASENTAMIENTO: CategoriaAsentamiento[] = ['residencial', 'industria', 'militar', 'mercado', 'almacenaje', 'carpinteria'];
 
 /**
- * ANCLA de cada categoría — Etapa 1 de "Anclas y satélites"
- * (`Consideraciones/Vista_Asentamiento_Trazado_Urbano.md` §5). Solo entran aquí los tipos que YA son edificios
- * reales y únicos hoy (`EDIFICIOS_UNICOS` en `construction.ts`): Centro Urbano, Mercado y Carpintería. Industria
- * y almacenaje se quedan fuera a propósito — su ancla (Patio de Gremios, y almacenaje no tiene ancla en el
- * catálogo de §5.1) todavía no existe como tipo, así que no hay nada real contra qué reanclar.
+ * Ancla PRIMARIA de cada categoría (Etapas 1-3) — la que ya existe (o se construye normalmente) sin pasar por
+ * la regla de semilla de grupo (§5.4). Residencial, mercado y carpinteria la tienen: Centro Urbano nace con
+ * la fundación, Mercado y Carpintería son construcción normal por cola. Militar e industria NO tienen ancla
+ * primaria — nacen enteramente por semilla de grupo, ver `ANCLA_SATURACION_POR_CATEGORIA` y `sitiosParaTipo`.
  */
-const ANCLA_POR_CATEGORIA: Partial<Record<CategoriaAsentamiento, EdificioTipo>> = {
+const ANCLA_PRIMARIA_POR_CATEGORIA: Partial<Record<CategoriaAsentamiento, EdificioTipo>> = {
   residencial: 'centroUrbano',
   mercado: 'mercado',
-  militar: 'carpinteria',
+  carpinteria: 'carpinteria',
 };
 
-/** Los mismos tres tipos de `ANCLA_POR_CATEGORIA`, como Set — `redDeCalles` los usa para decidir a quién le
- * toca el anillo generalizado de §5.2 (ver más abajo). Centro Urbano ya tenía ese trato desde el principio
- * (era la semilla de la red entera); esto solo lo extiende a Mercado y Carpintería, sin ningún tipo nuevo. */
-const ANCLAS_REALES = new Set<EdificioTipo>(Object.values(ANCLA_POR_CATEGORIA));
+/**
+ * Ancla DE SATURACIÓN de cada categoría (Etapa 3, §5.6) — el tipo que nace cuando el núcleo actual se llena
+ * (o, si la categoría no tiene ancla primaria, el que nace como semilla del primer núcleo). Mercado y
+ * carpinteria no tienen entrada aquí a propósito: sus anclas primarias nunca saturan (§5.6, "degradación
+ * limpia" — sin ancla de saturación declarada, un núcleo lleno simplemente cae al reparto de barrio de
+ * siempre, ver `sitiosParaTipo`).
+ */
+const ANCLA_SATURACION_POR_CATEGORIA: Partial<Record<CategoriaAsentamiento, EdificioTipo>> = {
+  residencial: 'plaza',
+  militar: 'plazaDeArmas',
+  industria: 'patioDeGremios',
+};
+
+/** Unión de anclas primarias y de saturación — `redDeCalles` las usa para decidir a quién le toca el anillo
+ * completo de calle de §5.2 (ver más abajo), y `sitiosParaTipo` para la zona de seguridad de §5.7. Centro
+ * Urbano ya tenía ese trato desde el principio (era la semilla de la red entera); esto lo extiende a todas
+ * las anclas reales y de saturación, primarias o repetibles. */
+const ANCLAS_REALES = new Set<EdificioTipo>([
+  ...Object.values(ANCLA_PRIMARIA_POR_CATEGORIA),
+  ...Object.values(ANCLA_SATURACION_POR_CATEGORIA),
+]);
+
+/** Tipos de ancla (primaria y de saturación, en ese orden) que le tocan a una categoría — puede ser 0, 1 o 2. */
+function tiposAnclaDe(categoria: CategoriaAsentamiento): EdificioTipo[] {
+  const tipos: EdificioTipo[] = [];
+  const primaria = ANCLA_PRIMARIA_POR_CATEGORIA[categoria];
+  const saturacion = ANCLA_SATURACION_POR_CATEGORIA[categoria];
+  if (primaria) tipos.push(primaria);
+  if (saturacion) tipos.push(saturacion);
+  return tipos;
+}
+
+/**
+ * Instancia más cercana a `punto`, de cualquiera de `tipos`, entre los edificios internos ya construidos —
+ * generaliza el `.find()` de una sola instancia que bastaba mientras las anclas eran únicas (Etapas 1-2). Con
+ * anclas repetibles (Etapa 3, §5.6) puede haber varias; `punto` es una referencia fija (el origen del
+ * asentamiento) para las búsquedas de colocación — no hace falta más precisión: en la práctica rara vez hay
+ * más de una o dos instancias por categoría, y desempatar por cercanía al origen es consistente con el resto
+ * del trazado (`porDistanciaAlOrigen`, `direccionesDelAsentamiento`).
+ */
+function anclaMasCercana(tipos: EdificioTipo[], punto: Point, edificios: Edificio[]): Edificio | undefined {
+  if (tipos.length === 0) return undefined;
+  let mejor: Edificio | undefined;
+  let mejorDistancia = Infinity;
+  for (const e of edificiosInternos(edificios)) {
+    if (!tipos.includes(e.tipo)) continue;
+    const d = distanciaEntrePuntos(punto, e.posicion);
+    if (d < mejorDistancia) {
+      mejor = e;
+      mejorDistancia = d;
+    }
+  }
+  return mejor;
+}
 
 /**
  * Reparto de direcciones cardinales por categoría, ALEATORIO por asentamiento (a petición del usuario) pero
@@ -780,9 +832,10 @@ function sitiosPorAtraccionDura(ancla: Edificio, tamano: TamanoEdificio, ocupada
  * - Granja y Corral: a las afueras. 360°, distancia mínima `TRAZADO.radioAfuerasMin`, y prefieren el hueco MÁS
  *   LEJANO — eso es lo que las mantiene en el borde de la ciudad según crece, no un radio calculado.
  * - Palacio: 360°, el más CERCANO al centro (junto al centro de poder), dentro de la trama urbana.
- * - Categorías con ancla real ya construida (`ANCLA_POR_CATEGORIA`): atracción dura (§5.3,
- *   `sitiosPorAtraccionDura`) — el hueco más pegado al ancla, sin cuña. Si el núcleo está saturado, cae al
- *   barrio de siempre en vez de bloquear.
+ * - Categorías con ancla ya construida y alcanzable (`anclaMasCercana`, primaria o de saturación — Etapa 3,
+ *   §5.6): atracción dura (§5.3, `sitiosPorAtraccionDura`) — el hueco más pegado al ancla, sin cuña. Si el
+ *   núcleo está saturado (o no hay ancla todavía), cae al barrio de siempre en vez de bloquear; quien llama
+ *   decide, tras colocar el edificio, si eso lo convierte en semilla de un núcleo nuevo (`anclaNacidaTrasSemilla`).
  * - Resto (sin ancla real, o ancla real pero saturada): la cuña de dirección de su barrio, prefiriendo quedar
  *   pegado a lo que ese barrio ya construyó (acreción) y, en su defecto, lo más cerca del Centro Urbano.
  *
@@ -820,8 +873,10 @@ export function sitiosParaTipo(
   const categoria = CATEGORIA_POR_TIPO[tipo];
   if (!categoria) return [];
 
-  const anclaTipo = ANCLA_POR_CATEGORIA[categoria];
-  const anclaInstancia = anclaTipo ? edificiosInternos(ocupados).find((e) => e.tipo === anclaTipo) : undefined;
+  const anclaInstancia = anclaMasCercana(tiposAnclaDe(categoria), centroDeRectangulo(ORIGEN_RECT), ocupados);
+  // Si hay ancla y no se intenta atracción (`ampliado`), el ancla sigue existiendo — esto NO es una semilla,
+  // solo se está ignorando la atracción a propósito (política "Líneas de Producción").
+  const alcanzoPorAtraccion = Boolean(anclaInstancia && ampliado);
   if (anclaInstancia && !ampliado) {
     const porAtraccionDura = sitiosPorAtraccionDura(anclaInstancia, tamano, ocupadas, red);
     if (porAtraccionDura.length > 0) return porAtraccionDura;
@@ -844,6 +899,24 @@ export function sitiosParaTipo(
         const rectCandidato: RectanguloCeldas = { minCol: c.min.col, minRow: c.min.row, ancho: tamano.ancho, alto: tamano.alto };
         return otrasAnclas.every((a) => gapCeldas(rectCandidato, rectanguloDeEdificio(a)) >= TRAZADO.separacionSeguridadAnclas);
       });
+    }
+  }
+
+  // Semilla de grupo (Etapa 3, §5.4): si esta categoría puede sembrar un ancla de saturación y no hay una
+  // alcanzable ahora mismo, `nuevo` puede acabar siendo esa semilla (lo decide quien llama, con el gate de
+  // nivel — ver `anclaSiNace`, construction.ts). Sus candidatos se filtran primero a `separacionMinimaAnclas`
+  // de TODAS las anclas ya construidas, para que — si de verdad se convierte en semilla — quede sitio real
+  // para que el ancla nazca "frente a él" (§5.5) sin invadir nada. Relajable (§5.7): si nada cumple la
+  // separación completa, no bloquea la colocación — sigue con los candidatos de siempre, igual que ya hacía
+  // antes de la Etapa 3 (mejor colocarlo sin ancla que no colocarlo).
+  if (ANCLA_SATURACION_POR_CATEGORIA[categoria] && !alcanzoPorAtraccion) {
+    const anclasExistentes = edificiosInternos(ocupados).filter((e) => ANCLAS_REALES.has(e.tipo));
+    if (anclasExistentes.length > 0) {
+      const conSeparacion = candidatos.filter((c) => {
+        const rectCandidato: RectanguloCeldas = { minCol: c.min.col, minRow: c.min.row, ancho: tamano.ancho, alto: tamano.alto };
+        return anclasExistentes.every((a) => gapCeldas(rectCandidato, rectanguloDeEdificio(a)) >= TRAZADO.separacionMinimaAnclas);
+      });
+      if (conSeparacion.length > 0) candidatos = conSeparacion;
     }
   }
   if (candidatos.length === 0) return [];
@@ -869,6 +942,138 @@ function distanciaAlBarrio(punto: Point, existentes: Edificio[]): number {
     if (d < minimo) minimo = d;
   }
   return minimo;
+}
+
+type LadoRectangulo = 'arriba' | 'abajo' | 'izquierda' | 'derecha';
+
+/** A qué lado de `rect` pertenece la arista `clave` (H/V, ver `aristaH`/`aristaV`), o `null` si no es una de
+ * sus aristas de perímetro. */
+function ladoDeArista(clave: string, rect: RectanguloCeldas): LadoRectangulo | null {
+  const horizontal = clave[0] === 'H';
+  const [i, j] = clave.slice(1).split(',').map(Number) as [number, number];
+  if (horizontal) {
+    if (j === rect.minRow) return 'arriba';
+    if (j === rect.minRow + rect.alto) return 'abajo';
+    return null;
+  }
+  if (i === rect.minCol) return 'izquierda';
+  if (i === rect.minCol + rect.ancho) return 'derecha';
+  return null;
+}
+
+/**
+ * Lados de perímetro de `rect` a los que da fachada, ORDENADOS de mejor a peor — Etapa 3, §5.5: "el ancla se
+ * coloca al otro lado de la arista de calle a la que da fachada" la semilla, desempatando por la que mira más
+ * lejos del Centro Urbano (origen), para que el núcleo crezca hacia afuera en vez de estrangularse contra la
+ * ciudad ya construida. Devuelve TODOS los candidatos, no solo el mejor: el mejor lado puede mirar hacia una
+ * ancla que ya ocupa ese lado (típico en el primer edificio de un grupo, pegado a Centro Urbano) y no tener
+ * sitio real — `posicionAnclaFrenteA` los prueba en orden hasta que uno funcione. `red` ya debe incluir a
+ * `rect` conectado (mismo `redDeCalles` de siempre, corrido con la semilla ya en la lista de edificios).
+ */
+function ladosDeFachada(rect: RectanguloCeldas, red: RedDeCalles): LadoRectangulo[] {
+  const candidatos = aristasDeRectangulo({ col: rect.minCol, row: rect.minRow }, { ancho: rect.ancho, alto: rect.alto })
+    .filter((clave) => red.calles.has(clave) || red.caminos.has(clave))
+    .map((clave) => ladoDeArista(clave, rect))
+    .filter((lado): lado is LadoRectangulo => lado !== null);
+  const lados = [...new Set(candidatos)];
+  if (lados.length <= 1) return lados;
+
+  const NORMAL: Record<LadoRectangulo, Point> = {
+    arriba: { x: 0, y: -1 },
+    abajo: { x: 0, y: 1 },
+    izquierda: { x: -1, y: 0 },
+    derecha: { x: 1, y: 0 },
+  };
+  const centro = centroDeRectangulo(rect);
+  const norma = Math.hypot(centro.x, centro.y) || 1;
+  const dirAlejarse = { x: centro.x / norma, y: centro.y / norma };
+  return lados.sort((a, b) => {
+    const alineacionA = NORMAL[a].x * dirAlejarse.x + NORMAL[a].y * dirAlejarse.y;
+    const alineacionB = NORMAL[b].x * dirAlejarse.x + NORMAL[b].y * dirAlejarse.y;
+    return alineacionB - alineacionA;
+  });
+}
+
+/** Rectángulo de `tamanoAncla`, al otro lado de `lado` de `rect`, centrado sobre esa arista compartida. */
+function rectanguloFrenteA(rect: RectanguloCeldas, lado: LadoRectangulo, tamanoAncla: TamanoEdificio): RectanguloCeldas {
+  if (lado === 'derecha') {
+    return { minCol: rect.minCol + rect.ancho, minRow: rect.minRow + Math.round((rect.alto - tamanoAncla.alto) / 2), ancho: tamanoAncla.ancho, alto: tamanoAncla.alto };
+  }
+  if (lado === 'izquierda') {
+    return { minCol: rect.minCol - tamanoAncla.ancho, minRow: rect.minRow + Math.round((rect.alto - tamanoAncla.alto) / 2), ancho: tamanoAncla.ancho, alto: tamanoAncla.alto };
+  }
+  if (lado === 'abajo') {
+    return { minCol: rect.minCol + Math.round((rect.ancho - tamanoAncla.ancho) / 2), minRow: rect.minRow + rect.alto, ancho: tamanoAncla.ancho, alto: tamanoAncla.alto };
+  }
+  return { minCol: rect.minCol + Math.round((rect.ancho - tamanoAncla.ancho) / 2), minRow: rect.minRow - tamanoAncla.alto, ancho: tamanoAncla.ancho, alto: tamanoAncla.alto };
+}
+
+/**
+ * Posición del ancla de saturación que nace "frente a" `semilla` (§5.5), o `null` si no hay arista de calle
+ * válida, el rectángulo resultante choca con algo ya ocupado, o no respeta `separacionSeguridadAnclas` frente
+ * a otra ancla ya construida — en cualquiera de esos casos se salta en silencio (mismo criterio que un puesto
+ * de Mercado sin hueco): la semilla ya se colocó igual, solo no consigue ancla esta vez.
+ */
+function posicionAnclaFrenteA(asentamientoId: string, edificios: Edificio[], semilla: Edificio, tamanoAncla: TamanoEdificio): Point | null {
+  const red = redDeCalles(asentamientoId, edificios);
+  const rectSemilla = rectanguloDeEdificio(semilla);
+  const ocupadas = celdasOcupadas(edificios);
+  const otrasAnclas = edificiosInternos(edificios).filter((e) => ANCLAS_REALES.has(e.tipo)).map(rectanguloDeEdificio);
+
+  for (const lado of ladosDeFachada(rectSemilla, red)) {
+    const rectAncla = rectanguloFrenteA(rectSemilla, lado, tamanoAncla);
+
+    let libre = true;
+    for (let dc = 0; dc < rectAncla.ancho && libre; dc++) {
+      for (let dr = 0; dr < rectAncla.alto && libre; dr++) {
+        if (ocupadas.has(claveCelda(rectAncla.minCol + dc, rectAncla.minRow + dr))) libre = false;
+      }
+    }
+    if (!libre) continue;
+    if (otrasAnclas.some((a) => gapCeldas(rectAncla, a) < TRAZADO.separacionSeguridadAnclas)) continue;
+
+    return centroDeRectangulo(rectAncla);
+  }
+  return null;
+}
+
+/**
+ * Tras colocar `nuevo` (ya con posición, recién añadido a `edificios`), decide si nace el ancla de saturación
+ * de su categoría "frente a él" (§5.4/5.5) — porque `nuevo` fue la semilla de un núcleo nuevo o de uno
+ * saturado: se re-evalúa la MISMA condición que `sitiosParaTipo` usó al colocarlo (¿había un ancla alcanzable
+ * en ese momento, con `edificios` SIN `nuevo`?) y, si no la había, nace el ancla. `null` si la categoría de
+ * `nuevo` no tiene ancla de saturación (Mercado/Carpintería nunca saturan, §5.6), si ya había un ancla
+ * alcanzable (no fue semilla), o si no se encontró sitio válido para la nueva (`posicionAnclaFrenteA`).
+ *
+ * El gate de nivel de asentamiento (§5.7.1: por debajo de nivel 2 nunca nace un ancla nueva, para no fijar un
+ * núcleo mal colocado en un disco todavía pequeño) es responsabilidad de quien llama — esta función es pura
+ * geometría, no lee `nivelActual` (evita un import circular con `asentamientoQuery.ts`, que sí importa de
+ * aquí).
+ */
+export function anclaNacidaTrasSemilla(
+  asentamiento: Pick<Asentamiento, 'id' | 'radioPotencial'>,
+  edificios: Edificio[],
+  nuevo: Edificio,
+  id: string
+): Edificio | null {
+  const categoria = CATEGORIA_POR_TIPO[nuevo.tipo];
+  if (!categoria) return null;
+  const anclaSaturacion = ANCLA_SATURACION_POR_CATEGORIA[categoria];
+  if (!anclaSaturacion) return null;
+
+  const anteriores = edificios.filter((e) => e.id !== nuevo.id);
+  const anclaCercana = anclaMasCercana(tiposAnclaDe(categoria), nuevo.posicion, anteriores);
+  if (anclaCercana) {
+    const tamanoNuevo = tamanoEdificio(nuevo.tipo, nuevo.nivelInterno);
+    const seguiaAlcanzable =
+      sitiosPorAtraccionDura(anclaCercana, tamanoNuevo, celdasOcupadas(anteriores), redDeCalles(asentamiento.id, anteriores)).length > 0;
+    if (seguiaAlcanzable) return null;
+  }
+
+  const posicion = posicionAnclaFrenteA(asentamiento.id, edificios, nuevo, tamanoEdificio(anclaSaturacion));
+  if (!posicion) return null;
+
+  return { id, tipo: anclaSaturacion, posicion, estado: 'activo', ticksRestantes: 0, ambito: 'asentamiento' };
 }
 
 /** El mejor hueco para `tipo`, o `null` si no cabe en ningún sitio. */
