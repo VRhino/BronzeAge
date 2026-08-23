@@ -1018,7 +1018,12 @@ function posicionAnclaFrenteA(asentamientoId: string, edificios: Edificio[], sem
   const red = redDeCalles(asentamientoId, edificios);
   const rectSemilla = rectanguloDeEdificio(semilla);
   const ocupadas = celdasOcupadas(edificios);
-  const otrasAnclas = edificiosInternos(edificios).filter((e) => ANCLAS_REALES.has(e.tipo)).map(rectanguloDeEdificio);
+  // Excluye a la propia semilla: si su tipo es también un ancla real (p. ej. Carpintería, ancla de su propia
+  // categoría `carpinteria` para los talleres) no debe contarse como "otra ancla" de la que alejarse — el
+  // ancla nueva nace pegada a ella a propósito (§5.5).
+  const otrasAnclas = edificiosInternos(edificios)
+    .filter((e) => ANCLAS_REALES.has(e.tipo) && e.id !== semilla.id)
+    .map(rectanguloDeEdificio);
 
   for (const lado of ladosDeFachada(rectSemilla, red)) {
     const rectAncla = rectanguloFrenteA(rectSemilla, lado, tamanoAncla);

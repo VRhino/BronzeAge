@@ -475,19 +475,19 @@ app.innerHTML = `
       <div class="section-title registros-heading">Registros de la simulación</div>
       <p class="legend-note registros-intro">Información de solo lectura sobre el estado actual del mundo.</p>
       <div class="logs-grid registros-grid">
-        <div class="log-card">
+        <div class="log-card registros-asentamientos-card">
           <h2>Asentamientos</h2>
           <div class="log-panel" id="asentamientos-panel"></div>
         </div>
-        <div class="log-card">
+        <div class="log-card registros-politica-card">
           <h2>Política</h2>
           <div class="log-panel" id="politica-panel"></div>
         </div>
-        <div class="log-card">
+        <div class="log-card registros-progresion-card">
           <h2>Progresión (Doc 2.9)</h2>
           <div class="log-panel" id="progresion-panel"></div>
         </div>
-        <div class="log-card">
+        <div class="log-card registros-militar-card">
           <h2>Militar</h2>
           <div class="log-panel" id="militar-panel"></div>
         </div>
@@ -982,23 +982,47 @@ function renderPanelAsentamientos(state: GameState): void {
   asentamientosPanelEl.innerHTML = state.asentamientos
     .map((a) => {
       const { pesants, artesanos, nobleza } = a.poblacion;
-      const recursosClave = ['madera', 'piedra', 'trigo', 'oro']
-        .map((r) => `${r}: ${Math.floor(a.almacen[r]?.cantidad ?? 0)}/${a.almacen[r]?.capacidad ?? 0}`)
-        .join(' · ');
+      const faccion = state.facciones.find((f) => f.id === a.faccionId);
+      const recursosClave = ['madera', 'piedra', 'trigo', 'oro'];
       const activos = a.edificios.filter((e) => e.estado === 'activo').length;
       const enCurso = a.edificios.length - activos;
-      const cargosTxt = CATALOGOS.cargos.map((c) => `${c}: ${a.cargos[`${c}Id` as keyof typeof a.cargos] ?? '—'}`).join(' · ');
+      const mantenimiento = Math.max(0, Math.min(100, a.medidorMantenimiento));
       const otrasCasas = a.casasCompradas.filter((id) => !a.jugadoresFundadoresIds.includes(id));
-      return `<div>
-        <strong>${etiquetaAsentamiento(a, state.facciones)}</strong> (nivel ${a.nivel}, radio ${Math.round(a.radioPotencial)}) · Mantenimiento: ${a.medidorMantenimiento.toFixed(0)}/100<br/>
-        Fundadores (con casa): ${a.jugadoresFundadoresIds.join(', ')} · Otras casas compradas: ${otrasCasas.join(', ') || '—'}<br/>
-        Cargos — ${cargosTxt}<br/>
-        Población — Pesants: ${pesants} · Artesanos: ${artesanos} · Nobleza: ${nobleza}<br/>
-        Almacén — ${recursosClave}<br/>
-        Edificios — activos: ${activos}, en curso/cola: ${enCurso} · Políticas activas: ${a.politicasActivas.length}
-      </div>`;
+      const recursosHtml = recursosClave
+        .map((r) => {
+          const recurso = a.almacen[r];
+          return `<div class="registro-resource"><span>${RECURSO_ICONO[r] ?? '📦'} ${RECURSO_NOMBRE[r] ?? r}</span><strong>${Math.floor(recurso?.cantidad ?? 0)}<small>/${recurso?.capacidad ?? 0}</small></strong></div>`;
+        })
+        .join('');
+      const cargosHtml = CATALOGOS.cargos
+        .map((c) => `<span class="registro-role"><b>${c}</b>${a.cargos[`${c}Id` as keyof typeof a.cargos] ?? '—'}</span>`)
+        .join('');
+      return `<article class="registro-asentamiento">
+        <header class="registro-asentamiento-header">
+          <div>
+            <h3>${a.nombre ?? a.id}</h3>
+            <p>${faccion?.nombre ?? a.faccionId} <span aria-hidden="true">·</span> ${a.id}</p>
+          </div>
+          <span class="registro-level">Nivel ${a.nivel}</span>
+        </header>
+        <div class="registro-asentamiento-summary">
+          <div class="registro-summary-item"><span>Población</span><strong>${pesants + artesanos + nobleza}</strong><small>${pesants} pesants · ${artesanos} artesanos · ${nobleza} nobleza</small></div>
+          <div class="registro-summary-item"><span>Edificios</span><strong>${activos}</strong><small>${enCurso} en curso o en cola</small></div>
+          <div class="registro-summary-item"><span>Radio potencial</span><strong>${Math.round(a.radioPotencial)}</strong><small>Fundado en tick ${a.fundadoEnTick}</small></div>
+          <div class="registro-summary-item"><span>Viviendas</span><strong>${a.casasCompradas.length}</strong><small>${otrasCasas.length} adquiridas después</small></div>
+        </div>
+        <div class="registro-asentamiento-health">
+          <div class="registro-health-label"><span>Mantenimiento</span><strong>${a.medidorMantenimiento.toFixed(0)}/100</strong></div>
+          <div class="registro-health-bar"><span style="width:${mantenimiento}%"></span></div>
+        </div>
+        <div class="registro-asentamiento-columns">
+          <section><h4>Almacén</h4><div class="registro-resource-grid">${recursosHtml}</div></section>
+          <section><h4>Cargos</h4><div class="registro-role-list">${cargosHtml}</div></section>
+        </div>
+        <footer class="registro-asentamiento-footer"><span>Políticas activas: <strong>${a.politicasActivas.length}</strong></span><span>Fundadores: <strong>${a.jugadoresFundadoresIds.length}</strong></span></footer>
+      </article>`;
     })
-    .join('');
+    .join('') || '<p class="legend-note registro-empty">Aún no hay asentamientos fundados.</p>';
 }
 
 function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
@@ -2086,7 +2110,11 @@ function renderPanelPolitica(state: GameState): void {
     .map((f) => {
       const cap = gameStore.capFundacion(f.nivel);
       const propios = state.asentamientos.filter((a) => a.faccionId === f.id).length;
-      return `<div><strong>${f.nombre}</strong> — nivel ${f.nivel}, cap fundación ${propios}/${cap} · Rey: ${f.reyId ?? '—'} · Embajador: ${f.embajadorId ?? '—'} · Ciudadanos: ${f.ciudadanosIds.length} · Reputación: ${f.reputacion.toFixed(0)}</div>`;
+      return `<article class="registro-politica-faccion">
+        <header><strong>${f.nombre}</strong><span class="registro-level">Nivel ${f.nivel}</span></header>
+        <div class="registro-mini-stats"><span>Asentamientos <b>${propios}/${cap}</b></span><span>Ciudadanos <b>${f.ciudadanosIds.length}</b></span><span>Reputación <b>${f.reputacion.toFixed(0)}</b></span></div>
+        <div class="registro-politica-leaders"><span>Rey <b>${f.reyId ?? '—'}</b></span><span>Embajador <b>${f.embajadorId ?? '—'}</b></span></div>
+      </article>`;
     })
     .join('');
   const relH = state.relaciones
@@ -2094,7 +2122,7 @@ function renderPanelPolitica(state: GameState): void {
       const a = state.facciones.find((f) => f.id === r.faccionAId)?.nombre ?? r.faccionAId;
       const b = state.facciones.find((f) => f.id === r.faccionBId)?.nombre ?? r.faccionBId;
       const trib = r.tributo ? ` (tributo ${r.tributo.cantidadPorTick}/tick ${r.tributo.recurso})` : '';
-      return `<div>${r.tipo} [${r.estado}]: ${a} → ${b}${trib}</div>`;
+      return `<div class="registro-politica-relation"><span class="registro-relation-type">${r.tipo}</span><span class="registro-relation-route">${a} <b aria-hidden="true">→</b> ${b}</span><span class="registro-relation-status">${r.estado}${trib}</span></div>`;
     })
     .join('');
   const ligas = gameStore.getLigas(state.relaciones, state.facciones);
@@ -2102,10 +2130,12 @@ function renderPanelPolitica(state: GameState): void {
     .map((liga, i) => {
       const nombres = liga.miembrosFaccionIds.map((id) => state.facciones.find((f) => f.id === id)?.nombre ?? id).join(', ');
       const granRey = liga.granReyFaccionId ? state.facciones.find((f) => f.id === liga.granReyFaccionId)?.reyId ?? '—' : '—';
-      return `<div>Liga ${i + 1}: ${nombres}${liga.tieneVasallaje ? ` — Gran Rey: ${granRey}` : ''}</div>`;
+      return `<div class="registro-liga"><strong>Liga ${i + 1}</strong><span>${nombres}</span>${liga.tieneVasallaje ? `<small>Gran Rey: ${granRey}</small>` : '<small>Sin vasallaje</small>'}</div>`;
     })
     .join('');
-  politicaPanelEl.innerHTML = `${facH}${relH}${ligasH || '<div>Sin Ligas formadas.</div>'}`;
+  politicaPanelEl.innerHTML = `<section class="registro-section-block"><h3>Facciones</h3><div class="registro-politica-facciones">${facH || '<p class="legend-note">Sin facciones.</p>'}</div></section>
+    <section class="registro-section-block"><h3>Relaciones diplomáticas</h3><div class="registro-politica-relations">${relH || '<p class="legend-note">Sin relaciones registradas.</p>'}</div></section>
+    <section class="registro-section-block"><h3>Ligas</h3><div class="registro-politica-ligas">${ligasH || '<p class="legend-note">Sin Ligas formadas.</p>'}</div></section>`;
 }
 
 function renderPanelMilitar(state: GameState): void {
@@ -2113,29 +2143,31 @@ function renderPanelMilitar(state: GameState): void {
     .map((a) => {
       const tieneFundicion = a.edificios.some((e) => e.tipo === 'fundicion' && e.estado === 'activo');
       const tieneGranFundicion = a.edificios.some((e) => e.tipo === 'granFundicion' && e.estado === 'activo');
+      const poder = gameStore.poderMilitarInfo(a);
       const escuadronesHtml =
         a.escuadrones
           .map(
             (e) =>
-              `<div>${e.id} — ${e.nombre} de ${e.jugadorId} (${nivelTropaTxt(e.tropaId)}, ${e.origen}) · cantidad ${e.cantidad} · veterania ${e.veterania.toFixed(1)} · moral ${e.moral.toFixed(0)}${e.heridoHastaTick ? ` · herido hasta t${e.heridoHastaTick}` : ''}</div>`
+              `<div class="registro-squad"><div><strong>${e.nombre}</strong><small>${e.id} · ${e.jugadorId}</small></div><span>${e.cantidad} soldados</span><span>${nivelTropaTxt(e.tropaId)}</span><span>Moral ${e.moral.toFixed(0)}</span>${e.heridoHastaTick ? `<em>Herido hasta t${e.heridoHastaTick}</em>` : ''}</div>`
           )
           .join('') || '<div>Sin escuadrones.</div>';
-      return `<div><strong>${etiquetaAsentamiento(a, state.facciones)}</strong> — Fundición: ${tieneFundicion ? 'sí' : 'no'} · Gran Fundición: ${tieneGranFundicion ? 'sí' : 'no'}${escuadronesHtml}</div>`;
+      return `<article class="registro-militar-settlement"><header><div><h3>${a.nombre ?? a.id}</h3><p>${state.facciones.find((f) => f.id === a.faccionId)?.nombre ?? a.faccionId}</p></div><div class="registro-military-power"><strong>${poder.soldados}</strong><small>soldados · poder ${poder.poder.toFixed(1)}</small></div></header><div class="registro-military-buildings"><span class="${tieneFundicion ? 'is-active' : ''}">Fundición ${tieneFundicion ? 'activa' : 'inactiva'}</span><span class="${tieneGranFundicion ? 'is-active' : ''}">Gran Fundición ${tieneGranFundicion ? 'activa' : 'inactiva'}</span></div><div class="registro-squad-list">${escuadronesHtml}</div></article>`;
     })
     .join('');
 
   // Campamentos de bandidos (Doc 1.9): amenaza global del mundo, no de un asentamiento — se muestra aparte.
   const campamentosHtml = state.campamentosBandidos
-    .map((c) => `<div>${c.id} — (${Math.round(c.posicion.x)}, ${Math.round(c.posicion.y)}) · poder ${c.poder}</div>`)
+    .map((c) => `<div class="registro-bandit"><strong>${c.id}</strong><span>Posición ${Math.round(c.posicion.x)}, ${Math.round(c.posicion.y)}</span><b>Poder ${c.poder}</b></div>`)
     .join('');
-  militarPanelEl.innerHTML += `<div class="detail-section"><h3>Campamentos de bandidos (Doc 1.9)</h3>${campamentosHtml || '<div>Ninguno activo.</div>'}</div>`;
+  militarPanelEl.innerHTML += `<section class="registro-section-block"><h3>Campamentos de bandidos</h3><div class="registro-bandit-list">${campamentosHtml || '<p class="legend-note">Ninguno activo.</p>'}</div></section>`;
 }
 
 function renderPanelProgresion(state: GameState): void {
-  progresionPanelEl.innerHTML =
-    state.titulos
-      .map((t) => `<div><strong>${t.nombre}</strong> — ${state.facciones.find((f) => f.id === t.poseedorId)?.nombre ?? t.poseedorId} (${t.valorMetrica.toFixed(0)})</div>`)
-      .join('') || '<div>Sin títulos calculados todavía (avanza un tick).</div>';
+  progresionPanelEl.innerHTML = state.titulos.length
+    ? `<div class="registro-title-grid">${state.titulos
+        .map((t) => `<article class="registro-title-card"><span class="registro-title-mark">✦</span><div><h3>${t.nombre}</h3><p>${state.facciones.find((f) => f.id === t.poseedorId)?.nombre ?? t.poseedorId}</p></div><strong>${t.valorMetrica.toFixed(0)}<small>métrica</small></strong></article>`)
+        .join('')}</div>`
+    : '<p class="legend-note registro-empty">Sin títulos calculados todavía (avanza un tick).</p>';
 }
 
 /** Caravanas realmente en movimiento (a petición del usuario: punto de partida, destino, carga, % de viaje

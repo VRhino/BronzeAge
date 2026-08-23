@@ -1571,6 +1571,467 @@ select:hover, input:hover {
   border-bottom-color: #3e392e;
 }
 
+/* El registro de asentamientos tiene más datos que los demás registros: se organiza en
+   tarjetas y bloques cortos para poder localizar el estado de cada uno de un vistazo. */
+.registros-asentamientos-card {
+  grid-column: 1 / -1;
+}
+
+.registros-asentamientos-card > .log-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 10px;
+  max-height: min(62vh, 620px);
+  padding: 4px;
+  overflow-y: auto;
+}
+
+.registro-asentamiento {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--admin-border);
+  border-left: 3px solid var(--admin-accent);
+  border-radius: 7px;
+  background: var(--admin-surface-deep);
+}
+
+.registro-asentamiento-header,
+.registro-health-label,
+.registro-asentamiento-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.registro-asentamiento-header {
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--admin-border);
+}
+
+.registro-asentamiento-header h3 {
+  margin: 0;
+  color: var(--admin-text);
+  font-size: 13px;
+}
+
+.registro-asentamiento-header p,
+.registro-summary-item small {
+  margin: 2px 0 0;
+  color: var(--admin-muted);
+  font-size: 10px;
+}
+
+.registro-level {
+  flex: none;
+  padding: 4px 7px;
+  border: 1px solid var(--admin-border-strong);
+  border-radius: 12px;
+  color: var(--admin-accent);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.registro-asentamiento-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin: 10px 0;
+}
+
+.registro-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px;
+  border: 1px solid #403a2e;
+  border-radius: 5px;
+  background: var(--admin-surface);
+}
+
+.registro-summary-item span,
+.registro-asentamiento-columns h4 {
+  color: var(--admin-muted);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.registro-summary-item strong {
+  color: var(--admin-text);
+  font-size: 16px;
+}
+
+.registro-asentamiento-health {
+  margin-bottom: 10px;
+}
+
+.registro-health-label {
+  margin-bottom: 4px;
+  color: var(--admin-muted);
+  font-size: 10px;
+}
+
+.registro-health-label strong {
+  color: var(--admin-text);
+}
+
+.registro-health-bar {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: #3b3529;
+}
+
+.registro-health-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--admin-danger), var(--admin-accent));
+}
+
+.registro-asentamiento-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.registro-asentamiento-columns section {
+  min-width: 0;
+}
+
+.registro-asentamiento-columns h4 {
+  margin: 0 0 5px;
+}
+
+.registro-resource-grid,
+.registro-role-list {
+  display: grid;
+  gap: 4px;
+}
+
+.registro-resource,
+.registro-role {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: var(--admin-surface);
+  color: var(--admin-text);
+  font-size: 10px;
+}
+
+.registro-resource strong {
+  color: var(--admin-text);
+}
+
+.registro-resource small {
+  color: var(--admin-muted);
+  font-size: 9px;
+}
+
+.registro-role b {
+  color: var(--admin-muted);
+  font-weight: 500;
+}
+
+.registro-asentamiento-footer {
+  margin-top: 10px;
+  padding-top: 7px;
+  border-top: 1px solid var(--admin-border);
+  color: var(--admin-muted);
+  font-size: 10px;
+}
+
+.registro-asentamiento-footer strong {
+  color: var(--admin-text);
+}
+
+.registro-empty {
+  grid-column: 1 / -1;
+  margin: 4px;
+}
+
+.registros-politica-card,
+.registros-progresion-card,
+.registros-militar-card {
+  min-width: 0;
+}
+
+.registros-politica-card > .log-panel,
+.registros-progresion-card > .log-panel,
+.registros-militar-card > .log-panel {
+  max-height: 430px;
+  padding: 4px;
+  overflow-y: auto;
+}
+
+.registro-section-block {
+  margin-bottom: 14px;
+}
+
+.registro-section-block:last-child {
+  margin-bottom: 0;
+}
+
+.registro-section-block > h3 {
+  margin: 0 0 7px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--admin-border);
+  color: var(--admin-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.registro-politica-facciones {
+  display: grid;
+  gap: 7px;
+}
+
+.registro-politica-faccion {
+  padding: 8px;
+  border: 1px solid var(--admin-border);
+  border-left: 3px solid #897345;
+  border-radius: 5px;
+  background: var(--admin-surface-deep);
+}
+
+.registro-politica-faccion header,
+.registro-militar-settlement header,
+.registro-title-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.registro-politica-faccion header {
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--admin-border);
+  color: var(--admin-text);
+  font-size: 12px;
+}
+
+.registro-mini-stats,
+.registro-politica-leaders {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  margin-top: 7px;
+  color: var(--admin-muted);
+  font-size: 10px;
+}
+
+.registro-mini-stats span,
+.registro-politica-leaders span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.registro-mini-stats b,
+.registro-politica-leaders b {
+  color: var(--admin-text);
+  font-weight: 600;
+}
+
+.registro-politica-leaders {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding-top: 6px;
+  border-top: 1px solid #403a2e;
+}
+
+.registro-politica-relations,
+.registro-politica-ligas,
+.registro-bandit-list {
+  display: grid;
+  gap: 5px;
+}
+
+.registro-politica-relation,
+.registro-liga,
+.registro-bandit {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 7px;
+  padding: 7px;
+  border: 1px solid #403a2e;
+  border-radius: 5px;
+  background: var(--admin-surface-deep);
+  color: var(--admin-text);
+  font-size: 10px;
+}
+
+.registro-relation-type {
+  color: var(--admin-accent);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.registro-relation-route {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.registro-relation-status,
+.registro-liga small,
+.registro-bandit span {
+  color: var(--admin-muted);
+  font-size: 9px;
+}
+
+.registro-liga {
+  grid-template-columns: auto 1fr;
+}
+
+.registro-liga small {
+  grid-column: 2;
+}
+
+.registro-militar-settlement {
+  margin-bottom: 8px;
+  padding: 10px;
+  border: 1px solid var(--admin-border);
+  border-left: 3px solid #b45d4e;
+  border-radius: 6px;
+  background: var(--admin-surface-deep);
+}
+
+.registro-militar-settlement h3,
+.registro-title-card h3 {
+  margin: 0;
+  color: var(--admin-text);
+  font-size: 12px;
+}
+
+.registro-militar-settlement header p,
+.registro-title-card p {
+  margin: 2px 0 0;
+  color: var(--admin-muted);
+  font-size: 10px;
+}
+
+.registro-military-power {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  color: var(--admin-accent);
+}
+
+.registro-military-power strong {
+  font-size: 16px;
+}
+
+.registro-military-power small {
+  color: var(--admin-muted);
+  font-size: 9px;
+}
+
+.registro-military-buildings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 8px 0;
+}
+
+.registro-military-buildings span {
+  padding: 3px 6px;
+  border: 1px solid var(--admin-border);
+  border-radius: 10px;
+  color: var(--admin-muted);
+  font-size: 9px;
+}
+
+.registro-military-buildings span.is-active {
+  border-color: #587c56;
+  color: #b5d4a7;
+}
+
+.registro-squad-list {
+  display: grid;
+  gap: 4px;
+}
+
+.registro-squad {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.4fr) repeat(3, auto);
+  align-items: center;
+  gap: 7px;
+  padding: 6px;
+  border-top: 1px solid #403a2e;
+  color: var(--admin-muted);
+  font-size: 9px;
+}
+
+.registro-squad strong,
+.registro-squad span {
+  color: var(--admin-text);
+}
+
+.registro-squad small,
+.registro-squad em {
+  display: block;
+  color: var(--admin-muted);
+  font-size: 8px;
+  font-style: normal;
+}
+
+.registro-squad em {
+  color: var(--admin-danger);
+}
+
+.registro-bandit {
+  grid-template-columns: auto 1fr auto;
+  border-left: 2px solid var(--admin-danger);
+}
+
+.registro-title-grid {
+  display: grid;
+  gap: 7px;
+}
+
+.registro-title-card {
+  padding: 10px;
+  border: 1px solid var(--admin-border);
+  border-left: 3px solid var(--admin-accent);
+  border-radius: 6px;
+  background: var(--admin-surface-deep);
+}
+
+.registro-title-mark {
+  flex: none;
+  color: var(--admin-accent);
+  font-size: 18px;
+}
+
+.registro-title-card > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.registro-title-card > strong {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  color: var(--admin-text);
+  font-size: 16px;
+}
+
+.registro-title-card > strong small {
+  color: var(--admin-muted);
+  font-size: 8px;
+  font-weight: 400;
+  text-transform: uppercase;
+}
+
 @media (max-width: 520px) {
   .controls-panel > h1 {
     font-size: 15px;
@@ -1590,6 +2051,33 @@ select:hover, input:hover {
 
   .storage-resource-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .registros-asentamientos-card > .log-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .registro-asentamiento-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .registro-mini-stats {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .registro-politica-relation,
+  .registro-bandit {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .registro-relation-status,
+  .registro-bandit b {
+    grid-column: 2;
+    text-align: right;
+  }
+
+  .registro-squad {
+    grid-template-columns: 1fr 1fr;
   }
 }
 

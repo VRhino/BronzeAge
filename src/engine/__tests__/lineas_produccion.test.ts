@@ -61,47 +61,49 @@ describe('gate de materia prima para auto-construcción de transformación', () 
     expect(tieneInsumoDeArranque(conAlmacen(asentamiento, { madera: 0, piedra: 0 }), 'carpinteria')).toBe(true);
   });
 
-  // it('en simulación real: con cobre ya en almacén, Fundición se auto-construye; sin livestock, Curtiduría nunca', () => {
-  //   // Inyecta cobre (simula stock de trueque) + piedra (evita que el gate se confunda con la restricción,
-  //   // ya existente, de que el asentamiento no pueda pagar el COSTO de construcción — esa es otra condición,
-  //   // no la que este gate prueba). Livestock se deja en 0 a propósito: Curtiduría nunca debe aparecer.
-  //   // nivel: 2 forzado (Doc Fase_0_6): Fundición/Curtiduría ahora exigen nivel de asentamiento 2 para su
-  //   // construcción BASE — este test prueba el gate de INSUMO, no el de nivel, así que arranca ya en nivel 2.
-  //   const mapa = crearMapaDeterminista(SEED);
-  //   const facciones = crearFacciones();
-  //   const restaurarMathRandom = mockMathRandomDeterminista(SEED);
-  //   try {
-  //     const { asentamiento: base } = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', []);
-  //     const asentamiento = conAlmacen({ ...base, nivel: 2, nivelActual: 2 }, { cobre: 10, piedra: 200 });
-  //     let estado: EstadoSimulacion = {
-  //       asentamientos: [asentamiento],
-  //       facciones,
-  //       caravanas: [],
-  //       acuerdos: [],
-  //       ordenes: [],
-  //       relaciones: [],
-  //       titulos: [],
-  //       caminos: [],
-  //       campamentosBandidos: [],
-  //       bandidosProximoSpawnTick: 0,
-  //     };
+  it('en simulación real: con cobre ya en almacén, Fundición se auto-construye; sin livestock, Curtiduría nunca', () => {
+    // Inyecta cobre (simula stock de trueque) + piedra (evita que el gate se confunda con la restricción,
+    // ya existente, de que el asentamiento no pueda pagar el COSTO de construcción — esa es otra condición,
+    // no la que este gate prueba). Livestock se deja en 0 a propósito: Curtiduría nunca debe aparecer.
+    // nivel: 2 forzado (Doc Fase_0_6): Fundición/Curtiduría ahora exigen nivel de asentamiento 2 para su
+    // construcción BASE — este test prueba el gate de INSUMO, no el de nivel, así que arranca ya en nivel 2.
+    const mapa = crearMapaDeterminista(SEED);
+    const facciones = crearFacciones();
+    const restaurarMathRandom = mockMathRandomDeterminista(SEED);
+    try {
+      const { asentamiento: base } = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', []);
+      const asentamiento = conAlmacen({ ...base, nivel: 2, nivelActual: 2 }, { cobre: 10, piedra: 200 });
+      let estado: EstadoSimulacion = {
+        asentamientos: [asentamiento],
+        facciones,
+        caravanas: [],
+        acuerdos: [],
+        ordenes: [],
+        relaciones: [],
+        titulos: [],
+        caminos: [],
+        campamentosBandidos: [],
+        bandidosProximoSpawnTick: 0,
+      };
 
-  //     // 100, no 40: presupuesto con margen sobre el sitio de fundación real de este seed (ver comentario
-  //     // equivalente más abajo, en el test de líneas de producción) — evita que el test dependa del filo
-  //     // exacto de cuántos ticks tarda la auto-construcción en llegar a Fundición para este mundo concreto.
-  //     let fundicionVista = false;
-  //     for (let tick = 1; tick <= 100; tick++) {
-  //       estado = avanzarSimulacion(estado, mapa, tick);
-  //       const propios = estado.asentamientos[0]!.edificios;
-  //       expect(propios.some((e) => e.tipo === 'curtiduria'), `tick ${tick}: Curtiduría apareció sin livestock en almacén`).toBe(false);
-  //       if (propios.some((e) => e.tipo === 'fundicion')) fundicionVista = true;
-  //     }
+      // 150, no 40: presupuesto con margen sobre el sitio de fundación real de este seed (ver comentario
+      // equivalente más abajo, en el test de líneas de producción) — evita que el test dependa del filo
+      // exacto de cuántos ticks tarda la auto-construcción en llegar a Fundición para este mundo concreto.
+      // Subido de 100 a 150 (Etapa 3, anclas y satélites): la separación mínima que ahora se exige para no
+      // sembrar un ancla mal colocada (§5.4) hace que encontrar sitio tarde algún tick más de lo habitual.
+      let fundicionVista = false;
+      for (let tick = 1; tick <= 150; tick++) {
+        estado = avanzarSimulacion(estado, mapa, tick);
+        const propios = estado.asentamientos[0]!.edificios;
+        expect(propios.some((e) => e.tipo === 'curtiduria'), `tick ${tick}: Curtiduría apareció sin livestock en almacén`).toBe(false);
+        if (propios.some((e) => e.tipo === 'fundicion')) fundicionVista = true;
+      }
 
-  //     expect(fundicionVista, 'Fundición nunca se auto-construyó en 100 ticks pese a tener cobre y piedra disponibles').toBe(true);
-  //   } finally {
-  //     restaurarMathRandom();
-  //   }
-  // });
+      expect(fundicionVista, 'Fundición nunca se auto-construyó en 100 ticks pese a tener cobre y piedra disponibles').toBe(true);
+    } finally {
+      restaurarMathRandom();
+    }
+  });
 });
 
 describe('factor de distancia de líneas de producción', () => {
@@ -216,73 +218,75 @@ describe('política "Líneas de Producción" del Maestro de Obras', () => {
     expect(factorPorDistancia(distOptimizado)).toBeGreaterThanOrEqual(factorPorDistancia(distPlano));
   });
 
-  // it('con la política activa, la auto-construcción sitúa Fundición cerca de la mina; sin ella, en el hueco genérico', () => {
-  //   // Mockeado como el resto de tests "en simulación real" de este archivo (ver arriba): sin esto, la
-  //   // varianza de `Math.random()` en el crecimiento de población (`population.ts`) puede retrasar lo
-  //   // suficiente la disponibilidad de mano de obra como para que Fundición no se proponga dentro del
-  //   // presupuesto de ticks — el test no verifica timing de población, solo DÓNDE se sitúa Fundición.
-  //   const restaurarMathRandom = mockMathRandomDeterminista(SEED);
-  //   try {
-  //     const mapa = crearMapaDeterminista(SEED);
-  //     const facciones = crearFacciones();
-  //     const { asentamiento: base, facciones: facs } = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', []);
-  //     const minaCobre: Edificio = {
-  //       id: 'mina-test',
-  //       tipo: 'minaCobre',
-  //       posicion: { x: base.posicion.x + base.radioPotencial * 0.95, y: base.posicion.y },
-  //       estado: 'activo',
-  //       ticksRestantes: 0,
-  //     };
+  it('con la política activa, la auto-construcción sitúa Fundición cerca de la mina; sin ella, en el hueco genérico', () => {
+    // Mockeado como el resto de tests "en simulación real" de este archivo (ver arriba): sin esto, la
+    // varianza de `Math.random()` en el crecimiento de población (`population.ts`) puede retrasar lo
+    // suficiente la disponibilidad de mano de obra como para que Fundición no se proponga dentro del
+    // presupuesto de ticks — el test no verifica timing de población, solo DÓNDE se sitúa Fundición.
+    const restaurarMathRandom = mockMathRandomDeterminista(SEED);
+    try {
+      const mapa = crearMapaDeterminista(SEED);
+      const facciones = crearFacciones();
+      const { asentamiento: base, facciones: facs } = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', []);
+      const minaCobre: Edificio = {
+        id: 'mina-test',
+        tipo: 'minaCobre',
+        posicion: { x: base.posicion.x + base.radioPotencial * 0.95, y: base.posicion.y },
+        estado: 'activo',
+        ticksRestantes: 0,
+      };
 
-  //     function fundicionPropuesta(conPolitica: boolean): { x: number; y: number } {
-  //       // nivel: 2 forzado (Doc Fase_0_6): Fundición exige nivel de asentamiento 2 para construcción BASE —
-  //       // este test prueba DÓNDE se coloca, no el gate de nivel, así que arranca ya en nivel 2.
-  //       let asentamiento: Asentamiento = {
-  //         ...base,
-  //         nivel: 2,
-  //         nivelActual: 2,
-  //         edificios: [...base.edificios, minaCobre],
-  //         almacen: { ...base.almacen, cobre: { cantidad: 10, capacidad: 200 }, piedra: { cantidad: 200, capacidad: 200 } },
-  //       };
-  //       if (conPolitica) {
-  //         asentamiento = { ...asentamiento, cargos: { ...asentamiento.cargos, maestroObrasId: 'jugador-test' } };
-  //         const faccion = facs.find((f) => f.id === 'faccion-1')!;
-  //         asentamiento = activarPolitica(asentamiento, faccion, 'maestroObras', 'lineas_produccion', 1);
-  //       }
-  //       let estado: EstadoSimulacion = {
-  //         asentamientos: [asentamiento],
-  //         facciones: facs,
-  //         caravanas: [],
-  //         acuerdos: [],
-  //         ordenes: [],
-  //         relaciones: [],
-  //         titulos: [],
-  //         caminos: [],
-  //         campamentosBandidos: [],
-  //         bandidosProximoSpawnTick: 0,
-  //       };
-  //       // 100, no 40: con el sitio de fundación real de esta seed, ambas ramas tardan ~76-77 ticks en
-  //       // encontrarle sitio a Fundición detrás de Armería (solo una transformación en vuelo a la vez, ver
-  //       // comentario en `construction.ts`) — margen para que no dependa del filo exacto del fixture.
-  //       for (let tick = 1; tick <= 100; tick++) {
-  //         estado = avanzarSimulacion(estado, mapa, tick);
-  //         const fundicion = estado.asentamientos[0]!.edificios.find((e) => e.tipo === 'fundicion');
-  //         if (fundicion) return fundicion.posicion;
-  //       }
-  //       throw new Error('Fundición nunca se propuso en 100 ticks — revisa el fixture del test.');
-  //     }
+      function fundicionPropuesta(conPolitica: boolean): { x: number; y: number } {
+        // nivel: 2 forzado (Doc Fase_0_6): Fundición exige nivel de asentamiento 2 para construcción BASE —
+        // este test prueba DÓNDE se coloca, no el gate de nivel, así que arranca ya en nivel 2.
+        let asentamiento: Asentamiento = {
+          ...base,
+          nivel: 2,
+          nivelActual: 2,
+          edificios: [...base.edificios, minaCobre],
+          almacen: { ...base.almacen, cobre: { cantidad: 10, capacidad: 200 }, piedra: { cantidad: 200, capacidad: 200 } },
+        };
+        if (conPolitica) {
+          asentamiento = { ...asentamiento, cargos: { ...asentamiento.cargos, maestroObrasId: 'jugador-test' } };
+          const faccion = facs.find((f) => f.id === 'faccion-1')!;
+          asentamiento = activarPolitica(asentamiento, faccion, 'maestroObras', 'lineas_produccion', 1);
+        }
+        let estado: EstadoSimulacion = {
+          asentamientos: [asentamiento],
+          facciones: facs,
+          caravanas: [],
+          acuerdos: [],
+          ordenes: [],
+          relaciones: [],
+          titulos: [],
+          caminos: [],
+          campamentosBandidos: [],
+          bandidosProximoSpawnTick: 0,
+        };
+        // 150, no 40: con el sitio de fundación real de esta seed, ambas ramas tardan ~76-77 ticks en
+        // encontrarle sitio a Fundición detrás de Armería (solo una transformación en vuelo a la vez, ver
+        // comentario en `construction.ts`) — margen para que no dependa del filo exacto del fixture. Subido
+        // de 100 a 150 (Etapa 3, anclas y satélites): la separación mínima al sembrar un ancla nueva (§5.4)
+        // añade algún tick más a esa espera.
+        for (let tick = 1; tick <= 150; tick++) {
+          estado = avanzarSimulacion(estado, mapa, tick);
+          const fundicion = estado.asentamientos[0]!.edificios.find((e) => e.tipo === 'fundicion');
+          if (fundicion) return fundicion.posicion;
+        }
+        throw new Error('Fundición nunca se propuso en 100 ticks — revisa el fixture del test.');
+      }
 
-  //     const posicionConPolitica = fundicionPropuesta(true);
-  //     const posicionSinPolitica = fundicionPropuesta(false);
+      const posicionConPolitica = fundicionPropuesta(true);
+      const posicionSinPolitica = fundicionPropuesta(false);
 
-  //     // Margen pequeño (Etapa 3, anclas y satélites): sin política, Fundición ya no cae siempre en el hueco
-  //     // genérico de barrio — puede atraerse al Patio de Gremios que nace con el primer edificio de industria
-  //     // (aquí, Armería), que por pura coincidencia geométrica a veces queda casi tan cerca de la mina como el
-  //     // hueco que la política elige a propósito por distancia. El margen cubre esa coincidencia sin dejar de
-  //     // proteger que la política nunca eligiera algo bastante peor.
-  //     expect(dist(posicionConPolitica, minaCobre.posicion)).toBeLessThanOrEqual(dist(posicionSinPolitica, minaCobre.posicion) + 1);
-  //   } finally {
-  //     restaurarMathRandom();
-  //   }
-  // });
+      // Margen pequeño (Etapa 3, anclas y satélites): sin política, Fundición ya no cae siempre en el hueco
+      // genérico de barrio — puede atraerse al Patio de Gremios que nace con el primer edificio de industria
+      // (aquí, Armería), que por pura coincidencia geométrica a veces queda casi tan cerca de la mina como el
+      // hueco que la política elige a propósito por distancia. El margen cubre esa coincidencia sin dejar de
+      // proteger que la política nunca eligiera algo bastante peor.
+      expect(dist(posicionConPolitica, minaCobre.posicion)).toBeLessThanOrEqual(dist(posicionSinPolitica, minaCobre.posicion) + 1);
+    } finally {
+      restaurarMathRandom();
+    }
+  });
 });
