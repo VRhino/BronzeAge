@@ -1,7 +1,8 @@
-import type { Asentamiento, Point, ZonaInfluencia } from '../domain/types';
+import type { Asentamiento, Point, ZonaFaccion, ZonaInfluencia } from '../domain/types';
 import type { Mapa } from '../world/mapa';
 import { SITIO, ZONA_INFLUENCIA } from '../constants';
 import { pointInPolygon } from '../world/geometria';
+import { unirPoligonos } from '../world/poligonos';
 
 // `pointInPolygon` es geometría pura y vive en `world/geometria.ts` (la usa también la fachada `Mapa`);
 // se reexporta desde aquí porque el motor la consume históricamente por esta vía.
@@ -85,6 +86,46 @@ export function computeZonaInfluencia(
 
 export function computeTodasLasZonas(asentamientos: Asentamiento[]): ZonaInfluencia[] {
   return asentamientos.map((a) => computeZonaInfluencia(a, asentamientos));
+}
+
+/**
+ * Las zonas de una MISMA facción, fusionadas en una sola silueta por facción — para DIBUJAR el mapa general
+ * (a petición del usuario), nunca para decidir reglas.
+ *
+ * Por qué hace falta: `computeZonaInfluencia` solo recorta contra facciones RIVALES, así que dos
+ * asentamientos hermanos se solapan por diseño (Doc 1.2: mismo bando fusiona, no compite). Pintando un
+ * polígono por asentamiento eso se veía como discos apilados con fronteras internas que no existen y con el
+ * relleno translúcido acumulado en los solapes. Lo que el jugador debe leer es "hasta aquí llega esta
+ * facción", una sola mancha con un solo borde.
+ *
+ * Las reglas de juego (fundar, controlar un chokepoint, colocar una Leñera, muestrear fertilidad) siguen
+ * usando el polígono POR ASENTAMIENTO: la pertenencia territorial es por asentamiento, no por facción, y
+ * fusionar aquí no cambia ninguna de esas respuestas.
+ */
+export function computeZonasFusionadasPorFaccion(
+  zonas: ZonaInfluencia[],
+  asentamientos: Asentamiento[]
+): ZonaFaccion[] {
+  const faccionDeAsentamiento = new Map(asentamientos.map((a) => [a.id, a.faccionId]));
+  // Orden de primera aparición en `asentamientos`, no el de un `Set` de ids: el resultado alimenta el pintado
+  // y debe ser estable entre frames.
+  const porFaccion = new Map<string, Point[][]>();
+  for (const zona of zonas) {
+    if (zona.poligono.length < 3) continue;
+    const faccionId = faccionDeAsentamiento.get(zona.asentamientoId);
+    if (faccionId === undefined) continue;
+    const grupo = porFaccion.get(faccionId);
+    if (grupo) grupo.push(zona.poligono);
+    else porFaccion.set(faccionId, [zona.poligono]);
+  }
+
+  return [...porFaccion].map(([faccionId, poligonos]) => ({
+    faccionId,
+    contornos: unirPoligonos(poligonos, {
+      paso: ZONA_INFLUENCIA.pasoFusionContorno,
+      tolerancia: ZONA_INFLUENCIA.pasoFusionContorno * 0.4,
+    }),
+  }));
 }
 
 /** Un punto está libre para fundar si no cae dentro de la zona de influencia ya recortada de ningún asentamiento existente. */

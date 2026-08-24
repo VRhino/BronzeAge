@@ -1,0 +1,366 @@
+// Laboratorio visual de crecimiento de asentamientos — ámbito aparte del juego (`laboratorio.html`), fuera
+// de `main.ts`/`app/gameStore.ts`. Un solo asentamiento, motor real (`avanzarSimulacion`), sin partida ni
+// facciones de más alrededor: existe para ver en vivo cómo se aplica el árbol único de anclas (Etapa 5,
+// `engine/trazado.ts`) sin tener que perseguirlo en una partida completa.
+import type { Asentamiento, EdificioTipo, Faccion, Point, RecursoTipo } from '../domain/types';
+import { MAPA_DEFAULT, generarMapa } from '../worldgen';
+import { crearMapa, type Mapa } from '../world/mapa';
+import { crearFaccion } from '../engine/faccion';
+import { asignarCargoLocal } from '../engine/cargos';
+import { evaluarViabilidadFundacion, fundarAsentamiento as fundarAsentamientoEngine } from '../engine/settlement';
+import { avanzarSimulacion, type EstadoSimulacion } from '../engine/simulation';
+import { celdaMinimaDeEdificio, edificiosInternos, redDeCalles, segmentosDeRed, tamanoDeEdificio, type RedDeCalles } from '../engine/trazado';
+import { anadirEdificioManualmente, reclamosDeFuentes, ConstruccionManualInvalidaError } from '../engine/construction';
+import { REJILLA_ASENTAMIENTO } from '../constants';
+import { drawAsentamiento, EDIFICIO_ETIQUETA } from '../ui/canvas';
+import { anclaEnPosicion, dibujarOverlayAnclas, inspeccionarAnclas, type FilaAncla } from './debugAnclas';
+import { calcularLayoutArbol, dibujarArbol, nodoEnPosicion, type LayoutArbol } from './vistaArbol';
+
+/** Todos los tipos de recurso del juego (mismo listado que `almacenInicial` en `engine/settlement.ts`) —
+ * el laboratorio le da 9999 de cada uno a su único asentamiento apenas se funda, para poder probar
+ * crecimiento sin que la escasez de materiales sea una variable más a controlar. */
+const RECURSOS_LAB: RecursoTipo[] = [
+  'madera', 'piedra', 'trigo', 'cobre', 'estano', 'oro', 'livestock',
+  'lingoteCobre', 'lingoteEstano', 'lingoteBronce',
+  'cuero', 'cueroCurtido', 'cueroCalidad',
+  'armaMadera', 'armaCobre', 'armaBronce', 'armaBronceCalidad',
+  'armaduraBasica', 'armaduraIntermedia', 'armaduraBronce',
+];
+
+/** Tipos construibles manualmente en la pestaña "Construcción manual" — mismo criterio que
+ * `anadirEdificioManualmente` (engine/construction.ts): excluye Centro Urbano y Puesto de Mercado (ambos
+ * rechazados ahí explícitamente) y los "marcadores gratis" que solo nacen por la regla de semilla de grupo
+ * (plaza/plazaDeArmas/patioDeGremios/tallerCarpinteria/pozo/parque, Etapa 5) — esos no tienen sitio propio
+ * fuera del árbol de anclas y `sitioParaTipo` no sabe colocarlos sueltos. */
+const TIPOS_CONSTRUIBLES_MANUAL: EdificioTipo[] = [
+  'vivienda', 'granja', 'cantera', 'lenera', 'almacen', 'mina', 'minaCobre', 'minaEstano',
+  'fundicion', 'granFundicion', 'corral', 'armeria', 'curtiduria', 'carpinteria', 'palacio',
+  'barracon', 'galeriaDeTiro', 'mercado', 'maravilla', 'muralla',
+];
+
+function darMaterialesInfinitos(asentamiento: Asentamiento): Asentamiento {
+  const almacen = { ...asentamiento.almacen };
+  for (const tipo of RECURSOS_LAB) {
+    almacen[tipo] = { cantidad: 9999, capacidad: 9999 };
+  }
+  return { ...asentamiento, almacen };
+}
+
+const canvas = document.getElementById('lab-canvas') as HTMLCanvasElement;
+const ctx = canvas.getContext('2d')!;
+const treeCanvas = document.getElementById('lab-tree-canvas') as HTMLCanvasElement;
+const treeCtx = treeCanvas.getContext('2d')!;
+const seedInput = document.getElementById('lab-seed') as HTMLInputElement;
+const fundarBtn = document.getElementById('lab-fundar') as HTMLButtonElement;
+const tick1Btn = document.getElementById('lab-tick-1') as HTMLButtonElement;
+const tick10Btn = document.getElementById('lab-tick-10') as HTMLButtonElement;
+const tick50Btn = document.getElementById('lab-tick-50') as HTMLButtonElement;
+const autoBtn = document.getElementById('lab-auto') as HTMLButtonElement;
+const statusEl = document.getElementById('lab-status')!;
+const anclasBodyEl = document.getElementById('lab-anclas-body')!;
+const tabAnclasBtn = document.getElementById('lab-tab-anclas') as HTMLButtonElement;
+const tabManualBtn = document.getElementById('lab-tab-manual') as HTMLButtonElement;
+const panelAnclasEl = document.getElementById('lab-panel-anclas')!;
+const panelManualEl = document.getElementById('lab-panel-manual')!;
+const manualTipoSelect = document.getElementById('lab-manual-tipo') as HTMLSelectElement;
+const manualEncolarBtn = document.getElementById('lab-manual-encolar') as HTMLButtonElement;
+const manualStatusEl = document.getElementById('lab-manual-status')!;
+const colaBodyEl = document.getElementById('lab-cola-body')!;
+
+let mapa: Mapa;
+let estado: EstadoSimulacion;
+let faccionLab: Faccion;
+let contadorManual = 0;
+let tick = 0;
+let nacimientos = new Map<string, number>();
+let autoTimer: number | undefined;
+
+for (const tipo of TIPOS_CONSTRUIBLES_MANUAL) {
+  const opcion = document.createElement('option');
+  opcion.value = tipo;
+  opcion.textContent = EDIFICIO_ETIQUETA[tipo] ?? tipo;
+  manualTipoSelect.appendChild(opcion);
+}
+
+// --- Estado cacheado del último `computar()` (motor), reutilizado por `pintar()` (solo hover, sin volver a
+// tocar el motor ni recalcular trazado/árbol en cada movimiento del mouse). ---
+let cacheAsentamiento: Asentamiento | null = null;
+let cacheFilas: FilaAncla[] = [];
+let cacheHuellas: Record<string, { x: number; y: number; ancho: number; alto: number }> = {};
+let cacheCalles: { desde: Point; hasta: Point }[] = [];
+let cacheCaminos: { desde: Point; hasta: Point }[] = [];
+let cacheAPantalla: (p: Point) => Point = (p) => p;
+let cacheEscala = 1;
+let cacheLayoutArbol: LayoutArbol = { nodos: new Map(), ancho: 0, alto: 0 };
+let hoveredId: string | null = null;
+
+/** Barre una grilla regular buscando una posición fundable con bosque alcanzable (mismo criterio que
+ * `engine/__tests__/fixtures.ts::posicionRecomendable`, reimplementado aquí en vez de importar desde
+ * `__tests__` — el laboratorio es una herramienta de desarrollo, no un test). */
+function posicionRecomendable(mapaBase: Mapa, existentes: Asentamiento[]): Point {
+  const paso = 40;
+  for (let x = paso; x < mapaBase.limites.ancho; x += paso) {
+    for (let y = paso; y < mapaBase.limites.alto; y += paso) {
+      const posicion = { x, y };
+      if (evaluarViabilidadFundacion(mapaBase, posicion, existentes).recomendable) return posicion;
+    }
+  }
+  return { x: mapaBase.limites.ancho / 2, y: mapaBase.limites.alto / 2 };
+}
+
+function fundar(seed: number): void {
+  if (autoTimer !== undefined) detenerAuto();
+  mapa = crearMapa(generarMapa({ ...MAPA_DEFAULT, seed }));
+  const faccionBase: Faccion = crearFaccion('faccion-lab', 'Laboratorio');
+  const posicion = posicionRecomendable(mapa, []);
+  const { asentamiento, facciones } = fundarAsentamientoEngine(mapa, [faccionBase], faccionBase.id, posicion, ['jugador-lab'], [], 0);
+  faccionLab = facciones[0]!;
+  // Gobernador propio (requisito de `anadirEdificioManualmente`) + 9999 de cada material, para que la
+  // pestaña "Construcción manual" pueda encolar cualquier cosa sin que fondos o cargos sean la traba.
+  const asentamientoConGobernador = asignarCargoLocal(darMaterialesInfinitos(asentamiento), faccionLab, 'gobernador', 'jugador-lab');
+  estado = {
+    asentamientos: [asentamientoConGobernador],
+    facciones: [faccionLab],
+    caravanas: [],
+    acuerdos: [],
+    ordenes: [],
+    relaciones: [],
+    titulos: [],
+    caminos: [],
+    campamentosBandidos: [],
+    bandidosProximoSpawnTick: 0,
+  };
+  tick = 0;
+  contadorManual = 0;
+  nacimientos = new Map(asentamientoConGobernador.edificios.map((e) => [e.id, 0]));
+  hoveredId = null;
+  manualStatusEl.textContent = '—';
+  computar();
+}
+
+function paso(): void {
+  if (estado.asentamientos.length === 0) return;
+  tick += 1;
+  estado = avanzarSimulacion(estado, mapa, tick);
+  const asentamiento = estado.asentamientos[0];
+  if (!asentamiento) return;
+  for (const edificio of asentamiento.edificios) {
+    if (!nacimientos.has(edificio.id)) nacimientos.set(edificio.id, tick);
+  }
+}
+
+function avanzarNTicks(n: number): void {
+  for (let i = 0; i < n; i++) {
+    if (estado.asentamientos.length === 0) break;
+    paso();
+  }
+  computar();
+}
+
+function toggleAuto(): void {
+  if (autoTimer !== undefined) {
+    detenerAuto();
+    return;
+  }
+  autoBtn.textContent = '⏸ Auto';
+  autoBtn.classList.add('activo');
+  autoTimer = window.setInterval(() => {
+    if (estado.asentamientos.length === 0) {
+      detenerAuto();
+      return;
+    }
+    paso();
+    computar();
+  }, 150);
+}
+
+function detenerAuto(): void {
+  if (autoTimer !== undefined) window.clearInterval(autoTimer);
+  autoTimer = undefined;
+  autoBtn.textContent = '▶ Auto';
+  autoBtn.classList.remove('activo');
+}
+
+function filaClase(fila: FilaAncla): string {
+  if (fila.esSemillaActiva) return 'activa';
+  if (fila.huerfana) return 'huerfana';
+  return '';
+}
+
+function marca(valor: boolean): string {
+  return valor ? '✓' : '—';
+}
+
+/** Recalcula todo lo que depende del motor (trazado, árbol, filas) tras fundar o avanzar ticks, guarda el
+ * resultado en la caché y pinta. `pintar()` (hover) NUNCA llama a esto — solo redibuja con lo ya cacheado. */
+function computar(): void {
+  const asentamiento = estado.asentamientos[0] ?? null;
+  cacheAsentamiento = asentamiento;
+  if (!asentamiento) {
+    cacheFilas = [];
+    pintar();
+    statusEl.textContent = `Tick ${tick} — el asentamiento colapsó. Fundá de nuevo.`;
+    anclasBodyEl.innerHTML = '';
+    return;
+  }
+
+  const red: RedDeCalles = redDeCalles(asentamiento.id, asentamiento.edificios);
+  const { calles, caminos } = segmentosDeRed(red);
+  cacheCalles = calles;
+  cacheCaminos = caminos;
+
+  const huellas: Record<string, { x: number; y: number; ancho: number; alto: number }> = {};
+  for (const edificio of edificiosInternos(asentamiento.edificios)) {
+    const min = celdaMinimaDeEdificio(edificio);
+    const tamano = tamanoDeEdificio(edificio);
+    huellas[edificio.id] = {
+      x: min.col * REJILLA_ASENTAMIENTO.tamanoCelda,
+      y: min.row * REJILLA_ASENTAMIENTO.tamanoCelda,
+      ancho: tamano.ancho * REJILLA_ASENTAMIENTO.tamanoCelda,
+      alto: tamano.alto * REJILLA_ASENTAMIENTO.tamanoCelda,
+    };
+  }
+  cacheHuellas = huellas;
+
+  const usable = canvas.width * 0.92;
+  cacheEscala = usable / (REJILLA_ASENTAMIENTO.radioMapa * 2);
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+  const escala = cacheEscala;
+  cacheAPantalla = (p: Point): Point => ({ x: cx + p.x * escala, y: cy + p.y * escala });
+
+  cacheFilas = inspeccionarAnclas(asentamiento.edificios, asentamiento.id, tick, nacimientos);
+  cacheLayoutArbol = calcularLayoutArbol(cacheFilas);
+
+  statusEl.textContent = `Tick ${tick} · nivel ${asentamiento.nivel} · ${asentamiento.edificios.length} edificios · ${cacheFilas.length} anclas de árbol`;
+  anclasBodyEl.innerHTML = cacheFilas
+    .map(
+      (fila) =>
+        `<tr class="${filaClase(fila)}" data-id="${fila.id}">` +
+        `<td>${EDIFICIO_ETIQUETA[fila.tipo] ?? fila.tipo}</td>` +
+        `<td>${fila.codigo}</td>` +
+        `<td>${fila.nivel}</td>` +
+        `<td>${fila.distanciaPadreCeldas === null ? '—' : fila.distanciaPadreCeldas.toFixed(1)}</td>` +
+        `<td>${marca(fila.esSemillaActiva)}</td>` +
+        `<td>${marca(fila.semillaSaturada)}</td>` +
+        `<td>${marca(fila.anclaLlena)}</td>` +
+        `<td>${fila.huerfana ? '⚠' : '—'}</td>` +
+        `<td>${fila.edad}</td>` +
+        `</tr>`
+    )
+    .join('');
+
+  const enColaOConstruccion = asentamiento.edificios
+    .filter((e) => e.estado === 'en_cola' || e.estado === 'en_construccion')
+    .sort((a, b) => (b.prioridad ?? 0) - (a.prioridad ?? 0));
+  colaBodyEl.innerHTML = enColaOConstruccion
+    .map(
+      (e) =>
+        `<tr><td>${EDIFICIO_ETIQUETA[e.tipo] ?? e.tipo}</td><td>${e.estado}</td><td>${e.ticksRestantes}</td></tr>`
+    )
+    .join('');
+
+  pintar();
+}
+
+/** Solo redibuja con lo ya cacheado por `computar()`, aplicando el resaltado de `hoveredId` — es lo único que
+ * corre en cada movimiento del mouse, para que el resaltado cruzado mapa↔árbol no tenga que volver a tocar el
+ * motor ni recalcular el trazado en cada frame. */
+function pintar(): void {
+  if (!cacheAsentamiento) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    treeCtx.clearRect(0, 0, treeCanvas.width, treeCanvas.height);
+    return;
+  }
+  drawAsentamiento(ctx, canvas, {
+    asentamiento: cacheAsentamiento,
+    etiqueta: `Laboratorio (seed ${seedInput.value})`,
+    calles: cacheCalles,
+    caminos: cacheCaminos,
+    huellas: cacheHuellas,
+    tamanoCelda: REJILLA_ASENTAMIENTO.tamanoCelda,
+    radioMapa: REJILLA_ASENTAMIENTO.radioMapa,
+  });
+  dibujarOverlayAnclas(ctx, cacheFilas, cacheAsentamiento.id, cacheAPantalla, cacheEscala, hoveredId);
+
+  treeCanvas.width = Math.max(treeCanvas.parentElement!.clientWidth, cacheLayoutArbol.ancho);
+  treeCanvas.height = Math.max(300, cacheLayoutArbol.alto);
+  dibujarArbol(treeCtx, treeCanvas, cacheFilas, cacheLayoutArbol, hoveredId);
+
+  for (const fila of Array.from(anclasBodyEl.children)) {
+    fila.classList.toggle('hover', (fila as HTMLElement).dataset.id === hoveredId);
+  }
+}
+
+function fijarHover(id: string | null): void {
+  if (id === hoveredId) return;
+  hoveredId = id;
+  pintar();
+}
+
+canvas.addEventListener('mousemove', (ev) => {
+  const rect = canvas.getBoundingClientRect();
+  const x = (ev.clientX - rect.left) * (canvas.width / rect.width);
+  const y = (ev.clientY - rect.top) * (canvas.height / rect.height);
+  fijarHover(anclaEnPosicion(cacheFilas, cacheAPantalla, x, y));
+});
+canvas.addEventListener('mouseleave', () => fijarHover(null));
+
+treeCanvas.addEventListener('mousemove', (ev) => {
+  const rect = treeCanvas.getBoundingClientRect();
+  const x = (ev.clientX - rect.left) * (treeCanvas.width / rect.width);
+  const y = (ev.clientY - rect.top) * (treeCanvas.height / rect.height);
+  fijarHover(nodoEnPosicion(cacheLayoutArbol, x, y));
+});
+treeCanvas.addEventListener('mouseleave', () => fijarHover(null));
+
+anclasBodyEl.addEventListener('mouseover', (ev) => {
+  const fila = (ev.target as HTMLElement).closest('tr[data-id]') as HTMLElement | null;
+  fijarHover(fila?.dataset.id ?? null);
+});
+anclasBodyEl.addEventListener('mouseleave', () => fijarHover(null));
+
+function elegirTab(tab: 'anclas' | 'manual'): void {
+  tabAnclasBtn.classList.toggle('activo', tab === 'anclas');
+  tabManualBtn.classList.toggle('activo', tab === 'manual');
+  panelAnclasEl.style.display = tab === 'anclas' ? '' : 'none';
+  panelManualEl.style.display = tab === 'manual' ? '' : 'none';
+}
+tabAnclasBtn.addEventListener('click', () => elegirTab('anclas'));
+tabManualBtn.addEventListener('click', () => elegirTab('manual'));
+
+manualEncolarBtn.addEventListener('click', () => {
+  const asentamiento = estado.asentamientos[0];
+  if (!asentamiento) return;
+  const tipo = manualTipoSelect.value as EdificioTipo;
+  const reclamos = reclamosDeFuentes(estado.asentamientos);
+  try {
+    const actualizado = anadirEdificioManualmente(
+      asentamiento,
+      faccionLab,
+      'gobernador',
+      tipo,
+      [],
+      mapa,
+      undefined,
+      reclamos,
+      contadorManual++
+    );
+    estado = { ...estado, asentamientos: [actualizado] };
+    for (const edificio of actualizado.edificios) {
+      if (!nacimientos.has(edificio.id)) nacimientos.set(edificio.id, tick);
+    }
+    manualStatusEl.textContent = `${EDIFICIO_ETIQUETA[tipo] ?? tipo} encolado.`;
+    computar();
+  } catch (err) {
+    manualStatusEl.textContent = err instanceof ConstruccionManualInvalidaError ? err.message : String(err);
+  }
+});
+
+fundarBtn.addEventListener('click', () => fundar(Number(seedInput.value) || 1));
+tick1Btn.addEventListener('click', () => avanzarNTicks(1));
+tick10Btn.addEventListener('click', () => avanzarNTicks(10));
+tick50Btn.addEventListener('click', () => avanzarNTicks(50));
+autoBtn.addEventListener('click', toggleAuto);
+
+fundar(Number(seedInput.value) || 1);

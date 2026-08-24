@@ -10,9 +10,10 @@
 import { describe, expect, it } from 'vitest';
 import type { Asentamiento, Edificio, RecursoAlmacenado } from '../../domain/types';
 import type { RecetaProduccion } from '../../constants';
-import { LINEAS_PRODUCCION } from '../../constants';
+import { LINEAS_PRODUCCION, REJILLA_ASENTAMIENTO, ZONA_INFLUENCIA } from '../../constants';
 import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
-import { angulosDeBarrios, factorLineaProduccion, factorPorDistancia, sitioEnBarrio, sitioEnBarrioLineaProduccion, tieneInsumoDeArranque } from '../construction';
+import { factorLineaProduccion, factorPorDistancia, sitioEnBarrio, sitioEnBarrioLineaProduccion, tieneInsumoDeArranque } from '../construction';
+import { celdaMinimaDeEdificio, crearAnclaNueva } from '../trazado';
 import { activarPolitica, lineasProduccionPriorizadas } from '../politicas';
 import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, mockMathRandomDeterminista } from './fixtures';
 
@@ -185,35 +186,43 @@ describe('política "Líneas de Producción" del Maestro de Obras', () => {
 
   it('sitioEnBarrioLineaProduccion nunca elige un hueco peor que el que elegiría sitioEnBarrio', () => {
     const mapa = crearMapaDeterminista(SEED);
-    const { asentamiento: base } = fundarAsentamientoDeTest(mapa, crearFacciones(), 'faccion-1', []);
+    const { asentamiento: fundado } = fundarAsentamientoDeTest(mapa, crearFacciones(), 'faccion-1', []);
+    // Etapa 5: Curtiduría (industria) ya no cae por una cuña de barrio — se atrae a un Patio de Gremios
+    // alcanzable. Nivel 2 y radio de sobra para que el árbol de anclas tenga sitio real donde nacer.
+    const base: Asentamiento = {
+      ...fundado,
+      nivel: 2,
+      nivelActual: 2,
+      radioPotencial: ZONA_INFLUENCIA.radioMaximoPorNivel[2] ?? fundado.radioPotencial,
+    };
+    const resultadoAncla = crearAnclaNueva(base.id, base.edificios, 'patioDeGremios', 'patio-de-gremios-test');
+    expect(resultadoAncla).not.toBeNull();
+    const patio = resultadoAncla!.nuevaAncla;
+    const conPatio = { ...base, edificios: [...base.edificios, patio] };
 
-    // Vista de Asentamiento (rejilla de celdas, a petición del usuario): Curtiduría y Corral comparten barrio
-    // ('industria') — ver CATEGORIA_POR_TIPO. Ambos buscan SOLO dentro de la cuña de la dirección asignada a
-    // ESTE asentamiento (aleatoria por asentamiento, ver `angulosDeBarrios`), así que el Corral se coloca en
-    // esa MISMA dirección, pegado al borde: el hueco por defecto de `sitioEnBarrio` (barrio vacío, prefiere el
-    // más cercano al centro) queda necesariamente más lejos de él que el mejor hueco posible del barrio.
-    const anguloIndustria = angulosDeBarrios(base.id).industria;
+    // Corral (fuente de livestock) pegado a un lado del Patio de Gremios, dentro de su anillo de atracción —
+    // no en el hueco "por defecto" que elegiría `sitioEnBarrio` (el más pegado sin mirar la fuente), para que
+    // la política de logística tenga margen real para mejorarlo.
+    const patioMin = celdaMinimaDeEdificio(patio);
+    const T = REJILLA_ASENTAMIENTO.tamanoCelda;
     const corral: Edificio = {
       id: 'corral-test',
       tipo: 'corral',
-      posicion: {
-        x: Math.cos(anguloIndustria) * base.radioPotencial * 0.95,
-        y: Math.sin(anguloIndustria) * base.radioPotencial * 0.95,
-      }, // coords LOCALES (origen = Centro Urbano)
+      posicion: { x: (patioMin.col - 5) * T, y: (patioMin.row + 1) * T },
       estado: 'activo',
       ticksRestantes: 0,
       ambito: 'asentamiento',
       fuenteId: 'nodo-livestock-inexistente', // basta el tipo/estado para `fuentesDeRecurso`; no se extrae aquí
     };
-    const conCorral = { ...base, edificios: [...base.edificios, corral] };
+    const conCorral = { ...conPatio, edificios: [...conPatio.edificios, corral] };
 
     const plano = sitioEnBarrio(conCorral, conCorral.edificios, 'curtiduria');
     const optimizado = sitioEnBarrioLineaProduccion(conCorral, conCorral.edificios, 'curtiduria');
     expect(plano).not.toBeNull();
     expect(optimizado).not.toBeNull();
 
-    const distPlano = dist(plano!, corral.posicion);
-    const distOptimizado = dist(optimizado!, corral.posicion);
+    const distPlano = dist(plano!.punto, corral.posicion);
+    const distOptimizado = dist(optimizado!.punto, corral.posicion);
     expect(distOptimizado).toBeLessThanOrEqual(distPlano);
     expect(factorPorDistancia(distOptimizado)).toBeGreaterThanOrEqual(factorPorDistancia(distPlano));
   });

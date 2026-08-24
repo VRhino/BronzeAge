@@ -361,6 +361,75 @@ Se discutieron 6 parámetros con el usuario antes de implementar nada (ver tambi
 
 ---
 
+## Etapa 5 (árbol único de anclas) — dos bugs reales de proliferación/reparto, encontrados con un laboratorio visual aparte
+
+El árbol único de anclas (Etapa 5, `Consideraciones/Vista_Asentamiento_Trazado_Urbano.md` §5.4-5.7) se había
+verificado hasta ahora solo por simulación abstracta y por los 237 tests existentes — ninguno de los dos
+expone cómo se ve un asentamiento real creciendo durante cientos de ticks. Para poder inspeccionarlo se
+construyó `laboratorio.html` + `src/lab/*` (un asentamiento aislado sobre el motor real, `avanzarSimulacion`,
+sin partida ni facciones alrededor — herramienta de desarrollo interna, no parte del juego ni de la suite de
+tests) con una tabla por ancla (semilla activa/saturada, ancla llena, huérfana, distancia a su padre, código
+de posición en el árbol tipo "R"/"a"/"a1") y una vista de árbol con resaltado cruzado mapa↔árbol al pasar el
+cursor. Jugando con ella el usuario encontró dos bugs reales de la Etapa 5 (más un desliz de mi parte al
+corregir el primero, revertido antes de shipear nada) y un tercero que queda documentado como abierto.
+
+### 46. Proliferación de anclas residenciales: la Lógica 2 nunca reutilizaba una instancia que no fuera la más cercana al origen
+- **Error:** con más de una instancia de ancla de la misma categoría (ej. dos Plazas), `sitiosParaTipo` elegía
+  siempre la más cercana al ORIGEN del asentamiento (`anclaMasCercana`), sin memoria de si tenía hueco. Centro
+  Urbano tiene `posicion=(0,0)` exacto, así que nunca perdía ese puesto: en cuanto su núcleo de satélites se
+  llenaba para siempre, `asegurarAnclaPara` seguía sondeando esa misma instancia llena y fabricaba un ancla
+  nueva en cada ronda de demanda en vez de reutilizar cualquiera de las que ya tenían hueco de sobra.
+- **Cómo se detectó:** reportado por el usuario probando el laboratorio (seed 1): la tabla mostraba 8 anclas
+  residenciales, ninguna marcada como saturada de verdad, dos de ellas huérfanas.
+- **Solución:** nuevo campo persistido `Edificio.anclaLlena` (se marca una sola vez, nunca se revisa — mismo
+  patrón que `semillaSaturada` del árbol) + `anclaActivaParaCategoria` (`engine/trazado.ts`), que recorre las
+  instancias de la categoría de más cerca a más lejos del origen saltando las `anclaLlena`, probando cada una
+  con la colocación real (`sitiosPorAtraccionDura`) hasta encontrar la primera con hueco. `asegurarAnclaPara`
+  (`engine/construction.ts`) la usa antes de considerar crear un ancla nueva. Detalle de diseño confirmado
+  explícitamente por el usuario tras una pregunta directa: **persistido, igual que `semillaSaturada`** — no se
+  recalcula en vivo en cada consulta. Ver `Vista_Asentamiento_Trazado_Urbano.md` §5.3.1 para el diseño completo.
+- **Desliz corregido en el camino, no shipeado:** una primera versión de la corrección hacía que `anclaLlena`
+  disparara también el avance de `semillaActiva` (Lógica 1) — el propio usuario lo señaló como error suyo
+  ("ancla llena no dispara nueva semilla, solo ancla saturada dispara cambio de semilla") apenas lo vio en el
+  laboratorio, y se revirtió por completo antes de continuar. `anclaLlena` (Lógica 2) y `semillaSaturada`
+  (Lógica 1) quedan como criterios independientes, documentado explícitamente en el comentario de ambos campos
+  (`domain/types.ts`) para que no se vuelvan a mezclar.
+- **Verificado:** `tsc --noEmit` limpio; 237/237 tests en verde; en el laboratorio (seed 1, tick 300 y 450) el
+  total de anclas se mantuvo estable en 4 en vez de seguir creciendo sin límite (184 anclas hacia el tick 400
+  en la corrida con el bug).
+
+### 47. Ranuras del árbol repetidas: una semilla podía nacer varias anclas hijas en la misma dirección
+- **Error:** `direccionesBarajadas` da el mismo orden de las 8 direcciones cardinales cada vez que se consulta
+  la MISMA semilla (determinista por diseño). Si la primera dirección de esa lista ya tenía un ancla hija,
+  `huecoEnDireccion` expandía el radio de búsqueda EN ESA MISMA DIRECCIÓN en vez de probar una de las otras 7
+  todavía libres — varias anclas hijas de una semilla terminaban alineadas en un solo rayo, a distancias
+  crecientes, en vez de repartirse alrededor.
+- **Cómo se detectó:** reportado por el usuario viendo la vista de árbol del laboratorio: dos anclas con el
+  mismo código de ranura (ej. "a" repetido, a distancias muy distintas) colgando de la misma semilla.
+- **Solución:** nueva función `ranuraOcupada` (`engine/trazado.ts`) — comprueba geométricamente si alguna
+  ancla ya existente cae casi exacto en el ángulo de una dirección dada, dentro del rango de radio de una
+  ranura. `crearAnclaNueva` separa las 8 direcciones en libres/ya usadas y prueba primero las libres (a la
+  mínima distancia que cada una permita), recurriendo a expandir una ya usada solo si ninguna libre sirve.
+- **Verificado:** `tsc --noEmit` limpio; 237/237 tests en verde; en el laboratorio (seed 1, tick 300 y 500) los
+  tres hijos de la raíz quedaron en tres ranuras distintas ("a", "h", "f") a distancias mínimas (6.0-7.5
+  celdas) sin ningún código repetido en la tabla, contra el caso anterior con dos anclas compartiendo ranura
+  "a" a distancias de 5.5 y 10.0.
+
+### Abierto: ancla creada sin garantizar sitio para al menos un satélite
+El laboratorio (seed 70) expone un tercer caso, todavía sin corregir: un Patio de Gremios nace consistente y
+queda huérfano para siempre — ningún edificio de industria consigue nunca pegársele. Coincide con el
+diagnóstico original que motivó toda la Etapa 5: `crearAnclaNueva`/`asegurarAnclaPara` garantizan que el ANCLA
+en sí cabe (hueco + separación) antes de colocarla, pero nunca comprueban que, una vez colocada,
+`sitiosPorAtraccionDura` vaya a encontrarle sitio a algún satélite de la categoría que la disparó. Documentado
+también en `Vista_Asentamiento_Trazado_Urbano.md` §"Abierto".
+
+Además, mientras se construía el laboratorio se añadió una pestaña de "Construcción manual" (dropdown con los
+tipos construibles a mano + botón "Encolar", mismo camino que `anadirEdificioManualmente` del motor real) y
+9999 de cada material sembrados al fundar, para poder forzar demanda de cualquier edificio sin que la
+escasez de recursos sea una variable más a controlar al probar el árbol de anclas.
+
+---
+
 ## Nota general
 
 Todas las correcciones anteriores son de **diseño/balance**, no de sintaxis: el proyecto compiló sin errores de TypeScript en todo momento salvo en los pasos intermedios normales de refactor (añadir un campo a un tipo y luego actualizar todos los lugares que lo instancian), que se resolvieron sobre la marcha y no se listan aquí por ser rutinarios.

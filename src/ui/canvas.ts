@@ -1,4 +1,4 @@
-import type { Asentamiento, BiomaTipo, CaminoComercial, CampamentoBandido, Caravana, Edificio, EdificioTipo, Faccion, Point, RecursoTipo, ZonaInfluencia } from '../domain/types';
+import type { Asentamiento, BiomaTipo, CaminoComercial, CampamentoBandido, Caravana, Edificio, EdificioTipo, Faccion, Point, RecursoTipo, ZonaFaccion } from '../domain/types';
 import type { Mapa } from '../world/mapa';
 
 export const FACCION_COLORES = ['#c0392b', '#2980b9', '#27ae60', '#8e44ad', '#d35400', '#16a085'];
@@ -276,6 +276,8 @@ export const EDIFICIO_ETIQUETA: Record<EdificioTipo, string> = {
   plazaDeArmas: 'Plaza de Armas',
   patioDeGremios: 'Patio de Gremios',
   tallerCarpinteria: 'Taller de carpintería',
+  pozo: 'Pozo',
+  parque: 'Parque',
 };
 
 export const EDIFICIO_COLOR: Record<EdificioTipo, string> = {
@@ -311,6 +313,8 @@ export const EDIFICIO_COLOR: Record<EdificioTipo, string> = {
   plazaDeArmas: '#c97a7a',
   patioDeGremios: '#c99a6b',
   tallerCarpinteria: '#a87850',
+  pozo: '#d8e4e8',
+  parque: '#c8e0b8',
 };
 
 export function faccionColor(faccionId: string, facciones: Faccion[]): string {
@@ -321,7 +325,14 @@ export function faccionColor(faccionId: string, facciones: Faccion[]): string {
 export interface DrawState {
   mapa: Mapa;
   asentamientos: Asentamiento[];
-  zonas: ZonaInfluencia[];
+  /**
+   * Territorio POR FACCIÓN, ya fusionado en una sola silueta por el motor
+   * (`GameStore.getZonasFusionadas` -> `computeZonasFusionadasPorFaccion`). Antes llegaba la lista de zonas
+   * por asentamiento y se pintaba un disco por cada uno: como los asentamientos de una misma facción se
+   * solapan por diseño, se veían fronteras internas inexistentes y el relleno translúcido se acumulaba en los
+   * solapes. Esta capa no fusiona nada por su cuenta — recibe los contornos resueltos.
+   */
+  zonasFusionadas: ZonaFaccion[];
   facciones: Faccion[];
   caravanas: Caravana[];
   /** Caminos comerciales (Fase 0.3, Doc 1.6) — estado de PARTIDA, a diferencia de los ríos/chokepoints
@@ -444,26 +455,44 @@ export function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, s
   ctx.strokeStyle = '#4a4436';
   ctx.strokeRect(0, 0, canvas.width, canvas.height);
 
-  // Bosques (zonas). El relleno da la forma de la zona (sin contorno: los glifos de árbol sembrados encima
-  // ya marcan el borde por densidad) — la densidad de madera se lee tanto en la opacidad del relleno como en
-  // la cantidad de árboles, dando a los bosques una silueta propia, distinguible de otras capas translúcidas
-  // (fertilidad, zonas de influencia) que comparten el mismo vocabulario de "círculo/polígono semitransparente".
+  // Bosques: se pinta la MANCHA fusionada (contorno de la unión de todos los discos, ya resuelto por
+  // `Mapa.contornosBosques`), no un círculo por bosque. Los 170 bosques del mapa se solapan muchísimo por
+  // diseño, así que dibujarlos uno a uno daba un amasijo de círculos con un anillo más oscuro en cada
+  // intersección; con una sola pasada de relleno la mancha queda con opacidad uniforme y silueta propia,
+  // distinguible de las otras capas translúcidas (fertilidad, zonas de influencia) que comparten el mismo
+  // vocabulario de "polígono semitransparente". Todos los lazos van en el mismo path: los claros encerrados
+  // por una corona de bosque se recortan solos con la regla `nonzero`.
+  //
+  // El borde SÍ se traza ahora (antes no había ninguno, porque el borde lo insinuaban los propios árboles):
+  // es lo que hace que la mancha se lea como una masa forestal con forma y no como una nube difusa.
+  ctx.beginPath();
+  for (const contorno of state.mapa.contornosBosques()) {
+    contorno.forEach((p, i) => {
+      const x = p.x * scale;
+      const y = p.y * scale;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.closePath();
+  }
+  ctx.fillStyle = 'rgba(38, 92, 40, 0.32)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(24, 64, 26, 0.45)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Árboles: siguen sembrándose bosque a bosque, y son ahora la ÚNICA señal de densidad de madera (el relleno
+  // pasó a ser uniforme al fusionarse — un solo tono no puede representar 170 densidades distintas, y donde
+  // dos bosques se solapan tampoco habría un valor "correcto" que mostrar). Cantidad ∝ área*densidad;
+  // posiciones deterministas por id de bosque (ver `mulberry32` arriba) así no bailan entre frames. Muestreo
+  // uniforme en disco: r = radio·√rand, no r = radio·rand (que amontonaría los puntos en el centro).
+  ctx.fillStyle = 'rgba(22, 62, 24, 0.9)';
   for (const bosque of state.mapa.listarBosques()) {
     const cx = bosque.centro.x * scale;
     const cy = bosque.centro.y * scale;
     const radioPx = bosque.radio * scale;
-
-    ctx.beginPath();
-    ctx.arc(cx, cy, radioPx, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(38, 92, 40, ${0.18 + bosque.densidad * 0.22})`;
-    ctx.fill();
-
-    // Cantidad de árboles ∝ área*densidad; posiciones deterministas por id de bosque (ver `mulberry32`
-    // arriba) así no bailan entre frames. Muestreo uniforme en disco: r = radio·√rand, no r = radio·rand
-    // (que amontonaría los puntos en el centro).
     const rand = mulberry32(hashSemilla(bosque.id));
     const numArboles = Math.round(Math.min(60, Math.max(4, (radioPx * radioPx * bosque.densidad) / 22)));
-    ctx.fillStyle = 'rgba(22, 62, 24, 0.9)';
     for (let i = 0; i < numArboles; i++) {
       const angulo = rand() * Math.PI * 2;
       const r = radioPx * Math.sqrt(rand());
@@ -479,19 +508,24 @@ export function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, s
     ctx.fill();
   }
 
-  // Zonas de influencia (polígono recortado por fronteras)
-  for (const zona of state.zonas) {
-    const asentamiento = state.asentamientos.find((a) => a.id === zona.asentamientoId);
-    if (!asentamiento || zona.poligono.length === 0) continue;
-    const color = faccionColor(asentamiento.faccionId, state.facciones);
+  // Zonas de influencia: UNA silueta por facción, no un disco por asentamiento (ver `zonasFusionadas`).
+  // Todos los lazos de una facción van en el MISMO path y se rellenan de una sola pasada: así el interior
+  // queda con opacidad uniforme (no se acumula donde dos asentamientos hermanos se solapan) y los huecos que
+  // la facción rodea sin reclamar se recortan solos por la regla de relleno `nonzero`, que es la de por
+  // defecto y la que los contornos ya vienen preparados para aprovechar (orientación opuesta).
+  for (const zonaFaccion of state.zonasFusionadas) {
+    if (zonaFaccion.contornos.length === 0) continue;
+    const color = faccionColor(zonaFaccion.faccionId, state.facciones);
     ctx.beginPath();
-    zona.poligono.forEach((p, i) => {
-      const x = p.x * scale;
-      const y = p.y * scale;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
-    ctx.closePath();
+    for (const contorno of zonaFaccion.contornos) {
+      contorno.forEach((p, i) => {
+        const x = p.x * scale;
+        const y = p.y * scale;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.closePath();
+    }
     ctx.fillStyle = color + '33';
     ctx.fill();
     ctx.strokeStyle = color;

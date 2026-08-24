@@ -77,11 +77,11 @@ el mapa de asentamiento es una espacio logico que se genera tomando en cuenta el
 + Correciones:
     + [NPC/CORNER-CASE]hay veces cuando un asentamiento es fundado por npc este no tiene acceso a la madera aun cuando el script de fundacion deberia prioriza q si o si tenga madera en distancia de zona de influencia, porq cuando va a construir la leñera le sale el mensaje de que no tiene bosque en su zona de influencia
     + [COMERCIO]mirar en profundidad como funcionan las comisiones de comercio
-    + [ANCLA]el funcionamiento del ancla cuando no se puede cumplir a n0, ir ampliando para simpre construi cerca. mientras no haya otra ancla de ese tipo.
-    + [ANCLA]los edifcios se contruyen siempre en la misma orientacion
-    + [ANCLA]tomar en cuenta la orientacion encuanto a ancla satelite, siempre intentando tener la maro cantidad de celdas adyacentes al ancla
-    + [ANCLA]las anclas tienen q salir en direcciones sin reclamar del asenteamiento, es decir, el centro urbano al centro, la siguiente toma una de las direcciones (N,S,E,O,NE,NO,SE,SO) y se construye en esa direccion, la siguiente ancla de tipo diferente toma otra direccion q no haya sido tomada y asi sucesivamente, aplica solo a anclas de diferentes tipos, y para aunmentar aun mas la diferencia entre ciudades, el eje de partida q define q es sur, norte, este y oeste, lo movemos algunos grados de forma aleatoria, por ejempo 10 grados o 45 o 33 grados asi es mad dificl encontrar ciudades iguales.
-    + [ANCLA] el credimiento de las viviendas tiene que tratar de conseguir crecer para rellenar los espacios en todas direcciones para que el centro urbano este simpre lo mas rodeado posible 
+    + [RESUELTO][ANCLA]el funcionamiento del ancla cuando no se puede cumplir a n0, ir ampliando para simpre construi cerca. mientras no haya otra ancla de ese tipo. — confirmado que el mecanismo de saturación ya cubría el caso (n0→n1→...→nN, verificado en `anclasSatelites.test.ts`), no hizo falta cambiar la lógica de saturación en sí, ver `Vista_Asentamiento_Trazado_Urbano.md` Etapa 5.
+    + [RESUELTO][ANCLA]los edifcios se contruyen siempre en la misma orientacion — orientación intercambiable ancho↔alto (`Edificio.rotado`), Etapa 4.
+    + [RESUELTO][ANCLA]tomar en cuenta la orientacion encuanto a ancla satelite, siempre intentando tener la maro cantidad de celdas adyacentes al ancla — desempate por máximo borde compartido (`bordeCompartido`) en `sitiosPorAtraccionDura`, Etapa 4.
+    + [RESUELTO][ANCLA]las anclas tienen q salir en direcciones sin reclamar del asenteamiento, es decir, el centro urbano al centro, la siguiente toma una de las direcciones (N,S,E,O,NE,NO,SE,SO) y se construye en esa direccion, la siguiente ancla de tipo diferente toma otra direccion q no haya sido tomada y asi sucesivamente, aplica solo a anclas de diferentes tipos, y para aunmentar aun mas la diferencia entre ciudades, el eje de partida q define q es sur, norte, este y oeste, lo movemos algunos grados de forma aleatoria, por ejempo 10 grados o 45 o 33 grados asi es mad dificl encontrar ciudades iguales. — reinterpretado con el usuario como un árbol único de anclas (Etapa 5): cada ancla tiene 8 ranuras de dirección (rotadas por asentamiento, `anguloRotacionEje`), sin distinguir tipo/categoría entre ellas — no "una dirección por tipo de ancla" como se planteó aquí originalmente, ver Etapa 5.
+    + [RESUELTO][ANCLA] el credimiento de las viviendas tiene que tratar de conseguir crecer para rellenar los espacios en todas direcciones para que el centro urbano este simpre lo mas rodeado posible — consecuencia del árbol único de anclas (Etapa 5): las anclas residenciales nuevas (Plaza/Pozo/Parque) nacen en cualquiera de las 8 direcciones rotadas de la semilla activa, no en una única cuña fija como con el reparto de barrio (eliminado en Etapa 5).
     + [BALANCE]cooldown de creacion de caravanas creado pero no parametrizable
     + [RESUELTO]revisar produccion de armaduras, no funciona correctamente
     + [FUNDACION]error cuadno se funda un segundo asentamiento no se elige quienes van en la caravana de fundacion para asignarlos al nuevo y quitarlos de anterior
@@ -97,14 +97,16 @@ el mapa de asentamiento es una espacio logico que se genera tomando en cuenta el
     + [RESUELTO] en la interfaz de asentamientos, dentro del cuadro de seleccion de asentamientO(donde sale el nombre, agregar un icono de warning en rojo cuando no se esta cumpliendo el mantenimiento)
     + [PRODUCCION] la interfaz no muestra correctamente el valor de consumo/total en la pestaña produccion cuando la produccion esta a 0 por ejemplo si consume 3 y la producciion esta a 0 el cosumo deberia ser 0/3 0 porq no se produce nada y 3 lo que consume esa receta al 100% de capacidad(sumatoria de los edificios)
 + Add Up:
-    + [ZONA/interfaz] las zonas de influencia de la misma faccion no se fusionan en un solo poligono en el mapa de asentamiento
+    + [ZONA/interfaz] las zonas de influencia de la misma faccion no se fusionan en un solo poligono en el mapa GENERAL
+        + [ZONA/interfaz] hay que cambiar la manera en que se crean los bosques de cicurlos overlaped a poligonos complejos para mostrar varios puntos que se overlapan como un solo poligono
     + [GUERRA] Los ejércitos también se mueven por el mapa para atacar como las caravanas, con un símbolo q los identifique por ejemplo un rombo, uno por cada jugador q va en el ejército, uno detrás de otro medio superpuestos y cada rombo del color de su faccion.
-    + [ASENTAMIENTO]cuando se sube de nivel de asentamiento se agregan edificios de decoracion solos a la ciudad como plazas y esas cosas
     + [RUTAS]el pathfinder de las rutas para las caravanas debe buscar evitar bosques(rodearlos) o rios(no los puede atravesar) y montañas
     + [POLITICAS]politicas de ubicacion de construccion.
     + [TRUEQUE]trueque compuesto de varios materiales
     + [REGISTRO-MOTOR]cuando motor de un mensaje de fondos insufiecientes para reealiza cualquier accion, q muestre lo que falta
-
+---------------------
+correciones:
+    + [ASENTAMIENTO]la opcion de reorganiza la cola no funciona correctamente probarlo en profudidad
 
 
 

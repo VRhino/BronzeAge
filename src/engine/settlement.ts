@@ -32,7 +32,8 @@ function edificiosIniciales(idBase: string): Edificio[] {
   for (let i = 0; i < FUNDACION.viviendasIniciales; i++) {
     // `sitioEnBarrio` siempre encuentra hueco aquí (fundación: solo el Centro Urbano ocupa celda todavía),
     // pero el fallback al origen es defensivo — nunca debe dejar una vivienda sin `Point`.
-    const posicion = sitioEnBarrio(contexto, edificios, 'vivienda') ?? { x: 0, y: 0 };
+    const sitio = sitioEnBarrio(contexto, edificios, 'vivienda');
+    const posicion = sitio?.punto ?? { x: 0, y: 0 };
     edificios.push({
       id: `edificio-${idBase}-vivienda-inicial-${i}`,
       tipo: 'vivienda',
@@ -40,10 +41,11 @@ function edificiosIniciales(idBase: string): Edificio[] {
       estado: 'activo',
       ticksRestantes: 0,
       ambito: 'asentamiento',
+      rotado: sitio?.rotado,
     });
   }
 
-  const posicionGranja = sitioEnBarrio(contexto, edificios, 'granja') ?? { x: 0, y: 0 };
+  const posicionGranja = sitioEnBarrio(contexto, edificios, 'granja')?.punto ?? { x: 0, y: 0 };
   edificios.push({
     id: `edificio-${idBase}-granja-inicial`,
     tipo: 'granja',

@@ -21,6 +21,7 @@ import type {
   Titulo,
   WorldConfig,
   ZonaBosque,
+  ZonaFaccion,
   ZonaInfluencia,
 } from '../domain/types';
 import { CAMPAMENTOS_BANDIDOS, EDIFICIO_CATALOGO, FUNDACION, MANTENIMIENTO, NECESIDADES, NIVEL_FACCION, POLITICAS, POLITICA_CATALOGO, REJILLA_ASENTAMIENTO, SIMULACION_AUTO_COMERCIO, TROPAS_RECLUTABLES } from '../constants';
@@ -58,7 +59,7 @@ import {
   type ViabilidadFundacion,
 } from '../engine/settlement';
 export type { ViabilidadFundacion } from '../engine/settlement';
-import { computeTodasLasZonas } from '../engine/zones';
+import { computeTodasLasZonas, computeZonasFusionadasPorFaccion } from '../engine/zones';
 import { avanzarSimulacion } from '../engine/simulation';
 import { avanzarNpcGobernanza } from './npcGobernanza';
 import { avanzarAutoComercioSimulado } from '../engine/simulacionAutoComercio';
@@ -215,6 +216,7 @@ export const CATALOGOS = {
   // `crearPuestosDeMercado`, engine/construction.ts). Mismo trato para las anclas de Etapa 3
   // (`plaza`/`plazaDeArmas`/`patioDeGremios`, marcadores gratis que nacen por la regla de semilla de grupo,
   // engine/trazado.ts) y `tallerCarpinteria` (nace al completarse la Carpintería, `crearTalleresDeCarpinteria`).
+  // `pozo`/`parque` (Etapa 4, punto 4): mismo trato, son las otras dos opciones del sorteo de ancla residencial.
   catalogoEdificios: (Object.keys(EDIFICIO_CATALOGO) as EdificioTipo[])
     .filter(
       (tipo) =>
@@ -223,7 +225,9 @@ export const CATALOGOS = {
         tipo !== 'plaza' &&
         tipo !== 'plazaDeArmas' &&
         tipo !== 'patioDeGremios' &&
-        tipo !== 'tallerCarpinteria'
+        tipo !== 'tallerCarpinteria' &&
+        tipo !== 'pozo' &&
+        tipo !== 'parque'
     )
     .map((tipo) => {
       const def = EDIFICIO_CATALOGO[tipo] as {
@@ -278,6 +282,9 @@ export class GameStore {
    * por referencia — indexar por él devolvería la fachada de la partida en curso al pedir la de una foto.
    */
   private mapasPorEstado = new WeakMap<EstadoMapa, Mapa>();
+  /** Última fusión de zonas por facción calculada, con la firma de los asentamientos de los que salió — ver
+   * `getZonasFusionadas`. Artefacto de render, no estado de partida: se puede tirar en cualquier momento. */
+  private zonasFusionadasCache: { clave: string; valor: ZonaFaccion[] } | null = null;
 
   constructor() {
     this.state = {
@@ -393,6 +400,31 @@ export class GameStore {
 
   getZonas(asentamientos: Asentamiento[] = this.state.asentamientos): ZonaInfluencia[] {
     return computeTodasLasZonas(asentamientos);
+  }
+
+  /**
+   * Las zonas de influencia agrupadas y FUSIONADAS por facción, para pintar el territorio como una sola
+   * silueta en vez de un disco por asentamiento (ver `computeZonasFusionadasPorFaccion`). Solo lectura, solo
+   * para dibujar: la interfaz nunca debe fusionar polígonos por su cuenta (acoplamiento 0 con el motor).
+   *
+   * Cacheado con una ranura: `render()` se dispara en cada `mousemove` sobre el lienzo, y la fusión (rejilla
+   * de muestreo + marching squares, ver `unirFormas`) es cara de sobra para no repetirla mientras nada haya
+   * cambiado. La clave es la única entrada de la que depende el resultado — posición, radio y facción de cada
+   * asentamiento — así que basta con que crezca un radio para que se recalcule, y alternar entre el presente
+   * y una foto del historial también la invalida (una ranura, no un mapa: se alterna poco y así no se
+   * acumulan fotos antiguas).
+   */
+  getZonasFusionadas(
+    zonas: ZonaInfluencia[] = this.getZonas(),
+    asentamientos: Asentamiento[] = this.state.asentamientos
+  ): ZonaFaccion[] {
+    const clave = asentamientos
+      .map((a) => `${a.id}|${a.faccionId}|${a.posicion.x},${a.posicion.y}|${a.radioPotencial}`)
+      .join(';');
+    if (this.zonasFusionadasCache?.clave === clave) return this.zonasFusionadasCache.valor;
+    const valor = computeZonasFusionadasPorFaccion(zonas, asentamientos);
+    this.zonasFusionadasCache = { clave, valor };
+    return valor;
   }
 
   /**

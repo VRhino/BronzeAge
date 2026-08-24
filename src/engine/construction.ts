@@ -16,7 +16,17 @@ import type { Mapa } from '../world/mapa';
 import { mejorFertilidadEnZona } from './zones';
 // `sitioParaTipo` del trazado se importa con alias: en este archivo ya existe una función con ese nombre, la
 // que resuelve la colocación de la construcción MANUAL (que a su vez llama a esta para los tipos internos).
-import { anclaNacidaTrasSemilla, CATEGORIA_POR_TIPO, reubicarPorTamano, sitioParaTipo as sitioEnTrazado, sitiosParaTipo, tamanoEdificio } from './trazado';
+import {
+  anclaActivaParaCategoria,
+  CATEGORIA_POR_TIPO,
+  crearAnclaNueva,
+  redDeCalles,
+  reubicarPorTamano,
+  sitioParaTipo as sitioEnTrazado,
+  sitiosParaTipo,
+  tamanoEdificio,
+  tipoAnclaParaCategoria,
+} from './trazado';
 import {
   capacidadViviendaArtesanos,
   capacidadViviendaPesants,
@@ -124,9 +134,9 @@ function distancia(a: Point, b: Point): number {
 // aquí solo se consume. Ver ese módulo y `Consideraciones/Vista_Asentamiento_Trazado_Urbano.md` antes de tocar
 // nada relacionado con dónde cae un edificio.
 
-/** Re-exportados para no romper a quienes ya los importaban desde aquí (`app/gameStore.ts`, tests): su
+/** Re-exportado para no romper a quienes ya lo importaban desde aquí (`app/gameStore.ts`, tests): su
  * implementación se mudó a `engine/trazado.ts` junto con el resto de la geometría urbana. */
-export { angulosDeBarrios, CATEGORIA_POR_TIPO } from './trazado';
+export { CATEGORIA_POR_TIPO } from './trazado';
 export type { CategoriaAsentamiento } from './trazado';
 
 /**
@@ -141,7 +151,7 @@ export function sitioEnBarrio(
   asentamiento: Pick<Asentamiento, 'id' | 'radioPotencial'>,
   ocupados: Edificio[],
   tipo: EdificioTipo
-): Point | null {
+): { punto: Point; rotado: boolean } | null {
   return sitioEnTrazado(asentamiento, ocupados, tipo);
 }
 
@@ -157,7 +167,11 @@ export function sitioEnBarrio(
  * unos puntos de factor. Si `tipo` no tiene recetas (Carpintería) cualquier hueco es igual de bueno y se
  * comporta como `sitioEnBarrio`.
  */
-export function sitioEnBarrioLineaProduccion(asentamiento: Asentamiento, ocupados: Edificio[], tipo: EdificioTipo): Point | null {
+export function sitioEnBarrioLineaProduccion(
+  asentamiento: Asentamiento,
+  ocupados: Edificio[],
+  tipo: EdificioTipo
+): { punto: Point; rotado: boolean } | null {
   const categoria = CATEGORIA_POR_TIPO[tipo];
   if (!categoria) return sitioEnBarrio(asentamiento, ocupados, tipo);
 
@@ -165,13 +179,21 @@ export function sitioEnBarrioLineaProduccion(asentamiento: Asentamiento, ocupado
   const candidatos = sitiosParaTipo(asentamiento, ocupados, tipo, undefined, true);
   if (recetas.length === 0) return candidatos[0] ?? null;
 
-  let mejor: { punto: Point; score: number } | null = null;
-  for (const punto of candidatos) {
-    const edificioSimulado: Edificio = { id: '', tipo, posicion: punto, estado: 'activo', ticksRestantes: 0, ambito: 'asentamiento' };
+  let mejor: { punto: Point; rotado: boolean; score: number } | null = null;
+  for (const candidato of candidatos) {
+    const edificioSimulado: Edificio = {
+      id: '',
+      tipo,
+      posicion: candidato.punto,
+      estado: 'activo',
+      ticksRestantes: 0,
+      ambito: 'asentamiento',
+      rotado: candidato.rotado,
+    };
     const score = Math.min(...recetas.map((r) => factorLineaProduccion(edificioSimulado, r, asentamiento)));
-    if (!mejor || score > mejor.score) mejor = { punto, score };
+    if (!mejor || score > mejor.score) mejor = { ...candidato, score };
   }
-  return mejor?.punto ?? null;
+  return mejor ? { punto: mejor.punto, rotado: mejor.rotado } : null;
 }
 
 /** Cantera/edificio de extracción: junto al nodo de recurso más cercano SIN reclamar ya (Doc 4.2, ej. herrería cerca de mina). */
@@ -267,7 +289,7 @@ function sitioEnBosque(
   return mapa.bosqueParaLenera(zonaPoligono, conteoPorBosque, asentamiento.posicion);
 }
 
-function crearEdificioEnCola(tipo: EdificioTipo, posicion: Point, id: string, fuenteId?: string): Edificio {
+function crearEdificioEnCola(tipo: EdificioTipo, posicion: Point, id: string, fuenteId?: string, rotado?: boolean): Edificio {
   const edificio: Edificio = {
     id,
     tipo,
@@ -276,7 +298,7 @@ function crearEdificioEnCola(tipo: EdificioTipo, posicion: Point, id: string, fu
     ticksRestantes: EDIFICIO_CATALOGO[tipo].tiempoConstruccionTicks,
     ambito: ambitoDe(tipo),
   };
-  return fuenteId ? { ...edificio, fuenteId } : edificio;
+  return { ...edificio, ...(fuenteId ? { fuenteId } : {}), ...(rotado ? { rotado } : {}) };
 }
 
 /**
@@ -305,15 +327,15 @@ function crearPuestosDeMercado(
   const nuevos: Edificio[] = [];
 
   for (const forma of formas) {
-    const posicion = sitioEnTrazado(asentamiento, [...existentes, ...nuevos], 'puestoMercado', forma);
-    if (!posicion) continue;
+    const sitio = sitioEnTrazado(asentamiento, [...existentes, ...nuevos], 'puestoMercado', forma);
+    if (!sitio) continue;
     let id = `edificio-${asentamiento.id}-${contador++}`;
     while (idsUsadas.has(id)) id = `edificio-${asentamiento.id}-${contador++}`;
     idsUsadas.add(id);
     nuevos.push({
       id,
       tipo: 'puestoMercado',
-      posicion,
+      posicion: sitio.punto,
       estado: 'activo',
       ticksRestantes: 0,
       ambito: 'asentamiento',
@@ -339,12 +361,12 @@ function crearTalleresDeCarpinteria(asentamiento: Pick<Asentamiento, 'id' | 'rad
   const nuevos: Edificio[] = [];
 
   for (let i = 0; i < 2; i++) {
-    const posicion = sitioEnTrazado(asentamiento, [...existentes, ...nuevos], 'tallerCarpinteria');
-    if (!posicion) continue;
+    const sitio = sitioEnTrazado(asentamiento, [...existentes, ...nuevos], 'tallerCarpinteria');
+    if (!sitio) continue;
     let id = `edificio-${asentamiento.id}-${contador++}`;
     while (idsUsadas.has(id)) id = `edificio-${asentamiento.id}-${contador++}`;
     idsUsadas.add(id);
-    nuevos.push({ id, tipo: 'tallerCarpinteria', posicion, estado: 'activo', ticksRestantes: 0, ambito: 'asentamiento' });
+    nuevos.push({ id, tipo: 'tallerCarpinteria', posicion: sitio.punto, estado: 'activo', ticksRestantes: 0, ambito: 'asentamiento' });
   }
   return nuevos;
 }
@@ -451,20 +473,53 @@ function conUrgencia(base: number, urgencia: number, bonus = 0): number {
   return base + Math.max(0, Math.min(100, urgencia)) + bonus;
 }
 
-/** Gate de nivel de asentamiento para el mecanismo de semilla/saturación de anclas (Etapa 3, §5.7.1): por
- * debajo de este nivel, un núcleo sin ancla alcanzable cae al reparto de barrio de siempre (comportamiento de
- * antes de la Etapa 3) en vez de fijar un ancla nueva mal colocada en un disco todavía pequeño. Se aplica al
- * MECANISMO de spawn, no a tipos de edificio concretos (a diferencia de lo que el doc propone para
- * Barracón/Galería de tiro): así protege también al núcleo residencial (Vivienda) sin gatear su construcción,
- * que rompería el crecimiento de población inicial. */
+/** Gate de nivel de asentamiento para el árbol de anclas (Etapa 5): por debajo de este nivel, una categoría
+ * sin ancla alcanzable simplemente no encuentra sitio este tick (se reintenta el siguiente) en vez de crear un
+ * ancla nueva mal colocada en un disco todavía pequeño. Residencial ya tiene a Centro Urbano desde la
+ * fundación, así que en la práctica esto solo puede llegar a frenar una Vivienda si el núcleo de Centro Urbano
+ * se satura antes de nivel 2 — militar/industria nunca lo notan: sus tipos ya exigen nivel 2 para construcción
+ * BASE (`requisitoNivelBase`), así que el gate siempre está cumplido de antemano cuando llegan aquí. */
 const NIVEL_GATE_ANCLAS = 2;
 
-/** Si `nuevo` (ya comprometido/colocado, incluido en `edificios`) hizo nacer un ancla de saturación al
- * colocarse (Etapa 3, §5.4/5.6), la devuelve — o `null` si no aplica (nivel insuficiente, categoría sin ancla
- * de saturación, ya había una alcanzable, o no se encontró sitio válido, ver `anclaNacidaTrasSemilla`). */
-function anclaSiNace(asentamiento: Asentamiento, edificios: Edificio[], nuevo: Edificio, id: string): Edificio | null {
-  if (nivelActualDe(asentamiento) < NIVEL_GATE_ANCLAS) return null;
-  return anclaNacidaTrasSemilla(asentamiento, edificios, nuevo, id);
+/**
+ * Etapa 5: garantiza que exista una ancla alcanzable para `tipo` ANTES de pedirle sitio — el árbol único de
+ * anclas ya no reacciona a un edificio recién colocado (§5.4/5.5 de la Etapa 3, retirado): el ancla nace
+ * primero, siempre.
+ *
+ * Primero recorre las instancias YA existentes de la categoría con `anclaActivaParaCategoria` (Lógica 2: la
+ * más cercana al origen que no esté `anclaLlena` y tenga hueco real) y persiste como `anclaLlena` cualquiera
+ * que se pruebe y no sirva — antes esto se sondeaba solo contra la instancia más cercana
+ * (`sitioEnTrazado`/`anclaMasCercana`, sin memoria), así que una vez esa se llenaba para siempre, ninguna otra
+ * instancia de la categoría se volvía a usar y el asentamiento fabricaba anclas nuevas sin parar en su lugar
+ * (bug detectado con el laboratorio visual). Si alguna instancia sirve, listo, no hace falta ancla nueva.
+ *
+ * Si NINGUNA instancia sirve (o no existe ninguna todavía) y el asentamiento ya cumple `NIVEL_GATE_ANCLAS`,
+ * crea una ancla nueva en el árbol único (`crearAnclaNueva`, Lógica 1 — sin distinguir tipo/categoría en la
+ * búsqueda de semilla, sin cambios) y aplica sus `anclasRecienSaturadas` sobre el array de edificios. Si no
+ * hay categoría (no hay tipo de ancla que sortear — Mercado, que se resuelve solo dentro de `sitiosParaTipo`),
+ * o `crearAnclaNueva` no encuentra sitio en absoluto, devuelve `edificios` (con las `anclaLlena` que sí se
+ * hayan detectado) — la colocación real que sigue simplemente no encontrará sitio este tick, como cualquier
+ * otro "no cabe" del trazado.
+ */
+function asegurarAnclaPara(asentamiento: Asentamiento, edificios: Edificio[], tipo: EdificioTipo, nextId: () => string): Edificio[] {
+  const categoria = CATEGORIA_POR_TIPO[tipo];
+  if (!categoria) return edificios;
+
+  const red = redDeCalles(asentamiento.id, edificios);
+  const { instancia, anclasRecienLlenas } = anclaActivaParaCategoria(categoria, tipo, undefined, edificios, red);
+  const edificiosConLlenas = edificios.map((e) => (anclasRecienLlenas.includes(e.id) ? { ...e, anclaLlena: true } : e));
+  if (instancia) return edificiosConLlenas;
+
+  if (nivelActualDe(asentamiento) < NIVEL_GATE_ANCLAS) return edificiosConLlenas;
+  const idAncla = nextId();
+  const tipoAncla = tipoAnclaParaCategoria(categoria, idAncla);
+  if (!tipoAncla) return edificiosConLlenas;
+  const resultado = crearAnclaNueva(asentamiento.id, edificiosConLlenas, tipoAncla, idAncla);
+  if (!resultado) return edificiosConLlenas;
+  const conSaturadasMarcadas = edificiosConLlenas.map((e) =>
+    resultado.anclasRecienSaturadas.includes(e.id) ? { ...e, semillaSaturada: true } : e
+  );
+  return [...conSaturadasMarcadas, resultado.nuevaAncla];
 }
 
 /**
@@ -488,9 +543,19 @@ function evaluarNecesidades(
   mapa: Mapa,
   reserva: Partial<Record<RecursoTipo, number>>,
   reclamos: ReclamosFuentes
-): { nuevos: Edificio[]; almacen: Record<string, RecursoAlmacenado>; extractoresTicksSinCupo: Partial<Record<EdificioTipo, number>> } {
+): {
+  nuevos: Edificio[];
+  almacen: Record<string, RecursoAlmacenado>;
+  extractoresTicksSinCupo: Partial<Record<EdificioTipo, number>>;
+  edificiosBase: Edificio[];
+} {
   const candidatos: Candidato[] = [];
   let contador = asentamiento.edificios.length;
+  // Etapa 5: las anclas que se crean ANTES de colocar un edificio (`asegurarAnclaPara`) se acumulan aquí, no
+  // en `nuevos` — nacen "gratis" (sin cola, sin costo) y no compiten por `cupoDisponible`, mismo criterio que
+  // `puestoMercado`/`tallerCarpinteria`. El array también refleja las `semillaSaturada` marcadas en el camino.
+  // Se devuelve al final para que `avanzarConstruccion` lo use como base en vez de `asentamiento.edificios`.
+  let edificiosBase = asentamiento.edificios;
   /**
    * Ids únicos DENTRO del asentamiento, verificado contra los que ya existen.
    *
@@ -509,7 +574,7 @@ function evaluarNecesidades(
     idsUsadas.add(id);
     return id;
   };
-  const ocupados = () => [...asentamiento.edificios, ...candidatos.map((c) => c.edificio)];
+  const ocupados = () => [...edificiosBase, ...candidatos.map((c) => c.edificio)];
   const proponer = (edificio: Edificio | null, score: number): void => {
     if (edificio) candidatos.push({ edificio, score });
   };
@@ -587,7 +652,7 @@ function evaluarNecesidades(
     if (sitio) {
       const deficitRatio = consumoTrigoObjetivo > 0 ? (consumoTrigoObjetivo - produccionTrigoActual) / consumoTrigoObjetivo : 1;
       const urgencia = granjasActivasEdificios.length === 0 ? 100 : deficitRatio * 100;
-      proponer(crearEdificioEnCola('granja', sitio, nextId()), conUrgencia(SCORE_BANDAS.supervivencia, urgencia));
+      proponer(crearEdificioEnCola('granja', sitio.punto, nextId(), undefined, sitio.rotado), conUrgencia(SCORE_BANDAS.supervivencia, urgencia));
     }
   }
 
@@ -603,7 +668,10 @@ function evaluarNecesidades(
     if (fuente && local) {
       const maderaBajoReserva = (asentamiento.almacen.madera?.cantidad ?? 0) < (reserva.madera ?? 0);
       const urgencia = leneras.length === 0 ? 100 : maderaBajoReserva ? 90 : 30;
-      proponer(crearEdificioEnCola('lenera', local, nextId(), fuente.fuenteId), conUrgencia(SCORE_BANDAS.supervivencia, urgencia));
+      proponer(
+        crearEdificioEnCola('lenera', local.punto, nextId(), fuente.fuenteId, local.rotado),
+        conUrgencia(SCORE_BANDAS.supervivencia, urgencia)
+      );
     }
   }
 
@@ -627,14 +695,15 @@ function evaluarNecesidades(
         // Minas/Cantera se plantan SOBRE su nodo del mapa general (posición del nodo, `ambito:'mapa'`); el
         // Corral es interno (Vista de Asentamiento): conserva el `fuenteId` del nodo de livestock de la zona,
         // pero se coloca dentro del espacio plano. Si no hay hueco local, no se propone este tick.
-        const posicion = ambitoDe(tipo) === 'mapa' ? sitio.posicion : sitioEnBarrio(asentamiento, ocupados(), tipo);
+        const local = ambitoDe(tipo) === 'mapa' ? null : sitioEnBarrio(asentamiento, ocupados(), tipo);
+        const posicion = ambitoDe(tipo) === 'mapa' ? sitio.posicion : local?.punto ?? null;
         if (!posicion) continue;
         const conFuenteViva = asentamiento.edificios
           .filter((e) => e.tipo === tipo)
           .some((e) => mapa.nodoProductivo(e.fuenteId));
         const ticksSinCupo = asentamiento.extractoresTicksSinCupo?.[tipo] ?? 0;
         const bonusDesempate = Math.min(ticksSinCupo * EXTRACTOR_DESEMPATE.bonusPorTickStarved, EXTRACTOR_DESEMPATE.bonusMaximo);
-        const edificio = crearEdificioEnCola(tipo, posicion, nextId(), sitio.fuenteId);
+        const edificio = crearEdificioEnCola(tipo, posicion, nextId(), sitio.fuenteId, local?.rotado);
         extractorCandidatoIds[tipo] = edificio.id;
         proponer(edificio, conUrgencia(SCORE_BANDAS.extractorBase, conFuenteViva ? 40 : 100, bonusDesempate));
       }
@@ -654,8 +723,14 @@ function evaluarNecesidades(
     !hayProyectoPendiente(asentamiento, 'vivienda') &&
     !alcanzoTopeDeViviendas(asentamiento)
   ) {
+    edificiosBase = asegurarAnclaPara(asentamiento, edificiosBase, 'vivienda', nextId);
     const sitio = sitioEnBarrio(asentamiento, ocupados(), 'vivienda');
-    if (sitio) proponer(crearEdificioEnCola('vivienda', sitio, nextId()), conUrgencia(SCORE_BANDAS.crecimiento, ocupacionMaxima * 100));
+    if (sitio) {
+      proponer(
+        crearEdificioEnCola('vivienda', sitio.punto, nextId(), undefined, sitio.rotado),
+        conUrgencia(SCORE_BANDAS.crecimiento, ocupacionMaxima * 100)
+      );
+    }
   }
 
   // Almacén: urgencia escala con el % de ocupación del recurso más lleno, con tope por nivel de asentamiento.
@@ -669,7 +744,12 @@ function evaluarNecesidades(
     !alcanzoTopeDeAlmacenes(asentamiento)
   ) {
     const sitio = sitioEnBarrio(asentamiento, ocupados(), 'almacen');
-    if (sitio) proponer(crearEdificioEnCola('almacen', sitio, nextId()), conUrgencia(SCORE_BANDAS.crecimiento, ocupacionAlmacenMaxima * 100));
+    if (sitio) {
+      proponer(
+        crearEdificioEnCola('almacen', sitio.punto, nextId(), undefined, sitio.rotado),
+        conUrgencia(SCORE_BANDAS.crecimiento, ocupacionAlmacenMaxima * 100)
+      );
+    }
   }
 
   // Edificios de transformación (Doc 4.2.1, rediseño de progreso Fase 0; gate de nivel añadido en Doc
@@ -689,11 +769,12 @@ function evaluarNecesidades(
     for (const tipo of ['curtiduria', 'armeria', 'fundicion'] as const) {
       if (alcanzoTopeDeTransformacion(asentamiento, tipo)) continue;
       if (!tieneInsumoDeArranque(asentamiento, tipo)) continue;
+      edificiosBase = asegurarAnclaPara(asentamiento, edificiosBase, tipo, nextId);
       const sitio = lineasProduccionPriorizadas(asentamiento)
         ? sitioEnBarrioLineaProduccion(asentamiento, ocupados(), tipo)
         : sitioEnBarrio(asentamiento, ocupados(), tipo);
       if (sitio) {
-        proponer(crearEdificioEnCola(tipo, sitio, nextId()), SCORE_BANDAS.transformacion);
+        proponer(crearEdificioEnCola(tipo, sitio.punto, nextId(), undefined, sitio.rotado), SCORE_BANDAS.transformacion);
         break;
       }
     }
@@ -708,8 +789,9 @@ function evaluarNecesidades(
     !alcanzoTopeDeTransformacion(asentamiento, 'carpinteria') &&
     !hayProyectoPendiente(asentamiento, 'carpinteria')
   ) {
+    edificiosBase = asegurarAnclaPara(asentamiento, edificiosBase, 'carpinteria', nextId);
     const sitio = sitioEnBarrio(asentamiento, ocupados(), 'carpinteria');
-    if (sitio) proponer(crearEdificioEnCola('carpinteria', sitio, nextId()), SCORE_BANDAS.transformacion);
+    if (sitio) proponer(crearEdificioEnCola('carpinteria', sitio.punto, nextId(), undefined, sitio.rotado), SCORE_BANDAS.transformacion);
   }
 
   // Commit único: ordena todos los candidatos de este tick por score descendente y paga en ese orden
@@ -736,11 +818,6 @@ function evaluarNecesidades(
     almacenActual = descontarRecursos(almacenActual, costo);
     const comprometido = { ...candidato.edificio, prioridad: candidato.score };
     nuevos.push(comprometido);
-    // Semilla de grupo (Etapa 3, §5.4/5.6): si este compromiso hizo nacer un ancla nueva, se añade gratis en
-    // el mismo tick — mismo criterio que `crearPuestosDeMercado` (nace ya activa, no pasa por cola, no cuenta
-    // contra `cupoDisponible`).
-    const ancla = anclaSiNace(asentamiento, [...asentamiento.edificios, ...nuevos], comprometido, nextId());
-    if (ancla) nuevos.push(ancla);
     // La fuente queda tomada en el momento en que se PAGA el proyecto, no al proponerlo: un candidato que
     // no llega a comprometerse (sin fondos o sin cupo) no debe bloquear el yacimiento a nadie más.
     registrarReclamo(reclamos, candidato.edificio);
@@ -758,7 +835,7 @@ function evaluarNecesidades(
     extractoresTicksSinCupo[tipo] = idsComprometidos.has(id) ? 0 : (asentamiento.extractoresTicksSinCupo?.[tipo] ?? 0) + 1;
   }
 
-  return { nuevos, almacen: almacenActual, extractoresTicksSinCupo };
+  return { nuevos, almacen: almacenActual, extractoresTicksSinCupo, edificiosBase };
 }
 
 /** Tipos de edificio de transformación con tiers (Doc 4.2.1): mejoran de nivelInterno y ejecutan recetas.
@@ -1108,15 +1185,20 @@ export function avanzarConstruccion(
   let nuevosProyectos: Edificio[] = [];
   let almacenFinal = asentamientoConProgreso.almacen;
   let extractoresTicksSinCupo = asentamiento.extractoresTicksSinCupo;
+  // Etapa 5: base para `edificiosFinal` — normalmente `asentamientoConProgreso.edificios`, pero
+  // `evaluarNecesidades` puede haber creado anclas nuevas o marcado otras `semillaSaturada` ANTES de comprometer
+  // ningún candidato (`asegurarAnclaPara`); esos cambios viven en `edificiosBase`, no en `nuevosProyectos`.
+  let edificiosBase = asentamientoConProgreso.edificios;
   if (!asentamiento.autoConstruccionPausada) {
     const trasNecesidades = evaluarNecesidades(asentamientoConProgreso, zonaPoligono, mapa, reserva, reclamos);
     nuevosProyectos = trasNecesidades.nuevos;
     almacenFinal = trasNecesidades.almacen;
     extractoresTicksSinCupo = trasNecesidades.extractoresTicksSinCupo;
+    edificiosBase = trasNecesidades.edificiosBase;
   }
   for (const p of nuevosProyectos) eventos.push(`Nueva necesidad detectada: se compromete ${p.tipo} (pagado).`);
 
-  const edificiosFinal = [...asentamientoConProgreso.edificios, ...nuevosProyectos];
+  const edificiosFinal = [...edificiosBase, ...nuevosProyectos];
   // Reordena los `en_cola` por `prioridad` (mismo criterio que el Paso 2) para que la posición mostrada en la
   // UI (ver main.ts) coincida con el orden real en que arrancarán en el próximo tick.
   const enColaOrdenados = edificiosFinal.filter((e) => e.estado === 'en_cola').sort((a, b) => (b.prioridad ?? 0) - (a.prioridad ?? 0));
@@ -1182,19 +1264,19 @@ function sitioParaTipo(
   zonaPoligono: Point[],
   mapa: Mapa,
   reclamos: ReclamosFuentes
-): { posicion: Point; fuenteId?: string } | null {
+): { posicion: Point; fuenteId?: string; rotado?: boolean } | null {
   // Vista de Asentamiento: Granja y el resto de urbanos van a un hueco de la rejilla local (`sitioEnBarrio`).
   // Leñera/Corral conservan su `fuenteId` del mapa general (bosque/livestock en la zona) pero también se
   // colocan dentro. Solo las Minas/Cantera se plantan sobre su nodo del mapa general (posición del nodo).
   if (tipo === 'granja') {
-    const posicion = sitioEnBarrio(asentamiento, asentamiento.edificios, 'granja');
-    return posicion ? { posicion } : null;
+    const sitio = sitioEnBarrio(asentamiento, asentamiento.edificios, 'granja');
+    return sitio ? { posicion: sitio.punto, rotado: sitio.rotado } : null;
   }
   if (tipo === 'lenera') {
     const fuente = sitioEnBosque(asentamiento, zonaPoligono, mapa, reclamos.lenerasPorBosque);
     if (!fuente) return null;
-    const posicion = sitioEnBarrio(asentamiento, asentamiento.edificios, 'lenera');
-    return posicion ? { posicion, fuenteId: fuente.fuenteId } : null;
+    const sitio = sitioEnBarrio(asentamiento, asentamiento.edificios, 'lenera');
+    return sitio ? { posicion: sitio.punto, fuenteId: fuente.fuenteId, rotado: sitio.rotado } : null;
   }
   const recursoExtractor = EXTRACTORES[tipo]?.recurso;
   if (recursoExtractor) {
@@ -1202,11 +1284,11 @@ function sitioParaTipo(
     if (!sitio) return null;
     if (ambitoDe(tipo) === 'mapa') return sitio;
     // Corral: interno — posición local, `fuenteId` del nodo de livestock de la zona.
-    const posicion = sitioEnBarrio(asentamiento, asentamiento.edificios, tipo);
-    return posicion ? { posicion, fuenteId: sitio.fuenteId } : null;
+    const local = sitioEnBarrio(asentamiento, asentamiento.edificios, tipo);
+    return local ? { posicion: local.punto, fuenteId: sitio.fuenteId, rotado: local.rotado } : null;
   }
-  const posicion = sitioEnBarrio(asentamiento, asentamiento.edificios, tipo);
-  return posicion ? { posicion } : null;
+  const sitio = sitioEnBarrio(asentamiento, asentamiento.edificios, tipo);
+  return sitio ? { posicion: sitio.punto, rotado: sitio.rotado } : null;
 }
 
 function cargoOcupado(asentamiento: Asentamiento, cargo: 'gobernador' | 'maestroObras'): string | null {
@@ -1276,7 +1358,12 @@ export function anadirEdificioManualmente(
   if (enColaActual >= NECESIDADES.maximoEnCola) {
     throw new ConstruccionManualInvalidaError(`La cola de construcción está llena (máximo ${NECESIDADES.maximoEnCola}).`);
   }
-  const sitio = sitioParaTipo(tipo, asentamiento, zonaPoligono, mapa, reclamos);
+  // Etapa 5: igual que en auto-construcción, garantiza una ancla alcanzable ANTES de pedir sitio — el árbol
+  // único de anclas ya no reacciona a este edificio después de colocarlo, nace primero si hace falta.
+  const edificiosConAncla = asegurarAnclaPara(asentamiento, asentamiento.edificios, tipo, () => `edificio-${asentamiento.id}-manual-${contador}-ancla`);
+  const asentamientoConAncla = edificiosConAncla === asentamiento.edificios ? asentamiento : { ...asentamiento, edificios: edificiosConAncla };
+
+  const sitio = sitioParaTipo(tipo, asentamientoConAncla, zonaPoligono, mapa, reclamos);
   if (!sitio) throw new ConstruccionManualInvalidaError('No hay sitio disponible dentro de la zona de influencia.');
 
   const costo = EDIFICIO_CATALOGO[tipo].costo as Partial<Record<string, number>>;
@@ -1287,14 +1374,10 @@ export function anadirEdificioManualmente(
 
   const almacen = descontarRecursos(asentamiento.almacen, costo);
   const nuevo = {
-    ...crearEdificioEnCola(tipo, sitio.posicion, `edificio-${asentamiento.id}-manual-${contador}`, sitio.fuenteId),
+    ...crearEdificioEnCola(tipo, sitio.posicion, `edificio-${asentamiento.id}-manual-${contador}`, sitio.fuenteId, sitio.rotado),
     prioridad: SCORE_BANDAS.manual,
   };
-  const edificiosConNuevo = [...asentamiento.edificios, nuevo];
-  // Semilla de grupo (Etapa 3, §5.4/5.6): igual que en auto-construcción, un edificio añadido a mano puede ser
-  // el que abre un núcleo nuevo o satura uno existente.
-  const ancla = anclaSiNace(asentamiento, edificiosConNuevo, nuevo, `edificio-${asentamiento.id}-manual-${contador}-ancla`);
-  return { ...asentamiento, almacen, edificios: ancla ? [...edificiosConNuevo, ancla] : edificiosConNuevo };
+  return { ...asentamiento, almacen, edificios: [...edificiosConAncla, nuevo] };
 }
 
 /**

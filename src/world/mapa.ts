@@ -27,6 +27,7 @@ import {
   type MapaGenerado,
 } from '../worldgen';
 import { boundingBox, distancia, pointInPolygon } from './geometria';
+import { formaCirculo, unirFormas } from './poligonos';
 
 /**
  * Lado de celda del índice espacial, en unidades de mapa. 100 sobre un mapa de 1000x1000 da una rejilla de
@@ -34,6 +35,26 @@ import { boundingBox, distancia, pointInPolygon } from './geometria';
  * pocas celdas en vez de todos los nodos, sin que la rejilla en sí pese nada.
  */
 const LADO_CELDA = 100;
+
+/**
+ * Contorno fusionado de los bosques, cacheado por MUNDO GENERADO y no por instancia de `Mapa`.
+ *
+ * Los bosques son geometría inmutable del mundo (`MapaGenerado`, ver `generarBosques`), mientras que cada
+ * foto del historial construye su propia fachada `Mapa` sobre ESE MISMO objeto generado, compartido por
+ * referencia (ver `GameStore.getMapa`). Cachear en el campo de la instancia obligaría a recalcular la unión
+ * entera cada vez que se mira un tick pasado en el slider de la línea de tiempo; cacheando por mundo se
+ * calcula una sola vez por partida. `WeakMap` para no retener mundos de partidas ya descartadas.
+ */
+const contornosBosquesPorMundo = new WeakMap<MapaGenerado, Point[][]>();
+
+/**
+ * Resolución de la fusión de bosques, como fracción del ancho del mapa: sobre los 2000 por defecto da un paso
+ * de 5 unidades. Relativo y no absoluto para que un mapa el doble de grande no salga con un contorno el doble
+ * de tosco. Se puede permitir ser fino porque un bosque es un círculo de verdad y `formaCirculo` resuelve
+ * cada muestra con una resta, sin recorrer aristas: MEDIDO en navegador, los 170 bosques del mapa por
+ * defecto se fusionan en 25 siluetas (~1300 puntos en total) en unos 16 ms, una sola vez por mundo.
+ */
+const PASO_FUSION_BOSQUES = 1 / 400;
 
 export interface OpcionesNodos {
   /** Solo nodos de este tipo de recurso. */
@@ -344,6 +365,30 @@ export class Mapa {
 
   listarBosques(): readonly ZonaBosque[] {
     return this.generado.bosques;
+  }
+
+  /**
+   * Los bosques como UNA silueta: contorno de la unión de todos sus discos, en lazos cerrados
+   * (a petición del usuario). Para DIBUJAR el mapa general; ninguna regla de juego lo consulta — el alcance
+   * de una Leñera sigue resolviéndose bosque a bosque (`bosqueParaLenera`, `hayBosqueEnRadio`).
+   *
+   * Los bosques se solapan mucho por diseño (170 discos de radio 45-120 sobre 2000 unidades, ver `BOSQUE`),
+   * así que dibujarlos uno a uno daba un amasijo de círculos con un anillo más oscuro en cada intersección,
+   * en vez de manchas de bosque con una silueta propia. Los claros que quedan encerrados por una corona de
+   * bosques salen como lazos de orientación opuesta y el relleno `nonzero` del canvas los recorta solo.
+   *
+   * Resultado inmutable y cacheado por mundo — el llamador no debe modificar los arrays devueltos.
+   */
+  contornosBosques(): readonly Point[][] {
+    const cacheado = contornosBosquesPorMundo.get(this.generado);
+    if (cacheado) return cacheado;
+    const paso = this.generado.config.ancho * PASO_FUSION_BOSQUES;
+    const contornos = unirFormas(
+      this.generado.bosques.map((b) => formaCirculo(b.centro, b.radio)),
+      { paso, tolerancia: paso * 0.4, areaMinima: paso * paso * 4 }
+    );
+    contornosBosquesPorMundo.set(this.generado, contornos);
+    return contornos;
   }
 
   /**

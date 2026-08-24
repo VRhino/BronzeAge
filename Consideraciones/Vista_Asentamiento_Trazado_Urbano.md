@@ -3,6 +3,12 @@
 Documento vivo. Recoge el estado actual del diseño; lo que sigue sin implementar va al final, marcado como
 abierto.
 
+> **Estado real (Etapa 5, última entrada del log de abajo): el sistema de anclas está implementado por
+> completo** — árbol único de anclas, orientación intercambiable, variedad residencial, compás + eje rotado.
+> El log de "Estado"/"Etapa N" que sigue es cronológico e histórico: la primera entrada ("CERO código de
+> anclas") describe el arranque del diseño, no el estado actual. Las secciones numeradas (§1 en adelante) ya
+> reflejan la implementación de la Etapa 5, no las etapas anteriores.
+
 ## Principio rector
 
 Nada del trazado urbano se define al fundar el asentamiento. Ni calles, ni manzanas, ni reservas de espacio.
@@ -151,6 +157,114 @@ los números de la reverificación en batch: §5.7 más abajo, "BUG (2026-08-19)
 Sigue sin ningún ancla nueva. Etapa 3 (Plaza, Plaza de Armas, Patio de Gremios como marcadores gratis, más la
 semilla de grupo §5.4/5.5 que decide dónde nace cada una) es lo único que falta del plan de 4 etapas.
 
+## Etapa 3: marcadores gratis + semilla de grupo — implementada, sin batch (no registrado en su momento)
+
+Cierra el plan de 4 etapas: `plaza`, `plazaDeArmas`, `patioDeGremios` y `tallerCarpinteria` nacen como los
+"marcadores gratis" que describe §5.1 (costo `{}`, `tiempoConstruccionTicks: 0`, nacen ya `activo`, no pasan
+por cola, no se pueden añadir a mano). Carpintería deja de ser un único bloque de 5x4 y pasa a ser la zona de
+tres piezas de §9 (pieza principal 4x2 + 2 talleres). Se implementó la semilla de grupo (§5.4/5.5) tal como
+estaba especificada: el primer edificio de un grupo sin ancla se coloca por el reparto de barrio, filtrado a
+`separacionMinimaAnclas` de toda ancla existente, y **inmediatamente después** nace su ancla "frente a él" —al
+otro lado de la arista de calle a la que da fachada, desempatando por la cara que mira lejos de Centro Urbano.
+El gate de nivel de §5.7.1 (`NIVEL_GATE_ANCLAS = 2`) se aplicó al MECANISMO de nacimiento, no a tipos de
+edificio concretos, para poder proteger también al núcleo residencial (Vivienda) sin gatear su construcción.
+Decisión cerrada con el usuario: **sin reflow al subir de nivel** — un núcleo saturado con el disco pequeño
+conserva su ancla de saturación para siempre, aunque el disco crezca después (resuelve el punto "Reflow al
+subir de nivel" de §"Abierto").
+
+Este entrada se escribe en retrospectiva (durante la Etapa 5, más abajo): la Etapa 3 se implementó y se probó
+(`anclasSatelites.test.ts`, verificación manual en la interfaz) pero no se registró aquí en su momento — de ahí
+que la Etapa 5 tuviera que redescubrir por análisis, no por este documento, que §5.4/5.5 ya tenían código.
+**Todo lo que describen §5.4 y §5.5 más abajo quedó reemplazado por la Etapa 5** — se dejan íntegros más abajo
+por valor histórico, pero el mecanismo real hoy es el árbol único de anclas.
+
+## Etapa 4: variedad, orientación, borde compartido y compás — implementada, sin batch
+
+Cuatro cambios independientes, a petición del usuario tras jugar la Etapa 3 en la interfaz:
+
+1. **Orientación intercambiable ancho↔alto.** Nuevo campo `Edificio.rotado`. Al buscar hueco, se ofrece también
+   la huella girada (`ancho`↔`alto`) como candidato adicional — mismo criterio de nivel/hueco que la
+   orientación normal, con un desempate final sembrado (`semillaCandidato`) para que la elección varíe entre
+   ciudades. Excluye `granja` (progresión real de tamaño) y `puestoMercado` (`nivelInterno` ya identifica una
+   forma concreta de zona).
+2. **Desempate por máximo borde compartido.** `sitiosPorAtraccionDura` desempataba solo por `hueco` mínimo, que
+   no distingue tocar por una esquina de compartir un lado entero. Nueva función `bordeCompartido`, aplicada
+   como criterio secundario tras el hueco.
+3. **Compás + eje rotado por asentamiento.** El sorteo de direcciones cardinales (§5.8) pasó a decidir también
+   dónde nace el ancla (antes solo desempataba la cuña de barrio): "frente a él" (§5.5) eligió el lado
+   alineado con la dirección de compás de la categoría, no solo el más lejano al origen. Además, nueva
+   `anguloRotacionEje`: el eje de las 8 direcciones se rota un ángulo aleatorio (determinista, `[0°, 45°)`) por
+   asentamiento, para que dos ciudades no compartan geometría aunque compartan el mismo reparto de categorías.
+4. **Variedad de anclas residenciales.** `ANCLA_SATURACION_POR_CATEGORIA` pasa de un tipo único por categoría a
+   una lista; residencial sortea (determinista) entre `plaza`, `pozo` (nuevo, 1x1) y `parque` (nuevo, 3x2).
+   Militar e industria siguen con un solo tipo — mismo mecanismo, listas de un elemento.
+
+Verificado con 234/234 tests (4 nuevos, uno por punto) y `tsc --noEmit` limpio — sin batch, la calibración fina
+de estos cuatro puntos queda para cuando haga falta. **Puntos 1 y 2 sobreviven intactos a la Etapa 5** (viven en
+`sitiosPorAtraccionDura`, que no se tocó). **Puntos 3 y 4 quedaron absorbidos/reemplazados por la Etapa 5**: el
+compás + eje rotado ahora se aplica a las 8 ranuras del árbol único, no a "frente a él"; la variedad
+residencial sobrevive igual (`tipoAnclaParaCategoria`), pero ya no depende de qué edificio disparó la semilla.
+
+## Etapa 5: árbol único de anclas — reemplaza la semilla de grupo (§5.4/5.5)
+
+**El motivo.** Playtesting tras la Etapa 4 encontró edificios sin ningún ancla real cerca —viviendas sueltas,
+una Curtiduría sin Patio de Gremios— y, en un caso, un ancla naciendo lejísimos de quien la necesitaba.
+Diagnóstico con el usuario, dos causas raíz **preexistentes desde la Etapa 3**, que la Etapa 4 solo hizo más
+visibles (más anclas repetibles, playtesting más largo):
+
+1. `sitiosParaTipo` decidía qué ancla usar con `anclaMasCercana(tipos, ORIGEN, ...)` — la referencia era
+   SIEMPRE el origen del asentamiento, nunca la posición real de lo que se estaba colocando. En cuanto existía
+   más de una instancia del mismo tipo, la más cercana al origen ganaba siempre, aunque estuviera saturada y
+   una instancia más nueva tuviera sitio de sobra.
+2. La semilla de grupo (§5.4/5.5): el edificio se colocaba primero por barrio, y RECIÉN DESPUÉS se comprobaba
+   si necesitaba un ancla que no tenía — momento en el que "frente a él" intentaba plantarla pegada a donde el
+   edificio cayó. Si ese lugar estaba apretado (cerca de otra ancla, dentro de `separacionSeguridadAnclas`), el
+   intento fallaba EN SILENCIO y nunca se reintentaba: el edificio quedaba sin su ancla para siempre.
+
+**El rediseño, cerrado con el usuario en varias rondas** (incluida una simulación abstracta del árbol de
+crecimiento, fuera del motor del juego, que confirmó el diseño antes de escribir una línea de código real —
+ver más abajo): **el reparto de barrio y la semilla de grupo desaparecen por completo** para las categorías con
+ancla. En su lugar, un **árbol único** que comparten TODAS las anclas del asentamiento, sin distinguir tipo:
+una Plaza de Armas puede nacer como hija de un Pozo.
+
+- **Semilla activa**: el nodo del árbol que se usa AHORA MISMO como referencia para decidir dónde nace la
+  próxima ancla — no es un edificio, es un puntero que se mueve por el árbol.
+- **8 ranuras** por ancla (las 8 direcciones cardinales, eje rotado por asentamiento — mismo mecanismo de la
+  Etapa 4, punto 3, reutilizado aquí).
+- **Ciclo al proponer una ancla**: ¿la semilla activa tiene alguna ranura con hueco real? Sí → se construye
+  ahí. No (las 8 fallaron) → la semilla se marca **saturada para siempre** (`Edificio.semillaSaturada`, estado
+  persistido, nunca se revisa dos veces) y se busca, entre TODAS las anclas no descartadas, la más cercana a
+  la raíz — sin volver a intentar la que se acaba de descartar.
+- **El ancla nace SIEMPRE antes que el edificio que la necesita** (`asegurarAnclaPara`, `engine/construction.ts`,
+  llamada antes de calcular sitio) — nunca al revés. Esto es lo que cierra el bug 2 de arriba: ya no hay
+  "edificio colocado, ancla intentada después y fallando en silencio".
+
+**Verificado por simulación abstracta** (árbol/grid de 8 direcciones sin geometría del juego, antes de tocar
+código real): sin límite de radio, el árbol nunca se traba, aunque se probó hasta 50.000 anclas creadas.
+Con radio limitado (simulando `radioPotencial`), se traba EXACTAMENTE cuando el 100% de las celdas del radio
+están ocupadas — en los 4 radios probados, `anclas creadas == celdas totales del cuadrado`, sin excepción. El
+diseño no deja huecos atrapados ni se rinde antes de tiempo.
+
+**Lógica 2 (satélites de un ancla, `sitiosPorAtraccionDura`) no se tocó** — sigue siendo la Etapa 4 completa
+(orientación, borde compartido) sin cambios. La separación entre las dos lógicas fue explícita en el diseño:
+Lógica 1 responde "¿dónde nace la PRÓXIMA ANCLA?" (ancla→ancla, sin distinguir tipo); Lógica 2 responde "¿dónde
+coloco este EDIFICIO NORMAL?" (ancla→satélite, por tipo/categoría). Comparten la palabra "saturada" para dos
+cosas distintas: una ancla puede estar `semillaSaturada` (no produce más anclas) y seguir teniendo hueco de
+sobra para sus propios satélites.
+
+**Cambio adicional a petición del usuario**: Almacén y Leñera dejan la cuña de "almacenaje" (que desaparece
+junto con el resto del reparto de barrio) y pasan al mismo camino que Palacio — 360°, sin ancla, el hueco más
+cercano al origen. Llenan huecos libres desde Centro Urbano hacia afuera en cualquier dirección.
+
+Verificado con 237/237 tests (3 nuevos que prueban el árbol directamente: bootstrap, árbol mixto sin filtrar
+tipo, saturación-y-descarte) y `tsc --noEmit` limpio. Sin batch — pendiente si hace falta calibrar
+`RADIO_INICIAL_RANURA`/`RADIO_MAXIMO_RANURA` (nuevas constantes, derivadas de `separacionMinimaAnclas`) contra
+partidas reales.
+
+**§5.4, §5.5, §5.7 (parte), §5.8 y §5.9 más abajo se reescribieron para reflejar el árbol único** — no se dejó
+el texto viejo como referencia histórica esta vez, a diferencia de la nota de la Etapa 3, porque describir dos
+mecanismos incompatibles en la misma sección confunde más de lo que documenta.
+
 ## 1. Geometría de las calles
 
 Las calles corren sobre las **aristas** de la rejilla, no sobre celdas: pasan entre celdas, por los vértices,
@@ -217,20 +331,26 @@ distritos legibles, con referencia fija y con espacio entre ellos.
 
 ### 5.1 Catálogo de anclas
 
-| Ancla | Naturaleza | Cuándo nace | Satélites | Al saturarse abre |
+| Ancla | Naturaleza | Cuándo nace | Satélites | Al saturarse, la categoría abre |
 |---|---|---|---|---|
-| Centro Urbano | edificio real, único | al fundar | Vivienda | una **Plaza** |
-| Plaza | marcador gratis, sin cola | al saturarse el núcleo residencial | Vivienda | otra **Plaza** |
+| Centro Urbano | edificio real, único | al fundar | Vivienda | **Plaza**, **Pozo** o **Parque** (sorteo) |
+| Plaza / Pozo / Parque | marcador gratis, sin cola | por el árbol único de anclas (§5.4) | Vivienda | **Plaza**, **Pozo** o **Parque** (sorteo) |
 | Mercado | edificio real, único | construcción normal | Puesto de mercado | **nada** |
-| Plaza de Armas | marcador gratis, sin cola | al construirse el 1.º militar | Barracón, Galería de tiro, Carpintería | otra **Plaza de Armas** |
-| Patio de Gremios | marcador gratis, sin cola | al construirse el 1.º de industria | Fundición, Curtiduría, Armería, Gran Fundición, Maravilla | otro **Patio de Gremios** |
+| Plaza de Armas | marcador gratis, sin cola | por el árbol único de anclas (§5.4) | Barracón, Galería de tiro, Carpintería | otra **Plaza de Armas** |
+| Patio de Gremios | marcador gratis, sin cola | por el árbol único de anclas (§5.4) | Fundición, Curtiduría, Armería, Gran Fundición, Maravilla | otro **Patio de Gremios** |
 | Carpintería | edificio real, único | construcción normal | Taller de carpintería | **nada** |
 
 **Invariante: un ancla se repite si y solo si es un marcador gratis.** Centro Urbano, Mercado y Carpintería
 son edificios reales y únicos (`EDIFICIOS_UNICOS`) — no se duplican nunca, ni siquiera para desahogar un
 núcleo saturado. Por eso el grupo residencial, cuyo primer ancla es el Centro Urbano, se desahoga abriendo una
-**Plaza**: un tipo distinto, repetible, que hace el mismo trabajo de trazado sin tocar la unicidad del centro
-de poder. El mercado y la carpintería no tienen ese equivalente y simplemente no abren núcleo nuevo (§5.6).
+Plaza, un Pozo o un Parque (sorteo determinista, `tipoAnclaParaCategoria`): tipos distintos, repetibles, que
+hacen el mismo trabajo de trazado sin tocar la unicidad del centro de poder. El mercado y la carpintería no
+tienen ese equivalente y simplemente no abren núcleo nuevo (§5.6).
+
+**Dónde nace exactamente la ancla nueva ya no depende de qué instancia se saturó** (Etapa 5, §5.4): todas las
+anclas del asentamiento —sin importar tipo ni categoría— comparten un único árbol de crecimiento, así que una
+Plaza de Armas puede terminar naciendo como hija de un Pozo. El tipo que se sortea sigue siendo por categoría
+(`ANCLA_SATURACION_POR_CATEGORIA`); lo que cambió es solo la geometría de dónde se planta.
 
 Sin ancla: **Almacén** y **Leñera** — se colocan por la regla genérica (§5.9) y rellenan el espacio entre
 núcleos. Se leen como logística repartida, no como distrito, que es lo que son.
@@ -278,39 +398,93 @@ y la saturación no dispararía jamás — el sistema de Plazas no arrancaría n
 espera: sale del núcleo y cae a la regla genérica (§5.9). Un satélite es función, no superficie — a diferencia
 de un puesto de mercado, no puede saltarse en silencio.
 
-### 5.4 Semilla de un grupo
+### 5.3.1 Qué instancia de ancla recibe el próximo satélite — instancia activa por categoría (post-Etapa 5)
 
-El primer edificio de un grupo se construye antes de que exista su ancla. Se coloca en el **mejor hueco que
-esté a `separacionMinimaAnclas` o más de toda ancla existente**, y su ancla nace inmediatamente después,
-frente a él (§5.5).
+Cuando una categoría (residencial/militar/industria) ya tiene más de una instancia de ancla —por ejemplo dos
+Plazas, una saturada de satélites y otra recién nacida—, hace falta decidir a cuál se atrae el PRÓXIMO
+satélite. Hasta corregirse esto, `sitiosParaTipo` usaba `anclaMasCercana(tipos, ORIGEN, ...)`: la instancia más
+cercana al ORIGEN del asentamiento, sin memoria de si tenía hueco. Con Centro Urbano en `posicion = (0,0)`
+exacto, eso significaba que, en cuanto el núcleo residencial inicial se llenaba de verdad, **ninguna otra
+instancia volvía a usarse jamás** — cada ronda de demanda residencial disparaba directamente
+`asegurarAnclaPara` (§5.4) y fabricaba un ancla nueva en vez de reutilizar una Plaza/Pozo/Parque con hueco de
+sobra. Bug real detectado con una herramienta de inspección visual aparte del juego (no un test): una corrida
+de prueba llegó a 8 anclas residenciales, ninguna marcada como saturada de verdad, dos huérfanas.
 
-Esta regla es la que sostiene todo lo demás. Sin ella, la colocación genérica ("mejor hueco más cercano al
-origen") haría nacer cada núcleo pegado al anterior, y la separación mínima entraría en conflicto directo con
-la regla que coloca los edificios. Así la separación se cumple **por construcción**, no por validación — mismo
-criterio de diseño que el resto del trazado (§1).
+**La corrección** (mismo patrón que la saturación de semilla del árbol, §5.6, pero para esta pregunta
+distinta): nuevo campo persistido `Edificio.anclaLlena` — una instancia queda `anclaLlena` la primera vez que
+`sitiosPorAtraccionDura` no le encuentra hueco para el tipo que se está pidiendo; se marca una sola vez y
+nunca se revisa (nada libera celdas). `anclaActivaParaCategoria` (`engine/trazado.ts`) recorre las instancias
+de la categoría que NO estén `anclaLlena`, de más cerca a más lejos del origen, probando cada una con la misma
+`sitiosPorAtraccionDura` real hasta encontrar la primera con hueco — mismo criterio de "búsqueda pareja" que
+`semillaActiva` usa para el árbol, pero aplicado a instancias de una categoría, no a todo el árbol.
+`asegurarAnclaPara` (`engine/construction.ts`) llama primero a esto: si encuentra instancia con hueco, la usa
+y termina (persiste las marcas `anclaLlena` descubiertas en el camino); solo si NINGUNA instancia sirve pasa a
+crear un ancla nueva vía el árbol (§5.4).
 
-### 5.5 Dónde nace el ancla: "frente a él"
+**Importante: `anclaLlena` (Lógica 2) y `semillaSaturada` (Lógica 1, §5.6) son criterios INDEPENDIENTES,
+ninguno dispara al otro** — un error real de una primera versión de esta corrección los mezclaba (que
+`anclaLlena` disparara el avance de `semillaActiva`), corregido tras confirmarlo con el usuario: una instancia
+puede estar `anclaLlena` y seguir siendo la semilla activa del árbol mientras sus 8 ranuras tengan sitio, o
+estar `semillaSaturada` y seguir teniendo hueco de sobra para sus propios satélites.
 
-El ancla se coloca **al otro lado de la arista de calle a la que da fachada** ese primer edificio. Comparten
-esa arista, así que quedan cara a cara con la calle en medio y en manzanas distintas — sale gratis de la
-geometría de aristas de §1, sin ninguna regla nueva de separación.
+### 5.4 El árbol único de anclas (Etapa 5)
 
-Desempate cuando el edificio da a varias calles: se elige **la cara que mira en dirección contraria al Centro
-Urbano**, para que el núcleo crezca hacia afuera y no se estrangule contra la ciudad ya construida.
+**El ancla nace SIEMPRE antes que el edificio que la necesita, nunca al revés.** Reemplaza por completo el
+mecanismo anterior de "semilla de grupo" (edificio primero, ancla reaccionando después "frente a él") — ver
+la nota de la Etapa 5 en "Estado", arriba, con el bug de fondo que motivó el cambio.
 
-### 5.6 Ancla adicional por saturación
+Todas las anclas del asentamiento —Centro Urbano, Plaza/Pozo/Parque, Plaza de Armas, Patio de Gremios,
+Mercado, Carpintería— comparten un **único árbol de crecimiento**, sin distinguir tipo ni categoría entre
+ellas. Una Plaza de Armas puede nacer como hija de un Pozo: el tipo de la ancla que se necesita no influye en
+NADA de dónde se coloca, solo en qué se planta al final.
 
-Si un satélite no encuentra hueco de nivel 0 ni 1 **habiendo llegado el radio a `radioMaximoNucleo`** (§5.3),
-el núcleo está saturado: nace el **ancla de saturación** de ese grupo (por la regla de §5.4) y el satélite la
-orbita. El tope es lo que hace que esta condición pueda cumplirse alguna vez.
+- **Semilla activa**: no es un edificio, es un puntero — la ancla que se usa AHORA MISMO como referencia para
+  decidir dónde nace la próxima. Entre todas las anclas que existen y no están descartadas (§5.6), es la más
+  cercana a la raíz del asentamiento (`semillaActiva`, `engine/trazado.ts`).
+- **8 ranuras**: cada ancla tiene 8 direcciones cardinales alrededor de ella donde puede nacer una ancla hija,
+  con el eje rotado un poco por asentamiento (§5.8) — mismas 8 direcciones que ya usaba el compás de la Etapa
+  4, reutilizadas aquí en vez de para desempatar "frente a él".
+- **Ciclo al proponer una ancla nueva** (`crearAnclaNueva`): la semilla activa prueba sus 8 direcciones, en
+  orden aleatorio (determinista), hasta encontrar una con hueco real —el candidato tiene que caber sin
+  colisionar y respetar `separacionSeguridadAnclas` (§5.7) frente a TODAS las demás anclas— y construye ahí.
+  Si ninguna de las 8 sirve, la semilla se descarta (§5.6) y se repite el ciclo con la siguiente semilla más
+  cercana a la raíz.
+- **Ranura libre antes que ranura ya usada expandiendo radio (post-Etapa 5).** `direccionesBarajadas` da el
+  mismo orden de las 8 direcciones cada vez que se consulta la MISMA semilla (determinista por diseño, §5.8) —
+  pero eso significaba que, si la primera dirección de la lista ya tenía un ancla hija, `huecoEnDireccion`
+  simplemente EXPANDÍA EL RADIO en esa misma dirección en vez de probar una de las otras 7 todavía libres:
+  varias anclas hijas de la misma semilla terminaban alineadas en la misma dirección a distancias crecientes,
+  en vez de reparties entre las 8. Corregido con `ranuraOcupada` (geométrico: ¿alguna ancla existente cae casi
+  exacto en el ángulo de esta dirección, dentro del rango de radio de una ranura?) — `crearAnclaNueva` prueba
+  primero las direcciones libres (a la mínima distancia que cada una permita) y solo recurre a una ya usada,
+  expandiendo su radio como antes, si ninguna libre sirve.
 
-El ancla de saturación es un tipo declarado por grupo, **no "otra del mismo tipo"** — esa distinción es la que
-protege la unicidad de Centro Urbano, Mercado y Carpintería. En residencial es la Plaza; en militar e
-industria coincide con el ancla inicial porque ya son marcadores gratis repetibles; en mercado y en
-carpintería **no hay ninguna**, y ahí el radio simplemente sigue expandiendo. Degradación limpia: la ausencia
-de ancla de saturación no es un caso especial, es el valor por defecto de la declaración.
+**Quién dispara el ciclo.** Antes de calcular dónde va cualquier edificio de una categoría con ancla, se
+comprueba si ya hay una instancia alcanzable (§5.3); si no la hay, se dispara el ciclo de arriba
+(`asegurarAnclaPara`, `engine/construction.ts`) ANTES de tocar la posición del edificio que lo pidió. El
+edificio nunca llega a colocarse sin que su ancla ya exista.
 
-Se autorregula según la geometría real — no hay ningún número de satélites por ancla que calibrar.
+### 5.5 Separación entre huecos de una ranura (piso duro)
+
+Igual que la separación de §5.7 entre anclas ya construidas, cada candidato a ranura tiene que respetar
+`separacionSeguridadAnclas` frente a TODAS las demás anclas (incluidas las descartadas por saturación — siguen
+siendo edificios reales que ocupan territorio). No hay separación "relajable" aparte para esto: si ninguno de
+los radios probados en una dirección la cumple, esa dirección se descarta y se prueba la siguiente de las 8.
+
+### 5.6 Saturación y descarte de una semilla
+
+Si la semilla activa no tiene hueco real en NINGUNA de sus 8 direcciones, queda **saturada para siempre**
+(`Edificio.semillaSaturada`, estado persistido, se marca una sola vez y nunca se revisa) — no vuelve a
+proponerse como semilla en ninguna búsqueda futura, sin importar qué tipo de ancla se necesite después.
+
+Confirmado por simulación abstracta (ver "Estado", Etapa 5) que esto nunca deja el sistema sin salida mientras
+haya espacio físico: la búsqueda de la siguiente semilla (la no descartada más cercana a la raíz, entre TODAS,
+otra vez sin distinguir tipo) siempre encuentra algo hasta que el 100% del espacio disponible está ocupado —
+en ese punto, y solo en ese punto, no hay dónde crecer más para esa categoría.
+
+**Ojo: esto NO es lo mismo que la saturación de §5.3.** Un ancla puede estar `semillaSaturada` (no produce más
+anclas) y seguir teniendo hueco de sobra para que se le peguen sus propios satélites — son dos preguntas
+independientes, en dos niveles distintos de la jerarquía (ancla→ancla vs. ancla→satélite).
 
 ### 5.7 Separación mínima entre anclas
 
@@ -319,15 +493,18 @@ reduce progresivamente hasta que aparezca uno.
 
 **Implementado (2026-08-19), y es un piso aparte: `separacionSeguridadAnclas` = 2 celdas, NUNCA relajable.**
 A petición del usuario: "siempre tiene que haber, aunque sea 2 celdas a la redonda de un ancla, donde no puede
-haber otra ancla — es como una zona de seguridad." La relajación progresiva de `separacionMinimaAnclas` de
-arriba es todavía SOLO especificación (vive en §5.4/5.5, la semilla de grupo, que sigue sin código — ver
-"Estado" al principio del doc); lo que sí hay código hoy es más simple y más estricto: `sitiosParaTipo`
-(`engine/trazado.ts`) descarta CUALQUIER candidato para un ancla real nueva (Mercado, Carpintería —
-`ANCLAS_REALES`) que quede a menos de `TRAZADO.separacionSeguridadAnclas` celdas de OTRA ancla real ya
-construida. Si ningún hueco la cumple, no hay sitio válido en ese tick — no se relaja ni se ignora, es un piso
-duro. Cuando exista la semilla de grupo de §5.4/5.5, `separacionMinimaAnclas` (6, relajable) decide DÓNDE nace
-una ancla nueva; `separacionSeguridadAnclas` (2, fijo) seguirá siendo el piso que ninguna relajación puede
-cruzar.
+haber otra ancla — es como una zona de seguridad." `sitiosParaTipo`/`crearAnclaNueva` (`engine/trazado.ts`)
+descartan CUALQUIER candidato para un ancla real nueva que quede a menos de `TRAZADO.separacionSeguridadAnclas`
+celdas de OTRA ancla real ya construida (incluidas las descartadas por saturación de §5.6 — siguen siendo
+territorio real). Si ningún hueco la cumple, no hay sitio válido — no se relaja ni se ignora, es un piso duro.
+
+**Actualizado en la Etapa 5: `separacionMinimaAnclas` (6) cambió de rol.** Con la semilla de grupo (§5.4/5.5
+viejas, ya reemplazadas) era un umbral de "relajación progresiva" entre el edificio semilla y las anclas ya
+construidas. Con el árbol único de anclas (§5.4 actual), no hay nada que relajar: `separacionMinimaAnclas`
+pasó a ser el **radio inicial** desde el que `crearAnclaNueva` empieza a probar huecos a lo largo de una
+dirección (`RADIO_INICIAL_RANURA`), creciendo de `FONDO_MANZANA` en `FONDO_MANZANA` hasta un tope
+(`RADIO_MAXIMO_RANURA = separacionMinimaAnclas × 3`). El único piso que de verdad nunca cede sigue siendo
+`separacionSeguridadAnclas` (2, fijo) — ahora es el ÚNICO criterio de rechazo duro para una ranura nueva.
 
 **BUG (2026-08-19) medido por el usuario en la interfaz, y corregido el mismo día — la primera versión medía
 centro a centro, no borde a borde.** El usuario fundó un asentamiento, dejó que el NPC construyera, y encontró
@@ -410,22 +587,33 @@ antes es un edificio decorativo. El gate solo hace explícito lo que la economí
 > levantaste. Por eso **no** hay —ni debe añadirse— una comprobación de `nivelActualDe` dentro de
 > `reclutarTropa`: su ausencia no es un olvido.
 
-La misma regla resuelve la **Plaza residencial**: es el otro ancla que querría nacer temprano, y también
-necesita su gate en lugar de nacer relajando siempre la separación.
+La misma regla resuelve la **Plaza residencial** (hoy Plaza/Pozo/Parque): es el otro grupo de anclas que
+querría nacer temprano, y también necesita su gate. **Sigue vigente bajo el árbol único (Etapa 5)**, aplicado
+ahora al mecanismo entero: `NIVEL_GATE_ANCLAS = 2` gatea `asegurarAnclaPara` (`engine/construction.ts`) — por
+debajo de nivel 2, una categoría sin ancla alcanzable simplemente no encuentra sitio ese tick (se reintenta el
+siguiente) en vez de crear una ancla nueva mal colocada en un disco todavía pequeño. En la práctica militar e
+industria nunca lo notan: sus tipos ya exigen nivel 2 para construcción base, así que el gate siempre está
+cumplido de antemano; residencial es el único que podría llegar a frenar una Vivienda si el núcleo de Centro
+Urbano se satura antes de nivel 2.
 
 ### 5.8 Identidad de cada ciudad
 
-El sorteo de direcciones cardinales por asentamiento (`direccionesDelAsentamiento`) **sobrevive**, pero cambia
-de trabajo: ya no filtra cada colocación, solo **desempata dónde nace un ancla** entre los huecos que cumplen
-la separación mínima.
+**Reescrito en la Etapa 5** — el mecanismo cambió de sitio, no de intención. El sorteo de direcciones
+cardinales por categoría (`direccionesDelAsentamiento`) **desapareció** junto con el reparto de barrio: ya no
+hace falta, porque el árbol único de anclas (§5.4) no distingue categoría al elegir dónde nace cada ancla.
 
-Era lo que hacía que dos ciudades no se parecieran. Sin ello, con las anclas colocadas solo por "mejor hueco
-que respete la separación", todas acabarían con la misma silueta y solo variaría el orden de construcción.
+Lo que sobrevive es `anguloRotacionEje`: un ángulo aleatorio (determinista, `[0°, 45°)`) por asentamiento que
+rota el eje de las 8 direcciones cardinales de **todas** las ranuras del árbol por igual — no una dirección
+distinta por categoría, un solo giro compartido. Sigue siendo lo que hace que dos ciudades no compartan
+geometría aunque construyan exactamente los mismos tipos en el mismo orden: sin el giro, con solo 8 direcciones
+fijas, dos asentamientos con el mismo orden de construcción producirían árboles idénticos.
 
 ### 5.9 Regla genérica (tipos sin ancla)
 
-Mejor hueco por nivel de preferencia, 360°, el más cercano al origen. Es lo que ya usaban los tipos sin
-categoría antes de este sistema, sin cambios.
+Mejor hueco por nivel de preferencia, 360°, el más cercano al origen. La usan Palacio y Muralla (sin geometría
+propia) y, desde la Etapa 5 a petición del usuario, también **Almacén y Leñera** —antes tenían su propia cuña
+de barrio ("almacenaje"), que desapareció junto con el resto del reparto por barrios—: llenan huecos libres
+desde Centro Urbano hacia afuera, en cualquier dirección, en vez de agruparse en una única cuña.
 
 ### 5.10 Las anclas encadenan
 
@@ -439,10 +627,17 @@ Cada tipo ocupa un rectángulo ancho×alto de celdas. El tamaño se deriva de `t
 y en las piezas satélite), nunca se persiste en el `Edificio` (`EDIFICIO_TAMANO`, `constants.ts`;
 `tamanoEdificio`, `engine/trazado.ts`).
 
+**Orientación intercambiable (Etapa 4).** El tamaño de la tabla es el "normal"; cualquier tipo no cuadrado
+—salvo Granja (progresión real de tamaño) y Puesto de mercado (`nivelInterno` ya identifica una forma
+concreta)— puede aparecer girado (ancho↔alto) al colocarse, marcado en `Edificio.rotado`. Es lo que da
+variedad de silueta entre ciudades: un Mercado 3x2 puede nacer como 3x2 o como 2x3.
+
 | Tipo | Tamaño | Ubicación |
 |---|---|---|
 | Centro Urbano | 3x3 | origen — primer ancla |
-| Plaza | 2x2 | ancla residencial adicional |
+| Plaza | 2x2 | ancla residencial adicional (1 de 3, sorteada) |
+| Pozo | 1x1 | ancla residencial adicional (1 de 3, sorteada) |
+| Parque | 3x2 | ancla residencial adicional (1 de 3, sorteada) |
 | Plaza de Armas | 2x2 | ancla militar |
 | Patio de Gremios | 2x2 | ancla de industria |
 | Carpintería (pieza principal) | 4x2 | satélite de Plaza de Armas |
@@ -504,7 +699,10 @@ satélite de tipo `puestoMercado` que aparecen al alcanzar cada nivel interno.
 - Orbitan el Mercado por la atracción de §5.3, con la pieza principal como referencia fija.
 - **Si no hay hueco, el puesto se salta en silencio** y no bloquea la subida de nivel: la zona es superficie,
   no función.
-- Las partidas guardadas se rellenan al cargar (`migrarEdificiosAEspacioLocal`), de forma idempotente.
+- **Sin migración de partidas guardadas** (a petición del usuario): el juego está en desarrollo continuo y no
+  se mantiene retrocompatibilidad — una partida de una versión de guardado anterior se rechaza al importar con
+  un mensaje explícito (`SimulacionExportada.version`, `app/gameStore.ts`) en vez de rellenarse/migrarse. Ver
+  también §"Abierto".
 
 ## 9. Carpintería: zona de tres piezas
 
@@ -527,16 +725,18 @@ pasa a ser una zona de **tres piezas**:
   contrario que el Mercado, cuya zona crece porque su función crece.
 - Si un taller no encuentra hueco se salta en silencio, mismo criterio que un puesto de mercado.
 
-**Quién abre de verdad el núcleo militar, por cada camino.** Conviene tenerlo presente antes de calibrar nada,
-porque los dos caminos dan resultados distintos:
+**Quién dispara la aparición del núcleo militar, por cada camino.** Conviene tenerlo presente antes de
+calibrar nada, porque los dos caminos dan resultados distintos — nota post-Etapa-5: dónde cae exactamente la
+Plaza de Armas ya no depende de quién la disparó (§5.4, árbol único), solo IMPORTA quién es el primero en
+necesitar una y no encontrarla:
 
 - **Auto-construcción / batch.** Barracón, Galería de tiro, Palacio y Muralla **no se auto-construyen** (la
   política de desbloqueo se retiró, ver `avanzarConstruccion` en `engine/construction.ts`) y la gobernanza NPC
   solo añade `mercado` (`app/npcGobernanza.ts`). El único militar que llega a existir es la **Carpintería**, a
-  nivel 3. El núcleo militar simulado será entonces Plaza de Armas + Carpintería + 2 talleres, y **la Plaza de
-  Armas nacerá frente a la Carpintería**, no frente a un Barracón.
+  nivel 3, así que normalmente es ella quien dispara `asegurarAnclaPara` y hace que exista la Plaza de Armas.
+  El núcleo militar simulado será entonces Plaza de Armas + Carpintería + 2 talleres.
 - **Construcción manual.** El jugador sí puede añadir Barracón o Galería de tiro, y entonces cualquiera de los
-  dos puede ser quien abra el grupo y decida dónde cae la Plaza de Armas. Con el gate de §5.7.1 lo más pronto
+  dos puede ser quien dispare la aparición de la Plaza de Armas. Con el gate de §5.7 lo más pronto
   que puede pasar es a nivel 2, con el disco ya en 15 celdas — que es exactamente para lo que existe ese gate.
 
 ## 10. Manzanas emergentes
@@ -550,9 +750,10 @@ cuando las calles cierran un anillo. Salen de tres reglas:
    de la segunda hilera ya no se puede construir sin traer otra calle. Las calles de hilera caen cada 2 filas
    (`FONDO_MANZANA`, `engine/trazado.ts`).
 3. **Transversales cada N columnas.** N se sortea por asentamiento en el rango 4–8
-   (`TRAZADO.largoFilaMin`/`largoFilaMax`) con la misma semilla determinista que
-   `direccionesDelAsentamiento`, más un desfase propio para que dos ciudades no tengan los bloques alineados a
-   las mismas columnas. La manzana queda de N × 2 celdas. El criterio es **posicional**: cuando un edificio cae
+   (`TRAZADO.largoFilaMin`/`largoFilaMax`), mismo mecanismo determinista (`hashTexto` + `pseudoAleatorio` sobre
+   el id del asentamiento) que usa el resto del trazado para variar por ciudad — ver §5.8 —, más un desfase
+   propio para que dos ciudades no tengan los bloques alineados a las mismas columnas. La manzana queda de
+   N × 2 celdas. El criterio es **posicional**: cuando un edificio cae
    sobre una de esas líneas, aporta su trozo de calle. La línea completa se va formando conforme la ciudad
    crece hacia ahí, y si nunca crece, esa calle no llega a existir — no hay ningún plano previo, solo un
    criterio de dónde caería la transversal el día que alguien la necesite.
@@ -591,33 +792,49 @@ manzanas). El camino solo conecta — se dibuja más fino y no genera manzanas n
 - **Gates de mejora de Granja.** El costo y el rinde por nivel están definidos (§7), pero no hay ningún
   requisito adicional (nivel de asentamiento, edificio previo, etc.) que condicione la mejora más allá de tener
   los materiales — es el mismo criterio que ya usan Fundición/Curtiduría/Armería/etc., sin gate extra todavía.
-- **Migración de partidas guardadas al modelo de anclas.** Los asentamientos existentes no tienen Plaza de
-  Armas, Patio de Gremios ni talleres de Carpintería. El relleno idempotente al cargar ya tiene precedente
-  (`completarPuestosDeMercado`) y la regla de §5.5 es geometría pura, así que aplica igual sobre una ciudad ya
-  construida por el modelo de barrios — falta confirmarlo contra una partida real. Caso aparte: la Carpintería
-  guardada mide 5x4 y pasa a medir 4x2; al encoger nunca colisiona, pero deja un hueco irregular.
-- **`separacionMinimaAnclas` = 6 celdas** es un valor propuesto, sin calibrar por simulación. De él se deriva
-  `radioMaximoNucleo` (§5.3), así que es el único número del sistema — calibrarlo los mueve a los dos a la vez.
-- **A qué nivel se gatea la Plaza residencial.** La regla de §5.7.1 ya dice que necesita gate; falta fijar el
-  número. Nivel 2 la alinea con Barracón/Galería, pero un núcleo residencial en un disco de 5-10 celdas puede
-  saturarse antes de eso — hay que mirar en el batch a qué altura satura de verdad.
-- **Riesgo de la prioridad "pegado al ancla" (§5.3) sobre la alineación de fachadas.** El código actual
-  documenta una regresión medida: sin preferir la continuación de fila, la ciudad crece como un borrón
-  compacto y solo 3 de 50 edificios llegaban a cerrar manzana. Al pasar la cercanía al ancla por delante de
-  los niveles de preferencia se reintroduce esa presión. Se mitiga porque la preferencia sigue desempatando
-  dentro de cada expansión, pero es lo primero que hay que mirar en el batch: **número de manzanas cerradas
-  por ciudad**, comparado contra la línea base con barrios.
-- **Reflow al subir de nivel.** El radio urbano salta 5 → 10 → 15 → 20 celdas. No está definido si los núcleos
-  ya saturados se reevalúan al crecer el disco. Sin reflow, la ciudad congela para siempre la forma del early
-  game; con reflow, el replay determinista del pilar 2 (§2) deja de ser estable, porque el trazado dejaría de
-  depender solo del orden de construcción. Hay que elegir, y la elección afecta a un pilar.
+- **`separacionMinimaAnclas` = 6 celdas** sigue sin calibrar por simulación real. Cambió de rol en la Etapa 5
+  (§5.7): ya no es un umbral relajable entre edificio-semilla y anclas, es el radio inicial de la búsqueda de
+  ranura (`RADIO_INICIAL_RANURA`) y la base del tope (`RADIO_MAXIMO_RANURA = separacionMinimaAnclas × 3`, nuevo
+  en la Etapa 5, tampoco calibrado) — sigue siendo el único número real que calibrar en el sistema.
+- **Riesgo de la prioridad "pegado al ancla" (§5.3) sobre la alineación de fachadas.** Sigue sin medirse en
+  batch. El código documenta una regresión medida en su momento (sin preferir la continuación de fila, la
+  ciudad crece como un borrón compacto), mitigada porque la preferencia de fila sigue desempatando dentro de
+  cada expansión — pero nunca se confirmó con **número de manzanas cerradas por ciudad** contra una línea base
+  real. Sigue siendo lo primero que mirar si se retoma la calibración en batch.
 - **Ciclo de vida del ancla.** Qué pasa con los satélites si su ancla desaparece, y cómo se propaga en la
   cadena de §5.10. Hoy es discutible pero no urgente: verificado que **nada destruye edificios activos** en
   Fase 0 — el único sitio que quita un edificio del array es `quitarDeCola`, y solo actúa sobre `en_cola`. Es
   deuda para cuando exista destrucción (incendio, asedio, abandono), no un agujero actual.
-- **Política "Líneas de Producción"** (`sitioEnBarrioLineaProduccion`) optimizaba entre todos los huecos de la
-  cuña del barrio. Bajo anclas pasa a optimizar entre todos los huecos dentro del radio del núcleo, lo que
-  conserva la intención (la logística puede ganarle a la compacidad dentro del distrito) sin dejarla dispersar
-  la ciudad — pendiente de implementar.
-- **Nombres provisionales.** `Plaza`, `Plaza de Armas`, `Patio de Gremios` y `Taller de carpintería` son los
-  nombres de trabajo de los cuatro tipos nuevos; ninguno está fijado en el catálogo todavía.
+- **Referencia de la Lógica 2 (atracción de satélites) sigue midiendo desde el origen, no desde la posición
+  real.** `anclaMasCercana`/`anclaActivaParaCategoria` (§5.3.1) —dentro de `sitiosParaTipo`, deciden a qué
+  instancia de ancla se atrae un satélite— siguen ordenando las instancias por distancia al ORIGEN del
+  asentamiento, no a la posición del edificio que se está colocando. La consecuencia GRAVE que tenía esto (una
+  instancia llena se seguía eligiendo para siempre, fabricando anclas nuevas sin parar) ya se corrigió en
+  §5.3.1 — lo que queda pendiente es solo la imprecisión geométrica: un satélite puede atraerse a una
+  instancia más lejana-pero-igual-de-válida en vez de la geométricamente más cercana a él. Riesgo leve, no
+  correctness — pendiente si algún día vale la pena afinarlo.
+- **Ancla creada sin garantizar que tendrá sitio para al menos un satélite.** `asegurarAnclaPara`/
+  `crearAnclaNueva` (§5.4) garantizan que el ANCLA en sí cabe (hueco real + separación, §5.5/§5.7) antes de
+  colocarla, pero no comprueban que, una vez colocada, `sitiosPorAtraccionDura` (§5.3) vaya a encontrarle sitio
+  a ni un solo satélite de la categoría que la disparó. Caso real observado con una semilla de prueba fija: un
+  Patio de Gremios nace consistentemente sin que ningún edificio de industria llegue a pegársele nunca —
+  huérfano desde el tick en que se crea. Coincide con el diagnóstico original que motivó toda la Etapa 5 (ver
+  arriba, "El motivo"): el ancla nace resuelta geométricamente, pero nadie verifica que resuelva el problema
+  que la originó. Sin corregir todavía.
+- **Nombres provisionales que siguen provisionales.** `Pozo` y `Parque` (Etapa 4) son nombres de trabajo,
+  igual que lo fueron en su momento `Plaza`/`Plaza de Armas`/`Patio de Gremios`/`Taller de carpintería` (esos
+  cuatro ya están fijados en el catálogo desde la Etapa 3).
+
+**Resueltos desde la última revisión de esta sección** (quedan aquí solo como referencia, no como pendientes):
+
+- ~~Migración de partidas guardadas al modelo de anclas~~ — decisión distinta a la que este documento
+  proponía: en vez de rellenar partidas viejas al cargar, se **eliminó toda retrocompatibilidad** (a petición
+  del usuario: "estamos en un proceso de desarrollo continuo... lo anterior se borran y se crean nuevas
+  partidas"). Una partida de versión de guardado anterior se rechaza al importar (§8).
+- ~~A qué nivel se gatea la Plaza residencial~~ — resuelto en la Etapa 3: `NIVEL_GATE_ANCLAS = 2`, uniforme
+  para las tres categorías con ancla (§5.7).
+- ~~Reflow al subir de nivel~~ — decisión cerrada con el usuario en la Etapa 3: **sin reflow**. Un núcleo
+  saturado con el disco pequeño conserva su ancla de saturación para siempre.
+- ~~Política "Líneas de Producción" pendiente de implementar~~ — implementada en la Etapa 5:
+  `sitiosPorAtraccionDura` acepta `ampliado`, que devuelve todos los candidatos dentro del núcleo del ancla en
+  vez de detenerse en el primero, para que la política elija por distancia a la fuente de insumos.

@@ -32,6 +32,16 @@ export const ZONA_INFLUENCIA = {
   // niveles anteriores — pendiente de calibrar por simulación, igual que el resto de cifras de esta fase.
   radioMaximoPorNivel: { 1: 60, 2: 90, 3: 120, 4: 150, 5: 180 } as Record<number, number>,
   segmentosPoligono: 48, // resolución del círculo aproximado como polígono
+  // Resolución (unidades de mapa) con la que se fusionan las zonas de una misma facción en una sola silueta
+  // para dibujarlas — ver `computeZonasFusionadasPorFaccion` y `unirFormas`. Solo afecta al DIBUJO, ningún
+  // cálculo de juego lo lee. 5 sobre un mapa de 2000 deja el error del contorno por debajo del grosor del
+  // trazo con el que se pinta la frontera.
+  //
+  // El coste va con 1/paso², así que es la palanca si alguna vez molesta. MEDIDO en navegador, por recálculo
+  // (que solo ocurre cuando cambia la posición, el radio o la facción de algún asentamiento — el resultado
+  // se cachea, ver `GameStore.getZonasFusionadas`): 3 asentamientos a radio 60 ≈ 2 ms, 6 a radio 90 ≈ 8 ms,
+  // 8 a radio 120 ≈ 17 ms, y el tope teórico de 12 asentamientos todos al radio máximo de nivel 5 ≈ 50 ms.
+  pasoFusionContorno: 5,
 };
 
 export const FUNDACION = {
@@ -477,6 +487,9 @@ export const EDIFICIO_CATALOGO = {
   patioDeGremios: { costo: {}, tiempoConstruccionTicks: 0 },
   // Pieza satélite de la zona de Carpintería (§9) — mismo patrón que puestoMercado, ver `crearTalleresDeCarpinteria`.
   tallerCarpinteria: { costo: {}, tiempoConstruccionTicks: 0 },
+  // Variedad de anclas residenciales (Etapa 4, punto 4) — mismo patrón "marcador gratis" que plaza.
+  pozo: { costo: {}, tiempoConstruccionTicks: 0 },
+  parque: { costo: {}, tiempoConstruccionTicks: 0 },
 
   // Maravilla (Roadmap_Escalado.md Eje 4, a petición del usuario) — SOLO el edificio en esta pasada: el ciclo
   // de servidor de 12 meses que se cierra al completarla (reset + Facción ganadora persistiendo como legado
@@ -667,6 +680,10 @@ export const EDIFICIO_TAMANO: Record<string, { ancho: number; alto: number }> = 
   patioDeGremios: { ancho: 2, alto: 2 },
   // Taller de carpintería (§9): 2x2, igual que las otras piezas satélite pequeñas.
   tallerCarpinteria: { ancho: 2, alto: 2 },
+  // Variedad de anclas residenciales (Etapa 4, punto 4): pozo 1x1 (marcador mínimo), parque 3x2 (el único no
+  // cuadrado de los tres, ejercita la orientación intercambiable del punto 1 también en anclas).
+  pozo: { ancho: 1, alto: 1 },
+  parque: { ancho: 3, alto: 2 },
 };
 
 /**

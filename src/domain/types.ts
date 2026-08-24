@@ -118,7 +118,11 @@ export type EdificioTipo =
   | 'patioDeGremios'
   // Pieza satélite de la zona de Carpintería (§9, mismo patrón que 'puestoMercado'): al completarse la
   // Carpintería (ahora la pieza principal de su propia zona, 4x2) nacen 2 talleres gratis a su alrededor.
-  | 'tallerCarpinteria';
+  | 'tallerCarpinteria'
+  // Variedad de anclas residenciales (Etapa 4, punto 4, a petición del usuario): mismo patrón "marcador
+  // gratis" que 'plaza' — cuando el núcleo residencial satura, se sortea (determinista) entre las tres.
+  | 'pozo'
+  | 'parque';
 
 export type EstadoEdificio = 'en_cola' | 'en_construccion' | 'activo';
 
@@ -149,6 +153,31 @@ export interface Edificio {
   /** Nivel interno de mejora (Doc 4.2.1): solo edificios de transformación con tiers (Fundición, Curtiduría,
    * Armería, Carpintería, Barracón, Galería de tiro). Ausente/1 para el resto. */
   nivelInterno?: number;
+  /** Orientación intercambiable ancho↔alto (Etapa 4, a petición del usuario: variedad de silueta entre
+   * ciudades, ej. un Mercado 3x2 puede nacer como 3x2 o 2x3). Decidida una vez al colocarse
+   * (`sitiosParaTipo`/`crearAnclaNueva`, engine/trazado.ts) y fija después — solo tiene efecto si el tipo
+   * tiene footprint no cuadrado; `granja` (progresión real de tamaño) y `puestoMercado` (`nivelInterno` ya
+   * codifica una forma concreta de zona) nunca lo usan. Ausente/false = orientación normal. */
+  rotado?: boolean;
+  /** Etapa 5, exclusivo de anclas reales (`ANCLAS_REALES`, engine/trazado.ts): esta instancia ya agotó sus 8
+   * direcciones de crecimiento (sin hueco real en ninguna) y quedó descartada PARA SIEMPRE como semilla de
+   * nuevas anclas (`semillaActiva`/`crearAnclaNueva`) — se marca una sola vez y nunca se revisa. No tiene
+   * relación con la saturación del núcleo de satélites de un ancla (`anclaLlena`, Lógica 2, sin cambios): un
+   * ancla puede estar `semillaSaturada` y seguir teniendo hueco de sobra para sus propios satélites, o estar
+   * `anclaLlena` y seguir siendo la semilla activa del árbol mientras sus 8 ranuras tengan sitio — CRITERIOS
+   * INDEPENDIENTES, ninguno dispara al otro (confirmado con el usuario tras una primera corrección que sí los
+   * mezclaba). */
+  semillaSaturada?: boolean;
+  /** Lógica 2 (satélites, `sitiosPorAtraccionDura`/`anclaActivaParaCategoria`, engine/trazado.ts): esta
+   * instancia ya no tiene hueco para el próximo edificio dependiente de su categoría — se marca una sola vez y
+   * nunca se revisa (nada libera celdas). Es un concepto DISTINTO de `semillaSaturada` (Lógica 1: agotamiento
+   * de las 8 ranuras de crecimiento del árbol, radio mucho mayor) y no la afecta — `anclaLlena` solo cambia a
+   * qué instancia se atrae el PRÓXIMO satélite de esa categoría (`anclaActivaParaCategoria`), nunca decide
+   * dónde nace la siguiente ancla. Antes de esto, la búsqueda de a qué instancia atraerse siempre volvía a la
+   * más cercana al origen sin memoria de si tenía hueco — con Centro Urbano (`posicion` fija en el origen)
+   * eso significaba que, una vez lleno, ninguna otra instancia de su categoría se volvía a usar jamás y el
+   * asentamiento fabricaba anclas nuevas sin parar en su lugar (bug detectado con el laboratorio visual). */
+  anclaLlena?: boolean;
   /** Overhaul de auto-construcción: score de necesidad (ver `SCORE_BANDAS`, constants.ts) capturado en el
    * momento en que el proyecto se comprometió (pagó) y entró `en_cola` — determina el orden real en que
    * arranca la construcción cuando compite por un hueco de `maximoEnConstruccionSimultanea`. Ausente para
@@ -286,6 +315,24 @@ export interface ZonaInfluencia {
   asentamientoId: string;
   /** Polígono resultante de recortar el círculo potencial contra las fronteras con asentamientos rivales. */
   poligono: Point[];
+}
+
+/**
+ * El territorio de UNA facción como una sola silueta: la unión de las `ZonaInfluencia` de todos sus
+ * asentamientos (que se solapan por diseño — mismo bando no compite, Doc 1.2). Derivado puro y SOLO PARA
+ * DIBUJAR, nunca persistido ni consultado por ninguna regla: la pertenencia territorial se sigue resolviendo
+ * asentamiento a asentamiento contra `ZonaInfluencia.poligono`.
+ * Lo calcula `computeZonasFusionadasPorFaccion` (engine/zones.ts).
+ */
+export interface ZonaFaccion {
+  faccionId: string;
+  /**
+   * Lazos CERRADOS del contorno (el último punto enlaza con el primero, no se repite): uno por grupo de
+   * asentamientos conectados, más uno por cada hueco interior que la facción rodee sin reclamar. Los huecos
+   * salen con orientación opuesta a los contornos exteriores, así que pintarlos todos en un mismo path y
+   * rellenar con la regla `nonzero` (la de por defecto en canvas) los recorta solo — ver `unirFormas`.
+   */
+  contornos: Point[][];
 }
 
 export interface NodoRecurso {

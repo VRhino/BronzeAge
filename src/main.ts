@@ -101,6 +101,8 @@ const EDIFICIO_NOMBRE: Record<string, string> = {
   plazaDeArmas: 'Plaza de Armas',
   patioDeGremios: 'Patio de Gremios',
   tallerCarpinteria: 'Taller de carpintería',
+  pozo: 'Pozo',
+  parque: 'Parque',
 };
 
 const EDIFICIO_FUNCION: Record<string, string> = {
@@ -130,6 +132,8 @@ const EDIFICIO_FUNCION: Record<string, string> = {
   plazaDeArmas: 'Ancla del núcleo militar: no se construye ni cuesta nada, aparece sola frente al primer edificio militar (Barracón/Galería de tiro/Carpintería/Muralla) que se construye. Solo ocupa suelo.',
   patioDeGremios: 'Ancla del núcleo de industria: no se construye ni cuesta nada, aparece sola frente al primer edificio de transformación (Fundición/Curtiduría/Armería/Gran Fundición/Maravilla) que se construye. Solo ocupa suelo.',
   tallerCarpinteria: 'Pieza de la zona de Carpintería: no se construye ni cuesta nada, aparecen dos al completarse la Carpintería. Solo ocupa suelo.',
+  pozo: 'Ancla de saturación del núcleo residencial (una de tres posibles, sorteada al azar): no se construye ni cuesta nada. Solo ocupa suelo.',
+  parque: 'Ancla de saturación del núcleo residencial (una de tres posibles, sorteada al azar): no se construye ni cuesta nada. Solo ocupa suelo.',
 };
 
 /** Campos de factor que puede traer una política del catálogo (ver CATALOGOS.politicas), con etiqueta legible. */
@@ -2493,7 +2497,7 @@ function render(): void {
     const drawState: DrawState = {
       mapa: gameStore.getMapa(state),
       asentamientos: state.asentamientos,
-      zonas,
+      zonasFusionadas: gameStore.getZonasFusionadas(zonas, state.asentamientos),
       facciones: state.facciones,
       caravanas: state.caravanas,
       caminos: state.caminos,
