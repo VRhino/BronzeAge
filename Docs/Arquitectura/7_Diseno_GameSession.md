@@ -202,12 +202,20 @@ evita:
 
 1. **Crear `session/gameSession.ts`** con el estado y los comandos, devolviendo `ResultadoComando`. Todavía
    nadie la usa.
-2. **Convertir `GameStore` en adaptador delgado** sobre `GameSession`: mantiene `subscribe`/`notify`/
+2. **Mover los 34 comandos a `session/comandos/`, de a grupos** — la suite completa en verde entre grupo y
+   grupo. `GameStore` sigue intacto y funcionando mientras tanto.
+3. **Convertir `GameStore` en adaptador delgado** sobre `GameSession`: mantiene `subscribe`/`notify`/
    `historial`/`log` (lo del navegador) y traduce `ResultadoComando` → entrada de log en texto. **La UI no
    cambia ni una línea** y la suite actual sigue siendo la red de seguridad.
-3. **Mover comandos de a grupos**, no todos de golpe — la suite completa en verde entre grupo y grupo.
 4. Cuando no quede lógica de partida en `GameStore`, lo que queda es un cliente local: exactamente la pieza
    que en Fase B5 se sustituye por un cliente de API remota.
+
+> **Corrección del orden (2026-08-24).** Los pasos 2 y 3 estaban al revés en la primera versión de este
+> documento. Convertir `GameStore` en adaptador ANTES de migrar los comandos es imposible: `GameStore` tiene
+> **70 mutaciones directas** de `this.state`, así que mientras quede un solo comando sin migrar habría dos
+> fuentes de verdad —el estado de `GameSession` y el de `GameStore`— divergiendo desde el primer comando que
+> se ejecutara. El paso 3 solo puede hacerse cuando ya no queda ninguna, y entonces es un cambio mecánico y
+> atómico en vez de una convivencia frágil.
 
 Este orden mantiene la propiedad que ha funcionado en toda la Fase A: cada paso es verificable con los tests
 que ya existen, y en ningún momento hay un estado intermedio roto.
