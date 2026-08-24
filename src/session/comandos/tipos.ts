@@ -21,6 +21,11 @@ export type ActorId = string;
  * Se corresponde con el rol técnico `servicio_npc` del doc 5. */
 export const ACTOR_SISTEMA: ActorId = 'sistema';
 
+/** Actor de la consola local de administración (`app/gameStore.ts`), donde todavía no hay autenticación y
+ * quien pulsa el botón es siempre el mismo. Desaparece en la Fase C, cuando el actor lo resuelva la sesión
+ * autenticada en vez de fijarlo el cliente (doc 2, principio 3). */
+export const ACTOR_LOCAL: ActorId = 'local';
+
 /**
  * Contexto de ejecución de un comando: lo que NO es dato del comando pero hace falta para resolverlo.
  * Deliberadamente simétrico a `ContextoSimulacion` (`engine/simulation.ts`) — y por el mismo motivo: el

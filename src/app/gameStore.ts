@@ -24,10 +24,9 @@ import type {
   ZonaFaccion,
   ZonaInfluencia,
 } from '../domain/types';
-import { CAMPAMENTOS_BANDIDOS, EDIFICIO_CATALOGO, FUNDACION, MANTENIMIENTO, NECESIDADES, NIVEL_FACCION, POLITICAS, POLITICA_CATALOGO, REJILLA_ASENTAMIENTO, SIMULACION_AUTO_COMERCIO, TROPAS_RECLUTABLES } from '../constants';
-import { createRng, generarMapa, MAPA_DEFAULT, WORLDGEN_VERSION, type MapaGenerado, type RandomFn } from '../worldgen';
-import { crearEstadoMapa, crearMapa, type EstadoMapa, type Mapa } from '../world/mapa';
-import { GeneradorIds } from '../session/idGenerator';
+import { EDIFICIO_CATALOGO, MANTENIMIENTO, NECESIDADES, NIVEL_FACCION, POLITICAS, POLITICA_CATALOGO, REJILLA_ASENTAMIENTO, TROPAS_RECLUTABLES } from '../constants';
+import { generarMapa, WORLDGEN_VERSION, type MapaGenerado } from '../worldgen';
+import { crearMapa, type EstadoMapa, type Mapa } from '../world/mapa';
 import { exportarParaUnityTerrain, UNITY_EXPORT_DEFAULT, type ExportUnityResultado, type OpcionesExportUnity } from '../world/exportUnity';
 
 export { UNITY_EXPORT_DEFAULT };
@@ -53,43 +52,21 @@ import { consumoComidaPoblacion } from '../engine/population';
 import { slotsDisponibles } from '../engine/politicas';
 import { listarCamposBalance, actualizarCampoBalance, restaurarBalancePorDefecto, type CampoBalance } from './balanceConfig';
 export type { CampoBalance } from './balanceConfig';
-import {
-  fundarAsentamiento as fundarAsentamientoEngine,
-  evaluarViabilidadFundacion,
-  FundacionInvalidaError,
-  type ViabilidadFundacion,
-} from '../engine/settlement';
+// --- Motor: SOLO consultas derivadas ---
+// Los COMANDOS ya no se importan aquí: viven en `session/comandos/` y este store los invoca a través de
+// `GameSession` (Docs/Arquitectura/7_Diseno_GameSession.md §6). Lo que queda son las funciones que alimentan
+// las consultas de solo lectura de la interfaz — pendientes de triaje en el doc 8.
+import { evaluarViabilidadFundacion, type ViabilidadFundacion } from '../engine/settlement';
 export type { ViabilidadFundacion } from '../engine/settlement';
 import { computeTodasLasZonas, computeZonasFusionadasPorFaccion } from '../engine/zones';
-import { avanzarSimulacion, type ContextoSimulacion } from '../engine/simulation';
-import { avanzarNpcGobernanza } from '../session/npcGobernanza';
-import { avanzarAutoComercioSimulado } from '../engine/simulacionAutoComercio';
-import { proponerTrueque as proponerTruequeEngine, construirCaravanaComercial as construirCaravanaComercialEngine, CaravanaInvalidaError, TruequeInvalidoError } from '../engine/trade';
-import { asegurarCaminoComercial } from '../engine/caminos';
 import { controladorDeChokepoint } from '../engine/chokepoints';
-import { colocarOrdenMercado as colocarOrdenMercadoEngine, calcularPrecioReferencia, OrdenInvalidaError } from '../engine/market';
-import { crearFaccion as crearFaccionEngine, comprarCasa as comprarCasaEngine, calcularCapFundacion, calcularCupoNivel, capacidadCasas, FaccionInvalidaError } from '../engine/faccion';
-import { asignarRey as asignarReyEngine, asignarEmbajador as asignarEmbajadorEngine, asignarCargoLocal as asignarCargoLocalEngine, CargoInvalidoError } from '../engine/cargos';
-import { activarPolitica as activarPoliticaEngine, PoliticaInvalidaError } from '../engine/politicas';
-import {
-  proponerVasallaje as proponerVasallajeEngine,
-  proponerAlianza as proponerAlianzaEngine,
-  romperRelacion as romperRelacionEngine,
-  rebelionVasallo as rebelionVasalloEngine,
-  DiplomaciaInvalidaError,
-} from '../engine/diplomacia';
+import { calcularPrecioReferencia } from '../engine/market';
+import { calcularCapFundacion, calcularCupoNivel, capacidadCasas } from '../engine/faccion';
 import { computeLigas, type LigaInfo } from '../engine/liga';
-import { anexionar as anexionarEngine, fusionar as fusionarEngine, FusionInvalidaError } from '../engine/fusion';
-import { reclutarTropa as reclutarTropaEngine, ReclutamientoInvalidoError, consumoRacionTropas } from '../engine/tropas';
+import { consumoRacionTropas } from '../engine/tropas';
 import {
-  anadirEdificioManualmente as anadirEdificioManualmenteEngine,
-  quitarDeCola as quitarDeColaEngine,
-  moverEnCola as moverEnColaEngine,
-  mejorarEdificioManualmente as mejorarEdificioManualmenteEngine,
   estadoMejoraEdificio as estadoMejoraEdificioEngine,
-  reclamosDeFuentes as reclamosDeFuentesEngine,
   factorLineaProduccion,
-  ConstruccionManualInvalidaError,
   type EstadoMejoraEdificio,
 } from '../engine/construction';
 export type { EstadoMejoraEdificio } from '../engine/construction';
@@ -101,19 +78,53 @@ import {
   tamanoDeEdificio,
   type SegmentoTrazado,
 } from '../engine/trazado';
+import { poderEscuadron } from '../engine/combate';
+
+// --- Capa de partida: la lógica de cada comando vive aquí, no en este archivo ---
+import { GameSession, type GameSessionState } from '../session/gameSession';
+import { ACTOR_LOCAL, type ManejadorComando, type ResultadoComando } from '../session/comandos/tipos';
+import { fundarAsentamiento as fundarAsentamientoCmd } from '../session/comandos/fundarAsentamiento';
+import { crearFaccion as crearFaccionCmd } from '../session/comandos/crearFaccion';
+import { alternarFaccionNpc as alternarFaccionNpcCmd } from '../session/comandos/alternarFaccionNpc';
 import {
-  iniciarAsedio as iniciarAsedioEngine,
-  combateCampoAbierto as combateCampoAbiertoEngine,
-  interceptarCaravana as interceptarCaravanaEngine,
-  atacarCampamentoBandidos as atacarCampamentoBandidosEngine,
-  poderEscuadron,
-  CombateInvalidoError,
-} from '../engine/combate';
+  activarPolitica as activarPoliticaCmd,
+  asignarCargoLocal as asignarCargoLocalCmd,
+  asignarEmbajador as asignarEmbajadorCmd,
+  asignarRey as asignarReyCmd,
+  comprarCasa as comprarCasaCmd,
+} from '../session/comandos/cargos';
 import {
-  lanzarCaravanaFundacion as lanzarCaravanaFundacionEngine,
-  desarmarCaravanaFundacion as desarmarCaravanaFundacionEngine,
-  ExpansionInvalidaError,
-} from '../engine/expansion';
+  anexionar as anexionarCmd,
+  fusionar as fusionarCmd,
+  proponerRelacion as proponerRelacionCmd,
+  rebelionVasallo as rebelionVasalloCmd,
+  romperRelacion as romperRelacionCmd,
+} from '../session/comandos/diplomacia';
+import {
+  colocarOrdenMercado as colocarOrdenMercadoCmd,
+  crearCaravana as crearCaravanaCmd,
+  proponerTrueque as proponerTruequeCmd,
+} from '../session/comandos/comercio';
+import {
+  atacarCampamentoBandidos as atacarCampamentoBandidosCmd,
+  combateCampoAbierto as combateCampoAbiertoCmd,
+  interceptarCaravana as interceptarCaravanaCmd,
+  iniciarAsedio as iniciarAsedioCmd,
+  reclutarTropa as reclutarTropaCmd,
+} from '../session/comandos/militar';
+import {
+  alternarAutoConstruccion as alternarAutoConstruccionCmd,
+  anadirEdificioManualmente as anadirEdificioManualmenteCmd,
+  calibrarReservaManual as calibrarReservaManualCmd,
+  mejorarEdificioAhora as mejorarEdificioAhoraCmd,
+  moverEnCola as moverEnColaCmd,
+  quitarDeCola as quitarDeColaCmd,
+  renombrarAsentamiento as renombrarAsentamientoCmd,
+} from '../session/comandos/construccion';
+import {
+  desarmarCaravanaFundacion as desarmarCaravanaFundacionCmd,
+  lanzarCaravanaFundacion as lanzarCaravanaFundacionCmd,
+} from '../session/comandos/expansion';
 
 export interface EventoLog {
   tick: number;
@@ -270,11 +281,16 @@ function idsNoVacios(csv: string): string[] {
  * constancia en el log — la interfaz nunca necesita conocer las clases de error del motor.
  */
 export class GameStore {
-  private state: GameState;
+  /**
+   * La partida vive aquí, no en este objeto (Docs/Arquitectura/7_Diseno_GameSession.md §6, paso 3).
+   * `GameStore` ya no posee estado de simulación: es el ADAPTADOR de navegador sobre `GameSession` —
+   * suscripciones, historial de depuración y traducción de `ResultadoComando` a entradas de log. Es también
+   * la pieza que en la Fase B5 se sustituye por un cliente de API remota sin tocar la interfaz.
+   */
+  private session: GameSession;
   private listeners = new Set<Listener>();
-  private ids = new GeneradorIds();
   /** Una foto completa del estado al final de cada tick (índice = número de tick) — alimenta el slider de línea de tiempo. */
-  private historial: GameState[] = [];
+  private historial: GameSessionState[] = [];
   /** Tick más antiguo con foto disponible. 0 en una partida normal; el tick importado tras un `importarSimulacion` (no hay fotos de ticks previos a ese punto). */
   private historialDesde = 0;
   /**
@@ -286,37 +302,27 @@ export class GameStore {
   /** Última fusión de zonas por facción calculada, con la firma de los asentamientos de los que salió — ver
    * `getZonasFusionadas`. Artefacto de render, no estado de partida: se puede tirar en cualquier momento. */
   private zonasFusionadasCache: { clave: string; valor: ZonaFaccion[] } | null = null;
+
   /**
-   * Fuente de aleatoriedad de la SIMULACIÓN (población, combate, bandidos — ver `engine/population.ts`,
-   * `engine/combate.ts`, `engine/bandidos.ts`), separada de la del generador de mundo (que ya es determinista
-   * por seed, ver `worldgen/`). Se reinicia con la misma seed del mundo en `regenerarMundo`/`importarSimulacion`
-   * para que una partida sea reproducible desde ese punto — NO se persiste su estado interno todavía (ver
-   * Docs/Arquitectura/4_Plan_Evolucion_Tareas.md, Fase B3): exportar/importar deja la secuencia consumida sin
-   * recuperar, así que dos partidas "idénticas" pueden divergir tras un import, algo pendiente de resolver
-   * cuando se diseñe la persistencia real.
+   * Estado de la partida, leído siempre de `GameSession`. Es un getter y no un campo a propósito: así las
+   * consultas derivadas de esta clase (`getZonas`, `produccionInfo`, `manoObraInfo`…) siguen leyendo
+   * `this.state.X` exactamente igual que antes, sin que ninguna tenga que cambiar. `GameSessionState` es un
+   * superconjunto de lo que era `GameState` (añade `gameId`, `version` y `eventosDominio`), así que la
+   * interfaz tampoco nota la diferencia.
    */
-  private rng: RandomFn = createRng(1);
+  private get state(): Readonly<GameSessionState> {
+    return this.session.getState();
+  }
+
+  /** Momento de simulación para una operación lanzada desde la interfaz. El reloj lo pone esta capa —
+   * `GameSession` no lo lee nunca (ver `ContextoComando`). */
+  private ahora(): string {
+    return new Date().toISOString();
+  }
 
   constructor() {
-    this.state = {
-      estadoMapa: crearEstadoMapa(),
-      mapa: generarMapa({ ...MAPA_DEFAULT, seed: 1 }),
-      asentamientos: [],
-      facciones: [],
-      caravanas: [],
-      acuerdos: [],
-      ordenes: [],
-      relaciones: [],
-      titulos: [],
-      caminos: [],
-      campamentosBandidos: [],
-      bandidosProximoSpawnTick: 0,
-      faccionesNpcIds: [],
-      tick: 0,
-      log: [],
-      historialJugadores: {},
-    };
-    this.registrar('Mundo generado. Selecciona una facción y haz clic en el mapa para fundar.');
+    this.session = GameSession.crear('local', { seed: 1 });
+    this.session.registrarEventoAdministrativo(this.ahora(), 'Mundo generado. Selecciona una facción y haz clic en el mapa para fundar.');
     this.notify();
   }
 
@@ -357,8 +363,11 @@ export class GameStore {
    * referencia sin clonar nada: es inmutable desde que se genera. Lo único que hay que fotografiar es
    * `estadoMapa`, un registro de números — antes esto obligaba a clonar los ~117 objetos-nodo cada tick.
    */
-  private clonarEstadoActual(): GameState {
+  private clonarEstadoActual(): GameSessionState {
     return {
+      gameId: this.state.gameId,
+      version: this.state.version,
+      eventosDominio: structuredClone(this.state.eventosDominio),
       mapa: this.state.mapa,
       estadoMapa: {
         extraido: { ...this.state.estadoMapa.extraido },
@@ -386,23 +395,23 @@ export class GameStore {
     for (const listener of this.listeners) listener();
   }
 
-  private registrar(mensaje: string): void {
-    this.state.log = [{ tick: this.state.tick, mensaje }, ...this.state.log];
-  }
-
   /**
-   * Descarta ids de `faccionesNpcIds` cuya Facción ya no existe — una anexión o fusión (`engine/fusion.ts`)
-   * hace desaparecer una de las dos Facciones, y la fusión además crea una TERCERA nueva, que nace bajo
-   * control manual: si el jugador quiere que también la juegue el NPC, la marca a mano.
+   * Ejecuta un comando de `GameSession` y refresca la interfaz. Los comandos ya registran sus propios
+   * eventos en el log de la partida (ver `exito()` en `session/comandos/tipos.ts`), así que aquí solo queda
+   * traducir un RECHAZO a la entrada de log que la consola mostraba antes — es la única parte de la
+   * traducción `ResultadoComando` → texto que sigue viviendo en el adaptador.
    */
-  private sincronizarFaccionesNpc(): void {
-    this.state.faccionesNpcIds = this.state.faccionesNpcIds.filter((id) => this.state.facciones.some((f) => f.id === id));
-  }
-
-  private registrarJugador(jugadorId: string, mensaje: string): void {
-    if (!jugadorId) return;
-    const lista = this.state.historialJugadores[jugadorId] ?? [];
-    this.state.historialJugadores[jugadorId] = [{ tick: this.state.tick, mensaje }, ...lista];
+  private despachar<P, R>(
+    manejador: ManejadorComando<P, R>,
+    params: P,
+    etiquetaRechazo: string
+  ): ResultadoComando<R> {
+    const resultado = this.session.ejecutar(manejador, params, { momento: this.ahora(), actor: ACTOR_LOCAL });
+    if (!resultado.ok) {
+      this.session.registrarEventoAdministrativo(this.ahora(), `${etiquetaRechazo}: ${resultado.codigoError ?? 'desconocido'}`);
+    }
+    this.notify();
+    return resultado;
   }
 
   // --- Derivados de solo lectura (evitan que la interfaz importe funciones del motor) ---
@@ -654,188 +663,48 @@ export class GameStore {
   // --- Acciones (una por intención de usuario) ---
 
   fundarAsentamiento(faccionId: string, posicion: { x: number; y: number }, numJugadores: number): void {
-    const n = Math.min(FUNDACION.maxJugadoresFundacionGrupal, Math.max(1, numJugadores || 1));
-    const jugadoresIds = Array.from({ length: n }, (_, i) => `jugador-${faccionId}-${i + 1}`);
-    try {
-      const resultado = fundarAsentamientoEngine(
-        this.getMapa(),
-        this.state.facciones,
-        faccionId,
-        posicion,
-        jugadoresIds,
-        this.state.asentamientos,
-        this.state.tick
-      );
-      this.state.asentamientos = [...this.state.asentamientos, resultado.asentamiento];
-      this.state.facciones = resultado.facciones;
-      const nombreFaccion = this.state.facciones.find((f) => f.id === faccionId)?.nombre ?? faccionId;
-      this.registrar(`${nombreFaccion} funda asentamiento en (${Math.round(posicion.x)}, ${Math.round(posicion.y)}).`);
-      for (const jugadorId of jugadoresIds) {
-        this.registrarJugador(jugadorId, `Funda ${resultado.asentamiento.id} (${nombreFaccion}) y recibe casa + ciudadanía.`);
-      }
-    } catch (err) {
-      if (err instanceof FundacionInvalidaError) this.registrar(`Fundación rechazada: ${err.message}`);
-      else throw err;
-    }
-    this.notify();
+    this.despachar(fundarAsentamientoCmd, { faccionId, posicion, numJugadores }, 'Fundación rechazada');
   }
 
-  /** Caravana de Fundación (Doc 1.8): expande una Facción más allá de su primer asentamiento. Lleva consigo
-   * a ciudadanos ya existentes de la Facción (no jugadores nuevos) y reserva de inmediato un cupo del Cap
-   * de Fundación (Doc 1.7) mientras esté en tránsito. */
   lanzarCaravanaFundacion(origenAsentamientoId: string, destino: { x: number; y: number }, numJugadores: number): void {
-    try {
-      const origen = this.state.asentamientos.find((a) => a.id === origenAsentamientoId)!;
-      const faccion = this.state.facciones.find((f) => f.id === origen.faccionId)!;
-      const resultado = lanzarCaravanaFundacionEngine(
-        this.getMapa(),
-        origen,
-        faccion,
-        destino,
-        this.state.asentamientos,
-        this.state.caravanas,
-        numJugadores,
-        this.state.tick,
-        this.ids.siguiente()
-      );
-      this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === origen.id ? resultado.origenActualizado : a));
-      this.state.caravanas = [...this.state.caravanas, resultado.caravana];
-      this.registrar(`${origen.id}: lanza una Caravana de Fundación hacia (${Math.round(destino.x)}, ${Math.round(destino.y)}).`);
-    } catch (err) {
-      if (err instanceof ExpansionInvalidaError) this.registrar(`Caravana de Fundación rechazada: ${err.message}`);
-      else throw err;
-    }
-    this.notify();
+    this.despachar(lanzarCaravanaFundacionCmd, { origenAsentamientoId, destino, numJugadores }, 'Caravana de Fundación rechazada');
   }
 
-  /** Desarma una Caravana de Fundación en tránsito y reembolsa su contenido íntegro al asentamiento de origen. */
   desarmarCaravanaFundacion(caravanaId: string): void {
-    try {
-      const caravana = this.state.caravanas.find((c) => c.id === caravanaId)!;
-      const origen = this.state.asentamientos.find((a) => a.id === caravana.origenAsentamientoId)!;
-      const actualizado = desarmarCaravanaFundacionEngine(origen, caravana);
-      this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === origen.id ? actualizado : a));
-      this.state.caravanas = this.state.caravanas.filter((c) => c.id !== caravanaId);
-      this.registrar(`${origen.id}: desarma la Caravana de Fundación ${caravanaId} y recupera su contenido.`);
-    } catch (err) {
-      if (err instanceof ExpansionInvalidaError) this.registrar(`No se pudo desarmar la caravana: ${err.message}`);
-      else throw err;
-    }
-    this.notify();
+    this.despachar(desarmarCaravanaFundacionCmd, { caravanaId }, 'No se pudo desarmar la caravana');
   }
 
-  /** Creación libre de Facción (Doc 0): cualquier nombre no vacío y no repetido, sin límite de cantidad. */
   crearFaccion(nombre: string): void {
-    try {
-      const nombreLimpio = nombre.trim();
-      const yaExiste = this.state.facciones.some((f) => f.nombre.toLowerCase() === nombreLimpio.toLowerCase());
-      if (yaExiste) throw new FaccionInvalidaError(`Ya existe una Facción llamada "${nombreLimpio}".`);
-      const nueva = crearFaccionEngine(`faccion-custom-${this.ids.siguiente()}`, nombreLimpio);
-      this.state.facciones = [...this.state.facciones, nueva];
-      this.registrar(`Nueva Facción fundada: ${nueva.nombre}.`);
-    } catch (err) {
-      if (err instanceof FaccionInvalidaError) this.registrar(`Creación de Facción rechazada: ${err.message}`);
-      else throw err;
-    }
-    this.notify();
+    this.despachar(crearFaccionCmd, { nombre }, 'Facción rechazada');
   }
 
-  /**
-   * Cede al NPC de gobernanza (`session/npcGobernanza.ts`) el control de una Facción, o lo retoma. Es solo un id
-   * dentro o fuera de una lista que se lee al principio de cada `avanzarTick`, así que funciona en caliente y
-   * en ambos sentidos a mitad de partida: el NPC no deja nada que impida volver a jugarla a mano (cargos,
-   * reservas, Mercado y tropas son estado normal del juego, creado con las mismas funciones del motor que usa
-   * el jugador humano).
-   */
   alternarFaccionNpc(faccionId: string, activo: boolean): void {
-    const faccion = this.state.facciones.find((f) => f.id === faccionId);
-    if (!faccion) return;
-    const yaEsNpc = this.state.faccionesNpcIds.includes(faccionId);
-    if (activo === yaEsNpc) return;
-
-    this.state.faccionesNpcIds = activo
-      ? [...this.state.faccionesNpcIds, faccionId]
-      : this.state.faccionesNpcIds.filter((id) => id !== faccionId);
-    this.registrar(
-      activo
-        ? `${faccion.nombre}: pasa a estar controlada por el NPC de gobernanza (juega sola).`
-        : `${faccion.nombre}: vuelve a control manual del jugador.`
-    );
-    this.notify();
+    this.despachar(alternarFaccionNpcCmd, { faccionId, activo }, 'Cesión al NPC rechazada');
   }
 
-  /** ¿Esta Facción la juega el NPC? (`GameState.faccionesNpcIds`, para la pestaña Facción). */
+  /** ¿Esta Facción la juega el NPC? (`GameSessionState.faccionesNpcIds`, para la pestaña Facción). */
   esFaccionNpc(faccionId: string): boolean {
     return this.state.faccionesNpcIds.includes(faccionId);
   }
 
   asignarRey(faccionId: string, jugadorId: string): void {
-    try {
-      const faccion = this.state.facciones.find((f) => f.id === faccionId)!;
-      this.state.facciones = this.state.facciones.map((f) => (f.id === faccion.id ? asignarReyEngine(f, jugadorId) : f));
-      this.registrar(`${faccion.nombre}: ${jugadorId} es el nuevo Rey.`);
-      this.registrarJugador(jugadorId, `Nombrado Rey de ${faccion.nombre}.`);
-    } catch (err) {
-      if (err instanceof CargoInvalidoError) this.registrar(`Rey rechazado: ${err.message}`);
-      else throw err;
-    }
-    this.notify();
+    this.despachar(asignarReyCmd, { faccionId, jugadorId }, 'Rey rechazado');
   }
 
   asignarEmbajador(faccionId: string, jugadorId: string): void {
-    try {
-      const faccion = this.state.facciones.find((f) => f.id === faccionId)!;
-      this.state.facciones = this.state.facciones.map((f) => (f.id === faccion.id ? asignarEmbajadorEngine(f, jugadorId) : f));
-      this.registrar(`${faccion.nombre}: ${jugadorId} es el nuevo Embajador.`);
-      this.registrarJugador(jugadorId, `Nombrado Embajador de ${faccion.nombre}.`);
-    } catch (err) {
-      if (err instanceof CargoInvalidoError) this.registrar(`Embajador rechazado: ${err.message}`);
-      else throw err;
-    }
-    this.notify();
+    this.despachar(asignarEmbajadorCmd, { faccionId, jugadorId }, 'Embajador rechazado');
   }
 
   asignarCargoLocal(asentamientoId: string, cargo: CargoTipo, jugadorId: string): void {
-    try {
-      const asentamiento = this.state.asentamientos.find((a) => a.id === asentamientoId)!;
-      const faccion = this.state.facciones.find((f) => f.id === asentamiento.faccionId)!;
-      const actualizado = asignarCargoLocalEngine(asentamiento, faccion, cargo, jugadorId);
-      this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === actualizado.id ? actualizado : a));
-      this.registrar(`${asentamiento.id}: ${jugadorId} asignado como ${cargo}.`);
-      this.registrarJugador(jugadorId, `Asignado como ${cargo} en ${asentamiento.id}.`);
-    } catch (err) {
-      if (err instanceof CargoInvalidoError) this.registrar(`Cargo rechazado: ${err.message}`);
-      else throw err;
-    }
-    this.notify();
+    this.despachar(asignarCargoLocalCmd, { asentamientoId, cargo, jugadorId }, 'Cargo rechazado');
   }
 
   comprarCasa(asentamientoId: string, jugadorId: string): void {
-    try {
-      const resultado = comprarCasaEngine(this.state.facciones, this.state.asentamientos, asentamientoId, jugadorId);
-      this.state.facciones = resultado.facciones;
-      this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === resultado.asentamiento.id ? resultado.asentamiento : a));
-      this.registrar(`${jugadorId} compra casa en ${asentamientoId} y obtiene ciudadanía.`);
-      this.registrarJugador(jugadorId, `Compra casa en ${asentamientoId} y obtiene ciudadanía.`);
-    } catch (err) {
-      if (err instanceof FaccionInvalidaError) this.registrar(`Compra de casa rechazada: ${err.message}`);
-      else throw err;
-    }
-    this.notify();
+    this.despachar(comprarCasaCmd, { asentamientoId, jugadorId }, 'Compra de casa rechazada');
   }
 
   activarPolitica(asentamientoId: string, cargo: CargoTipo, politicaId: string): void {
-    try {
-      const asentamiento = this.state.asentamientos.find((a) => a.id === asentamientoId)!;
-      const faccion = this.state.facciones.find((f) => f.id === asentamiento.faccionId)!;
-      const actualizado = activarPoliticaEngine(asentamiento, faccion, cargo, politicaId, this.state.tick, this.ids.siguiente());
-      this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === actualizado.id ? actualizado : a));
-      this.registrar(`${asentamiento.id}: política "${politicaId}" activada por ${cargo}.`);
-    } catch (err) {
-      if (err instanceof PoliticaInvalidaError) this.registrar(`Política rechazada: ${err.message}`);
-      else throw err;
-    }
-    this.notify();
+    this.despachar(activarPoliticaCmd, { asentamientoId, cargo, politicaId }, 'Política rechazada');
   }
 
   proponerRelacion(
@@ -845,87 +714,27 @@ export class GameStore {
     tributoRecurso: string,
     tributoCantidad: number
   ): void {
-    try {
-      const nueva =
-        tipo === 'vasallaje'
-          ? proponerVasallajeEngine(
-              this.state.facciones,
-              this.state.relaciones,
-              faccionAId,
-              faccionBId,
-              tributoRecurso,
-              tributoCantidad,
-              this.state.tick,
-              this.ids.siguiente()
-            )
-          : proponerAlianzaEngine(this.state.facciones, this.state.relaciones, faccionAId, faccionBId, this.state.tick, this.ids.siguiente());
-      this.state.relaciones = [...this.state.relaciones, nueva];
-      this.registrar(`Relación propuesta: ${nueva.id}.`);
-    } catch (err) {
-      if (err instanceof DiplomaciaInvalidaError) this.registrar(`Relación rechazada: ${err.message}`);
-      else throw err;
-    }
-    this.notify();
+    this.despachar(
+      proponerRelacionCmd,
+      { tipo, faccionAId, faccionBId, tributoRecurso: tributoRecurso as RecursoTipo, tributoCantidad },
+      'Relación rechazada'
+    );
   }
 
   romperRelacion(relacionId: string, iniciadorFaccionId: string): void {
-    if (!relacionId) return;
-    const resultado = romperRelacionEngine(this.state.facciones, this.state.relaciones, relacionId, iniciadorFaccionId);
-    this.state.facciones = resultado.facciones;
-    this.state.relaciones = resultado.relaciones;
-    this.registrar(`Relación ${relacionId} rota voluntariamente.`);
-    this.notify();
+    this.despachar(romperRelacionCmd, { relacionId, iniciadorFaccionId }, 'Ruptura rechazada');
   }
 
   rebelionVasallo(relacionId: string): void {
-    if (!relacionId) return;
-    try {
-      const resultado = rebelionVasalloEngine(this.state.facciones, this.state.relaciones, this.state.acuerdos, this.state.asentamientos, relacionId);
-      this.state.facciones = resultado.facciones;
-      this.state.relaciones = resultado.relaciones;
-      this.state.acuerdos = resultado.acuerdos;
-      for (const e of resultado.eventos) this.registrar(e);
-    } catch (err) {
-      if (err instanceof DiplomaciaInvalidaError) this.registrar(`Rebelión rechazada: ${err.message}`);
-      else throw err;
-    }
-    this.notify();
+    this.despachar(rebelionVasalloCmd, { relacionId }, 'Rebelión rechazada');
   }
 
   anexionar(faccionAId: string, faccionBId: string): void {
-    try {
-      const resultado = anexionarEngine(this.state.facciones, this.state.asentamientos, faccionAId, faccionBId);
-      this.state.facciones = resultado.facciones;
-      this.state.asentamientos = resultado.asentamientos;
-      this.sincronizarFaccionesNpc();
-      for (const e of resultado.eventos) this.registrar(e);
-    } catch (err) {
-      if (err instanceof FusionInvalidaError) this.registrar(`Anexión rechazada: ${err.message}`);
-      else throw err;
-    }
-    this.notify();
+    this.despachar(anexionarCmd, { faccionAId, faccionBId }, 'Anexión rechazada');
   }
 
   fusionar(faccionAId: string, faccionBId: string, nuevoNombre: string, nuevoReyId: string): void {
-    try {
-      const resultado = fusionarEngine(
-        this.state.facciones,
-        this.state.asentamientos,
-        faccionAId,
-        faccionBId,
-        nuevoNombre || 'Facción Fusionada',
-        nuevoReyId,
-        this.state.tick
-      );
-      this.state.facciones = resultado.facciones;
-      this.state.asentamientos = resultado.asentamientos;
-      this.sincronizarFaccionesNpc();
-      for (const e of resultado.eventos) this.registrar(e);
-    } catch (err) {
-      if (err instanceof FusionInvalidaError) this.registrar(`Fusión rechazada: ${err.message}`);
-      else throw err;
-    }
-    this.notify();
+    this.despachar(fusionarCmd, { faccionAId, faccionBId, nuevoNombre, nuevoReyId }, 'Fusión rechazada');
   }
 
   proponerTrueque(
@@ -936,70 +745,30 @@ export class GameStore {
     recursoB: string,
     cantidadB: number
   ): void {
-    try {
-      const nuevo = proponerTruequeEngine(
-        this.state.asentamientos,
+    this.despachar(
+      proponerTruequeCmd,
+      {
         asentamientoAId,
-        asentamientoBId,
-        recursoA,
-        recursoB,
+        recursoA: recursoA as RecursoTipo,
         cantidadA,
+        asentamientoBId,
+        recursoB: recursoB as RecursoTipo,
         cantidadB,
-        this.state.tick,
-        this.ids.siguiente()
-      );
-      this.state.acuerdos = [...this.state.acuerdos, nuevo];
-      this.registrar(`Trueque propuesto: ${nuevo.id}.`);
-
-      // Camino Comercial (Doc 1.6, Fase 0.3): se genera al establecer la relación comercial, no cada vez
-      // que se propone un trueque nuevo — `asegurarCaminoComercial` no hace nada si el par ya tiene uno.
-      const asentamientoA = this.state.asentamientos.find((a) => a.id === asentamientoAId);
-      const asentamientoB = this.state.asentamientos.find((a) => a.id === asentamientoBId);
-      if (asentamientoA && asentamientoB) {
-        const caminosPrevios = this.state.caminos.length;
-        this.state.caminos = asegurarCaminoComercial(this.state.caminos, this.getMapa(), asentamientoA, asentamientoB);
-        if (this.state.caminos.length > caminosPrevios) {
-          this.registrar(`Nuevo camino comercial entre ${asentamientoA.id} y ${asentamientoB.id}.`);
-        }
-      }
-    } catch (err) {
-      if (err instanceof TruequeInvalidoError) this.registrar(`Trueque rechazado: ${err.message}`);
-      else throw err;
-    }
-    this.notify();
+      },
+      'Trueque rechazado'
+    );
   }
 
   colocarOrdenMercado(asentamientoId: string, tipo: 'compra' | 'venta', recurso: string, cantidad: number, precio: number | undefined): void {
-    try {
-      const nueva = colocarOrdenMercadoEngine(this.state.asentamientos, asentamientoId, tipo, recurso, cantidad, this.state.tick, precio, this.ids.siguiente());
-      this.state.ordenes = [...this.state.ordenes, nueva];
-      this.registrar(`Orden de mercado colocada: ${nueva.id} (${nueva.tipo} ${nueva.cantidad} ${nueva.recurso} @ ${nueva.precioUnitario.toFixed(2)}).`);
-    } catch (err) {
-      if (err instanceof OrdenInvalidaError) this.registrar(`Orden rechazada: ${err.message}`);
-      else throw err;
-    }
-    this.notify();
+    this.despachar(
+      colocarOrdenMercadoCmd,
+      { asentamientoId, tipo, recurso: recurso as RecursoTipo, cantidad, precio },
+      'Orden rechazada'
+    );
   }
 
-  /** Ampliación de comercio (a petición del usuario): construye una caravana comercial propia — cuesta
-   * madera, exige Mercado activo y respeta el cupo de flota del asentamiento (Doc 3.3). */
   crearCaravana(asentamientoId: string): void {
-    try {
-      const asentamiento = this.state.asentamientos.find((a) => a.id === asentamientoId)!;
-      const { asentamiento: actualizado, caravana } = construirCaravanaComercialEngine(
-        asentamiento,
-        this.state.caravanas,
-        this.state.tick,
-        this.ids.siguiente()
-      );
-      this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === actualizado.id ? actualizado : a));
-      this.state.caravanas = [...this.state.caravanas, caravana];
-      this.registrar(`${asentamientoId}: construye una caravana comercial (${caravana.id}).`);
-    } catch (err) {
-      if (err instanceof CaravanaInvalidaError) this.registrar(`Caravana rechazada: ${err.message}`);
-      else throw err;
-    }
-    this.notify();
+    this.despachar(crearCaravanaCmd, { asentamientoId }, 'Caravana rechazada');
   }
 
   /** Solo lectura, para la pestaña Guerra/Acciones: cupo de flota, cuántas caravanas propias tiene el
@@ -1024,24 +793,8 @@ export class GameStore {
     };
   }
 
-  /** Reclutamiento por equipo (Doc 5.7/5.8): recluta una tropa específica vía Barracón/Galería de tiro, de
-   * origen Pesants o Artesanos. Nobleza ya no recluta tropas (sigue existiendo como clase de población, Doc 4.1).
-   * Escuadrón de UN jugador (Doc 2.5, a petición del usuario): `jugadorId` debe ser residente de `asentamientoId`.
-   * La cantidad de soldados reclutada es el faltante hasta `TROPAS_RECLUTABLES[].unidadesPorDefecto` (repone bajas
-   * si el jugador ya tenía el escuadrón por debajo del tope), no la elige el jugador. */
   reclutarTropa(asentamientoId: string, jugadorId: string, tropaId: string, origen: 'pesants' | 'artesanos'): void {
-    try {
-      const asentamiento = this.state.asentamientos.find((a) => a.id === asentamientoId)!;
-      const antes = asentamiento.escuadrones.find((e) => e.jugadorId === jugadorId && e.tropaId === tropaId)?.cantidad ?? 0;
-      const actualizado = reclutarTropaEngine(asentamiento, jugadorId, tropaId, origen, this.state.tick, this.ids.siguiente());
-      this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === actualizado.id ? actualizado : a));
-      const despues = actualizado.escuadrones.find((e) => e.jugadorId === jugadorId && e.tropaId === tropaId)?.cantidad ?? 0;
-      this.registrar(`${asentamiento.id}: ${jugadorId} recluta ${despues - antes} de la tropa "${tropaId}" (${origen}).`);
-    } catch (err) {
-      if (err instanceof ReclutamientoInvalidoError) this.registrar(`Reclutamiento rechazado: ${err.message}`);
-      else throw err;
-    }
-    this.notify();
+    this.despachar(reclutarTropaCmd, { asentamientoId, jugadorId, tropaId, origen }, 'Reclutamiento rechazado');
   }
 
   /** Residentes de un asentamiento (Doc 2.5): fundadores + casas compradas, deduplicado — cualquiera de ellos
@@ -1053,83 +806,20 @@ export class GameStore {
     return [...new Set([...asentamiento.jugadoresFundadoresIds, ...asentamiento.casasCompradas])];
   }
 
-  /**
-   * Control manual de cola (Doc 4.2, a petición del usuario — reemplaza el mecanismo de política de
-   * desbloqueo que tenían Barracón/Galería de tiro/Palacio/Mercado): Gobernador o Maestro de Obras añaden
-   * CUALQUIER edificio del catálogo a la cola, siempre que el asentamiento pueda pagarlo — la ubicación la
-   * sigue decidiendo siempre el algoritmo de colocación, nunca el jugador.
-   */
   anadirEdificioManualmente(asentamientoId: string, cargo: 'gobernador' | 'maestroObras', tipo: EdificioTipo): void {
-    try {
-      const asentamiento = this.state.asentamientos.find((a) => a.id === asentamientoId)!;
-      const faccion = this.state.facciones.find((f) => f.id === asentamiento.faccionId)!;
-      const zona = this.getZonas().find((z) => z.asentamientoId === asentamiento.id);
-      const capital = encontrarCapital(asentamiento.faccionId, this.state.asentamientos);
-      const reclamos = reclamosDeFuentesEngine(this.state.asentamientos);
-      const actualizado = anadirEdificioManualmenteEngine(
-        asentamiento,
-        faccion,
-        cargo,
-        tipo,
-        zona?.poligono ?? [],
-        this.getMapa(),
-        capital,
-        reclamos,
-        this.ids.siguiente()
-      );
-      this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === actualizado.id ? actualizado : a));
-      this.registrar(`${asentamiento.id}: ${cargo} añade ${tipo} a la cola (pagado).`);
-    } catch (err) {
-      if (err instanceof ConstruccionManualInvalidaError) this.registrar(`Añadir a la cola rechazado: ${err.message}`);
-      else throw err;
-    }
-    this.notify();
+    this.despachar(anadirEdificioManualmenteCmd, { asentamientoId, cargo, tipo }, 'Añadir a la cola rechazado');
   }
 
-  /** Quita un proyecto `en_cola` (solo si aún no empezó a construirse) y devuelve el costo completo pagado. */
   quitarDeCola(asentamientoId: string, cargo: 'gobernador' | 'maestroObras', edificioId: string): void {
-    try {
-      const asentamiento = this.state.asentamientos.find((a) => a.id === asentamientoId)!;
-      const actualizado = quitarDeColaEngine(asentamiento, cargo, edificioId);
-      this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === actualizado.id ? actualizado : a));
-      this.registrar(`${asentamiento.id}: ${cargo} quita un proyecto de la cola (recursos devueltos).`);
-    } catch (err) {
-      if (err instanceof ConstruccionManualInvalidaError) this.registrar(`Quitar de la cola rechazado: ${err.message}`);
-      else throw err;
-    }
-    this.notify();
+    this.despachar(quitarDeColaCmd, { asentamientoId, cargo, edificioId }, 'Quitar de la cola rechazado');
   }
 
-  /** Mueve un proyecto `en_cola` una posición arriba/abajo en el orden de arranque. */
   moverEnCola(asentamientoId: string, cargo: 'gobernador' | 'maestroObras', edificioId: string, direccion: 'arriba' | 'abajo'): void {
-    try {
-      const asentamiento = this.state.asentamientos.find((a) => a.id === asentamientoId)!;
-      const actualizado = moverEnColaEngine(asentamiento, cargo, edificioId, direccion);
-      this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === actualizado.id ? actualizado : a));
-      this.registrar(`${asentamiento.id}: ${cargo} reordena la cola de construcción.`);
-    } catch (err) {
-      if (err instanceof ConstruccionManualInvalidaError) this.registrar(`Reordenar cola rechazado: ${err.message}`);
-      else throw err;
-    }
-    this.notify();
+    this.despachar(moverEnColaCmd, { asentamientoId, cargo, edificioId, direccion }, 'Reordenar cola rechazado');
   }
 
-  /** Fuerza la mejora de un edificio concreto (Doc 4.2, mejora manual a petición del usuario) — la mejora
-   * automática de `avanzarMejoras` sigue corriendo cada tick igual que antes; esto solo adelanta la de un
-   * edificio elegido. Requiere Gobernador o Maestro de Obras asignado, mismos gates y costo que la ruta
-   * automática (ver `infoMejoraEdificio` para el estado que se le muestra al jugador antes de pulsar el botón). */
   mejorarEdificioAhora(asentamientoId: string, cargo: 'gobernador' | 'maestroObras', edificioId: string): void {
-    try {
-      const asentamiento = this.state.asentamientos.find((a) => a.id === asentamientoId)!;
-      const capital = encontrarCapital(asentamiento.faccionId, this.state.asentamientos);
-      const actualizado = mejorarEdificioManualmenteEngine(asentamiento, cargo, edificioId, capital);
-      this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === actualizado.id ? actualizado : a));
-      this.registrar(`${asentamiento.id}: ${cargo} fuerza la mejora de un edificio.`);
-    } catch (err) {
-      if (err instanceof ConstruccionManualInvalidaError) this.registrar(`Mejorar edificio rechazado: ${err.message}`);
-      else throw err;
-    }
-    this.notify();
+    this.despachar(mejorarEdificioAhoraCmd, { asentamientoId, cargo, edificioId }, 'Mejorar edificio rechazado');
   }
 
   /** Estado de la próxima mejora de un edificio concreto (nivel, costo, si hay fondos hoy) — `null` si el
@@ -1141,298 +831,80 @@ export class GameStore {
     return estadoMejoraEdificioEngine(asentamiento, edificio, capital);
   }
 
-  /** Overhaul de auto-construcción: pausa/reanuda la detección de NUEVAS necesidades en un asentamiento — lo
-   * ya pagado (`en_cola`/`en_construccion`) sigue avanzando normal (ver `Asentamiento.autoConstruccionPausada`,
-   * `engine/construction.ts`). */
   pausarAutoConstruccion(asentamientoId: string): void {
-    const asentamiento = this.state.asentamientos.find((a) => a.id === asentamientoId)!;
-    this.state.asentamientos = this.state.asentamientos.map((a) =>
-      a.id === asentamientoId ? { ...a, autoConstruccionPausada: true } : a
-    );
-    this.registrar(`${asentamiento.id}: auto-construcción pausada.`);
-    this.notify();
+    this.despachar(alternarAutoConstruccionCmd, { asentamientoId, pausada: true }, 'Pausar auto-construcción rechazado');
   }
 
   reanudarAutoConstruccion(asentamientoId: string): void {
-    const asentamiento = this.state.asentamientos.find((a) => a.id === asentamientoId)!;
-    this.state.asentamientos = this.state.asentamientos.map((a) =>
-      a.id === asentamientoId ? { ...a, autoConstruccionPausada: false } : a
-    );
-    this.registrar(`${asentamiento.id}: auto-construcción reanudada.`);
-    this.notify();
+    this.despachar(alternarAutoConstruccionCmd, { asentamientoId, pausada: false }, 'Reanudar auto-construcción rechazado');
   }
 
-  /** Calibra la reserva manual de un recurso (0-999, a petición del usuario, ver `Asentamiento.reservaManual`)
-   * — tope que el camino AUTOMÁTICO de construcción no puede tocar (`engine/construction.ts`); la
-   * construcción manual queda exenta a propósito. Requiere Tesorero asignado (mismo criterio que exigen las
-   * políticas por cargo, ver `engine/politicas.ts`). */
   calibrarReservaManual(asentamientoId: string, recurso: RecursoTipo, valor: number): void {
-    const asentamiento = this.state.asentamientos.find((a) => a.id === asentamientoId)!;
-    if (!asentamiento.cargos.tesoreroId) {
-      this.registrar(`Calibrar reserva rechazado: ${asentamiento.id} necesita un Tesorero asignado.`);
-      this.notify();
-      return;
-    }
-    const limpio = Math.max(0, Math.min(999, Math.round(valor)));
-    this.state.asentamientos = this.state.asentamientos.map((a) =>
-      a.id === asentamientoId ? { ...a, reservaManual: { ...a.reservaManual, [recurso]: limpio } } : a
-    );
-    this.notify();
+    this.despachar(calibrarReservaManualCmd, { asentamientoId, recurso, valor }, 'Calibrar reserva rechazado');
   }
 
-  /** Renombra un asentamiento (a petición del usuario) — solo `nombre` (presentación), `id` nunca cambia:
-   * sigue siendo la llave interna estable que usan caravanas/acuerdos/caminos/zonas. Vacío = vuelve a
-   * mostrar `id` (ver `etiquetaAsentamiento`, main.ts). */
   renombrarAsentamiento(asentamientoId: string, nombre: string): void {
-    const asentamiento = this.state.asentamientos.find((a) => a.id === asentamientoId)!;
-    const nombreLimpio = nombre.trim();
-    this.state.asentamientos = this.state.asentamientos.map((a) =>
-      a.id === asentamientoId ? { ...a, nombre: nombreLimpio || undefined } : a
-    );
-    this.registrar(`${asentamiento.id}: renombrado a "${nombreLimpio || asentamiento.id}".`);
-    this.notify();
+    this.despachar(renombrarAsentamientoCmd, { asentamientoId, nombre }, 'Renombrar rechazado');
   }
 
   iniciarAsedio(atacanteId: string, defensorId: string, escuadronesCsv: string): void {
-    try {
-      const atacante = this.state.asentamientos.find((a) => a.id === atacanteId)!;
-      const defensor = this.state.asentamientos.find((a) => a.id === defensorId)!;
-      const resultado = iniciarAsedioEngine(
-        atacante,
-        defensor,
-        idsNoVacios(escuadronesCsv),
-        this.state.facciones,
-        this.state.relaciones,
-        this.state.tick,
-        this.rng
-      );
-      this.state.asentamientos = this.state.asentamientos.map((a) => {
-        if (a.id === resultado.atacante.id) return resultado.atacante;
-        if (a.id === resultado.defensor.id) return resultado.defensor;
-        return a;
-      });
-      this.state.facciones = resultado.facciones;
-      for (const e of resultado.eventos) this.registrar(e);
-    } catch (err) {
-      if (err instanceof CombateInvalidoError) this.registrar(`Asedio rechazado: ${err.message}`);
-      else throw err;
-    }
-    this.notify();
+    this.despachar(iniciarAsedioCmd, { atacanteId, defensorId, escuadronIds: idsNoVacios(escuadronesCsv) }, 'Asedio rechazado');
   }
 
   combateCampoAbierto(asentamientoAId: string, escuadronesACsv: string, asentamientoBId: string, escuadronesBCsv: string): void {
-    try {
-      const asentamientoA = this.state.asentamientos.find((a) => a.id === asentamientoAId)!;
-      const asentamientoB = this.state.asentamientos.find((a) => a.id === asentamientoBId)!;
-      const resultado = combateCampoAbiertoEngine(
-        asentamientoA,
-        idsNoVacios(escuadronesACsv),
-        asentamientoB,
-        idsNoVacios(escuadronesBCsv),
-        this.state.facciones,
-        this.state.relaciones,
-        this.state.tick,
-        this.rng
-      );
-      this.state.asentamientos = this.state.asentamientos.map((a) => {
-        if (a.id === resultado.asentamientoA.id) return resultado.asentamientoA;
-        if (a.id === resultado.asentamientoB.id) return resultado.asentamientoB;
-        return a;
-      });
-      this.state.facciones = resultado.facciones;
-      for (const e of resultado.eventos) this.registrar(e);
-    } catch (err) {
-      if (err instanceof CombateInvalidoError) this.registrar(`Combate rechazado: ${err.message}`);
-      else throw err;
-    }
-    this.notify();
+    this.despachar(
+      combateCampoAbiertoCmd,
+      {
+        asentamientoAId,
+        escuadronIdsA: idsNoVacios(escuadronesACsv),
+        asentamientoBId,
+        escuadronIdsB: idsNoVacios(escuadronesBCsv),
+      },
+      'Combate rechazado'
+    );
   }
 
   interceptarCaravana(atacanteId: string, escuadronesCsv: string, caravanaId: string): void {
-    try {
-      const atacante = this.state.asentamientos.find((a) => a.id === atacanteId)!;
-      const caravana = this.state.caravanas.find((c) => c.id === caravanaId)!;
-      const resultado = interceptarCaravanaEngine(
-        atacante,
-        idsNoVacios(escuadronesCsv),
-        caravana,
-        this.state.tick,
-        this.state.facciones,
-        this.state.asentamientos,
-        this.rng
-      );
-      this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === resultado.atacante.id ? resultado.atacante : a));
-      this.state.facciones = resultado.facciones;
-      if (resultado.caravanaCapturada) this.state.caravanas = this.state.caravanas.filter((c) => c.id !== caravana.id);
-      for (const e of resultado.eventos) this.registrar(e);
-    } catch (err) {
-      if (err instanceof CombateInvalidoError) this.registrar(`Intercepción rechazada: ${err.message}`);
-      else throw err;
-    }
-    this.notify();
+    this.despachar(interceptarCaravanaCmd, { atacanteId, escuadronIds: idsNoVacios(escuadronesCsv), caravanaId }, 'Intercepción rechazada');
   }
 
-  /** Ataque de un jugador a un campamento de bandidos (Doc 1.9): si gana, se quita del mundo y se agenda el
-   * plazo de reaparición (`CAMPAMENTOS_BANDIDOS.ticksRespawn`) — el spawn en sí lo evalúa `avanzarTick`. */
   atacarCampamentoBandidos(atacanteId: string, escuadronesCsv: string, campamentoId: string): void {
-    try {
-      const atacante = this.state.asentamientos.find((a) => a.id === atacanteId)!;
-      const campamento = this.state.campamentosBandidos.find((c) => c.id === campamentoId)!;
-      const resultado = atacarCampamentoBandidosEngine(
-        atacante,
-        idsNoVacios(escuadronesCsv),
-        campamento,
-        this.state.tick,
-        this.state.facciones,
-        this.rng
-      );
-      this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === resultado.atacante.id ? resultado.atacante : a));
-      this.state.facciones = resultado.facciones;
-      if (resultado.campamentoDestruido) {
-        this.state.campamentosBandidos = this.state.campamentosBandidos.filter((c) => c.id !== campamento.id);
-        this.state.bandidosProximoSpawnTick = this.state.tick + CAMPAMENTOS_BANDIDOS.ticksRespawn;
-      }
-      for (const e of resultado.eventos) this.registrar(e);
-    } catch (err) {
-      if (err instanceof CombateInvalidoError) this.registrar(`Ataque a campamento rechazado: ${err.message}`);
-      else throw err;
-    }
-    this.notify();
+    this.despachar(
+      atacarCampamentoBandidosCmd,
+      { atacanteId, escuadronIds: idsNoVacios(escuadronesCsv), campamentoId },
+      'Ataque a campamento rechazado'
+    );
   }
 
   /**
-   * `ContextoSimulacion` para el tick en curso. El reloj lo pone ESTA capa, no el motor (ver
-   * `ContextoSimulacion` en `engine/simulation.ts`): la capa de aplicación es la dueña del reloj de servidor,
-   * el motor solo recibe el momento ya resuelto. Mientras la simulación siga siendo por ticks, `momento` es
-   * simplemente la hora real en que se resolvió el tick; al pasar a tiempo real (Fase D) será el instante de
-   * simulación que decida el scheduler, sin que cambie nada de lo que hay debajo.
+   * Un tick completo tal como lo pide la interfaz: el tick del motor, después el trueque automático de
+   * simulación (apagado por defecto) y por último el turno del NPC de gobernanza. El ORDEN es el mismo que
+   * tenía este store antes de delegar; ahora las tres son operaciones de sistema de `GameSession`.
    */
-  private contextoDeTickActual(): ContextoSimulacion {
-    return { tick: this.state.tick, momento: new Date().toISOString(), rng: this.rng };
-  }
-
   avanzarTick(): void {
-    this.state.tick += 1;
-    const resultado = avanzarSimulacion(
-      {
-        asentamientos: this.state.asentamientos,
-        facciones: this.state.facciones,
-        caravanas: this.state.caravanas,
-        acuerdos: this.state.acuerdos,
-        ordenes: this.state.ordenes,
-        relaciones: this.state.relaciones,
-        titulos: this.state.titulos,
-        caminos: this.state.caminos,
-        campamentosBandidos: this.state.campamentosBandidos,
-        bandidosProximoSpawnTick: this.state.bandidosProximoSpawnTick,
-      },
-      this.getMapa(),
-      this.contextoDeTickActual()
-    );
-    this.state.asentamientos = resultado.asentamientos;
-    this.state.facciones = resultado.facciones;
-    this.state.caravanas = resultado.caravanas;
-    this.state.acuerdos = resultado.acuerdos;
-    this.state.ordenes = resultado.ordenes;
-    this.state.relaciones = resultado.relaciones;
-    this.state.titulos = resultado.titulos;
-    this.state.caminos = resultado.caminos;
-    this.state.campamentosBandidos = resultado.campamentosBandidos;
-    this.state.bandidosProximoSpawnTick = resultado.bandidosProximoSpawnTick;
-    for (const evento of resultado.eventos) this.registrar(evento);
-
-    // SIMULACION_AUTO_COMERCIO (ver constants.ts): NPC de trueque solo-para-simulación, apagado por defecto.
-    // No forma parte de `avanzarSimulacion` a propósito — el juego real sigue siendo 100% manual (Doc 3.2).
-    if (SIMULACION_AUTO_COMERCIO.activo) {
-      const trasAutoComercio = avanzarAutoComercioSimulado(
-        {
-          asentamientos: this.state.asentamientos,
-          facciones: this.state.facciones,
-          caravanas: this.state.caravanas,
-          acuerdos: this.state.acuerdos,
-          ordenes: this.state.ordenes,
-          relaciones: this.state.relaciones,
-          titulos: this.state.titulos,
-          caminos: this.state.caminos,
-          campamentosBandidos: this.state.campamentosBandidos,
-          bandidosProximoSpawnTick: this.state.bandidosProximoSpawnTick,
-        },
-        this.getMapa(),
-        this.state.tick
-      );
-      this.state.asentamientos = trasAutoComercio.asentamientos;
-      this.state.caravanas = trasAutoComercio.caravanas;
-      this.state.acuerdos = trasAutoComercio.acuerdos;
-    }
-
-    this.avanzarFaccionesNpc();
-
+    const momento = this.ahora();
+    this.session.avanzarTick(momento);
+    this.session.avanzarAutoComercio(momento);
+    this.session.avanzarFaccionesNpc(momento);
     this.notify();
   }
 
   /**
-   * Turno del NPC de gobernanza (`session/npcGobernanza.ts`) para las Facciones cedidas, DESPUÉS del tick del
-   * motor — mismo orden que usan los scripts de batch. El NPC no es parte de `avanzarSimulacion` a propósito:
-   * decide con las funciones públicas del motor exactamente igual que este store cuando el jugador pulsa un
-   * botón, y solo sobre `faccionesNpcIds`. Sin Facciones cedidas no se llama a nada.
+   * Descarta la partida actual y crea otra desde cero con la seed indicada.
+   *
+   * NO es un comando de partida (Docs/Arquitectura/7_Diseno_GameSession.md §2.ter): se lanza ANTES de
+   * empezar a jugar, y dispararlo con una partida en curso pierde todo lo que hubiera en ella. Por eso
+   * sustituye la `GameSession` entera en vez de mutar nada. En el backend será una operación destructiva de
+   * administración —descartar una partida y crear otra—, sujeta a rol técnico y confirmación explícita, no
+   * un botón más de la consola.
    */
-  private avanzarFaccionesNpc(): void {
-    if (this.state.faccionesNpcIds.length === 0) return;
-
-    const resultado = avanzarNpcGobernanza(
-      {
-        asentamientos: this.state.asentamientos,
-        facciones: this.state.facciones,
-        caravanas: this.state.caravanas,
-        acuerdos: this.state.acuerdos,
-        ordenes: this.state.ordenes,
-        relaciones: this.state.relaciones,
-        titulos: this.state.titulos,
-        caminos: this.state.caminos,
-        campamentosBandidos: this.state.campamentosBandidos,
-        bandidosProximoSpawnTick: this.state.bandidosProximoSpawnTick,
-      },
-      this.getMapa(),
-      this.contextoDeTickActual(),
-      { faccionesIds: this.state.faccionesNpcIds, contadorInicial: this.ids.actual() }
-    );
-
-    this.state.asentamientos = resultado.estado.asentamientos;
-    this.state.facciones = resultado.estado.facciones;
-    this.state.caravanas = resultado.estado.caravanas;
-    this.state.acuerdos = resultado.estado.acuerdos;
-    this.state.campamentosBandidos = resultado.estado.campamentosBandidos;
-    this.state.bandidosProximoSpawnTick = resultado.estado.bandidosProximoSpawnTick;
-    // Los ids que el motor generó dentro del NPC salieron de este mismo contador: se adelanta para que la
-    // próxima acción manual del jugador no reutilice uno (ver `ConfigNpcGobernanza.contadorInicial`).
-    this.ids.fijar(resultado.contadorFinal);
-
-    for (const evento of resultado.eventos) this.registrar(`[NPC] ${evento}`);
-  }
-
   regenerarMundo(seed: number, region?: RegionId): void {
     this.historial = [];
     this.historialDesde = 0;
-    this.rng = createRng(seed);
-    this.state = {
-      estadoMapa: crearEstadoMapa(),
-      mapa: generarMapa({ ...MAPA_DEFAULT, seed, region }),
-      asentamientos: [],
-      facciones: [],
-      caravanas: [],
-      acuerdos: [],
-      ordenes: [],
-      relaciones: [],
-      titulos: [],
-      caminos: [],
-      campamentosBandidos: [],
-      bandidosProximoSpawnTick: 0,
-      faccionesNpcIds: [],
-      tick: 0,
-      log: [],
-      historialJugadores: {},
-    };
-    this.registrar(`Mundo regenerado con seed ${seed}.`);
+    this.mapasPorEstado = new WeakMap();
+    this.zonasFusionadasCache = null;
+    this.session = GameSession.crear('local', { seed, region });
+    this.session.registrarEventoAdministrativo(this.ahora(), `Mundo regenerado con seed ${seed}.`);
     this.notify();
   }
 
@@ -1526,31 +998,42 @@ export class GameStore {
 
       this.historial = [];
       this.historialDesde = payload.tick ?? 0;
-      this.rng = createRng(payload.world.config.seed);
-      this.state = {
-        mapa: mapaRegenerado,
-        estadoMapa: { extraido, regeneraEnTick: {} },
-        asentamientos: payload.asentamientos,
-        facciones: payload.facciones,
-        caravanas: payload.caravanas ?? [],
-        acuerdos: payload.acuerdos ?? [],
-        ordenes: payload.ordenes ?? [],
-        relaciones: payload.relaciones ?? [],
-        titulos: payload.titulos ?? [],
-        caminos: payload.caminos ?? [],
-        campamentosBandidos: payload.campamentosBandidos ?? [],
-        bandidosProximoSpawnTick: payload.bandidosProximoSpawnTick ?? 0,
-        // Se filtra contra las Facciones que el archivo trae de verdad: un id huérfano dejaría una entrada
-        // muerta que volvería a activarse sola si alguien creara después una Facción con ese mismo id.
-        faccionesNpcIds: (payload.faccionesNpcIds ?? []).filter((id) => payload.facciones!.some((f) => f.id === id)),
-        tick: payload.tick ?? 0,
-        log: payload.log ?? [],
-        historialJugadores: payload.historialJugadores ?? {},
-      };
-      this.registrar(`Simulación importada (tick ${this.state.tick}).`);
+      this.mapasPorEstado = new WeakMap();
+      this.zonasFusionadasCache = null;
+      // Reconstrucción de partida, no comando: se sustituye la `GameSession` entera (doc 7 §2.ter).
+      // `version` arranca en 0 y `eventosDominio` vacío — el formato de archivo v2 es anterior a ambos y no
+      // los guarda; recuperarlos es parte de la persistencia real de Fase B3.
+      this.session = GameSession.importar({
+        siguienteId: 0,
+        worldgenVersion: WORLDGEN_VERSION,
+        state: {
+          gameId: 'local',
+          version: 0,
+          eventosDominio: [],
+          mapa: mapaRegenerado,
+          estadoMapa: { extraido, regeneraEnTick: {} },
+          asentamientos: payload.asentamientos,
+          facciones: payload.facciones,
+          caravanas: payload.caravanas ?? [],
+          acuerdos: payload.acuerdos ?? [],
+          ordenes: payload.ordenes ?? [],
+          relaciones: payload.relaciones ?? [],
+          titulos: payload.titulos ?? [],
+          caminos: payload.caminos ?? [],
+          campamentosBandidos: payload.campamentosBandidos ?? [],
+          bandidosProximoSpawnTick: payload.bandidosProximoSpawnTick ?? 0,
+          // Se filtra contra las Facciones que el archivo trae de verdad: un id huérfano dejaría una entrada
+          // muerta que volvería a activarse sola si alguien creara después una Facción con ese mismo id.
+          faccionesNpcIds: (payload.faccionesNpcIds ?? []).filter((id) => payload.facciones!.some((f) => f.id === id)),
+          tick: payload.tick ?? 0,
+          log: payload.log ?? [],
+          historialJugadores: payload.historialJugadores ?? {},
+        },
+      });
+      this.session.registrarEventoAdministrativo(this.ahora(), `Simulación importada (tick ${this.state.tick}).`);
     } catch (err) {
       const razon = err instanceof Error ? err.message : 'formato desconocido';
-      this.registrar(`Importación rechazada: ${razon}`);
+      this.session.registrarEventoAdministrativo(this.ahora(), `Importación rechazada: ${razon}`);
     }
     this.notify();
   }
@@ -1560,20 +1043,27 @@ export class GameStore {
     return listarCamposBalance();
   }
 
-  /** Cambia un valor de balance en caliente. Afecta de inmediato a toda acción/tick posterior del motor. */
+  /**
+   * Cambia un valor de balance en caliente. Afecta de inmediato a toda acción/tick posterior del motor.
+   *
+   * NO es un comando de partida (doc 7 §2.ter): `balanceConfig.ts` muta los objetos de `constants.ts` EN EL
+   * SITIO, así que esto toca configuración del PROCESO, no el estado de esta partida. Por eso no pasa por
+   * `GameSession.ejecutar` y solo deja rastro en el log administrativo. Fase C lo convierte en configuración
+   * versionada por partida con auditoría real (doc 2, punto 8).
+   */
   actualizarBalance(path: string, valor: number): void {
-    if (actualizarCampoBalance(path, valor)) {
-      this.registrar(`Balance actualizado: ${path} = ${valor}.`);
-    } else {
-      this.registrar(`Valor de balance rechazado: "${path}" no es un campo válido.`);
-    }
+    const mensaje = actualizarCampoBalance(path, valor)
+      ? `Balance actualizado: ${path} = ${valor}.`
+      : `Valor de balance rechazado: "${path}" no es un campo válido.`;
+    this.session.registrarEventoAdministrativo(this.ahora(), mensaje);
     this.notify();
   }
 
-  /** Vuelve todos los valores de balance a los de fábrica (los que tenían al cargar la página). */
+  /** Vuelve todos los valores de balance a los de fábrica. Misma salvedad que `actualizarBalance`: es
+   * configuración del proceso, no de la partida. */
   restaurarBalance(): void {
     restaurarBalancePorDefecto();
-    this.registrar('Valores de balance restaurados a los de fábrica.');
+    this.session.registrarEventoAdministrativo(this.ahora(), 'Valores de balance restaurados a los de fábrica.');
     this.notify();
   }
 }

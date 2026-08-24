@@ -15,7 +15,8 @@ import type { RegionId } from '../domain/types';
 import { createRng, generarMapa, MAPA_DEFAULT, WORLDGEN_VERSION, type RandomFn } from '../worldgen';
 import { crearEstadoMapa, crearMapa, type Mapa } from '../world/mapa';
 import { GeneradorIds } from './idGenerator';
-import type { GameSessionState } from './estado';
+import { eventoLegado, type GameSessionState } from './estado';
+import { avanzarAutoComercio } from './comandos/avanzarAutoComercio';
 import { avanzarFaccionesNpc } from './comandos/avanzarFaccionesNpc';
 import { avanzarTick } from './comandos/avanzarTick';
 import {
@@ -104,6 +105,32 @@ export class GameSession {
   }
 
   /**
+   * Anota en el log administrativo un hecho que NO es un comando de partida — hoy solo los cambios de
+   * balance (`app/balanceConfig.ts`), que mutan `constants.ts` en el sitio y por tanto son configuración del
+   * PROCESO, no estado de esta partida (ver Docs/Arquitectura/7_Diseno_GameSession.md §2.ter).
+   *
+   * Existe para no tener que fingir que esos cambios son transiciones de estado: no pasan por un comando, no
+   * tienen `ResultadoComando` y no producen eventos de dominio de juego. Lo único que hacen es dejar rastro,
+   * que es lo que la consola de administración ya mostraba.
+   *
+   * **Temporal, y a sustituir en Fase C** por la auditoría real que pide el doc 2 (punto 8): actor, fecha,
+   * versión anterior y nueva, sobre un balance versionado POR PARTIDA en vez de global. Cuando eso exista,
+   * este método desaparece.
+   *
+   * Sí incrementa `version` porque el log es parte del estado persistido: cualquier cambio de
+   * `GameSessionState` tiene que versionarse para que el control de concurrencia optimista siga siendo válido.
+   */
+  registrarEventoAdministrativo(momento: string, mensaje: string): void {
+    const evento = eventoLegado(momento, this.estado.tick, mensaje);
+    this.estado = {
+      ...this.estado,
+      version: this.estado.version + 1,
+      log: [{ tick: evento.tick, mensaje }, ...this.estado.log],
+      eventosDominio: [evento, ...this.estado.eventosDominio],
+    };
+  }
+
+  /**
    * Ejecuta un comando y adopta el estado resultante. **Único punto donde `this.estado` cambia** — todo lo
    * demás son funciones puras, así que no hay forma de mutar la partida sin pasar por aquí.
    *
@@ -131,6 +158,12 @@ export class GameSession {
 
   avanzarTick(momento: string): ResultadoComando<void> {
     return this.ejecutar(avanzarTick, undefined, { momento, actor: ACTOR_SISTEMA });
+  }
+
+  /** Trueque automático de simulación (apagado por defecto). Va DESPUÉS del tick y ANTES del NPC de
+   * gobernanza — mismo orden que tenía en `GameStore`. */
+  avanzarAutoComercio(momento: string): ResultadoComando<void> {
+    return this.ejecutar(avanzarAutoComercio, undefined, { momento, actor: ACTOR_SISTEMA });
   }
 
   avanzarFaccionesNpc(momento: string): ResultadoComando<void> {
