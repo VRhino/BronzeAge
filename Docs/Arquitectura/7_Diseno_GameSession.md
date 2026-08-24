@@ -65,6 +65,53 @@ La prueba de que la frontera se respeta es la misma que ya tenemos automatizada:
 ejercitarse en un test síncrono, igual que el motor, y `scripts/run-batch-sim.ts` debe seguir corriendo sin
 tocar nada de infraestructura (ver [test de arquitectura](../../src/__tests__/arquitectura.test.ts)).
 
+## 2.bis Forma de los comandos: funciones, no métodos (revisión 2026-08-24)
+
+La primera implementación puso los comandos como **métodos** de `GameSession`. Se revisó antes de migrar el
+resto y se cambió, por una razón medida:
+
+| | Líneas | Comandos | Consultas |
+|---|---|---|---|
+| `GameStore` hoy | 1582 | 34 | 31 |
+| `GameSession` con métodos, extrapolada a 34 comandos | ~1100+ | 34 | — |
+
+Es decir: habría reproducido el mismo objeto-dios que el doc 2 critica de `GameStore`, cambiando de carpeta
+pero no de problema. La forma adoptada es:
+
+```text
+session/
+  estado.ts              GameSessionState + transformaciones PURAS (sin métodos que muten)
+  comandos/
+    tipos.ts             ContextoComando, ResultadoComando, TransicionComando, exito()/rechazo()
+    fundarAsentamiento.ts    un archivo por comando
+    crearFaccion.ts
+    avanzarTick.ts
+    avanzarFaccionesNpc.ts
+  gameSession.ts         despachador + estado actual (139 líneas, y no crece al añadir comandos)
+```
+
+Tres decisiones concretas:
+
+**(a) Un comando es una función pura** `(estado, mapa, ctx, params) -> { estado, resultado }`. Nunca muta el
+estado que recibe; un rechazo devuelve *el mismo objeto*. Esto importa para la Fase B3: con transiciones
+puras el runner puede hacer *aplicar → persistir → confirmar* y **descartar** el estado nuevo si la escritura
+falla. Con mutación, un fallo de persistencia deja el estado ya modificado y sin vuelta atrás.
+
+> ⚠️ La mutación de `Mapa` (§7.3) es exactamente lo que rompe esa garantía hoy: `extraer` modifica
+> `estadoMapa` fuera del valor de retorno. Por eso su arreglo es prerrequisito de B3, no cosmético.
+
+**(b) `ContextoComando { momento, actor, rng, ids }`** en vez de parámetros sueltos. El `momento` no es un
+dato del comando sino contexto de ejecución, y `actor` hará falta en **todos** los comandos cuando llegue la
+autorización de Fase C. Queda simétrico con el `ContextoSimulacion` del motor, y por el mismo motivo: el
+reloj y la aleatoriedad se inyectan, nunca se leen dentro.
+
+**(c) `exito()` es el único sitio que incrementa `version`.** Así no puede existir un comando que mute el
+estado y se olvide de versionarlo — que es precisamente lo que rompería el control de concurrencia optimista.
+
+Beneficio adicional que no es de estilo: cada comando puede llevar **junto a su lógica** los metadatos de
+autorización de su fila en la matriz del [doc 5](5_Contratos_Identidad_Permisos.md), en vez de en una tabla
+paralela que se desincroniza en cuanto alguien añade un comando y olvida la tabla.
+
 ## 3. Contrato de comando
 
 Hoy cada comando de `GameStore` sigue este patrón: llama al motor, atrapa el error de dominio
