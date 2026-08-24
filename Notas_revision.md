@@ -85,7 +85,7 @@ el mapa de asentamiento es una espacio logico que se genera tomando en cuenta el
     + [BALANCE]cooldown de creacion de caravanas creado pero no parametrizable
     + [RESUELTO]revisar produccion de armaduras, no funciona correctamente
     + [FUNDACION]error cuadno se funda un segundo asentamiento no se elige quienes van en la caravana de fundacion para asignarlos al nuevo y quitarlos de anterior
-    + [DEGRADACION-IMPORTANTE]los asentamientos no se estan degradando hasta volver a ruinas, simpelemente se estan destruyendo al llegar a 0, cuando mantenimiento al llegar a 0 deberia bajar de nivel primero y luego destruir
+    + [RESUELTO]los asentamientos no se estan degradando hasta volver a ruinas, simpelemente se estan destruyendo al llegar a 0, cuando mantenimiento al llegar a 0 deberia bajar de nivel primero y luego destruir
 + Interfaz:
     + [RESUELTO]mostar en pestaña comercio, segmento con todos los trueques activos con todos la info correspondiente, tiempo de vida, los involucrados, caravanas asignadas
     + [RESUELTO]mejora en interfaz de trueque, cuando se elige un asentamiento en los combos, muestre de bajo una info box con los materiales que posee disponibles dicho asentamiento para comerciar
@@ -97,8 +97,10 @@ el mapa de asentamiento es una espacio logico que se genera tomando en cuenta el
     + [RESUELTO] en la interfaz de asentamientos, dentro del cuadro de seleccion de asentamientO(donde sale el nombre, agregar un icono de warning en rojo cuando no se esta cumpliendo el mantenimiento)
     + [PRODUCCION] la interfaz no muestra correctamente el valor de consumo/total en la pestaña produccion cuando la produccion esta a 0 por ejemplo si consume 3 y la producciion esta a 0 el cosumo deberia ser 0/3 0 porq no se produce nada y 3 lo que consume esa receta al 100% de capacidad(sumatoria de los edificios)
 + Add Up:
-    + [ZONA/interfaz] las zonas de influencia de la misma faccion no se fusionan en un solo poligono en el mapa GENERAL
-        + [ZONA/interfaz] hay que cambiar la manera en que se crean los bosques de cicurlos overlaped a poligonos complejos para mostrar varios puntos que se overlapan como un solo poligono
+    + [RESUELTO][ZONA/interfaz] las zonas de influencia de la misma faccion no se fusionan en un solo poligono en el mapa GENERAL — la fusion la hace el motor (`computeZonasFusionadasPorFaccion`, engine/zones.ts) y la interfaz recibe una silueta por faccion (`ZonaFaccion.contornos`, domain/types.ts) que pinta de una sola pasada: sin fronteras internas entre asentamientos hermanos y sin relleno acumulado en los solapes. Las reglas de juego (fundar, chokepoints, leñeras, fertilidad) siguen usando el poligono POR ASENTAMIENTO, no cambia ningun comportamiento.
+        + [RESUELTO][ZONA/interfaz] hay que cambiar la manera en que se crean los bosques de cicurlos overlaped a poligonos complejos para mostrar varios puntos que se overlapan como un solo poligono — `Mapa.contornosBosques()` devuelve la union de los 170 discos como ~25 siluetas (cacheada por mundo generado, ~16 ms una sola vez). Los arboles se siguen sembrando bosque a bosque y pasan a ser la unica señal de densidad de madera.
+        + Los dos salen de la misma pieza nueva, `world/poligonos.ts` (`unirFormas`): union por campo de distancia con signo + marching squares, sin dependencias. Los claros encerrados por una corona (de bosque o de asentamientos) salen como lazos de orientacion opuesta y el canvas los recorta solo con la regla de relleno `nonzero`.
++ Feature nuevas
     + [GUERRA] Los ejércitos también se mueven por el mapa para atacar como las caravanas, con un símbolo q los identifique por ejemplo un rombo, uno por cada jugador q va en el ejército, uno detrás de otro medio superpuestos y cada rombo del color de su faccion.
     + [RUTAS]el pathfinder de las rutas para las caravanas debe buscar evitar bosques(rodearlos) o rios(no los puede atravesar) y montañas
     + [POLITICAS]politicas de ubicacion de construccion.

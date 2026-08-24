@@ -165,17 +165,128 @@ evita:
 Este orden mantiene la propiedad que ha funcionado en toda la Fase A: cada paso es verificable con los tests
 que ya existen, y en ningún momento hay un estado intermedio roto.
 
-## 7. Preguntas abiertas
+## 7. Decisiones sobre las preguntas abiertas (resueltas 2026-08-24)
 
-- **`log` e `historialJugadores` son hoy parte de `GameState`** y se persisten en el archivo de guardado.
-  En el diseño nuevo lo persistido deberían ser `EventoDominio[]` y el texto ser una proyección — pero eso
-  depende del avance del marcador 0/13 de A5. Mientras tanto, `GameSession` puede conservarlos tal cual sin
-  romper nada. Decidir si se migran al cerrar A5 o antes.
-- **`faccionesNpcIds`** vive en `GameState` (capa de aplicación, no dominio, y está bien así). En el servidor
-  pasa a ser configuración de partida — ¿la lleva `GameSession` o el runner? Se inclina a `GameSession`,
-  porque afecta a lo que ocurre en el tick.
-- **Mutación de `Mapa`** (`extraer`/`avanzarRegeneracion`, los 2 puntos identificados en el doc 6 §"puntos de
-  fuga"): el doc 2 pide hacerlas explícitas en el resultado del tick. ¿Se aborda al crear `GameSession` o
-  después? Afecta a si un snapshot puede escribirse de forma consistente con los eventos emitidos.
-- **Multi-partida en un proceso**: `GameSession` recibe `gameId` y no es singleton (a diferencia del
-  `gameStore` exportado hoy). Si un proceso aloja varias partidas o solo una es decisión del runner, no suya.
+### 7.1 `log` e `historialJugadores` son datos de ADMINISTRACIÓN
+
+Aclaración del usuario que cambia el encuadre: **estos dos campos no viajan nunca a los jugadores**. Se
+quedan en el servidor; como mucho los consulta un administrador directamente. No forman parte de ninguna
+proyección de jugador.
+
+Consecuencias:
+
+- **No hay urgencia de migrarlos a `EventoDominio`.** La regla del doc 2 ("los logs localizados no deben ser
+  el único contrato entre servidor y frontend") aplica al contrato con el JUGADOR, y estos quedan fuera de él.
+  Como superficie de administración, el texto ya formateado es un formato perfectamente razonable.
+- **`GameSession` los conserva tal cual**, sin tocarlos. Cero riesgo, la interfaz actual sigue funcionando.
+- **Pero se persiste `eventosDominio` en paralelo desde el principio**, no por el jugador sino por la
+  auditoría y el replay de la Fase E, que sí necesitan datos estructurados.
+- ⚠️ **Marcar explícitamente estos dos campos como "solo administración"** en el código y en los DTOs, para
+  que nadie los incluya por descuido en una proyección de jugador — sería una fuga de información de otras
+  facciones (el log global narra lo que pasa en todo el mundo).
+
+Esto desacopla el cierre del marcador 0/13 de A5 de la Fase B: la migración de eventos avanza a su ritmo sin
+bloquear nada.
+
+### 7.2 `faccionesNpcIds` vive en `GameSession`
+
+**Decidido: en `GameSession`**, y cambiarlo es un comando administrativo (rol técnico, ver
+[doc 5](5_Contratos_Identidad_Permisos.md)).
+
+Criterio: *si un dato cambia el resultado de un tick, es estado de partida* — si viviera en el runner y este
+se reiniciara con otra configuración, la partida cambiaría de comportamiento sin que el snapshot lo reflejara,
+rompiendo el principio 6 del doc 2 ("un reinicio no puede alterar la secuencia").
+
+Matiz aportado por el usuario: **en una partida real este valor no cambia en caliente**. Una facción que se
+declara IA lo es hasta que se destruye. Es configuración efectivamente inmutable tras la creación de la
+partida — lo que simplifica el diseño: no hace falta prever recálculos ni invalidación de cachés al
+cambiarla, y el comando administrativo que la modifica puede ser de uso excepcional (corrección/moderación),
+no una palanca de juego.
+
+### 7.3 Mutación de `Mapa`: se aborda en B3, no antes
+
+**Decidido: posponer a B3 (persistencia), dejándolo escrito para que no se pierda.** Anotado como tarea
+explícita en [4_Plan_Evolucion_Tareas.md](4_Plan_Evolucion_Tareas.md).
+
+Motivo para no hacerlo ahora: crear `GameSession` ya es un refactor grande, y no necesita este arreglo para
+existir. Meter los dos en el mismo paso mezclaría dos refactors del motor a la vez, justo lo que venimos
+evitando.
+
+Motivo para no dejarlo indefinidamente: es donde se vuelve un problema real. Al persistir tras cada tick se
+guarda *estado + eventos*; si parte del estado (lo extraído de cada yacimiento) se mutó por un camino lateral,
+puede guardarse un snapshot que no corresponde a los eventos emitidos. Y si un comando falla a mitad, el mapa
+queda modificado aunque el resto del estado no — un rollback parcial silencioso.
+
+**Vigilar que sigan siendo dos.** Hoy la superficie es exactamente `Mapa.extraer` (desde
+`engine/construction.ts`) y `Mapa.avanzarRegeneracion` (desde `engine/simulation.ts`). Si aparecen más
+mutaciones laterales antes de B3, el arreglo crece.
+
+### 7.4 Una partida por proceso
+
+**Decidido: cada proceso gestiona exactamente una partida.** Coincide con lo que ya decía el doc 2, y ahora
+con una razón medida además de la de aislamiento: Node ejecuta JS en un solo hilo, así que dos partidas en un
+proceso compartirían hilo y el tick de una dejaría a la otra sin atender comandos.
+
+`GameSession` recibe `gameId` y **no es singleton** (a diferencia del `gameStore` exportado hoy). Eso mantiene
+la decisión reversible sin reescribir nada.
+
+Ver §8 para la cuestión del multihilo, que se derivó de esta decisión.
+
+## 8. Multihilo: preparar, no construir
+
+Pregunta derivada de §7.4: ¿conviene abordar ya una estrategia multihilo (`worker_threads`)?
+
+**Decidido: no construirlo ahora; dejar el contrato preparado para poder hacerlo sin reescribir.**
+
+### 8.1 El multihilo NO resuelve el problema de la cola serial
+
+Distinción que hay que tener clara antes de decidir, porque es la que hace que la respuesta intuitiva sea
+equivocada. El tick largo causa **dos** problemas distintos:
+
+| | Problema | ¿Lo resuelve el multihilo? |
+|---|---|---|
+| **A** | Durante el tick no se APLICA ningún comando | **No.** La restricción es lógica, no de CPU: el estado solo admite un mutador a la vez. Mover el trabajo a otro hilo no cambia eso |
+| **B** | Durante el tick el event loop está bloqueado: los heartbeats de WebSocket no responden, no se aceptan conexiones nuevas, un health check expira | **Sí.** Este es el problema que el multihilo sí ataca |
+
+El problema B es el que de verdad duele a 500 jugadores: un event loop bloqueado 1.9 s puede hacer que los
+clientes den la conexión por muerta. El A es inherente a tener un estado consistente y no se elimina, solo se
+gestiona (encolar y confirmar recepción aunque la aplicación llegue después).
+
+### 8.2 La magnitud real es menor de lo estimado
+
+Corrección importante sobre las cifras del [doc 6](6_Sincronizacion_Visibilidad_y_Escala.md) §1: **500
+jugadores no son 500 asentamientos**. Un asentamiento aloja `CIUDADANIA.casasBasePorAsentamiento` = 5
+residentes (+2 por nivel adicional), así que 500 jugadores caben en ~70-100 asentamientos.
+
+Sobre la curva medida (O(n^1.5)), eso da **~170-300 ms por tick**, no 1.9 s. Los 500 asentamientos son un
+escenario de partida madura (las facciones expanden con el tiempo, ver `CAP_FUNDACION_POR_NIVEL`), no el
+punto de partida.
+
+Un bloqueo de ~200 ms es molesto pero perfectamente tolerable para heartbeats de WebSocket. **El multihilo no
+hace falta para arrancar.**
+
+### 8.3 Orden de soluciones cuando haga falta, de menor a mayor coste
+
+1. **Cesión cooperativa del event loop** — ceder (`setImmediate`) cada N asentamientos dentro del bucle del
+   tick. Mantiene un solo hilo, sin transferir estado. Es lo más barato y probablemente suficiente. Coste: el
+   bucle del tick pasa a ser asíncrono, lo que contaminaría el motor con `async` — hay que decidir si se hace
+   en el motor o exponiendo el tick por lotes que conduzca el runner.
+2. **Worker que posee la partida entera** — el hilo principal queda como E/S pura (HTTP, WebSocket,
+   persistencia) y el worker aloja `GameSession` de forma permanente. Los comandos son mensajes. Resuelve el
+   problema B por completo y **sin transferir estado en cada tick** (el estado vive siempre dentro del
+   worker). El problema A permanece idéntico, porque el worker sigue siendo serial.
+3. **No viable**: repartir un mismo tick entre varios hilos. El estado es compartido y mutable; haría falta
+   sincronización que costaría más de lo que ahorra.
+
+### 8.4 Qué preparar ahora (coste cero)
+
+- **`GameSession` síncrona y autocontenida** — ya es la decisión de §2. Es justo lo que la hace *movible* a un
+  worker tal cual, sin reescribirla.
+- **El contrato del `RunnerDePartida` nace asíncrono** (`async avanzarTick()`, `async ejecutar(comando)`)
+  aunque hoy por dentro no espere nada. Así, migrar a cesión cooperativa o a un worker es un cambio *dentro*
+  del runner, invisible para sus llamadores.
+- **No introducir `worker_threads` todavía.** Añade serialización de mensajes, depuración más difícil y una
+  forma nueva de fallo, a cambio de resolver un problema que a la escala inicial no se manifiesta.
+
+Disparador para reconsiderarlo: cuando se mida un tick por encima de ~500 ms en una partida real, o cuando
+aparezcan desconexiones de WebSocket atribuibles al bloqueo del event loop.

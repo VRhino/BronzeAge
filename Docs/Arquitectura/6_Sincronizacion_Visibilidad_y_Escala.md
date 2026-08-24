@@ -24,6 +24,14 @@ y promediando 30 ticks:
 **Escalado: O(n^1.5)** — superlineal pero no cuadrático. Extrapolando a ~500 asentamientos: **~1.9 s por tick**
 y **~2.4 MB de estado**.
 
+> ⚠️ **Corrección posterior (2026-08-24): 500 jugadores NO son 500 asentamientos.** Un asentamiento aloja
+> `CIUDADANIA.casasBasePorAsentamiento` = 5 residentes (+2 por nivel adicional), así que el objetivo de 500
+> jugadores cabe en **~70-100 asentamientos** → **~170-300 ms por tick**, no 1.9 s. La cifra de 500
+> asentamientos corresponde a una partida madura, con las facciones ya expandidas
+> (`CAP_FUNDACION_POR_NIVEL`), no al punto de partida. Las conclusiones cualitativas de abajo no cambian (el
+> cuello de botella sigue siendo la CPU del tick), pero la **urgencia** del problema del tick bloqueante sí:
+> ~200 ms es tolerable, 1.9 s no. Ver [7_Diseno_GameSession.md](7_Diseno_GameSession.md) §8.
+
 Consecuencias:
 
 - **El cuello de botella es la CPU del tick, no la red ni la persistencia.** Un tick de 1.9 s frente a ~0.4 ms
