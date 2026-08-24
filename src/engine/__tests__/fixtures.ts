@@ -2,13 +2,31 @@
 // usando las funciones REALES del motor (generarMapa/crearFaccion/fundarAsentamiento), nunca objetos
 // inventados a mano — así un test que pasa hoy sigue significando "el motor real produce esto".
 import type { Asentamiento, Faccion } from '../../domain/types';
-import { createRng, generarMapa, MAPA_DEFAULT } from '../../worldgen';
+import { generarMapa, MAPA_DEFAULT, type RandomFn } from '../../worldgen';
 import { crearMapa, type Mapa } from '../../world/mapa';
 import { crearFaccion } from '../faccion';
 import { evaluarViabilidadFundacion, fundarAsentamiento } from '../settlement';
+import type { ContextoSimulacion } from '../simulation';
 
 export function crearMapaDeterminista(seed: number): Mapa {
   return crearMapa(generarMapa({ ancho: MAPA_DEFAULT.ancho, alto: MAPA_DEFAULT.alto, seed }));
+}
+
+/** Fecha arbitraria y FIJA de la que arrancan los tests — ver `contextoDeTest`. */
+const INICIO_PARTIDA_DE_TEST = Date.UTC(2026, 0, 1, 0, 0, 0);
+/** Duración de simulación que se atribuye a cada tick en los tests. Arbitraria: nada del motor la usa
+ * todavía (el tick no tiene duración real hasta la Fase D), solo sirve para que `momento` avance de forma
+ * monótona y reproducible. */
+const MS_POR_TICK_DE_TEST = 60_000;
+
+/**
+ * `ContextoSimulacion` para tests, con `momento` DERIVADO DEL TICK y nunca del reloj real: el motor tiene que
+ * ser reproducible (ver `determinismo.test.ts`, que compara dos corridas completas), así que un `Date.now()`
+ * aquí haría divergir dos corridas idénticas por los timestamps. Pasar el MISMO `rng` en todos los ticks de
+ * una corrida — es una secuencia con estado, no una fábrica.
+ */
+export function contextoDeTest(tick: number, rng: RandomFn): ContextoSimulacion {
+  return { tick, momento: new Date(INICIO_PARTIDA_DE_TEST + tick * MS_POR_TICK_DE_TEST).toISOString(), rng };
 }
 
 /**
@@ -45,19 +63,4 @@ export function fundarAsentamientoDeTest(
 
 export function crearFacciones(): Faccion[] {
   return [crearFaccion('faccion-1', 'Micenas'), crearFaccion('faccion-2', 'Troya'), crearFaccion('faccion-3', 'Ugarit')];
-}
-
-/**
- * `population.ts` (crecimiento estocástico) y `combate.ts` (jitter de combate) llaman a `Math.random()`
- * global en vez de pasar por el PRNG con seed de `rng.ts` — el motor NO es 100% determinista de punta a
- * punta pese a que la generación de mundo sí lo es. Para poder escribir tests de regresión exactos
- * (determinismo/snapshot) sustituimos `Math.random` global por el mismo PRNG con seed que usa el resto
- * del motor mientras dura el test. Llamar a la función devuelta al terminar para restaurar el original.
- */
-export function mockMathRandomDeterminista(seed: number): () => void {
-  const original = Math.random;
-  Math.random = createRng(seed);
-  return () => {
-    Math.random = original;
-  };
 }

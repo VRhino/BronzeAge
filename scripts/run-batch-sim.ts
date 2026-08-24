@@ -1,13 +1,11 @@
-import * as fs from 'fs';
 import type { Asentamiento, Edificio, Faccion, Point } from '../src/domain/types';
-import { generarMapa, MAPA_DEFAULT } from '../src/worldgen';
+import { createRng, generarMapa, MAPA_DEFAULT } from '../src/worldgen';
 import { crearMapa, crearEstadoMapa, type Mapa } from '../src/world/mapa';
 import { avanzarSimulacion, type EstadoSimulacion } from '../src/engine/simulation';
 import { crearFaccion } from '../src/engine/faccion';
 import { evaluarViabilidadFundacion, fundarAsentamiento } from '../src/engine/settlement';
 import { nivelActualDe, tieneMercadoActivo, edificiosPorTipoYEstado, nutricionPoblacionDe } from '../src/engine/asentamientoQuery';
 import { calcularNivelAsentamiento } from '../src/engine/mantenimiento';
-import { mockMathRandomDeterminista } from '../src/engine/__tests__/fixtures';
 import { avanzarNpcGobernanza, type ConfigNpcGobernanza, MINERALES_BONUS_FUNDACION } from '../src/app/npcGobernanza';
 import { CATEGORIA_POR_TIPO, edificiosInternos, redDeCalles, segmentosDeRed } from '../src/engine/trazado';
 import { REJILLA_ASENTAMIENTO } from '../src/constants';
@@ -29,6 +27,12 @@ const FOTO_CADA = num('BATCH_FOTO_CADA', 100);
 const MIN_SEPARACION = 100;
 
 const TIPOS_EXTRACTOR = ['cantera', 'lenera', 'mina', 'minaCobre', 'minaEstano', 'corral'] as const;
+
+/** Fecha fija de arranque y duración por tick para el `momento` de `ContextoSimulacion` — arbitrarias y
+ * deterministas a propósito: nada del motor las usa todavía (el tick no tiene duración real hasta la Fase D),
+ * solo sirven para que el momento avance de forma monótona sin depender del reloj de la máquina. */
+const INICIO_BATCH = Date.UTC(2026, 0, 1, 0, 0, 0);
+const MS_POR_TICK = 60_000;
 
 function distancia(a: Point, b: Point): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
@@ -427,7 +431,7 @@ function construirFotoResumen(
 }
 
 async function main() {
-  const restaurarMathRandom = mockMathRandomDeterminista(SEED);
+  const rng = createRng(SEED);
 
   const mapaGenerado = generarMapa({ ancho: MAPA_DEFAULT.ancho, alto: MAPA_DEFAULT.alto, seed: SEED });
   const estadoMapa = crearEstadoMapa();
@@ -494,8 +498,11 @@ async function main() {
 
   for (let tick = 1; tick <= TICKS; tick++) {
     try {
-      const trasMotor = avanzarSimulacion(estado, mapa, tick);
-      const trasNpc = avanzarNpcGobernanza(trasMotor, mapa, tick, config);
+      // `momento` derivado del tick, no del reloj real: una corrida de batch tiene que ser reproducible
+      // (mismo SEED -> mismo resultado), igual que los tests del motor.
+      const contexto = { tick, momento: new Date(INICIO_BATCH + tick * MS_POR_TICK).toISOString(), rng };
+      const trasMotor = avanzarSimulacion(estado, mapa, contexto);
+      const trasNpc = avanzarNpcGobernanza(trasMotor, mapa, contexto, config);
       estado = trasNpc.estado;
       reclutamientosAcumulados += trasNpc.stats.reclutamientosExitosos;
       campamentosDestruidosAcumulados += trasNpc.stats.campamentosDestruidos;
@@ -529,8 +536,6 @@ async function main() {
 
   console.log(`Excepciones totales: ${excepcionesAcumuladas}`);
   console.log(JSON.stringify({ fotos, excepciones: excepcionesAcumuladas }, null, 2));
-
-  restaurarMathRandom();
 }
 
 main().catch(console.error);

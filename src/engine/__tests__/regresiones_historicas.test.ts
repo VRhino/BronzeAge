@@ -1,14 +1,15 @@
 // Casos puntuales tomados de Consideraciones/Correcciones_Durante_Desarrollo.md: bugs reales que ya se
 // arreglaron una vez. Cada test aquí reproduce la condición que los disparaba — si alguien reintroduce el
 // bug (a propósito o sin querer, ej. al refactorizar), el test correspondiente debe fallar.
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import type { EdificioTipo } from '../../domain/types';
 import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
+import { createRng, type RandomFn } from '../../worldgen';
 import {
+  contextoDeTest,
   crearFacciones,
   crearMapaDeterminista,
   fundarAsentamientoDeTest,
-  mockMathRandomDeterminista,
   posicionRecomendable,
 } from './fixtures';
 
@@ -16,7 +17,7 @@ import {
 // archivo. Con el mapa 2000x2000 se descubrió que, con ESTA seed en concreto, el asentamiento se estanca en
 // ~120 pesants y una sola Granja pase lo que pase la posición (probado en varios biomas/fertilidades) y cae
 // en ruinas hacia el tick 133 — un techo que no depende del emplazamiento, así que probablemente sea una
-// combinación específica de la secuencia de `Math.random` sustituida (ver `mockMathRandomDeterminista`) con
+// combinación específica de la secuencia del RNG de simulación (hoy inyectado vía `contextoDeTest`) con
 // el resto del motor, no algo introducido por el generador de mundo. Se cambia a 20 (verificado: crecimiento
 // sano más allá de 1000 pesants y varias Granjas en las tres pruebas) para no bloquear este archivo mientras
 // se investiga la seed 11 por separado.
@@ -46,14 +47,10 @@ function contarPorTipo(edificios: { tipo: EdificioTipo; estado: string }[], tipo
 }
 
 describe('regresiones históricas (Correcciones_Durante_Desarrollo.md)', () => {
-  let restaurarMathRandom: () => void;
+  let rng: RandomFn;
 
   beforeEach(() => {
-    restaurarMathRandom = mockMathRandomDeterminista(SEED);
-  });
-
-  afterEach(() => {
-    restaurarMathRandom();
+    rng = createRng(SEED);
   });
 
   // Bug #7: "muerte instantánea de todo asentamiento nuevo" — el coste de Mantenimiento exigía trigo desde
@@ -67,7 +64,7 @@ describe('regresiones históricas (Correcciones_Durante_Desarrollo.md)', () => {
     const graciaTicks = 60;
 
     for (let tick = 1; tick < graciaTicks; tick++) {
-      estado = avanzarSimulacion(estado, mapa, tick);
+      estado = avanzarSimulacion(estado, mapa, contextoDeTest(tick, rng));
       expect(estado.asentamientos, `tick ${tick}: el asentamiento sigue en pie durante la gracia`).toHaveLength(1);
       expect(estado.asentamientos[0]!.medidorMantenimiento, `tick ${tick}: medidor intacto durante la gracia`).toBe(100);
     }
@@ -84,7 +81,7 @@ describe('regresiones históricas (Correcciones_Durante_Desarrollo.md)', () => {
 
     let leneraActiva = false;
     for (let tick = 1; tick <= 40 && !leneraActiva; tick++) {
-      estado = avanzarSimulacion(estado, mapa, tick);
+      estado = avanzarSimulacion(estado, mapa, contextoDeTest(tick, rng));
       const asentamiento = estado.asentamientos[0];
       leneraActiva = !!asentamiento && asentamiento.edificios.some((e) => e.tipo === 'lenera' && e.estado === 'activo');
     }
@@ -103,7 +100,7 @@ describe('regresiones históricas (Correcciones_Durante_Desarrollo.md)', () => {
 
     let maxGranjas = 0;
     for (let tick = 1; tick <= 300; tick++) {
-      estado = avanzarSimulacion(estado, mapa, tick);
+      estado = avanzarSimulacion(estado, mapa, contextoDeTest(tick, rng));
       if (estado.asentamientos.length === 0) break; // se arruinó — no es lo que este test evalúa.
       maxGranjas = Math.max(maxGranjas, contarPorTipo(estado.asentamientos[0]!.edificios, 'granja'));
     }

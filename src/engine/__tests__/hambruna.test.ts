@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { POBLACION } from '../../constants';
 import { crecerPoblacion, avanzarNutricionPoblacion } from '../population';
+import { createRng } from '../../worldgen';
 import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, posicionRecomendable } from './fixtures';
 
 function asentamientoDeTest() {
@@ -72,11 +73,11 @@ describe('Hambruna: nutrición de la población', () => {
     const bienAlimentado = { ...base, nutricionPoblacion: 100 };
     const hambriento = { ...base, nutricionPoblacion: 0 };
 
-    // Cota determinista sin mockear Math.random: con este cupo, el esperado de crecimiento bien alimentado
+    // Cota determinista con RNG con seed fija: con este cupo, el esperado de crecimiento bien alimentado
     // (comidaFactor=1) es >=2 de sobra por encima del hambriento (comidaFactor=factorCrecimientoMinimo=0.2),
     // así que la diferencia se sostiene sin importar el redondeo estocástico de `crecimientoEstocastico`.
-    const { poblacion: crecidoBien } = crecerPoblacion(bienAlimentado);
-    const { poblacion: crecidoHambriento } = crecerPoblacion(hambriento);
+    const { poblacion: crecidoBien } = crecerPoblacion(bienAlimentado, createRng(1));
+    const { poblacion: crecidoHambriento } = crecerPoblacion(hambriento, createRng(1));
 
     expect(crecidoHambriento.pesants - hambriento.poblacion.pesants).toBeLessThan(crecidoBien.pesants - bienAlimentado.poblacion.pesants);
   });

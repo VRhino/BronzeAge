@@ -8,12 +8,13 @@
 //
 // Estas pruebas fijan el comportamiento correcto: el conteo de fuentes tomadas es GLOBAL (ver
 // `reclamosDeFuentes`) y se actualiza según se compromete cada obra, también dentro de un mismo tick.
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import type { Asentamiento } from '../../domain/types';
 import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
+import { createRng, type RandomFn } from '../../worldgen';
 import { reclamosDeFuentes } from '../construction';
 import { evaluarViabilidadFundacion } from '../settlement';
-import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, mockMathRandomDeterminista } from './fixtures';
+import { contextoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
 
 // Antes SEED=7: con el reordenamiento de PRNG de WORLDGEN_VERSION v6 (fertilidad antes que bosques, ver
 // `worldgen/types.ts`) el mundo de esa seed desplazó los nodos minerales lejos del primer par de
@@ -73,14 +74,10 @@ function dosAsentamientosDeLaMismaFaccion() {
 }
 
 describe('reclamo de fuentes del mapa', () => {
-  let restaurarMathRandom: () => void;
+  let rng: RandomFn;
 
   beforeEach(() => {
-    restaurarMathRandom = mockMathRandomDeterminista(SEED);
-  });
-
-  afterEach(() => {
-    restaurarMathRandom();
+    rng = createRng(SEED);
   });
 
   it('ningún yacimiento acaba explotado por dos asentamientos a la vez', () => {
@@ -100,7 +97,7 @@ describe('reclamo de fuentes del mapa', () => {
     };
 
     for (let tick = 1; tick <= TICKS; tick++) {
-      estado = avanzarSimulacion(estado, mapa, tick);
+      estado = avanzarSimulacion(estado, mapa, contextoDeTest(tick, rng));
 
       for (const [fuenteId, duenos] of extractoresPorFuente(estado.asentamientos)) {
         const distintos = new Set(duenos);
@@ -133,7 +130,7 @@ describe('reclamo de fuentes del mapa', () => {
 
     let lenerasVistas = 0;
     for (let tick = 1; tick <= TICKS; tick++) {
-      estado = avanzarSimulacion(estado, mapa, tick);
+      estado = avanzarSimulacion(estado, mapa, contextoDeTest(tick, rng));
 
       const { lenerasPorBosque } = reclamosDeFuentes(estado.asentamientos);
       lenerasVistas = Math.max(lenerasVistas, [...lenerasPorBosque.values()].reduce((a, b) => a + b, 0));

@@ -1,5 +1,6 @@
 import type { Asentamiento, Poblacion } from '../domain/types';
 import { EDIFICIO_CATALOGO, NIVEL_ASENTAMIENTO, POBLACION } from '../constants';
+import type { RandomFn } from '../worldgen';
 import {
   EDIFICIOS_TRANSFORMACION,
   capacidadViviendaArtesanos,
@@ -11,11 +12,11 @@ import {
 import { factorConsumoComida, factorCrecimientoNobleza } from './politicas';
 
 /** Incremento entero esperado = actual*tasa, con redondeo estocástico para no estancarse con poblaciones pequeñas. */
-function crecimientoEstocastico(actual: number, tasa: number): number {
+function crecimientoEstocastico(actual: number, tasa: number, rng: RandomFn): number {
   const esperado = actual * tasa;
   const base = Math.floor(esperado);
   const resto = esperado - base;
-  return base + (Math.random() < resto ? 1 : 0);
+  return base + (rng() < resto ? 1 : 0);
 }
 
 /**
@@ -32,7 +33,7 @@ function crecimientoEstocastico(actual: number, tasa: number): number {
  * `capacidadViviendaArtesanos`, ver constants.ts `EDIFICIO_CATALOGO.vivienda`) — ya no compiten entre sí.
  * Nobleza sigue con su propio cupo aparte, la `capacidadNobles` del Palacio.
  */
-export function crecerPoblacion(asentamiento: Asentamiento): { poblacion: Poblacion; eventos: string[] } {
+export function crecerPoblacion(asentamiento: Asentamiento, rng: RandomFn): { poblacion: Poblacion; eventos: string[] } {
   const eventos: string[] = [];
 
   // Hambruna (Doc 4.1, a petición del usuario): el factor de comida ya no es un booleano trigo>0?1:0.2 sino
@@ -49,7 +50,7 @@ export function crecerPoblacion(asentamiento: Asentamiento): { poblacion: Poblac
   const capacidadPesants = capacidadViviendaPesants(asentamiento);
   const espacioPesantsFactor = capacidadPesants <= 0 ? 0 : Math.max(0, Math.min(1, 1 - asentamiento.poblacion.pesants / capacidadPesants));
   const tasaPesants = POBLACION.pesants.tasaCrecimientoBase * comidaFactor * espacioPesantsFactor * estabilidad * felicidad;
-  const nuevosPesants = crecimientoEstocastico(asentamiento.poblacion.pesants, tasaPesants);
+  const nuevosPesants = crecimientoEstocastico(asentamiento.poblacion.pesants, tasaPesants, rng);
 
   // Artesanos: no aparece ninguno hasta el primer edificio de transformación activo (Fundición/Curtiduría/
   // Armería/Carpintería) — a partir de ahí crecen con la misma fórmula que Pesants, a su propia tasa (más
@@ -67,7 +68,7 @@ export function crecerPoblacion(asentamiento: Asentamiento): { poblacion: Poblac
       eventos.push('Los primeros Artesanos se establecen gracias al primer edificio de transformación.');
     } else {
       const tasaArtesanos = POBLACION.artesanos.tasaCrecimientoBase * comidaFactor * espacioArtesanosFactor * estabilidad * felicidad;
-      nuevosArtesanos = crecimientoEstocastico(asentamiento.poblacion.artesanos, tasaArtesanos);
+      nuevosArtesanos = crecimientoEstocastico(asentamiento.poblacion.artesanos, tasaArtesanos, rng);
     }
   }
 
@@ -88,7 +89,7 @@ export function crecerPoblacion(asentamiento: Asentamiento): { poblacion: Poblac
     } else {
       const tasaNobleza =
         POBLACION.nobleza.tasaCrecimientoBase * comidaFactor * espacioPalacioFactor * estabilidad * felicidad * factorCrecimientoNobleza(asentamiento);
-      nuevaNobleza = crecimientoEstocastico(asentamiento.poblacion.nobleza, tasaNobleza);
+      nuevaNobleza = crecimientoEstocastico(asentamiento.poblacion.nobleza, tasaNobleza, rng);
     }
   }
 

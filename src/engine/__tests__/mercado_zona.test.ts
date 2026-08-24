@@ -11,7 +11,8 @@ import { MERCADO_PUESTOS_POR_NIVEL, PUESTO_MERCADO_FORMA, ZONA_INFLUENCIA } from
 import { cupoCaravanas, tieneMercadoActivo } from '../asentamientoQuery';
 import { anadirEdificioManualmente, ConstruccionManualInvalidaError } from '../construction';
 import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
-import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, mockMathRandomDeterminista } from './fixtures';
+import { createRng } from '../../worldgen';
+import { contextoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
 
 const SEED = 42;
 
@@ -118,40 +119,36 @@ describe('Mercado como zona de varias piezas', () => {
   });
 
   it('al completarse la construcción del Mercado aparecen los puestos de su nivel 1', () => {
-    const restaurar = mockMathRandomDeterminista(SEED);
-    try {
-      const mapa = crearMapaDeterminista(SEED);
-      const facciones = crearFacciones();
-      const { asentamiento, facciones: facs } = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', []);
-      const enObra: Edificio = {
-        id: `mercado-obra-${asentamiento.id}`,
-        tipo: 'mercado',
-        posicion: { x: 30, y: 0 },
-        estado: 'en_construccion',
-        ticksRestantes: 1,
-        ambito: 'asentamiento',
-        nivelInterno: 1,
-      };
-      let estado: EstadoSimulacion = {
-        asentamientos: [{ ...asentamiento, edificios: [...asentamiento.edificios, enObra] }],
-        facciones: facs,
-        caravanas: [],
-        acuerdos: [],
-        ordenes: [],
-        relaciones: [],
-        titulos: [],
-        caminos: [],
-        campamentosBandidos: [],
-        bandidosProximoSpawnTick: 0,
-      };
-      estado = avanzarSimulacion(estado, mapa, 1);
+    const rng = createRng(SEED);
+    const mapa = crearMapaDeterminista(SEED);
+    const facciones = crearFacciones();
+    const { asentamiento, facciones: facs } = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', []);
+    const enObra: Edificio = {
+      id: `mercado-obra-${asentamiento.id}`,
+      tipo: 'mercado',
+      posicion: { x: 30, y: 0 },
+      estado: 'en_construccion',
+      ticksRestantes: 1,
+      ambito: 'asentamiento',
+      nivelInterno: 1,
+    };
+    let estado: EstadoSimulacion = {
+      asentamientos: [{ ...asentamiento, edificios: [...asentamiento.edificios, enObra] }],
+      facciones: facs,
+      caravanas: [],
+      acuerdos: [],
+      ordenes: [],
+      relaciones: [],
+      titulos: [],
+      caminos: [],
+      campamentosBandidos: [],
+      bandidosProximoSpawnTick: 0,
+    };
+    estado = avanzarSimulacion(estado, mapa, contextoDeTest(1, rng));
 
-      const a = estado.asentamientos[0]!;
-      expect(a.edificios.find((e) => e.id === enObra.id)!.estado).toBe('activo');
-      expect(puestos(a).length + 1).toBe(piezasEsperadas(1));
-    } finally {
-      restaurar();
-    }
+    const a = estado.asentamientos[0]!;
+    expect(a.edificios.find((e) => e.id === enObra.id)!.estado).toBe('activo');
+    expect(puestos(a).length + 1).toBe(piezasEsperadas(1));
   });
 
   it('un puesto no se puede añadir a la cola a mano', () => {

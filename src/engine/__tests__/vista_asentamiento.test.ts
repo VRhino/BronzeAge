@@ -6,9 +6,10 @@ import { describe, expect, it } from 'vitest';
 import type { Asentamiento } from '../../domain/types';
 import { REJILLA_ASENTAMIENTO, TRAZADO, ZONA_INFLUENCIA } from '../../constants';
 import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
+import { createRng } from '../../worldgen';
 import { esDeAfueras } from '../trazado';
 import { computeTodasLasZonas, mejorFertilidadEnZona } from '../zones';
-import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, mockMathRandomDeterminista } from './fixtures';
+import { contextoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
 
 const SEED = 42;
 const EXTERNOS = new Set(['mina', 'minaCobre', 'minaEstano', 'cantera']);
@@ -55,34 +56,30 @@ describe('Vista de Asentamiento — colocación tras simulación', () => {
   it('los edificios internos quedan dentro del disco local; las minas/cantera van al mapa general sobre su nodo', () => {
     const mapa = crearMapaDeterminista(SEED);
     const facciones = crearFacciones();
-    const restaurar = mockMathRandomDeterminista(SEED);
-    try {
-      const { asentamiento } = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', []);
-      let estado = estadoInicial(asentamiento, facciones);
-      for (let tick = 1; tick <= 90; tick++) estado = avanzarSimulacion(estado, mapa, tick);
+    const rng = createRng(SEED);
+    const { asentamiento } = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', []);
+    let estado = estadoInicial(asentamiento, facciones);
+    for (let tick = 1; tick <= 90; tick++) estado = avanzarSimulacion(estado, mapa, contextoDeTest(tick, rng));
 
-      const a = estado.asentamientos[0]!;
-      // Debe haber crecido más allá de los edificios iniciales (prueba que la auto-construcción coloca en local).
-      expect(a.edificios.length).toBeGreaterThan(5);
+    const a = estado.asentamientos[0]!;
+    // Debe haber crecido más allá de los edificios iniciales (prueba que la auto-construcción coloca en local).
+    expect(a.edificios.length).toBeGreaterThan(5);
 
-      for (const e of a.edificios) {
-        if (EXTERNOS.has(e.tipo)) {
-          // Externo: en el mapa general, plantado exactamente sobre su nodo de recurso.
-          expect(e.ambito).toBe('mapa');
-          const nodo = mapa.nodo(e.fuenteId);
-          expect(nodo).toBeDefined();
-          expect(e.posicion).toEqual(nodo!.posicion);
-        } else {
-          // Interno: coords locales dentro del disco local. Granja y Corral se salen a propósito del
-          // `radioPotencial` —están a las afueras, fuera del radio vedado— así que su techo es el del lienzo.
-          expect(e.ambito ?? 'asentamiento').toBe('asentamiento');
-          const techo = esDeAfueras(e.tipo) ? REJILLA_ASENTAMIENTO.radioMapa : a.radioPotencial;
-          expect(modulo(e.posicion)).toBeLessThanOrEqual(techo + 1e-6);
-          if (esDeAfueras(e.tipo)) expect(modulo(e.posicion)).toBeGreaterThanOrEqual(TRAZADO.radioAfuerasMin);
-        }
+    for (const e of a.edificios) {
+      if (EXTERNOS.has(e.tipo)) {
+        // Externo: en el mapa general, plantado exactamente sobre su nodo de recurso.
+        expect(e.ambito).toBe('mapa');
+        const nodo = mapa.nodo(e.fuenteId);
+        expect(nodo).toBeDefined();
+        expect(e.posicion).toEqual(nodo!.posicion);
+      } else {
+        // Interno: coords locales dentro del disco local. Granja y Corral se salen a propósito del
+        // `radioPotencial` —están a las afueras, fuera del radio vedado— así que su techo es el del lienzo.
+        expect(e.ambito ?? 'asentamiento').toBe('asentamiento');
+        const techo = esDeAfueras(e.tipo) ? REJILLA_ASENTAMIENTO.radioMapa : a.radioPotencial;
+        expect(modulo(e.posicion)).toBeLessThanOrEqual(techo + 1e-6);
+        if (esDeAfueras(e.tipo)) expect(modulo(e.posicion)).toBeGreaterThanOrEqual(TRAZADO.radioAfuerasMin);
       }
-    } finally {
-      restaurar();
     }
   });
 });

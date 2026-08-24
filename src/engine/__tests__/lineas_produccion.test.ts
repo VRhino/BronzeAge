@@ -12,10 +12,11 @@ import type { Asentamiento, Edificio, RecursoAlmacenado } from '../../domain/typ
 import type { RecetaProduccion } from '../../constants';
 import { LINEAS_PRODUCCION, REJILLA_ASENTAMIENTO, ZONA_INFLUENCIA } from '../../constants';
 import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
+import { createRng } from '../../worldgen';
 import { factorLineaProduccion, factorPorDistancia, sitioEnBarrio, sitioEnBarrioLineaProduccion, tieneInsumoDeArranque } from '../construction';
 import { celdaMinimaDeEdificio, crearAnclaNueva } from '../trazado';
 import { activarPolitica, lineasProduccionPriorizadas } from '../politicas';
-import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, mockMathRandomDeterminista } from './fixtures';
+import { contextoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
 
 const SEED = 42;
 
@@ -70,40 +71,36 @@ describe('gate de materia prima para auto-construcción de transformación', () 
     // construcción BASE — este test prueba el gate de INSUMO, no el de nivel, así que arranca ya en nivel 2.
     const mapa = crearMapaDeterminista(SEED);
     const facciones = crearFacciones();
-    const restaurarMathRandom = mockMathRandomDeterminista(SEED);
-    try {
-      const { asentamiento: base } = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', []);
-      const asentamiento = conAlmacen({ ...base, nivel: 2, nivelActual: 2 }, { cobre: 10, piedra: 200 });
-      let estado: EstadoSimulacion = {
-        asentamientos: [asentamiento],
-        facciones,
-        caravanas: [],
-        acuerdos: [],
-        ordenes: [],
-        relaciones: [],
-        titulos: [],
-        caminos: [],
-        campamentosBandidos: [],
-        bandidosProximoSpawnTick: 0,
-      };
+    const rng = createRng(SEED);
+    const { asentamiento: base } = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', []);
+    const asentamiento = conAlmacen({ ...base, nivel: 2, nivelActual: 2 }, { cobre: 10, piedra: 200 });
+    let estado: EstadoSimulacion = {
+      asentamientos: [asentamiento],
+      facciones,
+      caravanas: [],
+      acuerdos: [],
+      ordenes: [],
+      relaciones: [],
+      titulos: [],
+      caminos: [],
+      campamentosBandidos: [],
+      bandidosProximoSpawnTick: 0,
+    };
 
-      // 150, no 40: presupuesto con margen sobre el sitio de fundación real de este seed (ver comentario
-      // equivalente más abajo, en el test de líneas de producción) — evita que el test dependa del filo
-      // exacto de cuántos ticks tarda la auto-construcción en llegar a Fundición para este mundo concreto.
-      // Subido de 100 a 150 (Etapa 3, anclas y satélites): la separación mínima que ahora se exige para no
-      // sembrar un ancla mal colocada (§5.4) hace que encontrar sitio tarde algún tick más de lo habitual.
-      let fundicionVista = false;
-      for (let tick = 1; tick <= 150; tick++) {
-        estado = avanzarSimulacion(estado, mapa, tick);
-        const propios = estado.asentamientos[0]!.edificios;
-        expect(propios.some((e) => e.tipo === 'curtiduria'), `tick ${tick}: Curtiduría apareció sin livestock en almacén`).toBe(false);
-        if (propios.some((e) => e.tipo === 'fundicion')) fundicionVista = true;
-      }
-
-      expect(fundicionVista, 'Fundición nunca se auto-construyó en 100 ticks pese a tener cobre y piedra disponibles').toBe(true);
-    } finally {
-      restaurarMathRandom();
+    // 150, no 40: presupuesto con margen sobre el sitio de fundación real de este seed (ver comentario
+    // equivalente más abajo, en el test de líneas de producción) — evita que el test dependa del filo
+    // exacto de cuántos ticks tarda la auto-construcción en llegar a Fundición para este mundo concreto.
+    // Subido de 100 a 150 (Etapa 3, anclas y satélites): la separación mínima que ahora se exige para no
+    // sembrar un ancla mal colocada (§5.4) hace que encontrar sitio tarde algún tick más de lo habitual.
+    let fundicionVista = false;
+    for (let tick = 1; tick <= 150; tick++) {
+      estado = avanzarSimulacion(estado, mapa, contextoDeTest(tick, rng));
+      const propios = estado.asentamientos[0]!.edificios;
+      expect(propios.some((e) => e.tipo === 'curtiduria'), `tick ${tick}: Curtiduría apareció sin livestock en almacén`).toBe(false);
+      if (propios.some((e) => e.tipo === 'fundicion')) fundicionVista = true;
     }
+
+    expect(fundicionVista, 'Fundición nunca se auto-construyó en 100 ticks pese a tener cobre y piedra disponibles').toBe(true);
   });
 });
 
@@ -228,12 +225,12 @@ describe('política "Líneas de Producción" del Maestro de Obras', () => {
   });
 
   it('con la política activa, la auto-construcción sitúa Fundición cerca de la mina; sin ella, en el hueco genérico', () => {
-    // Mockeado como el resto de tests "en simulación real" de este archivo (ver arriba): sin esto, la
-    // varianza de `Math.random()` en el crecimiento de población (`population.ts`) puede retrasar lo
-    // suficiente la disponibilidad de mano de obra como para que Fundición no se proponga dentro del
-    // presupuesto de ticks — el test no verifica timing de población, solo DÓNDE se sitúa Fundición.
-    const restaurarMathRandom = mockMathRandomDeterminista(SEED);
-    try {
+    // RNG con seed fija como el resto de tests "en simulación real" de este archivo (ver arriba): sin esto, la
+    // varianza del crecimiento de población (`population.ts`) puede retrasar lo suficiente la disponibilidad
+    // de mano de obra como para que Fundición no se proponga dentro del presupuesto de ticks — el test no
+    // verifica timing de población, solo DÓNDE se sitúa Fundición.
+    const rng = createRng(SEED);
+    {
       const mapa = crearMapaDeterminista(SEED);
       const facciones = crearFacciones();
       const { asentamiento: base, facciones: facs } = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', []);
@@ -278,7 +275,7 @@ describe('política "Líneas de Producción" del Maestro de Obras', () => {
         // de 100 a 150 (Etapa 3, anclas y satélites): la separación mínima al sembrar un ancla nueva (§5.4)
         // añade algún tick más a esa espera.
         for (let tick = 1; tick <= 150; tick++) {
-          estado = avanzarSimulacion(estado, mapa, tick);
+          estado = avanzarSimulacion(estado, mapa, contextoDeTest(tick, rng));
           const fundicion = estado.asentamientos[0]!.edificios.find((e) => e.tipo === 'fundicion');
           if (fundicion) return fundicion.posicion;
         }
@@ -294,8 +291,6 @@ describe('política "Líneas de Producción" del Maestro de Obras', () => {
       // hueco que la política elige a propósito por distancia. El margen cubre esa coincidencia sin dejar de
       // proteger que la política nunca eligiera algo bastante peor.
       expect(dist(posicionConPolitica, minaCobre.posicion)).toBeLessThanOrEqual(dist(posicionSinPolitica, minaCobre.posicion) + 1);
-    } finally {
-      restaurarMathRandom();
     }
   });
 });

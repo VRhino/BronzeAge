@@ -1,43 +1,41 @@
-// El motor debe ser reproducible: mismo seed de mundo + misma secuencia de Math.random (los únicos dos
-// puntos de aleatoriedad, ver `population.ts`/`combate.ts`) deben producir SIEMPRE el mismo resultado.
-// Este test no valida ningún número en particular — protege contra la clase de regresión más traicionera:
-// que alguien cuele una fuente de no-determinismo nueva (Date.now(), Math.random() sin pasar por el rng
-// centralizado, iterar un Map/Set en un orden no garantizado, etc.) que haga que dos partidas "idénticas"
-// diverjan en producción sin que ningún test de valores concretos lo note.
+// El motor debe ser reproducible: mismo seed de mundo + mismo RNG inyectado (los únicos dos puntos de
+// aleatoriedad, ver `population.ts`/`combate.ts`/`bandidos.ts`, todos reciben su `rng` de `avanzarSimulacion`)
+// deben producir SIEMPRE el mismo resultado. Este test no valida ningún número en particular — protege
+// contra la clase de regresión más traicionera: que alguien cuele una fuente de no-determinismo nueva
+// (Date.now(), Math.random() suelto sin pasar por el rng inyectado, iterar un Map/Set en un orden no
+// garantizado, etc.) que haga que dos partidas "idénticas" diverjan en producción sin que ningún test de
+// valores concretos lo note.
 import { describe, expect, it } from 'vitest';
 import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
-import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, mockMathRandomDeterminista } from './fixtures';
+import { createRng } from '../../worldgen';
+import { contextoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
 
 const TICKS = 80;
 
 function correrSimulacion(seed: number) {
-  const restaurar = mockMathRandomDeterminista(seed);
-  try {
-    const mapa = crearMapaDeterminista(seed);
-    const { asentamiento, facciones } = fundarAsentamientoDeTest(mapa, crearFacciones(), 'faccion-1', []);
+  const rng = createRng(seed);
+  const mapa = crearMapaDeterminista(seed);
+  const { asentamiento, facciones } = fundarAsentamientoDeTest(mapa, crearFacciones(), 'faccion-1', []);
 
-    let estado: EstadoSimulacion = {
-      asentamientos: [asentamiento],
-      facciones,
-      caravanas: [],
-      acuerdos: [],
-      ordenes: [],
-      relaciones: [],
-      titulos: [],
-      caminos: [],
-      campamentosBandidos: [],
-      bandidosProximoSpawnTick: 0,
-    };
-    const eventosPorTick: string[][] = [];
-    for (let tick = 1; tick <= TICKS; tick++) {
-      const resultado = avanzarSimulacion(estado, mapa, tick);
-      eventosPorTick.push(resultado.eventos);
-      estado = resultado;
-    }
-    return { estadoFinal: estado, eventosPorTick };
-  } finally {
-    restaurar();
+  let estado: EstadoSimulacion = {
+    asentamientos: [asentamiento],
+    facciones,
+    caravanas: [],
+    acuerdos: [],
+    ordenes: [],
+    relaciones: [],
+    titulos: [],
+    caminos: [],
+    campamentosBandidos: [],
+    bandidosProximoSpawnTick: 0,
+  };
+  const eventosPorTick: string[][] = [];
+  for (let tick = 1; tick <= TICKS; tick++) {
+    const resultado = avanzarSimulacion(estado, mapa, contextoDeTest(tick, rng));
+    eventosPorTick.push(resultado.eventos);
+    estado = resultado;
   }
+  return { estadoFinal: estado, eventosPorTick };
 }
 
 describe('determinismo del motor', () => {

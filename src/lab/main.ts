@@ -3,7 +3,7 @@
 // facciones de más alrededor: existe para ver en vivo cómo se aplica el árbol único de anclas (Etapa 5,
 // `engine/trazado.ts`) sin tener que perseguirlo en una partida completa.
 import type { Asentamiento, EdificioTipo, Faccion, Point, RecursoTipo } from '../domain/types';
-import { MAPA_DEFAULT, generarMapa } from '../worldgen';
+import { MAPA_DEFAULT, createRng, generarMapa, type RandomFn } from '../worldgen';
 import { crearMapa, type Mapa } from '../world/mapa';
 import { crearFaccion } from '../engine/faccion';
 import { asignarCargoLocal } from '../engine/cargos';
@@ -69,6 +69,7 @@ const colaBodyEl = document.getElementById('lab-cola-body')!;
 
 let mapa: Mapa;
 let estado: EstadoSimulacion;
+let rng: RandomFn;
 let faccionLab: Faccion;
 let contadorManual = 0;
 let tick = 0;
@@ -111,6 +112,7 @@ function posicionRecomendable(mapaBase: Mapa, existentes: Asentamiento[]): Point
 function fundar(seed: number): void {
   if (autoTimer !== undefined) detenerAuto();
   mapa = crearMapa(generarMapa({ ...MAPA_DEFAULT, seed }));
+  rng = createRng(seed);
   const faccionBase: Faccion = crearFaccion('faccion-lab', 'Laboratorio');
   const posicion = posicionRecomendable(mapa, []);
   const { asentamiento, facciones } = fundarAsentamientoEngine(mapa, [faccionBase], faccionBase.id, posicion, ['jugador-lab'], [], 0);
@@ -141,7 +143,7 @@ function fundar(seed: number): void {
 function paso(): void {
   if (estado.asentamientos.length === 0) return;
   tick += 1;
-  estado = avanzarSimulacion(estado, mapa, tick);
+  estado = avanzarSimulacion(estado, mapa, { tick, momento: new Date().toISOString(), rng });
   const asentamiento = estado.asentamientos[0];
   if (!asentamiento) return;
   for (const edificio of asentamiento.edificios) {

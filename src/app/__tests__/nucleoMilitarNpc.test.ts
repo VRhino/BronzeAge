@@ -7,7 +7,8 @@ import { describe, expect, it } from 'vitest';
 import type { Asentamiento } from '../../domain/types';
 import type { EstadoSimulacion } from '../../engine/simulation';
 import { avanzarNpcGobernanza } from '../npcGobernanza';
-import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from '../../engine/__tests__/fixtures';
+import { contextoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from '../../engine/__tests__/fixtures';
+import { createRng } from '../../worldgen';
 import { ZONA_INFLUENCIA } from '../../constants';
 
 const SEED = 42;
@@ -58,12 +59,13 @@ describe('Gobernanza NPC — núcleo militar (Barracón / Galería de tiro)', ()
   it('añade Barracón y Galería de tiro a mano en un asentamiento de nivel 2', () => {
     const { estado, mapa, faccionId } = estadoBase();
     const config = { faccionesIds: [faccionId] };
+    const rng = createRng(SEED);
 
     // Llamada 1: sin Gobernador todavía, así que `asegurarGobernanzaBase` lo asigna en el mismo paso.
     // Dentro de esa misma llamada, `asegurarInfraestructuraComercial` (Mercado) y `asegurarNucleoMilitar`
     // (Barracón) corren en secuencia sobre el mismo asentamiento — con cola y fondos de sobra, los dos
     // entran en el mismo tick.
-    const r1 = avanzarNpcGobernanza(estado, mapa, 0, config);
+    const r1 = avanzarNpcGobernanza(estado, mapa, contextoDeTest(0, rng), config);
     const a1 = r1.estado.asentamientos[0]!;
     expect(a1.cargos.gobernadorId).toBeTruthy();
     expect(a1.edificios.some((e) => e.tipo === 'mercado')).toBe(true);
@@ -71,7 +73,7 @@ describe('Gobernanza NPC — núcleo militar (Barracón / Galería de tiro)', ()
     expect(a1.edificios.some((e) => e.tipo === 'galeriaDeTiro')).toBe(false);
 
     // Llamada 2: Barracón ya está en curso (en cola), así que el núcleo militar pasa a Galería de tiro.
-    const r3 = avanzarNpcGobernanza(r1.estado, mapa, 1, config);
+    const r3 = avanzarNpcGobernanza(r1.estado, mapa, contextoDeTest(1, rng), config);
     const a3 = r3.estado.asentamientos[0]!;
     expect(a3.edificios.some((e) => e.tipo === 'galeriaDeTiro')).toBe(true);
 
@@ -94,10 +96,11 @@ describe('Gobernanza NPC — núcleo militar (Barracón / Galería de tiro)', ()
       asentamientos: [{ ...estado.asentamientos[0]!, nivel: 1, nivelActual: 1 }],
     };
     const config = { faccionesIds: [faccionId] };
+    const rng = createRng(SEED);
 
     let actual = nivel1;
     for (let i = 0; i < 3; i++) {
-      actual = avanzarNpcGobernanza(actual, mapa, i, config).estado;
+      actual = avanzarNpcGobernanza(actual, mapa, contextoDeTest(i, rng), config).estado;
     }
     const asentamiento = actual.asentamientos[0]!;
     expect(asentamiento.edificios.some((e) => e.tipo === 'barracon')).toBe(false);

@@ -3,14 +3,15 @@
 // en el motor que altere el resultado de una partida "de referencia" — aunque no toque ninguna invariante
 // ni reproduzca ninguno de los bugs históricos ya cubiertos — hará que este test falle y obligue a revisar
 // el diff a propósito (`vitest run -u` para aceptarlo conscientemente) en vez de colarse en silencio.
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import type { Asentamiento, Faccion } from '../../domain/types';
 import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
+import { createRng, type RandomFn } from '../../worldgen';
 import {
+  contextoDeTest,
   crearFacciones,
   crearMapaDeterminista,
   fundarAsentamientoDeTest,
-  mockMathRandomDeterminista,
   posicionRecomendable,
 } from './fixtures';
 
@@ -44,14 +45,10 @@ function resumirFaccion(f: Faccion) {
 }
 
 describe('snapshot de regresión general', () => {
-  let restaurarMathRandom: () => void;
+  let rng: RandomFn;
 
   beforeEach(() => {
-    restaurarMathRandom = mockMathRandomDeterminista(SEED);
-  });
-
-  afterEach(() => {
-    restaurarMathRandom();
+    rng = createRng(SEED);
   });
 
   it('resumen del estado en ticks de referencia coincide con el baseline versionado', () => {
@@ -75,7 +72,7 @@ describe('snapshot de regresión general', () => {
 
     const cortes: Record<number, unknown> = {};
     for (let tick = 1; tick <= Math.max(...TICKS_DE_CORTE); tick++) {
-      estado = avanzarSimulacion(estado, mapa, tick);
+      estado = avanzarSimulacion(estado, mapa, contextoDeTest(tick, rng));
       if (TICKS_DE_CORTE.includes(tick)) {
         cortes[tick] = {
           asentamientos: estado.asentamientos.map(resumirAsentamiento),

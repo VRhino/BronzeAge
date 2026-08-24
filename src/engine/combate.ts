@@ -1,4 +1,5 @@
 import type { Asentamiento, CampamentoBandido, Caravana, Escuadron, Faccion, RelacionPolitica } from '../domain/types';
+import type { RandomFn } from '../worldgen';
 import { CAMPAMENTOS_BANDIDOS, MILITAR, NIVEL_FACCION, REPUTACION, TROPAS_RECLUTABLES } from '../constants';
 import { agregarRecurso } from './almacen';
 import { aplicarAjustesReputacion } from './reputacion';
@@ -51,12 +52,12 @@ export interface ResultadoCombate {
  * Resolución numérica de combate (Doc 5.2/5.10): "mismo motor" para asedio/mundo abierto/caravanas.
  * PERMADEATH real (Doc 5.4): las bajas son permanentes; sin empates (jitter aleatorio rompe la igualdad).
  */
-export function resolverCombate(atacantes: Escuadron[], defensores: Escuadron[], tickActual: number): ResultadoCombate {
+export function resolverCombate(atacantes: Escuadron[], defensores: Escuadron[], tickActual: number, rng: RandomFn): ResultadoCombate {
   if (atacantes.length === 0) throw new CombateInvalidoError('El atacante no tiene escuadrones con los que combatir.');
   if (defensores.length === 0) throw new CombateInvalidoError('El defensor no tiene escuadrones con los que combatir.');
 
-  const jitterA = 1 + (Math.random() * 2 - 1) * MILITAR.varianzaCombate;
-  const jitterD = 1 + (Math.random() * 2 - 1) * MILITAR.varianzaCombate;
+  const jitterA = 1 + (rng() * 2 - 1) * MILITAR.varianzaCombate;
+  const jitterD = 1 + (rng() * 2 - 1) * MILITAR.varianzaCombate;
   const poderA = poderTotal(atacantes, tickActual, false) * jitterA;
   const poderD = poderTotal(defensores, tickActual, true) * jitterD;
 
@@ -114,7 +115,8 @@ export function iniciarAsedio(
   escuadronIdsAtacantes: string[],
   facciones: Faccion[],
   relaciones: RelacionPolitica[],
-  tickActual: number
+  tickActual: number,
+  rng: RandomFn
 ): { atacante: Asentamiento; defensor: Asentamiento; facciones: Faccion[]; eventos: string[]; conquistado: boolean } {
   if (atacante.faccionId === defensor.faccionId) {
     throw new CombateInvalidoError('No se puede asediar un asentamiento de la propia Facción.');
@@ -124,7 +126,7 @@ export function iniciarAsedio(
   const escuadronesAtacantes = seleccionarEscuadrones(atacante, escuadronIdsAtacantes);
   const escuadronesDefensores = seleccionarEscuadrones(defensor, defensor.escuadrones.map((e) => e.id));
 
-  const resultado = resolverCombate(escuadronesAtacantes, escuadronesDefensores, tickActual);
+  const resultado = resolverCombate(escuadronesAtacantes, escuadronesDefensores, tickActual, rng);
 
   const conquistado = resultado.ganador === 'atacante';
   const eventos = [
@@ -179,11 +181,12 @@ export function combateCampoAbierto(
   escuadronIdsB: string[],
   facciones: Faccion[],
   relaciones: RelacionPolitica[],
-  tickActual: number
+  tickActual: number,
+  rng: RandomFn
 ): { asentamientoA: Asentamiento; asentamientoB: Asentamiento; facciones: Faccion[]; eventos: string[] } {
   const escuadronesA = seleccionarEscuadrones(asentamientoA, escuadronIdsA);
   const escuadronesB = seleccionarEscuadrones(asentamientoB, escuadronIdsB);
-  const resultado = resolverCombate(escuadronesA, escuadronesB, tickActual);
+  const resultado = resolverCombate(escuadronesA, escuadronesB, tickActual, rng);
 
   const faccionesConReputacion = estanAliadas(relaciones, asentamientoA.faccionId, asentamientoB.faccionId)
     ? aplicarAjustesReputacion(facciones, [
@@ -222,11 +225,12 @@ export function interceptarCaravana(
   caravana: Caravana,
   tickActual: number,
   facciones: Faccion[],
-  asentamientos: Asentamiento[]
+  asentamientos: Asentamiento[],
+  rng: RandomFn
 ): { atacante: Asentamiento; facciones: Faccion[]; eventos: string[]; caravanaCapturada: boolean } {
   if (!atacante.cargos.generalId) throw new CombateInvalidoError('El atacante necesita un General para interceptar.');
   const escuadrones = seleccionarEscuadrones(atacante, escuadronIdsAtacantes);
-  const jitter = 1 + (Math.random() * 2 - 1) * MILITAR.varianzaCombate;
+  const jitter = 1 + (rng() * 2 - 1) * MILITAR.varianzaCombate;
   const poderAtacante = escuadrones.reduce((acc, e) => acc + poderEscuadron(e, tickActual), 0) * jitter;
   const gana = poderAtacante > MILITAR.defensaBaseCaravana;
 
@@ -285,10 +289,11 @@ export function atacarCampamentoBandidos(
   escuadronIdsAtacantes: string[],
   campamento: CampamentoBandido,
   tickActual: number,
-  facciones: Faccion[]
+  facciones: Faccion[],
+  rng: RandomFn
 ): { atacante: Asentamiento; facciones: Faccion[]; eventos: string[]; campamentoDestruido: boolean } {
   const escuadrones = seleccionarEscuadrones(atacante, escuadronIdsAtacantes);
-  const jitter = 1 + (Math.random() * 2 - 1) * MILITAR.varianzaCombate;
+  const jitter = 1 + (rng() * 2 - 1) * MILITAR.varianzaCombate;
   const poderAtacante = poderTotal(escuadrones, tickActual, false) * jitter;
   const gana = poderAtacante > campamento.poder;
 

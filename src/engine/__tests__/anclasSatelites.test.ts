@@ -22,7 +22,8 @@ import {
   tipoAnclaParaCategoria,
 } from '../trazado';
 import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
-import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, mockMathRandomDeterminista } from './fixtures';
+import { createRng } from '../../worldgen';
+import { contextoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
 
 const SEED = 42;
 const RECLAMOS_VACIOS = { nodos: new Set<string>(), lenerasPorBosque: new Map<string, number>() };
@@ -117,40 +118,36 @@ describe('Etapa 5 — atracción a un ancla ya existente (Lógica 2, no crea una
 
 describe('Etapa 5 — Carpintería: zona de tres piezas (§9, Lógica 2, sin cambios)', () => {
   it('al completarse la construcción de Carpintería aparecen sus 2 talleres ya activos', () => {
-    const restaurar = mockMathRandomDeterminista(SEED);
-    try {
-      const { asentamiento, mapa, facciones: facs } = (() => {
-        const b = base(3);
-        return { asentamiento: b.asentamiento, mapa: b.mapa, facciones: crearFacciones() };
-      })();
-      const enObra: Edificio = {
-        id: `carpinteria-obra-${asentamiento.id}`,
-        tipo: 'carpinteria',
-        posicion: { x: 30, y: 0 },
-        estado: 'en_construccion',
-        ticksRestantes: 1,
-        ambito: 'asentamiento',
-      };
-      let estado: EstadoSimulacion = {
-        asentamientos: [{ ...asentamiento, edificios: [...asentamiento.edificios, enObra] }],
-        facciones: facs,
-        caravanas: [],
-        acuerdos: [],
-        ordenes: [],
-        relaciones: [],
-        titulos: [],
-        caminos: [],
-        campamentosBandidos: [],
-        bandidosProximoSpawnTick: 0,
-      };
-      estado = avanzarSimulacion(estado, mapa, 1);
+    const rng = createRng(SEED);
+    const { asentamiento, mapa, facciones: facs } = (() => {
+      const b = base(3);
+      return { asentamiento: b.asentamiento, mapa: b.mapa, facciones: crearFacciones() };
+    })();
+    const enObra: Edificio = {
+      id: `carpinteria-obra-${asentamiento.id}`,
+      tipo: 'carpinteria',
+      posicion: { x: 30, y: 0 },
+      estado: 'en_construccion',
+      ticksRestantes: 1,
+      ambito: 'asentamiento',
+    };
+    let estado: EstadoSimulacion = {
+      asentamientos: [{ ...asentamiento, edificios: [...asentamiento.edificios, enObra] }],
+      facciones: facs,
+      caravanas: [],
+      acuerdos: [],
+      ordenes: [],
+      relaciones: [],
+      titulos: [],
+      caminos: [],
+      campamentosBandidos: [],
+      bandidosProximoSpawnTick: 0,
+    };
+    estado = avanzarSimulacion(estado, mapa, contextoDeTest(1, rng));
 
-      const a = estado.asentamientos[0]!;
-      expect(a.edificios.find((e) => e.id === enObra.id)!.estado).toBe('activo');
-      expect(porTipo(a, 'tallerCarpinteria')).toHaveLength(2);
-    } finally {
-      restaurar();
-    }
+    const a = estado.asentamientos[0]!;
+    expect(a.edificios.find((e) => e.id === enObra.id)!.estado).toBe('activo');
+    expect(porTipo(a, 'tallerCarpinteria')).toHaveLength(2);
   });
 });
 

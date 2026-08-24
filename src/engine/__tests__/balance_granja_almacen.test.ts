@@ -5,7 +5,7 @@
 //  - El rinde de trigo de la Granja sube MUCHO más despacio que su costo: ×1 / ×1.5 / ×2 / ×3 sobre el nivel
 //    1, no duplicando en cada salto.
 //  - La capacidad de almacenamiento tiene techo: un tope de Almacenes por nivel de asentamiento.
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import type { Asentamiento, Edificio } from '../../domain/types';
 import { EDIFICIO_CATALOGO, NECESIDADES, NIVEL_ASENTAMIENTO, produccionTrigoDeGranja } from '../../constants';
 import {
@@ -16,7 +16,8 @@ import {
   maximoViviendasPorNivel,
 } from '../construction';
 import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
-import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, mockMathRandomDeterminista, posicionRecomendable } from './fixtures';
+import { createRng, type RandomFn } from '../../worldgen';
+import { contextoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, posicionRecomendable } from './fixtures';
 
 const SEED = 99;
 
@@ -42,14 +43,10 @@ describe('Granja: progresión del rinde de trigo', () => {
 });
 
 describe('Almacén: tope por nivel de asentamiento', () => {
-  let restaurar: () => void;
+  let rng: RandomFn;
 
   beforeEach(() => {
-    restaurar = mockMathRandomDeterminista(SEED);
-  });
-
-  afterEach(() => {
-    restaurar();
+    rng = createRng(SEED);
   });
 
   function conAlmacenes(base: Asentamiento, cuantos: number, estado: Edificio['estado'] = 'activo'): Asentamiento {
@@ -134,7 +131,7 @@ describe('Almacén: tope por nivel de asentamiento', () => {
 
     let maximoVisto = 0;
     for (let tick = 1; tick <= 200; tick++) {
-      estado = avanzarSimulacion(estado, mapa, tick);
+      estado = avanzarSimulacion(estado, mapa, contextoDeTest(tick, rng));
       // Se vuelve a llenar cada tick: el consumo del propio tick lo bajaría del umbral enseguida.
       estado = { ...estado, asentamientos: estado.asentamientos.map(conAlmacenLleno) };
       for (const a of estado.asentamientos) {
@@ -157,16 +154,6 @@ describe('Almacén: tope por nivel de asentamiento', () => {
 // deriva de cuántos pesants exige el SIGUIENTE nivel (`NIVEL_ASENTAMIENTO.requisitos[nivel+1].pesants`) entre
 // la capacidad de una Vivienda (`EDIFICIO_CATALOGO.vivienda.capacidadPesants`), ver `maximoViviendasPorNivel`.
 describe('Vivienda: tope por nivel de asentamiento', () => {
-  let restaurar: () => void;
-
-  beforeEach(() => {
-    restaurar = mockMathRandomDeterminista(SEED);
-  });
-
-  afterEach(() => {
-    restaurar();
-  });
-
   function conViviendas(base: Asentamiento, cuantas: number, estado: Edificio['estado'] = 'activo'): Asentamiento {
     const viviendas: Edificio[] = Array.from({ length: cuantas }, (_, i) => ({
       id: `vivienda-${base.id}-${i}`,

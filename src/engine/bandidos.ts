@@ -6,6 +6,7 @@
 
 import type { Asentamiento, Caravana, CampamentoBandido, Point, ZonaBosque, ZonaInfluencia } from '../domain/types';
 import type { Mapa } from '../world/mapa';
+import type { RandomFn } from '../worldgen';
 import { CAMPAMENTOS_BANDIDOS, MILITAR } from '../constants';
 import { pointInPolygon } from './zones';
 
@@ -88,7 +89,7 @@ export function avanzarSpawnBandidos(
  * el bandido no tiene almacén propio que reciba la carga capturada — si gana, la caravana se pierde por
  * completo (Doc 3.10: "se elimina si es capturada"), sin transferencia a nadie.
  */
-export function avanzarAtaquesBandidos(campamentos: CampamentoBandido[], caravanas: Caravana[]): { caravanas: Caravana[]; eventos: string[] } {
+export function avanzarAtaquesBandidos(campamentos: CampamentoBandido[], caravanas: Caravana[], rng: RandomFn): { caravanas: Caravana[]; eventos: string[] } {
   if (campamentos.length === 0) return { caravanas, eventos: [] };
   const eventos: string[] = [];
   const perdidas = new Set<string>();
@@ -100,7 +101,7 @@ export function avanzarAtaquesBandidos(campamentos: CampamentoBandido[], caravan
     );
     if (!campamentoCercano) continue;
 
-    const jitter = 1 + (Math.random() * 2 - 1) * MILITAR.varianzaCombate;
+    const jitter = 1 + (rng() * 2 - 1) * MILITAR.varianzaCombate;
     const gana = campamentoCercano.poder * jitter > MILITAR.defensaBaseCaravana;
     if (gana) {
       perdidas.add(caravana.id);

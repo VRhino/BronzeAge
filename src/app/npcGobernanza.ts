@@ -14,8 +14,9 @@
 //
 // En ambos casos el patrón es el mismo, y siempre DESPUÉS del tick del motor:
 //
-//   estado = avanzarSimulacion(estado, mapa, tick);           // motor real, sin tocar
-//   estado = avanzarNpcGobernanza(estado, mapa, tick, cfg).estado;
+//   const contexto = { tick, momento, rng };                        // ver ContextoSimulacion
+//   estado = avanzarSimulacion(estado, mapa, contexto);             // motor real, sin tocar
+//   estado = avanzarNpcGobernanza(estado, mapa, contexto, cfg).estado;
 //
 // `avanzarNpcGobernanza` no genera mundo, no funda el asentamiento inicial de una Facción y no escribe
 // archivos — solo decide, con las funciones PÚBLICAS del motor, qué haría ese NPC en ese tick.
@@ -24,7 +25,8 @@
 
 import type { AcuerdoTrueque, Asentamiento, Caravana, CampamentoBandido, EdificioTipo, Faccion, Point, RecursoTipo } from '../domain/types';
 import type { Mapa } from '../world/mapa';
-import type { EstadoSimulacion } from '../engine/simulation';
+import type { RandomFn } from '../worldgen';
+import type { ContextoSimulacion, EstadoSimulacion } from '../engine/simulation';
 import { avanzarAutoComercioSimulado } from '../engine/simulacionAutoComercio';
 import { reclutarTropa, ReclutamientoInvalidoError } from '../engine/tropas';
 import { atacarCampamentoBandidos, CombateInvalidoError } from '../engine/combate';
@@ -568,7 +570,8 @@ function atacarCampamentosCercanos(
   campamentos: CampamentoBandido[],
   facciones: Faccion[],
   tickActual: number,
-  esNpc: (faccionId: string) => boolean
+  esNpc: (faccionId: string) => boolean,
+  rng: RandomFn
 ): {
   asentamientos: Asentamiento[];
   facciones: Faccion[];
@@ -603,7 +606,8 @@ function atacarCampamentosCercanos(
         asentamiento.escuadrones.map((e) => e.id),
         campamento,
         tickActual,
-        faccionesActuales
+        faccionesActuales,
+        rng
       );
       asentamientosActuales = asentamientosActuales.map((a) => (a.id === resultado.atacante.id ? resultado.atacante : a));
       faccionesActuales = resultado.facciones;
@@ -705,8 +709,8 @@ export interface ConfigNpcGobernanza {
    * Primer número de secuencia para los ids que genera el motor este tick (`caravana-…-<tick>-<contador>`,
    * `trueque-…`, `escuadron-…`). En batch da igual arrancar de 0 cada tick porque nadie más crea entidades;
    * en la partida real el jugador humano también las crea a través de `GameStore` (que lleva su propio
-   * `contadorAcciones`), y dos acciones del mismo tick sobre el mismo asentamiento podrían chocar de id. El
-   * store pasa aquí su contador y luego lo adelanta con `contadorFinal` del resultado.
+   * `GeneradorIds`, ver `app/idGenerator.ts`), y dos acciones del mismo tick sobre el mismo asentamiento
+   * podrían chocar de id. El store pasa aquí su contador y luego lo adelanta con `contadorFinal` del resultado.
    */
   contadorInicial?: number;
   /** Punto 7b: ataca campamentos de bandidos cercanos con todos los escuadrones disponibles. Por defecto
@@ -859,7 +863,15 @@ function fundarAsentamientosIniciales(
  * reclutamiento (con gate de reserva) → ataque a campamentos de bandidos → expansión. Llamar DESPUÉS de
  * `avanzarSimulacion` en el mismo tick.
  */
-export function avanzarNpcGobernanza(estado: EstadoSimulacion, mapa: Mapa, tickActual: number, config: ConfigNpcGobernanza): ResultadoNpcGobernanza {
+export function avanzarNpcGobernanza(
+  estado: EstadoSimulacion,
+  mapa: Mapa,
+  contexto: ContextoSimulacion,
+  config: ConfigNpcGobernanza
+): ResultadoNpcGobernanza {
+  // Mismo contexto que consume el motor (`avanzarSimulacion`): el NPC decide con las funciones PÚBLICAS del
+  // motor, así que necesita exactamente las mismas entradas externas — tick, momento y aleatoriedad.
+  const { tick: tickActual, rng } = contexto;
   const eventos: string[] = [];
   let contador = config.contadorInicial ?? 0;
 
@@ -975,7 +987,7 @@ export function avanzarNpcGobernanza(estado: EstadoSimulacion, mapa: Mapa, tickA
           destruidos: 0,
           fallidos: 0,
         }
-      : atacarCampamentosCercanos(asentamientos, trasComercio.campamentosBandidos, trasComercio.facciones, tickActual, esNpc);
+      : atacarCampamentosCercanos(asentamientos, trasComercio.campamentosBandidos, trasComercio.facciones, tickActual, esNpc, rng);
   eventos.push(...trasBandidos.eventos);
 
   const trasExpansion = expandirSiPuede(

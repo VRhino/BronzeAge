@@ -25,8 +25,9 @@ import type {
   ZonaInfluencia,
 } from '../domain/types';
 import { CAMPAMENTOS_BANDIDOS, EDIFICIO_CATALOGO, FUNDACION, MANTENIMIENTO, NECESIDADES, NIVEL_FACCION, POLITICAS, POLITICA_CATALOGO, REJILLA_ASENTAMIENTO, SIMULACION_AUTO_COMERCIO, TROPAS_RECLUTABLES } from '../constants';
-import { generarMapa, MAPA_DEFAULT, WORLDGEN_VERSION, type MapaGenerado } from '../worldgen';
+import { createRng, generarMapa, MAPA_DEFAULT, WORLDGEN_VERSION, type MapaGenerado, type RandomFn } from '../worldgen';
 import { crearEstadoMapa, crearMapa, type EstadoMapa, type Mapa } from '../world/mapa';
+import { GeneradorIds } from './idGenerator';
 import { exportarParaUnityTerrain, UNITY_EXPORT_DEFAULT, type ExportUnityResultado, type OpcionesExportUnity } from '../world/exportUnity';
 
 export { UNITY_EXPORT_DEFAULT };
@@ -60,7 +61,7 @@ import {
 } from '../engine/settlement';
 export type { ViabilidadFundacion } from '../engine/settlement';
 import { computeTodasLasZonas, computeZonasFusionadasPorFaccion } from '../engine/zones';
-import { avanzarSimulacion } from '../engine/simulation';
+import { avanzarSimulacion, type ContextoSimulacion } from '../engine/simulation';
 import { avanzarNpcGobernanza } from './npcGobernanza';
 import { avanzarAutoComercioSimulado } from '../engine/simulacionAutoComercio';
 import { proponerTrueque as proponerTruequeEngine, construirCaravanaComercial as construirCaravanaComercialEngine, CaravanaInvalidaError, TruequeInvalidoError } from '../engine/trade';
@@ -271,7 +272,7 @@ function idsNoVacios(csv: string): string[] {
 export class GameStore {
   private state: GameState;
   private listeners = new Set<Listener>();
-  private contadorAcciones = 0;
+  private ids = new GeneradorIds();
   /** Una foto completa del estado al final de cada tick (índice = número de tick) — alimenta el slider de línea de tiempo. */
   private historial: GameState[] = [];
   /** Tick más antiguo con foto disponible. 0 en una partida normal; el tick importado tras un `importarSimulacion` (no hay fotos de ticks previos a ese punto). */
@@ -285,6 +286,16 @@ export class GameStore {
   /** Última fusión de zonas por facción calculada, con la firma de los asentamientos de los que salió — ver
    * `getZonasFusionadas`. Artefacto de render, no estado de partida: se puede tirar en cualquier momento. */
   private zonasFusionadasCache: { clave: string; valor: ZonaFaccion[] } | null = null;
+  /**
+   * Fuente de aleatoriedad de la SIMULACIÓN (población, combate, bandidos — ver `engine/population.ts`,
+   * `engine/combate.ts`, `engine/bandidos.ts`), separada de la del generador de mundo (que ya es determinista
+   * por seed, ver `worldgen/`). Se reinicia con la misma seed del mundo en `regenerarMundo`/`importarSimulacion`
+   * para que una partida sea reproducible desde ese punto — NO se persiste su estado interno todavía (ver
+   * Docs/Arquitectura/4_Plan_Evolucion_Tareas.md, Fase B3): exportar/importar deja la secuencia consumida sin
+   * recuperar, así que dos partidas "idénticas" pueden divergir tras un import, algo pendiente de resolver
+   * cuando se diseñe la persistencia real.
+   */
+  private rng: RandomFn = createRng(1);
 
   constructor() {
     this.state = {
@@ -685,7 +696,7 @@ export class GameStore {
         this.state.caravanas,
         numJugadores,
         this.state.tick,
-        this.contadorAcciones++
+        this.ids.siguiente()
       );
       this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === origen.id ? resultado.origenActualizado : a));
       this.state.caravanas = [...this.state.caravanas, resultado.caravana];
@@ -719,7 +730,7 @@ export class GameStore {
       const nombreLimpio = nombre.trim();
       const yaExiste = this.state.facciones.some((f) => f.nombre.toLowerCase() === nombreLimpio.toLowerCase());
       if (yaExiste) throw new FaccionInvalidaError(`Ya existe una Facción llamada "${nombreLimpio}".`);
-      const nueva = crearFaccionEngine(`faccion-custom-${this.contadorAcciones++}`, nombreLimpio);
+      const nueva = crearFaccionEngine(`faccion-custom-${this.ids.siguiente()}`, nombreLimpio);
       this.state.facciones = [...this.state.facciones, nueva];
       this.registrar(`Nueva Facción fundada: ${nueva.nombre}.`);
     } catch (err) {
@@ -817,7 +828,7 @@ export class GameStore {
     try {
       const asentamiento = this.state.asentamientos.find((a) => a.id === asentamientoId)!;
       const faccion = this.state.facciones.find((f) => f.id === asentamiento.faccionId)!;
-      const actualizado = activarPoliticaEngine(asentamiento, faccion, cargo, politicaId, this.state.tick, this.contadorAcciones++);
+      const actualizado = activarPoliticaEngine(asentamiento, faccion, cargo, politicaId, this.state.tick, this.ids.siguiente());
       this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === actualizado.id ? actualizado : a));
       this.registrar(`${asentamiento.id}: política "${politicaId}" activada por ${cargo}.`);
     } catch (err) {
@@ -845,9 +856,9 @@ export class GameStore {
               tributoRecurso,
               tributoCantidad,
               this.state.tick,
-              this.contadorAcciones++
+              this.ids.siguiente()
             )
-          : proponerAlianzaEngine(this.state.facciones, this.state.relaciones, faccionAId, faccionBId, this.state.tick, this.contadorAcciones++);
+          : proponerAlianzaEngine(this.state.facciones, this.state.relaciones, faccionAId, faccionBId, this.state.tick, this.ids.siguiente());
       this.state.relaciones = [...this.state.relaciones, nueva];
       this.registrar(`Relación propuesta: ${nueva.id}.`);
     } catch (err) {
@@ -935,7 +946,7 @@ export class GameStore {
         cantidadA,
         cantidadB,
         this.state.tick,
-        this.contadorAcciones++
+        this.ids.siguiente()
       );
       this.state.acuerdos = [...this.state.acuerdos, nuevo];
       this.registrar(`Trueque propuesto: ${nuevo.id}.`);
@@ -960,7 +971,7 @@ export class GameStore {
 
   colocarOrdenMercado(asentamientoId: string, tipo: 'compra' | 'venta', recurso: string, cantidad: number, precio: number | undefined): void {
     try {
-      const nueva = colocarOrdenMercadoEngine(this.state.asentamientos, asentamientoId, tipo, recurso, cantidad, this.state.tick, precio, this.contadorAcciones++);
+      const nueva = colocarOrdenMercadoEngine(this.state.asentamientos, asentamientoId, tipo, recurso, cantidad, this.state.tick, precio, this.ids.siguiente());
       this.state.ordenes = [...this.state.ordenes, nueva];
       this.registrar(`Orden de mercado colocada: ${nueva.id} (${nueva.tipo} ${nueva.cantidad} ${nueva.recurso} @ ${nueva.precioUnitario.toFixed(2)}).`);
     } catch (err) {
@@ -979,7 +990,7 @@ export class GameStore {
         asentamiento,
         this.state.caravanas,
         this.state.tick,
-        this.contadorAcciones++
+        this.ids.siguiente()
       );
       this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === actualizado.id ? actualizado : a));
       this.state.caravanas = [...this.state.caravanas, caravana];
@@ -1022,7 +1033,7 @@ export class GameStore {
     try {
       const asentamiento = this.state.asentamientos.find((a) => a.id === asentamientoId)!;
       const antes = asentamiento.escuadrones.find((e) => e.jugadorId === jugadorId && e.tropaId === tropaId)?.cantidad ?? 0;
-      const actualizado = reclutarTropaEngine(asentamiento, jugadorId, tropaId, origen, this.state.tick, this.contadorAcciones++);
+      const actualizado = reclutarTropaEngine(asentamiento, jugadorId, tropaId, origen, this.state.tick, this.ids.siguiente());
       this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === actualizado.id ? actualizado : a));
       const despues = actualizado.escuadrones.find((e) => e.jugadorId === jugadorId && e.tropaId === tropaId)?.cantidad ?? 0;
       this.registrar(`${asentamiento.id}: ${jugadorId} recluta ${despues - antes} de la tropa "${tropaId}" (${origen}).`);
@@ -1064,7 +1075,7 @@ export class GameStore {
         this.getMapa(),
         capital,
         reclamos,
-        this.contadorAcciones++
+        this.ids.siguiente()
       );
       this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === actualizado.id ? actualizado : a));
       this.registrar(`${asentamiento.id}: ${cargo} añade ${tipo} a la cola (pagado).`);
@@ -1186,7 +1197,15 @@ export class GameStore {
     try {
       const atacante = this.state.asentamientos.find((a) => a.id === atacanteId)!;
       const defensor = this.state.asentamientos.find((a) => a.id === defensorId)!;
-      const resultado = iniciarAsedioEngine(atacante, defensor, idsNoVacios(escuadronesCsv), this.state.facciones, this.state.relaciones, this.state.tick);
+      const resultado = iniciarAsedioEngine(
+        atacante,
+        defensor,
+        idsNoVacios(escuadronesCsv),
+        this.state.facciones,
+        this.state.relaciones,
+        this.state.tick,
+        this.rng
+      );
       this.state.asentamientos = this.state.asentamientos.map((a) => {
         if (a.id === resultado.atacante.id) return resultado.atacante;
         if (a.id === resultado.defensor.id) return resultado.defensor;
@@ -1212,7 +1231,8 @@ export class GameStore {
         idsNoVacios(escuadronesBCsv),
         this.state.facciones,
         this.state.relaciones,
-        this.state.tick
+        this.state.tick,
+        this.rng
       );
       this.state.asentamientos = this.state.asentamientos.map((a) => {
         if (a.id === resultado.asentamientoA.id) return resultado.asentamientoA;
@@ -1238,7 +1258,8 @@ export class GameStore {
         caravana,
         this.state.tick,
         this.state.facciones,
-        this.state.asentamientos
+        this.state.asentamientos,
+        this.rng
       );
       this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === resultado.atacante.id ? resultado.atacante : a));
       this.state.facciones = resultado.facciones;
@@ -1257,7 +1278,14 @@ export class GameStore {
     try {
       const atacante = this.state.asentamientos.find((a) => a.id === atacanteId)!;
       const campamento = this.state.campamentosBandidos.find((c) => c.id === campamentoId)!;
-      const resultado = atacarCampamentoBandidosEngine(atacante, idsNoVacios(escuadronesCsv), campamento, this.state.tick, this.state.facciones);
+      const resultado = atacarCampamentoBandidosEngine(
+        atacante,
+        idsNoVacios(escuadronesCsv),
+        campamento,
+        this.state.tick,
+        this.state.facciones,
+        this.rng
+      );
       this.state.asentamientos = this.state.asentamientos.map((a) => (a.id === resultado.atacante.id ? resultado.atacante : a));
       this.state.facciones = resultado.facciones;
       if (resultado.campamentoDestruido) {
@@ -1270,6 +1298,17 @@ export class GameStore {
       else throw err;
     }
     this.notify();
+  }
+
+  /**
+   * `ContextoSimulacion` para el tick en curso. El reloj lo pone ESTA capa, no el motor (ver
+   * `ContextoSimulacion` en `engine/simulation.ts`): la capa de aplicación es la dueña del reloj de servidor,
+   * el motor solo recibe el momento ya resuelto. Mientras la simulación siga siendo por ticks, `momento` es
+   * simplemente la hora real en que se resolvió el tick; al pasar a tiempo real (Fase D) será el instante de
+   * simulación que decida el scheduler, sin que cambie nada de lo que hay debajo.
+   */
+  private contextoDeTickActual(): ContextoSimulacion {
+    return { tick: this.state.tick, momento: new Date().toISOString(), rng: this.rng };
   }
 
   avanzarTick(): void {
@@ -1288,7 +1327,7 @@ export class GameStore {
         bandidosProximoSpawnTick: this.state.bandidosProximoSpawnTick,
       },
       this.getMapa(),
-      this.state.tick
+      this.contextoDeTickActual()
     );
     this.state.asentamientos = resultado.asentamientos;
     this.state.facciones = resultado.facciones;
@@ -1354,8 +1393,8 @@ export class GameStore {
         bandidosProximoSpawnTick: this.state.bandidosProximoSpawnTick,
       },
       this.getMapa(),
-      this.state.tick,
-      { faccionesIds: this.state.faccionesNpcIds, contadorInicial: this.contadorAcciones }
+      this.contextoDeTickActual(),
+      { faccionesIds: this.state.faccionesNpcIds, contadorInicial: this.ids.actual() }
     );
 
     this.state.asentamientos = resultado.estado.asentamientos;
@@ -1366,7 +1405,7 @@ export class GameStore {
     this.state.bandidosProximoSpawnTick = resultado.estado.bandidosProximoSpawnTick;
     // Los ids que el motor generó dentro del NPC salieron de este mismo contador: se adelanta para que la
     // próxima acción manual del jugador no reutilice uno (ver `ConfigNpcGobernanza.contadorInicial`).
-    this.contadorAcciones = resultado.contadorFinal;
+    this.ids.fijar(resultado.contadorFinal);
 
     for (const evento of resultado.eventos) this.registrar(`[NPC] ${evento}`);
   }
@@ -1374,6 +1413,7 @@ export class GameStore {
   regenerarMundo(seed: number, region?: RegionId): void {
     this.historial = [];
     this.historialDesde = 0;
+    this.rng = createRng(seed);
     this.state = {
       estadoMapa: crearEstadoMapa(),
       mapa: generarMapa({ ...MAPA_DEFAULT, seed, region }),
@@ -1486,6 +1526,7 @@ export class GameStore {
 
       this.historial = [];
       this.historialDesde = payload.tick ?? 0;
+      this.rng = createRng(payload.world.config.seed);
       this.state = {
         mapa: mapaRegenerado,
         estadoMapa: { extraido, regeneraEnTick: {} },

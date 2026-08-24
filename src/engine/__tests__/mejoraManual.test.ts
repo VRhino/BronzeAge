@@ -3,11 +3,11 @@
 // Gobernador/Maestro de Obras. Comparte gates y costo con la ruta automática (`elegibleParaMejora`), así que
 // estos tests se centran en las validaciones propias de la acción MANUAL: cargo, existencia/estado del
 // edificio, fondos y — en el caso de éxito — que pague y mude exactamente igual que el camino automático.
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import type { Asentamiento, Edificio } from '../../domain/types';
 import { EDIFICIO_CATALOGO } from '../../constants';
 import { ConstruccionManualInvalidaError, estadoMejoraEdificio, mejorarEdificioManualmente } from '../construction';
-import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, mockMathRandomDeterminista } from './fixtures';
+import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
 
 const SEED = 7;
 
@@ -119,16 +119,6 @@ describe('mejorarEdificioManualmente — validaciones', () => {
 });
 
 describe('mejorarEdificioManualmente — éxito', () => {
-  let restaurar: () => void;
-
-  beforeEach(() => {
-    restaurar = mockMathRandomDeterminista(SEED);
-  });
-
-  afterEach(() => {
-    restaurar();
-  });
-
   it('paga el costoMejora exacto, sube nivelInterno y reubica si cambia de tamaño (Granja 1 -> 2)', () => {
     const asentamiento = conGobernador(base());
     const conFondos: Asentamiento = {

@@ -3,15 +3,16 @@
 // garantías (un recurso queda negativo, aparece un NaN, el medidor de mantenimiento se sale de [0,100]...),
 // esto debe fallar aunque el test específico de esa regresión histórica (ver `regresiones_historicas.test.ts`)
 // no exista todavía para el caso concreto.
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import type { Asentamiento, Faccion } from '../../domain/types';
 import type { Mapa } from '../../world/mapa';
 import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
+import { createRng, type RandomFn } from '../../worldgen';
 import {
+  contextoDeTest,
   crearFacciones,
   crearMapaDeterminista,
   fundarAsentamientoDeTest,
-  mockMathRandomDeterminista,
   posicionRecomendable,
 } from './fixtures';
 
@@ -37,14 +38,10 @@ function esFinito(n: number): boolean {
 }
 
 describe('invariantes del motor en una simulación larga', () => {
-  let restaurarMathRandom: () => void;
+  let rng: RandomFn;
 
   beforeEach(() => {
-    restaurarMathRandom = mockMathRandomDeterminista(SEED);
-  });
-
-  afterEach(() => {
-    restaurarMathRandom();
+    rng = createRng(SEED);
   });
 
   it(`se mantienen tras ${TICKS} ticks con ${NUM_ASENTAMIENTOS} asentamientos (recursos, población, mantenimiento, nivel)`, () => {
@@ -68,7 +65,7 @@ describe('invariantes del motor en una simulación larga', () => {
     const ultimoNivelVisto = new Map<string, number>();
 
     for (let tick = 1; tick <= TICKS; tick++) {
-      const resultado = avanzarSimulacion(estado, mapa, tick);
+      const resultado = avanzarSimulacion(estado, mapa, contextoDeTest(tick, rng));
       estado = resultado;
 
       for (const asentamiento of resultado.asentamientos) {

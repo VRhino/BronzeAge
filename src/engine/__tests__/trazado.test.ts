@@ -5,10 +5,11 @@
 // edificios encima de calles, calles encima de calles y granjas pegadas al Centro Urbano. Se comprueban sobre
 // una simulación real de 300 ticks, no sobre casos armados a mano, porque los tres bugs solo aparecían con la
 // ciudad ya crecida.
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import type { Asentamiento, Edificio } from '../../domain/types';
 import { TRAZADO } from '../../constants';
 import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
+import { createRng } from '../../worldgen';
 import {
   aristasDePerimetro,
   celdasDeEdificio,
@@ -18,10 +19,10 @@ import {
   segmentosDeRed,
 } from '../trazado';
 import {
+  contextoDeTest,
   crearFacciones,
   crearMapaDeterminista,
   fundarAsentamientoDeTest,
-  mockMathRandomDeterminista,
   posicionRecomendable,
 } from './fixtures';
 
@@ -46,21 +47,16 @@ function simular(): Asentamiento[] {
     campamentosBandidos: [],
     bandidosProximoSpawnTick: 0,
   };
-  for (let tick = 1; tick <= TICKS; tick++) estado = avanzarSimulacion(estado, mapa, tick);
+  const rng = createRng(SEED);
+  for (let tick = 1; tick <= TICKS; tick++) estado = avanzarSimulacion(estado, mapa, contextoDeTest(tick, rng));
   return estado.asentamientos;
 }
 
 describe('trazado urbano dinámico', () => {
-  let restaurarMathRandom: () => void;
   let asentamientos: Asentamiento[];
 
   beforeEach(() => {
-    restaurarMathRandom = mockMathRandomDeterminista(SEED);
     asentamientos = simular();
-  });
-
-  afterEach(() => {
-    restaurarMathRandom();
   });
 
   it('la simulación produce ciudades con material suficiente para juzgar el trazado', () => {
