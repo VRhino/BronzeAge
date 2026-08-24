@@ -32,7 +32,13 @@ const CAPAS_PERMITIDAS: Record<string, string[]> = {
   world: ['domain', 'worldgen', 'constants'],
   engine: ['domain', 'worldgen', 'world', 'constants'],
   ui: ['domain', 'world', 'constants'],
-  app: ['domain', 'worldgen', 'world', 'engine', 'constants'],
+  // `session` es la capa de aplicación DE SERVIDOR (Docs/Arquitectura/7_Diseno_GameSession.md): la partida
+  // como estado + reglas, sin nada de navegador. NO puede importar de `app` ni `ui` — si pudiera, un import
+  // así reintroduciría justo el acoplamiento que GameSession existe para evitar.
+  session: ['domain', 'worldgen', 'world', 'engine', 'constants'],
+  // `app` es hoy GameStore: la sesión de UNA pestaña de navegador. Puede consumir `session` (así es como
+  // GameStore se convierte en adaptador delgado sobre GameSession, doc 7 §6) pero nunca al revés.
+  app: ['domain', 'worldgen', 'world', 'engine', 'session', 'constants'],
   lab: ['domain', 'worldgen', 'world', 'engine', 'ui', 'constants'],
   main: ['domain', 'worldgen', 'world', 'engine', 'app', 'ui', 'constants'],
 };

@@ -2,7 +2,7 @@
 // de `GameStore` para poder trasladarlo intacto a un futuro `GameSession` de backend (Fase B) sin arrastrar el
 // resto de responsabilidades de sesión/UI de `GameStore`. Deliberadamente mínimo: un entero que solo avanza,
 // serializable tal cual (`actual()` devuelve un `number` plano) sin envoltorio adicional — no hay nada más que
-// persistir. Mismo consumidor que `app/npcGobernanza.ts` (`ConfigNpcGobernanza.contadorInicial`/`contadorFinal`),
+// persistir. Mismo consumidor que `session/npcGobernanza.ts` (`ConfigNpcGobernanza.contadorInicial`/`contadorFinal`),
 // que lleva su propia cuenta con el mismo patrón en vez de depender de esta clase, para no acoplar el motor de
 // aplicación a un tipo concreto.
 export class GeneradorIds {

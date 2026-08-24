@@ -6,7 +6,7 @@ import { crearFaccion } from '../src/engine/faccion';
 import { evaluarViabilidadFundacion, fundarAsentamiento } from '../src/engine/settlement';
 import { nivelActualDe, tieneMercadoActivo, edificiosPorTipoYEstado, nutricionPoblacionDe } from '../src/engine/asentamientoQuery';
 import { calcularNivelAsentamiento } from '../src/engine/mantenimiento';
-import { avanzarNpcGobernanza, type ConfigNpcGobernanza, MINERALES_BONUS_FUNDACION } from '../src/app/npcGobernanza';
+import { avanzarNpcGobernanza, type ConfigNpcGobernanza, MINERALES_BONUS_FUNDACION } from '../src/session/npcGobernanza';
 import { CATEGORIA_POR_TIPO, edificiosInternos, redDeCalles, segmentosDeRed } from '../src/engine/trazado';
 import { REJILLA_ASENTAMIENTO } from '../src/constants';
 
@@ -47,7 +47,7 @@ interface CandidatoFundacion {
 
 /**
  * Selección de posiciones para la fundación INICIAL del batch — alineada con
- * `buscarPosicionFundacionInicialPorDefecto` (`src/app/npcGobernanza.ts`), que ya resolvió las mismas dos
+ * `buscarPosicionFundacionInicialPorDefecto` (`src/session/npcGobernanza.ts`), que ya resolvió las mismas dos
  * decisiones para la partida real. La divergencia previa entre ambas (piedra como puntuación blanda en vez de
  * requisito, y un barrido que arrancaba en paso 100) hacía que el 76% de los asentamientos del batch fundaran
  * sin piedra alcanzable — sin Cantera, el gate de nivel 2 (Doc Fase_0_6: 3 de 6 extractores) es inalcanzable

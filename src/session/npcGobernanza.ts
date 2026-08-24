@@ -709,7 +709,7 @@ export interface ConfigNpcGobernanza {
    * Primer número de secuencia para los ids que genera el motor este tick (`caravana-…-<tick>-<contador>`,
    * `trueque-…`, `escuadron-…`). En batch da igual arrancar de 0 cada tick porque nadie más crea entidades;
    * en la partida real el jugador humano también las crea a través de `GameStore` (que lleva su propio
-   * `GeneradorIds`, ver `app/idGenerator.ts`), y dos acciones del mismo tick sobre el mismo asentamiento
+   * `GeneradorIds`, ver `session/idGenerator.ts`), y dos acciones del mismo tick sobre el mismo asentamiento
    * podrían chocar de id. El store pasa aquí su contador y luego lo adelanta con `contadorFinal` del resultado.
    */
   contadorInicial?: number;

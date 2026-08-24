@@ -1,4 +1,4 @@
-// Cesión de una Facción al NPC de gobernanza (`app/npcGobernanza.ts`) desde la pestaña Facción.
+// Cesión de una Facción al NPC de gobernanza (`session/npcGobernanza.ts`) desde la pestaña Facción.
 //
 // Lo que se blinda aquí es la garantía que hace usable la mecánica: el NPC juega SOLO las Facciones que el
 // jugador le ha cedido (`GameState.faccionesNpcIds`) y no toca las que este sigue jugando a mano — ni

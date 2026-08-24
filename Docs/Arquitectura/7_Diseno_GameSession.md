@@ -347,4 +347,10 @@ pesado, ninguno en el camino caliente de la simulación:
 - **Varias partidas a la vez** — ya resuelto por la decisión de un proceso por partida (§7.4).
 - **Simulaciones de balance en batch** (`scripts/run-batch-sim.ts`) — trivialmente paralelas, son partidas
   separadas sin estado compartido. Aquí sí hay ganancia real e inmediata.
-- **Generación de mundo y exportación a Unity** — puras, pesadas y puntuales.
+
+Corrección (aportada por el usuario): la generación de mundo NO es un candidato recurrente — se ejecuta
+**una sola vez por partida**, al crearla, y nunca más durante su vida. Sigue siendo un candidato legítimo a
+paralelizar (es pura y pesada), pero como evento puntual de creación, no como parte del ciclo de vida del
+juego en marcha. Y la exportación a Unity **no es parte del juego**: es una herramienta de `worldgen/`
+(exportar el terreno generado), no algo que la partida en curso necesite — no debería figurar junto a
+trabajo del propio juego.

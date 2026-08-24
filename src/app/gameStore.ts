@@ -27,7 +27,7 @@ import type {
 import { CAMPAMENTOS_BANDIDOS, EDIFICIO_CATALOGO, FUNDACION, MANTENIMIENTO, NECESIDADES, NIVEL_FACCION, POLITICAS, POLITICA_CATALOGO, REJILLA_ASENTAMIENTO, SIMULACION_AUTO_COMERCIO, TROPAS_RECLUTABLES } from '../constants';
 import { createRng, generarMapa, MAPA_DEFAULT, WORLDGEN_VERSION, type MapaGenerado, type RandomFn } from '../worldgen';
 import { crearEstadoMapa, crearMapa, type EstadoMapa, type Mapa } from '../world/mapa';
-import { GeneradorIds } from './idGenerator';
+import { GeneradorIds } from '../session/idGenerator';
 import { exportarParaUnityTerrain, UNITY_EXPORT_DEFAULT, type ExportUnityResultado, type OpcionesExportUnity } from '../world/exportUnity';
 
 export { UNITY_EXPORT_DEFAULT };
@@ -62,7 +62,7 @@ import {
 export type { ViabilidadFundacion } from '../engine/settlement';
 import { computeTodasLasZonas, computeZonasFusionadasPorFaccion } from '../engine/zones';
 import { avanzarSimulacion, type ContextoSimulacion } from '../engine/simulation';
-import { avanzarNpcGobernanza } from './npcGobernanza';
+import { avanzarNpcGobernanza } from '../session/npcGobernanza';
 import { avanzarAutoComercioSimulado } from '../engine/simulacionAutoComercio';
 import { proponerTrueque as proponerTruequeEngine, construirCaravanaComercial as construirCaravanaComercialEngine, CaravanaInvalidaError, TruequeInvalidoError } from '../engine/trade';
 import { asegurarCaminoComercial } from '../engine/caminos';
@@ -142,7 +142,7 @@ export interface GameState {
   campamentosBandidos: CampamentoBandido[];
   bandidosProximoSpawnTick: number;
   /**
-   * Facciones que juega el NPC de gobernanza (`app/npcGobernanza.ts`) en vez del jugador humano — se
+   * Facciones que juega el NPC de gobernanza (`session/npcGobernanza.ts`) en vez del jugador humano — se
    * enciende/apaga por Facción desde la pestaña Facción, en caliente y en ambos sentidos. Vive aquí, en la
    * capa de aplicación, y NO en `Faccion` (domain/types.ts) a propósito: es una decisión de quién maneja los
    * mandos, no un dato del mundo simulado. El `EstadoSimulacion` que recibe `avanzarSimulacion` se construye
@@ -741,7 +741,7 @@ export class GameStore {
   }
 
   /**
-   * Cede al NPC de gobernanza (`app/npcGobernanza.ts`) el control de una Facción, o lo retoma. Es solo un id
+   * Cede al NPC de gobernanza (`session/npcGobernanza.ts`) el control de una Facción, o lo retoma. Es solo un id
    * dentro o fuera de una lista que se lee al principio de cada `avanzarTick`, así que funciona en caliente y
    * en ambos sentidos a mitad de partida: el NPC no deja nada que impida volver a jugarla a mano (cargos,
    * reservas, Mercado y tropas son estado normal del juego, creado con las mismas funciones del motor que usa
@@ -1371,7 +1371,7 @@ export class GameStore {
   }
 
   /**
-   * Turno del NPC de gobernanza (`app/npcGobernanza.ts`) para las Facciones cedidas, DESPUÉS del tick del
+   * Turno del NPC de gobernanza (`session/npcGobernanza.ts`) para las Facciones cedidas, DESPUÉS del tick del
    * motor — mismo orden que usan los scripts de batch. El NPC no es parte de `avanzarSimulacion` a propósito:
    * decide con las funciones públicas del motor exactamente igual que este store cuando el jugador pulsa un
    * botón, y solo sobre `faccionesNpcIds`. Sin Facciones cedidas no se llama a nada.

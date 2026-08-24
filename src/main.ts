@@ -1730,7 +1730,7 @@ function renderDetalleFaccion(faccion: Faccion, state: GameState, viendoPasado: 
     ? `<div class="chip-row">${titulosDeLaFaccion.map((t) => `<span class="chip">${t.nombre}</span>`).join('')}</div>`
     : '<p class="legend-note">Sin títulos.</p>';
 
-  // Ceder la Facción al NPC de gobernanza (`app/npcGobernanza.ts`). Se lee de la foto que se esté viendo
+  // Ceder la Facción al NPC de gobernanza (`session/npcGobernanza.ts`). Se lee de la foto que se esté viendo
   // (`state`), pero solo se puede cambiar en el presente: sobre el pasado no hay nada que ceder.
   const esNpc = state.faccionesNpcIds.includes(faccion.id);
   const controlHtml = `
