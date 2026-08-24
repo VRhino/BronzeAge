@@ -112,6 +112,43 @@ Beneficio adicional que no es de estilo: cada comando puede llevar **junto a su 
 autorización de su fila en la matriz del [doc 5](5_Contratos_Identidad_Permisos.md), en vez de en una tabla
 paralela que se desincroniza en cuanto alguien añade un comando y olvida la tabla.
 
+## 2.ter Lo que NO es un comando (aclaración del usuario, 2026-08-25)
+
+Al llegar al último grupo de la migración se vio que tres de los "comandos" de `GameStore` no lo son. Lo
+destapó una observación del usuario sobre `regenerarMundo`:
+
+> *"Regenerar mundo es algo que se lanza desde fuera, antes de empezar una partida. Una vez empezada la
+> partida no debería dispararse nunca, porque reinicia todo y se pierde todo lo que se tenía en esa partida."*
+
+Eso no es un matiz de UI: es la diferencia entre **operar sobre una partida** y **decidir qué partida existe**.
+`GameStore` las mezcla porque en una herramienta local de una sola pestaña solo hay una partida y un proceso,
+así que "regenerar el mundo" y "jugar" caben en el mismo objeto. En un servidor no.
+
+| Operación de `GameStore` | Qué es en realidad | Dónde vive |
+|---|---|---|
+| `regenerarMundo` | **Creación** de partida. Destruye la anterior por completo | `GameSession.crear()` — ya existe. Nunca un comando de una partida viva |
+| `importarSimulacion` | **Reconstrucción** de partida desde datos | `GameSession.importar()` — ya existe. Tampoco es un comando |
+| `actualizarBalance` / `restaurarBalance` | Mutación de **configuración global del proceso** | Ni comando ni partida — ver abajo |
+
+Las dos primeras ya estaban resueltas sin darnos cuenta: son las factorías estáticas de `GameSession`. No hay
+nada que migrar; lo que había que hacer era **dejar de considerarlas comandos**.
+
+La consecuencia operativa importa: en el backend, "regenerar el mundo" de una partida en curso no es una
+mutación sino **descartar esa partida y crear otra** — una operación destructiva de administración, sujeta a
+rol técnico y a confirmación explícita (doc 5), no un botón más de la consola.
+
+### El balance es peor: es estado global del proceso
+
+`app/balanceConfig.ts` **muta en el sitio los objetos de `constants.ts`**, que son los mismos objetos que
+importa cada módulo de `engine/`. Es decir: el balance no es estado de una partida, es estado **del proceso**,
+compartido por todo lo que corra en él.
+
+Con una partida por proceso (§7.4) el riesgo queda contenido hoy, pero sigue siendo exactamente lo que el
+doc 2 marca como riesgo ("Balance global mutable → partidas afectadas entre sí") y lo que su punto 8 manda
+convertir en **configuración versionada por partida, con auditoría**. Por eso estos dos no se migran como
+comandos: hacerlo fingiría que son transiciones de estado de partida cuando no lo son, y consolidaría el
+error. Quedan para la Fase C, junto al resto del trabajo de balance.
+
 ## 3. Contrato de comando
 
 Hoy cada comando de `GameStore` sigue este patrón: llama al motor, atrapa el error de dominio
