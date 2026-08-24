@@ -290,3 +290,61 @@ hace falta para arrancar.**
 
 Disparador para reconsiderarlo: cuando se mida un tick por encima de ~500 ms en una partida real, o cuando
 aparezcan desconexiones de WebSocket atribuibles al bloqueo del event loop.
+
+### 8.5 ¿Y en el modelo de tiempo real? (pregunta del usuario)
+
+Objeción legítima: el multihilo brilla cuando se puede **delegar trabajo en paralelo**. Que no encaje con el
+modelo de ticks no significa que no encaje con el de tiempo real. Se analizó con mediciones.
+
+**Medición: reparto del coste del tick** (100 asentamientos vivos, 60 ticks de calentamiento, media de 25):
+
+| Fase | Coste | % del tick | ¿Paralelizable? |
+|---|---|---|---|
+| Tick completo | 78.5 ms | 100% | |
+| Zonas de influencia (geometría pura) | 1.6 ms | 2.0% | Sí |
+| Reclamos de fuentes (lectura pura) | ~0 ms | 0.0% | Sí |
+| **Resto: mutación de estado compartido** | **76.9 ms** | **98.0%** | **No** |
+| Una ruta de pathfinding (por comando) | 0.1 ms | — | Sí, pero es despreciable |
+
+**El 98% del tick es mutación de estado compartido.** Por la ley de Amdahl, paralelizar el 2% puro daría una
+mejora máxima de ×1.02 — irrelevante. Y el pathfinding, que sería el candidato clásico a delegar, cuesta
+0.1 ms por ruta: no es cuello de botella ni de lejos.
+
+**Pero el usuario tiene razón en el fondo, y el motivo es estructural:**
+
+> **El tick es una barrera global.** Hoy TODOS los asentamientos deben llegar al tick N antes de que
+> cualquiera avance al N+1. Aunque fueran perfectamente independientes, esa sincronización obligatoria en
+> cada frontera de tick impide repartirlos entre hilos.
+
+En tiempo real esa barrera **desaparece**. El asentamiento A puede avanzar hasta T+5 s mientras B sigue en
+T+1 s, siempre que no interactúen. Y entonces sí aparece estructura paralelizable, porque el acoplamiento
+real del dominio es acotado:
+
+- Cada asentamiento extrae de **sus propios nodos** (`reclamosDeFuentes` ya adjudica un extractor por
+  yacimiento) — no compiten una vez asignados.
+- Comparte estado con **su facción** (XP, nivel, reputación), no con las demás.
+- Se acopla con sus **vecinos espaciales** (las zonas se recortan entre sí) y con sus **socios comerciales**.
+
+Eso es un grafo particionable: por facción o por región, con las interacciones entre particiones como
+mensajes. Es exactamente lo que hacen los MMO con *sharding* espacial. **En tiempo real, el paralelismo pasa
+de imposible a posible.**
+
+**Sin embargo, seguirá siendo innecesario — por el ritmo deliberado del juego.**
+
+El coste no es por segundo de reloj, es por avance de simulación. A 100 asentamientos, un tick cuesta 78.5 ms.
+Si un tick representa ~1 minuto de tiempo de juego (el diseño pide explícitamente que los asentamientos
+crezcan despacio), eso es **0.13% de un núcleo**. Extrapolando a 500 asentamientos (~0.9-1.9 s por avance,
+según cómo se extrapole la curva) sigue siendo **~1.5%**. La carga total es minúscula porque el juego es lento
+**por diseño**.
+
+Conclusión: en tiempo real el paralelismo se vuelve *arquitectónicamente viable*, pero *económicamente
+injustificado* — un solo hilo sobra para la simulación. Si algún día deja de sobrar, la partición por
+facción/región es la vía correcta, y llegar ahí no requiere ninguna decisión tomada hoy.
+
+**Dónde sí conviene el multihilo, en cualquiera de los dos modelos** — trabajo genuinamente independiente y
+pesado, ninguno en el camino caliente de la simulación:
+
+- **Varias partidas a la vez** — ya resuelto por la decisión de un proceso por partida (§7.4).
+- **Simulaciones de balance en batch** (`scripts/run-batch-sim.ts`) — trivialmente paralelas, son partidas
+  separadas sin estado compartido. Aquí sí hay ganancia real e inmediata.
+- **Generación de mundo y exportación a Unity** — puras, pesadas y puntuales.
