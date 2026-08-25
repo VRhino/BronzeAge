@@ -35,7 +35,11 @@ describe('exportarParaUnityTerrain', () => {
     expect(Number.isInteger(Math.log2(UNITY_EXPORT_DEFAULT.resolucion - 1))).toBe(true);
   });
 
-  it('el heightmap RAW mide resolución² × 2 bytes (16-bit) y cada muestra cae en [0, 65535]', () => {
+  // Timeout ampliado (no por trabajo propio: `RESOLUCION_TEST` ya lo mantiene barato, ver comentario arriba)
+  // sino porque bajo la suite completa, con más archivos de test compitiendo por CPU cada vez, el default de
+  // 5 s ha empezado a saltar por contención — no por que este test se haya vuelto más lento. Verificado con
+  // `git stash` contra un commit anterior a esta sesión: ya fallaba igual antes de tocar este archivo.
+  it('el heightmap RAW mide resolución² × 2 bytes (16-bit) y cada muestra cae en [0, 65535]', { timeout: 15000 }, () => {
     const generado = generarMapa({ ancho: 800, alto: 800, seed: 1 });
     const { heightmapRaw } = exportarParaUnityTerrain(generado, [], { resolucion: RESOLUCION_TEST });
 
