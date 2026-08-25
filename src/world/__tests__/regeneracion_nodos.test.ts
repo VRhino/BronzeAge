@@ -5,15 +5,14 @@ import { describe, expect, it } from 'vitest';
 import type { NodoRecurso } from '../../domain/types';
 import { REGENERACION_NODOS } from '../../constants';
 import { generarMapa, MAPA_DEFAULT } from '../../worldgen';
-import { crearEstadoMapa, crearMapa } from '../mapa';
+import { crearMapa } from '../mapa';
 
 const SEED = 42;
 
 function conMundo() {
   const generado = generarMapa({ ancho: MAPA_DEFAULT.ancho, alto: MAPA_DEFAULT.alto, seed: SEED });
-  const estado = crearEstadoMapa();
-  const mapa = crearMapa(generado, estado);
-  return { generado, estado, mapa };
+  const mapa = crearMapa(generado);
+  return { generado, mapa };
 }
 
 function agotar(mapa: ReturnType<typeof crearMapa>, nodo: NodoRecurso): void {

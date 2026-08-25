@@ -1,6 +1,6 @@
 import type { Asentamiento, Edificio, Faccion, Point } from '../src/domain/types';
 import { createRng, generarMapa, MAPA_DEFAULT } from '../src/worldgen';
-import { crearMapa, crearEstadoMapa, type Mapa } from '../src/world/mapa';
+import { crearMapa, type Mapa } from '../src/world/mapa';
 import { avanzarSimulacion, type EstadoSimulacion } from '../src/engine/simulation';
 import { crearFaccion } from '../src/engine/faccion';
 import { evaluarViabilidadFundacion, fundarAsentamiento } from '../src/engine/settlement';
@@ -434,8 +434,9 @@ async function main() {
   const rng = createRng(SEED);
 
   const mapaGenerado = generarMapa({ ancho: MAPA_DEFAULT.ancho, alto: MAPA_DEFAULT.alto, seed: SEED });
-  const estadoMapa = crearEstadoMapa();
-  const mapa = crearMapa(mapaGenerado, estadoMapa);
+  // Una sola fachada para toda la corrida: es dueña de su propio estado de partida del mapa, así que los
+  // yacimientos que se agotan y regeneran se acumulan tick a tick igual que en una partida real.
+  const mapa = crearMapa(mapaGenerado);
 
   let facciones: Faccion[] = [];
   for (let i = 0; i < NUM_FACCIONES; i++) {

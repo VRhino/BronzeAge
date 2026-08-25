@@ -1,6 +1,6 @@
 import type { AcuerdoTrueque, Asentamiento, CaminoComercial, CampamentoBandido, Caravana, Faccion, OrdenMercado, RelacionPolitica, Titulo } from '../domain/types';
 import type { EventoDominio } from '../domain/eventos';
-import type { Mapa } from '../world/mapa';
+import type { EstadoMapa, Mapa } from '../world/mapa';
 import type { RandomFn } from '../worldgen';
 import { computeTodasLasZonas } from './zones';
 import { avanzarConstruccion, reclamosDeFuentes } from './construction';
@@ -61,6 +61,16 @@ export interface ContextoSimulacion {
 }
 
 export interface ResultadoTick extends EstadoSimulacion {
+  /**
+   * Estado del mapa tras el tick (yacimientos extraídos y calendario de regeneración).
+   *
+   * Sale por aquí, y no como efecto lateral sobre la fachada `Mapa` que se pasó, porque el tick es el único
+   * avance que toca el mapa (`extraer` en `avanzarConstruccion`, `avanzarRegeneracion` más abajo) y sin esto
+   * el `ResultadoTick` no bastaba para reconstruir la partida: quien descartara el resultado —un fallo al
+   * persistir, en la Fase B3— se quedaba igualmente con los yacimientos vaciados. El llamador es quien
+   * decide adoptarlo (ver `session/comandos/avanzarTick.ts`).
+   */
+  estadoMapa: EstadoMapa;
   eventos: string[];
   /** Mismos eventos que `eventos`, en forma estructurada (Docs/Arquitectura/4_Plan_Evolucion_Tareas.md, Fase
    * A5) — todavía sin migrar subsistema por subsistema, así que hoy cada uno lleva `codigo: 'legado'` y el
@@ -208,8 +218,9 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   eventos.push(...trasExpansion.eventos);
   eventosDominio.push(...comoEventosDominio(trasExpansion.eventos, contexto));
 
-  // Regeneración de yacimientos agotados (a petición del usuario): muta `mapa` directamente, mismo patrón
-  // que `mapa.extraer` dentro de `avanzarConstruccion` más arriba en este mismo tick.
+  // Regeneración de yacimientos agotados (a petición del usuario): escribe en la fachada `mapa`, mismo patrón
+  // que `mapa.extraer` dentro de `avanzarConstruccion` más arriba en este mismo tick. La fachada trabaja
+  // sobre su propia copia del estado del mapa, que sale de aquí en `ResultadoTick.estadoMapa`.
   const eventosRegeneracion = mapa.avanzarRegeneracion(tickActual);
   eventos.push(...eventosRegeneracion);
   eventosDominio.push(...comoEventosDominio(eventosRegeneracion, contexto));
@@ -257,6 +268,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     caminos: estado.caminos,
     campamentosBandidos: trasSpawnBandidos.campamentos,
     bandidosProximoSpawnTick: estado.bandidosProximoSpawnTick,
+    estadoMapa: mapa.estadoActual(),
     eventos,
     eventosDominio,
   };

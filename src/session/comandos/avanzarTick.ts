@@ -11,10 +11,10 @@ import { exito, type ContextoComando, type TransicionComando } from './tipos';
  * 2 lo deja claro: "el servidor sigue siendo quien avance y resuelva los ticks". Se mantiene invocable a mano
  * para pruebas y para la consola de administración.
  *
- * ⚠️ Este es el único comando cuyo estado NO es totalmente reconstruible desde su valor de retorno: el motor
- * muta `estadoMapa` por dentro a través de la fachada `Mapa` (`extraer`/`avanzarRegeneracion`). Arreglarlo es
- * prerrequisito de la persistencia de Fase B3 — ver la tarea marcada con ⚠️ en el doc 4. Hasta entonces,
- * descartar el estado devuelto por un fallo de escritura NO revierte lo extraído de los yacimientos.
+ * Es el único comando que toca el mapa (los yacimientos se agotan al extraer y se regeneran al cabo de un
+ * cooldown). Ese cambio viaja en `ResultadoTick.estadoMapa` y se adopta aquí explícitamente, igual que el
+ * resto del estado: la fachada `Mapa` trabaja sobre su propia copia, así que el estado que entró no se toca
+ * y descartar la transición —un fallo al persistir, Fase B3— revierte también los yacimientos.
  */
 export function avanzarTick(
   estado: GameSessionState,
@@ -26,6 +26,8 @@ export function avanzarTick(
   const contexto: ContextoSimulacion = { tick, momento: ctx.momento, rng: ctx.rng };
   const resultado = avanzarSimulacion(estadoSimulacionDe(estado), mapa, contexto);
 
-  const siguiente = conResultadoDeSimulacion({ ...estado, tick }, resultado);
+  // `estadoMapa` va aparte de `conResultadoDeSimulacion` porque no es estado del motor: `EstadoSimulacion` es
+  // lo que el motor recibe y devuelve como juego, y el mapa es el mundo sobre el que se juega.
+  const siguiente = conResultadoDeSimulacion({ ...estado, tick, estadoMapa: resultado.estadoMapa }, resultado);
   return exito(siguiente, resultado.eventosDominio);
 }

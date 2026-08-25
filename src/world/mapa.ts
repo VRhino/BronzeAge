@@ -89,41 +89,104 @@ export function crearEstadoMapa(): EstadoMapa {
   return { extraido: {}, regeneraEnTick: {} };
 }
 
-export class Mapa {
-  private readonly generado: MapaGenerado;
-  private readonly estado: EstadoMapa;
-  private readonly nodosPorId: Map<string, NodoRecurso>;
-  private readonly bosquesPorId: Map<string, ZonaBosque>;
+/** Copia independiente del estado de partida del mapa. Son dos registros de números: clonar cuesta lo que
+ * cuesta recorrer los nodos ya tocados, no los ~117 del mundo. */
+function copiarEstadoMapa(estado: EstadoMapa): EstadoMapa {
+  return { extraido: { ...estado.extraido }, regeneraEnTick: { ...estado.regeneraEnTick } };
+}
+
+/**
+ * Índices derivados del MUNDO GENERADO — nada de estado de partida. Se cachean por mundo (misma razón y
+ * misma técnica que `contornosBosquesPorMundo`): desde que cada comando construye su propia fachada sobre
+ * una copia del estado (ver `GameSession.ejecutar`), instanciar `Mapa` dejó de ser algo que pasa una vez por
+ * partida para pasar a ser algo que pasa una vez por comando, y reconstruir tres mapas idénticos sobre los
+ * mismos nodos inmutables en cada uno no tiene sentido.
+ */
+interface IndicesMundo {
+  nodosPorId: Map<string, NodoRecurso>;
+  bosquesPorId: Map<string, ZonaBosque>;
   /** Índice espacial de NODOS: clave "col,fila" -> nodos cuyo centro cae en esa celda. */
-  private readonly celdas: Map<string, NodoRecurso[]>;
+  celdas: Map<string, NodoRecurso[]>;
   /**
    * Posición de cada nodo en el orden de generación. El índice espacial devuelve los nodos agrupados por
    * celda, y ese orden NO es el de generación: sin restaurarlo, dos nodos empatados a distancia se
    * desempatarían distinto que con el recorrido lineal de antes, cambiando dónde se coloca un edificio y
    * haciendo divergir la simulación. El orden de generación es parte del contrato observable del mapa.
    */
+  ordenGeneracion: Map<string, number>;
+}
+
+const indicesPorMundo = new WeakMap<MapaGenerado, IndicesMundo>();
+
+function claveCelda(p: Point): string {
+  return `${Math.floor(p.x / LADO_CELDA)},${Math.floor(p.y / LADO_CELDA)}`;
+}
+
+function indicesDe(generado: MapaGenerado): IndicesMundo {
+  const cacheado = indicesPorMundo.get(generado);
+  if (cacheado) return cacheado;
+
+  // Los bosques NO se indexan espacialmente: son 25 y se consultan por solapamiento de círculos (radio
+  // contra radio), donde una rejilla por punto central no ayudaría — un bosque grande alcanza varias celdas.
+  const celdas = new Map<string, NodoRecurso[]>();
+  for (const nodo of generado.nodos) {
+    const clave = claveCelda(nodo.posicion);
+    const lista = celdas.get(clave);
+    if (lista) lista.push(nodo);
+    else celdas.set(clave, [nodo]);
+  }
+
+  const indices: IndicesMundo = {
+    nodosPorId: new Map(generado.nodos.map((n) => [n.id, n])),
+    bosquesPorId: new Map(generado.bosques.map((b) => [b.id, b])),
+    celdas,
+    ordenGeneracion: new Map(generado.nodos.map((n, i) => [n.id, i])),
+  };
+  indicesPorMundo.set(generado, indices);
+  return indices;
+}
+
+export class Mapa {
+  private readonly generado: MapaGenerado;
+  /**
+   * Estado de partida del mapa, SIEMPRE una copia propia — nunca el objeto que pasó el llamador.
+   *
+   * Es lo que hace que `extraer`/`avanzarRegeneracion` no se lleven por delante el estado de la partida: la
+   * fachada trabaja sobre su copia y quien la creó decide si adopta el resultado (`estadoActual()`) o lo
+   * descarta. Antes se aliaseaba, y por eso un tick que fallara al persistirse dejaba los yacimientos ya
+   * vaciados aunque se descartara el estado devuelto (Fase B3, prerrequisito de la persistencia).
+   */
+  private readonly estado: EstadoMapa;
+  /** Mutaciones aceptadas sobre esta fachada. Solo sirve para que el llamador pueda comprobar que no se le
+   * olvidó adoptar `estadoActual()` — ver la comprobación de `GameSession.ejecutar`. */
+  private mutaciones = 0;
+  private readonly nodosPorId: Map<string, NodoRecurso>;
+  private readonly bosquesPorId: Map<string, ZonaBosque>;
+  private readonly celdas: Map<string, NodoRecurso[]>;
   private readonly ordenGeneracion: Map<string, number>;
 
   constructor(generado: MapaGenerado, estado: EstadoMapa) {
     this.generado = generado;
-    this.estado = estado;
-    this.nodosPorId = new Map(generado.nodos.map((n) => [n.id, n]));
-    this.bosquesPorId = new Map(generado.bosques.map((b) => [b.id, b]));
-    this.ordenGeneracion = new Map(generado.nodos.map((n, i) => [n.id, i]));
-
-    // Los bosques NO se indexan: son 25 y se consultan por solapamiento de círculos (radio contra radio),
-    // donde una rejilla por punto central no ayudaría — un bosque grande alcanza varias celdas.
-    this.celdas = new Map();
-    for (const nodo of generado.nodos) {
-      const clave = this.claveCelda(nodo.posicion);
-      const lista = this.celdas.get(clave);
-      if (lista) lista.push(nodo);
-      else this.celdas.set(clave, [nodo]);
-    }
+    this.estado = copiarEstadoMapa(estado);
+    const indices = indicesDe(generado);
+    this.nodosPorId = indices.nodosPorId;
+    this.bosquesPorId = indices.bosquesPorId;
+    this.celdas = indices.celdas;
+    this.ordenGeneracion = indices.ordenGeneracion;
   }
 
-  private claveCelda(p: Point): string {
-    return `${Math.floor(p.x / LADO_CELDA)},${Math.floor(p.y / LADO_CELDA)}`;
+  /**
+   * Estado de partida resultante de lo aplicado sobre esta fachada, como valor independiente listo para
+   * entrar en el estado de la partida. Copia en cada llamada a propósito: quien lo guarda es su dueño, y
+   * seguir mutando esta fachada después no debe poder tocarlo.
+   */
+  estadoActual(): EstadoMapa {
+    return copiarEstadoMapa(this.estado);
+  }
+
+  /** Cuántas mutaciones se han aceptado sobre esta fachada (`extraer` con resultado > 0, regeneraciones). */
+  get mutacionesAplicadas(): number {
+    return this.mutaciones;
   }
 
   /**
@@ -300,8 +363,8 @@ export class Mapa {
   /**
    * Extrae hasta `cantidad` de un nodo y devuelve lo realmente extraído (0 si el nodo no existe o está
    * agotado). ÚNICA vía de mutación del mapa: el agotamiento de yacimientos deja de ser un `nodo.cantidad -= x`
-   * escrito en seis sitios distintos de `construction.ts`, y lo que se toca es el estado de partida —
-   * el mundo generado no cambia nunca.
+   * escrito en seis sitios distintos de `construction.ts`, y lo que se toca es la copia local del estado de
+   * partida — ni el mundo generado ni el estado de quien creó la fachada cambian nunca.
    */
   extraer(nodoId: string | undefined, cantidad: number): number {
     const nodo = this.nodo(nodoId);
@@ -310,6 +373,7 @@ export class Mapa {
     if (disponible <= 0) return 0;
     const extraido = Math.min(cantidad, disponible);
     this.estado.extraido[nodo.id] = (this.estado.extraido[nodo.id] ?? 0) + extraido;
+    this.mutaciones++;
     return extraido;
   }
 
@@ -335,11 +399,13 @@ export class Mapa {
         const cooldown =
           nodo.tipo === 'livestock' ? REGENERACION_NODOS.livestock.ticksCooldown : REGENERACION_NODOS.metales.ticksCooldown;
         this.estado.regeneraEnTick[nodo.id] = tickActual + cooldown;
+        this.mutaciones++;
         continue;
       }
       if (tickActual >= pendiente) {
         delete this.estado.extraido[nodo.id];
         delete this.estado.regeneraEnTick[nodo.id];
+        this.mutaciones++;
         eventos.push(`El yacimiento de ${nodo.tipo} (${nodo.id}) se regenera.`);
       }
     }
@@ -467,6 +533,11 @@ export class Mapa {
   }
 }
 
+/**
+ * Fachada sobre un mundo generado y una foto de su estado de partida. `estado` se COPIA: la fachada no
+ * escribe nunca en el objeto recibido, así que crear una es siempre seguro. Para recuperar lo que se haya
+ * aplicado sobre ella, `estadoActual()`.
+ */
 export function crearMapa(generado: MapaGenerado, estado: EstadoMapa = crearEstadoMapa()): Mapa {
   return new Mapa(generado, estado);
 }

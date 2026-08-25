@@ -97,8 +97,9 @@ estado que recibe; un rechazo devuelve *el mismo objeto*. Esto importa para la F
 puras el runner puede hacer *aplicar → persistir → confirmar* y **descartar** el estado nuevo si la escritura
 falla. Con mutación, un fallo de persistencia deja el estado ya modificado y sin vuelta atrás.
 
-> ⚠️ La mutación de `Mapa` (§7.3) es exactamente lo que rompe esa garantía hoy: `extraer` modifica
-> `estadoMapa` fuera del valor de retorno. Por eso su arreglo es prerrequisito de B3, no cosmético.
+> ✅ **Resuelto el 2026-08-25** (§7.3). La mutación de `Mapa` era el único agujero de esa garantía: `extraer`
+> modificaba `estadoMapa` fuera del valor de retorno. Desde el arreglo, la garantía es completa: **todo** lo
+> que un comando cambia sale por su estado resultante.
 
 **(b) `ContextoComando { momento, actor, rng, ids }`** en vez de parámetros sueltos. El `momento` no es un
 dato del comando sino contexto de ejecución, y `actor` hará falta en **todos** los comandos cuando llegue la
@@ -295,23 +296,39 @@ partida — lo que simplifica el diseño: no hace falta prever recálculos ni in
 cambiarla, y el comando administrativo que la modifica puede ser de uso excepcional (corrección/moderación),
 no una palanca de juego.
 
-### 7.3 Mutación de `Mapa`: se aborda en B3, no antes
+### 7.3 Mutación de `Mapa`: resuelta (2026-08-25)
 
-**Decidido: posponer a B3 (persistencia), dejándolo escrito para que no se pierda.** Anotado como tarea
-explícita en [4_Plan_Evolucion_Tareas.md](4_Plan_Evolucion_Tareas.md).
+**Decidido en su día: posponer a B3 (persistencia), dejándolo escrito para que no se pierda.** Se abordó al
+empezar B3, antes de escribir una sola línea de guardado, que era el orden acordado.
 
-Motivo para no hacerlo ahora: crear `GameSession` ya es un refactor grande, y no necesita este arreglo para
-existir. Meter los dos en el mismo paso mezclaría dos refactors del motor a la vez, justo lo que venimos
-evitando.
+**El problema.** `Mapa` era una fachada sobre `estadoMapa` que *aliaseaba* el objeto de la partida: `extraer`
+(desde `engine/construction.ts`) y `avanzarRegeneracion` (desde `engine/simulation.ts`) escribían dentro. Al
+persistir tras cada tick se guarda *estado + eventos*, así que descartar el estado nuevo por un fallo de
+escritura no revertía los yacimientos ya vaciados — snapshot y memoria divergían en silencio, y el snapshot
+podía no corresponder a los eventos emitidos.
 
-Motivo para no dejarlo indefinidamente: es donde se vuelve un problema real. Al persistir tras cada tick se
-guarda *estado + eventos*; si parte del estado (lo extraído de cada yacimiento) se mutó por un camino lateral,
-puede guardarse un snapshot que no corresponde a los eventos emitidos. Y si un comando falla a mitad, el mapa
-queda modificado aunque el resto del estado no — un rollback parcial silencioso.
+**La solución, en una frase: la mutación deja de ser un efecto lateral y pasa a ser un valor.**
 
-**Vigilar que sigan siendo dos.** Hoy la superficie es exactamente `Mapa.extraer` (desde
-`engine/construction.ts`) y `Mapa.avanzarRegeneracion` (desde `engine/simulation.ts`). Si aparecen más
-mutaciones laterales antes de B3, el arreglo crece.
+| Antes | Ahora |
+| --- | --- |
+| `Mapa` aliasa el `EstadoMapa` de la partida | `Mapa` lo **copia** al construirse; expone `estadoActual()` |
+| El tick escribe el mapa por dentro | El tick lo devuelve: `ResultadoTick.estadoMapa` |
+| Una fachada para toda la vida de la sesión | Una fachada **por comando**, creada en `GameSession.ejecutar` |
+| Olvidarse de propagar = corrupción silenciosa | Olvidarse = excepción en `ejecutar` |
+
+La fachada por comando es lo que cierra el agujero de raíz, no solo en el tick: lo que un comando escriba y no
+devuelva se va con la fachada al terminar. Y la comprobación de `ejecutar` (comando **aceptado** + fachada
+tocada + `estadoMapa` sin cambiar de referencia → excepción) convierte el olvido en un fallo ruidoso. Un
+comando **rechazado** no la dispara: devuelve el estado intacto a propósito, y ahí descartar es lo correcto.
+
+**Coste y cómo se pagó.** Instanciar `Mapa` pasó de una vez por partida a una vez por comando. Sus índices
+(ids, rejilla espacial, orden de generación) son función del `MapaGenerado`, que es inmutable, así que se
+cachean por mundo en un `WeakMap` — la misma técnica que ya usaban los contornos de bosque. Lo que queda por
+comando es copiar dos registros de números.
+
+**La superficie sigue siendo dos.** `Mapa.extraer` y `Mapa.avanzarRegeneracion`, verificado al cerrar. Ya no
+hay que vigilarlo con la misma urgencia —una mutación lateral nueva se pierde en vez de corromper, y si el
+comando la acepta salta la excepción— pero sigue siendo la superficie a mirar si algo del mapa no cuadra.
 
 ### 7.4 Una partida por proceso
 

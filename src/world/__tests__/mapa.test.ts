@@ -60,11 +60,6 @@ function ids(nodos: readonly NodoRecurso[]): string[] {
   return nodos.map((n) => n.id);
 }
 
-/** Deshace un agotamiento provocado por un test: el estado de partida es un simple registro de extraídos. */
-function devolverStock(estado: EstadoMapa, nodoId: string): void {
-  delete estado.extraido[nodoId];
-}
-
 describe('Mapa — equivalencia con el acceso crudo anterior', () => {
   it('nodo(id) devuelve lo mismo que buscar linealmente en el array', () => {
     for (const seed of SEEDS) {
@@ -117,10 +112,13 @@ describe('Mapa — equivalencia con el acceso crudo anterior', () => {
   it('nodosEnPoligono con filtros y orden coincide con `sitioCercaDeNodo`', () => {
     // Referencia (construction.ts): filter(tipo + cantidad>0 + !excluidas + pointInPolygon).sort(por distancia).
     for (const seed of SEEDS) {
-      const { generado, estado, mapa, rng } = conMapa(seed);
+      const { generado, rng } = conMapa(seed);
       const tipos = ['piedra', 'cobre', 'estano', 'oro', 'livestock'];
 
       for (let i = 0; i < CONSULTAS; i++) {
+        // Fachada nueva por iteración: cada una trabaja sobre su propia copia del estado de partida, así que
+        // descartarla es lo que devuelve el stock al nodo que este caso agota a propósito.
+        const mapa = crearMapa(generado);
         const centro = puntoAleatorio(rng);
         const poligono = poligonoCircular(centro, 30 + rng() * 90);
         const tipo = tipos[Math.floor(rng() * tipos.length)]!;
@@ -137,8 +135,6 @@ describe('Mapa — equivalencia con el acceso crudo anterior', () => {
 
         const obtenido = mapa.nodosEnPoligono(poligono, { tipo, conStock: true, excluir, ordenarPorCercaniaA: centro });
         expect(ids(obtenido)).toEqual(ids(referencia));
-
-        devolverStock(estado, victima.id);
       }
     }
   });
@@ -322,9 +318,11 @@ describe('Mapa — extracción de yacimientos', () => {
     expect(mapa.stock(nodo.id)).toBe(0);
   });
 
-  it('extraer nunca toca el mundo generado, solo el estado de partida', () => {
+  it('extraer nunca toca el mundo generado ni el estado recibido, solo la copia de la fachada', () => {
     // Es la razón de ser de la separación: el `MapaGenerado` puede compartirse por referencia entre todas
-    // las fotos del historial precisamente porque nadie lo escribe.
+    // las fotos del historial precisamente porque nadie lo escribe. Y desde la Fase B3 tampoco se escribe el
+    // `EstadoMapa` que se le pasó: el resultado sale por `estadoActual()` y lo adopta quien quiera
+    // (`session/comandos/avanzarTick.ts`), de modo que descartar la fachada revierte lo extraído.
     const { generado, estado, mapa } = conMapa(1);
     const nodo = generado.nodos.find((n) => n.tipo === 'piedra')!;
     const inicial = nodo.cantidadInicial;
@@ -332,8 +330,23 @@ describe('Mapa — extracción de yacimientos', () => {
     mapa.extraer(nodo.id, 25);
 
     expect(nodo.cantidadInicial).toBe(inicial);
-    expect(estado.extraido[nodo.id]).toBe(25);
+    expect(estado.extraido[nodo.id]).toBeUndefined();
+    expect(mapa.estadoActual().extraido[nodo.id]).toBe(25);
     expect(mapa.stock(nodo.id)).toBe(inicial - 25);
+  });
+
+  it('estadoActual devuelve un valor independiente de la fachada', () => {
+    // Quien lo guarda es su dueño: seguir usando la fachada después no puede tocarlo, o el estado de partida
+    // adoptado por un comando cambiaría a espaldas de su `version`.
+    const { generado, mapa } = conMapa(1);
+    const nodo = generado.nodos.find((n) => n.tipo === 'piedra')!;
+
+    mapa.extraer(nodo.id, 25);
+    const adoptado = mapa.estadoActual();
+    mapa.extraer(nodo.id, 10);
+
+    expect(adoptado.extraido[nodo.id]).toBe(25);
+    expect(mapa.estadoActual().extraido[nodo.id]).toBe(35);
   });
 
   it('dos mapas sobre el mismo mundo con estados distintos no se contaminan', () => {

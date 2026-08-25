@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { GameSession } from '../gameSession';
 import { crearFaccion } from '../comandos/crearFaccion';
 import { fundarAsentamiento } from '../comandos/fundarAsentamiento';
+import { exito, type ManejadorComando } from '../comandos/tipos';
 
 const SEED = 42;
 const MOMENTO = '2026-01-01T00:00:00.000Z';
@@ -174,6 +175,45 @@ describe('operaciones del sistema — avanzarFaccionesNpc', () => {
     expect(resultado.ok).toBe(true);
     // La primera decisión de gobernanza base es asignar Gobernador; no depende de ticks previos.
     expect(sesion.getState().asentamientos[0]!.cargos.gobernadorId).toBeTruthy();
+  });
+});
+
+describe('GameSession — el mapa es estado devuelto, no efecto lateral', () => {
+  // Prerrequisito de la persistencia de Fase B3: si el tick escribiera el mapa por dentro de la fachada
+  // compartida, descartar su estado resultante (por un fallo al guardar) dejaría igualmente los yacimientos
+  // vaciados, y la partida en disco no coincidiría con la que sigue en memoria.
+  //
+  // Se provoca con la REGENERACIÓN y no con la extracción a propósito: extraer exige que el jugador haya
+  // levantado un edificio extractor, mientras que un yacimiento agotado hace que el tick le agende su
+  // reaparición sin más (`Mapa.avanzarRegeneracion`). Es el mismo camino de escritura.
+  function partidaConYacimientoAgotado(): { sesion: GameSession; nodoId: string } {
+    const base = partidaNueva();
+    const payload = base.exportar();
+    const nodo = payload.state.mapa.nodos[0]!;
+    payload.state.estadoMapa = { extraido: { [nodo.id]: nodo.cantidadInicial }, regeneraEnTick: {} };
+    return { sesion: GameSession.importar(payload), nodoId: nodo.id };
+  }
+
+  it('el tick devuelve el estado del mapa y NO toca el estado anterior', () => {
+    const { sesion, nodoId } = partidaConYacimientoAgotado();
+    const anterior = sesion.getState();
+
+    sesion.avanzarTick(MOMENTO);
+
+    expect(sesion.getState().estadoMapa.regeneraEnTick[nodoId]).toBeGreaterThan(0);
+    expect(anterior.estadoMapa.regeneraEnTick).toEqual({});
+    expect(sesion.getState().estadoMapa).not.toBe(anterior.estadoMapa);
+  });
+
+  it('un comando que escribe el mapa y no lo devuelve es un error, no una partida desincronizada', () => {
+    const sesion = partidaNueva();
+    const nodoId = sesion.getState().mapa.nodos[0]!.id; // intacto: hace falta que `extraer` entregue algo
+    const descuidado: ManejadorComando<void, void> = (estado, mapa) => {
+      mapa.extraer(nodoId, 1);
+      return exito(estado, []); // olvida `estadoMapa` en el estado resultante
+    };
+
+    expect(() => sesion.ejecutar(descuidado, undefined, { momento: MOMENTO })).toThrow(/estadoMapa/);
   });
 });
 

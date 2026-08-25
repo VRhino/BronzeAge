@@ -13,7 +13,7 @@
 //   - Notificar a una UI o llevar historial de depuración: del cliente.
 import type { RegionId } from '../domain/types';
 import { createRng, generarMapa, MAPA_DEFAULT, WORLDGEN_VERSION, type RandomFn } from '../worldgen';
-import { crearEstadoMapa, crearMapa, type Mapa } from '../world/mapa';
+import { crearEstadoMapa, crearMapa, type EstadoMapa, type Mapa } from '../world/mapa';
 import { GeneradorIds } from './idGenerator';
 import { eventoLegado, type GameSessionState } from './estado';
 import { avanzarAutoComercio } from './comandos/avanzarAutoComercio';
@@ -42,17 +42,14 @@ export class GameSession {
   private estado: GameSessionState;
   private rng: RandomFn;
   private ids: GeneradorIds;
-  /** Fachada de consultas espaciales sobre `estado.mapa`/`estado.estadoMapa`. Una sola instancia para toda la
-   * vida de la sesión: `GameSession` no lleva historial (a diferencia de `GameStore`, que cacheaba una por
-   * foto), así que no hay nada que invalidar. `extraer`/`avanzarRegeneracion` mutan `estadoMapa` en el sitio,
-   * por eso la misma fachada sigue siendo válida tick tras tick. */
-  private mapaFachada: Mapa;
+  /** Fachada de consulta del estado ACTUAL, cacheada para no reconstruirla en cada lectura. Se invalida
+   * sola comparando referencias: en cuanto un comando cambia el mapa, `estado.estadoMapa` es otro objeto. */
+  private mapaDeConsulta: { sobre: EstadoMapa; mapa: Mapa } | null = null;
 
   private constructor(estado: GameSessionState, ids: GeneradorIds, rng: RandomFn) {
     this.estado = estado;
     this.ids = ids;
     this.rng = rng;
-    this.mapaFachada = crearMapa(estado.mapa, estado.estadoMapa);
   }
 
   static crear(gameId: string, config: { seed: number; region?: RegionId }): GameSession {
@@ -96,8 +93,16 @@ export class GameSession {
     return this.estado;
   }
 
+  /**
+   * Fachada de consulta sobre el estado actual. Es de SOLO LECTURA en la práctica aunque el tipo exponga
+   * `extraer`/`avanzarRegeneracion`: escribe en su propia copia, que nadie adopta, así que un uso indebido se
+   * pierde en vez de corromper la partida.
+   */
   getMapa(): Mapa {
-    return this.mapaFachada;
+    if (this.mapaDeConsulta?.sobre !== this.estado.estadoMapa) {
+      this.mapaDeConsulta = { sobre: this.estado.estadoMapa, mapa: crearMapa(this.estado.mapa, this.estado.estadoMapa) };
+    }
+    return this.mapaDeConsulta.mapa;
   }
 
   exportar(): PartidaExportada {
@@ -137,6 +142,10 @@ export class GameSession {
    * El comando se pasa por referencia en vez de por nombre para conservar los tipos de sus parámetros y de
    * sus datos de retorno. Un registro por nombre (`{ 'fundarAsentamiento': ... }`) hará falta en la Fase C,
    * cuando la API reciba comandos serializados; se construirá sobre estos mismos manejadores.
+   *
+   * El comando recibe una fachada `Mapa` RECIÉN CREADA sobre una copia del estado del mapa. Es lo que cierra
+   * el último resquicio por el que un comando podía dejar rastro sin devolverlo: si no adopta lo que escribió
+   * en la fachada, se descarta con ella.
    */
   ejecutar<P, R>(manejador: ManejadorComando<P, R>, params: P, opciones: { momento: string; actor?: ActorId }): ResultadoComando<R> {
     const ctx: ContextoComando = {
@@ -145,7 +154,18 @@ export class GameSession {
       rng: this.rng,
       ids: this.ids,
     };
-    const transicion = manejador(this.estado, this.mapaFachada, ctx, params);
+    const anterior = this.estado;
+    const mapa = crearMapa(anterior.mapa, anterior.estadoMapa);
+    const transicion = manejador(anterior, mapa, ctx, params);
+
+    // Un comando ACEPTADO que escribió en el mapa y no devolvió el resultado estaría perdiendo ese cambio en
+    // silencio. Es un bug de programación, no un estado de juego posible, así que se rompe fuerte en vez de
+    // dejar que la partida siga con los yacimientos desincronizados de lo que dice su versión.
+    // (Un comando RECHAZADO devuelve el estado intacto a propósito: ahí descartar el mapa es lo correcto.)
+    if (transicion.resultado.ok && mapa.mutacionesAplicadas > 0 && transicion.estado.estadoMapa === anterior.estadoMapa) {
+      throw new Error('Un comando modificó el mapa pero no devolvió `estadoMapa` en su estado resultante.');
+    }
+
     this.estado = transicion.estado;
     return transicion.resultado;
   }

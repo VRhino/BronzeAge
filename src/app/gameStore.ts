@@ -294,9 +294,9 @@ export class GameStore {
   /** Tick más antiguo con foto disponible. 0 en una partida normal; el tick importado tras un `importarSimulacion` (no hay fotos de ticks previos a ese punto). */
   private historialDesde = 0;
   /**
-   * Fachadas `Mapa` ya construidas, indexadas por el ESTADO del que salen (ver `getMapa`). La clave es el
-   * estado y no el mundo generado porque todas las fotos del historial comparten el mismo `MapaGenerado`
-   * por referencia — indexar por él devolvería la fachada de la partida en curso al pedir la de una foto.
+   * Fachadas `Mapa` de las FOTOS del historial, indexadas por el estado del que salen (ver `getMapa`). La
+   * clave es el estado y no el mundo generado porque todas las fotos comparten el mismo `MapaGenerado` por
+   * referencia — indexar por él devolvería la fachada de una foto cualquiera al pedir la de otra.
    */
   private mapasPorEstado = new WeakMap<EstadoMapa, Mapa>();
   /** Última fusión de zonas por facción calculada, con la firma de los asentamientos de los que salió — ver
@@ -332,10 +332,12 @@ export class GameStore {
 
   /**
    * Fachada de consulta del mapa (índices + consultas espaciales) para un estado dado; por defecto, el
-   * estado en vivo. Se cachea por objeto `MapaGenerado`, así que la partida en curso reutiliza siempre la
-   * misma instancia y cada foto del historial construye la suya solo si alguien llega a dibujarla.
+   * estado en vivo, que resuelve la propia `GameSession` — es la dueña de la partida y ya lleva su fachada.
+   * Aquí solo se construyen las de las FOTOS del historial, cacheadas por el estado del que salen para que
+   * cada una se calcule como mucho una vez, y solo si alguien llega a dibujarla.
    */
   getMapa(estado: Readonly<GameState> = this.state): Mapa {
+    if (estado === this.state) return this.session.getMapa();
     const cacheado = this.mapasPorEstado.get(estado.estadoMapa);
     if (cacheado) return cacheado;
     const mapa = crearMapa(estado.mapa, estado.estadoMapa);
