@@ -39,6 +39,11 @@ const CAPAS_PERMITIDAS: Record<string, string[]> = {
   // `app` es hoy GameStore: la sesión de UNA pestaña de navegador. Puede consumir `session` (así es como
   // GameStore se convierte en adaptador delgado sobre GameSession, doc 7 §6) pero nunca al revés.
   app: ['domain', 'worldgen', 'world', 'engine', 'session', 'constants'],
+  // `server` es la capa de aplicación DE PROCESO backend (Node — `fs`, futuro HTTP/WebSocket): todo lo que
+  // `session` no puede tener porque es deliberadamente síncrona y sin E/S (doc 7 §2). Empieza con la
+  // persistencia de partida (Fase B3) y en Fase B/C suma el `RunnerDePartida` y la API. NO puede importar de
+  // `app`/`ui`/`lab`: es el lado servidor, nunca depende del lado navegador.
+  server: ['domain', 'worldgen', 'world', 'engine', 'session', 'constants'],
   lab: ['domain', 'worldgen', 'world', 'engine', 'ui', 'constants'],
   main: ['domain', 'worldgen', 'world', 'engine', 'app', 'ui', 'constants'],
 };

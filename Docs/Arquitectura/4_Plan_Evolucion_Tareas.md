@@ -56,6 +56,13 @@ persistencia se elige). Se subdividen más a medida que cada fase se acerca.
 > Decisión con el usuario: hacer solo la base en esta sesión (definir el tipo + que el motor lo devuelva) y
 > dejar la migración subsistema-por-subsistema para tareas futuras, dado el tamaño (13 subsistemas de
 > `engine/` producen hoy `string[]` de texto libre dentro del tick).
+>
+> **⚠️ Gate añadido 2026-08-25: los 13 subsistemas se migran ANTES de entrar en Fase C.** No bloquean el resto
+> de la Fase B (persistencia, API HTTP, `RunnerDePartida` — siguen desacoplados, ver nota en doc 7 §7.1) pero
+> sí bloquean el arranque de Fase C. Motivo: Fase C construye autorización y proyecciones por audiencia sobre
+> los comandos, y la auditoría/replay de Fase E que `eventosDominio` existe para servir necesita códigos
+> estables para poder filtrarse por tipo — construir C encima de 13 eventos todavía sin migrar dejaría ese
+> trabajo por rehacer más caro más adelante, con más código ya dependiendo de la forma final.
 
 **Base (completada):**
 - [x] Definir tipo `EventoDominio` — módulo nuevo `src/domain/eventos.ts` (no `domain/types.ts`, que es solo contratos de entidades de juego): `{ codigo, mensaje, tick, asentamientoId? }`. Todo evento hoy usa `codigo: 'legado'` — no hay catálogo de códigos todavía, eso es justo lo que falta migrar
@@ -155,14 +162,22 @@ devolver un resultado estructurado") que a este marcador — no sumar ni restar 
   - Los tests de `GameStore` (export/import, NPC, integración) pasaron **sin modificarse** — es la prueba real de que la delegación preserva el comportamiento
   - `avanzarAutoComercio` (trueque automático de simulación, apagado por defecto) migró como tercera operación de sistema, conservando su orden: tick → auto-comercio → NPC
   - **Balance resuelto sin fingir que es partida**: `actualizarBalance`/`restaurarBalance` no pasan por `GameSession.ejecutar`; usan `registrarEventoAdministrativo`, un método explícitamente temporal para hechos que no son comandos de partida. Lo sustituye la auditoría real de Fase C
-- [ ] Implementar guardado de: estado, tick, RNG, IDs, configuración, eventos, con versión de concurrencia
-- [ ] Persistir `eventosDominio` en el snapshot desde el principio — no para el jugador (ver decisión §7.1 del doc 7: `log`/`historialJugadores` son de administración y no viajan a jugadores) sino para la auditoría y el replay de la Fase E
-- [ ] Definir y documentar el esquema de snapshot/versión de formato de partida
+- [x] **Implementar guardado de: estado, tick, RNG, IDs, configuración, eventos, con versión de concurrencia** (2026-08-25). `src/server/persistenciaPartida.ts` — capa NUEVA (`server/`), no `session/`: `GameSession` sigue sin E/S por diseño, así que lo que toca `fs` vive aparte. `server` puede importar de `session` pero no al revés, y no de `app`/`ui`/`lab` (regla añadida al test de arquitectura)
+  - **Todo lo que había que guardar ya estaba resuelto**: `GameSession.exportar()` (estado, tick, `eventosDominio`, mapa/yacimientos, IDs, y desde el commit anterior el RNG) ya devolvía `PartidaExportada` completo. Este módulo solo añadió el CÓMO: escritura atómica (`.tmp` + `rename`, decidido en este doc) y la comprobación de versión
+  - **Escritura atómica**: un fallo a mitad de escritura nunca deja un archivo a medias — el nombre final o tiene la versión anterior completa, o la nueva completa, nunca algo entre medias
+  - **Versión de concurrencia, como red de seguridad y no como mecanismo principal**: la cola serial por `gameId` del futuro `RunnerDePartida` ya elimina la concurrencia de escritura en operación normal (motivo por el que se descartó SQLite, ver más abajo en este mismo doc). `guardarPartida` rechaza sobreescribir con una versión de partida MENOR que la que ya hay en disco (`ConflictoDeVersionError`) — detecta el síntoma de un bug real (dos procesos escribiendo el mismo `gameId`) en vez de perder datos en silencio. Guardar la MISMA versión dos veces no lanza: es un reintento válido tras un fallo de escritura, no un conflicto
+  - `cargarPartida` reconstruye una `GameSession` operable y en continuidad de RNG — verificado a través del disco de verdad, no solo en memoria, con el mismo patrón de prueba que la continuidad de RNG de `session/`
+  - Tests: 357 → 366, en un directorio temporal real por test (`mkdtemp`/`rm`) — un fake en memoria no habría ejercitado `rename` en absoluto
+- [x] Persistir `eventosDominio` en el snapshot desde el principio — cubierto por lo de arriba: `PartidaExportada.state.eventosDominio` viaja dentro del snapshot sin que este módulo tuviera que hacer nada especial, ya era parte del estado de partida
+- [x] **Definir y documentar el esquema de snapshot/versión de formato de partida** — `SnapshotPartida { formatoVersion, guardadoEn, partida: PartidaExportada }` en `src/server/persistenciaPartida.ts`, documentado en el propio código: tres versiones DISTINTAS y no confundibles conviven en el archivo — `formatoVersion` (forma del envoltorio, sube solo si cambia la forma del JSON), `partida.state.version` (versión de LA PARTIDA, sube en cada comando aceptado, es la de concurrencia) y `partida.worldgenVersion` (versión del algoritmo de generación de mundo, ya existía). Cargar un snapshot valida las tres: formato no soportado (`FormatoSnapshotNoSoportadoError`) y worldgen distinto (`WorldgenVersionNoCoincideError`, mismo criterio que ya usaba `GameStore.importarSimulacion` para el formato v2) se rechazan explícitamente en vez de cargar algo que no es lo que dice ser
 - [ ] Exponer API HTTP administrativa mínima (crear partida, avanzar tick, consultar estado)
 - [ ] Migrar `main.ts` para hablar con esa API en vez de con `GameStore` local (puede convivir temporalmente con un modo local para desarrollo)
 - [ ] **Resolver el bloqueo de la cola serial por ticks largos** — un tick de ~1.9 s a 500 asentamientos son ~1.9 s sin procesar comandos de nadie (el doc 2 no lo contempla). Vías a evaluar: comandos por lotes entre ticks, partir el tick en fases cedibles, o mover el tick a un worker aparte del hilo que atiende comandos. **Decisión pendiente** — se aborda dentro del diseño del `RunnerDePartida` (ver [7_Diseno_GameSession.md](7_Diseno_GameSession.md) §4): al quedar la cola FUERA de `GameSession`, estas tres vías se pueden probar y cambiar sin tocar la lógica de partida
 
 ## Fase C — Multijugador sobre ticks
+
+> **⚠️ Gate de entrada (decidido 2026-08-25): el marcador de A5 tiene que estar en 13/13 antes de empezar
+> cualquier tarea de esta fase.** Ver la nota en A5, arriba. No es necesario para el resto de la Fase B.
 
 - [ ] Implementar `Usuario`, `Sesion`, `Membresia` según el diseño de A6
 - [ ] Implementar chequeo de autorización antes de aplicar cada comando (rol + facción + asentamiento + cargo)
@@ -207,7 +222,7 @@ solo diseñada.
 
 - [ ] IDs resueltos exclusivamente en servidor, nunca confiados desde el cliente
 - [ ] Cola serial o control de versión por partida para comandos concurrentes
-- [ ] RNG determinista con estado persistido (partidas reproducibles tras reinicio)
+- [x] RNG determinista con estado persistido (partidas reproducibles tras reinicio) — `PartidaExportada.estadoRng` + `src/server/persistenciaPartida.ts` (2026-08-25)
 - [ ] DTOs/proyecciones por audiencia (nunca enviar `GameState` completo a un cliente no-admin)
 - [ ] Snapshots y retención para el historial (nunca clones ilimitados en RAM)
 - [ ] Balance versionado y ligado a partida/temporada (no global mutable)
