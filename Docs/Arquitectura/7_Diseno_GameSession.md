@@ -215,6 +215,14 @@ Por qué así y no con la cola dentro:
 El diseño del `RunnerDePartida` (y con él la resolución del tick bloqueante) queda como tarea aparte, después
 de que `GameSession` exista. **No se diseña ahora** para no volver a mezclar dos problemas.
 
+> **✅ Implementado el 2026-08-25** — `src/server/runnerDePartida.ts`. Cola serial (encadenando promesas, sin
+> mutex: JS ya es de un solo hilo) + ciclo "aplicar -> persistir -> confirmar" del §2(a) sobre
+> `persistenciaPartida.ts` + scheduler de ticks automáticos. La RESOLUCIÓN del tick bloqueante sigue sin
+> construirse a propósito (§8.2: no hace falta a la escala de arranque) — lo que sí quedó resuelto es la
+> preparación de coste cero del §8.4: la interfaz ya es `async`, así que la solución que haga falta el día
+> que haga falta se implementa dentro del runner sin cambiar quién lo llama. Detalle en
+> [4_Plan_Evolucion_Tareas.md](4_Plan_Evolucion_Tareas.md).
+
 ## 5. Dónde vive
 
 **Capa nueva: `src/session/`.** No dentro de `app/`.
