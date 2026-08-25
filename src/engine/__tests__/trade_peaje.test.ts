@@ -6,22 +6,13 @@
 // esta ruta de código toca (`costeEnPunto`, `listarChokepoints`), no hace falta un mundo generado real.
 
 import { describe, expect, it } from 'vitest';
-import type { Asentamiento, Chokepoint, Faccion, Point, RecursoAlmacenado, ZonaInfluencia } from '../../domain/types';
-import type { Caravana } from '../../domain/types';
-import type { Mapa } from '../../world/mapa';
+import type { Asentamiento, Chokepoint, Faccion, Point, ZonaInfluencia } from '../../domain/types';
 import { CHOKEPOINTS_PEAJE } from '../../constants';
 import { avanzarComercio } from '../trade';
-
-function almacenCon(oro: number): Record<string, RecursoAlmacenado> {
-  return { oro: { cantidad: oro, capacidad: 100000 } };
-}
+import { almacenSintetico, caravanaComercialCasiLlegando, mapaSintetico } from './tradeFixtures';
 
 function asentamiento(id: string, faccionId: string, posicion: Point, oro: number): Asentamiento {
-  return { id, faccionId, posicion, almacen: almacenCon(oro), politicasActivas: [] } as unknown as Asentamiento;
-}
-
-function mapaConChokepoint(chokepoints: Chokepoint[]): Mapa {
-  return { costeEnPunto: () => 1, listarChokepoints: () => chokepoints } as unknown as Mapa;
+  return { id, faccionId, posicion, almacen: almacenSintetico({ oro }), politicasActivas: [] } as unknown as Asentamiento;
 }
 
 describe('peaje de chokepoints al llegar una caravana comercial', () => {
@@ -40,29 +31,12 @@ describe('peaje de chokepoints al llegar una caravana comercial', () => {
     ],
   };
 
-  // progreso casi 1: cualquier velocidad positiva basta para completar el tramo que falta y disparar la
-  // llegada este mismo tick (ver `avanzarPosicionEnRuta`) — evita depender del valor exacto de
-  // `CARAVANA_CATALOGO.comercial.velocidad`.
-  function caravanaCasiLlegando(): Caravana {
-    return {
-      id: 'caravana-1',
-      tipo: 'comercial',
-      origenAsentamientoId: 'origen',
-      destinoAsentamientoId: 'destino',
-      contenido: {},
-      posicionActual: { x: 999, y: 0 },
-      progreso: 0.9999999,
-      estado: 'en_transito',
-      ruta: [origen.posicion, destino.posicion],
-    };
-  }
-
   it('cobra al destino y abona al asentamiento que controla el chokepoint que la ruta atraviesa', () => {
-    const mapa = mapaConChokepoint([chokepoint]);
+    const mapa = mapaSintetico({ chokepoints: [chokepoint] });
     const resultado = avanzarComercio(
       [origen, destino, controlador],
       [] as Faccion[],
-      [caravanaCasiLlegando()],
+      [caravanaComercialCasiLlegando(origen, destino)],
       [],
       mapa,
       [],
@@ -79,8 +53,8 @@ describe('peaje de chokepoints al llegar una caravana comercial', () => {
   });
 
   it('NO cobra peaje si nadie controla el chokepoint (sin zona que lo cubra)', () => {
-    const mapa = mapaConChokepoint([chokepoint]);
-    const resultado = avanzarComercio([origen, destino, controlador], [] as Faccion[], [caravanaCasiLlegando()], [], mapa, [], [], 1);
+    const mapa = mapaSintetico({ chokepoints: [chokepoint] });
+    const resultado = avanzarComercio([origen, destino, controlador], [] as Faccion[], [caravanaComercialCasiLlegando(origen, destino)], [], mapa, [], [], 1);
 
     const destinoFinal = resultado.asentamientos.find((a) => a.id === 'destino')!;
     expect(destinoFinal.almacen['oro']!.cantidad).toBe(100);
@@ -98,11 +72,11 @@ describe('peaje de chokepoints al llegar una caravana comercial', () => {
         { x: 470, y: 530 },
       ],
     };
-    const mapa = mapaConChokepoint([chokepointLejano]);
+    const mapa = mapaSintetico({ chokepoints: [chokepointLejano] });
     const resultado = avanzarComercio(
       [origen, destino, controlador],
       [] as Faccion[],
-      [caravanaCasiLlegando()],
+      [caravanaComercialCasiLlegando(origen, destino)],
       [],
       mapa,
       [],
