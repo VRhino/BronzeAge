@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bronze Age Collapse — Administración</title>
+    <link rel="stylesheet" href="/src/ui/style.css" />
+    <style>
+      #admin {
+        max-width: 420px;
+        margin: 40px auto;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        padding: 0 16px;
+      }
+      #admin h1 {
+        font-size: 16px;
+        margin: 0;
+      }
+      #admin p.hint {
+        font-size: 11px;
+        color: #a89f88;
+        margin: 0;
+      }
+      #admin label {
+        font-size: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+      #admin input,
+      #admin select {
+        background: #1b1a17;
+        color: #e8e2d0;
+        border: 1px solid #4a4436;
+        padding: 5px 6px;
+        font-size: 12px;
+      }
+      #admin button {
+        background: #3a352b;
+        color: #e8e2d0;
+        border: 1px solid #4a4436;
+        padding: 7px 10px;
+        cursor: pointer;
+        font-size: 13px;
+      }
+      #admin button:hover {
+        background: #4a4436;
+      }
+      #admin-status {
+        font-size: 12px;
+        color: #e8e2d0;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="admin">
+      <h1>Crear / regenerar mundo</h1>
+      <p class="hint">
+        Operación de administración (Docs/Arquitectura/4_Plan_Evolucion_Tareas.md, Fase B3): crea una partida
+        nueva para un `gameId` sin usar, o la reinicia por completo (descartando el progreso) si ya existe.
+        No es una acción de jugador — `main.ts` solo se conecta a una partida que ya exista, nunca la crea
+        desde cero por su cuenta.
+      </p>
+      <label>
+        gameId
+        <input id="admin-gameid" type="text" value="local" />
+      </label>
+      <label>
+        Seed
+        <input id="admin-seed" type="number" value="1" />
+      </label>
+      <label>
+        Región (opcional)
+        <select id="admin-region">
+          <option value="">— por defecto —</option>
+          <option value="greciaContinental">greciaContinental</option>
+          <option value="anatolia">anatolia</option>
+          <option value="egeo">egeo</option>
+          <option value="nilo">nilo</option>
+          <option value="mesopotamia">mesopotamia</option>
+        </select>
+      </label>
+      <button id="admin-crear">Crear / regenerar</button>
+      <div id="admin-status">—</div>
+    </div>
+    <script type="module" src="/src/admin.ts"></script>
+  </body>
+</html>
