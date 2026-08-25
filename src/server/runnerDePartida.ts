@@ -76,10 +76,26 @@ export class RunnerDePartida {
     );
   }
 
-  /** Avanza un tick, en la misma cola que los comandos de jugador — comparten la misma restricción (doc 7
-   * §8.1: "el estado solo admite un mutador a la vez"), así que comparten la misma cola. */
+  /**
+   * Avanza un tick, en la misma cola que los comandos de jugador — comparten la misma restricción (doc 7
+   * §8.1: "el estado solo admite un mutador a la vez"), así que comparten la misma cola.
+   *
+   * Encadena tick → auto-comercio (apagado por defecto) → turno del NPC de gobernanza, mismo orden que tenía
+   * `GameStore.avanzarTick` antes de que existiera este runner — es UN solo persist para las tres, no tres
+   * comandos sueltos: si se guardaran por separado, un fallo de escritura a mitad podría dejar el tick
+   * aplicado pero el turno NPC no, con la partida y el disco de acuerdo en un estado que nadie pidió.
+   */
   avanzarTick(): Promise<ResultadoComando<void>> {
-    return this.encolar(() => this.aplicarYPersistir((sesion) => sesion.avanzarTick(this.ahora())));
+    return this.encolar(() =>
+      this.aplicarYPersistir((sesion) => {
+        const momento = this.ahora();
+        const resultado = sesion.avanzarTick(momento);
+        if (!resultado.ok) return resultado;
+        sesion.avanzarAutoComercio(momento);
+        sesion.avanzarFaccionesNpc(momento);
+        return resultado;
+      })
+    );
   }
 
   /**
