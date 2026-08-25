@@ -88,13 +88,52 @@ describe('GET /partidas/:gameId', () => {
   });
 });
 
+/** Login con el proveedor de desarrollo + unirse como jugador a `gameId` (asume la partida ya creada y
+ * abierta). Devuelve la cabecera `Authorization: sesion <id>` lista para pasar a `/comandos`. */
+async function unirseComoJugador(gameId: string, sujetoId = 'ana') {
+  const login = await app.inject({ method: 'POST', url: '/sesiones', headers: { authorization: `dev ${sujetoId}` } });
+  const { sesionId } = login.json();
+  const auth = { authorization: `sesion ${sesionId}` };
+  await app.inject({ method: 'POST', url: `/partidas/${gameId}/jugadores`, headers: auth });
+  return auth;
+}
+
+describe('POST /partidas/:gameId/jugadores', () => {
+  it('crea la membresia de jugador y devuelve su jugadorId', async () => {
+    await app.inject({ method: 'POST', url: '/partidas', payload: { gameId: 'g1', seed: 42 } });
+    const login = await app.inject({ method: 'POST', url: '/sesiones', headers: { authorization: 'dev ana' } });
+    const { sesionId } = login.json();
+
+    const res = await app.inject({ method: 'POST', url: '/partidas/g1/jugadores', headers: { authorization: `sesion ${sesionId}` } });
+
+    expect(res.statusCode).toBe(201);
+    expect(res.json().jugadorId).toBeTruthy();
+  });
+
+  it('rechaza unirse dos veces a la misma partida', async () => {
+    await app.inject({ method: 'POST', url: '/partidas', payload: { gameId: 'g1', seed: 42 } });
+    const auth = await unirseComoJugador('g1');
+
+    const res = await app.inject({ method: 'POST', url: '/partidas/g1/jugadores', headers: auth });
+    expect(res.statusCode).toBe(409);
+  });
+
+  it('401 sin sesion valida', async () => {
+    await app.inject({ method: 'POST', url: '/partidas', payload: { gameId: 'g1', seed: 42 } });
+    const res = await app.inject({ method: 'POST', url: '/partidas/g1/jugadores' });
+    expect(res.statusCode).toBe(401);
+  });
+});
+
 describe('POST /partidas/:gameId/comandos', () => {
   it('ejecuta un comando conocido por su nombre y lo refleja en el resumen devuelto', async () => {
     await app.inject({ method: 'POST', url: '/partidas', payload: { gameId: 'g1', seed: 42 } });
+    const auth = await unirseComoJugador('g1');
 
     const res = await app.inject({
       method: 'POST',
       url: '/partidas/g1/comandos',
+      headers: auth,
       payload: { tipo: 'crearFaccion', params: { nombre: 'Micenas' } },
     });
 
@@ -107,10 +146,12 @@ describe('POST /partidas/:gameId/comandos', () => {
 
   it('400 si el tipo de comando no existe en el registro', async () => {
     await app.inject({ method: 'POST', url: '/partidas', payload: { gameId: 'g1', seed: 42 } });
+    const auth = await unirseComoJugador('g1');
 
     const res = await app.inject({
       method: 'POST',
       url: '/partidas/g1/comandos',
+      headers: auth,
       payload: { tipo: 'noExiste', params: {} },
     });
 
@@ -126,12 +167,57 @@ describe('POST /partidas/:gameId/comandos', () => {
     expect(res.statusCode).toBe(404);
   });
 
-  it('un comando rechazado por el dominio responde 200 con `ok: false`, no un error HTTP', async () => {
+  it('401 sin sesion valida', async () => {
     await app.inject({ method: 'POST', url: '/partidas', payload: { gameId: 'g1', seed: 42 } });
 
     const res = await app.inject({
       method: 'POST',
       url: '/partidas/g1/comandos',
+      payload: { tipo: 'crearFaccion', params: { nombre: 'Micenas' } },
+    });
+
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('403 con sesion valida pero sin membresia en esa partida', async () => {
+    await app.inject({ method: 'POST', url: '/partidas', payload: { gameId: 'g1', seed: 42 } });
+    const login = await app.inject({ method: 'POST', url: '/sesiones', headers: { authorization: 'dev ana' } });
+    const { sesionId } = login.json();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/partidas/g1/comandos',
+      headers: { authorization: `sesion ${sesionId}` },
+      payload: { tipo: 'crearFaccion', params: { nombre: 'Micenas' } },
+    });
+
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('403 cuando la matriz de autorización rechaza la condición de dominio (Facción ajena)', async () => {
+    await app.inject({ method: 'POST', url: '/partidas', payload: { gameId: 'g1', seed: 42 } });
+    const auth = await unirseComoJugador('g1');
+    await app.inject({ method: 'POST', url: '/partidas/g1/comandos', headers: auth, payload: { tipo: 'crearFaccion', params: { nombre: 'Micenas' } } });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/partidas/g1/comandos',
+      headers: auth,
+      payload: { tipo: 'fundarAsentamiento', params: { faccionId: 'faccion-de-otro', posicion: { x: 0, y: 0 }, numJugadores: 1 } },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error).toMatch(/condicion_dominio/);
+  });
+
+  it('un comando rechazado por el dominio responde 200 con `ok: false`, no un error HTTP', async () => {
+    await app.inject({ method: 'POST', url: '/partidas', payload: { gameId: 'g1', seed: 42 } });
+    const auth = await unirseComoJugador('g1');
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/partidas/g1/comandos',
+      headers: auth,
       payload: { tipo: 'crearFaccion', params: { nombre: '' } },
     });
 
@@ -176,5 +262,56 @@ describe('reanudación tras "reinicio del proceso"', () => {
     } finally {
       await appReiniciada.close();
     }
+  });
+});
+
+describe('POST /sesiones y GET /sesiones/actual', () => {
+  it('login con el proveedor de desarrollo devuelve usuarioId + sesionId', async () => {
+    const res = await app.inject({ method: 'POST', url: '/sesiones', headers: { authorization: 'dev ana' } });
+
+    expect(res.statusCode).toBe(201);
+    const body = res.json();
+    expect(body.usuarioId).toMatch(/^usuario-/);
+    expect(body.sesionId).toBeTruthy();
+    expect(body.expiraEn).toBeTruthy();
+  });
+
+  it('rechaza login sin cabecera Authorization', async () => {
+    const res = await app.inject({ method: 'POST', url: '/sesiones' });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('rechaza login con un esquema sin proveedor registrado', async () => {
+    const res = await app.inject({ method: 'POST', url: '/sesiones', headers: { authorization: 'oauth token-x' } });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('la sesion emitida por el login resuelve en /sesiones/actual', async () => {
+    const login = await app.inject({ method: 'POST', url: '/sesiones', headers: { authorization: 'dev ana' } });
+    const { usuarioId, sesionId } = login.json();
+
+    const res = await app.inject({ method: 'GET', url: '/sesiones/actual', headers: { authorization: `sesion ${sesionId}` } });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().usuarioId).toBe(usuarioId);
+  });
+
+  it('/sesiones/actual rechaza sin sesion, con esquema equivocado, o con un id inexistente', async () => {
+    const sinCabecera = await app.inject({ method: 'GET', url: '/sesiones/actual' });
+    expect(sinCabecera.statusCode).toBe(401);
+
+    const esquemaEquivocado = await app.inject({ method: 'GET', url: '/sesiones/actual', headers: { authorization: 'dev ana' } });
+    expect(esquemaEquivocado.statusCode).toBe(401);
+
+    const inexistente = await app.inject({ method: 'GET', url: '/sesiones/actual', headers: { authorization: 'sesion no-existe' } });
+    expect(inexistente.statusCode).toBe(401);
+  });
+
+  it('el mismo sujetoId reutiliza el Usuario entre logins distintos', async () => {
+    const primero = await app.inject({ method: 'POST', url: '/sesiones', headers: { authorization: 'dev ana' } });
+    const segundo = await app.inject({ method: 'POST', url: '/sesiones', headers: { authorization: 'dev ana' } });
+
+    expect(segundo.json().usuarioId).toBe(primero.json().usuarioId);
+    expect(segundo.json().sesionId).not.toBe(primero.json().sesionId);
   });
 });

@@ -138,6 +138,8 @@ cumplirse. "Facción propia" significa `Jugador.faccionId` del actor debe coinci
 | `activarPolitica`, `anadirEdificioManualmente`, `quitarDeCola`, `moverEnCola`, `mejorarEdificioAhora`, `pausarAutoConstruccion`, `reanudarAutoConstruccion`, `calibrarReservaManual` | jugador | residente + cargo exigido por el comando (`gobernador`/`maestroObras`, ya validado hoy por el motor) |
 | `renombrarAsentamiento` | jugador | residente (o cargo específico — abierto, hoy no lo exige el motor) |
 | `romperRelacion`, `rebelionVasallo`, `anexionar`, `fusionar` | jugador | Facción propia, cargo de rey/embajador según ya exige `engine/diplomacia.ts`/`faccion.ts` |
+| `proponerRelacion` | jugador | Facción propia de `faccionAId` (quien propone), cargo de rey/embajador — **fila añadida 2026-08-25**: no estaba en la versión original de esta tabla, aunque el comando ya existía; implementada en `server/autorizacion/matriz.ts` por analogía con `romperRelacion` |
+| `proponerTrueque` | jugador | residente de `asentamientoAId` (quien propone) — **fila añadida 2026-08-25**, mismo motivo que `proponerRelacion` |
 | `colocarOrdenMercado`, `crearCaravana`, `reclutarTropa` | jugador | residente del asentamiento objetivo |
 | `iniciarAsedio`, `combateCampoAbierto`, `interceptarCaravana`, `atacarCampamentoBandidos` | jugador | residente del asentamiento atacante, escuadrones propios del jugador o de otros residentes autorizados |
 | `avanzarTick` | administrador_partida (etapa provisional) o scheduler del servidor | — (Doc 2: "el servidor sigue siendo quien avance y resuelva los ticks"; en producción no es un comando de cliente) |

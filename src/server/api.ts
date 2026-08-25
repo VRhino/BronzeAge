@@ -1,8 +1,12 @@
 // API HTTP administrativa mínima (Docs/Arquitectura/4_Plan_Evolucion_Tareas.md, Fase B3): crear partida,
-// avanzar tick, consultar estado. Nada de autenticación ni autorización todavía — eso es Fase C (doc 5).
-// Estos tres endpoints son deliberadamente de ADMINISTRACIÓN: sin protegerlos por rol técnico, no deben
-// exponerse tal cual a un cliente de jugador real. `main.ts` (el cliente de navegador local) todavía no
-// habla con esta API — esa es la tarea siguiente del doc 4, sin abordar.
+// avanzar tick, consultar estado. `POST /partidas/:gameId/comandos` sí exige sesión y pasa por la matriz de
+// autorización (Fase C2, doc 5) — es el único endpoint que ejecuta acciones de JUEGO en nombre de un actor.
+//
+// `POST /partidas`, `POST /partidas/:gameId/tick` y `GET /partidas/:gameId` siguen SIN exigir sesión: son
+// deliberadamente de ADMINISTRACIÓN (crear/avanzar/inspeccionar la partida en bruto) y ya estaban flotando
+// sin protección antes de C2 — protegerlas de verdad es CORS + versionado + separación de superficies
+// admin/jugador (C3/C6), no algo que quepa colar aquí de paso. `GET /partidas/:gameId` en particular sigue
+// devolviendo el estado completo sin proyección — fuga conocida, pendiente de C4.
 //
 // `crearServidor()` construye la instancia SIN escuchar ningún puerto — eso lo decide el llamador
 // (`index.ts` en producción, los tests vía `.inject()`). Es el patrón recomendado de Fastify para probar
@@ -10,12 +14,28 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { RegionId } from '../domain/types';
 import { REGISTRO_COMANDOS, type TipoComando } from '../session/comandos/registro';
-import { ACTOR_LOCAL, type ManejadorComando } from '../session/comandos/tipos';
+import type { ManejadorComando } from '../session/comandos/tipos';
 import { RunnerDePartida } from './runnerDePartida';
+import { proveedoresPorDefecto, crearRegistroProveedores } from './identidad/registroProveedores';
+import { crearRepositorioIdentidadEnMemoria } from './identidad/repositorio';
+import {
+  CabeceraAutorizacionInvalidaError,
+  ProveedorDesconocidoError,
+  autenticar,
+  resolverSesion,
+  type ContextoAutenticacion,
+} from './identidad/servicioAutenticacion';
+import { CredencialInvalidaError } from './identidad/proveedorIdentidad';
+import { verificarAutorizacion } from './autorizacion/verificar';
+import type { ActorDeComando } from './autorizacion/matriz';
 
 export interface OpcionesServidor {
   /** Directorio donde `persistenciaPartida.ts` guarda los snapshots. */
   directorio: string;
+  /** Contexto de autenticación (proveedores + repositorio). Por defecto usa solo el proveedor de desarrollo
+   * (`identidad/proveedorDesarrollo.ts`) sobre un repositorio en memoria — inyectable para tests o para un
+   * proceso real con otros proveedores dados de alta. */
+  identidad?: ContextoAutenticacion;
 }
 
 interface CrearPartidaBody {
@@ -88,6 +108,42 @@ function mensajeDe(err: unknown): string {
 export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
   const app = Fastify({ logger: false });
 
+  const identidad: ContextoAutenticacion = opciones.identidad ?? {
+    proveedores: crearRegistroProveedores(proveedoresPorDefecto()),
+    repositorio: crearRepositorioIdentidadEnMemoria(),
+  };
+
+  /**
+   * Login: `Authorization: <esquema-de-proveedor> <credencial>` (ej. `dev ana`, ver
+   * `identidad/proveedorDesarrollo.ts`) -> `Usuario` (find-or-create) + `Sesion` nueva. El cliente guarda
+   * `sesionId` y lo presenta en requests futuras como `Authorization: sesion <sesionId>`.
+   *
+   * Todavía no hay ningún endpoint que EXIJA esta sesión (eso es C2/C3 — autorización por comando y
+   * superficies separadas admin/jugador); este es el mecanismo, listo para que esas fases lo consuman.
+   */
+  app.post('/sesiones', async (request, reply) => {
+    try {
+      const { usuario, sesion } = await autenticar(request.headers.authorization, identidad);
+      return reply.code(201).send({ usuarioId: usuario.id, sesionId: sesion.id, expiraEn: sesion.expiraEn });
+    } catch (err) {
+      if (
+        err instanceof CabeceraAutorizacionInvalidaError ||
+        err instanceof ProveedorDesconocidoError ||
+        err instanceof CredencialInvalidaError
+      ) {
+        return reply.code(401).send({ error: mensajeDe(err) });
+      }
+      throw err;
+    }
+  });
+
+  /** Whoami: resuelve `Authorization: sesion <sesionId>` a quién es. Sin sesión válida, 401 — nunca lanza. */
+  app.get('/sesiones/actual', async (request, reply) => {
+    const resuelto = resolverSesion(request.headers.authorization, identidad);
+    if (!resuelto) return reply.code(401).send({ error: 'sesion ausente, invalida o expirada' });
+    return reply.send({ usuarioId: resuelto.usuario.id, sesionId: resuelto.sesion.id, expiraEn: resuelto.sesion.expiraEn });
+  });
+
   /**
    * Partidas que ESTE proceso tiene abiertas. No es un caché de conveniencia: es lo que impide que dos
    * peticiones de creación concurrentes para el mismo `gameId` acaben con dos `RunnerDePartida` distintos
@@ -120,6 +176,41 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
     return reply.code(201).send(resumenDe(runner));
   });
 
+  /**
+   * Unirse a una partida como jugador: `Authorization: sesion <id>` -> crea la `Membresia` (rol `'jugador'`,
+   * sin Facción todavía — doc 5: "null antes de unirse a una") que `/comandos` exige para todo lo que no sea
+   * de administración. Un `Usuario` solo puede tener una `Membresia` por `gameId` (doc 5, "Preguntas
+   * abiertas" lo asume 1:1) — repetir la llamada tras la primera es 409, no una migración silenciosa.
+   *
+   * `Jugador` como entidad de almacenamiento propia (doc 5) queda diferida: hoy nada además de la
+   * autorización necesita distinguirla de la `Membresia` que ya la referencia, así que crear un puerto de
+   * persistencia solo para duplicar `jugadorId`/`faccionId` sería infraestructura sin consumidor. Reutiliza
+   * el `id` del `Usuario` como `jugadorId` — cumple el contrato del doc ("mismo valor que hoy usa el motor
+   * como jugadorId") sin necesitar un generador de ids aparte.
+   */
+  app.post<{ Params: ParametrosGameId }>('/partidas/:gameId/jugadores', async (request, reply) => {
+    const runner = runners.get(request.params.gameId);
+    if (!runner) {
+      return reply.code(404).send({ error: `la partida '${request.params.gameId}' no está abierta en este proceso.` });
+    }
+    const resuelto = resolverSesion(request.headers.authorization, identidad);
+    if (!resuelto) return reply.code(401).send({ error: 'sesion ausente, invalida o expirada' });
+
+    if (identidad.repositorio.obtenerMembresia(resuelto.usuario.id, request.params.gameId)) {
+      return reply.code(409).send({ error: 'ya existe una membresia de este usuario en esta partida' });
+    }
+    const jugadorId = resuelto.usuario.id;
+    identidad.repositorio.otorgarMembresia({
+      usuarioId: resuelto.usuario.id,
+      gameId: request.params.gameId,
+      jugadorId,
+      faccionId: null,
+      rol: 'jugador',
+      desde: new Date().toISOString(),
+    });
+    return reply.code(201).send({ jugadorId });
+  });
+
   app.post<{ Params: ParametrosGameId; Body: EjecutarComandoBody }>(
     '/partidas/:gameId/comandos',
     { schema: ESQUEMA_EJECUTAR_COMANDO },
@@ -128,10 +219,29 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
       if (!runner) {
         return reply.code(404).send({ error: `la partida '${request.params.gameId}' no está abierta en este proceso.` });
       }
+
+      // Fase C2 (doc 5): actor SIEMPRE resuelto desde la sesión + membresía, nunca de un id que el body
+      // afirme tener. Sin `Membresia` en esta partida no hay nada que autorizar — 403, no 401 (la sesión en
+      // sí es válida; lo que falta es pertenencia a ESTA partida).
+      const resuelto = resolverSesion(request.headers.authorization, identidad);
+      if (!resuelto) return reply.code(401).send({ error: 'sesion ausente, invalida o expirada' });
+      const membresia = identidad.repositorio.obtenerMembresia(resuelto.usuario.id, request.params.gameId);
+      if (!membresia) return reply.code(403).send({ error: 'sin membresia en esta partida' });
+
       const { tipo, params } = request.body;
       if (!esTipoComandoValido(tipo)) {
         return reply.code(400).send({ error: `tipo de comando desconocido: '${tipo}'.` });
       }
+
+      const actor: ActorDeComando = { rol: membresia.rol, jugadorId: membresia.jugadorId, faccionId: membresia.faccionId };
+      // `tipo` es `TipoComando` (unión), no un literal: la genérica de `verificarAutorizacion` no infiere un
+      // único `T` de una unión, igual que `manejador` de abajo pierde su `P`/`R` en el mismo punto — misma
+      // frontera "comando serializado sin validar" que ya asume el resto de la ruta.
+      const chequeo = verificarAutorizacion(tipo, params as any, runner.getState(), actor);
+      if (!chequeo.autorizado) {
+        return reply.code(403).send({ error: `no autorizado (${chequeo.motivo})` });
+      }
+
       // Dispatch genérico por nombre: el tipo específico de cada manejador (`P`/`R`) se pierde a propósito
       // aquí — es la frontera entre "comando serializado sin validar" y "comando tipado", igual que en
       // cualquier deserialización de un body HTTP. Sin esquema por comando todavía (queda para Fase C, doc
@@ -139,8 +249,9 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
       // devolver un rechazo limpio — cae en el `catch` de abajo como cualquier otro fallo y se responde 409,
       // no un crash del proceso.
       const manejador = REGISTRO_COMANDOS[tipo] as ManejadorComando<unknown, unknown>;
+      const actorId = membresia.jugadorId ?? `admin:${resuelto.usuario.id}`;
       try {
-        const resultado = await runner.ejecutar(manejador, params, ACTOR_LOCAL);
+        const resultado = await runner.ejecutar(manejador, params, actorId);
         return reply.send({ ...resumenDe(runner), resultado });
       } catch (err) {
         // Igual que en /tick: solo un fallo de persistencia llega hasta aquí como excepción.
