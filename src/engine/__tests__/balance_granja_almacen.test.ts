@@ -15,9 +15,9 @@ import {
   ConstruccionManualInvalidaError,
   maximoViviendasPorNivel,
 } from '../construction';
-import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
+import { avanzarSimulacion } from '../simulation';
 import { createRng, type RandomFn } from '../../worldgen';
-import { contextoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, posicionRecomendable } from './fixtures';
+import { contextoDeTest, crearEstadoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, posicionRecomendable } from './fixtures';
 
 const SEED = 99;
 
@@ -116,18 +116,7 @@ describe('Almacén: tope por nivel de asentamiento', () => {
     const mapa = crearMapaDeterminista(SEED);
     const facciones = crearFacciones();
     const { asentamiento, facciones: facs } = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', [], 0, posicionRecomendable(mapa));
-    let estado: EstadoSimulacion = {
-      asentamientos: [conAlmacenLleno(asentamiento)],
-      facciones: facs,
-      caravanas: [],
-      acuerdos: [],
-      ordenes: [],
-      relaciones: [],
-      titulos: [],
-      caminos: [],
-      campamentosBandidos: [],
-      bandidosProximoSpawnTick: 0,
-    };
+    let estado = crearEstadoDeTest([conAlmacenLleno(asentamiento)], facs);
 
     let maximoVisto = 0;
     for (let tick = 1; tick <= 200; tick++) {

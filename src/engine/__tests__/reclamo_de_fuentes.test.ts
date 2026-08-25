@@ -10,11 +10,11 @@
 // `reclamosDeFuentes`) y se actualiza según se compromete cada obra, también dentro de un mismo tick.
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Asentamiento } from '../../domain/types';
-import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
+import { avanzarSimulacion } from '../simulation';
 import { createRng, type RandomFn } from '../../worldgen';
 import { reclamosDeFuentes } from '../construction';
 import { evaluarViabilidadFundacion } from '../settlement';
-import { contextoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
+import { contextoDeTest, crearEstadoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
 
 // Antes SEED=7: con el reordenamiento de PRNG de WORLDGEN_VERSION v6 (fertilidad antes que bosques, ver
 // `worldgen/types.ts`) el mundo de esa seed desplazó los nodos minerales lejos del primer par de
@@ -83,18 +83,7 @@ describe('reclamo de fuentes del mapa', () => {
   it('ningún yacimiento acaba explotado por dos asentamientos a la vez', () => {
     const { mapa, facciones, asentamientos } = dosAsentamientosDeLaMismaFaccion();
 
-    let estado: EstadoSimulacion = {
-      asentamientos,
-      facciones,
-      caravanas: [],
-      acuerdos: [],
-      ordenes: [],
-      relaciones: [],
-      titulos: [],
-      caminos: [],
-      campamentosBandidos: [],
-      bandidosProximoSpawnTick: 0,
-    };
+    let estado = crearEstadoDeTest(asentamientos, facciones);
 
     for (let tick = 1; tick <= TICKS; tick++) {
       estado = avanzarSimulacion(estado, mapa, contextoDeTest(tick, rng));
@@ -115,18 +104,7 @@ describe('reclamo de fuentes del mapa', () => {
   it('ningún bosque supera su capacidad de Leñeras sumando todos los asentamientos', () => {
     const { mapa, facciones, asentamientos } = dosAsentamientosDeLaMismaFaccion();
 
-    let estado: EstadoSimulacion = {
-      asentamientos,
-      facciones,
-      caravanas: [],
-      acuerdos: [],
-      ordenes: [],
-      relaciones: [],
-      titulos: [],
-      caminos: [],
-      campamentosBandidos: [],
-      bandidosProximoSpawnTick: 0,
-    };
+    let estado = crearEstadoDeTest(asentamientos, facciones);
 
     let lenerasVistas = 0;
     for (let tick = 1; tick <= TICKS; tick++) {

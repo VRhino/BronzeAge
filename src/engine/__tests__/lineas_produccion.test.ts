@@ -11,12 +11,12 @@ import { describe, expect, it } from 'vitest';
 import type { Asentamiento, Edificio, RecursoAlmacenado } from '../../domain/types';
 import type { RecetaProduccion } from '../../constants';
 import { LINEAS_PRODUCCION, REJILLA_ASENTAMIENTO, ZONA_INFLUENCIA } from '../../constants';
-import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
+import { avanzarSimulacion } from '../simulation';
 import { createRng } from '../../worldgen';
 import { factorLineaProduccion, factorPorDistancia, sitioEnBarrio, sitioEnBarrioLineaProduccion, tieneInsumoDeArranque } from '../construction';
 import { celdaMinimaDeEdificio, crearAnclaNueva } from '../trazado';
 import { activarPolitica, lineasProduccionPriorizadas } from '../politicas';
-import { contextoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
+import { contextoDeTest, crearEstadoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
 
 const SEED = 42;
 
@@ -74,18 +74,7 @@ describe('gate de materia prima para auto-construcción de transformación', () 
     const rng = createRng(SEED);
     const { asentamiento: base } = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', []);
     const asentamiento = conAlmacen({ ...base, nivel: 2, nivelActual: 2 }, { cobre: 10, piedra: 200 });
-    let estado: EstadoSimulacion = {
-      asentamientos: [asentamiento],
-      facciones,
-      caravanas: [],
-      acuerdos: [],
-      ordenes: [],
-      relaciones: [],
-      titulos: [],
-      caminos: [],
-      campamentosBandidos: [],
-      bandidosProximoSpawnTick: 0,
-    };
+    let estado = crearEstadoDeTest([asentamiento], facciones);
 
     // 150, no 40: presupuesto con margen sobre el sitio de fundación real de este seed (ver comentario
     // equivalente más abajo, en el test de líneas de producción) — evita que el test dependa del filo
@@ -257,18 +246,7 @@ describe('política "Líneas de Producción" del Maestro de Obras', () => {
           const faccion = facs.find((f) => f.id === 'faccion-1')!;
           asentamiento = activarPolitica(asentamiento, faccion, 'maestroObras', 'lineas_produccion', 1);
         }
-        let estado: EstadoSimulacion = {
-          asentamientos: [asentamiento],
-          facciones: facs,
-          caravanas: [],
-          acuerdos: [],
-          ordenes: [],
-          relaciones: [],
-          titulos: [],
-          caminos: [],
-          campamentosBandidos: [],
-          bandidosProximoSpawnTick: 0,
-        };
+        let estado = crearEstadoDeTest([asentamiento], facs);
         // 150, no 40: con el sitio de fundación real de esta seed, ambas ramas tardan ~76-77 ticks en
         // encontrarle sitio a Fundición detrás de Armería (solo una transformación en vuelo a la vez, ver
         // comentario en `construction.ts`) — margen para que no dependa del filo exacto del fixture. Subido

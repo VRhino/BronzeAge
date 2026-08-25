@@ -10,9 +10,9 @@ import type { Asentamiento, Edificio } from '../../domain/types';
 import { MERCADO_PUESTOS_POR_NIVEL, PUESTO_MERCADO_FORMA, ZONA_INFLUENCIA } from '../../constants';
 import { cupoCaravanas, tieneMercadoActivo } from '../asentamientoQuery';
 import { anadirEdificioManualmente, ConstruccionManualInvalidaError } from '../construction';
-import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
+import { avanzarSimulacion } from '../simulation';
 import { createRng } from '../../worldgen';
-import { contextoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
+import { contextoDeTest, crearEstadoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
 
 const SEED = 42;
 
@@ -132,18 +132,7 @@ describe('Mercado como zona de varias piezas', () => {
       ambito: 'asentamiento',
       nivelInterno: 1,
     };
-    let estado: EstadoSimulacion = {
-      asentamientos: [{ ...asentamiento, edificios: [...asentamiento.edificios, enObra] }],
-      facciones: facs,
-      caravanas: [],
-      acuerdos: [],
-      ordenes: [],
-      relaciones: [],
-      titulos: [],
-      caminos: [],
-      campamentosBandidos: [],
-      bandidosProximoSpawnTick: 0,
-    };
+    let estado = crearEstadoDeTest([{ ...asentamiento, edificios: [...asentamiento.edificios, enObra] }], facs);
     estado = avanzarSimulacion(estado, mapa, contextoDeTest(1, rng));
 
     const a = estado.asentamientos[0]!;

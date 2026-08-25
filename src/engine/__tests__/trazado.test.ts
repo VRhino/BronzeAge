@@ -8,7 +8,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Asentamiento, Edificio } from '../../domain/types';
 import { TRAZADO } from '../../constants';
-import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
+import { avanzarSimulacion } from '../simulation';
 import { createRng } from '../../worldgen';
 import {
   aristasDePerimetro,
@@ -20,6 +20,7 @@ import {
 } from '../trazado';
 import {
   contextoDeTest,
+  crearEstadoDeTest,
   crearFacciones,
   crearMapaDeterminista,
   fundarAsentamientoDeTest,
@@ -35,18 +36,7 @@ function simular(): Asentamiento[] {
   const posicion = posicionRecomendable(mapa);
   const { asentamiento, facciones: faccionesTrasFundar } = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', [], 0, posicion);
 
-  let estado: EstadoSimulacion = {
-    asentamientos: [asentamiento],
-    facciones: faccionesTrasFundar,
-    caravanas: [],
-    acuerdos: [],
-    ordenes: [],
-    relaciones: [],
-    titulos: [],
-    caminos: [],
-    campamentosBandidos: [],
-    bandidosProximoSpawnTick: 0,
-  };
+  let estado = crearEstadoDeTest([asentamiento], faccionesTrasFundar);
   const rng = createRng(SEED);
   for (let tick = 1; tick <= TICKS; tick++) estado = avanzarSimulacion(estado, mapa, contextoDeTest(tick, rng));
   return estado.asentamientos;

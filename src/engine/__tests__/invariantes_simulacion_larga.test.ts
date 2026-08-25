@@ -6,10 +6,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Asentamiento, Faccion } from '../../domain/types';
 import type { Mapa } from '../../world/mapa';
-import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
+import { avanzarSimulacion } from '../simulation';
 import { createRng, type RandomFn } from '../../worldgen';
 import {
   contextoDeTest,
+  crearEstadoDeTest,
   crearFacciones,
   crearMapaDeterminista,
   fundarAsentamientoDeTest,
@@ -49,18 +50,7 @@ describe('invariantes del motor en una simulación larga', () => {
     const facciones = crearFacciones();
     const asentamientosIniciales = fundarVarios(mapa, facciones);
 
-    let estado: EstadoSimulacion = {
-      asentamientos: asentamientosIniciales,
-      facciones,
-      caravanas: [],
-      acuerdos: [],
-      ordenes: [],
-      relaciones: [],
-      titulos: [],
-      caminos: [],
-      campamentosBandidos: [],
-      bandidosProximoSpawnTick: 0,
-    };
+    let estado = crearEstadoDeTest(asentamientosIniciales, facciones);
 
     const ultimoNivelVisto = new Map<string, number>();
 

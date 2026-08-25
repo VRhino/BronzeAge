@@ -9,25 +9,14 @@ import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
 import { createRng } from '../../worldgen';
 import { esDeAfueras } from '../trazado';
 import { computeTodasLasZonas, mejorFertilidadEnZona } from '../zones';
-import { contextoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
+import { contextoDeTest, crearEstadoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
 
 const SEED = 42;
 const EXTERNOS = new Set(['mina', 'minaCobre', 'minaEstano', 'cantera']);
 const modulo = (p: { x: number; y: number }) => Math.hypot(p.x, p.y);
 
 function estadoInicial(asentamiento: Asentamiento, facciones: ReturnType<typeof crearFacciones>): EstadoSimulacion {
-  return {
-    asentamientos: [asentamiento],
-    facciones,
-    caravanas: [],
-    acuerdos: [],
-    ordenes: [],
-    relaciones: [],
-    titulos: [],
-    caminos: [],
-    campamentosBandidos: [],
-    bandidosProximoSpawnTick: 0,
-  };
+  return crearEstadoDeTest([asentamiento], facciones);
 }
 
 describe('Vista de Asentamiento — fundación en espacio local', () => {

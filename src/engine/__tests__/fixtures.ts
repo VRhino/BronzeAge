@@ -6,7 +6,7 @@ import { generarMapa, MAPA_DEFAULT, type RandomFn } from '../../worldgen';
 import { crearMapa, type Mapa } from '../../world/mapa';
 import { crearFaccion } from '../faccion';
 import { evaluarViabilidadFundacion, fundarAsentamiento } from '../settlement';
-import type { ContextoSimulacion } from '../simulation';
+import type { ContextoSimulacion, EstadoSimulacion } from '../simulation';
 
 export function crearMapaDeterminista(seed: number): Mapa {
   return crearMapa(generarMapa({ ancho: MAPA_DEFAULT.ancho, alto: MAPA_DEFAULT.alto, seed }));
@@ -63,4 +63,30 @@ export function fundarAsentamientoDeTest(
 
 export function crearFacciones(): Faccion[] {
   return [crearFaccion('faccion-1', 'Micenas'), crearFaccion('faccion-2', 'Troya'), crearFaccion('faccion-3', 'Ugarit')];
+}
+
+/**
+ * `EstadoSimulacion` de test: `asentamientos`/`facciones` son lo único que varía de un test a otro en toda
+ * la suite (revisión de duplicación 2026-08-25) — los otros 8 campos SIEMPRE arrancan vacíos/en cero, y ese
+ * objeto literal de 10 campos estaba copiado tal cual en 13+ archivos. `overrides` cubre el caso — hoy
+ * inexistente, pero no imposible — de un test que necesite arrancar con caravanas u órdenes ya puestas.
+ */
+export function crearEstadoDeTest(
+  asentamientos: Asentamiento[],
+  facciones: Faccion[],
+  overrides: Partial<Omit<EstadoSimulacion, 'asentamientos' | 'facciones'>> = {}
+): EstadoSimulacion {
+  return {
+    asentamientos,
+    facciones,
+    caravanas: [],
+    acuerdos: [],
+    ordenes: [],
+    relaciones: [],
+    titulos: [],
+    caminos: [],
+    campamentosBandidos: [],
+    bandidosProximoSpawnTick: 0,
+    ...overrides,
+  };
 }

@@ -5,10 +5,11 @@
 // el diff a propósito (`vitest run -u` para aceptarlo conscientemente) en vez de colarse en silencio.
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Asentamiento, Faccion } from '../../domain/types';
-import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
+import { avanzarSimulacion } from '../simulation';
 import { createRng, type RandomFn } from '../../worldgen';
 import {
   contextoDeTest,
+  crearEstadoDeTest,
   crearFacciones,
   crearMapaDeterminista,
   fundarAsentamientoDeTest,
@@ -57,18 +58,7 @@ describe('snapshot de regresión general', () => {
     const posicion = posicionRecomendable(mapa);
     const { asentamiento, facciones: faccionesTrasFundar } = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', [], 0, posicion);
 
-    let estado: EstadoSimulacion = {
-      asentamientos: [asentamiento],
-      facciones: faccionesTrasFundar,
-      caravanas: [],
-      acuerdos: [],
-      ordenes: [],
-      relaciones: [],
-      titulos: [],
-      caminos: [],
-      campamentosBandidos: [],
-      bandidosProximoSpawnTick: 0,
-    };
+    let estado = crearEstadoDeTest([asentamiento], faccionesTrasFundar);
 
     const cortes: Record<number, unknown> = {};
     for (let tick = 1; tick <= Math.max(...TICKS_DE_CORTE); tick++) {

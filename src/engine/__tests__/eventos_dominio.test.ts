@@ -4,9 +4,9 @@
 // hay que proteger aquí es el contrato: mismo contenido que `eventos`, con `tick` correcto y `asentamientoId`
 // presente solo cuando el evento viene del bucle por asentamiento.
 import { describe, expect, it } from 'vitest';
-import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
+import { avanzarSimulacion } from '../simulation';
 import { createRng } from '../../worldgen';
-import { contextoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
+import { contextoDeTest, crearEstadoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
 
 describe('eventos de dominio (Fase A5, base)', () => {
   it('eventosDominio tiene el mismo contenido que eventos, con tick y asentamientoId cuando aplica', () => {
@@ -14,18 +14,7 @@ describe('eventos de dominio (Fase A5, base)', () => {
     const facciones = crearFacciones();
     const { asentamiento, facciones: faccionesTrasFundar } = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', []);
 
-    const estado: EstadoSimulacion = {
-      asentamientos: [asentamiento],
-      facciones: faccionesTrasFundar,
-      caravanas: [],
-      acuerdos: [],
-      ordenes: [],
-      relaciones: [],
-      titulos: [],
-      caminos: [],
-      campamentosBandidos: [],
-      bandidosProximoSpawnTick: 0,
-    };
+    const estado = crearEstadoDeTest([asentamiento], faccionesTrasFundar);
 
     const tick = 1;
     const contexto = contextoDeTest(tick, createRng(1));

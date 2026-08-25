@@ -6,9 +6,9 @@
 // garantizado, etc.) que haga que dos partidas "idénticas" diverjan en producción sin que ningún test de
 // valores concretos lo note.
 import { describe, expect, it } from 'vitest';
-import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
+import { avanzarSimulacion } from '../simulation';
 import { createRng } from '../../worldgen';
-import { contextoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
+import { contextoDeTest, crearEstadoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
 
 const TICKS = 80;
 
@@ -17,18 +17,7 @@ function correrSimulacion(seed: number) {
   const mapa = crearMapaDeterminista(seed);
   const { asentamiento, facciones } = fundarAsentamientoDeTest(mapa, crearFacciones(), 'faccion-1', []);
 
-  let estado: EstadoSimulacion = {
-    asentamientos: [asentamiento],
-    facciones,
-    caravanas: [],
-    acuerdos: [],
-    ordenes: [],
-    relaciones: [],
-    titulos: [],
-    caminos: [],
-    campamentosBandidos: [],
-    bandidosProximoSpawnTick: 0,
-  };
+  let estado = crearEstadoDeTest([asentamiento], facciones);
   const eventosPorTick: string[][] = [];
   for (let tick = 1; tick <= TICKS; tick++) {
     const resultado = avanzarSimulacion(estado, mapa, contextoDeTest(tick, rng));

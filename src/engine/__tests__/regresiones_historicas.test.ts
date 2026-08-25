@@ -3,10 +3,11 @@
 // bug (a propósito o sin querer, ej. al refactorizar), el test correspondiente debe fallar.
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { EdificioTipo } from '../../domain/types';
-import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
+import { avanzarSimulacion } from '../simulation';
 import { createRng, type RandomFn } from '../../worldgen';
 import {
   contextoDeTest,
+  crearEstadoDeTest,
   crearFacciones,
   crearMapaDeterminista,
   fundarAsentamientoDeTest,
@@ -27,18 +28,7 @@ function estadoInicialConUnAsentamiento(posicion?: { x: number; y: number }) {
   const mapa = crearMapaDeterminista(SEED);
   const facciones = crearFacciones();
   const { asentamiento, facciones: faccionesTrasFundar } = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', [], 0, posicion);
-  const estado: EstadoSimulacion = {
-    asentamientos: [asentamiento],
-    facciones: faccionesTrasFundar,
-    caravanas: [],
-    acuerdos: [],
-    ordenes: [],
-    relaciones: [],
-    titulos: [],
-    caminos: [],
-    campamentosBandidos: [],
-    bandidosProximoSpawnTick: 0,
-  };
+  const estado = crearEstadoDeTest([asentamiento], faccionesTrasFundar);
   return { mapa, estado };
 }
 

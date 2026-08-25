@@ -21,9 +21,9 @@ import {
   tamanoDeEdificio,
   tipoAnclaParaCategoria,
 } from '../trazado';
-import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
+import { avanzarSimulacion } from '../simulation';
 import { createRng } from '../../worldgen';
-import { contextoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
+import { contextoDeTest, crearEstadoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
 
 const SEED = 42;
 const RECLAMOS_VACIOS = { nodos: new Set<string>(), lenerasPorBosque: new Map<string, number>() };
@@ -131,18 +131,7 @@ describe('Etapa 5 — Carpintería: zona de tres piezas (§9, Lógica 2, sin cam
       ticksRestantes: 1,
       ambito: 'asentamiento',
     };
-    let estado: EstadoSimulacion = {
-      asentamientos: [{ ...asentamiento, edificios: [...asentamiento.edificios, enObra] }],
-      facciones: facs,
-      caravanas: [],
-      acuerdos: [],
-      ordenes: [],
-      relaciones: [],
-      titulos: [],
-      caminos: [],
-      campamentosBandidos: [],
-      bandidosProximoSpawnTick: 0,
-    };
+    let estado = crearEstadoDeTest([{ ...asentamiento, edificios: [...asentamiento.edificios, enObra] }], facs);
     estado = avanzarSimulacion(estado, mapa, contextoDeTest(1, rng));
 
     const a = estado.asentamientos[0]!;
