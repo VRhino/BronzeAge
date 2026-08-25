@@ -1,23 +1,12 @@
-// Puerto de PERSISTENCIA de identidad — deliberadamente separado de `ProveedorIdentidad` (que solo verifica
-// credenciales, nunca guarda nada): este puerto recuerda qué `Usuario` corresponde a qué identidad externa,
-// y las `Sesion`/`Membresia` vigentes. La implementación en memoria de abajo es la única hoy — sustituirla
-// por una respaldada en disco o en una base real (igual que `persistenciaPartida.ts` para el estado de
-// partida) es cambiar esta clase sin tocar `servicioAutenticacion.ts`.
+// Adaptador en memoria del puerto `RepositorioIdentidad` (`acceso/repositorio.ts`). Es INFRAESTRUCTURA: cómo
+// se guardan los datos de acceso, no qué significan.
 //
-// Se pierde al reiniciar el proceso: aceptable mientras el único proveedor sea el de desarrollo
-// (`proveedorDesarrollo.ts`) y no haya usuarios reales que deban sobrevivir a un reinicio.
-import type { IdentidadVinculada, Membresia, Sesion, Usuario } from './tipos';
-
-export interface RepositorioIdentidad {
-  obtenerUsuario(usuarioId: string): Usuario | undefined;
-  buscarUsuarioPorIdentidadExterna(proveedor: string, sujetoId: string): Usuario | undefined;
-  crearUsuario(datos: { creadoEn: string }): Usuario;
-  vincularIdentidad(vinculo: IdentidadVinculada): void;
-  crearSesion(sesion: Sesion): void;
-  buscarSesion(sesionId: string): Sesion | undefined;
-  obtenerMembresia(usuarioId: string, gameId: string): Membresia | undefined;
-  otorgarMembresia(membresia: Membresia): void;
-}
+// Se pierde al reiniciar el proceso: aceptable mientras el único proveedor activo sea el de desarrollo
+// (`proveedorDesarrollo.ts`) y no haya usuarios reales que deban sobrevivir a un reinicio. Sustituirlo por
+// una implementación persistente (al estilo de `server/persistenciaPartida.ts` para el estado de partida) es
+// escribir otro adaptador de este mismo puerto y cambiar quién lo construye.
+import type { RepositorioIdentidad } from '../../acceso/repositorio';
+import type { Membresia, Sesion, Usuario } from '../../acceso/tipos';
 
 export function crearRepositorioIdentidadEnMemoria(): RepositorioIdentidad {
   const usuarios = new Map<string, Usuario>();

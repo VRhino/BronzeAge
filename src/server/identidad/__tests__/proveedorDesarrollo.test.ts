@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CredencialInvalidaError } from '../proveedorIdentidad';
+import { CredencialInvalidaError } from '../../../acceso/proveedorIdentidad';
 import { ESQUEMA_DESARROLLO, proveedorDesarrollo } from '../proveedorDesarrollo';
 
 describe('proveedorDesarrollo', () => {

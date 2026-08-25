@@ -8,25 +8,42 @@ La aplicación se construye con Vite y TypeScript. No incorpora framework de int
 
 ## Vista global
 
+Este repositorio es **solo servidor** desde la Fase C0: el cliente de navegador se extrajo a `cliente/`
+(proyecto aparte) y el de administración vive fuera. Lo que queda es un proceso Node.
+
 ```text
-Navegador
-  src/main.ts                 Interfaz DOM, eventos y estado visual local
-  src/ui/canvas.ts            Render Canvas 2D, exclusivamente presentacional
+INFRAESTRUCTURA — cómo se sirve (sustituible sin tocar el negocio)
+  src/server/                 Proceso Node: Fastify, persistencia en disco, RunnerDePartida
+    server/identidad/         Adaptadores de los puertos de `acceso`: proveedor de
+                              identidad, repositorio, parseo de cabeceras HTTP
           |
           v
-  src/app/gameStore.ts        Sesión única, acciones, consultas, log e historial
+NEGOCIO — qué debe pasar (estable aunque cambie todo lo de arriba)
+  src/session/                Aplicación de partida: GameSession, comandos y su
+                              autorización. Síncrona y sin E/S
+  src/acceso/                 Dominio de acceso: Usuario, Sesion, Rol, Membresia y
+                              los puertos que los sirven. Sin dependencias
           |
           v
-  src/engine/                Reglas y casos de cálculo de la simulación
-  src/world/                 Fachada y consultas del mapa mutable
-  src/worldgen/              Generación determinista del mundo
+  src/engine/                 Reglas y casos de cálculo de la simulación
+  src/world/                  Fachada y consultas del mapa mutable
+  src/worldgen/               Generación determinista del mundo
           |
           v
-  src/domain/types.ts         Tipos de datos del dominio
+  src/domain/types.ts         Tipos de datos del dominio de juego
   src/constants.ts            Catálogos y parámetros de balance
 ```
 
-La dirección principal de dependencias es correcta: la UI depende de `app`; `app` depende de motor, mundo y dominio; el motor depende de mundo, dominio y constantes. El motor no depende de la UI ni de APIs del navegador.
+La dirección de dependencias la congela `src/__tests__/arquitectura.test.ts`, que falla si algún import
+apunta "hacia arriba". Dos invariantes tienen además su propio test en lenguaje de negocio:
+
+- **Nada fuera de `server/` importa de `server/`.** Cambiar Fastify, el almacenamiento o el proveedor de
+  identidad no debe arrastrar reglas de juego consigo.
+- **`acceso/` no importa nada.** Un `Usuario` existe fuera de cualquier partida y su autenticación no sabe
+  de HTTP; por eso se prueba con dobles, sin levantar infraestructura.
+
+`session/` es el único punto que ve los dos dominios —juego y acceso— porque la autorización de comandos lo
+exige: qué rol técnico tiene el actor Y qué relación de juego guarda con la entidad objetivo.
 
 ## Capas y responsabilidades
 

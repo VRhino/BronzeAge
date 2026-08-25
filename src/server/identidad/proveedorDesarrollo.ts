@@ -9,8 +9,8 @@
 //
 // Formato de la credencial: `Authorization: dev <sujetoId>[:<email>]`. `sujetoId` es lo único necesario para
 // identificar de forma estable al mismo usuario entre requests.
-import type { IdentidadExterna, ProveedorIdentidad } from './proveedorIdentidad';
-import { CredencialInvalidaError } from './proveedorIdentidad';
+import type { IdentidadExterna, ProveedorIdentidad } from '../../acceso/proveedorIdentidad';
+import { CredencialInvalidaError } from '../../acceso/proveedorIdentidad';
 
 export const ESQUEMA_DESARROLLO = 'dev';
 

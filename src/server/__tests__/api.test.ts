@@ -194,20 +194,45 @@ describe('POST /partidas/:gameId/comandos', () => {
     expect(res.statusCode).toBe(403);
   });
 
-  it('403 cuando la matriz de autorización rechaza la condición de dominio (Facción ajena)', async () => {
+  it('403 cuando la matriz rechaza la condición de dominio: no es ciudadano de esa Facción', async () => {
     await app.inject({ method: 'POST', url: '/partidas', payload: { gameId: 'g1', seed: 42 } });
     const auth = await unirseComoJugador('g1');
-    await app.inject({ method: 'POST', url: '/partidas/g1/comandos', headers: auth, payload: { tipo: 'crearFaccion', params: { nombre: 'Micenas' } } });
+    // Crear una Facción no otorga ciudadanía (`engine/faccion.ts` la crea con `ciudadanosIds: []`), y la
+    // ciudadanía es lo que la autorización mira ahora — derivada del juego, no de la membresía.
+    const creada = await app.inject({
+      method: 'POST',
+      url: '/partidas/g1/comandos',
+      headers: auth,
+      payload: { tipo: 'crearFaccion', params: { nombre: 'Micenas' } },
+    });
+    const faccionId = creada.json().resultado.datos.faccionId;
 
     const res = await app.inject({
       method: 'POST',
       url: '/partidas/g1/comandos',
       headers: auth,
-      payload: { tipo: 'fundarAsentamiento', params: { faccionId: 'faccion-de-otro', posicion: { x: 0, y: 0 }, numJugadores: 1 } },
+      payload: { tipo: 'fundarAsentamiento', params: { faccionId, posicion: { x: 500, y: 500 }, numJugadores: 1 } },
     });
 
     expect(res.statusCode).toBe(403);
     expect(res.json().error).toMatch(/condicion_dominio/);
+  });
+
+  it('una Facción inexistente NO es un 403: la existencia la juzga el comando, con su codigo de error', async () => {
+    await app.inject({ method: 'POST', url: '/partidas', payload: { gameId: 'g1', seed: 42 } });
+    const auth = await unirseComoJugador('g1');
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/partidas/g1/comandos',
+      headers: auth,
+      payload: { tipo: 'fundarAsentamiento', params: { faccionId: 'no-existe', posicion: { x: 500, y: 500 }, numJugadores: 1 } },
+    });
+
+    // `fundacion.invalida` y no `faccion.no_existe` porque este comando delega la resolución de la Facción
+    // en el motor; lo que importa aquí es que sea un rechazo de dominio con código, no un 403 de permisos.
+    expect(res.statusCode).toBe(200);
+    expect(res.json().resultado).toMatchObject({ ok: false, codigoError: 'fundacion.invalida' });
   });
 
   it('un comando rechazado por el dominio responde 200 con `ok: false`, no un error HTTP', async () => {

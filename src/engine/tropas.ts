@@ -12,6 +12,7 @@ import { descontarRecursos, tieneRecursos } from './almacen';
 import { edificiosPorTipoYEstado, poblacionDisponibleParaReclutar, poblacionTotal } from './asentamientoQuery';
 import { consumoComidaPoblacion } from './population';
 import { factorCostoReclutamiento } from './politicas';
+import { esResidente } from './pertenencia';
 
 export class ReclutamientoInvalidoError extends Error {}
 
@@ -43,8 +44,7 @@ export function reclutarTropa(
   tickActual: number,
   contador = 0
 ): Asentamiento {
-  const esResidente = asentamiento.jugadoresFundadoresIds.includes(jugadorId) || asentamiento.casasCompradas.includes(jugadorId);
-  if (!esResidente) {
+  if (!esResidente(asentamiento, jugadorId)) {
     throw new ReclutamientoInvalidoError('Solo un jugador residente de este asentamiento puede reclutar aquí.');
   }
   const tropa = TROPAS_RECLUTABLES.find((t) => t.id === tropaId);

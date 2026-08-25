@@ -112,10 +112,17 @@ Membresia
   usuarioId
   gameId
   jugadorId       (null si el rol no requiere Jugador, ej. administrador_global)
-  faccionId       (null hasta que el Jugador se une a una Facción)
   rol
   desde / hasta    (revocable sin borrar historial — "hasta" ausente = vigente)
 ```
+
+> **`faccionId` retirado de `Membresia` y de `Jugador` (2026-08-25).** El diseño original los incluía. Al
+> implementarlos se vio que duplicaban un hecho cuya única fuente de verdad es `Faccion.ciudadanosIds`, que
+> el motor muta en `otorgarCiudadania`, `anexionar` y `fusionar`. Tras una anexión, los ciudadanos de la
+> Facción absorbida pasan a la absorbente en el estado del juego, pero la copia de la capa de acceso seguiría
+> apuntando a una Facción que ya no existe — y la autorización decidiría sobre datos fantasma. La Facción del
+> actor se DERIVA del estado de partida en cada chequeo (`session/comandos/autorizacion.ts`). Un campo que no
+> hay que creerse es peor que no tenerlo.
 
 ## Matriz de autorización por comando
 

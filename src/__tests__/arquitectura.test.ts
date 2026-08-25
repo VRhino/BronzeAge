@@ -50,13 +50,22 @@ const CAPAS_PERMITIDAS: Record<string, string[]> = {
   worldgen: ['domain', 'constants'],
   world: ['domain', 'worldgen', 'constants'],
   engine: ['domain', 'worldgen', 'world', 'constants'],
+  // `acceso` es el DOMINIO DE ACCESO (Docs/Arquitectura/5_Contratos_Identidad_Permisos.md): `Usuario`,
+  // `Sesion`, `Rol`, `Membresia` y los puertos que los sirven. Es negocio, no infraestructura — las reglas
+  // de quién puede existir y con qué papel no cambian aunque se sustituyan Fastify, el proveedor de
+  // identidad o la base de datos, y esos adaptadores viven en `server/`. Sin dependencias a propósito: no
+  // conoce el juego (un `Usuario` existe fuera de cualquier partida) ni el transporte.
+  acceso: [],
   // `session` es la capa de aplicación DE PARTIDA (Docs/Arquitectura/7_Diseno_GameSession.md): la partida
-  // como estado + reglas, síncrona y sin E/S. No conoce HTTP ni disco — de eso se encarga `server`.
-  session: ['domain', 'worldgen', 'world', 'engine', 'constants'],
+  // como estado + reglas, síncrona y sin E/S. No conoce HTTP ni disco — de eso se encarga `server`. Ve
+  // `acceso` porque la autorización de comandos (`comandos/autorizacion.ts`) cruza ambos dominios: qué rol
+  // técnico tiene el actor Y qué relación de juego guarda con la entidad objetivo.
+  session: ['domain', 'worldgen', 'world', 'engine', 'constants', 'acceso'],
   // `server` es la capa de aplicación DE PROCESO backend (Node — `fs`, HTTP, futuro WebSocket): todo lo que
   // `session` no puede tener porque es deliberadamente síncrona y sin E/S (doc 7 §2). Persistencia de
-  // partida, `RunnerDePartida` y la API.
-  server: ['domain', 'worldgen', 'world', 'engine', 'session', 'constants'],
+  // partida, `RunnerDePartida`, la API y los ADAPTADORES de los puertos de `acceso` (proveedor de identidad,
+  // repositorio, parseo de cabeceras).
+  server: ['domain', 'worldgen', 'world', 'engine', 'session', 'constants', 'acceso'],
 };
 
 /** Capa de una ruta absoluta-desde-raíz (`/src/engine/population.ts` -> `'engine'`, `/src/constants.ts` ->
@@ -118,6 +127,33 @@ describe('fronteras de arquitectura entre capas', () => {
     }
 
     expect(violaciones, `\n${violaciones.join('\n')}`).toEqual([]);
+  });
+
+  it('el negocio no depende de la infraestructura: nada fuera de `server` importa de `server`', () => {
+    // Espejo en lenguaje de negocio de la regla genérica de arriba, para la frontera que más cara sale
+    // equivocar (revisión de separación negocio/infraestructura, 2026-08-25): `acceso` (dominio de acceso),
+    // `session` (aplicación de partida) y el motor definen QUÉ debe pasar; `server` decide CÓMO se sirve
+    // (Fastify, disco, cabeceras HTTP, qué proveedor de identidad está activo). Si esto falla, cambiar de
+    // framework o de proveedor deja de ser un cambio local y empieza a arrastrar reglas de juego con él.
+    const violaciones: string[] = [];
+    for (const capa of ['domain', 'worldgen', 'world', 'engine', 'acceso', 'session']) {
+      for (const [ruta, contenido] of archivosDeCapa(capa)) {
+        for (const spec of importsRelativos(contenido)) {
+          if (capaDe(resolverEspecificador(ruta, spec)) === 'server') violaciones.push(`${ruta} importa de '${spec}'`);
+        }
+      }
+    }
+    expect(violaciones, `\n${violaciones.join('\n')}`).toEqual([]);
+  });
+
+  it('`acceso` no depende de NADA: es dominio puro, sin juego ni transporte', () => {
+    // Un `Usuario` existe fuera de cualquier partida, y su autenticación no sabe de HTTP. Que esta capa
+    // siga sin imports es lo que permite probarla con dobles (ver `acceso/__tests__/`) y sustituir
+    // proveedor o almacenamiento sin tocarla.
+    for (const [ruta, contenido] of archivosDeCapa('acceso')) {
+      const fuera = importsRelativos(contenido).filter((spec) => capaDe(resolverEspecificador(ruta, spec)) !== 'acceso');
+      expect(fuera, `${ruta} importa ${fuera.join(', ')}`).toEqual([]);
+    }
   });
 
   it('el motor (engine/world/worldgen/domain) sigue corriendo sin `app`/`ui` — invariante mínima para batch/servidor', () => {

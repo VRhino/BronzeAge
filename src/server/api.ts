@@ -16,18 +16,16 @@ import type { RegionId } from '../domain/types';
 import { REGISTRO_COMANDOS, type TipoComando } from '../session/comandos/registro';
 import type { ManejadorComando } from '../session/comandos/tipos';
 import { RunnerDePartida } from './runnerDePartida';
-import { proveedoresPorDefecto, crearRegistroProveedores } from './identidad/registroProveedores';
-import { crearRepositorioIdentidadEnMemoria } from './identidad/repositorio';
+import { proveedoresPorDefecto } from './identidad/proveedoresActivos';
+import { crearRepositorioIdentidadEnMemoria } from './identidad/repositorioEnMemoria';
 import {
   CabeceraAutorizacionInvalidaError,
-  ProveedorDesconocidoError,
-  autenticar,
-  resolverSesion,
-  type ContextoAutenticacion,
-} from './identidad/servicioAutenticacion';
-import { CredencialInvalidaError } from './identidad/proveedorIdentidad';
-import { verificarAutorizacion } from './autorizacion/verificar';
-import type { ActorDeComando } from './autorizacion/matriz';
+  credencialDesdeCabecera,
+  credencialOpcionalDesdeCabecera,
+} from './identidad/cabeceraAutorizacion';
+import { ProveedorDesconocidoError, autenticar, resolverSesion, type ContextoAutenticacion } from '../acceso/servicioAutenticacion';
+import { CredencialInvalidaError, crearRegistroProveedores } from '../acceso/proveedorIdentidad';
+import { verificarAutorizacion, type ActorDeComando } from '../session/comandos/autorizacion';
 
 export interface OpcionesServidor {
   /** Directorio donde `persistenciaPartida.ts` guarda los snapshots. */
@@ -123,7 +121,7 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
    */
   app.post('/sesiones', async (request, reply) => {
     try {
-      const { usuario, sesion } = await autenticar(request.headers.authorization, identidad);
+      const { usuario, sesion } = await autenticar(credencialDesdeCabecera(request.headers.authorization), identidad);
       return reply.code(201).send({ usuarioId: usuario.id, sesionId: sesion.id, expiraEn: sesion.expiraEn });
     } catch (err) {
       if (
@@ -139,7 +137,7 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
 
   /** Whoami: resuelve `Authorization: sesion <sesionId>` a quién es. Sin sesión válida, 401 — nunca lanza. */
   app.get('/sesiones/actual', async (request, reply) => {
-    const resuelto = resolverSesion(request.headers.authorization, identidad);
+    const resuelto = resolverSesion(credencialOpcionalDesdeCabecera(request.headers.authorization), identidad);
     if (!resuelto) return reply.code(401).send({ error: 'sesion ausente, invalida o expirada' });
     return reply.send({ usuarioId: resuelto.usuario.id, sesionId: resuelto.sesion.id, expiraEn: resuelto.sesion.expiraEn });
   });
@@ -177,23 +175,26 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
   });
 
   /**
-   * Unirse a una partida como jugador: `Authorization: sesion <id>` -> crea la `Membresia` (rol `'jugador'`,
-   * sin Facción todavía — doc 5: "null antes de unirse a una") que `/comandos` exige para todo lo que no sea
-   * de administración. Un `Usuario` solo puede tener una `Membresia` por `gameId` (doc 5, "Preguntas
-   * abiertas" lo asume 1:1) — repetir la llamada tras la primera es 409, no una migración silenciosa.
+   * Unirse a una partida como jugador: `Authorization: sesion <id>` -> crea la `Membresia` (rol `'jugador'`)
+   * que `/comandos` exige para todo lo que no sea de administración. Un `Usuario` solo puede tener una
+   * `Membresia` por `gameId` (doc 5, "Preguntas abiertas" lo asume 1:1) — repetir la llamada tras la primera
+   * es 409, no una migración silenciosa.
+   *
+   * La `Membresia` NO dice a qué Facción pertenece: eso lo decide el juego (`Faccion.ciudadanosIds`) y lo
+   * deriva la autorización de ahí. Unirse a la partida y unirse a una Facción son dos hechos distintos.
    *
    * `Jugador` como entidad de almacenamiento propia (doc 5) queda diferida: hoy nada además de la
    * autorización necesita distinguirla de la `Membresia` que ya la referencia, así que crear un puerto de
-   * persistencia solo para duplicar `jugadorId`/`faccionId` sería infraestructura sin consumidor. Reutiliza
-   * el `id` del `Usuario` como `jugadorId` — cumple el contrato del doc ("mismo valor que hoy usa el motor
-   * como jugadorId") sin necesitar un generador de ids aparte.
+   * persistencia solo para duplicar `jugadorId` sería infraestructura sin consumidor. Reutiliza el `id` del
+   * `Usuario` como `jugadorId` — cumple el contrato del doc ("mismo valor que hoy usa el motor como
+   * jugadorId") sin necesitar un generador de ids aparte.
    */
   app.post<{ Params: ParametrosGameId }>('/partidas/:gameId/jugadores', async (request, reply) => {
     const runner = runners.get(request.params.gameId);
     if (!runner) {
       return reply.code(404).send({ error: `la partida '${request.params.gameId}' no está abierta en este proceso.` });
     }
-    const resuelto = resolverSesion(request.headers.authorization, identidad);
+    const resuelto = resolverSesion(credencialOpcionalDesdeCabecera(request.headers.authorization), identidad);
     if (!resuelto) return reply.code(401).send({ error: 'sesion ausente, invalida o expirada' });
 
     if (identidad.repositorio.obtenerMembresia(resuelto.usuario.id, request.params.gameId)) {
@@ -204,7 +205,6 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
       usuarioId: resuelto.usuario.id,
       gameId: request.params.gameId,
       jugadorId,
-      faccionId: null,
       rol: 'jugador',
       desde: new Date().toISOString(),
     });
@@ -223,7 +223,7 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
       // Fase C2 (doc 5): actor SIEMPRE resuelto desde la sesión + membresía, nunca de un id que el body
       // afirme tener. Sin `Membresia` en esta partida no hay nada que autorizar — 403, no 401 (la sesión en
       // sí es válida; lo que falta es pertenencia a ESTA partida).
-      const resuelto = resolverSesion(request.headers.authorization, identidad);
+      const resuelto = resolverSesion(credencialOpcionalDesdeCabecera(request.headers.authorization), identidad);
       if (!resuelto) return reply.code(401).send({ error: 'sesion ausente, invalida o expirada' });
       const membresia = identidad.repositorio.obtenerMembresia(resuelto.usuario.id, request.params.gameId);
       if (!membresia) return reply.code(403).send({ error: 'sin membresia en esta partida' });
@@ -233,7 +233,7 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
         return reply.code(400).send({ error: `tipo de comando desconocido: '${tipo}'.` });
       }
 
-      const actor: ActorDeComando = { rol: membresia.rol, jugadorId: membresia.jugadorId, faccionId: membresia.faccionId };
+      const actor: ActorDeComando = { rol: membresia.rol, jugadorId: membresia.jugadorId };
       // `tipo` es `TipoComando` (unión), no un literal: la genérica de `verificarAutorizacion` no infiere un
       // único `T` de una unión, igual que `manejador` de abajo pierde su `P`/`R` en el mismo punto — misma
       // frontera "comando serializado sin validar" que ya asume el resto de la ruta.

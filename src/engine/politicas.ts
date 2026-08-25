@@ -1,6 +1,7 @@
 import type { Asentamiento, CargoTipo, Faccion, PoliticaActiva } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
 import { POLITICAS, POLITICA_CATALOGO } from '../constants';
+import { cargoOcupado } from './pertenencia';
 
 /** Fase A5 — payload de `politica.expirada` (ver `avanzarPoliticas`). */
 export interface PayloadPoliticaExpirada {
@@ -31,14 +32,6 @@ function activasPorCargo(asentamiento: Asentamiento, cargo: CargoTipo): Politica
   return asentamiento.politicasActivas.filter((p) => p.cargo === cargo);
 }
 
-const CAMPO_CARGO: Record<CargoTipo, keyof Asentamiento['cargos']> = {
-  gobernador: 'gobernadorId',
-  tesorero: 'tesoreroId',
-  general: 'generalId',
-  maestroObras: 'maestroObrasId',
-  sacerdote: 'sacerdoteId',
-};
-
 /**
  * Activa una política (Doc 4.4): duración fija, no cancelable antes de tiempo, respeta slots por cargo.
  * El Gobernador tiene pool COMPLETA (cualquier política); el resto solo las de su propio pool.
@@ -55,7 +48,7 @@ export function activarPolitica(
   if (cargo !== 'gobernador' && def.cargo !== cargo) {
     throw new PoliticaInvalidaError(`"${def.nombre}" no pertenece al pool de este cargo.`);
   }
-  if (!asentamiento.cargos[CAMPO_CARGO[cargo]]) {
+  if (!cargoOcupado(asentamiento, cargo)) {
     throw new PoliticaInvalidaError('El cargo debe estar ocupado para activar una política en su nombre.');
   }
   if (activasPorCargo(asentamiento, cargo).some((p) => p.politicaId === politicaId)) {

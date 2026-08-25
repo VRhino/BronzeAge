@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { crearRepositorioIdentidadEnMemoria } from '../repositorio';
+import { crearRepositorioIdentidadEnMemoria } from '../repositorioEnMemoria';
 
 describe('crearRepositorioIdentidadEnMemoria', () => {
   it('crea usuarios con id incremental y sin deshabilitar', () => {

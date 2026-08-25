@@ -1,6 +1,7 @@
 import type { Asentamiento, Faccion } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
 import { CAP_FUNDACION_POR_NIVEL, CIUDADANIA, CUPO_NIVEL_ASENTAMIENTO, NIVEL_FACCION } from '../constants';
+import { resideEnOtroAsentamiento } from './pertenencia';
 
 /** Fase A5 — payload de `faccion.nivel_subio` (ver `avanzarNivelesFaccion`). */
 export interface PayloadFaccionNivelSubio {
@@ -117,10 +118,7 @@ export function comprarCasa(
   if (asentamiento.casasCompradas.includes(jugadorId)) {
     throw new FaccionInvalidaError('El jugador ya tiene casa en este asentamiento.');
   }
-  const yaResideEnOtroAsentamiento = asentamientos.some(
-    (a) => a.id !== asentamiento.id && (a.jugadoresFundadoresIds.includes(jugadorId) || a.casasCompradas.includes(jugadorId))
-  );
-  if (yaResideEnOtroAsentamiento) {
+  if (resideEnOtroAsentamiento(asentamientos, asentamiento.id, jugadorId)) {
     throw new FaccionInvalidaError('El jugador ya reside en otro asentamiento (Doc 2.1: 1 jugador, 1 asentamiento).');
   }
   if (asentamiento.casasCompradas.length >= capacidadCasas(asentamiento)) {

@@ -1,5 +1,6 @@
 import type { Asentamiento, CargoTipo, Faccion } from '../domain/types';
 import { esCiudadano } from './faccion';
+import { cargoOcupado, conCargoLocal } from './pertenencia';
 
 export class CargoInvalidoError extends Error {}
 
@@ -39,28 +40,13 @@ export function asignarCargoLocal(
   if (!esCiudadano(faccion, jugadorId)) {
     throw new CargoInvalidoError('Solo un ciudadano de la Facción puede ejercer un cargo local.');
   }
-  if (cargo !== 'gobernador' && !asentamiento.cargos.gobernadorId) {
+  if (cargo !== 'gobernador' && !cargoOcupado(asentamiento, 'gobernador')) {
     throw new CargoInvalidoError('El asentamiento necesita un Gobernador antes de designar el resto de cargos.');
   }
 
-  const campo: Record<CargoTipo, keyof Asentamiento['cargos']> = {
-    gobernador: 'gobernadorId',
-    tesorero: 'tesoreroId',
-    general: 'generalId',
-    maestroObras: 'maestroObrasId',
-    sacerdote: 'sacerdoteId',
-  };
-
-  return { ...asentamiento, cargos: { ...asentamiento.cargos, [campo[cargo]]: jugadorId } };
+  return conCargoLocal(asentamiento, cargo, jugadorId);
 }
 
 export function liberarCargoLocal(asentamiento: Asentamiento, cargo: CargoTipo): Asentamiento {
-  const campo: Record<CargoTipo, keyof Asentamiento['cargos']> = {
-    gobernador: 'gobernadorId',
-    tesorero: 'tesoreroId',
-    general: 'generalId',
-    maestroObras: 'maestroObrasId',
-    sacerdote: 'sacerdoteId',
-  };
-  return { ...asentamiento, cargos: { ...asentamiento.cargos, [campo[cargo]]: null } };
+  return conCargoLocal(asentamiento, cargo, null);
 }
