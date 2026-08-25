@@ -2,7 +2,7 @@ import type { Mapa } from '../../world/mapa';
 import { avanzarAutoComercioSimulado } from '../../engine/simulacionAutoComercio';
 import { SIMULACION_AUTO_COMERCIO } from '../../constants';
 import { conResultadoDeSimulacion, estadoSimulacionDe, type GameSessionState } from '../estado';
-import { exito, type ContextoComando, type TransicionComando } from './tipos';
+import { exito, sinCambios, type ContextoComando, type TransicionComando } from './tipos';
 
 /**
  * Trueque automático SOLO PARA SIMULACIÓN (`SIMULACION_AUTO_COMERCIO`, constants.ts): apagado por defecto y
@@ -21,7 +21,7 @@ export function avanzarAutoComercio(
   _params: void
 ): TransicionComando<void> {
   if (!SIMULACION_AUTO_COMERCIO.activo) {
-    return { estado, resultado: { ok: true, eventos: [], version: estado.version } };
+    return sinCambios(estado);
   }
 
   const resultado = avanzarAutoComercioSimulado(estadoSimulacionDe(estado), mapa, estado.tick);

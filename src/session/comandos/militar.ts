@@ -5,9 +5,9 @@
 // combate, ver `engine/combate.ts`). Por eso importa que el rng venga del contexto y no de un global: es lo
 // que mantiene una partida reproducible aunque un jugador ataque en mitad de ella.
 //
-// ⚠️ Todos arrastraban el `.find(...)!` de `GameStore` sobre asentamiento/caravana/campamento — un id que no
-// existiera producía un TypeError en vez de un rechazo. Corregido aquí.
-import type { Mapa } from '../../world/mapa';
+// Sus eventos son los MÁS sensibles a visibilidad de toda la capa de comandos —quién atacó a quién— así que
+// son los que más ganan con `codigo`/`payload` estructurados: las proyecciones por audiencia de Fase C
+// filtran sobre eso. Los payloads de combate los declara `engine/combate.ts`, que es quien resuelve.
 import { reclutarTropa as reclutarTropaEngine } from '../../engine/tropas';
 import {
   atacarCampamentoBandidos as atacarCampamentoBandidosEngine,
@@ -16,11 +16,19 @@ import {
   iniciarAsedio as iniciarAsedioEngine,
 } from '../../engine/combate';
 import { CAMPAMENTOS_BANDIDOS } from '../../constants';
-import { conHistorialDeJugador, eventoLegado, type GameSessionState } from '../estado';
-import { exito, rechazo, rechazoDesdeError, type ContextoComando, type TransicionComando } from './tipos';
-import { CODIGOS_ERROR } from './codigosDeError';
+import { conHistorialDeJugador, type GameSessionState } from '../estado';
+import { exito } from './tipos';
+import { comando, conAsentamiento, conAsentamientos, exigirAsentamiento, exigirCampamento, exigirCaravana } from './ayudas';
+import { desdeCrudos, evento } from './eventos';
 
-const ASENTAMIENTO_NO_EXISTE = CODIGOS_ERROR.asentamientoNoExiste;
+/** Reclutamiento: lo narra esta capa (el motor devuelve el asentamiento actualizado, sin eventos). */
+export interface PayloadReclutamiento {
+  asentamientoId: string;
+  jugadorId: string;
+  tropaId: string;
+  origen: 'pesants' | 'artesanos';
+  reclutados: number;
+}
 
 export interface ParamsReclutarTropa {
   asentamientoId: string;
@@ -29,39 +37,34 @@ export interface ParamsReclutarTropa {
   origen: 'pesants' | 'artesanos';
 }
 
-export function reclutarTropa(
-  estado: GameSessionState,
-  _mapa: Mapa,
-  ctx: ContextoComando,
-  params: ParamsReclutarTropa
-): TransicionComando<{ reclutados: number }> {
-  const asentamiento = estado.asentamientos.find((a) => a.id === params.asentamientoId);
-  if (!asentamiento) return rechazo(estado, ASENTAMIENTO_NO_EXISTE);
+export const reclutarTropa = comando<ParamsReclutarTropa, { reclutados: number }>((estado, _mapa, ctx, params) => {
+  const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
 
   const cantidadDe = (a: typeof asentamiento): number =>
     a.escuadrones.find((e) => e.jugadorId === params.jugadorId && e.tropaId === params.tropaId)?.cantidad ?? 0;
 
-  try {
-    const antes = cantidadDe(asentamiento);
-    const actualizado = reclutarTropaEngine(asentamiento, params.jugadorId, params.tropaId, params.origen, estado.tick, ctx.ids.siguiente());
-    const reclutados = cantidadDe(actualizado) - antes;
+  const antes = cantidadDe(asentamiento);
+  const actualizado = reclutarTropaEngine(asentamiento, params.jugadorId, params.tropaId, params.origen, estado.tick, ctx.ids.siguiente());
+  const reclutados = cantidadDe(actualizado) - antes;
 
-    let siguiente: GameSessionState = {
-      ...estado,
-      asentamientos: estado.asentamientos.map((a) => (a.id === actualizado.id ? actualizado : a)),
-    };
-    siguiente = conHistorialDeJugador(siguiente, params.jugadorId, `Recluta ${reclutados} de "${params.tropaId}" en ${asentamiento.id}.`);
-    const evento = eventoLegado(
-      ctx.momento,
-      estado.tick,
-      `${asentamiento.id}: ${params.jugadorId} recluta ${reclutados} de la tropa "${params.tropaId}" (${params.origen}).`,
-      asentamiento.id
-    );
-    return exito(siguiente, [evento], { reclutados });
-  } catch (err) {
-    return rechazoDesdeError(estado, err);
-  }
-}
+  const siguiente = conHistorialDeJugador(
+    conAsentamiento(estado, actualizado),
+    params.jugadorId,
+    `Recluta ${reclutados} de "${params.tropaId}" en ${asentamiento.id}.`
+  );
+  return exito(
+    siguiente,
+    [
+      evento(ctx, estado, {
+        codigo: 'tropas.reclutadas',
+        mensaje: `${params.jugadorId} recluta ${reclutados} de la tropa "${params.tropaId}" (${params.origen}).`,
+        payload: { ...params, reclutados } satisfies PayloadReclutamiento,
+        asentamientoId: asentamiento.id,
+      }),
+    ],
+    { reclutados }
+  );
+});
 
 export interface ParamsIniciarAsedio {
   atacanteId: string;
@@ -69,33 +72,17 @@ export interface ParamsIniciarAsedio {
   escuadronIds: string[];
 }
 
-export function iniciarAsedio(
-  estado: GameSessionState,
-  _mapa: Mapa,
-  ctx: ContextoComando,
-  params: ParamsIniciarAsedio
-): TransicionComando<{ conquistado: boolean }> {
-  const atacante = estado.asentamientos.find((a) => a.id === params.atacanteId);
-  const defensor = estado.asentamientos.find((a) => a.id === params.defensorId);
-  if (!atacante || !defensor) return rechazo(estado, ASENTAMIENTO_NO_EXISTE);
+export const iniciarAsedio = comando<ParamsIniciarAsedio, { conquistado: boolean }>((estado, _mapa, ctx, params) => {
+  const atacante = exigirAsentamiento(estado, params.atacanteId);
+  const defensor = exigirAsentamiento(estado, params.defensorId);
 
-  try {
-    const resultado = iniciarAsedioEngine(atacante, defensor, params.escuadronIds, estado.facciones, estado.relaciones, estado.tick, ctx.rng);
-    const siguiente: GameSessionState = {
-      ...estado,
-      asentamientos: estado.asentamientos.map((a) => {
-        if (a.id === resultado.atacante.id) return resultado.atacante;
-        if (a.id === resultado.defensor.id) return resultado.defensor;
-        return a;
-      }),
-      facciones: resultado.facciones,
-    };
-    const eventos = resultado.eventos.map((mensaje) => eventoLegado(ctx.momento, estado.tick, mensaje, atacante.id));
-    return exito(siguiente, eventos, { conquistado: resultado.conquistado });
-  } catch (err) {
-    return rechazoDesdeError(estado, err);
-  }
-}
+  const resultado = iniciarAsedioEngine(atacante, defensor, params.escuadronIds, estado.facciones, estado.relaciones, estado.tick, ctx.rng);
+  const siguiente: GameSessionState = {
+    ...conAsentamientos(estado, [resultado.atacante, resultado.defensor]),
+    facciones: resultado.facciones,
+  };
+  return exito(siguiente, desdeCrudos(ctx, estado, resultado.eventos, atacante.id), { conquistado: resultado.conquistado });
+});
 
 export interface ParamsCombateCampoAbierto {
   asentamientoAId: string;
@@ -104,33 +91,19 @@ export interface ParamsCombateCampoAbierto {
   escuadronIdsB: string[];
 }
 
-export function combateCampoAbierto(
-  estado: GameSessionState,
-  _mapa: Mapa,
-  ctx: ContextoComando,
-  params: ParamsCombateCampoAbierto
-): TransicionComando<void> {
-  const a = estado.asentamientos.find((s) => s.id === params.asentamientoAId);
-  const b = estado.asentamientos.find((s) => s.id === params.asentamientoBId);
-  if (!a || !b) return rechazo(estado, ASENTAMIENTO_NO_EXISTE);
+export const combateCampoAbierto = comando<ParamsCombateCampoAbierto, void>((estado, _mapa, ctx, params) => {
+  const a = exigirAsentamiento(estado, params.asentamientoAId);
+  const b = exigirAsentamiento(estado, params.asentamientoBId);
 
-  try {
-    const resultado = combateCampoAbiertoEngine(a, params.escuadronIdsA, b, params.escuadronIdsB, estado.facciones, estado.relaciones, estado.tick, ctx.rng);
-    const siguiente: GameSessionState = {
-      ...estado,
-      asentamientos: estado.asentamientos.map((s) => {
-        if (s.id === resultado.asentamientoA.id) return resultado.asentamientoA;
-        if (s.id === resultado.asentamientoB.id) return resultado.asentamientoB;
-        return s;
-      }),
-      facciones: resultado.facciones,
-    };
-    const eventos = resultado.eventos.map((mensaje) => eventoLegado(ctx.momento, estado.tick, mensaje));
-    return exito(siguiente, eventos);
-  } catch (err) {
-    return rechazoDesdeError(estado, err);
-  }
-}
+  const resultado = combateCampoAbiertoEngine(a, params.escuadronIdsA, b, params.escuadronIdsB, estado.facciones, estado.relaciones, estado.tick, ctx.rng);
+  const siguiente: GameSessionState = {
+    ...conAsentamientos(estado, [resultado.asentamientoA, resultado.asentamientoB]),
+    facciones: resultado.facciones,
+  };
+  // Sin `asentamientoId`: el choque es entre DOS asentamientos, atribuirlo a uno sería arbitrario — los ids de
+  // ambos bandos van en el `payload` de `combate.resuelto`.
+  return exito(siguiente, desdeCrudos(ctx, estado, resultado.eventos));
+});
 
 export interface ParamsInterceptarCaravana {
   atacanteId: string;
@@ -138,31 +111,18 @@ export interface ParamsInterceptarCaravana {
   caravanaId: string;
 }
 
-export function interceptarCaravana(
-  estado: GameSessionState,
-  _mapa: Mapa,
-  ctx: ContextoComando,
-  params: ParamsInterceptarCaravana
-): TransicionComando<{ capturada: boolean }> {
-  const atacante = estado.asentamientos.find((a) => a.id === params.atacanteId);
-  if (!atacante) return rechazo(estado, ASENTAMIENTO_NO_EXISTE);
-  const caravana = estado.caravanas.find((c) => c.id === params.caravanaId);
-  if (!caravana) return rechazo(estado, CODIGOS_ERROR.caravanaNoExiste);
+export const interceptarCaravana = comando<ParamsInterceptarCaravana, { capturada: boolean }>((estado, _mapa, ctx, params) => {
+  const atacante = exigirAsentamiento(estado, params.atacanteId);
+  const caravana = exigirCaravana(estado, params.caravanaId);
 
-  try {
-    const resultado = interceptarCaravanaEngine(atacante, params.escuadronIds, caravana, estado.tick, estado.facciones, estado.asentamientos, ctx.rng);
-    const siguiente: GameSessionState = {
-      ...estado,
-      asentamientos: estado.asentamientos.map((a) => (a.id === resultado.atacante.id ? resultado.atacante : a)),
-      facciones: resultado.facciones,
-      caravanas: resultado.caravanaCapturada ? estado.caravanas.filter((c) => c.id !== caravana.id) : estado.caravanas,
-    };
-    const eventos = resultado.eventos.map((mensaje) => eventoLegado(ctx.momento, estado.tick, mensaje, atacante.id));
-    return exito(siguiente, eventos, { capturada: resultado.caravanaCapturada });
-  } catch (err) {
-    return rechazoDesdeError(estado, err);
-  }
-}
+  const resultado = interceptarCaravanaEngine(atacante, params.escuadronIds, caravana, estado.tick, estado.facciones, estado.asentamientos, ctx.rng);
+  const siguiente: GameSessionState = {
+    ...conAsentamiento(estado, resultado.atacante),
+    facciones: resultado.facciones,
+    caravanas: resultado.caravanaCapturada ? estado.caravanas.filter((c) => c.id !== caravana.id) : estado.caravanas,
+  };
+  return exito(siguiente, desdeCrudos(ctx, estado, resultado.eventos, atacante.id), { capturada: resultado.caravanaCapturada });
+});
 
 export interface ParamsAtacarCampamentoBandidos {
   atacanteId: string;
@@ -170,34 +130,21 @@ export interface ParamsAtacarCampamentoBandidos {
   campamentoId: string;
 }
 
-export function atacarCampamentoBandidos(
-  estado: GameSessionState,
-  _mapa: Mapa,
-  ctx: ContextoComando,
-  params: ParamsAtacarCampamentoBandidos
-): TransicionComando<{ destruido: boolean }> {
-  const atacante = estado.asentamientos.find((a) => a.id === params.atacanteId);
-  if (!atacante) return rechazo(estado, ASENTAMIENTO_NO_EXISTE);
-  const campamento = estado.campamentosBandidos.find((c) => c.id === params.campamentoId);
-  if (!campamento) return rechazo(estado, CODIGOS_ERROR.campamentoNoExiste);
+export const atacarCampamentoBandidos = comando<ParamsAtacarCampamentoBandidos, { destruido: boolean }>((estado, _mapa, ctx, params) => {
+  const atacante = exigirAsentamiento(estado, params.atacanteId);
+  const campamento = exigirCampamento(estado, params.campamentoId);
 
-  try {
-    const resultado = atacarCampamentoBandidosEngine(atacante, params.escuadronIds, campamento, estado.tick, estado.facciones, ctx.rng);
-    const siguiente: GameSessionState = {
-      ...estado,
-      asentamientos: estado.asentamientos.map((a) => (a.id === resultado.atacante.id ? resultado.atacante : a)),
-      facciones: resultado.facciones,
-      // Al destruirlo se agenda su reaparición; el spawn en sí lo evalúa el tick (`avanzarSpawnBandidos`).
-      campamentosBandidos: resultado.campamentoDestruido
-        ? estado.campamentosBandidos.filter((c) => c.id !== campamento.id)
-        : estado.campamentosBandidos,
-      bandidosProximoSpawnTick: resultado.campamentoDestruido
-        ? estado.tick + CAMPAMENTOS_BANDIDOS.ticksRespawn
-        : estado.bandidosProximoSpawnTick,
-    };
-    const eventos = resultado.eventos.map((mensaje) => eventoLegado(ctx.momento, estado.tick, mensaje, atacante.id));
-    return exito(siguiente, eventos, { destruido: resultado.campamentoDestruido });
-  } catch (err) {
-    return rechazoDesdeError(estado, err);
-  }
-}
+  const resultado = atacarCampamentoBandidosEngine(atacante, params.escuadronIds, campamento, estado.tick, estado.facciones, ctx.rng);
+  const siguiente: GameSessionState = {
+    ...conAsentamiento(estado, resultado.atacante),
+    facciones: resultado.facciones,
+    // Al destruirlo se agenda su reaparición; el spawn en sí lo evalúa el tick (`avanzarSpawnBandidos`).
+    campamentosBandidos: resultado.campamentoDestruido
+      ? estado.campamentosBandidos.filter((c) => c.id !== campamento.id)
+      : estado.campamentosBandidos,
+    bandidosProximoSpawnTick: resultado.campamentoDestruido
+      ? estado.tick + CAMPAMENTOS_BANDIDOS.ticksRespawn
+      : estado.bandidosProximoSpawnTick,
+  };
+  return exito(siguiente, desdeCrudos(ctx, estado, resultado.eventos, atacante.id), { destruido: resultado.campamentoDestruido });
+});

@@ -1,7 +1,12 @@
-import type { Mapa } from '../../world/mapa';
-import { eventoLegado, type GameSessionState } from '../estado';
-import { exito, rechazo, type ContextoComando, type TransicionComando } from './tipos';
-import { CODIGOS_ERROR } from './codigosDeError';
+import type { GameSessionState } from '../estado';
+import { exito, sinCambios } from './tipos';
+import { comando, exigirFaccion } from './ayudas';
+import { evento } from './eventos';
+
+export interface PayloadFaccionNpc {
+  faccionId: string;
+  activo: boolean;
+}
 
 export interface ParamsAlternarFaccionNpc {
   faccionId: string;
@@ -10,8 +15,7 @@ export interface ParamsAlternarFaccionNpc {
 }
 
 /**
- * Cede una Facción al NPC de gobernanza, o la recupera. Cierra el hueco que quedó al implementar
- * `avanzarFaccionesNpc`, que hasta ahora solo podía ejercitarse construyendo el estado a mano.
+ * Cede una Facción al NPC de gobernanza, o la recupera.
  *
  * Es un comando **administrativo** (rol técnico, doc 5), no una palanca de juego: el usuario confirmó que en
  * una partida real el valor no cambia en caliente — una Facción declarada IA lo es hasta que se destruye. Se
@@ -24,19 +28,11 @@ export interface ParamsAlternarFaccionNpc {
  * Pedir el estado en el que ya está NO es un error: es idempotente y se resuelve sin mutar ni versionar, que
  * es lo que hace segura una reintentar por reconexión (doc 2, punto 10: idempotencia de comandos).
  */
-export function alternarFaccionNpc(
-  estado: GameSessionState,
-  _mapa: Mapa,
-  ctx: ContextoComando,
-  params: ParamsAlternarFaccionNpc
-): TransicionComando<void> {
-  const faccion = estado.facciones.find((f) => f.id === params.faccionId);
-  if (!faccion) return rechazo(estado, CODIGOS_ERROR.faccionNoExiste);
+export const alternarFaccionNpc = comando<ParamsAlternarFaccionNpc, void>((estado, _mapa, ctx, params) => {
+  const faccion = exigirFaccion(estado, params.faccionId);
 
   const yaEsNpc = estado.faccionesNpcIds.includes(params.faccionId);
-  if (params.activo === yaEsNpc) {
-    return { estado, resultado: { ok: true, eventos: [], version: estado.version } };
-  }
+  if (params.activo === yaEsNpc) return sinCambios(estado);
 
   const siguiente: GameSessionState = {
     ...estado,
@@ -44,13 +40,13 @@ export function alternarFaccionNpc(
       ? [...estado.faccionesNpcIds, params.faccionId]
       : estado.faccionesNpcIds.filter((id) => id !== params.faccionId),
   };
-  const evento = eventoLegado(
-    ctx.momento,
-    estado.tick,
-    params.activo
-      ? `${faccion.nombre}: pasa a estar controlada por el NPC de gobernanza (juega sola).`
-      : `${faccion.nombre}: vuelve a control manual del jugador.`
-  );
-
-  return exito(siguiente, [evento]);
-}
+  return exito(siguiente, [
+    evento(ctx, estado, {
+      codigo: params.activo ? 'faccion.cedida_al_npc' : 'faccion.recuperada_del_npc',
+      mensaje: params.activo
+        ? `${faccion.nombre}: pasa a estar controlada por el NPC de gobernanza (juega sola).`
+        : `${faccion.nombre}: vuelve a control manual del jugador.`,
+      payload: { faccionId: faccion.id, activo: params.activo } satisfies PayloadFaccionNpc,
+    }),
+  ]);
+});

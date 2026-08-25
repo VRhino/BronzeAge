@@ -12,6 +12,13 @@ import { REPUTACION } from '../constants';
 import { agregarRecurso, cantidadDisponible, descontarRecursos } from './almacen';
 import { aplicarAjustesReputacion, puedeProponerAlianza } from './reputacion';
 
+/** Payload de `rebelionVasallo` — comando de jugador, no tick (ver `session/comandos/diplomacia.ts`). */
+export interface PayloadRebelionVasallo {
+  relacionId: string;
+  faccionSenoraId: string;
+  faccionVasallaId: string;
+}
+
 export class DiplomaciaInvalidaError extends Error {}
 
 function existeRelacionActiva(relaciones: RelacionPolitica[], aId: string, bId: string): boolean {
@@ -122,7 +129,7 @@ export function rebelionVasallo(
   acuerdos: AcuerdoTrueque[],
   asentamientos: Asentamiento[],
   relacionId: string
-): { facciones: Faccion[]; relaciones: RelacionPolitica[]; acuerdos: AcuerdoTrueque[]; eventos: string[] } {
+): { facciones: Faccion[]; relaciones: RelacionPolitica[]; acuerdos: AcuerdoTrueque[]; eventos: EventoCrudo[] } {
   const relacion = relaciones.find((r) => r.id === relacionId);
   if (!relacion || relacion.tipo !== 'vasallaje') {
     throw new DiplomaciaInvalidaError('La relación no existe o no es un vasallaje.');
@@ -147,7 +154,17 @@ export function rebelionVasallo(
     facciones: faccionesActualizadas,
     relaciones: relaciones.map((r) => (r.id === relacionId ? { ...r, estado: 'rota' as const } : r)),
     acuerdos: acuerdosActualizados,
-    eventos: [`Rebelión: el vasallaje ${relacionId} se rompe y se cancelan sus acuerdos comerciales vigentes.`],
+    eventos: [
+      {
+        codigo: 'diplomacia.rebelion_vasallo',
+        mensaje: `Rebelión: el vasallaje ${relacionId} se rompe y se cancelan sus acuerdos comerciales vigentes.`,
+        payload: {
+          relacionId,
+          faccionSenoraId: relacion.faccionAId,
+          faccionVasallaId: relacion.faccionBId,
+        } satisfies PayloadRebelionVasallo,
+      },
+    ],
   };
 }
 

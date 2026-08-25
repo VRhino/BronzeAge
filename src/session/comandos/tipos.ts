@@ -69,21 +69,34 @@ export type ManejadorComando<P, R> = (
 ) => TransicionComando<R>;
 
 /**
- * Comando aceptado: incrementa `version`, vuelca los eventos en el log administrativo y en `eventosDominio`.
+ * Comando aceptado: incrementa `version` y acumula los eventos en `eventosDominio`.
  * **Único punto donde se incrementa la versión** — así no puede quedar un comando que mute el estado y se
  * olvide de subirla, que es justo lo que rompería el control de concurrencia optimista de Fase B3.
  *
  * `estado` debe llegar ya con los cambios de dominio aplicados; esta función solo añade lo transversal.
+ *
+ * Ya no escribe un `log` en texto en paralelo: era el MISMO hecho guardado dos veces en el estado (y
+ * persistido dos veces en cada snapshot). El log que muestra la consola se DERIVA de `eventosDominio` en la
+ * capa de presentación (`proyectarLog`, `session/estado.ts`) — ver doc 2 punto 6: el texto es presentación,
+ * el contrato es el evento estructurado.
  */
 export function exito<T>(estado: GameSessionState, eventos: EventoDominio[], datos?: T): TransicionComando<T> {
   const version = estado.version + 1;
   const estadoFinal: GameSessionState = {
     ...estado,
     version,
-    log: [...eventos.map((e) => ({ tick: e.tick, mensaje: e.mensaje })), ...estado.log],
     eventosDominio: [...eventos, ...estado.eventosDominio],
   };
   return { estado: estadoFinal, resultado: { ok: true, datos, eventos, version } };
+}
+
+/**
+ * Comando ACEPTADO que no cambió nada: no muta el estado y **no incrementa la versión**, porque no hay
+ * mutación que versionar. No es un rechazo — pedir el estado en el que ya se está es legítimo, y es lo que
+ * hace segura una reintentar por reconexión (doc 2, punto 10: idempotencia de comandos).
+ */
+export function sinCambios<T>(estado: GameSessionState, datos?: T): TransicionComando<T> {
+  return { estado, resultado: { ok: true, datos, eventos: [], version: estado.version } };
 }
 
 /** Comando rechazado: devuelve el estado SIN TOCAR (mismo objeto) y sin subir la versión. */

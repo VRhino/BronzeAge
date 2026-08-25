@@ -86,13 +86,13 @@ describe('calibrarReservaManual', () => {
     // El motor exige Gobernador antes de cualquier otro cargo local (`engine/cargos.ts`).
     sesion.ejecutar(asignarCargoLocal, { asentamientoId, cargo: 'gobernador', jugadorId: fundador }, OPC);
     sesion.ejecutar(asignarCargoLocal, { asentamientoId, cargo: 'tesorero', jugadorId: fundador }, OPC);
-    const logAntes = sesion.getState().log.length;
+    const eventosAntes = sesion.getState().eventosDominio.length;
 
     const r = sesion.ejecutar(calibrarReservaManual, { asentamientoId, recurso: 'madera', valor: 50 }, OPC);
 
     expect(r.ok).toBe(true);
     expect(r.eventos).toEqual([]);
-    expect(sesion.getState().log.length).toBe(logAntes);
+    expect(sesion.getState().eventosDominio.length).toBe(eventosAntes);
   });
 });
 

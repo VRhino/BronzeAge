@@ -15,7 +15,7 @@ import type { RegionId } from '../domain/types';
 import { createRng, generarMapa, MAPA_DEFAULT, restaurarRng, WORLDGEN_VERSION, type RandomFn } from '../worldgen';
 import { crearEstadoMapa, crearMapa, type EstadoMapa, type Mapa } from '../world/mapa';
 import { GeneradorIds } from './idGenerator';
-import { eventoLegado, type GameSessionState } from './estado';
+import { eventoAdministrativo, type GameSessionState } from './estado';
 import { avanzarAutoComercio } from './comandos/avanzarAutoComercio';
 import { avanzarFaccionesNpc } from './comandos/avanzarFaccionesNpc';
 import { avanzarTick } from './comandos/avanzarTick';
@@ -81,7 +81,6 @@ export class GameSession {
       faccionesNpcIds: [],
       tick: 0,
       version: 0,
-      log: [],
       historialJugadores: {},
       eventosDominio: [],
     };
@@ -134,16 +133,14 @@ export class GameSession {
    * versión anterior y nueva, sobre un balance versionado POR PARTIDA en vez de global. Cuando eso exista,
    * este método desaparece.
    *
-   * Sí incrementa `version` porque el log es parte del estado persistido: cualquier cambio de
+   * Sí incrementa `version` porque el evento es parte del estado persistido: cualquier cambio de
    * `GameSessionState` tiene que versionarse para que el control de concurrencia optimista siga siendo válido.
    */
   registrarEventoAdministrativo(momento: string, mensaje: string): void {
-    const evento = eventoLegado(momento, this.estado.tick, mensaje);
     this.estado = {
       ...this.estado,
       version: this.estado.version + 1,
-      log: [{ tick: evento.tick, mensaje }, ...this.estado.log],
-      eventosDominio: [evento, ...this.estado.eventosDominio],
+      eventosDominio: [eventoAdministrativo(momento, this.estado.tick, mensaje), ...this.estado.eventosDominio],
     };
   }
 

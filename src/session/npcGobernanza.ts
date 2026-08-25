@@ -611,7 +611,11 @@ function atacarCampamentosCercanos(
       );
       asentamientosActuales = asentamientosActuales.map((a) => (a.id === resultado.atacante.id ? resultado.atacante : a));
       faccionesActuales = resultado.facciones;
-      eventos.push(...resultado.eventos);
+      // `engine/combate.ts` ya emite eventos estructurados, pero el NPC lleva su propio flujo en texto plano:
+      // migrarlo es una pasada aparte (este módulo NO es un comando, es el NPC jugando como jugaría alguien),
+      // así que aquí se toma solo el mensaje. Sus eventos salen como `codigo: 'npc.accion'`, ver
+      // `comandos/avanzarFaccionesNpc.ts`.
+      eventos.push(...resultado.eventos.map((e) => (typeof e === 'string' ? e : e.mensaje)));
       if (resultado.campamentoDestruido) {
         campamentosActuales = campamentosActuales.filter((c) => c.id !== campamento.id);
         bandidosProximoSpawnTick = tickActual + CAMPAMENTOS_BANDIDOS.ticksRespawn;

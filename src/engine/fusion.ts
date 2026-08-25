@@ -1,6 +1,20 @@
 import type { Asentamiento, Faccion } from '../domain/types';
+import type { EventoCrudo } from '../domain/eventos';
 
 export class FusionInvalidaError extends Error {}
+
+/** Fase A5 — payloads de este subsistema. Ambos eventos hacen DESAPARECER una Facción, así que un consumidor
+ * necesita los ids para actualizar lo que tuviera cacheado, no solo el texto. */
+export interface PayloadAnexion {
+  faccionAbsorbenteId: string;
+  faccionAbsorbidaId: string;
+}
+export interface PayloadFusion {
+  faccionAId: string;
+  faccionBId: string;
+  faccionNuevaId: string;
+  nuevoReyId: string;
+}
 
 function requerirFacciones(facciones: Faccion[], aId: string, bId: string): [Faccion, Faccion] {
   if (aId === bId) throw new FusionInvalidaError('Una Facción no puede fusionarse/anexionar consigo misma.');
@@ -23,14 +37,20 @@ export function anexionar(
   asentamientos: Asentamiento[],
   faccionAId: string,
   faccionBId: string
-): { facciones: Faccion[]; asentamientos: Asentamiento[]; eventos: string[] } {
+): { facciones: Faccion[]; asentamientos: Asentamiento[]; eventos: EventoCrudo[] } {
   const [a, b] = requerirFacciones(facciones, faccionAId, faccionBId);
   const aFusionada: Faccion = { ...a, ciudadanosIds: unionCiudadanos(a, b) };
 
   return {
     facciones: facciones.filter((f) => f.id !== faccionBId).map((f) => (f.id === faccionAId ? aFusionada : f)),
     asentamientos: asentamientos.map((asent) => (asent.faccionId === faccionBId ? { ...asent, faccionId: faccionAId } : asent)),
-    eventos: [`${a.nombre} anexiona a ${b.nombre}.`],
+    eventos: [
+      {
+        codigo: 'diplomacia.anexion',
+        mensaje: `${a.nombre} anexiona a ${b.nombre}.`,
+        payload: { faccionAbsorbenteId: a.id, faccionAbsorbidaId: b.id } satisfies PayloadAnexion,
+      },
+    ],
   };
 }
 
@@ -47,7 +67,7 @@ export function fusionar(
   nuevoNombre: string,
   nuevoReyId: string,
   tickActual: number
-): { facciones: Faccion[]; asentamientos: Asentamiento[]; eventos: string[] } {
+): { facciones: Faccion[]; asentamientos: Asentamiento[]; eventos: EventoCrudo[] } {
   const [a, b] = requerirFacciones(facciones, faccionAId, faccionBId);
   const ciudadanosC = unionCiudadanos(a, b);
   if (!ciudadanosC.includes(nuevoReyId)) {
@@ -73,6 +93,17 @@ export function fusionar(
     asentamientos: asentamientos.map((asent) =>
       asent.faccionId === faccionAId || asent.faccionId === faccionBId ? { ...asent, faccionId: nuevaFaccion.id } : asent
     ),
-    eventos: [`${a.nombre} y ${b.nombre} se fusionan en ${nuevoNombre}.`],
+    eventos: [
+      {
+        codigo: 'diplomacia.fusion',
+        mensaje: `${a.nombre} y ${b.nombre} se fusionan en ${nuevoNombre}.`,
+        payload: {
+          faccionAId: a.id,
+          faccionBId: b.id,
+          faccionNuevaId: nuevaFaccion.id,
+          nuevoReyId,
+        } satisfies PayloadFusion,
+      },
+    ],
   };
 }

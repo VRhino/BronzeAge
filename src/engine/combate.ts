@@ -1,4 +1,5 @@
 import type { Asentamiento, CampamentoBandido, Caravana, Escuadron, Faccion, RelacionPolitica } from '../domain/types';
+import type { EventoCrudo } from '../domain/eventos';
 import type { RandomFn } from '../worldgen';
 import { CAMPAMENTOS_BANDIDOS, MILITAR, NIVEL_FACCION, REPUTACION, TROPAS_RECLUTABLES } from '../constants';
 import { agregarRecurso } from './almacen';
@@ -41,11 +42,40 @@ function aplicarBajas(escuadrones: Escuadron[], fraccionBajas: number, victoria:
   });
 }
 
+// --- Eventos estructurados de combate ---
+//
+// Los comandos de combate son los ÚNICOS eventos de jugador con audiencia restringida de verdad: quién atacó
+// a quién, con cuánto poder y con qué resultado no puede viajar indiscriminadamente a todos los clientes. Por
+// eso el `payload` lleva los bandos como ids y no solo interpolados en `mensaje` — las proyecciones por
+// audiencia de Fase C filtran sobre eso, no parseando castellano.
+
+export interface PayloadCombateResuelto {
+  ganador: 'atacante' | 'defensor';
+  poderAtacante: number;
+  poderDefensor: number;
+}
+export interface PayloadAsedio {
+  atacanteId: string;
+  defensorId: string;
+  faccionAtacanteId: string;
+  faccionDefensoraId: string;
+}
+export interface PayloadIntercepcion {
+  atacanteId: string;
+  caravanaId: string;
+  /** Fracción del contenido capturada. Ausente si la intercepción falló. */
+  fraccionCapturada?: number;
+}
+export interface PayloadAtaqueCampamento {
+  atacanteId: string;
+  campamentoId: string;
+}
+
 export interface ResultadoCombate {
   ganador: 'atacante' | 'defensor';
   atacantes: Escuadron[];
   defensores: Escuadron[];
-  eventos: string[];
+  eventos: EventoCrudo[];
 }
 
 /**
@@ -74,7 +104,13 @@ export function resolverCombate(atacantes: Escuadron[], defensores: Escuadron[],
     ganador,
     atacantes: atacantesResultado,
     defensores: defensoresResultado,
-    eventos: [`Combate resuelto: gana el ${ganador} (poder ${poderA.toFixed(0)} vs ${poderD.toFixed(0)}).`],
+    eventos: [
+      {
+        codigo: 'combate.resuelto',
+        mensaje: `Combate resuelto: gana el ${ganador} (poder ${poderA.toFixed(0)} vs ${poderD.toFixed(0)}).`,
+        payload: { ganador, poderAtacante: poderA, poderDefensor: poderD } satisfies PayloadCombateResuelto,
+      },
+    ],
   };
 }
 
@@ -117,7 +153,7 @@ export function iniciarAsedio(
   relaciones: RelacionPolitica[],
   tickActual: number,
   rng: RandomFn
-): { atacante: Asentamiento; defensor: Asentamiento; facciones: Faccion[]; eventos: string[]; conquistado: boolean } {
+): { atacante: Asentamiento; defensor: Asentamiento; facciones: Faccion[]; eventos: EventoCrudo[]; conquistado: boolean } {
   if (atacante.faccionId === defensor.faccionId) {
     throw new CombateInvalidoError('No se puede asediar un asentamiento de la propia Facción.');
   }
@@ -129,9 +165,17 @@ export function iniciarAsedio(
   const resultado = resolverCombate(escuadronesAtacantes, escuadronesDefensores, tickActual, rng);
 
   const conquistado = resultado.ganador === 'atacante';
-  const eventos = [
+  const payloadAsedio: PayloadAsedio = {
+    atacanteId: atacante.id,
+    defensorId: defensor.id,
+    faccionAtacanteId: atacante.faccionId,
+    faccionDefensoraId: defensor.faccionId,
+  };
+  const eventos: EventoCrudo[] = [
     ...resultado.eventos,
-    conquistado ? `${atacante.id} conquista ${defensor.id}.` : `${defensor.id} resiste el asedio de ${atacante.id}.`,
+    conquistado
+      ? { codigo: 'combate.asedio_conquista', mensaje: `${atacante.id} conquista ${defensor.id}.`, payload: payloadAsedio }
+      : { codigo: 'combate.asedio_resistido', mensaje: `${defensor.id} resiste el asedio de ${atacante.id}.`, payload: payloadAsedio },
   ];
 
   // Atacar a un Aliado sin romper la relación antes es la penalización MÁS SEVERA de reputación (Doc 2.7).
@@ -183,7 +227,7 @@ export function combateCampoAbierto(
   relaciones: RelacionPolitica[],
   tickActual: number,
   rng: RandomFn
-): { asentamientoA: Asentamiento; asentamientoB: Asentamiento; facciones: Faccion[]; eventos: string[] } {
+): { asentamientoA: Asentamiento; asentamientoB: Asentamiento; facciones: Faccion[]; eventos: EventoCrudo[] } {
   const escuadronesA = seleccionarEscuadrones(asentamientoA, escuadronIdsA);
   const escuadronesB = seleccionarEscuadrones(asentamientoB, escuadronIdsB);
   const resultado = resolverCombate(escuadronesA, escuadronesB, tickActual, rng);
@@ -227,7 +271,7 @@ export function interceptarCaravana(
   facciones: Faccion[],
   asentamientos: Asentamiento[],
   rng: RandomFn
-): { atacante: Asentamiento; facciones: Faccion[]; eventos: string[]; caravanaCapturada: boolean } {
+): { atacante: Asentamiento; facciones: Faccion[]; eventos: EventoCrudo[]; caravanaCapturada: boolean } {
   if (!atacante.cargos.generalId) throw new CombateInvalidoError('El atacante necesita un General para interceptar.');
   const escuadrones = seleccionarEscuadrones(atacante, escuadronIdsAtacantes);
   const jitter = 1 + (rng() * 2 - 1) * MILITAR.varianzaCombate;
@@ -238,14 +282,26 @@ export function interceptarCaravana(
   const escuadronesActualizados = aplicarBajas(escuadrones, fraccionBajas, gana, tickActual);
 
   let almacen = atacante.almacen;
-  const eventos: string[] = [];
+  const eventos: EventoCrudo[] = [];
   if (gana) {
     for (const [recurso, cantidad] of Object.entries(caravana.contenido)) {
       almacen = agregarRecurso(almacen, recurso, cantidad * MILITAR.umbralCapturaCaravana);
     }
-    eventos.push(`${atacante.id} intercepta la caravana ${caravana.id} y captura ${MILITAR.umbralCapturaCaravana * 100}% de su carga.`);
+    eventos.push({
+      codigo: 'combate.caravana_interceptada',
+      mensaje: `${atacante.id} intercepta la caravana ${caravana.id} y captura ${MILITAR.umbralCapturaCaravana * 100}% de su carga.`,
+      payload: {
+        atacanteId: atacante.id,
+        caravanaId: caravana.id,
+        fraccionCapturada: MILITAR.umbralCapturaCaravana,
+      } satisfies PayloadIntercepcion,
+    });
   } else {
-    eventos.push(`${atacante.id} falla la intercepción de la caravana ${caravana.id} y sufre bajas.`);
+    eventos.push({
+      codigo: 'combate.intercepcion_fallida',
+      mensaje: `${atacante.id} falla la intercepción de la caravana ${caravana.id} y sufre bajas.`,
+      payload: { atacanteId: atacante.id, caravanaId: caravana.id } satisfies PayloadIntercepcion,
+    });
   }
 
   // Doc Fase_0_5 §8: ataque de caravana otorga XP al atacante; defensa de caravana otorga XP a la Facción
@@ -291,7 +347,7 @@ export function atacarCampamentoBandidos(
   tickActual: number,
   facciones: Faccion[],
   rng: RandomFn
-): { atacante: Asentamiento; facciones: Faccion[]; eventos: string[]; campamentoDestruido: boolean } {
+): { atacante: Asentamiento; facciones: Faccion[]; eventos: EventoCrudo[]; campamentoDestruido: boolean } {
   const escuadrones = seleccionarEscuadrones(atacante, escuadronIdsAtacantes);
   const jitter = 1 + (rng() * 2 - 1) * MILITAR.varianzaCombate;
   const poderAtacante = poderTotal(escuadrones, tickActual, false) * jitter;
@@ -301,14 +357,23 @@ export function atacarCampamentoBandidos(
   const escuadronesActualizados = aplicarBajas(escuadrones, fraccionBajas, gana, tickActual);
 
   let almacen = atacante.almacen;
-  const eventos: string[] = [];
+  const eventos: EventoCrudo[] = [];
+  const payloadCampamento: PayloadAtaqueCampamento = { atacanteId: atacante.id, campamentoId: campamento.id };
   if (gana) {
     for (const [recurso, cantidad] of Object.entries(CAMPAMENTOS_BANDIDOS.recompensa)) {
       if (cantidad) almacen = agregarRecurso(almacen, recurso, cantidad);
     }
-    eventos.push(`${atacante.id} destruye el campamento de bandidos ${campamento.id} y obtiene botín.`);
+    eventos.push({
+      codigo: 'combate.campamento_destruido',
+      mensaje: `${atacante.id} destruye el campamento de bandidos ${campamento.id} y obtiene botín.`,
+      payload: payloadCampamento,
+    });
   } else {
-    eventos.push(`${atacante.id} falla el ataque al campamento de bandidos ${campamento.id} y sufre bajas.`);
+    eventos.push({
+      codigo: 'combate.ataque_campamento_fallido',
+      mensaje: `${atacante.id} falla el ataque al campamento de bandidos ${campamento.id} y sufre bajas.`,
+      payload: payloadCampamento,
+    });
   }
 
   // Doc Fase_0_5 §8: combate contra un campamento NPC otorga XP igual que contra otra Facción — no hay

@@ -21,9 +21,14 @@ import type { MapaGenerado } from '../worldgen';
 import type { EstadoMapa } from '../world/mapa';
 import type { EstadoSimulacion } from '../engine/simulation';
 
-/** Entrada de log administrativo. Solo la consulta un administrador; nunca viaja a un jugador
- * (Docs/Arquitectura/7_Diseno_GameSession.md §7.1 — el log global narra lo que pasa en TODO el mundo, así
- * que incluirlo en una proyección de jugador sería una fuga de información de facciones rivales). */
+/**
+ * Entrada de log en texto. Ya no se guarda un log global en el estado (se deriva de `eventosDominio` con
+ * `proyectarLog`); este tipo sigue siendo el de esa proyección y el de `historialJugadores`.
+ *
+ * Administración: nunca viaja a un jugador tal cual (Docs/Arquitectura/7_Diseno_GameSession.md §7.1 — el log
+ * global narra lo que pasa en TODO el mundo, así que incluirlo en una proyección de jugador sería una fuga de
+ * información de facciones rivales).
+ */
 export interface EventoLogAdmin {
   tick: number;
   mensaje: string;
@@ -55,11 +60,17 @@ export interface GameSessionState {
   /** Sube en cada mutación aceptada. Un comando rechazado NUNCA la incrementa — base del control de
    * concurrencia optimista de Fase B3. */
   version: number;
-  /** Administración, no viaja a jugadores (ver `EventoLogAdmin`). */
-  log: EventoLogAdmin[];
   historialJugadores: Record<string, EventoLogAdmin[]>;
-  /** Auditoría y replay de Fase E: los mismos hechos que `log`, en forma estructurada. Hoy todo sale con
-   * `codigo: 'legado'` hasta que avance la migración por subsistemas de A5. */
+  /**
+   * Todo lo que ha ocurrido en la partida, en forma estructurada: la ÚNICA representación de los hechos que
+   * se guarda. El log en texto que muestra la consola se deriva de aquí con `proyectarLog()` — antes se
+   * persistía además un `log: EventoLogAdmin[]` en paralelo, que era el mismo hecho dos veces en el estado y
+   * dos veces en cada snapshot, y una de las dos copias (texto plano) no se podía filtrar por audiencia.
+   *
+   * Administración: NO viaja a un jugador tal cual (doc 7 §7.1 — narra lo que pasa en TODO el mundo, así que
+   * mandarlo entero sería una fuga de información de facciones rivales). Las proyecciones por audiencia de
+   * Fase C filtran sobre `codigo`/`payload`, que es justamente para lo que existe.
+   */
   eventosDominio: EventoDominio[];
 }
 
@@ -98,14 +109,33 @@ export function conResultadoDeSimulacion(estado: GameSessionState, simulacion: E
   };
 }
 
-/** Evento "legado": el mismo texto que ya se registraba, envuelto en la forma estructurada. Mientras un
- * subsistema no tenga su propio `codigo`, esta es la única forma en que produce eventos (ver
- * `domain/eventos.ts` y el marcador de migración de A5 en el doc 4). */
-export function eventoLegado(momento: string, tick: number, mensaje: string, asentamientoId?: string): EventoDominio {
-  return { codigo: 'legado', mensaje, momento, tick, asentamientoId };
+/**
+ * Deriva el log administrativo en texto a partir de los eventos estructurados. Es PRESENTACIÓN, no estado: no
+ * se guarda ni viaja como tal — el servidor manda `eventosDominio` y quien pinta la consola llama a esto.
+ *
+ * Un evento atribuido a un asentamiento se prefija con su id, que es lo que hacía `avanzarSimulacion` cuando
+ * el tick llevaba su propio array de texto (`eventos`, retirado por redundante). Al pasar el log a derivarse
+ * de `eventosDominio` —cuyos `mensaje` NO llevan el prefijo, porque el id va aparte en `asentamientoId`— la
+ * consola había empezado a mostrar "granja completado." sin decir de qué asentamiento. Reconstruirlo aquí lo
+ * deja en un solo sitio, en vez de en cada emisor.
+ */
+export function proyectarLog(eventos: readonly EventoDominio[]): EventoLogAdmin[] {
+  return eventos.map((e) => ({
+    tick: e.tick,
+    mensaje: e.asentamientoId ? `${e.asentamientoId}: ${e.mensaje}` : e.mensaje,
+  }));
 }
 
-/** Añade una entrada al historial de un jugador concreto (administración, igual que `log`). */
+/**
+ * Hecho administrativo que NO es un comando de partida (hoy solo los cambios de balance, ver
+ * `GameSession.registrarEventoAdministrativo`). Mantiene `mensaje` como texto libre a propósito: es un rastro
+ * temporal, y lo sustituye la auditoría real de Fase C (actor, fecha, versión previa y nueva).
+ */
+export function eventoAdministrativo(momento: string, tick: number, mensaje: string): EventoDominio {
+  return { codigo: 'administrativo', mensaje, momento, tick };
+}
+
+/** Añade una entrada al historial de un jugador concreto (administración, igual que el log). */
 export function conHistorialDeJugador(estado: GameSessionState, jugadorId: string, mensaje: string): GameSessionState {
   if (!jugadorId) return estado;
   const previo = estado.historialJugadores[jugadorId] ?? [];

@@ -60,7 +60,10 @@ describe('comando fundarAsentamiento', () => {
     expect(resultado.eventos).toHaveLength(1);
     expect(resultado.eventos[0]!.momento).toBe(MOMENTO);
     expect(resultado.eventos[0]!.asentamientoId).toBe(resultado.datos!.asentamientoId);
-    expect(resultado.eventos[0]!.codigo).toBe('legado');
+    // Código estable, ya no `'legado'`: los eventos de comando se migraron junto a los 13 subsistemas del
+    // tick (A5) para que Fase C pueda filtrarlos por audiencia sin parsear el texto.
+    expect(resultado.eventos[0]!.codigo).toBe('fundacion.asentamiento_fundado');
+    expect(resultado.eventos[0]!.payload).toMatchObject({ faccionId, posicion: { x: 500, y: 500 } });
   });
 
   it('éxito: registra en el historial de cada jugador fundador', () => {

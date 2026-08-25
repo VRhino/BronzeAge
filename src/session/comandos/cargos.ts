@@ -2,59 +2,75 @@
 // y activación de políticas. Agrupados en un archivo porque comparten la misma forma —localizar la entidad,
 // delegar en el motor, registrar— y separarlos en cinco archivos de 25 líneas sería ruido sin beneficio.
 //
-// ⚠️ Corrección respecto a `GameStore`: allí estos comandos hacían `.find(...)!` sobre Facción/asentamiento.
-// Si la entidad no existía, el `!` dejaba pasar `undefined` y el motor reventaba con un `TypeError` — un
-// error NO de dominio, que `rechazoDesdeError` relanzaría y tumbaría el comando en vez de rechazarlo. Aquí se
-// comprueba antes y se devuelve un código de rechazo propio.
+// Ninguno de estos comandos produce eventos en el motor (devuelve la entidad actualizada y nada más), así que
+// los narra esta capa entera: es la que sabe a quién se nombró y en qué Facción.
 import type { CargoTipo } from '../../domain/types';
-import type { Mapa } from '../../world/mapa';
 import { asignarCargoLocal as asignarCargoLocalEngine, asignarEmbajador as asignarEmbajadorEngine, asignarRey as asignarReyEngine } from '../../engine/cargos';
 import { comprarCasa as comprarCasaEngine } from '../../engine/faccion';
 import { activarPolitica as activarPoliticaEngine } from '../../engine/politicas';
-import { conHistorialDeJugador, eventoLegado, type GameSessionState } from '../estado';
-import { exito, rechazo, rechazoDesdeError, type ContextoComando, type TransicionComando } from './tipos';
-import { CODIGOS_ERROR } from './codigosDeError';
+import { conHistorialDeJugador, type GameSessionState } from '../estado';
+import { exito, type ContextoComando, type TransicionComando } from './tipos';
+import { comando, conAsentamiento, conFaccion, exigirAsentamiento, exigirFaccion, exigirFaccionDe } from './ayudas';
+import { evento } from './eventos';
 
-const FACCION_NO_EXISTE = CODIGOS_ERROR.faccionNoExiste;
-const ASENTAMIENTO_NO_EXISTE = CODIGOS_ERROR.asentamientoNoExiste;
+export interface PayloadCargoFaccion {
+  faccionId: string;
+  jugadorId: string;
+  cargo: 'rey' | 'embajador';
+}
+export interface PayloadCargoLocal {
+  asentamientoId: string;
+  jugadorId: string;
+  cargo: CargoTipo;
+}
+export interface PayloadCasaComprada {
+  asentamientoId: string;
+  jugadorId: string;
+}
+export interface PayloadPoliticaActivada {
+  asentamientoId: string;
+  politicaId: string;
+  cargo: CargoTipo;
+}
 
 export interface ParamsAsignarCargoFaccion {
   faccionId: string;
   jugadorId: string;
 }
 
-/** Rey y Embajador comparten todo salvo la función del motor y el nombre del cargo en los mensajes. */
+/** Rey y Embajador comparten todo salvo la función del motor y el nombre del cargo. */
 function asignarCargoDeFaccion(
   estado: GameSessionState,
   ctx: ContextoComando,
   params: ParamsAsignarCargoFaccion,
+  cargo: 'rey' | 'embajador',
   nombreCargo: string,
   aplicar: (faccion: Parameters<typeof asignarReyEngine>[0], jugadorId: string) => ReturnType<typeof asignarReyEngine>
 ): TransicionComando<void> {
-  const faccion = estado.facciones.find((f) => f.id === params.faccionId);
-  if (!faccion) return rechazo(estado, FACCION_NO_EXISTE);
+  const faccion = exigirFaccion(estado, params.faccionId);
+  const actualizada = aplicar(faccion, params.jugadorId);
 
-  try {
-    const actualizada = aplicar(faccion, params.jugadorId);
-    let siguiente: GameSessionState = {
-      ...estado,
-      facciones: estado.facciones.map((f) => (f.id === actualizada.id ? actualizada : f)),
-    };
-    siguiente = conHistorialDeJugador(siguiente, params.jugadorId, `Nombrado ${nombreCargo} de ${faccion.nombre}.`);
-    const evento = eventoLegado(ctx.momento, estado.tick, `${faccion.nombre}: ${params.jugadorId} es el nuevo ${nombreCargo}.`);
-    return exito(siguiente, [evento]);
-  } catch (err) {
-    return rechazoDesdeError(estado, err);
-  }
+  const siguiente = conHistorialDeJugador(
+    conFaccion(estado, actualizada),
+    params.jugadorId,
+    `Nombrado ${nombreCargo} de ${faccion.nombre}.`
+  );
+  return exito(siguiente, [
+    evento(ctx, estado, {
+      codigo: `cargo.${cargo}_asignado`,
+      mensaje: `${faccion.nombre}: ${params.jugadorId} es el nuevo ${nombreCargo}.`,
+      payload: { faccionId: faccion.id, jugadorId: params.jugadorId, cargo } satisfies PayloadCargoFaccion,
+    }),
+  ]);
 }
 
-export function asignarRey(estado: GameSessionState, _mapa: Mapa, ctx: ContextoComando, params: ParamsAsignarCargoFaccion): TransicionComando<void> {
-  return asignarCargoDeFaccion(estado, ctx, params, 'Rey', asignarReyEngine);
-}
+export const asignarRey = comando<ParamsAsignarCargoFaccion, void>((estado, _mapa, ctx, params) =>
+  asignarCargoDeFaccion(estado, ctx, params, 'rey', 'Rey', asignarReyEngine)
+);
 
-export function asignarEmbajador(estado: GameSessionState, _mapa: Mapa, ctx: ContextoComando, params: ParamsAsignarCargoFaccion): TransicionComando<void> {
-  return asignarCargoDeFaccion(estado, ctx, params, 'Embajador', asignarEmbajadorEngine);
-}
+export const asignarEmbajador = comando<ParamsAsignarCargoFaccion, void>((estado, _mapa, ctx, params) =>
+  asignarCargoDeFaccion(estado, ctx, params, 'embajador', 'Embajador', asignarEmbajadorEngine)
+);
 
 export interface ParamsAsignarCargoLocal {
   asentamientoId: string;
@@ -62,58 +78,49 @@ export interface ParamsAsignarCargoLocal {
   jugadorId: string;
 }
 
-export function asignarCargoLocal(
-  estado: GameSessionState,
-  _mapa: Mapa,
-  ctx: ContextoComando,
-  params: ParamsAsignarCargoLocal
-): TransicionComando<void> {
-  const asentamiento = estado.asentamientos.find((a) => a.id === params.asentamientoId);
-  if (!asentamiento) return rechazo(estado, ASENTAMIENTO_NO_EXISTE);
-  const faccion = estado.facciones.find((f) => f.id === asentamiento.faccionId);
-  if (!faccion) return rechazo(estado, FACCION_NO_EXISTE);
+export const asignarCargoLocal = comando<ParamsAsignarCargoLocal, void>((estado, _mapa, ctx, params) => {
+  const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
+  const faccion = exigirFaccionDe(estado, asentamiento);
 
-  try {
-    const actualizado = asignarCargoLocalEngine(asentamiento, faccion, params.cargo, params.jugadorId);
-    let siguiente: GameSessionState = {
-      ...estado,
-      asentamientos: estado.asentamientos.map((a) => (a.id === actualizado.id ? actualizado : a)),
-    };
-    siguiente = conHistorialDeJugador(siguiente, params.jugadorId, `Asignado como ${params.cargo} en ${asentamiento.id}.`);
-    const evento = eventoLegado(ctx.momento, estado.tick, `${asentamiento.id}: ${params.jugadorId} asignado como ${params.cargo}.`, asentamiento.id);
-    return exito(siguiente, [evento]);
-  } catch (err) {
-    return rechazoDesdeError(estado, err);
-  }
-}
+  const actualizado = asignarCargoLocalEngine(asentamiento, faccion, params.cargo, params.jugadorId);
+  const siguiente = conHistorialDeJugador(
+    conAsentamiento(estado, actualizado),
+    params.jugadorId,
+    `Asignado como ${params.cargo} en ${asentamiento.id}.`
+  );
+  return exito(siguiente, [
+    evento(ctx, estado, {
+      codigo: 'cargo.local_asignado',
+      mensaje: `${params.jugadorId} asignado como ${params.cargo}.`,
+      payload: { asentamientoId: asentamiento.id, jugadorId: params.jugadorId, cargo: params.cargo } satisfies PayloadCargoLocal,
+      asentamientoId: asentamiento.id,
+    }),
+  ]);
+});
 
 export interface ParamsComprarCasa {
   asentamientoId: string;
   jugadorId: string;
 }
 
-export function comprarCasa(estado: GameSessionState, _mapa: Mapa, ctx: ContextoComando, params: ParamsComprarCasa): TransicionComando<void> {
-  try {
-    // A diferencia del resto, este comando del motor resuelve el asentamiento por su cuenta y lanza
-    // `FaccionInvalidaError` si no existe — no hace falta comprobarlo antes.
-    const resultado = comprarCasaEngine(estado.facciones, estado.asentamientos, params.asentamientoId, params.jugadorId);
-    let siguiente: GameSessionState = {
-      ...estado,
-      facciones: resultado.facciones,
-      asentamientos: estado.asentamientos.map((a) => (a.id === resultado.asentamiento.id ? resultado.asentamiento : a)),
-    };
-    siguiente = conHistorialDeJugador(siguiente, params.jugadorId, `Compra casa en ${params.asentamientoId} y obtiene ciudadanía.`);
-    const evento = eventoLegado(
-      ctx.momento,
-      estado.tick,
-      `${params.jugadorId} compra casa en ${params.asentamientoId} y obtiene ciudadanía.`,
-      resultado.asentamiento.id
-    );
-    return exito(siguiente, [evento]);
-  } catch (err) {
-    return rechazoDesdeError(estado, err);
-  }
-}
+export const comprarCasa = comando<ParamsComprarCasa, void>((estado, _mapa, ctx, params) => {
+  // A diferencia del resto, este comando del motor resuelve el asentamiento por su cuenta y lanza
+  // `FaccionInvalidaError` si no existe — no hace falta comprobarlo antes.
+  const resultado = comprarCasaEngine(estado.facciones, estado.asentamientos, params.asentamientoId, params.jugadorId);
+  const siguiente = conHistorialDeJugador(
+    { ...conAsentamiento(estado, resultado.asentamiento), facciones: resultado.facciones },
+    params.jugadorId,
+    `Compra casa en ${params.asentamientoId} y obtiene ciudadanía.`
+  );
+  return exito(siguiente, [
+    evento(ctx, estado, {
+      codigo: 'ciudadania.casa_comprada',
+      mensaje: `${params.jugadorId} compra casa en ${params.asentamientoId} y obtiene ciudadanía.`,
+      payload: { asentamientoId: resultado.asentamiento.id, jugadorId: params.jugadorId } satisfies PayloadCasaComprada,
+      asentamientoId: resultado.asentamiento.id,
+    }),
+  ]);
+});
 
 export interface ParamsActivarPolitica {
   asentamientoId: string;
@@ -121,31 +128,17 @@ export interface ParamsActivarPolitica {
   politicaId: string;
 }
 
-export function activarPolitica(
-  estado: GameSessionState,
-  _mapa: Mapa,
-  ctx: ContextoComando,
-  params: ParamsActivarPolitica
-): TransicionComando<void> {
-  const asentamiento = estado.asentamientos.find((a) => a.id === params.asentamientoId);
-  if (!asentamiento) return rechazo(estado, ASENTAMIENTO_NO_EXISTE);
-  const faccion = estado.facciones.find((f) => f.id === asentamiento.faccionId);
-  if (!faccion) return rechazo(estado, FACCION_NO_EXISTE);
+export const activarPolitica = comando<ParamsActivarPolitica, void>((estado, _mapa, ctx, params) => {
+  const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
+  const faccion = exigirFaccionDe(estado, asentamiento);
 
-  try {
-    const actualizado = activarPoliticaEngine(asentamiento, faccion, params.cargo, params.politicaId, estado.tick, ctx.ids.siguiente());
-    const siguiente: GameSessionState = {
-      ...estado,
-      asentamientos: estado.asentamientos.map((a) => (a.id === actualizado.id ? actualizado : a)),
-    };
-    const evento = eventoLegado(
-      ctx.momento,
-      estado.tick,
-      `${asentamiento.id}: política "${params.politicaId}" activada por ${params.cargo}.`,
-      asentamiento.id
-    );
-    return exito(siguiente, [evento]);
-  } catch (err) {
-    return rechazoDesdeError(estado, err);
-  }
-}
+  const actualizado = activarPoliticaEngine(asentamiento, faccion, params.cargo, params.politicaId, estado.tick, ctx.ids.siguiente());
+  return exito(conAsentamiento(estado, actualizado), [
+    evento(ctx, estado, {
+      codigo: 'politica.activada',
+      mensaje: `Política "${params.politicaId}" activada por ${params.cargo}.`,
+      payload: { asentamientoId: asentamiento.id, politicaId: params.politicaId, cargo: params.cargo } satisfies PayloadPoliticaActivada,
+      asentamientoId: asentamiento.id,
+    }),
+  ]);
+});

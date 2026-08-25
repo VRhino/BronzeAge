@@ -91,6 +91,8 @@ import { poderEscuadron } from '../engine/combate';
 
 // --- Capa de partida: vive en el servidor, se habla por HTTP ---
 import type { GameSessionState } from '../session/gameSession';
+import type { EventoDominio } from '../domain/eventos';
+import { proyectarLog } from '../session/estado';
 import type { ParamsDe, TipoComando } from '../session/comandos/registro';
 import { ApiError, avanzarTick as apiAvanzarTick, consultarEstado, crearOResumirPartida, ejecutarComando } from './apiCliente';
 
@@ -99,9 +101,13 @@ export interface EventoLog {
   mensaje: string;
 }
 
-/** Estado completo de la partida tal como lo devuelve el servidor. Alias por compatibilidad con el nombre
- * que usaba la interfaz antes de esta migración — es exactamente `GameSessionState`, sin recorte. */
-export type GameState = GameSessionState;
+/**
+ * Lo que la interfaz consume: el estado que devuelve el servidor MÁS el log en texto, que ya no es estado
+ * persistido sino una proyección de `eventosDominio` (ver `proyectarLog`, `session/estado.ts`). Se deriva
+ * aquí, en el cliente, a partir de los eventos que el servidor ya manda — así el mismo hecho no viaja dos
+ * veces por la red ni se guarda dos veces en el snapshot.
+ */
+export type GameState = GameSessionState & { log: EventoLog[] };
 
 /**
  * Nodo tal como viaja en el ARCHIVO: con `cantidad` = lo que le queda. En memoria el nodo es inmutable y
@@ -202,6 +208,8 @@ export class GameStore {
    * deliberada (ver Docs/Arquitectura/4_Plan_Evolucion_Tareas.md, Fase B3). Con tope para no crecer sin límite
    * en una sesión de navegador muy larga. */
   private logEfimero: EventoLog[] = [];
+  /** Log en texto derivado de `eventosDominio`, cacheado contra el array del que sale (ver `getState`). */
+  private logCache: { sobre: EventoDominio[]; log: EventoLog[] } | null = null;
   /** Fachada `Mapa` del estado en vivo, cacheada por referencia — se invalida sola en cuanto `estadoCache`
    * cambia (cada acción/tick trae un `estadoMapa` distinto). Un solo hueco, no un mapa: sin historial de fotos
    * que cachear ya no hace falta más que eso (ver `GameSession.getMapa`, mismo patrón). */
@@ -237,9 +245,18 @@ export class GameStore {
     return this.estadoCache;
   }
 
+  /**
+   * Estado en vivo con el log ya derivado. La proyección se cachea contra el array de eventos del que sale
+   * (misma estrategia que `mapaCache`): la interfaz llama a `getState()` en cada notificación, y `main.ts`
+   * repinta el log entero, así que rehacer el `map` sobre todo el historial en cada render sería gratuito
+   * solo al principio de la partida.
+   */
   getState(): Readonly<GameState> {
-    if (this.logEfimero.length === 0) return this.estadoCache;
-    return { ...this.estadoCache, log: [...this.logEfimero, ...this.estadoCache.log] };
+    if (this.logCache?.sobre !== this.estadoCache.eventosDominio) {
+      this.logCache = { sobre: this.estadoCache.eventosDominio, log: proyectarLog(this.estadoCache.eventosDominio) };
+    }
+    const log = this.logEfimero.length === 0 ? this.logCache.log : [...this.logEfimero, ...this.logCache.log];
+    return { ...this.estadoCache, log };
   }
 
   /** Fachada de consulta del mapa (índices + consultas espaciales) del estado en vivo. */
@@ -781,7 +798,9 @@ export class GameStore {
       campamentosBandidos: this.state.campamentosBandidos,
       bandidosProximoSpawnTick: this.state.bandidosProximoSpawnTick,
       faccionesNpcIds: this.state.faccionesNpcIds,
-      log: this.state.log,
+      // El formato de archivo v2 guarda el log en texto (es anterior a `eventosDominio`): se proyecta al
+      // exportar en vez de arrastrarlo en el estado.
+      log: proyectarLog(this.state.eventosDominio),
       historialJugadores: this.state.historialJugadores,
     };
     return JSON.stringify(payload, null, 2);

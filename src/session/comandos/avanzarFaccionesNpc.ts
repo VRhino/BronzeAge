@@ -1,8 +1,9 @@
 import type { Mapa } from '../../world/mapa';
 import type { ContextoSimulacion } from '../../engine/simulation';
 import { avanzarNpcGobernanza, type ConfigNpcGobernanza } from '../npcGobernanza';
-import { conResultadoDeSimulacion, estadoSimulacionDe, eventoLegado, type GameSessionState } from '../estado';
-import { exito, type ContextoComando, type TransicionComando } from './tipos';
+import { conResultadoDeSimulacion, estadoSimulacionDe, type GameSessionState } from '../estado';
+import { eventos as construirEventos } from './eventos';
+import { exito, sinCambios, type ContextoComando, type TransicionComando } from './tipos';
 
 /**
  * Turno del NPC de gobernanza para las Facciones de `faccionesNpcIds`.
@@ -20,7 +21,7 @@ export function avanzarFaccionesNpc(
   _params: void
 ): TransicionComando<void> {
   if (estado.faccionesNpcIds.length === 0) {
-    return { estado, resultado: { ok: true, eventos: [], version: estado.version } };
+    return sinCambios(estado);
   }
 
   const contexto: ContextoSimulacion = { tick: estado.tick, momento: ctx.momento, rng: ctx.rng };
@@ -32,7 +33,14 @@ export function avanzarFaccionesNpc(
   ctx.ids.fijar(resultado.contadorFinal);
 
   const siguiente = conResultadoDeSimulacion(estado, resultado.estado);
-  const eventos = resultado.eventos.map((mensaje) => eventoLegado(ctx.momento, estado.tick, `[NPC] ${mensaje}`));
+  // `npcGobernanza.ts` sigue narrando en texto libre: es el NPC jugando como jugaría una persona, no un
+  // comando, y su migración a `codigo`/`payload` es una pasada propia. Hasta entonces sus eventos salen con
+  // un código que al menos permite FILTRARLOS como grupo (ej. no mandar el ruido del NPC a los clientes).
+  const eventos = construirEventos(
+    ctx,
+    estado,
+    resultado.eventos.map((mensaje) => ({ codigo: 'npc.accion', mensaje: `[NPC] ${mensaje}` }))
+  );
 
   return exito(siguiente, eventos);
 }

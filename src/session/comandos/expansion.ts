@@ -1,16 +1,26 @@
 // Comandos de expansión: lanzar una Caravana de Fundación hacia un punto del mapa, y desarmarla para
 // recuperar su contenido si se cambia de idea antes de que llegue.
-//
-// ⚠️ Mismo `.find(...)!` de siempre en ambos, sobre asentamiento y caravana.
 import type { Point } from '../../domain/types';
-import type { Mapa } from '../../world/mapa';
 import {
   desarmarCaravanaFundacion as desarmarCaravanaFundacionEngine,
   lanzarCaravanaFundacion as lanzarCaravanaFundacionEngine,
 } from '../../engine/expansion';
-import { eventoLegado, type GameSessionState } from '../estado';
-import { exito, rechazo, rechazoDesdeError, type ContextoComando, type TransicionComando } from './tipos';
-import { CODIGOS_ERROR } from './codigosDeError';
+import type { GameSessionState } from '../estado';
+import { exito } from './tipos';
+import { comando, conAsentamiento, exigirAsentamiento, exigirCaravana, exigirFaccionDe } from './ayudas';
+import { evento } from './eventos';
+
+export interface PayloadCaravanaFundacionLanzada {
+  caravanaId: string;
+  origenAsentamientoId: string;
+  faccionId: string;
+  destino: Point;
+  numJugadores: number;
+}
+export interface PayloadCaravanaFundacionDesarmada {
+  caravanaId: string;
+  origenAsentamientoId: string;
+}
 
 export interface ParamsLanzarCaravanaFundacion {
   origenAsentamientoId: string;
@@ -18,76 +28,64 @@ export interface ParamsLanzarCaravanaFundacion {
   numJugadores: number;
 }
 
-export function lanzarCaravanaFundacion(
-  estado: GameSessionState,
-  mapa: Mapa,
-  ctx: ContextoComando,
-  params: ParamsLanzarCaravanaFundacion
-): TransicionComando<{ caravanaId: string }> {
-  const origen = estado.asentamientos.find((a) => a.id === params.origenAsentamientoId);
-  if (!origen) return rechazo(estado, CODIGOS_ERROR.asentamientoNoExiste);
-  const faccion = estado.facciones.find((f) => f.id === origen.faccionId);
-  if (!faccion) return rechazo(estado, CODIGOS_ERROR.faccionNoExiste);
+export const lanzarCaravanaFundacion = comando<ParamsLanzarCaravanaFundacion, { caravanaId: string }>((estado, mapa, ctx, params) => {
+  const origen = exigirAsentamiento(estado, params.origenAsentamientoId);
+  const faccion = exigirFaccionDe(estado, origen);
 
-  try {
-    const resultado = lanzarCaravanaFundacionEngine(
-      mapa,
-      origen,
-      faccion,
-      params.destino,
-      estado.asentamientos,
-      estado.caravanas,
-      params.numJugadores,
-      estado.tick,
-      ctx.ids.siguiente()
-    );
-    const siguiente: GameSessionState = {
-      ...estado,
-      asentamientos: estado.asentamientos.map((a) => (a.id === origen.id ? resultado.origenActualizado : a)),
-      caravanas: [...estado.caravanas, resultado.caravana],
-    };
-    const evento = eventoLegado(
-      ctx.momento,
-      estado.tick,
-      `${origen.id}: lanza una Caravana de Fundación hacia (${Math.round(params.destino.x)}, ${Math.round(params.destino.y)}).`,
-      origen.id
-    );
-    return exito(siguiente, [evento], { caravanaId: resultado.caravana.id });
-  } catch (err) {
-    return rechazoDesdeError(estado, err);
-  }
-}
+  const resultado = lanzarCaravanaFundacionEngine(
+    mapa,
+    origen,
+    faccion,
+    params.destino,
+    estado.asentamientos,
+    estado.caravanas,
+    params.numJugadores,
+    estado.tick,
+    ctx.ids.siguiente()
+  );
+  const siguiente: GameSessionState = {
+    ...conAsentamiento(estado, resultado.origenActualizado),
+    caravanas: [...estado.caravanas, resultado.caravana],
+  };
+  return exito(
+    siguiente,
+    [
+      evento(ctx, estado, {
+        codigo: 'expansion.caravana_lanzada',
+        mensaje: `Lanza una Caravana de Fundación hacia (${Math.round(params.destino.x)}, ${Math.round(params.destino.y)}).`,
+        payload: {
+          caravanaId: resultado.caravana.id,
+          origenAsentamientoId: origen.id,
+          faccionId: faccion.id,
+          destino: params.destino,
+          numJugadores: params.numJugadores,
+        } satisfies PayloadCaravanaFundacionLanzada,
+        asentamientoId: origen.id,
+      }),
+    ],
+    { caravanaId: resultado.caravana.id }
+  );
+});
 
 export interface ParamsDesarmarCaravanaFundacion {
   caravanaId: string;
 }
 
-export function desarmarCaravanaFundacion(
-  estado: GameSessionState,
-  _mapa: Mapa,
-  ctx: ContextoComando,
-  params: ParamsDesarmarCaravanaFundacion
-): TransicionComando<void> {
-  const caravana = estado.caravanas.find((c) => c.id === params.caravanaId);
-  if (!caravana) return rechazo(estado, CODIGOS_ERROR.caravanaNoExiste);
-  const origen = estado.asentamientos.find((a) => a.id === caravana.origenAsentamientoId);
-  if (!origen) return rechazo(estado, CODIGOS_ERROR.asentamientoNoExiste);
+export const desarmarCaravanaFundacion = comando<ParamsDesarmarCaravanaFundacion, void>((estado, _mapa, ctx, params) => {
+  const caravana = exigirCaravana(estado, params.caravanaId);
+  const origen = exigirAsentamiento(estado, caravana.origenAsentamientoId ?? '');
 
-  try {
-    const actualizado = desarmarCaravanaFundacionEngine(origen, caravana);
-    const siguiente: GameSessionState = {
-      ...estado,
-      asentamientos: estado.asentamientos.map((a) => (a.id === origen.id ? actualizado : a)),
-      caravanas: estado.caravanas.filter((c) => c.id !== params.caravanaId),
-    };
-    const evento = eventoLegado(
-      ctx.momento,
-      estado.tick,
-      `${origen.id}: desarma la Caravana de Fundación ${params.caravanaId} y recupera su contenido.`,
-      origen.id
-    );
-    return exito(siguiente, [evento]);
-  } catch (err) {
-    return rechazoDesdeError(estado, err);
-  }
-}
+  const actualizado = desarmarCaravanaFundacionEngine(origen, caravana);
+  const siguiente: GameSessionState = {
+    ...conAsentamiento(estado, actualizado),
+    caravanas: estado.caravanas.filter((c) => c.id !== params.caravanaId),
+  };
+  return exito(siguiente, [
+    evento(ctx, estado, {
+      codigo: 'expansion.caravana_desarmada',
+      mensaje: `Desarma la Caravana de Fundación ${params.caravanaId} y recupera su contenido.`,
+      payload: { caravanaId: params.caravanaId, origenAsentamientoId: origen.id } satisfies PayloadCaravanaFundacionDesarmada,
+      asentamientoId: origen.id,
+    }),
+  ]);
+});
