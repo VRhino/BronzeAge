@@ -1,10 +1,17 @@
 // Wrapper `fetch` delgado sobre `src/server/api.ts` — sin lógica de negocio, solo I/O. Lo usa
-// `app/gameStore.ts`, vía `main.ts` (Docs/Arquitectura/4_Plan_Evolucion_Tareas.md, Fase B3 — migración de
-// `main.ts`). No hay separación real todavía entre cliente de jugador y herramienta de administración —
-// `main.ts` sirve a los dos propósitos por ahora, a propósito.
+// `app/gameStore.ts`, vía `main.ts`.
 //
-// Las rutas son relativas (`/partidas/...`): en dev, `vite.config.ts` las proxya al backend (mismo origen
-// desde el navegador, sin CORS); en producción, se sirven detrás del mismo host que el estático.
+// **Este cliente habla la superficie de ADMINISTRACIÓN** (`/admin/*`, Fase C3): crea partidas, avanza el
+// tick y lee el estado completo, que son operaciones de administrador. Es lo que siempre hizo; hasta C3 esos
+// endpoints no exigían identidad y ahora sí. El cliente de JUGADOR (`/jugador/*`, sin lectura de estado
+// hasta que existan las proyecciones de C4) vive en otro repositorio.
+//
+// Autenticación: login con el proveedor de desarrollo (`dev <sujetoId>`) y `sesionId` en memoria para el
+// resto de peticiones. Es un apaño de desarrollo consciente — el sujeto sale de `VITE_USUARIO` y debe estar
+// declarado en `ADMINISTRADORES` del servidor. Sustituirlo por un login real es cambiar solo `iniciarSesion`.
+//
+// Las rutas son relativas: en dev, `vite.config.ts` las proxya al backend (mismo origen desde el navegador,
+// sin CORS); en producción, se sirven detrás del mismo host que el estático.
 import type { RegionId } from '@motor/domain/types';
 import type { GameSessionState } from '@motor/session/gameSession';
 import type { ResultadoComando } from '@motor/session/comandos/tipos';
@@ -31,14 +38,27 @@ export class ApiError extends Error {
   }
 }
 
-async function peticion<T>(url: string, opciones?: RequestInit): Promise<T> {
+/** Sesión vigente, en memoria: se pierde al recargar y se vuelve a pedir. No se guarda en `localStorage` a
+ * propósito — un identificador de sesión ahí sobrevive a la pestaña y es exactamente lo que no conviene
+ * arrastrar cuando el mecanismo de autenticación real todavía no está decidido. */
+let sesionId: string | null = null;
+
+/** Sujeto con el que este cliente se identifica. Debe figurar en `ADMINISTRADORES` del servidor, si no el
+ * backend responderá 403 al crear la partida. */
+const SUJETO = import.meta.env.VITE_USUARIO ?? 'jefa';
+
+async function fetchJson<T>(url: string, opciones: RequestInit, cabeceraAuth: string): Promise<T> {
   let res: Response;
   try {
     res = await fetch(url, {
       ...opciones,
-      // Solo con body: Fastify rechaza con 400 un `content-type: application/json` sobre un cuerpo vacío
-      // (POST /tick no manda body) — el header solo tiene sentido cuando de verdad hay JSON que parsear.
-      headers: opciones?.body ? { 'content-type': 'application/json', ...(opciones?.headers ?? {}) } : opciones?.headers,
+      headers: {
+        authorization: cabeceraAuth,
+        // `content-type` solo con body: Fastify rechaza con 400 un `application/json` sobre un cuerpo vacío
+        // (el tick no manda body) — el header solo tiene sentido cuando de verdad hay JSON que parsear.
+        ...(opciones.body ? { 'content-type': 'application/json' } : {}),
+        ...((opciones.headers as Record<string, string>) ?? {}),
+      },
     });
   } catch {
     throw new ApiError(0, 'No se pudo contactar con el servidor. ¿Está corriendo `npm run server`?');
@@ -50,13 +70,34 @@ async function peticion<T>(url: string, opciones?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+async function iniciarSesion(): Promise<string> {
+  const { sesionId: id } = await fetchJson<{ sesionId: string }>('/sesiones', { method: 'POST' }, `dev ${SUJETO}`);
+  sesionId = id;
+  return id;
+}
+
 /**
- * Crea la partida si no existe, o la retoma si ya hay un runner abierto en el proceso (`server/api.ts`,
- * `POST /partidas`) — no destructivo. `forzar: true` SÍ lo es (descarta y empieza de cero): lo usa
- * `GameStore.regenerarMundo`, nunca el bootstrap de `GameStore.crear`.
+ * Petición autenticada. Si la sesión falta o el servidor la rechaza (401: caducó, o el proceso se reinició y
+ * la perdió — hoy vive en memoria), entra una vez y reintenta. Un segundo 401 se propaga: reintentar en
+ * bucle solo convertiría un problema de credenciales en una tormenta de peticiones.
+ */
+async function peticion<T>(url: string, opciones: RequestInit = {}): Promise<T> {
+  const id = sesionId ?? (await iniciarSesion());
+  try {
+    return await fetchJson<T>(url, opciones, `sesion ${id}`);
+  } catch (err) {
+    if (!(err instanceof ApiError) || err.status !== 401) throw err;
+    return fetchJson<T>(url, opciones, `sesion ${await iniciarSesion()}`);
+  }
+}
+
+/**
+ * Crea la partida si no existe, o la retoma desde el snapshot en disco — no destructivo. `forzar: true` SÍ
+ * lo es (descarta y empieza de cero): lo usa `GameStore.regenerarMundo`, nunca el bootstrap de
+ * `GameStore.crear`. Exige rol `administrador_global`; `forzar`, además, no lo permite un `moderador`.
  */
 export function crearOResumirPartida(gameId: string, seed: number, region?: RegionId, forzar?: boolean): Promise<ResumenPartida> {
-  return peticion<ResumenPartida>('/partidas', {
+  return peticion<ResumenPartida>('/admin/partidas', {
     method: 'POST',
     body: JSON.stringify({ gameId, seed, region, forzar }),
   });
@@ -64,18 +105,21 @@ export function crearOResumirPartida(gameId: string, seed: number, region?: Regi
 
 /** `T` fija a la vez la forma de `params` (`ParamsDe<T>`) y la de `resultado.datos` (`DatosDe<T>`) contra el
  * propio `REGISTRO_COMANDOS` — un `params` con un campo de menos, de más o del tipo equivocado no compila,
- * en vez de viajar como `unknown` y reventar dentro del manejador (ver `server/api.ts`). */
+ * en vez de viajar como `unknown` y reventar dentro del manejador.
+ *
+ * Va por la superficie de administración, así que la matriz de autorización lo evalúa con rol de
+ * administrador: rechazará con 403 todo lo que sea de jugador (que es casi todo). Ver `rutas/admin.ts`. */
 export function ejecutarComando<T extends TipoComando>(gameId: string, tipo: T, params: ParamsDe<T>): Promise<RespuestaComando<DatosDe<T>>> {
-  return peticion<RespuestaComando<DatosDe<T>>>(`/partidas/${encodeURIComponent(gameId)}/comandos`, {
+  return peticion<RespuestaComando<DatosDe<T>>>(`/admin/partidas/${encodeURIComponent(gameId)}/comandos`, {
     method: 'POST',
     body: JSON.stringify({ tipo, params }),
   });
 }
 
 export function avanzarTick(gameId: string): Promise<RespuestaComando<void>> {
-  return peticion<RespuestaComando<void>>(`/partidas/${encodeURIComponent(gameId)}/tick`, { method: 'POST' });
+  return peticion<RespuestaComando<void>>(`/admin/partidas/${encodeURIComponent(gameId)}/tick`, { method: 'POST' });
 }
 
 export function consultarEstado(gameId: string): Promise<GameSessionState> {
-  return peticion<GameSessionState>(`/partidas/${encodeURIComponent(gameId)}`);
+  return peticion<GameSessionState>(`/admin/partidas/${encodeURIComponent(gameId)}`);
 }

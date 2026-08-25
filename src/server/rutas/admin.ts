@@ -1,0 +1,164 @@
+// Superficie de ADMINISTRACIÓN (`/admin/*`), Fase C3. Gobierna la partida como objeto: crearla/reabrirla,
+// avanzar su tick, inspeccionar su estado completo.
+//
+// Requiere `administrador_global` (para lo que es de instancia) o una `Membresia` de administración en esa
+// partida concreta (`administrador_partida`/`moderador`). La política de qué rol alcanza qué está en
+// `acceso/rolesDePartida.ts`; aquí solo se cablea a rutas y códigos HTTP.
+//
+// Antes de C3 estos tres endpoints vivían sin prefijo y SIN autenticar (`POST /partidas`, `/tick`,
+// `GET /partidas/:gameId`): cualquiera con acceso a red podía crear una partida, avanzarla o leerla entera.
+// Separar las superficies es lo que permite cerrarlos sin romper la de jugador.
+import type { FastifyInstance } from 'fastify';
+import type { RegionId } from '../../domain/types';
+import { puedeAdministrar, puedeCrearPartida, puedeDescartarPartida, rolEnPartida } from '../../acceso/rolesDePartida';
+import type { RolTecnico } from '../../acceso/tipos';
+import type { ActorDeComando } from '../../session/comandos/autorizacion';
+import { PartidaYaAbiertaError } from '../registroDePartidas';
+import { ejecutarComandoHttp, ESQUEMA_EJECUTAR_COMANDO, type EjecutarComandoBody } from './comandos';
+import {
+  mensajeDe,
+  partidaNoAbierta,
+  resolverActor,
+  resumenDe,
+  sinPermiso,
+  sinSesion,
+  type DependenciasDeRutas,
+  type ParametrosGameId,
+} from './contexto';
+
+interface CrearPartidaBody {
+  gameId: string;
+  seed: number;
+  region?: RegionId;
+  /** Descarta la partida abierta en este proceso (si la hay) y crea una limpia — operación destructiva: la
+   * interfaz debe confirmarlo con el usuario antes de pedirlo. Exige `administrador_partida` o
+   * `administrador_global`; un `moderador` NO puede (doc 5: sin acceso a regeneración de mundo). */
+  forzar?: boolean;
+}
+
+const REGIONES: readonly RegionId[] = ['greciaContinental', 'anatolia', 'egeo', 'nilo', 'mesopotamia'];
+
+const ESQUEMA_CREAR_PARTIDA = {
+  body: {
+    type: 'object',
+    required: ['gameId', 'seed'],
+    additionalProperties: false,
+    properties: {
+      gameId: { type: 'string', minLength: 1 },
+      seed: { type: 'number' },
+      region: { type: 'string', enum: REGIONES },
+      forzar: { type: 'boolean' },
+    },
+  },
+} as const;
+
+export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDeRutas): void {
+  /**
+   * Crea una partida nueva, o RETOMA la que ya hubiera en disco para ese `gameId`. Operación de INSTANCIA:
+   * solo `administrador_global`, porque en una partida que aún no existe no hay `Membresia` posible.
+   *
+   * Al crearla, otorga a quien la crea `Membresia` de `administrador_partida` sobre ella. Sin eso, un
+   * administrador global no podría ejecutar ni siquiera los comandos que la matriz le reserva
+   * (`alternarFaccionNpc`), porque esa matriz razona sobre roles DE PARTIDA.
+   */
+  app.post<{ Body: CrearPartidaBody }>('/admin/partidas', { schema: ESQUEMA_CREAR_PARTIDA }, async (request, reply) => {
+    const { gameId, seed, region, forzar } = request.body;
+    const resuelto = resolverActor(request, deps, gameId);
+    if (!resuelto) return sinSesion(reply);
+    if (!puedeCrearPartida(resuelto.actor)) {
+      return sinPermiso(reply, 'crear o reabrir una partida exige rol administrador_global');
+    }
+    if (forzar && !puedeDescartarPartida(resuelto.actor)) {
+      return sinPermiso(reply, 'descartar una partida exige rol administrador_partida o administrador_global');
+    }
+
+    const runner = forzar
+      ? deps.partidas.descartarYCrear(gameId, { seed, region })
+      : await deps.partidas.abrir(gameId, { seed, region }).catch((err: unknown) => {
+          if (err instanceof PartidaYaAbiertaError) return undefined;
+          throw err;
+        });
+    if (!runner) return reply.code(409).send({ error: `la partida '${gameId}' ya está abierta en este proceso.` });
+
+    otorgarAdministracion(deps, resuelto.actor.usuarioId, gameId);
+    return reply.code(201).send(resumenDe(runner));
+  });
+
+  app.post<{ Params: ParametrosGameId }>('/admin/partidas/:gameId/tick', async (request, reply) => {
+    const acceso = exigirAdministracion(request, reply, deps);
+    if (!acceso.ok) return acceso.respuesta;
+
+    try {
+      const resultado = await acceso.runner.avanzarTick();
+      return reply.send({ ...resumenDe(acceso.runner), resultado });
+    } catch (err) {
+      // La única forma en que `avanzarTick` puede rechazar (no `resultado.ok === false`, que ya viene dentro
+      // de `resultado`) es un fallo de la capa de persistencia.
+      return reply.code(409).send({ error: mensajeDe(err) });
+    }
+  });
+
+  /** Estado COMPLETO de la partida, sin proyección: todas las facciones, log global. Es exactamente por eso
+   * que vive tras `/admin/*` — para un jugador sería una fuga (proyecciones por audiencia: Fase C4). */
+  app.get<{ Params: ParametrosGameId }>('/admin/partidas/:gameId', async (request, reply) => {
+    const acceso = exigirAdministracion(request, reply, deps);
+    if (!acceso.ok) return acceso.respuesta;
+    return reply.send(acceso.runner.getState());
+  });
+
+  /**
+   * Comandos ejecutados como administrador. La matriz sigue mandando: casi todos los comandos son de rol
+   * `jugador` y aquí se rechazarán con `rol_insuficiente`, que es lo correcto — tener acceso técnico no
+   * concede autoridad dentro del juego (doc 5). Hoy solo `alternarFaccionNpc` admite administración.
+   */
+  app.post<{ Params: ParametrosGameId; Body: EjecutarComandoBody }>(
+    '/admin/partidas/:gameId/comandos',
+    { schema: ESQUEMA_EJECUTAR_COMANDO },
+    async (request, reply) => {
+      const acceso = exigirAdministracion(request, reply, deps);
+      if (!acceso.ok) return acceso.respuesta;
+
+      const rol = rolEnPartida(acceso.actorInstancia) as RolTecnico;
+      const actor: ActorDeComando = { rol, jugadorId: acceso.actorInstancia.membresia?.jugadorId ?? null };
+      // Un administrador sin personaje en la partida queda registrado como `admin:<usuarioId>`, para que su
+      // huella en el log no se confunda con la de un jugador.
+      const actorId = acceso.actorInstancia.membresia?.jugadorId ?? `admin:${acceso.actorInstancia.usuarioId}`;
+      return ejecutarComandoHttp(reply, acceso.runner, request.body, actor, actorId);
+    }
+  );
+}
+
+/** `Membresia` de administración para quien abre la partida. Idempotente: reabrir una partida ya
+ * administrada por ese usuario no duplica ni degrada nada. */
+function otorgarAdministracion(deps: DependenciasDeRutas, usuarioId: string, gameId: string): void {
+  if (deps.identidad.repositorio.obtenerMembresia(usuarioId, gameId)) return;
+  deps.identidad.repositorio.otorgarMembresia({
+    usuarioId,
+    gameId,
+    jugadorId: null,
+    rol: 'administrador_partida',
+    desde: deps.ahora(),
+  });
+}
+
+type AccesoAdmin =
+  | { ok: true; runner: import('../runnerDePartida').RunnerDePartida; actorInstancia: import('../../acceso/rolesDePartida').ActorDeInstancia }
+  | { ok: false; respuesta: unknown };
+
+/** Sesión + partida abierta + permiso de administración, en el orden en que importa: sin sesión no se
+ * revela si la partida existe. */
+function exigirAdministracion(
+  request: { headers: Record<string, unknown>; params: unknown },
+  reply: Parameters<typeof sinSesion>[0],
+  deps: DependenciasDeRutas
+): AccesoAdmin {
+  const { gameId } = request.params as ParametrosGameId;
+  const resuelto = resolverActor(request as never, deps, gameId);
+  if (!resuelto) return { ok: false, respuesta: sinSesion(reply) };
+  if (!puedeAdministrar(resuelto.actor)) {
+    return { ok: false, respuesta: sinPermiso(reply, 'sin rol de administracion en esta partida') };
+  }
+  const runner = deps.partidas.obtener(gameId);
+  if (!runner) return { ok: false, respuesta: partidaNoAbierta(reply, gameId) };
+  return { ok: true, runner, actorInstancia: resuelto.actor };
+}

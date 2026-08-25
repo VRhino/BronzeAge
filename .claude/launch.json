@@ -5,6 +5,7 @@
       "name": "bronze-age-server",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "server"],
+      "env": { "ADMINISTRADORES": "dev:jefa" },
       "port": 3000
     },
     {

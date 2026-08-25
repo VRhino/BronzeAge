@@ -75,9 +75,9 @@ Objetivo: dejar el backend listo para que varios jugadores y un administrador �
 >   del mismo como OpenAPI para que los otros repos generen su cliente.
 
 - [x] C0. Cliente de navegador extraído a `cliente/`; el repo queda como backend puro (sin Vite ni capas `app`/`ui`/`main`/`lab`)
-- [ ] C1. Usuarios, sesiones, jugadores y membresías implementados (auth stub de desarrollo; el mecanismo real se sustituye después sin tocar lo que se apoya en él)
-- [ ] C2. Autorización de comandos por actor / facción / asentamiento / cargo, sobre el registro convertido en descriptor (manejador + esquema de `params` + rol + `idempotencyKey`)
-- [ ] C3. Superficies separadas: `/admin/*` y `/jugador/*` con requisitos de rol distintos
+- [x] C1. Usuarios, sesiones y membresías implementados (2026-08-25), con la autenticación tras un puerto intercambiable: sustituir el proveedor de desarrollo por uno real es escribir un adaptador y darlo de alta, sin tocar nada de lo que se apoya en él
+- [x] C2. Autorización de comandos por actor / facción / asentamiento / cargo (2026-08-25): matriz con una fila por comando, exhaustividad garantizada en compilación. El esquema de `params` por comando y la `idempotencyKey` siguen pendientes (C6 y reconexión de C5)
+- [x] C3. Superficies separadas: `/admin/*` y `/jugador/*` con requisitos de rol distintos — completada 2026-08-25. Cierra de paso el agujero que quedaba de B4: crear partida, tick y estado ya no son endpoints abiertos. `/jugador/*` sin lectura de estado a propósito, hasta que existan las proyecciones de C4
 - [ ] C4. Proyecciones de estado por audiencia (jugador / facción / admin / observador) y `ConocimientoJugador` con "último conocido"
 - [ ] C5. WebSocket único con canales, suscripciones autorizadas y reconexión sin duplicar comandos
 - [ ] C6. Contrato publicable: CORS, versionado de API y OpenAPI generado desde los esquemas de Fastify

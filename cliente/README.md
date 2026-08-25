@@ -39,15 +39,34 @@ consultas de `GameStore`: 5 de ellas se convierten en **proyecciones de Fase C**
 exponga esos DTOs, este cliente puede ir soltando imports de `@motor/*` hasta quedarse solo con `domain/types`
 (tipos, sin coste en tiempo de ejecución).
 
+## Qué superficie habla este cliente
+
+La de **administración** (`/admin/*`): crea partidas, avanza el tick y lee el estado completo. Eso es lo que
+siempre hizo; desde la Fase C3 del backend esos endpoints exigen identidad y rol. El cliente de **jugador**
+(`/jugador/*`) vive en otro repositorio.
+
+Se identifica con el proveedor de desarrollo del backend (`Authorization: dev <sujeto>`) y guarda el
+`sesionId` en memoria — se pierde al recargar y se vuelve a pedir solo. Es un apaño de desarrollo consciente:
+sustituirlo por un login real es cambiar `iniciarSesion` en `src/app/apiCliente.ts`.
+
 ## Uso
 
-Requiere el backend corriendo aparte (`npm run server` en el repo del servidor, Fastify en `:3000`).
-`vite.config.ts` proxya `/partidas` hacia él para evitar CORS en desarrollo.
+Requiere el backend corriendo aparte, con este sujeto declarado como administrador:
+
+```bash
+ADMINISTRADORES='dev:jefa' npm run server
+```
 
 ```bash
 npm install
 npm run dev
 ```
+
+`vite.config.ts` proxya `/sesiones`, `/admin` y `/jugador` hacia `:3000` para evitar CORS en desarrollo.
+
+El sujeto se cambia con `VITE_USUARIO`; el que se use debe figurar en `ADMINISTRADORES` del servidor, o el
+backend responderá 403 al crear la partida. Sin `ADMINISTRADORES` no hay ningún administrador y nadie puede
+crear partidas — es el default deliberado del servidor.
 
 > Al servir este cliente desde otro origen (ya sin el proxy de Vite), el servidor necesitará CORS: es la tarea
 > C6 de la Fase C en el roadmap del backend.

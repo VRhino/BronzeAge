@@ -12,6 +12,10 @@ export interface RepositorioIdentidad {
   buscarUsuarioPorIdentidadExterna(proveedor: string, sujetoId: string): Usuario | undefined;
   crearUsuario(datos: { creadoEn: string }): Usuario;
   vincularIdentidad(vinculo: IdentidadVinculada): void;
+  /** Lectura inversa del vínculo: con qué identidad externa entró un `Usuario`. La necesita el directorio de
+   * administradores de la instancia (`server/identidad/administradoresGlobales.ts`), que se configura por
+   * `proveedor:sujetoId` —lo que un operador conoce— y no por el `usuarioId` interno, que se asigna solo. */
+  buscarIdentidadDeUsuario(usuarioId: string): IdentidadVinculada | undefined;
   crearSesion(sesion: Sesion): void;
   buscarSesion(sesionId: string): Sesion | undefined;
   obtenerMembresia(usuarioId: string, gameId: string): Membresia | undefined;
