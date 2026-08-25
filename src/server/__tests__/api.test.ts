@@ -88,6 +88,77 @@ describe('GET /partidas/:gameId', () => {
   });
 });
 
+describe('POST /partidas/:gameId/comandos', () => {
+  it('ejecuta un comando conocido por su nombre y lo refleja en el resumen devuelto', async () => {
+    await app.inject({ method: 'POST', url: '/partidas', payload: { gameId: 'g1', seed: 42 } });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/partidas/g1/comandos',
+      payload: { tipo: 'crearFaccion', params: { nombre: 'Micenas' } },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const cuerpo = res.json();
+    expect(cuerpo.version).toBe(1);
+    expect(cuerpo.resultado.ok).toBe(true);
+    expect(cuerpo.resultado.datos.faccionId).toBeTruthy();
+  });
+
+  it('400 si el tipo de comando no existe en el registro', async () => {
+    await app.inject({ method: 'POST', url: '/partidas', payload: { gameId: 'g1', seed: 42 } });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/partidas/g1/comandos',
+      payload: { tipo: 'noExiste', params: {} },
+    });
+
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('404 si la partida no está abierta en este proceso', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/partidas/no-existe/comandos',
+      payload: { tipo: 'crearFaccion', params: { nombre: 'Micenas' } },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('un comando rechazado por el dominio responde 200 con `ok: false`, no un error HTTP', async () => {
+    await app.inject({ method: 'POST', url: '/partidas', payload: { gameId: 'g1', seed: 42 } });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/partidas/g1/comandos',
+      payload: { tipo: 'crearFaccion', params: { nombre: '' } },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().resultado.ok).toBe(false);
+  });
+});
+
+describe('POST /partidas con `forzar`', () => {
+  it('sin `forzar`, sigue rechazando con 409 si el gameId ya está abierto', async () => {
+    await app.inject({ method: 'POST', url: '/partidas', payload: { gameId: 'g1', seed: 42 } });
+    const res = await app.inject({ method: 'POST', url: '/partidas', payload: { gameId: 'g1', seed: 999 } });
+    expect(res.statusCode).toBe(409);
+  });
+
+  it('con `forzar: true`, descarta la partida en curso y crea una limpia (no reanuda el snapshot)', async () => {
+    await app.inject({ method: 'POST', url: '/partidas', payload: { gameId: 'g1', seed: 42 } });
+    await app.inject({ method: 'POST', url: '/partidas/g1/tick' });
+    await app.inject({ method: 'POST', url: '/partidas/g1/tick' });
+
+    const res = await app.inject({ method: 'POST', url: '/partidas', payload: { gameId: 'g1', seed: 999, forzar: true } });
+
+    expect(res.statusCode).toBe(201);
+    expect(res.json()).toEqual({ gameId: 'g1', tick: 0, version: 0 });
+  });
+});
+
 describe('reanudación tras "reinicio del proceso"', () => {
   it('crear con un gameId que ya tiene snapshot en disco retoma la partida, no la resetea', async () => {
     await app.inject({ method: 'POST', url: '/partidas', payload: { gameId: 'g1', seed: 42 } });

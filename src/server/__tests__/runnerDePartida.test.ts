@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { crearFaccion } from '../../session/comandos/crearFaccion';
 import { fundarAsentamiento } from '../../session/comandos/fundarAsentamiento';
+import { alternarFaccionNpc } from '../../session/comandos/alternarFaccionNpc';
 import { RunnerDePartida } from '../runnerDePartida';
 import { cargarPartida, type SnapshotPartida } from '../persistenciaPartida';
 
@@ -101,6 +102,23 @@ describe('RunnerDePartida — aplicar -> persistir -> confirmar', () => {
 
     expect(resultado.ok).toBe(true);
     expect(r.getState().facciones.map((f) => f.nombre)).toEqual(['Micenas', 'Ugarit']);
+  });
+});
+
+describe('RunnerDePartida.avanzarTick — bundlea auto-comercio y turno NPC', () => {
+  it('el turno del NPC de gobernanza ocurre DENTRO de avanzarTick, sin un comando aparte', async () => {
+    const r = runner('g-npc');
+    const creada = await r.ejecutar(crearFaccion, { nombre: 'Micenas' });
+    const faccionId = creada.datos!.faccionId;
+    await r.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 }, numJugadores: 1 });
+    await r.ejecutar(alternarFaccionNpc, { faccionId, activo: true });
+
+    // Antes de este fix, `avanzarTick()` del runner solo aplicaba el tick puro — la primera decisión de
+    // gobernanza del NPC (asignar Gobernador, determinista, no depende de ticks previos) no llegaba a
+    // ocurrir sin una llamada aparte a `avanzarFaccionesNpc`.
+    await r.avanzarTick();
+
+    expect(r.getState().asentamientos[0]!.cargos.gobernadorId).toBeTruthy();
   });
 });
 
