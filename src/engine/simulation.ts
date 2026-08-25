@@ -1,5 +1,5 @@
 import type { AcuerdoTrueque, Asentamiento, CaminoComercial, CampamentoBandido, Caravana, Faccion, OrdenMercado, RelacionPolitica, Titulo } from '../domain/types';
-import type { EventoDominio } from '../domain/eventos';
+import type { EventoCrudo, EventoDominio } from '../domain/eventos';
 import type { EstadoMapa, Mapa } from '../world/mapa';
 import type { RandomFn } from '../worldgen';
 import { computeTodasLasZonas } from './zones';
@@ -71,20 +71,22 @@ export interface ResultadoTick extends EstadoSimulacion {
    * decide adoptarlo (ver `session/comandos/avanzarTick.ts`).
    */
   estadoMapa: EstadoMapa;
-  eventos: string[];
-  /** Mismos eventos que `eventos`, en forma estructurada (Docs/Arquitectura/4_Plan_Evolucion_Tareas.md, Fase
-   * A5) — todavía sin migrar subsistema por subsistema, así que hoy cada uno lleva `codigo: 'legado'` y el
-   * mismo texto que su equivalente en `eventos`, más `asentamientoId` cuando se sabe a cuál pertenece. Un
-   * futuro backend puede empezar a consumir este campo sin esperar a que la migración esté completa. */
+  /** Eventos del tick en forma estructurada (Docs/Arquitectura/4_Plan_Evolucion_Tareas.md, Fase A5 — 13/13
+   * subsistemas migrados). Único contrato de salida del tick: el log en texto que muestra la interfaz sale
+   * de `mensaje` (ver `exito()` en `session/comandos/tipos.ts`), así que no hace falta un array paralelo. */
   eventosDominio: EventoDominio[];
 }
 
-/** Envuelve mensajes de texto ya formateados como eventos de dominio "legado" (ver `EventoDominio`) —
- * mientras un subsistema no tenga su propio `codigo`, esta es la única forma en que produce eventos
- * estructurados. */
-function comoEventosDominio(mensajes: string[], contexto: ContextoSimulacion, asentamientoId?: string): EventoDominio[] {
+/** Añade el contexto que un subsistema no conoce (`momento`, `tick`, `asentamientoId`) a lo que ya produjo —
+ * un `string` se envuelve como `codigo: 'legado'` (subsistema todavía sin migrar); un evento ya migrado
+ * conserva su `codigo`/`payload` tal cual (ver `EventoCrudo`). */
+function comoEventosDominio(eventos: EventoCrudo[], contexto: ContextoSimulacion, asentamientoId?: string): EventoDominio[] {
   const { tick, momento } = contexto;
-  return mensajes.map((mensaje) => ({ codigo: 'legado', mensaje, momento, tick, asentamientoId }));
+  return eventos.map((evento) => {
+    const { codigo, mensaje, payload } =
+      typeof evento === 'string' ? { codigo: 'legado', mensaje: evento, payload: undefined } : evento;
+    return { codigo, mensaje, momento, tick, asentamientoId, payload };
+  });
 }
 
 /**
@@ -98,7 +100,6 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   // usuario): ahora se dispara al completarse cada edificio, dentro de `avanzarConstruccion`.
   const crecidos = estado.asentamientos;
   const zonas = computeTodasLasZonas(crecidos);
-  const eventos: string[] = [];
   const eventosDominio: EventoDominio[] = [];
 
   const capitalesPorFaccion = new Map(
@@ -197,9 +198,6 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
       ...eventosPoblacion,
       ...eventosMantenimiento,
     ];
-    for (const e of eventosAsentamiento) {
-      eventos.push(`${asentamiento.id}: ${e}`);
-    }
     eventosDominio.push(...comoEventosDominio(eventosAsentamiento, contexto, asentamiento.id));
 
     return { asentamiento: trasMantenimiento, destruido };
@@ -209,52 +207,43 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   const actualizados = procesados.filter((p) => !p.destruido).map((p) => p.asentamiento);
 
   const trasComercio = avanzarComercio(actualizados, estado.facciones, estado.caravanas, estado.acuerdos, mapa, estado.caminos, zonas, tickActual);
-  eventos.push(...trasComercio.eventos);
   eventosDominio.push(...comoEventosDominio(trasComercio.eventos, contexto));
 
   // Caravanas de Fundación (Doc 1.8): expanden una Facción más allá de su primer asentamiento — se avanzan
   // aparte de las comerciales (destino es un punto del mapa, no un asentamiento existente).
   const trasExpansion = avanzarCaravanasFundacion(trasComercio.caravanas, mapa, trasComercio.facciones, trasComercio.asentamientos, tickActual);
-  eventos.push(...trasExpansion.eventos);
   eventosDominio.push(...comoEventosDominio(trasExpansion.eventos, contexto));
 
   // Regeneración de yacimientos agotados (a petición del usuario): escribe en la fachada `mapa`, mismo patrón
   // que `mapa.extraer` dentro de `avanzarConstruccion` más arriba en este mismo tick. La fachada trabaja
   // sobre su propia copia del estado del mapa, que sale de aquí en `ResultadoTick.estadoMapa`.
   const eventosRegeneracion = mapa.avanzarRegeneracion(tickActual);
-  eventos.push(...eventosRegeneracion);
   eventosDominio.push(...comoEventosDominio(eventosRegeneracion, contexto));
 
   // Campamentos de bandidos (Doc 1.9): spawn/respawn primero, después atacan cualquier caravana ya movida
   // este tick (comercial o de fundación) que pase cerca — mismo orden que el resto del tick, sobre posiciones
   // ya actualizadas.
   const trasSpawnBandidos = avanzarSpawnBandidos(estado.campamentosBandidos, estado.bandidosProximoSpawnTick, zonas, trasExpansion.asentamientos, mapa, tickActual);
-  eventos.push(...trasSpawnBandidos.eventos);
   eventosDominio.push(...comoEventosDominio(trasSpawnBandidos.eventos, contexto));
   const trasAtaquesBandidos = avanzarAtaquesBandidos(trasSpawnBandidos.campamentos, trasExpansion.caravanas, rng);
-  eventos.push(...trasAtaquesBandidos.eventos);
   eventosDominio.push(...comoEventosDominio(trasAtaquesBandidos.eventos, contexto));
 
   const trasMercado = avanzarMercado(trasExpansion.asentamientos, estado.ordenes);
-  eventos.push(...trasMercado.eventos);
   eventosDominio.push(...comoEventosDominio(trasMercado.eventos, contexto));
 
   const trasTributos = avanzarTributos(estado.relaciones, trasMercado.asentamientos);
-  eventos.push(...trasTributos.eventos);
   eventosDominio.push(...comoEventosDominio(trasTributos.eventos, contexto));
 
   // Doc Fase_0_5 §8: se aplica la XP de construcción acumulada arriba junto a la del resto del tick (combate/
   // caravanas, aplicadas ya directamente sobre `facciones` en `engine/combate.ts`) antes de recalcular nivel.
   const faccionesConXp = aplicarAjustesExperiencia(trasExpansion.facciones, ajustesExperiencia);
   const trasNivelFaccion = avanzarNivelesFaccion(faccionesConXp);
-  eventos.push(...trasNivelFaccion.eventos);
   eventosDominio.push(...comoEventosDominio(trasNivelFaccion.eventos, contexto));
 
   const faccionesFinal = avanzarReputacion(trasNivelFaccion.facciones, estado.relaciones);
 
   const titulosActuales = calcularTitulos(faccionesFinal, trasTributos.asentamientos, estado.relaciones);
   const eventosTitulos = narrarCambiosDeTitulo(estado.titulos, titulosActuales, faccionesFinal);
-  eventos.push(...eventosTitulos);
   eventosDominio.push(...comoEventosDominio(eventosTitulos, contexto));
 
   return {
@@ -269,7 +258,6 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     campamentosBandidos: trasSpawnBandidos.campamentos,
     bandidosProximoSpawnTick: estado.bandidosProximoSpawnTick,
     estadoMapa: mapa.estadoActual(),
-    eventos,
     eventosDominio,
   };
 }

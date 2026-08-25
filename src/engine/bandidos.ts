@@ -5,6 +5,20 @@
 // `engine/combate.ts` (`atacarCampamentoBandidos`), junto al resto de resolución de combate.
 
 import type { Asentamiento, Caravana, CampamentoBandido, Point, ZonaBosque, ZonaInfluencia } from '../domain/types';
+import type { EventoCrudo } from '../domain/eventos';
+
+/** Fase A5 — payloads de los eventos de este subsistema (ver `avanzarSpawnBandidos`/`avanzarAtaquesBandidos`). */
+export interface PayloadCampamentoAparece {
+  campamentoId: string;
+  asentamientoObjetivoId: string;
+}
+export interface PayloadCaravanaInterceptada {
+  campamentoId: string;
+  caravanaId: string;
+}
+export interface PayloadCaravanaEscapa {
+  caravanaId: string;
+}
 import type { Mapa } from '../world/mapa';
 import type { RandomFn } from '../worldgen';
 import { CAMPAMENTOS_BANDIDOS, MILITAR } from '../constants';
@@ -58,7 +72,7 @@ export function avanzarSpawnBandidos(
   mapa: Mapa,
   tickActual: number,
   contador = 0
-): { campamentos: CampamentoBandido[]; eventos: string[] } {
+): { campamentos: CampamentoBandido[]; eventos: EventoCrudo[] } {
   if (campamentos.length >= asentamientos.length || tickActual < proximoSpawnEnTick) {
     return { campamentos, eventos: [] };
   }
@@ -78,7 +92,13 @@ export function avanzarSpawnBandidos(
   };
   return {
     campamentos: [...campamentos, nuevo],
-    eventos: [`Aparece un campamento de bandidos cerca de ${asentamientoObjetivo.id}, en su bosque no reclamado más cercano (${nuevo.id}).`],
+    eventos: [
+      {
+        codigo: 'bandidos.campamento_aparece',
+        mensaje: `Aparece un campamento de bandidos cerca de ${asentamientoObjetivo.id}, en su bosque no reclamado más cercano (${nuevo.id}).`,
+        payload: { campamentoId: nuevo.id, asentamientoObjetivoId: asentamientoObjetivo.id } satisfies PayloadCampamentoAparece,
+      },
+    ],
   };
 }
 
@@ -89,9 +109,9 @@ export function avanzarSpawnBandidos(
  * el bandido no tiene almacén propio que reciba la carga capturada — si gana, la caravana se pierde por
  * completo (Doc 3.10: "se elimina si es capturada"), sin transferencia a nadie.
  */
-export function avanzarAtaquesBandidos(campamentos: CampamentoBandido[], caravanas: Caravana[], rng: RandomFn): { caravanas: Caravana[]; eventos: string[] } {
+export function avanzarAtaquesBandidos(campamentos: CampamentoBandido[], caravanas: Caravana[], rng: RandomFn): { caravanas: Caravana[]; eventos: EventoCrudo[] } {
   if (campamentos.length === 0) return { caravanas, eventos: [] };
-  const eventos: string[] = [];
+  const eventos: EventoCrudo[] = [];
   const perdidas = new Set<string>();
 
   for (const caravana of caravanas) {
@@ -105,9 +125,17 @@ export function avanzarAtaquesBandidos(campamentos: CampamentoBandido[], caravan
     const gana = campamentoCercano.poder * jitter > MILITAR.defensaBaseCaravana;
     if (gana) {
       perdidas.add(caravana.id);
-      eventos.push(`Un campamento de bandidos (${campamentoCercano.id}) intercepta y destruye la caravana ${caravana.id}.`);
+      eventos.push({
+        codigo: 'bandidos.caravana_interceptada',
+        mensaje: `Un campamento de bandidos (${campamentoCercano.id}) intercepta y destruye la caravana ${caravana.id}.`,
+        payload: { campamentoId: campamentoCercano.id, caravanaId: caravana.id } satisfies PayloadCaravanaInterceptada,
+      });
     } else {
-      eventos.push(`La caravana ${caravana.id} escapa de un campamento de bandidos cercano.`);
+      eventos.push({
+        codigo: 'bandidos.caravana_escapa',
+        mensaje: `La caravana ${caravana.id} escapa de un campamento de bandidos cercano.`,
+        payload: { caravanaId: caravana.id } satisfies PayloadCaravanaEscapa,
+      });
     }
   }
 

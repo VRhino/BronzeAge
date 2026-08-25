@@ -1,4 +1,15 @@
 import type { Asentamiento, OrdenMercado } from '../domain/types';
+import type { EventoCrudo } from '../domain/eventos';
+
+/** Fase A5 — payload de `mercado.compra` (ver `avanzarMercado`). */
+export interface PayloadMercadoCompra {
+  compradorId: string;
+  vendedorId: string;
+  recurso: string;
+  cantidad: number;
+  valor: number;
+  comision: number;
+}
 import { COMISION, PRECIO_BASE, PRECIO_REFERENCIA } from '../constants';
 import { agregarRecurso, cantidadDisponible, descontarRecursos } from './almacen';
 import { factorComisionExterna } from './politicas';
@@ -69,8 +80,8 @@ function tasaComision(vendedor: Asentamiento, comprador: Asentamiento): number {
 export function avanzarMercado(
   asentamientos: Asentamiento[],
   ordenes: OrdenMercado[]
-): { asentamientos: Asentamiento[]; ordenes: OrdenMercado[]; eventos: string[] } {
-  const eventos: string[] = [];
+): { asentamientos: Asentamiento[]; ordenes: OrdenMercado[]; eventos: EventoCrudo[] } {
+  const eventos: EventoCrudo[] = [];
   // Copias de trabajo locales: se mutan libremente dentro de esta función, pero nunca los objetos del caller.
   const asentamientosPorId = new Map(asentamientos.map((a) => [a.id, { ...a }]));
   const ordenesTrabajo = ordenes.map((o) => (o.estado === 'activa' ? { ...o } : o));
@@ -123,9 +134,18 @@ export function avanzarMercado(
         if (venta.cantidadCumplida >= venta.cantidad) venta.estado = 'cumplida';
         if (compra.cantidadCumplida >= compra.cantidad) compra.estado = 'cumplida';
 
-        eventos.push(
-          `Mercado: ${comprador.id} compra ${cantidad.toFixed(1)} ${recurso} a ${vendedor.id} por ${valor.toFixed(1)} oro (comisión ${comision.toFixed(1)}).`
-        );
+        eventos.push({
+          codigo: 'mercado.compra',
+          mensaje: `Mercado: ${comprador.id} compra ${cantidad.toFixed(1)} ${recurso} a ${vendedor.id} por ${valor.toFixed(1)} oro (comisión ${comision.toFixed(1)}).`,
+          payload: {
+            compradorId: comprador.id,
+            vendedorId: vendedor.id,
+            recurso,
+            cantidad,
+            valor,
+            comision,
+          } satisfies PayloadMercadoCompra,
+        });
       }
     }
   }

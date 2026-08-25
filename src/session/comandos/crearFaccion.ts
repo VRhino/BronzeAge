@@ -2,6 +2,7 @@ import type { Mapa } from '../../world/mapa';
 import { crearFaccion as crearFaccionEngine } from '../../engine/faccion';
 import { eventoLegado, type GameSessionState } from '../estado';
 import { exito, rechazo, type ContextoComando, type TransicionComando } from './tipos';
+import { CODIGOS_ERROR } from './codigosDeError';
 
 export interface ParamsCrearFaccion {
   nombre: string;
@@ -25,9 +26,9 @@ export function crearFaccion(
   params: ParamsCrearFaccion
 ): TransicionComando<{ faccionId: string }> {
   const nombre = params.nombre.trim();
-  if (!nombre) return rechazo(estado, 'faccion.nombre_vacio');
+  if (!nombre) return rechazo(estado, CODIGOS_ERROR.faccionNombreVacio);
   if (estado.facciones.some((f) => f.nombre.toLowerCase() === nombre.toLowerCase())) {
-    return rechazo(estado, 'faccion.nombre_duplicado');
+    return rechazo(estado, CODIGOS_ERROR.faccionNombreDuplicado);
   }
 
   const nueva = crearFaccionEngine(`faccion-custom-${ctx.ids.siguiente()}`, nombre);

@@ -59,7 +59,7 @@ describe('Hambruna: nutrición de la población', () => {
     expect(siguiente.poblacion.nobleza).toBe(5);
     const perdidos = asentamiento.poblacion.pesants + asentamiento.poblacion.artesanos - (siguiente.poblacion.pesants + siguiente.poblacion.artesanos);
     expect(perdidos).toBeGreaterThan(0);
-    expect(eventos.some((e) => e.includes('mueren de hambre'))).toBe(true);
+    expect(eventos.some((e) => typeof e !== 'string' && e.codigo === 'poblacion.hambruna_muerte')).toBe(true);
   });
 
   it('la nutrición baja frena el crecimiento de población (factorCrecimientoMinimo en vez de un booleano trigo>0?1:0.2)', () => {

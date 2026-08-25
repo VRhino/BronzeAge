@@ -1,4 +1,17 @@
 import type { Asentamiento, Faccion, RelacionPolitica, Titulo } from '../domain/types';
+import type { EventoCrudo } from '../domain/eventos';
+
+/** Fase A5 — payloads de los eventos de este subsistema (ver `narrarCambiosDeTitulo`). */
+export interface PayloadTituloCambiaManos {
+  tituloNombre: string;
+  previoFaccionId: string;
+  actualFaccionId: string;
+}
+export interface PayloadTituloNace {
+  tituloNombre: string;
+  faccionId: string;
+  valorMetrica: number;
+}
 import { cantidadDisponible } from './almacen';
 import { poblacionTotal } from './asentamientoQuery';
 import { computeLigas } from './liga';
@@ -39,15 +52,31 @@ export function calcularTitulos(facciones: Faccion[], asentamientos: Asentamient
 }
 
 /** Narración de Aedas/Poetas (Doc 6.3): log de texto cuando un título cambia de manos. */
-export function narrarCambiosDeTitulo(anteriores: Titulo[], actuales: Titulo[], facciones: Faccion[]): string[] {
+export function narrarCambiosDeTitulo(anteriores: Titulo[], actuales: Titulo[], facciones: Faccion[]): EventoCrudo[] {
   const nombreFaccion = (id: string) => facciones.find((f) => f.id === id)?.nombre ?? id;
-  const eventos: string[] = [];
+  const eventos: EventoCrudo[] = [];
   for (const actual of actuales) {
     const previo = anteriores.find((t) => t.nombre === actual.nombre);
     if (previo && previo.poseedorId !== actual.poseedorId) {
-      eventos.push(`Los Aedas cantan: el título "${actual.nombre}" pasa de ${nombreFaccion(previo.poseedorId)} a ${nombreFaccion(actual.poseedorId)}.`);
+      eventos.push({
+        codigo: 'titulo.cambia_manos',
+        mensaje: `Los Aedas cantan: el título "${actual.nombre}" pasa de ${nombreFaccion(previo.poseedorId)} a ${nombreFaccion(actual.poseedorId)}.`,
+        payload: {
+          tituloNombre: actual.nombre,
+          previoFaccionId: previo.poseedorId,
+          actualFaccionId: actual.poseedorId,
+        } satisfies PayloadTituloCambiaManos,
+      });
     } else if (!previo) {
-      eventos.push(`Los Aedas cantan: nace el título "${actual.nombre}", ostentado por ${nombreFaccion(actual.poseedorId)}.`);
+      eventos.push({
+        codigo: 'titulo.nace',
+        mensaje: `Los Aedas cantan: nace el título "${actual.nombre}", ostentado por ${nombreFaccion(actual.poseedorId)}.`,
+        payload: {
+          tituloNombre: actual.nombre,
+          faccionId: actual.poseedorId,
+          valorMetrica: actual.valorMetrica,
+        } satisfies PayloadTituloNace,
+      });
     }
   }
   return eventos;

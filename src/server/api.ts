@@ -22,10 +22,10 @@ interface CrearPartidaBody {
   gameId: string;
   seed: number;
   region?: RegionId;
-  /** Descarta la partida abierta en este proceso (si la hay) y crea una limpia — operación de
-   * ADMINISTRACIÓN (Docs/Arquitectura/4_Plan_Evolucion_Tareas.md, Fase B3): quien la pide es `admin.ts`,
-   * nunca el cliente de jugador. Sin esto, `POST /partidas` sobre un `gameId` ya abierto solo puede
-   * RETOMARLO (`cargarOCrear`), nunca tirarlo y empezar de cero. */
+  /** Descarta la partida abierta en este proceso (si la hay) y crea una limpia — operación destructiva
+   * (Docs/Arquitectura/4_Plan_Evolucion_Tareas.md, Fase B3): la interfaz debe confirmarlo con el usuario antes
+   * de pedirlo (ver `GameStore.regenerarMundo`). Sin esto, `POST /partidas` sobre un `gameId` ya abierto solo
+   * puede RETOMARLO (`cargarOCrear`), nunca tirarlo y empezar de cero. */
   forzar?: boolean;
 }
 

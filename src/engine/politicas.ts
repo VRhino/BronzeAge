@@ -1,5 +1,13 @@
 import type { Asentamiento, CargoTipo, Faccion, PoliticaActiva } from '../domain/types';
+import type { EventoCrudo } from '../domain/eventos';
 import { POLITICAS, POLITICA_CATALOGO } from '../constants';
+
+/** Fase A5 — payload de `politica.expirada` (ver `avanzarPoliticas`). */
+export interface PayloadPoliticaExpirada {
+  politicaId: string;
+  politicaNombre: string;
+  cargo: CargoTipo;
+}
 
 export class PoliticaInvalidaError extends Error {}
 
@@ -69,11 +77,18 @@ export function activarPolitica(
 }
 
 /** Expira políticas cuyo plazo terminó; no hay cancelación anticipada (Doc 4.4). */
-export function avanzarPoliticas(asentamiento: Asentamiento, tickActual: number): { asentamiento: Asentamiento; eventos: string[] } {
-  const eventos: string[] = [];
+export function avanzarPoliticas(asentamiento: Asentamiento, tickActual: number): { asentamiento: Asentamiento; eventos: EventoCrudo[] } {
+  const eventos: EventoCrudo[] = [];
   const vigentes = asentamiento.politicasActivas.filter((p) => {
     const expirada = tickActual >= p.expiraEnTick;
-    if (expirada) eventos.push(`Política "${definicion(p.politicaId).nombre}" expira.`);
+    if (expirada) {
+      const def = definicion(p.politicaId);
+      eventos.push({
+        codigo: 'politica.expirada',
+        mensaje: `Política "${def.nombre}" expira.`,
+        payload: { politicaId: p.politicaId, politicaNombre: def.nombre, cargo: p.cargo } satisfies PayloadPoliticaExpirada,
+      });
+    }
     return !expirada;
   });
   return { asentamiento: vigentes.length === asentamiento.politicasActivas.length ? asentamiento : { ...asentamiento, politicasActivas: vigentes }, eventos };

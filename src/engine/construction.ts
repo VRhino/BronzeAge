@@ -1,4 +1,5 @@
 import type { Asentamiento, Edificio, EdificioTipo, Faccion, Point, RecursoAlmacenado, RecursoTipo } from '../domain/types';
+import type { EventoCrudo } from '../domain/eventos';
 import type { RecetaProduccion } from '../constants';
 import {
   EDIFICIO_CATALOGO,
@@ -882,12 +883,38 @@ function elegibleParaMejora(
  * y hay fondos para `costoMejora` (respetando la misma reserva mínima que protege el inicio de construcción),
  * se paga y sube `nivelInterno` en el mismo tick. No hay tiempo de mejora especificado en el diseño original.
  */
+/** Fase A5 (Docs/Arquitectura/4_Plan_Evolucion_Tareas.md) — payloads estructurados de los eventos de este
+ * subsistema, exportados para que un futuro consumidor que filtre por `codigo` sepa con qué forma castear. */
+export interface PayloadMejoraCompletada {
+  edificioId: string;
+  edificioTipo: EdificioTipo;
+  nivelNuevo: number;
+}
+export interface PayloadEdificioCompletado {
+  edificioId: string;
+  edificioTipo: EdificioTipo;
+}
+export interface PayloadYacimientoAgotado {
+  edificioId: string;
+  edificioTipo: EdificioTipo;
+  recurso: RecursoTipo;
+  fuenteId?: string;
+}
+export interface PayloadConstruccionIniciada {
+  edificioId: string;
+  edificioTipo: EdificioTipo;
+}
+export interface PayloadNecesidadDetectada {
+  edificioId: string;
+  edificioTipo: EdificioTipo;
+}
+
 function avanzarMejoras(
   asentamiento: Asentamiento,
   almacen: Record<string, RecursoAlmacenado>,
   reserva: Partial<Record<RecursoTipo, number>>
-): { asentamiento: Asentamiento; almacen: Record<string, RecursoAlmacenado>; eventos: string[] } {
-  const eventos: string[] = [];
+): { asentamiento: Asentamiento; almacen: Record<string, RecursoAlmacenado>; eventos: EventoCrudo[] } {
+  const eventos: EventoCrudo[] = [];
   let almacenActual = almacen;
   // Bucle sobre una copia mutable, no `map`: una mejora puede MUDAR el edificio (ver abajo), y la siguiente
   // tiene que ver esa posición nueva para no elegir un hueco que ya se acaba de ocupar.
@@ -914,7 +941,11 @@ function avanzarMejoras(
     }
 
     almacenActual = descontarRecursos(almacenActual, costo);
-    eventos.push(`${edificio.tipo} mejora a nivel interno ${nivelSiguiente}.`);
+    eventos.push({
+      codigo: 'construccion.mejora_completada',
+      mensaje: `${edificio.tipo} mejora a nivel interno ${nivelSiguiente}.`,
+      payload: { edificioId: edificio.id, edificioTipo: edificio.tipo, nivelNuevo: nivelSiguiente } satisfies PayloadMejoraCompletada,
+    });
     edificios[indice] = { ...edificio, nivelInterno: nivelSiguiente, posicion };
 
     // La zona de Mercado se puebla al subir de nivel: los puestos se añaden a ESTA misma lista, no a una
@@ -1046,8 +1077,8 @@ export function avanzarConstruccion(
   mapa: Mapa,
   capital: Asentamiento | undefined,
   reclamos: ReclamosFuentes
-): { asentamiento: Asentamiento; eventos: string[]; edificiosCompletados: number } {
-  const eventos: string[] = [];
+): { asentamiento: Asentamiento; eventos: EventoCrudo[]; edificiosCompletados: number } {
+  const eventos: EventoCrudo[] = [];
   let almacen = asentamiento.almacen;
   const resultados = new Map<string, Edificio>();
   // Puestos de la zona de Mercado creados en este tick (ver `crearPuestosDeMercado`) — se añaden al final,
@@ -1069,7 +1100,11 @@ export function avanzarConstruccion(
     if (edificio.estado === 'en_construccion') {
       const restantes = edificio.ticksRestantes - 1;
       if (restantes <= 0) {
-        eventos.push(`${edificio.tipo} completado.`);
+        eventos.push({
+          codigo: 'construccion.edificio_completado',
+          mensaje: `${edificio.tipo} completado.`,
+          payload: { edificioId: edificio.id, edificioTipo: edificio.tipo } satisfies PayloadEdificioCompletado,
+        });
         edificiosCompletadosEsteTick += 1;
         if (edificio.tipo === 'almacen') {
           const bonus = EDIFICIO_CATALOGO.almacen.capacidadPorRecursoAdicional;
@@ -1119,7 +1154,18 @@ export function avanzarConstruccion(
         const resultado = agregarRecursoConSobrante(almacen, extraccion.recurso, extraido);
         almacen = resultado.almacen;
         pausadoPorAlmacenLleno = resultado.sobrante > 0;
-        if (!mapa.nodoProductivo(edificio.fuenteId)) eventos.push(extraccion.mensajeAgotado);
+        if (!mapa.nodoProductivo(edificio.fuenteId)) {
+          eventos.push({
+            codigo: 'construccion.yacimiento_agotado',
+            mensaje: extraccion.mensajeAgotado,
+            payload: {
+              edificioId: edificio.id,
+              edificioTipo: edificio.tipo,
+              recurso: extraccion.recurso,
+              fuenteId: edificio.fuenteId,
+            } satisfies PayloadYacimientoAgotado,
+          });
+        }
       }
     }
     resultados.set(edificio.id, pausadoPorAlmacenLleno !== !!edificio.pausadoPorAlmacenLleno ? { ...edificio, pausadoPorAlmacenLleno } : edificio);
@@ -1141,7 +1187,11 @@ export function avanzarConstruccion(
       resultados.set(edificio.id, edificio);
       continue;
     }
-    eventos.push(`Comienza construcción de ${edificio.tipo}.`);
+    eventos.push({
+      codigo: 'construccion.iniciada',
+      mensaje: `Comienza construcción de ${edificio.tipo}.`,
+      payload: { edificioId: edificio.id, edificioTipo: edificio.tipo } satisfies PayloadConstruccionIniciada,
+    });
     // Vía Rápida de Construcción (Maestro de Obras, Doc 2.2/4.4) acelera el tiempo restante al arrancar.
     const ticks = Math.max(1, Math.round(EDIFICIO_CATALOGO[edificio.tipo].tiempoConstruccionTicks * factorTiempoConstruccion(asentamiento)));
     resultados.set(edificio.id, { ...edificio, estado: 'en_construccion', ticksRestantes: ticks });
@@ -1196,7 +1246,13 @@ export function avanzarConstruccion(
     extractoresTicksSinCupo = trasNecesidades.extractoresTicksSinCupo;
     edificiosBase = trasNecesidades.edificiosBase;
   }
-  for (const p of nuevosProyectos) eventos.push(`Nueva necesidad detectada: se compromete ${p.tipo} (pagado).`);
+  for (const p of nuevosProyectos) {
+    eventos.push({
+      codigo: 'construccion.necesidad_detectada',
+      mensaje: `Nueva necesidad detectada: se compromete ${p.tipo} (pagado).`,
+      payload: { edificioId: p.id, edificioTipo: p.tipo } satisfies PayloadNecesidadDetectada,
+    });
+  }
 
   const edificiosFinal = [...edificiosBase, ...nuevosProyectos];
   // Reordena los `en_cola` por `prioridad` (mismo criterio que el Paso 2) para que la posición mostrada en la

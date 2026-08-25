@@ -21,11 +21,10 @@ const ARCHIVOS_FUENTE = import.meta.glob('/src/**/*.ts', { query: '?raw', import
 /**
  * Capas hacia las que cada capa puede importar, además de sí misma (siempre permitido, no hace falta
  * listarlo). `main` es la raíz de composición (`src/main.ts`): la única capa que puede importar de `app` y
- * `ui` a la vez. `lab` es la herramienta de desarrollo de `laboratorio.html` (Docs/Arquitectura/
- * 1_Arquitectura_Actual.md no la describe como parte de la partida real) — consume el motor directamente,
- * sin pasar por `app`. `admin` es el panel de administración (`admin.html`, Fase B3): otra raíz de
- * composición aparte de `main`, para las operaciones que NO son de jugador (crear/regenerar mundo) — habla
- * con `app/apiCliente.ts` directo, nunca con `GameStore` (ese es 100% jugador), y no necesita `ui`/`engine`.
+ * `ui` a la vez — hoy sirve tanto de cliente de jugador como de herramienta de administración (crear/
+ * regenerar mundo incluido): no hay separación real entre los dos todavía, a propósito (Fase B3). `lab` es la
+ * herramienta de desarrollo de `laboratorio.html` (Docs/Arquitectura/1_Arquitectura_Actual.md no la describe
+ * como parte de la partida real) — consume el motor directamente, sin pasar por `app`.
  */
 const CAPAS_PERMITIDAS: Record<string, string[]> = {
   domain: [],
@@ -48,7 +47,6 @@ const CAPAS_PERMITIDAS: Record<string, string[]> = {
   server: ['domain', 'worldgen', 'world', 'engine', 'session', 'constants'],
   lab: ['domain', 'worldgen', 'world', 'engine', 'ui', 'constants'],
   main: ['domain', 'worldgen', 'world', 'engine', 'app', 'ui', 'constants'],
-  admin: ['domain', 'app', 'constants'],
 };
 
 /** Capa de una ruta absoluta-desde-raíz (`/src/engine/population.ts` -> `'engine'`, `/src/constants.ts` ->
@@ -82,7 +80,7 @@ function importsRelativos(contenido: string): string[] {
 /** Archivos de producción (excluye `__tests__` y `*.test.ts`: los tests tienen sus propias conveniencias —
  * fixtures compartidas, etc. — y no son parte del contrato de arquitectura) de una capa dada. */
 function archivosDeCapa(capa: string): [ruta: string, contenido: string][] {
-  const prefijo = capa === 'constants' || capa === 'main' || capa === 'admin' ? `/src/${capa}.ts` : `/src/${capa}/`;
+  const prefijo = capa === 'constants' || capa === 'main' ? `/src/${capa}.ts` : `/src/${capa}/`;
   return Object.entries(ARCHIVOS_FUENTE).filter(
     ([ruta]) => (ruta === prefijo || ruta.startsWith(prefijo)) && !ruta.includes('/__tests__/') && !ruta.endsWith('.test.ts')
   );

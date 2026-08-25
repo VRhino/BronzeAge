@@ -1,4 +1,18 @@
 import type { Asentamiento, Caravana, Faccion, Point } from '../domain/types';
+import type { EventoCrudo } from '../domain/eventos';
+
+/** Fase A5 — payloads de los eventos de este subsistema (ver `avanzarCaravanasFundacion`). */
+export interface PayloadCaravanaFundacionPerdida {
+  caravanaId: string;
+}
+export interface PayloadAsentamientoFundado {
+  caravanaId: string;
+  asentamientoId: string;
+}
+export interface PayloadFundacionFallida {
+  caravanaId: string;
+  razon: string;
+}
 import type { Mapa } from '../world/mapa';
 import { calcularRuta } from '../world/rutas';
 import { CARAVANA_CATALOGO, EDIFICIO_CATALOGO, FUNDACION } from '../constants';
@@ -144,8 +158,8 @@ export function avanzarCaravanasFundacion(
   facciones: Faccion[],
   asentamientos: Asentamiento[],
   tickActual: number
-): { caravanas: Caravana[]; asentamientos: Asentamiento[]; facciones: Faccion[]; eventos: string[] } {
-  const eventos: string[] = [];
+): { caravanas: Caravana[]; asentamientos: Asentamiento[]; facciones: Faccion[]; eventos: EventoCrudo[] } {
+  const eventos: EventoCrudo[] = [];
   const restantes: Caravana[] = [];
   let asentamientosActuales = asentamientos;
   let faccionesActuales = facciones;
@@ -158,7 +172,11 @@ export function avanzarCaravanasFundacion(
 
     const origen = asentamientosActuales.find((a) => a.id === caravana.origenAsentamientoId);
     if (!origen) {
-      eventos.push(`La Caravana de Fundación ${caravana.id} se pierde: su asentamiento de origen ya no existe.`);
+      eventos.push({
+        codigo: 'expansion.caravana_perdida',
+        mensaje: `La Caravana de Fundación ${caravana.id} se pierde: su asentamiento de origen ya no existe.`,
+        payload: { caravanaId: caravana.id } satisfies PayloadCaravanaFundacionPerdida,
+      });
       continue;
     }
 
@@ -187,10 +205,18 @@ export function avanzarCaravanasFundacion(
       );
       asentamientosActuales = [...asentamientosActuales, resultado.asentamiento];
       faccionesActuales = resultado.facciones;
-      eventos.push(`La Caravana de Fundación ${caravana.id} llega y funda ${resultado.asentamiento.id}.`);
+      eventos.push({
+        codigo: 'expansion.asentamiento_fundado',
+        mensaje: `La Caravana de Fundación ${caravana.id} llega y funda ${resultado.asentamiento.id}.`,
+        payload: { caravanaId: caravana.id, asentamientoId: resultado.asentamiento.id } satisfies PayloadAsentamientoFundado,
+      });
     } catch (err) {
       const razon = err instanceof FundacionInvalidaError ? err.message : String(err);
-      eventos.push(`La Caravana de Fundación ${caravana.id} llega pero no puede fundar (${razon}) — se pierde.`);
+      eventos.push({
+        codigo: 'expansion.fundacion_fallida',
+        mensaje: `La Caravana de Fundación ${caravana.id} llega pero no puede fundar (${razon}) — se pierde.`,
+        payload: { caravanaId: caravana.id, razon } satisfies PayloadFundacionFallida,
+      });
     }
   }
 

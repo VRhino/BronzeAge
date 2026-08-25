@@ -1,5 +1,33 @@
 import type { Asentamiento, EdificioTipo, RecursoTipo } from '../domain/types';
+import type { EventoCrudo } from '../domain/eventos';
 import { MANTENIMIENTO, NIVEL_ASENTAMIENTO, RESERVA_CONSTRUCCION } from '../constants';
+
+/** Fase A5 — payloads de los eventos de este subsistema (ver `avanzarNivelAsentamiento`/`avanzarMantenimiento`). */
+export interface PayloadNivelSubio {
+  asentamientoId: string;
+  nivelNuevo: number;
+}
+export interface PayloadMantenimientoRecuperado {
+  nivelActualNuevo: number;
+}
+export interface PayloadMantenimientoColapsado {
+  nivelActualAnterior: number;
+  nivelActualNuevo: number;
+}
+export interface FaltanteMantenimiento {
+  recurso: string;
+  disponible: number;
+  cantidad: number;
+}
+export interface PayloadAsentamientoRuinas {
+  razon: string;
+  faltantes: FaltanteMantenimiento[];
+  fundadoEnTick: number;
+  duracionTicks: number;
+}
+export interface PayloadMantenimientoDeficit {
+  medidor: number;
+}
 import { edificiosPorTipoYEstado, nivelActualDe, poblacionTotal } from './asentamientoQuery';
 import { descontarRecursos } from './almacen';
 import { consumoComidaPoblacion } from './population';
@@ -49,7 +77,7 @@ export function calcularNivelAsentamiento(asentamiento: Asentamiento): number {
 export function avanzarNivelAsentamiento(
   asentamiento: Asentamiento,
   tieneCupoParaNivel?: (nivelObjetivo: number) => boolean
-): { asentamiento: Asentamiento; eventos: string[] } {
+): { asentamiento: Asentamiento; eventos: EventoCrudo[] } {
   const nivelElegible = calcularNivelAsentamiento(asentamiento);
   let nuevoNivel = asentamiento.nivel;
   while (nuevoNivel < nivelElegible && (!tieneCupoParaNivel || tieneCupoParaNivel(nuevoNivel + 1))) {
@@ -63,7 +91,16 @@ export function avanzarNivelAsentamiento(
   // nivel antes de esta subida), la nueva promoción no "cura" esa degradación de golpe.
   const yaEstabaAlDia = nivelActualDe(asentamiento) === asentamiento.nivel;
   const siguiente = { ...asentamiento, nivel: nuevoNivel, ...(yaEstabaAlDia ? { nivelActual: nuevoNivel } : {}) };
-  return { asentamiento: siguiente, eventos: [`${asentamiento.id} sube a nivel ${nuevoNivel}.`] };
+  return {
+    asentamiento: siguiente,
+    eventos: [
+      {
+        codigo: 'asentamiento.nivel_subio',
+        mensaje: `${asentamiento.id} sube a nivel ${nuevoNivel}.`,
+        payload: { asentamientoId: asentamiento.id, nivelNuevo: nuevoNivel } satisfies PayloadNivelSubio,
+      },
+    ],
+  };
 }
 
 /** "Centro de poder de la Facción" (Doc 4.5): placeholder = su asentamiento vivo más antiguo (proxy de capital). */
@@ -156,14 +193,14 @@ export function avanzarMantenimiento(
   asentamiento: Asentamiento,
   capital: Asentamiento | undefined,
   tickActual: number
-): { asentamiento: Asentamiento; eventos: string[]; destruido: boolean } {
+): { asentamiento: Asentamiento; eventos: EventoCrudo[]; destruido: boolean } {
   if (tickActual - asentamiento.fundadoEnTick < MANTENIMIENTO.graciaTicks) {
     return { asentamiento, eventos: [], destruido: false };
   }
 
   const costo = calcularCostoMantenimiento(asentamiento, capital);
   const cubierta = fraccionCubierta(asentamiento.almacen, costo);
-  const eventos: string[] = [];
+  const eventos: EventoCrudo[] = [];
   const nivelActualHoy = nivelActualDe(asentamiento);
 
   let almacen = asentamiento.almacen;
@@ -182,7 +219,11 @@ export function avanzarMantenimiento(
     const medidor = Math.min(100, asentamiento.medidorMantenimiento + MANTENIMIENTO.regeneracionSiPagoCompleto);
 
     if (racha >= MANTENIMIENTO.ticksSanosParaRecuperarNivel && nivelActualHoy < asentamiento.nivel) {
-      eventos.push(`${asentamiento.id}: mantenimiento sano y sostenido, recupera nivel actual ${nivelActualHoy + 1}.`);
+      eventos.push({
+        codigo: 'mantenimiento.recuperado',
+        mensaje: `${asentamiento.id}: mantenimiento sano y sostenido, recupera nivel actual ${nivelActualHoy + 1}.`,
+        payload: { nivelActualNuevo: nivelActualHoy + 1 } satisfies PayloadMantenimientoRecuperado,
+      });
       return {
         asentamiento: { ...asentamiento, almacen, medidorMantenimiento: medidor, nivelActual: nivelActualHoy + 1, rachaMantenimientoSano: 0 },
         eventos,
@@ -197,7 +238,14 @@ export function avanzarMantenimiento(
 
   if (medidor <= 0) {
     if (nivelActualHoy > 1) {
-      eventos.push(`${asentamiento.id}: mantenimiento colapsa, baja de nivel actual ${nivelActualHoy} a ${nivelActualHoy - 1}.`);
+      eventos.push({
+        codigo: 'mantenimiento.colapsado',
+        mensaje: `${asentamiento.id}: mantenimiento colapsa, baja de nivel actual ${nivelActualHoy} a ${nivelActualHoy - 1}.`,
+        payload: {
+          nivelActualAnterior: nivelActualHoy,
+          nivelActualNuevo: nivelActualHoy - 1,
+        } satisfies PayloadMantenimientoColapsado,
+      });
       return {
         asentamiento: {
           ...asentamiento,
@@ -212,20 +260,31 @@ export function avanzarMantenimiento(
     }
     // Razón auditable (a petición del usuario): qué recurso(s) faltaron en el tick del colapso y cuánto duró
     // el asentamiento, para poder diagnosticar después SIN tener que reconstruir el estado tick a tick.
-    const faltantes = Object.entries(costo)
-      .map(([recurso, cantidad]) => [recurso, cantidad ?? 0, asentamiento.almacen[recurso]?.cantidad ?? 0] as const)
-      .filter(([, cantidad, disponible]) => disponible < cantidad)
-      .map(([recurso, cantidad, disponible]) => `${recurso} (tenía ${disponible.toFixed(1)}/${cantidad.toFixed(1)})`);
-    const razon = faltantes.length > 0 ? `no pudo cubrir: ${faltantes.join(', ')}` : 'déficit sostenido';
+    const faltantesEstructurados: FaltanteMantenimiento[] = Object.entries(costo)
+      .map(([recurso, cantidad]) => ({ recurso, cantidad: cantidad ?? 0, disponible: asentamiento.almacen[recurso]?.cantidad ?? 0 }))
+      .filter((f) => f.disponible < f.cantidad);
+    const faltantesTexto = faltantesEstructurados.map((f) => `${f.recurso} (tenía ${f.disponible.toFixed(1)}/${f.cantidad.toFixed(1)})`);
+    const razon = faltantesTexto.length > 0 ? `no pudo cubrir: ${faltantesTexto.join(', ')}` : 'déficit sostenido';
     const duracion = tickActual - asentamiento.fundadoEnTick;
-    eventos.push(
-      `${asentamiento.id} cae en ruinas por abandono/mal mantenimiento (${razon}; fundado en tick ${asentamiento.fundadoEnTick}, duró ${duracion} ticks) — la zona queda libre.`
-    );
+    eventos.push({
+      codigo: 'asentamiento.ruinas',
+      mensaje: `${asentamiento.id} cae en ruinas por abandono/mal mantenimiento (${razon}; fundado en tick ${asentamiento.fundadoEnTick}, duró ${duracion} ticks) — la zona queda libre.`,
+      payload: {
+        razon,
+        faltantes: faltantesEstructurados,
+        fundadoEnTick: asentamiento.fundadoEnTick,
+        duracionTicks: duracion,
+      } satisfies PayloadAsentamientoRuinas,
+    });
     return { asentamiento: { ...asentamiento, almacen, medidorMantenimiento: 0 }, eventos, destruido: true };
   }
 
   if (medidor < asentamiento.medidorMantenimiento) {
-    eventos.push(`${asentamiento.id}: mantenimiento en déficit, medidor baja a ${medidor.toFixed(0)}.`);
+    eventos.push({
+      codigo: 'mantenimiento.deficit',
+      mensaje: `${asentamiento.id}: mantenimiento en déficit, medidor baja a ${medidor.toFixed(0)}.`,
+      payload: { medidor } satisfies PayloadMantenimientoDeficit,
+    });
   }
 
   return { asentamiento: { ...asentamiento, almacen, medidorMantenimiento: medidor, rachaMantenimientoSano: 0 }, eventos, destruido: false };

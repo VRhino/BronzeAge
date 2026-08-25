@@ -3,7 +3,7 @@
 // (dibujo/color, puramente presentacional). Nunca importa nada de `./engine/*` ni captura errores
 // de dominio: eso es responsabilidad exclusiva de `gameStore`. Los tipos de `./domain/types` se
 // importan solo como `type` para tipar lo que se lee — no acoplan a ninguna lógica.
-import type { Asentamiento, BiomaTipo, CargoTipo, Edificio, EdificioTipo, Faccion, RecursoTipo } from './domain/types';
+import type { Asentamiento, BiomaTipo, CargoTipo, Edificio, EdificioTipo, Faccion, RecursoTipo, RegionId } from './domain/types';
 import { CATALOGOS, crearGameStore, UNITY_EXPORT_DEFAULT, type GameState, type GameStore, type EstadoMejoraEdificio } from './app/gameStore';
 import { draw, drawAsentamiento, drawFiltroFertilidad, drawPreviewFundacion, drawTerreno, faccionColor, BIOMA_COLOR, BIOMA_COLOR_SIMPLE, RECURSO_COLOR, RECURSOS_EN_MAPA, EDIFICIO_COLOR, FACCION_COLORES, type DrawState } from './ui/canvas';
 
@@ -34,6 +34,16 @@ const RECURSO_NOMBRE: Record<string, string> = {
   armaduraBronce: 'Armadura de Bronce',
 };
 
+/** Regiones geográficas disponibles (Fase 0.2, ver `worldgen/regiones.ts`) — nombre para el selector del
+ * mundo. Mantenido a mano, igual que `BIOMA_NOMBRE`/`EDIFICIO_NOMBRE`: es presentación pura, no se deriva de
+ * `worldgen/` (este archivo no puede importar de ahí, ver la nota de frontera arriba). */
+const REGION_NOMBRE: Record<RegionId, string> = {
+  greciaContinental: 'Grecia continental',
+  anatolia: 'Anatolia',
+  egeo: 'Egeo (archipiélago)',
+  nilo: 'Nilo',
+  mesopotamia: 'Mesopotamia',
+};
 
 /** Biomas (Fase 0.1) en orden de elevación creciente — así la leyenda se lee como una escala de altura.
  * Usado con el toggle "Detalle de biomas" activado (`mostrarDetalleBiomas`, ver `BIOMA_COLOR`). */
@@ -412,8 +422,22 @@ app.innerHTML = `
 
     <div class="tab-panel" id="tab-generacionMundo" hidden>
       <div class="section-title registros-heading">Generación de mundo</div>
-      <p class="legend-note registros-intro">Exporta el terreno del mundo actual para utilizarlo fuera de la simulación. Crear o reiniciar el mundo es una operación de administración — ver <code>admin.html</code>, no este panel.</p>
+      <p class="legend-note registros-intro">Regenera el mapa procedural y exporta su terreno para utilizarlo fuera de la simulación.</p>
       <div class="controls-grid world-generation-grid">
+        <div class="controls">
+          <h2>Regenerar mundo</h2>
+          <p class="legend-note">Descarta la partida actual y crea una nueva con la seed y región indicadas — acción destructiva, pide confirmación.</p>
+          <label>Seed del mundo <input id="seed-input" type="number" value="1" /></label>
+          <label>Región geográfica (Fase 0.2)
+            <select id="region-select">
+              <option value="">Libre (procedural, sin sesgo)</option>
+              ${Object.entries(REGION_NOMBRE)
+                .map(([id, nombre]) => `<option value="${id}">${nombre}</option>`)
+                .join('')}
+            </select>
+          </label>
+          <button type="button" id="regenerar-btn">Regenerar mundo</button>
+        </div>
         <div class="controls">
           <h2>Exportar mapa</h2>
           <p class="legend-note">Genera el terreno para Unity con la altura máxima indicada.</p>
@@ -493,6 +517,8 @@ const politicaPanelEl = document.getElementById('politica-panel')!;
 const economiaPanelEl = document.getElementById('economia-panel')!;
 const faccionSelect = document.getElementById('faccion-select') as HTMLSelectElement;
 const faccionCrearNombreInput = document.getElementById('faccion-crear-nombre') as HTMLInputElement;
+const seedInput = document.getElementById('seed-input') as HTMLInputElement;
+const regionSelect = document.getElementById('region-select') as HTMLSelectElement;
 const jugadoresInput = document.getElementById('jugadores-input') as HTMLInputElement;
 
 const fundacionViabilidadEl = document.getElementById('fundacion-viabilidad')!;
@@ -571,9 +597,10 @@ const progresionPanelEl = document.getElementById('progresion-panel')!;
 // `gameStore` tal cual, sin reindentar miles de líneas.
 //
 // `crearGameStore` crea la partida si todavía no existe para este `gameId` (arranque limpio, cómodo para
-// desarrollo) o se conecta a la que ya haya — ninguna de las dos es destructiva. Lo que SÍ es administración
-// (`admin.html`, no este cliente) es DESCARTAR una partida en curso y empezar de cero — `regenerarMundo` no
-// existe en este archivo a propósito.
+// desarrollo) o se conecta a la que ya haya — no es destructivo. DESCARTAR una partida en curso y empezar de
+// cero sí lo es (`gameStore.regenerarMundo`, botón "Regenerar mundo" en la pestaña Generación de mundo) — no
+// hay separación real todavía entre cliente de jugador y herramienta de administración (una sola interfaz
+// sirve a los dos propósitos por ahora, a propósito), así que vive aquí mismo, no en un panel aparte.
 logEl.textContent = 'Conectando con el servidor...';
 let gameStore: GameStore;
 try {
@@ -2647,6 +2674,13 @@ document.getElementById('atacar-campamento-btn')!.addEventListener('click', asyn
 
 document.getElementById('tick-btn')!.addEventListener('click', async () => {
   await gameStore.avanzarTick();
+});
+
+document.getElementById('regenerar-btn')!.addEventListener('click', async () => {
+  const confirmado = window.confirm('Esto descarta la partida actual y crea una nueva. Se pierde todo el progreso. ¿Continuar?');
+  if (!confirmado) return;
+  const region = regionSelect.value as RegionId | '';
+  await gameStore.regenerarMundo(Number(seedInput.value) || 0, region || undefined);
 });
 
 document.getElementById('exportar-btn')!.addEventListener('click', () => {

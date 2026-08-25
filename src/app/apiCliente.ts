@@ -1,14 +1,14 @@
-// Wrapper `fetch` delgado sobre `src/server/api.ts` — sin lógica de negocio, solo I/O. Compartido por
-// `app/gameStore.ts` (cliente de JUGADOR, vía `main.ts`) y `admin.ts` (panel de administración): ambos hablan
-// con el mismo backend, cada uno con el subconjunto de llamadas que le corresponde (Docs/Arquitectura/
-// 4_Plan_Evolucion_Tareas.md, Fase B3 — migración de `main.ts`).
+// Wrapper `fetch` delgado sobre `src/server/api.ts` — sin lógica de negocio, solo I/O. Lo usa
+// `app/gameStore.ts`, vía `main.ts` (Docs/Arquitectura/4_Plan_Evolucion_Tareas.md, Fase B3 — migración de
+// `main.ts`). No hay separación real todavía entre cliente de jugador y herramienta de administración —
+// `main.ts` sirve a los dos propósitos por ahora, a propósito.
 //
 // Las rutas son relativas (`/partidas/...`): en dev, `vite.config.ts` las proxya al backend (mismo origen
 // desde el navegador, sin CORS); en producción, se sirven detrás del mismo host que el estático.
 import type { RegionId } from '../domain/types';
 import type { GameSessionState } from '../session/gameSession';
 import type { ResultadoComando } from '../session/comandos/tipos';
-import type { TipoComando } from '../session/comandos/registro';
+import type { DatosDe, ParamsDe, TipoComando } from '../session/comandos/registro';
 
 export interface ResumenPartida {
   gameId: string;
@@ -52,8 +52,8 @@ async function peticion<T>(url: string, opciones?: RequestInit): Promise<T> {
 
 /**
  * Crea la partida si no existe, o la retoma si ya hay un runner abierto en el proceso (`server/api.ts`,
- * `POST /partidas`) — no destructivo. `forzar: true` SÍ lo es (descarta y empieza de cero): solo lo usa
- * `admin.ts`, nunca el bootstrap del cliente de jugador.
+ * `POST /partidas`) — no destructivo. `forzar: true` SÍ lo es (descarta y empieza de cero): lo usa
+ * `GameStore.regenerarMundo`, nunca el bootstrap de `GameStore.crear`.
  */
 export function crearOResumirPartida(gameId: string, seed: number, region?: RegionId, forzar?: boolean): Promise<ResumenPartida> {
   return peticion<ResumenPartida>('/partidas', {
@@ -62,8 +62,11 @@ export function crearOResumirPartida(gameId: string, seed: number, region?: Regi
   });
 }
 
-export function ejecutarComando<R = unknown>(gameId: string, tipo: TipoComando, params: unknown): Promise<RespuestaComando<R>> {
-  return peticion<RespuestaComando<R>>(`/partidas/${encodeURIComponent(gameId)}/comandos`, {
+/** `T` fija a la vez la forma de `params` (`ParamsDe<T>`) y la de `resultado.datos` (`DatosDe<T>`) contra el
+ * propio `REGISTRO_COMANDOS` — un `params` con un campo de menos, de más o del tipo equivocado no compila,
+ * en vez de viajar como `unknown` y reventar dentro del manejador (ver `server/api.ts`). */
+export function ejecutarComando<T extends TipoComando>(gameId: string, tipo: T, params: ParamsDe<T>): Promise<RespuestaComando<DatosDe<T>>> {
+  return peticion<RespuestaComando<DatosDe<T>>>(`/partidas/${encodeURIComponent(gameId)}/comandos`, {
     method: 'POST',
     body: JSON.stringify({ tipo, params }),
   });

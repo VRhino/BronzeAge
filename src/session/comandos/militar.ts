@@ -18,8 +18,9 @@ import {
 import { CAMPAMENTOS_BANDIDOS } from '../../constants';
 import { conHistorialDeJugador, eventoLegado, type GameSessionState } from '../estado';
 import { exito, rechazo, rechazoDesdeError, type ContextoComando, type TransicionComando } from './tipos';
+import { CODIGOS_ERROR } from './codigosDeError';
 
-const ASENTAMIENTO_NO_EXISTE = 'asentamiento.no_existe';
+const ASENTAMIENTO_NO_EXISTE = CODIGOS_ERROR.asentamientoNoExiste;
 
 export interface ParamsReclutarTropa {
   asentamientoId: string;
@@ -146,7 +147,7 @@ export function interceptarCaravana(
   const atacante = estado.asentamientos.find((a) => a.id === params.atacanteId);
   if (!atacante) return rechazo(estado, ASENTAMIENTO_NO_EXISTE);
   const caravana = estado.caravanas.find((c) => c.id === params.caravanaId);
-  if (!caravana) return rechazo(estado, 'caravana.no_existe');
+  if (!caravana) return rechazo(estado, CODIGOS_ERROR.caravanaNoExiste);
 
   try {
     const resultado = interceptarCaravanaEngine(atacante, params.escuadronIds, caravana, estado.tick, estado.facciones, estado.asentamientos, ctx.rng);
@@ -178,7 +179,7 @@ export function atacarCampamentoBandidos(
   const atacante = estado.asentamientos.find((a) => a.id === params.atacanteId);
   if (!atacante) return rechazo(estado, ASENTAMIENTO_NO_EXISTE);
   const campamento = estado.campamentosBandidos.find((c) => c.id === params.campamentoId);
-  if (!campamento) return rechazo(estado, 'campamento.no_existe');
+  if (!campamento) return rechazo(estado, CODIGOS_ERROR.campamentoNoExiste);
 
   try {
     const resultado = atacarCampamentoBandidosEngine(atacante, params.escuadronIds, campamento, estado.tick, estado.facciones, ctx.rng);

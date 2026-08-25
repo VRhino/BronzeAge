@@ -13,11 +13,10 @@ import { comprarCasa as comprarCasaEngine } from '../../engine/faccion';
 import { activarPolitica as activarPoliticaEngine } from '../../engine/politicas';
 import { conHistorialDeJugador, eventoLegado, type GameSessionState } from '../estado';
 import { exito, rechazo, rechazoDesdeError, type ContextoComando, type TransicionComando } from './tipos';
+import { CODIGOS_ERROR } from './codigosDeError';
 
-/** Códigos propios de esta capa: rechazos por entidad inexistente, que el motor no cubre porque nunca llega a
- * verlos (recibe la entidad ya resuelta). */
-const FACCION_NO_EXISTE = 'faccion.no_existe';
-const ASENTAMIENTO_NO_EXISTE = 'asentamiento.no_existe';
+const FACCION_NO_EXISTE = CODIGOS_ERROR.faccionNoExiste;
+const ASENTAMIENTO_NO_EXISTE = CODIGOS_ERROR.asentamientoNoExiste;
 
 export interface ParamsAsignarCargoFaccion {
   faccionId: string;

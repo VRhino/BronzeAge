@@ -1,6 +1,7 @@
 import type { Mapa } from '../../world/mapa';
 import { eventoLegado, type GameSessionState } from '../estado';
 import { exito, rechazo, type ContextoComando, type TransicionComando } from './tipos';
+import { CODIGOS_ERROR } from './codigosDeError';
 
 export interface ParamsAlternarFaccionNpc {
   faccionId: string;
@@ -30,7 +31,7 @@ export function alternarFaccionNpc(
   params: ParamsAlternarFaccionNpc
 ): TransicionComando<void> {
   const faccion = estado.facciones.find((f) => f.id === params.faccionId);
-  if (!faccion) return rechazo(estado, 'faccion.no_existe');
+  if (!faccion) return rechazo(estado, CODIGOS_ERROR.faccionNoExiste);
 
   const yaEsNpc = estado.faccionesNpcIds.includes(params.faccionId);
   if (params.activo === yaEsNpc) {

@@ -1,5 +1,12 @@
 import type { Asentamiento, Faccion } from '../domain/types';
+import type { EventoCrudo } from '../domain/eventos';
 import { CAP_FUNDACION_POR_NIVEL, CIUDADANIA, CUPO_NIVEL_ASENTAMIENTO, NIVEL_FACCION } from '../constants';
+
+/** Fase A5 — payload de `faccion.nivel_subio` (ver `avanzarNivelesFaccion`). */
+export interface PayloadFaccionNivelSubio {
+  faccionId: string;
+  nivelNuevo: number;
+}
 
 export class FaccionInvalidaError extends Error {}
 
@@ -54,11 +61,17 @@ export function aplicarAjustesExperiencia(facciones: Faccion[], ajustes: AjusteE
 }
 
 /** Recalcula el nivel de todas las Facciones a partir de su experiencia actual; devuelve eventos de subida. */
-export function avanzarNivelesFaccion(facciones: Faccion[]): { facciones: Faccion[]; eventos: string[] } {
-  const eventos: string[] = [];
+export function avanzarNivelesFaccion(facciones: Faccion[]): { facciones: Faccion[]; eventos: EventoCrudo[] } {
+  const eventos: EventoCrudo[] = [];
   const actualizadas = facciones.map((f) => {
     const nuevoNivel = calcularNivelFaccion(f);
-    if (nuevoNivel > f.nivel) eventos.push(`${f.nombre} sube a nivel de Facción ${nuevoNivel}.`);
+    if (nuevoNivel > f.nivel) {
+      eventos.push({
+        codigo: 'faccion.nivel_subio',
+        mensaje: `${f.nombre} sube a nivel de Facción ${nuevoNivel}.`,
+        payload: { faccionId: f.id, nivelNuevo: nuevoNivel } satisfies PayloadFaccionNivelSubio,
+      });
+    }
     return nuevoNivel === f.nivel ? f : { ...f, nivel: nuevoNivel };
   });
   return { facciones: actualizadas, eventos };

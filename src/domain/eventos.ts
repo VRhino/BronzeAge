@@ -35,4 +35,28 @@ export interface EventoDominio {
   /** Asentamiento al que se atribuye, si aplica (mismo criterio que hoy usa `simulation.ts` para prefijar
    * cada mensaje de un asentamiento con su id). Ausente en eventos globales (comercio, mercado, títulos...). */
   asentamientoId?: string;
+  /** Datos estructurados del evento, específicos de cada `codigo` (ej. `{ edificioId, edificioTipo,
+   * nivelNuevo }` para `construccion.mejora_completada`) — lo que antes solo vivía interpolado dentro de
+   * `mensaje`. `unknown` a propósito: no hay (ni debe haber) un único tipo que abarque los ~30 códigos
+   * distintos; cada subsistema exporta su propia interfaz de payload junto al código que la usa, y un
+   * consumidor que filtra por `codigo` sabe con qué forma castear. Ausente en eventos `'legado'` (subsistemas
+   * todavía sin migrar, ver `EventoCrudo`) y en cualquier evento migrado sin datos extra que estructurar. */
+  payload?: unknown;
 }
+
+/**
+ * Lo que un subsistema del motor (`engine/*.ts`) empuja a su array `eventos` DENTRO de un `avanzarX`, antes de
+ * que `engine/simulation.ts` le añada el contexto que el subsistema no conoce (`momento`, `tick`,
+ * `asentamientoId`). Dos formas, a propósito, para que la migración por subsistema (Docs/Arquitectura/
+ * 4_Plan_Evolucion_Tareas.md, Fase A5, marcador 13 subsistemas) sea de uno en uno sin tocar los demás:
+ *
+ * - Un `string` plano: atajo "legado", mismo comportamiento que existía antes de A5 — se envuelve como
+ *   `{ codigo: 'legado', mensaje: <el string> }`. Así es como emite un subsistema TODAVÍA sin migrar.
+ * - Un objeto `{ codigo, mensaje, payload? }`: subsistema ya migrado — código estable en vez de `'legado'`,
+ *   y los datos que antes solo estaban interpolados en el texto, estructurados en `payload`.
+ *
+ * `mensaje` se mantiene en AMBOS casos porque sigue siendo la única fuente del log en texto que ya muestra la
+ * interfaz (`GameStore`/`main.ts`) — migrar un subsistema añade estructura, no le quita nada a nadie que ya
+ * consuma el texto.
+ */
+export type EventoCrudo = string | { codigo: string; mensaje: string; payload?: unknown };

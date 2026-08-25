@@ -8,6 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import { avanzarSimulacion } from '../simulation';
 import { createRng } from '../../worldgen';
+import type { EventoDominio } from '../../domain/eventos';
 import { contextoDeTest, crearEstadoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
 
 const TICKS = 80;
@@ -18,10 +19,10 @@ function correrSimulacion(seed: number) {
   const { asentamiento, facciones } = fundarAsentamientoDeTest(mapa, crearFacciones(), 'faccion-1', []);
 
   let estado = crearEstadoDeTest([asentamiento], facciones);
-  const eventosPorTick: string[][] = [];
+  const eventosPorTick: EventoDominio[][] = [];
   for (let tick = 1; tick <= TICKS; tick++) {
     const resultado = avanzarSimulacion(estado, mapa, contextoDeTest(tick, rng));
-    eventosPorTick.push(resultado.eventos);
+    eventosPorTick.push(resultado.eventosDominio);
     estado = resultado;
   }
   return { estadoFinal: estado, eventosPorTick };

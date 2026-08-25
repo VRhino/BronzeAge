@@ -10,6 +10,7 @@ import {
 } from '../../engine/expansion';
 import { eventoLegado, type GameSessionState } from '../estado';
 import { exito, rechazo, rechazoDesdeError, type ContextoComando, type TransicionComando } from './tipos';
+import { CODIGOS_ERROR } from './codigosDeError';
 
 export interface ParamsLanzarCaravanaFundacion {
   origenAsentamientoId: string;
@@ -24,9 +25,9 @@ export function lanzarCaravanaFundacion(
   params: ParamsLanzarCaravanaFundacion
 ): TransicionComando<{ caravanaId: string }> {
   const origen = estado.asentamientos.find((a) => a.id === params.origenAsentamientoId);
-  if (!origen) return rechazo(estado, 'asentamiento.no_existe');
+  if (!origen) return rechazo(estado, CODIGOS_ERROR.asentamientoNoExiste);
   const faccion = estado.facciones.find((f) => f.id === origen.faccionId);
-  if (!faccion) return rechazo(estado, 'faccion.no_existe');
+  if (!faccion) return rechazo(estado, CODIGOS_ERROR.faccionNoExiste);
 
   try {
     const resultado = lanzarCaravanaFundacionEngine(
@@ -68,9 +69,9 @@ export function desarmarCaravanaFundacion(
   params: ParamsDesarmarCaravanaFundacion
 ): TransicionComando<void> {
   const caravana = estado.caravanas.find((c) => c.id === params.caravanaId);
-  if (!caravana) return rechazo(estado, 'caravana.no_existe');
+  if (!caravana) return rechazo(estado, CODIGOS_ERROR.caravanaNoExiste);
   const origen = estado.asentamientos.find((a) => a.id === caravana.origenAsentamientoId);
-  if (!origen) return rechazo(estado, 'asentamiento.no_existe');
+  if (!origen) return rechazo(estado, CODIGOS_ERROR.asentamientoNoExiste);
 
   try {
     const actualizado = desarmarCaravanaFundacionEngine(origen, caravana);

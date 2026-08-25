@@ -12,6 +12,7 @@ import type { RandomFn } from '../../worldgen';
 import type { GameSessionState } from '../estado';
 import type { GeneradorIds } from '../idGenerator';
 import { codigoDeErrorDominio } from '../erroresDeDominio';
+import type { CodigoError } from './codigosDeError';
 
 /** Quién ejecuta el comando. Hoy es una cadena libre; en la Fase C pasa a ser el `Jugador` resuelto desde la
  * sesión autenticada, NUNCA un id que el cliente elija (doc 2, principio 3). */
@@ -46,8 +47,8 @@ export interface ContextoComando {
 export interface ResultadoComando<T = void> {
   ok: boolean;
   datos?: T;
-  /** Código estable de dominio si `ok` es `false` (ver `erroresDeDominio.ts`). */
-  codigoError?: string;
+  /** Código estable de dominio si `ok` es `false` (catálogo cerrado, ver `codigosDeError.ts`). */
+  codigoError?: CodigoError;
   eventos: EventoDominio[];
   /** Versión de la partida tras el comando. Idéntica a la previa si fue rechazado. */
   version: number;
@@ -86,7 +87,7 @@ export function exito<T>(estado: GameSessionState, eventos: EventoDominio[], dat
 }
 
 /** Comando rechazado: devuelve el estado SIN TOCAR (mismo objeto) y sin subir la versión. */
-export function rechazo<T>(estado: GameSessionState, codigoError: string): TransicionComando<T> {
+export function rechazo<T>(estado: GameSessionState, codigoError: CodigoError): TransicionComando<T> {
   return { estado, resultado: { ok: false, codigoError, eventos: [], version: estado.version } };
 }
 

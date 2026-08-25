@@ -48,21 +48,13 @@ persistencia se elige). Se subdividen más a medida que cada fase se acerca.
 - [x] Actualizar `GameStore` para usar el generador extraído sin cambiar comportamiento observable — campo `private ids = new GeneradorIds()` reemplaza a `private contadorAcciones = 0`; los 7 usos de `this.contadorAcciones++` pasan a `this.ids.siguiente()` (misma semántica postfix), y los 2 usos de lectura/escritura directa (NPC de gobernanza) a `this.ids.actual()`/`this.ids.fijar(...)` — **no se resetea** en `regenerarMundo`/`importarSimulacion`, igual que el comportamiento previo (no había reset ahí tampoco)
 - [x] Verificación: `tsc --noEmit` limpio, 40/40 archivos y 270/270 tests en verde
 
-### A5. Eventos de dominio estructurados — ⚠️ SOLO LA BASE, NO COMPLETADA — migración progresiva pendiente
+### A5. Eventos de dominio estructurados — ✅ completada 2026-08-25
 
-> **Estado real: base lista (2026-08-24), contenido NO migrado.** Todo evento que emite hoy el motor sigue
-> siendo texto libre envuelto bajo `codigo: 'legado'` — ver marcador de progreso abajo. No confundir "A5 tiene
-> checkmarks" con "A5 está terminada": el hito solo se da por cerrado cuando el marcador llegue a 100%.
-> Decisión con el usuario: hacer solo la base en esta sesión (definir el tipo + que el motor lo devuelva) y
-> dejar la migración subsistema-por-subsistema para tareas futuras, dado el tamaño (13 subsistemas de
-> `engine/` producen hoy `string[]` de texto libre dentro del tick).
->
-> **⚠️ Gate añadido 2026-08-25: los 13 subsistemas se migran ANTES de entrar en Fase C.** No bloquean el resto
-> de la Fase B (persistencia, API HTTP, `RunnerDePartida` — siguen desacoplados, ver nota en doc 7 §7.1) pero
-> sí bloquean el arranque de Fase C. Motivo: Fase C construye autorización y proyecciones por audiencia sobre
-> los comandos, y la auditoría/replay de Fase E que `eventosDominio` existe para servir necesita códigos
-> estables para poder filtrarse por tipo — construir C encima de 13 eventos todavía sin migrar dejaría ese
-> trabajo por rehacer más caro más adelante, con más código ya dependiendo de la forma final.
+> **Gate de Fase C cerrado.** Los 13 subsistemas de `engine/`+`world/` que producían texto libre dentro del
+> tick ya tienen `codigo` estable y `payload` tipado — ver marcador de progreso abajo (13/13). Motivo del gate
+> (seguía vigente hasta hoy): Fase C construye autorización y proyecciones por audiencia sobre los comandos, y
+> la auditoría/replay de Fase E que `eventosDominio` existe para servir necesita códigos estables para poder
+> filtrarse por tipo — con esto cerrado, Fase C ya puede empezar.
 
 **Base (completada):**
 - [x] Definir tipo `EventoDominio` — módulo nuevo `src/domain/eventos.ts` (no `domain/types.ts`, que es solo contratos de entidades de juego): `{ codigo, mensaje, tick, asentamientoId? }`. Todo evento hoy usa `codigo: 'legado'` — no hay catálogo de códigos todavía, eso es justo lo que falta migrar
@@ -75,29 +67,42 @@ persistencia se elige). Se subdividen más a medida que cada fase se acerca.
 - [x] Introducir `ContextoSimulacion { tick, momento, rng }` — cumple el punto 3 de la Fase A del doc 2 ("Introducir contexto de partida para RNG e IDs"). `avanzarSimulacion(estado, mapa, contexto)` y `avanzarNpcGobernanza(estado, mapa, contexto, config)` comparten ahora la misma forma de llamada. **El motor no lee nunca el reloj ni la aleatoriedad global**: ambos se inyectan, que es lo que mantiene la simulación reproducible. Al pasar a tiempo real, `tick` desaparece de este contexto sin cambiar ninguna firma
 - [x] `GameStore.contextoDeTickActual()` — la capa de aplicación es la dueña del reloj (`new Date()`); tests y batch derivan `momento` del tick para no romper determinismo (`contextoDeTest` en `engine/__tests__/fixtures.ts`)
 
-**Pendiente — no hecho a propósito:**
-- [ ] Adaptar `GameStore` para traducir `EventoDominio[]` a las entradas de log en texto actuales — `GameStore.avanzarTick` sigue leyendo `resultado.eventos` (sin cambios), `eventosDominio` no se consume aún en ningún sitio; no hace falta tocar `GameStore` hasta que un consumidor real (ej. el futuro backend) lo necesite
+**Antes pendiente, resuelto por otra vía:**
+- [x] Traducir `EventoDominio[]` a las entradas de log en texto — no hizo falta tocar `GameStore` (ya no existe: retirado en la migración de `main.ts` a la API, ver más abajo en este doc). Lo resuelve `exito()` en `session/comandos/tipos.ts`: `log: [...eventos.map(e => ({tick: e.tick, mensaje: e.mensaje})), ...estado.log]` — el log en texto que ya muestra la interfaz sale de `eventosDominio.mensaje`, no de un array aparte
 
-#### 📊 Marcador de progreso — migración por subsistema: **0 / 13 migrados (0%)**
+#### 📊 Marcador de progreso — migración por subsistema: **13 / 13 migrados (100%)**
 
 Migrar un subsistema = darle su propio `codigo` estable (dejar de usar `'legado'`) y mover lo que hoy es
-texto libre a `payload` tipado en `EventoDominio`, dentro de la función `avanzarX` de ese módulo. Marcar aquí
-cada uno al migrarlo y actualizar la fracción del encabezado — **A5 no se considera cerrada en el roadmap
-hasta que este contador llegue a 13/13 (100%)**.
+texto libre a `payload` tipado en `EventoDominio`. Mecanismo (2026-08-25): `EventoDominio` gana un campo
+`payload?: unknown`, y se introduce `EventoCrudo` (`domain/eventos.ts`) — `string | {codigo, mensaje, payload?}`
+— como lo que un subsistema empuja a su array `eventos` DENTRO del tick, antes de que `engine/simulation.ts` le
+añada `momento`/`tick`/`asentamientoId` centralmente (`comoEventosDominio`). Permitió migrar subsistema por
+subsistema sin tocar los demás cada vez: uno sin migrar sigue empujando `string` plano (atajo "legado"), uno
+migrado empuja el objeto — `mensaje` se mantiene en ambos casos, así que el log en texto que ya mostraba la
+interfaz no cambia. Cada subsistema exporta sus propias interfaces de payload (ej. `PayloadEdificioCompletado`)
+en vez de una unión discriminada global de ~30 variantes — más simple de mantener, y ningún consumidor real
+existe todavía que necesite narrowing exhaustivo por `codigo`.
 
-- [ ] `engine/construction.ts` (`avanzarConstruccion`)
-- [ ] `engine/politicas.ts` (`avanzarPoliticas`)
-- [ ] `engine/tropas.ts` (`avanzarMantenimientoTropas`)
-- [ ] `engine/mantenimiento.ts` (`avanzarNivelAsentamiento`, `avanzarMantenimiento`)
-- [ ] `engine/population.ts` (`avanzarNutricionPoblacion`, `crecerPoblacion`)
-- [ ] `engine/trade.ts` (`avanzarComercio`)
-- [ ] `engine/expansion.ts` (`avanzarCaravanasFundacion`)
-- [ ] `world/mapa.ts` (`avanzarRegeneracion`)
-- [ ] `engine/bandidos.ts` (`avanzarSpawnBandidos`, `avanzarAtaquesBandidos`)
-- [ ] `engine/market.ts` (`avanzarMercado`)
-- [ ] `engine/diplomacia.ts` (`avanzarTributos`)
-- [ ] `engine/faccion.ts` (`avanzarNivelesFaccion`)
-- [ ] `engine/titulos.ts` (`narrarCambiosDeTitulo`)
+- [x] `engine/construction.ts` (`avanzarConstruccion`) — 5 códigos: `construccion.mejora_completada`, `.edificio_completado`, `.yacimiento_agotado`, `.iniciada`, `.necesidad_detectada`
+- [x] `engine/politicas.ts` (`avanzarPoliticas`) — `politica.expirada`
+- [x] `engine/tropas.ts` (`avanzarMantenimientoTropas`) — `tropas.desercion`
+- [x] `engine/mantenimiento.ts` (`avanzarNivelAsentamiento`, `avanzarMantenimiento`) — 5 códigos: `asentamiento.nivel_subio`, `mantenimiento.recuperado`, `.colapsado`, `asentamiento.ruinas`, `mantenimiento.deficit`
+- [x] `engine/population.ts` (`avanzarNutricionPoblacion`, `crecerPoblacion`) — 3 códigos: `poblacion.primeros_artesanos`, `.primeros_nobles`, `.hambruna_muerte`
+- [x] `engine/trade.ts` (`avanzarComercio`) — 5 códigos: `comercio.caravana_llega`, `.peaje`, `.trueque_cumplido`, `.trueque_expirado`, `.caravana_sale`
+- [x] `engine/expansion.ts` (`avanzarCaravanasFundacion`) — 3 códigos: `expansion.caravana_perdida`, `.asentamiento_fundado`, `.fundacion_fallida`
+- [x] `world/mapa.ts` (`avanzarRegeneracion`) — `mapa.yacimiento_regenerado`
+- [x] `engine/bandidos.ts` (`avanzarSpawnBandidos`, `avanzarAtaquesBandidos`) — 3 códigos: `bandidos.campamento_aparece`, `.caravana_interceptada`, `.caravana_escapa`
+- [x] `engine/market.ts` (`avanzarMercado`) — `mercado.compra`
+- [x] `engine/diplomacia.ts` (`avanzarTributos`) — `diplomacia.tributo_pagado`
+- [x] `engine/faccion.ts` (`avanzarNivelesFaccion`) — `faccion.nivel_subio`
+- [x] `engine/titulos.ts` (`narrarCambiosDeTitulo`) — 2 códigos: `titulo.cambia_manos`, `titulo.nace`
+
+Verificación: `tsc --noEmit` limpio y suite completa en verde tras cada subsistema (no en un solo golpe al
+final) — 400 → 432 tests (un test nuevo por código, salvo un puñado ya cubiertos por tests existentes a los
+que solo hizo falta ajustar la aserción de texto libre a `codigo`/`payload`, ej. `trade_peaje.test.ts`,
+`regeneracion_nodos.test.ts`, `hambruna.test.ts`). El contrato general (`eventos_dominio.test.ts`) se aflojó a
+propósito: ya no exige `codigo === 'legado'` en todos los eventos (dejó de ser cierto), solo que `codigo` nunca
+venga vacío — la cobertura de QUÉ código concreto lleva cada evento vive en el test de su propio subsistema.
 
 **Fuera de alcance de este marcador (a propósito):** los resultados de comandos de combate
 (`engine/combate.ts`: `iniciarAsedio`, `combateCampoAbierto`, `interceptarCaravana`, `atacarCampamentoBandidos`)
@@ -187,7 +192,7 @@ devolver un resultado estructurado") que a este marcador — no sumar ni restar 
   - Añade `fastify` (dependencia de producción) y `tsx` (devDependency, para `npm run server` sin compilar)
 - [x] **Migrar `main.ts` para hablar con la API HTTP** (2026-08-25) — reemplazo COMPLETO, no modo dual (decidido con el usuario: revisa la redacción original de esta tarea). `main.ts` ya no posee ninguna `GameSession` en memoria del navegador; sin `npm run server` corriendo no se puede jugar.
   - **Endpoint genérico de comandos** (`POST /partidas/:gameId/comandos { tipo, params }`, `src/server/api.ts`) — la pieza que faltaba: la API solo tenía 3 endpoints (crear, tick, consultar), ninguno de los 31 comandos de partida tenía cómo llegar al backend. Despacha por un registro por nombre (`src/session/comandos/registro.ts`) que reutiliza los mismos manejadores — el propio `GameSession.ejecutar` ya anotaba que este registro haría falta "en Fase C, cuando la API reciba comandos serializados"; se construyó un ciclo de fase antes de lo previsto
-  - **Separación jugador/administración** (aclarado con el usuario a mitad de la tarea): regenerar mundo, balance, importar partida y el slider de histórico de ticks son operaciones de ADMINISTRACIÓN, no de jugador — mismo criterio que ya distinguía `GET /partidas/:gameId` en el doc 5. Se separan en un punto de entrada propio, `admin.html`/`src/admin.ts` (mismo patrón que `lab/laboratorio.html`), hablando directo con `apiCliente.ts` sin pasar por `GameStore`. Alcance de esta pasada, acotado a propósito: el panel de admin implementa SOLO crear/regenerar mundo (`POST /partidas` gana un flag `forzar`); balance, importar y el histórico quedan sin dueño, pendientes de una vuelta futura de ese mismo panel — se retiraron de `GameStore`/`main.ts` sin dejarlos a medias (incluye borrar `app/balanceConfig.ts`, huérfano tras el retiro)
+  - **Separación jugador/administración (revertida el mismo día)**: balance, importar partida y el slider de histórico de ticks son operaciones de ADMINISTRACIÓN, no de jugador — mismo criterio que ya distingue `GET /partidas/:gameId` en el doc 5 — y se retiraron de `GameStore`/`main.ts` sin dejarlos a medias (incluye borrar `app/balanceConfig.ts`, huérfano tras el retiro); quedan sin dueño, pendientes de una tarea futura. Regenerar mundo se probó primero en un punto de entrada propio, `admin.html`/`src/admin.ts` (mismo patrón que `lab/laboratorio.html`), pero el usuario corrigió el criterio: hoy no hay separación real entre "cliente de jugador" y "herramienta de administración" — una sola interfaz sirve a los dos propósitos, a propósito, hasta que exista un cliente de jugador de verdad (Unity, agnóstico de este backend). `admin.html`/`admin.ts` se eliminaron y `regenerarMundo` volvió a `GameStore`/`main.ts` (con confirmación explícita del usuario antes de llamarlo, por ser destructivo — `POST /partidas` con `forzar: true`)
   - **`GameStore` pasa a ser un adaptador de red puro** — ya no importa `GameSession` ni los manejadores de comando; cachea la última foto del estado (`estadoCache`, refrescada con un `GET` tras cada comando aceptado) y sus ~29 acciones de jugador son ahora `async`. `main.ts` no se reescribe en un IIFE: usa `await` de nivel de módulo (soportado por el `target: ES2022` del proyecto), así que el resto del archivo sigue leyendo `gameStore` igual que antes
   - **`RunnerDePartida.avanzarTick()` corregido para bundlear auto-comercio + turno NPC** — antes solo aplicaba el tick puro del motor; `GameStore.avanzarTick()` (ahora retirado) los encadenaba los tres. Sin este fix el comportamiento habría cambiado en silencio al migrar
   - **Dos bugs de integración real encontrados y corregidos verificando en navegador** (no los detectaba `tsc` ni la suite, por diseño — son de la capa HTTP): (1) `POST /partidas` sin `forzar` devuelve 409 si el `gameId` ya está abierto en el proceso — correcto para el panel de admin, pero rompía la reconexión normal de `main.ts` en cada recarga de página (ya había una partida abierta de una carga anterior); `GameStore.crear()` ahora trata ese 409 como "ya está lista, conectate" en vez de propagarlo. (2) `apiCliente.ts` mandaba `content-type: application/json` en TODAS las peticiones, incluida `POST /tick` sin body — Fastify rechaza con 400 un `content-type: application/json` sobre un cuerpo vacío; el header ahora solo se manda cuando de verdad hay body
@@ -197,8 +202,8 @@ devolver un resultado estructurado") que a este marcador — no sumar ni restar 
 
 ## Fase C — Multijugador sobre ticks
 
-> **⚠️ Gate de entrada (decidido 2026-08-25): el marcador de A5 tiene que estar en 13/13 antes de empezar
-> cualquier tarea de esta fase.** Ver la nota en A5, arriba. No es necesario para el resto de la Fase B.
+> **✅ Gate de entrada cumplido (2026-08-25): A5 llegó a 13/13.** Ver la nota en A5, arriba. Fase C ya puede
+> empezar.
 
 - [ ] Implementar `Usuario`, `Sesion`, `Membresia` según el diseño de A6
 - [ ] Implementar chequeo de autorización antes de aplicar cada comando (rol + facción + asentamiento + cargo)

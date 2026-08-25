@@ -10,6 +10,7 @@ import { colocarOrdenMercado as colocarOrdenMercadoEngine } from '../../engine/m
 import { asegurarCaminoComercial } from '../../engine/caminos';
 import { eventoLegado, type GameSessionState } from '../estado';
 import { exito, rechazo, rechazoDesdeError, type ContextoComando, type TransicionComando } from './tipos';
+import { CODIGOS_ERROR } from './codigosDeError';
 
 export interface ParamsProponerTrueque {
   asentamientoAId: string;
@@ -112,7 +113,7 @@ export function crearCaravana(
   params: ParamsCrearCaravana
 ): TransicionComando<{ caravanaId: string }> {
   const asentamiento = estado.asentamientos.find((a) => a.id === params.asentamientoId);
-  if (!asentamiento) return rechazo(estado, 'asentamiento.no_existe');
+  if (!asentamiento) return rechazo(estado, CODIGOS_ERROR.asentamientoNoExiste);
 
   try {
     const { asentamiento: actualizado, caravana } = construirCaravanaComercialEngine(

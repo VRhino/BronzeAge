@@ -49,7 +49,9 @@ describe('peaje de chokepoints al llegar una caravana comercial', () => {
 
     expect(destinoFinal.almacen['oro']!.cantidad).toBe(100 - CHOKEPOINTS_PEAJE.oro);
     expect(controladorFinal.almacen['oro']!.cantidad).toBe(CHOKEPOINTS_PEAJE.oro);
-    expect(resultado.eventos.some((e) => e.includes('Peaje') && e.includes('controlador-rival'))).toBe(true);
+    expect(
+      resultado.eventos.some((e) => typeof e !== 'string' && e.codigo === 'comercio.peaje' && (e.payload as { controladorId: string }).controladorId === 'controlador-rival')
+    ).toBe(true);
   });
 
   it('NO cobra peaje si nadie controla el chokepoint (sin zona que lo cubra)', () => {
@@ -58,7 +60,7 @@ describe('peaje de chokepoints al llegar una caravana comercial', () => {
 
     const destinoFinal = resultado.asentamientos.find((a) => a.id === 'destino')!;
     expect(destinoFinal.almacen['oro']!.cantidad).toBe(100);
-    expect(resultado.eventos.some((e) => e.includes('Peaje'))).toBe(false);
+    expect(resultado.eventos.some((e) => typeof e !== 'string' && e.codigo === 'comercio.peaje')).toBe(false);
   });
 
   it('NO cobra peaje si el chokepoint controlado queda lejos de la ruta (fuera de su radio)', () => {

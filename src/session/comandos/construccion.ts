@@ -17,9 +17,10 @@ import { computeTodasLasZonas } from '../../engine/zones';
 import { encontrarCapital } from '../../engine/mantenimiento';
 import { eventoLegado, type GameSessionState } from '../estado';
 import { exito, rechazo, rechazoDesdeError, type ContextoComando, type TransicionComando } from './tipos';
+import { CODIGOS_ERROR } from './codigosDeError';
 
-const ASENTAMIENTO_NO_EXISTE = 'asentamiento.no_existe';
-const FACCION_NO_EXISTE = 'faccion.no_existe';
+const ASENTAMIENTO_NO_EXISTE = CODIGOS_ERROR.asentamientoNoExiste;
+const FACCION_NO_EXISTE = CODIGOS_ERROR.faccionNoExiste;
 
 /** Cargos con autoridad sobre la cola de construcción (Doc 4.2). */
 export type CargoConstructor = 'gobernador' | 'maestroObras';
@@ -201,7 +202,7 @@ export function calibrarReservaManual(
 ): TransicionComando<void> {
   const asentamiento = estado.asentamientos.find((a) => a.id === params.asentamientoId);
   if (!asentamiento) return rechazo(estado, ASENTAMIENTO_NO_EXISTE);
-  if (!asentamiento.cargos.tesoreroId) return rechazo(estado, 'reserva.sin_tesorero');
+  if (!asentamiento.cargos.tesoreroId) return rechazo(estado, CODIGOS_ERROR.reservaSinTesorero);
 
   const limpio = Math.max(0, Math.min(999, Math.round(params.valor)));
   const actualizado = { ...asentamiento, reservaManual: { ...asentamiento.reservaManual, [params.recurso]: limpio } };

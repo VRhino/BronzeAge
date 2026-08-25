@@ -66,3 +66,12 @@ export const REGISTRO_COMANDOS = {
 } satisfies Record<string, ManejadorComando<any, any>>;
 
 export type TipoComando = keyof typeof REGISTRO_COMANDOS;
+
+/** Parámetros que espera el manejador de `tipo`, recuperados del `satisfies` de arriba — es lo que permite
+ * que un comando serializado por nombre (`apiCliente.ejecutarComando`, `GameStore.despachar`) siga
+ * comprobando en tiempo de compilación que `params` tiene la forma correcta, en vez de perderla en `unknown`
+ * en el borde cliente-servidor. */
+export type ParamsDe<T extends TipoComando> = Parameters<(typeof REGISTRO_COMANDOS)[T]>[3];
+
+/** Datos que devuelve el manejador de `tipo` en `ResultadoComando.datos` cuando acepta el comando. */
+export type DatosDe<T extends TipoComando> = ReturnType<(typeof REGISTRO_COMANDOS)[T]>['resultado']['datos'];

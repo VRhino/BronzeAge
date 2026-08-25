@@ -17,6 +17,14 @@
 
 import { LENERA_POR_BOSQUE, REGENERACION_NODOS } from '../constants';
 import type { BiomaTipo, Chokepoint, NodoRecurso, Point, RegionId, RioZona, TerrenoTipo, ZonaBosque } from '../domain/types';
+import type { EventoCrudo } from '../domain/eventos';
+
+/** Fase A5 (Docs/Arquitectura/4_Plan_Evolucion_Tareas.md) — payload de `mapa.yacimiento_regenerado` (ver
+ * `Mapa.avanzarRegeneracion`). */
+export interface PayloadYacimientoRegenerado {
+  nodoId: string;
+  recurso: string;
+}
 import {
   costeEnPunto,
   distanciaARioMasCercano,
@@ -390,8 +398,8 @@ export class Mapa {
    * agotado de una partida guardada ANTES de que existiera este sistema (sin entrada en `regeneraEnTick`)
    * se agenda solo la primera vez que corre esto — autocurativo, no hace falta migrar datos.
    */
-  avanzarRegeneracion(tickActual: number): string[] {
-    const eventos: string[] = [];
+  avanzarRegeneracion(tickActual: number): EventoCrudo[] {
+    const eventos: EventoCrudo[] = [];
     for (const nodo of this.generado.nodos) {
       if (this.stock(nodo.id) > 0) continue;
       const pendiente = this.estado.regeneraEnTick[nodo.id];
@@ -406,7 +414,11 @@ export class Mapa {
         delete this.estado.extraido[nodo.id];
         delete this.estado.regeneraEnTick[nodo.id];
         this.mutaciones++;
-        eventos.push(`El yacimiento de ${nodo.tipo} (${nodo.id}) se regenera.`);
+        eventos.push({
+          codigo: 'mapa.yacimiento_regenerado',
+          mensaje: `El yacimiento de ${nodo.tipo} (${nodo.id}) se regenera.`,
+          payload: { nodoId: nodo.id, recurso: nodo.tipo } satisfies PayloadYacimientoRegenerado,
+        });
       }
     }
     return eventos;

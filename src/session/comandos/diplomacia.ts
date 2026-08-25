@@ -15,6 +15,7 @@ import {
 import { anexionar as anexionarEngine, fusionar as fusionarEngine } from '../../engine/fusion';
 import { eventoLegado, type GameSessionState } from '../estado';
 import { exito, rechazo, rechazoDesdeError, type ContextoComando, type TransicionComando } from './tipos';
+import { CODIGOS_ERROR } from './codigosDeError';
 
 /**
  * Quita de `faccionesNpcIds` las Facciones que ya no existen. Anexionar y fusionar pueden hacer desaparecer
@@ -74,7 +75,7 @@ export function romperRelacion(
   ctx: ContextoComando,
   params: ParamsRomperRelacion
 ): TransicionComando<void> {
-  if (!params.relacionId) return rechazo(estado, 'diplomacia.relacion_no_indicada');
+  if (!params.relacionId) return rechazo(estado, CODIGOS_ERROR.diplomaciaRelacionNoIndicada);
 
   try {
     const resultado = romperRelacionEngine(estado.facciones, estado.relaciones, params.relacionId, params.iniciadorFaccionId);
@@ -95,7 +96,7 @@ export function rebelionVasallo(
   ctx: ContextoComando,
   params: ParamsRebelionVasallo
 ): TransicionComando<void> {
-  if (!params.relacionId) return rechazo(estado, 'diplomacia.relacion_no_indicada');
+  if (!params.relacionId) return rechazo(estado, CODIGOS_ERROR.diplomaciaRelacionNoIndicada);
 
   try {
     const resultado = rebelionVasalloEngine(estado.facciones, estado.relaciones, estado.acuerdos, estado.asentamientos, params.relacionId);

@@ -43,7 +43,7 @@ servidor, sin construir aún el servidor.
 - [x] A2. Motor (`engine/`) verificado sin dependencias de `app/`, `ui/` o `main.ts`
 - [x] A3. RNG de simulación inyectable (sin `Math.random()` suelto en reglas) — el estado interno del RNG aún no es serializable/persistible, diferido a propósito a B3 (ver detalle en el doc de tareas)
 - [x] A4. Generador de IDs desacoplado de `GameStore` (utilizable desde un contexto de partida)
-- [ ] A5. Eventos de dominio estructurados, separados de los mensajes de log en texto — ⚠️ **NO completada, solo la base**: tipo `EventoDominio` definido y `avanzarSimulacion` ya lo devuelve, pero todo evento sigue siendo texto libre bajo `codigo: 'legado'`. **Progreso real: 0/13 subsistemas migrados (0%)** — se aborda progresivamente, uno por tarea; este hito solo se marca `[x]` cuando el marcador de [4_Plan_Evolucion_Tareas.md](4_Plan_Evolucion_Tareas.md#-marcador-de-progreso--migración-por-subsistema-0--13-migrados-0) llegue a 13/13 (100%)
+- [x] A5. Eventos de dominio estructurados, separados de los mensajes de log en texto — completada 2026-08-25: los 13 subsistemas migrados, cada uno con su propio `codigo` estable y `payload` tipado (ya no `'legado'`). Ver [4_Plan_Evolucion_Tareas.md](4_Plan_Evolucion_Tareas.md#-marcador-de-progreso--migración-por-subsistema-13--13-migrados-100)
 - [x] A6. Contratos mínimos documentados: `Usuario`, `Sesion`, `Jugador`, `Rol`, `Partida`, `Membresia` (solo diseño, sin implementar aún) — ver [5_Contratos_Identidad_Permisos.md](5_Contratos_Identidad_Permisos.md)
 
 ## Fase B — Backend provisional con ticks
@@ -103,7 +103,7 @@ demostrar que funciona.
 
 _(completar con fecha y commit al cerrar cada fase)_
 
-- Fase A: —
+- Fase A: 2026-08-25 (A1–A6 completas; commit pendiente — el usuario gestiona los commits de esta sesión)
 - Fase B: —
 - Fase C: —
 - Fase D: —

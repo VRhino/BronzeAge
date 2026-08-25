@@ -11,9 +11,10 @@
 // menos una ida y vuelta HTTP.
 //
 // Lo que se retira en esta migración (confirmado con el usuario: son operaciones de ADMINISTRACIÓN, no de
-// jugador — `regenerarMundo`, `importarSimulacion`, el panel de Balance y el slider de línea de tiempo. Viven
-// ahora en `admin.ts`/`admin.html` (solo `regenerarMundo`, por ahora) o no tienen dueño todavía (balance,
-// importar, histórico) — candidatas a sumarse ahí en una vuelta futura de ese mismo panel.
+// jugador — `importarSimulacion`, el panel de Balance y el slider de línea de tiempo. No tienen dueño
+// todavía: no hay separación real todavía entre "cliente de jugador" y "herramienta de administración" (una
+// sola interfaz sirve a los dos propósitos por ahora, a propósito, según el usuario — esa separación es
+// trabajo futuro), así que `regenerarMundo` SÍ se queda aquí en vez de en un panel aparte.
 import type {
   AcuerdoTrueque,
   Asentamiento,
@@ -27,6 +28,7 @@ import type {
   NodoRecurso,
   OrdenMercado,
   RecursoTipo,
+  RegionId,
   RelacionPolitica,
   Titulo,
   WorldConfig,
@@ -89,7 +91,7 @@ import { poderEscuadron } from '../engine/combate';
 
 // --- Capa de partida: vive en el servidor, se habla por HTTP ---
 import type { GameSessionState } from '../session/gameSession';
-import type { TipoComando } from '../session/comandos/registro';
+import type { ParamsDe, TipoComando } from '../session/comandos/registro';
 import { ApiError, avanzarTick as apiAvanzarTick, consultarEstado, crearOResumirPartida, ejecutarComando } from './apiCliente';
 
 export interface EventoLog {
@@ -214,8 +216,8 @@ export class GameStore {
   }
 
   /** Conecta con una partida ya existente, o la crea si el `gameId` no tiene ninguna todavía — NO destructivo
-   * (ver `apiCliente.crearOResumirPartida`). Crear un mundo desde cero descartando uno en curso es
-   * administración (`admin.ts`), no algo que el cliente de jugador haga por su cuenta.
+   * (ver `apiCliente.crearOResumirPartida`). Descartar una partida en curso y crear otra de cero SÍ lo es —
+   * ver `regenerarMundo`, más abajo.
    *
    * Un 409 aquí NO es un fallo de conexión: `POST /partidas` lo devuelve cuando el `gameId` ya está abierto en
    * este proceso (`server/api.ts`) — exactamente lo normal al recargar la página con una partida ya en curso
@@ -272,7 +274,7 @@ export class GameStore {
    * en sí falla: se anota en el log efímero, igual que hacía antes el rechazo local — la interfaz nunca
    * necesita distinguir un rechazo de dominio de un fallo de red.
    */
-  private async despachar(tipo: TipoComando, params: unknown, etiquetaRechazo: string): Promise<void> {
+  private async despachar<T extends TipoComando>(tipo: T, params: ParamsDe<T>, etiquetaRechazo: string): Promise<void> {
     try {
       const respuesta = await ejecutarComando(this.gameId, tipo, params);
       if (respuesta.resultado.ok) {
@@ -734,6 +736,24 @@ export class GameStore {
     try {
       await apiAvanzarTick(this.gameId);
       this.estadoCache = await consultarEstado(this.gameId);
+    } catch (err) {
+      this.registrarRechazoEfimero(this.mensajeDeError(err));
+    }
+    this.notify();
+  }
+
+  /**
+   * Descarta la partida actual y crea otra desde cero con la seed indicada — operación DESTRUCTIVA
+   * (`crearOResumirPartida(..., forzar: true)`, ver `apiCliente.ts`). Pierde todo lo que hubiera en la
+   * partida en curso; la interfaz debe confirmar con el usuario ANTES de llamar a esto, no lo hace `GameStore`.
+   */
+  async regenerarMundo(seed: number, region?: RegionId): Promise<void> {
+    try {
+      await crearOResumirPartida(this.gameId, seed, region, true);
+      this.estadoCache = await consultarEstado(this.gameId);
+      this.mapaCache = null;
+      this.zonasFusionadasCache = null;
+      this.logEfimero = [];
     } catch (err) {
       this.registrarRechazoEfimero(this.mensajeDeError(err));
     }

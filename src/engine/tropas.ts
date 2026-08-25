@@ -1,5 +1,13 @@
 import type { Asentamiento, Escuadron } from '../domain/types';
+import type { EventoCrudo } from '../domain/eventos';
 import { MILITAR, RESERVA_CONSTRUCCION, TROPAS_RECLUTABLES } from '../constants';
+
+/** Fase A5 — payload de `tropas.desercion` (ver `avanzarMantenimientoTropas`). */
+export interface PayloadTropasDesercion {
+  escuadronId: string;
+  escuadronNombre: string;
+  desertores: number;
+}
 import { descontarRecursos, tieneRecursos } from './almacen';
 import { edificiosPorTipoYEstado, poblacionDisponibleParaReclutar, poblacionTotal } from './asentamientoQuery';
 import { consumoComidaPoblacion } from './population';
@@ -127,9 +135,9 @@ export function consumoRacionTropas(asentamiento: Asentamiento): number {
 }
 
 /** Mantenimiento (Doc 5.4): consumo de raciones; sin suministro la moral colapsa y desertan permanentemente. */
-export function avanzarMantenimientoTropas(asentamiento: Asentamiento): { asentamiento: Asentamiento; eventos: string[] } {
+export function avanzarMantenimientoTropas(asentamiento: Asentamiento): { asentamiento: Asentamiento; eventos: EventoCrudo[] } {
   if (asentamiento.escuadrones.length === 0) return { asentamiento, eventos: [] };
-  const eventos: string[] = [];
+  const eventos: EventoCrudo[] = [];
 
   const racionNecesaria = consumoRacionTropas(asentamiento);
   const trigoDisponible = asentamiento.almacen['trigo']?.cantidad ?? 0;
@@ -148,7 +156,13 @@ export function avanzarMantenimientoTropas(asentamiento: Asentamiento): { asenta
     if (moral <= 0 && cantidad > 0) {
       const desertores = Math.min(cantidad, Math.ceil(cantidad * MILITAR.desercionFraccionPorTickSinMoral));
       cantidad -= desertores;
-      if (desertores > 0) eventos.push(`${e.nombre}: ${desertores} desertan por hambre (moral colapsada).`);
+      if (desertores > 0) {
+        eventos.push({
+          codigo: 'tropas.desercion',
+          mensaje: `${e.nombre}: ${desertores} desertan por hambre (moral colapsada).`,
+          payload: { escuadronId: e.id, escuadronNombre: e.nombre, desertores } satisfies PayloadTropasDesercion,
+        });
+      }
     }
     return { ...e, moral, cantidad };
   });

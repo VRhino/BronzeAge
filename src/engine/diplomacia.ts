@@ -1,4 +1,13 @@
 import type { AcuerdoTrueque, Asentamiento, Faccion, RelacionPolitica } from '../domain/types';
+import type { EventoCrudo } from '../domain/eventos';
+
+/** Fase A5 — payload de `diplomacia.tributo_pagado` (ver `avanzarTributos`). */
+export interface PayloadTributoPagado {
+  pagadorId: string;
+  señoraId: string;
+  recurso: string;
+  cantidad: number;
+}
 import { REPUTACION } from '../constants';
 import { agregarRecurso, cantidadDisponible, descontarRecursos } from './almacen';
 import { aplicarAjustesReputacion, puedeProponerAlianza } from './reputacion';
@@ -146,8 +155,8 @@ export function rebelionVasallo(
 export function avanzarTributos(
   relaciones: RelacionPolitica[],
   asentamientos: Asentamiento[]
-): { asentamientos: Asentamiento[]; eventos: string[] } {
-  const eventos: string[] = [];
+): { asentamientos: Asentamiento[]; eventos: EventoCrudo[] } {
+  const eventos: EventoCrudo[] = [];
   const asentamientosPorId = new Map(asentamientos.map((a) => [a.id, { ...a }]));
 
   for (const relacion of relaciones) {
@@ -166,7 +175,16 @@ export function avanzarTributos(
 
     asentamientosPorId.set(pagador.id, { ...pagador, almacen: descontarRecursos(pagador.almacen, { [relacion.tributo.recurso]: cantidad }) });
     asentamientosPorId.set(señora.id, { ...señora, almacen: agregarRecurso(señora.almacen, relacion.tributo.recurso, cantidad) });
-    eventos.push(`Tributo: ${pagador.id} paga ${cantidad.toFixed(1)} ${relacion.tributo.recurso} a ${señora.id}.`);
+    eventos.push({
+      codigo: 'diplomacia.tributo_pagado',
+      mensaje: `Tributo: ${pagador.id} paga ${cantidad.toFixed(1)} ${relacion.tributo.recurso} a ${señora.id}.`,
+      payload: {
+        pagadorId: pagador.id,
+        señoraId: señora.id,
+        recurso: relacion.tributo.recurso,
+        cantidad,
+      } satisfies PayloadTributoPagado,
+    });
   }
 
   return { asentamientos: asentamientos.map((a) => asentamientosPorId.get(a.id)!), eventos };

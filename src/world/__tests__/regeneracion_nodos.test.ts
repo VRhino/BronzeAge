@@ -67,7 +67,9 @@ describe('Mapa.avanzarRegeneracion — yacimientos agotados', () => {
     const eventosEnRegenLivestock = mapa.avanzarRegeneracion(tickRegenLivestock);
 
     expect(mapa.stock(livestock.id)).toBe(livestock.cantidadInicial);
-    expect(eventosEnRegenLivestock.some((e) => e.includes(livestock.id))).toBe(true);
+    expect(
+      eventosEnRegenLivestock.some((e) => typeof e !== 'string' && e.codigo === 'mapa.yacimiento_regenerado' && (e.payload as { nodoId: string }).nodoId === livestock.id)
+    ).toBe(true);
     // El mineral todavía no le toca (su cooldown es mayor).
     expect(mapa.stock(mineral.id)).toBe(0);
   });

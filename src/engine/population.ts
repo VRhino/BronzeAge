@@ -1,5 +1,15 @@
 import type { Asentamiento, Poblacion } from '../domain/types';
+import type { EventoCrudo } from '../domain/eventos';
 import { EDIFICIO_CATALOGO, NIVEL_ASENTAMIENTO, POBLACION } from '../constants';
+
+/** Fase A5 — payload de `poblacion.hambruna_muerte` (ver `avanzarNutricionPoblacion`). Los eventos de
+ * `crecerPoblacion` ('poblacion.primeros_artesanos'/'poblacion.primeros_nobles') no llevan payload — el
+ * mensaje ya lo dice todo, no hay dato adicional que estructurar. */
+export interface PayloadHambrunaMuerte {
+  muertes: number;
+  muertesPesants: number;
+  muertesArtesanos: number;
+}
 import type { RandomFn } from '../worldgen';
 import {
   EDIFICIOS_TRANSFORMACION,
@@ -33,8 +43,8 @@ function crecimientoEstocastico(actual: number, tasa: number, rng: RandomFn): nu
  * `capacidadViviendaArtesanos`, ver constants.ts `EDIFICIO_CATALOGO.vivienda`) — ya no compiten entre sí.
  * Nobleza sigue con su propio cupo aparte, la `capacidadNobles` del Palacio.
  */
-export function crecerPoblacion(asentamiento: Asentamiento, rng: RandomFn): { poblacion: Poblacion; eventos: string[] } {
-  const eventos: string[] = [];
+export function crecerPoblacion(asentamiento: Asentamiento, rng: RandomFn): { poblacion: Poblacion; eventos: EventoCrudo[] } {
+  const eventos: EventoCrudo[] = [];
 
   // Hambruna (Doc 4.1, a petición del usuario): el factor de comida ya no es un booleano trigo>0?1:0.2 sino
   // que escala con el medidor de nutrición (`avanzarNutricionPoblacion`, corre antes en el mismo tick — ver
@@ -65,7 +75,10 @@ export function crecerPoblacion(asentamiento: Asentamiento, rng: RandomFn): { po
   if (hayEdificioTransformacion && espacioArtesanosFactor > 0) {
     if (asentamiento.poblacion.artesanos === 0) {
       nuevosArtesanos = 1;
-      eventos.push('Los primeros Artesanos se establecen gracias al primer edificio de transformación.');
+      eventos.push({
+        codigo: 'poblacion.primeros_artesanos',
+        mensaje: 'Los primeros Artesanos se establecen gracias al primer edificio de transformación.',
+      });
     } else {
       const tasaArtesanos = POBLACION.artesanos.tasaCrecimientoBase * comidaFactor * espacioArtesanosFactor * estabilidad * felicidad;
       nuevosArtesanos = crecimientoEstocastico(asentamiento.poblacion.artesanos, tasaArtesanos, rng);
@@ -85,7 +98,7 @@ export function crecerPoblacion(asentamiento: Asentamiento, rng: RandomFn): { po
   if (cumpleRequisitoNobleza && espacioPalacioFactor > 0) {
     if (asentamiento.poblacion.nobleza === 0) {
       nuevaNobleza = 1;
-      eventos.push('Aparecen los primeros Nobles.');
+      eventos.push({ codigo: 'poblacion.primeros_nobles', mensaje: 'Aparecen los primeros Nobles.' });
     } else {
       const tasaNobleza =
         POBLACION.nobleza.tasaCrecimientoBase * comidaFactor * espacioPalacioFactor * estabilidad * felicidad * factorCrecimientoNobleza(asentamiento);
@@ -130,8 +143,8 @@ export function consumoComidaPoblacion(asentamiento: Asentamiento): number {
  * (`fraccionMuertePorTickHambre`) — la nobleza queda protegida ("los nobles comen primero"), igual que
  * `nivel`/población ya asentada nunca se purga por un solo bache de Mantenimiento (Doc §6.2).
  */
-export function avanzarNutricionPoblacion(asentamiento: Asentamiento): { asentamiento: Asentamiento; eventos: string[] } {
-  const eventos: string[] = [];
+export function avanzarNutricionPoblacion(asentamiento: Asentamiento): { asentamiento: Asentamiento; eventos: EventoCrudo[] } {
+  const eventos: EventoCrudo[] = [];
   const { hambre } = POBLACION;
 
   const consumo = consumoComidaPoblacion(asentamiento);
@@ -161,7 +174,11 @@ export function avanzarNutricionPoblacion(asentamiento: Asentamiento): { asentam
         pesants: poblacion.pesants - muertesPesants,
         artesanos: poblacion.artesanos - muertesArtesanos,
       };
-      eventos.push(`${muertes} habitantes mueren de hambre por falta sostenida de trigo.`);
+      eventos.push({
+        codigo: 'poblacion.hambruna_muerte',
+        mensaje: `${muertes} habitantes mueren de hambre por falta sostenida de trigo.`,
+        payload: { muertes, muertesPesants, muertesArtesanos } satisfies PayloadHambrunaMuerte,
+      });
     }
   }
 
