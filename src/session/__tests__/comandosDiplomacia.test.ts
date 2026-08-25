@@ -1,12 +1,13 @@
 // Grupo de comandos de diplomacia (`session/comandos/diplomacia.ts`). Verifica el contrato de la capa de
 // partida, no las reglas del motor (requisitos de nivel, reputación, etc., ya cubiertos en `engine/`).
 //
-// El caso de `romperRelacion` con una relación inexistente es el que importa especialmente: en `GameStore`
-// ese comando NO tenía try/catch, así que el `DiplomaciaInvalidaError` del motor llegaba crudo a la interfaz.
+// Los rechazos por RELACIÓN/FACCIÓN INEXISTENTE (en `GameStore`, `romperRelacion` no tenía try/catch y el
+// `DiplomaciaInvalidaError` del motor llegaba crudo a la interfaz) están unificados en
+// `comandosContratoIds.test.ts`, no repetidos aquí.
 import { describe, expect, it } from 'vitest';
 import { GameSession } from '../gameSession';
 import { crearFaccion } from '../comandos/crearFaccion';
-import { anexionar, fusionar, proponerRelacion, rebelionVasallo, romperRelacion } from '../comandos/diplomacia';
+import { anexionar, proponerRelacion, rebelionVasallo, romperRelacion } from '../comandos/diplomacia';
 
 const MOMENTO = '2026-01-01T00:00:00.000Z';
 const OPC = { momento: MOMENTO, actor: 'jugador-test' };
@@ -19,14 +20,6 @@ function partidaConDosFacciones() {
 }
 
 describe('romperRelacion', () => {
-  it('rechazo: relación inexistente devuelve codigoError (en GameStore lanzaba excepción sin capturar)', () => {
-    const { sesion, a } = partidaConDosFacciones();
-    const resultado = sesion.ejecutar(romperRelacion, { relacionId: 'no-existe', iniciadorFaccionId: a }, OPC);
-
-    expect(resultado.ok).toBe(false);
-    expect(resultado.codigoError).toBe('diplomacia.invalida');
-  });
-
   it('rechazo: sin relacionId no hace nada y no versiona', () => {
     const { sesion, a } = partidaConDosFacciones();
     const antes = sesion.getState();
@@ -39,14 +32,6 @@ describe('romperRelacion', () => {
 });
 
 describe('rebelionVasallo', () => {
-  it('rechazo: relación inexistente se traduce a codigoError', () => {
-    const { sesion } = partidaConDosFacciones();
-    const resultado = sesion.ejecutar(rebelionVasallo, { relacionId: 'no-existe' }, OPC);
-
-    expect(resultado.ok).toBe(false);
-    expect(resultado.codigoError).toBe('diplomacia.invalida');
-  });
-
   it('rechazo: sin relacionId no muta el estado', () => {
     const { sesion } = partidaConDosFacciones();
     const antes = sesion.getState();
@@ -99,23 +84,6 @@ describe('anexionar / fusionar', () => {
 
     expect(resultado.ok).toBe(false);
     expect(resultado.codigoError).toBe('fusion.invalida');
-  });
-
-  it('anexionar rechaza si alguna Facción no existe', () => {
-    const { sesion, a } = partidaConDosFacciones();
-    const resultado = sesion.ejecutar(anexionar, { faccionAId: a, faccionBId: 'no-existe' }, OPC);
-
-    expect(resultado.ok).toBe(false);
-    expect(resultado.codigoError).toBe('fusion.invalida');
-  });
-
-  it('fusionar rechaza si alguna Facción no existe, sin mutar el estado', () => {
-    const { sesion, a } = partidaConDosFacciones();
-    const antes = sesion.getState();
-    const resultado = sesion.ejecutar(fusionar, { faccionAId: a, faccionBId: 'no-existe', nuevoNombre: 'X', nuevoReyId: 'y' }, OPC);
-
-    expect(resultado.ok).toBe(false);
-    expect(sesion.getState()).toBe(antes);
   });
 
   it('una anexión con éxito limpia de faccionesNpcIds la Facción que desaparece', () => {

@@ -1,31 +1,15 @@
 // Grupo de comandos de cargos, ciudadanía y gobernanza NPC (`session/comandos/cargos.ts` y
 // `alternarFaccionNpc.ts`). Verifica el contrato de la capa de partida, no las reglas del motor.
 //
-// Incluye a propósito los casos de "entidad inexistente": en `GameStore` esos comandos hacían `.find(...)!`,
-// así que una Facción o un asentamiento que no existiera producía un TypeError en vez de un rechazo. Aquí
-// deben devolver un `codigoError` limpio.
+// Los rechazos por ENTIDAD INEXISTENTE (Facción/asentamiento que no existe -> `codigoError` limpio, en vez
+// del `TypeError` de `.find(...)!` que daba `GameStore`) están unificados en `comandosContratoIds.test.ts`,
+// no repetidos aquí. Lo que queda son las reglas de NEGOCIO propias de cada comando.
 import { describe, expect, it } from 'vitest';
-import { GameSession } from '../gameSession';
-import { crearFaccion } from '../comandos/crearFaccion';
-import { fundarAsentamiento } from '../comandos/fundarAsentamiento';
 import { alternarFaccionNpc } from '../comandos/alternarFaccionNpc';
-import { activarPolitica, asignarCargoLocal, asignarEmbajador, asignarRey, comprarCasa } from '../comandos/cargos';
+import { activarPolitica, asignarCargoLocal, asignarEmbajador, asignarRey } from '../comandos/cargos';
+import { OPC, partidaConAsentamiento } from './fixtures';
 
-const MOMENTO = '2026-01-01T00:00:00.000Z';
-const ACTOR = 'jugador-test';
-const OPC = { momento: MOMENTO, actor: ACTOR };
-
-/** Partida con Facción y un asentamiento fundado; devuelve también el id del primer jugador fundador, que es
- * ciudadano de la Facción (requisito del motor para ser Rey). */
-function partidaConAsentamiento() {
-  const sesion = GameSession.crear('cargos-test', { seed: 42 });
-  const rf = sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, OPC);
-  const faccionId = rf.datos!.faccionId;
-  const ra = sesion.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 }, numJugadores: 2 }, OPC);
-  const asentamientoId = ra.datos!.asentamientoId;
-  const fundador = sesion.getState().asentamientos[0]!.jugadoresFundadoresIds[0]!;
-  return { sesion, faccionId, asentamientoId, fundador };
-}
+const MOMENTO = OPC.momento;
 
 describe('asignarRey / asignarEmbajador', () => {
   it('éxito: un ciudadano fundador puede ser Rey, y queda registrado en su historial', () => {
@@ -44,14 +28,6 @@ describe('asignarRey / asignarEmbajador', () => {
     expect(resultado.ok).toBe(false);
     expect(resultado.codigoError).toBe('cargo.invalido');
     expect(sesion.getState().facciones[0]!.reyId).toBeNull();
-  });
-
-  it('rechazo: Facción inexistente devuelve codigoError, NO revienta (en GameStore era un `.find(...)!`)', () => {
-    const { sesion, fundador } = partidaConAsentamiento();
-    const resultado = sesion.ejecutar(asignarRey, { faccionId: 'no-existe', jugadorId: fundador }, OPC);
-
-    expect(resultado.ok).toBe(false);
-    expect(resultado.codigoError).toBe('faccion.no_existe');
   });
 
   it('Embajador exige que la Facción ya tenga Rey', () => {
@@ -76,42 +52,9 @@ describe('asignarCargoLocal', () => {
     expect(sesion.getState().asentamientos[0]!.cargos.gobernadorId).toBe(fundador);
     expect(resultado.eventos[0]!.asentamientoId).toBe(asentamientoId);
   });
-
-  it('rechazo: asentamiento inexistente devuelve codigoError, NO revienta', () => {
-    const { sesion, fundador } = partidaConAsentamiento();
-    const resultado = sesion.ejecutar(asignarCargoLocal, { asentamientoId: 'no-existe', cargo: 'gobernador', jugadorId: fundador }, OPC);
-
-    expect(resultado.ok).toBe(false);
-    expect(resultado.codigoError).toBe('asentamiento.no_existe');
-  });
-});
-
-describe('comprarCasa', () => {
-  it('rechazo: asentamiento inexistente se traduce a error de dominio del motor', () => {
-    const { sesion } = partidaConAsentamiento();
-    const resultado = sesion.ejecutar(comprarCasa, { asentamientoId: 'no-existe', jugadorId: 'nuevo' }, OPC);
-
-    expect(resultado.ok).toBe(false);
-    expect(resultado.codigoError).toBe('faccion.invalida');
-  });
-
-  it('un rechazo no altera el estado ni la versión', () => {
-    const { sesion } = partidaConAsentamiento();
-    const antes = sesion.getState();
-    sesion.ejecutar(comprarCasa, { asentamientoId: 'no-existe', jugadorId: 'nuevo' }, OPC);
-    expect(sesion.getState()).toBe(antes);
-  });
 });
 
 describe('activarPolitica', () => {
-  it('rechazo: asentamiento inexistente devuelve codigoError, NO revienta', () => {
-    const { sesion } = partidaConAsentamiento();
-    const resultado = sesion.ejecutar(activarPolitica, { asentamientoId: 'no-existe', cargo: 'gobernador', politicaId: 'lineas_produccion' }, OPC);
-
-    expect(resultado.ok).toBe(false);
-    expect(resultado.codigoError).toBe('asentamiento.no_existe');
-  });
-
   it('rechazo: sin el cargo correspondiente, el motor la rechaza', () => {
     const { sesion, asentamientoId } = partidaConAsentamiento();
     const resultado = sesion.ejecutar(activarPolitica, { asentamientoId, cargo: 'gobernador', politicaId: 'lineas_produccion' }, OPC);
@@ -144,13 +87,6 @@ describe('alternarFaccionNpc', () => {
     expect(repetido.ok).toBe(true);
     expect(repetido.version).toBe(antes.version);
     expect(sesion.getState()).toBe(antes);
-  });
-
-  it('rechazo: Facción inexistente', () => {
-    const { sesion } = partidaConAsentamiento();
-    const resultado = sesion.ejecutar(alternarFaccionNpc, { faccionId: 'no-existe', activo: true }, OPC);
-    expect(resultado.ok).toBe(false);
-    expect(resultado.codigoError).toBe('faccion.no_existe');
   });
 
   it('tras cederla, `avanzarFaccionesNpc` ya actúa sobre ella (cierra el hueco que había)', () => {

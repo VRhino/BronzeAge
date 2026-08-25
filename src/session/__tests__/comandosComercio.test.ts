@@ -1,4 +1,7 @@
 // Grupo de comandos de comercio (`session/comandos/comercio.ts`).
+//
+// Los rechazos por ASENTAMIENTO INEXISTENTE (en `GameStore` eran `.find(...)!` y reventaban) están
+// unificados en `comandosContratoIds.test.ts`, no repetidos aquí.
 import { describe, expect, it } from 'vitest';
 import { GameSession } from '../gameSession';
 import { crearFaccion } from '../comandos/crearFaccion';
@@ -20,14 +23,6 @@ function partidaConDosAsentamientos() {
 }
 
 describe('crearCaravana', () => {
-  it('rechazo: asentamiento inexistente devuelve codigoError, NO revienta (era un `.find(...)!` en GameStore)', () => {
-    const { sesion } = partidaConDosAsentamientos();
-    const resultado = sesion.ejecutar(crearCaravana, { asentamientoId: 'no-existe' }, OPC);
-
-    expect(resultado.ok).toBe(false);
-    expect(resultado.codigoError).toBe('asentamiento.no_existe');
-  });
-
   it('rechazo: sin Mercado el motor no deja construir caravana, y no muta nada', () => {
     const { sesion, aId } = partidaConDosAsentamientos();
     const antes = sesion.getState();
@@ -73,20 +68,6 @@ describe('proponerTrueque', () => {
     expect(sesion.getState().caminos).toHaveLength(caminosTrasPrimero);
     expect(segundo.eventos.some((e) => e.mensaje.includes('camino comercial'))).toBe(false);
   });
-
-  it('rechazo: asentamiento inexistente se traduce a codigoError sin mutar', () => {
-    const { sesion, aId } = partidaConDosAsentamientos();
-    const antes = sesion.getState();
-    const resultado = sesion.ejecutar(
-      proponerTrueque,
-      { asentamientoAId: aId, recursoA: 'madera', cantidadA: 5, asentamientoBId: 'no-existe', recursoB: 'piedra', cantidadB: 5 },
-      OPC
-    );
-
-    expect(resultado.ok).toBe(false);
-    expect(resultado.codigoError).toBe('comercio.trueque_invalido');
-    expect(sesion.getState()).toBe(antes);
-  });
 });
 
 describe('colocarOrdenMercado', () => {
@@ -97,13 +78,5 @@ describe('colocarOrdenMercado', () => {
     expect(resultado.ok).toBe(false);
     expect(resultado.codigoError).toBe('mercado.orden_invalida');
     expect(sesion.getState().ordenes).toEqual([]);
-  });
-
-  it('rechazo: asentamiento inexistente', () => {
-    const { sesion } = partidaConDosAsentamientos();
-    const resultado = sesion.ejecutar(colocarOrdenMercado, { asentamientoId: 'no-existe', tipo: 'venta', recurso: 'madera', cantidad: 10 }, OPC);
-
-    expect(resultado.ok).toBe(false);
-    expect(resultado.codigoError).toBe('mercado.orden_invalida');
   });
 });

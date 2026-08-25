@@ -1,25 +1,13 @@
 // Grupo de comandos militares (`session/comandos/militar.ts`).
 //
-// Interesan sobre todo dos cosas de la capa de partida: que los ids inexistentes se traduzcan a códigos de
-// rechazo (en `GameStore` eran `.find(...)!` y reventaban), y que los comandos de combate consuman la
-// aleatoriedad DEL CONTEXTO, que es lo que mantiene la partida reproducible.
+// Los rechazos por ENTIDAD INEXISTENTE (en `GameStore` eran `.find(...)!` y reventaban) están unificados en
+// `comandosContratoIds.test.ts`, no repetidos aquí. Lo que queda: la regla de negocio de `reclutarTropa`
+// (asentamiento sin abastecer) y que los comandos de combate consuman la aleatoriedad DEL CONTEXTO, que es
+// lo que mantiene la partida reproducible.
 import { describe, expect, it } from 'vitest';
 import { GameSession } from '../gameSession';
-import { crearFaccion } from '../comandos/crearFaccion';
-import { fundarAsentamiento } from '../comandos/fundarAsentamiento';
-import { atacarCampamentoBandidos, combateCampoAbierto, interceptarCaravana, iniciarAsedio, reclutarTropa } from '../comandos/militar';
-
-const MOMENTO = '2026-01-01T00:00:00.000Z';
-const OPC = { momento: MOMENTO, actor: 'jugador-test' };
-
-function partidaConAsentamiento() {
-  const sesion = GameSession.crear('militar-test', { seed: 42 });
-  const faccionId = sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, OPC).datos!.faccionId;
-  const r = sesion.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 }, numJugadores: 2 }, OPC);
-  const asentamientoId = r.datos!.asentamientoId;
-  const fundador = sesion.getState().asentamientos[0]!.jugadoresFundadoresIds[0]!;
-  return { sesion, faccionId, asentamientoId, fundador };
-}
+import { atacarCampamentoBandidos, reclutarTropa } from '../comandos/militar';
+import { OPC, partidaConAsentamiento } from './fixtures';
 
 /**
  * Asentamiento en condiciones de reclutar. Un recién fundado NO puede, y por dos reglas REALES del motor —no
@@ -50,18 +38,6 @@ function partidaAbastecida() {
 }
 
 describe('reclutarTropa', () => {
-  it('rechazo: asentamiento inexistente devuelve codigoError, NO revienta', () => {
-    const { sesion, fundador } = partidaConAsentamiento();
-    const resultado = sesion.ejecutar(
-      reclutarTropa,
-      { asentamientoId: 'no-existe', jugadorId: fundador, tropaId: 'milicia_lanceros', origen: 'pesants' },
-      OPC
-    );
-
-    expect(resultado.ok).toBe(false);
-    expect(resultado.codigoError).toBe('asentamiento.no_existe');
-  });
-
   it('éxito: recluta, informa cuántos y lo anota en el historial del jugador', () => {
     const { sesion, asentamientoId, fundador } = partidaAbastecida();
     const resultado = sesion.ejecutar(
@@ -74,65 +50,6 @@ describe('reclutarTropa', () => {
     expect(resultado.datos!.reclutados).toBeGreaterThan(0);
     expect(sesion.getState().asentamientos[0]!.escuadrones).toHaveLength(1);
     expect(sesion.getState().historialJugadores[fundador]!.some((e) => e.mensaje.includes('Recluta'))).toBe(true);
-  });
-
-  it('rechazo: una tropa que no existe en el catálogo', () => {
-    const { sesion, asentamientoId, fundador } = partidaConAsentamiento();
-    const antes = sesion.getState();
-    const resultado = sesion.ejecutar(
-      reclutarTropa,
-      { asentamientoId, jugadorId: fundador, tropaId: 'no-existe', origen: 'pesants' },
-      OPC
-    );
-
-    expect(resultado.ok).toBe(false);
-    expect(resultado.codigoError).toBe('tropas.reclutamiento_invalido');
-    expect(sesion.getState()).toBe(antes);
-  });
-});
-
-describe('comandos de combate — ids inexistentes', () => {
-  it('iniciarAsedio: asentamiento inexistente', () => {
-    const { sesion, asentamientoId } = partidaConAsentamiento();
-    const resultado = sesion.ejecutar(iniciarAsedio, { atacanteId: asentamientoId, defensorId: 'no-existe', escuadronIds: [] }, OPC);
-
-    expect(resultado.ok).toBe(false);
-    expect(resultado.codigoError).toBe('asentamiento.no_existe');
-  });
-
-  it('combateCampoAbierto: asentamiento inexistente', () => {
-    const { sesion, asentamientoId } = partidaConAsentamiento();
-    const resultado = sesion.ejecutar(
-      combateCampoAbierto,
-      { asentamientoAId: asentamientoId, escuadronIdsA: [], asentamientoBId: 'no-existe', escuadronIdsB: [] },
-      OPC
-    );
-
-    expect(resultado.ok).toBe(false);
-    expect(resultado.codigoError).toBe('asentamiento.no_existe');
-  });
-
-  it('interceptarCaravana: caravana inexistente tiene su propio código', () => {
-    const { sesion, asentamientoId } = partidaConAsentamiento();
-    const resultado = sesion.ejecutar(interceptarCaravana, { atacanteId: asentamientoId, escuadronIds: [], caravanaId: 'no-existe' }, OPC);
-
-    expect(resultado.ok).toBe(false);
-    expect(resultado.codigoError).toBe('caravana.no_existe');
-  });
-
-  it('atacarCampamentoBandidos: campamento inexistente tiene su propio código', () => {
-    const { sesion, asentamientoId } = partidaConAsentamiento();
-    const resultado = sesion.ejecutar(atacarCampamentoBandidos, { atacanteId: asentamientoId, escuadronIds: [], campamentoId: 'no-existe' }, OPC);
-
-    expect(resultado.ok).toBe(false);
-    expect(resultado.codigoError).toBe('campamento.no_existe');
-  });
-
-  it('un rechazo por id inexistente no muta el estado', () => {
-    const { sesion, asentamientoId } = partidaConAsentamiento();
-    const antes = sesion.getState();
-    sesion.ejecutar(atacarCampamentoBandidos, { atacanteId: asentamientoId, escuadronIds: [], campamentoId: 'no-existe' }, OPC);
-    expect(sesion.getState()).toBe(antes);
   });
 });
 
