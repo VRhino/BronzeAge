@@ -239,4 +239,35 @@ describe('GameSession — exportar / importar', () => {
     expect(resultado.ok).toBe(true);
     expect(reconstruida.getState().tick).toBe(1);
   });
+
+  it('la sesión importada CONTINÚA la secuencia de RNG, no la reinicia desde la seed', () => {
+    // Es la razón de ser de `estadoRng` en `PartidaExportada`: sin él, cargar el snapshot de un incidente de
+    // producción y avanzar reproduce UNA continuación cualquiera, no la que realmente pasó en el servidor.
+    // Aquí se verifica el efecto observable: una partida que sigue en memoria y otra reconstruida en el
+    // mismo punto, avanzadas por los mismos ticks, tienen que llegar exactamente al mismo sitio —
+    // reclutamiento, ataques de bandidos y demás sistemas que consumen `ctx.rng` incluidos.
+    const { sesion, faccionId } = partidaConFaccion();
+    sesion.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 }, numJugadores: 5 }, { momento: MOMENTO, actor: ACTOR });
+    for (let i = 0; i < 10; i++) sesion.avanzarTick(MOMENTO); // el contador del RNG ya no está en su posición inicial
+
+    const reconstruida = GameSession.importar(sesion.exportar());
+
+    for (let i = 0; i < 10; i++) {
+      sesion.avanzarTick(MOMENTO);
+      reconstruida.avanzarTick(MOMENTO);
+    }
+
+    expect(reconstruida.getState()).toEqual(sesion.getState());
+  });
+
+  it('sin `estadoRng` (formato de archivo v2, anterior a esto) cae de vuelta a la seed del mundo', () => {
+    const { sesion } = partidaConFaccion();
+    sesion.avanzarTick(MOMENTO);
+    const payload = sesion.exportar();
+    delete payload.estadoRng;
+
+    const reconstruida = GameSession.importar(payload);
+
+    expect(reconstruida.avanzarTick(MOMENTO).ok).toBe(true);
+  });
 });

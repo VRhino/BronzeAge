@@ -12,7 +12,7 @@
 //   - HTTP, WebSocket, persistencia en disco: del runner y de la capa de transporte.
 //   - Notificar a una UI o llevar historial de depuración: del cliente.
 import type { RegionId } from '../domain/types';
-import { createRng, generarMapa, MAPA_DEFAULT, WORLDGEN_VERSION, type RandomFn } from '../worldgen';
+import { createRng, generarMapa, MAPA_DEFAULT, restaurarRng, WORLDGEN_VERSION, type RandomFn } from '../worldgen';
 import { crearEstadoMapa, crearMapa, type EstadoMapa, type Mapa } from '../world/mapa';
 import { GeneradorIds } from './idGenerator';
 import { eventoLegado, type GameSessionState } from './estado';
@@ -36,6 +36,17 @@ export interface PartidaExportada {
   state: GameSessionState;
   siguienteId: number;
   worldgenVersion: number;
+  /**
+   * Contador interno del RNG de partida (`RandomFn.estado()`), para que una sesión reconstruida CONTINÚE
+   * la misma secuencia en vez de reiniciarla desde la seed del mundo — importa para la reconstrucción de
+   * bugs de producción: sin esto, cargar el snapshot de un incidente y avanzar reproduce una continuación
+   * cualquiera, no la que realmente ocurrió (ver Docs/Arquitectura/4_Plan_Evolucion_Tareas.md, Fase B3).
+   *
+   * Opcional porque el formato de archivo v2 de `GameStore` (anterior a esta pieza, ver
+   * `GameStore.importarSimulacion`) no lo guarda: `importar` cae de vuelta a la seed en ese caso, con la
+   * misma pérdida de continuidad que había antes de esto — documentada, no oculta.
+   */
+  estadoRng?: number;
 }
 
 export class GameSession {
@@ -80,9 +91,10 @@ export class GameSession {
   static importar(payload: PartidaExportada): GameSession {
     const ids = new GeneradorIds();
     ids.fijar(payload.siguienteId);
-    // El RNG se reinicia desde la seed del mundo: su estado interno consumido todavía no se persiste (misma
-    // limitación conocida que ya tenía `GameStore`; se resuelve en Fase B3, ver doc 4).
-    return new GameSession(payload.state, ids, createRng(payload.state.mapa.config.seed));
+    // Continúa la secuencia exacta si el payload trae `estadoRng` (Fase B3). Sin él —formato de archivo v2,
+    // que es anterior a esto— se reinicia desde la seed del mundo, con la pérdida de continuidad ya conocida.
+    const rng = payload.estadoRng !== undefined ? restaurarRng(payload.estadoRng) : createRng(payload.state.mapa.config.seed);
+    return new GameSession(payload.state, ids, rng);
   }
 
   get gameId(): string {
@@ -106,7 +118,7 @@ export class GameSession {
   }
 
   exportar(): PartidaExportada {
-    return { state: this.estado, siguienteId: this.ids.actual(), worldgenVersion: WORLDGEN_VERSION };
+    return { state: this.estado, siguienteId: this.ids.actual(), worldgenVersion: WORLDGEN_VERSION, estadoRng: this.rng.estado() };
   }
 
   /**

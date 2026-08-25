@@ -75,16 +75,20 @@ describe('exportar / importar una simulación', () => {
   });
 
   it('el agotamiento de yacimientos sobrevive al viaje', () => {
+    // El agotamiento se fuerza EN EL ARCHIVO, no llamando a `mapa.extraer()` a mano: desde que `Mapa` copia
+    // el estado que recibe en vez de aliasarlo (Fase B3, ver `world/mapa.ts`), la fachada que devuelve
+    // `getMapa()` ya no es un asa de escritura sobre la partida — escribir en ella y esperar que la partida
+    // lo recuerde sería probar justo lo que ese cambio elimina. El formato v2 representa el agotamiento como
+    // `recursos[].cantidad`, así que se edita ahí, que es como realmente le llegaría a `importarSimulacion`
+    // un archivo con un yacimiento ya vaciado.
     const original = partidaEnMarcha();
-    const mapaOriginal = original.getMapa();
-    // Se agota un nodo a mano para garantizar que hay algo que preservar aunque la partida corta no haya
-    // vaciado ninguno por sí sola.
     const nodo = original.getState().mapa.nodos.find((n) => n.tipo === 'piedra')!;
-    mapaOriginal.extraer(nodo.id, nodo.cantidadInicial);
-    expect(mapaOriginal.nodoProductivo(nodo.id)).toBe(false);
+    const payload = JSON.parse(original.exportarSimulacion()) as SimulacionExportada;
+    const nodoExportado = payload.world.recursos.find((n) => n.id === nodo.id)!;
+    nodoExportado.cantidad = 0;
 
     const importada = new GameStore();
-    importada.importarSimulacion(original.exportarSimulacion());
+    importada.importarSimulacion(JSON.stringify(payload));
 
     expect(importada.getMapa().nodoProductivo(nodo.id)).toBe(false);
     expect(importada.getMapa().stock(nodo.id)).toBe(0);

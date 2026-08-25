@@ -290,6 +290,14 @@ Criterio: *si un dato cambia el resultado de un tick, es estado de partida* — 
 se reiniciara con otra configuración, la partida cambiaría de comportamiento sin que el snapshot lo reflejara,
 rompiendo el principio 6 del doc 2 ("un reinicio no puede alterar la secuencia").
 
+> El RNG de partida rompía exactamente este mismo principio hasta el 2026-08-25: `importar` lo reiniciaba
+> desde la seed del mundo en cada carga, así que un reinicio SÍ alteraba la secuencia — no en el sentido de
+> "la partida diverge de lo que debería ser" (no hay un debería ser externo, el servidor es autoridad única),
+> sino en que dos reinicios reales consumían la misma racha de números, y un snapshot ya no bastaba para
+> reconstruir el incidente que motivó guardarlo. Resuelto persistiendo el contador interno del RNG
+> (`PartidaExportada.estadoRng`, `worldgen/rng.ts`) — ver la tarea en
+> [4_Plan_Evolucion_Tareas.md](4_Plan_Evolucion_Tareas.md).
+
 Matiz aportado por el usuario: **en una partida real este valor no cambia en caliente**. Una facción que se
 declara IA lo es hasta que se destruye. Es configuración efectivamente inmutable tras la creación de la
 partida — lo que simplifica el diseño: no hace falta prever recálculos ni invalidación de cachés al
