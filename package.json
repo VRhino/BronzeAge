@@ -1,16 +1,13 @@
 {
-  "name": "bronze-age-collapse-sim",
+  "name": "bronze-age-collapse-server",
   "version": "0.0.1",
-  "description": "Fase 0 - prototipo de simulacion de datos puros (sin arte/3D). Ver Consideraciones/Fase_0_Definicion.md",
+  "description": "Backend de simulacion (motor + partida + API). Fase 0 - datos puros, sin arte/3D. Ver Consideraciones/Fase_0_Definicion.md",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "preview": "vite preview",
-    "typecheck": "tsc -b --noEmit",
+    "server": "tsx src/server/index.ts",
+    "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
-    "server": "tsx src/server/index.ts",
     "prepare": "husky"
   },
   "devDependencies": {
@@ -18,7 +15,6 @@
     "husky": "^9.1.7",
     "tsx": "^4.23.12",
     "typescript": "^5.6.3",
-    "vite": "^5.4.10",
     "vitest": "^4.1.10"
   },
   "dependencies": {

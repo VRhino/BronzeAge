@@ -9,22 +9,40 @@
 // que `scripts/run-batch-sim.ts` corre sin tocar `app/`/`ui/` — este test es la versión automática de esa
 // misma garantía, para que "backend" y "lógica de juego" no se puedan enredar sin que algo lo señale.
 //
-// Usa `import.meta.glob` (Vite) en vez de `node:fs` a propósito: este es un proyecto 100% navegador/Vite, sin
-// `@types/node` como dependencia — leer el árbol de archivos vía Vite evita introducir una dependencia nueva
-// solo para este test.
+// Lee el árbol con `node:fs`. Antes usaba `import.meta.glob` (Vite) porque el repo era "100% navegador/Vite,
+// sin `@types/node`" — premisa que dejó de ser cierta al separar el cliente a su propio proyecto (`cliente/`,
+// Fase C): esto es ya un proyecto de Node puro, y depender de una función de bundler para leer archivos sería
+// arrastrar un acoplamiento que ya no paga nada.
+import { readdirSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
+const RAIZ_SRC = fileURLToPath(new URL('..', import.meta.url));
+
 /** Todo el código fuente de producción como texto plano, indexado por ruta absoluta-desde-raíz
- * (`/src/engine/population.ts`). `eager: true` los carga todos de una vez (son ~150, nada pesado). */
-const ARCHIVOS_FUENTE = import.meta.glob('/src/**/*.ts', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
+ * (`/src/engine/population.ts`), que es el formato que espera el resto del test. */
+function leerArbolFuente(directorio = RAIZ_SRC, prefijo = '/src'): Record<string, string> {
+  const archivos: Record<string, string> = {};
+  for (const entrada of readdirSync(directorio, { withFileTypes: true })) {
+    const ruta = `${prefijo}/${entrada.name}`;
+    if (entrada.isDirectory()) Object.assign(archivos, leerArbolFuente(`${directorio}/${entrada.name}`, ruta));
+    else if (entrada.name.endsWith('.ts')) archivos[ruta] = readFileSync(`${directorio}/${entrada.name}`, 'utf-8');
+  }
+  return archivos;
+}
+
+const ARCHIVOS_FUENTE = leerArbolFuente();
 
 /**
  * Capas hacia las que cada capa puede importar, además de sí misma (siempre permitido, no hace falta
- * listarlo). `main` es la raíz de composición (`src/main.ts`): la única capa que puede importar de `app` y
- * `ui` a la vez — hoy sirve tanto de cliente de jugador como de herramienta de administración (crear/
- * regenerar mundo incluido): no hay separación real entre los dos todavía, a propósito (Fase B3). `lab` es la
- * herramienta de desarrollo de `laboratorio.html` (Docs/Arquitectura/1_Arquitectura_Actual.md no la describe
- * como parte de la partida real) — consume el motor directamente, sin pasar por `app`.
+ * listarlo).
+ *
+ * Desde la Fase C este repositorio es **solo servidor**: las capas de navegador (`app`, `ui`, `main`, `lab`)
+ * se extrajeron a `cliente/`, que es un proyecto aparte con su propio `package.json`/`tsconfig` y está
+ * pensado para inicializar su propio repositorio. Aquí ya no existen, y por eso no aparecen — pero la regla
+ * que las mantenía fuera del motor sigue viva en el test de abajo ("el motor no importa del lado cliente"),
+ * porque lo que protegía era que `engine`/`world`/`worldgen`/`domain` siguieran siendo juego reutilizable sin
+ * servidor NI navegador.
  */
 const CAPAS_PERMITIDAS: Record<string, string[]> = {
   domain: [],
@@ -32,21 +50,13 @@ const CAPAS_PERMITIDAS: Record<string, string[]> = {
   worldgen: ['domain', 'constants'],
   world: ['domain', 'worldgen', 'constants'],
   engine: ['domain', 'worldgen', 'world', 'constants'],
-  ui: ['domain', 'world', 'constants'],
-  // `session` es la capa de aplicación DE SERVIDOR (Docs/Arquitectura/7_Diseno_GameSession.md): la partida
-  // como estado + reglas, sin nada de navegador. NO puede importar de `app` ni `ui` — si pudiera, un import
-  // así reintroduciría justo el acoplamiento que GameSession existe para evitar.
+  // `session` es la capa de aplicación DE PARTIDA (Docs/Arquitectura/7_Diseno_GameSession.md): la partida
+  // como estado + reglas, síncrona y sin E/S. No conoce HTTP ni disco — de eso se encarga `server`.
   session: ['domain', 'worldgen', 'world', 'engine', 'constants'],
-  // `app` es hoy GameStore: la sesión de UNA pestaña de navegador. Puede consumir `session` (así es como
-  // GameStore se convierte en adaptador delgado sobre GameSession, doc 7 §6) pero nunca al revés.
-  app: ['domain', 'worldgen', 'world', 'engine', 'session', 'constants'],
-  // `server` es la capa de aplicación DE PROCESO backend (Node — `fs`, futuro HTTP/WebSocket): todo lo que
-  // `session` no puede tener porque es deliberadamente síncrona y sin E/S (doc 7 §2). Empieza con la
-  // persistencia de partida (Fase B3) y en Fase B/C suma el `RunnerDePartida` y la API. NO puede importar de
-  // `app`/`ui`/`lab`: es el lado servidor, nunca depende del lado navegador.
+  // `server` es la capa de aplicación DE PROCESO backend (Node — `fs`, HTTP, futuro WebSocket): todo lo que
+  // `session` no puede tener porque es deliberadamente síncrona y sin E/S (doc 7 §2). Persistencia de
+  // partida, `RunnerDePartida` y la API.
   server: ['domain', 'worldgen', 'world', 'engine', 'session', 'constants'],
-  lab: ['domain', 'worldgen', 'world', 'engine', 'ui', 'constants'],
-  main: ['domain', 'worldgen', 'world', 'engine', 'app', 'ui', 'constants'],
 };
 
 /** Capa de una ruta absoluta-desde-raíz (`/src/engine/population.ts` -> `'engine'`, `/src/constants.ts` ->
@@ -80,14 +90,14 @@ function importsRelativos(contenido: string): string[] {
 /** Archivos de producción (excluye `__tests__` y `*.test.ts`: los tests tienen sus propias conveniencias —
  * fixtures compartidas, etc. — y no son parte del contrato de arquitectura) de una capa dada. */
 function archivosDeCapa(capa: string): [ruta: string, contenido: string][] {
-  const prefijo = capa === 'constants' || capa === 'main' ? `/src/${capa}.ts` : `/src/${capa}/`;
+  const prefijo = capa === 'constants' ? `/src/${capa}.ts` : `/src/${capa}/`;
   return Object.entries(ARCHIVOS_FUENTE).filter(
     ([ruta]) => (ruta === prefijo || ruta.startsWith(prefijo)) && !ruta.includes('/__tests__/') && !ruta.endsWith('.test.ts')
   );
 }
 
 describe('fronteras de arquitectura entre capas', () => {
-  it('el glob de Vite encuentra archivos fuente reales (si esto falla, el resto del test no prueba nada)', () => {
+  it('la lectura del arbol encuentra archivos fuente reales (si esto falla, el resto del test no prueba nada)', () => {
     expect(Object.keys(ARCHIVOS_FUENTE).length).toBeGreaterThan(50);
     expect(archivosDeCapa('engine').length).toBeGreaterThan(10);
   });

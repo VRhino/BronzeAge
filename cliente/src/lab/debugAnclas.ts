@@ -3,8 +3,8 @@
 // ui/canvas.ts) el estado del árbol único de anclas (Etapa 5, Lógica 1: `engine/trazado.ts`), para poder ver
 // a simple vista si una semilla reparte sus 8 ranuras antes de pasar a una hija y si toda ancla de árbol
 // tiene algún satélite alcanzable.
-import type { Edificio, EdificioTipo, Point } from '../domain/types';
-import { REJILLA_ASENTAMIENTO, TRAZADO } from '../constants';
+import type { Edificio, EdificioTipo, Point } from '@motor/domain/types';
+import { REJILLA_ASENTAMIENTO, TRAZADO } from '@motor/constants';
 import {
   ANCLAS_REALES,
   ANCLA_PRIMARIA_POR_CATEGORIA,
@@ -20,7 +20,7 @@ import {
   tamanoDeEdificio,
   type CategoriaAsentamiento,
   type RectanguloCeldas,
-} from '../engine/trazado';
+} from '@motor/engine/trazado';
 
 /** Categoría de la que `tipo` es ancla (primaria o de saturación) — inversa de `ANCLA_PRIMARIA_POR_CATEGORIA`/
  * `ANCLA_SATURACION_POR_CATEGORIA`, derivada de ellas para no duplicar la relación a mano. Centro

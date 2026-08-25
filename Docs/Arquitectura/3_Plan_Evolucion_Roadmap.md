@@ -57,17 +57,31 @@ gobernada por una única `GameSession`, todavía sin multijugador real.
 - [ ] B4. API administrativa (HTTP) sobre esa partida
 - [ ] B5. La interfaz actual (`main.ts`) migrada a cliente remoto de esa API, en vez de llamar a `GameStore` local
 
-## Fase C — Multijugador sobre ticks
+## Fase C — Multijugador sobre ticks (**solo servidor**)
 
-Objetivo: varios jugadores y un administrador conectados a la misma partida, con
-autorización real.
+Objetivo: dejar el backend listo para que varios jugadores y un administrador —cada uno desde
+**su propio repositorio de cliente**— se conecten a la misma partida con autorización real.
 
-- [ ] C1. Usuarios, membresías y roles implementados
-- [ ] C2. Autorización de comandos por actor / facción / asentamiento / cargo
-- [ ] C3. WebSocket o SSE para difusión de cambios, con reconexión e idempotencia de comandos
-- [ ] C4. Proyecciones de estado por audiencia (jugador / facción / admin / observador)
-- [ ] C5. Frontend de jugador independiente, con solo las acciones y datos autorizados
-- [ ] C6. Balance versionado por partida/temporada (deja de ser módulo global mutable)
+> **Replanteada 2026-08-25.** Este repositorio pasa a ser **solo servidor**: el cliente de jugador vive en
+> otro repositorio y el de administración ya existe fuera. Consecuencias sobre el plan original:
+>
+> - **Sale de alcance** "frontend de jugador" (era C5). El cliente de navegador que quedaba aquí se extrajo a
+>   `cliente/` —proyecto aparte, con su `package.json`/`tsconfig`/`vite.config`— listo para inicializar su
+>   propio repositorio. Ver `cliente/README.md`.
+> - **Sube de prioridad** la proyección por audiencia: con un cliente externo, `GET /partidas/:gameId`
+>   (estado completo, todas las facciones) deja de ser "sin proyección todavía" y pasa a ser una fuga. Las
+>   proyecciones son frontera de seguridad, no refinamiento.
+> - **Entra lo que no estaba**: CORS (hoy lo evita el proxy de Vite), versionado del contrato y publicación
+>   del mismo como OpenAPI para que los otros repos generen su cliente.
+
+- [x] C0. Cliente de navegador extraído a `cliente/`; el repo queda como backend puro (sin Vite ni capas `app`/`ui`/`main`/`lab`)
+- [ ] C1. Usuarios, sesiones, jugadores y membresías implementados (auth stub de desarrollo; el mecanismo real se sustituye después sin tocar lo que se apoya en él)
+- [ ] C2. Autorización de comandos por actor / facción / asentamiento / cargo, sobre el registro convertido en descriptor (manejador + esquema de `params` + rol + `idempotencyKey`)
+- [ ] C3. Superficies separadas: `/admin/*` y `/jugador/*` con requisitos de rol distintos
+- [ ] C4. Proyecciones de estado por audiencia (jugador / facción / admin / observador) y `ConocimientoJugador` con "último conocido"
+- [ ] C5. WebSocket único con canales, suscripciones autorizadas y reconexión sin duplicar comandos
+- [ ] C6. Contrato publicable: CORS, versionado de API y OpenAPI generado desde los esquemas de Fastify
+- [ ] C7. Balance versionado por partida/temporada (deja de ser módulo global mutable)
 
 ## Fase D — Conversión temporal total
 

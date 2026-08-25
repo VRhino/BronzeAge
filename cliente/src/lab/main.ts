@@ -2,16 +2,16 @@
 // de `main.ts`/`app/gameStore.ts`. Un solo asentamiento, motor real (`avanzarSimulacion`), sin partida ni
 // facciones de más alrededor: existe para ver en vivo cómo se aplica el árbol único de anclas (Etapa 5,
 // `engine/trazado.ts`) sin tener que perseguirlo en una partida completa.
-import type { Asentamiento, EdificioTipo, Faccion, Point, RecursoTipo } from '../domain/types';
-import { MAPA_DEFAULT, createRng, generarMapa, type RandomFn } from '../worldgen';
-import { crearMapa, type Mapa } from '../world/mapa';
-import { crearFaccion } from '../engine/faccion';
-import { asignarCargoLocal } from '../engine/cargos';
-import { evaluarViabilidadFundacion, fundarAsentamiento as fundarAsentamientoEngine } from '../engine/settlement';
-import { avanzarSimulacion, type EstadoSimulacion } from '../engine/simulation';
-import { celdaMinimaDeEdificio, edificiosInternos, redDeCalles, segmentosDeRed, tamanoDeEdificio, type RedDeCalles } from '../engine/trazado';
-import { anadirEdificioManualmente, reclamosDeFuentes, ConstruccionManualInvalidaError } from '../engine/construction';
-import { REJILLA_ASENTAMIENTO } from '../constants';
+import type { Asentamiento, EdificioTipo, Faccion, Point, RecursoTipo } from '@motor/domain/types';
+import { MAPA_DEFAULT, createRng, generarMapa, type RandomFn } from '@motor/worldgen';
+import { crearMapa, type Mapa } from '@motor/world/mapa';
+import { crearFaccion } from '@motor/engine/faccion';
+import { asignarCargoLocal } from '@motor/engine/cargos';
+import { evaluarViabilidadFundacion, fundarAsentamiento as fundarAsentamientoEngine } from '@motor/engine/settlement';
+import { avanzarSimulacion, type EstadoSimulacion } from '@motor/engine/simulation';
+import { celdaMinimaDeEdificio, edificiosInternos, redDeCalles, segmentosDeRed, tamanoDeEdificio, type RedDeCalles } from '@motor/engine/trazado';
+import { anadirEdificioManualmente, reclamosDeFuentes, ConstruccionManualInvalidaError } from '@motor/engine/construction';
+import { REJILLA_ASENTAMIENTO } from '@motor/constants';
 import { drawAsentamiento, EDIFICIO_ETIQUETA } from '../ui/canvas';
 import { anclaEnPosicion, dibujarOverlayAnclas, inspeccionarAnclas, type FilaAncla } from './debugAnclas';
 import { calcularLayoutArbol, dibujarArbol, nodoEnPosicion, type LayoutArbol } from './vistaArbol';

@@ -35,10 +35,10 @@ import type {
   ZonaBosque,
   ZonaFaccion,
   ZonaInfluencia,
-} from '../domain/types';
-import { EDIFICIO_CATALOGO, MANTENIMIENTO, NECESIDADES, NIVEL_FACCION, POLITICAS, POLITICA_CATALOGO, REJILLA_ASENTAMIENTO, TROPAS_RECLUTABLES } from '../constants';
-import { crearMapa, type EstadoMapa, type Mapa } from '../world/mapa';
-import { exportarParaUnityTerrain, UNITY_EXPORT_DEFAULT, type ExportUnityResultado, type OpcionesExportUnity } from '../world/exportUnity';
+} from '@motor/domain/types';
+import { EDIFICIO_CATALOGO, MANTENIMIENTO, NECESIDADES, NIVEL_FACCION, POLITICAS, POLITICA_CATALOGO, REJILLA_ASENTAMIENTO, TROPAS_RECLUTABLES } from '@motor/constants';
+import { crearMapa, type EstadoMapa, type Mapa } from '@motor/world/mapa';
+import { exportarParaUnityTerrain, UNITY_EXPORT_DEFAULT, type ExportUnityResultado, type OpcionesExportUnity } from '@motor/world/exportUnity';
 
 export { UNITY_EXPORT_DEFAULT };
 import {
@@ -56,29 +56,29 @@ import {
   type ProduccionItem,
   type ManoObraInfo,
   type ProgresoNivelAsentamiento,
-} from '../engine/asentamientoQuery';
-export type { ProduccionItem, ManoObraInfo } from '../engine/asentamientoQuery';
-import { encontrarCapital, calcularCostoMantenimiento, calcularNivelAsentamiento } from '../engine/mantenimiento';
-import { consumoComidaPoblacion } from '../engine/population';
-import { slotsDisponibles } from '../engine/politicas';
+} from '@motor/engine/asentamientoQuery';
+export type { ProduccionItem, ManoObraInfo } from '@motor/engine/asentamientoQuery';
+import { encontrarCapital, calcularCostoMantenimiento, calcularNivelAsentamiento } from '@motor/engine/mantenimiento';
+import { consumoComidaPoblacion } from '@motor/engine/population';
+import { slotsDisponibles } from '@motor/engine/politicas';
 // --- Motor: SOLO consultas derivadas ---
 // Los COMANDOS ya no se importan aquí: viven en `session/comandos/` y se ejecutan en el SERVIDOR, a través de
 // `apiCliente.ejecutarComando` (por nombre, ver `session/comandos/registro.ts`). Lo que queda son las
 // funciones que alimentan las consultas de solo lectura de la interfaz.
-import { evaluarViabilidadFundacion, type ViabilidadFundacion } from '../engine/settlement';
-export type { ViabilidadFundacion } from '../engine/settlement';
-import { computeTodasLasZonas, computeZonasFusionadasPorFaccion } from '../engine/zones';
-import { controladorDeChokepoint } from '../engine/chokepoints';
-import { calcularPrecioReferencia } from '../engine/market';
-import { calcularCapFundacion, calcularCupoNivel, capacidadCasas } from '../engine/faccion';
-import { computeLigas, type LigaInfo } from '../engine/liga';
-import { consumoRacionTropas } from '../engine/tropas';
+import { evaluarViabilidadFundacion, type ViabilidadFundacion } from '@motor/engine/settlement';
+export type { ViabilidadFundacion } from '@motor/engine/settlement';
+import { computeTodasLasZonas, computeZonasFusionadasPorFaccion } from '@motor/engine/zones';
+import { controladorDeChokepoint } from '@motor/engine/chokepoints';
+import { calcularPrecioReferencia } from '@motor/engine/market';
+import { calcularCapFundacion, calcularCupoNivel, capacidadCasas } from '@motor/engine/faccion';
+import { computeLigas, type LigaInfo } from '@motor/engine/liga';
+import { consumoRacionTropas } from '@motor/engine/tropas';
 import {
   estadoMejoraEdificio as estadoMejoraEdificioEngine,
   factorLineaProduccion,
   type EstadoMejoraEdificio,
-} from '../engine/construction';
-export type { EstadoMejoraEdificio } from '../engine/construction';
+} from '@motor/engine/construction';
+export type { EstadoMejoraEdificio } from '@motor/engine/construction';
 import {
   celdaMinimaDeEdificio,
   edificiosInternos,
@@ -86,14 +86,14 @@ import {
   segmentosDeRed,
   tamanoDeEdificio,
   type SegmentoTrazado,
-} from '../engine/trazado';
-import { poderEscuadron } from '../engine/combate';
+} from '@motor/engine/trazado';
+import { poderEscuadron } from '@motor/engine/combate';
 
 // --- Capa de partida: vive en el servidor, se habla por HTTP ---
-import type { GameSessionState } from '../session/gameSession';
-import type { EventoDominio } from '../domain/eventos';
-import { proyectarLog } from '../session/estado';
-import type { ParamsDe, TipoComando } from '../session/comandos/registro';
+import type { GameSessionState } from '@motor/session/gameSession';
+import type { EventoDominio } from '@motor/domain/eventos';
+import { proyectarLog } from '@motor/session/estado';
+import type { ParamsDe, TipoComando } from '@motor/session/comandos/registro';
 import { ApiError, avanzarTick as apiAvanzarTick, consultarEstado, crearOResumirPartida, ejecutarComando } from './apiCliente';
 
 export interface EventoLog {

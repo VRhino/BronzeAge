@@ -1,0 +1,16 @@
+{
+  "name": "bronze-age-cliente-debug",
+  "version": "0.0.1",
+  "description": "Cliente de navegador (depuracion/administracion) y laboratorio visual del motor. Separado del backend para poder vivir en su propio repositorio.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10"
+  }
+}

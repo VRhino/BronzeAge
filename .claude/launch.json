@@ -2,17 +2,17 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "bronze-age-dev",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
-      "port": 5173,
-      "autoPort": true
-    },
-    {
       "name": "bronze-age-server",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "server"],
       "port": 3000
+    },
+    {
+      "name": "bronze-age-cliente",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "cliente", "run", "dev"],
+      "port": 5173,
+      "autoPort": true
     }
   ]
 }

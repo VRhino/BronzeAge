@@ -5,10 +5,10 @@
 //
 // Las rutas son relativas (`/partidas/...`): en dev, `vite.config.ts` las proxya al backend (mismo origen
 // desde el navegador, sin CORS); en producción, se sirven detrás del mismo host que el estático.
-import type { RegionId } from '../domain/types';
-import type { GameSessionState } from '../session/gameSession';
-import type { ResultadoComando } from '../session/comandos/tipos';
-import type { DatosDe, ParamsDe, TipoComando } from '../session/comandos/registro';
+import type { RegionId } from '@motor/domain/types';
+import type { GameSessionState } from '@motor/session/gameSession';
+import type { ResultadoComando } from '@motor/session/comandos/tipos';
+import type { DatosDe, ParamsDe, TipoComando } from '@motor/session/comandos/registro';
 
 export interface ResumenPartida {
   gameId: string;

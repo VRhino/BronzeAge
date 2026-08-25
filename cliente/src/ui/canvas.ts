@@ -1,5 +1,5 @@
-import type { Asentamiento, BiomaTipo, CaminoComercial, CampamentoBandido, Caravana, Edificio, EdificioTipo, Faccion, Point, RecursoTipo, ZonaFaccion } from '../domain/types';
-import type { Mapa } from '../world/mapa';
+import type { Asentamiento, BiomaTipo, CaminoComercial, CampamentoBandido, Caravana, Edificio, EdificioTipo, Faccion, Point, RecursoTipo, ZonaFaccion } from '@motor/domain/types';
+import type { Mapa } from '@motor/world/mapa';
 
 export const FACCION_COLORES = ['#c0392b', '#2980b9', '#27ae60', '#8e44ad', '#d35400', '#16a085'];
 

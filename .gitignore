@@ -2,10 +2,10 @@
 node_modules/
 .pnpm-store/
 
-# Build output
-/dist/
-/build/
-/coverage/
+# Build output — sin anclar a la raíz: `cliente/` es un proyecto aparte con su propio `vite build`
+dist/
+build/
+coverage/
 
 # TypeScript
 *.tsbuildinfo

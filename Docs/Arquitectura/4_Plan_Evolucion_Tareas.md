@@ -200,10 +200,44 @@ devolver un resultado estructurado") que a este marcador — no sumar ni restar 
   - Tests: 405 → 400 (neto: -10 de las dos suites de `app/__tests__/` retiradas, +6 de `npcGobernanza.test.ts`, +9 del endpoint de comandos/`forzar`/bundling de tick en el commit anterior)
 - [ ] **Resolver el bloqueo de la cola serial por ticks largos** — un tick de ~1.9 s a 500 asentamientos son ~1.9 s sin procesar comandos de nadie (el doc 2 no lo contempla). Vías a evaluar: comandos por lotes entre ticks, partir el tick en fases cedibles, o mover el tick a un worker aparte del hilo que atiende comandos. **Decisión de LA SOLUCIÓN sigue pendiente, a propósito** (doc 7 §8.2: a la escala de arranque el tick mide ~170-300 ms, tolerable; el disparador para reconsiderar es un tick medido por encima de ~500 ms en partida real). Lo que sí se hizo en `RunnerDePartida` (2026-08-25) fue la preparación de coste cero del doc 7 §8.4: `ejecutar()`/`avanzarTick()` ya son `async` de cara a quien los llama, así que cualquiera de las tres vías se puede implementar DENTRO del runner el día que haga falta, sin cambiar su interfaz ni tocar `GameSession`
 
-## Fase C — Multijugador sobre ticks
+## Fase C — Multijugador sobre ticks (**solo servidor**)
 
-> **✅ Gate de entrada cumplido (2026-08-25): A5 llegó a 13/13.** Ver la nota en A5, arriba. Fase C ya puede
-> empezar.
+> **✅ Gate de entrada cumplido (2026-08-25): A5 llegó a 13/13.** Ver la nota en A5, arriba.
+>
+> **✅ Gate ampliado el mismo día**: los eventos de COMANDO (30 llamadas a `eventoLegado` + `engine/combate.ts`,
+> `engine/fusion.ts`, `rebelionVasallo`) también se migraron a `codigo`/`payload`. A5 había cerrado el lado del
+> TICK, pero Fase C construye autorización y proyecciones **sobre los comandos** — y los eventos de combate,
+> los más sensibles a visibilidad, seguían siendo texto libre. Ver el bloque "Eventos de comando" más abajo.
+
+### Replanteo por separación de repositorios (2026-08-25)
+
+Este repositorio pasa a ser **solo servidor**. El cliente de jugador vive en otro repositorio y el de
+administración ya existe fuera. Lo que cambia respecto al plan original de Fase C:
+
+- **Sale de alcance** "construir frontend de jugador".
+- **La API pasa a ser el producto**: dos consumidores externos, en repos que no comparten build ni tipos con
+  este. Cada forma que sale por el cable es un contrato caro de coordinar.
+- **Las proyecciones dejan de ser refinamiento y pasan a ser frontera de seguridad**: hoy
+  `GET /partidas/:gameId` devuelve el estado completo (~2,4 MB, todas las facciones, log global). Con un
+  cliente de jugador externo, todo lo que el servidor mande el jugador lo tiene, lo pinte o no su interfaz.
+- **Entra lo que no estaba**: CORS (hoy lo evita el proxy de Vite del cliente), versionado de la API,
+  publicación del contrato como OpenAPI, y una respuesta de comando autosuficiente (el patrón actual
+  "comando → `GET` del estado entero" no sobrevive a las proyecciones).
+
+**Orden**: C1 → C2 → C3 son secuenciales. C4 se puede *diseñar* en paralelo y conviene hacerlo pronto: es lo
+que los otros repos necesitan saber para avanzar. Prioridad de superficie: **administración primero** (su
+cliente ya existe y no necesita proyecciones, así que valida C1–C3 sin esperar a C4).
+
+### C0. Extracción del cliente — ✅ completada 2026-08-25
+
+- [x] `index.html`, `laboratorio.html`, `src/main.ts`, `src/app/`, `src/ui/`, `src/lab/` y `vite.config.ts` movidos a `cliente/` con `git mv` (historial conservado), con `package.json`/`tsconfig.json`/`vite.config.ts` propios y `README.md`
+- [x] **La costura queda en un solo sitio**: `cliente/src/app/gameStore.ts` (25 imports) y `cliente/src/lab/` (13) necesitan el motor para calcular consultas derivadas en el navegador. Todos pasan por el alias `@motor/*`, declarado en `vite.config.ts` (`resolve.alias`) y `tsconfig.json` (`paths`), hoy apuntando a `../src`. Al sacar la carpeta a su repo se repunta ESE alias — tres opciones documentadas en `cliente/README.md`. La salida de fondo es C4: según el servidor exponga los DTOs, el cliente suelta imports de `@motor/*` (doc 8 ya triaba 5 de esas consultas como proyecciones de Fase C)
+- [x] Backend adelgazado: fuera Vite de `package.json`, fuera `DOM` de `tsconfig.lib`, `scripts` reducidos a `server`/`typecheck`/`test`
+- [x] `arquitectura.test.ts`: capas `app`/`ui`/`main`/`lab` retiradas del contrato (ya no existen aquí) y lectura del árbol pasada de `import.meta.glob` (Vite) a `node:fs` — su comentario justificaba el glob con "proyecto 100% navegador/Vite, sin `@types/node`", premisa que dejó de ser cierta
+- [x] Corregido de paso un fallo latente: `vite build` fallaba por el `await` de nivel de módulo de `main.ts` (Vite no heredaba el `target: ES2022` del tsconfig). `vite dev` funcionaba, así que nadie lo había visto
+- [x] Verificado en vivo: backend y cliente arrancados desde sus nuevas ubicaciones, partida persistida retomada, log correcto, 444/444 tests y `tsc` limpio en ambos proyectos
+
+### Tareas
 
 - [ ] Implementar `Usuario`, `Sesion`, `Membresia` según el diseño de A6
 - [ ] Implementar chequeo de autorización antes de aplicar cada comando (rol + facción + asentamiento + cargo)
@@ -213,7 +247,11 @@ devolver un resultado estructurado") que a este marcador — no sumar ni restar 
 - [ ] Diseñar y construir DTOs/proyecciones por audiencia: jugador, facción, admin, observador
 - [ ] **Diseñar `ConocimientoJugador`** (entidad de dominio nueva, hoy inexistente): qué sabe cada jugador, desde cuándo y hasta cuándo es válido. Fuentes de visibilidad: espacial (zona de influencia + valor de visualización), contacto (trueque, mientras siga vivo) y alianza
 - [ ] **Implementar la proyección "último conocido"** — **decidido 2026-08-24**: un jugador ve el estado que la entidad ajena tenía en el momento del contacto, NO el actual (patrón de niebla de guerra de RTS). Evita filtrar telemetría en vivo de rivales y reduce el tráfico a cero para lo ajeno. Cada dato congelado va marcado con el momento en que se supo, para que el frontend pueda mostrar "última información conocida: hace X"
-- [ ] Construir frontend de jugador (acciones y datos restringidos a su proyección)
+- [x] ~~Construir frontend de jugador (acciones y datos restringidos a su proyección)~~ — **fuera de alcance de este repositorio** desde el replanteo de 2026-08-25: el cliente de jugador vive en otro repositorio. Lo que sí es responsabilidad de aquí es que su proyección exista y esté documentada (tareas de proyecciones y de contrato)
+- [ ] **CORS** para los clientes externos: hoy no hace falta porque el proxy de Vite de `cliente/` hace que `fetch('/partidas/...')` sea same-origin. Servidos desde otro origen, ambos clientes lo necesitan — con lista de orígenes permitidos, no comodín
+- [ ] **Publicar el contrato como OpenAPI** generado desde los esquemas JSON Schema que Fastify ya usa para validar, para que los repos de cliente generen su cliente tipado sin acoplarse a este ni a TypeScript
+- [ ] **Versionado de la API** (`/v1/...` o cabecera): con consumidores en repos ajenos, romper una forma deja de ser un commit y pasa a ser una coordinación
+- [ ] **Respuesta de comando autosuficiente**: hoy el cliente hace comando + `GET` del estado completo (2 viajes y ~2,4 MB). Con proyecciones eso no se sostiene — la respuesta debe traer lo que cambió, ya proyectado para quien pregunta
 - [ ] Migrar balance de módulo global mutable a configuración versionada por partida/temporada, con auditoría de cambios (actor, fecha, versión anterior/nueva)
 - [ ] Separar rutas/endpoints de administración de las de jugador, protegidas por rol técnico
 
