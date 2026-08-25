@@ -101,16 +101,17 @@ el mapa de asentamiento es una espacio logico que se genera tomando en cuenta el
         + [RESUELTO][ZONA/interfaz] hay que cambiar la manera en que se crean los bosques de cicurlos overlaped a poligonos complejos para mostrar varios puntos que se overlapan como un solo poligono — `Mapa.contornosBosques()` devuelve la union de los 170 discos como ~25 siluetas (cacheada por mundo generado, ~16 ms una sola vez). Los arboles se siguen sembrando bosque a bosque y pasan a ser la unica señal de densidad de madera.
         + Los dos salen de la misma pieza nueva, `world/poligonos.ts` (`unirFormas`): union por campo de distancia con signo + marching squares, sin dependencias. Los claros encerrados por una corona (de bosque o de asentamientos) salen como lazos de orientacion opuesta y el canvas los recorta solo con la regla de relleno `nonzero`.
 + Feature nuevas
+    + [MOTOR] mecanicas de taxes en los asentamientos, que es la generacion de oro en base a la poblacion y tipo de poblacion que vive en el asentamiento
     + [GUERRA] Los ejércitos también se mueven por el mapa para atacar como las caravanas, con un símbolo q los identifique por ejemplo un rombo, uno por cada jugador q va en el ejército, uno detrás de otro medio superpuestos y cada rombo del color de su faccion.
     + [RUTAS]el pathfinder de las rutas para las caravanas debe buscar evitar bosques(rodearlos) o rios(no los puede atravesar) y montañas
     + [POLITICAS]politicas de ubicacion de construccion.
     + [TRUEQUE]trueque compuesto de varios materiales
     + [REGISTRO-MOTOR]cuando motor de un mensaje de fondos insufiecientes para reealiza cualquier accion, q muestre lo que falta
 ---------------------
-correciones:
++ correciones:
     + [ASENTAMIENTO]la opcion de reorganiza la cola no funciona correctamente probarlo en profudidad
-
-
+--------
++ anotaciones: una vez migrado todo a un back, limpiar para dejar solo la funcinalidad de backend, toda la estructura previsa q en backend reemplaza eliminarla y dejar solo lo q realmente se va usar, nada de codigo viejo que no se va a utilizar solo por guardar legacy
 
 
 

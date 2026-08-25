@@ -36,7 +36,9 @@ async function peticion<T>(url: string, opciones?: RequestInit): Promise<T> {
   try {
     res = await fetch(url, {
       ...opciones,
-      headers: { 'content-type': 'application/json', ...(opciones?.headers ?? {}) },
+      // Solo con body: Fastify rechaza con 400 un `content-type: application/json` sobre un cuerpo vacío
+      // (POST /tick no manda body) — el header solo tiene sentido cuando de verdad hay JSON que parsear.
+      headers: opciones?.body ? { 'content-type': 'application/json', ...(opciones?.headers ?? {}) } : opciones?.headers,
     });
   } catch {
     throw new ApiError(0, 'No se pudo contactar con el servidor. ¿Está corriendo `npm run server`?');

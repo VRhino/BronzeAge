@@ -3,8 +3,8 @@
 // (dibujo/color, puramente presentacional). Nunca importa nada de `./engine/*` ni captura errores
 // de dominio: eso es responsabilidad exclusiva de `gameStore`. Los tipos de `./domain/types` se
 // importan solo como `type` para tipar lo que se lee — no acoplan a ninguna lógica.
-import type { Asentamiento, BiomaTipo, CargoTipo, Edificio, EdificioTipo, Faccion, RecursoTipo, RegionId } from './domain/types';
-import { CATALOGOS, gameStore, UNITY_EXPORT_DEFAULT, type GameState, type CampoBalance, type EstadoMejoraEdificio } from './app/gameStore';
+import type { Asentamiento, BiomaTipo, CargoTipo, Edificio, EdificioTipo, Faccion, RecursoTipo } from './domain/types';
+import { CATALOGOS, crearGameStore, UNITY_EXPORT_DEFAULT, type GameState, type GameStore, type EstadoMejoraEdificio } from './app/gameStore';
 import { draw, drawAsentamiento, drawFiltroFertilidad, drawPreviewFundacion, drawTerreno, faccionColor, BIOMA_COLOR, BIOMA_COLOR_SIMPLE, RECURSO_COLOR, RECURSOS_EN_MAPA, EDIFICIO_COLOR, FACCION_COLORES, type DrawState } from './ui/canvas';
 
 // Subido de 800 a 900 junto con el mapa 2000x2000 (Fase 0.1): el mundo más grande necesitaba algo más de
@@ -34,16 +34,6 @@ const RECURSO_NOMBRE: Record<string, string> = {
   armaduraBronce: 'Armadura de Bronce',
 };
 
-/** Regiones geográficas disponibles (Fase 0.2, ver `worldgen/regiones.ts`) — nombre para el selector del
- * mundo. Mantenido a mano, igual que `BIOMA_NOMBRE`/`EDIFICIO_NOMBRE`: es presentación pura, no se deriva de
- * `worldgen/` (este archivo no puede importar de ahí, ver la nota de frontera arriba). */
-const REGION_NOMBRE: Record<RegionId, string> = {
-  greciaContinental: 'Grecia continental',
-  anatolia: 'Anatolia',
-  egeo: 'Egeo (archipiélago)',
-  nilo: 'Nilo',
-  mesopotamia: 'Mesopotamia',
-};
 
 /** Biomas (Fase 0.1) en orden de elevación creciente — así la leyenda se lee como una escala de altura.
  * Usado con el toggle "Detalle de biomas" activado (`mostrarDetalleBiomas`, ver `BIOMA_COLOR`). */
@@ -168,7 +158,7 @@ function efectoPolitica(politica: (typeof CATALOGOS.politicas)[number]): string 
 }
 
 // --- Estado de vista (qué se muestra, no simulación): vive solo aquí, nunca en el store. ---
-let tabActivo: 'acciones' | 'guerra' | 'comercio' | 'asentamientos' | 'facciones' | 'jugadores' | 'politicas' | 'balance' | 'registros' | 'generacionMundo' = 'acciones';
+let tabActivo: 'acciones' | 'guerra' | 'comercio' | 'asentamientos' | 'facciones' | 'jugadores' | 'politicas' | 'registros' | 'generacionMundo' = 'acciones';
 let comercioDetalleTab: 'acciones' | 'info' = 'acciones';
 let asentamientoSeleccionadoId: string | null = null;
 let asentamientoDetalleTab: 'general' | 'edificios' | 'produccion' | 'militar' = 'general';
@@ -182,9 +172,6 @@ let jugadoresFaccionFiltroId: string | null = null;
 /** Selector de escuadrones propios en Combate (a petición del usuario): chips en vez de ids escritos a mano
  * — se limpia solo al cambiar de Facción/Asentamiento o si un escuadrón deja de existir (ver `actualizarCombateEscuadrones`). */
 const combateEscuadronesSeleccionados = new Set<string>();
-/** Tick que el slider de línea de tiempo está mostrando. Sigue al tick en vivo salvo que el usuario arrastre hacia atrás. */
-let viewedTick = 0;
-let ultimoTickEnVivo = 0;
 let mostrarFiltroFertilidad = false;
 /** Vista del canvas principal (a petición del usuario): 'mundo' = mapa general de siempre; 'asentamiento' =
  * espacio plano local del asentamiento seleccionado (`asentamientoSeleccionadoId`), donde se ve con detalle la
@@ -200,9 +187,6 @@ let legendTabActivo: 'mundo' | 'facciones' = 'mundo';
  * offscreen y se reusa mientras no cambien seed/tamaño/detalle de biomas — es un artefacto de render, no
  * dato de juego. */
 let terrenoCache: { key: string; canvas: HTMLCanvasElement } | null = null;
-/** Grupos de la pestaña "Valores de simulación" que el usuario dejó expandidos (persiste solo en esta vista). */
-const balanceGruposAbiertos = new Set<string>();
-let balanceFiltro = '';
 
 const app = document.getElementById('app')!;
 app.innerHTML = `
@@ -210,11 +194,7 @@ app.innerHTML = `
     <div class="admin-titlebar">
       <h1>Bronze Age Collapse — Fase 0</h1>
       <div class="admin-title-actions" aria-label="Controles de simulación">
-        <span id="tick-slider-label">Tick: 0</span>
-        <input type="range" id="tick-slider" min="0" max="0" value="0" step="1" disabled />
-        <button type="button" id="volver-presente-btn" hidden>Volver al presente</button>
         <button type="button" id="exportar-btn">Exportar</button>
-        <button type="button" id="importar-btn">Importar</button>
         <button type="button" id="tick-btn">Avanzar tick</button>
       </div>
     </div>
@@ -226,7 +206,6 @@ app.innerHTML = `
       <button class="tab-btn" data-tab="facciones">Facción</button>
       <button class="tab-btn" data-tab="jugadores">Jugadores</button>
       <button class="tab-btn" data-tab="politicas">Políticas</button>
-      <button class="tab-btn" data-tab="balance">Valores de simulación</button>
       <button class="tab-btn" data-tab="registros">Registros</button>
       <button class="tab-btn" data-tab="generacionMundo">Generación de mundo</button>
     </div>
@@ -431,37 +410,10 @@ app.innerHTML = `
       <div id="politicas-tab" class="controls-grid"></div>
     </div>
 
-    <div class="tab-panel" id="tab-balance" hidden>
-      <div class="section-title-row">
-        <div class="section-title">Valores de simulación</div>
-        <button type="button" id="restaurar-balance-btn">Restaurar valores de fábrica</button>
-      </div>
-      <p class="legend-note">Placeholders de balance (Doc — ver Consideraciones/Preguntas_Abiertas.md). Se editan en caliente: afectan de inmediato a la próxima acción o tick. Los parámetros de generación del mundo (tamaño, nodos, bosques, fertilidad) no están aquí a propósito: son fijos por diseño para que una seed dé siempre el mismo mapa — ver <code>src/worldgen/config.ts</code>.</p>
-      <div class="balance-toolbar">
-        <input type="search" id="balance-search" placeholder="Buscar campo o grupo…" />
-        <span class="balance-count" id="balance-count"></span>
-      </div>
-      <div id="balance-tab" class="balance-groups"></div>
-    </div>
-
     <div class="tab-panel" id="tab-generacionMundo" hidden>
       <div class="section-title registros-heading">Generación de mundo</div>
-      <p class="legend-note registros-intro">Regenera el mapa procedural y exporta su terreno para utilizarlo fuera de la simulación.</p>
+      <p class="legend-note registros-intro">Exporta el terreno del mundo actual para utilizarlo fuera de la simulación. Crear o reiniciar el mundo es una operación de administración — ver <code>admin.html</code>, no este panel.</p>
       <div class="controls-grid world-generation-grid">
-        <div class="controls">
-          <h2>Regenerar mundo</h2>
-          <p class="legend-note">Configura la seed y la región antes de crear un mundo nuevo.</p>
-          <label>Seed del mundo <input id="seed-input" type="number" value="1" /></label>
-          <label>Región geográfica (Fase 0.2)
-            <select id="region-select">
-              <option value="">Libre (procedural, sin sesgo)</option>
-              ${Object.entries(REGION_NOMBRE)
-                .map(([id, nombre]) => `<option value="${id}">${nombre}</option>`)
-                .join('')}
-            </select>
-          </label>
-          <button type="button" id="regenerar-btn">Regenerar mundo</button>
-        </div>
         <div class="controls">
           <h2>Exportar mapa</h2>
           <p class="legend-note">Genera el terreno para Unity con la altura máxima indicada.</p>
@@ -472,7 +424,6 @@ app.innerHTML = `
           <button type="button" id="exportar-unity-btn">Exportar mapa (Unity Terrain)</button>
         </div>
       </div>
-      <input type="file" id="importar-input" accept="application/json,.json" hidden />
     </div>
 
     <div class="tab-panel" id="tab-registros" hidden>
@@ -540,14 +491,8 @@ const logEl = document.getElementById('log')!;
 const asentamientosPanelEl = document.getElementById('asentamientos-panel')!;
 const politicaPanelEl = document.getElementById('politica-panel')!;
 const economiaPanelEl = document.getElementById('economia-panel')!;
-const tickSliderEl = document.getElementById('tick-slider') as HTMLInputElement;
-const tickSliderLabelEl = document.getElementById('tick-slider-label')!;
-const volverPresenteBtn = document.getElementById('volver-presente-btn') as HTMLButtonElement;
-const controlsPanelEl = document.querySelector('.controls-panel')!;
 const faccionSelect = document.getElementById('faccion-select') as HTMLSelectElement;
 const faccionCrearNombreInput = document.getElementById('faccion-crear-nombre') as HTMLInputElement;
-const seedInput = document.getElementById('seed-input') as HTMLInputElement;
-const regionSelect = document.getElementById('region-select') as HTMLSelectElement;
 const jugadoresInput = document.getElementById('jugadores-input') as HTMLInputElement;
 
 const fundacionViabilidadEl = document.getElementById('fundacion-viabilidad')!;
@@ -617,6 +562,27 @@ const militarPanelEl = document.getElementById('militar-panel')!;
 const flotaAsentamientoSelect = document.getElementById('flota-asentamiento') as HTMLSelectElement;
 const flotaInfoEl = document.getElementById('flota-info')!;
 const progresionPanelEl = document.getElementById('progresion-panel')!;
+
+// Docs/Arquitectura/4_Plan_Evolucion_Tareas.md, Fase B3 — migración de `main.ts`: el cliente de jugador ya no
+// posee una `GameSession` en memoria del navegador, se conecta al backend real (`npm run server`). El shell
+// estático de arriba (estructura de pestañas, refs de elementos) no depende de esto y ya está en el DOM; lo
+// único que espera es la conexión inicial, con `await` de nivel de módulo (soportado por el target ES2022 de
+// este proyecto) en vez de envolver el resto del archivo en una función — el resto del archivo sigue leyendo
+// `gameStore` tal cual, sin reindentar miles de líneas.
+//
+// `crearGameStore` crea la partida si todavía no existe para este `gameId` (arranque limpio, cómodo para
+// desarrollo) o se conecta a la que ya haya — ninguna de las dos es destructiva. Lo que SÍ es administración
+// (`admin.html`, no este cliente) es DESCARTAR una partida en curso y empezar de cero — `regenerarMundo` no
+// existe en este archivo a propósito.
+logEl.textContent = 'Conectando con el servidor...';
+let gameStore: GameStore;
+try {
+  gameStore = await crearGameStore();
+} catch (err) {
+  logEl.textContent =
+    err instanceof Error ? `No se pudo conectar con el servidor: ${err.message}` : 'No se pudo conectar con el servidor.';
+  throw err;
+}
 
 cargoTipoSelect.innerHTML = CATALOGOS.cargos.map((c) => `<option value="${c}">${c}</option>`).join('');
 politicaCargoSelect.innerHTML = CATALOGOS.cargos.map((c) => `<option value="${c}">${c}</option>`).join('');
@@ -1605,8 +1571,8 @@ function renderAsentamientosTab(state: GameState): void {
 
   const renombrarBtn = document.getElementById('renombrar-asentamiento-btn') as HTMLButtonElement | null;
   const renombrarInput = document.getElementById('renombrar-asentamiento-input') as HTMLInputElement | null;
-  renombrarBtn?.addEventListener('click', () => {
-    gameStore.renombrarAsentamiento(renombrarBtn.dataset.settlement!, renombrarInput!.value);
+  renombrarBtn?.addEventListener('click', async () => {
+    await gameStore.renombrarAsentamiento(renombrarBtn.dataset.settlement!, renombrarInput!.value);
   });
   renombrarInput?.addEventListener('keydown', (ev) => {
     if ((ev as KeyboardEvent).key === 'Enter') renombrarBtn?.click();
@@ -1619,17 +1585,17 @@ function renderAsentamientosTab(state: GameState): void {
       const valorEl = cont.querySelector(`[data-recurso-valor="${input.dataset.recurso}"]`);
       if (valorEl) valorEl.textContent = input.value;
     });
-    input.addEventListener('change', () => {
-      gameStore.calibrarReservaManual(input.dataset.settlement!, input.dataset.recurso as RecursoTipo, Number(input.value));
+    input.addEventListener('change', async () => {
+      await gameStore.calibrarReservaManual(input.dataset.settlement!, input.dataset.recurso as RecursoTipo, Number(input.value));
     });
   });
 
   cont.querySelectorAll('.auto-construccion-toggle-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const id = (btn as HTMLElement).dataset.settlement!;
       const asentamiento = state.asentamientos.find((a) => a.id === id)!;
-      if (asentamiento.autoConstruccionPausada) gameStore.reanudarAutoConstruccion(id);
-      else gameStore.pausarAutoConstruccion(id);
+      if (asentamiento.autoConstruccionPausada) await gameStore.reanudarAutoConstruccion(id);
+      else await gameStore.pausarAutoConstruccion(id);
     });
   });
 
@@ -1639,36 +1605,36 @@ function renderAsentamientosTab(state: GameState): void {
   const cargoSeleccionado = (): 'gobernador' | 'maestroObras' => (colaCargoSelect?.value as 'gobernador' | 'maestroObras') ?? 'gobernador';
 
   cont.querySelectorAll('.cola-mover-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const el = btn as HTMLButtonElement;
-      gameStore.moverEnCola(el.dataset.settlement!, cargoSeleccionado(), el.dataset.edificio!, el.dataset.direccion as 'arriba' | 'abajo');
+      await gameStore.moverEnCola(el.dataset.settlement!, cargoSeleccionado(), el.dataset.edificio!, el.dataset.direccion as 'arriba' | 'abajo');
     });
   });
 
   cont.querySelectorAll('.cola-quitar-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const el = btn as HTMLButtonElement;
-      gameStore.quitarDeCola(el.dataset.settlement!, cargoSeleccionado(), el.dataset.edificio!);
+      await gameStore.quitarDeCola(el.dataset.settlement!, cargoSeleccionado(), el.dataset.edificio!);
     });
   });
 
   cont.querySelectorAll('.mejora-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const el = btn as HTMLButtonElement;
-      gameStore.mejorarEdificioAhora(el.dataset.settlement!, cargoSeleccionado(), el.dataset.edificio!);
+      await gameStore.mejorarEdificioAhora(el.dataset.settlement!, cargoSeleccionado(), el.dataset.edificio!);
     });
   });
 
   const colaAddBtn = document.getElementById('cola-add-btn') as HTMLButtonElement | null;
   const colaTipoSelect = document.getElementById('cola-tipo-select') as HTMLSelectElement | null;
-  colaAddBtn?.addEventListener('click', () => {
-    gameStore.anadirEdificioManualmente(colaAddBtn.dataset.settlement!, cargoSeleccionado(), colaTipoSelect!.value as EdificioTipo);
+  colaAddBtn?.addEventListener('click', async () => {
+    await gameStore.anadirEdificioManualmente(colaAddBtn.dataset.settlement!, cargoSeleccionado(), colaTipoSelect!.value as EdificioTipo);
   });
   colaTipoSelect?.addEventListener('change', actualizarInfoEdificioCola);
   actualizarInfoEdificioCola();
 }
 
-function renderDetalleFaccion(faccion: Faccion, state: GameState, viendoPasado: boolean): string {
+function renderDetalleFaccion(faccion: Faccion, state: GameState): string {
   const nivelFaccion = gameStore.nivelFaccionInfo(faccion);
   const cupo = gameStore.cupoAsentamientosFaccion(faccion);
   const cap = gameStore.capFundacion(faccion.nivel);
@@ -1730,14 +1696,13 @@ function renderDetalleFaccion(faccion: Faccion, state: GameState, viendoPasado: 
     ? `<div class="chip-row">${titulosDeLaFaccion.map((t) => `<span class="chip">${t.nombre}</span>`).join('')}</div>`
     : '<p class="legend-note">Sin títulos.</p>';
 
-  // Ceder la Facción al NPC de gobernanza (`session/npcGobernanza.ts`). Se lee de la foto que se esté viendo
-  // (`state`), pero solo se puede cambiar en el presente: sobre el pasado no hay nada que ceder.
+  // Ceder la Facción al NPC de gobernanza (`session/npcGobernanza.ts`).
   const esNpc = state.faccionesNpcIds.includes(faccion.id);
   const controlHtml = `
       <div class="detail-section">
         <h3>Control</h3>
         <label class="npc-toggle">
-          <input type="checkbox" id="faccion-npc-toggle" data-faccion="${faccion.id}" ${esNpc ? 'checked' : ''} ${viendoPasado ? 'disabled' : ''} />
+          <input type="checkbox" id="faccion-npc-toggle" data-faccion="${faccion.id}" ${esNpc ? 'checked' : ''} />
           Controlada por NPC (juega sola)
         </label>
         <p class="legend-note">
@@ -1800,7 +1765,7 @@ function renderDetalleFaccion(faccion: Faccion, state: GameState, viendoPasado: 
   `;
 }
 
-function renderFaccionesTab(state: GameState, viendoPasado: boolean): void {
+function renderFaccionesTab(state: GameState): void {
   const cont = document.getElementById('facciones-tab')!;
 
   if (state.facciones.length === 0) {
@@ -1822,7 +1787,7 @@ function renderFaccionesTab(state: GameState, viendoPasado: boolean): void {
     )
     .join('');
   const seleccionada = state.facciones.find((f) => f.id === faccionSeleccionadaId)!;
-  cont.innerHTML = `<div class="settlement-tab-row">${botones}</div>${renderDetalleFaccion(seleccionada, state, viendoPasado)}`;
+  cont.innerHTML = `<div class="settlement-tab-row">${botones}</div>${renderDetalleFaccion(seleccionada, state)}`;
 
   cont.querySelectorAll('.settlement-tab-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -1832,8 +1797,8 @@ function renderFaccionesTab(state: GameState, viendoPasado: boolean): void {
   });
 
   const npcToggle = cont.querySelector('#faccion-npc-toggle') as HTMLInputElement | null;
-  npcToggle?.addEventListener('change', () => {
-    gameStore.alternarFaccionNpc(npcToggle.dataset.faccion!, npcToggle.checked);
+  npcToggle?.addEventListener('change', async () => {
+    await gameStore.alternarFaccionNpc(npcToggle.dataset.faccion!, npcToggle.checked);
   });
 }
 
@@ -2009,105 +1974,6 @@ function renderPoliticasTab(): void {
 
   cont.innerHTML = notaGobernador + tarjetasPolitica;
 }
-
-/** Agrupa los campos de balance tal como los expone el store, preservando su orden de aparición. */
-function agruparPorGrupo(campos: CampoBalance[]): Map<string, CampoBalance[]> {
-  const grupos = new Map<string, CampoBalance[]>();
-  for (const campo of campos) {
-    const lista = grupos.get(campo.grupo) ?? [];
-    lista.push(campo);
-    grupos.set(campo.grupo, lista);
-  }
-  return grupos;
-}
-
-function renderBalanceTab(): void {
-  const cont = document.getElementById('balance-tab')!;
-  const countEl = document.getElementById('balance-count')!;
-  const todosLosCampos = gameStore.getBalance();
-  const filtro = balanceFiltro.trim().toLowerCase();
-  const grupos = agruparPorGrupo(todosLosCampos);
-
-  let camposCoincidentes = 0;
-  const gruposHtml = Array.from(grupos.entries())
-    .map(([grupo, campos]) => {
-      const camposFiltrados = filtro
-        ? campos.filter((c) => c.etiqueta.toLowerCase().includes(filtro) || grupo.toLowerCase().includes(filtro))
-        : campos;
-      if (camposFiltrados.length === 0) return '';
-      camposCoincidentes += camposFiltrados.length;
-
-      const modificados = campos.filter((c) => c.valor !== c.defecto).length;
-      const abierto = filtro !== '' || balanceGruposAbiertos.has(grupo);
-
-      const camposHtml = camposFiltrados
-        .map((c) => {
-          const modificado = c.valor !== c.defecto;
-          return `<div class="balance-field${modificado ? ' is-modified' : ''}">
-            <label>
-              <span class="balance-field-label">${c.etiqueta}</span>
-              <span class="balance-field-row">
-                <input type="number" step="any" data-path="${c.path}" value="${c.valor}" title="Valor de fábrica: ${c.defecto}" />
-                ${modificado ? `<button type="button" class="balance-field-reset" data-reset-path="${c.path}" data-default="${c.defecto}" title="Restaurar a ${c.defecto}">↺</button>` : ''}
-              </span>
-            </label>
-          </div>`;
-        })
-        .join('');
-
-      return `<details class="balance-group" data-grupo="${grupo}"${abierto ? ' open' : ''}>
-        <summary>
-          <span class="grupo-nombre">${grupo}</span>
-          <span class="badge">${campos.length}</span>
-          ${modificados ? `<span class="badge badge-modified">${modificados} modificado${modificados > 1 ? 's' : ''}</span>` : ''}
-        </summary>
-        <div class="balance-fields">${camposHtml}</div>
-      </details>`;
-    })
-    .join('');
-
-  cont.innerHTML = gruposHtml || '<p class="legend-note">Sin coincidencias para el filtro actual.</p>';
-  countEl.textContent = filtro
-    ? `${camposCoincidentes} de ${todosLosCampos.length} campos coinciden`
-    : `${todosLosCampos.length} campos en ${grupos.size} grupos`;
-
-  cont.querySelectorAll<HTMLDetailsElement>('.balance-group').forEach((el) => {
-    el.addEventListener('toggle', () => {
-      const grupo = el.dataset.grupo!;
-      if (el.open) balanceGruposAbiertos.add(grupo);
-      else balanceGruposAbiertos.delete(grupo);
-    });
-  });
-}
-
-document.getElementById('balance-tab')!.addEventListener('change', (ev) => {
-  const input = ev.target as HTMLInputElement;
-  const path = input.dataset.path;
-  if (!path) return;
-  gameStore.actualizarBalance(path, Number(input.value));
-  renderBalanceTab();
-});
-
-document.getElementById('balance-tab')!.addEventListener('click', (ev) => {
-  const btn = (ev.target as HTMLElement).closest('.balance-field-reset') as HTMLButtonElement | null;
-  if (!btn) return;
-  const path = btn.dataset.resetPath;
-  const defecto = btn.dataset.default;
-  if (!path || defecto === undefined) return;
-  gameStore.actualizarBalance(path, Number(defecto));
-  renderBalanceTab();
-});
-
-const balanceSearchInput = document.getElementById('balance-search') as HTMLInputElement;
-balanceSearchInput.addEventListener('input', () => {
-  balanceFiltro = balanceSearchInput.value;
-  renderBalanceTab();
-});
-
-document.getElementById('restaurar-balance-btn')!.addEventListener('click', () => {
-  gameStore.restaurarBalance();
-  renderBalanceTab();
-});
 
 function renderPanelPolitica(state: GameState): void {
   const facH = state.facciones
@@ -2339,17 +2205,15 @@ function actualizarTabs(): void {
   document.getElementById('tab-facciones')!.hidden = tabActivo !== 'facciones';
   document.getElementById('tab-jugadores')!.hidden = tabActivo !== 'jugadores';
   document.getElementById('tab-politicas')!.hidden = tabActivo !== 'politicas';
-  document.getElementById('tab-balance')!.hidden = tabActivo !== 'balance';
   document.getElementById('tab-registros')!.hidden = tabActivo !== 'registros';
   document.getElementById('tab-generacionMundo')!.hidden = tabActivo !== 'generacionMundo';
-  if (tabActivo === 'balance') renderBalanceTab();
   if (tabActivo === 'politicas') renderPoliticasTab();
 }
 
 document.getElementById('main-tabs')!.addEventListener('click', (ev) => {
   const btn = (ev.target as HTMLElement).closest('.tab-btn') as HTMLButtonElement | null;
   if (!btn) return;
-  tabActivo = btn.dataset.tab as 'acciones' | 'guerra' | 'comercio' | 'asentamientos' | 'facciones' | 'jugadores' | 'politicas' | 'balance' | 'registros' | 'generacionMundo';
+  tabActivo = btn.dataset.tab as 'acciones' | 'guerra' | 'comercio' | 'asentamientos' | 'facciones' | 'jugadores' | 'politicas' | 'registros' | 'generacionMundo';
   actualizarTabs();
 });
 
@@ -2457,26 +2321,7 @@ function terrenoCacheParaFrame(mapa: DrawState['mapa']): HTMLCanvasElement {
 }
 
 function render(): void {
-  const liveState = gameStore.getState();
-
-  // El tick en vivo solo puede avanzar mientras se está viendo el presente (las acciones se
-  // deshabilitan en el pasado, ver más abajo), así que si cambió, el slider lo sigue automáticamente.
-  if (liveState.tick !== ultimoTickEnVivo) {
-    ultimoTickEnVivo = liveState.tick;
-    viewedTick = liveState.tick;
-  }
-
-  const viendoPasado = viewedTick !== liveState.tick;
-  const state = viendoPasado ? (gameStore.getSnapshot(viewedTick) ?? liveState) : liveState;
-
-  const rangoTicks = gameStore.getTickRange();
-  tickSliderEl.min = String(rangoTicks.min);
-  tickSliderEl.max = String(rangoTicks.max);
-  tickSliderEl.value = String(viewedTick);
-  tickSliderEl.disabled = rangoTicks.min === rangoTicks.max;
-  tickSliderLabelEl.textContent = viendoPasado ? `Viendo tick ${viewedTick} de ${liveState.tick}` : `Tick: ${liveState.tick}`;
-  volverPresenteBtn.hidden = !viendoPasado;
-  controlsPanelEl.classList.toggle('viendo-pasado', viendoPasado);
+  const state = gameStore.getState();
 
   actualizarControlesVista(state);
   // Si el asentamiento en vista ya no existe (p. ej. cayó en ruinas o se importó otra partida), se vuelve al mapa general.
@@ -2506,14 +2351,14 @@ function render(): void {
     };
     draw(ctx, canvas, drawState, terrenoCacheParaFrame(drawState.mapa));
     if (mostrarFiltroFertilidad) drawFiltroFertilidad(ctx, canvas, gameStore.getMapa(state));
-    renderViabilidadFundacion(viendoPasado);
+    renderViabilidadFundacion();
   }
-  actualizarSelects(liveState);
-  actualizarInfoTruequeAsentamientos(liveState);
+  actualizarSelects(state);
+  actualizarInfoTruequeAsentamientos(state);
   actualizarInfoFlota(state);
   renderPanelAsentamientos(state);
   renderAsentamientosTab(state);
-  renderFaccionesTab(state, viendoPasado);
+  renderFaccionesTab(state);
   renderJugadoresTab(state);
   renderPanelPolitica(state);
   renderPanelProgresion(state);
@@ -2533,11 +2378,9 @@ const RECURSO_NOMBRE_CORTO: Record<string, string> = {
  * alcance el asentamiento casi siempre acaba en ruinas, y es con diferencia el mejor predictor de si llegará
  * a construir Leñera/Barracón y, con ello, a tener tropa.
  */
-function renderViabilidadFundacion(viendoPasado: boolean): void {
-  if (!hoverFundacion || viendoPasado) {
-    fundacionViabilidadEl.textContent = viendoPasado
-      ? 'Vuelve al presente para evaluar emplazamientos.'
-      : 'Pasa el cursor por el mapa para evaluar un emplazamiento.';
+function renderViabilidadFundacion(): void {
+  if (!hoverFundacion) {
+    fundacionViabilidadEl.textContent = 'Pasa el cursor por el mapa para evaluar un emplazamiento.';
     fundacionViabilidadEl.className = 'fundacion-viabilidad';
     return;
   }
@@ -2574,16 +2417,6 @@ function renderViabilidadFundacion(viendoPasado: boolean): void {
 // vuelve a llamar `render()` manualmente tras una acción — eso sería recrear el acoplamiento.
 gameStore.subscribe(render);
 
-tickSliderEl.addEventListener('input', () => {
-  viewedTick = Number(tickSliderEl.value);
-  render();
-});
-
-volverPresenteBtn.addEventListener('click', () => {
-  viewedTick = gameStore.getState().tick;
-  render();
-});
-
 function idsDeInput(input: HTMLInputElement): string {
   return input.value;
 }
@@ -2605,8 +2438,7 @@ function actualizarTooltipEdificioAsentamiento(ev: MouseEvent): void {
     return;
   }
 
-  const liveState = gameStore.getState();
-  const state = viewedTick !== liveState.tick ? gameStore.getSnapshot(viewedTick) ?? liveState : liveState;
+  const state = gameStore.getState();
   const asentamiento = state.asentamientos.find((a) => a.id === asentamientoSeleccionadoId);
   if (!asentamiento) {
     ocultarTooltipEdificioAsentamiento();
@@ -2673,7 +2505,7 @@ canvas.addEventListener('mouseleave', () => {
   render();
 });
 
-canvas.addEventListener('click', (ev) => {
+canvas.addEventListener('click', async (ev) => {
   if (vistaMapa === 'asentamiento') return; // fundar/seleccionar destino solo tiene sentido en el mapa general.
   const state = gameStore.getState();
   const rect = canvas.getBoundingClientRect();
@@ -2685,43 +2517,43 @@ canvas.addEventListener('click', (ev) => {
     expansionDestinoInput.value = `(${Math.round(worldX)}, ${Math.round(worldY)})`;
     return;
   }
-  gameStore.fundarAsentamiento(faccionSelect.value, { x: worldX, y: worldY }, Number(jugadoresInput.value) || 1);
+  await gameStore.fundarAsentamiento(faccionSelect.value, { x: worldX, y: worldY }, Number(jugadoresInput.value) || 1);
 });
 
-document.getElementById('expansion-lanzar-btn')!.addEventListener('click', () => {
+document.getElementById('expansion-lanzar-btn')!.addEventListener('click', async () => {
   if (!expansionDestino) return;
-  gameStore.lanzarCaravanaFundacion(expansionOrigenSelect.value, expansionDestino, Number(expansionJugadoresInput.value) || 1);
+  await gameStore.lanzarCaravanaFundacion(expansionOrigenSelect.value, expansionDestino, Number(expansionJugadoresInput.value) || 1);
   expansionDestino = null;
   expansionDestinoInput.value = '';
   expansionModoClicCheckbox.checked = false;
 });
 
-document.getElementById('expansion-desarmar-btn')!.addEventListener('click', () => {
-  gameStore.desarmarCaravanaFundacion(expansionCaravanaSelect.value);
+document.getElementById('expansion-desarmar-btn')!.addEventListener('click', async () => {
+  await gameStore.desarmarCaravanaFundacion(expansionCaravanaSelect.value);
 });
 
-document.getElementById('rey-btn')!.addEventListener('click', () => {
-  gameStore.asignarRey(cargoFaccionSelect.value, cargoJugadorSelect.value);
+document.getElementById('rey-btn')!.addEventListener('click', async () => {
+  await gameStore.asignarRey(cargoFaccionSelect.value, cargoJugadorSelect.value);
 });
 
-document.getElementById('embajador-btn')!.addEventListener('click', () => {
-  gameStore.asignarEmbajador(cargoFaccionSelect.value, cargoJugadorSelect.value);
+document.getElementById('embajador-btn')!.addEventListener('click', async () => {
+  await gameStore.asignarEmbajador(cargoFaccionSelect.value, cargoJugadorSelect.value);
 });
 
-document.getElementById('cargo-local-btn')!.addEventListener('click', () => {
-  gameStore.asignarCargoLocal(cargoAsentamientoSelect.value, cargoTipoSelect.value as CargoTipo, cargoJugadorSelect.value);
+document.getElementById('cargo-local-btn')!.addEventListener('click', async () => {
+  await gameStore.asignarCargoLocal(cargoAsentamientoSelect.value, cargoTipoSelect.value as CargoTipo, cargoJugadorSelect.value);
 });
 
-document.getElementById('casa-btn')!.addEventListener('click', () => {
-  gameStore.comprarCasa(casaAsentamientoSelect.value, casaJugadorInput.value.trim());
+document.getElementById('casa-btn')!.addEventListener('click', async () => {
+  await gameStore.comprarCasa(casaAsentamientoSelect.value, casaJugadorInput.value.trim());
 });
 
-document.getElementById('politica-btn')!.addEventListener('click', () => {
-  gameStore.activarPolitica(politicaAsentamientoSelect.value, politicaCargoSelect.value as CargoTipo, politicaIdSelect.value);
+document.getElementById('politica-btn')!.addEventListener('click', async () => {
+  await gameStore.activarPolitica(politicaAsentamientoSelect.value, politicaCargoSelect.value as CargoTipo, politicaIdSelect.value);
 });
 
-document.getElementById('diplo-proponer-btn')!.addEventListener('click', () => {
-  gameStore.proponerRelacion(
+document.getElementById('diplo-proponer-btn')!.addEventListener('click', async () => {
+  await gameStore.proponerRelacion(
     diploTipoSelect.value as 'vasallaje' | 'alianza',
     diploASelect.value,
     diploBSelect.value,
@@ -2730,29 +2562,29 @@ document.getElementById('diplo-proponer-btn')!.addEventListener('click', () => {
   );
 });
 
-document.getElementById('diplo-romper-btn')!.addEventListener('click', () => {
-  gameStore.romperRelacion(diploRelacionSelect.value, diploASelect.value);
+document.getElementById('diplo-romper-btn')!.addEventListener('click', async () => {
+  await gameStore.romperRelacion(diploRelacionSelect.value, diploASelect.value);
 });
 
-document.getElementById('diplo-rebelion-btn')!.addEventListener('click', () => {
-  gameStore.rebelionVasallo(diploRelacionSelect.value);
+document.getElementById('diplo-rebelion-btn')!.addEventListener('click', async () => {
+  await gameStore.rebelionVasallo(diploRelacionSelect.value);
 });
 
-document.getElementById('faccion-crear-btn')!.addEventListener('click', () => {
-  gameStore.crearFaccion(faccionCrearNombreInput.value.trim());
+document.getElementById('faccion-crear-btn')!.addEventListener('click', async () => {
+  await gameStore.crearFaccion(faccionCrearNombreInput.value.trim());
   faccionCrearNombreInput.value = '';
 });
 
-document.getElementById('anexion-btn')!.addEventListener('click', () => {
-  gameStore.anexionar(fusionASelect.value, fusionBSelect.value);
+document.getElementById('anexion-btn')!.addEventListener('click', async () => {
+  await gameStore.anexionar(fusionASelect.value, fusionBSelect.value);
 });
 
-document.getElementById('fusion-btn')!.addEventListener('click', () => {
-  gameStore.fusionar(fusionASelect.value, fusionBSelect.value, fusionNombreInput.value.trim(), fusionReyInput.value.trim());
+document.getElementById('fusion-btn')!.addEventListener('click', async () => {
+  await gameStore.fusionar(fusionASelect.value, fusionBSelect.value, fusionNombreInput.value.trim(), fusionReyInput.value.trim());
 });
 
-document.getElementById('trueque-btn')!.addEventListener('click', () => {
-  gameStore.proponerTrueque(
+document.getElementById('trueque-btn')!.addEventListener('click', async () => {
+  await gameStore.proponerTrueque(
     truequeASelect.value,
     truequeRecursoASelect.value,
     Number(truequeCantidadAInput.value) || 0,
@@ -2762,9 +2594,9 @@ document.getElementById('trueque-btn')!.addEventListener('click', () => {
   );
 });
 
-document.getElementById('mercado-btn')!.addEventListener('click', () => {
+document.getElementById('mercado-btn')!.addEventListener('click', async () => {
   const precio = mercadoPrecioInput.value.trim() === '' ? undefined : Number(mercadoPrecioInput.value);
-  gameStore.colocarOrdenMercado(
+  await gameStore.colocarOrdenMercado(
     mercadoAsentamientoSelect.value,
     mercadoTipoSelect.value as 'compra' | 'venta',
     mercadoRecursoSelect.value,
@@ -2773,12 +2605,12 @@ document.getElementById('mercado-btn')!.addEventListener('click', () => {
   );
 });
 
-document.getElementById('flota-construir-btn')!.addEventListener('click', () => {
-  gameStore.crearCaravana(flotaAsentamientoSelect.value);
+document.getElementById('flota-construir-btn')!.addEventListener('click', async () => {
+  await gameStore.crearCaravana(flotaAsentamientoSelect.value);
 });
 
-document.getElementById('reclutar-tropa-btn')!.addEventListener('click', () => {
-  gameStore.reclutarTropa(
+document.getElementById('reclutar-tropa-btn')!.addEventListener('click', async () => {
+  await gameStore.reclutarTropa(
     guerraAsentamientoSelect.value,
     reclutarTropaJugadorSelect.value,
     reclutarTropaSelect.value,
@@ -2786,18 +2618,18 @@ document.getElementById('reclutar-tropa-btn')!.addEventListener('click', () => {
   );
 });
 
-document.getElementById('gran-fundicion-btn')!.addEventListener('click', () => {
+document.getElementById('gran-fundicion-btn')!.addEventListener('click', async () => {
   // Consolidada en el control manual de cola (Doc 4.2, a petición del usuario) — Gran Fundición ya no tiene
   // su propio camino especial, pasa por el mismo `anadirEdificioManualmente` que cualquier otro edificio.
-  gameStore.anadirEdificioManualmente(guerraAsentamientoSelect.value, 'gobernador', 'granFundicion');
+  await gameStore.anadirEdificioManualmente(guerraAsentamientoSelect.value, 'gobernador', 'granFundicion');
 });
 
-document.getElementById('asedio-btn')!.addEventListener('click', () => {
-  gameStore.iniciarAsedio(combateAsentamientoSelect.value, guerraObjetivoSelect.value, idsDeChipsCombate());
+document.getElementById('asedio-btn')!.addEventListener('click', async () => {
+  await gameStore.iniciarAsedio(combateAsentamientoSelect.value, guerraObjetivoSelect.value, idsDeChipsCombate());
 });
 
-document.getElementById('campo-abierto-btn')!.addEventListener('click', () => {
-  gameStore.combateCampoAbierto(
+document.getElementById('campo-abierto-btn')!.addEventListener('click', async () => {
+  await gameStore.combateCampoAbierto(
     combateAsentamientoSelect.value,
     idsDeChipsCombate(),
     guerraObjetivoSelect.value,
@@ -2805,21 +2637,16 @@ document.getElementById('campo-abierto-btn')!.addEventListener('click', () => {
   );
 });
 
-document.getElementById('interceptar-btn')!.addEventListener('click', () => {
-  gameStore.interceptarCaravana(combateAsentamientoSelect.value, idsDeChipsCombate(), guerraCaravanaSelect.value);
+document.getElementById('interceptar-btn')!.addEventListener('click', async () => {
+  await gameStore.interceptarCaravana(combateAsentamientoSelect.value, idsDeChipsCombate(), guerraCaravanaSelect.value);
 });
 
-document.getElementById('atacar-campamento-btn')!.addEventListener('click', () => {
-  gameStore.atacarCampamentoBandidos(combateAsentamientoSelect.value, idsDeChipsCombate(), guerraCampamentoSelect.value);
+document.getElementById('atacar-campamento-btn')!.addEventListener('click', async () => {
+  await gameStore.atacarCampamentoBandidos(combateAsentamientoSelect.value, idsDeChipsCombate(), guerraCampamentoSelect.value);
 });
 
-document.getElementById('tick-btn')!.addEventListener('click', () => {
-  gameStore.avanzarTick();
-});
-
-document.getElementById('regenerar-btn')!.addEventListener('click', () => {
-  const region = regionSelect.value as RegionId | '';
-  gameStore.regenerarMundo(Number(seedInput.value) || 0, region || undefined);
+document.getElementById('tick-btn')!.addEventListener('click', async () => {
+  await gameStore.avanzarTick();
 });
 
 document.getElementById('exportar-btn')!.addEventListener('click', () => {
@@ -2892,21 +2719,6 @@ exportarUnityBtn.addEventListener('click', async () => {
     exportarUnityBtn.disabled = false;
     exportarUnityBtn.textContent = textoOriginal;
   }
-});
-
-const importarInput = document.getElementById('importar-input') as HTMLInputElement;
-document.getElementById('importar-btn')!.addEventListener('click', () => {
-  importarInput.click();
-});
-importarInput.addEventListener('change', () => {
-  const archivo = importarInput.files?.[0];
-  importarInput.value = '';
-  if (!archivo) return;
-  const lector = new FileReader();
-  lector.onload = () => {
-    gameStore.importarSimulacion(String(lector.result));
-  };
-  lector.readAsText(archivo);
 });
 
 render();
