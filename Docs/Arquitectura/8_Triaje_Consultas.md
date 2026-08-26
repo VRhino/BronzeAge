@@ -26,7 +26,8 @@ migración.
 >   ver [6_Sincronizacion_Visibilidad_y_Escala.md §6.3](6_Sincronizacion_Visibilidad_y_Escala.md#63-la-frontera-real-no-es-motor-sí--motor-no-es-reglas-vs-simulación).
 >   Las que son **fórmula sobre estado vivo** (`produccionInfo`, `mantenimientoInfo`, `manoObraInfo`…) las
 >   manda el servidor ya calculadas. Ambas caen hoy en el grupo "→ `engine/`" de abajo, y no deberían tener el
->   mismo destino. Desglose en los cuatro grupos: doc 4, § "C10 partido en dos".
+>   mismo destino. Desglose en los cuatro grupos: doc 4, § "C10 partido en dos"; clasificación completa del
+>   motor entero (no solo de las consultas de `GameStore`): [9_Reglas_vs_Simulacion.md](9_Reglas_vs_Simulacion.md).
 
 ## El criterio
 

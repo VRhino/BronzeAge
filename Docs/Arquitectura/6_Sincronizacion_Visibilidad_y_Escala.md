@@ -237,6 +237,12 @@ servidor y cuáles al cliente/SDE, para no filtrar información que no debía se
 Aquí eso es **C7** (balance versionado **y servido**), y está medio hecho sin saberlo: `EDIFICIO_CATALOGO`,
 `POLITICAS` y `NIVEL_FACCION` ya son tablas, no código.
 
+> **La clasificación completa —módulo por módulo, de todo el motor— vive en
+> [9_Reglas_vs_Simulacion.md](9_Reglas_vs_Simulacion.md).** Ese documento añade además un eje que esta sección
+> no tiene y que resultó ser el que más decide: una regla puede ser perfectamente pura y aun así ser solo de
+> servidor, porque su **entrada** es privilegiada (`calcularPrecioReferencia` suma el almacén de todos los
+> rivales). Pureza y visibilidad son ejes independientes.
+
 **Coste aceptado**: para las consultas que son tabla, si el cliente calcula, la fórmula acaba existiendo dos
 veces (servidor por autoridad, cliente por presentación) y pueden divergir. Se acepta —la alternativa es un
 viaje de red por *tooltip*— y se mitiga manteniendo las reglas lo más "tabla pura" posible, de modo que el

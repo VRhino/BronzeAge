@@ -11,6 +11,8 @@ Contexto y justificación de cada fase: ver
 [2_Estudio_Evolucion_Backend_Multifrontend.md](2_Estudio_Evolucion_Backend_Multifrontend.md).
 Decisiones de escala, conexiones y visibilidad: ver
 [6_Sincronizacion_Visibilidad_y_Escala.md](6_Sincronizacion_Visibilidad_y_Escala.md).
+Qué puede salir del servidor y qué no, módulo por módulo: ver
+[9_Reglas_vs_Simulacion.md](9_Reglas_vs_Simulacion.md) — referencia transversal, la ejecutan C7, C10 y C11.
 
 **Objetivo de escala (acordado 2026-08-24): mínimo 500 jugadores conectados
 simultáneamente en una misma partida.** Condiciona Fases B y C — el cuello de

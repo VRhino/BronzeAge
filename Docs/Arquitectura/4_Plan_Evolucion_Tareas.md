@@ -502,6 +502,14 @@ presentación) y pueden divergir. Se acepta a conciencia —la alternativa es un
 es inusable— y se mitiga manteniendo esas reglas como tabla pura, para que el cliente haga *lookup* en vez de
 reimplementar lógica. Es el mismo trato que hace la industria.
 
+> **La clasificación completa de todo el motor —qué es regla, qué es simulación, y cuál de las dos cosas puede
+> salir del servidor— está en [9_Reglas_vs_Simulacion.md](9_Reglas_vs_Simulacion.md)** (escrito 2026-08-26 a
+> petición del usuario, como referencia para futuras decisiones). Añade un eje que este desglose no tenía y
+> que corrige el grupo (c) de arriba: las cuatro consultas de geometría por frame no son solo un problema de
+> latencia, son además **entrada privilegiada** (`computeTodasLasZonas` mira todos los asentamientos,
+> `evaluarViabilidadFundacion` comprueba separación contra todos). No pueden ser un endpoint *y* no pueden
+> calcularse en el cliente: por eso tienen que viajar precalculadas dentro de la proyección.
+
 #### Eliminado: el laboratorio visual
 
 `cliente/laboratorio.html` + `cliente/src/lab/` (3 ficheros, 822 líneas, 13 imports de motor) ejecutaban
