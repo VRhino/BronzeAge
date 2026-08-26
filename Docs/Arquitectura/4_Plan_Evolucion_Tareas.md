@@ -435,7 +435,10 @@ la superficie de administración. → hito **C8**.
 Hoy `ParamsDe<T>` se deriva de `Parameters<typeof manejador>` — es TypeScript leyendo el código fuente del
 servidor, que es precisamente la dependencia a eliminar. Sin esquema por comando no hay cliente tipado
 generable desde `openapi.json`, y además un `params` malformado revienta dentro del manejador y sale como 409
-en vez de 400 (ya anotado como pendiente en C2, sin dueño hasta ahora). → hito **C9**.
+en vez de 400 (ya anotado como pendiente en C2, sin dueño hasta ahora). → hito **C9**, resuelto el mismo día
+que este diagnóstico (ver sección "C9" más abajo): `ParamsDe<T>` sigue derivándose del código fuente para
+TypeScript, pero el CLIENTE ya no lo necesita — `ESQUEMAS_PARAMS` (`session/comandos/esquemas.ts`) es la
+misma forma expresada como datos, publicada en `openapi.json`.
 
 #### Hallazgo 4 — la mitad de las 26 consultas no puede ser una petición HTTP
 
@@ -532,11 +535,22 @@ Consecuencia directa del hallazgo 8. Las 26 consultas no son homogéneas:
 `slotsPoliticaDisponibles`, `nivelFaccionInfo`. Son *lookup* sobre constantes de balance. Sirviendo el balance
 (C7), el cliente las resuelve sin reimplementar nada y sin viaje de red.
 
-**(b) Fórmula sobre estado vivo — el servidor manda el número calculado (C10).** `produccionInfo`,
-`mantenimientoInfo`, `manoObraInfo`, `poblacionInfo`, `infoMejoraEdificio`, `caravanasInfo`, `cupoNivelInfo`,
-`nivelAsentamientoInfo`, `poderMilitarInfo`. Dependen del estado de la partida, no solo del balance:
-re-derivarlas en el cliente sería duplicar simulación, no reglas. (`getLigas` NO va aquí — es T2a, ver la nota
-del doc 9; el error de haberla puesto en este grupo ya se corrigió más arriba, en el hallazgo 4.)
+**(b) Fórmula sobre estado vivo — DISUELTO por el doc 9 (corregido 2026-08-26, ver nota abajo).** Esta lista
+original —`produccionInfo`, `mantenimientoInfo`, `manoObraInfo`, `poblacionInfo`, `infoMejoraEdificio`,
+`caravanasInfo`, `cupoNivelInfo`, `nivelAsentamientoInfo`, `poderMilitarInfo`— se escribió el mismo día que el
+hallazgo 8, pero ANTES de [9_Reglas_vs_Simulacion.md](9_Reglas_vs_Simulacion.md), que es más preciso: casi
+todas resultan T2a (entrada propia — `manoObraInfo`, `estadoMejoraEdificio`, `calcularCostoMantenimiento`,
+`poderEscuadron`, `nivelActualDe`, `cupoCaravanas`, `poblacionTotal`... todas sobre **un** asentamiento/
+escuadrón/Facción **propios** — doc 9, tabla T2a). El cliente las resuelve solas en cuanto tenga el balance
+(C7), sin que el servidor tenga que calcular ni mandar nada nuevo — **cero trabajo de C10 aquí**. El roadmap
+(doc 3) nunca contó este grupo como pendiente de C10, y tenía razón; esta sección de doc 4 sí lo hacía y
+quedó sin corregir hasta ahora. (`getLigas` tampoco va aquí — es T2a, ver la nota del hallazgo 4.)
+
+> **Matiz que SÍ sigue abierto, pero no es de C10**: `mantenimientoInfo`/`poblacionInfo`/`caravanasInfo`/
+> `infoMejoraEdificio` aplicados a un asentamiento RIVAL (no propio) sí necesitarían proyección filtrada por
+> visibilidad — es la clasificación "Proyección por audiencia (5)" del triaje original del doc 8. Bloqueado en
+> lo mismo que siempre: **C4 Slice 2** (niebla de guerra), sin radio de visualización definido en ningún doc.
+> No es un hueco de C10 — es un hueco de C4 que C10 no puede cerrar por su cuenta.
 
 > **`precioReferencia` — hecho 2026-08-26.** Primera de este grupo en moverse: `RunnerDePartida.preciosReferencia()`,
 > caché con TTL de un minuto real (no un `setInterval` — se recalcula perezosamente en la siguiente lectura
@@ -545,9 +559,10 @@ del doc 9; el error de haberla puesto en este grupo ya se corrigió más arriba,
 > vivo, el precio mostrado en pantalla coincide con el cálculo del servidor. 8 tests nuevos (5 unitarios de
 > TTL/caché, 3 HTTP en las tres superficies de lectura). 613/613 en total.
 
-**(c) Geometría por frame — viaja precalculada dentro de la proyección (C10).** `getZonas`,
+**(c) Geometría por frame — viaja precalculada dentro de la proyección (C10). Hecho, 2026-08-26.** `getZonas`,
 `getZonasFusionadas`, `getTrazadoAsentamiento`. Solo cambian por tick, pero `render()` las pide en cada
-`mousemove`: no pueden ser un endpoint, tienen que llegar ya resueltas.
+`mousemove`: no pueden ser un endpoint, tienen que llegar ya resueltas — `RunnerDePartida.geometriaAsentamientos()`,
+ver la sección "C10" más abajo para el detalle completo.
 
 > **`chokepointsControl` sale de este grupo — eliminada, no migrada (2026-08-26).** Decisión del usuario: la
 > mecánica de chokepoints entera (geometría en `worldgen/`, control por zona de influencia, peaje en oro) "no
@@ -692,6 +707,116 @@ excepción. El 403 nunca fue un bug: era la interfaz de depuración ofreciendo, 
   `server/__tests__/api.test.ts`) y se corrigieron junto con el código; test nuevo de camino feliz
   (admin cede una Facción real al NPC, `resultado.ok: true`). Verificado en vivo contra el servidor real.
   606/606 tests, `tsc` limpio
+
+### C9. Esquema de `params` por comando (2026-08-26)
+
+- [x] **`session/comandos/esquemas.ts`**: `ESQUEMAS_PARAMS`, un JSON Schema por cada uno de los 30 comandos,
+  tipado `Record<TipoComando, EsquemaJson>` — exhaustividad en compilación, mismo mecanismo que
+  `MATRIZ_AUTORIZACION`. Vive en `session/`, no en `server/`: la forma de `params` es parte del contrato de
+  negocio del comando, no un detalle de Fastify
+- [x] **`server/rutas/comandos.ts`**: `ESQUEMA_EJECUTAR_COMANDO.body` pasa de `{tipo, params: {}}` a
+  `{type:'object', oneOf: [30 ramas]}`, una por comando (`properties.tipo: {const: tipo}` + el esquema de
+  `ESQUEMAS_PARAMS[tipo]`). ajv rechaza con 400 antes de que `ejecutarComandoHttp` llegue a mirar el cuerpo —
+  `esTipoComandoValido` queda como red de seguridad para quien llame a la función sin pasar por Fastify, no
+  como el camino real de un cliente HTTP. El `oneOf` aparece en `GET /v1/openapi.json` sin más trabajo:
+  `@fastify/swagger` lo traduce (y traduce `const` a `enum` de un solo valor, porque OpenAPI 3.0 no tiene
+  `const` — llegó en JSON Schema draft 6)
+- [x] **Regla seguida con disciplina, tras un test que la violó primero**: solo FORMA, nunca duplicar una
+  regla de dominio que ya tiene su propio código. `crearFaccion` con `nombre: ''` tenía un test que esperaba
+  200/`ok:false`/`faccion.nombre_vacio` (rechazo de dominio) — el primer borrador de este esquema traía
+  `minLength:1` en `nombre` y lo convertía en 400, rompiendo ese test. Investigado caso por caso, no solo
+  arreglado el que falló:
+  - `nombre` (`crearFaccion`) → domain: `faccion.nombre_vacio` (`crearFaccion.ts`)
+  - `nombre` (`renombrarAsentamiento`) → vacío es válido, significa "usar el id" (`construccion.ts`)
+  - `nuevoNombre` (`fusionar`) → vacío cae a un nombre por defecto (`params.nuevoNombre || 'Facción
+    Fusionada'`, `diplomacia.ts`)
+  - `cantidad`/`cantidadA`/`cantidadB` (trueque, mercado) → domain: `TruequeInvalidoError`/`OrdenInvalidaError`
+    para `<= 0` (`engine/trade.ts`, `engine/market.ts`) — ninguno lleva `minimum` en el esquema
+- [x] **`EdificioTipo`/`RecursoTipo`/`CargoTipo`/`CargoConstructor` SÍ como `enum` cerrado**, con arrays
+  exhaustivos nuevos (`RECURSOS_TIPO`, `EDIFICIOS_TIPO`, `CARGOS_TIPO` en `domain/types.ts`;
+  `CARGOS_CONSTRUCTOR` en `construccion.ts`), mismo mecanismo `Record<Union, true>` que fuerza en compilación
+  listar cada miembro exactamente una vez. Diferencia con el punto anterior: estos SÍ son tipos discriminados
+  cerrados por diseño, y un valor fuera del catálogo no tiene un rechazo de dominio limpio esperándolo —
+  confirmado leyendo el código, no supuesto:
+  - `EDIFICIO_CATALOGO[tipo].costo` (`engine/construction.ts`, dentro de `anadirEdificioManualmente`) no
+    comprueba que `tipo` exista antes de indexar: un `EdificioTipo` inválido llegado por HTTP producía un
+    `TypeError` sin capturar por `rechazoDesdeError` (no es un error de dominio reconocido, así que lo
+    relanza), que `ejecutarComandoHttp` convertía en 409 — exactamente el síntoma que motivó C9
+  - `direccion === 'arriba' ? indice - 1 : indice + 1` (`engine/construction.ts`, `moverEnCola`) y
+    `params.tipo === 'vasallaje' ? ... : ...` (`diplomacia.ts`, `proponerRelacion`) son ternarios SIN rama de
+    rechazo: un valor inválido no revienta, se **interpreta silenciosamente como el otro lado del par** — un
+    bug más grave que un crash, porque no se nota. El `enum` lo corta en el borde
+- [x] **`coerceTypes: false`** (`server/api.ts`, `Fastify({ajv: {customOptions: {...}}})`) — Fastify lo trae en
+  `true` por defecto, pensado para query/params de URL (siempre texto). Sobre un `body` JSON (ya tipado por
+  `JSON.parse`) silenciaba el propio esquema: `{nombre: 123}` pasaba coaccionado a `{nombre: "123"}` en vez de
+  rechazarse. Encontrado por un test nuevo que esperaba 400 y recibía 200
+- [x] 6 tests nuevos en `server/__tests__/api.test.ts` (falta un campo requerido, tipo JS equivocado, enum
+  fuera de catálogo, comando bien formado sigue aceptándose, `nombre` vacío sigue siendo rechazo de dominio,
+  el contrato publicado trae el `oneOf`). 612/612 en total, `tsc` limpio. Verificado en vivo contra el
+  servidor real: los 5 casos de arriba, uno por uno, con `curl`
+
+### C10. Geometría por frame servida — última pieza del hito (2026-08-26)
+
+- [x] **`trazadoParaAsentamiento`** (nuevo, `engine/trazado.ts`) — mueve al motor la orquestación de
+  `redDeCalles`/`segmentosDeRed`/`edificiosInternos`/`celdaMinimaDeEdificio`/`tamanoDeEdificio` que antes SOLO
+  vivía en `cliente/src/app/gameStore.ts` (`getTrazadoAsentamiento`). Doc 9 T2a: es una consulta de UN
+  asentamiento propio, así que le corresponde al motor, no a la capa de aplicación de un cliente concreto —
+  `cliente/` sigue con su copia hasta que se reescriba sin `@motor/*`, fuera de alcance de este hito
+- [x] **`RunnerDePartida.geometriaAsentamientos()`** — `zonas` (`computeTodasLasZonas`), `zonasFusionadas`
+  (`computeZonasFusionadasPorFaccion`) y `trazadoPorAsentamiento` de TODOS los asentamientos, memoizadas por
+  identidad de referencia de `estado.asentamientos` (a diferencia de `cachePrecios`, **sin TTL**: es pura, no
+  hay ninguna razón de diseño para que "se sienta" desactualizada un rato — memorizar por `===` es tan preciso
+  como un TTL de cero milisegundos)
+- [x] **`EstadoAdmin`** (`session/estado.ts`) trae `zonas`/`zonasFusionadas`/`trazadoPorAsentamiento` sin
+  filtrar — el admin observa toda la partida (doc 5). Se fusionan en `admin.ts`, no en `vistaAdminDeEstado`:
+  mismo criterio impuro que `preciosReferencia`, la función pura no puede calcularlos
+- [x] **`ProyeccionJugador`** (`session/proyecciones/jugador.ts`) los trae **filtrados a la Facción propia**:
+  `proyectarParaJugador` gana un tercer parámetro (`geometria: GeometriaAsentamientos`, calculado por el
+  llamador HTTP) y reutiliza el mismo `esPropio`/`faccionId` que ya filtra caravanas/acuerdos/órdenes/eventos
+  — cero geometría de un rival, mismo criterio conservador que el resto de Slice 1 ("mejor no ver nada del
+  rival que exponer un nivel de detalle que nadie ha decidido que sea seguro")
+- [x] **`GeometriaAsentamientos` vive en `session/estado.ts`, no en `server/runnerDePartida.ts`** — aunque es
+  `RunnerDePartida` quien la calcula y cachea, `session/proyecciones/jugador.ts` necesita el TIPO para
+  filtrarla, y `session/` no puede importar de `server/` (test de arquitectura). `RunnerDePartida` importa el
+  tipo de `session/estado.ts` en vez de declararlo él mismo
+- [x] 5 tests nuevos (`server/__tests__/runnerDePartida.test.ts`: vacío sin asentamientos, memoización por
+  referencia, recálculo tras fundar, referencia intacta si el comando no toca asentamientos;
+  `server/__tests__/api.test.ts`: una jugadora ve solo su zona/trazado, el admin ve los de las dos Facciones).
+  617/617 en total, `tsc` limpio. Verificado en vivo contra el servidor real con dos jugadoras y un admin
+- [x] **Reconciliación de doc 3/doc 4/doc 9** (ver la nota en el hito C10 del roadmap): el "grupo (b)" de este
+  documento (más abajo) quedó disuelto por el doc 9, escrito el mismo día pero después — corregido ahí, no
+  solo aquí
+
+### C11b. Terreno indibujable sin `worldgen/` — resuelto sin rasterizar (2026-08-26)
+
+El planteamiento original (doc 3, C11b) daba dos salidas: el servidor rasteriza (PNG o tiles, dependencia
+nueva de *encoding*) o los evaluadores de `worldgen/` se publican como librería (la dependencia a eliminar).
+Al preguntarle al usuario cuál de las dos, la respuesta fue una tercera que ya estaba en el doc 9 y no se
+había conectado con C11b: el terreno es **T2a** ("el terreno lo ven todos", entrada no privilegiada) — no
+hace falta que el SERVIDOR lo calcule para nadie, un cliente lo recalcula solo desde los parámetros públicos
+que ya sirve C11a. Cero rasterizado, cero dependencia nueva.
+
+- [x] **[`cliente-jugador/`](../../cliente-jugador/)** — proyecto nuevo, hermano de `cliente/`, con su propio
+  `package.json`/`tsconfig.json`/`vite.config.ts`. Sin ningún alias `@motor/*` ni `paths` hacia `../src`: es
+  la prueba de que el criterio de cierre de la Fase C es alcanzable, no solo una intención
+- [x] **`src/terreno/`** — copia deliberada (no import) de la parte de `worldgen/` que evalúa por punto:
+  `ruido.ts` (`evaluarRuido`/`evaluarRuidoParcial`, SIN `generarCampoRuido` — eso consume RNG, es generación,
+  se queda en el servidor), `elevacion.ts`, `fertilidad.ts`, `biomas.ts`, `rios.ts` (solo
+  `distanciaARioMasCercano` + `distanciaASegmento`, no la generación de ríos), `config.ts` (solo los umbrales
+  que usa la evaluación: `ELEVACION`, `ELEVACION_SUAVIZADO`, `BIOMA`). Ver `cliente-jugador/src/terreno/README.md`
+  para la tabla completa de qué se copió y qué no, y la disciplina de mantenimiento frente a `WORLDGEN_VERSION`
+- [x] **Limitación documentada, no resuelta**: sin soporte de `region` (`worldgen/regiones.ts`, ~300 líneas de
+  guías geográficas autoradas, no portadas) — una partida creada con `region` diverge del terreno real donde
+  pesa la guía. `elevacion.ts` avisa por consola (una vez) si detecta `campo.region`. El caso sin región
+  ("mundo libre", el default de la mayoría de partidas) se reproduce completo, borde incluido
+- [x] **`render.ts`** pinta bioma (paleta propia, `BiomaTipo` no lleva color) + ríos a canvas, muestreando cada
+  8 unidades de mapa (2000×2000 a 1:1 son 4M muestras, inviable por frame) — 250×250 muestras, aceptable
+- [x] **Verificado en vivo, no solo por inspección de código**: la misma partida (`gameId: 'local'`, seed 42,
+  sin región) renderizada a la vez en `cliente/` (motor real, `@motor/*`) y `cliente-jugador/` (evaluador
+  duplicado) — capturas comparadas, la geografía coincide: mismos lagos, mismas montañas, mismos ríos, en la
+  misma posición y forma. Es la prueba de que la copia es bit a bit correcta para el caso sin región, no una
+  suposición
+- [x] `tsc --noEmit` limpio en el proyecto nuevo; el backend (`src/`) no se tocó, sigue en 617/617
 
 ## Fase D — Conversión temporal total
 

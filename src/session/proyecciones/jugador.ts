@@ -23,11 +23,14 @@ import type {
   OrdenMercado,
   RelacionPolitica,
   Titulo,
+  ZonaFaccion,
+  ZonaInfluencia,
 } from '../../domain/types';
 import type { EventoDominio } from '../../domain/eventos';
 import type { EstadoMapa } from '../../world/mapa';
+import type { TrazadoAsentamiento } from '../../engine/trazado';
 import { esCiudadano } from '../../engine/faccion';
-import { idDeMapa, type EventoLogAdmin, type GameSessionState } from '../estado';
+import { idDeMapa, type EventoLogAdmin, type GameSessionState, type GeometriaAsentamientos } from '../estado';
 
 export interface ProyeccionJugador {
   gameId: string;
@@ -70,6 +73,18 @@ export interface ProyeccionJugador {
    * fuga que el doc 7 §7.1 señalaba en el log administrativo: el log global narra TODO el mundo. */
   eventosDominio: EventoDominio[];
   historial: EventoLogAdmin[];
+  /** Geometría por frame (Fase C10, doc 9) — SOLO de los asentamientos propios, mismo criterio de "mejor no
+   * ver nada del rival" que el resto de esta proyección: `computeZonaInfluencia` necesita la posición de
+   * TODOS los asentamientos del mundo para recortar contra rivales (entrada privilegiada), así que ni el
+   * cálculo ni la zona resultante de un rival viajan aquí — a diferencia de `facciones`/`relaciones`, que sí
+   * son públicas por diseño. Antes lo recalculaba `render()` en cada `mousemove` del cliente; ahora llega ya
+   * resuelto, filtrado por `proyectarParaJugador`. */
+  zonas: ZonaInfluencia[];
+  /** La silueta fusionada de la Facción propia (como mucho una entrada) — nunca la de un rival. */
+  zonasFusionadas: ZonaFaccion[];
+  /** Trazado urbano de cada asentamiento propio, por id — de los rivales no hay ni metadatos (Slice 1: no se
+   * ven en absoluto), así que tampoco hay trazado que filtrar para ellos. */
+  trazadoPorAsentamiento: Record<string, TrazadoAsentamiento>;
   /** Precio de referencia por recurso — auditoría de doc 9 (2026-08-26): `calcularPrecioReferencia` necesita
    * el almacén de TODOS los asentamientos del mundo (entrada privilegiada), así que el jugador nunca podría
    * calcularlo aunque quisiera. Lo calcula `RunnerDePartida.preciosReferencia()` (caché de un minuto real,
@@ -82,7 +97,11 @@ function faccionDe(estado: GameSessionState, jugadorId: string): string | null {
   return estado.facciones.find((f) => esCiudadano(f, jugadorId))?.id ?? null;
 }
 
-export function proyectarParaJugador(estado: GameSessionState, jugadorId: string): Omit<ProyeccionJugador, 'preciosReferencia'> {
+export function proyectarParaJugador(
+  estado: GameSessionState,
+  jugadorId: string,
+  geometria: GeometriaAsentamientos
+): Omit<ProyeccionJugador, 'preciosReferencia'> {
   const faccionId = faccionDe(estado, jugadorId);
   const asentamientosPropios = estado.asentamientos.filter((a) => a.faccionId === faccionId);
   const idsPropios = new Set(asentamientosPropios.map((a) => a.id));
@@ -107,5 +126,8 @@ export function proyectarParaJugador(estado: GameSessionState, jugadorId: string
     campamentosBandidos: estado.campamentosBandidos,
     eventosDominio: estado.eventosDominio.filter((e) => e.asentamientoId === undefined || esPropio(e.asentamientoId)),
     historial: estado.historialJugadores[jugadorId] ?? [],
+    zonas: geometria.zonas.filter((z) => esPropio(z.asentamientoId)),
+    zonasFusionadas: geometria.zonasFusionadas.filter((zf) => zf.faccionId === faccionId),
+    trazadoPorAsentamiento: Object.fromEntries(Object.entries(geometria.trazadoPorAsentamiento).filter(([id]) => esPropio(id))),
   };
 }

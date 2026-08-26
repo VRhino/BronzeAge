@@ -673,6 +673,32 @@ export function segmentosDeRed(red: RedDeCalles): { calles: SegmentoTrazado[]; c
   };
 }
 
+export interface TrazadoAsentamiento {
+  calles: SegmentoTrazado[];
+  caminos: SegmentoTrazado[];
+  /** Rectángulo (coords locales) que ocupa cada edificio, por `id`. */
+  huellas: Record<string, { x: number; y: number; ancho: number; alto: number }>;
+}
+
+/**
+ * Trazado urbano de UN asentamiento, ya resuelto a coordenadas locales para dibujar — orquesta
+ * `redDeCalles`/`segmentosDeRed`/`edificiosInternos`/`celdaMinimaDeEdificio`/`tamanoDeEdificio`, las mismas
+ * piezas que antes solo combinaba `cliente/src/app/gameStore.ts` (Fase C10, doc 9 T2a: es una consulta de UN
+ * asentamiento propio, así que vivir en el motor —no en la capa de aplicación de un cliente concreto— es lo
+ * que permite que el servidor la sirva ya resuelta sin que el cliente necesite `engine/trazado` para nada.
+ * `cliente/` sigue con su propia copia hasta que se reescriba sin `@motor/*`, fuera de alcance de este hito).
+ */
+export function trazadoParaAsentamiento(asentamiento: Asentamiento): TrazadoAsentamiento {
+  const { calles, caminos } = segmentosDeRed(redDeCalles(asentamiento.id, asentamiento.edificios));
+  const huellas: TrazadoAsentamiento['huellas'] = {};
+  for (const edificio of edificiosInternos(asentamiento.edificios)) {
+    const min = celdaMinimaDeEdificio(edificio);
+    const tamano = tamanoDeEdificio(edificio);
+    huellas[edificio.id] = { x: min.col * T, y: min.row * T, ancho: tamano.ancho * T, alto: tamano.alto * T };
+  }
+  return { calles, caminos, huellas };
+}
+
 // --- Colocación ---
 
 interface Candidato {

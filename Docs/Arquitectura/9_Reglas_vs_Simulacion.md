@@ -143,7 +143,9 @@ Necesitan estado que el jugador no debe ver. Lo que viaja es **el resultado ya c
 (`getZonasFusionadas`, `getTrazadoAsentamiento`). No es coincidencia: son consultas espaciales de ámbito
 mundial. Eso las deja atrapadas entre dos exigencias —**no pueden ser un endpoint** (latencia) y **no pueden
 calcularse en el cliente** (visibilidad)— y solo hay una salida: viajar **precalculadas dentro de la
-proyección**, que solo cambia por tick. Es el grupo (c) del hito C10. (`chokepointsControl` y
+proyección**, que solo cambia por tick. Es el grupo (c) del hito C10 — **hecho, 2026-08-26**:
+`RunnerDePartida.geometriaAsentamientos()`, filtrada a la Facción propia en `ProyeccionJugador`, sin filtrar
+en `EstadoAdmin` (ver doc 4, sección "C10"). (`chokepointsControl` y
 `viabilidadFundacion` iban en esa misma lista de cuatro; al desaparecer ambas, el propio *listener* de
 `mousemove` que disparaba `render()` en la vista de mundo se eliminó también — ya no había nada que
 recalcular en cada movimiento del ratón.)
@@ -199,11 +201,14 @@ una vez y cacheado por identidad de mapa. **Hito C11a, completado 2026-08-26**:
 `GET .../partidas/:gameId/mapa/:mapaId` en ambas superficies, `Cache-Control: immutable`; `ResumenPartida` y
 las vistas de estado llevan `mapaId` en vez de `mapa`.
 
-Ojo con el matiz que **sigue sin resolverse** (hito **C11b**, descoped a propósito): `MapaGenerado.elevacion`
-y `.fertilidad` **no son rásteres**, son *parámetros de ruido*, y el bioma no se guarda — se evalúa por píxel
-con `evaluarBioma`. C11a sirve el `MapaGenerado` tal cual, y eso **no basta**: sigue siendo indibujable sin
-`worldgen/`. Hay que rasterizar, y es igual de determinista por seed, así que se cachearía igual — pero se
-difirió porque hoy no existe ningún cliente sin motor que lo consuma.
+**Hito C11b, resuelto 2026-08-26 sin rasterizar.** `MapaGenerado.elevacion`/`.fertilidad` **no son rásteres**,
+son *parámetros de ruido*, y el bioma no se guarda — se evalúa por punto con `evaluarBioma`. C11a sirve el
+`MapaGenerado` tal cual, indibujable sin código de evaluación — pero ese código es exactamente T2a (esta
+misma sección, arriba): "el terreno lo ven todos", entrada no privilegiada. No hacía falta que el servidor
+rasterizara nada: [`cliente-jugador/`](../../cliente-jugador/) (boilerplate nuevo, sin `@motor/*`) lleva su
+propia copia de `evaluarElevacion`/`evaluarFertilidad`/`evaluarBioma` y recalcula el terreno él mismo desde
+los parámetros públicos de C11a — verificado en vivo que reproduce la misma geografía que el motor real, sin
+soporte de `region` todavía (limitación documentada, ver `cliente-jugador/src/terreno/README.md`).
 
 ---
 

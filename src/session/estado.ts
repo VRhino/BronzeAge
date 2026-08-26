@@ -15,7 +15,10 @@ import type {
   OrdenMercado,
   RelacionPolitica,
   Titulo,
+  ZonaFaccion,
+  ZonaInfluencia,
 } from '../domain/types';
+import type { TrazadoAsentamiento } from '../engine/trazado';
 import type { EventoDominio } from '../domain/eventos';
 import type { MapaGenerado } from '../worldgen';
 import type { EstadoMapa } from '../world/mapa';
@@ -149,6 +152,16 @@ export function idDeMapa(mapa: GameSessionState['mapa']): string {
   return `v${mapa.version}-s${mapa.config.seed}${mapa.config.region ? `-${mapa.config.region}` : ''}`;
 }
 
+/** Geometría por frame de TODOS los asentamientos (Fase C10) — lo que calcula
+ * `RunnerDePartida.geometriaAsentamientos()`. Vive aquí y no en `server/` porque `proyectarParaJugador`
+ * (`session/proyecciones/jugador.ts`) necesita el TIPO para filtrarla a lo propio del jugador, y `session/` no
+ * puede importar de `server/` (test de arquitectura). */
+export interface GeometriaAsentamientos {
+  zonas: ZonaInfluencia[];
+  zonasFusionadas: ZonaFaccion[];
+  trazadoPorAsentamiento: Record<string, TrazadoAsentamiento>;
+}
+
 /**
  * Vista de administración del estado completo: TODO sin filtrar por audiencia (a diferencia de
  * `proyectarParaJugador`, esto sigue siendo "todas las Facciones, log global" — Fase C3), pero con `mapa`
@@ -166,12 +179,21 @@ export function idDeMapa(mapa: GameSessionState['mapa']): string {
  * es lo que de verdad viaja por el cable (mismo patrón que `RespuestaComando.proyeccion` en C6: el tipo
  * describe el CONTRATO, no todo tiene que salir de una sola función pura). Quien construye la respuesta HTTP
  * es responsable de fusionarlo — ver `server/rutas/admin.ts` y `jugador.ts`.
+ *
+ * `zonas`/`zonasFusionadas`/`trazadoPorAsentamiento` (Fase C10, doc 9): la geometría por frame que antes
+ * calculaba `render()` en cada `mousemove` — entrada privilegiada (mira TODOS los asentamientos), así que
+ * tampoco la calcula esta función pura: la añade `RunnerDePartida.geometriaAsentamientos()`, mismo criterio
+ * que `preciosReferencia` aunque sin TTL (ver el comentario de `cacheGeometria` en ese archivo).
  */
-export type EstadoAdmin = Omit<GameSessionState, 'mapa'> & { mapaId: string; preciosReferencia: Record<string, number> };
+export type EstadoAdmin = Omit<GameSessionState, 'mapa'> &
+  GeometriaAsentamientos & { mapaId: string; preciosReferencia: Record<string, number> };
 
-/** Devuelve todo MENOS `preciosReferencia`: esa pieza es impura (TTL real) y la añade el llamador HTTP —
- * spread sobre este resultado más `{ preciosReferencia: runner.preciosReferencia() }` completa un `EstadoAdmin`. */
-export function vistaAdminDeEstado(estado: GameSessionState): Omit<EstadoAdmin, 'preciosReferencia'> {
+const CAMPOS_IMPUROS = ['preciosReferencia', 'zonas', 'zonasFusionadas', 'trazadoPorAsentamiento'] as const;
+
+/** Devuelve todo MENOS los campos impuros de arriba: los añade el llamador HTTP — spread sobre este resultado
+ * más `{ preciosReferencia: runner.preciosReferencia(), ...runner.geometriaAsentamientos() }` completa un
+ * `EstadoAdmin`. */
+export function vistaAdminDeEstado(estado: GameSessionState): Omit<EstadoAdmin, (typeof CAMPOS_IMPUROS)[number]> {
   const { mapa, ...resto } = estado;
   return { ...resto, mapaId: idDeMapa(mapa) };
 }

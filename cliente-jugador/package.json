@@ -1,0 +1,16 @@
+{
+  "name": "bronze-age-cliente-jugador",
+  "version": "0.0.1",
+  "description": "Boilerplate del cliente de jugador. Sin ninguna dependencia del motor (`@motor/*`): habla con el backend solo por red y recalcula el terreno con su propia copia de las funciones puras de worldgen (ver src/terreno/README.md). Fase C10-C11b.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10"
+  }
+}

@@ -11,6 +11,9 @@ directamente en el navegador, sin tocar la API— y por tanto no podía aislarse
 carpeta a otro repositorio. Está en el historial de git por si hiciera falta rescatarlo como herramienta de
 desarrollo del backend.
 
+Ver también [`cliente-jugador/`](../cliente-jugador/) (boilerplate, hito C11b): un proyecto hermano, nuevo,
+que sí cumple el criterio de cierre de la Fase C — cero import del motor, habla solo por red.
+
 ## Esta carpeta TODAVÍA NO puede moverse a su repositorio
 
 No es cuestión de repuntar un alias. `src/app/gameStore.ts` (25 imports), `src/ui/canvas.ts` y `src/main.ts`
@@ -25,7 +28,7 @@ repuntar — quedan descartadas las opciones que este README recomendaba antes (
 paquete npm).
 
 Lo que falta en el backend para que sea posible está desglosado y numerado en el roadmap
-(`Docs/Arquitectura/3_Plan_Evolucion_Roadmap.md`, hitos **C9–C13**; C7 y C8 ya completos) y diagnosticado en
+(`Docs/Arquitectura/3_Plan_Evolucion_Roadmap.md`, hitos **C12–C13**; C7–C11b ya completos) y diagnosticado en
 detalle en `Docs/Arquitectura/4_Plan_Evolucion_Tareas.md` § "Diagnóstico de aislamiento del cliente". **La
 Fase C no se cierra hasta que un cliente sin importar el código del motor de este repo pueda jugar una partida
 completa contra este backend** — eso NO significa cero lógica de dominio en el cliente, ver

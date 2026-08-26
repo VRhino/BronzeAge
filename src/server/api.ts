@@ -63,7 +63,12 @@ export interface OpcionesServidor {
 }
 
 export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
-  const app = Fastify({ logger: false });
+  // `coerceTypes: false` (Fastify por defecto lo trae a `true`): un cuerpo JSON ya llega tipado por
+  // `JSON.parse` — a diferencia de query/params de URL, que SIEMPRE son texto y necesitan coerción para tener
+  // sentido. Coercionar aquí (`nombre: 123` -> `"123"`) es exactamente lo que el esquema por comando de la
+  // Fase C9 viene a evitar: un cliente con un bug de tipos debe ver un 400, no que el servidor le adivine lo
+  // que quiso decir.
+  const app = Fastify({ logger: false, ajv: { customOptions: { coerceTypes: false } } });
   app.register(fastifyWebsocket);
   app.register(fastifyCors, {
     // `[]`/ausente -> `false` (CORS desactivado del todo, ningún origen cruzado pasa) en vez de un array

@@ -308,3 +308,39 @@ describe('RunnerDePartida — preciosReferencia (doc 9: entrada privilegiada, so
     expect(r.preciosReferencia().madera).toBeLessThanOrEqual(sinAsentamientos);
   });
 });
+
+describe('RunnerDePartida — geometriaAsentamientos (Fase C10: zonas/trazado por frame, entrada privilegiada)', () => {
+  it('sin asentamientos, todo vacío', () => {
+    const r = runner();
+    expect(r.geometriaAsentamientos()).toEqual({ zonas: [], zonasFusionadas: [], trazadoPorAsentamiento: {} });
+  });
+
+  it('sin cambios de estado, dos lecturas devuelven el MISMO objeto — memoizado por referencia, sin TTL', () => {
+    const r = runner();
+    const primera = r.geometriaAsentamientos();
+    expect(r.geometriaAsentamientos()).toBe(primera);
+  });
+
+  it('tras fundar un asentamiento, se recalcula y trae su zona y su trazado', async () => {
+    const r = runner();
+    const antes = r.geometriaAsentamientos();
+
+    const creada = await r.ejecutar(crearFaccion, { nombre: 'Micenas' });
+    const fundada = await r.ejecutar(fundarAsentamiento, { faccionId: creada.datos!.faccionId, posicion: { x: 500, y: 500 } });
+    expect(fundada.ok).toBe(true);
+    const asentamientoId = fundada.datos!.asentamientoId;
+
+    const despues = r.geometriaAsentamientos();
+    expect(despues).not.toBe(antes); // la referencia de `asentamientos` cambió: no es el mismo objeto cacheado
+    expect(despues.zonas.map((z) => z.asentamientoId)).toEqual([asentamientoId]);
+    expect(despues.zonasFusionadas).toEqual([{ faccionId: creada.datos!.faccionId, contornos: expect.any(Array) }]);
+    expect(despues.trazadoPorAsentamiento[asentamientoId]).toBeDefined();
+  });
+
+  it('un comando que NO toca asentamientos deja la misma referencia cacheada (crearFaccion sola)', async () => {
+    const r = runner();
+    const primera = r.geometriaAsentamientos();
+    await r.ejecutar(crearFaccion, { nombre: 'Micenas' }); // no funda: `estado.asentamientos` sigue siendo el mismo array
+    expect(r.geometriaAsentamientos()).toBe(primera);
+  });
+});

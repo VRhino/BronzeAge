@@ -5,6 +5,7 @@ import type { FastifyReply } from 'fastify';
 import { REGISTRO_COMANDOS, type TipoComando } from '../../session/comandos/registro';
 import type { ManejadorComando } from '../../session/comandos/tipos';
 import { verificarAutorizacion, type ActorDeComando } from '../../session/comandos/autorizacion';
+import { ESQUEMAS_PARAMS } from '../../session/comandos/esquemas';
 import type { RunnerDePartida } from '../runnerDePartida';
 import type { HubDeDifusion } from '../difusion/hub';
 import { mensajeDe, resumenDe } from './contexto';
@@ -17,17 +18,30 @@ export interface EjecutarComandoBody {
   idempotencyKey?: string;
 }
 
-export const ESQUEMA_EJECUTAR_COMANDO = {
-  body: {
-    type: 'object',
-    required: ['tipo', 'params'],
-    additionalProperties: false,
-    properties: {
-      tipo: { type: 'string', minLength: 1 },
-      params: {},
-      idempotencyKey: { type: 'string', minLength: 1 },
-    },
+/**
+ * Un `body` por comando (Fase C9): `tipo` fija QUÉ forma de `params` aplica (`ESQUEMAS_PARAMS`,
+ * `session/comandos/esquemas.ts`), así que la única manera de expresarlo en JSON Schema es un `oneOf` con una
+ * rama cerrada por comando — exactamente el mismo problema que un `switch` exhaustivo, resuelto con el mismo
+ * mecanismo (`Object.entries` sobre un `Record` exhaustivo, no una lista que se pueda olvidar actualizar).
+ *
+ * ajv exige que EXACTAMENTE una rama valide: un `tipo` que no sea ninguno de los 30 no matchea ninguna
+ * (`tipo: {const: ...}` en cada rama), así que la petición entera falla la validación — 400 antes de que
+ * `ejecutarComandoHttp` llegue siquiera a mirar `tipo` (`esTipoComandoValido` de abajo queda como red de
+ * seguridad para quien llame a `ejecutarComandoHttp` sin pasar por esta validación de Fastify, no como el
+ * camino real de un cliente HTTP).
+ */
+const RAMAS_POR_COMANDO = Object.entries(ESQUEMAS_PARAMS).map(([tipo, esquemaParams]) => ({
+  properties: {
+    tipo: { const: tipo },
+    params: esquemaParams,
+    idempotencyKey: { type: 'string', minLength: 1 },
   },
+  required: ['tipo', 'params'],
+  additionalProperties: false,
+}));
+
+export const ESQUEMA_EJECUTAR_COMANDO = {
+  body: { type: 'object', oneOf: RAMAS_POR_COMANDO },
 } as const;
 
 function esTipoComandoValido(tipo: string): tipo is TipoComando {

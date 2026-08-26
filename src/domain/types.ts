@@ -34,6 +34,39 @@ export type RecursoTipo =
   | 'armaduraIntermedia'
   | 'armaduraBronce';
 
+/**
+ * Los valores de `RecursoTipo`, en runtime — para validar por HTTP que un `recurso` recibido de un cliente es
+ * uno de verdad, sin duplicar la lista a mano (Fase C9, doc 4: "params malformado revienta dentro del
+ * manejador y sale como 409 en vez de 400"). Ninguna tabla de `constants.ts` cubre los 20 (`PRECIO_BASE`, por
+ * ejemplo, solo tiene los 6 comprables — los fabricados no tienen precio base), así que esto NO se deriva de
+ * ninguna — se deriva del propio TIPO: `Record<RecursoTipo, true>` obliga en COMPILACIÓN a listar cada
+ * miembro exactamente una vez; olvidar uno o escribir uno que no existe es un error de `tsc`, no un desajuste
+ * silencioso que alguien tenga que notar a mano.
+ */
+const TODOS_LOS_RECURSOS: Record<RecursoTipo, true> = {
+  madera: true,
+  piedra: true,
+  trigo: true,
+  cobre: true,
+  estano: true,
+  oro: true,
+  livestock: true,
+  lingoteCobre: true,
+  lingoteEstano: true,
+  lingoteBronce: true,
+  cuero: true,
+  cueroCurtido: true,
+  cueroCalidad: true,
+  armaMadera: true,
+  armaCobre: true,
+  armaBronce: true,
+  armaBronceCalidad: true,
+  armaduraBasica: true,
+  armaduraIntermedia: true,
+  armaduraBronce: true,
+};
+export const RECURSOS_TIPO = Object.keys(TODOS_LOS_RECURSOS) as RecursoTipo[];
+
 export type Rareza = 'comun' | 'intermedio' | 'raro';
 
 /** Cargos de nivel Facción (Doc 2.2): Rey (vasallaje, políticas superiores) y Embajador (designado por el Rey). */
@@ -123,6 +156,42 @@ export type EdificioTipo =
   // gratis" que 'plaza' — cuando el núcleo residencial satura, se sortea (determinista) entre las tres.
   | 'pozo'
   | 'parque';
+
+/** Los valores de `EdificioTipo` en runtime, mismo motivo y mismo mecanismo de exhaustividad que
+ * `RECURSOS_TIPO` — ver su comentario. Un `tipo` inválido llegado por HTTP hoy revienta más adentro
+ * (`EDIFICIO_CATALOGO[tipo].costo` en `engine/construction.ts` no comprueba existencia): esto lo convierte en
+ * un 400 en el borde, antes de tocar el motor. */
+const TODOS_LOS_EDIFICIOS: Record<EdificioTipo, true> = {
+  centroUrbano: true,
+  vivienda: true,
+  granja: true,
+  cantera: true,
+  lenera: true,
+  almacen: true,
+  mina: true,
+  minaCobre: true,
+  minaEstano: true,
+  fundicion: true,
+  granFundicion: true,
+  corral: true,
+  armeria: true,
+  curtiduria: true,
+  carpinteria: true,
+  palacio: true,
+  barracon: true,
+  galeriaDeTiro: true,
+  mercado: true,
+  puestoMercado: true,
+  maravilla: true,
+  muralla: true,
+  plaza: true,
+  plazaDeArmas: true,
+  patioDeGremios: true,
+  tallerCarpinteria: true,
+  pozo: true,
+  parque: true,
+};
+export const EDIFICIOS_TIPO = Object.keys(TODOS_LOS_EDIFICIOS) as EdificioTipo[];
 
 export type EstadoEdificio = 'en_cola' | 'en_construccion' | 'activo';
 
@@ -520,6 +589,16 @@ export interface OrdenMercado {
 // --- Sprint 4: Estructura política (Doc 2) ---
 
 export type CargoTipo = 'gobernador' | 'tesorero' | 'general' | 'maestroObras' | 'sacerdote';
+
+/** Mismo mecanismo de exhaustividad que `RECURSOS_TIPO`/`EDIFICIOS_TIPO`. */
+const TODOS_LOS_CARGOS: Record<CargoTipo, true> = {
+  gobernador: true,
+  tesorero: true,
+  general: true,
+  maestroObras: true,
+  sacerdote: true,
+};
+export const CARGOS_TIPO = Object.keys(TODOS_LOS_CARGOS) as CargoTipo[];
 
 /** Política activa en un asentamiento (Doc 4.4): slots/pools por cargo, duración fija, no cancelable antes de tiempo. */
 export interface PoliticaActiva {

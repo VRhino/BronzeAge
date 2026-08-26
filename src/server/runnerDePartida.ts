@@ -14,10 +14,13 @@
 // Contrato ASÍNCRONO desde el principio (doc 7 §8.4), aunque hoy por dentro no espere nada más que la propia
 // escritura a disco: migrar a cesión cooperativa del event loop o a un worker (si algún día hiciera falta,
 // ver doc 7 §8.3) es, por diseño, un cambio DENTRO de este archivo — invisible para quien lo llama.
-import type { RegionId } from '../domain/types';
+import type { Asentamiento, RegionId } from '../domain/types';
 import { GameSession, type PartidaExportada, type ResultadoComando } from '../session/gameSession';
 import type { ActorId, ManejadorComando } from '../session/comandos/tipos';
+import type { GeometriaAsentamientos } from '../session/estado';
 import { calcularPrecioReferencia } from '../engine/market';
+import { computeTodasLasZonas, computeZonasFusionadasPorFaccion } from '../engine/zones';
+import { trazadoParaAsentamiento } from '../engine/trazado';
 import { PRECIO_BASE } from '../constants';
 import { cargarPartida, guardarPartida } from './persistenciaPartida';
 
@@ -74,6 +77,20 @@ export class RunnerDePartida {
   private cachePrecios: { calculadoEnMs: number; precios: Record<string, number> } | null = null;
   private static readonly TTL_PRECIOS_MS = 60_000;
 
+  /**
+   * Caché de la geometría por frame (Fase C10, doc 9 T2b: `computeTodasLasZonas`/`computeZonasFusionadasPorFaccion`
+   * miran TODOS los asentamientos —entrada privilegiada—, y `render()` las pedía en cada `mousemove` del
+   * cliente de antes; ahora viajan precalculadas dentro de la proyección en vez de ser un endpoint).
+   *
+   * A diferencia de `cachePrecios`, sin TTL: no hay ninguna razón de diseño para que este valor "se sienta"
+   * desactualizado un rato — es puro, el resultado correcto es siempre el de AHORA MISMO. Lo que evita
+   * recalcular es una clave por IDENTIDAD de referencia de `asentamientos`: ese array es el mismo objeto
+   * mientras ningún comando lo toque (`GameSessionState` se reconstruye por spread, así que un comando que no
+   * muta asentamientos deja la referencia intacta), así que memorizar por `===` es tan preciso como un TTL de
+   * cero milisegundos, sin inventar un reloj que vigilar.
+   */
+  private cacheGeometria: { sobre: readonly Asentamiento[]; valor: GeometriaAsentamientos } | null = null;
+
   private constructor(sesion: GameSession, opciones: OpcionesRunner) {
     this.sesion = sesion;
     this.directorio = opciones.directorio;
@@ -111,6 +128,23 @@ export class RunnerDePartida {
       this.cachePrecios = { calculadoEnMs: ahoraMs, precios };
     }
     return this.cachePrecios.precios;
+  }
+
+  /** Zonas de influencia, su fusión por facción, y el trazado urbano de cada asentamiento — ver el comentario
+   * de `cacheGeometria`. Nunca lo calcula un cliente: las zonas necesitan la posición de TODOS los
+   * asentamientos del mundo, no solo el propio. */
+  geometriaAsentamientos(): GeometriaAsentamientos {
+    const asentamientos = this.sesion.getState().asentamientos;
+    if (this.cacheGeometria?.sobre !== asentamientos) {
+      const zonas = computeTodasLasZonas(asentamientos);
+      const valor: GeometriaAsentamientos = {
+        zonas,
+        zonasFusionadas: computeZonasFusionadasPorFaccion(zonas, asentamientos),
+        trazadoPorAsentamiento: Object.fromEntries(asentamientos.map((a) => [a.id, trazadoParaAsentamiento(a)])),
+      };
+      this.cacheGeometria = { sobre: asentamientos, valor };
+    }
+    return this.cacheGeometria.valor;
   }
 
   /**

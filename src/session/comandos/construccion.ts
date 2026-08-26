@@ -21,6 +21,10 @@ import { evento } from './eventos';
 /** Cargos con autoridad sobre la cola de construcción (Doc 4.2). */
 export type CargoConstructor = 'gobernador' | 'maestroObras';
 
+/** Mismo mecanismo de exhaustividad que `RECURSOS_TIPO`/`EDIFICIOS_TIPO` en `domain/types.ts`. */
+const TODOS_LOS_CARGOS_CONSTRUCTOR: Record<CargoConstructor, true> = { gobernador: true, maestroObras: true };
+export const CARGOS_CONSTRUCTOR = Object.keys(TODOS_LOS_CARGOS_CONSTRUCTOR) as CargoConstructor[];
+
 export interface PayloadColaConstruccion {
   asentamientoId: string;
   cargo: CargoConstructor;

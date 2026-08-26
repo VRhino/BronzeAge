@@ -5,19 +5,24 @@ import { describe, expect, it } from 'vitest';
 import { partidaConAsentamiento, OPC } from '../../__tests__/fixtures';
 import { crearFaccion } from '../../comandos/crearFaccion';
 import { fundarAsentamiento } from '../../comandos/fundarAsentamiento';
-import { idDeMapa } from '../../estado';
+import { idDeMapa, type GeometriaAsentamientos } from '../../estado';
 import { proyectarParaJugador } from '../jugador';
+
+// Estas pruebas verifican filtrado por Facción/ciudadanía, no la geometría por frame (Fase C10, cubierta en
+// su propia sección más abajo) — una entrada vacía basta y no obliga a construir asentamientos reales solo
+// para pasarlos por `computeTodasLasZonas`.
+const SIN_GEOMETRIA: GeometriaAsentamientos = { zonas: [], zonasFusionadas: [], trazadoPorAsentamiento: {} };
 
 describe('faccionId se deriva de la ciudadanía, no de un campo guardado', () => {
   it('el fundador ve su propia Facción', () => {
     const { sesion, faccionId, fundador } = partidaConAsentamiento();
-    const proyeccion = proyectarParaJugador(sesion.getState(), fundador);
+    const proyeccion = proyectarParaJugador(sesion.getState(), fundador, SIN_GEOMETRIA);
     expect(proyeccion.faccionId).toBe(faccionId);
   });
 
   it('un jugador sin ciudadanía en ninguna Facción tiene faccionId null', () => {
     const { sesion } = partidaConAsentamiento();
-    const proyeccion = proyectarParaJugador(sesion.getState(), 'forastero');
+    const proyeccion = proyectarParaJugador(sesion.getState(), 'forastero', SIN_GEOMETRIA);
     expect(proyeccion.faccionId).toBeNull();
   });
 });
@@ -25,13 +30,13 @@ describe('faccionId se deriva de la ciudadanía, no de un campo guardado', () =>
 describe('asentamientos: solo los de la Facción propia', () => {
   it('el fundador ve su asentamiento', () => {
     const { sesion, asentamientoId, fundador } = partidaConAsentamiento();
-    const proyeccion = proyectarParaJugador(sesion.getState(), fundador);
+    const proyeccion = proyectarParaJugador(sesion.getState(), fundador, SIN_GEOMETRIA);
     expect(proyeccion.asentamientos.map((a) => a.id)).toEqual([asentamientoId]);
   });
 
   it('un forastero sin Facción no ve ningún asentamiento, aunque exista', () => {
     const { sesion } = partidaConAsentamiento();
-    const proyeccion = proyectarParaJugador(sesion.getState(), 'forastero');
+    const proyeccion = proyectarParaJugador(sesion.getState(), 'forastero', SIN_GEOMETRIA);
     expect(proyeccion.asentamientos).toEqual([]);
   });
 
@@ -41,7 +46,7 @@ describe('asentamientos: solo los de la Facción propia', () => {
     const rf = base.sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, opcRival);
     base.sesion.ejecutar(fundarAsentamiento, { faccionId: rf.datos!.faccionId, posicion: { x: 900, y: 900 } }, opcRival);
 
-    const proyeccion = proyectarParaJugador(base.sesion.getState(), base.fundador);
+    const proyeccion = proyectarParaJugador(base.sesion.getState(), base.fundador, SIN_GEOMETRIA);
     expect(proyeccion.asentamientos).toHaveLength(1); // solo el propio, no los 2 que existen en la partida
     expect(proyeccion.asentamientos[0]!.faccionId).toBe(base.faccionId);
   });
@@ -53,7 +58,7 @@ describe('facciones: metadatos públicos de TODAS, sin filtrar', () => {
     const opcRival = { ...OPC, actor: 'rival' };
     const rf = base.sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, opcRival);
 
-    const proyeccion = proyectarParaJugador(base.sesion.getState(), base.fundador);
+    const proyeccion = proyectarParaJugador(base.sesion.getState(), base.fundador, SIN_GEOMETRIA);
     expect(proyeccion.facciones.map((f) => f.id).sort()).toEqual([base.faccionId, rf.datos!.faccionId].sort());
   });
 });
@@ -71,7 +76,7 @@ describe('caravanas, acuerdos y ordenes: solo los que tocan un asentamiento prop
       ],
     };
 
-    const proyeccion = proyectarParaJugador(estadoConOrdenes, fundador);
+    const proyeccion = proyectarParaJugador(estadoConOrdenes, fundador, SIN_GEOMETRIA);
     expect(proyeccion.ordenes.map((o) => o.id)).toEqual(['o1']);
   });
 
@@ -92,7 +97,7 @@ describe('caravanas, acuerdos y ordenes: solo los que tocan un asentamiento prop
       ],
     };
 
-    const proyeccion = proyectarParaJugador(estadoConCaravana, fundador);
+    const proyeccion = proyectarParaJugador(estadoConCaravana, fundador, SIN_GEOMETRIA);
     expect(proyeccion.caravanas.map((c) => c.id)).toEqual(['c1']);
   });
 });
@@ -100,7 +105,7 @@ describe('caravanas, acuerdos y ordenes: solo los que tocan un asentamiento prop
 describe('eventosDominio: sin asentamientoId (globales) o con uno propio', () => {
   it('el evento de fundación (con asentamientoId propio) pasa el filtro', () => {
     const { sesion, asentamientoId, fundador } = partidaConAsentamiento();
-    const proyeccion = proyectarParaJugador(sesion.getState(), fundador);
+    const proyeccion = proyectarParaJugador(sesion.getState(), fundador, SIN_GEOMETRIA);
     expect(proyeccion.eventosDominio.some((e) => e.asentamientoId === asentamientoId)).toBe(true);
   });
 
@@ -110,7 +115,7 @@ describe('eventosDominio: sin asentamientoId (globales) o con uno propio', () =>
     const rf = base.sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, opcRival);
     const ra = base.sesion.ejecutar(fundarAsentamiento, { faccionId: rf.datos!.faccionId, posicion: { x: 900, y: 900 } }, opcRival);
 
-    const proyeccion = proyectarParaJugador(base.sesion.getState(), base.fundador);
+    const proyeccion = proyectarParaJugador(base.sesion.getState(), base.fundador, SIN_GEOMETRIA);
     expect(proyeccion.eventosDominio.some((e) => e.asentamientoId === ra.datos!.asentamientoId)).toBe(false);
   });
 });
@@ -118,14 +123,14 @@ describe('eventosDominio: sin asentamientoId (globales) o con uno propio', () =>
 describe('historial: el propio, nunca el de otro jugador', () => {
   it('devuelve el historial de ESE jugador', () => {
     const { sesion, fundador } = partidaConAsentamiento();
-    const proyeccion = proyectarParaJugador(sesion.getState(), fundador);
+    const proyeccion = proyectarParaJugador(sesion.getState(), fundador, SIN_GEOMETRIA);
     expect(proyeccion.historial.length).toBeGreaterThan(0);
     expect(proyeccion.historial).toEqual(sesion.getState().historialJugadores[fundador]);
   });
 
   it('un jugador sin historial recibe un array vacío, no undefined', () => {
     const { sesion } = partidaConAsentamiento();
-    const proyeccion = proyectarParaJugador(sesion.getState(), 'nadie-hizo-nada');
+    const proyeccion = proyectarParaJugador(sesion.getState(), 'nadie-hizo-nada', SIN_GEOMETRIA);
     expect(proyeccion.historial).toEqual([]);
   });
 });
@@ -134,7 +139,7 @@ describe('mapaId, relaciones, titulos, caminos y campamentosBandidos: públicos,
   it('relaciones, titulos, caminos y campamentosBandidos viajan tal cual desde el estado', () => {
     const { sesion, fundador } = partidaConAsentamiento();
     const estado = sesion.getState();
-    const proyeccion = proyectarParaJugador(estado, fundador);
+    const proyeccion = proyectarParaJugador(estado, fundador, SIN_GEOMETRIA);
 
     expect(proyeccion.relaciones).toBe(estado.relaciones);
     expect(proyeccion.titulos).toBe(estado.titulos);
@@ -145,7 +150,7 @@ describe('mapaId, relaciones, titulos, caminos y campamentosBandidos: públicos,
   it('mapaId identifica el mapa del estado (Fase C11) sin mandarlo entero', () => {
     const { sesion, fundador } = partidaConAsentamiento();
     const estado = sesion.getState();
-    const proyeccion = proyectarParaJugador(estado, fundador);
+    const proyeccion = proyectarParaJugador(estado, fundador, SIN_GEOMETRIA);
 
     expect(proyeccion).not.toHaveProperty('mapa');
     expect(proyeccion.mapaId).toBe(idDeMapa(estado.mapa));

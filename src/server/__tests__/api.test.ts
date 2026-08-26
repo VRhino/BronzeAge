@@ -397,6 +397,51 @@ describe('GET /jugador/partidas/:gameId (proyeccion, Fase C4 Slice 1)', () => {
     expect(proyeccionAna.json().facciones.map((f: { nombre: string }) => f.nombre).sort()).toEqual(['Micenas', 'Troya']);
   });
 
+  it('geometría por frame (Fase C10): el jugador solo ve su propia zona/trazado, nunca los de un rival', async () => {
+    const { admin } = await partidaCreada('g1');
+    const ana = await jugadorEn('g1', 'ana');
+    const creadaAna = await app.inject({
+      method: 'POST',
+      url: '/v1/jugador/partidas/g1/comandos',
+      headers: ana,
+      payload: { tipo: 'crearFaccion', params: { nombre: 'Micenas' } },
+    });
+    const fundadaAna = await app.inject({
+      method: 'POST',
+      url: '/v1/jugador/partidas/g1/comandos',
+      headers: ana,
+      payload: { tipo: 'fundarAsentamiento', params: { faccionId: creadaAna.json().resultado.datos.faccionId, posicion: { x: 500, y: 500 } } },
+    });
+    const asentamientoAna = fundadaAna.json().resultado.datos.asentamientoId;
+
+    const luis = await jugadorEn('g1', 'luis');
+    const creadaLuis = await app.inject({
+      method: 'POST',
+      url: '/v1/jugador/partidas/g1/comandos',
+      headers: luis,
+      payload: { tipo: 'crearFaccion', params: { nombre: 'Troya' } },
+    });
+    const fundadaLuis = await app.inject({
+      method: 'POST',
+      url: '/v1/jugador/partidas/g1/comandos',
+      headers: luis,
+      payload: { tipo: 'fundarAsentamiento', params: { faccionId: creadaLuis.json().resultado.datos.faccionId, posicion: { x: 1200, y: 1200 } } },
+    });
+    const asentamientoLuis = fundadaLuis.json().resultado.datos.asentamientoId;
+
+    const proyeccionAna = (await app.inject({ method: 'GET', url: '/v1/jugador/partidas/g1', headers: ana })).json();
+    expect(proyeccionAna.zonas.map((z: { asentamientoId: string }) => z.asentamientoId)).toEqual([asentamientoAna]);
+    expect(proyeccionAna.zonasFusionadas).toHaveLength(1);
+    expect(proyeccionAna.zonasFusionadas[0].faccionId).toBe(creadaAna.json().resultado.datos.faccionId);
+    expect(Object.keys(proyeccionAna.trazadoPorAsentamiento)).toEqual([asentamientoAna]);
+
+    // El admin, en cambio, ve la geometría de las DOS Facciones — es quien observa toda la partida (doc 5).
+    const estadoAdmin = (await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1', headers: admin })).json();
+    expect(estadoAdmin.zonas.map((z: { asentamientoId: string }) => z.asentamientoId).sort()).toEqual([asentamientoAna, asentamientoLuis].sort());
+    expect(estadoAdmin.zonasFusionadas).toHaveLength(2);
+    expect(Object.keys(estadoAdmin.trazadoPorAsentamiento).sort()).toEqual([asentamientoAna, asentamientoLuis].sort());
+  });
+
   it('un admin no puede leer la proyeccion de jugador: para jugar hace falta ser jugador', async () => {
     const { admin } = await partidaCreada('g1');
     const res = await app.inject({ method: 'GET', url: '/v1/jugador/partidas/g1', headers: admin });
@@ -552,6 +597,109 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       payload: { tipo: 'noExiste', params: {} },
     });
     expect(res.statusCode).toBe(400);
+  });
+
+  describe('esquema de params por comando (Fase C9)', () => {
+    it('400, no 409: falta un campo requerido', async () => {
+      await partidaCreada('g1');
+      const auth = await jugadorEn('g1');
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/jugador/partidas/g1/comandos',
+        headers: auth,
+        // `fundarAsentamiento` exige `faccionId` y `posicion` — este cuerpo no trae ninguno.
+        payload: { tipo: 'fundarAsentamiento', params: {} },
+      });
+
+      expect(res.statusCode).toBe(400);
+    });
+
+    it('400, no 409: tipo JS equivocado en un campo', async () => {
+      await partidaCreada('g1');
+      const auth = await jugadorEn('g1');
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/jugador/partidas/g1/comandos',
+        headers: auth,
+        payload: { tipo: 'crearFaccion', params: { nombre: 123 } },
+      });
+
+      expect(res.statusCode).toBe(400);
+    });
+
+    it('400, no un crash del motor: EdificioTipo fuera del catálogo (antes reventaba en `EDIFICIO_CATALOGO[tipo].costo`)', async () => {
+      await partidaCreada('g1');
+      const auth = await jugadorEn('g1');
+      const creada = await app.inject({
+        method: 'POST',
+        url: '/v1/jugador/partidas/g1/comandos',
+        headers: auth,
+        payload: { tipo: 'crearFaccion', params: { nombre: 'Micenas' } },
+      });
+      const faccionId = creada.json().resultado.datos.faccionId;
+      const fundada = await app.inject({
+        method: 'POST',
+        url: '/v1/jugador/partidas/g1/comandos',
+        headers: auth,
+        payload: { tipo: 'fundarAsentamiento', params: { faccionId, posicion: { x: 500, y: 500 } } },
+      });
+      const asentamientoId = fundada.json().resultado.datos.asentamientoId;
+
+      // `tipo: 'noExiste'` no pasa el esquema (400) antes de que importe si `cargo`/autorización son
+      // correctos — por eso este `cargo` no necesita ser el del Gobernador real de este asentamiento.
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/jugador/partidas/g1/comandos',
+        headers: auth,
+        payload: { tipo: 'anadirEdificioManualmente', params: { asentamientoId, cargo: 'gobernador', tipo: 'noExiste' } },
+      });
+
+      expect(res.statusCode).toBe(400);
+    });
+
+    it('sigue aceptando un comando bien formado (no es una restricción de más)', async () => {
+      await partidaCreada('g1');
+      const auth = await jugadorEn('g1');
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/jugador/partidas/g1/comandos',
+        headers: auth,
+        payload: { tipo: 'crearFaccion', params: { nombre: 'Micenas' } },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().resultado.ok).toBe(true);
+    });
+
+    it('un `nombre` vacío SIGUE siendo un rechazo de dominio (200, ok:false), no un 400: el esquema no debe adelantarse a esa regla', async () => {
+      await partidaCreada('g1');
+      const auth = await jugadorEn('g1');
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/jugador/partidas/g1/comandos',
+        headers: auth,
+        payload: { tipo: 'crearFaccion', params: { nombre: '' } },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().resultado).toMatchObject({ ok: false, codigoError: 'faccion.nombre_vacio' });
+    });
+
+    it('el contrato publicado describe params por comando, ya no `params: {}`', async () => {
+      const doc = (await app.inject({ method: 'GET', url: '/v1/openapi.json' })).json();
+      const cuerpo = doc.paths['/jugador/partidas/{gameId}/comandos'].post.requestBody.content['application/json'].schema;
+
+      // `@fastify/swagger` convierte `const` a `enum: [valorUnico]` al publicar: OpenAPI 3.0 no tiene `const`
+      // (llegó en JSON Schema draft 6, y 3.0 se basa en un dialecto anterior) — ajv en runtime sí lo entiende
+      // tal cual (la validación de verdad usa el `schema.body` de Fastify, no este documento).
+      expect(cuerpo.oneOf.length).toBe(30);
+      const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
+      expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
+    });
   });
 
   it('403 cuando la matriz rechaza la condicion de dominio (no es ciudadano de esa Faccion)', async () => {

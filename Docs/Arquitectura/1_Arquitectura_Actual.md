@@ -15,7 +15,9 @@ se conectan a la misma instancia de partida.
 Este repositorio es **solo servidor** desde la Fase C0. La interfaz de navegador que existía aquí se extrajo a
 `cliente/` (proyecto aparte, con su propio `package.json`) y todavía **no cumple el criterio de cierre de la
 Fase C**: sigue importando el motor de este repo por un alias (`@motor/*`) en vez de hablar solo por red — ver
-`cliente/README.md` y los hitos C9–C13 del roadmap (C7 y C8 ya completos).
+`cliente/README.md` y los hitos C12–C13 del roadmap (C7–C11b ya completos). Un segundo proyecto,
+[`cliente-jugador/`](../../cliente-jugador/) (boilerplate, C11b), **sí** cumple el criterio: sin ningún alias
+al motor, habla solo por red y recalcula el terreno con su propia copia de las funciones puras de evaluación.
 
 ## Vista global
 
@@ -83,8 +85,9 @@ en v15, 2026-08-26 — ver doc 9.)
 El mundo generado es inmutable durante la partida salvo sus recursos agotables, cuyo consumo se mantiene
 separado en `EstadoMapa`. Por ser función pura de la seed, se sirve como **asset cacheable** en vez de viajar
 en cada respuesta — hito **C11a**, completado: `GET .../partidas/:gameId/mapa/:mapaId` con
-`Cache-Control: immutable`. Sigue sin resolverse que `elevacion`/`fertilidad` son *parámetros de ruido*, no
-rásteres — indibujable sin `worldgen/` (**C11b**, diferido a propósito).
+`Cache-Control: immutable`. `elevacion`/`fertilidad` son *parámetros de ruido*, no rásteres — indibujable sin
+código de evaluación — pero ese código es T2a (doc 9: "el terreno lo ven todos"), así que **C11b** se resolvió
+sin rasterizar nada en el servidor: `cliente-jugador/src/terreno/` lleva su propia copia y recalcula.
 
 ### Mundo y consultas espaciales: `src/world/`
 
@@ -225,8 +228,9 @@ hay todavía una fuente de ticks operativa por defecto ni descubrimiento de part
   partida — así que `alternarFaccionNpc` (la única acción que la matriz permite a un admin,
   `['jugador', 'administrador_partida']`) devolvía 403 siempre. Se invirtió el orden: la `Membresia` manda
   sobre `esAdministradorGlobal`, no al revés. Ver doc 5 y doc 3 hito C8.
-- Falta el esquema de `params` por comando (`ESQUEMA_EJECUTAR_COMANDO` declara `params: {}` hoy) — un
-  `params` malformado revienta dentro del manejador y sale como 409 en vez de 400 (**C9** pendiente).
+- **Resuelto (hito C9, 2026-08-26):** `ESQUEMA_EJECUTAR_COMANDO` tiene ahora un esquema por comando
+  (`session/comandos/esquemas.ts`, `oneOf` discriminado por `tipo`) — un `params` malformado responde 400
+  antes de tocar el manejador, en vez de 409 tras un `TypeError` sin capturar.
 - La proyección de jugador (C4) solo cubre el Slice 1 (Facción propia completa, resto solo metadatos
   públicos); la niebla de guerra real (Slice 2) está bloqueada por una decisión de balance sin tomar.
 
@@ -243,15 +247,17 @@ hay todavía una fuente de ticks operativa por defecto ni descubrimiento de part
   cliente sin duplicar acciones.
 - Contrato publicado (`/v1/openapi.json`) para que un cliente externo genere su propio cliente tipado.
 - Autorización de comandos exhaustiva en compilación (matriz, no lista suelta).
+- Esquema de `params` exhaustivo en compilación por comando (**C9**): un `oneOf` publicado en el OpenAPI, no
+  solo una validación interna — un cliente externo puede generar formularios correctos sin adivinar la forma.
+- Geometría por frame servida y filtrada por audiencia (**C10**): zonas de influencia, fusión por Facción y
+  trazado urbano ya no exigen que el cliente importe `engine/zones`/`engine/trazado` para dibujar el mapa — el
+  admin las recibe de todos los asentamientos, un jugador solo de los suyos.
+- Existe un cliente real sin ninguna línea del motor (**C11b**, `cliente-jugador/`) que pinta el terreno —
+  prueba en vivo, no solo en teoría, de que el criterio de cierre de la Fase C es alcanzable.
 
 ## Limitaciones actuales
 
 - Balance (`constants.ts`) servido (**C7**), pero global al proceso — sin overrides por partida/temporada.
-- `params` de comando sin esquema propio, error de forma malformado sale como 409 en vez de 400 (**C9**).
-- Geometría por frame (zonas de influencia, fusión, trazado urbano) no se sirve todavía precalculada; sigue
-  siendo una consulta de entrada privilegiada que solo el servidor puede resolver (**C10**, resto del hito).
-- Terreno no rasterizado: `MapaGenerado.elevacion`/`.fertilidad` son parámetros de ruido, indibujables sin
-  `worldgen/` (**C11b**, diferido por falta de consumidor hoy).
 - Sin descubrimiento de partidas (`gameId` llega fuera de banda) ni fuente de ticks operativa por defecto
   (**C12**).
 - `eventosDominio` sin cursor, crecen sin techo y viajan enteros en cada lectura; la única reacción de un
