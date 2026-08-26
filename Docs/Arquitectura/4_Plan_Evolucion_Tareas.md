@@ -437,13 +437,70 @@ siempre), o los evaluadores de `worldgen/` se publican como librería, que es ju
 
 #### Hallazgo 7 — C5 y C6 dejaron dos costuras de eficiencia que solo se ven con un cliente externo
 
+> **Corregido y medido 2026-08-26** tras la pregunta del usuario ("¿está viajando el mapa completo en cada
+> consulta?"). La respuesta es sí, pero la primera versión de este hallazgo apuntaba al culpable equivocado.
+> Medición completa y sus consecuencias en
+> [6_Sincronizacion_Visibilidad_y_Escala.md §6.4](6_Sincronizacion_Visibilidad_y_Escala.md#64-medición-qué-viaja-hoy-de-verdad).
+
+- **El mapa viaja entero en cada acción** (125,4 KB), y desde C6 cada comando de jugador devuelve una
+  proyección. Pero medirlo cambió el diagnóstico: esos 125,4 KB son **idénticos byte a byte** en el tick 0, el
+  50 y el 200 — el mapa se deriva de la seed y no cambia jamás. **No es estado, es un asset.** No necesita
+  `ETag`/deltas: necesita servirse una vez, cacheado por `seed`+`worldgenVersion` con `Cache-Control:
+  immutable`. Eso lo saca de la proyección del todo (−78%) y cae dentro de **C11**, que se abarata mucho
+- **`eventosDominio` es el problema de verdad**: 2,0 KB → 41,0 KB → 102,0 KB entre el tick 0 y el 200, con
+  solo 4 facciones, y viaja entero cada vez. Crece sin techo. A tick 1000 con 500 asentamientos es el
+  verdadero cuello. Se corta con un cursor `?desde=<version>` — que además es para lo que el WebSocket de C5
+  ya existe
 - **El WebSocket difunde `EventoDominio`, no deltas de estado.** Un cliente sin motor no puede aplicarlos a
   su proyección cacheada, así que la única reacción correcta a cualquier evento es *refetch* completo. C5
-  entrega avisos, no datos.
-- **La proyección manda `mapa` completo siempre**, y C6 hizo que cada comando de jugador devuelva una
-  proyección. Sin `ETag`/versión, el mapa entero viaja en cada acción. El cliente actual lo cachea y no lo
-  repide nunca; un cliente de red lo recibiría en cada comando.
-- → hito **C13**.
+  entrega avisos, no datos
+- → hito **C13**, con el objetivo corregido: el enemigo era el log de eventos, no el mapa.
+
+#### Hallazgo 8 — la frontera correcta no es "motor sí / motor no" (2026-08-26)
+
+Investigados los patrones de la industria a petición del usuario, que dudaba de si su premisa ("el cliente no
+debe tener el motor") venía de una mentalidad de aplicaciones web mal trasladada a videojuegos. Análisis
+completo, con fuentes, en
+[6_Sincronizacion_Visibilidad_y_Escala.md §6](6_Sincronizacion_Visibilidad_y_Escala.md#6-modelo-de-sincronización-reglas-al-cliente-simulación-en-el-servidor).
+Resumen de lo que afecta al plan:
+
+- **Lockstep determinista queda descartado** (el patrón de AoE/StarCraft: solo viajan comandos, cada cliente
+  simula el mundo entero). Es **estructuralmente incompatible con la niebla de guerra** —de ahí los maphacks
+  de StarCraft— y eso choca con C4, donde las proyecciones son frontera de seguridad. Segundo motivo: existe
+  para esconder latencia a 60 Hz, y aquí el tick mide ~1,9 s de CPU. Se confirma el modelo que C4/C5 ya
+  construyen: servidor autoritativo, cliente sin simulación
+- **Pero la premisa sí necesitaba un matiz**: la frontera es **reglas vs. simulación**, no "motor sí/no". La
+  simulación es solo del servidor; las **reglas** (costes, cupos, validez) el cliente las necesita para
+  responder al instante, y la industria se las manda **como datos, no como código** (el *Static Data Export*
+  de EVE Online). Eso es C7, y ya está medio hecho: `EDIFICIO_CATALOGO`, `POLITICAS` y `NIVEL_FACCION` son
+  tablas
+- **Consecuencia: C10 se parte en dos** (ver abajo)
+
+#### C10 partido en dos: qué sirve el servidor y qué calcula el cliente
+
+Consecuencia directa del hallazgo 8. Las 26 consultas no son homogéneas:
+
+**(a) Tabla — las resuelve C7, no C10.** `CATALOGOS`, `capFundacion`, `cupoVivienda`,
+`slotsPoliticaDisponibles`, `nivelFaccionInfo`. Son *lookup* sobre constantes de balance. Sirviendo el balance
+(C7), el cliente las resuelve sin reimplementar nada y sin viaje de red.
+
+**(b) Fórmula sobre estado vivo — el servidor manda el número calculado (C10).** `produccionInfo`,
+`mantenimientoInfo`, `manoObraInfo`, `poblacionInfo`, `infoMejoraEdificio`, `caravanasInfo`, `cupoNivelInfo`,
+`nivelAsentamientoInfo`, `poderMilitarInfo`, `precioReferencia`, `getLigas`. Dependen del estado de la partida,
+no solo del balance: re-derivarlas en el cliente sería duplicar simulación, no reglas.
+
+**(c) Geometría por frame — viaja precalculada dentro de la proyección (C10).** `getZonas`,
+`getZonasFusionadas`, `chokepointsControl`, `getTrazadoAsentamiento`. Solo cambian por tick, pero `render()`
+las pide en cada `mousemove`: no pueden ser un endpoint, tienen que llegar ya resueltas.
+
+**(d) Sin resolver — decisión de diseño de interacción, no de arquitectura.** `viabilidadFundacion(punto)` es
+función continua de un punto arbitrario que el usuario mueve con el ratón. O rejilla de viabilidad
+precalculada, o el *preview* deja de ser *hover* y pasa a clic. **No se decide aquí.**
+
+**Coste aceptado en (a)**: la fórmula acaba existiendo dos veces (servidor por autoridad, cliente por
+presentación) y pueden divergir. Se acepta a conciencia —la alternativa es un viaje de red por *tooltip*, que
+es inusable— y se mitiga manteniendo esas reglas como tabla pura, para que el cliente haga *lookup* en vez de
+reimplementar lógica. Es el mismo trato que hace la industria.
 
 #### Eliminado: el laboratorio visual
 

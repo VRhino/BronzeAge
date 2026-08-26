@@ -8,6 +8,11 @@ decisiones de diseño, así que se registran aquí antes de empezar la Fase B.
 Todo lo de aquí es diseño acordado, no implementado. Las tareas derivadas están en
 [4_Plan_Evolucion_Tareas.md](4_Plan_Evolucion_Tareas.md).
 
+> **Ampliado 2026-08-26** con [§6, Modelo de sincronización](#6-modelo-de-sincronización-reglas-al-cliente-simulación-en-el-servidor):
+> por qué este proyecto **no** puede usar lockstep determinista (el patrón clásico de RTS), y dónde cae de
+> verdad la frontera cliente/servidor. Va al final para no renumerar las secciones, a las que ya apuntan
+> comentarios del código y otros documentos, pero **justifica el §3 de abajo** y conviene leerlo antes.
+
 ## 1. Medición de escala del motor actual
 
 Medido sobre el motor real (`avanzarSimulacion`) en la máquina de desarrollo, fundando N asentamientos con
@@ -176,6 +181,92 @@ Tareas derivadas de este documento, reflejadas en
 - [ ] Resolver el bloqueo de la cola serial por ticks largos (Fase B/C, decisión pendiente).
 - [ ] Diseñar `ConocimientoJugador` y la proyección "último conocido" (Fase C, junto a los DTOs por audiencia).
 - [ ] Protocolo de suscripciones sobre conexión única (Fase C3).
+- [ ] Ver §6: el mapa deja de ser estado y pasa a ser asset cacheable (C11), y `eventosDominio` deja de viajar entero (C13).
+
+## 6. Modelo de sincronización: reglas al cliente, simulación en el servidor
+
+Añadido 2026-08-26. Pregunta que lo abrió, del usuario: *"he escuchado que varios juegos tienen el motor en
+cada front y uno en el back, y solo se manda la información de decisiones"*. Es un patrón real y con nombre;
+la conclusión es que **aquí no aplica**, y el porqué fija de paso dónde cae la frontera de verdad.
+
+### 6.1. Los tres modelos de la industria
+
+| | Qué viaja | ¿El cliente simula? | ¿Admite información oculta? | Género típico |
+|---|---|---|---|---|
+| **Lockstep determinista** | Solo comandos | Sí, el mundo entero | **No, estructuralmente** | RTS: AoE, StarCraft, C&C |
+| **State synchronization** | Comandos **y** estado | Sí, y se corrige contra el servidor | Parcial | Shooters, físicas |
+| **Servidor autoritativo + cliente fino** | Solo estado ya filtrado | No | Sí, por diseño | MMOs, Quake 3 |
+
+Lockstep es lo que describía la pregunta. Su propiedad estrella: el ancho de banda depende solo de **cuántos
+comandos emite el jugador**, no de cuántas entidades hay en el mundo (Bettner & Terrano, *1500 Archers on a
+28.8*, 2001).
+
+### 6.2. Por qué lockstep queda descartado aquí
+
+**Razón 1, y es definitiva: es incompatible con la niebla de guerra.** Lockstep exige que cada cliente conozca
+el mundo entero para poder simularlo, **incluida la parte tras la niebla**. Por eso los maphacks existen en
+StarCraft y Warcraft 3: el dato ya está en la máquina del jugador y la interfaz solo lo tapa. No es un fallo
+que nadie arregló, es consecuencia del modelo — los juegos que quieren niebla incorruptible abandonan lockstep
+justamente por esto.
+
+Eso choca de frente con el §3 de este documento y con la Fase C4: las proyecciones se declararon **frontera de
+seguridad, no refinamiento**. Adoptar lockstep sería renunciar a las tres fuentes de visibilidad de §3 y al
+"último conocido" de §3.2.
+
+**Razón 2: no hay latencia que esconder.** Lockstep y *client-side prediction* existen para dar respuesta
+instantánea a 60 Hz. El tick de este motor mide ~1,9 s de CPU a 500 asentamientos (§1). El jugador ya espera
+segundos por diseño. Se pagaría toda la disciplina de determinismo bit-exacto —que además arrastra que el
+estado interno del RNG todavía no es serializable (A3, diferido a B3)— a cambio de nada.
+
+**Se confirma el modelo 3**: servidor autoritativo, cliente sin simulación, estado filtrado por audiencia. Es
+lo que ya construyen C4/C5, y este análisis no lo cambia — lo justifica.
+
+### 6.3. La frontera real no es "motor sí / motor no", es REGLAS vs. SIMULACIÓN
+
+El eje correcto no es si el cliente tiene motor, sino qué parte:
+
+- **Simulación** (avanzar el mundo, resolver combates, producir, consumir): **solo servidor**, sin matices.
+- **Reglas** (qué cuesta un granero, cuántos slots da este nivel, es válida esta posición): el cliente **las
+  necesita** para dar respuesta inmediata. Un *tooltip* que hace viaje de ida y vuelta es inusable.
+
+La industria manda las reglas al cliente **como datos, no como código**. EVE Online lo llama *Static Data
+Export*: un *snapshot* publicado de todo lo que solo cambia con un parche. Y el problema que CCP describe al
+rehacerlo es exactamente el de este proyecto — *"había que tener extremo cuidado sobre qué datos iban al
+servidor y cuáles al cliente/SDE, para no filtrar información que no debía ser pública"*.
+
+Aquí eso es **C7** (balance versionado **y servido**), y está medio hecho sin saberlo: `EDIFICIO_CATALOGO`,
+`POLITICAS` y `NIVEL_FACCION` ya son tablas, no código.
+
+**Coste aceptado**: para las consultas que son tabla, si el cliente calcula, la fórmula acaba existiendo dos
+veces (servidor por autoridad, cliente por presentación) y pueden divergir. Se acepta —la alternativa es un
+viaje de red por *tooltip*— y se mitiga manteniendo las reglas lo más "tabla pura" posible, de modo que el
+cliente haga *lookup* y no reimplemente lógica. Consecuencia para el hito C10: ver su desglose en el doc 4.
+
+### 6.4. Medición: qué viaja hoy, de verdad
+
+Estado real, 4 facciones fundadas, seed 42 (medido 2026-08-26):
+
+| | tick 0 | tick 50 | tick 200 |
+|---|---|---|---|
+| `mapa` | 125,4 KB | 125,4 KB | 125,4 KB |
+| `asentamientos` | 8,8 KB | 18,0 KB | 26,9 KB |
+| `eventosDominio` | 2,0 KB | 41,0 KB | **102,0 KB** |
+| `estadoMapa` | 0,0 KB | 0,2 KB | 0,3 KB |
+| **Proyección total** | 129,6 KB | 144,3 KB | 160,4 KB |
+
+Dos conclusiones, y ninguna era la esperada:
+
+**(a) El mapa no es estado, es un asset.** 125,4 KB **idénticos byte a byte** en los tres cortes: se deriva de
+la seed y no cambia jamás en toda la partida. Con solo 4 facciones ya es el 78% de la proyección, y desde C6
+cada comando de jugador devuelve una proyección — así que hoy viajan 125 KB inmutables **en cada acción**. La
+solución no es compresión delta: es servirlo una vez, cacheado por `seed`+`worldgenVersion` con
+`Cache-Control: immutable`, y no volver a mandarlo. −78% sin maquinaria ninguna. → hito **C11**, que se abarata
+mucho: la rasterización del terreno cae en el mismo sitio, porque también es determinista por seed.
+
+**(b) El que crece sin techo es `eventosDominio`**: ×50 en 200 ticks, con 4 facciones, y viaja entero cada vez.
+A tick 1000 con 500 asentamientos ese es el problema real. Se corta con un cursor (`?desde=<version>`), que
+además es justo para lo que el WebSocket de C5 ya existe. → hito **C13**, cuyo objetivo cambia: el enemigo no
+era el mapa.
 
 ## Fuentes consultadas
 
@@ -195,6 +286,14 @@ Sincronización, visibilidad y conexiones:
 - [Game Networking (5) — Compression, delta encoding, interest management — Daposto](https://daposto.medium.com/game-networking-5-compression-delta-encoding-interest-management-bit-packing-9316ff1c96db)
 - [State Synchronization — Gaffer On Games](https://gafferongames.com/post/state_synchronization/)
 - [MMO Architecture: Source of truth, Dataflows, I/O bottlenecks — PRDeving](https://prdeving.wordpress.com/2023/09/29/mmo-architecture-source-of-truth-dataflows-i-o-bottlenecks-and-how-to-solve-them/)
+
+Modelos de sincronización y frontera cliente/servidor (consultadas 2026-08-26, para §6):
+
+- [1500 Archers on a 28.8: Network Programming in Age of Empires and Beyond — Bettner & Terrano (2001)](https://www.gamedeveloper.com/programming/1500-archers-on-a-28-8-network-programming-in-age-of-empires-and-beyond) — el paper fundacional de lockstep determinista
+- [What Every Programmer Needs To Know About Game Networking — Gaffer On Games](https://gafferongames.com/post/what_every_programmer_needs_to_know_about_game_networking/) — la taxonomía de los tres modelos
+- [Client-Side Prediction and Server Reconciliation — Gabriel Gambetta](https://www.gabrielgambetta.com/client-side-prediction-server-reconciliation.html)
+- [Network model for unhackable fog of war — GameDev.net](https://www.gamedev.net/forums/topic/583793-league-of-legends-network-model-for-unhackable-fog-of-war/) — por qué lockstep y niebla de guerra son incompatibles
+- [EVE Online — Static Data Export](https://developers.eveonline.com/docs/services/static-data/) y [Reworking the SDE](https://developers.eveonline.com/blog/reworking-the-sde-a-fresh-start-for-static-data) — reglas al cliente como datos, y el riesgo de filtración al hacerlo
 
 Antecedente de género (estrategia lenta por navegador, miles de jugadores por mundo, originalmente sin
 WebSockets): [OGame — Wikipedia](https://en.wikipedia.org/wiki/OGame).

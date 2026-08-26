@@ -19,6 +19,14 @@ migración.
 > - **Falta una categoría**: el TERRENO. `drawTerreno` evalúa `biomaEn`/`elevacionEn` por píxel sobre
 >   parámetros de ruido, no sobre un ráster. No es una consulta de `GameStore`, así que este triaje no la vio
 >   — es el hito **C11**.
+> - **El criterio "→ `engine/`" necesita un segundo eje** (2026-08-26). Este documento clasifica por *de qué
+>   depende* la consulta. Falta *quién puede calcularla sin viaje de red*: las que son **tabla pura** sobre
+>   constantes de balance (`capFundacion`, `cupoVivienda`, `slotsPoliticaDisponibles`, `nivelFaccionInfo`,
+>   `CATALOGOS`) las resuelve el cliente en cuanto **C7** le sirva el balance — patrón *Static Data Export*,
+>   ver [6_Sincronizacion_Visibilidad_y_Escala.md §6.3](6_Sincronizacion_Visibilidad_y_Escala.md#63-la-frontera-real-no-es-motor-sí--motor-no-es-reglas-vs-simulación).
+>   Las que son **fórmula sobre estado vivo** (`produccionInfo`, `mantenimientoInfo`, `manoObraInfo`…) las
+>   manda el servidor ya calculadas. Ambas caen hoy en el grupo "→ `engine/`" de abajo, y no deberían tener el
+>   mismo destino. Desglose en los cuatro grupos: doc 4, § "C10 partido en dos".
 
 ## El criterio
 
