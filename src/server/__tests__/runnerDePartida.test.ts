@@ -256,3 +256,55 @@ describe('RunnerDePartida.ejecutar — idempotencia (Fase C5)', () => {
     expect(r.getState().facciones.map((f) => f.nombre)).toEqual(['Micenas', 'Troya']);
   });
 });
+
+describe('RunnerDePartida — preciosReferencia (doc 9: entrada privilegiada, solo servidor)', () => {
+  /** Reloj mutable — a diferencia de `runner()` de arriba (fijo), aquí hace falta poder AVANZARLO para
+   * probar el TTL de un minuto real sin depender de `Date.now()` de verdad. */
+  function runnerConReloj(momentoInicial: string) {
+    let momento = momentoInicial;
+    const r = RunnerDePartida.crear('partida-precios', { seed: 1 }, { directorio, ahora: () => momento });
+    return { r, avanzarMs: (ms: number) => (momento = new Date(new Date(momento).getTime() + ms).toISOString()) };
+  }
+
+  it('sin asentamientos, el stock global es 0 y el factor se clampa al máximo (Doc 3.4)', () => {
+    const { r } = runnerConReloj(MOMENTO);
+    // PRECIO_BASE.madera = 1, PRECIO_REFERENCIA.factorMax = 3 -> 1 * 3 = 3.
+    expect(r.preciosReferencia().madera).toBe(3);
+  });
+
+  it('trae un precio para cada recurso de PRECIO_BASE, ni uno más ni uno menos', () => {
+    const { r } = runnerConReloj(MOMENTO);
+    expect(Object.keys(r.preciosReferencia()).sort()).toEqual(['cobre', 'estano', 'livestock', 'madera', 'piedra', 'trigo'].sort());
+  });
+
+  it('dentro del minuto de TTL, dos lecturas devuelven el MISMO objeto — no se recalcula de más', () => {
+    const { r, avanzarMs } = runnerConReloj(MOMENTO);
+    const primera = r.preciosReferencia();
+    avanzarMs(30_000); // 30s: dentro del TTL de 60s
+    expect(r.preciosReferencia()).toBe(primera); // misma referencia: no hubo recálculo
+  });
+
+  it('pasado el minuto de TTL, la siguiente lectura recalcula', async () => {
+    const { r, avanzarMs } = runnerConReloj(MOMENTO);
+    const creada = await r.ejecutar(crearFaccion, { nombre: 'Micenas' });
+    const rf = await r.ejecutar(fundarAsentamiento, { faccionId: creada.datos!.faccionId, posicion: { x: 500, y: 500 } });
+    expect(rf.ok).toBe(true);
+
+    const primera = r.preciosReferencia(); // con un asentamiento recién fundado (stock inicial > 0)
+    avanzarMs(60_000); // exactamente el TTL: >= dispara recálculo
+    const segunda = r.preciosReferencia();
+
+    expect(segunda).not.toBe(primera); // objeto nuevo: sí se recalculó
+    expect(segunda.madera).toEqual(primera.madera); // el estado no cambió entre medias, el valor sí coincide
+  });
+
+  it('el stock de un asentamiento baja el precio frente al caso sin asentamientos', async () => {
+    const sinAsentamientos = runnerConReloj(MOMENTO).r.preciosReferencia().madera!;
+
+    const { r } = runnerConReloj(MOMENTO);
+    const creada = await r.ejecutar(crearFaccion, { nombre: 'Micenas' });
+    await r.ejecutar(fundarAsentamiento, { faccionId: creada.datos!.faccionId, posicion: { x: 500, y: 500 } });
+
+    expect(r.preciosReferencia().madera).toBeLessThanOrEqual(sinAsentamientos);
+  });
+});

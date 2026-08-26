@@ -69,7 +69,6 @@ import { evaluarViabilidadFundacion, type ViabilidadFundacion } from '@motor/eng
 export type { ViabilidadFundacion } from '@motor/engine/settlement';
 import { computeTodasLasZonas, computeZonasFusionadasPorFaccion } from '@motor/engine/zones';
 import { controladorDeChokepoint } from '@motor/engine/chokepoints';
-import { calcularPrecioReferencia } from '@motor/engine/market';
 import { calcularCapFundacion, calcularCupoNivel, capacidadCasas } from '@motor/engine/faccion';
 import { computeLigas, type LigaInfo } from '@motor/engine/liga';
 import { consumoRacionTropas } from '@motor/engine/tropas';
@@ -439,8 +438,12 @@ export class GameStore {
     return capacidadCasas(asentamiento);
   }
 
-  precioReferencia(recurso: string, asentamientos: Asentamiento[] = this.state.asentamientos): number {
-    return calcularPrecioReferencia(recurso, asentamientos);
+  /** Precio de referencia calculado en el SERVIDOR (doc 9, 2026-08-26): necesita el almacén de todos los
+   * asentamientos del mundo, no solo los propios — entrada privilegiada que este cliente no debe recalcular
+   * aunque hoy tenga los datos para hacerlo (ve la partida entera por ser administración). Cacheado en el
+   * servidor con TTL de un minuto real; aquí solo se lee. */
+  precioReferencia(recurso: string): number {
+    return this.state.preciosReferencia[recurso] ?? 0;
   }
 
   /**

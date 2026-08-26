@@ -248,6 +248,13 @@ describe('GET /admin/partidas/:gameId (estado completo)', () => {
     expect(res.json()).not.toHaveProperty('mapa');
     expect(res.json().mapaId).toEqual(expect.any(String));
   });
+
+  it('trae preciosReferencia (doc 9): un administrador ve el mismo precio calculado en servidor', async () => {
+    const { admin } = await partidaCreada('g1');
+    const res = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1', headers: admin });
+
+    expect(Object.keys(res.json().preciosReferencia).sort()).toEqual(['cobre', 'estano', 'livestock', 'madera', 'piedra', 'trigo'].sort());
+  });
 });
 
 describe('GET /admin|jugador/partidas/:gameId/mapa/:mapaId (Fase C11)', () => {
@@ -350,6 +357,15 @@ describe('GET /jugador/partidas/:gameId (proyeccion, Fase C4 Slice 1)', () => {
     expect(cuerpo.facciones).toEqual([]);
   });
 
+  it('trae preciosReferencia (doc 9): calculado en el servidor con TODO el mundo, nunca por el jugador', async () => {
+    await partidaCreada('g1');
+    const auth = await jugadorEn('g1');
+
+    const res = await app.inject({ method: 'GET', url: '/v1/jugador/partidas/g1', headers: auth });
+
+    expect(Object.keys(res.json().preciosReferencia).sort()).toEqual(['cobre', 'estano', 'livestock', 'madera', 'piedra', 'trigo'].sort());
+  });
+
   it('no incluye asentamientos de una Faccion rival, aunque el admin sí los vea', async () => {
     await partidaCreada('g1');
     const ana = await jugadorEn('g1', 'ana');
@@ -427,6 +443,20 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
 
     expect(res.json().proyeccion.facciones).toHaveLength(1);
     expect(res.json().proyeccion.facciones[0].nombre).toBe('Micenas');
+  });
+
+  it('la proyeccion trae preciosReferencia (doc 9): calculado en el servidor, nunca por el jugador', async () => {
+    await partidaCreada('g1');
+    const auth = await jugadorEn('g1');
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/jugador/partidas/g1/comandos',
+      headers: auth,
+      payload: { tipo: 'crearFaccion', params: { nombre: 'Micenas' } },
+    });
+
+    expect(res.json().proyeccion.preciosReferencia.madera).toEqual(expect.any(Number));
   });
 
   it('la respuesta de administrador NO lleva proyeccion: su GET de estado completo ya esta ahi', async () => {

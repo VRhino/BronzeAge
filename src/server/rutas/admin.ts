@@ -149,11 +149,13 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
 
   /** Estado COMPLETO de la partida, sin proyección: todas las facciones, log global. Es exactamente por eso
    * que vive tras `/admin/*` — para un jugador sería una fuga (proyecciones por audiencia: Fase C4).
-   * Sin `mapa` (Fase C11): viaja `mapaId`, y el mapa real se pide una vez por `GET .../mapa/:mapaId`. */
+   * Sin `mapa` (Fase C11): viaja `mapaId`, y el mapa real se pide una vez por `GET .../mapa/:mapaId`.
+   * `preciosReferencia` (auditoría de doc 9) se fusiona aquí, no en `vistaAdminDeEstado`: es la pieza impura
+   * (caché con TTL de un minuto real) que solo `RunnerDePartida` puede calcular. */
   app.get<{ Params: ParametrosGameId }>('/admin/partidas/:gameId', { schema: ESQUEMA_ESTADO_COMPLETO }, async (request, reply) => {
     const acceso = exigirAdministracion(request, reply, deps);
     if (!acceso.ok) return acceso.respuesta;
-    return reply.send(vistaAdminDeEstado(acceso.runner.getState()));
+    return reply.send({ ...vistaAdminDeEstado(acceso.runner.getState()), preciosReferencia: acceso.runner.preciosReferencia() });
   });
 
   /** El mapa como asset (Fase C11) — ver `mapa.ts`. Misma comprobación de administración que el resto de esta

@@ -2092,7 +2092,7 @@ function caravanasEnRutaHtml(state: GameState): string {
 }
 
 function renderPanelEconomia(state: GameState): void {
-  const preciosHtml = CATALOGOS.recursosMercado.map((r) => `${r}: ${gameStore.precioReferencia(r, state.asentamientos).toFixed(2)}`).join(' · ');
+  const preciosHtml = CATALOGOS.recursosMercado.map((r) => `${r}: ${gameStore.precioReferencia(r).toFixed(2)}`).join(' · ');
   const nombreAsentamiento = (id: string) => {
     const asentamiento = state.asentamientos.find((a) => a.id === id);
     return asentamiento?.nombre ?? id;

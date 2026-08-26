@@ -122,7 +122,7 @@ Necesitan estado que el jugador no debe ver. Lo que viaja es **el resultado ya c
 
 | Función | Módulo | Por qué es privilegiada |
 |---|---|---|
-| `calcularPrecioReferencia` | `engine/market` | Suma el stock de **todos** los asentamientos del mundo |
+| `calcularPrecioReferencia` | `engine/market` | Suma el stock de **todos** los asentamientos del mundo — **movida al servidor 2026-08-26**: `RunnerDePartida.preciosReferencia()`, caché con TTL de un minuto real, expuesta en `EstadoAdmin`/`ProyeccionJugador`. El cliente ya no la importa; la sigue usando en vivo `colocarOrdenMercado` (comando, servidor) para el precio por defecto de una orden sin precio explícito — eso no cambió |
 | `computeZonaInfluencia`, `computeTodasLasZonas`, `computeZonasFusionadasPorFaccion` | `engine/zones` | Zona de cada asentamiento **contra todos los demás** |
 | `controladorDeChokepoint`, `chokepointsDePeajeEnRuta` | `engine/chokepoints` | Necesita las zonas de todos |
 | `evaluarViabilidadFundacion` | `engine/settlement` | Comprueba separación **contra todos** los asentamientos |

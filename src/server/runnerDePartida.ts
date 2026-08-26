@@ -17,6 +17,8 @@
 import type { RegionId } from '../domain/types';
 import { GameSession, type PartidaExportada, type ResultadoComando } from '../session/gameSession';
 import type { ActorId, ManejadorComando } from '../session/comandos/tipos';
+import { calcularPrecioReferencia } from '../engine/market';
+import { PRECIO_BASE } from '../constants';
 import { cargarPartida, guardarPartida } from './persistenciaPartida';
 
 export interface OpcionesRunner {
@@ -54,6 +56,24 @@ export class RunnerDePartida {
   private readonly idempotencia = new Map<string, Promise<ResultadoComando<unknown>>>();
   private static readonly LIMITE_IDEMPOTENCIA = 500;
 
+  /**
+   * Caché de precios de referencia (a petición del usuario, tras la auditoría de doc 9: `calcularPrecioReferencia`
+   * es una regla de entrada PRIVILEGIADA —suma el stock de TODOS los asentamientos del mundo—, así que un
+   * cliente sin motor no puede calcularla; el servidor la calcula y el cliente solo lee el resultado.
+   *
+   * TTL perezoso, no un `setInterval`: se recalcula la primera vez que alguien lo PIDE después de que pasó un
+   * minuto real desde el último cálculo, nunca antes. Con esto se consigue el mismo contrato observable que
+   * "se actualiza cada minuto en el servidor" (el cliente nunca ve un valor de más de ~60 s) sin sumar un
+   * temporizador de fondo por partida que limpiar en cada `app.close()` ni ruido en los 80 archivos de test
+   * que crean un servidor — no hay ninguna diferencia visible entre "recalculado por un timer" y "recalculado
+   * en la próxima lectura tras vencer el TTL" cuando nadie mira el valor entre medias.
+   *
+   * NO se persiste: es una vista DERIVADA de `asentamientos` (barata, O(n) por recurso), no una fuente de
+   * verdad — perderla al reiniciar el proceso no pierde nada, se recalcula sola en la siguiente lectura.
+   */
+  private cachePrecios: { calculadoEnMs: number; precios: Record<string, number> } | null = null;
+  private static readonly TTL_PRECIOS_MS = 60_000;
+
   private constructor(sesion: GameSession, opciones: OpcionesRunner) {
     this.sesion = sesion;
     this.directorio = opciones.directorio;
@@ -78,6 +98,19 @@ export class RunnerDePartida {
 
   getState() {
     return this.sesion.getState();
+  }
+
+  /** Precio de referencia por recurso, calculado en el servidor y cacheado con TTL de un minuto real — ver el
+   * comentario de `cachePrecios`. Nunca lo calcula el cliente: necesitaría el almacén de todos los
+   * asentamientos del mundo, no solo el propio. */
+  preciosReferencia(): Record<string, number> {
+    const ahoraMs = new Date(this.ahora()).getTime();
+    if (!this.cachePrecios || ahoraMs - this.cachePrecios.calculadoEnMs >= RunnerDePartida.TTL_PRECIOS_MS) {
+      const asentamientos = this.sesion.getState().asentamientos;
+      const precios = Object.fromEntries(Object.keys(PRECIO_BASE).map((recurso) => [recurso, calcularPrecioReferencia(recurso, asentamientos)]));
+      this.cachePrecios = { calculadoEnMs: ahoraMs, precios };
+    }
+    return this.cachePrecios.precios;
   }
 
   /**

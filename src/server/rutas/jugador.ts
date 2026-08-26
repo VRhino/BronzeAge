@@ -113,7 +113,7 @@ export function registrarRutasDeJugador(app: FastifyInstance, deps: Dependencias
     if (!runner) return partidaNoAbierta(reply, gameId);
 
     const jugadorId = resuelto.actor.membresia!.jugadorId!;
-    return reply.send(proyectarParaJugador(runner.getState(), jugadorId));
+    return reply.send({ ...proyectarParaJugador(runner.getState(), jugadorId), preciosReferencia: runner.preciosReferencia() });
   });
 
   /** El mapa como asset (Fase C11) — ver `mapa.ts`. La proyección solo trae `mapaId`; el mapa real se pide
@@ -144,7 +144,7 @@ export function registrarRutasDeJugador(app: FastifyInstance, deps: Dependencias
       const jugadorId = resuelto.actor.membresia!.jugadorId!;
       const actor: ActorDeComando = { rol: 'jugador', jugadorId };
       return ejecutarComandoHttp(reply, runner, request.body, actor, jugadorId, deps.hub, (r) => ({
-        proyeccion: proyectarParaJugador(r.getState(), jugadorId),
+        proyeccion: { ...proyectarParaJugador(r.getState(), jugadorId), preciosReferencia: r.preciosReferencia() },
       }));
     }
   );

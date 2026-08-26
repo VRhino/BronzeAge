@@ -492,8 +492,16 @@ Consecuencia directa del hallazgo 8. Las 26 consultas no son homogéneas:
 
 **(b) Fórmula sobre estado vivo — el servidor manda el número calculado (C10).** `produccionInfo`,
 `mantenimientoInfo`, `manoObraInfo`, `poblacionInfo`, `infoMejoraEdificio`, `caravanasInfo`, `cupoNivelInfo`,
-`nivelAsentamientoInfo`, `poderMilitarInfo`, `precioReferencia`, `getLigas`. Dependen del estado de la partida,
-no solo del balance: re-derivarlas en el cliente sería duplicar simulación, no reglas.
+`nivelAsentamientoInfo`, `poderMilitarInfo`. Dependen del estado de la partida, no solo del balance:
+re-derivarlas en el cliente sería duplicar simulación, no reglas. (`getLigas` NO va aquí — es T2a, ver la nota
+del doc 9; el error de haberla puesto en este grupo ya se corrigió más arriba, en el hallazgo 4.)
+
+> **`precioReferencia` — hecho 2026-08-26.** Primera de este grupo en moverse: `RunnerDePartida.preciosReferencia()`,
+> caché con TTL de un minuto real (no un `setInterval` — se recalcula perezosamente en la siguiente lectura
+> tras vencer el TTL, mismo contrato observable sin sumar un temporizador que limpiar por partida). Expuesta
+> en `EstadoAdmin`/`ProyeccionJugador`. El cliente dejó de importar `@motor/engine/market` — verificado en
+> vivo, el precio mostrado en pantalla coincide con el cálculo del servidor. 8 tests nuevos (5 unitarios de
+> TTL/caché, 3 HTTP en las tres superficies de lectura). 613/613 en total.
 
 **(c) Geometría por frame — viaja precalculada dentro de la proyección (C10).** `getZonas`,
 `getZonasFusionadas`, `chokepointsControl`, `getTrazadoAsentamiento`. Solo cambian por tick, pero `render()`

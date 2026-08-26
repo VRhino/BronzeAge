@@ -159,10 +159,19 @@ export function idDeMapa(mapa: GameSessionState['mapa']): string {
  *
  * El cliente pide el mapa real, una vez, por `GET .../mapa/:mapaId` — servible con cache eterna porque el id
  * ya captura su identidad completa.
+ *
+ * `preciosReferencia` (auditoría de doc 9, 2026-08-26) NO lo rellena esta función: es una regla de entrada
+ * PRIVILEGIADA (necesita el almacén de TODOS los asentamientos), calculada con caché de un minuto real en
+ * `RunnerDePartida.preciosReferencia()` — impuro, vive en `server/`, no aquí. Se declara en este tipo porque
+ * es lo que de verdad viaja por el cable (mismo patrón que `RespuestaComando.proyeccion` en C6: el tipo
+ * describe el CONTRATO, no todo tiene que salir de una sola función pura). Quien construye la respuesta HTTP
+ * es responsable de fusionarlo — ver `server/rutas/admin.ts` y `jugador.ts`.
  */
-export type EstadoAdmin = Omit<GameSessionState, 'mapa'> & { mapaId: string };
+export type EstadoAdmin = Omit<GameSessionState, 'mapa'> & { mapaId: string; preciosReferencia: Record<string, number> };
 
-export function vistaAdminDeEstado(estado: GameSessionState): EstadoAdmin {
+/** Devuelve todo MENOS `preciosReferencia`: esa pieza es impura (TTL real) y la añade el llamador HTTP —
+ * spread sobre este resultado más `{ preciosReferencia: runner.preciosReferencia() }` completa un `EstadoAdmin`. */
+export function vistaAdminDeEstado(estado: GameSessionState): Omit<EstadoAdmin, 'preciosReferencia'> {
   const { mapa, ...resto } = estado;
   return { ...resto, mapaId: idDeMapa(mapa) };
 }

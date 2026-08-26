@@ -70,13 +70,19 @@ export interface ProyeccionJugador {
    * fuga que el doc 7 §7.1 señalaba en el log administrativo: el log global narra TODO el mundo. */
   eventosDominio: EventoDominio[];
   historial: EventoLogAdmin[];
+  /** Precio de referencia por recurso — auditoría de doc 9 (2026-08-26): `calcularPrecioReferencia` necesita
+   * el almacén de TODOS los asentamientos del mundo (entrada privilegiada), así que el jugador nunca podría
+   * calcularlo aunque quisiera. Lo calcula `RunnerDePartida.preciosReferencia()` (caché de un minuto real,
+   * impuro) y esta función NO lo rellena — igual que `mapaId`, es parte del contrato de wire pero lo añade
+   * el llamador HTTP, ver `server/rutas/jugador.ts`. */
+  preciosReferencia: Record<string, number>;
 }
 
 function faccionDe(estado: GameSessionState, jugadorId: string): string | null {
   return estado.facciones.find((f) => esCiudadano(f, jugadorId))?.id ?? null;
 }
 
-export function proyectarParaJugador(estado: GameSessionState, jugadorId: string): ProyeccionJugador {
+export function proyectarParaJugador(estado: GameSessionState, jugadorId: string): Omit<ProyeccionJugador, 'preciosReferencia'> {
   const faccionId = faccionDe(estado, jugadorId);
   const asentamientosPropios = estado.asentamientos.filter((a) => a.faccionId === faccionId);
   const idsPropios = new Set(asentamientosPropios.map((a) => a.id));
