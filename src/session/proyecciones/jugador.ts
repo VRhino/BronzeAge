@@ -25,10 +25,9 @@ import type {
   Titulo,
 } from '../../domain/types';
 import type { EventoDominio } from '../../domain/eventos';
-import type { MapaGenerado } from '../../worldgen';
 import type { EstadoMapa } from '../../world/mapa';
 import { esCiudadano } from '../../engine/faccion';
-import type { EventoLogAdmin, GameSessionState } from '../estado';
+import { idDeMapa, type EventoLogAdmin, type GameSessionState } from '../estado';
 
 export interface ProyeccionJugador {
   gameId: string;
@@ -38,9 +37,14 @@ export interface ProyeccionJugador {
   /** Derivado de `Faccion.ciudadanosIds` en el momento de proyectar — nunca almacenado (ver `Membresia` en
    * `acceso/tipos.ts`: es la misma razón por la que se retiró de ahí). `null` antes de unirse a una. */
   faccionId: string | null;
-  /** Geografía del mundo: no es secreta (todos ven el mismo terreno), así que viaja completa — lo que se
-   * filtra son las ENTIDADES sobre el mapa, no el mapa en sí. */
-  mapa: MapaGenerado;
+  /**
+   * Identidad del mapa (Fase C11, doc 9), NO el mapa en sí. Geografía del mundo: no es secreta (todos ven el
+   * mismo terreno) — pero tampoco cambia NUNCA durante la partida (125 KB medidos, idénticos byte a byte en
+   * todo el tick 0-200, doc 6 §6.4), así que mandarla completa en cada comando/proyección era pura repetición.
+   * El cliente lo pide una vez, por `GET .../mapa/:mapaId`, cacheable para siempre porque el id ya captura su
+   * identidad — y compara este campo en cada proyección para saber si ese mapa sigue siendo el vigente.
+   */
+  mapaId: string;
   estadoMapa: EstadoMapa;
   /** Todas las Facciones, sin redactar: nada en `Faccion` (nombre, nivel, reputación, Rey/Embajador,
    * ciudadanía) es información táctica — es el mismo tipo de dato público que "quién gobierna Troya" en la
@@ -84,7 +88,7 @@ export function proyectarParaJugador(estado: GameSessionState, jugadorId: string
     version: estado.version,
     jugadorId,
     faccionId,
-    mapa: estado.mapa,
+    mapaId: idDeMapa(estado.mapa),
     estadoMapa: estado.estadoMapa,
     facciones: estado.facciones,
     asentamientos: asentamientosPropios,

@@ -135,6 +135,38 @@ export function eventoAdministrativo(momento: string, tick: number, mensaje: str
   return { codigo: 'administrativo', mensaje, momento, tick };
 }
 
+/**
+ * Identidad del mapa de una partida (Fase C11, doc 9: "el mapa deja de ser estado, es un asset"). Función
+ * PURA de `MapaGenerado.config` (`seed` + `region` — `ancho`/`alto` no varían nunca hoy, siempre
+ * `MAPA_DEFAULT`, así que no hace falta incluirlos) y del algoritmo de generación (`version`,
+ * `WORLDGEN_VERSION`). Determinista: el mismo mapa siempre produce el mismo id, y solo cambia si el mapa
+ * cambia de verdad (`regenerarMundo`/`forzar`, o una subida de `WORLDGEN_VERSION`).
+ *
+ * No es un hash: es legible a propósito, para poder leer un id en un log o una URL y saber de qué mapa se
+ * trata sin decodificar nada. Nunca se guarda — se deriva cada vez que hace falta, igual que `proyectarLog`.
+ */
+export function idDeMapa(mapa: GameSessionState['mapa']): string {
+  return `v${mapa.version}-s${mapa.config.seed}${mapa.config.region ? `-${mapa.config.region}` : ''}`;
+}
+
+/**
+ * Vista de administración del estado completo: TODO sin filtrar por audiencia (a diferencia de
+ * `proyectarParaJugador`, esto sigue siendo "todas las Facciones, log global" — Fase C3), pero con `mapa`
+ * sustituido por `mapaId` (Fase C11). El mapa no cambia nunca durante la partida (125 KB medidos, idénticos
+ * byte a byte del tick 0 al 200 — doc 6 §6.4): mandarlo entero en cada lectura de estado es la misma fuga de
+ * ancho de banda que ya se corrigió en la proyección de jugador, solo que aquí no se había notado porque el
+ * cliente de administración es el único que la sufre hoy.
+ *
+ * El cliente pide el mapa real, una vez, por `GET .../mapa/:mapaId` — servible con cache eterna porque el id
+ * ya captura su identidad completa.
+ */
+export type EstadoAdmin = Omit<GameSessionState, 'mapa'> & { mapaId: string };
+
+export function vistaAdminDeEstado(estado: GameSessionState): EstadoAdmin {
+  const { mapa, ...resto } = estado;
+  return { ...resto, mapaId: idDeMapa(mapa) };
+}
+
 /** Añade una entrada al historial de un jugador concreto (administración, igual que el log). */
 export function conHistorialDeJugador(estado: GameSessionState, jugadorId: string, mensaje: string): GameSessionState {
   if (!jugadorId) return estado;

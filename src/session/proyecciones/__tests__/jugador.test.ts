@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { partidaConAsentamiento, OPC } from '../../__tests__/fixtures';
 import { crearFaccion } from '../../comandos/crearFaccion';
 import { fundarAsentamiento } from '../../comandos/fundarAsentamiento';
+import { idDeMapa } from '../../estado';
 import { proyectarParaJugador } from '../jugador';
 
 describe('faccionId se deriva de la ciudadanía, no de un campo guardado', () => {
@@ -129,16 +130,24 @@ describe('historial: el propio, nunca el de otro jugador', () => {
   });
 });
 
-describe('mapa, relaciones, titulos, caminos y campamentosBandidos: públicos, sin filtrar', () => {
-  it('viajan tal cual desde el estado', () => {
+describe('mapaId, relaciones, titulos, caminos y campamentosBandidos: públicos, sin filtrar', () => {
+  it('relaciones, titulos, caminos y campamentosBandidos viajan tal cual desde el estado', () => {
     const { sesion, fundador } = partidaConAsentamiento();
     const estado = sesion.getState();
     const proyeccion = proyectarParaJugador(estado, fundador);
 
-    expect(proyeccion.mapa).toBe(estado.mapa);
     expect(proyeccion.relaciones).toBe(estado.relaciones);
     expect(proyeccion.titulos).toBe(estado.titulos);
     expect(proyeccion.caminos).toBe(estado.caminos);
     expect(proyeccion.campamentosBandidos).toBe(estado.campamentosBandidos);
+  });
+
+  it('mapaId identifica el mapa del estado (Fase C11) sin mandarlo entero', () => {
+    const { sesion, fundador } = partidaConAsentamiento();
+    const estado = sesion.getState();
+    const proyeccion = proyectarParaJugador(estado, fundador);
+
+    expect(proyeccion).not.toHaveProperty('mapa');
+    expect(proyeccion.mapaId).toBe(idDeMapa(estado.mapa));
   });
 });

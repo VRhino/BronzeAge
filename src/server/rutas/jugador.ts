@@ -14,6 +14,7 @@ import type { ActorDeComando } from '../../session/comandos/autorizacion';
 import { proyectarParaJugador } from '../../session/proyecciones/jugador';
 import { ESQUEMA_SESION_AUTH } from '../openapi';
 import { ejecutarComandoHttp, ESQUEMA_EJECUTAR_COMANDO, type EjecutarComandoBody } from './comandos';
+import { enviarMapa, ESQUEMA_MAPA } from './mapa';
 import { ERROR_RESPUESTA, PARAMS_GAME_ID } from './esquemas';
 import {
   partidaNoAbierta,
@@ -46,6 +47,7 @@ const ESQUEMA_MEMBRESIA = {
 const ESQUEMA_PROYECCION = {
   description:
     'Proyección del jugador (Fase C4 Slice 1): su Facción completa, las demás solo con metadatos públicos. ' +
+    'Sin `mapa` (Fase C11): trae `mapaId` en su lugar — ver GET .../mapa/:mapaId. ' +
     'Cuerpo no modelado en este esquema por su tamaño y forma variable (ver session/proyecciones/jugador.ts).',
   tags: ['jugador'],
   security: SEGURIDAD_JUGADOR,
@@ -112,6 +114,19 @@ export function registrarRutasDeJugador(app: FastifyInstance, deps: Dependencias
 
     const jugadorId = resuelto.actor.membresia!.jugadorId!;
     return reply.send(proyectarParaJugador(runner.getState(), jugadorId));
+  });
+
+  /** El mapa como asset (Fase C11) — ver `mapa.ts`. La proyección solo trae `mapaId`; el mapa real se pide
+   * aquí, una vez, y se cachea para siempre en el cliente. */
+  app.get<{ Params: ParametrosGameId & { mapaId: string } }>('/jugador/partidas/:gameId/mapa/:mapaId', { schema: ESQUEMA_MAPA }, async (request, reply) => {
+    const { gameId } = request.params;
+    const resuelto = resolverActor(request, deps, gameId);
+    if (!resuelto) return sinSesion(reply);
+    if (!puedeJugar(resuelto.actor)) return sinPermiso(reply, 'sin membresia de jugador en esta partida');
+
+    const runner = deps.partidas.obtener(gameId);
+    if (!runner) return partidaNoAbierta(reply, gameId);
+    enviarMapa(reply, runner);
   });
 
   app.post<{ Params: ParametrosGameId; Body: EjecutarComandoBody }>(

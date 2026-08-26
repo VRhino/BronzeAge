@@ -182,12 +182,15 @@ simulación de este proyecto tiene:
 Eso convierte al mapa en un **asset**, no en estado — medido: 125,4 KB idénticos byte a byte en los ticks 0,
 50 y 200 ([§6.4 del doc 6](6_Sincronizacion_Visibilidad_y_Escala.md#64-medición-qué-viaja-hoy-de-verdad)).
 El cliente no necesita `worldgen/` **ni** que se lo manden en cada respuesta: necesita el resultado servido
-una vez y cacheado por `seed`+`worldgenVersion`. Ese es el hito **C11**.
+una vez y cacheado por identidad de mapa. **Hito C11a, completado 2026-08-26**:
+`GET .../partidas/:gameId/mapa/:mapaId` en ambas superficies, `Cache-Control: immutable`; `ResumenPartida` y
+las vistas de estado llevan `mapaId` en vez de `mapa`.
 
-Ojo con el matiz que hoy lo impide: `MapaGenerado.elevacion` y `.fertilidad` **no son rásteres**, son
-*parámetros de ruido*, y el bioma no se guarda — se evalúa por píxel con `evaluarBioma`. Servir el
-`MapaGenerado` tal cual no basta: hay que rasterizar. La rasterización es igual de determinista por seed, así
-que se cachea igual.
+Ojo con el matiz que **sigue sin resolverse** (hito **C11b**, descoped a propósito): `MapaGenerado.elevacion`
+y `.fertilidad` **no son rásteres**, son *parámetros de ruido*, y el bioma no se guarda — se evalúa por píxel
+con `evaluarBioma`. C11a sirve el `MapaGenerado` tal cual, y eso **no basta**: sigue siendo indibujable sin
+`worldgen/`. Hay que rasterizar, y es igual de determinista por seed, así que se cachearía igual — pero se
+difirió porque hoy no existe ningún cliente sin motor que lo consuma.
 
 ---
 

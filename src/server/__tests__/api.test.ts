@@ -114,7 +114,7 @@ describe('POST /admin/partidas', () => {
     const { res } = await partidaCreada('g1');
 
     expect(res.statusCode).toBe(201);
-    expect(res.json()).toEqual({ gameId: 'g1', tick: 0, version: 0 });
+    expect(res.json()).toEqual({ gameId: 'g1', tick: 0, version: 0, mapaId: expect.any(String) });
   });
 
   it('401 sin sesion — antes de C3 este endpoint era abierto', async () => {
@@ -190,7 +190,7 @@ describe('POST /admin/partidas', () => {
     const res = await app.inject({ method: 'POST', url: '/v1/admin/partidas', headers: admin, payload: { gameId: 'g1', seed: 999, forzar: true } });
 
     expect(res.statusCode).toBe(201);
-    expect(res.json()).toEqual({ gameId: 'g1', tick: 0, version: 0 });
+    expect(res.json()).toEqual({ gameId: 'g1', tick: 0, version: 0, mapaId: expect.any(String) });
   });
 });
 
@@ -239,6 +239,71 @@ describe('GET /admin/partidas/:gameId (estado completo)', () => {
   it('401 sin sesion', async () => {
     await partidaCreada('g1');
     expect((await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1' })).statusCode).toBe(401);
+  });
+
+  it('sin `mapa` (Fase C11): trae `mapaId` en su lugar, el mapa no viaja en cada lectura de estado', async () => {
+    const { admin } = await partidaCreada('g1');
+    const res = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1', headers: admin });
+
+    expect(res.json()).not.toHaveProperty('mapa');
+    expect(res.json().mapaId).toEqual(expect.any(String));
+  });
+});
+
+describe('GET /admin|jugador/partidas/:gameId/mapa/:mapaId (Fase C11)', () => {
+  it('sirve el mapa real, con cache eterna, a un administrador', async () => {
+    const { admin } = await partidaCreada('g1', 42);
+    const estado = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1', headers: admin });
+    const { mapaId } = estado.json();
+
+    const res = await app.inject({ method: 'GET', url: `/v1/admin/partidas/g1/mapa/${mapaId}`, headers: admin });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().config.seed).toBe(42);
+    expect(res.headers['cache-control']).toMatch(/immutable/);
+  });
+
+  it('sirve el mapa real a un jugador con membresia, no solo a administracion', async () => {
+    await partidaCreada('g1', 42);
+    const jugador = await jugadorEn('g1');
+    const proyeccion = await app.inject({ method: 'GET', url: '/v1/jugador/partidas/g1', headers: jugador });
+    const { mapaId } = proyeccion.json();
+
+    const res = await app.inject({ method: 'GET', url: `/v1/jugador/partidas/g1/mapa/${mapaId}`, headers: jugador });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().config.seed).toBe(42);
+  });
+
+  it('el segmento :mapaId es solo cache-buster: cualquier valor sirve el mapa vigente', async () => {
+    const { admin } = await partidaCreada('g1', 42);
+    const res = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/mapa/cualquier-cosa', headers: admin });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().config.seed).toBe(42);
+  });
+
+  it('el mapaId de la proyeccion de jugador coincide con el de la vista de administracion', async () => {
+    const { admin } = await partidaCreada('g1');
+    const jugador = await jugadorEn('g1');
+
+    const estadoAdmin = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1', headers: admin });
+    const proyeccion = await app.inject({ method: 'GET', url: '/v1/jugador/partidas/g1', headers: jugador });
+
+    expect(proyeccion.json().mapaId).toBe(estadoAdmin.json().mapaId);
+  });
+
+  it('401 sin sesion en ambas superficies', async () => {
+    await partidaCreada('g1');
+    expect((await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/mapa/x' })).statusCode).toBe(401);
+    expect((await app.inject({ method: 'GET', url: '/v1/jugador/partidas/g1/mapa/x' })).statusCode).toBe(401);
+  });
+
+  it('403 a un jugador sin membresia en la superficie de jugador', async () => {
+    await partidaCreada('g1');
+    const auth = await sesionDe('ana');
+    const res = await app.inject({ method: 'GET', url: '/v1/jugador/partidas/g1/mapa/x', headers: auth });
+    expect(res.statusCode).toBe(403);
   });
 });
 

@@ -14,8 +14,10 @@ import { puedeAdministrar, puedeCrearPartida, puedeDescartarPartida, rolEnPartid
 import type { RolTecnico } from '../../acceso/tipos';
 import type { ActorDeComando } from '../../session/comandos/autorizacion';
 import { PartidaYaAbiertaError } from '../registroDePartidas';
+import { vistaAdminDeEstado } from '../../session/estado';
 import { ESQUEMA_SESION_AUTH } from '../openapi';
 import { ejecutarComandoHttp, ESQUEMA_EJECUTAR_COMANDO, type EjecutarComandoBody } from './comandos';
+import { enviarMapa, ESQUEMA_MAPA } from './mapa';
 import { ERROR_RESPUESTA, PARAMS_GAME_ID, RESUMEN_PARTIDA_RESPUESTA } from './esquemas';
 import {
   mensajeDe,
@@ -77,6 +79,8 @@ const ESQUEMA_TICK = {
 const ESQUEMA_ESTADO_COMPLETO = {
   description:
     'Estado COMPLETO de la partida, sin proyectar por audiencia (todas las Facciones, log global). ' +
+    'Sin `mapa` (Fase C11): trae `mapaId` en su lugar — el mapa real se pide una vez por ' +
+    'GET .../mapa/:mapaId, cacheable para siempre. ' +
     'Cuerpo de la respuesta no modelado en este esquema por su tamaño y forma variable (Fase C6, doc 4).',
   tags: ['admin'],
   security: SEGURIDAD_ADMIN,
@@ -144,11 +148,20 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
   });
 
   /** Estado COMPLETO de la partida, sin proyección: todas las facciones, log global. Es exactamente por eso
-   * que vive tras `/admin/*` — para un jugador sería una fuga (proyecciones por audiencia: Fase C4). */
+   * que vive tras `/admin/*` — para un jugador sería una fuga (proyecciones por audiencia: Fase C4).
+   * Sin `mapa` (Fase C11): viaja `mapaId`, y el mapa real se pide una vez por `GET .../mapa/:mapaId`. */
   app.get<{ Params: ParametrosGameId }>('/admin/partidas/:gameId', { schema: ESQUEMA_ESTADO_COMPLETO }, async (request, reply) => {
     const acceso = exigirAdministracion(request, reply, deps);
     if (!acceso.ok) return acceso.respuesta;
-    return reply.send(acceso.runner.getState());
+    return reply.send(vistaAdminDeEstado(acceso.runner.getState()));
+  });
+
+  /** El mapa como asset (Fase C11) — ver `mapa.ts`. Misma comprobación de administración que el resto de esta
+   * superficie: el mapa no es secreto, pero la partida sí exige sesión para entrar en su gameId. */
+  app.get<{ Params: ParametrosGameId & { mapaId: string } }>('/admin/partidas/:gameId/mapa/:mapaId', { schema: ESQUEMA_MAPA }, async (request, reply) => {
+    const acceso = exigirAdministracion(request, reply, deps);
+    if (!acceso.ok) return acceso.respuesta;
+    enviarMapa(reply, acceso.runner);
   });
 
   /**

@@ -14,6 +14,7 @@ import type { DirectorioDeAdministradores } from '../identidad/administradoresGl
 import type { RegistroDePartidas } from '../registroDePartidas';
 import type { RunnerDePartida } from '../runnerDePartida';
 import type { HubDeDifusion } from '../difusion/hub';
+import { idDeMapa } from '../../session/estado';
 
 export interface DependenciasDeRutas {
   identidad: ContextoAutenticacion;
@@ -33,11 +34,16 @@ export interface ResumenPartida {
   gameId: string;
   tick: number;
   version: number;
+  /** Identidad del mapa vigente (Fase C11, doc 9) — nunca el mapa en sí. Presente en TODA respuesta que
+   * incluya un resumen (crear partida, tick, comando) para que el cliente sepa, sin una petición aparte, si
+   * el mapa que tiene cacheado sigue siendo el vigente. Solo cambia si `regenerarMundo`/`forzar` reemplaza la
+   * partida por otra semilla. */
+  mapaId: string;
 }
 
 export function resumenDe(runner: RunnerDePartida): ResumenPartida {
   const estado = runner.getState();
-  return { gameId: runner.gameId, tick: estado.tick, version: estado.version };
+  return { gameId: runner.gameId, tick: estado.tick, version: estado.version, mapaId: idDeMapa(estado.mapa) };
 }
 
 export function mensajeDe(err: unknown): string {

@@ -13,14 +13,17 @@
 // Las rutas son relativas: en dev, `vite.config.ts` las proxya al backend (mismo origen desde el navegador,
 // sin CORS); en producción, se sirven detrás del mismo host que el estático.
 import type { RegionId } from '@motor/domain/types';
-import type { GameSessionState } from '@motor/session/gameSession';
+import type { EstadoAdmin } from '@motor/session/estado';
 import type { ResultadoComando } from '@motor/session/comandos/tipos';
 import type { DatosDe, ParamsDe, TipoComando } from '@motor/session/comandos/registro';
+import type { MapaGenerado } from '@motor/worldgen';
 
 export interface ResumenPartida {
   gameId: string;
   tick: number;
   version: number;
+  /** Identidad del mapa vigente (Fase C11) — nunca el mapa en sí. Ver `obtenerMapa`. */
+  mapaId: string;
 }
 
 export interface RespuestaComando<R = unknown> extends ResumenPartida {
@@ -123,6 +126,17 @@ export function avanzarTick(gameId: string): Promise<RespuestaComando<void>> {
   return peticion<RespuestaComando<void>>(`${V1}/admin/partidas/${encodeURIComponent(gameId)}/tick`, { method: 'POST' });
 }
 
-export function consultarEstado(gameId: string): Promise<GameSessionState> {
-  return peticion<GameSessionState>(`${V1}/admin/partidas/${encodeURIComponent(gameId)}`);
+/** Sin `mapa` (Fase C11): trae `mapaId` en su lugar. Ver `obtenerMapa` para pedir el mapa real. */
+export function consultarEstado(gameId: string): Promise<EstadoAdmin> {
+  return peticion<EstadoAdmin>(`${V1}/admin/partidas/${encodeURIComponent(gameId)}`);
+}
+
+/**
+ * El mapa como asset (Fase C11): NUNCA cambia durante la partida, así que se pide una sola vez por `mapaId` —
+ * `GameStore` decide cuándo llamar a esto comparando el `mapaId` que trae cada respuesta contra el que tiene
+ * cacheado, no esta función. `:mapaId` en la URL es lo que le permite al navegador cachear la respuesta para
+ * siempre sin volver a preguntarle al servidor (`Cache-Control: immutable`, ver `server/rutas/mapa.ts`).
+ */
+export function obtenerMapa(gameId: string, mapaId: string): Promise<MapaGenerado> {
+  return peticion<MapaGenerado>(`${V1}/admin/partidas/${encodeURIComponent(gameId)}/mapa/${encodeURIComponent(mapaId)}`);
 }

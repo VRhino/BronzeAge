@@ -90,11 +90,12 @@ import {
 import { poderEscuadron } from '@motor/engine/combate';
 
 // --- Capa de partida: vive en el servidor, se habla por HTTP ---
-import type { GameSessionState } from '@motor/session/gameSession';
+import type { EstadoAdmin } from '@motor/session/estado';
 import type { EventoDominio } from '@motor/domain/eventos';
 import { proyectarLog } from '@motor/session/estado';
 import type { ParamsDe, TipoComando } from '@motor/session/comandos/registro';
-import { ApiError, avanzarTick as apiAvanzarTick, consultarEstado, crearOResumirPartida, ejecutarComando } from './apiCliente';
+import type { MapaGenerado } from '@motor/worldgen';
+import { ApiError, avanzarTick as apiAvanzarTick, consultarEstado, crearOResumirPartida, ejecutarComando, obtenerMapa } from './apiCliente';
 
 export interface EventoLog {
   tick: number;
@@ -106,8 +107,11 @@ export interface EventoLog {
  * persistido sino una proyección de `eventosDominio` (ver `proyectarLog`, `session/estado.ts`). Se deriva
  * aquí, en el cliente, a partir de los eventos que el servidor ya manda — así el mismo hecho no viaja dos
  * veces por la red ni se guarda dos veces en el snapshot.
+ *
+ * Sin `mapa` (Fase C11): el servidor solo manda `mapaId` en el estado; el `MapaGenerado` real se pide UNA vez
+ * por `mapaId` (nunca cambia durante la partida) y se cachea aparte — ver `mapaGeneradoCache` más abajo.
  */
-export type GameState = GameSessionState & { log: EventoLog[] };
+export type GameState = EstadoAdmin & { log: EventoLog[] };
 
 /**
  * Nodo tal como viaja en el ARCHIVO: con `cantidad` = lo que le queda. En memoria el nodo es inmutable y
@@ -199,7 +203,7 @@ function idsNoVacios(csv: string): string[] {
  */
 export class GameStore {
   private gameId: string;
-  private estadoCache: GameSessionState;
+  private estadoCache: EstadoAdmin;
   private listeners = new Set<Listener>();
   /** Mensajes de rechazo/error SOLO EN MEMORIA del cliente (nunca persistidos): a diferencia de la versión
    * local anterior, el servidor no tiene manera de que el cliente le pida "anota este rechazo en el log" sin
@@ -214,13 +218,31 @@ export class GameStore {
    * cambia (cada acción/tick trae un `estadoMapa` distinto). Un solo hueco, no un mapa: sin historial de fotos
    * que cachear ya no hace falta más que eso (ver `GameSession.getMapa`, mismo patrón). */
   private mapaCache: { sobre: EstadoMapa; mapa: Mapa } | null = null;
+  /**
+   * El `MapaGenerado` real, cacheado aparte del estado (Fase C11): el servidor solo manda `mapaId` en cada
+   * respuesta —el mapa en sí no cambia NUNCA durante la partida (125 KB medidos, idénticos byte a byte en
+   * todo el tick 0-200, Docs/Arquitectura/6_Sincronizacion_Visibilidad_y_Escala.md §6.4)—, así que se pide
+   * UNA vez por `mapaId` y se guarda aquí. `sincronizarMapa` es lo único que lo toca tras el constructor: solo
+   * vuelve a pedirlo si `mapaId` cambia (`regenerarMundo`, la única operación que reemplaza la seed).
+   * Nunca `null` tras el constructor — invariante que sostiene `getMapa()` sin comprobarlo en cada llamada.
+   */
+  private mapaGeneradoCache: { id: string; mapa: MapaGenerado };
   /** Última fusión de zonas por facción calculada, con la firma de los asentamientos de los que salió — ver
    * `getZonasFusionadas`. Artefacto de render, no estado de partida: se puede tirar en cualquier momento. */
   private zonasFusionadasCache: { clave: string; valor: ZonaFaccion[] } | null = null;
 
-  private constructor(gameId: string, estadoInicial: GameSessionState) {
+  private constructor(gameId: string, estadoInicial: EstadoAdmin, mapaInicial: MapaGenerado) {
     this.gameId = gameId;
     this.estadoCache = estadoInicial;
+    this.mapaGeneradoCache = { id: estadoInicial.mapaId, mapa: mapaInicial };
+  }
+
+  /** Pide el mapa real si `mapaId` cambió desde la última sincronización (Fase C11) — en la inmensa mayoría
+   * de las llamadas es un no-op síncrono, porque el mapa no cambia entre comandos. Solo dispara una petición
+   * de verdad tras `regenerarMundo`, que es la única operación que reemplaza la seed de la partida. */
+  private async sincronizarMapa(mapaId: string): Promise<void> {
+    if (this.mapaGeneradoCache.id === mapaId) return;
+    this.mapaGeneradoCache = { id: mapaId, mapa: await obtenerMapa(this.gameId, mapaId) };
   }
 
   /** Conecta con una partida ya existente, o la crea si el `gameId` no tiene ninguna todavía — NO destructivo
@@ -230,7 +252,8 @@ export class GameStore {
    * Un 409 aquí NO es un fallo de conexión: `POST /partidas` lo devuelve cuando el `gameId` ya está abierto en
    * este proceso (`server/api.ts`) — exactamente lo normal al recargar la página con una partida ya en curso
    * (otra pestaña, u otra carga anterior, ya la abrió). El jugador no necesita "crearla" de nuevo, solo
-   * conectarse a la que ya hay — se ignora el 409 y se sigue directo a pedir su estado. */
+   * conectarse a la que ya hay — se ignora el 409 y se sigue directo a pedir su estado (y su mapa, Fase C11:
+   * primera y única vez que se pide sin pasar por `sincronizarMapa`, porque el constructor aún no existe). */
   static async crear(gameId: string, seed: number): Promise<GameStore> {
     try {
       await crearOResumirPartida(gameId, seed);
@@ -238,10 +261,11 @@ export class GameStore {
       if (!(err instanceof ApiError && err.status === 409)) throw err;
     }
     const estado = await consultarEstado(gameId);
-    return new GameStore(gameId, estado);
+    const mapa = await obtenerMapa(gameId, estado.mapaId);
+    return new GameStore(gameId, estado, mapa);
   }
 
-  private get state(): Readonly<GameSessionState> {
+  private get state(): Readonly<EstadoAdmin> {
     return this.estadoCache;
   }
 
@@ -259,10 +283,11 @@ export class GameStore {
     return { ...this.estadoCache, log };
   }
 
-  /** Fachada de consulta del mapa (índices + consultas espaciales) del estado en vivo. */
-  getMapa(estado: Readonly<GameSessionState> = this.state): Mapa {
+  /** Fachada de consulta del mapa (índices + consultas espaciales) del estado en vivo. El `MapaGenerado` sale
+   * de `mapaGeneradoCache` (Fase C11), no de `estado` — ya no viaja dentro de `EstadoAdmin`. */
+  getMapa(estado: Readonly<EstadoAdmin> = this.state): Mapa {
     if (this.mapaCache?.sobre === estado.estadoMapa) return this.mapaCache.mapa;
-    const mapa = crearMapa(estado.mapa, estado.estadoMapa);
+    const mapa = crearMapa(this.mapaGeneradoCache.mapa, estado.estadoMapa);
     this.mapaCache = { sobre: estado.estadoMapa, mapa };
     return mapa;
   }
@@ -296,6 +321,7 @@ export class GameStore {
       const respuesta = await ejecutarComando(this.gameId, tipo, params);
       if (respuesta.resultado.ok) {
         this.estadoCache = await consultarEstado(this.gameId);
+        await this.sincronizarMapa(this.estadoCache.mapaId);
       } else {
         this.registrarRechazoEfimero(`${etiquetaRechazo}: ${respuesta.resultado.codigoError ?? 'desconocido'}`);
       }
@@ -757,6 +783,7 @@ export class GameStore {
     try {
       await apiAvanzarTick(this.gameId);
       this.estadoCache = await consultarEstado(this.gameId);
+      await this.sincronizarMapa(this.estadoCache.mapaId);
     } catch (err) {
       this.registrarRechazoEfimero(this.mensajeDeError(err));
     }
@@ -772,6 +799,9 @@ export class GameStore {
     try {
       await crearOResumirPartida(this.gameId, seed, region, true);
       this.estadoCache = await consultarEstado(this.gameId);
+      // El único punto donde `sincronizarMapa` de verdad pide algo: regenerar SIEMPRE reemplaza la seed, así
+      // que `mapaId` cambia siempre — a diferencia de `despachar`/`avanzarTick`, donde suele ser un no-op.
+      await this.sincronizarMapa(this.estadoCache.mapaId);
       this.mapaCache = null;
       this.zonasFusionadasCache = null;
       this.logEfimero = [];
@@ -785,12 +815,13 @@ export class GameStore {
    * JSON — para descargar. Sigue siendo del jugador (guardar/exportar SU partida); a diferencia de
    * `importarSimulacion` (retirada, es administración: reemplazar la partida completa del servidor). */
   exportarSimulacion(): string {
+    const mapa = this.mapaGeneradoCache.mapa;
     const payload: SimulacionExportada = {
       version: 2,
       exportadoEn: new Date().toISOString(),
       tick: this.state.tick,
-      worldgenVersion: this.state.mapa.version,
-      world: { config: this.state.mapa.config, recursos: this.getMapa().nodosConStock(), bosques: this.state.mapa.bosques },
+      worldgenVersion: mapa.version,
+      world: { config: mapa.config, recursos: this.getMapa().nodosConStock(), bosques: mapa.bosques },
       asentamientos: this.state.asentamientos,
       facciones: this.state.facciones,
       caravanas: this.state.caravanas,
@@ -815,7 +846,7 @@ export class GameStore {
    * del mapa actual, listos para Unity Terrain. Puro respecto al estado: no muta nada.
    */
   exportarMapaUnity(opciones?: OpcionesExportUnity): ExportUnityResultado {
-    return exportarParaUnityTerrain(this.state.mapa, this.state.asentamientos, opciones);
+    return exportarParaUnityTerrain(this.mapaGeneradoCache.mapa, this.state.asentamientos, opciones);
   }
 }
 

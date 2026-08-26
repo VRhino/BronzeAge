@@ -19,12 +19,22 @@ export const RESUMEN_PARTIDA_RESPUESTA = {
     gameId: { type: 'string' },
     tick: { type: 'number' },
     version: { type: 'number' },
+    mapaId: { type: 'string' },
   },
-  required: ['gameId', 'tick', 'version'],
+  // `mapaId` es de `resumenDe` (Fase C11) igual que los otros tres: si se le olvida a este `required` no pasa
+  // nada en tiempo de ejecución (Fastify no exige `required` en la salida), pero se DESCARTARÍA del cuerpo en
+  // caliente por no estar en `properties` si algún día faltara aquí — ver la cabecera de este archivo.
+  required: ['gameId', 'tick', 'version', 'mapaId'],
 } as const;
 
 export const PARAMS_GAME_ID = {
   type: 'object',
   properties: { gameId: { type: 'string' } },
   required: ['gameId'],
+} as const;
+
+export const PARAMS_GAME_ID_MAPA = {
+  type: 'object',
+  properties: { gameId: { type: 'string' }, mapaId: { type: 'string' } },
+  required: ['gameId', 'mapaId'],
 } as const;

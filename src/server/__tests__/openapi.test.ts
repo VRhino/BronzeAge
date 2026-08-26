@@ -44,6 +44,9 @@ describe('GET /v1/openapi.json', () => {
     expect(rutas).toContain('/sesiones');
     expect(rutas).toContain('/admin/partidas');
     expect(rutas).toContain('/jugador/partidas/{gameId}/comandos');
+    // Fase C11: el mapa como asset, publicado en ambas superficies.
+    expect(rutas).toContain('/admin/partidas/{gameId}/mapa/{mapaId}');
+    expect(rutas).toContain('/jugador/partidas/{gameId}/mapa/{mapaId}');
   });
 
   it('marca las rutas autenticadas con seguridad, y el login con la suya propia', async () => {

@@ -523,6 +523,60 @@ de git por si conviene rescatarla como herramienta de desarrollo de ESTE repo, d
 correcto y gratis. `vite build` nunca la incluyó (no hay `rollupOptions.input` multipágina): solo existía en
 `vite dev`.
 
+### C11a. El mapa deja de ser estado — completada 2026-08-26
+
+Primer hito ejecutado tras el análisis del modelo de sincronización (doc 6 §6). El mapa se medía como el 78%
+de cada proyección y era idéntico byte a byte tick tras tick — es un asset, no estado, y viajaba en cada
+comando desde C6 sin necesidad.
+
+- [x] `idDeMapa(mapa): string` (`session/estado.ts`) — función PURA de `mapa.config.seed` + `.region` +
+  `mapa.version` (`WORLDGEN_VERSION`). Legible a propósito (`v14-s42-anatolia`), no un hash: se puede leer en
+  un log o una URL sin decodificar nada. `ancho`/`alto` no entran en la fórmula porque nunca varían (siempre
+  `MAPA_DEFAULT`) — ver el comentario del propio código si eso deja de ser cierto algún día
+- [x] `vistaAdminDeEstado(estado): EstadoAdmin` (`session/estado.ts`) — `Omit<GameSessionState, 'mapa'> &
+  {mapaId}`. Usada por `GET /admin/partidas/:gameId`, que YA NO manda `mapa`. `GameSessionState` (el estado de
+  dominio real) no se toca: sigue llevando `mapa: MapaGenerado` completo, porque el motor y los 30 comandos sí
+  lo necesitan de verdad — el recorte es solo en la frontera HTTP
+- [x] `ProyeccionJugador.mapa` → `ProyeccionJugador.mapaId` (`session/proyecciones/jugador.ts`)
+- [x] `ResumenPartida` (`server/rutas/contexto.ts`) gana `mapaId` — presente en TODA respuesta que ya llevaba
+  `resumenDe` (crear partida, tick, comando), así el cliente sabe si su mapa cacheado sigue vigente sin una
+  petición aparte. **Se añadió a `RESUMEN_PARTIDA_RESPUESTA` en el mismo cambio** — el `schema.response` de
+  Fastify es un filtro de serialización (lección de C6): olvidarlo aquí habría descartado el campo en
+  silencio de la respuesta `201` de `POST /admin/partidas`, y el primer run de tests lo confirmó fallando
+- [x] `GET /{admin,jugador}/partidas/:gameId/mapa/:mapaId` (`server/rutas/mapa.ts`, nuevo, compartido por las
+  dos superficies) — `Cache-Control: private, max-age=31536000, immutable`. El handler **ignora** `:mapaId`:
+  no hay historial de mapas que servir, solo el vigente, así que el segmento es puro cache-buster para el
+  navegador del cliente — mismo patrón que un asset estático con hash en el nombre de archivo
+- [x] Cliente (`cliente/`) actualizado para no romperse — es el único consumidor real hoy. `apiCliente.ts`:
+  `consultarEstado` devuelve `EstadoAdmin`, nueva `obtenerMapa(gameId, mapaId)`. `gameStore.ts`: nuevo
+  `mapaGeneradoCache` cacheado aparte de `estadoCache` (invariante: nunca `null` tras el constructor, que
+  ahora es async y pide el mapa una vez antes de devolver el `GameStore`), y `sincronizarMapa(mapaId)` — solo
+  vuelve a pedir el mapa si el id cambió, lo que en la práctica solo pasa tras `regenerarMundo`
+- [x] 8 tests HTTP nuevos (`api.test.ts`: sin `mapa` en el estado admin, sirve el mapa real en ambas
+  superficies, el id es cache-buster puro, mismo `mapaId` en las dos superficies, 401/403), 5 unitarios
+  (`estado.test.ts`, nuevo: estabilidad, invariancia frente al tick, distinción por seed, legibilidad), 2
+  esquemas nuevos verificados en `openapi.test.ts`. 605/605 en total, `tsc` limpio en los dos proyectos
+- [x] **Verificado en vivo** (servidor + cliente reales, Fase de verificación reforzada tras la lección de C3/C6
+  — ver memoria de sesión): `GET .../local` → 200 sin `mapa`; `GET .../local/mapa/v14-s1` → 200 con el mapa
+  real; el mapa renderiza en pantalla igual que antes. Tras `POST .../tick`, la petición de red confirma que
+  **no** se repite el `GET .../mapa/` — `mapaId` no cambió y `sincronizarMapa` lo reconoció sin red
+
+### C11b. Rasterizar el terreno — descoped, sin implementar
+
+`elevacion`/`fertilidad` en `MapaGenerado` son parámetros de ruido, no rásteres, y el bioma no se guarda: se
+evalúa por píxel con `evaluarBioma`. Lo que sale de C11a sigue siendo indibujable sin `worldgen/`.
+
+Se deja fuera de esta pasada, a propósito, por dos razones:
+
+- **Sin consumidor real hoy.** El único cliente que existe (`cliente/`) sigue importando `@motor/*` y dibuja
+  con la fachada `Mapa` en el navegador — no necesita un ráster. Un cliente sin motor que sí lo necesite está
+  bloqueado detrás de C8-C10 de todas formas
+- **Exige una decisión de dependencia nueva** (librería de rasterización a PNG — no hay ninguna en
+  `package.json` hoy) que no hay razón para tomar antes de que exista quien la consuma
+
+Queda anotado como pendiente explícito de C11, no como "hecho": lo mismo que costó una premisa falsa en C0
+—dar algo por resuelto porque una parte relacionada lo está— no se repite aquí a propósito.
+
 ## Fase D — Conversión temporal total
 
 - [ ] Introducir reloj de simulación y campos de fecha en el estado, sin retirar aún el tick

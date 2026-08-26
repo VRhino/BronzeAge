@@ -264,10 +264,12 @@ Dos conclusiones, y ninguna era la esperada:
 
 **(a) El mapa no es estado, es un asset.** 125,4 KB **idénticos byte a byte** en los tres cortes: se deriva de
 la seed y no cambia jamás en toda la partida. Con solo 4 facciones ya es el 78% de la proyección, y desde C6
-cada comando de jugador devuelve una proyección — así que hoy viajan 125 KB inmutables **en cada acción**. La
-solución no es compresión delta: es servirlo una vez, cacheado por `seed`+`worldgenVersion` con
-`Cache-Control: immutable`, y no volver a mandarlo. −78% sin maquinaria ninguna. → hito **C11**, que se abarata
-mucho: la rasterización del terreno cae en el mismo sitio, porque también es determinista por seed.
+cada comando de jugador devuelve una proyección — así que viajaban 125 KB inmutables **en cada acción**. La
+solución no es compresión delta: es servirlo una vez, cacheado por identidad de mapa, con
+`Cache-Control: immutable`. **Hito C11a, implementado y verificado 2026-08-26**: `GET
+.../partidas/:gameId/mapa/:mapaId`, −78% confirmado en vivo (ninguna petición nueva al mapa tras un comando o
+un tick, solo tras regenerar el mundo). El desglose completo está en el doc 4, § C11a. La rasterización del
+terreno (C11b) sigue sin resolver, deferida a propósito por falta de consumidor hoy.
 
 **(b) El que crece sin techo es `eventosDominio`**: ×50 en 200 ticks, con 4 facciones, y viaja entero cada vez.
 A tick 1000 con 500 asentamientos ese es el problema real. Se corta con un cursor (`?desde=<version>`), que
