@@ -74,6 +74,20 @@ Objetivo: dejar el backend listo para que varios jugadores y un administrador �
 > - **Entra lo que no estaba**: CORS (hoy lo evita el proxy de Vite), versionado del contrato y publicación
 >   del mismo como OpenAPI para que los otros repos generen su cliente.
 
+> **Ampliada 2026-08-26 tras el diagnóstico de aislamiento del cliente.** C0–C6 dieron por buena una premisa
+> falsa: que el cliente extraído podía moverse a su repositorio "repuntando el alias `@motor/*`". No puede.
+> Ese alias existe porque el cliente **calcula en el navegador 26 consultas derivadas que el servidor no
+> expone**, y porque el terreno que el servidor manda son *parámetros de ruido* inservibles sin el código de
+> `worldgen/`. La decisión del usuario (2026-08-26) es que el cliente **no dependa del motor de ninguna
+> forma**: solo red. Eso convierte lo que era "una costura a repuntar" en seis hitos de servidor (C8–C13) y
+> añade un criterio de cierre a la fase. Diagnóstico completo, con la evidencia de cada hallazgo, en
+> [4_Plan_Evolucion_Tareas.md](4_Plan_Evolucion_Tareas.md#diagnóstico-de-aislamiento-del-cliente-2026-08-26).
+>
+> Consecuencia inmediata ya aplicada: **`cliente/src/lab/` y `laboratorio.html` eliminados** (2026-08-26). El
+> laboratorio visual del motor no era un cliente —ejecutaba el motor en el navegador, sin tocar la API— así
+> que no podía aislarse por red ni por definición acompañar al cliente a otro repositorio. Queda en el
+> historial de git por si se rescata como herramienta de desarrollo de ESTE repo.
+
 - [x] C0. Cliente de navegador extraído a `cliente/`; el repo queda como backend puro (sin Vite ni capas `app`/`ui`/`main`/`lab`)
 - [x] C1. Usuarios, sesiones y membresías implementados (2026-08-25), con la autenticación tras un puerto intercambiable: sustituir el proveedor de desarrollo por uno real es escribir un adaptador y darlo de alta, sin tocar nada de lo que se apoya en él
 - [x] C2. Autorización de comandos por actor / facción / asentamiento / cargo (2026-08-25): matriz con una fila por comando, exhaustividad garantizada en compilación. El esquema de `params` por comando y la `idempotencyKey` siguen pendientes (C6 y reconexión de C5)
@@ -81,7 +95,13 @@ Objetivo: dejar el backend listo para que varios jugadores y un administrador �
 - [ ] C4. Proyecciones de estado por audiencia — **Slice 1 completado 2026-08-26** (jugador ve su Facción completa, las demás solo metadatos públicos, `GET /jugador/partidas/:gameId`). Slice 2 pendiente: `ConocimientoJugador` y "último conocido" necesitan un radio de visualización (balance de juego) no definido en ningún doc de este repo
 - [x] C5. WebSocket único con canales, suscripciones autorizadas y reconexión sin duplicar comandos — completada 2026-08-26. Difusión de eventos de dominio (no de comandos: el cliente los ejecuta por HTTP igual que antes)
 - [x] C6. Contrato publicable: CORS, versionado de API y OpenAPI generado desde los esquemas de Fastify — completada 2026-08-26. Todo bajo `/v1`; `GET /v1/openapi.json` sin autenticar; respuesta de comando autosuficiente en `/jugador/*` (incluye la proyección propia, ya no hace falta un `GET` aparte)
-- [ ] C7. Balance versionado por partida/temporada (deja de ser módulo global mutable)
+- [ ] C7. Balance versionado por partida/temporada (deja de ser módulo global mutable) — **y servido**: los 8 módulos de `constants` que hoy el cliente importa para construir sus formularios y calcular costes tienen que llegar por el cable. Versionar el balance y publicarlo son la misma tarea
+- [ ] C8. Superficie y rol del cliente de administración — **defecto abierto**: los 30 comandos responden `403 rol_insuficiente` a un `administrador_global`, porque `rolEnPartida` cortocircuita a ese rol y no figura en ninguna fila de la matriz. Decidir si el cliente de administración obtiene además una `Membresia` de jugador, o si algunos comandos admiten rol técnico. El comentario de `rutas/admin.ts` que afirma que `alternarFaccionNpc` sí funciona es falso — verificado
+- [ ] C9. Contrato de comandos completo: esquema de `params` por cada uno de los 30 comandos. Hoy `ESQUEMA_EJECUTAR_COMANDO` declara `params: {}` — el contrato publicado tiene el agujero justo donde un cliente externo lo necesita, y un `params` malformado revienta dentro del manejador y sale como 409 en vez de 400. Arrastrado desde C2
+- [ ] C10. Consultas derivadas servidas por el backend: la migración que [8_Triaje_Consultas.md](8_Triaje_Consultas.md) ya trió (11 a `engine/`, 8 a `session/`, 5 a proyección) y que sigue sin empezar. Son 26 métodos que hoy solo existen dentro de `cliente/src/app/gameStore.ts`
+- [ ] C11. Terreno servible sin `worldgen/`: `MapaGenerado.elevacion`/`.fertilidad` son *parámetros de ruido*, no rásteres, y el bioma no se guarda — se evalúa por píxel. El servidor rasteriza (determinista por seed, cacheable para siempre) o ningún cliente sin motor puede dibujar el mapa
+- [ ] C12. Descubrimiento y operación: listar partidas (hoy el `gameId` llega fuera de banda), endpoints de exportación de administración (`exportarSimulacion`/`exportarMapaUnity`, hoy en el navegador) y una fuente de ticks (hoy solo `POST /admin/.../tick` a mano — E1 lo cierra del todo, pero sin algo el mundo no avanza)
+- [ ] C13. Eficiencia de la sincronización: la proyección manda `mapa` completo en cada respuesta y C6 hizo que cada comando devuelva una proyección. Y el WebSocket difunde `EventoDominio`, que un cliente sin motor no puede aplicar a su estado cacheado — hoy la única reacción correcta a cualquier evento es refetch completo
 
 ## Fase D — Conversión temporal total
 
@@ -110,6 +130,7 @@ demostrar que funciona.
 
 ## Criterios de éxito
 
+- [ ] **Al cerrar la Fase C: un cliente sin una sola línea del motor —en su propio repositorio, sin alias `@motor/*`, sin `constants`, sin `worldgen/`— puede jugar una partida completa contra este backend.** Añadido 2026-08-26: es la prueba de que la API es de verdad el producto. Mientras `cliente/` necesite el alias para compilar, la fase no está cerrada por mucho que C0–C6 estén marcados.
 - [ ] Antes de iniciar la Fase D: una partida persistente corre en un backend dedicado, con varios jugadores + un admin conectados, comandos procesados en serie, y el servidor puede reiniciarse sin alterar la secuencia de ticks ni el RNG.
 - [ ] Al cerrar la Fase D: la misma infraestructura opera en tiempo real total, sin que el motor dependa de un paso global fijo, y sin que API, persistencia o frontends traten el tick como unidad temporal principal.
 

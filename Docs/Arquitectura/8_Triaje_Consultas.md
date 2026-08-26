@@ -7,6 +7,19 @@ real: moverlas todas a `GameSession` reproduciría el mismo objeto-dios que la s
 Este documento las clasifica. **Nada de esto está implementado**; es la guía para los pasos 2-4 de la
 migración.
 
+> **Cableado al roadmap (2026-08-26).** Esta migración dejó de ser opcional: es el hito **C10** de la Fase C.
+> El diagnóstico de aislamiento del cliente
+> ([4_Plan_Evolucion_Tareas.md](4_Plan_Evolucion_Tareas.md#diagnóstico-de-aislamiento-del-cliente-2026-08-26))
+> confirmó que estas consultas son la razón principal por la que `cliente/` todavía necesita importar el
+> motor, y la Fase C no cierra hasta que un cliente sin motor pueda jugar. Dos correcciones a lo que dice
+> este documento:
+>
+> - **La cuenta real es 26, no 31**, contando lo que `GameStore` calcula hoy con el motor (incluye `CATALOGOS`
+>   y las dos exportaciones). El triaje de abajo sigue siendo válido en su criterio.
+> - **Falta una categoría**: el TERRENO. `drawTerreno` evalúa `biomaEn`/`elevacionEn` por píxel sobre
+>   parámetros de ruido, no sobre un ráster. No es una consulta de `GameStore`, así que este triaje no la vio
+>   — es el hito **C11**.
+
 ## El criterio
 
 Una consulta va a un sitio u otro según **de qué depende y quién la necesita**:

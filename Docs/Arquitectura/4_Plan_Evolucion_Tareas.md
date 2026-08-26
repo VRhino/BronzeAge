@@ -231,7 +231,7 @@ cliente ya existe y no necesita proyecciones, así que valida C1–C3 sin espera
 ### C0. Extracción del cliente — ✅ completada 2026-08-25
 
 - [x] `index.html`, `laboratorio.html`, `src/main.ts`, `src/app/`, `src/ui/`, `src/lab/` y `vite.config.ts` movidos a `cliente/` con `git mv` (historial conservado), con `package.json`/`tsconfig.json`/`vite.config.ts` propios y `README.md`
-- [x] **La costura queda en un solo sitio**: `cliente/src/app/gameStore.ts` (25 imports) y `cliente/src/lab/` (13) necesitan el motor para calcular consultas derivadas en el navegador. Todos pasan por el alias `@motor/*`, declarado en `vite.config.ts` (`resolve.alias`) y `tsconfig.json` (`paths`), hoy apuntando a `../src`. Al sacar la carpeta a su repo se repunta ESE alias — tres opciones documentadas en `cliente/README.md`. La salida de fondo es C4: según el servidor exponga los DTOs, el cliente suelta imports de `@motor/*` (doc 8 ya triaba 5 de esas consultas como proyecciones de Fase C)
+- [x] ~~**La costura queda en un solo sitio**: al sacar la carpeta a su repo se repunta el alias `@motor/*` — tres opciones documentadas en `cliente/README.md`~~ — **premisa falsa, corregida el 2026-08-26**. Repuntar el alias mueve el motor de sitio, no lo elimina: existe porque el cliente CALCULA lo que el servidor no expone (26 consultas derivadas) y porque el terreno que el servidor manda es inservible sin `worldgen/`. Ver [Diagnóstico de aislamiento del cliente](#diagnóstico-de-aislamiento-del-cliente-2026-08-26) más abajo y los hitos C8–C13. `cliente/src/lab/` (13 imports) ya no cuenta: eliminado
 - [x] Backend adelgazado: fuera Vite de `package.json`, fuera `DOM` de `tsconfig.lib`, `scripts` reducidos a `server`/`typecheck`/`test`
 - [x] `arquitectura.test.ts`: capas `app`/`ui`/`main`/`lab` retiradas del contrato (ya no existen aquí) y lectura del árbol pasada de `import.meta.glob` (Vite) a `node:fs` — su comentario justificaba el glob con "proyecto 100% navegador/Vite, sin `@types/node`", premisa que dejó de ser cierta
 - [x] Corregido de paso un fallo latente: `vite build` fallaba por el `await` de nivel de módulo de `main.ts` (Vite no heredaba el `target: ES2022` del tsconfig). `vite dev` funcionaba, así que nadie lo había visto
@@ -342,6 +342,121 @@ una regla conservadora; la niebla de guerra queda como Slice 2, con sus parámet
 - [x] 11 tests nuevos (3 CORS, 6 OpenAPI, 2 respuesta autosuficiente), 592/592 en total, `tsc` limpio en ambos proyectos. Verificado en vivo: `/sesiones` sin `/v1` da 404, `/v1/sesiones` funciona; `openapi.json` describe las 9 rutas reales; el cliente de administración funcionando de punta a punta contra `/v1/*` a través del proxy de Vite actualizado
 - [ ] Migrar balance de módulo global mutable a configuración versionada por partida/temporada, con auditoría de cambios (actor, fecha, versión anterior/nueva)
 - [x] ~~Separar rutas/endpoints de administración de las de jugador, protegidas por rol técnico~~ — hecho en C3 (`/admin/*` y `/jugador/*`)
+
+### Diagnóstico de aislamiento del cliente (2026-08-26)
+
+Pregunta que lo abrió: *"si me llevo el cliente de administración a otro repo, ¿funciona?"* No, y las razones
+resultaron ser bastante peores que la que C0 había anotado. **Decisión del usuario tras el diagnóstico: el
+cliente no debe depender del motor de ninguna forma — solo puede hablar con el backend por red.** Eso deja
+obsoletas las tres opciones que `cliente/README.md` recomendaba (copiar el motor, submódulo, paquete npm) y
+convierte `@motor/*` en un defecto a eliminar, no en una costura a repuntar.
+
+**Premisa falsa que arrastraba C0.** El segundo bullet de C0 dice que al sacar la carpeta "se repunta ESE
+alias". Es cierto mecánicamente y falso en sustancia: el alias existe porque el cliente **calcula lo que el
+servidor no expone**. Repuntarlo mueve el motor de sitio, no lo elimina.
+
+#### Hallazgo 1 — el cliente de administración ya está roto, aquí, sin moverlo
+
+Verificado ejecutando el servidor real (`crearServidor` + `inject`) con `ADMINISTRADORES='dev:jefa'`:
+
+```text
+crear partida     -> 201
+tick              -> 200
+comando crearFaccion         -> 403 {"error":"no autorizado (rol_insuficiente)"}
+comando fundarAsentamiento   -> 403 {"error":"no autorizado (rol_insuficiente)"}
+comando crearCaravana        -> 403 {"error":"no autorizado (rol_insuficiente)"}
+comando alternarFaccionNpc   -> 403 {"error":"no autorizado (rol_insuficiente)"}
+```
+
+`apiCliente.ejecutarComando` manda a `/v1/admin/partidas/:gameId/comandos`. Ahí el actor entra con
+`rolEnPartida(actor)`, que **cortocircuita a `'administrador_global'` antes de mirar la `Membresia`**
+(`acceso/rolesDePartida.ts:36`) — y ese rol no figura en `rolesPermitidos` de ninguna de las 30 filas de
+`MATRIZ_AUTORIZACION`. Los ~30 botones de acción de la interfaz mueren en 403 desde C2/C3.
+
+El comentario de `rutas/admin.ts` ("hoy solo `alternarFaccionNpc` admite administración") es **falso**: esa
+fila permite `administrador_partida`, no `administrador_global`, y quien crea la partida siempre es global.
+
+No se detectó en la verificación en vivo de C3/C6 porque solo se ejercitaron crear mundo, tick y render —
+las dos únicas rutas que sí pasan. Fallo de cobertura de la verificación, no del diseño: que un rol técnico
+no conceda autoridad de juego es exactamente la regla del doc 5. Lo que nunca se decidió es **qué superficie
+habla este cliente**: `gameStore.ts` se declara "cliente de JUGADOR" en su cabecera y `apiCliente.ts` habla
+la superficie de administración. → hito **C8**.
+
+#### Hallazgo 2 — no es un acoplamiento, son cuatro, y cada uno se rompe distinto
+
+| # | Acoplamiento | Qué es | Sale con |
+|---|---|---|---|
+| 1 | **Tipos** (`domain/types`, `GameSessionState`, `ParamsDe`/`DatosDe`, `ResultadoComando`, `EventoDominio`) | Solo compilación, coste cero en ejecución | Cliente generado del OpenAPI — **bloqueado**: ver hallazgo 3 |
+| 2 | **Balance y catálogos** (8 módulos de `constants`) | Alimentan `CATALOGOS` (todos los formularios) y los cálculos de coste | **C7**: versionar el balance y servirlo son la misma tarea |
+| 3 | **26 consultas derivadas** | No existen en el servidor; solo dentro de `gameStore.ts` | **C10** (migración del doc 8) |
+| 4 | **El terreno** | `MapaGenerado.elevacion`/`.fertilidad` son *parámetros de ruido*, no rásteres | **C11** |
+
+#### Hallazgo 3 — el contrato publicado tiene el agujero justo donde el cliente lo necesita
+
+`ESQUEMA_EJECUTAR_COMANDO` (`server/rutas/comandos.ts`) declara `params: {}`. **30 comandos, cero descritos.**
+Hoy `ParamsDe<T>` se deriva de `Parameters<typeof manejador>` — es TypeScript leyendo el código fuente del
+servidor, que es precisamente la dependencia a eliminar. Sin esquema por comando no hay cliente tipado
+generable desde `openapi.json`, y además un `params` malformado revienta dentro del manejador y sale como 409
+en vez de 400 (ya anotado como pendiente en C2, sin dueño hasta ahora). → hito **C9**.
+
+#### Hallazgo 4 — la mitad de las 26 consultas no puede ser una petición HTTP
+
+`render()` se dispara en **cada `mousemove`** sobre el lienzo (`cliente/src/main.ts:2512`). Dentro llama a
+`getMapa()`, `getZonasFusionadas`, `chokepointsControl`, `getTrazadoAsentamiento` y `viabilidadFundacion`.
+
+- Las cuatro primeras solo cambian por tick → se resuelven mandando la geometría **ya calculada** dentro de
+  la proyección, no con un endpoint por consulta.
+- `viabilidadFundacion(hover)` es la difícil: función continua de un punto arbitrario. O rejilla de
+  viabilidad precalculada, o el *preview* deja de ser *hover* y pasa a clic. Es una decisión de diseño de
+  interacción, no de arquitectura — no se toma aquí.
+
+El resto (`mantenimientoInfo`, `poblacionInfo`, `produccionInfo`, `caravanasInfo`, `manoObraInfo`, los
+`nivel*Info`, los cupos, `precioReferencia`, `poderMilitarInfo`, `infoMejoraEdificio`, `getLigas`) cambia por
+tick y cabe en la proyección sin más.
+
+#### Hallazgo 5 — el terreno que el servidor manda es indibujable sin `worldgen/`
+
+`MapaGenerado.elevacion` es un `CampoElevacion` (parámetros de ruido + región) y `.fertilidad` un
+`CampoRuido`; el bioma **no se guarda**, se deriva bajo demanda (`worldgen/types.ts:39-61`). `drawTerreno`
+evalúa `biomaEn`/`elevacionEn` **por píxel** llamando a `evaluarBioma`/`evaluarElevacion`.
+
+Es la forma más aguda del acoplamiento: el servidor ya manda estos datos y son **inútiles sin el código que
+los interpreta**. Salidas: el servidor rasteriza (PNG o tiles — determinista por seed, así que se cachea para
+siempre), o los evaluadores de `worldgen/` se publican como librería, que es justo la dependencia a eliminar.
+→ hito **C11**.
+
+#### Hallazgo 6 — huecos de operación que nadie había listado
+
+- **No hay endpoint para listar partidas** (ni `/admin` ni `/jugador`). Un cliente externo no puede descubrir
+  a qué conectarse; el `gameId` llega fuera de banda.
+- **No hay fuente de ticks**: solo `POST /admin/.../tick`, sin scheduler. Un cliente conectado a un
+  despliegue real se queda en un mundo congelado salvo que alguien lo empuje a mano.
+- **No hay endpoints de exportación**: `exportarSimulacion` y `exportarMapaUnity` corren hoy en el navegador
+  usando `world/exportUnity` y `session/estado.proyectarLog`. El doc 8 ya los clasificaba como administración.
+- → hito **C12**.
+
+#### Hallazgo 7 — C5 y C6 dejaron dos costuras de eficiencia que solo se ven con un cliente externo
+
+- **El WebSocket difunde `EventoDominio`, no deltas de estado.** Un cliente sin motor no puede aplicarlos a
+  su proyección cacheada, así que la única reacción correcta a cualquier evento es *refetch* completo. C5
+  entrega avisos, no datos.
+- **La proyección manda `mapa` completo siempre**, y C6 hizo que cada comando de jugador devuelva una
+  proyección. Sin `ETag`/versión, el mapa entero viaja en cada acción. El cliente actual lo cachea y no lo
+  repide nunca; un cliente de red lo recibiría en cada comando.
+- → hito **C13**.
+
+#### Eliminado: el laboratorio visual
+
+`cliente/laboratorio.html` + `cliente/src/lab/` (3 ficheros, 822 líneas, 13 imports de motor) ejecutaban
+`generarMapa`, `avanzarSimulacion` y `fundarAsentamiento` **directamente en el navegador, sin servidor**. No
+era un cliente de la API y no podía llegar a serlo, así que aislarlo por red es imposible por definición y no
+podía acompañar a `cliente/` a otro repositorio.
+
+Se elimina (decisión del usuario, 2026-08-26). Era una herramienta útil —varios comentarios de
+`engine/trazado.ts` y `engine/construction.ts` citan bugs reales detectados con ella— y queda en el historial
+de git por si conviene rescatarla como herramienta de desarrollo de ESTE repo, donde el alias `../src` es
+correcto y gratis. `vite build` nunca la incluyó (no hay `rollupOptions.input` multipágina): solo existía en
+`vite dev`.
 
 ## Fase D — Conversión temporal total
 
