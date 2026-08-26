@@ -20,6 +20,18 @@ import type {
 } from '../domain/types';
 import type { TrazadoAsentamiento } from '../engine/trazado';
 import type { EventoDominio } from '../domain/eventos';
+
+/**
+ * Un `EventoDominio` tal y como vive en `GameSessionState.eventosDominio` — con `version` (Fase C13, doc 4:
+ * "eventosDominio crece sin techo y viaja entero cada vez"). `version` NO es del dominio de juego (el motor,
+ * `engine/*`, no sabe qué es una versión de partida), así que no vive en `domain/eventos.ts` — es
+ * exclusivamente el punto de la partida en el que `exito()` (`session/comandos/tipos.ts`, el ÚNICO sitio
+ * donde sube `GameSessionState.version`) estampó el evento. Permite paginar incrementalmente
+ * (`?desde=<version>`) en vez de mandar el histórico completo en cada lectura — ver `eventosDesde` más abajo.
+ */
+export interface EventoDominioConVersion extends EventoDominio {
+  version: number;
+}
 import type { MapaGenerado } from '../worldgen';
 import type { EstadoMapa } from '../world/mapa';
 import type { EstadoSimulacion } from '../engine/simulation';
@@ -74,7 +86,7 @@ export interface GameSessionState {
    * mandarlo entero sería una fuga de información de facciones rivales). Las proyecciones por audiencia de
    * Fase C filtran sobre `codigo`/`payload`, que es justamente para lo que existe.
    */
-  eventosDominio: EventoDominio[];
+  eventosDominio: EventoDominioConVersion[];
 }
 
 /** Proyecta el estado de partida al subconjunto que consume el motor. El motor no conoce `gameId`, `version`,
@@ -127,6 +139,22 @@ export function proyectarLog(eventos: readonly EventoDominio[]): EventoLogAdmin[
     tick: e.tick,
     mensaje: e.asentamientoId ? `${e.asentamientoId}: ${e.mensaje}` : e.mensaje,
   }));
+}
+
+/**
+ * Eventos con `version` estrictamente mayor que `desde` (Fase C13) — la mitad "sin filtrar por audiencia" del
+ * cursor incremental; `proyectarParaJugador`/`eventosDominioParaJugador` en `session/proyecciones/jugador.ts`
+ * hacen la versión filtrada. `estado.eventosDominio` vive más nuevo primero (`exito()` los antepone); se
+ * devuelven en orden CRONOLÓGICO (más viejo primero) porque es el orden natural para que un cliente los vaya
+ * aplicando/anexando a su log.
+ */
+export function eventosDesde(estado: GameSessionState, desde: number): EventoDominioConVersion[] {
+  const nuevos: EventoDominioConVersion[] = [];
+  for (const evento of estado.eventosDominio) {
+    if (evento.version <= desde) break; // más viejo que el cursor: todo lo que sigue también lo es
+    nuevos.push(evento);
+  }
+  return nuevos.reverse();
 }
 
 /**

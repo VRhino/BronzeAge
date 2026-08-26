@@ -27,9 +27,12 @@ hablar con el backend por red. Eso convierte `@motor/*` en un defecto a eliminar
 repuntar — quedan descartadas las opciones que este README recomendaba antes (copiar el motor, submódulo,
 paquete npm).
 
-Lo que falta en el backend para que sea posible está desglosado y numerado en el roadmap
-(`Docs/Arquitectura/3_Plan_Evolucion_Roadmap.md`, hitos **C12–C13**; C7–C11b ya completos) y diagnosticado en
-detalle en `Docs/Arquitectura/4_Plan_Evolucion_Tareas.md` § "Diagnóstico de aislamiento del cliente". **La
+El detalle de lo que había que resolver en el backend (hitos C7–C13, todos completos ahora — salvo C4
+Slice 2, niebla de guerra, bloqueado en una decisión de balance que ningún doc de este repo fija) está en el
+roadmap (`Docs/Arquitectura/3_Plan_Evolucion_Roadmap.md`) y diagnosticado en
+detalle en `Docs/Arquitectura/4_Plan_Evolucion_Tareas.md` § "Diagnóstico de aislamiento del cliente". Ver
+también [`cliente-jugador/`](../cliente-jugador/), un boilerplate que ya prueba que un cliente sin motor
+puede hablar con este backend. **La
 Fase C no se cierra hasta que un cliente sin importar el código del motor de este repo pueda jugar una partida
 completa contra este backend** — eso NO significa cero lógica de dominio en el cliente, ver
 `Docs/Arquitectura/9_Reglas_vs_Simulacion.md` para el eje real (regla de entrada propia vs. simulación /

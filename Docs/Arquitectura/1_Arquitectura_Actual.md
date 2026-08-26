@@ -15,9 +15,13 @@ se conectan a la misma instancia de partida.
 Este repositorio es **solo servidor** desde la Fase C0. La interfaz de navegador que existía aquí se extrajo a
 `cliente/` (proyecto aparte, con su propio `package.json`) y todavía **no cumple el criterio de cierre de la
 Fase C**: sigue importando el motor de este repo por un alias (`@motor/*`) en vez de hablar solo por red — ver
-`cliente/README.md` y los hitos C12–C13 del roadmap (C7–C11b ya completos). Un segundo proyecto,
-[`cliente-jugador/`](../../cliente-jugador/) (boilerplate, C11b), **sí** cumple el criterio: sin ningún alias
-al motor, habla solo por red y recalcula el terreno con su propia copia de las funciones puras de evaluación.
+`cliente/README.md`.
+
+Por el lado del BACKEND, la Fase C está funcionalmente completa (C0–C13, salvo C4 Slice 2 — niebla de guerra,
+bloqueado en una decisión de balance que ningún doc de este repo fija). Lo que falta para cerrar la fase de
+verdad ya no es servidor, es un cliente: [`cliente-jugador/`](../../cliente-jugador/) (boilerplate, hito C11b)
+prueba que se puede — sin ningún alias al motor, habla solo por red y recalcula el terreno con su propia
+copia de las funciones puras de evaluación — pero no tiene UI de comandos, no es un cliente completo.
 
 ## Vista global
 
@@ -55,7 +59,7 @@ apunta "hacia arriba". Dos invariantes tienen además su propio test en lenguaje
 `session/` es el único punto que ve los dos dominios —juego y acceso— porque la autorización de comandos lo
 exige: qué rol técnico tiene el actor Y qué relación de juego guarda con la entidad objetivo.
 
-606 tests en 79 archivos cubren las seis capas (medido 2026-08-26).
+640 tests en 80 archivos cubren las seis capas (medido 2026-08-26).
 
 ## Capas y responsabilidades
 
@@ -195,9 +199,10 @@ POST /admin/.../tick  (o el scheduler opcional de RunnerDePartida)
   -> UN solo persist para las tres (un fallo a mitad no deja tick aplicado sin NPC resuelto)
 ```
 
-Los ticks siguen siendo la unidad de simulación (Fase D no ha empezado): hoy se avanzan a mano vía
-`POST /admin/.../tick`, o mediante el scheduler opcional de `RunnerDePartida.iniciarTicksAutomaticos()` — no
-hay todavía una fuente de ticks operativa por defecto ni descubrimiento de partidas (**C12** pendiente).
+Los ticks siguen siendo la unidad de simulación (Fase D no ha empezado): se avanzan a mano vía
+`POST /admin/.../tick`, o solos si el despliegue configura `INTERVALO_TICK_MS` (**C12**, opt-in — sin
+configurarlo, ninguna partida avanza sola, ni siquiera en los tests). `GET /admin/partidas` descubre qué
+partidas existen en disco, incluidas las que nadie ha reabierto todavía en este proceso.
 
 ## Persistencia, historial y observabilidad
 
@@ -207,9 +212,12 @@ hay todavía una fuente de ticks operativa por defecto ni descubrimiento de part
 - El snapshot incluye estado completo, tick, RNG, IDs, configuración/semilla del mundo y eventos de dominio —
   no solo el estado "de superficie".
 - Los eventos de dominio son estructurados (código estable + payload tipado, A5), no mensajes de log en
-  texto. No tienen todavía cursor de paginación: viajan enteros en cada lectura y crecen sin techo dentro de
-  una partida larga (medido: 2 → 41 → 102 KB entre los ticks 0 y 200 con 4 facciones) — hito **C13**
-  pendiente.
+  texto. Cada uno lleva la `version` de partida en la que se emitió (**C13**), y
+  `GET .../eventos?desde=<version>` sirve solo los nuevos — un cliente que escucha por WebSocket ya no
+  necesita releer el histórico completo para ponerse al día. Las lecturas de estado completo siguen trayendo
+  `eventosDominio` entero, sin cursor todavía (crecen sin techo dentro de una partida larga: 2 → 41 → 102 KB
+  entre los ticks 0 y 200 con 4 facciones) — migrar esas lecturas exige un cliente real usando el cursor
+  primero, que hoy no existe.
 - No hay historial de línea de tiempo por tick en el servidor (lo que hacía `GameStore` en el prototipo, para
   depuración) — esa herramienta de desarrollo, si se necesita, vive del lado de un cliente de depuración, no
   del backend de producción.
@@ -238,7 +246,7 @@ hay todavía una fuente de ticks operativa por defecto ni descubrimiento de part
 
 - Dirección de dependencias congelada por test (`arquitectura.test.ts`); `acceso/` sin dependencias y
   `session/` síncrona y sin E/S, lo que hace ambas capas triviales de probar con dobles.
-- 606 tests en 79 archivos cubren motor, sesión, acceso y servidor.
+- 640 tests en 80 archivos cubren motor, sesión, acceso y servidor.
 - El mundo generado tiene semilla y versión, y se sirve como asset inmutable cacheado (C11a) en vez de viajar
   en cada respuesta.
 - El snapshot de partida persiste el estado del RNG: una partida recargada continúa siendo determinista, no
@@ -254,18 +262,28 @@ hay todavía una fuente de ticks operativa por defecto ni descubrimiento de part
   admin las recibe de todos los asentamientos, un jugador solo de los suyos.
 - Existe un cliente real sin ninguna línea del motor (**C11b**, `cliente-jugador/`) que pinta el terreno —
   prueba en vivo, no solo en teoría, de que el criterio de cierre de la Fase C es alcanzable.
+- Partidas descubribles (**C12**, `GET /admin/partidas`) y exportables (`.../exportar`, `.../exportar-unity`)
+  por HTTP — ya no hace falta el navegador para ninguna de las dos.
+- Cursor incremental de eventos (**C13**, `GET .../eventos?desde=`), filtrado por audiencia en la superficie
+  de jugador: un cliente puede ponerse al día sin releer el histórico completo.
 
 ## Limitaciones actuales
 
 - Balance (`constants.ts`) servido (**C7**), pero global al proceso — sin overrides por partida/temporada.
-- Sin descubrimiento de partidas (`gameId` llega fuera de banda) ni fuente de ticks operativa por defecto
-  (**C12**).
-- `eventosDominio` sin cursor, crecen sin techo y viajan enteros en cada lectura; la única reacción de un
-  cliente sin motor a un evento por WebSocket es hoy un refetch completo (**C13**).
+- Fuente de ticks opt-in (**C12**): sin configurar `INTERVALO_TICK_MS`, ninguna partida avanza sola. El
+  intervalo, si se configura, es un placeholder de ritmo de juego sin decisión de balance tomada.
+- Las lecturas de estado completo (`EstadoAdmin`/`ProyeccionJugador`) siguen trayendo `eventosDominio` entero,
+  sin el cursor de **C13** — crecen sin techo dentro de una partida larga. Migrarlas exige un cliente real que
+  ya use el cursor, que hoy no existe. El WebSocket sigue difundiendo eventos en bruto, no deltas de estado
+  aplicables — la única reacción de un cliente sin motor a un evento es releer, aunque ahora puede releer solo
+  lo nuevo en vez del estado completo.
 - Niebla de guerra / "último conocido" sin implementar (C4 Slice 2): bloqueado por una decisión de balance
-  (radio de visualización) que ningún documento de este repo fija todavía.
-- El único cliente que existe (`cliente/`) sigue importando el motor de este repo por `@motor/*`: el criterio
-  de cierre de la Fase C —un cliente sin código del motor jugando una partida completa— no se cumple todavía.
+  (radio de visualización) que ningún documento de este repo fija todavía. Es lo único de Fase C que sigue sin
+  resolver por razones de ARQUITECTURA — todo lo demás (C0–C13) está completo por el lado del backend.
+- El único cliente que existe (`cliente/`) sigue importando el motor de este repo por `@motor/*`; el
+  boilerplate sin motor (`cliente-jugador/`) no tiene UI de comandos. El criterio de cierre de la Fase C —un
+  cliente sin código del motor jugando una partida completa— no se cumple todavía, pero ya no por falta de
+  algo que el backend deba servir.
 
 ## Decisión de evolución adoptada
 

@@ -9,7 +9,7 @@
 import type { EventoDominio } from '../../domain/eventos';
 import type { Mapa } from '../../world/mapa';
 import type { RandomFn } from '../../worldgen';
-import type { GameSessionState } from '../estado';
+import type { EventoDominioConVersion, GameSessionState } from '../estado';
 import type { GeneradorIds } from '../idGenerator';
 import { codigoDeErrorDominio } from '../erroresDeDominio';
 import type { CodigoError } from './codigosDeError';
@@ -49,7 +49,10 @@ export interface ResultadoComando<T = void> {
   datos?: T;
   /** Código estable de dominio si `ok` es `false` (catálogo cerrado, ver `codigosDeError.ts`). */
   codigoError?: CodigoError;
-  eventos: EventoDominio[];
+  /** Con `version` estampada (Fase C13) — el mismo valor que `version` de aquí abajo, repetido en cada
+   * evento para que un cliente que escucha por WebSocket (`hub.difundir`, Fase C5) sepa desde qué cursor
+   * seguir (`GET .../eventos?desde=`, `session/estado.ts` `eventosDesde`) sin tener que mirar el envoltorio. */
+  eventos: EventoDominioConVersion[];
   /** Versión de la partida tras el comando. Idéntica a la previa si fue rechazado. */
   version: number;
 }
@@ -82,12 +85,15 @@ export type ManejadorComando<P, R> = (
  */
 export function exito<T>(estado: GameSessionState, eventos: EventoDominio[], datos?: T): TransicionComando<T> {
   const version = estado.version + 1;
+  // Estampa `version` aquí y solo aquí (Fase C13) — mismo motivo que estampar la versión misma: es el único
+  // punto que la conoce, y `eventos` llega desde el comando sin saber todavía a qué versión pertenece.
+  const eventosConVersion: EventoDominioConVersion[] = eventos.map((e) => ({ ...e, version }));
   const estadoFinal: GameSessionState = {
     ...estado,
     version,
-    eventosDominio: [...eventos, ...estado.eventosDominio],
+    eventosDominio: [...eventosConVersion, ...estado.eventosDominio],
   };
-  return { estado: estadoFinal, resultado: { ok: true, datos, eventos, version } };
+  return { estado: estadoFinal, resultado: { ok: true, datos, eventos: eventosConVersion, version } };
 }
 
 /**

@@ -17,9 +17,10 @@
 // aquí). La comprobación de versión de este módulo no es el mecanismo principal de control de concurrencia
 // — es una red de seguridad que detecta el síntoma de un bug real (dos procesos escribiendo el mismo
 // `gameId`) y se niega a perder datos en silencio en vez de prevenirlo por diseño.
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { GameSession, type PartidaExportada } from '../session/gameSession';
+import { idDeMapa } from '../session/estado';
 import { WORLDGEN_VERSION } from '../worldgen';
 
 /**
@@ -98,14 +99,19 @@ async function leerSnapshotSiExiste(ruta: string): Promise<SnapshotPartida | nul
  * Guarda el estado ACTUAL de `sesion` en `directorio/<gameId>.json`. Crea el directorio si no existe.
  *
  * Lanza `ConflictoDeVersionError` si el snapshot en disco ya tiene una versión de partida mayor que la que
- * se intenta guardar (ver la nota de concurrencia al principio del archivo).
+ * se intenta guardar (ver la nota de concurrencia al principio del archivo) — salvo que `forzar` sea `true`:
+ * el reemplazo DELIBERADO de una partida descartada (`RegistroDePartidas.descartarYCrear`, Fase C12) siempre
+ * empieza en version 0, así que sin este escape la propia red de seguridad contra el escenario "dos procesos
+ * escribiendo el mismo gameId" bloquearía el `forzar: true` legítimo que el usuario pidió — el guardado en la
+ * creación (`RunnerDePartida.crearYPersistir`) es justo lo que hace visible ese conflicto ahora, antes solo
+ * pasaba cuando llegaba el primer comando/tick de la partida nueva.
  */
-export async function guardarPartida(directorio: string, sesion: GameSession, momento: string): Promise<void> {
+export async function guardarPartida(directorio: string, sesion: GameSession, momento: string, opciones: { forzar?: boolean } = {}): Promise<void> {
   const partida = sesion.exportar();
   const ruta = rutaDe(directorio, sesion.gameId);
 
   const existente = await leerSnapshotSiExiste(ruta);
-  if (existente && existente.partida.state.version > partida.state.version) {
+  if (!opciones.forzar && existente && existente.partida.state.version > partida.state.version) {
     throw new ConflictoDeVersionError(sesion.gameId, existente.partida.state.version, partida.state.version);
   }
 
@@ -130,4 +136,49 @@ export async function cargarPartida(directorio: string, gameId: string): Promise
     throw new WorldgenVersionNoCoincideError(gameId, snapshot.partida.worldgenVersion);
   }
   return GameSession.importar(snapshot.partida);
+}
+
+export interface ResumenPartidaEnDisco {
+  gameId: string;
+  tick: number;
+  version: number;
+  mapaId: string;
+  guardadoEn: string;
+}
+
+/**
+ * Descubrimiento de partidas (Fase C12, doc 4: "un cliente externo no puede descubrir a qué conectarse; el
+ * gameId llega fuera de banda"). Lee el DIRECTORIO, no `RegistroDePartidas`: ese solo conoce lo abierto EN
+ * ESTE PROCESO, y una partida que existe en disco pero nadie ha tocado desde el último reinicio debe seguir
+ * siendo descubrible. Lectura ligera — `JSON.parse` de cada snapshot, sin reconstruir ninguna `GameSession` —
+ * mismo motivo que `RunnerDePartida` es deliberadamente "una partida por proceso": no hay razón para pagar
+ * ese coste solo para listar.
+ */
+export async function listarPartidas(directorio: string): Promise<ResumenPartidaEnDisco[]> {
+  let nombres: string[];
+  try {
+    nombres = await readdir(directorio);
+  } catch (err) {
+    // Directorio inexistente = ninguna partida se ha guardado todavía en este despliegue, no un error.
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw err;
+  }
+
+  const gameIds = nombres.filter((n) => n.endsWith('.json')).map((n) => n.slice(0, -'.json'.length));
+  const resumenes = await Promise.all(
+    gameIds.map(async (gameId): Promise<ResumenPartidaEnDisco | null> => {
+      const snapshot = await leerSnapshotSiExiste(rutaDe(directorio, gameId));
+      // `null` aquí sería una carrera con un borrado externo entre `readdir` y esta lectura — se descarta en
+      // silencio, no es un fallo de quien pidió la lista.
+      if (!snapshot) return null;
+      return {
+        gameId,
+        tick: snapshot.partida.state.tick,
+        version: snapshot.partida.state.version,
+        mapaId: idDeMapa(snapshot.partida.state.mapa),
+        guardadoEn: snapshot.guardadoEn,
+      };
+    })
+  );
+  return resumenes.filter((r): r is ResumenPartidaEnDisco => r !== null);
 }

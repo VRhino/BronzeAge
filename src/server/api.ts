@@ -60,6 +60,10 @@ export interface OpcionesServidor {
    * `cliente/` hace que las peticiones sean same-origin.
    */
   origenesPermitidos?: readonly string[];
+  /** Fuente de ticks (Fase C12) — ver el comentario de `RegistroDePartidas`. `undefined` por defecto: sin
+   * configurarlo, ninguna partida avanza sola, ni siquiera las de los tests que crean un servidor con
+   * `crearServidor({directorio})` sin este campo. */
+  intervaloTickMs?: number;
 }
 
 export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
@@ -86,7 +90,7 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
   const deps: DependenciasDeRutas = {
     identidad,
     administradores: crearDirectorioDeAdministradores(opciones.administradoresGlobales ?? [], identidad.repositorio),
-    partidas: new RegistroDePartidas(opciones.directorio),
+    partidas: new RegistroDePartidas(opciones.directorio, opciones.intervaloTickMs),
     ahora: opciones.ahora ?? (() => new Date().toISOString()),
     hub: opciones.hub ?? new HubDeDifusion(),
   };

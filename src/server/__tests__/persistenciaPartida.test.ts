@@ -15,6 +15,7 @@ import {
   FormatoSnapshotNoSoportadoError,
   FORMATO_SNAPSHOT_VERSION,
   guardarPartida,
+  listarPartidas,
   WorldgenVersionNoCoincideError,
   type SnapshotPartida,
 } from '../persistenciaPartida';
@@ -136,5 +137,31 @@ describe('guardarPartida / cargarPartida', () => {
 
     expect((await cargarPartida(directorio, a.gameId))!.getState().asentamientos).toHaveLength(1);
     expect((await cargarPartida(directorio, b.gameId))!.getState().asentamientos).toHaveLength(0);
+  });
+});
+
+describe('listarPartidas (Fase C12: descubrimiento)', () => {
+  it('directorio inexistente: lista vacía, no un error', async () => {
+    expect(await listarPartidas(join(directorio, 'no-existe-todavia'))).toEqual([]);
+  });
+
+  it('directorio vacío: lista vacía', async () => {
+    expect(await listarPartidas(directorio)).toEqual([]);
+  });
+
+  it('lee TODAS las partidas guardadas, no solo las que hay abiertas en memoria (no hay "memoria" aquí)', async () => {
+    const a = partidaEnMarcha(1);
+    const b = GameSession.crear('otra-partida', { seed: 2 });
+    await guardarPartida(directorio, a, MOMENTO);
+    await guardarPartida(directorio, b, MOMENTO);
+
+    const partidas = await listarPartidas(directorio);
+
+    expect(partidas.map((p) => p.gameId).sort()).toEqual([a.gameId, b.gameId].sort());
+    const resumenA = partidas.find((p) => p.gameId === a.gameId)!;
+    expect(resumenA.tick).toBe(a.getState().tick);
+    expect(resumenA.version).toBe(a.getState().version);
+    expect(resumenA.mapaId).toBeTruthy();
+    expect(resumenA.guardadoEn).toBe(MOMENTO);
   });
 });

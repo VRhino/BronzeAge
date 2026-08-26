@@ -129,6 +129,15 @@ describe('RunnerDePartida.cargarOCrear', () => {
     expect(r.getState().facciones).toEqual([]);
   });
 
+  it('una partida nueva se persiste antes de devolverla (Fase C12): sobrevive a un "reinicio" sin ningún comando de por medio', async () => {
+    await RunnerDePartida.cargarOCrear('g-recien-creada', { seed: 1 }, { directorio, ahora: () => MOMENTO });
+
+    // "Reinicio del proceso" simulado: pedirla de nuevo debe RETOMARLA (mismo tick/estado), no crear otra
+    // desde cero — solo pasa si la primera llamada la escribió a disco sin que se ejecutara ningún comando.
+    const retomada = await RunnerDePartida.cargarOCrear('g-recien-creada', { seed: 99 }, { directorio, ahora: () => MOMENTO });
+    expect(retomada.getState().mapa.config.seed).toBe(1); // la seed de la PRIMERA llamada, no la 99 de esta
+  });
+
   it('con snapshot previo, retoma la partida guardada — incluida la continuidad de RNG', async () => {
     const original = runner('g-retomada');
     await original.ejecutar(crearFaccion, { nombre: 'Micenas' });

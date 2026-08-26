@@ -26,11 +26,17 @@ import type {
   ZonaFaccion,
   ZonaInfluencia,
 } from '../../domain/types';
-import type { EventoDominio } from '../../domain/eventos';
 import type { EstadoMapa } from '../../world/mapa';
 import type { TrazadoAsentamiento } from '../../engine/trazado';
 import { esCiudadano } from '../../engine/faccion';
-import { idDeMapa, type EventoLogAdmin, type GameSessionState, type GeometriaAsentamientos } from '../estado';
+import {
+  eventosDesde,
+  idDeMapa,
+  type EventoDominioConVersion,
+  type EventoLogAdmin,
+  type GameSessionState,
+  type GeometriaAsentamientos,
+} from '../estado';
 
 export interface ProyeccionJugador {
   gameId: string;
@@ -71,7 +77,7 @@ export interface ProyeccionJugador {
   campamentosBandidos: CampamentoBandido[];
   /** Sin `asentamientoId` (eventos globales/de Facción) o con uno propio. Es el mismo criterio que evita la
    * fuga que el doc 7 §7.1 señalaba en el log administrativo: el log global narra TODO el mundo. */
-  eventosDominio: EventoDominio[];
+  eventosDominio: EventoDominioConVersion[];
   historial: EventoLogAdmin[];
   /** Geometría por frame (Fase C10, doc 9) — SOLO de los asentamientos propios, mismo criterio de "mejor no
    * ver nada del rival" que el resto de esta proyección: `computeZonaInfluencia` necesita la posición de
@@ -97,15 +103,22 @@ function faccionDe(estado: GameSessionState, jugadorId: string): string | null {
   return estado.facciones.find((f) => esCiudadano(f, jugadorId))?.id ?? null;
 }
 
+/** Lo que "propio" significa para un jugador (Slice 1: su Facción, nada de rivales) — factorizado para que
+ * `proyectarParaJugador` y `eventosDominioParaJugador` (cursor, Fase C13) usen exactamente el mismo criterio,
+ * en vez de que cada uno recalcule su propia versión y puedan divergir. */
+function propioDeJugador(estado: GameSessionState, jugadorId: string) {
+  const faccionId = faccionDe(estado, jugadorId);
+  const asentamientosPropios = estado.asentamientos.filter((a) => a.faccionId === faccionId);
+  const idsPropios = new Set(asentamientosPropios.map((a) => a.id));
+  return { faccionId, asentamientosPropios, esPropio: (asentamientoId: string) => idsPropios.has(asentamientoId) };
+}
+
 export function proyectarParaJugador(
   estado: GameSessionState,
   jugadorId: string,
   geometria: GeometriaAsentamientos
 ): Omit<ProyeccionJugador, 'preciosReferencia'> {
-  const faccionId = faccionDe(estado, jugadorId);
-  const asentamientosPropios = estado.asentamientos.filter((a) => a.faccionId === faccionId);
-  const idsPropios = new Set(asentamientosPropios.map((a) => a.id));
-  const esPropio = (asentamientoId: string) => idsPropios.has(asentamientoId);
+  const { faccionId, asentamientosPropios, esPropio } = propioDeJugador(estado, jugadorId);
 
   return {
     gameId: estado.gameId,
@@ -130,4 +143,15 @@ export function proyectarParaJugador(
     zonasFusionadas: geometria.zonasFusionadas.filter((zf) => zf.faccionId === faccionId),
     trazadoPorAsentamiento: Object.fromEntries(Object.entries(geometria.trazadoPorAsentamiento).filter(([id]) => esPropio(id))),
   };
+}
+
+/**
+ * Eventos con `version` > `desde`, filtrados a lo que ESE jugador puede ver (Fase C13) — mismo criterio que
+ * `proyectarParaJugador.eventosDominio`, factorizado con `propioDeJugador` para no divergir. Es lo que
+ * permite a un cliente que ya tiene la proyección inicial ponerse al día tras un aviso por WebSocket sin
+ * volver a pedir la proyección entera — solo los eventos nuevos.
+ */
+export function eventosDominioParaJugador(estado: GameSessionState, jugadorId: string, desde: number): EventoDominioConVersion[] {
+  const { esPropio } = propioDeJugador(estado, jugadorId);
+  return eventosDesde(estado, desde).filter((e) => e.asentamientoId === undefined || esPropio(e.asentamientoId));
 }

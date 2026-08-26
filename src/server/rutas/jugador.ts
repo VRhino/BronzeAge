@@ -11,11 +11,11 @@
 import type { FastifyInstance } from 'fastify';
 import { puedeJugar } from '../../acceso/rolesDePartida';
 import type { ActorDeComando } from '../../session/comandos/autorizacion';
-import { proyectarParaJugador } from '../../session/proyecciones/jugador';
+import { eventosDominioParaJugador, proyectarParaJugador } from '../../session/proyecciones/jugador';
 import { ESQUEMA_SESION_AUTH } from '../openapi';
 import { ejecutarComandoHttp, ESQUEMA_EJECUTAR_COMANDO, type EjecutarComandoBody } from './comandos';
 import { enviarMapa, ESQUEMA_MAPA } from './mapa';
-import { ERROR_RESPUESTA, PARAMS_GAME_ID } from './esquemas';
+import { ERROR_RESPUESTA, PARAMS_GAME_ID, QUERY_DESDE } from './esquemas';
 import {
   partidaNoAbierta,
   resolverActor,
@@ -53,6 +53,17 @@ const ESQUEMA_PROYECCION = {
   security: SEGURIDAD_JUGADOR,
   params: PARAMS_GAME_ID,
   response: { 401: ERROR_RESPUESTA, 403: ERROR_RESPUESTA, 404: ERROR_RESPUESTA },
+} as const;
+
+const ESQUEMA_EVENTOS = {
+  description:
+    'Eventos de dominio con version > `desde` (Fase C13), filtrados a lo que este jugador puede ver — mismo ' +
+    'criterio que la proyección (Slice 1: su Facción, nada de rivales). `desde` ausente equivale a 0.',
+  tags: ['jugador'],
+  security: SEGURIDAD_JUGADOR,
+  params: PARAMS_GAME_ID,
+  querystring: QUERY_DESDE,
+  response: { 400: ERROR_RESPUESTA, 401: ERROR_RESPUESTA, 403: ERROR_RESPUESTA, 404: ERROR_RESPUESTA },
 } as const;
 
 const ESQUEMA_COMANDOS_JUGADOR = {
@@ -118,6 +129,27 @@ export function registrarRutasDeJugador(app: FastifyInstance, deps: Dependencias
       preciosReferencia: runner.preciosReferencia(),
     });
   });
+
+  /** Cursor de eventos (Fase C13) — ver `ESQUEMA_EVENTOS`. */
+  app.get<{ Params: ParametrosGameId; Querystring: { desde?: string } }>(
+    '/jugador/partidas/:gameId/eventos',
+    { schema: ESQUEMA_EVENTOS },
+    async (request, reply) => {
+      const { gameId } = request.params;
+      const resuelto = resolverActor(request, deps, gameId);
+      if (!resuelto) return sinSesion(reply);
+      if (!puedeJugar(resuelto.actor)) return sinPermiso(reply, 'sin membresia de jugador en esta partida');
+
+      const runner = deps.partidas.obtener(gameId);
+      if (!runner) return partidaNoAbierta(reply, gameId);
+
+      const desde = Number(request.query.desde ?? '0');
+      if (!Number.isInteger(desde) || desde < 0) return reply.code(400).send({ error: '`desde` debe ser un entero no negativo.' });
+
+      const jugadorId = resuelto.actor.membresia!.jugadorId!;
+      return reply.send({ eventos: eventosDominioParaJugador(runner.getState(), jugadorId, desde) });
+    }
+  );
 
   /** El mapa como asset (Fase C11) — ver `mapa.ts`. La proyección solo trae `mapaId`; el mapa real se pide
    * aquí, una vez, y se cachea para siempre en el cliente. */

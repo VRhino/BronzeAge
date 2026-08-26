@@ -3,7 +3,10 @@
 // pruebas fallan de verdad si cambia la forma real de `GameSessionState.mapa`.
 import { describe, expect, it } from 'vitest';
 import { GameSession } from '../gameSession';
-import { idDeMapa, vistaAdminDeEstado } from '../estado';
+import { crearFaccion } from '../comandos/crearFaccion';
+import { idDeMapa, eventosDesde, vistaAdminDeEstado } from '../estado';
+
+const MOMENTO = '2026-01-01T00:00:00.000Z';
 
 describe('idDeMapa', () => {
   it('es estable: la misma partida produce el mismo id en llamadas repetidas', () => {
@@ -46,5 +49,44 @@ describe('vistaAdminDeEstado', () => {
     expect(vista.mapaId).toBe(idDeMapa(estado.mapa));
     expect(vista.tick).toBe(estado.tick);
     expect(vista.asentamientos).toBe(estado.asentamientos);
+  });
+});
+
+describe('eventosDesde (Fase C13: cursor incremental)', () => {
+  it('cada evento lleva la version de la partida en la que se emitió', () => {
+    const sesion = GameSession.crear('g1', { seed: 1 });
+    const resultado = sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, { momento: MOMENTO, actor: 'jugador-1' });
+
+    expect(resultado.ok).toBe(true);
+    expect(resultado.eventos).toHaveLength(1);
+    expect(resultado.eventos[0]!.version).toBe(1);
+  });
+
+  it('desde=0 trae todo el historial, en orden cronológico (más viejo primero)', () => {
+    const sesion = GameSession.crear('g1', { seed: 1 });
+    sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, { momento: MOMENTO, actor: 'a' });
+    sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, { momento: MOMENTO, actor: 'b' });
+
+    const eventos = eventosDesde(sesion.getState(), 0);
+
+    expect(eventos.map((e) => e.version)).toEqual([1, 2]);
+  });
+
+  it('desde=<version actual> no trae nada nuevo', () => {
+    const sesion = GameSession.crear('g1', { seed: 1 });
+    sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, { momento: MOMENTO, actor: 'a' });
+
+    expect(eventosDesde(sesion.getState(), sesion.getState().version)).toEqual([]);
+  });
+
+  it('desde=<version intermedia> trae solo lo posterior', () => {
+    const sesion = GameSession.crear('g1', { seed: 1 });
+    sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, { momento: MOMENTO, actor: 'a' }); // version 1
+    sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, { momento: MOMENTO, actor: 'b' }); // version 2
+    sesion.ejecutar(crearFaccion, { nombre: 'Esparta' }, { momento: MOMENTO, actor: 'c' }); // version 3
+
+    const eventos = eventosDesde(sesion.getState(), 1);
+
+    expect(eventos.map((e) => e.version)).toEqual([2, 3]);
   });
 });

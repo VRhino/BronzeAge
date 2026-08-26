@@ -38,3 +38,12 @@ export const PARAMS_GAME_ID_MAPA = {
   properties: { gameId: { type: 'string' }, mapaId: { type: 'string' } },
   required: ['gameId', 'mapaId'],
 } as const;
+
+/** Cursor de eventos (Fase C13): `desde` llega SIEMPRE como texto por ser un query param de URL — a
+ * diferencia de un `body` JSON, que ya trae tipos reales (ver `coerceTypes: false` en `api.ts`), aquí no hay
+ * forma de que sea otra cosa. `pattern` valida forma (dígitos), no rango; la ruta hace `Number(...)` y
+ * responde 400 si no da un entero no negativo — mismo criterio de "solo forma en el esquema" que C9. */
+export const QUERY_DESDE = {
+  type: 'object',
+  properties: { desde: { type: 'string', pattern: '^[0-9]+$' } },
+} as const;

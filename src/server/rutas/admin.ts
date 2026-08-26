@@ -14,11 +14,12 @@ import { puedeAdministrar, puedeCrearPartida, puedeDescartarPartida, rolEnPartid
 import type { RolTecnico } from '../../acceso/tipos';
 import type { ActorDeComando } from '../../session/comandos/autorizacion';
 import { PartidaYaAbiertaError } from '../registroDePartidas';
-import { vistaAdminDeEstado } from '../../session/estado';
+import { eventosDesde, vistaAdminDeEstado } from '../../session/estado';
+import { exportarParaUnityTerrain, UNITY_EXPORT_DEFAULT } from '../../world/exportUnity';
 import { ESQUEMA_SESION_AUTH } from '../openapi';
 import { ejecutarComandoHttp, ESQUEMA_EJECUTAR_COMANDO, type EjecutarComandoBody } from './comandos';
 import { enviarMapa, ESQUEMA_MAPA } from './mapa';
-import { ERROR_RESPUESTA, PARAMS_GAME_ID, RESUMEN_PARTIDA_RESPUESTA } from './esquemas';
+import { ERROR_RESPUESTA, PARAMS_GAME_ID, QUERY_DESDE, RESUMEN_PARTIDA_RESPUESTA } from './esquemas';
 import {
   mensajeDe,
   partidaNoAbierta,
@@ -43,6 +44,40 @@ interface CrearPartidaBody {
 }
 
 const REGIONES: readonly RegionId[] = ['greciaContinental', 'anatolia', 'egeo', 'nilo', 'mesopotamia'];
+
+const ESQUEMA_LISTAR_PARTIDAS = {
+  description:
+    'Partidas descubribles en este despliegue (Fase C12): lee el directorio de snapshots, no solo lo abierto ' +
+    'en este proceso — una partida guardada antes de un reinicio sigue apareciendo. Exige administrador_global, ' +
+    'mismo criterio que crear una partida: no hay Membresia de administración de partida posible sobre algo ' +
+    'que todavía no se ha abierto en este proceso.',
+  tags: ['admin'],
+  security: SEGURIDAD_ADMIN,
+  response: {
+    200: {
+      type: 'object',
+      properties: {
+        partidas: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              gameId: { type: 'string' },
+              tick: { type: 'number' },
+              version: { type: 'number' },
+              mapaId: { type: 'string' },
+              guardadoEn: { type: 'string' },
+            },
+            required: ['gameId', 'tick', 'version', 'mapaId', 'guardadoEn'],
+          },
+        },
+      },
+      required: ['partidas'],
+    },
+    401: ERROR_RESPUESTA,
+    403: ERROR_RESPUESTA,
+  },
+} as const;
 
 const ESQUEMA_CREAR_PARTIDA = {
   description: 'Crea una partida nueva, o retoma la que ya hubiera en disco para ese gameId. Exige administrador_global.',
@@ -88,6 +123,49 @@ const ESQUEMA_ESTADO_COMPLETO = {
   response: { 401: ERROR_RESPUESTA, 403: ERROR_RESPUESTA, 404: ERROR_RESPUESTA },
 } as const;
 
+const ESQUEMA_EVENTOS = {
+  description:
+    'Eventos de dominio con version > `desde` (Fase C13), en orden cronológico — cursor incremental para no ' +
+    'volver a mandar el histórico completo tras cada aviso por WebSocket. `desde` ausente u omitido equivale a 0.',
+  tags: ['admin'],
+  security: SEGURIDAD_ADMIN,
+  params: PARAMS_GAME_ID,
+  querystring: QUERY_DESDE,
+  response: { 400: ERROR_RESPUESTA, 401: ERROR_RESPUESTA, 403: ERROR_RESPUESTA, 404: ERROR_RESPUESTA },
+} as const;
+
+const ESQUEMA_EXPORTAR = {
+  description:
+    'Snapshot completo de la partida para descargar (Fase C12) — mismo formato que se persiste en disco tras ' +
+    'cada comando (`PartidaExportada`), no un formato aparte para exportar. Antes corría en el navegador ' +
+    '(`GameStore.exportarSimulacion`, retirado); ahora lo sirve el servidor, que es quien tiene el estado real.',
+  tags: ['admin'],
+  security: SEGURIDAD_ADMIN,
+  params: PARAMS_GAME_ID,
+  response: { 401: ERROR_RESPUESTA, 403: ERROR_RESPUESTA, 404: ERROR_RESPUESTA },
+} as const;
+
+const ESQUEMA_EXPORTAR_UNITY = {
+  description:
+    'Heightmap (16-bit RAW) + splatmap de biomas + metadata para Unity Terrain (Fase C12), en un solo JSON: ' +
+    'los binarios viajan en base64 (`heightmapRaw`, cada `splatmap.capas[bioma]`) — quien lo descarga decide ' +
+    'si los escribe a `.raw`/`.png` por su cuenta. Antes corría en el navegador (`GameStore.exportarMapaUnity`, ' +
+    '`world/exportUnity.ts` vía `@motor/*`); el cálculo no cambió, solo dónde se ejecuta. Resolución por ' +
+    'defecto alta (4097² el heightmap) — cara: pensada para pedirse una vez, no para *polling*.',
+  tags: ['admin'],
+  security: SEGURIDAD_ADMIN,
+  params: PARAMS_GAME_ID,
+  querystring: {
+    type: 'object',
+    properties: {
+      resolucion: { type: 'string', pattern: '^[0-9]+$' },
+      alturaMaximaMetros: { type: 'string', pattern: '^[0-9]+$' },
+      resolucionSplatmap: { type: 'string', pattern: '^[0-9]+$' },
+    },
+  },
+  response: { 400: ERROR_RESPUESTA, 401: ERROR_RESPUESTA, 403: ERROR_RESPUESTA, 404: ERROR_RESPUESTA },
+} as const;
+
 const ESQUEMA_COMANDOS_ADMIN = {
   ...ESQUEMA_EJECUTAR_COMANDO,
   description:
@@ -101,6 +179,16 @@ const ESQUEMA_COMANDOS_ADMIN = {
 } as const;
 
 export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDeRutas): void {
+  /** Descubrimiento (Fase C12) — ver `ESQUEMA_LISTAR_PARTIDAS`. Sin `gameId` que resolver: `resolverActor`
+   * sin tercer argumento solo comprueba sesión + `esAdministradorGlobal`, ninguna `Membresia`. */
+  app.get('/admin/partidas', { schema: ESQUEMA_LISTAR_PARTIDAS }, async (request, reply) => {
+    const resuelto = resolverActor(request, deps);
+    if (!resuelto) return sinSesion(reply);
+    if (!puedeCrearPartida(resuelto.actor)) return sinPermiso(reply, 'listar partidas exige rol administrador_global');
+
+    return reply.send({ partidas: await deps.partidas.listar() });
+  });
+
   /**
    * Crea una partida nueva, o RETOMA la que ya hubiera en disco para ese `gameId`. Operación de INSTANCIA:
    * solo `administrador_global`, porque en una partida que aún no existe no hay `Membresia` posible.
@@ -121,7 +209,7 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
     }
 
     const runner = forzar
-      ? deps.partidas.descartarYCrear(gameId, { seed, region })
+      ? await deps.partidas.descartarYCrear(gameId, { seed, region })
       : await deps.partidas.abrir(gameId, { seed, region }).catch((err: unknown) => {
           if (err instanceof PartidaYaAbiertaError) return undefined;
           throw err;
@@ -162,6 +250,70 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
       ...acceso.runner.geometriaAsentamientos(),
     });
   });
+
+  /** Cursor de eventos (Fase C13) — ver `ESQUEMA_EVENTOS`. `desde` inválido (no numérico: el esquema ya lo
+   * filtra por `pattern`; negativo o `NaN` tras parsear no) es un 400, no un 500 silencioso. */
+  app.get<{ Params: ParametrosGameId; Querystring: { desde?: string } }>(
+    '/admin/partidas/:gameId/eventos',
+    { schema: ESQUEMA_EVENTOS },
+    async (request, reply) => {
+      const acceso = exigirAdministracion(request, reply, deps);
+      if (!acceso.ok) return acceso.respuesta;
+
+      const desde = Number(request.query.desde ?? '0');
+      if (!Number.isInteger(desde) || desde < 0) return reply.code(400).send({ error: '`desde` debe ser un entero no negativo.' });
+
+      return reply.send({ eventos: eventosDesde(acceso.runner.getState(), desde) });
+    }
+  );
+
+  /** Descarga del snapshot completo (Fase C12) — ver `ESQUEMA_EXPORTAR`. */
+  app.get<{ Params: ParametrosGameId }>('/admin/partidas/:gameId/exportar', { schema: ESQUEMA_EXPORTAR }, async (request, reply) => {
+    const acceso = exigirAdministracion(request, reply, deps);
+    if (!acceso.ok) return acceso.respuesta;
+
+    reply.header('Content-Disposition', `attachment; filename="${acceso.runner.gameId}.json"`);
+    return reply.send(acceso.runner.exportar());
+  });
+
+  /** Export para Unity Terrain (Fase C12) — ver `ESQUEMA_EXPORTAR_UNITY`. */
+  app.get<{ Params: ParametrosGameId; Querystring: { resolucion?: string; alturaMaximaMetros?: string; resolucionSplatmap?: string } }>(
+    '/admin/partidas/:gameId/exportar-unity',
+    { schema: ESQUEMA_EXPORTAR_UNITY },
+    async (request, reply) => {
+      const acceso = exigirAdministracion(request, reply, deps);
+      if (!acceso.ok) return acceso.respuesta;
+
+      const opciones = {
+        resolucion: request.query.resolucion ? Number(request.query.resolucion) : UNITY_EXPORT_DEFAULT.resolucion,
+        alturaMaximaMetros: request.query.alturaMaximaMetros
+          ? Number(request.query.alturaMaximaMetros)
+          : UNITY_EXPORT_DEFAULT.alturaMaximaMetros,
+        resolucionSplatmap: request.query.resolucionSplatmap
+          ? Number(request.query.resolucionSplatmap)
+          : UNITY_EXPORT_DEFAULT.resolucionSplatmap,
+      };
+
+      let resultado: ReturnType<typeof exportarParaUnityTerrain>;
+      try {
+        resultado = exportarParaUnityTerrain(acceso.runner.getState().mapa, acceso.runner.getState().asentamientos, opciones);
+      } catch (err) {
+        // Único fallo posible: `resolucion` no cumple 2^n+1 (`validarResolucionHeightmap`) — error de forma
+        // del cliente, no un 500 del servidor.
+        return reply.code(400).send({ error: mensajeDe(err) });
+      }
+
+      return reply.send({
+        metadata: resultado.metadata,
+        nombreBase: resultado.nombreBase,
+        heightmapRaw: Buffer.from(resultado.heightmapRaw).toString('base64'),
+        splatmap: {
+          resolucion: resultado.splatmap.resolucion,
+          capas: Object.fromEntries(Object.entries(resultado.splatmap.capas).map(([bioma, datos]) => [bioma, Buffer.from(datos).toString('base64')])),
+        },
+      });
+    }
+  );
 
   /** El mapa como asset (Fase C11) — ver `mapa.ts`. Misma comprobación de administración que el resto de esta
    * superficie: el mapa no es secreto, pero la partida sí exige sesión para entrar en su gameId. */

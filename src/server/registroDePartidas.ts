@@ -8,6 +8,7 @@
 // invisible para cualquiera que no leyera esa función entera.
 import type { RegionId } from '../domain/types';
 import { RunnerDePartida } from './runnerDePartida';
+import { listarPartidas, type ResumenPartidaEnDisco } from './persistenciaPartida';
 
 export interface ConfiguracionPartida {
   seed: number;
@@ -24,10 +25,30 @@ export class PartidaYaAbiertaError extends Error {
 export class RegistroDePartidas {
   private readonly runners = new Map<string, RunnerDePartida>();
 
-  constructor(private readonly directorio: string) {}
+  /**
+   * Fuente de ticks (Fase C12, doc 4: "sin algo el mundo no avanza") — `undefined` por defecto: SIN
+   * configurarlo, ninguna partida avanza sola, ni siquiera las de los tests (mismo criterio deliberado que
+   * `ADMINISTRADORES`/`ORIGENES_PERMITIDOS` en `api.ts` — un default que activa algo por sí solo es el que
+   * sobrevive hasta producción sin que nadie lo note, y aquí además arriesgaría dejar temporizadores reales
+   * corriendo en cientos de servidores de prueba que nunca los paran explícitamente).
+   *
+   * El intervalo en sí es un PLACEHOLDER (igual que los valores de `constants.ts`, ver su cabecera): cada
+   * cuánto debe avanzar el mundo es una decisión de RITMO DE JUEGO, no de arquitectura, y no está tomada en
+   * ningún doc de este repo — E1 (Fase E) es quien cierra esto de verdad, con recuperación de eventos
+   * vencidos tras un reinicio. Esto es solo "que exista alguna fuente", no la definitiva.
+   */
+  constructor(
+    private readonly directorio: string,
+    private readonly intervaloTickMs?: number
+  ) {}
 
   obtener(gameId: string): RunnerDePartida | undefined {
     return this.runners.get(gameId);
+  }
+
+  /** Descubrimiento (Fase C12) — lee el directorio, no `this.runners`: ver el comentario de `listarPartidas`. */
+  listar(): Promise<ResumenPartidaEnDisco[]> {
+    return listarPartidas(this.directorio);
   }
 
   /**
@@ -42,15 +63,28 @@ export class RegistroDePartidas {
     if (this.runners.has(gameId)) throw new PartidaYaAbiertaError(gameId);
     const runner = await RunnerDePartida.cargarOCrear(gameId, config, { directorio: this.directorio });
     this.runners.set(gameId, runner);
+    this.arrancarTicksSiConfigurado(runner);
     return runner;
   }
 
   /** Descarta la partida en curso y crea una limpia — NO reanuda el snapshot existente. Única operación
-   * destructiva del registro; quien la expone debe exigir permiso aparte (`puedeDescartarPartida`). */
-  descartarYCrear(gameId: string, config: ConfiguracionPartida): RunnerDePartida {
+   * destructiva del registro; quien la expone debe exigir permiso aparte (`puedeDescartarPartida`).
+   *
+   * Persiste la nueva partida antes de devolverla (`crearYPersistir`, Fase C12): sin esto, el archivo en
+   * disco seguiría siendo el de la partida DESCARTADA hasta el primer comando/tick — un reinicio del proceso
+   * en ese hueco reviviría exactamente lo que `forzar: true` pedía borrar. */
+  async descartarYCrear(gameId: string, config: ConfiguracionPartida): Promise<RunnerDePartida> {
     this.runners.delete(gameId);
-    const runner = RunnerDePartida.crear(gameId, config, { directorio: this.directorio });
+    // `forzar: true`: la partida descartada puede seguir en disco con una version > 0 — este reemplazo,
+    // que empieza en 0, es deliberado, no el conflicto de concurrencia que `guardarPartida` normalmente
+    // detecta (ver su comentario).
+    const runner = await RunnerDePartida.crearYPersistir(gameId, config, { directorio: this.directorio }, { forzar: true });
     this.runners.set(gameId, runner);
+    this.arrancarTicksSiConfigurado(runner);
     return runner;
+  }
+
+  private arrancarTicksSiConfigurado(runner: RunnerDePartida): void {
+    if (this.intervaloTickMs !== undefined) runner.iniciarTicksAutomaticos(this.intervaloTickMs);
   }
 }

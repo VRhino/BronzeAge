@@ -109,6 +109,27 @@ describe('GET /sesiones/actual (whoami)', () => {
   });
 });
 
+describe('GET /admin/partidas (Fase C12: descubrimiento)', () => {
+  it('lista las partidas guardadas en disco, con resumen', async () => {
+    await partidaCreada('g1');
+    const { admin } = await partidaCreada('g2');
+
+    const res = await app.inject({ method: 'GET', url: '/v1/admin/partidas', headers: admin });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().partidas.map((p: { gameId: string }) => p.gameId).sort()).toEqual(['g1', 'g2']);
+    expect(res.json().partidas[0]).toHaveProperty('mapaId');
+  });
+
+  it('401 sin sesion, 403 sin ser administrador global', async () => {
+    expect((await app.inject({ method: 'GET', url: '/v1/admin/partidas' })).statusCode).toBe(401);
+
+    // `ana` nunca se declaró en ADMINISTRADORES (solo 'jefa' lo está, ver ADMINS arriba).
+    const ana = await sesionDe('ana');
+    expect((await app.inject({ method: 'GET', url: '/v1/admin/partidas', headers: ana })).statusCode).toBe(403);
+  });
+});
+
 describe('POST /admin/partidas', () => {
   it('un administrador global crea la partida', async () => {
     const { res } = await partidaCreada('g1');
@@ -258,6 +279,71 @@ describe('GET /admin/partidas/:gameId (estado completo)', () => {
     const res = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1', headers: admin });
 
     expect(Object.keys(res.json().preciosReferencia).sort()).toEqual(['cobre', 'estano', 'livestock', 'madera', 'piedra', 'trigo'].sort());
+  });
+});
+
+describe('GET /admin/partidas/:gameId/exportar (Fase C12)', () => {
+  it('descarga el snapshot completo, con Content-Disposition de adjunto', async () => {
+    const { admin } = await partidaCreada('g1', 7);
+    const auth = await jugadorEn('g1');
+    await app.inject({
+      method: 'POST',
+      url: '/v1/jugador/partidas/g1/comandos',
+      headers: auth,
+      payload: { tipo: 'crearFaccion', params: { nombre: 'Micenas' } },
+    });
+
+    const res = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/exportar', headers: admin });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-disposition']).toContain('attachment');
+    expect(res.headers['content-disposition']).toContain('g1.json');
+    expect(res.json().state.facciones).toHaveLength(1);
+    expect(res.json().worldgenVersion).toEqual(expect.any(Number));
+    expect(res.json().estadoRng).toEqual(expect.any(Number));
+  });
+
+  it('401 sin sesion, 403 para un jugador', async () => {
+    await partidaCreada('g1');
+    expect((await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/exportar' })).statusCode).toBe(401);
+
+    const jugador = await jugadorEn('g1');
+    expect((await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/exportar', headers: jugador })).statusCode).toBe(403);
+  });
+});
+
+describe('GET /admin/partidas/:gameId/exportar-unity (Fase C12)', () => {
+  it('devuelve heightmap/splatmap en base64 y metadata, a resolución reducida', async () => {
+    const { admin } = await partidaCreada('g1', 3);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/admin/partidas/g1/exportar-unity?resolucion=513&resolucionSplatmap=128',
+      headers: admin,
+    });
+
+    expect(res.statusCode).toBe(200);
+    const cuerpo = res.json();
+    expect(cuerpo.metadata.formatoVersion).toBe(1);
+    expect(typeof cuerpo.heightmapRaw).toBe('string');
+    // 513² muestras × 2 bytes = 526338 bytes -> ~701784 caracteres en base64 (4/3 + relleno).
+    expect(Buffer.from(cuerpo.heightmapRaw, 'base64').byteLength).toBe(513 * 513 * 2);
+    expect(cuerpo.splatmap.resolucion).toBe(128);
+    expect(Object.keys(cuerpo.splatmap.capas).length).toBeGreaterThan(0);
+  });
+
+  it('400 si la resolucion no cumple 2^n+1 (la exige el importador RAW de Unity)', async () => {
+    const { admin } = await partidaCreada('g1');
+    const res = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/exportar-unity?resolucion=500', headers: admin });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('401 sin sesion, 403 para un jugador', async () => {
+    await partidaCreada('g1');
+    expect((await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/exportar-unity' })).statusCode).toBe(401);
+
+    const jugador = await jugadorEn('g1');
+    expect((await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/exportar-unity', headers: jugador })).statusCode).toBe(403);
   });
 });
 
@@ -459,6 +545,93 @@ describe('GET /jugador/partidas/:gameId (proyeccion, Fase C4 Slice 1)', () => {
     const auth = await sesionDe('ana');
     const res = await app.inject({ method: 'GET', url: '/v1/jugador/partidas/no-existe', headers: auth });
     expect(res.statusCode).toBe(403);
+  });
+});
+
+describe('GET .../eventos?desde= (Fase C13: cursor incremental)', () => {
+  it('admin: desde=0 trae todo; desde=<version actual> no trae nada nuevo', async () => {
+    const { admin } = await partidaCreada('g1');
+    const auth = await jugadorEn('g1');
+    await app.inject({
+      method: 'POST',
+      url: '/v1/jugador/partidas/g1/comandos',
+      headers: auth,
+      payload: { tipo: 'crearFaccion', params: { nombre: 'Micenas' } },
+    });
+
+    const desdeCero = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/eventos?desde=0', headers: admin });
+    expect(desdeCero.statusCode).toBe(200);
+    expect(desdeCero.json().eventos).toHaveLength(1);
+    expect(desdeCero.json().eventos[0].version).toBe(1);
+
+    const desdeActual = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/eventos?desde=1', headers: admin });
+    expect(desdeActual.json().eventos).toEqual([]);
+  });
+
+  it('sin `desde` equivale a 0', async () => {
+    const { admin } = await partidaCreada('g1');
+    const auth = await jugadorEn('g1');
+    await app.inject({
+      method: 'POST',
+      url: '/v1/jugador/partidas/g1/comandos',
+      headers: auth,
+      payload: { tipo: 'crearFaccion', params: { nombre: 'Micenas' } },
+    });
+
+    const res = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/eventos', headers: admin });
+    expect(res.json().eventos).toHaveLength(1);
+  });
+
+  it('400 si `desde` no es un entero no negativo', async () => {
+    const { admin } = await partidaCreada('g1');
+    const res = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/eventos?desde=-1', headers: admin });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('jugador: filtrado por Facción propia, igual que la proyección', async () => {
+    await partidaCreada('g1');
+    const ana = await jugadorEn('g1', 'ana');
+    const fAna = await app.inject({
+      method: 'POST',
+      url: '/v1/jugador/partidas/g1/comandos',
+      headers: ana,
+      payload: { tipo: 'crearFaccion', params: { nombre: 'Micenas' } },
+    });
+    const fundadaAna = await app.inject({
+      method: 'POST',
+      url: '/v1/jugador/partidas/g1/comandos',
+      headers: ana,
+      payload: { tipo: 'fundarAsentamiento', params: { faccionId: fAna.json().resultado.datos.faccionId, posicion: { x: 500, y: 500 } } },
+    });
+    const asentamientoAna = fundadaAna.json().resultado.datos.asentamientoId;
+
+    const luis = await jugadorEn('g1', 'luis');
+    const fLuis = await app.inject({
+      method: 'POST',
+      url: '/v1/jugador/partidas/g1/comandos',
+      headers: luis,
+      payload: { tipo: 'crearFaccion', params: { nombre: 'Troya' } },
+    });
+    const fundadaLuis = await app.inject({
+      method: 'POST',
+      url: '/v1/jugador/partidas/g1/comandos',
+      headers: luis,
+      payload: { tipo: 'fundarAsentamiento', params: { faccionId: fLuis.json().resultado.datos.faccionId, posicion: { x: 1200, y: 1200 } } },
+    });
+    const asentamientoLuis = fundadaLuis.json().resultado.datos.asentamientoId;
+
+    const eventosAna = (await app.inject({ method: 'GET', url: '/v1/jugador/partidas/g1/eventos?desde=0', headers: ana })).json().eventos;
+    // Los eventos de Facción (`crearFaccion`, sin `asentamientoId`) son públicos para cualquiera — mismo
+    // criterio que `facciones` en la proyección ("sin redactar"). Lo que SÍ se filtra es lo atribuido a un
+    // asentamiento: Ana ve el suyo, nunca el de Luis.
+    expect(eventosAna.some((e: { asentamientoId?: string }) => e.asentamientoId === asentamientoAna)).toBe(true);
+    expect(eventosAna.some((e: { asentamientoId?: string }) => e.asentamientoId === asentamientoLuis)).toBe(false);
+  });
+
+  it('401 sin sesion', async () => {
+    await partidaCreada('g1');
+    const res = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/eventos' });
+    expect(res.statusCode).toBe(401);
   });
 });
 

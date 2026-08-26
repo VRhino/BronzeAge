@@ -484,7 +484,7 @@ siempre), o los evaluadores de `worldgen/` se publican como librería, que es ju
   despliegue real se queda en un mundo congelado salvo que alguien lo empuje a mano.
 - **No hay endpoints de exportación**: `exportarSimulacion` y `exportarMapaUnity` corren hoy en el navegador
   usando `world/exportUnity` y `session/estado.proyectarLog`. El doc 8 ya los clasificaba como administración.
-- → hito **C12**.
+- → hito **C12**, resuelto el 2026-08-26 — ver la sección "C12" más abajo.
 
 #### Hallazgo 7 — C5 y C6 dejaron dos costuras de eficiencia que solo se ven con un cliente externo
 
@@ -505,7 +505,9 @@ siempre), o los evaluadores de `worldgen/` se publican como librería, que es ju
 - **El WebSocket difunde `EventoDominio`, no deltas de estado.** Un cliente sin motor no puede aplicarlos a
   su proyección cacheada, así que la única reacción correcta a cualquier evento es *refetch* completo. C5
   entrega avisos, no datos
-- → hito **C13**, con el objetivo corregido: el enemigo era el log de eventos, no el mapa.
+- → hito **C13**, con el objetivo corregido: el enemigo era el log de eventos, no el mapa. Resuelto (el
+  cursor) el 2026-08-26 — ver la sección "C13" más abajo; el WebSocket sigue difundiendo eventos en bruto,
+  no deltas, ver el alcance no cubierto anotado ahí.
 
 #### Hallazgo 8 — la frontera correcta no es "motor sí / motor no" (2026-08-26)
 
@@ -652,6 +654,11 @@ comando desde C6 sin necesidad.
   **no** se repite el `GET .../mapa/` — `mapaId` no cambió y `sincronizarMapa` lo reconoció sin red
 
 ### C11b. Rasterizar el terreno — descoped, sin implementar
+
+> **Resuelto 2026-08-26, sin rasterizar** — ver la sección "C11b" más abajo (después de C10). Ninguna de las
+> dos razones de abajo llevaba a "hay que rasterizar": el terreno es T2a (doc 9, "el terreno lo ven todos"),
+> así que un cliente sin motor lo recalcula con su propia copia de las funciones puras — cero rasterizado,
+> cero dependencia nueva. Esta sección queda como registro de la investigación original, no como plan vigente.
 
 `elevacion`/`fertilidad` en `MapaGenerado` son parámetros de ruido, no rásteres, y el bioma no se guarda: se
 evalúa por píxel con `evaluarBioma`. Lo que sale de C11a sigue siendo indibujable sin `worldgen/`.
@@ -817,6 +824,94 @@ que ya sirve C11a. Cero rasterizado, cero dependencia nueva.
   misma posición y forma. Es la prueba de que la copia es bit a bit correcta para el caso sin región, no una
   suposición
 - [x] `tsc --noEmit` limpio en el proyecto nuevo; el backend (`src/`) no se tocó, sigue en 617/617
+
+### C12. Descubrimiento y operación (2026-08-26)
+
+- [x] **`GET /admin/partidas`** (`listarPartidas`, `server/persistenciaPartida.ts`) — lee el DIRECTORIO de
+  snapshots, no `RegistroDePartidas.runners` (que solo conoce lo abierto EN ESTE PROCESO): una partida
+  guardada antes de un reinicio del servidor sigue siendo descubrible. Lectura ligera, `JSON.parse` de cada
+  snapshot sin reconstruir ninguna `GameSession` — mismo motivo que "una partida por proceso" en
+  `RunnerDePartida`: no hay razón para pagar ese coste solo para listar. Exige `administrador_global`
+- [x] **Efecto colateral real, encontrado por un test que fallaba, no anticipado**: una partida recién creada
+  y sin ningún comando aplicado no existía en disco — `guardarPartida` solo corría dentro del ciclo
+  "aplicar → persistir → confirmar" de `ejecutar()`/`avanzarTick()`. Consecuencia doble: invisible para
+  `listarPartidas`, y **perdida del todo** si el proceso moría antes de que alguien ejecutara el primer
+  comando, pese a que `POST /admin/partidas` ya había respondido 201. Corregido con
+  `RunnerDePartida.crearYPersistir` (nuevo): persiste antes de devolver el runner, seguro fuera de la cola
+  serial porque nadie más tiene todavía una referencia a él. Lo usan `cargarOCrear` (rama "no existe
+  todavía") y `RegistroDePartidas.descartarYCrear`
+- [x] **Segundo efecto colateral, de cascada**: `descartarYCrear` reemplaza una partida que puede seguir en
+  disco con `version` > 0 por una que empieza en 0 — al empezar a persistir en la creación, eso ahora choca
+  con la red de seguridad de `guardarPartida` contra escrituras concurrentes (`ConflictoDeVersionError`,
+  pensada para el escenario "dos procesos escribiendo el mismo gameId"), que no distinguía ese reemplazo
+  DELIBERADO del bug real que existe para detectar. `guardarPartida` gana un `{forzar?: boolean}` que se salta
+  la comprobación; `descartarYCrear` lo pasa, `crearYPersistir`/`cargarOCrear` no. `descartarYCrear` pasa a
+  ser `async` (antes síncrono) — un solo call site en `admin.ts`, ya dentro de un handler async
+- [x] **Fuente de ticks**: `RegistroDePartidas` acepta `intervaloTickMs?: number` en el constructor y arranca
+  `RunnerDePartida.iniciarTicksAutomaticos` (ya existía, sin usar hasta ahora) al abrir o crear una partida.
+  **Opt-in, `undefined` por defecto** — mismo criterio que `ADMINISTRADORES`/`ORIGENES_PERMITIDOS`: activar
+  algo por defecto es lo que sobrevive hasta producción sin que nadie lo note, y aquí además dejaría
+  temporizadores reales corriendo en cientos de servidores de test que nunca los paran. Ningún test existente
+  pasa este campo — cero cambio de comportamiento salvo que se configure a propósito. `INTERVALO_TICK_MS`
+  (env var) en `server/index.ts`. El intervalo es un PLACEHOLDER de ritmo de juego (misma disciplina que
+  `constants.ts`): no hay decisión de balance tomada en ningún doc; E1 (Fase E) lo cierra de verdad
+- [x] **`GET /admin/partidas/:gameId/exportar`** — más simple de lo previsto al investigar: el formato v2 de
+  `GameStore.exportarSimulacion` (retirado en Fase B junto con `importarSimulacion`) no hacía falta
+  reconstruirlo. El snapshot que YA se persiste tras cada comando (`PartidaExportada`, `sesion.exportar()`)
+  ES el formato de exportación — no hay una segunda representación que mantener sincronizada.
+  `Content-Disposition: attachment` para forzar descarga en vez de mostrarlo inline
+- [x] **`GET /admin/partidas/:gameId/exportar-unity`** — el cálculo YA existía (`world/exportUnity.ts`,
+  `exportarParaUnityTerrain`), solo se invocaba desde el navegador vía `@motor/*`. Heightmap/splatmap viajan
+  en base64 dentro de un único JSON (sin inventar multipart/zip); resolución configurable por query string
+  (`resolucion`/`alturaMaximaMetros`/`resolucionSplatmap`), 400 —no 500— si `resolucion` no cumple 2^n+1
+  (`validarResolucionHeightmap` ya lanzaba, solo faltaba traducirlo a HTTP)
+- [x] Tests nuevos: `persistenciaPartida.test.ts` (`listarPartidas`), `runnerDePartida.test.ts`
+  (persistencia inmediata al crear), `registroDePartidas.test.ts` (nuevo — fuente de ticks opt-in), `api.test.ts`
+  (los cuatro endpoints). Verificado en vivo: listar vacío → crear 'g1' → aparece de inmediato sin ningún
+  comando; `INTERVALO_TICK_MS=200` hace avanzar la partida sola; exportar y exportar-unity devuelven datos
+  reales con las cabeceras/formas esperadas
+
+### C13. Cursor de eventos (2026-08-26)
+
+- [x] **`EventoDominioConVersion`** (`session/estado.ts`) — extiende `EventoDominio` con `version: number`.
+  Vive en `session/`, no en `domain/eventos.ts`: `version` es un concepto de PARTIDA (`GameSessionState.version`),
+  no de dominio de juego — el motor (`engine/*`) no sabe qué es una versión de partida y no debe tener que
+  saberlo. `GameSessionState.eventosDominio` cambia de tipo a `EventoDominioConVersion[]`
+- [x] **`exito()`** (`session/comandos/tipos.ts`, el ÚNICO sitio donde sube `GameSessionState.version`) es
+  también el único sitio que estampa `version` en cada evento — mismo punto, misma razón: es el único que la
+  conoce en el momento en que el evento se genera. `ResultadoComando.eventos` cambia de tipo también, así que
+  lo que viaja por WebSocket (`hub.difundir`) ya trae `version` sin cableado adicional.
+  `GameSession.registrarEventoAdministrativo` (el único camino que sube `version` SIN pasar por `exito()` —
+  hoy sin ningún llamador real, ver "De 34 a 31" más arriba) se corrigió igual, para que la invariante "todo
+  evento en `eventosDominio` tiene `version`" sea universal, no solo válida por los casos que se prueban
+- [x] **`eventosDesde(estado, desde)`** (`session/estado.ts`) — eventos con `version` > `desde`, en orden
+  CRONOLÓGICO (más viejo primero: `estado.eventosDominio` vive más nuevo primero, `exito()` los antepone).
+  `break` en el primer evento con `version <= desde` en vez de filtrar el array completo: como la lista es
+  estrictamente descendente por `version`, es válido y más barato para un cursor reciente
+- [x] **`eventosDominioParaJugador(estado, jugadorId, desde)`** (`session/proyecciones/jugador.ts`) — la
+  versión filtrada por audiencia. `propioDeJugador` se extrajo de `proyectarParaJugador` (antes inline) para
+  que las dos funciones compartan EXACTAMENTE el mismo criterio de "qué es propio" en vez de que cada una
+  recalcule su versión y puedan divergir con el tiempo
+- [x] **`GET /admin|jugador/partidas/:gameId/eventos?desde=`** — en ambas superficies. `desde` es un query
+  param de URL, así que llega SIEMPRE como texto (a diferencia de un `body` JSON, que ya trae tipos reales
+  desde `coerceTypes: false` de C9) — el esquema valida forma (`pattern: '^[0-9]+$'`), la ruta hace
+  `Number(...)` y responde 400 si no da un entero no negativo, mismo criterio de "solo forma en el esquema"
+  que C9
+- [x] **Alcance NO cubierto, a propósito** — dos cosas que el hallazgo original mencionaba y esta pasada no
+  resuelve:
+  - Las lecturas de estado completo (`EstadoAdmin`/`ProyeccionJugador`) siguen trayendo `eventosDominio`
+    ENTERO, sin cursor. Quitarlo habría roto `cliente/` (el único cliente que existe, todavía lo usa para su
+    línea de tiempo de depuración) sin que exista ningún consumidor migrado al cursor que lo reemplace —
+    cambiar el contrato sin un reemplazo listo es peor que dejarlo. Follow-up cuando haya un cliente real
+    usando el cursor
+  - El WebSocket sigue difundiendo `EventoDominio` en bruto, no deltas de estado aplicables. El cursor ya
+    resuelve el problema PRÁCTICO que motivó C13 ("la única reacción es refetch completo" pasa a ser "pedir
+    solo lo nuevo con `?desde=`") — convertir eventos en parches que un cliente sin motor pueda aplicar a su
+    proyección cacheada es una pieza de diseño mayor (un formato de delta por tipo de entidad, lógica de
+    aplicación en el cliente), fuera de alcance de esta pasada
+- [x] Test nuevo en `session/__tests__/estado.test.ts` (`eventosDesde` sobre estado GENUINO vía
+  `GameSession.ejecutar`, no un array fabricado a mano) y en `api.test.ts` (las dos superficies, filtrado por
+  audiencia, `400` en `desde` inválido). 640/640 en total, `tsc` limpio. Verificado en vivo con `curl`
 
 ## Fase D — Conversión temporal total
 

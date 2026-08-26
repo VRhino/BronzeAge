@@ -101,12 +101,30 @@ export class RunnerDePartida {
     return new RunnerDePartida(GameSession.crear(gameId, config), opciones);
   }
 
+  /** Como `crear`, pero persiste la partida antes de devolverla (Fase C12, doc 4: "un cliente externo no
+   * puede descubrir a qué conectarse"). Sin esto, `listarPartidas` (que lee disco, no memoria) no vería una
+   * partida recién creada hasta su primer comando o tick — y si el proceso muriera antes de que alguien
+   * ejecutara uno, se perdería del todo pese a que la creación ya había respondido 201/200. Seguro fuera de
+   * la cola serial: nadie más tiene todavía una referencia a este `runner`, no hay otro mutador con quien
+   * pisarse. Usado por `cargarOCrear` (rama "no existe todavía") y `RegistroDePartidas.descartarYCrear`. */
+  static async crearYPersistir(
+    gameId: string,
+    config: { seed: number; region?: RegionId },
+    opciones: OpcionesRunner,
+    persistencia: { forzar?: boolean } = {}
+  ): Promise<RunnerDePartida> {
+    const runner = RunnerDePartida.crear(gameId, config, opciones);
+    await guardarPartida(opciones.directorio, runner.sesion, runner.ahora(), persistencia);
+    return runner;
+  }
+
   /** Cierra el hueco entre "servidor recién arrancado" y "partida en curso": si ya hay un snapshot para
    * `gameId`, lo carga (en continuidad de RNG, ver `persistenciaPartida.ts`); si no, crea una partida nueva
-   * con `config`. `config` se ignora si se carga un snapshot existente. */
+   * con `config` (y la persiste, ver `crearYPersistir`). `config` se ignora si se carga un snapshot
+   * existente. */
   static async cargarOCrear(gameId: string, config: { seed: number; region?: RegionId }, opciones: OpcionesRunner): Promise<RunnerDePartida> {
     const existente = await cargarPartida(opciones.directorio, gameId);
-    return new RunnerDePartida(existente ?? GameSession.crear(gameId, config), opciones);
+    return existente ? new RunnerDePartida(existente, opciones) : RunnerDePartida.crearYPersistir(gameId, config, opciones);
   }
 
   get gameId(): string {
@@ -115,6 +133,14 @@ export class RunnerDePartida {
 
   getState() {
     return this.sesion.getState();
+  }
+
+  /** Snapshot exportable de la partida (Fase C12: descarga administrativa). En memoria, siempre al día —
+   * `exportarSimulacion` ya no necesita reconstruir un formato aparte (el v2 de `GameStore` quedó retirado
+   * junto con `importarSimulacion`, doc 4): el snapshot real que ya se persiste en cada comando ES el
+   * formato de exportación. */
+  exportar(): PartidaExportada {
+    return this.sesion.exportar();
   }
 
   /** Precio de referencia por recurso, calculado en el servidor y cacheado con TTL de un minuto real — ver el

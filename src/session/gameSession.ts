@@ -148,10 +148,11 @@ export class GameSession {
    * `GameSessionState` tiene que versionarse para que el control de concurrencia optimista siga siendo válido.
    */
   registrarEventoAdministrativo(momento: string, mensaje: string): void {
+    const version = this.estado.version + 1;
     this.estado = {
       ...this.estado,
-      version: this.estado.version + 1,
-      eventosDominio: [eventoAdministrativo(momento, this.estado.tick, mensaje), ...this.estado.eventosDominio],
+      version,
+      eventosDominio: [{ ...eventoAdministrativo(momento, this.estado.tick, mensaje), version }, ...this.estado.eventosDominio],
     };
   }
 
