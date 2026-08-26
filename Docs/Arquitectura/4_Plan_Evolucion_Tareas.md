@@ -404,6 +404,10 @@ en vez de 400 (ya anotado como pendiente en C2, sin dueño hasta ahora). → hit
 `render()` se dispara en **cada `mousemove`** sobre el lienzo (`cliente/src/main.ts:2512`). Dentro llama a
 `getMapa()`, `getZonasFusionadas`, `chokepointsControl`, `getTrazadoAsentamiento` y `viabilidadFundacion`.
 
+> **Corregido 2026-08-26**: `chokepointsControl` y `viabilidadFundacion` se eliminaron ese día (ver "C10
+> partido en dos" más abajo) en vez de migrarse. Como consecuencia, el propio `mousemove` que las disparaba ya
+> no llama a `render()` en la vista de mundo — no queda nada ahí que recalcular en cada movimiento del ratón.
+
 - Las cuatro primeras solo cambian por tick → se resuelven mandando la geometría **ya calculada** dentro de
   la proyección, no con un endpoint por consulta.
 - `viabilidadFundacion(hover)` es la difícil: función continua de un punto arbitrario. O rejilla de
@@ -504,12 +508,30 @@ del doc 9; el error de haberla puesto en este grupo ya se corrigió más arriba,
 > TTL/caché, 3 HTTP en las tres superficies de lectura). 613/613 en total.
 
 **(c) Geometría por frame — viaja precalculada dentro de la proyección (C10).** `getZonas`,
-`getZonasFusionadas`, `chokepointsControl`, `getTrazadoAsentamiento`. Solo cambian por tick, pero `render()`
-las pide en cada `mousemove`: no pueden ser un endpoint, tienen que llegar ya resueltas.
+`getZonasFusionadas`, `getTrazadoAsentamiento`. Solo cambian por tick, pero `render()` las pide en cada
+`mousemove`: no pueden ser un endpoint, tienen que llegar ya resueltas.
 
-**(d) Sin resolver — decisión de diseño de interacción, no de arquitectura.** `viabilidadFundacion(punto)` es
-función continua de un punto arbitrario que el usuario mueve con el ratón. O rejilla de viabilidad
-precalculada, o el *preview* deja de ser *hover* y pasa a clic. **No se decide aquí.**
+> **`chokepointsControl` sale de este grupo — eliminada, no migrada (2026-08-26).** Decisión del usuario: la
+> mecánica de chokepoints entera (geometría en `worldgen/`, control por zona de influencia, peaje en oro) "no
+> me está dando nada en este momento". `WORLDGEN_VERSION` sube a 15; el pipeline termina un paso antes
+> (chokepoints era el último), así que bosques/nodos/ríos/elevación salen bit a bit idénticos a v14 para la
+> misma seed — solo se regeneró el snapshot de caracterización, verificado que el diff es exclusivamente las
+> líneas de chokepoints. Alcance completo: `worldgen/chokepoints.ts`, `engine/chokepoints.ts`, el bloque de
+> peaje dentro de `engine/trade.ts` (`avanzarComercio`/`avanzarCaravanas` pierden el parámetro `zonas`, que ya
+> no necesitan para nada más), `CHOKEPOINTS_PEAJE`, el tipo de dominio `Chokepoint`, `Mapa.listarChokepoints`/
+> `chokepointMasCercano`, y el renderizado en `canvas.ts` (la capa cacheada de `drawTerreno` y el anillo de
+> control en `draw()`). 600/600 tests tras regenerar el snapshot; verificado en vivo que el mapa renderiza sin
+> los rombos ámbar de antes.
+
+**(d) `viabilidadFundacion(punto)` — retirada del cliente, no resuelta (2026-08-26).** Era la difícil por ser
+función continua de un punto arbitrario que el usuario mueve con el ratón — la decisión de diseño de
+interacción (rejilla precalculada vs. pasar a clic) seguía sin tomarse. Decisión del usuario tras la
+auditoría: "era un helper que ahora está causando más problemas que otra cosa", fuera del cliente. La función
+en sí **no desapareció** — `session/npcGobernanza.ts` la sigue usando en vivo para decidir dónde funda un NPC
+sin jugador (evita emplazamientos sin bosque cercano) — pero se retiró el *preview* de *hover* completo:
+`gameStore.viabilidadFundacion`, el div `#fundacion-viabilidad`, `drawPreviewFundacion` (canvas.ts, sin otro
+consumidor), y el propio *listener* de `mousemove` que solo existía para refrescarlo — al no quedar nada que
+recalcular en la vista de mundo, `render()` deja de dispararse en cada movimiento del ratón ahí.
 
 **Coste aceptado en (a)**: la fórmula acaba existiendo dos veces (servidor por autoridad, cliente por
 presentación) y pueden divergir. Se acepta a conciencia —la alternativa es un viaje de red por *tooltip*, que
@@ -519,10 +541,11 @@ reimplementar lógica. Es el mismo trato que hace la industria.
 > **La clasificación completa de todo el motor —qué es regla, qué es simulación, y cuál de las dos cosas puede
 > salir del servidor— está en [9_Reglas_vs_Simulacion.md](9_Reglas_vs_Simulacion.md)** (escrito 2026-08-26 a
 > petición del usuario, como referencia para futuras decisiones). Añade un eje que este desglose no tenía y
-> que corrige el grupo (c) de arriba: las cuatro consultas de geometría por frame no son solo un problema de
-> latencia, son además **entrada privilegiada** (`computeTodasLasZonas` mira todos los asentamientos,
-> `evaluarViabilidadFundacion` comprueba separación contra todos). No pueden ser un endpoint *y* no pueden
-> calcularse en el cliente: por eso tienen que viajar precalculadas dentro de la proyección.
+> que corrige el grupo (c) de arriba: las consultas de geometría por frame no son solo un problema de
+> latencia, son además **entrada privilegiada** (`computeTodasLasZonas` mira todos los asentamientos). No
+> pueden ser un endpoint *y* no pueden calcularse en el cliente: por eso tienen que viajar precalculadas
+> dentro de la proyección. (De las cuatro originales, `chokepointsControl` y `viabilidadFundacion` se
+> eliminaron el mismo día en vez de migrarse — ver las notas de (c)/(d) arriba.)
 
 #### Eliminado: el laboratorio visual
 

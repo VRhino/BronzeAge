@@ -60,7 +60,6 @@ describe('orientación de la ruta al reutilizar un Camino Comercial existente', 
       [acuerdo],
       mapaSintetico(),
       [caminoAB],
-      [],
       1
     );
 
@@ -193,7 +192,7 @@ describe('retorno real de una caravana comercial tras entregar', () => {
   const destino = { id: 'destino', faccionId: 'faccion-1', posicion: { x: 1000, y: 0 }, almacen: almacenSintetico({ oro: 0 }), politicasActivas: [] } as unknown as Asentamiento;
 
   function avanzar(caravanas: Caravana[]) {
-    return avanzarComercio([origen, destino], [] as Faccion[], caravanas, [], mapaSintetico(), [], [], 1);
+    return avanzarComercio([origen, destino], [] as Faccion[], caravanas, [], mapaSintetico(), [], 1);
   }
 
   it('al entregar pasa a "retornando" en destino, NO a "disponible" en origen', () => {
@@ -280,7 +279,7 @@ describe('reuso de caravana propia a través de varios envíos del mismo trueque
     const facciones: Faccion[] = [];
 
     function tick(n: number) {
-      const resultado = avanzarComercio(asentamientos, facciones, caravanas, acuerdos, mapa, [], [], n);
+      const resultado = avanzarComercio(asentamientos, facciones, caravanas, acuerdos, mapa, [], n);
       asentamientos = resultado.asentamientos;
       caravanas = resultado.caravanas;
       acuerdos = resultado.acuerdos;

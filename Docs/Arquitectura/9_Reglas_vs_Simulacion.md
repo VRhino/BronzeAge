@@ -124,16 +124,26 @@ Necesitan estado que el jugador no debe ver. Lo que viaja es **el resultado ya c
 |---|---|---|
 | `calcularPrecioReferencia` | `engine/market` | Suma el stock de **todos** los asentamientos del mundo — **movida al servidor 2026-08-26**: `RunnerDePartida.preciosReferencia()`, caché con TTL de un minuto real, expuesta en `EstadoAdmin`/`ProyeccionJugador`. El cliente ya no la importa; la sigue usando en vivo `colocarOrdenMercado` (comando, servidor) para el precio por defecto de una orden sin precio explícito — eso no cambió |
 | `computeZonaInfluencia`, `computeTodasLasZonas`, `computeZonasFusionadasPorFaccion` | `engine/zones` | Zona de cada asentamiento **contra todos los demás** |
-| `controladorDeChokepoint`, `chokepointsDePeajeEnRuta` | `engine/chokepoints` | Necesita las zonas de todos |
-| `evaluarViabilidadFundacion` | `engine/settlement` | Comprueba separación **contra todos** los asentamientos |
 | `posicionLibreParaFundar`, `mejorFertilidadEnZona` | `engine/zones` | Ídem |
 | `calcularTitulos` | `engine/titulos` | Ranking global: recorre **todos** los asentamientos, que sí se filtran |
 
-**Las cuatro de geometría son además las que `render()` pide en cada `mousemove`** (`getZonasFusionadas`,
-`chokepointsControl`, `getTrazadoAsentamiento`, `viabilidadFundacion`). No es coincidencia: son consultas
-espaciales de ámbito mundial. Eso las deja atrapadas entre dos exigencias —**no pueden ser un endpoint**
-(latencia) y **no pueden calcularse en el cliente** (visibilidad)— y solo hay una salida: viajar
-**precalculadas dentro de la proyección**, que solo cambia por tick. Es el grupo (c) del hito C10.
+> **`evaluarViabilidadFundacion` y toda la lógica de chokepoints — decisión del usuario, 2026-08-26.**
+> Chokepoints se eliminó por completo (geometría en `worldgen/`, control por zona y peaje en oro en
+> `engine/chokepoints.ts`/`engine/trade.ts`, el tipo de dominio, el renderizado) — "no me está dando nada en
+> este momento". `WORLDGEN_VERSION` sube a 15; el pipeline termina un paso antes, así que bosques/nodos/ríos
+> salen bit a bit idénticos a v14 para la misma seed (chokepoints era el ÚLTIMO paso). `evaluarViabilidadFundacion`
+> se queda en `engine/settlement.ts` — la sigue usando `session/npcGobernanza.ts` para decidir dónde funda un
+> NPC sin jugador —, pero se retiró del cliente (el helper de *hover* con el aviso de emplazamiento
+> desaparece de la interfaz entera, no solo su cálculo).
+
+**Las dos de geometría que quedan son además las que `render()` pedía en cada `mousemove`**
+(`getZonasFusionadas`, `getTrazadoAsentamiento`). No es coincidencia: son consultas espaciales de ámbito
+mundial. Eso las deja atrapadas entre dos exigencias —**no pueden ser un endpoint** (latencia) y **no pueden
+calcularse en el cliente** (visibilidad)— y solo hay una salida: viajar **precalculadas dentro de la
+proyección**, que solo cambia por tick. Es el grupo (c) del hito C10. (`chokepointsControl` y
+`viabilidadFundacion` iban en esa misma lista de cuatro; al desaparecer ambas, el propio *listener* de
+`mousemove` que disparaba `render()` en la vista de mundo se eliminó también — ya no había nada que
+recalcular en cada movimiento del ratón.)
 
 ---
 
@@ -200,7 +210,8 @@ difirió porque hoy no existe ningún cliente sin motor que lo consuma.
 
 - **T2a** (consulta pura, entrada no privilegiada — el terreno lo ven todos): `elevacionEn`, `biomaEn`,
   `terrenoEn`, `fertilidadEn`, `costeEnPunto`, `listarRios`, `listarBosques`, `listarNodos`,
-  `listarChokepoints`, `contornosBosques`, `dentroDelMapa`, `nodosEnRadio`, `nodosEnPoligono`.
+  `contornosBosques`, `dentroDelMapa`, `nodosEnRadio`, `nodosEnPoligono`. (`listarChokepoints`/
+  `chokepointMasCercano` existieron aquí hasta 2026-08-26 — eliminados con toda la mecánica de chokepoints.)
 - **T3** (muta el estado de la partida): `extraer` (agota un yacimiento) y `avanzarRegeneracion`.
 
 Consecuencia para C11: lo que el cliente necesita de `Mapa` es la **capa de consulta de terreno**, y eso se

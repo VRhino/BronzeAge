@@ -79,13 +79,12 @@ describe('exportarParaUnityTerrain', () => {
     expect(rioMeta?.puntos.length).toBe(rio!.puntos.length);
   });
 
-  it('la metadata lista tantos nodos/bosques/chokepoints como el mundo generado, y respeta ejes x/z', () => {
+  it('la metadata lista tantos nodos/bosques como el mundo generado, y respeta ejes x/z', () => {
     const generado = generarMapa({ ancho: 800, alto: 800, seed: 5 });
     const { metadata } = exportarParaUnityTerrain(generado, [], { resolucion: RESOLUCION_TEST });
 
     expect(metadata.nodos.length).toBe(generado.nodos.length);
     expect(metadata.bosques.length).toBe(generado.bosques.length);
-    expect(metadata.chokepoints.length).toBe(generado.chokepoints.length);
     expect(metadata.mundoMetros).toEqual({ ancho: generado.config.ancho, alto: generado.config.alto });
 
     if (generado.nodos.length > 0) {

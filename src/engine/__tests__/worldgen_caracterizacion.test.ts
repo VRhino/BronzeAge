@@ -14,7 +14,6 @@ import type { RegionId } from '../../domain/types';
 import { evaluarBioma, evaluarElevacion, evaluarFertilidad, evaluarTerreno, generarMapa, REGIONES, type MapaGenerado } from '../../worldgen';
 import {
   BOSQUE,
-  CHOKEPOINTS,
   LIVESTOCK,
   MAPA_DEFAULT,
   RECURSO_BIOMA_PERMITIDO,
@@ -95,12 +94,7 @@ function digest(world: MapaGenerado) {
     cumplimientoBiomaPorTipo[tipo] = `${enBioma}/${deEsteTipo.length}`;
   }
 
-  // Chokepoints (Fase 0.3, v7): puertos de montaña, geometría determinista — ver `worldgen/chokepoints.ts`.
-  const chokepoints = world.chokepoints.map(
-    (c) => `${c.id} p=(${c.posicion.x.toFixed(6)},${c.posicion.y.toFixed(6)}) r=${c.radio.toFixed(6)}`
-  );
-
-  return { conteoPorTipo, nodosDentroDeBosque, cumplimientoBiomaPorTipo, bosques, nodos, rios, chokepoints, fertilidad, elevacion };
+  return { conteoPorTipo, nodosDentroDeBosque, cumplimientoBiomaPorTipo, bosques, nodos, rios, fertilidad, elevacion };
 }
 
 describe('caracterización de la generación de mundo', () => {
@@ -448,47 +442,6 @@ describe('ríos troncales (Fase 0.2 — Nilo/Mesopotamia, ver RegionGeografica.r
     for (const seed of SEEDS) {
       const world = generarMapa({ ancho: MAPA_DEFAULT.ancho, alto: MAPA_DEFAULT.alto, seed, region: 'nilo' });
       expect(world.rios).toHaveLength(RIOS.cantidad + 1);
-    }
-  });
-});
-
-describe('chokepoints (Fase 0.3 — puertos de montaña, Doc 1.5)', () => {
-  it('hay exactamente CHOKEPOINTS.cantidad chokepoints, todos dentro del mapa', () => {
-    for (const seed of SEEDS) {
-      const world = crear(seed);
-      expect(world.chokepoints).toHaveLength(CHOKEPOINTS.cantidad);
-      for (const chokepoint of world.chokepoints) {
-        expect(chokepoint.posicion.x).toBeGreaterThanOrEqual(0);
-        expect(chokepoint.posicion.x).toBeLessThanOrEqual(world.config.ancho);
-        expect(chokepoint.posicion.y).toBeGreaterThanOrEqual(0);
-        expect(chokepoint.posicion.y).toBeLessThanOrEqual(world.config.alto);
-        expect(chokepoint.radio).toBe(CHOKEPOINTS.radio);
-      }
-    }
-  });
-
-  it('es determinista por seed, igual que el resto del pipeline', () => {
-    const a = crear(42);
-    const b = crear(42);
-    expect(b.chokepoints).toEqual(a.chokepoints);
-    expect(crear(42).chokepoints).not.toEqual(crear(43).chokepoints);
-  });
-
-  it('la mayoría de los chokepoints cae en terreno colina/montaña, no en llano/agua/cima', () => {
-    // Informativo, no 100% (mismo motivo que `cumplimientoBiomaPorTipo` arriba): `colocarConEspaciado`
-    // tiene un último recurso que ignora el filtro de terreno si el mapa está saturado de candidatos ya
-    // colocados — puertos de montaña de verdad deben ser la abrumadora mayoría, no el 100% garantizado.
-    // Umbral bajado a 65% en Fase 0.4.1 (terraceo) porque 'colina' quedaba plana, sin curvatura real —
-    // restaurado a 80% en Fase 0.4.2 (suavizado reemplaza al terraceo, ver
-    // `Consideraciones/Fase_0_4_Definicion_Relieve_Jugable.md`): 'colina' vuelve a tener curvatura de sobra,
-    // medido 14/14 en las 3 seeds de este test.
-    for (const seed of SEEDS) {
-      const world = crear(seed);
-      const enTerrenoMontanoso = world.chokepoints.filter((c) => {
-        const t = evaluarTerreno(world.elevacion, c.posicion);
-        return t === 'colina' || t === 'montana';
-      }).length;
-      expect(enTerrenoMontanoso).toBeGreaterThanOrEqual(Math.ceil(world.chokepoints.length * 0.8));
     }
   });
 });

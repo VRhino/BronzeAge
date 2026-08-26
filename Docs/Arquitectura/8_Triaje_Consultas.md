@@ -28,6 +28,10 @@ migración.
 >   manda el servidor ya calculadas. Ambas caen hoy en el grupo "→ `engine/`" de abajo, y no deberían tener el
 >   mismo destino. Desglose en los cuatro grupos: doc 4, § "C10 partido en dos"; clasificación completa del
 >   motor entero (no solo de las consultas de `GameStore`): [9_Reglas_vs_Simulacion.md](9_Reglas_vs_Simulacion.md).
+> - **Dos filas de la tabla de abajo ya no existen (2026-08-26), decisión del usuario tras esta misma
+>   auditoría**: `chokepointsControl` — se eliminó toda la mecánica de chokepoints, geometría y peaje incluidos
+>   (doc 3, hito C10). `viabilidadFundacion` sigue viva en `engine/settlement.ts` para uso interno del NPC de
+>   gobernanza, pero se retiró del cliente y no vuelve a ser una consulta expuesta.
 
 ## El criterio
 

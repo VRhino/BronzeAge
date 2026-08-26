@@ -2,7 +2,7 @@
 // `domain/types` (entidades compartidas) y de su propia configuración — se puede ejecutar, testear y
 // versionar por separado.
 
-import type { Chokepoint, NodoRecurso, RioZona, WorldConfig, ZonaBosque } from '../domain/types';
+import type { NodoRecurso, RioZona, WorldConfig, ZonaBosque } from '../domain/types';
 import type { Limites } from './colocacion';
 import type { CampoRuido } from './ruido';
 import type { RegionGeografica } from './regiones';
@@ -54,10 +54,6 @@ export interface MapaGenerado {
   /** Ríos como polilíneas (Fase 0.1). El bioma se deriva de esto + elevación + fertilidad bajo demanda
    * (`evaluarBioma`) — no existe un campo de bioma guardado. */
   rios: RioZona[];
-  /** Chokepoints estratégicos (Fase 0.3, Doc 1.5): puertos de montaña, geometría determinista por seed —
-   * ver `worldgen/chokepoints.ts`. Quién los controla y el peaje son estado de partida, no de aquí (ver
-   * `engine/chokepoints.ts`). */
-  chokepoints: Chokepoint[];
 }
 
 /**
@@ -124,5 +120,13 @@ export interface MapaGenerado {
  * terreno válido (restringida a solo 'montana' en v13) — medido: 14/14 chokepoints en colina/montana en las
  * 3 seeds de referencia. Cambia CUÁNDO cada candidato de chokepoint encuentra hueco dentro de sus intentos
  * (terrain check distinto), así que desplaza el consumo de PRNG de ahí en adelante — mismo criterio que v13.
+ * v15 (2026-08-26): retira POR COMPLETO chokepoints — decisión explícita del usuario ("no me está dando nada
+ * en este momento"), alcance total: `generarChokepoints`/`worldgen/chokepoints.ts` (geometría), control por
+ * zona de influencia y peaje en oro (`engine/chokepoints.ts`, `engine/trade.ts`), la constante
+ * `CHOKEPOINTS_PEAJE`, el tipo de dominio `Chokepoint`, y el renderizado en el cliente. `generarChokepoints`
+ * era el ÚLTIMO paso del pipeline (v7: "para no desplazar el consumo de PRNG de ningún paso anterior"), así
+ * que quitarlo tiene la misma propiedad a la inversa — bosques/nodos/ríos/elevación salen BIT A BIT idénticos
+ * a v14 para la misma seed, el pipeline simplemente termina un paso antes y no consume el RNG que los
+ * candidatos de chokepoint gastaban. `MapaGenerado.chokepoints` desaparece del tipo.
  */
-export const WORLDGEN_VERSION = 14;
+export const WORLDGEN_VERSION = 15;

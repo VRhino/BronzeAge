@@ -228,24 +228,6 @@ export function drawTerreno(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasEle
     ctx.stroke();
   }
 
-  // Chokepoints (Fase 0.3, Doc 1.5): geometría del mundo (determinista por seed), así que van en esta capa
-  // cacheada — QUIÉN los controla es estado de partida y se marca aparte, en `draw()` (ver `dibujarChokepointsControl`).
-  ctx.fillStyle = 'rgba(224, 160, 32, 0.5)';
-  ctx.strokeStyle = 'rgba(60, 45, 10, 0.85)';
-  ctx.lineWidth = 1.5;
-  for (const chokepoint of mapa.listarChokepoints()) {
-    const x = chokepoint.posicion.x * scale;
-    const y = chokepoint.posicion.y * scale;
-    const r = 6;
-    ctx.beginPath();
-    ctx.moveTo(x, y - r);
-    ctx.lineTo(x + r, y);
-    ctx.lineTo(x, y + r);
-    ctx.lineTo(x - r, y);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-  }
 }
 
 /** Nombre legible de cada tipo de edificio para las etiquetas de la Vista de Asentamiento. */
@@ -335,15 +317,11 @@ export interface DrawState {
   zonasFusionadas: ZonaFaccion[];
   facciones: Faccion[];
   caravanas: Caravana[];
-  /** Caminos comerciales (Fase 0.3, Doc 1.6) — estado de PARTIDA, a diferencia de los ríos/chokepoints
-   * (mundo generado): se dibujan en `draw()` en vivo, nunca en la capa cacheada `drawTerreno`. */
+  /** Caminos comerciales (Fase 0.3, Doc 1.6) — estado de PARTIDA, a diferencia de los ríos (mundo generado):
+   * se dibujan en `draw()` en vivo, nunca en la capa cacheada `drawTerreno`. */
   caminos: CaminoComercial[];
   /** Campamentos de bandidos (Doc 1.9) — estado de partida, se dibujan en vivo igual que las caravanas. */
   campamentosBandidos: CampamentoBandido[];
-  /** Chokepoint id -> asentamiento controlador (Fase 0.3, Doc 1.5), YA CALCULADO por el motor
-   * (`GameStore.chokepointsControl`) — `canvas.ts` solo lo pinta, nunca recalcula la regla de control por
-   * su cuenta (acoplamiento 0 entre interfaz y motor). */
-  chokepointsControl: Map<string, string>;
 }
 
 /**
@@ -365,44 +343,6 @@ export function drawFiltroFertilidad(ctx: CanvasRenderingContext2D, canvas: HTML
       ctx.fillRect(col * tamanoCelda * scale, fila * tamanoCelda * scale, tamanoCelda * scale, tamanoCelda * scale);
     }
   }
-}
-
-export interface PreviewFundacion {
-  posicion: { x: number; y: number };
-  radioInicial: number;
-  fundable: boolean;
-  bosqueAlcanzable: boolean;
-}
-
-/**
- * Previsualización del emplazamiento bajo el cursor, antes de fundar. Verde = fundable y con bosque al
- * alcance; ámbar = legal pero SIN madera alcanzable (se puede fundar, pero el asentamiento casi siempre
- * acaba en ruinas — ver `evaluarViabilidadFundacion`); rojo = no se puede fundar ahí.
- * Se dibuja encima de todo, igual que el filtro de fertilidad, y el caller decide cuándo llamarlo.
- */
-export function drawPreviewFundacion(
-  ctx: CanvasRenderingContext2D,
-  canvas: HTMLCanvasElement,
-  mapa: Mapa,
-  preview: PreviewFundacion
-): void {
-  const scale = canvas.width / mapa.limites.ancho;
-  const color = !preview.fundable ? '#c0392b' : preview.bosqueAlcanzable ? '#27ae60' : '#e0a020';
-
-  ctx.beginPath();
-  ctx.arc(preview.posicion.x * scale, preview.posicion.y * scale, preview.radioInicial * scale, 0, Math.PI * 2);
-  ctx.fillStyle = color + '22';
-  ctx.fill();
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 2;
-  ctx.setLineDash([5, 4]);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  ctx.beginPath();
-  ctx.arc(preview.posicion.x * scale, preview.posicion.y * scale, 3, 0, Math.PI * 2);
-  ctx.fillStyle = color;
-  ctx.fill();
 }
 
 // --- Glifos de árbol para la capa de bosques ---
@@ -535,8 +475,7 @@ export function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, s
 
   // Caminos comerciales (Fase 0.3, Doc 1.6): estado de partida, no del mundo generado — a diferencia de los
   // ríos, se dibujan aquí en vivo. Trazo discontinuo para distinguirlos de ríos (sólido, azul) y fronteras
-  // de zona (sólido, color de Facción). Marrón tierra deliberadamente distinto del ámbar de los chokepoints
-  // (`rgba(224, 160, 32, ...)` en `drawTerreno`) — con tonos parecidos eran indistinguibles de un vistazo.
+  // de zona (sólido, color de Facción).
   ctx.strokeStyle = 'rgba(139, 90, 43, 0.9)';
   ctx.lineWidth = 2.5;
   ctx.setLineDash([6, 4]);
@@ -552,22 +491,6 @@ export function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, s
     ctx.stroke();
   }
   ctx.setLineDash([]);
-
-  // Control de chokepoints (Doc 1.5): anillo del color de la Facción del asentamiento controlador — el
-  // control ya viene calculado por el motor (`state.chokepointsControl`, ver `GameStore.chokepointsControl`
-  // / `engine/chokepoints.ts`), aquí solo se pinta. La geometría del chokepoint en sí (el rombo) ya viene
-  // pintada en la capa cacheada de `drawTerreno`.
-  for (const chokepoint of state.mapa.listarChokepoints()) {
-    const controladorId = state.chokepointsControl.get(chokepoint.id);
-    if (!controladorId) continue;
-    const asentamiento = state.asentamientos.find((a) => a.id === controladorId);
-    if (!asentamiento) continue;
-    ctx.beginPath();
-    ctx.arc(chokepoint.posicion.x * scale, chokepoint.posicion.y * scale, 10, 0, Math.PI * 2);
-    ctx.strokeStyle = faccionColor(asentamiento.faccionId, state.facciones);
-    ctx.lineWidth = 2;
-    ctx.stroke();
-  }
 
   // Edificios (Doc 4.2): cuadrado relleno = activo, semitransparente = en construcción, solo contorno = en cola.
   // Vista de Asentamiento (a petición del usuario): en el mapa general SOLO se dibujan los edificios de

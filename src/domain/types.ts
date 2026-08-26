@@ -390,18 +390,6 @@ export interface RioZona {
 }
 
 /**
- * Chokepoint estratégico (Fase 0.3, Doc 1.5): puerto de montaña detectado como punto de silla del campo de
- * elevación (ver `worldgen/chokepoints.ts`) — geometría, no arista de un grafo (ver `Fase_0_1_Definicion.md`).
- * `radio` es la zona de influencia del propio chokepoint: qué zona de asentamiento lo controla
- * (`engine/chokepoints.ts`) y a qué distancia de una ruta cuenta como "la ruta pasa por aquí" para el peaje.
- */
-export interface Chokepoint {
-  id: string;
-  posicion: Point;
-  radio: number;
-}
-
-/**
  * Región geográfica opcional (Fase 0.2, ver `worldgen/regiones.ts`): sesga la generación de elevación para
  * que se parezca al carácter conocido de una zona real del Egeo/Levante de la Edad de Bronce, en vez del
  * mundo libre de siempre. Vive aquí (no en `worldgen/`) porque `WorldConfig` es una entidad de dominio y

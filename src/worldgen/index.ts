@@ -13,7 +13,6 @@
 
 import type { NodoRecurso, Point, WorldConfig } from '../domain/types';
 import { generarBosques } from './bosques';
-import { generarChokepoints } from './chokepoints';
 import { generarCampoElevacion } from './elevacion';
 import { generarCampoFertilidad } from './fertilidad';
 import { generarLivestock, generarNodosDeRareza } from './nodos';
@@ -22,12 +21,11 @@ import { createRng } from './rng';
 import { WORLDGEN_VERSION, type MapaGenerado } from './types';
 
 export { evaluarBioma } from './biomas';
-export { generarChokepoints } from './chokepoints';
 export { costeEnPunto } from './costeMovimiento';
 export { evaluarElevacion, evaluarTerreno, gradienteElevacion } from './elevacion';
 export { evaluarFertilidad } from './fertilidad';
 export { distanciaARioMasCercano } from './rios';
-export { MAPA_DEFAULT, COSTE_MOVIMIENTO, CHOKEPOINTS, RIOS, BIOMA } from './config';
+export { MAPA_DEFAULT, COSTE_MOVIMIENTO, RIOS, BIOMA } from './config';
 export { REGIONES } from './regiones';
 export { createRng, restaurarRng, randInt, randRange, type RandomFn } from './rng';
 export { WORLDGEN_VERSION, type CampoElevacion, type CampoFertilidad, type MapaGenerado } from './types';
@@ -62,9 +60,5 @@ export function generarMapa(config: WorldConfig): MapaGenerado {
     ...generarLivestock(rng, limites, colocadosGlobal, bosques, elevacion, fertilidad, rios),
   ];
 
-  // Chokepoints (Fase 0.3, v7): al final del pipeline — solo depende de elevación, así que colocarlo aquí
-  // no desplaza el consumo de PRNG de ningún paso anterior ya calibrado (ver `WORLDGEN_VERSION`).
-  const chokepoints = generarChokepoints(rng, limites, elevacion);
-
-  return { version: WORLDGEN_VERSION, config, bosques, nodos, fertilidad, elevacion, rios, chokepoints };
+  return { version: WORLDGEN_VERSION, config, bosques, nodos, fertilidad, elevacion, rios };
 }

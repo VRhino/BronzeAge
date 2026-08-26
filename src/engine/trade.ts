@@ -1,4 +1,4 @@
-import type { AcuerdoTrueque, Asentamiento, CaminoComercial, Caravana, Faccion, Point, ZonaInfluencia } from '../domain/types';
+import type { AcuerdoTrueque, Asentamiento, CaminoComercial, Caravana, Faccion, Point } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
 
 /** Fase A5 — payloads de los eventos de este subsistema (ver `avanzarCaravanas`/`asignarCaravanasATrueque`). */
@@ -9,12 +9,6 @@ export interface PayloadCaravanaLlega {
   destinoId: string;
   contenido: Record<string, number>;
   comision: number;
-}
-export interface PayloadPeaje {
-  destinoId: string;
-  monto: number;
-  controladorId: string;
-  cantidadChokepoints: number;
 }
 export interface PayloadTruequeCumplido {
   acuerdoId: string;
@@ -30,13 +24,12 @@ export interface PayloadCaravanaSale {
   cantidad: number;
   recurso: string;
 }
-import { ASIGNACION_CARAVANA, CARAVANA_CATALOGO, CHOKEPOINTS_PEAJE, COMISION, REPUTACION, TRUEQUE } from '../constants';
+import { ASIGNACION_CARAVANA, CARAVANA_CATALOGO, COMISION, REPUTACION, TRUEQUE } from '../constants';
 import { COSTE_MOVIMIENTO } from '../worldgen';
 import type { Mapa } from '../world/mapa';
 import { calcularRuta } from '../world/rutas';
 import { agregarRecurso, cantidadDisponible, descontarRecursos, tieneRecursos } from './almacen';
 import { buscarCamino } from './caminos';
-import { chokepointsDePeajeEnRuta } from './chokepoints';
 import { calcularPrecioReferencia } from './market';
 import { cupoCaravanas, puedeCrearCaravana, ticksCooldownCaravanaRestantes, tieneMercadoActivo } from './asentamientoQuery';
 import { avanzarPosicionEnRuta } from './movimiento';
@@ -152,7 +145,6 @@ function avanzarCaravanas(
   caravanas: Caravana[],
   mapa: Mapa,
   caminos: readonly CaminoComercial[],
-  zonas: readonly ZonaInfluencia[],
   asentamientosPorId: Map<string, Asentamiento>,
   acuerdosPorId: Map<string, AcuerdoTrueque>,
   facciones: Faccion[],
@@ -256,30 +248,6 @@ function avanzarCaravanas(
         comision,
       } satisfies PayloadCaravanaLlega,
     });
-
-    // Peaje de chokepoints (Doc 1.5, Fase 0.3): chokepoints controlados por una Facción rival que la ruta
-    // atraviesa cobran al DESTINO en el momento de la entrega — ver `engine/chokepoints.ts`.
-    const peajes = chokepointsDePeajeEnRuta(mapa.listarChokepoints(), zonas, caravana.ruta!, origen.faccionId, asentamientosPorId);
-    if (peajes.length > 0) {
-      const chokepointsPorControlador = new Map<string, number>();
-      for (const p of peajes) chokepointsPorControlador.set(p.controladorId, (chokepointsPorControlador.get(p.controladorId) ?? 0) + 1);
-
-      for (const [controladorId, cantidadChokepoints] of chokepointsPorControlador) {
-        if (controladorId === destino.id) continue; // el propio destino domina el paso: no se cobra a sí mismo
-        const controlador = asentamientosPorId.get(controladorId);
-        if (!controlador) continue;
-        const monto = Math.min(cantidadChokepoints * CHOKEPOINTS_PEAJE.oro, cantidadDisponible(almacenDestino, 'oro'));
-        if (monto <= 0) continue;
-        almacenDestino = descontarRecursos(almacenDestino, { oro: monto });
-        asentamientosPorId.set(controlador.id, { ...controlador, almacen: agregarRecurso(controlador.almacen, 'oro', monto) });
-        eventos.push({
-          codigo: 'comercio.peaje',
-          mensaje: `Peaje: ${destino.id} paga ${monto.toFixed(1)} oro a ${controlador.id} por ${cantidadChokepoints} chokepoint(s) en la ruta.`,
-          payload: { destinoId: destino.id, monto, controladorId: controlador.id, cantidadChokepoints } satisfies PayloadPeaje,
-        });
-      }
-      asentamientosPorId.set(destino.id, { ...destino, almacen: almacenDestino });
-    }
 
     if (caravana.origenAcuerdoId && caravana.ladoAcuerdo) {
       const acuerdo = acuerdosPorId.get(caravana.origenAcuerdoId);
@@ -497,7 +465,6 @@ export function avanzarComercio(
   acuerdos: AcuerdoTrueque[],
   mapa: Mapa,
   caminos: readonly CaminoComercial[],
-  zonas: readonly ZonaInfluencia[],
   tickActual: number
 ): { asentamientos: Asentamiento[]; facciones: Faccion[]; caravanas: Caravana[]; acuerdos: AcuerdoTrueque[]; eventos: EventoCrudo[] } {
   const eventos: EventoCrudo[] = [];
@@ -505,7 +472,7 @@ export function avanzarComercio(
   const asentamientosPorId = new Map(asentamientos.map((a) => [a.id, { ...a }]));
   const acuerdosPorId = new Map(acuerdos.map((a) => [a.id, a]));
 
-  const trasMovimiento = avanzarCaravanas(caravanas, mapa, caminos, zonas, asentamientosPorId, acuerdosPorId, facciones, eventos, ajustesReputacion);
+  const trasMovimiento = avanzarCaravanas(caravanas, mapa, caminos, asentamientosPorId, acuerdosPorId, facciones, eventos, ajustesReputacion);
   const trasAsignacion = asignarCaravanasATrueque(mapa, caminos, acuerdosPorId, asentamientosPorId, trasMovimiento, tickActual, eventos, ajustesReputacion);
 
   return {

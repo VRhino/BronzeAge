@@ -5,7 +5,7 @@
 // importan solo como `type` para tipar lo que se lee — no acoplan a ninguna lógica.
 import type { Asentamiento, BiomaTipo, CargoTipo, Edificio, EdificioTipo, Faccion, RecursoTipo, RegionId } from '@motor/domain/types';
 import { CATALOGOS, crearGameStore, UNITY_EXPORT_DEFAULT, type GameState, type GameStore, type EstadoMejoraEdificio } from './app/gameStore';
-import { draw, drawAsentamiento, drawFiltroFertilidad, drawPreviewFundacion, drawTerreno, faccionColor, BIOMA_COLOR, BIOMA_COLOR_SIMPLE, RECURSO_COLOR, RECURSOS_EN_MAPA, EDIFICIO_COLOR, FACCION_COLORES, type DrawState } from './ui/canvas';
+import { draw, drawAsentamiento, drawFiltroFertilidad, drawTerreno, faccionColor, BIOMA_COLOR, BIOMA_COLOR_SIMPLE, RECURSO_COLOR, RECURSOS_EN_MAPA, EDIFICIO_COLOR, FACCION_COLORES, type DrawState } from './ui/canvas';
 
 // Subido de 800 a 900 junto con el mapa 2000x2000 (Fase 0.1): el mundo más grande necesitaba algo más de
 // resolución física para que la capa de terreno/ríos no perdiera nitidez.
@@ -234,7 +234,6 @@ app.innerHTML = `
           Facción activa (clic en el mapa funda aquí)
           <select id="faccion-select"></select>
         </label>
-        <div id="fundacion-viabilidad" class="fundacion-viabilidad">Pasa el cursor por el mapa para evaluar un emplazamiento.</div>
       </div>
 
       <div class="controls">
@@ -515,10 +514,6 @@ const faccionSelect = document.getElementById('faccion-select') as HTMLSelectEle
 const faccionCrearNombreInput = document.getElementById('faccion-crear-nombre') as HTMLInputElement;
 const seedInput = document.getElementById('seed-input') as HTMLInputElement;
 const regionSelect = document.getElementById('region-select') as HTMLSelectElement;
-
-const fundacionViabilidadEl = document.getElementById('fundacion-viabilidad')!;
-/** Posición del cursor sobre el mapa, para previsualizar el emplazamiento antes de fundar (ver `render`). */
-let hoverFundacion: { x: number; y: number } | null = null;
 
 const expansionOrigenSelect = document.getElementById('expansion-origen') as HTMLSelectElement;
 const expansionModoClicCheckbox = document.getElementById('expansion-modo-clic') as HTMLInputElement;
@@ -2295,7 +2290,6 @@ document.getElementById('vista-mapa-toggle')!.addEventListener('click', (ev) => 
   if (vistaMapa === 'asentamiento' && !asentamientoSeleccionadoId) {
     asentamientoSeleccionadoId = gameStore.getState().asentamientos[0]?.id ?? null;
   }
-  hoverFundacion = null; // el aviso de fundación no aplica en la vista de asentamiento.
   ocultarTooltipEdificioAsentamiento();
   render();
 });
@@ -2369,11 +2363,9 @@ function render(): void {
       caravanas: state.caravanas,
       caminos: state.caminos,
       campamentosBandidos: state.campamentosBandidos,
-      chokepointsControl: gameStore.chokepointsControl(zonas),
     };
     draw(ctx, canvas, drawState, terrenoCacheParaFrame(drawState.mapa));
     if (mostrarFiltroFertilidad) drawFiltroFertilidad(ctx, canvas, gameStore.getMapa(state));
-    renderViabilidadFundacion();
   }
   actualizarSelects(state);
   actualizarInfoTruequeAsentamientos(state);
@@ -2390,64 +2382,12 @@ function render(): void {
   renderRegistro(state);
 }
 
-const RECURSO_NOMBRE_CORTO: Record<string, string> = {
-  piedra: 'piedra', cobre: 'cobre', estano: 'estaño', oro: 'oro', livestock: 'ganado',
-};
-
-/**
- * Aviso previo de emplazamiento (no bloquea nada, ver `evaluarViabilidadFundacion`): dibuja el radio inicial
- * bajo el cursor y explica en texto si el sitio es sostenible. El criterio duro es la madera — sin bosque al
- * alcance el asentamiento casi siempre acaba en ruinas, y es con diferencia el mejor predictor de si llegará
- * a construir Leñera/Barracón y, con ello, a tener tropa.
- */
-function renderViabilidadFundacion(): void {
-  if (!hoverFundacion) {
-    fundacionViabilidadEl.textContent = 'Pasa el cursor por el mapa para evaluar un emplazamiento.';
-    fundacionViabilidadEl.className = 'fundacion-viabilidad';
-    return;
-  }
-
-  const v = gameStore.viabilidadFundacion(hoverFundacion);
-  drawPreviewFundacion(ctx, canvas, gameStore.getMapa(), {
-    posicion: hoverFundacion,
-    radioInicial: v.radioInicial,
-    fundable: v.fundable,
-    bosqueAlcanzable: v.bosqueAlcanzable,
-  });
-
-  const recursos = v.recursosEnRadio
-    .map((r) => `${r.nodos}× ${RECURSO_NOMBRE_CORTO[r.tipo] ?? r.tipo}`)
-    .join(', ');
-
-  if (!v.fundable) {
-    fundacionViabilidadEl.textContent = !v.dentroDelMapa
-      ? '✖ Fuera de los límites del mapa.'
-      : !v.terrenoValido
-        ? '✖ Terreno de cima: inhabitable, no se puede fundar aquí.'
-        : '✖ Dentro de una zona de influencia existente.';
-    fundacionViabilidadEl.className = 'fundacion-viabilidad no-fundable';
-  } else if (!v.bosqueAlcanzable) {
-    fundacionViabilidadEl.textContent = `⚠ Sin bosque al alcance: no podrá construir Leñera, y la madera paga Mantenimiento desde el primer tick. Se puede fundar igual, pero es el emplazamiento con más riesgo de acabar en ruinas.${recursos ? ` En el radio: ${recursos}.` : ''}`;
-    fundacionViabilidadEl.className = 'fundacion-viabilidad aviso';
-  } else {
-    fundacionViabilidadEl.textContent = `✔ Emplazamiento sostenible: bosque al alcance.${recursos ? ` Además en el radio: ${recursos}.` : ' Sin nodos minerales en el radio inicial (la zona crece al construir).'}`;
-    fundacionViabilidadEl.className = 'fundacion-viabilidad ok';
-  }
-}
-
 // Única suscripción: cualquier acción del store dispara un re-render. La interfaz nunca
 // vuelve a llamar `render()` manualmente tras una acción — eso sería recrear el acoplamiento.
 gameStore.subscribe(render);
 
 function idsDeInput(input: HTMLInputElement): string {
   return input.value;
-}
-
-/** Coordenadas de mundo bajo el puntero, a partir de un evento de ratón sobre el canvas. */
-function posicionMundoDesdeEvento(ev: MouseEvent): { x: number; y: number } {
-  const rect = canvas.getBoundingClientRect();
-  const scale = gameStore.getMapa().limites.ancho / canvas.width;
-  return { x: (ev.clientX - rect.left) * scale, y: (ev.clientY - rect.top) * scale };
 }
 
 function ocultarTooltipEdificioAsentamiento(): void {
@@ -2510,21 +2450,11 @@ function actualizarTooltipEdificioAsentamiento(ev: MouseEvent): void {
 }
 
 canvas.addEventListener('mousemove', (ev) => {
-  if (vistaMapa === 'asentamiento') {
-    actualizarTooltipEdificioAsentamiento(ev);
-    return;
-  } // el aviso de fundación no aplica en el espacio plano del asentamiento.
-  hoverFundacion = posicionMundoDesdeEvento(ev);
-  render();
+  if (vistaMapa === 'asentamiento') actualizarTooltipEdificioAsentamiento(ev);
 });
 
 canvas.addEventListener('mouseleave', () => {
-  if (vistaMapa === 'asentamiento') {
-    ocultarTooltipEdificioAsentamiento();
-    return;
-  }
-  hoverFundacion = null;
-  render();
+  if (vistaMapa === 'asentamiento') ocultarTooltipEdificioAsentamiento();
 });
 
 canvas.addEventListener('click', async (ev) => {

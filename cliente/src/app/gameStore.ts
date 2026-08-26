@@ -65,10 +65,7 @@ import { slotsDisponibles } from '@motor/engine/politicas';
 // Los COMANDOS ya no se importan aquí: viven en `session/comandos/` y se ejecutan en el SERVIDOR, a través de
 // `apiCliente.ejecutarComando` (por nombre, ver `session/comandos/registro.ts`). Lo que queda son las
 // funciones que alimentan las consultas de solo lectura de la interfaz.
-import { evaluarViabilidadFundacion, type ViabilidadFundacion } from '@motor/engine/settlement';
-export type { ViabilidadFundacion } from '@motor/engine/settlement';
 import { computeTodasLasZonas, computeZonasFusionadasPorFaccion } from '@motor/engine/zones';
-import { controladorDeChokepoint } from '@motor/engine/chokepoints';
 import { calcularCapFundacion, calcularCupoNivel, capacidadCasas } from '@motor/engine/faccion';
 import { computeLigas, type LigaInfo } from '@motor/engine/liga';
 import { consumoRacionTropas } from '@motor/engine/tropas';
@@ -386,18 +383,6 @@ export class GameStore {
     return { calles, caminos, huellas };
   }
 
-  /**
-   * Chokepoint id -> asentamiento que lo controla (Fase 0.3, Doc 1.5): mismo criterio que las fronteras,
-   * derivado de las zonas de influencia (ver `engine/chokepoints.ts` `controladorDeChokepoint`).
-   */
-  chokepointsControl(zonas: ZonaInfluencia[] = this.getZonas()): Map<string, string> {
-    const resultado = new Map<string, string>();
-    for (const chokepoint of this.getMapa().listarChokepoints()) {
-      const controladorId = controladorDeChokepoint(chokepoint, zonas);
-      if (controladorId) resultado.set(chokepoint.id, controladorId);
-    }
-    return resultado;
-  }
 
   getLigas(relaciones: RelacionPolitica[] = this.state.relaciones, facciones: Faccion[] = this.state.facciones): LigaInfo[] {
     return computeLigas(relaciones, facciones);
@@ -444,15 +429,6 @@ export class GameStore {
    * servidor con TTL de un minuto real; aquí solo se lee. */
   precioReferencia(recurso: string): number {
     return this.state.preciosReferencia[recurso] ?? 0;
-  }
-
-  /**
-   * Evalúa un emplazamiento antes de fundar (solo lectura): si es legal y, sobre todo, si tiene madera al
-   * alcance — sin bosque en el radio inicial el asentamiento casi siempre acaba en ruinas. NO bloquea nada:
-   * alimenta el aviso previo de la interfaz.
-   */
-  viabilidadFundacion(posicion: { x: number; y: number }): ViabilidadFundacion {
-    return evaluarViabilidadFundacion(this.getMapa(), posicion, this.state.asentamientos);
   }
 
   /** Progreso de nivel de asentamiento (modelo de gates, Doc 4.5): población actual vs. requerida y qué
@@ -845,7 +821,7 @@ export class GameStore {
   }
 
   /**
-   * Heightmap (RAW 16-bit) + metadata (posiciones de nodos/bosques/ríos/chokepoints/asentamientos en metros)
+   * Heightmap (RAW 16-bit) + metadata (posiciones de nodos/bosques/ríos/asentamientos en metros)
    * del mapa actual, listos para Unity Terrain. Puro respecto al estado: no muta nada.
    */
   exportarMapaUnity(opciones?: OpcionesExportUnity): ExportUnityResultado {

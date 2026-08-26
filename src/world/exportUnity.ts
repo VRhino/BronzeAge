@@ -76,7 +76,6 @@ export interface MetadataExportUnity {
     profundidadMetros: number;
     puntos: EntidadExportada[];
   }[];
-  chokepoints: (EntidadExportada & { radioMetros: number })[];
   asentamientos: (EntidadExportada & { nombre: string; faccionId: string; nivel: number })[];
 }
 
@@ -258,7 +257,7 @@ function generarPesosSplatmap(generado: MapaGenerado, resolucion: number): Recor
 
 /**
  * Genera el heightmap (RAW 16-bit), el splatmap de biomas (un peso 0-255 por capa, ver `BIOMA_ORDEN`) y la
- * metadata (posiciones de nodos/bosques/ríos/chokepoints/asentamientos en metros, listas para instanciar en
+ * metadata (posiciones de nodos/bosques/ríos/asentamientos en metros, listas para instanciar en
  * Unity sin recalcular nada) de un mundo generado.
  * `asentamientos` es opcional porque `MapaGenerado` no los conoce — son estado de partida, no del mundo.
  */
@@ -332,13 +331,6 @@ export function exportarParaUnityTerrain(
       anchoMetros: RIOS.anchoMetros,
       profundidadMetros: RIOS.profundidadMetros,
       puntos: r.puntos.map((p, i) => ({ id: `${r.id}-${i}`, x: p.x, z: p.y, alturaY: alturaEnMetros(p) })),
-    })),
-    chokepoints: generado.chokepoints.map((c) => ({
-      id: c.id,
-      radioMetros: c.radio,
-      x: c.posicion.x,
-      z: c.posicion.y,
-      alturaY: alturaEnMetros(c.posicion),
     })),
     asentamientos: asentamientos.map((a) => ({
       id: a.id,

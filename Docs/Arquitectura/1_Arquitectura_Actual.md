@@ -61,7 +61,7 @@ Esta configuración es global para el proceso o la pestaña actual; no está ver
 
 ### Generación de mundo: `src/worldgen/`
 
-Genera un `MapaGenerado` a partir de una configuración y una semilla. Incluye elevación, fertilidad, biomas, ríos, bosques, nodos de recurso, regiones y chokepoints. La generación usa un RNG propio y es reproducible si se conserva la versión del algoritmo y la semilla.
+Genera un `MapaGenerado` a partir de una configuración y una semilla. Incluye elevación, fertilidad, biomas, ríos, bosques, nodos de recurso y regiones. La generación usa un RNG propio y es reproducible si se conserva la versión del algoritmo y la semilla. (Chokepoints existieron entre v7 y v14 del algoritmo; eliminados en v15, 2026-08-26 — ver [9_Reglas_vs_Simulacion.md](9_Reglas_vs_Simulacion.md).)
 
 El mundo generado se considera inmutable durante la partida salvo sus recursos agotables, cuyo consumo se mantiene separado en `EstadoMapa`.
 

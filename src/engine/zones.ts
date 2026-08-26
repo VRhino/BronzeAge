@@ -98,9 +98,9 @@ export function computeTodasLasZonas(asentamientos: Asentamiento[]): ZonaInfluen
  * relleno translúcido acumulado en los solapes. Lo que el jugador debe leer es "hasta aquí llega esta
  * facción", una sola mancha con un solo borde.
  *
- * Las reglas de juego (fundar, controlar un chokepoint, colocar una Leñera, muestrear fertilidad) siguen
- * usando el polígono POR ASENTAMIENTO: la pertenencia territorial es por asentamiento, no por facción, y
- * fusionar aquí no cambia ninguna de esas respuestas.
+ * Las reglas de juego (fundar, colocar una Leñera, muestrear fertilidad) siguen usando el polígono POR
+ * ASENTAMIENTO: la pertenencia territorial es por asentamiento, no por facción, y fusionar aquí no cambia
+ * ninguna de esas respuestas.
  */
 export function computeZonasFusionadasPorFaccion(
   zonas: ZonaInfluencia[],

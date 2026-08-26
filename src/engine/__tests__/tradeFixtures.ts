@@ -2,7 +2,7 @@
 // objetos SINTÉTICOS mínimos (solo los campos que la ruta de código bajo prueba realmente toca), a
 // diferencia de `fixtures.ts` (que construye todo vía el motor real). Antes estaban clonadas casi byte a
 // byte en varios archivos (revisión de duplicación 2026-08-25) — unificadas aquí.
-import type { Asentamiento, Caravana, Chokepoint, Point, RecursoAlmacenado } from '../../domain/types';
+import type { Asentamiento, Caravana, Point, RecursoAlmacenado } from '../../domain/types';
 import type { Mapa } from '../../world/mapa';
 
 /** `Record<string, RecursoAlmacenado>` a partir de un mapa plano `{recurso: cantidad}`, con capacidad de
@@ -14,14 +14,13 @@ export function almacenSintetico(recursos: Record<string, number>): Record<strin
 }
 
 /**
- * `Mapa` sintético: solo implementa `costeEnPunto`/`listarChokepoints`/`limites`, los únicos métodos que
- * `avanzarComercio` toca en estos tests — no hace falta un mundo generado real (mismo patrón que
- * `world/__tests__/rutas.test.ts`). Terreno siempre llano (coste 1) y sin chokepoints salvo que se indiquen.
+ * `Mapa` sintético: solo implementa `costeEnPunto`/`limites`, los únicos métodos que `avanzarComercio` toca
+ * en estos tests — no hace falta un mundo generado real (mismo patrón que `world/__tests__/rutas.test.ts`).
+ * Terreno siempre llano (coste 1).
  */
-export function mapaSintetico(opciones: { chokepoints?: Chokepoint[]; limites?: { ancho: number; alto: number } } = {}): Mapa {
+export function mapaSintetico(opciones: { limites?: { ancho: number; alto: number } } = {}): Mapa {
   return {
     costeEnPunto: () => 1,
-    listarChokepoints: () => opciones.chokepoints ?? [],
     limites: opciones.limites ?? { ancho: 2000, alto: 2000 },
   } as unknown as Mapa;
 }

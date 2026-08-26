@@ -16,7 +16,7 @@
 // le pasan como parámetro — el motor sigue mandando.
 
 import { LENERA_POR_BOSQUE, REGENERACION_NODOS } from '../constants';
-import type { BiomaTipo, Chokepoint, NodoRecurso, Point, RegionId, RioZona, TerrenoTipo, ZonaBosque } from '../domain/types';
+import type { BiomaTipo, NodoRecurso, Point, RegionId, RioZona, TerrenoTipo, ZonaBosque } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
 
 /** Fase A5 (Docs/Arquitectura/4_Plan_Evolucion_Tareas.md) — payload de `mapa.yacimiento_regenerado` (ver
@@ -261,7 +261,7 @@ export class Mapa {
 
   /**
    * Tipo de terreno en un punto (Fase 0.1: relieve real, derivado del campo de elevación por umbral —
-   * antes era un stub fijo a 'llano'). Ver Doc 1.5 (chokepoints) para el consumidor futuro de esto.
+   * antes era un stub fijo a 'llano').
    */
   terrenoEn(p: Point): TerrenoTipo {
     return evaluarTerreno(this.generado.elevacion, p);
@@ -291,23 +291,6 @@ export class Mapa {
     for (const rio of this.generado.rios) {
       const d = distanciaARioMasCercano([rio], p);
       if (!mejor || d < mejor.distancia) mejor = { rio, distancia: d };
-    }
-    return mejor;
-  }
-
-  // --- Chokepoints (Fase 0.3) ---
-
-  listarChokepoints(): readonly Chokepoint[] {
-    return this.generado.chokepoints;
-  }
-
-  /** Chokepoint más cercano a un punto y la distancia hasta él. `null` si el mundo no tiene chokepoints.
-   * Recorrido lineal: mismo criterio que `rioMasCercano` (`CHOKEPOINTS.cantidad` es pequeño). */
-  chokepointMasCercano(p: Point): { chokepoint: Chokepoint; distancia: number } | null {
-    let mejor: { chokepoint: Chokepoint; distancia: number } | null = null;
-    for (const chokepoint of this.generado.chokepoints) {
-      const d = distancia(chokepoint.posicion, p);
-      if (!mejor || d < mejor.distancia) mejor = { chokepoint, distancia: d };
     }
     return mejor;
   }

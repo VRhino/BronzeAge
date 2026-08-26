@@ -16,7 +16,7 @@ const SEGURIDAD_MAPA = [{ [ESQUEMA_SESION_AUTH]: [] }];
 
 export const ESQUEMA_MAPA = {
   description:
-    'El mapa generado de la partida (terreno, recursos, ríos, bosques, chokepoints) — Fase C11. NUNCA cambia ' +
+    'El mapa generado de la partida (terreno, recursos, ríos, bosques) — Fase C11. NUNCA cambia ' +
     'durante la partida (se deriva de la seed), así que la respuesta es cacheable para siempre: ' +
     '`Cache-Control: immutable`. El segmento `:mapaId` de la URL solo sirve para que el CLIENTE sepa cuándo ' +
     'invalidar su caché (cambia si `regenerarMundo` reemplaza la partida) — el servidor lo ignora y siempre ' +

@@ -275,27 +275,3 @@ export const COSTE_MOVIMIENTO = congelar({
   radioCamino: 15,
 });
 
-// Chokepoints (Fase 0.3, Doc 1.5): puertos de montaña detectados como puntos de silla del campo de
-// elevación (ver `worldgen/chokepoints.ts`). `pasoHessiano` (80) es mayor que la octava más fina de
-// `ELEVACION` (~37 unidades) a propósito, mismo motivo que `RIOS.pasoGradiente`: promedia el detalle fino
-// del ruido fractal para que el test de silla capture la forma general de la cordillera (un puerto de
-// verdad), no un pliegue diminuto del terreno. `curvaturaMinima` descarta puntos de silla "de mentira" donde
-// ambas curvaturas son casi cero (ruido de redondeo numérico, no una silla real pronunciada) — MEDIDO (no
-// estimado): con `pasoHessiano`=80, la curvatura media del campo (|exx|/|eyy|) es ~7e-6; 2e-6 recorta solo
-// el cuartil más plano mientras deja ~11% de los puntos en colina/montaña como candidato válido de silla
-// (~99% de probabilidad de encontrar al menos uno en los 40 intentos de `colocarConEspaciado`, ver
-// `COLOCACION.intentosPorPunto`) — el primer valor probado (0.02) resultó ~3 órdenes de magnitud por encima
-// de la curvatura real del campo y descartaba el 100% de los candidatos, cayendo siempre al fallback sin
-// filtro de terreno (ver diagnóstico en el commit que fijó este valor). `cantidad`/`espacioMinimo`
-// deliberadamente escasos frente a `RIOS`: un chokepoint es un punto de control estratégico, no un
-// accidente geográfico común.
-// `peajeOro` (balance de PARTIDA, no de generación) vive en `constants.ts` (`CHOKEPOINTS_PEAJE`), no aquí —
-// mismo criterio documentado arriba: este archivo es solo para parámetros que, de cambiar, invalidarían una
-// seed ya generada; el peaje no afecta qué chokepoints existen, solo cuánto cuesta cruzarlos.
-export const CHOKEPOINTS = congelar({
-  cantidad: 14,
-  espacioMinimo: 150,
-  pasoHessiano: 80,
-  curvaturaMinima: 0.000002,
-  radio: 40,
-});
