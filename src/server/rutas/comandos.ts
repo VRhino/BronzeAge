@@ -6,11 +6,15 @@ import { REGISTRO_COMANDOS, type TipoComando } from '../../session/comandos/regi
 import type { ManejadorComando } from '../../session/comandos/tipos';
 import { verificarAutorizacion, type ActorDeComando } from '../../session/comandos/autorizacion';
 import type { RunnerDePartida } from '../runnerDePartida';
+import type { HubDeDifusion } from '../difusion/hub';
 import { mensajeDe, resumenDe } from './contexto';
 
 export interface EjecutarComandoBody {
   tipo: string;
   params: unknown;
+  /** Fase C5 (doc 4: "reconexión sin duplicar comandos"). Opcional: sin ella, cada petición se aplica tal
+   * cual, igual que hasta ahora — la idempotencia es una protección que el cliente pide, no un requisito. */
+  idempotencyKey?: string;
 }
 
 export const ESQUEMA_EJECUTAR_COMANDO = {
@@ -21,6 +25,7 @@ export const ESQUEMA_EJECUTAR_COMANDO = {
     properties: {
       tipo: { type: 'string', minLength: 1 },
       params: {},
+      idempotencyKey: { type: 'string', minLength: 1 },
     },
   },
 } as const;
@@ -36,13 +41,19 @@ function esTipoComandoValido(tipo: string): tipo is TipoComando {
  * `actorId` es lo que el motor registra como autor: el `jugadorId` de la membresía, o un id derivado del
  * usuario cuando actúa como administrador sin personaje en la partida (así una acción administrativa queda
  * distinguible en el log de una de jugador).
+ *
+ * Tras un comando ACEPTADO, difunde sus eventos por WebSocket (`hub.difundir`, Fase C5) a quien esté
+ * suscrito al canal que le corresponda a cada uno. Un comando rechazado no genera eventos que difundir
+ * (`ResultadoComando.eventos` viene vacío), así que llamar a `difundir` siempre es seguro sin comprobar
+ * `resultado.ok` aparte.
  */
 export async function ejecutarComandoHttp(
   reply: FastifyReply,
   runner: RunnerDePartida,
   cuerpo: EjecutarComandoBody,
   actor: ActorDeComando,
-  actorId: string
+  actorId: string,
+  hub: HubDeDifusion
 ) {
   const { tipo, params } = cuerpo;
   if (!esTipoComandoValido(tipo)) {
@@ -64,7 +75,8 @@ export async function ejecutarComandoHttp(
   // `catch` como cualquier otro fallo y responde 409, no un crash del proceso.
   const manejador = REGISTRO_COMANDOS[tipo] as ManejadorComando<unknown, unknown>;
   try {
-    const resultado = await runner.ejecutar(manejador, params, actorId);
+    const resultado = await runner.ejecutar(manejador, params, actorId, cuerpo.idempotencyKey);
+    hub.difundir(runner.gameId, resultado.eventos);
     return reply.send({ ...resumenDe(runner), resultado });
   } catch (err) {
     // Solo un fallo de persistencia llega hasta aquí como excepción (ver `RunnerDePartida.aplicarYPersistir`).

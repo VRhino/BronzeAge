@@ -188,3 +188,71 @@ describe('RunnerDePartida — ticks automáticos', () => {
     expect(r.getState().tick).toBe(tickTrasParar);
   });
 });
+
+describe('RunnerDePartida.ejecutar — idempotencia (Fase C5)', () => {
+  it('sin idempotencyKey, dos llamadas se aplican dos veces (comportamiento de siempre)', async () => {
+    const r = runner('g-sin-clave');
+    await r.ejecutar(crearFaccion, { nombre: 'Micenas' });
+    await r.ejecutar(crearFaccion, { nombre: 'Troya' }); // nombre distinto: `crearFaccion` rechaza duplicados
+    expect(r.getState().facciones).toHaveLength(2);
+  });
+
+  it('la misma idempotencyKey y el mismo actor: el segundo ejecutar NO vuelve a aplicar el comando', async () => {
+    const r = runner('g-idem');
+    const primero = await r.ejecutar(crearFaccion, { nombre: 'Micenas' }, 'jugador-1', 'clave-1');
+    const segundo = await r.ejecutar(crearFaccion, { nombre: 'Micenas' }, 'jugador-1', 'clave-1');
+
+    expect(r.getState().facciones).toHaveLength(1); // no dos
+    expect(r.getState().version).toBe(1); // la segunda llamada no subió la versión
+    expect(segundo).toEqual(primero); // literalmente el mismo resultado, no uno equivalente
+  });
+
+  it('deduplica también si el reintento llega ANTES de que el primero termine (misma promesa)', async () => {
+    const r = runner('g-idem-concurrente');
+    // Sin `await` entre medias: el segundo `ejecutar` llega mientras el primero sigue en la cola.
+    const p1 = r.ejecutar(crearFaccion, { nombre: 'Micenas' }, 'jugador-1', 'clave-1');
+    const p2 = r.ejecutar(crearFaccion, { nombre: 'Micenas' }, 'jugador-1', 'clave-1');
+    await Promise.all([p1, p2]);
+
+    expect(r.getState().facciones).toHaveLength(1);
+  });
+
+  it('la misma clave con actores distintos NO colisiona: cada actor tiene su propio espacio de claves', async () => {
+    const r = runner('g-idem-actores');
+    await r.ejecutar(crearFaccion, { nombre: 'Micenas' }, 'jugador-1', 'clave-1');
+    await r.ejecutar(crearFaccion, { nombre: 'Troya' }, 'jugador-2', 'clave-1');
+
+    expect(r.getState().facciones.map((f) => f.nombre)).toEqual(['Micenas', 'Troya']);
+  });
+
+  it('una clave reutilizada tras un RECHAZO de dominio también devuelve el mismo rechazo, sin reintentar de verdad', async () => {
+    const r = runner('g-idem-rechazo');
+    const primero = await r.ejecutar(fundarAsentamiento, { faccionId: 'no-existe', posicion: { x: 0, y: 0 } }, 'jugador-1', 'clave-1');
+    const segundo = await r.ejecutar(fundarAsentamiento, { faccionId: 'no-existe', posicion: { x: 0, y: 0 } }, 'jugador-1', 'clave-1');
+
+    expect(primero.ok).toBe(false);
+    expect(segundo).toEqual(primero);
+  });
+
+  it('si la persistencia falla, la clave NO queda cacheada: un reintento legítimo puede volver a intentarlo', async () => {
+    const r = runner('g-idem-fallo');
+    await r.ejecutar(crearFaccion, { nombre: 'Micenas' }); // versión 1, guardada
+
+    const ruta = join(directorio, 'g-idem-fallo.json');
+    const snapshot = JSON.parse(await readFile(ruta, 'utf-8')) as SnapshotPartida;
+    snapshot.partida.state.version = 999;
+    await writeFile(ruta, JSON.stringify(snapshot), 'utf-8');
+
+    await expect(r.ejecutar(crearFaccion, { nombre: 'Troya' }, 'jugador-1', 'clave-1')).rejects.toThrow();
+
+    // Se arregla el conflicto y se reintenta con la MISMA clave: si hubiera quedado cacheado el fallo, esto
+    // devolvería el mismo rechazo en vez de aplicar de verdad.
+    const snapshotArreglado = JSON.parse(await readFile(ruta, 'utf-8')) as SnapshotPartida;
+    snapshotArreglado.partida.state.version = 1;
+    await writeFile(ruta, JSON.stringify(snapshotArreglado), 'utf-8');
+
+    const resultado = await r.ejecutar(crearFaccion, { nombre: 'Troya' }, 'jugador-1', 'clave-1');
+    expect(resultado.ok).toBe(true);
+    expect(r.getState().facciones.map((f) => f.nombre)).toEqual(['Micenas', 'Troya']);
+  });
+});

@@ -13,6 +13,7 @@ import { credencialOpcionalDesdeCabecera } from '../identidad/cabeceraAutorizaci
 import type { DirectorioDeAdministradores } from '../identidad/administradoresGlobales';
 import type { RegistroDePartidas } from '../registroDePartidas';
 import type { RunnerDePartida } from '../runnerDePartida';
+import type { HubDeDifusion } from '../difusion/hub';
 
 export interface DependenciasDeRutas {
   identidad: ContextoAutenticacion;
@@ -20,6 +21,8 @@ export interface DependenciasDeRutas {
   partidas: RegistroDePartidas;
   /** Reloj inyectado, como en el resto del proyecto — decide la vigencia de sesiones y membresías. */
   ahora: () => string;
+  /** Conexiones WebSocket activas (Fase C5) — a quién difundir tras un comando o un tick. */
+  hub: HubDeDifusion;
 }
 
 export interface ParametrosGameId {

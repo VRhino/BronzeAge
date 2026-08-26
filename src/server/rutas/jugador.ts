@@ -86,7 +86,7 @@ export function registrarRutasDeJugador(app: FastifyInstance, deps: Dependencias
 
       const jugadorId = resuelto.actor.membresia!.jugadorId;
       const actor: ActorDeComando = { rol: 'jugador', jugadorId };
-      return ejecutarComandoHttp(reply, runner, request.body, actor, jugadorId ?? resuelto.usuario.id);
+      return ejecutarComandoHttp(reply, runner, request.body, actor, jugadorId ?? resuelto.usuario.id, deps.hub);
     }
   );
 }

@@ -41,6 +41,19 @@ export class RunnerDePartida {
    */
   private cola: Promise<void> = Promise.resolve();
 
+  /**
+   * Idempotencia de comandos (Fase C5, doc 4: "reconexión de cliente sin duplicar comandos"). Clave
+   * `actor:idempotencyKey` -> la MISMA promesa que ya está en curso o ya resolvió para ese intento. Guardar
+   * la promesa (no solo el resultado) cubre dos casos con el mismo mecanismo: un reintento mientras el
+   * primero sigue en la cola (dedup en curso) y un reintento después de que ya resolvió (dedup en caché) —
+   * ambos devuelven exactamente lo mismo, sin volver a tocar el estado ni la versión.
+   *
+   * Se borra la entrada si la operación termina en EXCEPCIÓN (fallo de persistencia): eso no se persistió,
+   * así que un reintento legítimo debe poder intentarlo de nuevo, no quedarse pegado a un fallo pasado.
+   */
+  private readonly idempotencia = new Map<string, Promise<ResultadoComando<unknown>>>();
+  private static readonly LIMITE_IDEMPOTENCIA = 500;
+
   private constructor(sesion: GameSession, opciones: OpcionesRunner) {
     this.sesion = sesion;
     this.directorio = opciones.directorio;
@@ -67,13 +80,38 @@ export class RunnerDePartida {
     return this.sesion.getState();
   }
 
-  /** Ejecuta un comando de jugador y espera su turno en la cola. Rechaza con lo que lance la persistencia si
+  /**
+   * Ejecuta un comando de jugador y espera su turno en la cola. Rechaza con lo que lance la persistencia si
    * la escritura falla — el comando en sí no se pierde en silencio, pero tampoco queda aplicado sin estar
-   * guardado. */
-  ejecutar<P, R>(manejador: ManejadorComando<P, R>, params: P, actor?: ActorId): Promise<ResultadoComando<R>> {
-    return this.encolar(() =>
-      this.aplicarYPersistir((sesion) => sesion.ejecutar(manejador, params, { momento: this.ahora(), actor }))
-    );
+   * guardado.
+   *
+   * `idempotencyKey` (Fase C5): si se pasa, un segundo `ejecutar` con la misma clave para el mismo `actor` —
+   * ya esté el primero en curso o ya haya resuelto — devuelve el MISMO resultado sin volver a aplicar el
+   * comando. Es lo que hace segura la reconexión de cliente: reintentar tras una respuesta perdida no duplica
+   * la acción, aunque el reintento llegue antes de que el primer intento haya terminado.
+   *
+   * NO comprueba que `manejador`/`params` coincidan con los del primer uso de esa clave — confía en que el
+   * cliente no reutiliza una `idempotencyKey` para dos comandos distintos. Validarlo exigiría comparar
+   * `params` por igualdad profunda (`JSON.stringify` no sirve: el orden de claves de un objeto puede variar
+   * entre dos llamadas equivalentes y daría falsos positivos), y no es lo que este mecanismo existe para
+   * resolver — es protección contra la reconexión, no contra un cliente que genera mal sus claves.
+   */
+  ejecutar<P, R>(manejador: ManejadorComando<P, R>, params: P, actor?: ActorId, idempotencyKey?: string): Promise<ResultadoComando<R>> {
+    const operacion = () => this.aplicarYPersistir((sesion) => sesion.ejecutar(manejador, params, { momento: this.ahora(), actor }));
+    if (idempotencyKey === undefined) return this.encolar(operacion);
+
+    const clave = `${actor ?? ''}:${idempotencyKey}`;
+    const enCurso = this.idempotencia.get(clave);
+    if (enCurso) return enCurso as Promise<ResultadoComando<R>>;
+
+    const promesa = this.encolar(operacion);
+    this.idempotencia.set(clave, promesa);
+    if (this.idempotencia.size > RunnerDePartida.LIMITE_IDEMPOTENCIA) {
+      const masAntigua = this.idempotencia.keys().next().value;
+      if (masAntigua !== undefined) this.idempotencia.delete(masAntigua);
+    }
+    promesa.catch(() => this.idempotencia.delete(clave));
+    return promesa;
   }
 
   /**

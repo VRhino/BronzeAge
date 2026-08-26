@@ -349,6 +349,18 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
     expect(res.json().resultado.ok).toBe(true);
   });
 
+  it('idempotencyKey (Fase C5): repetir la misma peticion no vuelve a aplicar el comando', async () => {
+    await partidaCreada('g1');
+    const auth = await jugadorEn('g1');
+    const payload = { tipo: 'crearFaccion', params: { nombre: 'Micenas' }, idempotencyKey: 'clave-http-1' };
+
+    const primero = await app.inject({ method: 'POST', url: '/jugador/partidas/g1/comandos', headers: auth, payload });
+    const segundo = await app.inject({ method: 'POST', url: '/jugador/partidas/g1/comandos', headers: auth, payload });
+
+    expect(primero.json().resultado).toEqual(segundo.json().resultado);
+    expect(segundo.json().version).toBe(1); // no subió a 2: el segundo POST no se aplicó de verdad
+  });
+
   it('401 sin sesion, 403 con sesion pero sin membresia de jugador', async () => {
     await partidaCreada('g1');
     const payload = { tipo: 'crearFaccion', params: { nombre: 'Micenas' } };

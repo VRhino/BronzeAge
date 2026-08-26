@@ -90,6 +90,7 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
 
     try {
       const resultado = await acceso.runner.avanzarTick();
+      deps.hub.difundir(acceso.runner.gameId, resultado.eventos);
       return reply.send({ ...resumenDe(acceso.runner), resultado });
     } catch (err) {
       // La única forma en que `avanzarTick` puede rechazar (no `resultado.ok === false`, que ya viene dentro
@@ -123,7 +124,7 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
       // Un administrador sin personaje en la partida queda registrado como `admin:<usuarioId>`, para que su
       // huella en el log no se confunda con la de un jugador.
       const actorId = acceso.actorInstancia.membresia?.jugadorId ?? `admin:${acceso.actorInstancia.usuarioId}`;
-      return ejecutarComandoHttp(reply, acceso.runner, request.body, actor, actorId);
+      return ejecutarComandoHttp(reply, acceso.runner, request.body, actor, actorId, deps.hub);
     }
   );
 }
