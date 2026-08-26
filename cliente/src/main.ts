@@ -234,10 +234,6 @@ app.innerHTML = `
           Facción activa (clic en el mapa funda aquí)
           <select id="faccion-select"></select>
         </label>
-        <label>
-          Jugadores fundadores (fundación grupal, 1-5)
-          <input id="jugadores-input" type="number" value="1" min="1" max="5" />
-        </label>
         <div id="fundacion-viabilidad" class="fundacion-viabilidad">Pasa el cursor por el mapa para evaluar un emplazamiento.</div>
       </div>
 
@@ -519,7 +515,6 @@ const faccionSelect = document.getElementById('faccion-select') as HTMLSelectEle
 const faccionCrearNombreInput = document.getElementById('faccion-crear-nombre') as HTMLInputElement;
 const seedInput = document.getElementById('seed-input') as HTMLInputElement;
 const regionSelect = document.getElementById('region-select') as HTMLSelectElement;
-const jugadoresInput = document.getElementById('jugadores-input') as HTMLInputElement;
 
 const fundacionViabilidadEl = document.getElementById('fundacion-viabilidad')!;
 /** Posición del cursor sobre el mapa, para previsualizar el emplazamiento antes de fundar (ver `render`). */
@@ -2544,7 +2539,7 @@ canvas.addEventListener('click', async (ev) => {
     expansionDestinoInput.value = `(${Math.round(worldX)}, ${Math.round(worldY)})`;
     return;
   }
-  await gameStore.fundarAsentamiento(faccionSelect.value, { x: worldX, y: worldY }, Number(jugadoresInput.value) || 1);
+  await gameStore.fundarAsentamiento(faccionSelect.value, { x: worldX, y: worldY });
 });
 
 document.getElementById('expansion-lanzar-btn')!.addEventListener('click', async () => {

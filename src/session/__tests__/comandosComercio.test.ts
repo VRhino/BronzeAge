@@ -16,8 +16,8 @@ function partidaConDosAsentamientos() {
   const sesion = GameSession.crear('comercio-test', { seed: 42 });
   const fa = sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, OPC).datos!.faccionId;
   const fb = sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, OPC).datos!.faccionId;
-  const a = sesion.ejecutar(fundarAsentamiento, { faccionId: fa, posicion: { x: 400, y: 400 }, numJugadores: 1 }, OPC);
-  const b = sesion.ejecutar(fundarAsentamiento, { faccionId: fb, posicion: { x: 900, y: 900 }, numJugadores: 1 }, OPC);
+  const a = sesion.ejecutar(fundarAsentamiento, { faccionId: fa, posicion: { x: 400, y: 400 } }, OPC);
+  const b = sesion.ejecutar(fundarAsentamiento, { faccionId: fb, posicion: { x: 900, y: 900 } }, OPC);
   if (!a.ok || !b.ok) throw new Error('setup del test: no se pudieron fundar los dos asentamientos');
   return { sesion, aId: a.datos!.asentamientoId, bId: b.datos!.asentamientoId };
 }

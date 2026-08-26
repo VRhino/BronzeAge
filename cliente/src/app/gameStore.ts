@@ -535,8 +535,12 @@ export class GameStore {
 
   // --- Acciones (una por intención de usuario) ---
 
-  async fundarAsentamiento(faccionId: string, posicion: { x: number; y: number }, numJugadores: number): Promise<void> {
-    await this.despachar('fundarAsentamiento', { faccionId, posicion, numJugadores }, 'Fundación rechazada');
+  /**
+   * Funda un asentamiento. El fundador es siempre EL ACTOR que ejecuta el comando (Fase C2/C3): el backend
+   * ya no acepta una lista de cofundadores — ver `session/comandos/fundarAsentamiento.ts` para el porqué.
+   */
+  async fundarAsentamiento(faccionId: string, posicion: { x: number; y: number }): Promise<void> {
+    await this.despachar('fundarAsentamiento', { faccionId, posicion }, 'Fundación rechazada');
   }
 
   async lanzarCaravanaFundacion(origenAsentamientoId: string, destino: { x: number; y: number }, numJugadores: number): Promise<void> {

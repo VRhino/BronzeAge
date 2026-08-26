@@ -44,7 +44,7 @@ describe('comando fundarAsentamiento', () => {
     const { sesion, faccionId } = partidaConFaccion();
     const versionPrevia = sesion.getState().version;
 
-    const resultado = sesion.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 }, numJugadores: 3 }, { momento: MOMENTO, actor: ACTOR });
+    const resultado = sesion.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 } }, { momento: MOMENTO, actor: ACTOR });
 
     expect(resultado.ok).toBe(true);
     expect(resultado.codigoError).toBeUndefined();
@@ -55,7 +55,7 @@ describe('comando fundarAsentamiento', () => {
 
   it('éxito: el evento lleva el asentamientoId y el `momento` INYECTADO, no un reloj leído dentro', () => {
     const { sesion, faccionId } = partidaConFaccion();
-    const resultado = sesion.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 }, numJugadores: 1 }, { momento: MOMENTO, actor: ACTOR });
+    const resultado = sesion.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 } }, { momento: MOMENTO, actor: ACTOR });
 
     expect(resultado.eventos).toHaveLength(1);
     expect(resultado.eventos[0]!.momento).toBe(MOMENTO);
@@ -66,20 +66,22 @@ describe('comando fundarAsentamiento', () => {
     expect(resultado.eventos[0]!.payload).toMatchObject({ faccionId, posicion: { x: 500, y: 500 } });
   });
 
-  it('éxito: registra en el historial de cada jugador fundador', () => {
+  it('éxito: registra en el historial del actor, que es el único fundador', () => {
+    // Desde que `fundarAsentamiento` dejó de fabricar fundadores ficticios (`jugador-<faccionId>-<n>`), el
+    // fundador es SIEMPRE el actor que ejecuta el comando — nunca una lista con más gente que él.
     const { sesion, faccionId } = partidaConFaccion();
-    sesion.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 }, numJugadores: 2 }, { momento: MOMENTO, actor: ACTOR });
+    sesion.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 } }, { momento: MOMENTO, actor: ACTOR });
 
     const historial = sesion.getState().historialJugadores;
-    expect(Object.keys(historial)).toHaveLength(2);
-    for (const entradas of Object.values(historial)) expect(entradas[0]!.mensaje).toContain('Funda');
+    expect(Object.keys(historial)).toEqual([ACTOR]);
+    expect(historial[ACTOR]![0]!.mensaje).toContain('Funda');
   });
 
   it('rechazo: posición fuera del mapa devuelve codigoError sin mutar nada ni subir la versión', () => {
     const { sesion, faccionId } = partidaConFaccion();
     const antes = sesion.getState();
 
-    const resultado = sesion.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: -100, y: -100 }, numJugadores: 1 }, { momento: MOMENTO, actor: ACTOR });
+    const resultado = sesion.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: -100, y: -100 } }, { momento: MOMENTO, actor: ACTOR });
 
     expect(resultado.ok).toBe(false);
     expect(resultado.codigoError).toBe('fundacion.invalida');
@@ -92,7 +94,7 @@ describe('comando fundarAsentamiento', () => {
 
   it('rechazo: Facción inexistente también se traduce a codigoError, sin excepción sin capturar', () => {
     const sesion = partidaNueva();
-    const resultado = sesion.ejecutar(fundarAsentamiento, { faccionId: 'no-existe', posicion: { x: 500, y: 500 }, numJugadores: 1 }, { momento: MOMENTO, actor: ACTOR });
+    const resultado = sesion.ejecutar(fundarAsentamiento, { faccionId: 'no-existe', posicion: { x: 500, y: 500 } }, { momento: MOMENTO, actor: ACTOR });
     expect(resultado.ok).toBe(false);
     expect(resultado.codigoError).toBe('fundacion.invalida');
   });
@@ -129,7 +131,7 @@ describe('comando crearFaccion', () => {
 describe('operaciones del sistema — avanzarTick', () => {
   it('avanza el tick, sube la versión y produce eventos con el `momento` correcto', () => {
     const { sesion, faccionId } = partidaConFaccion();
-    sesion.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 }, numJugadores: 1 }, { momento: MOMENTO, actor: ACTOR });
+    sesion.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 } }, { momento: MOMENTO, actor: ACTOR });
     const versionPrevia = sesion.getState().version;
 
     const resultado = sesion.avanzarTick(MOMENTO);
@@ -144,7 +146,7 @@ describe('operaciones del sistema — avanzarTick', () => {
     function correr(): unknown {
       const sesion = GameSession.crear('det', { seed: SEED });
       const r = sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, { momento: MOMENTO, actor: ACTOR });
-      sesion.ejecutar(fundarAsentamiento, { faccionId: r.datos!.faccionId, posicion: { x: 500, y: 500 }, numJugadores: 3 }, { momento: MOMENTO, actor: ACTOR });
+      sesion.ejecutar(fundarAsentamiento, { faccionId: r.datos!.faccionId, posicion: { x: 500, y: 500 } }, { momento: MOMENTO, actor: ACTOR });
       for (let tick = 1; tick <= 20; tick++) sesion.avanzarTick(`2026-01-01T00:${String(tick).padStart(2, '0')}:00.000Z`);
       return sesion.getState();
     }
@@ -158,7 +160,7 @@ describe('operaciones del sistema — avanzarFaccionesNpc', () => {
   // se construye el estado vía `importar()`, que acepta cualquier `GameSessionState` válido.
   function partidaConFaccionNpc(): GameSession {
     const { sesion, faccionId } = partidaConFaccion();
-    sesion.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 }, numJugadores: 1 }, { momento: MOMENTO, actor: ACTOR });
+    sesion.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 } }, { momento: MOMENTO, actor: ACTOR });
     const payload = sesion.exportar();
     return GameSession.importar({ ...payload, state: { ...payload.state, faccionesNpcIds: [faccionId] } });
   }
@@ -223,7 +225,7 @@ describe('GameSession — el mapa es estado devuelto, no efecto lateral', () => 
 describe('GameSession — exportar / importar', () => {
   it('reconstruye una partida con el mismo estado', () => {
     const { sesion, faccionId } = partidaConFaccion();
-    sesion.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 }, numJugadores: 2 }, { momento: MOMENTO, actor: ACTOR });
+    sesion.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 } }, { momento: MOMENTO, actor: ACTOR });
     sesion.avanzarTick(MOMENTO);
 
     const reconstruida = GameSession.importar(sesion.exportar());
@@ -234,7 +236,7 @@ describe('GameSession — exportar / importar', () => {
 
   it('la sesión importada sigue siendo operable', () => {
     const { sesion, faccionId } = partidaConFaccion();
-    sesion.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 }, numJugadores: 2 }, { momento: MOMENTO, actor: ACTOR });
+    sesion.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 } }, { momento: MOMENTO, actor: ACTOR });
 
     const reconstruida = GameSession.importar(sesion.exportar());
     const resultado = reconstruida.avanzarTick(MOMENTO);
@@ -250,7 +252,7 @@ describe('GameSession — exportar / importar', () => {
     // mismo punto, avanzadas por los mismos ticks, tienen que llegar exactamente al mismo sitio —
     // reclutamiento, ataques de bandidos y demás sistemas que consumen `ctx.rng` incluidos.
     const { sesion, faccionId } = partidaConFaccion();
-    sesion.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 }, numJugadores: 5 }, { momento: MOMENTO, actor: ACTOR });
+    sesion.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 } }, { momento: MOMENTO, actor: ACTOR });
     for (let i = 0; i < 10; i++) sesion.avanzarTick(MOMENTO); // el contador del RNG ya no está en su posición inicial
 
     const reconstruida = GameSession.importar(sesion.exportar());

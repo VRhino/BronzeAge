@@ -326,20 +326,31 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
 
   it('403 cuando la matriz rechaza la condicion de dominio (no es ciudadano de esa Faccion)', async () => {
     await partidaCreada('g1');
-    const auth = await jugadorEn('g1');
+    const primero = await jugadorEn('g1', 'ana');
+    // `ana` crea la Facción Y funda en ella: es el caso de arranque (Facción recién creada, sin ciudadanos
+    // aún) y queda como su primera ciudadana. Con eso la Facción deja de estar "vacía" para cualquier otro.
     const creada = await app.inject({
       method: 'POST',
       url: '/jugador/partidas/g1/comandos',
-      headers: auth,
+      headers: primero,
       payload: { tipo: 'crearFaccion', params: { nombre: 'Micenas' } },
     });
     const faccionId = creada.json().resultado.datos.faccionId;
+    await app.inject({
+      method: 'POST',
+      url: '/jugador/partidas/g1/comandos',
+      headers: primero,
+      payload: { tipo: 'fundarAsentamiento', params: { faccionId, posicion: { x: 500, y: 500 } } },
+    });
 
+    // `luis`, otro jugador sin Facción, intenta fundar en la Facción de `ana` — ya no está vacía, así que la
+    // excepción de arranque no aplica y se rechaza igual que a cualquier forastero.
+    const segundo = await jugadorEn('g1', 'luis');
     const res = await app.inject({
       method: 'POST',
       url: '/jugador/partidas/g1/comandos',
-      headers: auth,
-      payload: { tipo: 'fundarAsentamiento', params: { faccionId, posicion: { x: 500, y: 500 }, numJugadores: 1 } },
+      headers: segundo,
+      payload: { tipo: 'fundarAsentamiento', params: { faccionId, posicion: { x: 900, y: 900 } } },
     });
 
     expect(res.statusCode).toBe(403);
@@ -354,7 +365,7 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       method: 'POST',
       url: '/jugador/partidas/g1/comandos',
       headers: auth,
-      payload: { tipo: 'fundarAsentamiento', params: { faccionId: 'no-existe', posicion: { x: 500, y: 500 }, numJugadores: 1 } },
+      payload: { tipo: 'fundarAsentamiento', params: { faccionId: 'no-existe', posicion: { x: 500, y: 500 } } },
     });
 
     expect(res.statusCode).toBe(200);

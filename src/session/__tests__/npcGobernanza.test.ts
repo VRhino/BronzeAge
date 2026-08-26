@@ -49,8 +49,8 @@ function partidaConDosFacciones(): { sesion: GameSession; faccionNpcId: string; 
   }
   expect(posiciones).toHaveLength(2);
 
-  sesion.ejecutar(fundarAsentamiento, { faccionId: faccionNpcId, posicion: posiciones[0]!, numJugadores: 3 }, { momento: MOMENTO, actor: ACTOR });
-  sesion.ejecutar(fundarAsentamiento, { faccionId: faccionManualId, posicion: posiciones[1]!, numJugadores: 3 }, { momento: MOMENTO, actor: ACTOR });
+  sesion.ejecutar(fundarAsentamiento, { faccionId: faccionNpcId, posicion: posiciones[0]! }, { momento: MOMENTO, actor: ACTOR });
+  sesion.ejecutar(fundarAsentamiento, { faccionId: faccionManualId, posicion: posiciones[1]! }, { momento: MOMENTO, actor: ACTOR });
   expect(sesion.getState().asentamientos).toHaveLength(2);
 
   return { sesion, faccionNpcId, faccionManualId };

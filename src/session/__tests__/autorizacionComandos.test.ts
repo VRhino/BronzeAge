@@ -6,7 +6,8 @@
 // Un test que quiera un actor con Facción tiene que fundarla y ganarse la ciudadanía como en el juego real,
 // así que estas pruebas fallan si cambia el significado de ciudadanía, residencia o cargo en `engine/`.
 import { describe, expect, it } from 'vitest';
-import { partidaConAsentamiento, OPC } from './fixtures';
+import { GameSession } from '../gameSession';
+import { partidaConAsentamiento, ACTOR, OPC } from './fixtures';
 import { crearFaccion } from '../comandos/crearFaccion';
 import { fundarAsentamiento } from '../comandos/fundarAsentamiento';
 import { asignarCargoLocal, asignarRey } from '../comandos/cargos';
@@ -20,19 +21,22 @@ function jugador(jugadorId: string): ActorDeComando {
   return { rol: 'jugador', jugadorId };
 }
 
-/** Segundo fundador del asentamiento: ciudadano y residente igual que el primero, pero sin ningún cargo —
- * el actor que distingue "reside" de "manda". */
-function segundoFundador(sesion: ReturnType<typeof partidaConAsentamiento>['sesion']): string {
-  return sesion.getState().asentamientos[0]!.jugadoresFundadoresIds[1]!;
-}
+/**
+ * Partida con una segunda Facción rival, con su propio asentamiento y su propio ciudadano.
+ *
+ * La funda OTRO actor (`ciudadanoRival`), no el de `OPC`: desde que funda quien ejecuta el comando, usar el
+ * mismo actor para las dos Facciones lo haría ciudadano de ambas — un estado que el juego no admite (Doc 0:
+ * un jugador, una Facción) y que dejaría sin sentido cualquier prueba sobre "Facción ajena".
+ */
+const CIUDADANO_RIVAL = 'jugador-troyano';
 
-/** Partida con una segunda Facción rival, con su propio asentamiento y ciudadanos. */
 function partidaConFaccionRival() {
   const base = partidaConAsentamiento();
-  const rf = base.sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, OPC);
+  const opcRival = { ...OPC, actor: CIUDADANO_RIVAL };
+  const rf = base.sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, opcRival);
   const faccionRivalId = rf.datos!.faccionId;
-  const ra = base.sesion.ejecutar(fundarAsentamiento, { faccionId: faccionRivalId, posicion: { x: 900, y: 900 }, numJugadores: 1 }, OPC);
-  return { ...base, faccionRivalId, asentamientoRivalId: ra.datos!.asentamientoId };
+  const ra = base.sesion.ejecutar(fundarAsentamiento, { faccionId: faccionRivalId, posicion: { x: 900, y: 900 } }, opcRival);
+  return { ...base, faccionRivalId, asentamientoRivalId: ra.datos!.asentamientoId, ciudadanoRival: CIUDADANO_RIVAL };
 }
 
 describe('exhaustividad de la matriz', () => {
@@ -46,7 +50,7 @@ describe('filtro de rol técnico', () => {
     const { sesion, faccionId } = partidaConAsentamiento();
     const resultado = verificarAutorizacion(
       'fundarAsentamiento',
-      { faccionId, posicion: { x: 0, y: 0 }, numJugadores: 1 },
+      { faccionId, posicion: { x: 0, y: 0 } },
       sesion.getState(),
       { rol: 'observador', jugadorId: null }
     );
@@ -57,7 +61,7 @@ describe('filtro de rol técnico', () => {
     const { sesion, faccionId } = partidaConAsentamiento();
     const resultado = verificarAutorizacion(
       'fundarAsentamiento',
-      { faccionId, posicion: { x: 0, y: 0 }, numJugadores: 1 },
+      { faccionId, posicion: { x: 0, y: 0 } },
       sesion.getState(),
       { rol: 'jugador', jugadorId: null }
     );
@@ -70,31 +74,58 @@ describe('la Facción del actor se deriva de ciudadanosIds, no de la membresía'
     const { sesion, faccionId, fundador } = partidaConAsentamiento();
     const resultado = verificarAutorizacion(
       'fundarAsentamiento',
-      { faccionId, posicion: { x: 0, y: 0 }, numJugadores: 1 },
+      { faccionId, posicion: { x: 0, y: 0 } },
       sesion.getState(),
       jugador(fundador)
     );
     expect(resultado).toEqual(AUTORIZADO);
   });
 
-  it('rechaza a quien no es ciudadano de ella', () => {
+  it('rechaza a un forastero: fundar consume el cap de fundación de la Facción', () => {
     const { sesion, faccionId } = partidaConAsentamiento();
     const resultado = verificarAutorizacion(
       'fundarAsentamiento',
-      { faccionId, posicion: { x: 0, y: 0 }, numJugadores: 1 },
+      { faccionId, posicion: { x: 0, y: 0 } },
       sesion.getState(),
       jugador('forastero')
     );
     expect(resultado).toEqual(POR_DOMINIO);
   });
 
-  it('un ciudadano de la Facción rival tampoco pasa', () => {
-    const { sesion, faccionId, asentamientoRivalId } = partidaConFaccionRival();
-    const ciudadanoRival = sesion.getState().asentamientos.find((a) => a.id === asentamientoRivalId)!.jugadoresFundadoresIds[0]!;
+  it('ARRANQUE: en una Facción recién creada, sin ciudadanos, sí puede fundar quien no tiene Facción', () => {
+    // Sin esta excepción `crearFaccion` -> `fundarAsentamiento` sería imposible y toda Facción nacería
+    // muerta: es fundar lo que otorga la primera ciudadanía.
+    const sesion = GameSession.crear('arranque', { seed: 42 });
+    const rf = sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, OPC);
 
     const resultado = verificarAutorizacion(
       'fundarAsentamiento',
-      { faccionId, posicion: { x: 0, y: 0 }, numJugadores: 1 },
+      { faccionId: rf.datos!.faccionId, posicion: { x: 500, y: 500 } },
+      sesion.getState(),
+      jugador(ACTOR)
+    );
+    expect(resultado).toEqual(AUTORIZADO);
+  });
+
+  it('...pero NO quien ya es ciudadano de otra Facción: un jugador pertenece solo a una', () => {
+    const { sesion, fundador } = partidaConAsentamiento();
+    const rf = sesion.ejecutar(crearFaccion, { nombre: 'Vacia' }, { ...OPC, actor: 'otro' });
+
+    const resultado = verificarAutorizacion(
+      'fundarAsentamiento',
+      { faccionId: rf.datos!.faccionId, posicion: { x: 900, y: 900 } },
+      sesion.getState(),
+      jugador(fundador)
+    );
+    expect(resultado).toEqual(POR_DOMINIO);
+  });
+
+  it('un ciudadano de la Facción rival tampoco pasa', () => {
+    const { sesion, faccionId, ciudadanoRival } = partidaConFaccionRival();
+
+    const resultado = verificarAutorizacion(
+      'fundarAsentamiento',
+      { faccionId, posicion: { x: 0, y: 0 } },
       sesion.getState(),
       jugador(ciudadanoRival)
     );
@@ -150,14 +181,14 @@ describe('asignarCargoLocal', () => {
   });
 
   it('otro residente sin cargo no puede designar Tesorero aunque ya haya Gobernador', () => {
-    const { sesion, asentamientoId, fundador } = partidaConAsentamiento();
+    const { sesion, asentamientoId, fundador, vecino } = partidaConAsentamiento();
     sesion.ejecutar(asignarCargoLocal, { asentamientoId, cargo: 'gobernador', jugadorId: fundador }, OPC);
 
     const resultado = verificarAutorizacion(
       'asignarCargoLocal',
       { asentamientoId, cargo: 'tesorero', jugadorId: fundador },
       sesion.getState(),
-      jugador(segundoFundador(sesion))
+      jugador(vecino)
     );
     expect(resultado).toEqual(POR_DOMINIO);
   });
@@ -165,8 +196,7 @@ describe('asignarCargoLocal', () => {
 
 describe('el cargo local se comprueba sobre el titular, no sobre si el puesto está cubierto', () => {
   it('calibrarReservaManual: el Tesorero sí, otro residente no, aunque el cargo esté ocupado', () => {
-    const { sesion, asentamientoId, fundador } = partidaConAsentamiento();
-    const otro = segundoFundador(sesion);
+    const { sesion, asentamientoId, fundador, vecino: otro } = partidaConAsentamiento();
     sesion.ejecutar(asignarCargoLocal, { asentamientoId, cargo: 'gobernador', jugadorId: fundador }, OPC);
     sesion.ejecutar(asignarCargoLocal, { asentamientoId, cargo: 'tesorero', jugadorId: fundador }, OPC);
     const params = { asentamientoId, recurso: 'trigo' as const, valor: 10 };
@@ -212,12 +242,12 @@ describe('residencia en el asentamiento objetivo', () => {
   });
 
   it('reclutarTropa rechaza reclutar a nombre de otro, aunque ambos residan ahí', () => {
-    const { sesion, asentamientoId, fundador } = partidaConAsentamiento();
+    const { sesion, asentamientoId, fundador, vecino } = partidaConAsentamiento();
     const resultado = verificarAutorizacion(
       'reclutarTropa',
       { asentamientoId, jugadorId: fundador, tropaId: 'x', origen: 'pesants' },
       sesion.getState(),
-      jugador(segundoFundador(sesion))
+      jugador(vecino)
     );
     expect(resultado).toEqual(POR_DOMINIO);
   });

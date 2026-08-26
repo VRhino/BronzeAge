@@ -1,6 +1,5 @@
 import type { Point } from '../../domain/types';
 import { fundarAsentamiento as fundarAsentamientoEngine } from '../../engine/settlement';
-import { FUNDACION } from '../../constants';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito } from './tipos';
 import { comando } from './ayudas';
@@ -16,21 +15,32 @@ export interface PayloadAsentamientoFundado {
 export interface ParamsFundarAsentamiento {
   faccionId: string;
   posicion: Point;
-  numJugadores: number;
 }
 
 /**
- * Funda un asentamiento nuevo para una Facción existente.
+ * Funda un asentamiento nuevo para una Facción existente. El fundador es EL ACTOR: recibe casa y, con ella,
+ * ciudadanía inmediata de la Facción (Doc 1.2/1.3).
  *
- * Autorización (matriz del doc 5, pendiente de implementar en Fase C): rol `jugador`, y la Facción objetivo
- * debe ser la propia del actor.
+ * Autorización (`comandos/autorizacion.ts`): rol `jugador`, y ser ya ciudadano de esa Facción — salvo que no
+ * sea ciudadano de ninguna, porque fundar es una de las dos vías de ENTRAR en una (la otra es `comprarCasa`).
+ *
+ * **Fundación grupal diferida.** El Doc 1.2/1.3 admite hasta 5 fundadores juntos, y el motor lo soporta
+ * (`fundarAsentamiento` de `engine/settlement.ts` recibe una lista). No se expone aquí porque falta lo que la
+ * haría legítima: un mecanismo de CONSENTIMIENTO. Aceptar una lista de cofundadores del cliente permitiría
+ * meter a cualquier jugador en una Facción sin que él lo pidiera —y, como un jugador solo puede pertenecer a
+ * una (Doc 0), dejarlo bloqueado para entrar en la que quería—. Eso es una vía de acoso, no una función.
+ *
+ * Hasta la Fase C2 este comando fabricaba sus fundadores (`jugador-<faccionId>-<n>`) a partir de un
+ * `numJugadores`, herencia de cuando no había identidad real. Con la ciudadanía ya derivada del estado de
+ * juego para autorizar (ver `Membresia` en `acceso/tipos.ts`), esos ids ficticios dejaban al jugador real sin
+ * ninguna forma de hacerse ciudadano: creaba la Facción, fundaba, y la ciudadanía se la quedaban cinco
+ * jugadores que no existían.
+ *
+ * La gobernanza NPC no pasa por aquí: funda con sus propios ids (`npc-<faccionId>-<n>`, ver
+ * `session/npcGobernanza.ts`), que sí son ficticios a propósito porque detrás no hay ninguna persona.
  */
 export const fundarAsentamiento = comando<ParamsFundarAsentamiento, { asentamientoId: string }>((estado, mapa, ctx, params) => {
-  // Los ids de jugador los sigue derivando la capa de partida a partir de la Facción, igual que hacía
-  // `GameStore`. En Fase C esto cambia: los jugadores serán identidades reales (`Jugador`, doc 5) y llegarán
-  // resueltos desde la sesión autenticada, no fabricados aquí.
-  const n = Math.min(FUNDACION.maxJugadoresFundacionGrupal, Math.max(1, params.numJugadores || 1));
-  const jugadoresIds = Array.from({ length: n }, (_, i) => `jugador-${params.faccionId}-${i + 1}`);
+  const jugadoresIds = [ctx.actor];
 
   const resultado = fundarAsentamientoEngine(
     mapa,

@@ -46,7 +46,7 @@ describe('RunnerDePartida — cola serial', () => {
     const r = runner();
     const p1 = r.ejecutar(crearFaccion, { nombre: 'Micenas' });
     // `fundarAsentamiento` con una facción inexistente se rechaza (error de dominio) sin lanzar.
-    const p2 = r.ejecutar(fundarAsentamiento, { faccionId: 'no-existe', posicion: { x: 0, y: 0 }, numJugadores: 1 });
+    const p2 = r.ejecutar(fundarAsentamiento, { faccionId: 'no-existe', posicion: { x: 0, y: 0 } });
     const p3 = r.ejecutar(crearFaccion, { nombre: 'Troya' });
 
     const [r1, r2, r3] = await Promise.all([p1, p2, p3]);
@@ -110,7 +110,7 @@ describe('RunnerDePartida.avanzarTick — bundlea auto-comercio y turno NPC', ()
     const r = runner('g-npc');
     const creada = await r.ejecutar(crearFaccion, { nombre: 'Micenas' });
     const faccionId = creada.datos!.faccionId;
-    await r.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 }, numJugadores: 1 });
+    await r.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 } });
     await r.ejecutar(alternarFaccionNpc, { faccionId, activo: true });
 
     // Antes de este fix, `avanzarTick()` del runner solo aplicaba el tick puro — la primera decisión de

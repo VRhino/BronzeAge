@@ -5,28 +5,39 @@
 import { GameSession } from '../gameSession';
 import { crearFaccion } from '../comandos/crearFaccion';
 import { fundarAsentamiento } from '../comandos/fundarAsentamiento';
+import { comprarCasa } from '../comandos/cargos';
 
 export const MOMENTO = '2026-01-01T00:00:00.000Z';
 export const ACTOR = 'jugador-test';
 export const OPC = { momento: MOMENTO, actor: ACTOR };
 
+/** Segundo residente del asentamiento de la fixture, que entra comprando casa. */
+export const VECINO = 'jugador-vecino';
+
 /**
- * Partida con una Facción y un asentamiento fundado (seed 42, 2 jugadores en `{x:500,y:500}`). Devuelve
- * también el id del primer jugador fundador — es ciudadano de la Facción, requisito del motor para varios
- * cargos (Rey, Gobernador...) — así que la mayoría de los comandos de prueba lo pueden usar directamente sin
- * tener que resolverlo ellos mismos.
+ * Partida con una Facción y un asentamiento fundado (seed 42, en `{x:500,y:500}`).
+ *
+ * El fundador es el ACTOR de `OPC`: desde que `fundarAsentamiento` dejó de fabricar fundadores ficticios
+ * (`jugador-<faccionId>-<n>`), funda quien ejecuta el comando, y con ello se gana casa y ciudadanía. Se
+ * devuelve `fundador` igualmente para no obligar a cada test a resolverlo.
+ *
+ * `vecino` es un SEGUNDO residente que entra por la otra vía que admite el juego: comprar casa (Doc 2.5).
+ * Antes salía de una fundación grupal con jugadores inventados; ahora se gana la residencia como lo haría una
+ * persona. Lo usan los tests que necesitan distinguir "reside aquí" de "manda aquí".
  */
 export function partidaConAsentamiento(gameId = 'test'): {
   sesion: GameSession;
   faccionId: string;
   asentamientoId: string;
   fundador: string;
+  vecino: string;
 } {
   const sesion = GameSession.crear(gameId, { seed: 42 });
   const rf = sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, OPC);
   const faccionId = rf.datos!.faccionId;
-  const ra = sesion.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 }, numJugadores: 2 }, OPC);
+  const ra = sesion.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 } }, OPC);
   const asentamientoId = ra.datos!.asentamientoId;
   const fundador = sesion.getState().asentamientos[0]!.jugadoresFundadoresIds[0]!;
-  return { sesion, faccionId, asentamientoId, fundador };
+  sesion.ejecutar(comprarCasa, { asentamientoId, jugadorId: VECINO }, OPC);
+  return { sesion, faccionId, asentamientoId, fundador, vecino: VECINO };
 }

@@ -76,6 +76,38 @@ function esFaccionPropia(estado: GameSessionState, jugadorId: string, faccionId:
   return faccion === undefined || esCiudadano(faccion, jugadorId);
 }
 
+function sinFaccionTodavia(estado: GameSessionState, jugadorId: string): boolean {
+  return !estado.facciones.some((f) => esCiudadano(f, jugadorId));
+}
+
+/**
+ * Es su Facción, o todavía no tiene ninguna. Lo segundo importa para `comprarCasa`: comprar casa es una de
+ * las dos vías de ENTRAR en una Facción (Doc 2.5) y está abierta a cualquiera —el motor solo exige no ser ya
+ * ciudadano de otra, y el cupo de vivienda la limita—, así que exigir ciudadanía previa la volvería
+ * inalcanzable.
+ */
+function esFaccionPropiaOSinFaccion(estado: GameSessionState, jugadorId: string, faccionId: string): boolean {
+  return sinFaccionTodavia(estado, jugadorId) || esFaccionPropia(estado, jugadorId, faccionId);
+}
+
+/**
+ * Puede fundar para esa Facción: ser ya ciudadano suyo, o —caso de arranque— que la Facción no tenga NINGÚN
+ * ciudadano todavía y el actor no pertenezca a ninguna otra.
+ *
+ * La excepción es estrecha a propósito. Hace falta porque `crearFaccion` deja la Facción con
+ * `ciudadanosIds: []` (`engine/faccion.ts`) y fundar es lo que otorga la primera ciudadanía: sin ella, quien
+ * crea una Facción no podría fundar en ella y la Facción nacería muerta. Pero no puede ser más ancha: fundar
+ * consume el CAP DE FUNDACIÓN de la Facción (limitado por su nivel, Doc 1.7), así que dejar que un
+ * desconocido funde en una Facción ajena sería regalarle una vía para agotarle el cupo. Comprar casa, que sí
+ * está abierta, no consume nada de eso.
+ */
+function puedeFundarEn(estado: GameSessionState, jugadorId: string, faccionId: string): boolean {
+  const faccion = buscarFaccion(estado, faccionId);
+  if (faccion === undefined) return true; // no existe: lo rechaza el comando, no la autorización
+  if (esCiudadano(faccion, jugadorId)) return true;
+  return faccion.ciudadanosIds.length === 0 && sinFaccionTodavia(estado, jugadorId);
+}
+
 /** Ciudadano de la Facción dueña de ese asentamiento. */
 function esFaccionDelAsentamiento(estado: GameSessionState, jugadorId: string, asentamientoId: string): boolean {
   const asentamiento = buscarAsentamiento(estado, asentamientoId);
@@ -102,10 +134,12 @@ function conAutoridadDiplomatica(estado: GameSessionState, jugadorId: string, fa
 }
 
 export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
-  // --- Fundación y expansión: Facción propia ---
+  // --- Fundación y expansión: Facción propia (con el caso de arranque, ver `puedeFundarEn`) ---
+  // El fundador es el propio actor: el comando ya no acepta una lista de fundadores (ver
+  // `fundarAsentamiento.ts`), así que fundar otorga ciudadanía a quien ejecuta, y a nadie más.
   fundarAsentamiento: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => esFaccionPropia(estado, jugadorId, params.faccionId),
+    condicionJugador: (estado, jugadorId, params) => puedeFundarEn(estado, jugadorId, params.faccionId),
   },
   lanzarCaravanaFundacion: {
     rolesPermitidos: ['jugador'],
@@ -167,9 +201,7 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
     condicionJugador: (estado, jugadorId, params) => {
       if (jugadorId !== params.jugadorId) return false;
       const asentamiento = buscarAsentamiento(estado, params.asentamientoId);
-      if (!asentamiento) return true;
-      const sinFaccionTodavia = !estado.facciones.some((f) => esCiudadano(f, jugadorId));
-      return sinFaccionTodavia || esFaccionPropia(estado, jugadorId, asentamiento.faccionId);
+      return asentamiento === undefined || esFaccionPropiaOSinFaccion(estado, jugadorId, asentamiento.faccionId);
     },
   },
 
