@@ -3,7 +3,7 @@
 // (dibujo/color, puramente presentacional). Nunca importa nada de `./engine/*` ni captura errores
 // de dominio: eso es responsabilidad exclusiva de `gameStore`. Los tipos de `./domain/types` se
 // importan solo como `type` para tipar lo que se lee — no acoplan a ninguna lógica.
-import type { Asentamiento, BiomaTipo, CargoTipo, Edificio, EdificioTipo, Faccion, RecursoTipo, RegionId } from '@motor/domain/types';
+import type { Asentamiento, BiomaTipo, CargoTipo, Edificio, Faccion, RegionId } from '@motor/domain/types';
 import { CATALOGOS, crearGameStore, UNITY_EXPORT_DEFAULT, type GameState, type GameStore, type EstadoMejoraEdificio } from './app/gameStore';
 import { draw, drawAsentamiento, drawFiltroFertilidad, drawTerreno, faccionColor, BIOMA_COLOR, BIOMA_COLOR_SIMPLE, RECURSO_COLOR, RECURSOS_EN_MAPA, EDIFICIO_COLOR, FACCION_COLORES, type DrawState } from './ui/canvas';
 
@@ -168,7 +168,7 @@ function efectoPolitica(politica: (typeof CATALOGOS.politicas)[number]): string 
 }
 
 // --- Estado de vista (qué se muestra, no simulación): vive solo aquí, nunca en el store. ---
-let tabActivo: 'acciones' | 'guerra' | 'comercio' | 'asentamientos' | 'facciones' | 'jugadores' | 'politicas' | 'registros' | 'generacionMundo' = 'acciones';
+let tabActivo: 'guerra' | 'comercio' | 'asentamientos' | 'facciones' | 'jugadores' | 'politicas' | 'registros' | 'generacionMundo' = 'asentamientos';
 let comercioDetalleTab: 'acciones' | 'info' = 'acciones';
 let asentamientoSeleccionadoId: string | null = null;
 let asentamientoDetalleTab: 'general' | 'edificios' | 'produccion' | 'militar' = 'general';
@@ -179,9 +179,6 @@ let jugadorSeleccionadoId: string | null = null;
  * dejaba de caber en pantalla — las pestañas Asentamientos/Jugadores filtran a una Facción por combobox. */
 let asentamientosFaccionFiltroId: string | null = null;
 let jugadoresFaccionFiltroId: string | null = null;
-/** Selector de escuadrones propios en Combate (a petición del usuario): chips en vez de ids escritos a mano
- * — se limpia solo al cambiar de Facción/Asentamiento o si un escuadrón deja de existir (ver `actualizarCombateEscuadrones`). */
-const combateEscuadronesSeleccionados = new Set<string>();
 let mostrarFiltroFertilidad = false;
 /** Vista del canvas principal (a petición del usuario): 'mundo' = mapa general de siempre; 'asentamiento' =
  * espacio plano local del asentamiento seleccionado (`asentamientoSeleccionadoId`), donde se ve con detalle la
@@ -209,7 +206,6 @@ app.innerHTML = `
       </div>
     </div>
     <div class="tabs" id="main-tabs">
-      <button class="tab-btn" data-tab="acciones">Acciones</button>
       <button class="tab-btn" data-tab="guerra">Guerra</button>
       <button class="tab-btn" data-tab="comercio">Comercio</button>
       <button class="tab-btn" data-tab="asentamientos">Asentamientos</button>
@@ -220,113 +216,14 @@ app.innerHTML = `
       <button class="tab-btn" data-tab="generacionMundo">Generación de mundo</button>
     </div>
 
-    <div class="tab-panel" id="tab-acciones">
-    <div class="controls-grid">
-      <div class="controls">
-        <h2>Facciones (Doc 0)</h2>
-        <label>Nombre de la nueva Facción <input id="faccion-crear-nombre" type="text" placeholder="Nombre de la Facción" /></label>
-        <button id="faccion-crear-btn">Fundar Facción</button>
-      </div>
-
-      <div class="controls">
-        <h2>Mundo</h2>
-        <label>
-          Facción activa (clic en el mapa funda aquí)
-          <select id="faccion-select"></select>
-        </label>
-      </div>
-
-      <div class="controls">
-        <h2>Caravana de Fundación (Doc 1.8)</h2>
-        <label>Asentamiento de origen (nivel ≥2) <select id="expansion-origen"></select></label>
-        <label><input type="checkbox" id="expansion-modo-clic" /> Elegir destino con clic en el mapa</label>
-        <label>Destino elegido <input id="expansion-destino" type="text" readonly placeholder="clic en el mapa…" /></label>
-        <label>Ciudadanos que fundarán (1-5) <input id="expansion-jugadores" type="number" value="1" min="1" max="5" /></label>
-        <button id="expansion-lanzar-btn">Lanzar Caravana de Fundación</button>
-        <label>Caravana de Fundación en tránsito <select id="expansion-caravana"></select></label>
-        <button id="expansion-desarmar-btn">Desarmar (reembolso íntegro)</button>
-      </div>
-
-      <div class="controls">
-        <h2>Cargos (Doc 2.2)</h2>
-        <label>Facción <select id="cargo-faccion"></select></label>
-        <label>Jugador (ciudadano de la facción) <select id="cargo-jugador"></select></label>
-        <button id="rey-btn">Asignar Rey</button>
-        <button id="embajador-btn">Asignar Embajador</button>
-        <label>Asentamiento <select id="cargo-asentamiento"></select></label>
-        <label>Cargo local <select id="cargo-tipo"></select></label>
-        <button id="cargo-local-btn">Asignar cargo local</button>
-      </div>
-
-      <div class="controls">
-        <h2>Ciudadanía (Doc 2.5)</h2>
-        <label>Asentamiento <select id="casa-asentamiento"></select></label>
-        <label>Jugador (id) <input id="casa-jugador" type="text" placeholder="jugador-nuevo-1" /></label>
-        <button id="casa-btn">Comprar casa</button>
-      </div>
-
-      <div class="controls">
-        <h2>Políticas (Doc 4.4)</h2>
-        <label>Asentamiento <select id="politica-asentamiento"></select></label>
-        <label>Cargo que la activa <select id="politica-cargo"></select></label>
-        <label>Política <select id="politica-id"></select></label>
-        <button id="politica-btn">Activar política</button>
-      </div>
-
-      <div class="controls">
-        <h2>Diplomacia (Doc 2.3/2.4)</h2>
-        <label>Facción A (señora si es vasallaje) <select id="diplo-a"></select></label>
-        <label>Facción B (vasalla si es vasallaje) <select id="diplo-b"></select></label>
-        <label>Tipo <select id="diplo-tipo"><option value="alianza">Alianza</option><option value="vasallaje">Vasallaje</option></select></label>
-        <label>Tributo: recurso <select id="diplo-tributo-recurso"></select></label>
-        <label>Tributo: cantidad/tick <input id="diplo-tributo-cantidad" type="number" value="2" min="0" /></label>
-        <button id="diplo-proponer-btn">Proponer relación</button>
-        <label>Relación activa <select id="diplo-relacion"></select></label>
-        <button id="diplo-romper-btn">Romper (voluntario)</button>
-        <button id="diplo-rebelion-btn">Rebelión de vasallo</button>
-      </div>
-
-      <div class="controls">
-        <h2>Fusión / Anexión (Doc 2.6)</h2>
-        <label>Facción A <select id="fusion-a"></select></label>
-        <label>Facción B <select id="fusion-b"></select></label>
-        <button id="anexion-btn">A anexiona a B</button>
-        <label>Nuevo nombre (fusión) <input id="fusion-nombre" type="text" value="Liga Nueva" /></label>
-        <label>Nuevo Rey (id jugador, fusión) <input id="fusion-rey" type="text" /></label>
-        <button id="fusion-btn">Fusionar en Facción nueva</button>
-      </div>
-
-    </div>
-    </div>
 
     <div class="tab-panel" id="tab-guerra" hidden>
     <div class="controls-grid">
       <div class="controls">
-        <h2>Reclutamiento (Doc 5.7/5.8)</h2>
-        <label>Asentamiento <select id="guerra-asentamiento"></select></label>
-        <label>Jugador (residente de este asentamiento) <select id="reclutar-tropa-jugador"></select></label>
-        <label>Reclutar tropa (Centro Urbano/Barracón/Galería de tiro) <select id="reclutar-tropa"></select></label>
+        <h2>Catálogo de reclutamiento (Doc 5.7/5.8)</h2>
+        <p class="legend-note">Solo consulta — reclutar es del jugador residente, no de administración.</p>
+        <label>Tropa (Centro Urbano/Barracón/Galería de tiro) <select id="reclutar-tropa"></select></label>
         <div class="tropa-info" id="reclutar-tropa-info"></div>
-        <label>Origen <select id="reclutar-tropa-origen"></select></label>
-        <button id="reclutar-tropa-btn">Reclutar tropa</button>
-        <p class="legend-note">Cada escuadrón es del jugador elegido (Doc 2.5) — tope fijo por tropa (ver "Info" arriba); si ya tiene bajas, reclutar repone solo lo que falta hasta el tope.</p>
-        <button id="gran-fundicion-btn">Construir Gran Fundición</button>
-      </div>
-
-      <div class="controls">
-        <h2>Combate (Doc 5.2/5.10)</h2>
-        <label>Facción propia <select id="combate-faccion-select"></select></label>
-        <label>Asentamiento propio <select id="combate-asentamiento-select"></select></label>
-        <label>Escuadrones propios (clic para seleccionar/deseleccionar)</label>
-        <div class="chip-row" id="combate-escuadrones-chips"></div>
-        <label>Asentamiento objetivo/rival <select id="guerra-objetivo"></select></label>
-        <label>Escuadrones del objetivo (solo campo abierto) <input id="guerra-escuadrones-objetivo" type="text" /></label>
-        <button id="asedio-btn">Iniciar asedio</button>
-        <button id="campo-abierto-btn">Combate en campo abierto</button>
-        <label>Caravana a interceptar <select id="guerra-caravana"></select></label>
-        <button id="interceptar-btn">Interceptar caravana</button>
-        <label>Campamento de bandidos a atacar (Doc 1.9) <select id="guerra-campamento"></select></label>
-        <button id="atacar-campamento-btn">Atacar campamento</button>
       </div>
     </div>
 
@@ -338,7 +235,7 @@ app.innerHTML = `
 
     <div class="tab-panel" id="tab-comercio" hidden>
     <div class="commerce-detail-tabs" role="tablist" aria-label="Secciones de comercio">
-      <button type="button" class="commerce-detail-tab active" data-commerce-detail-tab="acciones" role="tab" aria-selected="true">⚒️ Acciones</button>
+      <button type="button" class="commerce-detail-tab active" data-commerce-detail-tab="acciones" role="tab" aria-selected="true">🔍 Detalle</button>
       <button type="button" class="commerce-detail-tab" data-commerce-detail-tab="info" role="tab" aria-selected="false">📈 Información</button>
     </div>
 
@@ -346,45 +243,25 @@ app.innerHTML = `
     <div class="controls-grid commerce-actions-grid">
       <div class="controls trade-barter-card">
         <h2>Trueque (Doc 3.2)</h2>
-        <p class="trade-card-intro">Intercambia recursos entre dos asentamientos mediante caravanas comerciales.</p>
+        <p class="trade-card-intro">Materiales comerciables de cada asentamiento — solo consulta.</p>
         <div class="trade-side trade-side-a">
-          <div class="trade-side-heading"><span>🟦</span><strong>Asentamiento A</strong><small>entrega</small></div>
+          <div class="trade-side-heading"><span>🟦</span><strong>Asentamiento A</strong></div>
         <label>Asentamiento A <select id="trueque-a"></select></label>
         <div class="trade-settlement-info" id="trueque-a-info"></div>
-        <label>Recurso que entrega A <select id="trueque-recurso-a"></select></label>
-        <label>Cantidad de A <input id="trueque-cantidad-a" type="number" value="50" min="1" /></label>
         </div>
         <div class="trade-exchange-mark" aria-hidden="true">⇄</div>
         <div class="trade-side trade-side-b">
-          <div class="trade-side-heading"><span>🟧</span><strong>Asentamiento B</strong><small>entrega</small></div>
+          <div class="trade-side-heading"><span>🟧</span><strong>Asentamiento B</strong></div>
         <label>Asentamiento B <select id="trueque-b"></select></label>
         <div class="trade-settlement-info" id="trueque-b-info"></div>
-        <label>Recurso que entrega B <select id="trueque-recurso-b"></select></label>
-        <label>Cantidad de B <input id="trueque-cantidad-b" type="number" value="50" min="1" /></label>
         </div>
-        <button id="trueque-btn">Proponer trueque</button>
-      </div>
-
-      <div class="controls trade-card trade-market-card">
-        <h2>Orden de Mercado (Doc 3.3)</h2>
-        <p class="trade-card-intro">Publica una orden de compra o venta con precio unitario en oro.</p>
-        <label>Asentamiento <select id="mercado-asentamiento"></select></label>
-        <label>Tipo
-          <select id="mercado-tipo"><option value="venta">Venta</option><option value="compra">Compra</option></select>
-        </label>
-        <label>Recurso <select id="mercado-recurso"></select></label>
-        <label>Cantidad <input id="mercado-cantidad" type="number" value="30" min="1" /></label>
-        <label>Precio unitario (vacío = precio de referencia) <input id="mercado-precio" type="number" min="0" step="0.1" /></label>
-        <button id="mercado-btn">Colocar orden</button>
       </div>
 
       <div class="controls trade-card trade-fleet-card">
         <h2>Flota de Caravanas (Doc 3.2, ampliación de comercio)</h2>
-        <p class="trade-card-intro">Administra la capacidad logÃ­stica y crea caravanas para transportar mercancÃ­as.</p>
+        <p class="trade-card-intro">Capacidad logística de la flota propia — solo consulta.</p>
         <label>Asentamiento <select id="flota-asentamiento"></select></label>
         <div class="tropa-info" id="flota-info"></div>
-        <button id="flota-construir-btn">Construir caravana (50 madera)</button>
-        <p class="legend-note">Requiere Mercado activo y cupo libre. Las caravanas propias no se pueden desmantelar — solo se pierden si las capturan en combate.</p>
       </div>
     </div>
     </div>
@@ -510,70 +387,22 @@ const logEl = document.getElementById('log')!;
 const asentamientosPanelEl = document.getElementById('asentamientos-panel')!;
 const politicaPanelEl = document.getElementById('politica-panel')!;
 const economiaPanelEl = document.getElementById('economia-panel')!;
-const faccionSelect = document.getElementById('faccion-select') as HTMLSelectElement;
-const faccionCrearNombreInput = document.getElementById('faccion-crear-nombre') as HTMLInputElement;
 const seedInput = document.getElementById('seed-input') as HTMLInputElement;
 const regionSelect = document.getElementById('region-select') as HTMLSelectElement;
 
-const expansionOrigenSelect = document.getElementById('expansion-origen') as HTMLSelectElement;
-const expansionModoClicCheckbox = document.getElementById('expansion-modo-clic') as HTMLInputElement;
-const expansionDestinoInput = document.getElementById('expansion-destino') as HTMLInputElement;
-const expansionJugadoresInput = document.getElementById('expansion-jugadores') as HTMLInputElement;
-const expansionCaravanaSelect = document.getElementById('expansion-caravana') as HTMLSelectElement;
-let expansionDestino: { x: number; y: number } | null = null;
-
+// Fase C8: el administrador observa, no interactúa como jugador — los selects de abajo solo alimentan
+// paneles de SOLO CONSULTA (materiales comerciables, estado de flota, catálogo de reclutamiento). Los
+// campos y botones que componían los 27 comandos de rol `jugador` (fundar, comprar casa, diplomacia,
+// órdenes de mercado, combate...) se retiraron de la interfaz — no le corresponden a un administrador, ver
+// Docs/Arquitectura/5_Contratos_Identidad_Permisos.md "Diferencia entre rol técnico y cargo de juego".
 const truequeASelect = document.getElementById('trueque-a') as HTMLSelectElement;
 const truequeBSelect = document.getElementById('trueque-b') as HTMLSelectElement;
 const truequeAInfoEl = document.getElementById('trueque-a-info')!;
 const truequeBInfoEl = document.getElementById('trueque-b-info')!;
-const truequeRecursoASelect = document.getElementById('trueque-recurso-a') as HTMLSelectElement;
-const truequeRecursoBSelect = document.getElementById('trueque-recurso-b') as HTMLSelectElement;
-const truequeCantidadAInput = document.getElementById('trueque-cantidad-a') as HTMLInputElement;
-const truequeCantidadBInput = document.getElementById('trueque-cantidad-b') as HTMLInputElement;
 
-const mercadoAsentamientoSelect = document.getElementById('mercado-asentamiento') as HTMLSelectElement;
-const mercadoTipoSelect = document.getElementById('mercado-tipo') as HTMLSelectElement;
-const mercadoRecursoSelect = document.getElementById('mercado-recurso') as HTMLSelectElement;
-const mercadoCantidadInput = document.getElementById('mercado-cantidad') as HTMLInputElement;
-const mercadoPrecioInput = document.getElementById('mercado-precio') as HTMLInputElement;
-
-const cargoFaccionSelect = document.getElementById('cargo-faccion') as HTMLSelectElement;
-const cargoJugadorSelect = document.getElementById('cargo-jugador') as HTMLSelectElement;
-const cargoAsentamientoSelect = document.getElementById('cargo-asentamiento') as HTMLSelectElement;
-const cargoTipoSelect = document.getElementById('cargo-tipo') as HTMLSelectElement;
-
-const casaAsentamientoSelect = document.getElementById('casa-asentamiento') as HTMLSelectElement;
-const casaJugadorInput = document.getElementById('casa-jugador') as HTMLInputElement;
-
-const politicaAsentamientoSelect = document.getElementById('politica-asentamiento') as HTMLSelectElement;
-const politicaCargoSelect = document.getElementById('politica-cargo') as HTMLSelectElement;
-const politicaIdSelect = document.getElementById('politica-id') as HTMLSelectElement;
-
-const diploASelect = document.getElementById('diplo-a') as HTMLSelectElement;
-const diploBSelect = document.getElementById('diplo-b') as HTMLSelectElement;
-const diploTipoSelect = document.getElementById('diplo-tipo') as HTMLSelectElement;
-const diploTributoRecursoSelect = document.getElementById('diplo-tributo-recurso') as HTMLSelectElement;
-const diploTributoCantidadInput = document.getElementById('diplo-tributo-cantidad') as HTMLInputElement;
-const diploRelacionSelect = document.getElementById('diplo-relacion') as HTMLSelectElement;
-
-const fusionASelect = document.getElementById('fusion-a') as HTMLSelectElement;
-const fusionBSelect = document.getElementById('fusion-b') as HTMLSelectElement;
-const fusionNombreInput = document.getElementById('fusion-nombre') as HTMLInputElement;
-const fusionReyInput = document.getElementById('fusion-rey') as HTMLInputElement;
-
-const guerraAsentamientoSelect = document.getElementById('guerra-asentamiento') as HTMLSelectElement;
-const reclutarTropaJugadorSelect = document.getElementById('reclutar-tropa-jugador') as HTMLSelectElement;
 const reclutarTropaSelect = document.getElementById('reclutar-tropa') as HTMLSelectElement;
-const reclutarTropaOrigenSelect = document.getElementById('reclutar-tropa-origen') as HTMLSelectElement;
 const reclutarTropaInfoEl = document.getElementById('reclutar-tropa-info')!;
 const rosterTropasEl = document.getElementById('roster-tropas')!;
-const combateFaccionSelect = document.getElementById('combate-faccion-select') as HTMLSelectElement;
-const combateAsentamientoSelect = document.getElementById('combate-asentamiento-select') as HTMLSelectElement;
-const combateEscuadronesChipsEl = document.getElementById('combate-escuadrones-chips')!;
-const guerraObjetivoSelect = document.getElementById('guerra-objetivo') as HTMLSelectElement;
-const guerraEscuadronesObjetivoInput = document.getElementById('guerra-escuadrones-objetivo') as HTMLInputElement;
-const guerraCaravanaSelect = document.getElementById('guerra-caravana') as HTMLSelectElement;
-const guerraCampamentoSelect = document.getElementById('guerra-campamento') as HTMLSelectElement;
 const militarPanelEl = document.getElementById('militar-panel')!;
 const flotaAsentamientoSelect = document.getElementById('flota-asentamiento') as HTMLSelectElement;
 const flotaInfoEl = document.getElementById('flota-info')!;
@@ -601,14 +430,6 @@ try {
   throw err;
 }
 
-cargoTipoSelect.innerHTML = CATALOGOS.cargos.map((c) => `<option value="${c}">${c}</option>`).join('');
-politicaCargoSelect.innerHTML = CATALOGOS.cargos.map((c) => `<option value="${c}">${c}</option>`).join('');
-politicaIdSelect.innerHTML = CATALOGOS.politicas.map((p) => `<option value="${p.id}">${p.nombre} (${p.cargo})</option>`).join('');
-diploTributoRecursoSelect.innerHTML = CATALOGOS.recursosTrueque.map((r) => `<option value="${r}">${r}</option>`).join('');
-truequeRecursoASelect.innerHTML = CATALOGOS.recursosTrueque.map((r) => `<option value="${r}">${r}</option>`).join('');
-truequeRecursoBSelect.innerHTML = CATALOGOS.recursosTrueque.map((r) => `<option value="${r}">${r}</option>`).join('');
-mercadoRecursoSelect.innerHTML = CATALOGOS.recursosMercado.map((r) => `<option value="${r}">${r}</option>`).join('');
-reclutarTropaOrigenSelect.innerHTML = CATALOGOS.origenesTropa.map((o) => `<option value="${o}">${o}</option>`).join('');
 reclutarTropaSelect.innerHTML = CATALOGOS.tropasReclutables
   .map((t) => {
     const costoTxt = Object.entries(t.costoEquipo)
@@ -642,36 +463,26 @@ function costoTropaTxt(tropa: (typeof CATALOGOS.tropasReclutables)[number], porS
     .join(' + ');
 }
 
-/** Segmento "Info:" bajo el combo de reclutamiento (a petición del usuario): toda la info de la tropa
- * seleccionada — edificio/nivel exigido, tamaño fijo del escuadrón, costo por soldado y total, poder base.
- * Depende también del Jugador elegido (Doc 2.5): si ya tiene el escuadrón por debajo del tope, muestra cuánto
- * falta y el costo de reponer solo eso, en vez del costo de un escuadrón completo desde cero. */
-function actualizarInfoTropa(state: GameState): void {
+/** Segmento "Info:" bajo el combo de reclutamiento — catálogo de solo consulta (Fase C8): edificio/nivel
+ * exigido, tamaño fijo del escuadrón, costo por soldado y total, poder base. Reclutar de verdad (con
+ * jugador y asentamiento reales) sigue siendo un comando de jugador, no algo que esta consola ejecute. */
+function actualizarInfoTropa(): void {
   const tropa = CATALOGOS.tropasReclutables.find((t) => t.id === reclutarTropaSelect.value);
   if (!tropa) {
     reclutarTropaInfoEl.innerHTML = '';
     return;
   }
-  const asentamiento = state.asentamientos.find((a) => a.id === guerraAsentamientoSelect.value);
-  const existente = asentamiento?.escuadrones.find((e) => e.jugadorId === reclutarTropaJugadorSelect.value && e.tropaId === tropa.id);
-  const faltante = tropa.unidadesPorDefecto - (existente?.cantidad ?? 0);
-  const filaCantidad =
-    existente && faltante > 0
-      ? `<div class="kv-row"><span>Escuadrón actual</span><span>${existente.cantidad}/${tropa.unidadesPorDefecto} — repone ${faltante}</span></div>`
-      : `<div class="kv-row"><span>Unidades por escuadrón</span><span>${tropa.unidadesPorDefecto} (tamaño fijo, no elegible)</span></div>`;
   reclutarTropaInfoEl.innerHTML = `
     <div class="kv-row"><span>Info:</span><span>${tropa.nombre}</span></div>
     <div class="kv-row"><span>Edificio requerido</span><span>${edificioRequeridoTxt(tropa)}</span></div>
-    ${filaCantidad}
+    <div class="kv-row"><span>Unidades por escuadrón</span><span>${tropa.unidadesPorDefecto} (tamaño fijo)</span></div>
     <div class="kv-row"><span>Costo por soldado</span><span>${costoTropaTxt(tropa, true)}</span></div>
-    <div class="kv-row"><span>Costo de este reclutamiento</span><span>${faltante > 0 ? costoTropaTxt({ ...tropa, unidadesPorDefecto: faltante }, false) : '— (al tope)'}</span></div>
+    <div class="kv-row"><span>Costo del escuadrón completo</span><span>${costoTropaTxt(tropa, false)}</span></div>
     <div class="kv-row"><span>Poder base (por soldado)</span><span>${tropa.poderBase}</span></div>
   `;
 }
-reclutarTropaSelect.addEventListener('change', () => actualizarInfoTropa(gameStore.getState()));
-reclutarTropaJugadorSelect.addEventListener('change', () => actualizarInfoTropa(gameStore.getState()));
-guerraAsentamientoSelect.addEventListener('change', () => actualizarInfoTropa(gameStore.getState()));
-actualizarInfoTropa(gameStore.getState());
+reclutarTropaSelect.addEventListener('change', actualizarInfoTropa);
+actualizarInfoTropa();
 
 /** Info de flota (ampliación de comercio, pestaña Acciones): mercado activo, cupo y cuántas caravanas propias
  * hay disponibles/en tránsito. Se refresca al cambiar de asentamiento y en cada `render()` (los conteos
@@ -714,40 +525,6 @@ function actualizarInfoTruequeAsentamientos(state: GameState): void {
 truequeASelect.addEventListener('change', () => actualizarInfoTruequeAsentamientos(gameStore.getState()));
 truequeBSelect.addEventListener('change', () => actualizarInfoTruequeAsentamientos(gameStore.getState()));
 
-/** Desglose de costo de un edificio del catálogo (para el segmento "Info:" del selector de "añadir a la cola"). */
-function costoEdificioTxt(entrada: (typeof CATALOGOS.catalogoEdificios)[number]): string {
-  const entradas = Object.entries(entrada.costo);
-  if (entradas.length === 0) return '—';
-  return entradas.map(([r, c]) => `${c} ${RECURSO_NOMBRE[r] ?? r}`).join(' + ');
-}
-
-/** Segmento "Info:" bajo el selector de "añadir a la cola" (Doc 4.2, a petición del usuario) — mismo patrón
- * que `actualizarInfoTropa`: costo de construcción, tiempo y gates de nivel antes de confirmar. El selector
- * se regenera en cada `renderAsentamientosTab` (vive dentro del detalle del asentamiento), así que esta
- * función se llama/recablea ahí, a diferencia de `actualizarInfoTropa` (selector estático, cableado una vez). */
-function actualizarInfoEdificioCola(): void {
-  const select = document.getElementById('cola-tipo-select') as HTMLSelectElement | null;
-  const info = document.getElementById('cola-tipo-info');
-  if (!select || !info) return;
-  const entrada = CATALOGOS.catalogoEdificios.find((e) => e.tipo === select.value);
-  if (!entrada) {
-    info.innerHTML = '';
-    return;
-  }
-  const gatesTxt = [
-    entrada.requisitoNivelAsentamiento > 0 ? `nivel de asentamiento ${entrada.requisitoNivelAsentamiento}` : null,
-    entrada.requisitoNivelFaccion > 0 ? `nivel de Facción ${entrada.requisitoNivelFaccion}` : null,
-  ]
-    .filter((s): s is string => s !== null)
-    .join(', ');
-  info.innerHTML = `
-    <div class="kv-row"><span>Info:</span><span>${EDIFICIO_NOMBRE[entrada.tipo] ?? entrada.tipo}</span></div>
-    <div class="kv-row"><span>Costo de construcción</span><span>${costoEdificioTxt(entrada)}</span></div>
-    <div class="kv-row"><span>Tiempo de construcción</span><span>${entrada.tiempoConstruccionTicks} ticks</span></div>
-    ${gatesTxt ? `<div class="kv-row"><span>Requisitos</span><span>${gatesTxt}</span></div>` : ''}
-  `;
-}
-
 /** Secciones del roster completo (Doc 5.8), agrupadas por edificio de reclutamiento — la pestaña Guerra las
  * muestra siempre visibles, a diferencia del segmento "Info:" que solo detalla la tropa seleccionada. */
 const ROSTER_SECCIONES: { edificio: 'centroUrbano' | 'barracon' | 'galeriaDeTiro'; titulo: string }[] = [
@@ -783,186 +560,13 @@ function etiquetaAsentamiento(a: Asentamiento, facciones: Faccion[]): string {
   return `${a.nombre ?? a.id} (${nombreFaccion})`;
 }
 
-/** El combo "Jugador" de Cargos solo ofrece ciudadanos de la Facción elegida en el combo de al lado. */
-function actualizarCargoJugadorSelect(state: GameState): void {
-  const faccion = state.facciones.find((f) => f.id === cargoFaccionSelect.value);
-  const ciudadanos = faccion?.ciudadanosIds ?? [];
-  const seleccionPrevia = cargoJugadorSelect.value;
-  cargoJugadorSelect.innerHTML = ciudadanos.length
-    ? ciudadanos.map((id) => `<option value="${id}">${id}</option>`).join('')
-    : '<option value="">Sin ciudadanos en esta facción</option>';
-  if (ciudadanos.includes(seleccionPrevia)) cargoJugadorSelect.value = seleccionPrevia;
-}
-
-/** El combo "Jugador" de Reclutamiento solo ofrece residentes (fundadores o casa comprada, Doc 2.5) del
- * asentamiento elegido en el combo de al lado — reclutar es beneficio de residencia, no de cargo. */
-function actualizarReclutamientoJugadorSelect(): void {
-  const residentes = gameStore.jugadoresDeAsentamiento(guerraAsentamientoSelect.value);
-  const seleccionPrevia = reclutarTropaJugadorSelect.value;
-  reclutarTropaJugadorSelect.innerHTML = residentes.length
-    ? residentes.map((id) => `<option value="${id}">${id}</option>`).join('')
-    : '<option value="">Sin residentes en este asentamiento</option>';
-  if (residentes.includes(seleccionPrevia)) reclutarTropaJugadorSelect.value = seleccionPrevia;
-}
-guerraAsentamientoSelect.addEventListener('change', actualizarReclutamientoJugadorSelect);
-
-cargoFaccionSelect.addEventListener('change', () => actualizarCargoJugadorSelect(gameStore.getState()));
-
-/** Selector de escuadrones propios en Combate (a petición del usuario): cascada Facción → Asentamiento →
- * escuadrones agrupados por Jugador (Doc 2.5 — cada escuadrón es de UN jugador, ver `Escuadron.jugadorId`),
- * con chips seleccionables debajo de cada uno, en vez de escribir ids de escuadrón a mano. El objetivo es que
- * la selección de chips represente "qué jugadores se unen al combate y con cuál tropa cada uno": marcar 1+
- * chips bajo el jugador A y 1+ bajo el jugador B ya es "A y B se unen, cada uno con sus tropas elegidas". El
- * asentamiento solo ofrece los de la Facción elegida (mismo patrón que `actualizarCargoJugadorSelect`); los
- * chips seleccionados llevan borde verde, el resto borde blanco. La selección se limpia sola si el escuadrón
- * deja de existir (aniquilado, o cambia la Facción/Asentamiento elegido). */
-function actualizarCombateEscuadrones(state: GameState): void {
-  const asentamientosDeFaccion = state.asentamientos.filter((a) => a.faccionId === combateFaccionSelect.value);
-
-  const seleccionAsentamientoPrevia = combateAsentamientoSelect.value;
-  combateAsentamientoSelect.innerHTML = asentamientosDeFaccion.length
-    ? asentamientosDeFaccion.map((a) => `<option value="${a.id}">${a.id}</option>`).join('')
-    : '<option value="">Sin asentamientos en esta Facción</option>';
-  if (asentamientosDeFaccion.some((a) => a.id === seleccionAsentamientoPrevia)) {
-    combateAsentamientoSelect.value = seleccionAsentamientoPrevia;
-  }
-
-  const asentamiento = asentamientosDeFaccion.find((a) => a.id === combateAsentamientoSelect.value);
-  const escuadrones = asentamiento?.escuadrones.filter((e) => e.cantidad > 0) ?? [];
-  for (const id of combateEscuadronesSeleccionados) {
-    if (!escuadrones.some((e) => e.id === id)) combateEscuadronesSeleccionados.delete(id);
-  }
-
-  const porJugador = new Map<string, typeof escuadrones>();
-  for (const e of escuadrones) {
-    const grupo = porJugador.get(e.jugadorId) ?? [];
-    grupo.push(e);
-    porJugador.set(e.jugadorId, grupo);
-  }
-
-  combateEscuadronesChipsEl.innerHTML = porJugador.size
-    ? [...porJugador.entries()]
-        .map(([jugadorId, escuadronesDeJugador]) => {
-          const chips = escuadronesDeJugador
-            .map((e) => {
-              const nombreTropa = CATALOGOS.tropasReclutables.find((t) => t.id === e.tropaId)?.nombre ?? e.nombre;
-              const seleccionado = combateEscuadronesSeleccionados.has(e.id) ? ' selected' : '';
-              return `<button type="button" class="chip-escuadron${seleccionado}" data-escuadron="${e.id}">${nombreTropa} (${e.cantidad})</button>`;
-            })
-            .join('');
-          return `
-            <div class="combate-jugador-grupo">
-              <div class="combate-jugador-nombre">${jugadorId}</div>
-              <div class="chip-row">${chips}</div>
-            </div>`;
-        })
-        .join('')
-    : '<p class="legend-note">Sin escuadrones en este asentamiento.</p>';
-
-  combateEscuadronesChipsEl.querySelectorAll('.chip-escuadron').forEach((chip) => {
-    chip.addEventListener('click', () => {
-      const id = (chip as HTMLElement).dataset.escuadron!;
-      if (combateEscuadronesSeleccionados.has(id)) combateEscuadronesSeleccionados.delete(id);
-      else combateEscuadronesSeleccionados.add(id);
-      render();
-    });
-  });
-}
-
-combateFaccionSelect.addEventListener('change', () => {
-  combateEscuadronesSeleccionados.clear();
-  actualizarCombateEscuadrones(gameStore.getState());
-});
-combateAsentamientoSelect.addEventListener('change', () => {
-  combateEscuadronesSeleccionados.clear();
-  actualizarCombateEscuadrones(gameStore.getState());
-});
-
-/** CSV de los escuadrones marcados en los chips de Combate (Doc 5.2/5.10) — mismo formato que las acciones
- * `gameStore.*` ya esperaban del antiguo input de texto libre. */
-function idsDeChipsCombate(): string {
-  return [...combateEscuadronesSeleccionados].join(',');
-}
-
 function actualizarSelects(state: GameState): void {
   const opcionesAsentamientos = state.asentamientos.map((a) => `<option value="${a.id}">${etiquetaAsentamiento(a, state.facciones)}</option>`).join('');
-  for (const select of [
-    truequeASelect,
-    truequeBSelect,
-    mercadoAsentamientoSelect,
-    cargoAsentamientoSelect,
-    casaAsentamientoSelect,
-    politicaAsentamientoSelect,
-    guerraAsentamientoSelect,
-    guerraObjetivoSelect,
-    flotaAsentamientoSelect,
-  ]) {
+  for (const select of [truequeASelect, truequeBSelect, flotaAsentamientoSelect]) {
     const seleccionPrevia = select.value;
     select.innerHTML = opcionesAsentamientos;
     if (state.asentamientos.some((a) => a.id === seleccionPrevia)) select.value = seleccionPrevia;
   }
-
-  const opcionesCaravanas = state.caravanas
-    .map((c) => {
-      const destinoTxt = c.destinoPosicion ? `(${Math.round(c.destinoPosicion.x)}, ${Math.round(c.destinoPosicion.y)})` : c.destinoAsentamientoId;
-      return `<option value="${c.id}">${c.id} (${c.origenAsentamientoId} → ${destinoTxt})</option>`;
-    })
-    .join('');
-  const caravanaPrevia = guerraCaravanaSelect.value;
-  guerraCaravanaSelect.innerHTML = opcionesCaravanas;
-  if (state.caravanas.some((c) => c.id === caravanaPrevia)) guerraCaravanaSelect.value = caravanaPrevia;
-
-  const opcionesCampamentos = state.campamentosBandidos
-    .map((c) => `<option value="${c.id}">${c.id} (${Math.round(c.posicion.x)}, ${Math.round(c.posicion.y)}) · poder ${c.poder}</option>`)
-    .join('');
-  const campamentoPrevio = guerraCampamentoSelect.value;
-  guerraCampamentoSelect.innerHTML = opcionesCampamentos || '<option value="">Ningún campamento activo</option>';
-  if (state.campamentosBandidos.some((c) => c.id === campamentoPrevio)) guerraCampamentoSelect.value = campamentoPrevio;
-
-  const opcionesAsentamientosNivel2 = state.asentamientos
-    .filter((a) => a.nivel >= 2)
-    .map((a) => `<option value="${a.id}">${etiquetaAsentamiento(a, state.facciones)} (nivel ${a.nivel})</option>`)
-    .join('');
-  const origenPrevio = expansionOrigenSelect.value;
-  expansionOrigenSelect.innerHTML = opcionesAsentamientosNivel2 || '<option value="">Ningún asentamiento en nivel ≥2</option>';
-  if (state.asentamientos.some((a) => a.id === origenPrevio && a.nivel >= 2)) expansionOrigenSelect.value = origenPrevio;
-
-  const caravanasFundacion = state.caravanas.filter((c) => c.tipo === 'construccion' && c.destinoPosicion);
-  const opcionesCaravanasFundacion = caravanasFundacion
-    .map((c) => `<option value="${c.id}">${c.id} (${c.origenAsentamientoId} → (${Math.round(c.destinoPosicion!.x)}, ${Math.round(c.destinoPosicion!.y)}))</option>`)
-    .join('');
-  const caravanaFundacionPrevia = expansionCaravanaSelect.value;
-  expansionCaravanaSelect.innerHTML = opcionesCaravanasFundacion || '<option value="">Ninguna en tránsito</option>';
-  if (caravanasFundacion.some((c) => c.id === caravanaFundacionPrevia)) expansionCaravanaSelect.value = caravanaFundacionPrevia;
-
-  const opcionesFacciones = state.facciones.map((f) => `<option value="${f.id}">${f.nombre}</option>`).join('');
-  for (const select of [cargoFaccionSelect, diploASelect, diploBSelect, fusionASelect, fusionBSelect, combateFaccionSelect]) {
-    const seleccionPrevia = select.value;
-    select.innerHTML = opcionesFacciones;
-    if (state.facciones.some((f) => f.id === seleccionPrevia)) select.value = seleccionPrevia;
-  }
-
-  actualizarCargoJugadorSelect(state);
-  actualizarReclutamientoJugadorSelect();
-  actualizarInfoTropa(state);
-  actualizarCombateEscuadrones(state);
-
-  const seleccionPreviaFaccionActiva = faccionSelect.value;
-  faccionSelect.innerHTML = state.facciones
-    .map((f) => `<option value="${f.id}" style="color:${faccionColor(f.id, state.facciones)}">${f.nombre}</option>`)
-    .join('');
-  if (state.facciones.some((f) => f.id === seleccionPreviaFaccionActiva)) faccionSelect.value = seleccionPreviaFaccionActiva;
-
-  const relacionesActivas = state.relaciones.filter((r) => r.estado === 'activa');
-  const seleccionPrevia = diploRelacionSelect.value;
-  diploRelacionSelect.innerHTML = relacionesActivas
-    .map((r) => {
-      const a = state.facciones.find((f) => f.id === r.faccionAId)?.nombre ?? r.faccionAId;
-      const b = state.facciones.find((f) => f.id === r.faccionBId)?.nombre ?? r.faccionBId;
-      return `<option value="${r.id}">${r.tipo}: ${a} → ${b}</option>`;
-    })
-    .join('');
-  if (relacionesActivas.some((r) => r.id === seleccionPrevia)) diploRelacionSelect.value = seleccionPrevia;
 }
 
 function renderPanelAsentamientos(state: GameState): void {
@@ -1040,21 +644,15 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
     })
     .join('') || '<p class="legend-note">Almacén vacío.</p>';
 
-  // Reserva manual por recurso (a petición del usuario, ver Asentamiento.reservaManual): tope 0-999 que la
-  // auto-construcción no puede tocar (construcción manual exenta) — solo calibrable con Tesorero asignado,
-  // mismo criterio que exigen las políticas por cargo.
+  // Reserva manual por recurso (ver Asentamiento.reservaManual): tope 0-999 que la auto-construcción no puede
+  // tocar (construcción manual exenta). Fase C8: solo consulta para el administrador — calibrarla es del
+  // Tesorero (jugador), no de la consola de administración.
   const reservaHtml = a.cargos.tesoreroId
-    ? `<div class="reserva-grid">${CATALOGOS.recursosTrueque
-        .map((r) => {
-          const valor = a.reservaManual?.[r] ?? 0;
-          return `<label class="reserva-slider">
-            <span>${RECURSO_NOMBRE[r] ?? r} <span class="reserva-valor" data-recurso-valor="${r}">${valor}</span></span>
-            <input type="range" min="0" max="999" step="1" value="${valor}" class="reserva-input" data-settlement="${a.id}" data-recurso="${r}" />
-          </label>`;
-        })
+    ? `<div class="kv-grid">${CATALOGOS.recursosTrueque
+        .map((r) => `<div class="kv-row"><span>${RECURSO_NOMBRE[r] ?? r}</span><span>${a.reservaManual?.[r] ?? 0}</span></div>`)
         .join('')}</div>
       <p class="legend-note">La auto-construcción nunca gasta por debajo de esta reserva (la construcción manual queda exenta).</p>`
-    : '<p class="legend-note">Requiere un Tesorero asignado para calibrar la reserva.</p>';
+    : '<p class="legend-note">Requiere un Tesorero asignado.</p>';
 
   const cargosHtml = CATALOGOS.cargos
     .map((c) => {
@@ -1107,7 +705,7 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
   }
   const mejorasHtml = mejorasDisponibles.length
     ? `<table class="mini-table">
-        <thead><tr><th>Edificio</th><th>Nivel</th><th>Costo</th><th></th></tr></thead>
+        <thead><tr><th>Edificio</th><th>Nivel</th><th>Costo</th></tr></thead>
         <tbody>
           ${mejorasDisponibles
             .map(({ edificio, info }) => {
@@ -1119,7 +717,6 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
                 <td>${EDIFICIO_NOMBRE[edificio.tipo] ?? edificio.tipo}</td>
                 <td>${info.nivelActual} &rarr; ${info.nivelSiguiente}</td>
                 <td>${costoTxt}</td>
-                <td><button type="button" class="mejora-btn" data-settlement="${a.id}" data-edificio="${edificio.id}" title="${info.elegible ? '' : (info.motivoBloqueo ?? '')}">Mejorar ahora</button></td>
               </tr>`;
             })
             .join('')}
@@ -1340,10 +937,6 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
       <div class="settlement-detail-panel${asentamientoDetalleTab === 'general' ? ' active' : ''}" data-settlement-detail-panel="general" role="tabpanel">
       <div class="detail-section">
         <h3>${a.nombre ?? a.id}${a.nombre ? ` <span class="legend-note" style="font-weight:normal">(${a.id})</span>` : ''}</h3>
-        <div class="kv-row" style="margin-top:2px; margin-bottom:6px; gap:6px; align-items:center;">
-          <input type="text" id="renombrar-asentamiento-input" placeholder="Nuevo nombre…" value="${a.nombre ?? ''}" data-settlement="${a.id}" />
-          <button type="button" id="renombrar-asentamiento-btn" data-settlement="${a.id}">Renombrar</button>
-        </div>
         <div class="kv-grid">
           <div class="kv-row"><span>Facción</span><span>${faccion?.nombre ?? a.faccionId}</span></div>
           <div class="kv-row"><span>Nivel</span><span>${a.nivel}</span></div>
@@ -1418,10 +1011,7 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
       <div class="detail-section">
         <h3>Edificios</h3>
         <div class="kv-row">
-          <span>Auto-construcción: ${a.autoConstruccionPausada ? 'pausada' : 'activa'}</span>
-          <button type="button" class="auto-construccion-toggle-btn" data-settlement="${a.id}">
-            ${a.autoConstruccionPausada ? 'Reanudar' : 'Pausar'}
-          </button>
+          <span>Auto-construcción</span><span>${a.autoConstruccionPausada ? 'pausada' : 'activa'}</span>
         </div>
         <p class="legend-note">
           ${a.autoConstruccionPausada
@@ -1432,47 +1022,25 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
       </div>
 
       <div class="detail-section">
-        <h3>Mejoras de edificios — control manual (Gobernador / Maestro de Obras)</h3>
-        <p class="legend-note">La mejora automática sigue evaluando cada tick; esto solo adelanta la de un edificio elegido. Usa el mismo selector de cargo de la cola, más abajo.</p>
+        <h3>Mejoras de edificios disponibles</h3>
+        <p class="legend-note">La mejora automática evalúa cada edificio activo cada tick — control manual de jugador (Gobernador/Maestro de Obras), no de administración.</p>
         ${mejorasHtml}
       </div>
 
       <div class="detail-section">
-        <h3>Cola de construcción — control manual (Gobernador / Maestro de Obras)</h3>
-        <p class="legend-note">Reordenar, añadir o quitar nunca elige ubicación — eso lo sigue decidiendo el algoritmo de colocación. Quitar solo es posible antes de que arranque la obra, y devuelve el costo completo pagado.</p>
+        <h3>Cola de construcción</h3>
         ${
           colaGlobal.length
             ? `<table class="mini-table">
-                <thead><tr><th>#</th><th>Edificio</th><th>Acciones</th></tr></thead>
+                <thead><tr><th>#</th><th>Edificio</th></tr></thead>
                 <tbody>
                   ${colaGlobal
-                    .map(
-                      (e, i) => `<tr>
-                        <td>${i + 1}</td>
-                        <td>${EDIFICIO_NOMBRE[e.tipo] ?? e.tipo}</td>
-                        <td>
-                          <button type="button" class="cola-mover-btn" data-settlement="${a.id}" data-edificio="${e.id}" data-direccion="arriba" ${i === 0 ? 'disabled' : ''}>&#9650;</button>
-                          <button type="button" class="cola-mover-btn" data-settlement="${a.id}" data-edificio="${e.id}" data-direccion="abajo" ${i === colaGlobal.length - 1 ? 'disabled' : ''}>&#9660;</button>
-                          <button type="button" class="cola-quitar-btn" data-settlement="${a.id}" data-edificio="${e.id}">Quitar</button>
-                        </td>
-                      </tr>`
-                    )
+                    .map((e, i) => `<tr><td>${i + 1}</td><td>${EDIFICIO_NOMBRE[e.tipo] ?? e.tipo}</td></tr>`)
                     .join('')}
                 </tbody>
               </table>`
             : '<p class="legend-note">Cola vacía.</p>'
         }
-        <div class="kv-row" style="margin-top:8px; gap:6px; align-items:center;">
-          <select id="cola-cargo-select">
-            <option value="gobernador">Gobernador</option>
-            <option value="maestroObras">Maestro de Obras</option>
-          </select>
-          <select id="cola-tipo-select">
-            ${CATALOGOS.catalogoEdificios.map((e) => `<option value="${e.tipo}">${EDIFICIO_NOMBRE[e.tipo] ?? e.tipo}</option>`).join('')}
-          </select>
-          <button type="button" id="cola-add-btn" data-settlement="${a.id}">Añadir a la cola</button>
-        </div>
-        <div class="tropa-info" id="cola-tipo-info"></div>
       </div>
 
       </div>
@@ -1586,69 +1154,6 @@ function renderAsentamientosTab(state: GameState): void {
     });
   });
 
-  const renombrarBtn = document.getElementById('renombrar-asentamiento-btn') as HTMLButtonElement | null;
-  const renombrarInput = document.getElementById('renombrar-asentamiento-input') as HTMLInputElement | null;
-  renombrarBtn?.addEventListener('click', async () => {
-    await gameStore.renombrarAsentamiento(renombrarBtn.dataset.settlement!, renombrarInput!.value);
-  });
-  renombrarInput?.addEventListener('keydown', (ev) => {
-    if ((ev as KeyboardEvent).key === 'Enter') renombrarBtn?.click();
-  });
-
-  cont.querySelectorAll<HTMLInputElement>('.reserva-input').forEach((input) => {
-    // Actualiza el número en vivo mientras se arrastra (DOM puro, sin re-render) — confirma en gameStore
-    // solo al soltar ('change'), evitando reconstruir todo el panel en cada paso del slider.
-    input.addEventListener('input', () => {
-      const valorEl = cont.querySelector(`[data-recurso-valor="${input.dataset.recurso}"]`);
-      if (valorEl) valorEl.textContent = input.value;
-    });
-    input.addEventListener('change', async () => {
-      await gameStore.calibrarReservaManual(input.dataset.settlement!, input.dataset.recurso as RecursoTipo, Number(input.value));
-    });
-  });
-
-  cont.querySelectorAll('.auto-construccion-toggle-btn').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const id = (btn as HTMLElement).dataset.settlement!;
-      const asentamiento = state.asentamientos.find((a) => a.id === id)!;
-      if (asentamiento.autoConstruccionPausada) await gameStore.reanudarAutoConstruccion(id);
-      else await gameStore.pausarAutoConstruccion(id);
-    });
-  });
-
-  // Control manual de cola (Doc 4.2, a petición del usuario): el mismo selector de cargo gobierna quién
-  // "actúa" para mover/quitar/añadir en este panel — Gobernador o Maestro de Obras, ver Doc 2.2/4.2.
-  const colaCargoSelect = document.getElementById('cola-cargo-select') as HTMLSelectElement | null;
-  const cargoSeleccionado = (): 'gobernador' | 'maestroObras' => (colaCargoSelect?.value as 'gobernador' | 'maestroObras') ?? 'gobernador';
-
-  cont.querySelectorAll('.cola-mover-btn').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const el = btn as HTMLButtonElement;
-      await gameStore.moverEnCola(el.dataset.settlement!, cargoSeleccionado(), el.dataset.edificio!, el.dataset.direccion as 'arriba' | 'abajo');
-    });
-  });
-
-  cont.querySelectorAll('.cola-quitar-btn').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const el = btn as HTMLButtonElement;
-      await gameStore.quitarDeCola(el.dataset.settlement!, cargoSeleccionado(), el.dataset.edificio!);
-    });
-  });
-
-  cont.querySelectorAll('.mejora-btn').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const el = btn as HTMLButtonElement;
-      await gameStore.mejorarEdificioAhora(el.dataset.settlement!, cargoSeleccionado(), el.dataset.edificio!);
-    });
-  });
-
-  const colaAddBtn = document.getElementById('cola-add-btn') as HTMLButtonElement | null;
-  const colaTipoSelect = document.getElementById('cola-tipo-select') as HTMLSelectElement | null;
-  colaAddBtn?.addEventListener('click', async () => {
-    await gameStore.anadirEdificioManualmente(colaAddBtn.dataset.settlement!, cargoSeleccionado(), colaTipoSelect!.value as EdificioTipo);
-  });
-  colaTipoSelect?.addEventListener('change', actualizarInfoEdificioCola);
-  actualizarInfoEdificioCola();
 }
 
 function renderDetalleFaccion(faccion: Faccion, state: GameState): string {
@@ -2214,7 +1719,6 @@ function actualizarTabs(): void {
   document.querySelectorAll<HTMLButtonElement>('#main-tabs .tab-btn').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.tab === tabActivo);
   });
-  document.getElementById('tab-acciones')!.hidden = tabActivo !== 'acciones';
   document.getElementById('tab-guerra')!.hidden = tabActivo !== 'guerra';
   if (tabActivo === 'guerra') renderRosterTropas();
   document.getElementById('tab-comercio')!.hidden = tabActivo !== 'comercio';
@@ -2230,7 +1734,7 @@ function actualizarTabs(): void {
 document.getElementById('main-tabs')!.addEventListener('click', (ev) => {
   const btn = (ev.target as HTMLElement).closest('.tab-btn') as HTMLButtonElement | null;
   if (!btn) return;
-  tabActivo = btn.dataset.tab as 'acciones' | 'guerra' | 'comercio' | 'asentamientos' | 'facciones' | 'jugadores' | 'politicas' | 'registros' | 'generacionMundo';
+  tabActivo = btn.dataset.tab as 'guerra' | 'comercio' | 'asentamientos' | 'facciones' | 'jugadores' | 'politicas' | 'registros' | 'generacionMundo';
   actualizarTabs();
 });
 
@@ -2386,10 +1890,6 @@ function render(): void {
 // vuelve a llamar `render()` manualmente tras una acción — eso sería recrear el acoplamiento.
 gameStore.subscribe(render);
 
-function idsDeInput(input: HTMLInputElement): string {
-  return input.value;
-}
-
 function ocultarTooltipEdificioAsentamiento(): void {
   settlementBuildingTooltipEl.hidden = true;
 }
@@ -2455,146 +1955,6 @@ canvas.addEventListener('mousemove', (ev) => {
 
 canvas.addEventListener('mouseleave', () => {
   if (vistaMapa === 'asentamiento') ocultarTooltipEdificioAsentamiento();
-});
-
-canvas.addEventListener('click', async (ev) => {
-  if (vistaMapa === 'asentamiento') return; // fundar/seleccionar destino solo tiene sentido en el mapa general.
-  const state = gameStore.getState();
-  const rect = canvas.getBoundingClientRect();
-  const scale = gameStore.getMapa(state).limites.ancho / canvas.width;
-  const worldX = (ev.clientX - rect.left) * scale;
-  const worldY = (ev.clientY - rect.top) * scale;
-  if (expansionModoClicCheckbox.checked) {
-    expansionDestino = { x: worldX, y: worldY };
-    expansionDestinoInput.value = `(${Math.round(worldX)}, ${Math.round(worldY)})`;
-    return;
-  }
-  await gameStore.fundarAsentamiento(faccionSelect.value, { x: worldX, y: worldY });
-});
-
-document.getElementById('expansion-lanzar-btn')!.addEventListener('click', async () => {
-  if (!expansionDestino) return;
-  await gameStore.lanzarCaravanaFundacion(expansionOrigenSelect.value, expansionDestino, Number(expansionJugadoresInput.value) || 1);
-  expansionDestino = null;
-  expansionDestinoInput.value = '';
-  expansionModoClicCheckbox.checked = false;
-});
-
-document.getElementById('expansion-desarmar-btn')!.addEventListener('click', async () => {
-  await gameStore.desarmarCaravanaFundacion(expansionCaravanaSelect.value);
-});
-
-document.getElementById('rey-btn')!.addEventListener('click', async () => {
-  await gameStore.asignarRey(cargoFaccionSelect.value, cargoJugadorSelect.value);
-});
-
-document.getElementById('embajador-btn')!.addEventListener('click', async () => {
-  await gameStore.asignarEmbajador(cargoFaccionSelect.value, cargoJugadorSelect.value);
-});
-
-document.getElementById('cargo-local-btn')!.addEventListener('click', async () => {
-  await gameStore.asignarCargoLocal(cargoAsentamientoSelect.value, cargoTipoSelect.value as CargoTipo, cargoJugadorSelect.value);
-});
-
-document.getElementById('casa-btn')!.addEventListener('click', async () => {
-  await gameStore.comprarCasa(casaAsentamientoSelect.value, casaJugadorInput.value.trim());
-});
-
-document.getElementById('politica-btn')!.addEventListener('click', async () => {
-  await gameStore.activarPolitica(politicaAsentamientoSelect.value, politicaCargoSelect.value as CargoTipo, politicaIdSelect.value);
-});
-
-document.getElementById('diplo-proponer-btn')!.addEventListener('click', async () => {
-  await gameStore.proponerRelacion(
-    diploTipoSelect.value as 'vasallaje' | 'alianza',
-    diploASelect.value,
-    diploBSelect.value,
-    diploTributoRecursoSelect.value,
-    Number(diploTributoCantidadInput.value) || 0
-  );
-});
-
-document.getElementById('diplo-romper-btn')!.addEventListener('click', async () => {
-  await gameStore.romperRelacion(diploRelacionSelect.value, diploASelect.value);
-});
-
-document.getElementById('diplo-rebelion-btn')!.addEventListener('click', async () => {
-  await gameStore.rebelionVasallo(diploRelacionSelect.value);
-});
-
-document.getElementById('faccion-crear-btn')!.addEventListener('click', async () => {
-  await gameStore.crearFaccion(faccionCrearNombreInput.value.trim());
-  faccionCrearNombreInput.value = '';
-});
-
-document.getElementById('anexion-btn')!.addEventListener('click', async () => {
-  await gameStore.anexionar(fusionASelect.value, fusionBSelect.value);
-});
-
-document.getElementById('fusion-btn')!.addEventListener('click', async () => {
-  await gameStore.fusionar(fusionASelect.value, fusionBSelect.value, fusionNombreInput.value.trim(), fusionReyInput.value.trim());
-});
-
-document.getElementById('trueque-btn')!.addEventListener('click', async () => {
-  await gameStore.proponerTrueque(
-    truequeASelect.value,
-    truequeRecursoASelect.value,
-    Number(truequeCantidadAInput.value) || 0,
-    truequeBSelect.value,
-    truequeRecursoBSelect.value,
-    Number(truequeCantidadBInput.value) || 0
-  );
-});
-
-document.getElementById('mercado-btn')!.addEventListener('click', async () => {
-  const precio = mercadoPrecioInput.value.trim() === '' ? undefined : Number(mercadoPrecioInput.value);
-  await gameStore.colocarOrdenMercado(
-    mercadoAsentamientoSelect.value,
-    mercadoTipoSelect.value as 'compra' | 'venta',
-    mercadoRecursoSelect.value,
-    Number(mercadoCantidadInput.value) || 0,
-    precio
-  );
-});
-
-document.getElementById('flota-construir-btn')!.addEventListener('click', async () => {
-  await gameStore.crearCaravana(flotaAsentamientoSelect.value);
-});
-
-document.getElementById('reclutar-tropa-btn')!.addEventListener('click', async () => {
-  await gameStore.reclutarTropa(
-    guerraAsentamientoSelect.value,
-    reclutarTropaJugadorSelect.value,
-    reclutarTropaSelect.value,
-    reclutarTropaOrigenSelect.value as 'pesants' | 'artesanos'
-  );
-});
-
-document.getElementById('gran-fundicion-btn')!.addEventListener('click', async () => {
-  // Consolidada en el control manual de cola (Doc 4.2, a petición del usuario) — Gran Fundición ya no tiene
-  // su propio camino especial, pasa por el mismo `anadirEdificioManualmente` que cualquier otro edificio.
-  await gameStore.anadirEdificioManualmente(guerraAsentamientoSelect.value, 'gobernador', 'granFundicion');
-});
-
-document.getElementById('asedio-btn')!.addEventListener('click', async () => {
-  await gameStore.iniciarAsedio(combateAsentamientoSelect.value, guerraObjetivoSelect.value, idsDeChipsCombate());
-});
-
-document.getElementById('campo-abierto-btn')!.addEventListener('click', async () => {
-  await gameStore.combateCampoAbierto(
-    combateAsentamientoSelect.value,
-    idsDeChipsCombate(),
-    guerraObjetivoSelect.value,
-    idsDeInput(guerraEscuadronesObjetivoInput)
-  );
-});
-
-document.getElementById('interceptar-btn')!.addEventListener('click', async () => {
-  await gameStore.interceptarCaravana(combateAsentamientoSelect.value, idsDeChipsCombate(), guerraCaravanaSelect.value);
-});
-
-document.getElementById('atacar-campamento-btn')!.addEventListener('click', async () => {
-  await gameStore.atacarCampamentoBandidos(combateAsentamientoSelect.value, idsDeChipsCombate(), guerraCampamentoSelect.value);
 });
 
 document.getElementById('tick-btn')!.addEventListener('click', async () => {

@@ -614,6 +614,42 @@ Se deja fuera de esta pasada, a propósito, por dos razones:
 Queda anotado como pendiente explícito de C11, no como "hecho": lo mismo que costó una premisa falsa en C0
 —dar algo por resuelto porque una parte relacionada lo está— no se repite aquí a propósito.
 
+### C8. El administrador observa, no interactúa — interfaz corregida, autorización sin resolver (2026-08-26)
+
+Corrección de rumbo del usuario sobre el planteamiento original de C8: la pregunta no era "¿cómo le damos al
+administrador permiso de jugador?", era "¿qué hace de verdad un administrador?". La respuesta ya estaba en
+[5_Contratos_Identidad_Permisos.md §"Matriz de autorización por comando"](5_Contratos_Identidad_Permisos.md)
+(escrita el 2026-08-25, **antes** de implementar nada): de 30 comandos, solo `alternarFaccionNpc` admite rol
+técnico. Los 27 restantes — fundar, comprar casa, diplomacia, comercio, combate — son `jugador`, sin
+excepción. El 403 nunca fue un bug: era la interfaz de depuración ofreciendo, desde antes de C3, botones para
+27 acciones que un administrador nunca debió poder ejecutar.
+
+- [x] **Tab "Acciones" eliminada por completo** (Fundar Facción, Cargos, Ciudadanía, Políticas, Diplomacia,
+  Fusión/Anexión) — sus 6 tarjetas eran 100% formularios de acción sin ninguna vista de solo lectura propia;
+  lo que mostraban ya vive en las pestañas Facción/Jugadores/Registros
+- [x] **Tab "Guerra"**: tarjeta "Combate" eliminada (sin vista propia — los escuadrones ya se ven en
+  Asentamientos→Militar); "Reclutamiento" reducida a catálogo de solo consulta (tropa + costo + poder, sin
+  jugador/origen/botón de reclutar). Roster de tropas intacto
+- [x] **Tab "Comercio"**: tarjeta "Orden de Mercado" eliminada (sin vista propia); "Trueque" y "Flota de
+  Caravanas" reducidas a paneles de solo consulta (materiales comerciables, estado de flota) — se quitan
+  recurso/cantidad/precio y los botones de enviar. Sub-tab renombrada de "⚒️ Acciones" a "🔍 Detalle"
+- [x] **Detalle de asentamiento** (dentro de "Asentamientos", que ya era 95% lectura): se quita el input de
+  renombrar, los sliders de reserva protegida (ahora valores de solo lectura), el botón "Mejorar ahora", el
+  toggle de auto-construcción, y el control completo de cola (mover/quitar/añadir) — la tabla de cola se queda,
+  sin columna de acciones
+- [x] `alternarFaccionNpc` (Facción → toggle "Controlada por NPC") es la única acción interactiva que queda en
+  toda la interfaz — es la única que la matriz permite a un rol técnico
+- [x] Verificado en vivo con un asentamiento real (fundado vía la superficie de `/jugador/*` con una sesión
+  aparte, no desde la UI de administración — así se prueba la vista de solo lectura contra datos genuinos, no
+  contra un mock): cola de construcción, mejoras, reserva protegida y auto-construcción muestran los datos
+  correctos sin ningún control de escritura. 600/600 tests, `tsc` limpio en los dos proyectos
+- [ ] **Defecto real encontrado en la misma verificación, sin resolver**: el toggle de `alternarFaccionNpc`
+  —la única acción que debía funcionar— **responde 403** igual que las 27 que se acaban de quitar. Mismo bug
+  de fondo del hallazgo original de C8: `rolEnPartida` (`acceso/rolesDePartida.ts`) devuelve
+  `'administrador_global'` en cuanto `esAdministradorGlobal` es cierto, sin mirar la `Membresia` real, y la
+  fila de `alternarFaccionNpc` en la matriz solo admite `['jugador', 'administrador_partida']`. La limpieza de
+  interfaz de esta pasada no lo toca — es un fix de autorización en el servidor, pendiente
+
 ## Fase D — Conversión temporal total
 
 - [ ] Introducir reloj de simulación y campos de fecha en el estado, sin retirar aún el tick
