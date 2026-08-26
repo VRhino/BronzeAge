@@ -411,8 +411,14 @@ en vez de 400 (ya anotado como pendiente en C2, sin dueño hasta ahora). → hit
   interacción, no de arquitectura — no se toma aquí.
 
 El resto (`mantenimientoInfo`, `poblacionInfo`, `produccionInfo`, `caravanasInfo`, `manoObraInfo`, los
-`nivel*Info`, los cupos, `precioReferencia`, `poderMilitarInfo`, `infoMejoraEdificio`, `getLigas`) cambia por
-tick y cabe en la proyección sin más.
+`nivel*Info`, los cupos, `precioReferencia`, `poderMilitarInfo`, `infoMejoraEdificio`) cambia por tick y cabe
+en la proyección sin más.
+
+> **Corregido 2026-08-26**: `getLigas` salió de esta lista — estaba mal puesta aquí. `computeLigas` es T2a en
+> el doc 9 (`relaciones` + `facciones`, ambos ya públicos en la proyección): el cliente la calcula localmente
+> y **ya lo hace hoy** (`gameStore.getLigas`). Ponerla en el grupo (b) habría significado mandarla calculada
+> desde el servidor sin necesidad — el mismo tipo de sobre-ingeniería que el resto de este documento evita a
+> propósito. Detectado auditando qué corre hoy en `cliente/` de verdad, no reclasificando de memoria.
 
 #### Hallazgo 5 — el terreno que el servidor manda es indibujable sin `worldgen/`
 
