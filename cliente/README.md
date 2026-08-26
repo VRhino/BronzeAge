@@ -41,9 +41,9 @@ exponga esos DTOs, este cliente puede ir soltando imports de `@motor/*` hasta qu
 
 ## Qué superficie habla este cliente
 
-La de **administración** (`/admin/*`): crea partidas, avanza el tick y lee el estado completo. Eso es lo que
-siempre hizo; desde la Fase C3 del backend esos endpoints exigen identidad y rol. El cliente de **jugador**
-(`/jugador/*`) vive en otro repositorio.
+La de **administración** (`/v1/admin/*`): crea partidas, avanza el tick y lee el estado completo. Eso es lo
+que siempre hizo; desde la Fase C3 del backend esos endpoints exigen identidad y rol. El cliente de
+**jugador** (`/v1/jugador/*`) vive en otro repositorio.
 
 Se identifica con el proveedor de desarrollo del backend (`Authorization: dev <sujeto>`) y guarda el
 `sesionId` en memoria — se pierde al recargar y se vuelve a pedir solo. Es un apaño de desarrollo consciente:
@@ -62,11 +62,12 @@ npm install
 npm run dev
 ```
 
-`vite.config.ts` proxya `/sesiones`, `/admin` y `/jugador` hacia `:3000` para evitar CORS en desarrollo.
+`vite.config.ts` proxya `/v1` entero hacia `:3000` para evitar CORS en desarrollo.
 
 El sujeto se cambia con `VITE_USUARIO`; el que se use debe figurar en `ADMINISTRADORES` del servidor, o el
 backend responderá 403 al crear la partida. Sin `ADMINISTRADORES` no hay ningún administrador y nadie puede
 crear partidas — es el default deliberado del servidor.
 
-> Al servir este cliente desde otro origen (ya sin el proxy de Vite), el servidor necesitará CORS: es la tarea
-> C6 de la Fase C en el roadmap del backend.
+> Al servir este cliente desde otro origen (ya sin el proxy de Vite), el servidor necesita CORS: configúralo
+> con `ORIGENES_PERMITIDOS='https://tu-origen'` al arrancarlo — vacío por defecto, ningún origen cruzado pasa.
+> El contrato completo (rutas, esquemas, qué exige sesión) está publicado en `GET /v1/openapi.json`.

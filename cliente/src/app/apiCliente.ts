@@ -47,6 +47,9 @@ let sesionId: string | null = null;
  * backend responderá 403 al crear la partida. */
 const SUJETO = import.meta.env.VITE_USUARIO ?? 'jefa';
 
+/** Prefijo de versión del contrato (Fase C6, doc 4): `server/api.ts` sirve todo bajo `/v1`. */
+const V1 = '/v1';
+
 async function fetchJson<T>(url: string, opciones: RequestInit, cabeceraAuth: string): Promise<T> {
   let res: Response;
   try {
@@ -71,7 +74,7 @@ async function fetchJson<T>(url: string, opciones: RequestInit, cabeceraAuth: st
 }
 
 async function iniciarSesion(): Promise<string> {
-  const { sesionId: id } = await fetchJson<{ sesionId: string }>('/sesiones', { method: 'POST' }, `dev ${SUJETO}`);
+  const { sesionId: id } = await fetchJson<{ sesionId: string }>(`${V1}/sesiones`, { method: 'POST' }, `dev ${SUJETO}`);
   sesionId = id;
   return id;
 }
@@ -97,7 +100,7 @@ async function peticion<T>(url: string, opciones: RequestInit = {}): Promise<T> 
  * `GameStore.crear`. Exige rol `administrador_global`; `forzar`, además, no lo permite un `moderador`.
  */
 export function crearOResumirPartida(gameId: string, seed: number, region?: RegionId, forzar?: boolean): Promise<ResumenPartida> {
-  return peticion<ResumenPartida>('/admin/partidas', {
+  return peticion<ResumenPartida>(`${V1}/admin/partidas`, {
     method: 'POST',
     body: JSON.stringify({ gameId, seed, region, forzar }),
   });
@@ -110,16 +113,16 @@ export function crearOResumirPartida(gameId: string, seed: number, region?: Regi
  * Va por la superficie de administración, así que la matriz de autorización lo evalúa con rol de
  * administrador: rechazará con 403 todo lo que sea de jugador (que es casi todo). Ver `rutas/admin.ts`. */
 export function ejecutarComando<T extends TipoComando>(gameId: string, tipo: T, params: ParamsDe<T>): Promise<RespuestaComando<DatosDe<T>>> {
-  return peticion<RespuestaComando<DatosDe<T>>>(`/admin/partidas/${encodeURIComponent(gameId)}/comandos`, {
+  return peticion<RespuestaComando<DatosDe<T>>>(`${V1}/admin/partidas/${encodeURIComponent(gameId)}/comandos`, {
     method: 'POST',
     body: JSON.stringify({ tipo, params }),
   });
 }
 
 export function avanzarTick(gameId: string): Promise<RespuestaComando<void>> {
-  return peticion<RespuestaComando<void>>(`/admin/partidas/${encodeURIComponent(gameId)}/tick`, { method: 'POST' });
+  return peticion<RespuestaComando<void>>(`${V1}/admin/partidas/${encodeURIComponent(gameId)}/tick`, { method: 'POST' });
 }
 
 export function consultarEstado(gameId: string): Promise<GameSessionState> {
-  return peticion<GameSessionState>(`/admin/partidas/${encodeURIComponent(gameId)}`);
+  return peticion<GameSessionState>(`${V1}/admin/partidas/${encodeURIComponent(gameId)}`);
 }

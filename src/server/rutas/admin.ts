@@ -14,7 +14,9 @@ import { puedeAdministrar, puedeCrearPartida, puedeDescartarPartida, rolEnPartid
 import type { RolTecnico } from '../../acceso/tipos';
 import type { ActorDeComando } from '../../session/comandos/autorizacion';
 import { PartidaYaAbiertaError } from '../registroDePartidas';
+import { ESQUEMA_SESION_AUTH } from '../openapi';
 import { ejecutarComandoHttp, ESQUEMA_EJECUTAR_COMANDO, type EjecutarComandoBody } from './comandos';
+import { ERROR_RESPUESTA, PARAMS_GAME_ID, RESUMEN_PARTIDA_RESPUESTA } from './esquemas';
 import {
   mensajeDe,
   partidaNoAbierta,
@@ -25,6 +27,8 @@ import {
   type DependenciasDeRutas,
   type ParametrosGameId,
 } from './contexto';
+
+const SEGURIDAD_ADMIN = [{ [ESQUEMA_SESION_AUTH]: [] }];
 
 interface CrearPartidaBody {
   gameId: string;
@@ -39,6 +43,9 @@ interface CrearPartidaBody {
 const REGIONES: readonly RegionId[] = ['greciaContinental', 'anatolia', 'egeo', 'nilo', 'mesopotamia'];
 
 const ESQUEMA_CREAR_PARTIDA = {
+  description: 'Crea una partida nueva, o retoma la que ya hubiera en disco para ese gameId. Exige administrador_global.',
+  tags: ['admin'],
+  security: SEGURIDAD_ADMIN,
   body: {
     type: 'object',
     required: ['gameId', 'seed'],
@@ -50,6 +57,43 @@ const ESQUEMA_CREAR_PARTIDA = {
       forzar: { type: 'boolean' },
     },
   },
+  response: {
+    201: RESUMEN_PARTIDA_RESPUESTA,
+    400: ERROR_RESPUESTA,
+    401: ERROR_RESPUESTA,
+    403: ERROR_RESPUESTA,
+    409: ERROR_RESPUESTA,
+  },
+} as const;
+
+const ESQUEMA_TICK = {
+  description: 'Avanza un tick de la partida (auto-comercio + turno del NPC de gobernanza incluidos).',
+  tags: ['admin'],
+  security: SEGURIDAD_ADMIN,
+  params: PARAMS_GAME_ID,
+  response: { 401: ERROR_RESPUESTA, 403: ERROR_RESPUESTA, 404: ERROR_RESPUESTA, 409: ERROR_RESPUESTA },
+} as const;
+
+const ESQUEMA_ESTADO_COMPLETO = {
+  description:
+    'Estado COMPLETO de la partida, sin proyectar por audiencia (todas las Facciones, log global). ' +
+    'Cuerpo de la respuesta no modelado en este esquema por su tamaño y forma variable (Fase C6, doc 4).',
+  tags: ['admin'],
+  security: SEGURIDAD_ADMIN,
+  params: PARAMS_GAME_ID,
+  response: { 401: ERROR_RESPUESTA, 403: ERROR_RESPUESTA, 404: ERROR_RESPUESTA },
+} as const;
+
+const ESQUEMA_COMANDOS_ADMIN = {
+  ...ESQUEMA_EJECUTAR_COMANDO,
+  description:
+    'Ejecuta un comando de partida con rol de administración. La matriz de autorización sigue mandando: casi ' +
+    'todos los comandos exigen rol jugador y aquí se rechazan (403 rol_insuficiente) — tener acceso técnico ' +
+    'no concede autoridad dentro del juego.',
+  tags: ['admin'],
+  security: SEGURIDAD_ADMIN,
+  params: PARAMS_GAME_ID,
+  response: { 400: ERROR_RESPUESTA, 401: ERROR_RESPUESTA, 403: ERROR_RESPUESTA, 404: ERROR_RESPUESTA, 409: ERROR_RESPUESTA },
 } as const;
 
 export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDeRutas): void {
@@ -84,7 +128,7 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
     return reply.code(201).send(resumenDe(runner));
   });
 
-  app.post<{ Params: ParametrosGameId }>('/admin/partidas/:gameId/tick', async (request, reply) => {
+  app.post<{ Params: ParametrosGameId }>('/admin/partidas/:gameId/tick', { schema: ESQUEMA_TICK }, async (request, reply) => {
     const acceso = exigirAdministracion(request, reply, deps);
     if (!acceso.ok) return acceso.respuesta;
 
@@ -101,7 +145,7 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
 
   /** Estado COMPLETO de la partida, sin proyección: todas las facciones, log global. Es exactamente por eso
    * que vive tras `/admin/*` — para un jugador sería una fuga (proyecciones por audiencia: Fase C4). */
-  app.get<{ Params: ParametrosGameId }>('/admin/partidas/:gameId', async (request, reply) => {
+  app.get<{ Params: ParametrosGameId }>('/admin/partidas/:gameId', { schema: ESQUEMA_ESTADO_COMPLETO }, async (request, reply) => {
     const acceso = exigirAdministracion(request, reply, deps);
     if (!acceso.ok) return acceso.respuesta;
     return reply.send(acceso.runner.getState());
@@ -114,7 +158,7 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
    */
   app.post<{ Params: ParametrosGameId; Body: EjecutarComandoBody }>(
     '/admin/partidas/:gameId/comandos',
-    { schema: ESQUEMA_EJECUTAR_COMANDO },
+    { schema: ESQUEMA_COMANDOS_ADMIN },
     async (request, reply) => {
       const acceso = exigirAdministracion(request, reply, deps);
       if (!acceso.ok) return acceso.respuesta;

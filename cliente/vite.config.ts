@@ -17,13 +17,12 @@ export default defineConfig({
   build: { target: 'es2022' },
   server: {
     port: 5173,
-    // El backend (Fastify) corre aparte, en :3000. El proxy evita CORS en desarrollo: desde el navegador
-    // `fetch('/admin/...')` es same-origin. Al separar los repos, un cliente servido desde otro origen SÍ
-    // necesitará CORS en el servidor (tarea C6 de la Fase C).
+    // El backend (Fastify) corre aparte, en :3000, con todo bajo `/v1` (Fase C6: versionado del contrato).
+    // El proxy evita CORS en desarrollo: desde el navegador `fetch('/v1/admin/...')` es same-origin. Al
+    // separar los repos, un cliente servido desde otro origen SÍ necesita CORS — ya implementado en el
+    // servidor (`ORIGENES_PERMITIDOS`), vacío por defecto.
     proxy: {
-      '/admin': 'http://localhost:3000',
-      '/jugador': 'http://localhost:3000',
-      '/sesiones': 'http://localhost:3000',
+      '/v1': 'http://localhost:3000',
     },
   },
 });

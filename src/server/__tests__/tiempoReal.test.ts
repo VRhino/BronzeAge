@@ -30,23 +30,23 @@ afterEach(async () => {
 });
 
 async function sesionDe(sujetoId: string) {
-  const login = await app.inject({ method: 'POST', url: '/sesiones', headers: { authorization: `dev ${sujetoId}` } });
+  const login = await app.inject({ method: 'POST', url: '/v1/sesiones', headers: { authorization: `dev ${sujetoId}` } });
   return { authorization: `sesion ${login.json().sesionId}` };
 }
 
 async function partidaCreada(gameId = 'g1') {
   const admin = await sesionDe('jefa');
-  await app.inject({ method: 'POST', url: '/admin/partidas', headers: admin, payload: { gameId, seed: 42 } });
+  await app.inject({ method: 'POST', url: '/v1/admin/partidas', headers: admin, payload: { gameId, seed: 42 } });
 }
 
 async function jugadorEn(gameId: string, sujetoId: string) {
   const auth = await sesionDe(sujetoId);
-  const res = await app.inject({ method: 'POST', url: `/jugador/partidas/${gameId}/membresia`, headers: auth });
+  const res = await app.inject({ method: 'POST', url: `/v1/jugador/partidas/${gameId}/membresia`, headers: auth });
   return { auth, jugadorId: res.json().jugadorId as string };
 }
 
 async function ejecutar(gameId: string, auth: { authorization: string }, tipo: string, params: unknown) {
-  return app.inject({ method: 'POST', url: `/jugador/partidas/${gameId}/comandos`, headers: auth, payload: { tipo, params } });
+  return app.inject({ method: 'POST', url: `/v1/jugador/partidas/${gameId}/comandos`, headers: auth, payload: { tipo, params } });
 }
 
 /** Próximo mensaje JSON que llegue por el socket. */
@@ -63,26 +63,26 @@ async function suscribir(ws: WebSocket, canal: string) {
 describe('handshake: autenticación antes de completar la conexión', () => {
   it('rechaza sin sesion (401), como respuesta HTTP a la peticion de upgrade, no como un socket abierto y cerrado', async () => {
     await partidaCreada('g1');
-    await expect(app.injectWS('/jugador/partidas/g1/tiempo-real')).rejects.toThrow(/401/);
+    await expect(app.injectWS('/v1/jugador/partidas/g1/tiempo-real')).rejects.toThrow(/401/);
   });
 
   it('rechaza con sesion pero sin membresia de jugador (403)', async () => {
     await partidaCreada('g1');
     const auth = await sesionDe('ana');
-    await expect(app.injectWS('/jugador/partidas/g1/tiempo-real', { headers: auth })).rejects.toThrow(/403/);
+    await expect(app.injectWS('/v1/jugador/partidas/g1/tiempo-real', { headers: auth })).rejects.toThrow(/403/);
   });
 
   it('un administrador de la partida tampoco puede conectar: para jugar hace falta ser jugador', async () => {
     await partidaCreada('g1');
     const admin = await sesionDe('jefa');
-    await expect(app.injectWS('/jugador/partidas/g1/tiempo-real', { headers: admin })).rejects.toThrow(/403/);
+    await expect(app.injectWS('/v1/jugador/partidas/g1/tiempo-real', { headers: admin })).rejects.toThrow(/403/);
   });
 
   it('acepta con sesion + membresia de jugador: la conexion queda abierta', async () => {
     await partidaCreada('g1');
     const { auth } = await jugadorEn('g1', 'ana');
 
-    const ws = await app.injectWS('/jugador/partidas/g1/tiempo-real', { headers: auth });
+    const ws = await app.injectWS('/v1/jugador/partidas/g1/tiempo-real', { headers: auth });
     expect(ws.readyState).toBe(ws.OPEN);
     expect(hub.conexionesAbiertas('g1')).toBe(1);
     ws.terminate();
@@ -90,10 +90,10 @@ describe('handshake: autenticación antes de completar la conexión', () => {
 
   it('acepta la sesion tambien por query string (?sesion=), la via que un navegador SI puede usar', async () => {
     await partidaCreada('g1');
-    const login = await app.inject({ method: 'POST', url: '/sesiones', headers: { authorization: 'dev ana' } });
-    await app.inject({ method: 'POST', url: '/jugador/partidas/g1/membresia', headers: { authorization: `sesion ${login.json().sesionId}` } });
+    const login = await app.inject({ method: 'POST', url: '/v1/sesiones', headers: { authorization: 'dev ana' } });
+    await app.inject({ method: 'POST', url: '/v1/jugador/partidas/g1/membresia', headers: { authorization: `sesion ${login.json().sesionId}` } });
 
-    const ws = await app.injectWS(`/jugador/partidas/g1/tiempo-real?sesion=${login.json().sesionId}`);
+    const ws = await app.injectWS(`/v1/jugador/partidas/g1/tiempo-real?sesion=${login.json().sesionId}`);
     expect(ws.readyState).toBe(ws.OPEN);
     ws.terminate();
   });
@@ -103,7 +103,7 @@ describe('protocolo de suscripcion', () => {
   it('suscribirse al canal general siempre se acepta', async () => {
     await partidaCreada('g1');
     const { auth } = await jugadorEn('g1', 'ana');
-    const ws = await app.injectWS('/jugador/partidas/g1/tiempo-real', { headers: auth });
+    const ws = await app.injectWS('/v1/jugador/partidas/g1/tiempo-real', { headers: auth });
 
     expect(await suscribir(ws, 'mapa/general')).toEqual({ tipo: 'suscrito', canal: 'mapa/general' });
     ws.terminate();
@@ -119,7 +119,7 @@ describe('protocolo de suscripcion', () => {
     });
     const asentamientoId = fundacion.json().resultado.datos.asentamientoId as string;
 
-    const ws = await app.injectWS('/jugador/partidas/g1/tiempo-real', { headers: ana.auth });
+    const ws = await app.injectWS('/v1/jugador/partidas/g1/tiempo-real', { headers: ana.auth });
 
     expect(await suscribir(ws, `asentamiento/${asentamientoId}`)).toEqual({ tipo: 'suscrito', canal: `asentamiento/${asentamientoId}` });
     expect(await suscribir(ws, 'asentamiento/no-existe')).toEqual({ tipo: 'error', canal: 'asentamiento/no-existe', error: 'no autorizado' });
@@ -129,7 +129,7 @@ describe('protocolo de suscripcion', () => {
   it('un mensaje que no es {accion, canal} responde error, sin cerrar la conexion', async () => {
     await partidaCreada('g1');
     const { auth } = await jugadorEn('g1', 'ana');
-    const ws = await app.injectWS('/jugador/partidas/g1/tiempo-real', { headers: auth });
+    const ws = await app.injectWS('/v1/jugador/partidas/g1/tiempo-real', { headers: auth });
 
     ws.send('no es json');
     expect((await esperarMensaje(ws)).tipo).toBe('error');
@@ -145,7 +145,7 @@ describe('protocolo de suscripcion', () => {
   it('desuscribirse no exige autorizacion: siempre se acepta, incluso de un canal nunca suscrito', async () => {
     await partidaCreada('g1');
     const { auth } = await jugadorEn('g1', 'ana');
-    const ws = await app.injectWS('/jugador/partidas/g1/tiempo-real', { headers: auth });
+    const ws = await app.injectWS('/v1/jugador/partidas/g1/tiempo-real', { headers: auth });
 
     ws.send(JSON.stringify({ accion: 'desuscribir', canal: 'asentamiento/nunca-suscrito' }));
     expect(await esperarMensaje(ws)).toEqual({ tipo: 'desuscrito', canal: 'asentamiento/nunca-suscrito' });
@@ -158,7 +158,7 @@ describe('difusion de eventos tras un comando', () => {
     await partidaCreada('g1');
     const ana = await jugadorEn('g1', 'ana');
 
-    const ws = await app.injectWS('/jugador/partidas/g1/tiempo-real', { headers: ana.auth });
+    const ws = await app.injectWS('/v1/jugador/partidas/g1/tiempo-real', { headers: ana.auth });
     await suscribir(ws, 'mapa/general');
 
     // El listener se registra ANTES de disparar el comando: la difusión llega dentro de la propia petición
@@ -182,10 +182,10 @@ describe('difusion de eventos tras un comando', () => {
     const fundacion = await ejecutar('g1', ana.auth, 'fundarAsentamiento', { faccionId, posicion: { x: 500, y: 500 } });
     const asentamientoId = fundacion.json().resultado.datos.asentamientoId as string;
 
-    const wsGeneral = await app.injectWS('/jugador/partidas/g1/tiempo-real', { headers: ana.auth });
+    const wsGeneral = await app.injectWS('/v1/jugador/partidas/g1/tiempo-real', { headers: ana.auth });
     await suscribir(wsGeneral, 'mapa/general');
 
-    const wsAsentamiento = await app.injectWS('/jugador/partidas/g1/tiempo-real', { headers: ana.auth });
+    const wsAsentamiento = await app.injectWS('/v1/jugador/partidas/g1/tiempo-real', { headers: ana.auth });
     await suscribir(wsAsentamiento, `asentamiento/${asentamientoId}`);
 
     let generalRecibioAlgo = false;
@@ -208,7 +208,7 @@ describe('difusion de eventos tras un comando', () => {
     await partidaCreada('g1');
     const ana = await jugadorEn('g1', 'ana');
 
-    const ws = await app.injectWS('/jugador/partidas/g1/tiempo-real', { headers: ana.auth });
+    const ws = await app.injectWS('/v1/jugador/partidas/g1/tiempo-real', { headers: ana.auth });
     await suscribir(ws, 'mapa/general');
     ws.send(JSON.stringify({ accion: 'desuscribir', canal: 'mapa/general' }));
     await esperarMensaje(ws);
@@ -231,7 +231,7 @@ describe('difusion de eventos tras un comando', () => {
     const ana = await jugadorEn('g1', 'ana');
     const luis = await jugadorEn('g1', 'luis');
 
-    const wsLuis = await app.injectWS('/jugador/partidas/g1/tiempo-real', { headers: luis.auth });
+    const wsLuis = await app.injectWS('/v1/jugador/partidas/g1/tiempo-real', { headers: luis.auth });
     await suscribir(wsLuis, 'mapa/general');
 
     const difundidoPromesa = esperarMensaje(wsLuis); // registrado antes del comando — ver test de arriba
@@ -246,7 +246,7 @@ describe('difusion de eventos tras un comando', () => {
     await partidaCreada('g1');
     const { auth } = await jugadorEn('g1', 'ana');
 
-    const ws = await app.injectWS('/jugador/partidas/g1/tiempo-real', { headers: auth });
+    const ws = await app.injectWS('/v1/jugador/partidas/g1/tiempo-real', { headers: auth });
     expect(hub.conexionesAbiertas('g1')).toBe(1);
 
     const cerrado = new Promise((resolve) => ws.once('close', resolve));

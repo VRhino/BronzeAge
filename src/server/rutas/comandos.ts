@@ -46,6 +46,12 @@ function esTipoComandoValido(tipo: string): tipo is TipoComando {
  * suscrito al canal que le corresponda a cada uno. Un comando rechazado no genera eventos que difundir
  * (`ResultadoComando.eventos` viene vacío), así que llamar a `difundir` siempre es seguro sin comprobar
  * `resultado.ok` aparte.
+ *
+ * `camposExtra` (Fase C6, doc 4: "respuesta de comando autosuficiente") añade campos a la respuesta de
+ * ÉXITO sin que esta función tenga que saber qué son — hoy lo usa `/jugador/*` para adjuntar la proyección
+ * propia (`session/proyecciones/jugador.ts`) y ahorrarle al cliente el segundo viaje que antes hacía falta
+ * (comando + `GET` aparte). `/admin/*` no lo necesita: su `GET` de estado completo es barato de pedir aparte
+ * y adjuntarlo aquí también repetiría el problema que esto viene a evitar.
  */
 export async function ejecutarComandoHttp(
   reply: FastifyReply,
@@ -53,7 +59,8 @@ export async function ejecutarComandoHttp(
   cuerpo: EjecutarComandoBody,
   actor: ActorDeComando,
   actorId: string,
-  hub: HubDeDifusion
+  hub: HubDeDifusion,
+  camposExtra?: (runner: RunnerDePartida) => Record<string, unknown>
 ) {
   const { tipo, params } = cuerpo;
   if (!esTipoComandoValido(tipo)) {
@@ -77,7 +84,7 @@ export async function ejecutarComandoHttp(
   try {
     const resultado = await runner.ejecutar(manejador, params, actorId, cuerpo.idempotencyKey);
     hub.difundir(runner.gameId, resultado.eventos);
-    return reply.send({ ...resumenDe(runner), resultado });
+    return reply.send({ ...resumenDe(runner), resultado, ...(camposExtra ? camposExtra(runner) : {}) });
   } catch (err) {
     // Solo un fallo de persistencia llega hasta aquí como excepción (ver `RunnerDePartida.aplicarYPersistir`).
     return reply.code(409).send({ error: mensajeDe(err) });
