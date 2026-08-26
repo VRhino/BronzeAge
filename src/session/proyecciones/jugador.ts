@@ -1,0 +1,101 @@
+// Proyección de jugador (Fase C4, Slice 1 — Docs/Arquitectura/6_Sincronizacion_Visibilidad_y_Escala.md §3).
+// Filtra `GameSessionState` a lo que un jugador concreto puede ver.
+//
+// **SIN niebla de guerra todavía.** El doc 6 diseña tres fuentes de visibilidad de lo AJENO (espacial,
+// contacto, alianza) con memoria tipo RTS — eso es `ConocimientoJugador`, que queda para un Slice 2
+// explícitamente diferido: la visibilidad espacial necesita un radio de visualización (número de BALANCE, no
+// de arquitectura) que no está definido en ningún doc de este repo, y la semántica exacta de cuándo decae la
+// memoria espacial tampoco. Inventar cualquiera de los dos aquí sería una decisión de diseño de juego
+// disfrazada de código.
+//
+// Regla de ESTA pasada, deliberadamente conservadora: la Facción propia se ve COMPLETA (asentamientos,
+// escuadrones, colas, almacén); las demás Facciones no aportan ni un asentamiento, ni siquiera resumido.
+// Mejor "no ves nada del rival" que exponer un nivel de detalle que nadie ha decidido que sea seguro. Lo que
+// SÍ viaja de todas las Facciones son los metadatos ya públicos en la ficción del juego (nombre, nivel,
+// reputación, Rey/Embajador) — sin ellos la pantalla de diplomacia no tendría con qué pintarse.
+import type {
+  AcuerdoTrueque,
+  Asentamiento,
+  CaminoComercial,
+  CampamentoBandido,
+  Caravana,
+  Faccion,
+  OrdenMercado,
+  RelacionPolitica,
+  Titulo,
+} from '../../domain/types';
+import type { EventoDominio } from '../../domain/eventos';
+import type { MapaGenerado } from '../../worldgen';
+import type { EstadoMapa } from '../../world/mapa';
+import { esCiudadano } from '../../engine/faccion';
+import type { EventoLogAdmin, GameSessionState } from '../estado';
+
+export interface ProyeccionJugador {
+  gameId: string;
+  tick: number;
+  version: number;
+  jugadorId: string;
+  /** Derivado de `Faccion.ciudadanosIds` en el momento de proyectar — nunca almacenado (ver `Membresia` en
+   * `acceso/tipos.ts`: es la misma razón por la que se retiró de ahí). `null` antes de unirse a una. */
+  faccionId: string | null;
+  /** Geografía del mundo: no es secreta (todos ven el mismo terreno), así que viaja completa — lo que se
+   * filtra son las ENTIDADES sobre el mapa, no el mapa en sí. */
+  mapa: MapaGenerado;
+  estadoMapa: EstadoMapa;
+  /** Todas las Facciones, sin redactar: nada en `Faccion` (nombre, nivel, reputación, Rey/Embajador,
+   * ciudadanía) es información táctica — es el mismo tipo de dato público que "quién gobierna Troya" en la
+   * ficción del juego. Lo táctico/económico vive en `Asentamiento`, que sí se filtra. */
+  facciones: Faccion[];
+  /** SOLO los de la Facción propia (Slice 1). El Slice 2 añade aquí lo visible por espacio/contacto/alianza. */
+  asentamientos: Asentamiento[];
+  caravanas: Caravana[];
+  acuerdos: AcuerdoTrueque[];
+  ordenes: OrdenMercado[];
+  /** Las relaciones diplomáticas son públicas por naturaleza — quién está aliado o es vasallo de quién no es
+   * un secreto en ningún juego de estrategia. */
+  relaciones: RelacionPolitica[];
+  /** Títulos/ranking (Doc 2.6-ish): son competitivos por diseño — un ranking que no se puede ver no sirve
+   * como ranking. */
+  titulos: Titulo[];
+  /** Infraestructura del mundo (rutas comerciales trazadas), no actividad económica en curso: se trata como
+   * el mapa, no como los `acuerdos`/`ordenes` que sí filtran. */
+  caminos: CaminoComercial[];
+  /** Entidades del MUNDO (bandidos), no de ninguna Facción — visibles para cualquiera que pueda atacarlas. */
+  campamentosBandidos: CampamentoBandido[];
+  /** Sin `asentamientoId` (eventos globales/de Facción) o con uno propio. Es el mismo criterio que evita la
+   * fuga que el doc 7 §7.1 señalaba en el log administrativo: el log global narra TODO el mundo. */
+  eventosDominio: EventoDominio[];
+  historial: EventoLogAdmin[];
+}
+
+function faccionDe(estado: GameSessionState, jugadorId: string): string | null {
+  return estado.facciones.find((f) => esCiudadano(f, jugadorId))?.id ?? null;
+}
+
+export function proyectarParaJugador(estado: GameSessionState, jugadorId: string): ProyeccionJugador {
+  const faccionId = faccionDe(estado, jugadorId);
+  const asentamientosPropios = estado.asentamientos.filter((a) => a.faccionId === faccionId);
+  const idsPropios = new Set(asentamientosPropios.map((a) => a.id));
+  const esPropio = (asentamientoId: string) => idsPropios.has(asentamientoId);
+
+  return {
+    gameId: estado.gameId,
+    tick: estado.tick,
+    version: estado.version,
+    jugadorId,
+    faccionId,
+    mapa: estado.mapa,
+    estadoMapa: estado.estadoMapa,
+    facciones: estado.facciones,
+    asentamientos: asentamientosPropios,
+    caravanas: estado.caravanas.filter((c) => esPropio(c.origenAsentamientoId) || (c.destinoAsentamientoId !== undefined && esPropio(c.destinoAsentamientoId))),
+    acuerdos: estado.acuerdos.filter((a) => esPropio(a.asentamientoAId) || esPropio(a.asentamientoBId)),
+    ordenes: estado.ordenes.filter((o) => esPropio(o.asentamientoId)),
+    relaciones: estado.relaciones,
+    titulos: estado.titulos,
+    caminos: estado.caminos,
+    campamentosBandidos: estado.campamentosBandidos,
+    eventosDominio: estado.eventosDominio.filter((e) => e.asentamientoId === undefined || esPropio(e.asentamientoId)),
+    historial: estado.historialJugadores[jugadorId] ?? [],
+  };
+}

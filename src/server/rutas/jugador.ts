@@ -1,15 +1,17 @@
-// Superficie de JUGADOR (`/jugador/*`), Fase C3. Todo lo que un cliente de jugador necesita: unirse a una
-// partida y ejecutar comandos en ella.
+// Superficie de JUGADOR (`/jugador/*`). Todo lo que un cliente de jugador necesita: unirse a una partida,
+// leer su proyección del estado, y ejecutar comandos en ella.
 //
-// NO tiene endpoint de lectura de estado, y es deliberado: hoy el único `GET` de partida devuelve el estado
-// completo (todas las facciones, log global), que para un jugador es una fuga. Exponerlo aquí "de momento"
-// sería justo la clase de atajo que luego nadie retira. Llega con las proyecciones por audiencia (Fase C4).
+// El `GET` de lectura (Fase C4, Slice 1) NO es el estado completo: pasa por `proyectarParaJugador`, que hoy
+// solo expone la Facción propia — nada de las demás. Es deliberadamente conservador, ver el comentario de
+// cabecera de `session/proyecciones/jugador.ts` para el porqué (la niebla de guerra completa del doc 6
+// depende de un número de balance que no está definido en ningún doc de este repo).
 //
 // Un administrador NO pasa este filtro aunque tenga acceso total a la partida: para jugar hace falta ser
 // jugador (doc 5, "Diferencia entre rol técnico y cargo de juego").
 import type { FastifyInstance } from 'fastify';
 import { puedeJugar } from '../../acceso/rolesDePartida';
 import type { ActorDeComando } from '../../session/comandos/autorizacion';
+import { proyectarParaJugador } from '../../session/proyecciones/jugador';
 import { ejecutarComandoHttp, ESQUEMA_EJECUTAR_COMANDO, type EjecutarComandoBody } from './comandos';
 import {
   partidaNoAbierta,
@@ -50,6 +52,24 @@ export function registrarRutasDeJugador(app: FastifyInstance, deps: Dependencias
       desde: deps.ahora(),
     });
     return reply.code(201).send({ jugadorId });
+  });
+
+  /**
+   * Proyección de jugador (Fase C4, Slice 1): la Facción propia completa, las demás solo con sus metadatos
+   * públicos — nunca sus asentamientos. No es el mismo endpoint que `/admin/partidas/:gameId`: aquel expone
+   * `GameSessionState` en bruto, este siempre pasa por `proyectarParaJugador`.
+   */
+  app.get<{ Params: ParametrosGameId }>('/jugador/partidas/:gameId', async (request, reply) => {
+    const { gameId } = request.params;
+    const resuelto = resolverActor(request, deps, gameId);
+    if (!resuelto) return sinSesion(reply);
+    if (!puedeJugar(resuelto.actor)) return sinPermiso(reply, 'sin membresia de jugador en esta partida');
+
+    const runner = deps.partidas.obtener(gameId);
+    if (!runner) return partidaNoAbierta(reply, gameId);
+
+    const jugadorId = resuelto.actor.membresia!.jugadorId!;
+    return reply.send(proyectarParaJugador(runner.getState(), jugadorId));
   });
 
   app.post<{ Params: ParametrosGameId; Body: EjecutarComandoBody }>(

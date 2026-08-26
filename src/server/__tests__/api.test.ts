@@ -271,6 +271,67 @@ describe('POST /jugador/partidas/:gameId/membresia (unirse)', () => {
   });
 });
 
+describe('GET /jugador/partidas/:gameId (proyeccion, Fase C4 Slice 1)', () => {
+  it('devuelve la proyeccion del jugador, no el estado completo', async () => {
+    await partidaCreada('g1');
+    const auth = await jugadorEn('g1');
+
+    const res = await app.inject({ method: 'GET', url: '/jugador/partidas/g1', headers: auth });
+
+    expect(res.statusCode).toBe(200);
+    const cuerpo = res.json();
+    expect(cuerpo.jugadorId).toBeTruthy();
+    expect(cuerpo.asentamientos).toEqual([]); // sin Facción todavía
+    expect(cuerpo.facciones).toEqual([]);
+  });
+
+  it('no incluye asentamientos de una Faccion rival, aunque el admin sí los vea', async () => {
+    await partidaCreada('g1');
+    const ana = await jugadorEn('g1', 'ana');
+    await app.inject({
+      method: 'POST',
+      url: '/jugador/partidas/g1/comandos',
+      headers: ana,
+      payload: { tipo: 'crearFaccion', params: { nombre: 'Micenas' } },
+    });
+    // El admin creador de la partida no es ciudadano de ninguna Facción del juego, así que "fundar" con su
+    // usuario no pertenece a este escenario — se usa un segundo jugador para tener una Facción rival real.
+    const luis = await jugadorEn('g1', 'luis');
+    await app.inject({
+      method: 'POST',
+      url: '/jugador/partidas/g1/comandos',
+      headers: luis,
+      payload: { tipo: 'crearFaccion', params: { nombre: 'Troya' } },
+    });
+
+    const proyeccionAna = await app.inject({ method: 'GET', url: '/jugador/partidas/g1', headers: ana });
+    // Ana no fundó ningún asentamiento (solo creó la Facción): su proyección no tiene ninguno, ni el suyo ni
+    // el de nadie — es justo la ausencia de niebla de guerra la que impide que Slice 1 le muestre algo ajeno.
+    expect(proyeccionAna.json().asentamientos).toEqual([]);
+    // Pero sí ve los METADATOS de ambas Facciones (necesarios para la pantalla de diplomacia).
+    expect(proyeccionAna.json().facciones.map((f: { nombre: string }) => f.nombre).sort()).toEqual(['Micenas', 'Troya']);
+  });
+
+  it('un admin no puede leer la proyeccion de jugador: para jugar hace falta ser jugador', async () => {
+    const { admin } = await partidaCreada('g1');
+    const res = await app.inject({ method: 'GET', url: '/jugador/partidas/g1', headers: admin });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('401 sin sesion', async () => {
+    await partidaCreada('g1');
+    expect((await app.inject({ method: 'GET', url: '/jugador/partidas/g1' })).statusCode).toBe(401);
+  });
+
+  it('403 (no 404) en una partida inexistente sin membresia: no delata si existe antes de comprobar permiso', async () => {
+    // Mismo orden que POST .../comandos: se comprueba la membresía antes que la existencia de la partida, así
+    // que sin unirse nunca se llega a saber si 'no-existe' está abierta o no.
+    const auth = await sesionDe('ana');
+    const res = await app.inject({ method: 'GET', url: '/jugador/partidas/no-existe', headers: auth });
+    expect(res.statusCode).toBe(403);
+  });
+});
+
 describe('POST /jugador/partidas/:gameId/comandos', () => {
   it('ejecuta un comando y lo refleja en el resumen', async () => {
     await partidaCreada('g1');
