@@ -31,6 +31,7 @@ import { registrarRutasDeSesion } from './rutas/sesiones';
 import { registrarRutasDeAdmin } from './rutas/admin';
 import { registrarRutasDeJugador } from './rutas/jugador';
 import { registrarRutaDeTiempoReal } from './rutas/tiempoReal';
+import { registrarRutaDeBalance } from './rutas/balance';
 import { opcionesOpenApi } from './openapi';
 import type { DependenciasDeRutas } from './rutas/contexto';
 
@@ -92,6 +93,9 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
       registrarRutasDeAdmin(v1, deps);
       registrarRutasDeJugador(v1, deps);
       registrarRutaDeTiempoReal(v1, deps);
+      // El balance (Fase C7) es regla pública, no estado de partida — sin autenticar, mismo criterio que
+      // `/openapi.json` justo debajo.
+      registrarRutaDeBalance(v1);
       // El contrato publicado (doc 4: "para que los repos de cliente generen su cliente tipado"). Sin
       // autenticar a propósito: es lo primero que un cliente nuevo necesita leer, antes incluso de poder
       // hacer login.

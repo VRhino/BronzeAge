@@ -54,9 +54,11 @@ aquí para que no se cuele como resuelto.
 
 ## T1 · Regla-dato — `src/constants.ts`
 
-39 tablas, 1251 líneas. **Todas son candidatas a viajar al cliente** en cuanto exista C7 (balance versionado
-y servido). Es lo que hoy obliga a `cliente/src/app/gameStore.ts` a importar 8 módulos de `constants` para
-poder pintar un formulario.
+39 tablas, 1243 líneas. **Se sirven completas y sin autenticar en `GET /v1/balance`** desde el 2026-08-26
+(hito C7, decisión del usuario: publicarlas todas, sin lista de exclusión). Sigue sin resolverse la parte
+"por partida/temporada" del hito — hoy es un único valor de proceso, sin overrides — pero eso no bloquea a un
+cliente sin motor: ya puede dejar de importar los 8 módulos de `constants` que usa hoy
+`cliente/src/app/gameStore.ts` para pintar un formulario.
 
 Por consumidor de interfaz:
 
@@ -66,16 +68,17 @@ Por consumidor de interfaz:
 | **Cupos y niveles** | `NIVEL_FACCION`, `NIVEL_ASENTAMIENTO`, `CAP_FUNDACION_POR_NIVEL`, `CUPO_NIVEL_ASENTAMIENTO`, `POLITICAS`, `CIUDADANIA` | Barras de progreso, "te faltan N para subir" |
 | **Costes y economía** | `MANTENIMIENTO`, `ALMACEN`, `NECESIDADES`, `PRECIO_BASE`, `PRECIO_REFERENCIA`, `COMISION`, `TRUEQUE`, `RESERVA_CONSTRUCCION` | Mostrar el coste antes de confirmar |
 | **Geometría urbana** | `REJILLA_ASENTAMIENTO`, `EDIFICIO_TAMANO`, `TRAZADO`, `SITIO`, `PUESTO_MERCADO_FORMA`, `MERCADO_PUESTOS_POR_NIVEL` | Dibujar la vista urbana |
-| **Mundo y militar** | `ZONA_INFLUENCIA`, `FUNDACION`, `POBLACION`, `MILITAR`, `CHOKEPOINTS_PEAJE`, `LENERA_POR_BOSQUE` | Leyendas, radios, previsualizaciones |
+| **Mundo y militar** | `ZONA_INFLUENCIA`, `FUNDACION`, `POBLACION`, `MILITAR`, `LENERA_POR_BOSQUE` | Leyendas, radios, previsualizaciones |
 
-**Tres tablas a revisar antes de publicarlas**, no por ser secretas sino porque nadie lo ha decidido:
+**Resuelto (2026-08-26, decisión del usuario al implementar C7): se publican las siete.** Quedan agrupadas
+bajo `internas` en la respuesta de `GET /v1/balance`, para que quien lea el JSON no las confunda con balance
+que un formulario necesita, pero viajan igual que el resto — no hay lista de exclusión que mantener:
 
-- `CAMPAMENTOS_BANDIDOS` y `REGENERACION_NODOS` — parámetros de aparición y regeneración. En la mayoría de
-  juegos de estrategia esto acaba en una wiki de todas formas, pero publicarlo es una decisión de diseño.
+- `CAMPAMENTOS_BANDIDOS` y `REGENERACION_NODOS` — parámetros de aparición y regeneración.
 - `SCORE_BANDAS`, `EXTRACTOR_DESEMPATE`, `LINEAS_PRODUCCION`, `EXTRACCION_MAXIMOS` — heurísticas internas de
-  colocación automática. El cliente no las necesita para nada.
+  colocación automática. El cliente no las necesita para nada, pero publicarlas no cuesta nada tampoco.
 - `SIMULACION_AUTO_COMERCIO` — herramienta de simulación de desarrollo, apagada por defecto. No es balance de
-  juego; no debe salir.
+  juego real, pero tampoco es secreta.
 
 > Este es literalmente el problema que CCP describe al rehacer el *Static Data Export* de EVE: *"había que
 > tener extremo cuidado sobre qué datos iban al servidor y cuáles al cliente, para no filtrar información que

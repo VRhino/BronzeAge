@@ -2,9 +2,29 @@
 // Centralizados aquí para poder re-balancear sin tocar la lógica del motor.
 //
 // NO están aquí los parámetros de GENERACIÓN de mundo (tamaño del mapa, rareza/cantidad de nodos, bosques,
-// fertilidad): viven congelados en `src/worldgen/config.ts`. Todo lo de este archivo es editable en caliente
-// desde el panel de balance (ver `app/balanceConfig.ts`), y la generación no puede serlo — la partida
-// guardada solo almacena la seed y regenera el mapa al cargar. Ver el encabezado de `worldgen/config.ts`.
+// fertilidad): viven congelados en `src/worldgen/config.ts`, y la generación no es editable en caliente — la
+// partida guardada solo almacena la seed y regenera el mapa al cargar. Ver el encabezado de `worldgen/config.ts`.
+//
+// Servido por HTTP sin autenticar en `GET /v1/balance` (Fase C7, `server/rutas/balance.ts`) — es regla
+// pública (T1 en doc 9), no estado de partida: publicar las 39 tablas completas es más simple que mantener
+// una lista de exclusión, y ninguna es una fuga de estado de un rival. El panel de administración que las
+// editaba en caliente (`app/balanceConfig.ts`) se retiró al extraer el cliente (Fase C0) y no tiene dueño
+// todavía — hoy este módulo es de solo lectura en tiempo de ejecución, mutable únicamente editando el código.
+
+/**
+ * Versión del balance. Sube cuando cambia el CONTENIDO de una tabla de este archivo (no cuando se retira
+ * una tabla entera por eliminar una mecánica — eso ya lo delata el propio JSON servido). Se estampa en
+ * `PartidaExportada.balanceVersion` al crear una partida (`GameSession.exportar`), como registro de qué
+ * versión estaba viva en ese momento — a diferencia de `WORLDGEN_VERSION`, un desajuste NO se rechaza al
+ * cargar el snapshot: el balance no es necesario para reconstruir el estado ya guardado (a diferencia de la
+ * seed, que sin la versión exacta del algoritmo no reproduce el mismo mapa), solo cambia qué reglas rigen
+ * los próximos comandos y ticks. Sin overrides por partida todavía: es un único valor de proceso, no hay
+ * mecanismo para que dos partidas abiertas a la vez corran versiones distintas.
+ *
+ * v1 (2026-08-26): primera versión con número explícito — el balance existía desde antes, pero sin
+ * identificador publicable.
+ */
+export const BALANCE_VERSION = 1;
 
 /**
  * Capacidad de Leñeras por bosque según su tamaño (a petición del usuario): un bosque grande admite más de

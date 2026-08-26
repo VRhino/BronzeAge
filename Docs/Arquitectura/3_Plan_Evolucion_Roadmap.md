@@ -53,11 +53,16 @@ servidor, sin construir aún el servidor.
 Objetivo: una partida corriendo en un proceso Node.js dedicado, con persistencia,
 gobernada por una única `GameSession`, todavía sin multijugador real.
 
-- [ ] B1. `GameSession` (o `GameApplicationService`) que reemplaza las responsabilidades de casos de uso de `GameStore`
-- [ ] B2. Proceso backend Node.js + repositorio de partida
-- [ ] B3. Persistencia de estado, tick, RNG, IDs, configuración y eventos (snapshots como estrategia inicial)
-- [ ] B4. API administrativa (HTTP) sobre esa partida
-- [ ] B5. La interfaz actual (`main.ts`) migrada a cliente remoto de esa API, en vez de llamar a `GameStore` local
+> **Marcada `[x]` retroactivamente (2026-08-26).** Las cinco quedaron satisfechas como efecto colateral de
+> implementar C1–C3 (2026-08-25) — nunca se marcaron en su momento porque el trabajo no se hizo *como* Fase B
+> explícita, sino como la base que C necesitaba. No hay commit único de cierre que citar; la evidencia es el
+> código listado en cada ítem, verificado el 2026-08-26.
+
+- [x] B1. `GameSession` (o `GameApplicationService`) que reemplaza las responsabilidades de casos de uso de `GameStore` — `session/gameSession.ts`
+- [x] B2. Proceso backend Node.js + repositorio de partida — `server/index.ts`, `server/api.ts` (Fastify), `server/registroDePartidas.ts`
+- [x] B3. Persistencia de estado, tick, RNG, IDs, configuración y eventos (snapshots como estrategia inicial) — `server/persistenciaPartida.ts`, escritura atómica (`.tmp`+`rename`), incluye el estado del RNG en `PartidaExportada`
+- [x] B4. API administrativa (HTTP) sobre esa partida — `server/rutas/admin.ts`
+- [x] B5. La interfaz actual (`main.ts`) migrada a cliente remoto de esa API, en vez de llamar a `GameStore` local — `cliente/src/app/apiCliente.ts`
 
 ## Fase C — Multijugador sobre ticks (**solo servidor**)
 
@@ -80,9 +85,12 @@ Objetivo: dejar el backend listo para que varios jugadores y un administrador �
 > falsa: que el cliente extraído podía moverse a su repositorio "repuntando el alias `@motor/*`". No puede.
 > Ese alias existe porque el cliente **calcula en el navegador 26 consultas derivadas que el servidor no
 > expone**, y porque el terreno que el servidor manda son *parámetros de ruido* inservibles sin el código de
-> `worldgen/`. La decisión del usuario (2026-08-26) es que el cliente **no dependa del motor de ninguna
-> forma**: solo red. Eso convierte lo que era "una costura a repuntar" en seis hitos de servidor (C8–C13) y
-> añade un criterio de cierre a la fase. Diagnóstico completo, con la evidencia de cada hallazgo, en
+> `worldgen/`. La decisión del usuario (2026-08-26) es que el cliente **no dependa del código del motor de
+> ninguna forma**: no lo importa, no lo ejecuta. Eso convierte lo que era "una costura a repuntar" en seis
+> hitos de servidor (C8–C13) y añade un criterio de cierre a la fase. **Matiz del mismo día, no contradicción**:
+> esto no significa "cero derivaciones en el cliente" — [9_Reglas_vs_Simulacion.md](9_Reglas_vs_Simulacion.md)
+> fija que las puras de entrada propia (T2a) se reimplementan como código del cliente a propósito, para evitar
+> un viaje de red por *tooltip*. Diagnóstico completo, con la evidencia de cada hallazgo, en
 > [4_Plan_Evolucion_Tareas.md](4_Plan_Evolucion_Tareas.md#diagnóstico-de-aislamiento-del-cliente-2026-08-26).
 >
 > Consecuencia inmediata ya aplicada: **`cliente/src/lab/` y `laboratorio.html` eliminados** (2026-08-26). El
@@ -97,8 +105,8 @@ Objetivo: dejar el backend listo para que varios jugadores y un administrador �
 - [ ] C4. Proyecciones de estado por audiencia — **Slice 1 completado 2026-08-26** (jugador ve su Facción completa, las demás solo metadatos públicos, `GET /jugador/partidas/:gameId`). Slice 2 pendiente: `ConocimientoJugador` y "último conocido" necesitan un radio de visualización (balance de juego) no definido en ningún doc de este repo
 - [x] C5. WebSocket único con canales, suscripciones autorizadas y reconexión sin duplicar comandos — completada 2026-08-26. Difusión de eventos de dominio (no de comandos: el cliente los ejecuta por HTTP igual que antes)
 - [x] C6. Contrato publicable: CORS, versionado de API y OpenAPI generado desde los esquemas de Fastify — completada 2026-08-26. Todo bajo `/v1`; `GET /v1/openapi.json` sin autenticar; respuesta de comando autosuficiente en `/jugador/*` (incluye la proyección propia, ya no hace falta un `GET` aparte)
-- [ ] C7. Balance versionado por partida/temporada (deja de ser módulo global mutable) — **y servido**: los 8 módulos de `constants` que hoy el cliente importa para construir sus formularios y calcular costes tienen que llegar por el cable. Versionar el balance y publicarlo son la misma tarea. Es el patrón *Static Data Export* de la industria (reglas al cliente como DATOS, simulación solo en el servidor — ver [6_Sincronizacion_Visibilidad_y_Escala.md §6.3](6_Sincronizacion_Visibilidad_y_Escala.md#63-la-frontera-real-no-es-motor-sí--motor-no-es-reglas-vs-simulación)), y absorbe además el grupo "de tabla" de C10
-- [ ] C8. Superficie y rol del cliente de administración — **replanteado 2026-08-26**: el administrador observa, no interactúa como jugador (decisión del usuario) — los 27 comandos de rol `jugador` no debían estar expuestos en el cliente de administración, no era un permiso que faltara. Interfaz corregida: paneles convertidos a solo consulta, ninguna acción de jugador queda en la UI. Pero queda un **defecto real, sin resolver**: `alternarFaccionNpc` —la ÚNICA acción legítima de administrador (doc 5: "sin restricción si es admin")— **sigue devolviendo 403**, verificado en vivo tras la limpieza de UI. Causa: `rolEnPartida` cortocircuita a `administrador_global` y esa fila de la matriz solo admite `['jugador', 'administrador_partida']`, no `administrador_global`. El comentario de `rutas/admin.ts` que afirma que `alternarFaccionNpc` sí funciona sigue siendo falso
+- [x] C7. Balance versionado y servido — **completada 2026-08-26**: `GET /v1/balance` (`server/rutas/balance.ts`), sin autenticar (regla pública, no estado de partida, doc 9 T1), las 39 tablas completas de `constants.ts` sin lista de exclusión (decisión del usuario: publicarlas todas). `BALANCE_VERSION` (`constants.ts`) se estampa en `PartidaExportada.balanceVersion` al exportar una partida, como registro de qué balance corría — sin rechazo al cargar si cambia, a diferencia de `worldgenVersion` (el balance no hace falta para reconstruir el snapshot, solo cambia qué reglas rigen desde ahora). **Alcance NO cubierto, a propósito**: "versionado por partida/temporada" con overrides reales — hoy sigue siendo un único valor de proceso, no hay mecanismo para que dos partidas corran versiones de balance distintas a la vez; el panel que mutaba `constants.ts` en caliente (`app/balanceConfig.ts`) se eliminó en Fase B sin reemplazo y sigue sin dueño. Absorbe el grupo "de tabla" de C10 (`capFundacion`, `cupoVivienda`, `slotsPoliticaDisponibles`, `nivelFaccionInfo`, `CATALOGOS`): con el balance servido, un cliente sin motor ya puede resolverlas por *lookup* sin viaje de red — pendiente de que exista ese cliente (C8-C13)
+- [x] C8. Superficie y rol del cliente de administración — **completada 2026-08-26**. Replanteo: el administrador observa, no interactúa como jugador (decisión del usuario) — los 27 comandos de rol `jugador` no debían estar expuestos en el cliente de administración, no era un permiso que faltara. Interfaz corregida: paneles convertidos a solo consulta, ninguna acción de jugador queda en la UI. **Causa raíz corregida el mismo día**: `rolEnPartida` (`acceso/rolesDePartida.ts`) cortocircuitaba a `administrador_global` para cualquier actor con acceso técnico global, incluso con una `Membresia` `administrador_partida` real en esa partida (la que `otorgarAdministracion()` concede a quien la crea) — invertido el orden: la Membresia manda, `esAdministradorGlobal` es el *fallback* solo si no hay ninguna. `alternarFaccionNpc` —la única acción legítima de administrador (doc 5: "sin restricción si es admin")— ya no devuelve 403: verificado en vivo (servidor real, admin crea partida, jugador funda Facción, admin la cede al NPC — `resultado.ok: true`) y con dos regresiones nuevas en `server/__tests__/api.test.ts`. Dos tests preexistentes **codificaban el bug como comportamiento esperado** (`acceso/__tests__/rolesDePartida.test.ts`, `server/__tests__/api.test.ts`) — corregidos junto con el fix, no solo el código
 - [ ] C9. Contrato de comandos completo: esquema de `params` por cada uno de los 30 comandos. Hoy `ESQUEMA_EJECUTAR_COMANDO` declara `params: {}` — el contrato publicado tiene el agujero justo donde un cliente externo lo necesita, y un `params` malformado revienta dentro del manejador y sale como 409 en vez de 400. Arrastrado desde C2
 - [ ] C10. Consultas derivadas servidas por el backend: la migración que [8_Triaje_Consultas.md](8_Triaje_Consultas.md) ya trió. **`calcularPrecioReferencia` hecha** (2026-08-26, `RunnerDePartida.preciosReferencia()`). **Chokepoints y `evaluarViabilidadFundacion` (cliente) eliminados** ese mismo día, no migrados — decisión del usuario: la mecánica de chokepoints no aportaba, y el aviso de *hover* de viabilidad se quita de la interfaz (la función se queda solo para el NPC de gobernanza). Queda **un grupo**: la **geometría por frame** (zonas, fusión, trazado), que viaja precalculada dentro de la proyección porque `render()` la pide en cada `mousemove`. Las de tabla las absorbe C7
 - [x] C11a. El mapa deja de ser estado — **completada 2026-08-26**: 125,4 KB idénticos byte a byte en los ticks 0, 50 y 200 (medido; el 78% de la proyección con solo 4 facciones), viajaban en cada acción desde C6. `GET .../partidas/:gameId/mapa/:mapaId` en ambas superficies (`Cache-Control: immutable`), `:mapaId` es cache-buster puro que el servidor ignora al servir. `ResumenPartida`, `EstadoAdmin` y `ProyeccionJugador` llevan `mapaId` en vez de `mapa`. Verificado en vivo: tras `tick`/comando, ninguna petición nueva a `/mapa/` — solo tras `regenerarMundo`, que cambia la seed. 605/605 tests, `tsc` limpio en los dos proyectos
@@ -133,7 +141,7 @@ demostrar que funciona.
 
 ## Criterios de éxito
 
-- [ ] **Al cerrar la Fase C: un cliente sin una sola línea del motor —en su propio repositorio, sin alias `@motor/*`, sin `constants`, sin `worldgen/`— puede jugar una partida completa contra este backend.** Añadido 2026-08-26: es la prueba de que la API es de verdad el producto. Mientras `cliente/` necesite el alias para compilar, la fase no está cerrada por mucho que C0–C6 estén marcados.
+- [ ] **Al cerrar la Fase C: un cliente en su propio repositorio, sin importar el código del motor (`@motor/*`, ni `src/` de este repo de ninguna forma) y sin ejecutar ninguna simulación (T3) ni ninguna derivación de entrada privilegiada, puede jugar una partida completa contra este backend.** Añadido 2026-08-26, corregido 2026-08-26 tras discutir el eje real: **no** es "cero líneas de dominio en el cliente" — [9_Reglas_vs_Simulacion.md](9_Reglas_vs_Simulacion.md) fija que las derivaciones T2a (puras, de entrada propia — lo que el jugador ya ve en su proyección) pueden y deben **reimplementarse como código propio del cliente**, para no pagar un viaje de red por cada *tooltip*; la divergencia de fórmula entre cliente y servidor se acepta a conciencia (doc 9, T2a). Lo que el criterio prohíbe es (a) importar el código del motor de este repo para ejecutarlo en el navegador, y (b) que el cliente calcule o reciba como entrada algo privilegiado (estado de otras facciones). El balance (T1) le llega como **datos servidos** (C7), no como módulo `constants` importado. Mientras `cliente/` necesite el alias `@motor/*` para compilar, la fase no está cerrada por mucho que C0–C6 estén marcados.
 - [ ] Antes de iniciar la Fase D: una partida persistente corre en un backend dedicado, con varios jugadores + un admin conectados, comandos procesados en serie, y el servidor puede reiniciarse sin alterar la secuencia de ticks ni el RNG.
 - [ ] Al cerrar la Fase D: la misma infraestructura opera en tiempo real total, sin que el motor dependa de un paso global fijo, y sin que API, persistencia o frontends traten el tick como unidad temporal principal.
 
@@ -142,7 +150,7 @@ demostrar que funciona.
 _(completar con fecha y commit al cerrar cada fase)_
 
 - Fase A: 2026-08-25 (A1–A6 completas; commit pendiente — el usuario gestiona los commits de esta sesión)
-- Fase B: —
+- Fase B: 2026-08-26 (marcada retroactivamente; B1–B5 completas sin fecha de cierre propia — ver nota arriba)
 - Fase C: —
 - Fase D: —
 - Fase E: —

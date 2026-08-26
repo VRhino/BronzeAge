@@ -1,9 +1,20 @@
 # Contratos de identidad y permisos (diseño, Fase A6)
 
-Solo documento — nada de esto está implementado todavía. Es la Fase A6 del
-[roadmap](3_Plan_Evolucion_Roadmap.md): define las entidades externas al motor que la Fase B (backend
-provisional) y la Fase C (multijugador) necesitan, y la matriz de autorización sobre la superficie de
+Es la Fase A6 del [roadmap](3_Plan_Evolucion_Roadmap.md): define las entidades externas al motor que la Fase B
+(backend provisional) y la Fase C (multijugador) necesitan, y la matriz de autorización sobre la superficie de
 comandos que `GameStore` ya expone hoy. Contexto y motivación: [2_Estudio_Evolucion_Backend_Multifrontend.md](2_Estudio_Evolucion_Backend_Multifrontend.md), sección "1. Definir contratos de partida, identidad y permisos".
+
+> **Ya no es "solo documento" (2026-08-25/26).** Se escribió como diseño puro cuando nada de esto existía; hoy
+> las entidades (`Usuario`, `Sesion`, `Jugador`, `Membresia`) y la matriz de autorización de comandos están
+> **implementadas** (hitos C1/C2 del roadmap, `session/comandos/autorizacion.ts`). Las notas que dicen "hoy
+> ninguna de estas condiciones se comprueba" (más abajo, junto a la matriz) describen el estado en el momento
+> de escribir el diseño, no el estado actual — quedan como registro de la intención original, no como
+> descripción vigente. Desajuste real entre este diseño y la implementación, encontrado en vivo y **corregido
+> el 2026-08-26** (hito C8): la fila `alternarFaccionNpc` de abajo dice "sin restricción si es admin", pero
+> `rolEnPartida` cortocircuitaba a `administrador_global` para cualquier actor con `esAdministradorGlobal` sin
+> mirar su `Membresia` real — esa fila de la matriz solo admite `['jugador', 'administrador_partida']`, nunca
+> `administrador_global`, así que el comando devolvía 403 siempre para un admin. Se invirtió el orden: la
+> `Membresia` manda. Ver hito **C8** del roadmap.
 
 ## Punto de partida: qué existe hoy
 

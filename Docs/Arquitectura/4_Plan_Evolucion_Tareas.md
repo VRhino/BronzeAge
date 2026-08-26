@@ -340,8 +340,40 @@ una regla conservadora; la niebla de guerra queda como Slice 2, con sus parámet
 - [x] **Sin `schema.response` para los cuerpos grandes o de forma variable** (estado completo de administrador, proyección de jugador, `resultado.datos` que cambia según el comando) — decisión de seguridad, no de pereza: el `response` de Fastify no es solo documentación, es un FILTRO DE SERIALIZACIÓN (`fast-json-stringify`) — un campo real ausente del schema se DESCARTA de la respuesta en caliente. Modelar esos cuerpos con un schema aproximado arriesgaba romper payloads de verdad en silencio; se prefirió dejarlos sin cuerpo de respuesta documentado (la ruta sigue apareciendo con método, parámetros y seguridad) antes que correr ese riesgo. Verificado tras cada ruta añadida: la suite entera sigue en verde, ningún campo real desapareció
 - [x] **Respuesta de comando autosuficiente, solo en `/jugador/*`**: la respuesta de `POST .../comandos` ahora incluye `proyeccion` (el resultado de `proyectarParaJugador` sobre el estado YA actualizado) — el cliente deja de necesitar el viaje aparte que hacía antes. `ejecutarComandoHttp` (compartido con `/admin/*`) gana un parámetro opcional `camposExtra` en vez de bifurcarse; `/admin/*` no lo usa porque su `GET` de estado completo ya es barato de pedir aparte, y adjuntarlo ahí repetiría el problema de tamaño que esto viene a evitar
 - [x] 11 tests nuevos (3 CORS, 6 OpenAPI, 2 respuesta autosuficiente), 592/592 en total, `tsc` limpio en ambos proyectos. Verificado en vivo: `/sesiones` sin `/v1` da 404, `/v1/sesiones` funciona; `openapi.json` describe las 9 rutas reales; el cliente de administración funcionando de punta a punta contra `/v1/*` a través del proxy de Vite actualizado
-- [ ] Migrar balance de módulo global mutable a configuración versionada por partida/temporada, con auditoría de cambios (actor, fecha, versión anterior/nueva)
+- [x] Servir el balance — hecho en C7, ver abajo. La parte "versionado por partida/temporada, con auditoría de cambios" queda sin dueño (mismo estado que `actualizarBalance`/`restaurarBalance` desde que se retiraron en Fase B — ver arriba, "De 34 a 31")
 - [x] ~~Separar rutas/endpoints de administración de las de jugador, protegidas por rol técnico~~ — hecho en C3 (`/admin/*` y `/jugador/*`)
+
+### C7. Balance servido (2026-08-26)
+
+- [x] **`GET /v1/balance`** (`server/rutas/balance.ts`), registrado en `api.ts` junto a `openapi.json` — sin
+  autenticar, mismo criterio: es regla pública (T1, doc 9), no estado de partida, y es lo primero que un
+  cliente nuevo puede necesitar antes incluso de hacer login. Devuelve las **39 tablas completas** de
+  `constants.ts` agrupadas por el mismo criterio que la tabla "por consumidor de interfaz" del doc 9
+  (`catalogos`, `cuposYNiveles`, `costesYEconomia`, `geometriaUrbana`, `mundoYMilitar`, `caravanas`,
+  `reputacion`, `internas`), más `version`. Sin `schema.response`: modelar 39 tablas en JSON Schema es una
+  segunda fuente de verdad que mantener a mano, mismo motivo que ya usa `esquemas.ts` para los cuerpos grandes
+- [x] **Decisión del usuario sobre las 7 tablas que el doc 9 marcaba "a revisar antes de publicarlas"**
+  (`CAMPAMENTOS_BANDIDOS`, `REGENERACION_NODOS`, `SCORE_BANDAS`, `EXTRACTOR_DESEMPATE`, `LINEAS_PRODUCCION`,
+  `EXTRACCION_MAXIMOS`, `SIMULACION_AUTO_COMERCIO`): **publicarlas todas**, sin lista de exclusión que
+  mantener — quedan agrupadas bajo `internas` para que no se confundan con balance de formulario, pero viajan
+  igual que el resto. Doc 9 actualizado
+- [x] **`BALANCE_VERSION`** (`constants.ts`, primer valor `1`) se estampa en `PartidaExportada.balanceVersion`
+  al exportar (`GameSession.exportar`), como registro de qué balance corría al crear/guardar la partida. A
+  diferencia de `WORLDGEN_VERSION`, un desajuste **no se rechaza** al cargar (`persistenciaPartida.ts` no
+  gana una nueva excepción): el balance no hace falta para reconstruir el snapshot ya guardado, solo cambia
+  qué reglas rigen los próximos comandos y ticks — documentado en el propio comentario de `BALANCE_VERSION`
+- [x] **Alcance NO cubierto, a propósito** (evitar sobre-construir sin un consumidor real): "por
+  partida/temporada" con overrides de verdad. Hoy sigue siendo un único valor de proceso — no hay mecanismo
+  para que dos partidas abiertas a la vez corran versiones de balance distintas. El panel que mutaba
+  `constants.ts` en caliente (`app/balanceConfig.ts`) sigue sin dueño desde que se retiró en Fase B
+- [x] 4 tests nuevos (`server/__tests__/balance.test.ts`: 200 sin sesión, tabla real sin transformar,
+  presencia en el OpenAPI sin `security`; `session/__tests__/gameSession.test.ts`: `balanceVersion` estampada
+  al exportar). 604/604 en total, `tsc` limpio. Verificado en vivo: servidor real levantado con
+  `ADMINISTRADORES='dev:jefa'`, `curl http://localhost:.../v1/balance` responde 200 con `version:1` y
+  `EDIFICIO_CATALOGO` real dentro de `catalogos`
+- [ ] Absorbe el grupo "de tabla" del hito C10 (`capFundacion`, `cupoVivienda`, `slotsPoliticaDisponibles`,
+  `nivelFaccionInfo`, `CATALOGOS`): con el balance servido, un cliente sin motor ya puede resolverlas por
+  *lookup* — pero eso lo hace el cliente cuando exista uno sin `@motor/*` (C8-C13), no este hito
 
 ### Diagnóstico de aislamiento del cliente (2026-08-26)
 
@@ -382,12 +414,18 @@ no conceda autoridad de juego es exactamente la regla del doc 5. Lo que nunca se
 habla este cliente**: `gameStore.ts` se declara "cliente de JUGADOR" en su cabecera y `apiCliente.ts` habla
 la superficie de administración. → hito **C8**.
 
+> **De las cuatro filas de la tabla, tres siguen 403 hoy — correctamente**: `crearFaccion`, `fundarAsentamiento`
+> y `crearCaravana` son de rol `jugador` puro, y ya no están expuestas en la interfaz de administración (C8,
+> UI corregida). La cuarta, `alternarFaccionNpc`, **ya no da 403** desde el fix de `rolEnPartida` del
+> 2026-08-26 — era el bug real de esta fila, no las otras tres. El comentario de `rutas/admin.ts` citado abajo
+> es ahora **cierto**, no falso.
+
 #### Hallazgo 2 — no es un acoplamiento, son cuatro, y cada uno se rompe distinto
 
 | # | Acoplamiento | Qué es | Sale con |
 |---|---|---|---|
 | 1 | **Tipos** (`domain/types`, `GameSessionState`, `ParamsDe`/`DatosDe`, `ResultadoComando`, `EventoDominio`) | Solo compilación, coste cero en ejecución | Cliente generado del OpenAPI — **bloqueado**: ver hallazgo 3 |
-| 2 | **Balance y catálogos** (8 módulos de `constants`) | Alimentan `CATALOGOS` (todos los formularios) y los cálculos de coste | **C7**: versionar el balance y servirlo son la misma tarea |
+| 2 | **Balance y catálogos** (8 módulos de `constants`) | Alimentan `CATALOGOS` (todos los formularios) y los cálculos de coste | **C7 hecho** (`GET /v1/balance`) — sale cuando `cliente/` deje de importar `constants` y lea el endpoint en su lugar |
 | 3 | **26 consultas derivadas** | No existen en el servidor; solo dentro de `gameStore.ts` | **C10** (migración del doc 8) |
 | 4 | **El terreno** | `MapaGenerado.elevacion`/`.fertilidad` son *parámetros de ruido*, no rásteres | **C11** |
 
@@ -614,7 +652,7 @@ Se deja fuera de esta pasada, a propósito, por dos razones:
 Queda anotado como pendiente explícito de C11, no como "hecho": lo mismo que costó una premisa falsa en C0
 —dar algo por resuelto porque una parte relacionada lo está— no se repite aquí a propósito.
 
-### C8. El administrador observa, no interactúa — interfaz corregida, autorización sin resolver (2026-08-26)
+### C8. El administrador observa, no interactúa — interfaz corregida, autorización resuelta (2026-08-26)
 
 Corrección de rumbo del usuario sobre el planteamiento original de C8: la pregunta no era "¿cómo le damos al
 administrador permiso de jugador?", era "¿qué hace de verdad un administrador?". La respuesta ya estaba en
@@ -643,12 +681,17 @@ excepción. El 403 nunca fue un bug: era la interfaz de depuración ofreciendo, 
   aparte, no desde la UI de administración — así se prueba la vista de solo lectura contra datos genuinos, no
   contra un mock): cola de construcción, mejoras, reserva protegida y auto-construcción muestran los datos
   correctos sin ningún control de escritura. 600/600 tests, `tsc` limpio en los dos proyectos
-- [ ] **Defecto real encontrado en la misma verificación, sin resolver**: el toggle de `alternarFaccionNpc`
-  —la única acción que debía funcionar— **responde 403** igual que las 27 que se acaban de quitar. Mismo bug
-  de fondo del hallazgo original de C8: `rolEnPartida` (`acceso/rolesDePartida.ts`) devuelve
-  `'administrador_global'` en cuanto `esAdministradorGlobal` es cierto, sin mirar la `Membresia` real, y la
-  fila de `alternarFaccionNpc` en la matriz solo admite `['jugador', 'administrador_partida']`. La limpieza de
-  interfaz de esta pasada no lo toca — es un fix de autorización en el servidor, pendiente
+- [x] **Defecto encontrado en la misma verificación, corregido el mismo día**: el toggle de `alternarFaccionNpc`
+  —la única acción que debía funcionar— respondía 403 igual que las 27 que se acababan de quitar. Mismo bug
+  de fondo del hallazgo original de C8: `rolEnPartida` (`acceso/rolesDePartida.ts`) devolvía
+  `'administrador_global'` en cuanto `esAdministradorGlobal` era cierto, sin mirar la `Membresia` real, y la
+  fila de `alternarFaccionNpc` en la matriz solo admite `['jugador', 'administrador_partida']`. **Fix**: la
+  `Membresia` manda sobre `esAdministradorGlobal`, no al revés — quien crea la partida ya tiene Membresia
+  `administrador_partida` (`otorgarAdministracion`), así que ahora cae en esa fila. Dos tests preexistentes
+  codificaban el bug como esperado (`acceso/__tests__/rolesDePartida.test.ts`,
+  `server/__tests__/api.test.ts`) y se corrigieron junto con el código; test nuevo de camino feliz
+  (admin cede una Facción real al NPC, `resultado.ok: true`). Verificado en vivo contra el servidor real.
+  606/606 tests, `tsc` limpio
 
 ## Fase D — Conversión temporal total
 

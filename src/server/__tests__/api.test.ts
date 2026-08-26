@@ -149,9 +149,13 @@ describe('POST /admin/partidas', () => {
   it('quien crea la partida queda como administrador_partida de ella', async () => {
     const { admin } = await partidaCreada('g1');
     const res = await app.inject({ method: 'GET', url: '/v1/sesiones/actual?gameId=g1', headers: admin });
-    expect(res.json().rol).toBe('administrador_global'); // global manda sobre la membresia concreta
+    // La membresia concreta manda sobre ser administrador global (fix C8, 2026-08-26) — `esAdministradorGlobal`
+    // sigue en `true` por separado (siguiente aserción), pero el ROL con el que actúa EN esta partida es el
+    // de su Membresia.
+    expect(res.json().rol).toBe('administrador_partida');
+    expect(res.json().esAdministradorGlobal).toBe(true);
 
-    // La membresía existe igualmente: sin ella no podría ejecutar comandos de administración.
+    // Sigue siendo jugador de ninguna: administrar no es jugar (doc 5).
     const comando = await app.inject({
       method: 'POST',
       url: '/v1/admin/partidas/g1/comandos',
@@ -468,7 +472,38 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       payload: { tipo: 'alternarFaccionNpc', params: { faccionId: 'no-existe', activo: true } },
     });
 
+    // 200, no 403: quien crea la partida recibe Membresia `administrador_partida` (`otorgarAdministracion`),
+    // así que SÍ pasa la matriz de autorización — lo que rechaza esta petición es que la Facción no existe,
+    // no el rol. Antes del fix de C8 (`rolEnPartida`, 2026-08-26) esto daba 403 en todos los casos, y esta
+    // aserción no lo distinguía: un cuerpo `{error}` de un 403 también carece de `proyeccion`.
+    expect(res.statusCode).toBe(200);
+    expect(res.json().resultado.ok).toBe(false);
     expect(res.json().proyeccion).toBeUndefined();
+  });
+
+  it('alternarFaccionNpc: el administrador que crea la partida SÍ puede (doc 5, fix C8 2026-08-26)', async () => {
+    const { admin } = await partidaCreada('g1');
+    const auth = await jugadorEn('g1');
+    const crear = await app.inject({
+      method: 'POST',
+      url: '/v1/jugador/partidas/g1/comandos',
+      headers: auth,
+      payload: { tipo: 'crearFaccion', params: { nombre: 'Micenas' } },
+    });
+    const faccionId = crear.json().resultado.datos.faccionId;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/admin/partidas/g1/comandos',
+      headers: admin,
+      payload: { tipo: 'alternarFaccionNpc', params: { faccionId, activo: true } },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().resultado.ok).toBe(true);
+
+    const estado = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1', headers: admin });
+    expect(estado.json().faccionesNpcIds).toContain(faccionId);
   });
 
   it('idempotencyKey (Fase C5): repetir la misma peticion no vuelve a aplicar el comando', async () => {

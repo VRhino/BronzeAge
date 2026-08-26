@@ -32,6 +32,10 @@ migración.
 >   auditoría**: `chokepointsControl` — se eliminó toda la mecánica de chokepoints, geometría y peaje incluidos
 >   (doc 3, hito C10). `viabilidadFundacion` sigue viva en `engine/settlement.ts` para uso interno del NPC de
 >   gobernanza, pero se retiró del cliente y no vuelve a ser una consulta expuesta.
+> - **Una fila de la tabla de `session/` ya está resuelta**: `precioReferencia` se migró al servidor el
+>   2026-08-26 (`RunnerDePartida.preciosReferencia()`, caché con TTL de un minuto real). La afirmación "nada de
+>   esto está implementado" de la intro ya no es literalmente cierta — es la primera consulta triadas aquí que
+>   completó el viaje.
 
 ## El criterio
 

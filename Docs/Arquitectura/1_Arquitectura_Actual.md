@@ -1,15 +1,23 @@
 # Arquitectura actual del proyecto
 
+> **Reescrito 2026-08-26** para describir el backend real, tras varias sesiones en las que este documento se
+> quedó describiendo el prototipo de un solo `GameStore` en el navegador (Fase 0/A) mientras el código
+> avanzaba hasta la Fase C. Fuente de verdad para el estado de cada hito: [3_Plan_Evolucion_Roadmap.md](3_Plan_Evolucion_Roadmap.md).
+
 ## Propósito y alcance
 
-El proyecto es un prototipo web de la Fase 0 de Bronze Age Collapse. Ejecuta una simulación de datos en TypeScript y ofrece una interfaz de depuración en navegador con DOM y Canvas 2D. Su objetivo actual es validar reglas de mundo, economía, población, construcción, política, comercio y combate; no es todavía un servidor multijugador.
+El proyecto es el backend multijugador de Bronze Age Collapse: un proceso Node.js (Fastify) que gobierna una
+partida —mundo, facciones, asentamientos, economía, población, construcción, política, comercio, diplomacia y
+combate— y la expone por red bajo un contrato HTTP versionado (`/v1`) más un canal WebSocket. No es un
+prototipo de una sola pestaña: varios clientes externos, cada uno en su propio proceso y su propia identidad,
+se conectan a la misma instancia de partida.
 
-La aplicación se construye con Vite y TypeScript. No incorpora framework de interfaz, backend, base de datos, autenticación ni capa de red.
+Este repositorio es **solo servidor** desde la Fase C0. La interfaz de navegador que existía aquí se extrajo a
+`cliente/` (proyecto aparte, con su propio `package.json`) y todavía **no cumple el criterio de cierre de la
+Fase C**: sigue importando el motor de este repo por un alias (`@motor/*`) en vez de hablar solo por red — ver
+`cliente/README.md` y los hitos C9–C13 del roadmap (C7 y C8 ya completos).
 
 ## Vista global
-
-Este repositorio es **solo servidor** desde la Fase C0: el cliente de navegador se extrajo a `cliente/`
-(proyecto aparte) y el de administración vive fuera. Lo que queda es un proceso Node.
 
 ```text
 INFRAESTRUCTURA — cómo se sirve (sustituible sin tocar el negocio)
@@ -45,160 +53,230 @@ apunta "hacia arriba". Dos invariantes tienen además su propio test en lenguaje
 `session/` es el único punto que ve los dos dominios —juego y acceso— porque la autorización de comandos lo
 exige: qué rol técnico tiene el actor Y qué relación de juego guarda con la entidad objetivo.
 
+606 tests en 79 archivos cubren las seis capas (medido 2026-08-26).
+
 ## Capas y responsabilidades
 
 ### Dominio: `src/domain/types.ts`
 
-Contiene los contratos de datos centrales: facciones, asentamientos, edificios, población, escuadrones, caravanas, mercado, relaciones políticas, recursos, nodos de mapa y geometría básica.
-
-Los datos identifican entidades mediante cadenas (`id`, `faccionId`, `asentamientoId`, `jugadorId`). Los jugadores son actualmente identidades del dominio de juego; no representan usuarios autenticados del sistema.
+Contratos de datos centrales: facciones, asentamientos, edificios, población, escuadrones, caravanas,
+mercado, relaciones políticas, recursos, nodos de mapa y geometría básica. Las entidades se identifican por
+cadenas (`id`, `faccionId`, `asentamientoId`, `jugadorId`) — son identidades del dominio de *juego*, distintas
+del `Usuario` autenticado que vive en `acceso/` (un mismo `Usuario` puede tener un `Jugador` por partida).
 
 ### Configuración: `src/constants.ts`
 
-Contiene catálogos y parámetros de reglas: recursos, edificios, economía, población, construcción, combate, política, mundo y balance. El módulo `app/balanceConfig.ts` permite cambiar algunos valores en caliente desde la interfaz de administración actual.
-
-Esta configuración es global para el proceso o la pestaña actual; no está versionada ni asociada a una partida concreta.
+39 tablas, ~1240 líneas: recursos, edificios, economía, población, construcción, combate, política, mundo y
+balance. **Servida completa y sin autenticar en `GET /v1/balance`** desde el hito **C7** (2026-08-26), con
+`BALANCE_VERSION` estampada en cada partida al crearla. Sigue siendo **global al proceso** — la parte
+"versionado por partida/temporada, con overrides reales" del hito queda deliberadamente sin construir, sin un
+consumidor que la necesite todavía. Clasificación completa de qué puede viajar a un cliente y qué no:
+[9_Reglas_vs_Simulacion.md](9_Reglas_vs_Simulacion.md).
 
 ### Generación de mundo: `src/worldgen/`
 
-Genera un `MapaGenerado` a partir de una configuración y una semilla. Incluye elevación, fertilidad, biomas, ríos, bosques, nodos de recurso y regiones. La generación usa un RNG propio y es reproducible si se conserva la versión del algoritmo y la semilla. (Chokepoints existieron entre v7 y v14 del algoritmo; eliminados en v15, 2026-08-26 — ver [9_Reglas_vs_Simulacion.md](9_Reglas_vs_Simulacion.md).)
+Genera un `MapaGenerado` a partir de una configuración y una semilla: elevación, fertilidad, biomas, ríos,
+bosques, nodos de recurso y regiones. RNG propio, reproducible si se conserva la versión del algoritmo
+(`WORLDGEN_VERSION`, hoy **15**) y la semilla. (Chokepoints existieron entre v7 y v14; eliminados por completo
+en v15, 2026-08-26 — ver doc 9.)
 
-El mundo generado se considera inmutable durante la partida salvo sus recursos agotables, cuyo consumo se mantiene separado en `EstadoMapa`.
+El mundo generado es inmutable durante la partida salvo sus recursos agotables, cuyo consumo se mantiene
+separado en `EstadoMapa`. Por ser función pura de la seed, se sirve como **asset cacheable** en vez de viajar
+en cada respuesta — hito **C11a**, completado: `GET .../partidas/:gameId/mapa/:mapaId` con
+`Cache-Control: immutable`. Sigue sin resolverse que `elevacion`/`fertilidad` son *parámetros de ruido*, no
+rásteres — indibujable sin `worldgen/` (**C11b**, diferido a propósito).
 
 ### Mundo y consultas espaciales: `src/world/`
 
-`MapaGenerado` y `EstadoMapa` son datos serializables. La clase `Mapa` es una fachada en memoria que construye índices y ofrece consultas espaciales, stock de nodos, extracción y regeneración. `GameStore` cachea esta fachada mediante `WeakMap`; no la guarda dentro del estado exportable.
+`MapaGenerado` y `EstadoMapa` son datos serializables. La clase `Mapa` es una fachada en memoria que construye
+índices y ofrece consultas espaciales, stock de nodos, extracción y regeneración. También incluye geometría,
+rutas y exportación de terreno para Unity (`exportUnity.ts` — herramienta de administración, no del juego).
 
-También incluye geometría, rutas y exportación de terreno para Unity. La exportación Unity es una operación de lectura del estado, no una regla de simulación.
-
-`world/poligonos.ts` resuelve la unión de siluetas que se solapan (campo de distancia con signo más marching squares, sin dependencias externas). Sus dos consumidores son puramente de presentación: `Mapa.contornosBosques()` fusiona los discos de bosque en manchas, y `engine/zones.ts` fusiona las zonas de influencia de una misma facción en una silueta por facción. Ninguna regla de simulación consulta esos contornos: la pertenencia territorial y el alcance de recursos se siguen resolviendo contra el polígono por asentamiento y el disco por bosque.
+`world/poligonos.ts` resuelve la unión de siluetas que se solapan. Sus dos consumidores son de presentación:
+`Mapa.contornosBosques()` y `engine/zones.ts` (fusión de zonas de influencia por facción).
 
 ### Motor: `src/engine/`
 
-Agrupa reglas por subsistema: fundación, expansión, zonas, construcción, trazado urbano, población, mantenimiento, almacenamiento, mercado, comercio, caravanas, facciones, cargos, diplomacia, ligas, combate, tropas, bandidos, reputación y títulos.
+Reglas por subsistema: fundación, expansión, zonas, construcción, trazado urbano, población, mantenimiento,
+almacenamiento, mercado, comercio, caravanas, facciones, cargos, diplomacia, ligas, combate, tropas, bandidos,
+reputación y títulos. Libre de dependencias de `session/`, `server/` o de cualquier capa de presentación.
 
-La función central es `avanzarSimulacion(estado, mapa, tickActual)` en `engine/simulation.ts`. Procesa el tick de forma ordenada y devuelve el nuevo estado de los subsistemas junto con eventos. La fachada `Mapa` puede mutar `EstadoMapa` por extracción y regeneración, por lo que el tick no es completamente funcional aunque su entrada y salida están bien delimitadas.
+`avanzarSimulacion(estado, mapa, tickActual)` (`engine/simulation.ts`) es el orquestador del tick: lo procesa
+de forma ordenada y devuelve el nuevo estado de los subsistemas junto con eventos de dominio estructurados
+(código + payload tipado, no texto — hito A5). Hay aleatoriedad de simulación en población, combate y
+bandidos vía un RNG inyectado (no `Math.random()` suelto — A3); su estado forma parte del snapshot persistido
+(ver "Persistencia" más abajo).
 
-El motor está libre de dependencias de `app`, `ui` y `main`, por lo que puede ejecutarse en un proceso Node.js sin llevar código de navegador.
+Clasificación completa de qué es regla pura (puede recalcularse en un cliente sin motor) y qué es simulación o
+entrada privilegiada (solo servidor): [9_Reglas_vs_Simulacion.md](9_Reglas_vs_Simulacion.md).
 
-Hay aleatoriedad de simulación en población, combate y bandidos mediante `Math.random()`. Los tests sustituyen esa fuente para comprobar determinismo, pero su estado no forma parte de una partida guardada.
+### Dominio de acceso: `src/acceso/`
 
-### Aplicación y sesión local: `src/app/gameStore.ts`
+Entidades externas al motor, sin ninguna dependencia (ni siquiera de `domain/`): `Usuario`, `Sesion`, `Rol`,
+`Jugador`, `Partida`, `Membresia` (`acceso/tipos.ts`), el servicio de autenticación por sesión
+(`servicioAutenticacion.ts`), el registro de proveedores de identidad intercambiable
+(`proveedorIdentidad.ts`) y la política de qué puede hacer cada rol técnico (`rolesDePartida.ts`:
+`rolEnPartida`, `puedeAdministrar`, `puedeJugar`, `puedeCrearPartida`, `puedeDescartarPartida`).
 
-`GameStore` es el dueño de la sesión actual. Mantiene un único `GameState` en memoria con mundo, estado del mapa, entidades de juego, tick, log e historial por jugador.
+Una `Membresia` es **una por (usuarioId, gameId)** — un Usuario no puede unirse dos veces a la misma partida
+(409 en el intento). `esAdministradorGlobal` es un flag **ortogonal**, no una Membresia: un administrador
+técnico no es por eso un jugador dentro de la partida (doc 5, "Diferencia entre rol técnico y cargo de
+juego").
 
-Sus responsabilidades actuales son:
+### Aplicación de partida: `src/session/`
 
-- Inicializar y regenerar el mundo.
-- Convertir intenciones de UI en llamadas al motor.
-- Validar y traducir errores de dominio a entradas del log.
-- Mantener un contador local para generar IDs de acciones.
-- Ejecutar el tick y el NPC de gobernanza.
-- Exponer consultas derivadas para la UI.
-- Notificar cambios a suscriptores locales.
-- Conservar una copia profunda de cada tick para la línea de tiempo.
-- Importar y exportar una partida como JSON.
+`GameSession` (`gameSession.ts`) reemplaza lo que hacía `GameStore` en el prototipo: es el dueño del
+`GameState` de una partida, deliberadamente **síncrona y sin E/S** (ninguna llamada a disco, red o reloj sin
+que se lo pasen por parámetro) — así es fácil de probar y la async vive en la capa de encima (`server/`).
 
-Por ello, `GameStore` mezcla sesión, casos de uso, adaptación de errores, historial de debug y parte de la administración. Es la capa que deberá dividirse o reemplazarse al introducir un servidor.
+- `session/comandos/` — los 30 comandos de juego (`registro.ts`), y `autorizacion.ts`: una matriz con una fila
+  por comando (rol técnico mínimo + condición de dominio), exhaustividad garantizada en compilación. El actor
+  manda una intención `{tipo, params}`; nunca ejecuta motor directamente.
+- `session/proyecciones/jugador.ts` — compone lo que un jugador puede ver de la partida (Fase C4, Slice 1: su
+  Facción completa, las demás solo metadatos públicos). Slice 2 (niebla de guerra / "último conocido") sigue
+  sin implementar: depende de un radio de visualización que ningún doc de este repo define todavía.
+- `session/canales.ts` — qué canal de WebSocket puede suscribir cada actor.
+- `session/npcGobernanza.ts` — automatización de facciones NPC tras el tick, separada del motor puro.
+- `session/estado.ts` — las vistas de estado completo (`vistaAdminDeEstado`) que consume la superficie admin.
 
-El estado se exporta como `SimulacionExportada`. El guardado conserva la versión de formato, el tick, configuración/semilla del mundo, recursos restantes, entidades y logs. No existe persistencia automática: exportar/importar se hace mediante archivos desde el navegador.
+### Servidor: `src/server/`
 
-### NPC de gobernanza: `src/app/npcGobernanza.ts`
+El único punto async del backend. `api.ts` es la raíz de composición: monta Fastify, CORS, WebSocket, OpenAPI,
+y registra tres superficies bajo `/v1` (Fase C6 — versionado por prefijo de ruta, sin alias sin versión):
 
-El NPC es una automatización de aplicación, separada del tick básico del motor. Se ejecuta después del tick para las facciones marcadas en `faccionesNpcIds`. Sus decisiones reutilizan funciones públicas del motor.
+- **`/v1/sesiones`** — login (proveedor de desarrollo hoy, `Authorization: dev <sujeto>`) y whoami. La puerta
+  a las otras dos.
+- **`/v1/admin/*`** (`rutas/admin.ts`) — gobierno de la partida como objeto: crear/reabrir, avanzar tick, leer
+  estado completo. Exige `administrador_global` o una `Membresia` de administración (`administrador_partida`/
+  `moderador`) en esa partida — política en `acceso/rolesDePartida.ts`.
+- **`/v1/jugador/*`** (`rutas/jugador.ts`) — unirse (crea la `Membresia`), leer la proyección propia, ejecutar
+  comandos. Un administrador **no** pasa este filtro: tener acceso técnico no da autoridad de jugador (doc 5).
+- **`/v1/.../tiempo-real`** (`rutas/tiempoReal.ts`, Fase C5) — WebSocket con canales suscribibles, autorizados
+  por `session/canales.ts`; difunde eventos de dominio, nunca ejecuta comandos por este canal.
+- **`GET /v1/openapi.json`** — el contrato publicado, sin autenticar a propósito, para que otros repos generen
+  su cliente.
 
-El hecho de que esté aislado del motor es positivo: en un servidor puede convertirse en un agente de aplicación programado, sin contaminar las reglas puras.
+Piezas de soporte:
 
-### Interfaz: `src/main.ts` y `src/ui/canvas.ts`
-
-`main.ts` construye la interfaz de administración y depuración: formularios, pestañas, controles de tick, administración de facciones, asentamientos, comercio, guerra, balance, logs, generación e importación/exportación.
-
-Conserva estado de visualización local, como pestañas activas, selección, filtros, posición de la línea de tiempo y caché visual. Se suscribe a `gameStore` para repintar.
-
-`ui/canvas.ts` dibuja el mapa y la vista local de asentamientos. No decide reglas, rutas, trazado ni control territorial: recibe esos datos ya resueltos.
-
-La UI actual es una consola administrativa completa, no un frontend restringido para un jugador individual.
+- `server/identidad/` — adaptadores de los puertos de `acceso`: proveedor de desarrollo, repositorio en
+  memoria, parseo de cabecera `Authorization`, y el directorio de administradores globales
+  (`ADMINISTRADORES=proveedor:sujetoId` por variable de entorno — vacío por defecto, sin él nadie administra).
+- `server/persistenciaPartida.ts` — snapshot de partida a disco: `PartidaExportada` completa (estado, tick,
+  eventos, mapa/yacimientos, IDs y **el estado del RNG**), escritura atómica (`.tmp` + `rename`, nunca un
+  archivo a medias), con comprobación de versión como red de seguridad contra dos procesos escribiendo el
+  mismo `gameId`.
+- `server/runnerDePartida.ts` — la pieza entre `GameSession` y el proceso real: una **cola serial** por
+  partida (dos llamadas concurrentes se aplican en orden de llegada, nunca intercaladas), el ciclo
+  "aplicar → persistir → confirmar" (si falla la escritura, `GameSession` vuelve atrás), idempotencia de
+  comandos por `actor:idempotencyKey` (reconexión sin duplicar acciones, Fase C5), caché con TTL de un minuto
+  real de `preciosReferencia()` (regla de entrada privilegiada, C10), y un scheduler opcional de ticks
+  automáticos.
+- `server/registroDePartidas.ts` — qué partidas están abiertas en este proceso.
+- `server/difusion/hub.ts` — registro de conexiones WebSocket y envío a las suscritas a un canal; la decisión
+  de quién puede suscribirse a qué vive en `session/canales.ts`, no aquí.
+- `server/openapi.ts` — configuración de `@fastify/swagger` para el contrato publicado.
 
 ## Estado de partida y ciclo de un tick
 
 ```text
-Evento UI
-  -> método de GameStore
-  -> función del motor / actualización del estado
-  -> registro de eventos o errores en log
-  -> clon de historial y notify()
-  -> render de todos los paneles y Canvas
+Comando de jugador o admin (HTTP)
+  -> RunnerDePartida.ejecutar(manejador, params, actor, idempotencyKey?)
+  -> encolar en la cola serial de esa partida
+  -> GameSession.ejecutar(...) (síncrono: valida, autoriza, muta estado, genera eventos)
+  -> persistir snapshot en disco (o revertir GameSession si falla la escritura)
+  -> resultado devuelto al cliente HTTP
 
-Botón "Avanzar tick"
-  -> GameStore.avanzarTick()
-  -> engine.avanzarSimulacion(...)
-  -> comercio automático opcional
-  -> NPC de gobernanza opcional
-  -> log, historial y render
+POST /admin/.../tick  (o el scheduler opcional de RunnerDePartida)
+  -> RunnerDePartida.avanzarTick()
+  -> misma cola serial: GameSession.avanzarTick() -> avanzarAutoComercio() -> avanzarFaccionesNpc()
+  -> UN solo persist para las tres (un fallo a mitad no deja tick aplicado sin NPC resuelto)
 ```
 
-Los ticks avanzan manualmente al pulsar un botón. No hay planificador de tiempo real ni proceso de servidor que los ejecute.
+Los ticks siguen siendo la unidad de simulación (Fase D no ha empezado): hoy se avanzan a mano vía
+`POST /admin/.../tick`, o mediante el scheduler opcional de `RunnerDePartida.iniciarTicksAutomaticos()` — no
+hay todavía una fuente de ticks operativa por defecto ni descubrimiento de partidas (**C12** pendiente).
 
 ## Persistencia, historial y observabilidad
 
-- La partida en curso vive en memoria de la pestaña del navegador.
-- El guardado es un JSON descargado manualmente; no hay base de datos.
-- El historial contiene una copia profunda del estado por tick dentro de `GameStore` para la línea temporal. Es útil para depuración, pero su coste de memoria aumenta con número de ticks y tamaño de partida.
-- Los eventos son mensajes de texto, sin esquema de evento estable, sin auditoría de actor y sin almacenamiento externo.
+- Cada partida es un snapshot JSON en disco (`server/persistenciaPartida.ts`), no una base de datos —
+  suficiente para el volumen actual; el doc 4 registra por qué no hace falta SQLite todavía (la cola serial ya
+  elimina la concurrencia de escritura).
+- El snapshot incluye estado completo, tick, RNG, IDs, configuración/semilla del mundo y eventos de dominio —
+  no solo el estado "de superficie".
+- Los eventos de dominio son estructurados (código estable + payload tipado, A5), no mensajes de log en
+  texto. No tienen todavía cursor de paginación: viajan enteros en cada lectura y crecen sin techo dentro de
+  una partida larga (medido: 2 → 41 → 102 KB entre los ticks 0 y 200 con 4 facciones) — hito **C13**
+  pendiente.
+- No hay historial de línea de tiempo por tick en el servidor (lo que hacía `GameStore` en el prototipo, para
+  depuración) — esa herramienta de desarrollo, si se necesita, vive del lado de un cliente de depuración, no
+  del backend de producción.
 
 ## Comunicación, identidad y permisos
 
-No existe una interfaz de comunicación entre procesos o clientes:
-
-- No hay HTTP, WebSocket, Server-Sent Events ni RPC.
-- No hay servidor ni instancias de partida identificadas por `gameId`.
-- No hay cuentas, sesiones, autenticación ni autorización.
-- No hay asociación entre un usuario externo y un `jugadorId` de dominio.
-- No hay filtrado de datos por facción, jugador, rol administrativo o niebla de guerra.
-
-Las acciones de `GameStore` reciben directamente IDs que provee la UI. Esto es válido para una herramienta local, pero no puede considerarse seguro en un entorno cliente-servidor: el servidor tendrá que determinar el actor autenticado y comprobar sus permisos antes de aplicar cada comando.
+- HTTP versionado (`/v1`) + WebSocket, con tres superficies separadas por rol (arriba). CORS desactivado por
+  defecto (`ORIGENES_PERMITIDOS`, vacío = ningún origen cruzado pasa).
+- `Usuario`, `Sesion`, `Jugador`, `Membresia` están implementados (C1), con la autenticación tras un puerto
+  intercambiable: sustituir el proveedor de desarrollo por uno real es un adaptador nuevo, sin tocar lo que se
+  apoya en él.
+- Autorización de comandos por actor/facción/asentamiento/cargo, vía la matriz de `session/comandos/autorizacion.ts`
+  (C2) — exhaustiva en compilación, no una lista que se pueda olvidar actualizar.
+- **Defecto corregido (hito C8, 2026-08-26):** `rolEnPartida` cortocircuitaba a `administrador_global` para
+  cualquier actor con `esAdministradorGlobal`, sin comprobar si además tenía una `Membresia` real en esa
+  partida — así que `alternarFaccionNpc` (la única acción que la matriz permite a un admin,
+  `['jugador', 'administrador_partida']`) devolvía 403 siempre. Se invirtió el orden: la `Membresia` manda
+  sobre `esAdministradorGlobal`, no al revés. Ver doc 5 y doc 3 hito C8.
+- Falta el esquema de `params` por comando (`ESQUEMA_EJECUTAR_COMANDO` declara `params: {}` hoy) — un
+  `params` malformado revienta dentro del manejador y sale como 409 en vez de 400 (**C9** pendiente).
+- La proyección de jugador (C4) solo cubre el Slice 1 (Facción propia completa, resto solo metadatos
+  públicos); la niebla de guerra real (Slice 2) está bloqueada por una decisión de balance sin tomar.
 
 ## Fortalezas para una futura evolución
 
-- El motor de reglas está separado de la UI y no necesita DOM.
-- El modelo de estado es explícito y mayoritariamente serializable.
-- La generación de mundo tiene semilla y versión.
-- Existen pruebas extensas para reglas y regresiones.
-- La UI no invoca directamente el motor; ya usa una frontera de aplicación (`GameStore`).
-- Las entidades usan IDs estables, adecuados para almacenamiento y mensajes de red.
+- Dirección de dependencias congelada por test (`arquitectura.test.ts`); `acceso/` sin dependencias y
+  `session/` síncrona y sin E/S, lo que hace ambas capas triviales de probar con dobles.
+- 606 tests en 79 archivos cubren motor, sesión, acceso y servidor.
+- El mundo generado tiene semilla y versión, y se sirve como asset inmutable cacheado (C11a) en vez de viajar
+  en cada respuesta.
+- El snapshot de partida persiste el estado del RNG: una partida recargada continúa siendo determinista, no
+  solo su estado de superficie.
+- Escritura de snapshot atómica; cola serial + idempotencia de comandos hacen segura la reconexión de
+  cliente sin duplicar acciones.
+- Contrato publicado (`/v1/openapi.json`) para que un cliente externo genere su propio cliente tipado.
+- Autorización de comandos exhaustiva en compilación (matriz, no lista suelta).
 
 ## Limitaciones actuales
 
-- Sesión única en memoria y singleton `gameStore`.
-- Ausencia total de backend, transporte y persistencia servidor.
-- UI administrativa con acceso al estado completo.
-- Falta de identidad y autorización.
-- Balance mutable globalmente.
-- Aleatoriedad no persistida ni inyectada por partida.
-- Historial completo en memoria sin política de retención.
-- Algunos métodos de aplicación mezclan decisiones de presentación, mensajes de log y lógica operativa.
+- Balance (`constants.ts`) servido (**C7**), pero global al proceso — sin overrides por partida/temporada.
+- `params` de comando sin esquema propio, error de forma malformado sale como 409 en vez de 400 (**C9**).
+- Geometría por frame (zonas de influencia, fusión, trazado urbano) no se sirve todavía precalculada; sigue
+  siendo una consulta de entrada privilegiada que solo el servidor puede resolver (**C10**, resto del hito).
+- Terreno no rasterizado: `MapaGenerado.elevacion`/`.fertilidad` son parámetros de ruido, indibujables sin
+  `worldgen/` (**C11b**, diferido por falta de consumidor hoy).
+- Sin descubrimiento de partidas (`gameId` llega fuera de banda) ni fuente de ticks operativa por defecto
+  (**C12**).
+- `eventosDominio` sin cursor, crecen sin techo y viajan enteros en cada lectura; la única reacción de un
+  cliente sin motor a un evento por WebSocket es hoy un refetch completo (**C13**).
+- Niebla de guerra / "último conocido" sin implementar (C4 Slice 2): bloqueado por una decisión de balance
+  (radio de visualización) que ningún documento de este repo fija todavía.
+- El único cliente que existe (`cliente/`) sigue importando el motor de este repo por `@motor/*`: el criterio
+  de cierre de la Fase C —un cliente sin código del motor jugando una partida completa— no se cumple todavía.
 
 ## Decisión de evolución adoptada
 
-La conversión temporal completa no se realizará como primer paso. La primera etapa será construir el backend multijugador sobre el motor de ticks actual y validar servidor, persistencia, comunicación, identidad y permisos.
+La conversión temporal completa no se realiza como primer paso. La etapa actual construye el backend
+multijugador sobre el motor de ticks existente: servidor, persistencia, comunicación, identidad y permisos
+primero (Fases B y C), tiempo real después (Fase D).
 
-Durante esa etapa provisional:
+Durante esta etapa:
 
-- Cada partida será una instancia backend dedicada.
-- Todos los jugadores conectados a esa instancia compartirán el mismo estado y tick.
-- El servidor seguirá siendo quien avance y resuelva los ticks.
-- El frontend podrá ser sustituido sin trasladar la autoridad de la partida al navegador.
+- Cada partida es una instancia backend dedicada (`RunnerDePartida` + snapshot en disco).
+- Todos los actores conectados a esa instancia comparten el mismo estado y tick.
+- El servidor sigue siendo quien avanza y resuelve los ticks; ningún cliente ejecuta motor por autoridad.
+- Los frontends (jugador, administración) son sustituibles sin trasladar la autoridad de la partida al
+  navegador — es justo lo que exige el criterio de cierre de la Fase C.
 
-La conversión posterior será de ticks discretos a tiempo real total. Esta decisión reduce el número de cambios simultáneos, pero exige no convertir el tick en un contrato permanente de infraestructura.
-
-Desde el principio deben quedar separados:
-
-- El reloj del servidor.
-- El tiempo de simulación.
-- La unidad interna provisional del motor (`tick`).
-- El scheduler que decide cuándo avanzar.
-- La representación temporal que recibe cada frontend.
-
-## Verificación realizada al documentar
-
-El comando de comprobación de tipos pasa. La suite de pruebas tiene cuatro fallos en dos ficheros de prueba ya modificados en el árbol de trabajo (`anclasSatelites.test.ts` y `lineas_produccion.test.ts`); no se ha modificado código durante este análisis.
+La conversión posterior será de ticks discretos a tiempo real total (Fase D). Desde el principio quedan
+separados: el reloj del servidor, el tiempo de simulación, la unidad interna provisional del motor (`tick`),
+el scheduler que decide cuándo avanzar, y la representación temporal que recibe cada frontend — ninguna API,
+persistencia o DTO nuevo debe tratar el tick como contrato definitivo (doc 3, regla que gobierna todo el
+roadmap).

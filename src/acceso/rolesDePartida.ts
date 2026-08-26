@@ -31,10 +31,24 @@ export function esVigente(membresia: Membresia, ahora: string): boolean {
   return membresia.hasta === undefined || membresia.hasta > ahora;
 }
 
-/** Rol con el que el actor actúa en esta partida, o `undefined` si no tiene ninguno. */
+/**
+ * Rol con el que el actor actúa EN ESTA PARTIDA, o `undefined` si no tiene ninguno.
+ *
+ * La `Membresia` manda sobre `esAdministradorGlobal` — no al revés. Bug real corregido el 2026-08-26 (hito
+ * C8): el orden anterior cortocircuitaba a `'administrador_global'` para cualquier actor con acceso técnico
+ * global, incluso cuando además tenía una `Membresia` `administrador_partida` en esa partida concreta (la que
+ * `otorgarAdministracion()` concede automáticamente a quien la crea) — así que `alternarFaccionNpc`, la ÚNICA
+ * fila de `MATRIZ_AUTORIZACION` que admite administración (`['jugador', 'administrador_partida']`, ninguna
+ * admite `'administrador_global'`), devolvía 403 siempre para un administrador, contradiciendo el propio
+ * comentario de esa fila ("sin restricción si es admin", doc 5). `esAdministradorGlobal` sigue siendo la
+ * autoridad para ENTRAR a la superficie `/admin/*` de una partida sin Membresia (`puedeAdministrar`, más
+ * abajo, no usa esta función) — pero el rol CON el que actúa dentro de una partida concreta es el que da su
+ * Membresia ahí, si tiene una.
+ */
 export function rolEnPartida(actor: ActorDeInstancia): RolTecnico | undefined {
+  if (actor.membresia) return actor.membresia.rol;
   if (actor.esAdministradorGlobal) return 'administrador_global';
-  return actor.membresia?.rol;
+  return undefined;
 }
 
 /** Puede usar la superficie `/admin/*` de esta partida. */

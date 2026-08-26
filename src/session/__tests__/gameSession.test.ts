@@ -4,6 +4,7 @@
 // inyectado, y que un comando rechazado no deje rastro.
 import { describe, expect, it } from 'vitest';
 import { GameSession } from '../gameSession';
+import { BALANCE_VERSION } from '../../constants';
 import { crearFaccion } from '../comandos/crearFaccion';
 import { fundarAsentamiento } from '../comandos/fundarAsentamiento';
 import { exito, type ManejadorComando } from '../comandos/tipos';
@@ -232,6 +233,11 @@ describe('GameSession — exportar / importar', () => {
 
     expect(reconstruida.getState()).toEqual(sesion.getState());
     expect(reconstruida.gameId).toBe(sesion.gameId);
+  });
+
+  it('estampa la BALANCE_VERSION vigente al exportar (Fase C7)', () => {
+    const { sesion } = partidaConFaccion();
+    expect(sesion.exportar().balanceVersion).toBe(BALANCE_VERSION);
   });
 
   it('la sesión importada sigue siendo operable', () => {

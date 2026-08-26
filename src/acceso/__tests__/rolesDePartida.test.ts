@@ -82,12 +82,22 @@ describe('puedeDescartarPartida', () => {
 });
 
 describe('rolEnPartida', () => {
-  it('el administrador global manda sobre la membresia concreta', () => {
-    expect(rolEnPartida({ usuarioId: 'u1', esAdministradorGlobal: true, membresia: membresia('jugador') })).toBe('administrador_global');
+  it('la membresia concreta manda sobre ser administrador global (fix C8, 2026-08-26)', () => {
+    // Caso real que produjo el bug: quien crea una partida recibe Membresia `administrador_partida`
+    // (`otorgarAdministracion`) — antes del fix, esta función ignoraba esa membresia y devolvía
+    // `administrador_global`, un rol que ninguna fila de `MATRIZ_AUTORIZACION` admite.
+    expect(
+      rolEnPartida({ usuarioId: 'u1', esAdministradorGlobal: true, membresia: membresia('administrador_partida') })
+    ).toBe('administrador_partida');
+    expect(rolEnPartida({ usuarioId: 'u1', esAdministradorGlobal: true, membresia: membresia('jugador') })).toBe('jugador');
   });
 
-  it('sin admin global, el rol es el de la membresia; sin membresia, ninguno', () => {
-    expect(rolEnPartida(actor('moderador'))).toBe('moderador');
+  it('sin membresia, cae al administrador global; sin ninguno de los dos, ninguno', () => {
+    expect(rolEnPartida(actor(undefined, true))).toBe('administrador_global');
     expect(rolEnPartida(actor(undefined))).toBeUndefined();
+  });
+
+  it('sin admin global, el rol es el de la membresia', () => {
+    expect(rolEnPartida(actor('moderador'))).toBe('moderador');
   });
 });
