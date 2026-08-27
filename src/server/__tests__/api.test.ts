@@ -869,7 +869,7 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       // `@fastify/swagger` convierte `const` a `enum: [valorUnico]` al publicar: OpenAPI 3.0 no tiene `const`
       // (llegó en JSON Schema draft 6, y 3.0 se basa en un dialecto anterior) — ajv en runtime sí lo entiende
       // tal cual (la validación de verdad usa el `schema.body` de Fastify, no este documento).
-      expect(cuerpo.oneOf.length).toBe(30);
+      expect(cuerpo.oneOf.length).toBe(32); // 30 + `unirseAFaccion`/`dejarFaccion` (2026-08-27)
       const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
       expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
     });

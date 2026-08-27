@@ -1,6 +1,6 @@
 // Pinta un `MapaGenerado` (Fase C11a) a un canvas usando SOLO `terreno/` — cero motor. Es la prueba de que
 // C11b no hacía falta: el terreno se recalcula aquí, con la misma semilla pública que ve cualquiera.
-import { colorDeBioma, evaluarBioma, type MapaGenerado } from './terreno';
+import { colorDeBioma, contornosBosques, evaluarBioma, type MapaGenerado } from './terreno';
 
 /** Tamaño de celda de muestreo, en unidades de mapa — no 1:1 (2000×2000 = 4M muestras, demasiado para pintar
  * en un frame). 8 unidades da 250×250 = 62 500 muestras, suficiente para un mapa de estrategia a esta escala
@@ -17,7 +17,23 @@ export function pintarTerreno(ctx: CanvasRenderingContext2D, mapa: MapaGenerado,
     }
   }
 
-  // Ríos encima del terreno, como polilíneas — mismos datos (`mapa.rios`) que ya usa `evaluarBioma` para la
+  // Bosques como silueta fusionada (no círculos sueltos), debajo de los ríos — mismo criterio de capas que
+  // el cliente de administración. `nonzero` (el relleno por defecto de canvas) recorta solos los claros que
+  // queden encerrados por una corona de bosques, porque `contornosBosques` los devuelve como lazo opuesto.
+  ctx.fillStyle = 'rgba(27, 94, 32, 0.55)';
+  const lazosBosque = contornosBosques(mapa.bosques, mapa.config.ancho);
+  if (lazosBosque.length > 0) {
+    ctx.beginPath();
+    for (const lazo of lazosBosque) {
+      if (lazo.length < 3) continue;
+      ctx.moveTo(lazo[0]!.x * escalaCanvas, lazo[0]!.y * escalaCanvas);
+      for (const p of lazo.slice(1)) ctx.lineTo(p.x * escalaCanvas, p.y * escalaCanvas);
+      ctx.closePath();
+    }
+    ctx.fill('nonzero');
+  }
+
+  // Ríos encima de todo, como polilíneas — mismos datos (`mapa.rios`) que ya usa `evaluarBioma` para la
   // humedad, así que pintarlos no cuesta ninguna consulta nueva.
   ctx.strokeStyle = '#1a4d7a';
   ctx.lineWidth = Math.max(1, escalaCanvas * 3);

@@ -29,8 +29,10 @@ const ACTOR = 'jugador-test';
 
 function partidaConDosFacciones(): { sesion: GameSession; faccionNpcId: string; faccionManualId: string } {
   const sesion = GameSession.crear('test-npc', { seed: SEED });
-  const r1 = sesion.ejecutar(crearFaccion, { nombre: 'Facción NPC' }, { momento: MOMENTO, actor: ACTOR });
-  const r2 = sesion.ejecutar(crearFaccion, { nombre: 'Facción Manual' }, { momento: MOMENTO, actor: ACTOR });
+  // Dos actores distintos al CREAR: un jugador solo puede crear una Facción (Doc 2 "Entidades"). Fundar sigue
+  // con `ACTOR` para las dos, sin conflicto — el motor no exige ciudadanía previa para fundar.
+  const r1 = sesion.ejecutar(crearFaccion, { nombre: 'Facción NPC' }, { momento: MOMENTO, actor: 'jugador-npc' });
+  const r2 = sesion.ejecutar(crearFaccion, { nombre: 'Facción Manual' }, { momento: MOMENTO, actor: 'jugador-manual' });
   if (!r1.ok || !r2.ok) throw new Error('setup del test: no se pudieron crear las Facciones');
   const faccionNpcId = r1.datos!.faccionId;
   const faccionManualId = r2.datos!.faccionId;

@@ -148,7 +148,9 @@ cumplirse. "Facción propia" significa `Jugador.faccionId` del actor debe coinci
 | Comando (`GameStore.*`) | Rol técnico mínimo | Condición de dominio adicional |
 |---|---|---|
 | `fundarAsentamiento`, `lanzarCaravanaFundacion`, `desarmarCaravanaFundacion` | jugador | Facción propia |
-| `crearFaccion` | jugador | el Usuario no tiene ya un Jugador con Facción asignada en esta partida (o la política que se decida — abierto) |
+| `crearFaccion` | jugador | **RESUELTO 2026-08-27** (antes "abierto"): no ser ya ciudadano de ninguna Facción, y no haber abandonado una hace menos de `CIUDADANIA.cooldownCreacionFaccionDias` (7 días) — ambas son rechazo de DOMINIO dentro del propio comando (`faccion.ya_pertenece`/`faccion.cooldown_creacion`), no de esta matriz: cualquier `jugador` puede intentarlo, igual que nombre vacío/duplicado. Otorga ciudadanía inmediata a quien la crea |
+| `unirseAFaccion` | jugador | no ser ya ciudadano de OTRA Facción (`faccion.ya_pertenece`); ya ciudadano de la misma es idempotente. Sin cooldown — solo `crearFaccion` lo tiene |
+| `dejarFaccion` | jugador | ser ciudadano de alguna (`faccion.no_pertenece` si no); sin parámetros, solo puede dejar la PROPIA. Libera Rey/Embajador si los ocupaba; NO libera residencia ni cargos locales (limitación documentada en Doc 2.5) |
 | `alternarFaccionNpc` | jugador (rey) o administrador_partida | Facción propia si es jugador; sin restricción si es admin |
 | `asignarRey`, `asignarEmbajador` | jugador | Facción propia, cargo de rey vigente (o primera asignación) |
 | `asignarCargoLocal` | jugador | residente del asentamiento, con el cargo que otorga ese poder según reglas de dominio ya existentes |

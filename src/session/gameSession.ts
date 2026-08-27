@@ -88,6 +88,7 @@ export class GameSession {
       version: 0,
       historialJugadores: {},
       eventosDominio: [],
+      salidasFaccionPorJugador: {},
     };
     return new GameSession(estado, new GeneradorIds(), createRng(config.seed));
   }

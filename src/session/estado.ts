@@ -77,6 +77,13 @@ export interface GameSessionState {
   version: number;
   historialJugadores: Record<string, EventoLogAdmin[]>;
   /**
+   * `jugadorId` -> momento (ISO 8601) en que abandonó su última Facción (`dejarFaccion`, a petición del
+   * usuario 2026-08-27). Única razón de ser: `crearFaccion` lo consulta para el cooldown de
+   * `CIUDADANIA.cooldownCreacionFaccionDias` — anti-abuso contra "crear, abandonar, crear" en bucle. No es
+   * historial (no guarda TODAS las salidas, solo la última) ni afecta a `unirseAFaccion`, que no tiene cooldown.
+   */
+  salidasFaccionPorJugador: Record<string, string>;
+  /**
    * Todo lo que ha ocurrido en la partida, en forma estructurada: la ÚNICA representación de los hechos que
    * se guarda. El log en texto que muestra la consola se deriva de aquí con `proyectarLog()` — antes se
    * persistía además un `log: EventoLogAdmin[]` en paralelo, que era el mismo hecho dos veces en el estado y

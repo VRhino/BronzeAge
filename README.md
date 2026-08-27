@@ -29,12 +29,22 @@ Contenido explícitamente **fuera de Fase 0** (no implementar aún): representac
 
 ## Estado de implementación
 
-Fase 0 (Sprints 1-6) ya está **implementada** en TypeScript (`src/`) y validada jugando en el navegador. Ver **`Consideraciones/Correcciones_Durante_Desarrollo.md`** para el registro de bugs de diseño/lógica encontrados y corregidos durante la implementación — varios de ellos resolvieron preguntas que estaban marcadas como pendientes en esta documentación (protección temporal de asentamientos nuevos, reemplazo de recursos agotados, calibración de Mantenimiento), y ya están reflejados en los Docs 1, 2, 4 y 5.
+Fase 0 (Sprints 1-6, el motor de simulación puro) está **implementada** en TypeScript (`src/`). Desde ahí el
+proyecto siguió evolucionando **más allá de lo que describe esta sección** — ver
+**[`Docs/Arquitectura/1_Arquitectura_Actual.md`](Docs/Arquitectura/1_Arquitectura_Actual.md)** para el estado
+real hoy: este repositorio es ahora un **backend multijugador puro** (Fastify, autenticación/autorización por
+comando, proyecciones por audiencia, WebSocket), sin ningún cliente de navegador dentro — "validada jugando en
+el navegador" ya no aplica, el juego se prueba contra la API HTTP/WS. El roadmap completo de esa evolución
+(Fases A-E) vive en **[`Docs/Arquitectura/3_Plan_Evolucion_Roadmap.md`](Docs/Arquitectura/3_Plan_Evolucion_Roadmap.md)**.
+Ver **`Consideraciones/Correcciones_Durante_Desarrollo.md`** para el registro de bugs de diseño/lógica
+encontrados y corregidos durante la implementación de Fase 0 — varios de ellos resolvieron preguntas que
+estaban marcadas como pendientes en esta documentación (protección temporal de asentamientos nuevos,
+reemplazo de recursos agotados, calibración de Mantenimiento), y ya están reflejados en los Docs 1, 2, 4 y 5.
 
 ## Estructura del repositorio
 
 ```
-Docs/                                              Documentación de diseño por sistema
+Docs/                                              Documentación de diseño por sistema (QUÉ es el juego)
   0_Glosario_de_Entidades_Politicas.md
   1_Sistema_de_Mundo_y_Territorio.md
   2_Sistema_Politico_Facciones_y_Cargos.md
@@ -42,6 +52,8 @@ Docs/                                              Documentación de diseño por
   4_Sistema_de_Poblacion_Construccion_y_Mantenimiento.md
   5_Sistema_Militar_y_Combate.md
   6_Sistema_de_Tecnologia_y_Aedas.md
+  Arquitectura/                                    Evolución del backend (CÓMO se sirve el juego) — empezar
+                                                     por 1_Arquitectura_Actual.md y 3_Plan_Evolucion_Roadmap.md
 Consideraciones/                                   Alcance, plan técnico y estado del proyecto
   Fase_0_Definicion.md
   Plan_Implementacion_Tecnica.md
@@ -49,5 +61,11 @@ Consideraciones/                                   Alcance, plan técnico y esta
   Checklist_Mecanicas.md
   Preguntas_Abiertas.md
   Correcciones_Durante_Desarrollo.md
-src/                                                Código fuente del prototipo Fase 0 en TypeScript (implementado)
+src/                                                Backend: domain/constants/worldgen/world/engine (motor
+                                                     puro de Fase 0) + acceso/session/server (multijugador,
+                                                     Fases B-C)
+cliente/                                            Cliente de depuración/administración (proyecto separado,
+                                                     sigue importando el motor — ver cliente/README.md)
+cliente-jugador/                                    Boilerplate de cliente SIN motor (hito C11b): prueba de
+                                                     que la Fase C es alcanzable, no un cliente completo
 ```

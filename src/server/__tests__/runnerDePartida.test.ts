@@ -31,9 +31,11 @@ describe('RunnerDePartida — cola serial', () => {
     const r = runner();
 
     // Sin `await` entre medias: las tres promesas se lanzan "a la vez" desde la perspectiva del llamador.
-    const p1 = r.ejecutar(crearFaccion, { nombre: 'Micenas' });
-    const p2 = r.ejecutar(crearFaccion, { nombre: 'Troya' });
-    const p3 = r.ejecutar(crearFaccion, { nombre: 'Ugarit' });
+    // Tres actores distintos: un jugador solo puede crear una Facción (Doc 2 "Entidades"), así que el mismo
+    // actor para las tres habría rechazado la segunda y la tercera por `faccion.ya_pertenece`.
+    const p1 = r.ejecutar(crearFaccion, { nombre: 'Micenas' }, 'jugador-1');
+    const p2 = r.ejecutar(crearFaccion, { nombre: 'Troya' }, 'jugador-2');
+    const p3 = r.ejecutar(crearFaccion, { nombre: 'Ugarit' }, 'jugador-3');
     await Promise.all([p1, p2, p3]);
 
     expect(r.getState().facciones.map((f) => f.nombre)).toEqual(['Micenas', 'Troya', 'Ugarit']);
@@ -44,10 +46,10 @@ describe('RunnerDePartida — cola serial', () => {
 
   it('un comando rechazado no bloquea ni desordena los que vienen después', async () => {
     const r = runner();
-    const p1 = r.ejecutar(crearFaccion, { nombre: 'Micenas' });
+    const p1 = r.ejecutar(crearFaccion, { nombre: 'Micenas' }, 'jugador-1');
     // `fundarAsentamiento` con una facción inexistente se rechaza (error de dominio) sin lanzar.
     const p2 = r.ejecutar(fundarAsentamiento, { faccionId: 'no-existe', posicion: { x: 0, y: 0 } });
-    const p3 = r.ejecutar(crearFaccion, { nombre: 'Troya' });
+    const p3 = r.ejecutar(crearFaccion, { nombre: 'Troya' }, 'jugador-2');
 
     const [r1, r2, r3] = await Promise.all([p1, p2, p3]);
     expect(r1.ok).toBe(true);
@@ -78,7 +80,9 @@ describe('RunnerDePartida — aplicar -> persistir -> confirmar', () => {
     await writeFile(ruta, JSON.stringify(snapshot), 'utf-8');
 
     const estadoAntes = r.getState();
-    await expect(r.ejecutar(crearFaccion, { nombre: 'Troya' })).rejects.toThrow();
+    // Actor distinto del de Micenas: si reutilizara el mismo, el rechazo de dominio (`faccion.ya_pertenece`)
+    // llegaría antes que el de persistencia que este test quiere ejercitar, y nunca lanzaría.
+    await expect(r.ejecutar(crearFaccion, { nombre: 'Troya' }, 'jugador-2')).rejects.toThrow();
 
     // El comando se descartó: ni la facción nueva ni la versión avanzada quedaron en memoria.
     expect(r.getState().version).toBe(estadoAntes.version);
@@ -93,12 +97,14 @@ describe('RunnerDePartida — aplicar -> persistir -> confirmar', () => {
     const snapshot = JSON.parse(await readFile(ruta, 'utf-8')) as SnapshotPartida;
     snapshot.partida.state.version = 999;
     await writeFile(ruta, JSON.stringify(snapshot), 'utf-8');
-    await expect(r.ejecutar(crearFaccion, { nombre: 'Troya' })).rejects.toThrow();
+    // Actor distinto del de Micenas, mismo motivo que el test anterior.
+    await expect(r.ejecutar(crearFaccion, { nombre: 'Troya' }, 'jugador-2')).rejects.toThrow();
 
     // El "atacante" deja de escribir versiones adelantadas: el siguiente comando legítimo debe volver a
-    // funcionar con normalidad, sin arrastrar nada del intento fallido.
+    // funcionar con normalidad, sin arrastrar nada del intento fallido. Tercer actor: ni el de Micenas ni el
+    // de Troya (ambos ya tienen Facción).
     await writeFile(ruta, JSON.stringify({ ...snapshot, partida: { ...snapshot.partida, state: { ...snapshot.partida.state, version: 1 } } }), 'utf-8');
-    const resultado = await r.ejecutar(crearFaccion, { nombre: 'Ugarit' });
+    const resultado = await r.ejecutar(crearFaccion, { nombre: 'Ugarit' }, 'jugador-3');
 
     expect(resultado.ok).toBe(true);
     expect(r.getState().facciones.map((f) => f.nombre)).toEqual(['Micenas', 'Ugarit']);
@@ -201,8 +207,9 @@ describe('RunnerDePartida — ticks automáticos', () => {
 describe('RunnerDePartida.ejecutar — idempotencia (Fase C5)', () => {
   it('sin idempotencyKey, dos llamadas se aplican dos veces (comportamiento de siempre)', async () => {
     const r = runner('g-sin-clave');
-    await r.ejecutar(crearFaccion, { nombre: 'Micenas' });
-    await r.ejecutar(crearFaccion, { nombre: 'Troya' }); // nombre distinto: `crearFaccion` rechaza duplicados
+    await r.ejecutar(crearFaccion, { nombre: 'Micenas' }, 'jugador-1');
+    // Actor distinto: un jugador ya no puede crear una segunda Facción (`faccion.ya_pertenece`).
+    await r.ejecutar(crearFaccion, { nombre: 'Troya' }, 'jugador-2');
     expect(r.getState().facciones).toHaveLength(2);
   });
 

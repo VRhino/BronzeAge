@@ -14,6 +14,8 @@ backend — ver el README de la carpeta padre para el porqué arquitectónico.
 | `biomas.ts` | `worldgen/biomas.ts` | — (completo) |
 | `rios.ts` | `worldgen/rios.ts` + `world/geometria.ts` | La generación de ríos (RNG); solo la consulta de distancia |
 | `config.ts` | `worldgen/config.ts` | Solo los umbrales que usa la evaluación (`ELEVACION`, `ELEVACION_SUAVIZADO`, `BIOMA`) — no `RIOS`, `BOSQUE_TERRENO_PERMITIDO` ni nada de generación |
+| `poligonos.ts` | `world/poligonos.ts` | Solo `formaCirculo` + el motor de fusión (`unirFormas`); no `formaPoligono`/`unirPoligonos` — esas fusionan zonas de Facción, que dependen de TODOS los asentamientos rivales (entrada privilegiada, no portable) |
+| `bosques.ts` | `world/mapa.ts` (`Mapa.contornosBosques()`) | Solo la fusión — `worldgen/bosques.ts` (colocación de los círculos) consume RNG, igual que `generarCampoRuido`; los círculos ya colocados (`ZonaBosque[]`) llegan como dato público en el mapa servido |
 
 ## Disciplina de mantenimiento
 

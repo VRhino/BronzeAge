@@ -930,6 +930,11 @@ export const CIUDADANIA = {
   // sitio para todos sus fundadores, y el resto queda libre para compras posteriores.
   casasBasePorAsentamiento: FUNDACION.maxJugadoresFundacionGrupal,
   casasPorNivelAdicional: 2,
+  // Resuelve la pregunta abierta que dejaba `crearFaccion.ts` (a petición del usuario, 2026-08-27): tras
+  // abandonar una Facción (`dejarFaccion`), cuánto hay que esperar para poder crear otra — anti-abuso contra
+  // "crear, abandonar, crear" en bucle. Solo aplica a CREAR: unirse a una Facción existente (`unirseAFaccion`)
+  // no tiene cooldown, solo la regla de siempre (no estar ya en otra).
+  cooldownCreacionFaccionDias: 7,
 };
 
 export const POLITICAS = {

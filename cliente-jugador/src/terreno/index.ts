@@ -2,6 +2,7 @@
 export { evaluarElevacion, evaluarTerreno } from './elevacion';
 export { evaluarFertilidad } from './fertilidad';
 export { evaluarBioma } from './biomas';
+export { contornosBosques } from './bosques';
 export type { BiomaTipo, MapaGenerado, Point, TerrenoTipo } from './tipos';
 
 import type { BiomaTipo } from './tipos';

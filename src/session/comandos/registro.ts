@@ -10,6 +10,8 @@
 import type { ManejadorComando } from './tipos';
 import { fundarAsentamiento } from './fundarAsentamiento';
 import { crearFaccion } from './crearFaccion';
+import { unirseAFaccion } from './unirseAFaccion';
+import { dejarFaccion } from './dejarFaccion';
 import { alternarFaccionNpc } from './alternarFaccionNpc';
 import { activarPolitica, asignarCargoLocal, asignarEmbajador, asignarRey, comprarCasa } from './cargos';
 import { anexionar, fusionar, proponerRelacion, rebelionVasallo, romperRelacion } from './diplomacia';
@@ -35,6 +37,8 @@ import { desarmarCaravanaFundacion, lanzarCaravanaFundacion } from './expansion'
 export const REGISTRO_COMANDOS = {
   fundarAsentamiento,
   crearFaccion,
+  unirseAFaccion,
+  dejarFaccion,
   alternarFaccionNpc,
   activarPolitica,
   asignarCargoLocal,

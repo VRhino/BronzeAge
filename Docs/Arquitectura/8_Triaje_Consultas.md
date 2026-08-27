@@ -36,6 +36,35 @@ migración.
 >   2026-08-26 (`RunnerDePartida.preciosReferencia()`, caché con TTL de un minuto real). La afirmación "nada de
 >   esto está implementado" de la intro ya no es literalmente cierta — es la primera consulta triadas aquí que
 >   completó el viaje.
+>
+> **Actualización de cierre (2026-08-26, tras C7–C13). La frase "nada de esto está implementado" de la intro
+> queda OBSOLETA.** El balance (C7), la geometría por frame (C10) y el descubrimiento/exportación (C12)
+> resolvieron la mayor parte de este triaje — no moviendo funciones DENTRO de este repo tal como este
+> documento anticipaba, sino sirviendo su ENTRADA (balance, geometría) para que un cliente sin motor las
+> recalcule él mismo, que es el patrón que doc 9 fija como T2a. Estado real, grupo por grupo:
+>
+> - **→ `engine/` (11)**: **NO se movieron** a `src/engine/`, salvo `manoObraInfo`
+>   (`engine/asentamientoQuery.ts`, verificado por grep). Las otras diez siguen viviendo solo como métodos de
+>   `cliente/src/app/gameStore.ts`. Esto ya no es una tarea pendiente de ESTE repo backend: doc 9 las
+>   reclasificó T2a ("entrada propia") DESPUÉS de este documento — su destino real es código de CLIENTE
+>   (duplicado, como `cliente-jugador/src/terreno/` hace con el terreno), no `engine/`. Sin un cliente sin
+>   motor que las necesite todavía, moverlas aquí no tiene consumidor; queda como trabajo de un futuro cliente,
+>   no de este repo
+> - **→ `session/` (8)**: `precioReferencia` — hecho (`RunnerDePartida.preciosReferencia()`, C10).
+>   `getZonas`/`getTrazadoAsentamiento` — hechos, fusionados en `RunnerDePartida.geometriaAsentamientos()` (C10,
+>   una sola llamada memoizada en vez de dos). `chokepointsControl` — eliminado del juego por completo (ver
+>   nota de arriba). `viabilidadFundacion` — retirado del cliente (ver nota de arriba). `getState`/`getMapa` —
+>   no necesitaban migración, ya vivían en `GameSession`/`session/`. `getLigas` — **sin auditar todavía**, es
+>   el único ítem real de este grupo sin resolver ni verificar
+> - **→ Proyección por audiencia (5)**: sin resolver de fondo — siguen bloqueadas por C4 Slice 2 (niebla de
+>   guerra, radio de visualización sin decidir en ningún doc). Lo de un asentamiento PROPIO ya viaja filtrado
+>   por Facción desde C4 Slice 1; lo que falta es "último conocido" de un asentamiento AJENO, justo el caso que
+>   motivó agrupar estas cinco aparte
+> - **→ Administración (3)**: **las tres resueltas**. `getBalance` → `GET /v1/balance` (C7).
+>   `exportarSimulacion` → `GET /admin/partidas/:gameId/exportar` (C12). `exportarMapaUnity` →
+>   `GET /admin/partidas/:gameId/exportar-unity` (C12)
+> - **→ Cliente (4)**: sin cambios, correcto que sigan ahí — `subscribe`/`getSnapshot`/`getTickRange` son
+>   estado de sesión de navegador, `esFaccionNpc` es lectura trivial del estado que el cliente ya recibe
 
 ## El criterio
 
@@ -113,7 +142,7 @@ No pertenecen al servidor en ninguna forma. Se quedan donde están cuando `GameS
 depuración (que `GameSession` deliberadamente no tiene, doc 7 §1); la última es una lectura trivial del
 estado que el cliente ya recibe.
 
-### → Administración — rol técnico (3)
+### → Administración — rol técnico (3) — ✅ las tres resueltas (ver nota de cierre arriba)
 
 `exportarSimulacion`, `exportarMapaUnity`, `getBalance`. Endpoints protegidos (doc 5). `exportarMapaUnity`
 además **no es parte del juego**: es una herramienta de `worldgen/` y no debería colgar de la partida.
