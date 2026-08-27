@@ -14,8 +14,10 @@ const OPC = { momento: MOMENTO, actor: 'jugador-test' };
 
 function partidaConDosFacciones() {
   const sesion = GameSession.crear('diplo-test', { seed: 42 });
-  const a = sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, OPC).datos!.faccionId;
-  const b = sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, OPC).datos!.faccionId;
+  // Dos actores distintos: un jugador solo puede crear una Facción (Doc 2 "Entidades") — el mismo actor para
+  // las dos habría rechazado la segunda con `faccion.ya_pertenece`.
+  const a = sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, { ...OPC, actor: 'jugador-a' }).datos!.faccionId;
+  const b = sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, { ...OPC, actor: 'jugador-b' }).datos!.faccionId;
   return { sesion, a, b };
 }
 

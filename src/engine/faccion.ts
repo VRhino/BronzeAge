@@ -87,6 +87,26 @@ export function otorgarCiudadania(faccion: Faccion, jugadorId: string): Faccion 
   return { ...faccion, ciudadanosIds: [...faccion.ciudadanosIds, jugadorId] };
 }
 
+/**
+ * Retira la ciudadanía (comando `dejarFaccion`, a petición del usuario). Libera también Rey/Embajador si el
+ * jugador ocupaba alguno — un cargo de Facción ocupado por quien ya no es ciudadano es un estado inconsistente
+ * (aunque `conAutoridadDiplomatica`, `session/comandos/autorizacion.ts`, ya exige ciudadanía además del cargo,
+ * así que no habilitaría nada por sí solo; se libera igual para no dejar un "Rey" fantasma en el estado).
+ *
+ * NO toca residencia (`Asentamiento.casasCompradas`/`jugadoresFundadoresIds`) ni cargos LOCALES (Gobernador,
+ * etc.): Doc 2.5 no define qué pasa con la vivienda al abandonar la Facción, y no existe todavía un comando
+ * "dejar residencia"/"vender casa" que lo resuelva — limitación documentada, no un olvido (ver `dejarFaccion.ts`).
+ */
+export function quitarCiudadania(faccion: Faccion, jugadorId: string): Faccion {
+  if (!esCiudadano(faccion, jugadorId)) return faccion;
+  return {
+    ...faccion,
+    ciudadanosIds: faccion.ciudadanosIds.filter((id) => id !== jugadorId),
+    reyId: faccion.reyId === jugadorId ? null : faccion.reyId,
+    embajadorId: faccion.embajadorId === jugadorId ? null : faccion.embajadorId,
+  };
+}
+
 export function capacidadCasas(asentamiento: Asentamiento): number {
   return CIUDADANIA.casasBasePorAsentamiento + (asentamiento.nivel - 1) * CIUDADANIA.casasPorNivelAdicional;
 }

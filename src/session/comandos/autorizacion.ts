@@ -153,9 +153,17 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
     },
   },
 
-  // --- crearFaccion: sin condición adicional. Doc 5 ("Preguntas abiertas") deja sin decidir si debe
-  // limitarse a un Jugador que aún no tenga Facción; el motor tampoco lo restringe hoy. ---
+  // --- crearFaccion/unirseAFaccion/dejarFaccion: sin condición de dominio adicional aquí — a diferencia del
+  // resto de la matriz, "1 jugador, 1 Facción" y el cooldown de creación son reglas de NEGOCIO de la partida
+  // (qué transición es válida), no de AUTORIZACIÓN (quién puede intentarla): cualquier `jugador` puede
+  // intentar los tres, y el propio comando rechaza con su código si no toca (`faccion.ya_pertenece`,
+  // `faccion.cooldown_creacion`, `faccion.no_pertenece`) — mismo criterio que nombre vacío/duplicado en
+  // `crearFaccion.ts`. Resuelve la pregunta que este archivo dejaba abierta (doc 5, "Preguntas abiertas").
+  // Ninguno de los tres acepta un `jugadorId`/`faccionId` de OTRO en `params` con el que suplantar: el actor
+  // siempre es `ctx.actor`, nunca algo que el cliente pueda mandar.
   crearFaccion: { rolesPermitidos: ['jugador'] },
+  unirseAFaccion: { rolesPermitidos: ['jugador'] },
+  dejarFaccion: { rolesPermitidos: ['jugador'] },
 
   // --- Cargos de Facción ---
   alternarFaccionNpc: {

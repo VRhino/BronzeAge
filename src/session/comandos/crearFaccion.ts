@@ -1,4 +1,5 @@
-import { crearFaccion as crearFaccionEngine } from '../../engine/faccion';
+import { crearFaccion as crearFaccionEngine, esCiudadano, otorgarCiudadania } from '../../engine/faccion';
+import { CIUDADANIA } from '../../constants';
 import type { GameSessionState } from '../estado';
 import { exito } from './tipos';
 import { comando, rechazar } from './ayudas';
@@ -8,21 +9,27 @@ import { evento } from './eventos';
 export interface PayloadFaccionCreada {
   faccionId: string;
   nombre: string;
+  fundadorId: string;
 }
 
 export interface ParamsCrearFaccion {
   nombre: string;
 }
 
+const MS_POR_DIA = 24 * 60 * 60 * 1000;
+
 /**
- * Crea una Facción nueva.
+ * Crea una Facción nueva y otorga ciudadanía inmediata a quien la crea (a petición del usuario, 2026-08-27:
+ * antes nacía sin ciudadanos, y solo se convertía en la Facción de su fundador cuando este fundaba un
+ * asentamiento o compraba una casa — un hueco entre "crear" y "pertenecer" que no tenía por qué existir).
  *
- * A diferencia de la mayoría de comandos, las dos validaciones (nombre vacío, nombre duplicado) viven AQUÍ y
- * no en el motor: `crearFaccion` de `engine/faccion.ts` no las hace, porque son reglas de la partida —qué
- * nombres se admiten en ESTA sesión— y no del modelo de juego.
- *
- * Autorización (doc 5, pendiente de Fase C): rol `jugador`. Queda abierto en ese documento si un jugador que
- * ya tiene Facción puede crear otra.
+ * Tres validaciones viven AQUÍ y no en el motor — son reglas de ESTA partida, no del modelo de juego:
+ *  - nombre vacío / duplicado (ya existían)
+ *  - el actor no puede ser ya ciudadano de OTRA Facción (Doc 2 "Entidades": 1 jugador, 1 Facción — resuelve la
+ *    pregunta que este mismo archivo dejaba abierta hasta ahora)
+ *  - si abandonó una Facción hace menos de `CIUDADANIA.cooldownCreacionFaccionDias`, no puede crear otra
+ *    todavía (anti-abuso "crear, abandonar, crear"; ver `dejarFaccion.ts`, que es quien estampa
+ *    `salidasFaccionPorJugador`)
  */
 export const crearFaccion = comando<ParamsCrearFaccion, { faccionId: string }>((estado, _mapa, ctx, params) => {
   const nombre = params.nombre.trim();
@@ -30,16 +37,26 @@ export const crearFaccion = comando<ParamsCrearFaccion, { faccionId: string }>((
   if (estado.facciones.some((f) => f.nombre.toLowerCase() === nombre.toLowerCase())) {
     rechazar(CODIGOS_ERROR.faccionNombreDuplicado);
   }
+  if (estado.facciones.some((f) => esCiudadano(f, ctx.actor))) {
+    rechazar(CODIGOS_ERROR.faccionYaPerteneces);
+  }
+  const salida = estado.salidasFaccionPorJugador[ctx.actor];
+  if (salida !== undefined) {
+    const cooldownMs = CIUDADANIA.cooldownCreacionFaccionDias * MS_POR_DIA;
+    if (new Date(ctx.momento).getTime() - new Date(salida).getTime() < cooldownMs) {
+      rechazar(CODIGOS_ERROR.faccionCooldownCreacion);
+    }
+  }
 
-  const nueva = crearFaccionEngine(`faccion-custom-${ctx.ids.siguiente()}`, nombre);
+  const nueva = otorgarCiudadania(crearFaccionEngine(`faccion-custom-${ctx.ids.siguiente()}`, nombre), ctx.actor);
   const siguiente: GameSessionState = { ...estado, facciones: [...estado.facciones, nueva] };
   return exito(
     siguiente,
     [
       evento(ctx, estado, {
         codigo: 'faccion.creada',
-        mensaje: `Se crea la Facción "${nueva.nombre}".`,
-        payload: { faccionId: nueva.id, nombre: nueva.nombre } satisfies PayloadFaccionCreada,
+        mensaje: `Se crea la Facción "${nueva.nombre}", fundada por ${ctx.actor}.`,
+        payload: { faccionId: nueva.id, nombre: nueva.nombre, fundadorId: ctx.actor } satisfies PayloadFaccionCreada,
       }),
     ],
     { faccionId: nueva.id }

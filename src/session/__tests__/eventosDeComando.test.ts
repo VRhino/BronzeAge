@@ -23,7 +23,9 @@ describe('eventos de comando (códigos estables)', () => {
     const { sesion, faccionId, asentamientoId, fundador } = partidaConAsentamiento();
     sesion.ejecutar(asignarCargoLocal, { asentamientoId, cargo: 'gobernador', jugadorId: fundador }, OPC);
     sesion.ejecutar(renombrarAsentamiento, { asentamientoId, nombre: 'Tirinto' }, OPC);
-    sesion.ejecutar(crearFaccion, { nombre: 'Pilos' }, OPC);
+    // Actor distinto del fundador (ya tiene Facción): si no, `crearFaccion` rechazaría con
+    // `faccion.ya_pertenece` y este comando dejaría de aportar un evento a la muestra que el test recorre.
+    sesion.ejecutar(crearFaccion, { nombre: 'Pilos' }, { ...OPC, actor: 'jugador-pilos' });
     expect(faccionId).toBeTruthy();
 
     const eventos = sesion.getState().eventosDominio;
@@ -42,7 +44,7 @@ describe('eventos de comando (códigos estables)', () => {
     expect(r.eventos).toHaveLength(1);
     const e = r.eventos[0]!;
     expect(e.codigo).toBe('faccion.creada');
-    expect(e.payload as PayloadFaccionCreada).toEqual({ faccionId: r.datos!.faccionId, nombre: 'Micenas' });
+    expect(e.payload as PayloadFaccionCreada).toEqual({ faccionId: r.datos!.faccionId, nombre: 'Micenas', fundadorId: OPC.actor });
     // Alcance global: no se atribuye a ningún asentamiento.
     expect(e.asentamientoId).toBeUndefined();
   });
@@ -59,7 +61,9 @@ describe('eventos de comando (códigos estables)', () => {
 
   it('proponerRelacion: el payload lleva AMBAS facciones, que es sobre lo que filtrará la visibilidad', () => {
     const { sesion, faccionId } = partidaConAsentamiento();
-    const otra = sesion.ejecutar(crearFaccion, { nombre: 'Pilos' }, OPC).datos!.faccionId;
+    // Actor distinto del fundador de `faccionId` (que ya tiene Facción): `crearFaccion` ahora exige no
+    // pertenecer ya a ninguna.
+    const otra = sesion.ejecutar(crearFaccion, { nombre: 'Pilos' }, { ...OPC, actor: 'jugador-pilos' }).datos!.faccionId;
 
     const r = sesion.ejecutar(proponerRelacion, { tipo: 'alianza', faccionAId: faccionId, faccionBId: otra }, OPC);
 

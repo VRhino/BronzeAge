@@ -106,15 +106,15 @@ el mapa de asentamiento es una espacio logico que se genera tomando en cuenta el
     + [RUTAS]el pathfinder de las rutas para las caravanas debe buscar evitar bosques(rodearlos) o rios(no los puede atravesar) y montañas
     + [POLITICAS]politicas de ubicacion de construccion.
     + [TRUEQUE]trueque compuesto de varios materiales
-    + [REGISTRO-MOTOR]cuando motor de un mensaje de fondos insufiecientes para reealiza cualquier accion, q muestre lo que falta
 ---------------------
 + correciones:
     + [ASENTAMIENTO]la opcion de reorganiza la cola no funciona correctamente probarlo en profudidad
---------
-+ anotaciones: una vez migrado todo a un back, limpiar para dejar solo la funcinalidad de backend, toda la estructura previsa q en backend reemplaza eliminarla y dejar solo lo q realmente se va usar, nada de codigo viejo que no se va a utilizar solo por guardar legacy
-
-
-
+-------- 27/08/2026
++ funcinalidad pendientes
+    + [RESUELTO]el crear una faccion con un jugador te deberia asignar como miembro automaticamente, y luego de que un jugador esta en una faccion no puede crear otra por un cooldown de 7 dias y solo si no esta en ninguna
+    + [RESUELTO]debe existir una funcionalidad dejar faccion y unirse a faccion.
+    + [PENDIENTE]cada faccion debe tener un rey, el valor no puede estar vacio asi que por ende al crear una faccion coloca al creador como rey
+    + [PENDIENTE]cuando un jugador usa la funcion de unirse a faccion, este no se une automaticamente, entre a una lista de aspirantes y el rey acepta a quienes quiere dentro y puede rechazar tambien 
 
 
 

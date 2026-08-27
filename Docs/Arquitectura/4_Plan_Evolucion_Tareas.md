@@ -824,6 +824,22 @@ que ya sirve C11a. Cero rasterizado, cero dependencia nueva.
   misma posición y forma. Es la prueba de que la copia es bit a bit correcta para el caso sin región, no una
   suposición
 - [x] `tsc --noEmit` limpio en el proyecto nuevo; el backend (`src/`) no se tocó, sigue en 617/617
+- [x] **Ampliado (2026-08-27): bosques fusionados, mismo patrón.** Pregunta del usuario al revisar el hito:
+  si `unirPoligonos`/`unirFormas` (`world/poligonos.ts`) también fusiona los 170 discos de bosque en una
+  silueta (`Mapa.contornosBosques()`), ¿por qué no se copió también? Respuesta: la colocación de los bosques
+  (`worldgen/bosques.ts`, `generarBosques`) SÍ consume RNG y es generación server-only (igual que
+  `generarCampoRuido`), pero el resultado (`ZonaBosque[]`: centro/radio/densidad) ya viaja completo y sin
+  filtrar en `GET .../mapa/:mapaId` desde C11a — es dato público. Lo único que faltaba era el paso de FUSIÓN
+  (`unirFormas`), que es geometría pura sobre ese dato ya público — T2a, exactamente como terreno.
+  `cliente-jugador/src/terreno/poligonos.ts` (motor de fusión, reducido: solo `formaCirculo`+`unirFormas`, sin
+  `formaPoligono`/`unirPoligonos` — esos fusionan zonas de Facción, que SÍ dependen de posiciones rivales,
+  T2b, no portables) + `bosques.ts` (envoltorio con el mismo `PASO_FUSION_BOSQUES = 1/400` que
+  `world/mapa.ts`). `render.ts` pinta la silueta fusionada (relleno `nonzero`, agujeros incluidos) debajo de
+  los ríos. **Verificado por comparación directa, no visual**: los 170 bosques reales de una partida
+  (`gameId: 'local'`, seed 42) corridos por el motor de fusión del servidor y por la copia de
+  `cliente-jugador/` con las MISMAS opciones — 19 lazos en los dos, **idénticos byte a byte** (mismas
+  coordenadas, mismo orden), no solo área parecida. `tsc --noEmit` limpio; 640/640 en el backend (sin tocar).
+  Actualiza `cliente-jugador/src/terreno/README.md` (tabla de qué se copió) y `cliente-jugador/README.md`
 
 ### C12. Descubrimiento y operación (2026-08-26)
 

@@ -59,6 +59,9 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   // Sin `minLength` en `nombre`: vacío/solo-espacios ya es un rechazo de dominio con su propio código
   // (`faccion.nombre_vacio`, `crearFaccion.ts`) — mismo motivo que `NUMERO` más arriba.
   crearFaccion: objeto({ nombre: { type: 'string' } }, ['nombre']),
+  unirseAFaccion: objeto({ faccionId: IDENTIFICADOR }, ['faccionId']),
+  // Sin parámetros: el actor solo puede dejar SU PROPIA Facción — `objeto({}, [])` solo admite `{}`.
+  dejarFaccion: objeto({}, []),
 
   // --- Cargos ---
   alternarFaccionNpc: objeto({ faccionId: IDENTIFICADOR, activo: { type: 'boolean' } }, ['faccionId', 'activo']),

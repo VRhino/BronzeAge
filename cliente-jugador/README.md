@@ -27,9 +27,13 @@ detalle y la disciplina de mantenimiento.
 
 Es un boilerplate, no un cliente completo:
 
-- Solo pinta terreno (bioma + ríos). No dibuja asentamientos, zonas de influencia ni trazado urbano — esos ya
-  llegan calculados en la proyección (`zonas`/`zonasFusionadas`/`trazadoPorAsentamiento`, Fase C10) y son
-  triviales de pintar encima del canvas existente, pero no está hecho aquí.
+- Pinta terreno (bioma + ríos + bosques fusionados). No dibuja asentamientos, zonas de influencia ni trazado
+  urbano — esos ya llegan calculados en la proyección (`zonas`/`zonasFusionadas`/`trazadoPorAsentamiento`,
+  Fase C10) y son triviales de pintar encima del canvas existente, pero no está hecho aquí. **Ojo con las
+  zonas de Facción si se implementan luego**: a diferencia de terreno y bosques, fusionarlas con
+  `unirFormas`/`unirPoligonos` NO se puede duplicar aquí — su entrada (posición de asentamientos rivales) es
+  privilegiada (T2b, doc 9), así que el resultado ya filtrado por Facción tiene que seguir viniendo calculado
+  del servidor, como hoy.
 - No soporta partidas creadas con `region` (ver la limitación documentada en `src/terreno/elevacion.ts`).
 - Sin formularios de comando: `ejecutarComando` existe en `apiCliente.ts` pero no hay UI que la invoque más
   allá del ejemplo comentado en `main.ts`.
