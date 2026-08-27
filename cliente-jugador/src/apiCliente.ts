@@ -1,9 +1,7 @@
-// Wrapper `fetch` delgado sobre la superficie `/jugador/*` del backend (Fase C3) — sin lógica de negocio,
-// solo I/O. Mismo patrón que `cliente/src/app/apiCliente.ts` (login dev, sesión en memoria), pero SIN ningún
-// import de tipos del servidor: los tipos de esta función son los mínimos que este boilerplate necesita, no
-// un reflejo de `session/estado.ts`. Un cliente de verdad generaría estos tipos desde `GET /v1/openapi.json`
-// (Fase C9) en vez de escribirlos a mano.
+// Wrapper `fetch` sobre la superficie `/jugador/*` y `/sesiones` del backend (Fase C3) — sin lógica de negocio, solo I/O.
 import type { MapaGenerado } from './terreno';
+
+import type { Asentamiento, CaminoComercial, CampamentoBandido, Caravana, Faccion, ZonaFaccion, TrazadoAsentamiento } from './tiposDominio';
 
 export class ApiError extends Error {
   constructor(
@@ -21,15 +19,46 @@ export interface ProyeccionJugador {
   jugadorId: string;
   faccionId: string | null;
   mapaId: string;
-  facciones: unknown[];
-  asentamientos: unknown[];
+  facciones: Faccion[];
+  asentamientos: Asentamiento[];
+  caravanas: Caravana[];
+  caminos: CaminoComercial[];
+  campamentosBandidos: CampamentoBandido[];
+  zonasFusionadas: ZonaFaccion[];
+  trazadoPorAsentamiento: Record<string, TrazadoAsentamiento>;
   [campo: string]: unknown;
 }
 
-let sesionId: string | null = null;
+export interface RespuestaLogin {
+  usuarioId: string;
+  sesionId: string;
+  expiraEn: string;
+}
 
-const SUJETO = import.meta.env.VITE_USUARIO ?? 'ana';
+export interface RespuestaWhoami {
+  usuarioId: string;
+  esAdministradorGlobal: boolean;
+  gameId?: string;
+  rol?: string | null;
+  jugadorId?: string | null;
+}
+
+export interface RespuestaComando {
+  resultado: {
+    ok: boolean;
+    codigoError?: string;
+  };
+  proyeccion?: ProyeccionJugador;
+  [campo: string]: unknown;
+}
+
 const V1 = '/v1';
+const STORAGE_KEY_SESION = 'bac_jugador_sesion_id';
+const STORAGE_KEY_USUARIO = 'bac_jugador_usuario';
+const STORAGE_KEY_GAME_ID = 'bac_jugador_game_id';
+
+let sesionIdMemoria: string | null = null;
+let usuarioMemoria: string | null = null;
 
 async function fetchJson<T>(url: string, opciones: RequestInit, cabeceraAuth: string): Promise<T> {
   let res: Response;
@@ -52,24 +81,78 @@ async function fetchJson<T>(url: string, opciones: RequestInit, cabeceraAuth: st
   return res.json() as Promise<T>;
 }
 
-async function iniciarSesion(): Promise<string> {
-  const { sesionId: id } = await fetchJson<{ sesionId: string }>(`${V1}/sesiones`, { method: 'POST' }, `dev ${SUJETO}`);
-  sesionId = id;
-  return id;
+export async function loginConUsuario(usuario: string): Promise<RespuestaLogin> {
+  const sujeto = usuario.trim();
+  if (!sujeto) throw new ApiError(400, 'El nombre de usuario no puede estar vacío.');
+
+  const res = await fetchJson<RespuestaLogin>(`${V1}/sesiones`, { method: 'POST' }, `dev ${sujeto}`);
+  sesionIdMemoria = res.sesionId;
+  usuarioMemoria = sujeto;
+  return res;
+}
+
+export function guardarSesionLocal(sesionId: string, usuario: string, gameId: string): void {
+  sesionIdMemoria = sesionId;
+  usuarioMemoria = usuario;
+  localStorage.setItem(STORAGE_KEY_SESION, sesionId);
+  localStorage.setItem(STORAGE_KEY_USUARIO, usuario);
+  localStorage.setItem(STORAGE_KEY_GAME_ID, gameId);
+}
+
+export function cargarSesionLocal(): { sesionId: string; usuario: string; gameId: string } | null {
+  const sid = localStorage.getItem(STORAGE_KEY_SESION);
+  const usr = localStorage.getItem(STORAGE_KEY_USUARIO);
+  const gid = localStorage.getItem(STORAGE_KEY_GAME_ID);
+
+  if (sid && usr && gid) {
+    sesionIdMemoria = sid;
+    usuarioMemoria = usr;
+    return { sesionId: sid, usuario: usr, gameId: gid };
+  }
+  return null;
+}
+
+export function cerrarSesion(): void {
+  sesionIdMemoria = null;
+  usuarioMemoria = null;
+  localStorage.removeItem(STORAGE_KEY_SESION);
+  localStorage.removeItem(STORAGE_KEY_USUARIO);
+  localStorage.removeItem(STORAGE_KEY_GAME_ID);
+}
+
+export function getUsuarioActual(): string | null {
+  return usuarioMemoria;
 }
 
 async function peticion<T>(url: string, opciones: RequestInit = {}): Promise<T> {
-  const id = sesionId ?? (await iniciarSesion());
+  if (!sesionIdMemoria) {
+    const local = cargarSesionLocal();
+    if (!local) throw new ApiError(401, 'No hay ninguna sesión activa. Inicie sesión primero.');
+  }
+
   try {
-    return await fetchJson<T>(url, opciones, `sesion ${id}`);
+    return await fetchJson<T>(url, opciones, `sesion ${sesionIdMemoria}`);
   } catch (err) {
-    if (!(err instanceof ApiError) || err.status !== 401) throw err;
-    return fetchJson<T>(url, opciones, `sesion ${await iniciarSesion()}`);
+    if (err instanceof ApiError && err.status === 401) {
+      // Si la sesión expiró o es inválida, intentar re-autenticar automáticamente si conocemos el usuario
+      if (usuarioMemoria) {
+        const loginRes = await loginConUsuario(usuarioMemoria);
+        sesionIdMemoria = loginRes.sesionId;
+        const local = cargarSesionLocal();
+        if (local) guardarSesionLocal(loginRes.sesionId, local.usuario, local.gameId);
+        return fetchJson<T>(url, opciones, `sesion ${sesionIdMemoria}`);
+      }
+    }
+    throw err;
   }
 }
 
-/** Une al sujeto actual a la partida como jugador — idempotente en la práctica (un segundo intento da 409,
- * que el llamador puede ignorar igual que hace `cliente/` con la creación de partida). */
+export function obtenerWhoami(gameId?: string): Promise<RespuestaWhoami> {
+  const query = gameId ? `?gameId=${encodeURIComponent(gameId)}` : '';
+  return peticion<RespuestaWhoami>(`${V1}/sesiones/actual${query}`);
+}
+
+/** Une al sujeto actual a la partida como jugador */
 export function unirseAPartida(gameId: string): Promise<{ jugadorId: string }> {
   return peticion<{ jugadorId: string }>(`${V1}/jugador/partidas/${encodeURIComponent(gameId)}/membresia`, { method: 'POST' });
 }
@@ -78,17 +161,13 @@ export function consultarProyeccion(gameId: string): Promise<ProyeccionJugador> 
   return peticion<ProyeccionJugador>(`${V1}/jugador/partidas/${encodeURIComponent(gameId)}`);
 }
 
-/** El mapa como asset (Fase C11a): se pide una sola vez por `mapaId` y se cachea para siempre — ver
- * `main.ts`, que decide CUÁNDO llamar a esto comparando el `mapaId` de la proyección contra el cacheado. */
+/** El mapa como asset (Fase C11a): se pide una sola vez por `mapaId` y se cachea */
 export function obtenerMapa(gameId: string, mapaId: string): Promise<MapaGenerado> {
   return peticion<MapaGenerado>(`${V1}/jugador/partidas/${encodeURIComponent(gameId)}/mapa/${encodeURIComponent(mapaId)}`);
 }
 
-/** Sin tipar `params`/`resultado.datos` por comando (a diferencia de `cliente/`, que sí puede porque importa
- * `ParamsDe<T>`/`DatosDe<T>` del servidor): la forma de cada comando está en `GET /v1/openapi.json`
- * (Fase C9) — es el contrato que un cliente sin motor debe leer, no adivinar contra el código fuente. */
-export function ejecutarComando(gameId: string, tipo: string, params: unknown): Promise<{ resultado: { ok: boolean; codigoError?: string } }> {
-  return peticion(`${V1}/jugador/partidas/${encodeURIComponent(gameId)}/comandos`, {
+export function ejecutarComando(gameId: string, tipo: string, params: unknown): Promise<RespuestaComando> {
+  return peticion<RespuestaComando>(`${V1}/jugador/partidas/${encodeURIComponent(gameId)}/comandos`, {
     method: 'POST',
     body: JSON.stringify({ tipo, params }),
   });
