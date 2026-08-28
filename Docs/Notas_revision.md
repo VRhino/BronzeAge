@@ -115,6 +115,9 @@ el mapa de asentamiento es una espacio logico que se genera tomando en cuenta el
     + [RESUELTO]debe existir una funcionalidad dejar faccion y unirse a faccion.
     + [PENDIENTE]cada faccion debe tener un rey, el valor no puede estar vacio asi que por ende al crear una faccion coloca al creador como rey
     + [PENDIENTE]cuando un jugador usa la funcion de unirse a faccion, este no se une automaticamente, entre a una lista de aspirantes y el rey acepta a quienes quiere dentro y puede rechazar tambien 
+    + en al vista de cliente(admin) falta una pestaña para gestionar partida, el game id, jugadores conectados, crear partida y demas
++ Issues:
+    + 
 
 
 
