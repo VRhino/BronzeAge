@@ -1,0 +1,332 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`snapshot de regresión general > resumen del estado en ticks de referencia coincide con el baseline versionado 1`] = `
+{
+  "1": {
+    "asentamientos": [
+      {
+        "edificios": {
+          "centroUrbano:activo": 1,
+          "granja:activo": 1,
+          "lenera:en_cola": 1,
+          "vivienda:activo": 3,
+        },
+        "escuadrones": 0,
+        "medidorMantenimiento": 100,
+        "nivel": 1,
+        "poblacion": {
+          "artesanos": 0,
+          "nobleza": 0,
+          "pesants": 22,
+        },
+        "recursosClave": [
+          {
+            "cantidad": 40,
+            "recurso": "madera",
+          },
+          {
+            "cantidad": 20,
+            "recurso": "piedra",
+          },
+          {
+            "cantidad": 107.29,
+            "recurso": "trigo",
+          },
+          {
+            "cantidad": 0,
+            "recurso": "cobre",
+          },
+          {
+            "cantidad": 0,
+            "recurso": "estano",
+          },
+          {
+            "cantidad": 100,
+            "recurso": "oro",
+          },
+          {
+            "cantidad": 0,
+            "recurso": "livestock",
+          },
+        ],
+      },
+    ],
+    "facciones": [
+      {
+        "nivel": 1,
+        "reputacion": 0,
+      },
+      {
+        "nivel": 1,
+        "reputacion": 0,
+      },
+      {
+        "nivel": 1,
+        "reputacion": 0,
+      },
+    ],
+  },
+  "10": {
+    "asentamientos": [
+      {
+        "edificios": {
+          "centroUrbano:activo": 1,
+          "granja:activo": 1,
+          "lenera:activo": 2,
+          "lenera:en_construccion": 1,
+          "vivienda:activo": 3,
+        },
+        "escuadrones": 0,
+        "medidorMantenimiento": 100,
+        "nivel": 1,
+        "poblacion": {
+          "artesanos": 0,
+          "nobleza": 0,
+          "pesants": 34,
+        },
+        "recursosClave": [
+          {
+            "cantidad": 41.6,
+            "recurso": "madera",
+          },
+          {
+            "cantidad": 20,
+            "recurso": "piedra",
+          },
+          {
+            "cantidad": 166.72,
+            "recurso": "trigo",
+          },
+          {
+            "cantidad": 0,
+            "recurso": "cobre",
+          },
+          {
+            "cantidad": 0,
+            "recurso": "estano",
+          },
+          {
+            "cantidad": 100,
+            "recurso": "oro",
+          },
+          {
+            "cantidad": 0,
+            "recurso": "livestock",
+          },
+        ],
+      },
+    ],
+    "facciones": [
+      {
+        "nivel": 1,
+        "reputacion": 0,
+      },
+      {
+        "nivel": 1,
+        "reputacion": 0,
+      },
+      {
+        "nivel": 1,
+        "reputacion": 0,
+      },
+    ],
+  },
+  "100": {
+    "asentamientos": [
+      {
+        "edificios": {
+          "almacen:activo": 3,
+          "centroUrbano:activo": 1,
+          "granja:activo": 3,
+          "lenera:activo": 3,
+          "vivienda:activo": 13,
+          "vivienda:en_construccion": 1,
+        },
+        "escuadrones": 0,
+        "medidorMantenimiento": 100,
+        "nivel": 1,
+        "poblacion": {
+          "artesanos": 0,
+          "nobleza": 0,
+          "pesants": 172,
+        },
+        "recursosClave": [
+          {
+            "cantidad": 467.4,
+            "recurso": "madera",
+          },
+          {
+            "cantidad": 0,
+            "recurso": "piedra",
+          },
+          {
+            "cantidad": 829.3,
+            "recurso": "trigo",
+          },
+          {
+            "cantidad": 0,
+            "recurso": "cobre",
+          },
+          {
+            "cantidad": 0,
+            "recurso": "estano",
+          },
+          {
+            "cantidad": 100,
+            "recurso": "oro",
+          },
+          {
+            "cantidad": 0,
+            "recurso": "livestock",
+          },
+        ],
+      },
+    ],
+    "facciones": [
+      {
+        "nivel": 1,
+        "reputacion": 0,
+      },
+      {
+        "nivel": 1,
+        "reputacion": 0,
+      },
+      {
+        "nivel": 1,
+        "reputacion": 0,
+      },
+    ],
+  },
+  "25": {
+    "asentamientos": [
+      {
+        "edificios": {
+          "almacen:activo": 1,
+          "centroUrbano:activo": 1,
+          "granja:activo": 1,
+          "lenera:activo": 3,
+          "vivienda:activo": 4,
+        },
+        "escuadrones": 0,
+        "medidorMantenimiento": 100,
+        "nivel": 1,
+        "poblacion": {
+          "artesanos": 0,
+          "nobleza": 0,
+          "pesants": 48,
+        },
+        "recursosClave": [
+          {
+            "cantidad": 72.83,
+            "recurso": "madera",
+          },
+          {
+            "cantidad": 0,
+            "recurso": "piedra",
+          },
+          {
+            "cantidad": 224.59,
+            "recurso": "trigo",
+          },
+          {
+            "cantidad": 0,
+            "recurso": "cobre",
+          },
+          {
+            "cantidad": 0,
+            "recurso": "estano",
+          },
+          {
+            "cantidad": 100,
+            "recurso": "oro",
+          },
+          {
+            "cantidad": 0,
+            "recurso": "livestock",
+          },
+        ],
+      },
+    ],
+    "facciones": [
+      {
+        "nivel": 1,
+        "reputacion": 0,
+      },
+      {
+        "nivel": 1,
+        "reputacion": 0,
+      },
+      {
+        "nivel": 1,
+        "reputacion": 0,
+      },
+    ],
+  },
+  "50": {
+    "asentamientos": [
+      {
+        "edificios": {
+          "almacen:activo": 1,
+          "centroUrbano:activo": 1,
+          "granja:activo": 1,
+          "lenera:activo": 3,
+          "vivienda:activo": 6,
+          "vivienda:en_construccion": 1,
+        },
+        "escuadrones": 0,
+        "medidorMantenimiento": 100,
+        "nivel": 1,
+        "poblacion": {
+          "artesanos": 0,
+          "nobleza": 0,
+          "pesants": 81,
+        },
+        "recursosClave": [
+          {
+            "cantidad": 312.87,
+            "recurso": "madera",
+          },
+          {
+            "cantidad": 0,
+            "recurso": "piedra",
+          },
+          {
+            "cantidad": 424.46,
+            "recurso": "trigo",
+          },
+          {
+            "cantidad": 0,
+            "recurso": "cobre",
+          },
+          {
+            "cantidad": 0,
+            "recurso": "estano",
+          },
+          {
+            "cantidad": 100,
+            "recurso": "oro",
+          },
+          {
+            "cantidad": 0,
+            "recurso": "livestock",
+          },
+        ],
+      },
+    ],
+    "facciones": [
+      {
+        "nivel": 1,
+        "reputacion": 0,
+      },
+      {
+        "nivel": 1,
+        "reputacion": 0,
+      },
+      {
+        "nivel": 1,
+        "reputacion": 0,
+      },
+    ],
+  },
+}
+`;

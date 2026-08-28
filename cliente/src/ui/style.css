@@ -1,0 +1,2721 @@
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: #1b1a17;
+  color: #e8e2d0;
+}
+
+#app {
+  display: grid;
+  grid-template-columns: 1fr max-content;
+  align-items: start;
+  gap: 12px;
+  padding: 12px;
+  min-height: 100vh;
+}
+
+.map-panel {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  border: 1px solid #4a4436;
+  background: #2a2721;
+  flex: none;
+}
+
+.map-toggles {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Toggle de vista Mundo/Asentamiento (Vista de Asentamiento). */
+.vista-mapa-toggle {
+  display: inline-flex;
+  border: 1px solid #4a4436;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.vista-btn {
+  padding: 5px 11px;
+  background: rgba(26, 24, 20, 0.85);
+  border: none;
+  color: #e8e2d0;
+  font-size: 11px;
+  cursor: pointer;
+}
+.vista-btn + .vista-btn {
+  border-left: 1px solid #4a4436;
+}
+.vista-btn:hover {
+  background: rgba(60, 54, 44, 0.9);
+}
+.vista-btn.active {
+  background: #c9a227;
+  color: #1a1814;
+  font-weight: 600;
+}
+#vista-asentamiento-select {
+  padding: 5px 9px;
+  background: rgba(26, 24, 20, 0.85);
+  border: 1px solid #4a4436;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #e8e2d0;
+  max-width: 220px;
+}
+
+.fertilidad-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  background: rgba(26, 24, 20, 0.85);
+  border: 1px solid #4a4436;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #e8e2d0;
+  cursor: pointer;
+  user-select: none;
+}
+
+#world-canvas {
+  display: block;
+  flex: none;
+  /* Fija la altura al bitmap del canvas: sin esto, `align-items: stretch` del `.map-panel` lo estira (y
+     deforma, porque el bitmap no cambia de resolución) cada vez que la leyenda crece más que el mapa —
+     p. ej. con muchas Facciones creadas en partida. */
+  align-self: flex-start;
+  cursor: crosshair;
+}
+
+.settlement-building-tooltip {
+  position: absolute;
+  z-index: 5;
+  width: 230px;
+  max-width: 28vw;
+  padding: 9px 10px;
+  border: 1px solid #b8ae90;
+  border-radius: 4px;
+  background: rgba(26, 24, 20, 0.96);
+  color: #e8e2d0;
+  font-size: 11px;
+  line-height: 1.35;
+  pointer-events: none;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.settlement-tooltip-title {
+  color: #c9a227;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.settlement-tooltip-meta {
+  margin-bottom: 7px;
+  color: #b8ae90;
+}
+
+.settlement-tooltip-group {
+  margin-top: 6px;
+  padding-top: 5px;
+  border-top: 1px solid #4a4436;
+}
+
+.settlement-tooltip-group > span:first-child {
+  display: block;
+  margin-bottom: 2px;
+  color: #b8ae90;
+  font-weight: 600;
+}
+
+.settlement-tooltip-group > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.settlement-tooltip-muted {
+  color: #8f8876;
+  font-style: italic;
+}
+
+.legend {
+  flex: none;
+  width: 240px;
+  /* Techo independiente del contenido (no depende de que `.map-panel` tenga altura definida, que no la
+     tiene): con muchas Facciones, la leyenda deja de crecer sin límite y `.legend-body` scrollea. Igualado
+     a la altura del mapa (`--legend-max-height`, fijado inline desde `CANVAS_SIZE`) para que el panel quede
+     justo, con `calc(100vh - 24px)` como respaldo si esa variable no llegara a fijarse. */
+  max-height: var(--legend-max-height, calc(100vh - 24px));
+  background: rgba(26, 24, 20, 0.92);
+  border-left: 1px solid #4a4436;
+  font-size: 11px;
+  color: #e8e2d0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.legend.collapsed {
+  align-self: flex-start;
+}
+
+.legend-header {
+  padding: 6px 10px;
+  cursor: pointer;
+  user-select: none;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  border-bottom: 1px solid #4a4436;
+}
+
+.legend-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 6px 10px 0;
+  border-bottom: 1px solid #4a4436;
+}
+
+.legend-tab-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  color: #b8ae90;
+  font-size: 11px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.legend-tab-btn:hover {
+  background: #2a2721;
+}
+
+.legend-tab-btn.active {
+  background: #2a2721;
+  border-color: #4a4436;
+  color: #e8e2d0;
+}
+
+.legend-body {
+  flex: 1;
+  min-height: 0;
+  padding: 8px 10px;
+  overflow-y: auto;
+}
+
+.legend.collapsed .legend-tabs,
+.legend.collapsed .legend-body {
+  display: none;
+}
+
+.legend-group {
+  margin-bottom: 8px;
+}
+
+.legend-group:last-child {
+  margin-bottom: 0;
+}
+
+.legend-group h3 {
+  margin: 0 0 4px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #b8ae90;
+}
+
+.legend-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.5;
+}
+
+.legend-note {
+  color: #b8ae90;
+  font-size: 10px;
+  margin-top: 2px;
+}
+
+/* Aviso previo de emplazamiento al fundar (no bloquea: solo informa, ver renderViabilidadFundacion). */
+.fundacion-viabilidad {
+  font-size: 11px;
+  line-height: 1.45;
+  color: #b8ae90;
+  padding: 6px 8px;
+  border: 1px solid #4a4436;
+  border-left-width: 3px;
+  border-radius: 3px;
+  background: #1f1d19;
+}
+
+.fundacion-viabilidad.ok {
+  color: #a8d69a;
+  border-left-color: #27ae60;
+}
+
+.fundacion-viabilidad.aviso {
+  color: #e8c98a;
+  border-left-color: #e0a020;
+}
+
+.fundacion-viabilidad.no-fundable {
+  color: #e07a6b;
+  border-left-color: #c0392b;
+}
+
+.swatch {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid #1b1a17;
+}
+
+.swatch-square {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  border: 1px solid #1b1a17;
+}
+
+.swatch-poly {
+  flex: none;
+  width: 12px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+/* Caravanas (a petición del usuario): triángulo en vez de círculo/diamante — el color real en el mapa varía
+   por Facción de origen (ver `faccionColor`, ui/canvas.ts); aquí se usa uno de la paleta como muestra. */
+.swatch-triangle {
+  flex: none;
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 10px solid #c0392b;
+}
+
+.controls-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid #4a4436;
+}
+
+.tab-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  color: #b8ae90;
+  padding: 8px 14px;
+}
+
+.tab-btn:hover {
+  background: #2a2721;
+}
+
+.tab-btn.active {
+  background: #2a2721;
+  border-color: #4a4436;
+  color: #e8e2d0;
+}
+
+.tab-panel[hidden] {
+  display: none;
+}
+
+.faccion-group {
+  margin-bottom: 10px;
+}
+
+.faccion-group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #b8ae90;
+  margin-bottom: 6px;
+}
+
+.settlement-tab-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.settlement-tab-btn {
+  font-size: 12px;
+  padding: 5px 8px;
+}
+
+.settlement-tab-btn.active {
+  background: #4a4436;
+  border-color: #b8ae90;
+  color: #e8e2d0;
+}
+
+/* Chips de escuadrones propios en Combate (Doc 5.2/5.10, a petición del usuario): borde blanco sin
+   seleccionar, verde al seleccionar — ver `actualizarCombateEscuadrones` en main.ts. */
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0 10px;
+}
+
+.chip-escuadron {
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: 12px;
+  border: 1.5px solid #ffffff;
+}
+
+.chip-escuadron.selected {
+  border-color: #4caf50;
+  background: #223a22;
+  color: #d9f2d9;
+}
+
+.combate-jugador-grupo {
+  margin: 4px 0 10px;
+  padding: 6px 8px;
+  border-left: 2px solid #444;
+}
+
+.combate-jugador-nombre {
+  font-size: 12px;
+  color: #aaa;
+  margin-bottom: 4px;
+}
+
+.settlement-detail {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settlement-detail-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid #4a4436;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding-top: 2px;
+  background: #1b1a17;
+}
+
+.settlement-detail-tab {
+  padding: 7px 14px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  background: transparent;
+  color: #b8ae90;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.settlement-detail-tab:hover {
+  background: #2a2721;
+  color: #e8e2d0;
+}
+
+.settlement-detail-tab.active {
+  background: #2a2721;
+  border-color: #4a4436;
+  color: #e8e2d0;
+  font-weight: 600;
+}
+
+.settlement-detail-panel {
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settlement-detail-panel.active {
+  display: flex;
+}
+
+/* Orden de lectura de la pestaña General: el almacén queda junto al mantenimiento y
+   ciudadanía/cargos/políticas se consultan al final del panel. */
+[data-settlement-detail-panel="general"] .detail-section:nth-child(1) { order: 1; }
+[data-settlement-detail-panel="general"] .detail-section:nth-child(2) { order: 2; }
+[data-settlement-detail-panel="general"] .detail-section:nth-child(3) { order: 6; }
+[data-settlement-detail-panel="general"] .detail-section:nth-child(4) { order: 7; }
+[data-settlement-detail-panel="general"] .detail-section:nth-child(5) { order: 3; }
+[data-settlement-detail-panel="general"] .detail-section:nth-child(6) { order: 4; }
+[data-settlement-detail-panel="general"] .detail-section:nth-child(7) { order: 5; }
+[data-settlement-detail-panel="general"] .detail-section:nth-child(8) { order: 8; }
+
+/* Orden de lectura de la pestaña Edificios: primero la cola, después las mejoras y al final el resumen. */
+[data-settlement-detail-panel="edificios"] .detail-section:nth-child(1) { order: 3; }
+[data-settlement-detail-panel="edificios"] .detail-section:nth-child(2) { order: 2; }
+[data-settlement-detail-panel="edificios"] .detail-section:nth-child(3) { order: 1; }
+
+.military-summary {
+  display: flex;
+  gap: 18px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-top: 1px solid #4a4436;
+  color: #d8cfb5;
+}
+
+.settlement-warning-icon {
+  color: #e05252;
+  font-size: 15px;
+  line-height: 1;
+  margin-left: 4px;
+}
+
+.detail-section {
+  background: #2a2721;
+  border: 1px solid #4a4436;
+  border-radius: 4px;
+  padding: 10px;
+}
+
+/* Inventario del asentamiento: cada recurso tiene una superficie propia para que el panel
+   se lea como un conjunto de almacenes separados y no como una lista corrida. */
+.settlement-storage-summary {
+  background: linear-gradient(145deg, #302b22, #26231e);
+  border-color: #66583d;
+  padding: 12px;
+}
+
+.storage-section-heading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid #4a4436;
+}
+
+.storage-section-heading h3 {
+  margin: 0;
+}
+
+.storage-section-heading p {
+  margin: 3px 0 0;
+  color: #9f967e;
+  font-size: 11px;
+}
+
+.storage-section-icon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid #796643;
+  border-radius: 8px;
+  background: #211f1a;
+  font-size: 19px;
+}
+
+.storage-resource-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.storage-resource-card {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid #4e4738;
+  border-radius: 6px;
+  background: #211f1a;
+}
+
+.storage-resource-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.storage-resource-icon {
+  flex: 0 0 auto;
+  font-size: 17px;
+}
+
+.storage-resource-name {
+  overflow: hidden;
+  color: #d8cfb5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storage-resource-heading strong {
+  margin-left: auto;
+  color: #f0e7cf;
+  white-space: nowrap;
+}
+
+.storage-resource-heading small {
+  color: #918873;
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.storage-capacity-track {
+  height: 4px;
+  margin-top: 7px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #3d382d;
+}
+
+.storage-capacity-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #9d7a37, #d2ad58);
+}
+
+.storage-reserve-section {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed #66583d;
+}
+
+.storage-reserve-section > summary {
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.storage-reserve-section > summary::-webkit-details-marker {
+  display: none;
+}
+
+.storage-reserve-heading {
+  padding-bottom: 8px;
+  border-bottom: 0;
+}
+
+.storage-reserve-chevron {
+  margin-left: auto;
+  color: #b8ae90;
+  font-size: 18px;
+  transition: transform 0.15s ease;
+}
+
+.storage-reserve-section[open] .storage-reserve-chevron {
+  transform: rotate(90deg);
+}
+
+.storage-reserve-section[open] > summary {
+  padding-bottom: 10px;
+  border-bottom: 1px solid #4a4436;
+}
+
+.storage-reserve-content {
+  padding-top: 10px;
+}
+
+.storage-reserve-section .reserva-grid {
+  margin-top: 2px;
+}
+
+.trade-settlement-info {
+  margin: -2px 0 8px;
+  padding: 6px 8px;
+  border: 1px solid #4a4436;
+  border-left: 3px solid #c9a227;
+  border-radius: 3px;
+  background: #1f1d19;
+  color: #d8cfb5;
+  font-size: 11px;
+}
+
+.trade-settlement-info-title {
+  margin-bottom: 4px;
+  color: #b8ae90;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.trade-material-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+.trade-active-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.trade-active-card {
+  padding: 8px;
+  border: 1px solid #4a4436;
+  border-radius: 4px;
+  background: #2a2721;
+}
+
+.trade-active-card-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+  color: #e8e2d0;
+}
+
+.detail-section h3 {
+  margin: 0 0 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #b8ae90;
+}
+
+.kv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 4px 12px;
+  font-size: 12px;
+}
+
+.kv-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+/* Reserva manual por recurso (Almacén, a petición del usuario) — un slider 0-999 por recurso, mismo ritmo
+   visual que .kv-grid. */
+.reserva-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px 12px;
+  margin-top: 4px;
+}
+
+.reserva-slider {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+}
+
+.reserva-slider input[type='range'] {
+  width: 100%;
+}
+
+.reserva-valor {
+  color: #b8ae90;
+}
+
+/* Segmento "Info:" bajo el combo de reclutar tropa (pestaña Guerra) — mismo look que .detail-section. */
+.tropa-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: #2a2721;
+  border: 1px solid #4a4436;
+  border-left: 3px solid #b8ae90;
+  border-radius: 3px;
+  padding: 8px 10px;
+  margin: -2px 0 4px;
+}
+
+.tropa-info .kv-row span:first-child {
+  color: #b8ae90;
+}
+
+.kv-row span:first-child {
+  color: #b8ae90;
+}
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  font-size: 11px;
+  padding: 3px 8px;
+  background: #3a3529;
+  border: 1px solid #4a4436;
+  border-radius: 10px;
+}
+
+.mini-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+/* Envoltorio de seguridad para tablas con columnas de texto largo (ej. roster de tropas, pestaña Guerra):
+   si el contenido no cabe en el ancho disponible, desplaza en horizontal DENTRO del propio bloque en vez de
+   desbordar el layout de la página (ver <preview_tools> "Responsive": ninguna tabla ancha debe hacer scrollear
+   el body). */
+.table-scroll {
+  overflow-x: auto;
+}
+
+/* Roster de tropas (pestaña Guerra): fuera del controls-grid estrecho (min 230px) a propósito — con 5
+   columnas y nombres de tropa largos, encajarlo en una celda de grid angosta forzaba desbordamiento. */
+.roster-section {
+  margin-top: 10px;
+}
+
+.roster-section h3 {
+  margin: 0 0 6px;
+}
+
+.roster-section h3:not(:first-child) {
+  margin-top: 14px;
+}
+
+.mini-table th,
+.mini-table td {
+  text-align: left;
+  padding: 3px 6px;
+  border-bottom: 1px solid #3a3529;
+}
+
+.fila-deficit td {
+  color: #e07a6b;
+  background: rgba(192, 57, 43, 0.12);
+}
+
+.resource-inline-icon {
+  display: inline-block;
+  width: 1.35em;
+  margin-right: 4px;
+  text-align: center;
+}
+
+.valor-negativo {
+  color: #e05252;
+  font-weight: 700;
+}
+
+.mantenimiento-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: #3a3529;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.mantenimiento-fill {
+  height: 100%;
+  background: #6fae5a;
+}
+
+.map-column {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  flex: none;
+}
+
+.section-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #8a8060;
+  margin: 0 0 -8px;
+}
+
+.section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 0 0 -8px;
+}
+
+.section-title-row .section-title {
+  margin: 0;
+}
+
+.time-travel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: #b8ae90;
+}
+
+.time-travel input[type='range'] {
+  width: 160px;
+  accent-color: #b8ae90;
+  padding: 0;
+  background: transparent;
+  border: none;
+}
+
+.time-travel button {
+  font-size: 11px;
+  padding: 4px 8px;
+}
+
+.time-travel-divider {
+  width: 1px;
+  align-self: stretch;
+  background: #4a4436;
+}
+
+.altura-unity-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.altura-unity-label input[type='number'] {
+  width: 60px;
+  font-size: 11px;
+  padding: 3px 5px;
+  background: rgba(26, 24, 20, 0.85);
+  border: 1px solid #4a4436;
+  color: #e8e0c8;
+  border-radius: 3px;
+}
+
+.controls-panel.viendo-pasado .tab-panel#tab-acciones,
+.controls-panel.viendo-pasado .tab-panel#tab-comercio {
+  position: relative;
+  pointer-events: none;
+  opacity: 0.45;
+}
+
+.controls-grid,
+.logs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: #2a2721;
+  border: 1px solid #4a4436;
+  border-radius: 4px;
+  min-width: 0;
+}
+
+.controls label {
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.balance-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.balance-toolbar input[type='search'] {
+  flex: 1;
+  min-width: 200px;
+}
+
+.balance-count {
+  font-size: 11px;
+  color: #b8ae90;
+  white-space: nowrap;
+}
+
+.balance-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.balance-group {
+  background: #2a2721;
+  border: 1px solid #4a4436;
+  border-radius: 4px;
+}
+
+.balance-group summary {
+  cursor: pointer;
+  padding: 9px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+  user-select: none;
+}
+
+.balance-group summary::-webkit-details-marker {
+  display: none;
+}
+
+.balance-group summary::before {
+  content: '▸';
+  color: #b8ae90;
+  transition: transform 0.1s ease;
+  flex: none;
+}
+
+.balance-group[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.balance-group summary .grupo-nombre {
+  flex: 1;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #e8e2d0;
+}
+
+.badge {
+  flex: none;
+  font-size: 10px;
+  padding: 1px 7px;
+  border-radius: 8px;
+  background: #3a3529;
+  color: #b8ae90;
+  border: 1px solid #4a4436;
+}
+
+.badge-modified {
+  background: rgba(219, 166, 60, 0.16);
+  color: #dba63c;
+  border-color: rgba(219, 166, 60, 0.4);
+}
+
+.balance-group .balance-fields {
+  padding: 10px 12px 12px;
+  border-top: 1px solid #4a4436;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 8px 10px;
+}
+
+.balance-field label {
+  font-size: 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  color: #b8ae90;
+}
+
+.balance-field-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.balance-field-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.balance-field.is-modified .balance-field-label {
+  color: #dba63c;
+}
+
+.balance-field.is-modified input {
+  border-color: #dba63c;
+}
+
+.balance-field-reset {
+  flex: none;
+  padding: 4px 6px;
+  line-height: 1;
+  font-size: 12px;
+}
+
+button, select, input {
+  font-family: inherit;
+  font-size: 13px;
+  padding: 6px;
+  background: #3a3529;
+  color: #e8e2d0;
+  border: 1px solid #4a4436;
+  border-radius: 3px;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:hover {
+  background: #4a4436;
+}
+
+.log-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  background: #2a2721;
+  border: 1px solid #4a4436;
+  border-radius: 4px;
+  min-width: 0;
+}
+
+/* Registro general de sitio (a petición del usuario): movido a la cabeza de `.map-column`, visible sin
+   scroll — el acento lo distingue del resto de log-cards que quedaron abajo, en `.logs-grid`. */
+.log-card-registro {
+  border-left: 3px solid #b8ae90;
+}
+
+.log-card h2 {
+  flex: none;
+}
+
+.log-panel {
+  max-height: 240px;
+  overflow-y: auto;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.log-panel div {
+  border-bottom: 1px solid #3a3529;
+  padding: 2px 0;
+}
+
+h1 {
+  font-size: 15px;
+  margin: 0 0 4px;
+}
+
+h2 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #b8ae90;
+  margin: 0;
+}
+
+/* Cesión de una Facción al NPC de gobernanza (pestaña Facción, ver `app/npcGobernanza.ts`). */
+.npc-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #e8e2d0;
+  cursor: pointer;
+}
+
+.npc-toggle input[disabled] {
+  cursor: not-allowed;
+}
+
+.npc-toggle:has(input[disabled]) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* --------------------------------------------------------------------------
+   Sistema visual de administración
+   El mapa/canvas conserva sus estilos propios; estas reglas se aplican a los
+   paneles de gestión, formularios, tablas y registros que lo acompañan.
+   -------------------------------------------------------------------------- */
+:root {
+  --admin-surface: #29261f;
+  --admin-surface-raised: #322e25;
+  --admin-surface-deep: #201e19;
+  --admin-border: #514936;
+  --admin-border-strong: #75623d;
+  --admin-text: #eee7d5;
+  --admin-muted: #aaa087;
+  --admin-accent: #d0a94e;
+  --admin-accent-soft: rgba(208, 169, 78, 0.14);
+  --admin-danger: #d96f62;
+  --admin-radius: 8px;
+}
+
+.controls-panel {
+  gap: 16px;
+  padding: 2px 0 16px;
+}
+
+.simulation-status-bar {
+  position: fixed;
+  z-index: 20;
+  left: 12px;
+  bottom: 12px;
+  width: min(760px, calc(100vw - 24px));
+  max-height: min(30vh, 180px);
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--admin-border-strong);
+  border-radius: var(--admin-radius);
+  background: rgba(32, 30, 25, 0.96);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(8px);
+}
+
+.simulation-status-bar .section-title-row {
+  align-items: flex-start;
+  margin: 0;
+  gap: 8px;
+}
+
+.simulation-status-bar .section-title {
+  flex: 0 0 auto;
+  margin: 0;
+  padding-top: 5px;
+  color: var(--admin-text);
+}
+
+.simulation-status-bar .section-title::before {
+  content: '⏱️';
+  margin-right: 6px;
+  font-size: 15px;
+}
+
+.simulation-status-bar .time-travel {
+  flex: 1 1 440px;
+  min-width: 0;
+}
+
+.simulation-status-bar .time-travel button {
+  min-height: 29px;
+}
+
+.simulation-status-bar .altura-unity-label {
+  color: var(--admin-muted);
+}
+
+.controls-panel {
+  padding-bottom: 116px;
+}
+
+.registros-heading {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+  background: var(--admin-surface-deep);
+  color: var(--admin-text);
+}
+
+.registros-heading::before {
+  content: '🗂️';
+  font-size: 16px;
+}
+
+.registros-intro {
+  margin: 8px 0 12px;
+}
+
+.registros-grid {
+  margin-top: 0;
+}
+
+.controls-panel > h1 {
+  padding: 14px 16px;
+  border: 1px solid var(--admin-border-strong);
+  border-radius: var(--admin-radius);
+  background: linear-gradient(135deg, #3a3326, #27241e 68%);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  color: var(--admin-text);
+  font-size: 17px;
+  letter-spacing: 0.025em;
+}
+
+#main-tabs {
+  gap: 5px;
+  padding: 4px;
+  overflow-x: auto;
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+  background: var(--admin-surface-deep);
+  scrollbar-width: thin;
+}
+
+#main-tabs .tab-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--admin-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.025em;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+#main-tabs .tab-btn::before {
+  font-size: 14px;
+}
+
+#main-tabs .tab-btn[data-tab='acciones']::before { content: '🧭'; }
+#main-tabs .tab-btn[data-tab='guerra']::before { content: '⚔️'; }
+#main-tabs .tab-btn[data-tab='comercio']::before { content: '🤝'; }
+#main-tabs .tab-btn[data-tab='asentamientos']::before { content: '🏘️'; }
+#main-tabs .tab-btn[data-tab='facciones']::before { content: '👑'; }
+#main-tabs .tab-btn[data-tab='jugadores']::before { content: '👥'; }
+#main-tabs .tab-btn[data-tab='politicas']::before { content: '📜'; }
+#main-tabs .tab-btn[data-tab='balance']::before { content: '📊'; }
+#main-tabs .tab-btn[data-tab='registros']::before { content: '🗂️'; }
+#main-tabs .tab-btn[data-tab='generacionMundo']::before { content: '🌍'; }
+
+#main-tabs .tab-btn:hover {
+  border-color: var(--admin-border);
+  background: var(--admin-surface);
+  color: var(--admin-text);
+  transform: translateY(-1px);
+}
+
+#main-tabs .tab-btn.active {
+  border-color: var(--admin-border-strong);
+  background: var(--admin-accent-soft);
+  color: var(--admin-text);
+  box-shadow: inset 0 -2px 0 var(--admin-accent);
+}
+
+.tab-panel {
+  animation: admin-panel-in 0.16s ease-out;
+}
+
+@keyframes admin-panel-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.controls-grid,
+.logs-grid {
+  gap: 12px;
+}
+
+.controls-panel .controls,
+.controls-panel .detail-section,
+.controls-panel .log-card,
+.map-column > .logs-grid .log-card {
+  position: relative;
+  overflow: hidden;
+  padding: 14px;
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+  background: linear-gradient(145deg, var(--admin-surface-raised), var(--admin-surface));
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.12);
+}
+
+.controls-panel .controls::before,
+.controls-panel .detail-section::before,
+.map-column > .logs-grid .log-card::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--admin-accent);
+  content: '';
+  opacity: 0.72;
+}
+
+.controls-panel .controls h2,
+.controls-panel .detail-section > h3,
+.map-column > .logs-grid .log-card h2,
+.log-card-registro h2 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--admin-border);
+  color: var(--admin-text);
+  font-size: 11px;
+}
+
+.controls-panel .controls h2::before,
+.controls-panel .detail-section > h3::before,
+.map-column > .logs-grid .log-card h2::before,
+.log-card-registro h2::before {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.controls-panel .controls h2::before { content: '🧩'; }
+.controls-panel .detail-section > h3::before { content: '📌'; }
+.map-column > .logs-grid .log-card h2::before,
+.log-card-registro h2::before { content: '🗒️'; }
+
+.controls-panel .controls label {
+  color: var(--admin-muted);
+  line-height: 1.35;
+}
+
+.controls-panel .controls label > input,
+.controls-panel .controls label > select,
+.controls-panel .controls label > textarea {
+  margin-top: 1px;
+}
+
+button, select, input {
+  border-color: var(--admin-border);
+  border-radius: 6px;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+button {
+  min-height: 32px;
+  border-color: var(--admin-border-strong);
+  background: #443a28;
+  color: var(--admin-text);
+  font-weight: 600;
+}
+
+button:hover {
+  border-color: var(--admin-accent);
+  background: #594a2f;
+  transform: translateY(-1px);
+}
+
+button:active {
+  transform: translateY(0);
+}
+
+button:focus-visible,
+select:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--admin-accent);
+  outline-offset: 2px;
+}
+
+select, input {
+  background: var(--admin-surface-deep);
+  color: var(--admin-text);
+}
+
+select:hover, input:hover {
+  border-color: #82704a;
+}
+
+.controls-panel .legend-note,
+.controls-panel .section-title,
+.map-column .legend-note {
+  color: var(--admin-muted);
+}
+
+.controls-panel .fundacion-viabilidad,
+.controls-panel .tropa-info,
+.controls-panel .trade-settlement-info {
+  border-color: var(--admin-border);
+  border-left-color: var(--admin-accent);
+  border-radius: 6px;
+  background: var(--admin-surface-deep);
+}
+
+.controls-panel .settlement-tab-row {
+  padding: 5px;
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+  background: var(--admin-surface-deep);
+}
+
+.controls-panel .settlement-tab-btn {
+  border-radius: 6px;
+  color: var(--admin-muted);
+}
+
+.controls-panel .settlement-tab-btn:hover,
+.controls-panel .settlement-tab-btn.active {
+  border-color: var(--admin-border-strong);
+  background: var(--admin-accent-soft);
+  color: var(--admin-text);
+}
+
+.controls-panel .settlement-detail-tabs {
+  gap: 6px;
+  padding: 5px;
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+  background: var(--admin-surface-deep);
+}
+
+.controls-panel .settlement-detail-tab {
+  border-radius: 6px;
+}
+
+.controls-panel .settlement-detail-tab.active {
+  border-color: var(--admin-border-strong);
+  background: var(--admin-accent-soft);
+}
+
+.mini-table {
+  border: 1px solid var(--admin-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.mini-table th {
+  background: var(--admin-surface-deep);
+  color: var(--admin-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.mini-table th,
+.mini-table td {
+  padding: 7px 8px;
+  border-bottom-color: #403a2e;
+}
+
+.mini-table tbody tr:hover {
+  background: rgba(208, 169, 78, 0.06);
+}
+
+.log-card-registro {
+  border: 1px solid var(--admin-border-strong);
+  border-left-width: 3px;
+  background: linear-gradient(145deg, #302d25, #24221d);
+}
+
+.map-column > .section-title-row {
+  padding: 10px 12px;
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+  background: var(--admin-surface-deep);
+}
+
+.map-column > .section-title-row .section-title {
+  color: var(--admin-text);
+}
+
+.time-travel {
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.time-travel-divider {
+  background: var(--admin-border);
+}
+
+.balance-toolbar {
+  padding: 10px;
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+  background: var(--admin-surface-deep);
+}
+
+.balance-group {
+  border-radius: var(--admin-radius);
+  background: var(--admin-surface);
+}
+
+.balance-group[open] {
+  border-color: var(--admin-border-strong);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.balance-group summary:hover {
+  background: var(--admin-accent-soft);
+}
+
+.badge {
+  border-radius: 10px;
+}
+
+.map-column > .logs-grid .log-panel,
+.map-column > .log-card .log-panel {
+  padding: 4px 8px;
+  border: 1px solid var(--admin-border);
+  border-radius: 6px;
+  background: var(--admin-surface-deep);
+}
+
+.map-column .log-panel div {
+  padding: 5px 2px;
+  border-bottom-color: #3e392e;
+}
+
+/* El registro de asentamientos tiene más datos que los demás registros: se organiza en
+   tarjetas y bloques cortos para poder localizar el estado de cada uno de un vistazo. */
+.registros-asentamientos-card {
+  grid-column: 1 / -1;
+}
+
+.registros-asentamientos-card > .log-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 10px;
+  max-height: min(62vh, 620px);
+  padding: 4px;
+  overflow-y: auto;
+}
+
+.registro-asentamiento {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--admin-border);
+  border-left: 3px solid var(--admin-accent);
+  border-radius: 7px;
+  background: var(--admin-surface-deep);
+}
+
+.registro-asentamiento-header,
+.registro-health-label,
+.registro-asentamiento-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.registro-asentamiento-header {
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--admin-border);
+}
+
+.registro-asentamiento-header h3 {
+  margin: 0;
+  color: var(--admin-text);
+  font-size: 13px;
+}
+
+.registro-asentamiento-header p,
+.registro-summary-item small {
+  margin: 2px 0 0;
+  color: var(--admin-muted);
+  font-size: 10px;
+}
+
+.registro-level {
+  flex: none;
+  padding: 4px 7px;
+  border: 1px solid var(--admin-border-strong);
+  border-radius: 12px;
+  color: var(--admin-accent);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.registro-asentamiento-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin: 10px 0;
+}
+
+.registro-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px;
+  border: 1px solid #403a2e;
+  border-radius: 5px;
+  background: var(--admin-surface);
+}
+
+.registro-summary-item span,
+.registro-asentamiento-columns h4 {
+  color: var(--admin-muted);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.registro-summary-item strong {
+  color: var(--admin-text);
+  font-size: 16px;
+}
+
+.registro-asentamiento-health {
+  margin-bottom: 10px;
+}
+
+.registro-health-label {
+  margin-bottom: 4px;
+  color: var(--admin-muted);
+  font-size: 10px;
+}
+
+.registro-health-label strong {
+  color: var(--admin-text);
+}
+
+.registro-health-bar {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: #3b3529;
+}
+
+.registro-health-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--admin-danger), var(--admin-accent));
+}
+
+.registro-asentamiento-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.registro-asentamiento-columns section {
+  min-width: 0;
+}
+
+.registro-asentamiento-columns h4 {
+  margin: 0 0 5px;
+}
+
+.registro-resource-grid,
+.registro-role-list {
+  display: grid;
+  gap: 4px;
+}
+
+.registro-resource,
+.registro-role {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: var(--admin-surface);
+  color: var(--admin-text);
+  font-size: 10px;
+}
+
+.registro-resource strong {
+  color: var(--admin-text);
+}
+
+.registro-resource small {
+  color: var(--admin-muted);
+  font-size: 9px;
+}
+
+.registro-role b {
+  color: var(--admin-muted);
+  font-weight: 500;
+}
+
+.registro-asentamiento-footer {
+  margin-top: 10px;
+  padding-top: 7px;
+  border-top: 1px solid var(--admin-border);
+  color: var(--admin-muted);
+  font-size: 10px;
+}
+
+.registro-asentamiento-footer strong {
+  color: var(--admin-text);
+}
+
+.registro-empty {
+  grid-column: 1 / -1;
+  margin: 4px;
+}
+
+.registros-politica-card,
+.registros-progresion-card,
+.registros-militar-card {
+  min-width: 0;
+}
+
+.registros-politica-card > .log-panel,
+.registros-progresion-card > .log-panel,
+.registros-militar-card > .log-panel {
+  max-height: 430px;
+  padding: 4px;
+  overflow-y: auto;
+}
+
+.registro-section-block {
+  margin-bottom: 14px;
+}
+
+.registro-section-block:last-child {
+  margin-bottom: 0;
+}
+
+.registro-section-block > h3 {
+  margin: 0 0 7px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--admin-border);
+  color: var(--admin-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.registro-politica-facciones {
+  display: grid;
+  gap: 7px;
+}
+
+.registro-politica-faccion {
+  padding: 8px;
+  border: 1px solid var(--admin-border);
+  border-left: 3px solid #897345;
+  border-radius: 5px;
+  background: var(--admin-surface-deep);
+}
+
+.registro-politica-faccion header,
+.registro-militar-settlement header,
+.registro-title-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.registro-politica-faccion header {
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--admin-border);
+  color: var(--admin-text);
+  font-size: 12px;
+}
+
+.registro-mini-stats,
+.registro-politica-leaders {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  margin-top: 7px;
+  color: var(--admin-muted);
+  font-size: 10px;
+}
+
+.registro-mini-stats span,
+.registro-politica-leaders span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.registro-mini-stats b,
+.registro-politica-leaders b {
+  color: var(--admin-text);
+  font-weight: 600;
+}
+
+.registro-politica-leaders {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding-top: 6px;
+  border-top: 1px solid #403a2e;
+}
+
+.registro-politica-relations,
+.registro-politica-ligas,
+.registro-bandit-list {
+  display: grid;
+  gap: 5px;
+}
+
+.registro-politica-relation,
+.registro-liga,
+.registro-bandit {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 7px;
+  padding: 7px;
+  border: 1px solid #403a2e;
+  border-radius: 5px;
+  background: var(--admin-surface-deep);
+  color: var(--admin-text);
+  font-size: 10px;
+}
+
+.registro-relation-type {
+  color: var(--admin-accent);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.registro-relation-route {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.registro-relation-status,
+.registro-liga small,
+.registro-bandit span {
+  color: var(--admin-muted);
+  font-size: 9px;
+}
+
+.registro-liga {
+  grid-template-columns: auto 1fr;
+}
+
+.registro-liga small {
+  grid-column: 2;
+}
+
+.registro-militar-settlement {
+  margin-bottom: 8px;
+  padding: 10px;
+  border: 1px solid var(--admin-border);
+  border-left: 3px solid #b45d4e;
+  border-radius: 6px;
+  background: var(--admin-surface-deep);
+}
+
+.registro-militar-settlement h3,
+.registro-title-card h3 {
+  margin: 0;
+  color: var(--admin-text);
+  font-size: 12px;
+}
+
+.registro-militar-settlement header p,
+.registro-title-card p {
+  margin: 2px 0 0;
+  color: var(--admin-muted);
+  font-size: 10px;
+}
+
+.registro-military-power {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  color: var(--admin-accent);
+}
+
+.registro-military-power strong {
+  font-size: 16px;
+}
+
+.registro-military-power small {
+  color: var(--admin-muted);
+  font-size: 9px;
+}
+
+.registro-military-buildings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 8px 0;
+}
+
+.registro-military-buildings span {
+  padding: 3px 6px;
+  border: 1px solid var(--admin-border);
+  border-radius: 10px;
+  color: var(--admin-muted);
+  font-size: 9px;
+}
+
+.registro-military-buildings span.is-active {
+  border-color: #587c56;
+  color: #b5d4a7;
+}
+
+.registro-squad-list {
+  display: grid;
+  gap: 4px;
+}
+
+.registro-squad {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.4fr) repeat(3, auto);
+  align-items: center;
+  gap: 7px;
+  padding: 6px;
+  border-top: 1px solid #403a2e;
+  color: var(--admin-muted);
+  font-size: 9px;
+}
+
+.registro-squad strong,
+.registro-squad span {
+  color: var(--admin-text);
+}
+
+.registro-squad small,
+.registro-squad em {
+  display: block;
+  color: var(--admin-muted);
+  font-size: 8px;
+  font-style: normal;
+}
+
+.registro-squad em {
+  color: var(--admin-danger);
+}
+
+.registro-bandit {
+  grid-template-columns: auto 1fr auto;
+  border-left: 2px solid var(--admin-danger);
+}
+
+.registro-title-grid {
+  display: grid;
+  gap: 7px;
+}
+
+.registro-title-card {
+  padding: 10px;
+  border: 1px solid var(--admin-border);
+  border-left: 3px solid var(--admin-accent);
+  border-radius: 6px;
+  background: var(--admin-surface-deep);
+}
+
+.registro-title-mark {
+  flex: none;
+  color: var(--admin-accent);
+  font-size: 18px;
+}
+
+.registro-title-card > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.registro-title-card > strong {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  color: var(--admin-text);
+  font-size: 16px;
+}
+
+.registro-title-card > strong small {
+  color: var(--admin-muted);
+  font-size: 8px;
+  font-weight: 400;
+  text-transform: uppercase;
+}
+
+@media (max-width: 520px) {
+  .controls-panel > h1 {
+    font-size: 15px;
+  }
+
+  .controls-grid,
+  .logs-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .controls-panel .controls,
+  .controls-panel .detail-section,
+  .controls-panel .log-card,
+  .map-column > .logs-grid .log-card {
+    padding: 11px;
+  }
+
+  .storage-resource-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .registros-asentamientos-card > .log-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .registro-asentamiento-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .registro-mini-stats {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .registro-politica-relation,
+  .registro-bandit {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .registro-relation-status,
+  .registro-bandit b {
+    grid-column: 2;
+    text-align: right;
+  }
+
+  .registro-squad {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Comercio: el formulario se lee como un flujo de intercambio y no como una
+   columna de controles independientes. */
+#tab-comercio .commerce-actions-grid {
+  align-items: stretch;
+}
+
+#tab-comercio .commerce-actions-grid > .trade-barter-card {
+  grid-column: 1 / -1;
+}
+
+#tab-comercio .trade-card {
+  gap: 10px;
+}
+
+#tab-comercio .trade-card h2 {
+  margin-bottom: -2px;
+}
+
+.trade-card-intro {
+  margin: -2px 0 2px;
+  color: var(--admin-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.trade-barter-card {
+  grid-column: span 2;
+}
+
+.trade-side {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--admin-border);
+  border-radius: 7px;
+  background: var(--admin-surface-deep);
+}
+
+.trade-side-a {
+  border-left: 3px solid #538bd0;
+}
+
+.trade-side-b {
+  border-left: 3px solid #d58b4d;
+}
+
+.trade-side-heading {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--admin-text);
+  font-size: 12px;
+}
+
+.trade-side-heading span {
+  font-size: 17px;
+}
+
+.trade-side-heading small {
+  margin-left: auto;
+  color: var(--admin-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.trade-material-list {
+  gap: 5px;
+}
+
+.trade-material-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 7px;
+  border: 1px solid #4c4739;
+  border-radius: 12px;
+  background: #29261f;
+  color: #d8cfb5;
+  font-size: 10px;
+}
+
+.trade-material-pill > span {
+  font-size: 13px;
+}
+
+.trade-material-pill strong {
+  color: #ecd27e;
+}
+
+.trade-exchange-mark {
+  align-self: center;
+  margin: -4px 0;
+  color: var(--admin-accent);
+  font-size: 23px;
+  line-height: 1;
+}
+
+.trade-barter-card > button {
+  margin-top: 2px;
+  background: linear-gradient(135deg, #6d582d, #4b3d25);
+}
+
+.commerce-detail-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 5px;
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+  background: var(--admin-surface-deep);
+}
+
+.commerce-detail-tab {
+  min-height: 32px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--admin-muted);
+}
+
+.commerce-detail-tab:hover,
+.commerce-detail-tab.active {
+  border-color: var(--admin-border-strong);
+  background: var(--admin-accent-soft);
+  color: var(--admin-text);
+}
+
+.commerce-detail-panel[hidden] {
+  display: none;
+}
+
+.commerce-detail-panel.active {
+  animation: admin-panel-in 0.16s ease-out;
+}
+
+.trade-market-card,
+.trade-fleet-card {
+  min-height: 100%;
+}
+
+.trade-market-card > button,
+.trade-fleet-card > button {
+  margin-top: auto;
+}
+
+.trade-market-card #mercado-tipo {
+  accent-color: var(--admin-accent);
+}
+
+#flota-info {
+  margin: 0;
+  padding: 9px;
+  border-left-color: #7b9d63;
+}
+
+#flota-info .kv-row {
+  padding: 3px 0;
+  border-bottom: 1px solid #383329;
+}
+
+#flota-info .kv-row:last-child {
+  border-bottom: 0;
+}
+
+.trade-overview {
+  border-color: var(--admin-border-strong) !important;
+}
+
+#economia-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: none;
+  overflow: visible;
+}
+
+.trade-reference-strip {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid #665631;
+  border-radius: 7px;
+  background: var(--admin-accent-soft);
+  color: var(--admin-text);
+}
+
+.trade-reference-icon {
+  font-size: 20px;
+}
+
+.trade-reference-strip div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+.trade-reference-strip small,
+.trade-order-card small {
+  color: var(--admin-muted);
+  font-size: 10px;
+}
+
+.trade-reference-strip > span:last-child {
+  overflow: hidden;
+  color: #dfc984;
+  font-size: 11px;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trade-overview-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.trade-overview-block h3 {
+  margin: 0;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--admin-border);
+  color: var(--admin-text);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.trade-overview-block .mini-table {
+  margin-top: 0;
+}
+
+.trade-active-card {
+  padding: 11px;
+  border-color: var(--admin-border);
+  border-left: 3px solid var(--admin-accent);
+  border-radius: 7px;
+  background: var(--admin-surface-deep);
+}
+
+.trade-active-card-title {
+  align-items: center;
+  margin-bottom: 9px;
+  color: var(--admin-text);
+}
+
+.trade-active-card-title span {
+  padding: 3px 7px;
+  border: 1px solid #6d5b36;
+  border-radius: 10px;
+  background: var(--admin-accent-soft);
+  color: #e4ca7f;
+  font-size: 10px;
+}
+
+.trade-active-card .kv-grid {
+  gap: 7px 12px;
+}
+
+.trade-active-card .kv-row {
+  padding-bottom: 4px;
+  border-bottom: 1px solid #383329;
+}
+
+.trade-active-card .kv-row:last-child {
+  border-bottom: 0;
+}
+
+.trade-active-card .mantenimiento-bar {
+  margin-top: 10px;
+  height: 7px;
+  background: #3d382d;
+}
+
+.trade-active-card .mantenimiento-fill {
+  background: linear-gradient(90deg, #a47e35, #d7b257);
+}
+
+/* Trueques activos: bloques con jerarquía propia para que las rutas largas no
+   conviertan toda la tarjeta en una fila comprimida. */
+.trade-active-card-title > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.trade-active-card-title > div small {
+  color: var(--admin-muted);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+.trade-active-card-title > div strong {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.trade-route-banner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 10px;
+  border: 1px solid var(--admin-border);
+  border-radius: 7px;
+  background: #26231e;
+}
+
+.trade-route-place {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.trade-route-place small {
+  color: var(--admin-muted);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+}
+
+.trade-route-place strong,
+.trade-route-place span {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.trade-route-place span {
+  color: var(--admin-muted);
+  font-size: 10px;
+}
+
+.trade-route-place-right {
+  text-align: right;
+}
+
+.trade-route-arrow {
+  color: var(--admin-accent);
+  font-size: 22px;
+}
+
+.trade-active-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.trade-delivery-card,
+.trade-lifetime-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--admin-border);
+  border-radius: 6px;
+  background: #211f1a;
+}
+
+.trade-delivery-card > span,
+.trade-lifetime-card > span {
+  color: var(--admin-muted);
+  font-size: 10px;
+}
+
+.trade-delivery-card strong,
+.trade-lifetime-card strong {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  color: var(--admin-text);
+}
+
+.trade-delivery-card small,
+.trade-lifetime-card small {
+  color: var(--admin-muted);
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.trade-caravans-block {
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--admin-border);
+}
+
+.trade-subsection-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 6px;
+  color: var(--admin-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.trade-subsection-title span {
+  padding: 1px 6px;
+  border-radius: 9px;
+  background: var(--admin-accent-soft);
+  color: #e4ca7f;
+}
+
+.trade-caravan-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 0;
+  border-bottom: 1px solid #383329;
+}
+
+.trade-caravan-item:last-child {
+  border-bottom: 0;
+}
+
+.trade-caravan-icon {
+  font-size: 16px;
+}
+
+.trade-caravan-route {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.trade-caravan-route strong {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  color: var(--admin-text);
+  font-size: 11px;
+}
+
+.trade-caravan-route small {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  color: var(--admin-muted);
+  font-size: 10px;
+}
+
+.trade-caravan-status {
+  align-self: start;
+  padding: 3px 6px;
+  border: 1px solid #665631;
+  border-radius: 10px;
+  background: var(--admin-accent-soft);
+  color: #e4ca7f;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.trade-caravan-empty {
+  color: var(--admin-muted);
+  font-size: 11px;
+  font-style: italic;
+}
+
+/* Cabecera y generación de mundo: la barra fija de estado ya no se utiliza. */
+.simulation-status-bar {
+  display: none;
+}
+
+.controls-panel {
+  padding-bottom: 16px;
+}
+
+.admin-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--admin-border-strong);
+  border-radius: var(--admin-radius);
+  background: linear-gradient(135deg, #3a3326, #27241e 68%);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.admin-titlebar h1 {
+  margin: 0;
+  color: var(--admin-text);
+  font-size: 17px;
+  letter-spacing: 0.025em;
+}
+
+.admin-title-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.admin-title-actions > span {
+  color: var(--admin-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.admin-title-actions input[type='range'] {
+  width: 100px;
+  padding: 0;
+  accent-color: var(--admin-accent);
+}
+
+.admin-title-actions button {
+  min-height: 29px;
+  padding: 5px 8px;
+  font-size: 11px;
+}
+
+.world-generation-grid {
+  max-width: 760px;
+}
+
+.world-generation-grid .controls {
+  min-height: 170px;
+}
+
+.world-generation-grid .controls button {
+  margin-top: auto;
+}
+
+@media (max-width: 760px) {
+  .admin-titlebar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .admin-title-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 700px) {
+  .trade-active-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .trade-route-banner {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .trade-route-place-right {
+    text-align: left;
+  }
+
+  .trade-route-arrow {
+    justify-self: center;
+    transform: rotate(90deg);
+  }
+
+  .trade-caravan-item {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .trade-caravan-status {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
+
+.trade-orders-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 7px;
+}
+
+.trade-order-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid var(--admin-border);
+  border-radius: 7px;
+  background: var(--admin-surface-deep);
+}
+
+.trade-order-icon {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--admin-accent-soft);
+  color: var(--admin-accent);
+  font-size: 18px;
+}
+
+.trade-order-card > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.trade-order-card > div strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trade-order-amount {
+  margin-left: auto;
+  color: var(--admin-text);
+  font-size: 11px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.trade-order-amount small {
+  display: block;
+}
+
+@media (max-width: 700px) {
+  .trade-barter-card {
+    grid-column: auto;
+  }
+
+  .trade-reference-strip {
+    grid-template-columns: auto 1fr;
+  }
+
+  .trade-reference-strip > span:last-child {
+    grid-column: 1 / -1;
+    text-align: left;
+  }
+}

@@ -1,0 +1,163 @@
+# Triaje de las consultas de `GameStore`
+
+`GameStore` expone **34 comandos y 31 consultas**. El diseño de `GameSession`
+([doc 7](7_Diseno_GameSession.md)) resolvió los comandos pero dejó las consultas sin ubicar, que era un hueco
+real: moverlas todas a `GameSession` reproduciría el mismo objeto-dios que la separación por comandos evita.
+
+Este documento las clasifica. **Nada de esto está implementado**; es la guía para los pasos 2-4 de la
+migración.
+
+> **Cableado al roadmap (2026-08-26).** Esta migración dejó de ser opcional: es el hito **C10** de la Fase C.
+> El diagnóstico de aislamiento del cliente
+> ([4_Plan_Evolucion_Tareas.md](4_Plan_Evolucion_Tareas.md#diagnóstico-de-aislamiento-del-cliente-2026-08-26))
+> confirmó que estas consultas son la razón principal por la que `cliente/` todavía necesita importar el
+> motor, y la Fase C no cierra hasta que un cliente sin motor pueda jugar. Dos correcciones a lo que dice
+> este documento:
+>
+> - **La cuenta real es 26, no 31**, contando lo que `GameStore` calcula hoy con el motor (incluye `CATALOGOS`
+>   y las dos exportaciones). El triaje de abajo sigue siendo válido en su criterio.
+> - **Falta una categoría**: el TERRENO. `drawTerreno` evalúa `biomaEn`/`elevacionEn` por píxel sobre
+>   parámetros de ruido, no sobre un ráster. No es una consulta de `GameStore`, así que este triaje no la vio
+>   — es el hito **C11**.
+> - **El criterio "→ `engine/`" necesita un segundo eje** (2026-08-26). Este documento clasifica por *de qué
+>   depende* la consulta. Falta *quién puede calcularla sin viaje de red*: las que son **tabla pura** sobre
+>   constantes de balance (`capFundacion`, `cupoVivienda`, `slotsPoliticaDisponibles`, `nivelFaccionInfo`,
+>   `CATALOGOS`) las resuelve el cliente en cuanto **C7** le sirva el balance — patrón *Static Data Export*,
+>   ver [6_Sincronizacion_Visibilidad_y_Escala.md §6.3](6_Sincronizacion_Visibilidad_y_Escala.md#63-la-frontera-real-no-es-motor-sí--motor-no-es-reglas-vs-simulación).
+>   Las que son **fórmula sobre estado vivo** (`produccionInfo`, `mantenimientoInfo`, `manoObraInfo`…) las
+>   manda el servidor ya calculadas. Ambas caen hoy en el grupo "→ `engine/`" de abajo, y no deberían tener el
+>   mismo destino. Desglose en los cuatro grupos: doc 4, § "C10 partido en dos"; clasificación completa del
+>   motor entero (no solo de las consultas de `GameStore`): [9_Reglas_vs_Simulacion.md](9_Reglas_vs_Simulacion.md).
+> - **Dos filas de la tabla de abajo ya no existen (2026-08-26), decisión del usuario tras esta misma
+>   auditoría**: `chokepointsControl` — se eliminó toda la mecánica de chokepoints, geometría y peaje incluidos
+>   (doc 3, hito C10). `viabilidadFundacion` sigue viva en `engine/settlement.ts` para uso interno del NPC de
+>   gobernanza, pero se retiró del cliente y no vuelve a ser una consulta expuesta.
+> - **Una fila de la tabla de `session/` ya está resuelta**: `precioReferencia` se migró al servidor el
+>   2026-08-26 (`RunnerDePartida.preciosReferencia()`, caché con TTL de un minuto real). La afirmación "nada de
+>   esto está implementado" de la intro ya no es literalmente cierta — es la primera consulta triadas aquí que
+>   completó el viaje.
+>
+> **Actualización de cierre (2026-08-26, tras C7–C13). La frase "nada de esto está implementado" de la intro
+> queda OBSOLETA.** El balance (C7), la geometría por frame (C10) y el descubrimiento/exportación (C12)
+> resolvieron la mayor parte de este triaje — no moviendo funciones DENTRO de este repo tal como este
+> documento anticipaba, sino sirviendo su ENTRADA (balance, geometría) para que un cliente sin motor las
+> recalcule él mismo, que es el patrón que doc 9 fija como T2a. Estado real, grupo por grupo:
+>
+> - **→ `engine/` (11)**: **NO se movieron** a `src/engine/`, salvo `manoObraInfo`
+>   (`engine/asentamientoQuery.ts`, verificado por grep). Las otras diez siguen viviendo solo como métodos de
+>   `cliente/src/app/gameStore.ts`. Esto ya no es una tarea pendiente de ESTE repo backend: doc 9 las
+>   reclasificó T2a ("entrada propia") DESPUÉS de este documento — su destino real es código de CLIENTE
+>   (duplicado, como `cliente-jugador/src/terreno/` hace con el terreno), no `engine/`. Sin un cliente sin
+>   motor que las necesite todavía, moverlas aquí no tiene consumidor; queda como trabajo de un futuro cliente,
+>   no de este repo
+> - **→ `session/` (8)**: `precioReferencia` — hecho (`RunnerDePartida.preciosReferencia()`, C10).
+>   `getZonas`/`getTrazadoAsentamiento` — hechos, fusionados en `RunnerDePartida.geometriaAsentamientos()` (C10,
+>   una sola llamada memoizada en vez de dos). `chokepointsControl` — eliminado del juego por completo (ver
+>   nota de arriba). `viabilidadFundacion` — retirado del cliente (ver nota de arriba). `getState`/`getMapa` —
+>   no necesitaban migración, ya vivían en `GameSession`/`session/`. `getLigas` — **sin auditar todavía**, es
+>   el único ítem real de este grupo sin resolver ni verificar
+> - **→ Proyección por audiencia (5)**: sin resolver de fondo — siguen bloqueadas por C4 Slice 2 (niebla de
+>   guerra, radio de visualización sin decidir en ningún doc). Lo de un asentamiento PROPIO ya viaja filtrado
+>   por Facción desde C4 Slice 1; lo que falta es "último conocido" de un asentamiento AJENO, justo el caso que
+>   motivó agrupar estas cinco aparte
+> - **→ Administración (3)**: **las tres resueltas**. `getBalance` → `GET /v1/balance` (C7).
+>   `exportarSimulacion` → `GET /admin/partidas/:gameId/exportar` (C12). `exportarMapaUnity` →
+>   `GET /admin/partidas/:gameId/exportar-unity` (C12)
+> - **→ Cliente (4)**: sin cambios, correcto que sigan ahí — `subscribe`/`getSnapshot`/`getTickRange` son
+>   estado de sesión de navegador, `esFaccionNpc` es lectura trivial del estado que el cliente ya recibe
+
+## El criterio
+
+Una consulta va a un sitio u otro según **de qué depende y quién la necesita**:
+
+| Destino | Criterio | Por qué |
+|---|---|---|
+| **`engine/`** | Es un cálculo de dominio: solo depende de entidades de juego y constantes de balance | Es una regla, no una vista. Debe poder probarse y usarse en batch sin capa de partida |
+| **`session/`** | Necesita el estado completo de la partida o la fachada `Mapa` | Es de la partida, pero no una regla del mundo |
+| **Proyección (Fase C)** | Compone datos para una audiencia concreta y debe filtrarse por visibilidad | Su forma la decide el cliente que la consume, y **debe respetar "último conocido"** (doc 6 §3) |
+| **Cliente** | Es estado de presentación o de la sesión de navegador | No tiene nada que hacer en el servidor |
+| **Admin** | Solo la consume un administrador | Endpoint protegido por rol técnico (doc 5) |
+
+## Clasificación
+
+### → `engine/` — cálculos de dominio puros (11)
+
+Dependen solo de entidades y constantes. Varias ya delegan en el motor y lo único que hacen es reexportar,
+así que mover la firma es casi todo el trabajo.
+
+| Consulta | Nota |
+|---|---|
+| `capFundacion` | Deriva de `CAP_FUNDACION_POR_NIVEL` |
+| `cupoVivienda` | Cálculo sobre edificios del asentamiento |
+| `cupoAsentamientosFaccion` | Ya usa `calcularCupoNivel` |
+| `nivelFaccionInfo` | Deriva de `NIVEL_FACCION` y la XP |
+| `nivelAsentamientoInfo` | Gates de nivel, regla pura |
+| `cupoNivelInfo` | Ídem |
+| `slotsPoliticaDisponibles` | Deriva de `POLITICAS` |
+| `poderMilitarInfo` | Ya usa `poderEscuadron` de `engine/combate.ts` |
+| `manoObraInfo` | Reparto de mano de obra, regla de producción |
+| `produccionInfo` | Recetas y capacidad; regla de producción |
+| `edificioEconomiaInfo` | Coste/rinde de un edificio |
+
+⚠️ `produccionInfo` arrastra un bug abierto en `Notas_revision.md` (`[PRODUCCION]`: el consumo se muestra mal
+cuando la producción es 0). Conviene arreglarlo **al moverla**, no antes: en `engine/` queda cubierta por la
+suite del motor.
+
+### → `session/` — necesitan el estado de partida o el mapa (8)
+
+| Consulta | Nota |
+|---|---|
+| `getState` | Acceso al estado; ya existe en `GameSession` |
+| `getMapa` | Fachada de consultas espaciales; ya existe |
+| `getZonas` | Zonas de influencia de todos los asentamientos |
+| `getTrazadoAsentamiento` | Trazado urbano derivado |
+| `chokepointsControl` | Necesita zonas + relaciones |
+| `getLigas` | Necesita relaciones + facciones |
+| `precioReferencia` | Depende de todos los asentamientos (mercado global) |
+| `viabilidadFundacion` | Necesita la fachada `Mapa` |
+
+Estas son candidatas a **caché derivada** en el runner: `getZonas` reaparece dentro del tick
+(`computeTodasLasZonas`) y el perfilado la midió en ~2% del coste. No urge, pero conviene no recalcularla dos
+veces por tick cuando exista el runner.
+
+### → Proyección por audiencia (Fase C) — filtradas por visibilidad (5)
+
+Son las que **no pueden servirse tal cual a un jugador**: hoy devuelven todo, y deben pasar por el modelo de
+visibilidad de [doc 6](6_Sincronizacion_Visibilidad_y_Escala.md) §3 (espacial + contacto + alianza, mostrando
+**último conocido** para lo ajeno).
+
+| Consulta | Riesgo si se sirve sin filtrar |
+|---|---|
+| `mantenimientoInfo` | Estado económico interno de un asentamiento ajeno |
+| `poblacionInfo` | Ídem |
+| `caravanasInfo` | Revela rutas y cargas en vuelo de rivales |
+| `jugadoresDeAsentamiento` | Revela composición de facciones rivales |
+| `infoMejoraEdificio` | Revela planes de construcción |
+
+### → Cliente — presentación pura (4)
+
+No pertenecen al servidor en ninguna forma. Se quedan donde están cuando `GameStore` pase a ser cliente.
+
+`subscribe`, `getSnapshot`, `getTickRange`, `esFaccionNpc` — las tres primeras sostienen la línea de tiempo de
+depuración (que `GameSession` deliberadamente no tiene, doc 7 §1); la última es una lectura trivial del
+estado que el cliente ya recibe.
+
+### → Administración — rol técnico (3) — ✅ las tres resueltas (ver nota de cierre arriba)
+
+`exportarSimulacion`, `exportarMapaUnity`, `getBalance`. Endpoints protegidos (doc 5). `exportarMapaUnity`
+además **no es parte del juego**: es una herramienta de `worldgen/` y no debería colgar de la partida.
+
+## Orden sugerido
+
+1. **`engine/` primero** (11 consultas). Sin dependencias de nada nuevo, la suite del motor las cubre al
+   llegar, y descargan `GameStore` antes de tocarlo.
+2. **`session/` después** (8), al convertir `GameStore` en adaptador (paso 2 del doc 7 §6).
+3. **Proyecciones al final** (5), en Fase C junto a `ConocimientoJugador` — son las únicas que dependen de una
+   decisión de diseño todavía sin implementar.
+4. Las de **cliente** no se tocan; las de **admin**, al montar los endpoints por rol.
+
+## Consecuencia para el tamaño de `GameStore`
+
+De las 31, **19 salen** de la capa de aplicación de navegador (11 a `engine/`, 8 a `session/`) y 5 se
+transforman en proyecciones. Junto con los 34 comandos, eso es lo que reduce `GameStore` de 1582 líneas al
+cliente delgado que el paso 4 del plan describe.

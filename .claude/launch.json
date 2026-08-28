@@ -1,0 +1,27 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "bronze-age-server",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "server"],
+      "env": { "ADMINISTRADORES": "dev:jefa" },
+      "port": 3000
+    },
+    {
+      "name": "bronze-age-cliente",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "cliente", "run", "dev"],
+      "port": 5173,
+      "autoPort": true
+    },
+    {
+      "name": "bronze-age-cliente-jugador",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "cliente-jugador", "run", "dev"],
+      "env": { "VITE_USUARIO": "ana", "VITE_GAME_ID": "local" },
+      "port": 5174,
+      "autoPort": true
+    }
+  ]
+}
