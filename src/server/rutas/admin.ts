@@ -10,7 +10,7 @@
 // Separar las superficies es lo que permite cerrarlos sin romper la de jugador.
 import type { FastifyInstance } from 'fastify';
 import type { RegionId } from '../../domain/types';
-import { puedeAdministrar, puedeCrearPartida, puedeDescartarPartida, rolEnPartida } from '../../acceso/rolesDePartida';
+import { esVigente, puedeAdministrar, puedeCrearPartida, puedeDescartarPartida, puedeGestionarMembresias, rolEnPartida } from '../../acceso/rolesDePartida';
 import type { RolTecnico } from '../../acceso/tipos';
 import type { ActorDeComando } from '../../session/comandos/autorizacion';
 import { PartidaYaAbiertaError } from '../registroDePartidas';
@@ -164,6 +164,97 @@ const ESQUEMA_EXPORTAR_UNITY = {
     },
   },
   response: { 400: ERROR_RESPUESTA, 401: ERROR_RESPUESTA, 403: ERROR_RESPUESTA, 404: ERROR_RESPUESTA },
+} as const;
+
+/** Roles que un administrador de partida puede otorgar por esta superficie. `jugador` no está: se obtiene por
+ * la superficie de jugador (necesita un `jugadorId`). `administrador_global` tampoco: es de instancia,
+ * configurado por variable de entorno (`ADMINISTRADORES`), no repartible por partida. `servicio_npc` es
+ * interno. */
+const ROLES_OTORGABLES: readonly RolTecnico[] = ['administrador_partida', 'moderador', 'observador'];
+
+const ESQUEMA_LISTAR_MEMBRESIAS = {
+  description:
+    'Membresías técnicas de esta partida (cierre de Fase C): quién tiene rol de administración/observación, ' +
+    'vigente o revocado. `vigente` aplica el filtro de `hasta` sobre el reloj del servidor.',
+  tags: ['admin'],
+  security: SEGURIDAD_ADMIN,
+  params: PARAMS_GAME_ID,
+  response: {
+    200: {
+      type: 'object',
+      properties: {
+        membresias: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              usuarioId: { type: 'string' },
+              jugadorId: { type: ['string', 'null'] },
+              rol: { type: 'string' },
+              desde: { type: 'string' },
+              hasta: { type: 'string' },
+              vigente: { type: 'boolean' },
+            },
+            required: ['usuarioId', 'rol', 'desde', 'vigente'],
+          },
+        },
+      },
+      required: ['membresias'],
+    },
+    401: ERROR_RESPUESTA,
+    403: ERROR_RESPUESTA,
+    404: ERROR_RESPUESTA,
+  },
+} as const;
+
+const ESQUEMA_OTORGAR_MEMBRESIA = {
+  description:
+    'Otorga a un usuario un rol técnico sobre esta partida (cierre de Fase C). El usuario debe haber iniciado ' +
+    'sesión alguna vez (404 si no); repetir sobre un usuario que ya tiene membresía es 409, no un cambio de rol.',
+  tags: ['admin'],
+  security: SEGURIDAD_ADMIN,
+  params: PARAMS_GAME_ID,
+  body: {
+    type: 'object',
+    required: ['usuarioId', 'rol'],
+    additionalProperties: false,
+    properties: {
+      usuarioId: { type: 'string', minLength: 1 },
+      rol: { type: 'string', enum: ROLES_OTORGABLES },
+    },
+  },
+  response: {
+    201: {
+      type: 'object',
+      properties: { usuarioId: { type: 'string' }, rol: { type: 'string' }, desde: { type: 'string' } },
+      required: ['usuarioId', 'rol', 'desde'],
+    },
+    400: ERROR_RESPUESTA,
+    401: ERROR_RESPUESTA,
+    403: ERROR_RESPUESTA,
+    404: ERROR_RESPUESTA,
+    409: ERROR_RESPUESTA,
+  },
+} as const;
+
+const ESQUEMA_REVOCAR_MEMBRESIA = {
+  description:
+    'Revoca la membresía técnica de un usuario en esta partida poniéndole `hasta` (no borra el historial, ' +
+    'doc 5). 404 si ese usuario no tenía ninguna. No revoca al `administrador_global` de instancia: su acceso ' +
+    'no sale de una `Membresia`.',
+  tags: ['admin'],
+  security: SEGURIDAD_ADMIN,
+  params: {
+    type: 'object',
+    properties: { gameId: { type: 'string' }, usuarioId: { type: 'string' } },
+    required: ['gameId', 'usuarioId'],
+  },
+  response: {
+    200: { type: 'object', properties: { revocada: { type: 'boolean' } }, required: ['revocada'] },
+    401: ERROR_RESPUESTA,
+    403: ERROR_RESPUESTA,
+    404: ERROR_RESPUESTA,
+  },
 } as const;
 
 const ESQUEMA_COMANDOS_ADMIN = {
@@ -341,6 +432,68 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
       // huella en el log no se confunda con la de un jugador.
       const actorId = acceso.actorInstancia.membresia?.jugadorId ?? `admin:${acceso.actorInstancia.usuarioId}`;
       return ejecutarComandoHttp(reply, acceso.runner, request.body, actor, actorId, deps.hub);
+    }
+  );
+
+  /** Membresías técnicas de la partida (cierre de Fase C) — ver `ESQUEMA_LISTAR_MEMBRESIAS`. */
+  app.get<{ Params: ParametrosGameId }>('/admin/partidas/:gameId/membresias', { schema: ESQUEMA_LISTAR_MEMBRESIAS }, async (request, reply) => {
+    const acceso = exigirAdministracion(request, reply, deps);
+    if (!acceso.ok) return acceso.respuesta;
+
+    const ahora = deps.ahora();
+    const membresias = deps.identidad.repositorio.listarMembresiasDePartida(acceso.runner.gameId).map((m) => ({
+      usuarioId: m.usuarioId,
+      jugadorId: m.jugadorId,
+      rol: m.rol,
+      desde: m.desde,
+      ...(m.hasta !== undefined ? { hasta: m.hasta } : {}),
+      vigente: esVigente(m, ahora),
+    }));
+    return reply.send({ membresias });
+  });
+
+  /** Otorgar rol técnico (cierre de Fase C) — ver `ESQUEMA_OTORGAR_MEMBRESIA`. Exige `administrador_partida`
+   * o `administrador_global`: un `moderador` administra la partida pero no reparte accesos. */
+  app.post<{ Params: ParametrosGameId; Body: { usuarioId: string; rol: RolTecnico } }>(
+    '/admin/partidas/:gameId/membresias',
+    { schema: ESQUEMA_OTORGAR_MEMBRESIA },
+    async (request, reply) => {
+      const acceso = exigirAdministracion(request, reply, deps);
+      if (!acceso.ok) return acceso.respuesta;
+      if (!puedeGestionarMembresias(acceso.actorInstancia)) {
+        return sinPermiso(reply, 'otorgar membresías exige rol administrador_partida o administrador_global');
+      }
+
+      const { usuarioId, rol } = request.body;
+      if (!deps.identidad.repositorio.obtenerUsuario(usuarioId)) {
+        return reply.code(404).send({ error: `no existe el usuario '${usuarioId}' (¿ha iniciado sesión alguna vez?)` });
+      }
+      if (deps.identidad.repositorio.obtenerMembresia(usuarioId, acceso.runner.gameId)) {
+        return reply.code(409).send({ error: `el usuario '${usuarioId}' ya tiene una membresía en esta partida; revócala antes de cambiar el rol` });
+      }
+
+      const desde = deps.ahora();
+      // `jugadorId: null` — ninguno de los roles otorgables por esta vía requiere un `Jugador` (ese lo crea la
+      // superficie de jugador al unirse).
+      deps.identidad.repositorio.otorgarMembresia({ usuarioId, gameId: acceso.runner.gameId, jugadorId: null, rol, desde });
+      return reply.code(201).send({ usuarioId, rol, desde });
+    }
+  );
+
+  /** Revocar membresía (cierre de Fase C) — ver `ESQUEMA_REVOCAR_MEMBRESIA`. */
+  app.delete<{ Params: { gameId: string; usuarioId: string } }>(
+    '/admin/partidas/:gameId/membresias/:usuarioId',
+    { schema: ESQUEMA_REVOCAR_MEMBRESIA },
+    async (request, reply) => {
+      const acceso = exigirAdministracion(request, reply, deps);
+      if (!acceso.ok) return acceso.respuesta;
+      if (!puedeGestionarMembresias(acceso.actorInstancia)) {
+        return sinPermiso(reply, 'revocar membresías exige rol administrador_partida o administrador_global');
+      }
+
+      const revocada = deps.identidad.repositorio.revocarMembresia(request.params.usuarioId, request.params.gameId, deps.ahora());
+      if (!revocada) return reply.code(404).send({ error: `el usuario '${request.params.usuarioId}' no tiene membresía en esta partida` });
+      return reply.send({ revocada: true });
     }
   );
 }

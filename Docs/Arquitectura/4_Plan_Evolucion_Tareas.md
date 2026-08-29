@@ -285,7 +285,7 @@ puede importar de `server`), y para lograrlo reimplementó reglas de juego que y
 - [x] **Cliente actualizado** (`cliente/`): habla `/admin/*` (es lo que siempre hizo: crea partidas, avanza tick, lee estado completo), con login de desarrollo y sesión en memoria. No es desarrollo de cliente, es repuntar el wrapper para que el repo no quede roto
 - [x] 532/532 tests, `tsc` limpio en ambos proyectos, y verificado en vivo sobre HTTP real: 401 sin sesión, 403 sin rol, 403 al jugador que intenta leer el estado de admin, 403 al admin que intenta jugar, y el cliente renderizando contra la superficie autenticada
 
-- [ ] **Pendiente**: `Membresia` sigue viviendo en memoria (se pierde al reiniciar el proceso, igual que `Sesion`); no hay endpoint para revocar ni para otorgar `moderador`/`observador`, solo se crean por unirse o por crear partida
+- [x] ~~**Pendiente**: `Membresia`/`Sesion` viven en memoria; no hay endpoint para revocar ni para otorgar `moderador`/`observador`~~ — **cerrado 2026-08-29**, ver "Cierre de Fase C" al final de esta sección
 - [ ] ~~`POST /partidas` y `POST /partidas/:gameId/tick` SIGUEN sin exigir sesión~~ — cerrado en C3
 - [x] ~~`fundarAsentamiento` fabrica ids sintéticos en vez de usar el actor real~~ — corregido 2026-08-26
 
@@ -301,7 +301,7 @@ existían.
 - [x] **Fundación grupal (hasta 5 cofundadores) queda diferida a propósito**: el motor la soporta, pero exponerla exigiría un mecanismo de CONSENTIMIENTO que hoy no existe — sin él, un cliente podría meter a cualquier jugador en una Facción sin que lo pidiera, y como solo se pertenece a una (Doc 0), dejarlo bloqueado para la que quería. Es una vía de acoso, no una función; documentado en el propio comando
 - [x] Autorización (`comandos/autorizacion.ts`): nueva `puedeFundarEn` — ciudadano de la Facción, **o** caso de arranque (Facción sin ningún ciudadano todavía Y actor sin Facción propia). La excepción es estrecha: fundar consume el cap de fundación de la Facción (Doc 1.7), así que no se abre a cualquiera, solo al primer ciudadano de una Facción recién creada — sin ella, `crearFaccion` → `fundarAsentamiento` sería imposible
 - [x] Cliente (`cliente/`) repuntado: quitado el campo "Jugadores fundadores" del panel de Mundo y el parámetro del método `gameStore.fundarAsentamiento`
-- [x] 534 tests (arreglados 2 que asumían fundación grupal ficticia, añadidos los del caso de arranque y su exclusión), `tsc` limpio en ambos proyectos, y verificado en vivo sobre HTTP real: `jugadoresFundadoresIds`/`ciudadanosIds` quedan con el `usuarioId` real de quien funda; un segundo jugador sin Facción es rechazado (`condicion_dominio`) en cuanto la Facción deja de estar vacía. "Escuadrones propios del jugador o de otros residentes autorizados" (doc 5, fila de combate) sigue sin comprobarse: la condición implementada solo exige residencia en el asentamiento atacante, no la propiedad de cada `escuadronId` — pendiente
+- [x] 534 tests (arreglados 2 que asumían fundación grupal ficticia, añadidos los del caso de arranque y su exclusión), `tsc` limpio en ambos proyectos, y verificado en vivo sobre HTTP real: `jugadoresFundadoresIds`/`ciudadanosIds` quedan con el `usuarioId` real de quien funda; un segundo jugador sin Facción es rechazado (`condicion_dominio`) en cuanto la Facción deja de estar vacía. "Escuadrones propios del jugador" (doc 5, fila de combate) — **comprobado desde 2026-08-29** (`comandaEscuadrones`, ver "Cierre de Fase C"). "De otros residentes autorizados" sigue fuera: necesita un mecanismo de cesión de tropas que la Fase 0 no tiene
 
 ### C4 Slice 1. Proyección de jugador sin niebla de guerra — completada 2026-08-26
 
@@ -929,6 +929,71 @@ que ya sirve C11a. Cero rasterizado, cero dependencia nueva.
   `GameSession.ejecutar`, no un array fabricado a mano) y en `api.test.ts` (las dos superficies, filtrado por
   audiencia, `400` en `desde` inválido). 640/640 en total, `tsc` limpio. Verificado en vivo con `curl`
 
+### Cierre de Fase C — huecos pequeños (2026-08-29)
+
+Tras revisar los 9 docs de arquitectura, el usuario eligió cerrar los pendientes menores que quedaban de
+Fase C antes de decidir sobre C4 Slice 2 o Fase D. Tres piezas de código + dos de documentación.
+
+- [x] **Persistencia del dominio de acceso** — `Membresia`/`Sesion`/`Usuario`/`IdentidadVinculada` ya no se
+  pierden al reiniciar el proceso (era el pendiente citado en C1 y C3).
+  - `src/server/persistenciaIdentidad.ts` (capa `server/`, como `persistenciaPartida.ts` — `acceso/` no puede
+    tocar `fs`): `leerIdentidad`/`escribirIdentidad`, escritura **atómica** (`.tmp` + `rename`),
+    `formatoVersion` de envoltorio con su propia excepción de rechazo. **Sin versión de concurrencia**, a
+    diferencia de una partida: lo escribe un solo proceso, las mutaciones son diminutas y el adaptador las
+    serializa en una cola — el archivo entero se reescribe en cada cambio.
+  - `src/server/identidad/repositorioEnMemoria.ts` **refactorizado, no duplicado**: gana `inicial?`
+    (snapshot cargado) y `alCambiar?` (gancho de persistencia). `crearRepositorioIdentidadEnDisco` (adaptador
+    nuevo) = ese mismo repositorio con los dos ganchos cableados a disco + una cola de escrituras encadenadas
+    (misma técnica que `RunnerDePartida`) y `esperarEscrituras()` para apagado limpio y tests deterministas.
+    La lógica de índices, "primera identidad gana" y el contador de ids vive en UN solo sitio.
+  - `RepositorioIdentidad` (puerto, `acceso/`) gana `listarMembresiasDePartida` y `revocarMembresia` — las
+    necesita la superficie de administración (siguiente punto). Actualizados los dos implementadores (el de
+    memoria y el doble de test de `acceso/`).
+  - `server/index.ts` pasa a `async`: carga el repositorio de disco (`identidad.json`, junto a los snapshots
+    de partida) antes de `crearServidor`, y registra un handler de `SIGINT`/`SIGTERM` que espera la última
+    escritura antes de salir. `crearServidor` **no cambia**: sigue con el repositorio en memoria por defecto
+    (tests), el de disco se le inyecta vía `identidad`.
+- [x] **Endpoints de gestión de membresías** en `/admin/*` (era el otro pendiente de C1/C3: "no hay endpoint
+  para revocar ni para otorgar `moderador`/`observador`").
+  - `GET /admin/partidas/:gameId/membresias` — lista (usuarioId, jugadorId, rol, desde, hasta, `vigente`).
+  - `POST /admin/partidas/:gameId/membresias` `{ usuarioId, rol }` — `rol` ∈ `administrador_partida` /
+    `moderador` / `observador` (enum cerrado en el esquema, mismo criterio que C9: `jugador` se obtiene por la
+    superficie de jugador, `administrador_global` es de instancia y solo por `ADMINISTRADORES`,
+    `servicio_npc` es interno). 404 si el usuario nunca inició sesión, 409 si ya tiene membresía (revocar
+    primero — no hay cambio de rol silencioso).
+  - `DELETE /admin/partidas/:gameId/membresias/:usuarioId` — revoca poniendo `hasta` (no borra, doc 5).
+  - `acceso/rolesDePartida.ts` gana `puedeGestionarMembresias`: `administrador_partida` o
+    `administrador_global`, **no `moderador`** (doc 5: "subset de administrador_partida, sin acceso a
+    balance/regeneración" — repartir accesos es competencia del administrador de partida).
+- [x] **Propiedad de escuadrones en combate** (`session/comandos/autorizacion.ts`). `comandaEscuadrones`:
+  cada `escuadronId` comprometido que EXISTE en el asentamiento atacante debe pertenecer al actor
+  (`Escuadron.jugadorId`). Se mantiene la exigencia de residencia. Añadido a `iniciarAsedio`,
+  `interceptarCaravana`, `atacarCampamentoBandidos` (residente + dueño de todos) y `combateCampoAbierto`
+  (dueño en cada lado donde resida). Un id inexistente se deja pasar (fail-open, lo rechaza el comando).
+  **"De otros residentes autorizados" (doc 5) sigue fuera**: la delegación de mando —un General al que se le
+  ceden tropas— no existe en Fase 0.
+- [x] **Follow-ups de C13 — anotados, no implementados a propósito.** Quitar `eventosDominio` entero de
+  `EstadoAdmin`/`ProyeccionJugador` y convertir la difusión WebSocket en deltas aplicables siguen sin
+  consumidor: `cliente/` (el único cliente real hoy) todavía lee el array completo para su línea de tiempo de
+  depuración, y no hay ningún cliente migrado al cursor `?desde=` que lo reemplace. Cambiar el contrato sin un
+  reemplazo listo es peor que dejarlo — queda como follow-up para cuando exista un cliente que use el cursor
+  (ver el "Alcance NO cubierto" de C13 arriba, sin cambios).
+- [x] Verificación: 654 → **669 tests** (`autorizacionComandos.test.ts` +4 sobre estado genuino,
+  `persistenciaIdentidad.test.ts` nuevo, `api.test.ts` +6 de gestión de membresías y persistencia tras
+  reinicio), `tsc --noEmit` limpio. **Verificado en vivo** con servidor real escuchando en un puerto y HTTP
+  real (`fetch`, no `inject`): otorgar moderador → beto administra → beto NO reparte roles (403) → revocar →
+  beto vuelve a 403; una membresía de jugador y una revocación sobreviven a recrear el servidor sobre el
+  mismo directorio.
+
+**Qué queda de Fase C, y por qué no se cierra aquí:**
+
+- **C4 Slice 2 (niebla de guerra)** — bloqueado por un número de BALANCE (radio de visualización) que ningún
+  doc de este repo fija. Sigue igual: un jugador ve cero de cualquier Facción rival. No es de arquitectura.
+- **El cliente jugable completo** — `cliente-jugador/` se movió a su propio repositorio (commit `2dfe9e7`);
+  construir la UI de comandos es trabajo de ESE repo, no de este backend. El backend ya cumple su parte del
+  criterio de éxito (balance, geometría, terreno recalculable, esquema de comandos, cursor de eventos,
+  descubrimiento, y ahora identidad persistente).
+
 ## Fase D — Conversión temporal total
 
 - [ ] Introducir reloj de simulación y campos de fecha en el estado, sin retirar aún el tick
@@ -958,10 +1023,10 @@ que ya sirve C11a. Cero rasterizado, cero dependencia nueva.
 Marcar cuando la mitigación correspondiente esté implementada y verificada, no
 solo diseñada.
 
-- [ ] IDs resueltos exclusivamente en servidor, nunca confiados desde el cliente
-- [ ] Cola serial o control de versión por partida para comandos concurrentes
+- [x] IDs resueltos exclusivamente en servidor, nunca confiados desde el cliente — el actor de cada comando es `Membresia.jugadorId`, resuelto de la sesión; los ids de entidad los genera `ContextoComando.ids` en el servidor (C2)
+- [x] Cola serial o control de versión por partida para comandos concurrentes — `RunnerDePartida` (cola serial por `gameId`, encadenando promesas) + `PartidaExportada.state.version` de concurrencia en `persistenciaPartida.ts` (Fase B)
 - [x] RNG determinista con estado persistido (partidas reproducibles tras reinicio) — `PartidaExportada.estadoRng` + `src/server/persistenciaPartida.ts` (2026-08-25)
-- [ ] DTOs/proyecciones por audiencia (nunca enviar `GameState` completo a un cliente no-admin)
-- [ ] Snapshots y retención para el historial (nunca clones ilimitados en RAM)
-- [ ] Balance versionado y ligado a partida/temporada (no global mutable)
-- [ ] Frontends y endpoints de admin vs. jugador separados con roles técnicos distintos
+- [~] DTOs/proyecciones por audiencia (nunca enviar `GameState` completo a un cliente no-admin) — **Slice 1 hecho** (`proyectarParaJugador`, C4): un jugador nunca recibe `GameSessionState` completo. Slice 2 (niebla de guerra / "último conocido") pendiente de un radio de visualización de balance
+- [ ] Snapshots y retención para el historial (nunca clones ilimitados en RAM) — snapshot por comando hecho; política de retención/poda, Fase E2
+- [~] Balance versionado y ligado a partida/temporada (no global mutable) — **servido** (`GET /v1/balance`, C7) y `BALANCE_VERSION` estampada en cada snapshot; los overrides reales por partida/temporada siguen sin dueño
+- [x] Frontends y endpoints de admin vs. jugador separados con roles técnicos distintos — `/admin/*` vs `/jugador/*` (C3), reforzado con la gestión de membresías del cierre de Fase C (2026-08-29)

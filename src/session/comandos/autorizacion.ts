@@ -119,6 +119,26 @@ function reside(estado: GameSessionState, jugadorId: string, asentamientoId: str
   return asentamiento === undefined || esResidente(asentamiento, jugadorId);
 }
 
+/**
+ * Todos los escuadrones indicados que EXISTEN en ese asentamiento pertenecen al actor (Doc 5, fila de
+ * combate: "escuadrones propios del jugador"). `Escuadron.jugadorId` es la única fuente de verdad del dueño
+ * (`domain/types.ts`), la mutó el motor al reclutar y el cliente no puede falsearla.
+ *
+ * Un `escuadronId` que no existe se deja pasar — lo rechaza el propio comando de combate, mismo criterio
+ * fail-open que el resto de resolutores de este archivo. Lo que se corta es comprometer el escuadrón de OTRO
+ * residente del mismo asentamiento: la delegación "de otros residentes autorizados" del doc 5 necesita un
+ * mecanismo de mando (un General al que se le ceden tropas) que la Fase 0 no tiene, así que hoy cada jugador
+ * solo manda lo suyo.
+ */
+function comandaEscuadrones(estado: GameSessionState, jugadorId: string, asentamientoId: string, escuadronIds: string[]): boolean {
+  const asentamiento = buscarAsentamiento(estado, asentamientoId);
+  if (asentamiento === undefined) return true; // no existe: lo rechaza el comando
+  return escuadronIds.every((id) => {
+    const escuadron = asentamiento.escuadrones.find((e) => e.id === id);
+    return escuadron === undefined || escuadron.jugadorId === jugadorId;
+  });
+}
+
 /** Reside en el asentamiento Y ostenta ahí el cargo indicado. */
 function residenteConCargo(estado: GameSessionState, jugadorId: string, asentamientoId: string, cargo: Parameters<typeof tieneCargoLocal>[1]): boolean {
   const asentamiento = buscarAsentamiento(estado, asentamientoId);
@@ -297,10 +317,9 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
     condicionJugador: (estado, jugadorId, params) => reside(estado, jugadorId, params.asentamientoId),
   },
 
-  // --- Militar: residente del asentamiento atacante.
-  // Doc 5 añade "escuadrones propios del jugador o de otros residentes autorizados": NO se comprueba todavía
-  // (exigiría resolver el dueño de cada `escuadronId`), simplificación explícita — sin ella ningún residente
-  // podría ordenar un ataque. ---
+  // --- Militar: residente del asentamiento atacante + solo puede comprometer SUS PROPIOS escuadrones
+  // (`comandaEscuadrones`, doc 5 "escuadrones propios del jugador"). Mandar los de otro residente del mismo
+  // asentamiento sigue fuera: necesita un mecanismo de cesión de tropas que la Fase 0 no tiene. ---
   reclutarTropa: {
     rolesPermitidos: ['jugador'],
     // Nadie recluta a nombre de otro: `Escuadron.jugadorId` sería el del actor, no el que mande el cliente.
@@ -308,21 +327,32 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
   },
   iniciarAsedio: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => reside(estado, jugadorId, params.atacanteId),
+    condicionJugador: (estado, jugadorId, params) =>
+      reside(estado, jugadorId, params.atacanteId) && comandaEscuadrones(estado, jugadorId, params.atacanteId, params.escuadronIds),
   },
   interceptarCaravana: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => reside(estado, jugadorId, params.atacanteId),
+    condicionJugador: (estado, jugadorId, params) =>
+      reside(estado, jugadorId, params.atacanteId) && comandaEscuadrones(estado, jugadorId, params.atacanteId, params.escuadronIds),
   },
   atacarCampamentoBandidos: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => reside(estado, jugadorId, params.atacanteId),
+    condicionJugador: (estado, jugadorId, params) =>
+      reside(estado, jugadorId, params.atacanteId) && comandaEscuadrones(estado, jugadorId, params.atacanteId, params.escuadronIds),
   },
-  // Entre dos asentamientos cualesquiera: el actor debe residir en al menos uno de los lados que comanda.
+  // Entre dos asentamientos: el actor debe residir en al menos uno de los lados, y comandar sus propios
+  // escuadrones en cada lado donde resida. Escoger qué escuadrones del OTRO lado participan es una
+  // simplificación del comando en sí (Fase 0: el combate se resuelve en una sola llamada), no de esta matriz.
   combateCampoAbierto: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) =>
-      reside(estado, jugadorId, params.asentamientoAId) || reside(estado, jugadorId, params.asentamientoBId),
+    condicionJugador: (estado, jugadorId, params) => {
+      const enA = reside(estado, jugadorId, params.asentamientoAId);
+      const enB = reside(estado, jugadorId, params.asentamientoBId);
+      if (!enA && !enB) return false;
+      if (enA && !comandaEscuadrones(estado, jugadorId, params.asentamientoAId, params.escuadronIdsA)) return false;
+      if (enB && !comandaEscuadrones(estado, jugadorId, params.asentamientoBId, params.escuadronIdsB)) return false;
+      return true;
+    },
   },
 };
 

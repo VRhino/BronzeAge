@@ -2,9 +2,10 @@
 // verifica credenciales, nunca guarda nada): este puerto recuerda qué `Usuario` corresponde a qué identidad
 // externa, y las `Sesion`/`Membresia` vigentes.
 //
-// Aquí vive solo el CONTRATO. Las implementaciones son adaptadores y viven en `server/` — hoy
-// `server/identidad/repositorioEnMemoria.ts`; mañana, una respaldada en disco o en una base real, sin que
-// `servicioAutenticacion.ts` ni ninguna ruta se enteren.
+// Aquí vive solo el CONTRATO. Las implementaciones son adaptadores y viven en `server/`:
+// `repositorioEnMemoria.ts` (tests y despliegue efímero) y `repositorioEnDisco.ts` (el proceso real, mismo
+// adaptador de memoria con carga/guardado de un JSON atómico). Una base de datos real sería otro adaptador
+// más, sin que `servicioAutenticacion.ts` ni ninguna ruta se enteren.
 import type { IdentidadVinculada, Membresia, Sesion, Usuario } from './tipos';
 
 export interface RepositorioIdentidad {
@@ -20,4 +21,11 @@ export interface RepositorioIdentidad {
   buscarSesion(sesionId: string): Sesion | undefined;
   obtenerMembresia(usuarioId: string, gameId: string): Membresia | undefined;
   otorgarMembresia(membresia: Membresia): void;
+  /** Todas las membresías de una partida —vigentes y revocadas— para que la superficie de administración
+   * pueda listarlas y gestionarlas (Fase C3, cierre de Fase C). El filtro de vigencia lo aplica quien lo
+   * consume (`esVigente`, `acceso/rolesDePartida.ts`). */
+  listarMembresiasDePartida(gameId: string): Membresia[];
+  /** Revoca una membresía poniéndole `hasta` (no la borra: el historial se conserva, doc 5). `false` si no
+   * había ninguna para ese usuario+partida. */
+  revocarMembresia(usuarioId: string, gameId: string, hasta: string): boolean;
 }

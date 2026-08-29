@@ -102,6 +102,7 @@ Objetivo: dejar el backend listo para que varios jugadores y un administrador �
 - [x] C1. Usuarios, sesiones y membresías implementados (2026-08-25), con la autenticación tras un puerto intercambiable: sustituir el proveedor de desarrollo por uno real es escribir un adaptador y darlo de alta, sin tocar nada de lo que se apoya en él
 - [x] C2. Autorización de comandos por actor / facción / asentamiento / cargo (2026-08-25): matriz con una fila por comando, exhaustividad garantizada en compilación. El esquema de `params` por comando y la `idempotencyKey` siguen pendientes (C6 y reconexión de C5)
 - [x] C3. Superficies separadas: `/admin/*` y `/jugador/*` con requisitos de rol distintos — completada 2026-08-25. Cierra de paso el agujero que quedaba de B4: crear partida, tick y estado ya no son endpoints abiertos. `/jugador/*` sin lectura de estado a propósito, hasta que existan las proyecciones de C4
+- [x] Cierre de huecos pequeños de Fase C — **2026-08-29**: (1) `Membresia`/`Sesion`/`Usuario` persistidos en disco (`server/persistenciaIdentidad.ts`, escritura atómica) — ya no se pierden al reiniciar el proceso, era el pendiente de C1/C3; (2) `GET`/`POST`/`DELETE /admin/partidas/:gameId/membresias` — otorgar/listar/revocar `moderador`/`observador`/`administrador_partida`, exige `administrador_partida`/`administrador_global`; (3) propiedad de escuadrones en combate (`comandaEscuadrones`) — un jugador solo comanda sus propias tropas en los 4 comandos de combate. 669/669 tests, verificado en vivo con servidor real. Detalle en [4_Plan_Evolucion_Tareas.md](4_Plan_Evolucion_Tareas.md#cierre-de-fase-c--huecos-pequeños-2026-08-29)
 - [ ] C4. Proyecciones de estado por audiencia — **Slice 1 completado 2026-08-26** (jugador ve su Facción completa, las demás solo metadatos públicos, `GET /jugador/partidas/:gameId`). Slice 2 pendiente: `ConocimientoJugador` y "último conocido" necesitan un radio de visualización (balance de juego) no definido en ningún doc de este repo
 - [x] C5. WebSocket único con canales, suscripciones autorizadas y reconexión sin duplicar comandos — completada 2026-08-26. Difusión de eventos de dominio (no de comandos: el cliente los ejecuta por HTTP igual que antes)
 - [x] C6. Contrato publicable: CORS, versionado de API y OpenAPI generado desde los esquemas de Fastify — completada 2026-08-26. Todo bajo `/v1`; `GET /v1/openapi.json` sin autenticar; respuesta de comando autosuficiente en `/jugador/*` (incluye la proyección propia, ya no hace falta un `GET` aparte)
@@ -159,7 +160,10 @@ demostrar que funciona.
   - **C4 Slice 2 (niebla de guerra) sigue bloqueado**: necesita un radio de visualización (decisión de
     BALANCE de juego) que ningún doc de este repo fija. Sin él, un jugador sigue viendo cero de cualquier
     Facción rival en vez de "lo que ha explorado" — conservador y seguro, pero no el diseño final
-- [ ] Antes de iniciar la Fase D: una partida persistente corre en un backend dedicado, con varios jugadores + un admin conectados, comandos procesados en serie, y el servidor puede reiniciarse sin alterar la secuencia de ticks ni el RNG.
+  - **Huecos pequeños cerrados el 2026-08-29** (ver doc 4): identidad persistida, endpoints de gestión de
+    membresías, propiedad de escuadrones en combate. Lo que queda abierto de Fase C es lo de arriba (C4
+    Slice 2 y el cliente jugable del repo externo), nada más
+- [x] Antes de iniciar la Fase D: una partida persistente corre en un backend dedicado, con varios jugadores + un admin conectados, comandos procesados en serie, y el servidor puede reiniciarse sin alterar la secuencia de ticks ni el RNG. **Cumplido 2026-08-29**: la persistencia de partida (B3) ya cubría estado/tick/RNG/eventos; el cierre de Fase C añadió la persistencia de identidad (usuarios/sesiones/membresías) que faltaba para que "el servidor puede reiniciarse" sea cierto de punta a punta, no solo para el estado de simulación.
 - [ ] Al cerrar la Fase D: la misma infraestructura opera en tiempo real total, sin que el motor dependa de un paso global fijo, y sin que API, persistencia o frontends traten el tick como unidad temporal principal.
 
 ## Registro de cierre de fases
@@ -168,6 +172,6 @@ _(completar con fecha y commit al cerrar cada fase)_
 
 - Fase A: 2026-08-25 (A1–A6 completas; commit pendiente — el usuario gestiona los commits de esta sesión)
 - Fase B: 2026-08-26 (marcada retroactivamente; B1–B5 completas sin fecha de cierre propia — ver nota arriba)
-- Fase C: —
+- Fase C: backend completo (2026-08-29). C0–C13 hechos + huecos pequeños cerrados (identidad persistida, gestión de membresías, propiedad de escuadrones). **No se marca cierre pleno**: C4 Slice 2 (niebla de guerra) sigue bloqueada por una decisión de balance sin tomar, y el cliente jugable completo es trabajo del repo externo `cliente-jugador/`. El criterio "antes de Fase D" (partida persistente + varios jugadores + reinicio sin alterar la secuencia) sí está cumplido.
 - Fase D: —
 - Fase E: —

@@ -253,6 +253,64 @@ describe('residencia en el asentamiento objetivo', () => {
   });
 });
 
+describe('combate: residente del atacante Y dueño de los escuadrones comprometidos', () => {
+  /** Estado con dos escuadrones en el asentamiento de la fixture: uno del fundador, otro del vecino. */
+  function conEscuadrones(sesion: ReturnType<typeof partidaConAsentamiento>['sesion'], fundador: string, vecino: string) {
+    const estado = sesion.getState();
+    const asentamiento = estado.asentamientos[0]!;
+    return {
+      ...estado,
+      asentamientos: [
+        {
+          ...asentamiento,
+          escuadrones: [
+            { id: 'esc-fundador', nombre: 'A', jugadorId: fundador, origen: 'pesants' as const, cantidad: 10, veterania: 0, moral: 100, tropaId: 't1' },
+            { id: 'esc-vecino', nombre: 'B', jugadorId: vecino, origen: 'pesants' as const, cantidad: 10, veterania: 0, moral: 100, tropaId: 't1' },
+          ],
+        },
+        ...estado.asentamientos.slice(1),
+      ],
+    };
+  }
+
+  it('iniciarAsedio: el residente puede comprometer SU escuadrón, no el de un co-residente', () => {
+    const { sesion, asentamientoId, fundador, vecino } = partidaConAsentamiento();
+    const estado = conEscuadrones(sesion, fundador, vecino);
+
+    expect(
+      verificarAutorizacion('iniciarAsedio', { atacanteId: asentamientoId, defensorId: 'x', escuadronIds: ['esc-fundador'] }, estado, jugador(fundador))
+    ).toEqual(AUTORIZADO);
+    expect(
+      verificarAutorizacion('iniciarAsedio', { atacanteId: asentamientoId, defensorId: 'x', escuadronIds: ['esc-vecino'] }, estado, jugador(fundador))
+    ).toEqual(POR_DOMINIO);
+    expect(
+      verificarAutorizacion(
+        'iniciarAsedio',
+        { atacanteId: asentamientoId, defensorId: 'x', escuadronIds: ['esc-fundador', 'esc-vecino'] },
+        estado,
+        jugador(fundador)
+      )
+    ).toEqual(POR_DOMINIO);
+  });
+
+  it('un escuadronId inexistente se deja pasar: lo rechaza el comando, no la autorización', () => {
+    const { sesion, asentamientoId, fundador, vecino } = partidaConAsentamiento();
+    const estado = conEscuadrones(sesion, fundador, vecino);
+    expect(
+      verificarAutorizacion('atacarCampamentoBandidos', { atacanteId: asentamientoId, campamentoId: 'c', escuadronIds: ['no-existe'] }, estado, jugador(fundador))
+    ).toEqual(AUTORIZADO);
+  });
+
+  it('combateCampoAbierto: solo se exige propiedad en el lado donde el actor reside', () => {
+    const { sesion, asentamientoId, fundador, vecino } = partidaConAsentamiento();
+    const estado = conEscuadrones(sesion, fundador, vecino);
+    const base = { asentamientoAId: asentamientoId, asentamientoBId: 'ajeno', escuadronIdsB: ['loQueSea'] };
+
+    expect(verificarAutorizacion('combateCampoAbierto', { ...base, escuadronIdsA: ['esc-fundador'] }, estado, jugador(fundador))).toEqual(AUTORIZADO);
+    expect(verificarAutorizacion('combateCampoAbierto', { ...base, escuadronIdsA: ['esc-vecino'] }, estado, jugador(fundador))).toEqual(POR_DOMINIO);
+  });
+});
+
 describe('diplomacia: ciudadanía + autoridad de Rey/Embajador', () => {
   function conRelacion(sesion: ReturnType<typeof partidaConAsentamiento>['sesion'], tipo: 'alianza' | 'vasallaje', aId: string, bId: string) {
     return {

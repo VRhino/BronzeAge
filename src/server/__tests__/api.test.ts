@@ -10,6 +10,9 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { crearServidor } from '../api';
+import { crearRegistroProveedores } from '../../acceso/proveedorIdentidad';
+import { proveedoresPorDefecto } from '../identidad/proveedoresActivos';
+import { crearRepositorioIdentidadEnDisco } from '../identidad/repositorioEnDisco';
 
 /** El operador declara administradores por identidad externa; `dev jefa` es la de las pruebas. */
 const ADMINS = [{ proveedor: 'dev', sujetoId: 'jefa' }];
@@ -962,5 +965,112 @@ describe('reanudacion tras "reinicio del proceso"', () => {
 
     expect(res.statusCode).toBe(201);
     expect(res.json().tick).toBe(2); // retomó los 2 ticks ya guardados, no volvió a 0
+  });
+});
+
+describe('gestión de membresías técnicas (/admin/partidas/:gameId/membresias, cierre de Fase C)', () => {
+  /** `usuarioId` de un sujeto tras iniciar sesión — lo que un admin necesita para otorgarle un rol. */
+  async function usuarioIdDe(sujetoId: string): Promise<string> {
+    const login = await app.inject({ method: 'POST', url: '/v1/sesiones', headers: { authorization: `dev ${sujetoId}` } });
+    return login.json().usuarioId;
+  }
+
+  it('el admin otorga un rol, aparece en la lista, y se puede revocar', async () => {
+    const { admin } = await partidaCreada('g1');
+    const beto = await usuarioIdDe('beto');
+
+    const otorgar = await app.inject({
+      method: 'POST',
+      url: '/v1/admin/partidas/g1/membresias',
+      headers: admin,
+      payload: { usuarioId: beto, rol: 'moderador' },
+    });
+    expect(otorgar.statusCode).toBe(201);
+
+    const lista = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/membresias', headers: admin });
+    expect(lista.json().membresias).toContainEqual(expect.objectContaining({ usuarioId: beto, rol: 'moderador', vigente: true }));
+
+    // Beto ya puede administrar la partida.
+    const betoAuth = { authorization: `sesion ${(await app.inject({ method: 'POST', url: '/v1/sesiones', headers: { authorization: 'dev beto' } })).json().sesionId}` };
+    expect((await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1', headers: betoAuth })).statusCode).toBe(200);
+
+    const revocar = await app.inject({ method: 'DELETE', url: `/v1/admin/partidas/g1/membresias/${beto}`, headers: admin });
+    expect(revocar.statusCode).toBe(200);
+
+    // Revocada: ya no administra, y la lista lo marca no vigente.
+    expect((await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1', headers: betoAuth })).statusCode).toBe(403);
+    const listaTras = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/membresias', headers: admin });
+    expect(listaTras.json().membresias).toContainEqual(expect.objectContaining({ usuarioId: beto, vigente: false }));
+  });
+
+  it('404 si el usuario nunca inició sesión; 409 si ya tiene membresía', async () => {
+    const { admin } = await partidaCreada('g1');
+    expect(
+      (await app.inject({ method: 'POST', url: '/v1/admin/partidas/g1/membresias', headers: admin, payload: { usuarioId: 'usuario-999', rol: 'moderador' } })).statusCode
+    ).toBe(404);
+
+    const beto = await usuarioIdDe('beto');
+    await app.inject({ method: 'POST', url: '/v1/admin/partidas/g1/membresias', headers: admin, payload: { usuarioId: beto, rol: 'observador' } });
+    const repetido = await app.inject({ method: 'POST', url: '/v1/admin/partidas/g1/membresias', headers: admin, payload: { usuarioId: beto, rol: 'moderador' } });
+    expect(repetido.statusCode).toBe(409);
+  });
+
+  it('el esquema rechaza un rol no otorgable (jugador, administrador_global)', async () => {
+    const { admin } = await partidaCreada('g1');
+    const beto = await usuarioIdDe('beto');
+    for (const rol of ['jugador', 'administrador_global', 'servicio_npc']) {
+      const res = await app.inject({ method: 'POST', url: '/v1/admin/partidas/g1/membresias', headers: admin, payload: { usuarioId: beto, rol } });
+      expect(res.statusCode).toBe(400);
+    }
+  });
+
+  it('un moderador puede administrar la partida pero NO repartir roles', async () => {
+    const { admin } = await partidaCreada('g1');
+    const beto = await usuarioIdDe('beto');
+    await app.inject({ method: 'POST', url: '/v1/admin/partidas/g1/membresias', headers: admin, payload: { usuarioId: beto, rol: 'moderador' } });
+    const betoAuth = { authorization: `sesion ${(await app.inject({ method: 'POST', url: '/v1/sesiones', headers: { authorization: 'dev beto' } })).json().sesionId}` };
+    const carlos = await usuarioIdDe('carlos');
+
+    const res = await app.inject({ method: 'POST', url: '/v1/admin/partidas/g1/membresias', headers: betoAuth, payload: { usuarioId: carlos, rol: 'observador' } });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('404 al revocar una membresía inexistente; 403 sin sesión de administración', async () => {
+    const { admin } = await partidaCreada('g1');
+    expect((await app.inject({ method: 'DELETE', url: '/v1/admin/partidas/g1/membresias/usuario-999', headers: admin })).statusCode).toBe(404);
+
+    const ana = await sesionDe('ana');
+    expect((await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/membresias', headers: ana })).statusCode).toBe(403);
+  });
+});
+
+describe('persistencia de identidad tras "reinicio del proceso" (cierre de Fase C)', () => {
+  let enDisco: Awaited<ReturnType<typeof crearRepositorioIdentidadEnDisco>>;
+
+  async function servidorConIdentidadEnDisco(): Promise<FastifyInstance> {
+    enDisco = await crearRepositorioIdentidadEnDisco(join(directorio, 'identidad.json'));
+    return crearServidor({
+      directorio,
+      administradoresGlobales: ADMINS,
+      identidad: { proveedores: crearRegistroProveedores(proveedoresPorDefecto()), repositorio: enDisco.repositorio },
+    });
+  }
+
+  it('una membresía de jugador sobrevive a recrear el servidor sobre el mismo directorio', async () => {
+    await app.close();
+    app = await servidorConIdentidadEnDisco();
+
+    const admin = await sesionDe('jefa');
+    await app.inject({ method: 'POST', url: '/v1/admin/partidas', headers: admin, payload: { gameId: 'g1', seed: 42 } });
+    const ana = await sesionDe('ana');
+    await app.inject({ method: 'POST', url: '/v1/jugador/partidas/g1/membresia', headers: ana });
+    await enDisco.esperarEscrituras();
+    await app.close();
+
+    // Proceso "nuevo": relee el archivo de identidad.
+    app = await servidorConIdentidadEnDisco();
+    const anaOtraVez = await sesionDe('ana');
+    const res = await app.inject({ method: 'GET', url: '/v1/sesiones/actual?gameId=g1', headers: anaOtraVez });
+    expect(res.json().rol).toBe('jugador');
   });
 });
