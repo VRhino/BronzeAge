@@ -16,6 +16,7 @@
 // ============================================================================
 
 import type { AcuerdoTrueque, Asentamiento, Caravana, Faccion, RecursoTipo } from '../domain/types';
+import type { Instante } from '../domain/tiempo';
 import type { Mapa } from '../world/mapa';
 import { CARAVANA_CATALOGO, SIMULACION_AUTO_COMERCIO } from '../constants';
 import { computeTodasLasZonas } from './zones';
@@ -93,7 +94,7 @@ function asegurarInfraestructuraComercial(
   mapa: Mapa,
   capital: Asentamiento | undefined,
   reclamos: ReturnType<typeof reclamosDeFuentes>,
-  tickActual: number,
+  instante: Instante,
   contador: number
 ): { asentamiento: Asentamiento; caravanaNueva?: Caravana } {
   let actual = asentamiento;
@@ -133,7 +134,7 @@ function asegurarInfraestructuraComercial(
   const propias = caravanas.filter((c) => c.tipo === 'comercial' && c.origenAsentamientoId === actual.id).length;
   if (propias < cupoCaravanas(actual)) {
     try {
-      const resultado = construirCaravanaComercial(actual, caravanas, tickActual, contador);
+      const resultado = construirCaravanaComercial(actual, caravanas, instante, contador);
       return { asentamiento: resultado.asentamiento, caravanaNueva: resultado.caravana };
     } catch (err) {
       if (!(err instanceof CaravanaInvalidaError)) throw err;
@@ -151,7 +152,7 @@ function asegurarInfraestructuraComercial(
  * propone un trueque — el deficitario paga con lo que él sí tenga de sobra (madera o trigo). No repite un
  * trueque si ya hay uno 'activo' entre el mismo par para ese recurso.
  */
-export function avanzarAutoComercioSimulado(estado: EstadoSimulacion, mapa: Mapa, tickActual: number): EstadoSimulacion {
+export function avanzarAutoComercioSimulado(estado: EstadoSimulacion, mapa: Mapa, instante: Instante): EstadoSimulacion {
   if (!SIMULACION_AUTO_COMERCIO.activo) return estado;
 
   let asentamientos = [...estado.asentamientos];
@@ -181,7 +182,7 @@ export function avanzarAutoComercioSimulado(estado: EstadoSimulacion, mapa: Mapa
         mapa,
         capital,
         reclamos,
-        tickActual,
+        instante,
         contador++
       );
       actualizar(asentamiento.id, resultado.asentamiento);
@@ -214,7 +215,7 @@ export function avanzarAutoComercioSimulado(estado: EstadoSimulacion, mapa: Mapa
             recurso,
             SIMULACION_AUTO_COMERCIO.cantidadPorTrueque,
             SIMULACION_AUTO_COMERCIO.cantidadPorTrueque,
-            tickActual,
+            instante,
             contador++
           );
           acuerdosNuevos.push(acuerdo);

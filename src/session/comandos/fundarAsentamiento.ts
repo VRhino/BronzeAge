@@ -49,7 +49,7 @@ export const fundarAsentamiento = comando<ParamsFundarAsentamiento, { asentamien
     params.posicion,
     jugadoresIds,
     estado.asentamientos,
-    estado.tick
+    ctx.instante
   );
 
   let siguiente: GameSessionState = {
@@ -66,7 +66,7 @@ export const fundarAsentamiento = comando<ParamsFundarAsentamiento, { asentamien
   return exito(
     siguiente,
     [
-      evento(ctx, estado, {
+      evento(ctx, {
         codigo: 'fundacion.asentamiento_fundado',
         mensaje: `${nombreFaccion} funda asentamiento en (${Math.round(params.posicion.x)}, ${Math.round(params.posicion.y)}).`,
         payload: {

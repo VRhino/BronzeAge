@@ -7,12 +7,12 @@ import { CANAL_GENERAL, canalDeAsentamiento, canalDeEvento, puedeSuscribirseA } 
 
 describe('canalDeEvento', () => {
   it('sin asentamientoId va al canal general', () => {
-    const evento = { codigo: 'faccion.creada', mensaje: '', momento: '2026-01-01T00:00:00.000Z', tick: 0 };
+    const evento = { codigo: 'faccion.creada', mensaje: '', momento: '2026-01-01T00:00:00.000Z' };
     expect(canalDeEvento(evento)).toBe(CANAL_GENERAL);
   });
 
   it('con asentamientoId va a su propio canal', () => {
-    const evento = { codigo: 'x', mensaje: '', momento: '2026-01-01T00:00:00.000Z', tick: 0, asentamientoId: 'a1' };
+    const evento = { codigo: 'x', mensaje: '', momento: '2026-01-01T00:00:00.000Z', asentamientoId: 'a1' };
     expect(canalDeEvento(evento)).toBe(canalDeAsentamiento('a1'));
     expect(canalDeAsentamiento('a1')).toBe('asentamiento/a1');
   });

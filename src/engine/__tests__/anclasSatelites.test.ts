@@ -23,7 +23,7 @@ import {
 } from '../trazado';
 import { avanzarSimulacion } from '../simulation';
 import { createRng } from '../../worldgen';
-import { contextoDeTest, crearEstadoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
+import { contextoDeTest, crearEstadoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instanteDeTest } from './fixtures';
 
 const SEED = 42;
 const RECLAMOS_VACIOS = { nodos: new Set<string>(), lenerasPorBosque: new Map<string, number>() };
@@ -65,7 +65,6 @@ function ocupante(col: number, row: number, id: string): Edificio {
     tipo: 'vivienda',
     posicion: { x: (col + 0.5) * T, y: (row + 0.5) * T },
     estado: 'activo',
-    ticksRestantes: 0,
     ambito: 'asentamiento',
   };
 }
@@ -128,7 +127,7 @@ describe('Etapa 5 — Carpintería: zona de tres piezas (§9, Lógica 2, sin cam
       tipo: 'carpinteria',
       posicion: { x: 30, y: 0 },
       estado: 'en_construccion',
-      ticksRestantes: 1,
+      completaEn: instanteDeTest(1),
       ambito: 'asentamiento',
     };
     let estado = crearEstadoDeTest([{ ...asentamiento, edificios: [...asentamiento.edificios, enObra] }], facs);
@@ -166,7 +165,6 @@ describe('Etapa 5 — árbol único de anclas, a nivel de motor (trazado.ts)', (
       tipo: 'pozo',
       posicion: { x: 60 * T, y: 0 },
       estado: 'activo',
-      ticksRestantes: 0,
       ambito: 'asentamiento',
     };
     const edificios = [
@@ -207,7 +205,6 @@ describe('Etapa 5 — árbol único de anclas, a nivel de motor (trazado.ts)', (
       tipo: 'mercado',
       posicion: { x: 200 * T, y: 200 * T },
       estado: 'activo',
-      ticksRestantes: 0,
       ambito: 'asentamiento',
     };
     const edificios = [...asentamiento.edificios, ...relleno, mercadoLejano];
@@ -312,7 +309,6 @@ describe('Etapa 4 (sin cambios) — orientación intercambiable (ancho↔alto)',
       tipo: 'carpinteria',
       posicion: elegido.punto,
       estado: 'activo',
-      ticksRestantes: 0,
       ambito: 'asentamiento',
       rotado: true,
     };

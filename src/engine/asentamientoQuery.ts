@@ -1,4 +1,5 @@
 import type { Asentamiento, Edificio, EdificioTipo, Point } from '../domain/types';
+import { minutos, duracion, type Duracion, type Instante } from '../domain/tiempo';
 import type { Mapa } from '../world/mapa';
 import {
   CARAVANA_COOLDOWN,
@@ -76,22 +77,21 @@ export function cupoCaravanas(asentamiento: Asentamiento): number {
 }
 
 /**
- * Ticks que faltan para que este asentamiento pueda crear otra caravana (Fundación o comercial) — 0 si ya
- * puede. Cooldown COMPARTIDO entre los dos mecanismos (`CARAVANA_COOLDOWN.ticksCooldown`, a petición del
- * usuario): evita spam de creación cuando una caravana recién salida es destruida y el cupo/recursos vuelven a
- * estar disponibles de inmediato. Informativo para la UI (`gameStore.caravanasInfo`); la comprobación real que
- * bloquea la creación vive en `lanzarCaravanaFundacion` (engine/expansion.ts) y `construirCaravanaComercial`
- * (engine/trade.ts), que llaman a `puedeCrearCaravana` más abajo.
+ * Tiempo de mundo (`Duracion`, ms) que falta para que este asentamiento pueda crear otra caravana (Fundación
+ * o comercial) — 0 si ya puede. Cooldown COMPARTIDO entre los dos mecanismos (`CARAVANA_COOLDOWN.cooldownMinutos`):
+ * evita spam de creación cuando una caravana recién salida es destruida y el cupo/recursos vuelven de
+ * inmediato. Informativo para la UI; la comprobación que bloquea la creación vive en `lanzarCaravanaFundacion`
+ * (engine/expansion.ts) y `construirCaravanaComercial` (engine/trade.ts), vía `puedeCrearCaravana` de abajo.
  */
-export function ticksCooldownCaravanaRestantes(asentamiento: Pick<Asentamiento, 'ultimaCaravanaCreadaEnTick'>, tickActual: number): number {
-  if (asentamiento.ultimaCaravanaCreadaEnTick === undefined) return 0;
-  return Math.max(0, asentamiento.ultimaCaravanaCreadaEnTick + CARAVANA_COOLDOWN.ticksCooldown - tickActual);
+export function cooldownCaravanaRestante(asentamiento: Pick<Asentamiento, 'ultimaCaravanaCreadaEn'>, instante: Instante): Duracion {
+  if (asentamiento.ultimaCaravanaCreadaEn === undefined) return duracion(0);
+  return duracion(Math.max(0, asentamiento.ultimaCaravanaCreadaEn + minutos(CARAVANA_COOLDOWN.cooldownMinutos) - instante));
 }
 
 /** ¿Puede este asentamiento crear una caravana nueva (Fundación o comercial) ahora mismo? Ver
- * `ticksCooldownCaravanaRestantes`. */
-export function puedeCrearCaravana(asentamiento: Pick<Asentamiento, 'ultimaCaravanaCreadaEnTick'>, tickActual: number): boolean {
-  return ticksCooldownCaravanaRestantes(asentamiento, tickActual) === 0;
+ * `cooldownCaravanaRestante`. */
+export function puedeCrearCaravana(asentamiento: Pick<Asentamiento, 'ultimaCaravanaCreadaEn'>, instante: Instante): boolean {
+  return cooldownCaravanaRestante(asentamiento, instante) === 0;
 }
 
 const EDIFICIOS_PRODUCTORES: EdificioTipo[] = ['granja', 'cantera', 'lenera', 'mina', 'minaCobre', 'minaEstano', 'corral'];
@@ -241,7 +241,7 @@ export interface ProduccionItem {
   tipo: EdificioTipo;
   recurso: string;
   activos: number;
-  cantidadPorTick: number;
+  cantidadPorMinuto: number;
 }
 
 /**
@@ -279,8 +279,8 @@ function produccionRecetas(asentamiento: Asentamiento): ProduccionItem[] {
       disponible.set(receta.produce, (disponible.get(receta.produce) ?? 0) + cantidad);
 
       const existente = items.find((it) => it.tipo === edificio.tipo && it.recurso === receta.produce);
-      if (existente) existente.cantidadPorTick += cantidad;
-      else items.push({ tipo: edificio.tipo, recurso: receta.produce, activos: edificiosPorTipoYEstado(asentamiento, edificio.tipo).length, cantidadPorTick: cantidad });
+      if (existente) existente.cantidadPorMinuto += cantidad;
+      else items.push({ tipo: edificio.tipo, recurso: receta.produce, activos: edificiosPorTipoYEstado(asentamiento, edificio.tipo).length, cantidadPorMinuto: cantidad });
     }
   }
   return items;
@@ -292,7 +292,7 @@ function produccionRecetas(asentamiento: Asentamiento): ProduccionItem[] {
  * descuenta nodos de recurso ni almacén (a diferencia de `avanzarConstruccion`/`avanzarRecetas`, que
  * sí aplican la producción real).
  */
-export function produccionPorTick(asentamiento: Asentamiento, mapa: Mapa, zonaPoligono: Point[] = []): ProduccionItem[] {
+export function produccionPorMinuto(asentamiento: Asentamiento, mapa: Mapa, zonaPoligono: Point[] = []): ProduccionItem[] {
   const ratioMano = ratioManoObra(asentamiento);
   const items: ProduccionItem[] = [];
 
@@ -308,7 +308,7 @@ export function produccionPorTick(asentamiento: Asentamiento, mapa: Mapa, zonaPo
       (acc, e) => acc + produccionTrigoDeGranja(e.nivelInterno) * fertilidadZona * ratioMano * factorTrigo,
       0
     );
-    items.push({ tipo: 'granja', recurso: 'trigo', activos: granjas.length, cantidadPorTick: total });
+    items.push({ tipo: 'granja', recurso: 'trigo', activos: granjas.length, cantidadPorMinuto: total });
   }
 
   const leneras = edificiosPorTipoYEstado(asentamiento, 'lenera');
@@ -317,7 +317,7 @@ export function produccionPorTick(asentamiento: Asentamiento, mapa: Mapa, zonaPo
       const bosque = mapa.bosque(e.fuenteId);
       return acc + (bosque ? EDIFICIO_CATALOGO.lenera.produccionBaseMadera * bosque.densidad * ratioMano : 0);
     }, 0);
-    items.push({ tipo: 'lenera', recurso: 'madera', activos: leneras.length, cantidadPorTick: total });
+    items.push({ tipo: 'lenera', recurso: 'madera', activos: leneras.length, cantidadPorMinuto: total });
   }
 
   const minado: { tipo: 'cantera' | 'mina' | 'minaCobre' | 'minaEstano' | 'corral'; recurso: string; base: number }[] = [
@@ -337,7 +337,7 @@ export function produccionPorTick(asentamiento: Asentamiento, mapa: Mapa, zonaPo
       if (restante <= 0) return acc;
       return acc + Math.min(base * ratioMano, restante);
     }, 0);
-    items.push({ tipo, recurso, activos: edificios.length, cantidadPorTick: total });
+    items.push({ tipo, recurso, activos: edificios.length, cantidadPorMinuto: total });
   }
 
   return [...items, ...produccionRecetas(asentamiento)];

@@ -13,10 +13,10 @@ import {
   type PayloadMantenimientoRecuperado,
   type PayloadNivelSubio,
 } from '../mantenimiento';
-import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
+import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instanteDeTest } from './fixtures';
 
 function edificioActivo(id: string, tipo: Edificio['tipo']): Edificio {
-  return { id, tipo, posicion: { x: 0, y: 0 }, estado: 'activo', ticksRestantes: 0, ambito: 'asentamiento' };
+  return { id, tipo, posicion: { x: 0, y: 0 }, estado: 'activo', ambito: 'asentamiento' };
 }
 
 function base(): Asentamiento {
@@ -46,12 +46,12 @@ describe('eventos de dominio — mantenimiento.ts', () => {
   it('avanzarMantenimiento: sin madera para pagar produce mantenimiento.deficit', () => {
     const asentamiento: Asentamiento = {
       ...base(),
-      fundadoEnTick: 0,
+      fundadoEn: instanteDeTest(0),
       medidorMantenimiento: MANTENIMIENTO.medidorInicial,
       almacen: { ...base().almacen, madera: { cantidad: 0, capacidad: 1000 } },
     };
 
-    const resultado = avanzarMantenimiento(asentamiento, undefined, MANTENIMIENTO.graciaTicks + 1);
+    const resultado = avanzarMantenimiento(asentamiento, undefined, instanteDeTest(MANTENIMIENTO.graciaMinutos + 1));
 
     expect(resultado.destruido).toBe(false);
     const evento = resultado.eventos.find((e) => typeof e !== 'string' && e.codigo === 'mantenimiento.deficit');
@@ -63,14 +63,14 @@ describe('eventos de dominio — mantenimiento.ts', () => {
   it('avanzarMantenimiento: medidor a 0 con nivelActual > 1 produce mantenimiento.colapsado (no destruye)', () => {
     const asentamiento: Asentamiento = {
       ...base(),
-      fundadoEnTick: 0,
+      fundadoEn: instanteDeTest(0),
       nivel: 2,
       nivelActual: 2,
       medidorMantenimiento: 0.1,
       almacen: { ...base().almacen, madera: { cantidad: 0, capacidad: 1000 } },
     };
 
-    const resultado = avanzarMantenimiento(asentamiento, undefined, MANTENIMIENTO.graciaTicks + 1);
+    const resultado = avanzarMantenimiento(asentamiento, undefined, instanteDeTest(MANTENIMIENTO.graciaMinutos + 1));
 
     expect(resultado.destruido).toBe(false);
     expect(resultado.eventos).toHaveLength(1);
@@ -85,14 +85,14 @@ describe('eventos de dominio — mantenimiento.ts', () => {
   it('avanzarMantenimiento: medidor a 0 con nivelActual == 1 produce asentamiento.ruinas (destruye)', () => {
     const asentamiento: Asentamiento = {
       ...base(),
-      fundadoEnTick: 0,
+      fundadoEn: instanteDeTest(0),
       nivel: 1,
       nivelActual: 1,
       medidorMantenimiento: 0.1,
       almacen: { ...base().almacen, madera: { cantidad: 0, capacidad: 1000 } },
     };
 
-    const resultado = avanzarMantenimiento(asentamiento, undefined, MANTENIMIENTO.graciaTicks + 1);
+    const resultado = avanzarMantenimiento(asentamiento, undefined, instanteDeTest(MANTENIMIENTO.graciaMinutos + 1));
 
     expect(resultado.destruido).toBe(true);
     expect(resultado.eventos).toHaveLength(1);
@@ -102,22 +102,22 @@ describe('eventos de dominio — mantenimiento.ts', () => {
     const p = evento.payload as PayloadAsentamientoRuinas;
     expect(p.faltantes.length).toBeGreaterThan(0);
     expect(p.faltantes[0]!.recurso).toBe('madera');
-    expect(p.fundadoEnTick).toBe(0);
-    expect(p.duracionTicks).toBe(MANTENIMIENTO.graciaTicks + 1);
+    expect(p.fundadoEn).toBe(instanteDeTest(0));
+    expect(p.duro).toBe((MANTENIMIENTO.graciaMinutos + 1) * 60_000); // graciaMinutos+1 ticks de mundo, en ms
   });
 
   it('avanzarMantenimiento: pago íntegro + racha suficiente produce mantenimiento.recuperado', () => {
     const asentamiento: Asentamiento = {
       ...base(),
-      fundadoEnTick: 0,
+      fundadoEn: instanteDeTest(0),
       nivel: 2,
       nivelActual: 1,
       medidorMantenimiento: MANTENIMIENTO.medidorInicial,
-      rachaMantenimientoSano: MANTENIMIENTO.ticksSanosParaRecuperarNivel - 1,
+      rachaMantenimientoSano: MANTENIMIENTO.minutosSanosParaRecuperarNivel - 1,
       almacen: { ...base().almacen, madera: { cantidad: 1000, capacidad: 1000 } },
     };
 
-    const resultado = avanzarMantenimiento(asentamiento, undefined, MANTENIMIENTO.graciaTicks + 1);
+    const resultado = avanzarMantenimiento(asentamiento, undefined, instanteDeTest(MANTENIMIENTO.graciaMinutos + 1));
 
     expect(resultado.eventos).toHaveLength(1);
     const evento = resultado.eventos[0]!;

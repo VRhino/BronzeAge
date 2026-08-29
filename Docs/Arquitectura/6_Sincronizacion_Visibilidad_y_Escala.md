@@ -157,16 +157,23 @@ Doble beneficio, y el primero aplica ya hoy: con un contador el servidor tiene q
 **cero tráfico adicional**. Reduce ancho de banda ahora y hace gratis la migración después. El doc 2 ya lo
 anticipaba ("La API no debe exponer solo `ticksRestantes`"); esta es una segunda justificación independiente.
 
-**(b) Los eventos llevan momento, no número de tick.** `EventoDominio` (Fase A5) debe llevar `momento` además
-de `tick`, para que el día que el tick desaparezca el contrato no cambie.
+> **Estado (Fase D / D3–D4): hecho.** `Edificio.ticksRestantes` pasó a `Edificio.completaEn: Instante` (D3,
+> ms de mundo — el último contador de deadline) y ya viaja así en el DTO (el edificio va crudo, y su campo
+> temporal es ya una fecha absoluta). D4 añadió `instante` (la hora de mundo "ahora") a `ResumenPartida`/
+> `EstadoAdmin`/`ProyeccionJugador`, que es contra lo que el cliente resta para pintar la cuenta atrás. `tick`
+> sigue en el contrato, marcado provisional.
+
+**(b) Los eventos llevan momento, no número de tick.** **Hecho (cierre de Fase D).** `EventoDominio` y
+`EventoLogAdmin` llevan `momento` (ISO 8601) y NADA de `tick`. Los DTOs (`ResumenPartida`, `ProyeccionJugador`,
+…) llevan `instante`. El `tick` solo existe como paso de integración interno del motor.
 
 **(c) Las suscripciones describen QUÉ, no CUÁNDO.** El cliente se suscribe a `asentamiento/X`; el servidor
 empuja cuando X cambia. Al cliente le da igual si el cambio lo provocó un tick o un evento de tiempo real.
 **Esta es la regla que hace que el frontend no cambie ni una línea el día de la migración.**
 
 **(d) Las ventanas de validez son temporales.** "Contacto mientras esté vivo" se modela con `desde`/`hasta` en
-tiempo, no en número de tick — igual que `heridoHastaTick`, `regeneraEnTick` y los cooldowns que el doc 2 ya
-marca para migrar en D2.
+tiempo, no en número de tick. **Hecho en D2/D6**: `heridoHasta`, `regeneraEn`, `expiraEn` y los cooldowns son
+`Instante`/`Duracion` de mundo; las constantes de plazo se declaran en minutos.
 
 ## 5. Consecuencias para el roadmap
 

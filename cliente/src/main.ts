@@ -4,7 +4,7 @@
 // de dominio: eso es responsabilidad exclusiva de `gameStore`. Los tipos de `./domain/types` se
 // importan solo como `type` para tipar lo que se lee — no acoplan a ninguna lógica.
 import type { Asentamiento, BiomaTipo, CargoTipo, Edificio, Faccion, RegionId } from '@motor/domain/types';
-import { CATALOGOS, crearGameStore, UNITY_EXPORT_DEFAULT, type GameState, type GameStore, type EstadoMejoraEdificio } from './app/gameStore';
+import { CATALOGOS, crearGameStore, fmtTiempoMundo, UNITY_EXPORT_DEFAULT, type GameState, type GameStore, type EstadoMejoraEdificio } from './app/gameStore';
 import { draw, drawAsentamiento, drawFiltroFertilidad, drawTerreno, faccionColor, BIOMA_COLOR, BIOMA_COLOR_SIMPLE, RECURSO_COLOR, RECURSOS_EN_MAPA, EDIFICIO_COLOR, FACCION_COLORES, type DrawState } from './ui/canvas';
 
 // Subido de 800 a 900 junto con el mapa 2000x2000 (Fase 0.1): el mundo más grande necesitaba algo más de
@@ -201,8 +201,9 @@ app.innerHTML = `
     <div class="admin-titlebar">
       <h1>Bronze Age Collapse — Fase 0</h1>
       <div class="admin-title-actions" aria-label="Controles de simulación">
+        <span id="reloj-mundo" class="reloj-mundo" title="Tiempo de mundo. El servidor avanza solo (1 minuto real = 1 tick); la interfaz se refresca sola cada 5 s.">—</span>
         <button type="button" id="exportar-btn">Exportar</button>
-        <button type="button" id="tick-btn">Avanzar tick</button>
+        <button type="button" id="refrescar-btn">Refrescar</button>
       </div>
     </div>
     <div class="tabs" id="main-tabs">
@@ -288,7 +289,7 @@ app.innerHTML = `
 
     <div class="tab-panel" id="tab-politicas" hidden>
       <div class="section-title">Catálogo de políticas (Doc 4.4)</div>
-      <p class="legend-note">El Gobernador puede activar cualquier política del catálogo completo; el resto de cargos solo las de su propio pool. Duración fija de ${CATALOGOS.duracionPoliticaTicks} ticks, sin cancelación anticipada.</p>
+      <p class="legend-note">El Gobernador puede activar cualquier política del catálogo completo; el resto de cargos solo las de su propio pool. Duración fija de ${CATALOGOS.duracionPoliticaMinutos} min de mundo, sin cancelación anticipada.</p>
       <div id="politicas-tab" class="controls-grid"></div>
     </div>
 
@@ -384,6 +385,7 @@ const settlementBuildingTooltipEl = document.getElementById('settlement-building
 const legendEl = document.getElementById('legend')!;
 const legendBodyEl = document.getElementById('legend-body')!;
 const logEl = document.getElementById('log')!;
+const relojMundoEl = document.getElementById('reloj-mundo')!;
 const asentamientosPanelEl = document.getElementById('asentamientos-panel')!;
 const politicaPanelEl = document.getElementById('politica-panel')!;
 const economiaPanelEl = document.getElementById('economia-panel')!;
@@ -500,7 +502,7 @@ function actualizarInfoFlota(state: GameState): void {
     <div class="kv-row"><span>Disponibles</span><span>${info.disponibles}</span></div>
     <div class="kv-row"><span>En tránsito</span><span>${info.enTransito}</span></div>
     <div class="kv-row"><span>Volviendo</span><span>${info.retornando}</span></div>
-    <div class="kv-row"><span>Cooldown de creación</span><span>${info.ticksCooldownRestantes > 0 ? `${info.ticksCooldownRestantes} ticks` : 'Listo'}</span></div>
+    <div class="kv-row"><span>Cooldown de creación</span><span>${info.cooldownCreacionRestanteMin > 0 ? `${info.cooldownCreacionRestanteMin} min` : 'Listo'}</span></div>
   `;
 }
 flotaAsentamientoSelect.addEventListener('change', () => actualizarInfoFlota(gameStore.getState()));
@@ -599,7 +601,7 @@ function renderPanelAsentamientos(state: GameState): void {
         <div class="registro-asentamiento-summary">
           <div class="registro-summary-item"><span>Población</span><strong>${pesants + artesanos + nobleza}</strong><small>${pesants} pesants · ${artesanos} artesanos · ${nobleza} nobleza</small></div>
           <div class="registro-summary-item"><span>Edificios</span><strong>${activos}</strong><small>${enCurso} en curso o en cola</small></div>
-          <div class="registro-summary-item"><span>Radio potencial</span><strong>${Math.round(a.radioPotencial)}</strong><small>Fundado en tick ${a.fundadoEnTick}</small></div>
+          <div class="registro-summary-item"><span>Radio potencial</span><strong>${Math.round(a.radioPotencial)}</strong><small>Fundado ${fmtTiempoMundo(a.fundadoEn)}</small></div>
           <div class="registro-summary-item"><span>Viviendas</span><strong>${a.casasCompradas.length}</strong><small>${otrasCasas.length} adquiridas después</small></div>
         </div>
         <div class="registro-asentamiento-health">
@@ -673,7 +675,10 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
   for (const e of a.edificios) {
     const entry = edificiosPorTipo.get(e.tipo) ?? { activos: 0, enConstruccion: [], enCola: [] };
     if (e.estado === 'activo') entry.activos += 1;
-    else if (e.estado === 'en_construccion') entry.enConstruccion.push(e.ticksRestantes);
+    // Fase D: la obra ya no lleva un contador `ticksRestantes` sino la fecha absoluta `completaEn` (Instante
+    // de mundo) — la interfaz muestra los minutos de mundo que faltan contra `state.instante`.
+    else if (e.estado === 'en_construccion')
+      entry.enConstruccion.push(e.completaEn !== undefined ? Math.max(0, Math.round((e.completaEn - state.instante) / 60_000)) : 0);
     else entry.enCola.push(posicionEnCola.get(e.id)!);
     edificiosPorTipo.set(e.tipo, entry);
   }
@@ -684,7 +689,7 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
           ${Array.from(edificiosPorTipo.entries())
             .map(([tipo, e]) => {
               const construccionTxt = e.enConstruccion.length
-                ? e.enConstruccion.map((t) => `${t}t`).join(', ')
+                ? e.enConstruccion.map((m) => `${m} min`).join(', ')
                 : '—';
               const colaTxt = e.enCola.length ? e.enCola.map((p) => `#${p} de ${colaGlobal.length}`).join(', ') : '—';
               return `<tr><td>${EDIFICIO_NOMBRE[tipo] ?? tipo}</td><td>${EDIFICIO_FUNCION[tipo] ?? '—'}</td><td>${e.activos}</td><td>${construccionTxt}</td><td>${colaTxt}</td></tr>`;
@@ -725,20 +730,20 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
     : '<p class="legend-note">Sin mejoras disponibles ahora mismo.</p>';
 
   const produccion = gameStore.produccionInfo(a);
-  const consumoPorTipoYRecurso = new Map<string, { tipo: string; recurso: string; activos: number; cantidadPorTick: number }>();
+  const consumoPorTipoYRecurso = new Map<string, { tipo: string; recurso: string; activos: number; cantidadPorMinuto: number }>();
   for (const edificio of a.edificios) {
     if (edificio.estado !== 'activo') continue;
     const economia = gameStore.edificioEconomiaInfo(a, edificio);
     for (const item of economia.consumoTotal) {
       const clave = `${edificio.tipo}:${item.recurso}`;
       const anterior = consumoPorTipoYRecurso.get(clave);
-      if (anterior) anterior.cantidadPorTick += item.cantidadPorTick;
+      if (anterior) anterior.cantidadPorMinuto += item.cantidadPorMinuto;
       else {
         consumoPorTipoYRecurso.set(clave, {
           tipo: edificio.tipo,
           recurso: item.recurso,
           activos: a.edificios.filter((e) => e.estado === 'activo' && e.tipo === edificio.tipo).length,
-          cantidadPorTick: item.cantidadPorTick,
+          cantidadPorMinuto: item.cantidadPorMinuto,
         });
       }
     }
@@ -748,12 +753,12 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
   const poblacion = gameStore.poblacionInfo(a);
   const produccionHtml = produccion.length
     ? `<table class="mini-table">
-        <thead><tr><th>Edificio</th><th>Activos</th><th>Recurso</th><th>Producción/tick</th></tr></thead>
+        <thead><tr><th>Edificio</th><th>Activos</th><th>Recurso</th><th>Producción/min</th></tr></thead>
         <tbody>
           ${produccion
             .map(
               (p) =>
-                `<tr><td>${EDIFICIO_NOMBRE[p.tipo] ?? p.tipo}</td><td>${p.activos}</td><td><span class="resource-inline-icon" aria-hidden="true">${RECURSO_ICONO[p.recurso] ?? '📦'}</span>${RECURSO_NOMBRE[p.recurso] ?? p.recurso}</td><td>${Math.floor(p.cantidadPorTick)}</td></tr>`
+                `<tr><td>${EDIFICIO_NOMBRE[p.tipo] ?? p.tipo}</td><td>${p.activos}</td><td><span class="resource-inline-icon" aria-hidden="true">${RECURSO_ICONO[p.recurso] ?? '📦'}</span>${RECURSO_NOMBRE[p.recurso] ?? p.recurso}</td><td>${Math.floor(p.cantidadPorMinuto)}</td></tr>`
             )
             .join('')}
         </tbody>
@@ -769,18 +774,18 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
               (c) => {
                 const producidoEsteTick = produccion
                   .filter((item) => item.recurso === c.recurso)
-                  .reduce((total, item) => total + item.cantidadPorTick, 0);
+                  .reduce((total, item) => total + item.cantidadPorMinuto, 0);
                 const disponibleParaConsumo = a.almacen[c.recurso]?.cantidad ?? 0;
                 const consumosAnteriores = consumo
                   .slice(0, consumo.indexOf(c))
                   .filter((item) => item.recurso === c.recurso)
-                  .reduce((total, item) => total + item.cantidadPorTick, 0);
+                  .reduce((total, item) => total + item.cantidadPorMinuto, 0);
                 const cubierto = Math.min(
-                  c.cantidadPorTick,
+                  c.cantidadPorMinuto,
                   Math.max(0, disponibleParaConsumo + producidoEsteTick - consumosAnteriores)
                 );
                 const formatearCantidad = (cantidad: number) => Math.floor(cantidad).toString();
-                return `<tr><td>${EDIFICIO_NOMBRE[c.tipo] ?? c.tipo}</td><td>${c.activos}</td><td><span class="resource-inline-icon" aria-hidden="true">${RECURSO_ICONO[c.recurso] ?? '📦'}</span>${RECURSO_NOMBRE[c.recurso] ?? c.recurso}</td><td>${formatearCantidad(cubierto)}/${formatearCantidad(c.cantidadPorTick)}</td></tr>`;
+                return `<tr><td>${EDIFICIO_NOMBRE[c.tipo] ?? c.tipo}</td><td>${c.activos}</td><td><span class="resource-inline-icon" aria-hidden="true">${RECURSO_ICONO[c.recurso] ?? '📦'}</span>${RECURSO_NOMBRE[c.recurso] ?? c.recurso}</td><td>${formatearCantidad(cubierto)}/${formatearCantidad(c.cantidadPorMinuto)}</td></tr>`;
               }
             )
             .join('')}
@@ -795,7 +800,7 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
           ${a.politicasActivas
             .map((p) => {
               const def = CATALOGOS.politicas.find((c) => c.id === p.politicaId);
-              return `<tr><td>${def?.nombre ?? p.politicaId}</td><td>${p.cargo}</td><td>${def ? efectoPolitica(def) : '—'}</td><td>t${p.expiraEnTick}</td></tr>`;
+              return `<tr><td>${def?.nombre ?? p.politicaId}</td><td>${p.cargo}</td><td>${def ? efectoPolitica(def) : '—'}</td><td>${fmtTiempoMundo(p.expiraEn)}</td></tr>`;
             })
             .join('')}
         </tbody>
@@ -840,21 +845,21 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
   const mantenimiento = gameStore.mantenimientoInfo(a);
   const produccionPorRecurso = new Map<string, number>();
   for (const item of gameStore.produccionInfo(a)) {
-    produccionPorRecurso.set(item.recurso, (produccionPorRecurso.get(item.recurso) ?? 0) + item.cantidadPorTick);
+    produccionPorRecurso.set(item.recurso, (produccionPorRecurso.get(item.recurso) ?? 0) + item.cantidadPorMinuto);
   }
   const mantenimientoHtml = mantenimiento.enGracia
-    ? `<p class="legend-note">En periodo de gracia (recién fundado): sin coste todavía — ${mantenimiento.ticksParaFinGracia} ticks restantes.</p>`
+    ? `<p class="legend-note">En periodo de gracia (recién fundado): sin coste todavía — ${mantenimiento.minutosParaFinGracia} min restantes.</p>`
     : mantenimiento.items.length
       ? `<table class="mini-table">
-          <thead><tr><th>Recurso</th><th>Disponible</th><th>Producción/tick</th><th>Coste/tick</th><th>Valor (producción-coste)</th></tr></thead>
+          <thead><tr><th>Recurso</th><th>Disponible</th><th>Producción/min</th><th>Coste/min</th><th>Valor (producción-coste)</th></tr></thead>
           <tbody>
             ${mantenimiento.items
               .map(
                 (i) => {
                   const produccion = produccionPorRecurso.get(i.recurso) ?? 0;
-                  const valor = produccion - i.costoPorTick;
+                  const valor = produccion - i.costoPorMinuto;
                   const nombre = RECURSO_NOMBRE[i.recurso] ?? i.recurso;
-                  return `<tr class="${i.cubierto ? '' : 'fila-deficit'}"><td><span class="resource-inline-icon" aria-hidden="true">${RECURSO_ICONO[i.recurso] ?? '📦'}</span>${nombre}</td><td>${i.disponible.toFixed(0)}</td><td>${produccion.toFixed(1)}</td><td>${i.costoPorTick.toFixed(1)}</td><td class="${valor < 0 ? 'valor-negativo' : ''}">${valor.toFixed(1)}</td></tr>`;
+                  return `<tr class="${i.cubierto ? '' : 'fila-deficit'}"><td><span class="resource-inline-icon" aria-hidden="true">${RECURSO_ICONO[i.recurso] ?? '📦'}</span>${nombre}</td><td>${i.disponible.toFixed(0)}</td><td>${produccion.toFixed(1)}</td><td>${i.costoPorMinuto.toFixed(1)}</td><td class="${valor < 0 ? 'valor-negativo' : ''}">${valor.toFixed(1)}</td></tr>`;
                 }
               )
               .join('')}
@@ -870,7 +875,7 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
           ${a.escuadrones
             .map(
               (e) =>
-                `<tr><td>${e.nombre}${e.heridoHastaTick ? ' (herido)' : ''}</td><td>${e.jugadorId}</td><td>${e.origen}</td><td>${nivelTropaTxt(e.tropaId)}</td><td>${e.cantidad}</td><td>${e.veterania.toFixed(1)}</td><td>${e.moral.toFixed(0)}</td></tr>`
+                `<tr><td>${e.nombre}${e.heridoHasta ? ' (herido)' : ''}</td><td>${e.jugadorId}</td><td>${e.origen}</td><td>${nivelTropaTxt(e.tropaId)}</td><td>${e.cantidad}</td><td>${e.veterania.toFixed(1)}</td><td>${e.moral.toFixed(0)}</td></tr>`
             )
             .join('')}
         </tbody>
@@ -902,7 +907,7 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
                 <td>${RECURSO_NOMBRE[acuerdo.recursoA] ?? acuerdo.recursoA} ↔ ${RECURSO_NOMBRE[acuerdo.recursoB] ?? acuerdo.recursoB}<br/><span class="legend-note">con ${otro?.nombre ?? otro?.id ?? asentamientoOtroId}</span></td>
                 <td>${porcentaje}%<br/><span class="legend-note">A: ${acuerdo.cantidadEntregadaA}/${acuerdo.cantidadTotalA} · B: ${acuerdo.cantidadEntregadaB}/${acuerdo.cantidadTotalB}</span></td>
                 <td>${caravanasAsignadas}</td>
-                <td>t${acuerdo.expiraEnTick}</td>
+                <td>${fmtTiempoMundo(acuerdo.expiraEn)}</td>
               </tr>`;
             })
             .join('')}
@@ -941,7 +946,7 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
           <div class="kv-row"><span>Facción</span><span>${faccion?.nombre ?? a.faccionId}</span></div>
           <div class="kv-row"><span>Nivel</span><span>${a.nivel}</span></div>
           <div class="kv-row"><span>Radio potencial</span><span>${Math.round(a.radioPotencial)}</span></div>
-          <div class="kv-row"><span>Fundado en tick</span><span>${a.fundadoEnTick}</span></div>
+          <div class="kv-row"><span>Fundado</span><span>${fmtTiempoMundo(a.fundadoEn)}</span></div>
         </div>
         <div class="kv-row" style="margin-top:6px"><span>Progreso de nivel</span><span>${nivelTexto}</span></div>
         <div class="mantenimiento-bar"><div class="mantenimiento-fill" style="width:${nivelPorcentaje}%"></div></div>
@@ -953,7 +958,7 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
       </div>
 
       <div class="detail-section">
-        <h3>Mantenimiento — consumo por tick</h3>
+        <h3>Mantenimiento — consumo por minuto</h3>
         ${mantenimientoHtml}
       </div>
 
@@ -1023,7 +1028,7 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
 
       <div class="detail-section">
         <h3>Mejoras de edificios disponibles</h3>
-        <p class="legend-note">La mejora automática evalúa cada edificio activo cada tick — control manual de jugador (Gobernador/Maestro de Obras), no de administración.</p>
+        <p class="legend-note">La mejora automática evalúa cada edificio activo en cada tick del servidor — control manual de jugador (Gobernador/Maestro de Obras), no de administración.</p>
         ${mejorasHtml}
       </div>
 
@@ -1047,7 +1052,7 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
 
       <div class="settlement-detail-panel${asentamientoDetalleTab === 'produccion' ? ' active' : ''}" data-settlement-detail-panel="produccion" role="tabpanel">
       <div class="detail-section">
-        <h3>Producción — por tick</h3>
+        <h3>Producción — por minuto</h3>
         ${produccionHtml}
       </div>
 
@@ -1194,7 +1199,7 @@ function renderDetalleFaccion(faccion: Faccion, state: GameState): string {
               const otraId = esA ? r.faccionBId : r.faccionAId;
               const otraNombre = state.facciones.find((f) => f.id === otraId)?.nombre ?? otraId;
               const rol = r.tipo === 'vasallaje' ? (esA ? 'Señora' : 'Vasalla') : '—';
-              const tributo = r.tributo ? `${r.tributo.cantidadPorTick}/tick ${RECURSO_NOMBRE[r.tributo.recurso] ?? r.tributo.recurso}` : '—';
+              const tributo = r.tributo ? `${r.tributo.cantidadPorMinuto}/min ${RECURSO_NOMBRE[r.tributo.recurso] ?? r.tributo.recurso}` : '—';
               return `<tr><td>${r.tipo}</td><td>${otraNombre}</td><td>${rol}</td><td>${r.estado}</td><td>${tributo}</td></tr>`;
             })
             .join('')}
@@ -1228,7 +1233,7 @@ function renderDetalleFaccion(faccion: Faccion, state: GameState): string {
           Controlada por NPC (juega sola)
         </label>
         <p class="legend-note">
-          El NPC asume el papel de Gobernador/Tesorero/Rey de esta Facción a partir del próximo tick: si todavía
+          El NPC asume el papel de Gobernador/Tesorero/Rey de esta Facción en el próximo avance del mundo: si todavía
           no tiene ningún asentamiento se funda uno solo (5 fundadores propios); luego cargos y reserva de
           madera, Mercado y caravana propia, trueques de supervivencia (solo con otras Facciones NPC),
           reclutamiento, ataque a campamentos de bandidos y expansión con Caravanas de Fundación. Se puede
@@ -1358,7 +1363,7 @@ function renderDetalleJugador(jugadorId: string, state: GameState): string {
 
   const historial = state.historialJugadores[jugadorId] ?? [];
   const historialHtml = historial.length
-    ? `<div class="log-panel">${historial.map((e) => `<div>[t${e.tick}] ${e.mensaje}</div>`).join('')}</div>`
+    ? `<div class="log-panel">${historial.map((e) => `<div>[${fmtTiempoMundo(e.momento)}] ${e.mensaje}</div>`).join('')}</div>`
     : '<p class="legend-note">Sin actividad registrada todavía.</p>';
 
   // Escuadrones reclutados por este jugador (Doc 2.5): cada uno vive en el `asentamiento.escuadrones` donde
@@ -1374,7 +1379,7 @@ function renderDetalleJugador(jugadorId: string, state: GameState): string {
           ${escuadronesJugador
             .map(
               ({ asentamientoId, escuadron: e }) =>
-                `<tr><td>${e.nombre}${e.heridoHastaTick ? ' (herido)' : ''}</td><td>${asentamientoId}</td><td>${e.origen}</td><td>${nivelTropaTxt(e.tropaId)}</td><td>${e.cantidad}</td><td>${e.veterania.toFixed(1)}</td><td>${e.moral.toFixed(0)}</td></tr>`
+                `<tr><td>${e.nombre}${e.heridoHasta ? ' (herido)' : ''}</td><td>${asentamientoId}</td><td>${e.origen}</td><td>${nivelTropaTxt(e.tropaId)}</td><td>${e.cantidad}</td><td>${e.veterania.toFixed(1)}</td><td>${e.moral.toFixed(0)}</td></tr>`
             )
             .join('')}
         </tbody>
@@ -1488,7 +1493,7 @@ function renderPoliticasTab(): void {
         <h2>${p.nombre}</h2>
         <div class="kv-row"><span>Cargo</span><span>${p.cargo}</span></div>
         <div class="kv-row"><span>Slots simultáneos (${p.cargo})</span><span>${slots.base} (fijo)</span></div>
-        <div class="kv-row"><span>Duración</span><span>${CATALOGOS.duracionPoliticaTicks} ticks</span></div>
+        <div class="kv-row"><span>Duración</span><span>${CATALOGOS.duracionPoliticaMinutos} min</span></div>
         <p class="legend-note">${efectoPolitica(p)}</p>
       </div>`;
     })
@@ -1513,7 +1518,7 @@ function renderPanelPolitica(state: GameState): void {
     .map((r) => {
       const a = state.facciones.find((f) => f.id === r.faccionAId)?.nombre ?? r.faccionAId;
       const b = state.facciones.find((f) => f.id === r.faccionBId)?.nombre ?? r.faccionBId;
-      const trib = r.tributo ? ` (tributo ${r.tributo.cantidadPorTick}/tick ${r.tributo.recurso})` : '';
+      const trib = r.tributo ? ` (tributo ${r.tributo.cantidadPorMinuto}/min ${r.tributo.recurso})` : '';
       return `<div class="registro-politica-relation"><span class="registro-relation-type">${r.tipo}</span><span class="registro-relation-route">${a} <b aria-hidden="true">→</b> ${b}</span><span class="registro-relation-status">${r.estado}${trib}</span></div>`;
     })
     .join('');
@@ -1540,7 +1545,7 @@ function renderPanelMilitar(state: GameState): void {
         a.escuadrones
           .map(
             (e) =>
-              `<div class="registro-squad"><div><strong>${e.nombre}</strong><small>${e.id} · ${e.jugadorId}</small></div><span>${e.cantidad} soldados</span><span>${nivelTropaTxt(e.tropaId)}</span><span>Moral ${e.moral.toFixed(0)}</span>${e.heridoHastaTick ? `<em>Herido hasta t${e.heridoHastaTick}</em>` : ''}</div>`
+              `<div class="registro-squad"><div><strong>${e.nombre}</strong><small>${e.id} · ${e.jugadorId}</small></div><span>${e.cantidad} soldados</span><span>${nivelTropaTxt(e.tropaId)}</span><span>Moral ${e.moral.toFixed(0)}</span>${e.heridoHasta ? `<em>Herido hasta ${fmtTiempoMundo(e.heridoHasta)}</em>` : ''}</div>`
           )
           .join('') || '<div>Sin escuadrones.</div>';
       return `<article class="registro-militar-settlement"><header><div><h3>${a.nombre ?? a.id}</h3><p>${state.facciones.find((f) => f.id === a.faccionId)?.nombre ?? a.faccionId}</p></div><div class="registro-military-power"><strong>${poder.soldados}</strong><small>soldados · poder ${poder.poder.toFixed(1)}</small></div></header><div class="registro-military-buildings"><span class="${tieneFundicion ? 'is-active' : ''}">Fundición ${tieneFundicion ? 'activa' : 'inactiva'}</span><span class="${tieneGranFundicion ? 'is-active' : ''}">Gran Fundición ${tieneGranFundicion ? 'activa' : 'inactiva'}</span></div><div class="registro-squad-list">${escuadronesHtml}</div></article>`;
@@ -1559,7 +1564,7 @@ function renderPanelProgresion(state: GameState): void {
     ? `<div class="registro-title-grid">${state.titulos
         .map((t) => `<article class="registro-title-card"><span class="registro-title-mark">✦</span><div><h3>${t.nombre}</h3><p>${state.facciones.find((f) => f.id === t.poseedorId)?.nombre ?? t.poseedorId}</p></div><strong>${t.valorMetrica.toFixed(0)}<small>métrica</small></strong></article>`)
         .join('')}</div>`
-    : '<p class="legend-note registro-empty">Sin títulos calculados todavía (avanza un tick).</p>';
+    : '<p class="legend-note registro-empty">Sin títulos calculados todavía (aparecen cuando el mundo avanza).</p>';
 }
 
 /** Caravanas realmente en movimiento (a petición del usuario: punto de partida, destino, carga, % de viaje
@@ -1633,7 +1638,7 @@ function renderPanelEconomia(state: GameState): void {
               <div class="trade-active-metrics">
                 <div class="trade-delivery-card"><span>📦 Entrega de A</span><strong>${t.cantidadEntregadaA.toFixed(0)} <small>/ ${t.cantidadTotalA} ${RECURSO_NOMBRE[t.recursoA] ?? t.recursoA}</small></strong></div>
                 <div class="trade-delivery-card"><span>📦 Entrega de B</span><strong>${t.cantidadEntregadaB.toFixed(0)} <small>/ ${t.cantidadTotalB} ${RECURSO_NOMBRE[t.recursoB] ?? t.recursoB}</small></strong></div>
-                <div class="trade-lifetime-card"><span>⏳ Vigencia</span><strong>t${t.creadoEnTick} → t${t.expiraEnTick}</strong><small>${Math.max(0, t.expiraEnTick - state.tick)} ticks restantes</small></div>
+                <div class="trade-lifetime-card"><span>⏳ Vigencia</span><strong>${fmtTiempoMundo(t.creadoEn)} → ${fmtTiempoMundo(t.expiraEn)}</strong><small>${Math.max(0, Math.round((t.expiraEn - state.instante) / 60000))} min restantes</small></div>
               </div>
               <div class="trade-caravans-block"><div class="trade-subsection-title">🚚 Caravanas asignadas <span>${caravanas.length}</span></div>${caravanasHtml}</div>
               <div class="mantenimiento-bar"><div class="mantenimiento-fill" style="width:${porcentaje}%"></div></div>
@@ -1712,7 +1717,7 @@ function renderLeyenda(state: GameState): void {
 }
 
 function renderRegistro(state: GameState): void {
-  logEl.innerHTML = state.log.map((e) => `<div>[t${e.tick}] ${e.mensaje}</div>`).join('');
+  logEl.innerHTML = state.log.map((e) => `<div>[${fmtTiempoMundo(e.momento)}] ${e.mensaje}</div>`).join('');
 }
 
 function actualizarTabs(): void {
@@ -1843,6 +1848,7 @@ function terrenoCacheParaFrame(mapa: DrawState['mapa']): HTMLCanvasElement {
 function render(): void {
   const state = gameStore.getState();
 
+  relojMundoEl.textContent = `🕑 ${fmtTiempoMundo(state.instante)}`;
   actualizarControlesVista(state);
   // Si el asentamiento en vista ya no existe (p. ej. cayó en ruinas o se importó otra partida), se vuelve al mapa general.
   const asentamientoEnVista = state.asentamientos.find((a) => a.id === asentamientoSeleccionadoId);
@@ -1929,9 +1935,9 @@ function actualizarTooltipEdificioAsentamiento(ev: MouseEvent): void {
 
   const economia = gameStore.edificioEconomiaInfo(asentamiento, edificio);
   const estado = edificio.estado === 'activo' ? 'Activo' : edificio.estado === 'en_construccion' ? 'En construcción' : 'En cola';
-  const filasEconomia = (items: { recurso: string; cantidadPorTick: number }[], vacio: string) =>
+  const filasEconomia = (items: { recurso: string; cantidadPorMinuto: number }[], vacio: string) =>
     items.length
-      ? items.map((item) => `<div><span>${RECURSO_NOMBRE[item.recurso] ?? item.recurso}</span><strong>${item.cantidadPorTick.toFixed(1)}/tick</strong></div>`).join('')
+      ? items.map((item) => `<div><span>${RECURSO_NOMBRE[item.recurso] ?? item.recurso}</span><strong>${item.cantidadPorMinuto.toFixed(1)}/min</strong></div>`).join('')
       : `<span class="settlement-tooltip-muted">${vacio}</span>`;
 
   settlementBuildingTooltipEl.innerHTML = `
@@ -1957,9 +1963,16 @@ canvas.addEventListener('mouseleave', () => {
   if (vistaMapa === 'asentamiento') ocultarTooltipEdificioAsentamiento();
 });
 
-document.getElementById('tick-btn')!.addEventListener('click', async () => {
-  await gameStore.avanzarTick();
+document.getElementById('refrescar-btn')!.addEventListener('click', () => {
+  void gameStore.refrescar();
 });
+
+// El mundo avanza SOLO en el servidor (reloj de mundo, Fase D / D5). Esta interfaz no tiene sincronización
+// en vivo (ni WebSocket ni deltas), así que re-lee el estado cada 5 s mientras la pestaña esté visible —
+// suficiente para un panel de administración, sin martillear el servidor cuando nadie lo mira.
+setInterval(() => {
+  if (!document.hidden) void gameStore.refrescar();
+}, 5000);
 
 document.getElementById('regenerar-btn')!.addEventListener('click', async () => {
   const confirmado = window.confirm('Esto descarta la partida actual y crea una nueva. Se pierde todo el progreso. ¿Continuar?');
@@ -1974,7 +1987,7 @@ document.getElementById('exportar-btn')!.addEventListener('click', () => {
   const url = URL.createObjectURL(blob);
   const enlace = document.createElement('a');
   enlace.href = url;
-  enlace.download = `bronze-age-sim-tick${gameStore.getState().tick}.json`;
+  enlace.download = `bronze-age-sim-${new Date(gameStore.getState().instante).toISOString().slice(0, 16).replace(/[:T]/g, '-')}.json`;
   enlace.click();
   URL.revokeObjectURL(url);
 });

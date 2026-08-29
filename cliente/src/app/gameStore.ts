@@ -36,20 +36,20 @@ import type {
   ZonaFaccion,
   ZonaInfluencia,
 } from '@motor/domain/types';
-import { EDIFICIO_CATALOGO, MANTENIMIENTO, NECESIDADES, NIVEL_FACCION, POLITICAS, POLITICA_CATALOGO, REJILLA_ASENTAMIENTO, TROPAS_RECLUTABLES } from '@motor/constants';
+import { EDIFICIO_CATALOGO, MANTENIMIENTO, NECESIDADES, NIVEL_FACCION, POLITICAS, POLITICA_CATALOGO, REJILLA_ASENTAMIENTO, SIMULACION, TROPAS_RECLUTABLES } from '@motor/constants';
 import { crearMapa, type EstadoMapa, type Mapa } from '@motor/world/mapa';
 import { exportarParaUnityTerrain, UNITY_EXPORT_DEFAULT, type ExportUnityResultado, type OpcionesExportUnity } from '@motor/world/exportUnity';
 
 export { UNITY_EXPORT_DEFAULT };
 import {
-  produccionPorTick,
+  produccionPorMinuto,
   manoObraInfo as calcularManoObraInfo,
   progresoNivelAsentamiento,
   capacidadViviendaPesants,
   capacidadViviendaArtesanos,
   edificiosPorTipoYEstado,
   cupoCaravanas as cupoCaravanasEngine,
-  ticksCooldownCaravanaRestantes as ticksCooldownCaravanaRestantesEngine,
+  cooldownCaravanaRestante as cooldownCaravanaRestanteEngine,
   tieneMercadoActivo as tieneMercadoActivoEngine,
   nivelActualDe,
   ratioManoObraArtesanos,
@@ -86,16 +86,26 @@ import {
 import { poderEscuadron } from '@motor/engine/combate';
 
 // --- Capa de partida: vive en el servidor, se habla por HTTP ---
-import type { EstadoAdmin } from '@motor/session/estado';
+import type { EstadoAdmin, EventoLogAdmin } from '@motor/session/estado';
 import type { EventoDominio } from '@motor/domain/eventos';
-import { proyectarLog } from '@motor/session/estado';
+import { isoDeInstante, proyectarLog } from '@motor/session/estado';
 import type { ParamsDe, TipoComando } from '@motor/session/comandos/registro';
 import type { MapaGenerado } from '@motor/worldgen';
-import { ApiError, avanzarTick as apiAvanzarTick, consultarEstado, crearOResumirPartida, ejecutarComando, obtenerMapa } from './apiCliente';
+import { ApiError, consultarEstado, crearOResumirPartida, ejecutarComando, obtenerMapa } from './apiCliente';
 
-export interface EventoLog {
-  tick: number;
-  mensaje: string;
+/** Entrada de log en texto — Fase D: `momento` (ISO de mundo) en vez de `tick`. Mismo shape que
+ * `EventoLogAdmin` del motor (`proyectarLog` la produce). */
+export type EventoLog = EventoLogAdmin;
+
+const EPOCA_MUNDO_MS = new Date(SIMULACION.epocaInicial).getTime();
+
+/** Tiempo de mundo legible ("día D · HH:MM") desde un `Instante` (ms) o su forma ISO — para la interfaz.
+ * Fase D: los campos temporales del estado son `Instante`/`Duracion` de mundo, no ordinales de tick. */
+export function fmtTiempoMundo(t: number | string): string {
+  const ms = typeof t === 'string' ? Date.parse(t) : t;
+  const min = Math.max(0, Math.round((ms - EPOCA_MUNDO_MS) / 60_000));
+  const dia = Math.floor(min / 1440);
+  return `día ${dia} · ${String(Math.floor((min % 1440) / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
 }
 
 /**
@@ -133,7 +143,7 @@ export interface SimulacionExportada {
   titulos: Titulo[];
   caminos?: CaminoComercial[];
   campamentosBandidos?: CampamentoBandido[];
-  bandidosProximoSpawnTick?: number;
+  bandidosProximoSpawnEn?: number;
   faccionesNpcIds?: string[];
   log: EventoLog[];
   historialJugadores: Record<string, EventoLog[]>;
@@ -147,7 +157,7 @@ export const CATALOGOS = {
   recursosTrueque: ['madera', 'piedra', 'trigo', 'cobre', 'estano', 'oro', 'livestock'] as RecursoTipo[],
   recursosMercado: ['madera', 'piedra', 'trigo', 'cobre', 'estano', 'livestock'] as RecursoTipo[],
   politicas: POLITICA_CATALOGO,
-  duracionPoliticaTicks: POLITICAS.duracionTicksPorDefecto,
+  duracionPoliticaMinutos: POLITICAS.duracionMinutosPorDefecto,
   slotsPorCargoBase: POLITICAS.slotsPorCargo,
   nivelFaccionPorSlotExtraGobernador: POLITICAS.nivelFaccionPorSlotExtraGobernador,
   maximoEdificiosEnCola: NECESIDADES.maximoEnCola,
@@ -167,14 +177,14 @@ export const CATALOGOS = {
     .map((tipo) => {
       const def = EDIFICIO_CATALOGO[tipo] as {
         costo: Partial<Record<string, number>>;
-        tiempoConstruccionTicks: number;
+        tiempoConstruccionMinutos: number;
         requisitoNivelAsentamientoConstruccion?: number;
         nivelFaccionMinimo?: number;
       };
       return {
         tipo,
         costo: def.costo,
-        tiempoConstruccionTicks: def.tiempoConstruccionTicks,
+        tiempoConstruccionMinutos: def.tiempoConstruccionMinutos,
         requisitoNivelAsentamiento: def.requisitoNivelAsentamientoConstruccion ?? 0,
         requisitoNivelFaccion: def.nivelFaccionMinimo ?? 0,
       };
@@ -298,7 +308,7 @@ export class GameStore {
   }
 
   private registrarRechazoEfimero(mensaje: string): void {
-    this.logEfimero = [{ tick: this.estadoCache.tick, mensaje }, ...this.logEfimero].slice(0, 50);
+    this.logEfimero = [{ momento: isoDeInstante(this.estadoCache.instante), mensaje }, ...this.logEfimero].slice(0, 50);
   }
 
   private mensajeDeError(err: unknown): string {
@@ -457,21 +467,21 @@ export class GameStore {
   /** Coste de mantenimiento del tick actual, recurso por recurso, con lo disponible y si alcanza a cubrirlo. */
   mantenimientoInfo(asentamiento: Asentamiento): {
     enGracia: boolean;
-    ticksParaFinGracia: number;
-    items: { recurso: string; costoPorTick: number; disponible: number; cubierto: boolean }[];
+    minutosParaFinGracia: number;
+    items: { recurso: string; costoPorMinuto: number; disponible: number; cubierto: boolean }[];
   } {
-    const ticksDesdeFundacion = this.state.tick - asentamiento.fundadoEnTick;
-    const enGracia = ticksDesdeFundacion < MANTENIMIENTO.graciaTicks;
+    const minutosDesdeFundacion = (this.state.instante - asentamiento.fundadoEn) / 60_000;
+    const enGracia = minutosDesdeFundacion < MANTENIMIENTO.graciaMinutos;
     const capital = encontrarCapital(asentamiento.faccionId, this.state.asentamientos);
     const costo = calcularCostoMantenimiento(asentamiento, capital);
     const items = Object.entries(costo).map(([recurso, cantidad]) => {
       const disponible = asentamiento.almacen[recurso]?.cantidad ?? 0;
-      return { recurso, costoPorTick: cantidad ?? 0, disponible, cubierto: disponible >= (cantidad ?? 0) };
+      return { recurso, costoPorMinuto: cantidad ?? 0, disponible, cubierto: disponible >= (cantidad ?? 0) };
     });
     const costoTrigo = consumoComidaPoblacion(asentamiento) + consumoRacionTropas(asentamiento);
     const trigoDisponible = asentamiento.almacen['trigo']?.cantidad ?? 0;
-    items.push({ recurso: 'trigo', costoPorTick: costoTrigo, disponible: trigoDisponible, cubierto: trigoDisponible >= costoTrigo });
-    return { enGracia, ticksParaFinGracia: Math.max(0, MANTENIMIENTO.graciaTicks - ticksDesdeFundacion), items };
+    items.push({ recurso: 'trigo', costoPorMinuto: costoTrigo, disponible: trigoDisponible, cubierto: trigoDisponible >= costoTrigo });
+    return { enGracia, minutosParaFinGracia: Math.max(0, Math.round(MANTENIMIENTO.graciaMinutos - minutosDesdeFundacion)), items };
   }
 
   /** Slots de política disponibles para `cargo` según el nivel de Facción (el Gobernador escala con el nivel). */
@@ -482,30 +492,30 @@ export class GameStore {
   /** Producción por tick de cada edificio activo de extracción/producción primaria, agrupada por tipo. */
   produccionInfo(asentamiento: Asentamiento): ProduccionItem[] {
     const zona = this.getZonas().find((z) => z.asentamientoId === asentamiento.id);
-    return produccionPorTick(asentamiento, this.getMapa(), zona?.poligono ?? []);
+    return produccionPorMinuto(asentamiento, this.getMapa(), zona?.poligono ?? []);
   }
 
   /** Producción y consumo estimados del edificio individual para el tooltip de la vista urbana. */
   edificioEconomiaInfo(asentamiento: Asentamiento, edificio: Pick<Edificio, 'tipo' | 'nivelInterno' | 'estado' | 'posicion' | 'ambito'>): {
-    produccion: { recurso: string; cantidadPorTick: number }[];
-    consumo: { recurso: string; cantidadPorTick: number }[];
-    consumoTotal: { recurso: string; cantidadPorTick: number }[];
+    produccion: { recurso: string; cantidadPorMinuto: number }[];
+    consumo: { recurso: string; cantidadPorMinuto: number }[];
+    consumoTotal: { recurso: string; cantidadPorMinuto: number }[];
   } {
     const activosDelTipo = asentamiento.edificios.filter((e) => e.tipo === edificio.tipo && e.estado === 'activo').length;
     if ((edificio.estado !== undefined && edificio.estado !== 'activo') || activosDelTipo === 0 || edificio.tipo === 'centroUrbano') return { produccion: [], consumo: [], consumoTotal: [] };
 
     const produccionAgregada = this.produccionInfo(asentamiento).filter((item) => item.tipo === edificio.tipo);
-    const produccion = produccionAgregada.map((item) => ({ recurso: item.recurso, cantidadPorTick: item.cantidadPorTick / activosDelTipo }));
+    const produccion = produccionAgregada.map((item) => ({ recurso: item.recurso, cantidadPorMinuto: item.cantidadPorMinuto / activosDelTipo }));
     const definicion = EDIFICIO_CATALOGO[edificio.tipo] as { niveles?: Record<number, { recetas?: { produce: string; produccionBase: number; consumePorUnidad: Record<string, number> }[] }> };
     const recetas = definicion.niveles?.[edificio.nivelInterno ?? 1]?.recetas ?? [];
     const consumo = recetas.flatMap((receta) => {
-      const salida = produccion.find((item) => item.recurso === receta.produce)?.cantidadPorTick ?? 0;
-      return Object.entries(receta.consumePorUnidad).map(([recurso, cantidad]) => ({ recurso, cantidadPorTick: cantidad * salida }));
+      const salida = produccion.find((item) => item.recurso === receta.produce)?.cantidadPorMinuto ?? 0;
+      return Object.entries(receta.consumePorUnidad).map(([recurso, cantidad]) => ({ recurso, cantidadPorMinuto: cantidad * salida }));
     });
     const ratioArtesano = ratioManoObraArtesanos(asentamiento);
     const consumoTotal = recetas.flatMap((receta) => {
       const salidaTotal = receta.produccionBase * ratioArtesano * factorLineaProduccion(edificio as Edificio, receta, asentamiento);
-      return Object.entries(receta.consumePorUnidad).map(([recurso, cantidad]) => ({ recurso, cantidadPorTick: cantidad * salidaTotal }));
+      return Object.entries(receta.consumePorUnidad).map(([recurso, cantidad]) => ({ recurso, cantidadPorMinuto: cantidad * salidaTotal }));
     });
     return { produccion, consumo, consumoTotal };
   }
@@ -514,7 +524,7 @@ export class GameStore {
   poderMilitarInfo(asentamiento: Asentamiento): { soldados: number; poder: number } {
     return {
       soldados: asentamiento.escuadrones.reduce((total, escuadron) => total + escuadron.cantidad, 0),
-      poder: asentamiento.escuadrones.reduce((total, escuadron) => total + poderEscuadron(escuadron, this.state.tick), 0),
+      poder: asentamiento.escuadrones.reduce((total, escuadron) => total + poderEscuadron(escuadron, this.state.instante), 0),
     };
   }
 
@@ -661,7 +671,7 @@ export class GameStore {
     disponibles: number;
     enTransito: number;
     retornando: number;
-    ticksCooldownRestantes: number;
+    cooldownCreacionRestanteMin: number;
   } {
     const propias = this.state.caravanas.filter((c) => c.tipo === 'comercial' && c.origenAsentamientoId === asentamiento.id);
     return {
@@ -670,7 +680,8 @@ export class GameStore {
       disponibles: propias.filter((c) => c.estado === 'disponible').length,
       enTransito: propias.filter((c) => c.estado === 'en_transito').length,
       retornando: propias.filter((c) => c.estado === 'retornando').length,
-      ticksCooldownRestantes: ticksCooldownCaravanaRestantesEngine(asentamiento, this.state.tick),
+      // El motor devuelve una `Duracion` en ms; la interfaz la muestra en minutos de mundo.
+      cooldownCreacionRestanteMin: Math.round(cooldownCaravanaRestanteEngine(asentamiento, this.state.instante) / 60_000),
     };
   }
 
@@ -755,12 +766,11 @@ export class GameStore {
     );
   }
 
-  /** Un tick completo tal como lo pide la interfaz — el tick del motor, el trueque automático de simulación
-   * (apagado por defecto) y el turno del NPC de gobernanza van los tres en el SERVIDOR, dentro de la misma
-   * operación (`RunnerDePartida.avanzarTick`). Aquí solo queda pedirlo y refrescar el estado. */
-  async avanzarTick(): Promise<void> {
+  /** Re-pide el estado completo al servidor. El mundo avanza SOLO en el servidor (reloj de mundo, Fase D /
+   * D5: un tick por minuto real, con catch-up tras reinicio) — la interfaz no lo empuja, solo vuelve a leer.
+   * Lo llama el botón "Refrescar" y el auto-refresco de `main.ts`. */
+  async refrescar(): Promise<void> {
     try {
-      await apiAvanzarTick(this.gameId);
       this.estadoCache = await consultarEstado(this.gameId);
       await this.sincronizarMapa(this.estadoCache.mapaId);
     } catch (err) {
@@ -779,7 +789,7 @@ export class GameStore {
       await crearOResumirPartida(this.gameId, seed, region, true);
       this.estadoCache = await consultarEstado(this.gameId);
       // El único punto donde `sincronizarMapa` de verdad pide algo: regenerar SIEMPRE reemplaza la seed, así
-      // que `mapaId` cambia siempre — a diferencia de `despachar`/`avanzarTick`, donde suele ser un no-op.
+      // que `mapaId` cambia siempre — a diferencia de `despachar`/`refrescar`, donde suele ser un no-op.
       await this.sincronizarMapa(this.estadoCache.mapaId);
       this.mapaCache = null;
       this.zonasFusionadasCache = null;
@@ -810,7 +820,7 @@ export class GameStore {
       titulos: this.state.titulos,
       caminos: this.state.caminos,
       campamentosBandidos: this.state.campamentosBandidos,
-      bandidosProximoSpawnTick: this.state.bandidosProximoSpawnTick,
+      bandidosProximoSpawnEn: this.state.bandidosProximoSpawnEn,
       faccionesNpcIds: this.state.faccionesNpcIds,
       // El formato de archivo v2 guarda el log en texto (es anterior a `eventosDominio`): se proyecta al
       // exportar en vez de arrastrarlo en el estado.

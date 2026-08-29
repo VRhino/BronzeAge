@@ -13,6 +13,7 @@ import { crearServidor } from '../api';
 import { crearRegistroProveedores } from '../../acceso/proveedorIdentidad';
 import { proveedoresPorDefecto } from '../identidad/proveedoresActivos';
 import { crearRepositorioIdentidadEnDisco } from '../identidad/repositorioEnDisco';
+import { instanteDeTick } from '../../session/estado';
 
 /** El operador declara administradores por identidad externa; `dev jefa` es la de las pruebas. */
 const ADMINS = [{ proveedor: 'dev', sujetoId: 'jefa' }];
@@ -122,6 +123,8 @@ describe('GET /admin/partidas (Fase C12: descubrimiento)', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().partidas.map((p: { gameId: string }) => p.gameId).sort()).toEqual(['g1', 'g2']);
     expect(res.json().partidas[0]).toHaveProperty('mapaId');
+    // D4/D6: el resumen fecha la partida con el instante de mundo (el tick interno no viaja).
+    expect(res.json().partidas[0]).toMatchObject({ instante: instanteDeTick(0) });
   });
 
   it('401 sin sesion, 403 sin ser administrador global', async () => {
@@ -138,7 +141,7 @@ describe('POST /admin/partidas', () => {
     const { res } = await partidaCreada('g1');
 
     expect(res.statusCode).toBe(201);
-    expect(res.json()).toEqual({ gameId: 'g1', tick: 0, version: 0, mapaId: expect.any(String) });
+    expect(res.json()).toEqual({ gameId: 'g1', instante: instanteDeTick(0), version: 0, mapaId: expect.any(String) });
   });
 
   it('401 sin sesion — antes de C3 este endpoint era abierto', async () => {
@@ -218,7 +221,7 @@ describe('POST /admin/partidas', () => {
     const res = await app.inject({ method: 'POST', url: '/v1/admin/partidas', headers: admin, payload: { gameId: 'g1', seed: 999, forzar: true } });
 
     expect(res.statusCode).toBe(201);
-    expect(res.json()).toEqual({ gameId: 'g1', tick: 0, version: 0, mapaId: expect.any(String) });
+    expect(res.json()).toEqual({ gameId: 'g1', instante: instanteDeTick(0), version: 0, mapaId: expect.any(String) });
   });
 });
 
@@ -228,7 +231,7 @@ describe('POST /admin/partidas/:gameId/tick', () => {
     const res = await app.inject({ method: 'POST', url: '/v1/admin/partidas/g1/tick', headers: admin });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json().tick).toBe(1);
+    expect(res.json().instante).toBe(instanteDeTick(1));
   });
 
   it('401 sin sesion; 403 para un jugador de la partida', async () => {
@@ -964,7 +967,7 @@ describe('reanudacion tras "reinicio del proceso"', () => {
     const res = await app.inject({ method: 'POST', url: '/v1/admin/partidas', headers: nuevaSesion, payload: { gameId: 'g1', seed: 999 } });
 
     expect(res.statusCode).toBe(201);
-    expect(res.json().tick).toBe(2); // retomó los 2 ticks ya guardados, no volvió a 0
+    expect(res.json().instante).toBe(instanteDeTick(2)); // retomó los 2 ticks ya guardados, no volvió a 0
   });
 });
 

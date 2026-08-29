@@ -1,5 +1,6 @@
 // Fase A5 (Docs/Arquitectura/4_Plan_Evolucion_Tareas.md): `bandidos.ts` migrado.
 import { describe, expect, it } from 'vitest';
+import { instanteDeTest } from './fixtures';
 import type { CampamentoBandido, Caravana } from '../../domain/types';
 import { createRng } from '../../worldgen';
 import { avanzarAtaquesBandidos, avanzarSpawnBandidos } from '../bandidos';
@@ -28,7 +29,7 @@ describe('eventos de dominio — bandidos.ts', () => {
     const mapa = crearMapaDeterminista(7);
     const { asentamiento } = fundarAsentamientoDeTest(mapa, crearFacciones(), 'faccion-1', []);
 
-    const resultado = avanzarSpawnBandidos([], 0, [], [asentamiento], mapa, 1, 1);
+    const resultado = avanzarSpawnBandidos([], instanteDeTest(0), [], [asentamiento], mapa, instanteDeTest(1), 1);
 
     expect(resultado.campamentos).toHaveLength(1);
     expect(resultado.eventos).toHaveLength(1);

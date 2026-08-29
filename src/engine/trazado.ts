@@ -1193,7 +1193,6 @@ export function crearAnclaNueva(
             tipo: tipoAncla,
             posicion: centroDeRectangulo(rect),
             estado: 'activo',
-            ticksRestantes: 0,
             ambito: 'asentamiento',
             rotado,
           },

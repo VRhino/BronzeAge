@@ -1,5 +1,6 @@
 import type { Asentamiento, Caravana, Faccion, Point } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
+import type { Instante } from '../domain/tiempo';
 
 /** Fase A5 — payloads de los eventos de este subsistema (ver `avanzarCaravanasFundacion`). */
 export interface PayloadCaravanaFundacionPerdida {
@@ -21,7 +22,7 @@ import { avanzarPosicionEnRuta } from './movimiento';
 import { posicionLibreParaFundar } from './zones';
 import { calcularCapFundacion } from './faccion';
 import { fundarAsentamiento, FundacionInvalidaError } from './settlement';
-import { nivelActualDe, puedeCrearCaravana, ticksCooldownCaravanaRestantes } from './asentamientoQuery';
+import { nivelActualDe, puedeCrearCaravana, cooldownCaravanaRestante } from './asentamientoQuery';
 
 export class ExpansionInvalidaError extends Error {}
 
@@ -70,7 +71,7 @@ export function lanzarCaravanaFundacion(
   asentamientosExistentes: Asentamiento[],
   caravanasExistentes: Caravana[],
   numJugadores: number,
-  tickActual: number,
+  instante: Instante,
   contador = 0
 ): { origenActualizado: Asentamiento; caravana: Caravana } {
   if (origen.faccionId !== faccion.id) {
@@ -84,9 +85,9 @@ export function lanzarCaravanaFundacion(
   if (!posicionLibreParaFundar(destino, asentamientosExistentes)) {
     throw new ExpansionInvalidaError('El destino cae dentro de una zona de influencia existente.');
   }
-  if (!puedeCrearCaravana(origen, tickActual)) {
+  if (!puedeCrearCaravana(origen, instante)) {
     throw new ExpansionInvalidaError(
-      `Cooldown de creación de caravanas: faltan ${ticksCooldownCaravanaRestantes(origen, tickActual)} ticks para poder crear otra desde este asentamiento.`
+      `Cooldown de creación de caravanas: faltan ~${Math.round(cooldownCaravanaRestante(origen, instante) / 60_000)} min para poder crear otra desde este asentamiento.`
     );
   }
 
@@ -108,7 +109,7 @@ export function lanzarCaravanaFundacion(
   }
 
   const caravana: Caravana = {
-    id: `caravana-fundacion-${origen.id}-${tickActual}-${contador}`,
+    id: `caravana-fundacion-${origen.id}-${contador}`,
     tipo: 'construccion',
     origenAsentamientoId: origen.id,
     contenido: costo as Record<string, number>,
@@ -122,7 +123,7 @@ export function lanzarCaravanaFundacion(
   };
 
   return {
-    origenActualizado: { ...origen, almacen: descontarRecursos(origen.almacen, costo), ultimaCaravanaCreadaEnTick: tickActual },
+    origenActualizado: { ...origen, almacen: descontarRecursos(origen.almacen, costo), ultimaCaravanaCreadaEn: instante },
     caravana,
   };
 }
@@ -157,7 +158,7 @@ export function avanzarCaravanasFundacion(
   mapa: Mapa,
   facciones: Faccion[],
   asentamientos: Asentamiento[],
-  tickActual: number
+  instante: Instante
 ): { caravanas: Caravana[]; asentamientos: Asentamiento[]; facciones: Faccion[]; eventos: EventoCrudo[] } {
   const eventos: EventoCrudo[] = [];
   const restantes: Caravana[] = [];
@@ -201,7 +202,7 @@ export function avanzarCaravanasFundacion(
         caravana.destinoPosicion,
         caravana.jugadoresFundadoresIds ?? [],
         asentamientosActuales,
-        tickActual
+        instante
       );
       asentamientosActuales = [...asentamientosActuales, resultado.asentamiento];
       faccionesActuales = resultado.facciones;

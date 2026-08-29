@@ -22,6 +22,11 @@ export interface OpcionesExportUnity {
   alturaMaximaMetros?: number;
   /** Resolución del splatmap de biomas — independiente de la del heightmap (Unity no exige 2^n+1 aquí). */
   resolucionSplatmap?: number;
+  /** Momento (ISO 8601) que se estampa en la metadata como "cuándo se generó este export". Lo pasa quien
+   * llama —el servidor (`server/rutas/admin.ts`), que sí puede leer el reloj—: `world/` es núcleo puro y no
+   * lee `Date` (ver `Docs/Arquitectura/10_Modelo_Temporal.md` y `src/__tests__/autoridadTemporal.test.ts`).
+   * Ausente = la metadata no lleva el campo. */
+  generadoEn?: string;
 }
 
 export const UNITY_EXPORT_DEFAULT = {
@@ -46,7 +51,8 @@ interface EntidadExportada {
 
 export interface MetadataExportUnity {
   formatoVersion: 1;
-  generadoEn: string;
+  /** Presente solo si quien llamó pasó `opciones.generadoEn` — ver `OpcionesExportUnity`. */
+  generadoEn?: string;
   seed: number;
   region: RegionId | undefined;
   worldgenVersion: number;
@@ -282,7 +288,7 @@ export function exportarParaUnityTerrain(
 
   const metadata: MetadataExportUnity = {
     formatoVersion: 1,
-    generadoEn: new Date().toISOString(),
+    ...(opciones.generadoEn !== undefined ? { generadoEn: opciones.generadoEn } : {}),
     seed: generado.config.seed,
     region: generado.config.region,
     worldgenVersion: generado.version,

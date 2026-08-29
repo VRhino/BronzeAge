@@ -16,6 +16,7 @@
 // le pasan como parámetro — el motor sigue mandando.
 
 import { LENERA_POR_BOSQUE, REGENERACION_NODOS } from '../constants';
+import { minutos, sumar, type Instante } from '../domain/tiempo';
 import type { BiomaTipo, NodoRecurso, Point, RegionId, RioZona, TerrenoTipo, ZonaBosque } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
 
@@ -88,19 +89,19 @@ export interface OpcionesNodos {
 export interface EstadoMapa {
   /** Cuánto se lleva sacado de cada yacimiento (id de nodo -> unidades). Ausente = intacto. */
   extraido: Record<string, number>;
-  /** Tick en el que un yacimiento agotado (stock 0) vuelve a aparecer con su `cantidadInicial` completa
-   * (id de nodo -> tick, ver `Mapa.avanzarRegeneracion`). Ausente = productivo o todavía sin agendar. */
-  regeneraEnTick: Record<string, number>;
+  /** Instante de mundo en que un yacimiento agotado (stock 0) vuelve a aparecer con su `cantidadInicial`
+   * completa (id de nodo -> `Instante`, ver `Mapa.avanzarRegeneracion`). Ausente = productivo o sin agendar. */
+  regeneraEn: Record<string, Instante>;
 }
 
 export function crearEstadoMapa(): EstadoMapa {
-  return { extraido: {}, regeneraEnTick: {} };
+  return { extraido: {}, regeneraEn: {} };
 }
 
 /** Copia independiente del estado de partida del mapa. Son dos registros de números: clonar cuesta lo que
  * cuesta recorrer los nodos ya tocados, no los ~117 del mundo. */
 function copiarEstadoMapa(estado: EstadoMapa): EstadoMapa {
-  return { extraido: { ...estado.extraido }, regeneraEnTick: { ...estado.regeneraEnTick } };
+  return { extraido: { ...estado.extraido }, regeneraEn: { ...estado.regeneraEn } };
 }
 
 /**
@@ -376,26 +377,26 @@ export class Mapa {
   /**
    * Avanza la regeneración de yacimientos agotados (a petición del usuario): SEGUNDA y única otra vía de
    * mutación del mapa además de `extraer`. Un nodo que llega a stock 0 agenda su reaparición para
-   * `tickActual + N` (N según su tipo, `REGENERACION_NODOS`) la primera vez que se detecta agotado; cuando
-   * ese tick llega, vuelve a stock completo (se borra lo extraído) y se olvida el calendario. Un nodo
-   * agotado de una partida guardada ANTES de que existiera este sistema (sin entrada en `regeneraEnTick`)
+   * `instante + N` (N según su tipo, `REGENERACION_NODOS`) la primera vez que se detecta agotado; cuando
+   * ese instante llega, vuelve a stock completo (se borra lo extraído) y se olvida el calendario. Un nodo
+   * agotado de una partida guardada ANTES de que existiera este sistema (sin entrada en `regeneraEn`)
    * se agenda solo la primera vez que corre esto — autocurativo, no hace falta migrar datos.
    */
-  avanzarRegeneracion(tickActual: number): EventoCrudo[] {
+  avanzarRegeneracion(instante: Instante): EventoCrudo[] {
     const eventos: EventoCrudo[] = [];
     for (const nodo of this.generado.nodos) {
       if (this.stock(nodo.id) > 0) continue;
-      const pendiente = this.estado.regeneraEnTick[nodo.id];
+      const pendiente = this.estado.regeneraEn[nodo.id];
       if (pendiente === undefined) {
-        const cooldown =
-          nodo.tipo === 'livestock' ? REGENERACION_NODOS.livestock.ticksCooldown : REGENERACION_NODOS.metales.ticksCooldown;
-        this.estado.regeneraEnTick[nodo.id] = tickActual + cooldown;
+        const cooldownTicks =
+          nodo.tipo === 'livestock' ? REGENERACION_NODOS.livestock.cooldownMinutos : REGENERACION_NODOS.metales.cooldownMinutos;
+        this.estado.regeneraEn[nodo.id] = sumar(instante, minutos(cooldownTicks));
         this.mutaciones++;
         continue;
       }
-      if (tickActual >= pendiente) {
+      if (instante >= pendiente) {
         delete this.estado.extraido[nodo.id];
-        delete this.estado.regeneraEnTick[nodo.id];
+        delete this.estado.regeneraEn[nodo.id];
         this.mutaciones++;
         eventos.push({
           codigo: 'mapa.yacimiento_regenerado',

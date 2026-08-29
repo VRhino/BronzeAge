@@ -1,5 +1,6 @@
 import type { Asentamiento, OrdenMercado } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
+import type { Instante } from '../domain/tiempo';
 
 /** Fase A5 — payload de `mercado.compra` (ver `avanzarMercado`). */
 export interface PayloadMercadoCompra {
@@ -34,7 +35,7 @@ export function colocarOrdenMercado(
   tipo: 'compra' | 'venta',
   recurso: string,
   cantidad: number,
-  tickActual: number,
+  instante: Instante,
   precioUnitario?: number,
   contador = 0
 ): OrdenMercado {
@@ -52,14 +53,14 @@ export function colocarOrdenMercado(
   }
 
   return {
-    id: `orden-${asentamientoId}-${tickActual}-${contador}`,
+    id: `orden-${asentamientoId}-${contador}`,
     asentamientoId,
     tipo,
     recurso,
     cantidad,
     cantidadCumplida: 0,
     precioUnitario: precioUnitario ?? calcularPrecioReferencia(recurso, asentamientos),
-    creadoEnTick: tickActual,
+    creadoEn: instante,
     estado: 'activa',
   };
 }

@@ -17,14 +17,16 @@ export const RESUMEN_PARTIDA_RESPUESTA = {
   type: 'object',
   properties: {
     gameId: { type: 'string' },
-    tick: { type: 'number' },
+    // Instante de mundo (doc 10), ms desde época — la única referencia temporal del contrato (Fase D cerrada:
+    // el `tick` interno del motor ya no viaja).
+    instante: { type: 'number' },
     version: { type: 'number' },
     mapaId: { type: 'string' },
   },
-  // `mapaId` es de `resumenDe` (Fase C11) igual que los otros tres: si se le olvida a este `required` no pasa
+  // `mapaId` es de `resumenDe` (Fase C11) igual que los demás: si se le olvida a este `required` no pasa
   // nada en tiempo de ejecución (Fastify no exige `required` en la salida), pero se DESCARTARÍA del cuerpo en
   // caliente por no estar en `properties` si algún día faltara aquí — ver la cabecera de este archivo.
-  required: ['gameId', 'tick', 'version', 'mapaId'],
+  required: ['gameId', 'instante', 'version', 'mapaId'],
 } as const;
 
 export const PARAMS_GAME_ID = {

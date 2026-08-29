@@ -5,7 +5,7 @@
 // de la MISMA Facción.
 import { describe, expect, it } from 'vitest';
 import type { Asentamiento, Faccion } from '../../domain/types';
-import { crearFacciones, crearMapaDeterminista, posicionRecomendable } from './fixtures';
+import { crearFacciones, crearMapaDeterminista, posicionRecomendable, instanteDeTest } from './fixtures';
 import { fundarAsentamiento } from '../settlement';
 import { comprarCasa, FaccionInvalidaError } from '../faccion';
 
@@ -23,7 +23,7 @@ function fundarDosAsentamientosDeFaccion(): { asentamientoA: Asentamiento; asent
     posicionRecomendable(mapa),
     ['jugador-a'],
     [],
-    0
+    instanteDeTest(0)
   );
   const faccionesNivel2 = faccionesTrasA.map((f) => (f.id === 'faccion-1' ? { ...f, nivel: 2 } : f));
   const { asentamiento: asentamientoB, facciones: faccionesTrasB } = fundarAsentamiento(
@@ -33,7 +33,7 @@ function fundarDosAsentamientosDeFaccion(): { asentamientoA: Asentamiento; asent
     posicionRecomendable(mapa, [asentamientoA]),
     ['jugador-b'],
     [asentamientoA],
-    0
+    instanteDeTest(0)
   );
 
   return { asentamientoA, asentamientoB, facciones: faccionesTrasB };

@@ -58,16 +58,16 @@ export const proponerRelacion = comando<ParamsProponerRelacion, { relacionId: st
           params.faccionBId,
           params.tributoRecurso ?? 'trigo',
           params.tributoCantidad ?? 0,
-          estado.tick,
+          ctx.instante,
           ctx.ids.siguiente()
         )
-      : proponerAlianzaEngine(estado.facciones, estado.relaciones, params.faccionAId, params.faccionBId, estado.tick, ctx.ids.siguiente());
+      : proponerAlianzaEngine(estado.facciones, estado.relaciones, params.faccionAId, params.faccionBId, ctx.instante, ctx.ids.siguiente());
 
   const siguiente: GameSessionState = { ...estado, relaciones: [...estado.relaciones, nueva] };
   return exito(
     siguiente,
     [
-      evento(ctx, estado, {
+      evento(ctx, {
         codigo: 'diplomacia.relacion_propuesta',
         mensaje: `Relación propuesta: ${nueva.id}.`,
         payload: {
@@ -93,7 +93,7 @@ export const romperRelacion = comando<ParamsRomperRelacion, void>((estado, _mapa
   const resultado = romperRelacionEngine(estado.facciones, estado.relaciones, params.relacionId, params.iniciadorFaccionId);
   const siguiente: GameSessionState = { ...estado, facciones: resultado.facciones, relaciones: resultado.relaciones };
   return exito(siguiente, [
-    evento(ctx, estado, {
+    evento(ctx, {
       codigo: 'diplomacia.relacion_rota',
       mensaje: `Relación ${params.relacionId} rota voluntariamente.`,
       payload: { relacionId: params.relacionId, iniciadorFaccionId: params.iniciadorFaccionId } satisfies PayloadRelacionRota,
@@ -115,7 +115,7 @@ export const rebelionVasallo = comando<ParamsRebelionVasallo, void>((estado, _ma
     relaciones: resultado.relaciones,
     acuerdos: resultado.acuerdos,
   };
-  return exito(siguiente, desdeCrudos(ctx, estado, resultado.eventos));
+  return exito(siguiente, desdeCrudos(ctx, resultado.eventos));
 });
 
 export interface ParamsAnexionar {
@@ -130,7 +130,7 @@ export const anexionar = comando<ParamsAnexionar, void>((estado, _mapa, ctx, par
     facciones: resultado.facciones,
     asentamientos: resultado.asentamientos,
   });
-  return exito(siguiente, desdeCrudos(ctx, estado, resultado.eventos));
+  return exito(siguiente, desdeCrudos(ctx, resultado.eventos));
 });
 
 export interface ParamsFusionar {
@@ -148,12 +148,12 @@ export const fusionar = comando<ParamsFusionar, void>((estado, _mapa, ctx, param
     params.faccionBId,
     params.nuevoNombre || 'Facción Fusionada',
     params.nuevoReyId,
-    estado.tick
+    ctx.instante
   );
   const siguiente = sincronizarFaccionesNpc({
     ...estado,
     facciones: resultado.facciones,
     asentamientos: resultado.asentamientos,
   });
-  return exito(siguiente, desdeCrudos(ctx, estado, resultado.eventos));
+  return exito(siguiente, desdeCrudos(ctx, resultado.eventos));
 });

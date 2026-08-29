@@ -7,6 +7,7 @@
 // a la Fase C— los metadatos de autorización de cada uno (matriz del doc 5) pueden vivir junto a su lógica en
 // vez de en una tabla paralela que se desincroniza.
 import type { EventoDominio } from '../../domain/eventos';
+import type { Instante } from '../../domain/tiempo';
 import type { Mapa } from '../../world/mapa';
 import type { RandomFn } from '../../worldgen';
 import type { EventoDominioConVersion, GameSessionState } from '../estado';
@@ -33,7 +34,12 @@ export const ACTOR_LOCAL: ActorId = 'local';
  * momento y la aleatoriedad se inyectan, nunca se leen aquí dentro.
  */
 export interface ContextoComando {
-  /** Momento de simulación (ISO 8601). Lo decide el llamador; ningún comando llama a `Date.now()`. */
+  /** Instante de MUNDO (`Instante`, ms), derivado del tick por `GameSession.ejecutar` (`instanteDeTick`,
+   * Fase D / doc 10). Ni el comando ni el llamador lo pasan: es función del `tick` y de nada más — el reloj
+   * de pared no entra en el estado de partida. Es con lo que se fechan los campos `*En: Instante`. */
+  instante: Instante;
+  /** El mismo instante en ISO 8601, para fechar eventos (`EventoDominio.momento`). Redundante a propósito —
+   * ver `ContextoSimulacion.momento`; D4 lo unifica. */
   momento: string;
   actor: ActorId;
   rng: RandomFn;

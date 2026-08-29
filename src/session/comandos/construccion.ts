@@ -69,7 +69,7 @@ export const anadirEdificioManualmente = comando<ParamsAnadirEdificio, void>((es
     ctx.ids.siguiente()
   );
   return exito(conAsentamiento(estado, actualizado), [
-    evento(ctx, estado, {
+    evento(ctx, {
       codigo: 'construccion.encolada',
       mensaje: `${params.cargo} añade ${params.tipo} a la cola (pagado).`,
       payload: { asentamientoId: asentamiento.id, cargo: params.cargo, edificioTipo: params.tipo } satisfies PayloadColaConstruccion,
@@ -89,7 +89,7 @@ export const quitarDeCola = comando<ParamsQuitarDeCola, void>((estado, _mapa, ct
 
   const actualizado = quitarDeColaEngine(asentamiento, params.cargo, params.edificioId);
   return exito(conAsentamiento(estado, actualizado), [
-    evento(ctx, estado, {
+    evento(ctx, {
       codigo: 'construccion.desencolada',
       mensaje: `${params.cargo} quita un proyecto de la cola (recursos devueltos).`,
       payload: { asentamientoId: asentamiento.id, cargo: params.cargo, edificioId: params.edificioId } satisfies PayloadColaConstruccion,
@@ -110,7 +110,7 @@ export const moverEnCola = comando<ParamsMoverEnCola, void>((estado, _mapa, ctx,
 
   const actualizado = moverEnColaEngine(asentamiento, params.cargo, params.edificioId, params.direccion);
   return exito(conAsentamiento(estado, actualizado), [
-    evento(ctx, estado, {
+    evento(ctx, {
       codigo: 'construccion.cola_reordenada',
       mensaje: `${params.cargo} reordena la cola de construcción.`,
       payload: { asentamientoId: asentamiento.id, cargo: params.cargo, edificioId: params.edificioId } satisfies PayloadColaConstruccion,
@@ -131,7 +131,7 @@ export const mejorarEdificioAhora = comando<ParamsMejorarEdificio, void>((estado
   const capital = encontrarCapital(asentamiento.faccionId, estado.asentamientos);
   const actualizado = mejorarEdificioManualmenteEngine(asentamiento, params.cargo, params.edificioId, capital);
   return exito(conAsentamiento(estado, actualizado), [
-    evento(ctx, estado, {
+    evento(ctx, {
       codigo: 'construccion.mejora_forzada',
       mensaje: `${params.cargo} fuerza la mejora de un edificio.`,
       payload: { asentamientoId: asentamiento.id, cargo: params.cargo, edificioId: params.edificioId } satisfies PayloadColaConstruccion,
@@ -159,7 +159,7 @@ export const alternarAutoConstruccion = comando<ParamsAlternarAutoConstruccion, 
 
   const actualizado = { ...asentamiento, autoConstruccionPausada: params.pausada };
   return exito(conAsentamiento(estado, actualizado), [
-    evento(ctx, estado, {
+    evento(ctx, {
       codigo: 'construccion.auto_alternada',
       mensaje: `Auto-construcción ${params.pausada ? 'pausada' : 'reanudada'}.`,
       payload: { asentamientoId: asentamiento.id, pausada: params.pausada } satisfies PayloadAutoConstruccion,
@@ -198,7 +198,7 @@ export const renombrarAsentamiento = comando<ParamsRenombrarAsentamiento, void>(
   const nombreLimpio = params.nombre.trim();
   const actualizado = { ...asentamiento, nombre: nombreLimpio || undefined };
   return exito(conAsentamiento(estado, actualizado), [
-    evento(ctx, estado, {
+    evento(ctx, {
       codigo: 'asentamiento.renombrado',
       mensaje: `Renombrado a "${nombreLimpio || asentamiento.id}".`,
       payload: { asentamientoId: asentamiento.id, nombre: nombreLimpio || undefined } satisfies PayloadRenombrado,

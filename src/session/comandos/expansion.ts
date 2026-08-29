@@ -40,7 +40,7 @@ export const lanzarCaravanaFundacion = comando<ParamsLanzarCaravanaFundacion, { 
     estado.asentamientos,
     estado.caravanas,
     params.numJugadores,
-    estado.tick,
+    ctx.instante,
     ctx.ids.siguiente()
   );
   const siguiente: GameSessionState = {
@@ -50,7 +50,7 @@ export const lanzarCaravanaFundacion = comando<ParamsLanzarCaravanaFundacion, { 
   return exito(
     siguiente,
     [
-      evento(ctx, estado, {
+      evento(ctx, {
         codigo: 'expansion.caravana_lanzada',
         mensaje: `Lanza una Caravana de Fundación hacia (${Math.round(params.destino.x)}, ${Math.round(params.destino.y)}).`,
         payload: {
@@ -81,7 +81,7 @@ export const desarmarCaravanaFundacion = comando<ParamsDesarmarCaravanaFundacion
     caravanas: estado.caravanas.filter((c) => c.id !== params.caravanaId),
   };
   return exito(siguiente, [
-    evento(ctx, estado, {
+    evento(ctx, {
       codigo: 'expansion.caravana_desarmada',
       mensaje: `Desarma la Caravana de Fundación ${params.caravanaId} y recupera su contenido.`,
       payload: { caravanaId: params.caravanaId, origenAsentamientoId: origen.id } satisfies PayloadCaravanaFundacionDesarmada,

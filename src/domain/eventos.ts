@@ -20,18 +20,12 @@ export interface EventoDominio {
   /** Mensaje en texto ya formateado — única fuente de verdad mientras dure la migración (ver `codigo`). */
   mensaje: string;
   /**
-   * Momento de simulación en que ocurrió el evento (ISO 8601). **Este es el campo temporal definitivo**: el
-   * protocolo hacia los clientes debe usar SIEMPRE este y nunca `tick` (ver
-   * Docs/Arquitectura/6_Sincronizacion_Visibilidad_y_Escala.md §4, regla (b)) — así el día que el motor pase
-   * a tiempo real (Fase D) el contrato no cambia. Lo inyecta quien avanza la simulación
-   * (`ContextoSimulacion.momento`, ver `engine/simulation.ts`); el motor nunca lee el reloj por su cuenta.
+   * Instante de MUNDO en que ocurrió el evento (ISO 8601). **El único campo temporal del evento** (Fase D
+   * cerrada — el `tick` provisional se retiró; doc 6 §4 regla (b)): derivado del tick por quien avanza la
+   * simulación (`isoDeInstante(instanteDeTick(tick))`, ver `engine/simulation.ts` / `session/comandos/eventos.ts`),
+   * nunca leído del reloj de pared.
    */
   momento: string;
-  /**
-   * Tick en el que ocurrió el evento. **PROVISIONAL**: desaparece al completarse la Fase D — es la unidad
-   * interna del motor, no un contrato temporal. Para cualquier consumidor externo, usar `momento`.
-   */
-  tick: number;
   /** Asentamiento al que se atribuye, si aplica (mismo criterio que hoy usa `simulation.ts` para prefijar
    * cada mensaje de un asentamiento con su id). Ausente en eventos globales (comercio, mercado, títulos...). */
   asentamientoId?: string;

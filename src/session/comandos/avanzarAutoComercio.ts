@@ -17,14 +17,14 @@ import { exito, sinCambios, type ContextoComando, type TransicionComando } from 
 export function avanzarAutoComercio(
   estado: GameSessionState,
   mapa: Mapa,
-  _ctx: ContextoComando,
+  ctx: ContextoComando,
   _params: void
 ): TransicionComando<void> {
   if (!SIMULACION_AUTO_COMERCIO.activo) {
     return sinCambios(estado);
   }
 
-  const resultado = avanzarAutoComercioSimulado(estadoSimulacionDe(estado), mapa, estado.tick);
+  const resultado = avanzarAutoComercioSimulado(estadoSimulacionDe(estado), mapa, ctx.instante);
   // Sin eventos propios: este módulo del motor no narra nada, solo mueve recursos y caravanas.
   return exito(conResultadoDeSimulacion(estado, resultado), []);
 }

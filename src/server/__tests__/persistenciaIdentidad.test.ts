@@ -54,6 +54,9 @@ describe('crearRepositorioIdentidadEnDisco', () => {
     const segundo = await crearRepositorioIdentidadEnDisco(ruta);
     const u3 = segundo.repositorio.crearUsuario({ creadoEn: AHORA });
     expect([u1.id, u2.id, u3.id]).toEqual(['usuario-1', 'usuario-2', 'usuario-3']);
+    // `crearUsuario` encola una escritura en segundo plano: hay que dejarla terminar antes de que
+    // `afterEach` borre el directorio, o el `rename` en vuelo choca con el `rmdir` (ENOTEMPTY en Windows).
+    await segundo.esperarEscrituras();
   });
 
   it('revocar una membresía persiste el `hasta`', async () => {

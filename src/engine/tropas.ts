@@ -41,7 +41,6 @@ export function reclutarTropa(
   jugadorId: string,
   tropaId: string,
   origen: 'pesants' | 'artesanos',
-  tickActual: number,
   contador = 0
 ): Asentamiento {
   if (!esResidente(asentamiento, jugadorId)) {
@@ -85,7 +84,7 @@ export function reclutarTropa(
 
   // Reserva de trigo ANTES de reclutar (a petición del usuario — mano de obra/reclutamiento a futuro con
   // jugadores reales, no solo el NPC): reclutar (o reponer) una tropa exige que el trigo en almacén cubra
-  // `horizonteTicksComida` ticks del consumo YA PROYECTADO CON la tropa nueva sumada — mismo patrón y mismo
+  // `horizonteMinutosComida` ticks del consumo YA PROYECTADO CON la tropa nueva sumada — mismo patrón y mismo
   // horizonte que `reservaDinamicaConstruccion` (`engine/mantenimiento.ts`) exige para construir, extendido
   // aquí a trigo. Es una regla del MOTOR, no un heurístico del NPC (como Vivienda: aplica igual a
   // reclutamiento manual y automático) — reemplaza el throttle "1 residente por tick en nivel 1" que antes
@@ -94,8 +93,8 @@ export function reclutarTropa(
   // escasez, se cierra antes de que reclutar termine de romper nada — ver
   // `issues/granjas_no_escalan_con_poblacion.md` y `Consideraciones/NPC_Gobernanza_Facciones_Controladas.md`
   // §"Abierto" para el diagnóstico completo (colapso masivo medido en batch con el throttle viejo).
-  const consumoConNuevaTropa = consumoComidaPoblacion(asentamiento) + consumoRacionTropas(asentamiento) + cantidad * MILITAR.racionPorSoldadoPorTick;
-  const reservaTrigoRequerida = consumoConNuevaTropa * RESERVA_CONSTRUCCION.horizonteTicksComida;
+  const consumoConNuevaTropa = consumoComidaPoblacion(asentamiento) + consumoRacionTropas(asentamiento) + cantidad * MILITAR.racionPorSoldadoPorMinuto;
+  const reservaTrigoRequerida = consumoConNuevaTropa * RESERVA_CONSTRUCCION.horizonteMinutosComida;
   const trigoDisponible = asentamiento.almacen['trigo']?.cantidad ?? 0;
   if (trigoDisponible < reservaTrigoRequerida) {
     throw new ReclutamientoInvalidoError(
@@ -108,7 +107,7 @@ export function reclutarTropa(
     : [
         ...asentamiento.escuadrones,
         {
-          id: `escuadron-${asentamiento.id}-${tickActual}-${contador}`,
+          id: `escuadron-${asentamiento.id}-${contador}`,
           nombre: `${tropa.nombre} de ${jugadorId}`,
           jugadorId,
           origen,
@@ -131,7 +130,7 @@ export function reclutarTropa(
  * aquí como para el "apartado de trigo" mostrado en Mantenimiento (ver `gameStore.mantenimientoInfo`). */
 export function consumoRacionTropas(asentamiento: Asentamiento): number {
   const totalSoldados = asentamiento.escuadrones.reduce((acc, e) => acc + e.cantidad, 0);
-  return totalSoldados * MILITAR.racionPorSoldadoPorTick;
+  return totalSoldados * MILITAR.racionPorSoldadoPorMinuto;
 }
 
 /** Mantenimiento (Doc 5.4): consumo de raciones; sin suministro la moral colapsa y desertan permanentemente. */
@@ -148,13 +147,13 @@ export function avanzarMantenimientoTropas(asentamiento: Asentamiento): { asenta
   const escuadrones = asentamiento.escuadrones.map((e) => {
     let moral = e.moral;
     if (factorSuministro >= 1) {
-      moral = Math.min(100, moral + MILITAR.regeneracionMoralPorTick);
+      moral = Math.min(100, moral + MILITAR.regeneracionMoralPorMinuto);
     } else {
       moral = Math.max(0, moral - MILITAR.degradacionMoralSinRacion * (1 - factorSuministro));
     }
     let cantidad = e.cantidad;
     if (moral <= 0 && cantidad > 0) {
-      const desertores = Math.min(cantidad, Math.ceil(cantidad * MILITAR.desercionFraccionPorTickSinMoral));
+      const desertores = Math.min(cantidad, Math.ceil(cantidad * MILITAR.desercionFraccionPorMinutoSinMoral));
       cantidad -= desertores;
       if (desertores > 0) {
         eventos.push({

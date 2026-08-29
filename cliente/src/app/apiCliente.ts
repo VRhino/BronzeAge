@@ -1,10 +1,10 @@
 // Wrapper `fetch` delgado sobre `src/server/api.ts` — sin lógica de negocio, solo I/O. Lo usa
 // `app/gameStore.ts`, vía `main.ts`.
 //
-// **Este cliente habla la superficie de ADMINISTRACIÓN** (`/admin/*`, Fase C3): crea partidas, avanza el
-// tick y lee el estado completo, que son operaciones de administrador. Es lo que siempre hizo; hasta C3 esos
-// endpoints no exigían identidad y ahora sí. El cliente de JUGADOR (`/jugador/*`, sin lectura de estado
-// hasta que existan las proyecciones de C4) vive en otro repositorio.
+// **Este cliente habla la superficie de ADMINISTRACIÓN** (`/admin/*`, Fase C3): crea partidas y lee el
+// estado completo, que son operaciones de administrador. El mundo avanza SOLO en el servidor (reloj de
+// mundo, Fase D / D5) — el cliente no lo empuja, solo re-lee el estado. El cliente de JUGADOR (`/jugador/*`)
+// vive en otro repositorio.
 //
 // Autenticación: login con el proveedor de desarrollo (`dev <sujetoId>`) y `sesionId` en memoria para el
 // resto de peticiones. Es un apaño de desarrollo consciente — el sujeto sale de `VITE_USUARIO` y debe estar
@@ -20,7 +20,9 @@ import type { MapaGenerado } from '@motor/worldgen';
 
 export interface ResumenPartida {
   gameId: string;
-  tick: number;
+  /** Instante de MUNDO de la partida (ms desde época) — Fase D: la referencia temporal del contrato, en
+   * lugar del `tick` interno del motor. */
+  instante: number;
   version: number;
   /** Identidad del mapa vigente (Fase C11) — nunca el mapa en sí. Ver `obtenerMapa`. */
   mapaId: string;
@@ -120,10 +122,6 @@ export function ejecutarComando<T extends TipoComando>(gameId: string, tipo: T, 
     method: 'POST',
     body: JSON.stringify({ tipo, params }),
   });
-}
-
-export function avanzarTick(gameId: string): Promise<RespuestaComando<void>> {
-  return peticion<RespuestaComando<void>>(`${V1}/admin/partidas/${encodeURIComponent(gameId)}/tick`, { method: 'POST' });
 }
 
 /** Sin `mapa` (Fase C11): trae `mapaId` en su lugar. Ver `obtenerMapa` para pedir el mapa real. */

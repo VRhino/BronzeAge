@@ -2587,6 +2587,17 @@ select:hover, input:hover {
   white-space: nowrap;
 }
 
+/* Reloj de mundo (Fase D): el servidor avanza solo, esto es el "ahora" de la partida. */
+.reloj-mundo {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--admin-fg, #e8e8e8);
+  background: var(--admin-panel-alt, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--admin-border, rgba(255, 255, 255, 0.12));
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
 .admin-title-actions input[type='range'] {
   width: 100px;
   padding: 0;

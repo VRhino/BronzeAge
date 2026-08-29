@@ -13,6 +13,7 @@ import {
   SCORE_BANDAS,
   ZONA_INFLUENCIA,
 } from '../constants';
+import { minutos, sumar, type Instante } from '../domain/tiempo';
 import type { Mapa } from '../world/mapa';
 import { mejorFertilidadEnZona } from './zones';
 // `sitioParaTipo` del trazado se importa con alias: en este archivo ya existe una función con ese nombre, la
@@ -187,7 +188,6 @@ export function sitioEnBarrioLineaProduccion(
       tipo,
       posicion: candidato.punto,
       estado: 'activo',
-      ticksRestantes: 0,
       ambito: 'asentamiento',
       rotado: candidato.rotado,
     };
@@ -296,7 +296,8 @@ function crearEdificioEnCola(tipo: EdificioTipo, posicion: Point, id: string, fu
     tipo,
     posicion,
     estado: 'en_cola',
-    ticksRestantes: EDIFICIO_CATALOGO[tipo].tiempoConstruccionTicks,
+    // `completaEn` ausente: la obra aún no arrancó. Su duración se fija al pasar a `en_construccion`
+    // (Paso 2 de `avanzarConstruccion`), donde la Vía Rápida del Maestro de Obras puede acelerarla.
     ambito: ambitoDe(tipo),
   };
   return { ...edificio, ...(fuenteId ? { fuenteId } : {}), ...(rotado ? { rotado } : {}) };
@@ -338,7 +339,6 @@ function crearPuestosDeMercado(
       tipo: 'puestoMercado',
       posicion: sitio.punto,
       estado: 'activo',
-      ticksRestantes: 0,
       ambito: 'asentamiento',
       // En un puesto `nivelInterno` no es progresión: identifica su FORMA (ver `PUESTO_MERCADO_FORMA`).
       nivelInterno: forma,
@@ -367,7 +367,7 @@ function crearTalleresDeCarpinteria(asentamiento: Pick<Asentamiento, 'id' | 'rad
     let id = `edificio-${asentamiento.id}-${contador++}`;
     while (idsUsadas.has(id)) id = `edificio-${asentamiento.id}-${contador++}`;
     idsUsadas.add(id);
-    nuevos.push({ id, tipo: 'tallerCarpinteria', posicion: sitio.punto, estado: 'activo', ticksRestantes: 0, ambito: 'asentamiento' });
+    nuevos.push({ id, tipo: 'tallerCarpinteria', posicion: sitio.punto, estado: 'activo', ambito: 'asentamiento' });
   }
   return nuevos;
 }
@@ -703,7 +703,7 @@ function evaluarNecesidades(
           .filter((e) => e.tipo === tipo)
           .some((e) => mapa.nodoProductivo(e.fuenteId));
         const ticksSinCupo = asentamiento.extractoresTicksSinCupo?.[tipo] ?? 0;
-        const bonusDesempate = Math.min(ticksSinCupo * EXTRACTOR_DESEMPATE.bonusPorTickStarved, EXTRACTOR_DESEMPATE.bonusMaximo);
+        const bonusDesempate = Math.min(ticksSinCupo * EXTRACTOR_DESEMPATE.bonusPorMinutoStarved, EXTRACTOR_DESEMPATE.bonusMaximo);
         const edificio = crearEdificioEnCola(tipo, posicion, nextId(), sitio.fuenteId, local?.rotado);
         extractorCandidatoIds[tipo] = edificio.id;
         proponer(edificio, conUrgencia(SCORE_BANDAS.extractorBase, conFuenteViva ? 40 : 100, bonusDesempate));
@@ -1076,7 +1076,8 @@ export function avanzarConstruccion(
   zonaPoligono: Point[],
   mapa: Mapa,
   capital: Asentamiento | undefined,
-  reclamos: ReclamosFuentes
+  reclamos: ReclamosFuentes,
+  instante: Instante
 ): { asentamiento: Asentamiento; eventos: EventoCrudo[]; edificiosCompletados: number } {
   const eventos: EventoCrudo[] = [];
   let almacen = asentamiento.almacen;
@@ -1098,34 +1099,37 @@ export function avanzarConstruccion(
   // `en_cola` se resuelven en un segundo paso por PRIORIDAD (ver abajo), no aquí.
   for (const edificio of asentamiento.edificios) {
     if (edificio.estado === 'en_construccion') {
-      const restantes = edificio.ticksRestantes - 1;
-      if (restantes <= 0) {
-        eventos.push({
-          codigo: 'construccion.edificio_completado',
-          mensaje: `${edificio.tipo} completado.`,
-          payload: { edificioId: edificio.id, edificioTipo: edificio.tipo } satisfies PayloadEdificioCompletado,
-        });
-        edificiosCompletadosEsteTick += 1;
-        if (edificio.tipo === 'almacen') {
-          const bonus = EDIFICIO_CATALOGO.almacen.capacidadPorRecursoAdicional;
-          for (const recurso of Object.keys(almacen)) {
-            almacen = { ...almacen, [recurso]: { ...almacen[recurso]!, capacidad: almacen[recurso]!.capacidad + bonus } };
-          }
-        }
-        // El Mercado no nace solo: al terminarse aparece con los puestos de su nivel 1 (a petición del
-        // usuario, es una ZONA). Los de niveles 2 y 3 los añade `avanzarMejoras` al subir de nivel interno.
-        if (edificio.tipo === 'mercado') {
-          puestosNuevos.push(...crearPuestosDeMercado(asentamiento, 1, [...asentamiento.edificios, ...puestosNuevos]));
-        }
-        // Carpintería tampoco nace sola (§9, Etapa 3 de anclas y satélites): al completarse aparecen sus 2
-        // talleres de una vez (no progresan por nivel interno, a diferencia del Mercado).
-        if (edificio.tipo === 'carpinteria') {
-          puestosNuevos.push(...crearTalleresDeCarpinteria(asentamiento, [...asentamiento.edificios, ...puestosNuevos]));
-        }
-        resultados.set(edificio.id, { ...edificio, estado: 'activo', ticksRestantes: 0 });
-      } else {
-        resultados.set(edificio.id, { ...edificio, ticksRestantes: restantes });
+      // Fecha absoluta, no contador (doc 6 §4 regla (a) / doc 10): la obra termina cuando el instante de
+      // mundo alcanza `completaEn` — fijado al arrancar (Paso 2). Un `en_construccion` sin `completaEn`
+      // (dato de un formato viejo que se coló) se completa en cuanto se evalúa, no se queda colgado.
+      if (edificio.completaEn !== undefined && instante < edificio.completaEn) {
+        resultados.set(edificio.id, edificio); // sigue en obra: sin cambios (ya no hay contador que bajar).
+        continue;
       }
+
+      eventos.push({
+        codigo: 'construccion.edificio_completado',
+        mensaje: `${edificio.tipo} completado.`,
+        payload: { edificioId: edificio.id, edificioTipo: edificio.tipo } satisfies PayloadEdificioCompletado,
+      });
+      edificiosCompletadosEsteTick += 1;
+      if (edificio.tipo === 'almacen') {
+        const bonus = EDIFICIO_CATALOGO.almacen.capacidadPorRecursoAdicional;
+        for (const recurso of Object.keys(almacen)) {
+          almacen = { ...almacen, [recurso]: { ...almacen[recurso]!, capacidad: almacen[recurso]!.capacidad + bonus } };
+        }
+      }
+      // El Mercado no nace solo: al terminarse aparece con los puestos de su nivel 1 (a petición del
+      // usuario, es una ZONA). Los de niveles 2 y 3 los añade `avanzarMejoras` al subir de nivel interno.
+      if (edificio.tipo === 'mercado') {
+        puestosNuevos.push(...crearPuestosDeMercado(asentamiento, 1, [...asentamiento.edificios, ...puestosNuevos]));
+      }
+      // Carpintería tampoco nace sola (§9, Etapa 3 de anclas y satélites): al completarse aparecen sus 2
+      // talleres de una vez (no progresan por nivel interno, a diferencia del Mercado).
+      if (edificio.tipo === 'carpinteria') {
+        puestosNuevos.push(...crearTalleresDeCarpinteria(asentamiento, [...asentamiento.edificios, ...puestosNuevos]));
+      }
+      resultados.set(edificio.id, { ...edificio, estado: 'activo', completaEn: undefined });
       continue;
     }
 
@@ -1193,8 +1197,8 @@ export function avanzarConstruccion(
       payload: { edificioId: edificio.id, edificioTipo: edificio.tipo } satisfies PayloadConstruccionIniciada,
     });
     // Vía Rápida de Construcción (Maestro de Obras, Doc 2.2/4.4) acelera el tiempo restante al arrancar.
-    const ticks = Math.max(1, Math.round(EDIFICIO_CATALOGO[edificio.tipo].tiempoConstruccionTicks * factorTiempoConstruccion(asentamiento)));
-    resultados.set(edificio.id, { ...edificio, estado: 'en_construccion', ticksRestantes: ticks });
+    const ticks = Math.max(1, Math.round(EDIFICIO_CATALOGO[edificio.tipo].tiempoConstruccionMinutos * factorTiempoConstruccion(asentamiento)));
+    resultados.set(edificio.id, { ...edificio, estado: 'en_construccion', completaEn: sumar(instante, minutos(ticks)) });
     cupoObraDisponible -= 1;
   }
 

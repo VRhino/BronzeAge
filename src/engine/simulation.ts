@@ -1,5 +1,6 @@
 import type { AcuerdoTrueque, Asentamiento, CaminoComercial, CampamentoBandido, Caravana, Faccion, OrdenMercado, RelacionPolitica, Titulo } from '../domain/types';
 import type { EventoCrudo, EventoDominio } from '../domain/eventos';
+import type { Instante } from '../domain/tiempo';
 import type { EstadoMapa, Mapa } from '../world/mapa';
 import type { RandomFn } from '../worldgen';
 import { computeTodasLasZonas } from './zones';
@@ -33,9 +34,9 @@ export interface EstadoSimulacion {
   caminos: CaminoComercial[];
   /** Campamentos de bandidos activos (Doc 1.9) — ver `engine/bandidos.ts`. */
   campamentosBandidos: CampamentoBandido[];
-  /** Tick a partir del cual puede aparecer un campamento nuevo si hay menos de `maximoSimultaneos` activos
-   * (Doc 1.9) — se adelanta cada vez que un jugador destruye uno (`GameStore.atacarCampamentoBandidos`). */
-  bandidosProximoSpawnTick: number;
+  /** Instante de mundo a partir del cual puede aparecer un campamento nuevo si hay menos de
+   * `maximoSimultaneos` activos (Doc 1.9) — se adelanta cada vez que un jugador destruye uno. */
+  bandidosProximoSpawnEn: Instante;
 }
 
 /**
@@ -44,17 +45,19 @@ export interface EstadoSimulacion {
  * es estado de juego: la unidad temporal, el momento de simulación y la fuente de aleatoriedad.
  *
  * Existe para que el motor no lea nunca por su cuenta ni el reloj (`Date.now()`) ni la aleatoriedad global
- * (`Math.random()`): ambos son responsabilidad de quien gobierna la partida (hoy `GameStore`, mañana
- * `GameSession` en el backend), y mantenerlos inyectados es lo que hace la simulación reproducible
- * (ver `__tests__/determinismo.test.ts`).
+ * (`Math.random()`): ambos son responsabilidad de quien gobierna la partida (`GameSession` en el backend), y
+ * mantenerlos inyectados es lo que hace la simulación reproducible (ver `__tests__/determinismo.test.ts`).
  *
- * Al pasar a tiempo real (Fase D) este contexto es el punto natural donde `tick` desaparece y `momento` pasa a
- * ser la única referencia temporal — sin cambiar la firma de `avanzarSimulacion` ni la de sus llamadores.
+ * Fase D cerrada: el `tick` (unidad interna del motor) ya no forma parte de este contexto — `instante` es la
+ * única referencia temporal, `momento` su forma ISO para fechar eventos.
  */
 export interface ContextoSimulacion {
-  /** Unidad temporal interna PROVISIONAL del motor — desaparece en Fase D. */
-  tick: number;
-  /** Momento de simulación de este avance (ISO 8601). Es el campo temporal que viaja a los clientes. */
+  /** Instante de MUNDO de este avance (Fase D / doc 10): con lo que se fechan y comparan los campos
+   * `*En: Instante` de las entidades (`fundadoEn`, `expiraEn`, `heridoHasta`…). */
+  instante: Instante;
+  /** El mismo instante en ISO 8601, para fechar los eventos que viajan al cliente (`EventoDominio.momento`).
+   * Redundante con `instante` a propósito — el núcleo puro no puede construir un `Date` (`isoDeInstante` vive
+   * en `session/`), así que quien avanza la simulación lo pasa ya formateado. */
   momento: string;
   /** Fuente de aleatoriedad de la simulación (población, combate, bandidos). */
   rng: RandomFn;
@@ -77,15 +80,15 @@ export interface ResultadoTick extends EstadoSimulacion {
   eventosDominio: EventoDominio[];
 }
 
-/** Añade el contexto que un subsistema no conoce (`momento`, `tick`, `asentamientoId`) a lo que ya produjo —
- * un `string` se envuelve como `codigo: 'legado'` (subsistema todavía sin migrar); un evento ya migrado
+/** Añade el contexto que un subsistema no conoce (`momento`, `asentamientoId`) a lo que ya produjo — un
+ * `string` se envuelve como `codigo: 'legado'` (subsistema todavía sin migrar); un evento ya migrado
  * conserva su `codigo`/`payload` tal cual (ver `EventoCrudo`). */
 function comoEventosDominio(eventos: EventoCrudo[], contexto: ContextoSimulacion, asentamientoId?: string): EventoDominio[] {
-  const { tick, momento } = contexto;
+  const { momento } = contexto;
   return eventos.map((evento) => {
     const { codigo, mensaje, payload } =
       typeof evento === 'string' ? { codigo: 'legado', mensaje: evento, payload: undefined } : evento;
-    return { codigo, mensaje, momento, tick, asentamientoId, payload };
+    return { codigo, mensaje, momento, asentamientoId, payload };
   });
 }
 
@@ -95,7 +98,7 @@ function comoEventosDominio(eventos: EventoCrudo[], contexto: ContextoSimulacion
  * reputación y títulos dinámicos (Sprint 6, cierre).
  */
 export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto: ContextoSimulacion): ResultadoTick {
-  const { tick: tickActual, rng } = contexto;
+  const { instante, rng } = contexto;
   // El crecimiento de la zona de influencia ya no es puramente temporal (rediseño Doc 1.2, a petición del
   // usuario): ahora se dispara al completarse cada edificio, dentro de `avanzarConstruccion`.
   const crecidos = estado.asentamientos;
@@ -137,7 +140,8 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
       zona?.poligono ?? [],
       mapa,
       capitalesPorFaccion.get(asentamiento.faccionId),
-      reclamos
+      reclamos,
+      instante
     );
     if (edificiosCompletados > 0) {
       ajustesExperiencia.push({
@@ -147,7 +151,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
       });
     }
 
-    const { asentamiento: trasPoliticas, eventos: eventosPoliticas } = avanzarPoliticas(trasConstruccion, tickActual);
+    const { asentamiento: trasPoliticas, eventos: eventosPoliticas } = avanzarPoliticas(trasConstruccion, instante);
     // `avanzarNivelAsentamiento` sube de a un escalón por llamada, en orden creciente — para llegar a pedir
     // cupo de nivel 3, el asentamiento tuvo que pasar por (y consumir) el cupo de nivel 2 primero, sea porque
     // ya estaba ahí desde antes de este tick, o porque acaba de conseguirlo en la llamada anterior de este
@@ -187,7 +191,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     const conPoblacion = { ...trasTropas, poblacion };
 
     const capital = capitalesPorFaccion.get(asentamiento.faccionId);
-    const { asentamiento: trasMantenimiento, eventos: eventosMantenimiento, destruido } = avanzarMantenimiento(conPoblacion, capital, tickActual);
+    const { asentamiento: trasMantenimiento, eventos: eventosMantenimiento, destruido } = avanzarMantenimiento(conPoblacion, capital, instante);
 
     const eventosAsentamiento = [
       ...eventosConstruccion,
@@ -206,24 +210,24 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   // Ruinas por abandono/mal mantenimiento (Doc 4.5): el asentamiento se elimina, su zona queda libre.
   const actualizados = procesados.filter((p) => !p.destruido).map((p) => p.asentamiento);
 
-  const trasComercio = avanzarComercio(actualizados, estado.facciones, estado.caravanas, estado.acuerdos, mapa, estado.caminos, tickActual);
+  const trasComercio = avanzarComercio(actualizados, estado.facciones, estado.caravanas, estado.acuerdos, mapa, estado.caminos, instante);
   eventosDominio.push(...comoEventosDominio(trasComercio.eventos, contexto));
 
   // Caravanas de Fundación (Doc 1.8): expanden una Facción más allá de su primer asentamiento — se avanzan
   // aparte de las comerciales (destino es un punto del mapa, no un asentamiento existente).
-  const trasExpansion = avanzarCaravanasFundacion(trasComercio.caravanas, mapa, trasComercio.facciones, trasComercio.asentamientos, tickActual);
+  const trasExpansion = avanzarCaravanasFundacion(trasComercio.caravanas, mapa, trasComercio.facciones, trasComercio.asentamientos, instante);
   eventosDominio.push(...comoEventosDominio(trasExpansion.eventos, contexto));
 
   // Regeneración de yacimientos agotados (a petición del usuario): escribe en la fachada `mapa`, mismo patrón
   // que `mapa.extraer` dentro de `avanzarConstruccion` más arriba en este mismo tick. La fachada trabaja
   // sobre su propia copia del estado del mapa, que sale de aquí en `ResultadoTick.estadoMapa`.
-  const eventosRegeneracion = mapa.avanzarRegeneracion(tickActual);
+  const eventosRegeneracion = mapa.avanzarRegeneracion(instante);
   eventosDominio.push(...comoEventosDominio(eventosRegeneracion, contexto));
 
   // Campamentos de bandidos (Doc 1.9): spawn/respawn primero, después atacan cualquier caravana ya movida
   // este tick (comercial o de fundación) que pase cerca — mismo orden que el resto del tick, sobre posiciones
   // ya actualizadas.
-  const trasSpawnBandidos = avanzarSpawnBandidos(estado.campamentosBandidos, estado.bandidosProximoSpawnTick, zonas, trasExpansion.asentamientos, mapa, tickActual);
+  const trasSpawnBandidos = avanzarSpawnBandidos(estado.campamentosBandidos, estado.bandidosProximoSpawnEn, zonas, trasExpansion.asentamientos, mapa, instante);
   eventosDominio.push(...comoEventosDominio(trasSpawnBandidos.eventos, contexto));
   const trasAtaquesBandidos = avanzarAtaquesBandidos(trasSpawnBandidos.campamentos, trasExpansion.caravanas, rng);
   eventosDominio.push(...comoEventosDominio(trasAtaquesBandidos.eventos, contexto));
@@ -256,7 +260,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     titulos: titulosActuales,
     caminos: estado.caminos,
     campamentosBandidos: trasSpawnBandidos.campamentos,
-    bandidosProximoSpawnTick: estado.bandidosProximoSpawnTick,
+    bandidosProximoSpawnEn: estado.bandidosProximoSpawnEn,
     estadoMapa: mapa.estadoActual(),
     eventosDominio,
   };

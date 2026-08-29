@@ -1,5 +1,6 @@
 // Fase A5 (Docs/Arquitectura/4_Plan_Evolucion_Tareas.md): `market.ts` migrado.
 import { describe, expect, it } from 'vitest';
+import { instanteDeTest } from './fixtures';
 import type { Asentamiento, OrdenMercado } from '../../domain/types';
 import { avanzarMercado } from '../market';
 import type { PayloadMercadoCompra } from '../market';
@@ -21,7 +22,7 @@ describe('eventos de dominio — market.ts', () => {
       cantidad: 50,
       cantidadCumplida: 0,
       precioUnitario: 2,
-      creadoEnTick: 0,
+      creadoEn: instanteDeTest(0),
       estado: 'activa',
     };
     const compra: OrdenMercado = {
@@ -32,7 +33,7 @@ describe('eventos de dominio — market.ts', () => {
       cantidad: 50,
       cantidadCumplida: 0,
       precioUnitario: 2,
-      creadoEnTick: 0,
+      creadoEn: instanteDeTest(0),
       estado: 'activa',
     };
 

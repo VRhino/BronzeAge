@@ -12,7 +12,7 @@ import { cupoCaravanas, tieneMercadoActivo } from '../asentamientoQuery';
 import { anadirEdificioManualmente, ConstruccionManualInvalidaError } from '../construction';
 import { avanzarSimulacion } from '../simulation';
 import { createRng } from '../../worldgen';
-import { contextoDeTest, crearEstadoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
+import { contextoDeTest, crearEstadoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instanteDeTest } from './fixtures';
 
 const SEED = 42;
 
@@ -39,7 +39,6 @@ function conMercado(base: Asentamiento, nivelInterno: number): Asentamiento {
     tipo: 'mercado',
     posicion: { x: 30, y: 0 },
     estado: 'activo',
-    ticksRestantes: 0,
     ambito: 'asentamiento',
     nivelInterno,
   };
@@ -51,7 +50,6 @@ function conMercado(base: Asentamiento, nivelInterno: number): Asentamiento {
         tipo: 'puestoMercado',
         posicion: { x: 30 + puestos.length + 1, y: 0 },
         estado: 'activo',
-        ticksRestantes: 0,
         ambito: 'asentamiento',
         nivelInterno: forma,
       });
@@ -128,7 +126,7 @@ describe('Mercado como zona de varias piezas', () => {
       tipo: 'mercado',
       posicion: { x: 30, y: 0 },
       estado: 'en_construccion',
-      ticksRestantes: 1,
+      completaEn: instanteDeTest(1),
       ambito: 'asentamiento',
       nivelInterno: 1,
     };

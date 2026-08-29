@@ -87,13 +87,21 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
     repositorio: crearRepositorioIdentidadEnMemoria(),
   };
 
+  const ahora = opciones.ahora ?? (() => new Date().toISOString());
   const deps: DependenciasDeRutas = {
     identidad,
     administradores: crearDirectorioDeAdministradores(opciones.administradoresGlobales ?? [], identidad.repositorio),
-    partidas: new RegistroDePartidas(opciones.directorio, opciones.intervaloTickMs),
-    ahora: opciones.ahora ?? (() => new Date().toISOString()),
+    // Mismo reloj de pared que el resto del servidor: así el reloj de mundo de cada partida y su catch-up
+    // (D5, `RunnerDePartida.iniciarRelojDeMundo`) son inyectables en tests, no solo el reloj del sistema.
+    partidas: new RegistroDePartidas(opciones.directorio, opciones.intervaloTickMs, ahora),
+    ahora,
     hub: opciones.hub ?? new HubDeDifusion(),
   };
+
+  // Apagado limpio: al cerrar la instancia, parar el reloj de mundo de cada partida abierta y dejar drenar
+  // su cola (un tick a medio persistir no se aborta). `app.close()` —lo llama el handler de SIGINT/SIGTERM
+  // en `index.ts`, y todos los tests en su `afterEach`— dispara este hook.
+  app.addHook('onClose', () => deps.partidas.cerrar());
 
   // Todas las superficies bajo /v1 (Fase C6) — ver el comentario de cabecera.
   app.register(

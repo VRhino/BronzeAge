@@ -1,6 +1,7 @@
 import type { Asentamiento, EdificioTipo, RecursoTipo } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
 import { MANTENIMIENTO, NIVEL_ASENTAMIENTO, RESERVA_CONSTRUCCION } from '../constants';
+import { minutos, transcurrido, type Duracion, type Instante } from '../domain/tiempo';
 
 /** Fase A5 — payloads de los eventos de este subsistema (ver `avanzarNivelAsentamiento`/`avanzarMantenimiento`). */
 export interface PayloadNivelSubio {
@@ -22,8 +23,9 @@ export interface FaltanteMantenimiento {
 export interface PayloadAsentamientoRuinas {
   razon: string;
   faltantes: FaltanteMantenimiento[];
-  fundadoEnTick: number;
-  duracionTicks: number;
+  fundadoEn: Instante;
+  /** Cuánto tiempo de mundo aguantó el asentamiento (`Duracion`, ms). */
+  duro: Duracion;
 }
 export interface PayloadMantenimientoDeficit {
   medidor: number;
@@ -107,7 +109,7 @@ export function avanzarNivelAsentamiento(
 export function encontrarCapital(faccionId: string, asentamientos: Asentamiento[]): Asentamiento | undefined {
   return asentamientos
     .filter((a) => a.faccionId === faccionId)
-    .sort((a, b) => a.fundadoEnTick - b.fundadoEnTick)[0];
+    .sort((a, b) => a.fundadoEn - b.fundadoEn)[0];
 }
 
 /**
@@ -156,7 +158,7 @@ export function recursosProtegidosPorMantenimiento(nivel: number): RecursoTipo[]
  * Reserva mínima que la auto-construcción no puede tocar al comprometer (pagar) un proyecto nuevo — overhaul
  * de auto-construcción: reemplaza los umbrales fijos anteriores (`RESERVA_CONSTRUCCION` ya no lleva cifras
  * por recurso) por una proyección real de cuánto va a cobrar Mantenimiento + consumo de comida en los
- * próximos `horizonteTicks*` ticks (ver `RESERVA_CONSTRUCCION` en constants.ts). Así el margen de seguridad
+ * próximos `horizonteMinutos*` minutos de mundo (ver `RESERVA_CONSTRUCCION` en constants.ts). Así el margen de seguridad
  * escala solo con el mantenimiento/población real del asentamiento en vez de quedarse en un número fijo
  * pensado para el asentamiento inicial (causa real de colapsos tras subir de nivel, ver bitácora de bugs).
  */
@@ -167,10 +169,10 @@ export function reservaDinamicaConstruccion(
   const costoMantenimiento = calcularCostoMantenimiento(asentamiento, capital);
   const reserva: Partial<Record<RecursoTipo, number>> = {};
   for (const [recurso, cantidad] of Object.entries(costoMantenimiento)) {
-    reserva[recurso as RecursoTipo] = (cantidad ?? 0) * RESERVA_CONSTRUCCION.horizonteTicksMantenimiento;
+    reserva[recurso as RecursoTipo] = (cantidad ?? 0) * RESERVA_CONSTRUCCION.horizonteMinutosMantenimiento;
   }
   reserva.trigo =
-    (consumoComidaPoblacion(asentamiento) + consumoRacionTropas(asentamiento)) * RESERVA_CONSTRUCCION.horizonteTicksComida;
+    (consumoComidaPoblacion(asentamiento) + consumoRacionTropas(asentamiento)) * RESERVA_CONSTRUCCION.horizonteMinutosComida;
   return reserva;
 }
 
@@ -186,15 +188,15 @@ function fraccionCubierta(almacen: Asentamiento['almacen'], costo: Partial<Recor
  * degrada el medidor proporcionalmente al déficit si no llega a cubrir el coste completo, y regenera
  * lentamente si el pago fue íntegro. Al tocar 0, `nivelActual` baja un escalón (nunca `nivel`/nivelAlcanzado,
  * nunca la población) y el medidor se reinicia — solo cae en RUINAS si ya estaba en `nivelActual` 1. Subir
- * `nivelActual` de vuelta exige una racha de `MANTENIMIENTO.ticksSanosParaRecuperarNivel` ticks seguidos con
+ * `nivelActual` de vuelta exige una racha de `MANTENIMIENTO.minutosSanosParaRecuperarNivel` ticks seguidos con
  * pago íntegro (`rachaMantenimientoSano`), no un solo tick sano — evita el yo-yo de nivel.
  */
 export function avanzarMantenimiento(
   asentamiento: Asentamiento,
   capital: Asentamiento | undefined,
-  tickActual: number
+  instante: Instante
 ): { asentamiento: Asentamiento; eventos: EventoCrudo[]; destruido: boolean } {
-  if (tickActual - asentamiento.fundadoEnTick < MANTENIMIENTO.graciaTicks) {
+  if (transcurrido(asentamiento.fundadoEn, instante) < minutos(MANTENIMIENTO.graciaMinutos)) {
     return { asentamiento, eventos: [], destruido: false };
   }
 
@@ -218,7 +220,7 @@ export function avanzarMantenimiento(
     const racha = (asentamiento.rachaMantenimientoSano ?? 0) + 1;
     const medidor = Math.min(100, asentamiento.medidorMantenimiento + MANTENIMIENTO.regeneracionSiPagoCompleto);
 
-    if (racha >= MANTENIMIENTO.ticksSanosParaRecuperarNivel && nivelActualHoy < asentamiento.nivel) {
+    if (racha >= MANTENIMIENTO.minutosSanosParaRecuperarNivel && nivelActualHoy < asentamiento.nivel) {
       eventos.push({
         codigo: 'mantenimiento.recuperado',
         mensaje: `${asentamiento.id}: mantenimiento sano y sostenido, recupera nivel actual ${nivelActualHoy + 1}.`,
@@ -265,15 +267,15 @@ export function avanzarMantenimiento(
       .filter((f) => f.disponible < f.cantidad);
     const faltantesTexto = faltantesEstructurados.map((f) => `${f.recurso} (tenía ${f.disponible.toFixed(1)}/${f.cantidad.toFixed(1)})`);
     const razon = faltantesTexto.length > 0 ? `no pudo cubrir: ${faltantesTexto.join(', ')}` : 'déficit sostenido';
-    const duracion = tickActual - asentamiento.fundadoEnTick;
+    const duro = transcurrido(asentamiento.fundadoEn, instante);
     eventos.push({
       codigo: 'asentamiento.ruinas',
-      mensaje: `${asentamiento.id} cae en ruinas por abandono/mal mantenimiento (${razon}; fundado en tick ${asentamiento.fundadoEnTick}, duró ${duracion} ticks) — la zona queda libre.`,
+      mensaje: `${asentamiento.id} cae en ruinas por abandono/mal mantenimiento (${razon}; duró ~${Math.round(duro / 60_000)} min de mundo) — la zona queda libre.`,
       payload: {
         razon,
         faltantes: faltantesEstructurados,
-        fundadoEnTick: asentamiento.fundadoEnTick,
-        duracionTicks: duracion,
+        fundadoEn: asentamiento.fundadoEn,
+        duro,
       } satisfies PayloadAsentamientoRuinas,
     });
     return { asentamiento: { ...asentamiento, almacen, medidorMantenimiento: 0 }, eventos, destruido: true };

@@ -8,7 +8,7 @@ import { CARAVANA_COOLDOWN } from '../../constants';
 import { avanzarComercio, construirCaravanaComercial, proponerTrueque, CaravanaInvalidaError } from '../trade';
 import { lanzarCaravanaFundacion, ExpansionInvalidaError } from '../expansion';
 import { almacenSintetico, caravanaComercialCasiLlegando, mapaSintetico } from './tradeFixtures';
-import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, posicionRecomendable } from './fixtures';
+import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instanteDeTest, posicionRecomendable } from './fixtures';
 
 // ---------------------------------------------------------------------------------------------------------
 // Orientación de la ruta al reutilizar un Camino Comercial existente
@@ -30,7 +30,7 @@ describe('orientación de la ruta al reutilizar un Camino Comercial existente', 
       posicion,
       almacen: almacenSintetico(recursos),
       politicasActivas: [],
-      edificios: [{ id: `mercado-${id}`, tipo: 'mercado', posicion, estado: 'activo', ticksRestantes: 0, nivelInterno: 1 }],
+      edificios: [{ id: `mercado-${id}`, tipo: 'mercado', posicion, estado: 'activo', nivelInterno: 1 }],
     } as unknown as Asentamiento;
   }
 
@@ -45,13 +45,13 @@ describe('orientación de la ruta al reutilizar un Camino Comercial existente', 
     const caminoAB: CaminoComercial = { id: 'camino-A-B', asentamientoAId: 'A', asentamientoBId: 'B', puntos: [posA, { x: 500, y: 0 }, posB] };
 
     // Cada asentamiento construye su propia caravana (mismo patrón que el save real: una por lado).
-    const { asentamiento: aTrasConstruir, caravana: caravanaA } = construirCaravanaComercial(a, [], 0, 0);
-    const { asentamiento: bTrasConstruir, caravana: caravanaB } = construirCaravanaComercial(b, [caravanaA], 0, 1);
+    const { asentamiento: aTrasConstruir, caravana: caravanaA } = construirCaravanaComercial(a, [], instanteDeTest(0), 0);
+    const { asentamiento: bTrasConstruir, caravana: caravanaB } = construirCaravanaComercial(b, [caravanaA], instanteDeTest(0), 1);
 
     // Trueque A<->B: A entrega cobre a B (caravana de A viaja A->B, a favor del camino), B entrega oro a A
     // (caravana de B viaja B->A, EN CONTRA del orden guardado del camino) — el mismo patrón de dos trueques
     // opuestos por el mismo camino que expuso el bug en la partida real.
-    const acuerdo = proponerTrueque([aTrasConstruir, bTrasConstruir], 'A', 'B', 'cobre', 'oro', 50, 20, 0, 0);
+    const acuerdo = proponerTrueque([aTrasConstruir, bTrasConstruir], 'A', 'B', 'cobre', 'oro', 50, 20, instanteDeTest(0), 0);
 
     const resultado = avanzarComercio(
       [aTrasConstruir, bTrasConstruir],
@@ -60,7 +60,7 @@ describe('orientación de la ruta al reutilizar un Camino Comercial existente', 
       [acuerdo],
       mapaSintetico(),
       [caminoAB],
-      1
+      instanteDeTest(1)
     );
 
     const cA = resultado.caravanas.find((c) => c.id === caravanaA.id)!;
@@ -86,7 +86,7 @@ describe('orientación de la ruta al reutilizar un Camino Comercial existente', 
 // Cooldown de creación de caravanas (antes `caravana_cooldown.test.ts`)
 //
 // A petición del usuario: tras crear una caravana (Fundación o comercial) desde un asentamiento, hay que
-// esperar `CARAVANA_COOLDOWN.ticksCooldown` ticks antes de poder crear otra desde el mismo asentamiento —
+// esperar `CARAVANA_COOLDOWN.cooldownMinutos` ticks antes de poder crear otra desde el mismo asentamiento —
 // evita spam de creación cuando una caravana recién salida es destruida (bandidos, intercepción) y el
 // cupo/recursos vuelven a estar disponibles de inmediato. Ver `Docs/3_Sistema_Economico_y_Comercio.md` y
 // `engine/asentamientoQuery.ts` (`puedeCrearCaravana`).
@@ -101,7 +101,7 @@ describe('cooldown de creación de caravanas', () => {
       almacen: { ...asentamiento.almacen, madera: { cantidad: 1000, capacidad: 2000 } },
       edificios: [
         ...asentamiento.edificios,
-        { id: 'mercado-test', tipo: 'mercado', posicion: { x: 100, y: 100 }, estado: 'activo', ticksRestantes: 0, ambito: 'asentamiento' },
+        { id: 'mercado-test', tipo: 'mercado', posicion: { x: 100, y: 100 }, estado: 'activo', ambito: 'asentamiento' },
       ],
     };
   }
@@ -109,27 +109,27 @@ describe('cooldown de creación de caravanas', () => {
   describe('caravana comercial (construirCaravanaComercial)', () => {
     it('rechaza crear una segunda caravana antes de que pase el cooldown', () => {
       const asentamiento = asentamientoConMercado();
-      const r1 = construirCaravanaComercial(asentamiento, [], 0, 0);
-      expect(() => construirCaravanaComercial(r1.asentamiento, [r1.caravana], 1, 1)).toThrow(CaravanaInvalidaError);
+      const r1 = construirCaravanaComercial(asentamiento, [], instanteDeTest(0), 0);
+      expect(() => construirCaravanaComercial(r1.asentamiento, [r1.caravana], instanteDeTest(1), 1)).toThrow(CaravanaInvalidaError);
     });
 
-    it('permite crear otra en cuanto pasa CARAVANA_COOLDOWN.ticksCooldown ticks', () => {
+    it('permite crear otra en cuanto pasa CARAVANA_COOLDOWN.cooldownMinutos ticks', () => {
       const asentamiento = asentamientoConMercado();
-      const r1 = construirCaravanaComercial(asentamiento, [], 0, 0);
+      const r1 = construirCaravanaComercial(asentamiento, [], instanteDeTest(0), 0);
       expect(() =>
-        construirCaravanaComercial(r1.asentamiento, [r1.caravana], CARAVANA_COOLDOWN.ticksCooldown, 1)
+        construirCaravanaComercial(r1.asentamiento, [r1.caravana], instanteDeTest(CARAVANA_COOLDOWN.cooldownMinutos), 1)
       ).not.toThrow();
     });
 
-    it('registra el tick de creación en ultimaCaravanaCreadaEnTick', () => {
+    it('registra el instante de creación en ultimaCaravanaCreadaEn', () => {
       const asentamiento = asentamientoConMercado();
-      const r1 = construirCaravanaComercial(asentamiento, [], 5, 0);
-      expect(r1.asentamiento.ultimaCaravanaCreadaEnTick).toBe(5);
+      const r1 = construirCaravanaComercial(asentamiento, [], instanteDeTest(5), 0);
+      expect(r1.asentamiento.ultimaCaravanaCreadaEn).toBe(instanteDeTest(5));
     });
 
     it('un asentamiento que nunca creó ninguna no está en cooldown', () => {
       const asentamiento = asentamientoConMercado();
-      expect(() => construirCaravanaComercial(asentamiento, [], 0, 0)).not.toThrow();
+      expect(() => construirCaravanaComercial(asentamiento, [], instanteDeTest(0), 0)).not.toThrow();
     });
   });
 
@@ -153,15 +153,15 @@ describe('cooldown de creación de caravanas', () => {
 
     it('rechaza lanzar una segunda Caravana de Fundación antes de que pase el cooldown', () => {
       const { mapa, asentamiento, faccion, destino } = contextoNivel2();
-      const r1 = lanzarCaravanaFundacion(mapa, asentamiento, faccion, destino, [asentamiento], [], 1, 0, 0);
+      const r1 = lanzarCaravanaFundacion(mapa, asentamiento, faccion, destino, [asentamiento], [], 1, instanteDeTest(0), 0);
       expect(() =>
-        lanzarCaravanaFundacion(mapa, r1.origenActualizado, faccion, destino, [asentamiento], [r1.caravana], 1, 1, 1)
+        lanzarCaravanaFundacion(mapa, r1.origenActualizado, faccion, destino, [asentamiento], [r1.caravana], 1, instanteDeTest(0), 1)
       ).toThrow(ExpansionInvalidaError);
     });
 
-    it('permite lanzar otra en cuanto pasa CARAVANA_COOLDOWN.ticksCooldown ticks', () => {
+    it('permite lanzar otra en cuanto pasa CARAVANA_COOLDOWN.cooldownMinutos ticks', () => {
       const { mapa, asentamiento, faccion, destino } = contextoNivel2();
-      const r1 = lanzarCaravanaFundacion(mapa, asentamiento, faccion, destino, [asentamiento], [], 1, 0, 0);
+      const r1 = lanzarCaravanaFundacion(mapa, asentamiento, faccion, destino, [asentamiento], [], 1, instanteDeTest(0), 0);
       expect(() =>
         lanzarCaravanaFundacion(
           mapa,
@@ -171,7 +171,7 @@ describe('cooldown de creación de caravanas', () => {
           [asentamiento],
           [r1.caravana],
           1,
-          CARAVANA_COOLDOWN.ticksCooldown,
+          instanteDeTest(CARAVANA_COOLDOWN.cooldownMinutos),
           1
         )
       ).not.toThrow();
@@ -192,7 +192,7 @@ describe('retorno real de una caravana comercial tras entregar', () => {
   const destino = { id: 'destino', faccionId: 'faccion-1', posicion: { x: 1000, y: 0 }, almacen: almacenSintetico({ oro: 0 }), politicasActivas: [] } as unknown as Asentamiento;
 
   function avanzar(caravanas: Caravana[]) {
-    return avanzarComercio([origen, destino], [] as Faccion[], caravanas, [], mapaSintetico(), [], 1);
+    return avanzarComercio([origen, destino], [] as Faccion[], caravanas, [], mapaSintetico(), [], instanteDeTest(1));
   }
 
   it('al entregar pasa a "retornando" en destino, NO a "disponible" en origen', () => {
@@ -251,7 +251,7 @@ describe('reuso de caravana propia a través de varios envíos del mismo trueque
       almacen: almacenSintetico(recursos),
       politicasActivas: [],
       edificios: conMercado
-        ? [{ id: `mercado-${id}`, tipo: 'mercado', posicion, estado: 'activo', ticksRestantes: 0, nivelInterno: 1 }]
+        ? [{ id: `mercado-${id}`, tipo: 'mercado', posicion, estado: 'activo', nivelInterno: 1 }]
         : [],
     } as unknown as Asentamiento;
   }
@@ -266,12 +266,12 @@ describe('reuso de caravana propia a través de varios envíos del mismo trueque
     const origen0 = asentamientoSintetico('origen', origenPos, { madera: 50, piedra: 200 }, true);
     const destino0 = asentamientoSintetico('destino', destinoPos, { oro: 1000 }, false);
 
-    const { asentamiento: origenTrasConstruir, caravana } = construirCaravanaComercial(origen0, [], 0, 0);
+    const { asentamiento: origenTrasConstruir, caravana } = construirCaravanaComercial(origen0, [], instanteDeTest(0), 0);
     expect(caravana.estado).toBe('disponible');
 
     // 100 piedra pactadas, capacidad de una caravana comercial = 60 (CARAVANA_CATALOGO.comercial.capacidad):
     // fuerza DOS envíos con la misma caravana en vez de uno.
-    const acuerdo = proponerTrueque([origenTrasConstruir, destino0], 'origen', 'destino', 'piedra', 'oro', 100, 1, 0, 0);
+    const acuerdo = proponerTrueque([origenTrasConstruir, destino0], 'origen', 'destino', 'piedra', 'oro', 100, 1, instanteDeTest(0), 0);
 
     let asentamientos = [origenTrasConstruir, destino0];
     let caravanas: Caravana[] = [caravana];
@@ -279,7 +279,7 @@ describe('reuso de caravana propia a través de varios envíos del mismo trueque
     const facciones: Faccion[] = [];
 
     function tick(n: number) {
-      const resultado = avanzarComercio(asentamientos, facciones, caravanas, acuerdos, mapa, [], n);
+      const resultado = avanzarComercio(asentamientos, facciones, caravanas, acuerdos, mapa, [], instanteDeTest(n));
       asentamientos = resultado.asentamientos;
       caravanas = resultado.caravanas;
       acuerdos = resultado.acuerdos;

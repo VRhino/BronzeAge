@@ -30,7 +30,7 @@ export const unirseAFaccion = comando<ParamsUnirseAFaccion, void>((estado, _mapa
   const actualizada = otorgarCiudadania(faccion, ctx.actor);
   const siguiente = conFaccion(estado, actualizada);
   return exito(siguiente, [
-    evento(ctx, estado, {
+    evento(ctx, {
       codigo: 'faccion.ciudadania_union',
       mensaje: `${ctx.actor} se une a ${faccion.nombre}.`,
       payload: { faccionId: faccion.id, jugadorId: ctx.actor } satisfies PayloadFaccionUnion,

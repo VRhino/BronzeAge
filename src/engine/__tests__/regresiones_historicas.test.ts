@@ -45,15 +45,15 @@ describe('regresiones históricas (Correcciones_Durante_Desarrollo.md)', () => {
 
   // Bug #7: "muerte instantánea de todo asentamiento nuevo" — el coste de Mantenimiento exigía trigo desde
   // el tick 1, antes de que la Granja llegara a completarse, destruyendo el asentamiento en ~9 ticks siempre.
-  // La corrección es MANTENIMIENTO.graciaTicks: ningún asentamiento puede caer en ruinas antes de esos ticks.
+  // La corrección es MANTENIMIENTO.graciaMinutos: ningún asentamiento puede caer en ruinas antes de esos ticks.
   it('un asentamiento recién fundado no puede caer en ruinas durante la gracia de mantenimiento, sin importar su emplazamiento', () => {
     // Posición deliberadamente sin garantía de bosque cercano (a diferencia de `posicionRecomendable`):
     // si la gracia no protegiera, este sería justo el caso que colapsaría en ~9 ticks.
     const { mapa, estado: estadoInicial } = estadoInicialConUnAsentamiento({ x: 500, y: 500 });
     let estado = estadoInicial;
-    const graciaTicks = 60;
+    const graciaMinutos = 60;
 
-    for (let tick = 1; tick < graciaTicks; tick++) {
+    for (let tick = 1; tick < graciaMinutos; tick++) {
       estado = avanzarSimulacion(estado, mapa, contextoDeTest(tick, rng));
       expect(estado.asentamientos, `tick ${tick}: el asentamiento sigue en pie durante la gracia`).toHaveLength(1);
       expect(estado.asentamientos[0]!.medidorMantenimiento, `tick ${tick}: medidor intacto durante la gracia`).toBe(100);

@@ -20,7 +20,8 @@
 import { mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { GameSession, type PartidaExportada } from '../session/gameSession';
-import { idDeMapa } from '../session/estado';
+import { idDeMapa, instanteDeTick, isoDeInstante } from '../session/estado';
+import { instante, type Instante } from '../domain/tiempo';
 import { WORLDGEN_VERSION } from '../worldgen';
 
 /**
@@ -28,13 +29,24 @@ import { WORLDGEN_VERSION } from '../worldgen';
  * PARTIDA, sube en cada comando aceptado) ni `worldgenVersion` (versión del generador de mundo) — esta sube
  * solo si cambia la FORMA del archivo en sí, para poder rechazar o migrar snapshots de una build anterior
  * sin adivinar por la forma del JSON.
+ *
+ * v2 (Fase D / doc 10): los campos temporales pasan de `*EnTick: number` (ordinal de tick) a `*En: Instante`
+ * (ms de mundo). v3 (Fase D / D3): el contador de construcción `Edificio.ticksRestantes` pasa a
+ * `Edificio.completaEn: Instante` (fecha absoluta, no contador — doc 6 §4). v4 (Fase D / D6): el único campo
+ * de entidad con unidad de tick en su nombre, `RelacionPolitica.tributo.cantidadPorTick`, pasa a
+ * `cantidadPorMinuto` (mismo valor — 1 tick = 1 minuto). v5 (cierre de Fase D): el `tick` provisional de los
+ * eventos y del log desaparece — `EventoDominio` se queda solo con `momento`, `EventoLogAdmin.tick` pasa a
+ * `momento`. `migrarSnapshot` encadena las conversiones y todas son sin pérdida — la relación tick↔instante
+ * es 1:1 (`instanteDeTick`).
  */
-export const FORMATO_SNAPSHOT_VERSION = 1;
+export const FORMATO_SNAPSHOT_VERSION = 5;
 
 export interface SnapshotPartida {
   formatoVersion: number;
-  /** Momento de simulación del guardado (ISO 8601) — lo decide el llamador, igual que en todo lo demás de
-   * `session/`: este módulo tampoco lee el reloj por su cuenta. */
+  /** Reloj de PARED del guardado (ISO 8601) — cuándo se escribió este archivo en tiempo real, no tiempo de
+   * mundo (ese es `instanteDeTick(partida.state.tick)`, derivado). Lo pasa `RunnerDePartida` con `this.ahora()`:
+   * `server/` es la capa dueña del reloj de pared (doc 10 §3), y este dato es metadato del archivo, no estado
+   * de partida. */
   guardadoEn: string;
   partida: PartidaExportada;
 }
@@ -55,8 +67,8 @@ export class ConflictoDeVersionError extends Error {
   }
 }
 
-/** Se lanza al cargar un snapshot de un formato de envoltorio que esta build no sabe leer. Sin migración
- * automática todavía: no hay snapshots reales en producción que migrar. */
+/** Se lanza al cargar un snapshot de un formato de envoltorio que esta build no sabe leer NI migrar (hoy:
+ * cualquiera fuera del rango v1..v5). */
 export class FormatoSnapshotNoSoportadoError extends Error {
   constructor(
     public readonly gameId: string,
@@ -106,7 +118,7 @@ async function leerSnapshotSiExiste(ruta: string): Promise<SnapshotPartida | nul
  * creación (`RunnerDePartida.crearYPersistir`) es justo lo que hace visible ese conflicto ahora, antes solo
  * pasaba cuando llegaba el primer comando/tick de la partida nueva.
  */
-export async function guardarPartida(directorio: string, sesion: GameSession, momento: string, opciones: { forzar?: boolean } = {}): Promise<void> {
+export async function guardarPartida(directorio: string, sesion: GameSession, guardadoEn: string, opciones: { forzar?: boolean } = {}): Promise<void> {
   const partida = sesion.exportar();
   const ruta = rutaDe(directorio, sesion.gameId);
 
@@ -116,33 +128,157 @@ export async function guardarPartida(directorio: string, sesion: GameSession, mo
   }
 
   await mkdir(directorio, { recursive: true });
-  const snapshot: SnapshotPartida = { formatoVersion: FORMATO_SNAPSHOT_VERSION, guardadoEn: momento, partida };
+  const snapshot: SnapshotPartida = { formatoVersion: FORMATO_SNAPSHOT_VERSION, guardadoEn, partida };
   const rutaTemporal = `${ruta}.tmp`;
   await writeFile(rutaTemporal, JSON.stringify(snapshot), 'utf-8');
   await rename(rutaTemporal, ruta);
 }
 
+/** Lo que devuelve `cargarPartida`: la sesión reconstruida más el reloj de PARED del último guardado
+ * (`SnapshotPartida.guardadoEn`). El `guardadoEn` es lo que necesita el reloj de mundo de D5 para saber
+ * cuántos ticks se adeudan tras un reinicio — "hace 3 h reales que se guardó el último tick" ⇒ 180 ticks. */
+export interface PartidaCargada {
+  sesion: GameSession;
+  guardadoEn: string;
+}
+
 /**
- * Reconstruye la `GameSession` guardada en `directorio/<gameId>.json`. `null` si no existe ningún snapshot
- * para ese `gameId` — no es un error, es el caso "partida nueva".
+ * Reconstruye la `GameSession` guardada en `directorio/<gameId>.json`, con el `guardadoEn` del snapshot.
+ * `null` si no existe ningún snapshot para ese `gameId` — no es un error, es el caso "partida nueva".
  */
-export async function cargarPartida(directorio: string, gameId: string): Promise<GameSession | null> {
+export async function cargarPartida(directorio: string, gameId: string): Promise<PartidaCargada | null> {
   const snapshot = await leerSnapshotSiExiste(rutaDe(directorio, gameId));
   if (!snapshot) return null;
-  if (snapshot.formatoVersion !== FORMATO_SNAPSHOT_VERSION) {
+
+  const partida = migrarSnapshot(gameId, snapshot);
+  if (partida.worldgenVersion !== WORLDGEN_VERSION) {
+    throw new WorldgenVersionNoCoincideError(gameId, partida.worldgenVersion);
+  }
+  return { sesion: GameSession.importar(partida), guardadoEn: snapshot.guardadoEn };
+}
+
+/**
+ * Lleva un snapshot al formato actual encadenando migraciones (v1 -> ... -> v5). La versión actual se
+ * devuelve tal cual; cualquier versión fuera del rango soportado se rechaza. La migración NO se persiste sola
+ * — el próximo comando o tick reescribe el archivo ya en la versión actual.
+ *
+ * Trabaja sobre el JSON crudo (`Record<string, any>`): las formas de cada versión difieren en nombres de
+ * campo, así que tipar el intermedio no aporta — el resultado sí es un `PartidaExportada` válido.
+ */
+function migrarSnapshot(gameId: string, snapshot: SnapshotPartida): PartidaExportada {
+  if (snapshot.formatoVersion === FORMATO_SNAPSHOT_VERSION) return snapshot.partida;
+  if (snapshot.formatoVersion < 1 || snapshot.formatoVersion > FORMATO_SNAPSHOT_VERSION) {
     throw new FormatoSnapshotNoSoportadoError(gameId, snapshot.formatoVersion);
   }
-  if (snapshot.partida.worldgenVersion !== WORLDGEN_VERSION) {
-    throw new WorldgenVersionNoCoincideError(gameId, snapshot.partida.worldgenVersion);
+
+  const p = snapshot.partida as unknown as Record<string, any>;
+  const s = p.state as Record<string, any>;
+  if (snapshot.formatoVersion < 2) migrarV1aV2(s);
+  if (snapshot.formatoVersion < 3) migrarV2aV3(s);
+  if (snapshot.formatoVersion < 4) migrarV3aV4(s);
+  if (snapshot.formatoVersion < 5) migrarV4aV5(s);
+  return p as unknown as PartidaExportada;
+}
+
+/** v1 -> v2 (Fase D / doc 10): campos temporales `*EnTick: number` (ordinal de tick) -> `*En: Instante` (ms
+ * de mundo), relación 1:1 vía `instanteDeTick`. `salidasFaccionPorJugador` guardaba ISO en v1. */
+function migrarV1aV2(s: Record<string, any>): void {
+  const iso = (isoOTick: unknown) => (typeof isoOTick === 'string' ? instante(Date.parse(isoOTick)) : instanteDeTick(Number(isoOTick)));
+
+  for (const a of s.asentamientos ?? []) {
+    a.fundadoEn = instanteDeTick(a.fundadoEnTick ?? 0);
+    delete a.fundadoEnTick;
+    if (a.ultimaCaravanaCreadaEnTick !== undefined) {
+      a.ultimaCaravanaCreadaEn = instanteDeTick(a.ultimaCaravanaCreadaEnTick);
+      delete a.ultimaCaravanaCreadaEnTick;
+    }
+    for (const e of a.escuadrones ?? []) {
+      if (e.heridoHastaTick !== undefined) {
+        e.heridoHasta = instanteDeTick(e.heridoHastaTick);
+        delete e.heridoHastaTick;
+      }
+    }
+    for (const pol of a.politicasActivas ?? []) {
+      pol.activadaEn = instanteDeTick(pol.activadaEnTick ?? 0);
+      pol.expiraEn = instanteDeTick(pol.expiraEnTick ?? 0);
+      delete pol.activadaEnTick;
+      delete pol.expiraEnTick;
+    }
   }
-  return GameSession.importar(snapshot.partida);
+  for (const ac of s.acuerdos ?? []) {
+    ac.creadoEn = instanteDeTick(ac.creadoEnTick ?? 0);
+    ac.expiraEn = instanteDeTick(ac.expiraEnTick ?? 0);
+    delete ac.creadoEnTick;
+    delete ac.expiraEnTick;
+  }
+  for (const o of s.ordenes ?? []) {
+    o.creadoEn = instanteDeTick(o.creadoEnTick ?? 0);
+    delete o.creadoEnTick;
+  }
+  for (const r of s.relaciones ?? []) {
+    r.creadoEn = instanteDeTick(r.creadoEnTick ?? 0);
+    delete r.creadoEnTick;
+  }
+  s.bandidosProximoSpawnEn = instanteDeTick(s.bandidosProximoSpawnTick ?? 0);
+  delete s.bandidosProximoSpawnTick;
+  s.salidasFaccionPorJugador = Object.fromEntries(
+    Object.entries(s.salidasFaccionPorJugador ?? {}).map(([jugador, valor]) => [jugador, iso(valor)])
+  );
+  const mapa = s.estadoMapa as Record<string, any>;
+  if (mapa?.regeneraEnTick !== undefined) {
+    mapa.regeneraEn = Object.fromEntries(Object.entries(mapa.regeneraEnTick).map(([id, tick]) => [id, instanteDeTick(Number(tick))]));
+    delete mapa.regeneraEnTick;
+  }
+}
+
+/** v2 -> v3 (Fase D / D3): el contador `Edificio.ticksRestantes` -> `Edificio.completaEn: Instante`. Solo un
+ * edificio `en_construccion` lleva `completaEn` (instante en que la obra terminará = tick actual + los ticks
+ * que le quedaban); `en_cola` y `activo` simplemente pierden el contador. */
+function migrarV2aV3(s: Record<string, any>): void {
+  const tickActual = Number(s.tick ?? 0);
+  for (const a of s.asentamientos ?? []) {
+    for (const e of a.edificios ?? []) {
+      if (e.ticksRestantes === undefined) continue;
+      if (e.estado === 'en_construccion') {
+        e.completaEn = instanteDeTick(tickActual + Number(e.ticksRestantes));
+      }
+      delete e.ticksRestantes;
+    }
+  }
+}
+
+/** v3 -> v4 (Fase D / D6): `RelacionPolitica.tributo.cantidadPorTick` -> `cantidadPorMinuto`. Mismo valor
+ * (1 tick = 1 minuto) — solo cambia el nombre para que la unidad la diga el campo. */
+function migrarV3aV4(s: Record<string, any>): void {
+  for (const r of s.relaciones ?? []) {
+    if (r.tributo?.cantidadPorTick === undefined) continue;
+    r.tributo.cantidadPorMinuto = r.tributo.cantidadPorTick;
+    delete r.tributo.cantidadPorTick;
+  }
+}
+
+/** v4 -> v5 (cierre de Fase D): el `tick` provisional se retira del contrato de eventos. Los eventos
+ * guardados pierden `tick` (ya llevan `momento`); las entradas del log por jugador cambian `tick` por el
+ * `momento` de mundo equivalente (`isoDeInstante(instanteDeTick(tick))`). */
+function migrarV4aV5(s: Record<string, any>): void {
+  for (const e of s.eventosDominio ?? []) delete e.tick;
+  for (const entradas of Object.values(s.historialJugadores ?? {})) {
+    for (const entrada of entradas as Array<Record<string, any>>) {
+      if (entrada.tick === undefined) continue;
+      entrada.momento = isoDeInstante(instanteDeTick(Number(entrada.tick)));
+      delete entrada.tick;
+    }
+  }
 }
 
 export interface ResumenPartidaEnDisco {
   gameId: string;
-  tick: number;
+  /** Instante de MUNDO de la partida (doc 10) — `instanteDeTick(state.tick)`, derivado. `state.tick` está en
+   * el snapshot en todas las versiones de formato, así que no hace falta migrar para leerlo. */
+  instante: Instante;
   version: number;
   mapaId: string;
+  /** Reloj de PARED del último guardado (ISO 8601), metadato del archivo — no es tiempo de mundo. */
   guardadoEn: string;
 }
 
@@ -173,7 +309,7 @@ export async function listarPartidas(directorio: string): Promise<ResumenPartida
       if (!snapshot) return null;
       return {
         gameId,
-        tick: snapshot.partida.state.tick,
+        instante: instanteDeTick(snapshot.partida.state.tick),
         version: snapshot.partida.state.version,
         mapaId: idDeMapa(snapshot.partida.state.mapa),
         guardadoEn: snapshot.guardadoEn,

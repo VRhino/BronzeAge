@@ -8,8 +8,7 @@ import { crearFaccion } from '../comandos/crearFaccion';
 import { fundarAsentamiento } from '../comandos/fundarAsentamiento';
 import { colocarOrdenMercado, crearCaravana, proponerTrueque } from '../comandos/comercio';
 
-const MOMENTO = '2026-01-01T00:00:00.000Z';
-const OPC = { momento: MOMENTO, actor: 'jugador-test' };
+const OPC = { actor: 'jugador-test' };
 
 /** Dos asentamientos de Facciones distintas, lo bastante separados para que ambos sean fundables. */
 function partidaConDosAsentamientos() {

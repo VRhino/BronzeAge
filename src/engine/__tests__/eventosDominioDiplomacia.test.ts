@@ -1,5 +1,6 @@
 // Fase A5 (Docs/Arquitectura/4_Plan_Evolucion_Tareas.md): `diplomacia.ts` migrado.
 import { describe, expect, it } from 'vitest';
+import { instanteDeTest } from './fixtures';
 import type { Asentamiento, RelacionPolitica } from '../../domain/types';
 import { avanzarTributos } from '../diplomacia';
 import type { PayloadTributoPagado } from '../diplomacia';
@@ -18,8 +19,8 @@ describe('eventos de dominio — diplomacia.ts', () => {
       tipo: 'vasallaje',
       faccionAId: 'f-senora',
       faccionBId: 'f-vasallo',
-      tributo: { recurso: 'madera', cantidadPorTick: 10 },
-      creadoEnTick: 0,
+      tributo: { recurso: 'madera', cantidadPorMinuto: 10 },
+      creadoEn: instanteDeTest(0),
       estado: 'activa',
     };
 
@@ -44,8 +45,8 @@ describe('eventos de dominio — diplomacia.ts', () => {
       tipo: 'vasallaje',
       faccionAId: 'f-senora',
       faccionBId: 'f-vasallo',
-      tributo: { recurso: 'madera', cantidadPorTick: 10 },
-      creadoEnTick: 0,
+      tributo: { recurso: 'madera', cantidadPorMinuto: 10 },
+      creadoEn: instanteDeTest(0),
       estado: 'activa',
     };
 

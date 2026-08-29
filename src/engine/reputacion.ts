@@ -27,14 +27,14 @@ export function avanzarReputacion(facciones: Faccion[], relaciones: RelacionPoli
   const bonusPorFaccion = new Map<string, number>();
   for (const r of relaciones) {
     if (r.estado !== 'activa' || r.tipo !== 'alianza') continue;
-    bonusPorFaccion.set(r.faccionAId, (bonusPorFaccion.get(r.faccionAId) ?? 0) + REPUTACION.bonusPorTickAlianzaActiva);
-    bonusPorFaccion.set(r.faccionBId, (bonusPorFaccion.get(r.faccionBId) ?? 0) + REPUTACION.bonusPorTickAlianzaActiva);
+    bonusPorFaccion.set(r.faccionAId, (bonusPorFaccion.get(r.faccionAId) ?? 0) + REPUTACION.bonusPorMinutoAlianzaActiva);
+    bonusPorFaccion.set(r.faccionBId, (bonusPorFaccion.get(r.faccionBId) ?? 0) + REPUTACION.bonusPorMinutoAlianzaActiva);
   }
 
   return facciones.map((f) => {
     let rep = f.reputacion;
-    if (rep > 0) rep = Math.max(0, rep - REPUTACION.decaimientoPorTick);
-    else if (rep < 0) rep = Math.min(0, rep + REPUTACION.decaimientoPorTick);
+    if (rep > 0) rep = Math.max(0, rep - REPUTACION.decaimientoPorMinuto);
+    else if (rep < 0) rep = Math.min(0, rep + REPUTACION.decaimientoPorMinuto);
     rep = Math.max(-100, Math.min(100, rep + (bonusPorFaccion.get(f.id) ?? 0)));
     return rep === f.reputacion ? f : { ...f, reputacion: rep };
   });

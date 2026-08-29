@@ -36,7 +36,27 @@ export class RunnerDePartida {
   private sesion: GameSession;
   private readonly directorio: string;
   private readonly ahora: () => string;
-  private temporizador: ReturnType<typeof setInterval> | null = null;
+
+  /**
+   * Reloj de mundo (Fase D / D5, doc 10 §2–3), `null` si no está en marcha. `referenciaMs` es el instante de
+   * PARED del último tick que este reloj dio por bueno — inicializado al `guardadoEn` del snapshot cargado
+   * (para el catch-up tras reinicio) o a "ahora" para una partida nueva; avanza en pasos de `intervaloMs` a
+   * medida que se ejecutan ticks, nunca por acumulación de `setInterval` (así el jitter del temporizador no
+   * deriva). El reloj de pared solo dice CUÁNTOS ticks faltan; el `instante` de cada uno lo deriva el motor
+   * del tick (doc 10 §2), así que la ráfaga de catch-up es determinista.
+   */
+  private relojDeMundo: { intervaloMs: number; timer: ReturnType<typeof setInterval>; referenciaMs: number } | null = null;
+
+  /** Instante de PARED (ms) del último guardado conocido al construir el runner — `guardadoEn` del snapshot
+   * cargado, o "ahora" para una partida nueva. Junto a `tickAlConstruir` fija el punto de anclaje del reloj
+   * de mundo: "en `referenciaRelojInicialMs` el mundo estaba en `tickAlConstruir`". */
+  private readonly referenciaRelojInicialMs: number;
+  private readonly tickAlConstruir: number;
+
+  /** Tope de ticks que una sola pasada de `sincronizarConReloj` ejecuta en ráfaga. Acota la latencia de
+   * arranque tras una caída larga (y el daño de un salto de reloj disparatado, p. ej. una corrección NTP);
+   * lo que exceda se recupera en las pasadas siguientes del temporizador. 10 080 = una semana de mundo. */
+  private static readonly MAX_TICKS_RAFAGA = 10_080;
 
   /**
    * Cadena de la cola serial. INVARIANTE: siempre es una promesa que RESUELVE (nunca rechaza) — cada
@@ -91,10 +111,12 @@ export class RunnerDePartida {
    */
   private cacheGeometria: { sobre: readonly Asentamiento[]; valor: GeometriaAsentamientos } | null = null;
 
-  private constructor(sesion: GameSession, opciones: OpcionesRunner) {
+  private constructor(sesion: GameSession, opciones: OpcionesRunner, guardadoEn?: string) {
     this.sesion = sesion;
     this.directorio = opciones.directorio;
     this.ahora = opciones.ahora ?? (() => new Date().toISOString());
+    this.referenciaRelojInicialMs = guardadoEn !== undefined ? Date.parse(guardadoEn) : new Date(this.ahora()).getTime();
+    this.tickAlConstruir = sesion.getState().tick;
   }
 
   static crear(gameId: string, config: { seed: number; region?: RegionId }, opciones: OpcionesRunner): RunnerDePartida {
@@ -124,7 +146,9 @@ export class RunnerDePartida {
    * existente. */
   static async cargarOCrear(gameId: string, config: { seed: number; region?: RegionId }, opciones: OpcionesRunner): Promise<RunnerDePartida> {
     const existente = await cargarPartida(opciones.directorio, gameId);
-    return existente ? new RunnerDePartida(existente, opciones) : RunnerDePartida.crearYPersistir(gameId, config, opciones);
+    return existente
+      ? new RunnerDePartida(existente.sesion, opciones, existente.guardadoEn)
+      : RunnerDePartida.crearYPersistir(gameId, config, opciones);
   }
 
   get gameId(): string {
@@ -190,7 +214,10 @@ export class RunnerDePartida {
    * resolver — es protección contra la reconexión, no contra un cliente que genera mal sus claves.
    */
   ejecutar<P, R>(manejador: ManejadorComando<P, R>, params: P, actor?: ActorId, idempotencyKey?: string): Promise<ResultadoComando<R>> {
-    const operacion = () => this.aplicarYPersistir((sesion) => sesion.ejecutar(manejador, params, { momento: this.ahora(), actor }));
+    // Sin `momento`: `GameSession` lo deriva del tick (`instanteDeTick`, Fase D / doc 10). `this.ahora()`
+    // —el reloj de pared— se reserva para lo que NO es estado de partida: `guardarPartida` (abajo), el TTL de
+    // `preciosReferencia`, y el catch-up del reloj de mundo (`sincronizarConReloj`, D5).
+    const operacion = () => this.aplicarYPersistir((sesion) => sesion.ejecutar(manejador, params, { actor }));
     if (idempotencyKey === undefined) return this.encolar(operacion);
 
     const clave = `${actor ?? ''}:${idempotencyKey}`;
@@ -217,43 +244,81 @@ export class RunnerDePartida {
    * aplicado pero el turno NPC no, con la partida y el disco de acuerdo en un estado que nadie pidió.
    */
   avanzarTick(): Promise<ResultadoComando<void>> {
-    return this.encolar(() =>
-      this.aplicarYPersistir((sesion) => {
-        const momento = this.ahora();
-        const resultado = sesion.avanzarTick(momento);
-        if (!resultado.ok) return resultado;
-        sesion.avanzarAutoComercio(momento);
-        sesion.avanzarFaccionesNpc(momento);
-        return resultado;
-      })
-    );
+    return this.encolar(() => this.aplicarYPersistir((sesion) => this.unTickCompleto(sesion)));
+  }
+
+  /** Un tick "completo" tal y como lo entiende este runner: tick puro + auto-comercio + turno del NPC, un
+   * solo persist para los tres. Sin encolar — lo llaman `avanzarTick` (una entrada de cola) y la ráfaga de
+   * catch-up (`sincronizarConReloj`, también una sola entrada para toda la ráfaga). */
+  private unTickCompleto(sesion: GameSession): ResultadoComando<void> {
+    const resultado = sesion.avanzarTick();
+    if (!resultado.ok) return resultado;
+    sesion.avanzarAutoComercio();
+    sesion.avanzarFaccionesNpc();
+    return resultado;
   }
 
   /**
-   * Programa `avanzarTick()` cada `intervaloMs`, a través de la misma cola serial que los comandos —
-   * `setInterval` solo dispara la llamada, el orden real lo sigue decidiendo la cola. Un tick que tarde más
-   * que `intervaloMs` no se solapa consigo mismo: la siguiente llamada simplemente espera su turno como
-   * cualquier otro trabajo encolado.
+   * Arranca el RELOJ DE MUNDO (Fase D / D5): mantiene `estado.tick` sincronizado con el tiempo real,
+   * ejecutando un tick por cada `intervaloMs` de reloj de pared transcurrido. Con "mundo = tiempo real"
+   * (doc 10 §2), `intervaloMs` = `SIMULACION.duracionTickMs` = 60 000: un tick por minuto real.
+   *
+   * `referenciaMs` = "instante de pared en que el mundo llegó al tick ACTUAL". Se parte del anclaje del
+   * constructor (`referenciaRelojInicialMs` en `tickAlConstruir`) más un intervalo por cada tick avanzado
+   * desde entonces a mano (`POST .../tick`), para que arrancar el reloj después de unos ticks manuales no
+   * los cuente dos veces ni pare/reanude re-ejecute la ráfaga.
+   *
+   * En el primer disparo —y tras cualquier hueco: proceso caído y reabierto, host dormido, GC largo—
+   * ejecuta EN RÁFAGA los ticks adeudados (catch-up, doc 10 §2), por la misma cola serial que los comandos.
+   * `setInterval` solo dispara la comprobación; cuántos ticks faltan lo decide siempre el reloj de pared
+   * contra `referenciaMs`, no un contador que acumule el jitter del temporizador.
    */
-  iniciarTicksAutomaticos(intervaloMs: number): void {
-    if (this.temporizador) return; // ya en marcha: no duplicar el intervalo
-    this.temporizador = setInterval(() => {
-      void this.avanzarTick();
-    }, intervaloMs);
+  iniciarRelojDeMundo(intervaloMs: number): void {
+    if (this.relojDeMundo) return; // ya en marcha: no duplicar el intervalo
+    const ticksAvanzadosAMano = this.sesion.getState().tick - this.tickAlConstruir;
+    const referenciaMs = this.referenciaRelojInicialMs + ticksAvanzadosAMano * intervaloMs;
+    const timer = setInterval(() => void this.sincronizarConReloj(), intervaloMs);
+    this.relojDeMundo = { intervaloMs, timer, referenciaMs };
+    void this.sincronizarConReloj(); // catch-up inmediato, sin esperar al primer intervalo
   }
 
-  detenerTicksAutomaticos(): void {
-    if (!this.temporizador) return;
-    clearInterval(this.temporizador);
-    this.temporizador = null;
+  detenerRelojDeMundo(): void {
+    if (!this.relojDeMundo) return;
+    clearInterval(this.relojDeMundo.timer);
+    this.relojDeMundo = null;
+  }
+
+  /**
+   * Ejecuta los ticks que el reloj de pared dice que se adeudan desde `referenciaMs`, y adelanta la
+   * referencia EXACTAMENTE ese número de intervalos (nunca a "ahora": así un resto sub-intervalo no se
+   * pierde). Adelantar la referencia ANTES de encolar la ráfaga hace que un segundo disparo del `setInterval`
+   * durante una ráfaga larga vea 0 adeudados y no duplique trabajo.
+   *
+   * Toda la ráfaga es UNA sola entrada de la cola serial: un comando de jugador que llegue a mitad del
+   * catch-up espera a que el mundo termine de ponerse al día (correcto — no se puede actuar "ahora" hasta
+   * que el mundo esté en "ahora"), y `esperarColaVacia` cubre la ráfaga entera. Si el reloj se detiene a
+   * mitad (`detenerRelojDeMundo`, apagado del proceso), la ráfaga para donde va.
+   */
+  private sincronizarConReloj(): Promise<void> {
+    const reloj = this.relojDeMundo;
+    if (!reloj) return Promise.resolve();
+    const ahoraMs = new Date(this.ahora()).getTime();
+    const adeudados = Math.min(Math.floor((ahoraMs - reloj.referenciaMs) / reloj.intervaloMs), RunnerDePartida.MAX_TICKS_RAFAGA);
+    if (adeudados <= 0) return Promise.resolve();
+    reloj.referenciaMs += adeudados * reloj.intervaloMs;
+    return this.encolar(async () => {
+      for (let i = 0; i < adeudados && this.relojDeMundo; i++) {
+        await this.aplicarYPersistir((sesion) => this.unTickCompleto(sesion));
+      }
+    });
   }
 
   /**
    * Se resuelve cuando la cola queda vacía: todo lo encolado hasta este instante ha terminado, con éxito o
-   * con error. `detenerTicksAutomaticos` impide que se ENCOLE trabajo nuevo, pero no cancela el que ya
-   * estaba en cola (un tick a medio persistir no se aborta) — esto es para esperar a que ese resto drene.
-   * Pensado tanto para un apagado limpio del proceso como para pruebas que necesiten un punto determinista
-   * después de parar el scheduler.
+   * con error. `detenerRelojDeMundo` impide que se ENCOLE trabajo nuevo, pero no cancela el que ya estaba en
+   * cola (un tick a medio persistir no se aborta) — esto es para esperar a que ese resto drene. Pensado
+   * tanto para un apagado limpio del proceso como para pruebas que necesiten un punto determinista después
+   * de parar el reloj.
    */
   async esperarColaVacia(): Promise<void> {
     await this.cola;

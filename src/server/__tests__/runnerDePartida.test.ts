@@ -1,5 +1,5 @@
 // Contrato de RunnerDePartida (Docs/Arquitectura/7_Diseno_GameSession.md §4, §8.4): cola serial, ciclo
-// "aplicar -> persistir -> confirmar" con descarte en fallo, y el scheduler de ticks automáticos.
+// "aplicar -> persistir -> confirmar" con descarte en fallo, y el reloj de mundo con catch-up (D5, doc 10).
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -65,7 +65,7 @@ describe('RunnerDePartida — aplicar -> persistir -> confirmar', () => {
     await r.ejecutar(crearFaccion, { nombre: 'Micenas' });
 
     const cargada = await cargarPartida(directorio, 'g-persistido');
-    expect(cargada!.getState().facciones).toHaveLength(1);
+    expect(cargada!.sesion.getState().facciones).toHaveLength(1);
   });
 
   it('si la persistencia falla, el comando se descarta: GameSession vuelve a como estaba antes', async () => {
@@ -157,50 +157,98 @@ describe('RunnerDePartida.cargarOCrear', () => {
   });
 });
 
-// Timers REALES a propósito, no `vi.useFakeTimers()`: cada tick del scheduler dispara E/S real a disco
+// Timers REALES a propósito, no `vi.useFakeTimers()`: cada tick del reloj de mundo dispara E/S real a disco
 // (`avanzarTick` -> `guardarPartida`), y avanzar un reloj falso no adelanta una escritura de archivo de
-// verdad — con timers falsos, la mayoría de los ticks programados nunca llegaban a completar su persistencia
-// antes de que el test comprobara el resultado (flakiness verificada al escribir este archivo). El coste es
-// unos pocos cientos de ms reales de duración de test; a cambio, prueba el mecanismo de verdad.
+// verdad — con timers falsos, la mayoría de los ticks nunca llegaban a completar su persistencia antes de
+// que el test comprobara el resultado (flakiness verificada al escribir este archivo).
 function esperar(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-describe('RunnerDePartida — ticks automáticos', () => {
-  it('avanza ticks mientras está activo, y deja de avanzar al detenerlo', async () => {
-    const r = runner('g-scheduler');
-    r.iniciarTicksAutomaticos(10);
-    await esperar(200);
-    r.detenerTicksAutomaticos();
-    // `detener` impide que se ENCOLE trabajo nuevo, pero no cancela el último tick que ya se hubiera
-    // disparado y estuviera a medio persistir — se espera a que ese resto drene antes de fijar la
-    // referencia, o un backlog bajo carga (suite completa, no este archivo solo) se leería como que el
-    // scheduler seguía corriendo.
-    await r.esperarColaVacia();
-    const tickTrasParar = r.getState().tick;
+/** Runner con un reloj de PARED controlable: `avanzar(ms)` mueve el reloj hacia adelante, que es lo que el
+ * reloj de mundo consulta para saber cuántos ticks se adeudan. `crear` (no `cargarOCrear`) ⇒ la referencia
+ * inicial del catch-up es "ahora" en el momento de construir. */
+function runnerConReloj(gameId: string, seed = 7): { r: RunnerDePartida; avanzar: (ms: number) => void } {
+  let relojMs = Date.parse(MOMENTO);
+  const r = RunnerDePartida.crear(gameId, { seed }, { directorio, ahora: () => new Date(relojMs).toISOString() });
+  return { r, avanzar: (ms) => (relojMs += ms) };
+}
 
+describe('RunnerDePartida — reloj de mundo (D5)', () => {
+  it('al arrancar ejecuta EN RÁFAGA los ticks que el reloj de pared dice que se adeudan (catch-up)', async () => {
+    const { r, avanzar } = runnerConReloj('g-catchup');
+    avanzar(5 * 60_000); // 5 minutos reales antes de arrancar el reloj
+    r.iniciarRelojDeMundo(60_000);
+    await r.esperarColaVacia(); // la ráfaga es una sola entrada de cola: esto la cubre entera, sin timers
+    r.detenerRelojDeMundo();
+
+    expect(r.getState().tick).toBe(5);
+  });
+
+  it('no adelanta la referencia a "ahora": un resto sub-intervalo no se pierde entre paradas', async () => {
+    const { r, avanzar } = runnerConReloj('g-resto');
+    avanzar(2 * 60_000 + 40_000); // 2 intervalos + 40 s de resto
+    r.iniciarRelojDeMundo(60_000);
+    await r.esperarColaVacia();
+    r.detenerRelojDeMundo();
+    expect(r.getState().tick).toBe(2);
+
+    // 25 s más ⇒ 40 + 25 = 65 s desde el tick 2: si la referencia hubiera saltado a "ahora" al parar, esos
+    // 40 s se habrían perdido y esto seguiría en 2. Como la referencia es "cuándo se llegó al tick actual",
+    // vuelve a arrancar contando desde el tick 2 y ejecuta el tick que ya toca.
+    avanzar(25_000);
+    r.iniciarRelojDeMundo(60_000);
+    await r.esperarColaVacia();
+    r.detenerRelojDeMundo();
+    expect(r.getState().tick).toBe(3);
+  });
+
+  it('sigue avanzando con el tiempo y deja de avanzar al detenerlo', async () => {
+    const { r, avanzar } = runnerConReloj('g-continuo');
+    r.iniciarRelojDeMundo(20);
+    avanzar(200); // 10 intervalos de reloj de pared
+    await esperar(120); // deja que el setInterval real dispare y drene la ráfaga
+    await r.esperarColaVacia();
+    r.detenerRelojDeMundo();
+    const tickTrasParar = r.getState().tick;
     expect(tickTrasParar).toBeGreaterThan(0);
 
-    // Si `detenerTicksAutomaticos` no hubiera parado el intervalo de verdad, seguiría subiendo aquí.
-    await esperar(200);
+    avanzar(200); // más "tiempo real"... pero el reloj ya está detenido
+    await esperar(120);
     await r.esperarColaVacia();
     expect(r.getState().tick).toBe(tickTrasParar);
   });
 
-  it('llamar dos veces a iniciar no deja un segundo intervalo huérfano sin detener', async () => {
-    const r = runner('g-scheduler-doble');
-    r.iniciarTicksAutomaticos(10);
-    r.iniciarTicksAutomaticos(10); // si esto creara un SEGUNDO intervalo, `detener` (que solo limpia uno) lo dejaría corriendo para siempre
-    await esperar(200);
-    r.detenerTicksAutomaticos();
+  it('llamar dos veces a iniciar no deja un segundo intervalo huérfano', async () => {
+    const { r, avanzar } = runnerConReloj('g-doble');
+    r.iniciarRelojDeMundo(20);
+    r.iniciarRelojDeMundo(20); // si creara un SEGUNDO intervalo, `detener` (que limpia uno) dejaría el otro vivo
+    avanzar(200);
+    await esperar(120);
     await r.esperarColaVacia();
+    r.detenerRelojDeMundo();
     const tickTrasParar = r.getState().tick;
-
     expect(tickTrasParar).toBeGreaterThan(0);
 
-    await esperar(200);
+    avanzar(200);
+    await esperar(120);
     await r.esperarColaVacia();
     expect(r.getState().tick).toBe(tickTrasParar);
+  });
+
+  it('catch-up tras un reinicio: reabrir una partida guardada hace 3 "horas" ejecuta los ticks vencidos', async () => {
+    // Guarda una partida con `guardadoEn` = MOMENTO, tick 0.
+    await RunnerDePartida.crearYPersistir('g-reinicio', { seed: 3 }, { directorio, ahora: () => MOMENTO });
+
+    // "Reinicio del proceso": se reabre 3 minutos reales después. La referencia del catch-up es el
+    // `guardadoEn` del snapshot, no el instante de reapertura ⇒ 3 ticks adeudados.
+    const tresMinutosDespues = new Date(Date.parse(MOMENTO) + 3 * 60_000).toISOString();
+    const reabierta = await RunnerDePartida.cargarOCrear('g-reinicio', { seed: 3 }, { directorio, ahora: () => tresMinutosDespues });
+    reabierta.iniciarRelojDeMundo(60_000);
+    await reabierta.esperarColaVacia();
+    reabierta.detenerRelojDeMundo();
+
+    expect(reabierta.getState().tick).toBe(3);
   });
 });
 
@@ -358,5 +406,38 @@ describe('RunnerDePartida — geometriaAsentamientos (Fase C10: zonas/trazado po
     const primera = r.geometriaAsentamientos();
     await r.ejecutar(crearFaccion, { nombre: 'Micenas' }); // no funda: `estado.asentamientos` sigue siendo el mismo array
     expect(r.geometriaAsentamientos()).toBe(primera);
+  });
+});
+
+describe('RunnerDePartida — el reloj de pared NO entra en el estado (Fase D / doc 10 §7, regresión del bug)', () => {
+  /** Corre la misma secuencia con un `ahora` (reloj de pared) distinto y devuelve el snapshot resultante,
+   * ignorando `guardadoEn` (que SÍ es reloj de pared, y a propósito — es metadato del archivo). */
+  async function snapshotTras(ahora: () => string): Promise<unknown> {
+    const dir = await mkdtemp(join(tmpdir(), 'bronzeage-reloj-'));
+    try {
+      const r = RunnerDePartida.crear('g', { seed: 7 }, { directorio: dir, ahora });
+      const creada = await r.ejecutar(crearFaccion, { nombre: 'Micenas' }, 'ana');
+      await r.ejecutar(fundarAsentamiento, { faccionId: creada.datos!.faccionId, posicion: { x: 500, y: 500 } }, 'ana');
+      await r.avanzarTick();
+      await r.avanzarTick();
+      const { partida } = JSON.parse(await readFile(join(dir, 'g.json'), 'utf-8')) as SnapshotPartida;
+      return partida;
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  }
+
+  it('mismo comando + misma seed con relojes de pared distintos → snapshot IDÉNTICO (incluidos los eventos)', async () => {
+    const enEnero = await snapshotTras(() => '2026-01-01T00:00:00.000Z');
+    const enJulio = await snapshotTras(() => '2026-07-15T12:34:56.000Z');
+    // Antes de D1 esto fallaba: `ctx.momento` era `ahora()` y viajaba a `eventosDominio[].momento`.
+    expect(enJulio).toEqual(enEnero);
+  });
+
+  it('los eventos se fechan con el instante de MUNDO (derivado del tick), no con el reloj de pared', async () => {
+    const partida = (await snapshotTras(() => '2099-12-31T23:59:59.000Z')) as SnapshotPartida['partida'];
+    for (const evento of partida.state.eventosDominio) {
+      expect(evento.momento.startsWith('2026-01-01T00:0')).toBe(true); // época + unos pocos minutos, no 2099
+    }
   });
 });

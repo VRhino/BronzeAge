@@ -6,10 +6,14 @@ import { GameSession } from '../gameSession';
 import { crearFaccion } from '../comandos/crearFaccion';
 import { fundarAsentamiento } from '../comandos/fundarAsentamiento';
 import { comprarCasa } from '../comandos/cargos';
+import { instanteDeTick, isoDeInstante } from '../estado';
 
-export const MOMENTO = '2026-01-01T00:00:00.000Z';
+/** `EventoDominio.momento` (ISO 8601) de un comando sobre una partida recién creada — instante del tick 0
+ * (= `SIMULACION.epocaInicial`). Ya no se inyecta un `momento`, lo deriva `GameSession` del tick (Fase D /
+ * doc 10). */
+export const MOMENTO = isoDeInstante(instanteDeTick(0));
 export const ACTOR = 'jugador-test';
-export const OPC = { momento: MOMENTO, actor: ACTOR };
+export const OPC = { actor: ACTOR };
 
 /** Segundo residente del asentamiento de la fixture, que entra comprando casa. */
 export const VECINO = 'jugador-vecino';

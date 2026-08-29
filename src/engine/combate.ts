@@ -1,5 +1,6 @@
 import type { Asentamiento, CampamentoBandido, Caravana, Escuadron, Faccion, RelacionPolitica } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
+import { minutos, sumar, type Instante } from '../domain/tiempo';
 import type { RandomFn } from '../worldgen';
 import { CAMPAMENTOS_BANDIDOS, MILITAR, NIVEL_FACCION, REPUTACION, TROPAS_RECLUTABLES } from '../constants';
 import { agregarRecurso } from './almacen';
@@ -17,28 +18,28 @@ export class CombateInvalidoError extends Error {}
 /** Poder de combate (Doc 5.1: héroe-comandante liderando tropa; el resultado es CÁLCULO, no combate visual, Doc 5.10).
  * `poderBase` sale siempre del catálogo `TROPAS_RECLUTABLES` vía `tropaId` (Doc 5.7/5.8) — toda tropa lo tiene,
  * nunca cambia de identidad al ganar veteranía (Doc 5.8, a petición del usuario). */
-export function poderEscuadron(e: Escuadron, tickActual: number): number {
+export function poderEscuadron(e: Escuadron, instante: Instante): number {
   const poderBase = TROPAS_RECLUTABLES.find((t) => t.id === e.tropaId)!.poderBase;
   const base = poderBase * e.cantidad;
   const conVeterania = base * (1 + e.veterania * MILITAR.bonusVeteraniaPorPunto);
-  const herido = e.heridoHastaTick !== undefined && tickActual < e.heridoHastaTick;
+  const herido = e.heridoHasta !== undefined && instante < e.heridoHasta;
   return herido ? conVeterania * MILITAR.penalizacionHerido : conVeterania;
 }
 
-function poderTotal(escuadrones: Escuadron[], tickActual: number, bonusCohesion: boolean): number {
-  const suma = escuadrones.reduce((acc, e) => acc + poderEscuadron(e, tickActual), 0);
+function poderTotal(escuadrones: Escuadron[], instante: Instante, bonusCohesion: boolean): number {
+  const suma = escuadrones.reduce((acc, e) => acc + poderEscuadron(e, instante), 0);
   if (!bonusCohesion || escuadrones.length <= 1) return suma;
   // Cohesión entre escuadrones defendiendo juntos (Doc 5.3), abstraída sin formaciones renderizadas (Fase 0).
   return suma * (1 + MILITAR.bonusCohesionPorEscuadronExtra * (escuadrones.length - 1));
 }
 
-function aplicarBajas(escuadrones: Escuadron[], fraccionBajas: number, victoria: boolean, tickActual: number): Escuadron[] {
+function aplicarBajas(escuadrones: Escuadron[], fraccionBajas: number, victoria: boolean, instante: Instante): Escuadron[] {
   return escuadrones.map((e) => {
     const bajas = Math.round(e.cantidad * fraccionBajas);
     const cantidad = Math.max(0, e.cantidad - bajas);
     const veterania = e.veterania + (victoria ? MILITAR.veteraniaGanadaPorVictoria : MILITAR.veteraniaGanadaPorDerrota);
-    const heridoHastaTick = victoria ? e.heridoHastaTick : tickActual + MILITAR.duracionHeridoTicks;
-    return { ...e, cantidad, veterania, heridoHastaTick };
+    const heridoHasta = victoria ? e.heridoHasta : sumar(instante, minutos(MILITAR.duracionHeridoMinutos));
+    return { ...e, cantidad, veterania, heridoHasta };
   });
 }
 
@@ -82,14 +83,14 @@ export interface ResultadoCombate {
  * Resolución numérica de combate (Doc 5.2/5.10): "mismo motor" para asedio/mundo abierto/caravanas.
  * PERMADEATH real (Doc 5.4): las bajas son permanentes; sin empates (jitter aleatorio rompe la igualdad).
  */
-export function resolverCombate(atacantes: Escuadron[], defensores: Escuadron[], tickActual: number, rng: RandomFn): ResultadoCombate {
+export function resolverCombate(atacantes: Escuadron[], defensores: Escuadron[], instante: Instante, rng: RandomFn): ResultadoCombate {
   if (atacantes.length === 0) throw new CombateInvalidoError('El atacante no tiene escuadrones con los que combatir.');
   if (defensores.length === 0) throw new CombateInvalidoError('El defensor no tiene escuadrones con los que combatir.');
 
   const jitterA = 1 + (rng() * 2 - 1) * MILITAR.varianzaCombate;
   const jitterD = 1 + (rng() * 2 - 1) * MILITAR.varianzaCombate;
-  const poderA = poderTotal(atacantes, tickActual, false) * jitterA;
-  const poderD = poderTotal(defensores, tickActual, true) * jitterD;
+  const poderA = poderTotal(atacantes, instante, false) * jitterA;
+  const poderD = poderTotal(defensores, instante, true) * jitterD;
 
   const ganador: 'atacante' | 'defensor' = poderA > poderD ? 'atacante' : 'defensor';
   const ratio = Math.min(poderA, poderD) / Math.max(poderA, poderD, 1);
@@ -97,8 +98,8 @@ export function resolverCombate(atacantes: Escuadron[], defensores: Escuadron[],
   const bajasGanador = 0.05 + 0.15 * ratio;
   const bajasPerdedor = 0.3 + 0.4 * (1 - ratio);
 
-  const atacantesResultado = aplicarBajas(atacantes, ganador === 'atacante' ? bajasGanador : bajasPerdedor, ganador === 'atacante', tickActual);
-  const defensoresResultado = aplicarBajas(defensores, ganador === 'defensor' ? bajasGanador : bajasPerdedor, ganador === 'defensor', tickActual);
+  const atacantesResultado = aplicarBajas(atacantes, ganador === 'atacante' ? bajasGanador : bajasPerdedor, ganador === 'atacante', instante);
+  const defensoresResultado = aplicarBajas(defensores, ganador === 'defensor' ? bajasGanador : bajasPerdedor, ganador === 'defensor', instante);
 
   return {
     ganador,
@@ -151,7 +152,7 @@ export function iniciarAsedio(
   escuadronIdsAtacantes: string[],
   facciones: Faccion[],
   relaciones: RelacionPolitica[],
-  tickActual: number,
+  instante: Instante,
   rng: RandomFn
 ): { atacante: Asentamiento; defensor: Asentamiento; facciones: Faccion[]; eventos: EventoCrudo[]; conquistado: boolean } {
   if (atacante.faccionId === defensor.faccionId) {
@@ -162,7 +163,7 @@ export function iniciarAsedio(
   const escuadronesAtacantes = seleccionarEscuadrones(atacante, escuadronIdsAtacantes);
   const escuadronesDefensores = seleccionarEscuadrones(defensor, defensor.escuadrones.map((e) => e.id));
 
-  const resultado = resolverCombate(escuadronesAtacantes, escuadronesDefensores, tickActual, rng);
+  const resultado = resolverCombate(escuadronesAtacantes, escuadronesDefensores, instante, rng);
 
   const conquistado = resultado.ganador === 'atacante';
   const payloadAsedio: PayloadAsedio = {
@@ -225,12 +226,12 @@ export function combateCampoAbierto(
   escuadronIdsB: string[],
   facciones: Faccion[],
   relaciones: RelacionPolitica[],
-  tickActual: number,
+  instante: Instante,
   rng: RandomFn
 ): { asentamientoA: Asentamiento; asentamientoB: Asentamiento; facciones: Faccion[]; eventos: EventoCrudo[] } {
   const escuadronesA = seleccionarEscuadrones(asentamientoA, escuadronIdsA);
   const escuadronesB = seleccionarEscuadrones(asentamientoB, escuadronIdsB);
-  const resultado = resolverCombate(escuadronesA, escuadronesB, tickActual, rng);
+  const resultado = resolverCombate(escuadronesA, escuadronesB, instante, rng);
 
   const faccionesConReputacion = estanAliadas(relaciones, asentamientoA.faccionId, asentamientoB.faccionId)
     ? aplicarAjustesReputacion(facciones, [
@@ -267,7 +268,7 @@ export function interceptarCaravana(
   atacante: Asentamiento,
   escuadronIdsAtacantes: string[],
   caravana: Caravana,
-  tickActual: number,
+  instante: Instante,
   facciones: Faccion[],
   asentamientos: Asentamiento[],
   rng: RandomFn
@@ -275,11 +276,11 @@ export function interceptarCaravana(
   if (!atacante.cargos.generalId) throw new CombateInvalidoError('El atacante necesita un General para interceptar.');
   const escuadrones = seleccionarEscuadrones(atacante, escuadronIdsAtacantes);
   const jitter = 1 + (rng() * 2 - 1) * MILITAR.varianzaCombate;
-  const poderAtacante = escuadrones.reduce((acc, e) => acc + poderEscuadron(e, tickActual), 0) * jitter;
+  const poderAtacante = escuadrones.reduce((acc, e) => acc + poderEscuadron(e, instante), 0) * jitter;
   const gana = poderAtacante > MILITAR.defensaBaseCaravana;
 
   const fraccionBajas = gana ? 0.05 : 0.25;
-  const escuadronesActualizados = aplicarBajas(escuadrones, fraccionBajas, gana, tickActual);
+  const escuadronesActualizados = aplicarBajas(escuadrones, fraccionBajas, gana, instante);
 
   let almacen = atacante.almacen;
   const eventos: EventoCrudo[] = [];
@@ -344,17 +345,17 @@ export function atacarCampamentoBandidos(
   atacante: Asentamiento,
   escuadronIdsAtacantes: string[],
   campamento: CampamentoBandido,
-  tickActual: number,
+  instante: Instante,
   facciones: Faccion[],
   rng: RandomFn
 ): { atacante: Asentamiento; facciones: Faccion[]; eventos: EventoCrudo[]; campamentoDestruido: boolean } {
   const escuadrones = seleccionarEscuadrones(atacante, escuadronIdsAtacantes);
   const jitter = 1 + (rng() * 2 - 1) * MILITAR.varianzaCombate;
-  const poderAtacante = poderTotal(escuadrones, tickActual, false) * jitter;
+  const poderAtacante = poderTotal(escuadrones, instante, false) * jitter;
   const gana = poderAtacante > campamento.poder;
 
   const fraccionBajas = gana ? 0.05 : 0.25;
-  const escuadronesActualizados = aplicarBajas(escuadrones, fraccionBajas, gana, tickActual);
+  const escuadronesActualizados = aplicarBajas(escuadrones, fraccionBajas, gana, instante);
 
   let almacen = atacante.almacen;
   const eventos: EventoCrudo[] = [];

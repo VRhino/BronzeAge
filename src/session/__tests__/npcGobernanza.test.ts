@@ -24,15 +24,14 @@ import { fundarAsentamiento } from '../comandos/fundarAsentamiento';
 // ('local', { seed: 1 })`): varios tests de abajo dependen de que este mundo concreto tenga minerales extra
 // alcanzables cerca de sitios con madera+piedra.
 const SEED = 1;
-const MOMENTO = '2026-01-01T00:00:00.000Z';
 const ACTOR = 'jugador-test';
 
 function partidaConDosFacciones(): { sesion: GameSession; faccionNpcId: string; faccionManualId: string } {
   const sesion = GameSession.crear('test-npc', { seed: SEED });
   // Dos actores distintos al CREAR: un jugador solo puede crear una Facción (Doc 2 "Entidades"). Fundar sigue
   // con `ACTOR` para las dos, sin conflicto — el motor no exige ciudadanía previa para fundar.
-  const r1 = sesion.ejecutar(crearFaccion, { nombre: 'Facción NPC' }, { momento: MOMENTO, actor: 'jugador-npc' });
-  const r2 = sesion.ejecutar(crearFaccion, { nombre: 'Facción Manual' }, { momento: MOMENTO, actor: 'jugador-manual' });
+  const r1 = sesion.ejecutar(crearFaccion, { nombre: 'Facción NPC' }, { actor: 'jugador-npc' });
+  const r2 = sesion.ejecutar(crearFaccion, { nombre: 'Facción Manual' }, { actor: 'jugador-manual' });
   if (!r1.ok || !r2.ok) throw new Error('setup del test: no se pudieron crear las Facciones');
   const faccionNpcId = r1.datos!.faccionId;
   const faccionManualId = r2.datos!.faccionId;
@@ -51,8 +50,8 @@ function partidaConDosFacciones(): { sesion: GameSession; faccionNpcId: string; 
   }
   expect(posiciones).toHaveLength(2);
 
-  sesion.ejecutar(fundarAsentamiento, { faccionId: faccionNpcId, posicion: posiciones[0]! }, { momento: MOMENTO, actor: ACTOR });
-  sesion.ejecutar(fundarAsentamiento, { faccionId: faccionManualId, posicion: posiciones[1]! }, { momento: MOMENTO, actor: ACTOR });
+  sesion.ejecutar(fundarAsentamiento, { faccionId: faccionNpcId, posicion: posiciones[0]! }, { actor: ACTOR });
+  sesion.ejecutar(fundarAsentamiento, { faccionId: faccionManualId, posicion: posiciones[1]! }, { actor: ACTOR });
   expect(sesion.getState().asentamientos).toHaveLength(2);
 
   return { sesion, faccionNpcId, faccionManualId };
@@ -69,15 +68,15 @@ function asentamientoDe(sesion: GameSession, faccionId: string): Asentamiento {
  * Este helper reproduce ese mismo bundling para el test. */
 function avanzar(sesion: GameSession, n: number): void {
   for (let i = 0; i < n; i++) {
-    sesion.avanzarTick(MOMENTO);
-    sesion.avanzarFaccionesNpc(MOMENTO);
+    sesion.avanzarTick();
+    sesion.avanzarFaccionesNpc();
   }
 }
 
 describe('Facción controlada por NPC', () => {
   it('gobierna la Facción cedida y no toca la que juega el jugador', () => {
     const { sesion, faccionNpcId, faccionManualId } = partidaConDosFacciones();
-    sesion.ejecutar(alternarFaccionNpc, { faccionId: faccionNpcId, activo: true }, { momento: MOMENTO, actor: ACTOR });
+    sesion.ejecutar(alternarFaccionNpc, { faccionId: faccionNpcId, activo: true }, { actor: ACTOR });
     avanzar(sesion, 40);
 
     const npc = asentamientoDe(sesion, faccionNpcId);
@@ -110,13 +109,13 @@ describe('Facción controlada por NPC', () => {
     avanzar(sesion, 20);
     expect(asentamientoDe(sesion, faccionNpcId).cargos.gobernadorId).toBeNull();
 
-    sesion.ejecutar(alternarFaccionNpc, { faccionId: faccionNpcId, activo: true }, { momento: MOMENTO, actor: ACTOR });
+    sesion.ejecutar(alternarFaccionNpc, { faccionId: faccionNpcId, activo: true }, { actor: ACTOR });
     expect(sesion.getState().faccionesNpcIds).toContain(faccionNpcId);
     avanzar(sesion, 5);
     expect(asentamientoDe(sesion, faccionNpcId).cargos.gobernadorId).toBeTruthy();
 
     // Retomar el control no deshace lo que el NPC ya hizo (es estado normal del juego): solo deja de decidir.
-    sesion.ejecutar(alternarFaccionNpc, { faccionId: faccionNpcId, activo: false }, { momento: MOMENTO, actor: ACTOR });
+    sesion.ejecutar(alternarFaccionNpc, { faccionId: faccionNpcId, activo: false }, { actor: ACTOR });
     expect(sesion.getState().faccionesNpcIds).not.toContain(faccionNpcId);
     const antes = asentamientoDe(sesion, faccionNpcId);
     avanzar(sesion, 5);
@@ -127,7 +126,7 @@ describe('Facción controlada por NPC', () => {
 
   it('la marca de NPC sobrevive a exportar/importar la partida', () => {
     const { sesion, faccionNpcId } = partidaConDosFacciones();
-    sesion.ejecutar(alternarFaccionNpc, { faccionId: faccionNpcId, activo: true }, { momento: MOMENTO, actor: ACTOR });
+    sesion.ejecutar(alternarFaccionNpc, { faccionId: faccionNpcId, activo: true }, { actor: ACTOR });
     avanzar(sesion, 5);
 
     // `exportar()`/`GameSession.importar()`, no el formato de archivo de descarga del navegador — es la vía
@@ -138,13 +137,13 @@ describe('Facción controlada por NPC', () => {
 
   it('se funda a sí misma si se cede sin ningún asentamiento (reportado por el usuario: quedaba inerte)', () => {
     const sesion = GameSession.crear('test-npc-inerte', { seed: SEED });
-    const creada = sesion.ejecutar(crearFaccion, { nombre: 'Facción NPC' }, { momento: MOMENTO, actor: ACTOR });
+    const creada = sesion.ejecutar(crearFaccion, { nombre: 'Facción NPC' }, { actor: ACTOR });
     if (!creada.ok) throw new Error('setup del test: no se pudo crear la Facción');
     const faccionId = creada.datos!.faccionId;
 
     // A diferencia de `partidaConDosFacciones`, aquí NO se funda nada a mano: el jugador crea la Facción, la
     // marca NPC y avanza tick — el punto de partida real que reportó el fallo.
-    sesion.ejecutar(alternarFaccionNpc, { faccionId, activo: true }, { momento: MOMENTO, actor: ACTOR });
+    sesion.ejecutar(alternarFaccionNpc, { faccionId, activo: true }, { actor: ACTOR });
     expect(sesion.getState().asentamientos).toHaveLength(0);
 
     avanzar(sesion, 10);
@@ -156,11 +155,11 @@ describe('Facción controlada por NPC', () => {
 
   it('funda su asentamiento inicial en un sitio con madera Y piedra alcanzables (a petición del usuario)', () => {
     const sesion = GameSession.crear('test-npc-piedra', { seed: SEED });
-    const creada = sesion.ejecutar(crearFaccion, { nombre: 'Facción NPC Piedra' }, { momento: MOMENTO, actor: ACTOR });
+    const creada = sesion.ejecutar(crearFaccion, { nombre: 'Facción NPC Piedra' }, { actor: ACTOR });
     if (!creada.ok) throw new Error('setup del test: no se pudo crear la Facción');
     const faccionId = creada.datos!.faccionId;
 
-    sesion.ejecutar(alternarFaccionNpc, { faccionId, activo: true }, { momento: MOMENTO, actor: ACTOR });
+    sesion.ejecutar(alternarFaccionNpc, { faccionId, activo: true }, { actor: ACTOR });
     for (let i = 0; i < 5 && sesion.getState().asentamientos.length === 0; i++) avanzar(sesion, 1);
 
     const asentamiento = sesion.getState().asentamientos.find((a) => a.faccionId === faccionId);
@@ -203,10 +202,10 @@ describe('Facción controlada por NPC', () => {
     }
     expect(candidatosConBonus).toBeGreaterThan(0);
 
-    const creada = sesion.ejecutar(crearFaccion, { nombre: 'Facción NPC Rica' }, { momento: MOMENTO, actor: ACTOR });
+    const creada = sesion.ejecutar(crearFaccion, { nombre: 'Facción NPC Rica' }, { actor: ACTOR });
     if (!creada.ok) throw new Error('setup del test: no se pudo crear la Facción');
     const faccionId = creada.datos!.faccionId;
-    sesion.ejecutar(alternarFaccionNpc, { faccionId, activo: true }, { momento: MOMENTO, actor: ACTOR });
+    sesion.ejecutar(alternarFaccionNpc, { faccionId, activo: true }, { actor: ACTOR });
     for (let i = 0; i < 5 && sesion.getState().asentamientos.length === 0; i++) avanzar(sesion, 1);
 
     const asentamiento = sesion.getState().asentamientos.find((a) => a.faccionId === faccionId)!;

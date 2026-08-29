@@ -1,5 +1,6 @@
 import type { AcuerdoTrueque, Asentamiento, Faccion, RelacionPolitica } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
+import type { Instante } from '../domain/tiempo';
 
 /** Fase A5 — payload de `diplomacia.tributo_pagado` (ver `avanzarTributos`). */
 export interface PayloadTributoPagado {
@@ -47,18 +48,18 @@ export function proponerVasallaje(
   faccionSeñoraId: string,
   faccionVasallaId: string,
   tributoRecurso: string,
-  tributoCantidadPorTick: number,
-  tickActual: number,
+  tributoCantidadPorMinuto: number,
+  instante: Instante,
   contador = 0
 ): RelacionPolitica {
   validarPar(facciones, faccionSeñoraId, faccionVasallaId, relaciones);
   return {
-    id: `vasallaje-${faccionSeñoraId}-${faccionVasallaId}-${tickActual}-${contador}`,
+    id: `vasallaje-${faccionSeñoraId}-${faccionVasallaId}-${contador}`,
     tipo: 'vasallaje',
     faccionAId: faccionSeñoraId,
     faccionBId: faccionVasallaId,
-    tributo: { recurso: tributoRecurso, cantidadPorTick: tributoCantidadPorTick },
-    creadoEnTick: tickActual,
+    tributo: { recurso: tributoRecurso, cantidadPorMinuto: tributoCantidadPorMinuto },
+    creadoEn: instante,
     estado: 'activa',
   };
 }
@@ -69,7 +70,7 @@ export function proponerAlianza(
   relaciones: RelacionPolitica[],
   faccionAId: string,
   faccionBId: string,
-  tickActual: number,
+  instante: Instante,
   contador = 0
 ): RelacionPolitica {
   validarPar(facciones, faccionAId, faccionBId, relaciones);
@@ -80,11 +81,11 @@ export function proponerAlianza(
     );
   }
   return {
-    id: `alianza-${faccionAId}-${faccionBId}-${tickActual}-${contador}`,
+    id: `alianza-${faccionAId}-${faccionBId}-${contador}`,
     tipo: 'alianza',
     faccionAId,
     faccionBId,
-    creadoEnTick: tickActual,
+    creadoEn: instante,
     estado: 'activa',
   };
 }
@@ -187,7 +188,7 @@ export function avanzarTributos(
     if (!señora || !pagador) continue;
 
     const disponible = cantidadDisponible(pagador.almacen, relacion.tributo.recurso);
-    const cantidad = Math.min(disponible, relacion.tributo.cantidadPorTick);
+    const cantidad = Math.min(disponible, relacion.tributo.cantidadPorMinuto);
     if (cantidad <= 0) continue;
 
     asentamientosPorId.set(pagador.id, { ...pagador, almacen: descontarRecursos(pagador.almacen, { [relacion.tributo.recurso]: cantidad }) });

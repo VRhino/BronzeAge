@@ -63,12 +63,12 @@ const ESQUEMA_LISTAR_PARTIDAS = {
             type: 'object',
             properties: {
               gameId: { type: 'string' },
-              tick: { type: 'number' },
+              instante: { type: 'number' },
               version: { type: 'number' },
               mapaId: { type: 'string' },
               guardadoEn: { type: 'string' },
             },
-            required: ['gameId', 'tick', 'version', 'mapaId', 'guardadoEn'],
+            required: ['gameId', 'instante', 'version', 'mapaId', 'guardadoEn'],
           },
         },
       },
@@ -383,6 +383,9 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
         resolucionSplatmap: request.query.resolucionSplatmap
           ? Number(request.query.resolucionSplatmap)
           : UNITY_EXPORT_DEFAULT.resolucionSplatmap,
+        // El export es una herramienta de despliegue, no simulación: la marca de tiempo es reloj de pared y
+        // la estampa el servidor, que es la capa a la que le corresponde leerlo.
+        generadoEn: new Date().toISOString(),
       };
 
       let resultado: ReturnType<typeof exportarParaUnityTerrain>;

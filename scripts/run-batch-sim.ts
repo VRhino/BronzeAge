@@ -9,6 +9,7 @@ import { calcularNivelAsentamiento } from '../src/engine/mantenimiento';
 import { avanzarNpcGobernanza, type ConfigNpcGobernanza, MINERALES_BONUS_FUNDACION } from '../src/session/npcGobernanza';
 import { CATEGORIA_POR_TIPO, edificiosInternos, redDeCalles, segmentosDeRed } from '../src/engine/trazado';
 import { REJILLA_ASENTAMIENTO } from '../src/constants';
+import { instanteDeTick, isoDeInstante } from '../src/session/estado';
 
 /** Overrides por entorno para poder hacer pasadas cortas de humo sin esperar la corrida completa
  * (`BATCH_TICKS=200 BATCH_FACCIONES=10 node ...`). Sin variables, los valores son los de siempre — ninguna
@@ -27,12 +28,6 @@ const FOTO_CADA = num('BATCH_FOTO_CADA', 100);
 const MIN_SEPARACION = 100;
 
 const TIPOS_EXTRACTOR = ['cantera', 'lenera', 'mina', 'minaCobre', 'minaEstano', 'corral'] as const;
-
-/** Fecha fija de arranque y duración por tick para el `momento` de `ContextoSimulacion` — arbitrarias y
- * deterministas a propósito: nada del motor las usa todavía (el tick no tiene duración real hasta la Fase D),
- * solo sirven para que el momento avance de forma monótona sin depender del reloj de la máquina. */
-const INICIO_BATCH = Date.UTC(2026, 0, 1, 0, 0, 0);
-const MS_POR_TICK = 60_000;
 
 function distancia(a: Point, b: Point): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
@@ -455,7 +450,7 @@ async function main() {
     const faccion = facciones[i]!;
     const posicion = candidatos[i]!.posicion;
     const jugadores = Array.from({ length: JUGADORES_POR_ASENTAMIENTO }, (_, j) => `jugador-${faccion.id}-${j + 1}`);
-    const resultado = fundarAsentamiento(mapa, facciones, faccion.id, posicion, jugadores, asentamientos, 0);
+    const resultado = fundarAsentamiento(mapa, facciones, faccion.id, posicion, jugadores, asentamientos, instanteDeTick(0));
     asentamientos.push(resultado.asentamiento);
     idsFundados.push(resultado.asentamiento.id);
     facciones = resultado.facciones;
@@ -471,7 +466,7 @@ async function main() {
     titulos: [],
     caminos: [],
     campamentosBandidos: [],
-    bandidosProximoSpawnTick: 0,
+    bandidosProximoSpawnEn: instanteDeTick(0),
   };
 
   // Palancas de EXPERIMENTO, ninguna cambia el comportamiento por defecto:
@@ -499,9 +494,11 @@ async function main() {
 
   for (let tick = 1; tick <= TICKS; tick++) {
     try {
-      // `momento` derivado del tick, no del reloj real: una corrida de batch tiene que ser reproducible
-      // (mismo SEED -> mismo resultado), igual que los tests del motor.
-      const contexto = { tick, momento: new Date(INICIO_BATCH + tick * MS_POR_TICK).toISOString(), rng };
+      // `instante`/`momento` derivados del tick con la misma fórmula que el backend (`instanteDeTick`,
+      // Fase D / doc 10): una corrida de batch tiene que ser reproducible (mismo SEED -> mismo resultado),
+      // así que nada del contexto puede depender del reloj de la máquina.
+      const instante = instanteDeTick(tick);
+      const contexto = { instante, momento: isoDeInstante(instante), rng };
       const trasMotor = avanzarSimulacion(estado, mapa, contexto);
       const trasNpc = avanzarNpcGobernanza(trasMotor, mapa, contexto, config);
       estado = trasNpc.estado;

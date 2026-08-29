@@ -6,6 +6,7 @@
 // Un test que quiera un actor con Facción tiene que fundarla y ganarse la ciudadanía como en el juego real,
 // así que estas pruebas fallan si cambia el significado de ciudadanía, residencia o cargo en `engine/`.
 import { describe, expect, it } from 'vitest';
+import { instanteDeTick } from '../estado';
 import { GameSession } from '../gameSession';
 import { partidaConAsentamiento, ACTOR, OPC } from './fixtures';
 import { crearFaccion } from '../comandos/crearFaccion';
@@ -315,7 +316,7 @@ describe('diplomacia: ciudadanía + autoridad de Rey/Embajador', () => {
   function conRelacion(sesion: ReturnType<typeof partidaConAsentamiento>['sesion'], tipo: 'alianza' | 'vasallaje', aId: string, bId: string) {
     return {
       ...sesion.getState(),
-      relaciones: [{ id: 'r1', tipo, faccionAId: aId, faccionBId: bId, creadoEnTick: 0, estado: 'activa' as const }],
+      relaciones: [{ id: 'r1', tipo, faccionAId: aId, faccionBId: bId, creadoEn: instanteDeTick(0), estado: 'activa' as const }],
     };
   }
 

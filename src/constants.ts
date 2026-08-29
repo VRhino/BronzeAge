@@ -6,7 +6,7 @@
 // partida guardada solo almacena la seed y regenera el mapa al cargar. Ver el encabezado de `worldgen/config.ts`.
 //
 // Servido por HTTP sin autenticar en `GET /v1/balance` (Fase C7, `server/rutas/balance.ts`) — es regla
-// pública (T1 en doc 9), no estado de partida: publicar las 39 tablas completas es más simple que mantener
+// pública (T1 en doc 9), no estado de partida: publicar las 40 tablas completas es más simple que mantener
 // una lista de exclusión, y ninguna es una fuga de estado de un rival. El panel de administración que las
 // editaba en caliente (`app/balanceConfig.ts`) se retiró al extraer el cliente (Fase C0) y no tiene dueño
 // todavía — hoy este módulo es de solo lectura en tiempo de ejecución, mutable únicamente editando el código.
@@ -23,8 +23,38 @@
  *
  * v1 (2026-08-26): primera versión con número explícito — el balance existía desde antes, pero sin
  * identificador publicable.
+ * v2 (2026-08-29): añadida la tabla `SIMULACION` (modelo temporal, Fase D — ver doc 10).
+ * v3 (2026-08-29): D6 — plazos renombrados de ticks a minutos (`tiempoConstruccionMinutos`,
+ *   `plazoMinutosPorDefecto`, `graciaMinutos`, `cooldownMinutos`, `respawnMinutos`, `duracionHeridoMinutos`,
+ *   `duracionMinutosPorDefecto`) y tasas `*PorTick` → `*PorMinuto`. Mismos VALORES (1 tick = 1 min), otras
+ *   claves en el JSON servido.
  */
-export const BALANCE_VERSION = 1;
+export const BALANCE_VERSION = 3;
+
+/**
+ * Modelo temporal (Fase D, Docs/Arquitectura/10_Modelo_Temporal.md). **Decisión del usuario (2026-08-29):
+ * mundo = tiempo real, 1 tick = 1 minuto real, sin aceleración** (modelo OGame). No es un placeholder — es el
+ * modelo. Lo que SÍ queda pendiente es el rebalanceo de los VALORES de las demás tablas para ese ritmo (una
+ * pasada dedicada sobre el laboratorio batch, doc 10 §8), no el modelo en sí.
+ *
+ * El `instante` de mundo es `epocaInicial + tick × duracionTickMs`, DERIVADO del tick — nunca se lee el reloj
+ * de pared ni se guarda en el estado (ver `instanteDeTick`, `session/estado.ts`). Un snapshot antiguo se
+ * reconstruye del `tick` sin datos nuevos.
+ *
+ * `duracionTickMs` y `INTERVALO_TICK_MS` (el intervalo del reloj de mundo, `server/index.ts`) son 60 000 por
+ * defecto —el mismo número, porque no hay aceleración—, pero se mantienen separados: uno calcula el `instante`,
+ * el otro alimenta el `setInterval` de `RunnerDePartida.iniciarRelojDeMundo`, y así un "servidor rápido" no
+ * exige rediseño.
+ */
+export const SIMULACION = {
+  /** Fecha de mundo de la que arranca toda partida (ISO 8601). Neutral a propósito; la interfaz muestra
+   * "día N desde la fundación" restando esto. */
+  epocaInicial: '2026-01-01T00:00:00.000Z',
+  /** Tiempo de mundo que representa un tick, en ms. 60 000 = 1 minuto (= 1:1 con el tiempo real). Es el
+   * único sitio del repo que "sabe" cuánto dura un tick: el resto de plazos se declaran ya en minutos
+   * (`*Minutos`) y el motor los convierte con `minutos()` de `domain/tiempo.ts` (D6, doc 10 §6). */
+  duracionTickMs: 60_000,
+} as const;
 
 /**
  * Capacidad de Leñeras por bosque según su tamaño (a petición del usuario): un bosque grande admite más de
@@ -97,36 +127,36 @@ export const POBLACION = {
   // Rediseño de progreso (Fase 0): además de este mínimo, ahora también requiere Palacio construido
   // (Doc 4.2.1 — "desbloquea la aparición de la población noble"), ver engine/population.ts.
   nobleza: { minCiudadanos: 3, tasaCrecimientoBase: 0.01 },
-  consumoComidaPorHabitante: 0.1, // trigo/tick por habitante (pesants+artesanos+nobleza)
+  consumoComidaPorHabitante: 0.1, // trigo/minuto por habitante (pesants+artesanos+nobleza)
   /**
    * Hambruna (a petición del usuario): efecto negativo de no poder mantener a la población con trigo — espejo
-   * deliberado de `MILITAR.regeneracionMoralPorTick`/`degradacionMoralSinRacion`/`desercionFraccionPorTickSinMoral`
+   * deliberado de `MILITAR.regeneracionMoralPorMinuto`/`degradacionMoralSinRacion`/`desercionFraccionPorMinutoSinMoral`
    * (mismo diseño ya validado para tropas, ver engine/tropas.ts). El medidor de nutrición sube/baja con la
-   * fracción de consumo cubierta cada tick (`avanzarNutricionPoblacion`, engine/population.ts); con estos
+   * fracción de consumo cubierta cada minuto (`avanzarNutricionPoblacion`, engine/population.ts); con estos
    * valores, trigo en 0 sostenido colapsa el medidor en 100/20 = 5 ticks, igual que la moral de tropas.
    * PLACEHOLDER sin calibrar por simulación todavía, igual que el resto de esta fase.
    */
   hambre: {
     nutricionInicial: 100,
-    regeneracionPorTick: 5,
+    regeneracionPorMinuto: 5,
     degradacionSinComida: 20,
     // Suelo del factor de crecimiento cuando la nutrición está en 0 (Doc 4.1: antes era un booleano
     // trigo>0?1:0.2 — ahora escala linealmente entre este suelo y 1 según `nutricionPoblacion`/100).
     factorCrecimientoMinimo: 0.2,
     // Nutrición <= este umbral empieza a costar población real, no solo crecimiento.
     umbralMuertePorHambre: 0,
-    // Fracción de pesants+artesanos (nobleza protegida) perdida por tick mientras la nutrición sigue en el
+    // Fracción de pesants+artesanos (nobleza protegida) perdida por minuto mientras la nutrición sigue en el
     // umbral — mismo valor que la deserción de tropas sin moral, por coherencia entre ambos sistemas.
-    fraccionMuertePorTickHambre: 0.05,
+    fraccionMuertePorMinutoHambre: 0.05,
   },
 };
 
 /**
  * Receta de crafting de un edificio de transformación (Doc 4.2.1, rediseño de progreso Fase 0): `produccionBase`
- * es la tasa objetivo por tick (mismo criterio que produccionBaseTrigo/produccionBasePiedra etc.);
+ * es la tasa objetivo por minuto (mismo criterio que produccionBaseTrigo/produccionBasePiedra etc.);
  * `consumePorUnidad` es cuánto de cada insumo hace falta por cada unidad de output, derivado de la proporción
  * de la receta original documentada (ej. "8 Lingote de Cobre + 2 Lingote de Estaño -> 5 Lingote de Bronce" con
- * produccionBase 1 LB/tick => consumePorUnidad { lingoteCobre: 1.6, lingoteEstano: 0.4 }). La producción real de
+ * produccionBase 1 LB/minuto => consumePorUnidad { lingoteCobre: 1.6, lingoteEstano: 0.4 }). La producción real de
  * cada tick se limita por `min(produccionBase * ratioManoObraArtesanos, insumo_disponible / consumePorUnidad)`,
  * mismo criterio que ya usan los extractores minerales contra `nodo.cantidad` (ver engine/construction.ts).
  */
@@ -171,7 +201,7 @@ interface NivelEdificioTransformacion {
  * Se repite en los 3 niveles porque las recetas se REEMPLAZAN al mejorar, no se acumulan: sin esto, mejorar
  * la Armería quitaría la capacidad de armar milicia.
  *
- * Cifras deliberadamente modestas (2/tick a cambio de 4 madera/tick): `avanzarRecetas` NO respeta la reserva
+ * Cifras deliberadamente modestas (2/minuto a cambio de 4 madera/minuto): `avanzarRecetas` NO respeta la reserva
  * dinámica de Mantenimiento (a diferencia de la construcción, ver `puedeIniciarConstruccion`) — vacía el
  * stock hasta donde llegue. Una tasa más alta convertiría la Armería en una vía de colapso por falta de
  * madera para Mantenimiento.
@@ -180,13 +210,13 @@ const RECETA_ARMA_MADERA = { produce: 'armaMadera', produccionBase: 2, consumePo
 
 export const EDIFICIO_CATALOGO = {
   // Único edificio que NO pasa por la cola de construcción (ni automática ni manual, Doc 1.3): nace
-  // ya activo al fundar. costo/tiempoConstruccionTicks quedan en 0 solo por consistencia de forma con
+  // ya activo al fundar. costo/tiempoConstruccionMinutos quedan en 0 solo por consistencia de forma con
   // el resto del catálogo — nunca se leen, porque construirlo por otra vía no es posible.
-  centroUrbano: { costo: {}, tiempoConstruccionTicks: 0 },
+  centroUrbano: { costo: {}, tiempoConstruccionMinutos: 0 },
   // Cupos SEPARADOS por clase (a petición del usuario, ver Correcciones): antes un único pool compartido
   // entre Pesants y Artesanos hacía que Pesants (crece ~2.4x más rápido) acaparara todo el cupo y dejara a
   // Artesanos varado — cada Vivienda ahora aporta 15 espacios de Pesants Y, por separado, 5 de Artesanos.
-  vivienda: { costo: { madera: 10 }, tiempoConstruccionTicks: 4, capacidadPesants: 15, capacidadArtesanos: 5 },
+  vivienda: { costo: { madera: 10 }, tiempoConstruccionMinutos: 4, capacidadPesants: 15, capacidadArtesanos: 5 },
   /**
    * Granja: 4 niveles internos (a petición del usuario, trazado urbano dinámico). El costo en materiales
    * DUPLICA en cada salto, tomando como base su `costo` de construcción (madera 30 → 60, 120, 240).
@@ -201,7 +231,7 @@ export const EDIFICIO_CATALOGO = {
    */
   granja: {
     costo: { madera: 30 },
-    tiempoConstruccionTicks: 6,
+    tiempoConstruccionMinutos: 6,
     produccionBaseTrigo: 15,
     trabajadoresRequeridos: 4,
     niveles: {
@@ -213,35 +243,35 @@ export const EDIFICIO_CATALOGO = {
       4: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 45, tamano: { ancho: 6, alto: 6 }, costoMejora: { madera: 240, piedra: 80 } },
     } as Record<number, NivelEdificioTransformacion>,
   },
-  cantera: { costo: { madera: 20 }, tiempoConstruccionTicks: 5, produccionBasePiedra: 5, trabajadoresRequeridos: 4 },
-  lenera: { costo: { madera: 10 }, tiempoConstruccionTicks: 3, produccionBaseMadera: 5, trabajadoresRequeridos: 4 },
+  cantera: { costo: { madera: 20 }, tiempoConstruccionMinutos: 5, produccionBasePiedra: 5, trabajadoresRequeridos: 4 },
+  lenera: { costo: { madera: 10 }, tiempoConstruccionMinutos: 3, produccionBaseMadera: 5, trabajadoresRequeridos: 4 },
   // Sin piedra en la construcción BASE (Doc Fase_0_6, a petición del usuario): nivel 1 completo se paga solo
   // en madera — la piedra recién se introduce en nivel 2 (ver EDIFICIO_CATALOGO.fundicion/curtiduria/armeria).
-  almacen: { costo: { madera: 50 }, tiempoConstruccionTicks: 6, capacidadPorRecursoAdicional: 300 },
+  almacen: { costo: { madera: 50 }, tiempoConstruccionMinutos: 6, capacidadPorRecursoAdicional: 300 },
   // Oro: metal precioso en bruto, origen en minas igual que cualquier otro recurso (Doc 3.1). produccionBaseOro
-  // recalibrado (verificación batch del overhaul de auto-construcción): a 2/tick, una sola Mina (2) ya no
+  // recalibrado (verificación batch del overhaul de auto-construcción): a 2/minuto, una sola Mina (2) ya no
   // alcanzaba a cubrir el costo de Mantenimiento de oro a nivel 3 (`MANTENIMIENTO.oroBase` × escala ≈
-  // 2.6-5.2/tick) ni siquiera con el nodo recién descubierto — a diferencia de piedra/Cantera, este era un
+  // 2.6-5.2/minuto) ni siquiera con el nodo recién descubierto — a diferencia de piedra/Cantera, este era un
   // problema real de TASA, no solo de tamaño de nodo. Sube a 4 para dar el mismo margen que Cantera tiene
   // sobre su propio costo de Mantenimiento (~1.4-1.5×) en la distancia base.
   // Sin piedra en la construcción BASE (Doc Fase_0_6): las 3 minas son extractores de nivel 1, tienen que ser
   // alcanzables sin piedra — es justo lo que hace falta construir para cumplir el gate de subir a nivel 2
   // (NIVEL_ASENTAMIENTO.requisitos[2], ≥3 edificios de extracción).
-  mina: { costo: { madera: 40 }, tiempoConstruccionTicks: 6, produccionBaseOro: 4, trabajadoresRequeridos: 6 },
+  mina: { costo: { madera: 40 }, tiempoConstruccionMinutos: 6, produccionBaseOro: 4, trabajadoresRequeridos: 6 },
   // Cobre (Doc 1.1/5.7): "relativamente abundante" — igual patrón que cantera/mina pero sobre nodos de cobre.
-  minaCobre: { costo: { madera: 30 }, tiempoConstruccionTicks: 4, produccionBaseCobre: 5, trabajadoresRequeridos: 8 },
+  minaCobre: { costo: { madera: 30 }, tiempoConstruccionMinutos: 4, produccionBaseCobre: 5, trabajadoresRequeridos: 8 },
   // Estaño (Doc 1.1/5.7): raro y concentrado (menos nodos que cobre/oro, ver RECURSO_RAREZA.raro) — costo más
   // alto y producción base más baja que el resto de minas, coherente con ser el cuello de botella del bronce.
   // produccionBaseEstano subido de 1.5 a 3 (pruebas del usuario) — el estaño era el cuello de botella más
   // duro de la cadena de bronce, más de lo que el diseño original pretendía.
-  minaEstano: { costo: { madera: 50 }, tiempoConstruccionTicks: 7, produccionBaseEstano: 3, trabajadoresRequeridos: 8 },
+  minaEstano: { costo: { madera: 50 }, tiempoConstruccionMinutos: 7, produccionBaseEstano: 3, trabajadoresRequeridos: 8 },
   // Corral (Doc 4.2.1, rediseño de progreso Fase 0): extractor de livestock, mismo patrón que cantera/minas —
   // liga a un nodo finito de livestock (Doc 1.4), con reemplazo automático al agotarse (ver EXTRACCION_MAXIMOS).
-  corral: { costo: { madera: 30 }, tiempoConstruccionTicks: 6, produccionBaseLivestock: 3, trabajadoresRequeridos: 4 },
+  corral: { costo: { madera: 30 }, tiempoConstruccionMinutos: 6, produccionBaseLivestock: 3, trabajadoresRequeridos: 4 },
   // "Único edificio de tier élite, exclusivo de asentamientos/Facciones de mayor nivel" — gate por nivel de Facción.
   // Se mantiene sin cambios (Doc 4.2, rediseño de progreso): queda para iteraciones posteriores la integración
   // con la nueva Fundición.
-  granFundicion: { costo: { madera: 150, piedra: 100, oro: 50 }, tiempoConstruccionTicks: 20, nivelFaccionMinimo: 3 },
+  granFundicion: { costo: { madera: 150, piedra: 100, oro: 50 }, tiempoConstruccionMinutos: 20, nivelFaccionMinimo: 3 },
 
   // --- Edificios de transformación (Doc 4.2.1, rediseño de progreso Fase 0): auto-construcción (sin gate de
   // nivel para la construcción BASE — solo las mejoras de nivel interno lo exigen), disparan Artesanos (Doc
@@ -250,7 +280,7 @@ export const EDIFICIO_CATALOGO = {
 
   fundicion: {
     costo: { madera: 80, piedra: 40 },
-    tiempoConstruccionTicks: 6,
+    tiempoConstruccionMinutos: 6,
     // Doc Fase_0_6 (a petición del usuario): construcción BASE gateada a nivel 2 — antes era construible
     // desde nivel 1. Con esto la responsabilidad de "producir transformación" queda exclusivamente en manos
     // de los edificios de nivel 2.
@@ -275,7 +305,7 @@ export const EDIFICIO_CATALOGO = {
 
   curtiduria: {
     costo: { madera: 80, piedra: 30 },
-    tiempoConstruccionTicks: 8,
+    tiempoConstruccionMinutos: 8,
     // Doc Fase_0_6: construcción BASE gateada a nivel 2 (ver nota en `fundicion`).
     requisitoNivelAsentamientoConstruccion: 2,
     niveles: {
@@ -310,7 +340,7 @@ export const EDIFICIO_CATALOGO = {
   // que fabrique — confirmado con el usuario que era un error de tipeo por "Arma de Cobre" (AC).
   armeria: {
     costo: { madera: 80, piedra: 30 },
-    tiempoConstruccionTicks: 6,
+    tiempoConstruccionMinutos: 6,
     // Doc Fase_0_6: construcción BASE gateada a nivel 2 (ver nota en `fundicion`).
     requisitoNivelAsentamientoConstruccion: 2,
     niveles: {
@@ -361,7 +391,7 @@ export const EDIFICIO_CATALOGO = {
   // que antes, pero ahora llega un escalón más tarde — se desbloquea junto con Murallas en nivel 3.
   carpinteria: {
     costo: { madera: 60, piedra: 20 },
-    tiempoConstruccionTicks: 6,
+    tiempoConstruccionMinutos: 6,
     requisitoNivelAsentamientoConstruccion: 3,
     niveles: {
       1: { trabajadoresRequeridos: 0, recetas: [] },
@@ -378,7 +408,7 @@ export const EDIFICIO_CATALOGO = {
 
   barracon: {
     costo: { madera: 30 },
-    tiempoConstruccionTicks: 6,
+    tiempoConstruccionMinutos: 6,
     // Construcción BASE gateada a nivel 2 (trazado de anclas, ver Vista_Asentamiento_Trazado_Urbano.md §5.7.1):
     // el primer edificio militar arrastra tras de sí la Plaza de Armas, y al fundar (disco urbano de 5 celdas)
     // no existe ningún hueco que respete la separación mínima entre anclas — el núcleo militar nacía pegado al
@@ -411,7 +441,7 @@ export const EDIFICIO_CATALOGO = {
   // Galería de tiro sigue su propio camino de progresión, confirmado con el usuario que no se uniforma.
   galeriaDeTiro: {
     costo: { madera: 50 },
-    tiempoConstruccionTicks: 6,
+    tiempoConstruccionMinutos: 6,
     // Mismo gate y mismo motivo que Barracón (ver arriba): es el otro tipo capaz de abrir el grupo militar y
     // arrastrar la Plaza de Armas consigo.
     requisitoNivelAsentamientoConstruccion: 2,
@@ -442,7 +472,7 @@ export const EDIFICIO_CATALOGO = {
   // (junto con Carpintería); construirla es requisito para subir a nivel 4 (NIVEL_ASENTAMIENTO.requisitos).
   muralla: {
     costo: { piedra: 2000 },
-    tiempoConstruccionTicks: 15,
+    tiempoConstruccionMinutos: 15,
     requisitoNivelAsentamientoConstruccion: 3,
   },
 
@@ -451,7 +481,7 @@ export const EDIFICIO_CATALOGO = {
   // Gate subido de nivel 3 a nivel 4 (Doc Fase_0_6): construirlo pasa a ser requisito para subir a nivel 5.
   palacio: {
     costo: { madera: 1500, piedra: 1000 },
-    tiempoConstruccionTicks: 20,
+    tiempoConstruccionMinutos: 20,
     requisitoNivelAsentamientoConstruccion: 4,
     capacidadNobles: 200,
   },
@@ -473,7 +503,7 @@ export const EDIFICIO_CATALOGO = {
     // piedra sin cambios — para entonces el asentamiento ya tuvo tiempo de conseguirla, por extracción propia
     // o por el propio comercio que el Mercado nivel 1 acaba de destrabar.
     costo: { madera: 100 },
-    tiempoConstruccionTicks: 8,
+    tiempoConstruccionMinutos: 8,
     niveles: {
       1: { trabajadoresRequeridos: 0, recetas: [], cupoCaravanas: 2 },
       2: {
@@ -497,19 +527,19 @@ export const EDIFICIO_CATALOGO = {
   // gratis y ya activa, cuando el Mercado alcanza cada nivel interno (ver `crearPuestosDeMercado`,
   // engine/construction.ts). El costo y el tiempo van a cero por la misma razón que en centroUrbano — la
   // entrada existe solo porque `EDIFICIO_CATALOGO[tipo]` se indexa con `EdificioTipo` en varios sitios.
-  puestoMercado: { costo: {}, tiempoConstruccionTicks: 0 },
+  puestoMercado: { costo: {}, tiempoConstruccionMinutos: 0 },
 
   // Anclas y satélites, Etapa 3 (Consideraciones/Vista_Asentamiento_Trazado_Urbano.md §5): "marcadores
   // gratis", mismo patrón que puestoMercado — nunca pasan por cola ni se añaden a mano, nacen ya activos por
   // la regla de semilla de grupo (engine/trazado.ts).
-  plaza: { costo: {}, tiempoConstruccionTicks: 0 },
-  plazaDeArmas: { costo: {}, tiempoConstruccionTicks: 0 },
-  patioDeGremios: { costo: {}, tiempoConstruccionTicks: 0 },
+  plaza: { costo: {}, tiempoConstruccionMinutos: 0 },
+  plazaDeArmas: { costo: {}, tiempoConstruccionMinutos: 0 },
+  patioDeGremios: { costo: {}, tiempoConstruccionMinutos: 0 },
   // Pieza satélite de la zona de Carpintería (§9) — mismo patrón que puestoMercado, ver `crearTalleresDeCarpinteria`.
-  tallerCarpinteria: { costo: {}, tiempoConstruccionTicks: 0 },
+  tallerCarpinteria: { costo: {}, tiempoConstruccionMinutos: 0 },
   // Variedad de anclas residenciales (Etapa 4, punto 4) — mismo patrón "marcador gratis" que plaza.
-  pozo: { costo: {}, tiempoConstruccionTicks: 0 },
-  parque: { costo: {}, tiempoConstruccionTicks: 0 },
+  pozo: { costo: {}, tiempoConstruccionMinutos: 0 },
+  parque: { costo: {}, tiempoConstruccionMinutos: 0 },
 
   // Maravilla (Roadmap_Escalado.md Eje 4, a petición del usuario) — SOLO el edificio en esta pasada: el ciclo
   // de servidor de 12 meses que se cierra al completarla (reset + Facción ganadora persistiendo como legado
@@ -522,7 +552,7 @@ export const EDIFICIO_CATALOGO = {
   // es un trofeo, no un edificio productivo.
   maravilla: {
     costo: { madera: 5000, piedra: 5000, oro: 500, cobre: 300, estano: 200, livestock: 200 },
-    tiempoConstruccionTicks: 200,
+    tiempoConstruccionMinutos: 200,
     requisitoNivelAsentamientoConstruccion: 5,
   },
 } as const;
@@ -600,7 +630,7 @@ export const SCORE_BANDAS = {
  * el bonus nunca pueda hacer que un extractor le gane el turno a Granja/Leñera.
  */
 export const EXTRACTOR_DESEMPATE = {
-  bonusPorTickStarved: 1,
+  bonusPorMinutoStarved: 1,
   bonusMaximo: 400,
 };
 
@@ -631,7 +661,7 @@ export const LINEAS_PRODUCCION = {
  * progreso Fase 0): antes escalaba 1:1 con el nivel del asentamiento (hasta 10, el nivelMaximo anterior); con
  * el tope de nivel bajando a 3 (ver NIVEL_ASENTAMIENTO) un máximo ligado al nivel se quedaría corto, así que
  * se desacopla a un número fijo. Calibrado por simulación (150-600 ticks): con porTipo=5 y la tasa de
- * crecimiento de Pesants ya existente (12%/tick, sin tope salvo Vivienda), todo asentamiento colapsaba por
+ * crecimiento de Pesants ya existente (12%/minuto, sin tope salvo Vivienda), todo asentamiento colapsaba por
  * déficit de Mantenimiento hacia el tick 200-700 — el tope de extracción se quedaba corto frente a una
  * población sin límite real, algo que el sistema anterior evitaba dejando llegar hasta 10 extractores por
  * tipo. Sube a 10 (mismo techo que el nivelMaximo anterior) para no perder ese margen. Sigue siendo
@@ -783,7 +813,7 @@ export const TRAZADO = {
 // Velocidad ×2 en las 4 categorías (a petición del usuario, ampliación de comercio): el batch de diagnóstico
 // mostró que a la velocidad original un trueque de tamaño moderado a distancia media podía necesitar más
 // ticks de viaje (varios envíos en serie, uno por vez por cada lado del acuerdo, ver `asignarCaravanasATrueque`
-// en engine/trade.ts) que `TRUEQUE.plazoTicksPorDefecto` — el acuerdo expiraba antes de poder completarse
+// en engine/trade.ts) que `TRUEQUE.plazoMinutosPorDefecto` — el acuerdo expiraba antes de poder completarse
 // pase lo que pase. Doblar la velocidad de las 4 a la vez mantiene el catálogo consistente entre sí.
 export const CARAVANA_CATALOGO = {
   // costoConstruccion (nuevo, ampliación de comercio): solo 'comercial' es un activo persistente que el
@@ -799,14 +829,14 @@ export const CARAVANA_CATALOGO = {
 /**
  * Cooldown de creación de caravanas (a petición del usuario): tras crear una caravana desde un asentamiento
  * —Fundación (`lanzarCaravanaFundacion`, engine/expansion.ts) o comercial (`construirCaravanaComercial`,
- * engine/trade.ts), COMPARTIDO entre las dos— hay que esperar `ticksCooldown` ticks antes de poder crear otra
+ * engine/trade.ts), COMPARTIDO entre las dos— hay que esperar `cooldownMinutos` ticks antes de poder crear otra
  * desde el mismo asentamiento. Evita que se spamee la creación cuando una caravana recién salida es destruida
  * (bandidos, `engine/bandidos.ts`; intercepción de otra Facción, `engine/combate.ts`) y el cupo/recursos
- * vuelven a estar disponibles de inmediato. Mismo patrón que `CAMPAMENTOS_BANDIDOS.ticksRespawn` /
- * `REGENERACION_NODOS.*.ticksCooldown` — un solo número parametrizable, sin calibrar por simulación todavía.
+ * vuelven a estar disponibles de inmediato. Mismo patrón que `CAMPAMENTOS_BANDIDOS.respawnMinutos` /
+ * `REGENERACION_NODOS.*.cooldownMinutos` — un solo número parametrizable, sin calibrar por simulación todavía.
  */
 export const CARAVANA_COOLDOWN = {
-  ticksCooldown: 10,
+  cooldownMinutos: 10,
 };
 
 /**
@@ -829,7 +859,7 @@ export const ASIGNACION_CARAVANA = {
 
 export const TRUEQUE = {
   // "expirar un plazo" sin número fijado en el diseño (ver Preguntas_Abiertas) — placeholder.
-  plazoTicksPorDefecto: 200,
+  plazoMinutosPorDefecto: 200,
 };
 
 // Precio de referencia por defecto, según escasez/abundancia GLOBAL (Doc 3.4, sin componente de distancia).
@@ -947,7 +977,7 @@ export const POLITICAS = {
     sacerdote: { base: 1, maximo: 1 },
   } as const,
   nivelFaccionPorSlotExtraGobernador: 3,
-  duracionTicksPorDefecto: 150,
+  duracionMinutosPorDefecto: 150,
 };
 
 /**
@@ -1043,17 +1073,17 @@ export const TROPAS_RECLUTABLES: {
 ];
 
 export const MILITAR = {
-  racionPorSoldadoPorTick: 0.15,
-  regeneracionMoralPorTick: 5,
+  racionPorSoldadoPorMinuto: 0.15,
+  regeneracionMoralPorMinuto: 5,
   degradacionMoralSinRacion: 20,
-  // Fracción de la cantidad del escuadrón que deserta por tick mientras la moral está a 0 (Doc 5.4).
-  desercionFraccionPorTickSinMoral: 0.05,
+  // Fracción de la cantidad del escuadrón que deserta por minuto mientras la moral está a 0 (Doc 5.4).
+  desercionFraccionPorMinutoSinMoral: 0.05,
   bonusVeteraniaPorPunto: 0.05,
   veteraniaGanadaPorVictoria: 1,
   veteraniaGanadaPorDerrota: 0.5,
   // Cohesión entre escuadrones defendiendo juntos (Doc 5.3), abstraída como bonus de poder (sin formaciones renderizadas).
   bonusCohesionPorEscuadronExtra: 0.1,
-  duracionHeridoTicks: 30,
+  duracionHeridoMinutos: 30,
   penalizacionHerido: 0.5,
   varianzaCombate: 0.15,
   // Combate de caravanas (Doc 3.10): umbral de captura del 50% y defensa base de una escolta no modelada en detalle.
@@ -1076,7 +1106,7 @@ export const CAMPAMENTOS_BANDIDOS = {
   // expresado en ticks — Fase 0 no tiene mapeo tick-a-tiempo-real todavía). Bajado de 60 a 10 (pruebas del
   // usuario) — a 60 ticks el farming de XP de Facción vía campamentos era demasiado lento frente al resto
   // de fuentes de experiencia.
-  ticksRespawn: 10,
+  respawnMinutos: 10,
   // Recompensa fija al destruirlo (botín).
   recompensa: { madera: 40, piedra: 20, oro: 15 } as Partial<Record<string, number>>,
 };
@@ -1084,7 +1114,7 @@ export const CAMPAMENTOS_BANDIDOS = {
 /**
  * Regeneración de yacimientos agotados (a petición del usuario): un `NodoRecurso` que llega a stock 0
  * (`Mapa.stock`, ver `world/mapa.ts`) vuelve a aparecer con su `cantidadInicial` completa pasados N ticks —
- * mismo patrón que la reaparición de campamentos de bandidos (`CAMPAMENTOS_BANDIDOS.ticksRespawn`). Dos
+ * mismo patrón que la reaparición de campamentos de bandidos (`CAMPAMENTOS_BANDIDOS.respawnMinutos`). Dos
  * cadencias: `livestock` (fauna, se recupera por reproducción/migración) más rápido que `metales` (todo el
  * resto de nodos: piedra/cobre/estaño/oro — yacimientos minerales, se repone más despacio). Bajadas de
  * 200/100 a 10/3 (pruebas del usuario) — a las cifras viejas, agotar un nodo dejaba al extractor parado
@@ -1092,8 +1122,8 @@ export const CAMPAMENTOS_BANDIDOS = {
  * Cifras PLACEHOLDER, sin calibrar por simulación todavía, mismo criterio que el resto del proyecto.
  */
 export const REGENERACION_NODOS = {
-  metales: { ticksCooldown: 10 },
-  livestock: { ticksCooldown: 3 },
+  metales: { cooldownMinutos: 10 },
+  livestock: { cooldownMinutos: 3 },
 };
 
 /**
@@ -1164,7 +1194,7 @@ export const NIVEL_ASENTAMIENTO = {
    * usuario) — por encima de este número, la Vivienda/Palacio dejan de dar cupo efectivo aunque tengan
    * capacidad física de sobra: el nivel pasa a ser lo que abre el techo de habitantes, no solo una llave de
    * edificios. Pieza central del rediseño de dependencia: un nivel 3 en su techo (6000 hab) consume 600
-   * trigo/tick contra un techo agrícola real de 150-450 (ver diagnóstico en Fase_0_5_Definicion...md §1) —
+   * trigo/minuto contra un techo agrícola real de 150-450 (ver diagnóstico en Fase_0_5_Definicion...md §1) —
    * no puede sostenerse sin importar. Ligado a `asentamiento.nivel` (nivelAlcanzado, nunca baja — Doc §6.2:
    * un fallo de suministro NUNCA purga población ya asentada, solo congela capacidad de construir/mejorar).
    * Niveles 4/5 (Doc Fase_0_6): desacelera el múltiplo anterior (×5, ×4) a ×2/×1.7, asumiendo que son
@@ -1203,7 +1233,7 @@ export const MANTENIMIENTO = {
   // abajo, que ya es el mecanismo real de "imperio disperso cuesta más" — sumar ambos habría castigado DOBLE
   // al imperio distribuido que el diseño quiere fomentar (ver Fase_0_5_Definicion...md §5.1). Placeholder sin
   // calibrar: a poblacionReferencia=500, nivel 1 en su techo (300 hab) paga factor 1.6; nivel 3 en su techo
-  // (6000 hab) paga factor 13 — frente a un techo de extracción propia de ~50 madera/tick, el mantenimiento
+  // (6000 hab) paga factor 13 — frente a un techo de extracción propia de ~50 madera/minuto, el mantenimiento
   // solo ya se come casi toda la producción bruta de una ciudad llena, antes de sumar comida/ejército/mejoras.
   poblacionReferencia: 500,
   escalaDistancia: 400,
@@ -1213,14 +1243,14 @@ export const MANTENIMIENTO = {
   // Protección temporal a asentamientos recién fundados (Doc 1.3, pendiente en el diseño): sin esto, todo
   // asentamiento nuevo entra en déficit desde el tick 1 (antes de que la Granja llegue a construirse) y cae
   // en ruinas pase lo que pase. La gracia cubre el tiempo típico de estabilizar la economía base.
-  graciaTicks: 60,
+  graciaMinutos: 60,
   // nivelActual (Doc Fase_0_5 §6.2, rediseño a petición del usuario): al tocar 0 el medidor, `nivelActual`
   // baja un escalón (nivel 3→2→1→ruinas, solo cae en ruinas ya en nivelActual 1) EN VEZ de destruirse
   // directamente, y el medidor se reinicia a `medidorInicial` — el asentamiento sigue vivo y produciendo,
   // solo pierde capacidad de construir/mejorar/reclutar de nivel alto hasta recuperarse. Solo vuelve a subir
-  // tras `ticksSanosParaRecuperarNivel` ticks SEGUIDOS con mantenimiento pagado en full (no cada tick que
+  // tras `minutosSanosParaRecuperarNivel` ticks SEGUIDOS con mantenimiento pagado en full (no cada tick que
   // esté sano) — evita el yo-yo de subir/bajar por un solo bache. Placeholder sin calibrar por simulación.
-  ticksSanosParaRecuperarNivel: 30,
+  minutosSanosParaRecuperarNivel: 30,
 };
 
 /**
@@ -1232,7 +1262,7 @@ export const MANTENIMIENTO = {
  * `calcularCostoMantenimiento`). Corrige un colapso real documentado: tras subir de nivel (piedra/oro
  * entran a cobrarse) la reserva fija se quedaba corta frente al mantenimiento real ya escalado. Cifras de
  * horizonte PLACEHOLDER (ver Preguntas_Abiertas.md), calibradas contra `FUNDACION.materialesIniciales`: con
- * el stock inicial de madera (50) y el costo base de Mantenimiento a nivel 1 (3/tick), un horizonte de 15
+ * el stock inicial de madera (50) y el costo base de Mantenimiento a nivel 1 (3/minuto), un horizonte de 15
  * ticks reservaría 45 — casi todo el stock inicial, congelando cualquier construcción no exenta (Vivienda,
  * extractores...) durante los primeros ticks incluso en un asentamiento sano con acceso a bosque. 8 ticks dan
  * un margen real (protege contra el patrón de colapso post-ascenso de nivel ya documentado) sin dejar al
@@ -1243,8 +1273,8 @@ export const MANTENIMIENTO = {
  * por la misma escasez que deben resolver sería un huevo-y-la-gallina sin salida.
  */
 export const RESERVA_CONSTRUCCION = {
-  horizonteTicksMantenimiento: 8,
-  horizonteTicksComida: 8,
+  horizonteMinutosMantenimiento: 8,
+  horizonteMinutosComida: 8,
 };
 
 /**
@@ -1252,14 +1282,14 @@ export const RESERVA_CONSTRUCCION = {
  * Cifras exactas de cada evento sin cerrar en el diseño (Preguntas_Abiertas) — valores placeholder razonables.
  */
 export const REPUTACION = {
-  decaimientoPorTick: 0.2,
+  decaimientoPorMinuto: 0.2,
   bonusTruequeCumplido: 5,
   penalizacionTruequeIncumplido: -8,
   bonusLiberarVasalloVoluntario: 6,
   penalizacionRebelionParaSenora: -10,
   penalizacionRomperAlianza: -12,
   penalizacionAtacarAliado: -25,
-  bonusPorTickAlianzaActiva: 0.05,
+  bonusPorMinutoAlianzaActiva: 0.05,
   // Restricción del Embajador (Doc 2.7, uso 3): por debajo de este umbral no puede proponer alianzas.
   umbralBajoParaEmbajador: -40,
   // Términos de comercio asimétricos (Doc 2.7, uso 1): score bajo encarece la comisión que paga esa Facción.

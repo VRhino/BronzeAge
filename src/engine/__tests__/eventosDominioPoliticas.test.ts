@@ -4,15 +4,15 @@
 import { describe, expect, it } from 'vitest';
 import type { Asentamiento, PoliticaActiva } from '../../domain/types';
 import { avanzarPoliticas, type PayloadPoliticaExpirada } from '../politicas';
-import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
+import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instanteDeTest } from './fixtures';
 
 function conPoliticaVencida(asentamiento: Asentamiento): Asentamiento {
   const activa: PoliticaActiva = {
     id: `politica-${asentamiento.id}-0`,
     politicaId: 'edicto_cosecha',
     cargo: 'gobernador',
-    activadaEnTick: 0,
-    expiraEnTick: 5,
+    activadaEn: instanteDeTest(0),
+    expiraEn: instanteDeTest(5),
   };
   return { ...asentamiento, politicasActivas: [activa] };
 }
@@ -23,7 +23,7 @@ describe('eventos de dominio — politicas.ts', () => {
     const { asentamiento } = fundarAsentamientoDeTest(mapa, crearFacciones(), 'faccion-1', []);
     const conVencida = conPoliticaVencida(asentamiento);
 
-    const resultado = avanzarPoliticas(conVencida, 10);
+    const resultado = avanzarPoliticas(conVencida, instanteDeTest(10));
 
     expect(resultado.asentamiento.politicasActivas).toHaveLength(0);
     expect(resultado.eventos).toHaveLength(1);
@@ -42,7 +42,7 @@ describe('eventos de dominio — politicas.ts', () => {
     const { asentamiento } = fundarAsentamientoDeTest(mapa, crearFacciones(), 'faccion-1', []);
     const conVigente = conPoliticaVencida(asentamiento);
 
-    const resultado = avanzarPoliticas(conVigente, 3);
+    const resultado = avanzarPoliticas(conVigente, instanteDeTest(3));
 
     expect(resultado.eventos).toHaveLength(0);
   });

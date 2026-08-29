@@ -3,6 +3,8 @@
 // Ver Consideraciones/Plan_Implementacion_Tecnica.md para el modelo de datos completo.
 // Murallas/torres/puerto (edificios estratégicos de colocación manual, Doc 4.2) quedan fuera de Fase 0.
 
+import type { Instante } from './tiempo';
+
 export interface Point {
   x: number;
   y: number;
@@ -208,7 +210,13 @@ export interface Edificio {
    */
   posicion: Point;
   estado: EstadoEdificio;
-  ticksRestantes: number;
+  /**
+   * Fase D / doc 10 — instante de MUNDO en el que la obra pasa a `activo` (FECHA ABSOLUTA, no un contador
+   * descendente: doc 6 §4, regla (a) "fechas, nunca contadores"). Presente SOLO mientras
+   * `estado === 'en_construccion'`; ausente en `en_cola` (la obra aún no arrancó y su duración se fija al
+   * empezar, ver Vía Rápida en `avanzarConstruccion`) y en `activo` (ya terminó).
+   */
+  completaEn?: Instante;
   /**
    * Espacio lógico en el que vive el edificio (Vista de Asentamiento). Ausente = `'asentamiento'` (el caso
    * común: casi todo edificio se construye DENTRO del espacio plano del asentamiento). Solo los extractores
@@ -293,8 +301,9 @@ export interface Escuadron {
   veterania: number;
   /** Moral 0-100 por suministro de raciones (Doc 5.4); a 0 hay deserción permanente continua. */
   moral: number;
-  /** Debuff temporal tras perder en mundo abierto (Doc 5.2.2), penaliza poder de combate mientras dura. */
-  heridoHastaTick?: number;
+  /** Debuff temporal tras perder en mundo abierto (Doc 5.2.2): penaliza el poder de combate hasta este
+   * instante de mundo (Fase D). Ausente = sano. */
+  heridoHasta?: Instante;
   /** Tropa reclutada vía Centro Urbano/Barracón/Galería de tiro (Doc 5.7/5.8, ver TROPAS_RECLUTABLES en
    * constants.ts) — determina el poderBase (`poderEscuadron`, engine/combate.ts). Único origen de escuadrones
    * en el motor (`reclutarTropa`, engine/tropas.ts), por eso es obligatorio: "mejorar" una tropa siempre es
@@ -330,10 +339,11 @@ export interface Asentamiento {
    * nunca apaga nada ni purga población. */
   nivelActual: number;
   /** Racha de ticks CONSECUTIVOS con Mantenimiento pagado en full (Doc Fase_0_5 §6.2) — al llegar a
-   * `MANTENIMIENTO.ticksSanosParaRecuperarNivel` sube `nivelActual` un escalón (tope `nivel`) y se reinicia a
+   * `MANTENIMIENTO.minutosSanosParaRecuperarNivel` sube `nivelActual` un escalón (tope `nivel`) y se reinicia a
    * 0; cualquier tick en déficit también la reinicia a 0. Ausente = 0. */
   rachaMantenimientoSano?: number;
-  fundadoEnTick: number;
+  /** Instante de mundo en que se fundó el asentamiento (Fase D). */
+  fundadoEn: Instante;
   /** Radio "potencial" de la zona de influencia si no hubiera fronteras vecinas; crece con el tiempo/nivel. */
   radioPotencial: number;
   poblacion: Poblacion;
@@ -372,12 +382,12 @@ export interface Asentamiento {
    * válido en `evaluarNecesidades` sin conseguir cupo — se resetea a 0 en cuanto el tipo consigue cupo o deja
    * de ser candidato. Ausente/tipo ausente = 0 (comportamiento sin cambios: sin historial de inanición). */
   extractoresTicksSinCupo?: Partial<Record<EdificioTipo, number>>;
-  /** Último tick en el que este asentamiento creó una caravana (Fundación o comercial) — cooldown compartido
-   * entre los dos mecanismos (`CARAVANA_COOLDOWN.ticksCooldown`, constants.ts): evita que se spamee la
-   * creación cuando una caravana recién salida es destruida (bandidos, intercepción) y el cupo/recursos
-   * vuelven a estar disponibles de inmediato (a petición del usuario). Ausente = nunca creó ninguna, así que el
-   * cooldown no aplica. Ver `puedeCrearCaravana`/`ticksCooldownCaravanaRestantes`, engine/asentamientoQuery.ts. */
-  ultimaCaravanaCreadaEnTick?: number;
+  /** Instante de mundo en que este asentamiento creó su última caravana (Fundación o comercial) — cooldown
+   * compartido entre los dos mecanismos (`CARAVANA_COOLDOWN.cooldownMinutos`, constants.ts): evita que se
+   * spamee la creación cuando una caravana recién salida es destruida y el cupo/recursos vuelven a estar
+   * disponibles. Ausente = nunca creó ninguna, así que el cooldown no aplica. Ver `puedeCrearCaravana`,
+   * engine/asentamientoQuery.ts. */
+  ultimaCaravanaCreadaEn?: Instante;
 }
 
 export interface ZonaInfluencia {
@@ -554,8 +564,9 @@ export interface AcuerdoTrueque {
   cantidadTotalB: number;
   cantidadEntregadaA: number;
   cantidadEntregadaB: number;
-  creadoEnTick: number;
-  expiraEnTick: number;
+  /** Instantes de mundo de creación y vencimiento del acuerdo (Fase D). */
+  creadoEn: Instante;
+  expiraEn: Instante;
   estado: 'activo' | 'cumplido' | 'expirado';
 }
 
@@ -582,7 +593,8 @@ export interface OrdenMercado {
   cantidad: number;
   cantidadCumplida: number;
   precioUnitario: number;
-  creadoEnTick: number;
+  /** Instante de mundo en que se colocó la orden (Fase D). */
+  creadoEn: Instante;
   estado: 'activa' | 'cumplida';
 }
 
@@ -605,8 +617,9 @@ export interface PoliticaActiva {
   id: string;
   politicaId: string;
   cargo: CargoTipo;
-  activadaEnTick: number;
-  expiraEnTick: number;
+  /** Instantes de mundo de activación y vencimiento (Fase D). Duración fija, no cancelable antes de tiempo. */
+  activadaEn: Instante;
+  expiraEn: Instante;
 }
 
 /**
@@ -619,9 +632,11 @@ export interface RelacionPolitica {
   tipo: 'vasallaje' | 'alianza';
   faccionAId: string;
   faccionBId: string;
-  /** Tributo periódico del vasallo al señor (Doc 2.4), solo aplica a vasallaje. */
-  tributo?: { recurso: string; cantidadPorTick: number };
-  creadoEnTick: number;
+  /** Tributo periódico del vasallo al señor (Doc 2.4), solo aplica a vasallaje — `cantidadPorMinuto` unidades
+   * de mundo por minuto (D6; 1 tick = 1 minuto, ver `SIMULACION`). */
+  tributo?: { recurso: string; cantidadPorMinuto: number };
+  /** Instante de mundo en que se estableció la relación (Fase D). */
+  creadoEn: Instante;
   estado: 'activa' | 'rota';
 }
 

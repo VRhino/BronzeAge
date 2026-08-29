@@ -2,6 +2,7 @@
 // mocks — así estas pruebas fallan de verdad si cambia la forma de `GameSessionState` o el significado de
 // ciudadanía, no solo si cambia la proyección.
 import { describe, expect, it } from 'vitest';
+import { instanteDeTest } from '../../../engine/__tests__/fixtures';
 import { partidaConAsentamiento, OPC } from '../../__tests__/fixtures';
 import { crearFaccion } from '../../comandos/crearFaccion';
 import { fundarAsentamiento } from '../../comandos/fundarAsentamiento';
@@ -71,8 +72,8 @@ describe('caravanas, acuerdos y ordenes: solo los que tocan un asentamiento prop
     const estadoConOrdenes = {
       ...sesion.getState(),
       ordenes: [
-        { id: 'o1', asentamientoId, tipo: 'venta' as const, recurso: 'trigo', cantidad: 10, cantidadCumplida: 0, precioUnitario: 1, creadoEnTick: 0, estado: 'activa' as const },
-        { id: 'o2', asentamientoId: 'asentamiento-ajeno', tipo: 'venta' as const, recurso: 'trigo', cantidad: 10, cantidadCumplida: 0, precioUnitario: 1, creadoEnTick: 0, estado: 'activa' as const },
+        { id: 'o1', asentamientoId, tipo: 'venta' as const, recurso: 'trigo', cantidad: 10, cantidadCumplida: 0, precioUnitario: 1, creadoEn: instanteDeTest(0), estado: 'activa' as const },
+        { id: 'o2', asentamientoId: 'asentamiento-ajeno', tipo: 'venta' as const, recurso: 'trigo', cantidad: 10, cantidadCumplida: 0, precioUnitario: 1, creadoEn: instanteDeTest(0), estado: 'activa' as const },
       ],
     };
 

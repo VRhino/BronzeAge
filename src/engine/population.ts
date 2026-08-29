@@ -140,7 +140,7 @@ export function consumoComidaPoblacion(asentamiento: Asentamiento): number {
  * del tick (nunca negativo) y actualiza `nutricionPoblacion` según la fracción cubierta — sube si el pago fue
  * íntegro, baja proporcional al déficit si no. Mientras la nutrición se mantiene en
  * `POBLACION.hambre.umbralMuertePorHambre` (0), cada tick cuesta una fracción de pesants+artesanos
- * (`fraccionMuertePorTickHambre`) — la nobleza queda protegida ("los nobles comen primero"), igual que
+ * (`fraccionMuertePorMinutoHambre`) — la nobleza queda protegida ("los nobles comen primero"), igual que
  * `nivel`/población ya asentada nunca se purga por un solo bache de Mantenimiento (Doc §6.2).
  */
 export function avanzarNutricionPoblacion(asentamiento: Asentamiento): { asentamiento: Asentamiento; eventos: EventoCrudo[] } {
@@ -159,14 +159,14 @@ export function avanzarNutricionPoblacion(asentamiento: Asentamiento): { asentam
   const nutricionPrevia = nutricionPoblacionDe(asentamiento);
   const nutricionPoblacion =
     factorSuministro >= 1
-      ? Math.min(100, nutricionPrevia + hambre.regeneracionPorTick)
+      ? Math.min(100, nutricionPrevia + hambre.regeneracionPorMinuto)
       : Math.max(0, nutricionPrevia - hambre.degradacionSinComida * (1 - factorSuministro));
 
   let poblacion = asentamiento.poblacion;
   if (nutricionPoblacion <= hambre.umbralMuertePorHambre) {
     const afectados = poblacion.pesants + poblacion.artesanos;
     if (afectados > 0) {
-      const muertes = Math.min(afectados, Math.ceil(afectados * hambre.fraccionMuertePorTickHambre));
+      const muertes = Math.min(afectados, Math.ceil(afectados * hambre.fraccionMuertePorMinutoHambre));
       const muertesPesants = Math.round(muertes * (poblacion.pesants / afectados));
       const muertesArtesanos = muertes - muertesPesants;
       poblacion = {

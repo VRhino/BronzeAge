@@ -22,6 +22,7 @@ export interface PayloadCaravanaEscapa {
 import type { Mapa } from '../world/mapa';
 import type { RandomFn } from '../worldgen';
 import { CAMPAMENTOS_BANDIDOS, MILITAR } from '../constants';
+import type { Instante } from '../domain/tiempo';
 import { pointInPolygon } from './zones';
 
 function distancia(a: Point, b: Point): number {
@@ -66,14 +67,14 @@ function bosqueNoReclamadoMasCercano(mapa: Mapa, zonas: ZonaInfluencia[], ocupad
  */
 export function avanzarSpawnBandidos(
   campamentos: CampamentoBandido[],
-  proximoSpawnEnTick: number,
+  proximoSpawnEn: Instante,
   zonas: ZonaInfluencia[],
   asentamientos: Asentamiento[],
   mapa: Mapa,
-  tickActual: number,
+  instante: Instante,
   contador = 0
 ): { campamentos: CampamentoBandido[]; eventos: EventoCrudo[] } {
-  if (campamentos.length >= asentamientos.length || tickActual < proximoSpawnEnTick) {
+  if (campamentos.length >= asentamientos.length || instante < proximoSpawnEn) {
     return { campamentos, eventos: [] };
   }
   const asentamientoObjetivo = asentamientoSinCampamento(asentamientos, campamentos);
@@ -84,7 +85,7 @@ export function avanzarSpawnBandidos(
   if (!bosque) return { campamentos, eventos: [] };
 
   const nuevo: CampamentoBandido = {
-    id: `campamento-${tickActual}-${contador}`,
+    id: `campamento-${contador}`,
     posicion: bosque.centro,
     bosqueId: bosque.id,
     asentamientoId: asentamientoObjetivo.id,

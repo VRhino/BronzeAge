@@ -41,7 +41,7 @@ export const alternarFaccionNpc = comando<ParamsAlternarFaccionNpc, void>((estad
       : estado.faccionesNpcIds.filter((id) => id !== params.faccionId),
   };
   return exito(siguiente, [
-    evento(ctx, estado, {
+    evento(ctx, {
       codigo: params.activo ? 'faccion.cedida_al_npc' : 'faccion.recuperada_del_npc',
       mensaje: params.activo
         ? `${faccion.nombre}: pasa a estar controlada por el NPC de gobernanza (juega sola).`

@@ -50,7 +50,6 @@ describe('mejorarEdificioManualmente — validaciones', () => {
       tipo: 'granja',
       posicion: { x: 40, y: 0 },
       estado: 'en_cola',
-      ticksRestantes: 0,
       ambito: 'asentamiento',
     };
     const conProyecto = { ...asentamiento, edificios: [...asentamiento.edificios, enCola] };
@@ -81,7 +80,6 @@ describe('mejorarEdificioManualmente — validaciones', () => {
       tipo: 'fundicion',
       posicion: { x: 40, y: 0 },
       estado: 'activo',
-      ticksRestantes: 0,
       ambito: 'asentamiento',
       nivelInterno: 1,
     };

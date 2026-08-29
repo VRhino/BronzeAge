@@ -15,18 +15,18 @@ separa el generador de mundo del motor general del juego
 + [RESUELTO]Revisar si los mercados se construyen. 
 + [RESUELTO]Liberar la creación de facciones para q se puedan crear x
 + Pathfinder caravanas, priorizar en la creación de la ruta atravesar asentamientos aliados y neutrales, si están en la ruta son desviarse demasiado, esto crea puntos seguros de camino.
-+ modificar el auto construir para que tome en cuenta:
++ [RESUELTO]modificar el auto construir para que tome en cuenta:
     + lineas de produccion: ubicacion y proximidad entre extractores y transformadores, y almacenes
     + ubicacion de construccion de viviendas, lo mas agrupadas posibles con 2 opciones: barrios(agrupados por clusters)(politica del maestro de obras) o siempre lo mas cerca del centro urbano posible(por defecto) 
 + agregar las primeras versions de cria
-+ Crear una ia para que juegue dentro del juego
++ [RESUELTO]Crear una ia para que juegue dentro del juego
 + Cambiar la mecánica de la simulación a una versión por tiempo y no por tics para jugar
 
 ## Interfaz:
 + [resuelto]agregar una nueva pestaña que sea comercio y dejar toda la info mas la acciones de comercio en esa pestaña
 
 ## Prueba multijugador
-+ separar el motor a un backend y una interfaz simplificada para un jugador y la interfaz completa para el GM
++ [RESUELTO]separar el motor a un backend y una interfaz simplificada para un jugador y la interfaz completa para el GM
 
 # Dudas a futuro:
 + como afecta el ataque y saqueo de un nodo en sus construcciones: sons destruibles en el ataque, o solo reciben daño y se reparan como en total war.
@@ -100,12 +100,6 @@ el mapa de asentamiento es una espacio logico que se genera tomando en cuenta el
     + [RESUELTO][ZONA/interfaz] las zonas de influencia de la misma faccion no se fusionan en un solo poligono en el mapa GENERAL — la fusion la hace el motor (`computeZonasFusionadasPorFaccion`, engine/zones.ts) y la interfaz recibe una silueta por faccion (`ZonaFaccion.contornos`, domain/types.ts) que pinta de una sola pasada: sin fronteras internas entre asentamientos hermanos y sin relleno acumulado en los solapes. Las reglas de juego (fundar, chokepoints, leñeras, fertilidad) siguen usando el poligono POR ASENTAMIENTO, no cambia ningun comportamiento.
         + [RESUELTO][ZONA/interfaz] hay que cambiar la manera en que se crean los bosques de cicurlos overlaped a poligonos complejos para mostrar varios puntos que se overlapan como un solo poligono — `Mapa.contornosBosques()` devuelve la union de los 170 discos como ~25 siluetas (cacheada por mundo generado, ~16 ms una sola vez). Los arboles se siguen sembrando bosque a bosque y pasan a ser la unica señal de densidad de madera.
         + Los dos salen de la misma pieza nueva, `world/poligonos.ts` (`unirFormas`): union por campo de distancia con signo + marching squares, sin dependencias. Los claros encerrados por una corona (de bosque o de asentamientos) salen como lazos de orientacion opuesta y el canvas los recorta solo con la regla de relleno `nonzero`.
-+ Feature nuevas
-    + [MOTOR] mecanicas de taxes en los asentamientos, que es la generacion de oro en base a la poblacion y tipo de poblacion que vive en el asentamiento
-    + [GUERRA] Los ejércitos también se mueven por el mapa para atacar como las caravanas, con un símbolo q los identifique por ejemplo un rombo, uno por cada jugador q va en el ejército, uno detrás de otro medio superpuestos y cada rombo del color de su faccion.
-    + [RUTAS]el pathfinder de las rutas para las caravanas debe buscar evitar bosques(rodearlos) o rios(no los puede atravesar) y montañas
-    + [POLITICAS]politicas de ubicacion de construccion.
-    + [TRUEQUE]trueque compuesto de varios materiales
 ---------------------
 + correciones:
     + [ASENTAMIENTO]la opcion de reorganiza la cola no funciona correctamente probarlo en profudidad
@@ -116,10 +110,10 @@ el mapa de asentamiento es una espacio logico que se genera tomando en cuenta el
     + [PENDIENTE]cada faccion debe tener un rey, el valor no puede estar vacio asi que por ende al crear una faccion coloca al creador como rey
     + [PENDIENTE]cuando un jugador usa la funcion de unirse a faccion, este no se une automaticamente, entre a una lista de aspirantes y el rey acepta a quienes quiere dentro y puede rechazar tambien 
     + en al vista de cliente(admin) falta una pestaña para gestionar partida, el game id, jugadores conectados, crear partida y demas
-+ Issues:
-    + 
-
-
+----- 29/08/2025
+issues:
++ en el motor en cuanto a calidad de codigo hay mucho magic strings cosas que se pueden pasar a constantes
++hay que hacer revision de trazado
 
 
 

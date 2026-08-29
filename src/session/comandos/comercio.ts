@@ -53,7 +53,7 @@ export const proponerTrueque = comando<ParamsProponerTrueque, { acuerdoId: strin
     params.recursoB,
     params.cantidadA,
     params.cantidadB,
-    estado.tick,
+    ctx.instante,
     ctx.ids.siguiente()
   );
 
@@ -83,7 +83,7 @@ export const proponerTrueque = comando<ParamsProponerTrueque, { acuerdoId: strin
   }
 
   const siguiente: GameSessionState = { ...estado, acuerdos: [...estado.acuerdos, nuevo], caminos };
-  return exito(siguiente, construirEventos(ctx, estado, narrados), { acuerdoId: nuevo.id });
+  return exito(siguiente, construirEventos(ctx, narrados), { acuerdoId: nuevo.id });
 });
 
 export interface ParamsColocarOrdenMercado {
@@ -102,7 +102,7 @@ export const colocarOrdenMercado = comando<ParamsColocarOrdenMercado, { ordenId:
     params.tipo,
     params.recurso,
     params.cantidad,
-    estado.tick,
+    ctx.instante,
     params.precio,
     ctx.ids.siguiente()
   );
@@ -110,7 +110,7 @@ export const colocarOrdenMercado = comando<ParamsColocarOrdenMercado, { ordenId:
   return exito(
     siguiente,
     [
-      evento(ctx, estado, {
+      evento(ctx, {
         codigo: 'mercado.orden_colocada',
         mensaje: `Orden de mercado colocada: ${nueva.id} (${nueva.tipo} ${nueva.cantidad} ${nueva.recurso} @ ${nueva.precioUnitario.toFixed(2)}).`,
         payload: {
@@ -139,7 +139,7 @@ export const crearCaravana = comando<ParamsCrearCaravana, { caravanaId: string }
   const { asentamiento: actualizado, caravana } = construirCaravanaComercialEngine(
     asentamiento,
     estado.caravanas,
-    estado.tick,
+    ctx.instante,
     ctx.ids.siguiente()
   );
   const siguiente: GameSessionState = {
@@ -149,7 +149,7 @@ export const crearCaravana = comando<ParamsCrearCaravana, { caravanaId: string }
   return exito(
     siguiente,
     [
-      evento(ctx, estado, {
+      evento(ctx, {
         codigo: 'comercio.caravana_construida',
         mensaje: `Construye una caravana comercial (${caravana.id}).`,
         payload: { caravanaId: caravana.id, asentamientoId: params.asentamientoId } satisfies PayloadCaravanaConstruida,

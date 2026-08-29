@@ -1,5 +1,6 @@
 import type { Asentamiento, CargoTipo, Faccion, PoliticaActiva } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
+import { minutos, sumar, type Instante } from '../domain/tiempo';
 import { POLITICAS, POLITICA_CATALOGO } from '../constants';
 import { cargoOcupado } from './pertenencia';
 
@@ -41,7 +42,7 @@ export function activarPolitica(
   faccion: Faccion,
   cargo: CargoTipo,
   politicaId: string,
-  tickActual: number,
+  instante: Instante,
   contador = 0
 ): Asentamiento {
   const def = definicion(politicaId);
@@ -60,20 +61,20 @@ export function activarPolitica(
   }
 
   const nueva: PoliticaActiva = {
-    id: `politica-${asentamiento.id}-${tickActual}-${contador}`,
+    id: `politica-${asentamiento.id}-${contador}`,
     politicaId,
     cargo,
-    activadaEnTick: tickActual,
-    expiraEnTick: tickActual + POLITICAS.duracionTicksPorDefecto,
+    activadaEn: instante,
+    expiraEn: sumar(instante, minutos(POLITICAS.duracionMinutosPorDefecto)),
   };
   return { ...asentamiento, politicasActivas: [...asentamiento.politicasActivas, nueva] };
 }
 
 /** Expira políticas cuyo plazo terminó; no hay cancelación anticipada (Doc 4.4). */
-export function avanzarPoliticas(asentamiento: Asentamiento, tickActual: number): { asentamiento: Asentamiento; eventos: EventoCrudo[] } {
+export function avanzarPoliticas(asentamiento: Asentamiento, instante: Instante): { asentamiento: Asentamiento; eventos: EventoCrudo[] } {
   const eventos: EventoCrudo[] = [];
   const vigentes = asentamiento.politicasActivas.filter((p) => {
-    const expirada = tickActual >= p.expiraEnTick;
+    const expirada = instante >= p.expiraEn;
     if (expirada) {
       const def = definicion(p.politicaId);
       eventos.push({

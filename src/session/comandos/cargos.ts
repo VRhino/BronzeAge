@@ -56,7 +56,7 @@ function asignarCargoDeFaccion(
     `Nombrado ${nombreCargo} de ${faccion.nombre}.`
   );
   return exito(siguiente, [
-    evento(ctx, estado, {
+    evento(ctx, {
       codigo: `cargo.${cargo}_asignado`,
       mensaje: `${faccion.nombre}: ${params.jugadorId} es el nuevo ${nombreCargo}.`,
       payload: { faccionId: faccion.id, jugadorId: params.jugadorId, cargo } satisfies PayloadCargoFaccion,
@@ -89,7 +89,7 @@ export const asignarCargoLocal = comando<ParamsAsignarCargoLocal, void>((estado,
     `Asignado como ${params.cargo} en ${asentamiento.id}.`
   );
   return exito(siguiente, [
-    evento(ctx, estado, {
+    evento(ctx, {
       codigo: 'cargo.local_asignado',
       mensaje: `${params.jugadorId} asignado como ${params.cargo}.`,
       payload: { asentamientoId: asentamiento.id, jugadorId: params.jugadorId, cargo: params.cargo } satisfies PayloadCargoLocal,
@@ -113,7 +113,7 @@ export const comprarCasa = comando<ParamsComprarCasa, void>((estado, _mapa, ctx,
     `Compra casa en ${params.asentamientoId} y obtiene ciudadanía.`
   );
   return exito(siguiente, [
-    evento(ctx, estado, {
+    evento(ctx, {
       codigo: 'ciudadania.casa_comprada',
       mensaje: `${params.jugadorId} compra casa en ${params.asentamientoId} y obtiene ciudadanía.`,
       payload: { asentamientoId: resultado.asentamiento.id, jugadorId: params.jugadorId } satisfies PayloadCasaComprada,
@@ -132,9 +132,9 @@ export const activarPolitica = comando<ParamsActivarPolitica, void>((estado, _ma
   const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
   const faccion = exigirFaccionDe(estado, asentamiento);
 
-  const actualizado = activarPoliticaEngine(asentamiento, faccion, params.cargo, params.politicaId, estado.tick, ctx.ids.siguiente());
+  const actualizado = activarPoliticaEngine(asentamiento, faccion, params.cargo, params.politicaId, ctx.instante, ctx.ids.siguiente());
   return exito(conAsentamiento(estado, actualizado), [
-    evento(ctx, estado, {
+    evento(ctx, {
       codigo: 'politica.activada',
       mensaje: `Política "${params.politicaId}" activada por ${params.cargo}.`,
       payload: { asentamientoId: asentamiento.id, politicaId: params.politicaId, cargo: params.cargo } satisfies PayloadPoliticaActivada,

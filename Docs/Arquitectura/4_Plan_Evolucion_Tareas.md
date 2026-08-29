@@ -996,20 +996,222 @@ Fase C antes de decidir sobre C4 Slice 2 o Fase D. Tres piezas de código + dos 
 
 ## Fase D — Conversión temporal total
 
-- [ ] Introducir reloj de simulación y campos de fecha en el estado, sin retirar aún el tick
-- [ ] Migrar construcción, políticas y cooldowns de `ticksRestantes`/`enTick` a duraciones o fechas de finalización
-- [ ] Migrar producción/consumo/población/hambre/mantenimiento a tasas o acumuladores por tiempo transcurrido
-- [ ] Migrar caravanas (salida, velocidad, tiempo transcurrido en vez de posición por tick)
-- [ ] Migrar comercio, bandidos, NPC y combate a eventos temporales
-- [ ] Escribir migración explícita de partidas guardadas en formato "ticks" a formato "tiempo real"
-- [ ] Actualizar DTOs y frontends: contadores → fechas/duraciones/eventos
-- [ ] Recalibrar valores de balance con simulaciones de referencia tras el cambio de modelo temporal
-- [ ] Persistir `ultimoProcesadoEn` y procesar eventos vencidos tras un reinicio de servidor
+> **Re‑planteada 2026‑08‑29** — modelo completo en [10_Modelo_Temporal.md](10_Modelo_Temporal.md). Resumen de
+> la investigación previa:
+>
+> - **Inventario medido**: 128 usos de `*Tick` en 3 arquetipos — **instantes** (7 campos: `expiraEnTick`,
+>   `fundadoEnTick`, `heridoHastaTick`, `activadaEnTick`, `creadoEnTick`, `bandidosProximoSpawnTick`,
+>   `ultimaCaravanaCreadaEnTick`), **contadores** (`ticksRestantes`, `rachaMantenimientoSano`), **tasas**
+>   (~15 constantes `/tick`). El motor solo usa `tick` para la aritmética y `momento` para fechar eventos —
+>   `ContextoSimulacion` ya está listo, nada lee el reloj.
+> - **Dos bugs temporales en producción, verificados** (doc 10 §7): `ctx.momento` es reloj de pared y se
+>   persiste en el estado (mismo comando + misma seed → snapshots distintos); el cooldown de `crearFaccion`
+>   (7 días) corre contra reloj de pared con la partida congelada.
+> - **"Independencia del tamaño del paso" (doc 2) es inalcanzable** — RNG escala 1:1 con los pasos, población
+>   compuesta (15 % de divergencia en 6 pasos). Se retira; el paso es fijo.
+> - **Decisión del usuario**: mundo = tiempo real, 1 tick = 1 minuto real, `instante` derivado del tick.
+
+- [x] **Guard de autoridad temporal** (antes de D1) — `src/__tests__/autoridadTemporal.test.ts`: el núcleo
+  puro (`domain`/`constants`/`worldgen`/`world`/`engine`) no nombra `Date` ni consume aleatoriedad ambiental
+  (`Math.random`/`crypto.*`/`performance.now`); `session` no lee el reloj de pared (`Date.now()`/`new Date()`
+  vacío) — puede parsear un ISO recibido hasta D2. Extrae la lectura del árbol de `arquitectura.test.ts` a
+  `src/__tests__/fuenteDelProyecto.ts` (compartida). Corrige de paso `world/exportUnity.ts`: dejaba de ser
+  núcleo puro por un `new Date().toISOString()` en la metadata — ahora el servidor le pasa `generadoEn` por
+  opciones (`MetadataExportUnity.generadoEn` pasa a opcional; ningún test asertaba sobre él). 669 → 675 tests,
+  `tsc` limpio, verificado por prueba negativa (reintroducir el `new Date()` hace fallar el guard con
+  `exportUnity.ts:291`)
+- [x] **D1** — **hecho 2026‑08‑29**. Decisión de diseño al implementar: `momentoSimulacion` **NO se almacena**
+  en el estado — se deriva (`instanteDeTick(tick) = epocaInicial + tick × duracionTickMs`, función pura en
+  `session/estado.ts`, mismo patrón que `idDeMapa`). Consecuencia: **el formato de snapshot no cambia**, un
+  snapshot viejo se reconstruye del `tick` sin datos nuevos.
+  - `SIMULACION` en `constants.ts` (`epocaInicial: '2026-01-01T00:00:00.000Z'`, `duracionTickMs: 60_000`),
+    `BALANCE_VERSION` 1 → 2, servido en `GET /v1/balance` bajo `temporal` (40 tablas, no 39)
+  - `GameSession.ejecutar(manejador, params, opciones?)` — el tercer parámetro pasa de `{ momento; actor? }` a
+    `{ actor? }`; `ctx.momento` lo deriva `ejecutar` de `instanteDeTick(this.estado.tick)`. Las 3 operaciones
+    de sistema (`avanzarTick`/`avanzarAutoComercio`/`avanzarFaccionesNpc`) pierden el parámetro `momento`
+  - `avanzarTick.ts` fecha los eventos del tick con `instanteDeTick(nuevoTick)` — el instante RESULTANTE,
+    coherente con `ContextoSimulacion.tick` (el nuevo). `avanzarFaccionesNpc` no necesita override: corre tras
+    el tick, así que `this.estado.tick` ya es el nuevo
+  - `RunnerDePartida.ejecutar`/`avanzarTick` dejan de pasar `this.ahora()`. `ahora` (reloj de pared) queda para
+    `guardarPartida` (param renombrado `momento` → `guardadoEn`), el TTL de `preciosReferencia`, y el catch‑up
+    de D5
+  - `crearFaccion` cooldown: automáticamente pasa a tiempo de mundo (compara dos `instanteDeTick`). Test
+    reescrito para adelantar la partida por `exportar`/`importar` con `tick` alto en vez de inyectar `momento`
+  - `engine/__tests__/fixtures.ts` (`contextoDeTest`) y `scripts/run-batch-sim.ts` alineados a `SIMULACION` —
+    ya derivaban el momento del tick con la misma fórmula, ahora con la constante compartida
+  - **Regresión congelada** (`runnerDePartida.test.ts`): mismo comando + relojes de pared distintos → snapshot
+    idéntico; eventos fechados en tiempo de mundo aunque `ahora()` diga 2099. Verificado en vivo sobre HTTP
+    real (balance v2 con `SIMULACION`; 6 eventos de un tick, todos en `2026-01-01T00:0X`, no en la fecha real).
+    669 → 677 tests, `tsc` limpio
+- [x] **D2** — **hecho**. Tipos branded y migración de los campos‑instante.
+  - `domain/tiempo.ts` (módulo hoja, cero imports): `Instante`/`Duracion` (`number` con marca de tipo) +
+    `instante`/`duracion`/`minutos`/`dias`/`sumar`/`transcurrido`. El compilador ya no deja sumar dos
+    instantes ni confundir un instante de mundo con un `tick` ordinal — es la red que hizo la migración
+    verificable (`tsc` señaló ~55 sitios).
+  - `constants.ts` ganó `ticksComoDuracion(n): Duracion` (`n × SIMULACION.duracionTickMs`) como puente para
+    las constantes que aún se declaraban en ticks. **D6 lo eliminó**: esas constantes ahora son `*Minutos` y
+    el motor usa `minutos()` de `domain/tiempo.ts` directamente.
+  - `session/estado.ts`: `instanteDeTick(tick): Instante` (antes devolvía ISO), `isoDeInstante(i): string`
+    para lo que sale por el cable.
+  - **Campos renombrados** `*EnTick: number` → `*En: Instante`: `Escuadron.heridoHasta`, `Asentamiento.fundadoEn`/
+    `ultimaCaravanaCreadaEn`, `AcuerdoTrueque.creadoEn`/`expiraEn`, `OrdenMercado.creadoEn`,
+    `PoliticaActiva.activadaEn`/`expiraEn`, `RelacionPolitica.creadoEn`, `EstadoSimulacion`/`GameSessionState.bandidosProximoSpawnEn`,
+    `EstadoMapa.regeneraEn`, `GameSessionState.salidasFaccionPorJugador` (ISO → `Instante`).
+    `PayloadAsentamientoRuinas.duracionTicks` → `duro: Duracion`.
+  - `ContextoSimulacion` y `ContextoComando` ganan `instante: Instante`; conservan `momento: string` (ISO)
+    solo para fechar eventos — redundante a propósito, D4 lo unifica. Los ~15 archivos de motor que tomaban
+    `tickActual: number` para una comparación de deadline ahora toman `instante: Instante`. `avanzarSimulacion`
+    ya no necesita `tick` (solo `comoEventosDominio` lo usa, para el campo `tick` heredado del evento).
+  - **`reclutarTropa` y varios ids** dejan de llevar el tick en el string (`escuadron-<asentamiento>-<contador>`,
+    etc.): el contador de `GeneradorIds` ya garantiza unicidad, el tick era redundante.
+  - **`crearFaccion` cooldown**: `transcurrido(salida, ctx.instante) < dias(CIUDADANIA.cooldownCreacionFaccionDias)` —
+    aritmética de `Instante`/`Duracion` pura, se acabó el `new Date(...).getTime()`.
+  - **Migración de snapshot v1 → v2** (`persistenciaPartida.ts` `migrarSnapshot`, `FORMATO_SNAPSHOT_VERSION` → 2):
+    cada `*EnTick: N` → `*En: instanteDeTick(N)` (relación 1:1, sin pérdida), ISOs de `salidasFaccionPorJugador`
+    → `Instante`. No se persiste sola — el próximo comando reescribe el archivo en v2. Test con snapshot v1
+    sintético que cubre los 8 tipos de campo.
+  - **El guard NO se endureció** (doc 10 §4): el único `new Date` que queda en `session` es `instanteDeTick`
+    (construye el ms) e `isoDeInstante` (lo formatea) — construir un `Date` desde un valor no es leer el reloj.
+  - 677 → 678 tests, `tsc` limpio, verificado en vivo (servidor real: `asentamiento.fundadoEn` es un `Instante`
+    de 13 dígitos, sin campo `fundadoEnTick`; eventos fechados en tiempo de mundo).
+- [x] **D3** — `Edificio.ticksRestantes: number` → `Edificio.completaEn?: Instante` (implementa doc 6 §4 (a),
+  "fechas absolutas, nunca contadores"). Era el último contador de deadline; `rachaMantenimientoSano` y
+  `extractoresTicksSinCupo` son rachas/acumuladores y se quedan hasta D6.
+  - `completaEn` presente SOLO mientras `estado === 'en_construccion'`; ausente en `en_cola` (la Vía Rápida
+    del Maestro de Obras fija la duración al arrancar, el valor viejo en cola nunca era autoritativo) y en
+    `activo`. `domain/types.ts`, más los literales `activo` de `settlement.ts`/`trazado.ts`/`construction.ts`.
+  - `avanzarConstruccion(asentamiento, zona, mapa, capital, reclamos, instante)`: en el Paso 1 compara
+    `instante >= edificio.completaEn` en vez de `--ticksRestantes <= 0`; en el Paso 2 fija
+    `completaEn: sumar(instante, minutos(ticks))` (tras D6; mismo `ticks` con `factorTiempoConstruccion`).
+    `simulation.ts` le pasa `instante`. Un `en_construccion` sin `completaEn` (dato viejo colado) se completa
+    en cuanto se evalúa — no se cuelga.
+  - **Timing tick‑a‑tick idéntico**: el snapshot baseline (`snapshot_baseline.test.ts`, cuenta
+    `tipo:estado` en ticks 1/10/25/50/100) no se movió — los mismos edificios están `en_construccion` en los
+    mismos ticks que antes.
+  - **Migración de snapshot v2 → v3** (`FORMATO_SNAPSHOT_VERSION` → 3): `migrarSnapshot` ahora encadena
+    (`v1→v2` y `v2→v3` como funciones separadas). `v2→v3`: un `en_construccion` gana
+    `completaEn: instanteDeTick(state.tick + ticksRestantes)`; `en_cola`/`activo` solo pierden el contador.
+    Tests: el de v1 sintético ahora llega hasta v3 (obra + cola), más un test v2→v3 dedicado.
+  - **De paso**: `scripts/run-batch-sim.ts` (fuera de `tsconfig`, sin type‑check) estaba roto desde D2 —
+    `ContextoSimulacion` sin `instante`, `fundarAsentamiento(…, 0)`, `bandidosProximoSpawnTick`. Al día ahora,
+    con `instanteDeTick`/`isoDeInstante`. Y `scoreAsignacion` (trade.ts): variable local `ticksRestantes`
+    (que ya era ms desde D2) → `restante`.
+  - 678 → 679 tests, `tsc` limpio, verificado con el laboratorio batch en vivo (120 ticks, niveles de
+    Facción progresan 1→2, 0 excepciones, construcción no se completa de golpe).
+- [x] **D4** — DTOs con instante de mundo. `ResumenPartida` (`server/rutas/contexto.ts`),
+  `ResumenPartidaEnDisco` (`server/persistenciaPartida.ts`), `EstadoAdmin` y `ProyeccionJugador` ganan
+  `instante: Instante` (ms de mundo).
+  - Derivado como `mapaId` — `instanteDeTick(estado.tick)` en `resumenDe`/`vistaAdminDeEstado`/
+    `proyectarParaJugador`/`listarPartidas`; nunca almacenado. En `EstadoAdmin` es campo del TIPO (no lo
+    borra `CAMPOS_IMPUROS`, es puro). `listarPartidas` lee `state.tick` del JSON crudo — presente en todo
+    formato de snapshot, no hace falta migrar.
+  - `tick` sigue viajando en cada DTO, con el comentario "PROVISIONAL, se cae del contrato al cerrar Fase D;
+    usar `instante`". El comentario de `GameSessionState.tick` explica que el instante se deriva de él, no al
+    revés, y que hacia afuera la referencia es `instante`/`momento`.
+  - Esquemas de respuesta: `RESUMEN_PARTIDA_RESPUESTA` (`esquemas.ts`) y el `items` de `ESQUEMA_LISTAR_PARTIDAS`
+    (`admin.ts`) ganan `instante: { type: 'number' }` en `properties` + `required` — Fastify filtra la
+    respuesta por schema, un campo ausente se descartaría en caliente. Las rutas de proyección/estado/comando
+    no tienen schema de cuerpo (deliberado, Fase C6) — `instante` pasa sin tocar.
+  - **Sin campo ISO redundante.** Split: estado vivo en `Instante` ms (aritmética directa del cliente contra
+    `completaEn`/`expiraEn`/`heridoHasta`, que ya viajaban absolutos desde D2/D3); eventos en `momento` ISO
+    (legible en un log, ya existía). `isoDeInstante` es una línea en el cliente si hace falta formatear.
+  - D4 dejó `EventoLogAdmin` (`{tick, mensaje}`) y `ResumenPartida.tick`/`ProyeccionJugador.tick` con el
+    `tick` provisional — **resuelto en el cierre de Fase D** (ver más abajo): `EventoLogAdmin.tick` →
+    `momento`, y los DTOs sueltan `tick`.
+  - Tests: `api.test.ts` — las 2 aserciones `toEqual` exactas de `resumenDe` + la de la lista ahora incluyen
+    `instante`. 679 tests, `tsc` limpio, verificado en vivo sobre las 4 superficies
+    (`POST`/`GET /admin/partidas`, `GET /admin/partidas/:id`, `GET /jugador/partidas/:id`): `instante` = época
+    + tick×60 000 ms en todas, 1 tick = 60 000 ms.
+- [~] **D5** — reloj de mundo + catch‑up **hechos** (= el antiguo E1). Comandos programados: aplazados.
+  - **`RunnerDePartida.iniciarRelojDeMundo(intervaloMs)` / `detenerRelojDeMundo()`** sustituyen al metrónomo
+    `iniciarTicksAutomaticos`/`detener`. Mantiene `estado.tick` sincronizado con el reloj de pared: la
+    referencia (`relojDeMundo.referenciaMs`) es "instante de pared en que el mundo llegó al tick actual" —
+    parte del anclaje del constructor (`referenciaRelojInicialMs` = `guardadoEn` del snapshot, o "ahora"
+    para una partida nueva; en `tickAlConstruir`) más un intervalo por cada tick avanzado a mano antes de
+    arrancar el reloj (así `POST .../tick` manuales no se cuentan dos veces, y parar/reanudar no re‑ejecuta
+    la ráfaga). Cada disparo: `adeudados = ⌊(ahora − referenciaMs) / intervaloMs⌋`, capado a
+    `MAX_TICKS_RAFAGA` (10 080 = una semana; lo que exceda se recupera en pasadas siguientes — acota la
+    latencia de arranque y el daño de un salto de reloj). La referencia avanza EXACTAMENTE ese nº de
+    intervalos (nunca a "ahora": el resto sub‑intervalo se conserva). Sin acumular jitter del `setInterval`.
+  - **Catch‑up = una sola entrada de la cola serial** para toda la ráfaga (`sincronizarConReloj` →
+    `encolar`): un comando de jugador que llegue a mitad espera a que el mundo se ponga al día (correcto —
+    no se puede actuar "ahora" hasta que el mundo esté en "ahora"). El tick puro + auto‑comercio + turno
+    NPC de cada tick de la ráfaga salen de `unTickCompleto`, extraído de `avanzarTick`.
+  - **`cargarPartida` → `PartidaCargada { sesion, guardadoEn }`** (antes `GameSession | null`): el
+    `guardadoEn` es la referencia del catch‑up. `RunnerDePartida` privado gana el 3er parámetro `guardadoEn?`.
+  - **`RegistroDePartidas`** recibe el reloj de pared inyectado (3er parámetro, = `deps.ahora` en `api.ts`)
+    y lo pasa a los runners → el reloj de mundo y su catch‑up son inyectables en tests. Nuevo `cerrar()`:
+    para el reloj de cada partida abierta y drena su cola; lo llama el hook `onClose` de Fastify (SIGINT/
+    SIGTERM en `index.ts`, y el `afterEach` de todos los tests).
+  - **`server/index.ts`**: mensaje de arranque actualizado (ya no es un "placeholder"; es el reloj de mundo
+    con catch‑up). `INTERVALO_TICK_MS` sigue opt‑in; con "mundo = tiempo real" el valor es 60000.
+  - Tests: `runnerDePartida.test.ts` — describe "reloj de mundo (D5)" reescrito con reloj de pared
+    controlable (`runnerConReloj`): catch‑up al arrancar, resto sub‑intervalo entre paradas, avance
+    continuo + parada, doble‑iniciar sin fuga de intervalo, catch‑up tras reinicio (reabrir con
+    `cargarOCrear`). `registroDePartidas.test.ts` — catch‑up de extremo a extremo (crear+persistir con un
+    registro que no avanza → reabrir 4 min después con otro que sí → tick 4). `persistenciaPartida.test.ts`
+    — `cargarPartida` devuelve `guardadoEn`. 679 → 683 tests, `tsc` limpio.
+  - **Verificado en vivo por HTTP**: proceso A crea la partida (tick 0), se apaga; proceso B la reabre 7 min
+    reales después con reloj de mundo de 1 min/tick → `GET /admin/partidas/g` da **tick 7**,
+    `instante = instanteDeTick(7)`. El catch‑up mide tiempo real transcurrido, no salta a la fecha del
+    calendario.
+  - **Comandos programados a un `instante` — APLAZADOS.** Sus consumidores concretos están pospuestos a
+    Fase 1+ por decisión explícita del diseño: asedios formales en ventanas horarias
+    ([`Docs/Game/5_Sistema_Militar_y_Combate.md`](../Game/5_Sistema_Militar_y_Combate.md): *"pospuesto a
+    Fase 1+ de forma explícita — requiere... sistema de colas/horarios"*), planificación manual de
+    caravanas ([`Docs/Game/3_Sistema_Economico_y_Comercio.md`](../Game/3_Sistema_Economico_y_Comercio.md):
+    *"pasar a asignación/carga manual en Fase 1+"*). Construir ahora el almacén de comandos pendientes +
+    su despacho en el tick + la migración de snapshot sería infraestructura especulativa sin consumidor —
+    justo lo que este repo evita a conciencia en todas partes ("inventar aquí sería una decisión de diseño
+    de juego disfrazada de código"). Aterriza con la primera mecánica que lo pida, en su fase.
+- [x] **D6** — constantes de `constants.ts` de tick a minuto, **sin tocar valores** (1 tick = 1 minuto).
+  - **Plazos** `*Ticks` → `*Minutos`: `EDIFICIO_CATALOGO[*].tiempoConstruccionMinutos` (~30 entradas),
+    `POLITICAS.duracionMinutosPorDefecto`, `TRUEQUE.plazoMinutosPorDefecto`, `MILITAR.duracionHeridoMinutos`,
+    `CAMPAMENTOS_BANDIDOS.respawnMinutos`, `CARAVANA_COOLDOWN.cooldownMinutos`,
+    `REGENERACION_NODOS.*.cooldownMinutos`, `MANTENIMIENTO.graciaMinutos` /
+    `minutosSanosParaRecuperarNivel`, `RESERVA_CONSTRUCCION.horizonteMinutosMantenimiento/Comida`.
+  - **Tasas** `*PorTick` → `*PorMinuto`: `racionPorSoldadoPorMinuto`, `regeneracionMoralPorMinuto`,
+    `desercionFraccionPorMinutoSinMoral`, `decaimientoPorMinuto`, `bonusPorMinutoAlianzaActiva`,
+    `fraccionMuertePorMinutoHambre`, `regeneracionPorMinuto`, `bonusPorMinutoStarved`. Comentarios `X/tick` →
+    `X/minuto` donde eran unidad de tasa (los "tick N" ordinales del laboratorio batch se dejan — el motor
+    sigue integrando en pasos discretos).
+  - **`ticksComoDuracion` eliminado** de `constants.ts` — los 9 llamadores usan `minutos()` de
+    `domain/tiempo.ts` directamente. `SIMULACION.duracionTickMs` queda como el único sitio que "sabe" cuánto
+    dura un tick.
+  - **`RelacionPolitica.tributo.cantidadPorTick` → `cantidadPorMinuto`** (campo persistido) + la query
+    `produccionPorTick`/`ProduccionItem.cantidadPorTick` (derivada, T2a) → `*PorMinuto`. Migración de
+    snapshot **v3 → v4** (`migrarV3aV4`, renombra el campo de `tributo`, mismo valor). `BALANCE_VERSION` 2 → 3
+    (claves distintas en el JSON servido, mismos valores).
+  - **Queda como está a propósito:** los contadores persistidos `Asentamiento.rachaMantenimientoSano` y
+    `extractoresTicksSinCupo` — cuentan pasos consecutivos, no son plazos; renombrarlos no aporta y exigiría
+    otra migración.
+  - Tests: `persistenciaPartida.test.ts` — test v3→v4 dedicado. Renombres reflejados en tests de
+    diplomacia/mantenimiento/caravanas/bandidos. 683 → 684 tests, `tsc` limpio.
+- [x] **Cierre de Fase D** — se retira el `tick` provisional del CONTRATO (quedaba de D4/D6).
+  - `EventoDominio` se queda solo con `momento` (ISO); `EventoLogAdmin.tick` → `momento`;
+    `ContextoSimulacion.tick` eliminado (solo lo leía `comoEventosDominio`); `ResumenPartida`,
+    `ResumenPartidaEnDisco` y `ProyeccionJugador` pierden `tick` (ya llevan `instante` desde D4). Los
+    esquemas de respuesta (`RESUMEN_PARTIDA_RESPUESTA`, `ESQUEMA_LISTAR_PARTIDAS`) sueltan `tick`.
+  - `session/comandos/eventos.ts`: `evento`/`eventos`/`desdeCrudos` dejan de recibir `estado` (solo servía
+    para `estado.tick`) — 29 llamadas en ~13 comandos actualizadas. `eventoAdministrativo` y
+    `conHistorialDeJugador` fechan con `momento` derivado.
+  - Migración de snapshot **v4 → v5** (`migrarV4aV5`): `delete e.tick` de cada `eventosDominio[]`;
+    `historialJugadores[*][]` cambia `tick` por `isoDeInstante(instanteDeTick(tick))`.
+  - **Se queda:** `GameSessionState.tick` (paso de integración interno del motor, del que se DERIVA el
+    `instante` — no al revés) y `EstadoAdmin.tick` (heredado, diagnóstico del panel admin).
+  - Tests: `eventos_dominio`/`proyeccionLog`/`canales`/`api` actualizados; test v4→v5 dedicado + el de v1
+    ahora encadena hasta v5. 684 → 685 tests, `tsc` limpio, verificado en vivo por HTTP (evento con
+    `momento` y sin `tick`; proyección con `instante` y sin `tick`; carga de un snapshot v4 lo migra).
+
+**Fuera de Fase D, después:** pasada de rebalanceo en tiempo (población a ~12 %/minuto compuesto = duplica
+cada ~6 min reales, absurdo para un juego lento). Esfuerzo dedicado apoyado en el laboratorio batch; se separa
+de la migración estructural a conciencia. Era el antiguo D7.
 
 ## Fase E — Operación persistente
 
-- [ ] Implementar scheduler temporal definitivo (reemplaza el avance manual de tick como mecanismo principal)
-- [ ] Recuperación de eventos vencidos tras caída/reinicio, verificada con pruebas
+- [x] ~~Scheduler temporal definitivo~~ — **hecho en D5** (`RunnerDePartida.iniciarRelojDeMundo`)
+- [x] ~~Recuperación de eventos vencidos tras caída/reinicio, verificada con pruebas~~ — **hecho en D5**
+  (catch‑up en ráfaga; tests en `runnerDePartida.test.ts` y `registroDePartidas.test.ts`)
 - [ ] Pipeline de auditoría (quién, qué comando, cuándo, resultado, versión de partida)
 - [ ] Backups automáticos + prueba de restauración documentada
 - [ ] Métricas: duración de tick/procesamiento, tamaño de cola, tasa de errores, clientes conectados
@@ -1025,7 +1227,7 @@ solo diseñada.
 
 - [x] IDs resueltos exclusivamente en servidor, nunca confiados desde el cliente — el actor de cada comando es `Membresia.jugadorId`, resuelto de la sesión; los ids de entidad los genera `ContextoComando.ids` en el servidor (C2)
 - [x] Cola serial o control de versión por partida para comandos concurrentes — `RunnerDePartida` (cola serial por `gameId`, encadenando promesas) + `PartidaExportada.state.version` de concurrencia en `persistenciaPartida.ts` (Fase B)
-- [x] RNG determinista con estado persistido (partidas reproducibles tras reinicio) — `PartidaExportada.estadoRng` + `src/server/persistenciaPartida.ts` (2026-08-25)
+- [~] RNG determinista con estado persistido — `PartidaExportada.estadoRng` existe (2026‑08‑25), pero **la reproducibilidad a nivel de sesión estaba rota**: `ctx.momento` era reloj de pared y se persistía en el estado (doc 10 §7). El guard de autoridad temporal (2026‑08‑29) lo congela; D1 lo repara de raíz. El motor puro (`avanzarSimulacion`) sí es reproducible con seed y **eso es lo que se conserva** (lo consume el laboratorio batch) — `estadoRng` en snapshot queda sin consumidor real hasta que exista un replay de incidentes (doc 10 §5)
 - [~] DTOs/proyecciones por audiencia (nunca enviar `GameState` completo a un cliente no-admin) — **Slice 1 hecho** (`proyectarParaJugador`, C4): un jugador nunca recibe `GameSessionState` completo. Slice 2 (niebla de guerra / "último conocido") pendiente de un radio de visualización de balance
 - [ ] Snapshots y retención para el historial (nunca clones ilimitados en RAM) — snapshot por comando hecho; política de retención/poda, Fase E2
 - [~] Balance versionado y ligado a partida/temporada (no global mutable) — **servido** (`GET /v1/balance`, C7) y `BALANCE_VERSION` estampada en cada snapshot; los overrides reales por partida/temporada siguen sin dueño

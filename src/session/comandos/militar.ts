@@ -16,6 +16,7 @@ import {
   iniciarAsedio as iniciarAsedioEngine,
 } from '../../engine/combate';
 import { CAMPAMENTOS_BANDIDOS } from '../../constants';
+import { minutos, sumar } from '../../domain/tiempo';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito } from './tipos';
 import { comando, conAsentamiento, conAsentamientos, exigirAsentamiento, exigirCampamento, exigirCaravana } from './ayudas';
@@ -44,7 +45,7 @@ export const reclutarTropa = comando<ParamsReclutarTropa, { reclutados: number }
     a.escuadrones.find((e) => e.jugadorId === params.jugadorId && e.tropaId === params.tropaId)?.cantidad ?? 0;
 
   const antes = cantidadDe(asentamiento);
-  const actualizado = reclutarTropaEngine(asentamiento, params.jugadorId, params.tropaId, params.origen, estado.tick, ctx.ids.siguiente());
+  const actualizado = reclutarTropaEngine(asentamiento, params.jugadorId, params.tropaId, params.origen, ctx.ids.siguiente());
   const reclutados = cantidadDe(actualizado) - antes;
 
   const siguiente = conHistorialDeJugador(
@@ -55,7 +56,7 @@ export const reclutarTropa = comando<ParamsReclutarTropa, { reclutados: number }
   return exito(
     siguiente,
     [
-      evento(ctx, estado, {
+      evento(ctx, {
         codigo: 'tropas.reclutadas',
         mensaje: `${params.jugadorId} recluta ${reclutados} de la tropa "${params.tropaId}" (${params.origen}).`,
         payload: { ...params, reclutados } satisfies PayloadReclutamiento,
@@ -76,12 +77,12 @@ export const iniciarAsedio = comando<ParamsIniciarAsedio, { conquistado: boolean
   const atacante = exigirAsentamiento(estado, params.atacanteId);
   const defensor = exigirAsentamiento(estado, params.defensorId);
 
-  const resultado = iniciarAsedioEngine(atacante, defensor, params.escuadronIds, estado.facciones, estado.relaciones, estado.tick, ctx.rng);
+  const resultado = iniciarAsedioEngine(atacante, defensor, params.escuadronIds, estado.facciones, estado.relaciones, ctx.instante, ctx.rng);
   const siguiente: GameSessionState = {
     ...conAsentamientos(estado, [resultado.atacante, resultado.defensor]),
     facciones: resultado.facciones,
   };
-  return exito(siguiente, desdeCrudos(ctx, estado, resultado.eventos, atacante.id), { conquistado: resultado.conquistado });
+  return exito(siguiente, desdeCrudos(ctx, resultado.eventos, atacante.id), { conquistado: resultado.conquistado });
 });
 
 export interface ParamsCombateCampoAbierto {
@@ -95,14 +96,14 @@ export const combateCampoAbierto = comando<ParamsCombateCampoAbierto, void>((est
   const a = exigirAsentamiento(estado, params.asentamientoAId);
   const b = exigirAsentamiento(estado, params.asentamientoBId);
 
-  const resultado = combateCampoAbiertoEngine(a, params.escuadronIdsA, b, params.escuadronIdsB, estado.facciones, estado.relaciones, estado.tick, ctx.rng);
+  const resultado = combateCampoAbiertoEngine(a, params.escuadronIdsA, b, params.escuadronIdsB, estado.facciones, estado.relaciones, ctx.instante, ctx.rng);
   const siguiente: GameSessionState = {
     ...conAsentamientos(estado, [resultado.asentamientoA, resultado.asentamientoB]),
     facciones: resultado.facciones,
   };
   // Sin `asentamientoId`: el choque es entre DOS asentamientos, atribuirlo a uno sería arbitrario — los ids de
   // ambos bandos van en el `payload` de `combate.resuelto`.
-  return exito(siguiente, desdeCrudos(ctx, estado, resultado.eventos));
+  return exito(siguiente, desdeCrudos(ctx, resultado.eventos));
 });
 
 export interface ParamsInterceptarCaravana {
@@ -115,13 +116,13 @@ export const interceptarCaravana = comando<ParamsInterceptarCaravana, { capturad
   const atacante = exigirAsentamiento(estado, params.atacanteId);
   const caravana = exigirCaravana(estado, params.caravanaId);
 
-  const resultado = interceptarCaravanaEngine(atacante, params.escuadronIds, caravana, estado.tick, estado.facciones, estado.asentamientos, ctx.rng);
+  const resultado = interceptarCaravanaEngine(atacante, params.escuadronIds, caravana, ctx.instante, estado.facciones, estado.asentamientos, ctx.rng);
   const siguiente: GameSessionState = {
     ...conAsentamiento(estado, resultado.atacante),
     facciones: resultado.facciones,
     caravanas: resultado.caravanaCapturada ? estado.caravanas.filter((c) => c.id !== caravana.id) : estado.caravanas,
   };
-  return exito(siguiente, desdeCrudos(ctx, estado, resultado.eventos, atacante.id), { capturada: resultado.caravanaCapturada });
+  return exito(siguiente, desdeCrudos(ctx, resultado.eventos, atacante.id), { capturada: resultado.caravanaCapturada });
 });
 
 export interface ParamsAtacarCampamentoBandidos {
@@ -134,7 +135,7 @@ export const atacarCampamentoBandidos = comando<ParamsAtacarCampamentoBandidos, 
   const atacante = exigirAsentamiento(estado, params.atacanteId);
   const campamento = exigirCampamento(estado, params.campamentoId);
 
-  const resultado = atacarCampamentoBandidosEngine(atacante, params.escuadronIds, campamento, estado.tick, estado.facciones, ctx.rng);
+  const resultado = atacarCampamentoBandidosEngine(atacante, params.escuadronIds, campamento, ctx.instante, estado.facciones, ctx.rng);
   const siguiente: GameSessionState = {
     ...conAsentamiento(estado, resultado.atacante),
     facciones: resultado.facciones,
@@ -142,9 +143,9 @@ export const atacarCampamentoBandidos = comando<ParamsAtacarCampamentoBandidos, 
     campamentosBandidos: resultado.campamentoDestruido
       ? estado.campamentosBandidos.filter((c) => c.id !== campamento.id)
       : estado.campamentosBandidos,
-    bandidosProximoSpawnTick: resultado.campamentoDestruido
-      ? estado.tick + CAMPAMENTOS_BANDIDOS.ticksRespawn
-      : estado.bandidosProximoSpawnTick,
+    bandidosProximoSpawnEn: resultado.campamentoDestruido
+      ? sumar(ctx.instante, minutos(CAMPAMENTOS_BANDIDOS.respawnMinutos))
+      : estado.bandidosProximoSpawnEn,
   };
-  return exito(siguiente, desdeCrudos(ctx, estado, resultado.eventos, atacante.id), { destruido: resultado.campamentoDestruido });
+  return exito(siguiente, desdeCrudos(ctx, resultado.eventos, atacante.id), { destruido: resultado.campamentoDestruido });
 });

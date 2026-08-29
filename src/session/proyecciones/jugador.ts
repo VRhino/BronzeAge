@@ -28,10 +28,12 @@ import type {
 } from '../../domain/types';
 import type { EstadoMapa } from '../../world/mapa';
 import type { TrazadoAsentamiento } from '../../engine/trazado';
+import type { Instante } from '../../domain/tiempo';
 import { esCiudadano } from '../../engine/faccion';
 import {
   eventosDesde,
   idDeMapa,
+  instanteDeTick,
   type EventoDominioConVersion,
   type EventoLogAdmin,
   type GameSessionState,
@@ -40,7 +42,10 @@ import {
 
 export interface ProyeccionJugador {
   gameId: string;
-  tick: number;
+  /** Instante de MUNDO "ahora" de la partida (doc 10) — `instanteDeTick(estado.tick)`, derivado, no
+   * almacenado. La ÚNICA referencia temporal del contrato (Fase D cerrada): con esto el cliente pinta cuentas
+   * atrás localmente (`completaEn - instante`, `expiraEn - instante`). El `tick` interno del motor no viaja. */
+  instante: Instante;
   version: number;
   jugadorId: string;
   /** Derivado de `Faccion.ciudadanosIds` en el momento de proyectar — nunca almacenado (ver `Membresia` en
@@ -122,7 +127,7 @@ export function proyectarParaJugador(
 
   return {
     gameId: estado.gameId,
-    tick: estado.tick,
+    instante: instanteDeTick(estado.tick),
     version: estado.version,
     jugadorId,
     faccionId,

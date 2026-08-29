@@ -5,12 +5,12 @@
 // `DiplomaciaInvalidaError` del motor llegaba crudo a la interfaz) están unificados en
 // `comandosContratoIds.test.ts`, no repetidos aquí.
 import { describe, expect, it } from 'vitest';
+import { instanteDeTest } from '../../engine/__tests__/fixtures';
 import { GameSession } from '../gameSession';
 import { crearFaccion } from '../comandos/crearFaccion';
 import { anexionar, proponerRelacion, rebelionVasallo, romperRelacion } from '../comandos/diplomacia';
 
-const MOMENTO = '2026-01-01T00:00:00.000Z';
-const OPC = { momento: MOMENTO, actor: 'jugador-test' };
+const OPC = { actor: 'jugador-test' };
 
 function partidaConDosFacciones() {
   const sesion = GameSession.crear('diplo-test', { seed: 42 });
@@ -65,7 +65,7 @@ describe('proponerRelacion', () => {
     expect(resultado.ok).toBe(true);
     const relacion = sesion.getState().relaciones[0]!;
     expect(relacion.tipo).toBe('vasallaje');
-    expect(relacion.tributo).toEqual({ recurso: 'madera', cantidadPorTick: 5 });
+    expect(relacion.tributo).toEqual({ recurso: 'madera', cantidadPorMinuto: 5 });
   });
 
   it('una relación creada se puede romper después, y el comando la marca como rota', () => {
@@ -105,8 +105,8 @@ describe('anexionar / fusionar', () => {
             faccionAId: a,
             faccionBId: b,
             estado: 'activa',
-            creadoEnTick: 0,
-            tributo: { recurso: 'trigo', cantidadPorTick: 1 },
+            creadoEn: instanteDeTest(0),
+            tributo: { recurso: 'trigo', cantidadPorMinuto: 1 },
           },
         ],
       },

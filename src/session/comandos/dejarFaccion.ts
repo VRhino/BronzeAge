@@ -30,10 +30,10 @@ export const dejarFaccion = comando<ParamsDejarFaccion, void>((estado, _mapa, ct
   const actualizada = quitarCiudadania(faccion, ctx.actor);
   const siguiente = {
     ...conFaccion(estado, actualizada),
-    salidasFaccionPorJugador: { ...estado.salidasFaccionPorJugador, [ctx.actor]: ctx.momento },
+    salidasFaccionPorJugador: { ...estado.salidasFaccionPorJugador, [ctx.actor]: ctx.instante },
   };
   return exito(siguiente, [
-    evento(ctx, estado, {
+    evento(ctx, {
       codigo: 'faccion.abandonada',
       mensaje: `${ctx.actor} abandona ${faccion.nombre}.`,
       payload: { faccionId: faccion.id, jugadorId: ctx.actor } satisfies PayloadFaccionAbandonada,

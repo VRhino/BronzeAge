@@ -14,7 +14,7 @@
 //
 // En ambos casos el patrón es el mismo, y siempre DESPUÉS del tick del motor:
 //
-//   const contexto = { tick, momento, rng };                        // ver ContextoSimulacion
+//   const contexto = { instante, momento, rng };                    // ver ContextoSimulacion
 //   estado = avanzarSimulacion(estado, mapa, contexto);             // motor real, sin tocar
 //   estado = avanzarNpcGobernanza(estado, mapa, contexto, cfg).estado;
 //
@@ -47,6 +47,7 @@ import { computeTodasLasZonas } from '../engine/zones';
 import { calcularCostoMantenimiento, encontrarCapital } from '../engine/mantenimiento';
 import { evaluarViabilidadFundacion, fundarAsentamiento, FundacionInvalidaError } from '../engine/settlement';
 import { CAMPAMENTOS_BANDIDOS, TROPAS_RECLUTABLES } from '../constants';
+import { minutos, sumar, type Instante } from '../domain/tiempo';
 
 /**
  * Reserva mínima de madera antes de reclutar (a petición del usuario, tras diagnosticar el colapso masivo de
@@ -305,7 +306,7 @@ function asegurarInfraestructuraComercial(
   mapa: Mapa,
   capital: Asentamiento | undefined,
   reclamos: ReturnType<typeof reclamosDeFuentes>,
-  tickActual: number,
+  instante: Instante,
   contador: number
 ): { asentamiento: Asentamiento; caravanaNueva?: Caravana } {
   if (!asentamiento.cargos.gobernadorId) return { asentamiento };
@@ -323,7 +324,7 @@ function asegurarInfraestructuraComercial(
   const propias = caravanas.filter((c) => c.tipo === 'comercial' && c.origenAsentamientoId === asentamiento.id).length;
   if (propias < cupoCaravanas(asentamiento)) {
     try {
-      const resultado = construirCaravanaComercial(asentamiento, caravanas, tickActual, contador);
+      const resultado = construirCaravanaComercial(asentamiento, caravanas, instante, contador);
       return { asentamiento: resultado.asentamiento, caravanaNueva: resultado.caravana };
     } catch (err) {
       if (!(err instanceof CaravanaInvalidaError)) throw err;
@@ -446,7 +447,7 @@ function truequeDeSupervivencia(
   asentamientos: Asentamiento[],
   capitalesPorFaccion: Map<string, Asentamiento | undefined>,
   acuerdosExistentes: AcuerdoTrueque[],
-  tickActual: number,
+  instante: Instante,
   contadorInicial: number,
   esNpc: (faccionId: string) => boolean
 ): { acuerdosNuevos: AcuerdoTrueque[]; eventos: string[]; contador: number; propuestos: number } {
@@ -485,7 +486,7 @@ function truequeDeSupervivencia(
           recurso,
           CANTIDAD_TRUEQUE_SUPERVIVENCIA,
           CANTIDAD_TRUEQUE_SUPERVIVENCIA,
-          tickActual,
+          instante,
           contador++
         );
         acuerdosNuevos.push(acuerdo);
@@ -521,7 +522,6 @@ function truequeDeSupervivencia(
  */
 function reclutarParaTodos(
   asentamiento: Asentamiento,
-  tickActual: number,
   contadorInicial: number,
   tropaId: string,
   origen: 'pesants' | 'artesanos'
@@ -537,7 +537,7 @@ function reclutarParaTodos(
   let exitosos = 0;
   for (const jugadorId of residentes) {
     try {
-      actual = reclutarTropa(actual, jugadorId, tropaId, origen, tickActual, contador++);
+      actual = reclutarTropa(actual, jugadorId, tropaId, origen, contador++);
       exitosos++;
     } catch (err) {
       if (!(err instanceof ReclutamientoInvalidoError)) throw err;
@@ -569,14 +569,14 @@ function atacarCampamentosCercanos(
   asentamientos: Asentamiento[],
   campamentos: CampamentoBandido[],
   facciones: Faccion[],
-  tickActual: number,
+  instante: Instante,
   esNpc: (faccionId: string) => boolean,
   rng: RandomFn
 ): {
   asentamientos: Asentamiento[];
   facciones: Faccion[];
   campamentos: CampamentoBandido[];
-  bandidosProximoSpawnTick: number | undefined;
+  bandidosProximoSpawnEn: Instante | undefined;
   eventos: string[];
   destruidos: number;
   fallidos: number;
@@ -587,7 +587,7 @@ function atacarCampamentosCercanos(
   const eventos: string[] = [];
   let destruidos = 0;
   let fallidos = 0;
-  let bandidosProximoSpawnTick: number | undefined;
+  let bandidosProximoSpawnEn: Instante | undefined;
 
   for (const campamento of campamentos) {
     const asentamiento = asentamientosActuales.find((a) => a.id === campamento.asentamientoId);
@@ -605,7 +605,7 @@ function atacarCampamentosCercanos(
         asentamiento,
         asentamiento.escuadrones.map((e) => e.id),
         campamento,
-        tickActual,
+        instante,
         faccionesActuales,
         rng
       );
@@ -618,7 +618,7 @@ function atacarCampamentosCercanos(
       eventos.push(...resultado.eventos.map((e) => (typeof e === 'string' ? e : e.mensaje)));
       if (resultado.campamentoDestruido) {
         campamentosActuales = campamentosActuales.filter((c) => c.id !== campamento.id);
-        bandidosProximoSpawnTick = tickActual + CAMPAMENTOS_BANDIDOS.ticksRespawn;
+        bandidosProximoSpawnEn = sumar(instante, minutos(CAMPAMENTOS_BANDIDOS.respawnMinutos));
         destruidos++;
       } else {
         fallidos++;
@@ -628,7 +628,7 @@ function atacarCampamentosCercanos(
     }
   }
 
-  return { asentamientos: asentamientosActuales, facciones: faccionesActuales, campamentos: campamentosActuales, bandidosProximoSpawnTick, eventos, destruidos, fallidos };
+  return { asentamientos: asentamientosActuales, facciones: faccionesActuales, campamentos: campamentosActuales, bandidosProximoSpawnEn, eventos, destruidos, fallidos };
 }
 
 /**
@@ -645,7 +645,7 @@ function expandirSiPuede(
   facciones: Faccion[],
   caravanas: Caravana[],
   mapa: Mapa,
-  tickActual: number,
+  instante: Instante,
   contadorInicial: number,
   buscarDestino: (origen: Asentamiento, mapa: Mapa, asentamientos: Asentamiento[]) => Point | undefined,
   jugadoresPorCaravana: number,
@@ -675,7 +675,7 @@ function expandirSiPuede(
         asentamientosActuales,
         caravanasActuales,
         jugadoresPorCaravana,
-        tickActual,
+        instante,
         contador++
       );
       asentamientosActuales = asentamientosActuales.map((a) => (a.id === resultado.origenActualizado.id ? resultado.origenActualizado : a));
@@ -828,7 +828,7 @@ function fundarAsentamientosIniciales(
   facciones: Faccion[],
   faccionesIds: string[],
   mapa: Mapa,
-  tickActual: number,
+  instante: Instante,
   jugadoresPorFundacion: number,
   buscarPosicion: (mapa: Mapa, asentamientos: Asentamiento[]) => Point | undefined
 ): { asentamientos: Asentamiento[]; facciones: Faccion[]; eventos: string[] } {
@@ -846,7 +846,7 @@ function fundarAsentamientosIniciales(
 
     const jugadoresIds = Array.from({ length: jugadoresPorFundacion }, (_, i) => `npc-${faccionId}-${i + 1}`);
     try {
-      const resultado = fundarAsentamiento(mapa, faccionesActuales, faccionId, posicion, jugadoresIds, asentamientosActuales, tickActual);
+      const resultado = fundarAsentamiento(mapa, faccionesActuales, faccionId, posicion, jugadoresIds, asentamientosActuales, instante);
       asentamientosActuales = [...asentamientosActuales, resultado.asentamiento];
       faccionesActuales = resultado.facciones;
       eventos.push(`${faccion.nombre} funda su asentamiento inicial ${resultado.asentamiento.id}.`);
@@ -875,7 +875,7 @@ export function avanzarNpcGobernanza(
 ): ResultadoNpcGobernanza {
   // Mismo contexto que consume el motor (`avanzarSimulacion`): el NPC decide con las funciones PÚBLICAS del
   // motor, así que necesita exactamente las mismas entradas externas — tick, momento y aleatoriedad.
-  const { tick: tickActual, rng } = contexto;
+  const { instante, rng } = contexto;
   const eventos: string[] = [];
   let contador = config.contadorInicial ?? 0;
 
@@ -896,7 +896,7 @@ export function avanzarNpcGobernanza(
       facciones,
       config.faccionesIds,
       mapa,
-      tickActual,
+      instante,
       config.jugadoresPorFundacionInicial ?? 5,
       config.buscarPosicionFundacionInicial ?? buscarPosicionFundacionInicialPorDefecto
     );
@@ -934,14 +934,14 @@ export function avanzarNpcGobernanza(
       mapa,
       capital,
       reclamos,
-      tickActual,
+      instante,
       contador++
     );
     if (resultado.caravanaNueva) caravanas = [...caravanas, resultado.caravanaNueva];
     return asegurarNucleoMilitar(resultado.asentamiento, faccion, zonaPoligono, mapa, capital, reclamos, contador++);
   });
 
-  const trueque = truequeDeSupervivencia(asentamientos, capitalesPorFaccion, estado.acuerdos, tickActual, contador, esNpc);
+  const trueque = truequeDeSupervivencia(asentamientos, capitalesPorFaccion, estado.acuerdos, instante, contador, esNpc);
   contador = trueque.contador;
   eventos.push(...trueque.eventos);
 
@@ -965,7 +965,7 @@ export function avanzarNpcGobernanza(
   // Este paso solo hace algo con `SIMULACION_AUTO_COMERCIO.activo = 1` (apagado por defecto, encendible en
   // caliente desde la pestaña "Valores de simulación"). Con el flag apagado el NPC conserva los otros 6 pasos.
   const faccionesNpc = facciones.filter((f) => esNpc(f.id));
-  const trasComercioParcial = avanzarAutoComercioSimulado({ ...estadoConGobernanzaBase, facciones: faccionesNpc }, mapa, tickActual);
+  const trasComercioParcial = avanzarAutoComercioSimulado({ ...estadoConGobernanzaBase, facciones: faccionesNpc }, mapa, instante);
   const trasComercio: EstadoSimulacion = { ...trasComercioParcial, facciones };
 
   asentamientos = trasComercio.asentamientos;
@@ -974,7 +974,7 @@ export function avanzarNpcGobernanza(
   const origenReclutamiento = config.origenReclutamiento ?? 'pesants';
   asentamientos = asentamientos.map((a) => {
     if (!esNpc(a.faccionId)) return a;
-    const resultado = reclutarParaTodos(a, tickActual, contador, tropaId, origenReclutamiento);
+    const resultado = reclutarParaTodos(a, contador, tropaId, origenReclutamiento);
     contador = resultado.contador;
     reclutamientosExitosos += resultado.reclutamientosExitosos;
     return resultado.asentamiento;
@@ -986,12 +986,12 @@ export function avanzarNpcGobernanza(
           asentamientos,
           facciones: trasComercio.facciones,
           campamentos: trasComercio.campamentosBandidos,
-          bandidosProximoSpawnTick: undefined,
+          bandidosProximoSpawnEn: undefined,
           eventos: [] as string[],
           destruidos: 0,
           fallidos: 0,
         }
-      : atacarCampamentosCercanos(asentamientos, trasComercio.campamentosBandidos, trasComercio.facciones, tickActual, esNpc, rng);
+      : atacarCampamentosCercanos(asentamientos, trasComercio.campamentosBandidos, trasComercio.facciones, instante, esNpc, rng);
   eventos.push(...trasBandidos.eventos);
 
   const trasExpansion = expandirSiPuede(
@@ -999,7 +999,7 @@ export function avanzarNpcGobernanza(
     trasBandidos.facciones,
     trasComercio.caravanas,
     mapa,
-    tickActual,
+    instante,
     contador,
     config.buscarDestinoFundacion ?? buscarDestinoFundacionPorDefecto,
     config.jugadoresPorCaravanaFundacion ?? 5,
@@ -1013,7 +1013,7 @@ export function avanzarNpcGobernanza(
       facciones: trasBandidos.facciones,
       caravanas: trasExpansion.caravanas,
       campamentosBandidos: trasBandidos.campamentos,
-      bandidosProximoSpawnTick: trasBandidos.bandidosProximoSpawnTick ?? trasComercio.bandidosProximoSpawnTick,
+      bandidosProximoSpawnEn: trasBandidos.bandidosProximoSpawnEn ?? trasComercio.bandidosProximoSpawnEn,
     },
     eventos,
     stats: {

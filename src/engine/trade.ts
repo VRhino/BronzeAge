@@ -25,13 +25,14 @@ export interface PayloadCaravanaSale {
   recurso: string;
 }
 import { ASIGNACION_CARAVANA, CARAVANA_CATALOGO, COMISION, REPUTACION, TRUEQUE } from '../constants';
+import { minutos, sumar, type Instante } from '../domain/tiempo';
 import { COSTE_MOVIMIENTO } from '../worldgen';
 import type { Mapa } from '../world/mapa';
 import { calcularRuta } from '../world/rutas';
 import { agregarRecurso, cantidadDisponible, descontarRecursos, tieneRecursos } from './almacen';
 import { buscarCamino } from './caminos';
 import { calcularPrecioReferencia } from './market';
-import { cupoCaravanas, puedeCrearCaravana, ticksCooldownCaravanaRestantes, tieneMercadoActivo } from './asentamientoQuery';
+import { cupoCaravanas, puedeCrearCaravana, cooldownCaravanaRestante, tieneMercadoActivo } from './asentamientoQuery';
 import { avanzarPosicionEnRuta } from './movimiento';
 import { factorCapacidadCaravana, factorComisionExterna, factorVelocidadCaravana } from './politicas';
 import { aplicarAjustesReputacion, factorComisionPorReputacion, type AjusteReputacion } from './reputacion';
@@ -56,7 +57,7 @@ export function proponerTrueque(
   recursoB: string,
   cantidadTotalA: number,
   cantidadTotalB: number,
-  tickActual: number,
+  instante: Instante,
   contador = 0
 ): AcuerdoTrueque {
   if (asentamientoAId === asentamientoBId) {
@@ -70,7 +71,7 @@ export function proponerTrueque(
   }
 
   return {
-    id: `trueque-${asentamientoAId}-${asentamientoBId}-${tickActual}-${contador}`,
+    id: `trueque-${asentamientoAId}-${asentamientoBId}-${contador}`,
     asentamientoAId,
     asentamientoBId,
     recursoA,
@@ -79,8 +80,8 @@ export function proponerTrueque(
     cantidadTotalB,
     cantidadEntregadaA: 0,
     cantidadEntregadaB: 0,
-    creadoEnTick: tickActual,
-    expiraEnTick: tickActual + TRUEQUE.plazoTicksPorDefecto,
+    creadoEn: instante,
+    expiraEn: sumar(instante, minutos(TRUEQUE.plazoMinutosPorDefecto)),
     estado: 'activo',
   };
 }
@@ -96,15 +97,15 @@ export function proponerTrueque(
 export function construirCaravanaComercial(
   asentamiento: Asentamiento,
   caravanasExistentes: Caravana[],
-  tickActual: number,
+  instante: Instante,
   contador = 0
 ): { asentamiento: Asentamiento; caravana: Caravana } {
   if (!tieneMercadoActivo(asentamiento)) {
     throw new CaravanaInvalidaError('El asentamiento necesita un Mercado activo para construir caravanas.');
   }
-  if (!puedeCrearCaravana(asentamiento, tickActual)) {
+  if (!puedeCrearCaravana(asentamiento, instante)) {
     throw new CaravanaInvalidaError(
-      `Cooldown de creación de caravanas: faltan ${ticksCooldownCaravanaRestantes(asentamiento, tickActual)} ticks para poder crear otra desde este asentamiento.`
+      `Cooldown de creación de caravanas: faltan ~${Math.round(cooldownCaravanaRestante(asentamiento, instante) / 60_000)} min para poder crear otra desde este asentamiento.`
     );
   }
   const cupo = cupoCaravanas(asentamiento);
@@ -118,7 +119,7 @@ export function construirCaravanaComercial(
   }
   const almacen = descontarRecursos(asentamiento.almacen, costo);
   const caravana: Caravana = {
-    id: `caravana-comercial-${asentamiento.id}-${tickActual}-${contador}`,
+    id: `caravana-comercial-${asentamiento.id}-${contador}`,
     tipo: 'comercial',
     origenAsentamientoId: asentamiento.id,
     contenido: {},
@@ -126,7 +127,7 @@ export function construirCaravanaComercial(
     progreso: 0,
     estado: 'disponible',
   };
-  return { asentamiento: { ...asentamiento, almacen, ultimaCaravanaCreadaEnTick: tickActual }, caravana };
+  return { asentamiento: { ...asentamiento, almacen, ultimaCaravanaCreadaEn: instante }, caravana };
 }
 
 /** Tasa base (Doc 3.5); si es externa, el Tesorero del destino (quien cobra la comisión) puede modularla. */
@@ -319,10 +320,10 @@ interface LadoPendiente {
  * - Urgencia por volumen: qué fracción del total pactado sigue pendiente.
  * - Cercanía: destinos más cercanos rinden más envíos por caravana disponible (round-trip más corto).
  */
-function scoreAsignacion(l: LadoPendiente, origen: Asentamiento, destino: Asentamiento, tickActual: number): number {
-  const plazoTotal = l.acuerdo.expiraEnTick - l.acuerdo.creadoEnTick;
-  const ticksRestantes = Math.max(0, l.acuerdo.expiraEnTick - tickActual);
-  const urgenciaExpiracion = plazoTotal > 0 ? 100 * (1 - ticksRestantes / plazoTotal) : 100;
+function scoreAsignacion(l: LadoPendiente, origen: Asentamiento, destino: Asentamiento, instante: Instante): number {
+  const plazoTotal = l.acuerdo.expiraEn - l.acuerdo.creadoEn;
+  const restante = Math.max(0, l.acuerdo.expiraEn - instante);
+  const urgenciaExpiracion = plazoTotal > 0 ? 100 * (1 - restante / plazoTotal) : 100;
   const pendiente = l.total - l.entregado;
   const urgenciaVolumen = l.total > 0 ? 100 * Math.min(1, pendiente / l.total) : 0;
   const dist = distancia(origen.posicion, destino.posicion);
@@ -348,7 +349,7 @@ function asignarCaravanasATrueque(
   acuerdosPorId: Map<string, AcuerdoTrueque>,
   asentamientosPorId: Map<string, Asentamiento>,
   caravanas: Caravana[],
-  tickActual: number,
+  instante: Instante,
   eventos: EventoCrudo[],
   ajustesReputacion: AjusteReputacion[]
 ): Caravana[] {
@@ -356,7 +357,7 @@ function asignarCaravanasATrueque(
 
   for (const acuerdo of acuerdosPorId.values()) {
     if (acuerdo.estado !== 'activo') continue;
-    if (tickActual >= acuerdo.expiraEnTick) {
+    if (instante >= acuerdo.expiraEn) {
       acuerdosPorId.set(acuerdo.id, { ...acuerdo, estado: 'expirado' });
       eventos.push({
         codigo: 'comercio.trueque_expirado',
@@ -402,7 +403,7 @@ function asignarCaravanasATrueque(
     const conScore = pendientes
       .map((l) => {
         const destino = asentamientosPorId.get(l.destinoId);
-        return destino ? { l, destino, score: scoreAsignacion(l, origen, destino, tickActual) } : null;
+        return destino ? { l, destino, score: scoreAsignacion(l, origen, destino, instante) } : null;
       })
       .filter((x): x is { l: LadoPendiente; destino: Asentamiento; score: number } => x !== null)
       .sort((a, b) => b.score - a.score);
@@ -465,7 +466,7 @@ export function avanzarComercio(
   acuerdos: AcuerdoTrueque[],
   mapa: Mapa,
   caminos: readonly CaminoComercial[],
-  tickActual: number
+  instante: Instante
 ): { asentamientos: Asentamiento[]; facciones: Faccion[]; caravanas: Caravana[]; acuerdos: AcuerdoTrueque[]; eventos: EventoCrudo[] } {
   const eventos: EventoCrudo[] = [];
   const ajustesReputacion: AjusteReputacion[] = [];
@@ -473,7 +474,7 @@ export function avanzarComercio(
   const acuerdosPorId = new Map(acuerdos.map((a) => [a.id, a]));
 
   const trasMovimiento = avanzarCaravanas(caravanas, mapa, caminos, asentamientosPorId, acuerdosPorId, facciones, eventos, ajustesReputacion);
-  const trasAsignacion = asignarCaravanasATrueque(mapa, caminos, acuerdosPorId, asentamientosPorId, trasMovimiento, tickActual, eventos, ajustesReputacion);
+  const trasAsignacion = asignarCaravanasATrueque(mapa, caminos, acuerdosPorId, asentamientosPorId, trasMovimiento, instante, eventos, ajustesReputacion);
 
   return {
     asentamientos: asentamientos.map((a) => asentamientosPorId.get(a.id)!),

@@ -4,7 +4,7 @@
 // (dos escuadrones de 25 aparecían como un único chip de 50, inseleccionable de forma independiente).
 import { describe, expect, it } from 'vitest';
 import type { Asentamiento } from '../../domain/types';
-import { crearFacciones, crearMapaDeterminista, posicionRecomendable } from './fixtures';
+import { crearFacciones, crearMapaDeterminista, posicionRecomendable, instanteDeTest } from './fixtures';
 import { fundarAsentamiento } from '../settlement';
 import { reclutarTropa, ReclutamientoInvalidoError } from '../tropas';
 
@@ -23,7 +23,7 @@ function asentamientoDeTest(): Asentamiento {
   const mapa = crearMapaDeterminista(1);
   const facciones = crearFacciones();
   const posicion = posicionRecomendable(mapa);
-  const { asentamiento } = fundarAsentamiento(mapa, facciones, 'faccion-1', posicion, ['jugador-a', 'jugador-b'], [], 0);
+  const { asentamiento } = fundarAsentamiento(mapa, facciones, 'faccion-1', posicion, ['jugador-a', 'jugador-b'], [], instanteDeTest(0));
   // 60, no 50: con el pool de reclutamiento acotado por mano de obra (`poblacionDisponibleParaReclutar`,
   // engine/asentamientoQuery.ts), el asentamiento de fundación ya tiene una Granja activa reservando 4 pesants
   // — 50 solo alcanzaba para UN escuadrón de 25, y este fixture lo comparten dos tests que reclutan dos veces.
@@ -34,8 +34,8 @@ describe('reclutarTropa — escuadrones por jugador (Doc 2.5)', () => {
   it('dos jugadores reclutando la misma tropa en el mismo asentamiento crean DOS escuadrones separados', () => {
     const asentamiento = asentamientoDeTest();
 
-    const trasA = reclutarTropa(asentamiento, 'jugador-a', 'milicia_lanceros', 'pesants', 0, 0);
-    const trasB = reclutarTropa(trasA, 'jugador-b', 'milicia_lanceros', 'pesants', 0, 1);
+    const trasA = reclutarTropa(asentamiento, 'jugador-a', 'milicia_lanceros', 'pesants', 0);
+    const trasB = reclutarTropa(trasA, 'jugador-b', 'milicia_lanceros', 'pesants', 1);
 
     expect(trasB.escuadrones).toHaveLength(2);
     const deA = trasB.escuadrones.find((e) => e.jugadorId === 'jugador-a');
@@ -47,7 +47,7 @@ describe('reclutarTropa — escuadrones por jugador (Doc 2.5)', () => {
 
   it('reclutar de nuevo repone solo el faltante hasta el tope, sin crear un segundo escuadrón', () => {
     const asentamiento = asentamientoDeTest();
-    const trasReclutar = reclutarTropa(asentamiento, 'jugador-a', 'milicia_lanceros', 'pesants', 0, 0);
+    const trasReclutar = reclutarTropa(asentamiento, 'jugador-a', 'milicia_lanceros', 'pesants', 0);
 
     // Simula bajas de combate: el escuadrón de jugador-a queda en 20/25.
     const conBajas = conRecursos(
@@ -56,7 +56,7 @@ describe('reclutarTropa — escuadrones por jugador (Doc 2.5)', () => {
       100
     );
 
-    const repuesto = reclutarTropa(conBajas, 'jugador-a', 'milicia_lanceros', 'pesants', 0, 1);
+    const repuesto = reclutarTropa(conBajas, 'jugador-a', 'milicia_lanceros', 'pesants', 1);
 
     expect(repuesto.escuadrones).toHaveLength(1);
     expect(repuesto.escuadrones[0]!.cantidad).toBe(25);
@@ -67,15 +67,15 @@ describe('reclutarTropa — escuadrones por jugador (Doc 2.5)', () => {
 
   it('reclutar un escuadrón ya al tope se rechaza', () => {
     const asentamiento = asentamientoDeTest();
-    const trasReclutar = reclutarTropa(asentamiento, 'jugador-a', 'milicia_lanceros', 'pesants', 0, 0);
+    const trasReclutar = reclutarTropa(asentamiento, 'jugador-a', 'milicia_lanceros', 'pesants', 0);
 
-    expect(() => reclutarTropa(trasReclutar, 'jugador-a', 'milicia_lanceros', 'pesants', 0, 1)).toThrow(ReclutamientoInvalidoError);
+    expect(() => reclutarTropa(trasReclutar, 'jugador-a', 'milicia_lanceros', 'pesants', 1)).toThrow(ReclutamientoInvalidoError);
   });
 
   it('un jugador que no reside en el asentamiento no puede reclutar ahí', () => {
     const asentamiento = asentamientoDeTest();
 
-    expect(() => reclutarTropa(asentamiento, 'jugador-forastero', 'milicia_lanceros', 'pesants', 0, 0)).toThrow(
+    expect(() => reclutarTropa(asentamiento, 'jugador-forastero', 'milicia_lanceros', 'pesants', 0)).toThrow(
       ReclutamientoInvalidoError
     );
   });
@@ -84,6 +84,6 @@ describe('reclutarTropa — escuadrones por jugador (Doc 2.5)', () => {
     const asentamiento = asentamientoDeTest();
     expect(asentamiento.cargos.generalId).toBeNull();
 
-    expect(() => reclutarTropa(asentamiento, 'jugador-a', 'milicia_lanceros', 'pesants', 0, 0)).not.toThrow();
+    expect(() => reclutarTropa(asentamiento, 'jugador-a', 'milicia_lanceros', 'pesants', 0)).not.toThrow();
   });
 });

@@ -11,10 +11,11 @@
 // `https://jugador.ejemplo.com,https://admin.ejemplo.com`. Vacía por defecto: sin ella, ningún origen
 // cruzado puede llamar a esta API — mismo criterio que `ADMINISTRADORES`.
 //
-// `INTERVALO_TICK_MS` (Fase C12) arranca el scheduler de ticks automáticos para cada partida que se abra.
-// Sin declarar, `undefined` — ninguna partida avanza sola (ver el comentario de `RegistroDePartidas`). El
-// valor, si se declara, es un PLACEHOLDER: el ritmo de juego real no está decidido en ningún doc de este
-// repo, esto solo existe para que el mundo no quede congelado en un despliegue real.
+// `INTERVALO_TICK_MS` (Fase C12) arranca el RELOJ DE MUNDO de cada partida que se abra (D5,
+// `RunnerDePartida.iniciarRelojDeMundo`): un tick por cada tanto de reloj de pared, con catch-up en ráfaga de
+// los ticks vencidos tras un reinicio. Sin declarar, `undefined` — ninguna partida avanza sola (ver el
+// comentario de `RegistroDePartidas`). Con "mundo = tiempo real" (doc 10 §2) el valor es 60000 (=
+// `SIMULACION.duracionTickMs`): un minuto real por tick.
 import { join } from 'node:path';
 import { crearServidor } from './api';
 import { crearRegistroProveedores } from '../acceso/proveedorIdentidad';
@@ -70,7 +71,7 @@ async function arrancar(): Promise<void> {
   if (INTERVALO_TICK_MS === undefined) {
     console.warn('AVISO: sin INTERVALO_TICK_MS configurado — ninguna partida avanza sola, solo con POST .../tick a mano.');
   } else {
-    console.log(`ticks automáticos cada ${INTERVALO_TICK_MS} ms (placeholder, sin decisión de ritmo de juego todavía).`);
+    console.log(`reloj de mundo: un tick cada ${INTERVALO_TICK_MS} ms reales, con catch-up en ráfaga tras un reinicio.`);
   }
 }
 

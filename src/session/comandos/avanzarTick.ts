@@ -1,6 +1,6 @@
 import type { Mapa } from '../../world/mapa';
 import { avanzarSimulacion, type ContextoSimulacion } from '../../engine/simulation';
-import { conResultadoDeSimulacion, estadoSimulacionDe, type GameSessionState } from '../estado';
+import { conResultadoDeSimulacion, estadoSimulacionDe, instanteDeTick, isoDeInstante, type GameSessionState } from '../estado';
 import { exito, type ContextoComando, type TransicionComando } from './tipos';
 
 /**
@@ -23,7 +23,11 @@ export function avanzarTick(
   _params: void
 ): TransicionComando<void> {
   const tick = estado.tick + 1;
-  const contexto: ContextoSimulacion = { tick, momento: ctx.momento, rng: ctx.rng };
+  // El tick lleva el mundo de `instanteDeTick(estado.tick)` a `instanteDeTick(tick)`: sus eventos se fechan
+  // con el instante RESULTANTE. `ctx.instante` que llega aquí es el del tick ANTERIOR (lo derivó
+  // `GameSession.ejecutar` del `this.estado.tick` de entonces), por eso no se reutiliza.
+  const instante = instanteDeTick(tick);
+  const contexto: ContextoSimulacion = { instante, momento: isoDeInstante(instante), rng: ctx.rng };
   const resultado = avanzarSimulacion(estadoSimulacionDe(estado), mapa, contexto);
 
   // `estadoMapa` va aparte de `conResultadoDeSimulacion` porque no es estado del motor: `EstadoSimulacion` es

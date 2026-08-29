@@ -1,4 +1,5 @@
 import type { Asentamiento, Edificio, Faccion, Point, RecursoAlmacenado } from '../domain/types';
+import type { Instante } from '../domain/tiempo';
 import { ALMACEN, FUNDACION, MANTENIMIENTO, POBLACION, ZONA_INFLUENCIA } from '../constants';
 import type { Mapa } from '../world/mapa';
 import { posicionLibreParaFundar } from './zones';
@@ -24,7 +25,6 @@ function edificiosIniciales(idBase: string): Edificio[] {
     tipo: 'centroUrbano',
     posicion: { x: 0, y: 0 },
     estado: 'activo',
-    ticksRestantes: 0,
     ambito: 'asentamiento',
   };
 
@@ -39,7 +39,6 @@ function edificiosIniciales(idBase: string): Edificio[] {
       tipo: 'vivienda',
       posicion,
       estado: 'activo',
-      ticksRestantes: 0,
       ambito: 'asentamiento',
       rotado: sitio?.rotado,
     });
@@ -51,7 +50,6 @@ function edificiosIniciales(idBase: string): Edificio[] {
     tipo: 'granja',
     posicion: posicionGranja,
     estado: 'activo',
-    ticksRestantes: 0,
     ambito: 'asentamiento',
   });
 
@@ -138,7 +136,7 @@ export function fundarAsentamiento(
   posicion: Point,
   jugadoresFundadoresIds: string[],
   asentamientosExistentes: Asentamiento[],
-  tickActual: number
+  fundadoEn: Instante
 ): { asentamiento: Asentamiento; facciones: Faccion[] } {
   if (jugadoresFundadoresIds.length < 1 || jugadoresFundadoresIds.length > FUNDACION.maxJugadoresFundacionGrupal) {
     throw new FundacionInvalidaError(
@@ -190,7 +188,7 @@ export function fundarAsentamiento(
     nivel: 1,
     nivelActual: 1,
     rachaMantenimientoSano: 0,
-    fundadoEnTick: tickActual,
+    fundadoEn,
     radioPotencial: ZONA_INFLUENCIA.radioInicial,
     poblacion: { pesants: POBLACION.pesants.inicial, artesanos: 0, nobleza: 0 },
     almacen: almacenInicial,
