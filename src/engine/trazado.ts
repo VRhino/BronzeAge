@@ -1606,6 +1606,10 @@ export function radioMaximoRanura(): number {
  * radios crecientes y devuelve el primer rectángulo que no colisiona con nada ya ocupado y respeta
  * `separacionSeguridadAnclas` frente a TODAS las demás anclas — o `null` si ninguno hasta el tope sirve (Etapa
  * 5: esta ranura de la semilla queda descartada, `crearAnclaNueva` prueba la siguiente dirección).
+ *
+ * Ojo: esto NO comprueba que un satélite pueda pegarse al ancla ni que el ancla alcance la red — de eso se
+ * encarga `asegurarAnclaPara` (construction.ts), que descarta el ancla recién creada si `sitiosPorAtraccionDura`
+ * no le encuentra sitio. Ver doc trazado §E6.19.
  */
 export function huecoEnDireccion(
   origen: Point,

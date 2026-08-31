@@ -963,8 +963,8 @@ vistazo los que se han tocado.
 
 **Hallazgos del mismo playtest (seed 60, Mercado a mano en el tick 1, nivel 3 al tick 452):**
 
-1. **Doble Patio de Gremios en el mismo tick, uno de ellos huérfano y sin calle (ABIERTO, diagnosticado
-   2026-08-31).** Reproducido: seed 60, Mercado a mano en el tick 1, **tick 120** → aparecen DOS
+1. **Doble Patio de Gremios en el mismo tick, uno de ellos huérfano y sin calle (RESUELTO 2026-08-31, fix
+   `b`).** Reproducido: seed 60, Mercado a mano en el tick 1, **tick 120** → aparecen DOS
    `patioDeGremios` a la vez (ids consecutivos `-37` y `-38`); `-37` nace `anclaLlena`, sin calle y sin
    satélites, `-38` conecta y recibe la Armería. Sin el Mercado manual, seed 60 crea un solo Patio en ese
    tick — el Mercado + sus 12 puestos (que también nacen en el tick 120) ocupan el núcleo y empujan la ranura
@@ -987,13 +987,24 @@ vistazo los que se han tocado.
    El caso benigno `1→2` en otros seeds (sin Mercado manual, ~tick 200+) NO es este bug: ahí el Patio #1 sí
    tiene 3-4 satélites activos, su núcleo está lleno de verdad y el #2 es expansión correcta.
 
-   **Causas candidatas para el fix (a decidir):**
-   a. `crearAnclaNueva`/`huecoEnDireccion` deberían rechazar una ranura desde la que el ancla no alcanza la
-      red dentro de `capCorredorUrbano` — un ancla sin calle no es un ancla.
-   b. `asegurarAnclaPara` debería verificar con `sitiosPorAtraccionDura` que el ancla recién creada admite
-      al menos un satélite ANTES de comprometerla; si no, no crearla (y no crear una segunda).
-   c. El bucle de transformación no debería llamar a `asegurarAnclaPara` más de una vez por pasada para la
-      misma categoría — si la primera creó un ancla que no sirvió, reintentar el tick siguiente, no encadenar.
+   **Fix aplicado (opción b):** `asegurarAnclaPara` (`construction.ts`), tras `crearAnclaNueva`, comprueba con
+   `sitiosPorAtraccionDura(nuevaAncla, tamaño-del-satélite, …)` que un satélite de `tipo` puede pegarse de
+   verdad al ancla recién creada. Si no hay sitio, el ancla **no se commitea** —se devuelve `edificiosBase`
+   sin ella (conservando las `semillaSaturada`, que sí son un hecho geométrico)— y la construcción se
+   reintenta el tick siguiente, cuando la ciudad haya crecido. Así:
+   - nunca queda un `patioDeGremios`/`plazaDeArmas` huérfano ocupando suelo y árbol de anclas;
+   - la iteración siguiente del bucle vuelve a intentar `crearAnclaNueva` (mismo slot, determinista), vuelve a
+     rechazarlo, y **no encadena** una segunda ancla — como mucho paga el coste de un `redDeCalles` extra
+     mientras está atascado, cosa rara.
+
+   Se descartó la opción `a` (chequeo de alcance a la red en `huecoEnDireccion`): un ancla legítima que nace
+   en el radio máximo de ranura (`separacionMinimaAnclas × 3` = 36 celdas) queda ~29 celdas de la calle de su
+   semilla, por encima de `capCorredorUrbano` (12), así que ese gate rechazaba anclas buenas. La opción `b`
+   pregunta lo correcto directamente: *¿cabe el satélite?*, sin depender de un cap.
+
+   Verificado: 30 corridas (15 seeds × con/sin Mercado manual, 320 ticks) — `huérfanos = 0` en todas,
+   `industria = 9` sin regresión, seed 60+M ahora crea **un solo Patio conectado** en el tick 126 (6 ticks
+   más tarde, esperando a que se abra un hueco de satélite). 691 tests.
 
 2. **Talleres de Carpintería que no se crean (ABIERTO, sin diagnosticar).** Observado en el mismo playtest de
    seed 60; probablemente la misma familia (`crearTalleresDeCarpinteria` con la Carpintería como ancla propia).

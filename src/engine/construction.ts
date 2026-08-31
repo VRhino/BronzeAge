@@ -23,10 +23,13 @@ import {
   anclaActivaParaCategoria,
   CATEGORIA_POR_TIPO,
   crearAnclaNueva,
+  permiteRotacion,
   redDeCalles,
   reubicarPorTamano,
   sitioParaTipo as sitioEnTrazado,
   sitiosParaTipo,
+  sitiosPorAtraccionDura,
+  sueloOcupado,
   tamanoEdificio,
   tipoAnclaParaCategoria,
 } from './trazado';
@@ -522,10 +525,25 @@ function asegurarAnclaPara(asentamiento: Asentamiento, edificios: Edificio[], ti
   if (!tipoAncla) return edificiosConLlenas;
   const resultado = crearAnclaNueva(asentamiento.id, edificiosConLlenas, tipoAncla, idAncla);
   if (!resultado) return edificiosConLlenas;
+
   const conSaturadasMarcadas = edificiosConLlenas.map((e) =>
     resultado.anclasRecienSaturadas.includes(e.id) ? { ...e, semillaSaturada: true } : e
   );
-  return [...conSaturadasMarcadas, resultado.nuevaAncla];
+  const conAncla = [...conSaturadasMarcadas, resultado.nuevaAncla];
+
+  // GATE de utilidad (doc trazado §E6.19): `crearAnclaNueva` solo mira geometría + `separacionSeguridadAnclas`,
+  // así que en un núcleo saturado (p. ej. el Mercado y sus 12 puestos recién nacidos empujando la ranura de
+  // industria fuera del alcance de toda calle) puede colocar un ancla a la que NINGÚN satélite de `tipo` se
+  // puede pegar. Comprometerla dejaría un `patioDeGremios`/`plazaDeArmas` huérfano permanente en la ciudad; y
+  // como la iteración siguiente del bucle de transformación la vería inútil y volvería a llamar aquí, salían
+  // DOS anclas en el mismo tick (bug reportado). Si no hay sitio para el satélite, no se commitea el ancla —
+  // se reintenta el tick siguiente, cuando la ciudad haya crecido. `semillaSaturada` SÍ se conserva: esas
+  // semillas están agotadas geométricamente, sea o no útil el ancla que se intentó.
+  const tamanoSat = tamanoEdificio(tipo);
+  const { ocupadas, red: redConAncla } = sueloOcupado(asentamiento.id, conAncla);
+  const haySitioSatelite =
+    sitiosPorAtraccionDura(resultado.nuevaAncla, tamanoSat, ocupadas, redConAncla, permiteRotacion(tipo, tamanoSat)).length > 0;
+  return haySitioSatelite ? conAncla : conSaturadasMarcadas;
 }
 
 /**
