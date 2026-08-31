@@ -451,8 +451,8 @@ Conectividad (§E6.4) se mide sobre la UNIÓN de calles y caminos, igual que hoy
 ### E6.11 La escala ×2 no cuesta nada
 
 `tamanoCelda: 6 → 3` y todas las huellas ×2. El álgebra se conserva: `puntoDeRectangulo` da **exactamente el
-mismo punto local** (`6·col + 3·ancho` en ambos modelos), incluida la excepción del Centro Urbano, que sigue
-cayendo en `(9,-9)`.
+mismo punto local** (`6·col + 3·ancho` en ambos modelos). (El Centro Urbano tenía una excepción de
+coordenadas —resuelta en §E6.20, 2026-08-31: su `posicion` ahora es su centro, sin caso especial.)
 
 Consecuencias:
 
@@ -560,8 +560,8 @@ red no.
 - [x] Conservación de coordenadas **probada, no afirmada**: `engine/__tests__/escalaRejilla.test.ts` — 40 casos
       (todos los tipos + niveles de Granja + formas de Puesto + rotaciones) generados con el código real a
       `tamanoCelda = 6` y anclados en la celda (1,−2), que siguen en verde a `tamanoCelda = 3` sin editar un
-      número. Es una aserción CRUZADA ENTRE VERSIONES; ahí está todo su valor. Incluye la excepción del Centro
-      Urbano (`(9,−9)`) y un test genérico de que `posicion`↔celda son inversas exactas a cualquier escala
+      número. Es una aserción CRUZADA ENTRE VERSIONES; ahí está todo su valor. Incluye un test genérico de que
+      `posicion`↔celda son inversas exactas a cualquier escala
 - [x] **`CELDA_METRICA` congelada en 6** (`scripts/run-batch-sim.ts`): las métricas de distancia
       (`dispersion*`, `UMBRAL_COMPONENTE_CELDAS`) estaban expresadas EN CELDAS, así que al partir la celda por
       la mitad se habrían duplicado solas —3.44 → 6.88 sin que nada empeorase— y la comparación contra el Paso 0
@@ -1016,6 +1016,28 @@ vistazo los que se han tocado.
    `bordeCompartido` elige la que pega el lado LARGO al Mercado. `crearPuestosDeMercado` (construction.ts)
    tuvo que empezar a persistir `rotado` — antes lo ignoraba, inofensivo solo porque el puesto nunca giraba.
    Verificado en el lab: 12 puestos, 3 girados, 0 solapes.
+
+---
+
+### E6.20 El `posicion` del Centro Urbano pasa a ser su CENTRO (2026-08-31)
+
+Hasta ahora el Centro Urbano era la ÚNICA excepción de coordenadas del sistema: su `posicion` `(0,0)` no era
+su centro geométrico sino el VÉRTICE de una esquina (originalmente a petición del usuario). Efecto medido: con
+6×6, su huella caía en las columnas 0..5 y filas -6..-1 — **todo el edificio en un solo cuadrante**, con el
+origen pegado a una esquina. Y peor: `cu.posicion` valía `(0,0)` pero `centroDeRectangulo(rectanguloDeEdificio(cu))`
+valía `(9,-9)` local — **dos "centros" distintos** según qué función preguntara. `semillaActiva` (más cercana
+al origen) y `anclaMasCercana` medían contra `(0,0)`; `crearAnclaNueva` proyectaba sus 8 ranuras desde `(9,-9)`.
+De ahí los "comportamientos algo extraños" que reportó el usuario.
+
+**Cambio:** se quitó el caso especial de `celdaMinimaDeEdificio` (`engine/trazado.ts`). Ahora `(0,0)` es el
+CENTRO del Centro Urbano, igual que en cualquier otro edificio. Con 6×6 ocupa las columnas -3..2 y las filas
+-3..2, **simétrico alrededor del origen**, y `cu.posicion === centroDeRectangulo(rectanguloDeEdificio(cu))`.
+
+Toca solo `celdaMinimaDeEdificio` (una rama menos). `settlement.ts` ya creaba el CU con `posicion: (0,0)` —
+sigue igual, solo cambia qué significa. `cliente/` importa la función del motor, no tiene copia. Tests:
+`escalaRejilla.test.ts` (fila dorada del CU, ahora con la misma huella de anclaje que el resto; se quitó su
+`continue` de la prueba de inversa exacta). Suite verde (691). Partidas guardadas con el CU en `(0,0)` lo verán
+desplazado ~4 celdas — pero ya hay que borrarlas por la Etapa 6 (§E6.14), así que no se migra.
 
 ---
 

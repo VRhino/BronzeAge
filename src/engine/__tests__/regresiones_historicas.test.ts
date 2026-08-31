@@ -96,5 +96,5 @@ describe('regresiones históricas (Correcciones_Durante_Desarrollo.md)', () => {
     }
 
     expect(maxGranjas, 'en algún momento de la simulación hay más de 1 Granja (activa o en camino)').toBeGreaterThan(1);
-  });
+  }, 20_000); // 300 ticks: ~3s aislado, ~5.5s bajo carga paralela — sobra el default de 5s. Timeout explícito.
 });

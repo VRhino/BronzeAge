@@ -49,7 +49,9 @@ type CasoDorado = Pick<Edificio, 'tipo'> & {
  * 2026-08-31): forma 1 pasó de 2×2 a 1×2 celdas originales, forma 2 de 3×2 a 1×3, y ese mismo día
  * `puestoMercado` salió de `TIPOS_SIN_ROTACION` — de ahí sus filas `rotado: true`. */
 const DORADOS: CasoDorado[] = [
-  { tipo: 'centroUrbano', posicion: { x: 15, y: -3 }, huella: { x: 0, y: -18, ancho: 18, alto: 18 } },
+  // Centro Urbano: `posicion` pasó de ser el VÉRTICE de una esquina a ser el CENTRO real (doc trazado §E6.20,
+  // 2026-08-31). Ahora su huella cae en la misma celda de anclaje que todos los demás — `x: 6, y: -12`.
+  { tipo: 'centroUrbano', posicion: { x: 15, y: -3 }, huella: { x: 6, y: -12, ancho: 18, alto: 18 } },
   { tipo: 'vivienda', posicion: { x: 9, y: -9 }, huella: { x: 6, y: -12, ancho: 6, alto: 6 } },
   { tipo: 'granja', nivelInterno: 1, posicion: { x: 12, y: -6 }, huella: { x: 6, y: -12, ancho: 12, alto: 12 } },
   { tipo: 'granja', nivelInterno: 2, posicion: { x: 12, y: -3 }, huella: { x: 6, y: -12, ancho: 12, alto: 18 } },
@@ -119,9 +121,9 @@ describe('escala de la rejilla (doc trazado §E6.11)', () => {
   it('`posicion` y celda son inversas exactas a CUALQUIER escala, para todo tipo y en un rango de celdas', () => {
     // Complementa a la tabla dorada: aquella es una aserción cruzada entre versiones (números fijos), esta es
     // la propiedad algebraica, que tiene que cumplirse sea cual sea `tamanoCelda` hoy.
+    // Centro Urbano ya NO es excepción (doc trazado §E6.20): su `posicion` es su centro, como todos.
     const desajustes: string[] = [];
     for (const tipo of EDIFICIOS_TIPO) {
-      if (tipo === 'centroUrbano') continue; // excepción documentada: su `posicion` es un VÉRTICE, no el centro
       const niveles = tipo === 'granja' ? [1, 2, 3, 4] : tipo === 'puestoMercado' ? [1, 2, 3] : [undefined];
       for (const nivelInterno of niveles) {
         const base = tamanoEdificio(tipo, nivelInterno);

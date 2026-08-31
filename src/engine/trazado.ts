@@ -122,13 +122,14 @@ export function puntoDeRectangulo(celdaMin: Celda, tamano: TamanoEdificio): Poin
  * exacto tanto para lados pares como impares (el centro cae en un vértice o en el centro de una celda, y
  * `posicion / T - lado / 2` da un entero en ambos casos).
  *
- * El Centro Urbano es la ÚNICA excepción del sistema: su posición `(0,0)` no es su centro sino el VÉRTICE de
- * su esquina inferior izquierda (sur-oeste: +y = sur), a petición explícita del usuario. Con 3x3 eso lo deja
- * ocupando las columnas 0..2 y las filas -3..-1.
+ * SIN excepciones desde 2026-08-31 (doc trazado §E6.20): el Centro Urbano tenía un caso especial —su `posicion`
+ * `(0,0)` era el VÉRTICE de una esquina, no su centro— que a petición del usuario se quitó. Ahora `(0,0)` es su
+ * CENTRO real, como en cualquier otro edificio: `centroDeRectangulo(rectanguloDeEdificio(cu))` y `cu.posicion`
+ * coinciden, y la ciudad crece simétrica alrededor del origen. Con 6x6 el CU ocupa las columnas -3..2 y las
+ * filas -3..2.
  */
 export function celdaMinimaDeEdificio(edificio: Pick<Edificio, 'tipo' | 'nivelInterno' | 'posicion' | 'rotado'>): Celda {
   const tamano = tamanoDeEdificio(edificio);
-  if (edificio.tipo === 'centroUrbano') return { col: 0, row: -tamano.alto };
   return {
     col: Math.round(edificio.posicion.x / T - tamano.ancho / 2),
     row: Math.round(edificio.posicion.y / T - tamano.alto / 2),
