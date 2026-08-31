@@ -17,11 +17,12 @@ Este repositorio es **solo servidor** desde la Fase C0. La interfaz de navegador
 Fase C**: sigue importando el motor de este repo por un alias (`@motor/*`) en vez de hablar solo por red — ver
 `cliente/README.md`.
 
-Por el lado del BACKEND, la Fase C está funcionalmente completa (C0–C13, salvo C4 Slice 2 — niebla de guerra,
-bloqueado en una decisión de balance que ningún doc de este repo fija). Lo que falta para cerrar la fase de
-verdad ya no es servidor, es un cliente: [`cliente-jugador/`](../../cliente-jugador/) (boilerplate, hito C11b)
-prueba que se puede — sin ningún alias al motor, habla solo por red y recalcula el terreno con su propia
-copia de las funciones puras de evaluación — pero no tiene UI de comandos, no es un cliente completo.
+Por el lado del BACKEND, la Fase C está **completa** (C0–C13). C4 dio la proyección por audiencia
+(`proyectarParaJugador`: un jugador nunca recibe el estado completo); la niebla de guerra fina ("último
+conocido" de rivales) se movió a [`Docs/Mecanicas a desarrollar.md`](../Mecanicas%20a%20desarrollar.md) §12 —
+es mecánica de juego con parámetros por definir, no arquitectura. Construir un cliente jugable completo es
+trabajo de un repo de interfaz aparte (este repo es solo servidor); [`cliente-jugador/`](../../cliente-jugador/)
+es un boilerplate que prueba que se puede pintar el mundo sin el código del motor.
 
 ## Vista global
 
@@ -139,9 +140,10 @@ que se lo pasen por parámetro) — así es fácil de probar y la async vive en 
 - `session/comandos/` — los 30 comandos de juego (`registro.ts`), y `autorizacion.ts`: una matriz con una fila
   por comando (rol técnico mínimo + condición de dominio), exhaustividad garantizada en compilación. El actor
   manda una intención `{tipo, params}`; nunca ejecuta motor directamente.
-- `session/proyecciones/jugador.ts` — compone lo que un jugador puede ver de la partida (Fase C4, Slice 1: su
-  Facción completa, las demás solo metadatos públicos). Slice 2 (niebla de guerra / "último conocido") sigue
-  sin implementar: depende de un radio de visualización que ningún doc de este repo define todavía.
+- `session/proyecciones/jugador.ts` — compone lo que un jugador puede ver de la partida (Fase C4: su Facción
+  completa, las demás solo metadatos públicos). Es la frontera de seguridad — un jugador nunca recibe el
+  estado completo. La niebla de guerra fina ("último conocido" de rivales) es mecánica de juego con
+  parámetros por definir (`Mecanicas a desarrollar.md` §12); esta misma función es donde se añadiría.
 - `session/canales.ts` — qué canal de WebSocket puede suscribir cada actor.
 - `session/npcGobernanza.ts` — automatización de facciones NPC tras el tick, separada del motor puro.
 - `session/estado.ts` — las vistas de estado completo (`vistaAdminDeEstado`) que consume la superficie admin.
@@ -239,8 +241,9 @@ partidas existen en disco, incluidas las que nadie ha reabierto todavía en este
 - **Resuelto (hito C9, 2026-08-26):** `ESQUEMA_EJECUTAR_COMANDO` tiene ahora un esquema por comando
   (`session/comandos/esquemas.ts`, `oneOf` discriminado por `tipo`) — un `params` malformado responde 400
   antes de tocar el manejador, en vez de 409 tras un `TypeError` sin capturar.
-- La proyección de jugador (C4) solo cubre el Slice 1 (Facción propia completa, resto solo metadatos
-  públicos); la niebla de guerra real (Slice 2) está bloqueada por una decisión de balance sin tomar.
+- La proyección de jugador (C4) da la Facción propia completa y del resto solo metadatos públicos; la niebla
+  de guerra fina ("último conocido" de rivales) es mecánica de juego pendiente de parámetros
+  (`Mecanicas a desarrollar.md` §12), no un hueco de arquitectura.
 
 ## Fortalezas para una futura evolución
 
@@ -261,7 +264,7 @@ partidas existen en disco, incluidas las que nadie ha reabierto todavía en este
   trazado urbano ya no exigen que el cliente importe `engine/zones`/`engine/trazado` para dibujar el mapa — el
   admin las recibe de todos los asentamientos, un jugador solo de los suyos.
 - Existe un cliente real sin ninguna línea del motor (**C11b**, `cliente-jugador/`) que pinta el terreno —
-  prueba en vivo, no solo en teoría, de que el criterio de cierre de la Fase C es alcanzable.
+  prueba en vivo de que un cliente puede dibujar el mundo hablando solo por red.
 - Partidas descubribles (**C12**, `GET /admin/partidas`) y exportables (`.../exportar`, `.../exportar-unity`)
   por HTTP — ya no hace falta el navegador para ninguna de las dos.
 - Cursor incremental de eventos (**C13**, `GET .../eventos?desde=`), filtrado por audiencia en la superficie
@@ -277,13 +280,13 @@ partidas existen en disco, incluidas las que nadie ha reabierto todavía en este
   ya use el cursor, que hoy no existe. El WebSocket sigue difundiendo eventos en bruto, no deltas de estado
   aplicables — la única reacción de un cliente sin motor a un evento es releer, aunque ahora puede releer solo
   lo nuevo en vez del estado completo.
-- Niebla de guerra / "último conocido" sin implementar (C4 Slice 2): bloqueado por una decisión de balance
-  (radio de visualización) que ningún documento de este repo fija todavía. Es lo único de Fase C que sigue sin
-  resolver por razones de ARQUITECTURA — todo lo demás (C0–C13) está completo por el lado del backend.
-- El único cliente que existe (`cliente/`) sigue importando el motor de este repo por `@motor/*`; el
-  boilerplate sin motor (`cliente-jugador/`) no tiene UI de comandos. El criterio de cierre de la Fase C —un
-  cliente sin código del motor jugando una partida completa— no se cumple todavía, pero ya no por falta de
-  algo que el backend deba servir.
+- Niebla de guerra / "último conocido" de rivales: mecánica de juego con parámetros por definir (radio de
+  visualización, si el contacto decae o se congela) — movida a `Mecanicas a desarrollar.md` §12. NO es un
+  hueco de arquitectura: la proyección de C4 ya es frontera de seguridad, y `proyectarParaJugador` es donde
+  se añadiría el filtrado fino cuando esos números existan.
+- El cliente jugable completo (UI de comandos, etc.) es trabajo de un repo de interfaz aparte — fuera del
+  alcance de este repo, que es solo servidor. `cliente/` (herramienta de admin/dev) y `cliente-jugador/`
+  (boilerplate de terreno) viven aquí solo como referencia hasta la separación de repos.
 
 ## Decisión de evolución adoptada
 
@@ -297,7 +300,8 @@ Durante esta etapa:
 - Todos los actores conectados a esa instancia comparten el mismo estado y tick.
 - El servidor sigue siendo quien avanza y resuelve los ticks; ningún cliente ejecuta motor por autoridad.
 - Los frontends (jugador, administración) son sustituibles sin trasladar la autoridad de la partida al
-  navegador — es justo lo que exige el criterio de cierre de la Fase C.
+  navegador — la API es el producto, no el cliente. Construir esos frontends está fuera del alcance de este
+  repo (solo servidor).
 
 La conversión posterior será de ticks discretos a tiempo real total (Fase D). Desde el principio quedan
 separados: el reloj del servidor, el tiempo de simulación, la unidad interna provisional del motor (`tick`),

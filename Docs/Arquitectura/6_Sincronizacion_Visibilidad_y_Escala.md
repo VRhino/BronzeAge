@@ -186,7 +186,10 @@ Tareas derivadas de este documento, reflejadas en
   la regla (b) de §4 implementada, y deja `tick` aislado en un solo sitio para poder retirarlo en Fase D sin
   tocar firmas.
 - [ ] Resolver el bloqueo de la cola serial por ticks largos (Fase B/C, decisión pendiente).
-- [ ] Diseñar `ConocimientoJugador` y la proyección "último conocido" (Fase C, junto a los DTOs por audiencia).
+- [x] DTOs por audiencia (`proyectarParaJugador`, C4) — frontera de seguridad hecha. `ConocimientoJugador` y
+  la proyección "último conocido" de rivales pasaron a `Mecanicas a desarrollar.md` §12: es mecánica de juego
+  con parámetros por definir (radio de visualización, decaimiento del contacto), no arquitectura. El diseño
+  de fondo vive en §3.2 de este doc.
 - [ ] Protocolo de suscripciones sobre conexión única (Fase C3).
 - [ ] Ver §6: el mapa deja de ser estado y pasa a ser asset cacheable (C11), y `eventosDominio` deja de viajar entero (C13).
 

@@ -7,7 +7,15 @@ import { evaluarViabilidadFundacion, fundarAsentamiento } from '../src/engine/se
 import { nivelActualDe, tieneMercadoActivo, edificiosPorTipoYEstado, nutricionPoblacionDe } from '../src/engine/asentamientoQuery';
 import { calcularNivelAsentamiento } from '../src/engine/mantenimiento';
 import { avanzarNpcGobernanza, type ConfigNpcGobernanza, MINERALES_BONUS_FUNDACION } from '../src/session/npcGobernanza';
-import { CATEGORIA_POR_TIPO, edificiosInternos, redDeCalles, segmentosDeRed } from '../src/engine/trazado';
+import {
+  CATEGORIA_POR_TIPO,
+  celdaMinimaDeEdificio,
+  celdasDeEdificio,
+  edificiosInternos,
+  esDeAfueras,
+  redDeCalles,
+  tamanoDeEdificio,
+} from '../src/engine/trazado';
 import { REJILLA_ASENTAMIENTO } from '../src/constants';
 import { instanteDeTick, isoDeInstante } from '../src/session/estado';
 
@@ -104,7 +112,20 @@ function elegirPosicionesFundacion(mapa: Mapa, cantidad: number): CandidatoFunda
 // Las tres se calculan SOLO sobre el trazado ya existente — no anticipan nada del rediseño, así que sirven
 // igual para el "antes" (barrios) y para el "después" (anclas).
 
-const CELDA = REJILLA_ASENTAMIENTO.tamanoCelda;
+/**
+ * Unidad FIJA en la que se expresan las métricas de DISTANCIA (`dispersion*`, `UMBRAL_COMPONENTE_CELDAS`).
+ * Deliberadamente un literal y NO `REJILLA_ASENTAMIENTO.tamanoCelda`.
+ *
+ * Por qué: la Etapa 6 (§E6.11) parte la celda por la mitad (6 → 3) y dobla todas las huellas, de modo que la
+ * geometría física no cambia. Si la dispersión se dividiera por la celda VIVA, el mismo edificio en el mismo
+ * sitio pasaría de "3.44 celdas" a "6.88 celdas" — el doble, sin que nada haya empeorado, y la comparación
+ * contra la línea base del Paso 0 (y contra los números históricos de las Etapas 1 y 2, medidos con celda 6)
+ * quedaría corrupta en silencio.
+ *
+ * Congelándola en 6 la métrica pasa a ser una unidad FÍSICA estable, independiente de a qué resolución se
+ * discretice la rejilla. Solo debe cambiar si cambia el tamaño físico de los edificios, no su representación.
+ */
+const CELDA_METRICA = 6;
 
 /** Union-find mínimo sobre claves de texto, para contar componentes conexas sin traer una dependencia. */
 function crearUnionFind() {
@@ -137,23 +158,34 @@ function crearUnionFind() {
  * ahí, y esta métrica es lo que avisará si la reintroduce.
  */
 function manzanasCerradas(asentamiento: Asentamiento): number {
-  const { calles } = segmentosDeRed(redDeCalles(asentamiento.id, asentamiento.edificios));
-  if (calles.length === 0) return 0;
+  const red = redDeCalles(asentamiento.id, asentamiento.edificios);
+  const celdas = new Set([...red.calles, ...red.caminos]);
+  if (celdas.size === 0) return 0;
 
+  // Etapa 6, Paso 2: la red son CELDAS, no aristas. El grafo cuyos ciclos se cuentan pasa a ser el de
+  // adyacencia ortogonal entre celdas de calle — misma fórmula de Euler, otro grafo. Cada par de celdas
+  // vecinas aporta una arista; cada celda, un vértice.
   const uf = crearUnionFind();
-  const clave = (p: Point) => `${Math.round(p.x)},${Math.round(p.y)}`;
-  const vertices = new Set<string>();
-  for (const segmento of calles) {
-    const a = clave(segmento.desde);
-    const b = clave(segmento.hasta);
-    vertices.add(a);
-    vertices.add(b);
-    uf.agregar(a);
-    uf.agregar(b);
-    uf.unir(a, b);
+  for (const clave of celdas) uf.agregar(clave);
+  let aristas = 0;
+  for (const clave of celdas) {
+    const [col, row] = clave.split(',').map(Number) as [number, number];
+    // Solo dos de las cuatro direcciones, para no contar cada arista dos veces.
+    for (const [dc, dr] of PARES_ADELANTE) {
+      const vecina = `${col + dc},${row + dr}`;
+      if (!celdas.has(vecina)) continue;
+      aristas++;
+      uf.unir(clave, vecina);
+    }
   }
-  return calles.length - vertices.size + uf.componentes();
+  return aristas - celdas.size + uf.componentes();
 }
+
+/** Las dos direcciones que bastan para recorrer cada adyacencia ortogonal UNA vez. */
+const PARES_ADELANTE: readonly [number, number][] = [
+  [1, 0],
+  [0, 1],
+];
 
 /**
  * Cuántos GRUPOS SEPARADOS forma una categoría dentro del asentamiento (enlace simple: dos edificios caen en
@@ -170,7 +202,7 @@ function componentesDeCategoria(edificios: Edificio[], umbralCeldas: number): nu
   edificios.forEach((_, i) => uf.agregar(String(i)));
   for (let i = 0; i < edificios.length; i++) {
     for (let j = i + 1; j < edificios.length; j++) {
-      if (distancia(edificios[i]!.posicion, edificios[j]!.posicion) / CELDA <= umbralCeldas) {
+      if (distancia(edificios[i]!.posicion, edificios[j]!.posicion) / CELDA_METRICA <= umbralCeldas) {
         uf.unir(String(i), String(j));
       }
     }
@@ -178,9 +210,20 @@ function componentesDeCategoria(edificios: Edificio[], umbralCeldas: number): nu
   return uf.componentes();
 }
 
-/** Umbral de enlace simple para `componentesDeCategoria`, en celdas. Del orden del diámetro que tendría un
- * núcleo con `separacionMinimaAnclas = 6` (§5.3: `radioMaximoNucleo = separacionMinimaAnclas / 2`). */
+/** Umbral de enlace simple para `componentesDeCategoria`, en `CELDA_METRICA` (unidad física fija, no celdas de
+ * la rejilla viva — ver `CELDA_METRICA`). Del orden del diámetro que tendría un núcleo con
+ * `separacionMinimaAnclas` = 6 celdas de la rejilla ORIGINAL (§5.3: `radioMaximoNucleo = separacionMinimaAnclas / 2`).
+ * No se toca al reescalar la rejilla en la Etapa 6: la distancia física que representa es la misma. */
 const UMBRAL_COMPONENTE_CELDAS = 4;
+
+// --- Métricas de la red de calles (Etapa 6, §E6.14 del doc de trazado) ---
+//
+// Se instrumentaron en el Paso 0, ANTES de tocar `engine/trazado.ts`, para tener línea base contra la que
+// juzgar el rediseño — mismo orden que la Etapa 0 del rediseño de anclas.
+//
+// Deliberadamente NO dependían del formato de clave de arista (`H i,j`/`V i,j`), que era interno de
+// `trazado.ts`: esa precaución es lo que permitió que sobrevivieran al Paso 2, donde ese formato desapareció.
+// Lo que sí cambió de sentido con las celdas está explicado en `MedidasDeCalle`, más abajo.
 
 const CATEGORIAS_MEDIDAS = ['residencial', 'industria', 'militar', 'mercado', 'almacenaje'] as const;
 
@@ -190,8 +233,92 @@ const CATEGORIAS_MEDIDAS = ['residencial', 'industria', 'militar', 'mercado', 'a
  * el grupo, así que la cadena puede alejarse paso a paso. */
 function dispersionMedia(satelites: Edificio[], referencia: Edificio | undefined): number | null {
   if (!referencia || satelites.length === 0) return null;
-  const suma = satelites.reduce((acc, s) => acc + distancia(s.posicion, referencia.posicion) / CELDA, 0);
+  const suma = satelites.reduce((acc, s) => acc + distancia(s.posicion, referencia.posicion) / CELDA_METRICA, 0);
   return suma / satelites.length;
+}
+
+/**
+ * Medidas de la red de calles. Etapa 6, Paso 2: dos de las tres cambiaron de sentido al pasar de aristas a
+ * celdas, y conviene dejar escrito por que.
+ *
+ * - `anchoCeroPct` **se retira**: medía tramos que separaban dos edificios distintos, o sea calles de ancho
+ *   cero. Con las calles ocupando celdas eso es imposible por construccion, y lo congela un test permanente
+ *   (`trazado.test.ts`, "ningun edificio pisa una celda de calle"). Una metrica que solo puede valer 0 no es
+ *   una metrica, es un invariante — y como invariante vive mejor en la suite que en el batch.
+ * - `conFrenteRealPct` se queda, por la razon inversa: sigue siendo el numero que dice si la ciudad tiene
+ *   salida a la calle de verdad. Pasa de ~33% a deber ser 100.
+ * - `componentesDeRed` es NUEVA y es la que 3D necesita: en cuantos trozos inconexos esta partida la red.
+ *   Debe ser 1. No se podia ni formular con aristas.
+ */
+interface MedidasDeCalle {
+  /** % de edificios internos con una CELDA de calle ortogonalmente adyacente — algo por lo que salir andando. */
+  conFrenteRealPct: number | null;
+  /** Trozos inconexos de la red (adyacencia ortogonal entre celdas de calle). Debe ser 1. */
+  componentesDeRed: number | null;
+  /** % de ocupacion del NUCLEO urbano (sin afueras) dentro de su propia caja. Mide el coagulo que produce la
+   * atraccion dura y que la decision 4 de la Etapa 6 quiere aflojar — medido en 48-73% antes del rediseno. */
+  ocupacionNucleoPct: number | null;
+}
+
+function medirCalles(asentamiento: Asentamiento): MedidasDeCalle {
+  const internos = edificiosInternos(asentamiento.edificios);
+  if (internos.length === 0) return { conFrenteRealPct: null, componentesDeRed: null, ocupacionNucleoPct: null };
+
+  const red = redDeCalles(asentamiento.id, asentamiento.edificios);
+  const celdasRed = new Set([...red.calles, ...red.caminos]);
+
+  let conFrenteReal = 0;
+  for (const e of internos) {
+    const min = celdaMinimaDeEdificio(e);
+    const t = tamanoDeEdificio(e);
+    let frente = false;
+    for (let dc = 0; dc < t.ancho && !frente; dc++) {
+      if (celdasRed.has(`${min.col + dc},${min.row - 1}`) || celdasRed.has(`${min.col + dc},${min.row + t.alto}`)) frente = true;
+    }
+    for (let dr = 0; dr < t.alto && !frente; dr++) {
+      if (celdasRed.has(`${min.col - 1},${min.row + dr}`) || celdasRed.has(`${min.col + t.ancho},${min.row + dr}`)) frente = true;
+    }
+    if (frente) conFrenteReal++;
+  }
+
+  let componentesDeRed: number | null = null;
+  if (celdasRed.size > 0) {
+    const uf = crearUnionFind();
+    for (const clave of celdasRed) uf.agregar(clave);
+    for (const clave of celdasRed) {
+      const [col, row] = clave.split(',').map(Number) as [number, number];
+      for (const [dc, dr] of PARES_ADELANTE) {
+        const vecina = `${col + dc},${row + dr}`;
+        if (celdasRed.has(vecina)) uf.unir(clave, vecina);
+      }
+    }
+    componentesDeRed = uf.componentes();
+  }
+
+  // Ocupacion del nucleo: Granja y Corral viven a `radioAfuerasMin` por diseno y estirarian la caja hasta
+  // volver la metrica insignificante (medido: 7% con afueras dentro contra 69% sin ellas).
+  const nucleo = internos.filter((e) => !esDeAfueras(e.tipo));
+  let ocupacionNucleoPct: number | null = null;
+  if (nucleo.length > 0) {
+    let minCol = Infinity;
+    let maxCol = -Infinity;
+    let minRow = Infinity;
+    let maxRow = -Infinity;
+    let celdas = 0;
+    for (const e of nucleo) {
+      for (const c of celdasDeEdificio(e)) {
+        celdas++;
+        minCol = Math.min(minCol, c.col);
+        maxCol = Math.max(maxCol, c.col);
+        minRow = Math.min(minRow, c.row);
+        maxRow = Math.max(maxRow, c.row);
+      }
+    }
+    const caja = (maxCol - minCol + 1) * (maxRow - minRow + 1);
+    ocupacionNucleoPct = caja === 0 ? null : (celdas / caja) * 100;
+  }
+
+  return { conFrenteRealPct: (conFrenteReal / internos.length) * 100, componentesDeRed, ocupacionNucleoPct };
 }
 
 interface Foto {
@@ -233,6 +360,13 @@ interface Foto {
   /** Grupos separados que forma cada categoría, promediado sobre los asentamientos que tienen esa categoría.
    * Con barrios debería rondar 1 (una sola mancha); con núcleos debería crecer. */
   componentesPorCategoria: Record<string, number | null>;
+  // --- Línea base de la Etapa 6 (calles como celdas). Ver `medirCalles`. ---
+  /** % de edificios con frente de calle REAL. Con celdas tiene que ser 100: es el invariante nuevo (§E6.12). */
+  edificiosConFrenteRealPct: number | null;
+  /** Trozos inconexos de la red por asentamiento. Debe ser 1 — lo que 3D necesita y las aristas no daban. */
+  componentesDeRedMedia: number | null;
+  /** % de ocupación del núcleo urbano dentro de su caja. Es el coágulo que la decisión 4 quiere aflojar. */
+  ocupacionNucleoPct: number | null;
   // --- Población contra el gate de nivel 2 (diagnóstico del estancamiento en nivel 1) ---
   /** Viviendas activas por asentamiento. El tope en nivel 1 es 14 (`maximoViviendasPorNivel`), que da 210 de
    * capacidad de pesants contra los 200 que pide el gate: si esto no llega a 14, el gate es inalcanzable por
@@ -304,6 +438,14 @@ function construirFotoResumen(
   let dispersionViviendaN = 0;
   const componentesSuma: Record<string, number> = Object.fromEntries(CATEGORIAS_MEDIDAS.map((c) => [c, 0]));
   const componentesN: Record<string, number> = Object.fromEntries(CATEGORIAS_MEDIDAS.map((c) => [c, 0]));
+  // Etapa 6: cada una lleva su propio contador porque son `null` de forma independiente (una ciudad puede
+  // tener edificios pero ninguna calle todavía, o núcleo pero ninguna manzana).
+  let componentesRedSuma = 0;
+  let componentesRedN = 0;
+  let frenteRealSuma = 0;
+  let frenteRealN = 0;
+  let ocupacionNucleoSuma = 0;
+  let ocupacionNucleoN = 0;
   let viviendasSuma = 0;
   let pesantsSuma = 0;
   let pesantsMaximo = 0;
@@ -374,6 +516,20 @@ function construirFotoResumen(
       componentesSuma[categoria] = (componentesSuma[categoria] ?? 0) + componentesDeCategoria(deLaCategoria, UMBRAL_COMPONENTE_CELDAS);
       componentesN[categoria] = (componentesN[categoria] ?? 0) + 1;
     }
+
+    const calles = medirCalles(a);
+    if (calles.componentesDeRed !== null) {
+      componentesRedSuma += calles.componentesDeRed;
+      componentesRedN++;
+    }
+    if (calles.conFrenteRealPct !== null) {
+      frenteRealSuma += calles.conFrenteRealPct;
+      frenteRealN++;
+    }
+    if (calles.ocupacionNucleoPct !== null) {
+      ocupacionNucleoSuma += calles.ocupacionNucleoPct;
+      ocupacionNucleoN++;
+    }
   }
 
   const redondear = (x: number) => Math.round(x * 100) / 100;
@@ -415,6 +571,9 @@ function construirFotoResumen(
     componentesPorCategoria: Object.fromEntries(
       CATEGORIAS_MEDIDAS.map((c) => [c, media(componentesSuma[c] ?? 0, componentesN[c] ?? 0)])
     ),
+    edificiosConFrenteRealPct: media(frenteRealSuma, frenteRealN),
+    componentesDeRedMedia: media(componentesRedSuma, componentesRedN),
+    ocupacionNucleoPct: media(ocupacionNucleoSuma, ocupacionNucleoN),
     viviendasMedia: vivos === 0 ? 0 : redondear(viviendasSuma / vivos),
     granjasActivasMedia: vivos === 0 ? 0 : redondear(granjasActivasSuma / vivos),
     granjasPendientesMedia: vivos === 0 ? 0 : redondear(granjasPendientesSuma / vivos),

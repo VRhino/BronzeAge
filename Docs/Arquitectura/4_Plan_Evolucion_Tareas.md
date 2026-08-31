@@ -303,22 +303,24 @@ existían.
 - [x] Cliente (`cliente/`) repuntado: quitado el campo "Jugadores fundadores" del panel de Mundo y el parámetro del método `gameStore.fundarAsentamiento`
 - [x] 534 tests (arreglados 2 que asumían fundación grupal ficticia, añadidos los del caso de arranque y su exclusión), `tsc` limpio en ambos proyectos, y verificado en vivo sobre HTTP real: `jugadoresFundadoresIds`/`ciudadanosIds` quedan con el `usuarioId` real de quien funda; un segundo jugador sin Facción es rechazado (`condicion_dominio`) en cuanto la Facción deja de estar vacía. "Escuadrones propios del jugador" (doc 5, fila de combate) — **comprobado desde 2026-08-29** (`comandaEscuadrones`, ver "Cierre de Fase C"). "De otros residentes autorizados" sigue fuera: necesita un mecanismo de cesión de tropas que la Fase 0 no tiene
 
-### C4 Slice 1. Proyección de jugador sin niebla de guerra — completada 2026-08-26
+### C4. Proyección de jugador por audiencia — completada 2026-08-26
 
 Alcance decidido explícitamente con el usuario: la niebla de guerra completa (`ConocimientoJugador`, las 3
 fuentes de visibilidad) necesita un **radio de visualización** — número de BALANCE, no de arquitectura — que
 no está definido en ningún doc de este repo (las referencias "Doc 1.2", "Doc 2.5" etc. apuntan a un documento
 de diseño externo). Inventar ese número habría sido una decisión de diseño de juego disfrazada de código, así
 que se separó en dos: esta pasada resuelve la fuga de seguridad (nunca `GameState` completo a un jugador) con
-una regla conservadora; la niebla de guerra queda como Slice 2, con sus parámetros pendientes de definir.
+una regla conservadora — **eso es todo lo que C4 le pide a la arquitectura, y está hecho**. La niebla de
+guerra como mecánica de juego (con sus parámetros por definir) se movió a
+[`Docs/Mecanicas a desarrollar.md`](../Mecanicas%20a%20desarrollar.md) §12.
 
 - [x] `session/proyecciones/jugador.ts`: `proyectarParaJugador(estado, jugadorId)` — Facción propia COMPLETA (asentamientos, escuadrones, colas, almacén); las demás Facciones no aportan ni un asentamiento, ni resumido. Deliberadamente conservador: mejor "no ves nada del rival" que exponer un nivel de detalle que nadie ha decidido que sea seguro
 - [x] Público sin filtrar, por no ser información táctica: `facciones` (nombre/nivel/reputación/Rey/Embajador — necesario para que la pantalla de diplomacia tenga con qué pintarse), `relaciones`, `titulos` (un ranking que no se puede ver no sirve como ranking), `caminos`, `campamentosBandidos` (entidades del mundo, no de ninguna Facción), `mapa`/`estadoMapa` (geografía, no secreta — lo que se filtra son las entidades sobre el mapa)
 - [x] Filtrados por `asentamientoId` propio: `caravanas` (origen o destino), `acuerdos`, `ordenes`, `eventosDominio` (sin `asentamientoId` = global, o uno propio — mismo criterio que evita la fuga que el doc 7 §7.1 señalaba en el log administrativo)
 - [x] `GET /jugador/partidas/:gameId` (Fase C3 lo había dejado explícitamente sin implementar): exige rol `jugador` — un administrador sigue sin poder leerlo, aunque administre esa misma partida
 - [x] 20 tests nuevos (13 unitarios con estado de partida genuino, 5 HTTP), 552/552 en total, `tsc` limpio en ambos proyectos. Verificado en vivo sobre HTTP real: un jugador sin Facción ve `facciones` pero `asentamientos: []`; el fundador ve el suyo; un admin recibe 403
-- [ ] **Slice 2, pendiente y con parámetros por definir**: `ConocimientoJugador` (entidad qué-sabe-cada-jugador-desde-cuándo), visibilidad espacial (zona de influencia + radio de visualización — falta el número), contacto (trueque, mientras siga vivo — falta decidir si decae o se congela indefinidamente) y alianza (visibilidad en vivo de aliados). La decisión de fondo ya está tomada (2026-08-24): se muestra el ÚLTIMO ESTADO CONOCIDO, no el actual — patrón de niebla de guerra de RTS, evita filtrar telemetría en vivo de rivales
-- [x] ~~Construir frontend de jugador (acciones y datos restringidos a su proyección)~~ — **fuera de alcance de este repositorio** desde el replanteo de 2026-08-25: el cliente de jugador vive en otro repositorio. Lo que sí es responsabilidad de aquí es que su proyección exista y esté documentada (tareas de proyecciones y de contrato)
+- [x] La **niebla de guerra** (`ConocimientoJugador`, visibilidad espacial/contacto/alianza, "último conocido") **NO es de arquitectura** — es una mecánica de juego con parámetros por definir (radio de visualización, si el contacto decae o se congela). Movida a [`Docs/Mecanicas a desarrollar.md`](../Mecanicas%20a%20desarrollar.md) §12. El backend ya tiene la costura (`proyectarParaJugador`, mismo sitio) para añadir el filtrado cuando esos parámetros existan
+- [x] ~~Construir frontend de jugador~~ — **fuera de alcance de este repositorio** (solo servidor). El cliente jugable vive en un repo de interfaz aparte; aquí solo importa que su proyección exista y esté documentada
 
 ### C5. WebSocket, canales e idempotencia — completada 2026-08-26
 
@@ -548,11 +550,11 @@ escuadrón/Facción **propios** — doc 9, tabla T2a). El cliente las resuelve s
 (doc 3) nunca contó este grupo como pendiente de C10, y tenía razón; esta sección de doc 4 sí lo hacía y
 quedó sin corregir hasta ahora. (`getLigas` tampoco va aquí — es T2a, ver la nota del hallazgo 4.)
 
-> **Matiz que SÍ sigue abierto, pero no es de C10**: `mantenimientoInfo`/`poblacionInfo`/`caravanasInfo`/
-> `infoMejoraEdificio` aplicados a un asentamiento RIVAL (no propio) sí necesitarían proyección filtrada por
-> visibilidad — es la clasificación "Proyección por audiencia (5)" del triaje original del doc 8. Bloqueado en
-> lo mismo que siempre: **C4 Slice 2** (niebla de guerra), sin radio de visualización definido en ningún doc.
-> No es un hueco de C10 — es un hueco de C4 que C10 no puede cerrar por su cuenta.
+> **Matiz que SÍ sigue abierto, pero no es de C10 ni de arquitectura**: `mantenimientoInfo`/`poblacionInfo`/
+> `caravanasInfo`/`infoMejoraEdificio` aplicados a un asentamiento RIVAL (no propio) necesitarían proyección
+> filtrada por visibilidad — es la "Proyección por audiencia (5)" del triaje del doc 8. Depende de la **niebla
+> de guerra** (`Mecanicas a desarrollar.md` §12, parámetros por definir). Hasta entonces la regla conservadora
+> de C4 (nada de un rival) los cubre: un jugador no recibe ese asentamiento, así que no hay `info` que filtrar.
 
 > **`precioReferencia` — hecho 2026-08-26.** Primera de este grupo en moverse: `RunnerDePartida.preciosReferencia()`,
 > caché con TTL de un minuto real (no un `setInterval` — se recalcula perezosamente en la siguiente lectura
@@ -805,7 +807,8 @@ que ya sirve C11a. Cero rasterizado, cero dependencia nueva.
 
 - [x] **[`cliente-jugador/`](../../cliente-jugador/)** — proyecto nuevo, hermano de `cliente/`, con su propio
   `package.json`/`tsconfig.json`/`vite.config.ts`. Sin ningún alias `@motor/*` ni `paths` hacia `../src`: es
-  la prueba de que el criterio de cierre de la Fase C es alcanzable, no solo una intención
+  la prueba de que un cliente PUEDE pintar el mundo sin el código del motor. Construir la interfaz jugable
+  completa a partir de aquí es trabajo de un repo aparte — fuera del alcance de este repo (solo servidor)
 - [x] **`src/terreno/`** — copia deliberada (no import) de la parte de `worldgen/` que evalúa por punto:
   `ruido.ts` (`evaluarRuido`/`evaluarRuidoParcial`, SIN `generarCampoRuido` — eso consume RNG, es generación,
   se queda en el servidor), `elevacion.ts`, `fertilidad.ts`, `biomas.ts`, `rios.ts` (solo
@@ -932,7 +935,9 @@ que ya sirve C11a. Cero rasterizado, cero dependencia nueva.
 ### Cierre de Fase C — huecos pequeños (2026-08-29)
 
 Tras revisar los 9 docs de arquitectura, el usuario eligió cerrar los pendientes menores que quedaban de
-Fase C antes de decidir sobre C4 Slice 2 o Fase D. Tres piezas de código + dos de documentación.
+Fase C antes de arrancar Fase D. Tres piezas de código + dos de documentación. Con esto Fase C queda
+**completa** (la niebla de guerra fina se movió a `Mecanicas a desarrollar.md` §12 — es mecánica de juego, no
+arquitectura).
 
 - [x] **Persistencia del dominio de acceso** — `Membresia`/`Sesion`/`Usuario`/`IdentidadVinculada` ya no se
   pierden al reiniciar el proceso (era el pendiente citado en C1 y C3).
@@ -985,14 +990,16 @@ Fase C antes de decidir sobre C4 Slice 2 o Fase D. Tres piezas de código + dos 
   beto vuelve a 403; una membresía de jugador y una revocación sobreviven a recrear el servidor sobre el
   mismo directorio.
 
-**Qué queda de Fase C, y por qué no se cierra aquí:**
+**Fase C: completa (2026-08-29).** El backend cumple todo lo que le toca. Lo que queda son cosas de OTRAS
+capas, no de este repo:
 
-- **C4 Slice 2 (niebla de guerra)** — bloqueado por un número de BALANCE (radio de visualización) que ningún
-  doc de este repo fija. Sigue igual: un jugador ve cero de cualquier Facción rival. No es de arquitectura.
-- **El cliente jugable completo** — `cliente-jugador/` se movió a su propio repositorio (commit `2dfe9e7`);
-  construir la UI de comandos es trabajo de ESE repo, no de este backend. El backend ya cumple su parte del
-  criterio de éxito (balance, geometría, terreno recalculable, esquema de comandos, cursor de eventos,
-  descubrimiento, y ahora identidad persistente).
+- **Niebla de guerra** — no es de arquitectura sino una mecánica de juego con parámetros por definir (radio
+  de visualización, si el contacto decae o se congela). Movida a `Mecanicas a desarrollar.md` §12. El backend
+  ya tiene la costura (`proyectarParaJugador`) para el filtrado cuando esos parámetros existan; hasta entonces
+  la regla conservadora de C4 (un jugador ve cero de cualquier Facción rival) es segura.
+- **El cliente jugable completo** — trabajo de un repo de interfaz aparte (este repo es solo servidor). El
+  backend ya sirve balance, geometría, terreno recalculable, esquema de comandos, cursor de eventos,
+  descubrimiento e identidad persistente.
 
 ## Fase D — Conversión temporal total
 
@@ -1228,7 +1235,7 @@ solo diseñada.
 - [x] IDs resueltos exclusivamente en servidor, nunca confiados desde el cliente — el actor de cada comando es `Membresia.jugadorId`, resuelto de la sesión; los ids de entidad los genera `ContextoComando.ids` en el servidor (C2)
 - [x] Cola serial o control de versión por partida para comandos concurrentes — `RunnerDePartida` (cola serial por `gameId`, encadenando promesas) + `PartidaExportada.state.version` de concurrencia en `persistenciaPartida.ts` (Fase B)
 - [~] RNG determinista con estado persistido — `PartidaExportada.estadoRng` existe (2026‑08‑25), pero **la reproducibilidad a nivel de sesión estaba rota**: `ctx.momento` era reloj de pared y se persistía en el estado (doc 10 §7). El guard de autoridad temporal (2026‑08‑29) lo congela; D1 lo repara de raíz. El motor puro (`avanzarSimulacion`) sí es reproducible con seed y **eso es lo que se conserva** (lo consume el laboratorio batch) — `estadoRng` en snapshot queda sin consumidor real hasta que exista un replay de incidentes (doc 10 §5)
-- [~] DTOs/proyecciones por audiencia (nunca enviar `GameState` completo a un cliente no-admin) — **Slice 1 hecho** (`proyectarParaJugador`, C4): un jugador nunca recibe `GameSessionState` completo. Slice 2 (niebla de guerra / "último conocido") pendiente de un radio de visualización de balance
+- [x] DTOs/proyecciones por audiencia (nunca enviar `GameState` completo a un cliente no-admin) — `proyectarParaJugador` (C4): un jugador nunca recibe `GameSessionState` completo; solo su Facción + metadatos públicos. La niebla de guerra fina ("último conocido" de rivales) es una mecánica de juego, no una mitigación de riesgo — `Mecanicas a desarrollar.md` §12
 - [ ] Snapshots y retención para el historial (nunca clones ilimitados en RAM) — snapshot por comando hecho; política de retención/poda, Fase E2
 - [~] Balance versionado y ligado a partida/temporada (no global mutable) — **servido** (`GET /v1/balance`, C7) y `BALANCE_VERSION` estampada en cada snapshot; los overrides reales por partida/temporada siguen sin dueño
 - [x] Frontends y endpoints de admin vs. jugador separados con roles técnicos distintos — `/admin/*` vs `/jugador/*` (C3), reforzado con la gestión de membresías del cierre de Fase C (2026-08-29)

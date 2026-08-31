@@ -4,7 +4,10 @@
     {
       "name": "bronze-age-server",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "server"],
+      "runtimeArgs": [
+        "run",
+        "server"
+      ],
       "env": {
         "ADMINISTRADORES": "dev:jefa",
         "INTERVALO_TICK_MS": "5000"
@@ -14,17 +17,39 @@
     {
       "name": "bronze-age-cliente",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "cliente", "run", "dev"],
+      "runtimeArgs": [
+        "--prefix",
+        "cliente",
+        "run",
+        "dev"
+      ],
       "port": 5173,
       "autoPort": true
     },
     {
       "name": "bronze-age-cliente-jugador",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "cliente-jugador", "run", "dev"],
-      "env": { "VITE_USUARIO": "ana", "VITE_GAME_ID": "local" },
+      "runtimeArgs": [
+        "--prefix",
+        "cliente-jugador",
+        "run",
+        "dev"
+      ],
+      "env": {
+        "VITE_USUARIO": "ana",
+        "VITE_GAME_ID": "local"
+      },
       "port": 5174,
       "autoPort": true
+    },
+    {
+      "name": "lab-trazado",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "lab"
+      ],
+      "port": 5180
     }
   ]
 }

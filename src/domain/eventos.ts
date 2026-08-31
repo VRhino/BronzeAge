@@ -40,8 +40,9 @@ export interface EventoDominio {
 
 /**
  * Lo que un subsistema del motor (`engine/*.ts`) empuja a su array `eventos` DENTRO de un `avanzarX`, antes de
- * que `engine/simulation.ts` le añada el contexto que el subsistema no conoce (`momento`, `tick`,
- * `asentamientoId`). Dos formas, a propósito, para que la migración por subsistema (Docs/Arquitectura/
+ * que `engine/simulation.ts` le añada el contexto que el subsistema no conoce (`momento` y `asentamientoId` —
+ * el `tick` provisional se retiró al cerrar la Fase D, doc 10 §8). Dos formas, a propósito, para que la
+ * migración por subsistema (Docs/Arquitectura/
  * 4_Plan_Evolucion_Tareas.md, Fase A5, marcador 13 subsistemas) sea de uno en uno sin tocar los demás:
  *
  * - Un `string` plano: atajo "legado", mismo comportamiento que existía antes de A5 — se envuelve como

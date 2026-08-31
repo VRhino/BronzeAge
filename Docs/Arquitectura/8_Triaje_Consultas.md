@@ -56,10 +56,11 @@ migración.
 >   nota de arriba). `viabilidadFundacion` — retirado del cliente (ver nota de arriba). `getState`/`getMapa` —
 >   no necesitaban migración, ya vivían en `GameSession`/`session/`. `getLigas` — **sin auditar todavía**, es
 >   el único ítem real de este grupo sin resolver ni verificar
-> - **→ Proyección por audiencia (5)**: sin resolver de fondo — siguen bloqueadas por C4 Slice 2 (niebla de
->   guerra, radio de visualización sin decidir en ningún doc). Lo de un asentamiento PROPIO ya viaja filtrado
->   por Facción desde C4 Slice 1; lo que falta es "último conocido" de un asentamiento AJENO, justo el caso que
->   motivó agrupar estas cinco aparte
+> - **→ Proyección por audiencia (5)**: lo de un asentamiento PROPIO ya viaja filtrado por Facción desde C4.
+>   Lo de un asentamiento AJENO ("último conocido") depende de la **niebla de guerra**, que es mecánica de
+>   juego con parámetros por definir — movida a `Mecanicas a desarrollar.md` §12, ya no es un pendiente de
+>   arquitectura. Hasta entonces la regla conservadora de C4 (nada de un rival) las cubre: no llega el
+>   asentamiento ajeno, así que no hay `info` que proyectar
 > - **→ Administración (3)**: **las tres resueltas**. `getBalance` → `GET /v1/balance` (C7).
 >   `exportarSimulacion` → `GET /admin/partidas/:gameId/exportar` (C12). `exportarMapaUnity` →
 >   `GET /admin/partidas/:gameId/exportar-unity` (C12)

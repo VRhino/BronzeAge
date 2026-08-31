@@ -68,10 +68,11 @@ function puestos(asentamiento: Asentamiento): Edificio[] {
 }
 
 describe('Mercado como zona de varias piezas', () => {
-  it('la composición por nivel es 3 / 10 / 12 piezas', () => {
-    expect(piezasEsperadas(1)).toBe(3);
-    expect(piezasEsperadas(2)).toBe(10);
-    expect(piezasEsperadas(3)).toBe(12);
+  it('la composición por nivel es 6 / 13 / 17 piezas', () => {
+    // Composición fijada en el playtest del laboratorio (2026-08-31) — ver MERCADO_PUESTOS_POR_NIVEL.
+    expect(piezasEsperadas(1)).toBe(6);
+    expect(piezasEsperadas(2)).toBe(13);
+    expect(piezasEsperadas(3)).toBe(17);
   });
 
   it('todas las formas de puesto declaradas existen en la tabla de formas', () => {

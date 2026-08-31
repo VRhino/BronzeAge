@@ -606,10 +606,11 @@ export interface DrawAsentamientoState {
   asentamiento: Asentamiento;
   /** Nombre a mostrar (el `nombre` del asentamiento o su `id`) — lo resuelve el caller. */
   etiqueta: string;
-  /** Tramos de calle urbana, en coordenadas locales — `gameStore.getTrazadoAsentamiento`. */
-  calles: { desde: Point; hasta: Point }[];
-  /** Tramos de camino rural (a Granja/Corral, en las afueras): clase aparte de la calle, más fina. */
-  caminos: { desde: Point; hasta: Point }[];
+  /** Tiradas de calle urbana, en coordenadas locales — `gameStore.getTrazadoAsentamiento`.
+   * Etapa 6: son ÁREAS (la calle ocupa suelo), no líneas sin grosor. */
+  calles: { x: number; y: number; ancho: number; alto: number }[];
+  /** Tiradas de camino rural (a Granja/Corral, en las afueras): clase aparte de la calle, se pinta más apagada. */
+  caminos: { x: number; y: number; ancho: number; alto: number }[];
   /** Rectángulo que ocupa cada edificio interno, por id, en unidades locales (esquina superior izquierda +
    * ancho/alto). Los tamaños varían por tipo y, en Granja, por nivel interno. */
   huellas: Record<string, { x: number; y: number; ancho: number; alto: number }>;
@@ -664,27 +665,22 @@ function dibujarEdificioLocal(
   }
 }
 
-/** Pinta una tanda de tramos ya resueltos por el motor. No decide ningún trazado: solo une los puntos que le
- * llegan, que siempre forman segmentos horizontales o verticales sobre las líneas de la rejilla. */
-function dibujarTramos(
+/** Pinta una tanda de tiradas de calle ya resueltas por el motor. No decide ningún trazado: solo rellena los
+ * rectángulos que le llegan. Etapa 6: la calle es SUPERFICIE, así que se rellena en vez de trazarse — que es
+ * justamente lo que el modelo de aristas no podía representar (una línea no tiene ancho). */
+function dibujarTiradas(
   ctx: CanvasRenderingContext2D,
-  tramos: { desde: Point; hasta: Point }[],
+  tiradas: { x: number; y: number; ancho: number; alto: number }[],
   aPantalla: (p: Point) => Point,
-  color: string,
-  grosor: number
+  escala: number,
+  color: string
 ): void {
-  if (tramos.length === 0) return;
-  ctx.strokeStyle = color;
-  ctx.lineWidth = grosor;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  for (const tramo of tramos) {
-    const a = aPantalla(tramo.desde);
-    const b = aPantalla(tramo.hasta);
-    ctx.moveTo(a.x, a.y);
-    ctx.lineTo(b.x, b.y);
+  if (tiradas.length === 0) return;
+  ctx.fillStyle = color;
+  for (const t of tiradas) {
+    const esquina = aPantalla({ x: t.x, y: t.y });
+    ctx.fillRect(esquina.x, esquina.y, t.ancho * escala, t.alto * escala);
   }
-  ctx.stroke();
 }
 
 /**
@@ -735,8 +731,8 @@ export function drawAsentamiento(ctx: CanvasRenderingContext2D, canvas: HTMLCanv
 
   // Trazado: caminos primero (más finos, van por debajo) y calles encima. Los tramos vienen ya resueltos del
   // motor; aquí no se decide por dónde pasa ninguno.
-  dibujarTramos(ctx, caminos, aPantalla, 'rgba(140, 118, 88, 0.55)', 1.5);
-  dibujarTramos(ctx, calles, aPantalla, 'rgba(120, 92, 58, 0.75)', 3);
+  dibujarTiradas(ctx, caminos, aPantalla, escala, 'rgba(140, 118, 88, 0.45)');
+  dibujarTiradas(ctx, calles, aPantalla, escala, 'rgba(120, 92, 58, 0.60)');
 
   // Edificios: cada uno con su huella real (varía por tipo, y por nivel interno en Granja). Se dibujan las
   // Viviendas primero para que las etiquetas de los edificios singulares queden por encima.

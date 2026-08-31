@@ -78,10 +78,10 @@ export type { EstadoMejoraEdificio } from '@motor/engine/construction';
 import {
   celdaMinimaDeEdificio,
   edificiosInternos,
+  rectangulosDeRed,
   redDeCalles,
-  segmentosDeRed,
   tamanoDeEdificio,
-  type SegmentoTrazado,
+  type RectanguloLocal,
 } from '@motor/engine/trazado';
 import { poderEscuadron } from '@motor/engine/combate';
 
@@ -374,11 +374,11 @@ export class GameStore {
    * (`engine/trazado.ts`), nada persistido.
    */
   getTrazadoAsentamiento(asentamiento: Asentamiento): {
-    calles: SegmentoTrazado[];
-    caminos: SegmentoTrazado[];
+    calles: RectanguloLocal[];
+    caminos: RectanguloLocal[];
     huellas: Record<string, { x: number; y: number; ancho: number; alto: number }>;
   } {
-    const { calles, caminos } = segmentosDeRed(redDeCalles(asentamiento.id, asentamiento.edificios));
+    const { calles, caminos } = rectangulosDeRed(redDeCalles(asentamiento.id, asentamiento.edificios));
     const huellas: Record<string, { x: number; y: number; ancho: number; alto: number }> = {};
     for (const edificio of edificiosInternos(asentamiento.edificios)) {
       const min = celdaMinimaDeEdificio(edificio);

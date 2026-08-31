@@ -113,7 +113,9 @@ el mapa de asentamiento es una espacio logico que se genera tomando en cuenta el
 ----- 29/08/2025
 issues:
 + en el motor en cuanto a calidad de codigo hay mucho magic strings cosas que se pueden pasar a constantes
-+hay que hacer revision de trazado
++ hay que hacer revision de trazado
+ideas:
++ estudiar la idea de manejar poligonoes mas complejos para bosques y zonas de influeencia y que implica
 
 
 

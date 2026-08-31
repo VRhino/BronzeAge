@@ -47,8 +47,9 @@ entregue. El aviso de viabilidad al fundar (`evaluarViabilidadFundacion`) necesi
 asentamientos para comprobar separación: mandar el resultado en vez de la entrada reduce la fuga, no la
 elimina — de dónde *no* puedes fundar se deduce dónde hay alguien.
 
-Es una decisión de diseño de niebla de guerra (**C4 Slice 2**), no un problema de transporte. Queda anotado
-aquí para que no se cuele como resuelto.
+Es una decisión de diseño de niebla de guerra (`Mecanicas a desarrollar.md` §12), no un problema de
+transporte. `evaluarViabilidadFundacion` ya se retiró del cliente por esto (C10); si vuelve como consulta
+servida, tendrá que respetar la visibilidad del jugador.
 
 ---
 

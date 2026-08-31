@@ -11,12 +11,12 @@ import { TRAZADO } from '../../constants';
 import { avanzarSimulacion } from '../simulation';
 import { createRng } from '../../worldgen';
 import {
-  aristasDePerimetro,
+  celdaMinimaDeEdificio,
   celdasDeEdificio,
   edificiosInternos,
   esDeAfueras,
   redDeCalles,
-  segmentosDeRed,
+  tamanoDeEdificio,
 } from '../trazado';
 import {
   contextoDeTest,
@@ -75,27 +75,85 @@ describe('trazado urbano dinámico', () => {
     }
   });
 
-  it('todo edificio interno toca una calle o un camino por al menos una arista de su perímetro', () => {
+  // Etapa 6 (§E6.12): con las calles sobre CELDAS, "un edificio encima de una calle" vuelve a ser posible y
+  // deja de estar garantizado por construcción. Es una de las dos garantías que pasaron de gratuitas a
+  // obligación al abandonar las aristas.
+  it('ningún edificio pisa una celda de calle', () => {
     for (const asentamiento of asentamientos) {
       const red = redDeCalles(asentamiento.id, asentamiento.edificios);
       for (const edificio of edificiosInternos(asentamiento.edificios)) {
-        const conectado = aristasDePerimetro(edificio).some((a) => red.calles.has(a) || red.caminos.has(a));
-        expect(conectado, `${edificio.tipo} (${edificio.id}) quedó sin salida a la calle`).toBe(true);
+        for (const celda of celdasDeEdificio(edificio)) {
+          const clave = `${celda.col},${celda.row}`;
+          const enRed = red.calles.has(clave) || red.caminos.has(clave);
+          expect(enRed, `${edificio.tipo} (${edificio.id}) ocupa la celda de calle ${clave}`).toBe(false);
+        }
       }
     }
   });
 
-  it('ningún tramo es diagonal y ninguno se repite', () => {
+  // Reemplaza al viejo "toca la red por alguna ARISTA de su perímetro", que se cumplía aunque al otro lado
+  // hubiera otro edificio pegado — medido: el 51% de aquella red eran calles de ancho cero, y solo el 33% de
+  // los edificios tenía delante algo por lo que se pudiera caminar (§E6.1).
+  it('todo edificio interno tiene una CELDA de calle o camino ortogonalmente adyacente', () => {
     for (const asentamiento of asentamientos) {
-      const { calles, caminos } = segmentosDeRed(redDeCalles(asentamiento.id, asentamiento.edificios));
-      const vistos = new Set<string>();
-      for (const tramo of [...calles, ...caminos]) {
-        const rectilineo = tramo.desde.x === tramo.hasta.x || tramo.desde.y === tramo.hasta.y;
-        expect(rectilineo, `tramo diagonal: ${JSON.stringify(tramo)}`).toBe(true);
-        const clave = `${tramo.desde.x},${tramo.desde.y}->${tramo.hasta.x},${tramo.hasta.y}`;
-        expect(vistos.has(clave), `tramo duplicado: ${clave}`).toBe(false);
-        vistos.add(clave);
+      const red = redDeCalles(asentamiento.id, asentamiento.edificios);
+      for (const edificio of edificiosInternos(asentamiento.edificios)) {
+        const min = celdaMinimaDeEdificio(edificio);
+        const tamano = tamanoDeEdificio(edificio);
+        let conFrente = false;
+        for (let dc = 0; dc < tamano.ancho && !conFrente; dc++) {
+          for (const row of [min.row - 1, min.row + tamano.alto]) {
+            const clave = `${min.col + dc},${row}`;
+            if (red.calles.has(clave) || red.caminos.has(clave)) conFrente = true;
+          }
+        }
+        for (let dr = 0; dr < tamano.alto && !conFrente; dr++) {
+          for (const col of [min.col - 1, min.col + tamano.ancho]) {
+            const clave = `${col},${min.row + dr}`;
+            if (red.calles.has(clave) || red.caminos.has(clave)) conFrente = true;
+          }
+        }
+        expect(conFrente, `${edificio.tipo} (${edificio.id}) quedó sin salida real a la calle`).toBe(true);
       }
+    }
+  });
+
+  // EL invariante que el modelo de aristas no podía ni formular, y el que 3D necesita de verdad: se puede ir
+  // andando de cualquier punto de la red a cualquier otro. Sale gratis por inducción (§E6.4) — las celdas de
+  // calle están en `ocupadas`, así que nadie puede partir un corredor existente, y cada edificio o ya toca la
+  // red o abre un corredor, que es un camino. Este test es lo que congela esa propiedad.
+  it('la red es un ÚNICO componente conexo, alcanzable a pie desde el Centro Urbano', () => {
+    for (const asentamiento of asentamientos) {
+      const red = redDeCalles(asentamiento.id, asentamiento.edificios);
+      const todas = new Set([...red.calles, ...red.caminos]);
+      if (todas.size === 0) continue;
+
+      const centroUrbano = edificiosInternos(asentamiento.edificios).find((e) => e.tipo === 'centroUrbano')!;
+      const minCU = celdaMinimaDeEdificio(centroUrbano);
+      const tamCU = tamanoDeEdificio(centroUrbano);
+      const arranque = [...todas].find((clave) => {
+        const [col, row] = clave.split(',').map(Number) as [number, number];
+        return col >= minCU.col - 1 && col <= minCU.col + tamCU.ancho && row >= minCU.row - 1 && row <= minCU.row + tamCU.alto;
+      });
+      expect(arranque, `${asentamiento.id}: la red no toca el Centro Urbano`).toBeDefined();
+
+      const vistas = new Set<string>([arranque!]);
+      const cola = [arranque!];
+      for (let i = 0; i < cola.length; i++) {
+        const [col, row] = cola[i]!.split(',').map(Number) as [number, number];
+        for (const [dc, dr] of [[0, -1], [1, 0], [0, 1], [-1, 0]] as [number, number][]) {
+          const vecina = `${col + dc},${row + dr}`;
+          if (!todas.has(vecina) || vistas.has(vecina)) continue;
+          vistas.add(vecina);
+          cola.push(vecina);
+        }
+      }
+
+      const huerfanas = [...todas].filter((c) => !vistas.has(c));
+      expect(
+        huerfanas.length,
+        `${asentamiento.id}: ${huerfanas.length}/${todas.size} celdas de calle no se alcanzan a pie desde el Centro Urbano (p.ej. ${huerfanas.slice(0, 5).join(' ')})`
+      ).toBe(0);
     }
   });
 

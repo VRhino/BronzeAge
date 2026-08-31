@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import type { Asentamiento, Edificio } from '../../domain/types';
 import { EDIFICIO_CATALOGO } from '../../constants';
 import { ConstruccionManualInvalidaError, estadoMejoraEdificio, mejorarEdificioManualmente } from '../construction';
+import { celdaMinimaDeEdificio, tamanoDeEdificio } from '../trazado';
 import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
 
 const SEED = 7;
@@ -137,8 +138,16 @@ describe('mejorarEdificioManualmente — éxito', () => {
     expect(granjaMejorada.nivelInterno).toBe(2);
     expect(resultado.almacen.madera!.cantidad).toBe(1000 - costoMejora.madera!);
     expect(resultado.almacen.piedra!.cantidad).toBe(1000 - costoMejora.piedra!);
-    // Nivel 2 mide 2x3 frente a 2x2 en nivel 1 (EDIFICIO_CATALOGO.granja.niveles) — obliga a mudarla.
-    expect(granjaMejorada.posicion).not.toEqual(granja.posicion);
+    // Nivel 2 es más alto que nivel 1 (EDIFICIO_CATALOGO.granja.niveles) — obliga a mudarla.
+    //
+    // Se compara la HUELLA (celda mínima + tamaño), no `posicion`. Hasta el Paso 1 de la Etapa 6 bastaba con
+    // `posicion` porque con la rejilla original una huella de alto par y otra de alto impar no podían
+    // compartir centro (habría exigido media celda); al doblar la resolución (§E6.11) sí pueden, y la Granja
+    // se muda una celda hacia arriba conservando exactamente el mismo centro. El edificio SÍ se movió — lo que
+    // dejó de ser cierto es que moverse implique cambiar de `posicion`.
+    const antes = celdaMinimaDeEdificio(granja);
+    const despues = celdaMinimaDeEdificio(granjaMejorada);
+    expect({ ...despues, ...tamanoDeEdificio(granjaMejorada) }).not.toEqual({ ...antes, ...tamanoDeEdificio(granja) });
   });
 });
 

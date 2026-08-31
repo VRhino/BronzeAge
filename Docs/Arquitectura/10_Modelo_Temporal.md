@@ -9,6 +9,22 @@ Es una **referencia, no un plan**. Los hitos que la ejecutan son D1–D6 (ver [d
 y [doc 4](4_Plan_Evolucion_Tareas.md)). El criterio de "qué es regla y qué es simulación" vive en el
 [doc 9](9_Reglas_vs_Simulacion.md); este documento es su eje temporal.
 
+> **Estado a 2026‑08‑30 (verificado contra `src/`).** Fase D **cerrada**: D1–D6 y el cierre de contrato están
+> implementados y en verde (685 tests). En el código: `SIMULACION` en `constants.ts`; `instanteDeTick` deriva
+> el `instante` del `tick` y nunca se almacena; `domain/tiempo.ts` con `Instante`/`Duracion` branded; el guard
+> [`autoridadTemporal.test.ts`](../../src/__tests__/autoridadTemporal.test.ts) activo; snapshot migrado hasta
+> **v5** (`tick` fuera del contrato de eventos); reloj de mundo + catch‑up en `RunnerDePartida`. Los dos bugs
+> de §7 están cerrados con regresión congelada.
+>
+> **Pendiente, y fuera del alcance de D a propósito:**
+> - **La pasada de rebalanceo en tiempo** (§8, último párrafo). D1–D6 preservaron los valores; con 1 tick =
+>   1 min real varios siguen calibrados para "abstracto" (p. ej. población compuesta ~12 %/min). Es el
+>   siguiente esfuerzo, apoyado en el laboratorio batch.
+> - **El scheduler de comandos programados** (D5): asedios formales y caravanas planificadas. Aterriza con su
+>   primera mecánica de Fase 1+, no antes.
+> - **El log de comandos** (§5): queda para Fase E (auditoría); `PartidaExportada.estadoRng` se mantiene sin
+>   más inversión hasta que un incidente real lo pida.
+
 ---
 
 ## 1. El error de vocabulario que hay que deshacer primero

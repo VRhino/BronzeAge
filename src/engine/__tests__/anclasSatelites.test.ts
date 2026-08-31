@@ -9,16 +9,21 @@
 // etapa, solo se re-verifica que sigue funcionando con el nuevo mecanismo de creación).
 import { describe, expect, it } from 'vitest';
 import type { Asentamiento, Edificio } from '../../domain/types';
-import { REJILLA_ASENTAMIENTO, ZONA_INFLUENCIA } from '../../constants';
+import { REJILLA_ASENTAMIENTO, TRAZADO, ZONA_INFLUENCIA } from '../../constants';
 import { anadirEdificioManualmente } from '../construction';
 import {
   celdaMinimaDeEdificio,
   celdasDeEdificio,
   crearAnclaNueva,
   direccionesRotadas,
+  puntoDeRectangulo,
+  radioMaximoRanura,
   sitioParaTipo as sitioTrazado,
-  sitiosParaTipo as sitiosTrazado,
+  sitiosPorAtraccionDura,
+  type RedDeCalles,
   tamanoDeEdificio,
+  tamanoEdificio,
+  tiposAfines,
   tipoAnclaParaCategoria,
 } from '../trazado';
 import { avanzarSimulacion } from '../simulation';
@@ -56,17 +61,54 @@ function porTipo(asentamiento: Asentamiento, tipo: string): Edificio[] {
   return asentamiento.edificios.filter((e) => e.tipo === tipo);
 }
 
-/** Un edificio 1x1 sin uso mecánico, solo para ocupar celdas y forzar saturación/estrechez en los tests —
- * mismo patrón que un edificio "de verdad", pero su tipo (`vivienda`) es irrelevante aquí. */
+/** Huella del edificio de relleno. `ocupante` planta una Vivienda, que es el tipo más pequeño del catálogo —
+ * pero desde el Paso 1 de la Etapa 6 (§E6.11) YA NO mide una celda, sino `TAMANO_OCUPANTE`.
+ *
+ * Es justo lo que rompió estos tests al reescalar: `ocupante(col, row)` prometía "ocupa ESTA celda", los
+ * bucles de relleno iteraban celda a celda contando con eso, y al doblarse la huella cada Vivienda se
+ * desbordaba sobre sus vecinas — incluido el hueco que el test dejaba libre a propósito, que quedaba tapado.
+ * El síntoma era "0 candidatos", que no dice nada de la causa. Los rellenos recorren ahora la rejilla A PASOS
+ * de esta huella, y `ocupante` recibe la celda MÍNIMA del rectángulo, no "su" celda. */
+const TAMANO_OCUPANTE = tamanoEdificio('vivienda');
+
+/** Un edificio de relleno sin uso mecánico, anclado por su celda MÍNIMA — solo para ocupar suelo y forzar
+ * saturación/estrechez en los tests. Su tipo (`vivienda`) es irrelevante; lo que importa es su huella. */
 function ocupante(col: number, row: number, id: string): Edificio {
-  const T = REJILLA_ASENTAMIENTO.tamanoCelda;
   return {
     id,
     tipo: 'vivienda',
-    posicion: { x: (col + 0.5) * T, y: (row + 0.5) * T },
+    posicion: puntoDeRectangulo({ col, row }, TAMANO_OCUPANTE),
     estado: 'activo',
     ambito: 'asentamiento',
   };
+}
+
+/** Rellena de `ocupante`s el rectángulo `[minCol, maxCol] x [minRow, maxRow]`, saltando cualquier posición
+ * cuya HUELLA COMPLETA solape alguno de los rectángulos `libres`. Recorre a pasos del tamaño del ocupante,
+ * no celda a celda: con huellas mayores que una celda, iterar por celda produce solapes y desbordes. */
+function rellenar(
+  minCol: number,
+  maxCol: number,
+  minRow: number,
+  maxRow: number,
+  libres: { minCol: number; minRow: number; ancho: number; alto: number }[]
+): Edificio[] {
+  const relleno: Edificio[] = [];
+  let contador = 0;
+  for (let col = minCol; col <= maxCol; col += TAMANO_OCUPANTE.ancho) {
+    for (let row = minRow; row <= maxRow; row += TAMANO_OCUPANTE.alto) {
+      const solapa = libres.some(
+        (l) =>
+          col < l.minCol + l.ancho &&
+          col + TAMANO_OCUPANTE.ancho > l.minCol &&
+          row < l.minRow + l.alto &&
+          row + TAMANO_OCUPANTE.alto > l.minRow
+      );
+      if (solapa) continue;
+      relleno.push(ocupante(col, row, `relleno-${contador++}`));
+    }
+  }
+  return relleno;
 }
 
 describe('Etapa 5 — construir un edificio de una categoría con ancla garantiza el ancla primero', () => {
@@ -187,17 +229,18 @@ describe('Etapa 5 — árbol único de anclas, a nivel de motor (trazado.ts)', (
     const T = REJILLA_ASENTAMIENTO.tamanoCelda;
 
     // Rodea Centro Urbano por completo (radio generoso: cubre cualquier rotación posible de las 8 direcciones)
-    // para que NINGUNA de sus ranuras tenga hueco real.
-    const relleno: Edificio[] = [];
-    let contador = 0;
-    const margen = 20;
-    for (let col = cuMin.col - margen; col <= cuMin.col + cuTamano.ancho + margen; col++) {
-      for (let row = cuMin.row - margen; row <= cuMin.row + cuTamano.alto + margen; row++) {
-        const enCU = col >= cuMin.col && col < cuMin.col + cuTamano.ancho && row >= cuMin.row && row < cuMin.row + cuTamano.alto;
-        if (enCU) continue;
-        relleno.push(ocupante(col, row, `relleno-${contador++}`));
-      }
-    }
+    // para que NINGUNA de sus ranuras tenga hueco real. El margen se DERIVA del radio máximo que llega a
+    // explorar una ranura (`RADIO_MAXIMO_RANURA`, engine/trazado.ts): con un literal, el Paso 1 de la Etapa 6
+    // (§E6.11) lo dejó corto —el radio de búsqueda se dobló y el relleno no— y Centro Urbano seguía
+    // encontrando hueco justo por fuera, así que nunca se marcaba como saturado.
+    const margen = radioMaximoRanura() + cuTamano.ancho;
+    const relleno = rellenar(
+      cuMin.col - margen,
+      cuMin.col + cuTamano.ancho + margen,
+      cuMin.row - margen,
+      cuMin.row + cuTamano.alto + margen,
+      [{ minCol: cuMin.col, minRow: cuMin.row, ancho: cuTamano.ancho, alto: cuTamano.alto }]
+    );
     // Una segunda ancla, bien lejos del relleno, con sitio de sobra alrededor — debe ser la que reciba la
     // ancla nueva una vez Centro Urbano quede descartado.
     const mercadoLejano: Edificio = {
@@ -250,75 +293,106 @@ describe('Etapa 4 (sin cambios) — desempate por máximo borde compartido', () 
     const mercadoMin = celdaMinimaDeEdificio(mercado);
     const mercadoTamano = tamanoDeEdificio(mercado);
 
-    // Puesto de Mercado forma 2 (3x2, ver PUESTO_MERCADO_FORMA) atraído al Mercado recién construido.
+    // Puesto de Mercado forma 2 (2x6, ver PUESTO_MERCADO_FORMA) atraído al Mercado recién construido. Desde
+    // 2026-08-31 el puesto puede salir girado si su lado largo pega mejor al Mercado — el test usa `sitio.rotado`.
     const sitio = sitioTrazado(conMercado, conMercado.edificios, 'puestoMercado', 2);
     expect(sitio).not.toBeNull();
     const puestoMin = celdaMinimaDeEdificio({ tipo: 'puestoMercado', nivelInterno: 2, posicion: sitio!.punto, rotado: sitio!.rotado });
     const puestoTamano = tamanoDeEdificio({ tipo: 'puestoMercado', nivelInterno: 2, rotado: sitio!.rotado });
 
-    const tocaArriba = puestoMin.row + puestoTamano.alto === mercadoMin.row;
-    const tocaAbajo = mercadoMin.row + mercadoTamano.alto === puestoMin.row;
-    const tocaIzq = puestoMin.col + puestoTamano.ancho === mercadoMin.col;
-    const tocaDer = mercadoMin.col + mercadoTamano.ancho === puestoMin.col;
-    expect(tocaArriba || tocaAbajo || tocaIzq || tocaDer).toBe(true);
+    // Etapa 6 (§E6.7): el Mercado siembra su anillo de calle, así que "pegado al ancla" YA NO es tocarla —
+    // es mirarla desde el otro lado de su calle. La referencia del desempate pasa a ser el ancla EXPANDIDA
+    // por su anillo, que es contra lo que mide `sitiosPorAtraccionDura`.
+    const anillo = TRAZADO.anchoCalle;
+    const anclaMin = { col: mercadoMin.col - anillo, row: mercadoMin.row - anillo };
+    const anclaTamano = { ancho: mercadoTamano.ancho + anillo * 2, alto: mercadoTamano.alto + anillo * 2 };
+
+    const tocaArriba = puestoMin.row + puestoTamano.alto === anclaMin.row;
+    const tocaAbajo = anclaMin.row + anclaTamano.alto === puestoMin.row;
+    const tocaIzq = puestoMin.col + puestoTamano.ancho === anclaMin.col;
+    const tocaDer = anclaMin.col + anclaTamano.ancho === puestoMin.col;
+    expect(
+      tocaArriba || tocaAbajo || tocaIzq || tocaDer,
+      'el puesto debería quedar al otro lado del anillo de calle del Mercado'
+    ).toBe(true);
 
     // En el eje de contacto, el candidato elegido cubre TODO el lado corto compartido — la prueba directa de
-    // que el desempate por borde ganó al primer hueco que tocara `hueco === 0` sin más criterio.
+    // que el desempate por borde ganó al primer hueco que empatara en distancia sin más criterio.
     if (tocaArriba || tocaAbajo) {
-      const solape = Math.min(puestoMin.col + puestoTamano.ancho, mercadoMin.col + mercadoTamano.ancho) - Math.max(puestoMin.col, mercadoMin.col);
-      expect(solape).toBe(Math.min(puestoTamano.ancho, mercadoTamano.ancho));
+      const solape = Math.min(puestoMin.col + puestoTamano.ancho, anclaMin.col + anclaTamano.ancho) - Math.max(puestoMin.col, anclaMin.col);
+      expect(solape).toBe(Math.min(puestoTamano.ancho, anclaTamano.ancho));
     } else {
-      const solape = Math.min(puestoMin.row + puestoTamano.alto, mercadoMin.row + mercadoTamano.alto) - Math.max(puestoMin.row, mercadoMin.row);
-      expect(solape).toBe(Math.min(puestoTamano.alto, mercadoTamano.alto));
+      const solape = Math.min(puestoMin.row + puestoTamano.alto, anclaMin.row + anclaTamano.alto) - Math.max(puestoMin.row, anclaMin.row);
+      expect(solape).toBe(Math.min(puestoTamano.alto, anclaTamano.alto));
     }
   });
 });
 
 describe('Etapa 4 (sin cambios) — orientación intercambiable (ancho↔alto)', () => {
   it('ofrece la huella girada cuando es la única que cabe, y coloca sin invadir nada', () => {
-    const { asentamiento, faccion, mapa } = base(2);
-    const conBarracon = anadirEdificioManualmente(asentamiento, faccion, 'gobernador', 'barracon', [], mapa, undefined, RECLAMOS_VACIOS);
-    const plazaDeArmas = porTipo(conBarracon, 'plazaDeArmas')[0]!;
-    const plazaMin = celdaMinimaDeEdificio(plazaDeArmas);
-    const plazaTamano = tamanoDeEdificio(plazaDeArmas); // 2x2
-
-    // Hueco libre pegado a la derecha de la Plaza de Armas: 2 columnas x 4 filas. Carpintería (4x2) no cabe
-    // tal cual (4 de ancho no entra en 2 columnas), solo girada (2x4).
-    const huecoMinCol = plazaMin.col + plazaTamano.ancho;
-    const huecoMinRow = plazaMin.row - 1;
-    const margen = 9;
-    const relleno: Edificio[] = [];
-    let contador = 0;
-    for (let col = plazaMin.col - margen; col <= plazaMin.col + plazaTamano.ancho + margen; col++) {
-      for (let row = plazaMin.row - margen; row <= plazaMin.row + plazaTamano.alto + margen; row++) {
-        const enPlaza = col >= plazaMin.col && col < plazaMin.col + plazaTamano.ancho && row >= plazaMin.row && row < plazaMin.row + plazaTamano.alto;
-        const enHueco = col >= huecoMinCol && col < huecoMinCol + 2 && row >= huecoMinRow && row < huecoMinRow + 4;
-        if (enPlaza || enHueco) continue;
-        relleno.push(ocupante(col, row, `relleno-${contador++}`));
-      }
-    }
-    const edificios = [...conBarracon.edificios, ...relleno];
-
-    const candidatos = sitiosTrazado(conBarracon, edificios, 'carpinteria');
-    expect(candidatos.length).toBeGreaterThan(0);
-    const elegido = candidatos[0]!;
-    expect(elegido.rotado).toBe(true);
-
-    const carpinteriaGirada: Edificio = {
-      id: 'carpinteria-girada-test',
-      tipo: 'carpinteria',
-      posicion: elegido.punto,
+    // Test UNITARIO sobre `sitiosPorAtraccionDura`, con `ocupadas` y `red` construidas a mano.
+    //
+    // Antes montaba el escenario con una simulación real y un relleno de edificios. Eso dejó de funcionar en la
+    // Etapa 6 y por una razón que vale la pena dejar escrita: con las calles sobre CELDAS, `redDeCalles` planta
+    // calles DENTRO del espacio libre (corredores de los propios edificios de relleno), así que un "hueco de
+    // exactamente la huella girada" ya no se puede construir desde fuera — medido, 21 de sus 32 celdas
+    // aparecían ocupadas por calle. No es un fallo del motor: es la calle costando suelo, que es justo el
+    // objetivo del rediseño. Lo que dejó de ser posible es fabricar ese escenario indirectamente.
+    const ancla: Edificio = {
+      id: 'ancla-rotacion',
+      tipo: 'plazaDeArmas',
+      posicion: puntoDeRectangulo({ col: 0, row: 0 }, tamanoEdificio('plazaDeArmas')),
       estado: 'activo',
       ambito: 'asentamiento',
-      rotado: true,
     };
-    const ocupadas = new Set(edificios.flatMap((e) => celdasDeEdificio(e).map((c) => `${c.col},${c.row}`)));
-    for (const c of celdasDeEdificio(carpinteriaGirada)) {
-      expect(ocupadas.has(`${c.col},${c.row}`)).toBe(false);
+    const anclaMin = celdaMinimaDeEdificio(ancla);
+    const anclaTamano = tamanoDeEdificio(ancla);
+    const anillo = TRAZADO.anchoCalle;
+
+    const carpinteria = tamanoEdificio('carpinteria');
+    // El hueco tiene EXACTAMENTE la huella girada: la orientación normal no entra (su ancho no cabe en estas
+    // columnas), solo la girada. Va al otro lado del anillo de calle del ancla (§E6.7).
+    const huecoAncho = carpinteria.alto;
+    const huecoAlto = carpinteria.ancho;
+    const huecoMinCol = anclaMin.col + anclaTamano.ancho + anillo;
+    const huecoMinRow = anclaMin.row - Math.floor((huecoAlto - anclaTamano.alto) / 2);
+
+    const dentro = (col: number, row: number, minCol: number, minRow: number, ancho: number, alto: number) =>
+      col >= minCol && col < minCol + ancho && row >= minRow && row < minRow + alto;
+
+    // Red: SOLO el anillo del ancla. Al construirla a mano, nada puede aparecer donde no se quiere.
+    const red: RedDeCalles = { calles: new Set(), caminos: new Set() };
+    for (let col = anclaMin.col - anillo; col < anclaMin.col + anclaTamano.ancho + anillo; col++) {
+      for (let row = anclaMin.row - anillo; row < anclaMin.row + anclaTamano.alto + anillo; row++) {
+        if (dentro(col, row, anclaMin.col, anclaMin.row, anclaTamano.ancho, anclaTamano.alto)) continue;
+        red.calles.add(`${col},${row}`);
+      }
+    }
+
+    // Ocupado: todo el entorno menos el ancla, su anillo y el hueco.
+    const ocupadas = new Set<string>();
+    const margen = huecoAlto + anclaTamano.alto + 8;
+    for (let col = anclaMin.col - margen; col <= anclaMin.col + anclaTamano.ancho + margen; col++) {
+      for (let row = anclaMin.row - margen; row <= anclaMin.row + anclaTamano.alto + margen; row++) {
+        if (dentro(col, row, anclaMin.col - anillo, anclaMin.row - anillo, anclaTamano.ancho + anillo * 2, anclaTamano.alto + anillo * 2)) continue;
+        if (dentro(col, row, huecoMinCol, huecoMinRow, huecoAncho, huecoAlto)) continue;
+        ocupadas.add(`${col},${row}`);
+      }
+    }
+
+    const candidatos = sitiosPorAtraccionDura(ancla, carpinteria, ocupadas, red, true);
+    expect(candidatos.length, 'el hueco girado debería ofrecer al menos un candidato').toBeGreaterThan(0);
+    const elegido = candidatos[0]!;
+    expect(elegido.rotado, 'solo la huella GIRADA cabe en un hueco de esas columnas').toBe(true);
+
+    // Y no invade nada: sus celdas caen todas dentro del hueco que se dejó libre.
+    const colocada: Edificio = { ...ancla, id: 'carpinteria-girada', tipo: 'carpinteria', posicion: elegido.punto, rotado: true };
+    for (const c of celdasDeEdificio(colocada)) {
+      expect(ocupadas.has(`${c.col},${c.row}`), `pisa la celda ocupada ${c.col},${c.row}`).toBe(false);
+      expect(red.calles.has(`${c.col},${c.row}`), `pisa la celda de calle ${c.col},${c.row}`).toBe(false);
     }
   });
 });
-
 describe('Etapa 5 — compás + eje rotado por asentamiento (mismo mecanismo, aplicado a las 8 ranuras)', () => {
   it('las 8 direcciones se desvían de los ángulos exactos, y varían entre asentamientos', () => {
     const direccionesA = direccionesRotadas('asentamiento-prueba-eje-a');
@@ -330,5 +404,88 @@ describe('Etapa 5 — compás + eje rotado por asentamiento (mismo mecanismo, ap
       expect(resto).toBeGreaterThan(0);
     }
     expect(direccionesA.map((d) => d.angulo)).not.toEqual(direccionesB.map((d) => d.angulo));
+  });
+});
+
+describe('Regla de afinidad (2026-08-31) — desempate por vecindad con edificios del mismo tipo/categoría', () => {
+  it('tiposAfines: mismo tipo o misma categoría funcional; un ancla nunca sale afín a su satélite', () => {
+    expect(tiposAfines('vivienda', 'vivienda')).toBe(true);
+    expect(tiposAfines('puestoMercado', 'puestoMercado')).toBe(true);
+    // Industria: fundición/curtiduría/armería son afines entre sí aunque sean tipos distintos.
+    expect(tiposAfines('fundicion', 'curtiduria')).toBe(true);
+    expect(tiposAfines('fundicion', 'armeria')).toBe(true);
+    expect(tiposAfines('armeria', 'curtiduria')).toBe(true);
+    // Categorías distintas: no afines.
+    expect(tiposAfines('vivienda', 'fundicion')).toBe(false);
+    expect(tiposAfines('barracon', 'mercado')).toBe(false);
+    // Los tipos de ancla puros (Centro Urbano, Plaza de Armas…) no están en CATEGORIA_POR_TIPO, así que un
+    // satélite nunca sale afín a su ancla por esta vía — la adyacencia al ancla ya es el criterio primario.
+    expect(tiposAfines('vivienda', 'centroUrbano')).toBe(false);
+    expect(tiposAfines('barracon', 'plazaDeArmas')).toBe(false);
+  });
+
+  it('entre dos huecos igual de pegados al ancla, elige el que toca a los suyos', () => {
+    // Mercado 6x4 en el origen, con su anillo de calle sembrado a mano (nada aparece donde no se quiere).
+    const mercado: Edificio = {
+      id: 'mercado-afinidad',
+      tipo: 'mercado',
+      posicion: puntoDeRectangulo({ col: 0, row: 0 }, tamanoEdificio('mercado')),
+      estado: 'activo',
+      ambito: 'asentamiento',
+    };
+    const anclaMin = celdaMinimaDeEdificio(mercado);
+    const anclaTam = tamanoDeEdificio(mercado);
+
+    const red: RedDeCalles = { calles: new Set(), caminos: new Set() };
+    for (let dc = -1; dc <= anclaTam.ancho; dc++) {
+      red.calles.add(`${anclaMin.col + dc},${anclaMin.row - 1}`);
+      red.calles.add(`${anclaMin.col + dc},${anclaMin.row + anclaTam.alto}`);
+    }
+    for (let dr = 0; dr < anclaTam.alto; dr++) {
+      red.calles.add(`${anclaMin.col - 1},${anclaMin.row + dr}`);
+      red.calles.add(`${anclaMin.col + anclaTam.ancho},${anclaMin.row + dr}`);
+    }
+
+    // `ocupadas` = lo que ve toda colocación real: huella del ancla + celdas de la red (en el motor las une
+    // `sueloOcupado`). Sin las celdas de red, `candidatosLibres` propondría huecos ENCIMA de la calle.
+    const ocupadas = new Set<string>();
+    for (let dc = 0; dc < anclaTam.ancho; dc++) {
+      for (let dr = 0; dr < anclaTam.alto; dr++) ocupadas.add(`${anclaMin.col + dc},${anclaMin.row + dr}`);
+    }
+    for (const clave of red.calles) ocupadas.add(clave);
+
+    // Un puesto (2x2) YA construido pegado a la cara sur, al otro lado del anillo de calle.
+    const puestoTam = tamanoEdificio('puestoMercado', 3); // forma 2x2
+    const existenteMin = { col: anclaMin.col, row: anclaMin.row + anclaTam.alto + 1 };
+    const celdasAfines = new Set<string>();
+    for (let dc = 0; dc < puestoTam.ancho; dc++) {
+      for (let dr = 0; dr < puestoTam.alto; dr++) {
+        const clave = `${existenteMin.col + dc},${existenteMin.row + dr}`;
+        ocupadas.add(clave);
+        celdasAfines.add(clave);
+      }
+    }
+
+    const tocaAfin = (punto: { x: number; y: number }): boolean => {
+      const min = celdaMinimaDeEdificio({ tipo: 'puestoMercado', nivelInterno: 3, posicion: punto, rotado: false });
+      for (let dc = 0; dc < puestoTam.ancho; dc++) {
+        for (let dr = 0; dr < puestoTam.alto; dr++) {
+          for (const [ec, er] of [[0, -1], [1, 0], [0, 1], [-1, 0]] as const) {
+            if (celdasAfines.has(`${min.col + dc + ec},${min.row + dr + er}`)) return true;
+          }
+        }
+      }
+      return false;
+    };
+
+    const sinAfinidad = sitiosPorAtraccionDura(mercado, puestoTam, ocupadas, red, false, false);
+    const conAfinidad = sitiosPorAtraccionDura(mercado, puestoTam, ocupadas, red, false, false, celdasAfines);
+
+    // Hay elección real: muchos huecos igual de válidos alrededor del Mercado.
+    expect(sinAfinidad.length).toBeGreaterThan(6);
+    // Con la regla de afinidad, el hueco elegido comparte lado con el puesto ya construido...
+    expect(tocaAfin(conAfinidad[0]!.punto)).toBe(true);
+    // ...y sin la regla NO lo hacía (el desempate lo decidía solo la semilla determinista).
+    expect(tocaAfin(sinAfinidad[0]!.punto)).toBe(false);
   });
 });

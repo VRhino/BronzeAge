@@ -6,6 +6,7 @@ import {
   EXTRACCION_MAXIMOS,
   EXTRACTOR_DESEMPATE,
   LINEAS_PRODUCCION,
+  CARPINTERIA_ZONA,
   MERCADO_PUESTOS_POR_NIVEL,
   NECESIDADES,
   NIVEL_ASENTAMIENTO,
@@ -342,6 +343,10 @@ function crearPuestosDeMercado(
       ambito: 'asentamiento',
       // En un puesto `nivelInterno` no es progresión: identifica su FORMA (ver `PUESTO_MERCADO_FORMA`).
       nivelInterno: forma,
+      // `sitioEnTrazado` puede devolver la forma GIRADA si pega mejor al Mercado (2026-08-31: `puestoMercado`
+      // salió de `TIPOS_SIN_ROTACION`). `posicion` ya está calculada para esa orientación, así que hay que
+      // persistir `rotado` o `tamanoDeEdificio` la leería con la huella sin girar y la pieza se solaparía.
+      ...(sitio.rotado ? { rotado: true } : {}),
     });
   }
   return nuevos;
@@ -361,7 +366,7 @@ function crearTalleresDeCarpinteria(asentamiento: Pick<Asentamiento, 'id' | 'rad
   let contador = existentes.length;
   const nuevos: Edificio[] = [];
 
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < CARPINTERIA_ZONA.talleres; i++) {
     const sitio = sitioEnTrazado(asentamiento, [...existentes, ...nuevos], 'tallerCarpinteria');
     if (!sitio) continue;
     let id = `edificio-${asentamiento.id}-${contador++}`;

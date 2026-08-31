@@ -38,8 +38,10 @@ export interface ContextoComando {
    * Fase D / doc 10). Ni el comando ni el llamador lo pasan: es función del `tick` y de nada más — el reloj
    * de pared no entra en el estado de partida. Es con lo que se fechan los campos `*En: Instante`. */
   instante: Instante;
-  /** El mismo instante en ISO 8601, para fechar eventos (`EventoDominio.momento`). Redundante a propósito —
-   * ver `ContextoSimulacion.momento`; D4 lo unifica. */
+  /** El mismo instante en ISO 8601, para fechar eventos (`EventoDominio.momento`). Redundante con `instante`
+   * a propósito y de forma permanente: el núcleo puro no puede construir un `Date` (`isoDeInstante` vive en
+   * `session/estado.ts`), así que quien ejecuta el comando lo pasa ya formateado — mismo criterio que
+   * `ContextoSimulacion.momento`. */
   momento: string;
   actor: ActorId;
   rng: RandomFn;

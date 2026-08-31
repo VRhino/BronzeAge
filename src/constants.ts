@@ -235,12 +235,12 @@ export const EDIFICIO_CATALOGO = {
     produccionBaseTrigo: 15,
     trabajadoresRequeridos: 4,
     niveles: {
-      1: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 15, tamano: { ancho: 2, alto: 2 } },
+      1: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 15, tamano: { ancho: 4, alto: 4 } },
       // Piedra añadida a las mejoras (Doc Fase_0_6, a petición del usuario): antes 100% madera. Sin gate de
       // nivel de asentamiento — las 4 mejoras siguen alcanzables estando en nivel 1.
-      2: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 22.5, tamano: { ancho: 2, alto: 3 }, costoMejora: { madera: 60, piedra: 20 } },
-      3: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 30, tamano: { ancho: 4, alto: 3 }, costoMejora: { madera: 120, piedra: 40 } },
-      4: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 45, tamano: { ancho: 6, alto: 6 }, costoMejora: { madera: 240, piedra: 80 } },
+      2: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 22.5, tamano: { ancho: 4, alto: 6 }, costoMejora: { madera: 60, piedra: 20 } },
+      3: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 30, tamano: { ancho: 8, alto: 6 }, costoMejora: { madera: 120, piedra: 40 } },
+      4: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 45, tamano: { ancho: 12, alto: 12 }, costoMejora: { madera: 240, piedra: 80 } },
     } as Record<number, NivelEdificioTransformacion>,
   },
   cantera: { costo: { madera: 20 }, tiempoConstruccionMinutos: 5, produccionBasePiedra: 5, trabajadoresRequeridos: 4 },
@@ -698,43 +698,75 @@ export const SITIO = {
  * para que ningún edificio colocado por `sitioEnBarrio` quede jamás fuera del área dibujada.
  */
 export const REJILLA_ASENTAMIENTO = {
-  tamanoCelda: 6,
+  /**
+   * Lado de una celda en unidades locales. **6 → 3 en el Paso 1 de la Etapa 6** (doc trazado §E6.11): la
+   * rejilla se discretiza al DOBLE de resolución y todas las huellas de `EDIFICIO_TAMANO` se doblan a la vez,
+   * de modo que el tamaño FÍSICO de cada edificio no cambia — una Vivienda sigue midiendo 6 unidades locales,
+   * solo que ahora son 2x2 celdas en vez de 1x1.
+   *
+   * Para qué: con las calles sobre CELDAS (Etapa 6) una calle necesita ancho propio, y a la resolución
+   * anterior el ancho mínimo posible era una Vivienda entera. Al doblar la resolución, `anchoCalle = 1` mide
+   * media Vivienda, que es la proporción buscada.
+   *
+   * La identidad `punto = (col + ancho/2) · tamanoCelda` se conserva EXACTA al doblar ambos a la vez
+   * (`(2·col + 2·ancho/2) · 3 = (col + ancho/2) · 6`), así que `Edificio.posicion` —que está persistido en
+   * unidades locales— no se mueve y **no hace falta migrar ninguna partida**. Congelado en
+   * `engine/__tests__/escalaRejilla.test.ts` con una tabla generada antes del cambio.
+   */
+  tamanoCelda: 3,
   radioMapa: 150,
 };
 
 /**
  * Huella de cada tipo de edificio en la rejilla local, en celdas (a petición del usuario). Un tipo ausente
- * mide 1x1 — el caso por defecto (Vivienda, Leñera). Granja NO está aquí: es el único tipo cuya huella cambia
- * con el nivel interno, y vive en `EDIFICIO_CATALOGO.granja.niveles[n].tamano`.
+ * mide `EDIFICIO_TAMANO_POR_DEFECTO` — el caso por defecto (Vivienda, Leñera, las minas). Granja NO está aquí:
+ * es el único tipo cuya huella cambia con el nivel interno, y vive en
+ * `EDIFICIO_CATALOGO.granja.niveles[n].tamano`.
  *
  * Se lee siempre a través de `tamanoEdificio` (engine/trazado.ts), nunca directo, para que el caso de Granja
  * quede resuelto en un solo sitio.
+ *
+ * **Todos los valores se doblaron en el Paso 1 de la Etapa 6** (doc trazado §E6.11), a la vez que
+ * `REJILLA_ASENTAMIENTO.tamanoCelda` pasaba de 6 a 3: el tamaño FÍSICO no cambia, solo la resolución a la que
+ * se discretiza. Los comentarios que mencionan medidas ("2x2", "3x2") siguen refiriéndose a la rejilla
+ * ORIGINAL, que es la unidad en la que se acordaron con el usuario.
  */
 export const EDIFICIO_TAMANO: Record<string, { ancho: number; alto: number }> = {
-  centroUrbano: { ancho: 3, alto: 3 },
+  centroUrbano: { ancho: 6, alto: 6 },
   // 5x4 → 4x2 (Etapa 3, §9): Carpintería pasa a ser la PIEZA PRINCIPAL de su propia zona de tres piezas — los
   // otros dos talleres (`tallerCarpinteria`) ocupan el resto de lo que antes era un bloque monolítico único.
-  carpinteria: { ancho: 4, alto: 2 },
-  fundicion: { ancho: 2, alto: 2 },
-  curtiduria: { ancho: 2, alto: 2 },
-  armeria: { ancho: 2, alto: 3 },
-  barracon: { ancho: 2, alto: 2 },
-  galeriaDeTiro: { ancho: 2, alto: 4 },
-  mercado: { ancho: 3, alto: 2 },
-  palacio: { ancho: 4, alto: 4 },
-  corral: { ancho: 4, alto: 3 },
-  almacen: { ancho: 2, alto: 1 },
-  // Anclas y satélites, Etapa 3 (§5.1/§6): las tres anclas nuevas miden 2x2.
-  plaza: { ancho: 2, alto: 2 },
-  plazaDeArmas: { ancho: 2, alto: 2 },
-  patioDeGremios: { ancho: 2, alto: 2 },
-  // Taller de carpintería (§9): 2x2, igual que las otras piezas satélite pequeñas.
-  tallerCarpinteria: { ancho: 2, alto: 2 },
-  // Variedad de anclas residenciales (Etapa 4, punto 4): pozo 1x1 (marcador mínimo), parque 3x2 (el único no
-  // cuadrado de los tres, ejercita la orientación intercambiable del punto 1 también en anclas).
-  pozo: { ancho: 1, alto: 1 },
-  parque: { ancho: 3, alto: 2 },
+  carpinteria: { ancho: 8, alto: 4 },
+  fundicion: { ancho: 4, alto: 4 },
+  curtiduria: { ancho: 4, alto: 4 },
+  armeria: { ancho: 4, alto: 6 },
+  barracon: { ancho: 4, alto: 4 },
+  galeriaDeTiro: { ancho: 4, alto: 8 },
+  mercado: { ancho: 6, alto: 4 },
+  palacio: { ancho: 8, alto: 8 },
+  corral: { ancho: 8, alto: 6 },
+  almacen: { ancho: 4, alto: 2 },
+  // Anclas y satélites, Etapa 3 (§5.1/§6): las tres anclas nuevas miden 2x2 de la rejilla original.
+  plaza: { ancho: 4, alto: 4 },
+  plazaDeArmas: { ancho: 4, alto: 4 },
+  patioDeGremios: { ancho: 4, alto: 4 },
+  // Taller de carpintería (§9): igual que las otras piezas satélite pequeñas.
+  tallerCarpinteria: { ancho: 4, alto: 4 },
+  // Variedad de anclas residenciales (Etapa 4, punto 4): pozo el marcador mínimo (1x1 original), parque el
+  // único no cuadrado de los tres (3x2 original), que ejercita la orientación intercambiable también en anclas.
+  pozo: { ancho: 2, alto: 2 },
+  parque: { ancho: 6, alto: 4 },
 };
+
+/**
+ * Huella de un tipo AUSENTE de `EDIFICIO_TAMANO` (Vivienda, Leñera, las tres minas, Gran Fundición, Maravilla,
+ * Muralla). Es 1x1 de la rejilla ORIGINAL, o sea 2x2 tras el Paso 1 de la Etapa 6.
+ *
+ * Existe como constante con nombre y no como literal en `tamanoEdificio` porque el reescalado tenía que
+ * alcanzarla igual que a la tabla: dejarla en `{1,1}` habría dejado a la Vivienda —el edificio más numeroso de
+ * cualquier ciudad— a la MITAD de su tamaño físico, y el síntoma habría sido "las casas encogieron", no un
+ * error de tipos. Un literal repetido dentro de una función es justo lo que un reescalado se salta.
+ */
+export const EDIFICIO_TAMANO_POR_DEFECTO = { ancho: 2, alto: 2 };
 
 /**
  * Formas que puede tener un puesto de Mercado (a petición del usuario: la zona se compone de piezas de tamaños
@@ -743,22 +775,37 @@ export const EDIFICIO_TAMANO: Record<string, { ancho: number; alto: number }> = 
  * engine/trazado.ts) en vez de persistir el tamaño en el `Edificio` — el tamaño siempre se DERIVA del tipo.
  */
 export const PUESTO_MERCADO_FORMA: Record<number, { ancho: number; alto: number }> = {
-  1: { ancho: 2, alto: 2 },
-  2: { ancho: 3, alto: 2 },
-  3: { ancho: 1, alto: 1 },
+  // Formas fijadas tras el playtest del laboratorio (2026-08-31): tres piezas estrechas (2 celdas de ancho),
+  // que apiladas contra el Mercado forman un mercadillo de puestos alargados en vez de bloques cuadrados.
+  1: { ancho: 2, alto: 4 },
+  2: { ancho: 2, alto: 6 },
+  3: { ancho: 2, alto: 2 },
 };
 
 /**
  * Puestos que se AÑADEN al alcanzar cada nivel interno de Mercado, como lista de formas
- * (`PUESTO_MERCADO_FORMA`). No es acumulativo: cada nivel suma los suyos a los que ya había.
+ * (`PUESTO_MERCADO_FORMA`). Es ACUMULATIVO: cada nivel suma los suyos a los que ya había.
  *
- * Con la pieza principal (el propio Mercado, 3x2) la zona queda en 3 piezas en nivel 1, 10 en nivel 2 y 12 en
- * nivel 3, que es la composición acordada en Consideraciones/Vista_Asentamiento_Trazado_Urbano.md.
+ * Composición fijada en el playtest del laboratorio (2026-08-31). Con la pieza principal (el propio Mercado),
+ * la zona queda en 6 piezas en nivel 1, 13 en nivel 2 y 17 en nivel 3.
+ *   nivel 1 — forma 1 ×2, forma 2 ×2, forma 3 ×1
+ *   nivel 2 — forma 1 ×2, forma 2 ×2, forma 3 ×3
+ *   nivel 3 — forma 1 ×1, forma 2 ×2, forma 3 ×1
  */
 export const MERCADO_PUESTOS_POR_NIVEL: Record<number, number[]> = {
-  1: [1, 1],
-  2: [3, 3, 3, 3, 1, 1, 1],
-  3: [2, 2],
+  1: [1, 1, 2, 2, 3],
+  2: [1, 1, 2, 2, 3, 3, 3],
+  3: [1, 2, 2, 3],
+};
+
+/**
+ * Zona de la Carpinteria (§9 del doc de trazado urbano). A diferencia del Mercado, no escalona por nivel
+ * interno: los `talleres` nacen todos de una vez al completarse la pieza principal. Objeto (no un literal
+ * suelto) para que el laboratorio pueda ajustar `talleres` en caliente -- misma razon que
+ * `MERCADO_PUESTOS_POR_NIVEL`.
+ */
+export const CARPINTERIA_ZONA = {
+  talleres: 2,
 };
 
 /** Rinde de trigo de UNA Granja según su nivel interno — la mejora duplica producción y costo a la vez (ver
@@ -789,21 +836,50 @@ export function produccionTrigoDeGranja(nivelInterno: number | undefined): numbe
  *   Urbano. Y tiene sentido de fondo: el campo de una ciudad está fuera de su zona de influencia, no dentro.
  */
 export const TRAZADO = {
-  largoFilaMin: 4,
-  largoFilaMax: 8,
+  // Ancho de manzana en celdas — doblado en el Paso 1 de la Etapa 6 (§E6.11) junto con `tamanoCelda`: la
+  // manzana mide lo mismo físicamente, se discretiza al doble de resolución.
+  largoFilaMin: 8,
+  largoFilaMax: 16,
+  // `radioAfuerasMin` y `anchoBandaAfueras` están en UNIDADES LOCALES, no en celdas (ver `radioMaximoAfueras`,
+  // engine/trazado.ts, que los compara contra `radioPotencial`): el reescalado de la Etapa 6 NO los toca.
   radioAfuerasMin: 60,
   anchoBandaAfueras: 36,
   // Anclas y satélites, Etapa 2 (Consideraciones/Vista_Asentamiento_Trazado_Urbano.md §5.3/5.7): separación
   // mínima en celdas entre centros de ancla. `radioMaximoNucleo = separacionMinimaAnclas / 2` (engine/trazado.ts,
   // `sitiosPorAtraccionDura`) es lo que evita que dos núcleos vecinos se invadan. Sin calibrar por simulación
   // todavía — ver "Abierto" en el doc.
-  separacionMinimaAnclas: 6,
+  // Doblada en el Paso 1 de la Etapa 6 (§E6.11) — 6 celdas de la rejilla original. `RADIO_INICIAL_RANURA` y
+  // `RADIO_MAXIMO_RANURA` (engine/trazado.ts) se derivan de aquí, así que se reescalan solas.
+  separacionMinimaAnclas: 12,
   // Zona de seguridad entre anclas (a petición del usuario): un PISO DURO, no relajable — a diferencia de
   // `separacionMinimaAnclas`, que el doc describe como negociable, esta nunca cede. Ningún ancla real nueva
   // (Mercado, Carpintería — `ANCLAS_REALES`, engine/trazado.ts) puede colocarse a menos de esta distancia,
-  // centro a centro, de OTRA ancla ya construida (`sitiosParaTipo`). Si ningún hueco la cumple, no hay sitio
-  // válido en ese tick — la colocación se salta o se reintenta, igual que cualquier otro "no cabe" del trazado.
-  separacionSeguridadAnclas: 2,
+  // BORDE A BORDE (`gapCeldas` en `huecoEnDireccion`), de OTRA ancla ya construida. Si ningún hueco la
+  // cumple, no hay sitio válido en ese tick — la colocación se salta o se reintenta, igual que cualquier otro
+  // "no cabe" del trazado.
+  // Fijada en 6 celdas tras el playtest del laboratorio (2026-08-31) — deja espacio para una calle y una
+  // hilera de satélites entre dos anclas vecinas sin que se pisen los núcleos.
+  separacionSeguridadAnclas: 6,
+  /**
+   * Ancho de una calle EN CELDAS (Etapa 6, decisión 1 del doc trazado §E6.3). Con la rejilla del Paso 1
+   * (`tamanoCelda` 3), una celda es media Vivienda: callejón estrecho, muy de la Edad de Bronce.
+   *
+   * Es la constante que hace que la calle CUESTE SUELO, que es el fondo del rediseño: con las calles sobre
+   * aristas eran gratis, y por eso el 51% de la red medida no existía físicamente (§E6.1/§E6.2).
+   *
+   * Uniforme a propósito: la jerarquía callejón/avenida queda aplazada, no descartada (ver "Abierto").
+   */
+  anchoCalle: 1,
+  /**
+   * Largo máximo, en celdas, del corredor que un edificio puede reclamar para alcanzar la red (§E6.10).
+   * Es lo que impide enterrarse dentro de un coágulo: cuanto más corto, más se pega la ciudad a las calles
+   * que ya existen. Sin calibrar todavía — es uno de los dos números del Paso 5.
+   *
+   * Granja y Corral NO lo usan: viven a `radioAfuerasMin` por diseño y su camino es largo a propósito, así que
+   * tienen su propio tope (`capCorredorAfueras`). Un cap único los rechazaría a todos.
+   */
+  capCorredorUrbano: 12,
+  capCorredorAfueras: 200,
 };
 
 // --- Sprint 3: Economía (Doc 3) ---

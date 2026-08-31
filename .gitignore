@@ -34,4 +34,8 @@ Thumbs.db
 issues/
 
 # Snapshots de partida de `npm run server` (src/server/persistenciaPartida.ts), directorio por defecto
-/partidas/
+/partidas
+
+# Bundle del laboratorio visual (se regenera con `npm run lab`)
+/lab/dist/
+

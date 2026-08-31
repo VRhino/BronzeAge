@@ -7,13 +7,39 @@ import type { Asentamiento } from '../../domain/types';
 import { REJILLA_ASENTAMIENTO, TRAZADO, ZONA_INFLUENCIA } from '../../constants';
 import { avanzarSimulacion, type EstadoSimulacion } from '../simulation';
 import { createRng } from '../../worldgen';
-import { esDeAfueras } from '../trazado';
+import { celdaMinimaDeEdificio, esDeAfueras, tamanoDeEdificio } from '../trazado';
 import { computeTodasLasZonas, mejorFertilidadEnZona } from '../zones';
 import { contextoDeTest, crearEstadoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
 
 const SEED = 42;
 const EXTERNOS = new Set(['mina', 'minaCobre', 'minaEstano', 'cantera']);
 const modulo = (p: { x: number; y: number }) => Math.hypot(p.x, p.y);
+
+/**
+ * Distancia del origen al punto MÁS CERCANO de la huella de un edificio (0 si el origen cae dentro).
+ *
+ * Es la métrica con la que se mide el radio vedado de las afueras desde 2026-08-31 (a petición del usuario:
+ * "las granjas deben crecer hacia afuera de la ciudad, no hacia adentro"). Antes se medía el CENTRO, y una
+ * Granja de nivel 4 —36 unidades de lado— cuyo centro cumpliera el radio metía medio edificio dentro del casco
+ * urbano: medido, su borde interior llegaba a 39 con el veto en 60.
+ */
+function esquinaMasLejana(e: Parameters<typeof celdaMinimaDeEdificio>[0]): number {
+  const T = REJILLA_ASENTAMIENTO.tamanoCelda;
+  const min = celdaMinimaDeEdificio(e);
+  const tam = tamanoDeEdificio(e);
+  const dx = Math.max(Math.abs(min.col * T), Math.abs((min.col + tam.ancho) * T));
+  const dy = Math.max(Math.abs(min.row * T), Math.abs((min.row + tam.alto) * T));
+  return Math.hypot(dx, dy);
+}
+
+function bordeInterior(e: Parameters<typeof celdaMinimaDeEdificio>[0]): number {
+  const T = REJILLA_ASENTAMIENTO.tamanoCelda;
+  const min = celdaMinimaDeEdificio(e);
+  const tam = tamanoDeEdificio(e);
+  const dx = Math.max(min.col * T, 0, -((min.col + tam.ancho) * T));
+  const dy = Math.max(min.row * T, 0, -((min.row + tam.alto) * T));
+  return Math.hypot(dx, dy);
+}
 
 function estadoInicial(asentamiento: Asentamiento, facciones: ReturnType<typeof crearFacciones>): EstadoSimulacion {
   return crearEstadoDeTest([asentamiento], facciones);
@@ -34,9 +60,22 @@ describe('Vista de Asentamiento — fundación en espacio local', () => {
       // Granja y Corral se miden contra otro techo: viven A LAS AFUERAS, fuera del radio vedado de
       // `TRAZADO.radioAfuerasMin`, que es mayor que el radio inicial de la zona de influencia. El campo de una
       // ciudad está fuera de su zona de influencia, no dentro (ver `radioMaximoAfueras`, engine/trazado.ts).
-      const techo = esDeAfueras(e.tipo) ? TRAZADO.radioAfuerasMin + TRAZADO.anchoBandaAfueras : ZONA_INFLUENCIA.radioInicial;
-      expect(modulo(e.posicion)).toBeLessThanOrEqual(techo + 1e-6);
-      if (esDeAfueras(e.tipo)) expect(modulo(e.posicion)).toBeGreaterThanOrEqual(TRAZADO.radioAfuerasMin);
+      if (esDeAfueras(e.tipo)) {
+        // La banda de afueras se mide sobre la HUELLA, no sobre el centro: lo que no puede entrar en la ciudad
+        // es el edificio entero. Su centro sí puede quedar más allá de la banda — el edificio se extiende hacia
+        // afuera desde su borde interior, que es lo que la banda acota.
+        // El veto es un piso DURO: ninguna celda del edificio entra de aquí para dentro.
+        expect(bordeInterior(e), `${e.tipo} se mete en el radio vedado`).toBeGreaterThanOrEqual(TRAZADO.radioAfuerasMin - 1e-6);
+        // Por arriba NO hay regla dura: §11 dice que las afueras llegan "AL MENOS" hasta
+        // `radioAfuerasMin + anchoBandaAfueras`, y el techo real sube con `radioPotencial` y con el tamaño del
+        // propio edificio (`radioMaximoAfueras`). Lo que sí tiene que cumplirse es que quepa entero en el
+        // espacio local que se dibuja — si no, quedaría fuera del lienzo de la Vista de Asentamiento.
+        expect(esquinaMasLejana(e), `${e.tipo} se sale del espacio local dibujable`).toBeLessThanOrEqual(
+          REJILLA_ASENTAMIENTO.radioMapa
+        );
+      } else {
+        expect(modulo(e.posicion)).toBeLessThanOrEqual(ZONA_INFLUENCIA.radioInicial + 1e-6);
+      }
     }
   });
 });
