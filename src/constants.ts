@@ -845,11 +845,11 @@ export const TRAZADO = {
   radioAfuerasMin: 60,
   anchoBandaAfueras: 36,
   // Anclas y satélites, Etapa 2 (Consideraciones/Vista_Asentamiento_Trazado_Urbano.md §5.3/5.7): separación
-  // mínima en celdas entre centros de ancla. `radioMaximoNucleo = separacionMinimaAnclas / 2` (engine/trazado.ts,
-  // `sitiosPorAtraccionDura`) es lo que evita que dos núcleos vecinos se invadan. Sin calibrar por simulación
-  // todavía — ver "Abierto" en el doc.
-  // Doblada en el Paso 1 de la Etapa 6 (§E6.11) — 6 celdas de la rejilla original. `RADIO_INICIAL_RANURA` y
-  // `RADIO_MAXIMO_RANURA` (engine/trazado.ts) se derivan de aquí, así que se reescalan solas.
+  // mínima en celdas entre centros de ancla, usada por la búsqueda de ranura del árbol (`radioInicialRanura` /
+  // `radioMaximoRanura`, engine/trazado.ts, que se derivan de aquí y se reescalan solas).
+  // Ya NO define el núcleo de un ancla: desde §E6.21 ese es la banda de una manzana (`FONDO_MANZANA` celdas
+  // desde el anillo de calle, en `sitiosPorAtraccionDura`), no `separacionMinimaAnclas / 2`.
+  // Doblada en el Paso 1 de la Etapa 6 (§E6.11) — 6 celdas de la rejilla original.
   separacionMinimaAnclas: 12,
   // Zona de seguridad entre anclas (a petición del usuario): un PISO DURO, no relajable — a diferencia de
   // `separacionMinimaAnclas`, que el doc describe como negociable, esta nunca cede. Ningún ancla real nueva

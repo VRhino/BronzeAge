@@ -1353,28 +1353,33 @@ function porDistanciaAlOrigen(candidatos: Candidato[], masLejos: boolean): Candi
 }
 
 /**
- * Atracción dura (Lógica 2 — satélites de un ancla): el hueco más pegado posible al ANCLA real de la
- * categoría, buscando en anillos concéntricos por HUECO real (borde a borde, `gapCeldas` — no distancia centro
- * a centro, ver más abajo por qué) — arranca en el anillo (hueco 0, tocando) y se expande de `FONDO_MANZANA`
- * en `FONDO_MANZANA`, capado en `radioMaximoNucleo = separacionMinimaAnclas / 2` (así dos núcleos vecinos
- * nunca se invaden). En cuanto un anillo ofrece algún hueco de nivel 0 o 1 (conectado — nivel 2/3 no cuenta,
- * eso es saturación, no un hueco válido), se detiene ahí. Nunca filtra por dirección: la prioridad es solo
- * cercanía al ancla.
+ * Atracción dura (Lógica 2 — satélites de un ancla): coloca el satélite en el HUECO más pegado posible al
+ * ANCLA, dentro de su NÚCLEO.
  *
- * BUG medido por el usuario y corregido en su momento: la versión anterior medía la distancia de cada
- * candidato al CENTRO del ancla, así que el propio tamaño del ancla (p.ej. el Mercado, 3x2) ya se comía buena
- * parte del radio disponible antes de llegar a ningún candidato real. Aquí el candidato se escanea con margen
- * de sobra alrededor del ancla y el filtro real —a qué anillo pertenece cada uno— usa `gapCeldas` entre el
- * rectángulo del candidato y el del ancla.
+ * **El núcleo es la BANDA DE UNA MANZANA alrededor del ancla** (§E6.21, a petición del usuario): el anillo
+ * de calle que toda ancla siembra (§E6.7) más `FONDO_MANZANA` celdas de fondo — dos hileras de satélites
+ * espalda con espalda, que es lo más hondo que puede tener una manzana sin traer otra calle (§3). El hueco de
+ * cada candidato se mide BORDE A BORDE (`gapCeldas`, no centro a centro) contra el ancla ya expandida por su
+ * anillo, así que `hueco <= FONDO_MANZANA` es exactamente esa banda.
  *
- * `ampliado` (política "Líneas de Producción", ver `sitioEnBarrioLineaProduccion` en construction.ts): en vez
- * de detenerse en el primer anillo con hueco de nivel 0/1 y devolver solo ESE anillo, devuelve TODOS los
- * candidatos dentro del tope (`radioMaximoNucleoCeldas`), de cualquier nivel — así la política de logística
- * tiene un conjunto real donde elegir por distancia a la fuente de sus insumos, no un solo hueco ya decidido.
+ * **El ancla está LLENA solo cuando la banda no tiene ni un hueco geométrico libre.** Antes se daba por llena
+ * en cuanto no quedaba un hueco CON FRENTE DE CALLE (nivel 0/1), aunque la banda tuviera decenas de celdas
+ * libres de segunda hilera — y eso atascaba el crecimiento residencial (seed 60: clavado en nivel 1 con la
+ * mitad del núcleo del Centro Urbano vacío, porque `anclaLlena` es un latch permanente). Ahora se aceptan los
+ * candidatos de nivel 2/3: todos ya alcanzan la red dentro de `capCorredorUrbano` (gate duro de
+ * `candidatosLibres`), así que `redDeCalles` les estira un corredor y el retículo cierra la manzana según la
+ * ciudad crece hacia ahí.
  *
- * Devuelve `[]` si el núcleo está saturado (ningún candidato dentro del tope, o ninguno con hueco de nivel
- * 0/1 cuando `ampliado` es false). Quien llama (Etapa 5: `sitiosParaTipo`) no tiene ningún fallback que
- * ofrecer — la ancla alcanzable debe garantizarse ANTES de pedir sitio (`asegurarAnclaPara`, construction.ts).
+ * Orden de preferencia del resultado: 1º pegado al ancla (`hueco`), 2º con frente de calle (`nivel`), 3º más
+ * lado compartido con el ANCLA (`bordeCompartido`), 4º más lado con los AFINES (`bordeAfinDe` — barrios
+ * homogéneos, viviendas con viviendas), 5º semilla determinista. Nunca filtra por dirección.
+ *
+ * `ampliado` (política "Líneas de Producción", `sitioEnBarrioLineaProduccion`): devuelve TODOS los candidatos
+ * de la banda sin ordenar por vecindad — la política de logística elige entre ellos por distancia a sus
+ * insumos.
+ *
+ * Devuelve `[]` solo si la banda está geométricamente llena. Quien llama (`sitiosParaTipo`) no tiene fallback:
+ * un ancla usable debe garantizarse ANTES de pedir sitio (`asegurarAnclaPara`, construction.ts).
  */
 export function sitiosPorAtraccionDura(
   ancla: Edificio,
@@ -1408,7 +1413,10 @@ export function sitiosPorAtraccionDura(
     ancho: rectAncla.ancho + anillo * 2,
     alto: rectAncla.alto + anillo * 2,
   };
-  const radioMaximoNucleoCeldas = TRAZADO.separacionMinimaAnclas / 2;
+  // El núcleo del ancla = anillo de calle (ya dentro de `rectAnclaConAnillo`) + `FONDO_MANZANA` celdas de
+  // fondo de manzana. `hueco` se mide desde `rectAnclaConAnillo`, así que el tope en términos de `hueco` es
+  // `FONDO_MANZANA` a secas — independiente de cuánto valga `anchoCalle`.
+  const radioMaximoNucleoCeldas = FONDO_MANZANA;
 
   // Escaneo generoso: cubre el tope de verdad más el propio tamaño del ancla y del satélite, para que ningún
   // candidato válido quede fuera por culpa del radio de escaneo — el tope real lo decide el hueco, más abajo.
@@ -1418,38 +1426,34 @@ export function sitiosPorAtraccionDura(
     return { ...c, rectCandidato, hueco: gapCeldas(rectCandidato, rectAnclaConAnillo) };
   });
 
+  const enLaBanda = candidatosConHueco.filter((c) => c.hueco <= radioMaximoNucleoCeldas);
+  if (enLaBanda.length === 0) return []; // banda geométricamente llena: el ancla NO admite más satélites.
+
   if (ampliado) {
-    return candidatosConHueco
-      .filter((c) => c.hueco <= radioMaximoNucleoCeldas)
-      .map((c) => ({ punto: c.punto, rotado: c.rotado }));
+    return enLaBanda.map((c) => ({ punto: c.punto, rotado: c.rotado }));
   }
 
-  for (let radioCeldas = 0; radioCeldas <= radioMaximoNucleoCeldas; radioCeldas += FONDO_MANZANA) {
-    const enEsteAnillo = candidatosConHueco.filter((c) => c.hueco <= radioCeldas);
-    if (enEsteAnillo.length === 0) continue;
-
-    const mejorNivel = Math.min(...enEsteAnillo.map((c) => c.nivel));
-    if (mejorNivel > 1) continue; // solo pared/suelto dentro del tope: saturado, no un hueco válido.
-
-    // Decorar-ordenar-desdecorar, mismo motivo que en `porDistanciaAlOrigen`: `bordeCompartido`,
-    // `bordeAfin` y `semillaCandidato` son constantes por candidato y el comparador se ejecuta `O(n log n)`
-    // veces.
-    //
-    // Prioridad del desempate (a petición del usuario, 2026-08-31): 1º hueco al ancla, 2º lado compartido con
-    // el ANCLA (regla original), 3º lado compartido con los AFINES —edificios del mismo tipo o categoría— para
-    // que la ciudad forme barrios homogéneos (viviendas juntas, industria junta…), 4º semilla determinista.
-    return enEsteAnillo
-      .filter((c) => c.nivel === mejorNivel)
-      .map((c) => ({
-        c,
-        borde: bordeCompartido(c.rectCandidato, rectAnclaConAnillo),
-        bordeAfin: bordeAfinDe(c.rectCandidato, celdasAfines),
-        semilla: semillaCandidato(c),
-      }))
-      .sort((a, b) => a.c.hueco - b.c.hueco || b.borde - a.borde || b.bordeAfin - a.bordeAfin || a.semilla - b.semilla)
-      .map((d) => ({ punto: d.c.punto, rotado: d.c.rotado }));
-  }
-  return [];
+  // Decorar-ordenar-desdecorar, mismo motivo que en `porDistanciaAlOrigen`: `bordeCompartido`, `bordeAfin` y
+  // `semillaCandidato` son constantes por candidato y el comparador se ejecuta `O(n log n)` veces.
+  //
+  // Orden (§E6.21): 1º pegado al ancla (`hueco`), 2º con frente de calle (`nivel` — 0/1 antes que 2/3), 3º
+  // más lado con el ANCLA, 4º más lado con los AFINES (barrios homogéneos), 5º semilla determinista.
+  return enLaBanda
+    .map((c) => ({
+      c,
+      borde: bordeCompartido(c.rectCandidato, rectAnclaConAnillo),
+      bordeAfin: bordeAfinDe(c.rectCandidato, celdasAfines),
+      semilla: semillaCandidato(c),
+    }))
+    .sort(
+      (a, b) =>
+        a.c.hueco - b.c.hueco ||
+        a.c.nivel - b.c.nivel ||
+        b.borde - a.borde ||
+        b.bordeAfin - a.bordeAfin ||
+        a.semilla - b.semilla
+    )
+    .map((d) => ({ punto: d.c.punto, rotado: d.c.rotado }));
 }
 
 /**

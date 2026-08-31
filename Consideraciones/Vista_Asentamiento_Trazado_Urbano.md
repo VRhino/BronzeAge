@@ -1041,6 +1041,46 @@ desplazado ~4 celdas — pero ya hay que borrarlas por la Etapa 6 (§E6.14), as�
 
 ---
 
+### E6.21 El núcleo de un ancla es la BANDA DE UNA MANZANA, y "lleno" es geométrico (2026-08-31)
+
+Reportado por el usuario con el laboratorio (seed 60, Mercado a mano en los primeros ticks): **el asentamiento
+se quedaba clavado en nivel 1** — no podía construir las viviendas que le faltaban para llegar a 200 pesants
+"porque se llena el ancla del Centro Urbano cuando todavía tiene espacio".
+
+**Diagnóstico:** `sitiosPorAtraccionDura` daba el ancla por llena (`[]`) en cuanto no quedaba un hueco **con
+frente de calle** (nivel 0/1), aunque la banda tuviera **130+ celdas libres** de segunda hilera (nivel 2/3).
+`anclaActivaParaCategoria` marcaba el Centro Urbano `anclaLlena` —un latch permanente, §"Detalle D"— y a partir
+de ahí ninguna vivienda más. El fix de §E6.19 lo agravaba: al intentar crear un `plaza`/`pozo`/`parque` de
+relevo, su propio gate (`sitiosPorAtraccionDura` del ancla nueva) también veía "sin frente de calle" y lo
+rechazaba. Resultado medido: seed 60 y 42 atascadas en nivel 1 con viv≈10 durante 300+ ticks; seed 60+M en
+nivel 2 con viv=14 (necesita 40).
+
+**Cambio en `sitiosPorAtraccionDura`:**
+
+1. **El núcleo pasa a ser la BANDA DE UNA MANZANA** alrededor del ancla — el anillo de calle (§E6.7) más
+   `FONDO_MANZANA` celdas de fondo (dos hileras de satélites espalda con espalda, lo más hondo posible sin
+   traer otra calle). En términos de `hueco` (que se mide desde el ancla ya expandida por su anillo) el tope
+   es `FONDO_MANZANA` a secas. Antes era `separacionMinimaAnclas / 2` (= 6), un número sin relación con la
+   geometría de manzana.
+2. **El ancla está LLENA solo cuando la banda no tiene ni un hueco geométrico libre.** Se aceptan los
+   candidatos de nivel 2/3: todos ya alcanzan la red dentro de `capCorredorUrbano` (gate duro de
+   `candidatosLibres`), así que `redDeCalles` les estira un corredor y el retículo cierra la manzana según la
+   ciudad crece hacia ahí.
+3. El bucle de anillos concéntricos (que con `FONDO_MANZANA` = 4 y tope 6 solo iteraba en 0 y 4, dejando
+   muerta la franja hueco 5-6 — §"Detalle A") se sustituye por un único filtro de banda + orden:
+   **`hueco` ↑ → `nivel` ↑ → `bordeCompartido` con el ancla ↓ → `bordeAfinDe` ↓ → semilla.**
+
+**Resultado medido** (8 escenarios, 15 seeds × con/sin Mercado manual × 400 ticks): todas las semillas antes
+atascadas llegan a **nivel 2 con viv = 40**; **0 edificios sin calle adyacente** (los nivel 2/3 se conectan
+por corredor); sin regresión en las semillas sanas. Lab verificado: seed 60+M → nivel 2, 81 edificios, banda
+del CU llena, ciudad compacta y coherente. 691 tests.
+
+`separacionMinimaAnclas` deja de definir el núcleo (sigue mandando en la búsqueda de ranura del árbol,
+`radioInicialRanura`/`radioMaximoRanura`). El latch de `anclaLlena` (§"Detalle D") sigue ahí — pero ahora se
+dispara mucho más tarde y con relevo (`plaza`/`pozo`/`parque`) funcionando, así que deja de bloquear.
+
+---
+
 ## 1. Geometría de las calles
 
 > **DESACTUALIZADO desde 2026-08-31.** Esta sección y las siguientes describen el modelo de ARISTAS, que YA NO
