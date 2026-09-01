@@ -35,6 +35,11 @@ la experiencia en cada tick.)
   le falta al asentamiento para subir de nivel** — población actual/requerida de cada rol y los edificios que
   aún faltan del gate (`progresoNivelAsentamiento`, mismos gates que `calcularNivelAsentamiento`). El cupo de
   nivel de la partida real no aplica: el laboratorio tiene un solo asentamiento.
+- **Perfil de trazado** (bajo los botones de tick): cuatro perfiles excluyentes (`Núcleos` / `Caminera` /
+  `Compacta` / `Gremial`) más `Tradición` (el que le toca al asentamiento por su id). Cada uno permuta el
+  desempate de colocación — doc trazado §E6.23. Escribe `TRAZADO.perfilForzado`, el mismo camino que usará una
+  ordenanza real del Maestro de Obras. **Se aplica en vivo, sin refundar**: lo ya construido no se mueve, así
+  que cambiar a mitad de partida deja un ESTRATO visible, igual que hará una política al expirar.
 - **Mapa**: calles y caminos como ÁREAS (desde la Etapa 6 la calle ocupa celdas), huella real de cada edificio,
   rejilla de fondo conmutable. Contorno rojo = obra sin terminar. **Al pasar el cursor por un edificio**, su
   ficha con la verdad del motor: huella, celda que ocupa, código de árbol si es ancla, y el estado de su

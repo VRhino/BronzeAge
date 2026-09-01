@@ -15,7 +15,6 @@ import type { RolTecnico } from '../../acceso/tipos';
 import type { ActorDeComando } from '../../session/comandos/autorizacion';
 import { PartidaYaAbiertaError } from '../registroDePartidas';
 import { eventosDesde, vistaAdminDeEstado } from '../../session/estado';
-import { exportarParaUnityTerrain, UNITY_EXPORT_DEFAULT } from '../../world/exportUnity';
 import { ESQUEMA_SESION_AUTH } from '../openapi';
 import { ejecutarComandoHttp, ESQUEMA_EJECUTAR_COMANDO, type EjecutarComandoBody } from './comandos';
 import { enviarMapa, ESQUEMA_MAPA } from './mapa';
@@ -143,27 +142,6 @@ const ESQUEMA_EXPORTAR = {
   security: SEGURIDAD_ADMIN,
   params: PARAMS_GAME_ID,
   response: { 401: ERROR_RESPUESTA, 403: ERROR_RESPUESTA, 404: ERROR_RESPUESTA },
-} as const;
-
-const ESQUEMA_EXPORTAR_UNITY = {
-  description:
-    'Heightmap (16-bit RAW) + splatmap de biomas + metadata para Unity Terrain (Fase C12), en un solo JSON: ' +
-    'los binarios viajan en base64 (`heightmapRaw`, cada `splatmap.capas[bioma]`) — quien lo descarga decide ' +
-    'si los escribe a `.raw`/`.png` por su cuenta. Antes corría en el navegador (`GameStore.exportarMapaUnity`, ' +
-    '`world/exportUnity.ts` vía `@motor/*`); el cálculo no cambió, solo dónde se ejecuta. Resolución por ' +
-    'defecto alta (4097² el heightmap) — cara: pensada para pedirse una vez, no para *polling*.',
-  tags: ['admin'],
-  security: SEGURIDAD_ADMIN,
-  params: PARAMS_GAME_ID,
-  querystring: {
-    type: 'object',
-    properties: {
-      resolucion: { type: 'string', pattern: '^[0-9]+$' },
-      alturaMaximaMetros: { type: 'string', pattern: '^[0-9]+$' },
-      resolucionSplatmap: { type: 'string', pattern: '^[0-9]+$' },
-    },
-  },
-  response: { 400: ERROR_RESPUESTA, 401: ERROR_RESPUESTA, 403: ERROR_RESPUESTA, 404: ERROR_RESPUESTA },
 } as const;
 
 /** Roles que un administrador de partida puede otorgar por esta superficie. `jugador` no está: se obtiene por
@@ -366,48 +344,6 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
     reply.header('Content-Disposition', `attachment; filename="${acceso.runner.gameId}.json"`);
     return reply.send(acceso.runner.exportar());
   });
-
-  /** Export para Unity Terrain (Fase C12) — ver `ESQUEMA_EXPORTAR_UNITY`. */
-  app.get<{ Params: ParametrosGameId; Querystring: { resolucion?: string; alturaMaximaMetros?: string; resolucionSplatmap?: string } }>(
-    '/admin/partidas/:gameId/exportar-unity',
-    { schema: ESQUEMA_EXPORTAR_UNITY },
-    async (request, reply) => {
-      const acceso = exigirAdministracion(request, reply, deps);
-      if (!acceso.ok) return acceso.respuesta;
-
-      const opciones = {
-        resolucion: request.query.resolucion ? Number(request.query.resolucion) : UNITY_EXPORT_DEFAULT.resolucion,
-        alturaMaximaMetros: request.query.alturaMaximaMetros
-          ? Number(request.query.alturaMaximaMetros)
-          : UNITY_EXPORT_DEFAULT.alturaMaximaMetros,
-        resolucionSplatmap: request.query.resolucionSplatmap
-          ? Number(request.query.resolucionSplatmap)
-          : UNITY_EXPORT_DEFAULT.resolucionSplatmap,
-        // El export es una herramienta de despliegue, no simulación: la marca de tiempo es reloj de pared y
-        // la estampa el servidor, que es la capa a la que le corresponde leerlo.
-        generadoEn: new Date().toISOString(),
-      };
-
-      let resultado: ReturnType<typeof exportarParaUnityTerrain>;
-      try {
-        resultado = exportarParaUnityTerrain(acceso.runner.getState().mapa, acceso.runner.getState().asentamientos, opciones);
-      } catch (err) {
-        // Único fallo posible: `resolucion` no cumple 2^n+1 (`validarResolucionHeightmap`) — error de forma
-        // del cliente, no un 500 del servidor.
-        return reply.code(400).send({ error: mensajeDe(err) });
-      }
-
-      return reply.send({
-        metadata: resultado.metadata,
-        nombreBase: resultado.nombreBase,
-        heightmapRaw: Buffer.from(resultado.heightmapRaw).toString('base64'),
-        splatmap: {
-          resolucion: resultado.splatmap.resolucion,
-          capas: Object.fromEntries(Object.entries(resultado.splatmap.capas).map(([bioma, datos]) => [bioma, Buffer.from(datos).toString('base64')])),
-        },
-      });
-    }
-  );
 
   /** El mapa como asset (Fase C11) — ver `mapa.ts`. Misma comprobación de administración que el resto de esta
    * superficie: el mapa no es secreto, pero la partida sí exige sesión para entrar en su gameId. */

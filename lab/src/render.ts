@@ -11,6 +11,7 @@
 import type { Asentamiento, EdificioTipo, Point } from '../../src/domain/types';
 import type { RectanguloLocal, TrazadoAsentamiento } from '../../src/engine/trazado';
 import { edificiosInternos } from '../../src/engine/trazado';
+import type { CeldaMuro, TrazadoMuralla, TrazoRecinto } from '../../src/engine/muralla';
 
 export const EDIFICIO_ETIQUETA: Record<EdificioTipo, string> = {
   centroUrbano: 'Centro Urbano',
@@ -89,6 +90,11 @@ export interface EstadoDibujoLab {
   tamanoCelda: number;
   /** Rejilla de fondo: en el laboratorio interesa VER las celdas, para juzgar huellas y anchos de calle. */
   mostrarRejilla: boolean;
+  /** Presupuesto de muralla: el anillo PROPUESTO, todavía sin comprometer. Ausente = no se ha pedido ninguno. */
+  murallaPropuesta?: TrazadoMuralla;
+  /** El mismo trazo sin fusionar, celda a celda y EN ORDEN DE RECORRIDO — lo que necesita el tooltip para
+   * poder decir de una celda concreta qué clase es, qué cuesta y en qué punto de la obra se levantará. */
+  murallaTrazo?: TrazoRecinto;
 }
 
 /** Escala y traslación de coordenadas locales a píxeles del lienzo. */
@@ -109,7 +115,7 @@ export function dibujarAsentamientoLab(
   canvas: HTMLCanvasElement,
   estado: EstadoDibujoLab
 ): void {
-  const { asentamiento, trazado, radioMapa, tamanoCelda, mostrarRejilla } = estado;
+  const { asentamiento, trazado, radioMapa, tamanoCelda, mostrarRejilla, murallaPropuesta } = estado;
   const { escala, aPantalla } = proyeccion(canvas, radioMapa);
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -175,6 +181,46 @@ export function dibujarAsentamientoLab(
     ctx.lineWidth = edificio.estado === 'activo' ? 1 : 1.5;
     ctx.strokeRect(x, y, w, h);
   }
+
+  // La muralla va ENCIMA de todo: es lo que hay que juzgar cuando se pide un presupuesto, y a esta escala una
+  // celda son pocos píxeles. Se dibuja translúcida y con contorno discontinuo para que se lea como PROPUESTA
+  // y no como algo ya construido — mientras no exista la entidad `Recinto`, nada de esto está comprometido.
+  {
+    const pintar = (rects: RectanguloLocal[], relleno: string, borde: string, guiones: number[]) => {
+      ctx.fillStyle = relleno;
+      ctx.strokeStyle = borde;
+      ctx.lineWidth = 1;
+      ctx.setLineDash(guiones);
+      for (const r of rects) {
+        const esquina = aPantalla({ x: r.x, y: r.y });
+        const w = r.ancho * escala;
+        const h = r.alto * escala;
+        ctx.fillRect(esquina.x, esquina.y, w, h);
+        ctx.strokeRect(esquina.x, esquina.y, w, h);
+      }
+      ctx.setLineDash([]);
+    };
+    // Recintos YA COMPROMETIDOS: sólidos y con contorno continuo. Su suelo está ocupado de verdad.
+    for (const muralla of trazado.murallas) {
+      // Obra pendiente: MISMO contorno rojo que un edificio `en_construccion`, porque es literalmente lo
+      // mismo — suelo ya comprometido que todavía no está en pie. Si no se dibujara, en su sitio se vería
+      // césped vacío que rechaza edificios sin explicación, que es la peor clase de bug: el que parece un
+      // bug del motor y en realidad es una omisión del dibujo.
+      pintar(muralla.planificado, 'rgba(90, 90, 90, 0.30)', 'rgba(200, 40, 40, 0.95)', []);
+      pintar(muralla.muro, 'rgba(90, 90, 90, 0.95)', 'rgba(20, 20, 20, 1)', []);
+      // Torre: gris casi negro y opaca — es la lectura visual inmediata del nivel del recinto (§6 del doc).
+      pintar(muralla.torres, 'rgba(45, 45, 45, 1)', 'rgba(10, 10, 10, 1)', []);
+      // Puerta: ocre, y a propósito el color más llamativo del conjunto. Es el dato irreversible del trazo —
+      // cuántas hay decide si el recinto es una fortaleza o una metrópoli (§0).
+      pintar(muralla.puertas, 'rgba(214, 158, 46, 1)', 'rgba(120, 84, 10, 1)', []);
+    }
+    // Presupuesto todavía SIN comprometer: translúcido y punteado, para que no se confunda con lo real.
+    if (murallaPropuesta) {
+      pintar(murallaPropuesta.muro, 'rgba(90, 90, 90, 0.55)', 'rgba(20, 20, 20, 0.9)', [3, 2]);
+      pintar(murallaPropuesta.torres, 'rgba(45, 45, 45, 0.7)', 'rgba(10, 10, 10, 0.9)', [3, 2]);
+      pintar(murallaPropuesta.puertas, 'rgba(214, 158, 46, 0.75)', 'rgba(120, 84, 10, 0.9)', [3, 2]);
+    }
+  }
 }
 
 /** El edificio cuya huella contiene un punto de PANTALLA, o `null`. Para inspeccionar con el ratón. */
@@ -194,4 +240,78 @@ export function edificioEnPantalla(
     }
   }
   return null;
+}
+
+/** Lo que el tooltip necesita saber del recinto al que pertenece una celda, sin volver a calcular nada. */
+export interface ContextoMuralla {
+  total: number;
+  puertas: number;
+  torres: number;
+  nivel: number;
+  /** Solo tiene sentido en un recinto COMPROMETIDO: si esa celda ya está en pie o sigue siendo obra pendiente. */
+  levantada: boolean;
+  comprometido: boolean;
+  areaEncerrada: number;
+  dentro: number;
+  fuera: number;
+}
+
+/**
+ * La celda de muralla bajo un punto de PANTALLA, con su posición en el recorrido de la obra, o `null`.
+ * Espejo de `edificioEnPantalla`: el laboratorio existe para inspeccionar, y el anillo era lo único dibujado
+ * que no se podía interrogar con el ratón.
+ *
+ * Mira primero los recintos COMPROMETIDOS y después el presupuesto: si hay muro de verdad, es lo que interesa
+ * saber —sobre todo si esa celda está levantada o es obra pendiente, que es la diferencia entre "aquí hay un
+ * muro" y "aquí no puedes construir aunque parezca vacío"—.
+ */
+export function celdaMurallaEnPantalla(
+  canvas: HTMLCanvasElement,
+  estado: EstadoDibujoLab,
+  x: number,
+  y: number
+): { celda: CeldaMuro; indice: number; contexto: ContextoMuralla } | null {
+  const { escala } = proyeccion(canvas, estado.radioMapa);
+  const col = Math.floor((x - canvas.width / 2) / escala / estado.tamanoCelda);
+  const row = Math.floor((y - canvas.height / 2) / escala / estado.tamanoCelda);
+
+  for (const recinto of estado.asentamiento.recintos ?? []) {
+    const indice = recinto.celdas.findIndex((c) => c.col === col && c.row === row);
+    if (indice === -1) continue;
+    return {
+      celda: recinto.celdas[indice]!,
+      indice,
+      contexto: {
+        total: recinto.celdas.length,
+        puertas: recinto.celdas.filter((c) => c.clase === 'puerta').length,
+        torres: recinto.celdas.filter((c) => c.clase === 'torre').length,
+        nivel: recinto.nivel,
+        levantada: indice <= recinto.avance,
+        comprometido: true,
+        areaEncerrada: 0,
+        dentro: 0,
+        fuera: 0,
+      },
+    };
+  }
+
+  const trazo = estado.murallaTrazo;
+  if (!trazo) return null;
+  const indice = trazo.celdas.findIndex((c) => c.col === col && c.row === row);
+  if (indice === -1) return null;
+  return {
+    celda: trazo.celdas[indice]!,
+    indice,
+    contexto: {
+      total: trazo.celdas.length,
+      puertas: trazo.puertas,
+      torres: trazo.torres,
+      nivel: estado.murallaPropuesta?.nivel ?? 1,
+      levantada: false,
+      comprometido: false,
+      areaEncerrada: trazo.areaEncerrada,
+      dentro: trazo.dentro.length,
+      fuera: trazo.fuera.length,
+    },
+  };
 }

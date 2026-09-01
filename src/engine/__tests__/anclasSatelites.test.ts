@@ -182,7 +182,7 @@ describe('Etapa 5 — Carpintería: zona de tres piezas (§9, Lógica 2, sin cam
 });
 
 describe('Etapa 5 — árbol único de anclas, a nivel de motor (trazado.ts)', () => {
-  it('bootstrap: la primera ancla nace en una de las 8 direcciones desde Centro Urbano, sin colisionar', () => {
+  it('bootstrap: la primera ancla nace en una de las 5 ranuras desde Centro Urbano, sin colisionar', () => {
     const { asentamiento } = base(2);
     const resultado = crearAnclaNueva(asentamiento.id, asentamiento.edificios, 'plazaDeArmas', 'test-plaza-armas');
     expect(resultado).not.toBeNull();
@@ -228,7 +228,7 @@ describe('Etapa 5 — árbol único de anclas, a nivel de motor (trazado.ts)', (
     const cuTamano = tamanoDeEdificio(centroUrbano);
     const T = REJILLA_ASENTAMIENTO.tamanoCelda;
 
-    // Rodea Centro Urbano por completo (radio generoso: cubre cualquier rotación posible de las 8 direcciones)
+    // Rodea Centro Urbano por completo (radio generoso: cubre cualquier rotación posible de las 5 ranuras)
     // para que NINGUNA de sus ranuras tenga hueco real. El margen se DERIVA del radio máximo que llega a
     // explorar una ranura (`RADIO_MAXIMO_RANURA`, engine/trazado.ts): con un literal, el Paso 1 de la Etapa 6
     // (§E6.11) lo dejó corto —el radio de búsqueda se dobló y el relleno no— y Centro Urbano seguía
@@ -393,16 +393,26 @@ describe('Etapa 4 (sin cambios) — orientación intercambiable (ancho↔alto)',
     }
   });
 });
-describe('Etapa 5 — compás + eje rotado por asentamiento (mismo mecanismo, aplicado a las 8 ranuras)', () => {
-  it('las 8 direcciones se desvían de los ángulos exactos, y varían entre asentamientos', () => {
+describe('Etapa 5 — compás + eje rotado por asentamiento (mismo mecanismo, aplicado a las ranuras)', () => {
+  it('son 5 ranuras equidistantes (72°), con el eje rotado por asentamiento y variando entre asentamientos', () => {
     const direccionesA = direccionesRotadas('asentamiento-prueba-eje-a');
     const direccionesB = direccionesRotadas('asentamiento-prueba-eje-b');
-    const paso = Math.PI / 4;
+    const paso = (Math.PI * 2) / 5; // 72°
 
-    for (const { angulo } of direccionesA) {
-      const resto = ((angulo % paso) + paso) % paso;
-      expect(resto).toBeGreaterThan(0);
+    expect(direccionesA).toHaveLength(5);
+
+    // Equidistantes: el hueco entre ranuras consecutivas es siempre `paso`.
+    for (let i = 1; i < direccionesA.length; i++) {
+      expect(direccionesA[i]!.angulo - direccionesA[i - 1]!.angulo).toBeCloseTo(paso);
     }
+
+    // El eje está rotado: ninguna ranura cae en su ángulo base sin rotar (-90° + k·72°).
+    const base = Array.from({ length: 5 }, (_, k) => -Math.PI / 2 + k * paso);
+    for (let k = 0; k < 5; k++) {
+      expect(Math.abs(direccionesA[k]!.angulo - base[k]!)).toBeGreaterThan(1e-6);
+    }
+
+    // Y la rotación varía entre asentamientos.
     expect(direccionesA.map((d) => d.angulo)).not.toEqual(direccionesB.map((d) => d.angulo));
   });
 });

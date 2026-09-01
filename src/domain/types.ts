@@ -197,6 +197,45 @@ export const EDIFICIOS_TIPO = Object.keys(TODOS_LOS_EDIFICIOS) as EdificioTipo[]
 
 export type EstadoEdificio = 'en_cola' | 'en_construccion' | 'activo';
 
+/**
+ * Una celda del anillo de un recinto amurallado (`Consideraciones/Murallas_Definicion.md`).
+ *
+ * `clase` se decide AL TRAZAR y no cambia nunca: una celda que nació puerta muere puerta (§5.1 — las puertas
+ * se congelan con el trazo, así que un recinto ya levantado no gana puertas jamás y ningún camino posterior lo
+ * atraviesa). Lo que el nivel del recinto cambia es lo que esa puerta VALE, no que exista.
+ */
+export interface CeldaMuro {
+  col: number;
+  row: number;
+  clase: 'muro' | 'puerta' | 'torre';
+}
+
+/**
+ * Un recinto amurallado: un ANILLO CERRADO DE CELDAS alrededor del casco urbano. No es un edificio —no tiene
+ * huella rectangular, se paga por celda y se levanta celda a celda—, por eso es una entidad propia y no un
+ * `EdificioTipo` (el `muralla` de 1 celda que existía antes desaparece, §13 del doc).
+ *
+ * Es la primera FRONTERA persistente del motor: divide el asentamiento en intramuros y arrabal.
+ */
+export interface Recinto {
+  id: string;
+  /** 1 = empalizada · 2 = muro de piedra · 3 = muralla con adarve (§7 del doc). */
+  nivel: number;
+  /** El anillo completo, EN ORDEN DE RECORRIDO desde la puerta principal — que es el orden en que se levanta.
+   * Congelado al comprometerse: ni una mejora de nivel ni el crecimiento de la ciudad lo modifican. */
+  celdas: CeldaMuro[];
+  /** Índice de la última celda YA LEVANTADA del recorrido. -1 = trazo comprometido pero sin una sola celda en
+   * pie. Las celdas todavía no levantadas **ocupan suelo igual** desde el commit: si no, un edificio se
+   * plantaría encima del trazo a medio hacer y el anillo dejaría de poder cerrarse. */
+  avance: number;
+  /** Nivel al que se está mejorando ahora mismo, si hay una mejora en curso (§7 del doc). Mientras esté
+   * presente, `avance` mide el progreso de la MEJORA (reiniciado a -1 al empezarla), no el de la construcción
+   * original — solo se puede mejorar un recinto ya completo. Se borra al terminar, cuando `nivel` sube. */
+  mejorandoA?: number;
+  comprometidoEn: Instante;
+  completadoEn?: Instante;
+}
+
 export interface Edificio {
   id: string;
   tipo: EdificioTipo;
@@ -241,14 +280,14 @@ export interface Edificio {
    * nuevas anclas (`semillaActiva`/`crearAnclaNueva`) — se marca una sola vez y nunca se revisa. No tiene
    * relación con la saturación del núcleo de satélites de un ancla (`anclaLlena`, Lógica 2, sin cambios): un
    * ancla puede estar `semillaSaturada` y seguir teniendo hueco de sobra para sus propios satélites, o estar
-   * `anclaLlena` y seguir siendo la semilla activa del árbol mientras sus 8 ranuras tengan sitio — CRITERIOS
+   * `anclaLlena` y seguir siendo la semilla activa del árbol mientras sus 5 ranuras tengan sitio — CRITERIOS
    * INDEPENDIENTES, ninguno dispara al otro (confirmado con el usuario tras una primera corrección que sí los
    * mezclaba). */
   semillaSaturada?: boolean;
   /** Lógica 2 (satélites, `sitiosPorAtraccionDura`/`anclaActivaParaCategoria`, engine/trazado.ts): esta
    * instancia ya no tiene hueco para el próximo edificio dependiente de su categoría — se marca una sola vez y
    * nunca se revisa (nada libera celdas). Es un concepto DISTINTO de `semillaSaturada` (Lógica 1: agotamiento
-   * de las 8 ranuras de crecimiento del árbol, radio mucho mayor) y no la afecta — `anclaLlena` solo cambia a
+   * de las 5 ranuras de crecimiento del árbol, radio mucho mayor) y no la afecta — `anclaLlena` solo cambia a
    * qué instancia se atrae el PRÓXIMO satélite de esa categoría (`anclaActivaParaCategoria`), nunca decide
    * dónde nace la siguiente ancla. Antes de esto, la búsqueda de a qué instancia atraerse siempre volvía a la
    * más cercana al origen sin memoria de si tenía hueco — con Centro Urbano (`posicion` fija en el origen)
@@ -350,6 +389,10 @@ export interface Asentamiento {
   /** Recurso -> cantidad almacenada y capacidad actual (Doc 4.3). */
   almacen: Record<string, RecursoAlmacenado>;
   edificios: Edificio[];
+  /** Recintos amurallados, del más interior al más exterior (orden de construcción). Al ampliar, el recinto
+   * viejo SE QUEDA con sus puertas abiertas —estratos, no reformas— así que esto es una lista, no un campo
+   * único. Ausente = asentamiento sin murallas, que es el caso normal. */
+  recintos?: Recinto[];
   cargos: CargosAsentamiento;
   /** Jugadores que compraron casa aquí (Doc 2.5), vía de ciudadanía distinta de fundar. */
   casasCompradas: string[];

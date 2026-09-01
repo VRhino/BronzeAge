@@ -15,8 +15,10 @@ import {
   esDeAfueras,
   redDeCalles,
   tamanoDeEdificio,
+  integridadDeRecinto,
 } from '../src/engine/trazado';
-import { REJILLA_ASENTAMIENTO } from '../src/constants';
+import { costoDeTrazo, areaEncerradaDeRecinto } from '../src/engine/muralla';
+import { PERFILES_TRAZADO, REJILLA_ASENTAMIENTO, SIMULACION, TRAZADO, type PerfilTrazado } from '../src/constants';
 import { instanteDeTick, isoDeInstante } from '../src/session/estado';
 
 /** Overrides por entorno para poder hacer pasadas cortas de humo sin esperar la corrida completa
@@ -34,6 +36,21 @@ const JUGADORES_POR_ASENTAMIENTO = 5;
 const TICKS = num('BATCH_TICKS', 3000);
 const FOTO_CADA = num('BATCH_FOTO_CADA', 100);
 const MIN_SEPARACION = 100;
+
+/**
+ * `BATCH_PERFIL=<nucleos|caminera|compacta|gremial>`: fuerza el perfil de trazado (doc trazado §E6.23) en
+ * TODOS los asentamientos de la corrida, para poder comparar perfiles con las mismas semillas.
+ *
+ * Sin la variable no se toca nada y cada asentamiento usa el suyo (tradición local por id), que es lo que
+ * corre en una partida real. Es la misma palanca que el selector del laboratorio — `TRAZADO.perfilForzado`.
+ */
+const PERFIL_FORZADO = process.env['BATCH_PERFIL'];
+if (PERFIL_FORZADO !== undefined) {
+  if (!(PERFILES_TRAZADO as readonly string[]).includes(PERFIL_FORZADO)) {
+    throw new Error(`BATCH_PERFIL="${PERFIL_FORZADO}" no es un perfil válido (${PERFILES_TRAZADO.join(', ')}).`);
+  }
+  TRAZADO.perfilForzado = PERFIL_FORZADO as PerfilTrazado;
+}
 
 const TIPOS_EXTRACTOR = ['cantera', 'lenera', 'mina', 'minaCobre', 'minaEstano', 'corral'] as const;
 
@@ -264,7 +281,10 @@ function medirCalles(asentamiento: Asentamiento): MedidasDeCalle {
   const internos = edificiosInternos(asentamiento.edificios);
   if (internos.length === 0) return { conFrenteRealPct: null, componentesDeRed: null, ocupacionNucleoPct: null };
 
-  const red = redDeCalles(asentamiento.id, asentamiento.edificios);
+  // `recintos`: desde que la gobernanza NPC compromete murallas (Paso 2c), medir sin esto vería una red que
+  // ya no es la que el motor usa de verdad — el mismo bug que costó 68→47 edificios antes de centralizar
+  // `ocupadasConRed` (ver Consideraciones/Murallas_Definicion.md, hallazgos del Paso 2a).
+  const red = redDeCalles(asentamiento.id, asentamiento.edificios, asentamiento.recintos);
   const celdasRed = new Set([...red.calles, ...red.caminos]);
 
   let conFrenteReal = 0;
@@ -386,6 +406,17 @@ interface Foto {
   /** Nutrición media (0-100). Entra como factor multiplicativo directo del crecimiento
    * (`comidaFactor`, engine/population.ts), así que una nutrición baja frena el pool aunque sobre capacidad. */
   nutricionMedia: number;
+  // --- Murallas (Paso 2c): invariantes 4/6/9 en batch + guardián de que el gate de nivel 4 sea alcanzable ---
+  /** Asentamientos con al menos un recinto (en obra o terminado). Si esto se queda en 0 con el batch corrido
+   * lo bastante, `asegurarMuralla` no está disparando — mismo diagnóstico que
+   * `issues/nivel_3_inalcanzable_sin_jugador_humano.md` tuvo con Barracón/Galería. */
+  asentamientosConRecinto: number;
+  /** De esos, cuántos tienen su recinto exterior COMPLETO (integridad 1). Es lo que de verdad habilita el
+   * efecto defensivo (Paso 3b) y el gate de nivel 4 (Paso 5). */
+  asentamientosConRecintoCompleto: number;
+  /** Integridad media (0-1) de todos los recintos existentes, terminados o no — el pulso de "cuánta obra hay
+   * en curso" del batch en un momento dado. */
+  integridadRecintoMedia: number | null;
 }
 
 function construirFotoResumen(
@@ -454,6 +485,10 @@ function construirFotoResumen(
   let granjasPendientesSuma = 0;
   let granjasNivelSuma = 0;
   let granjasNivelN = 0;
+  let asentamientosConRecinto = 0;
+  let asentamientosConRecintoCompleto = 0;
+  let integridadRecintoSuma = 0;
+  let integridadRecintoN = 0;
 
   for (const a of estado.asentamientos) {
     const nivel = nivelActualDe(a);
@@ -482,6 +517,17 @@ function construirFotoResumen(
       granjasNivelN++;
     }
     nutricionSuma += nutricionPoblacionDe(a);
+
+    // --- Murallas (Paso 2c) ---
+    const recintos = a.recintos ?? [];
+    if (recintos.length > 0) {
+      asentamientosConRecinto++;
+      if (recintos.some((r) => integridadDeRecinto(r) >= 1)) asentamientosConRecintoCompleto++;
+      for (const r of recintos) {
+        integridadRecintoSuma += integridadDeRecinto(r);
+        integridadRecintoN++;
+      }
+    }
 
     // --- Trazado urbano ---
     const manzanas = manzanasCerradas(a);
@@ -581,6 +627,9 @@ function construirFotoResumen(
     pesantsMedia: vivos === 0 ? 0 : redondear(pesantsSuma / vivos),
     pesantsMaximo,
     nutricionMedia: vivos === 0 ? 0 : redondear(nutricionSuma / vivos),
+    asentamientosConRecinto,
+    asentamientosConRecintoCompleto,
+    integridadRecintoMedia: media(integridadRecintoSuma, integridadRecintoN),
   };
 }
 
@@ -692,6 +741,50 @@ async function main() {
   }
 
   console.log(`Excepciones totales: ${excepcionesAcumuladas}`);
+
+  // --- El eje fortaleza↔metrópoli (§0/§18, Paso 2c) ---
+  //
+  // Una fila por recinto vivo al final de la corrida: el anillo está CONGELADO desde que se compromete (§5.1
+  // — sus celdas, puertas y coste ya no cambian jamás), así que leerlo al final da el mismo número que leerlo
+  // el día que se comprometió. Lo único que varía entre filas es `comprometidoEnTick`: es la variable
+  // independiente de la tabla que dice si amurallar pronto (embudo barato, pocas puertas) y amurallar tarde
+  // (más ciudad protegida, más puertas que cubrir) son los dos extremos jugables que el diseño quiere, o si
+  // uno domina al otro — con ella se calibran `MURALLA.tarifaPorCelda`, `upkeepPorCelda` y el riesgo 11.
+  interface FilaFortalezaMetropoli {
+    asentamientoId: string;
+    comprometidoEnTick: number;
+    nivel: number;
+    completo: boolean;
+    celdas: number;
+    puertas: number;
+    torres: number;
+    areaEncerrada: number | null;
+    costoTotal: Partial<Record<string, number>>;
+  }
+  // Inverso de `instanteDeTick` (`session/estado.ts`, `EPOCA_MS` no exportada): `comprometidoEn` es un
+  // `Instante` de mundo, y aquí solo hace falta en qué TICK de la corrida cayó.
+  const epocaMs = new Date(SIMULACION.epocaInicial).getTime();
+  const tickDe = (i: number) => Math.round((i - epocaMs) / SIMULACION.duracionTickMs);
+
+  const filasMuralla: FilaFortalezaMetropoli[] = [];
+  for (const a of estado.asentamientos) {
+    for (const r of a.recintos ?? []) {
+      filasMuralla.push({
+        asentamientoId: a.id,
+        comprometidoEnTick: tickDe(r.comprometidoEn),
+        nivel: r.nivel,
+        completo: integridadDeRecinto(r) >= 1,
+        celdas: r.celdas.length,
+        puertas: r.celdas.filter((c) => c.clase === 'puerta').length,
+        torres: r.celdas.filter((c) => c.clase === 'torre').length,
+        areaEncerrada: areaEncerradaDeRecinto(a, r),
+        costoTotal: costoDeTrazo(r.celdas, r.nivel),
+      });
+    }
+  }
+  console.log(`\nRecintos vivos al final de la corrida: ${filasMuralla.length}`);
+  console.log(JSON.stringify(filasMuralla, null, 2));
+
   console.log(JSON.stringify({ fotos, excepciones: excepcionesAcumuladas }, null, 2));
 }
 

@@ -6,6 +6,7 @@ import { CAMPAMENTOS_BANDIDOS, MILITAR, NIVEL_FACCION, REPUTACION, TROPAS_RECLUT
 import { agregarRecurso } from './almacen';
 import { aplicarAjustesReputacion } from './reputacion';
 import { aplicarAjustesExperiencia, type AjusteExperiencia } from './faccion';
+import { multiplicadorDefensivoDeRecintos } from './muralla';
 
 function estanAliadas(relaciones: RelacionPolitica[], aId: string, bId: string): boolean {
   return relaciones.some(
@@ -83,14 +84,23 @@ export interface ResultadoCombate {
  * Resolución numérica de combate (Doc 5.2/5.10): "mismo motor" para asedio/mundo abierto/caravanas.
  * PERMADEATH real (Doc 5.4): las bajas son permanentes; sin empates (jitter aleatorio rompe la igualdad).
  */
-export function resolverCombate(atacantes: Escuadron[], defensores: Escuadron[], instante: Instante, rng: RandomFn): ResultadoCombate {
+export function resolverCombate(
+  atacantes: Escuadron[],
+  defensores: Escuadron[],
+  instante: Instante,
+  rng: RandomFn,
+  multiplicadorDefensor = 1
+): ResultadoCombate {
   if (atacantes.length === 0) throw new CombateInvalidoError('El atacante no tiene escuadrones con los que combatir.');
   if (defensores.length === 0) throw new CombateInvalidoError('El defensor no tiene escuadrones con los que combatir.');
 
   const jitterA = 1 + (rng() * 2 - 1) * MILITAR.varianzaCombate;
   const jitterD = 1 + (rng() * 2 - 1) * MILITAR.varianzaCombate;
   const poderA = poderTotal(atacantes, instante, false) * jitterA;
-  const poderD = poderTotal(defensores, instante, true) * jitterD;
+  // El multiplicador de muralla (Paso 3b, `multiplicadorDefensivoDeRecintos`) SOLO llega aquí desde
+  // `iniciarAsedio` — `combateCampoAbierto` no lo pasa nunca (1 por defecto): en mundo abierto no hay ningún
+  // recinto que atravesar, así que aplicarlo ahí sería un bono de la nada.
+  const poderD = poderTotal(defensores, instante, true) * jitterD * multiplicadorDefensor;
 
   const ganador: 'atacante' | 'defensor' = poderA > poderD ? 'atacante' : 'defensor';
   const ratio = Math.min(poderA, poderD) / Math.max(poderA, poderD, 1);
@@ -163,7 +173,10 @@ export function iniciarAsedio(
   const escuadronesAtacantes = seleccionarEscuadrones(atacante, escuadronIdsAtacantes);
   const escuadronesDefensores = seleccionarEscuadrones(defensor, defensor.escuadrones.map((e) => e.id));
 
-  const resultado = resolverCombate(escuadronesAtacantes, escuadronesDefensores, instante, rng);
+  // Paso 3b (§16 del doc de murallas): la razón de ser de toda la mecánica — un asedio contra un recinto
+  // cerrado es mucho más caro para el atacante, y tanto más cuantas menos puertas tenga el defensor.
+  const multiplicadorMuralla = multiplicadorDefensivoDeRecintos(defensor.recintos ?? []);
+  const resultado = resolverCombate(escuadronesAtacantes, escuadronesDefensores, instante, rng, multiplicadorMuralla);
 
   const conquistado = resultado.ganador === 'atacante';
   const payloadAsedio: PayloadAsedio = {

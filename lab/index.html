@@ -177,6 +177,25 @@
         gap: 6px;
         align-items: center;
       }
+      /* Perfiles de trazado: radios excluyentes, se aplican en vivo (no requieren refundar). */
+      .lab-perfiles { display: flex; flex-direction: column; gap: 4px; }
+      .lab-perfil-titulo { font-weight: 600; }
+      .lab-perfiles label {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        border: 1px solid #4a4436;
+        border-radius: 3px;
+        padding: 3px 8px;
+        cursor: pointer;
+        background: #2a2721;
+      }
+      .lab-perfiles label:hover { background: #3a352b; }
+      .lab-perfiles label.activo {
+        background: #6b5a2a;
+        border-color: #ffd23f;
+        color: #fff3c4;
+      }
       .lab-manual-row select {
         background: #1b1a17;
         color: #e8e2d0;
@@ -197,9 +216,9 @@
           Ámbito aislado: un asentamiento sobre motor real (`avanzarSimulacion`), sin partida ni facciones de
           más alrededor. La Facción del lab nace a nivel máximo: así el cupo de asentamientos por nivel de
           Facción (`CUPO_NIVEL_ASENTAMIENTO`) no bloquea la subida a nivel 3, que es un límite de la partida,
-          no del crecimiento urbano que se estudia aquí. Código de árbol: R = Centro Urbano, a-h = hijos directos de R (una letra por ranura),
-          a1/a11... = generaciones siguientes (un dígito 1-8 por ranura). Anillo dorado = semilla activa ·
-          borde rojo punteado = semilla saturada (Lógica 1, árbol de anclas — 8 ranuras agotadas) · "Ancla
+          no del crecimiento urbano que se estudia aquí. Código de árbol: R = Centro Urbano, a-e = hijos directos de R (una letra por ranura),
+          a1/a11... = generaciones siguientes (un dígito 1-5 por ranura). Anillo dorado = semilla activa ·
+          borde rojo punteado = semilla saturada (Lógica 1, árbol de anclas — 5 ranuras agotadas) · "Ancla
           llena" = sin hueco para el próximo edificio dependiente (Lógica 2 — al llenarse, la búsqueda de
           satélites pasa a la siguiente instancia elegible de esa categoría) · "!" rojo = ancla sin NINGÚN
           satélite alcanzable (huérfana).
@@ -216,6 +235,41 @@
           <button id="lab-auto">▶ Auto</button>
         <label class="lab-check"><input type="checkbox" id="lab-rejilla" checked /> rejilla</label>
         </div>
+
+        <div class="lab-perfiles">
+          <div class="lab-row" id="lab-perfil-opciones"><span class="lab-perfil-titulo">Perfil de trazado</span></div>
+          <p class="hint">
+            Excluyentes entre sí. Cada uno permuta el desempate de colocación: qué prefiere un edificio entre
+            huecos igual de válidos del núcleo de su ancla. <b>Se aplica en vivo, sin refundar</b> — lo ya
+            construido no se mueve, así que cambiar de perfil a mitad de partida deja un ESTRATO visible, igual
+            que hará una política real al expirar. «Tradición» = el que le toca al asentamiento por su id.
+          </p>
+        </div>
+
+        <div class="lab-perfiles">
+          <div class="lab-row">
+            <span class="lab-perfil-titulo">Muralla</span>
+            <button id="lab-muralla-trazar">Trazar recinto</button>
+            <button id="lab-muralla-comprometer">Comprometer</button>
+            <button id="lab-muralla-abandonar">Abandonar</button>
+            <button id="lab-muralla-quitar">Quitar</button>
+            <label class="lab-check">nivel
+              <select id="lab-muralla-nivel">
+                <option value="1">1 · empalizada</option>
+                <option value="2" selected>2 · piedra</option>
+                <option value="3">3 · adarve</option>
+              </select>
+            </label>
+          </div>
+          <p class="hint">
+            Presupuesto, <b>no compromete nada</b>: enseña dónde caería el anillo hoy y cuánto costaría. El
+            trazo cambia según crece la ciudad — vuelve a pulsar tras avanzar ticks para verlo. El dato
+            irreversible es el <b>nº de puertas</b>: se congelan al comprometer y menos puertas es MÁS defensa
+            (embudo), a cambio de que los caminos rurales rodeen.
+          </p>
+          <div class="lab-status" id="lab-muralla-status">—</div>
+        </div>
+
         <div class="lab-status" id="lab-status">—</div>
 
         <div class="lab-tabs">
@@ -231,11 +285,11 @@
               <thead>
                 <tr>
                   <th>Tipo</th>
-                  <th title="Posición en el árbol: R = Centro Urbano, a-h = hijos de R, a1/a11... = generaciones siguientes">Código</th>
+                  <th title="Posición en el árbol: R = Centro Urbano, a-e = hijos de R, a1/a11... = generaciones siguientes">Código</th>
                   <th title="Profundidad en el árbol (R = 0)">Nivel</th>
                   <th title="Distancia en celdas a su padre directo (la semilla de la que nació) — no a la raíz última del árbol">Dist. a su raíz</th>
                   <th title="¿Es la semilla activa ahora mismo?">Semilla activa</th>
-                  <th title="Lógica 1: ¿esta semilla ya agotó sus 8 ranuras?">Semilla saturada</th>
+                  <th title="Lógica 1: ¿esta semilla ya agotó sus 5 ranuras?">Semilla saturada</th>
                   <th title="Lógica 2: ¿ya no le queda hueco a este ancla para un satélite más? (persistido, campo Edificio.anclaLlena)">Ancla llena</th>
                   <th title="Sin ningún satélite alcanzable — señal de ancla huérfana">Huérfana</th>
                   <th>Edad</th>

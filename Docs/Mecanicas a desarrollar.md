@@ -26,6 +26,21 @@ mecanica de murallas: que rodee todo el espacio interno de la ciudad ocupando ce
 
 la murallas tienen mejora, el coste es de madera y piedra, al principio no se pueden apostar soldados arriba, pero con niveles mas altos si. al subir de nivel, la muralla, gana torres, puertas
 
+> **Diseño cerrado: `Consideraciones/Murallas_Definicion.md`** (2026-08-31, revisado por consejo).
+> Especificación completa — entidad `Recinto` persistida, trazo del anillo por dilatación, puertas
+> geométricas y congeladas, torres, tres niveles (empalizada → piedra → adarve), coste por celda con obra
+> progresiva, arrabal extramuros y ampliación de recinto. **CERO código escrito todavía.**
+>
+> La razón de ser está en §0: la muralla es una ventaja defensiva abrumadora, y **menos puertas benefician al
+> defensor** (embudo). De ahí el eje estratégico: amurallar pronto = fortaleza barata con casi todo el
+> crecimiento futuro extramuros; amurallar tarde = metrópoli cara con más frente que cubrir. Por eso entran
+> ya en la primera pasada el multiplicador defensivo y el upkeep por celda: la ventaja tiene que ser difícil
+> de obtener Y de mantener.
+>
+> Depende de §7 (calles como celdas): sin la geometría de celdas de la Etapa 6 esta mecánica no se puede
+> escribir. El `EdificioTipo 'muralla'` mínimo que existe hoy (1 celda, 2000 piedra, gate de nivel 4)
+> desaparece y lo sustituye el recinto.
+
 ## 7. Revamp caminos
 Revamp la mecánica de colocación de edificios para tomar en cuenta los caminos como celdas y no aristas. Dado q cuando pase a de 2d a 3d el ser aristas causa problemas.
 

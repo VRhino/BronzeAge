@@ -97,8 +97,10 @@ sin rasterizar nada en el servidor: `cliente-jugador/src/terreno/` lleva su prop
 ### Mundo y consultas espaciales: `src/world/`
 
 `MapaGenerado` y `EstadoMapa` son datos serializables. La clase `Mapa` es una fachada en memoria que construye
-índices y ofrece consultas espaciales, stock de nodos, extracción y regeneración. También incluye geometría,
-rutas y exportación de terreno para Unity (`exportUnity.ts` — herramienta de administración, no del juego).
+índices y ofrece consultas espaciales, stock de nodos, extracción y regeneración. También incluye geometría y
+rutas. (El export de terreno a Unity Terrain, `exportUnity.ts`, se retiró: era un experimento de herramienta
+de administración —nunca parte del juego— que no llegó a usarse y dejaba un test lento e intermitente
+lastrando la suite.)
 
 `world/poligonos.ts` resuelve la unión de siluetas que se solapan. Sus dos consumidores son de presentación:
 `Mapa.contornosBosques()` y `engine/zones.ts` (fusión de zonas de influencia por facción).

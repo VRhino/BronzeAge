@@ -42,6 +42,7 @@ import {
 import { tieneRecursos } from '../engine/almacen';
 import { asignarCargoLocal, CargoInvalidoError } from '../engine/cargos';
 import { anadirEdificioManualmente, reclamosDeFuentes, ConstruccionManualInvalidaError } from '../engine/construction';
+import { comprometerRecintoManualmente, RecintoInvalidoError } from '../engine/muralla';
 import { construirCaravanaComercial, proponerTrueque, CaravanaInvalidaError, TruequeInvalidoError } from '../engine/trade';
 import { computeTodasLasZonas } from '../engine/zones';
 import { calcularCostoMantenimiento, encontrarCapital } from '../engine/mantenimiento';
@@ -373,6 +374,29 @@ function asegurarNucleoMilitar(
     return anadirEdificioManualmente(asentamiento, faccion, 'gobernador', faltante, zonaPoligono, mapa, capital, reclamos, contador);
   } catch (err) {
     if (!(err instanceof ConstruccionManualInvalidaError)) throw err;
+    return asentamiento;
+  }
+}
+
+/**
+ * Primer recinto a mano para CUALQUIER asentamiento con Gobernador (`Consideraciones/Murallas_Definicion.md`,
+ * Paso 2c) — mismo agujero que `asegurarNucleoMilitar` documenta para Barracón/Galería: no hay
+ * auto-construcción de murallas (§8 del doc), así que sin este paso ninguna Facción NPC del batch alcanzaría
+ * jamás el gate de nivel 4 que el recinto completo sustituye (`NIVEL_ASENTAMIENTO.requisitos[4]`, Paso 5).
+ *
+ * Solo el PRIMER recinto: si ya hay uno (en obra o terminado), este paso no hace nada — ampliar tiene sus
+ * propios gates (integridad 1 + `MURALLA.arrabalMinimo` extramuros, §10) y es responsabilidad del Paso 3, no
+ * de este. Nivel 1 (empalizada) a propósito: es el más barato, y subir de nivel un recinto ya trazado es la
+ * mejora del Paso 3, no algo que decidir al comprometer.
+ */
+function asegurarMuralla(asentamiento: Asentamiento, instante: Instante): Asentamiento {
+  if (!asentamiento.cargos.gobernadorId) return asentamiento;
+  if ((asentamiento.recintos ?? []).length > 0) return asentamiento;
+
+  try {
+    return comprometerRecintoManualmente(asentamiento, 'gobernador', 1, instante);
+  } catch (err) {
+    if (!(err instanceof RecintoInvalidoError)) throw err;
     return asentamiento;
   }
 }
@@ -861,11 +885,11 @@ function fundarAsentamientosIniciales(
 /**
  * Un tick completo de decisiones del NPC de gobernanza: gobernanza+reserva base → **Granjas mínimas
  * (gate: sin esto, no se avanza a los dos pasos siguientes este tick)** → infraestructura comercial
- * (Mercado+caravana, para cualquier asentamiento) → núcleo militar (Barracón/Galería) → trueque de
- * SUPERVIVENCIA (cualquier Facción, prioriza lo que Mantenimiento necesita) → trueque de especialización
- * (delega en `avanzarAutoComercioSimulado`, sin reimplementarlo — solo dentro de la misma Facción) →
- * reclutamiento (con gate de reserva) → ataque a campamentos de bandidos → expansión. Llamar DESPUÉS de
- * `avanzarSimulacion` en el mismo tick.
+ * (Mercado+caravana, para cualquier asentamiento) → núcleo militar (Barracón/Galería) → **primer recinto de
+ * muralla (`asegurarMuralla`, Paso 2c)** → trueque de SUPERVIVENCIA (cualquier Facción, prioriza lo que
+ * Mantenimiento necesita) → trueque de especialización (delega en `avanzarAutoComercioSimulado`, sin
+ * reimplementarlo — solo dentro de la misma Facción) → reclutamiento (con gate de reserva) → ataque a
+ * campamentos de bandidos → expansión. Llamar DESPUÉS de `avanzarSimulacion` en el mismo tick.
  */
 export function avanzarNpcGobernanza(
   estado: EstadoSimulacion,
@@ -938,7 +962,8 @@ export function avanzarNpcGobernanza(
       contador++
     );
     if (resultado.caravanaNueva) caravanas = [...caravanas, resultado.caravanaNueva];
-    return asegurarNucleoMilitar(resultado.asentamiento, faccion, zonaPoligono, mapa, capital, reclamos, contador++);
+    const conNucleoMilitar = asegurarNucleoMilitar(resultado.asentamiento, faccion, zonaPoligono, mapa, capital, reclamos, contador++);
+    return asegurarMuralla(conNucleoMilitar, instante);
   });
 
   const trueque = truequeDeSupervivencia(asentamientos, capitalesPorFaccion, estado.acuerdos, instante, contador, esNpc);

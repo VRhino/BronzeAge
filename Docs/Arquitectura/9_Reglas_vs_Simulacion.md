@@ -233,8 +233,6 @@ viajando en la proyección — hoy pesa 0,3 KB al tick 200, es irrelevante.
 
 No entran en la clasificación porque no son ni regla ni simulación de partida:
 
-- `world/exportUnity.ts` (`exportarParaUnityTerrain`) — herramienta de *worldgen*, no del juego. El
-  [doc 8](8_Triaje_Consultas.md) ya la marcaba como endpoint de administración; hoy corre en el navegador.
 - `GameStore.exportarSimulacion` — serializa la partida a un archivo. Administración (**C12**).
 - `engine/simulacionAutoComercio.ts` — simulación de desarrollo, apagada por defecto.
 

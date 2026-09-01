@@ -254,6 +254,20 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
     rolesPermitidos: ['jugador'],
     condicionJugador: (estado, jugadorId, params) => residenteConCargo(estado, jugadorId, params.asentamientoId, params.cargo),
   },
+  comprometerRecinto: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, jugadorId, params) => residenteConCargo(estado, jugadorId, params.asentamientoId, params.cargo),
+  },
+  // Sin `cargo` en `params`: abandonar un recinto es SOLO del Gobernador (§8 del doc de murallas), a
+  // diferencia de comprometer, que también admite al Maestro de Obras.
+  abandonarRecinto: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, jugadorId, params) => residenteConCargo(estado, jugadorId, params.asentamientoId, 'gobernador'),
+  },
+  mejorarRecinto: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, jugadorId, params) => residenteConCargo(estado, jugadorId, params.asentamientoId, params.cargo),
+  },
   // Sin `cargo` en `params`, a diferencia de los de arriba: autoridad sobre la cola de construcción es del
   // Gobernador o del Maestro de Obras (`CargoConstructor`, ver `construccion.ts`).
   alternarAutoConstruccion: {

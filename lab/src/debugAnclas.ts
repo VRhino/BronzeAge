@@ -1,7 +1,7 @@
 // Overlay de depuración del Laboratorio (fuera del ámbito del juego general) — NO se importa desde
 // `main.ts`/`ui/canvas.ts` del juego real. Inspecciona y dibuja encima del trazado real (`drawAsentamiento`,
 // ui/canvas.ts) el estado del árbol único de anclas (Etapa 5, Lógica 1: `engine/trazado.ts`), para poder ver
-// a simple vista si una semilla reparte sus 8 ranuras antes de pasar a una hija y si toda ancla de árbol
+// a simple vista si una semilla reparte sus 5 ranuras antes de pasar a una hija y si toda ancla de árbol
 // tiene algún satélite alcanzable.
 import type { Edificio, EdificioTipo, Point } from '../../src/domain/types';
 import { REJILLA_ASENTAMIENTO, TRAZADO } from '../../src/constants';
@@ -35,8 +35,8 @@ for (const [categoria, tipos] of Object.entries(ANCLA_SATURACION_POR_CATEGORIA) 
 }
 
 /** Letras para los hijos DIRECTOS de la raíz (Centro Urbano) — a petición del usuario. A partir de la
- * segunda generación el código sigue con un dígito 1-8 en vez de otra letra (ver `construirArbol`). */
-const LETRAS_RANURA = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+ * segunda generación el código sigue con un dígito 1-5 en vez de otra letra (ver `construirArbol`). */
+const LETRAS_RANURA = ['a', 'b', 'c', 'd', 'e'];
 
 interface NodoArbol {
   padreId: string | null;
@@ -57,11 +57,11 @@ function distanciaAlOrigenLocal(p: Point): number {
 
 /**
  * Reconstruye, para cada ancla de árbol (`ANCLAS_REALES`) del asentamiento, su padre real, profundidad y
- * código de posición (Centro Urbano = "R"; hijos directos de la raíz = "a".."h" según la ranura; a partir de
- * ahí se apila un dígito 1-8 por generación: "a1", "a11"...).
+ * código de posición (Centro Urbano = "R"; hijos directos de la raíz = "a".."e" según la ranura; a partir de
+ * ahí se apila un dígito 1-5 por generación: "a1", "a11"...).
  *
- * Un primer intento de esto comparaba solo el ÁNGULO entre dos anclas contra las 8 direcciones rotadas — y
- * resultó ser un espejismo: como todas las anclas del asentamiento comparten el MISMO eje de 8 direcciones,
+ * Un primer intento de esto comparaba solo el ÁNGULO entre dos anclas contra las 5 ranuras rotadas — y
+ * resultó ser un espejismo: como todas las anclas del asentamiento comparten el MISMO eje de 5 ranuras,
  * dos anclas SIN relación real (p. ej. dos hermanas de la misma semilla, o dos anclas de una cadena en línea
  * recta del bug de "ranura reutilizada") pueden quedar alineadas por pura coincidencia geométrica y el
  * heurístico les inventaba un parentesco falso. La única forma de estar seguro es no adivinar: se REPRODUCE
@@ -116,7 +116,7 @@ function construirArbol(edificios: Edificio[], asentamientoId: string): Map<stri
         }
       }
       if (asignado) break;
-      // Las 8 direcciones de `candidato` fallan TODAS en este punto del historial: coherente con que el motor
+      // Las 5 ranuras de `candidato` fallan TODAS en este punto del historial: coherente con que el motor
       // lo hubiera descartado aquí — pasamos al siguiente candidato, más lejano. Si en cambio sí tenía hueco
       // pero en ninguna dirección coincide con `e`, no se descarta (de verdad tenía sitio): seguimos probando
       // el resto de candidatos por si la coincidencia real está más lejos en la lista.
@@ -182,7 +182,7 @@ export interface FilaAncla {
   /** Distancia en celdas a su padre directo ("raíz" en la terminología del usuario) — `null` para Centro
    * Urbano. Sirve para ver de un vistazo el bug de "ranura reutilizada": si dos hijas del mismo padre y
    * misma ranura (mismo prefijo de código antes del último dígito) tienen distancias muy distintas, es la
-   * cadena expandiéndose en línea recta en vez de repartirse entre las 8 direcciones. */
+   * cadena expandiéndose en línea recta en vez de repartirse entre las 5 ranuras. */
   distanciaPadreCeldas: number | null;
   esSemillaActiva: boolean;
   semillaSaturada: boolean;
@@ -225,7 +225,7 @@ export function inspeccionarAnclas(edificios: Edificio[], asentamientoId: string
 }
 
 /**
- * Dibuja, ENCIMA del trazado ya pintado por `drawAsentamiento` (ui/canvas.ts): las 8 ranuras rotadas de cada
+ * Dibuja, ENCIMA del trazado ya pintado por `drawAsentamiento` (ui/canvas.ts): las 5 ranuras rotadas de cada
  * ancla de árbol (mismas para todo el asentamiento — la rotación es por asentamiento, no por ancla, ver
  * `direccionesRotadas`), para ver a simple vista si dos hijas de una misma semilla cayeron en el mismo rayo
  * (bug de "crecimiento en línea recta"); un anillo dorado sobre la semilla activa; un borde rojo punteado

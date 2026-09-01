@@ -7,7 +7,7 @@
 // catálogo también permite que `ResultadoComando.codigoError` tenga un tipo cerrado (`CodigoError`) en vez de
 // `string` suelto.
 export const CODIGOS_ERROR = {
-  // Los 13 que el MOTOR (`engine/*.ts`) lanza como excepción — mapeados desde la clase de error concreta en
+  // Los 14 que el MOTOR (`engine/*.ts`) lanza como excepción — mapeados desde la clase de error concreta en
   // `erroresDeDominio.ts`, que importa este catálogo en vez de escribir los literales por su cuenta.
   cargoInvalido: 'cargo.invalido',
   combateInvalido: 'combate.invalido',
@@ -22,6 +22,7 @@ export const CODIGOS_ERROR = {
   tropasReclutamientoInvalido: 'tropas.reclutamiento_invalido',
   comercioCaravanaInvalida: 'comercio.caravana_invalida',
   comercioTruequeInvalido: 'comercio.trueque_invalido',
+  recintoInvalido: 'recinto.invalido',
 
   // Los que rechaza la CAPA DE PARTIDA (`session/comandos/*.ts`) sin que el motor llegue a verlos: casi todos
   // "la entidad referenciada por id no existe" (el motor recibe la entidad ya resuelta, nunca un id suelto),

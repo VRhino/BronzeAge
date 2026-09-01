@@ -4,7 +4,7 @@
 // de dominio: eso es responsabilidad exclusiva de `gameStore`. Los tipos de `./domain/types` se
 // importan solo como `type` para tipar lo que se lee — no acoplan a ninguna lógica.
 import type { Asentamiento, BiomaTipo, CargoTipo, Edificio, Faccion, RegionId } from '@motor/domain/types';
-import { CATALOGOS, crearGameStore, fmtTiempoMundo, UNITY_EXPORT_DEFAULT, type GameState, type GameStore, type EstadoMejoraEdificio } from './app/gameStore';
+import { CATALOGOS, crearGameStore, fmtTiempoMundo, type GameState, type GameStore, type EstadoMejoraEdificio } from './app/gameStore';
 import { draw, drawAsentamiento, drawFiltroFertilidad, drawTerreno, faccionColor, BIOMA_COLOR, BIOMA_COLOR_SIMPLE, RECURSO_COLOR, RECURSOS_EN_MAPA, EDIFICIO_COLOR, FACCION_COLORES, type DrawState } from './ui/canvas';
 
 // Subido de 800 a 900 junto con el mapa 2000x2000 (Fase 0.1): el mundo más grande necesitaba algo más de
@@ -295,7 +295,7 @@ app.innerHTML = `
 
     <div class="tab-panel" id="tab-generacionMundo" hidden>
       <div class="section-title registros-heading">Generación de mundo</div>
-      <p class="legend-note registros-intro">Regenera el mapa procedural y exporta su terreno para utilizarlo fuera de la simulación.</p>
+      <p class="legend-note registros-intro">Regenera el mapa procedural del mundo.</p>
       <div class="controls-grid world-generation-grid">
         <div class="controls">
           <h2>Regenerar mundo</h2>
@@ -310,15 +310,6 @@ app.innerHTML = `
             </select>
           </label>
           <button type="button" id="regenerar-btn">Regenerar mundo</button>
-        </div>
-        <div class="controls">
-          <h2>Exportar mapa</h2>
-          <p class="legend-note">Genera el terreno para Unity con la altura máxima indicada.</p>
-          <label class="altura-unity-label" for="exportar-unity-altura" title="Altura máxima del mapa">
-            Altura máx. (m):
-            <input type="number" id="exportar-unity-altura" min="1" step="10" value="${UNITY_EXPORT_DEFAULT.alturaMaximaMetros}" />
-          </label>
-          <button type="button" id="exportar-unity-btn">Exportar mapa (Unity Terrain)</button>
         </div>
       </div>
     </div>
@@ -1990,67 +1981,6 @@ document.getElementById('exportar-btn')!.addEventListener('click', () => {
   enlace.download = `bronze-age-sim-${new Date(gameStore.getState().instante).toISOString().slice(0, 16).replace(/[:T]/g, '-')}.json`;
   enlace.click();
   URL.revokeObjectURL(url);
-});
-
-function descargarBlob(blob: Blob, nombreArchivo: string): void {
-  const url = URL.createObjectURL(blob);
-  const enlace = document.createElement('a');
-  enlace.href = url;
-  enlace.download = nombreArchivo;
-  enlace.click();
-  URL.revokeObjectURL(url);
-}
-
-/**
- * Peso 0-255 por celda -> PNG en escala de grises (R=G=B=peso, A=255), vía `<canvas>` fuera del DOM. El
- * cálculo del peso vive en `world/exportUnity.ts` (sin DOM, testeable en Node); rasterizar a imagen es
- * trabajo de interfaz, así que vive aquí.
- */
-function pesosAPng(pesos: Uint8Array, resolucion: number): Promise<Blob> {
-  const canvas = document.createElement('canvas');
-  canvas.width = resolucion;
-  canvas.height = resolucion;
-  const ctx = canvas.getContext('2d')!;
-  const imagen = ctx.createImageData(resolucion, resolucion);
-  for (let i = 0; i < pesos.length; i++) {
-    const peso = pesos[i]!;
-    const base = i * 4;
-    imagen.data[base] = peso;
-    imagen.data[base + 1] = peso;
-    imagen.data[base + 2] = peso;
-    imagen.data[base + 3] = 255;
-  }
-  ctx.putImageData(imagen, 0, 0);
-  return new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('No se pudo generar el PNG del splatmap'))), 'image/png');
-  });
-}
-
-const exportarUnityBtn = document.getElementById('exportar-unity-btn') as HTMLButtonElement;
-const exportarUnityAlturaInput = document.getElementById('exportar-unity-altura') as HTMLInputElement;
-exportarUnityBtn.addEventListener('click', async () => {
-  const textoOriginal = exportarUnityBtn.textContent;
-  exportarUnityBtn.disabled = true;
-  try {
-    exportarUnityBtn.textContent = 'Generando heightmap…';
-    // Deja que el navegador repinte el botón deshabilitado antes de la generación síncrona del heightmap
-    // (~1s a resolución 4097, ver `world/exportUnity.ts`).
-    await new Promise((r) => setTimeout(r, 0));
-    const alturaMaximaMetros = Number(exportarUnityAlturaInput.value) || UNITY_EXPORT_DEFAULT.alturaMaximaMetros;
-    const { heightmapRaw, splatmap, metadata, nombreBase } = gameStore.exportarMapaUnity({ alturaMaximaMetros });
-
-    descargarBlob(new Blob([heightmapRaw], { type: 'application/octet-stream' }), `${nombreBase}.raw`);
-    descargarBlob(new Blob([JSON.stringify(metadata, null, 2)], { type: 'application/json' }), `${nombreBase}.json`);
-
-    for (const [bioma, pesos] of Object.entries(splatmap.capas)) {
-      exportarUnityBtn.textContent = `Generando splatmap (${bioma})…`;
-      const png = await pesosAPng(pesos, splatmap.resolucion);
-      descargarBlob(png, `${nombreBase}-splat-${bioma}.png`);
-    }
-  } finally {
-    exportarUnityBtn.disabled = false;
-    exportarUnityBtn.textContent = textoOriginal;
-  }
 });
 
 render();

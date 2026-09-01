@@ -1081,6 +1081,136 @@ dispara mucho más tarde y con relevo (`plaza`/`pozo`/`parque`) funcionando, as�
 
 ---
 
+### E6.22 El árbol de anclas pasa de 8 ranuras cardinales a 5 equidistantes (2026-08-31)
+
+A petición del usuario, tras ver en el laboratorio que "rara vez se crean las 8": las **8 direcciones**
+(cardinales + intercardinales, 45°) de cada semilla del árbol pasan a **5 ranuras equidistantes a 72°**.
+
+**Por qué:** con 8, casi la mitad de las ranuras de una semilla apuntaban de vuelta al centro ya construido
+y fallaban `huecoEnDireccion` casi siempre, así que la semilla se descartaba (`semillaSaturada`) con la mitad
+de sus ranuras sin estrenar y el árbol saltaba a otra. 5 a 72° reparten el crecimiento mejor sin dejar tantas
+ranuras muertas.
+
+**Cambio** (`engine/trazado.ts`):
+- `NUM_RANURAS = 5`, `PASO_RANURA = 2π/5`, `ANGULO_RANURA_0 = -π/2` (la ranura 0 apunta hacia arriba —
+  "partiendo del medio" del marco). Se borran `DIRECCIONES_CARDINALES` / `VECTOR_DIRECCION` / `ANGULO_DIRECCION`
+  (el sistema de nombres N/NE/E/… ya no aporta nada).
+- `direccionesRotadas` genera las 5 por aritmética de ángulo en vez de mapear los cardinales.
+- `anguloRotacionEje`: rango `[0, PASO_RANURA)` (una ranura completa) en vez de `[0°, 45°)`.
+- `ranuraOcupada`: el margen angular `EPS_ANGULO` pasa a derivarse de `MEDIA_RANURA_DIRECCION` (self-scaling).
+- Códigos del árbol en el laboratorio: `a`–`e` (5 letras) en vez de `a`–`h`, dígitos `1`–`5`.
+
+**Medido** (10 seeds × con/sin Mercado manual, 400 ticks): sin regresión — todas llegan a nivel 2 con
+viv≈40, 3–5 anclas por asentamiento repartidas en ranuras distintas, `sinCalle≈0`. Lab verificado: seed 13 →
+árbol CU + Patio de Gremios (ranura `a`) + Parque (ranura `e`), bien separados. 691 tests.
+
+Experimento: si no convence, revertir es cambiar `NUM_RANURAS` de vuelta a 8 y restaurar el ángulo base
+`ANGULO_RANURA_0 = 0` (o volver a los cardinales nombrados).
+
+---
+
+### E6.23 Perfiles de trazado: una política cambia la FORMA de la ciudad (2026-08-31)
+
+A petición del usuario: *"eligiendo una política en específico, generar ciudades de formas diferentes pero
+siendo orgánicas al mismo tiempo"*.
+
+#### El principio
+
+Hay dos formas de hacerlo y una mata lo orgánico:
+
+- ❌ **Plantilla global** ("política X → traza una retícula / una estrella"). La forma deja de emerger y pasa a
+  estar impuesta — es exactamente el plano pre-generado que se rechazó al empezar la mecánica.
+- ✅ **Cambiar qué PREFIERE un edificio suelto** entre huecos igual de válidos. Las reglas siguen siendo
+  locales, la forma sigue emergiendo, pero la estadística agregada cambia.
+
+Lo segundo es lo que ya hacía `lineas_produccion` (§5.3, `ampliado`), que es el precedente: **el patrón
+"una política sustituye el criterio de orden" ya estaba implementado y probado**. Y `postura_defensiva` llevaba
+en el catálogo desde el principio marcada `// flag de layout, Doc 4.2 — sin efecto visual en Fase 0`, o sea:
+el hueco estaba reservado.
+
+#### La palanca
+
+El desempate de `sitiosPorAtraccionDura` es **lexicográfico**, así que el primer término domina de forma
+absoluta y los cuatro valores **ya se calculaban**. Un perfil es una PERMUTACIÓN de ese orden:
+
+| Perfil | Manda | Silueta |
+|---|---|---|
+| `nucleos` | `hueco` | Racimos densos concéntricos por ancla — el orden histórico |
+| `caminera` | `nivel` | Se encadena a las calles que ya existen |
+| `compacta` | `centro` | Cada barrio llena primero su cara interior; ciudad más apretada |
+| `gremial` | `bordeAfin` | Barrios monocromos, oficios segregados |
+
+Permutación y no suma ponderada: los pesos habría que calibrarlos, se prestan a que un término se coma a otro
+sin que se note, y destruyen la garantía de que un criterio se respeta SIEMPRE.
+
+**Un quinto perfil se probó y se descartó:** «palatina», que hacía dominar `bordeCompartido` con el ancla.
+Salió **idéntico a `nucleos`** — ese término solo tiene señal cuando el candidato toca el anillo del ancla
+(hueco 0), así que como criterio dominante vale 0 en casi toda la banda y cae al siguiente. Se sustituyó por
+`centro` (distancia al origen del asentamiento), el único término que mira la ciudad entera en vez de la
+vecindad del ancla — por eso es el que produce una silueta global distinta. `bordeCompartido` sigue en el
+desempate de los cuatro perfiles, donde sí sirve, pero no puede encabezar ninguno.
+
+#### De dónde sale el perfil
+
+`resolverPerfil(id, porPolitica)` — precedencia en un solo sitio:
+
+```
+TRAZADO.perfilForzado (laboratorio / BATCH_PERFIL)  >  política activa  >  tradición local
+```
+
+- **Tradición local** (`perfilPorTradicion`): derivada del id del asentamiento, determinista y permanente.
+  Mismo mecanismo que `anguloRotacionEje` y `largoMaxFila`. Es lo que hace que **dos ciudades NPC no salgan
+  iguales aunque nadie active ninguna política** — el problema de fondo se arregla también sin jugador.
+- **Política**: cuatro ordenanzas del Maestro de Obras (`postura_defensiva` → compacta, `arterias_comerciales`
+  → caminera, `barrios_gremiales` → gremial, `plazas_mayores` → nucleos). **Excluyentes sin ninguna regla
+  nueva**: `maestroObras` tiene un único slot, así que activar una obliga a esperar a que expire la anterior.
+  Compiten en ese mismo slot con Vía Rápida y Líneas de Producción — forma contra velocidad contra logística.
+
+`trazado.ts` no sabe nada de políticas (sigue siendo geometría pura): la decisión *"qué perfil toca"* vive en
+`construction.ts::perfilDe`, la de *"qué hace ese perfil"* en `ORDEN_POR_PERFIL`.
+
+#### Estratos, no reformas
+
+Una política dura `duracionMinutosPorDefecto` = **150 ticks** (1 tick = 1 minuto) y nada mueve lo ya
+construido. Así que una ordenanza de trazado **no produce una ciudad de esa forma — produce un ESTRATO**: un
+núcleo gremial con un anillo compacto encima, etc. La ciudad acaba registrando su historia política en su
+geometría. Es deliberado y creo que es mejor que el efecto puro, pero implica que nunca se verá una ciudad
+"100 % caminera".
+
+#### Medido
+
+Batch, 12 facciones × 400 ticks, mismas semillas (`BATCH_PERFIL=<perfil>`):
+
+| perfil | frente real | componentes de red | ocupación núcleo | manzanas cerradas |
+|---|---|---|---|---|
+| `nucleos` | 99.7 % | 1 | 43.0 % | 4.45 |
+| `caminera` | 100 % | 1 | 41.9 % | 4.55 |
+| `compacta` | 100 % | 1 | **49.4 %** | **5.55** |
+| `gremial` | 100 % | 1 | 41.7 % | 5.27 |
+
+- **Ningún perfil rompe nada**: frente real ~100 % y red de UN solo componente en los cuatro.
+- `compacta` es medible: +15 % de densidad y +25 % de manzanas cerradas.
+- `gremial` cierra más manzanas a la misma densidad (la segregación aprieta los bloques). En medición aparte,
+  homogeneidad de vecindad 86-92 % contra 68-76 % de base.
+- **`caminera` es el más flojo**: apenas se separa en estas métricas. La causa es la misma que mató a
+  «palatina», más suave: `nivel` vale 0 o 1 para casi todos los candidatos de una banda sana, así que
+  discrimina poco. Es distinto (ciudad distinta, test lo congela) pero el efecto es sutil — candidato a
+  reforzarse o a sustituirse.
+
+Cobertura: `perfilesTrazado.test.ts` — cada perfil da una ciudad distinta (lo que impide que vuelva a colarse
+un perfil decorativo), ninguno rompe invariantes, ninguno altera el CENSO de edificios (la forma no puede ser
+una ventaja económica encubierta), precedencia, y exclusividad por slot.
+
+#### Pendiente
+
+**Ninguna ordenanza tiene coste/beneficio mecánico propio**, así que hoy compiten en desventaja contra Vía
+Rápida (−25 % de tiempo de obra) y son, en la práctica, una elección estética. Una política de forma que solo
+cambia la forma es cosmética y nadie la elegirá: **la forma tiene que ser la consecuencia de un trade-off, no
+el trade-off**. `barrios_gremiales` es la que más cerca está de tener uno solo — agrupar industria acorta la
+distancia a los insumos, que `factorLineaProduccion` ya mide y ya premia. Sin calibrar ni medir.
+
+---
+
 ## 1. Geometría de las calles
 
 > **DESACTUALIZADO desde 2026-08-31.** Esta sección y las siguientes describen el modelo de ARISTAS, que YA NO

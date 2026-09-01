@@ -38,9 +38,6 @@ import type {
 } from '@motor/domain/types';
 import { EDIFICIO_CATALOGO, MANTENIMIENTO, NECESIDADES, NIVEL_FACCION, POLITICAS, POLITICA_CATALOGO, REJILLA_ASENTAMIENTO, SIMULACION, TROPAS_RECLUTABLES } from '@motor/constants';
 import { crearMapa, type EstadoMapa, type Mapa } from '@motor/world/mapa';
-import { exportarParaUnityTerrain, UNITY_EXPORT_DEFAULT, type ExportUnityResultado, type OpcionesExportUnity } from '@motor/world/exportUnity';
-
-export { UNITY_EXPORT_DEFAULT };
 import {
   produccionPorMinuto,
   manoObraInfo as calcularManoObraInfo,
@@ -830,13 +827,6 @@ export class GameStore {
     return JSON.stringify(payload, null, 2);
   }
 
-  /**
-   * Heightmap (RAW 16-bit) + metadata (posiciones de nodos/bosques/ríos/asentamientos en metros)
-   * del mapa actual, listos para Unity Terrain. Puro respecto al estado: no muta nada.
-   */
-  exportarMapaUnity(opciones?: OpcionesExportUnity): ExportUnityResultado {
-    return exportarParaUnityTerrain(this.mapaGeneradoCache.mapa, this.state.asentamientos, opciones);
-  }
 }
 
 /** Conecta con `gameId` (lo crea si no existe todavía — no destructivo) y devuelve un `GameStore` listo para

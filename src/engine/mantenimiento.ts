@@ -2,6 +2,7 @@ import type { Asentamiento, EdificioTipo, RecursoTipo } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
 import { MANTENIMIENTO, NIVEL_ASENTAMIENTO, RESERVA_CONSTRUCCION } from '../constants';
 import { minutos, transcurrido, type Duracion, type Instante } from '../domain/tiempo';
+import { upkeepDeRecintos } from './muralla';
 
 /** Fase A5 — payloads de los eventos de este subsistema (ver `avanzarNivelAsentamiento`/`avanzarMantenimiento`). */
 export interface PayloadNivelSubio {
@@ -124,6 +125,17 @@ export function encontrarCapital(faccionId: string, asentamientos: Asentamiento[
  * valor fijo de trigo ADEMÁS del que ya se descontaba por separado en `avanzarNutricionPoblacion`/`avanzarMantenimientoTropas`,
  * duplicando el gasto). El consumo real de trigo (población + tropas) se sigue descontando únicamente en esas
  * dos funciones; para mostrarlo en el panel de Mantenimiento, ver `gameStore.mantenimientoInfo`.
+ *
+ * El upkeep de la muralla (`upkeepDeRecintos`, `engine/muralla.ts`, Paso 3b) se SUMA aquí, no en un pote
+ * aparte: es la pieza que hace real "difícil de obtener **y de mantener**" (§0 del doc de murallas). Si el
+ * total no se cubre, es EXACTAMENTE el mismo mecanismo de deficit/degradación de `avanzarMantenimiento` de
+ * abajo el que responde — sin una segunda vía de castigo que rebaje solo la integridad del muro por su cuenta,
+ * que dejaría a la ciudad a salvo de su propia elección de amurallarse. Consecuencia deliberada: un
+ * asentamiento de una sola Facción sin comercio, viviendo solo de su propia extracción, ya vive con el margen
+ * de piedra/oro muy ajustado en cuanto se acerca a su tope de población (ver el comentario de
+ * `poblacionReferencia` más abajo) — sumarle el upkeep de un recinto de nivel 2 o 3 es justo lo que lo empuja
+ * a déficit si no tiene de sobra. El nivel 1 (empalizada, upkeep en madera) se queda deliberadamente barato:
+ * es el escalón que cualquier asentamiento pobre puede seguir sosteniendo (§0, "fortaleza temprana").
  */
 export function calcularCostoMantenimiento(asentamiento: Asentamiento, capital: Asentamiento | undefined): Partial<Record<string, number>> {
   const nivel = asentamiento.nivel;
@@ -137,6 +149,10 @@ export function calcularCostoMantenimiento(asentamiento: Asentamiento, capital: 
   };
   if (nivel >= MANTENIMIENTO.nivelParaPiedra) costo.piedra = MANTENIMIENTO.piedraBase * escala;
   if (nivel >= MANTENIMIENTO.nivelParaOro) costo.oro = MANTENIMIENTO.oroBase * escala;
+
+  for (const [recurso, cantidad] of Object.entries(upkeepDeRecintos(asentamiento.recintos ?? []))) {
+    costo[recurso] = (costo[recurso] ?? 0) + (cantidad ?? 0);
+  }
   return costo;
 }
 

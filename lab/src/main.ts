@@ -10,9 +10,18 @@ import { asignarCargoLocal } from '../../src/engine/cargos';
 import { evaluarViabilidadFundacion, fundarAsentamiento as fundarAsentamientoEngine } from '../../src/engine/settlement';
 import { avanzarSimulacion, type EstadoSimulacion } from '../../src/engine/simulation';
 import { progresoNivelAsentamiento } from '../../src/engine/asentamientoQuery';
-import { celdasDeEdificio, redDeCalles, trazadoParaAsentamiento, type TrazadoAsentamiento } from '../../src/engine/trazado';
+import { celdasDeEdificio, redDeCalles, resolverPerfil, trazadoParaAsentamiento, type TrazadoAsentamiento } from '../../src/engine/trazado';
+import { abandonarRecinto, comprometerRecinto, RecintoInvalidoError, trazadoDeRecinto, trazarRecinto, type TrazoRecinto } from '../../src/engine/muralla';
+import type { TrazadoMuralla } from '../../src/engine/trazado';
 import { anadirEdificioManualmente, mejorarEdificioManualmente, reclamosDeFuentes, ConstruccionManualInvalidaError } from '../../src/engine/construction';
-import { REJILLA_ASENTAMIENTO, TRAZADO, EDIFICIO_TAMANO, NIVEL_FACCION } from '../../src/constants';
+import {
+  REJILLA_ASENTAMIENTO,
+  TRAZADO,
+  EDIFICIO_TAMANO,
+  NIVEL_FACCION,
+  PERFILES_TRAZADO,
+  type PerfilTrazado,
+} from '../../src/constants';
 import { instanteDeTick, isoDeInstante } from '../../src/session/estado';
 import { dibujarAsentamientoLab, EDIFICIO_ETIQUETA, proyeccion, type EstadoDibujoLab } from './render';
 import { crearTooltip } from './tooltip';
@@ -93,6 +102,13 @@ const tick10Btn = document.getElementById('lab-tick-10') as HTMLButtonElement;
 const tick50Btn = document.getElementById('lab-tick-50') as HTMLButtonElement;
 const autoBtn = document.getElementById('lab-auto') as HTMLButtonElement;
 const rejillaChk = document.getElementById('lab-rejilla') as HTMLInputElement | null;
+const murallaTrazarBtn = document.getElementById('lab-muralla-trazar') as HTMLButtonElement;
+const murallaNivelSel = document.getElementById('lab-muralla-nivel') as HTMLSelectElement;
+const murallaStatusEl = document.getElementById('lab-muralla-status')!;
+const murallaComprometerBtn = document.getElementById('lab-muralla-comprometer') as HTMLButtonElement;
+const murallaQuitarBtn = document.getElementById('lab-muralla-quitar') as HTMLButtonElement;
+const murallaAbandonarBtn = document.getElementById('lab-muralla-abandonar') as HTMLButtonElement;
+const perfilOpcionesEl = document.getElementById('lab-perfil-opciones')!;
 const statusEl = document.getElementById('lab-status')!;
 const anclasBodyEl = document.getElementById('lab-anclas-body')!;
 const tabAnclasBtn = document.getElementById('lab-tab-anclas') as HTMLButtonElement;
@@ -119,6 +135,10 @@ let contadorManual = 0;
 let tick = 0;
 let nacimientos = new Map<string, number>();
 let autoTimer: number | undefined;
+// Presupuesto de muralla: el anillo PROPUESTO. No es estado del motor y no se persiste — se recalcula a mano
+// con el botón, nunca por tick, porque el trazo es una consulta cara y el jugador tampoco lo vería cambiar.
+let murallaPropuesta: TrazadoMuralla | undefined;
+let murallaTrazo: TrazoRecinto | undefined;
 
 for (const tipo of TIPOS_CONSTRUIBLES_MANUAL) {
   const opcion = document.createElement('option');
@@ -131,7 +151,7 @@ for (const tipo of TIPOS_CONSTRUIBLES_MANUAL) {
 // tocar el motor ni recalcular trazado/árbol en cada movimiento del mouse). ---
 let cacheAsentamiento: Asentamiento | null = null;
 let cacheFilas: FilaAncla[] = [];
-let cacheTrazado: TrazadoAsentamiento = { calles: [], caminos: [], huellas: {} };
+let cacheTrazado: TrazadoAsentamiento = { calles: [], caminos: [], huellas: {}, murallas: [] };
 let cacheAPantalla: (p: Point) => Point = (p) => p;
 let cacheEscala = 1;
 let cacheLayoutArbol: LayoutArbol = { nodos: new Map(), ancho: 0, alto: 0 };
@@ -187,6 +207,9 @@ function fundar(seed: number): void {
   };
   tick = 0;
   contadorManual = 0;
+  murallaPropuesta = undefined;
+  murallaTrazo = undefined;
+  murallaStatusEl.textContent = '—';
   nacimientos = new Map(asentamientoConGobernador.edificios.map((e) => [e.id, 0]));
   hoveredId = null;
   manualStatusEl.textContent = '—';
@@ -247,6 +270,28 @@ function marca(valor: boolean): string {
   return valor ? '✓' : '—';
 }
 
+/** Publica el estado REAL del motor en `window.__lab` (ver README del laboratorio): sirve para medir
+ * invariantes sobre la ciudad que estés mirando sin instrumentar nada. Se llama desde `computar()` y también
+ * al trazar una muralla — si no, `murallaTrazo` se quedaría con el valor del último `computar()` y la consola
+ * mentiría, que es peor que no exponer nada. */
+function publicarEnConsola(): void {
+  const asentamiento = cacheAsentamiento;
+  if (!asentamiento) return;
+  (window as unknown as { __lab: unknown }).__lab = {
+    tick,
+    estado,
+    asentamiento,
+    trazado: cacheTrazado,
+    mapa,
+    red: redDeCalles(asentamiento.id, asentamiento.edificios),
+    celdasDeEdificio,
+    TRAZADO,
+    EDIFICIO_TAMANO,
+    murallaTrazo,
+    trazarRecinto,
+  };
+}
+
 /** Recalcula todo lo que depende del motor (trazado, árbol, filas) tras fundar o avanzar ticks, guarda el
  * resultado en la caché y pinta. `pintar()` (hover) NUNCA llama a esto — solo redibuja con lo ya cacheado. */
 function computar(): void {
@@ -264,11 +309,12 @@ function computar(): void {
   // Antes el laboratorio lo recalculaba a mano (redDeCalles + segmentosDeRed + huellas), lo que significaba
   // que podia divergir de lo que ve un cliente real. Ahora dibujar el laboratorio EJERCITA ese contrato.
   cacheTrazado = trazadoParaAsentamiento(asentamiento);
+  refrescarEstadoDeMuralla(asentamiento);
 
   // Gancho de depuración: el estado REAL del motor accesible desde la consola del navegador
   // (`__lab.asentamiento`, `__lab.trazado`, `__lab.estado`). El laboratorio existe para mirar; poder además
   // consultar y medir sin instrumentar nada es la mitad de su valor.
-  (window as unknown as { __lab: unknown }).__lab = { tick, estado, asentamiento, trazado: cacheTrazado, mapa, red: redDeCalles(asentamiento.id, asentamiento.edificios), celdasDeEdificio, TRAZADO, EDIFICIO_TAMANO };
+  publicarEnConsola();
 
   const proy = proyeccion(canvas, REJILLA_ASENTAMIENTO.radioMapa);
   cacheEscala = proy.escala;
@@ -277,9 +323,11 @@ function computar(): void {
   cacheFilas = inspeccionarAnclas(asentamiento.edificios, asentamiento.id, tick, nacimientos);
   cacheLayoutArbol = calcularLayoutArbol(cacheFilas);
 
+  const perfilActivo = resolverPerfil(asentamiento.id);
   statusEl.textContent =
     `Tick ${tick} · nivel ${asentamiento.nivel} · ${asentamiento.edificios.length} edificios · ` +
-    `${cacheFilas.length} anclas de árbol · ${faltaParaNivel(asentamiento)}`;
+    `${cacheFilas.length} anclas de árbol · perfil ${perfilActivo}${TRAZADO.perfilForzado ? '' : ' (tradición)'} · ` +
+    faltaParaNivel(asentamiento);
   anclasBodyEl.innerHTML = cacheFilas
     .map(
       (fila) =>
@@ -328,6 +376,8 @@ function pintar(): void {
     tamanoCelda: REJILLA_ASENTAMIENTO.tamanoCelda,
     radioMapa: REJILLA_ASENTAMIENTO.radioMapa,
     mostrarRejilla: rejillaChk?.checked ?? true,
+    murallaPropuesta,
+    murallaTrazo,
   };
   dibujarAsentamientoLab(ctx, canvas, cacheDibujo);
   dibujarOverlayAnclas(ctx, cacheFilas, cacheAsentamiento.id, cacheAPantalla, cacheEscala, hoveredId);
@@ -411,6 +461,54 @@ const tooltip = crearTooltip(
   (id) => cacheFilas.find((f) => f.id === id)?.codigo ?? null
 );
 
+/**
+ * Selector EXCLUYENTE de perfil de trazado (doc trazado §E6.23). Escribe `TRAZADO.perfilForzado`, que es lo
+ * que lee `resolverPerfil` en el motor — el mismo camino que usará una política real.
+ *
+ * Se aplica EN VIVO a propósito, sin refundar: nada mueve lo ya construido, así que cambiar de perfil a mitad
+ * de partida deja un estrato visible. Es exactamente lo que va a pasar cuando una política de 150 ticks
+ * expire, y conviene poder verlo.
+ */
+const ETIQUETA_PERFIL: Record<PerfilTrazado, string> = {
+  nucleos: 'Núcleos',
+  caminera: 'Caminera',
+  compacta: 'Compacta',
+  gremial: 'Gremial',
+};
+const AYUDA_PERFIL: Record<PerfilTrazado, string> = {
+  nucleos: 'Manda el hueco pegado al ancla. Racimos densos concéntricos — el comportamiento histórico.',
+  caminera: 'Manda el frente de calle: se prefiere continuar una hilera existente antes que pegarse al ancla.',
+  compacta: 'Manda la cercanía al centro de la ciudad. Cada barrio llena primero su cara interior; ciudad más apretada.',
+  gremial: 'Manda el lado compartido con los AFINES. Barrios monocromos, oficios segregados.',
+};
+
+function montarSelectorPerfil(): void {
+  const opciones: { valor: PerfilTrazado | null; texto: string; ayuda: string }[] = [
+    { valor: null, texto: 'Tradición', ayuda: 'Sin forzar: cada asentamiento usa el perfil que le toca por su id (`perfilPorTradicion`).' },
+    ...PERFILES_TRAZADO.map((p) => ({ valor: p, texto: ETIQUETA_PERFIL[p], ayuda: AYUDA_PERFIL[p] })),
+  ];
+
+  for (const { valor, texto, ayuda } of opciones) {
+    const label = document.createElement('label');
+    label.title = ayuda;
+    const radio = document.createElement('input');
+    radio.type = 'radio';
+    radio.name = 'lab-perfil';
+    radio.checked = TRAZADO.perfilForzado === valor;
+    label.classList.toggle('activo', radio.checked);
+    radio.addEventListener('change', () => {
+      if (!radio.checked) return;
+      TRAZADO.perfilForzado = valor;
+      perfilOpcionesEl.querySelectorAll('label').forEach((otra) => otra.classList.remove('activo'));
+      label.classList.add('activo');
+      computar(); // solo refresca la línea de estado: el perfil muerde en la SIGUIENTE colocación.
+    });
+    label.append(radio, document.createTextNode(` ${texto}`));
+    perfilOpcionesEl.appendChild(label);
+  }
+}
+montarSelectorPerfil();
+
 montarPanelParametros(panelParametrosEl, () => {
   fundar(Number(seedInput.value) || 1);
   elegirTab('parametros');
@@ -442,6 +540,123 @@ manualEncolarBtn.addEventListener('click', () => {
   } catch (err) {
     manualStatusEl.textContent = err instanceof ConstruccionManualInvalidaError ? err.message : String(err);
   }
+});
+
+/**
+ * Presupuesto de muralla (§14 del doc): enseña dónde caería el anillo HOY y qué costaría, sin comprometer
+ * nada. Es la mitad barata de la mecánica y la que responde su pregunta más peligrosa — si el trazo se
+ * rechaza en ciudades de forma rara, se descubre aquí sin haber tocado ni una invariante persistida.
+ */
+function trazarMuralla(): void {
+  if (!cacheAsentamiento) return;
+  const nivel = Number(murallaNivelSel.value) || 1;
+  const trazo = trazarRecinto(cacheAsentamiento, { nivel });
+  if (!trazo) {
+    murallaPropuesta = undefined;
+    murallaTrazo = undefined;
+    murallaStatusEl.textContent = 'Sin trazo válido: el anillo no se puede cerrar en esta ciudad.';
+    publicarEnConsola();
+    pintar();
+    return;
+  }
+  murallaPropuesta = trazadoDeRecinto(trazo, nivel);
+  murallaTrazo = trazo;
+  murallaStatusEl.textContent = resumenDeTrazo(trazo, nivel);
+  publicarEnConsola();
+  pintar();
+}
+
+function resumenDeTrazo(trazo: TrazoRecinto, nivel: number): string {
+  const coste = Object.entries(trazo.costo)
+    .map(([recurso, cantidad]) => `${cantidad} ${recurso}`)
+    .join(' + ');
+  const partes = [
+    `nivel ${nivel} · ${trazo.celdas.length} celdas`,
+    `${trazo.puertas} puerta${trazo.puertas === 1 ? '' : 's'}`,
+    `${trazo.torres} torres`,
+    `${trazo.areaEncerrada} celdas encerradas`,
+    `dentro ${trazo.dentro.length} / arrabal ${trazo.fuera.length}`,
+    coste || 'gratis',
+  ];
+  if (trazo.afuerasDentro.length > 0) partes.push(`⚠ ${trazo.afuerasDentro.length} de afueras ENCERRADAS`);
+  return partes.join(' · ');
+}
+
+/**
+ * Comprometer: el trazo deja de ser una consulta y pasa a ser estado del asentamiento. A partir de aquí sus
+ * celdas OCUPAN SUELO —`sueloOcupado` las cuenta— así que ningún edificio posterior puede plantarse encima,
+ * que es justo el fallo que se veía antes de que existiera la entidad.
+ */
+function comprometerMuralla(): void {
+  const actual = estado.asentamientos[0];
+  if (!actual) return;
+  try {
+    const nivel = Number(murallaNivelSel.value) || 1;
+    estado = { ...estado, asentamientos: [comprometerRecinto(actual, nivel, instanteDeTick(tick))] };
+    murallaPropuesta = undefined;
+    murallaTrazo = undefined;
+    computar();
+    const recinto = estado.asentamientos[0]!.recintos!.at(-1)!;
+    const puertas = recinto.celdas.filter((c) => c.clase === 'puerta').length;
+    murallaStatusEl.textContent =
+      `Recinto comprometido (GRATIS): ${recinto.celdas.length} celdas · ${puertas} puertas · nivel ${recinto.nivel}. ` +
+      `Su suelo ya está ocupado; la obra empieza a levantarlo y a cobrarlo con los ticks.`;
+  } catch (err) {
+    murallaStatusEl.textContent = err instanceof RecintoInvalidoError ? err.message : String(err);
+  }
+}
+
+/** Atajo del LABORATORIO, no una mecánica del juego: borra los recintos para poder volver a probar sobre la
+ * misma ciudad sin refundar. La mecánica real de abandono (con su coste hundido) es del Paso 2b. */
+function quitarMurallas(): void {
+  const actual = estado.asentamientos[0];
+  if (!actual) return;
+  estado = { ...estado, asentamientos: [{ ...actual, recintos: [] }] };
+  murallaPropuesta = undefined;
+  murallaTrazo = undefined;
+  computar();
+  murallaStatusEl.textContent = 'Murallas retiradas (atajo del laboratorio).';
+}
+
+/** Estado de la obra, refrescado en cada tick: sin esto la única forma de saber si el muro avanza sería
+ * mirar el dibujo celda a celda. No pisa el presupuesto — mientras haya una propuesta en pantalla, manda ella. */
+function refrescarEstadoDeMuralla(asentamiento: Asentamiento): void {
+  if (murallaPropuesta) return;
+  const recintos = asentamiento.recintos ?? [];
+  murallaStatusEl.textContent =
+    recintos.length === 0
+      ? '—'
+      : recintos
+          .map((r) => {
+            const puertas = r.celdas.filter((c) => c.clase === 'puerta').length;
+            const pct = Math.round(((r.avance + 1) / r.celdas.length) * 100);
+            const obra = pct === 100 ? 'cerrado' : `en obra ${r.avance + 1}/${r.celdas.length}`;
+            return `nivel ${r.nivel} · ${pct}% (${obra}) · ${puertas} puertas`;
+          })
+          .join('  |  ');
+}
+
+murallaTrazarBtn.addEventListener('click', trazarMuralla);
+murallaComprometerBtn.addEventListener('click', comprometerMuralla);
+/** La mecánica real de abandono: solo mientras el anillo esté incompleto, y sin devolver nada. */
+function abandonarMuralla(): void {
+  const actual = estado.asentamientos[0];
+  const recinto = actual?.recintos?.at(-1);
+  if (!actual || !recinto) return;
+  try {
+    estado = { ...estado, asentamientos: [abandonarRecinto(actual, recinto.id)] };
+    computar();
+    murallaStatusEl.textContent = 'Recinto abandonado. El suelo queda libre; los materiales gastados no vuelven.';
+  } catch (err) {
+    murallaStatusEl.textContent = err instanceof RecintoInvalidoError ? err.message : String(err);
+  }
+}
+
+murallaQuitarBtn.addEventListener('click', quitarMurallas);
+murallaAbandonarBtn.addEventListener('click', abandonarMuralla);
+// El nivel solo cambia tarifas y torres, no el trazo: si ya hay presupuesto, se recalcula al vuelo.
+murallaNivelSel.addEventListener('change', () => {
+  if (murallaPropuesta) trazarMuralla();
 });
 
 fundarBtn.addEventListener('click', () => fundar(Number(seedInput.value) || 1));

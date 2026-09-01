@@ -318,41 +318,6 @@ describe('GET /admin/partidas/:gameId/exportar (Fase C12)', () => {
   });
 });
 
-describe('GET /admin/partidas/:gameId/exportar-unity (Fase C12)', () => {
-  it('devuelve heightmap/splatmap en base64 y metadata, a resolución reducida', async () => {
-    const { admin } = await partidaCreada('g1', 3);
-
-    const res = await app.inject({
-      method: 'GET',
-      url: '/v1/admin/partidas/g1/exportar-unity?resolucion=513&resolucionSplatmap=128',
-      headers: admin,
-    });
-
-    expect(res.statusCode).toBe(200);
-    const cuerpo = res.json();
-    expect(cuerpo.metadata.formatoVersion).toBe(1);
-    expect(typeof cuerpo.heightmapRaw).toBe('string');
-    // 513² muestras × 2 bytes = 526338 bytes -> ~701784 caracteres en base64 (4/3 + relleno).
-    expect(Buffer.from(cuerpo.heightmapRaw, 'base64').byteLength).toBe(513 * 513 * 2);
-    expect(cuerpo.splatmap.resolucion).toBe(128);
-    expect(Object.keys(cuerpo.splatmap.capas).length).toBeGreaterThan(0);
-  });
-
-  it('400 si la resolucion no cumple 2^n+1 (la exige el importador RAW de Unity)', async () => {
-    const { admin } = await partidaCreada('g1');
-    const res = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/exportar-unity?resolucion=500', headers: admin });
-    expect(res.statusCode).toBe(400);
-  });
-
-  it('401 sin sesion, 403 para un jugador', async () => {
-    await partidaCreada('g1');
-    expect((await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/exportar-unity' })).statusCode).toBe(401);
-
-    const jugador = await jugadorEn('g1');
-    expect((await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/exportar-unity', headers: jugador })).statusCode).toBe(403);
-  });
-});
-
 describe('GET /admin|jugador/partidas/:gameId/mapa/:mapaId (Fase C11)', () => {
   it('sirve el mapa real, con cache eterna, a un administrador', async () => {
     const { admin } = await partidaCreada('g1', 42);
@@ -875,7 +840,7 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       // `@fastify/swagger` convierte `const` a `enum: [valorUnico]` al publicar: OpenAPI 3.0 no tiene `const`
       // (llegó en JSON Schema draft 6, y 3.0 se basa en un dialecto anterior) — ajv en runtime sí lo entiende
       // tal cual (la validación de verdad usa el `schema.body` de Fastify, no este documento).
-      expect(cuerpo.oneOf.length).toBe(32); // 30 + `unirseAFaccion`/`dejarFaccion` (2026-08-27)
+      expect(cuerpo.oneOf.length).toBe(35); // 34 + `mejorarRecinto` (Paso 3, 2026-09-01)
       const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
       expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
     });

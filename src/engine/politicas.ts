@@ -1,7 +1,7 @@
 import type { Asentamiento, CargoTipo, Faccion, PoliticaActiva } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
 import { minutos, sumar, type Instante } from '../domain/tiempo';
-import { POLITICAS, POLITICA_CATALOGO } from '../constants';
+import { POLITICAS, POLITICA_CATALOGO, type PerfilTrazado } from '../constants';
 import { cargoOcupado } from './pertenencia';
 
 /** Fase A5 — payload de `politica.expirada` (ver `avanzarPoliticas`). */
@@ -146,3 +146,22 @@ function algunaPoliticaActiva(asentamiento: Asentamiento, campo: string): boolea
  * sitúan cerca de la fuente de sus insumos en vez del primer hueco libre (ver `sitioConcentricoLineaProduccion`,
  * engine/construction.ts). */
 export const lineasProduccionPriorizadas = (a: Asentamiento): boolean => algunaPoliticaActiva(a, 'lineasProduccionPriorizadas');
+
+/**
+ * Perfil de trazado impuesto por una ordenanza activa del Maestro de Obras (doc trazado §E6.23), o `null` si
+ * no hay ninguna — en cuyo caso el asentamiento usa su tradición local (`resolverPerfil`, engine/trazado.ts).
+ *
+ * Devuelve el PRIMERO que encuentre, no un producto ni una suma: un perfil es una elección discreta, no un
+ * factor. En la práctica nunca hay dos, porque las cuatro ordenanzas viven en el único slot de `maestroObras`
+ * — pero el Gobernador tiene pool completa y varios slots, así que la ambigüedad es alcanzable y conviene
+ * resolverla de forma determinista (orden del catálogo) en vez de dejarla al azar del array.
+ */
+export function perfilTrazadoDePolitica(asentamiento: Partial<Pick<Asentamiento, 'politicasActivas'>>): PerfilTrazado | null {
+  const activas = asentamiento.politicasActivas;
+  if (!activas || activas.length === 0) return null;
+  for (const def of POLITICA_CATALOGO) {
+    const perfil = (def as { perfilTrazado?: PerfilTrazado }).perfilTrazado;
+    if (perfil && activas.some((a) => a.politicaId === def.id)) return perfil;
+  }
+  return null;
+}

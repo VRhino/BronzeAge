@@ -7,9 +7,11 @@
 import type { Asentamiento, Edificio } from '../../src/domain/types';
 import { estadoMejoraEdificio } from '../../src/engine/construction';
 import { celdaMinimaDeEdificio, tamanoDeEdificio } from '../../src/engine/trazado';
+import { costoDeTrazo, type CeldaMuro } from '../../src/engine/muralla';
 import { EDIFICIO_ETIQUETA } from './render';
 import type { EstadoDibujoLab } from './render';
-import { edificioEnPantalla } from './render';
+import { celdaMurallaEnPantalla, edificioEnPantalla } from './render';
+import type { ContextoMuralla } from './render';
 
 const el = document.createElement('div');
 el.id = 'lab-tooltip';
@@ -81,6 +83,59 @@ function ficha(asentamiento: Asentamiento, edificio: Edificio, codigoAncla: stri
   return lineas.join('<br>');
 }
 
+const ETIQUETA_MURO: Record<CeldaMuro['clase'], string> = {
+  muro: 'Muro',
+  puerta: 'Puerta',
+  torre: 'Torre',
+};
+
+/**
+ * Ficha de una celda del anillo. Existe porque el anillo era lo único dibujado que no se podía interrogar con
+ * el ratón, y el laboratorio está para inspeccionar: sin esto no hay forma de comprobar a mano por qué una
+ * celda concreta salió puerta y no muro, que es exactamente el bug de las puertas de 4-5 celdas.
+ */
+function fichaMuralla(celda: CeldaMuro, indice: number, estado: EstadoDibujoLab, contexto: ContextoMuralla): string {
+  const { total, puertas, torres, nivel, levantada, comprometido, areaEncerrada, dentro, fuera } = contexto;
+  const costo = Object.entries(costoDeTrazo([celda], nivel))
+    .map(([recurso, cantidad]) => `${cantidad} ${recurso}`)
+    .join(', ');
+  const color = celda.clase === 'puerta' ? '#d69e2e' : celda.clase === 'torre' ? '#c9c9c9' : '#a89f88';
+
+  const lineas: string[] = [
+    `<b style="color:${color}">${ETIQUETA_MURO[celda.clase]}</b>  <span style="color:#a89f88">muralla nivel ${nivel}</span>`,
+    `celda (${celda.col}, ${celda.row})`,
+  ];
+
+  if (!comprometido) {
+    lineas.push(`obra: celda ${indice + 1} de ${total} del recorrido`);
+  } else if (levantada) {
+    lineas.push(`<span style="color:#9c6">levantada</span> · celda ${indice + 1} de ${total} del recorrido`);
+  } else {
+    // Lo que evita la pregunta "¿por qué no puedo construir aquí, si está vacío?": esta celda YA ocupa suelo
+    // desde que se comprometió el recinto, aunque todavía no esté en pie.
+    lineas.push(
+      `<span style="color:#e06">por construir</span> · celda ${indice + 1} de ${total} del recorrido`,
+      `<span style="color:#a89f88">su suelo ya está ocupado: nadie puede edificar aquí</span>`
+    );
+  }
+  lineas.push(`<span style="color:#a89f88">coste de esta celda: ${costo || 'gratis'}</span>`);
+
+  if (celda.clase === 'puerta') {
+    lineas.push(
+      `<span style="color:#d69e2e">una puerta por cruce · ${puertas} en todo el recinto</span>`,
+      `<span style="color:#a89f88">menos puertas = más defensa (embudo), pero los caminos rodean</span>`
+    );
+  }
+  if (celda.clase === 'torre') lineas.push(`<span style="color:#a89f88">${torres} torres en el recinto</span>`);
+
+  const pct = Math.round((estado.trazado.murallas[0]?.integridad ?? 0) * 100);
+  const resumen = comprometido
+    ? `recinto COMPROMETIDO · ${total} celdas · ${pct}% levantado`
+    : `recinto PROPUESTO, sin comprometer · ${total} celdas · ${areaEncerrada} encerradas · dentro ${dentro} / arrabal ${fuera}`;
+  lineas.push(`<hr style="border:0;border-top:1px solid #4a4436;margin:5px 0"><span style="color:#a89f88">${resumen}</span>`);
+  return lineas.join('<br>');
+}
+
 /**
  * Wiring del tooltip: llamar `actualizar(ev)` en cada `mousemove` del canvas, `ocultar()` en `mouseleave`.
  * `estado()` devuelve el `EstadoDibujoLab` vigente (lo tiene la caché de `main.ts`); `codigoDe(id)` mapea un
@@ -105,23 +160,26 @@ export function crearTooltip(
     const x = (ev.clientX - rect.left) * (canvas.width / rect.width);
     const y = (ev.clientY - rect.top) * (canvas.height / rect.height);
     const hit = edificioEnPantalla(canvas, est, x, y);
-    if (!hit) {
-      ocultar();
-      return null;
+    const edificio = hit ? est.asentamiento.edificios.find((e) => e.id === hit.id) : undefined;
+    if (edificio) {
+      el.innerHTML = ficha(est.asentamiento, edificio, codigoDe(edificio.id));
+    } else {
+      // La muralla se consulta DESPUÉS del edificio: se dibuja encima, pero nunca se solapa con uno (el trazo
+      // lo garantiza), así que el orden solo decide qué gana si el ratón cae en el borde de un píxel.
+      const muro = celdaMurallaEnPantalla(canvas, est, x, y);
+      if (!muro) {
+        ocultar();
+        return null;
+      }
+      el.innerHTML = fichaMuralla(muro.celda, muro.indice, est, muro.contexto);
     }
-    const edificio = est.asentamiento.edificios.find((e) => e.id === hit.id);
-    if (!edificio) {
-      ocultar();
-      return null;
-    }
-    el.innerHTML = ficha(est.asentamiento, edificio, codigoDe(hit.id));
     el.style.display = 'block';
     // Reposicionar tras medir, para no salirse de la ventana.
     const w = el.offsetWidth;
     const h = el.offsetHeight;
     el.style.left = `${Math.min(ev.clientX + 14, window.innerWidth - w - 8)}px`;
     el.style.top = `${Math.min(ev.clientY + 14, window.innerHeight - h - 8)}px`;
-    return hit.id;
+    return edificio?.id ?? null;
   };
 
   return { actualizar, ocultar };

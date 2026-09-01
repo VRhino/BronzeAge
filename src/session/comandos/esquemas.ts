@@ -109,6 +109,18 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   // `renombrarAsentamiento`, `construccion.ts`) — no un error de forma.
   renombrarAsentamiento: objeto({ asentamientoId: IDENTIFICADOR, nombre: { type: 'string' } }, ['asentamientoId', 'nombre']),
 
+  // --- Murallas (Consideraciones/Murallas_Definicion.md, Paso 2c) ---
+  comprometerRecinto: objeto(
+    { asentamientoId: IDENTIFICADOR, cargo: CARGO_CONSTRUCTOR, nivel: { type: 'integer', enum: [1, 2, 3] } },
+    ['asentamientoId', 'cargo', 'nivel']
+  ),
+  // Sin `cargo`: abandonar es solo del Gobernador (§8 del doc), no un `CargoConstructor` cualquiera.
+  abandonarRecinto: objeto({ asentamientoId: IDENTIFICADOR, recintoId: IDENTIFICADOR }, ['asentamientoId', 'recintoId']),
+  mejorarRecinto: objeto(
+    { asentamientoId: IDENTIFICADOR, cargo: CARGO_CONSTRUCTOR, recintoId: IDENTIFICADOR },
+    ['asentamientoId', 'cargo', 'recintoId']
+  ),
+
   // --- Diplomacia ---
   proponerRelacion: {
     type: 'object',

@@ -25,6 +25,7 @@ import {
   crearAnclaNueva,
   permiteRotacion,
   redDeCalles,
+  resolverPerfil,
   reubicarPorTamano,
   sitioParaTipo as sitioEnTrazado,
   sitiosParaTipo,
@@ -32,6 +33,7 @@ import {
   sueloOcupado,
   tamanoEdificio,
   tipoAnclaParaCategoria,
+  type PerfilTrazado,
 } from './trazado';
 import {
   capacidadViviendaArtesanos,
@@ -43,8 +45,9 @@ import {
   ratioManoObraArtesanos,
 } from './asentamientoQuery';
 import { agregarRecurso, agregarRecursoConSobrante, descontarRecursos, tieneRecursos } from './almacen';
+import { avanzarObraDeRecintos } from './muralla';
 import { reservaDinamicaConstruccion } from './mantenimiento';
-import { factorProduccionTrigo, factorTiempoConstruccion, lineasProduccionPriorizadas } from './politicas';
+import { factorProduccionTrigo, factorTiempoConstruccion, lineasProduccionPriorizadas, perfilTrazadoDePolitica } from './politicas';
 import { consumoComidaPoblacion } from './population';
 import { consumoRacionTropas } from './tropas';
 
@@ -146,19 +149,40 @@ export { CATEGORIA_POR_TIPO } from './trazado';
 export type { CategoriaAsentamiento } from './trazado';
 
 /**
+ * Lo mínimo que necesita cualquier colocación: id + radio, y OPCIONALMENTE las políticas activas para poder
+ * resolver el perfil de trazado (§E6.23).
+ *
+ * `politicasActivas` es opcional a propósito: durante la FUNDACIÓN (`engine/settlement.ts`) todavía no existe
+ * un `Asentamiento` completo, y un asentamiento recién fundado no tiene ninguna política de todos modos. Sin
+ * ellas se cae a la tradición local del asentamiento, que es la respuesta correcta.
+ */
+type ContextoColocacion = Pick<Asentamiento, 'id' | 'radioPotencial'> & Partial<Pick<Asentamiento, 'politicasActivas'>>;
+
+/**
+ * Perfil de trazado efectivo del asentamiento: ordenanza activa del Maestro de Obras si la hay, si no su
+ * tradición local (y por encima de todo, el override del laboratorio — ver `resolverPerfil`).
+ *
+ * Vive AQUÍ y no en `engine/trazado.ts` a propósito: trazado es geometría pura y no sabe nada de cargos ni de
+ * catálogos de política. La decisión "qué perfil toca" es regla de juego; "qué hace ese perfil" es geometría.
+ */
+function perfilDe(asentamiento: ContextoColocacion): PerfilTrazado {
+  return resolverPerfil(asentamiento.id, perfilTrazadoDePolitica(asentamiento));
+}
+
+/**
  * Hueco para un edificio de tipo `tipo` dentro de la Vista de Asentamiento — delega en `sitioParaTipo`
  * (engine/trazado.ts), que resuelve huella, barrio, filas y afueras. Se conserva el nombre porque lo usan
  * `engine/settlement.ts` (fundación), la auto-construcción y la construcción manual.
  *
- * Solo necesita `id` + `radioPotencial` de `asentamiento` (narrowing deliberado, no el `Asentamiento`
- * completo) para poder reutilizarse durante la FUNDACIÓN, antes de que exista un `Asentamiento` completo.
+ * Es también el punto donde se resuelve el PERFIL DE TRAZADO (§E6.23): al pasar por aquí toda la colocación
+ * urbana, la ordenanza activa se aplica sin que ningún llamante tenga que acordarse de propagarla.
  */
 export function sitioEnBarrio(
-  asentamiento: Pick<Asentamiento, 'id' | 'radioPotencial'>,
+  asentamiento: ContextoColocacion,
   ocupados: Edificio[],
   tipo: EdificioTipo
 ): { punto: Point; rotado: boolean } | null {
-  return sitioEnTrazado(asentamiento, ocupados, tipo);
+  return sitioEnTrazado(asentamiento, ocupados, tipo, undefined, perfilDe(asentamiento));
 }
 
 /**
@@ -182,7 +206,7 @@ export function sitioEnBarrioLineaProduccion(
   if (!categoria) return sitioEnBarrio(asentamiento, ocupados, tipo);
 
   const recetas = nivelesDe(tipo)?.[1]?.recetas ?? [];
-  const candidatos = sitiosParaTipo(asentamiento, ocupados, tipo, undefined, true);
+  const candidatos = sitiosParaTipo(asentamiento, ocupados, tipo, undefined, true, perfilDe(asentamiento));
   if (recetas.length === 0) return candidatos[0] ?? null;
 
   let mejor: { punto: Point; rotado: boolean; score: number } | null = null;
@@ -319,7 +343,7 @@ function crearEdificioEnCola(tipo: EdificioTipo, posicion: Point, id: string, fu
  * la pieza principal, tenga o no todo su acompañamiento.
  */
 function crearPuestosDeMercado(
-  asentamiento: Pick<Asentamiento, 'id' | 'radioPotencial'>,
+  asentamiento: ContextoColocacion,
   nivel: number,
   existentes: Edificio[]
 ): Edificio[] {
@@ -333,7 +357,7 @@ function crearPuestosDeMercado(
   const nuevos: Edificio[] = [];
 
   for (const forma of formas) {
-    const sitio = sitioEnTrazado(asentamiento, [...existentes, ...nuevos], 'puestoMercado', forma);
+    const sitio = sitioEnTrazado(asentamiento, [...existentes, ...nuevos], 'puestoMercado', forma, perfilDe(asentamiento));
     if (!sitio) continue;
     let id = `edificio-${asentamiento.id}-${contador++}`;
     while (idsUsadas.has(id)) id = `edificio-${asentamiento.id}-${contador++}`;
@@ -364,13 +388,13 @@ function crearPuestosDeMercado(
  * `existentes` debe incluir todo lo que ya ocupa suelo, mismo criterio que `crearPuestosDeMercado`. Si un
  * taller no encuentra hueco se salta en silencio: la zona es superficie, no función.
  */
-function crearTalleresDeCarpinteria(asentamiento: Pick<Asentamiento, 'id' | 'radioPotencial'>, existentes: Edificio[]): Edificio[] {
+function crearTalleresDeCarpinteria(asentamiento: ContextoColocacion, existentes: Edificio[]): Edificio[] {
   const idsUsadas = new Set(existentes.map((e) => e.id));
   let contador = existentes.length;
   const nuevos: Edificio[] = [];
 
   for (let i = 0; i < CARPINTERIA_ZONA.talleres; i++) {
-    const sitio = sitioEnTrazado(asentamiento, [...existentes, ...nuevos], 'tallerCarpinteria');
+    const sitio = sitioEnTrazado(asentamiento, [...existentes, ...nuevos], 'tallerCarpinteria', undefined, perfilDe(asentamiento));
     if (!sitio) continue;
     let id = `edificio-${asentamiento.id}-${contador++}`;
     while (idsUsadas.has(id)) id = `edificio-${asentamiento.id}-${contador++}`;
@@ -514,8 +538,9 @@ function asegurarAnclaPara(asentamiento: Asentamiento, edificios: Edificio[], ti
   const categoria = CATEGORIA_POR_TIPO[tipo];
   if (!categoria) return edificios;
 
-  const red = redDeCalles(asentamiento.id, edificios);
-  const { instancia, anclasRecienLlenas } = anclaActivaParaCategoria(categoria, tipo, undefined, edificios, red);
+  const red = redDeCalles(asentamiento.id, edificios, asentamiento.recintos ?? []);
+  const perfil = perfilDe(asentamiento);
+  const { instancia, anclasRecienLlenas } = anclaActivaParaCategoria(categoria, tipo, undefined, edificios, red, perfil, asentamiento.recintos ?? []);
   const edificiosConLlenas = edificios.map((e) => (anclasRecienLlenas.includes(e.id) ? { ...e, anclaLlena: true } : e));
   if (instancia) return edificiosConLlenas;
 
@@ -523,7 +548,7 @@ function asegurarAnclaPara(asentamiento: Asentamiento, edificios: Edificio[], ti
   const idAncla = nextId();
   const tipoAncla = tipoAnclaParaCategoria(categoria, idAncla);
   if (!tipoAncla) return edificiosConLlenas;
-  const resultado = crearAnclaNueva(asentamiento.id, edificiosConLlenas, tipoAncla, idAncla);
+  const resultado = crearAnclaNueva(asentamiento.id, edificiosConLlenas, tipoAncla, idAncla, asentamiento.recintos ?? []);
   if (!resultado) return edificiosConLlenas;
 
   const conSaturadasMarcadas = edificiosConLlenas.map((e) =>
@@ -540,9 +565,9 @@ function asegurarAnclaPara(asentamiento: Asentamiento, edificios: Edificio[], ti
   // se reintenta el tick siguiente, cuando la ciudad haya crecido. `semillaSaturada` SÍ se conserva: esas
   // semillas están agotadas geométricamente, sea o no útil el ancla que se intentó.
   const tamanoSat = tamanoEdificio(tipo);
-  const { ocupadas, red: redConAncla } = sueloOcupado(asentamiento.id, conAncla);
+  const { ocupadas, red: redConAncla } = sueloOcupado(asentamiento.id, conAncla, undefined, asentamiento.recintos ?? []);
   const haySitioSatelite =
-    sitiosPorAtraccionDura(resultado.nuevaAncla, tamanoSat, ocupadas, redConAncla, permiteRotacion(tipo, tamanoSat)).length > 0;
+    sitiosPorAtraccionDura(resultado.nuevaAncla, tamanoSat, ocupadas, redConAncla, permiteRotacion(tipo, tamanoSat), false, new Set(), perfil).length > 0;
   return haySitioSatelite ? conAncla : conSaturadasMarcadas;
 }
 
@@ -1281,6 +1306,14 @@ export function avanzarConstruccion(
     });
   }
 
+  // Obra de murallas: fuera de la cola de edificios a propósito (es una obra pública, no un proyecto), pero
+  // sujeta a la MISMA reserva de mantenimiento — es lo que impide que una muralla mate de hambre a su ciudad.
+  // Va después de `evaluarNecesidades` para que la construcción normal tenga preferencia sobre los materiales:
+  // una ciudad que deja de producir por levantar su muro no sobrevive para verlo terminado.
+  const obra = avanzarObraDeRecintos(asentamientoConProgreso.recintos ?? [], almacenFinal, reserva, instante, asentamientoConProgreso.edificios);
+  almacenFinal = obra.almacen;
+  eventos.push(...obra.eventos);
+
   const edificiosFinal = [...edificiosBase, ...nuevosProyectos];
   // Reordena los `en_cola` por `prioridad` (mismo criterio que el Paso 2) para que la posición mostrada en la
   // UI (ver main.ts) coincida con el orden real en que arrancarán en el próximo tick.
@@ -1289,7 +1322,7 @@ export function avanzarConstruccion(
   const edificiosOrdenados = edificiosFinal.map((e) => (e.estado === 'en_cola' ? enColaOrdenados[indiceEnCola++]! : e));
 
   return {
-    asentamiento: { ...asentamientoConProgreso, almacen: almacenFinal, edificios: edificiosOrdenados, extractoresTicksSinCupo },
+    asentamiento: { ...asentamientoConProgreso, almacen: almacenFinal, edificios: edificiosOrdenados, extractoresTicksSinCupo, ...(obra.recintos.length > 0 ? { recintos: obra.recintos } : {}) },
     eventos,
     // Doc Fase_0_5 §8: cuántos edificios completó ESTE asentamiento este tick — el llamador (simulation.ts)
     // lo usa para otorgar experiencia de Facción (`NIVEL_FACCION.xp.edificioCompletado`).

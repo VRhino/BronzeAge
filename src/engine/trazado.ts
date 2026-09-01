@@ -1,12 +1,16 @@
-import type { Asentamiento, Edificio, EdificioTipo, Point } from '../domain/types';
+import type { Asentamiento, Edificio, EdificioTipo, Point, Recinto } from '../domain/types';
 import {
   EDIFICIO_CATALOGO,
   EDIFICIO_TAMANO,
   EDIFICIO_TAMANO_POR_DEFECTO,
+  PERFILES_TRAZADO,
+  type PerfilTrazado,
   PUESTO_MERCADO_FORMA,
   REJILLA_ASENTAMIENTO,
   TRAZADO,
 } from '../constants';
+
+export type { PerfilTrazado };
 
 /**
  * TRAZADO URBANO DINÁMICO de la Vista de Asentamiento (a petición del usuario).
@@ -243,22 +247,74 @@ export function celdasOcupadas(edificios: Edificio[], excluirId?: string): Set<s
  */
 /** Añade las celdas de la red a un conjunto de celdas ocupadas ya calculado — para los caminos que reciben la
  * red hecha desde fuera en vez de derivarla ellos (ver `sueloOcupado`, que es la vía normal). */
-function conCeldasDeRed(ocupadas: Set<string>, red: RedDeCalles): Set<string> {
+/**
+ * El suelo ocupado cuando la red YA está calculada: edificios + calles + caminos + muro y torres de los
+ * recintos. `sueloOcupado` es esto mismo calculando la red por su cuenta.
+ *
+ * Existe exportada, y no como tres líneas repetidas, porque la repetición ya costó un deadlock: al llegar las
+ * murallas, `anclaActivaParaCategoria` seguía montando su propio conjunto sin las celdas de muro, así que daba
+ * el Centro Urbano por USABLE (veía 5-8 huecos, todos encima del anillo) mientras la colocación real, que sí
+ * las contaba, encontraba CERO. El ancla no se marcaba llena, nunca nacía una Plaza de relevo, y la ciudad
+ * dejaba de construir viviendas para siempre — medido: 68 edificios sin muralla contra 47 con ella, y la
+ * población congelada en la mitad. Dos definiciones del mismo concepto siempre acaban divergiendo; ahora hay
+ * una.
+ */
+export function ocupadasConRed(
+  edificios: Edificio[],
+  red: RedDeCalles,
+  recintos: readonly Recinto[] = [],
+  excluirId?: string
+): Set<string> {
+  const ocupadas = celdasOcupadas(edificios, excluirId);
   for (const clave of red.calles) ocupadas.add(clave);
   for (const clave of red.caminos) ocupadas.add(clave);
+  for (const clave of celdasBloqueadasDeRecintos(recintos)) ocupadas.add(clave);
   return ocupadas;
+}
+
+/** Las celdas que un recinto BLOQUEA: muro y torre. Las puertas NO — son transitables, y que lo sean es lo
+ * que mantiene la red en un solo componente conexo cuando el anillo corta un camino (doc murallas §5).
+ *
+ * Bloquean TODAS las celdas del trazo, estén levantadas o no (`avance` no se mira): si el suelo de una celda
+ * todavía no construida quedara libre, un edificio se plantaría encima y el anillo no podría cerrarse nunca.
+ *
+ * Vive aquí y no en `engine/muralla.ts` para no crear un ciclo de imports — `muralla.ts` ya depende de este
+ * módulo para el vocabulario de celdas, y el trazado no puede depender de él de vuelta. */
+export function celdasBloqueadasDeRecintos(recintos: readonly Recinto[]): Set<string> {
+  const bloqueadas = new Set<string>();
+  for (const recinto of recintos) {
+    for (const celda of recinto.celdas) {
+      if (celda.clase !== 'puerta') bloqueadas.add(claveCelda(celda.col, celda.row));
+    }
+  }
+  return bloqueadas;
+}
+
+/** Las celdas de PUERTA de todos los recintos. Se siembran como calle antes del replay de `redDeCalles`: así
+ * la red no pierde ni una celda al levantarse el muro. */
+export function celdasDePuertas(recintos: readonly Recinto[]): Set<string> {
+  const puertas = new Set<string>();
+  for (const recinto of recintos) {
+    for (const celda of recinto.celdas) {
+      if (celda.clase === 'puerta') puertas.add(claveCelda(celda.col, celda.row));
+    }
+  }
+  return puertas;
 }
 
 export function sueloOcupado(
   asentamientoId: string,
   edificios: Edificio[],
-  excluirId?: string
+  excluirId?: string,
+  /** Recintos amurallados del asentamiento. Sus celdas de muro y torre ocupan suelo como cualquier edificio
+   * —las de PUERTA no, son transitables— y por eso entran aquí y no en otro sitio: este es el punto único por
+   * el que pasa toda la colocación, que es exactamente por lo que se centralizó en el Paso 2 de la Etapa 6.
+   * Omitirlo en uno solo de los cuatro puntos de colocación bastaba entonces para plantar edificios sobre las
+   * calles; con murallas el síntoma es el mismo (casas encima del anillo, visto en el laboratorio). */
+  recintos: readonly Recinto[] = []
 ): { ocupadas: Set<string>; red: RedDeCalles } {
-  const red = redDeCalles(asentamientoId, edificios);
-  const ocupadas = celdasOcupadas(edificios, excluirId);
-  for (const clave of red.calles) ocupadas.add(clave);
-  for (const clave of red.caminos) ocupadas.add(clave);
-  return { ocupadas, red };
+  const red = redDeCalles(asentamientoId, edificios, recintos);
+  return { ocupadas: ocupadasConRed(edificios, red, recintos, excluirId), red };
 }
 
 // --- La red de calles OCUPA CELDAS (Etapa 6, doc trazado §E6.2) ---
@@ -514,27 +570,24 @@ function largoMaxFila(asentamientoId: string): number {
   return TRAZADO.largoFilaMin + Math.floor(pseudoAleatorio(hashTexto(`${asentamientoId}-largo-fila`)) * rango);
 }
 
-// --- Dirección: el asentamiento entero gira sus 8 direcciones cardinales un poco (Etapa 5) ---
+// --- Dirección: cada semilla del árbol de anclas reparte su crecimiento en N ranuras equidistantes (Etapa 5) ---
 
-const DIRECCIONES_CARDINALES = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'] as const;
-type DireccionCardinal = (typeof DIRECCIONES_CARDINALES)[number];
+/**
+ * Cuántas ranuras (direcciones equidistantes) tiene cada semilla del árbol para hacer nacer anclas nuevas.
+ *
+ * 8 → 5 (2026-08-31, a petición del usuario): con 8 (cardinales + intercardinales) rara vez se llenaban todas
+ * —las que apuntaban de vuelta al centro ya construido fallaban `huecoEnDireccion` casi siempre—, así que el
+ * árbol saltaba a otra semilla con la mitad de las ranuras sin usar. 5 a 72° reparten mejor.
+ */
+const NUM_RANURAS = 5;
 
-/** Vector unitario (en celdas) de cada dirección cardinal — +x = Este, +y = Sur (mismo criterio que el resto
- * de coordenadas locales, ver `Edificio.posicion`). */
-const VECTOR_DIRECCION: Record<DireccionCardinal, { dx: number; dy: number }> = {
-  N: { dx: 0, dy: -1 },
-  NE: { dx: 1, dy: -1 },
-  E: { dx: 1, dy: 0 },
-  SE: { dx: 1, dy: 1 },
-  S: { dx: 0, dy: 1 },
-  SW: { dx: -1, dy: 1 },
-  W: { dx: -1, dy: 0 },
-  NW: { dx: -1, dy: -1 },
-};
+/** Ángulo entre dos ranuras consecutivas (`2π / NUM_RANURAS`). */
+const PASO_RANURA = (Math.PI * 2) / NUM_RANURAS;
 
-const ANGULO_DIRECCION: Record<DireccionCardinal, number> = Object.fromEntries(
-  DIRECCIONES_CARDINALES.map((d) => [d, Math.atan2(VECTOR_DIRECCION[d].dy, VECTOR_DIRECCION[d].dx)])
-) as Record<DireccionCardinal, number>;
+/** Ángulo base de la ranura 0 antes de la rotación por asentamiento: apunta hacia ARRIBA (Norte; -y en coords
+ * locales, ya que +y = Sur), "partiendo del medio" del marco a petición del usuario. Las otras `NUM_RANURAS-1`
+ * salen a `PASO_RANURA` de intervalo. */
+const ANGULO_RANURA_0 = -Math.PI / 2;
 
 /** Categoría funcional de cada tipo de edificio "urbano". Ausente = sin categoría fija: Granja/Corral van a
  * las afueras y Palacio junto al centro (ver `sitiosParaTipo`); Centro Urbano es el origen;
@@ -692,26 +745,26 @@ function anclaMasCercana(tipos: EdificioTipo[], punto: Point, edificios: Edifici
   return mejor;
 }
 
-/** Media ranura de dirección: 8 direcciones cubriendo 360° sin huecos ni solapes = 45° cada una. */
-const MEDIA_RANURA_DIRECCION = Math.PI / 8;
+/** Media ranura de dirección (`PASO_RANURA / 2`): margen para `ranuraOcupada` y tope de `anguloRotacionEje`. */
+const MEDIA_RANURA_DIRECCION = PASO_RANURA / 2;
 
 /**
- * Rotación (radianes) del eje de las 8 direcciones cardinales, determinista por asentamiento (a petición del
- * usuario: "movemos algunos grados... así es más difícil encontrar ciudades iguales") — aplica a las 8
- * ranuras de crecimiento del árbol único de anclas (`direccionesRotadas`, Etapa 5). El rango se limita a
- * `[0°, 45°)`: más allá de una ranura completa el resultado sería indistinguible de otra rotación (cada una
- * de las 8 direcciones ya cubre 45° del círculo), así que no aportaría variedad nueva, solo complejidad.
+ * Rotación (radianes) del eje de las `NUM_RANURAS` ranuras, determinista por asentamiento (a petición del
+ * usuario: "movemos algunos grados... así es más difícil encontrar ciudades iguales") — aplica a las ranuras
+ * de crecimiento del árbol único de anclas (`direccionesRotadas`, Etapa 5). El rango se limita a
+ * `[0, PASO_RANURA)`: más allá de una ranura completa el resultado sería indistinguible de otra rotación (cada
+ * ranura ya cubre `PASO_RANURA` del círculo), así que no aportaría variedad nueva, solo complejidad.
  */
 function anguloRotacionEje(asentamientoId: string): number {
-  return pseudoAleatorio(hashTexto(`${asentamientoId}-rotacion-eje`)) * MEDIA_RANURA_DIRECCION * 2;
+  return pseudoAleatorio(hashTexto(`${asentamientoId}-rotacion-eje`)) * PASO_RANURA;
 }
 
-/** Las 8 direcciones cardinales con el eje ya rotado para este asentamiento (`anguloRotacionEje`), listas para
- * proyectar una ranura de ancla nueva (Etapa 5, `crearAnclaNueva`). */
+/** Las `NUM_RANURAS` direcciones equidistantes (arrancando en `ANGULO_RANURA_0`) con el eje ya rotado para
+ * este asentamiento (`anguloRotacionEje`), listas para proyectar una ranura de ancla nueva (`crearAnclaNueva`). */
 export function direccionesRotadas(asentamientoId: string): { vector: Point; angulo: number }[] {
   const rotacion = anguloRotacionEje(asentamientoId);
-  return DIRECCIONES_CARDINALES.map((d) => {
-    const angulo = ANGULO_DIRECCION[d] + rotacion;
+  return Array.from({ length: NUM_RANURAS }, (_, k) => {
+    const angulo = ANGULO_RANURA_0 + k * PASO_RANURA + rotacion;
     return { vector: { x: Math.cos(angulo), y: Math.sin(angulo) }, angulo };
   });
 }
@@ -798,7 +851,7 @@ export const FONDO_MANZANA = 4;
  * franja de retículo pueden salir incompletos, y eso es correcto — un edificio grande desvía la calle
  * localmente, que es exactamente lo que significa "retículo blando" (§E6.8).
  */
-export function redDeCalles(asentamientoId: string, edificios: Edificio[]): RedDeCalles {
+export function redDeCalles(asentamientoId: string, edificios: Edificio[], recintos: readonly Recinto[] = []): RedDeCalles {
   const red: RedDeCalles = { calles: new Set(), caminos: new Set() };
   const internos = edificiosInternos(edificios);
   const centro = internos.find((e) => e.tipo === 'centroUrbano');
@@ -808,6 +861,17 @@ export function redDeCalles(asentamientoId: string, edificios: Edificio[]): RedD
   // momento de construir cada uno, no como está al final — si no, dejaría de ser un crecimiento paso a paso.
   const ocupadas = new Set<string>();
   for (const c of celdasDeEdificio(centro)) ocupadas.add(claveCelda(c.col, c.row));
+
+  // La muralla entra ANTES del replay: muro y torre OCUPAN, así que ninguna calle nueva puede nacer encima ni
+  // un corredor atravesarlas. Las PUERTAS no entran — se quedan libres, que es lo que las hace transitables.
+  //
+  // Ojo con lo que esto NO hace, porque la primera versión sí lo hacía y partía la red en 20 pedazos: las
+  // puertas NO se siembran como calle. Sembrarlas dejaba islas de calle sueltas en mitad del muro, sin nada
+  // que las uniera al resto —`anadirConectadas` existe precisamente para no añadir tramos huérfanos, y este
+  // atajo se lo saltaba—. Medido: 71 celdas alcanzables de 175. Una puerta es un HUECO en el anillo; se
+  // convierte en calle sola, cuando el replay estira un corredor a través de ella, igual que cualquier otra
+  // celda libre.
+  for (const clave of celdasBloqueadasDeRecintos(recintos)) ocupadas.add(clave);
 
   anadirConectadas(anilloDeRectangulo(rectanguloDeEdificio(centro)), ocupadas, red, red.calles);
 
@@ -869,6 +933,58 @@ export function redDeCalles(asentamientoId: string, edificios: Edificio[]): RedD
  * rectángulo y no como 20. Es el mismo criterio de presupuesto de payload del doc 6 que ya obligó a sacar el
  * mapa de las lecturas de estado.
  */
+/** Celdas → rectángulos locales, fusionando cada fila en tiradas horizontales: una avenida de 20 celdas viaja
+ * como UN rectángulo y no como 20 (presupuesto de payload del doc 6). La usan la red y las murallas. */
+export function fusionarCeldas(celdas: Iterable<Celda>): RectanguloLocal[] {
+  const porFila = new Map<number, number[]>();
+  for (const c of celdas) {
+    const fila = porFila.get(c.row);
+    if (fila) fila.push(c.col);
+    else porFila.set(c.row, [c.col]);
+  }
+  const rects: RectanguloLocal[] = [];
+  for (const row of [...porFila.keys()].sort((a, b) => a - b)) {
+    const cols = porFila.get(row)!.sort((a, b) => a - b);
+    let inicio = cols[0]!;
+    let previa = inicio;
+    for (let i = 1; i <= cols.length; i++) {
+      const col = cols[i];
+      if (col !== undefined && col === previa + 1) {
+        previa = col;
+        continue;
+      }
+      rects.push({ x: inicio * T, y: row * T, ancho: (previa - inicio + 1) * T, alto: T });
+      if (col === undefined) break;
+      inicio = col;
+      previa = col;
+    }
+  }
+  return rects;
+}
+
+/** Integridad de un recinto: qué fracción de su anillo está levantada. Escalará el efecto defensivo (§16 del
+ * doc de murallas) — un anillo a medio cerrar no defiende, se entra por el hueco. */
+export function integridadDeRecinto(recinto: Recinto): number {
+  return recinto.celdas.length === 0 ? 0 : (recinto.avance + 1) / recinto.celdas.length;
+}
+
+/** Los recintos resueltos para dibujar. Solo las celdas YA LEVANTADAS: un anillo a medio cerrar se ve a medio
+ * cerrar, que es justo lo que hace legible la obra progresiva. */
+export function murallasDeRecintos(recintos: readonly Recinto[]): TrazadoMuralla[] {
+  return recintos.map((recinto) => {
+    const levantadas = recinto.celdas.slice(0, recinto.avance + 1);
+    const de = (clase: Recinto['celdas'][number]['clase']) => fusionarCeldas(levantadas.filter((c) => c.clase === clase));
+    return {
+      nivel: recinto.nivel,
+      integridad: integridadDeRecinto(recinto),
+      muro: de('muro'),
+      puertas: de('puerta'),
+      torres: de('torre'),
+      planificado: fusionarCeldas(recinto.celdas.slice(recinto.avance + 1)),
+    };
+  });
+}
+
 export function rectangulosDeRed(red: RedDeCalles): { calles: RectanguloLocal[]; caminos: RectanguloLocal[] } {
   const fusionar = (celdas: Iterable<string>, excluir?: Set<string>): RectanguloLocal[] => {
     const porFila = new Map<number, number[]>();
@@ -915,6 +1031,28 @@ export interface TrazadoAsentamiento {
   caminos: RectanguloLocal[];
   /** Rectángulo (coords locales) que ocupa cada edificio, por `id`. */
   huellas: Record<string, RectanguloLocal>;
+  /** Recintos amurallados, del más interior al más exterior. Solo las celdas YA LEVANTADAS — un anillo a medio
+   * cerrar se ve a medio cerrar. Vacío en un asentamiento sin murallas. */
+  murallas: TrazadoMuralla[];
+}
+
+/** Un recinto resuelto para dibujar: áreas en coordenadas locales, con las celdas fusionadas en tiradas
+ * horizontales — mismo criterio de presupuesto de payload que las calles (`rectangulosDeRed`). */
+export interface TrazadoMuralla {
+  nivel: number;
+  /** 0..1 — qué fracción del anillo está levantada. */
+  integridad: number;
+  /** Celdas YA LEVANTADAS, por clase. */
+  muro: RectanguloLocal[];
+  puertas: RectanguloLocal[];
+  torres: RectanguloLocal[];
+  /**
+   * Celdas del anillo TODAVÍA NO LEVANTADAS. Se dibujan como una obra sin terminar, igual que un edificio
+   * `en_construccion`, y no como suelo vacío — porque **ya ocupan suelo desde que se comprometió el recinto**
+   * (decisión 7 del doc): nadie puede construir ahí. Un hueco invisible que además rechaza edificios es
+   * exactamente el tipo de comportamiento que parece un bug y no lo es.
+   */
+  planificado: RectanguloLocal[];
 }
 
 /**
@@ -926,14 +1064,14 @@ export interface TrazadoAsentamiento {
  * `cliente/` sigue con su propia copia hasta que se reescriba sin `@motor/*`, fuera de alcance de este hito).
  */
 export function trazadoParaAsentamiento(asentamiento: Asentamiento): TrazadoAsentamiento {
-  const { calles, caminos } = rectangulosDeRed(redDeCalles(asentamiento.id, asentamiento.edificios));
+  const { calles, caminos } = rectangulosDeRed(redDeCalles(asentamiento.id, asentamiento.edificios, asentamiento.recintos ?? []));
   const huellas: TrazadoAsentamiento['huellas'] = {};
   for (const edificio of edificiosInternos(asentamiento.edificios)) {
     const min = celdaMinimaDeEdificio(edificio);
     const tamano = tamanoDeEdificio(edificio);
     huellas[edificio.id] = { x: min.col * T, y: min.row * T, ancho: tamano.ancho * T, alto: tamano.alto * T };
   }
-  return { calles, caminos, huellas };
+  return { calles, caminos, huellas, murallas: murallasDeRecintos(asentamiento.recintos ?? []) };
 }
 
 // --- Colocación ---
@@ -1352,6 +1490,75 @@ function porDistanciaAlOrigen(candidatos: Candidato[], masLejos: boolean): Candi
   return decorados.map((d) => d.c);
 }
 
+// --- Perfiles de trazado (doc trazado §E6.23) ---
+//
+// Los cuatro términos de desempate de `sitiosPorAtraccionDura` ya se calculaban todos; lo único que cambia
+// entre perfiles es CUÁL manda. Como el orden es lexicográfico, el primero domina de forma absoluta, así que
+// una permutación cambia la silueta de la ciudad entera sin tocar ninguna regla ni ningún umbral.
+//
+// Por qué una permutación y no una suma ponderada: los pesos habría que calibrarlos, se prestan a que un
+// término se coma a otro sin que se note, y destruyen la garantía de que un criterio se respeta SIEMPRE. Una
+// permutación es discreta, legible ("en esta ciudad manda X") y no necesita calibración.
+
+/**
+ * Los términos que se pueden permutar. `semilla` no entra: es el desempate final, siempre el último.
+ *
+ * - `hueco`     — celdas hasta el ancla (borde a borde, con su anillo). Discrimina en toda la banda.
+ * - `nivel`     — 0 continúa fila · 1 frente de calle · 2 pared con pared · 3 suelto.
+ * - `borde`     — celdas de lado compartidas con el ANCLA. **Solo tiene señal a hueco 0**, así que sirve de
+ *                 desempate pero NO puede encabezar un perfil (ver la nota de `PerfilTrazado`).
+ * - `bordeAfin` — celdas de lado compartidas con edificios afines. 0 para el primero de cada tipo.
+ * - `centro`    — distancia al ORIGEN del asentamiento. Discrimina en toda la banda y es el único término que
+ *                 mira la ciudad entera, no la vecindad del ancla: por eso es el que produce una silueta
+ *                 global distinta en vez de reordenar dentro del barrio.
+ */
+type ClaveDesempate = 'hueco' | 'nivel' | 'borde' | 'bordeAfin' | 'centro';
+
+/** true = menor es mejor (`hueco`: pegado al ancla; `nivel`: 0 continúa fila; `centro`: hacia el origen). */
+const MEJOR_ES_MENOR: Record<ClaveDesempate, boolean> = {
+  hueco: true,
+  nivel: true,
+  borde: false,
+  bordeAfin: false,
+  centro: true,
+};
+
+/**
+ * Orden de desempate de cada perfil. Todos contienen TODAS las claves — lo que cambia es la prioridad, así
+ * que ningún perfil IGNORA un criterio, solo lo posterga.
+ *
+ * `nucleos` es el orden histórico (el que corría antes de que existieran los perfiles) con `centro` añadido
+ * al final, donde no cambia nada: sigue siendo el comportamiento por defecto.
+ */
+const ORDEN_POR_PERFIL: Record<PerfilTrazado, readonly ClaveDesempate[]> = {
+  nucleos: ['hueco', 'nivel', 'borde', 'bordeAfin', 'centro'],
+  caminera: ['nivel', 'hueco', 'borde', 'bordeAfin', 'centro'],
+  compacta: ['centro', 'hueco', 'nivel', 'borde', 'bordeAfin'],
+  gremial: ['bordeAfin', 'hueco', 'nivel', 'borde', 'centro'],
+};
+
+/**
+ * TRADICIÓN LOCAL: el perfil que le toca a un asentamiento por su id, determinista y permanente. Es lo que
+ * hace que dos ciudades NPC no salgan iguales aunque nadie active ninguna política — mismo mecanismo que ya
+ * usan `anguloRotacionEje` y `largoMaxFila` para variar el trazado por asentamiento.
+ */
+export function perfilPorTradicion(asentamientoId: string): PerfilTrazado {
+  const i = Math.floor(pseudoAleatorio(hashTexto(`${asentamientoId}-perfil-trazado`)) * PERFILES_TRAZADO.length);
+  return PERFILES_TRAZADO[Math.min(i, PERFILES_TRAZADO.length - 1)]!;
+}
+
+/**
+ * Perfil efectivo de un asentamiento, con la precedencia completa en UN solo sitio:
+ *
+ *   `TRAZADO.perfilForzado` (laboratorio/batch)  >  `porPolitica`  >  tradición local
+ *
+ * `porPolitica` lo resuelve quien SÍ conoce las políticas (`construction.ts` — `trazado.ts` es geometría pura
+ * y no sabe nada de cargos ni de catálogos de política, y conviene que siga sin saberlo).
+ */
+export function resolverPerfil(asentamientoId: string, porPolitica: PerfilTrazado | null = null): PerfilTrazado {
+  return TRAZADO.perfilForzado ?? porPolitica ?? perfilPorTradicion(asentamientoId);
+}
+
 /**
  * Atracción dura (Lógica 2 — satélites de un ancla): coloca el satélite en el HUECO más pegado posible al
  * ANCLA, dentro de su NÚCLEO.
@@ -1370,9 +1577,10 @@ function porDistanciaAlOrigen(candidatos: Candidato[], masLejos: boolean): Candi
  * `candidatosLibres`), así que `redDeCalles` les estira un corredor y el retículo cierra la manzana según la
  * ciudad crece hacia ahí.
  *
- * Orden de preferencia del resultado: 1º pegado al ancla (`hueco`), 2º con frente de calle (`nivel`), 3º más
- * lado compartido con el ANCLA (`bordeCompartido`), 4º más lado con los AFINES (`bordeAfinDe` — barrios
- * homogéneos, viviendas con viviendas), 5º semilla determinista. Nunca filtra por dirección.
+ * Orden de preferencia del resultado: lo decide el PERFIL (`ORDEN_POR_PERFIL`, §E6.23) permutando los cuatro
+ * términos —`hueco` (pegado al ancla), `nivel` (frente de calle), `bordeCompartido` (lado pegado al ancla) y
+ * `bordeAfin` (lado pegado a los suyos)— con `semillaCandidato` siempre de último. Nunca filtra por dirección,
+ * y ningún perfil ignora un criterio: solo lo posterga.
  *
  * `ampliado` (política "Líneas de Producción", `sitioEnBarrioLineaProduccion`): devuelve TODOS los candidatos
  * de la banda sin ordenar por vecindad — la política de logística elige entre ellos por distancia a sus
@@ -1388,10 +1596,12 @@ export function sitiosPorAtraccionDura(
   red: RedDeCalles,
   permitirRotacion = false,
   ampliado = false,
-  /** Celdas ocupadas por edificios AFINES al que se coloca (`celdasDeTiposAfines`) — desempate secundario
-   * tras la adyacencia al ancla: entre dos huecos igual de pegados al ancla gana el que más lado comparte con
-   * los suyos (viviendas con viviendas, industria junta…). Vacío = sin preferencia de agrupación. */
-  celdasAfines: Set<string> = new Set()
+  /** Celdas ocupadas por edificios AFINES al que se coloca (`celdasDeTiposAfines`) — uno de los cuatro
+   * términos de desempate: entre dos huecos igual de buenos gana el que más lado comparte con los suyos
+   * (viviendas con viviendas, industria junta…). Vacío = sin preferencia de agrupación. */
+  celdasAfines: Set<string> = new Set(),
+  /** Perfil de trazado: qué término manda en el desempate (§E6.23). Ver `ORDEN_POR_PERFIL`. */
+  perfil: PerfilTrazado = 'nucleos'
 ): { punto: Point; rotado: boolean }[] {
   const rectAncla = rectanguloDeEdificio(ancla);
   // §E6.7 — LA TRAMPA de la Etapa 6, y la razón de que este bloque no se pudiera dejar para el Paso 3.
@@ -1436,24 +1646,29 @@ export function sitiosPorAtraccionDura(
   // Decorar-ordenar-desdecorar, mismo motivo que en `porDistanciaAlOrigen`: `bordeCompartido`, `bordeAfin` y
   // `semillaCandidato` son constantes por candidato y el comparador se ejecuta `O(n log n)` veces.
   //
-  // Orden (§E6.21): 1º pegado al ancla (`hueco`), 2º con frente de calle (`nivel` — 0/1 antes que 2/3), 3º
-  // más lado con el ANCLA, 4º más lado con los AFINES (barrios homogéneos), 5º semilla determinista.
+  // El orden lo fija el PERFIL (§E6.23). Recorrer 4 claves dentro del comparador es aritmética sobre números
+  // YA calculados: no es lo que encarecía el comparador antes (eso eran `Math.sin`, `hashTexto` y plantillas
+  // de texto, todo movido a la fase de decorado y ahí sigue).
+  const orden = ORDEN_POR_PERFIL[perfil];
   return enLaBanda
     .map((c) => ({
-      c,
+      punto: c.punto,
+      rotado: c.rotado,
+      hueco: c.hueco,
+      nivel: c.nivel,
       borde: bordeCompartido(c.rectCandidato, rectAnclaConAnillo),
       bordeAfin: bordeAfinDe(c.rectCandidato, celdasAfines),
+      centro: distanciaAlOrigen(c.punto),
       semilla: semillaCandidato(c),
     }))
-    .sort(
-      (a, b) =>
-        a.c.hueco - b.c.hueco ||
-        a.c.nivel - b.c.nivel ||
-        b.borde - a.borde ||
-        b.bordeAfin - a.bordeAfin ||
-        a.semilla - b.semilla
-    )
-    .map((d) => ({ punto: d.c.punto, rotado: d.c.rotado }));
+    .sort((a, b) => {
+      for (const clave of orden) {
+        const d = MEJOR_ES_MENOR[clave] ? a[clave] - b[clave] : b[clave] - a[clave];
+        if (d !== 0) return d;
+      }
+      return a.semilla - b.semilla;
+    })
+    .map((d) => ({ punto: d.punto, rotado: d.rotado }));
 }
 
 /**
@@ -1475,11 +1690,15 @@ export function anclaActivaParaCategoria(
   tipo: EdificioTipo,
   nivelInterno: number | undefined,
   edificios: Edificio[],
-  red: RedDeCalles
+  red: RedDeCalles,
+  perfil: PerfilTrazado = 'nucleos',
+  /** Los recintos del asentamiento. NO es opcional por comodidad: esta consulta tiene que ver EXACTAMENTE el
+   * mismo suelo que la colocación real, y no verlo fue el deadlock descrito en `ocupadasConRed`. */
+  recintos: readonly Recinto[] = []
 ): { instancia: Edificio | null; anclasRecienLlenas: string[] } {
   const tamano = tamanoEdificio(tipo, nivelInterno);
   const permitirRotacion = permiteRotacion(tipo, tamano);
-  const ocupadas = conCeldasDeRed(celdasOcupadas(edificios), red);
+  const ocupadas = ocupadasConRed(edificios, red, recintos);
   const tipos = tiposAnclaDe(categoria);
   const candidatos = edificiosInternos(edificios)
     .filter((e) => tipos.includes(e.tipo) && !e.anclaLlena)
@@ -1487,7 +1706,9 @@ export function anclaActivaParaCategoria(
 
   const anclasRecienLlenas: string[] = [];
   for (const candidato of candidatos) {
-    if (sitiosPorAtraccionDura(candidato, tamano, ocupadas, red, permitirRotacion).length > 0) {
+    // El perfil no cambia SI hay hueco (eso es la banda, geométrica) pero sí CUÁL se elegiría, y esta consulta
+    // debe hacer exactamente lo que hará la colocación real — por eso se le pasa igual.
+    if (sitiosPorAtraccionDura(candidato, tamano, ocupadas, red, permitirRotacion, false, new Set(), perfil).length > 0) {
       return { instancia: candidato, anclasRecienLlenas };
     }
     anclasRecienLlenas.push(candidato.id);
@@ -1519,14 +1740,17 @@ export function anclaActivaParaCategoria(
  * `engine/settlement.ts` durante la FUNDACIÓN, antes de que exista un `Asentamiento` completo.
  */
 export function sitiosParaTipo(
-  asentamiento: Pick<Asentamiento, 'id' | 'radioPotencial'>,
+  asentamiento: Pick<Asentamiento, 'id' | 'radioPotencial' | 'recintos'>,
   ocupados: Edificio[],
   tipo: EdificioTipo,
   nivelInterno?: number,
-  ampliado = false
+  ampliado = false,
+  /** Perfil de trazado (§E6.23). Por defecto el que le toca al asentamiento (`resolverPerfil`: override del
+   * laboratorio > tradición local); `construction.ts` pasa el de la política activa cuando hay una. */
+  perfil: PerfilTrazado = resolverPerfil(asentamiento.id)
 ): { punto: Point; rotado: boolean }[] {
   const tamano = tamanoEdificio(tipo, nivelInterno);
-  const { ocupadas, red } = sueloOcupado(asentamiento.id, ocupados);
+  const { ocupadas, red } = sueloOcupado(asentamiento.id, ocupados, undefined, asentamiento.recintos ?? []);
   const aPunto = (candidatos: Candidato[]): { punto: Point; rotado: boolean }[] =>
     candidatos.map((c) => ({ punto: c.punto, rotado: c.rotado }));
 
@@ -1558,7 +1782,7 @@ export function sitiosParaTipo(
   // cualquier otra. El id es solo semilla determinista para esta consulta — el llamante genera el id real al
   // comprometer la construcción (`crearEdificioEnCola`, construction.ts).
   if (ANCLA_PRIMARIA_POR_CATEGORIA[categoria] === tipo) {
-    const resultado = crearAnclaNueva(asentamiento.id, ocupados, tipo, `consulta-${tipo}`);
+    const resultado = crearAnclaNueva(asentamiento.id, ocupados, tipo, `consulta-${tipo}`, asentamiento.recintos ?? []);
     return resultado ? [{ punto: resultado.nuevaAncla.posicion, rotado: resultado.nuevaAncla.rotado ?? false }] : [];
   }
 
@@ -1576,7 +1800,7 @@ export function sitiosParaTipo(
   // con edificios afines ya construidos. `ampliado` (Líneas de Producción) lo ignora — esa política reordena
   // los candidatos por distancia a sus insumos, no por vecindad.
   const celdasAfines = ampliado ? new Set<string>() : celdasDeTiposAfines(ocupados, tipo, anclaInstancia.id);
-  return sitiosPorAtraccionDura(anclaInstancia, tamano, ocupadas, red, permitirRotacion, ampliado, celdasAfines);
+  return sitiosPorAtraccionDura(anclaInstancia, tamano, ocupadas, red, permitirRotacion, ampliado, celdasAfines, perfil);
 }
 
 /** Las dos orientaciones de `tamanoAncla` a probar, en un orden sembrado de forma determinista por `semillaId`
@@ -1646,12 +1870,12 @@ export function huecoEnDireccion(
  * Entre las anclas NO descartadas (`ANCLAS_REALES`, sin `semillaSaturada`, y sin las `excluidas` de esta
  * misma búsqueda), la más cercana al origen del asentamiento — Etapa 5, Lógica 1: un único árbol para TODAS
  * las anclas, sin distinguir tipo. `undefined` solo si no queda ninguna (asentamiento sin anclas en absoluto,
- * o las 8 direcciones de TODAS agotadas — caso límite confirmado por simulación: solo ocurre cuando el 100%
+ * o las 5 ranuras de TODAS agotadas — caso límite confirmado por simulación: solo ocurre cuando el 100%
  * del espacio físico disponible ya está ocupado).
  *
  * `anclaLlena` (Lógica 2) NO participa aquí — es un criterio aparte, sin relación con esta selección de
  * semilla (confirmado con el usuario tras una primera corrección que sí las mezclaba). Un ancla puede estar
- * `anclaLlena` y seguir siendo la semilla activa del árbol mientras sus 8 ranuras de crecimiento tengan sitio.
+ * `anclaLlena` y seguir siendo la semilla activa del árbol mientras sus 5 ranuras de crecimiento tengan sitio.
  */
 export function semillaActiva(edificios: Edificio[], excluidas: Set<string> = new Set()): Edificio | undefined {
   let mejor: Edificio | undefined;
@@ -1667,7 +1891,7 @@ export function semillaActiva(edificios: Edificio[], excluidas: Set<string> = ne
   return mejor;
 }
 
-/** Orden aleatorio (determinista, sembrado por `semilla.id`+intento) de las 8 direcciones ya rotadas para el
+/** Orden aleatorio (determinista, sembrado por `semilla.id`+intento) de las 5 ranuras equidistantes ya rotadas para el
  * asentamiento — Etapa 5: la ranura se elige al azar, no en orden fijo N→NE→E... */
 function direccionesBarajadas(semillaId: string, asentamientoId: string): Point[] {
   const direcciones = direccionesRotadas(asentamientoId).map((d) => d.vector);
@@ -1681,7 +1905,7 @@ function direccionesBarajadas(semillaId: string, asentamientoId: string): Point[
 /**
  * Crea una ancla nueva de `tipoAncla` en el árbol único de anclas (Etapa 5, Lógica 1) — recorre la semilla
  * activa (la ancla no saturada más cercana a la raíz, de CUALQUIER tipo, sin distinguir categoría) probando
- * sus 8 direcciones en orden aleatorio; si ninguna de las 8 tiene hueco real (`huecoEnDireccion`), esa semilla
+ * sus 5 ranuras en orden aleatorio; si ninguna de las 5 tiene hueco real (`huecoEnDireccion`), esa semilla
  * se descarta PARA SIEMPRE (`anclasRecienSaturadas`, que el llamante debe persistir como `semillaSaturada` en
  * el array real de edificios) y se prueba la siguiente semilla más cercana. `null` si no queda ninguna semilla
  * disponible en absoluto — caso límite: el asentamiento ya no tiene dónde crecer para este tipo de ancla.
@@ -1696,15 +1920,15 @@ function anguloNormalizado(a: number): number {
 /**
  * ¿Ya hay una ancla existente sobre esta ranura (dirección) de `centroSemilla`? Compara el ángulo desde
  * `centroSemilla` hacia cada una de `otrasAnclas` contra `direccion` — si alguna cae casi exacta (margen
- * generoso pero muy por debajo de los 45° entre ranuras, para absorber el redondeo a celda de
- * `huecoEnDireccion`) Y a una distancia dentro del rango de una ranura (`RADIO_INICIAL_RANURA`..
- * `RADIO_MAXIMO_RANURA`, con margen), esa ranura se considera OCUPADA — bug detectado con el laboratorio
+ * `MEDIA_RANURA_DIRECCION * 0.55`, generoso pero por debajo de media ranura, para absorber el redondeo a celda
+ * de `huecoEnDireccion`) Y a una distancia dentro del rango de una ranura (`radioInicialRanura()`..
+ * `radioMaximoRanura()`, con margen), esa ranura se considera OCUPADA — bug detectado con el laboratorio
  * visual: sin este chequeo, `huecoEnDireccion` simplemente sigue expandiendo el radio en la misma dirección ya
- * usada hasta encontrar hueco más lejos, en vez de repartirse entre las 8 direcciones libres.
+ * usada hasta encontrar hueco más lejos, en vez de repartirse entre las ranuras libres.
  */
 function ranuraOcupada(centroSemilla: Point, direccion: Point, otrasAnclas: RectanguloCeldas[]): boolean {
   const anguloDireccion = Math.atan2(direccion.y, direccion.x);
-  const EPS_ANGULO = 0.35;
+  const EPS_ANGULO = MEDIA_RANURA_DIRECCION * 0.55;
   const MARGEN_RADIO_CELDAS = 2;
   return otrasAnclas.some((ancla) => {
     const centro = centroDeRectangulo(ancla);
@@ -1720,10 +1944,11 @@ export function crearAnclaNueva(
   asentamientoId: string,
   edificios: Edificio[],
   tipoAncla: EdificioTipo,
-  id: string
+  id: string,
+  recintos: readonly Recinto[] = []
 ): { nuevaAncla: Edificio; anclasRecienSaturadas: string[] } | null {
   const tamanoBase = tamanoEdificio(tipoAncla);
-  const { ocupadas } = sueloOcupado(asentamientoId, edificios);
+  const { ocupadas } = sueloOcupado(asentamientoId, edificios, undefined, recintos);
   const excluidas = new Set<string>();
   let semilla = semillaActiva(edificios, excluidas);
 
@@ -1768,9 +1993,10 @@ export function sitioParaTipo(
   asentamiento: Pick<Asentamiento, 'id' | 'radioPotencial'>,
   ocupados: Edificio[],
   tipo: EdificioTipo,
-  nivelInterno?: number
+  nivelInterno?: number,
+  perfil?: PerfilTrazado
 ): { punto: Point; rotado: boolean } | null {
-  return sitiosParaTipo(asentamiento, ocupados, tipo, nivelInterno)[0] ?? null;
+  return sitiosParaTipo(asentamiento, ocupados, tipo, nivelInterno, false, perfil ?? resolverPerfil(asentamiento.id))[0] ?? null;
 }
 
 /**
@@ -1793,13 +2019,13 @@ export function sitioParaTipo(
  * otro", lo único que no se negocia.
  */
 export function reubicarPorTamano(
-  asentamiento: Pick<Asentamiento, 'id' | 'radioPotencial'>,
+  asentamiento: Pick<Asentamiento, 'id' | 'radioPotencial' | 'recintos'>,
   edificio: Edificio,
   todos: Edificio[],
   nivelInternoNuevo: number
 ): Point | null {
   const tamano = tamanoEdificio(edificio.tipo, nivelInternoNuevo);
-  const { ocupadas, red } = sueloOcupado(asentamiento.id, todos, edificio.id);
+  const { ocupadas, red } = sueloOcupado(asentamiento.id, todos, edificio.id, asentamiento.recintos ?? []);
   const afueras = esDeAfueras(edificio.tipo);
   const distanciaMinima = afueras ? TRAZADO.radioAfuerasMin : 0;
   const radioMaximo = afueras ? radioMaximoAfueras(asentamiento.radioPotencial, tamano) : asentamiento.radioPotencial;

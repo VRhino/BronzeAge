@@ -835,7 +835,36 @@ export function produccionTrigoDeGranja(nivelInterno: number | undefined): numbe
  *   habría NINGÚN hueco válido para la Granja inicial y caería al fallback del origen, encima del Centro
  *   Urbano. Y tiene sentido de fondo: el campo de una ciudad está fuera de su zona de influencia, no dentro.
  */
+/**
+ * PERFIL DE TRAZADO (doc trazado §E6.23) — qué prefiere un edificio cuando elige entre huecos igual de
+ * válidos dentro del núcleo de su ancla. Es una PERMUTACIÓN del desempate de `sitiosPorAtraccionDura`
+ * (engine/trazado.ts), no una plantilla: las reglas siguen siendo locales y la forma sigue emergiendo, pero
+ * la silueta agregada cambia.
+ *
+ * - `nucleos`   — pegado al ancla manda. Racimos densos concéntricos. Es el comportamiento histórico.
+ * - `caminera`  — el frente de calle manda. La ciudad se encadena a las calles que ya existen.
+ * - `compacta`  — la cercanía al CENTRO de la ciudad manda. Cada barrio llena primero su cara interior.
+ * - `gremial`   — el lado compartido con los AFINES manda. Barrios monocromos, oficios segregados.
+ *
+ * Un quinto candidato, "palatina" (dominaba `bordeCompartido` con el ancla), se PROBÓ Y SE DESCARTÓ: ese
+ * término solo tiene señal cuando el candidato toca el anillo del ancla, así que como criterio dominante vale
+ * 0 en casi toda la banda y el resultado salía idéntico a `nucleos` (medido, doc trazado §E6.23). Sigue en el
+ * desempate de todos los perfiles, donde sí sirve — pero no puede encabezar ninguno.
+ */
+export type PerfilTrazado = 'nucleos' | 'caminera' | 'compacta' | 'gremial';
+
+export const PERFILES_TRAZADO: readonly PerfilTrazado[] = ['nucleos', 'caminera', 'compacta', 'gremial'];
+
 export const TRAZADO = {
+  /**
+   * Override de perfil para el LABORATORIO: `null` = cada asentamiento usa el suyo (política > tradición,
+   * ver `resolverPerfil` en engine/trazado.ts). Con un valor, TODOS los asentamientos usan ese perfil.
+   *
+   * Existe para poder comparar perfiles en el laboratorio y en el batch (`BATCH_PERFIL`) sin montar cargos ni
+   * políticas. Nunca debería tener valor en una partida real — es una palanca de desarrollo, igual que el
+   * resto de campos que el laboratorio muta en caliente.
+   */
+  perfilForzado: null as PerfilTrazado | null,
   // Ancho de manzana en celdas — doblado en el Paso 1 de la Etapa 6 (§E6.11) junto con `tamanoCelda`: la
   // manzana mide lo mismo físicamente, se discretiza al doble de resolución.
   largoFilaMin: 8,
@@ -880,6 +909,68 @@ export const TRAZADO = {
    */
   capCorredorUrbano: 12,
   capCorredorAfueras: 200,
+};
+
+/**
+ * Murallas (`Consideraciones/Murallas_Definicion.md`). Un recinto es un ANILLO CERRADO DE CELDAS alrededor del
+ * casco urbano, no un edificio: se paga por celda, se levanta celda a celda y sus puertas se congelan al
+ * trazarlo.
+ *
+ * La razón de ser (§0 del doc) es lo que fija estas cifras: la muralla es una ventaja defensiva abrumadora
+ * —**menos puertas benefician al defensor**, que solo tiene que defender un embudo— y por eso tiene que ser
+ * cara de obtener Y de mantener. De ahí que el coste escale con el perímetro y que exista upkeep.
+ *
+ * TODO PLACEHOLDER, y las tarifas están MAL A PROPÓSITO hasta el Paso 1: salían de suponer un núcleo urbano
+ * de 17x14 celdas, pero la medición del Paso 0 (§11.1) encontró tejidos de 22-29 celdas de radio en nivel 2 y
+ * 33-44 en nivel 3 — el perímetro real es 2-3 veces mayor. Se fijan cuando `trazarRecinto` dé el perímetro
+ * del trazo de verdad, no antes.
+ */
+export const MURALLA = {
+  /** Gate de construcción (§8 del doc): el mismo nivel de asentamiento que exigía el viejo edificio `muralla`
+   * que este recinto sustituye (`EDIFICIO_CATALOGO.muralla.requisitoNivelAsentamientoConstruccion`). */
+  nivelMinimoConstruccion: 3,
+  /** Nivel más alto de recinto (§7: 1 empalizada · 2 muro de piedra · 3 muralla con adarve). Tope de
+   * `iniciarMejoraDeRecinto` — no hay nivel 4 de muralla. */
+  nivelMaximo: 3,
+  /** Celdas libres entre el último edificio y el muro (el *pomerium*): la banda por la que se circula y se
+   * defiende. Es también la palanca contra el riesgo de que un muro interior asfixie el casco antiguo tras
+   * una ampliación (§10 del doc). */
+  franjaDeRonda: 1,
+  /** Cada cuántas celdas de tramo recto aparece una torre, por nivel de recinto. Las esquinas convexas llevan
+   * torre siempre. El nivel 1 (empalizada) no tiene torres, por eso no está en la tabla. */
+  pasoTorres: { 2: 8, 3: 5 } as Record<number, number>,
+  /** Edificios extramuros necesarios para poder AMPLIAR el recinto (§10). Sin un mínimo, ampliar sería spam. */
+  arrabalMinimo: 6,
+  /** Ritmo de obra: celdas levantadas por minuto (= por tick) mientras haya materiales. Es lo que hace que el
+   * anillo se vea cerrarse poco a poco en vez de aparecer de golpe. */
+  celdasPorMinuto: 1,
+  /** Multiplicadores de tarifa sobre la celda de muro llana. Una puerta es una casa-puerta, no un hueco. */
+  factorPuerta: 4,
+  factorTorre: 3,
+  /** Coste de UNA celda de muro llana. Nivel 1 = empalizada (madera domina); 2 y 3 son el coste de MEJORAR
+   * cada celda al nivel siguiente, no el coste total acumulado. */
+  tarifaPorCelda: {
+    1: { madera: 20, piedra: 2 },
+    2: { madera: 5, piedra: 25 },
+    3: { madera: 10, piedra: 20 },
+  } as Record<number, Partial<Record<string, number>>>,
+  /** Upkeep por celda y por tick. La mitad de "difícil de obtener Y DE MANTENER": sin esto, una ventaja
+   * abrumadora se pagaría una sola vez y duraría para siempre. */
+  upkeepPorCelda: {
+    1: { madera: 0.02 },
+    2: { piedra: 0.02 },
+    3: { piedra: 0.04 },
+  } as Record<number, Partial<Record<string, number>>>,
+  /**
+   * Bono defensivo base del recinto. El multiplicador REAL que se aplica a los defensores es
+   *
+   *     1 + (bonoDefensaPorNivel[nivel] − 1) × integridad / nºPuertas
+   *
+   * El divisor por puertas es lo que hace real el eje fortaleza↔metrópoli (§0): amurallar pronto da un
+   * embudo barato, amurallar tarde protege más ciudad con más frente que cubrir. El "1 +" garantiza que un
+   * muro NUNCA perjudique al defensor por muchas puertas que tenga.
+   */
+  bonoDefensaPorNivel: { 1: 1.3, 2: 1.8, 3: 2.5 } as Record<number, number>,
 };
 
 // --- Sprint 3: Economía (Doc 3) ---
@@ -1065,7 +1156,27 @@ export const POLITICA_CATALOGO = [
   { id: 'racionamiento', cargo: 'sacerdote', nombre: 'Racionamiento', factorConsumoComida: 0.8 },
   { id: 'culto_fertilidad', cargo: 'sacerdote', nombre: 'Culto a la Fertilidad', factorCrecimientoNobleza: 1.5 },
   { id: 'via_rapida', cargo: 'maestroObras', nombre: 'Vía Rápida de Construcción', factorTiempoConstruccion: 0.75 },
-  { id: 'postura_defensiva', cargo: 'maestroObras', nombre: 'Postura Defensiva' }, // flag de layout, Doc 4.2 — sin efecto visual en Fase 0
+  // --- Ordenanzas de TRAZADO (doc trazado §E6.23) ---
+  //
+  // Las cuatro fijan el `perfilTrazado` del asentamiento mientras están activas: cambian QUÉ PREFIERE un
+  // edificio al elegir entre huecos igual de válidos, no imponen ninguna plantilla — la forma sigue emergiendo
+  // (ver `ORDEN_POR_PERFIL`, engine/trazado.ts). Son EXCLUYENTES ENTRE SÍ sin necesidad de ninguna regla nueva:
+  // `maestroObras` tiene un único slot (`POLITICAS.slotsPorCargo`), así que activar una obliga a esperar a que
+  // expire la anterior. Compiten en ese mismo slot con Vía Rápida y Líneas de Producción, que es la tensión
+  // interesante: forma contra velocidad contra logística.
+  //
+  // Como una política dura `duracionMinutosPorDefecto` (150 ticks) y nada mueve lo ya construido, cada una
+  // deja un ESTRATO en la ciudad en vez de reformarla entera — la ciudad acaba registrando su historia
+  // política en su geometría.
+  //
+  // PENDIENTE (a propósito, no olvido): ninguna tiene todavía coste/beneficio mecánico propio, así que hoy
+  // compiten en desventaja contra Vía Rápida (−25% de tiempo de obra). `barrios_gremiales` es la que más cerca
+  // está de tener uno solo: agrupar industria acorta la distancia a los insumos, que `factorLineaProduccion`
+  // (engine/construction.ts) ya mide y ya premia. Sin calibrar.
+  { id: 'postura_defensiva', cargo: 'maestroObras', nombre: 'Postura Defensiva', perfilTrazado: 'compacta' },
+  { id: 'arterias_comerciales', cargo: 'maestroObras', nombre: 'Arterias Comerciales', perfilTrazado: 'caminera' },
+  { id: 'barrios_gremiales', cargo: 'maestroObras', nombre: 'Barrios Gremiales', perfilTrazado: 'gremial' },
+  { id: 'plazas_mayores', cargo: 'maestroObras', nombre: 'Plazas Mayores', perfilTrazado: 'nucleos' },
   // A petición del usuario, líneas de producción (Doc 4.2.1): mientras esté activa, la auto-construcción sitúa
   // los edificios de transformación nuevos (Fundición/Curtiduría/Armería) en el hueco de su zona que minimiza
   // la penalización de distancia a la fuente de sus insumos (`sitioConcentricoLineaProduccion`,

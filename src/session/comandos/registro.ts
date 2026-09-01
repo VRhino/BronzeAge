@@ -33,6 +33,7 @@ import {
   renombrarAsentamiento,
 } from './construccion';
 import { desarmarCaravanaFundacion, lanzarCaravanaFundacion } from './expansion';
+import { abandonarRecinto, comprometerRecinto, mejorarRecinto } from './murallas';
 
 export const REGISTRO_COMANDOS = {
   fundarAsentamiento,
@@ -67,6 +68,9 @@ export const REGISTRO_COMANDOS = {
   renombrarAsentamiento,
   desarmarCaravanaFundacion,
   lanzarCaravanaFundacion,
+  comprometerRecinto,
+  abandonarRecinto,
+  mejorarRecinto,
 } satisfies Record<string, ManejadorComando<any, any>>;
 
 export type TipoComando = keyof typeof REGISTRO_COMANDOS;
