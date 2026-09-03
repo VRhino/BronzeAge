@@ -6,22 +6,29 @@
 El motor maneja **dos espacios** y hasta ahora nadie había declarado cómo se relacionan, así que el código los
 trataba como iguales. La equivalencia es:
 
-> **1 unidad de mapa = 10 unidades locales de la Vista de Asentamiento.**
+> **1 unidad de mapa = 40 unidades locales de la Vista de Asentamiento.**
 
 De ahí sale la jerarquía territorial de la ficción:
 
 | | radio | equivale a |
 |---|---|---|
-| **Ciudad** (casco urbano + afueras) | ~150 unidades locales = **15 de mapa** | el núcleo habitado |
+| **Ciudad** (casco urbano + afueras) | 121-205 unidades locales = **3-5 de mapa** | el núcleo habitado |
 | **Provincia** (zona de influencia) | **30-180 de mapa**, según nivel | lo que controla un asentamiento |
 | **Reino** | todas las provincias de una Facción | sin número fijo: una Facción podría llegar a todo el mapa |
 
-**Por qué 10.** El mundo mide 2000×2000 y el 91% es habitable (medido: solo 7,6% agua y 1,3% cima), o sea
-3,64 millones de unidades². Repartido entre las **200 provincias** que Fase 0 quiere, salen 18.207 u² por
-provincia, es decir un **radio de ~76** — que es casi exactamente el tope de zona de influencia de nivel 1 que
-ya existía (60). La escala de las provincias ya era buena; lo que fallaba era la ciudad. Con la equivalencia
-declarada, una ciudad ocupa **un quinto del radio de su provincia y un 4% de su superficie**, y el resto es
-campo, bosque y minas — que es lo que debe haber entre dos ciudades.
+**Cuántas provincias caben.** El mundo mide 2000×2000 y el 91% es habitable (medido: solo 7,6% agua y 1,3%
+cima), o sea 3,64 millones de unidades². Repartido entre las **200 provincias** que Fase 0 quiere, salen
+18.207 u² por provincia: un **radio de ~76**, casi exactamente el tope de zona de influencia de nivel 1 que ya
+existía (60). **La escala de las provincias ya era buena; lo que fallaba era la ciudad.**
+
+**Por qué 40 y no 10.** Una ciudad tiene un TAMAÑO MÍNIMO de ~121 unidades locales que no encoge —al fundar,
+la Granja inicial no cabe más cerca— mientras que la provincia sí arranca pequeña (radio 30). Con un factor de
+10, una aldea recién fundada ocupaba el **40%** de su provincia y solo llegaba a la décima en niveles altos.
+Con 40, ese peor caso mide 3,0 de mapa dentro de una provincia de 30: el **10,1%**. De ahí para arriba el
+ratio solo baja (5% en nivel 1, 3% en nivel 5), porque la provincia crece y el mínimo de la ciudad no.
+
+**La regla, entonces: una ciudad nunca pasa de una décima de su provincia.** El resto es campo, bosque y
+minas — lo que debe haber entre dos ciudades.
 
 **Qué estaba roto.** Al compartir unidades sin decirlo, una ciudad medía ~121 y su provincia 30-180: **la urbe
 era más grande que el territorio que controlaba**. El código incluso lo daba por hecho — `radioMaximoAfueras`

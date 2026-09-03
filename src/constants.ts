@@ -685,6 +685,15 @@ export const SITIO = {
  * lienzo, así que el zoom no varía a medida que el asentamiento crece — solo se va llenando. Debe cubrir con
  * margen el mayor `radioPotencial` alcanzable (tope 120, nivel 3 — ver `ZONA_INFLUENCIA.radioMaximoPorNivel`),
  * para que ningún edificio colocado por `sitioEnBarrio` quede jamás fuera del área dibujada.
+ *
+ * **150 -> 220 (2026-09-02): se había quedado corto.** Ese "tope 120, nivel 3" dejó de ser cierto cuando
+ * Fase 0.6 subió el tope de asentamiento a nivel 5, y con él `radioMaximoPorNivel` hasta 180. La ciudad real
+ * de un nivel 5 llega a **205** unidades locales (`radioMaximoAfueras`: 180 + la media diagonal de una Granja
+ * nivel 4), así que sus afueras habrían caído FUERA del lienzo. Latente y sin observar todavía porque hoy
+ * ningún asentamiento pasa de nivel 2 en batch, pero el bug estaba puesto. 220 cubre 205 con margen.
+ *
+ * Es solo PRESENTACIÓN: `radioMapa` decide el zoom del lienzo de la Vista de Asentamiento, nunca dónde se
+ * coloca un edificio. Cambiarlo no mueve la simulación.
  */
 /**
  * ESCALA DEL MUNDO (a petición del usuario, 2026-09-02) — la equivalencia que faltaba declarar.
@@ -701,17 +710,26 @@ export const SITIO = {
  * más grande que el territorio que controlaba, y el propio `radioMaximoAfueras` lo daba por hecho ("el campo
  * de una ciudad está FUERA de su zona de influencia").
  *
- * Con 10, una ciudad de radio local 150 ocupa 15 unidades de mapa dentro de una provincia de ~76 (el radio
- * que sale de querer 200 provincias sobre el 91% habitable de este mapa): la ciudad es un quinto del radio de
- * su provincia y un 4% de su superficie. El resto es campo, bosque y minas — que es lo que debe haber entre
- * dos ciudades.
+ * **Por qué 40 y no 10.** El primer intento fue 10, y no bastaba: la ciudad tiene un TAMAÑO MÍNIMO de ~121
+ * unidades locales que no encoge —el suelo `max(radioUrbano, radioAfuerasMin + anchoBandaAfueras)` de
+ * `radioMaximoAfueras`, que existe porque al fundar la Granja inicial no cabe más cerca— mientras que la
+ * provincia SÍ arranca pequeña (`radioInicial` 30). Con 10, una aldea recién fundada ocupaba el 40% de su
+ * provincia y solo llegaba a la décima en los niveles altos.
+ *
+ * 40 es el factor que cubre el PEOR caso: al fundar, esa ciudad mínima mide 3,0 unidades de mapa dentro de
+ * una provincia de 30 — el 10,1%. De ahí para arriba el ratio solo baja (5% en nivel 1, 3% en nivel 5),
+ * porque la provincia crece y el suelo de la ciudad no. Es decir: **la ciudad nunca pasa de una décima de su
+ * provincia**, que era la proporción buscada.
+ *
+ * Se llegó aquí sin tocar el trazado urbano ni `radioInicial`, que es lo que el usuario pidió preservar: la
+ * escala local es la palanca, y basta con hacerla más pequeña frente a la mundial.
  *
  * **No cambia ningún número de la simulación**: el trazado urbano sigue midiendo lo mismo en sus unidades y
  * la zona de influencia sigue midiendo lo mismo en las suyas. Lo que cambia es que ahora está DICHO, y que
  * `radioUrbanoDe` (engine/asentamientoQuery.ts) es el único punto donde los dos espacios se tocan.
  */
 export const ESCALA = {
-  unidadesLocalesPorUnidadMapa: 10,
+  unidadesLocalesPorUnidadMapa: 40,
 };
 
 export const REJILLA_ASENTAMIENTO = {
@@ -731,7 +749,7 @@ export const REJILLA_ASENTAMIENTO = {
    * `engine/__tests__/escalaRejilla.test.ts` con una tabla generada antes del cambio.
    */
   tamanoCelda: 3,
-  radioMapa: 150,
+  radioMapa: 220,
 };
 
 /**
