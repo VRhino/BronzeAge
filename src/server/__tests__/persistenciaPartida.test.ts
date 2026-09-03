@@ -313,4 +313,17 @@ describe('listarPartidas (Fase C12: descubrimiento)', () => {
     expect(resumenA.mapaId).toBeTruthy();
     expect(resumenA.guardadoEn).toBe(MOMENTO);
   });
+
+  it('ignora un .json del directorio que no sea una partida — `identidad.json` vive AQUI', async () => {
+    // Reproduce el 500 real de `GET /admin/partidas`: `crearRepositorioIdentidadEnDisco` guarda
+    // `identidad.json` en el mismo directorio que los snapshots (`server/index.ts`), asi que el filtro por
+    // extension lo colaba y `snapshot.partida.state` reventaba. Bastaba con haber iniciado sesion una vez.
+    const a = partidaEnMarcha(1);
+    await guardarPartida(directorio, a, MOMENTO);
+    await writeFile(join(directorio, 'identidad.json'), JSON.stringify({ formatoVersion: 1, datos: { usuarios: [] } }), 'utf-8');
+
+    const partidas = await listarPartidas(directorio);
+
+    expect(partidas.map((p) => p.gameId)).toEqual([a.gameId]);
+  });
 });

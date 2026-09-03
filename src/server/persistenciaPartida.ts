@@ -317,6 +317,12 @@ export async function listarPartidas(directorio: string): Promise<ResumenPartida
       // `null` aquí sería una carrera con un borrado externo entre `readdir` y esta lectura — se descarta en
       // silencio, no es un fallo de quien pidió la lista.
       if (!snapshot) return null;
+      // No todo `.json` del directorio es una partida: `crearRepositorioIdentidadEnDisco` guarda su
+      // `identidad.json` AQUÍ MISMO (`server/index.ts`), así que el filtro por extensión lo colaba y
+      // `snapshot.partida.state` reventaba con un 500 — bastaba con que alguien hubiera iniciado sesión
+      // alguna vez para que el endpoint de descubrimiento (Fase C12) dejara de funcionar del todo. Se
+      // descarta como la carrera de arriba: lo que no tiene forma de partida, no es una partida.
+      if (!snapshot.partida?.state) return null;
       return {
         gameId,
         instante: instanteDeTick(snapshot.partida.state.tick),
