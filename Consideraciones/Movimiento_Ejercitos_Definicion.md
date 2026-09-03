@@ -513,6 +513,12 @@ usuario dio la tabla real. Calibrarla es un cambio de **datos**, no de código.
       la secuencia global sea correcta).
 - [ ] **Paso 11 — Retirar `combateCampoAbierto` e `interceptarCaravana` como comandos.** Demolición separada
       del paso que la habilita: primero funciona lo nuevo, después se borra lo viejo.
+      **Se llevan por delante una fuga de visibilidad** detectada al hacer el 5b: los dos emiten sus eventos
+      SIN `asentamientoId` a propósito (`session/comandos/militar.ts`, "el choque es entre DOS asentamientos,
+      atribuirlo a uno sería arbitrario"), y un evento sin atribuir es global — o sea que hoy toda la partida
+      lee la resolución completa de cualquier combate entre dos rivales, con los ids de ambos bandos en el
+      `payload`. No se arregla ahora porque este paso los borra; si por lo que sea sobrevivieran, hay que
+      decidir a quién se atribuye un choque entre dos (probablemente a los DOS: un evento por bando).
 - [ ] **Paso 12 — NPC** migrado a marchar, con diario de batch contra la línea base.
 - [ ] **Paso 13 — Calibración** por simulación: `LIDERAZGO.factorCoste`, `capacidadCarroPorJugador` (recalculado
       desde el radio si cambió la ración), velocidades y capacidad de caravana.
