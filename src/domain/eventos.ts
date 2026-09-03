@@ -54,4 +54,37 @@ export interface EventoDominio {
  * interfaz (`GameStore`/`main.ts`) — migrar un subsistema añade estructura, no le quita nada a nadie que ya
  * consuma el texto.
  */
-export type EventoCrudo = string | { codigo: string; mensaje: string; payload?: unknown };
+export type EventoCrudo =
+  | string
+  | {
+      codigo: string;
+      mensaje: string;
+      payload?: unknown;
+      /**
+       * Asentamiento al que se atribuye ESTE evento concreto, cuando el subsistema lo sabe y quien lo llama
+       * no. `engine/simulation.ts` atribuye por lotes —le pasa un `asentamientoId` a `comoEventosDominio`
+       * porque lo sabe por el bucle que recorre asentamiento a asentamiento—, pero un subsistema GLOBAL que
+       * itera sobre otra cosa (los ejércitos, cada uno con su origen distinto) no cabe en ese molde: sin
+       * esto sus eventos salen sin atribuir, y un evento sin atribuir es GLOBAL, o sea visible para todo el
+       * mundo en `proyectarParaJugador`. Ahí es donde deja de ser una cuestión de forma: narrar a todos que
+       * "el ejército X llega a su destino" es exactamente la telemetría de rival que Doc 5.12.7 prohíbe.
+       *
+       * Cuando está, gana sobre la atribución por lotes. Es el mismo campo, con el mismo significado, que
+       * `EventoDeComando` (`session/comandos/eventos.ts`) ya tenía por el lado de los comandos.
+       */
+      asentamientoId?: string;
+    };
+
+/**
+ * Atribuye a un asentamiento un evento que ya venía hecho. Existe para el caso en que quien PRODUCE el
+ * evento no sabe a quién atribuirlo y quien lo consume sí: `avanzarRacion` narra la deserción de un
+ * escuadrón sin saber si ese escuadrón está en una guarnición o en un carro a media marcha, y es
+ * `avanzarEjercitos` —que sí lo sabe— quien le pone el origen del ejército antes de acumularlo.
+ *
+ * Respeta una atribución previa: si el evento ya venía atribuido, ese dato es más específico que el del
+ * llamador y no se pisa.
+ */
+export function atribuir(evento: EventoCrudo, asentamientoId: string): EventoCrudo {
+  if (typeof evento === 'string') return { codigo: 'legado', mensaje: evento, asentamientoId };
+  return evento.asentamientoId === undefined ? { ...evento, asentamientoId } : evento;
+}

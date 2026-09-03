@@ -209,3 +209,38 @@ describe('está enchufado al tick y NO consume aleatoriedad', () => {
     expect(contar(true)).toBe(contar(false));
   });
 });
+
+describe('atribucion de los eventos: un ejercito NO narra en global (Doc 5.12.7)', () => {
+  // Por que esto es un test y no un detalle de formato: un `EventoDominio` sin `asentamientoId` es GLOBAL, y
+  // `proyectarParaJugador` lo manda a TODOS los jugadores de la partida. Sin esta atribucion, redactar los
+  // ejercitos ajenos en la proyeccion no serviria de nada: el log seguiria contandole a medio mundo que a un
+  // rival se le desertan los hombres o que su columna acaba de llegar a destino.
+  const origen = () => base().asentamiento;
+
+  it('la desercion por hambre se atribuye al asentamiento de origen', () => {
+    const a = origen();
+    // Sin trigo en el carro y con la moral ya en el suelo: desertan en este mismo tick.
+    const e = ejercitoDe(a, [escuadron('s1', 'milicia_lanceros', 10, 0)], 0);
+    const eventos = avanzarEjercitos([e], [a], mapa).eventos;
+
+    const desercion = eventos.filter((ev) => typeof ev !== 'string' && ev.codigo === 'tropas.desercion');
+    expect(desercion.length).toBeGreaterThan(0);
+    for (const ev of desercion) {
+      expect(typeof ev !== 'string' && ev.asentamientoId).toBe(a.id);
+    }
+  });
+
+  it('llegar, regresar y disolverse tambien se atribuyen', () => {
+    const a = origen();
+    // Ya en el ultimo tramo, para que llegue en este tick.
+    const llega = { ...ejercitoDe(a, [escuadron('s1', 'milicia_lanceros')], 500), progreso: 0.999 };
+    const disuelto = { ...ejercitoDe(a, [escuadron('s2', 'milicia_lanceros', 0)], 0), id: 'ejercito-2' };
+    const vuelve = { ...ejercitoDe(a, [escuadron('s3', 'milicia_lanceros')], 500), id: 'ejercito-3', progreso: 0.999, estado: 'regresando' as const };
+
+    const eventos = avanzarEjercitos([llega, disuelto, vuelve], [a], mapa).eventos;
+    const codigos = eventos.filter((ev): ev is Exclude<typeof ev, string> => typeof ev !== 'string');
+
+    expect(codigos.map((ev) => ev.codigo).sort()).toEqual(['ejercito.disuelto', 'ejercito.llega', 'ejercito.regresa']);
+    for (const ev of codigos) expect(ev.asentamientoId).toBe(a.id);
+  });
+});

@@ -471,8 +471,27 @@ usuario dio la tabla real. Calibrarla es un cambio de **datos**, no de código.
         `El ejército ejercito-solitario llega a su destino y acampa`. Medido en píxeles sobre el canvas: el
         racimo de 3 jugadores ocupa **16 px de ancho frente a 6 px el de 1** — cada participante añade
         exactamente media anchura de rombo, que es el solape del 50% especificado.
-  - [ ] **5b — Proyección al jugador**: `ejercitos` en `ProyeccionJugador` (que NO es un `Omit`, es una lista
-        explícita de campos), filtrado por zona de influencia y **redactado** para los ajenos (§1.1d).
+  - [x] **5b — Proyección al jugador (2026-09-03).** Dos campos, no uno: `ejercitos` (los propios, completos)
+        y `ejercitosAvistados` (los ajenos, redactados a `id` + `faccionId` + `posicionActual` +
+        `participantes`). Van en arrays SEPARADOS a propósito — la diferencia entre "lo veo entero" y "solo
+        lo avisto" queda en el tipo, no en un campo opcional que el cliente pueda olvidarse de mirar.
+        Visibilidad = zona de influencia propia ∪ `LOGISTICA.radioVisionEjercito` (150) alrededor de los
+        ejércitos propios, sin memoria: responde "¿se ve AHORA?" y nada más. Un jugador huérfano sigue viendo
+        la columna en la que va su propia tropa, aunque no tenga Facción.
+
+        **Además hubo que tapar una fuga que habría dejado la redacción en decoración**: los eventos de
+        `avanzarEjercitos` salían SIN `asentamientoId`, y un evento sin atribuir es GLOBAL — o sea que el log
+        le contaba a toda la partida que a un rival se le desertaban los hombres o que su columna acababa de
+        llegar. Se atribuyen ya a su `origenAsentamientoId`, para lo que `EventoCrudo` acepta ahora un
+        `asentamientoId` propio (un subsistema global que itera sobre ejércitos no cabe en la atribución por
+        lotes de `simulation.ts`, que va asentamiento a asentamiento).
+
+        **Verificado en vivo** contra `GET /v1/jugador/partidas/local` con cuatro ejércitos en el mundo: el
+        admin ve los cuatro; la jugadora ve el suyo completo, dos rivales redactados a exactamente esas
+        cuatro claves (uno dentro de su zona, otro visto solo por su ejército en marcha, con
+        `participantes: 2` derivado de 2 escuadrones de 2 jugadores) y el cuarto **no aparece en un solo byte
+        del payload**. En el log: de 17 eventos del tramo, 8 eran del ejército rival y a ella le llegaron 9,
+        ninguno de ellos del rival.
   - [ ] **5c — Cliente de jugador** (`BronzeAgeClient`, **repo aparte** en `C:/Users/VRINO/Desarrollo/BronzeAgeClient`).
         Espejo de 5a: su `src/render.ts:275-293` ya dibuja caravanas igual que el admin. Ese cliente **no puede
         importar del backend** por diseño (sin alias `@motor/*`, solo HTTP), así que hay que añadirle una copia

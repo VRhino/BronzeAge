@@ -85,13 +85,16 @@ export interface ResultadoTick extends EstadoSimulacion {
 
 /** Añade el contexto que un subsistema no conoce (`momento`, `asentamientoId`) a lo que ya produjo — un
  * `string` se envuelve como `codigo: 'legado'` (subsistema todavía sin migrar); un evento ya migrado
- * conserva su `codigo`/`payload` tal cual (ver `EventoCrudo`). */
+ * conserva su `codigo`/`payload` tal cual (ver `EventoCrudo`).
+ *
+ * La atribución por lotes (`asentamientoId`) sirve a la mayoría de subsistemas porque este bucle ya va
+ * asentamiento a asentamiento. Un subsistema global que itera sobre otra cosa —los ejércitos, cada uno con
+ * su propio origen— la trae en el evento, y esa gana: ver `EventoCrudo`. */
 function comoEventosDominio(eventos: EventoCrudo[], contexto: ContextoSimulacion, asentamientoId?: string): EventoDominio[] {
   const { momento } = contexto;
   return eventos.map((evento) => {
-    const { codigo, mensaje, payload } =
-      typeof evento === 'string' ? { codigo: 'legado', mensaje: evento, payload: undefined } : evento;
-    return { codigo, mensaje, momento, asentamientoId, payload };
+    if (typeof evento === 'string') return { codigo: 'legado', mensaje: evento, momento, asentamientoId };
+    return { ...evento, momento, asentamientoId: evento.asentamientoId ?? asentamientoId };
   });
 }
 

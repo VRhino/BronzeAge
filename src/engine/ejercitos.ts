@@ -13,7 +13,7 @@ import type { Mapa } from '../world/mapa';
 import { calcularRuta } from '../world/rutas';
 import { distancia } from '../world/geometria';
 import { LOGISTICA, TROPAS_RECLUTABLES } from '../constants';
-import type { EventoCrudo } from '../domain/eventos';
+import { atribuir, type EventoCrudo } from '../domain/eventos';
 import { avanzarPosicionEnRuta } from './movimiento';
 import { agregarRecurso } from './almacen';
 import { avanzarRacion } from './tropas';
@@ -266,7 +266,10 @@ export function avanzarEjercitos(
     const factorConsumo = original.estado === 'estacionado' ? LOGISTICA.factorConsumoEstacionado : 1;
     const trigoEnCarro = original.suministro['trigo'] ?? 0;
     const racion = avanzarRacion(original.escuadrones, trigoEnCarro, factorConsumo);
-    eventos.push(...racion.eventos);
+    // `avanzarRacion` narra la deserción sin saber si es guarnición o campaña; aquí sí se sabe de quién es
+    // esa columna, y sin atribuirla el evento saldría GLOBAL — o sea, contando a todo el mundo que a un
+    // rival se le están desertando los hombres (Doc 5.12.7).
+    eventos.push(...racion.eventos.map((e) => atribuir(e, original.origenAsentamientoId)));
 
     let ejercito: Ejercito = {
       ...original,
@@ -279,6 +282,7 @@ export function avanzarEjercitos(
       const volvieron = reintegrar(ejercito, true);
       eventos.push({
         codigo: 'ejercito.disuelto',
+        asentamientoId: ejercito.origenAsentamientoId,
         mensaje: volvieron
           ? `El ejército ${ejercito.id} se deshace sin un solo soldado en pie; sus estandartes vuelven a ${ejercito.origenAsentamientoId}.`
           : `El ejército ${ejercito.id} se deshace sin un solo soldado en pie, y ya no tiene asentamiento al que volver.`,
@@ -299,6 +303,7 @@ export function avanzarEjercitos(
         const volvieron = reintegrar(ejercito, true);
         eventos.push({
           codigo: 'ejercito.regresa',
+          asentamientoId: ejercito.origenAsentamientoId,
           mensaje: volvieron
             ? `El ejército ${ejercito.id} vuelve a ${ejercito.origenAsentamientoId} y se reincorpora a la guarnición.`
             : `El ejército ${ejercito.id} llega a donde estaba su hogar y no encuentra nada a lo que volver.`,
@@ -310,6 +315,7 @@ export function avanzarEjercitos(
       ejercito = { ...ejercito, estado: 'estacionado' };
       eventos.push({
         codigo: 'ejercito.llega',
+        asentamientoId: ejercito.origenAsentamientoId,
         mensaje: `El ejército ${ejercito.id} llega a su destino y acampa.`,
         payload: { ejercitoId: ejercito.id, objetivo: ejercito.objetivo },
       });

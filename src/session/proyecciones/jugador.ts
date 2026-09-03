@@ -1,31 +1,38 @@
 // Proyección de jugador (Fase C4, Slice 1 — Docs/Arquitectura/6_Sincronizacion_Visibilidad_y_Escala.md §3).
 // Filtra `GameSessionState` a lo que un jugador concreto puede ver.
 //
-// **SIN niebla de guerra todavía.** El doc 6 diseña tres fuentes de visibilidad de lo AJENO (espacial,
-// contacto, alianza) con memoria tipo RTS — eso es `ConocimientoJugador`, que queda para un Slice 2
-// explícitamente diferido: la visibilidad espacial necesita un radio de visualización (número de BALANCE, no
-// de arquitectura) que no está definido en ningún doc de este repo, y la semántica exacta de cuándo decae la
-// memoria espacial tampoco. Inventar cualquiera de los dos aquí sería una decisión de diseño de juego
-// disfrazada de código.
+// Regla de base, deliberadamente conservadora: la Facción propia se ve COMPLETA (asentamientos, escuadrones,
+// colas, almacén); las demás Facciones no aportan ni un asentamiento, ni siquiera resumido. Mejor "no ves
+// nada del rival" que exponer un nivel de detalle que nadie ha decidido que sea seguro. Lo que SÍ viaja de
+// todas las Facciones son los metadatos ya públicos en la ficción del juego (nombre, nivel, reputación,
+// Rey/Embajador) — sin ellos la pantalla de diplomacia no tendría con qué pintarse.
 //
-// Regla de ESTA pasada, deliberadamente conservadora: la Facción propia se ve COMPLETA (asentamientos,
-// escuadrones, colas, almacén); las demás Facciones no aportan ni un asentamiento, ni siquiera resumido.
-// Mejor "no ves nada del rival" que exponer un nivel de detalle que nadie ha decidido que sea seguro. Lo que
-// SÍ viaja de todas las Facciones son los metadatos ya públicos en la ficción del juego (nombre, nivel,
-// reputación, Rey/Embajador) — sin ellos la pantalla de diplomacia no tendría con qué pintarse.
+// **La única excepción son los EJÉRCITOS ajenos** (`ejercitosAvistados`), y solo desde que Doc 5.12.7 fijó
+// el número que faltaba: un ejército se ve si entra en tu territorio o si cae dentro del radio de visión de
+// uno de los tuyos. Viajan REDACTADOS —posición, Facción y nº de estandartes, nada más— porque una columna
+// en campaña es, por la ficción, visible: cruza campo abierto a la vista de quien vigile ese campo. Un
+// asentamiento rival, en cambio, sigue sin proyectarse en absoluto.
+//
+// Lo que sigue faltando de la niebla de guerra (§12) es la MEMORIA: aquí se responde "¿se ve AHORA?", no
+// "¿qué recuerdo de la última vez que lo vi?". Eso es `ConocimientoJugador` y sigue diferido, junto con las
+// otras dos fuentes de visibilidad que diseña el doc 6 (contacto y alianza).
 import type {
   AcuerdoTrueque,
   Asentamiento,
   CaminoComercial,
   CampamentoBandido,
   Caravana,
+  Ejercito,
   Faccion,
   OrdenMercado,
+  Point,
   RelacionPolitica,
   Titulo,
   ZonaFaccion,
   ZonaInfluencia,
 } from '../../domain/types';
+import { LOGISTICA } from '../../constants';
+import { distancia, pointInPolygon } from '../../world/geometria';
 import type { EstadoMapa } from '../../world/mapa';
 import type { TrazadoAsentamiento } from '../../engine/trazado';
 import type { Instante } from '../../domain/tiempo';
@@ -39,6 +46,30 @@ import {
   type GameSessionState,
   type GeometriaAsentamientos,
 } from '../estado';
+
+/**
+ * Un ejército AJENO tal como se ve desde fuera (Doc 5.12.7): dónde está, de qué Facción es y cuántos
+ * estandartes se le cuentan —el número de rombos del mapa, Doc 5.12.2—. Nada más.
+ *
+ * Lo que deliberadamente NO lleva, y por qué:
+ * - `escuadrones`: es la composición y, con ella, el poder exacto de la columna. Es la telemetría de rival
+ *   que el doc prohíbe explícitamente; saber que vienen 200 hombres no es lo mismo que saber que son 200
+ *   arqueros con la moral por los suelos.
+ * - `ruta` y `objetivo`: son su INTENCIÓN. Ver pasar un ejército no es leerle el plan de campaña.
+ * - `estado`: que vuelva a casa, acampe o siga avanzando es una decisión de su jugador, no algo que se
+ *   distinga a la vista de una columna en movimiento.
+ * - `origenAsentamientoId` y `suministro`: de dónde salió y cuánto aguanta. Lo segundo es directamente la
+ *   respuesta a "¿me basta con esperar a que se le acabe el trigo?".
+ *
+ * Se redacta AQUÍ y no en el cliente: lo que no sale del servidor no se puede mirar en un DevTools.
+ */
+export interface EjercitoAvistado {
+  id: string;
+  faccionId: string;
+  posicionActual: Point;
+  /** Jugadores distintos que marchan en él. Es el único dato de "tamaño" que viaja. */
+  participantes: number;
+}
 
 export interface ProyeccionJugador {
   gameId: string;
@@ -67,6 +98,12 @@ export interface ProyeccionJugador {
   /** SOLO los de la Facción propia (Slice 1). El Slice 2 añade aquí lo visible por espacio/contacto/alianza. */
   asentamientos: Asentamiento[];
   caravanas: Caravana[];
+  /** Los de la Facción propia, COMPLETOS — mismo criterio que `asentamientos`: de lo tuyo se ve todo. */
+  ejercitos: Ejercito[];
+  /** Los de CUALQUIER otra Facción que se estén viendo ahora mismo, redactados (ver `EjercitoAvistado`).
+   * Van en un array aparte y no mezclados con `ejercitos` a propósito: la diferencia entre "lo veo entero"
+   * y "solo lo avisto" es de tipo, no de un campo opcional que el cliente pueda olvidarse de mirar. */
+  ejercitosAvistados: EjercitoAvistado[];
   acuerdos: AcuerdoTrueque[];
   ordenes: OrdenMercado[];
   /** Las relaciones diplomáticas son públicas por naturaleza — quién está aliado o es vasallo de quién no es
@@ -118,12 +155,44 @@ function propioDeJugador(estado: GameSessionState, jugadorId: string) {
   return { faccionId, asentamientosPropios, esPropio: (asentamientoId: string) => idsPropios.has(asentamientoId) };
 }
 
+/**
+ * Fuente ESPACIAL de la niebla de guerra (Doc 5.12.7): un jugador ve de lo ajeno lo que entra en su
+ * territorio —que vigila por definición— y lo que sus propios ejércitos alcanzan a ver mientras marchan,
+ * `LOGISTICA.radioVisionEjercito` a la redonda.
+ *
+ * Sin memoria, a propósito: esto responde "¿se ve AHORA?" y nada más. El "último conocido" —recordar lo que
+ * viste cuando dejas de verlo— es la otra mitad de §12 y necesita una entidad (`ConocimientoJugador`) que no
+ * existe todavía. Mientras tanto un ejército rival aparece y desaparece del mapa, que es conservador en la
+ * dirección correcta: se filtra de menos, nunca de más.
+ */
+function seVeAhora(punto: Point, zonasPropias: readonly ZonaInfluencia[], ejercitosPropios: readonly Ejercito[]): boolean {
+  return (
+    zonasPropias.some((z) => pointInPolygon(punto, z.poligono)) ||
+    ejercitosPropios.some((e) => distancia(punto, e.posicionActual) <= LOGISTICA.radioVisionEjercito)
+  );
+}
+
+/** El nº de rombos de una columna (Doc 5.12.2): jugadores DISTINTOS que marchan en ella, no escuadrones —
+ * salir solo con tres escuadrones sigue siendo un rombo. */
+function participantesDe(ejercito: Ejercito): number {
+  return new Set(ejercito.escuadrones.map((e) => e.jugadorId)).size;
+}
+
 export function proyectarParaJugador(
   estado: GameSessionState,
   jugadorId: string,
   geometria: GeometriaAsentamientos
 ): Omit<ProyeccionJugador, 'preciosReferencia'> {
   const { faccionId, asentamientosPropios, esPropio } = propioDeJugador(estado, jugadorId);
+
+  // Un ejército es "propio" si es de tu Facción o si llevas tropa TUYA dentro. Lo segundo no es redundante:
+  // un jugador huérfano (Doc 5.4) se queda sin Facción pero no sin los escuadrones que iban con él, y no
+  // tendría sentido que dejara de ver la columna en la que va montado.
+  const ejercitosPropios = estado.ejercitos.filter(
+    (e) => (faccionId !== null && e.faccionId === faccionId) || e.escuadrones.some((esc) => esc.jugadorId === jugadorId)
+  );
+  const zonasPropias = geometria.zonas.filter((z) => esPropio(z.asentamientoId));
+  const propios = new Set(ejercitosPropios.map((e) => e.id));
 
   return {
     gameId: estado.gameId,
@@ -136,6 +205,10 @@ export function proyectarParaJugador(
     facciones: estado.facciones,
     asentamientos: asentamientosPropios,
     caravanas: estado.caravanas.filter((c) => esPropio(c.origenAsentamientoId) || (c.destinoAsentamientoId !== undefined && esPropio(c.destinoAsentamientoId))),
+    ejercitos: ejercitosPropios,
+    ejercitosAvistados: estado.ejercitos
+      .filter((e) => !propios.has(e.id) && seVeAhora(e.posicionActual, zonasPropias, ejercitosPropios))
+      .map((e) => ({ id: e.id, faccionId: e.faccionId, posicionActual: e.posicionActual, participantes: participantesDe(e) })),
     acuerdos: estado.acuerdos.filter((a) => esPropio(a.asentamientoAId) || esPropio(a.asentamientoBId)),
     ordenes: estado.ordenes.filter((o) => esPropio(o.asentamientoId)),
     relaciones: estado.relaciones,
@@ -144,7 +217,7 @@ export function proyectarParaJugador(
     campamentosBandidos: estado.campamentosBandidos,
     eventosDominio: estado.eventosDominio.filter((e) => e.asentamientoId === undefined || esPropio(e.asentamientoId)),
     historial: estado.historialJugadores[jugadorId] ?? [],
-    zonas: geometria.zonas.filter((z) => esPropio(z.asentamientoId)),
+    zonas: zonasPropias,
     zonasFusionadas: geometria.zonasFusionadas.filter((zf) => zf.faccionId === faccionId),
     trazadoPorAsentamiento: Object.fromEntries(Object.entries(geometria.trazadoPorAsentamiento).filter(([id]) => esPropio(id))),
   };

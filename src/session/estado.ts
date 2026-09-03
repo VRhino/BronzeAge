@@ -71,8 +71,7 @@ export interface GameSessionState {
    * identidad (eso vive en `session/identidad`): es estado de juego. Un jugador que no aparezca aquí usa
    * `LIDERAZGO.base`, así que la lista solo necesita crecer cuando alguien se desvíe del valor por defecto. */
   jugadores: Jugador[];
-  /** Ejércitos en campaña (Doc 5.12). Todavía sin comportamiento: el tick no los toca hasta que exista
-   * `avanzarEjercitos`, así que de momento solo se persisten. */
+  /** Ejércitos en campaña (Doc 5.12) — los mueve `avanzarEjercitos` al final de la cadena del tick. */
   ejercitos: Ejercito[];
   acuerdos: AcuerdoTrueque[];
   ordenes: OrdenMercado[];

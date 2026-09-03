@@ -9,9 +9,12 @@
 // Dos canales, calcados de los ejemplos del doc 6 §2:
 //   - `mapa/general`: eventos SIN `asentamientoId` (globales — diplomacia, Facciones, tick). Abierto a
 //     cualquiera con `Membresia` de jugador en la partida.
-//   - `asentamiento/<id>`: eventos de ESE asentamiento. Solo si es de la Facción propia — Slice 1 de C4
-//     (`session/proyecciones/jugador.ts`) todavía no tiene niebla de guerra, así que la autorización de canal
-//     usa la MISMA regla que la proyección: nada de lo ajeno, ni siquiera en tiempo real.
+//   - `asentamiento/<id>`: eventos de ESE asentamiento. Solo si es de la Facción propia — la autorización de
+//     canal usa la MISMA regla que la proyección: nada de lo ajeno, ni siquiera en tiempo real.
+//
+// De ahí que atribuir un evento importe más de lo que parece: lo que sale sin `asentamientoId` se difunde por
+// `mapa/general`, al que puede suscribirse CUALQUIER jugador de la partida. Los eventos de campaña se
+// atribuyen a su asentamiento de origen justamente por esto (ver `avanzarEjercitos`).
 import type { EventoDominio } from '../domain/eventos';
 import { esCiudadano } from '../engine/faccion';
 import type { GameSessionState } from './estado';

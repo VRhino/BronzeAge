@@ -100,22 +100,29 @@ en "Slice 1", deliberadamente conservador: el jugador ve su Facción completa y 
 metadatos ya públicos en la ficción** (nombre, nivel, reputación, Rey/Embajador, relaciones diplomáticas).
 Cero telemetría en vivo de un rival.
 
-Lo que falta es una **decisión de diseño de juego**, no de arquitectura:
+**La fuente espacial ya está implementada para EJÉRCITOS** (2026-09-03, Doc 5.12.7): `proyectarParaJugador`
+proyecta en `ejercitosAvistados` los ejércitos ajenos que caen en tu zona de influencia o dentro de
+`LOGISTICA.radioVisionEjercito` (150) de uno de los tuyos, redactados a posición, Facción y nº de
+participantes. La mecánica de ejércitos desbloqueó ese radio, que era justo el número que faltaba.
+
+Lo que queda es **decisión de diseño de juego**, no de arquitectura:
 
 - **Patrón: se muestra el ÚLTIMO ESTADO CONOCIDO, no el actual** (niebla de guerra tipo RTS). Decisión ya
   tomada (2026-08-24). Evita filtrar telemetría en vivo — ves el asentamiento rival tal como estaba la última
-  vez que tuviste contacto, no como está ahora.
-- **Entidad `ConocimientoJugador`**: qué sabe cada jugador y desde cuándo (por asentamiento / entidad).
-- **Tres fuentes de visibilidad de lo ajeno**, cada una con un parámetro sin fijar:
-  1. **Espacial** — zona de influencia propia + un **radio de visualización** alrededor de tus asentamientos
-     y ejércitos. *Falta el número del radio.*
+  vez que tuviste contacto, no como está ahora. **Es lo que hoy NO hace la proyección de ejércitos**: sin
+  memoria, un ejército rival aparece y desaparece del mapa según entra y sale de tu vista.
+- **Entidad `ConocimientoJugador`**: qué sabe cada jugador y desde cuándo (por asentamiento / entidad). Es la
+  pieza que falta para el punto anterior.
+- **Las tres fuentes de visibilidad de lo ajeno**:
+  1. **Espacial** — hecha para ejércitos (arriba). *Falta aplicarla a los ASENTAMIENTOS rivales, que hoy no
+     se proyectan en absoluto, y decidir si el radio de un asentamiento es su zona de influencia o algo mayor.*
   2. **Contacto** — al proponer un trueque con otro asentamiento pasas a "conocerlo". *Falta decidir si ese
      conocimiento decae con el tiempo o se congela indefinidamente en el último snapshot.*
   3. **Alianza** — un aliado ve lo que ves tú, en vivo (no "último conocido"): la alianza es cooperación
      explícita.
 
-Cuando estos parámetros estén definidos, el backend añade el filtrado a `proyectarParaJugador` (mismo sitio
-que Slice 1) y la entidad `ConocimientoJugador` al estado.
+Cuando estos parámetros estén definidos, el backend extiende el filtrado en `proyectarParaJugador` (mismo
+sitio) y añade la entidad `ConocimientoJugador` al estado.
 
 ## 13. La capital como decisión del jugador
 
