@@ -50,6 +50,19 @@ Nueve decisiones más, todas respuesta a hallazgos del consejo (§9) o ampliaci�
 15. **El jugador cuyo asentamiento cae estando de campaña queda HUÉRFANO** hasta entrar en una Facción que tenga asentamiento.
 16. **Incentivo de conquista**: un asentamiento completo + ampliar los asentamientos de la Facción **por encima del cupo de su nivel**. Cierra el hallazgo del consejo de que la guerra era suma negativa — y resulta que **ya es el comportamiento implementado**: `iniciarAsedio` conserva el nivel del conquistado sin verificar cupo, anotado en el código como "punto abierto #2" a la espera de que alguien decidiera si era intencional. Lo era.
 
+### 1.1c Cerrada al revisar el impacto del TIEMPO REAL (2026-09-02)
+
+18. **Un ejército con todos sus escuadrones a cero se disuelve, y sus identidades vacías vuelven al
+    asentamiento de origen**, que es donde se pueden rellenar reclutando.
+
+Salió de una pregunta del usuario: *"el servidor no es del todo tick ya, el avance a tiempo real se ha hecho,
+¿esto afecta al plan?"*. Sí — y destapó este hueco. Con 1 tick = 1 minuto real, un ejército cuyo jugador no
+vuelve consume durante horas; al vaciarse el carro la deserción lo lleva a cero, pero **el escuadrón persiste
+como identidad aunque se quede sin unidades** (Doc 5.4). Sin regla explícita quedaba un ejército fantasma: 0
+soldados, 0 ración (ya no pasa hambre), marchando para siempre y atacando con poder 0. Y **no lo atrapaba la
+guarda existente**: `resolverCombate` rechaza si el array de atacantes está VACÍO, no si tiene escuadrones a
+cero. Regla en Doc 5.13.4.
+
 ### 1.2 Derivadas — no se preguntaron porque las de arriba o los invariantes vigentes ya las obligan
 
 - **El ejército NO cambia de bando al caer su hogar** (de 1.1 punto 4: conserva "las que tiene encima").
@@ -243,6 +256,35 @@ estado post-tick.
 > determinismo**. Hay que actualizar `__tests__/determinismo.test.ts` y asumir que las partidas guardadas
 > divergen a partir del cambio.
 
+### 2.5b Qué implica que el servidor ya corra en TIEMPO REAL
+
+Pregunta del usuario (2026-09-02). El reloj de mundo de Fase D ya está: `SIMULACION.duracionTickMs` = 60.000,
+o sea **1 tick = 1 minuto real**, y `RunnerDePartida` ejecuta los ticks adeudados en ráfaga
+(`MAX_TICKS_RAFAGA` = 10.080, siete días).
+
+**Lo que NO cambia — el modelo de movimiento.** El Doc 2 preveía derivar la posición de "salida + velocidad +
+tiempo transcurrido", pero ese objetivo (independencia del tamaño de paso) **se midió imposible y se retiró en
+Fase D**. Además, con coste de terreno el movimiento es dependiente del CAMINO: no se puede derivar la
+posición del tiempo transcurrido sin recorrer la ruta, porque el coste varía a lo largo de ella. Los ejércitos
+acumulan progreso por tick igual que las caravanas, y no hay alternativa mejor.
+
+**Descartado: programar la llegada como evento futuro** en vez de sondearla cada tick, aprovechando que D5
+dejó la infraestructura de comandos programados pendiente "para su primera mecánica de Fase 1". El ejército
+necesita trabajo por tick de todas formas (comer del carro, moral, encuentros por proximidad), así que
+programar la llegada no eliminaría esa pasada: solo añadiría un segundo mecanismo sin ahorrar nada.
+
+**Lo que sí cambia, y está recogido en los pasos y riesgos:**
+
+1. **Rendimiento en ráfaga** — riesgo nuevo en §8, a medir en el Paso 10.
+2. **El Paso 5 gana una verificación mucho mejor**: con el reloj de dev a 5 s/tick un ejército cruza el mapa
+   en el navegador en un par de minutos, así que el render verifica ruta, velocidad y consumo de verdad y no
+   una captura de un rombo quieto.
+3. **El Paso 8 (reabastecimiento) pasa de accesorio a load-bearing**: estacionado consume a 0.5×, o sea que un
+   ejército aparcado quema su carro en ~100 minutos reales. "Sostener un paso de montaña" no existe como
+   posición hasta que se pueda reabastecer.
+4. **La crítica del consejo sobre la asincronía deja de ser teórica** (§9.3): ausentarse 8 horas son 480
+   ticks, unas 10 veces la autonomía completa de un ejército.
+
 ### 2.6 La superficie de comandos se encoge
 
 `combateCampoAbierto` e `interceptarCaravana` **dejan de ser comandos de jugador** y pasan a ser
@@ -385,14 +427,21 @@ usuario dio la tabla real. Calibrarla es un cambio de **datos**, no de código.
       carro con factor de estacionado, deserción por hambre, retorno. **Colocado al FINAL de la cadena del
       tick y mudo de RNG cuando no hay ejércitos** (§2.5): así el test guardián de determinismo sigue verde
       **sin tocarlo**, que es verificación más fuerte que actualizarlo.
+      Incluye la disolución del **ejército fantasma** (§1.1c / Doc 5.13.4): todos los escuadrones a cero ⇒ el
+      ejército se disuelve y las identidades vacías vuelven al asentamiento de origen.
 - [ ] **Paso 5 — Render: rombos por jugador + traza de ruta.** Sube aquí a propósito: es el instrumento con el
-      que se verifican rutas, velocidad y consumo en el lab.
+      que se verifican rutas, velocidad y consumo en el lab. Y con el reloj de mundo ya en marcha
+      (`INTERVALO_TICK_MS` = 5 s en dev) la verificación es de verdad: **un ejército cruza el mapa en el
+      navegador en un par de minutos**, así que se ve moverse, gastar y llegar — no una captura de un rombo
+      quieto (§2.5b).
 - [ ] **Paso 6 — Carga del carro desde el granero**, con tope y **reserva mínima intocable** para que sacar un
       ejército no deje al asentamiento en hambruna. Medido en batch: ciudades colapsadas antes/después.
 - [ ] **Paso 7 — Llegada → asedio**, con la rama "sin defensores → conquista automática" y la conquista que ya
       no hereda guarnición. Aquí aparece el jugador huérfano.
 - [ ] **Paso 8 — Reabastecimiento en ruta** (propio siempre, aliado con la opción activa) + campo
-      `permiteReabastecerAliados`.
+      `permiteReabastecerAliados`. **Más importante de lo que parecía**: en tiempo real un ejército
+      estacionado quema su carro en ~100 minutos, así que hasta este paso "sostener un paso de montaña" no
+      existe como posición, solo como jugada corta (§2.5b).
 - [ ] **Paso 9 — Caravanas adjuntas**: capacidad, entrada en el `min` de velocidad, pérdida al ser derrotado,
       y escolta (la caravana entrega mientras marcha). Incluye el rebalance de `CARAVANA_CATALOGO` **medido en
       batch por el efecto sobre el oro**.
@@ -424,6 +473,8 @@ usuario dio la tabla real. Calibrarla es un cambio de **datos**, no de código.
 13. Un ejército derrotado pierde sus caravanas adjuntas.
 14. El carro NO se descarga en un asentamiento distinto del de origen (si no, es transporte gratis).
 15. Un jugador sin residencia (huérfano) no puede reclutar, reabastecer en propio ni replegarse.
+16. Un ejército con todos sus escuadrones a cero **se disuelve**, y esas identidades vacías reaparecen en el
+    asentamiento de origen (nunca se pierden por hambre: lo que murió son las unidades, no el squad).
 
 ## 7. Abierto — lo que este documento deja sin cerrar a propósito
 
@@ -455,6 +506,7 @@ usuario dio la tabla real. Calibrarla es un cambio de **datos**, no de código.
 | El determinismo se rompe al mover el combate al tick | medio | Paso 6 aislado; `determinismo.test.ts` se actualiza en el mismo commit |
 | Sacar el ejército deja al asentamiento sin trigo y colapsa | medio | es coste deseado, pero hay que medirlo: la reserva de `reclutarTropa` protege el reclutamiento, no la salida. **Paso 6 propio** con reserva mínima intocable |
 | Subir la capacidad de caravana multiplica el oro por entrega | **alto** | `comision = valorTotal × tasa × distancia × reputación` (`trade.ts:234`) escala con la carga: ×8 de capacidad es ×8 de oro por viaje. Medir en batch en el Paso 9 ANTES de fijar el número |
+| **Una ráfaga de catch-up con muchos ejércitos bloquea la cola serial** | **alto, sin medir** | `MAX_TICKS_RAFAGA` son 10.080 ticks en UNA entrada de la cola (`sincronizarConReloj`, D5). Hoy los bandidos pagan `campamentos × caravanas` por tick; el Paso 10 añade `ejércitos × caravanas + ejércitos²`. Con 50 ejércitos y 100 caravanas son ~7.500 distancias/tick × 10.080 = ~75M en una ráfaga. **Medir el coste de la ráfaga en el Paso 10**, no solo la corrección |
 | El determinismo se rompe con varios encuentros en un tick | medio | orden canónico de resolución por id (§9.1 punto 6), congelado en test |
 
 ## 9. Revisión por consejo (2026-09-02)

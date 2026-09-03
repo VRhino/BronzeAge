@@ -297,4 +297,19 @@ Una caravana adjunta **puede ir cargada de mercancía y hacer su entrega normal*
 
 La misma regla de velocidad la equilibra sola: escoltar baja el ejército a la velocidad de la caravana, así que **no se puede escoltar y depredar a la vez**.
 
+### 5.13.4 Un ejército que se queda sin nada se disuelve
+
+Regla necesaria por el TIEMPO REAL (decisión del usuario, 2026-09-02). Un tick es un minuto real, así que un
+ejército cuyo jugador no vuelve sigue existiendo y consumiendo durante horas. Cuando el carro se vacía, la
+deserción por hambre lo lleva a cero — pero un escuadrón **persiste como identidad aunque se quede sin
+unidades** (5.4), de modo que sin una regla explícita quedaría un **ejército fantasma**: cero soldados (y por
+tanto cero ración, ya no pasa hambre) marchando indefinidamente, llegando a su destino y atacando con poder 0.
+
+Por eso: **un ejército cuyos escuadrones están todos a cero se disuelve**, y sus identidades de escuadrón
+—vacías pero con su nombre y su veteranía— **vuelven al asentamiento de origen**, que es donde se pueden
+rellenar reclutando (5.4). No se pierden: lo que murió son las unidades, no el squad.
+
+Si el asentamiento de origen ya no existe, sus jugadores quedan huérfanos (5.4) y con ellos esas identidades,
+hasta que entren en una Facción con asentamiento.
+
 > El carro de suministros y los carros/animales de tiro del revamp de caravanas (`Docs/Mecanicas a desarrollar.md` §8) son el mismo concepto físico; unificarlos queda para cuando esa mecánica se diseñe.
