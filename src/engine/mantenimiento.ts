@@ -34,8 +34,7 @@ export interface PayloadMantenimientoDeficit {
 }
 import { edificiosPorTipoYEstado, nivelActualDe, poblacionTotal } from './asentamientoQuery';
 import { descontarRecursos } from './almacen';
-import { consumoComidaPoblacion } from './population';
-import { consumoRacionTropas } from './tropas';
+import { reservaDeTrigo } from './tropas';
 
 function distancia(a: { x: number; y: number }, b: { x: number; y: number }): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
@@ -199,8 +198,7 @@ export function reservaDinamicaConstruccion(
   for (const [recurso, cantidad] of Object.entries(costoMantenimiento)) {
     reserva[recurso as RecursoTipo] = (cantidad ?? 0) * RESERVA_CONSTRUCCION.horizonteMinutosMantenimiento;
   }
-  reserva.trigo =
-    (consumoComidaPoblacion(asentamiento) + consumoRacionTropas(asentamiento)) * RESERVA_CONSTRUCCION.horizonteMinutosComida;
+  reserva.trigo = reservaDeTrigo(asentamiento);
   return reserva;
 }
 

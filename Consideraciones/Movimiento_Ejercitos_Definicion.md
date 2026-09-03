@@ -513,8 +513,26 @@ usuario dio la tabla real. Calibrarla es un cambio de **datos**, no de código.
         entorno que nadie lee; y la barra de estado del cliente imprimía literalmente `Tick: undefined` desde
         que la Fase D retiró el `tick` del contrato (lo que viaja es `instante`).
 
-- [ ] **Paso 6 — Carga del carro desde el almacén**, con tope y **reserva mínima intocable** para que sacar un
-      ejército no deje al asentamiento en hambruna. Medido en batch: ciudades colapsadas antes/después.
+- [x] **Paso 6 — Carga del carro desde el almacén (2026-09-04).** Al movilizar y al unirse, cada Jugador
+      carga trigo hasta el menor de dos topes: el espacio libre del carro y lo que el asentamiento puede
+      soltar sin bajar de su reserva. Si no llega, **se sale con menos autonomía y punto** — el diseño dice
+      explícitamente que no se bloquea la salida.
+
+      **La reserva no es una constante nueva.** Es la que YA protegía a la ciudad de la auto-construcción y
+      del reclutamiento: `(consumo de población + guarnición) × RESERVA_CONSTRUCCION.horizonteMinutosComida`.
+      Estaba copiada en dos sitios y esta habría sido la tercera copia, así que se extrajo a
+      `reservaDeTrigo` (`engine/tropas.ts`) y los tres llamadores miden con la misma vara. El refactor se
+      midió en batch: **cero diferencias en 422 líneas de informe.**
+
+      Dos detalles que sí son decisiones:
+      - La reserva se calcula sobre el asentamiento **ya sin los escuadrones que salen**: dejan de comer ahí
+        en el mismo acto, y seguir contándolos protegería bocas que ya no están.
+      - El tope al unirse va contra la capacidad TOTAL de la columna (participantes × carro), no contra "un
+        carro más". Sin eso, un jugador que ya iba dentro podía unirse otra vez, y otra, sacando 500 de trigo
+        cada vez: una bomba de trigo infinita desde el almacén.
+
+- [ ] **Paso 6b (NUEVO, sale de medir el Paso 6) — la economía no puede pagar el carro.** Ver §10.
+
 - [ ] **Paso 7 — Llegada → asedio**, con la rama "sin defensores → conquista automática" y la conquista que ya
       no hereda guarnición. Aquí aparece el jugador huérfano.
 - [ ] **Paso 8 — Reabastecimiento en ruta** (propio siempre, aliado con la opción activa) + campo
@@ -689,3 +707,44 @@ escalado de Granjas en vez de resolverlo (`issues/granjas_no_escalan_con_poblaci
   `trade`) teniendo `world/geometria.ts` exportándola. Los imports `engine/` → `world/` ya son práctica
   establecida (`calcularRuta`, `pointInPolygon`, `unirPoligonos`), así que el módulo nuevo debe importarla y
   no hacer la quinta copia.
+
+## 10. Medición del Paso 6: la economía actual no puede pagar el carro (2026-09-04)
+
+Al instrumentar el batch con la logística de campaña (`sobranteParaCarroMedia`, `sinCarroCompleto`,
+`sinNadaQueCargar` en `scripts/run-batch-sim.ts`), la línea base es demoledora. Corrida de 600 ticks, 30
+Facciones, 28 asentamientos vivos:
+
+| tick | sobrante medio para el carro | sin carro completo | sin NADA que cargar |
+|---|---|---|---|
+| 100 | 41,3 | 28/28 | 2/28 |
+| 200 | 10,2 | 28/28 | 26/28 |
+| 600 | **7,7** | **28/28** | **26/28** |
+
+**Ni un solo asentamiento puede llenar un carro, y 26 de 28 no pueden aportar ni un grano.** El sobrante
+medio es un **1,5 %** de `LOGISTICA.capacidadCarroPorJugador` (500).
+
+La cuenta explica por qué. Un asentamiento nivel 1 a tope tiene ~300 habitantes (30 de trigo/minuto) y ~73
+soldados (11/minuto): su reserva son `41 × 8 ≈ 330`. Para sacar a UN jugador con el carro lleno haría falta
+tener **~830 de trigo almacenado**, y estas ciudades viven rozando su reserva.
+
+Esto **no invalida la implementación** —hace exactamente lo que el diseño pide— sino que revela que la
+capacidad del carro se derivó del **radio operativo** (§5.13.1: "un cuarto del mapa ida y vuelta") sin que
+nadie comprobara que la economía puede pagarlo. Las dos mitades del diseño nunca se habían tocado.
+
+Es la misma raíz que el cuello de botella ya conocido (§9.4): el trigo va justo en todas partes. El Paso 0 lo
+dobló y sigue sin llegar para sostener además campañas.
+
+**No se toca ninguna constante todavía** — la medición es el entregable; elegir la palanca es decisión del
+usuario. Las opciones, sin recomendación cerrada:
+
+1. **Bajar la capacidad del carro** y aceptar un radio operativo menor (revisa §5.13.1, que es canon).
+2. **Subir la producción de trigo** otra vez, o bajar el consumo — arregla también §9.4, pero mueve toda la
+   economía y exige rebalance completo.
+3. **Bajar `horizonteMinutosComida`** solo para el carro, desacoplándolo de la auto-construcción: sacar un
+   ejército pasaría a ser legítimamente más arriesgado que construir.
+4. **Aceptarlo como está**: sacar un ejército con autonomía exige haber acumulado excedente a propósito, y hoy
+   nadie lo hace porque el NPC recluta a saco. Es defendible, pero significa que en Fase 0 las campañas largas
+   no existen hasta que alguien juegue para ello.
+
+Nota sobre la métrica: es un **suelo**. Se mide con la guarnición entera dentro, y llevarse tropa reduce la
+propia reserva (48 de margen por cada 40 soldados que salen). A la escala del carro no cambia la conclusión.

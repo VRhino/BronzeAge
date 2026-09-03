@@ -93,8 +93,7 @@ export function reclutarTropa(
   // escasez, se cierra antes de que reclutar termine de romper nada — ver
   // `issues/granjas_no_escalan_con_poblacion.md` y `Consideraciones/NPC_Gobernanza_Facciones_Controladas.md`
   // §"Abierto" para el diagnóstico completo (colapso masivo medido en batch con el throttle viejo).
-  const consumoConNuevaTropa = consumoComidaPoblacion(asentamiento) + consumoRacionTropas(asentamiento) + cantidad * MILITAR.racionPorSoldadoPorMinuto;
-  const reservaTrigoRequerida = consumoConNuevaTropa * RESERVA_CONSTRUCCION.horizonteMinutosComida;
+  const reservaTrigoRequerida = reservaDeTrigo(asentamiento, cantidad * MILITAR.racionPorSoldadoPorMinuto);
   const trigoDisponible = asentamiento.almacen['trigo']?.cantidad ?? 0;
   if (trigoDisponible < reservaTrigoRequerida) {
     throw new ReclutamientoInvalidoError(
@@ -141,6 +140,23 @@ export function consumoRacionDeEscuadrones(escuadrones: readonly Escuadron[], fa
  * exactamente lo que la regla pide. */
 export function consumoRacionTropas(asentamiento: Asentamiento): number {
   return consumoRacionDeEscuadrones(asentamiento.escuadrones);
+}
+
+/**
+ * Trigo que un asentamiento NO puede tocar: lo que su gente —población y guarnición— come durante
+ * `RESERVA_CONSTRUCCION.horizonteMinutosComida` minutos de mundo.
+ *
+ * Escrita aquí una sola vez porque son ya TRES las puertas que dan al almacén y todas tienen que medir con la
+ * misma vara: la auto-construcción (`reservaDinamicaConstruccion`), el reclutamiento (justo abajo) y la carga
+ * del carro de un ejército que sale de campaña (`engine/ejercitos.ts`, Doc 5.13). Antes la fórmula estaba
+ * copiada en las dos primeras, y la tercera habría sido la copia número tres.
+ *
+ * `consumoExtraPorMinuto` proyecta bocas que TODAVÍA no existen — la tropa que se está a punto de reclutar —,
+ * que es lo que distingue "¿me queda margen?" de "¿me quedará margen después de esto?".
+ */
+export function reservaDeTrigo(asentamiento: Asentamiento, consumoExtraPorMinuto = 0): number {
+  const porMinuto = consumoComidaPoblacion(asentamiento) + consumoRacionTropas(asentamiento) + consumoExtraPorMinuto;
+  return porMinuto * RESERVA_CONSTRUCCION.horizonteMinutosComida;
 }
 
 /**

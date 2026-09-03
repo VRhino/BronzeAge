@@ -295,6 +295,8 @@ La capacidad del carro **no es un número elegido, es una consecuencia**. La reg
 
 Sobre el mapa de 2000×2000 eso son 1.000 unidades de recorrido. Una carga máxima de Liderazgo son ~70 soldados, que a velocidad ligera (20) tardan 50 ticks en ese trayecto y comen `70 × 0.15 × 50 = 525`. De ahí sale la capacidad del carro.
 
+> **Medido (2026-09-04): la economía todavía NO puede pagar esta capacidad.** En batch, ningún asentamiento llega a llenar un carro y 26 de 28 no pueden aportar ni un grano sin bajar de su reserva de comida. La capacidad se derivó del radio operativo sin comprobar que hubiera trigo con el que ejercerlo. Cifras, causa y las cuatro palancas posibles en `Consideraciones/Movimiento_Ejercitos_Definicion.md` §10 — sin decidir.
+
 Como la autonomía se mide en **ticks** y no en distancia, **la velocidad pasa a ser también un atributo logístico**: un ejército rápido cubre más mapa con la misma comida. Un ejército pesado tiene la mitad de alcance con el mismo carro — y por eso necesita caravanas.
 
 ### 5.13.2 Caravanas adjuntas al ejército

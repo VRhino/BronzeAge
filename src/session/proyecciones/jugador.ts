@@ -37,6 +37,8 @@ import type { EstadoMapa } from '../../world/mapa';
 import type { TrazadoAsentamiento } from '../../engine/trazado';
 import type { Instante } from '../../domain/tiempo';
 import { esCiudadano } from '../../engine/faccion';
+// El mismo recuento que usa el motor para los carros (Doc 5.13): un participante es un carro Y un rombo.
+import { participantesDe } from '../../engine/ejercitos';
 import {
   eventosDesde,
   idDeMapa,
@@ -172,12 +174,6 @@ function seVeAhora(punto: Point, zonasPropias: readonly ZonaInfluencia[], ejerci
   );
 }
 
-/** El nº de rombos de una columna (Doc 5.12.2): jugadores DISTINTOS que marchan en ella, no escuadrones —
- * salir solo con tres escuadrones sigue siendo un rombo. */
-function participantesDe(ejercito: Ejercito): number {
-  return new Set(ejercito.escuadrones.map((e) => e.jugadorId)).size;
-}
-
 export function proyectarParaJugador(
   estado: GameSessionState,
   jugadorId: string,
@@ -208,7 +204,7 @@ export function proyectarParaJugador(
     ejercitos: ejercitosPropios,
     ejercitosAvistados: estado.ejercitos
       .filter((e) => !propios.has(e.id) && seVeAhora(e.posicionActual, zonasPropias, ejercitosPropios))
-      .map((e) => ({ id: e.id, faccionId: e.faccionId, posicionActual: e.posicionActual, participantes: participantesDe(e) })),
+      .map((e) => ({ id: e.id, faccionId: e.faccionId, posicionActual: e.posicionActual, participantes: participantesDe(e.escuadrones) })),
     acuerdos: estado.acuerdos.filter((a) => esPropio(a.asentamientoAId) || esPropio(a.asentamientoBId)),
     ordenes: estado.ordenes.filter((o) => esPropio(o.asentamientoId)),
     relaciones: estado.relaciones,

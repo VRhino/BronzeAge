@@ -15,8 +15,8 @@ import { distancia } from '../world/geometria';
 import { LOGISTICA, TROPAS_RECLUTABLES } from '../constants';
 import { atribuir, type EventoCrudo } from '../domain/eventos';
 import { avanzarPosicionEnRuta } from './movimiento';
-import { agregarRecurso } from './almacen';
-import { avanzarRacion } from './tropas';
+import { agregarRecurso, cantidadDisponible, descontarRecursos } from './almacen';
+import { avanzarRacion, reservaDeTrigo } from './tropas';
 import { puedeLlevar } from './liderazgo';
 import { esResidente } from './pertenencia';
 
@@ -50,6 +50,47 @@ function seleccionarParaCampana(asentamiento: Asentamiento, jugadorId: string, e
   return elegidos;
 }
 
+/**
+ * Los participantes de una columna: jugadores DISTINTOS, no escuadrones (Doc 5.12.2). Es a la vez el número
+ * de rombos que se dibujan en el mapa y el número de carros que lleva el ejército, porque las dos cosas
+ * cuentan lo mismo: cuánta gente va ahí.
+ */
+export function participantesDe(escuadrones: readonly Escuadron[]): number {
+  return new Set(escuadrones.map((e) => e.jugadorId)).size;
+}
+
+/** Capacidad del carro (Doc 5.13): FIJA por Jugador y aditiva — un ejército de cuatro lleva cuatro carros. */
+export function capacidadCarroDe(escuadrones: readonly Escuadron[]): number {
+  return participantesDe(escuadrones) * LOGISTICA.capacidadCarroPorJugador;
+}
+
+/**
+ * Carga el carro con trigo del almacén (Doc 5.13, Paso 6). Se lleva el MENOR de dos topes:
+ *
+ *  - el espacio que le queda al carro, y
+ *  - lo que el asentamiento puede soltar sin bajar de su `reservaDeTrigo` — el mismo margen que ya frena a la
+ *    auto-construcción y al reclutamiento. Sacar un ejército cuesta stock real, pero no puede ser la vía por
+ *    la que un jugador vacía su propia ciudad y la deja en hambruna.
+ *
+ * Si no llega, **se sale con menos autonomía y punto**: el diseño dice explícitamente que no se bloquea la
+ * salida. Impedir mover tropa porque la ciudad va justa de comida sería una regla mucho más dura que la
+ * pedida, y además dejaría al jugador encerrado justo cuando más falta le hace maniobrar.
+ *
+ * La reserva se mide sobre el asentamiento del que los escuadrones YA se han ido: dejan de comer de aquí en
+ * el mismo acto, así que seguir contándolos protegería a bocas que ya no están.
+ */
+function cargarCarro(
+  asentamiento: Asentamiento,
+  yaEnElCarro: number,
+  capacidad: number
+): { asentamiento: Asentamiento; cargado: number } {
+  const espacio = Math.max(0, capacidad - yaEnElCarro);
+  const disponible = Math.max(0, cantidadDisponible(asentamiento.almacen, 'trigo') - reservaDeTrigo(asentamiento));
+  const cargado = Math.min(espacio, disponible);
+  if (cargado <= 0) return { asentamiento, cargado: 0 };
+  return { asentamiento: { ...asentamiento, almacen: descontarRecursos(asentamiento.almacen, { trigo: cargado }) }, cargado };
+}
+
 /** Tope de Liderazgo del jugador sobre lo que ESE jugador aporta (Doc 5.11): en un ejército de varios no hay
  * tope agregado, cada uno se valida contra el suyo. */
 function exigirLiderazgo(jugador: Jugador | undefined, escuadrones: readonly Escuadron[]): void {
@@ -62,8 +103,9 @@ function exigirLiderazgo(jugador: Jugador | undefined, escuadrones: readonly Esc
  * Saca a un jugador de campaña con los escuadrones que elija (Doc 5.12.1). Salir SOLO es esto mismo con un
  * participante: no hay dos casos ni dos tipos.
  *
- * El carro de suministros nace VACÍO a propósito: cargarlo del almacén es el Paso 6 del plan, aislado para
- * que su impacto económico se pueda medir en batch por separado del resto de la mecánica.
+ * Sale con el carro cargado del almacén hasta donde llegue sin comprometer la despensa del asentamiento
+ * (`cargarCarro`, Doc 5.13). Puede salir con el carro vacío si la ciudad ya iba justa: eso no se impide, se
+ * paga en autonomía.
  */
 export function movilizarEjercito(
   asentamiento: Asentamiento,
@@ -74,7 +116,7 @@ export function movilizarEjercito(
   asentamientos: readonly Asentamiento[],
   mapa: Mapa,
   id: string
-): { asentamiento: Asentamiento; ejercito: Ejercito } {
+): { asentamiento: Asentamiento; ejercito: Ejercito; trigoCargado: number } {
   if (!esResidente(asentamiento, jugadorId)) {
     throw new MovilizacionInvalidaError('Solo un residente puede sacar tropas de este asentamiento.');
   }
@@ -91,15 +133,17 @@ export function movilizarEjercito(
   const ruta = calcularRuta(mapa, asentamiento.posicion, destino);
   if (!ruta) throw new MovilizacionInvalidaError('No hay ruta por tierra hasta ese destino.');
   const idsFuera = new Set(escuadrones.map((e) => e.id));
+  const sinLosQueSalen = { ...asentamiento, escuadrones: asentamiento.escuadrones.filter((e) => !idsFuera.has(e.id)) };
+  const carga = cargarCarro(sinLosQueSalen, 0, capacidadCarroDe(escuadrones));
 
   return {
-    asentamiento: { ...asentamiento, escuadrones: asentamiento.escuadrones.filter((e) => !idsFuera.has(e.id)) },
+    asentamiento: carga.asentamiento,
     ejercito: {
       id,
       faccionId: asentamiento.faccionId,
       origenAsentamientoId: asentamiento.id,
       escuadrones,
-      suministro: {},
+      suministro: { trigo: carga.cargado },
       caravanasAdjuntasIds: [],
       objetivo,
       ruta,
@@ -107,6 +151,7 @@ export function movilizarEjercito(
       posicionActual: asentamiento.posicion,
       estado: 'marchando',
     },
+    trigoCargado: carga.cargado,
   };
 }
 
@@ -116,6 +161,11 @@ export function movilizarEjercito(
  * Exige proximidad: el ejército tiene que estar pasando por (o parado en) el asentamiento del que se une. Sin
  * eso, unirse sería teletransportar refuerzos al otro extremo del mapa — y como el radio es el mismo que el
  * del reabastecimiento, "por dónde puede pasar a recogerte" y "dónde puede repostar" son la misma geografía.
+ *
+ * El que se une trae SU carro y lo carga de SU asentamiento (Doc 5.13). El tope se mide contra la capacidad
+ * total de la columna ya con él dentro, no contra "un carro más": si el que se une YA era participante
+ * —sumar más escuadrones a un ejército en el que ya vas es legítimo— no aparece ningún carro nuevo, y sin ese
+ * tope repetir la operación sería una bomba de trigo infinita desde el almacén.
  */
 export function unirseAEjercito(
   ejercito: Ejercito,
@@ -123,7 +173,7 @@ export function unirseAEjercito(
   jugador: Jugador | undefined,
   jugadorId: string,
   escuadronIds: readonly string[]
-): { asentamiento: Asentamiento; ejercito: Ejercito } {
+): { asentamiento: Asentamiento; ejercito: Ejercito; trigoCargado: number } {
   if (!esResidente(asentamiento, jugadorId)) {
     throw new MovilizacionInvalidaError('Solo un residente puede sacar tropas de este asentamiento.');
   }
@@ -140,9 +190,19 @@ export function unirseAEjercito(
   exigirLiderazgo(jugador, [...suyosYaDentro, ...escuadrones]);
 
   const idsFuera = new Set(escuadrones.map((e) => e.id));
+  const sinLosQueSalen = { ...asentamiento, escuadrones: asentamiento.escuadrones.filter((e) => !idsFuera.has(e.id)) };
+  const escuadronesTotales = [...ejercito.escuadrones, ...escuadrones];
+  const enElCarro = ejercito.suministro['trigo'] ?? 0;
+  const carga = cargarCarro(sinLosQueSalen, enElCarro, capacidadCarroDe(escuadronesTotales));
+
   return {
-    asentamiento: { ...asentamiento, escuadrones: asentamiento.escuadrones.filter((e) => !idsFuera.has(e.id)) },
-    ejercito: { ...ejercito, escuadrones: [...ejercito.escuadrones, ...escuadrones] },
+    asentamiento: carga.asentamiento,
+    ejercito: {
+      ...ejercito,
+      escuadrones: escuadronesTotales,
+      suministro: { ...ejercito.suministro, trigo: enElCarro + carga.cargado },
+    },
+    trigoCargado: carga.cargado,
   };
 }
 

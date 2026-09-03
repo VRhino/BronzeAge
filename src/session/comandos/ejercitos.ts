@@ -28,6 +28,9 @@ export interface PayloadEjercitoMovilizado {
   escuadronIds: string[];
   liderazgoUsado: number;
   objetivo: ObjetivoEjercito;
+  /** Trigo que el carro se llevó del almacén (Doc 5.13). Puede ser 0: la ciudad iba justa y se sale sin
+   * autonomía, que es lo que el diseño manda en vez de bloquear la salida. */
+  trigoCargado: number;
 }
 
 export interface ParamsMovilizarEjercito {
@@ -41,7 +44,7 @@ export const movilizarEjercito = comando<ParamsMovilizarEjercito, { ejercitoId: 
   const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
   const ejercitoId = ctx.ids.siguiente();
 
-  const { asentamiento: origen, ejercito } = movilizarEngine(
+  const { asentamiento: origen, ejercito, trigoCargado } = movilizarEngine(
     asentamiento,
     jugadorDe(estado, params.jugadorId),
     params.jugadorId,
@@ -53,6 +56,10 @@ export const movilizarEjercito = comando<ParamsMovilizarEjercito, { ejercitoId: 
   );
 
   const destino = params.objetivo.tipo === 'asentamiento' ? params.objetivo.id : 'un punto del mapa';
+  // El carro vacío no es un detalle de contabilidad: es la diferencia entre una campaña y una marcha que se
+  // deshace por hambre a los pocos ticks, así que se dice en el propio mensaje y no solo en el payload.
+  const conElCarro =
+    trigoCargado > 0 ? `con ${Math.floor(trigoCargado)} de trigo en el carro` : 'CON EL CARRO VACÍO (el almacén no da más sin dejar la ciudad en riesgo)';
   const siguiente: GameSessionState = {
     ...conAsentamiento(estado, origen),
     ejercitos: [...estado.ejercitos, ejercito],
@@ -63,7 +70,7 @@ export const movilizarEjercito = comando<ParamsMovilizarEjercito, { ejercitoId: 
     [
       evento(ctx, {
         codigo: 'ejercito.movilizado',
-        mensaje: `${params.jugadorId} sale de ${asentamiento.id} con ${ejercito.escuadrones.length} escuadrón(es) hacia ${destino}.`,
+        mensaje: `${params.jugadorId} sale de ${asentamiento.id} con ${ejercito.escuadrones.length} escuadrón(es) hacia ${destino}, ${conElCarro}.`,
         payload: {
           ejercitoId: ejercito.id,
           origenAsentamientoId: asentamiento.id,
@@ -71,6 +78,7 @@ export const movilizarEjercito = comando<ParamsMovilizarEjercito, { ejercitoId: 
           escuadronIds: [...params.escuadronIds],
           liderazgoUsado: liderazgoComprometido(ejercito.escuadrones),
           objetivo: params.objetivo,
+          trigoCargado,
         } satisfies PayloadEjercitoMovilizado,
         asentamientoId: asentamiento.id,
       }),
@@ -84,6 +92,8 @@ export interface PayloadEjercitoRefuerzo {
   asentamientoId: string;
   jugadorId: string;
   escuadronIds: string[];
+  /** Trigo que el que se une aporta al carro común, tomado de SU asentamiento (Doc 5.13). */
+  trigoCargado: number;
 }
 
 export interface ParamsUnirseAEjercito {
@@ -97,7 +107,7 @@ export const unirseAEjercito = comando<ParamsUnirseAEjercito, void>((estado, _ma
   const ejercitoActual = exigirEjercito(estado, params.ejercitoId);
   const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
 
-  const { asentamiento: origen, ejercito } = unirseEngine(
+  const { asentamiento: origen, ejercito, trigoCargado } = unirseEngine(
     ejercitoActual,
     asentamiento,
     jugadorDe(estado, params.jugadorId),
@@ -111,12 +121,13 @@ export const unirseAEjercito = comando<ParamsUnirseAEjercito, void>((estado, _ma
     [
       evento(ctx, {
         codigo: 'ejercito.refuerzo',
-        mensaje: `${params.jugadorId} refuerza el ejército ${ejercito.id} con ${params.escuadronIds.length} escuadrón(es).`,
+        mensaje: `${params.jugadorId} refuerza el ejército ${ejercito.id} con ${params.escuadronIds.length} escuadrón(es) y ${Math.floor(trigoCargado)} de trigo.`,
         payload: {
           ejercitoId: ejercito.id,
           asentamientoId: asentamiento.id,
           jugadorId: params.jugadorId,
           escuadronIds: [...params.escuadronIds],
+          trigoCargado,
         } satisfies PayloadEjercitoRefuerzo,
         asentamientoId: asentamiento.id,
       }),

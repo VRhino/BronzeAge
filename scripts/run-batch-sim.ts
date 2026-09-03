@@ -6,6 +6,7 @@ import { crearFaccion } from '../src/engine/faccion';
 import { evaluarViabilidadFundacion, fundarAsentamiento } from '../src/engine/settlement';
 import { nivelActualDe, tieneMercadoActivo, edificiosPorTipoYEstado, nutricionPoblacionDe } from '../src/engine/asentamientoQuery';
 import { calcularNivelAsentamiento } from '../src/engine/mantenimiento';
+import { reservaDeTrigo } from '../src/engine/tropas';
 import { avanzarNpcGobernanza, type ConfigNpcGobernanza, MINERALES_BONUS_FUNDACION } from '../src/session/npcGobernanza';
 import {
   CATEGORIA_POR_TIPO,
@@ -18,7 +19,7 @@ import {
   integridadDeRecinto,
 } from '../src/engine/trazado';
 import { costoDeTrazo, areaEncerradaDeRecinto, edificiosExtramurosDe } from '../src/engine/muralla';
-import { EDIFICIO_CATALOGO, PERFILES_TRAZADO, SIMULACION, TRAZADO, type PerfilTrazado } from '../src/constants';
+import { EDIFICIO_CATALOGO, LOGISTICA, PERFILES_TRAZADO, SIMULACION, TRAZADO, type PerfilTrazado } from '../src/constants';
 import { instanteDeTick, isoDeInstante } from '../src/session/estado';
 
 /** Overrides por entorno para poder hacer pasadas cortas de humo sin esperar la corrida completa
@@ -389,6 +390,20 @@ interface Foto {
   truequesSupervivenciaAcumulados: number;
   acuerdosActivos: number;
   acuerdosCumplidos: number;
+  // --- Logística de campaña (Paso 6 del movimiento de ejércitos, Doc 5.13) ---
+  /** Trigo que un asentamiento podría meter en un carro AHORA MISMO sin bajar de su reserva, promediado.
+   * Es la autonomía que la economía puede PAGAR, frente a la capacidad teórica del carro.
+   *
+   * Es un SUELO, no la cifra exacta: se mide con la guarnición entera dentro, y sacar tropa reduce la propia
+   * reserva (los que se van dejan de comer aquí), así que un jugador que se lleve 40 soldados libera
+   * `40 × 0.15 × 8 = 48` de margen. A la escala del carro (500) esa corrección no cambia la conclusión, pero
+   * conviene no leer este número como si fuera exacto. */
+  sobranteParaCarroMedia: number;
+  /** Asentamientos que ni siquiera llegan a llenar un carro entero. Si son casi todos, la constante de
+   * capacidad está calibrada contra una economía que no existe (entrada para el Paso 13). */
+  sinCarroCompleto: number;
+  /** Asentamientos que no pueden aportar ni un grano: sacar un ejército de aquí es marchar en ayunas. */
+  sinNadaQueCargar: number;
   // --- Trazado urbano (línea base para el rediseño "anclas y satélites") ---
   /** Ciclos de la red de calles por asentamiento, promediado. Guardián de regresión de la alineación. */
   manzanasCerradasMedia: number;
@@ -487,6 +502,9 @@ function construirFotoResumen(
   let conMercado = 0;
   let conGateNivel2Cumplido = 0;
   let tropasVivas = 0;
+  let sobranteParaCarroSuma = 0;
+  let sinCarroCompleto = 0;
+  let sinNadaQueCargar = 0;
   const extraccionPorTipoActivosTotal: Record<string, number> = Object.fromEntries(TIPOS_EXTRACTOR.map((t) => [t, 0]));
 
   // Trazado urbano: se acumulan suma y contador por separado porque cada métrica solo aplica a los
@@ -535,6 +553,11 @@ function construirFotoResumen(
     if (tieneMercadoActivo(a)) conMercado++;
     if (calcularNivelAsentamiento(a) >= 2) conGateNivel2Cumplido++;
     tropasVivas += a.escuadrones.reduce((acc, e) => acc + e.cantidad, 0);
+    // Lo que este asentamiento podría cargar en un carro sin comprometer su despensa (Doc 5.13).
+    const sobrante = Math.max(0, (a.almacen['trigo']?.cantidad ?? 0) - reservaDeTrigo(a));
+    sobranteParaCarroSuma += sobrante;
+    if (sobrante < LOGISTICA.capacidadCarroPorJugador) sinCarroCompleto++;
+    if (sobrante <= 0) sinNadaQueCargar++;
     for (const tipo of TIPOS_EXTRACTOR) {
       extraccionPorTipoActivosTotal[tipo] = (extraccionPorTipoActivosTotal[tipo] ?? 0) + edificiosPorTipoYEstado(a, tipo).length;
     }
@@ -657,6 +680,10 @@ function construirFotoResumen(
     reclutamientosAcumulados,
     campamentosDestruidosAcumulados,
     truequesSupervivenciaAcumulados,
+    sobranteParaCarroMedia:
+      estado.asentamientos.length === 0 ? 0 : Math.round((sobranteParaCarroSuma / estado.asentamientos.length) * 100) / 100,
+    sinCarroCompleto,
+    sinNadaQueCargar,
     acuerdosActivos,
     acuerdosCumplidos,
     manzanasCerradasMedia: vivos === 0 ? 0 : redondear(manzanasSuma / vivos),
