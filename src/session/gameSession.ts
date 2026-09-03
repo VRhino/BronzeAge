@@ -76,6 +76,8 @@ export class GameSession {
       asentamientos: [],
       facciones: [],
       caravanas: [],
+      jugadores: [],
+      ejercitos: [],
       acuerdos: [],
       ordenes: [],
       relaciones: [],

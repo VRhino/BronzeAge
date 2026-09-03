@@ -323,7 +323,7 @@ export const LOGISTICA = {
 // añadido a TROPAS_RECLUTABLES: `velocidad` por tropa (Doc 5.12.5)
 // ligera 20 — milicia_lanceros, honderos, lanceros_mimbre, escaramuzadores_jabalina
 // media  16 — espadachines_cobre, espadachines_bronce, hacheros_ligeros, arqueros
-// pesada 12 — hacheros_armados, lanceros_micenicos, arqueros_compuesto
+// pesada 12 — hacheros_armados, lanceros_pesados, arqueros_compuesto
 
 // REBALANCE de CARAVANA_CATALOGO (§1.1b punto 9): hoy capacidad 20/40/60/150, que está un orden de magnitud
 // por debajo del carro de un solo jugador (500). Una caravana debe cargar >= 500. Ver el riesgo en §8:
@@ -331,9 +331,9 @@ export const LOGISTICA = {
 // el oro por entrega en la misma proporción — hay que medirlo en batch antes de fijarlo.
 ```
 
-Sobre la velocidad: la regla del canon es `min` sobre los escuadrones (Doc 5.12.5). Hoy **ninguna tropa tiene
-velocidad propia**, así que todas usan la base y el `min` es trivial. Se escribe igualmente así desde el
-principio: diferenciar velocidades por tropa será un cambio de **datos**, no de código.
+Sobre la velocidad: la regla del canon es `min` sobre los escuadrones (Doc 5.12.5), y desde el Paso 2 **cada
+tropa tiene la suya de verdad** — la idea inicial de una `velocidadEjercitoBase` plana se retiró en cuanto el
+usuario dio la tabla real. Calibrarla es un cambio de **datos**, no de código.
 
 ## 5. Plan de ejecución
 
@@ -358,10 +358,16 @@ principio: diferenciar velocidades por tropa será un cambio de **datos**, no de
       Añadido `avanzarRacion.test.ts` (7 casos) para congelar lo que el envoltorio de guarnición NO ejercita
       y de lo que el Paso 5 va a depender: `trigoConsumido` como retorno y `factorConsumo` (estacionado).
       Retirada de paso `poblacionTotalConTropas`, código muerto (§10). 786 → 793 tests, `tsc` limpio.
-- [ ] **Paso 2 — Entidad `Jugador` + Liderazgo + entidad `Ejercito` + persistencia.** Fusionados: ninguno de
-      los dos se puede verificar en vivo por separado (un tipo y un módulo puro no se miran). `engine/liderazgo.ts`
-      puro, consumido también por la UI para mostrar "38/50 pts" sin duplicar la regla. No se dan por cerrados
-      hasta el Paso 3, donde el tope rechaza una movilización y **eso sí se ve**.
+- [x] **Paso 2 — Entidad `Jugador` + Liderazgo + entidad `Ejercito` + persistencia (2026-09-02).**
+      `Jugador` y `Ejercito` en `domain/types.ts`; `LIDERAZGO` y `LOGISTICA` en `constants.ts`; campo
+      `velocidad` por tropa con la tabla de Doc 5.12.5. `engine/liderazgo.ts` puro (`costeLiderazgo` derivado,
+      `liderazgoDe`, `liderazgoComprometido`, `puedeLlevar`, `liderazgoDisponible`).
+      `GameSessionState.jugadores`/`.ejercitos` + **migración de snapshot v5 → v6** (ambas a `[]`).
+      **Sin comportamiento**: el tick no las toca, así que NO entran en `EstadoSimulacion` hasta el Paso 4.
+      Tests: la tabla de Doc 5.11.1 congelada tropa a tropa —es el sitio donde documento y código se miran a
+      la cara, ya que el coste se deriva y no se ve en `constants.ts`—, el gate de élite, que no hay tope
+      agregado, y la migración. 793 → 815 tests, `tsc` limpio en motor, lab y cliente.
+      Sigue sin verificarse EN VIVO, como estaba previsto: eso llega en el Paso 3.
 - [ ] **Paso 3 — Comandos: `movilizarEjercito` / `unirseAEjercito` / `replegarEjercito` / `cancelarMarcha`.**
       Validación de liderazgo y proximidad para unirse.
 - [ ] **Paso 4 — `avanzarEjercitos` en el tick.** Movimiento con velocidad por tropa (`min`), consumo del
@@ -434,7 +440,7 @@ principio: diferenciar velocidades por tropa será un cambio de **datos**, no de
 | Riesgo | Coste si pasa | Mitigación |
 |---|---|---|
 | El NPC marchando hunde los números del batch | alto — ya pasó con otras mecánicas militares | Paso 10 aislado, con diario de batch antes/después |
-| Los ejércitos vuelven la guerra demasiado lenta y nadie ataca | medio | `velocidadEjercitoBase` es una constante; calibrable en el Paso 11 sin tocar código |
+| Los ejércitos vuelven la guerra demasiado lenta y nadie ataca | medio | la `velocidad` de cada tropa es un dato del catálogo; calibrable en el Paso 13 sin tocar código |
 | El determinismo se rompe al mover el combate al tick | medio | Paso 6 aislado; `determinismo.test.ts` se actualiza en el mismo commit |
 | Sacar el ejército deja al asentamiento sin trigo y colapsa | medio | es coste deseado, pero hay que medirlo: la reserva de `reclutarTropa` protege el reclutamiento, no la salida. **Paso 6 propio** con reserva mínima intocable |
 | Subir la capacidad de caravana multiplica el oro por entrega | **alto** | `comision = valorTotal × tasa × distancia × reputación` (`trade.ts:234`) escala con la carga: ×8 de capacidad es ×8 de oro por viaje. Medir en batch en el Paso 9 ANTES de fijar el número |

@@ -1220,6 +1220,11 @@ export const TROPAS_RECLUTABLES: {
   costoEquipo: Partial<Record<string, number>>;
   poderBase: number;
   unidadesPorDefecto: number;
+  /** Velocidad de marcha por el mapa general (Doc 5.12.5). Un ejército va al ritmo de su escuadrón MÁS
+   * LENTO, así que meter un solo escuadrón pesado en una partida de incursión la frena. Las dos reglas que
+   * fijan estos números: una caravana inicial (comercial, 16) no puede ser más rápida que un ejército, y un
+   * jugador solo con infantería ligera tiene que poder alcanzarla. */
+  velocidad: number;
 }[] = [
   // Escalón de entrada (a petición del usuario: la defensa mínima no debe depender de Barracón — que exige
   // añadirlo MANUALMENTE a la cola vía Gobernador/Maestro de Obras antes de siquiera empezar a construirse,
@@ -1231,21 +1236,21 @@ export const TROPAS_RECLUTABLES: {
   // pasar por Armería. Débil a propósito (poderBase 2, por debajo de todo lo demás): existe para que el bucle
   // de juego arranque y las primeras escaramuzas ocurran pronto, no para ganar batallas. Sigue exigiendo un
   // General asignado (`reclutarTropa` en engine/tropas.ts) — eso no cambia, solo el edificio.
-  { id: 'milicia_lanceros', nombre: 'Milicia de lanceros', edificio: 'centroUrbano', nivelRequerido: 1, costoEquipo: { madera: 2 }, poderBase: 2, unidadesPorDefecto: 25 },
+  { id: 'milicia_lanceros', nombre: 'Milicia de lanceros', edificio: 'centroUrbano', nivelRequerido: 1, costoEquipo: { madera: 2 }, poderBase: 2, unidadesPorDefecto: 25, velocidad: 20 },
   // Recosteadas a `armaMadera` (ver RECETA_ARMA_MADERA): antes exigían la cadena del cobre/cuero entera, lo
   // que era además temáticamente incoherente — un escudo de MIMBRE pagado con un arma de cobre, y unos
   // Honderos (una honda y una piedra) pagados con armadura de cuero. El cobre pasa a ser la MEJORA
   // (`espadachines_cobre`, que sí lo conserva), no el ticket de entrada.
-  { id: 'lanceros_mimbre', nombre: 'Lanceros con escudo de mimbre', edificio: 'barracon', nivelRequerido: 1, costoEquipo: { armaMadera: 1 }, poderBase: 3, unidadesPorDefecto: 20 },
-  { id: 'espadachines_cobre', nombre: 'Espadachines de espada corta de cobre', edificio: 'barracon', nivelRequerido: 1, costoEquipo: { armaCobre: 1, armaduraBasica: 1 }, poderBase: 4, unidadesPorDefecto: 20 },
-  { id: 'hacheros_ligeros', nombre: 'Hacheros ligeros', edificio: 'barracon', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraBasica: 1 }, poderBase: 7, unidadesPorDefecto: 18 },
-  { id: 'espadachines_bronce', nombre: 'Espadachines con espadas y escudos de bronce', edificio: 'barracon', nivelRequerido: 2, costoEquipo: { armaBronce: 2, armaduraIntermedia: 1 }, poderBase: 9, unidadesPorDefecto: 18 },
-  { id: 'lanceros_pesados', nombre: 'Lanceros pesados micénicos', edificio: 'barracon', nivelRequerido: 3, costoEquipo: { armaBronce: 2, armaduraIntermedia: 2 }, poderBase: 14, unidadesPorDefecto: 15 },
-  { id: 'hacheros_armados', nombre: 'Hacheros armados', edificio: 'barracon', nivelRequerido: 3, costoEquipo: { armaBronce: 1, armaduraIntermedia: 1 }, poderBase: 12, unidadesPorDefecto: 15 },
-  { id: 'honderos', nombre: 'Honderos', edificio: 'galeriaDeTiro', nivelRequerido: 1, costoEquipo: { armaMadera: 1 }, poderBase: 5, unidadesPorDefecto: 25 },
-  { id: 'escaramuzadores_jabalina', nombre: 'Escaramuzadores con jabalina', edificio: 'galeriaDeTiro', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraBasica: 1 }, poderBase: 8, unidadesPorDefecto: 20 },
-  { id: 'arqueros', nombre: 'Arqueros', edificio: 'galeriaDeTiro', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraIntermedia: 1 }, poderBase: 9, unidadesPorDefecto: 25 },
-  { id: 'arqueros_compuesto', nombre: 'Arqueros con arco compuesto', edificio: 'galeriaDeTiro', nivelRequerido: 3, costoEquipo: { armaBronce: 3, armaduraIntermedia: 2 }, poderBase: 15, unidadesPorDefecto: 20 },
+  { id: 'lanceros_mimbre', nombre: 'Lanceros con escudo de mimbre', edificio: 'barracon', nivelRequerido: 1, costoEquipo: { armaMadera: 1 }, poderBase: 3, unidadesPorDefecto: 20, velocidad: 20 },
+  { id: 'espadachines_cobre', nombre: 'Espadachines de espada corta de cobre', edificio: 'barracon', nivelRequerido: 1, costoEquipo: { armaCobre: 1, armaduraBasica: 1 }, poderBase: 4, unidadesPorDefecto: 20, velocidad: 16 },
+  { id: 'hacheros_ligeros', nombre: 'Hacheros ligeros', edificio: 'barracon', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraBasica: 1 }, poderBase: 7, unidadesPorDefecto: 18, velocidad: 16 },
+  { id: 'espadachines_bronce', nombre: 'Espadachines con espadas y escudos de bronce', edificio: 'barracon', nivelRequerido: 2, costoEquipo: { armaBronce: 2, armaduraIntermedia: 1 }, poderBase: 9, unidadesPorDefecto: 18, velocidad: 16 },
+  { id: 'lanceros_pesados', nombre: 'Lanceros pesados micénicos', edificio: 'barracon', nivelRequerido: 3, costoEquipo: { armaBronce: 2, armaduraIntermedia: 2 }, poderBase: 14, unidadesPorDefecto: 15, velocidad: 12 },
+  { id: 'hacheros_armados', nombre: 'Hacheros armados', edificio: 'barracon', nivelRequerido: 3, costoEquipo: { armaBronce: 1, armaduraIntermedia: 1 }, poderBase: 12, unidadesPorDefecto: 15, velocidad: 12 },
+  { id: 'honderos', nombre: 'Honderos', edificio: 'galeriaDeTiro', nivelRequerido: 1, costoEquipo: { armaMadera: 1 }, poderBase: 5, unidadesPorDefecto: 25, velocidad: 20 },
+  { id: 'escaramuzadores_jabalina', nombre: 'Escaramuzadores con jabalina', edificio: 'galeriaDeTiro', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraBasica: 1 }, poderBase: 8, unidadesPorDefecto: 20, velocidad: 20 },
+  { id: 'arqueros', nombre: 'Arqueros', edificio: 'galeriaDeTiro', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraIntermedia: 1 }, poderBase: 9, unidadesPorDefecto: 25, velocidad: 16 },
+  { id: 'arqueros_compuesto', nombre: 'Arqueros con arco compuesto', edificio: 'galeriaDeTiro', nivelRequerido: 3, costoEquipo: { armaBronce: 3, armaduraIntermedia: 2 }, poderBase: 15, unidadesPorDefecto: 20, velocidad: 12 },
 ];
 
 export const MILITAR = {
@@ -1265,6 +1270,44 @@ export const MILITAR = {
   // Combate de caravanas (Doc 3.10): umbral de captura del 50% y defensa base de una escolta no modelada en detalle.
   umbralCapturaCaravana: 0.5,
   defensaBaseCaravana: 15,
+};
+
+/**
+ * Liderazgo (Doc 5.11): cuánto puede sacar a campaña un jugador. Es límite de SALIDA, no de posesión — la
+ * guarnición no tiene tope, y por eso "¿qué me llevo?" es la decisión central de cada campaña.
+ *
+ * `factorCoste` PLACEHOLDER, a calibrar. El coste NO se escribe a mano tropa por tropa: se DERIVA de
+ * `poderBase × unidadesPorDefecto × factorCoste` (ver `costeLiderazgo`, engine/liderazgo.ts). La razón es
+ * concreta: `poderBase` sigue siendo placeholder pendiente de calibración (Doc 5.8), y once números escritos
+ * a mano se desincronizarían del poder en cuanto se calibre. Una fórmula no — se calibra un solo número.
+ *
+ * Con `base: 50` y `factorCoste: 0.2` la Milicia de lanceros cuesta 10 (ancla elegida por el usuario) y los
+ * Arqueros con arco compuesto 60: la tropa de élite es INFIELABLE sin progresión de liderazgo, que es la
+ * consecuencia buscada (Doc 5.11.1).
+ */
+export const LIDERAZGO = {
+  base: 50,
+  factorCoste: 0.2,
+};
+
+/**
+ * Logística de campaña (Doc 5.13). Todo PLACEHOLDER a calibrar.
+ *
+ * `capacidadCarroPorJugador` NO es un número elegido: sale del RADIO OPERATIVO objetivo que fijó el usuario
+ * —"un jugador solo tiene que poder recorrer al menos un cuarto del mapa ida y vuelta"— sobre el mapa de
+ * 2000×2000. Son 1.000 unidades de recorrido; una carga máxima de liderazgo (~70 soldados) a velocidad
+ * ligera (20) tarda 50 ticks y come `70 × 0.15 × 50 = 525`. De ahí el 500 redondeado.
+ *
+ * IMPORTANTE al rebalancear: si cambia la ración o la producción de trigo, RECALCULAR desde el radio en vez
+ * de ajustar este número a ojo — si no, el radio operativo se rompe en silencio. `autonomiaTicksObjetivo` es
+ * el invariante de diseño del que cuelga todo lo demás.
+ */
+export const LOGISTICA = {
+  capacidadCarroPorJugador: 500,
+  autonomiaTicksObjetivo: 50,
+  factorConsumoEstacionado: 0.5,
+  radioReabastecimiento: 60,
+  radioEncuentro: 60,
 };
 
 /**

@@ -246,6 +246,27 @@ describe('guardarPartida / cargarPartida', () => {
     expect(state.historialJugadores['jugador-1']![0]).not.toHaveProperty('tick');
   });
 
+  it('migra v5 -> v6: un snapshot sin `jugadores` ni `ejercitos` los recibe vacíos', async () => {
+    // Movimiento de ejércitos (Doc 5.11/5.12): dos colecciones nuevas. Una partida guardada de antes de la
+    // mecánica no tiene ejércitos en campaña, y un jugador sin registro en `jugadores` usa `LIDERAZGO.base`
+    // por diseño — así que no hay nada que reconstruir, solo que existan para que nadie lea `undefined`.
+    const sesion = partidaEnMarcha();
+    await guardarPartida(directorio, sesion, MOMENTO);
+    const ruta = join(directorio, `${sesion.gameId}.json`);
+    const snap = JSON.parse(await readFile(ruta, 'utf-8'));
+    snap.formatoVersion = 5;
+    delete snap.partida.state.jugadores;
+    delete snap.partida.state.ejercitos;
+    await writeFile(ruta, JSON.stringify(snap), 'utf-8');
+
+    const cargada = (await cargarPartida(directorio, sesion.gameId))!.sesion;
+    const state = cargada.getState();
+    expect(state.jugadores).toEqual([]);
+    expect(state.ejercitos).toEqual([]);
+    // Y la partida sigue siendo operable: la migración no toca nada más.
+    expect(state.asentamientos.length).toBeGreaterThan(0);
+  });
+
   it('rechaza un snapshot generado con otra versión del generador de mundo', async () => {
     const sesion = partidaEnMarcha();
     await guardarPartida(directorio, sesion, MOMENTO);

@@ -310,6 +310,25 @@ export interface CargosAsentamiento {
   sacerdoteId: string | null;
 }
 
+/**
+ * Jugador (Doc 0/Glosario, Doc 5.11) — entidad NUEVA en el motor, creada por el Liderazgo.
+ *
+ * Hasta ahora el jugador era solo un `jugadorId: string` repartido por `Escuadron`, `jugadoresFundadoresIds`,
+ * `casasCompradas`, `cargos`, `historialJugadores` y `salidasFaccionPorJugador` — `engine/combate.ts` lo
+ * dejaba anotado como pendiente "si llega a necesitar un propósito propio". El Liderazgo es ese propósito.
+ *
+ * Deliberadamente mínima: solo lo que el motor necesita HOY. La identidad (usuario, sesión, permisos) vive en
+ * `session/`, no aquí; esto es estado de partida.
+ */
+export interface Jugador {
+  id: string;
+  /** Liderazgo BASE (Doc 5.11). El efectivo es base + progresión, pero la progresión todavía no está
+   * diseñada (`Docs/Mecanicas a desarrollar.md` §11), así que hoy coinciden. Un jugador SIN registro en
+   * `GameSessionState.jugadores` usa `LIDERAZGO.base` — por eso las partidas guardadas no necesitan
+   * migración. */
+  liderazgoBase: number;
+}
+
 export type OrigenTropa = 'pesants' | 'artesanos' | 'nobleza';
 
 /**
@@ -564,6 +583,44 @@ export interface Caravana {
    * 'disponible'. Ausente para caravanas de Fundación y para los tipos de caravana todavía sin uso real
    * (militar/contrabando, Doc 3.6). */
   estado?: 'disponible' | 'en_transito' | 'retornando';
+}
+
+/**
+ * Ejército (Doc 5.12): uno o más escuadrones que salieron del asentamiento y se mueven por el mapa como UNA
+ * sola entidad, con la misma maquinaria de rutas que las caravanas (`calcularRuta` + `avanzarPosicionEnRuta`).
+ *
+ * Salir SOLO y salir en ejército no son dos casos: salir solo es un ejército de un participante. Por eso no
+ * hay dos tipos ni una lista de participantes guardada — los participantes se DERIVAN de los `jugadorId`
+ * distintos de sus escuadrones, y ese mismo número es el de rombos a dibujar en el mapa (Doc 5.12.2).
+ *
+ * Tampoco se guardan: la Facción y el color (salen de `origenAsentamientoId`), el poder (`poderTotal`), la
+ * capacidad del carro (nº de participantes × `LOGISTICA.capacidadCarroPorJugador`) ni la velocidad (el `min`
+ * sobre las velocidades de sus escuadrones y caravanas adjuntas).
+ */
+export interface Ejercito {
+  id: string;
+  faccionId: string;
+  /** De dónde salió y a dónde vuelve. Se reasigna al asentamiento propio más cercano si este cae; si la
+   * Facción no conserva ninguno, el ejército queda sin hogar y sus jugadores huérfanos (Doc 5.4). */
+  origenAsentamientoId: string;
+  /** Escuadrones MOVIDOS aquí desde `Asentamiento.escuadrones` — se van de verdad, por eso la guarnición es
+   * lo único que defiende (Doc 5.12.4) y por eso `consumoRacionTropas` ya cuenta solo lo que quedó en casa. */
+  escuadrones: Escuadron[];
+  /** El carro: los de todos sus jugadores, ya sumados. Solo trigo en Fase 0. En marcha se come de AQUÍ, no
+   * del granero (Doc 5.13) — misma regla del hambre vía `avanzarRacion`, distinta despensa. */
+  suministro: Record<string, number>;
+  /** Caravanas que marchan con el ejército (Doc 5.13.2): amplían la carga, entran en el `min` de velocidad,
+   * pueden ir cargadas de mercancía (escolta, Doc 5.13.3) y se pierden si el ejército es derrotado. */
+  caravanasAdjuntasIds: string[];
+  objetivo: { tipo: 'asentamiento'; id: string } | { tipo: 'punto'; punto: Point };
+  /** Polilínea calculada al movilizar, igual que en `Caravana.ruta`. */
+  ruta: Point[];
+  /** 0-1 a lo largo de `ruta`. Al cancelar o al terminar, el regreso desanda la MISMA ruta invertida. */
+  progreso: number;
+  posicionActual: Point;
+  /** `estacionado` consume reducido pero nunca 0 (Doc 5.12.3). Cancelar una marcha pasa a `regresando`
+   * (Doc 5.12.6). */
+  estado: 'marchando' | 'estacionado' | 'regresando';
 }
 
 /**

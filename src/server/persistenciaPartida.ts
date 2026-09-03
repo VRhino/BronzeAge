@@ -39,7 +39,7 @@ import { WORLDGEN_VERSION } from '../worldgen';
  * `momento`. `migrarSnapshot` encadena las conversiones y todas son sin pérdida — la relación tick↔instante
  * es 1:1 (`instanteDeTick`).
  */
-export const FORMATO_SNAPSHOT_VERSION = 5;
+export const FORMATO_SNAPSHOT_VERSION = 6;
 
 export interface SnapshotPartida {
   formatoVersion: number;
@@ -177,6 +177,7 @@ function migrarSnapshot(gameId: string, snapshot: SnapshotPartida): PartidaExpor
   if (snapshot.formatoVersion < 3) migrarV2aV3(s);
   if (snapshot.formatoVersion < 4) migrarV3aV4(s);
   if (snapshot.formatoVersion < 5) migrarV4aV5(s);
+  if (snapshot.formatoVersion < 6) migrarV5aV6(s);
   return p as unknown as PartidaExportada;
 }
 
@@ -269,6 +270,15 @@ function migrarV4aV5(s: Record<string, any>): void {
       delete entrada.tick;
     }
   }
+}
+
+/** v5 -> v6 (movimiento de ejércitos, Doc 5.11/5.12): dos colecciones nuevas en el estado. Se rellenan
+ * vacías y ya está — una partida de antes de la mecánica no tiene ejércitos en campaña, y un jugador sin
+ * registro en `jugadores` usa `LIDERAZGO.base` por diseño (ver `liderazgoDe`, engine/liderazgo.ts), así que
+ * no hay nada que reconstruir ni ningún valor que adivinar. */
+function migrarV5aV6(s: Record<string, any>): void {
+  s.jugadores ??= [];
+  s.ejercitos ??= [];
 }
 
 export interface ResumenPartidaEnDisco {

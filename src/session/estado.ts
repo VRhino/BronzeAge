@@ -16,8 +16,7 @@ import type {
   RelacionPolitica,
   Titulo,
   ZonaFaccion,
-  ZonaInfluencia,
-} from '../domain/types';
+  ZonaInfluencia, Ejercito, Jugador } from '../domain/types';
 import type { TrazadoAsentamiento } from '../engine/trazado';
 import type { EventoDominio } from '../domain/eventos';
 
@@ -68,6 +67,13 @@ export interface GameSessionState {
   asentamientos: Asentamiento[];
   facciones: Faccion[];
   caravanas: Caravana[];
+  /** Jugadores con estado propio de partida (Doc 5.11) — hoy solo su Liderazgo. NO es el registro de
+   * identidad (eso vive en `session/identidad`): es estado de juego. Un jugador que no aparezca aquí usa
+   * `LIDERAZGO.base`, así que la lista solo necesita crecer cuando alguien se desvíe del valor por defecto. */
+  jugadores: Jugador[];
+  /** Ejércitos en campaña (Doc 5.12). Todavía sin comportamiento: el tick no los toca hasta que exista
+   * `avanzarEjercitos`, así que de momento solo se persisten. */
+  ejercitos: Ejercito[];
   acuerdos: AcuerdoTrueque[];
   ordenes: OrdenMercado[];
   relaciones: RelacionPolitica[];
