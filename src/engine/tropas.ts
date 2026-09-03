@@ -9,7 +9,7 @@ export interface PayloadTropasDesercion {
   desertores: number;
 }
 import { descontarRecursos, tieneRecursos } from './almacen';
-import { edificiosPorTipoYEstado, poblacionDisponibleParaReclutar, poblacionTotal } from './asentamientoQuery';
+import { edificiosPorTipoYEstado, poblacionDisponibleParaReclutar } from './asentamientoQuery';
 import { consumoComidaPoblacion } from './population';
 import { factorCostoReclutamiento } from './politicas';
 import { esResidente } from './pertenencia';
@@ -126,25 +126,50 @@ export function reclutarTropa(
   };
 }
 
-/** Ración total de trigo/tick que exigen los escuadrones activos (Doc 5.4) — usada tanto para descontarla
- * aquí como para el "apartado de trigo" mostrado en Mantenimiento (ver `gameStore.mantenimientoInfo`). */
-export function consumoRacionTropas(asentamiento: Asentamiento): number {
-  const totalSoldados = asentamiento.escuadrones.reduce((acc, e) => acc + e.cantidad, 0);
-  return totalSoldados * MILITAR.racionPorSoldadoPorMinuto;
+/** Ración de trigo/tick que exige un conjunto de escuadrones, mire quien lo mire (Doc 5.4). El
+ * `factorConsumo` lo usa un ejército ESTACIONADO, que consume reducido pero nunca 0 (Doc 5.12.3). */
+export function consumoRacionDeEscuadrones(escuadrones: readonly Escuadron[], factorConsumo = 1): number {
+  const totalSoldados = escuadrones.reduce((acc, e) => acc + e.cantidad, 0);
+  return totalSoldados * MILITAR.racionPorSoldadoPorMinuto * factorConsumo;
 }
 
-/** Mantenimiento (Doc 5.4): consumo de raciones; sin suministro la moral colapsa y desertan permanentemente. */
-export function avanzarMantenimientoTropas(asentamiento: Asentamiento): { asentamiento: Asentamiento; eventos: EventoCrudo[] } {
-  if (asentamiento.escuadrones.length === 0) return { asentamiento, eventos: [] };
-  const eventos: EventoCrudo[] = [];
+/** Ración total de trigo/tick que exigen los escuadrones de la GUARNICIÓN (Doc 5.4) — usada tanto para
+ * descontarla como para el "apartado de trigo" mostrado en Mantenimiento (ver `gameStore.mantenimientoInfo`).
+ *
+ * No hace falta tocarla cuando existan los ejércitos: al salir a campaña los escuadrones se van DE VERDAD de
+ * `asentamiento.escuadrones` (Doc 5.4), así que esto ya cuenta solo lo que se quedó en casa, que es
+ * exactamente lo que la regla pide. */
+export function consumoRacionTropas(asentamiento: Asentamiento): number {
+  return consumoRacionDeEscuadrones(asentamiento.escuadrones);
+}
 
-  const racionNecesaria = consumoRacionTropas(asentamiento);
-  const trigoDisponible = asentamiento.almacen['trigo']?.cantidad ?? 0;
+/**
+ * La regla del hambre, escrita UNA vez (Doc 5.4): se come de la despensa que se le pase, y lo que no alcanza
+ * se paga en moral; a moral 0 hay deserción permanente.
+ *
+ * Es deliberadamente ignorante de DÓNDE está la comida: recibe unos escuadrones y un montón de trigo. Eso es
+ * lo que permite que la guarnición (que come del almacén del asentamiento) y un ejército en campaña (que come
+ * de su carro de suministros, Doc 5.13) compartan curva, constantes y evento sin duplicar nada — el carro no
+ * es un subsistema paralelo, es un segundo llamador de esta función.
+ *
+ * `factorConsumo` < 1 para un ejército estacionado (Doc 5.12.3). No hay parámetro de "consecuencia": el
+ * usuario cerró que dispersión y deserción son lo mismo, así que el resultado del hambre es idéntico en
+ * ambos sitios.
+ *
+ * Devuelve el trigo REALMENTE consumido para que el llamador lo descuente de donde corresponda.
+ */
+export function avanzarRacion(
+  escuadrones: readonly Escuadron[],
+  trigoDisponible: number,
+  factorConsumo = 1
+): { escuadrones: Escuadron[]; trigoConsumido: number; eventos: EventoCrudo[] } {
+  const eventos: EventoCrudo[] = [];
+  const racionNecesaria = consumoRacionDeEscuadrones(escuadrones, factorConsumo);
   const factorSuministro = racionNecesaria > 0 ? Math.min(1, trigoDisponible / racionNecesaria) : 1;
-  const almacen = descontarRecursos(asentamiento.almacen, { trigo: Math.min(trigoDisponible, racionNecesaria) });
+  const trigoConsumido = Math.min(trigoDisponible, racionNecesaria);
 
   // El squad (nombre, veteranía) persiste aunque `cantidad` llegue a 0 (Doc 5.4) — se puede rellenar reclutando.
-  const escuadrones = asentamiento.escuadrones.map((e) => {
+  const actualizados = escuadrones.map((e) => {
     let moral = e.moral;
     if (factorSuministro >= 1) {
       moral = Math.min(100, moral + MILITAR.regeneracionMoralPorMinuto);
@@ -166,9 +191,17 @@ export function avanzarMantenimientoTropas(asentamiento: Asentamiento): { asenta
     return { ...e, moral, cantidad };
   });
 
-  return { asentamiento: { ...asentamiento, almacen, escuadrones }, eventos };
+  return { escuadrones: actualizados, trigoConsumido, eventos };
 }
 
-export function poblacionTotalConTropas(asentamiento: Asentamiento): number {
-  return poblacionTotal(asentamiento) + asentamiento.escuadrones.reduce((acc, e) => acc + e.cantidad, 0);
+/** Mantenimiento de la GUARNICIÓN (Doc 5.4): envoltorio de `avanzarRacion` sobre el almacén del asentamiento.
+ * El ejército en campaña usará la misma función con su carro (Doc 5.13). */
+export function avanzarMantenimientoTropas(asentamiento: Asentamiento): { asentamiento: Asentamiento; eventos: EventoCrudo[] } {
+  if (asentamiento.escuadrones.length === 0) return { asentamiento, eventos: [] };
+
+  const trigoDisponible = asentamiento.almacen['trigo']?.cantidad ?? 0;
+  const { escuadrones, trigoConsumido, eventos } = avanzarRacion(asentamiento.escuadrones, trigoDisponible);
+  const almacen = descontarRecursos(asentamiento.almacen, { trigo: trigoConsumido });
+
+  return { asentamiento: { ...asentamiento, almacen, escuadrones }, eventos };
 }

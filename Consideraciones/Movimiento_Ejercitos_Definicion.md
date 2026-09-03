@@ -349,8 +349,15 @@ principio: diferenciar velocidades por tropa será un cambio de **datos**, no de
 > carga del carro desde el granero pasa a ser **paso propio** en vez de viajar dentro de otro — si se hunde el
 > batch, hay que poder saber si fue la logística o la IA.
 
-- [ ] **Paso 1 — `avanzarRacion` extraída.** Refactor puro: la curva de moral/deserción deja de estar atada al
-      asentamiento. Criterio de hecho: **los tests existentes de moral/deserción pasan SIN tocarlos**.
+- [x] **Paso 1 — `avanzarRacion` extraída (2026-09-02).** Refactor puro: la curva de moral/deserción deja de
+      estar atada al asentamiento. **Criterio cumplido: cero archivos de test modificados** y el golden de
+      `snapshot_baseline` sin moverse — la simulación produce el mismo estado.
+      `avanzarRacion(escuadrones, trigoDisponible, factorConsumo = 1) -> { escuadrones, trigoConsumido, eventos }`;
+      `avanzarMantenimientoTropas` queda como envoltorio sobre el almacén. `consumoRacionTropas` tampoco
+      cambia de contrato: ahora delega en `consumoRacionDeEscuadrones`, que es el que reutilizará el carro.
+      Añadido `avanzarRacion.test.ts` (7 casos) para congelar lo que el envoltorio de guarnición NO ejercita
+      y de lo que el Paso 5 va a depender: `trigoConsumido` como retorno y `factorConsumo` (estacionado).
+      Retirada de paso `poblacionTotalConTropas`, código muerto (§10). 786 → 793 tests, `tsc` limpio.
 - [ ] **Paso 2 — Entidad `Jugador` + Liderazgo + entidad `Ejercito` + persistencia.** Fusionados: ninguno de
       los dos se puede verificar en vivo por separado (un tipo y un módulo puro no se miran). `engine/liderazgo.ts`
       puro, consumido también por la UI para mostrar "38/50 pts" sin duplicar la regla. No se dan por cerrados
@@ -522,8 +529,8 @@ escalado de Granjas en vez de resolverlo (`issues/granjas_no_escalan_con_poblaci
 
 ## 10. Higiene detectada de paso (no es de esta mecánica, pero toca el mismo código)
 
-- **`poblacionTotalConTropas`** (`engine/tropas.ts:172`) es **código muerto**: cero consumidores en todo el
-  repo.
+- ~~**`poblacionTotalConTropas`** (`engine/tropas.ts`) es código muerto~~ — **retirada en el Paso 1**
+  (2026-09-02), junto con el import de `poblacionTotal` que solo ella usaba.
 - **`distancia` está duplicada en cuatro módulos de `engine/`** (`bandidos`, `construction`, `mantenimiento`,
   `trade`) teniendo `world/geometria.ts` exportándola. Los imports `engine/` → `world/` ya son práctica
   establecida (`calcularRuta`, `pointInPolygon`, `unirPoligonos`), así que el módulo nuevo debe importarla y
