@@ -686,6 +686,34 @@ export const SITIO = {
  * margen el mayor `radioPotencial` alcanzable (tope 120, nivel 3 — ver `ZONA_INFLUENCIA.radioMaximoPorNivel`),
  * para que ningún edificio colocado por `sitioEnBarrio` quede jamás fuera del área dibujada.
  */
+/**
+ * ESCALA DEL MUNDO (a petición del usuario, 2026-09-02) — la equivalencia que faltaba declarar.
+ *
+ * El motor maneja DOS espacios y hasta ahora nadie había dicho cómo se relacionan, así que el código los
+ * trataba como iguales:
+ *
+ *  - **Mapa general** (`Asentamiento.posicion`, `radioPotencial`, rutas, ejércitos): 2000×2000 unidades.
+ *  - **Vista de Asentamiento** (`Edificio.posicion`, `REJILLA_ASENTAMIENTO`, todo `engine/trazado.ts`):
+ *    espacio plano y separado, centrado en el Centro Urbano.
+ *
+ * Sin esta declaración la ficción no cerraba: una zona de influencia debe ser una PROVINCIA y la ciudad un
+ * punto dentro de ella, pero al compartir unidades la ciudad medía ~121 y su provincia 30-180 — la urbe era
+ * más grande que el territorio que controlaba, y el propio `radioMaximoAfueras` lo daba por hecho ("el campo
+ * de una ciudad está FUERA de su zona de influencia").
+ *
+ * Con 10, una ciudad de radio local 150 ocupa 15 unidades de mapa dentro de una provincia de ~76 (el radio
+ * que sale de querer 200 provincias sobre el 91% habitable de este mapa): la ciudad es un quinto del radio de
+ * su provincia y un 4% de su superficie. El resto es campo, bosque y minas — que es lo que debe haber entre
+ * dos ciudades.
+ *
+ * **No cambia ningún número de la simulación**: el trazado urbano sigue midiendo lo mismo en sus unidades y
+ * la zona de influencia sigue midiendo lo mismo en las suyas. Lo que cambia es que ahora está DICHO, y que
+ * `radioUrbanoDe` (engine/asentamientoQuery.ts) es el único punto donde los dos espacios se tocan.
+ */
+export const ESCALA = {
+  unidadesLocalesPorUnidadMapa: 10,
+};
+
 export const REJILLA_ASENTAMIENTO = {
   /**
    * Lado de una celda en unidades locales. **6 → 3 en el Paso 1 de la Etapa 6** (doc trazado §E6.11): la
@@ -1306,6 +1334,18 @@ export const LOGISTICA = {
   capacidadCarroPorJugador: 500,
   autonomiaTicksObjetivo: 50,
   factorConsumoEstacionado: 0.5,
+  /**
+   * Campo de visión de un ejército en marcha, en unidades de MAPA (Doc 5.12.7).
+   *
+   * 150 sobre un mapa de 2000 es ~2 radios de provincia (~76, ver `ESCALA` y Doc 1.0a): un ejército ve
+   * VARIAS ciudades por delante si la geografía lo permite, que es lo que se pedía. Y queda holgadamente por
+   * debajo del radio de cohesión de un reino (`MANTENIMIENTO.escalaDistancia` = 400, ~5 provincias), así que
+   * ver no equivale a controlar.
+   *
+   * Se descartó 30 —el radio de una zona de influencia recién fundada— porque bajo la escala rota parecía
+   * razonable y con la escala declarada no llega ni al borde de la propia provincia.
+   */
+  radioVisionEjercito: 150,
   radioReabastecimiento: 60,
   radioEncuentro: 60,
 };

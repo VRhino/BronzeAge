@@ -1,6 +1,39 @@
 # 1. Sistema de Mundo y Territorio
 
 
+## 1.0a La escala del mundo (a petición del usuario, 2026-09-02)
+
+El motor maneja **dos espacios** y hasta ahora nadie había declarado cómo se relacionan, así que el código los
+trataba como iguales. La equivalencia es:
+
+> **1 unidad de mapa = 10 unidades locales de la Vista de Asentamiento.**
+
+De ahí sale la jerarquía territorial de la ficción:
+
+| | radio | equivale a |
+|---|---|---|
+| **Ciudad** (casco urbano + afueras) | ~150 unidades locales = **15 de mapa** | el núcleo habitado |
+| **Provincia** (zona de influencia) | **30-180 de mapa**, según nivel | lo que controla un asentamiento |
+| **Reino** | todas las provincias de una Facción | sin número fijo: una Facción podría llegar a todo el mapa |
+
+**Por qué 10.** El mundo mide 2000×2000 y el 91% es habitable (medido: solo 7,6% agua y 1,3% cima), o sea
+3,64 millones de unidades². Repartido entre las **200 provincias** que Fase 0 quiere, salen 18.207 u² por
+provincia, es decir un **radio de ~76** — que es casi exactamente el tope de zona de influencia de nivel 1 que
+ya existía (60). La escala de las provincias ya era buena; lo que fallaba era la ciudad. Con la equivalencia
+declarada, una ciudad ocupa **un quinto del radio de su provincia y un 4% de su superficie**, y el resto es
+campo, bosque y minas — que es lo que debe haber entre dos ciudades.
+
+**Qué estaba roto.** Al compartir unidades sin decirlo, una ciudad medía ~121 y su provincia 30-180: **la urbe
+era más grande que el territorio que controlaba**. El código incluso lo daba por hecho — `radioMaximoAfueras`
+documenta que "el campo de una ciudad está FUERA de su zona de influencia", que es justo el síntoma.
+
+**Un reino mide ~5 provincias**, y eso tampoco lo había decidido nadie: sale de `MANTENIMIENTO.escalaDistancia`
+= 400, la distancia a la capital a la que el coste de mantenimiento toca su tope (×2). 400 / 76 ≈ 5.
+
+> La corrección es **conceptual, no numérica**: ni el trazado urbano ni las zonas de influencia cambian de
+> tamaño. Lo que cambia es que la equivalencia está dicha, y que `radioUrbanoDe` (`engine/trazado.ts`) es el
+> único punto donde los dos espacios se tocan — antes `radioPotencial` hacía los dos trabajos a la vez.
+
 ## 1.0b El agua es un OBSTÁCULO (a petición del usuario, 2026-09-02)
 
 **Ni los ejércitos ni las caravanas pueden moverse sobre agua.** No es terreno caro: es infranqueable. Todo lo que se desplaza por el mapa —caravanas de comercio, caravanas de fundación, ejércitos y el trazado de los caminos comerciales— la rodea o no llega.

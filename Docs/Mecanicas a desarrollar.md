@@ -9,6 +9,7 @@
     10. [WORLDGEN] creacion de landmarks reconocibles (3d)
     11. [JUGADOR] progreso jugador y tropa 
     12. [VISIBILIDAD] niebla de guerra (proyeccion por audiencia, "ultimo conocido")
+    13. [POLITICA] la capital como decision del jugador
 
 ## 2. Movimiento de ejercitos por el mapa
 Los ejércitos también se mueven por el mapa para atacar como las caravanas, con un símbolo q los identifique por ejemplo un rombo, uno por cada jugador q va en el ejército, uno detrás de otro medio superpuestos y cada rombo del color de su faccion.
@@ -115,3 +116,29 @@ Lo que falta es una **decisión de diseño de juego**, no de arquitectura:
 
 Cuando estos parámetros estén definidos, el backend añade el filtrado a `proyectarParaJugador` (mismo sitio
 que Slice 1) y la entidad `ConocimientoJugador` al estado.
+
+## 13. La capital como decisión del jugador
+
+La capital tiene que ser una **decisión consciente de los jugadores**, no algo heredado.
+
+Hoy no lo es. `encontrarCapital` (`engine/mantenimiento.ts`) devuelve **el asentamiento vivo más antiguo de la
+Facción** —literalmente `sort((a,b) => a.fundadoEn - b.fundadoEn)[0]`— y el propio código lo marca como
+*"placeholder = proxy de capital"*. De ahí salen tres problemas:
+
+1. **No se elige, se hereda.** El primer asentamiento es capital para siempre, aunque acabe siendo un
+   villorrio y la Facción tenga su verdadero centro de poder en otra parte. No hay forma de trasladarla.
+2. **El Palacio no pinta nada.** Existe el edificio `palacio` (Doc 4.2.1) y la capital lo ignora por completo.
+   Lo natural sería que la capital fuera *donde está el Palacio*, o que designarla lo exigiera.
+3. **Y sí tiene efecto mecánico real**, así que no es cosmético: el mantenimiento de cada asentamiento escala
+   con su distancia a la capital — `factorDistancia = 1 + min(1, dist/400) × (2-1)`, o sea ×1 en la capital y
+   hasta **×2 a distancia 400**, topado a partir de ahí. Es el mecanismo anti-snowball de "cohesión"
+   (Fase_0_5 §5.1).
+
+Dos cosas que hay que decidir con ello:
+
+- **Cómo se designa y qué cuesta trasladarla.** Si mover la capital es gratis, el jugador la reubica cada vez
+  que conquista algo y el factor de distancia deja de morder.
+- **El tope a 400 desactiva el anti-snowball.** Más allá de esa distancia no hay penalización adicional: un
+  imperio de punta a punta del mapa paga lo mismo que uno moderadamente disperso. Con provincias de radio ~76
+  (ver la escala del mundo), 400 son ~5 provincias — o sea que el "radio cómodo" de un reino ya está fijado en
+  el código sin que nadie lo decidiera.

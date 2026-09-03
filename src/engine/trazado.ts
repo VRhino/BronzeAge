@@ -776,12 +776,38 @@ export function esDeAfueras(tipo: EdificioTipo): boolean {
 }
 
 /**
+ * Radio del casco urbano en UNIDADES LOCALES — hasta dónde puede colocar edificios este módulo.
+ *
+ * Existe para separar dos cosas que `radioPotencial` venía haciendo a la vez sin que nadie lo hubiera
+ * decidido (ver `ESCALA` en constants.ts):
+ *
+ *  - **la PROVINCIA**: `Asentamiento.radioPotencial`, en unidades de MAPA — dibuja la zona de influencia,
+ *    decide dónde se puede fundar y de dónde se muestrea la fertilidad;
+ *  - **la CIUDAD**: hasta dónde llega el trazado en el espacio LOCAL de la Vista de Asentamiento.
+ *
+ * Hoy devuelve el mismo número a propósito: la separación es CONCEPTUAL y no cambia el comportamiento, así
+ * que el batch tiene que salir idéntico. Pero al estar aquí, el día que ciudad y provincia deban crecer a
+ * ritmos distintos —o que una ciudad amurallada deje de expandirse mientras su provincia sigue— se toca este
+ * punto y nada más.
+ *
+ * Lo que la separación arregla ya, sin mover una cifra: con la escala declarada (1 unidad de mapa = 10
+ * locales), una ciudad de radio local 150 mide 15 en el mapa dentro de una provincia de ~76. Antes, al
+ * compartir unidades sin decirlo, la ciudad era MÁS GRANDE que la provincia que controlaba.
+ *
+ * Vive en `trazado.ts` y no en `asentamientoQuery.ts` porque este módulo es el dueño del espacio local — y
+ * porque `asentamientoQuery` ya importa de aquí (`integridadDeRecinto`), así que al revés sería un ciclo.
+ */
+export function radioUrbanoDe(asentamiento: Pick<Asentamiento, 'radioPotencial'>): number {
+  return asentamiento.radioPotencial;
+}
+
+/**
  * Hasta dónde llegan las afueras. Nunca menos que `radioAfuerasMin + anchoBandaAfueras`, aunque la zona de
  * influencia sea más chica: el campo de una ciudad está FUERA de su zona de influencia, y si el tope fuera el
  * de la zona, al fundar (radio inicial 30, radio vedado 60) no habría ningún hueco válido para la Granja
  * inicial y caería al fallback del origen, encima del Centro Urbano.
  */
-function radioMaximoAfueras(radioPotencial: number, tamano: TamanoEdificio): number {
+function radioMaximoAfueras(radioUrbano: number, tamano: TamanoEdificio): number {
   // El tope acota el CENTRO del edificio, pero la banda tiene que poder CONTENERLO entero: sumarle su media
   // diagonal es lo que permite que un edificio del tamaño que sea llegue con su borde interior hasta el final
   // de la banda, en vez de quedarse a medias porque su centro topa antes.
@@ -790,7 +816,10 @@ function radioMaximoAfueras(radioPotencial: number, tamano: TamanoEdificio): num
   // y una Granja de nivel 4 mide 36 de lado, así que literalmente no cabía sin retroceder hacia la ciudad —
   // medido: cinco de nueve mejoras acababan más cerca del centro aunque la reubicación ya prefiriera afuera.
   const mediaDiagonal = Math.hypot(tamano.ancho * T, tamano.alto * T) / 2;
-  return Math.max(radioPotencial, TRAZADO.radioAfuerasMin + TRAZADO.anchoBandaAfueras) + mediaDiagonal;
+  // `radioUrbano` y `radioAfuerasMin`/`anchoBandaAfueras` son TODOS unidades locales (ver `radioUrbanoDe`):
+  // hasta 2026-09-02 aquí entraba `radioPotencial` en crudo, que es una magnitud del MAPA, y esta línea era
+  // el punto exacto donde las dos escalas se mezclaban sin conversión.
+  return Math.max(radioUrbano, TRAZADO.radioAfuerasMin + TRAZADO.anchoBandaAfueras) + mediaDiagonal;
 }
 
 // --- Crecimiento de la red ---
@@ -1355,7 +1384,7 @@ class DistanciaALaCalle {
  */
 function candidatosLibres(
   referencia: RectanguloCeldas,
-  radioPotencial: number,
+  radioUrbano: number,
   tamano: TamanoEdificio,
   ocupadas: Set<string>,
   red: RedDeCalles,
@@ -1364,7 +1393,7 @@ function candidatosLibres(
   capCorredor = TRAZADO.capCorredorUrbano
 ): Candidato[] {
   const centro = centroDeRectangulo(referencia);
-  const maxCeldas = Math.ceil(radioPotencial / T) + 1;
+  const maxCeldas = Math.ceil(radioUrbano / T) + 1;
   const centroCol = Math.round(centro.x / T);
   const centroRow = Math.round(centro.y / T);
   const candidatos: Candidato[] = [];
@@ -1393,7 +1422,7 @@ function candidatosLibres(
       const px = (col + tamano.ancho / 2) * T;
       const py = (row + tamano.alto / 2) * T;
       const distancia = Math.hypot(px - centro.x, py - centro.y);
-      if (distancia > radioPotencial) continue;
+      if (distancia > radioUrbano) continue;
       // El VETO se mide contra la huella, no contra el centro. Con el centro, una Granja de nivel 4 (12x12
       // celdas) cuyo centro cumpliera el radio metía medio edificio dentro de la ciudad: medido, su borde
       // interior llegaba a 39 con `radioAfuerasMin` = 60, ocupando suelo del casco urbano. Con el borde,
@@ -1452,17 +1481,17 @@ export function permiteRotacion(tipo: EdificioTipo, tamano: TamanoEdificio): boo
  * normal, más `semillaCandidato` como último desempate). */
 function candidatosConOrientaciones(
   referencia: RectanguloCeldas,
-  radioPotencial: number,
+  radioUrbano: number,
   tamano: TamanoEdificio,
   ocupadas: Set<string>,
   red: RedDeCalles,
   distanciaMinima: number,
   permitirRotacion: boolean
 ): Candidato[] {
-  const normales = candidatosLibres(referencia, radioPotencial, tamano, ocupadas, red, distanciaMinima, false);
+  const normales = candidatosLibres(referencia, radioUrbano, tamano, ocupadas, red, distanciaMinima, false);
   if (!permitirRotacion || tamano.ancho === tamano.alto) return normales;
   const girado: TamanoEdificio = { ancho: tamano.alto, alto: tamano.ancho };
-  const girados = candidatosLibres(referencia, radioPotencial, girado, ocupadas, red, distanciaMinima, true);
+  const girados = candidatosLibres(referencia, radioUrbano, girado, ocupadas, red, distanciaMinima, true);
   return [...normales, ...girados];
 }
 
@@ -1856,7 +1885,7 @@ export function sitiosParaTipo(
     // encima del Centro Urbano — el propio §E6.10 avisaba de que "un cap único los rechazaría a todos".
     const candidatos = candidatosLibres(
       ORIGEN_RECT,
-      radioMaximoAfueras(asentamiento.radioPotencial, tamano),
+      radioMaximoAfueras(radioUrbanoDe(asentamiento), tamano),
       tamano,
       ocupadas,
       red,
@@ -1867,7 +1896,7 @@ export function sitiosParaTipo(
     return aPunto(porDistanciaAlOrigen(candidatos, true));
   }
   if (tipo === 'palacio' || tipo === 'almacen' || tipo === 'lenera') {
-    const candidatos = candidatosLibres(ORIGEN_RECT, asentamiento.radioPotencial, tamano, ocupadas, red, 0);
+    const candidatos = candidatosLibres(ORIGEN_RECT, radioUrbanoDe(asentamiento), tamano, ocupadas, red, 0);
     return conPreferenciaIntramuros(aPunto(porDistanciaAlOrigen(candidatos, false)), tipo, nivelInterno, ocupados, asentamiento.recintos ?? []);
   }
 
@@ -2125,7 +2154,7 @@ export function reubicarPorTamano(
   const { ocupadas, red } = sueloOcupado(asentamiento.id, todos, edificio.id, asentamiento.recintos ?? []);
   const afueras = esDeAfueras(edificio.tipo);
   const distanciaMinima = afueras ? TRAZADO.radioAfuerasMin : 0;
-  const radioMaximo = afueras ? radioMaximoAfueras(asentamiento.radioPotencial, tamano) : asentamiento.radioPotencial;
+  const radioMaximo = afueras ? radioMaximoAfueras(radioUrbanoDe(asentamiento), tamano) : radioUrbanoDe(asentamiento);
   const capCorredor = afueras ? TRAZADO.capCorredorAfueras : TRAZADO.capCorredorUrbano;
   const candidatos = candidatosLibres(ORIGEN_RECT, radioMaximo, tamano, ocupadas, red, distanciaMinima, false, capCorredor);
   if (candidatos.length === 0) return null;

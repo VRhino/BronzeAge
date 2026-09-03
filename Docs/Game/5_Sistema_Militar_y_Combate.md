@@ -265,6 +265,19 @@ Consecuencias que salen del `min` sin escribir ninguna regla más:
 
 Una marcha en curso **se puede cancelar en cualquier momento**, y hacerlo **dispara la vuelta**: el ejército pasa a `regresando` y desanda su ruta hacia el asentamiento de origen. No se teletransporta ni se desvanece — volver cuesta el mismo camino que costó ir, y sigue comiendo del carro durante el regreso.
 
+### 5.12.7 Qué ve un ejército, y qué ve el jugador
+
+Un ejército en marcha **ve a su alrededor en un radio de 150** (unidades de mapa). Sobre el mundo de 2000×2000 eso son unas **dos provincias** (Doc 1.0a), así que una columna en campaña divisa varias ciudades por delante si la geografía lo permite — y sigue muy por debajo del radio de cohesión de un reino (~5 provincias), de modo que ver no es lo mismo que controlar.
+
+Un jugador, por tanto, ve de lo AJENO dos cosas:
+
+1. **Lo que entre en su zona de influencia** — su territorio, que vigila por definición.
+2. **Lo que sus propios ejércitos alcancen a ver** mientras marchan.
+
+De un ejército ajeno se sabe **dónde está, de qué Facción es y cuánta gente lo compone** (el número de rombos, Doc 5.12.2). NO se sabe su composición ni su poder: eso exigiría ver sus escuadrones, y sería telemetría de un rival.
+
+> Esto es la fuente **espacial** de la niebla de guerra (`Docs/Mecanicas a desarrollar.md` §12), que estaba bloqueada precisamente por faltar este número. Lo que sigue pendiente ahí es la capa de MEMORIA — el "último conocido", que recuerda lo que viste cuando dejas de verlo.
+
 ## 5.13 Suministro en campaña (a petición del usuario, 2026-09-01)
 
 **Un ejército en marcha NO come del granero de su asentamiento.** Lleva su propio **carro de suministros** con la comida que consume mientras se mueve. Si se queda sin comida, la moral colapsa y los soldados desertan — exactamente la misma regla del hambre que en guarnición (5.4), solo cambia de qué despensa se come.
