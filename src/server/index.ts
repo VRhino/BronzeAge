@@ -46,12 +46,15 @@ async function arrancar(): Promise<void> {
       proveedores: crearRegistroProveedores(proveedoresPorDefecto()),
       repositorio: identidadEnDisco.repositorio,
     },
+    // Cerrar el servidor drena las escrituras de identidad pendientes (ver `alCerrar` en `api.ts`).
+    alCerrar: () => identidadEnDisco.esperarEscrituras(),
   });
 
-  // Apagado limpio: esperar a que la última escritura de identidad termine antes de salir.
+  // Apagado limpio: `app.close()` ya drena las escrituras de identidad por el gancho `alCerrar`, así que
+  // aquí no hace falta ordenarlo a mano — que era justo el detalle fácil de olvidar.
   for (const senal of ['SIGINT', 'SIGTERM'] as const) {
     process.once(senal, () => {
-      void identidadEnDisco.esperarEscrituras().finally(() => app.close().finally(() => process.exit(0)));
+      void app.close().finally(() => process.exit(0));
     });
   }
 

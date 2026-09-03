@@ -53,7 +53,10 @@ const NOMBRE: Record<EdificioTipo, string> = {
   mercado: 'Mercado',
   puestoMercado: 'Puesto de mercado',
   maravilla: 'Maravilla',
-  muralla: 'Muralla',
+  // 'muralla' se retiró de `EdificioTipo` en el Paso 5 de la mecánica de murallas: una muralla ya no es un
+  // edificio, es la entidad `Recinto` (perímetro de celdas con puertas, torres y niveles propios). Este
+  // catálogo cubre EDIFICIOS, así que no le corresponde una fila — los recintos tendrían que salir de
+  // `RECINTO_*` en constants.ts, y de momento nadie ha pedido ese informe.
   plaza: 'Plaza',
   plazaDeArmas: 'Plaza de Armas',
   patioDeGremios: 'Patio de Gremios',
@@ -141,7 +144,8 @@ function recolectar(tipo: EdificioTipo): EdificioInfo {
     huella.nota = 'crece con el nivel interno';
   } else if (tipo === 'puestoMercado') {
     huella.formas = {};
-    for (const f of Object.keys(PUESTO_MERCADO_FORMA).map(Number)) huella.formas[f] = huellaFisica(PUESTO_MERCADO_FORMA[f]);
+    // `f` sale de las propias claves del objeto, así que la entrada existe siempre.
+    for (const f of Object.keys(PUESTO_MERCADO_FORMA).map(Number)) huella.formas[f] = huellaFisica(PUESTO_MERCADO_FORMA[f]!);
     huella.nota = 'forma según nivelInterno (no es progresión)';
   } else {
     const enTabla = EDIFICIO_TAMANO[tipo] as Dim | undefined;
@@ -162,7 +166,7 @@ function recolectar(tipo: EdificioTipo): EdificioInfo {
       .map(Number)
       .sort((a, b) => a - b)
       .map((n) => {
-        const lv = nivelesRaw[n];
+        const lv = nivelesRaw[n]!; // `n` sale de `Object.keys(nivelesRaw)`: la entrada existe.
         const recetas = ((lv.recetas as Array<Record<string, unknown>>) ?? []).map(
           (r) => `${r.produce} ×${r.produccionBase}/min ⟵ ${fmtRecursos(r.consumePorUnidad as Partial<Record<string, number>>)} (por unidad)`
         );
@@ -278,20 +282,27 @@ function imprimirMarkdown(): void {
 /** JSON mínimo (a petición del usuario): solo `{ nombre, ancho, alto }` por edificio, nada más. `ancho`/`alto`
  * van en celdas de la rejilla local (`EDIFICIO_TAMANO`). Los tipos cuya huella varía (Granja por nivel,
  * Puesto de mercado por forma) emiten una fila por variante, con la variante indicada en el nombre. */
+/** "4×6" -> [4, 6]. Devuelve una tupla de números de verdad: destructurar `split().map(Number)` daba
+ * `number | undefined` en cada posición, y esas dimensiones acaban en el JSON como números. */
+function dimensionesDe(celdas: string): [number, number] {
+  const [ancho, alto] = celdas.split('×').map(Number);
+  return [ancho ?? 0, alto ?? 0];
+}
+
 function jsonMinimo(): Array<{ nombre: string; ancho: number; alto: number }> {
   const filas: Array<{ nombre: string; ancho: number; alto: number }> = [];
   for (const e of CATALOGO) {
     if (e.huella.fija) {
-      const [ancho, alto] = e.huella.fija.celdas.split('×').map(Number);
+      const [ancho, alto] = dimensionesDe(e.huella.fija.celdas);
       filas.push({ nombre: e.nombre, ancho, alto });
     } else if (e.huella.porNivel) {
       for (const [n, h] of Object.entries(e.huella.porNivel)) {
-        const [ancho, alto] = h.celdas.split('×').map(Number);
+        const [ancho, alto] = dimensionesDe(h.celdas);
         filas.push({ nombre: `${e.nombre} (nivel ${n})`, ancho, alto });
       }
     } else if (e.huella.formas) {
       for (const [f, h] of Object.entries(e.huella.formas)) {
-        const [ancho, alto] = h.celdas.split('×').map(Number);
+        const [ancho, alto] = dimensionesDe(h.celdas);
         filas.push({ nombre: `${e.nombre} (forma ${f})`, ancho, alto });
       }
     }

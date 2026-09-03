@@ -47,6 +47,19 @@ export interface OpcionesServidor {
    * clase de default que sobrevive hasta producción sin que nadie lo note.
    */
   administradoresGlobales?: readonly AdministradorConfigurado[];
+  /**
+   * Trabajo pendiente que hay que DRENAR al cerrar la instancia, además de las partidas.
+   *
+   * Existe por el repositorio de identidad en disco, que encola sus escrituras en segundo plano: hasta ahora
+   * había que acordarse de `esperarEscrituras()` A MANO antes de `app.close()` (así lo hace el handler de
+   * SIGINT en `index.ts`), y quien no lo hiciera perdía la última escritura o —en Windows— chocaba el
+   * `rename` en vuelo contra el `rmdir` del directorio temporal. Eso hacía intermitente un test de la API
+   * con `ENOTEMPTY`, y era el mismo fallo que ya se corrigió una vez en `persistenciaIdentidad.test.ts`.
+   *
+   * Con el gancho aquí, **cerrar el servidor drena de verdad**: ni el proceso ni los tests tienen que
+   * recordar el orden correcto.
+   */
+  alCerrar?: () => Promise<void>;
   /** Reloj inyectado, como en el resto del proyecto: decide la vigencia de sesiones y membresías. */
   ahora?: () => string;
   /** Hub de difusión WebSocket (Fase C5). Inyectable por el mismo motivo que `identidad`: los tests
@@ -101,7 +114,10 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
   // Apagado limpio: al cerrar la instancia, parar el reloj de mundo de cada partida abierta y dejar drenar
   // su cola (un tick a medio persistir no se aborta). `app.close()` —lo llama el handler de SIGINT/SIGTERM
   // en `index.ts`, y todos los tests en su `afterEach`— dispara este hook.
-  app.addHook('onClose', () => deps.partidas.cerrar());
+  app.addHook('onClose', async () => {
+    await deps.partidas.cerrar();
+    await opciones.alCerrar?.();
+  });
 
   // Todas las superficies bajo /v1 (Fase C6) — ver el comentario de cabecera.
   app.register(

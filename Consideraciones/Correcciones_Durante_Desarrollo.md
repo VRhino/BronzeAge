@@ -531,12 +531,34 @@ enterara. Dos veces es un patrón.
 Arreglado con `scripts/tsconfig.json` + `npm run typecheck:scripts`, mismo patrón que `typecheck:lab`. No es
 un script de usar y tirar: de sus corridas salen calibradas las constantes del juego.
 
-`catalogo-edificios.ts` queda FUERA a propósito — arrastra 15 errores propios, incluida una referencia a
-`'muralla'` (retirada en el Paso 5 de murallas, o sea que lleva roto desde entonces en ejecución, no solo en
-tipos). Merece su propia pasada.
+**`catalogo-edificios.ts` arreglado en la misma pasada** (a petición del usuario, que prefirió no diferirlo):
+sus 15 errores eran una fila `'muralla'` obsoleta —el tipo se retiró en el Paso 5 de murallas, así que el
+script llevaba roto EN EJECUCIÓN desde entonces, no solo en tipos— más 14 sitios de
+`noUncheckedIndexedAccess`. La fila de muralla se elimina sin sustituto: una muralla ya no es un edificio sino
+la entidad `Recinto`, y este catálogo cubre edificios. Verificado ejecutándolo en sus tres modos (informe,
+`--json`, `--md`), no solo compilándolo: llevaba roto y compilar no demuestra que produzca la salida correcta.
+Los tres scripts quedan dentro de `typecheck:scripts` — dejar uno fuera es como se llega a este tipo de
+agujeros.
 
 Y el contador de excepciones del batch ahora puede imprimir las 3 primeras con `BATCH_MOSTRAR_ERRORES=1`:
 decía QUE algo fallaba, nunca QUÉ.
+
+### 52. Cerrar el servidor no drenaba las escrituras de identidad
+
+Salió como un test intermitente de `api.test.ts` (`ENOTEMPTY` al borrar el directorio temporal en Windows,
+1 de cada ~4 corridas), pero el fallo no era del test: **`app.close()` no esperaba a las escrituras de
+identidad pendientes**. El repositorio en disco las encola en segundo plano, y hasta ahora había que acordarse
+de llamar a `esperarEscrituras()` A MANO antes de cerrar — así lo hacía el handler de SIGINT en `index.ts`.
+Quien no lo hiciera perdía la última escritura, o en Windows chocaba el `rename` en vuelo contra el `rmdir`.
+
+Es el mismo fallo que ya se corrigió una vez en `persistenciaIdentidad.test.ts`, arreglado allí caso por caso.
+Volver a verlo en otro archivo dice que el arreglo puntual no bastaba: el orden correcto era fácil de olvidar
+porque no estaba en ningún sitio que lo hiciera cumplir.
+
+Arreglado con un gancho `alCerrar` en `OpcionesServidor`, invocado desde el hook `onClose` de Fastify junto al
+cierre de partidas. Ahora **cerrar el servidor drena de verdad**: `index.ts` ya no ordena nada a mano (su
+handler de señales se simplifica a `app.close()`) y ningún test tiene que recordarlo. Verificado repitiendo la
+suite de API 5 veces seguidas, todas limpias.
 
 ## Nota general
 

@@ -1024,6 +1024,9 @@ describe('persistencia de identidad tras "reinicio del proceso" (cierre de Fase 
       directorio,
       administradoresGlobales: ADMINS,
       identidad: { proveedores: crearRegistroProveedores(proveedoresPorDefecto()), repositorio: enDisco.repositorio },
+      // Sin esto, `afterEach` borraba el directorio con una escritura de identidad en vuelo y el test salía
+      // intermitente con ENOTEMPTY en Windows.
+      alCerrar: () => enDisco.esperarEscrituras(),
     });
   }
 
