@@ -430,6 +430,60 @@ escasez de recursos sea una variable más a controlar al probar el árbol de anc
 
 ---
 
+## Rebalanceo de trigo y §E6.16 (2026-09-02)
+
+### 48. Producción base de Granja ×2 — el asentamiento nacía en déficit estructural
+
+**Encontrado** midiendo para responder a la revisión por consejo del movimiento de ejércitos, no buscándolo:
+un asentamiento **nivel 1 a tope de población (300) come 30 trigo/tick** y una **Granja nivel 1 producía 15**.
+No hacía falta simular para verlo. Lo que sí hizo falta simular fue decidir cuánto subirla.
+
+Experimento A/B/C con la misma seed (15 facciones, 600 ticks), palanca `BATCH_TRIGO_X` nueva en
+`scripts/run-batch-sim.ts` — mismo criterio que `BATCH_SIN_RECLUTAMIENTO`/`BATCH_SIN_ATAQUES`, muta el
+catálogo que es el punto único de lectura (`produccionTrigoDeGranja`):
+
+| | 1x | **2x** | 3x |
+|---|---|---|---|
+| Nutrición media (t600) | 28.98, **cayendo** | **100** | 100 |
+| Nivel 2 | 7/13 | **11/13** | 11/13 |
+| Nivel Facción máx | 3 | **5** | 5 |
+| Tropas vivas (mundo entero) | **15** | 777 | 943 |
+
+A 1x **las tropas se morían de hambre** (23→15). **3x es idéntico a 2x** en todo salvo en cuánto ejército
+sostiene: a 2x la nutrición ya satura, así que triplicar es trigo sin destino. Adoptado **2x**: 15/22.5/30/45
+→ **30/45/60/90**, `BALANCE_VERSION` 3→4, snapshot de regresión actualizado.
+
+Dos límites que conviene no olvidar: **nivel 3 sigue en 0 incluso a 3x** (no es alimentario — issue nuevo
+`issues/npc_no_alcanzan_nivel_3.md`, causa sospechada `artesanos = 0`), y subir la base **esquiva** el
+problema de que las Granjas no escalan (`granjasActivasMedia = 2`, nivel interno 1 en las tres
+configuraciones) en vez de resolverlo.
+
+### 49. §E6.16: edificios construidos sobre celdas de calle — el guardián lo trajo el punto 48
+
+Al aplicar el 2x, `perfilesTrazado.test.ts` empezó a fallar (*"gremial: vivienda pisa la celda de calle
+-7,-5"*). Comprobado revirtiendo el cambio: **sin 2x pasa, con 2x falla**. Pero no es un bug nuevo — es
+§E6.16, abierto y diagnosticado desde el 31 de agosto, que el usuario había encontrado a mano en el
+laboratorio y que **la suite no alcanzaba**. Las ciudades más grandes lo hicieron reproducible.
+
+Ese apartado decía textualmente que antes de arreglarlo hacía falta un caso que lo congelara. Apareció solo.
+
+**Arreglo (salida 3 de las cuatro documentadas)**: `pisaCalleComprometida` en `engine/construction.ts`,
+dentro del bucle de commit, **después** de cupo/tope/fondos y **antes** de pagar. Recalcula `redDeCalles` sobre
+el orden REAL en que va a quedar la ciudad y descarta el candidato si cae sobre calle.
+
+**Lo que hizo viable esa salida, y no estaba en el análisis original**: `anadirConectadas` (`trazado.ts:433`)
+nunca siembra calle sobre celda ya ocupada, y el replay ocupa las celdas de cada edificio antes de sembrar sus
+calles. Luego **ningún edificio puede quedar bajo una calle nacida después de él**, y validar cada candidato
+contra su prefijo basta: no hace falta iterar a punto fijo ni deshacer pagos.
+
+No se eligieron 1 ni 2 porque cambian qué se paga primero cuando no alcanza para todo (eso es balance), ni 4
+porque sería rediseñar el crecimiento emergente.
+
+**Coste medido: cero.** Batch idéntico antes/después en las 11 métricas de ciudad y simulación.
+**Guardián**: `src/engine/__tests__/edificiosSobreCalle.test.ts` con la ciudad del laboratorio (seed 1, 200
+ticks) que §E6.16 pedía, más seeds 60 y 200. Verificado a mano sobre 15 seeds antes de recortar.
+786/786 tests, `tsc --noEmit` limpio en motor, cliente y lab.
+
 ## Nota general
 
 Todas las correcciones anteriores son de **diseño/balance**, no de sintaxis: el proyecto compiló sin errores de TypeScript en todo momento salvo en los pasos intermedios normales de refactor (añadir un campo a un tipo y luego actualizar todos los lugares que lo instancian), que se resolvieron sobre la marcha y no se listan aquí por ser rutinarios.

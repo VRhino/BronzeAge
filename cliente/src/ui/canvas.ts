@@ -253,7 +253,6 @@ export const EDIFICIO_ETIQUETA: Record<EdificioTipo, string> = {
   mercado: 'Mercado',
   puestoMercado: 'Puesto de mercado',
   maravilla: 'Maravilla',
-  muralla: 'Muralla',
   plaza: 'Plaza',
   plazaDeArmas: 'Plaza de Armas',
   patioDeGremios: 'Patio de Gremios',
@@ -287,8 +286,6 @@ export const EDIFICIO_COLOR: Record<EdificioTipo, string> = {
   // retirada del lienzo el color es lo único que agrupa el conjunto a la vista.
   puestoMercado: '#7fc9bf',
   maravilla: '#ffd700',
-  // Muralla (Doc Fase_0_6): gris piedra oscuro, distinto del gris de Cantera para no confundirlos.
-  muralla: '#5a5a5a',
   // Anclas y satélites, Etapa 3: tonos más claros de sus propias categorías (mismo criterio que puestoMercado
   // frente a mercado) — marcan visualmente que son piezas de zona, no edificios independientes.
   plaza: '#f0e8c8',

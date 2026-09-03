@@ -72,14 +72,7 @@ import {
   type EstadoMejoraEdificio,
 } from '@motor/engine/construction';
 export type { EstadoMejoraEdificio } from '@motor/engine/construction';
-import {
-  celdaMinimaDeEdificio,
-  edificiosInternos,
-  rectangulosDeRed,
-  redDeCalles,
-  tamanoDeEdificio,
-  type RectanguloLocal,
-} from '@motor/engine/trazado';
+import { trazadoParaAsentamiento, type TrazadoAsentamiento } from '@motor/engine/trazado';
 import { poderEscuadron } from '@motor/engine/combate';
 
 // --- Capa de partida: vive en el servidor, se habla por HTTP ---
@@ -370,24 +363,15 @@ export class GameStore {
    * de camino, y el rectángulo que ocupa cada edificio (por id). Todo derivado en el motor
    * (`engine/trazado.ts`), nada persistido.
    */
-  getTrazadoAsentamiento(asentamiento: Asentamiento): {
-    calles: RectanguloLocal[];
-    caminos: RectanguloLocal[];
-    huellas: Record<string, { x: number; y: number; ancho: number; alto: number }>;
-  } {
-    const { calles, caminos } = rectangulosDeRed(redDeCalles(asentamiento.id, asentamiento.edificios));
-    const huellas: Record<string, { x: number; y: number; ancho: number; alto: number }> = {};
-    for (const edificio of edificiosInternos(asentamiento.edificios)) {
-      const min = celdaMinimaDeEdificio(edificio);
-      const tamano = tamanoDeEdificio(edificio);
-      huellas[edificio.id] = {
-        x: min.col * CATALOGOS.tamanoCeldaAsentamiento,
-        y: min.row * CATALOGOS.tamanoCeldaAsentamiento,
-        ancho: tamano.ancho * CATALOGOS.tamanoCeldaAsentamiento,
-        alto: tamano.alto * CATALOGOS.tamanoCeldaAsentamiento,
-      };
-    }
-    return { calles, caminos, huellas };
+  /**
+   * Delegado directo en `trazadoParaAsentamiento` (motor) — hasta el Paso 6 de
+   * `Consideraciones/Murallas_Definicion.md` esta función mantenía su PROPIA copia (Fase C10, doc 9 T2a:
+   * "cliente/ sigue con su propia copia hasta que se reescriba sin @motor/*"), que se quedó sin `recintos` —
+   * ni bloqueaba suelo de muralla en el dibujo ni sabía pintar el anillo. Con la UI de murallas ya hacía
+   * falta lo segundo de todos modos, así que se unificó: una sola definición, no dos que puedan divergir.
+   */
+  getTrazadoAsentamiento(asentamiento: Asentamiento): TrazadoAsentamiento {
+    return trazadoParaAsentamiento(asentamiento);
   }
 
 

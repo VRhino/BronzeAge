@@ -73,7 +73,6 @@ const UNICOS_POR_ASENTAMIENTO = new Set<EdificioTipo>([
   'mercado',
   'granFundicion',
   'maravilla',
-  'muralla',
 ]);
 /** Nacen ya activos por regla de fundación/semilla/satélite — nunca pasan por cola ni se añaden a mano. */
 const GRATIS_NO_CONSTRUIBLES = new Set<EdificioTipo>([

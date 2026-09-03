@@ -79,7 +79,7 @@ Fase 0 descarta por completo los requisitos de "Planos de X" (vía Aedas, Doc 6)
 | Edificio | Recurso | Costo | Trabajadores | Tiempo | Producción base |
 |---|---|---|---|---|---|
 | Corral (nuevo) | Livestock | 30 madera | 4 | 6 ticks | 3 livestock |
-| Granja | Trigo | 30 madera | 4 | 6 ticks | 15 trigo |
+| Granja | Trigo | 30 madera | 4 | 6 ticks | **30 trigo** |
 | Leñera | Madera | 10 madera | 4 | 3 ticks | 5 madera |
 | Mina de oro | Oro | 40 madera + 10 piedra | 6 | 6 ticks | 2 oro |
 | Mina de cobre | Cobre | 30 madera + 5 piedra | 8 | 4 ticks | 5 cobre |
@@ -87,7 +87,24 @@ Fase 0 descarta por completo los requisitos de "Planos de X" (vía Aedas, Doc 6)
 
 Corral sigue el mismo patrón que Cantera/minas (ver 4.2): liga a un nodo finito de livestock (Doc 1.4), con reemplazo automático al agotarse. Cantera (piedra) no cambia respecto a la versión ya implementada — no está en esta tabla porque sus cifras siguen igual.
 
-**Producción de Granja recalibrada** (post rediseño de progreso, ver `Correcciones_Durante_Desarrollo.md` y 4.5): con una sola Granja por asentamiento y población creciendo un 12%/tick compuesto (sin techo — más población no aumenta la producción una vez cubiertos los `trabajadoresRequeridos`, ver `ratioManoObra`), la producción fija original de 5 trigo/tick no alcanzaba a sostener el consumo — el trigo llegaba a 0 sistemáticamente entre los ticks 45 y 90. Subida primero a 10 y recalibrada de nuevo a **15 trigo/tick**: mejora real, combinada con el disparador de Granja rediseñado (ver 4.2) para reaccionar antes de que el trigo se agote.
+**Producción de Granja recalibrada** (post rediseño de progreso, ver `Correcciones_Durante_Desarrollo.md` y 4.5): con una sola Granja por asentamiento y población creciendo un 12%/tick compuesto (sin techo — más población no aumenta la producción una vez cubiertos los `trabajadoresRequeridos`, ver `ratioManoObra`), la producción fija original de 5 trigo/tick no alcanzaba a sostener el consumo — el trigo llegaba a 0 sistemáticamente entre los ticks 45 y 90. Subida primero a 10 y recalibrada de nuevo a 15 trigo/tick: mejora real, combinada con el disparador de Granja rediseñado (ver 4.2) para reaccionar antes de que el trigo se agote.
+
+**Recalibrada otra vez a 30 trigo/tick — el doble en TODOS los niveles (2026-09-02, medido en batch).** Los 15 seguían sin cerrar la cuenta, y esta vez se vio con aritmética antes que con simulación: un asentamiento **nivel 1 a tope de población (300 habitantes) come 30 trigo/tick** (`consumoComidaPorHabitante` 0.1) mientras **una Granja nivel 1 producía 15** — el asentamiento nacía en déficit estructural, y en nivel 3 (techo 6.000) harían falta ~13 Granjas nivel 4. Niveles: 15/22.5/30/45 → **30/45/60/90**.
+
+Experimento A/B/C con la misma semilla (15 facciones, 600 ticks, palanca `BATCH_TRIGO_X` en `scripts/run-batch-sim.ts`):
+
+| | 1x (antes) | **2x (adoptado)** | 3x |
+|---|---|---|---|
+| Nutrición media (tick 600) | 28.98 y **cayendo** | **100** | 100 |
+| Asentamientos en nivel 2 | 7 / 13 | **11 / 13** | 11 / 13 |
+| Nivel de Facción máx | 3 | **5** | 5 |
+| Tropas vivas en todo el mundo | **15** | 777 | 943 |
+
+El dato que cierra la discusión: a 1x **las tropas se morían de hambre** (23 → 15 a lo largo de la corrida), o sea aproximadamente una tropa por asentamiento en todo el mundo. **3x no aporta nada sobre 2x** salvo sostener más ejército: nutrición, población, viviendas y niveles son idénticos, porque a 2x la nutrición ya satura. Por eso se adopta 2x y no 3x.
+
+Dos cosas que este experimento dejó ABIERTAS y conviene no perder de vista:
+- **El trigo NO es el cuello de botella de nivel 3**: con el triple de comida, `nivel 3 = 0` igual. La causa sospechada es `artesanos = 0` — ver `issues/npc_no_alcanzan_nivel_3.md`.
+- **Subir la producción base ESQUIVA el problema de escalado de Granjas** (`granjasActivasMedia = 2` y nivel interno 1 en las tres configuraciones: el NPC no construye más ni las mejora). Ver `issues/granjas_no_escalan_con_poblacion.md`.
 
 ### Especiales
 
@@ -205,7 +222,7 @@ Límites de almacenaje por recurso, ampliables construyendo más capacidad. El s
 - **Trigo — fix de mecánica repetida (detectado jugando, ver `Correcciones_Durante_Desarrollo.md`)**: el trigo YA NO forma parte del coste periódico anterior. Antes, Mantenimiento cobraba un valor fijo de trigo (placeholder desconectado de la realidad) ADEMÁS del consumo real de comida de población + tropas, que ya se descontaba por separado cada tick — un doble descuento sobre el mismo recurso por dos razones que en el fondo eran la misma ("alimentar al asentamiento"). Ahora el "apartado de trigo" que se muestra en el panel de Mantenimiento es directamente `consumo de comida de la población (4.1) + ración de tropas (Doc 5.4)` — el valor real, sin placeholder — pero se sigue descontando UNA sola vez, donde siempre se descontó (población/tropas), no aquí. Efecto colateral a tener en cuenta: un déficit de trigo NUNCA degrada este medidor directamente — el medidor de Mantenimiento depende solo de madera (+piedra/oro por nivel). Eso NO significa que un déficit de trigo sea inofensivo: desde la mecánica de Hambruna (§4.1) tiene su propio medidor de nutrición aparte, que primero frena el crecimiento y, sostenido, cuesta población real — solo queda desacoplado de ESTE medidor (Mantenimiento) y de la ruta de "caer en ruinas" de abajo.
 - Si NO se cumple algún pago (madera/piedra/oro), el medidor BAJA de 100 a 0 de forma PROPORCIONAL al déficit (degradación gradual, no corte binario).
 - Al llegar a 0: el asentamiento se DESTRUYE y cae en RUINAS → se limpia la zona → queda disponible para otro jugador/grupo. Esta es la MISMA ruta mecánica que el caso de abandono total (sea el asentamiento literalmente abandonado o simplemente mal gestionado mientras sigue activo).
-- **Calibración** (ajustada durante implementación, sigue siendo placeholder): el coste base de madera y la velocidad de degradación se redujeron respecto a la versión inicial (que generaba espiral de déficit incluso en asentamientos bien gestionados); se subió también la velocidad de regeneración cuando el pago es íntegro. Producción base de Granja recalibrada dos veces (5→10→15 trigo/tick, ver 4.2.1), combinada con el disparador de Granja basado en déficit real (producción < consumo, hasta 3 Granjas a la vez en déficit, ver 4.2) y la política "Edicto de Cosecha" (×1.5, ver 4.4) — conjunto que mitiga bastante el desajuste entre población exponencial y producción de Granja, aunque no lo elimina del todo en fundaciones con fertilidad baja.
+- **Calibración** (ajustada durante implementación, sigue siendo placeholder): el coste base de madera y la velocidad de degradación se redujeron respecto a la versión inicial (que generaba espiral de déficit incluso en asentamientos bien gestionados); se subió también la velocidad de regeneración cuando el pago es íntegro. Producción base de Granja recalibrada tres veces (5→10→15→30 trigo/tick, ver 4.2.1), combinada con el disparador de Granja basado en déficit real (producción < consumo, hasta 3 Granjas a la vez en déficit, ver 4.2) y la política "Edicto de Cosecha" (×1.5, ver 4.4) — conjunto que mitiga bastante el desajuste entre población exponencial y producción de Granja, aunque no lo elimina del todo en fundaciones con fertilidad baja.
 - PENDIENTE: cantidades exactas finales por nivel, velocidad exacta de degradación/regeneración, duración exacta del período de gracia inicial, y el número fijo de extractores por tipo (RESUELTO el umbral piedra/oro por nivel, ver escalado arriba; sigue pendiente el número fijo de extractores) — todo sigue siendo ajustable, pendiente de nueva calibración por simulación tras el rediseño de progreso (el validado en pruebas de 150-300 ticks corresponde al modelo anterior).
 
 ## 4.6 Entrada tardía y mundo lleno

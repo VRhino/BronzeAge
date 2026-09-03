@@ -138,10 +138,6 @@ export type EdificioTipo =
   // EDIFICIO en sí — el ciclo de servidor de 12 meses que cierra al completarla queda fuera de esta pasada
   // (requiere infraestructura de servidor/multi-instancia que Fase 0 no tiene, ver Roadmap_Escalado.md).
   | 'maravilla'
-  // Muralla (Doc Fase_0_6, a petición del usuario): implementación mínima a propósito — solo el edificio
-  // (1 celda, cuesta piedra), sin niveles ni efecto mecánico en combate/asedio todavía. Gatea subir a
-  // nivel de asentamiento 4 (ver NIVEL_ASENTAMIENTO.requisitos).
-  | 'muralla'
   // Anclas y satélites, Etapa 3 (Consideraciones/Vista_Asentamiento_Trazado_Urbano.md §5): "marcadores
   // gratis" — mismo patrón que 'puestoMercado' (costo {}, nacen ya activos, nunca pasan por cola, no se
   // pueden añadir a mano). 'plaza' es el ancla de saturación del núcleo residencial (nunca ancla primaria:
@@ -185,7 +181,6 @@ const TODOS_LOS_EDIFICIOS: Record<EdificioTipo, true> = {
   mercado: true,
   puestoMercado: true,
   maravilla: true,
-  muralla: true,
   plaza: true,
   plazaDeArmas: true,
   patioDeGremios: true,

@@ -3,7 +3,34 @@
 Consultar este documento ante cualquier duda de terminología — el resto de documentos asume estas definiciones.
 
 ## Jugador
-Persona real que juega. Pertenece a 1 y SOLO 1 Facción en todo momento, y reside en 1 y SOLO 1 asentamiento a la vez (Doc 2.5) — es lo que le permite tener como mucho un escuadrón propio de cada tropa (Doc 5.8).
+Persona real que juega. Pertenece a 1 y SOLO 1 Facción en todo momento, y reside en 1 y SOLO 1 asentamiento a la vez (Doc 2.5) — es lo que le permite tener como mucho UN escuadrón de cada tropa (ver abajo, y Doc 5.8).
+
+Es además el dueño de sus escuadrones: **los escuadrones son del Jugador, no del asentamiento** (Doc 5.4). El asentamiento es donde están apostados, no quien los posee. Tiene un valor de **Liderazgo** (Doc 5.11) que limita cuántos puede sacar a campaña a la vez.
+
+## Escuadrón / Tropa / Unidad
+Terminología cerrada (a petición del usuario, 2026-09-02). Son **tres conceptos distintos** y conviene no mezclarlos — la jerarquía de entidades es **Jugador → Escuadrón → Unidad**, y "tropa" es el TIPO, no la instancia:
+
+- **Escuadrón:** la entidad. El grupo de soldados que un Jugador recluta y comanda como un bloque. Un Jugador tiene muchos escuadrones, pero **no más de uno de cada tropa**. Persiste como identidad (nombre, veteranía) aunque se quede sin unidades (Doc 5.4). Es lo que se cuenta: "tres escuadrones".
+- **Tropa:** el TIPO de escuadrón — "Milicia de lanceros", "Honderos", "Arqueros con arco compuesto"… El catálogo completo está en Doc 5.8. Determina el poder por unidad, el equipo que cuesta reclutarlo, cuántas unidades trae y su coste de Liderazgo (Doc 5.11). Un escuadrón **jamás cambia de tropa**: ganar veteranía lo hace más fuerte, nunca lo convierte en otro (Doc 5.8).
+- **Unidad:** cada soldado individual dentro de un escuadrón. Las bajas son permanentes (permadeath, Doc 5.4).
+
+> **"Tropa" se usa además en sentido colectivo** en todos los documentos ("las tropas consumen raciones", "mantenimiento de tropas", "reclutar tropas"), igual que en castellano corriente. Eso es deliberado y no choca: en singular y referido a un catálogo es el tipo; en plural y genérico es el colectivo. **La entidad contable es siempre el escuadrón** — y por eso lleva ese nombre, para que "tropa" quede libre para los otros dos usos.
+
+## Guarnición
+Los escuadrones apostados en un asentamiento, es decir, los que NO salieron a campaña. Son los únicos que lo defienden de un asedio (Doc 5.12). Un asentamiento cuyos jugadores se llevaron todo queda indefenso.
+
+## Ejército
+Uno o más escuadrones que han salido del asentamiento y se mueven por el mapa como **una sola entidad** (Doc 5.12). Puede ser de un solo Jugador o de varios juntos; en ambos casos es la misma cosa, y cada Jugador que lo compone sigue limitado por su propio Liderazgo.
+
+Mientras está en campaña, un ejército **no come del granero de su asentamiento**: lleva su propio carro de suministros (Doc 5.13) — uno por Jugador, de capacidad fija. Puede además llevar **caravanas adjuntas** que amplían su alcance, y que pueden ir cargadas de mercancía (escolta de caravanas, Doc 5.13.2-5.13.3). Si el ejército es derrotado, las caravanas adjuntas se pierden con él.
+
+Una marcha se puede **cancelar**, lo que dispara la vuelta por el mismo camino (Doc 5.12.6).
+
+## Huérfano
+Jugador al que conquistaron su asentamiento mientras estaba de campaña (Doc 5.4). Conserva los escuadrones que llevaba encima, pero se queda sin residencia: sin sitio donde reabastecer, reclutar ni volver. Deja de serlo cuando entra en una Facción que tenga asentamiento — se sale por la vía política, no por la militar.
+
+## Liderazgo
+Valor del Jugador que limita **cuánto puede sacar a campaña a la vez** — no cuánto puede poseer. Cada tropa tiene un coste de Liderazgo proporcional a su poder; la suma de lo que un Jugador se lleva no puede exceder su Liderazgo (Doc 5.11). Lo que se queda, defiende (ver Guarnición).
 
 ## Asentamiento
 Unidad territorial con zona de influencia, edificios (auto-construidos), población NPC (Pesants/Artesanos/Nobleza), y cargos LOCALES (Gobernador, Tesorero, General, Maestro de Obras, Sacerdote). Pertenece a 1 y SOLO 1 Facción. Una Facción puede tener muchos asentamientos.

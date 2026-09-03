@@ -1,4 +1,4 @@
-import type { Asentamiento, Edificio, EdificioTipo, Faccion, Point, RecursoAlmacenado, RecursoTipo } from '../domain/types';
+import type { Asentamiento, Edificio, EdificioTipo, Faccion, Point, Recinto, RecursoAlmacenado, RecursoTipo } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
 import type { RecetaProduccion } from '../constants';
 import {
@@ -22,7 +22,9 @@ import { mejorFertilidadEnZona } from './zones';
 import {
   anclaActivaParaCategoria,
   CATEGORIA_POR_TIPO,
+  celdasDeEdificio,
   crearAnclaNueva,
+  esDeAfueras,
   permiteRotacion,
   redDeCalles,
   resolverPerfil,
@@ -864,6 +866,12 @@ function evaluarNecesidades(
     }
     const costo = EDIFICIO_CATALOGO[candidato.edificio.tipo].costo as Partial<Record<string, number>>;
     if (!puedeIniciarConstruccion(almacenActual, costo, candidato.edificio.tipo, reserva)) continue;
+    // §E6.16: última comprobación antes de pagar — el sitio se eligió en orden de propuesta, pero la ciudad
+    // se replaya en el orden de ESTE bucle. Va después de cupo/tope/fondos a propósito: así se ejecuta como
+    // mucho `NECESIDADES.maximoEnCola` veces por asentamiento y tick, no una por candidato propuesto.
+    if (pisaCalleComprometida(asentamiento.id, edificiosBase, nuevos, candidato.edificio, asentamiento.recintos ?? [])) {
+      continue;
+    }
     almacenActual = descontarRecursos(almacenActual, costo);
     const comprometido = { ...candidato.edificio, prioridad: candidato.score };
     nuevos.push(comprometido);
@@ -885,6 +893,46 @@ function evaluarNecesidades(
   }
 
   return { nuevos, almacen: almacenActual, extractoresTicksSinCupo, edificiosBase };
+}
+
+/**
+ * ¿El candidato caería encima de una calle, mirando la ciudad tal y como va a quedar REALMENTE ordenada?
+ * (doc trazado §E6.16, salida 3 — "revalidar tras el commit".)
+ *
+ * El bug que cierra: `evaluarNecesidades` calcula el sitio de cada candidato consultando `sueloOcupado` en
+ * ORDEN DE PROPUESTA, pero los compromete ordenados por score y descarta por el camino los que no tienen
+ * cupo, materiales o tope. El array final no queda en el orden en que cada uno eligió su hueco, y
+ * `redDeCalles` es un replay dependiente del orden: una calle que en el orden final ya existe cuando le toca
+ * al candidato pudo no existir cuando el candidato eligió. Con calles sobre aristas la divergencia era
+ * invisible (una arista no ocupa superficie); desde que la calle cuesta suelo, es un edificio encima de una
+ * calle.
+ *
+ * Por qué basta con mirar el prefijo ya comprometido y no hace falta revalidar a los anteriores:
+ * `anadirConectadas` (trazado.ts) NUNCA siembra calle sobre una celda ya ocupada, y el replay marca las
+ * celdas de cada edificio como ocupadas ANTES de sembrar sus calles. Así que ningún edificio puede quedar
+ * bajo una calle nacida después de él: validar cada candidato contra `[...base, ...yaComprometidos, él]` es
+ * suficiente y el resultado es estable.
+ *
+ * No se eligieron las otras salidas de §E6.16: comprometer en orden de propuesta (1) o proponer ya en orden
+ * de score (2) cambian QUÉ se paga primero cuando no alcanza para todo, y eso es balance; hacer `redDeCalles`
+ * independiente del orden (4) sería rediseñar el crecimiento emergente entero.
+ */
+function pisaCalleComprometida(
+  asentamientoId: string,
+  edificiosBase: Edificio[],
+  yaComprometidos: Edificio[],
+  candidato: Edificio,
+  recintos: readonly Recinto[]
+): boolean {
+  // Solo aplica a edificios internos: los de afueras se conectan por CAMINO, no forman manzana y el
+  // invariante de §E6.12 no los cubre.
+  if (esDeAfueras(candidato.tipo)) return false;
+  const red = redDeCalles(asentamientoId, [...edificiosBase, ...yaComprometidos, candidato], recintos);
+  if (red.calles.size === 0) return false;
+  for (const c of celdasDeEdificio(candidato)) {
+    if (red.calles.has(`${c.col},${c.row}`)) return true;
+  }
+  return false;
 }
 
 /** Tipos de edificio de transformación con tiers (Doc 4.2.1): mejoran de nivelInterno y ejecutan recetas.
@@ -1341,9 +1389,6 @@ const EDIFICIOS_UNICOS = new Set<EdificioTipo>([
   'mercado',
   'granFundicion',
   'maravilla',
-  // Muralla (Doc Fase_0_6): una sola por asentamiento, mismo patrón que Palacio/Mercado — no auto-
-  // construcción, se añade manualmente (Gobernador/Maestro de Obras).
-  'muralla',
 ]);
 
 /** Cupo de cada tipo de edificio de transformaciÃ³n por nivel operativo del asentamiento.

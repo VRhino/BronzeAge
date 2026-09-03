@@ -29,7 +29,7 @@
  *   `duracionMinutosPorDefecto`) y tasas `*PorTick` → `*PorMinuto`. Mismos VALORES (1 tick = 1 min), otras
  *   claves en el JSON servido.
  */
-export const BALANCE_VERSION = 3;
+export const BALANCE_VERSION = 4;
 
 /**
  * Modelo temporal (Fase D, Docs/Arquitectura/10_Modelo_Temporal.md). **Decisión del usuario (2026-08-29):
@@ -232,15 +232,15 @@ export const EDIFICIO_CATALOGO = {
   granja: {
     costo: { madera: 30 },
     tiempoConstruccionMinutos: 6,
-    produccionBaseTrigo: 15,
+    produccionBaseTrigo: 30,
     trabajadoresRequeridos: 4,
     niveles: {
-      1: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 15, tamano: { ancho: 4, alto: 4 } },
+      1: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 30, tamano: { ancho: 4, alto: 4 } },
       // Piedra añadida a las mejoras (Doc Fase_0_6, a petición del usuario): antes 100% madera. Sin gate de
       // nivel de asentamiento — las 4 mejoras siguen alcanzables estando en nivel 1.
-      2: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 22.5, tamano: { ancho: 4, alto: 6 }, costoMejora: { madera: 60, piedra: 20 } },
-      3: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 30, tamano: { ancho: 8, alto: 6 }, costoMejora: { madera: 120, piedra: 40 } },
-      4: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 45, tamano: { ancho: 12, alto: 12 }, costoMejora: { madera: 240, piedra: 80 } },
+      2: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 45, tamano: { ancho: 4, alto: 6 }, costoMejora: { madera: 60, piedra: 20 } },
+      3: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 60, tamano: { ancho: 8, alto: 6 }, costoMejora: { madera: 120, piedra: 40 } },
+      4: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 90, tamano: { ancho: 12, alto: 12 }, costoMejora: { madera: 240, piedra: 80 } },
     } as Record<number, NivelEdificioTransformacion>,
   },
   cantera: { costo: { madera: 20 }, tiempoConstruccionMinutos: 5, produccionBasePiedra: 5, trabajadoresRequeridos: 4 },
@@ -463,17 +463,6 @@ export const EDIFICIO_CATALOGO = {
         recetas: [],
       },
     } as Record<number, NivelEdificioTransformacion>,
-  },
-
-  // Muralla (Doc Fase_0_6, a petición del usuario): implementación MÍNIMA a propósito — 1 celda (tamaño por
-  // defecto, no está en EDIFICIO_TAMANO), solo piedra, sin niveles ni recetas, sin efecto mecánico en
-  // combate/asedio todavía (no interactúa con `engine/combate.ts` en esta pasada — existe como edificio
-  // construible, nada más, ver Doc 5.10 para cuándo se le dé mecánica real). Gate de construcción nivel 3
-  // (junto con Carpintería); construirla es requisito para subir a nivel 4 (NIVEL_ASENTAMIENTO.requisitos).
-  muralla: {
-    costo: { piedra: 2000 },
-    tiempoConstruccionMinutos: 15,
-    requisitoNivelAsentamientoConstruccion: 3,
   },
 
   // Único tier — desbloquea la aparición de Nobleza (además del mínimo de ciudadanos ya existente, ver
@@ -1373,9 +1362,18 @@ export const NIVEL_ASENTAMIENTO = {
       edificiosMinimo: 3,
     },
     3: { pesants: 500, artesanos: 200, edificios: ['armeria', 'curtiduria', 'fundicion', 'barracon', 'galeriaDeTiro'] },
-    4: { pesants: 1000, artesanos: 400, edificios: ['muralla'] },
+    // Sustituye al viejo `edificios: ['muralla']` (Paso 5, `Consideraciones/Murallas_Definicion.md` §13): el
+    // recinto ya no es un `EdificioTipo`, así que el gate deja de poder contarlo como edificio y pasa a
+    // `recintoCompletoNivelMinimo` — cualquier recinto TERMINADO (integridad 1) de nivel 1 en adelante basta,
+    // la empalizada barata cuenta igual que la muralla de piedra. `edificios: []` es intencional, no un
+    // descuido: sin ningún tipo en la lista, `cumpleEdificios` es trivialmente cierto y el gate real es el
+    // del recinto.
+    4: { pesants: 1000, artesanos: 400, edificios: [], recintoCompletoNivelMinimo: 1 },
     5: { pesants: 2000, artesanos: 800, edificios: ['palacio'] },
-  } as Record<number, { pesants: number; artesanos: number; edificios: string[]; edificiosMinimo?: number }>,
+  } as Record<
+    number,
+    { pesants: number; artesanos: number; edificios: string[]; edificiosMinimo?: number; recintoCompletoNivelMinimo?: number }
+  >,
   /**
    * Techo de POBLACIÓN TOTAL (pesants+artesanos+nobleza) por nivel (Doc Fase_0_5 §3.1, a petición del
    * usuario) — por encima de este número, la Vivienda/Palacio dejan de dar cupo efectivo aunque tengan

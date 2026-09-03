@@ -19,6 +19,7 @@ import {
   edificiosInternos,
   esDeAfueras,
   redDeCalles,
+  sitiosParaTipo,
   tamanoDeEdificio,
   trazadoParaAsentamiento,
 } from '../trazado';
@@ -38,7 +39,8 @@ import {
   trazarRecinto,
   upkeepDeRecintos,
 } from '../muralla';
-import { calcularCostoMantenimiento } from '../mantenimiento';
+import { calcularCostoMantenimiento, calcularNivelAsentamiento } from '../mantenimiento';
+import { progresoNivelAsentamiento } from '../asentamientoQuery';
 import {
   contextoDeTest,
   crearEstadoDeTest,
@@ -822,5 +824,118 @@ describe('murallas — defensa y upkeep (Paso 3b, §16)', () => {
     for (const [recurso, cantidad] of Object.entries(upkeep)) {
       expect(costoConMuro[recurso]).toBeCloseTo((costoBase[recurso] ?? 0) + (cantidad ?? 0), 6);
     }
+  });
+});
+
+// --- Paso 4: preferencia intramuros en la búsqueda de sitio (§9) ---
+describe('murallas — preferencia intramuros (Paso 4, §9)', () => {
+  /** Verificación INDEPENDIENTE de `trazado.ts` (no reutiliza `regionInteriorDeRecinto`, privada allí, para no
+   * probar el código contra sí mismo): flood fill 4-conexo desde el Centro Urbano sin cruzar el anillo. */
+  function esIntramuros(asentamiento: Asentamiento, recinto: Recinto, candidato: { punto: { x: number; y: number }; rotado: boolean }): boolean {
+    const centro = edificiosInternos(asentamiento.edificios).find((e) => e.tipo === 'centroUrbano')!;
+    const semilla = celdasDeEdificio(centro)[0]!;
+    // `almacen` (no `vivienda`): la búsqueda de vivienda ata a la ancla residencial ACTIVA, y a tick 200 esa
+    // ancla ya suele haber migrado ella misma al arrabal (el fix del Paso 2a hace que nazca fuera cuando el
+    // núcleo se llena) — sus candidatos salen siempre fuera, sin nada que reordenar. `almacen`/`lenera` no
+    // atan a ninguna ancla: buscan hueco libre en TODO `radioPotencial` desde el origen, así que sí parten
+    // candidatos a los dos lados del anillo (medido con `_probe_arrabal.ts`, efímero, ya borrado).
+    const objetivo = celdasDeEdificio({ tipo: 'almacen' as const, posicion: candidato.punto, rotado: candidato.rotado });
+
+    const muro = new Set(recinto.celdas.map((c) => clave(c.col, c.row)));
+    const cols = recinto.celdas.map((c) => c.col);
+    const rows = recinto.celdas.map((c) => c.row);
+    const minCol = Math.min(...cols) - 1;
+    const maxCol = Math.max(...cols) + 1;
+    const minRow = Math.min(...rows) - 1;
+    const maxRow = Math.max(...rows) + 1;
+
+    const vistas = new Set<string>([clave(semilla.col, semilla.row)]);
+    const pila: [number, number][] = [[semilla.col, semilla.row]];
+    while (pila.length > 0) {
+      const [col, row] = pila.pop()!;
+      for (const [dc, dr] of [[0, -1], [1, 0], [0, 1], [-1, 0]] as [number, number][]) {
+        const nCol = col + dc;
+        const nRow = row + dr;
+        if (nCol < minCol || nCol > maxCol || nRow < minRow || nRow > maxRow) continue;
+        const k = clave(nCol, nRow);
+        if (muro.has(k) || vistas.has(k)) continue;
+        vistas.add(k);
+        pila.push([nCol, nRow]);
+      }
+    }
+    return objetivo.length > 0 && objetivo.every((c) => vistas.has(clave(c.col, c.row)));
+  }
+
+  it('con el recinto exterior completo, los candidatos DENTRO se devuelven antes que los de FUERA', () => {
+    const completo = conRecintoCompleto(7, 200, 1);
+    const recinto = completo.recintos![0]!;
+    // Mismas celdas bloqueadas en los dos casos (`celdasBloqueadasDeRecintos` no mira `avance`): la única
+    // diferencia es si el recinto cuenta como "completo" para `conPreferenciaIntramuros` — aísla el efecto de
+    // la preferencia del efecto de bloquear suelo, que ya tiene su propia cobertura en `murallas — la obra`.
+    const incompleto: Asentamiento = { ...completo, recintos: [{ ...recinto, avance: -1 }] };
+
+    const conPreferencia = sitiosParaTipo(completo, completo.edificios, 'almacen');
+    const sinPreferencia = sitiosParaTipo(incompleto, incompleto.edificios, 'almacen');
+
+    expect(conPreferencia.length).toBe(sinPreferencia.length); // mismo conjunto de candidatos, solo reordenado
+
+    const dentro = conPreferencia.filter((c) => esIntramuros(completo, recinto, c));
+    const fuera = conPreferencia.filter((c) => !esIntramuros(completo, recinto, c));
+    // Si la ciudad de fixture no partiera candidatos a los dos lados del anillo, esta prueba pasaría vacía sin
+    // demostrar nada — con eso se sabría que hay que cambiar de ciudad/tipo, no que la preferencia funciona.
+    expect(dentro.length, 'la ciudad de fixture debería tener candidatos DENTRO del anillo').toBeGreaterThan(0);
+    expect(fuera.length, 'la ciudad de fixture debería tener candidatos FUERA del anillo también').toBeGreaterThan(0);
+
+    // Partición estable: todo lo de dentro antes que lo de fuera, en el orden con preferencia.
+    const primerFuera = conPreferencia.findIndex((c) => !esIntramuros(completo, recinto, c));
+    const haySegundoDentroTrasElPrimerFuera = conPreferencia.slice(primerFuera).some((c) => esIntramuros(completo, recinto, c));
+    expect(haySegundoDentroTrasElPrimerFuera).toBe(false);
+
+    // Y de verdad cambia el orden respecto a no tener preferencia (si no, la prueba de arriba sería trivial
+    // porque `sinPreferencia` ya viniera casualmente ordenado igual).
+    expect(conPreferencia.map((c) => c.punto)).not.toEqual(sinPreferencia.map((c) => c.punto));
+  });
+
+  it('sin ningún recinto, no cambia nada respecto al comportamiento de antes de Paso 4', () => {
+    const a = ciudad(7, 200);
+    expect(sitiosParaTipo(a, a.edificios, 'almacen')).toEqual(sitiosParaTipo({ ...a, recintos: [] }, a.edificios, 'almacen'));
+  });
+});
+
+// --- Paso 5: el gate de nivel 4 exige un recinto completo, no el viejo edificio `muralla` (§13) ---
+describe('murallas — el gate de nivel 4 (Paso 5, §13)', () => {
+  function conNivel3YPoblacionDeNivel4(seed: number, ticks: number): Asentamiento {
+    const a = ciudad(seed, ticks);
+    return { ...a, nivel: 3, nivelActual: 3, poblacion: { ...a.poblacion, pesants: 1000, artesanos: 400 } };
+  }
+
+  it('sin ningún recinto, no sube a nivel 4 aunque la población lo permita', () => {
+    const a = conNivel3YPoblacionDeNivel4(99, 200);
+    expect(calcularNivelAsentamiento(a)).toBe(3);
+  });
+
+  it('con un recinto INCOMPLETO, tampoco sube', () => {
+    const conMuro = comprometerRecinto(conNivel3YPoblacionDeNivel4(99, 200), 1, instanteDeTest(200));
+    expect(calcularNivelAsentamiento(conMuro)).toBe(3);
+  });
+
+  it('con un recinto COMPLETO de nivel 1 (la empalizada, la más barata) ya basta para subir a nivel 4', () => {
+    const conMuro = comprometerRecinto(conNivel3YPoblacionDeNivel4(99, 200), 1, instanteDeTest(200));
+    const recinto = conMuro.recintos![0]!;
+    const completo: Asentamiento = { ...conMuro, recintos: [{ ...recinto, avance: recinto.celdas.length - 1 }] };
+    expect(calcularNivelAsentamiento(completo)).toBe(4);
+  });
+
+  it('progresoNivelAsentamiento informa el gate del recinto aparte de `edificiosFaltantes` (que ya no lo incluye)', () => {
+    const a = conNivel3YPoblacionDeNivel4(99, 200);
+    const progreso = progresoNivelAsentamiento(a);
+    expect(progreso.siguiente?.nivelObjetivo).toBe(4);
+    expect(progreso.siguiente?.edificiosFaltantes).toEqual([]); // ya no hay ningún EdificioTipo que exigir
+    expect(progreso.siguiente?.recinto).toEqual({ cumplido: false, nivelMinimoRequerido: 1 });
+
+    const conMuro = comprometerRecinto(a, 1, instanteDeTest(200));
+    const recinto = conMuro.recintos![0]!;
+    const completo: Asentamiento = { ...conMuro, recintos: [{ ...recinto, avance: recinto.celdas.length - 1 }] };
+    expect(progresoNivelAsentamiento(completo).siguiente?.recinto).toEqual({ cumplido: true, nivelMinimoRequerido: 1 });
   });
 });

@@ -85,7 +85,6 @@ const DORADOS: CasoDorado[] = [
   { tipo: 'puestoMercado', nivelInterno: 2, rotado: true, posicion: { x: 15, y: -9 }, huella: { x: 6, y: -12, ancho: 18, alto: 6 } },
   { tipo: 'puestoMercado', nivelInterno: 3, posicion: { x: 9, y: -9 }, huella: { x: 6, y: -12, ancho: 6, alto: 6 } },
   { tipo: 'maravilla', posicion: { x: 9, y: -9 }, huella: { x: 6, y: -12, ancho: 6, alto: 6 } },
-  { tipo: 'muralla', posicion: { x: 9, y: -9 }, huella: { x: 6, y: -12, ancho: 6, alto: 6 } },
   { tipo: 'plaza', posicion: { x: 12, y: -6 }, huella: { x: 6, y: -12, ancho: 12, alto: 12 } },
   { tipo: 'plazaDeArmas', posicion: { x: 12, y: -6 }, huella: { x: 6, y: -12, ancho: 12, alto: 12 } },
   { tipo: 'patioDeGremios', posicion: { x: 12, y: -6 }, huella: { x: 6, y: -12, ancho: 12, alto: 12 } },

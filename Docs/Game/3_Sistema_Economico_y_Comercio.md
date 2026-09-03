@@ -55,6 +55,10 @@ No hay un sistema que detecte explícitamente "cortar una ruta" como evento de g
 - NO hay reparación NPC tras derrota — la caravana simplemente se elimina si es capturada (el diseño original preveía reparación; simplificado en Fase 0).
 - **Amenaza NPC nueva — IMPLEMENTADO (a petición del usuario, ver Doc 1.9)**: campamentos de bandidos en bosques no reclamados atacan caravanas que pasen cerca, con la misma resolución de combate asimétrico que la intercepción entre Facciones, pero contra un bando NPC — ver Doc 1.9 para spawn, recompensa y reaparición, `engine/bandidos.ts` para la implementación.
 
+**ESCOLTA DE CARAVANAS — resuelta por la mecánica de ejércitos (2026-09-02, ver Doc 5.13.3).** La escolta que este apartado daba por no modelada ya tiene forma: una caravana puede ir **adjunta a un ejército** y hacer su entrega normal mientras marcha con él. Deja de defenderse con la defensa base fija y pasa a estar protegida por el poder de combate real del ejército. Se autoequilibra con la regla de velocidad (Doc 5.12.5): el ejército va al ritmo de su integrante más lento, así que escoltar una caravana comercial (16) frena a un ejército ligero (20) y le quita la capacidad de cazar otras caravanas — **no se puede escoltar y depredar a la vez**. Si el ejército es derrotado, la caravana escoltada se pierde con él.
+
+**LA INTERCEPCIÓN ES EMBOSCADA, NO PERSECUCIÓN** (hallazgo de la revisión por consejo, 2026-09-02): con las velocidades de tropa de Doc 5.12.5, solo un ejército de infantería **ligera** (20) supera a una caravana comercial (16) y puede darle caza. Un ejército medio (16) la iguala y uno pesado (12) no la alcanza jamás; el contrabando (24) escapa de todo. Interceptar con tropa pesada solo es posible **estando ya apostado en la ruta**, no persiguiendo.
+
 ## 3.11 Comercio marítimo — ❌ fuera de alcance (correcto, según diseño)
 Requiere tecnología de barcos + puertos. Nada implementado — consistente con que Fase 0 es 100% terrestre (eje naval pospuesto a fase completa).
 

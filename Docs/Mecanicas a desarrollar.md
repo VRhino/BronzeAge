@@ -1,6 +1,4 @@
 + Feature nuevas(indice)
-    7. [CONSTRUCCION] Revamp caminos
-    6. [CONSTRUCCION] murallas
     2. [GUERRA] movimiento de ejercitos por el mapa
     8. [CARAVANAS] mecanica caravanas.
     1. [MOTOR] mecanicas de taxes en los asentamientos, que es la generacion de oro en base a la poblacion y tipo de poblacion que vive en el asentamiento
@@ -15,48 +13,60 @@
 ## 2. Movimiento de ejercitos por el mapa
 Los ejércitos también se mueven por el mapa para atacar como las caravanas, con un símbolo q los identifique por ejemplo un rombo, uno por cada jugador q va en el ejército, uno detrás de otro medio superpuestos y cada rombo del color de su faccion.
 
+Las tropas son del JUGADOR, no del asentamiento — están apostadas ahí. En marcha no comen del granero: el
+ejército lleva su propio carro de suministros, y sin comida hay deserción y baja moral. El jugador sale solo
+(eligiendo qué tropas se lleva) o como parte de un ejército de varios jugadores que se mueve como una sola
+entidad. En ambos casos lo limita su **liderazgo**: cada tipo de tropa tiene un coste, y solo puede sacar lo
+que quepa en su valor.
+
+Se le pueden **adjuntar caravanas** para cargar más trigo del que suman los carros de sus jugadores, y esas
+caravanas pueden ir cargadas de mercancía — lo que resuelve de paso la **escolta de caravanas**, que estaba
+pendiente. Cada tropa tiene **velocidad propia** y el ejército va al ritmo de la más lenta, así que escoltar
+frena y no se puede escoltar y depredar a la vez. Una marcha se puede **cancelar**, lo que dispara la vuelta.
+
+> **Diseño cerrado (2026-09-01/02, 17 decisiones con el usuario + revisión por consejo, CERO código escrito).**
+> Sin puntos bloqueando el arranque.
+>
+> **Las reglas son canon y viven en `Docs/Game/`**: `5_Sistema_Militar_y_Combate.md` §5.11 (Liderazgo),
+> §5.12 (Ejércitos y movimiento por el mapa) y §5.13 (Suministro en campaña), más las entradas
+> *Escuadrón/Tropa/Unidad*, *Ejército*, *Guarnición*, *Huérfano* y *Liderazgo* del glosario. Doc 5.4 recoge
+> que los escuadrones son del Jugador, Doc 5.10 aclara que el movimiento en el mapa SÍ es Fase 0, y Doc 3.10
+> recoge la escolta de caravanas, que esta mecánica resuelve.
+>
+> **El cierre de decisiones y el plan de ejecución** (13 pasos con checkbox) están en
+> `Consideraciones/Movimiento_Ejercitos_Definicion.md`, junto con la **revisión por consejo** (§9): cinco
+> asesores + revisión cruzada, misma metodología que murallas. Encontró 9 hallazgos, 5 de los cuales
+> cambiaron reglas del juego (mulas de suministro, intercepción imposible por velocidad plana, guerra suma
+> negativa, cancelar marcha, jugador huérfano) y 4 el orden del plan.
+>
+> **Decisión abierta que salió al preguntar por qué se usa RNG** (§1.4 del doc de ejecución, regla en Doc
+> 5.2.5): la varianza de combate de ±15% nunca estuvo escrita en ningún documento, solo en el código, y
+> significa que un atacante necesita un 35% más de poder para tener la victoria asegurada. Esta mecánica
+> multiplica el coste de una mala tirada, y la niebla de guerra (§12) es una fuente de incertidumbre mejor
+> —reducible jugando bien— así que se replantea bajarla o retirarla. No bloquea el arranque.
+>
+> De la revisión salió además un dato que NO es de esta mecánica: **el ejército no es el problema del trigo**.
+> Un asentamiento nivel 1 a tope de población come 30/tick y una Granja nivel 1 produce 15 — nace en déficit
+> estructural, y en nivel 3 harían falta ~13 Granjas nivel 4. Es el cuello de botella de nivel 3 ya conocido.
+> Ver §9.4.
+>
+> La mecánica trae dos cosas que no estaban en el enunciado: la entidad **`Jugador`** (hoy inexistente en el
+> motor; `engine/combate.ts:143` ya la daba por pendiente "si llega a necesitar un propósito propio" — el
+> liderazgo es ese propósito) y el **liderazgo** como primer eje de progresión personal, lo que abre
+> parcialmente §11.
+>
+> El movimiento en sí sale casi gratis: `calcularRuta` + `avanzarPosicionEnRuta` ya mueven caravanas, y
+> `resolverCombate` ya recibe tropas planas sin saber de asentamientos. Lo caro es la propiedad de la tropa —
+> se va de verdad del asentamiento, y eso hace que "tu ciudad queda desnuda" se cumpla por construcción.
+>
+> Depende de §12 (niebla de guerra) solo para ver ejércitos AJENOS; los propios no la necesitan, así que no
+> bloquea.
+
 ## 3. Rutas Caravanas
 el pathfinder de las rutas para las caravanas debe buscar evitar bosques(rodearlos) o rios(no los puede atravesar).
 Cuando hay muchos caminos q pasan cerca en el mapa general debido a rutas de caravana se debería juntar para formar caminos unificados y si estos caminos para ir de A a C, está B justo en camino o cruza una zona de influencia de B, debe pasar por la ciudad B de camino a C y dejar una pequeña comisión, cuando una caravana está cruzando una una ciudad neutral o aliada no puede ser atacada
 
 cuadno se forma un manino se evalua la proximidad con otros camnios, cada otra caravana que use ese camino le agrega 1 punto, mientras mas puntos mas grande se ven en el mapa real y atrae con mas fuerza a oras rutas para que se desvien asi sea un poco de su camino, creando caminos principales.
-
-## 6. Murallas
-mecanica de murallas: que rodee todo el espacio interno de la ciudad ocupando celdas, cada celda de muralla tiene un coste, es decir q escala mientras más celdas tenga, deja granjas y corrales fuera.
-
-la murallas tienen mejora, el coste es de madera y piedra, al principio no se pueden apostar soldados arriba, pero con niveles mas altos si. al subir de nivel, la muralla, gana torres, puertas
-
-> **Diseño cerrado: `Consideraciones/Murallas_Definicion.md`** (2026-08-31, revisado por consejo).
-> Especificación completa — entidad `Recinto` persistida, trazo del anillo por dilatación, puertas
-> geométricas y congeladas, torres, tres niveles (empalizada → piedra → adarve), coste por celda con obra
-> progresiva, arrabal extramuros y ampliación de recinto. **CERO código escrito todavía.**
->
-> La razón de ser está en §0: la muralla es una ventaja defensiva abrumadora, y **menos puertas benefician al
-> defensor** (embudo). De ahí el eje estratégico: amurallar pronto = fortaleza barata con casi todo el
-> crecimiento futuro extramuros; amurallar tarde = metrópoli cara con más frente que cubrir. Por eso entran
-> ya en la primera pasada el multiplicador defensivo y el upkeep por celda: la ventaja tiene que ser difícil
-> de obtener Y de mantener.
->
-> Depende de §7 (calles como celdas): sin la geometría de celdas de la Etapa 6 esta mecánica no se puede
-> escribir. El `EdificioTipo 'muralla'` mínimo que existe hoy (1 celda, 2000 piedra, gate de nivel 4)
-> desaparece y lo sustituye el recinto.
-
-## 7. Revamp caminos
-Revamp la mecánica de colocación de edificios para tomar en cuenta los caminos como celdas y no aristas. Dado q cuando pase a de 2d a 3d el ser aristas causa problemas.
-
-Para el espacio relativo de el asentamiento queda igual solo q se representa diferente lo q antes era 1 celda ahora es 2x2 y lo demás crece en relacion
-
-> **Diseño cerrado y plan de ejecución: `Consideraciones/Vista_Asentamiento_Trazado_Urbano.md` → "Etapa 6"**
-> (§E6.1–E6.15), 2026-08-30. Especificación completa + las cinco decisiones cerradas con el usuario + el plan
-> por pasos con checkbox. **Paso 0 (línea base instrumentada en el batch) hecho; el resto pendiente.**
->
-> Al medir el modelo actual antes de diseñar, el problema resultó más grande que el motivo declarado: el 51%
-> de la red de calles es de **ancho cero** (aristas que corren por el muro compartido de dos edificios) y solo
-> el 33% de los edificios tiene frente de calle real. Las celdas arreglan el 3D de paso; lo que arreglan de
-> fondo es que la calle pase a **costar suelo**, que es la única presión capaz de producir manzanas de verdad.
->
-> Es además la pieza que condiciona a las otras dos mecánicas de construcción: §6 (murallas) necesita su
-> geometría de celdas, y §4 (políticas de ubicación) puntúa sobre el mismo trazado.
 
 ## 8. Revamp caravanas
 Cuando construyes tu primer mercado te cuesta 50 de oro y te da un carro de caravana de básica y un animal de arrastre

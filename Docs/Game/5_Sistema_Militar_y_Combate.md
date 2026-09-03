@@ -7,9 +7,19 @@ El jugador NO combate individualmente contra multitudes — asume el rol de HÉR
 El combate ocurre en INSTANCIAS separadas del mapa global (aunque se desencadenen en él), límites simétricos fijos, 2 bandos (Atacante/Defensor), sin empates.
 
 1. **Asedio de asentamientos**: atacante captura banderas/áreas vitales antes de que expire el tiempo; defensor gana resistiendo. Solo defienden miembros de la Facción soberana del nodo o Facciones aliadas/vasallas confirmadas. Mortalidad severa (permadeath). Jugadores en cola desde mundo abierto rellenan la instancia dinámicamente según bajas.
-2. **Mundo abierto**: choque de patrullas/ejércitos. Bandera/campamento transitorio; quien la pierde se retira, deja loot, sufre debuff temporal "Herido".
-3. **Defensa/intercepción de caravanas**: combate asimétrico móvil (ver Doc 3, sección 3.10).
+2. **Mundo abierto**: choque de patrullas/ejércitos. Bandera/campamento transitorio; quien la pierde se retira, deja loot, sufre debuff temporal "Herido". **No se declara: se produce por PROXIMIDAD entre dos ejércitos que se cruzan en el mapa** (5.12).
+3. **Defensa/intercepción de caravanas**: combate asimétrico móvil (ver Doc 3, sección 3.10). Igual que el anterior, se dispara por proximidad de un ejército a una caravana (5.12).
 4. **Entrenamiento/matchmaking** (POSPUESTO a fase posterior a Fase 0/1): 15v15 puro, sin permadeath, para probar tácticas. CONFIRMADO: pospuesto de forma explícita, requiere factores no disponibles en Fase 0 (mismo motivo que Attack Timer, ver 5.6).
+
+### 5.2.5 Resolución numérica y varianza de combate
+
+Regla vigente, que **hasta ahora solo existía en el código** y no estaba escrita en ningún documento (`resolverCombate`, `engine/combate.ts`; `MILITAR.varianzaCombate = 0.15`):
+
+Se suma el poder de cada bando y **se multiplica cada uno por un factor aleatorio de ±15%**. Gana quien saque el producto más alto. Cuanto más ajustado el resultado, más bajas sufre también el ganador; el perdedor siempre pierde más. El azar entra **una sola vez por bando y por combate** — no hay tiradas por unidad ni por ronda.
+
+**Qué implica ese ±15% en la práctica**: los multiplicadores van de 0.85 a 1.15, así que el cociente entre ambos bandos va de 0.74 a 1.35. Es decir, **un atacante necesita un 35% más de poder para tener la victoria garantizada**; por debajo de eso siempre puede perder. El comentario del código lo justifica como "romper empates", pero 15% por bando es varianza de combate real, no un desempate.
+
+> **DECISIÓN ABIERTA (2026-09-02): revisar esta varianza a la baja o retirarla.** El movimiento de ejércitos multiplica el coste de una mala tirada —marchar cuesta tiempo real, deja la ciudad indefensa, gasta el granero y las bajas son permanentes— y el juego ya tiene diseñada una fuente de incertidumbre mejor: la niebla de guerra (`Docs/Mecanicas a desarrollar.md` §12), que es incertidumbre **reducible jugando bien** en vez de un dado. Análisis completo y las tres opciones en `Consideraciones/Movimiento_Ejercitos_Definicion.md` §1.4.
 
 ## 5.3 Formaciones y cohesión táctica (heredado de Iberia)
 - Romper formación penaliza duro (ej. arqueros dispersos -30% precisión, escuderos aislados -20% defensa, lanceros sin formación pierden bono anti-carga). Flanquear/aislar formaciones enemigas es táctica válida.
@@ -17,9 +27,18 @@ El combate ocurre en INSTANCIAS separadas del mapa global (aunque se desencadene
 - Jugador novato: útil desde el día 1 con infantería básica de escudo barata ("carne de línea") mientras veteranos flanquean.
 
 ## 5.4 Ciclo de vida de unidades (heredado de Iberia)
+
+**Los escuadrones son del JUGADOR, no del asentamiento** (a petición del usuario, 2026-09-01 — cierra una ambigüedad que el modelo arrastraba: el asentamiento los contenía, así que parecía dueño de ellos). El asentamiento es donde están **apostados**, no quien los posee. Consecuencias:
+
+- Un asentamiento **conquistado** hace que sus jugadores **pierdan los escuadrones que estaban apostados ahí**; conservan solo los que llevaban encima en campaña (5.12). Los perdidos **no pasan al conquistador** — son personales de otro jugador, no botín transferible.
+- Sacar escuadrones a campaña los quita de la guarnición **de verdad**: dejan de defender y dejan de comer del granero (5.13).
+- **Un jugador al que le conquistan su asentamiento estando de campaña queda HUÉRFANO** (decisión del usuario, 2026-09-02): conserva los escuadrones que lleva encima, pero se queda sin residencia — sin sitio donde reabastecer, reclutar ni volver. Sigue huérfano **hasta que entre en una Facción nueva que tenga asentamiento**. No es una derrota definitiva: es un estado del que se sale por la vía política (Doc 2.5, ciudadanía), no por la militar.
+
+Ciclo de vida propiamente dicho:
+
 - PERMADEATH individual (excepto modo entrenamiento): bajas son permanentes.
 - El SQUAD (nombre, nivel veterano) persiste aunque el regimiento sea aniquilado — se puede rellenar con nuevos reclutas conservando el progreso.
-- DESERCIÓN POR HAMBRE: tropas consumen raciones continuamente; sin suministro, la moral colapsa y desertan permanentemente (mismo efecto que perderlas en combate).
+- DESERCIÓN POR HAMBRE: tropas consumen raciones continuamente; sin suministro, la moral colapsa y desertan permanentemente (mismo efecto que perderlas en combate). **Es la misma regla en guarnición y en campaña** — solo cambia de qué despensa se come (5.13).
 - **Población civil come ANTES que las Tropas** (rediseño, a petición del usuario — pensando en escala
   multijugador real: cantidad de jugadores por asentamiento y presión militar PvP crecen con el servidor,
   mientras que la producción de comida está acotada por espacio construido; ver
@@ -88,7 +107,7 @@ No hay árbol tecnológico abstracto — el tipo de unidad reclutable depende de
 
 ## 5.8 Roster de tropas (rediseño Fase 0: reclutamiento por edificio + nivel interno, ver Doc 4.2.1)
 
-**IMPLEMENTADO** (ver `constants.ts` `TROPAS_RECLUTABLES`, `engine/tropas.ts` `reclutarTropa`). Terminología (Doc 0/Glosario, igual criterio que Iberia): una **tropa** es el tipo de escuadrón que se recluta de una vez (ej. "Lanceros con escudo de mimbre"); una **unidad** es cada soldado individual dentro de una tropa. A diferencia de una versión anterior de esta sección, el número de unidades **NO lo elige el jugador** (ver "Unidades por defecto" más abajo) — cada tropa reclutada añade siempre el mismo tamaño de escuadrón fijo.
+**IMPLEMENTADO** (ver `constants.ts` `TROPAS_RECLUTABLES`, `engine/tropas.ts` `reclutarTropa`). Terminología (Doc 0/Glosario, **precisada 2026-09-02**): son tres conceptos y la jerarquía de entidades es **Jugador → Escuadrón → Unidad**. Una **tropa** es el TIPO (ej. "Lanceros con escudo de mimbre") y las tablas de abajo son su catálogo; un **escuadrón** es la instancia que un jugador posee y comanda; una **unidad** es cada soldado individual dentro de él. El número de unidades **NO lo elige el jugador** (ver "Unidades por defecto" más abajo) — cada escuadrón reclutado añade siempre el mismo tamaño fijo.
 
 El roster ya no se organiza por Tier abstracto (inspiración Total War Troy, foco Egeo/Grecia) — cada tropa se recluta en Centro Urbano, Barracón o Galería de tiro, según el NIVEL INTERNO del edificio (1-3, ver Doc 4.2.1; Centro Urbano no tiene niveles), pagando el equipo correspondiente fabricado en Armería (ver catálogo completo de recetas en Doc 4.2.1). "Costo" en las tablas de abajo es POR SOLDADO — el costo real de reclutar es ese valor × "Unidades". Cada tropa tiene además un `poderBase` (PLACEHOLDER, ver más abajo) usado en el cálculo de combate en vez del poderBase por tier del roster anterior.
 
@@ -144,3 +163,138 @@ El Gobernador puede decretar exilio de jugadores enemigos de su territorio; cost
 
 ## 5.10 Fuera de alcance de Fase 0
 Todo lo instanciado/visual (combate real en escena, formaciones renderizadas, modo entrenamiento, attack timer con UI) pertenece a Fase 1+. En Fase 0, el combate se resuelve como CÁLCULO/LOG DE TEXTO (quién gana, bajas resultantes), sin representación gráfica.
+
+**Precisión (2026-09-01):** lo que queda fuera es la ESCENA de batalla, no el mapa. El **movimiento de ejércitos por el mapa del mundo SÍ es Fase 0** (5.12): es desplazamiento sobre el mapa continuo con la misma maquinaria que ya mueve caravanas, no una instancia renderizada. Un ejército llega a su destino, y ahí el combate se sigue resolviendo como cálculo.
+
+## 5.11 Liderazgo (a petición del usuario, 2026-09-01)
+
+Cada Jugador tiene un valor de **Liderazgo**, y cada tropa (tipo) un **coste de Liderazgo**. Al salir a campaña, la suma de los costes de los escuadrones que ese Jugador se lleva no puede exceder su Liderazgo.
+
+**Es un límite de SALIDA, no de posesión.** Se pueden poseer muchos más escuadrones de los que se pueden sacar de una vez; lo que se queda forma la guarnición y defiende el asentamiento (5.12). Esto convierte "¿qué me llevo?" en la decisión central de cada campaña, y le da un propósito real a la guarnición, que antes era simplemente "todo lo que tienes".
+
+En un ejército de varios jugadores, **cada uno se valida contra SU propio Liderazgo, por separado**. No hay tope agregado del ejército: cuatro jugadores juntos sacan cuatro veces más.
+
+### 5.11.1 El coste depende del poder
+
+Decisión del usuario: **a mayor poder de la tropa, mayor coste de Liderazgo.** Se deriva del poder nominal completo del escuadrón —lo que se comanda son soldados, no estadísticas por soldado— en vez de escribirse a mano tropa por tropa:
+
+```
+coste de Liderazgo = poderBase × unidades × factor
+```
+
+Con Liderazgo base **50** y el factor anclado para que la Milicia de lanceros cueste **10**:
+
+| Tropa | poderBase | Unidades | Poder total | Coste |
+|---|---|---|---|---|
+| Milicia de lanceros | 2 | 25 | 50 | 10 |
+| Lanceros con escudo de mimbre | 3 | 20 | 60 | 12 |
+| Espadachines de espada corta de cobre | 4 | 20 | 80 | 16 |
+| Honderos | 5 | 25 | 125 | 25 |
+| Hacheros ligeros | 7 | 18 | 126 | 25 |
+| Escaramuzadores con jabalina | 8 | 20 | 160 | 32 |
+| Espadachines con espadas y escudos de bronce | 9 | 18 | 162 | 32 |
+| Hacheros armados | 12 | 15 | 180 | 36 |
+| Lanceros pesados micénicos | 14 | 15 | 210 | 42 |
+| Arqueros | 9 | 25 | 225 | 45 |
+| Arqueros con arco compuesto | 15 | 20 | 300 | 60 |
+
+Se deriva y no se escribe a mano porque `poderBase` sigue siendo PLACEHOLDER pendiente de calibración (5.8): once números escritos a mano se desincronizarían del poder en cuanto se calibre, una fórmula no.
+
+**Consecuencia buscada:** un escuadrón de Arqueros con arco compuesto (60) es **infielable** para un jugador sin progresión. La tropa de élite queda gateada detrás del Liderazgo, no solo detrás de recursos y edificios.
+
+**Contrapeso que sale del cruce con el suministro:** la ración es por SOLDADO y el coste de Liderazgo por PODER. Por punto de Liderazgo, la Milicia da 2.5 soldados y los Arqueros con arco compuesto 0.33 — las tropas baratas comen mucho más por punto gastado. Con el mismo carro, una horda barata tiene mucha menos autonomía que una fuerza de élite (5.13). El Liderazgo premia la calidad; el suministro castiga la cantidad.
+
+> El Liderazgo es **base + progresión**. La progresión en sí (cómo sube) es la mecánica de progreso de jugador, todavía sin diseñar — ver `Docs/Mecanicas a desarrollar.md` §11.
+
+## 5.12 Ejércitos y movimiento por el mapa (a petición del usuario, 2026-09-01)
+
+Los ejércitos se mueven por el mapa del mundo para atacar, igual que las caravanas: siguen una ruta que rodea el terreno costoso, y tardan en llegar.
+
+### 5.12.1 Las dos formas de salir son la misma entidad
+
+El Jugador puede salir **solo** (eligiendo qué escuadrones se lleva) o **como parte de un ejército de varios jugadores** que se mueve como una sola entidad. No son dos cosas distintas: **salir solo es un ejército de un participante**. Un solo concepto, las mismas reglas de movimiento, suministro y combate en ambos casos.
+
+Un Jugador **puede unirse a un ejército ya en campaña**, siempre que este pase por su asentamiento (si no, unirse sería teletransportar refuerzos). Al unirse aporta sus escuadrones —validados contra su propio Liderazgo— y su parte del carro de suministros.
+
+### 5.12.2 Identificación en el mapa
+
+Un ejército se dibuja como **rombos, uno por cada Jugador que va en él**, uno detrás de otro medio superpuestos, cada uno del color de su Facción. El rombo lo distingue del triángulo de caravana y del círculo de asentamiento.
+
+### 5.12.3 Un destino; los encuentros salen de la geometría
+
+Un ejército solo sabe **ir a un sitio** (un asentamiento o un punto del mapa). Todo lo demás se produce por proximidad, sin declararlo:
+
+- **Al llegar** a un asentamiento enemigo → asedio (5.2.1).
+- **Al cruzarse** con un ejército enemigo → combate en mundo abierto (5.2.2).
+- **Al pasar cerca** de una caravana enemiga → intercepción (5.2.3, Doc 3.10).
+
+Un ejército puede además quedarse **estacionado** en un punto indefinidamente — aparcar en un paso de montaña para cortarlo es una jugada legítima. Estacionado consume menos suministro que marchando, pero **nunca cero**.
+
+### 5.12.4 La guarnición es lo único que defiende
+
+Como los escuadrones que salen se van de verdad (5.4), **un asentamiento cuyos jugadores se llevaron todo queda indefenso**, y un asedio contra él lo conquista sin combate. Esta es la tensión central de la mecánica: atacar cuesta dejar la casa descubierta.
+
+**Y el premio justifica el riesgo** (decisión del usuario, 2026-09-02): conquistar entrega **un asentamiento completo y en funcionamiento**, y además **amplía los asentamientos de la Facción por encima del cupo de su nivel** (Doc Fase_0_5 §5). Conquistar es la única vía de crecer más allá del techo que marca el nivel de Facción — fundar sí respeta el cupo, conquistar no. Ese es el incentivo, y es lo que impide que la guerra sea un intercambio de pérdidas donde a nadie le compensa atacar.
+
+### 5.12.5 Velocidad
+
+**Un ejército es tan rápido como su escuadrón más lento** — mismo criterio que el usuario fijó para las caravanas (una caravana es tan rápida como su carro más lento). El terreno modula por encima de eso: cruzar colina o montaña cuesta más que el llano.
+
+**Cada tropa tiene velocidad propia** (decisión del usuario, 2026-09-02). Tres clases:
+
+| Clase | Tropas | Velocidad |
+|---|---|---|
+| **Ligera** | Milicia de lanceros, Honderos, Lanceros con escudo de mimbre, Escaramuzadores con jabalina | **20** |
+| **Media** | Espadachines de cobre, Espadachines de bronce, Hacheros ligeros, Arqueros | **16** |
+| **Pesada** | Hacheros armados, Lanceros pesados micénicos, Arqueros con arco compuesto | **12** |
+
+Las dos reglas que fijan esta tabla, ambas del usuario:
+
+1. **Una caravana inicial no puede ser más rápida que un ejército en movimiento.** La caravana comercial va a 16, así que ni siquiera un ejército medio se deja adelantar por ella.
+2. **Un jugador solo con infantería ligera tiene que poder alcanzar una caravana inicial.** Ligera 20 > comercial 16: la caza.
+
+Consecuencias que salen del `min` sin escribir ninguna regla más:
+
+- Un ejército **pesado (12) no alcanza a ninguna caravana**, y eso es correcto: un ejército de asedio no persigue mercaderes. La intercepción es cosa de tropa ligera.
+- **Meter un solo escuadrón pesado en una partida de incursión la frena a 12** y le quita la capacidad de cazar. Incursión y asedio pasan a ser composiciones distintas, no la misma fuerza con otra orden.
+- La caravana de **contrabando (24) sigue escapando de todo**, lo cual es deliberado: el contrabandista evade por diseño, y no es una caravana "inicial".
+
+### 5.12.6 Cancelar la marcha
+
+Una marcha en curso **se puede cancelar en cualquier momento**, y hacerlo **dispara la vuelta**: el ejército pasa a `regresando` y desanda su ruta hacia el asentamiento de origen. No se teletransporta ni se desvanece — volver cuesta el mismo camino que costó ir, y sigue comiendo del carro durante el regreso.
+
+## 5.13 Suministro en campaña (a petición del usuario, 2026-09-01)
+
+**Un ejército en marcha NO come del granero de su asentamiento.** Lleva su propio **carro de suministros** con la comida que consume mientras se mueve. Si se queda sin comida, la moral colapsa y los soldados desertan — exactamente la misma regla del hambre que en guarnición (5.4), solo cambia de qué despensa se come.
+
+- **Capacidad**: **FIJA e igual para todos los Jugadores** — es un carro, no una abstracción proporcional a lo que llevas. Se **suma** al formar ejército: un ejército de cuatro lleva cuatro carros.
+- **Carga**: al salir o al unirse, cada Jugador **toma del asentamiento**. Si el granero no llega, se sale con menos autonomía; no se bloquea la salida. Sacar un ejército **cuesta stock real** al asentamiento.
+- **Reabastecimiento en ruta**: al pasar por un asentamiento **propio**, siempre. Por uno **aliado**, solo si ese asentamiento tiene la opción activada. Por uno neutral u hostil, nunca.
+- **Regreso**: el sobrante **vuelve al almacén** del asentamiento de origen. **El carro NO se descarga en ruta ni en otro asentamiento** — si pudiera, el ejército sería un transporte de mercancías gratuito que dejaría sin sentido a las caravanas. Para mover carga está el punto siguiente.
+
+### 5.13.1 El radio operativo es la constante de diseño
+
+La capacidad del carro **no es un número elegido, es una consecuencia**. La regla que la fija (decisión del usuario, 2026-09-02):
+
+> **Un jugador solo, con su carro, tiene que poder recorrer al menos un cuarto del mapa ida y vuelta con la comida que carga.**
+
+Sobre el mapa de 2000×2000 eso son 1.000 unidades de recorrido. Una carga máxima de Liderazgo son ~70 soldados, que a velocidad ligera (20) tardan 50 ticks en ese trayecto y comen `70 × 0.15 × 50 = 525`. De ahí sale la capacidad del carro.
+
+Como la autonomía se mide en **ticks** y no en distancia, **la velocidad pasa a ser también un atributo logístico**: un ejército rápido cubre más mapa con la misma comida. Un ejército pesado tiene la mitad de alcance con el mismo carro — y por eso necesita caravanas.
+
+### 5.13.2 Caravanas adjuntas al ejército
+
+Un ejército puede llevar **caravanas adjuntas** que amplían su capacidad de carga más allá de la suma de los carros de sus jugadores. Es la forma de proyectar una campaña lejos sin depender de que se unan más jugadores.
+
+- La capacidad de una caravana es **igual o mayor que la del carro de un jugador** — si cargara menos, la caravana no tendría sentido como tren de suministros.
+- **Entran en el `min` de velocidad.** Una caravana comercial va a 16, así que adjuntarla baja un ejército ligero de 20 a 16 y **le quita la capacidad de cazar caravanas**. No se puede tener alcance profundo y velocidad de incursión a la vez.
+- **Cuestan comercio.** El cupo de caravanas de un Mercado es 2/4/6 según su nivel (Doc 3): enganchar la flota a un ejército es apagar tu comercio mientras dure la campaña.
+- **Si el ejército es derrotado, las caravanas adjuntas se pierden.** Eso convierte el tren de suministros en un objetivo militar de verdad: cortar la retaguardia gana campañas sin asaltar una muralla.
+
+### 5.13.3 Escolta de caravanas
+
+Una caravana adjunta **puede ir cargada de mercancía y hacer su entrega normal** mientras marcha con el ejército. Eso resuelve la escolta de caravanas, que estaba pendiente sin implementar (Doc 3.10): la caravana viaja protegida por el poder de combate del ejército en vez de por su defensa base fija.
+
+La misma regla de velocidad la equilibra sola: escoltar baja el ejército a la velocidad de la caravana, así que **no se puede escoltar y depredar a la vez**.
+
+> El carro de suministros y los carros/animales de tiro del revamp de caravanas (`Docs/Mecanicas a desarrollar.md` §8) son el mismo concepto físico; unificarlos queda para cuando esa mecánica se diseñe.

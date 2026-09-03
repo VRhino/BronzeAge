@@ -796,7 +796,7 @@ inseparable del Paso 2 (ver allí) y aterrizó con él.
 - [ ] Reescribir §1, §2, §3, §4, §5.2, §5.3, §6, §10, §11 y §12 al modelo de celdas y retirar el banner de
       "CERO código escrito" de la cabecera de la Etapa 6 y de §1
 
-### E6.16 Hallazgo del laboratorio: edificios sobre celdas de calle (ABIERTO)
+### E6.16 Hallazgo del laboratorio: edificios sobre celdas de calle (RESUELTO 2026-09-02)
 
 Al recuperar el laboratorio visual (`lab/`, ver más abajo) y correr su ciudad —seed 1, 200 ticks— aparecen
 **2 edificios pisando 6 celdas de calle**, violando el invariante de §E6.12 que la suite da por bueno. El test
@@ -845,6 +845,41 @@ vuelve un edificio construido encima de una calle.
 **Antes de arreglarlo hay que congelar el caso**: el fixture de `trazado.test.ts` (seed 99) no lo reproduce,
 así que el arreglo no tendría guardián. La ciudad del laboratorio (seed 1, 200 ticks) sí — conviene añadirla
 como segundo caso del test.
+
+---
+
+#### RESUELTO (2026-09-02) — salida 3, "revalidar antes de pagar"
+
+**El guardián apareció solo.** Al duplicar la producción base de Granja (rebalanceo de trigo, Doc Game 4.2.1)
+las ciudades crecen más, y `perfilesTrazado.test.ts` empezó a fallar con *"gremial: vivienda pisa la celda de
+calle -7,-5"*. Comprobado revirtiendo el cambio: sin 2x pasa, con 2x falla. **El 2x no introdujo el bug, lo
+hizo alcanzable por la suite** — que es justo lo que este apartado pedía antes de tocar nada.
+
+**Qué se implementó**: `pisaCalleComprometida` (`engine/construction.ts`), llamada dentro del bucle de commit
+**después** de las comprobaciones de cupo, tope y fondos, y **antes** de pagar. Recalcula `redDeCalles` sobre
+`[...edificiosBase, ...yaComprometidos, candidato]` — es decir, sobre el orden REAL en que va a quedar la
+ciudad — y si alguna celda del candidato cae sobre calle, lo descarta con un `continue`. Al ir después de las
+otras comprobaciones, corre como mucho `NECESIDADES.maximoEnCola` (4) veces por asentamiento y tick, no una
+por candidato propuesto.
+
+**Por qué basta con mirar el prefijo ya comprometido y no hay que revalidar a los anteriores** (esto es lo que
+hace viable la salida 3 y no estaba en el análisis original): `anadirConectadas` (`trazado.ts:433`) **nunca
+siembra calle sobre una celda ya ocupada**, y el replay marca las celdas de cada edificio como ocupadas ANTES
+de sembrar sus calles. Así que ningún edificio puede quedar bajo una calle nacida después de él. Validar cada
+candidato contra su prefijo es suficiente **y el resultado es estable** — no hace falta iterar a punto fijo.
+
+**Por qué no las otras salidas**: 1 y 2 cambian QUÉ se paga primero cuando no alcanza para todo, y eso es
+balance (el orden por score existe a propósito); 4 sería rediseñar el crecimiento emergente entero.
+
+**Coste medido: cero.** Batch de 15 facciones × 600 ticks, misma seed, antes y después del arreglo:
+`vivos`, `colapsados`, `pesantsMedia`, `viviendasMedia`, `granjasActivasMedia`, `conGateNivel2Cumplido`,
+`tropasVivas`, `manzanasCerradasMedia`, `edificiosConFrenteRealPct`, `componentesDeRedMedia` y
+`ocupacionNucleoPct` salen **idénticos**. El rechazo es raro; cuando dispara, evita la violación sin frenar la
+construcción.
+
+**Guardián permanente**: `src/engine/__tests__/edificiosSobreCalle.test.ts`, con la ciudad del laboratorio
+(**seed 1**, 200 ticks) que pedía este apartado, más las seeds 60 y 200. Verificado además a mano sobre 15
+seeds antes de recortar: ninguna ciudad superviviente pisa calle. 786/786 tests, `tsc --noEmit` limpio.
 
 
 ### E6.17 Las afueras crecen hacia AFUERA (corregido 2026-08-31)

@@ -869,15 +869,87 @@ toda la mecánica, y mezclarlos con la geometría haría ilegible cuál movió q
       Los contrapesos (todo crece extramuros, el nivel 3 es caro, el upkeep cobra siempre) se validan aquí.
       Mismo bloqueo que el punto anterior — sin batch que llegue a nivel 3, no hay datos que comprobar contra.
 
-#### Paso 4. Arrabal y presión intramuros — ⬜
-- [ ] Filtro intramuros con fallback (§9), sin tocar el orden lexicográfico de los perfiles
-- [ ] Medir `arrabalPct` y, sobre todo, **`ocupacionNucleoPct` y `manzanasCerradasMedia`**: la presión
-      intramuros es exactamente el tipo de cambio capaz de devolver la ciudad al coágulo que la Etapa 6 abrió
-- [ ] Decidir si hace falta `capCorredorArrabal` propio
+#### Paso 4. Arrabal y presión intramuros — ✅ completada 2026-09-01 (con el mismo límite de siempre)
+- [x] **Filtro intramuros con fallback** (§9): `conPreferenciaIntramuros` (`engine/trazado.ts`), aplicado dentro
+      de `sitiosParaTipo` a las dos rutas de sitio que devuelven una LISTA de candidatos —
+      Palacio/Almacén/Leñera y la atracción dura ancla-satélite (`sitiosPorAtraccionDura`); Granja/Corral
+      (siempre extramuros por diseño) y la creación de una ancla nueva (un único candidato, no una lista) se
+      quedan fuera a propósito. Es una PARTICIÓN ESTABLE (dentro primero, fuera después), no un término nuevo
+      del desempate — no toca el orden lexicográfico de los cuatro perfiles de §E6.23. Sin recinto exterior
+      completo, no-op exacto (probado). Reutiliza el mismo interior-de-recinto que `areaEncerradaDeRecinto`
+      (Paso 2c), pero reimplementado con claves de texto en `trazado.ts` en vez de importado de `muralla.ts`
+      (que usa claves numéricas y ya importa de `trazado.ts` — el import inverso habría creado un ciclo; misma
+      duplicación deliberada que ya tenían `celdasBloqueadasDeRecintos`/`celdasDePuertas`). 2 tests nuevos en
+      `muralla.test.ts` (con `almacen`, no `vivienda`: la ancla residencial activa a tick 200 ya suele haber
+      migrado ella misma al arrabal por el fix del Paso 2a, así que sus candidatos salen siempre fuera y no
+      prueban la partición — medido con un script de sondeo efímero, ya borrado).
+- [x] **Medir `arrabalPct`, `ocupacionNucleoPct` y `manzanasCerradasMedia`**: instrumentado en
+      `run-batch-sim.ts` (`arrabalPct` nuevo; los otros dos ya existían de la Etapa 6, pero `manzanasCerradas`
+      tenía el MISMO bug que `medirCalles` — llamaba a `redDeCalles` sin `recintos`, arreglado de paso). **En
+      el batch real sigue sin poder medirse**: mismo cuello de botella de nivel 3 que ya bloqueó Paso 2c/3b.
 
-#### Paso 5. Retirada del `muralla` viejo y gate de nivel 4 — ⬜
-- [ ] Los ocho puntos de §13, borrado de `partidas/`, y verificar en batch que las facciones NPC vuelven a
-      alcanzar el nivel 4
+      `scripts/medicion-arrabal.ts` (efímero) rodeó el bloqueo: materiales de sobra, un anillo nivel 1
+      comprometido justo cuando la ciudad toca su techo de nivel 2 (~tick 300), y ahí mismo se le da a mano el
+      `radioPotencial`/`nivel` de nivel 3 —da igual si nivel 3 es alcanzable jugando (issue ya documentado
+      aparte) para responder esta pregunta, que es qué le pasa al TRAZADO cuando la ciudad sigue creciendo
+      por delante de un anillo que ya no la sigue. Dos corridas del mismo seed (con muro vs. sin muro nunca),
+      3 seeds, hasta 1200 ticks (la población se estabiliza en 1200 pesants —techo de nivel 3— hacia el tick
+      700 en las 6 corridas):
+
+      | seed | `arrabalPct` final (con muro) | `ocupacionNucleoPct` control → con muro | `manzanasCerradas` control → con muro |
+      |---|---|---|---|
+      | 7  | 51.1% | 41.4 → 43.4 (+2.0) | 20 → 19 (−1) |
+      | 60 | 51.8% | 39.7 → 39.2 (−0.5) | 15 → 23 (+8) |
+      | 99 | 54.5% | 38.2 → 30.8 (**−7.4**) | 27 → 35 (+8) |
+
+      **El arrabal nace y crece de verdad**: 51-55% de los edificios urbanos terminan extramuros — ni se ahoga
+      contra `capCorredorUrbano` (12 celdas) ni necesita ayuda. **El riesgo 1 ("la presión intramuros devuelve
+      el coágulo") NO se confirma con estos datos**: `ocupacionNucleoPct` con muro es igual o MENOR que el
+      control sin muro en 2 de 3 seeds (hasta 7.4 puntos menos en la seed 99) — la preferencia intramuros
+      llena huecos existentes antes que amontonar, y en cuanto el núcleo se satura de verdad, desborda al
+      arrabal en vez de comprimirse. `manzanasCerradas` sí sube más con muro en 2 de 3 seeds (más manzanas
+      cerradas, calles más entrelazadas) — no está claro si es bueno, malo o neutro por sí solo (es un
+      guardián de regresión, no una métrica con dirección "mejor/peor"), pero no hay señal de colapso
+      (siempre > 0, sin caída a 0 componentes ni desconexión).
+
+      **Límite de esta medición, honesto**: es UN anillo nivel 1 comprometido pronto (tick 300, la ciudad más
+      pequeña posible que puede tener uno) con espacio de nivel 3 dado a mano, sobre 3 seeds — no una
+      ampliación, no un anillo tardío/grande, no una corrida de cientos de facciones. Es evidencia de que el
+      mecanismo FUNCIONA y no es catastrófico, no un veredicto de calibración final (eso es el Paso 6).
+- [x] **`capCorredorArrabal` propio: NO hace falta, por ahora**. Con `capCorredorUrbano` = 12 celdas el
+      arrabal alcanza 51-55% de los edificios urbanos en las tres seeds medidas — muy lejos de "ahogado". Si
+      el Paso 6 (playtest real, con ciudades más grandes y anillos más tardíos) encuentra lo contrario, la
+      palanca ya está identificada y aislada (§9); no hace falta tocar nada hasta entonces.
+
+#### Paso 5. Retirada del `muralla` viejo y gate de nivel 4 — ✅ completada 2026-09-01
+Los ocho puntos de §13, uno por uno:
+- [x] `domain/types.ts`: `'muralla'` fuera de `EdificioTipo` y de `TODOS_LOS_EDIFICIOS`.
+- [x] `constants.ts`: `muralla` fuera de `EDIFICIO_CATALOGO`.
+- [x] `NIVEL_ASENTAMIENTO.requisitos[4]`: `edificios: ['muralla']` → `edificios: [], recintoCompletoNivelMinimo: 1`
+      (nuevo campo). `calcularNivelAsentamiento` (engine/mantenimiento.ts) y `progresoNivelAsentamiento`
+      (engine/asentamientoQuery.ts) extendidos con `tieneRecintoCompletoDeNivelMinimo` — cualquier recinto
+      TERMINADO de nivel ≥ 1 basta, la empalizada barata cuenta igual que la muralla de piedra. El campo
+      nuevo de `progresoNivelAsentamiento.siguiente.recinto` (`{cumplido, nivelMinimoRequerido}`) es aparte de
+      `edificiosFaltantes` porque un `Recinto` no es un `EdificioTipo` — no cabía ahí.
+- [x] `scripts/run-batch-sim.ts`: `murallasActivas` (contaba `edificiosPorTipoYEstado(a,'muralla')`, ya
+      imposible de compilar) → `celdasMuroMedia` (nº medio de celdas de los recintos completos);
+      `asentamientosConRecintoCompleto`/`arrabalPct` ya existían de los Pasos 2c/4.
+- [x] `cliente/src/main.ts`, `cliente/src/ui/canvas.ts`, `lab/src/render.ts`, `lab/src/main.ts`,
+      `scripts/catalogo-edificios.ts`: etiqueta, color `#5a5a5a` y entradas de catálogo retiradas. El lab ya
+      tenía su "capa de muralla" propia desde el Paso 1 (dibujo del anillo con sus propios colores, aparte de
+      `EDIFICIO_COLOR`) — no había nada que mudar ahí, solo que borrar. `cliente/` todavía no dibuja recintos
+      en absoluto (ver Paso 6, "playtest en la interfaz"): no había nada de qué migrar tampoco.
+- [x] Gobernanza NPC: ya lo hacía `asegurarMuralla` desde el Paso 2c — este punto llegó resuelto.
+- [x] Partidas guardadas: `partidas/local.json` (snapshot local de desarrollo, sin usuarios reales) borrado.
+- [x] **Verificado en vivo**: laboratorio (traza + compromete un recinto nivel 2, sin errores de consola, el
+      catálogo de "Construcción manual" ya no ofrece Muralla) y servidor+cliente reales arrancados desde cero
+      (sin la partida borrada) — la leyenda de edificios del mapa tampoco la lista, cero errores.
+- [ ] **Verificar en batch que las facciones NPC vuelven a alcanzar nivel 4**: sigue bloqueado por el mismo
+      cuello de botella de nivel 3 que ya impidió medir esto en los Pasos 2c/3b/4 — ningún asentamiento del
+      batch llega ni siquiera a nivel 3, así que nivel 4 no es medible todavía. No es un problema nuevo de
+      este paso, es el mismo de siempre sin resolver aún (ver `task_0a505c6d`).
+- 8 tests nuevos en `muralla.test.ts` (`calcularNivelAsentamiento`/`progresoNivelAsentamiento` con y sin
+  recinto). Suite 779→783, `tsc` limpio en motor, cliente y laboratorio.
 
 #### Paso 6. Calibración — ⬜
 - [ ] Tarifas, `franjaDeRonda`, `pasoTorres`, `celdasPorMinuto`, `arrabalMinimo`, por playtest del laboratorio

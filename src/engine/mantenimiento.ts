@@ -3,6 +3,7 @@ import type { EventoCrudo } from '../domain/eventos';
 import { MANTENIMIENTO, NIVEL_ASENTAMIENTO, RESERVA_CONSTRUCCION } from '../constants';
 import { minutos, transcurrido, type Duracion, type Instante } from '../domain/tiempo';
 import { upkeepDeRecintos } from './muralla';
+import { integridadDeRecinto } from './trazado';
 
 /** Fase A5 — payloads de los eventos de este subsistema (ver `avanzarNivelAsentamiento`/`avanzarMantenimiento`). */
 export interface PayloadNivelSubio {
@@ -62,10 +63,21 @@ export function calcularNivelAsentamiento(asentamiento: Asentamiento): number {
       (tipo) => edificiosPorTipoYEstado(asentamiento, tipo as EdificioTipo).length > 0
     ).length;
     const cumpleEdificios = tiposConstruidos >= (requisito.edificiosMinimo ?? requisito.edificios.length);
-    if (!cumplePoblacion || !cumpleEdificios) break;
+    const cumpleRecinto =
+      requisito.recintoCompletoNivelMinimo === undefined || tieneRecintoCompletoDeNivelMinimo(asentamiento, requisito.recintoCompletoNivelMinimo);
+    if (!cumplePoblacion || !cumpleEdificios || !cumpleRecinto) break;
     nivel += 1;
   }
   return nivel;
+}
+
+/** ¿Tiene algún recinto TERMINADO (integridad 1) de al menos `nivelMinimo`? Paso 5 (§13): sustituye a
+ * `edificios: ['muralla']` en el gate de nivel 4 — un `Recinto` no es un `EdificioTipo`, así que el gate de
+ * nivel necesitaba su propia condición en vez de poder seguir contándolo como edificio. Cualquier recinto
+ * basta, no solo el exterior: uno interior de una ampliación (§10) nunca pierde su nivel ni su integridad.
+ */
+function tieneRecintoCompletoDeNivelMinimo(asentamiento: Asentamiento, nivelMinimo: number): boolean {
+  return (asentamiento.recintos ?? []).some((r) => r.nivel >= nivelMinimo && integridadDeRecinto(r) >= 1);
 }
 
 /**

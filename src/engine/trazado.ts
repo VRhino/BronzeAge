@@ -611,7 +611,6 @@ export const CATEGORIA_POR_TIPO: Partial<Record<EdificioTipo, CategoriaAsentamie
   barracon: 'militar',
   galeriaDeTiro: 'militar',
   carpinteria: 'militar',
-  muralla: 'militar',
   mercado: 'mercado',
   // Los puestos comparten el barrio del Mercado: así la acreción que ya existe (`distanciaAlBarrio`) los
   // agrupa alrededor de la pieza principal sola, sin ninguna regla nueva de "quedar pegados".
@@ -1738,7 +1737,104 @@ export function anclaActivaParaCategoria(
  *
  * Solo necesita `id` + `radioPotencial` de `asentamiento` (narrowing deliberado) para poder reutilizarse en
  * `engine/settlement.ts` durante la FUNDACIÓN, antes de que exista un `Asentamiento` completo.
+ *
+ * **Preferencia intramuros** (`Consideraciones/Murallas_Definicion.md` §9, Paso 4): con un recinto exterior
+ * completo, los candidatos urbanos (todo salvo Granja/Corral) que caen DENTRO se devuelven primero —
+ * `conPreferenciaIntramuros`, más abajo.
  */
+
+/**
+ * Interior de un recinto, en celdas — lo mismo que `region` en `trazarRecinto` (`engine/muralla.ts` §4), pero
+ * reconstruido de las celdas YA CONGELADAS del recinto en vez de recalculado del trazado actual (da el mismo
+ * resultado en cualquier tick posterior al compromiso, porque el anillo no cambia, §5.1).
+ *
+ * Vive AQUÍ, con claves de texto (`claveCelda`, el resto de este archivo) y no en `muralla.ts` (que ya tiene
+ * su propia versión con claves NUMÉRICAS por rendimiento en el camino caliente del trazo): `sitiosParaTipo`
+ * la necesita para la preferencia intramuros de abajo, y `muralla.ts` ya importa de este módulo — el import
+ * inverso crearía un ciclo. Es la misma duplicación deliberada que ya tienen `celdasBloqueadasDeRecintos`/
+ * `celdasDePuertas` frente a sus equivalentes internos de `muralla.ts`.
+ */
+function regionInteriorDeRecinto(edificios: Edificio[], recinto: Recinto): Set<string> | null {
+  const centro = edificiosInternos(edificios).find((e) => e.tipo === 'centroUrbano');
+  if (!centro) return null;
+  const semilla = celdasDeEdificio(centro)[0];
+  if (!semilla) return null;
+
+  const muro = new Set<string>(recinto.celdas.map((c) => claveCelda(c.col, c.row)));
+  let minCol = Infinity;
+  let maxCol = -Infinity;
+  let minRow = Infinity;
+  let maxRow = -Infinity;
+  for (const c of recinto.celdas) {
+    if (c.col < minCol) minCol = c.col;
+    if (c.col > maxCol) maxCol = c.col;
+    if (c.row < minRow) minRow = c.row;
+    if (c.row > maxRow) maxRow = c.row;
+  }
+  minCol -= 1;
+  maxCol += 1;
+  minRow -= 1;
+  maxRow += 1;
+
+  const vistas = new Set<string>([claveCelda(semilla.col, semilla.row)]);
+  const pila: Celda[] = [semilla];
+  while (pila.length > 0) {
+    const actual = pila.pop()!;
+    for (const [dc, dr] of VECINAS_ORTOGONALES) {
+      const col = actual.col + dc;
+      const row = actual.row + dr;
+      if (col < minCol || col > maxCol || row < minRow || row > maxRow) continue;
+      const k = claveCelda(col, row);
+      if (muro.has(k) || vistas.has(k)) continue;
+      vistas.add(k);
+      pila.push({ col, row });
+    }
+  }
+  return vistas;
+}
+
+/** El recinto EXTERIOR ya completo, si lo hay — el que de verdad delimita "intramuros" hoy. Recorre desde el
+ * final porque una ampliación (§10) puede dejar el más nuevo a medio construir mientras el viejo sigue en
+ * pie: mientras tanto, "intramuros" sigue siendo lo que el recinto viejo (completo) encierra. */
+function recintoExteriorCompleto(recintos: readonly Recinto[]): Recinto | undefined {
+  for (let i = recintos.length - 1; i >= 0; i--) {
+    if (integridadDeRecinto(recintos[i]!) >= 1) return recintos[i];
+  }
+  return undefined;
+}
+
+/**
+ * Preferencia intramuros (§9 del doc de murallas, Paso 4): con un recinto exterior completo, reordena los
+ * candidatos para que los que caen DENTRO vayan primero. Es un FILTRO CON FALLBACK, no un término más del
+ * desempate — añadir un criterio al orden lexicográfico existente rompería los cuatro perfiles de trazado de
+ * §E6.23, que son permutaciones exactas de ese orden. Dentro de cada grupo (dentro/fuera) el orden que ya
+ * traía `candidatos` —decidido por el perfil— no se toca: es una partición ESTABLE, no un criterio nuevo.
+ *
+ * Sin recinto completo, no-op: un asentamiento sin muro, o con uno todavía a medio cerrar, se comporta
+ * exactamente igual que antes de que esta función existiera.
+ */
+function conPreferenciaIntramuros(
+  candidatos: { punto: Point; rotado: boolean }[],
+  tipo: EdificioTipo,
+  nivelInterno: number | undefined,
+  edificios: Edificio[],
+  recintos: readonly Recinto[]
+): { punto: Point; rotado: boolean }[] {
+  const exterior = recintoExteriorCompleto(recintos);
+  if (!exterior) return candidatos;
+  const region = regionInteriorDeRecinto(edificios, exterior);
+  if (!region) return candidatos;
+
+  const dentro: { punto: Point; rotado: boolean }[] = [];
+  const fuera: { punto: Point; rotado: boolean }[] = [];
+  for (const candidato of candidatos) {
+    const celdas = celdasDeEdificio({ tipo, nivelInterno, posicion: candidato.punto, rotado: candidato.rotado });
+    const encerrado = celdas.length > 0 && celdas.every((c) => region.has(claveCelda(c.col, c.row)));
+    (encerrado ? dentro : fuera).push(candidato);
+  }
+  return [...dentro, ...fuera];
+}
+
 export function sitiosParaTipo(
   asentamiento: Pick<Asentamiento, 'id' | 'radioPotencial' | 'recintos'>,
   ocupados: Edificio[],
@@ -1772,7 +1868,7 @@ export function sitiosParaTipo(
   }
   if (tipo === 'palacio' || tipo === 'almacen' || tipo === 'lenera') {
     const candidatos = candidatosLibres(ORIGEN_RECT, asentamiento.radioPotencial, tamano, ocupadas, red, 0);
-    return aPunto(porDistanciaAlOrigen(candidatos, false));
+    return conPreferenciaIntramuros(aPunto(porDistanciaAlOrigen(candidatos, false)), tipo, nivelInterno, ocupados, asentamiento.recintos ?? []);
   }
 
   const categoria = CATEGORIA_POR_TIPO[tipo];
@@ -1800,7 +1896,8 @@ export function sitiosParaTipo(
   // con edificios afines ya construidos. `ampliado` (Líneas de Producción) lo ignora — esa política reordena
   // los candidatos por distancia a sus insumos, no por vecindad.
   const celdasAfines = ampliado ? new Set<string>() : celdasDeTiposAfines(ocupados, tipo, anclaInstancia.id);
-  return sitiosPorAtraccionDura(anclaInstancia, tamano, ocupadas, red, permitirRotacion, ampliado, celdasAfines, perfil);
+  const sitios = sitiosPorAtraccionDura(anclaInstancia, tamano, ocupadas, red, permitirRotacion, ampliado, celdasAfines, perfil);
+  return conPreferenciaIntramuros(sitios, tipo, nivelInterno, ocupados, asentamiento.recintos ?? []);
 }
 
 /** Las dos orientaciones de `tamanoAncla` a probar, en un orden sembrado de forma determinista por `semillaId`

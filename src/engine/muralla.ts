@@ -908,8 +908,10 @@ export function areaEncerradaDeRecinto(asentamiento: Asentamiento, recinto: Reci
 /**
  * Edificios URBANOS (no Granja/Corral, que están fuera del recinto por diseño desde el Paso 0 y no cuentan
  * como arrabal) que quedan FUERA del interior de `recinto` — el "extramuros" del gate de ampliación (§10).
+ * Exportada además para la medición de `arrabalPct` del Paso 4 (`scripts/run-batch-sim.ts`): mismo concepto,
+ * dos consumidores.
  */
-function edificiosExtramurosDe(asentamiento: Asentamiento, recinto: Recinto): number {
+export function edificiosExtramurosDe(asentamiento: Asentamiento, recinto: Recinto): number {
   const region = regionInteriorDeRecinto(asentamiento.edificios, recinto);
   if (!region) return 0;
   let cuenta = 0;

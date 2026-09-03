@@ -17,8 +17,8 @@ import {
   tamanoDeEdificio,
   integridadDeRecinto,
 } from '../src/engine/trazado';
-import { costoDeTrazo, areaEncerradaDeRecinto } from '../src/engine/muralla';
-import { PERFILES_TRAZADO, REJILLA_ASENTAMIENTO, SIMULACION, TRAZADO, type PerfilTrazado } from '../src/constants';
+import { costoDeTrazo, areaEncerradaDeRecinto, edificiosExtramurosDe } from '../src/engine/muralla';
+import { EDIFICIO_CATALOGO, PERFILES_TRAZADO, REJILLA_ASENTAMIENTO, SIMULACION, TRAZADO, type PerfilTrazado } from '../src/constants';
 import { instanteDeTick, isoDeInstante } from '../src/session/estado';
 
 /** Overrides por entorno para poder hacer pasadas cortas de humo sin esperar la corrida completa
@@ -50,6 +50,27 @@ if (PERFIL_FORZADO !== undefined) {
     throw new Error(`BATCH_PERFIL="${PERFIL_FORZADO}" no es un perfil válido (${PERFILES_TRAZADO.join(', ')}).`);
   }
   TRAZADO.perfilForzado = PERFIL_FORZADO as PerfilTrazado;
+}
+
+/**
+ * `BATCH_TRIGO_X=<n>`: multiplica la producción base de trigo de TODOS los niveles de Granja.
+ *
+ * Existe para el experimento de producción de 2026-09-02 (ver `Consideraciones/Movimiento_Ejercitos_Definicion.md`
+ * §9.4): la aritmética dice que un asentamiento nivel 1 a tope de población come 30 trigo/tick mientras una
+ * Granja nivel 1 produce 15, así que el asentamiento nace en déficit estructural y eso es ANTERIOR a los
+ * ejércitos. Esta palanca permite medir 1× / 2× / 3× con la misma seed sin tocar `constants.ts` entre
+ * corridas — mismo criterio que `BATCH_SIN_RECLUTAMIENTO`/`BATCH_SIN_ATAQUES`.
+ *
+ * Muta el catálogo, que es el punto ÚNICO de lectura (`produccionTrigoDeGranja`, constants.ts). Sin la
+ * variable no se toca nada y la corrida es idéntica a las de siempre.
+ */
+const TRIGO_X = Number(process.env['BATCH_TRIGO_X'] ?? 1);
+if (Number.isFinite(TRIGO_X) && TRIGO_X > 0 && TRIGO_X !== 1) {
+  const granja = EDIFICIO_CATALOGO.granja as { produccionBaseTrigo?: number; niveles?: Record<number, { produccionBaseTrigo?: number }> };
+  if (granja.produccionBaseTrigo !== undefined) granja.produccionBaseTrigo *= TRIGO_X;
+  for (const nivel of Object.values(granja.niveles ?? {})) {
+    if (nivel.produccionBaseTrigo !== undefined) nivel.produccionBaseTrigo *= TRIGO_X;
+  }
 }
 
 const TIPOS_EXTRACTOR = ['cantera', 'lenera', 'mina', 'minaCobre', 'minaEstano', 'corral'] as const;
@@ -175,7 +196,9 @@ function crearUnionFind() {
  * ahí, y esta métrica es lo que avisará si la reintroduce.
  */
 function manzanasCerradas(asentamiento: Asentamiento): number {
-  const red = redDeCalles(asentamiento.id, asentamiento.edificios);
+  // `recintos`: mismo fix que `medirCalles` (Paso 2c) — sin esto, en cuanto la gobernanza NPC amuralla algo,
+  // esta función seguiría contando calles sobre celdas que ahora son muro.
+  const red = redDeCalles(asentamiento.id, asentamiento.edificios, asentamiento.recintos);
   const celdas = new Set([...red.calles, ...red.caminos]);
   if (celdas.size === 0) return 0;
 
@@ -356,7 +379,6 @@ interface Foto {
   nivelesAsentamiento: Record<string, number>;
   artesanosTotal: number;
   edificiosTransformacionActivosTotal: number;
-  murallasActivas: number;
   palaciosActivos: number;
   conMercado: number;
   extraccionPorTipoActivosTotal: Record<string, number>;
@@ -417,6 +439,16 @@ interface Foto {
   /** Integridad media (0-1) de todos los recintos existentes, terminados o no — el pulso de "cuánta obra hay
    * en curso" del batch en un momento dado. */
   integridadRecintoMedia: number | null;
+  /** Nº medio de celdas de los recintos COMPLETOS (perímetro real) — sustituye a `murallasActivas` (Paso 5,
+   * §13: `muralla` ya no es un `EdificioTipo`, no hay nada que contar con `edificiosPorTipoYEstado`). */
+  celdasMuroMedia: number | null;
+  // --- Paso 4: arrabal y presión intramuros ---
+  /** % de edificios urbanos (no Granja/Corral) que quedan FUERA del recinto exterior completo, medido solo
+   * sobre asentamientos que tienen uno — un asentamiento sin recinto no aporta arrabal, contarlo como 0
+   * mentiría hacia abajo. Es la contraparte de `ocupacionNucleoPct`/`manzanasCerradasMedia` de más abajo: si
+   * la preferencia intramuros (§9) funciona, la presión que no cabe dentro debería aparecer aquí, no
+   * acumularse como coágulo del núcleo. */
+  arrabalPct: number | null;
 }
 
 function construirFotoResumen(
@@ -451,7 +483,6 @@ function construirFotoResumen(
   const nivelesAsentamiento: Record<string, number> = { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 };
   let artesanosTotal = 0;
   let edificiosTransformacionActivosTotal = 0;
-  let murallasActivas = 0;
   let palaciosActivos = 0;
   let conMercado = 0;
   let conGateNivel2Cumplido = 0;
@@ -489,6 +520,10 @@ function construirFotoResumen(
   let asentamientosConRecintoCompleto = 0;
   let integridadRecintoSuma = 0;
   let integridadRecintoN = 0;
+  let celdasMuroSuma = 0;
+  let celdasMuroN = 0;
+  let arrabalSuma = 0;
+  let arrabalN = 0;
 
   for (const a of estado.asentamientos) {
     const nivel = nivelActualDe(a);
@@ -496,7 +531,6 @@ function construirFotoResumen(
     artesanosTotal += a.poblacion.artesanos;
     edificiosTransformacionActivosTotal +=
       edificiosPorTipoYEstado(a, 'curtiduria').length + edificiosPorTipoYEstado(a, 'armeria').length + edificiosPorTipoYEstado(a, 'fundicion').length;
-    murallasActivas += edificiosPorTipoYEstado(a, 'muralla').length;
     palaciosActivos += edificiosPorTipoYEstado(a, 'palacio').length;
     if (tieneMercadoActivo(a)) conMercado++;
     if (calcularNivelAsentamiento(a) >= 2) conGateNivel2Cumplido++;
@@ -526,6 +560,22 @@ function construirFotoResumen(
       for (const r of recintos) {
         integridadRecintoSuma += integridadDeRecinto(r);
         integridadRecintoN++;
+        if (integridadDeRecinto(r) >= 1) {
+          celdasMuroSuma += r.celdas.length;
+          celdasMuroN++;
+        }
+      }
+
+      // --- Arrabal (Paso 4) — solo tiene sentido con el recinto EXTERIOR completo: es lo que activa la
+      // preferencia intramuros (`conPreferenciaIntramuros`, engine/trazado.ts) y por tanto lo único que
+      // podría estar empujando edificios afuera en vez de apretarlos dentro.
+      const exterior = recintos[recintos.length - 1]!;
+      if (integridadDeRecinto(exterior) >= 1) {
+        const urbanos = edificiosInternos(a.edificios).filter((e) => !esDeAfueras(e.tipo)).length;
+        if (urbanos > 0) {
+          arrabalSuma += (edificiosExtramurosDe(a, exterior) / urbanos) * 100;
+          arrabalN++;
+        }
       }
     }
 
@@ -599,7 +649,6 @@ function construirFotoResumen(
     nivelesAsentamiento,
     artesanosTotal,
     edificiosTransformacionActivosTotal,
-    murallasActivas,
     palaciosActivos,
     conMercado,
     extraccionPorTipoActivosTotal,
@@ -630,6 +679,8 @@ function construirFotoResumen(
     asentamientosConRecinto,
     asentamientosConRecintoCompleto,
     integridadRecintoMedia: media(integridadRecintoSuma, integridadRecintoN),
+    celdasMuroMedia: media(celdasMuroSuma, celdasMuroN),
+    arrabalPct: media(arrabalSuma, arrabalN),
   };
 }
 

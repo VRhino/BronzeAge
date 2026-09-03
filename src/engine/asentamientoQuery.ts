@@ -11,6 +11,7 @@ import {
 } from '../constants';
 import { cupoCaravanaExtra, factorProduccionTrigo } from './politicas';
 import { mejorFertilidadEnZona } from './zones';
+import { integridadDeRecinto } from './trazado';
 
 /** Nivel ACTUAL / operativo (Doc Fase_0_5 §6.2): gates de construcción/mejora/reclutamiento/expansión leen
  * este valor, no `asentamiento.nivel` (nivelAlcanzado) directamente — `nivelActual` puede bajar tras un
@@ -142,6 +143,10 @@ export interface ProgresoNivelAsentamiento {
      * de tipo "al menos N de M" (Doc Fase_0_6, nivel 2: 3 de 6 edificios de extracción). */
     edificiosConstruidos: number;
     edificiosRequeridos: number;
+    /** Gate del recinto de muralla (Paso 5, §13 del doc) — ausente si el nivel objetivo no lo exige. Un
+     * `Recinto` no es un `EdificioTipo`, así que no cabe en `edificiosFaltantes`; el laboratorio y el
+     * cliente lo muestran aparte ("recinto completo, nivel ≥ N"). */
+    recinto?: { cumplido: boolean; nivelMinimoRequerido: number };
   };
 }
 
@@ -160,6 +165,7 @@ export function progresoNivelAsentamiento(asentamiento: Asentamiento): ProgresoN
   const edificiosFaltantes = requisito.edificios.filter(
     (tipo) => edificiosPorTipoYEstado(asentamiento, tipo as EdificioTipo).length === 0
   );
+  const nivelMinimoRequerido = requisito.recintoCompletoNivelMinimo;
   return {
     nivel: asentamiento.nivel,
     esMaximo: false,
@@ -170,6 +176,14 @@ export function progresoNivelAsentamiento(asentamiento: Asentamiento): ProgresoN
       edificiosFaltantes,
       edificiosConstruidos: requisito.edificios.length - edificiosFaltantes.length,
       edificiosRequeridos: requisito.edificiosMinimo ?? requisito.edificios.length,
+      ...(nivelMinimoRequerido === undefined
+        ? {}
+        : {
+            recinto: {
+              cumplido: (asentamiento.recintos ?? []).some((r) => r.nivel >= nivelMinimoRequerido && integridadDeRecinto(r) >= 1),
+              nivelMinimoRequerido,
+            },
+          }),
     },
   };
 }

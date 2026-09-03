@@ -29,7 +29,7 @@ exports[`snapshot de regresión general > resumen del estado en ticks de referen
             "recurso": "piedra",
           },
           {
-            "cantidad": 107.29,
+            "cantidad": 116.58,
             "recurso": "trigo",
           },
           {
@@ -94,7 +94,7 @@ exports[`snapshot de regresión general > resumen del estado en ticks de referen
             "recurso": "piedra",
           },
           {
-            "cantidad": 166.72,
+            "cantidad": 196.7,
             "recurso": "trigo",
           },
           {
@@ -135,9 +135,9 @@ exports[`snapshot de regresión general > resumen del estado en ticks de referen
     "asentamientos": [
       {
         "edificios": {
-          "almacen:activo": 3,
+          "almacen:activo": 4,
           "centroUrbano:activo": 1,
-          "granja:activo": 3,
+          "granja:activo": 1,
           "lenera:activo": 3,
           "vivienda:activo": 13,
           "vivienda:en_construccion": 1,
@@ -148,11 +148,11 @@ exports[`snapshot de regresión general > resumen del estado en ticks de referen
         "poblacion": {
           "artesanos": 0,
           "nobleza": 0,
-          "pesants": 172,
+          "pesants": 175,
         },
         "recursosClave": [
           {
-            "cantidad": 467.4,
+            "cantidad": 477.33,
             "recurso": "madera",
           },
           {
@@ -160,7 +160,7 @@ exports[`snapshot de regresión general > resumen del estado en ticks de referen
             "recurso": "piedra",
           },
           {
-            "cantidad": 829.3,
+            "cantidad": 1382.8,
             "recurso": "trigo",
           },
           {
@@ -225,7 +225,7 @@ exports[`snapshot de regresión general > resumen del estado en ticks de referen
             "recurso": "piedra",
           },
           {
-            "cantidad": 224.59,
+            "cantidad": 267.18,
             "recurso": "trigo",
           },
           {
@@ -266,7 +266,7 @@ exports[`snapshot de regresión general > resumen del estado en ticks de referen
     "asentamientos": [
       {
         "edificios": {
-          "almacen:activo": 1,
+          "almacen:activo": 2,
           "centroUrbano:activo": 1,
           "granja:activo": 1,
           "lenera:activo": 3,
@@ -283,7 +283,7 @@ exports[`snapshot de regresión general > resumen del estado en ticks de referen
         },
         "recursosClave": [
           {
-            "cantidad": 312.87,
+            "cantidad": 262.87,
             "recurso": "madera",
           },
           {
@@ -291,7 +291,7 @@ exports[`snapshot de regresión general > resumen del estado en ticks de referen
             "recurso": "piedra",
           },
           {
-            "cantidad": 424.46,
+            "cantidad": 706.31,
             "recurso": "trigo",
           },
           {

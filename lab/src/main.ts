@@ -48,7 +48,7 @@ const RECURSOS_LAB: RecursoTipo[] = [
 const TIPOS_CONSTRUIBLES_MANUAL: EdificioTipo[] = [
   'vivienda', 'granja', 'cantera', 'lenera', 'almacen', 'mina', 'minaCobre', 'minaEstano',
   'fundicion', 'granFundicion', 'corral', 'armeria', 'curtiduria', 'carpinteria', 'palacio',
-  'barracon', 'galeriaDeTiro', 'mercado', 'maravilla', 'muralla',
+  'barracon', 'galeriaDeTiro', 'mercado', 'maravilla',
 ];
 
 /** Minutos de mundo que le quedan a una obra. Desde la Fase D3 el plazo es una FECHA absoluta
