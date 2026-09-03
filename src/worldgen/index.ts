@@ -21,7 +21,7 @@ import { createRng } from './rng';
 import { WORLDGEN_VERSION, type MapaGenerado } from './types';
 
 export { evaluarBioma } from './biomas';
-export { costeEnPunto } from './costeMovimiento';
+export { costeEnPunto, esTransitable } from './costeMovimiento';
 export { evaluarElevacion, evaluarTerreno, gradienteElevacion } from './elevacion';
 export { evaluarFertilidad } from './fertilidad';
 export { distanciaARioMasCercano } from './rios';

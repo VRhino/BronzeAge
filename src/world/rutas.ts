@@ -21,6 +21,17 @@ const ESPACIADO_MALLA = 45;
  * usado como heurística admisible de A* (nunca sobreestima el coste real restante). */
 const COSTE_MINIMO_POR_UNIDAD = 1;
 
+/** ¿El segmento recto entre dos puntos se mantiene en tierra? Muestrea a `ESPACIADO_MALLA/3`, suficiente
+ * para el único caso que lo usa: tramos más cortos que una celda de la malla. */
+function tramoTransitable(mapa: Mapa, a: Point, b: Point): boolean {
+  const pasos = Math.max(1, Math.ceil(distancia(a, b) / (ESPACIADO_MALLA / 3)));
+  for (let i = 0; i <= pasos; i++) {
+    const t = i / pasos;
+    if (!mapa.esTransitable({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t })) return false;
+  }
+  return true;
+}
+
 /** Vecinos en 8 direcciones de la malla (col, fila). */
 const VECINOS: readonly [number, number][] = [
   [1, 0], [-1, 0], [0, 1], [0, -1],
@@ -78,22 +89,51 @@ class ColaPrioridad {
 }
 
 /**
- * Ruta de coste mínimo entre dos puntos, evitando terreno costoso (`Mapa.costeEnPunto`, ver
- * `worldgen/costeMovimiento.ts`). A* sobre una malla 8-conexa muestreada solo dentro de la caja
- * origen-destino (con margen) — nunca sobre el mapa completo. Determinista dados `origen`/`destino`/el
- * mundo, pero NO forma parte del contrato de generación (no consume el PRNG, no depende de la seed más que
- * a través del propio `Mapa`).
+ * Ruta de coste mínimo entre dos puntos, evitando terreno costoso (`Mapa.costeEnPunto`) y **rodeando el
+ * agua, que es infranqueable** (`Mapa.esTransitable`, a petición del usuario 2026-09-02). A* sobre una malla
+ * 8-conexa muestreada solo dentro de la caja origen-destino (con margen) — nunca sobre el mapa completo.
+ * Determinista dados `origen`/`destino`/el mundo, pero NO forma parte del contrato de generación (no consume
+ * el PRNG, no depende de la seed más que a través del propio `Mapa`).
  *
- * Devuelve `[origen, ..., destino]`. Si origen y destino caen en la misma celda de la malla (distancia menor
- * que `ESPACIADO_MALLA`), o si por lo que sea A* no encuentra camino (no debería pasar: la malla es
- * conexa y todo coste es finito), cae a la línea recta `[origen, destino]`.
+ * Devuelve `[origen, ..., destino]`, o **`undefined` si no hay camino por tierra**: origen o destino sobre
+ * agua, o ninguna ruta que los una sin cruzarla (una isla, una península cortada).
+ *
+ * **Antes caía a la línea recta cuando no encontraba camino**, y eso ya no vale: con el agua infranqueable,
+ * una recta de reserva sería precisamente una ruta a través del mar. Cada llamador decide qué significa "no
+ * hay ruta" — rechazar la movilización, no despachar la caravana, no trazar el camino comercial— pero
+ * ninguno puede seguir adelante como si nada.
  */
-export function calcularRuta(mapa: Mapa, origen: Point, destino: Point): Point[] {
-  const distanciaDirecta = distancia(origen, destino);
-  if (distanciaDirecta < ESPACIADO_MALLA) return [origen, destino];
+export function calcularRuta(mapa: Mapa, origen: Point, destino: Point): Point[] | undefined {
+  // Ni el punto de partida ni el de llegada pueden estar en el agua, se busque la ruta que se busque.
+  if (!mapa.esTransitable(origen) || !mapa.esTransitable(destino)) return undefined;
 
+  const distanciaDirecta = distancia(origen, destino);
+  if (distanciaDirecta < ESPACIADO_MALLA) {
+    // Demasiado cerca para mallar, pero el tramo recto todavía puede cruzar una lengua de agua: se comprueba
+    // muestreando, que es más barato que montar la malla para tan poca distancia.
+    return tramoTransitable(mapa, origen, destino) ? [origen, destino] : undefined;
+  }
+
+  // Primero la caja ajustada de siempre, que es la barata y resuelve el caso normal.
+  const ajustada = buscarEnCaja(mapa, origen, destino, Math.max(200, distanciaDirecta * 0.15));
+  if (ajustada) return ajustada;
+
+  // Y si ahí no aparece, se reintenta sobre el MAPA ENTERO antes de rendirse.
+  //
+  // Hace falta desde que el agua es infranqueable: un rodeo legítimo puede salirse de la caja ajustada —una
+  // bahía que obliga a subir mucho más al norte que el margen— y antes daba igual, porque no encontrar
+  // camino caía a la línea recta. Ahora "no encontrado" significa rechazar el viaje, así que hay que estar
+  // seguro de que de verdad no lo hay. Es barato: a `ESPACIADO_MALLA` = 45, un mapa de 2000×2000 son ~1.900
+  // celdas, y solo se paga cuando la búsqueda ajustada ya ha fallado.
   const { ancho, alto } = mapa.limites;
-  const margen = Math.max(200, distanciaDirecta * 0.15);
+  return buscarEnCaja(mapa, origen, destino, Math.max(ancho, alto));
+}
+
+/** A* sobre la malla muestreada en la caja origen-destino ampliada por `margen`. `undefined` si no hay
+ * camino POR TIERRA dentro de esa caja — no distingue "no existe" de "no cabe en la caja"; eso lo resuelve
+ * `calcularRuta` reintentando sobre el mapa entero. */
+function buscarEnCaja(mapa: Mapa, origen: Point, destino: Point, margen: number): Point[] | undefined {
+  const { ancho, alto } = mapa.limites;
   const minX = Math.max(0, Math.min(origen.x, destino.x) - margen);
   const minY = Math.max(0, Math.min(origen.y, destino.y) - margen);
   const maxX = Math.min(ancho, Math.max(origen.x, destino.x) + margen);
@@ -122,6 +162,17 @@ export function calcularRuta(mapa: Mapa, origen: Point, destino: Point): Point[]
       costeCache.set(clave, c);
     }
     return c;
+  };
+
+  const transitableCache = new Map<string, boolean>();
+  const transitableDeCelda = (col: number, fila: number): boolean => {
+    const clave = `${col},${fila}`;
+    let t = transitableCache.get(clave);
+    if (t === undefined) {
+      t = mapa.esTransitable(colFilaAPunto(col, fila));
+      transitableCache.set(clave, t);
+    }
+    return t;
   };
 
   const abiertos = new ColaPrioridad();
@@ -162,6 +213,8 @@ export function calcularRuta(mapa: Mapa, origen: Point, destino: Point): Point[]
       if (!dentroDeLaMalla(col, fila)) continue;
       const clave = `${col},${fila}`;
       if (visitados.has(clave)) continue;
+      // El agua no se cruza: la celda no entra en la frontera, en vez de entrar con coste alto.
+      if (!transitableDeCelda(col, fila)) continue;
 
       const distanciaPaso = Math.hypot(dCol, dFila) * ESPACIADO_MALLA;
       const costeVecino = costeDeCelda(col, fila);
@@ -176,7 +229,8 @@ export function calcularRuta(mapa: Mapa, origen: Point, destino: Point): Point[]
     }
   }
 
-  if (!encontrado) return [origen, destino];
+  // Sin camino por tierra. NO se cae a la recta: sería una ruta por el agua (ver cabecera).
+  if (!encontrado) return undefined;
 
   const puntos: Point[] = [];
   let claveActual: string | null = claveDestino;

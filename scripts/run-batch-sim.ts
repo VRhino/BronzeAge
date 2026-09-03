@@ -18,7 +18,7 @@ import {
   integridadDeRecinto,
 } from '../src/engine/trazado';
 import { costoDeTrazo, areaEncerradaDeRecinto, edificiosExtramurosDe } from '../src/engine/muralla';
-import { EDIFICIO_CATALOGO, PERFILES_TRAZADO, REJILLA_ASENTAMIENTO, SIMULACION, TRAZADO, type PerfilTrazado } from '../src/constants';
+import { EDIFICIO_CATALOGO, PERFILES_TRAZADO, SIMULACION, TRAZADO, type PerfilTrazado } from '../src/constants';
 import { instanteDeTick, isoDeInstante } from '../src/session/estado';
 
 /** Overrides por entorno para poder hacer pasadas cortas de humo sin esperar la corrida completa
@@ -719,6 +719,7 @@ async function main() {
     asentamientos,
     facciones,
     caravanas: [],
+    ejercitos: [],
     acuerdos: [],
     ordenes: [],
     relaciones: [],
@@ -767,6 +768,12 @@ async function main() {
       caravanasFundacionLanzadasAcumuladas += trasNpc.stats.caravanasFundacionLanzadas;
     } catch (err) {
       excepcionesAcumuladas++;
+      // `BATCH_MOSTRAR_ERRORES=1` imprime las 3 primeras. Añadido tras perder un rato con un batch que daba
+      // 600 excepciones silenciosas: el contador dice QUE algo falla, nunca QUÉ, y sin esto hay que
+      // instrumentar a mano cada vez.
+      if (process.env['BATCH_MOSTRAR_ERRORES'] === '1' && excepcionesAcumuladas <= 3) {
+        console.error('EXCEPCION:', err instanceof Error ? err.message : String(err));
+      }
     }
 
     const idsVivosAhora = new Set(estado.asentamientos.map((a) => a.id));

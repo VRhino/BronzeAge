@@ -57,6 +57,8 @@ No hay un sistema que detecte explícitamente "cortar una ruta" como evento de g
 
 **ESCOLTA DE CARAVANAS — resuelta por la mecánica de ejércitos (2026-09-02, ver Doc 5.13.3).** La escolta que este apartado daba por no modelada ya tiene forma: una caravana puede ir **adjunta a un ejército** y hacer su entrega normal mientras marcha con él. Deja de defenderse con la defensa base fija y pasa a estar protegida por el poder de combate real del ejército. Se autoequilibra con la regla de velocidad (Doc 5.12.5): el ejército va al ritmo de su integrante más lento, así que escoltar una caravana comercial (16) frena a un ejército ligero (20) y le quita la capacidad de cazar otras caravanas — **no se puede escoltar y depredar a la vez**. Si el ejército es derrotado, la caravana escoltada se pierde con él.
 
+**LAS CARAVANAS TAMPOCO CRUZAN EL AGUA** (2026-09-02, ver Doc 1.0b): si no hay ruta por tierra entre origen y destino, la caravana **no sale** y la carga se queda en el almacén; el camino comercial tampoco se traza. Aplica igual a las Caravanas de Fundación, que además no pueden fundar en un punto inalcanzable. Comerciar entre dos costas enfrentadas exigiría comercio marítimo, que sigue fuera de alcance (3.11).
+
 **LA INTERCEPCIÓN ES EMBOSCADA, NO PERSECUCIÓN** (hallazgo de la revisión por consejo, 2026-09-02): con las velocidades de tropa de Doc 5.12.5, solo un ejército de infantería **ligera** (20) supera a una caravana comercial (16) y puede darle caza. Un ejército medio (16) la iguala y uno pesado (12) no la alcanza jamás; el contrabando (24) escapa de todo. Interceptar con tropa pesada solo es posible **estando ya apostado en la ruta**, no persiguiendo.
 
 ## 3.11 Comercio marítimo — ❌ fuera de alcance (correcto, según diseño)

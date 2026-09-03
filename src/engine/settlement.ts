@@ -69,10 +69,10 @@ export interface ViabilidadFundacion {
   bosqueAlcanzable: boolean;
   /** Nodos de recurso que caen dentro del radio inicial, agrupados por tipo. */
   recursosEnRadio: { tipo: string; nodos: number }[];
-  /** `false` si el terreno es 'cima' (Fase 0.1) — banda de elevación más alta, inhabitable. */
+  /** `false` si el terreno es 'cima' (banda de elevación más alta) o 'agua' — inhabitables. */
   terrenoValido: boolean;
   /** Se puede fundar aquí (lo que valida `fundarAsentamiento`): dentro del mapa, sin solapar otra zona y en
-   * terreno habitable (no 'cima'). */
+   * terreno habitable (ni 'cima' ni 'agua'). */
   fundable: boolean;
   /** Además de fundable, el emplazamiento es SOSTENIBLE (tiene madera al alcance). */
   recomendable: boolean;
@@ -97,8 +97,14 @@ export function evaluarViabilidadFundacion(
 ): ViabilidadFundacion {
   const enMapa = mapa.dentroDelMapa(posicion);
   const libre = posicionLibreParaFundar(posicion, asentamientosExistentes);
-  // Fase 0.1: 'cima' (banda de elevación más alta) es inhabitable — no se puede fundar ahí.
-  const terrenoValido = mapa.terrenoEn(posicion) !== 'cima';
+  // Terreno inhabitable: 'cima' (banda de elevación más alta, Fase 0.1) y 'agua'.
+  //
+  // El agua se añadió el 2026-09-02, al hacerla infranqueable para ejércitos y caravanas: hasta entonces
+  // fundar en el mar era solo absurdo, y desde entonces es una TRAMPA — un asentamiento sobre agua queda
+  // incomunicado para siempre, sin caravana ni ejército que pueda entrar o salir. Lo destapó el fixture de
+  // pruebas, que llevaba fundando en (500,500) de la seed 42 sin que nadie notara que ahí hay mar.
+  const terreno = mapa.terrenoEn(posicion);
+  const terrenoValido = terreno !== 'cima' && terreno !== 'agua';
   const radio = ZONA_INFLUENCIA.radioInicial;
 
   // Un bosque es alcanzable si su BORDE entra en el radio inicial, no hace falta que lo esté su centro —

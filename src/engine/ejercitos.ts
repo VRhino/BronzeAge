@@ -86,7 +86,10 @@ export function movilizarEjercito(
   exigirLiderazgo(jugador, escuadrones);
 
   const destino = puntoDeObjetivo(objetivo, asentamientos);
+  // El agua es infranqueable (`world/rutas.ts`): si no hay camino por tierra, no se sale. Un ejército no se
+  // embarca — y una ruta recta de reserva sería precisamente una marcha por el mar.
   const ruta = calcularRuta(mapa, asentamiento.posicion, destino);
+  if (!ruta) throw new MovilizacionInvalidaError('No hay ruta por tierra hasta ese destino.');
   const idsFuera = new Set(escuadrones.map((e) => e.id));
 
   return {
@@ -173,13 +176,10 @@ export function replegarEjercito(ejercito: Ejercito, origen: Asentamiento | unde
     };
   }
 
-  return {
-    ...ejercito,
-    estado: 'regresando',
-    objetivo,
-    ruta: calcularRuta(mapa, ejercito.posicionActual, origen.posicion),
-    progreso: 0,
-  };
+  const vuelta = calcularRuta(mapa, ejercito.posicionActual, origen.posicion);
+  if (!vuelta) throw new MovilizacionInvalidaError('No hay ruta por tierra de vuelta a casa desde aquí.');
+
+  return { ...ejercito, estado: 'regresando', objetivo, ruta: vuelta, progreso: 0 };
 }
 
 /** Planta el ejército donde está (Doc 5.12.3): deja de avanzar y pasa a consumo reducido. Aparcar en un paso

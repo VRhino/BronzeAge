@@ -1,0 +1,5 @@
+{
+  "//": "Type-check del LABORATORIO DE BATCH (`run-batch-sim.ts`), que el tsconfig raíz no cubre porque solo incluye `src`. Existe porque el mismo agujero ya mordió dos veces: en Fase D2 el script quedó roto sin que nadie se enterara, y el 2026-09-02 volvió a pasar — se le olvidó `ejercitos: []` al añadir la entidad y la corrida daba 600 excepciones silenciosas, que además atribuí al cambio equivocado. No es un script de usar y tirar: de sus corridas salen calibradas las constantes del juego. `catalogo-edificios.ts` queda FUERA a propósito: arrastra 15 errores propios (incluida una referencia a `'muralla'`, retirada en el Paso 5 de murallas), y merece su propia pasada.",
+  "extends": "../tsconfig.json",
+  "include": ["run-batch-sim.ts", "lab.ts"]
+}

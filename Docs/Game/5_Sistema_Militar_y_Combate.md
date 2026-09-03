@@ -240,6 +240,8 @@ Como los escuadrones que salen se van de verdad (5.4), **un asentamiento cuyos j
 
 **Un ejército es tan rápido como su escuadrón más lento** — mismo criterio que el usuario fijó para las caravanas (una caravana es tan rápida como su carro más lento). El terreno modula por encima de eso: cruzar colina o montaña cuesta más que el llano.
 
+**Y el agua no se cruza** (Doc 1.0b): un ejército la rodea, y si no hay camino por tierra hasta el destino, sencillamente **no se puede movilizar**. Tampoco replegarse, si el regreso quedara cortado. No hay embarque.
+
 **Cada tropa tiene velocidad propia** (decisión del usuario, 2026-09-02). Tres clases:
 
 | Clase | Tropas | Velocidad |

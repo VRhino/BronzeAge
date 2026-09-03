@@ -1,5 +1,22 @@
 # 1. Sistema de Mundo y Territorio
 
+
+## 1.0b El agua es un OBSTÁCULO (a petición del usuario, 2026-09-02)
+
+**Ni los ejércitos ni las caravanas pueden moverse sobre agua.** No es terreno caro: es infranqueable. Todo lo que se desplaza por el mapa —caravanas de comercio, caravanas de fundación, ejércitos y el trazado de los caminos comerciales— la rodea o no llega.
+
+Esto **revierte una decisión de Fase 0.3**, que la penalizaba fuerte (coste 15) pero la dejaba cruzable "para no romper el pathfinding en un mundo donde el camino más corto la roce". El síntoma que la tumbó: trazando un ejército tick a tick se le veía arrastrarse sobre el mar a **1/14 de su velocidad**, en vez de bordearlo. Nadie camina sobre el agua.
+
+Tres consecuencias, todas deliberadas:
+
+1. **Un destino puede quedar SIN RUTA.** Una isla, una península cortada. Antes el pathfinder caía a una línea recta cuando no encontraba camino; ahora **devuelve "no hay ruta"** y quien lo pidió decide qué hacer — no se moviliza el ejército, no sale la caravana, no se traza el camino comercial. Una recta de reserva sería precisamente una ruta por el mar.
+2. **No se puede fundar sobre agua.** Antes solo era absurdo; ahora sería una trampa, porque el asentamiento quedaría incomunicado para siempre. `'agua'` se suma a `'cima'` como terreno inhabitable.
+3. **`cima` sigue siendo transitable**, solo que cara (coste 12): es terreno difícil, no un medio distinto.
+
+**No cubre los RÍOS**, que en este motor no son terreno sino una entidad aparte y que el coste de movimiento nunca ha mirado. Que un río corte el paso es parte del rediseño de rutas de caravana (`Docs/Mecanicas a desarrollar.md` §3) y necesita vados o puentes para no fragmentar el mapa.
+
+El comercio por mar sigue fuera de alcance (Doc 3.11): sin barcos, dos costas enfrentadas no comercian.
+
 ## 1.1 Generación del mundo (Fase 0)
 - Mapa CUADRADO, espacio de coordenadas continuo (no grid discreto).
 - Tamaño base: 1000x1000 unidades, PARAMETRIZABLE.

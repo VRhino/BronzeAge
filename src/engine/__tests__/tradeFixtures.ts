@@ -21,6 +21,8 @@ export function almacenSintetico(recursos: Record<string, number>): Record<strin
 export function mapaSintetico(opciones: { limites?: { ancho: number; alto: number } } = {}): Mapa {
   return {
     costeEnPunto: () => 1,
+    // Todo tierra: estos fixtures miden comercio, no pathfinding sobre agua.
+    esTransitable: () => true,
     limites: opciones.limites ?? { ancho: 2000, alto: 2000 },
   } as unknown as Mapa;
 }

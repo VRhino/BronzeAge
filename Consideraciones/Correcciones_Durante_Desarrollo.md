@@ -484,6 +484,60 @@ porque sería rediseñar el crecimiento emergente.
 ticks) que §E6.16 pedía, más seeds 60 y 200. Verificado a mano sobre 15 seeds antes de recortar.
 786/786 tests, `tsc --noEmit` limpio en motor, cliente y lab.
 
+### 50. El agua pasa de terreno caro a OBSTÁCULO (2026-09-02)
+
+A petición del usuario: "los ejércitos y las caravanas no deben poder moverse sobre agua, el agua es un
+obstáculo". **Revierte una decisión explícita de Fase 0.3**, cuyo comentario decía: *"Agua/cima no se prohíben
+duro (romperían el pathfinding en cualquier mundo donde el camino más corto los roce) — se penalizan lo
+bastante fuerte para que A* los evite salvo que no haya alternativa real"*. El síntoma que la tumbó salió
+trazando un ejército tick a tick en el Paso 4: se le veía arrastrarse sobre el mar a 1/14 de su velocidad.
+
+`Mapa.esTransitable` nuevo; A* salta las celdas de agua en vez de darles coste alto; `calcularRuta` devuelve
+`Point[] | undefined`. **Lo importante es lo segundo**: antes caía a `[origen, destino]` cuando no encontraba
+camino, y con el agua infranqueable esa recta de reserva sería justo una ruta por el mar.
+
+Tres cosas que salieron al hacerlo, y ninguna era la que se buscaba:
+
+**(a) La caja de búsqueda de A\* tenía margen fijo**, así que un rodeo más largo que el margen no se
+encontraba. Daba igual mientras hubiera recta de reserva; ahora significaba rechazar un viaje posible. Se
+añadió un reintento sobre el mapa entero cuando la caja ajustada falla — barato (a `ESPACIADO_MALLA`=45 un
+mapa de 2000×2000 son ~1.900 celdas) y solo se paga tras fallar.
+
+**(b) Dos llamadores no daban error de tipos y eran los peligrosos.** `Caravana.ruta` es OPCIONAL, así que
+pasarle un `undefined` compilaba — y la caravana caería a la fórmula de línea recta de siempre
+(`avanzarCaravanas`), es decir, cruzaría el mar en silencio. Rechazan explícitamente: la caravana de comercio
+no sale (y la carga se queda en el almacén, comprobado ANTES de descontar), la de fundación tampoco.
+
+**(c) Se podía FUNDAR SOBRE AGUA.** `evaluarViabilidadFundacion` solo excluía `'cima'`. Era inocuo mientras el
+agua fuera cara; con ella infranqueable, un asentamiento en el mar queda incomunicado para siempre. Lo destapó
+el fixture de pruebas, que llevaba fundando en (500,500) de la seed 42 —donde hay mar— sin que nadie lo
+notara, porque nada dependía del terreno. `'agua'` se suma a `'cima'` como inhabitable, y el fixture se movió
+a (400,400).
+
+**Coste medido: cero.** Batch de 15 facciones × 600 ticks, misma seed: las 10 métricas idénticas antes y
+después. Reglas en Doc 1.0b (mundo), 5.12.5 (ejércitos) y 3.10 (caravanas).
+
+### 51. El laboratorio de batch llevaba un paso entero roto, y el type-check no lo veía
+
+Al medir el punto 50 el batch daba **600 excepciones**. No era el agua: `avanzarEjercitos` recibía
+`ejercitos` undefined porque el script construye su propio `EstadoSimulacion` y se le olvidó el campo al
+añadir la entidad en el Paso 4. Peor: **atribuí el daño al cambio equivocado** hasta instrumentar el error, y
+comparé contra una línea base anterior al paso que lo rompió.
+
+Causa de fondo: `tsconfig.json` tiene `"include": ["src"]`, así que **`scripts/` nunca se type-checkea**. Es
+exactamente el mismo agujero que ya mordió en Fase D2, cuando el mismo script quedó roto sin que nadie se
+enterara. Dos veces es un patrón.
+
+Arreglado con `scripts/tsconfig.json` + `npm run typecheck:scripts`, mismo patrón que `typecheck:lab`. No es
+un script de usar y tirar: de sus corridas salen calibradas las constantes del juego.
+
+`catalogo-edificios.ts` queda FUERA a propósito — arrastra 15 errores propios, incluida una referencia a
+`'muralla'` (retirada en el Paso 5 de murallas, o sea que lleva roto desde entonces en ejecución, no solo en
+tipos). Merece su propia pasada.
+
+Y el contador de excepciones del batch ahora puede imprimir las 3 primeras con `BATCH_MOSTRAR_ERRORES=1`:
+decía QUE algo fallaba, nunca QUÉ.
+
 ## Nota general
 
 Todas las correcciones anteriores son de **diseño/balance**, no de sintaxis: el proyecto compiló sin errores de TypeScript en todo momento salvo en los pasos intermedios normales de refactor (añadir un campo a un tipo y luego actualizar todos los lugares que lo instancian), que se resolvieron sobre la marcha y no se listan aquí por ser rutinarios.

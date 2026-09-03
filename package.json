@@ -10,7 +10,8 @@
     "test:run": "vitest run",
     "prepare": "husky",
     "lab": "tsx scripts/lab.ts",
-    "typecheck:lab": "tsc --noEmit -p lab/tsconfig.json"
+    "typecheck:lab": "tsc --noEmit -p lab/tsconfig.json",
+    "typecheck:scripts": "tsc --noEmit -p scripts/tsconfig.json"
   },
   "devDependencies": {
     "@types/node": "^26.3.0",

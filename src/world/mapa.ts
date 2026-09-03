@@ -28,6 +28,7 @@ export interface PayloadYacimientoRegenerado {
 }
 import {
   costeEnPunto,
+  esTransitable,
   distanciaARioMasCercano,
   evaluarBioma,
   evaluarElevacion,
@@ -277,6 +278,12 @@ export class Mapa {
    * pathfinding (`world/rutas.ts`) y el avance por tick de las caravanas (`engine/movimiento.ts`). */
   costeEnPunto(p: Point): number {
     return costeEnPunto(this.generado.elevacion, p);
+  }
+
+  /** ¿Se puede pisar este punto? El agua es un OBSTÁCULO, no terreno caro (a petición del usuario) — ver
+   * `esTransitable` en `worldgen/costeMovimiento.ts` para lo que eso implica en el pathfinding. */
+  esTransitable(p: Point): boolean {
+    return esTransitable(this.generado.elevacion, p);
   }
 
   // --- Ríos ---

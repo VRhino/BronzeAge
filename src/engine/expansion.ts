@@ -108,6 +108,15 @@ export function lanzarCaravanaFundacion(
     throw new ExpansionInvalidaError('La Facción no tiene ciudadanos disponibles para fundar el nuevo asentamiento.');
   }
 
+  // El agua es infranqueable (`world/rutas.ts`): sin camino por tierra no se puede fundar allí. Rechazar es
+  // OBLIGATORIO y no una cortesía — `Caravana.ruta` es opcional, así que dejar pasar un `undefined` no daría
+  // error de tipos y la caravana caería a la fórmula de línea recta de siempre (`avanzarCaravanas`,
+  // engine/trade.ts), es decir, cruzaría el mar en silencio.
+  const ruta = calcularRuta(mapa, origen.posicion, destino);
+  if (!ruta) {
+    throw new ExpansionInvalidaError('No hay ruta por tierra hasta ese punto de fundación: el agua no se cruza.');
+  }
+
   const caravana: Caravana = {
     id: `caravana-fundacion-${origen.id}-${contador}`,
     tipo: 'construccion',
@@ -117,9 +126,9 @@ export function lanzarCaravanaFundacion(
     progreso: 0,
     destinoPosicion: destino,
     jugadoresFundadoresIds,
-    // Ruta calculada al lanzar (Fase 0.3, ver `world/rutas.ts`): rodea terreno costoso en vez de ir en
-    // línea recta hacia el punto de fundación elegido.
-    ruta: calcularRuta(mapa, origen.posicion, destino),
+    // Ruta calculada al lanzar (Fase 0.3, ver `world/rutas.ts`): rodea terreno costoso y el agua en vez de
+    // ir en línea recta hacia el punto de fundación elegido.
+    ruta,
   };
 
   return {

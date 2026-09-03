@@ -6,7 +6,9 @@ import type { Mapa } from '../../world/mapa';
 import { asegurarCaminoComercial, buscarCamino } from '../caminos';
 
 function mapaSintetico(): Mapa {
-  return { limites: { ancho: 2000, alto: 2000 }, costeEnPunto: () => 1 } as unknown as Mapa;
+  // `esTransitable: () => true` = todo tierra: este fixture mide el trazado del camino, no la
+  // infranqueabilidad del agua (para eso, `world/__tests__/rutas.test.ts`).
+  return { limites: { ancho: 2000, alto: 2000 }, costeEnPunto: () => 1, esTransitable: () => true } as unknown as Mapa;
 }
 
 function asentamiento(id: string, posicion: Point): Asentamiento {

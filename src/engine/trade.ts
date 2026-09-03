@@ -436,6 +436,13 @@ function asignarCaravanasATrueque(
           ? caminoExistente.puntos
           : [...caminoExistente.puntos].reverse()
         : undefined;
+      // El agua es infranqueable: sin camino por tierra la caravana NO sale y la carga se queda en el
+      // almacén. Comprobado ANTES de descontar recursos, y de forma explícita porque `Caravana.ruta` es
+      // opcional: un `undefined` no daría error de tipos y la caravana caería a la fórmula de línea recta de
+      // siempre (ver `avanzarCaravanas` más arriba), o sea que cruzaría el mar en silencio.
+      const ruta = rutaOrientada ?? calcularRuta(mapa, origen.posicion, destino.posicion);
+      if (!ruta) continue;
+
       asentamientosPorId.set(origen.id, { ...origen, almacen: descontarRecursos(origen.almacen, { [l.recurso]: cantidad }) });
       caravanasPorId.set(caravana.id, {
         ...caravana,
@@ -446,7 +453,7 @@ function asignarCaravanasATrueque(
         ladoAcuerdo: l.lado,
         posicionActual: origen.posicion,
         progreso: 0,
-        ruta: rutaOrientada ?? calcularRuta(mapa, origen.posicion, destino.posicion),
+        ruta,
       });
       eventos.push({
         codigo: 'comercio.caravana_sale',

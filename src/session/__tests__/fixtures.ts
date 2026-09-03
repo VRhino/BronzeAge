@@ -39,7 +39,10 @@ export function partidaConAsentamiento(gameId = 'test'): {
   const sesion = GameSession.crear(gameId, { seed: 42 });
   const rf = sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, OPC);
   const faccionId = rf.datos!.faccionId;
-  const ra = sesion.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 } }, OPC);
+  // (400,400) y no (500,500): en la seed 42 ese punto es AGUA, y desde que el agua es infranqueable
+  // (2026-09-02) fundar ahí ya no es legal — el fixture llevaba fundando en el mar sin que se notara,
+  // porque nada dependía del terreno. Este está en llano y es `recomendable`.
+  const ra = sesion.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 400, y: 400 } }, OPC);
   const asentamientoId = ra.datos!.asentamientoId;
   const fundador = sesion.getState().asentamientos[0]!.jugadoresFundadoresIds[0]!;
   sesion.ejecutar(comprarCasa, { asentamientoId, jugadorId: VECINO }, OPC);
