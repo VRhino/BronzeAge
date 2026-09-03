@@ -31,14 +31,10 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "--prefix",
-        "cliente-jugador",
+        "../BronzeAgeClient",
         "run",
         "dev"
       ],
-      "env": {
-        "VITE_USUARIO": "ana",
-        "VITE_GAME_ID": "local"
-      },
       "port": 5174,
       "autoPort": true
     },

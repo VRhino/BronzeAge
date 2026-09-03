@@ -460,8 +460,8 @@ usuario dio la tabla real. Calibrarla es un cambio de **datos**, no de código.
       > nominal**. El cálculo de `capacidadCarroPorJugador` (Doc 5.13.1) asumió coste 1, así que **el radio
       > operativo real es menor que el objetivo**: hay que meter un factor de terreno medio en la calibración
       > del Paso 13. Es una ruta en una seed, así que es indicación, no calibración.
-- [~] **Paso 5 — Render de ejércitos.** Son TRES piezas con destinos distintos, no una (corrección del
-      usuario: el lab NO pinta mapa general —es vista de asentamiento— y hay DOS clientes).
+- [x] **Paso 5 — Render de ejércitos (2026-09-04).** Eran TRES piezas con destinos distintos, no una
+      (corrección del usuario: el lab NO pinta mapa general —es vista de asentamiento— y hay DOS clientes).
   - [x] **5a — Cliente de administración** (`cliente/src/ui/canvas.ts`, 2026-09-02). Sin trabajo de backend:
         `EstadoAdmin` es un `Omit<GameSessionState,'mapa'>`, así que `ejercitos` viaja desde el Paso 2.
         Traza de ruta + **rombos apilados medio superpuestos, uno por jugador distinto**, en color de la
@@ -492,10 +492,26 @@ usuario dio la tabla real. Calibrarla es un cambio de **datos**, no de código.
         `participantes: 2` derivado de 2 escuadrones de 2 jugadores) y el cuarto **no aparece en un solo byte
         del payload**. En el log: de 17 eventos del tramo, 8 eran del ejército rival y a ella le llegaron 9,
         ninguno de ellos del rival.
-  - [ ] **5c — Cliente de jugador** (`BronzeAgeClient`, **repo aparte** en `C:/Users/VRINO/Desarrollo/BronzeAgeClient`).
-        Espejo de 5a: su `src/render.ts:275-293` ya dibuja caravanas igual que el admin. Ese cliente **no puede
-        importar del backend** por diseño (sin alias `@motor/*`, solo HTTP), así que hay que añadirle una copia
-        local de `Ejercito` a su `src/tiposDominio.ts`. Depende de 5b.
+  - [x] **5c — Cliente de jugador (2026-09-04).** `BronzeAgeClient`, **repo aparte** en
+        `C:/Users/VRINO/Desarrollo/BronzeAgeClient`, rama `ejercitos-en-el-mapa`. Espejo de 5a con el MISMO
+        glifo y las mismas medidas (`dibujarRacimoDeRombos`), alimentado por los dos arrays de 5b: a los
+        propios se les pinta además el rastro de la ruta, como a las caravanas; a los avistados NO, y no por
+        simplificar — su ruta no viaja, así que no hay estela que dibujar, y esa ausencia ES lo que se sabe
+        de ellos. Copias locales de `Ejercito` y `EjercitoAvistado` en `src/tiposDominio.ts`, porque ese
+        cliente no importa del motor por diseño.
+
+        **Verificado en vivo**, medido en píxeles sobre el canvas: el racimo mide **7, 13 y 18 px** de
+        relleno para 1, 2 y 3 jugadores —cada participante añade ~5, media anchura de rombo, el solape
+        especificado— y queda centrado sobre la posición del ejército con menos de 1 px de desviación. Dos
+        Facciones, dos colores. El cuarto ejército, fuera de vista, ni llega en la proyección ni pinta un
+        píxel de su Facción donde debería estar. De propina, el radio de visión se vio funcionar solo: un
+        rival dejó de proyectarse en cuanto la columna propia se alejó más de 150 de él.
+
+        **Se arreglaron dos cosas rotas de antes** que salieron al montar la verificación: la entrada
+        `bronze-age-cliente-jugador` de `.claude/launch.json` seguía apuntando a `cliente-jugador/`, un
+        directorio que dejó de existir cuando el cliente se movió a su repo (`2dfe9e7`), con dos variables de
+        entorno que nadie lee; y la barra de estado del cliente imprimía literalmente `Tick: undefined` desde
+        que la Fase D retiró el `tick` del contrato (lo que viaja es `instante`).
 
 - [ ] **Paso 6 — Carga del carro desde el granero**, con tope y **reserva mínima intocable** para que sacar un
       ejército no deje al asentamiento en hambruna. Medido en batch: ciudades colapsadas antes/después.
