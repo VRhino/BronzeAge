@@ -405,7 +405,7 @@ usuario dio la tabla real. Calibrarla es un cambio de **datos**, no de código.
 > **Reordenado tras la revisión por consejo (§9).** Tres cambios sobre el orden original: el refactor del
 > hambre sube al primer puesto (es riesgo cero y desbloquea todo), el render sube justo detrás del movimiento
 > (el lab es el instrumento de medida, no un adorno: sin él los pasos siguientes se depuran a ciegas), y la
-> carga del carro desde el granero pasa a ser **paso propio** en vez de viajar dentro de otro — si se hunde el
+> carga del carro desde el almacén pasa a ser **paso propio** en vez de viajar dentro de otro — si se hunde el
 > batch, hay que poder saber si fue la logística o la IA.
 
 - [x] **Paso 1 — `avanzarRacion` extraída (2026-09-02).** Refactor puro: la curva de moral/deserción deja de
@@ -434,7 +434,7 @@ usuario dio la tabla real. Calibrarla es un cambio de **datos**, no de código.
       ni un punto), estacionado calcula ruta nueva a casa. Se añadió `estacionarEjercito`, que el plan no
       listaba pero que la regla de Doc 5.12.3 exigía para poder llegar al estado `estacionado`.
       Códigos de error nuevos: `movilizacion.invalida`, `ejercito.no_existe`.
-      El carro nace VACÍO a propósito — cargarlo del granero es el Paso 6, aislado para poder medir su
+      El carro nace VACÍO a propósito — cargarlo del almacén es el Paso 6, aislado para poder medir su
       impacto económico por separado.
       **VERIFICADO EN VIVO** sobre un servidor que escucha de verdad (fetch, no `inject`), pasando además por
       disco para ejercitar el round-trip del snapshot v6: movilizar con 10 ≤ 10 pasa, con 25 > 10 devuelve
@@ -513,7 +513,7 @@ usuario dio la tabla real. Calibrarla es un cambio de **datos**, no de código.
         entorno que nadie lee; y la barra de estado del cliente imprimía literalmente `Tick: undefined` desde
         que la Fase D retiró el `tick` del contrato (lo que viaja es `instante`).
 
-- [ ] **Paso 6 — Carga del carro desde el granero**, con tope y **reserva mínima intocable** para que sacar un
+- [ ] **Paso 6 — Carga del carro desde el almacén**, con tope y **reserva mínima intocable** para que sacar un
       ejército no deje al asentamiento en hambruna. Medido en batch: ciudades colapsadas antes/después.
 - [ ] **Paso 7 — Llegada → asedio**, con la rama "sin defensores → conquista automática" y la conquista que ya
       no hereda guarnición. Aquí aparece el jugador huérfano.
@@ -546,7 +546,7 @@ usuario dio la tabla real. Calibrarla es un cambio de **datos**, no de código.
    nunca en ninguno.
 3. La guarnición y el ejército aplican **la misma** curva de moral/deserción (mismo `avanzarRacion`).
 4. Un ejército estacionado consume **menos que marchando, pero más que 0**.
-5. El trigo se conserva: lo que sale del granero al carro, más lo devuelto al volver, más lo comido, cuadra.
+5. El trigo se conserva: lo que sale del almacén al carro, más lo devuelto al volver, más lo comido, cuadra.
 6. Un asentamiento sin guarnición es conquistado, **no** rechaza el asedio.
 7. La conquista **no** transfiere escuadrones al conquistador.
 8. "Ejército más grande" cuenta guarnición + campo (no baila al marchar).
@@ -603,14 +603,14 @@ revisiones cruzadas anónimas, mismo procedimiento que `Murallas_Definicion.md` 
 
 | # | Hallazgo | Estado |
 |---|---|---|
-| 1 | **Exploit de las "mulas" de suministro.** Con carro de 300 FIJO por jugador y aditivo, un aliado que se une con una milicia aporta un carro entero: la autonomía sube más que el consumo. Y como el sobrante volvía al granero, era además **transporte de trigo gratis que canibalizaba las caravanas**. Lo encontraron dos asesores por separado. | **RESUELTO**, pero no como proponía el consejo (capacidad proporcional a la tropa): el usuario mantiene el carro fijo (§1.1b punto 12) y el exploit muere por otra vía — ver §9.2. |
+| 1 | **Exploit de las "mulas" de suministro.** Con carro de 300 FIJO por jugador y aditivo, un aliado que se une con una milicia aporta un carro entero: la autonomía sube más que el consumo. Y como el sobrante volvía al almacén, era además **transporte de trigo gratis que canibalizaba las caravanas**. Lo encontraron dos asesores por separado. | **RESUELTO**, pero no como proponía el consejo (capacidad proporcional a la tropa): el usuario mantiene el carro fijo (§1.1b punto 12) y el exploit muere por otra vía — ver §9.2. |
 | 2 | **El encuentro ejército↔caravana era letra muerta.** Con velocidad plana de 10 y caravanas a 16-24, un ejército no alcanzaba jamás a una caravana. Verificado contra `CARAVANA_CATALOGO`. | **RESUELTO** por la tabla de velocidades por tropa (§1.1b punto 13): la ligera (20) caza a la comercial (16). |
 | 3 | **La guerra era suma negativa.** Conquistar no daba botín (la guarnición se pierde) y el defensor podía evacuar sus tropas para no perderlas ⇒ el meta óptimo era no atacar nunca. | **RESUELTO** por el incentivo de conquista (§1.1b punto 16). |
 | 4 | **No había forma de cancelar ni retirar una marcha.** Fire-and-forget durante horas reales. | **RESUELTO** (§1.1b punto 14). |
 | 5 | **El jugador cuya ciudad cae estando de campaña quedaba sin definir.** El diseño resolvía la re-adopción del ejército pero no la residencia del jugador. | **RESUELTO** por el estado huérfano (§1.1b punto 15). |
 | 6 | **Orden canónico de resolución entre ejércitos.** Solo apareció en la revisión cruzada: `resolverCombate` consume RNG, así que con N encuentros en un tick el orden de iteración determina el consumo. Sin ordenar por id, el determinismo se rompe aunque la secuencia global del tick sea correcta. | **INCORPORADO** al Paso 10. |
 | 7 | **El determinismo no necesitaba romperse.** Colocando `avanzarEjercitos` al final de la cadena y haciéndolo mudo de RNG cuando no hay ejércitos, el test guardián sigue verde sin tocarlo. Verificado contra `simulation.ts` (`crecerPoblacion` l.190, `avanzarAtaquesBandidos` l.232). | **INCORPORADO** al Paso 4. Sustituye al plan anterior, que asumía actualizar el test. |
-| 8 | **Faltaba un paso: la carga del carro desde el granero.** Iba implícita dentro de otros pasos; si el batch se hunde, no se podría saber si fue la logística o la IA. | **INCORPORADO** como Paso 6. |
+| 8 | **Faltaba un paso: la carga del carro desde el almacén.** Iba implícita dentro de otros pasos; si el batch se hunde, no se podría saber si fue la logística o la IA. | **INCORPORADO** como Paso 6. |
 | 9 | **El render estaba demasiado tarde.** El lab es el instrumento de medida; sin él los pasos de asedio, reabastecimiento y encuentros se depuran a ciegas. | **INCORPORADO**: sube al Paso 5. |
 
 ### 9.2 Por qué la "mula" deja de ser un exploit con el carro FIJO

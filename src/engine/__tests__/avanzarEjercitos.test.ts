@@ -70,7 +70,7 @@ describe('velocidadDeEjercito — el ritmo lo marca el más lento (Doc 5.12.5)',
 });
 
 describe('avanzarEjercitos — comer y moverse', () => {
-  it('avanza por su ruta y come del CARRO, no del granero', () => {
+  it('avanza por su ruta y come del CARRO, no del almacén', () => {
     const { asentamiento } = base();
     const trigoEnGranero = asentamiento.almacen['trigo']?.cantidad ?? 0;
     const ejercito = ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros')], 100);
@@ -79,7 +79,7 @@ describe('avanzarEjercitos — comer y moverse', () => {
 
     expect(r.ejercitos[0]!.progreso).toBeGreaterThan(0);
     expect(r.ejercitos[0]!.suministro['trigo']).toBeCloseTo(100 - 10 * MILITAR.racionPorSoldadoPorMinuto);
-    // El granero del asentamiento no se toca: en marcha se come del carro (Doc 5.13).
+    // El almacén del asentamiento no se toca: en marcha se come del carro (Doc 5.13).
     expect(r.asentamientos[0]!.almacen['trigo']?.cantidad).toBe(trigoEnGranero);
   });
 

@@ -62,7 +62,7 @@ function exigirLiderazgo(jugador: Jugador | undefined, escuadrones: readonly Esc
  * Saca a un jugador de campaña con los escuadrones que elija (Doc 5.12.1). Salir SOLO es esto mismo con un
  * participante: no hay dos casos ni dos tipos.
  *
- * El carro de suministros nace VACÍO a propósito: cargarlo del granero es el Paso 6 del plan, aislado para
+ * El carro de suministros nace VACÍO a propósito: cargarlo del almacén es el Paso 6 del plan, aislado para
  * que su impacto económico se pueda medir en batch por separado del resto de la mecánica.
  */
 export function movilizarEjercito(

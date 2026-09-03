@@ -14,7 +14,7 @@
 ## 2. Movimiento de ejercitos por el mapa
 Los ejércitos también se mueven por el mapa para atacar como las caravanas, con un símbolo q los identifique por ejemplo un rombo, uno por cada jugador q va en el ejército, uno detrás de otro medio superpuestos y cada rombo del color de su faccion.
 
-Las tropas son del JUGADOR, no del asentamiento — están apostadas ahí. En marcha no comen del granero: el
+Las tropas son del JUGADOR, no del asentamiento — están apostadas ahí. En marcha no comen del almacén: el
 ejército lleva su propio carro de suministros, y sin comida hay deserción y baja moral. El jugador sale solo
 (eligiendo qué tropas se lleva) o como parte de un ejército de varios jugadores que se mueve como una sola
 entidad. En ambos casos lo limita su **liderazgo**: cada tipo de tropa tiene un coste, y solo puede sacar lo

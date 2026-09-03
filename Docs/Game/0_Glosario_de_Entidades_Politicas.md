@@ -22,7 +22,7 @@ Los escuadrones apostados en un asentamiento, es decir, los que NO salieron a ca
 ## Ejército
 Uno o más escuadrones que han salido del asentamiento y se mueven por el mapa como **una sola entidad** (Doc 5.12). Puede ser de un solo Jugador o de varios juntos; en ambos casos es la misma cosa, y cada Jugador que lo compone sigue limitado por su propio Liderazgo.
 
-Mientras está en campaña, un ejército **no come del granero de su asentamiento**: lleva su propio carro de suministros (Doc 5.13) — uno por Jugador, de capacidad fija. Puede además llevar **caravanas adjuntas** que amplían su alcance, y que pueden ir cargadas de mercancía (escolta de caravanas, Doc 5.13.2-5.13.3). Si el ejército es derrotado, las caravanas adjuntas se pierden con él.
+Mientras está en campaña, un ejército **no come del almacén de su asentamiento**: lleva su propio carro de suministros (Doc 5.13) — uno por Jugador, de capacidad fija. Puede además llevar **caravanas adjuntas** que amplían su alcance, y que pueden ir cargadas de mercancía (escolta de caravanas, Doc 5.13.2-5.13.3). Si el ejército es derrotado, las caravanas adjuntas se pierden con él.
 
 Una marcha se puede **cancelar**, lo que dispara la vuelta por el mismo camino (Doc 5.12.6).
 
@@ -31,6 +31,14 @@ Jugador al que conquistaron su asentamiento mientras estaba de campaña (Doc 5.4
 
 ## Liderazgo
 Valor del Jugador que limita **cuánto puede sacar a campaña a la vez** — no cuánto puede poseer. Cada tropa tiene un coste de Liderazgo proporcional a su poder; la suma de lo que un Jugador se lleva no puede exceder su Liderazgo (Doc 5.11). Lo que se queda, defiende (ver Guarnición).
+
+## Almacén (y por qué NO se llama "granero")
+
+La despensa de un asentamiento es su **almacén** — `Asentamiento.almacen` en el motor, ampliable con el edificio `almacen` del catálogo. Ahí es donde vive el trigo, y de ahí come la guarnición.
+
+**No existe ningún edificio llamado "granero".** La palabra sí está cogida, pero para otra cosa: un **Granero** es un *rol de asentamiento*, el que se especializa en producir trigo, junto a Aserradero, Cuenca Minera, Dehesa y Ciudad (`Consideraciones/Fase_0_5_Definicion_Especializacion_y_Cupos.md` §4). Es una **vocación de un asentamiento entero**, no un edificio suyo.
+
+Así que "el ejército come del granero" no solo nombraba un edificio inexistente: colisionaba con un término del diseño que significa algo distinto. Se dice **almacén**.
 
 ## Asentamiento
 Unidad territorial con zona de influencia, edificios (auto-construidos), población NPC (Pesants/Artesanos/Nobleza), y cargos LOCALES (Gobernador, Tesorero, General, Maestro de Obras, Sacerdote). Pertenece a 1 y SOLO 1 Facción. Una Facción puede tener muchos asentamientos.

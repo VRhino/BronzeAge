@@ -236,7 +236,7 @@ lo que ya construyen C4/C5, y este análisis no lo cambia — lo justifica.
 El eje correcto no es si el cliente tiene motor, sino qué parte:
 
 - **Simulación** (avanzar el mundo, resolver combates, producir, consumir): **solo servidor**, sin matices.
-- **Reglas** (qué cuesta un granero, cuántos slots da este nivel, es válida esta posición): el cliente **las
+- **Reglas** (qué cuesta un almacén, cuántos slots da este nivel, es válida esta posición): el cliente **las
   necesita** para dar respuesta inmediata. Un *tooltip* que hace viaje de ida y vuelta es inusable.
 
 La industria manda las reglas al cliente **como datos, no como código**. EVE Online lo llama *Static Data

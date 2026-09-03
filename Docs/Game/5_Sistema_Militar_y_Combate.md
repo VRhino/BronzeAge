@@ -19,7 +19,7 @@ Se suma el poder de cada bando y **se multiplica cada uno por un factor aleatori
 
 **Qué implica ese ±15% en la práctica**: los multiplicadores van de 0.85 a 1.15, así que el cociente entre ambos bandos va de 0.74 a 1.35. Es decir, **un atacante necesita un 35% más de poder para tener la victoria garantizada**; por debajo de eso siempre puede perder. El comentario del código lo justifica como "romper empates", pero 15% por bando es varianza de combate real, no un desempate.
 
-> **DECISIÓN ABIERTA (2026-09-02): revisar esta varianza a la baja o retirarla.** El movimiento de ejércitos multiplica el coste de una mala tirada —marchar cuesta tiempo real, deja la ciudad indefensa, gasta el granero y las bajas son permanentes— y el juego ya tiene diseñada una fuente de incertidumbre mejor: la niebla de guerra (`Docs/Mecanicas a desarrollar.md` §12), que es incertidumbre **reducible jugando bien** en vez de un dado. Análisis completo y las tres opciones en `Consideraciones/Movimiento_Ejercitos_Definicion.md` §1.4.
+> **DECISIÓN ABIERTA (2026-09-02): revisar esta varianza a la baja o retirarla.** El movimiento de ejércitos multiplica el coste de una mala tirada —marchar cuesta tiempo real, deja la ciudad indefensa, vacía el almacén y las bajas son permanentes— y el juego ya tiene diseñada una fuente de incertidumbre mejor: la niebla de guerra (`Docs/Mecanicas a desarrollar.md` §12), que es incertidumbre **reducible jugando bien** en vez de un dado. Análisis completo y las tres opciones en `Consideraciones/Movimiento_Ejercitos_Definicion.md` §1.4.
 
 ## 5.3 Formaciones y cohesión táctica (heredado de Iberia)
 - Romper formación penaliza duro (ej. arqueros dispersos -30% precisión, escuderos aislados -20% defensa, lanceros sin formación pierden bono anti-carga). Flanquear/aislar formaciones enemigas es táctica válida.
@@ -31,7 +31,7 @@ Se suma el poder de cada bando y **se multiplica cada uno por un factor aleatori
 **Los escuadrones son del JUGADOR, no del asentamiento** (a petición del usuario, 2026-09-01 — cierra una ambigüedad que el modelo arrastraba: el asentamiento los contenía, así que parecía dueño de ellos). El asentamiento es donde están **apostados**, no quien los posee. Consecuencias:
 
 - Un asentamiento **conquistado** hace que sus jugadores **pierdan los escuadrones que estaban apostados ahí**; conservan solo los que llevaban encima en campaña (5.12). Los perdidos **no pasan al conquistador** — son personales de otro jugador, no botín transferible.
-- Sacar escuadrones a campaña los quita de la guarnición **de verdad**: dejan de defender y dejan de comer del granero (5.13).
+- Sacar escuadrones a campaña los quita de la guarnición **de verdad**: dejan de defender y dejan de comer del almacén (5.13).
 - **Un jugador al que le conquistan su asentamiento estando de campaña queda HUÉRFANO** (decisión del usuario, 2026-09-02): conserva los escuadrones que lleva encima, pero se queda sin residencia — sin sitio donde reabastecer, reclutar ni volver. Sigue huérfano **hasta que entre en una Facción nueva que tenga asentamiento**. No es una derrota definitiva: es un estado del que se sale por la vía política (Doc 2.5, ciudadanía), no por la militar.
 
 Ciclo de vida propiamente dicho:
@@ -280,10 +280,10 @@ De un ejército ajeno se sabe **dónde está, de qué Facción es y cuánta gent
 
 ## 5.13 Suministro en campaña (a petición del usuario, 2026-09-01)
 
-**Un ejército en marcha NO come del granero de su asentamiento.** Lleva su propio **carro de suministros** con la comida que consume mientras se mueve. Si se queda sin comida, la moral colapsa y los soldados desertan — exactamente la misma regla del hambre que en guarnición (5.4), solo cambia de qué despensa se come.
+**Un ejército en marcha NO come del almacén de su asentamiento.** Lleva su propio **carro de suministros** con la comida que consume mientras se mueve. Si se queda sin comida, la moral colapsa y los soldados desertan — exactamente la misma regla del hambre que en guarnición (5.4), solo cambia de qué despensa se come.
 
 - **Capacidad**: **FIJA e igual para todos los Jugadores** — es un carro, no una abstracción proporcional a lo que llevas. Se **suma** al formar ejército: un ejército de cuatro lleva cuatro carros.
-- **Carga**: al salir o al unirse, cada Jugador **toma del asentamiento**. Si el granero no llega, se sale con menos autonomía; no se bloquea la salida. Sacar un ejército **cuesta stock real** al asentamiento.
+- **Carga**: al salir o al unirse, cada Jugador **toma del asentamiento**. Si el almacén no llega, se sale con menos autonomía; no se bloquea la salida. Sacar un ejército **cuesta stock real** al asentamiento.
 - **Reabastecimiento en ruta**: al pasar por un asentamiento **propio**, siempre. Por uno **aliado**, solo si ese asentamiento tiene la opción activada. Por uno neutral u hostil, nunca.
 - **Regreso**: el sobrante **vuelve al almacén** del asentamiento de origen. **El carro NO se descarga en ruta ni en otro asentamiento** — si pudiera, el ejército sería un transporte de mercancías gratuito que dejaría sin sentido a las caravanas. Para mover carga está el punto siguiente.
 

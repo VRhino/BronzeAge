@@ -607,7 +607,7 @@ export interface Ejercito {
    * lo único que defiende (Doc 5.12.4) y por eso `consumoRacionTropas` ya cuenta solo lo que quedó en casa. */
   escuadrones: Escuadron[];
   /** El carro: los de todos sus jugadores, ya sumados. Solo trigo en Fase 0. En marcha se come de AQUÍ, no
-   * del granero (Doc 5.13) — misma regla del hambre vía `avanzarRacion`, distinta despensa. */
+   * del almacén (Doc 5.13) — misma regla del hambre vía `avanzarRacion`, distinta despensa. */
   suministro: Record<string, number>;
   /** Caravanas que marchan con el ejército (Doc 5.13.2): amplían la carga, entran en el `min` de velocidad,
    * pueden ir cargadas de mercancía (escolta, Doc 5.13.3) y se pierden si el ejército es derrotado. */

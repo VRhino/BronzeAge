@@ -83,7 +83,7 @@ describe('movilizarEjercito', () => {
     // La ruta se calcula al salir, como una caravana al despacharse.
     expect(ejercito.ruta.length).toBeGreaterThanOrEqual(2);
     expect(ejercito.progreso).toBe(0);
-    // El carro nace vacío a propósito: cargarlo del granero es el Paso 6.
+    // El carro nace vacío a propósito: cargarlo del almacén es el Paso 6.
     expect(ejercito.suministro).toEqual({});
   });
 
