@@ -1863,6 +1863,7 @@ function render(): void {
       caravanas: state.caravanas,
       caminos: state.caminos,
       campamentosBandidos: state.campamentosBandidos,
+      ejercitos: state.ejercitos,
     };
     draw(ctx, canvas, drawState, terrenoCacheParaFrame(drawState.mapa));
     if (mostrarFiltroFertilidad) drawFiltroFertilidad(ctx, canvas, gameStore.getMapa(state));

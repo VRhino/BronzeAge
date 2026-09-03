@@ -63,6 +63,23 @@ soldados, 0 ración (ya no pasa hambre), marchando para siempre y atacando con p
 guarda existente**: `resolverCombate` rechaza si el array de atacantes está VACÍO, no si tiene escuadrones a
 cero. Regla en Doc 5.13.4.
 
+### 1.1d Cerrada (2026-09-02): visibilidad de ejércitos ajenos
+
+19. **Un jugador ve los ejércitos ajenos que entren en su ZONA DE INFLUENCIA.**
+
+Bloqueaba el Paso 5 (proyección + render del cliente de jugador). Las tres opciones que se plantearon: no ver
+nada (coherente con el Slice 1, pero desactiva la tensión — un ejército enemigo tarda ~50 minutos reales en
+llegar y no podrías reaccionar), ver por zona de influencia, o ver por radio de visión (que es lo que §12
+pide de verdad, pero **necesita un número que sigue sin decidirse**).
+
+Se elige la zona de influencia porque **usa `zonas`/`zonasFusionadas`, que ya existen y ya se proyectan**: da
+capacidad de reacción sin inventar ninguna constante, y no compromete §12 — cuando llegue el radio, sustituye
+a este criterio sin romper el contrato.
+
+**Consecuencia obligatoria**: el ejército ajeno se proyecta REDACTADO. Los rombos necesitan el número de
+participantes, que sale de los escuadrones — pero mandar los escuadrones de un ejército enemigo filtraría su
+composición y su poder. Se manda posición, facción y **recuento de participantes**, nunca el detalle de tropas.
+
 ### 1.2 Derivadas — no se preguntaron porque las de arriba o los invariantes vigentes ya las obligan
 
 - **El ejército NO cambia de bando al caer su hogar** (de 1.1 punto 4: conserva "las que tiene encima").
@@ -443,11 +460,24 @@ usuario dio la tabla real. Calibrarla es un cambio de **datos**, no de código.
       > nominal**. El cálculo de `capacidadCarroPorJugador` (Doc 5.13.1) asumió coste 1, así que **el radio
       > operativo real es menor que el objetivo**: hay que meter un factor de terreno medio en la calibración
       > del Paso 13. Es una ruta en una seed, así que es indicación, no calibración.
-- [ ] **Paso 5 — Render: rombos por jugador + traza de ruta.** Sube aquí a propósito: es el instrumento con el
-      que se verifican rutas, velocidad y consumo en el lab. Y con el reloj de mundo ya en marcha
-      (`INTERVALO_TICK_MS` = 5 s en dev) la verificación es de verdad: **un ejército cruza el mapa en el
-      navegador en un par de minutos**, así que se ve moverse, gastar y llegar — no una captura de un rombo
-      quieto (§2.5b).
+- [~] **Paso 5 — Render de ejércitos.** Son TRES piezas con destinos distintos, no una (corrección del
+      usuario: el lab NO pinta mapa general —es vista de asentamiento— y hay DOS clientes).
+  - [x] **5a — Cliente de administración** (`cliente/src/ui/canvas.ts`, 2026-09-02). Sin trabajo de backend:
+        `EstadoAdmin` es un `Omit<GameSessionState,'mapa'>`, así que `ejercitos` viaja desde el Paso 2.
+        Traza de ruta + **rombos apilados medio superpuestos, uno por jugador distinto**, en color de la
+        Facción de origen. El recuento se DERIVA de `escuadrones`; no se guarda nada nuevo.
+        **Verificado en vivo** con el reloj de mundo a 5 s/tick: dos ejércitos inyectados (uno de 3 jugadores,
+        otro de 1) se mueven, gastan trigo en proporción 3:1 a sus soldados, y el log canta
+        `El ejército ejercito-solitario llega a su destino y acampa`. Medido en píxeles sobre el canvas: el
+        racimo de 3 jugadores ocupa **16 px de ancho frente a 6 px el de 1** — cada participante añade
+        exactamente media anchura de rombo, que es el solape del 50% especificado.
+  - [ ] **5b — Proyección al jugador**: `ejercitos` en `ProyeccionJugador` (que NO es un `Omit`, es una lista
+        explícita de campos), filtrado por zona de influencia y **redactado** para los ajenos (§1.1d).
+  - [ ] **5c — Cliente de jugador** (`BronzeAgeClient`, **repo aparte** en `C:/Users/VRINO/Desarrollo/BronzeAgeClient`).
+        Espejo de 5a: su `src/render.ts:275-293` ya dibuja caravanas igual que el admin. Ese cliente **no puede
+        importar del backend** por diseño (sin alias `@motor/*`, solo HTTP), así que hay que añadirle una copia
+        local de `Ejercito` a su `src/tiposDominio.ts`. Depende de 5b.
+
 - [ ] **Paso 6 — Carga del carro desde el granero**, con tope y **reserva mínima intocable** para que sacar un
       ejército no deje al asentamiento en hambruna. Medido en batch: ciudades colapsadas antes/después.
 - [ ] **Paso 7 — Llegada → asedio**, con la rama "sin defensores → conquista automática" y la conquista que ya

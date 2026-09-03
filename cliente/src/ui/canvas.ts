@@ -1,4 +1,4 @@
-import type { Asentamiento, BiomaTipo, CaminoComercial, CampamentoBandido, Caravana, Edificio, EdificioTipo, Faccion, Point, RecursoTipo, ZonaFaccion } from '@motor/domain/types';
+import type { Asentamiento, BiomaTipo, CaminoComercial, CampamentoBandido, Caravana, Edificio, EdificioTipo, Ejercito, Faccion, Point, RecursoTipo, ZonaFaccion } from '@motor/domain/types';
 import type { Mapa } from '@motor/world/mapa';
 
 export const FACCION_COLORES = ['#c0392b', '#2980b9', '#27ae60', '#8e44ad', '#d35400', '#16a085'];
@@ -319,6 +319,8 @@ export interface DrawState {
   caminos: CaminoComercial[];
   /** Campamentos de bandidos (Doc 1.9) — estado de partida, se dibujan en vivo igual que las caravanas. */
   campamentosBandidos: CampamentoBandido[];
+  /** Ejércitos en campaña (Doc 5.12) — estado de partida, en vivo como las caravanas. */
+  ejercitos: Ejercito[];
 }
 
 /**
@@ -564,6 +566,58 @@ export function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, s
     ctx.strokeStyle = '#1b1a17';
     ctx.lineWidth = 1;
     ctx.stroke();
+  }
+
+  // Ejércitos en campaña (Doc 5.12.2): traza de ruta + ROMBOS, uno por cada jugador que va dentro, apilados
+  // medio superpuestos y del color de la Facción.
+  //
+  // El número de rombos no es un dato del estado: se DERIVA de los `jugadorId` distintos de sus escuadrones
+  // (Doc 5.12.1 — salir solo es un ejército de un participante). Así, de un vistazo, el tamaño del racimo
+  // dice cuánta gente va en esa columna, que es justo lo que un rival necesita para decidir si le planta cara.
+  //
+  // Rombo y no triángulo (caravana) ni círculo (asentamiento) ni diamante rojo (campamento bandido): las
+  // cuatro cosas que se mueven o amenazan en este mapa tienen forma propia, para no depender del color.
+  ctx.strokeStyle = 'rgba(241, 230, 200, 0.35)';
+  ctx.lineWidth = 1.5;
+  for (const ejercito of state.ejercitos) {
+    // Estacionado no tiene trayecto pendiente que enseñar (acampó); marchando y regresando sí.
+    if (ejercito.estado === 'estacionado' || ejercito.ruta.length < 2) continue;
+    ctx.beginPath();
+    ejercito.ruta.forEach((p, i) => {
+      const x = p.x * scale;
+      const y = p.y * scale;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  }
+
+  for (const ejercito of state.ejercitos) {
+    const origen = state.asentamientos.find((a) => a.id === ejercito.origenAsentamientoId);
+    const color = origen ? faccionColor(origen.faccionId, state.facciones) : faccionColor(ejercito.faccionId, state.facciones);
+    const participantes = new Set(ejercito.escuadrones.map((e) => e.jugadorId)).size;
+    const r = 5;
+    // Cada rombo se desplaza medio ancho respecto al anterior (solape del 50%), y el racimo entero se
+    // recentra para que la POSICIÓN del ejército siga cayendo en el medio y no en el primer rombo.
+    const inicio = ((participantes - 1) * r) / 2;
+    const cx = ejercito.posicionActual.x * scale;
+    const cy = ejercito.posicionActual.y * scale;
+
+    // De atrás hacia delante, para que el primero quede ENCIMA y el racimo se lea como una columna.
+    for (let i = participantes - 1; i >= 0; i--) {
+      const x = cx - inicio + i * r;
+      ctx.beginPath();
+      ctx.moveTo(x, cy - r);
+      ctx.lineTo(x + r, cy);
+      ctx.lineTo(x, cy + r);
+      ctx.lineTo(x - r, cy);
+      ctx.closePath();
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.strokeStyle = '#1b1a17';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
   }
 
   // Campamentos de bandidos (Doc 1.9): marcador en forma de diamante, distinto de asentamientos (círculos) y
