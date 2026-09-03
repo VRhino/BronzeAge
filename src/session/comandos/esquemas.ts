@@ -200,6 +200,31 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
     { atacanteId: IDENTIFICADOR, escuadronIds: LISTA_DE_IDENTIFICADORES, caravanaId: IDENTIFICADOR },
     ['atacanteId', 'escuadronIds', 'caravanaId']
   ),
+  // Ejércitos (Doc 5.12). `objetivo` es una union: un asentamiento por id, o un punto del mapa. Se valida
+  // con `oneOf` para que un cliente no pueda colar un punto sin coordenadas ni un destino sin id.
+  movilizarEjercito: objeto(
+    {
+      asentamientoId: IDENTIFICADOR,
+      jugadorId: IDENTIFICADOR,
+      escuadronIds: LISTA_DE_IDENTIFICADORES,
+      objetivo: {
+        oneOf: [
+          objeto({ tipo: { type: 'string', enum: ['asentamiento'] }, id: IDENTIFICADOR }, ['tipo', 'id']),
+          objeto(
+            { tipo: { type: 'string', enum: ['punto'] }, punto: objeto({ x: NUMERO, y: NUMERO }, ['x', 'y']) },
+            ['tipo', 'punto']
+          ),
+        ],
+      },
+    },
+    ['asentamientoId', 'jugadorId', 'escuadronIds', 'objetivo']
+  ),
+  unirseAEjercito: objeto(
+    { ejercitoId: IDENTIFICADOR, asentamientoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR, escuadronIds: LISTA_DE_IDENTIFICADORES },
+    ['ejercitoId', 'asentamientoId', 'jugadorId', 'escuadronIds']
+  ),
+  replegarEjercito: objeto({ ejercitoId: IDENTIFICADOR }, ['ejercitoId']),
+  estacionarEjercito: objeto({ ejercitoId: IDENTIFICADOR }, ['ejercitoId']),
   atacarCampamentoBandidos: objeto(
     { atacanteId: IDENTIFICADOR, escuadronIds: LISTA_DE_IDENTIFICADORES, campamentoId: IDENTIFICADOR },
     ['atacanteId', 'escuadronIds', 'campamentoId']

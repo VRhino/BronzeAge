@@ -23,6 +23,7 @@ export const CODIGOS_ERROR = {
   comercioCaravanaInvalida: 'comercio.caravana_invalida',
   comercioTruequeInvalido: 'comercio.trueque_invalido',
   recintoInvalido: 'recinto.invalido',
+  movilizacionInvalida: 'movilizacion.invalida',
 
   // Los que rechaza la CAPA DE PARTIDA (`session/comandos/*.ts`) sin que el motor llegue a verlos: casi todos
   // "la entidad referenciada por id no existe" (el motor recibe la entidad ya resuelta, nunca un id suelto),
@@ -32,6 +33,7 @@ export const CODIGOS_ERROR = {
   faccionNoExiste: 'faccion.no_existe',
   caravanaNoExiste: 'caravana.no_existe',
   campamentoNoExiste: 'campamento.no_existe',
+  ejercitoNoExiste: 'ejercito.no_existe',
   reservaSinTesorero: 'reserva.sin_tesorero',
   diplomaciaRelacionNoIndicada: 'diplomacia.relacion_no_indicada',
   faccionNombreVacio: 'faccion.nombre_vacio',

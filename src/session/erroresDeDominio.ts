@@ -17,6 +17,7 @@ import { FundacionInvalidaError } from '../engine/settlement';
 import { CaravanaInvalidaError, TruequeInvalidoError } from '../engine/trade';
 import { ReclutamientoInvalidoError } from '../engine/tropas';
 import { RecintoInvalidoError } from '../engine/muralla';
+import { MovilizacionInvalidaError } from '../engine/ejercitos';
 import { CODIGOS_ERROR, type CodigoError } from './comandos/codigosDeError';
 
 /** Los 14 tipos de error de dominio que el motor puede lanzar, y su código estable. Orden alfabético por
@@ -24,6 +25,7 @@ import { CODIGOS_ERROR, type CodigoError } from './comandos/codigosDeError';
 const CODIGOS_DE_ERROR = new Map<Function, CodigoError>([
   [CargoInvalidoError, CODIGOS_ERROR.cargoInvalido],
   [CombateInvalidoError, CODIGOS_ERROR.combateInvalido],
+  [MovilizacionInvalidaError, CODIGOS_ERROR.movilizacionInvalida],
   [ConstruccionManualInvalidaError, CODIGOS_ERROR.construccionInvalida],
   [DiplomaciaInvalidaError, CODIGOS_ERROR.diplomaciaInvalida],
   [ExpansionInvalidaError, CODIGOS_ERROR.expansionInvalida],

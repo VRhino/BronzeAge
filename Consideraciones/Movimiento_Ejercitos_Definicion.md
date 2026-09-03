@@ -368,8 +368,19 @@ usuario dio la tabla real. Calibrarla es un cambio de **datos**, no de código.
       la cara, ya que el coste se deriva y no se ve en `constants.ts`—, el gate de élite, que no hay tope
       agregado, y la migración. 793 → 815 tests, `tsc` limpio en motor, lab y cliente.
       Sigue sin verificarse EN VIVO, como estaba previsto: eso llega en el Paso 3.
-- [ ] **Paso 3 — Comandos: `movilizarEjercito` / `unirseAEjercito` / `replegarEjercito` / `cancelarMarcha`.**
-      Validación de liderazgo y proximidad para unirse.
+- [x] **Paso 3 — Comandos de ejército (2026-09-02).** `engine/ejercitos.ts` (dominio) +
+      `session/comandos/ejercitos.ts` (capa de partida), con esquema, autorización y registro.
+      **`replegar` y `cancelarMarcha` resultaron ser la MISMA operación desde estados distintos**, así que son
+      un solo comando y no dos: marchando da media vuelta (invierte ruta Y progreso, la posición no se mueve
+      ni un punto), estacionado calcula ruta nueva a casa. Se añadió `estacionarEjercito`, que el plan no
+      listaba pero que la regla de Doc 5.12.3 exigía para poder llegar al estado `estacionado`.
+      Códigos de error nuevos: `movilizacion.invalida`, `ejercito.no_existe`.
+      El carro nace VACÍO a propósito — cargarlo del granero es el Paso 6, aislado para poder medir su
+      impacto económico por separado.
+      **VERIFICADO EN VIVO** sobre un servidor que escucha de verdad (fetch, no `inject`), pasando además por
+      disco para ejercitar el round-trip del snapshot v6: movilizar con 10 ≤ 10 pasa, con 25 > 10 devuelve
+      `movilizacion.invalida`, el escuadrón desaparece de la guarnición, la ruta sale con 10 puntos y replegar
+      deja el ejército en `regresando`. 815 → 826 tests, `tsc` limpio en motor, lab y cliente.
 - [ ] **Paso 4 — `avanzarEjercitos` en el tick.** Movimiento con velocidad por tropa (`min`), consumo del
       carro con factor de estacionado, deserción por hambre, retorno. **Colocado al FINAL de la cadena del
       tick y mudo de RNG cuando no hay ejércitos** (§2.5): así el test guardián de determinismo sigue verde

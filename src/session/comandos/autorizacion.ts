@@ -139,6 +139,14 @@ function comandaEscuadrones(estado: GameSessionState, jugadorId: string, asentam
   });
 }
 
+/** ¿El jugador tiene algún escuadrón dentro de ese ejército? Un ejército inexistente se deja pasar — lo
+ * rechaza el propio comando, mismo criterio fail-open que el resto de resolutores de este archivo. */
+function participaEnEjercito(estado: GameSessionState, jugadorId: string, ejercitoId: string): boolean {
+  const ejercito = estado.ejercitos.find((e) => e.id === ejercitoId);
+  if (ejercito === undefined) return true;
+  return ejercito.escuadrones.some((e) => e.jugadorId === jugadorId);
+}
+
 /** Reside en el asentamiento Y ostenta ahí el cargo indicado. */
 function residenteConCargo(estado: GameSessionState, jugadorId: string, asentamientoId: string, cargo: Parameters<typeof tieneCargoLocal>[1]): boolean {
   const asentamiento = buscarAsentamiento(estado, asentamientoId);
@@ -354,6 +362,35 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
     condicionJugador: (estado, jugadorId, params) =>
       reside(estado, jugadorId, params.atacanteId) && comandaEscuadrones(estado, jugadorId, params.atacanteId, params.escuadronIds),
   },
+  // --- Ejércitos (Doc 5.12): salir de campaña es sacar TUS escuadrones de TU asentamiento, así que la
+  // condición es la misma pareja que el resto de lo militar (residencia + mando de los propios escuadrones).
+  // Nadie moviliza a nombre de otro: `jugadorId` tiene que ser el actor, igual que en `reclutarTropa`. ---
+  movilizarEjercito: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, jugadorId, params) =>
+      jugadorId === params.jugadorId &&
+      reside(estado, jugadorId, params.asentamientoId) &&
+      comandaEscuadrones(estado, jugadorId, params.asentamientoId, params.escuadronIds),
+  },
+  unirseAEjercito: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, jugadorId, params) =>
+      jugadorId === params.jugadorId &&
+      reside(estado, jugadorId, params.asentamientoId) &&
+      comandaEscuadrones(estado, jugadorId, params.asentamientoId, params.escuadronIds),
+  },
+  // Replegar y estacionar mandan sobre el ejército entero, no sobre escuadrones sueltos: basta con tener
+  // tropa dentro. El mando compartido de una coalición (quién decide cuando hay varios jugadores) necesita
+  // un mecanismo de cesión que la Fase 0 no tiene — hoy cualquier participante puede ordenar el repliegue.
+  replegarEjercito: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, jugadorId, params) => participaEnEjercito(estado, jugadorId, params.ejercitoId),
+  },
+  estacionarEjercito: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, jugadorId, params) => participaEnEjercito(estado, jugadorId, params.ejercitoId),
+  },
+
   // Entre dos asentamientos: el actor debe residir en al menos uno de los lados, y comandar sus propios
   // escuadrones en cada lado donde resida. Escoger qué escuadrones del OTRO lado participan es una
   // simplificación del comando en sí (Fase 0: el combate se resuelve en una sola llamada), no de esta matriz.

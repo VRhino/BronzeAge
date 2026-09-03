@@ -14,7 +14,7 @@
 // valor de error, que es control de flujo por excepción en una capa que por lo demás es de funciones puras.
 // Queda encerrado dentro de `comando()`, no escapa nunca de un manejador, y es exactamente lo que ya hacía
 // `rechazoDesdeError` con los errores del motor — así que el mecanismo es uno, no dos.
-import type { Asentamiento, CampamentoBandido, Caravana, Faccion } from '../../domain/types';
+import type { Asentamiento, CampamentoBandido, Caravana, Faccion, Ejercito } from '../../domain/types';
 import type { GameSessionState } from '../estado';
 import { CODIGOS_ERROR, type CodigoError } from './codigosDeError';
 import { rechazo, rechazoDesdeError, type ManejadorComando } from './tipos';
@@ -87,6 +87,12 @@ export function exigirCampamento(estado: GameSessionState, campamentoId: string)
   const campamento = estado.campamentosBandidos.find((c) => c.id === campamentoId);
   if (!campamento) rechazar(CODIGOS_ERROR.campamentoNoExiste);
   return campamento;
+}
+
+export function exigirEjercito(estado: GameSessionState, ejercitoId: string): Ejercito {
+  const ejercito = estado.ejercitos.find((e) => e.id === ejercitoId);
+  if (!ejercito) rechazar(CODIGOS_ERROR.ejercitoNoExiste);
+  return ejercito;
 }
 
 // --- Actualizadores: estado nuevo con una entidad sustituida ---
