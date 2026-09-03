@@ -12,7 +12,11 @@ import type { Asentamiento, Ejercito, Escuadron, Jugador, Point } from '../domai
 import type { Mapa } from '../world/mapa';
 import { calcularRuta } from '../world/rutas';
 import { distancia } from '../world/geometria';
-import { LOGISTICA } from '../constants';
+import { LOGISTICA, TROPAS_RECLUTABLES } from '../constants';
+import type { EventoCrudo } from '../domain/eventos';
+import { avanzarPosicionEnRuta } from './movimiento';
+import { agregarRecurso } from './almacen';
+import { avanzarRacion } from './tropas';
 import { puedeLlevar } from './liderazgo';
 import { esResidente } from './pertenencia';
 
@@ -183,4 +187,136 @@ export function replegarEjercito(ejercito: Ejercito, origen: Asentamiento | unde
 export function estacionarEjercito(ejercito: Ejercito): Ejercito {
   if (ejercito.estado === 'estacionado') throw new MovilizacionInvalidaError('El ejército ya está estacionado.');
   return { ...ejercito, estado: 'estacionado', objetivo: { tipo: 'punto', punto: ejercito.posicionActual } };
+}
+
+// --- Avance en el tick ---
+
+/**
+ * Velocidad de marcha del ejército: la de su escuadrón MÁS LENTO (Doc 5.12.5).
+ *
+ * De aquí sale sola la distinción entre una partida de incursión y un ejército de asedio: meter un solo
+ * escuadrón pesado (12) en una fuerza ligera (20) la frena a 12 y le quita la capacidad de cazar caravanas
+ * (comercial va a 16). No hace falta ninguna regla más para separar los dos roles.
+ *
+ * Un ejército sin escuadrones vivos no se mueve — pero eso no debería llegar aquí: `disolverSiVacio` lo
+ * retira antes (Doc 5.13.4).
+ */
+export function velocidadDeEjercito(ejercito: Ejercito): number {
+  const velocidades = ejercito.escuadrones
+    .map((e) => TROPAS_RECLUTABLES.find((t) => t.id === e.tropaId)?.velocidad)
+    .filter((v): v is number => v !== undefined);
+  return velocidades.length === 0 ? 0 : Math.min(...velocidades);
+}
+
+/** ¿Se quedó sin nadie? Un escuadrón persiste como identidad con `cantidad: 0` (Doc 5.4), así que "vacío" es
+ * que NINGUNO tenga soldados, no que la lista esté vacía — que es justo lo que `resolverCombate` no distingue
+ * y lo que dejaría marchar a un ejército fantasma (Doc 5.13.4). */
+function sinSoldados(ejercito: Ejercito): boolean {
+  return ejercito.escuadrones.every((e) => e.cantidad <= 0);
+}
+
+export interface ResultadoAvanceEjercitos {
+  ejercitos: Ejercito[];
+  asentamientos: Asentamiento[];
+  eventos: EventoCrudo[];
+}
+
+/**
+ * Un tick de todos los ejércitos en campaña: comer, moverse, llegar (Doc 5.12/5.13).
+ *
+ * NO consume aleatoriedad. Ni el hambre, ni el movimiento, ni la disolución la necesitan — y eso es
+ * deliberado: colocada al final de la cadena del tick y sin tocar el RNG, el guardián de determinismo sigue
+ * verde SIN modificarlo, que es una verificación más fuerte que actualizarlo. El RNG entrará cuando la
+ * llegada dispare combate (Paso 7), y ahí sí habrá que ordenar canónicamente las resoluciones.
+ *
+ * Orden dentro de cada ejército, y por qué:
+ *  1. **Comer primero.** Un ejército que se queda sin suministro este tick pierde moral este tick, avance
+ *     incluido — si se moviera antes de comer, la última jornada saldría gratis.
+ *  2. **Disolver si se quedó sin nadie** (Doc 5.13.4), antes de moverlo: si no, marcharía como fantasma.
+ *  3. **Mover**, salvo estacionado (que acampa pero sigue comiendo, a `factorConsumoEstacionado`).
+ *  4. **Llegar**: `regresando` reintegra la tropa y el sobrante en casa; cualquier otro destino deja el
+ *     ejército acampado donde llegó. Que la llegada a un asentamiento enemigo dispare un asedio es el Paso 7:
+ *     hasta entonces, plantarse es la conducta neutra y no rompe nada.
+ */
+export function avanzarEjercitos(
+  ejercitos: readonly Ejercito[],
+  asentamientos: readonly Asentamiento[],
+  mapa: Mapa
+): ResultadoAvanceEjercitos {
+  if (ejercitos.length === 0) return { ejercitos: [...ejercitos], asentamientos: [...asentamientos], eventos: [] };
+
+  const eventos: EventoCrudo[] = [];
+  const porId = new Map(asentamientos.map((a) => [a.id, a]));
+  const supervivientes: Ejercito[] = [];
+
+  /** Devuelve escuadrones (y opcionalmente suministro) al asentamiento de origen. Si ya no existe, se pierden
+   * con él: sus jugadores quedan huérfanos (Doc 5.4) y no hay dónde reintegrar. */
+  const reintegrar = (ejercito: Ejercito, devolverSuministro: boolean): boolean => {
+    const origen = porId.get(ejercito.origenAsentamientoId);
+    if (!origen) return false;
+    const almacen = devolverSuministro
+      ? Object.entries(ejercito.suministro).reduce((acc, [recurso, cantidad]) => agregarRecurso(acc, recurso, cantidad), origen.almacen)
+      : origen.almacen;
+    porId.set(origen.id, { ...origen, escuadrones: [...origen.escuadrones, ...ejercito.escuadrones], almacen });
+    return true;
+  };
+
+  for (const original of ejercitos) {
+    // 1. Comer. La MISMA regla del hambre que la guarnición, solo que de otra despensa (Doc 5.13).
+    const factorConsumo = original.estado === 'estacionado' ? LOGISTICA.factorConsumoEstacionado : 1;
+    const trigoEnCarro = original.suministro['trigo'] ?? 0;
+    const racion = avanzarRacion(original.escuadrones, trigoEnCarro, factorConsumo);
+    eventos.push(...racion.eventos);
+
+    let ejercito: Ejercito = {
+      ...original,
+      escuadrones: racion.escuadrones,
+      suministro: { ...original.suministro, trigo: trigoEnCarro - racion.trigoConsumido },
+    };
+
+    // 2. ¿Se quedó sin nadie? Se disuelve y las identidades vacías vuelven a casa a poder rellenarse.
+    if (sinSoldados(ejercito)) {
+      const volvieron = reintegrar(ejercito, true);
+      eventos.push({
+        codigo: 'ejercito.disuelto',
+        mensaje: volvieron
+          ? `El ejército ${ejercito.id} se deshace sin un solo soldado en pie; sus estandartes vuelven a ${ejercito.origenAsentamientoId}.`
+          : `El ejército ${ejercito.id} se deshace sin un solo soldado en pie, y ya no tiene asentamiento al que volver.`,
+        payload: { ejercitoId: ejercito.id, origenAsentamientoId: ejercito.origenAsentamientoId, reintegrado: volvieron },
+      });
+      continue;
+    }
+
+    // 3. Mover (estacionado acampa: no avanza, pero ya comió arriba).
+    if (ejercito.estado !== 'estacionado') {
+      const avance = avanzarPosicionEnRuta(mapa, ejercito.ruta, ejercito.progreso, velocidadDeEjercito(ejercito));
+      ejercito = { ...ejercito, progreso: avance.progreso, posicionActual: avance.posicion };
+    }
+
+    // 4. Llegar.
+    if (ejercito.estado !== 'estacionado' && ejercito.progreso >= 1) {
+      if (ejercito.estado === 'regresando') {
+        const volvieron = reintegrar(ejercito, true);
+        eventos.push({
+          codigo: 'ejercito.regresa',
+          mensaje: volvieron
+            ? `El ejército ${ejercito.id} vuelve a ${ejercito.origenAsentamientoId} y se reincorpora a la guarnición.`
+            : `El ejército ${ejercito.id} llega a donde estaba su hogar y no encuentra nada a lo que volver.`,
+          payload: { ejercitoId: ejercito.id, origenAsentamientoId: ejercito.origenAsentamientoId, reintegrado: volvieron },
+        });
+        continue;
+      }
+      // Llegó a su destino: acampa. El asedio lo añade el Paso 7.
+      ejercito = { ...ejercito, estado: 'estacionado' };
+      eventos.push({
+        codigo: 'ejercito.llega',
+        mensaje: `El ejército ${ejercito.id} llega a su destino y acampa.`,
+        payload: { ejercitoId: ejercito.id, objetivo: ejercito.objetivo },
+      });
+    }
+
+    supervivientes.push(ejercito);
+  }
+
+  return { ejercitos: supervivientes, asentamientos: [...porId.values()], eventos };
 }

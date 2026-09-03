@@ -423,12 +423,26 @@ usuario dio la tabla real. Calibrarla es un cambio de **datos**, no de código.
       disco para ejercitar el round-trip del snapshot v6: movilizar con 10 ≤ 10 pasa, con 25 > 10 devuelve
       `movilizacion.invalida`, el escuadrón desaparece de la guarnición, la ruta sale con 10 puntos y replegar
       deja el ejército en `regresando`. 815 → 826 tests, `tsc` limpio en motor, lab y cliente.
-- [ ] **Paso 4 — `avanzarEjercitos` en el tick.** Movimiento con velocidad por tropa (`min`), consumo del
-      carro con factor de estacionado, deserción por hambre, retorno. **Colocado al FINAL de la cadena del
-      tick y mudo de RNG cuando no hay ejércitos** (§2.5): así el test guardián de determinismo sigue verde
-      **sin tocarlo**, que es verificación más fuerte que actualizarlo.
-      Incluye la disolución del **ejército fantasma** (§1.1c / Doc 5.13.4): todos los escuadrones a cero ⇒ el
-      ejército se disuelve y las identidades vacías vuelven al asentamiento de origen.
+- [x] **Paso 4 — `avanzarEjercitos` en el tick (2026-09-02).** Comer del carro (con factor de estacionado),
+      moverse a la velocidad del escuadrón más lento, disolverse si no queda nadie, y llegar. Colocado al
+      final de la cadena, tras los bandidos.
+      **Resultó ser mudo de RNG SIEMPRE, no solo cuando no hay ejércitos**: ni el hambre, ni el movimiento, ni
+      la disolución necesitan aleatoriedad. Eso es más fuerte de lo que preveía el plan — el guardián de
+      determinismo pasó **sin tocarlo**, y hay un test que lo congela contando las llamadas al RNG con y sin
+      ejércitos (mismo número). El RNG entrará en el Paso 7, con el combate.
+      Incluye la disolución del **ejército fantasma** (§1.1c / Doc 5.13.4) y el retorno: al llegar a casa
+      reintegra la tropa **y devuelve el sobrante del carro** al almacén.
+      `calcularTitulos` pasa a contar guarnición + campo (invariante 8): si no, "Ejército más grande" cambiaría
+      de manos cada vez que alguien marcha y los Aedas narrarían un cambio que no ocurrió.
+      826 → 838 tests, `tsc` limpio en motor, lab y cliente.
+
+      > **Hallazgo de calibración, medido al verificar en vivo.** Trazando un ejército tick a tick, los cuatro
+      > primeros avanzan a 0.006 de progreso y los siguientes a 0.086: **14× de diferencia**, porque la ruta
+      > bordea agua (`COSTE_MOVIMIENTO.agua` = 15, `cima` = 12) al salir del asentamiento. En esa corrida, 13
+      > ticks cubrieron ~161 unidades en vez de las 260 que darían en llano — **un 62% de la velocidad
+      > nominal**. El cálculo de `capacidadCarroPorJugador` (Doc 5.13.1) asumió coste 1, así que **el radio
+      > operativo real es menor que el objetivo**: hay que meter un factor de terreno medio en la calibración
+      > del Paso 13. Es una ruta en una seed, así que es indicación, no calibración.
 - [ ] **Paso 5 — Render: rombos por jugador + traza de ruta.** Sube aquí a propósito: es el instrumento con el
       que se verifican rutas, velocidad y consumo en el lab. Y con el reloj de mundo ya en marcha
       (`INTERVALO_TICK_MS` = 5 s en dev) la verificación es de verdad: **un ejército cruza el mapa en el

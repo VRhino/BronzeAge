@@ -1,4 +1,4 @@
-import type { AcuerdoTrueque, Asentamiento, CaminoComercial, CampamentoBandido, Caravana, Faccion, OrdenMercado, RelacionPolitica, Titulo } from '../domain/types';
+import type { AcuerdoTrueque, Asentamiento, CaminoComercial, CampamentoBandido, Caravana, Ejercito, Faccion, OrdenMercado, RelacionPolitica, Titulo } from '../domain/types';
 import type { EventoCrudo, EventoDominio } from '../domain/eventos';
 import type { Instante } from '../domain/tiempo';
 import type { EstadoMapa, Mapa } from '../world/mapa';
@@ -19,11 +19,14 @@ import { nivelActualDe } from './asentamientoQuery';
 import { avanzarReputacion } from './reputacion';
 import { calcularTitulos, narrarCambiosDeTitulo } from './titulos';
 import { avanzarAtaquesBandidos, avanzarSpawnBandidos } from './bandidos';
+import { avanzarEjercitos } from './ejercitos';
 
 export interface EstadoSimulacion {
   asentamientos: Asentamiento[];
   facciones: Faccion[];
   caravanas: Caravana[];
+  /** Ejércitos en campaña (Doc 5.12) — los mueve `avanzarEjercitos`, al final de la cadena del tick. */
+  ejercitos: Ejercito[];
   acuerdos: AcuerdoTrueque[];
   ordenes: OrdenMercado[];
   relaciones: RelacionPolitica[];
@@ -232,7 +235,15 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   const trasAtaquesBandidos = avanzarAtaquesBandidos(trasSpawnBandidos.campamentos, trasExpansion.caravanas, rng);
   eventosDominio.push(...comoEventosDominio(trasAtaquesBandidos.eventos, contexto));
 
-  const trasMercado = avanzarMercado(trasExpansion.asentamientos, estado.ordenes);
+  // Ejércitos (Doc 5.12): comer del carro, moverse, llegar. Va DESPUÉS de los bandidos, al final de la
+  // cadena, y NO consume aleatoriedad — ni el hambre, ni el movimiento, ni la disolución la necesitan. Esas
+  // dos cosas juntas son lo que mantiene el guardián de determinismo verde SIN tocarlo: una partida sin
+  // ejércitos hace exactamente las mismas llamadas al RNG, en el mismo orden, que antes de existir esto. El
+  // RNG entrará cuando la llegada dispare combate (Paso 7), y ahí habrá que ordenar canónicamente.
+  const trasEjercitos = avanzarEjercitos(estado.ejercitos, trasExpansion.asentamientos, mapa);
+  eventosDominio.push(...comoEventosDominio(trasEjercitos.eventos, contexto));
+
+  const trasMercado = avanzarMercado(trasEjercitos.asentamientos, estado.ordenes);
   eventosDominio.push(...comoEventosDominio(trasMercado.eventos, contexto));
 
   const trasTributos = avanzarTributos(estado.relaciones, trasMercado.asentamientos);
@@ -246,7 +257,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
 
   const faccionesFinal = avanzarReputacion(trasNivelFaccion.facciones, estado.relaciones);
 
-  const titulosActuales = calcularTitulos(faccionesFinal, trasTributos.asentamientos, estado.relaciones);
+  const titulosActuales = calcularTitulos(faccionesFinal, trasTributos.asentamientos, estado.relaciones, trasEjercitos.ejercitos);
   const eventosTitulos = narrarCambiosDeTitulo(estado.titulos, titulosActuales, faccionesFinal);
   eventosDominio.push(...comoEventosDominio(eventosTitulos, contexto));
 
@@ -254,6 +265,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     asentamientos: trasTributos.asentamientos,
     facciones: faccionesFinal,
     caravanas: trasAtaquesBandidos.caravanas,
+    ejercitos: trasEjercitos.ejercitos,
     acuerdos: trasComercio.acuerdos,
     ordenes: trasMercado.ordenes,
     relaciones: estado.relaciones,

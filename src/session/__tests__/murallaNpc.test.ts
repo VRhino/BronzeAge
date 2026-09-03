@@ -35,6 +35,7 @@ function estadoBase(nivel: number): { estado: EstadoSimulacion; mapa: ReturnType
       asentamientos: [abundante],
       facciones: faccionesTrasFundar,
       caravanas: [],
+    ejercitos: [],
       acuerdos: [],
       ordenes: [],
       relaciones: [],

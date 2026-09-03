@@ -43,6 +43,7 @@ function estadoBase(): { estado: EstadoSimulacion; mapa: ReturnType<typeof crear
       asentamientos: [abundante],
       facciones: faccionesTrasFundar,
       caravanas: [],
+    ejercitos: [],
       acuerdos: [],
       ordenes: [],
       relaciones: [],

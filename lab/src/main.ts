@@ -197,6 +197,7 @@ function fundar(seed: number): void {
     asentamientos: [asentamientoConGobernador],
     facciones: [faccionLab],
     caravanas: [],
+    ejercitos: [],
     acuerdos: [],
     ordenes: [],
     relaciones: [],
