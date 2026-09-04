@@ -263,11 +263,21 @@ solo mira.
 
 ### 5.3 Lo que salió del Paso 3
 
-**La máscara viaja con su geometría, no solo con sus bits.** `exploracion` no es la cadena pelada: es
-`{ tamanoCelda, columnas, filas, celdas }`. El cliente necesita el tamaño de celda para saber qué tapa cada
-bit, y si tuviera que ir a buscarlo a `GET /v1/balance` bastaría una versión de más para que pintase la
-niebla DESPLAZADA sobre el mapa sin que nada fallara de forma visible. La máscara y su geometría son un solo
-dato, así que viajan juntas.
+**Son DOS máscaras, no una, y viajan con su geometría.** `exploracion` es
+`{ tamanoCelda, columnas, filas, celdas, visibles }`:
+
+- `celdas` = explorado alguna vez. `visibles` = lo que se ve ahora mismo, siempre un subconjunto del anterior.
+- De ahí salen los tres estados sin que el cliente sepa una sola regla: fuera de `celdas` = nunca visto; en
+  `celdas` pero no en `visibles` = visto antes; en `visibles` = viéndolo.
+
+La segunda máscara se añadió al implementar el Paso 5 y es lo que hace que el estado 2 exista de verdad. El
+cliente podría deducirla a partir de dónde están sus plazas y sus columnas, pero para eso necesitaría los
+radios de visión y el algoritmo de marcado — o sea, una copia de las reglas del juego dentro del cliente.
+Ochocientos bytes de más salen mucho más baratos que eso.
+
+Y la geometría va con ellas porque el cliente necesita el tamaño de celda para saber qué tapa cada bit: si
+tuviera que ir a buscarlo a `GET /v1/balance` bastaría una versión de más para que pintase la niebla
+DESPLAZADA sobre el mapa sin que nada fallara de forma visible.
 
 **Lo proyectado es memoria MÁS vista, no solo memoria.** Quien graba es el tick, así que entre un comando y el
 siguiente tick hay una ventana en la que lo recién visto —una plaza recién fundada, por ejemplo— todavía no

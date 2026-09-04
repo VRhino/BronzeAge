@@ -482,6 +482,54 @@ describe('la exploracion proyectada: la mascara que tapa el terreno', () => {
     expect(exploracion.filas * exploracion.tamanoCelda).toBeGreaterThanOrEqual(2000);
   });
 
+  it('lo VISIBLE es un subconjunto de lo explorado: no se puede ver lo que no se ha explorado', () => {
+    // Es la relacion de la que cuelgan los tres estados. Si se rompiera, habria celdas "visibles pero nunca
+    // vistas" y el cliente tendria que decidir cual de las dos mascaras miente.
+    const { sesion, faccionId, fundador } = partidaConAsentamiento();
+    const estado = sesion.getState();
+    const rejilla = rejillaDe(estado.mapa.config);
+    const conMemoria: GameSessionState = {
+      ...estado,
+      memoriaPorFaccion: { [faccionId]: { exploracion: marcarVisto('', rejilla, { x: 1700, y: 1700 }, 100), asentamientos: {} } },
+    };
+
+    const { exploracion } = proyectarParaJugador(conMemoria, fundador, SIN_GEOMETRIA);
+    for (let fila = 0; fila < exploracion.filas; fila++) {
+      for (let columna = 0; columna < exploracion.columnas; columna++) {
+        const punto = { x: columna * exploracion.tamanoCelda + 1, y: fila * exploracion.tamanoCelda + 1 };
+        if (estaExplorado(exploracion.visibles, rejilla, punto)) {
+          expect(estaExplorado(exploracion.celdas, rejilla, punto)).toBe(true);
+        }
+      }
+    }
+  });
+
+  it('lo RECORDADO no esta en la mascara de visible: es justo lo que el cliente pinta oscuro', () => {
+    const { sesion, faccionId, fundador } = partidaConAsentamiento();
+    const estado = sesion.getState();
+    const rejilla = rejillaDe(estado.mapa.config);
+    const lejos = { x: 1700, y: 1700 };
+    const conMemoria: GameSessionState = {
+      ...estado,
+      memoriaPorFaccion: { [faccionId]: { exploracion: marcarVisto('', rejilla, lejos, 100), asentamientos: {} } },
+    };
+
+    const { exploracion } = proyectarParaJugador(conMemoria, fundador, SIN_GEOMETRIA);
+    // El rincon recordado: explorado SI, visible NO -> estado 2.
+    expect(estaExplorado(exploracion.celdas, rejilla, lejos)).toBe(true);
+    expect(estaExplorado(exploracion.visibles, rejilla, lejos)).toBe(false);
+    // La propia plaza: las dos cosas -> estado 3.
+    expect(estaExplorado(exploracion.celdas, rejilla, { x: 400, y: 400 })).toBe(true);
+    expect(estaExplorado(exploracion.visibles, rejilla, { x: 400, y: 400 })).toBe(true);
+  });
+
+  it('sin Faccion las dos mascaras estan vacias', () => {
+    const { sesion } = partidaConAsentamiento();
+    const { exploracion } = proyectarParaJugador(sesion.getState(), 'forastero', SIN_GEOMETRIA);
+    expect(exploracion.celdas).toBe('');
+    expect(exploracion.visibles).toBe('');
+  });
+
   it('lo GRABADO no se pierde al proyectar: la mascara es memoria mas vista, no solo vista', () => {
     const { sesion, faccionId, fundador } = partidaConAsentamiento();
     const estado = sesion.getState();

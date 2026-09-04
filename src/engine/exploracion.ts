@@ -139,25 +139,50 @@ export function marcarVisto(
 }
 
 /**
- * Lo explorado tal como viaja a un cliente: el bitmap MÁS la geometría con que se descifra.
+ * La niebla tal como viaja a un cliente: DOS máscaras sobre la misma rejilla, más la geometría con que se
+ * descifran. De ellas salen los tres estados en que el jugador ve el mundo, sin que el cliente tenga que
+ * saber una sola regla de juego:
  *
- * Van juntos a propósito. El cliente necesita el tamaño de celda para saber qué tapa cada bit, y si tuviera
- * que ir a buscarlo a `GET /v1/balance` bastaría una versión de más para que pintase la niebla desplazada
- * sobre el mapa sin que nada fallara de forma visible. La máscara y su geometría son un solo dato.
+ * | Estado | Cómo se deduce |
+ * |---|---|
+ * | Nunca visto | el bit NO está en `celdas` |
+ * | Visto antes | está en `celdas` pero no en `visibles` |
+ * | Viéndolo | está en `visibles` |
+ *
+ * **Por qué van las dos y no solo `celdas`**: sin `visibles` el cliente solo podría distinguir explorado de
+ * no explorado, y el estado 2 —el filtro oscuro de "esto lo vi hace rato"— desaparecería. Podría deducirlo
+ * él a partir de dónde están sus plazas y sus columnas, pero para eso necesitaría los radios de visión y el
+ * algoritmo de marcado, o sea una copia de las reglas del juego dentro del cliente. Ochocientos bytes de más
+ * salen mucho más baratos que eso.
+ *
+ * **Y por qué viaja también la geometría**: el cliente necesita el tamaño de celda para saber qué tapa cada
+ * bit, y si tuviera que ir a buscarlo a `GET /v1/balance` bastaría una versión de más para que pintase la
+ * niebla desplazada sobre el mapa sin que nada fallara de forma visible. La máscara y su geometría son un
+ * solo dato.
  */
 export interface NieblaProyectada {
   /** Lado de una celda, en unidades de mapa. */
   tamanoCelda: number;
   columnas: number;
   filas: number;
-  /** Un bit por celda, en hexadecimal, recorriendo el mundo fila a fila desde (0,0). 1 = explorado. El bit
-   * de la celda `(columna, fila)` es el `fila * columnas + columna`, contando desde el bit MENOS significativo
-   * de cada byte, y cada byte son dos caracteres hex. */
+  /** Lo explorado ALGUNA VEZ, que incluye lo que se ve ahora: un bit por celda, en hexadecimal, recorriendo
+   * el mundo fila a fila desde (0,0). 1 = explorado. El bit de la celda `(columna, fila)` es el
+   * `fila * columnas + columna`, contando desde el bit MENOS significativo de cada byte, y cada byte son dos
+   * caracteres hex. */
   celdas: Exploracion;
+  /** Lo que se está viendo AHORA MISMO, en el mismo formato y sobre la misma rejilla. Siempre es un
+   * subconjunto de `celdas`. */
+  visibles: Exploracion;
 }
 
-export function proyectarNiebla(exploracion: Exploracion, rejilla: Rejilla): NieblaProyectada {
-  return { tamanoCelda: rejilla.tamanoCelda, columnas: rejilla.columnas, filas: rejilla.filas, celdas: exploracion };
+export function proyectarNiebla(explorado: Exploracion, visible: Exploracion, rejilla: Rejilla): NieblaProyectada {
+  return {
+    tamanoCelda: rejilla.tamanoCelda,
+    columnas: rejilla.columnas,
+    filas: rejilla.filas,
+    celdas: explorado,
+    visibles: visible,
+  };
 }
 
 /** Cuántas celdas hay marcadas. Para tests y métricas del laboratorio — ninguna regla de juego lo consulta. */

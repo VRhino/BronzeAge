@@ -47,7 +47,7 @@ import type { Instante } from '../../domain/tiempo';
 import { esCiudadano } from '../../engine/faccion';
 // El mismo recuento que usa el motor para los carros (Doc 5.13): un participante es un carro Y un rombo.
 import { participantesDe } from '../../engine/ejercitos';
-import { marcarVisto, proyectarNiebla, rejillaDe, type NieblaProyectada } from '../../engine/exploracion';
+import { marcarVisto, proyectarNiebla, rejillaDe, SIN_EXPLORAR, type NieblaProyectada } from '../../engine/exploracion';
 import { MEMORIA_VACIA, type FichaConocida } from '../../engine/memoria';
 import {
   eventosDesde,
@@ -136,9 +136,9 @@ export interface ProyeccionJugador {
    * `FichaConocida`). Nunca repite lo que ya está en `asentamientosAvistados` — cuando algo se ve y además se
    * recuerda, gana lo que se ve. Vacío para un jugador sin Facción: la memoria es de la Facción. */
   asentamientosConocidos: FichaConocida[];
-  /** El terreno que la Facción propia ha llegado a ver, como máscara de celdas (ver `NieblaProyectada`). Es
-   * lo que separa "nunca he estado ahí" de "ya lo vi": **quien la aplica es el CLIENTE DE JUGADOR** (decisión
-   * del usuario, 2026-09-04), no el servidor. La geografía no es información táctica —es la misma para todos
+  /** Las DOS máscaras de celdas —lo explorado alguna vez y lo visible ahora— con las que el cliente
+   * distingue los tres estados (ver `NieblaProyectada`). **Quien las aplica es el CLIENTE DE JUGADOR**
+   * (decisión del usuario, 2026-09-04), no el servidor. La geografía no es información táctica —es la misma para todos
    * y el cliente la cachea para siempre por su `mapaId`—, así que ocultarla aquí rompería esa caché a cambio
    * de nada: lo que no puede salir del servidor son las ENTIDADES, y eso ya se filtra arriba. El cliente de
    * ADMINISTRACIÓN, que es herramienta de operación y no un jugador, lo ve todo sin máscara.
@@ -231,25 +231,34 @@ function seVeAhora(
 }
 
 /**
- * Lo explorado que viaja al cliente: lo que la Facción tiene GRABADO, más lo que se está viendo en este
- * mismo instante.
+ * Las dos máscaras de niebla que viajan al cliente (ver `NieblaProyectada`): lo VISIBLE ahora mismo, y lo
+ * EXPLORADO alguna vez —que es lo que la Facción tiene grabado MÁS lo visible—.
  *
- * La unión no es redundante. El tick es quien graba, así que entre un comando y el siguiente tick hay una
- * ventana en la que lo recién visto —una plaza recién fundada, por ejemplo— todavía no está en la memoria. Sin
- * esta unión el cliente pintaría niebla justo encima de lo que el jugador acaba de hacer, que es la clase de
- * agujero que nadie relaciona con un desfase de un tick.
+ * Las dos se calculan con los mismos ojos y el mismo `marcarVisto` que usa el motor al grabar, en vez de con
+ * una versión propia: si el criterio de "hasta dónde ve una plaza" cambiara, cambiaría en los dos sitios a la
+ * vez porque es el mismo código.
+ *
+ * Y unir lo grabado con lo visible no es redundante. El tick es quien graba, así que entre un comando y el
+ * siguiente tick hay una ventana en la que lo recién visto —una plaza recién fundada, por ejemplo— todavía no
+ * está en la memoria. Sin esta unión el cliente pintaría niebla justo encima de lo que el jugador acaba de
+ * hacer, que es la clase de agujero que nadie relaciona con un desfase de un tick.
  */
-function exploracionDe(
+function nieblaDe(
   grabada: string,
   estado: GameSessionState,
   asentamientosPropios: readonly Asentamiento[],
   ejercitosPropios: readonly Ejercito[]
 ): NieblaProyectada {
   const rejilla = rejillaDe(estado.mapa.config);
+  let visibles = SIN_EXPLORAR;
+  for (const a of asentamientosPropios) visibles = marcarVisto(visibles, rejilla, a.posicion, a.radioPotencial + VISION.margenAsentamiento);
+  for (const e of ejercitosPropios) visibles = marcarVisto(visibles, rejilla, e.posicionActual, VISION.ejercito);
+
   let celdas = grabada;
   for (const a of asentamientosPropios) celdas = marcarVisto(celdas, rejilla, a.posicion, a.radioPotencial + VISION.margenAsentamiento);
   for (const e of ejercitosPropios) celdas = marcarVisto(celdas, rejilla, e.posicionActual, VISION.ejercito);
-  return proyectarNiebla(celdas, rejilla);
+
+  return proyectarNiebla(celdas, visibles, rejilla);
 }
 
 export function proyectarParaJugador(
@@ -289,7 +298,7 @@ export function proyectarParaJugador(
     // Lo recordado MENOS lo que se ve ahora, y menos lo que entretanto pasó a ser propio (eso viaja completo
     // en `asentamientos`). Cada plaza aparece en una lista o en la otra, nunca en las dos.
     asentamientosConocidos: Object.values(memoria.asentamientos).filter((f) => !seVe.has(f.asentamientoId) && !esPropio(f.asentamientoId)),
-    exploracion: exploracionDe(memoria.exploracion, estado, asentamientosPropios, ejercitosPropios),
+    exploracion: nieblaDe(memoria.exploracion, estado, asentamientosPropios, ejercitosPropios),
     caravanas: estado.caravanas.filter((c) => esPropio(c.origenAsentamientoId) || (c.destinoAsentamientoId !== undefined && esPropio(c.destinoAsentamientoId))),
     ejercitos: ejercitosPropios,
     ejercitosAvistados: estado.ejercitos
