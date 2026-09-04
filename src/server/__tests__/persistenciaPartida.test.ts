@@ -267,6 +267,23 @@ describe('guardarPartida / cargarPartida', () => {
     expect(state.asentamientos.length).toBeGreaterThan(0);
   });
 
+  it('migra v6 -> v7: un snapshot sin `memoriaPorFaccion` la recibe vacía', async () => {
+    // Niebla de guerra (Paso 2): la partida no venía guardando qué había visto cada Facción, así que no hay
+    // pasado que reconstruir — se empieza a recordar desde el primer tick que corra con la mecánica. Lo que
+    // el jugador nota es que el mapa se tapa entero salvo lo que esté viendo, y se destapa jugando.
+    const sesion = partidaEnMarcha();
+    await guardarPartida(directorio, sesion, MOMENTO);
+    const ruta = join(directorio, `${sesion.gameId}.json`);
+    const snap = JSON.parse(await readFile(ruta, 'utf-8'));
+    snap.formatoVersion = 6;
+    delete snap.partida.state.memoriaPorFaccion;
+    await writeFile(ruta, JSON.stringify(snap), 'utf-8');
+
+    const cargada = (await cargarPartida(directorio, sesion.gameId))!.sesion;
+    expect(cargada.getState().memoriaPorFaccion).toEqual({});
+    expect(cargada.getState().asentamientos.length).toBeGreaterThan(0);
+  });
+
   it('rechaza un snapshot generado con otra versión del generador de mundo', async () => {
     const sesion = partidaEnMarcha();
     await guardarPartida(directorio, sesion, MOMENTO);

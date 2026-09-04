@@ -1538,6 +1538,23 @@ export const VISION = {
 };
 
 /**
+ * Discretización de lo EXPLORADO (niebla de guerra, Paso 2 — ver `engine/exploracion.ts`). Lo que una Facción
+ * ha llegado a ver alguna vez es un área, y un área hay que trocearla para poder guardarla.
+ *
+ * **25** unidades de mapa por celda, que es un compromiso entre dos cosas medibles:
+ *
+ * - **Cómo se lee la frontera de la niebla.** Lo que vigila una plaza recién fundada (30 de radio + 60 de
+ *   margen = 90) son ~3,6 celdas de radio, y la vista de un ejército (150), 6. Con celdas más gruesas la
+ *   frontera se leería como un cuadrado en vez de como una forma.
+ * - **Lo que ocupa en el snapshot.** Sobre el mundo de 2000 salen 80x80 = 6.400 celdas, o sea 800 bytes por
+ *   Facción — 24 KB con las 30 del laboratorio, frente a los 125 KB que ya ocupa el mapa. Doblar la
+ *   resolución multiplicaría eso por cuatro.
+ */
+export const EXPLORACION = {
+  tamanoCelda: 25,
+};
+
+/**
  * Campamentos de bandidos (Doc 1.9, a petición del usuario — inspirado en análisis comparativo con Travian):
  * amenaza NPC en bosques no reclamados que ataca caravanas cercanas. Todas las cifras son PLACEHOLDER, sin
  * calibrar por simulación todavía (ver `Preguntas_Abiertas.md` #14c) — mismo criterio que el resto del proyecto.

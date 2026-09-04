@@ -18,6 +18,7 @@ import type {
   ZonaFaccion,
   ZonaInfluencia, Ejercito, Jugador } from '../domain/types';
 import type { TrazadoAsentamiento } from '../engine/trazado';
+import type { MemoriaFaccion } from '../engine/memoria';
 import type { EventoDominio } from '../domain/eventos';
 
 /**
@@ -111,6 +112,11 @@ export interface GameSessionState {
    * Fase C filtran sobre `codigo`/`payload`, que es justamente para lo que existe.
    */
   eventosDominio: EventoDominioConVersion[];
+  /** Lo que cada Facción RECUERDA del mundo (niebla de guerra — `engine/memoria.ts`), por `faccionId`: qué
+   * terreno ha llegado a ver y la última ficha de cada plaza ajena que vio. Lo que ve AHORA no está aquí: se
+   * deriva al proyectar. Una Facción ausente no ha visto nada, así que un snapshot viejo no necesita
+   * migración — solo empieza a recordar a partir del primer tick que corra con la mecánica. */
+  memoriaPorFaccion: Record<string, MemoriaFaccion>;
 }
 
 /** Proyecta el estado de partida al subconjunto que consume el motor. El motor no conoce `gameId`, `version`,
@@ -128,6 +134,7 @@ export function estadoSimulacionDe(estado: GameSessionState): EstadoSimulacion {
     caminos: estado.caminos,
     campamentosBandidos: estado.campamentosBandidos,
     bandidosProximoSpawnEn: estado.bandidosProximoSpawnEn,
+    memoriaPorFaccion: estado.memoriaPorFaccion,
   };
 }
 
@@ -147,6 +154,7 @@ export function conResultadoDeSimulacion(estado: GameSessionState, simulacion: E
     caminos: simulacion.caminos,
     campamentosBandidos: simulacion.campamentosBandidos,
     bandidosProximoSpawnEn: simulacion.bandidosProximoSpawnEn,
+    memoriaPorFaccion: simulacion.memoriaPorFaccion,
   };
 }
 

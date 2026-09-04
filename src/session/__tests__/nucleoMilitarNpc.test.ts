@@ -51,6 +51,7 @@ function estadoBase(): { estado: EstadoSimulacion; mapa: ReturnType<typeof crear
       caminos: [],
       campamentosBandidos: [],
       bandidosProximoSpawnEn: instanteDeTest(0),
+      memoriaPorFaccion: {},
     },
     mapa,
     faccionId: 'faccion-1',

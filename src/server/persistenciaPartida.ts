@@ -37,9 +37,10 @@ import { WORLDGEN_VERSION } from '../worldgen';
  * `cantidadPorMinuto` (mismo valor — 1 tick = 1 minuto). v5 (cierre de Fase D): el `tick` provisional de los
  * eventos y del log desaparece — `EventoDominio` se queda solo con `momento`, `EventoLogAdmin.tick` pasa a
  * `momento`. `migrarSnapshot` encadena las conversiones y todas son sin pérdida — la relación tick↔instante
- * es 1:1 (`instanteDeTick`).
+ * es 1:1 (`instanteDeTick`). v6 (movimiento de ejércitos): `jugadores` y `ejercitos`. v7 (niebla de guerra):
+ * `memoriaPorFaccion`.
  */
-export const FORMATO_SNAPSHOT_VERSION = 6;
+export const FORMATO_SNAPSHOT_VERSION = 7;
 
 export interface SnapshotPartida {
   formatoVersion: number;
@@ -178,6 +179,7 @@ function migrarSnapshot(gameId: string, snapshot: SnapshotPartida): PartidaExpor
   if (snapshot.formatoVersion < 4) migrarV3aV4(s);
   if (snapshot.formatoVersion < 5) migrarV4aV5(s);
   if (snapshot.formatoVersion < 6) migrarV5aV6(s);
+  if (snapshot.formatoVersion < 7) migrarV6aV7(s);
   return p as unknown as PartidaExportada;
 }
 
@@ -279,6 +281,16 @@ function migrarV4aV5(s: Record<string, any>): void {
 function migrarV5aV6(s: Record<string, any>): void {
   s.jugadores ??= [];
   s.ejercitos ??= [];
+}
+
+/** v6 -> v7 (niebla de guerra, Paso 2): `memoriaPorFaccion`. Se rellena vacío: nadie ha explorado nada
+ * todavía, que es exactamente lo cierto — la partida no venía guardando qué había visto cada Facción, así que
+ * inventar un pasado sería peor que empezar a recordar desde el primer tick que corra con la mecánica.
+ *
+ * Consecuencia asumida, y visible para el jugador: al cargar una partida vieja el mapa se tapa entero salvo
+ * lo que se esté viendo en ese momento, y se va destapando de nuevo según se juega. */
+function migrarV6aV7(s: Record<string, any>): void {
+  s.memoriaPorFaccion ??= {};
 }
 
 export interface ResumenPartidaEnDisco {

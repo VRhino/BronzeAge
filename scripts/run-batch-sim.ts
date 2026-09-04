@@ -854,6 +854,7 @@ async function main() {
     facciones,
     caravanas: [],
     ejercitos: [],
+    memoriaPorFaccion: {},
     acuerdos: [],
     ordenes: [],
     relaciones: [],

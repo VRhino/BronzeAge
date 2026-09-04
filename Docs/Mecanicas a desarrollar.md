@@ -73,11 +73,16 @@ ve ahora mismo, siempre redactado: `ejercitosAvistados` (desde 2026-09-03) y `as
 ficha del rival. Los dos radios viven en `VISION` (`ejercito: 150`, `margenAsentamiento: 60`) y la mecánica de
 ejércitos desbloqueó el primero, que era el número que llevaba tiempo faltando.
 
-**Lo que queda es la MEMORIA**, o sea los estados 1 y 2, y el reparto de responsabilidades está decidido:
+**Hecho (Paso 2, 2026-09-04): la MEMORIA se graba.** `memoriaPorFaccion` en el estado guarda, por **Facción**
+y no por jugador, qué terreno ha llegado a ver (rejilla de celdas de 25, `engine/exploracion.ts`) y la última
+ficha de cada plaza ajena que vio, con el instante (`engine/memoria.ts`). Se escribe al final del tick, con
+los ejércitos ya movidos, y **solo crece**. Migración de snapshot v6 -> v7: una partida vieja empieza a
+recordar desde el primer tick que corra con la mecánica.
 
-- `memoriaPorFaccion` en el estado —lo explorado, en rejilla gruesa, y la última ficha de cada plaza conocida—
-  guardado por **Facción**, no por jugador: la proyección ya enseña la Facción propia completa a cualquiera de
-  sus ciudadanos.
+**Lo que queda**:
+
+- **Proyectar la memoria** (Paso 3): `asentamientosConocidos` con su `conocidoEn` y `exploracion` en
+  `ProyeccionJugador`, con la regla de que lo visto en vivo gana sobre lo recordado.
 - **El terreno lo tapa el CLIENTE DE JUGADOR**, no el servidor (decisión del usuario). La geografía no es
   información táctica y el cliente ya la cachea para siempre por su `mapaId`; lo que no puede salir del
   servidor son las ENTIDADES, y eso ya se filtra. **El cliente de administración lo ve todo.**

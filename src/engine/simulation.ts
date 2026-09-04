@@ -20,6 +20,7 @@ import { avanzarReputacion } from './reputacion';
 import { calcularTitulos, narrarCambiosDeTitulo } from './titulos';
 import { avanzarAtaquesBandidos, avanzarSpawnBandidos } from './bandidos';
 import { avanzarEjercitos } from './ejercitos';
+import { grabarLoVisto, type MemoriaFaccion } from './memoria';
 
 export interface EstadoSimulacion {
   asentamientos: Asentamiento[];
@@ -40,6 +41,10 @@ export interface EstadoSimulacion {
   /** Instante de mundo a partir del cual puede aparecer un campamento nuevo si hay menos de
    * `maximoSimultaneos` activos (Doc 1.9) — se adelanta cada vez que un jugador destruye uno. */
   bandidosProximoSpawnEn: Instante;
+  /** Lo que cada Facción RECUERDA del mundo (niebla de guerra — ver `engine/memoria.ts`), por `faccionId`.
+   * Una Facción ausente no ha visto nada todavía, así que las partidas guardadas antes de la mecánica no
+   * necesitan migración. */
+  memoriaPorFaccion: Record<string, MemoriaFaccion>;
 }
 
 /**
@@ -296,6 +301,15 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     caminos: estado.caminos,
     campamentosBandidos: trasSpawnBandidos.campamentos,
     bandidosProximoSpawnEn: estado.bandidosProximoSpawnEn,
+    // Al FINAL, y con lo que ya se movió: lo que se graba es dónde acabaron las columnas este minuto, no de
+    // dónde salieron. No emite eventos ni cambia nada más — la memoria solo mira.
+    memoriaPorFaccion: grabarLoVisto(estado.memoriaPorFaccion, {
+      asentamientos: trasTributos.asentamientos,
+      ejercitos: trasEjercitos.ejercitos,
+      facciones: faccionesFinal,
+      limites: mapa.limites,
+      instante,
+    }),
     estadoMapa: mapa.estadoActual(),
     eventosDominio,
   };

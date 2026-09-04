@@ -198,6 +198,7 @@ function fundar(seed: number): void {
     facciones: [faccionLab],
     caravanas: [],
     ejercitos: [],
+    memoriaPorFaccion: {},
     acuerdos: [],
     ordenes: [],
     relaciones: [],

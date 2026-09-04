@@ -27,7 +27,7 @@ Así que esto ya no es una mecánica desde cero: es **completar** lo que quedó 
 | Proyección por audiencia | Hecha (Fase C4) |
 | Ver ejércitos ajenos por espacio | **Hecho** (Doc 5.12.7) |
 | Ver asentamientos ajenos por espacio | **Hecho** (Paso 1, 2026-09-04) |
-| Memoria ("último conocido") | Falta — hoy lo visto aparece y desaparece |
+| Memoria ("último conocido") | **Grabada** (Paso 2) — falta proyectarla (Paso 3) |
 | Terreno tapado donde nunca se estuvo | Falta — hoy el mapa entero se descarga y se pinta |
 | Visión compartida por alianza | Falta |
 
@@ -199,8 +199,9 @@ mirar.** Y solo el segundo lleva `conocidoEn`, porque solo el segundo puede esta
 - [x] **Paso 1 — Visión espacial de asentamientos ajenos** (estado 3). **HECHO (2026-09-04).**
       `AsentamientoAvistado` + `asentamientosAvistados` en `proyectarParaJugador`, sobre el mismo `seVeAhora`
       que ya servía a los ejércitos. Ver §5.1 para lo que salió por el camino.
-- [ ] **Paso 2 — `memoriaPorFaccion` en el estado**: la rejilla de exploración con su módulo y sus helpers, y
-      el grabado en el tick de lo que cada Facción alcanza a ver. Todavía no se proyecta: solo se acumula.
+- [x] **Paso 2 — `memoriaPorFaccion` en el estado**. **HECHO (2026-09-04).** `engine/exploracion.ts` (la
+      rejilla) y `engine/memoria.ts` (la regla), grabando al final del tick con los ejércitos ya movidos.
+      Migración de snapshot v6 -> v7. Todavía no se proyecta: solo se acumula. Ver §5.2.
 - [ ] **Paso 3 — Proyectar la memoria** (estados 1 y 2): `exploracion` y `asentamientosConocidos` con su
       `conocidoEn`, y la regla de que lo visto en vivo gana sobre lo recordado.
 - [ ] **Paso 4 — Visión compartida por alianza.** En vivo, y solo mientras la alianza esté activa: al
@@ -232,6 +233,33 @@ vista, nunca la recorta.
 De rebote, **la visibilidad ya no lee el parámetro `geometria` en absoluto**, que era una entrada
 privilegiada (necesita la posición de todos los asentamientos del mundo). Hay un test que lo congela: inyectar
 un polígono enorme, propio o ajeno, ya no concede ni un metro de visión.
+
+### 5.2 Lo que salió del Paso 2
+
+**Las dos mitades de la memoria se hicieron a la vez**, en contra del plan, que separaba la rejilla (Paso 2) de
+la ficha (Paso 3). Con "ver es conocer" las dos se graban en la MISMA pasada y con los MISMOS ojos: partirlas
+habría significado recorrer dos veces la misma lista para escribir en el mismo sitio. El Paso 3 se queda con
+lo que de verdad le corresponde, que es proyectar.
+
+**Hexadecimal en vez de base64.** El plan decía base64 (800 bytes por Facción); son 1.600 caracteres hex, el
+doble de texto pero **cero dependencias**: ni `Buffer` (que no aparece en ninguna otra parte de `src/`) ni
+`btoa`. El resto del motor es aritmética pura y este módulo también lo es. De propina, un volcado hex se
+sigue leyendo a ojo en un snapshot.
+
+**La celda que pisa el ojo se marca siempre.** La regla general es "celda vista = celda cuyo centro entra en
+el círculo", que es conservadora en la dirección correcta. Sola, dejaba a un ojo de radio pequeño pegado al
+borde de su celda sin marcar ni el suelo que pisaba — el único caso en que la regla del centro da un
+resultado absurdo. Hay un test que lo congela.
+
+**Un jugador huérfano no aporta memoria a nadie.** No tiene Facción a la que grabarla. Su columna sigue
+viendo en vivo, porque `proyectarParaJugador` resuelve eso por escuadrón y no por Facción, pero lo que ve no
+queda registrado hasta que vuelva a tener bandera. Es una divergencia pequeña y consciente entre la vista y
+la memoria, no un descuido.
+
+**Medido en vivo** (servidor real, 30 Facciones en el laboratorio): una plaza recién fundada explora 44
+celdas, y 76 tras 31 ticks — la zona se ensancha al completarse edificios. 800 bytes por Facción tope, y el
+batch de 300 ticks sigue en 0 excepciones con las cifras de juego intactas, que es lo esperable de algo que
+solo mira.
 
 ## 6. Invariantes a congelar en tests
 

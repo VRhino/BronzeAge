@@ -85,6 +85,7 @@ export function crearEstadoDeTest(
     facciones,
     caravanas: [],
     ejercitos: [],
+    memoriaPorFaccion: {},
     acuerdos: [],
     ordenes: [],
     relaciones: [],

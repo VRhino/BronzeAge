@@ -43,6 +43,7 @@ function estadoBase(nivel: number): { estado: EstadoSimulacion; mapa: ReturnType
       caminos: [],
       campamentosBandidos: [],
       bandidosProximoSpawnEn: instanteDeTest(0),
+      memoriaPorFaccion: {},
     },
     mapa,
     faccionId: 'faccion-1',
