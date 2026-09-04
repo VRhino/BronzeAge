@@ -18,8 +18,6 @@ import { anexionar, fusionar, proponerRelacion, rebelionVasallo, romperRelacion 
 import { colocarOrdenMercado, crearCaravana, proponerTrueque } from './comercio';
 import {
   atacarCampamentoBandidos,
-  combateCampoAbierto,
-  interceptarCaravana,
   iniciarAsedio,
   reclutarTropa,
 } from './militar';
@@ -75,8 +73,6 @@ export const REGISTRO_COMANDOS = {
   cargarCaravana,
   entregarDeCaravana,
   atacarCampamentoBandidos,
-  combateCampoAbierto,
-  interceptarCaravana,
   iniciarAsedio,
   reclutarTropa,
   alternarAutoConstruccion,

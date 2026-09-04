@@ -207,19 +207,6 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
     { atacanteId: IDENTIFICADOR, defensorId: IDENTIFICADOR, escuadronIds: LISTA_DE_IDENTIFICADORES },
     ['atacanteId', 'defensorId', 'escuadronIds']
   ),
-  combateCampoAbierto: objeto(
-    {
-      asentamientoAId: IDENTIFICADOR,
-      escuadronIdsA: LISTA_DE_IDENTIFICADORES,
-      asentamientoBId: IDENTIFICADOR,
-      escuadronIdsB: LISTA_DE_IDENTIFICADORES,
-    },
-    ['asentamientoAId', 'escuadronIdsA', 'asentamientoBId', 'escuadronIdsB']
-  ),
-  interceptarCaravana: objeto(
-    { atacanteId: IDENTIFICADOR, escuadronIds: LISTA_DE_IDENTIFICADORES, caravanaId: IDENTIFICADOR },
-    ['atacanteId', 'escuadronIds', 'caravanaId']
-  ),
   // Ejércitos (Doc 5.12). `objetivo` es una union: un asentamiento por id, o un punto del mapa. Se valida
   // con `oneOf` para que un cliente no pueda colar un punto sin coordenadas ni un destino sin id.
   movilizarEjercito: objeto(

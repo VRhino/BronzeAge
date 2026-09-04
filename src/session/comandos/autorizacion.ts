@@ -377,11 +377,6 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
     condicionJugador: (estado, jugadorId, params) =>
       reside(estado, jugadorId, params.atacanteId) && comandaEscuadrones(estado, jugadorId, params.atacanteId, params.escuadronIds),
   },
-  interceptarCaravana: {
-    rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) =>
-      reside(estado, jugadorId, params.atacanteId) && comandaEscuadrones(estado, jugadorId, params.atacanteId, params.escuadronIds),
-  },
   atacarCampamentoBandidos: {
     rolesPermitidos: ['jugador'],
     condicionJugador: (estado, jugadorId, params) =>
@@ -419,17 +414,6 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
   // Entre dos asentamientos: el actor debe residir en al menos uno de los lados, y comandar sus propios
   // escuadrones en cada lado donde resida. Escoger qué escuadrones del OTRO lado participan es una
   // simplificación del comando en sí (Fase 0: el combate se resuelve en una sola llamada), no de esta matriz.
-  combateCampoAbierto: {
-    rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => {
-      const enA = reside(estado, jugadorId, params.asentamientoAId);
-      const enB = reside(estado, jugadorId, params.asentamientoBId);
-      if (!enA && !enB) return false;
-      if (enA && !comandaEscuadrones(estado, jugadorId, params.asentamientoAId, params.escuadronIdsA)) return false;
-      if (enB && !comandaEscuadrones(estado, jugadorId, params.asentamientoBId, params.escuadronIdsB)) return false;
-      return true;
-    },
-  },
 };
 
 export type MotivoDenegacion = 'rol_insuficiente' | 'condicion_dominio';

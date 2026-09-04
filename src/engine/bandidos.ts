@@ -106,7 +106,7 @@ export function avanzarSpawnBandidos(
 
 /**
  * Campamentos de bandidos atacan caravanas que pasen cerca (Doc 1.9/3.10) — mismo tipo de resolución que
- * `interceptarCaravana` (engine/combate.ts): poder fijo del atacante con jitter contra la defensa base de
+ * `interceptarCaravanaConEjercito` (engine/combate.ts): poder del atacante con jitter contra la defensa base de
  * caravana, sin escolta de jugadores modelada en detalle. A diferencia de la intercepción entre Facciones,
  * el bandido no tiene almacén propio que reciba la carga capturada — si gana, la caravana se pierde por
  * completo (Doc 3.10: "se elimina si es capturada"), sin transferencia a nadie.

@@ -656,8 +656,29 @@ usuario dio la tabla real. Calibrarla es un cambio de **datos**, no de código.
       existe, porque el sobrante del carro vuelve al almacén de origen al replegarse.
 
       903/903, batch idéntico byte a byte.
-- [ ] **Paso 11 — Retirar `combateCampoAbierto` e `interceptarCaravana` como comandos.** Demolición separada
-      del paso que la habilita: primero funciona lo nuevo, después se borra lo viejo.
+- [x] **Paso 11 — Retirados `combateCampoAbierto` e `interceptarCaravana` (2026-09-04).** Demolición separada
+      del paso que la habilitaba, y por eso llegó sin sobresaltos: lo nuevo llevaba dos pasos funcionando.
+
+      Fuera los dos comandos, sus esquemas, sus entradas en la matriz de autorización, las dos funciones de
+      motor que ya no llamaba nadie y los dos métodos del cliente de administración. La superficie de jugador
+      baja de 44 a **42 comandos** — encoger es parte del diseño (§2.6): se manda un ejército en vez de
+      declarar un ataque desde el sofá.
+
+      No era solo limpieza. `interceptarCaravana` resolvía contra una **defensa base fija**, que es
+      exactamente lo que la escolta del Paso 9b sustituyó; mantener los dos dejaba dos reglas distintas para
+      el mismo hecho según por dónde se entrara.
+
+      **Ningún test se borró sin más.** El de `combateCampoAbierto` en `comandosContratoIds` era cobertura
+      duplicada (`iniciarAsedio: defensorId` recorre el mismo camino); el de `interceptarCaravana` se
+      re-apuntó a `desarmarCaravanaFundacion`, porque lo que congelaba —que un `caravanaId` inexistente sale
+      como `caravana.no_existe`— lo prueba igual cualquier comando que empiece por `exigirCaravana`. Y el de
+      autorización ("solo dispones de TUS escuadrones") sigue vivo en `movilizarEjercito`.
+
+      **`iniciarAsedio` NO se retira**: sigue siendo la vía directa entre dos asentamientos vecinos, que no
+      exige movilizar una columna. Comparte la regla de conquista con el asedio por llegada desde el Paso 7,
+      así que no hay dos verdades.
+
+      901/901 (dos menos, los dos casos retirados), batch idéntico byte a byte.
       **Se llevan por delante una fuga de visibilidad** detectada al hacer el 5b: los dos emiten sus eventos
       SIN `asentamientoId` a propósito (`session/comandos/militar.ts`, "el choque es entre DOS asentamientos,
       atribuirlo a uno sería arbitrario"), y un evento sin atribuir es global — o sea que hoy toda la partida

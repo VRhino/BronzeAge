@@ -22,7 +22,7 @@ import {
   renombrarAsentamiento,
 } from '../comandos/construccion';
 import { anexionar, fusionar, rebelionVasallo, romperRelacion } from '../comandos/diplomacia';
-import { atacarCampamentoBandidos, combateCampoAbierto, interceptarCaravana, iniciarAsedio, reclutarTropa } from '../comandos/militar';
+import { atacarCampamentoBandidos, iniciarAsedio, reclutarTropa } from '../comandos/militar';
 import { colocarOrdenMercado, crearCaravana, proponerTrueque } from '../comandos/comercio';
 import { desarmarCaravanaFundacion, lanzarCaravanaFundacion } from '../comandos/expansion';
 import { OPC, partidaConAsentamiento } from './fixtures';
@@ -138,21 +138,15 @@ const CASOS: CasoIdInexistente[] = [
     ejecutar: ({ sesion, asentamientoId }) =>
       sesion.ejecutar(iniciarAsedio, { atacanteId: asentamientoId, defensorId: 'no-existe', escuadronIds: [] }, OPC),
   },
+  // El caso de `combateCampoAbierto` (segundo asentamiento inexistente) se retiró con el comando en el Paso
+  // 11: `iniciarAsedio: defensorId`, justo arriba, ya cubre exactamente ese camino. El de
+  // `interceptarCaravana` se re-apunta aquí en vez de perderse — lo que se congela es que un `caravanaId`
+  // inexistente sale como `caravana.no_existe` y no como un error interno, y eso lo prueba igual de bien
+  // cualquier comando que empiece por `exigirCaravana`.
   {
-    etiqueta: 'combateCampoAbierto: asentamientoBId',
-    codigoEsperado: 'asentamiento.no_existe',
-    ejecutar: ({ sesion, asentamientoId }) =>
-      sesion.ejecutar(
-        combateCampoAbierto,
-        { asentamientoAId: asentamientoId, escuadronIdsA: [], asentamientoBId: 'no-existe', escuadronIdsB: [] },
-        OPC
-      ),
-  },
-  {
-    etiqueta: 'interceptarCaravana: caravanaId',
+    etiqueta: 'desarmarCaravanaFundacion: caravanaId',
     codigoEsperado: 'caravana.no_existe',
-    ejecutar: ({ sesion, asentamientoId }) =>
-      sesion.ejecutar(interceptarCaravana, { atacanteId: asentamientoId, escuadronIds: [], caravanaId: 'no-existe' }, OPC),
+    ejecutar: ({ sesion }) => sesion.ejecutar(desarmarCaravanaFundacion, { caravanaId: 'no-existe' }, OPC),
   },
   {
     etiqueta: 'atacarCampamentoBandidos: campamentoId',

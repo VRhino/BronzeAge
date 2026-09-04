@@ -843,10 +843,11 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       // 35 + los 4 de ejércitos (Paso 3 del movimiento de ejércitos, 2026-09-02: movilizar, unirse, replegar
       // y estacionar) + `alternarReabastecerAliados` (Paso 8: abrir el almacén a los ejércitos aliados) +
       // `adjuntarCaravana`/`soltarCaravana` (Paso 9a: el tren de suministros) + `cargarCaravana`/
-      // `entregarDeCaravana` (Paso 9b: la escolta, donde el jugador elige QUÉ carga y a qué trueque lo
-      // entrega). Cuando el Paso 11 retire `combateCampoAbierto` e `interceptarCaravana` como comandos de
-      // jugador, este número BAJA a 42 — la superficie se encoge, que es parte del diseño.
-      expect(cuerpo.oneOf.length).toBe(44);
+      // `entregarDeCaravana` (Paso 9b: la escolta) — MENOS `combateCampoAbierto` e `interceptarCaravana`,
+      // retirados en el Paso 11 (2026-09-04) al pasar a ser resoluciones del motor por geometría. La
+      // superficie de jugador encogió, que es parte del diseño: se manda un ejército en vez de declarar un
+      // ataque desde el sofá.
+      expect(cuerpo.oneOf.length).toBe(42);
       const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
       expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
     });

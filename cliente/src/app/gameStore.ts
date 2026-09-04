@@ -722,22 +722,7 @@ export class GameStore {
     await this.despachar('iniciarAsedio', { atacanteId, defensorId, escuadronIds: idsNoVacios(escuadronesCsv) }, 'Asedio rechazado');
   }
 
-  async combateCampoAbierto(asentamientoAId: string, escuadronesACsv: string, asentamientoBId: string, escuadronesBCsv: string): Promise<void> {
-    await this.despachar(
-      'combateCampoAbierto',
-      {
-        asentamientoAId,
-        escuadronIdsA: idsNoVacios(escuadronesACsv),
-        asentamientoBId,
-        escuadronIdsB: idsNoVacios(escuadronesBCsv),
-      },
-      'Combate rechazado'
-    );
-  }
 
-  async interceptarCaravana(atacanteId: string, escuadronesCsv: string, caravanaId: string): Promise<void> {
-    await this.despachar('interceptarCaravana', { atacanteId, escuadronIds: idsNoVacios(escuadronesCsv), caravanaId }, 'Intercepción rechazada');
-  }
 
   async atacarCampamentoBandidos(atacanteId: string, escuadronesCsv: string, campamentoId: string): Promise<void> {
     await this.despachar(

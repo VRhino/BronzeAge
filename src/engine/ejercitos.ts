@@ -716,7 +716,8 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
         //
         // Queda un hueco conocido: al vencido no le llega la noticia de su propia derrota, porque pierde el
         // asentamiento por el que la vería. Taparlo pide una audiencia por FACCIÓN que el modelo de eventos
-        // no tiene — el mismo agujero anotado para `combateCampoAbierto` en el Paso 11.
+        // no tiene. Sigue abierto: el Paso 11 retiró `combateCampoAbierto`, que tenía el mismo problema,
+        // pero retirar el comando no resolvió la falta de audiencia por Facción — solo dejó de duplicarla.
         for (const e of asedio.eventos) {
           eventos.push(atribuir(e, ejercito.origenAsentamientoId));
           if (!asedio.conquistado) eventos.push(atribuir(e, objetivo.id));

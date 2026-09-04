@@ -302,14 +302,10 @@ describe('combate: residente del atacante Y dueño de los escuadrones comprometi
     ).toEqual(AUTORIZADO);
   });
 
-  it('combateCampoAbierto: solo se exige propiedad en el lado donde el actor reside', () => {
-    const { sesion, asentamientoId, fundador, vecino } = partidaConAsentamiento();
-    const estado = conEscuadrones(sesion, fundador, vecino);
-    const base = { asentamientoAId: asentamientoId, asentamientoBId: 'ajeno', escuadronIdsB: ['loQueSea'] };
-
-    expect(verificarAutorizacion('combateCampoAbierto', { ...base, escuadronIdsA: ['esc-fundador'] }, estado, jugador(fundador))).toEqual(AUTORIZADO);
-    expect(verificarAutorizacion('combateCampoAbierto', { ...base, escuadronIdsA: ['esc-vecino'] }, estado, jugador(fundador))).toEqual(POR_DOMINIO);
-  });
+  // El caso de `combateCampoAbierto` ("solo se exige propiedad en el lado donde el actor reside") se fue con
+  // el comando en el Paso 11. La regla que probaba —que un jugador solo dispone de SUS escuadrones— no se ha
+  // perdido: vive en `movilizarEjercito`, que rechaza sacar un escuadrón de otro (`seleccionarParaCampana`,
+  // engine/ejercitos.ts), y se comprueba en `comandosEjercitos.test.ts`.
 });
 
 describe('diplomacia: ciudadanía + autoridad de Rey/Embajador', () => {

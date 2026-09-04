@@ -3,9 +3,10 @@
 // Estos comandos NO mueven nada — eso es `avanzarEjercitos` en el tick. Aquí solo se decide quién sale, con
 // qué, y hacia dónde; el ejército queda creado, en `marchando`, con su ruta ya calculada.
 //
-// Sustituyen a medio plazo a `iniciarAsedio`/`combateCampoAbierto`/`interceptarCaravana` como superficie de
-// jugador (Doc 5.12.3): el jugador deja de "atacar a X" y pasa a "mandar un ejército a X"; el combate lo
-// dispara la llegada o la proximidad, dentro del tick. Los comandos viejos siguen vivos hasta el Paso 11.
+// Sustituyen a los comandos de combate como superficie de jugador (Doc 5.12.3): el jugador deja de "atacar a
+// X" y pasa a "mandar un ejército a X"; el combate lo dispara la llegada o la proximidad, dentro del tick.
+// `combateCampoAbierto` e `interceptarCaravana` YA se retiraron (Paso 11, 2026-09-04); `iniciarAsedio` sigue
+// vivo como vía directa entre dos asentamientos vecinos, que no exige movilizar.
 import { LOGISTICA } from '../../constants';
 import { distancia as distanciaEntre } from '../../world/geometria';
 import { aplicarAjustesReputacion } from '../../engine/reputacion';

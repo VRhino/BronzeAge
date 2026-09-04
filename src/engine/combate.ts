@@ -93,7 +93,7 @@ export function resolverCombate(
   const jitterD = 1 + (rng() * 2 - 1) * MILITAR.varianzaCombate;
   const poderA = poderTotal(atacantes, instante, false) * jitterA;
   // El multiplicador de muralla (Paso 3b, `multiplicadorDefensivoDeRecintos`) SOLO llega aquí desde
-  // `iniciarAsedio` — `combateCampoAbierto` no lo pasa nunca (1 por defecto): en mundo abierto no hay ningún
+  // `iniciarAsedio` — un encuentro en mundo abierto no lo pasa nunca (1 por defecto): ahí no hay ningún
   // recinto que atravesar, así que aplicarlo ahí sería un bono de la nada.
   const poderD = poderTotal(defensores, instante, true) * jitterD * multiplicadorDefensor;
 
@@ -265,115 +265,15 @@ export function iniciarAsedio(
   };
 }
 
-/** Mundo abierto (Doc 5.2.2): choque de patrullas/ejércitos sin cambio de territorio; el perdedor queda "Herido". */
-export function combateCampoAbierto(
-  asentamientoA: Asentamiento,
-  escuadronIdsA: string[],
-  asentamientoB: Asentamiento,
-  escuadronIdsB: string[],
-  facciones: Faccion[],
-  relaciones: RelacionPolitica[],
-  instante: Instante,
-  rng: RandomFn
-): { asentamientoA: Asentamiento; asentamientoB: Asentamiento; facciones: Faccion[]; eventos: EventoCrudo[] } {
-  const escuadronesA = seleccionarEscuadrones(asentamientoA, escuadronIdsA);
-  const escuadronesB = seleccionarEscuadrones(asentamientoB, escuadronIdsB);
-  const resultado = resolverCombate(escuadronesA, escuadronesB, instante, rng);
-
-  const faccionesConReputacion = estanAliadas(relaciones, asentamientoA.faccionId, asentamientoB.faccionId)
-    ? aplicarAjustesReputacion(facciones, [
-        { faccionId: asentamientoA.faccionId, delta: REPUTACION.penalizacionAtacarAliado, razon: 'atacar a un Aliado' },
-      ])
-    : facciones;
-
-  const faccionesFinal = aplicarAjustesExperiencia(faccionesConReputacion, [
-    {
-      faccionId: asentamientoA.faccionId,
-      delta: NIVEL_FACCION.xp.combate * jugadoresParticipantes(escuadronesA),
-      razon: 'combate (campo abierto)',
-    },
-    {
-      faccionId: asentamientoB.faccionId,
-      delta: NIVEL_FACCION.xp.combate * jugadoresParticipantes(escuadronesB),
-      razon: 'combate (campo abierto)',
-    },
-  ]);
-
-  return {
-    asentamientoA: { ...asentamientoA, escuadrones: reemplazarEscuadrones(asentamientoA, resultado.atacantes) },
-    asentamientoB: { ...asentamientoB, escuadrones: reemplazarEscuadrones(asentamientoB, resultado.defensores) },
-    facciones: faccionesFinal,
-    eventos: resultado.eventos,
-  };
-}
-
-/**
- * Defensa/intercepción de caravanas (Doc 3.10): escolta no modelada individualmente en Fase 0 (sin jugadores
- * reales escoltando) — se usa una defensa base fija como placeholder. Captura al 50% del contenido si gana.
- */
-export function interceptarCaravana(
-  atacante: Asentamiento,
-  escuadronIdsAtacantes: string[],
-  caravana: Caravana,
-  instante: Instante,
-  facciones: Faccion[],
-  asentamientos: Asentamiento[],
-  rng: RandomFn
-): { atacante: Asentamiento; facciones: Faccion[]; eventos: EventoCrudo[]; caravanaCapturada: boolean } {
-  if (!atacante.cargos.generalId) throw new CombateInvalidoError('El atacante necesita un General para interceptar.');
-  const escuadrones = seleccionarEscuadrones(atacante, escuadronIdsAtacantes);
-  const jitter = 1 + (rng() * 2 - 1) * MILITAR.varianzaCombate;
-  const poderAtacante = escuadrones.reduce((acc, e) => acc + poderEscuadron(e, instante), 0) * jitter;
-  const gana = poderAtacante > MILITAR.defensaBaseCaravana;
-
-  const fraccionBajas = gana ? 0.05 : 0.25;
-  const escuadronesActualizados = aplicarBajas(escuadrones, fraccionBajas, gana, instante);
-
-  let almacen = atacante.almacen;
-  const eventos: EventoCrudo[] = [];
-  if (gana) {
-    for (const [recurso, cantidad] of Object.entries(caravana.contenido)) {
-      almacen = agregarRecurso(almacen, recurso, cantidad * MILITAR.umbralCapturaCaravana);
-    }
-    eventos.push({
-      codigo: 'combate.caravana_interceptada',
-      mensaje: `${atacante.id} intercepta la caravana ${caravana.id} y captura ${MILITAR.umbralCapturaCaravana * 100}% de su carga.`,
-      payload: {
-        atacanteId: atacante.id,
-        caravanaId: caravana.id,
-        fraccionCapturada: MILITAR.umbralCapturaCaravana,
-      } satisfies PayloadIntercepcion,
-    });
-  } else {
-    eventos.push({
-      codigo: 'combate.intercepcion_fallida',
-      mensaje: `${atacante.id} falla la intercepción de la caravana ${caravana.id} y sufre bajas.`,
-      payload: { atacanteId: atacante.id, caravanaId: caravana.id } satisfies PayloadIntercepcion,
-    });
-  }
-
-  // Doc Fase_0_5 §8: ataque de caravana otorga XP al atacante; defensa de caravana otorga XP a la Facción
-  // dueña de la caravana (resuelta vía `origenAsentamientoId`, ausente solo en partidas antiguas sin dueño).
-  const duenoId = asentamientos.find((a) => a.id === caravana.origenAsentamientoId)?.faccionId;
-  const ajustesXp: AjusteExperiencia[] = [
-    {
-      faccionId: atacante.faccionId,
-      delta: NIVEL_FACCION.xp.ataqueCaravana * jugadoresParticipantes(escuadrones),
-      razon: 'ataque a caravana',
-    },
-  ];
-  if (duenoId && duenoId !== atacante.faccionId) {
-    // Sin multiplicar (a diferencia del atacante): la escolta no tiene escuadrones/jugadores reales todavía.
-    ajustesXp.push({ faccionId: duenoId, delta: NIVEL_FACCION.xp.defensaCaravana, razon: 'defensa de caravana' });
-  }
-
-  return {
-    atacante: { ...atacante, almacen, escuadrones: reemplazarEscuadrones(atacante, escuadronesActualizados) },
-    facciones: aplicarAjustesExperiencia(facciones, ajustesXp),
-    eventos,
-    caravanaCapturada: gana,
-  };
-}
+// `combateCampoAbierto` e `interceptarCaravana` VIVÍAN AQUÍ y se retiraron en el Paso 11 del movimiento de
+// ejércitos (2026-09-04), junto con sus comandos. Lo que hacían no se ha perdido: son ahora
+// `encuentroEntreEjercitos` e `interceptarCaravanaConEjercito` (más abajo), disparadas por la GEOMETRÍA desde
+// `resolverEncuentros` (engine/ejercitos.ts) en vez de por una orden del jugador — se manda un ejército y el
+// choque ocurre donde tenga que ocurrir (Doc 5.12.3).
+//
+// Retirarlos no era solo limpieza: `interceptarCaravana` resolvía contra una defensa base FIJA, que es
+// exactamente lo que la escolta sustituyó (Doc 5.13.3). Mantener los dos habría dejado dos reglas distintas
+// para el mismo hecho según por dónde se entrara.
 
 /**
  * Ataque de un jugador a un campamento de bandidos (Doc 1.9, a petición del usuario) — mismo patrón que el
