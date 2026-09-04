@@ -100,6 +100,7 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
     ['asentamientoId', 'cargo', 'edificioId']
   ),
   alternarAutoConstruccion: objeto({ asentamientoId: IDENTIFICADOR, pausada: { type: 'boolean' } }, ['asentamientoId', 'pausada']),
+  alternarReabastecerAliados: objeto({ asentamientoId: IDENTIFICADOR, permitido: { type: 'boolean' } }, ['asentamientoId', 'permitido']),
   calibrarReservaManual: objeto({ asentamientoId: IDENTIFICADOR, recurso: RECURSO, valor: NUMERO }, [
     'asentamientoId',
     'recurso',

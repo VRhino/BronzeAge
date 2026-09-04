@@ -21,9 +21,17 @@ import { avanzarPosicionEnRuta } from './movimiento';
 import { agregarRecurso, cantidadDisponible, descontarRecursos } from './almacen';
 import { avanzarRacion, reservaDeTrigo } from './tropas';
 import { puedeLlevar } from './liderazgo';
-import { esResidente } from './pertenencia';
+import { esResidente, estanAliadas } from './pertenencia';
 
 export class MovilizacionInvalidaError extends Error {}
+
+/** Fase A5 — payload de `ejercito.reabastecido` (ver `repostarSiPuede`). */
+export interface PayloadEjercitoReabastecido {
+  ejercitoId: string;
+  /** La plaza que puso el trigo — propia, o aliada con la opción abierta. */
+  asentamientoId: string;
+  trigoRepuesto: number;
+}
 
 export type ObjetivoEjercito = Ejercito['objetivo'];
 
@@ -92,6 +100,66 @@ function cargarCarro(
   const cargado = Math.min(espacio, disponible);
   if (cargado <= 0) return { asentamiento, cargado: 0 };
   return { asentamiento: { ...asentamiento, almacen: descontarRecursos(asentamiento.almacen, { trigo: cargado }) }, cargado };
+}
+
+/**
+ * ¿Puede este ejército repostar en esta plaza? (Doc 5.13, Paso 8). Tres casos y ninguno negociable:
+ *
+ *  - **Propia**: siempre. No hace falta permiso para abrir tu propio almacén a tu propia columna.
+ *  - **Aliada**: solo si esa plaza tiene `permiteReabastecerAliados` activo. Repostar cuesta stock REAL al
+ *    que lo da, así que es una decisión suya, no un derecho del que pasa por ahí.
+ *  - **Neutral u hostil**: nunca.
+ */
+function puedeRepostarEn(ejercito: Ejercito, plaza: Asentamiento, relaciones: readonly RelacionPolitica[]): boolean {
+  if (plaza.faccionId === ejercito.faccionId) return true;
+  return (plaza.permiteReabastecerAliados ?? false) && estanAliadas(relaciones, ejercito.faccionId, plaza.faccionId);
+}
+
+/**
+ * Repostar al pasar (Doc 5.13, Paso 8): si el ejército está dentro de `LOGISTICA.radioReabastecimiento` de
+ * una plaza donde tiene derecho a hacerlo, rellena el carro de su almacén.
+ *
+ * Es EXACTAMENTE la misma operación que cargar al salir —`cargarCarro`, con sus dos topes: el espacio libre
+ * del carro y lo que la plaza puede soltar sin bajar de su reserva de comida—, solo que el almacén es otro.
+ * Que sea la misma función es lo que garantiza que repostar en una ciudad ajena no pueda vaciarla por debajo
+ * de lo que su propia gente necesita, sin ninguna regla nueva que mantener en paralelo.
+ *
+ * Si hay varias plazas al alcance se elige la MÁS CERCANA, y a igual distancia la de id menor: hace falta un
+ * criterio total porque de aquí sale un gasto real y el orden no puede depender de cómo quedara el array.
+ *
+ * Sin límite de veces: un ejército acampado junto a una plaza amiga repone cada tick, que es precisamente lo
+ * que convierte "sostener un paso de montaña" en una posición sostenible (Doc 5.12.3) en vez de una cuenta
+ * atrás. Repostar no es gratis para nadie — sale del almacén de quien lo da.
+ */
+function repostarSiPuede(
+  ejercito: Ejercito,
+  porId: Map<string, Asentamiento>,
+  relaciones: readonly RelacionPolitica[]
+): { ejercito: Ejercito; plaza: Asentamiento | undefined; repuesto: number } {
+  const alcance = [...porId.values()]
+    .filter(
+      (a) =>
+        distancia(a.posicion, ejercito.posicionActual) <= LOGISTICA.radioReabastecimiento &&
+        puedeRepostarEn(ejercito, a, relaciones)
+    )
+    .sort((a, b) => {
+      const da = distancia(a.posicion, ejercito.posicionActual);
+      const db = distancia(b.posicion, ejercito.posicionActual);
+      return da !== db ? da - db : a.id < b.id ? -1 : 1;
+    });
+
+  const plaza = alcance[0];
+  if (!plaza) return { ejercito, plaza: undefined, repuesto: 0 };
+
+  const enElCarro = ejercito.suministro['trigo'] ?? 0;
+  const carga = cargarCarro(plaza, enElCarro, capacidadCarroDe(ejercito.escuadrones));
+  if (carga.cargado <= 0) return { ejercito, plaza: undefined, repuesto: 0 };
+
+  return {
+    ejercito: { ...ejercito, suministro: { ...ejercito.suministro, trigo: enElCarro + carga.cargado } },
+    plaza: carga.asentamiento,
+    repuesto: carga.cargado,
+  };
 }
 
 /** Tope de Liderazgo del jugador sobre lo que ESE jugador aporta (Doc 5.11): en un ejército de varios no hay
@@ -373,6 +441,25 @@ export function avanzarEjercitos(
     if (ejercito.estado !== 'estacionado') {
       const avance = avanzarPosicionEnRuta(mapa, ejercito.ruta, ejercito.progreso, velocidadDeEjercito(ejercito));
       ejercito = { ...ejercito, progreso: avance.progreso, posicionActual: avance.posicion };
+    }
+
+    // 3b. Repostar al pasar (Doc 5.13). Va DESPUÉS de moverse —se repone donde uno acaba, no donde estaba— y
+    // ANTES de resolver la llegada, para que un ejército que se planta en una plaza propia entre en el asedio
+    // o acampe ya con el carro lleno.
+    const reposte = repostarSiPuede(ejercito, porId, relaciones);
+    if (reposte.plaza) {
+      ejercito = reposte.ejercito;
+      porId.set(reposte.plaza.id, reposte.plaza);
+      eventos.push({
+        codigo: 'ejercito.reabastecido',
+        asentamientoId: reposte.plaza.id,
+        mensaje: `El ejército ${ejercito.id} repone ${Math.floor(reposte.repuesto)} de trigo en ${reposte.plaza.id}.`,
+        payload: {
+          ejercitoId: ejercito.id,
+          asentamientoId: reposte.plaza.id,
+          trigoRepuesto: reposte.repuesto,
+        } satisfies PayloadEjercitoReabastecido,
+      });
     }
 
     // 4. Llegar.

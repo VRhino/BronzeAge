@@ -9,7 +9,7 @@
 import { movilizarEjercito as movilizarEngine, replegarEjercito as replegarEngine, estacionarEjercito as estacionarEngine, unirseAEjercito as unirseEngine, type ObjetivoEjercito } from '../../engine/ejercitos';
 import { liderazgoComprometido } from '../../engine/liderazgo';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
-import { exito } from './tipos';
+import { exito, sinCambios } from './tipos';
 import { comando, exigirAsentamiento, exigirEjercito, conAsentamiento } from './ayudas';
 import { evento } from './eventos';
 
@@ -183,6 +183,39 @@ export const estacionarEjercito = comando<ParamsEstacionarEjercito, void>((estad
       codigo: 'ejercito.estacionado',
       mensaje: `El ejército ${ejercito.id} acampa y pasa a consumo reducido.`,
       payload: { ejercitoId: ejercito.id } satisfies PayloadEjercitoEstacionado,
+    }),
+  ]);
+});
+
+export interface PayloadReabastecerAliados {
+  asentamientoId: string;
+  permitido: boolean;
+}
+
+export interface ParamsAlternarReabastecerAliados {
+  asentamientoId: string;
+  /** `true` abre el almacén a los ejércitos aliados; `false` lo cierra. */
+  permitido: boolean;
+}
+
+/**
+ * Abre o cierra el almacén de un asentamiento a los ejércitos de sus ALIADOS (Doc 5.13, Paso 8).
+ *
+ * Es una decisión de la plaza que da, no del que pasa: repostar le cuesta stock real, y por eso los ejércitos
+ * propios entran siempre y los aliados solo con esto activo. Cerrar no tiene efecto retroactivo — lo ya
+ * repuesto está repuesto; a partir del siguiente tick la puerta está cerrada.
+ */
+export const alternarReabastecerAliados = comando<ParamsAlternarReabastecerAliados, void>((estado, _mapa, ctx, params) => {
+  const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
+  if ((asentamiento.permiteReabastecerAliados ?? false) === params.permitido) return sinCambios(estado);
+
+  const actualizado = { ...asentamiento, permiteReabastecerAliados: params.permitido };
+  return exito(conAsentamiento(estado, actualizado), [
+    evento(ctx, {
+      codigo: 'logistica.reabastecer_aliados',
+      mensaje: `${asentamiento.id} ${params.permitido ? 'abre' : 'cierra'} su almacén a los ejércitos aliados.`,
+      payload: { asentamientoId: asentamiento.id, permitido: params.permitido } satisfies PayloadReabastecerAliados,
+      asentamientoId: asentamiento.id,
     }),
   ]);
 });

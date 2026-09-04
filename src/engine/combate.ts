@@ -7,13 +7,7 @@ import { agregarRecurso } from './almacen';
 import { aplicarAjustesReputacion } from './reputacion';
 import { aplicarAjustesExperiencia, type AjusteExperiencia } from './faccion';
 import { multiplicadorDefensivoDeRecintos } from './muralla';
-import { CAMPO_CARGO } from './pertenencia';
-
-function estanAliadas(relaciones: RelacionPolitica[], aId: string, bId: string): boolean {
-  return relaciones.some(
-    (r) => r.estado === 'activa' && r.tipo === 'alianza' && ((r.faccionAId === aId && r.faccionBId === bId) || (r.faccionAId === bId && r.faccionBId === aId))
-  );
-}
+import { CAMPO_CARGO, estanAliadas } from './pertenencia';
 
 export class CombateInvalidoError extends Error {}
 

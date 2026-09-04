@@ -7,7 +7,7 @@
 // y unirse exige proximidad.
 import { describe, expect, it } from 'vitest';
 import { GameSession } from '../gameSession';
-import { estacionarEjercito, movilizarEjercito, replegarEjercito, unirseAEjercito } from '../comandos/ejercitos';
+import { alternarReabastecerAliados, estacionarEjercito, movilizarEjercito, replegarEjercito, unirseAEjercito } from '../comandos/ejercitos';
 import { OPC, partidaConAsentamiento } from './fixtures';
 import { CODIGOS_ERROR } from '../comandos/codigosDeError';
 import { LOGISTICA } from '../../constants';
@@ -358,5 +358,25 @@ describe('carga del carro desde el almacén', () => {
 
     const estado = sesion.getState();
     expect(trigoDe(estado.asentamientos[0]!) + estado.ejercitos[0]!.suministro['trigo']!).toBeCloseTo(antes);
+  });
+});
+
+describe('alternarReabastecerAliados (Paso 8)', () => {
+  it('abre y cierra el almacén a los aliados, y no repite evento si no cambia nada', () => {
+    const { sesion, asentamientoId } = partidaConTropas();
+    expect(sesion.getState().asentamientos[0]!.permiteReabastecerAliados ?? false, 'cerrado por defecto').toBe(false);
+
+    const abrir = sesion.ejecutar(alternarReabastecerAliados, { asentamientoId, permitido: true }, OPC);
+    expect(abrir.ok).toBe(true);
+    expect(sesion.getState().asentamientos[0]!.permiteReabastecerAliados).toBe(true);
+
+    // Volver a abrir lo ya abierto no es un error, pero tampoco un hecho que narrar.
+    const versionAntes = sesion.getState().version;
+    const repetir = sesion.ejecutar(alternarReabastecerAliados, { asentamientoId, permitido: true }, OPC);
+    expect(repetir.ok).toBe(true);
+    expect(sesion.getState().version, 'un no-cambio no sube la versión de la partida').toBe(versionAntes);
+
+    sesion.ejecutar(alternarReabastecerAliados, { asentamientoId, permitido: false }, OPC);
+    expect(sesion.getState().asentamientos[0]!.permiteReabastecerAliados).toBe(false);
   });
 });

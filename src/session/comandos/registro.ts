@@ -34,7 +34,7 @@ import {
 } from './construccion';
 import { desarmarCaravanaFundacion, lanzarCaravanaFundacion } from './expansion';
 import { abandonarRecinto, comprometerRecinto, mejorarRecinto } from './murallas';
-import { estacionarEjercito, movilizarEjercito, replegarEjercito, unirseAEjercito } from './ejercitos';
+import { alternarReabastecerAliados, estacionarEjercito, movilizarEjercito, replegarEjercito, unirseAEjercito } from './ejercitos';
 
 export const REGISTRO_COMANDOS = {
   fundarAsentamiento,
@@ -59,6 +59,7 @@ export const REGISTRO_COMANDOS = {
   unirseAEjercito,
   replegarEjercito,
   estacionarEjercito,
+  alternarReabastecerAliados,
   atacarCampamentoBandidos,
   combateCampoAbierto,
   interceptarCaravana,

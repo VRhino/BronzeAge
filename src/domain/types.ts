@@ -432,6 +432,15 @@ export interface Asentamiento {
    * La adición MANUAL de edificios (`anadirEdificioManualmente`, Gobernador/Maestro de Obras) no se ve
    * afectada. Ausente/`false` = activa. */
   autoConstruccionPausada?: boolean;
+  /**
+   * ¿Este asentamiento deja repostar a los ejércitos de sus ALIADOS? (Doc 5.13, Paso 8). Ausente = `false`:
+   * abrir tu almacén a la columna de otro es una decisión explícita, no el estado por defecto — te cuesta
+   * stock real y la reserva de comida protege a tu propia gente, no a la suya.
+   *
+   * No aplica a los ejércitos propios, que reponen SIEMPRE en cualquier plaza de su Facción sin permiso que
+   * valga, ni a los neutrales u hostiles, que no reponen nunca.
+   */
+  permiteReabastecerAliados?: boolean;
   /** Reserva manual por recurso (0-999, a petición del usuario), calibrada por el Tesorero: se SUMA a
    * `reservaDinamicaConstruccion` (engine/mantenimiento.ts) y solo la respeta el camino AUTOMÁTICO de
    * construcción (`avanzarConstruccion`/`avanzarMejoras`, engine/construction.ts) — `anadirEdificioManualmente`

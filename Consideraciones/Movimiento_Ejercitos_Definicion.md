@@ -564,10 +564,31 @@ usuario dio la tabla real. Calibrarla es un cambio de **datos**, no de código.
       enseñaba dos veces al mismo jugador (medido en vivo antes de corregirlo). Queda el hueco de que **al
       vencido no le llega la noticia de su derrota**, porque pierde el asentamiento por el que la vería: pide
       una audiencia por Facción que el modelo de eventos no tiene, y es el mismo agujero del Paso 11.
-- [ ] **Paso 8 — Reabastecimiento en ruta** (propio siempre, aliado con la opción activa) + campo
-      `permiteReabastecerAliados`. **Más importante de lo que parecía**: en tiempo real un ejército
-      estacionado quema su carro en ~100 minutos, así que hasta este paso "sostener un paso de montaña" no
-      existe como posición, solo como jugada corta (§2.5b).
+- [x] **Paso 8 — Reabastecimiento en ruta (2026-09-04).** Un ejército dentro de `radioReabastecimiento` de una
+      plaza donde tiene derecho repone el carro cada tick: propia siempre, aliada solo con
+      `permiteReabastecerAliados` activo, neutral u hostil nunca.
+
+      **Reutiliza `cargarCarro` del Paso 6 sin tocarlo**, y eso es lo que da la garantía interesante: repostar
+      en una ciudad ajena NO puede bajarla de su reserva de comida, porque es literalmente la misma función
+      que ya protegía a la ciudad al sacar un ejército. Cero reglas nuevas que mantener en paralelo.
+
+      Detalles que sí son decisiones: se repone DESPUÉS de moverse (donde uno acaba, no donde estaba) y ANTES
+      de resolver la llegada, para que quien se planta en una plaza propia entre al asedio con el carro lleno;
+      si hay varias plazas al alcance se elige la más cercana y a igual distancia la de id menor, porque de
+      aquí sale un gasto real y el orden no puede depender de cómo quedara el array.
+
+      El campo se gobierna con `alternarReabastecerAliados`, reservado a Gobernador o Tesorero de esa plaza:
+      abrir el almacén cuesta stock propio, así que es decisión de quien manda o custodia el tesoro allí.
+
+      **Verificado en vivo.** Un ejército aliado acampado sobre la ciudad de ana, con el carro a 8: tres ticks
+      con el almacén cerrado y el carro BAJA a 7,0 mientras la ciudad acumula. Ana abre con el comando real, y
+      en dos ticks el carro salta a **500 (lleno)** y la ciudad baja de 5.527 a 5.138 — puso ~390 de su propio
+      trigo. La plaza paga, que era el punto.
+
+      Nota de contexto: la nota original decía que esto era load-bearing porque un ejército estacionado quemaba
+      su carro en ~100 minutos. Ya no: la decisión del usuario de bajar el consumo estacionado a 1/10
+      (§11) alarga eso a ~1.000 minutos por sí sola. El paso sigue siendo lo que hace la posición
+      *indefinida* en vez de solo *larga*.
 - [ ] **Paso 9 — Caravanas adjuntas**: capacidad, entrada en el `min` de velocidad, pérdida al ser derrotado,
       y escolta (la caravana entrega mientras marcha). Incluye el rebalance de `CARAVANA_CATALOGO` **medido en
       batch por el efecto sobre el oro**.

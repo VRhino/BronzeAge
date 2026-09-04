@@ -9,7 +9,7 @@
 // `CargoTipo -> campo de Asentamiento.cargos` estaba copiado CUATRO veces (dos en `cargos.ts`, una en
 // `politicas.ts`, una más en la capa de autorización), y la regla de residencia TRES (`tropas.ts`,
 // `faccion.ts`, autorización). Añadir un cargo nuevo obligaba a acertar en los cuatro sitios.
-import type { Asentamiento, CargoTipo, Faccion } from '../domain/types';
+import type { Asentamiento, CargoTipo, Faccion, RelacionPolitica } from '../domain/types';
 
 /** Único mapa `CargoTipo -> campo de `Asentamiento.cargos``. Si se añade un cargo, el tipo `CargoTipo`
  * (domain/types.ts) obliga a completarlo aquí, y todo lo demás lo hereda. */
@@ -63,4 +63,22 @@ export function esReyDe(faccion: Faccion, jugadorId: string): boolean {
 /** Cargos de Facción con autoridad diplomática (Doc 2.2): el Rey, y el Embajador que él designa. */
 export function esReyOEmbajadorDe(faccion: Faccion, jugadorId: string): boolean {
   return faccion.reyId === jugadorId || faccion.embajadorId === jugadorId;
+}
+
+/**
+ * ¿Hay una alianza ACTIVA entre estas dos Facciones? (Doc 2.4).
+ *
+ * Vivía como función privada de `engine/combate.ts`, donde solo servía para la penalización de reputación por
+ * atacar a un Aliado. Sube aquí al aparecer el segundo consumidor con una pregunta distinta: el
+ * reabastecimiento en ruta, que deja repostar en una plaza aliada (Doc 5.13). Es un predicado de pertenencia
+ * política como los de arriba, y este módulo es hoja (solo importa `domain/types`), así que no crea ciclo con
+ * nadie.
+ */
+export function estanAliadas(relaciones: readonly RelacionPolitica[], aId: string, bId: string): boolean {
+  return relaciones.some(
+    (r) =>
+      r.estado === 'activa' &&
+      r.tipo === 'alianza' &&
+      ((r.faccionAId === aId && r.faccionBId === bId) || (r.faccionAId === bId && r.faccionBId === aId))
+  );
 }

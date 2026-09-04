@@ -840,10 +840,11 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       // `@fastify/swagger` convierte `const` a `enum: [valorUnico]` al publicar: OpenAPI 3.0 no tiene `const`
       // (llegó en JSON Schema draft 6, y 3.0 se basa en un dialecto anterior) — ajv en runtime sí lo entiende
       // tal cual (la validación de verdad usa el `schema.body` de Fastify, no este documento).
-      // 35 + los 4 de ejércitos (Paso 3 del movimiento de ejércitos, 2026-09-02): movilizar, unirse,
-      // replegar y estacionar. Cuando el Paso 11 retire `combateCampoAbierto` e `interceptarCaravana` como
-      // comandos de jugador, este número BAJA a 37 — la superficie se encoge, que es parte del diseño.
-      expect(cuerpo.oneOf.length).toBe(39);
+      // 35 + los 4 de ejércitos (Paso 3 del movimiento de ejércitos, 2026-09-02: movilizar, unirse, replegar
+      // y estacionar) + `alternarReabastecerAliados` (Paso 8, 2026-09-04: abrir el almacén a los ejércitos
+      // aliados). Cuando el Paso 11 retire `combateCampoAbierto` e `interceptarCaravana` como comandos de
+      // jugador, este número BAJA a 38 — la superficie se encoge, que es parte del diseño.
+      expect(cuerpo.oneOf.length).toBe(40);
       const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
       expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
     });

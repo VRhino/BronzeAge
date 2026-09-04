@@ -12,6 +12,7 @@ import type { Asentamiento, Ejercito, Escuadron, Faccion, RelacionPolitica } fro
 import { LOGISTICA, MILITAR } from '../../constants';
 import { avanzarEjercitos, velocidadDeEjercito } from '../ejercitos';
 import { esResidente, resideEnOtroAsentamiento } from '../pertenencia';
+import { reservaDeTrigo } from '../tropas';
 import { crearEstadoDeTest, crearFacciones, crearMapaDeterminista, contextoDeTest, fundarAsentamientoDeTest, instanteDeTest } from './fixtures';
 import { avanzarSimulacion } from '../simulation';
 import { createRng, type RandomFn } from '../../worldgen';
@@ -33,6 +34,16 @@ const escuadron = (id: string, tropaId: string, cantidad = 10, moral = 100): Esc
   moral,
   tropaId,
 });
+
+/**
+ * Aleja un ejército de cualquier plaza amiga. Desde el Paso 8, un ejército a menos de
+ * `LOGISTICA.radioReabastecimiento` de una ciudad suya REPONE cada tick, así que medir el consumo del carro
+ * junto a su propio asentamiento mide otra cosa: el saldo neto de comer y repostar a la vez.
+ */
+function enCampoAbierto(ejercito: Ejercito, origen: Asentamiento): Ejercito {
+  const lejos = { x: origen.posicion.x, y: origen.posicion.y + LOGISTICA.radioReabastecimiento * 4 };
+  return { ...ejercito, posicionActual: lejos, ruta: [lejos, { x: lejos.x, y: lejos.y + 400 }] };
+}
 
 /** Ejército sintético que sale de `origen` hacia un punto lejano, con lo que se le indique en el carro. */
 function ejercitoDe(origen: Asentamiento, escuadrones: Escuadron[], trigo: number, estado: Ejercito['estado'] = 'marchando'): Ejercito {
@@ -95,7 +106,7 @@ describe('avanzarEjercitos — comer y moverse', () => {
   it('avanza por su ruta y come del CARRO, no del almacén', () => {
     const { asentamiento } = base();
     const trigoEnGranero = asentamiento.almacen['trigo']?.cantidad ?? 0;
-    const ejercito = ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros')], 100);
+    const ejercito = enCampoAbierto(ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros')], 100), asentamiento);
 
     const r = avanzar([ejercito], [asentamiento]);
 
@@ -107,12 +118,12 @@ describe('avanzarEjercitos — comer y moverse', () => {
 
   it('estacionado no avanza, pero sigue comiendo — a consumo reducido (Doc 5.12.3)', () => {
     const { asentamiento } = base();
-    const ejercito = ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros')], 100, 'estacionado');
+    const ejercito = enCampoAbierto(ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros')], 100, 'estacionado'), asentamiento);
 
     const r = avanzar([ejercito], [asentamiento]);
 
     expect(r.ejercitos[0]!.progreso).toBe(0);
-    expect(r.ejercitos[0]!.posicionActual).toEqual(asentamiento.posicion);
+    expect(r.ejercitos[0]!.posicionActual).toEqual(ejercito.posicionActual);
     const racionCompleta = 10 * MILITAR.racionPorSoldadoPorMinuto;
     expect(r.ejercitos[0]!.suministro['trigo']).toBeCloseTo(100 - racionCompleta * LOGISTICA.factorConsumoEstacionado);
     // Reducido, pero NUNCA cero: aparcar no es gratis.
@@ -465,5 +476,125 @@ describe('llegada a un asentamiento ajeno = asedio (Paso 7)', () => {
         defensor: r.asentamientos.find((a) => a.id === enemigo.id)!.escuadrones.map((x) => x.cantidad),
       });
     expect(resumen(enOrden)).toBe(resumen(alReves));
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------
+// Paso 8 — repostar al pasar (Doc 5.13).
+// ---------------------------------------------------------------------------------------------------------
+
+describe('reabastecimiento en ruta', () => {
+  /** Un ejército a medio carro, plantado justo encima de `plaza`. */
+  function juntoA(plaza: Asentamiento, origen: Asentamiento, faccionId = origen.faccionId): Ejercito {
+    const e = ejercitoDe(origen, [escuadron('a', 'milicia_lanceros', 10)], 100, 'estacionado');
+    return { ...e, faccionId, posicionActual: plaza.posicion };
+  }
+
+  it('en una plaza PROPIA repone siempre, hasta llenar el carro, y sale del almacén de ella', () => {
+    const { asentamiento } = base();
+    const trigoAntes = asentamiento.almacen['trigo']?.cantidad ?? 0;
+    const ejercito = juntoA(asentamiento, asentamiento);
+
+    const r = avanzar([ejercito], [asentamiento]);
+
+    const carro = r.ejercitos[0]!.suministro['trigo']!;
+    expect(carro, 'el carro sube por encima de lo que tenía').toBeGreaterThan(100);
+    expect(carro).toBeLessThanOrEqual(LOGISTICA.capacidadCarroPorJugador);
+    // Y el trigo sale de la plaza: repostar cuesta stock real a quien lo da.
+    expect(r.asentamientos[0]!.almacen['trigo']!.cantidad).toBeLessThan(trigoAntes);
+  });
+
+  it('nunca deja a la plaza por debajo de su reserva de comida', () => {
+    const { asentamiento } = base();
+    const reserva = reservaDeTrigo(asentamiento);
+    const apurado: Asentamiento = {
+      ...asentamiento,
+      almacen: { ...asentamiento.almacen, trigo: { ...asentamiento.almacen['trigo']!, cantidad: reserva + 20 } },
+    };
+
+    const r = avanzar([juntoA(apurado, apurado)], [apurado]);
+
+    const plaza = r.asentamientos[0]!;
+    expect(plaza.almacen['trigo']!.cantidad).toBeGreaterThanOrEqual(reservaDeTrigo(plaza) - 1e-9);
+  });
+
+  it('en una plaza AJENA sin alianza no repone nada', () => {
+    const facciones = crearFacciones();
+    const propio = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', []);
+    const ajenoBase = fundarAsentamientoDeTest(mapa, propio.facciones, 'faccion-2', [propio.asentamiento]);
+    const ajeno = ajenoBase.asentamiento;
+    const trigoAntes = ajeno.almacen['trigo']?.cantidad ?? 0;
+
+    const r = avanzar([juntoA(ajeno, propio.asentamiento)], [ajeno], { facciones: ajenoBase.facciones });
+
+    expect(r.ejercitos[0]!.suministro['trigo']).toBeLessThanOrEqual(100);
+    expect(r.asentamientos[0]!.almacen['trigo']!.cantidad).toBe(trigoAntes);
+  });
+
+  it('en una plaza ALIADA repone solo si ella lo permite', () => {
+    const facciones = crearFacciones();
+    const propio = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', []);
+    const aliadaBase = fundarAsentamientoDeTest(mapa, propio.facciones, 'faccion-2', [propio.asentamiento]);
+    const alianza: RelacionPolitica[] = [
+      { id: 'r1', faccionAId: 'faccion-1', faccionBId: 'faccion-2', tipo: 'alianza', estado: 'activa', creadoEn: instanteDeTest(0) },
+    ];
+
+    const cerrada = aliadaBase.asentamiento;
+    const sinPermiso = avanzar([juntoA(cerrada, propio.asentamiento)], [cerrada], { facciones, relaciones: alianza });
+    expect(sinPermiso.ejercitos[0]!.suministro['trigo'], 'sin la opción activa, la puerta está cerrada').toBeLessThanOrEqual(100);
+
+    const abierta: Asentamiento = { ...cerrada, permiteReabastecerAliados: true };
+    const conPermiso = avanzar([juntoA(abierta, propio.asentamiento)], [abierta], { facciones, relaciones: alianza });
+    expect(conPermiso.ejercitos[0]!.suministro['trigo']).toBeGreaterThan(100);
+  });
+
+  it('la alianza NO basta por sí sola: sin la opción no hay reposte aunque sean aliadas', () => {
+    // Complementa al anterior desde el otro lado: aquí la plaza tiene la opción ABIERTA pero no hay alianza.
+    const facciones = crearFacciones();
+    const propio = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', []);
+    const otraBase = fundarAsentamientoDeTest(mapa, propio.facciones, 'faccion-2', [propio.asentamiento]);
+    const abiertaSinAlianza: Asentamiento = { ...otraBase.asentamiento, permiteReabastecerAliados: true };
+
+    const r = avanzar([juntoA(abiertaSinAlianza, propio.asentamiento)], [abiertaSinAlianza], { facciones });
+
+    expect(r.ejercitos[0]!.suministro['trigo']).toBeLessThanOrEqual(100);
+  });
+
+  it('demasiado lejos de la plaza, no repone', () => {
+    const { asentamiento } = base();
+    const lejos = enCampoAbierto(ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros')], 100, 'estacionado'), asentamiento);
+    const trigoAntes = asentamiento.almacen['trigo']?.cantidad ?? 0;
+
+    const r = avanzar([lejos], [asentamiento]);
+
+    expect(r.ejercitos[0]!.suministro['trigo']).toBeLessThan(100); // comió y no repuso
+    expect(r.asentamientos[0]!.almacen['trigo']!.cantidad).toBe(trigoAntes);
+  });
+
+  it('acampado junto a una plaza amiga se sostiene: 50 ticks y el carro va a MÁS, no a menos', () => {
+    // La razón de ser del paso (Doc 5.12.3). Se compara contra el mismo ejército en campo abierto, que es la
+    // única forma de decir que lo que sostiene la posición es el reposte y no que estacionado coma poco.
+    const { asentamiento } = base();
+    const correr = (inicial: Ejercito) => {
+      let ejercitos = [inicial];
+      let asentamientos = [asentamiento];
+      for (let i = 0; i < 50; i++) {
+        const r = avanzar(ejercitos, asentamientos);
+        ejercitos = r.ejercitos;
+        asentamientos = r.asentamientos;
+      }
+      return ejercitos;
+    };
+
+    const acampado = correr(juntoA(asentamiento, asentamiento));
+    const enRuta = correr(enCampoAbierto(juntoA(asentamiento, asentamiento), asentamiento));
+
+    expect(acampado, 'no se disolvió por hambre').toHaveLength(1);
+    expect(acampado[0]!.escuadrones[0]!.cantidad, 'ni un desertor').toBe(10);
+    expect(acampado[0]!.suministro['trigo'], 'el carro acaba con MÁS trigo del que empezó').toBeGreaterThan(100);
+    expect(
+      acampado[0]!.suministro['trigo']!,
+      'y con más que el mismo ejército sin plaza al lado'
+    ).toBeGreaterThan(enRuta[0]!.suministro['trigo']!);
   });
 });

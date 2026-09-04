@@ -293,7 +293,11 @@ De un ejército ajeno se sabe **dónde está, de qué Facción es y cuánta gent
 
 - **Capacidad**: **FIJA e igual para todos los Jugadores** — es un carro, no una abstracción proporcional a lo que llevas. Se **suma** al formar ejército: un ejército de cuatro lleva cuatro carros.
 - **Carga**: al salir o al unirse, cada Jugador **toma del asentamiento**. Si el almacén no llega, se sale con menos autonomía; no se bloquea la salida. Sacar un ejército **cuesta stock real** al asentamiento.
-- **Reabastecimiento en ruta**: al pasar por un asentamiento **propio**, siempre. Por uno **aliado**, solo si ese asentamiento tiene la opción activada. Por uno neutral u hostil, nunca.
+- **Reabastecimiento en ruta**: al pasar por un asentamiento **propio**, siempre. Por uno **aliado**, solo si ese asentamiento tiene la opción activada. Por uno neutral u hostil, nunca. "Al pasar" es estar dentro del **radio de reabastecimiento**, el mismo que decide dónde puede un ejército recoger refuerzos (5.12.1): por dónde puede pasar a recogerte y dónde puede repostar son la misma geografía.
+
+  Repostar rellena el carro con las **mismas dos reglas que cargarlo al salir**: hasta donde quepa, y sin bajar nunca de la reserva de comida de la plaza que lo da. Abrir el almacén a un aliado **cuesta stock real**, y por eso es una decisión suya y no un derecho del que pasa — quien manda o custodia el tesoro de esa plaza (Gobernador o Tesorero) la toma, y puede cerrarla cuando quiera. Cerrar no es retroactivo: lo repuesto está repuesto.
+
+  Sin límite de veces. Un ejército acampado junto a una plaza amiga repone cada tick, y **eso es lo que convierte "sostener un paso de montaña" en una posición** (5.12.3) en vez de una cuenta atrás.
 - **Regreso**: el sobrante **vuelve al almacén** del asentamiento de origen. **El carro NO se descarga en ruta ni en otro asentamiento** — si pudiera, el ejército sería un transporte de mercancías gratuito que dejaría sin sentido a las caravanas. Para mover carga está el punto siguiente.
 
 ### 5.13.1 El radio operativo es la constante de diseño
