@@ -76,8 +76,11 @@ Lo que queda es **decisión de diseño de juego**, no de arquitectura:
   3. **Alianza** — un aliado ve lo que ves tú, en vivo (no "último conocido"): la alianza es cooperación
      explícita.
 
-Cuando estos parámetros estén definidos, el backend extiende el filtrado en `proyectarParaJugador` (mismo
-sitio) y añade la entidad `ConocimientoJugador` al estado.
+> **DISEÑO CERRADO (2026-09-04).** Las tres decisiones que faltaban están tomadas y el plan de ejecución
+> escrito en `Consideraciones/Niebla_De_Guerra_Definicion.md`: un asentamiento ve su zona **más un margen de
+> 60**, de un rival se sabe su **ficha** (nombre, Facción, posición, nivel) y nada de su interior, y el
+> conocimiento por contacto **no caduca pero se refresca** al volver a comerciar. Esta entrada se retirará del
+> índice cuando la mecánica esté hecha.
 
 ## 13. La capital como decisión del jugador
 
