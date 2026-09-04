@@ -12,19 +12,19 @@ import type { Escuadron, Jugador } from '../domain/types';
 import { LIDERAZGO, TROPAS_RECLUTABLES } from '../constants';
 
 /**
- * Coste de liderazgo de una tropa (tipo), DERIVADO de su poder nominal completo (Doc 5.11.1).
+ * Coste de Liderazgo de una tropa (tipo): el de su ESCALÓN (Doc 5.11.1).
  *
- * Se deriva y no se escribe a mano en el catálogo por una razón concreta: `poderBase` sigue siendo
- * PLACEHOLDER pendiente de calibración (Doc 5.8), así que once números escritos a mano se desincronizarían
- * del poder en cuanto se calibre. Con una fórmula, calibrar el poder recalcula el coste solo, y lo único que
- * se ajusta a mano es `LIDERAZGO.factorCoste`.
+ * Hasta 2026-09-04 se derivaba de `poderBase × unidadesPorDefecto × factorCoste`, con el argumento de que
+ * `poderBase` es placeholder y once cifras a mano se desincronizarían al calibrarlo. Ese argumento se cae con
+ * el rediseño, y a propósito: **el coste ya no debe seguir al poder.** Si lo sigue de forma proporcional, el
+ * poder por punto de Liderazgo sale idéntico para todas las tropas y elegir composición deja de ser una
+ * decisión (ver `LIDERAZGO` en constants.ts). El escalón es justamente el grado de libertad que permite que
+ * la élite cueste más de lo que rinde.
  *
- * Es `poderBase × unidadesPorDefecto` y no `poderBase` a secas porque lo que se comanda son SOLDADOS, no
- * estadísticas por soldado. Usa `unidadesPorDefecto` (constante del catálogo) y NO la cantidad actual del
- * escuadrón: si mirara la cantidad, un escuadrón de élite a media fuerza costaría menos y la tropa cara
- * pasaría a ser fieldeable "en dosis pequeñas", que es justo lo que el gate quiere impedir. El efecto
- * secundario conocido —un escuadrón mermado paga el precio completo— está anotado como punto abierto en
- * `Consideraciones/Movimiento_Ejercitos_Definicion.md` §7.
+ * NO mira la `cantidad` actual del escuadrón, solo su tipo: si la mirara, un escuadrón de élite a media
+ * fuerza costaría menos y la tropa cara pasaría a ser fieldeable "en dosis pequeñas", que es justo lo que el
+ * gate impide. El efecto secundario conocido —un escuadrón mermado paga el precio completo— sigue anotado
+ * como punto abierto en `Consideraciones/Movimiento_Ejercitos_Definicion.md` §7.
  *
  * Devuelve 0 para un `tropaId` que no exista en el catálogo: no es tarea de esta función rechazar tropas
  * inventadas (eso lo hace el reclutamiento), y cobrar por algo que no existe sería peor que no cobrar.
@@ -32,7 +32,7 @@ import { LIDERAZGO, TROPAS_RECLUTABLES } from '../constants';
 export function costeLiderazgo(tropaId: string): number {
   const tropa = TROPAS_RECLUTABLES.find((t) => t.id === tropaId);
   if (!tropa) return 0;
-  return tropa.poderBase * tropa.unidadesPorDefecto * LIDERAZGO.factorCoste;
+  return LIDERAZGO.costePorEscalon[tropa.escalon] ?? 0;
 }
 
 /** Liderazgo efectivo de un jugador. Un jugador sin registro en el estado usa el base — así una partida

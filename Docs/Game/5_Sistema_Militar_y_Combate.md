@@ -175,37 +175,49 @@ Cada Jugador tiene un valor de **Liderazgo**, y cada tropa (tipo) un **coste de 
 
 En un ejército de varios jugadores, **cada uno se valida contra SU propio Liderazgo, por separado**. No hay tope agregado del ejército: cuatro jugadores juntos sacan cuatro veces más.
 
-### 5.11.1 El coste depende del poder
+### 5.11.1 El coste va por ESCALÓN
 
-Decisión del usuario: **a mayor poder de la tropa, mayor coste de Liderazgo.** Se deriva del poder nominal completo del escuadrón —lo que se comanda son soldados, no estadísticas por soldado— en vez de escribirse a mano tropa por tropa:
+Decisión del usuario: **a mayor calidad de la tropa, mayor coste de Liderazgo.** Las tropas se agrupan en
+**cinco escalones**, de leva a élite, y el coste es el de su escalón — no una fórmula sobre su poder.
 
-```
-coste de Liderazgo = poderBase × unidades × factor
-```
+| Escalón | Coste | Caben con 100 | Tropas |
+|---|---|---|---|
+| 1 — leva | 7 | 14 | Milicia de lanceros, Lanceros con escudo de mimbre |
+| 2 — tropa de línea | 14 | 7 | Espadachines de cobre, Honderos |
+| 3 — veterana | 22 | 4 | Hacheros ligeros, Escaramuzadores, Espadachines de bronce, Arqueros |
+| 4 — pesada | 32 | 3 | Hacheros armados, Lanceros pesados |
+| 5 — élite | 45 | 2 | Arqueros con arco compuesto |
 
-Con Liderazgo base **50** y el factor anclado para que la Milicia de lanceros cueste **10**:
+Liderazgo base **100**.
 
-| Tropa | poderBase | Unidades | Poder total | Coste |
-|---|---|---|---|---|
-| Milicia de lanceros | 2 | 25 | 50 | 10 |
-| Lanceros con escudo de mimbre | 3 | 20 | 60 | 12 |
-| Espadachines de espada corta de cobre | 4 | 20 | 80 | 16 |
-| Honderos | 5 | 25 | 125 | 25 |
-| Hacheros ligeros | 7 | 18 | 126 | 25 |
-| Escaramuzadores con jabalina | 8 | 20 | 160 | 32 |
-| Espadachines con espadas y escudos de bronce | 9 | 18 | 162 | 32 |
-| Hacheros armados | 12 | 15 | 180 | 36 |
-| Lanceros pesados micénicos | 14 | 15 | 210 | 42 |
-| Arqueros | 9 | 25 | 225 | 45 |
-| Arqueros con arco compuesto | 15 | 20 | 300 | 60 |
+**Por qué no se deriva del poder.** Antes el coste era `poderBase × unidades × factor`, y eso tenía un defecto
+de fondo: al ser exactamente proporcional al poder nominal, **el poder por punto de Liderazgo salía idéntico
+para las once tropas**. Cinco milicias rendían lo mismo que un lancero pesado, por construcción. La élite no
+era mejor por punto, solo venía en envase más pequeño — así que elegir composición no era una decisión, era
+aritmética.
 
-Se deriva y no se escribe a mano porque `poderBase` sigue siendo PLACEHOLDER pendiente de calibración (5.8): once números escritos a mano se desincronizarían del poder en cuanto se calibre, una fórmula no.
+Con coste por escalón el precio crece **más deprisa que el poder**, y eso es lo buscado: la élite es
+deliberadamente ineficiente por punto. Se la lleva uno porque veinte cuerpos de élite aguantan un paso que
+cien de leva no, no porque rindan más por punto gastado.
 
-**Consecuencia buscada:** un escuadrón de Arqueros con arco compuesto (60) es **infielable** para un jugador sin progresión. La tropa de élite queda gateada detrás del Liderazgo, no solo detrás de recursos y edificios.
+**El presupuesto está elegido para que las mezclas interesantes queden JUSTO en el techo**, que es lo que hace
+que la decisión duela:
 
-**Contrapeso que sale del cruce con el suministro:** la ración es por SOLDADO y el coste de Liderazgo por PODER. Por punto de Liderazgo, la Milicia da 2.5 soldados y los Arqueros con arco compuesto 0.33 — las tropas baratas comen mucho más por punto gastado. Con el mismo carro, una horda barata tiene mucha menos autonomía que una fuerza de élite (5.13). El Liderazgo premia la calidad; el suministro castiga la cantidad.
+| Composición | Coste |
+|---|---|
+| 1 élite + 1 pesada + 1 veterana | 99 |
+| 2 pesadas + 1 veterana + 1 de línea | 100 |
+| 3 veteranas + 1 pesada | 98 |
+| 2 élites + 1 leva | 97 |
+| Hueste de leva | 14 escuadrones |
 
-> El Liderazgo es **base + progresión**. La progresión en sí (cómo sube) es la mecánica de progreso de jugador, todavía sin diseñar — ver `Docs/Mecanicas a desarrollar.md` §11.
+Ninguna sobra ni falta por poco, y ninguna admite una unidad más. La cantidad sigue siendo una estrategia
+—catorce escuadrones de leva son 350 hombres— pero se paga en suministro: esa hueste vacía un carro en diez
+minutos, mientras que dos escuadrones de élite aguantan más de ochenta (5.13). **El eje de la decisión no es
+el poder, es el alcance.**
+
+El techo sube con la progresión del Jugador (`Jugador.liderazgoBase`), que el motor ya admite por jugador
+aunque la mecánica que lo otorga siga pendiente (`Docs/Mecanicas a desarrollar.md` §11).
 
 ## 5.12 Ejércitos y movimiento por el mapa (a petición del usuario, 2026-09-01)
 

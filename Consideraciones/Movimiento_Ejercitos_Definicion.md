@@ -1110,8 +1110,10 @@ en el canon) · **medido** (lo fijó una corrida de batch) · **placeholder** (n
 
 | Constante | Hoy | Qué decide | Procedencia | Si se toca |
 |---|---|---|---|---|
-| `base` | 50 | Cuánta tropa puede sacar un Jugador | **placeholder** | Techo de toda campaña individual. Con 50 salen ~70 soldados ligeros |
-| `factorCoste` | 0.2 | Coste de Liderazgo por punto de poder | **placeholder** | Decide qué tropas compensan. **Entrada principal del Paso 13**: nunca se ha medido |
+| `base` | 100 | Cuánta tropa puede sacar un Jugador | **usuario** (2026-09-04) | Techo de toda campaña individual |
+| `costePorEscalon` | 7 / 14 / 22 / 32 / 45 | Coste de cada escalón, de leva a élite | **usuario** (2026-09-04) | Es el espacio de composición entero. Ver §13 |
+
+> `factorCoste` **ya no existe**: el coste dejó de derivarse del poder el 2026-09-04. Ver §13.
 
 ### 12.3 Velocidades de tropa (`TROPAS_RECLUTABLES[].velocidad`)
 
@@ -1170,3 +1172,79 @@ Ordenado por relación entre lo que mueve y lo poco que se sabe de él:
 
 Y el que **NO** hay que tocar sin rehacer su regla: `capacidadCarroPorJugador`. No es un número elegido, es una
 consecuencia de §5.13.1 — cambiarlo a mano deja la regla y el valor contradiciéndose.
+
+## 13. El Liderazgo pasa a escalones (2026-09-04)
+
+Decisión del usuario tras estudiar cómo resuelven esto otros juegos del género: **cinco escalones de tropa,
+coste por escalón, Liderazgo base 100.**
+
+### 13.1 Qué estaba mal en lo anterior
+
+El coste era `poderBase × unidadesPorDefecto × factorCoste`, y de ahí salía una propiedad que nadie había
+mirado de frente: **el poder por punto de Liderazgo era exactamente el mismo para las once tropas** — el
+factor es una constante, así que la división se cancela. Cinco milicias rendían el mismo poder nominal que un
+lancero pesado, por construcción.
+
+Es literalmente la crítica que el consejo dejó anotada en §9.3 (*"el coste es lineal sobre el mismo escalar
+que el jugador maximiza, luego no hay decisión, solo aritmética"*), y que entonces se respondió con "el
+suministro lo desempata". Cierto, pero el suministro desempata por ALCANCE; en poder puro seguía sin haber
+decisión. El sistema de escalones la crea de frente.
+
+Y había un síntoma sin medir: con base 50, `arqueros_compuesto` costaba **60** — la tropa de élite del juego
+**no se podía sacar al mapa jamás**. Un test lo tenía congelado como si fuera una función deseada ("el gate de
+élite es real"). Ahora entra, y cuesta casi media campaña.
+
+### 13.2 Lo que se midió del género, y lo que se tomó
+
+Interesa la FORMA, no las cifras. Lo revelador al compararlas:
+
+| | más barata | más cara | abanico | caben (barata) | caben (cara) |
+|---|---|---|---|---|---|
+| Referencia del género | ~35 | ~265 | 7,5x | ~14 | ~1,9 |
+| Nosotros ANTES | 10 | 60 | 6x | 5 | **0,83** |
+| Nosotros AHORA | 7 | 45 | 6,4x | 14 | 2,2 |
+
+**El abanico ya lo teníamos bien.** Lo que estaba mal era el presupuesto frente a los costes: con 50 puntos la
+más cara no cabía y las medianas entraban de una en una, así que siete de once tropas no admitían mezcla. No
+había espacio de composición, había una lista de "o esto o aquello".
+
+### 13.3 Lo que queda abierto: la eficiencia no es monótona
+
+Con coste plano por escalón, el poder nominal por punto sale así:
+
+| Tropa | Escalón | Poder nominal | Poder / punto |
+|---|---|---|---|
+| Lanceros de mimbre | 1 | 60 | 8,6 |
+| Milicia de lanceros | 1 | 50 | 7,1 |
+| Honderos | 2 | 125 | 8,9 |
+| Espadachines de cobre | 2 | 80 | 5,7 |
+| **Arqueros** | **3** | **225** | **10,2** |
+| Espadachines de bronce | 3 | 162 | 7,4 |
+| Escaramuzadores | 3 | 160 | 7,3 |
+| Hacheros ligeros | 3 | 126 | 5,7 |
+| Lanceros pesados | 4 | 210 | 6,6 |
+| Hacheros armados | 4 | 180 | 5,6 |
+| Arqueros con arco compuesto | 5 | 300 | 6,7 |
+
+**Los Arqueros son la tropa más eficiente del juego**, por encima de cualquier leva, y la élite (6,7) rinde
+más por punto que la pesada (5,6-6,6). La causa no es el coste sino `unidadesPorDefecto`: los Arqueros traen
+25 hombres —tamaño de leva— con poder de veterana, y los escuadrones pesados son de 15.
+
+Que dentro de un escalón haya tropas mejores es normal y deseable: es lo que hace que exista una tier list.
+Que una veterana domine a TODO lo demás, no.
+
+Se midió la corrección obvia —alinear el tamaño del escuadrón con el escalón (25/20/18/15/12)— y ordena la
+tabla: Arqueros bajarían de 10,2 a 7,4 y la élite de 6,7 a 4,0. **No se ha aplicado**: cambia el reclutamiento
+y el tamaño de todos los ejércitos del juego, y es una decisión aparte.
+
+### 13.4 El batch no puede validar esto todavía
+
+Corrida completa antes y después: **idéntica dígito a dígito** — vivos, tropas, ejércitos, campañas,
+conquistas y colapsos.
+
+No es que el cambio no haga nada: es que **el Liderazgo no es el límite que muerde en el NPC**. Su puerta de
+prudencia (`FRACCION_MAXIMA_EN_CAMPANA`, media guarnición) le deja sacar 1-2 escuadrones, o sea 7-14 puntos de
+100. Nunca se acerca al techo.
+
+Consecuencia para el Paso 13: **el espacio de composición solo se puede calibrar con juego humano, o con un
+NPC que use el Liderazgo como límite en vez de una fracción.** Medirlo en el batch actual no dice nada.

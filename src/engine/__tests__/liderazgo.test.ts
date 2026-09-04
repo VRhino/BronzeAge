@@ -1,18 +1,20 @@
 // LIDERAZGO (Doc 5.11): cuánta tropa puede sacar a campaña un jugador.
 //
-// Lo que congela este archivo es sobre todo la TABLA de Doc 5.11.1. No está escrita a mano en el catálogo —
-// se deriva de `poderBase × unidadesPorDefecto × factorCoste` precisamente porque `poderBase` sigue sin
-// calibrar y once números a mano se desincronizarían. El precio de derivarla es que nadie ve los valores al
-// leer `constants.ts`, así que el test es el sitio donde la tabla del documento y el código se miran a la
-// cara: si alguien recalibra el poder de una tropa, este archivo se pone rojo y obliga a decidir a
-// conciencia si el nuevo coste de liderazgo es el que se quería.
+// Lo que congela este archivo es la TABLA DE ESCALONES de Doc 5.11.1 y, sobre todo, el ESPACIO DE
+// COMPOSICIÓN que produce: qué mezclas caben en el presupuesto y cuáles se pasan por poco. Esa es la
+// mecánica — no los costes en sí, sino las decisiones que obligan a tomar.
+//
+// Rediseño 2026-09-04: el coste dejó de derivarse de `poderBase × unidades × factor` y pasa a ser el de su
+// ESCALÓN. La razón está en `LIDERAZGO` (constants.ts) y es de fondo: con el coste proporcional al poder, el
+// poder por punto salía idéntico para las once tropas y elegir composición no era una decisión sino
+// aritmética. Este archivo cambió entero con ese rediseño.
 import { describe, expect, it } from 'vitest';
 import type { Escuadron, Jugador } from '../../domain/types';
-import { LIDERAZGO } from '../../constants';
+import { LIDERAZGO, TROPAS_RECLUTABLES } from '../../constants';
 import { costeLiderazgo, liderazgoComprometido, liderazgoDisponible, liderazgoDe, puedeLlevar } from '../liderazgo';
 
 const escuadron = (tropaId: string, jugadorId = 'jugador-1'): Escuadron => ({
-  id: `e-${tropaId}`,
+  id: `e-${tropaId}-${jugadorId}`,
   nombre: tropaId,
   jugadorId,
   origen: 'pesants',
@@ -22,77 +24,88 @@ const escuadron = (tropaId: string, jugadorId = 'jugador-1'): Escuadron => ({
   tropaId,
 });
 
-describe('costeLiderazgo — la tabla de Doc 5.11.1', () => {
-  // Anclada por el usuario: la Milicia de lanceros cuesta 10. Todo lo demás sale de ahí.
-  const esperado: Record<string, number> = {
-    milicia_lanceros: 10,
-    lanceros_mimbre: 12,
-    espadachines_cobre: 16,
-    honderos: 25,
-    hacheros_ligeros: 25.2,
-    escaramuzadores_jabalina: 32,
-    espadachines_bronce: 32.4,
-    hacheros_armados: 36,
-    lanceros_pesados: 42,
-    arqueros: 45,
-    arqueros_compuesto: 60,
-  };
+/** Una tropa cualquiera de ese escalón — los tests hablan de escalones, no de nombres propios. */
+const deEscalon = (escalon: number): string => TROPAS_RECLUTABLES.find((t) => t.escalon === escalon)!.id;
 
-  for (const [tropaId, coste] of Object.entries(esperado)) {
-    it(`${tropaId} cuesta ${coste}`, () => {
-      expect(costeLiderazgo(tropaId)).toBeCloseTo(coste);
-    });
-  }
+describe('costeLiderazgo — la tabla de escalones (Doc 5.11.1)', () => {
+  it('cada tropa cuesta lo de su escalón, y nada más', () => {
+    for (const tropa of TROPAS_RECLUTABLES) {
+      expect(costeLiderazgo(tropa.id), tropa.id).toBe(LIDERAZGO.costePorEscalon[tropa.escalon]);
+    }
+  });
+
+  it('el coste crece con el escalón — sin empates ni inversiones', () => {
+    const costes = [1, 2, 3, 4, 5].map((e) => LIDERAZGO.costePorEscalon[e]!);
+    for (let i = 1; i < costes.length; i++) {
+      expect(costes[i]!, `escalón ${i + 1} debe costar más que el ${i}`).toBeGreaterThan(costes[i - 1]!);
+    }
+  });
+
+  it('el coste NO sigue al poder: dos tropas del mismo escalón cuestan igual aunque una rinda más', () => {
+    // Es el punto del rediseño. Si el coste siguiera al poder, el poder por punto sería constante y no habría
+    // decisión que tomar; que dos veteranas de poder distinto cuesten lo mismo es lo que crea la tier list.
+    const veteranas = TROPAS_RECLUTABLES.filter((t) => t.escalon === 3);
+    expect(veteranas.length, 'hace falta más de una para que la prueba diga algo').toBeGreaterThan(1);
+    expect(new Set(veteranas.map((t) => t.poderBase)).size, 'y con poderes distintos').toBeGreaterThan(1);
+    expect(new Set(veteranas.map((t) => costeLiderazgo(t.id))).size).toBe(1);
+  });
 
   it('una tropa que no existe en el catálogo no cuesta nada', () => {
     expect(costeLiderazgo('__no_existe__')).toBe(0);
   });
 });
 
-describe('el gate de élite es real (Doc 5.11.1)', () => {
-  it('los Arqueros con arco compuesto NO caben en el liderazgo base', () => {
-    expect(costeLiderazgo('arqueros_compuesto')).toBeGreaterThan(LIDERAZGO.base);
-    expect(puedeLlevar(undefined, [escuadron('arqueros_compuesto')])).toBe(false);
+describe('el espacio de composición que abre el presupuesto', () => {
+  // Las mezclas que el diseño quiere que sean posibles y AJUSTADAS: caben, pero no sobra para nada más. Si
+  // alguien toca un coste o la base, aquí se ve si el juego de decisiones sigue existiendo o se ha vuelto
+  // trivial en una dirección u otra.
+  const mezcla = (...escalones: number[]) => escalones.map((e) => escuadron(deEscalon(e), `j-${e}-${Math.random()}`));
+
+  it('élite + pesada + veterana cabe, y no deja sitio para una más', () => {
+    const tres = [5, 4, 3];
+    expect(puedeLlevar(undefined, mezcla(...tres))).toBe(true);
+    expect(puedeLlevar(undefined, mezcla(...tres, 1)), 'ni siquiera para una leva').toBe(false);
   });
 
-  it('pero un jugador con liderazgo suficiente sí los saca', () => {
-    const veterano: Jugador = { id: 'jugador-1', liderazgoBase: 60 };
-    expect(puedeLlevar(veterano, [escuadron('arqueros_compuesto')])).toBe(true);
+  it('dos pesadas + veterana + tropa de línea cabe justo', () => {
+    expect(puedeLlevar(undefined, mezcla(4, 4, 3, 2))).toBe(true);
+    expect(puedeLlevar(undefined, mezcla(4, 4, 3, 2, 1))).toBe(false);
+  });
+
+  it('la élite ES fiedable, pero cuesta casi media campaña', () => {
+    // Antes del rediseño la élite costaba MÁS que el liderazgo base y no salía nunca al mapa. Ya no: entra,
+    // y el precio es que se lleva casi la mitad del presupuesto.
+    const coste = costeLiderazgo(deEscalon(5));
+    expect(coste).toBeLessThan(LIDERAZGO.base);
+    expect(coste).toBeGreaterThan(LIDERAZGO.base * 0.4);
+    expect(puedeLlevar(undefined, mezcla(5))).toBe(true);
+    expect(puedeLlevar(undefined, mezcla(5, 5)), 'dos entran').toBe(true);
+    expect(puedeLlevar(undefined, mezcla(5, 5, 5)), 'tres no').toBe(false);
+  });
+
+  it('una hueste de leva es numerosa: la cantidad sigue siendo una estrategia', () => {
+    const caben = Math.floor(LIDERAZGO.base / costeLiderazgo(deEscalon(1)));
+    expect(caben).toBeGreaterThanOrEqual(10);
+    expect(puedeLlevar(undefined, mezcla(...Array(caben).fill(1)))).toBe(true);
   });
 });
 
 describe('el límite es de SALIDA, no de posesión', () => {
   it('suma los costes de lo que se lleva', () => {
-    const carga = [escuadron('milicia_lanceros'), escuadron('lanceros_mimbre'), escuadron('espadachines_cobre')];
-    expect(liderazgoComprometido(carga)).toBeCloseTo(38);
-  });
-
-  it('acepta una carga que cabe justa y rechaza la que se pasa por poco', () => {
-    const cabe = [escuadron('milicia_lanceros'), escuadron('honderos')]; // 35
-    const noCabe = [escuadron('milicia_lanceros'), escuadron('honderos'), escuadron('espadachines_cobre')]; // 51
-
-    expect(puedeLlevar(undefined, cabe)).toBe(true);
-    expect(puedeLlevar(undefined, noCabe)).toBe(false);
-  });
-
-  it('el ejemplo del usuario: con 50 no caben milicia + honderos + lanceros de mimbre a la vez... sí caben', () => {
-    // El usuario planteó el caso con números de ejemplo (10/15/30 = 55 > 50). Con la tabla DERIVADA los
-    // mismos tres suman 47 y sí entran — la regla que él fijó ("a mayor poder, mayor coste") manda sobre
-    // aquellos números, que él mismo confirmó como ilustrativos. Queda escrito aquí para que nadie lo lea
-    // como una regresión al comparar con la conversación de diseño.
-    const tres = [escuadron('milicia_lanceros'), escuadron('honderos'), escuadron('lanceros_mimbre')];
-    expect(liderazgoComprometido(tres)).toBeCloseTo(47);
-    expect(puedeLlevar(undefined, tres)).toBe(true);
+    const carga = [escuadron(deEscalon(1)), escuadron(deEscalon(3)), escuadron(deEscalon(5))];
+    expect(liderazgoComprometido(carga)).toBe(
+      LIDERAZGO.costePorEscalon[1]! + LIDERAZGO.costePorEscalon[3]! + LIDERAZGO.costePorEscalon[5]!
+    );
   });
 
   it('no hay tope agregado: cada jugador se valida contra el SUYO (Doc 5.11)', () => {
-    // Dos jugadores llevando cada uno 45 puntos: 90 en el mismo ejército, y es válido.
-    const a = [escuadron('arqueros', 'jugador-a')];
-    const b = [escuadron('arqueros', 'jugador-b')];
+    // Dos jugadores llevando cada uno una élite: en el mismo ejército suman el doble del tope, y es válido.
+    const a = [escuadron(deEscalon(5), 'jugador-a')];
+    const b = [escuadron(deEscalon(5), 'jugador-b')];
 
     expect(puedeLlevar(undefined, a)).toBe(true);
     expect(puedeLlevar(undefined, b)).toBe(true);
-    expect(liderazgoComprometido([...a, ...b])).toBeCloseTo(90);
+    expect(liderazgoComprometido([...a, ...b])).toBe(2 * LIDERAZGO.costePorEscalon[5]!);
   });
 });
 
@@ -101,12 +114,20 @@ describe('liderazgoDe / liderazgoDisponible', () => {
     expect(liderazgoDe(undefined)).toBe(LIDERAZGO.base);
   });
 
+  it('un jugador con más liderazgo saca más', () => {
+    // El techo por progresión todavía no existe como mecánica, pero el motor ya lo admite por jugador.
+    const veterano: Jugador = { id: 'jugador-1', liderazgoBase: LIDERAZGO.base * 1.5 };
+    const tres = [escuadron(deEscalon(5), 'a'), escuadron(deEscalon(4), 'a'), escuadron(deEscalon(3), 'a')];
+    expect(puedeLlevar(veterano, [...tres, escuadron(deEscalon(2), 'a')])).toBe(true);
+    expect(puedeLlevar(undefined, [...tres, escuadron(deEscalon(2), 'a')])).toBe(false);
+  });
+
   it('lo que queda libre nunca es negativo', () => {
-    const pasado = [escuadron('arqueros_compuesto')]; // 60 > 50
+    const pasado = Array.from({ length: 20 }, (_, i) => escuadron(deEscalon(5), `j${i}`));
     expect(liderazgoDisponible(undefined, pasado)).toBe(0);
   });
 
   it('descuenta lo ya comprometido', () => {
-    expect(liderazgoDisponible(undefined, [escuadron('milicia_lanceros')])).toBeCloseTo(40);
+    expect(liderazgoDisponible(undefined, [escuadron(deEscalon(1))])).toBe(LIDERAZGO.base - LIDERAZGO.costePorEscalon[1]!);
   });
 });

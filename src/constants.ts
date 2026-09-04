@@ -1351,6 +1351,8 @@ export const TROPAS_RECLUTABLES: {
    * fijan estos números: una caravana inicial (comercial, 16) no puede ser más rápida que un ejército, y un
    * jugador solo con infantería ligera tiene que poder alcanzarla. */
   velocidad: number;
+  /** Escalón de élite, 1 (leva) a 5 (élite). Decide su coste de Liderazgo — ver `LIDERAZGO.costePorEscalon`. */
+  escalon: 1 | 2 | 3 | 4 | 5;
 }[] = [
   // Escalón de entrada (a petición del usuario: la defensa mínima no debe depender de Barracón — que exige
   // añadirlo MANUALMENTE a la cola vía Gobernador/Maestro de Obras antes de siquiera empezar a construirse,
@@ -1362,21 +1364,21 @@ export const TROPAS_RECLUTABLES: {
   // pasar por Armería. Débil a propósito (poderBase 2, por debajo de todo lo demás): existe para que el bucle
   // de juego arranque y las primeras escaramuzas ocurran pronto, no para ganar batallas. Sigue exigiendo un
   // General asignado (`reclutarTropa` en engine/tropas.ts) — eso no cambia, solo el edificio.
-  { id: 'milicia_lanceros', nombre: 'Milicia de lanceros', edificio: 'centroUrbano', nivelRequerido: 1, costoEquipo: { madera: 2 }, poderBase: 2, unidadesPorDefecto: 25, velocidad: 20 },
+  { id: 'milicia_lanceros', nombre: 'Milicia de lanceros', edificio: 'centroUrbano', nivelRequerido: 1, costoEquipo: { madera: 2 }, poderBase: 2, unidadesPorDefecto: 25, velocidad: 20, escalon: 1 },
   // Recosteadas a `armaMadera` (ver RECETA_ARMA_MADERA): antes exigían la cadena del cobre/cuero entera, lo
   // que era además temáticamente incoherente — un escudo de MIMBRE pagado con un arma de cobre, y unos
   // Honderos (una honda y una piedra) pagados con armadura de cuero. El cobre pasa a ser la MEJORA
   // (`espadachines_cobre`, que sí lo conserva), no el ticket de entrada.
-  { id: 'lanceros_mimbre', nombre: 'Lanceros con escudo de mimbre', edificio: 'barracon', nivelRequerido: 1, costoEquipo: { armaMadera: 1 }, poderBase: 3, unidadesPorDefecto: 20, velocidad: 20 },
-  { id: 'espadachines_cobre', nombre: 'Espadachines de espada corta de cobre', edificio: 'barracon', nivelRequerido: 1, costoEquipo: { armaCobre: 1, armaduraBasica: 1 }, poderBase: 4, unidadesPorDefecto: 20, velocidad: 16 },
-  { id: 'hacheros_ligeros', nombre: 'Hacheros ligeros', edificio: 'barracon', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraBasica: 1 }, poderBase: 7, unidadesPorDefecto: 18, velocidad: 16 },
-  { id: 'espadachines_bronce', nombre: 'Espadachines con espadas y escudos de bronce', edificio: 'barracon', nivelRequerido: 2, costoEquipo: { armaBronce: 2, armaduraIntermedia: 1 }, poderBase: 9, unidadesPorDefecto: 18, velocidad: 16 },
-  { id: 'lanceros_pesados', nombre: 'Lanceros pesados micénicos', edificio: 'barracon', nivelRequerido: 3, costoEquipo: { armaBronce: 2, armaduraIntermedia: 2 }, poderBase: 14, unidadesPorDefecto: 15, velocidad: 12 },
-  { id: 'hacheros_armados', nombre: 'Hacheros armados', edificio: 'barracon', nivelRequerido: 3, costoEquipo: { armaBronce: 1, armaduraIntermedia: 1 }, poderBase: 12, unidadesPorDefecto: 15, velocidad: 12 },
-  { id: 'honderos', nombre: 'Honderos', edificio: 'galeriaDeTiro', nivelRequerido: 1, costoEquipo: { armaMadera: 1 }, poderBase: 5, unidadesPorDefecto: 25, velocidad: 20 },
-  { id: 'escaramuzadores_jabalina', nombre: 'Escaramuzadores con jabalina', edificio: 'galeriaDeTiro', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraBasica: 1 }, poderBase: 8, unidadesPorDefecto: 20, velocidad: 20 },
-  { id: 'arqueros', nombre: 'Arqueros', edificio: 'galeriaDeTiro', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraIntermedia: 1 }, poderBase: 9, unidadesPorDefecto: 25, velocidad: 16 },
-  { id: 'arqueros_compuesto', nombre: 'Arqueros con arco compuesto', edificio: 'galeriaDeTiro', nivelRequerido: 3, costoEquipo: { armaBronce: 3, armaduraIntermedia: 2 }, poderBase: 15, unidadesPorDefecto: 20, velocidad: 12 },
+  { id: 'lanceros_mimbre', nombre: 'Lanceros con escudo de mimbre', edificio: 'barracon', nivelRequerido: 1, costoEquipo: { armaMadera: 1 }, poderBase: 3, unidadesPorDefecto: 20, velocidad: 20, escalon: 1 },
+  { id: 'espadachines_cobre', nombre: 'Espadachines de espada corta de cobre', edificio: 'barracon', nivelRequerido: 1, costoEquipo: { armaCobre: 1, armaduraBasica: 1 }, poderBase: 4, unidadesPorDefecto: 20, velocidad: 16, escalon: 2 },
+  { id: 'hacheros_ligeros', nombre: 'Hacheros ligeros', edificio: 'barracon', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraBasica: 1 }, poderBase: 7, unidadesPorDefecto: 18, velocidad: 16, escalon: 3 },
+  { id: 'espadachines_bronce', nombre: 'Espadachines con espadas y escudos de bronce', edificio: 'barracon', nivelRequerido: 2, costoEquipo: { armaBronce: 2, armaduraIntermedia: 1 }, poderBase: 9, unidadesPorDefecto: 18, velocidad: 16, escalon: 3 },
+  { id: 'lanceros_pesados', nombre: 'Lanceros pesados micénicos', edificio: 'barracon', nivelRequerido: 3, costoEquipo: { armaBronce: 2, armaduraIntermedia: 2 }, poderBase: 14, unidadesPorDefecto: 15, velocidad: 12, escalon: 4 },
+  { id: 'hacheros_armados', nombre: 'Hacheros armados', edificio: 'barracon', nivelRequerido: 3, costoEquipo: { armaBronce: 1, armaduraIntermedia: 1 }, poderBase: 12, unidadesPorDefecto: 15, velocidad: 12, escalon: 4 },
+  { id: 'honderos', nombre: 'Honderos', edificio: 'galeriaDeTiro', nivelRequerido: 1, costoEquipo: { armaMadera: 1 }, poderBase: 5, unidadesPorDefecto: 25, velocidad: 20, escalon: 2 },
+  { id: 'escaramuzadores_jabalina', nombre: 'Escaramuzadores con jabalina', edificio: 'galeriaDeTiro', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraBasica: 1 }, poderBase: 8, unidadesPorDefecto: 20, velocidad: 20, escalon: 3 },
+  { id: 'arqueros', nombre: 'Arqueros', edificio: 'galeriaDeTiro', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraIntermedia: 1 }, poderBase: 9, unidadesPorDefecto: 25, velocidad: 16, escalon: 3 },
+  { id: 'arqueros_compuesto', nombre: 'Arqueros con arco compuesto', edificio: 'galeriaDeTiro', nivelRequerido: 3, costoEquipo: { armaBronce: 3, armaduraIntermedia: 2 }, poderBase: 15, unidadesPorDefecto: 20, velocidad: 12, escalon: 5 },
 ];
 
 export const MILITAR = {
@@ -1399,21 +1401,40 @@ export const MILITAR = {
 };
 
 /**
- * Liderazgo (Doc 5.11): cuánto puede sacar a campaña un jugador. Es límite de SALIDA, no de posesión — la
- * guarnición no tiene tope, y por eso "¿qué me llevo?" es la decisión central de cada campaña.
+ * Liderazgo (Doc 5.11): cuánta tropa puede sacar a campaña un Jugador de una vez. Límite de SALIDA, no de
+ * posesión — lo que se queda es la guarnición, y es lo único que defiende (Doc 5.12.4).
  *
- * `factorCoste` PLACEHOLDER, a calibrar. El coste NO se escribe a mano tropa por tropa: se DERIVA de
- * `poderBase × unidadesPorDefecto × factorCoste` (ver `costeLiderazgo`, engine/liderazgo.ts). La razón es
- * concreta: `poderBase` sigue siendo placeholder pendiente de calibración (Doc 5.8), y once números escritos
- * a mano se desincronizarían del poder en cuanto se calibre. Una fórmula no — se calibra un solo número.
+ * **El coste va por ESCALÓN, no derivado del poder (rediseño 2026-09-04, decisión del usuario).** Antes era
+ * `poderBase × unidades × factor`, y esa fórmula tenía un defecto de fondo que el consejo ya había señalado:
+ * al ser el coste exactamente proporcional al poder nominal, **el poder por punto de Liderazgo salía idéntico
+ * para las once tropas**. La élite no era mejor por punto, solo venía en envase más pequeño — así que elegir
+ * no era una decisión, era aritmética.
  *
- * Con `base: 50` y `factorCoste: 0.2` la Milicia de lanceros cuesta 10 (ancla elegida por el usuario) y los
- * Arqueros con arco compuesto 60: la tropa de élite es INFIELABLE sin progresión de liderazgo, que es la
- * consecuencia buscada (Doc 5.11.1).
+ * Con coste por escalón el coste crece MÁS DEPRISA que el poder, y eso es lo que se busca: la élite es
+ * deliberadamente ineficiente por punto. Se la lleva uno porque veinte cuerpos de élite aguantan un paso que
+ * cien de leva no, no porque rindan más por punto gastado.
+ *
+ * Los cinco escalones y su presupuesto están elegidos para que las composiciones interesantes queden JUSTO en
+ * el techo, que es lo que hace que la decisión duela:
+ *
+ * | Escalón | Coste | Caben con 100 |
+ * |---|---|---|
+ * | 1 — leva | 7 | 14 |
+ * | 2 — tropa de línea | 14 | 7 |
+ * | 3 — veterana | 22 | 4 |
+ * | 4 — pesada | 32 | 3 |
+ * | 5 — élite | 45 | 2 |
+ *
+ * Y las mezclas máximas salen redondas: **1 élite + 1 pesada + 1 veterana = 99**, **2 pesadas + 1 veterana +
+ * 1 de línea = 100**. Ninguna sobra ni falta por poco.
+ *
+ * `base` 100 (decisión del usuario). El techo con equipo queda para cuando exista la artesanía de armaduras
+ * (`Docs/Mecanicas a desarrollar.md` §11, progresión de jugador): la mecánica ya lo admite sin tocar nada —
+ * `Jugador.liderazgoBase` es por jugador y quien no lo tenga usa este valor.
  */
 export const LIDERAZGO = {
-  base: 50,
-  factorCoste: 0.2,
+  base: 100,
+  costePorEscalon: { 1: 7, 2: 14, 3: 22, 4: 32, 5: 45 } as Record<number, number>,
 };
 
 /**

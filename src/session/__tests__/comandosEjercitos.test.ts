@@ -20,8 +20,8 @@ import { reservaDeTrigo } from '../../engine/tropas';
  * almacén — obstáculos reales del motor (`reclutarTropa`) pero ajenos a lo que se prueba aquí, que es la
  * COMPOSICIÓN de un ejército. Mismo atajo que usa `autorizacionComandos.test.ts` por la misma razón.
  *
- * Las tropas elegidas cubren los tres escalones de coste de Liderazgo: milicia 10, lanceros de mimbre 12,
- * honderos 25.
+ * Las tropas elegidas cubren dos escalones de coste de Liderazgo: milicia y lanceros de mimbre son leva
+ * (escalón 1), honderos es tropa de línea (escalón 2).
  */
 function partidaConTropas(liderazgoBase?: number) {
   const base = partidaConAsentamiento();
@@ -111,8 +111,8 @@ describe('movilizarEjercito', () => {
   });
 
   it('RECHAZA si los escuadrones exceden el Liderazgo del jugador', () => {
-    // Liderazgo 10: justo la Milicia de lanceros y nada más.
-    const { sesion, asentamientoId, fundador } = partidaConTropas(10);
+    // Liderazgo 7: justo una tropa de leva (escalón 1) y nada más — los honderos son de línea (14) y se pasan.
+    const { sesion, asentamientoId, fundador } = partidaConTropas(7);
     const milicia = 'esc-milicia';
     const honderos = 'esc-honderos';
 
@@ -250,8 +250,9 @@ describe('unirseAEjercito', () => {
   });
 
   it('el refuerzo también cuenta contra el Liderazgo, sumando lo que ese jugador YA lleva dentro', () => {
-    // Liderazgo 15: cabe la milicia (10) sola, pero no milicia + lanceros de mimbre (10 + 12 = 22).
-    const { sesion, asentamientoId, fundador } = partidaConTropas(15);
+    // Liderazgo 10: cabe una tropa de leva sola (7), pero no dos (14) — que es lo que este test comprueba:
+    // el refuerzo suma contra lo que ese jugador YA lleva dentro, no se valida en el vacío.
+    const { sesion, asentamientoId, fundador } = partidaConTropas(10);
     const primero = 'esc-milicia';
     const segundo = 'esc-mimbre';
 
