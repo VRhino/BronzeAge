@@ -149,11 +149,11 @@ exports[`snapshot de regresión general > resumen del estado en ticks de referen
         "poblacion": {
           "artesanos": 0,
           "nobleza": 0,
-          "pesants": 174,
+          "pesants": 175,
         },
         "recursosClave": [
           {
-            "cantidad": 427.52,
+            "cantidad": 505.15,
             "recurso": "madera",
           },
           {
@@ -161,7 +161,7 @@ exports[`snapshot de regresión general > resumen del estado en ticks de referen
             "recurso": "piedra",
           },
           {
-            "cantidad": 3382.9,
+            "cantidad": 3382.8,
             "recurso": "trigo",
           },
           {
@@ -219,15 +219,15 @@ exports[`snapshot de regresión general > resumen del estado en ticks de referen
         },
         "recursosClave": [
           {
-            "cantidad": 82.83,
+            "cantidad": 22.83,
             "recurso": "madera",
           },
           {
-            "cantidad": 20,
+            "cantidad": 0,
             "recurso": "piedra",
           },
           {
-            "cantidad": 295.57,
+            "cantidad": 362.84,
             "recurso": "trigo",
           },
           {
@@ -294,7 +294,7 @@ exports[`snapshot de regresión general > resumen del estado en ticks de referen
             "recurso": "piedra",
           },
           {
-            "cantidad": 1545.14,
+            "cantidad": 1631.55,
             "recurso": "trigo",
           },
           {

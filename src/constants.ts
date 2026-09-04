@@ -29,7 +29,7 @@
  *   `duracionMinutosPorDefecto`) y tasas `*PorTick` → `*PorMinuto`. Mismos VALORES (1 tick = 1 min), otras
  *   claves en el JSON servido.
  */
-export const BALANCE_VERSION = 5;
+export const BALANCE_VERSION = 6;
 
 /**
  * Modelo temporal (Fase D, Docs/Arquitectura/10_Modelo_Temporal.md). **Decisión del usuario (2026-08-29):
@@ -1561,7 +1561,23 @@ export const MANTENIMIENTO = {
   // consumo real de comida que ya se descuenta en `avanzarNutricionPoblacion`/`avanzarMantenimientoTropas`, duplicando
   // el gasto). El "apartado de trigo" que se muestra en el panel de Mantenimiento ahora es la suma real de
   // consumo de población + tropas (ver `gameStore.mantenimientoInfo`), no un placeholder desconectado.
-  costoBase: { madera: 3 },
+  /**
+   * Mantenimiento base en madera por minuto, antes de escalar por población y distancia a la capital.
+   *
+   * **A LA MITAD desde el 2026-09-04 (3 → 1.5, decisión del usuario).** El motivo, medido: era lo que
+   * inflaba la reserva de construcción hasta hacerla infranqueable. La reserva de un recurso es su
+   * mantenimiento × `RESERVA_CONSTRUCCION.horizonteMinutosMantenimiento`, así que una ciudad madura del batch
+   * llegaba a exigirse **194 de madera guardada** mientras acumulaba **142** — y con eso
+   * `puedeIniciarConstruccion` le vetaba CUALQUIER gasto discrecional para siempre. Resultado: cero Almacenes
+   * y cero Graneros en 600 ticks, aunque hubiera madera entrando (ver
+   * `Consideraciones/Movimiento_Ejercitos_Definicion.md` §11.1).
+   *
+   * No era un problema de producción sino del techo que el propio mantenimiento se imponía: la reserva escala
+   * con el mantenimiento, que escala con lo construido, así que cuanto más crecía la ciudad menos podía
+   * construir. Se eligió esta palanca sobre las otras tres (bajar el horizonte de reserva, subir el rinde de
+   * la Leñera, eximir al almacenaje de la reserva) por ser la que ataca la causa y no el síntoma.
+   */
+  costoBase: { madera: 1.5 },
   // Rediseño de progreso (Fase 0): con el tope de nivel bajando de 10 a 3 (ver NIVEL_ASENTAMIENTO), los
   // umbrales de piedra/oro (antes nivel 3 y nivel 8, pensados para un rango 1-10) se recalibran al rango 1-3
   // para que los 3 niveles tengan una escalada de coste real — cifra exacta PLACEHOLDER pendiente de

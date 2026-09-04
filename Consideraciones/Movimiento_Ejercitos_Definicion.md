@@ -867,3 +867,33 @@ Las palancas, sin decidir (entrada del Paso 13):
 3. **Bajar el mantenimiento en madera**, que es lo que infla la reserva.
 4. **Eximir al almacenaje de la reserva**, como ya se exime a Granja y Leñera de la de su propio recurso
    (`RECURSO_PROPIO`): un Almacén no consume madera de forma recurrente, la invierte una vez.
+
+### 11.2 Mantenimiento de madera a la mitad, y el interbloqueo que destapó (2026-09-04)
+
+El usuario eligió la palanca 3: `MANTENIMIENTO.costoBase.madera` de 3 a **1.5**. Medido a 300 ticks / 30
+Facciones, el efecto es real pero pequeño —asentamientos de nivel 2+ 26 → 28 a tick 200, más madera en
+almacén— y **NO desbloquea el almacenaje: siguen siendo cero Almacenes y cero Graneros**.
+
+La sonda sobre el punto exacto del rechazo explica por qué, y lo que enseña ya no es un problema de balance:
+
+```
+SONDA almacen: madera=200  reservaMadera=167  capacidadMadera=200
+```
+
+**La madera está a TOPE de capacidad (200 = `ALMACEN.capacidadInicialPorRecurso`) y aun así no alcanza.** La
+cuenta es `200 − 50 = 150 < 167`, así que `puedeIniciarConstruccion` veta el Almacén. Y como la capacidad de
+madera SOLO crece construyendo Almacenes, esto es un **interbloqueo**:
+
+> Para subir el techo hay que construir un Almacén; para construirlo hace falta guardar `reserva + 50`; y la
+> reserva más el coste superan el techo. El asentamiento queda encerrado para siempre.
+
+Bajar el mantenimiento movió la reserva de 194 a 167 — no lo suficiente. Y no es cuestión de afinar el número:
+la reserva CRECE con la población, así que en realidad es una **carrera** que hay que ganar temprano. Si un
+asentamiento no construye su primer Almacén mientras es pequeño (cuando la madera se está gastando en Granja,
+Leñera y extractores, todos de banda superior), pierde la ventana y ya no la recupera nunca.
+
+**La palanca que queda es la 4, y ya no es un ajuste sino un arreglo**: eximir a los edificios de ALMACENAJE
+de la reserva, igual que `RECURSO_PROPIO` ya exime a la Granja de la reserva de trigo y a la Leñera de la de
+madera. La razón es la misma en los tres casos: no consumen ese recurso de forma recurrente — lo invierten una
+vez, y en el caso del Almacén es justamente para subir el techo contra el que la reserva se mide. Pendiente de
+decisión del usuario.
