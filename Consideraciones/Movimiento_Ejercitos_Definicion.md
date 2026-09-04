@@ -589,9 +589,32 @@ usuario dio la tabla real. Calibrarla es un cambio de **datos**, no de código.
       su carro en ~100 minutos. Ya no: la decisión del usuario de bajar el consumo estacionado a 1/10
       (§11) alarga eso a ~1.000 minutos por sí sola. El paso sigue siendo lo que hace la posición
       *indefinida* en vez de solo *larga*.
-- [ ] **Paso 9 — Caravanas adjuntas**: capacidad, entrada en el `min` de velocidad, pérdida al ser derrotado,
-      y escolta (la caravana entrega mientras marcha). Incluye el rebalance de `CARAVANA_CATALOGO` **medido en
-      batch por el efecto sobre el oro**.
+- [~] **Paso 9 — Caravanas adjuntas.** Partido en dos: la mitad estructural está hecha, la escolta no.
+  - [x] **9a — El tren de suministros (2026-09-04).** Enganchar y soltar (`adjuntarCaravana`/`soltarCaravana`,
+        con las cuatro condiciones: misma Facción, disponible, al alcance, no repetida), suma de capacidad,
+        entrada en el `min` de velocidad y pérdida al deshacerse el ejército. Las adjuntas **viajan con la
+        columna**: su posición es la suya, no una ruta propia.
+
+        **El rebalance de riesgo resultó inerte.** El plan marcaba subir `CARAVANA_CATALOGO.comercial.capacidad`
+        (60 → 500, lo exige el canon: una caravana debe cargar al menos lo que el carro de un Jugador) como el
+        cambio más peligroso de la mecánica, por multiplicar el oro por entrega. **Medido en batch: cero
+        diferencia**, dígito a dígito, en oro medio, acuerdos cumplidos, vivos, colapsos, niveles y tropas. La
+        razón es que la capacidad nunca fue el límite — `asignarCaravanasATrueque` reparte
+        `min(stock, pendiente, capacidad)` y un trueque automático son **30 unidades**, la mitad de la
+        capacidad VIEJA. El riesgo era real en el papel y lo desactivaban las otras dos cifras. Volverá a
+        morder el día que los acuerdos pasen de 500.
+
+        De paso, `avanzarEjercitos` pasa de siete parámetros posicionales a un `ContextoAvanceEjercitos`: con
+        mapa, Facciones, relaciones, instante, RNG y ahora caravanas, el orden ya no decía nada en la llamada.
+        Y al hacerlo salió un bug real: recibía `trasExpansion.caravanas` en vez de
+        `trasAtaquesBandidos.caravanas`, así que al devolver su lista habría **resucitado las caravanas que los
+        bandidos acababan de destruir** ese mismo tick. Corregido.
+
+  - [ ] **9b — Escolta**: que una caravana adjunta cargada haga su ENTREGA mientras marcha con el ejército
+        (Doc 5.13.3, resuelve la escolta pendiente de Doc 3.10). Es lo que queda, y no es pequeño: hoy la
+        entrega la conduce `avanzarCaravanas` sobre la ruta propia de la caravana, y una adjunta no tiene ruta
+        propia — se mueve con la columna. Hay que decidir qué cuenta como "llegar a destino" para una caravana
+        que ya no elige por dónde va.
 - [ ] **Paso 10 — Encuentros por proximidad** (ejército↔ejército, ejército↔caravana), con **orden canónico de
       resolución por id** (§9, hallazgo de la revisión cruzada: sin él el RNG deja de ser determinista aunque
       la secuencia global sea correcta).

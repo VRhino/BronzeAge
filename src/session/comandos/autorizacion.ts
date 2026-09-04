@@ -278,6 +278,15 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
   },
   // Sin `cargo` en `params`, a diferencia de los de arriba: autoridad sobre la cola de construcción es del
   // Gobernador o del Maestro de Obras (`CargoConstructor`, ver `construccion.ts`).
+  /** Enganchar o soltar el tren de suministros lo decide quien va en la columna, igual que replegarla. */
+  adjuntarCaravana: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, jugadorId, params) => participaEnEjercito(estado, jugadorId, params.ejercitoId),
+  },
+  soltarCaravana: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, jugadorId, params) => participaEnEjercito(estado, jugadorId, params.ejercitoId),
+  },
   /** Abrir el almacén a un aliado es política de la plaza: Gobernador (manda) o Tesorero (custodia el stock). */
   alternarReabastecerAliados: {
     rolesPermitidos: ['jugador'],

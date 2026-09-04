@@ -29,7 +29,7 @@
  *   `duracionMinutosPorDefecto`) y tasas `*PorTick` → `*PorMinuto`. Mismos VALORES (1 tick = 1 min), otras
  *   claves en el JSON servido.
  */
-export const BALANCE_VERSION = 6;
+export const BALANCE_VERSION = 7;
 
 /**
  * Modelo temporal (Fase D, Docs/Arquitectura/10_Modelo_Temporal.md). **Decisión del usuario (2026-08-29):
@@ -1086,7 +1086,23 @@ export const CARAVANA_CATALOGO = {
   // jugador construye y conserva (flota propia, ver `construirCaravanaComercial`) — militar/construccion/
   // contrabando siguen siendo instanciadas por su propio mecanismo (reclutamiento militar sin implementar
   // todavía; Caravana de Fundación, Doc 1.8) y no tienen costo de flota propio.
-  comercial: { capacidad: 60, velocidad: 16, costoConstruccion: { madera: 50 } },
+  /**
+   * **60 → 500 (2026-09-04, Paso 9 del movimiento de ejércitos).** Lo exige el canon: una caravana adjunta a
+   * un ejército tiene que cargar **al menos lo que el carro de un Jugador** (`LOGISTICA.capacidadCarroPorJugador`,
+   * Doc 5.13.2) — si cargara menos, engancharla como tren de suministros no tendría sentido.
+   *
+   * El plan marcaba este número como el cambio de MÁS riesgo de toda la mecánica, por multiplicar el oro que
+   * entrega cada viaje. **Medido en batch (300 ticks, 30 Facciones): CERO diferencia** en oro medio, acuerdos
+   * cumplidos, vivos, colapsos, niveles y tropas — idéntico dígito a dígito. La razón es que la capacidad
+   * nunca fue el límite: `asignarCaravanasATrueque` reparte
+   * `min(stock disponible, pendiente del acuerdo, capacidad)`, y un trueque automático son 30 unidades
+   * (`SIMULACION_AUTO_COMERCIO.cantidadPorTrueque`), la MITAD de la capacidad vieja. El riesgo era real en el
+   * papel y lo desactivan las otras dos cifras.
+   *
+   * Lo que sí habrá que revisar el día que los acuerdos crezcan por encima de 500: ahí la capacidad volvería a
+   * morder, y entonces este número sí decide el ritmo del comercio.
+   */
+  comercial: { capacidad: 500, velocidad: 16, costoConstruccion: { madera: 50 } },
   militar: { capacidad: 40, velocidad: 12 },
   construccion: { capacidad: 150, velocidad: 10 },
   contrabando: { capacidad: 20, velocidad: 24 },

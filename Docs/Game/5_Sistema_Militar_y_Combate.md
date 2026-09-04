@@ -316,10 +316,12 @@ Como la autonomía se mide en **ticks** y no en distancia, **la velocidad pasa a
 
 Un ejército puede llevar **caravanas adjuntas** que amplían su capacidad de carga más allá de la suma de los carros de sus jugadores. Es la forma de proyectar una campaña lejos sin depender de que se unan más jugadores.
 
-- La capacidad de una caravana es **igual o mayor que la del carro de un jugador** — si cargara menos, la caravana no tendría sentido como tren de suministros.
+- La capacidad de una caravana es **igual o mayor que la del carro de un jugador** — si cargara menos, la caravana no tendría sentido como tren de suministros. Hoy son iguales (500).
+- **Se engancha y se suelta en marcha**, con cuatro condiciones: que sea de tu Facción, que esté **disponible** (una caravana ya despachada está cumpliendo un trueque y secuestrarla lo rompería), que esté al alcance —el mismo radio con el que se recogen refuerzos y se reposta— y que no vaya ya enganchada. Al soltarla se queda **donde esté la columna**: no vuelve sola a casa, igual que un ejército no se teletransporta al replegarse.
+- Mientras va enganchada **viaja con el ejército**: su posición es la de la columna, no una ruta propia.
 - **Entran en el `min` de velocidad.** Una caravana comercial va a 16, así que adjuntarla baja un ejército ligero de 20 a 16 y **le quita la capacidad de cazar caravanas**. No se puede tener alcance profundo y velocidad de incursión a la vez.
 - **Cuestan comercio.** El cupo de caravanas de un Mercado es 2/4/6 según su nivel (Doc 3): enganchar la flota a un ejército es apagar tu comercio mientras dure la campaña.
-- **Si el ejército es derrotado, las caravanas adjuntas se pierden.** Eso convierte el tren de suministros en un objetivo militar de verdad: cortar la retaguardia gana campañas sin asaltar una muralla.
+- **Si el ejército es derrotado, las caravanas adjuntas se pierden.** Eso convierte el tren de suministros en un objetivo militar de verdad: cortar la retaguardia gana campañas sin asaltar una muralla. Se pierden igualmente si el ejército **se deshace de hambre** (5.13.4): en los dos casos deja de existir en campo abierto, y lo que vuelve a casa son las *identidades* de sus escuadrones, no bienes físicos — una caravana sin nadie que la lleve no se teletransporta a ninguna parte.
 
 ### 5.13.3 Escolta de caravanas
 

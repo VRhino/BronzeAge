@@ -458,6 +458,9 @@ interface Foto {
   granerosActivos: number;
   /** Asentamientos con el almacén de trigo por encima del umbral que dispara ampliar capacidad. */
   conTrigoDesbordado: number;
+  /** Oro medio por asentamiento. Es el termómetro del comercio: la capacidad de una caravana decide cuánto
+   * entrega por viaje, así que cualquier cambio ahí se lee aquí antes que en ningún otro sitio. */
+  oroMedio: number;
   /** Almacenes activos: la otra mitad de la pregunta "¿por qué no crece la capacidad?" — si tampoco hay
    * Almacenes, el problema no es del Granero sino de que la ciudad no puede pagar almacenaje ninguno. */
   almacenesActivos: number;
@@ -571,6 +574,7 @@ function construirFotoResumen(
   let sinNadaQueCargar = 0;
   let granerosActivos = 0;
   let conTrigoDesbordado = 0;
+  let oroSuma = 0;
   let almacenesActivos = 0;
   let lenerasSuma = 0;
   let granerosNivelSuma = 0;
@@ -636,6 +640,7 @@ function construirFotoResumen(
     const ocupTrigo = trigoAlm && trigoAlm.capacidad > 0 ? trigoAlm.cantidad / trigoAlm.capacidad : 0;
     ocupacionTrigoSuma += ocupTrigo;
     if (ocupTrigo >= NECESIDADES_UMBRAL_AMPLIACION) conTrigoDesbordado++;
+    oroSuma += a.almacen['oro']?.cantidad ?? 0;
     almacenesActivos += edificiosPorTipoYEstado(a, 'almacen').length;
     lenerasSuma += edificiosPorTipoYEstado(a, 'lenera').length;
     for (const tipo of TIPOS_EXTRACTOR) {
@@ -766,6 +771,7 @@ function construirFotoResumen(
     sinNadaQueCargar,
     granerosActivos,
     conTrigoDesbordado,
+    oroMedio: Math.round((oroSuma / Math.max(1, estado.asentamientos.length)) * 10) / 10,
     almacenesActivos,
     lenerasMedia: Math.round((lenerasSuma / Math.max(1, estado.asentamientos.length)) * 10) / 10,
     granerosNivelSuma,

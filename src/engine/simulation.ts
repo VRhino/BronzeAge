@@ -238,20 +238,22 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   const trasAtaquesBandidos = avanzarAtaquesBandidos(trasSpawnBandidos.campamentos, trasExpansion.caravanas, rng);
   eventosDominio.push(...comoEventosDominio(trasAtaquesBandidos.eventos, contexto));
 
-  // Ejércitos (Doc 5.12): comer del carro, moverse, llegar. Va DESPUÉS de los bandidos, al final de la
-  // cadena, y NO consume aleatoriedad — ni el hambre, ni el movimiento, ni la disolución la necesitan. Esas
-  // dos cosas juntas son lo que mantiene el guardián de determinismo verde SIN tocarlo: una partida sin
-  // ejércitos hace exactamente las mismas llamadas al RNG, en el mismo orden, que antes de existir esto. El
-  // RNG entrará cuando la llegada dispare combate (Paso 7), y ahí habrá que ordenar canónicamente.
-  const trasEjercitos = avanzarEjercitos(
-    estado.ejercitos,
-    trasExpansion.asentamientos,
+  // Ejércitos (Doc 5.12): comer del carro, moverse, repostar, llegar. Va DESPUÉS de los bandidos, al final de
+  // la cadena. Solo consume aleatoriedad cuando un asedio llega a resolverse contra una plaza defendida
+  // (Paso 7): sin eso, una partida sin ejércitos hace exactamente las mismas llamadas al RNG, en el mismo
+  // orden, que antes de existir la mecánica — y por eso el guardián de determinismo sigue verde sin tocarlo.
+  //
+  // Recibe `trasAtaquesBandidos.caravanas` y NO `trasExpansion.caravanas`: los bandidos ya han podido
+  // destruir alguna este tick, y partir de la lista anterior las habría resucitado al devolver la suya.
+  const trasEjercitos = avanzarEjercitos(estado.ejercitos, {
+    asentamientos: trasExpansion.asentamientos,
+    caravanas: trasAtaquesBandidos.caravanas,
+    facciones: trasExpansion.facciones,
+    relaciones: estado.relaciones,
     mapa,
-    trasExpansion.facciones,
-    estado.relaciones,
     instante,
-    rng
-  );
+    rng,
+  });
   eventosDominio.push(...comoEventosDominio(trasEjercitos.eventos, contexto));
 
   const trasMercado = avanzarMercado(trasEjercitos.asentamientos, estado.ordenes);
@@ -277,7 +279,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   return {
     asentamientos: trasTributos.asentamientos,
     facciones: faccionesFinal,
-    caravanas: trasAtaquesBandidos.caravanas,
+    caravanas: trasEjercitos.caravanas,
     ejercitos: trasEjercitos.ejercitos,
     acuerdos: trasComercio.acuerdos,
     ordenes: trasMercado.ordenes,

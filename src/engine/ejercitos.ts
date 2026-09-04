@@ -8,11 +8,11 @@
 // referencia ni una proyección — salen de `Asentamiento.escuadrones` y entran en `Ejercito.escuadrones`. Por
 // eso la guarnición es lo único que defiende (Doc 5.12.4) sin necesidad de ningún predicado extra, y por eso
 // `consumoRacionTropas` ya cuenta solo lo que se quedó en casa sin tocar una línea.
-import type { Asentamiento, Ejercito, Escuadron, Faccion, Jugador, Point, RelacionPolitica } from '../domain/types';
+import type { Asentamiento, Caravana, Ejercito, Escuadron, Faccion, Jugador, Point, RelacionPolitica } from '../domain/types';
 import type { Mapa } from '../world/mapa';
 import { calcularRuta } from '../world/rutas';
 import { distancia } from '../world/geometria';
-import { LOGISTICA, TROPAS_RECLUTABLES } from '../constants';
+import { CARAVANA_CATALOGO, LOGISTICA, TROPAS_RECLUTABLES } from '../constants';
 import { atribuir, type EventoCrudo } from '../domain/eventos';
 import type { Instante } from '../domain/tiempo';
 import type { RandomFn } from '../worldgen';
@@ -24,6 +24,12 @@ import { puedeLlevar } from './liderazgo';
 import { esResidente, estanAliadas } from './pertenencia';
 
 export class MovilizacionInvalidaError extends Error {}
+
+/** Fase A5 — payload de `ejercito.caravanas_perdidas` (Doc 5.13.2). */
+export interface PayloadCaravanasPerdidas {
+  ejercitoId: string;
+  caravanaIds: string[];
+}
 
 /** Fase A5 — payload de `ejercito.reabastecido` (ver `repostarSiPuede`). */
 export interface PayloadEjercitoReabastecido {
@@ -70,9 +76,34 @@ export function participantesDe(escuadrones: readonly Escuadron[]): number {
   return new Set(escuadrones.map((e) => e.jugadorId)).size;
 }
 
-/** Capacidad del carro (Doc 5.13): FIJA por Jugador y aditiva — un ejército de cuatro lleva cuatro carros. */
-export function capacidadCarroDe(escuadrones: readonly Escuadron[]): number {
+/**
+ * Capacidad de carga total del ejército (Doc 5.13): el carro FIJO de cada Jugador —aditivo, un ejército de
+ * cuatro lleva cuatro carros— más lo que aporten las caravanas adjuntas (Doc 5.13.2).
+ *
+ * `caravanas` son las del mundo, no solo las adjuntas: se filtran aquí por `caravanasAdjuntasIds` para que el
+ * llamador no tenga que resolverlas. Omitirlas devuelve solo los carros, que es lo correcto para un ejército
+ * que todavía no ha enganchado ninguna.
+ */
+export function capacidadCargaDe(ejercito: Ejercito, caravanas: readonly Caravana[] = []): number {
+  return (
+    capacidadCarrosDe(ejercito.escuadrones) +
+    adjuntasDe(ejercito, caravanas).reduce((suma, c) => suma + CARAVANA_CATALOGO[c.tipo].capacidad, 0)
+  );
+}
+
+/** Solo los carros de los Jugadores, sin caravanas. Existe aparte porque al MOVILIZAR todavía no hay ejército
+ * al que preguntarle sus adjuntas: se está creando. */
+export function capacidadCarrosDe(escuadrones: readonly Escuadron[]): number {
   return participantesDe(escuadrones) * LOGISTICA.capacidadCarroPorJugador;
+}
+
+/** Las caravanas que este ejército lleva enganchadas, resueltas contra la lista del mundo. Una id que ya no
+ * corresponda a ninguna caravana viva se ignora en silencio: perder una caravana es un hecho del juego (la
+ * derrota del ejército, Doc 5.13.2), no un estado inconsistente que haya que reparar. */
+export function adjuntasDe(ejercito: Ejercito, caravanas: readonly Caravana[]): Caravana[] {
+  if (ejercito.caravanasAdjuntasIds.length === 0) return [];
+  const ids = new Set(ejercito.caravanasAdjuntasIds);
+  return caravanas.filter((c) => ids.has(c.id));
 }
 
 /**
@@ -134,7 +165,8 @@ function puedeRepostarEn(ejercito: Ejercito, plaza: Asentamiento, relaciones: re
 function repostarSiPuede(
   ejercito: Ejercito,
   porId: Map<string, Asentamiento>,
-  relaciones: readonly RelacionPolitica[]
+  relaciones: readonly RelacionPolitica[],
+  caravanas: readonly Caravana[]
 ): { ejercito: Ejercito; plaza: Asentamiento | undefined; repuesto: number } {
   const alcance = [...porId.values()]
     .filter(
@@ -152,7 +184,7 @@ function repostarSiPuede(
   if (!plaza) return { ejercito, plaza: undefined, repuesto: 0 };
 
   const enElCarro = ejercito.suministro['trigo'] ?? 0;
-  const carga = cargarCarro(plaza, enElCarro, capacidadCarroDe(ejercito.escuadrones));
+  const carga = cargarCarro(plaza, enElCarro, capacidadCargaDe(ejercito, caravanas));
   if (carga.cargado <= 0) return { ejercito, plaza: undefined, repuesto: 0 };
 
   return {
@@ -205,7 +237,7 @@ export function movilizarEjercito(
   if (!ruta) throw new MovilizacionInvalidaError('No hay ruta por tierra hasta ese destino.');
   const idsFuera = new Set(escuadrones.map((e) => e.id));
   const sinLosQueSalen = { ...asentamiento, escuadrones: asentamiento.escuadrones.filter((e) => !idsFuera.has(e.id)) };
-  const carga = cargarCarro(sinLosQueSalen, 0, capacidadCarroDe(escuadrones));
+  const carga = cargarCarro(sinLosQueSalen, 0, capacidadCarrosDe(escuadrones));
 
   return {
     asentamiento: carga.asentamiento,
@@ -243,7 +275,9 @@ export function unirseAEjercito(
   asentamiento: Asentamiento,
   jugador: Jugador | undefined,
   jugadorId: string,
-  escuadronIds: readonly string[]
+  escuadronIds: readonly string[],
+  /** Las del mundo: el que se une llena hasta la capacidad TOTAL de la columna, adjuntas incluidas. */
+  caravanas: readonly Caravana[] = []
 ): { asentamiento: Asentamiento; ejercito: Ejercito; trigoCargado: number } {
   if (!esResidente(asentamiento, jugadorId)) {
     throw new MovilizacionInvalidaError('Solo un residente puede sacar tropas de este asentamiento.');
@@ -264,7 +298,7 @@ export function unirseAEjercito(
   const sinLosQueSalen = { ...asentamiento, escuadrones: asentamiento.escuadrones.filter((e) => !idsFuera.has(e.id)) };
   const escuadronesTotales = [...ejercito.escuadrones, ...escuadrones];
   const enElCarro = ejercito.suministro['trigo'] ?? 0;
-  const carga = cargarCarro(sinLosQueSalen, enElCarro, capacidadCarroDe(escuadronesTotales));
+  const carga = cargarCarro(sinLosQueSalen, enElCarro, capacidadCargaDe({ ...ejercito, escuadrones: escuadronesTotales }, caravanas));
 
   return {
     asentamiento: carga.asentamiento,
@@ -275,6 +309,47 @@ export function unirseAEjercito(
     },
     trigoCargado: carga.cargado,
   };
+}
+
+/**
+ * Engancha una caravana al ejército como tren de suministros (Doc 5.13.2).
+ *
+ * Cuatro condiciones, y cada una tapa un agujero distinto:
+ *
+ *  1. **Misma Facción.** Un ejército no requisa la flota de otro.
+ *  2. **Disponible**, no en tránsito ni retornando: una caravana ya despachada está cumpliendo un trueque, y
+ *     secuestrarla a media entrega rompería el acuerdo por detrás.
+ *  3. **Al alcance**, el mismo `radioReabastecimiento` que rige recoger refuerzos y repostar — engancharse a
+ *     una columna que está al otro lado del mapa sería teletransportar el tren de suministros.
+ *  4. **No enganchada ya** a este ejército.
+ *
+ * Lo que NO se comprueba es el cupo de Mercado: la caravana ya existe y ya lo ocupaba. Lo que el diseño llama
+ * "cuesta comercio" (Doc 5.13.2) es exactamente esto — mientras marcha con el ejército no está comerciando —,
+ * y sale solo de que la caravana deje de estar disponible.
+ */
+export function adjuntarCaravana(ejercito: Ejercito, caravana: Caravana, origen: Asentamiento | undefined): Ejercito {
+  if (ejercito.caravanasAdjuntasIds.includes(caravana.id)) {
+    throw new MovilizacionInvalidaError('Esa caravana ya va con este ejército.');
+  }
+  if (!origen || origen.faccionId !== ejercito.faccionId) {
+    throw new MovilizacionInvalidaError('La caravana no es de la Facción de este ejército.');
+  }
+  if (caravana.estado !== 'disponible') {
+    throw new MovilizacionInvalidaError('Solo se puede enganchar una caravana que esté disponible, no una ya despachada.');
+  }
+  if (distancia(caravana.posicionActual, ejercito.posicionActual) > LOGISTICA.radioReabastecimiento) {
+    throw new MovilizacionInvalidaError('La caravana está demasiado lejos del ejército.');
+  }
+  return { ...ejercito, caravanasAdjuntasIds: [...ejercito.caravanasAdjuntasIds, caravana.id] };
+}
+
+/** Suelta una caravana del ejército. Se queda donde esté la columna en ese momento — no vuelve sola a casa,
+ * igual que un ejército no se teletransporta al replegarse (Doc 5.12.6). */
+export function soltarCaravana(ejercito: Ejercito, caravanaId: string): Ejercito {
+  if (!ejercito.caravanasAdjuntasIds.includes(caravanaId)) {
+    throw new MovilizacionInvalidaError('Esa caravana no va con este ejército.');
+  }
+  return { ...ejercito, caravanasAdjuntasIds: ejercito.caravanasAdjuntasIds.filter((id) => id !== caravanaId) };
 }
 
 /**
@@ -327,15 +402,20 @@ export function estacionarEjercito(ejercito: Ejercito): Ejercito {
  *
  * De aquí sale sola la distinción entre una partida de incursión y un ejército de asedio: meter un solo
  * escuadrón pesado (12) en una fuerza ligera (20) la frena a 12 y le quita la capacidad de cazar caravanas
- * (comercial va a 16). No hace falta ninguna regla más para separar los dos roles.
+ * (comercial va a 16). No hace falta ninguna regla más para separar los dos roles — y lo mismo vale para las
+ * caravanas adjuntas, que entran en el mismo mínimo (Doc 5.13.2).
  *
  * Un ejército sin escuadrones vivos no se mueve — pero eso no debería llegar aquí: `disolverSiVacio` lo
  * retira antes (Doc 5.13.4).
  */
-export function velocidadDeEjercito(ejercito: Ejercito): number {
+export function velocidadDeEjercito(ejercito: Ejercito, caravanas: readonly Caravana[] = []): number {
   const velocidades = ejercito.escuadrones
     .map((e) => TROPAS_RECLUTABLES.find((t) => t.id === e.tropaId)?.velocidad)
     .filter((v): v is number => v !== undefined);
+  // Las caravanas adjuntas entran en el MISMO mínimo (Doc 5.13.2): una comercial va a 16, así que engancharla
+  // baja una fuerza ligera de 20 a 16 y le quita la capacidad de cazar caravanas. Ahí está el equilibrio de la
+  // escolta, sin ninguna regla extra: no se puede escoltar y depredar a la vez.
+  for (const c of adjuntasDe(ejercito, caravanas)) velocidades.push(CARAVANA_CATALOGO[c.tipo].velocidad);
   return velocidades.length === 0 ? 0 : Math.min(...velocidades);
 }
 
@@ -346,9 +426,26 @@ function sinSoldados(ejercito: Ejercito): boolean {
   return ejercito.escuadrones.every((e) => e.cantidad <= 0);
 }
 
+/**
+ * Todo lo que el tick de ejércitos necesita del mundo. Es un objeto y no siete parámetros sueltos porque a
+ * partir del Paso 9 lo son: `mapa` para moverse, `facciones`/`relaciones`/`instante`/`rng` para el asedio, y
+ * `caravanas` para las adjuntas. Con esa lista, el orden posicional dejaba de decir nada en la llamada.
+ */
+export interface ContextoAvanceEjercitos {
+  asentamientos: readonly Asentamiento[];
+  caravanas: readonly Caravana[];
+  facciones: readonly Faccion[];
+  relaciones: readonly RelacionPolitica[];
+  mapa: Mapa;
+  instante: Instante;
+  rng: RandomFn;
+}
+
 export interface ResultadoAvanceEjercitos {
   ejercitos: Ejercito[];
   asentamientos: Asentamiento[];
+  /** Las del mundo, menos las que se hayan perdido con un ejército derrotado (Doc 5.13.2). */
+  caravanas: Caravana[];
   /** Las Facciones, que un asedio puede tocar: XP de combate y conquista, y la penalización de reputación por
    * atacar a un Aliado. Vuelven tal cual si en el tick no hubo ningún asedio. */
   facciones: Faccion[];
@@ -377,23 +474,23 @@ export interface ResultadoAvanceEjercitos {
  *     ejército acampado donde llegó. Que la llegada a un asentamiento enemigo dispare un asedio es el Paso 7:
  *     hasta entonces, plantarse es la conducta neutra y no rompe nada.
  */
-export function avanzarEjercitos(
-  ejercitos: readonly Ejercito[],
-  asentamientos: readonly Asentamiento[],
-  mapa: Mapa,
-  facciones: readonly Faccion[],
-  relaciones: readonly RelacionPolitica[],
-  instante: Instante,
-  rng: RandomFn
-): ResultadoAvanceEjercitos {
+export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: ContextoAvanceEjercitos): ResultadoAvanceEjercitos {
+  const { asentamientos, caravanas, facciones, relaciones, mapa, instante, rng } = contexto;
   if (ejercitos.length === 0) {
-    return { ejercitos: [...ejercitos], asentamientos: [...asentamientos], facciones: [...facciones], eventos: [] };
+    return {
+      ejercitos: [...ejercitos],
+      asentamientos: [...asentamientos],
+      caravanas: [...caravanas],
+      facciones: [...facciones],
+      eventos: [],
+    };
   }
 
   const eventos: EventoCrudo[] = [];
   const porId = new Map(asentamientos.map((a) => [a.id, a]));
   const supervivientes: Ejercito[] = [];
   let faccionesActuales = [...facciones];
+  let caravanasActuales = [...caravanas];
 
   /** Devuelve escuadrones (y opcionalmente suministro) al asentamiento de origen. Si ya no existe, se pierden
    * con él: sus jugadores quedan huérfanos (Doc 5.4) y no hay dónde reintegrar. */
@@ -426,6 +523,21 @@ export function avanzarEjercitos(
     // 2. ¿Se quedó sin nadie? Se disuelve y las identidades vacías vuelven a casa a poder rellenarse.
     if (sinSoldados(ejercito)) {
       const volvieron = reintegrar(ejercito, true);
+      // Las caravanas adjuntas se pierden con él (Doc 5.13.2). El canon lo dice de un ejército DERROTADO, y
+      // aquí se aplica también al que se deshace por hambre: en los dos casos deja de existir en campo
+      // abierto, y lo que vuelve a casa son las IDENTIDADES de sus escuadrones (Doc 5.13.4), no bienes
+      // físicos. Una caravana sin nadie que la lleve no se teletransporta a ninguna parte.
+      const perdidas = adjuntasDe(ejercito, caravanasActuales);
+      if (perdidas.length > 0) {
+        const ids = new Set(perdidas.map((c) => c.id));
+        caravanasActuales = caravanasActuales.filter((c) => !ids.has(c.id));
+        eventos.push({
+          codigo: 'ejercito.caravanas_perdidas',
+          asentamientoId: ejercito.origenAsentamientoId,
+          mensaje: `Con el ejército ${ejercito.id} se pierden ${perdidas.length} caravana(s) adjunta(s).`,
+          payload: { ejercitoId: ejercito.id, caravanaIds: perdidas.map((c) => c.id) } satisfies PayloadCaravanasPerdidas,
+        });
+      }
       eventos.push({
         codigo: 'ejercito.disuelto',
         asentamientoId: ejercito.origenAsentamientoId,
@@ -446,7 +558,7 @@ export function avanzarEjercitos(
     // 3b. Repostar al pasar (Doc 5.13). Va DESPUÉS de moverse —se repone donde uno acaba, no donde estaba— y
     // ANTES de resolver la llegada, para que un ejército que se planta en una plaza propia entre en el asedio
     // o acampe ya con el carro lleno.
-    const reposte = repostarSiPuede(ejercito, porId, relaciones);
+    const reposte = repostarSiPuede(ejercito, porId, relaciones, caravanas);
     if (reposte.plaza) {
       ejercito = reposte.ejercito;
       porId.set(reposte.plaza.id, reposte.plaza);
@@ -460,6 +572,13 @@ export function avanzarEjercitos(
           trigoRepuesto: reposte.repuesto,
         } satisfies PayloadEjercitoReabastecido,
       });
+    }
+
+    // Las adjuntas van enganchadas: su posición es la del ejército, no una ruta propia. Sin esto seguirían
+    // marcando el punto donde se engancharon y el mapa mentiría sobre dónde está el tren de suministros.
+    if (ejercito.caravanasAdjuntasIds.length > 0) {
+      const ids = new Set(ejercito.caravanasAdjuntasIds);
+      caravanasActuales = caravanasActuales.map((c) => (ids.has(c.id) ? { ...c, posicionActual: ejercito.posicionActual } : c));
     }
 
     // 4. Llegar.
@@ -517,5 +636,11 @@ export function avanzarEjercitos(
     supervivientes.push(ejercito);
   }
 
-  return { ejercitos: supervivientes, asentamientos: [...porId.values()], facciones: faccionesActuales, eventos };
+  return {
+    ejercitos: supervivientes,
+    asentamientos: [...porId.values()],
+    caravanas: caravanasActuales,
+    facciones: faccionesActuales,
+    eventos,
+  };
 }

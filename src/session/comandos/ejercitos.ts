@@ -6,11 +6,19 @@
 // Sustituyen a medio plazo a `iniciarAsedio`/`combateCampoAbierto`/`interceptarCaravana` como superficie de
 // jugador (Doc 5.12.3): el jugador deja de "atacar a X" y pasa a "mandar un ejército a X"; el combate lo
 // dispara la llegada o la proximidad, dentro del tick. Los comandos viejos siguen vivos hasta el Paso 11.
-import { movilizarEjercito as movilizarEngine, replegarEjercito as replegarEngine, estacionarEjercito as estacionarEngine, unirseAEjercito as unirseEngine, type ObjetivoEjercito } from '../../engine/ejercitos';
+import {
+  movilizarEjercito as movilizarEngine,
+  replegarEjercito as replegarEngine,
+  estacionarEjercito as estacionarEngine,
+  unirseAEjercito as unirseEngine,
+  adjuntarCaravana as adjuntarCaravanaEngine,
+  soltarCaravana as soltarCaravanaEngine,
+  type ObjetivoEjercito,
+} from '../../engine/ejercitos';
 import { liderazgoComprometido } from '../../engine/liderazgo';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito, sinCambios } from './tipos';
-import { comando, exigirAsentamiento, exigirEjercito, conAsentamiento } from './ayudas';
+import { comando, exigirAsentamiento, exigirCaravana, exigirEjercito, conAsentamiento } from './ayudas';
 import { evento } from './eventos';
 
 function conEjercito(estado: GameSessionState, actualizado: GameSessionState['ejercitos'][number]): GameSessionState {
@@ -112,7 +120,8 @@ export const unirseAEjercito = comando<ParamsUnirseAEjercito, void>((estado, _ma
     asentamiento,
     jugadorDe(estado, params.jugadorId),
     params.jugadorId,
-    params.escuadronIds
+    params.escuadronIds,
+    estado.caravanas
   );
 
   const siguiente = conEjercito(conAsentamiento(estado, origen), ejercito);
@@ -216,6 +225,57 @@ export const alternarReabastecerAliados = comando<ParamsAlternarReabastecerAliad
       mensaje: `${asentamiento.id} ${params.permitido ? 'abre' : 'cierra'} su almacén a los ejércitos aliados.`,
       payload: { asentamientoId: asentamiento.id, permitido: params.permitido } satisfies PayloadReabastecerAliados,
       asentamientoId: asentamiento.id,
+    }),
+  ]);
+});
+
+export interface PayloadCaravanaAdjunta {
+  ejercitoId: string;
+  caravanaId: string;
+  jugadorId: string;
+}
+
+export interface ParamsAdjuntarCaravana {
+  ejercitoId: string;
+  caravanaId: string;
+  jugadorId: string;
+}
+
+/** Engancha una caravana propia al ejército como tren de suministros (Doc 5.13.2). Las condiciones —misma
+ * Facción, disponible, al alcance— viven en el motor (`adjuntarCaravana`); aquí solo se resuelve y se narra. */
+export const adjuntarCaravana = comando<ParamsAdjuntarCaravana, void>((estado, _mapa, ctx, params) => {
+  const ejercito = exigirEjercito(estado, params.ejercitoId);
+  const caravana = exigirCaravana(estado, params.caravanaId);
+  const origen = estado.asentamientos.find((a) => a.id === caravana.origenAsentamientoId);
+
+  const actualizado = adjuntarCaravanaEngine(ejercito, caravana, origen);
+  return exito(conEjercito(estado, actualizado), [
+    evento(ctx, {
+      codigo: 'ejercito.caravana_adjuntada',
+      mensaje: `La caravana ${caravana.id} se engancha al ejército ${ejercito.id}.`,
+      payload: { ejercitoId: ejercito.id, caravanaId: caravana.id, jugadorId: params.jugadorId } satisfies PayloadCaravanaAdjunta,
+      asentamientoId: ejercito.origenAsentamientoId,
+    }),
+  ]);
+});
+
+export interface ParamsSoltarCaravana {
+  ejercitoId: string;
+  caravanaId: string;
+  jugadorId: string;
+}
+
+/** Suelta una caravana del ejército; se queda donde esté la columna (Doc 5.13.2). */
+export const soltarCaravana = comando<ParamsSoltarCaravana, void>((estado, _mapa, ctx, params) => {
+  const ejercito = exigirEjercito(estado, params.ejercitoId);
+
+  const actualizado = soltarCaravanaEngine(ejercito, params.caravanaId);
+  return exito(conEjercito(estado, actualizado), [
+    evento(ctx, {
+      codigo: 'ejercito.caravana_soltada',
+      mensaje: `La caravana ${params.caravanaId} se desengancha del ejército ${ejercito.id}.`,
+      payload: { ejercitoId: ejercito.id, caravanaId: params.caravanaId, jugadorId: params.jugadorId } satisfies PayloadCaravanaAdjunta,
+      asentamientoId: ejercito.origenAsentamientoId,
     }),
   ]);
 });

@@ -4,7 +4,7 @@
 // documenta su origen tal como lo hacía el archivo del que viene.
 import { describe, expect, it } from 'vitest';
 import type { Asentamiento, Caravana, CaminoComercial, Faccion, Point } from '../../domain/types';
-import { CARAVANA_COOLDOWN } from '../../constants';
+import { CARAVANA_COOLDOWN, CARAVANA_CATALOGO } from '../../constants';
 import { avanzarComercio, construirCaravanaComercial, proponerTrueque, CaravanaInvalidaError } from '../trade';
 import { lanzarCaravanaFundacion, ExpansionInvalidaError } from '../expansion';
 import { almacenSintetico, caravanaComercialCasiLlegando, mapaSintetico } from './tradeFixtures';
@@ -263,15 +263,20 @@ describe('reuso de caravana propia a través de varios envíos del mismo trueque
     const destinoPos: Point = { x: 30, y: 0 };
     const mapa = mapaSintetico({ limites: { ancho: 1000, alto: 1000 } });
 
-    const origen0 = asentamientoSintetico('origen', origenPos, { madera: 50, piedra: 200 }, true);
+    // Las cantidades se DERIVAN de la capacidad de la caravana en vez de escribirse a mano: lo que este test
+    // mide es el reúso de la MISMA caravana en dos viajes, y con números fijos dejaba de medirlo en cuanto la
+    // capacidad cambiaba (pasó al subirla de 60 a 500 en el Paso 9 — con 100 pactadas ya cabían en un viaje).
+    // Pactando 1,5 capacidades, siempre son exactamente dos: uno lleno y otro a la mitad.
+    const CAPACIDAD = CARAVANA_CATALOGO.comercial.capacidad;
+    const PACTADAS = CAPACIDAD * 1.5;
+    const SEGUNDO_ENVIO = PACTADAS - CAPACIDAD;
+    const origen0 = asentamientoSintetico('origen', origenPos, { madera: 50, piedra: PACTADAS }, true);
     const destino0 = asentamientoSintetico('destino', destinoPos, { oro: 1000 }, false);
 
     const { asentamiento: origenTrasConstruir, caravana } = construirCaravanaComercial(origen0, [], instanteDeTest(0), 0);
     expect(caravana.estado).toBe('disponible');
 
-    // 100 piedra pactadas, capacidad de una caravana comercial = 60 (CARAVANA_CATALOGO.comercial.capacidad):
-    // fuerza DOS envíos con la misma caravana en vez de uno.
-    const acuerdo = proponerTrueque([origenTrasConstruir, destino0], 'origen', 'destino', 'piedra', 'oro', 100, 1, instanteDeTest(0), 0);
+    const acuerdo = proponerTrueque([origenTrasConstruir, destino0], 'origen', 'destino', 'piedra', 'oro', PACTADAS, 1, instanteDeTest(0), 0);
 
     let asentamientos = [origenTrasConstruir, destino0];
     let caravanas: Caravana[] = [caravana];
@@ -286,11 +291,11 @@ describe('reuso de caravana propia a través de varios envíos del mismo trueque
       return resultado;
     }
 
-    // Tick 1: se asigna la caravana disponible al primer envío (sale con 60 piedra, tope de capacidad).
+    // Tick 1: se asigna la caravana disponible al primer envío (sale a tope de capacidad).
     tick(1);
     expect(caravanas).toHaveLength(1);
     expect(caravanas[0]!.estado).toBe('en_transito');
-    expect(caravanas[0]!.contenido['piedra']).toBe(60);
+    expect(caravanas[0]!.contenido['piedra']).toBe(CAPACIDAD);
 
     // Avanza hasta que entregue el primer envío (distancia 30, velocidad 16/tick -> llega en tick 2).
     let entregoUna = false;
@@ -299,8 +304,8 @@ describe('reuso de caravana propia a través de varios envíos del mismo trueque
       if (acuerdos[0]!.cantidadEntregadaA > 0) entregoUna = true;
     }
     expect(entregoUna).toBe(true);
-    expect(acuerdos[0]!.cantidadEntregadaA).toBe(60);
-    expect(acuerdos[0]!.estado).toBe('activo'); // aún falta el segundo envío (40 piedra) — no "cumplido" todavía.
+    expect(acuerdos[0]!.cantidadEntregadaA).toBe(CAPACIDAD);
+    expect(acuerdos[0]!.estado).toBe('activo'); // aún falta el segundo envío — no "cumplido" todavía.
 
     // Justo tras entregar: la MISMA caravana (mismo id, no una nueva) está "retornando", no "disponible" — no
     // puede recibir un segundo envío hasta volver de verdad a origen.
@@ -308,7 +313,7 @@ describe('reuso de caravana propia a través de varios envíos del mismo trueque
     expect(caravanas[0]!.id).toBe(caravana.id);
     expect(caravanas[0]!.estado).toBe('retornando');
 
-    // Mientras retorna, nada la reasigna al resto pendiente del trueque (40 piedra) aunque origen tenga stock:
+    // Mientras retorna, nada la reasigna al resto pendiente del trueque aunque origen tenga stock:
     // sigue "retornando", a medio camino (ni 0 ni 1) — prueba de que de verdad viaja, no se teletransporta.
     tick(6);
     expect(caravanas[0]!.estado).toBe('retornando');
@@ -316,7 +321,7 @@ describe('reuso de caravana propia a través de varios envíos del mismo trueque
     expect(caravanas[0]!.progreso).toBeLessThan(1);
 
     // Avanza hasta que vuelva a origen — el mismo tick en que llega, `asignarCaravanasATrueque` la reasigna
-    // de inmediato al resto pendiente (40 piedra) y sale por segunda vez: sigue siendo la MISMA caravana.
+    // de inmediato al resto pendiente y sale por segunda vez: sigue siendo la MISMA caravana.
     let salioSegundaVez = false;
     for (let t = 7; t < 20 && !salioSegundaVez; t++) {
       tick(t);
@@ -325,16 +330,16 @@ describe('reuso de caravana propia a través de varios envíos del mismo trueque
     expect(salioSegundaVez).toBe(true);
     expect(caravanas).toHaveLength(1); // ninguna caravana nueva se creó ni la original desapareció.
     expect(caravanas[0]!.id).toBe(caravana.id);
-    expect(caravanas[0]!.contenido['piedra']).toBe(40);
+    expect(caravanas[0]!.contenido['piedra']).toBe(SEGUNDO_ENVIO);
 
-    // Entrega el segundo envío: el trueque queda completo en 100/100 con la MISMA caravana, en dos viajes reales.
+    // Entrega el segundo envío: el trueque queda completo con la MISMA caravana, en dos viajes reales.
     let entregoDos = false;
     for (let t = 21; t < 30 && !entregoDos; t++) {
       tick(t);
-      if (acuerdos[0]!.cantidadEntregadaA >= 100) entregoDos = true;
+      if (acuerdos[0]!.cantidadEntregadaA >= PACTADAS) entregoDos = true;
     }
     expect(entregoDos).toBe(true);
-    expect(acuerdos[0]!.cantidadEntregadaA).toBe(100);
+    expect(acuerdos[0]!.cantidadEntregadaA).toBe(PACTADAS);
     expect(caravanas).toHaveLength(1);
     expect(caravanas[0]!.id).toBe(caravana.id);
     expect(caravanas[0]!.estado).toBe('retornando'); // vuelve a casa una última vez, ya sin más pendiente.

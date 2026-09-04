@@ -8,9 +8,16 @@
 // exactamente las mismas llamadas, en el mismo orden, que antes de que la mecánica existiera — y por eso el
 // guardián de determinismo sigue verde sin tocarlo.
 import { describe, expect, it } from 'vitest';
-import type { Asentamiento, Ejercito, Escuadron, Faccion, RelacionPolitica } from '../../domain/types';
-import { LOGISTICA, MILITAR } from '../../constants';
-import { avanzarEjercitos, velocidadDeEjercito } from '../ejercitos';
+import type { Asentamiento, Caravana, Ejercito, Escuadron, Faccion, RelacionPolitica } from '../../domain/types';
+import { CARAVANA_CATALOGO, LOGISTICA, MILITAR } from '../../constants';
+import {
+  adjuntarCaravana,
+  avanzarEjercitos,
+  capacidadCargaDe,
+  MovilizacionInvalidaError,
+  soltarCaravana,
+  velocidadDeEjercito,
+} from '../ejercitos';
 import { esResidente, resideEnOtroAsentamiento } from '../pertenencia';
 import { reservaDeTrigo } from '../tropas';
 import { crearEstadoDeTest, crearFacciones, crearMapaDeterminista, contextoDeTest, fundarAsentamientoDeTest, instanteDeTest } from './fixtures';
@@ -71,17 +78,17 @@ function ejercitoDe(origen: Asentamiento, escuadrones: Escuadron[], trigo: numbe
 function avanzar(
   ejercitos: Ejercito[],
   asentamientos: Asentamiento[],
-  opciones: { facciones?: Faccion[]; relaciones?: RelacionPolitica[]; rng?: RandomFn } = {}
+  opciones: { facciones?: Faccion[]; relaciones?: RelacionPolitica[]; rng?: RandomFn; caravanas?: Caravana[] } = {}
 ) {
-  return avanzarEjercitos(
-    ejercitos,
+  return avanzarEjercitos(ejercitos, {
     asentamientos,
+    caravanas: opciones.caravanas ?? [],
+    facciones: opciones.facciones ?? crearFacciones(),
+    relaciones: opciones.relaciones ?? [],
     mapa,
-    opciones.facciones ?? crearFacciones(),
-    opciones.relaciones ?? [],
-    instanteDeTest(1),
-    opciones.rng ?? createRng(1)
-  );
+    instante: instanteDeTest(1),
+    rng: opciones.rng ?? createRng(1),
+  });
 }
 
 describe('velocidadDeEjercito — el ritmo lo marca el más lento (Doc 5.12.5)', () => {
@@ -596,5 +603,127 @@ describe('reabastecimiento en ruta', () => {
       acampado[0]!.suministro['trigo']!,
       'y con más que el mismo ejército sin plaza al lado'
     ).toBeGreaterThan(enRuta[0]!.suministro['trigo']!);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------
+// Paso 9a — el tren de suministros: caravanas adjuntas (Doc 5.13.2).
+// ---------------------------------------------------------------------------------------------------------
+
+const caravanaDe = (id: string, origenId: string, posicion: { x: number; y: number }): Caravana => ({
+  id,
+  tipo: 'comercial',
+  origenAsentamientoId: origenId,
+  contenido: {},
+  posicionActual: posicion,
+  progreso: 0,
+  estado: 'disponible',
+});
+
+describe('caravanas adjuntas', () => {
+  it('la capacidad de una caravana NO es menor que el carro de un Jugador (Doc 5.13.2)', () => {
+    // El invariante que justifica el rebalance del Paso 9: si cargara menos, engancharla no tendría sentido.
+    expect(CARAVANA_CATALOGO.comercial.capacidad).toBeGreaterThanOrEqual(LOGISTICA.capacidadCarroPorJugador);
+  });
+
+  it('suman su capacidad a la del carro', () => {
+    const { asentamiento } = base();
+    const e = ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros')], 0);
+    const c = caravanaDe('c1', asentamiento.id, asentamiento.posicion);
+
+    expect(capacidadCargaDe(e, [])).toBe(LOGISTICA.capacidadCarroPorJugador);
+    const conCaravana = adjuntarCaravana(e, c, asentamiento);
+    expect(capacidadCargaDe(conCaravana, [c])).toBe(
+      LOGISTICA.capacidadCarroPorJugador + CARAVANA_CATALOGO.comercial.capacidad
+    );
+  });
+
+  it('entran en el MÍNIMO de velocidad: una comercial frena a una fuerza ligera de 20 a 16', () => {
+    const { asentamiento } = base();
+    const ligero = ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros')], 0);
+    expect(velocidadDeEjercito(ligero)).toBe(20);
+
+    const c = caravanaDe('c1', asentamiento.id, asentamiento.posicion);
+    const conCaravana = adjuntarCaravana(ligero, c, asentamiento);
+    expect(velocidadDeEjercito(conCaravana, [c])).toBe(CARAVANA_CATALOGO.comercial.velocidad);
+    expect(velocidadDeEjercito(conCaravana, [c]), 'y eso le quita la capacidad de cazar una comercial').toBeLessThan(20);
+  });
+
+  it('rechaza enganchar una caravana ajena, ya despachada, lejos, o dos veces', () => {
+    const { asentamiento } = base();
+    const e = ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros')], 0);
+    const c = caravanaDe('c1', asentamiento.id, asentamiento.posicion);
+    const ajeno: Asentamiento = { ...asentamiento, faccionId: 'faccion-2' };
+
+    expect(() => adjuntarCaravana(e, c, ajeno)).toThrow(MovilizacionInvalidaError);
+    expect(() => adjuntarCaravana(e, c, undefined)).toThrow(MovilizacionInvalidaError);
+    expect(() => adjuntarCaravana(e, { ...c, estado: 'en_transito' }, asentamiento)).toThrow(MovilizacionInvalidaError);
+    const lejos = { x: asentamiento.posicion.x + LOGISTICA.radioReabastecimiento * 3, y: asentamiento.posicion.y };
+    expect(() => adjuntarCaravana(e, { ...c, posicionActual: lejos }, asentamiento)).toThrow(MovilizacionInvalidaError);
+
+    const yaEnganchada = adjuntarCaravana(e, c, asentamiento);
+    expect(() => adjuntarCaravana(yaEnganchada, c, asentamiento)).toThrow(MovilizacionInvalidaError);
+  });
+
+  it('soltarla la deja donde está la columna, y rechaza soltar la que no lleva', () => {
+    const { asentamiento } = base();
+    const c = caravanaDe('c1', asentamiento.id, asentamiento.posicion);
+    const e = adjuntarCaravana(ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros')], 0), c, asentamiento);
+
+    expect(soltarCaravana(e, 'c1').caravanasAdjuntasIds).toEqual([]);
+    expect(() => soltarCaravana(e, 'no-existe')).toThrow(MovilizacionInvalidaError);
+  });
+
+  it('viajan CON el ejército: su posición sigue a la columna', () => {
+    const { asentamiento } = base();
+    const c = caravanaDe('c1', asentamiento.id, asentamiento.posicion);
+    const e = adjuntarCaravana(ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros')], 500), c, asentamiento);
+
+    const r = avanzar([e], [asentamiento], { caravanas: [c] });
+
+    expect(r.ejercitos[0]!.posicionActual).not.toEqual(asentamiento.posicion); // se movió
+    expect(r.caravanas[0]!.posicionActual, 'la caravana va enganchada, no se queda atrás').toEqual(
+      r.ejercitos[0]!.posicionActual
+    );
+  });
+
+  it('el carro se llena hasta la capacidad AMPLIADA por las adjuntas', () => {
+    const { asentamiento } = base();
+    const rico: Asentamiento = {
+      ...asentamiento,
+      almacen: { ...asentamiento.almacen, trigo: { cantidad: 100000, capacidad: 100000 } },
+    };
+    const c = caravanaDe('c1', rico.id, rico.posicion);
+    const e = adjuntarCaravana({ ...ejercitoDe(rico, [escuadron('a', 'milicia_lanceros')], 0), estado: 'estacionado' as const }, c, rico);
+
+    const r = avanzar([e], [rico], { caravanas: [c] });
+
+    // Repostando en su propia plaza llena hasta carro + caravana, no solo hasta el carro.
+    expect(r.ejercitos[0]!.suministro['trigo']).toBe(
+      LOGISTICA.capacidadCarroPorJugador + CARAVANA_CATALOGO.comercial.capacidad
+    );
+  });
+
+  it('si el ejército se deshace, las adjuntas se PIERDEN (Doc 5.13.2)', () => {
+    const { asentamiento } = base();
+    const c = caravanaDe('c1', asentamiento.id, asentamiento.posicion);
+    // Escuadrón aniquilado: el ejército se disuelve en este tick.
+    const e = adjuntarCaravana(ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros', 0)], 0), c, asentamiento);
+
+    const r = avanzar([e], [asentamiento], { caravanas: [c] });
+
+    expect(r.ejercitos, 'el ejército se disolvió').toHaveLength(0);
+    expect(r.caravanas, 'y su tren de suministros con él').toHaveLength(0);
+    expect(r.eventos.some((ev) => typeof ev !== 'string' && ev.codigo === 'ejercito.caravanas_perdidas')).toBe(true);
+  });
+
+  it('un ejército sin adjuntas no toca las caravanas del mundo', () => {
+    const { asentamiento } = base();
+    const ajena = caravanaDe('c-ajena', asentamiento.id, { x: 1, y: 1 });
+    const e = ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros')], 500);
+
+    const r = avanzar([e], [asentamiento], { caravanas: [ajena] });
+
+    expect(r.caravanas).toEqual([ajena]);
   });
 });
