@@ -287,6 +287,15 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
     rolesPermitidos: ['jugador'],
     condicionJugador: (estado, jugadorId, params) => participaEnEjercito(estado, jugadorId, params.ejercitoId),
   },
+  /** Cargar y entregar las decide quien va en la columna: es SU viaje (Doc 5.13.3). */
+  cargarCaravana: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, jugadorId, params) => participaEnEjercito(estado, jugadorId, params.ejercitoId),
+  },
+  entregarDeCaravana: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, jugadorId, params) => participaEnEjercito(estado, jugadorId, params.ejercitoId),
+  },
   /** Abrir el almacén a un aliado es política de la plaza: Gobernador (manda) o Tesorero (custodia el stock). */
   alternarReabastecerAliados: {
     rolesPermitidos: ['jugador'],

@@ -594,8 +594,14 @@ export interface Caravana {
    * NUNCA se teletransporta), pasa a 'retornando' — recorre la MISMA `ruta` en sentido inverso (ver
    * `avanzarCaravanas`, engine/trade.ts) de vuelta a `origenAsentamientoId`, vacía, y solo entonces vuelve a
    * 'disponible'. Ausente para caravanas de Fundación y para los tipos de caravana todavía sin uso real
-   * (militar/contrabando, Doc 3.6). */
-  estado?: 'disponible' | 'en_transito' | 'retornando';
+   * (militar/contrabando, Doc 3.6).
+   *
+   * 'adjunta' = enganchada a un ejército como tren de suministros o escolta (Doc 5.13.2). Es un ESTADO propio
+   * y no un 'disponible' con una bandera aparte por una razón concreta: `asignarCaravanasATrueque` reparte
+   * las 'disponible', así que dejarla ahí permitía que el comercio automático la despachara por debajo del
+   * ejército que la lleva. Mientras esté 'adjunta' se mueve con la columna, y se carga y entrega A MANO
+   * (Doc 5.13.3) — el reparto automático no la ve. Soltarla la devuelve a 'disponible' donde esté. */
+  estado?: 'disponible' | 'adjunta' | 'en_transito' | 'retornando';
 }
 
 /**

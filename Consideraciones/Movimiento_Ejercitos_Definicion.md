@@ -589,7 +589,7 @@ usuario dio la tabla real. Calibrarla es un cambio de **datos**, no de código.
       su carro en ~100 minutos. Ya no: la decisión del usuario de bajar el consumo estacionado a 1/10
       (§11) alarga eso a ~1.000 minutos por sí sola. El paso sigue siendo lo que hace la posición
       *indefinida* en vez de solo *larga*.
-- [~] **Paso 9 — Caravanas adjuntas.** Partido en dos: la mitad estructural está hecha, la escolta no.
+- [x] **Paso 9 — Caravanas adjuntas.** Partido en dos y cerrado: el tren de suministros (9a) y la escolta (9b).
   - [x] **9a — El tren de suministros (2026-09-04).** Enganchar y soltar (`adjuntarCaravana`/`soltarCaravana`,
         con las cuatro condiciones: misma Facción, disponible, al alcance, no repetida), suma de capacidad,
         entrada en el `min` de velocidad y pérdida al deshacerse el ejército. Las adjuntas **viajan con la
@@ -610,11 +610,33 @@ usuario dio la tabla real. Calibrarla es un cambio de **datos**, no de código.
         `trasAtaquesBandidos.caravanas`, así que al devolver su lista habría **resucitado las caravanas que los
         bandidos acababan de destruir** ese mismo tick. Corregido.
 
-  - [ ] **9b — Escolta**: que una caravana adjunta cargada haga su ENTREGA mientras marcha con el ejército
-        (Doc 5.13.3, resuelve la escolta pendiente de Doc 3.10). Es lo que queda, y no es pequeño: hoy la
-        entrega la conduce `avanzarCaravanas` sobre la ruta propia de la caravana, y una adjunta no tiene ruta
-        propia — se mueve con la columna. Hay que decidir qué cuenta como "llegar a destino" para una caravana
-        que ya no elige por dónde va.
+  - [x] **9b — Escolta (2026-09-04).** La pregunta abierta era qué cuenta como "llegar a destino" para una
+        caravana que ya no elige por dónde va. **El usuario la resolvió cambiando la premisa**: una caravana
+        enganchada deja de ser automática. El jugador elige qué carga y a qué trueque lo entrega — no hay
+        "destino" que detectar porque no hay ruta que seguir.
+
+        Y eso no desvía el diseño, lo cumple: `asignarCaravanasATrueque` lleva desde que existe diciendo que
+        el reparto por score es "el sustituto automático de Fase 0" y que "en el diseño objetivo el jugador
+        elige la caravana, la carga y la escolta a mano". La escolta es la primera parte que llega ahí.
+
+        Tres piezas:
+        - **Estado `'adjunta'`** en `Caravana`, no una bandera sobre `'disponible'`. Arregla de paso un bug
+          real del 9a: mientras seguía 'disponible', el comercio automático podía despacharla por debajo del
+          ejército que la llevaba.
+        - **`cargarCaravana`**: toma del almacén de una plaza al alcance que le abra la puerta (propia
+          siempre, aliada con la opción). Sin reserva de mantenimiento, igual que el comercio automático —
+          exigirla aquí haría que la misma acción costase distinto según quién la ordene.
+        - **`entregarDeCaravana`**: el motor resuelve de qué lado del trueque está el ejército y cuánto falta
+          (`ladoPendienteParaEjercito`, que es la MISMA consulta con la que la interfaz pinta la lista), se
+          comprueba que la columna esté al alcance del que recibe, y se entrega el menor de lo cargado y lo
+          pendiente. Comisión y cierre del trueque salen por las funciones extraídas de `avanzarCaravanas`
+          (`comisionDeEntrega`, `aplicarEntregaATrueque`), para que el camino manual no cobre distinto.
+
+        **Los bandidos atacan al ejército** (decisión del usuario): una caravana escoltada tira contra el
+        `poderTotal` de la columna y no contra `defensaBaseCaravana`. Sin esto, escoltar no protegía de lo
+        único que hoy ataca caravanas en el mundo.
+
+        894/894, batch idéntico byte a byte — toda la maquinaria duerme mientras nadie enganche nada.
 - [ ] **Paso 10 — Encuentros por proximidad** (ejército↔ejército, ejército↔caravana), con **orden canónico de
       resolución por id** (§9, hallazgo de la revisión cruzada: sin él el RNG deja de ser determinista aunque
       la secuencia global sea correcta).

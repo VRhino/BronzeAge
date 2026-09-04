@@ -4,7 +4,7 @@
 // cada tick dentro de `avanzarSimulacion`); el ataque MANUAL de un jugador contra un campamento vive en
 // `engine/combate.ts` (`atacarCampamentoBandidos`), junto al resto de resolución de combate.
 
-import type { Asentamiento, Caravana, CampamentoBandido, Point, ZonaBosque, ZonaInfluencia } from '../domain/types';
+import type { Asentamiento, Caravana, CampamentoBandido, Ejercito, Point, ZonaBosque, ZonaInfluencia } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
 
 /** Fase A5 — payloads de los eventos de este subsistema (ver `avanzarSpawnBandidos`/`avanzarAtaquesBandidos`). */
@@ -24,6 +24,7 @@ import type { RandomFn } from '../worldgen';
 import { CAMPAMENTOS_BANDIDOS, MILITAR } from '../constants';
 import type { Instante } from '../domain/tiempo';
 import { pointInPolygon } from './zones';
+import { poderTotal } from './combate';
 
 function distancia(a: Point, b: Point): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
@@ -110,10 +111,22 @@ export function avanzarSpawnBandidos(
  * el bandido no tiene almacén propio que reciba la carga capturada — si gana, la caravana se pierde por
  * completo (Doc 3.10: "se elimina si es capturada"), sin transferencia a nadie.
  */
-export function avanzarAtaquesBandidos(campamentos: CampamentoBandido[], caravanas: Caravana[], rng: RandomFn): { caravanas: Caravana[]; eventos: EventoCrudo[] } {
+export function avanzarAtaquesBandidos(
+  campamentos: CampamentoBandido[],
+  caravanas: Caravana[],
+  rng: RandomFn,
+  /** Ejércitos en campaña: una caravana que va enganchada a uno se defiende con el poder de la COLUMNA, no
+   * con su defensa base (Doc 5.13.3, decisión del usuario 2026-09-04). Sin esto, escoltar no protegía de lo
+   * único que hoy ataca caravanas en el mundo. */
+  ejercitos: readonly Ejercito[] = [],
+  instante?: Instante
+): { caravanas: Caravana[]; eventos: EventoCrudo[] } {
   if (campamentos.length === 0) return { caravanas, eventos: [] };
   const eventos: EventoCrudo[] = [];
   const perdidas = new Set<string>();
+
+  const escoltaDe = (caravanaId: string): Ejercito | undefined =>
+    ejercitos.find((e) => e.caravanasAdjuntasIds.includes(caravanaId));
 
   for (const caravana of caravanas) {
     if (caravana.estado === 'disponible') continue; // parada en origen, no viajando — nada que interceptar.
@@ -122,8 +135,15 @@ export function avanzarAtaquesBandidos(campamentos: CampamentoBandido[], caravan
     );
     if (!campamentoCercano) continue;
 
+    // Escoltada: el bandido se encuentra con el ejército, no con la caravana. Esa es toda la mecánica de la
+    // escolta (Doc 5.13.3) — "viaja protegida por el poder de combate del ejército en vez de por su defensa
+    // base fija" —, y por eso el número contra el que tira es `poderTotal` de la columna.
+    const escolta = escoltaDe(caravana.id);
+    const defensa =
+      escolta && instante !== undefined ? poderTotal(escolta.escuadrones, instante, true) : MILITAR.defensaBaseCaravana;
+
     const jitter = 1 + (rng() * 2 - 1) * MILITAR.varianzaCombate;
-    const gana = campamentoCercano.poder * jitter > MILITAR.defensaBaseCaravana;
+    const gana = campamentoCercano.poder * jitter > defensa;
     if (gana) {
       perdidas.add(caravana.id);
       eventos.push({

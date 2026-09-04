@@ -37,6 +37,8 @@ import { abandonarRecinto, comprometerRecinto, mejorarRecinto } from './murallas
 import {
   adjuntarCaravana,
   alternarReabastecerAliados,
+  cargarCaravana,
+  entregarDeCaravana,
   estacionarEjercito,
   movilizarEjercito,
   replegarEjercito,
@@ -70,6 +72,8 @@ export const REGISTRO_COMANDOS = {
   alternarReabastecerAliados,
   adjuntarCaravana,
   soltarCaravana,
+  cargarCaravana,
+  entregarDeCaravana,
   atacarCampamentoBandidos,
   combateCampoAbierto,
   interceptarCaravana,

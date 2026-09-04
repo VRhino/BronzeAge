@@ -1,6 +1,16 @@
 import type { AcuerdoTrueque, Asentamiento, CaminoComercial, Caravana, Faccion, Point } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
 
+/** Fase A5 — payload de `comercio.entrega_escoltada` (Doc 5.13.3). */
+export interface PayloadEntregaEscoltada {
+  caravanaId: string;
+  acuerdoId: string;
+  destinoId: string;
+  recurso: string;
+  entregado: number;
+  comision: number;
+}
+
 /** Fase A5 — payloads de los eventos de este subsistema (ver `avanzarCaravanas`/`asignarCaravanasATrueque`). */
 export interface PayloadCaravanaLlega {
   caravanaId: string;
@@ -227,11 +237,7 @@ function avanzarCaravanas(
       valorTotal += cantidad * calcularPrecioReferencia(recurso, [...asentamientosPorId.values()]);
       almacenDestino = agregarRecurso(almacenDestino, recurso, cantidad);
     }
-    // Reputación (Doc 2.7, uso 1): tratar con una Facción de origen poco confiable deja peores términos —
-    // el destino extrae más comisión de esa entrega.
-    const faccionOrigen = facciones.find((f) => f.id === origen.faccionId);
-    const factorReputacion = faccionOrigen ? factorComisionPorReputacion(faccionOrigen) : 1;
-    const comision = valorTotal * tasaComision(origen, destino) * bonusPorDistancia(distanciaTotal) * factorReputacion;
+    const comision = comisionDeEntrega(valorTotal, distanciaTotal, origen, destino, facciones);
     almacenDestino = agregarRecurso(almacenDestino, 'oro', comision);
     asentamientosPorId.set(destino.id, { ...destino, almacen: almacenDestino });
 
@@ -254,26 +260,10 @@ function avanzarCaravanas(
       const acuerdo = acuerdosPorId.get(caravana.origenAcuerdoId);
       if (acuerdo) {
         const entregado = Object.values(caravana.contenido)[0] ?? 0;
-        const actualizado: AcuerdoTrueque =
-          caravana.ladoAcuerdo === 'A'
-            ? { ...acuerdo, cantidadEntregadaA: acuerdo.cantidadEntregadaA + entregado }
-            : { ...acuerdo, cantidadEntregadaB: acuerdo.cantidadEntregadaB + entregado };
-        if (actualizado.cantidadEntregadaA >= actualizado.cantidadTotalA && actualizado.cantidadEntregadaB >= actualizado.cantidadTotalB) {
-          actualizado.estado = 'cumplido';
-          eventos.push({
-            codigo: 'comercio.trueque_cumplido',
-            mensaje: `Trueque ${acuerdo.id} cumplido entre ${acuerdo.asentamientoAId} y ${acuerdo.asentamientoBId}.`,
-            payload: {
-              acuerdoId: acuerdo.id,
-              asentamientoAId: acuerdo.asentamientoAId,
-              asentamientoBId: acuerdo.asentamientoBId,
-            } satisfies PayloadTruequeCumplido,
-          });
-          const faccionA = asentamientosPorId.get(acuerdo.asentamientoAId)?.faccionId;
-          const faccionB = asentamientosPorId.get(acuerdo.asentamientoBId)?.faccionId;
-          if (faccionA) ajustesReputacion.push({ faccionId: faccionA, delta: REPUTACION.bonusTruequeCumplido, razon: 'trueque cumplido' });
-          if (faccionB) ajustesReputacion.push({ faccionId: faccionB, delta: REPUTACION.bonusTruequeCumplido, razon: 'trueque cumplido' });
-        }
+        const aplicado = aplicarEntregaATrueque(acuerdo, caravana.ladoAcuerdo, entregado, asentamientosPorId);
+        const actualizado = aplicado.acuerdo;
+        eventos.push(...aplicado.eventos);
+        ajustesReputacion.push(...aplicado.ajustesReputacion);
         acuerdosPorId.set(acuerdo.id, actualizado);
       }
     }
@@ -333,6 +323,140 @@ function scoreAsignacion(l: LadoPendiente, origen: Asentamiento, destino: Asenta
     urgenciaVolumen * ASIGNACION_CARAVANA.pesoUrgenciaVolumen +
     cercania * ASIGNACION_CARAVANA.pesoCercania
   );
+}
+
+/**
+ * Comisión que cobra el destino por una entrega (Doc 3.3 + 2.7). Extraída de `avanzarCaravanas` al aparecer el
+ * segundo camino de entrega —la manual desde una caravana escoltada (Doc 5.13.3)—: los dos tienen que cobrar
+ * igual, y con la fórmula copiada eso duraría hasta el primer retoque de una de las dos.
+ *
+ * Incluye la penalización por reputación: tratar con una Facción de origen poco confiable deja peores
+ * términos, y el destino extrae más comisión de esa entrega.
+ */
+export function comisionDeEntrega(
+  valorTotal: number,
+  distanciaTotal: number,
+  origen: Asentamiento,
+  destino: Asentamiento,
+  facciones: readonly Faccion[]
+): number {
+  const faccionOrigen = facciones.find((f) => f.id === origen.faccionId);
+  const factorReputacion = faccionOrigen ? factorComisionPorReputacion(faccionOrigen) : 1;
+  return valorTotal * tasaComision(origen, destino) * bonusPorDistancia(distanciaTotal) * factorReputacion;
+}
+
+/**
+ * Suma una entrega a un trueque y, si con ella quedan saldados los dos lados, lo cierra (Doc 3.2).
+ *
+ * También extraída al aparecer la entrega manual: cerrar un trueque otorga reputación a AMBAS Facciones, y
+ * esa regla tiene que ser la misma la conduzca el tick o la conduzca un jugador desde su caravana escoltada.
+ */
+export function aplicarEntregaATrueque(
+  acuerdo: AcuerdoTrueque,
+  lado: 'A' | 'B',
+  cantidad: number,
+  asentamientosPorId: Map<string, Asentamiento>
+): { acuerdo: AcuerdoTrueque; eventos: EventoCrudo[]; ajustesReputacion: AjusteReputacion[] } {
+  const eventos: EventoCrudo[] = [];
+  const ajustesReputacion: AjusteReputacion[] = [];
+  const actualizado: AcuerdoTrueque =
+    lado === 'A'
+      ? { ...acuerdo, cantidadEntregadaA: acuerdo.cantidadEntregadaA + cantidad }
+      : { ...acuerdo, cantidadEntregadaB: acuerdo.cantidadEntregadaB + cantidad };
+
+  if (actualizado.cantidadEntregadaA >= actualizado.cantidadTotalA && actualizado.cantidadEntregadaB >= actualizado.cantidadTotalB) {
+    actualizado.estado = 'cumplido';
+    eventos.push({
+      codigo: 'comercio.trueque_cumplido',
+      mensaje: `Trueque ${acuerdo.id} cumplido entre ${acuerdo.asentamientoAId} y ${acuerdo.asentamientoBId}.`,
+      payload: {
+        acuerdoId: acuerdo.id,
+        asentamientoAId: acuerdo.asentamientoAId,
+        asentamientoBId: acuerdo.asentamientoBId,
+      } satisfies PayloadTruequeCumplido,
+    });
+    const faccionA = asentamientosPorId.get(acuerdo.asentamientoAId)?.faccionId;
+    const faccionB = asentamientosPorId.get(acuerdo.asentamientoBId)?.faccionId;
+    if (faccionA) ajustesReputacion.push({ faccionId: faccionA, delta: REPUTACION.bonusTruequeCumplido, razon: 'trueque cumplido' });
+    if (faccionB) ajustesReputacion.push({ faccionId: faccionB, delta: REPUTACION.bonusTruequeCumplido, razon: 'trueque cumplido' });
+  }
+  return { acuerdo: actualizado, eventos, ajustesReputacion };
+}
+
+export class EntregaInvalidaError extends Error {}
+
+/**
+ * Entrega MANUAL desde una caravana escoltada a un trueque activo (Doc 5.13.3, decisión del usuario 2026-09-04).
+ *
+ * Es la contrapartida de `asignarCaravanasATrueque`: allí el motor decide qué caravana sirve qué envío por
+ * score; aquí lo decide el jugador, que ha cargado lo que quería y lo ha llevado adonde quería. El diseño
+ * objetivo del documento de comercio, en fin — el reparto automático siempre fue el sustituto de Fase 0.
+ *
+ * Condiciones, y cada una responde a una pregunta distinta de la interfaz:
+ *  - el trueque está ACTIVO y uno de sus lados lo debe la Facción del ejército (`ladoPendienteParaEjercito`);
+ *  - el ejército está al alcance del asentamiento que RECIBE (el otro lado del trueque);
+ *  - la caravana lleva el recurso que ese lado debe.
+ *
+ * Entrega el menor de lo que carga y lo que falta: sobre-entregar un trueque no tendría dónde imputarse.
+ * Cobra la misma comisión que una entrega automática (`comisionDeEntrega`) y cierra el trueque por la misma
+ * vía (`aplicarEntregaATrueque`), para que el camino manual no sea una puerta trasera con otras reglas.
+ */
+export function entregarDesdeCaravanaAdjunta(
+  caravana: Caravana,
+  acuerdo: AcuerdoTrueque,
+  lado: 'A' | 'B',
+  recurso: string,
+  faltante: number,
+  destino: Asentamiento,
+  origen: Asentamiento,
+  asentamientos: readonly Asentamiento[],
+  facciones: readonly Faccion[]
+): {
+  caravana: Caravana;
+  destino: Asentamiento;
+  acuerdo: AcuerdoTrueque;
+  entregado: number;
+  comision: number;
+  eventos: EventoCrudo[];
+  ajustesReputacion: AjusteReputacion[];
+} {
+  const cargado = caravana.contenido[recurso] ?? 0;
+  if (cargado <= 0) throw new EntregaInvalidaError(`La caravana ${caravana.id} no lleva ${recurso}.`);
+
+  const entregado = Math.min(cargado, faltante);
+  if (entregado <= 0) throw new EntregaInvalidaError('Ese lado del trueque ya está saldado.');
+
+  const asentamientosPorId = new Map(asentamientos.map((a) => [a.id, a]));
+  const valorTotal = entregado * calcularPrecioReferencia(recurso, [...asentamientos]);
+  const comision = comisionDeEntrega(valorTotal, Math.max(1, distancia(origen.posicion, destino.posicion)), origen, destino, facciones);
+
+  let almacen = agregarRecurso(destino.almacen, recurso, entregado);
+  almacen = agregarRecurso(almacen, 'oro', comision);
+
+  const aplicado = aplicarEntregaATrueque(acuerdo, lado, entregado, asentamientosPorId);
+  const eventos: EventoCrudo[] = [
+    {
+      codigo: 'comercio.entrega_escoltada',
+      mensaje: `La caravana escoltada ${caravana.id} entrega ${entregado.toFixed(0)} ${recurso} en ${destino.id} (comisión +${comision.toFixed(1)} oro).`,
+      payload: { caravanaId: caravana.id, acuerdoId: acuerdo.id, destinoId: destino.id, recurso, entregado, comision } satisfies PayloadEntregaEscoltada,
+    },
+    ...aplicado.eventos,
+  ];
+
+  const restante = cargado - entregado;
+  const contenido = { ...caravana.contenido };
+  if (restante > 0) contenido[recurso] = restante;
+  else delete contenido[recurso];
+
+  return {
+    caravana: { ...caravana, contenido },
+    destino: { ...destino, almacen },
+    acuerdo: aplicado.acuerdo,
+    entregado,
+    comision,
+    eventos,
+    ajustesReputacion: aplicado.ajustesReputacion,
+  };
 }
 
 /**

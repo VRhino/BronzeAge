@@ -111,6 +111,15 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
     'caravanaId',
     'jugadorId',
   ]),
+  cargarCaravana: objeto(
+    { ejercitoId: IDENTIFICADOR, caravanaId: IDENTIFICADOR, asentamientoId: IDENTIFICADOR, recurso: RECURSO, cantidad: NUMERO },
+    ['ejercitoId', 'caravanaId', 'asentamientoId', 'recurso', 'cantidad']
+  ),
+  entregarDeCaravana: objeto({ ejercitoId: IDENTIFICADOR, caravanaId: IDENTIFICADOR, acuerdoId: IDENTIFICADOR }, [
+    'ejercitoId',
+    'caravanaId',
+    'acuerdoId',
+  ]),
   calibrarReservaManual: objeto({ asentamientoId: IDENTIFICADOR, recurso: RECURSO, valor: NUMERO }, [
     'asentamientoId',
     'recurso',

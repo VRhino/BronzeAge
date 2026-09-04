@@ -22,7 +22,7 @@ export function poderEscuadron(e: Escuadron, instante: Instante): number {
   return herido ? conVeterania * MILITAR.penalizacionHerido : conVeterania;
 }
 
-function poderTotal(escuadrones: Escuadron[], instante: Instante, bonusCohesion: boolean): number {
+export function poderTotal(escuadrones: readonly Escuadron[], instante: Instante, bonusCohesion: boolean): number {
   const suma = escuadrones.reduce((acc, e) => acc + poderEscuadron(e, instante), 0);
   if (!bonusCohesion || escuadrones.length <= 1) return suma;
   // Cohesión entre escuadrones defendiendo juntos (Doc 5.3), abstraída sin formaciones renderizadas (Fase 0).

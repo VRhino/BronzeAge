@@ -8,7 +8,7 @@
 // referencia ni una proyección — salen de `Asentamiento.escuadrones` y entran en `Ejercito.escuadrones`. Por
 // eso la guarnición es lo único que defiende (Doc 5.12.4) sin necesidad de ningún predicado extra, y por eso
 // `consumoRacionTropas` ya cuenta solo lo que se quedó en casa sin tocar una línea.
-import type { Asentamiento, Caravana, Ejercito, Escuadron, Faccion, Jugador, Point, RelacionPolitica } from '../domain/types';
+import type { AcuerdoTrueque, Asentamiento, Caravana, Ejercito, Escuadron, Faccion, Jugador, Point, RelacionPolitica } from '../domain/types';
 import type { Mapa } from '../world/mapa';
 import { calcularRuta } from '../world/rutas';
 import { distancia } from '../world/geometria';
@@ -327,7 +327,11 @@ export function unirseAEjercito(
  * "cuesta comercio" (Doc 5.13.2) es exactamente esto — mientras marcha con el ejército no está comerciando —,
  * y sale solo de que la caravana deje de estar disponible.
  */
-export function adjuntarCaravana(ejercito: Ejercito, caravana: Caravana, origen: Asentamiento | undefined): Ejercito {
+export function adjuntarCaravana(
+  ejercito: Ejercito,
+  caravana: Caravana,
+  origen: Asentamiento | undefined
+): { ejercito: Ejercito; caravana: Caravana } {
   if (ejercito.caravanasAdjuntasIds.includes(caravana.id)) {
     throw new MovilizacionInvalidaError('Esa caravana ya va con este ejército.');
   }
@@ -340,16 +344,111 @@ export function adjuntarCaravana(ejercito: Ejercito, caravana: Caravana, origen:
   if (distancia(caravana.posicionActual, ejercito.posicionActual) > LOGISTICA.radioReabastecimiento) {
     throw new MovilizacionInvalidaError('La caravana está demasiado lejos del ejército.');
   }
-  return { ...ejercito, caravanasAdjuntasIds: [...ejercito.caravanasAdjuntasIds, caravana.id] };
+  return {
+    ejercito: { ...ejercito, caravanasAdjuntasIds: [...ejercito.caravanasAdjuntasIds, caravana.id] },
+    caravana: { ...caravana, estado: 'adjunta', posicionActual: ejercito.posicionActual },
+  };
 }
 
 /** Suelta una caravana del ejército. Se queda donde esté la columna en ese momento — no vuelve sola a casa,
  * igual que un ejército no se teletransporta al replegarse (Doc 5.12.6). */
-export function soltarCaravana(ejercito: Ejercito, caravanaId: string): Ejercito {
-  if (!ejercito.caravanasAdjuntasIds.includes(caravanaId)) {
+export function soltarCaravana(ejercito: Ejercito, caravana: Caravana): { ejercito: Ejercito; caravana: Caravana } {
+  if (!ejercito.caravanasAdjuntasIds.includes(caravana.id)) {
     throw new MovilizacionInvalidaError('Esa caravana no va con este ejército.');
   }
-  return { ...ejercito, caravanasAdjuntasIds: ejercito.caravanasAdjuntasIds.filter((id) => id !== caravanaId) };
+  return {
+    ejercito: { ...ejercito, caravanasAdjuntasIds: ejercito.caravanasAdjuntasIds.filter((id) => id !== caravana.id) },
+    caravana: { ...caravana, estado: 'disponible', posicionActual: ejercito.posicionActual },
+  };
+}
+
+/**
+ * Carga mercancía en una caravana adjunta, del almacén de una plaza al alcance (Doc 5.13.3).
+ *
+ * **Decisión del usuario (2026-09-04): una caravana enganchada deja de comportarse como las automáticas.** El
+ * jugador que la engancha elige QUÉ carga y a dónde la lleva — son viajes conscientes, no reparto por score.
+ * Y eso no es un desvío del diseño sino su destino: `asignarCaravanasATrueque` lleva desde que existe
+ * declarando que el reparto automático es "el sustituto de Fase 0" y que "en el diseño objetivo el jugador
+ * elige la caravana, la carga y la escolta a mano". La escolta es la primera parte que llega ahí.
+ *
+ * Se carga de donde se pueda repostar —propia siempre, aliada con la opción abierta—: la misma puerta y la
+ * misma geografía que el trigo.
+ *
+ * **Sin reserva de mantenimiento**, a diferencia del carro: cargar mercancía para comerciar es lo mismo que
+ * ya hace el comercio automático, que reparte contra `cantidadDisponible` a secas. Exigir aquí una reserva
+ * que el otro camino no tiene haría que la misma acción costase distinto según quién la ordene.
+ */
+export function cargarCaravanaAdjunta(
+  ejercito: Ejercito,
+  caravana: Caravana,
+  plaza: Asentamiento,
+  recurso: string,
+  cantidad: number,
+  relaciones: readonly RelacionPolitica[]
+): { caravana: Caravana; plaza: Asentamiento; cargado: number } {
+  if (!ejercito.caravanasAdjuntasIds.includes(caravana.id)) {
+    throw new MovilizacionInvalidaError('Esa caravana no va con este ejército.');
+  }
+  if (cantidad <= 0) throw new MovilizacionInvalidaError('La cantidad a cargar tiene que ser positiva.');
+  if (distancia(plaza.posicion, ejercito.posicionActual) > LOGISTICA.radioReabastecimiento) {
+    throw new MovilizacionInvalidaError('El ejército está demasiado lejos de ese asentamiento.');
+  }
+  if (!puedeRepostarEn(ejercito, plaza, relaciones)) {
+    throw new MovilizacionInvalidaError('Ese asentamiento no abre su almacén a este ejército.');
+  }
+
+  const yaCargado = Object.values(caravana.contenido).reduce((a, b) => a + b, 0);
+  const espacio = CARAVANA_CATALOGO[caravana.tipo].capacidad - yaCargado;
+  if (espacio <= 0) throw new MovilizacionInvalidaError('La caravana ya va llena.');
+
+  const cargado = Math.min(cantidad, espacio, cantidadDisponible(plaza.almacen, recurso));
+  if (cargado <= 0) throw new MovilizacionInvalidaError(`No hay ${recurso} en el almacén de ${plaza.id}.`);
+
+  return {
+    caravana: { ...caravana, contenido: { ...caravana.contenido, [recurso]: (caravana.contenido[recurso] ?? 0) + cargado } },
+    plaza: { ...plaza, almacen: descontarRecursos(plaza.almacen, { [recurso]: cargado }) },
+    cargado,
+  };
+}
+
+/**
+ * Qué lado de un trueque le toca cumplir a este ejército, y cuánto le falta (Doc 3.2 + 5.13.3).
+ *
+ * Es la consulta que necesita la interfaz descrita por el usuario: "al interactuar con un asentamiento, ver
+ * los trueques activos, el faltante por TU parte, y entregar de lo que cargas". Vive en el motor y no en el
+ * cliente porque decide una regla —de qué lado estás y cuánto debes—, no una presentación.
+ *
+ * `null` si el acuerdo no está activo, si ninguno de sus dos lados es de la Facción del ejército, o si ese
+ * lado ya está saldado.
+ */
+export function ladoPendienteParaEjercito(
+  ejercito: Ejercito,
+  acuerdo: AcuerdoTrueque,
+  asentamientos: readonly Asentamiento[]
+): { lado: 'A' | 'B'; recurso: string; faltante: number; destinoId: string } | null {
+  if (acuerdo.estado !== 'activo') return null;
+  const faccionDe = (id: string) => asentamientos.find((a) => a.id === id)?.faccionId;
+
+  // El lado que DEBE es el de la Facción del ejército; el destino de la entrega es el otro.
+  const candidatos: { lado: 'A' | 'B'; deudorId: string; destinoId: string; recurso: string; faltante: number }[] = [
+    {
+      lado: 'A',
+      deudorId: acuerdo.asentamientoAId,
+      destinoId: acuerdo.asentamientoBId,
+      recurso: acuerdo.recursoA,
+      faltante: acuerdo.cantidadTotalA - acuerdo.cantidadEntregadaA,
+    },
+    {
+      lado: 'B',
+      deudorId: acuerdo.asentamientoBId,
+      destinoId: acuerdo.asentamientoAId,
+      recurso: acuerdo.recursoB,
+      faltante: acuerdo.cantidadTotalB - acuerdo.cantidadEntregadaB,
+    },
+  ];
+
+  const mio = candidatos.find((c) => faccionDe(c.deudorId) === ejercito.faccionId && c.faltante > 0);
+  return mio ? { lado: mio.lado, recurso: mio.recurso, faltante: mio.faltante, destinoId: mio.destinoId } : null;
 }
 
 /**

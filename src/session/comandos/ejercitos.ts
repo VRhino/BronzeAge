@@ -6,7 +6,13 @@
 // Sustituyen a medio plazo a `iniciarAsedio`/`combateCampoAbierto`/`interceptarCaravana` como superficie de
 // jugador (Doc 5.12.3): el jugador deja de "atacar a X" y pasa a "mandar un ejército a X"; el combate lo
 // dispara la llegada o la proximidad, dentro del tick. Los comandos viejos siguen vivos hasta el Paso 11.
+import { LOGISTICA } from '../../constants';
+import { distancia as distanciaEntre } from '../../world/geometria';
+import { aplicarAjustesReputacion } from '../../engine/reputacion';
+import { EntregaInvalidaError, entregarDesdeCaravanaAdjunta } from '../../engine/trade';
 import {
+  cargarCaravanaAdjunta as cargarCaravanaEngine,
+  ladoPendienteParaEjercito,
   movilizarEjercito as movilizarEngine,
   replegarEjercito as replegarEngine,
   estacionarEjercito as estacionarEngine,
@@ -19,10 +25,14 @@ import { liderazgoComprometido } from '../../engine/liderazgo';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito, sinCambios } from './tipos';
 import { comando, exigirAsentamiento, exigirCaravana, exigirEjercito, conAsentamiento } from './ayudas';
-import { evento } from './eventos';
+import { evento, eventos } from './eventos';
 
 function conEjercito(estado: GameSessionState, actualizado: GameSessionState['ejercitos'][number]): GameSessionState {
   return { ...estado, ejercitos: estado.ejercitos.map((e) => (e.id === actualizado.id ? actualizado : e)) };
+}
+
+function conCaravana(estado: GameSessionState, actualizada: GameSessionState['caravanas'][number]): GameSessionState {
+  return { ...estado, caravanas: estado.caravanas.map((c) => (c.id === actualizada.id ? actualizada : c)) };
 }
 
 function jugadorDe(estado: GameSessionState, jugadorId: string) {
@@ -248,8 +258,8 @@ export const adjuntarCaravana = comando<ParamsAdjuntarCaravana, void>((estado, _
   const caravana = exigirCaravana(estado, params.caravanaId);
   const origen = estado.asentamientos.find((a) => a.id === caravana.origenAsentamientoId);
 
-  const actualizado = adjuntarCaravanaEngine(ejercito, caravana, origen);
-  return exito(conEjercito(estado, actualizado), [
+  const r = adjuntarCaravanaEngine(ejercito, caravana, origen);
+  return exito(conCaravana(conEjercito(estado, r.ejercito), r.caravana), [
     evento(ctx, {
       codigo: 'ejercito.caravana_adjuntada',
       mensaje: `La caravana ${caravana.id} se engancha al ejército ${ejercito.id}.`,
@@ -269,8 +279,9 @@ export interface ParamsSoltarCaravana {
 export const soltarCaravana = comando<ParamsSoltarCaravana, void>((estado, _mapa, ctx, params) => {
   const ejercito = exigirEjercito(estado, params.ejercitoId);
 
-  const actualizado = soltarCaravanaEngine(ejercito, params.caravanaId);
-  return exito(conEjercito(estado, actualizado), [
+  const caravana = exigirCaravana(estado, params.caravanaId);
+  const r = soltarCaravanaEngine(ejercito, caravana);
+  return exito(conCaravana(conEjercito(estado, r.ejercito), r.caravana), [
     evento(ctx, {
       codigo: 'ejercito.caravana_soltada',
       mensaje: `La caravana ${params.caravanaId} se desengancha del ejército ${ejercito.id}.`,
@@ -279,3 +290,108 @@ export const soltarCaravana = comando<ParamsSoltarCaravana, void>((estado, _mapa
     }),
   ]);
 });
+
+export interface PayloadCargaCaravana {
+  ejercitoId: string;
+  caravanaId: string;
+  asentamientoId: string;
+  recurso: string;
+  cargado: number;
+}
+
+export interface ParamsCargarCaravana {
+  ejercitoId: string;
+  caravanaId: string;
+  /** De qué plaza se carga — tiene que estar al alcance y abrirle el almacén al ejército. */
+  asentamientoId: string;
+  recurso: string;
+  cantidad: number;
+}
+
+/**
+ * Carga mercancía en una caravana escoltada (Doc 5.13.3). El jugador elige QUÉ lleva: una caravana enganchada
+ * ya no la reparte el comercio automático.
+ */
+export const cargarCaravana = comando<ParamsCargarCaravana, { cargado: number }>((estado, _mapa, ctx, params) => {
+  const ejercito = exigirEjercito(estado, params.ejercitoId);
+  const caravana = exigirCaravana(estado, params.caravanaId);
+  const plaza = exigirAsentamiento(estado, params.asentamientoId);
+
+  const r = cargarCaravanaEngine(ejercito, caravana, plaza, params.recurso, params.cantidad, estado.relaciones);
+  const siguiente = conCaravana(conAsentamiento(estado, r.plaza), r.caravana);
+  return exito(
+    siguiente,
+    [
+      evento(ctx, {
+        codigo: 'ejercito.caravana_cargada',
+        mensaje: `La caravana ${caravana.id} carga ${r.cargado.toFixed(0)} ${params.recurso} en ${plaza.id}.`,
+        payload: {
+          ejercitoId: ejercito.id,
+          caravanaId: caravana.id,
+          asentamientoId: plaza.id,
+          recurso: params.recurso,
+          cargado: r.cargado,
+        } satisfies PayloadCargaCaravana,
+        asentamientoId: plaza.id,
+      }),
+    ],
+    { cargado: r.cargado }
+  );
+});
+
+export interface ParamsEntregarDeCaravana {
+  ejercitoId: string;
+  caravanaId: string;
+  acuerdoId: string;
+}
+
+/**
+ * Entrega manual desde una caravana escoltada a un trueque activo (Doc 5.13.3).
+ *
+ * El motor resuelve de qué lado está el ejército y cuánto falta (`ladoPendienteParaEjercito`) — es la misma
+ * consulta con la que la interfaz pinta la lista de trueques y su faltante. Aquí solo se comprueba la
+ * geografía (estar al alcance del que RECIBE) y se narra.
+ */
+export const entregarDeCaravana = comando<ParamsEntregarDeCaravana, { entregado: number; comision: number }>(
+  (estado, _mapa, ctx, params) => {
+    const ejercito = exigirEjercito(estado, params.ejercitoId);
+    const caravana = exigirCaravana(estado, params.caravanaId);
+    const acuerdo = estado.acuerdos.find((a) => a.id === params.acuerdoId);
+    if (!acuerdo) throw new EntregaInvalidaError(`El trueque ${params.acuerdoId} no existe.`);
+    if (!ejercito.caravanasAdjuntasIds.includes(caravana.id)) {
+      throw new EntregaInvalidaError('Esa caravana no va con este ejército.');
+    }
+
+    const pendiente = ladoPendienteParaEjercito(ejercito, acuerdo, estado.asentamientos);
+    if (!pendiente) throw new EntregaInvalidaError('Este ejército no tiene nada pendiente en ese trueque.');
+
+    const destino = exigirAsentamiento(estado, pendiente.destinoId);
+    if (distanciaEntre(ejercito.posicionActual, destino.posicion) > LOGISTICA.radioReabastecimiento) {
+      throw new EntregaInvalidaError(`El ejército está demasiado lejos de ${destino.id} para entregar.`);
+    }
+    const origen = exigirAsentamiento(estado, pendiente.lado === 'A' ? acuerdo.asentamientoAId : acuerdo.asentamientoBId);
+
+    const r = entregarDesdeCaravanaAdjunta(
+      caravana,
+      acuerdo,
+      pendiente.lado,
+      pendiente.recurso,
+      pendiente.faltante,
+      destino,
+      origen,
+      estado.asentamientos,
+      estado.facciones
+    );
+
+    const siguiente: GameSessionState = {
+      ...conCaravana(conAsentamiento(estado, r.destino), r.caravana),
+      acuerdos: estado.acuerdos.map((a) => (a.id === r.acuerdo.id ? r.acuerdo : a)),
+      facciones: aplicarAjustesReputacion(estado.facciones, r.ajustesReputacion),
+    };
+
+    return exito(siguiente, eventos(ctx, r.eventos.map((e) => (typeof e === 'string' ? { codigo: 'legado', mensaje: e } : e))), {
+      entregado: r.entregado,
+      comision: r.comision,
+    });
+  }
+);

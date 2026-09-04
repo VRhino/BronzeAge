@@ -8,10 +8,13 @@
 // exactamente las mismas llamadas, en el mismo orden, que antes de que la mecánica existiera — y por eso el
 // guardián de determinismo sigue verde sin tocarlo.
 import { describe, expect, it } from 'vitest';
-import type { Asentamiento, Caravana, Ejercito, Escuadron, Faccion, RelacionPolitica } from '../../domain/types';
+import type { AcuerdoTrueque, Asentamiento, Caravana, Ejercito, Escuadron, Faccion, RelacionPolitica } from '../../domain/types';
 import { CARAVANA_CATALOGO, LOGISTICA, MILITAR } from '../../constants';
+import { entregarDesdeCaravanaAdjunta } from '../trade';
 import {
   adjuntarCaravana,
+  cargarCaravanaAdjunta,
+  ladoPendienteParaEjercito,
   avanzarEjercitos,
   capacidadCargaDe,
   MovilizacionInvalidaError,
@@ -632,7 +635,7 @@ describe('caravanas adjuntas', () => {
     const c = caravanaDe('c1', asentamiento.id, asentamiento.posicion);
 
     expect(capacidadCargaDe(e, [])).toBe(LOGISTICA.capacidadCarroPorJugador);
-    const conCaravana = adjuntarCaravana(e, c, asentamiento);
+    const conCaravana = adjuntarCaravana(e, c, asentamiento).ejercito;
     expect(capacidadCargaDe(conCaravana, [c])).toBe(
       LOGISTICA.capacidadCarroPorJugador + CARAVANA_CATALOGO.comercial.capacidad
     );
@@ -644,7 +647,7 @@ describe('caravanas adjuntas', () => {
     expect(velocidadDeEjercito(ligero)).toBe(20);
 
     const c = caravanaDe('c1', asentamiento.id, asentamiento.posicion);
-    const conCaravana = adjuntarCaravana(ligero, c, asentamiento);
+    const conCaravana = adjuntarCaravana(ligero, c, asentamiento).ejercito;
     expect(velocidadDeEjercito(conCaravana, [c])).toBe(CARAVANA_CATALOGO.comercial.velocidad);
     expect(velocidadDeEjercito(conCaravana, [c]), 'y eso le quita la capacidad de cazar una comercial').toBeLessThan(20);
   });
@@ -661,23 +664,23 @@ describe('caravanas adjuntas', () => {
     const lejos = { x: asentamiento.posicion.x + LOGISTICA.radioReabastecimiento * 3, y: asentamiento.posicion.y };
     expect(() => adjuntarCaravana(e, { ...c, posicionActual: lejos }, asentamiento)).toThrow(MovilizacionInvalidaError);
 
-    const yaEnganchada = adjuntarCaravana(e, c, asentamiento);
+    const yaEnganchada = adjuntarCaravana(e, c, asentamiento).ejercito;
     expect(() => adjuntarCaravana(yaEnganchada, c, asentamiento)).toThrow(MovilizacionInvalidaError);
   });
 
   it('soltarla la deja donde está la columna, y rechaza soltar la que no lleva', () => {
     const { asentamiento } = base();
     const c = caravanaDe('c1', asentamiento.id, asentamiento.posicion);
-    const e = adjuntarCaravana(ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros')], 0), c, asentamiento);
+    const e = adjuntarCaravana(ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros')], 0), c, asentamiento).ejercito;
 
-    expect(soltarCaravana(e, 'c1').caravanasAdjuntasIds).toEqual([]);
-    expect(() => soltarCaravana(e, 'no-existe')).toThrow(MovilizacionInvalidaError);
+    expect(soltarCaravana(e, c).ejercito.caravanasAdjuntasIds).toEqual([]);
+    expect(() => soltarCaravana(e, { ...c, id: 'no-existe' })).toThrow(MovilizacionInvalidaError);
   });
 
   it('viajan CON el ejército: su posición sigue a la columna', () => {
     const { asentamiento } = base();
     const c = caravanaDe('c1', asentamiento.id, asentamiento.posicion);
-    const e = adjuntarCaravana(ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros')], 500), c, asentamiento);
+    const e = adjuntarCaravana(ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros')], 500), c, asentamiento).ejercito;
 
     const r = avanzar([e], [asentamiento], { caravanas: [c] });
 
@@ -694,7 +697,7 @@ describe('caravanas adjuntas', () => {
       almacen: { ...asentamiento.almacen, trigo: { cantidad: 100000, capacidad: 100000 } },
     };
     const c = caravanaDe('c1', rico.id, rico.posicion);
-    const e = adjuntarCaravana({ ...ejercitoDe(rico, [escuadron('a', 'milicia_lanceros')], 0), estado: 'estacionado' as const }, c, rico);
+    const e = adjuntarCaravana({ ...ejercitoDe(rico, [escuadron('a', 'milicia_lanceros')], 0), estado: 'estacionado' as const }, c, rico).ejercito;
 
     const r = avanzar([e], [rico], { caravanas: [c] });
 
@@ -708,7 +711,7 @@ describe('caravanas adjuntas', () => {
     const { asentamiento } = base();
     const c = caravanaDe('c1', asentamiento.id, asentamiento.posicion);
     // Escuadrón aniquilado: el ejército se disuelve en este tick.
-    const e = adjuntarCaravana(ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros', 0)], 0), c, asentamiento);
+    const e = adjuntarCaravana(ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros', 0)], 0), c, asentamiento).ejercito;
 
     const r = avanzar([e], [asentamiento], { caravanas: [c] });
 
@@ -725,5 +728,116 @@ describe('caravanas adjuntas', () => {
     const r = avanzar([e], [asentamiento], { caravanas: [ajena] });
 
     expect(r.caravanas).toEqual([ajena]);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------
+// Paso 9b — la escolta: carga y entrega CONSCIENTES (Doc 5.13.3).
+// ---------------------------------------------------------------------------------------------------------
+
+describe('escolta: cargar y entregar a mano', () => {
+  it('engancharla la saca de `disponible` — el comercio automático deja de verla', () => {
+    // El bug que esto cierra: mientras seguía 'disponible', `asignarCaravanasATrueque` podía despacharla por
+    // debajo del ejército que la lleva.
+    const { asentamiento } = base();
+    const c = caravanaDe('c1', asentamiento.id, asentamiento.posicion);
+    const r = adjuntarCaravana(ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros')], 0), c, asentamiento);
+
+    expect(r.caravana.estado).toBe('adjunta');
+    expect(soltarCaravana(r.ejercito, r.caravana).caravana.estado, 'soltarla la devuelve al pool').toBe('disponible');
+  });
+
+  it('el jugador elige QUÉ carga, del almacén de una plaza al alcance', () => {
+    const { asentamiento } = base();
+    const rico: Asentamiento = {
+      ...asentamiento,
+      almacen: { ...asentamiento.almacen, piedra: { cantidad: 300, capacidad: 1000 } },
+    };
+    const c = caravanaDe('c1', rico.id, rico.posicion);
+    const { ejercito, caravana } = adjuntarCaravana(ejercitoDe(rico, [escuadron('a', 'milicia_lanceros')], 0), c, rico);
+
+    const r = cargarCaravanaAdjunta(ejercito, caravana, rico, 'piedra', 120, []);
+
+    expect(r.cargado).toBe(120);
+    expect(r.caravana.contenido['piedra']).toBe(120);
+    expect(r.plaza.almacen['piedra']!.cantidad, 'sale del almacén de la plaza').toBe(180);
+  });
+
+  it('no carga más de lo que cabe ni de lo que hay, y rechaza plazas lejanas o ajenas', () => {
+    const { asentamiento } = base();
+    const conPoco: Asentamiento = {
+      ...asentamiento,
+      almacen: { ...asentamiento.almacen, piedra: { cantidad: 10, capacidad: 1000 } },
+    };
+    const c = caravanaDe('c1', conPoco.id, conPoco.posicion);
+    const { ejercito, caravana } = adjuntarCaravana(ejercitoDe(conPoco, [escuadron('a', 'milicia_lanceros')], 0), c, conPoco);
+
+    expect(cargarCaravanaAdjunta(ejercito, caravana, conPoco, 'piedra', 999, []).cargado, 'tope por stock').toBe(10);
+
+    const lejos: Asentamiento = { ...conPoco, posicion: { x: conPoco.posicion.x + 1000, y: conPoco.posicion.y } };
+    expect(() => cargarCaravanaAdjunta(ejercito, caravana, lejos, 'piedra', 5, [])).toThrow(MovilizacionInvalidaError);
+
+    const ajena: Asentamiento = { ...conPoco, faccionId: 'faccion-2' };
+    expect(() => cargarCaravanaAdjunta(ejercito, caravana, ajena, 'piedra', 5, [])).toThrow(MovilizacionInvalidaError);
+  });
+
+  it('`ladoPendienteParaEjercito` dice de qué lado estás y cuánto debes — lo que pinta la interfaz', () => {
+    const { asentamiento } = base();
+    const otro: Asentamiento = { ...asentamiento, id: 'otro', faccionId: 'faccion-2' };
+    const e = ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros')], 0);
+    const acuerdo: AcuerdoTrueque = {
+      id: 'ac1',
+      asentamientoAId: asentamiento.id,
+      asentamientoBId: otro.id,
+      recursoA: 'piedra',
+      recursoB: 'oro',
+      cantidadTotalA: 100,
+      cantidadTotalB: 50,
+      cantidadEntregadaA: 30,
+      cantidadEntregadaB: 0,
+      creadoEn: instanteDeTest(0),
+      expiraEn: instanteDeTest(1000),
+      estado: 'activo',
+    };
+
+    const mio = ladoPendienteParaEjercito(e, acuerdo, [asentamiento, otro])!;
+    expect(mio.lado).toBe('A');
+    expect(mio.recurso).toBe('piedra');
+    expect(mio.faltante, '100 pactadas menos 30 ya entregadas').toBe(70);
+    expect(mio.destinoId, 'se entrega en el OTRO lado').toBe('otro');
+
+    // Saldado o cerrado: no hay nada que entregar.
+    expect(ladoPendienteParaEjercito(e, { ...acuerdo, cantidadEntregadaA: 100 }, [asentamiento, otro])).toBeNull();
+    expect(ladoPendienteParaEjercito(e, { ...acuerdo, estado: 'cumplido' }, [asentamiento, otro])).toBeNull();
+    // Y un ejército de una Facción que no es parte del trueque tampoco.
+    expect(ladoPendienteParaEjercito({ ...e, faccionId: 'faccion-3' }, acuerdo, [asentamiento, otro])).toBeNull();
+  });
+
+  it('entregar avanza el trueque, deja la mercancía y cobra comisión', () => {
+    const { asentamiento } = base();
+    const otro: Asentamiento = { ...asentamiento, id: 'otro', faccionId: 'faccion-2', posicion: { x: asentamiento.posicion.x + 10, y: asentamiento.posicion.y } };
+    const c = { ...caravanaDe('c1', asentamiento.id, asentamiento.posicion), contenido: { piedra: 200 }, estado: 'adjunta' as const };
+    const acuerdo: AcuerdoTrueque = {
+      id: 'ac1',
+      asentamientoAId: asentamiento.id,
+      asentamientoBId: otro.id,
+      recursoA: 'piedra',
+      recursoB: 'oro',
+      cantidadTotalA: 100,
+      cantidadTotalB: 50,
+      cantidadEntregadaA: 0,
+      cantidadEntregadaB: 0,
+      creadoEn: instanteDeTest(0),
+      expiraEn: instanteDeTest(1000),
+      estado: 'activo',
+    };
+
+    const r = entregarDesdeCaravanaAdjunta(c, acuerdo, 'A', 'piedra', 100, otro, asentamiento, [asentamiento, otro], crearFacciones());
+
+    expect(r.entregado, 'entrega el FALTANTE, no todo lo que carga').toBe(100);
+    expect(r.caravana.contenido['piedra'], 'y conserva el resto').toBe(100);
+    expect(r.acuerdo.cantidadEntregadaA).toBe(100);
+    expect(r.destino.almacen['piedra']!.cantidad).toBeGreaterThan(asentamiento.almacen['piedra']?.cantidad ?? 0);
+    expect(r.comision, 'el destino cobra su comisión, igual que en una entrega automática').toBeGreaterThan(0);
   });
 });

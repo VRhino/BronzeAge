@@ -325,9 +325,19 @@ Un ejército puede llevar **caravanas adjuntas** que amplían su capacidad de ca
 
 ### 5.13.3 Escolta de caravanas
 
-Una caravana adjunta **puede ir cargada de mercancía y hacer su entrega normal** mientras marcha con el ejército. Eso resuelve la escolta de caravanas, que estaba pendiente sin implementar (Doc 3.10): la caravana viaja protegida por el poder de combate del ejército en vez de por su defensa base fija.
+Una caravana adjunta **puede ir cargada de mercancía y hacer su entrega** mientras marcha con el ejército. Eso resuelve la escolta de caravanas, que estaba pendiente sin implementar (Doc 3.10): la caravana viaja protegida por el poder de combate del ejército en vez de por su defensa base fija.
 
-La misma regla de velocidad la equilibra sola: escoltar baja el ejército a la velocidad de la caravana, así que **no se puede escoltar y depredar a la vez**.
+**Una caravana enganchada deja de ser automática** (decisión del usuario, 2026-09-04). No la reparte el sistema por score: el jugador que la engancha **elige qué carga y a dónde la lleva**. Son viajes conscientes. No es una excepción a la mecánica de comercio sino su destino — el reparto automático siempre estuvo declarado como el sustituto de Fase 0 de "el jugador elige la caravana, la carga y la escolta a mano" (Doc 3.2).
+
+En la práctica son tres actos del jugador:
+
+1. **Enganchar** una caravana disponible, estando la columna a su alcance.
+2. **Cargar** lo que quiera del almacén de una plaza que le abra la puerta — la propia siempre, una aliada si tiene la opción activa. La misma geografía con la que reposta el trigo.
+3. **Entregar**, al llegar: interactuando con un asentamiento se ven los **trueques activos**, cuánto falta **por tu parte** en cada uno, y se entrega de lo que la caravana lleve. Se entrega el menor de lo cargado y lo que falta, y el destino cobra su comisión exactamente igual que en una entrega automática — el camino manual no es una puerta trasera con otras reglas.
+
+**Los bandidos atacan a la columna, no a la caravana** (decisión del usuario, 2026-09-04): una caravana escoltada se resuelve contra el poder de combate del ejército y no contra la defensa base fija. Sin eso, escoltar no protegía de lo único que hoy ataca caravanas en el mundo.
+
+La regla de velocidad lo equilibra sola: escoltar baja el ejército a la velocidad de la caravana, así que **no se puede escoltar y depredar a la vez**.
 
 ### 5.13.4 Un ejército que se queda sin nada se disuelve
 

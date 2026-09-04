@@ -235,7 +235,15 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   // ya actualizadas.
   const trasSpawnBandidos = avanzarSpawnBandidos(estado.campamentosBandidos, estado.bandidosProximoSpawnEn, zonas, trasExpansion.asentamientos, mapa, instante);
   eventosDominio.push(...comoEventosDominio(trasSpawnBandidos.eventos, contexto));
-  const trasAtaquesBandidos = avanzarAtaquesBandidos(trasSpawnBandidos.campamentos, trasExpansion.caravanas, rng);
+  // Los ejércitos entran aquí solo como ESCOLTA: una caravana enganchada se defiende con el poder de su
+  // columna y no con la defensa base fija (Doc 5.13.3). El movimiento de los ejércitos sigue después.
+  const trasAtaquesBandidos = avanzarAtaquesBandidos(
+    trasSpawnBandidos.campamentos,
+    trasExpansion.caravanas,
+    rng,
+    estado.ejercitos,
+    instante
+  );
   eventosDominio.push(...comoEventosDominio(trasAtaquesBandidos.eventos, contexto));
 
   // Ejércitos (Doc 5.12): comer del carro, moverse, repostar, llegar. Va DESPUÉS de los bandidos, al final de
