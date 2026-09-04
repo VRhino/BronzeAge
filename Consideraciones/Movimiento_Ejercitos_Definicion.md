@@ -726,7 +726,10 @@ usuario dio la tabla real. Calibrarla es un cambio de **datos**, no de código.
       —3.221 frente a 3.592, que es el precio de pelear— y **no toca el comercio** (oro idéntico). Y traer las
       columnas a casa no solo recicla tropa: sube los asentamientos vivos de 31 a **38**, porque una campaña
       que vuelve libera a su ciudad para volver a operar en vez de dejarla bloqueada indefinidamente.
-- [ ] **Paso 13 — Calibración** por simulación: `LIDERAZGO.factorCoste`, `capacidadCarroPorJugador` (recalculado
+- [ ] **Paso 13 — Calibración.** Inventario completo de lo tocable, con procedencia y orden de ataque, en
+      **§12**. Nota de contexto: hasta el Paso 12 el batch no tenía un solo ejército, así que ninguna de estas
+      cifras se podía medir; ahora sí.
+- [ ] (enunciado original) **Paso 13 — Calibración** por simulación: `LIDERAZGO.factorCoste`, `capacidadCarroPorJugador` (recalculado
       desde el radio si cambió la ración), velocidades y capacidad de caravana.
 
 ## 6. Invariantes a congelar en tests
@@ -1082,3 +1085,88 @@ logística de campaña: los Pasos 8, 9 y 12 ya se pueden medir de verdad.
 el arreglo conceptualmente correcto —un Almacén invierte madera una vez, no la consume de forma recurrente, y
 la reserva se mide contra un techo que él mismo sube—, pero ya no hay interbloqueo que justifique tocarlo
 ahora. Anotada por si el mismo síntoma reaparece a otra escala.
+
+## 12. Tabla de calibración: todo lo que esta mecánica dejó tocable (Paso 13)
+
+Inventario completo de las variables que el movimiento de ejércitos introdujo o movió, con su valor de hoy y
+**de dónde salió cada uno**. Esa última columna es la que importa: un número DERIVADO no se toca sin revisar
+la regla de la que sale, y un PLACEHOLDER se puede mover sin pedir permiso a nada.
+
+Procedencias: **usuario** (decisión suya, no se cambia sin preguntar) · **derivado** (sale de una regla escrita
+en el canon) · **medido** (lo fijó una corrida de batch) · **placeholder** (nunca lo validó nadie).
+
+### 12.1 Logística de campaña (`LOGISTICA`, constants.ts)
+
+| Constante | Hoy | Qué decide | Procedencia | Si se toca |
+|---|---|---|---|---|
+| `capacidadCarroPorJugador` | 500 | Cuánto trigo lleva cada Jugador | **derivado** de §5.13.1 ("un cuarto del mapa ida y vuelta") | Cambia el radio operativo de TODA campaña. Recalcular la regla, no el número |
+| `autonomiaTicksObjetivo` | 50 | El objetivo con el que se dedujo lo anterior | **derivado** | Es la entrada de la fórmula: tocar esto es tocar el diseño |
+| `factorConsumoEstacionado` | 0.1 | Consumo acampado frente a en marcha | **usuario** (2026-09-04) | Sube y "sostener un paso" vuelve a ser una cuenta atrás. A 0.5 el gate de repliegue del NPC dejaba de dispararse |
+| `radioVisionEjercito` | 150 | Hasta dónde ve una columna | **usuario** | ~2 provincias. Bajarlo acerca el juego a la niebla ciega; subirlo hace la sorpresa imposible |
+| `radioReabastecimiento` | 60 | Repostar, recoger refuerzos, cargar y entregar | **placeholder** | Es el radio de "estar en una plaza". Nunca se validó |
+| `radioEncuentro` | 15 | Cruzarse, emboscar | **usuario** (2026-09-04) | La relación 1:10 con la visión es el punto: ver mucho antes de chocar |
+
+### 12.2 Liderazgo (`LIDERAZGO`)
+
+| Constante | Hoy | Qué decide | Procedencia | Si se toca |
+|---|---|---|---|---|
+| `base` | 50 | Cuánta tropa puede sacar un Jugador | **placeholder** | Techo de toda campaña individual. Con 50 salen ~70 soldados ligeros |
+| `factorCoste` | 0.2 | Coste de Liderazgo por punto de poder | **placeholder** | Decide qué tropas compensan. **Entrada principal del Paso 13**: nunca se ha medido |
+
+### 12.3 Velocidades de tropa (`TROPAS_RECLUTABLES[].velocidad`)
+
+| Clase | Hoy | Tropas | Procedencia |
+|---|---|---|---|
+| Ligera | 20 | milicia_lanceros, lanceros_mimbre, honderos, escaramuzadores_jabalina | **usuario** |
+| Media | 16 | espadachines_cobre/bronce, hacheros_ligeros, arqueros | **usuario** |
+| Pesada | 12 | lanceros_pesados, hacheros_armados, arqueros_compuesto | **usuario** |
+
+Son load-bearing más allá de moverse: la ligera (20) es la única que caza una caravana comercial (16), y de
+ahí sale que **la intercepción sea emboscada y no persecución** (Doc 3.10). Tocarlas reescribe esa regla.
+
+### 12.4 Combate y suministro (`MILITAR`)
+
+| Constante | Hoy | Qué decide | Procedencia | Si se toca |
+|---|---|---|---|---|
+| `racionPorSoldadoPorMinuto` | 0.15 | Consumo por soldado | **placeholder** | Entra en la autonomía, en la reserva de comida y en el alcance del NPC. De las más acopladas |
+| `varianzaCombate` | 0.15 | Aleatoriedad del combate | **usuario** (confirmado 2026-09-04) | Implica que hace falta +35% de poder para ganar seguro |
+| `defensaBaseCaravana` | 15 | Defensa de una caravana SIN escolta | **placeholder** | Con escolta ya no aplica (Doc 5.13.3) |
+| `umbralCapturaCaravana` | 0.5 | Fracción capturada al emboscar | **derivado** del diseño original | — |
+| `degradacionMoralSinRacion` | 20 | Caída de moral sin comer | **placeholder** | Con 0 de comida, la moral cae a 0 en 5 ticks |
+| `desercionFraccionPorMinutoSinMoral` | 0.05 | Deserción con moral 0 | **placeholder** | Fija cuánto tarda en deshacerse un ejército sin suministro |
+| `regeneracionMoralPorMinuto` | 5 | Recuperación comiendo | **placeholder** | — |
+
+### 12.5 Lo que la mecánica movió fuera de sí misma
+
+| Constante | Antes | Hoy | Procedencia |
+|---|---|---|---|
+| `EDIFICIO_CATALOGO.granja.produccionBaseTrigo` | 15 → 30 | **60** | **usuario**, dos veces: el cuello de botella de nivel 3 y luego el carro vacío |
+| `EDIFICIO_CATALOGO.granero.niveles[].capacidadTrigo` | (no existía) | 2000/3000/4000/6000 | **usuario** (forma), niveles ×1/×1,5/×2/×3 como la Granja |
+| `ALMACEN.capacidadInicialPorRecurso` | 200 | **400** | **medido**: 200 era un interbloqueo; 500 no aporta nada sobre 400 |
+| `MANTENIMIENTO.costoBase.madera` | 3 | **1.5** | **usuario**; medido: ayuda pero no desbloquea por sí solo |
+| `CARAVANA_CATALOGO.comercial.capacidad` | 60 | **500** | **derivado** (≥ carro de un Jugador); **medido**: cero efecto en el oro |
+| `RESERVA_CONSTRUCCION.horizonteMinutosComida` | 8 | 8 | **placeholder**. Gobierna cuánto puede cargar un ejército sin dejar la ciudad en riesgo |
+| `RESERVA_CONSTRUCCION.horizonteMinutosMantenimiento` | 8 | 8 | **placeholder**. Fue la mitad del interbloqueo de §11.2 |
+
+### 12.6 Prudencia del NPC (`npcGobernanza.ts`) y del laboratorio
+
+| Constante | Hoy | Qué decide | Procedencia |
+|---|---|---|---|
+| `NIVEL_MINIMO_PARA_CAMPANA` | 2 | Madurez antes de la primera campaña | **derivado** del análisis del colapso histórico |
+| `ESCUADRONES_MINIMOS_PARA_CAMPANA` | 2 | Mínimo para poder partir la guarnición | **placeholder** |
+| `FRACCION_MAXIMA_EN_CAMPANA` | 0.5 | Cuánto se lleva como mucho | **derivado** de Doc 5.12.4 (la guarnición es lo único que defiende) |
+| `AUTONOMIA_MINIMA_TICKS` | 20 | Comida mínima para salir | **placeholder** |
+| `MIN_CAPACIDAD_LENERAS` (batch) | 8 | Bosque exigido al elegir emplazamiento | **medido**: con el filtro anterior se quedaban en 5,5 de un tope de 10 |
+
+### 12.7 Por dónde empezar
+
+Ordenado por relación entre lo que mueve y lo poco que se sabe de él:
+
+1. **`LIDERAZGO.factorCoste`** — decide qué tropas compensan y nunca se midió. Es el objetivo declarado del Paso 13.
+2. **`MILITAR.racionPorSoldadoPorMinuto`** — la más acoplada de todas: autonomía, reserva de comida y alcance del NPC dependen de ella, y es un placeholder.
+3. **`radioReabastecimiento`** — gobierna cuatro acciones distintas y nadie lo eligió.
+4. **Las dos de `RESERVA_CONSTRUCCION`** — ya se demostró que deciden si una ciudad puede construir; siguen sin validar.
+5. **La curva de moral/deserción** (tres constantes) — fija cuánto tarda en deshacerse un ejército sin suministro, que es el reloj de toda campaña.
+
+Y el que **NO** hay que tocar sin rehacer su regla: `capacidadCarroPorJugador`. No es un número elegido, es una
+consecuencia de §5.13.1 — cambiarlo a mano deja la regla y el valor contradiciéndose.
