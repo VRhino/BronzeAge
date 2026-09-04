@@ -1288,3 +1288,6 @@ prudencia (`FRACCION_MAXIMA_EN_CAMPANA`, media guarnición) le deja sacar 1-2 es
 
 Consecuencia para el Paso 13: **el espacio de composición solo se puede calibrar con juego humano, o con un
 NPC que use el Liderazgo como límite en vez de una fracción.** Medirlo en el batch actual no dice nada.
+
+Anotado como issue propio —`issues/npc_no_ejercita_el_liderazgo.md`— porque es trabajo de NPC, no de esta
+mecánica, y el usuario lo despriorizó el 2026-09-04.
