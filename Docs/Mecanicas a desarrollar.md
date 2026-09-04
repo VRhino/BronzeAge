@@ -84,14 +84,13 @@ recordar desde el primer tick que corra con la mecánica.
 celdas con la geometría necesaria para descifrarla. Lo que se ve en vivo gana a lo recordado: cada plaza sale
 en una lista o en la otra, nunca en las dos.
 
-**Con esto el SERVIDOR ya ha hecho su parte de los tres estados.** Lo que queda:
+**Hecho (Paso 5, 2026-09-04): se pinta.** El cliente de jugador (`BronzeAgeClient`) tapa el terreno no
+explorado y pinta lo recordado con filtro oscuro; el de administración no aplica ninguna máscara, porque es
+herramienta de operación y no un jugador. El servidor manda dos máscaras —`celdas` y `visibles`— y de ellas
+salen los tres estados sin que el cliente sepa una sola regla del juego.
 
-- **Pintar** (Paso 5). **El terreno lo tapa el CLIENTE DE JUGADOR**, no el servidor (decisión del usuario):
-  la geografía no es información táctica y el cliente ya la cachea para siempre por su `mapaId`; lo que no
-  puede salir del servidor son las ENTIDADES, y eso ya se filtra. Lo recordado se pinta con filtro oscuro.
-  **El cliente de administración lo ve todo**, sin máscara: es herramienta de operación, no un jugador.
-- **Visión compartida por alianza** (Paso 4): en vivo, no "último conocido" — la alianza es cooperación
-  explícita.
+**Lo que queda**: la **visión compartida por alianza** (Paso 4) — en vivo, no "último conocido", porque la
+alianza es cooperación explícita— y la **calibración** del margen y del tamaño de celda (Paso 6).
 
 ## 13. La capital como decisión del jugador
 

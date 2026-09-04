@@ -28,7 +28,7 @@ Así que esto ya no es una mecánica desde cero: es **completar** lo que quedó 
 | Ver ejércitos ajenos por espacio | **Hecho** (Doc 5.12.7) |
 | Ver asentamientos ajenos por espacio | **Hecho** (Paso 1, 2026-09-04) |
 | Memoria ("último conocido") | **Hecha** (Pasos 2-3) |
-| Terreno tapado donde nunca se estuvo | Falta — hoy el mapa entero se descarga y se pinta |
+| Terreno tapado donde nunca se estuvo | **Hecho** (Paso 5, en el cliente de jugador) |
 | Visión compartida por alianza | Falta |
 
 ## 2. Decisiones cerradas con el usuario (2026-09-04)
@@ -207,8 +207,9 @@ mirar.** Y solo el segundo lleva `conocidoEn`, porque solo el segundo puede esta
 - [ ] **Paso 4 — Visión compartida por alianza.** En vivo, y solo mientras la alianza esté activa: al
       romperse, lo que se veía por ella pasa a ser recuerdo (con la fecha de la ruptura) o desaparece —
       **decidir al llegar**, no antes.
-- [ ] **Paso 5 — Render.** El cliente de JUGADOR tapa el terreno no explorado y pinta lo recordado con filtro
-      oscuro; el de ADMINISTRACIÓN no tapa nada (es herramienta de operación, no un jugador).
+- [x] **Paso 5 — Render en el cliente de JUGADOR.** **HECHO (2026-09-04).** Tapa el terreno no explorado y
+      pinta lo recordado con filtro oscuro. El de ADMINISTRACIÓN no se toca: no tapa nada, es herramienta de
+      operación y no un jugador. Ver §5.4.
 - [ ] **Paso 6 — Calibración** del margen (2.1) contra la vista de ejército, con la nota del nivel 5, y del
       tamaño de celda contra cómo se ve la frontera de la niebla.
 
@@ -294,6 +295,42 @@ sin comprobar nada.
 plaza propia destapada y el otro extremo del mundo tapado, con rejilla 80x80 de 25; tras el tick la plaza
 rival sale en `asentamientosAvistados` y NO en `asentamientosConocidos`, aunque su ficha sí está grabada en
 el estado con su `conocidoEn`. 1.600 caracteres hex por Facción, como se había calculado.
+
+### 5.4 Lo que salió del Paso 5 (el cliente de jugador)
+
+**El orden de capas ES la niebla**, y así queda escrito en `render.ts`. Lo que se pinta antes de la máscara
+queda tapado donde nunca se estuvo y a media luz donde solo se recuerda; lo que se pinta después se ve tal
+cual. De ahí el criterio: geografía y lo RECORDADO van antes; lo tuyo y lo que estás VIENDO, después. Mover
+una capa de un lado al otro cambia lo que el jugador sabe — no es refactor, y el comentario del archivo lo
+dice con esas palabras.
+
+**La máscara se compone a resolución de REJILLA y se estira.** 80x80 sobre el mundo de 2000, dibujada con
+interpolación hasta el tamaño del lienzo. Eso da bordes de niebla suaves gratis; pintando celda a celda sobre
+el lienzo grande, el mundo se vería a cuadros y la frontera delataría la rejilla en vez de parecer niebla.
+
+**Relleno lo que ves, hueco lo que recuerdas.** Un asentamiento avistado usa el mismo glifo relleno que uno
+propio —es la misma clase de cosa, y el color de su Facción ya dice que no es tuya—; uno recordado va hueco, y
+además le cae encima el filtro oscuro porque se dibuja DEBAJO de la máscara. El hueco dice literalmente "aquí
+hay una ciudad, no sé cómo está ahora".
+
+**El color de la niebla es el del fondo de la página** (`--bg-primary`), no negro: así lo no explorado no se
+lee como un agujero quemado en el mapa sino como mapa que todavía no está.
+
+**Encontrado por el camino**: `caminos` y `campamentosBandidos` se proyectan a todo el mundo sin filtrar. El
+cliente los dibuja bajo la máscara, así que en pantalla ya no flotan sobre tierra sin pisar — pero el dato
+sigue viajando, y eso es cosa del servidor. Anotado como tarea aparte.
+
+**Medido en vivo** (backend real en :3000, cliente real en :5174, partida de tres Facciones):
+
+| Estado | Medido |
+|---|---|
+| Nunca visto | `rgb(10,14,23)` exacto: el terreno desaparece, y con él la ciudad de la tercera Facción |
+| Visto antes | `rgb(67,70,75)` sobre un control gris 160 — el 42% de su brillo, justo el 62% de filtro |
+| Viéndolo | `rgb(160,160,160)`: intacto |
+
+Y el escalón entre ver y recordar, promediando en círculos alrededor de la plaza para que el terreno no meta
+ruido, cae en **radio ~120** — que es exactamente `radioPotencial (60) + margenAsentamiento (60)`. La
+geometría de la máscara sale bien sin que el cliente sepa ninguno de los dos números.
 
 ## 6. Invariantes a congelar en tests
 
