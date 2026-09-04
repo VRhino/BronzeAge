@@ -23,7 +23,7 @@
 //
 // Diseño, decisiones y limitaciones: `Consideraciones/NPC_Gobernanza_Facciones_Controladas.md`.
 
-import type { AcuerdoTrueque, Asentamiento, Caravana, CampamentoBandido, EdificioTipo, Faccion, Point, RecursoTipo } from '../domain/types';
+import type { AcuerdoTrueque, Asentamiento, Caravana, CampamentoBandido, EdificioTipo, Ejercito, Escuadron, Faccion, Jugador, Point, RecursoTipo, RelacionPolitica } from '../domain/types';
 import type { Mapa } from '../world/mapa';
 import type { RandomFn } from '../worldgen';
 import type { ContextoSimulacion, EstadoSimulacion } from '../engine/simulation';
@@ -47,7 +47,11 @@ import { construirCaravanaComercial, proponerTrueque, CaravanaInvalidaError, Tru
 import { computeTodasLasZonas } from '../engine/zones';
 import { calcularCostoMantenimiento, encontrarCapital } from '../engine/mantenimiento';
 import { evaluarViabilidadFundacion, fundarAsentamiento, FundacionInvalidaError } from '../engine/settlement';
-import { CAMPAMENTOS_BANDIDOS, TROPAS_RECLUTABLES } from '../constants';
+import { CAMPAMENTOS_BANDIDOS, LOGISTICA, MILITAR, TROPAS_RECLUTABLES } from '../constants';
+import { movilizarEjercito, replegarEjercito, MovilizacionInvalidaError } from '../engine/ejercitos';
+import { reservaDeTrigo } from '../engine/tropas';
+import { estanAliadas } from '../engine/pertenencia';
+import { distancia } from '../world/geometria';
 import { minutos, sumar, type Instante } from '../domain/tiempo';
 
 /**
@@ -147,6 +151,10 @@ export interface StatsNpcGobernanza {
   reclutamientosExitosos: number;
   truequesSupervivenciaPropuestos: number;
   campamentosDestruidos: number;
+  /** Campañas lanzadas este tick (Paso 12): columnas que salen contra una plaza rival. */
+  campanasLanzadas: number;
+  /** Columnas mandadas a casa este tick por haber terminado su campaña. */
+  repliegues: number;
   campamentosAtacadosSinExito: number;
   caravanasFundacionLanzadas: number;
 }
@@ -713,6 +721,187 @@ function expandirSiPuede(
   return { asentamientos: asentamientosActuales, caravanas: caravanasActuales, lanzadas, contador };
 }
 
+/**
+ * Puertas de prudencia antes de lanzar una CAMPAÑA (Paso 12 del movimiento de ejércitos).
+ *
+ * Nacen leídas de la historia de este mismo archivo. El diagnóstico del colapso masivo de los campamentos de
+ * bandidos (ver `UMBRAL_NUTRICION_ANTES_DE_ATACAR` arriba) terminaba diciendo exactamente qué faltaba:
+ *
+ * > "probablemente hace falta pausar el PRIMER combate hasta que el asentamiento tenga cierta madurez (nivel,
+ * > población, ticks desde la fundación), no seguir ajustando el umbral de un gate reactivo."
+ *
+ * Un gate REACTIVO no sirve porque antes de la primera pelea no hay daño que mirar. Estos son PREVENTIVOS:
+ *
+ * - `NIVEL_MINIMO_PARA_CAMPANA` — el gate de madurez que aquel análisis pedía. Un asentamiento recién fundado
+ *   no manda expediciones: primero se sostiene.
+ * - `ESCUADRONES_MINIMOS_PARA_CAMPANA` y `FRACCION_MAXIMA_EN_CAMPANA` — nunca se va todo. La guarnición es lo
+ *   ÚNICO que defiende (Doc 5.12.4), así que un NPC que vaciara su plaza para atacar se estaría regalando a sí
+ *   mismo. Se lleva como mucho la mitad, y solo si le sobra con qué.
+ * - `AUTONOMIA_MINIMA_TICKS` — no se sale sin comida para el viaje. Una columna que no llega es peor que no
+ *   salir: pierde la tropa Y deja la casa desguarnecida mientras tanto.
+ */
+const NIVEL_MINIMO_PARA_CAMPANA = 2;
+const ESCUADRONES_MINIMOS_PARA_CAMPANA = 2;
+const FRACCION_MAXIMA_EN_CAMPANA = 0.5;
+const AUTONOMIA_MINIMA_TICKS = 20;
+
+/**
+ * ¿Hasta dónde puede llegar y volver esta columna con lo que carga? (Doc 5.13.1, la regla del radio operativo
+ * aplicada al revés.)
+ *
+ * La autonomía se mide en TICKS, no en distancia: `trigo / (soldados × ración)`. Multiplicada por la
+ * velocidad da distancia recorrible, y la mitad es hasta dónde se puede ir sabiendo que hay que volver. Es la
+ * misma cuenta con la que se dedujo la capacidad del carro, resuelta para la otra incógnita.
+ */
+function alcanceDeIdaYVuelta(escuadrones: Escuadron[], trigoEnCarro: number): number {
+  const soldados = escuadrones.reduce((n, e) => n + e.cantidad, 0);
+  if (soldados <= 0) return 0;
+  const ticks = trigoEnCarro / (soldados * MILITAR.racionPorSoldadoPorMinuto);
+  if (ticks < AUTONOMIA_MINIMA_TICKS) return 0;
+  const velocidades = escuadrones
+    .map((e) => TROPAS_RECLUTABLES.find((t) => t.id === e.tropaId)?.velocidad)
+    .filter((v): v is number => v !== undefined);
+  const velocidad = velocidades.length === 0 ? 0 : Math.min(...velocidades);
+  return (ticks * velocidad) / 2;
+}
+
+/**
+ * Punto 7c: el NPC **marcha** (Paso 12). Hasta aquí solo sabía atacar campamentos de bandidos desde casa, sin
+ * moverse; con la mecánica de ejércitos ya completa, puede mandar una columna contra una plaza rival.
+ *
+ * Deliberadamente conservador, y las razones están en `NIVEL_MINIMO_PARA_CAMPANA`: la lección de este archivo
+ * es que un guion que ataca en cuanto puede colapsa el mundo. Un asentamiento lanza como mucho UNA campaña a
+ * la vez, con la mitad de su guarnición, solo si es maduro y solo contra un objetivo al que pueda llegar y
+ * volver con la comida que carga.
+ *
+ * El objetivo es la plaza rival MÁS CERCANA al alcance — desempate por id, porque de aquí sale una
+ * movilización real y no puede depender del orden de la lista.
+ */
+function lanzarCampanas(
+  asentamientos: Asentamiento[],
+  ejercitos: Ejercito[],
+  jugadores: Jugador[],
+  relaciones: RelacionPolitica[],
+  mapa: Mapa,
+  esNpc: (faccionId: string) => boolean,
+  contador: number
+): { asentamientos: Asentamiento[]; ejercitos: Ejercito[]; eventos: string[]; campanasLanzadas: number; contador: number } {
+  const eventos: string[] = [];
+  let campanasLanzadas = 0;
+  const porId = new Map(asentamientos.map((a) => [a.id, a]));
+  const nuevos: Ejercito[] = [];
+  const conCampanaEnCurso = new Set(ejercitos.map((e) => e.origenAsentamientoId));
+
+  for (const origen of [...asentamientos].sort((a, b) => (a.id < b.id ? -1 : 1))) {
+    if (!esNpc(origen.faccionId)) continue;
+    if (conCampanaEnCurso.has(origen.id)) continue;
+    if (nivelActualDe(origen) < NIVEL_MINIMO_PARA_CAMPANA) continue;
+
+    const vivos = origen.escuadrones.filter((e) => e.cantidad > 0);
+    if (vivos.length < ESCUADRONES_MINIMOS_PARA_CAMPANA) continue;
+
+    // Se lleva como mucho la mitad, y todos del MISMO jugador: el Liderazgo se valida por jugador (Doc 5.11),
+    // así que mezclar dueños solo complicaría la selección sin aportar nada al NPC.
+    const porJugador = new Map<string, Escuadron[]>();
+    for (const e of vivos) porJugador.set(e.jugadorId, [...(porJugador.get(e.jugadorId) ?? []), e]);
+    const tope = Math.floor(vivos.length * FRACCION_MAXIMA_EN_CAMPANA);
+    if (tope < 1) continue;
+
+    const candidato = [...porJugador.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).find(([, lista]) => lista.length >= 1);
+    if (!candidato) continue;
+    const [jugadorId, suyos] = candidato;
+    const expedicion = suyos.slice(0, Math.min(tope, suyos.length));
+
+    // ¿Hasta dónde llega? Se estima con lo que el almacén podría darle, no con lo que ya lleva (todavía no
+    // existe el carro): `movilizarEjercito` cargará hasta ahí respetando la reserva de comida.
+    const trigoDisponible = Math.max(
+      0,
+      (origen.almacen['trigo']?.cantidad ?? 0) - reservaDeTrigo({ ...origen, escuadrones: origen.escuadrones.filter((e) => !expedicion.includes(e)) })
+    );
+    const carro = Math.min(trigoDisponible, LOGISTICA.capacidadCarroPorJugador);
+    const alcance = alcanceDeIdaYVuelta(expedicion, carro);
+    if (alcance <= 0) continue;
+
+    const objetivo = asentamientos
+      .filter((a) => a.faccionId !== origen.faccionId && !estanAliadas(relaciones, origen.faccionId, a.faccionId))
+      .filter((a) => distancia(a.posicion, origen.posicion) <= alcance)
+      .sort((a, b) => {
+        const da = distancia(a.posicion, origen.posicion);
+        const db = distancia(b.posicion, origen.posicion);
+        return da !== db ? da - db : a.id < b.id ? -1 : 1;
+      })[0];
+    if (!objetivo) continue;
+
+    try {
+      const r = movilizarEjercito(
+        porId.get(origen.id)!,
+        jugadores.find((j) => j.id === jugadorId),
+        jugadorId,
+        expedicion.map((e) => e.id),
+        { tipo: 'asentamiento', id: objetivo.id },
+        asentamientos,
+        mapa,
+        `ejercito-npc-${contador++}`
+      );
+      porId.set(origen.id, r.asentamiento);
+      nuevos.push(r.ejercito);
+      conCampanaEnCurso.add(origen.id);
+      campanasLanzadas++;
+      eventos.push(`${origen.id}: lanza una campaña contra ${objetivo.id} con ${expedicion.length} escuadrón(es).`);
+    } catch (err) {
+      // Sin ruta por tierra, sin Liderazgo o sin escuadrones válidos: el NPC simplemente no sale este tick.
+      // Igual que con `atacarCampamentosCercanos`, un rechazo del motor no es un fallo del guion.
+      if (!(err instanceof MovilizacionInvalidaError)) throw err;
+    }
+  }
+
+  return { asentamientos: [...porId.values()], ejercitos: [...ejercitos, ...nuevos], eventos, campanasLanzadas, contador };
+}
+
+/**
+ * Una columna ACAMPADA ya terminó su campaña, así que el NPC la manda a casa.
+ *
+ * El asedio se resuelve UNA vez, al llegar (Doc 5.12.4): a partir de ahí, quedarse plantado no vuelve a
+ * atacar nada. Acampar indefinidamente es una jugada legítima para un humano —cortar un paso de montaña—,
+ * pero para un guion es sencillamente no saber volver: la tropa se queda fuera, y su asentamiento no puede
+ * lanzar otra campaña porque ya tiene una en curso.
+ *
+ * La primera versión de esta regla replegaba solo por HAMBRE, con el mismo `AUTONOMIA_MINIMA_TICKS` con el que
+ * decide salir. **Medido: no se disparaba ni una vez en 600 ticks.** Con el consumo de estacionado a 1/10
+ * (decisión del usuario, Doc 5.12.3), un carro de 500 sostiene a veinte soldados unos 1.600 ticks — el hambre
+ * no llega nunca, y el gate correcto resultó ser inútil por medir lo que no era. Lo que dejaba a las columnas
+ * fuera no era el hambre: era no tener motivo para volver.
+ */
+function replegarLosQueYaTerminaron(
+  ejercitos: Ejercito[],
+  asentamientos: Asentamiento[],
+  mapa: Mapa,
+  esNpc: (faccionId: string) => boolean
+): { ejercitos: Ejercito[]; eventos: string[]; repliegues: number } {
+  const eventos: string[] = [];
+  let repliegues = 0;
+  const porId = new Map(asentamientos.map((a) => [a.id, a]));
+
+  const actualizados = ejercitos.map((ejercito) => {
+    if (!esNpc(ejercito.faccionId) || ejercito.estado !== 'estacionado') return ejercito;
+    if (ejercito.escuadrones.every((e) => e.cantidad <= 0)) return ejercito; // ya es un fantasma: lo disuelve el motor
+
+    try {
+      const vuelta = replegarEjercito(ejercito, porId.get(ejercito.origenAsentamientoId), mapa);
+      repliegues++;
+      eventos.push(`${ejercito.id}: campaña terminada, se repliega a ${ejercito.origenAsentamientoId}.`);
+      return vuelta;
+    } catch (err) {
+      // Sin hogar al que volver (conquistado) o sin ruta por tierra: se queda donde está. El motor ya tiene
+      // decidido qué pasa entonces — se deshará por hambre y sus jugadores quedarán huérfanos (Doc 5.4).
+      if (!(err instanceof MovilizacionInvalidaError)) throw err;
+      return ejercito;
+    }
+  });
+
+  return { ejercitos: actualizados, eventos, repliegues };
+}
+
 export interface ConfigNpcGobernanza {
   /**
    * Facciones que este NPC gobierna. En la partida real son las que el jugador marcó como "controlada por
@@ -741,6 +930,9 @@ export interface ConfigNpcGobernanza {
    * podrían chocar de id. El store pasa aquí su contador y luego lo adelanta con `contadorFinal` del resultado.
    */
   contadorInicial?: number;
+  /** Punto 7c: manda columnas contra plazas rivales (Paso 12). Por defecto `true`. `false` deja al NPC como
+   * antes de que existiera el movimiento de ejércitos — la palanca para aislar su efecto en batch. */
+  lanzarCampanas?: boolean;
   /** Punto 7b: ataca campamentos de bandidos cercanos con todos los escuadrones disponibles. Por defecto
    * `true` (comportamiento de siempre, sin cambios). `false` es una palanca de EXPERIMENTO para aislar cuánto
    * del reclutamiento continuo del NPC lo sostiene reponer bajas de combate frente a deserción por hambre —
@@ -1019,8 +1211,33 @@ export function avanzarNpcGobernanza(
       : atacarCampamentosCercanos(asentamientos, trasComercio.campamentosBandidos, trasComercio.facciones, instante, esNpc, rng);
   eventos.push(...trasBandidos.eventos);
 
+  // Punto 7c: las campañas (Paso 12). Van DESPUÉS de reclutar y de los bandidos, y antes de expandir: se
+  // decide con la guarnición ya repuesta de este tick, y sacar tropa no debe competir con fundar.
+  const trasCampanas =
+    config.lanzarCampanas === false
+      ? { asentamientos: trasBandidos.asentamientos, ejercitos: trasComercio.ejercitos, eventos: [] as string[], campanasLanzadas: 0, contador }
+      : lanzarCampanas(
+          trasBandidos.asentamientos,
+          trasComercio.ejercitos,
+          // Sin registro de Jugador: `EstadoSimulacion` no lo lleva (vive en `GameSessionState`), y un
+          // jugador ausente usa `LIDERAZGO.base` por diseño (Doc 5.11). Los del NPC no se desvían de la base,
+          // así que no hay nada que consultar.
+          [],
+          trasComercio.relaciones,
+          mapa,
+          esNpc,
+          contador
+        );
+  contador = trasCampanas.contador;
+  eventos.push(...trasCampanas.eventos);
+
+  // Y saber volver: una columna que ya acampó terminó su campaña y se manda a casa. Va después de lanzar para
+  // que una recién salida no se replegue en el mismo tick.
+  const trasRepliegues = replegarLosQueYaTerminaron(trasCampanas.ejercitos, trasCampanas.asentamientos, mapa, esNpc);
+  eventos.push(...trasRepliegues.eventos);
+
   const trasExpansion = expandirSiPuede(
-    trasBandidos.asentamientos,
+    trasCampanas.asentamientos,
     trasBandidos.facciones,
     trasComercio.caravanas,
     mapa,
@@ -1037,6 +1254,7 @@ export function avanzarNpcGobernanza(
       asentamientos: trasExpansion.asentamientos,
       facciones: trasBandidos.facciones,
       caravanas: trasExpansion.caravanas,
+      ejercitos: trasRepliegues.ejercitos,
       campamentosBandidos: trasBandidos.campamentos,
       bandidosProximoSpawnEn: trasBandidos.bandidosProximoSpawnEn ?? trasComercio.bandidosProximoSpawnEn,
     },
@@ -1045,6 +1263,8 @@ export function avanzarNpcGobernanza(
       reclutamientosExitosos,
       truequesSupervivenciaPropuestos: trueque.propuestos,
       campamentosDestruidos: trasBandidos.destruidos,
+      campanasLanzadas: trasCampanas.campanasLanzadas,
+      repliegues: trasRepliegues.repliegues,
       campamentosAtacadosSinExito: trasBandidos.fallidos,
       caravanasFundacionLanzadas: trasExpansion.lanzadas,
     },

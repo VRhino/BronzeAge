@@ -456,6 +456,13 @@ interface Foto {
   /** Graneros activos y suma de sus niveles internos: si son 0, la capacidad de grano nueva no se está
    * usando y cualquier lectura sobre el excedente está midiendo otra cosa. */
   granerosActivos: number;
+  /** Campañas del NPC (Paso 12): ejércitos vivos y columnas lanzadas en total. Si salen 0, la mecánica de
+   * ejércitos no se está ejercitando y cualquier lectura del batch sobre ella no dice nada. */
+  ejercitosVivos: number;
+  campanasLanzadasAcumuladas: number;
+  /** Repliegues: si son ~0 con muchas campañas, las columnas se están quedando fuera hasta morir de hambre. */
+  replieguesAcumulados: number;
+  conquistasAcumuladas: number;
   /** Asentamientos con el almacén de trigo por encima del umbral que dispara ampliar capacidad. */
   conTrigoDesbordado: number;
   /** Oro medio por asentamiento. Es el termómetro del comercio: la capacidad de una caravana decide cuánto
@@ -541,7 +548,10 @@ function construirFotoResumen(
   reclutamientosAcumulados: number,
   campamentosDestruidosAcumulados: number,
   truequesSupervivenciaAcumulados: number,
-  caravanasFundacionLanzadasAcumuladas: number
+  caravanasFundacionLanzadasAcumuladas: number,
+  campanasLanzadasAcumuladas: number,
+  replieguesAcumulados: number,
+  conquistasAcumuladas: number
 ): Foto {
   const vivos = estado.asentamientos.length;
 
@@ -770,6 +780,10 @@ function construirFotoResumen(
     sinCarroCompleto,
     sinNadaQueCargar,
     granerosActivos,
+    ejercitosVivos: estado.ejercitos.length,
+    campanasLanzadasAcumuladas,
+    replieguesAcumulados,
+    conquistasAcumuladas,
     conTrigoDesbordado,
     oroMedio: Math.round((oroSuma / Math.max(1, estado.asentamientos.length)) * 10) / 10,
     almacenesActivos,
@@ -871,6 +885,12 @@ async function main() {
   let campamentosDestruidosAcumulados = 0;
   let truequesSupervivenciaAcumulados = 0;
   let caravanasFundacionLanzadasAcumuladas = 0;
+  let campanasLanzadasAcumuladas = 0;
+  let replieguesAcumulados = 0;
+  // Las conquistas se cuentan por CAMBIO DE DUEÑO entre ticks: el evento vive en el log del motor y aquí solo
+  // llega el estado, así que se deduce comparando a quién pertenecía cada plaza.
+  let conquistasAcumuladas = 0;
+  let duenoPorAsentamiento = new Map(estado.asentamientos.map((a) => [a.id, a.faccionId]));
 
   for (let tick = 1; tick <= TICKS; tick++) {
     try {
@@ -886,6 +906,13 @@ async function main() {
       campamentosDestruidosAcumulados += trasNpc.stats.campamentosDestruidos;
       truequesSupervivenciaAcumulados += trasNpc.stats.truequesSupervivenciaPropuestos;
       caravanasFundacionLanzadasAcumuladas += trasNpc.stats.caravanasFundacionLanzadas;
+      campanasLanzadasAcumuladas += trasNpc.stats.campanasLanzadas;
+      replieguesAcumulados += trasNpc.stats.repliegues;
+      for (const a of estado.asentamientos) {
+        const antes = duenoPorAsentamiento.get(a.id);
+        if (antes !== undefined && antes !== a.faccionId) conquistasAcumuladas++;
+      }
+      duenoPorAsentamiento = new Map(estado.asentamientos.map((a) => [a.id, a.faccionId]));
     } catch (err) {
       excepcionesAcumuladas++;
       // `BATCH_MOSTRAR_ERRORES=1` imprime las 3 primeras. Añadido tras perder un rato con un batch que daba
@@ -912,7 +939,10 @@ async function main() {
           reclutamientosAcumulados,
           campamentosDestruidosAcumulados,
           truequesSupervivenciaAcumulados,
-          caravanasFundacionLanzadasAcumuladas
+          caravanasFundacionLanzadasAcumuladas,
+          campanasLanzadasAcumuladas,
+          replieguesAcumulados,
+          conquistasAcumuladas
         )
       );
     }

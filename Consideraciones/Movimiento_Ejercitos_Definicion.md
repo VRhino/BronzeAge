@@ -685,7 +685,47 @@ usuario dio la tabla real. Calibrarla es un cambio de **datos**, no de código.
       lee la resolución completa de cualquier combate entre dos rivales, con los ids de ambos bandos en el
       `payload`. No se arregla ahora porque este paso los borra; si por lo que sea sobrevivieran, hay que
       decidir a quién se atribuye un choque entre dos (probablemente a los DOS: un evento por bando).
-- [ ] **Paso 12 — NPC** migrado a marchar, con diario de batch contra la línea base.
+- [x] **Paso 12 — NPC migrado a marchar (2026-09-04).** Hasta aquí el NPC solo sabía atacar campamentos de
+      bandidos **desde casa**, sin moverse. Ahora manda columnas contra plazas rivales, y con eso **la mecánica
+      entera aparece por fin en el batch**: todas las corridas anteriores salían idénticas byte a byte porque
+      no había un solo ejército en el mundo.
+
+      **Las puertas de prudencia salen de la historia de este propio repo.** El análisis del colapso masivo
+      que dejó documentado `npcGobernanza.ts` terminaba diciendo qué faltaba: *"probablemente hace falta pausar
+      el PRIMER combate hasta que el asentamiento tenga cierta madurez... no seguir ajustando el umbral de un
+      gate reactivo"*. Estas son preventivas, no reactivas: nivel mínimo 2 (la madurez que aquel análisis
+      pedía), mínimo 2 escuadrones, como mucho la mitad de la guarnición —la guarnición es lo ÚNICO que
+      defiende (Doc 5.12.4)— y solo contra un objetivo al que pueda **llegar y volver** con lo que carga
+      (`alcanceDeIdaYVuelta`, que es la cuenta del radio operativo de Doc 5.13.1 resuelta para la otra
+      incógnita).
+
+      **Funcionó: cero colapsos.** El desastre histórico no se repitió.
+
+      **Y saber volver resultó ser la mitad que faltaba.** La primera versión replegaba por HAMBRE, con el
+      mismo umbral con el que decide salir. Medido: **no se disparó ni una vez en 600 ticks** — con el consumo
+      de estacionado a 1/10 (§11), un carro sostiene a veinte soldados unos 1.600 ticks. El gate era correcto
+      y medía lo que no era: a las columnas no las dejaba fuera el hambre, sino no tener motivo para volver.
+      El asedio se resuelve UNA vez al llegar, así que acampar después no vuelve a atacar nada — y mientras
+      tanto su asentamiento no puede lanzar otra campaña. La regla pasó a ser **"acampada = campaña terminada,
+      a casa"**, y el efecto es grande.
+
+      Diario de batch (600 ticks, 30 Facciones), contra la línea base sin campañas:
+
+      | | sin campañas | acampando siempre | volviendo a casa |
+      |---|---|---|---|
+      | Asentamientos vivos | 30 | 31 | **38** |
+      | Colapsados | 0 | **0** | **0** |
+      | Nivel 2+ | 28 (t300) | 30 | 29 |
+      | Tropas vivas | 3.500 (t300) | 3.592 | 3.221 |
+      | Campañas lanzadas | — | 627 | **1.176** |
+      | Repliegues | — | 0 | 180 |
+      | Conquistas | — | 7 | 7 |
+      | Oro medio | 170 (t300) | 170 | 170 |
+
+      Lo que dice la tabla: la guerra **no rompe el mundo** (cero colapsos en las tres columnas), cuesta tropa
+      —3.221 frente a 3.592, que es el precio de pelear— y **no toca el comercio** (oro idéntico). Y traer las
+      columnas a casa no solo recicla tropa: sube los asentamientos vivos de 31 a **38**, porque una campaña
+      que vuelve libera a su ciudad para volver a operar en vez de dejarla bloqueada indefinidamente.
 - [ ] **Paso 13 — Calibración** por simulación: `LIDERAZGO.factorCoste`, `capacidadCarroPorJugador` (recalculado
       desde el radio si cambió la ración), velocidades y capacidad de caravana.
 
