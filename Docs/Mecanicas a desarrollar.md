@@ -79,14 +79,19 @@ ficha de cada plaza ajena que vio, con el instante (`engine/memoria.ts`). Se esc
 los ejércitos ya movidos, y **solo crece**. Migración de snapshot v6 -> v7: una partida vieja empieza a
 recordar desde el primer tick que corra con la mecánica.
 
-**Lo que queda**:
+**Hecho (Paso 3, 2026-09-04): la memoria se proyecta.** `ProyeccionJugador` gana `asentamientosConocidos`
+—la última foto de cada plaza que se vio y ya no se ve, con su `conocidoEn`— y `exploracion`, la máscara de
+celdas con la geometría necesaria para descifrarla. Lo que se ve en vivo gana a lo recordado: cada plaza sale
+en una lista o en la otra, nunca en las dos.
 
-- **Proyectar la memoria** (Paso 3): `asentamientosConocidos` con su `conocidoEn` y `exploracion` en
-  `ProyeccionJugador`, con la regla de que lo visto en vivo gana sobre lo recordado.
-- **El terreno lo tapa el CLIENTE DE JUGADOR**, no el servidor (decisión del usuario). La geografía no es
-  información táctica y el cliente ya la cachea para siempre por su `mapaId`; lo que no puede salir del
-  servidor son las ENTIDADES, y eso ya se filtra. **El cliente de administración lo ve todo.**
-- **Visión compartida por alianza**: en vivo, no "último conocido" — la alianza es cooperación explícita.
+**Con esto el SERVIDOR ya ha hecho su parte de los tres estados.** Lo que queda:
+
+- **Pintar** (Paso 5). **El terreno lo tapa el CLIENTE DE JUGADOR**, no el servidor (decisión del usuario):
+  la geografía no es información táctica y el cliente ya la cachea para siempre por su `mapaId`; lo que no
+  puede salir del servidor son las ENTIDADES, y eso ya se filtra. Lo recordado se pinta con filtro oscuro.
+  **El cliente de administración lo ve todo**, sin máscara: es herramienta de operación, no un jugador.
+- **Visión compartida por alianza** (Paso 4): en vivo, no "último conocido" — la alianza es cooperación
+  explícita.
 
 ## 13. La capital como decisión del jugador
 

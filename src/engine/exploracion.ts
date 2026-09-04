@@ -138,6 +138,28 @@ export function marcarVisto(
   return cambio ? aTexto(bytes) : exploracion;
 }
 
+/**
+ * Lo explorado tal como viaja a un cliente: el bitmap MÁS la geometría con que se descifra.
+ *
+ * Van juntos a propósito. El cliente necesita el tamaño de celda para saber qué tapa cada bit, y si tuviera
+ * que ir a buscarlo a `GET /v1/balance` bastaría una versión de más para que pintase la niebla desplazada
+ * sobre el mapa sin que nada fallara de forma visible. La máscara y su geometría son un solo dato.
+ */
+export interface NieblaProyectada {
+  /** Lado de una celda, en unidades de mapa. */
+  tamanoCelda: number;
+  columnas: number;
+  filas: number;
+  /** Un bit por celda, en hexadecimal, recorriendo el mundo fila a fila desde (0,0). 1 = explorado. El bit
+   * de la celda `(columna, fila)` es el `fila * columnas + columna`, contando desde el bit MENOS significativo
+   * de cada byte, y cada byte son dos caracteres hex. */
+  celdas: Exploracion;
+}
+
+export function proyectarNiebla(exploracion: Exploracion, rejilla: Rejilla): NieblaProyectada {
+  return { tamanoCelda: rejilla.tamanoCelda, columnas: rejilla.columnas, filas: rejilla.filas, celdas: exploracion };
+}
+
 /** Cuántas celdas hay marcadas. Para tests y métricas del laboratorio — ninguna regla de juego lo consulta. */
 export function celdasExploradas(exploracion: Exploracion): number {
   let total = 0;

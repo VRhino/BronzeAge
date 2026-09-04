@@ -326,7 +326,25 @@ De lo ajeno se ve **quién es y dónde está, nunca su interior**:
 
 El **nivel** de una plaza sí se ve porque una ciudad grande se ve grande desde fuera; no dice cuánta tropa tiene dentro, que es lo que decidiría un ataque.
 
-> Esto es la **vista** — la mitad de la niebla de guerra que responde "¿qué veo AHORA?". La otra mitad es la **memoria**, el "último conocido" que recuerda lo que viste cuando dejas de verlo, y sigue en desarrollo (`Consideraciones/Niebla_De_Guerra_Definicion.md`). Hoy lo que dejas de ver desaparece del mapa.
+### 5.12.8 Qué recuerda el jugador — la memoria
+
+Ver algo **es** conocerlo. No hay dos mecanismos: lo que esté al alcance de tus plazas o de tus columnas en un momento dado queda grabado, y comerciar con una ciudad no es una vía aparte — es otra forma de verla un instante.
+
+De ahí salen los tres estados en que el jugador ve el mundo:
+
+| Estado | Qué ve |
+|---|---|
+| **Nunca lo he visto** | Nada: ese trozo de mundo está tapado, terreno incluido |
+| **No lo veo, pero lo vi antes** | La última foto que tomó, con la fecha en que la tomó |
+| **Lo estoy viendo** | La ficha en vivo. Al dejar de verlo, cae al estado anterior |
+
+**Lo recordado no caduca, se refresca.** No hace falta un plazo de caducidad porque el dato viejo se delata solo: la foto viaja con el instante en que se tomó, y la interfaz puede decir "última información: hace 3 horas". El jugador juzga si fiarse. Volver a ver la plaza actualiza la foto; borrar información que el jugador ya sabe se sentiría arbitrario, dejarla envejecer a la vista no.
+
+**La memoria es de la FACCIÓN, no del ciudadano.** Lo que uno explora lo saben todos los suyos — es lo coherente con que la Facción propia ya se vea entera desde dentro. Un jugador sin Facción (Doc 5.4) ve en vivo lo que alcanza su columna, pero lo que ve no queda registrado en ninguna parte hasta que vuelva a tener bandera.
+
+**Lo que se ve gana a lo que se recuerda.** Cuando una plaza está a la vez avistada y en la memoria, lo que llega es la información en vivo: estar mirándola es mejor información que acordarse de ella.
+
+> **El terreno lo tapa el cliente de jugador, no el servidor.** La geografía no es información táctica —es la misma para todos— así que el servidor solo dice QUÉ has explorado y cada cliente decide cómo pintarlo. El de administración no tapa nada: es una herramienta de operación, no un jugador.
 
 ## 5.13 Suministro en campaña (a petición del usuario, 2026-09-01)
 

@@ -27,7 +27,7 @@ Así que esto ya no es una mecánica desde cero: es **completar** lo que quedó 
 | Proyección por audiencia | Hecha (Fase C4) |
 | Ver ejércitos ajenos por espacio | **Hecho** (Doc 5.12.7) |
 | Ver asentamientos ajenos por espacio | **Hecho** (Paso 1, 2026-09-04) |
-| Memoria ("último conocido") | **Grabada** (Paso 2) — falta proyectarla (Paso 3) |
+| Memoria ("último conocido") | **Hecha** (Pasos 2-3) |
 | Terreno tapado donde nunca se estuvo | Falta — hoy el mapa entero se descarga y se pinta |
 | Visión compartida por alianza | Falta |
 
@@ -202,8 +202,8 @@ mirar.** Y solo el segundo lleva `conocidoEn`, porque solo el segundo puede esta
 - [x] **Paso 2 — `memoriaPorFaccion` en el estado**. **HECHO (2026-09-04).** `engine/exploracion.ts` (la
       rejilla) y `engine/memoria.ts` (la regla), grabando al final del tick con los ejércitos ya movidos.
       Migración de snapshot v6 -> v7. Todavía no se proyecta: solo se acumula. Ver §5.2.
-- [ ] **Paso 3 — Proyectar la memoria** (estados 1 y 2): `exploracion` y `asentamientosConocidos` con su
-      `conocidoEn`, y la regla de que lo visto en vivo gana sobre lo recordado.
+- [x] **Paso 3 — Proyectar la memoria** (estados 1 y 2). **HECHO (2026-09-04).** `exploracion` y
+      `asentamientosConocidos` en `ProyeccionJugador`, con lo visto en vivo ganando a lo recordado. Ver §5.3.
 - [ ] **Paso 4 — Visión compartida por alianza.** En vivo, y solo mientras la alianza esté activa: al
       romperse, lo que se veía por ella pasa a ser recuerdo (con la fecha de la ruptura) o desaparece —
       **decidir al llegar**, no antes.
@@ -261,16 +261,45 @@ celdas, y 76 tras 31 ticks — la zona se ensancha al completarse edificios. 800
 batch de 300 ticks sigue en 0 excepciones con las cifras de juego intactas, que es lo esperable de algo que
 solo mira.
 
+### 5.3 Lo que salió del Paso 3
+
+**La máscara viaja con su geometría, no solo con sus bits.** `exploracion` no es la cadena pelada: es
+`{ tamanoCelda, columnas, filas, celdas }`. El cliente necesita el tamaño de celda para saber qué tapa cada
+bit, y si tuviera que ir a buscarlo a `GET /v1/balance` bastaría una versión de más para que pintase la
+niebla DESPLAZADA sobre el mapa sin que nada fallara de forma visible. La máscara y su geometría son un solo
+dato, así que viajan juntas.
+
+**Lo proyectado es memoria MÁS vista, no solo memoria.** Quien graba es el tick, así que entre un comando y el
+siguiente tick hay una ventana en la que lo recién visto —una plaza recién fundada, por ejemplo— todavía no
+está en `memoriaPorFaccion`. Sin unir ambas cosas al proyectar, el cliente pintaría niebla justo encima de lo
+que el jugador acaba de hacer: la clase de agujero que nadie relaciona con un desfase de un tick. Cuesta unas
+pocas decenas de celdas por proyección.
+
+**Una plaza aparece en una lista o en la otra, nunca en las dos.** `asentamientosConocidos` es lo recordado
+MENOS lo que se ve ahora y MENOS lo que entretanto pasó a ser propio (eso ya viaja completo en
+`asentamientos`). Es el invariante 3, y es lo que hace que el cliente pueda pintar cada lista con su estilo
+sin comprobar nada.
+
+**Medido en vivo** (servidor real, HTTP real, dos Facciones): antes del primer tick la proyección ya trae la
+plaza propia destapada y el otro extremo del mundo tapado, con rejilla 80x80 de 25; tras el tick la plaza
+rival sale en `asentamientosAvistados` y NO en `asentamientosConocidos`, aunque su ficha sí está grabada en
+el estado con su `conocidoEn`. 1.600 caracteres hex por Facción, como se había calculado.
+
 ## 6. Invariantes a congelar en tests
 
-1. Un asentamiento rival **fuera** de zona+margen y de la vista de todo ejército propio **no aparece en
-   absoluto** en la proyección — ni redactado.
+Los siete están congelados. Entre paréntesis, dónde.
+
+1. Un asentamiento rival **fuera** de radio+margen y de la vista de todo ejército propio **no aparece en
+   absoluto** en la proyección — ni redactado. (`proyecciones/__tests__/jugador.test.ts`)
 2. Lo proyectado de un rival **nunca** incluye almacén, escuadrones, edificios ni colas. Ni en vivo ni
-   recordado.
-3. Un asentamiento visto en vivo y además conocido por contacto aparece **una sola vez**, y como visto.
-4. La foto congelada **no cambia** cuando cambia el asentamiento real; solo cuando hay un contacto nuevo.
+   recordado. (ídem, por `Object.keys` sobre lo avistado: un campo nuevo rompe el test en vez de colarse)
+3. Un asentamiento visto en vivo y además recordado aparece **una sola vez**, y como visto. (ídem)
+4. La foto congelada **no cambia** cuando cambia el asentamiento real; solo cuando se vuelve a ver.
+   (`engine/__tests__/memoria.test.ts`, subiendo de nivel la plaza mientras nadie la mira)
 5. Una Facción sin registro de memoria proyecta listas vacías y exploración vacía, nunca `undefined`.
+   (`proyecciones/__tests__/jugador.test.ts`, con un jugador sin Facción)
 6. **Lo que se ve, se graba**: un asentamiento que entra en alcance y vuelve a salir sigue proyectándose como
    recordado, nunca desaparece del todo. Es el tránsito del estado 3 al 2, y era el error de la primera
-   versión de este documento.
+   versión de este documento. (`engine/__tests__/memoria.test.ts`)
 7. La exploración solo CRECE. Nada la reduce: lo explorado no se desexplora.
+   (`engine/__tests__/exploracion.test.ts` y `session/__tests__/memoriaNiebla.test.ts`, a 21 ticks)

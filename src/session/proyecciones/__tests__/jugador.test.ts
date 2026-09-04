@@ -6,10 +6,12 @@ import { instanteDeTest } from '../../../engine/__tests__/fixtures';
 import { partidaConAsentamiento, MOMENTO, OPC } from '../../__tests__/fixtures';
 import { crearFaccion } from '../../comandos/crearFaccion';
 import { fundarAsentamiento } from '../../comandos/fundarAsentamiento';
-import { idDeMapa, type GeometriaAsentamientos } from '../../estado';
+import { idDeMapa, type GameSessionState, type GeometriaAsentamientos } from '../../estado';
+import { estaExplorado, marcarVisto, rejillaDe } from '../../../engine/exploracion';
+import { MEMORIA_VACIA, type FichaConocida } from '../../../engine/memoria';
 import { proyectarParaJugador } from '../jugador';
 import type { Ejercito, Escuadron, Point } from '../../../domain/types';
-import { VISION } from '../../../constants';
+import { EXPLORACION, VISION } from '../../../constants';
 
 // Estas pruebas verifican filtrado por Facción/ciudadanía, no la geometría por frame (Fase C10, cubierta en
 // su propia sección más abajo) — una entrada vacía basta y no obliga a construir asentamientos reales solo
@@ -373,6 +375,126 @@ describe('ejercitosAvistados: lo ajeno, solo si se ve y siempre redactado', () =
       posicionActual: { x: 1050, y: 1000 },
       participantes: 2,
     });
+  });
+});
+
+// Niebla de guerra, Paso 3: la MEMORIA proyectada. Los tres estados que ve el jugador, y sobre todo el
+// transito entre ellos — "al dejar de verlo, cae en la categoria anterior", que era el punto que la primera
+// version del diseño se dejaba fuera.
+describe('la memoria proyectada: lo que se vio y ya no se ve', () => {
+  /** La ficha que una Faccion recuerda de una plaza, inyectada en el estado como la habria dejado el tick. */
+  function recordando(estado: GameSessionState, faccionId: string, ficha: FichaConocida): GameSessionState {
+    const previa = estado.memoriaPorFaccion[faccionId] ?? MEMORIA_VACIA;
+    return {
+      ...estado,
+      memoriaPorFaccion: {
+        ...estado.memoriaPorFaccion,
+        [faccionId]: { ...previa, asentamientos: { ...previa.asentamientos, [ficha.asentamientoId]: ficha } },
+      },
+    };
+  }
+
+  function fichaDe(asentamientoId: string, posicion: Point): FichaConocida {
+    return { asentamientoId, nombre: 'Troya', faccionId: 'faccion-rival', posicion, nivel: 2, conocidoEn: instanteDeTest(3) };
+  }
+
+  it('sin Faccion no hay memoria: listas vacias, nunca undefined', () => {
+    const { sesion } = partidaConAsentamiento();
+    const proyeccion = proyectarParaJugador(sesion.getState(), 'forastero', SIN_GEOMETRIA);
+
+    expect(proyeccion.asentamientosConocidos).toEqual([]);
+    expect(proyeccion.exploracion.celdas).toBe('');
+    expect(proyeccion.exploracion.tamanoCelda).toBeGreaterThan(0);
+  });
+
+  it('lo que se vio y ya no se ve viaja como RECUERDO, con su instante', () => {
+    const { sesion, faccionId, fundador } = partidaConAsentamiento();
+    const ficha = fichaDe('asentamiento-lejano', { x: 1700, y: 1700 });
+    const estado = recordando(sesion.getState(), faccionId, ficha);
+
+    const proyeccion = proyectarParaJugador(estado, fundador, SIN_GEOMETRIA);
+    expect(proyeccion.asentamientosConocidos).toEqual([ficha]);
+    expect(proyeccion.asentamientosAvistados).toEqual([]);
+  });
+
+  it('lo que se ve Y ademas se recuerda aparece UNA sola vez, y como visto', () => {
+    // La plaza rival esta a 70 de la propia, dentro de lo que vigila: se ve en vivo. Y ademas se recuerda,
+    // con una foto vieja que dice nivel 2. Debe ganar la de en vivo.
+    const base = partidaConAsentamiento();
+    const opcRival = { ...OPC, actor: 'rival' };
+    const rf = base.sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, opcRival);
+    const ra = base.sesion.ejecutar(fundarAsentamiento, { faccionId: rf.datos!.faccionId, posicion: { x: 400, y: 470 } }, opcRival);
+    const rivalId = ra.datos!.asentamientoId;
+    const estado = recordando(base.sesion.getState(), base.faccionId, fichaDe(rivalId, { x: 400, y: 470 }));
+
+    const proyeccion = proyectarParaJugador(estado, base.fundador, SIN_GEOMETRIA);
+    expect(proyeccion.asentamientosAvistados.map((a) => a.id)).toEqual([rivalId]);
+    expect(proyeccion.asentamientosConocidos).toEqual([]);
+    // Y lo que viaja es el nivel REAL, no el 2 de la foto vieja.
+    expect(proyeccion.asentamientosAvistados[0]!.nivel).toBe(1);
+  });
+
+  it('una plaza que se recordaba y que ahora es PROPIA no se proyecta como recuerdo: ya viaja entera', () => {
+    const { sesion, faccionId, fundador, asentamientoId } = partidaConAsentamiento();
+    const estado = recordando(sesion.getState(), faccionId, fichaDe(asentamientoId, { x: 400, y: 400 }));
+
+    const proyeccion = proyectarParaJugador(estado, fundador, SIN_GEOMETRIA);
+    expect(proyeccion.asentamientosConocidos).toEqual([]);
+    expect(proyeccion.asentamientos.map((a) => a.id)).toEqual([asentamientoId]);
+  });
+
+  it('lo recordado NO se refresca solo: la foto es de cuando se tomo, aunque la plaza real haya cambiado', () => {
+    const base = partidaConAsentamiento();
+    const opcRival = { ...OPC, actor: 'rival' };
+    const rf = base.sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, opcRival);
+    const ra = base.sesion.ejecutar(fundarAsentamiento, { faccionId: rf.datos!.faccionId, posicion: { x: 1500, y: 1500 } }, opcRival);
+    const rivalId = ra.datos!.asentamientoId;
+    // Se recuerda en una posicion y un nivel que YA no son los reales.
+    const estado = recordando(base.sesion.getState(), base.faccionId, fichaDe(rivalId, { x: 900, y: 900 }));
+
+    const conocida = proyectarParaJugador(estado, base.fundador, SIN_GEOMETRIA).asentamientosConocidos[0]!;
+    expect(conocida.posicion).toEqual({ x: 900, y: 900 });
+    expect(conocida.nivel).toBe(2);
+    expect(conocida.conocidoEn).toBe(instanteDeTest(3));
+  });
+});
+
+describe('la exploracion proyectada: la mascara que tapa el terreno', () => {
+  it('incluye lo que se ve AHORA aunque el tick no lo haya grabado todavia', () => {
+    // Recien fundada y sin un solo tick corrido: `memoriaPorFaccion` esta vacia. Aun asi el jugador no puede
+    // ver niebla encima de su propia plaza.
+    const { sesion, fundador } = partidaConAsentamiento();
+    const estado = sesion.getState();
+    expect(estado.memoriaPorFaccion).toEqual({});
+
+    const { exploracion } = proyectarParaJugador(estado, fundador, SIN_GEOMETRIA);
+    const rejilla = { columnas: exploracion.columnas, filas: exploracion.filas, tamanoCelda: exploracion.tamanoCelda };
+    expect(estaExplorado(exploracion.celdas, rejilla, { x: 400, y: 400 })).toBe(true);
+    expect(estaExplorado(exploracion.celdas, rejilla, { x: 1800, y: 1800 })).toBe(false);
+  });
+
+  it('viaja con la geometria que hace falta para descifrarla', () => {
+    const { sesion, fundador } = partidaConAsentamiento();
+    const { exploracion } = proyectarParaJugador(sesion.getState(), fundador, SIN_GEOMETRIA);
+
+    expect(exploracion.tamanoCelda).toBe(EXPLORACION.tamanoCelda);
+    expect(exploracion.columnas * exploracion.tamanoCelda).toBeGreaterThanOrEqual(2000);
+    expect(exploracion.filas * exploracion.tamanoCelda).toBeGreaterThanOrEqual(2000);
+  });
+
+  it('lo GRABADO no se pierde al proyectar: la mascara es memoria mas vista, no solo vista', () => {
+    const { sesion, faccionId, fundador } = partidaConAsentamiento();
+    const estado = sesion.getState();
+    const rejilla = rejillaDe(estado.mapa.config);
+    // Una Faccion que en su dia exploro el otro extremo del mundo, donde hoy no tiene nada.
+    const conMemoria: GameSessionState = {
+      ...estado,
+      memoriaPorFaccion: { [faccionId]: { exploracion: marcarVisto('', rejilla, { x: 1700, y: 1700 }, 100), asentamientos: {} } },
+    };
+
+    const { exploracion } = proyectarParaJugador(conMemoria, fundador, SIN_GEOMETRIA);
+    expect(estaExplorado(exploracion.celdas, rejilla, { x: 1700, y: 1700 })).toBe(true);
+    expect(estaExplorado(exploracion.celdas, rejilla, { x: 400, y: 400 })).toBe(true);
   });
 });
 
