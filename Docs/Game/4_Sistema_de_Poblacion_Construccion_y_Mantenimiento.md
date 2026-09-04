@@ -192,6 +192,8 @@ Van por AUTO-CONSTRUCCIÓN (igual que Granja/Cantera), disparadas en cuanto se c
 ## 4.3 Almacenamiento
 Límites de almacenaje por recurso, ampliables construyendo más capacidad. El superávit que excede el límite dispara construcción automática de más almacenamiento.
 
+Un asentamiento **nace con 400 de capacidad por recurso** (a petición del usuario, 2026-09-04, tras jugar varias partidas: 200 se quedaba corto). No es holgura: con 200 la ciudad quedaba **encerrada**, porque la reserva de construcción que protege el mantenimiento le impedía gastar los 50 de madera del Almacén… que era justamente el edificio que subía ese techo. Medido en batch, el cambio lleva los Almacenes construidos de 0 a 114 y los Graneros de 0 a 28, sin mover ni colapsos ni niveles alcanzados.
+
 Dos edificios lo amplían, y no compiten: el **Almacén** sube la capacidad de TODOS los recursos por igual (+300 cada uno, varios por asentamiento según nivel), y el **Granero** sube solo la del **trigo** (+2.000 a +6.000 según su nivel interno, uno por asentamiento). Ver 4.2.
 
 **Producción de trigo**: la base de la Granja se ha doblado dos veces a petición del usuario (15 → 30 el 2026-09-02, 30 → 60 el 2026-09-04). La primera vez porque una ciudad nivel 1 a tope come 30/minuto y la Granja rendía 15, o sea que nacía en déficit estructural. La segunda porque, con la mecánica de suministro en campaña ya medida, 26 de 28 ciudades no podían meter ni un grano en el carro de un ejército sin bajar de su reserva de comida (ver `Consideraciones/Movimiento_Ejercitos_Definicion.md` §10).

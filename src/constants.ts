@@ -587,7 +587,28 @@ export const EDIFICIO_CATALOGO = {
 } as const;
 
 export const ALMACEN = {
-  capacidadInicialPorRecurso: 200,
+  /**
+   * Capacidad de almacén con la que NACE un asentamiento, por recurso.
+   *
+   * **200 → 400 (2026-09-04, a petición del usuario tras jugar varias partidas).** No es un ajuste de holgura:
+   * 200 producía un **interbloqueo**. La reserva de construcción impide gastar por debajo de
+   * `mantenimiento × RESERVA_CONSTRUCCION.horizonteMinutosMantenimiento`, que en una ciudad madura del batch
+   * son ~167 de madera; el Almacén cuesta 50; y como la capacidad de madera SOLO crece construyendo Almacenes,
+   * el techo de 200 dejaba `200 − 50 = 150 < 167`. O sea: para subir el techo había que construir un Almacén,
+   * y para construirlo hacía falta más margen del que el techo permitía guardar. El asentamiento quedaba
+   * encerrado, y no al madurar sino desde el principio — mientras es pequeño la madera se va en Granja, Leñera
+   * y extractores, que van en banda de score superior y cobran primero.
+   *
+   * Medido en batch (300 ticks, 30 Facciones), 200 → 400: **Almacenes 0 → 114, Graneros 0 → 28** (los
+   * construyen TODOS), tropas vivas +44%, y el excedente de trigo disponible para el carro de un ejército pasa
+   * de **10 a 4.792** — de un 2% de un carro a nueve carros llenos. Los asentamientos que no podían aportar ni
+   * un grano pasan de 28 de 30 a **ninguno**. Colapsos y niveles alcanzados no se mueven: esto no regala
+   * progreso, desatasca el que ya había.
+   *
+   * Se midió también 500 y **no aporta nada**: exactamente los +100 de capacidad extra en el excedente y un
+   * Almacén menos. La diferencia estructural está entre 200 y 400, no más arriba.
+   */
+  capacidadInicialPorRecurso: 400,
 };
 
 // Umbrales que disparan auto-construcción por necesidad (Doc 4.2). Placeholders razonables.

@@ -531,7 +531,12 @@ usuario dio la tabla real. Calibrarla es un cambio de **datos**, no de código.
         carro más". Sin eso, un jugador que ya iba dentro podía unirse otra vez, y otra, sacando 500 de trigo
         cada vez: una bomba de trigo infinita desde el almacén.
 
-- [~] **Paso 6b (sale de medir el Paso 6) — la economía no puede pagar el carro.** El usuario eligió palanca el 2026-09-04: Granero + doblar otra vez el trigo. Resuelto en una ciudad sana; en el batch sigue sin verse porque esas ciudades no construyen almacenaje NINGUNO. Ver §10.1.
+- [x] **Paso 6b (sale de medir el Paso 6) — la economía ya puede pagar el carro (2026-09-04).** Hicieron falta
+      cuatro cambios encadenados, y el que lo resolvió no fue ninguno de los tres primeros: Granero, trigo
+      doblado, bosque garantizado en el batch, mantenimiento de madera a la mitad… y finalmente **la capacidad
+      inicial de almacén de 200 a 400**, que era lo único que rompía el interbloqueo. El excedente disponible
+      para el carro pasa de **10 a 4.792** (nueve carros) y los asentamientos que no podían aportar ni un grano
+      pasan de 28 de 30 a **ninguno**. Ver §10.1, §11.1, §11.2 y §11.3.
 
 - [x] **Paso 7 — Llegada → asedio (2026-09-04).** Un ejército que termina su ruta sobre un asentamiento de otra
       Facción resuelve el asedio ahí mismo, una sola vez. Sin defensores cae sin combate (Doc 5.12.4) **y sin
@@ -897,3 +902,40 @@ de la reserva, igual que `RECURSO_PROPIO` ya exime a la Granja de la reserva de 
 madera. La razón es la misma en los tres casos: no consumen ese recurso de forma recurrente — lo invierten una
 vez, y en el caso del Almacén es justamente para subir el techo contra el que la reserva se mide. Pendiente de
 decisión del usuario.
+
+### 11.3 La capacidad inicial de almacén: 200 → 400, y el interbloqueo resuelto (2026-09-04)
+
+A petición del usuario tras jugar varias partidas ("la reserva inicial de 200 por recurso es muy baja"), se
+midió subir `ALMACEN.capacidadInicialPorRecurso` a 400 y a 500. El resultado cierra de golpe todo el hilo que
+venía de §10.
+
+**Es el arreglo del interbloqueo de §11.2, no un ajuste de holgura.** El techo de 200 dejaba
+`200 − 50 = 150 < 167` de reserva, y como la capacidad de madera solo crece construyendo Almacenes, la ciudad
+no podía construir lo único que subía su techo. A 400 el margen pasa a 233 y la puerta se abre.
+
+Medido a 300 ticks / 30 Facciones, contra la línea base de 200:
+
+| | 200 | 400 | 500 |
+|---|---|---|---|
+| Almacenes activos | **0** | **114** | 113 |
+| Graneros activos | **0** | **28** | 28 |
+| Excedente medio para el carro | 10,6 | **4.792** | 4.882 |
+| Asentamientos sin nada que cargar | 28 / 30 | **0** | 0 |
+| Tropas vivas | 2.424 | **3.500** | 3.500 |
+| Vivos / colapsados / nivel 2+ | 30 / 0 / 28 | 30 / 0 / 28 | 30 / 0 / 28 |
+
+Dos lecturas que importan:
+
+1. **No regala progreso.** Vivos, colapsos y niveles alcanzados no se mueven ni un punto. Lo que cambia es que
+   la economía deja de estar atascada: se construye lo que ya se quería construir y no se podía pagar.
+2. **500 no aporta nada.** La diferencia con 400 son exactamente los +100 de capacidad extra reflejados en el
+   excedente, y un Almacén menos. **La discontinuidad está entre 200 y 400**, no más arriba — que es lo que
+   confirma que era un umbral y no una curva.
+
+Con esto, el **Paso 6b queda cerrado** y el batch vuelve a ser un instrumento de medida útil para la
+logística de campaña: los Pasos 8, 9 y 12 ya se pueden medir de verdad.
+
+**La palanca 4 (eximir al almacenaje de la reserva) queda SIN aplicar y sin necesidad urgente.** Sigue siendo
+el arreglo conceptualmente correcto —un Almacén invierte madera una vez, no la consume de forma recurrente, y
+la reserva se mide contra un techo que él mismo sube—, pero ya no hay interbloqueo que justifique tocarlo
+ahora. Anotada por si el mismo síntoma reaparece a otra escala.
