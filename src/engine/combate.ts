@@ -546,3 +546,138 @@ export function asediarConEjercito(
     conquistado,
   };
 }
+
+/**
+ * Choque en campo abierto entre dos ejércitos que se han cruzado (Doc 5.2.2 / 5.12.3, Paso 10).
+ *
+ * Nadie lo ordena: sale de la geometría. Por eso NO hay atacante ni defensor en el sentido del comando viejo
+ * —los dos iban a lo suyo— y el bonus de cohesión defensiva no se aplica a ninguno; la ventaja de defender es
+ * de quien está en una plaza, no de quien se topa con otro en un camino.
+ *
+ * Los aliados no se cruzan: el llamador ya los excluye. Sin eso, dos columnas amigas que compartieran ruta se
+ * masacrarían solas cada tick, que es lo contrario de lo que una alianza significa.
+ */
+export function encuentroEntreEjercitos(
+  a: Ejercito,
+  b: Ejercito,
+  facciones: Faccion[],
+  instante: Instante,
+  rng: RandomFn
+): { a: Ejercito; b: Ejercito; facciones: Faccion[]; eventos: EventoCrudo[] } {
+  const vivosA = a.escuadrones.filter((e) => e.cantidad > 0);
+  const vivosB = b.escuadrones.filter((e) => e.cantidad > 0);
+  const resultado = resolverCombate(vivosA, vivosB, instante, rng);
+
+  const porId = <T extends { id: string }>(lista: T[]) => new Map(lista.map((x) => [x.id, x]));
+  const actualizadosA = porId(resultado.atacantes);
+  const actualizadosB = porId(resultado.defensores);
+
+  const eventos: EventoCrudo[] = [
+    ...resultado.eventos,
+    {
+      codigo: 'combate.encuentro',
+      mensaje: `Los ejércitos ${a.id} y ${b.id} se cruzan y combaten: gana ${resultado.ganador === 'atacante' ? a.id : b.id}.`,
+      payload: {
+        ejercitoAId: a.id,
+        ejercitoBId: b.id,
+        faccionAId: a.faccionId,
+        faccionBId: b.faccionId,
+        ganadorId: resultado.ganador === 'atacante' ? a.id : b.id,
+      } satisfies PayloadEncuentroEjercitos,
+    },
+  ];
+
+  const faccionesFinal = aplicarAjustesExperiencia(facciones, [
+    { faccionId: a.faccionId, delta: NIVEL_FACCION.xp.combate * jugadoresParticipantes(vivosA), razon: 'combate (encuentro)' },
+    { faccionId: b.faccionId, delta: NIVEL_FACCION.xp.combate * jugadoresParticipantes(vivosB), razon: 'combate (encuentro)' },
+  ]);
+
+  return {
+    a: { ...a, escuadrones: a.escuadrones.map((e) => actualizadosA.get(e.id) ?? e) },
+    b: { ...b, escuadrones: b.escuadrones.map((e) => actualizadosB.get(e.id) ?? e) },
+    facciones: faccionesFinal,
+    eventos,
+  };
+}
+
+/** Fase A5 — payload de `combate.encuentro` (Doc 5.2.2). */
+export interface PayloadEncuentroEjercitos {
+  ejercitoAId: string;
+  ejercitoBId: string;
+  faccionAId: string;
+  faccionBId: string;
+  ganadorId: string;
+}
+
+/** Fase A5 — payload de `combate.caravana_interceptada_por_ejercito` (Doc 3.10 / 5.2.3). */
+export interface PayloadInterceptacionEjercito {
+  ejercitoId: string;
+  caravanaId: string;
+  capturada: boolean;
+  botin: Record<string, number>;
+}
+
+/**
+ * Un ejército alcanza una caravana enemiga sin escolta y la embosca (Doc 3.10 / 5.2.3, Paso 10).
+ *
+ * Es la misma resolución asimétrica de siempre —poder del atacante contra `defensaBaseCaravana`, captura del
+ * 50% de la carga, la caravana se elimina si cae— pero disparada por la geometría en vez de por un comando, y
+ * con un atacante que es una columna en el mapa y no un asentamiento.
+ *
+ * **Dónde va el botín es una decisión que el canon no cerraba** (2026-09-04): los comandos viejos lo metían en
+ * el almacén del asentamiento atacante, y un ejército no tiene almacén. Va a su CARGA, con dos consecuencias
+ * que lo hacen coherente con el resto: cabe solo lo que quepa —el resto se pierde, saquear no es gratis— y
+ * llega a casa por la vía que ya existe, porque el sobrante del carro vuelve al almacén de origen al
+ * replegarse (Doc 5.13). El carro sigue sin poder descargarse en ruta, así que esto no lo convierte en un
+ * transporte de mercancías: para eso están las caravanas adjuntas.
+ */
+export function interceptarCaravanaConEjercito(
+  ejercito: Ejercito,
+  caravana: Caravana,
+  capacidadCarga: number,
+  instante: Instante,
+  rng: RandomFn
+): { ejercito: Ejercito; capturada: boolean; eventos: EventoCrudo[] } {
+  const vivos = ejercito.escuadrones.filter((e) => e.cantidad > 0);
+  const jitter = 1 + (rng() * 2 - 1) * MILITAR.varianzaCombate;
+  const gana = poderTotal(vivos, instante, false) * jitter > MILITAR.defensaBaseCaravana;
+
+  const fraccionBajas = gana ? 0.05 : 0.25;
+  const conBajas = aplicarBajas(vivos, fraccionBajas, gana, instante);
+  const porId = new Map(conBajas.map((e) => [e.id, e]));
+
+  let suministro = ejercito.suministro;
+  const botin: Record<string, number> = {};
+  if (gana) {
+    let libre = Math.max(0, capacidadCarga - Object.values(suministro).reduce((x, y) => x + y, 0));
+    for (const [recurso, cantidad] of Object.entries(caravana.contenido)) {
+      const cabe = Math.min(cantidad * MILITAR.umbralCapturaCaravana, libre);
+      if (cabe <= 0) continue;
+      suministro = { ...suministro, [recurso]: (suministro[recurso] ?? 0) + cabe };
+      botin[recurso] = cabe;
+      libre -= cabe;
+    }
+  }
+
+  const eventos: EventoCrudo[] = [
+    {
+      codigo: 'combate.caravana_interceptada_por_ejercito',
+      mensaje: gana
+        ? `El ejército ${ejercito.id} embosca y destruye la caravana ${caravana.id}${
+            Object.keys(botin).length > 0
+              ? `, con un botín de ${Object.entries(botin)
+                  .map(([r, c]) => `${c.toFixed(0)} ${r}`)
+                  .join(', ')}`
+              : ' (sin sitio en el carro para el botín)'
+          }.`
+        : `La caravana ${caravana.id} se zafa del ejército ${ejercito.id}.`,
+      payload: { ejercitoId: ejercito.id, caravanaId: caravana.id, capturada: gana, botin } satisfies PayloadInterceptacionEjercito,
+    },
+  ];
+
+  return {
+    ejercito: { ...ejercito, escuadrones: ejercito.escuadrones.map((e) => porId.get(e.id) ?? e), suministro },
+    capturada: gana,
+    eventos,
+  };
+}

@@ -16,7 +16,7 @@ import { CARAVANA_CATALOGO, LOGISTICA, TROPAS_RECLUTABLES } from '../constants';
 import { atribuir, type EventoCrudo } from '../domain/eventos';
 import type { Instante } from '../domain/tiempo';
 import type { RandomFn } from '../worldgen';
-import { asediarConEjercito } from './combate';
+import { asediarConEjercito, encuentroEntreEjercitos, interceptarCaravanaConEjercito } from './combate';
 import { avanzarPosicionEnRuta } from './movimiento';
 import { agregarRecurso, cantidadDisponible, descontarRecursos } from './almacen';
 import { avanzarRacion, reservaDeTrigo } from './tropas';
@@ -735,11 +735,121 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
     supervivientes.push(ejercito);
   }
 
+  // --- FASE 2: encuentros por proximidad (Doc 5.12.3, Paso 10) ---
+  //
+  // Va en una segunda pasada y no dentro del bucle de arriba porque un encuentro depende de dónde acabaron
+  // TODOS: resolverlo mientras la mitad de las columnas aún no se ha movido daría choques con posiciones de
+  // dos momentos distintos, y el resultado dependería del orden del array.
+  const conEncuentros = resolverEncuentros(supervivientes, caravanasActuales, faccionesActuales, relaciones, porId, instante, rng);
+  eventos.push(...conEncuentros.eventos);
+
   return {
-    ejercitos: supervivientes,
+    ejercitos: conEncuentros.ejercitos,
     asentamientos: [...porId.values()],
-    caravanas: caravanasActuales,
-    facciones: faccionesActuales,
+    caravanas: conEncuentros.caravanas,
+    facciones: conEncuentros.facciones,
     eventos,
   };
 }
+
+/**
+ * Los encuentros de un tick: quién se cruza con quién, y qué pasa (Doc 5.12.3).
+ *
+ * Nadie los ordena — salen de la geometría. Las reglas que los acotan:
+ *
+ *  - **Orden canónico por id.** Cada encuentro consume RNG, así que el orden decide el resultado. Ordenar por
+ *    id lo ancla al DATO y no a cómo quedara el array (§9 de la revisión por consejo: sin esto el determinismo
+ *    se rompe aunque la secuencia global del tick sea correcta).
+ *  - **Un encuentro por ejército y tick.** Sin eso, tres columnas juntas se trituran en cascada dentro del
+ *    mismo minuto y el resultado depende de a quién se mire primero.
+ *  - **Los aliados no se cruzan.** Dos columnas amigas compartiendo ruta se masacrarían solas cada tick, que
+ *    es lo contrario de lo que una alianza significa. Tampoco las de la misma Facción, claro.
+ *  - **Una caravana escoltada no es un objetivo blando**: el que se topa con ella se topa con su ejército, y
+ *    eso ya es un encuentro entre ejércitos. Por eso las 'adjunta' se saltan al buscar caravanas.
+ *  - **El más cercano primero.** Entre varios al alcance, el que se cruza de verdad es el que tienes encima;
+ *    a igual distancia decide el id, para que no lo decida el orden de la lista.
+ */
+function resolverEncuentros(
+  ejercitos: readonly Ejercito[],
+  caravanas: readonly Caravana[],
+  facciones: readonly Faccion[],
+  relaciones: readonly RelacionPolitica[],
+  /** `asentamientoId -> Asentamiento` del tick ya avanzado: de aquí sale de qué Facción es cada caravana. */
+  asentamientosPorId: ReadonlyMap<string, Asentamiento>,
+  instante: Instante,
+  rng: RandomFn
+): { ejercitos: Ejercito[]; caravanas: Caravana[]; facciones: Faccion[]; eventos: EventoCrudo[] } {
+  const eventos: EventoCrudo[] = [];
+  if (ejercitos.length === 0) {
+    return { ejercitos: [...ejercitos], caravanas: [...caravanas], facciones: [...facciones], eventos };
+  }
+
+  const porId = new Map(ejercitos.map((e) => [e.id, e]));
+  let caravanasVivas = [...caravanas];
+  let faccionesActuales = [...facciones];
+  const yaChocaron = new Set<string>();
+
+  const enemiga = (a: string, b: string) => a !== b && !estanAliadas(relaciones, a, b);
+  const porIdAsc = (a: { id: string }, b: { id: string }) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+
+  for (const id of [...porId.keys()].sort()) {
+    if (yaChocaron.has(id)) continue;
+    const ejercito = porId.get(id)!;
+    if (sinSoldados(ejercito)) continue;
+
+    // Candidatos: ejércitos enemigos que aún no han chocado, y caravanas enemigas SIN escolta.
+    const rivales = [...porId.values()]
+      .filter((o) => o.id !== id && !yaChocaron.has(o.id) && !sinSoldados(o) && enemiga(ejercito.faccionId, o.faccionId))
+      .filter((o) => distancia(o.posicionActual, ejercito.posicionActual) <= LOGISTICA.radioEncuentro);
+    const presas = caravanasVivas
+      .filter((c) => c.estado !== 'adjunta' && c.estado !== 'disponible')
+      .filter((c) => {
+        const duena = asentamientosPorId.get(c.origenAsentamientoId)?.faccionId;
+        // Sin dueño identificable no se puede decidir si es enemiga, así que no se toca.
+        return duena !== undefined && enemiga(ejercito.faccionId, duena);
+      })
+      .filter((c) => distancia(c.posicionActual, ejercito.posicionActual) <= LOGISTICA.radioEncuentro);
+
+    const masCerca = <T extends { id: string; posicionActual: Point }>(lista: T[]): T | undefined =>
+      [...lista].sort((x, y) => {
+        const dx = distancia(x.posicionActual, ejercito.posicionActual);
+        const dy = distancia(y.posicionActual, ejercito.posicionActual);
+        return dx !== dy ? dx - dy : porIdAsc(x, y);
+      })[0];
+
+    // Un ejército enemigo manda sobre una caravana: es la amenaza real, y dejarla pasar para saquear un carro
+    // sería absurdo.
+    const rival = masCerca(rivales);
+    if (rival) {
+      const choque = encuentroEntreEjercitos(ejercito, rival, faccionesActuales, instante, rng);
+      porId.set(ejercito.id, choque.a);
+      porId.set(rival.id, choque.b);
+      faccionesActuales = choque.facciones;
+      for (const e of choque.eventos) {
+        eventos.push(atribuir(e, ejercito.origenAsentamientoId));
+        eventos.push(atribuir(e, rival.origenAsentamientoId));
+      }
+      yaChocaron.add(ejercito.id);
+      yaChocaron.add(rival.id);
+      continue;
+    }
+
+    const presa = masCerca(presas);
+    if (presa) {
+      const emboscada = interceptarCaravanaConEjercito(
+        ejercito,
+        presa,
+        capacidadCargaDe(ejercito, caravanasVivas),
+        instante,
+        rng
+      );
+      porId.set(ejercito.id, emboscada.ejercito);
+      if (emboscada.capturada) caravanasVivas = caravanasVivas.filter((c) => c.id !== presa.id);
+      for (const e of emboscada.eventos) eventos.push(atribuir(e, ejercito.origenAsentamientoId));
+      yaChocaron.add(ejercito.id);
+    }
+  }
+
+  return { ejercitos: [...porId.values()], caravanas: caravanasVivas, facciones: faccionesActuales, eventos };
+}
+

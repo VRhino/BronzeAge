@@ -637,9 +637,25 @@ usuario dio la tabla real. Calibrarla es un cambio de **datos**, no de código.
         único que hoy ataca caravanas en el mundo.
 
         894/894, batch idéntico byte a byte — toda la maquinaria duerme mientras nadie enganche nada.
-- [ ] **Paso 10 — Encuentros por proximidad** (ejército↔ejército, ejército↔caravana), con **orden canónico de
-      resolución por id** (§9, hallazgo de la revisión cruzada: sin él el RNG deja de ser determinista aunque
-      la secuencia global sea correcta).
+- [x] **Paso 10 — Encuentros por proximidad (2026-09-04).** Segunda pasada del tick, después de que se hayan
+      movido TODOS: resolver un encuentro con la mitad de las columnas aún sin mover daría choques entre
+      posiciones de dos momentos distintos.
+
+      El orden canónico por id ya entró en el Paso 7 —el asedio fue el primer consumidor de RNG—, así que aquí
+      solo había que respetarlo. Cuatro reglas más acotan el resultado, y cada una tapa un problema concreto:
+      un encuentro por ejército y tick (sin él, cascada dentro del mismo minuto), los aliados y los de la
+      misma Facción no se cruzan (compartir ruta no puede costar una masacre por minuto), un ejército enemigo
+      manda sobre una caravana, y una caravana escoltada no es objetivo blando — el choque es con su ejército.
+
+      En campo abierto **no hay atacante ni defensor**: ninguno recibe el bonus de cohesión defensiva, que es
+      de quien defiende una plaza y no de quien se topa con otro en un camino.
+
+      **Decisión que el canon no cerraba**: dónde va el botín de una emboscada. Los comandos viejos lo metían
+      en el almacén del asentamiento atacante y un ejército no tiene almacén. Va a su CARGA, y de ahí salen
+      dos cosas buenas gratis: cabe solo lo que quepa (saquear no es gratis) y llega a casa por la vía que ya
+      existe, porque el sobrante del carro vuelve al almacén de origen al replegarse.
+
+      903/903, batch idéntico byte a byte.
 - [ ] **Paso 11 — Retirar `combateCampoAbierto` e `interceptarCaravana` como comandos.** Demolición separada
       del paso que la habilita: primero funciona lo nuevo, después se borra lo viejo.
       **Se llevan por delante una fuga de visibilidad** detectada al hacer el 5b: los dos emiten sus eventos

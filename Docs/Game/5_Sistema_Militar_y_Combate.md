@@ -231,6 +231,17 @@ Un ejército solo sabe **ir a un sitio** (un asentamiento o un punto del mapa). 
 
 "Cruzarse" y "pasar cerca" son **15** unidades de mapa (decisión del usuario, 2026-09-04), frente a las **150** que alcanza la vista (5.12.7). Que los dos números no se parezcan es el punto: **se ve diez veces más lejos de lo que se tropieza**, así que un ejército divisa a otro con muchísima antelación y le da tiempo a evitarlo, salirle al paso o prepararse. El encuentro es una decisión, no un accidente por pasar cerca.
 
+Cuatro reglas acotan lo que pasa cuando sí se tropiezan:
+
+- **Un encuentro por ejército y minuto.** Sin ese tope, tres columnas juntas se trituran en cascada dentro del mismo tick y el resultado depende de a quién se mire primero.
+- **Los aliados no se cruzan**, ni las columnas de la misma Facción. Compartir camino con un amigo no puede costar una masacre cada minuto.
+- **Un ejército enemigo manda sobre una caravana.** Con las dos cosas al alcance, se combate: dejar pasar la amenaza real para saquear un carro no tendría sentido.
+- **Una caravana escoltada no es un objetivo blando**: quien se topa con ella se topa con su ejército, y eso ya es un choque entre ejércitos (5.13.3).
+
+En un choque en campo abierto **no hay atacante ni defensor**: los dos iban a lo suyo, así que ninguno recibe el bonus de cohesión defensiva. Esa ventaja es de quien defiende una plaza, no de quien se topa con otro en un camino.
+
+Al emboscar una caravana, el botín —el 50% de su carga, 3.10— **viaja en el carro del ejército**, con dos consecuencias (decisión tomada al implementarlo, 2026-09-04, porque el canon no lo cerraba: los comandos viejos lo metían en el almacén de un asentamiento y un ejército no tiene): cabe solo lo que quepa, y llega a casa por la vía que ya existe —el sobrante del carro vuelve al almacén de origen al replegarse (5.13)—. El carro sigue sin poder descargarse en ruta, así que esto no lo convierte en un transporte de mercancías: para eso están las caravanas adjuntas.
+
 Un ejército puede además quedarse **estacionado** en un punto indefinidamente — aparcar en un paso de montaña para cortarlo es una jugada legítima. Estacionado consume **una décima parte** de lo que consume en marcha (decisión del usuario, 2026-09-04), pero **nunca cero**.
 
 La cifra es lo que hace que estacionar signifique algo. Con la mitad del consumo, plantarse solo compraba el doble de tiempo y "cortar un paso" seguía siendo una carrera contra el hambre; a una décima parte, un carro lleno sostiene una posición diez veces más, y aparcar pasa a ser una jugada de verdad en vez de un aplazamiento.

@@ -841,3 +841,145 @@ describe('escolta: cargar y entregar a mano', () => {
     expect(r.comision, 'el destino cobra su comisión, igual que en una entrega automática').toBeGreaterThan(0);
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------
+// Paso 10 — encuentros por proximidad (Doc 5.12.3). Nadie los ordena: salen de la geometría.
+// ---------------------------------------------------------------------------------------------------------
+
+describe('encuentros por proximidad', () => {
+  /** Dos ejércitos de Facciones distintas, a `separacion` uno de otro y sin nada más alrededor. */
+  // El carro sale con 100 y no con miles: la capacidad de un carro son 500, y llenarlo por encima en el
+  // fixture dejaba sitio 0 para el botín — que es exactamente lo que descubrió el test de la emboscada.
+  function dosColumnas(separacion: number, escuadronesA = 30, escuadronesB = 30) {
+    const facciones = crearFacciones();
+    const uno = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', []);
+    const dos = fundarAsentamientoDeTest(mapa, uno.facciones, 'faccion-2', [uno.asentamiento]);
+    // Lejos de las dos ciudades, para que no se mezcle el reposte ni la llegada.
+    const punto = { x: 1000, y: 1000 };
+    const a: Ejercito = {
+      ...ejercitoDe(uno.asentamiento, [escuadron('a1', 'milicia_lanceros', escuadronesA)], 100, 'estacionado'),
+      id: 'ejercito-a',
+      posicionActual: punto,
+    };
+    const b: Ejercito = {
+      ...ejercitoDe(dos.asentamiento, [escuadron('b1', 'milicia_lanceros', escuadronesB)], 100, 'estacionado'),
+      id: 'ejercito-b',
+      faccionId: 'faccion-2',
+      origenAsentamientoId: dos.asentamiento.id,
+      posicionActual: { x: punto.x + separacion, y: punto.y },
+    };
+    return { facciones: dos.facciones, asentamientos: [uno.asentamiento, dos.asentamiento], a, b };
+  }
+
+  it('dos columnas enemigas que se cruzan combaten solas, sin que nadie lo ordene', () => {
+    const { facciones, asentamientos, a, b } = dosColumnas(LOGISTICA.radioEncuentro - 1);
+
+    const r = avanzar([a, b], asentamientos, { facciones });
+
+    expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo === 'combate.encuentro')).toBe(true);
+    const totalDespues = r.ejercitos.reduce((n, e) => n + e.escuadrones.reduce((m, x) => m + x.cantidad, 0), 0);
+    expect(totalDespues, 'los dos bandos sufren bajas').toBeLessThan(60);
+  });
+
+  it('fuera del radio de encuentro no pasa nada, aunque se vean de sobra', () => {
+    // A 15 se tropieza; a 150 se ve. Entre medias hay muchísimo sitio para decidir.
+    const { facciones, asentamientos, a, b } = dosColumnas(LOGISTICA.radioEncuentro + 1);
+
+    const r = avanzar([a, b], asentamientos, { facciones });
+
+    expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo.startsWith('combate.'))).toBe(false);
+    expect(r.ejercitos.every((e) => e.escuadrones[0]!.cantidad === 30)).toBe(true);
+  });
+
+  it('los ALIADOS no se cruzan: compartir ruta no es masacrarse cada tick', () => {
+    const { facciones, asentamientos, a, b } = dosColumnas(1);
+    const alianza: RelacionPolitica[] = [
+      { id: 'r1', faccionAId: 'faccion-1', faccionBId: 'faccion-2', tipo: 'alianza', estado: 'activa', creadoEn: instanteDeTest(0) },
+    ];
+
+    const r = avanzar([a, b], asentamientos, { facciones, relaciones: alianza });
+
+    expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo.startsWith('combate.'))).toBe(false);
+  });
+
+  it('tampoco se cruzan dos columnas de la MISMA Facción', () => {
+    const { facciones, asentamientos, a, b } = dosColumnas(1);
+    const mismaFaccion: Ejercito = { ...b, faccionId: a.faccionId };
+
+    const r = avanzar([a, mismaFaccion], asentamientos, { facciones });
+
+    expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo.startsWith('combate.'))).toBe(false);
+  });
+
+  it('un ejército choca UNA vez por tick, aunque tenga dos enemigos encima', () => {
+    const { facciones, asentamientos, a, b } = dosColumnas(1);
+    const tercero: Ejercito = { ...b, id: 'ejercito-c', posicionActual: { ...a.posicionActual } };
+
+    const r = avanzar([a, b, tercero], asentamientos, { facciones });
+
+    // Se cuentan PAREJAS y no eventos: cada encuentro se narra dos veces, una a cada hogar (ver la doble
+    // atribución en `avanzarEjercitos`), así que contar eventos contaría el doble.
+    const parejas = new Set(
+      r.eventos
+        .filter((e) => typeof e !== 'string' && e.codigo === 'combate.encuentro')
+        .map((e) => JSON.stringify((e as { payload: { ejercitoAId: string; ejercitoBId: string } }).payload))
+    );
+    expect(parejas.size, 'un solo encuentro: sin cascada dentro del mismo minuto').toBe(1);
+  });
+
+  it('el orden es canónico por id, no el del array', () => {
+    const { facciones, asentamientos, a, b } = dosColumnas(1);
+    const resumen = (r: ReturnType<typeof avanzar>) =>
+      JSON.stringify([...r.ejercitos].sort((x, y) => (x.id < y.id ? -1 : 1)).map((e) => e.escuadrones.map((s) => s.cantidad)));
+
+    expect(resumen(avanzar([a, b], asentamientos, { facciones, rng: createRng(9) }))).toBe(
+      resumen(avanzar([b, a], asentamientos, { facciones, rng: createRng(9) }))
+    );
+  });
+
+  it('embosca una caravana enemiga en ruta y se queda con parte de la carga', () => {
+    const { facciones, asentamientos, a } = dosColumnas(1);
+    const suya = asentamientos[1]!; // la de faccion-2
+    const presa: Caravana = {
+      ...caravanaDe('c-presa', suya.id, { ...a.posicionActual }),
+      estado: 'en_transito',
+      contenido: { piedra: 100 },
+    };
+
+    const r = avanzar([a], asentamientos, { facciones, caravanas: [presa], rng: createRng(3) });
+
+    const ev = r.eventos.find((e) => typeof e !== 'string' && e.codigo === 'combate.caravana_interceptada_por_ejercito');
+    expect(ev, 'hubo emboscada').toBeDefined();
+    expect(r.caravanas, 'la caravana capturada se elimina').toHaveLength(0);
+    expect(r.ejercitos[0]!.suministro['piedra'], 'el botín viaja en el carro').toBe(100 * MILITAR.umbralCapturaCaravana);
+  });
+
+  it('una caravana ESCOLTADA no es un objetivo blando: el choque es con su ejército', () => {
+    const { facciones, asentamientos, a, b } = dosColumnas(1);
+    const escoltada: Caravana = { ...caravanaDe('c-esc', asentamientos[1]!.id, { ...b.posicionActual }), estado: 'adjunta', contenido: { piedra: 100 } };
+    const conEscolta: Ejercito = { ...b, caravanasAdjuntasIds: ['c-esc'] };
+
+    const r = avanzar([a, conEscolta], asentamientos, { facciones, caravanas: [escoltada] });
+
+    expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo === 'combate.encuentro'), 'chocan los ejércitos').toBe(true);
+    expect(
+      r.eventos.some((e) => typeof e !== 'string' && e.codigo === 'combate.caravana_interceptada_por_ejercito'),
+      'y NO se la emboscó por su cuenta'
+    ).toBe(false);
+    expect(r.caravanas, 'sigue viva mientras su escolta aguante').toHaveLength(1);
+  });
+
+  it('una caravana propia o de un aliado no se toca', () => {
+    const { facciones, asentamientos, a } = dosColumnas(1);
+    const propia: Caravana = {
+      ...caravanaDe('c-propia', asentamientos[0]!.id, { ...a.posicionActual }),
+      estado: 'en_transito',
+      contenido: { piedra: 100 },
+    };
+
+    const r = avanzar([a], asentamientos, { facciones, caravanas: [propia] });
+
+    expect(r.caravanas).toHaveLength(1);
+    expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo.startsWith('combate.'))).toBe(false);
+  });
+});
