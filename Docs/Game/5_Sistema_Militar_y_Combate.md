@@ -180,15 +180,20 @@ En un ejército de varios jugadores, **cada uno se valida contra SU propio Lider
 Decisión del usuario: **a mayor calidad de la tropa, mayor coste de Liderazgo.** Las tropas se agrupan en
 **cinco escalones**, de leva a élite, y el coste es el de su escalón — no una fórmula sobre su poder.
 
-| Escalón | Coste | Caben con 100 | Tropas |
-|---|---|---|---|
-| 1 — leva | 7 | 14 | Milicia de lanceros, Lanceros con escudo de mimbre |
-| 2 — tropa de línea | 14 | 7 | Espadachines de cobre, Honderos |
-| 3 — veterana | 22 | 4 | Hacheros ligeros, Escaramuzadores, Espadachines de bronce, Arqueros |
-| 4 — pesada | 32 | 3 | Hacheros armados, Lanceros pesados |
-| 5 — élite | 45 | 2 | Arqueros con arco compuesto |
+| Escalón | Coste | Soldados por escuadrón | Caben con 100 | Tropas |
+|---|---|---|---|---|
+| 1 — leva | 7 | 25 | 14 | Milicia de lanceros, Lanceros con escudo de mimbre |
+| 2 — tropa de línea | 14 | 20 | 7 | Espadachines de cobre, Honderos |
+| 3 — veterana | 22 | 18 | 4 | Hacheros ligeros, Escaramuzadores, Espadachines de bronce, Arqueros |
+| 4 — pesada | 32 | 15 | 3 | Hacheros armados, Lanceros pesados |
+| 5 — élite | 45 | 12 | 2 | Arqueros con arco compuesto |
 
 Liderazgo base **100**.
+
+**El tamaño del escuadrón también va por escalón**: cuanto más de élite, menos cuerpos. No es decorativo — es
+lo que hace que subir de escalón sea *calidad* y no *cantidad*, y lo que ordena el rendimiento por punto de
+Liderazgo de mayor (leva) a menor (élite). Con tamaños puestos a ojo, una veterana con escuadrón de leva
+resultaba ser la tropa más eficiente del juego y la élite rendía más por punto que la pesada, invertido.
 
 **Por qué no se deriva del poder.** Antes el coste era `poderBase × unidades × factor`, y eso tenía un defecto
 de fondo: al ser exactamente proporcional al poder nominal, **el poder por punto de Liderazgo salía idéntico
@@ -212,9 +217,9 @@ que la decisión duela:
 | Hueste de leva | 14 escuadrones |
 
 Ninguna sobra ni falta por poco, y ninguna admite una unidad más. La cantidad sigue siendo una estrategia
-—catorce escuadrones de leva son 350 hombres— pero se paga en suministro: esa hueste vacía un carro en diez
-minutos, mientras que dos escuadrones de élite aguantan más de ochenta (5.13). **El eje de la decisión no es
-el poder, es el alcance.**
+—catorce escuadrones de leva son 350 hombres— pero se paga en suministro: esa hueste vacía un carro en **diez
+minutos**, mientras que dos escuadrones de élite (24 hombres) aguantan más de **dos horas** (5.13). Catorce
+veces más alcance. **El eje de la decisión no es el poder, es el alcance.**
 
 El techo sube con la progresión del Jugador (`Jugador.liderazgoBase`), que el motor ya admite por jugador
 aunque la mecánica que lo otorga siga pendiente (`Docs/Mecanicas a desarrollar.md` §11).

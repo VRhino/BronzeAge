@@ -1208,7 +1208,7 @@ Interesa la FORMA, no las cifras. Lo revelador al compararlas:
 más cara no cabía y las medianas entraban de una en una, así que siete de once tropas no admitían mezcla. No
 había espacio de composición, había una lista de "o esto o aquello".
 
-### 13.3 Lo que queda abierto: la eficiencia no es monótona
+### 13.3 La eficiencia no era monótona — RESUELTO alineando el tamaño al escalón
 
 Con coste plano por escalón, el poder nominal por punto sale así:
 
@@ -1233,9 +1233,38 @@ más por punto que la pesada (5,6-6,6). La causa no es el coste sino `unidadesPo
 Que dentro de un escalón haya tropas mejores es normal y deseable: es lo que hace que exista una tier list.
 Que una veterana domine a TODO lo demás, no.
 
-Se midió la corrección obvia —alinear el tamaño del escuadrón con el escalón (25/20/18/15/12)— y ordena la
-tabla: Arqueros bajarían de 10,2 a 7,4 y la élite de 6,7 a 4,0. **No se ha aplicado**: cambia el reclutamiento
-y el tamaño de todos los ejércitos del juego, y es una decisión aparte.
+**Aplicado (decisión del usuario, 2026-09-04): el tamaño del escuadrón se DERIVA del escalón** — 25 / 20 / 18
+/ 15 / 12, de leva a élite. Ya no se escribe por tropa, lo pone `UNIDADES_POR_ESCALON`, y eso es lo que impide
+que vuelva a desalinearse: una tropa nueva hereda el tamaño de su escalón y no hay forma de escribir uno que
+lo contradiga.
+
+Cómo queda:
+
+| Tropa | Escalón | Poder / punto | Autonomía de un carro |
+|---|---|---|---|
+| Lanceros de mimbre | 1 | 10,7 | 10 ticks |
+| Milicia de lanceros | 1 | 7,1 | 10 |
+| Honderos | 2 | 7,1 | 24 |
+| Espadachines de cobre | 2 | 5,7 | 24 |
+| Espadachines de bronce | 3 | 7,4 | 46 |
+| Arqueros | 3 | **7,4** (antes 10,2) | 46 |
+| Escaramuzadores | 3 | 6,5 | 46 |
+| Hacheros ligeros | 3 | 5,7 | 46 |
+| Lanceros pesados | 4 | 6,6 | 74 |
+| Hacheros armados | 4 | 5,6 | 74 |
+| Arqueros con arco compuesto | 5 | **4,0** (antes 6,7) | **139** |
+
+La tropa dominante desapareció: los Arqueros quedan empatados con los Espadachines de bronce dentro de su
+escalón, que es exactamente la clase de competencia que se busca. Y el eje del diseño se afila: de la leva a
+la élite hay **14 veces más alcance operativo** (10 ticks contra 139) por menos de la mitad de rendimiento por
+punto.
+
+Queda una inversión menor: el mejor de escalón 2 (7,1) rinde algo menos que el mejor de escalón 3 (7,4). Es un
+4%, viene de `poderBase` —que sigue siendo placeholder sin calibrar— y no de la estructura de escalones.
+
+**El batch tampoco puede ver esto**, por la misma razón que §13.4 y una más: el NPC solo recluta
+`milicia_lanceros`, que es escalón 1 y conserva sus 25 hombres. Corrida idéntica dígito a dígito. Cualquier
+cosa sobre la FORMA del roster es invisible para el laboratorio mientras recluta una sola tropa.
 
 ### 13.4 El batch no puede validar esto todavía
 
