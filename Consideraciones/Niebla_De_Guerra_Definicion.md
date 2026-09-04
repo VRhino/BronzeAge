@@ -121,6 +121,40 @@ Dos razones, y la segunda es la que manda:
 - **Coste**: en el laboratorio hay 30 Facciones y ~150 jugadores. Guardarlo por jugador multiplica por cinco
   un dato que se escribe en cada snapshot.
 
+### 2.8 Lo que hay en el MUNDO tampoco es público (2026-09-04)
+
+Dos colecciones se proyectaban a todo el mundo sin filtrar, con el argumento de que no son de ninguna
+Facción: los **caminos comerciales** y los **campamentos de bandidos**. Era defendible antes de que existiera
+la niebla; con ella deja de serlo. Que algo no pertenezca a nadie no lo hace público — un campamento en un
+bosque que nadie ha pisado, o una calzada entre dos ciudades al otro lado del mundo, es información que el
+jugador no ha ido a buscar. Y `caminos` era además la peor de las dos: cada camino une **dos plazas
+identificadas**, así que la lista completa es el mapa de quién comercia con quién.
+
+Cada colección se filtra con la regla que le toca, y no es la misma:
+
+| Colección | Regla | Por qué |
+|---|---|---|
+| **Caminos** | **Explorado** | Es infraestructura estática, como el terreno: la calzada que recorriste sigue donde estaba aunque hoy no la mires |
+| **Campamentos de bandidos** | **Visible ahora**, sin memoria | Aparecen y desaparecen, y sobre algo que va y viene "explorado" miente en las dos direcciones |
+
+**Por qué los campamentos no tienen memoria.** Con "explorado" se enseñaría el campamento que nació la semana
+pasada en un bosque que la Facción visitó una vez —información que nadie fue a buscar, que es exactamente la
+fuga que se está cerrando— y se seguiría enseñando el que otra Facción ya arrasó. Se consideró darles memoria
+propia, como a una plaza: no se mueven, y "aquí había bandidos, hace tres horas" sería una ficha razonable.
+Se descartó porque exigiría grabarlos en `memoriaPorFaccion` con su `conocidoEn` y su tránsito del estado 3 al
+2, y de eso no hay una sola regla en el canon. Sin memoria se comportan como `ejercitosAvistados`, que ya es
+un precedente del propio juego.
+
+**Un camino viaja entero o no viaja.** Recortar el trazado a los tramos explorados no daría "medio camino":
+daría una polilínea con agujeros que el cliente uniría con rectas falsas, o trozos sin identidad propia (el
+`id` y los dos extremos son del camino, no de cada tramo). Lo que se acepta a cambio es que haber andado un
+tramo revele qué dos plazas une — que es, en la ficción, justo lo que una calzada dice de sí misma.
+
+**Y esto cambia el orden de capas del cliente**, que no es estética (§5.4): los caminos siguen BAJO la
+máscara, porque lo explorado-y-no-visto se pinta a media luz; los campamentos pasan a pintarse ENCIMA, junto
+a lo que se está viendo ahora mismo. De qué lado cae cada cosa lo decide la regla con que el servidor la
+filtra, no su aspecto.
+
 ### 2.7 Lo que ya estaba decidido y no se toca
 
 - **Se muestra el ÚLTIMO ESTADO CONOCIDO, no el actual** (2026-08-24, doc de arquitectura 6 §3). Es el patrón
@@ -316,9 +350,10 @@ hay una ciudad, no sé cómo está ahora".
 **El color de la niebla es el del fondo de la página** (`--bg-primary`), no negro: así lo no explorado no se
 lee como un agujero quemado en el mapa sino como mapa que todavía no está.
 
-**Encontrado por el camino**: `caminos` y `campamentosBandidos` se proyectan a todo el mundo sin filtrar. El
-cliente los dibuja bajo la máscara, así que en pantalla ya no flotan sobre tierra sin pisar — pero el dato
-sigue viajando, y eso es cosa del servidor. Anotado como tarea aparte.
+**Encontrado por el camino**: `caminos` y `campamentosBandidos` se proyectaban a todo el mundo sin filtrar.
+El cliente los dibujaba bajo la máscara, así que en pantalla ya no flotaban sobre tierra sin pisar — pero el
+dato seguía viajando. **Cerrado (2026-09-04)**: se filtran en el servidor, cada uno con su regla (§2.8), y el
+campamento pasó a pintarse por encima de la máscara al dejar de tener memoria.
 
 **Medido en vivo** (backend real en :3000, cliente real en :5174, partida de tres Facciones):
 
@@ -334,7 +369,7 @@ geometría de la máscara sale bien sin que el cliente sepa ninguno de los dos n
 
 ## 6. Invariantes a congelar en tests
 
-Los siete están congelados. Entre paréntesis, dónde.
+Los nueve están congelados. Entre paréntesis, dónde.
 
 1. Un asentamiento rival **fuera** de radio+margen y de la vista de todo ejército propio **no aparece en
    absoluto** en la proyección — ni redactado. (`proyecciones/__tests__/jugador.test.ts`)
@@ -350,3 +385,7 @@ Los siete están congelados. Entre paréntesis, dónde.
    versión de este documento. (`engine/__tests__/memoria.test.ts`)
 7. La exploración solo CRECE. Nada la reduce: lo explorado no se desexplora.
    (`engine/__tests__/exploracion.test.ts` y `session/__tests__/memoriaNiebla.test.ts`, a 21 ticks)
+8. Un camino **entero en tierra sin explorar no viaja**, y uno que cruza lo explorado viaja **entero**, con
+   todos sus puntos. (`proyecciones/__tests__/jugador.test.ts`)
+9. Un campamento de bandidos en un rincón **explorado pero que ahora no se ve no viaja**, aunque el camino
+   que pasa por ese mismo rincón sí. Es la asimetría de §2.8 en un solo test. (ídem)

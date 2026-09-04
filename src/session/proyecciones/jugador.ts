@@ -13,6 +13,12 @@
 // ficción en los dos casos: una columna cruza campo abierto a la vista de quien vigile ese campo, y una
 // ciudad no se puede esconder.
 //
+// Lo que hay en el MUNDO —que no es de nadie— se filtra por la misma niebla, cada cosa con la regla que le
+// toca: los campamentos de bandidos por lo que se ve AHORA (`campamentosAvistados`) y los caminos por lo
+// EXPLORADO (`caminosConocidos`). Que no pertenezcan a ninguna Facción no los hace públicos: un campamento
+// en un bosque que nadie ha pisado, o una calzada que une dos ciudades al otro lado del mundo, son
+// información que el jugador no ha ido a buscar.
+//
 // A eso se le suma la MEMORIA (`memoriaPorFaccion`, `engine/memoria.ts`), que es lo que produce los tres
 // estados que el jugador ve en pantalla:
 //
@@ -47,7 +53,15 @@ import type { Instante } from '../../domain/tiempo';
 import { esCiudadano } from '../../engine/faccion';
 // El mismo recuento que usa el motor para los carros (Doc 5.13): un participante es un carro Y un rombo.
 import { participantesDe } from '../../engine/ejercitos';
-import { marcarVisto, proyectarNiebla, rejillaDe, SIN_EXPLORAR, type NieblaProyectada } from '../../engine/exploracion';
+import {
+  estaExplorado,
+  marcarVisto,
+  proyectarNiebla,
+  rejillaDe,
+  SIN_EXPLORAR,
+  type NieblaProyectada,
+  type Rejilla,
+} from '../../engine/exploracion';
 import { MEMORIA_VACIA, type FichaConocida } from '../../engine/memoria';
 import {
   eventosDesde,
@@ -161,10 +175,11 @@ export interface ProyeccionJugador {
   /** Títulos/ranking (Doc 2.6-ish): son competitivos por diseño — un ranking que no se puede ver no sirve
    * como ranking. */
   titulos: Titulo[];
-  /** Infraestructura del mundo (rutas comerciales trazadas), no actividad económica en curso: se trata como
-   * el mapa, no como los `acuerdos`/`ordenes` que sí filtran. */
+  /** Infraestructura del mundo (rutas comerciales trazadas). Solo los que la Facción ha PISADO: se filtran
+   * como el terreno, por lo explorado, no por Facción como los `acuerdos`/`ordenes` — ver `caminosConocidos`. */
   caminos: CaminoComercial[];
-  /** Entidades del MUNDO (bandidos), no de ninguna Facción — visibles para cualquiera que pueda atacarlas. */
+  /** Entidades del MUNDO (bandidos). Solo los que se están VIENDO ahora mismo, sin memoria — ver
+   * `campamentosAvistados`. */
   campamentosBandidos: CampamentoBandido[];
   /** Sin `asentamientoId` (eventos globales/de Facción) o con uno propio. Es el mismo criterio que evita la
    * fuga que el doc 7 §7.1 señalaba en el log administrativo: el log global narra TODO el mundo. */
@@ -261,6 +276,53 @@ function nieblaDe(
   return proyectarNiebla(celdas, visibles, rejilla);
 }
 
+/**
+ * Los caminos que la Facción CONOCE: los que ha pisado. Un camino es infraestructura estática, así que le
+ * toca la misma regla que al terreno —"explorado", no "visible ahora"—: la calzada que recorriste sigue
+ * donde estaba aunque hoy no la mires, igual que la colina que hay al lado.
+ *
+ * Se mide contra la máscara que YA viaja (`NieblaProyectada.celdas`) y no contra `memoria.exploracion` a
+ * secas, para que el camino y el suelo que pisa no puedan discrepar: si la máscara destapa terreno por lo
+ * que se ve ahora mismo —la ventana de un tick que `nieblaDe` cubre a propósito—, el camino que pase por
+ * ahí viaja con él.
+ *
+ * **Entero o nada**, y a propósito. Recortar el trazado a los tramos explorados no daría "medio camino":
+ * daría una polilínea con agujeros que el cliente uniría con rectas falsas, o trozos sin identidad (el
+ * `id` y los dos extremos son del camino, no de cada tramo). Lo que se acepta a cambio es que haber andado
+ * un tramo revele qué dos plazas une — que es, en la ficción, justo lo que una calzada dice de sí misma.
+ */
+function caminosConocidos(caminos: readonly CaminoComercial[], niebla: NieblaProyectada): CaminoComercial[] {
+  // La rejilla sale de la propia máscara y no de `rejillaDe`: son la misma geometría por construcción, y
+  // leerla de aquí quita de raíz la posibilidad de descifrar la máscara con una rejilla distinta.
+  const rejilla: Rejilla = { columnas: niebla.columnas, filas: niebla.filas, tamanoCelda: niebla.tamanoCelda };
+  return caminos.filter((c) => c.puntos.some((p) => estaExplorado(niebla.celdas, rejilla, p)));
+}
+
+/**
+ * Los campamentos de bandidos que se ven AHORA — sin memoria, como los ejércitos avistados y a diferencia de
+ * los asentamientos.
+ *
+ * No es una asimetría gratuita con los caminos: un campamento APARECE y DESAPARECE (`engine/bandidos.ts` los
+ * genera, el combate los borra), y sobre algo que va y viene "explorado" mentiría en las dos direcciones.
+ * Enseñaría el campamento que nació la semana pasada en un bosque que visitaste una vez —información que
+ * nadie ha ido a buscar, que es exactamente la fuga— y seguiría enseñando el que otra Facción ya arrasó.
+ *
+ * Podría tener memoria, como una plaza: no se mueve, y "aquí había bandidos, hace tres horas" sería una
+ * ficha razonable. Se descarta porque exigiría grabarlos en `memoriaPorFaccion` con su propio `conocidoEn` y
+ * su propio tránsito del estado 3 al 2, y de eso no hay una sola regla escrita en el canon. Si algún día la
+ * hay, el sitio es `engine/memoria.ts` y esto pasa a ser un `campamentosConocidos`.
+ *
+ * Consecuencia en el CLIENTE: al no tener memoria, un campamento se pinta DESPUÉS de la máscara de niebla,
+ * junto a lo demás que se está viendo — taparlo sería taparle al jugador su propia información.
+ */
+function campamentosAvistados(
+  campamentos: readonly CampamentoBandido[],
+  asentamientosPropios: readonly Asentamiento[],
+  ejercitosPropios: readonly Ejercito[]
+): CampamentoBandido[] {
+  return campamentos.filter((c) => seVeAhora(c.posicion, asentamientosPropios, ejercitosPropios));
+}
+
 export function proyectarParaJugador(
   estado: GameSessionState,
   jugadorId: string,
@@ -283,6 +345,9 @@ export function proyectarParaJugador(
   const seVe = new Set(avistados.map((a) => a.id));
 
   const memoria = (faccionId !== null ? estado.memoriaPorFaccion[faccionId] : undefined) ?? MEMORIA_VACIA;
+  // La niebla se calcula ANTES del objeto porque además de viajar es el filtro de los caminos: la misma
+  // máscara que tapa el terreno decide qué calzadas existen para este jugador.
+  const exploracion = nieblaDe(memoria.exploracion, estado, asentamientosPropios, ejercitosPropios);
 
   return {
     gameId: estado.gameId,
@@ -298,7 +363,7 @@ export function proyectarParaJugador(
     // Lo recordado MENOS lo que se ve ahora, y menos lo que entretanto pasó a ser propio (eso viaja completo
     // en `asentamientos`). Cada plaza aparece en una lista o en la otra, nunca en las dos.
     asentamientosConocidos: Object.values(memoria.asentamientos).filter((f) => !seVe.has(f.asentamientoId) && !esPropio(f.asentamientoId)),
-    exploracion: nieblaDe(memoria.exploracion, estado, asentamientosPropios, ejercitosPropios),
+    exploracion,
     caravanas: estado.caravanas.filter((c) => esPropio(c.origenAsentamientoId) || (c.destinoAsentamientoId !== undefined && esPropio(c.destinoAsentamientoId))),
     ejercitos: ejercitosPropios,
     ejercitosAvistados: estado.ejercitos
@@ -308,8 +373,8 @@ export function proyectarParaJugador(
     ordenes: estado.ordenes.filter((o) => esPropio(o.asentamientoId)),
     relaciones: estado.relaciones,
     titulos: estado.titulos,
-    caminos: estado.caminos,
-    campamentosBandidos: estado.campamentosBandidos,
+    caminos: caminosConocidos(estado.caminos, exploracion),
+    campamentosBandidos: campamentosAvistados(estado.campamentosBandidos, asentamientosPropios, ejercitosPropios),
     eventosDominio: estado.eventosDominio.filter((e) => e.asentamientoId === undefined || esPropio(e.asentamientoId)),
     historial: estado.historialJugadores[jugadorId] ?? [],
     zonas: zonasPropias,

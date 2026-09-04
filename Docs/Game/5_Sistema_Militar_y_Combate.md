@@ -344,6 +344,15 @@ De ahí salen los tres estados en que el jugador ve el mundo:
 
 **Lo que se ve gana a lo que se recuerda.** Cuando una plaza está a la vez avistada y en la memoria, lo que llega es la información en vivo: estar mirándola es mejor información que acordarse de ella.
 
+**Lo que hay en el mundo tampoco es público.** Que algo no pertenezca a ninguna Facción no lo pone a la vista de todos: un **campamento de bandidos** en un bosque que nadie ha pisado, o un **camino comercial** que une dos ciudades al otro lado del mundo, es información que no se ha ido a buscar. Cada uno pasa por la niebla con la regla que le corresponde:
+
+| Cosa del mundo | Se ve si | Por qué |
+|---|---|---|
+| **Camino comercial** | Lo has **explorado** | Es infraestructura estática, como el terreno: la calzada que recorriste sigue donde estaba aunque hoy no la mires |
+| **Campamento de bandidos** | Lo estás **viendo ahora** | Aparecen y desaparecen, así que no tienen memoria: recordarlos enseñaría el que nació después de que te fueras y el que ya arrasó otro |
+
+Un camino se conoce **entero o no se conoce**: haber recorrido un tramo revela qué dos plazas une, que es en la ficción lo que una calzada dice de sí misma.
+
 > **El terreno lo tapa el cliente de jugador, no el servidor.** La geografía no es información táctica —es la misma para todos— así que el servidor solo dice QUÉ has explorado y cada cliente decide cómo pintarlo. El de administración no tapa nada: es una herramienta de operación, no un jugador.
 
 ## 5.13 Suministro en campaña (a petición del usuario, 2026-09-01)
