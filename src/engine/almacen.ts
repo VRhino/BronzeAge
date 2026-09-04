@@ -44,3 +44,21 @@ export function agregarRecursoConSobrante(
 export function cantidadDisponible(almacen: Record<string, RecursoAlmacenado>, recurso: string): number {
   return almacen[recurso]?.cantidad ?? 0;
 }
+
+/**
+ * Amplía la CAPACIDAD (no la cantidad) de un recurso. Lo usan los dos edificios de almacenaje al completarse
+ * —Almacén sobre todos los recursos, Granero solo sobre el trigo— y el Granero otra vez en cada mejora de
+ * nivel, con el delta contra el nivel anterior.
+ *
+ * Un recurso que todavía no exista en el almacén se crea con cantidad 0: la capacidad puede llegar antes que
+ * el primer grano.
+ */
+export function ampliarCapacidad(
+  almacen: Record<string, RecursoAlmacenado>,
+  recurso: string,
+  extra: number
+): Record<string, RecursoAlmacenado> {
+  if (extra === 0) return almacen;
+  const actual = almacen[recurso] ?? { cantidad: 0, capacidad: 0 };
+  return { ...almacen, [recurso]: { ...actual, capacidad: actual.capacidad + extra } };
+}

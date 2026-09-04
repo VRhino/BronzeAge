@@ -38,6 +38,7 @@ const NOMBRE: Record<EdificioTipo, string> = {
   cantera: 'Cantera',
   lenera: 'Leñera',
   almacen: 'Almacén',
+  granero: 'Granero',
   mina: 'Mina (oro)',
   minaCobre: 'Mina (cobre)',
   minaEstano: 'Mina (estaño)',

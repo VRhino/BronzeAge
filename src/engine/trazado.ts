@@ -599,6 +599,7 @@ export type CategoriaAsentamiento = 'residencial' | 'industria' | 'militar' | 'm
 export const CATEGORIA_POR_TIPO: Partial<Record<EdificioTipo, CategoriaAsentamiento>> = {
   vivienda: 'residencial',
   almacen: 'almacenaje',
+  granero: 'almacenaje',
   // Leñera/Corral: extractores locales sin barrio temático claro — se agrupan con Almacén (logística de
   // recursos), decisión editorial simple para no inventar una sexta categoría.
   lenera: 'almacenaje',
@@ -1895,7 +1896,12 @@ export function sitiosParaTipo(
     );
     return aPunto(porDistanciaAlOrigen(candidatos, true));
   }
-  if (tipo === 'palacio' || tipo === 'almacen' || tipo === 'lenera') {
+  // Colocación GENÉRICA, sin ancla: el hueco libre más cercano al centro dentro del radio urbano. Es lo que
+  // la categoría 'almacenaje' significa —no tiene ancla propia ni de saturación—, más el Palacio, que es
+  // pieza única y no pertenece a ningún barrio. El Granero entra aquí por lo mismo que el Almacén: sin esta
+  // línea cae al camino de anclas, `tiposAnclaDe('almacenaje')` viene vacío y NUNCA encuentra sitio — que es
+  // exactamente lo que pasó al añadirlo (se proponía cada tick y `sitioEnBarrio` devolvía null siempre).
+  if (tipo === 'palacio' || tipo === 'almacen' || tipo === 'granero' || tipo === 'lenera') {
     const candidatos = candidatosLibres(ORIGEN_RECT, radioUrbanoDe(asentamiento), tamano, ocupadas, red, 0);
     return conPreferenciaIntramuros(aPunto(porDistanciaAlOrigen(candidatos, false)), tipo, nivelInterno, ocupados, asentamiento.recintos ?? []);
   }

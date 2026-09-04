@@ -238,6 +238,7 @@ export const EDIFICIO_ETIQUETA: Record<EdificioTipo, string> = {
   cantera: 'Cantera',
   lenera: 'Leñera',
   almacen: 'Almacén',
+  granero: 'Granero',
   mina: 'Mina (oro)',
   minaCobre: 'Mina (cobre)',
   minaEstano: 'Mina (estaño)',
@@ -268,6 +269,9 @@ export const EDIFICIO_COLOR: Record<EdificioTipo, string> = {
   cantera: '#8d8d8d',
   lenera: '#3f7d3a',
   almacen: '#7a5c3a',
+  // Grano: dorado apagado, emparentado con la Granja (#d4b106) pero más terroso — se lee como "aquí va el
+  // trigo" sin confundirse con el campo que lo produce.
+  granero: '#b8933f',
   mina: '#f1c40f',
   minaCobre: '#c0703c',
   minaEstano: '#2f6fd1',

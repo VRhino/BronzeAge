@@ -6,7 +6,10 @@ import { crearFaccion } from '../src/engine/faccion';
 import { evaluarViabilidadFundacion, fundarAsentamiento } from '../src/engine/settlement';
 import { nivelActualDe, tieneMercadoActivo, edificiosPorTipoYEstado, nutricionPoblacionDe } from '../src/engine/asentamientoQuery';
 import { calcularNivelAsentamiento } from '../src/engine/mantenimiento';
+
 import { reservaDeTrigo } from '../src/engine/tropas';
+import { NECESIDADES } from '../src/constants';
+const NECESIDADES_UMBRAL_AMPLIACION = NECESIDADES.umbralAlmacenAmpliacion;
 import { avanzarNpcGobernanza, type ConfigNpcGobernanza, MINERALES_BONUS_FUNDACION } from '../src/session/npcGobernanza';
 import {
   CATEGORIA_POR_TIPO,
@@ -404,6 +407,18 @@ interface Foto {
   sinCarroCompleto: number;
   /** Asentamientos que no pueden aportar ni un grano: sacar un ejército de aquí es marchar en ayunas. */
   sinNadaQueCargar: number;
+  /** Graneros activos y suma de sus niveles internos: si son 0, la capacidad de grano nueva no se está
+   * usando y cualquier lectura sobre el excedente está midiendo otra cosa. */
+  granerosActivos: number;
+  /** Asentamientos con el almacén de trigo por encima del umbral que dispara ampliar capacidad. */
+  conTrigoDesbordado: number;
+  /** Almacenes activos: la otra mitad de la pregunta "¿por qué no crece la capacidad?" — si tampoco hay
+   * Almacenes, el problema no es del Granero sino de que la ciudad no puede pagar almacenaje ninguno. */
+  almacenesActivos: number;
+  granerosNivelSuma: number;
+  /** Ocupación media del almacén de trigo (0-1): es lo que dispara la construcción del Granero, así que si el
+   * excedente no crece hay que saber si es porque no hay grano o porque el grano no llega a acumularse. */
+  ocupacionTrigoMedia: number;
   // --- Trazado urbano (línea base para el rediseño "anclas y satélites") ---
   /** Ciclos de la red de calles por asentamiento, promediado. Guardián de regresión de la alineación. */
   manzanasCerradasMedia: number;
@@ -505,6 +520,11 @@ function construirFotoResumen(
   let sobranteParaCarroSuma = 0;
   let sinCarroCompleto = 0;
   let sinNadaQueCargar = 0;
+  let granerosActivos = 0;
+  let conTrigoDesbordado = 0;
+  let almacenesActivos = 0;
+  let granerosNivelSuma = 0;
+  let ocupacionTrigoSuma = 0;
   const extraccionPorTipoActivosTotal: Record<string, number> = Object.fromEntries(TIPOS_EXTRACTOR.map((t) => [t, 0]));
 
   // Trazado urbano: se acumulan suma y contador por separado porque cada métrica solo aplica a los
@@ -558,6 +578,15 @@ function construirFotoResumen(
     sobranteParaCarroSuma += sobrante;
     if (sobrante < LOGISTICA.capacidadCarroPorJugador) sinCarroCompleto++;
     if (sobrante <= 0) sinNadaQueCargar++;
+    for (const g of edificiosPorTipoYEstado(a, 'granero')) {
+      granerosActivos++;
+      granerosNivelSuma += g.nivelInterno ?? 1;
+    }
+    const trigoAlm = a.almacen['trigo'];
+    const ocupTrigo = trigoAlm && trigoAlm.capacidad > 0 ? trigoAlm.cantidad / trigoAlm.capacidad : 0;
+    ocupacionTrigoSuma += ocupTrigo;
+    if (ocupTrigo >= NECESIDADES_UMBRAL_AMPLIACION) conTrigoDesbordado++;
+    almacenesActivos += edificiosPorTipoYEstado(a, 'almacen').length;
     for (const tipo of TIPOS_EXTRACTOR) {
       extraccionPorTipoActivosTotal[tipo] = (extraccionPorTipoActivosTotal[tipo] ?? 0) + edificiosPorTipoYEstado(a, tipo).length;
     }
@@ -684,6 +713,12 @@ function construirFotoResumen(
       estado.asentamientos.length === 0 ? 0 : Math.round((sobranteParaCarroSuma / estado.asentamientos.length) * 100) / 100,
     sinCarroCompleto,
     sinNadaQueCargar,
+    granerosActivos,
+    conTrigoDesbordado,
+    almacenesActivos,
+    granerosNivelSuma,
+    ocupacionTrigoMedia:
+      estado.asentamientos.length === 0 ? 0 : Math.round((ocupacionTrigoSuma / estado.asentamientos.length) * 1000) / 1000,
     acuerdosActivos,
     acuerdosCumplidos,
     manzanasCerradasMedia: vivos === 0 ? 0 : redondear(manzanasSuma / vivos),

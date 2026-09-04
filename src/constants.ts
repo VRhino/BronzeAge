@@ -29,7 +29,7 @@
  *   `duracionMinutosPorDefecto`) y tasas `*PorTick` → `*PorMinuto`. Mismos VALORES (1 tick = 1 min), otras
  *   claves en el JSON servido.
  */
-export const BALANCE_VERSION = 4;
+export const BALANCE_VERSION = 5;
 
 /**
  * Modelo temporal (Fase D, Docs/Arquitectura/10_Modelo_Temporal.md). **Decisión del usuario (2026-08-29):
@@ -182,6 +182,11 @@ interface NivelEdificioTransformacion {
   /** Solo Granja (trazado urbano dinámico, a petición del usuario): rinde trigo en vez de ejecutar recetas
    * (recetas: []), así que su producción escala por nivel aquí — ver `produccionTrigoDeGranja`. */
   produccionBaseTrigo?: number;
+  /** Solo Granero (a petición del usuario, 2026-09-04): capacidad de TRIGO que aporta este nivel — total, no
+   * incremental. Mismo patrón que `cupoCaravanas` en Mercado: un edificio sin recetas cuyo nivel interno no
+   * cambia lo que produce sino lo que habilita. Se aplica como DELTA contra el nivel anterior al mejorar,
+   * ver `avanzarMejoras` (engine/construction.ts). */
+  capacidadTrigo?: number;
   /** Solo Granja: su huella en la rejilla CRECE con el nivel interno (1x1 → 6x6), a diferencia del resto de
    * tipos, cuyo tamaño es fijo (`EDIFICIO_TAMANO`). Ver `tamanoEdificio`, engine/trazado.ts. */
   tamano?: { ancho: number; alto: number };
@@ -221,9 +226,15 @@ export const EDIFICIO_CATALOGO = {
    * Granja: 4 niveles internos (a petición del usuario, trazado urbano dinámico). El costo en materiales
    * DUPLICA en cada salto, tomando como base su `costo` de construcción (madera 30 → 60, 120, 240).
    *
-   * El rinde de trigo sube MUCHO más despacio que el costo, a petición del usuario tras ver que duplicarlo
-   * también desbalanceaba la comida: los multiplicadores son sobre el nivel 1, no acumulativos —
-   * ×1 / ×1.5 / ×2 / ×3 (15 → 22.5 → 30 → 45). Una granja de nivel 4 cuesta 8 veces la de nivel 1 y rinde 3.
+   * El rinde de trigo sube MUCHO más despacio que el costo: los multiplicadores son sobre el nivel 1, no
+   * acumulativos — ×1 / ×1.5 / ×2 / ×3. Una granja de nivel 4 cuesta 8 veces la de nivel 1 y rinde 3.
+   *
+   * **La base se ha DOBLADO dos veces** (15 → 30 el 2026-09-02, 30 → 60 el 2026-09-04), las dos a petición del
+   * usuario y las dos por la misma razón: el trigo era el cuello de botella de todo lo demás. La primera vez
+   * fue por el nivel 3 (`Mecanicas` §9.4: un asentamiento nivel 1 a tope come 30/minuto y una Granja rendía
+   * 15, o sea que nacía en déficit estructural). La segunda, porque medir el Paso 6 del movimiento de
+   * ejércitos demostró que 26 de 28 ciudades no podían meter NI UN GRANO en el carro de un ejército sin
+   * bajar de su reserva de comida (`Consideraciones/Movimiento_Ejercitos_Definicion.md` §10).
    *
    * El tamaño por nivel vive aquí mismo (`tamano`) y no en `EDIFICIO_TAMANO`, porque es el único tipo cuya
    * huella cambia con el nivel. `trabajadoresRequeridos` se repite igual en los 4 (el valor plano que Granja
@@ -232,15 +243,15 @@ export const EDIFICIO_CATALOGO = {
   granja: {
     costo: { madera: 30 },
     tiempoConstruccionMinutos: 6,
-    produccionBaseTrigo: 30,
+    produccionBaseTrigo: 60,
     trabajadoresRequeridos: 4,
     niveles: {
-      1: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 30, tamano: { ancho: 4, alto: 4 } },
+      1: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 60, tamano: { ancho: 4, alto: 4 } },
       // Piedra añadida a las mejoras (Doc Fase_0_6, a petición del usuario): antes 100% madera. Sin gate de
       // nivel de asentamiento — las 4 mejoras siguen alcanzables estando en nivel 1.
-      2: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 45, tamano: { ancho: 4, alto: 6 }, costoMejora: { madera: 60, piedra: 20 } },
-      3: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 60, tamano: { ancho: 8, alto: 6 }, costoMejora: { madera: 120, piedra: 40 } },
-      4: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 90, tamano: { ancho: 12, alto: 12 }, costoMejora: { madera: 240, piedra: 80 } },
+      2: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 90, tamano: { ancho: 4, alto: 6 }, costoMejora: { madera: 60, piedra: 20 } },
+      3: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 120, tamano: { ancho: 8, alto: 6 }, costoMejora: { madera: 120, piedra: 40 } },
+      4: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 180, tamano: { ancho: 12, alto: 12 }, costoMejora: { madera: 240, piedra: 80 } },
     } as Record<number, NivelEdificioTransformacion>,
   },
   cantera: { costo: { madera: 20 }, tiempoConstruccionMinutos: 5, produccionBasePiedra: 5, trabajadoresRequeridos: 4 },
@@ -248,6 +259,35 @@ export const EDIFICIO_CATALOGO = {
   // Sin piedra en la construcción BASE (Doc Fase_0_6, a petición del usuario): nivel 1 completo se paga solo
   // en madera — la piedra recién se introduce en nivel 2 (ver EDIFICIO_CATALOGO.fundicion/curtiduria/armeria).
   almacen: { costo: { madera: 50 }, tiempoConstruccionMinutos: 6, capacidadPorRecursoAdicional: 300 },
+  /**
+   * Granero (a petición del usuario, 2026-09-04): almacén ESPECIALIZADO en grano. A diferencia del Almacén
+   * —que amplía la capacidad de todos los recursos por igual, 300 cada uno— este solo guarda trigo, y a
+   * cambio guarda mucho más.
+   *
+   * **Uno por asentamiento** (`EDIFICIOS_UNICOS`): crece por NIVEL INTERNO, no por número. Los cuatro niveles
+   * escalan la capacidad con la misma forma que el rinde de la Granja —×1 / ×1.5 / ×2 / ×3 sobre el nivel 1,
+   * no acumulativa— así que el techo va de 2.000 a 6.000. Para comparar: la reserva de comida de una ciudad
+   * nivel 1 a tope ronda los 330 y el carro de un ejército son 500, o sea que un Granero de nivel 4 permite
+   * acumular una docena de campañas.
+   *
+   * Los gates de mejora los fijó el usuario: subir al nivel 2 exige asentamiento nivel 2, y llegar al 4 exige
+   * nivel 3. El gate del 2 al 3 se declara explícitamente aunque parezca redundante (no se puede tener un
+   * Granero 2 sin haber sido nivel 2): un asentamiento DEGRADADO a nivel 1 sí existiría en ese estado, y sin
+   * el gate podría seguir ampliando granero mientras se cae a pedazos.
+   *
+   * Costos siguiendo el estándar del resto del catálogo: base solo en madera (Doc Fase_0_6 — la piedra se
+   * introduce a partir del nivel 2) y mejoras que DUPLICAN sobre la base, igual que Granja.
+   */
+  granero: {
+    costo: { madera: 50 },
+    tiempoConstruccionMinutos: 6,
+    niveles: {
+      1: { trabajadoresRequeridos: 0, recetas: [], capacidadTrigo: 2000 },
+      2: { trabajadoresRequeridos: 0, recetas: [], capacidadTrigo: 3000, requisitoNivelAsentamiento: 2, costoMejora: { madera: 100, piedra: 30 } },
+      3: { trabajadoresRequeridos: 0, recetas: [], capacidadTrigo: 4000, requisitoNivelAsentamiento: 2, costoMejora: { madera: 200, piedra: 60 } },
+      4: { trabajadoresRequeridos: 0, recetas: [], capacidadTrigo: 6000, requisitoNivelAsentamiento: 3, costoMejora: { madera: 400, piedra: 120 } },
+    } as Record<number, NivelEdificioTransformacion>,
+  },
   // Oro: metal precioso en bruto, origen en minas igual que cualquier otro recurso (Doc 3.1). produccionBaseOro
   // recalibrado (verificación batch del overhaul de auto-construcción): a 2/minuto, una sola Mina (2) ya no
   // alcanzaba a cubrir el costo de Mantenimiento de oro a nivel 3 (`MANTENIMIENTO.oroBase` × escala ≈
@@ -780,6 +820,9 @@ export const EDIFICIO_TAMANO: Record<string, { ancho: number; alto: number }> = 
   palacio: { ancho: 8, alto: 8 },
   corral: { ancho: 8, alto: 6 },
   almacen: { ancho: 4, alto: 2 },
+  // Granero: el doble de largo que el Almacén (4x2 de la rejilla original) — guarda un solo recurso pero
+  // mucha cantidad, y que se distinga a simple vista del Almacén importa en la Vista de Asentamiento.
+  granero: { ancho: 8, alto: 4 },
   // Anclas y satélites, Etapa 3 (§5.1/§6): las tres anclas nuevas miden 2x2 de la rejilla original.
   plaza: { ancho: 4, alto: 4 },
   plazaDeArmas: { ancho: 4, alto: 4 },

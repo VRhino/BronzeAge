@@ -112,6 +112,14 @@ Dos cosas que este experimento dejó ABIERTAS y conviene no perder de vista:
 
 **Almacén** — auto-construcción, sin cambios de diseño. Costo: 50 madera + 30 piedra. Tiempo: 6 ticks.
 
+**Granero** (a petición del usuario, 2026-09-04) — almacén ESPECIALIZADO en grano: solo guarda trigo, y a cambio guarda mucho más que el Almacén general. **Uno por asentamiento**: no crece por número sino por **nivel interno**, cuatro escalones que llevan su capacidad de **2.000 a 6.000** de trigo (×1 / ×1,5 / ×2 / ×3 sobre el nivel 1, la misma forma que el rinde de la Granja).
+
+- **Costo**: 50 madera. Tiempo: 6 ticks. Mejoras que duplican sobre la base, con piedra a partir del nivel 2: 100+30, 200+60, 400+120.
+- **Gates de mejora**: subir al nivel 2 exige asentamiento de nivel 2; llegar al nivel 4 exige nivel 3. Se miden contra el nivel OPERATIVO, así que un asentamiento degradado deja de poder ampliar su granero hasta recuperarse.
+- **Auto-construcción**: se encola cuando el trigo pasa el mismo umbral de ocupación que dispara la ampliación de Almacén, mirando SOLO el trigo. Cuando lo que desborda es el grano, 300 de capacidad general es mucho peor negocio que 2.000 de grano.
+
+Para dimensionarlo: la reserva de comida de una ciudad de nivel 1 a tope ronda los 330, y el carro de suministros de un ejército son 500 (Doc 5.13). Un Granero de nivel 4 permite acumular una docena de campañas — es la pieza que convierte el excedente de trigo en capacidad militar en vez de perderlo contra el techo del almacén.
+
 **Murallas** — edificación defensiva, fuera de alcance de Fase 0 (sin cambios).
 
 ### Transformación de recursos
@@ -183,6 +191,10 @@ Van por AUTO-CONSTRUCCIÓN (igual que Granja/Cantera), disparadas en cuanto se c
 
 ## 4.3 Almacenamiento
 Límites de almacenaje por recurso, ampliables construyendo más capacidad. El superávit que excede el límite dispara construcción automática de más almacenamiento.
+
+Dos edificios lo amplían, y no compiten: el **Almacén** sube la capacidad de TODOS los recursos por igual (+300 cada uno, varios por asentamiento según nivel), y el **Granero** sube solo la del **trigo** (+2.000 a +6.000 según su nivel interno, uno por asentamiento). Ver 4.2.
+
+**Producción de trigo**: la base de la Granja se ha doblado dos veces a petición del usuario (15 → 30 el 2026-09-02, 30 → 60 el 2026-09-04). La primera vez porque una ciudad nivel 1 a tope come 30/minuto y la Granja rendía 15, o sea que nacía en déficit estructural. La segunda porque, con la mecánica de suministro en campaña ya medida, 26 de 28 ciudades no podían meter ni un grano en el carro de un ejército sin bajar de su reserva de comida (ver `Consideraciones/Movimiento_Ejercitos_Definicion.md` §10).
 
 ## 4.4 Políticas (mecanismo de influencia del jugador)
 - Interfaz: decisiones DISCRETAS tipo menú (no sliders continuos).

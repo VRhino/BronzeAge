@@ -531,7 +531,7 @@ usuario dio la tabla real. Calibrarla es un cambio de **datos**, no de código.
         carro más". Sin eso, un jugador que ya iba dentro podía unirse otra vez, y otra, sacando 500 de trigo
         cada vez: una bomba de trigo infinita desde el almacén.
 
-- [ ] **Paso 6b (NUEVO, sale de medir el Paso 6) — la economía no puede pagar el carro.** Ver §10.
+- [~] **Paso 6b (sale de medir el Paso 6) — la economía no puede pagar el carro.** El usuario eligió palanca el 2026-09-04: Granero + doblar otra vez el trigo. Resuelto en una ciudad sana; en el batch sigue sin verse porque esas ciudades no construyen almacenaje NINGUNO. Ver §10.1.
 
 - [ ] **Paso 7 — Llegada → asedio**, con la rama "sin defensores → conquista automática" y la conquista que ya
       no hereda guarnición. Aquí aparece el jugador huérfano.
@@ -748,3 +748,46 @@ usuario. Las opciones, sin recomendación cerrada:
 
 Nota sobre la métrica: es un **suelo**. Se mide con la guarnición entera dentro, y llevarse tropa reduce la
 propia reserva (48 de margen por cada 40 soldados que salen). A la escala del carro no cambia la conclusión.
+
+### 10.1 La palanca elegida, y qué destapó (2026-09-04)
+
+De las cuatro opciones de §10 el usuario eligió una combinación de la 1 y la 2, con una pieza nueva:
+
+- **Granero**: almacén especializado en grano, uno por asentamiento, 4 niveles internos, de 2.000 a 6.000 de
+  capacidad de trigo (Doc 4.2/4.3). Sin él, doblar la producción no habría servido de nada: el trigo de más se
+  perdía contra el techo del almacén.
+- **Producción base de trigo doblada otra vez**: 30 → 60 por Granja de nivel 1 (60/90/120/180 por nivel).
+
+**Medido en una ciudad sana** (fixture de un asentamiento, seed 20, 300 ticks): el Granero se construye en el
+tick ~50, sube a nivel 3 hacia el 150, y el excedente disponible para el carro pasa de **7,7 a 5.881** —de un
+1,5% de un carro a casi doce carros llenos—. El Paso 6b queda resuelto **para una ciudad que funciona**.
+
+**Medido en batch (30 Facciones, 600 ticks): CERO Graneros construidos.** No es culpa del Granero: la sonda
+`SIN FONDOS` disparó en las 1.406 propuestas, y el contador `almacenesActivos` sale **0** — esas ciudades
+tampoco construyen ni un Almacén. Se proponen, tienen sitio y tienen cupo, pero no pueden pagar 50 de madera
+sin bajar de su reserva de mantenimiento. **La madera, no el trigo, es lo que las tiene atascadas**, y eso es
+anterior a todo esto (es el mismo cuello de botella de §9.4 visto desde otro lado).
+
+Consecuencia práctica: el batch **no puede medir todavía** el efecto económico de la logística de campaña, y
+cualquier lectura sobre excedentes ahí está midiendo la pobreza de la madera. Queda como entrada del Paso 13.
+
+### 10.2 Un bug latente que salió al añadir el Granero
+
+El array `Asentamiento.edificios` es el **historial de crecimiento**, y su orden es load-bearing: `redDeCalles`
+lo replaya de principio a fin y una calle solo puede nacer donde el suelo estaba libre cuando le tocó a ese
+edificio. `avanzarConstruccion` lo **permutaba** al final de cada tick, reordenando los `en_cola` por
+`prioridad` — un arreglo de PRESENTACIÓN (que la posición mostrada coincidiera con el orden de arranque)
+implementado permutando el historial.
+
+Eso rompe §E6.12 ("ningún edificio encima de una calle"): un proyecto encolado con score alto salta por delante
+de edificios YA CONSTRUIDOS y, en el replay, se procesa antes que ellos —cuando su suelo aún consta libre— y
+les tiende una calle por debajo. El guardián de §E6.16 (`pisaCalleComprometida`) no podía verlo: valida contra
+el prefijo real en el momento de pagar, y la permutación ocurre después.
+
+Reproducido: seed 42, perfil `nucleos`, tick 29 — el Granero pasa a la posición 14 y deja a la Vivienda 15 con
+la celda (1,-6) convertida en calle bajo sus cimientos. Latente desde que existe la reordenación; salió ahora
+porque el Granero se encola con urgencia máxima y salta muy arriba.
+
+**Arreglado retirando la permutación**: el array vuelve a ser historial y el orden de cola se deriva de
+`prioridad` donde se necesita — que es lo que ya hacían `avanzarConstruccion` y `moverEnCola`, y ahora también
+el cliente al pintar la cola.

@@ -111,6 +111,9 @@ export type EdificioTipo =
   | 'cantera'
   | 'lenera'
   | 'almacen'
+  // Almacén especializado en grano (a petición del usuario, 2026-09-04): solo trigo, mucha más capacidad,
+  // uno por asentamiento y con 4 niveles internos. Ver `EDIFICIO_CATALOGO.granero`.
+  | 'granero'
   | 'mina'
   | 'minaCobre'
   | 'minaEstano'
@@ -166,6 +169,7 @@ const TODOS_LOS_EDIFICIOS: Record<EdificioTipo, true> = {
   cantera: true,
   lenera: true,
   almacen: true,
+  granero: true,
   mina: true,
   minaCobre: true,
   minaEstano: true,

@@ -46,7 +46,7 @@ import {
   ratioManoObra,
   ratioManoObraArtesanos,
 } from './asentamientoQuery';
-import { agregarRecurso, agregarRecursoConSobrante, descontarRecursos, tieneRecursos } from './almacen';
+import { agregarRecurso, agregarRecursoConSobrante, ampliarCapacidad, descontarRecursos, tieneRecursos } from './almacen';
 import { avanzarObraDeRecintos } from './muralla';
 import { reservaDinamicaConstruccion } from './mantenimiento';
 import { factorProduccionTrigo, factorTiempoConstruccion, lineasProduccionPriorizadas, perfilTrazadoDePolitica } from './politicas';
@@ -784,6 +784,27 @@ function evaluarNecesidades(
     }
   }
 
+  // Granero: mismo mecanismo que el Almacén de abajo, pero mirando SOLO la ocupación del trigo — es lo único
+  // que guarda. Va ANTES a propósito: cuando lo que se está desbordando es el grano, ampliar capacidad general
+  // a 300 por recurso es mucho peor negocio que un Granero, y sin esta regla la comida de más que produce la
+  // Granja (doblada dos veces) se perdería contra el techo del almacén en vez de acumularse para una campaña.
+  // No lleva tope propio: el Granero es único por asentamiento (`EDIFICIOS_UNICOS`) y crece por nivel interno.
+  const trigoAlmacenado = asentamiento.almacen['trigo'];
+  const ocupacionTrigo = trigoAlmacenado && trigoAlmacenado.capacidad > 0 ? trigoAlmacenado.cantidad / trigoAlmacenado.capacidad : 0;
+  if (
+    ocupacionTrigo >= NECESIDADES.umbralAlmacenAmpliacion &&
+    edificiosPorTipoYEstado(asentamiento, 'granero').length === 0 &&
+    !hayProyectoPendiente(asentamiento, 'granero')
+  ) {
+    const sitio = sitioEnBarrio(asentamiento, ocupados(), 'granero');
+    if (sitio) {
+      proponer(
+        crearEdificioEnCola('granero', sitio.punto, nextId(), undefined, sitio.rotado),
+        conUrgencia(SCORE_BANDAS.crecimiento, ocupacionTrigo * 100)
+      );
+    }
+  }
+
   // Almacén: urgencia escala con el % de ocupación del recurso más lleno, con tope por nivel de asentamiento.
   const ocupacionAlmacenes = Object.values(asentamiento.almacen)
     .filter((r) => r.capacidad > 0)
@@ -940,10 +961,17 @@ function pisaCalleComprometida(
  * están vacías, el nivel interno solo cambia `cupoCaravanas` (ver `cupoCaravanas`, asentamientoQuery.ts).
  * Granja también, y con dos particularidades propias: su nivel sube el rinde de trigo
  * (`produccionTrigoDeGranja`) y AGRANDA su huella, lo que obliga a mudarla (ver `avanzarMejoras`). */
-const EDIFICIOS_CON_NIVELES = ['fundicion', 'curtiduria', 'armeria', 'carpinteria', 'barracon', 'galeriaDeTiro', 'mercado', 'granja'] as const;
+const EDIFICIOS_CON_NIVELES = ['fundicion', 'curtiduria', 'armeria', 'carpinteria', 'barracon', 'galeriaDeTiro', 'mercado', 'granja', 'granero'] as const;
 
 function nivelesDe(tipo: EdificioTipo): Record<number, { trabajadoresRequeridos: number; recetas: { produce: string; produccionBase: number; consumePorUnidad: Partial<Record<string, number>> }[]; costoMejora?: Partial<Record<string, number>>; requisitoNivelAsentamiento?: number; requiereEdificio?: string; requiereEdificioNivel?: number }> | undefined {
   return (EDIFICIO_CATALOGO[tipo] as { niveles?: Record<number, any> }).niveles;
+}
+
+/** Capacidad de trigo que aporta un Granero en `nivelInterno` — TOTAL, no incremental (ver
+ * `EDIFICIO_CATALOGO.granero`). Un nivel inexistente da 0, que es lo que hace que el delta de una mejora
+ * salga bien sin casos especiales. */
+function capacidadTrigoDeGranero(nivelInterno: number | undefined): number {
+  return EDIFICIO_CATALOGO.granero.niveles[nivelInterno ?? 1]?.capacidadTrigo ?? 0;
 }
 
 /** Resultado de evaluar SOLO los gates de la siguiente mejora (nivel de asentamiento + edificio previo, si
@@ -1047,6 +1075,15 @@ function avanzarMejoras(
     // La zona de Mercado se puebla al subir de nivel: los puestos se añaden a ESTA misma lista, no a una
     // aparte, para que las mejoras que queden por evaluar en este mismo tick vean sus celdas ya ocupadas.
     if (edificio.tipo === 'mercado') edificios.push(...crearPuestosDeMercado(asentamiento, nivelSiguiente, edificios));
+    // El Granero amplía la capacidad de trigo con el DELTA entre los dos niveles: `capacidadTrigo` es el
+    // total de cada nivel, así que sumar el total otra vez lo contaría dos veces.
+    if (edificio.tipo === 'granero') {
+      almacenActual = ampliarCapacidad(
+        almacenActual,
+        'trigo',
+        capacidadTrigoDeGranero(nivelSiguiente) - capacidadTrigoDeGranero(nivelActual)
+      );
+    }
   }
   return { asentamiento: { ...asentamiento, edificios }, almacen: almacenActual, eventos };
 }
@@ -1211,9 +1248,12 @@ export function avanzarConstruccion(
       edificiosCompletadosEsteTick += 1;
       if (edificio.tipo === 'almacen') {
         const bonus = EDIFICIO_CATALOGO.almacen.capacidadPorRecursoAdicional;
-        for (const recurso of Object.keys(almacen)) {
-          almacen = { ...almacen, [recurso]: { ...almacen[recurso]!, capacidad: almacen[recurso]!.capacidad + bonus } };
-        }
+        for (const recurso of Object.keys(almacen)) almacen = ampliarCapacidad(almacen, recurso, bonus);
+      }
+      // El Granero nace en su nivel 1 y solo toca el trigo. Las ampliaciones por mejora las aplica
+      // `avanzarMejoras`, con el delta contra el nivel anterior.
+      if (edificio.tipo === 'granero') {
+        almacen = ampliarCapacidad(almacen, 'trigo', capacidadTrigoDeGranero(1));
       }
       // El Mercado no nace solo: al terminarse aparece con los puestos de su nivel 1 (a petición del
       // usuario, es una ZONA). Los de niveles 2 y 3 los añade `avanzarMejoras` al subir de nivel interno.
@@ -1362,12 +1402,28 @@ export function avanzarConstruccion(
   almacenFinal = obra.almacen;
   eventos.push(...obra.eventos);
 
-  const edificiosFinal = [...edificiosBase, ...nuevosProyectos];
-  // Reordena los `en_cola` por `prioridad` (mismo criterio que el Paso 2) para que la posición mostrada en la
-  // UI (ver main.ts) coincida con el orden real en que arrancarán en el próximo tick.
-  const enColaOrdenados = edificiosFinal.filter((e) => e.estado === 'en_cola').sort((a, b) => (b.prioridad ?? 0) - (a.prioridad ?? 0));
-  let indiceEnCola = 0;
-  const edificiosOrdenados = edificiosFinal.map((e) => (e.estado === 'en_cola' ? enColaOrdenados[indiceEnCola++]! : e));
+  /**
+   * El array de edificios es el HISTORIAL DE CRECIMIENTO, y su orden es load-bearing: `redDeCalles` lo replaya
+   * de principio a fin para reconstruir la ciudad paso a paso, y una calle solo puede nacer en suelo que
+   * estuviera libre CUANDO le tocó a ese edificio. Permutarlo mueve las calles.
+   *
+   * Aquí había una reordenación de los `en_cola` por `prioridad`, puesta para que la posición que muestra la
+   * interfaz coincidiera con el orden en que arrancarán. Era un problema de PRESENTACIÓN resuelto permutando
+   * el historial, y rompía §E6.12 ("ningún edificio encima de una calle"): un proyecto encolado con score alto
+   * saltaba por delante de edificios YA CONSTRUIDOS en el array, así que en el replay se procesaba antes que
+   * ellos —cuando su suelo aún constaba como libre— y les tendía una calle por debajo. El chequeo de §E6.16
+   * (`pisaCalleComprometida`) no podía verlo: valida al candidato contra el prefijo real en el momento de
+   * pagar, y esta permutación ocurre DESPUÉS.
+   *
+   * Latente desde que existe la reordenación; salió al añadir el Granero (2026-09-04), que se encola con
+   * urgencia máxima —el trigo desbordado— y por tanto salta muy arriba. Reproducido: en la seed 42, perfil
+   * `nucleos`, tick 29, el Granero pasaba a la posición 14 y dejaba a la Vivienda 15 con la celda (1,-6)
+   * convertida en calle bajo sus cimientos.
+   *
+   * El orden de la cola no se pierde: vive en `prioridad`, que es el dato, y quien la muestre ordena por él
+   * (`cliente/src/main.ts`) igual que ya hacen `avanzarConstruccion` y `moverEnCola` aquí mismo.
+   */
+  const edificiosOrdenados = [...edificiosBase, ...nuevosProyectos];
 
   return {
     asentamiento: { ...asentamientoConProgreso, almacen: almacenFinal, edificios: edificiosOrdenados, extractoresTicksSinCupo, ...(obra.recintos.length > 0 ? { recintos: obra.recintos } : {}) },
@@ -1383,6 +1439,8 @@ export class ConstruccionManualInvalidaError extends Error {}
 /** Tipos que solo admiten UNA instancia por asentamiento (progresan por `nivelInterno` en vez de repetirse) —
  * añadir una segunda no tiene sentido estructural, sea cual sea el mecanismo (auto o manual). */
 const EDIFICIOS_UNICOS = new Set<EdificioTipo>([
+  // El Granero crece por NIVEL INTERNO, no por número: uno por asentamiento, de 2.000 a 6.000 de trigo.
+  'granero',
   'barracon',
   'galeriaDeTiro',
   'palacio',

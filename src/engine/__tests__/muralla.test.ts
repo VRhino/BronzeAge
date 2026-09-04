@@ -867,8 +867,24 @@ describe('murallas — preferencia intramuros (Paso 4, §9)', () => {
   }
 
   it('con el recinto exterior completo, los candidatos DENTRO se devuelven antes que los de FUERA', () => {
-    const completo = conRecintoCompleto(7, 200, 1);
-    const recinto = completo.recintos![0]!;
+    const conRecinto = conRecintoCompleto(7, 200, 1);
+    const recinto = conRecinto.recintos![0]!;
+
+    // La ciudad de fixture llena su anillo POR COMPLETO —el recinto se traza ciñendo lo ya construido, así que
+    // a tick 200 quedan 57 de sus 58 edificios dentro y ni un solar libre—, y sin suelo intramuros no hay
+    // candidatos que ordenar: la prueba pasaría vacía. Antes se sostenía por un margen de uno o dos huecos
+    // sobrantes, y bastó añadir un edificio al catálogo (el Granero, 2026-09-04) para consumirlos y dejar los
+    // 370 candidatos fuera del anillo.
+    //
+    // Se derriban dos Viviendas interiores para GARANTIZAR la premisa en vez de confiar en la casualidad. No
+    // ablanda lo que se mide —el orden de los candidatos— y hace que el test deje de depender de cuán llena
+    // acabe la ciudad, que es exactamente lo que su comentario original pedía ("habría que cambiar de
+    // ciudad/tipo").
+    const esInterior = (e: { posicion: { x: number; y: number }; rotado?: boolean }) => esIntramuros(conRecinto, recinto, { punto: e.posicion, rotado: e.rotado ?? false });
+    const derribadas = new Set(conRecinto.edificios.filter((e) => e.tipo === 'vivienda' && esInterior(e)).map((e) => e.id));
+    expect(derribadas.size, 'la ciudad de fixture debería tener Viviendas intramuros que derribar').toBeGreaterThan(2);
+    const completo: Asentamiento = { ...conRecinto, edificios: conRecinto.edificios.filter((e) => !derribadas.has(e.id)) };
+
     // Mismas celdas bloqueadas en los dos casos (`celdasBloqueadasDeRecintos` no mira `avance`): la única
     // diferencia es si el recinto cuenta como "completo" para `conPreferenciaIntramuros` — aísla el efecto de
     // la preferencia del efecto de bloquear suelo, que ya tiene su propia cobertura en `murallas — la obra`.

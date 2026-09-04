@@ -655,9 +655,12 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
 
   // La cola de construcción es única y compartida por TODO el asentamiento (no una por tipo de edificio).
   // Overhaul de auto-construcción: los "en_cola" ya están PAGADOS (el pago ocurre al comprometerse, no al
-  // arrancar obra) y el motor los devuelve ordenados por `prioridad` (score de necesidad) — el índice en el
-  // array SÍ coincide con el orden real en que competirán por un hueco de obra (ver engine/construction.ts).
-  const colaGlobal = a.edificios.filter((e) => e.estado === 'en_cola');
+  // arrancar obra) y compiten por hueco de obra por `prioridad` (score de necesidad), mayor primero.
+  //
+  // El orden se calcula AQUÍ y no viene dado por el array: el motor devuelve sus edificios en orden de
+  // crecimiento, que es historial y no cola (permutarlo movía las calles — ver `edificiosOrdenados` en
+  // engine/construction.ts). Es el mismo criterio que usa el motor para decidir quién arranca.
+  const colaGlobal = a.edificios.filter((e) => e.estado === 'en_cola').sort((x, y) => (y.prioridad ?? 0) - (x.prioridad ?? 0));
   const posicionEnCola = new Map(colaGlobal.map((e, i) => [e.id, i + 1]));
   const enConstruccionCount = a.edificios.filter((e) => e.estado === 'en_construccion').length;
 

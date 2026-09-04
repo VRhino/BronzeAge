@@ -61,6 +61,12 @@ const DORADOS: CasoDorado[] = [
   { tipo: 'lenera', posicion: { x: 9, y: -9 }, huella: { x: 6, y: -12, ancho: 6, alto: 6 } },
   { tipo: 'almacen', posicion: { x: 12, y: -9 }, huella: { x: 6, y: -12, ancho: 12, alto: 6 } },
   { tipo: 'almacen', rotado: true, posicion: { x: 9, y: -6 }, huella: { x: 6, y: -12, ancho: 6, alto: 12 } },
+  // Granero (2026-09-04): NO es una aserción cruzada entre versiones como el resto de la tabla — este tipo no
+  // existía antes del reescalado, así que sus números se generaron con el código de hoy anclándolo en la misma
+  // celda que los demás. Sigue cumpliendo la otra mitad de su función: si alguien vuelve a tocar la escala,
+  // esto tiene que quedarse igual.
+  { tipo: 'granero', posicion: { x: 18, y: -6 }, huella: { x: 6, y: -12, ancho: 24, alto: 12 } },
+  { tipo: 'granero', rotado: true, posicion: { x: 12, y: 0 }, huella: { x: 6, y: -12, ancho: 12, alto: 24 } },
   { tipo: 'mina', posicion: { x: 9, y: -9 }, huella: { x: 6, y: -12, ancho: 6, alto: 6 } },
   { tipo: 'minaCobre', posicion: { x: 9, y: -9 }, huella: { x: 6, y: -12, ancho: 6, alto: 6 } },
   { tipo: 'minaEstano', posicion: { x: 9, y: -9 }, huella: { x: 6, y: -12, ancho: 6, alto: 6 } },
