@@ -7,15 +7,16 @@
 // todas las Facciones son los metadatos ya públicos en la ficción del juego (nombre, nivel, reputación,
 // Rey/Embajador) — sin ellos la pantalla de diplomacia no tendría con qué pintarse.
 //
-// **La única excepción son los EJÉRCITOS ajenos** (`ejercitosAvistados`), y solo desde que Doc 5.12.7 fijó
-// el número que faltaba: un ejército se ve si entra en tu territorio o si cae dentro del radio de visión de
-// uno de los tuyos. Viajan REDACTADOS —posición, Facción y nº de estandartes, nada más— porque una columna
-// en campaña es, por la ficción, visible: cruza campo abierto a la vista de quien vigile ese campo. Un
-// asentamiento rival, en cambio, sigue sin proyectarse en absoluto.
+// **La excepción es lo que se VE**, y viaja siempre REDACTADO: los ejércitos ajenos (`ejercitosAvistados`,
+// Doc 5.12.7) y los asentamientos ajenos (`asentamientosAvistados`, niebla de guerra Paso 1). De ambos se
+// proyecta lo que se distingue desde fuera —quién es y dónde está— y nada de su interior. Es la misma
+// ficción en los dos casos: una columna cruza campo abierto a la vista de quien vigile ese campo, y una
+// ciudad no se puede esconder.
 //
-// Lo que sigue faltando de la niebla de guerra (§12) es la MEMORIA: aquí se responde "¿se ve AHORA?", no
-// "¿qué recuerdo de la última vez que lo vi?". Eso es `ConocimientoJugador` y sigue diferido, junto con las
-// otras dos fuentes de visibilidad que diseña el doc 6 (contacto y alianza).
+// Lo que sigue faltando de la niebla de guerra (Consideraciones/Niebla_De_Guerra_Definicion.md) es la
+// MEMORIA: aquí se responde "¿se ve AHORA?", no "¿qué recuerdo de la última vez que lo vi?". Hoy lo que
+// dejas de ver desaparece del todo, en vez de quedarse como última foto conocida. Eso es `memoriaPorFaccion`
+// (Pasos 2-3) y sigue diferido, junto con la visión compartida por alianza (Paso 4).
 import type {
   AcuerdoTrueque,
   Asentamiento,
@@ -31,8 +32,8 @@ import type {
   ZonaFaccion,
   ZonaInfluencia,
 } from '../../domain/types';
-import { LOGISTICA } from '../../constants';
-import { distancia, pointInPolygon } from '../../world/geometria';
+import { VISION } from '../../constants';
+import { distancia } from '../../world/geometria';
 import type { EstadoMapa } from '../../world/mapa';
 import type { TrazadoAsentamiento } from '../../engine/trazado';
 import type { Instante } from '../../domain/tiempo';
@@ -73,6 +74,24 @@ export interface EjercitoAvistado {
   participantes: number;
 }
 
+/**
+ * Un asentamiento AJENO tal como se ve desde fuera: su FICHA (decisión del usuario, 2026-09-04). Quién es,
+ * de quién es, dónde está y cómo de grande — que es exactamente lo que se distingue mirando una ciudad.
+ *
+ * El `nivel` SÍ entra: una ciudad grande se ve grande, y no dice cuánta tropa tiene dentro, que es lo que
+ * decidiría un ataque. Queda fuera a propósito todo lo demás —almacén, escuadrones, edificios, colas,
+ * cargos, trazado urbano—: eso es telemetría de un rival, y es justo lo que esta proyección existe para
+ * impedir.
+ */
+export interface AsentamientoAvistado {
+  id: string;
+  /** Opcional por el mismo motivo que en `Asentamiento`: ausente = el cliente muestra el `id`. */
+  nombre?: string;
+  faccionId: string;
+  posicion: Point;
+  nivel: number;
+}
+
 export interface ProyeccionJugador {
   gameId: string;
   /** Instante de MUNDO "ahora" de la partida (doc 10) — `instanteDeTick(estado.tick)`, derivado, no
@@ -97,8 +116,13 @@ export interface ProyeccionJugador {
    * ciudadanía) es información táctica — es el mismo tipo de dato público que "quién gobierna Troya" en la
    * ficción del juego. Lo táctico/económico vive en `Asentamiento`, que sí se filtra. */
   facciones: Faccion[];
-  /** SOLO los de la Facción propia (Slice 1). El Slice 2 añade aquí lo visible por espacio/contacto/alianza. */
+  /** SOLO los de la Facción propia, COMPLETOS. Lo ajeno que se vea va aparte, en `asentamientosAvistados`. */
   asentamientos: Asentamiento[];
+  /** Los de CUALQUIER otra Facción que se estén viendo AHORA, redactados a su ficha (ver
+   * `AsentamientoAvistado`). Array aparte y no mezclado con `asentamientos`, por el mismo motivo que
+   * `ejercitosAvistados`: la diferencia entre "lo veo entero" y "solo lo avisto" es de TIPO, no un campo
+   * opcional que el cliente pueda olvidarse de mirar. */
+  asentamientosAvistados: AsentamientoAvistado[];
   caravanas: Caravana[];
   /** Los de la Facción propia, COMPLETOS — mismo criterio que `asentamientos`: de lo tuyo se ve todo. */
   ejercitos: Ejercito[];
@@ -158,19 +182,28 @@ function propioDeJugador(estado: GameSessionState, jugadorId: string) {
 }
 
 /**
- * Fuente ESPACIAL de la niebla de guerra (Doc 5.12.7): un jugador ve de lo ajeno lo que entra en su
- * territorio —que vigila por definición— y lo que sus propios ejércitos alcanzan a ver mientras marchan,
- * `LOGISTICA.radioVisionEjercito` a la redonda.
+ * Fuente ESPACIAL de la niebla de guerra: un jugador ve de lo ajeno lo que sus plazas vigilan —su radio de
+ * influencia MÁS `VISION.margenAsentamiento`, como una atalaya que mira algo más allá de la frontera— y lo
+ * que sus ejércitos alcanzan a ver mientras marchan, `VISION.ejercito` a la redonda.
+ *
+ * Un detalle que conviene tener presente: se mide contra `radioPotencial`, el DISCO, no contra el polígono de
+ * la zona. La zona está recortada por las fronteras con Facciones rivales (`computeZonaInfluencia`) y ese
+ * recorte es político, no óptico: que un rival tenga su frontera pegada a tu ciudad no ciega a tus vigías —
+ * si acaso lo contrario. Como el polígono siempre está contenido en el disco, esto solo ensancha la vista,
+ * nunca la recorta.
  *
  * Sin memoria, a propósito: esto responde "¿se ve AHORA?" y nada más. El "último conocido" —recordar lo que
- * viste cuando dejas de verlo— es la otra mitad de §12 y necesita una entidad (`ConocimientoJugador`) que no
- * existe todavía. Mientras tanto un ejército rival aparece y desaparece del mapa, que es conservador en la
- * dirección correcta: se filtra de menos, nunca de más.
+ * viste cuando dejas de verlo— es la otra mitad de la mecánica (Pasos 2-3). Mientras tanto lo ajeno aparece y
+ * desaparece del mapa, que es conservador en la dirección correcta: se filtra de menos, nunca de más.
  */
-function seVeAhora(punto: Point, zonasPropias: readonly ZonaInfluencia[], ejercitosPropios: readonly Ejercito[]): boolean {
+function seVeAhora(
+  punto: Point,
+  asentamientosPropios: readonly Asentamiento[],
+  ejercitosPropios: readonly Ejercito[]
+): boolean {
   return (
-    zonasPropias.some((z) => pointInPolygon(punto, z.poligono)) ||
-    ejercitosPropios.some((e) => distancia(punto, e.posicionActual) <= LOGISTICA.radioVisionEjercito)
+    asentamientosPropios.some((a) => distancia(punto, a.posicion) <= a.radioPotencial + VISION.margenAsentamiento) ||
+    ejercitosPropios.some((e) => distancia(punto, e.posicionActual) <= VISION.ejercito)
   );
 }
 
@@ -200,10 +233,13 @@ export function proyectarParaJugador(
     estadoMapa: estado.estadoMapa,
     facciones: estado.facciones,
     asentamientos: asentamientosPropios,
+    asentamientosAvistados: estado.asentamientos
+      .filter((a) => !esPropio(a.id) && seVeAhora(a.posicion, asentamientosPropios, ejercitosPropios))
+      .map((a) => ({ id: a.id, nombre: a.nombre, faccionId: a.faccionId, posicion: a.posicion, nivel: a.nivel })),
     caravanas: estado.caravanas.filter((c) => esPropio(c.origenAsentamientoId) || (c.destinoAsentamientoId !== undefined && esPropio(c.destinoAsentamientoId))),
     ejercitos: ejercitosPropios,
     ejercitosAvistados: estado.ejercitos
-      .filter((e) => !propios.has(e.id) && seVeAhora(e.posicionActual, zonasPropias, ejercitosPropios))
+      .filter((e) => !propios.has(e.id) && seVeAhora(e.posicionActual, asentamientosPropios, ejercitosPropios))
       .map((e) => ({ id: e.id, faccionId: e.faccionId, posicionActual: e.posicionActual, participantes: participantesDe(e.escuadrones) })),
     acuerdos: estado.acuerdos.filter((a) => esPropio(a.asentamientoAId) || esPropio(a.asentamientoBId)),
     ordenes: estado.ordenes.filter((o) => esPropio(o.asentamientoId)),

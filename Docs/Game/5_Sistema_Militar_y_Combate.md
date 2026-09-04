@@ -246,7 +246,7 @@ Un ejército solo sabe **ir a un sitio** (un asentamiento o un punto del mapa). 
 - **Al cruzarse** con un ejército enemigo → combate en mundo abierto (5.2.2).
 - **Al pasar cerca** de una caravana enemiga → intercepción (5.2.3, Doc 3.10).
 
-"Cruzarse" y "pasar cerca" son **15** unidades de mapa (decisión del usuario, 2026-09-04), frente a las **150** que alcanza la vista (5.12.7). Que los dos números no se parezcan es el punto: **se ve diez veces más lejos de lo que se tropieza**, así que un ejército divisa a otro con muchísima antelación y le da tiempo a evitarlo, salirle al paso o prepararse. El encuentro es una decisión, no un accidente por pasar cerca.
+"Cruzarse" y "pasar cerca" son **15** unidades de mapa (decisión del usuario, 2026-09-04), frente a las **150** que alcanza la vista de un ejército (5.12.7). Que los dos números no se parezcan es el punto: **se ve diez veces más lejos de lo que se tropieza**, así que un ejército divisa a otro con muchísima antelación y le da tiempo a evitarlo, salirle al paso o prepararse. El encuentro es una decisión, no un accidente por pasar cerca.
 
 Cuatro reglas acotan lo que pasa cuando sí se tropiezan:
 
@@ -302,18 +302,31 @@ Consecuencias que salen del `min` sin escribir ninguna regla más:
 
 Una marcha en curso **se puede cancelar en cualquier momento**, y hacerlo **dispara la vuelta**: el ejército pasa a `regresando` y desanda su ruta hacia el asentamiento de origen. No se teletransporta ni se desvanece — volver cuesta el mismo camino que costó ir, y sigue comiendo del carro durante el regreso.
 
-### 5.12.7 Qué ve un ejército, y qué ve el jugador
+### 5.12.7 Qué ve el jugador — la vista
 
-Un ejército en marcha **ve a su alrededor en un radio de 150** (unidades de mapa). Sobre el mundo de 2000×2000 eso son unas **dos provincias** (Doc 1.0a), así que una columna en campaña divisa varias ciudades por delante si la geografía lo permite — y sigue muy por debajo del radio de cohesión de un reino (~5 provincias), de modo que ver no es lo mismo que controlar.
+Un jugador ve de lo AJENO lo que alcancen sus dos clases de ojos:
 
-Un jugador, por tanto, ve de lo AJENO dos cosas:
+1. **Sus plazas**, que vigilan su radio de influencia **más 60** unidades de mapa. La ciudad mira algo más allá de su frontera, como una atalaya.
+2. **Sus ejércitos en marcha**, que ven **150** a la redonda.
 
-1. **Lo que entre en su zona de influencia** — su territorio, que vigila por definición.
-2. **Lo que sus propios ejércitos alcancen a ver** mientras marchan.
+**Los dos números solo se entienden comparados.** Que la columna vea más lejos que la plaza es lo que mantiene el valor de explorar: un ejército divisa una ciudad mucho antes de que la ciudad lo divise a él, y conserva la iniciativa. Y el margen de la plaza coincide con la distancia a la que un ejército puede repostar en ella (5.13), lo que da una regla fácil de recordar: **si una columna está lo bastante cerca como para repostar en tu ciudad, tu ciudad la ve.**
 
-De un ejército ajeno se sabe **dónde está, de qué Facción es y cuánta gente lo compone** (el número de rombos, Doc 5.12.2). NO se sabe su composición ni su poder: eso exigiría ver sus escuadrones, y sería telemetría de un rival.
+Sobre el mundo de 2000×2000, los 150 del ejército son unas **dos provincias** (Doc 1.0a) — varias ciudades por delante si la geografía lo permite — y siguen muy por debajo del radio de cohesión de un reino (~5 provincias): ver no es lo mismo que controlar. Los 60 de margen **duplican el área vigilada de una plaza recién fundada**, así que se notan desde el primer minuto.
 
-> Esto es la fuente **espacial** de la niebla de guerra (`Docs/Mecanicas a desarrollar.md` §12), que estaba bloqueada precisamente por faltar este número. Lo que sigue pendiente ahí es la capa de MEMORIA — el "último conocido", que recuerda lo que viste cuando dejas de verlo.
+El margen de la plaza se mide sobre su **radio**, no sobre la silueta de su zona. La zona viene recortada por las fronteras con Facciones rivales (Doc 1.2), y ese recorte es político, no óptico: que un rival plante su frontera pegada a tu ciudad no ciega a tus vigías.
+
+> **Consecuencia anotada para calibración**: como el radio crece con el nivel (60 → 180), una plaza de **nivel 5 vigila 240 y ve más lejos que un ejército**. Es coherente con la ficción —una capital tiene atalayas— pero diluye la ventaja de explorar cerca de las grandes ciudades.
+
+De lo ajeno se ve **quién es y dónde está, nunca su interior**:
+
+| Lo avistado | Qué se sabe | Qué NO se sabe |
+|---|---|---|
+| **Ejército** | Dónde está, de qué Facción es, cuántos rombos lo componen (5.12.2) | Composición, poder, ruta, objetivo, suministro, de dónde salió |
+| **Asentamiento** | Nombre, Facción, posición y **nivel** | Almacén, guarnición, edificios, colas de construcción, cargos |
+
+El **nivel** de una plaza sí se ve porque una ciudad grande se ve grande desde fuera; no dice cuánta tropa tiene dentro, que es lo que decidiría un ataque.
+
+> Esto es la **vista** — la mitad de la niebla de guerra que responde "¿qué veo AHORA?". La otra mitad es la **memoria**, el "último conocido" que recuerda lo que viste cuando dejas de verlo, y sigue en desarrollo (`Consideraciones/Niebla_De_Guerra_Definicion.md`). Hoy lo que dejas de ver desaparece del mapa.
 
 ## 5.13 Suministro en campaña (a petición del usuario, 2026-09-01)
 

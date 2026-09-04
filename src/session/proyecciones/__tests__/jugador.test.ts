@@ -9,7 +9,7 @@ import { fundarAsentamiento } from '../../comandos/fundarAsentamiento';
 import { idDeMapa, type GeometriaAsentamientos } from '../../estado';
 import { proyectarParaJugador } from '../jugador';
 import type { Ejercito, Escuadron, Point } from '../../../domain/types';
-import { LOGISTICA } from '../../../constants';
+import { VISION } from '../../../constants';
 
 // Estas pruebas verifican filtrado por Facción/ciudadanía, no la geometría por frame (Fase C10, cubierta en
 // su propia sección más abajo) — una entrada vacía basta y no obliga a construir asentamientos reales solo
@@ -43,7 +43,7 @@ describe('asentamientos: solo los de la Facción propia', () => {
     expect(proyeccion.asentamientos).toEqual([]);
   });
 
-  it('el asentamiento de una Facción rival NO aparece — es justo lo que Slice 1 no resuelve todavía', () => {
+  it('el asentamiento de una Facción rival nunca entra en `asentamientos`, se vea o no', () => {
     const base = partidaConAsentamiento();
     const opcRival = { ...OPC, actor: 'rival' };
     const rf = base.sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, opcRival);
@@ -52,6 +52,59 @@ describe('asentamientos: solo los de la Facción propia', () => {
     const proyeccion = proyectarParaJugador(base.sesion.getState(), base.fundador, SIN_GEOMETRIA);
     expect(proyeccion.asentamientos).toHaveLength(1); // solo el propio, no los 2 que existen en la partida
     expect(proyeccion.asentamientos[0]!.faccionId).toBe(base.faccionId);
+  });
+});
+
+// Niebla de guerra, Paso 1 (Consideraciones/Niebla_De_Guerra_Definicion.md §2.1-2.2). Se funda una plaza
+// rival de verdad en vez de inyectarla en el estado: asi las pruebas van contra `radioPotencial` real y
+// contra el `nivel` real, no contra un objeto a mano que podria no parecerse a un asentamiento.
+describe('asentamientosAvistados: la FICHA de lo ajeno, solo si se ve', () => {
+  function conPlazaRivalEn(posicion: Point) {
+    const base = partidaConAsentamiento();
+    const opcRival = { ...OPC, actor: 'rival' };
+    const rf = base.sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, opcRival);
+    const ra = base.sesion.ejecutar(fundarAsentamiento, { faccionId: rf.datos!.faccionId, posicion }, opcRival);
+    return { ...base, faccionRivalId: rf.datos!.faccionId, asentamientoRivalId: ra.datos!.asentamientoId };
+  }
+
+  it('una plaza rival LEJOS de todo lo propio no aparece ni redactada', () => {
+    const { sesion, fundador } = conPlazaRivalEn({ x: 900, y: 900 });
+    const proyeccion = proyectarParaJugador(sesion.getState(), fundador, SIN_GEOMETRIA);
+    expect(proyeccion.asentamientosAvistados).toEqual([]);
+  });
+
+  it('una plaza rival dentro de lo que vigila la propia se avista, con su ficha y nada mas', () => {
+    // El fixture funda en (400,400) con radio inicial 30: (400,470) cae dentro de 30+60=90.
+    const { sesion, fundador, faccionRivalId, asentamientoRivalId } = conPlazaRivalEn({ x: 400, y: 470 });
+    const rival = sesion.getState().asentamientos.find((a) => a.id === asentamientoRivalId)!;
+
+    const proyeccion = proyectarParaJugador(sesion.getState(), fundador, SIN_GEOMETRIA);
+    expect(proyeccion.asentamientosAvistados).toEqual([
+      { id: asentamientoRivalId, nombre: rival.nombre, faccionId: faccionRivalId, posicion: { x: 400, y: 470 }, nivel: rival.nivel },
+    ]);
+  });
+
+  it('lo avistado NO lleva almacen, escuadrones, edificios, colas ni cargos: es telemetria de rival', () => {
+    const { sesion, fundador } = conPlazaRivalEn({ x: 400, y: 470 });
+    const avistado = proyectarParaJugador(sesion.getState(), fundador, SIN_GEOMETRIA).asentamientosAvistados[0]!;
+
+    expect(Object.keys(avistado).sort()).toEqual(['faccionId', 'id', 'nivel', 'nombre', 'posicion']);
+  });
+
+  it('un ejercito propio en marcha tambien avista plazas rivales, a su propio radio', () => {
+    const { sesion, faccionId, fundador, asentamientoRivalId } = conPlazaRivalEn({ x: 900, y: 900 });
+    // A 100 de la plaza rival, muy lejos de la propia: la unica vision posible es la de la columna.
+    const explorador = ejercito('e-explorador', faccionId, { x: 1000, y: 900 }, [escuadron('s1', fundador)]);
+    const estado = { ...sesion.getState(), ejercitos: [explorador] };
+
+    const proyeccion = proyectarParaJugador(estado, fundador, SIN_GEOMETRIA);
+    expect(proyeccion.asentamientosAvistados.map((a) => a.id)).toEqual([asentamientoRivalId]);
+  });
+
+  it('la plaza PROPIA no se cuela en lo avistado: ya viaja entera en `asentamientos`', () => {
+    const { sesion, fundador, asentamientoId } = conPlazaRivalEn({ x: 400, y: 470 });
+    const proyeccion = proyectarParaJugador(sesion.getState(), fundador, SIN_GEOMETRIA);
+    expect(proyeccion.asentamientosAvistados.map((a) => a.id)).not.toContain(asentamientoId);
   });
 });
 
@@ -253,29 +306,49 @@ describe('ejercitosAvistados: lo ajeno, solo si se ve y siempre redactado', () =
     expect(proyeccion.ejercitosAvistados).toEqual([]);
   });
 
-  it('un ejercito rival DENTRO de la zona de influencia propia se avista', () => {
-    const { sesion, asentamientoId, fundador } = partidaConAsentamiento();
+  it('un ejercito rival dentro de lo que vigila una plaza propia se avista', () => {
+    const { sesion, fundador } = partidaConAsentamiento();
     const rival = ejercito('e-rival', 'faccion-rival', { x: 410, y: 410 }, [escuadron('s1', 'otro')]);
     const estado = { ...sesion.getState(), ejercitos: [rival] };
 
-    const proyeccion = proyectarParaJugador(estado, fundador, zonaCuadrada(asentamientoId, { x: 400, y: 400 }, 30));
+    const proyeccion = proyectarParaJugador(estado, fundador, SIN_GEOMETRIA);
     expect(proyeccion.ejercitosAvistados.map((e) => e.id)).toEqual(['e-rival']);
   });
 
-  it('la zona de influencia de un asentamiento AJENO no da vision, aunque llegue en la geometria', () => {
+  it('una plaza vigila su radio MAS el margen, y ni una unidad mas', () => {
     const { sesion, fundador } = partidaConAsentamiento();
-    const rival = ejercito('e-rival', 'faccion-rival', { x: 910, y: 910 }, [escuadron('s1', 'otro')]);
-    const estado = { ...sesion.getState(), ejercitos: [rival] };
+    // El fixture funda en (400,400); el radio es el que tenga la plaza en ese momento, no un numero a mano.
+    const propio = sesion.getState().asentamientos[0]!;
+    const alcance = propio.radioPotencial + VISION.margenAsentamiento;
+    const dentro = ejercito('e-dentro', 'faccion-rival', { x: 400 + alcance - 1, y: 400 }, [escuadron('s1', 'otro')]);
+    const fuera = ejercito('e-fuera', 'faccion-rival', { x: 400 + alcance + 1, y: 400 }, [escuadron('s2', 'otro')]);
+    const estado = { ...sesion.getState(), ejercitos: [dentro, fuera] };
 
-    const proyeccion = proyectarParaJugador(estado, fundador, zonaCuadrada('asentamiento-ajeno', { x: 900, y: 900 }, 30));
-    expect(proyeccion.ejercitosAvistados).toEqual([]);
+    const proyeccion = proyectarParaJugador(estado, fundador, SIN_GEOMETRIA);
+    expect(proyeccion.ejercitosAvistados.map((e) => e.id)).toEqual(['e-dentro']);
+  });
+
+  it('la GEOMETRIA no da vision: quien ve es la plaza, no el poligono que llegue por parametro', () => {
+    // Regresion de la niebla Paso 1: la vision se media contra el poligono de zona, que viene recortado por
+    // las fronteras rivales (`computeZonaInfluencia`). Ese recorte es politico, no optico. Ahora se mide
+    // contra el disco de la propia plaza, asi que un poligono inyectado —propio o ajeno— no cambia nada.
+    const { sesion, asentamientoId, fundador } = partidaConAsentamiento();
+    const lejos = ejercito('e-lejos', 'faccion-rival', { x: 910, y: 910 }, [escuadron('s1', 'otro')]);
+    const estado = { ...sesion.getState(), ejercitos: [lejos] };
+
+    // Un cuadrado enorme que lo cubre, atribuido a la plaza PROPIA: sigue sin verse.
+    const conZonaPropia = proyectarParaJugador(estado, fundador, zonaCuadrada(asentamientoId, { x: 900, y: 900 }, 30));
+    expect(conZonaPropia.ejercitosAvistados).toEqual([]);
+    // Y la zona de un asentamiento AJENO tampoco presta vision, obviamente.
+    const conZonaAjena = proyectarParaJugador(estado, fundador, zonaCuadrada('asentamiento-ajeno', { x: 900, y: 900 }, 30));
+    expect(conZonaAjena.ejercitosAvistados).toEqual([]);
   });
 
   it('un ejercito propio avista lo que caiga en su radio de vision, y solo eso', () => {
     const { sesion, faccionId, fundador } = partidaConAsentamiento();
     const propio = ejercito('e-propio', faccionId, { x: 1000, y: 1000 }, [escuadron('s1', fundador)]);
-    const dentro = ejercito('e-dentro', 'faccion-rival', { x: 1000 + LOGISTICA.radioVisionEjercito - 1, y: 1000 }, [escuadron('s2', 'otro')]);
-    const fuera = ejercito('e-fuera', 'faccion-rival', { x: 1000 + LOGISTICA.radioVisionEjercito + 1, y: 1000 }, [escuadron('s3', 'otro')]);
+    const dentro = ejercito('e-dentro', 'faccion-rival', { x: 1000 + VISION.ejercito - 1, y: 1000 }, [escuadron('s2', 'otro')]);
+    const fuera = ejercito('e-fuera', 'faccion-rival', { x: 1000 + VISION.ejercito + 1, y: 1000 }, [escuadron('s3', 'otro')]);
     const estado = { ...sesion.getState(), ejercitos: [propio, dentro, fuera] };
 
     const proyeccion = proyectarParaJugador(estado, fundador, SIN_GEOMETRIA);

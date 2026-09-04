@@ -55,32 +55,33 @@ en "Slice 1", deliberadamente conservador: el jugador ve su Facción completa y 
 metadatos ya públicos en la ficción** (nombre, nivel, reputación, Rey/Embajador, relaciones diplomáticas).
 Cero telemetría en vivo de un rival.
 
-**La fuente espacial ya está implementada para EJÉRCITOS** (2026-09-03, Doc 5.12.7): `proyectarParaJugador`
-proyecta en `ejercitosAvistados` los ejércitos ajenos que caen en tu zona de influencia o dentro de
-`LOGISTICA.radioVisionEjercito` (150) de uno de los tuyos, redactados a posición, Facción y nº de
-participantes. La mecánica de ejércitos desbloqueó ese radio, que era justo el número que faltaba.
+> **DISEÑO CERRADO Y EN EJECUCIÓN (2026-09-04).** El registro de decisiones y el plan de los 6 pasos están
+> en `Consideraciones/Niebla_De_Guerra_Definicion.md`; las reglas de juego, en Doc 5.12.7. Esta entrada se
+> retirará del índice cuando la mecánica esté hecha.
 
-Lo que queda es **decisión de diseño de juego**, no de arquitectura:
+El jugador debe acabar viendo el mundo en **tres estados** (así lo planteó el usuario):
 
-- **Patrón: se muestra el ÚLTIMO ESTADO CONOCIDO, no el actual** (niebla de guerra tipo RTS). Decisión ya
-  tomada (2026-08-24). Evita filtrar telemetría en vivo — ves el asentamiento rival tal como estaba la última
-  vez que tuviste contacto, no como está ahora. **Es lo que hoy NO hace la proyección de ejércitos**: sin
-  memoria, un ejército rival aparece y desaparece del mapa según entra y sale de tu vista.
-- **Entidad `ConocimientoJugador`**: qué sabe cada jugador y desde cuándo (por asentamiento / entidad). Es la
-  pieza que falta para el punto anterior.
-- **Las tres fuentes de visibilidad de lo ajeno**:
-  1. **Espacial** — hecha para ejércitos (arriba). *Falta aplicarla a los ASENTAMIENTOS rivales, que hoy no
-     se proyectan en absoluto, y decidir si el radio de un asentamiento es su zona de influencia o algo mayor.*
-  2. **Contacto** — al proponer un trueque con otro asentamiento pasas a "conocerlo". *Falta decidir si ese
-     conocimiento decae con el tiempo o se congela indefinidamente en el último snapshot.*
-  3. **Alianza** — un aliado ve lo que ves tú, en vivo (no "último conocido"): la alianza es cooperación
-     explícita.
+1. **No lo veo y nunca lo he visto**: esa zona está tapada, terreno incluido.
+2. **No lo veo pero lo vi antes**: se guarda lo último que vi, con un filtro oscuro, como si fuera de noche.
+3. **Lo estoy viendo**: tal cual. Al dejar de verlo, cae al estado anterior.
 
-> **DISEÑO CERRADO (2026-09-04).** Las tres decisiones que faltaban están tomadas y el plan de ejecución
-> escrito en `Consideraciones/Niebla_De_Guerra_Definicion.md`: un asentamiento ve su zona **más un margen de
-> 60**, de un rival se sabe su **ficha** (nombre, Facción, posición, nivel) y nada de su interior, y el
-> conocimiento por contacto **no caduca pero se refresca** al volver a comerciar. Esta entrada se retirará del
-> índice cuando la mecánica esté hecha.
+Y sale de **una sola regla**: *lo que alcanzas a ver este tick queda grabado*. Ver algo ES conocerlo — el
+contacto comercial no es una vía aparte, es otra forma de verlo un instante.
+
+**Hecho (Paso 1, 2026-09-04): la VISTA**, o sea el estado 3. `proyectarParaJugador` proyecta lo ajeno que se
+ve ahora mismo, siempre redactado: `ejercitosAvistados` (desde 2026-09-03) y `asentamientosAvistados` con la
+ficha del rival. Los dos radios viven en `VISION` (`ejercito: 150`, `margenAsentamiento: 60`) y la mecánica de
+ejércitos desbloqueó el primero, que era el número que llevaba tiempo faltando.
+
+**Lo que queda es la MEMORIA**, o sea los estados 1 y 2, y el reparto de responsabilidades está decidido:
+
+- `memoriaPorFaccion` en el estado —lo explorado, en rejilla gruesa, y la última ficha de cada plaza conocida—
+  guardado por **Facción**, no por jugador: la proyección ya enseña la Facción propia completa a cualquiera de
+  sus ciudadanos.
+- **El terreno lo tapa el CLIENTE DE JUGADOR**, no el servidor (decisión del usuario). La geografía no es
+  información táctica y el cliente ya la cachea para siempre por su `mapaId`; lo que no puede salir del
+  servidor son las ENTIDADES, y eso ya se filtra. **El cliente de administración lo ve todo.**
+- **Visión compartida por alianza**: en vivo, no "último conocido" — la alianza es cooperación explícita.
 
 ## 13. La capital como decisión del jugador
 

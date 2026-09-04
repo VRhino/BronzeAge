@@ -1,6 +1,7 @@
 # Niebla de guerra ("último conocido") — cierre de diseño y plan de ejecución
 
-> **Estado (2026-09-04): diseño cerrado, CERO código escrito.** Mismo criterio que
+> **Estado (2026-09-04): diseño cerrado y REVISADO (§2.4-2.6) tras contrastarlo con el resultado que el
+> usuario quiere ver en pantalla.** Mismo criterio que
 > `Murallas_Definicion.md` y `Movimiento_Ejercitos_Definicion.md`: la especificación se escribe ANTES de tocar
 > el motor.
 >
@@ -25,9 +26,9 @@ Así que esto ya no es una mecánica desde cero: es **completar** lo que quedó 
 |---|---|
 | Proyección por audiencia | Hecha (Fase C4) |
 | Ver ejércitos ajenos por espacio | **Hecho** (Doc 5.12.7) |
-| Ver asentamientos ajenos por espacio | Falta — hoy no se proyecta ni uno |
+| Ver asentamientos ajenos por espacio | **Hecho** (Paso 1, 2026-09-04) |
 | Memoria ("último conocido") | Falta — hoy lo visto aparece y desaparece |
-| Conocimiento por contacto | Falta |
+| Terreno tapado donde nunca se estuvo | Falta — hoy el mapa entero se descarga y se pinta |
 | Visión compartida por alianza | Falta |
 
 ## 2. Decisiones cerradas con el usuario (2026-09-04)
@@ -62,9 +63,9 @@ es telemetría de un rival, y es justo lo que la proyección existe para impedir
 El **nivel sí entra** porque es visible desde fuera en la ficción: una ciudad grande se ve grande. No dice
 cuánta tropa tiene dentro, que es lo que decidiría un ataque.
 
-### 2.3 El conocimiento por contacto no caduca, y se refresca al volver a comerciar
+### 2.3 El conocimiento no caduca, y se refresca cada vez que se vuelve a ver
 
-Decisión: **no caduca; cada trueque nuevo actualiza la foto.**
+Decisión: **no caduca; cada vez que vuelves a verlo, la foto se actualiza.**
 
 No hace falta elegir un plazo de caducidad —que sería una constante más sin medir— porque **el dato viejo ya
 se delata solo**: la foto viaja con el instante en que se tomó, y la interfaz puede decir "última información:
@@ -72,7 +73,55 @@ hace 3 horas". El jugador juzga si fiarse.
 
 Borrar información que el jugador ya sabe se siente arbitrario; dejarla envejecer a la vista, no.
 
-### 2.4 Lo que ya estaba decidido y no se toca
+### 2.4 VER es conocer — corrección al plan original (2026-09-04)
+
+El usuario describió el resultado que quiere en tres estados, y al contrastarlo apareció un error de fondo en
+la primera versión de este documento:
+
+> 1. **No lo veo y nunca lo he visto**: tapado.
+> 2. **No lo veo pero lo vi antes**: se guarda lo último que vi, con un filtro oscuro.
+> 3. **Lo estoy viendo**: tal cual. Al dejar de verlo, cae en el estado anterior.
+
+La primera versión solo guardaba memoria del **contacto comercial**. Con eso, ver una ciudad rival con un
+ejército y alejarse la hacía **desaparecer del todo** en vez de caer al estado 2 — justo lo contrario del
+punto 3.
+
+La corrección deja el modelo **más simple**, no más complicado:
+
+> **Ver algo ES conocerlo.** No hay tres fuentes de conocimiento, hay una regla: lo que esté a tu alcance
+> este tick queda grabado. Comerciar no es una vía aparte — es otra forma de "ver" ese asentamiento un
+> instante.
+
+Las tres fuentes que arrastraba el documento de arquitectura (espacial, contacto, alianza) colapsan así en un
+solo mecanismo, y el contacto pasa a ser un caso particular del mismo.
+
+### 2.5 El terreno también se tapa, y de eso se encarga el CLIENTE DE JUGADOR
+
+Decisión del usuario: **el estado 1 tapa también el terreno**, no solo lo que hay encima. Sin eso, "nunca
+visto" y "visto pero vacío" se ven igual y los tres estados no se distinguen.
+
+Pero el enmascarado lo hace el **cliente de jugador**, no el servidor:
+
+- **El terreno no es información táctica.** La geografía es la misma para todos y el cliente ya la descarga
+  una vez y la cachea para siempre por su `mapaId` (Fase C11, 125 KB idénticos byte a byte). Ocultarla en el
+  servidor rompería esa caché a cambio de nada: lo que no puede salir del servidor son las ENTIDADES, y eso
+  ya se filtra.
+- **El cliente de administración lo ve todo**, sin máscara. Es una herramienta de operación, no un jugador.
+
+Así que el servidor solo aporta **qué has explorado**; cómo se pinta es cosa de cada cliente.
+
+### 2.6 La exploración es de la FACCIÓN, no del jugador
+
+Decisión tomada al diseñar el almacenamiento: lo explorado y lo conocido se guardan **por Facción**.
+
+Dos razones, y la segunda es la que manda:
+
+- **Coherencia**: la proyección ya enseña la Facción propia COMPLETA a cualquiera de sus ciudadanos. Que un
+  miembro no supiera lo que otro ya exploró sería incoherente con todo lo demás.
+- **Coste**: en el laboratorio hay 30 Facciones y ~150 jugadores. Guardarlo por jugador multiplica por cinco
+  un dato que se escribe en cada snapshot.
+
+### 2.7 Lo que ya estaba decidido y no se toca
 
 - **Se muestra el ÚLTIMO ESTADO CONOCIDO, no el actual** (2026-08-24, doc de arquitectura 6 §3). Es el patrón
   de los RTS y lo que impide que un solo trueque dé telemetría en vivo para siempre.
@@ -80,28 +129,32 @@ Borrar información que el jugador ya sabe se siente arbitrario; dejarla envejec
 
 ## 3. El modelo que sale de esas decisiones
 
-Tres fuentes de visibilidad, y cada una entrega un tipo de dato distinto:
+Una sola regla —**lo que alcanzas a ver este tick queda grabado**— produce los tres estados del jugador:
 
-| Fuente | Qué habilita | Datos | Frescura |
+| Estado | Cómo se produce | Qué se envía | Cómo lo pinta el cliente de jugador |
 |---|---|---|---|
-| **Espacial** | Lo que cae en tu zona + margen, o en la vista de un ejército tuyo | Ficha (2.2) | **En vivo** |
-| **Contacto** | Un asentamiento con el que has comerciado | Ficha (2.2) | **Congelada**, con su instante |
-| **Alianza** | Todo lo que ven tus aliados | Lo que el aliado vea | **En vivo** |
+| **1. Nunca visto** | La celda no está en lo explorado de tu Facción | Nada | Terreno tapado |
+| **2. Visto antes** | Explorado, pero fuera de alcance ahora | La FICHA congelada + `conocidoEn` | Terreno visible, entidades con filtro oscuro |
+| **3. Viéndolo** | Dentro de zona+margen, de la vista de un ejército tuyo, o de la de un aliado | La ficha EN VIVO | Tal cual |
 
-La distinción clave, y la que evita el error fácil: **lo que ves AHORA es en vivo; lo que RECUERDAS es una
-foto.** Un asentamiento rival dentro de tu zona se proyecta en vivo porque lo estás mirando; uno con el que
-comerciaste hace tres horas y está al otro lado del mapa, congelado.
+Y el tránsito que pedía el usuario sale solo: **al dejar de ver algo, deja de estar en la lista de en vivo y
+se queda la última foto** — que es exactamente "cae en la categoría anterior".
 
-Cuando las dos fuentes coinciden, gana la de en vivo: estar mirándolo es mejor información que recordarlo.
+Cuando las dos coinciden gana la de en vivo: estar mirándolo es mejor información que recordarlo.
 
 ## 4. Representación en el motor
 
-### `ConocimientoJugador` — la única entidad nueva
+### Lo que se guarda, y lo que NO
+
+Se guarda **solo la memoria**: lo explorado y la última foto de cada asentamiento conocido, por Facción. Lo
+que se ve AHORA no se guarda — se deriva en cada proyección de dónde están tus asentamientos y tus ejércitos,
+exactamente como ya se hace con `ejercitosAvistados`. Guardar lo derivable es la clase de error que este
+proyecto lleva evitando desde el principio.
 
 ```
-ConocimientoJugador {
-  jugadorId: string
-  asentamientos: Record<asentamientoId, FichaConocida>
+MemoriaFaccion {
+  exploracion: <celdas exploradas>                    // el estado 1 contra el 2
+  asentamientos: Record<asentamientoId, FichaConocida>  // el estado 2
 }
 
 FichaConocida {
@@ -110,20 +163,31 @@ FichaConocida {
 }
 ```
 
-Vive en `GameSessionState`, como `jugadores`. Un jugador sin registro no conoce nada — igual que un jugador
-sin registro usa el Liderazgo base, así que **las partidas guardadas no necesitan migración**.
+Vive en `GameSessionState` como `memoriaPorFaccion`. Una Facción sin registro no ha explorado nada — igual
+que un jugador sin registro usa el Liderazgo base, así que **las partidas guardadas no necesitan migración**.
 
-**Solo guarda lo de CONTACTO.** Lo espacial no se guarda: se deriva en cada proyección de dónde están tus
-asentamientos y tus ejércitos, exactamente como ya se hace con `ejercitosAvistados`. Guardar lo que se puede
-derivar es la clase de error que este proyecto lleva evitando desde el principio.
+### La exploración: una rejilla gruesa
+
+Lo explorado no puede ser una lista de puntos: es un ÁREA. Se discretiza en celdas de
+`EXPLORACION.tamanoCelda` (25 unidades de mapa → 80×80 = 6.400 celdas sobre el mundo de 2000).
+
+El tamaño es un compromiso explícito: con celdas de 25, el margen de visión de una plaza (120) son ~5 celdas
+de radio — bastante para que la frontera de la niebla se lea como una forma y no como un cuadrado — y el
+coste por Facción se queda en **6.400 bits, o sea 800 bytes**. Treinta Facciones son 24 KB en el snapshot,
+frente a los 125 KB que ya ocupa el mapa.
+
+Se guarda como bitmap y no como lista de celdas por eso mismo: una lista de 6.400 pares `"col,row"` son ~45 KB
+por Facción, doscientas veces más para el mismo dato. La opacidad que eso introduce se acota en un módulo
+propio con sus helpers (`marcarExplorado`, `estaExplorado`) y sus tests.
 
 ### En la proyección
 
-`ProyeccionJugador` gana un campo, hermano del que ya existe para ejércitos:
+`ProyeccionJugador` gana tres campos:
 
 ```
-asentamientosAvistados: FichaAsentamiento[]   // en vivo, por espacio o alianza
-asentamientosConocidos: FichaConocida[]       // congelados, por contacto
+asentamientosAvistados: FichaAsentamiento[]   // estado 3: en vivo
+asentamientosConocidos: FichaConocida[]       // estado 2: congelados, con `conocidoEn`
+exploracion: <celdas exploradas>              // estado 1 contra 2: lo que el cliente usa para tapar
 ```
 
 Dos arrays y no uno, por el mismo motivo que se separaron `ejercitos` y `ejercitosAvistados`: **la diferencia
@@ -132,20 +196,42 @@ mirar.** Y solo el segundo lleva `conocidoEn`, porque solo el segundo puede esta
 
 ## 5. Plan de ejecución
 
-- [ ] **Paso 1 — Visión espacial de asentamientos ajenos.** El margen (`radioVisionAsentamiento`) y el filtro
-      en `proyectarParaJugador`, reutilizando `seVeAhora` que ya existe para ejércitos. Sin memoria todavía:
-      esto solo añade "veo lo que tengo delante". Es el paso que más juego añade por menos código.
-- [ ] **Paso 2 — `ConocimientoJugador` en el estado**, con su migración de snapshot (aunque sea vacía) y el
-      registro al cerrarse un trueque. Todavía no se proyecta: solo se acumula.
-- [ ] **Paso 3 — Proyectar lo conocido**, con `conocidoEn`, y la regla de que lo visto en vivo gana sobre lo
-      recordado.
+- [x] **Paso 1 — Visión espacial de asentamientos ajenos** (estado 3). **HECHO (2026-09-04).**
+      `AsentamientoAvistado` + `asentamientosAvistados` en `proyectarParaJugador`, sobre el mismo `seVeAhora`
+      que ya servía a los ejércitos. Ver §5.1 para lo que salió por el camino.
+- [ ] **Paso 2 — `memoriaPorFaccion` en el estado**: la rejilla de exploración con su módulo y sus helpers, y
+      el grabado en el tick de lo que cada Facción alcanza a ver. Todavía no se proyecta: solo se acumula.
+- [ ] **Paso 3 — Proyectar la memoria** (estados 1 y 2): `exploracion` y `asentamientosConocidos` con su
+      `conocidoEn`, y la regla de que lo visto en vivo gana sobre lo recordado.
 - [ ] **Paso 4 — Visión compartida por alianza.** En vivo, y solo mientras la alianza esté activa: al
       romperse, lo que se veía por ella pasa a ser recuerdo (con la fecha de la ruptura) o desaparece —
       **decidir al llegar**, no antes.
-- [ ] **Paso 5 — Render**, en los dos clientes. Espejo de lo que ya se hizo con los ejércitos: el de
-      administración lo ve todo, el de jugador solo lo suyo y lo avistado, y lo recordado se pinta distinto de
-      lo visto.
-- [ ] **Paso 6 — Calibración** del margen (2.1) contra la vista de ejército, con la nota del nivel 5.
+- [ ] **Paso 5 — Render.** El cliente de JUGADOR tapa el terreno no explorado y pinta lo recordado con filtro
+      oscuro; el de ADMINISTRACIÓN no tapa nada (es herramienta de operación, no un jugador).
+- [ ] **Paso 6 — Calibración** del margen (2.1) contra la vista de ejército, con la nota del nivel 5, y del
+      tamaño de celda contra cómo se ve la frontera de la niebla.
+
+### 5.1 Lo que salió del Paso 1
+
+Dos cosas que el plan no anticipaba, ambas de simplificación:
+
+**Los dos radios de visión ahora viven juntos, en `VISION`.** `radioVisionEjercito` estaba dentro de
+`LOGISTICA`, que es el módulo del avituallamiento de una columna — no su casa. Y el margen del asentamiento
+tampoco cabía ahí: la atalaya de una ciudad no es logística. Se sacaron los dos a un grupo propio
+(`VISION.ejercito` = 150, `VISION.margenAsentamiento` = 60) porque **la relación entre ellos ES la regla de
+juego**: que la columna vea más lejos que la plaza es lo que mantiene el valor de explorar, y eso solo se lee
+si los dos números están a la vista uno al lado del otro.
+
+**La vista dejó de depender del polígono de la zona, y pasó a medirse contra el disco de la plaza.** Antes
+`seVeAhora` hacía `pointInPolygon` contra la zona de influencia, que viene **recortada por las fronteras con
+Facciones rivales** (`computeZonaInfluencia`). Ese recorte es POLÍTICO, no óptico: que un rival plante su
+frontera pegada a tu ciudad no puede cegar a tus vigías — si acaso lo contrario. Ahora se mide contra
+`radioPotencial + margen`, y como el polígono siempre está contenido en el disco, el cambio solo ensancha la
+vista, nunca la recorta.
+
+De rebote, **la visibilidad ya no lee el parámetro `geometria` en absoluto**, que era una entrada
+privilegiada (necesita la posición de todos los asentamientos del mundo). Hay un test que lo congela: inyectar
+un polígono enorme, propio o ajeno, ya no concede ni un metro de visión.
 
 ## 6. Invariantes a congelar en tests
 
@@ -155,4 +241,8 @@ mirar.** Y solo el segundo lleva `conocidoEn`, porque solo el segundo puede esta
    recordado.
 3. Un asentamiento visto en vivo y además conocido por contacto aparece **una sola vez**, y como visto.
 4. La foto congelada **no cambia** cuando cambia el asentamiento real; solo cuando hay un contacto nuevo.
-5. Un jugador sin registro de conocimiento proyecta listas vacías, nunca `undefined`.
+5. Una Facción sin registro de memoria proyecta listas vacías y exploración vacía, nunca `undefined`.
+6. **Lo que se ve, se graba**: un asentamiento que entra en alcance y vuelve a salir sigue proyectándose como
+   recordado, nunca desaparece del todo. Es el tránsito del estado 3 al 2, y era el error de la primera
+   versión de este documento.
+7. La exploración solo CRECE. Nada la reduce: lo explorado no se desexplora.

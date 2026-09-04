@@ -28,8 +28,12 @@
  *   `plazoMinutosPorDefecto`, `graciaMinutos`, `cooldownMinutos`, `respawnMinutos`, `duracionHeridoMinutos`,
  *   `duracionMinutosPorDefecto`) y tasas `*PorTick` → `*PorMinuto`. Mismos VALORES (1 tick = 1 min), otras
  *   claves en el JSON servido.
+ * v4-v7: bumps sin entrada aquí (el registro se dejó de mantener entre 2026-08-29 y 2026-09-04).
+ * v8 (2026-09-04): niebla de guerra, Paso 1 — nueva tabla `VISION`, con `radioVisionEjercito` mudado desde
+ *   `LOGISTICA` (mismo valor, 150) y el nuevo `margenAsentamiento`. Ninguna de las dos se sirve todavía por
+ *   `GET /v1/balance`, que arrastra nueve tablas sin dar de alta.
  */
-export const BALANCE_VERSION = 7;
+export const BALANCE_VERSION = 8;
 
 /**
  * Modelo temporal (Fase D, Docs/Arquitectura/10_Modelo_Temporal.md). **Decisión del usuario (2026-08-29):
@@ -1482,18 +1486,6 @@ export const LOGISTICA = {
    * Nunca 0, que es la otra mitad de la regla: acampar cuesta comida, solo que poca.
    */
   factorConsumoEstacionado: 0.1,
-  /**
-   * Campo de visión de un ejército en marcha, en unidades de MAPA (Doc 5.12.7).
-   *
-   * 150 sobre un mapa de 2000 es ~2 radios de provincia (~76, ver `ESCALA` y Doc 1.0a): un ejército ve
-   * VARIAS ciudades por delante si la geografía lo permite, que es lo que se pedía. Y queda holgadamente por
-   * debajo del radio de cohesión de un reino (`MANTENIMIENTO.escalaDistancia` = 400, ~5 provincias), así que
-   * ver no equivale a controlar.
-   *
-   * Se descartó 30 —el radio de una zona de influencia recién fundada— porque bajo la escala rota parecía
-   * razonable y con la escala declarada no llega ni al borde de la propia provincia.
-   */
-  radioVisionEjercito: 150,
   radioReabastecimiento: 60,
   /**
    * A qué distancia dos cosas que se mueven se TROPIEZAN (Paso 10). **15** (decisión del usuario,
@@ -1505,6 +1497,44 @@ export const LOGISTICA = {
    * ver y chocar era de solo 2.5×, y cualquier cruce de rutas acababa en combate quisiera o no.
    */
   radioEncuentro: 15,
+};
+
+/**
+ * Niebla de guerra (Doc 5.12.7 y Doc 6 §12): hasta dónde alcanza la vista de cada cosa, en unidades de MAPA.
+ *
+ * Los dos radios viven juntos porque **solo se entienden comparados**: la relación entre ellos es la regla de
+ * juego, no cada cifra por su lado.
+ */
+export const VISION = {
+  /**
+   * Campo de visión de un ejército en marcha.
+   *
+   * 150 sobre un mapa de 2000 es ~2 radios de provincia (~76, ver `ESCALA` y Doc 1.0a): un ejército ve
+   * VARIAS ciudades por delante si la geografía lo permite, que es lo que se pedía. Y queda holgadamente por
+   * debajo del radio de cohesión de un reino (`MANTENIMIENTO.escalaDistancia` = 400, ~5 provincias), así que
+   * ver no equivale a controlar.
+   *
+   * Se descartó 30 —el radio de una zona de influencia recién fundada— porque bajo la escala rota parecía
+   * razonable y con la escala declarada no llega ni al borde de la propia provincia.
+   */
+  ejercito: 150,
+  /**
+   * Cuánto ve un asentamiento MÁS ALLÁ de su radio de influencia (decisión del usuario, 2026-09-04): la plaza
+   * vigila algo más allá de su frontera, como una atalaya. **60**, por tres razones:
+   *
+   * - **Menos que la vista de un ejército** (150), que es lo que mantiene el valor de explorar: una columna en
+   *   marcha divisa una plaza mucho antes de que la plaza la divise a ella, y conserva la iniciativa.
+   * - **Duplica el área vigilada de una plaza recién fundada**, cuya zona ronda 30-60. El margen se nota desde
+   *   el primer minuto en vez de ser un detalle que solo importa tarde.
+   * - Coincide con `LOGISTICA.radioReabastecimiento`, y esa coincidencia se lee bien: **si una columna está lo
+   *   bastante cerca como para repostar en tu ciudad, tu ciudad la ve.**
+   *
+   * Consecuencia anotada para calibración (§2.1 del doc de niebla): como el radio crece con el nivel
+   * (60 -> 180, `ZONA_INFLUENCIA.radioMaximoPorNivel`), una plaza de nivel 5 vigila 240 y por tanto ve más
+   * lejos que un ejército. Es coherente con la ficción, pero diluye la ventaja de explorar cerca de las
+   * grandes ciudades.
+   */
+  margenAsentamiento: 60,
 };
 
 /**
