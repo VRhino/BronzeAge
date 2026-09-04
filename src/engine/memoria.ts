@@ -32,6 +32,19 @@ export interface FichaConocida {
   posicion: Point;
   nivel: number;
   conocidoEn: Instante;
+  /**
+   * Hasta dónde llegaba su tierra cuando se tomó la foto — el RADIO, no el polígono.
+   *
+   * Se guarda el número y no la silueta por dos razones. La barata: un polígono de 48 vértices son ~1,2 KB
+   * por plaza recordada, y una Facción que ha viajado recuerda decenas — cientos de KB en cada snapshot,
+   * treinta veces. La buena: la silueta real está recortada contra vecinos que quizá no conozcas, así que
+   * congelarla sería congelar información de terceros. Un radio es lo que de verdad recuerdas: "su tierra
+   * llegaba más o menos hasta aquí".
+   *
+   * Opcional porque las fichas grabadas antes de que existieran las zonas no lo llevan; se rellena solo la
+   * próxima vez que se vea esa plaza, así que no hace falta migrar el snapshot.
+   */
+  radioPotencial?: number;
 }
 
 export interface MemoriaFaccion {
@@ -110,6 +123,7 @@ export function grabarLoVisto(
         posicion: a.posicion,
         nivel: a.nivel,
         conocidoEn: contexto.instante,
+        radioPotencial: a.radioPotencial,
       };
     }
 

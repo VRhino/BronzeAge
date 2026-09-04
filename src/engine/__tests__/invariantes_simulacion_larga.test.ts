@@ -93,5 +93,5 @@ describe('invariantes del motor en una simulación larga', () => {
     // Los 5 asentamientos se fundaron en posiciones "recomendables" (bosque alcanzable) — con la reserva
     // dinámica + gracia de mantenimiento ya implementadas, el colapso total del grupo no debería ser la norma.
     expect(estado.asentamientos.length, 'al menos un asentamiento sobrevive 300 ticks').toBeGreaterThan(0);
-  }, 20_000); // 300 ticks × 3 asentamientos: ~3s aislado, ~5.5s bajo carga paralela. Timeout explícito, > default 5s.
+  });
 });

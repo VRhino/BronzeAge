@@ -110,6 +110,9 @@ describe('grabarLoVisto: la ficha de lo ajeno', () => {
       posicion: suya.posicion,
       nivel: suya.nivel,
       conocidoEn: instanteDeTest(7),
+      // Hasta donde llegaba su tierra: el RADIO, no la silueta. La silueta real esta recortada contra
+      // vecinos que quiza no conozcas, asi que congelarla seria congelar informacion de terceros.
+      radioPotencial: suya.radioPotencial,
     });
   });
 
@@ -131,7 +134,7 @@ describe('grabarLoVisto: la ficha de lo ajeno', () => {
 
     const visto = grabarLoVisto({}, { ...base, ejercitos: [encima], instante: instanteDeTest(1) });
     // La plaza sube de nivel y el ejercito se retira: la memoria NO se entera.
-    const crecida = { ...suya, nivel: 3 };
+    const crecida = { ...suya, nivel: 3, radioPotencial: suya.radioPotencial + 40 };
     const lejos = grabarLoVisto(visto, {
       ...base,
       asentamientos: [mia, crecida],
@@ -140,11 +143,13 @@ describe('grabarLoVisto: la ficha de lo ajeno', () => {
     });
     expect(lejos['faccion-1']!.asentamientos[suya.id]!.nivel).toBe(suya.nivel);
     expect(lejos['faccion-1']!.asentamientos[suya.id]!.conocidoEn).toBe(instanteDeTest(1));
+    expect(lejos['faccion-1']!.asentamientos[suya.id]!.radioPotencial).toBe(suya.radioPotencial);
 
     // Y al volver, la foto se actualiza — no caduca, se refresca.
     const devuelta = grabarLoVisto(lejos, { ...base, asentamientos: [mia, crecida], ejercitos: [encima], instante: instanteDeTest(9) });
     expect(devuelta['faccion-1']!.asentamientos[suya.id]!.nivel).toBe(3);
     expect(devuelta['faccion-1']!.asentamientos[suya.id]!.conocidoEn).toBe(instanteDeTest(9));
+    expect(devuelta['faccion-1']!.asentamientos[suya.id]!.radioPotencial).toBe(suya.radioPotencial + 40);
   });
 });
 

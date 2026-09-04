@@ -13,6 +13,11 @@
 // ficción en los dos casos: una columna cruza campo abierto a la vista de quien vigile ese campo, y una
 // ciudad no se puede esconder.
 //
+// Con la ciudad viaja también SU FRONTERA (decisión del usuario, 2026-09-05), y la silueta REAL, no una
+// estimada: una frontera está marcada sobre el terreno y quien pasa por delante la ve. Lo que la acota es
+// la misma niebla que acota todo lo demás — el cliente la dibuja bajo la máscara, así que del contorno solo
+// se llega a ver el tramo que cae en tierra explorada.
+//
 // Lo que hay en el MUNDO —que no es de nadie— se filtra por la misma niebla, cada cosa con la regla que le
 // toca: los campamentos de bandidos por lo que se ve AHORA (`campamentosAvistados`) y los caminos por lo
 // EXPLORADO (`caminosConocidos`). Que no pertenezcan a ninguna Facción no los hace públicos: un campamento
@@ -46,7 +51,7 @@ import type {
   ZonaInfluencia,
 } from '../../domain/types';
 import { VISION } from '../../constants';
-import { distancia } from '../../world/geometria';
+import { distancia, pointInPolygon } from '../../world/geometria';
 import type { EstadoMapa } from '../../world/mapa';
 import type { TrazadoAsentamiento } from '../../engine/trazado';
 import type { Instante } from '../../domain/tiempo';
@@ -113,6 +118,20 @@ export interface AsentamientoAvistado {
   faccionId: string;
   posicion: Point;
   nivel: number;
+  /**
+   * Su zona de influencia, con la silueta REAL — la misma que calcula el motor, recortada contra sus
+   * vecinos (`computeZonaInfluencia`).
+   *
+   * **Fuga conocida y aceptada** (decisión del usuario, 2026-09-05): esa silueta está recortada contra
+   * TODOS los vecinos de otra Facción, incluidos los que este jugador no ha visto nunca, y el corte se
+   * reparte según el `radioPotencial` de cada uno. O sea que un lado plano en la frontera de una ciudad
+   * delata que hay un tercero en esa dirección, y con cuánta fuerza relativa.
+   *
+   * Se acepta porque solo viaja la zona de una plaza que YA se está viendo —de quien no ves, no ves nada— y
+   * porque la alternativa (recortar solo contra lo que el jugador conoce) enseñaría una frontera que no es
+   * la de verdad. Entre "exacta con una pista de más" y "limpia pero falsa" se eligió la primera.
+   */
+  zona: Point[];
 }
 
 export interface ProyeccionJugador {
@@ -150,6 +169,15 @@ export interface ProyeccionJugador {
    * `FichaConocida`). Nunca repite lo que ya está en `asentamientosAvistados` — cuando algo se ve y además se
    * recuerda, gana lo que se ve. Vacío para un jugador sin Facción: la memoria es de la Facción. */
   asentamientosConocidos: FichaConocida[];
+  /** En qué territorio pisa cada ejército PROPIO: `ejercitoId` -> `faccionId` de quien manda en esa tierra,
+   * o ausente si marcha por tierra de nadie. La propia Facción también cuenta, así que sirve igual para
+   * "estás en casa" que para "te has metido en tierra de Troya".
+   *
+   * Lo resuelve el servidor y no el cliente aunque el cliente tenga los polígonos, por dos motivos: es un
+   * HECHO del juego (de quién es el suelo que pisas), no una preferencia de dibujo; y el cliente solo tiene
+   * las zonas de lo que ve, así que se equivocaría justo en el caso que importa — una capital de nivel 5
+   * vigila 240 y una columna ve 150, o sea que se puede entrar en su tierra sin llegar a ver la ciudad. */
+  territorioPorEjercito: Record<string, string>;
   /** Las DOS máscaras de celdas —lo explorado alguna vez y lo visible ahora— con las que el cliente
    * distingue los tres estados (ver `NieblaProyectada`). **Quien las aplica es el CLIENTE DE JUGADOR**
    * (decisión del usuario, 2026-09-04), no el servidor. La geografía no es información táctica —es la misma para todos
@@ -323,6 +351,35 @@ function campamentosAvistados(
   return campamentos.filter((c) => seVeAhora(c.posicion, asentamientosPropios, ejercitosPropios));
 }
 
+/**
+ * De quién es el suelo que pisa cada ejército propio (a petición del usuario, 2026-09-05: "debería poder
+ * saber si estoy en el territorio de otro cuando voy caminando").
+ *
+ * Se resuelve contra las zonas de TODAS las Facciones, que es entrada privilegiada y por eso vive aquí y no
+ * en el cliente: la respuesta tiene que ser correcta incluso cuando el jugador no ve la ciudad que manda en
+ * esa tierra. Y ocurre — una capital de nivel 5 vigila 240 mientras una columna ve 150, así que hay una
+ * franja en la que estás dentro de su territorio sin haberla divisado.
+ *
+ * Lo que sale de aquí es solo un `faccionId`, nunca qué asentamiento concreto: pisar la tierra de alguien te
+ * dice de quién es, no dónde tiene la capital.
+ */
+function territorioDeCadaEjercito(
+  ejercitosPropios: readonly Ejercito[],
+  zonas: readonly ZonaInfluencia[],
+  asentamientos: readonly Asentamiento[]
+): Record<string, string> {
+  if (ejercitosPropios.length === 0) return {};
+  const faccionDeZona = new Map(asentamientos.map((a) => [a.id, a.faccionId]));
+
+  const salida: Record<string, string> = {};
+  for (const ejercito of ejercitosPropios) {
+    const dentro = zonas.find((z) => pointInPolygon(ejercito.posicionActual, z.poligono));
+    const duena = dentro ? faccionDeZona.get(dentro.asentamientoId) : undefined;
+    if (duena !== undefined) salida[ejercito.id] = duena;
+  }
+  return salida;
+}
+
 export function proyectarParaJugador(
   estado: GameSessionState,
   jugadorId: string,
@@ -339,9 +396,20 @@ export function proyectarParaJugador(
   const zonasPropias = geometria.zonas.filter((z) => esPropio(z.asentamientoId));
   const propios = new Set(ejercitosPropios.map((e) => e.id));
 
+  // La zona sale de `geometria`, que el runner ya calculó y cachea para TODOS los asentamientos: adjuntarla
+  // aquí no cuesta un cálculo más. Una plaza sin zona en la geometría (no debería pasar) viaja con el
+  // contorno vacío en vez de romper la proyección entera.
+  const poligonoDe = new Map(geometria.zonas.map((z) => [z.asentamientoId, z.poligono]));
   const avistados = estado.asentamientos
     .filter((a) => !esPropio(a.id) && seVeAhora(a.posicion, asentamientosPropios, ejercitosPropios))
-    .map((a) => ({ id: a.id, nombre: a.nombre, faccionId: a.faccionId, posicion: a.posicion, nivel: a.nivel }));
+    .map((a) => ({
+      id: a.id,
+      nombre: a.nombre,
+      faccionId: a.faccionId,
+      posicion: a.posicion,
+      nivel: a.nivel,
+      zona: poligonoDe.get(a.id) ?? [],
+    }));
   const seVe = new Set(avistados.map((a) => a.id));
 
   const memoria = (faccionId !== null ? estado.memoriaPorFaccion[faccionId] : undefined) ?? MEMORIA_VACIA;
@@ -363,6 +431,7 @@ export function proyectarParaJugador(
     // Lo recordado MENOS lo que se ve ahora, y menos lo que entretanto pasó a ser propio (eso viaja completo
     // en `asentamientos`). Cada plaza aparece en una lista o en la otra, nunca en las dos.
     asentamientosConocidos: Object.values(memoria.asentamientos).filter((f) => !seVe.has(f.asentamientoId) && !esPropio(f.asentamientoId)),
+    territorioPorEjercito: territorioDeCadaEjercito(ejercitosPropios, geometria.zonas, estado.asentamientos),
     exploracion,
     caravanas: estado.caravanas.filter((c) => esPropio(c.origenAsentamientoId) || (c.destinoAsentamientoId !== undefined && esPropio(c.destinoAsentamientoId))),
     ejercitos: ejercitosPropios,

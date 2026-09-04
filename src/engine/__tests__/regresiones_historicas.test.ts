@@ -112,5 +112,5 @@ describe('regresiones históricas (Correcciones_Durante_Desarrollo.md)', () => {
     expect(maxProduccion, 'la capacidad de producir trigo creció por encima de la Granja inicial').toBeGreaterThan(rindeInicial);
     // El síntoma del bug original, comprobado aparte: el trigo nunca tocó fondo.
     expect(trigoMinimo, 'el trigo nunca llegó a 0 (la "hambruna silenciosa")').toBeGreaterThan(0);
-  }, 20_000); // 300 ticks: ~3s aislado, ~5.5s bajo carga paralela — sobra el default de 5s. Timeout explícito.
+  });
 });

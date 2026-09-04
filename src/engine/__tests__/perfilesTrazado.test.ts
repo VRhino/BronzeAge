@@ -70,11 +70,7 @@ describe('perfiles de trazado — la permutación del desempate cambia la ciudad
     const duplicados = [...firmas.values()].filter((ps) => ps.length > 1);
     expect(duplicados, `perfiles con ciudad idéntica: ${duplicados.map((d) => d.join('=')).join(' · ')}`).toEqual([]);
     expect(firmas.size).toBe(PERFILES_TRAZADO.length);
-    // Timeout explícito por el MISMO motivo que el test de aquí abajo, del que se había quedado
-    // descolgado: construye una ciudad de 120 ticks por cada perfil del catálogo, o sea exactamente el
-    // mismo trabajo, y venía pasando por los pelos contra el default de 5 s. Con la máquina cargada
-    // (backend y cliente corriendo a la vez) se cayó por reloj, no por regresión.
-  }, 30_000);
+  });
 
   it('ningún perfil rompe los invariantes del trazado (nada sobre calle, nada solapado)', () => {
     for (const perfil of PERFILES_TRAZADO) {
@@ -91,11 +87,7 @@ describe('perfiles de trazado — la permutación del desempate cambia la ciudad
         }
       }
     }
-    // Timeout explícito, mismo motivo que en `regresiones_historicas`: construye una ciudad de 120 ticks por
-    // cada perfil del catálogo, y eso vive al filo del default de 5 s — medido en 5.0-5.3 s cuando la máquina
-    // va cargada (y ~5.5 s desde que el rinde de trigo doblado hace ciudades más grandes), o sea que fallaba
-    // por reloj y no por regresión. Es coste real del test, no lentitud a investigar.
-  }, 30_000);
+  });
 
   it('el perfil no altera QUÉ se construye, solo DÓNDE', () => {
     // La forma no puede ser una ventaja económica encubierta: dos ciudades con el mismo material y los mismos

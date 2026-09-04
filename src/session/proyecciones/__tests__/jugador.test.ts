@@ -7,11 +7,12 @@ import { partidaConAsentamiento, MOMENTO, OPC } from '../../__tests__/fixtures';
 import { crearFaccion } from '../../comandos/crearFaccion';
 import { fundarAsentamiento } from '../../comandos/fundarAsentamiento';
 import { idDeMapa, type GameSessionState, type GeometriaAsentamientos } from '../../estado';
+import { computeTodasLasZonas } from '../../../engine/zones';
 import { estaExplorado, marcarVisto, rejillaDe } from '../../../engine/exploracion';
 import { MEMORIA_VACIA, type FichaConocida } from '../../../engine/memoria';
 import { proyectarParaJugador } from '../jugador';
 import type { CaminoComercial, CampamentoBandido, Ejercito, Escuadron, Point } from '../../../domain/types';
-import { EXPLORACION, VISION } from '../../../constants';
+import { EXPLORACION, VISION, ZONA_INFLUENCIA } from '../../../constants';
 
 // Estas pruebas verifican filtrado por Facción/ciudadanía, no la geometría por frame (Fase C10, cubierta en
 // su propia sección más abajo) — una entrada vacía basta y no obliga a construir asentamientos reales solo
@@ -82,15 +83,48 @@ describe('asentamientosAvistados: la FICHA de lo ajeno, solo si se ve', () => {
 
     const proyeccion = proyectarParaJugador(sesion.getState(), fundador, SIN_GEOMETRIA);
     expect(proyeccion.asentamientosAvistados).toEqual([
-      { id: asentamientoRivalId, nombre: rival.nombre, faccionId: faccionRivalId, posicion: { x: 400, y: 470 }, nivel: rival.nivel },
+      // `SIN_GEOMETRIA` no trae zonas, asi que el contorno viaja vacio en vez de romper la proyeccion — el
+      // caso con geometria de verdad lo cubre el test de mas abajo.
+      { id: asentamientoRivalId, nombre: rival.nombre, faccionId: faccionRivalId, posicion: { x: 400, y: 470 }, nivel: rival.nivel, zona: [] },
     ]);
+  });
+
+  it('la zona que viaja es la SILUETA REAL del motor, recortada contra los vecinos', () => {
+    const base = conPlazaRivalEn({ x: 400, y: 470 });
+    // Las dos plazas se crecen hasta que sus discos se pisan: al fundar no puede haber recorte (fundar
+    // exige no solapar, y con radios iguales la frontera cae siempre fuera de los dos circulos), asi que
+    // sin esto el poligono seria un circulo entero y el test no probaria nada.
+    const estado = {
+      ...base.sesion.getState(),
+      asentamientos: base.sesion.getState().asentamientos.map((a) => ({ ...a, radioPotencial: 60 })),
+    };
+    const zonas = computeTodasLasZonas(estado.asentamientos);
+    const geometria: GeometriaAsentamientos = { zonas, zonasFusionadas: [], trazadoPorAsentamiento: {} };
+
+    const avistado = proyectarParaJugador(estado, base.fundador, geometria).asentamientosAvistados[0]!;
+    expect(avistado.zona).toEqual(zonas.find((z) => z.asentamientoId === base.asentamientoRivalId)!.poligono);
+
+    // Y esta recortada DE VERDAD, que es lo que separa "silueta real" de "circulo pintado". La señal es el
+    // numero de vertices, no su distancia al centro: recortar un circulo le quita el arco que sobra y deja
+    // una cuerda, pero los vertices que quedan —los de la circunferencia y los dos de corte— siguen todos
+    // a la distancia del radio. Contar es lo unico que distingue las dos cosas.
+    expect(avistado.zona.length).toBeLessThan(ZONA_INFLUENCIA.segmentosPoligono);
+    expect(avistado.zona.length).toBeGreaterThan(2);
+    // La cuerda: un lado mucho mas largo que el resto, que es justo la frontera con la plaza propia.
+    const lados = avistado.zona.map((p, i) => {
+      const q = avistado.zona[(i + 1) % avistado.zona.length]!;
+      return Math.hypot(q.x - p.x, q.y - p.y);
+    });
+    expect(Math.max(...lados)).toBeGreaterThan(5 * (Math.min(...lados) || 1));
   });
 
   it('lo avistado NO lleva almacen, escuadrones, edificios, colas ni cargos: es telemetria de rival', () => {
     const { sesion, fundador } = conPlazaRivalEn({ x: 400, y: 470 });
     const avistado = proyectarParaJugador(sesion.getState(), fundador, SIN_GEOMETRIA).asentamientosAvistados[0]!;
 
-    expect(Object.keys(avistado).sort()).toEqual(['faccionId', 'id', 'nivel', 'nombre', 'posicion']);
+    // La ZONA si entra (decision del usuario, 2026-09-05): una frontera esta marcada sobre el terreno y
+    // quien pasa por delante la ve. Lo que la acota es la niebla, no la proyeccion.
+    expect(Object.keys(avistado).sort()).toEqual(['faccionId', 'id', 'nivel', 'nombre', 'posicion', 'zona']);
   });
 
   it('un ejercito propio en marcha tambien avista plazas rivales, a su propio radio', () => {
@@ -379,6 +413,77 @@ describe('ejercitosAvistados: lo ajeno, solo si se ve y siempre redactado', () =
 // Niebla de guerra, Paso 3: la MEMORIA proyectada. Los tres estados que ve el jugador, y sobre todo el
 // transito entre ellos — "al dejar de verlo, cae en la categoria anterior", que era el punto que la primera
 // version del diseño se dejaba fuera.
+// A peticion del usuario (2026-09-05): "deberia poder saber si estoy en el territorio de otro cuando voy
+// caminando". Lo resuelve el servidor y no el cliente porque el cliente solo tiene las zonas de lo que ve.
+describe('territorioPorEjercito: de quien es el suelo que pisas', () => {
+  /** Partida con plaza propia en (400,400) y una rival en (400,470), las dos crecidas hasta radio 60. */
+  function dosPlazasVecinas() {
+    const base = partidaConAsentamiento();
+    const opcRival = { ...OPC, actor: 'rival' };
+    const rf = base.sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, opcRival);
+    base.sesion.ejecutar(fundarAsentamiento, { faccionId: rf.datos!.faccionId, posicion: { x: 400, y: 470 } }, opcRival);
+    const asentamientos = base.sesion.getState().asentamientos.map((a) => ({ ...a, radioPotencial: 60 }));
+    const zonas = computeTodasLasZonas(asentamientos);
+    return {
+      ...base,
+      faccionRivalId: rf.datos!.faccionId,
+      asentamientos,
+      geometria: { zonas, zonasFusionadas: [], trazadoPorAsentamiento: {} } as GeometriaAsentamientos,
+    };
+  }
+
+  function conEjercitoEn(punto: Point) {
+    const d = dosPlazasVecinas();
+    const columna = ejercito('e-propio', d.faccionId, punto, [escuadron('s1', d.fundador)]);
+    return { ...d, estado: { ...d.sesion.getState(), asentamientos: d.asentamientos, ejercitos: [columna] } };
+  }
+
+  it('marchando por tierra de nadie, no hay entrada: el silencio es "campo abierto"', () => {
+    const { estado, fundador, geometria } = conEjercitoEn({ x: 1500, y: 1500 });
+    expect(proyectarParaJugador(estado, fundador, geometria).territorioPorEjercito).toEqual({});
+  });
+
+  it('marchando por tierra RIVAL, dice de que Faccion es', () => {
+    // (400,500) esta a 30 de la plaza rival y a 100 de la propia: cae de lleno en la zona de Troya.
+    const { estado, fundador, geometria, faccionRivalId } = conEjercitoEn({ x: 400, y: 500 });
+    expect(proyectarParaJugador(estado, fundador, geometria).territorioPorEjercito).toEqual({ 'e-propio': faccionRivalId });
+  });
+
+  it('marchando por tierra PROPIA tambien lo dice: sirve igual para "estas en casa"', () => {
+    const { estado, fundador, geometria, faccionId } = conEjercitoEn({ x: 400, y: 380 });
+    expect(proyectarParaJugador(estado, fundador, geometria).territorioPorEjercito).toEqual({ 'e-propio': faccionId });
+  });
+
+  it('funciona aunque la ciudad que manda en esa tierra NO se vea: es el caso que lo justifica', () => {
+    // Una capital vigila hasta 240 y una columna ve 150, asi que se puede estar dentro de su territorio sin
+    // haberla divisado. Aqui se fuerza ese hueco: la plaza rival con radio 300 y el ejercito a 200 de ella,
+    // lejos de todo lo propio — dentro de su zona, pero fuera de lo que la columna alcanza a ver.
+    const base = partidaConAsentamiento();
+    const opcRival = { ...OPC, actor: 'rival' };
+    const rf = base.sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, opcRival);
+    base.sesion.ejecutar(fundarAsentamiento, { faccionId: rf.datos!.faccionId, posicion: { x: 1500, y: 1500 } }, opcRival);
+    const asentamientos = base.sesion.getState().asentamientos.map((a) =>
+      a.posicion.x === 1500 ? { ...a, radioPotencial: 300 } : a
+    );
+    const geometria: GeometriaAsentamientos = {
+      zonas: computeTodasLasZonas(asentamientos),
+      zonasFusionadas: [],
+      trazadoPorAsentamiento: {},
+    };
+    const columna = ejercito('e-propio', base.faccionId, { x: 1700, y: 1500 }, [escuadron('s1', base.fundador)]);
+    const estado = { ...base.sesion.getState(), asentamientos, ejercitos: [columna] };
+
+    const proyeccion = proyectarParaJugador(estado, base.fundador, geometria);
+    expect(proyeccion.asentamientosAvistados).toEqual([]); // no la ve...
+    expect(proyeccion.territorioPorEjercito).toEqual({ 'e-propio': rf.datos!.faccionId }); // ...pero pisa su tierra
+  });
+
+  it('sin ejercitos, el mapa va vacio y no se recorre ni una zona', () => {
+    const { sesion, fundador } = partidaConAsentamiento();
+    expect(proyectarParaJugador(sesion.getState(), fundador, SIN_GEOMETRIA).territorioPorEjercito).toEqual({});
+  });
+});
+
 describe('la memoria proyectada: lo que se vio y ya no se ve', () => {
   /** La ficha que una Faccion recuerda de una plaza, inyectada en el estado como la habria dejado el tick. */
   function recordando(estado: GameSessionState, faccionId: string, ficha: FichaConocida): GameSessionState {
