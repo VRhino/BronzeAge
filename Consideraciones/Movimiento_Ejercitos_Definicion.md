@@ -1,9 +1,16 @@
 # Movimiento de ejércitos y Liderazgo — cierre de diseño y plan de ejecución
 
-> **Estado (2026-09-02): diseño cerrado, CERO código escrito.** Mismo criterio que `Murallas_Definicion.md`:
-> la especificación se escribe ANTES de tocar el motor. 17 decisiones cerradas con el usuario + revisión por
-> consejo incorporada (§9). **Nada bloquea el arranque**; la única decisión abierta (§1.4, la varianza de
-> combate) no afecta a los Pasos 1-8.
+> **Estado (2026-09-04): MECÁNICA CERRADA.** Los 13 pasos del plan están hechos salvo el 13 (calibración),
+> que no es una tarea pendiente sino una actividad continua — como en el resto del juego, muchas constantes
+> siguen siendo placeholder y se afinan midiendo. El inventario de lo tocable, con la procedencia de cada
+> cifra, está en §12; el rediseño del Liderazgo por escalones, en §13.
+>
+> Lo que sí conviene leer antes de calibrar: **§13.4 y §13.3 explican por qué el batch no puede validar el
+> espacio de composición todavía** — el NPC no llega a rozar su Liderazgo y recluta una sola tropa, así que
+> la forma del roster le es invisible.
+>
+> Se escribió con el mismo criterio que `Murallas_Definicion.md`: la especificación ANTES de tocar el motor.
+> 17 decisiones cerradas con el usuario + revisión por consejo (§9) antes de la primera línea de código.
 >
 > **Las REGLAS DE JUEGO de esta mecánica no viven aquí: viven en `Docs/Game/`**, que es el canon.
 > Concretamente `Docs/Game/5_Sistema_Militar_y_Combate.md` **§5.11 (Liderazgo)**, **§5.12 (Ejércitos y
@@ -13,8 +20,8 @@
 > en el mapa SÍ es Fase 0.
 >
 > **Este documento cubre solo lo que no es regla de juego**: qué se decidió y cuándo, cómo se representa en
-> el motor, qué código hay que tocar, en qué orden, y qué se congela en tests. El enunciado original es
-> `Docs/Mecanicas a desarrollar.md` §2.
+> el motor, qué código hay que tocar, en qué orden, y qué se congela en tests. El enunciado original estaba
+> en `Docs/Mecanicas a desarrollar.md` §2, de donde se retiró al cerrarse la mecánica.
 
 ## 1. Decisiones
 
@@ -726,11 +733,15 @@ usuario dio la tabla real. Calibrarla es un cambio de **datos**, no de código.
       —3.221 frente a 3.592, que es el precio de pelear— y **no toca el comercio** (oro idéntico). Y traer las
       columnas a casa no solo recicla tropa: sube los asentamientos vivos de 31 a **38**, porque una campaña
       que vuelve libera a su ciudad para volver a operar en vez de dejarla bloqueada indefinidamente.
-- [ ] **Paso 13 — Calibración.** Inventario completo de lo tocable, con procedencia y orden de ataque, en
-      **§12**. Nota de contexto: hasta el Paso 12 el batch no tenía un solo ejército, así que ninguna de estas
-      cifras se podía medir; ahora sí.
-- [ ] (enunciado original) **Paso 13 — Calibración** por simulación: `LIDERAZGO.factorCoste`, `capacidadCarroPorJugador` (recalculado
-      desde el radio si cambió la ración), velocidades y capacidad de caravana.
+- [ ] **Paso 13 — Calibración.** No es un paso pendiente sino la actividad continua con la que se cierra
+      cualquier mecánica de este proyecto: el inventario completo de lo tocable, con la PROCEDENCIA de cada
+      cifra y por dónde empezar, está en **§12**; el rediseño del Liderazgo por escalones, en **§13**.
+
+      El enunciado original citaba `LIDERAZGO.factorCoste` como objetivo principal — esa constante ya no
+      existe: el coste dejó de derivarse del poder (§13.1). Lo que queda en su sitio es el espacio de
+      composición que abren `costePorEscalon` y `base`, y ahí está el matiz importante: **el batch todavía no
+      lo puede medir** (§13.3-13.4). Hace falta antes que el NPC juegue con el roster entero y con el
+      Liderazgo como límite, en vez de reclutar una sola tropa y frenarse con una fracción de guarnición.
 
 ## 6. Invariantes a congelar en tests
 

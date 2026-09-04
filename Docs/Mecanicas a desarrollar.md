@@ -1,5 +1,4 @@
 + Feature nuevas(indice)
-    2. [GUERRA] movimiento de ejercitos por el mapa
     8. [CARAVANAS] mecanica caravanas.
     1. [MOTOR] mecanicas de taxes en los asentamientos, que es la generacion de oro en base a la poblacion y tipo de poblacion que vive en el asentamiento
     3. [CARAVANAS] Rutas Caravanas.
@@ -11,57 +10,13 @@
     12. [VISIBILIDAD] niebla de guerra (proyeccion por audiencia, "ultimo conocido")
     13. [POLITICA] la capital como decision del jugador
 
-## 2. Movimiento de ejercitos por el mapa
-Los ejércitos también se mueven por el mapa para atacar como las caravanas, con un símbolo q los identifique por ejemplo un rombo, uno por cada jugador q va en el ejército, uno detrás de otro medio superpuestos y cada rombo del color de su faccion.
-
-Las tropas son del JUGADOR, no del asentamiento — están apostadas ahí. En marcha no comen del almacén: el
-ejército lleva su propio carro de suministros, y sin comida hay deserción y baja moral. El jugador sale solo
-(eligiendo qué tropas se lleva) o como parte de un ejército de varios jugadores que se mueve como una sola
-entidad. En ambos casos lo limita su **liderazgo**: cada tipo de tropa tiene un coste, y solo puede sacar lo
-que quepa en su valor.
-
-Se le pueden **adjuntar caravanas** para cargar más trigo del que suman los carros de sus jugadores, y esas
-caravanas pueden ir cargadas de mercancía — lo que resuelve de paso la **escolta de caravanas**, que estaba
-pendiente. Cada tropa tiene **velocidad propia** y el ejército va al ritmo de la más lenta, así que escoltar
-frena y no se puede escoltar y depredar a la vez. Una marcha se puede **cancelar**, lo que dispara la vuelta.
-
-> **Diseño cerrado (2026-09-01/02, 17 decisiones con el usuario + revisión por consejo, CERO código escrito).**
-> Sin puntos bloqueando el arranque.
+> **Movimiento de ejércitos por el mapa — HECHO (2026-09-04), retirado de este índice.** Las reglas viven en
+> `Docs/Game/5_Sistema_Militar_y_Combate.md` §5.11-5.13 y en el glosario; el registro de decisiones, el plan
+> de ejecución y las mediciones, en `Consideraciones/Movimiento_Ejercitos_Definicion.md`.
 >
-> **Las reglas son canon y viven en `Docs/Game/`**: `5_Sistema_Militar_y_Combate.md` §5.11 (Liderazgo),
-> §5.12 (Ejércitos y movimiento por el mapa) y §5.13 (Suministro en campaña), más las entradas
-> *Escuadrón/Tropa/Unidad*, *Ejército*, *Guarnición*, *Huérfano* y *Liderazgo* del glosario. Doc 5.4 recoge
-> que los escuadrones son del Jugador, Doc 5.10 aclara que el movimiento en el mapa SÍ es Fase 0, y Doc 3.10
-> recoge la escolta de caravanas, que esta mecánica resuelve.
->
-> **El cierre de decisiones y el plan de ejecución** (13 pasos con checkbox) están en
-> `Consideraciones/Movimiento_Ejercitos_Definicion.md`, junto con la **revisión por consejo** (§9): cinco
-> asesores + revisión cruzada, misma metodología que murallas. Encontró 9 hallazgos, 5 de los cuales
-> cambiaron reglas del juego (mulas de suministro, intercepción imposible por velocidad plana, guerra suma
-> negativa, cancelar marcha, jugador huérfano) y 4 el orden del plan.
->
-> **Decisión abierta que salió al preguntar por qué se usa RNG** (§1.4 del doc de ejecución, regla en Doc
-> 5.2.5): la varianza de combate de ±15% nunca estuvo escrita en ningún documento, solo en el código, y
-> significa que un atacante necesita un 35% más de poder para tener la victoria asegurada. Esta mecánica
-> multiplica el coste de una mala tirada, y la niebla de guerra (§12) es una fuente de incertidumbre mejor
-> —reducible jugando bien— así que se replantea bajarla o retirarla. No bloquea el arranque.
->
-> De la revisión salió además un dato que NO es de esta mecánica: **el ejército no es el problema del trigo**.
-> Un asentamiento nivel 1 a tope de población come 30/tick y una Granja nivel 1 produce 15 — nace en déficit
-> estructural, y en nivel 3 harían falta ~13 Granjas nivel 4. Es el cuello de botella de nivel 3 ya conocido.
-> Ver §9.4.
->
-> La mecánica trae dos cosas que no estaban en el enunciado: la entidad **`Jugador`** (hoy inexistente en el
-> motor; `engine/combate.ts:143` ya la daba por pendiente "si llega a necesitar un propósito propio" — el
-> liderazgo es ese propósito) y el **liderazgo** como primer eje de progresión personal, lo que abre
-> parcialmente §11.
->
-> El movimiento en sí sale casi gratis: `calcularRuta` + `avanzarPosicionEnRuta` ya mueven caravanas, y
-> `resolverCombate` ya recibe tropas planas sin saber de asentamientos. Lo caro es la propiedad de la tropa —
-> se va de verdad del asentamiento, y eso hace que "tu ciudad queda desnuda" se cumpla por construcción.
->
-> Depende de §12 (niebla de guerra) solo para ver ejércitos AJENOS; los propios no la necesitan, así que no
-> bloquea.
+> Se llevó por delante dos entradas más de esta lista: la **escolta de caravanas** (Doc 3.10, que llevaba
+> años marcada como "no modelada") y la **fuente espacial** de la niebla de guerra (§12), que estaba bloqueada
+> por faltar el radio de visión.
 
 ## 3. Rutas Caravanas
 el pathfinder de las rutas para las caravanas debe buscar evitar bosques(rodearlos) o rios(no los puede atravesar).
