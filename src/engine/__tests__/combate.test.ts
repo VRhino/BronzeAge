@@ -78,7 +78,10 @@ describe('iniciarAsedio — la muralla del DEFENSOR decide, no la del atacante',
 
     expect(resultado.conquistado).toBe(true);
     expect(resultado.defensor.faccionId).toBe(atacante.faccionId);
-    expect(resultado.defensor.escuadrones).toEqual([]);
+    // Cascarones a cero: sin hombres, pero el escuadrón y su progreso siguen siendo de su dueño.
+    expect(resultado.defensor.escuadrones.map((e) => e.cantidad)).toEqual([0]);
+    expect(resultado.defensor.escuadrones[0]!.jugadorId).toBe(defensor.escuadrones[0]!.jugadorId);
+    expect(resultado.defensor.escuadrones[0]!.veterania).toBe(defensor.escuadrones[0]!.veterania);
     expect(resultado.defensor.jugadoresFundadoresIds).toEqual([]);
     expect(resultado.defensor.casasCompradas).toEqual([]);
     expect(Object.values(resultado.defensor.cargos).every((v) => v === null)).toBe(true);

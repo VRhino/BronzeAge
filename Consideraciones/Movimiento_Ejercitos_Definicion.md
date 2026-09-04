@@ -815,3 +815,55 @@ porque el Granero se encola con urgencia máxima y salta muy arriba.
 **Arreglado retirando la permutación**: el array vuelve a ser historial y el orden de cola se deriva de
 `prioridad` donde se necesita — que es lo que ya hacían `avanzarConstruccion` y `moverEnCola`, y ahora también
 el cliente al pintar la cola.
+
+## 11. Decisiones del usuario del 2026-09-04 (cierre de puntos abiertos)
+
+Se cierran de una tacada las cuatro decisiones que quedaban colgando, y salen dos cambios más:
+
+1. **Residencia al conquistar** — se retira también a los que estaban EN CASA, como se había implementado.
+   Y sus escuadrones **quedan a 0 unidades sin perder la veteranía**: se pierden los hombres, no la unidad ni
+   su progreso, exactamente igual que en cualquier otra aniquilación (Doc 5.4). Antes se borraban del todo.
+2. **Varianza de combate ±15% — se queda** (§1.4 cerrada). El corolario sigue en pie y sigue siendo el dato
+   de diseño útil: hace falta un 35% más de poder para tener la victoria asegurada.
+3. **Radio de encuentro = 15**, contra los 150 de visión. Cierra el conflicto que estaba anotado: con los 60
+   heredados del reabastecimiento, el margen entre ver y chocar era de solo 2.5× y cualquier cruce de rutas
+   acababa en combate. A 15 se ve diez veces más lejos de lo que se tropieza, y el encuentro pasa a ser una
+   decisión. Entrada del Paso 10.
+4. **La capital** sigue aparcada para otra sesión — vive documentada en `Docs/Mecanicas a desarrollar.md` §13
+   y deja de contar como punto abierto de esta mecánica.
+5. **Ejército estacionado: una décima parte del consumo en marcha** (antes la mitad). Es lo que convierte
+   "aparcar en un paso de montaña" en una jugada sostenible en vez de un aplazamiento. Adelanta parte de lo
+   que el Paso 8 iba a resolver por otra vía.
+6. **El batch debe garantizar bosque de verdad** — ver §11.1.
+
+### 11.1 La madera: qué se arregló y qué queda (2026-09-04)
+
+El §10.1 dejó anotado que las ciudades del batch no construían almacenaje NINGUNO y que las tenía atascadas
+la madera. El usuario pidió asegurar que un asentamiento del laboratorio tenga bosque desde que se funda.
+
+**Lo que había**: el batch filtraba por `viabilidad.recomendable`, que solo exige **un** bosque tocando el
+radio inicial. Medido, eso dejaba a los asentamientos en **5,5 Leñeras de media contra un tope de 10**
+(`EXTRACCION_MAXIMOS.porTipo`): no los limitaba la regla, los limitaba el bosque de su zona.
+
+**Lo que se hizo**: el batch ahora exige capacidad para al menos **8 Leñeras** (`MIN_CAPACIDAD_LENERAS`,
+sumando `Mapa.capacidadLeneras` de todos los bosques que tocan el radio de nivel 2, no el inicial: la zona
+crece y lo que importa es la vida del asentamiento, no su primer minuto) y usa esa capacidad como criterio
+principal de desempate, por encima de los minerales — sin madera no se construye nada.
+
+**Lo que mejoró, medido a 300 ticks / 30 Facciones**: Leñeras 5,5 → **6,8**, asentamientos vivos 28 → **30**,
+y **colapsados 2 → 0**.
+
+**Lo que NO arregló, y es el siguiente número**: sigue habiendo **cero Almacenes y cero Graneros**. La sonda
+sobre el punto exacto del rechazo lo deja claro: en el momento de evaluar, el asentamiento tiene **142 de
+madera y una reserva de mantenimiento de 194**. O sea que ya no es un problema de producción —la hay— sino de
+que **la reserva de madera de 8 minutos supera al stock que la ciudad llega a acumular**, y `puedeIniciarConstruccion`
+bloquea cualquier gasto discrecional para siempre. Es un techo estructural: la reserva escala con el
+mantenimiento, que escala con lo construido.
+
+Las palancas, sin decidir (entrada del Paso 13):
+
+1. **Bajar `RESERVA_CONSTRUCCION.horizonteMinutosMantenimiento`** (hoy 8) — toca a toda la auto-construcción.
+2. **Subir el rinde de la Leñera** (hoy 5/minuto) o su tope por asentamiento.
+3. **Bajar el mantenimiento en madera**, que es lo que infla la reserva.
+4. **Eximir al almacenaje de la reserva**, como ya se exime a Granja y Leñera de la de su propio recurso
+   (`RECURSO_PROPIO`): un Almacén no consume madera de forma recurrente, la invierte una vez.

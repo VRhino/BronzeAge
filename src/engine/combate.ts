@@ -155,18 +155,27 @@ function jugadoresParticipantes(escuadrones: Escuadron[]): number {
 /**
  * Lo que le pasa a un asentamiento AL SER CONQUISTADO (Doc 5.4). La ciudad cambia de dueño entera:
  *
- * - **La guarnición se pierde y NO pasa al conquistador.** Los escuadrones son del Jugador, no del
- *   asentamiento: son tropas personales de otro, no botín transferible. Antes se heredaban —el conquistador
- *   se quedaba con el ejército del vencido—, que es exactamente lo que el Doc 5.4 prohíbe.
+ * - **La guarnición cae a CERO unidades, pero los escuadrones NO desaparecen** (decisión del usuario,
+ *   2026-09-04): conservan nombre, tropa, dueño y **veteranía**. Es la misma regla que el resto del juego ya
+ *   aplica al aniquilar un regimiento (Doc 5.4: "el SQUAD persiste aunque el regimiento sea aniquilado — se
+ *   puede rellenar con nuevos reclutas conservando el progreso") y la misma que deja volver a casa a los
+ *   estandartes de un ejército deshecho por hambre. Lo que se pierde son los hombres, no la unidad.
+ *
+ *   Y **nada de eso pasa al conquistador**: los escuadrones son del Jugador, no del asentamiento — tropas
+ *   personales de otro, no botín transferible. Antes se heredaban con sus unidades intactas, que es
+ *   exactamente lo que el Doc 5.4 prohíbe.
  * - **Los antiguos residentes dejan de serlo**, y con ellos caen los cargos locales. De ahí sale el estado
  *   HUÉRFANO (Doc 5.4): quien estuviera de campaña conserva los escuadrones que lleva encima pero se queda
  *   sin sitio donde volver, reabastecer ni reclutar. No hace falta guardar ese estado en ninguna parte —
  *   "huérfano" es no residir en ningún asentamiento, y eso ya se deriva de `esResidente`.
  *
- * DECISIÓN QUE EL DOC NO CIERRA (2026-09-04): el canon detalla el caso del jugador en campaña, pero no dice
- * qué pasa con los residentes que estaban EN CASA. Se les retira la residencia igual, porque la alternativa
- * es incoherente: seguirían siendo residentes de una ciudad de la Facción enemiga, con lo que eso habilita.
- * Pendiente de confirmación del usuario.
+ *   Se les retira también a los que estaban EN CASA (decisión del usuario, 2026-09-04): la alternativa era
+ *   dejarlos como residentes de una ciudad de la Facción enemiga, con todo lo que la residencia habilita.
+ *
+ * Los cascarones a cero se quedan EN el asentamiento conquistado, que es el único sitio donde el modelo sabe
+ * guardar un escuadrón que no marcha. Ni su dueño puede rellenarlos (ya no reside ahí) ni el conquistador
+ * puede usarlos (`movilizarEjercito` rechaza los de otro jugador), así que quedan congelados con su
+ * veteranía a la espera de que la mecánica del huérfano decida cómo se recuperan.
  *
  * Lo que NO toca: población, edificios, almacén ni murallas. Conquistar entrega "un asentamiento completo y
  * en funcionamiento" (Doc 5.12.4) — ese es el premio que hace que atacar compense.
@@ -177,7 +186,7 @@ export function aplicarConquista(defensor: Asentamiento, faccionConquistadoraId:
   return {
     ...defensor,
     faccionId: faccionConquistadoraId,
-    escuadrones: [],
+    escuadrones: defensor.escuadrones.map((e) => ({ ...e, cantidad: 0 })),
     jugadoresFundadoresIds: [],
     casasCompradas: [],
     cargos,

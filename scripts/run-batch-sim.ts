@@ -22,7 +22,7 @@ import {
   integridadDeRecinto,
 } from '../src/engine/trazado';
 import { costoDeTrazo, areaEncerradaDeRecinto, edificiosExtramurosDe } from '../src/engine/muralla';
-import { EDIFICIO_CATALOGO, LOGISTICA, PERFILES_TRAZADO, SIMULACION, TRAZADO, type PerfilTrazado } from '../src/constants';
+import { EDIFICIO_CATALOGO, LOGISTICA, PERFILES_TRAZADO, SIMULACION, TRAZADO, ZONA_INFLUENCIA, type PerfilTrazado } from '../src/constants';
 import { instanteDeTick, isoDeInstante } from '../src/session/estado';
 
 /** Overrides por entorno para poder hacer pasadas cortas de humo sin esperar la corrida completa
@@ -87,6 +87,8 @@ interface CandidatoFundacion {
   posicion: Point;
   tienePiedra: boolean;
   tieneOtroMineral: boolean;
+  /** Leñeras que admite el bosque a su alcance — ver `MIN_CAPACIDAD_LENERAS`. */
+  capacidadLeneras: number;
   score: number;
 }
 
@@ -111,8 +113,42 @@ interface CandidatoFundacion {
  *   de 0 a 4 según cuántos de esos minerales tiene alcanzables, igual que el NPC — antes el batch usaba su
  *   propia lista de 3 sin oro, que además es uno de los 6 tipos del gate de nivel 2 (`mina`).
  */
+/**
+ * Cuántas Leñeras da de sí el bosque que un asentamiento tendría a su alcance, sumando la capacidad de todos
+ * los bosques cuyo borde entra en el radio indicado (`Mapa.capacidadLeneras`, 1-3 según el tamaño del disco).
+ *
+ * Existe porque `evaluarViabilidadFundacion` solo responde SÍ/NO (`bosqueAlcanzable`: hay al menos un bosque
+ * tocando el radio inicial), y eso resultó ser una garantía mucho más débil de lo que parecía — ver
+ * `MIN_CAPACIDAD_LENERAS`.
+ */
+function capacidadLenerasEnRadio(mapa: Mapa, centro: Point, radio: number): number {
+  return mapa
+    .listarBosques()
+    .filter((b) => Math.hypot(b.centro.x - centro.x, b.centro.y - centro.y) < radio + b.radio)
+    .reduce((suma: number, b) => suma + mapa.capacidadLeneras(b.id), 0);
+}
+
+/**
+ * Capacidad mínima de Leñeras que se le exige a un emplazamiento del batch (a petición del usuario,
+ * 2026-09-04): **un asentamiento del laboratorio tiene que poder farmear madera desde que se funda, y no
+ * pararse por no tener de dónde sacarla.**
+ *
+ * Por qué hacía falta, medido: el filtro anterior era `viabilidad.recomendable`, que solo exige UN bosque
+ * tocando el radio inicial. Con eso, los asentamientos del batch se quedaban en **5,5 Leñeras de media
+ * contra un tope de 10** (`EXTRACCION_MAXIMOS.porTipo`) — o sea limitados por el bosque de su zona, no por
+ * la regla. Y esa media era el cuello de botella real de todo lo demás: con la madera racionada, el
+ * Almacén (50 de madera) nunca llegaba a pagarse —CERO almacenes en 600 ticks— y sin capacidad de
+ * almacenaje el excedente de trigo se perdía contra el techo, que es lo que hacía imposible medir la
+ * logística de campaña (ver `Consideraciones/Movimiento_Ejercitos_Definicion.md` §10.1).
+ *
+ * Se mide sobre el radio de nivel 2 y no sobre el inicial: la zona CRECE, y lo que interesa es si el sitio da
+ * madera durante la vida del asentamiento, no solo el primer minuto.
+ */
+const MIN_CAPACIDAD_LENERAS = 8;
+
 function recolectarCandidatos(mapa: Mapa, paso: number): CandidatoFundacion[] {
   const candidatos: CandidatoFundacion[] = [];
+  const radioMaduro = ZONA_INFLUENCIA.radioMaximoPorNivel[2] ?? ZONA_INFLUENCIA.radioInicial;
   for (let x = paso; x < mapa.limites.ancho; x += paso) {
     for (let y = paso; y < mapa.limites.alto; y += paso) {
       const posicion = { x, y };
@@ -120,10 +156,20 @@ function recolectarCandidatos(mapa: Mapa, paso: number): CandidatoFundacion[] {
       if (!viabilidad.recomendable) continue;
       const tienePiedra = viabilidad.recursosEnRadio.some((r) => r.tipo === 'piedra' && r.nodos > 0);
       if (!tienePiedra) continue;
+      const capacidadLeneras = capacidadLenerasEnRadio(mapa, posicion, radioMaduro);
+      if (capacidadLeneras < MIN_CAPACIDAD_LENERAS) continue;
       const bonusMinerales = MINERALES_BONUS_FUNDACION.filter((tipo) =>
         viabilidad.recursosEnRadio.some((r) => r.tipo === tipo && r.nodos > 0)
       ).length;
-      candidatos.push({ posicion, tienePiedra, tieneOtroMineral: bonusMinerales > 0, score: bonusMinerales });
+      candidatos.push({
+        posicion,
+        tienePiedra,
+        tieneOtroMineral: bonusMinerales > 0,
+        capacidadLeneras,
+        // La madera manda en el desempate por encima de los minerales: sin ella no se construye NADA, y los
+        // minerales solo deciden qué se puede construir después.
+        score: capacidadLeneras * 10 + bonusMinerales,
+      });
     }
   }
   return candidatos;
@@ -415,6 +461,9 @@ interface Foto {
   /** Almacenes activos: la otra mitad de la pregunta "¿por qué no crece la capacidad?" — si tampoco hay
    * Almacenes, el problema no es del Granero sino de que la ciudad no puede pagar almacenaje ninguno. */
   almacenesActivos: number;
+  /** Leñeras activas por asentamiento. Contra `EXTRACCION_MAXIMOS.porTipo` dice si el límite es la regla o el
+   * bosque disponible — la distinción que destapó el cuello de botella de la madera. */
+  lenerasMedia: number;
   granerosNivelSuma: number;
   /** Ocupación media del almacén de trigo (0-1): es lo que dispara la construcción del Granero, así que si el
    * excedente no crece hay que saber si es porque no hay grano o porque el grano no llega a acumularse. */
@@ -523,6 +572,7 @@ function construirFotoResumen(
   let granerosActivos = 0;
   let conTrigoDesbordado = 0;
   let almacenesActivos = 0;
+  let lenerasSuma = 0;
   let granerosNivelSuma = 0;
   let ocupacionTrigoSuma = 0;
   const extraccionPorTipoActivosTotal: Record<string, number> = Object.fromEntries(TIPOS_EXTRACTOR.map((t) => [t, 0]));
@@ -587,6 +637,7 @@ function construirFotoResumen(
     ocupacionTrigoSuma += ocupTrigo;
     if (ocupTrigo >= NECESIDADES_UMBRAL_AMPLIACION) conTrigoDesbordado++;
     almacenesActivos += edificiosPorTipoYEstado(a, 'almacen').length;
+    lenerasSuma += edificiosPorTipoYEstado(a, 'lenera').length;
     for (const tipo of TIPOS_EXTRACTOR) {
       extraccionPorTipoActivosTotal[tipo] = (extraccionPorTipoActivosTotal[tipo] ?? 0) + edificiosPorTipoYEstado(a, tipo).length;
     }
@@ -716,6 +767,7 @@ function construirFotoResumen(
     granerosActivos,
     conTrigoDesbordado,
     almacenesActivos,
+    lenerasMedia: Math.round((lenerasSuma / Math.max(1, estado.asentamientos.length)) * 10) / 10,
     granerosNivelSuma,
     ocupacionTrigoMedia:
       estado.asentamientos.length === 0 ? 0 : Math.round((ocupacionTrigoSuma / estado.asentamientos.length) * 1000) / 1000,

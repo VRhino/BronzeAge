@@ -1394,7 +1394,15 @@ export const LIDERAZGO = {
 export const LOGISTICA = {
   capacidadCarroPorJugador: 500,
   autonomiaTicksObjetivo: 50,
-  factorConsumoEstacionado: 0.5,
+  /**
+   * Cuánto come un ejército ACAMPADO respecto a uno en marcha (Doc 5.12.3). **Una décima parte** (decisión
+   * del usuario, 2026-09-04): con 0.5 estacionar apenas compraba tiempo —un carro lleno aguantaba el doble en
+   * vez de diez veces más— y "plantarse en un sitio" no llegaba a ser una jugada. A 0.1 sí lo es: sostener un
+   * paso de montaña deja de ser una carrera contra el hambre.
+   *
+   * Nunca 0, que es la otra mitad de la regla: acampar cuesta comida, solo que poca.
+   */
+  factorConsumoEstacionado: 0.1,
   /**
    * Campo de visión de un ejército en marcha, en unidades de MAPA (Doc 5.12.7).
    *
@@ -1408,7 +1416,16 @@ export const LOGISTICA = {
    */
   radioVisionEjercito: 150,
   radioReabastecimiento: 60,
-  radioEncuentro: 60,
+  /**
+   * A qué distancia dos cosas que se mueven se TROPIEZAN (Paso 10). **15** (decisión del usuario,
+   * 2026-09-04), frente a los 150 de visión: ver y chocar son cosas distintas y por eso los números no se
+   * parecen. Con 15 un ejército divisa a otro con muchísima antelación y puede evitarlo, interceptarlo o
+   * prepararse — el encuentro es una DECISIÓN, no un accidente por pasar cerca.
+   *
+   * El conflicto que esto cierra: con 60 (el valor de reabastecimiento, heredado sin decidir) el margen entre
+   * ver y chocar era de solo 2.5×, y cualquier cruce de rutas acababa en combate quisiera o no.
+   */
+  radioEncuentro: 15,
 };
 
 /**

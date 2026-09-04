@@ -309,14 +309,21 @@ describe('llegada a un asentamiento ajeno = asedio (Paso 7)', () => {
     expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo === 'combate.asedio_conquista')).toBe(true);
   });
 
-  it('la guarnición del conquistado SE PIERDE, no pasa al conquistador (Doc 5.4)', () => {
-    const { facciones, propio, enemigo, ejercito } = frenteDeGuerra([escuadron('d1', 'milicia_lanceros', 1)]);
+  it('la guarnición del conquistado queda a CERO pero conserva dueño y veteranía (Doc 5.4)', () => {
+    // Veteranía y dueño distintos de los de la fixture para que la aserción diga algo: lo que se pierde son
+    // los hombres, no el escuadrón ni su progreso.
+    const veterano: Escuadron = { ...escuadron('d1', 'milicia_lanceros', 1), jugadorId: 'rival-a', veterania: 3 };
+    const { facciones, propio, enemigo, ejercito } = frenteDeGuerra([veterano]);
 
     const r = avanzar([ejercito], [propio, enemigo], { facciones });
 
     const despues = r.asentamientos.find((a) => a.id === enemigo.id)!;
     expect(despues.faccionId, 'con 50 atacantes contra 1 defensor la plaza cae').toBe('faccion-1');
-    expect(despues.escuadrones, 'los escuadrones del vencido no son botín transferible').toEqual([]);
+    // El escuadrón SOBREVIVE como cascarón: sin hombres, pero con su dueño y su veteranía (Doc 5.4 — "el
+    // SQUAD persiste aunque el regimiento sea aniquilado"). Lo que no hay es botín: cero unidades para nadie.
+    expect(despues.escuadrones.map((e) => e.cantidad)).toEqual([0]);
+    expect(despues.escuadrones[0]!.jugadorId, 'sigue siendo de su dueño, no del conquistador').toBe('rival-a');
+    expect(despues.escuadrones[0]!.veterania, 'el progreso del escuadrón no se pierde').toBe(3);
   });
 
   it('conquistar deja HUÉRFANOS a los residentes: pierden residencia y cargos (Doc 5.4)', () => {

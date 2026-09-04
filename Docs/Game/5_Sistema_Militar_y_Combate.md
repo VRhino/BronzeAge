@@ -19,7 +19,7 @@ Se suma el poder de cada bando y **se multiplica cada uno por un factor aleatori
 
 **Qué implica ese ±15% en la práctica**: los multiplicadores van de 0.85 a 1.15, así que el cociente entre ambos bandos va de 0.74 a 1.35. Es decir, **un atacante necesita un 35% más de poder para tener la victoria garantizada**; por debajo de eso siempre puede perder. El comentario del código lo justifica como "romper empates", pero 15% por bando es varianza de combate real, no un desempate.
 
-> **DECISIÓN ABIERTA (2026-09-02): revisar esta varianza a la baja o retirarla.** El movimiento de ejércitos multiplica el coste de una mala tirada —marchar cuesta tiempo real, deja la ciudad indefensa, vacía el almacén y las bajas son permanentes— y el juego ya tiene diseñada una fuente de incertidumbre mejor: la niebla de guerra (`Docs/Mecanicas a desarrollar.md` §12), que es incertidumbre **reducible jugando bien** en vez de un dado. Análisis completo y las tres opciones en `Consideraciones/Movimiento_Ejercitos_Definicion.md` §1.4.
+> **RESUELTA (2026-09-04): el ±15% se queda tal cual.** Se abrió en cuanto se vio que el movimiento de ejércitos multiplica el coste de una mala tirada —marchar cuesta tiempo real, deja la ciudad indefensa, vacía el almacén y las bajas son permanentes—, y se planteó bajarla o retirarla en favor de la niebla de guerra como fuente de incertidumbre. **El usuario la mantiene.** El corolario, que sigue siendo el dato útil de diseño, es que **un atacante necesita un 35% más de poder para tener la victoria garantizada**: el margen no es un detalle de implementación, es lo que decide cuándo merece la pena atacar. Análisis y opciones descartadas en `Consideraciones/Movimiento_Ejercitos_Definicion.md` §1.4.
 
 ## 5.3 Formaciones y cohesión táctica (heredado de Iberia)
 - Romper formación penaliza duro (ej. arqueros dispersos -30% precisión, escuderos aislados -20% defensa, lanceros sin formación pierden bono anti-carga). Flanquear/aislar formaciones enemigas es táctica válida.
@@ -30,8 +30,8 @@ Se suma el poder de cada bando y **se multiplica cada uno por un factor aleatori
 
 **Los escuadrones son del JUGADOR, no del asentamiento** (a petición del usuario, 2026-09-01 — cierra una ambigüedad que el modelo arrastraba: el asentamiento los contenía, así que parecía dueño de ellos). El asentamiento es donde están **apostados**, no quien los posee. Consecuencias:
 
-- Un asentamiento **conquistado** hace que sus jugadores **pierdan los escuadrones que estaban apostados ahí**; conservan solo los que llevaban encima en campaña (5.12). Los perdidos **no pasan al conquistador** — son personales de otro jugador, no botín transferible.
-- **Y pierden la residencia, con ella los cargos locales** (decidido al implementar el Paso 7, 2026-09-04 — *pendiente de confirmación del usuario*): la ciudad cambia de dueño entera. El canon ya decía que el jugador de campaña queda huérfano, pero no qué pasa con los que estaban en casa; dejarlos como residentes de una ciudad ahora enemiga era incoherente con todo lo que la residencia habilita (Doc 2.5). Lo que NO se toca es la ciudad en sí: población, edificios, almacén y murallas siguen en pie, porque el premio de conquistar es justamente "un asentamiento completo y en funcionamiento" (5.12.4).
+- Un asentamiento **conquistado** deja los escuadrones apostados ahí **a cero unidades**, pero **sin perder el escuadrón ni su veteranía** (decisión del usuario, 2026-09-04). Es la misma regla que ya rige cualquier aniquilación: se pierden los hombres, no la unidad ni su progreso — se rellena reclutando. Sus dueños conservan además, intacto, lo que llevaran encima en campaña (5.12). Y **nada pasa al conquistador**: son escuadrones personales de otro jugador, no botín transferible.
+- **Y pierden la residencia, con ella los cargos locales** (decisión del usuario, 2026-09-04): la ciudad cambia de dueño entera, y eso vale tanto para los que estaban de campaña como para los que estaban en casa. Dejar a estos últimos como residentes de una ciudad ahora enemiga era incoherente con todo lo que la residencia habilita (Doc 2.5). Lo que NO se toca es la ciudad en sí: población, edificios, almacén y murallas siguen en pie, porque el premio de conquistar es justamente "un asentamiento completo y en funcionamiento" (5.12.4).
 - Sacar escuadrones a campaña los quita de la guarnición **de verdad**: dejan de defender y dejan de comer del almacén (5.13).
 - **Un jugador al que le conquistan su asentamiento estando de campaña queda HUÉRFANO** (decisión del usuario, 2026-09-02): conserva los escuadrones que lleva encima, pero se queda sin residencia — sin sitio donde reabastecer, reclutar ni volver. Sigue huérfano **hasta que entre en una Facción nueva que tenga asentamiento**. No es una derrota definitiva: es un estado del que se sale por la vía política (Doc 2.5, ciudadanía), no por la militar.
 
@@ -229,7 +229,11 @@ Un ejército solo sabe **ir a un sitio** (un asentamiento o un punto del mapa). 
 - **Al cruzarse** con un ejército enemigo → combate en mundo abierto (5.2.2).
 - **Al pasar cerca** de una caravana enemiga → intercepción (5.2.3, Doc 3.10).
 
-Un ejército puede además quedarse **estacionado** en un punto indefinidamente — aparcar en un paso de montaña para cortarlo es una jugada legítima. Estacionado consume menos suministro que marchando, pero **nunca cero**.
+"Cruzarse" y "pasar cerca" son **15** unidades de mapa (decisión del usuario, 2026-09-04), frente a las **150** que alcanza la vista (5.12.7). Que los dos números no se parezcan es el punto: **se ve diez veces más lejos de lo que se tropieza**, así que un ejército divisa a otro con muchísima antelación y le da tiempo a evitarlo, salirle al paso o prepararse. El encuentro es una decisión, no un accidente por pasar cerca.
+
+Un ejército puede además quedarse **estacionado** en un punto indefinidamente — aparcar en un paso de montaña para cortarlo es una jugada legítima. Estacionado consume **una décima parte** de lo que consume en marcha (decisión del usuario, 2026-09-04), pero **nunca cero**.
+
+La cifra es lo que hace que estacionar signifique algo. Con la mitad del consumo, plantarse solo compraba el doble de tiempo y "cortar un paso" seguía siendo una carrera contra el hambre; a una décima parte, un carro lleno sostiene una posición diez veces más, y aparcar pasa a ser una jugada de verdad en vez de un aplazamiento.
 
 ### 5.12.4 La guarnición es lo único que defiende
 

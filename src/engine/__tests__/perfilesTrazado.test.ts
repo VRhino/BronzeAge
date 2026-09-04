@@ -87,7 +87,11 @@ describe('perfiles de trazado — la permutación del desempate cambia la ciudad
         }
       }
     }
-  });
+    // Timeout explícito, mismo motivo que en `regresiones_historicas`: construye una ciudad de 120 ticks por
+    // cada perfil del catálogo, y eso vive al filo del default de 5 s — medido en 5.0-5.3 s cuando la máquina
+    // va cargada (y ~5.5 s desde que el rinde de trigo doblado hace ciudades más grandes), o sea que fallaba
+    // por reloj y no por regresión. Es coste real del test, no lentitud a investigar.
+  }, 30_000);
 
   it('el perfil no altera QUÉ se construye, solo DÓNDE', () => {
     // La forma no puede ser una ventaja económica encubierta: dos ciudades con el mismo material y los mismos
