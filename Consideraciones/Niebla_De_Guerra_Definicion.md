@@ -367,6 +367,45 @@ Y el escalón entre ver y recordar, promediando en círculos alrededor de la pla
 ruido, cae en **radio ~120** — que es exactamente `radioPotencial (60) + margenAsentamiento (60)`. La
 geometría de la máscara sale bien sin que el cliente sepa ninguno de los dos números.
 
+### 5.5 Las fronteras ajenas (2026-09-05)
+
+Petición del usuario, después de ver la niebla funcionando: *"deberían estar los polígonos reales, pero se
+siguen ocultando bajo la niebla de guerra; si paso cerca de una frontera yo debería poder verla, y también
+debería poder saber si estoy en el territorio de otro cuando voy caminando."*
+
+**Se eligió el polígono REAL frente a uno estimado.** La alternativa que se propuso —recortar la silueta solo
+contra los asentamientos que el jugador conoce, para no delatar a terceros— se descartó: enseñaría una
+frontera que no es la de verdad. Entre "exacta con una pista de más" y "limpia pero falsa", el usuario
+eligió la primera.
+
+**La fuga que eso deja, anotada y aceptada.** La silueta viene recortada contra TODOS los vecinos de otra
+Facción, incluidos los que no has visto, y el corte se reparte según el `radioPotencial` de cada uno: un lado
+plano delata que hay un tercero en esa dirección y con cuánta fuerza relativa. Está acotada —solo viaja la
+zona de una plaza que YA se ve— y escrita en el propio tipo (`AsentamientoAvistado.zona`) para que nadie la
+descubra por sorpresa.
+
+**Lo que acota el contorno es el orden de capas, no un filtro.** La frontera se dibuja BAJO la máscara, así
+que del trazo solo se llega a ver el tramo que cae en tierra explorada. No hizo falta escribir ni una línea
+de lógica para "si paso cerca de una frontera la veo": sale del sitio en el que se pinta.
+
+**Lo recordado guarda el RADIO, no la silueta.** Dos razones, y las dos mandan. La barata: 48 vértices son
+~1,2 KB por plaza recordada y una Facción viajera recuerda decenas — cientos de KB en cada snapshot, treinta
+veces. La buena: la silueta real está recortada contra vecinos que quizá no conozcas, así que congelarla
+sería congelar información de terceros. Un radio es lo que de verdad recuerdas, y el cliente lo pinta
+punteado para que se vea que es una aproximación.
+
+**"¿En tierra de quién estoy?" lo responde el SERVIDOR** (`territorioPorEjercito`), aunque el cliente tenga
+los polígonos. Es un hecho del juego, no una preferencia de dibujo — y el cliente solo tiene las zonas de lo
+que ve, así que se equivocaría justo en el caso que lo justifica: una capital vigila 240 y una columna ve
+150, o sea que se puede entrar en su territorio sin llegar a ver la ciudad. Sale solo el `faccionId`: pisar
+la tierra de alguien te dice de quién es, no dónde tiene la capital.
+
+**Medido en vivo** (tres Facciones, backend y cliente reales): la frontera compartida entre dos plazas
+vecinas llega con **39 vértices en vez de 48**, o sea recortada de verdad y no un círculo; la mitad de la
+zona rival que cae fuera de lo explorado se desvanece bajo la máscara; una plaza recordada sale como círculo
+punteado a media luz; y una tercera Facción sin descubrir no manda ni un vértice, aunque su nombre sí esté en
+`facciones` como metadato público.
+
 ## 6. Invariantes a congelar en tests
 
 Los nueve están congelados. Entre paréntesis, dónde.
@@ -385,6 +424,12 @@ Los nueve están congelados. Entre paréntesis, dónde.
    versión de este documento. (`engine/__tests__/memoria.test.ts`)
 7. La exploración solo CRECE. Nada la reduce: lo explorado no se desexplora.
    (`engine/__tests__/exploracion.test.ts` y `session/__tests__/memoriaNiebla.test.ts`, a 21 ticks)
+8. La zona que viaja de una plaza avistada es la SILUETA REAL del motor, recortada contra sus vecinos — no un
+   círculo ni una estimación. (`proyecciones/__tests__/jugador.test.ts`, contando vértices: recortar quita
+   arco y deja cuerda, y los vértices que quedan siguen todos sobre la circunferencia, así que la distancia
+   al centro no distingue nada y contar sí)
+9. `territorioPorEjercito` acierta **aunque la ciudad que manda en esa tierra no se vea**: es el caso que lo
+   justifica. (ídem, con una plaza de radio 300 y la columna a 200, fuera de su alcance de vista)
 8. Un camino **entero en tierra sin explorar no viaja**, y uno que cruza lo explorado viaja **entero**, con
    todos sus puntos. (`proyecciones/__tests__/jugador.test.ts`)
 9. Un campamento de bandidos en un rincón **explorado pero que ahora no se ve no viaja**, aunque el camino
