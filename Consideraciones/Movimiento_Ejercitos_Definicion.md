@@ -533,8 +533,32 @@ usuario dio la tabla real. Calibrarla es un cambio de **datos**, no de código.
 
 - [~] **Paso 6b (sale de medir el Paso 6) — la economía no puede pagar el carro.** El usuario eligió palanca el 2026-09-04: Granero + doblar otra vez el trigo. Resuelto en una ciudad sana; en el batch sigue sin verse porque esas ciudades no construyen almacenaje NINGUNO. Ver §10.1.
 
-- [ ] **Paso 7 — Llegada → asedio**, con la rama "sin defensores → conquista automática" y la conquista que ya
-      no hereda guarnición. Aquí aparece el jugador huérfano.
+- [x] **Paso 7 — Llegada → asedio (2026-09-04).** Un ejército que termina su ruta sobre un asentamiento de otra
+      Facción resuelve el asedio ahí mismo, una sola vez. Sin defensores cae sin combate (Doc 5.12.4) **y sin
+      tocar el RNG**, que es lo que mantiene verde el guardián de determinismo sin modificarlo: una partida sin
+      asedios contra plazas defendidas hace exactamente las mismas llamadas que antes. Como el RNG ya entra
+      aquí, los ejércitos pasan a recorrerse en **orden canónico por id** (lo que el §9 pedía para el Paso 10).
+
+      **La conquista se escribió una vez** (`aplicarConquista`) y la usan los dos caminos, así que el comando
+      viejo `iniciarAsedio` deja de contradecir al canon: hasta ahora **heredaba la guarnición del vencido**,
+      justo lo que Doc 5.4 prohíbe, y no lo cubría ningún test. Ahora la guarnición se pierde, la residencia y
+      los cargos se vacían —de ahí sale el huérfano, derivado y no almacenado— y la ciudad se entrega intacta.
+
+      **Decisión que el canon no cerraba**: qué pasa con los residentes que estaban EN CASA. Se les retira la
+      residencia igual que a los de campaña; la alternativa era dejarlos como residentes de una ciudad enemiga.
+      Anotado en Doc 5.4 pendiente de confirmación.
+
+      **Verificado en vivo** sobre el servidor real: ana moviliza 25 milicianos contra una plaza rival de 5
+      defensores; a los 5 ticks la plaza pasa a su Facción con la **guarnición vacía**, residentes y cargos a
+      cero, y sus **33 edificios, 210 habitantes y 3.379 de trigo intactos**. Su columna queda acampada FUERA
+      con 23 de 25 supervivientes. El carro había salido con 500 de trigo — el Paso 6 y el Granero funcionando
+      en el mismo trayecto.
+
+      **Audiencia de los eventos**: un choque entre dos se narra al hogar del atacante y, si la plaza resistió,
+      también a la plaza. Si cae, solo al atacante — atribuírselo también a la ciudad recién conquistada se lo
+      enseñaba dos veces al mismo jugador (medido en vivo antes de corregirlo). Queda el hueco de que **al
+      vencido no le llega la noticia de su derrota**, porque pierde el asentamiento por el que la vería: pide
+      una audiencia por Facción que el modelo de eventos no tiene, y es el mismo agujero del Paso 11.
 - [ ] **Paso 8 — Reabastecimiento en ruta** (propio siempre, aliado con la opción activa) + campo
       `permiteReabastecerAliados`. **Más importante de lo que parecía**: en tiempo real un ejército
       estacionado quema su carro en ~100 minutos, así que hasta este paso "sostener un paso de montaña" no

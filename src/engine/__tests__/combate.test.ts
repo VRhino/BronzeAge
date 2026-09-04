@@ -67,6 +67,35 @@ describe('iniciarAsedio — la muralla del DEFENSOR decide, no la del atacante',
     expect(resultado.conquistado).toBe(true);
   });
 
+  it('conquistar NO hereda la guarnición ni la residencia del vencido (Doc 5.4)', () => {
+    // Regresión: hasta 2026-09-04 el conquistador se quedaba con los escuadrones del vencido —los mismos que
+    // el doc llama "personales de otro jugador, no botín transferible"— y sus antiguos residentes seguían
+    // figurando como tales en una ciudad ahora enemiga. No lo cubría ningún test.
+    const { atacante, defensor } = ciudades();
+    expect(defensor.escuadrones.length, 'el defensor arranca con guarnición').toBeGreaterThan(0);
+
+    const resultado = iniciarAsedio(atacante, defensor, ['e-atacante'], crearFacciones(), [], instanteDeTest(0), rngSinVarianza);
+
+    expect(resultado.conquistado).toBe(true);
+    expect(resultado.defensor.faccionId).toBe(atacante.faccionId);
+    expect(resultado.defensor.escuadrones).toEqual([]);
+    expect(resultado.defensor.jugadoresFundadoresIds).toEqual([]);
+    expect(resultado.defensor.casasCompradas).toEqual([]);
+    expect(Object.values(resultado.defensor.cargos).every((v) => v === null)).toBe(true);
+  });
+
+  it('un asedio RESISTIDO no toca ni residencia ni cargos: solo deja bajas', () => {
+    const { atacante, defensor } = ciudades();
+    const amurallado: Asentamiento = { ...defensor, recintos: [recintoCompleto(3, 1, 10)] };
+
+    const resultado = iniciarAsedio(atacante, amurallado, ['e-atacante'], crearFacciones(), [], instanteDeTest(0), rngSinVarianza);
+
+    expect(resultado.conquistado).toBe(false);
+    expect(resultado.defensor.faccionId).toBe(defensor.faccionId);
+    expect(resultado.defensor.jugadoresFundadoresIds).toEqual(defensor.jugadoresFundadoresIds);
+    expect(resultado.defensor.escuadrones.length).toBe(defensor.escuadrones.length);
+  });
+
   it('con un recinto nivel 3 de una puerta, completo, el defensor resiste el MISMO ataque', () => {
     const { atacante, defensor } = ciudades();
     const amurallado: Asentamiento = { ...defensor, recintos: [recintoCompleto(3, 1, 10)] };

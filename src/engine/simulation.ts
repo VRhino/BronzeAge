@@ -243,7 +243,15 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   // dos cosas juntas son lo que mantiene el guardián de determinismo verde SIN tocarlo: una partida sin
   // ejércitos hace exactamente las mismas llamadas al RNG, en el mismo orden, que antes de existir esto. El
   // RNG entrará cuando la llegada dispare combate (Paso 7), y ahí habrá que ordenar canónicamente.
-  const trasEjercitos = avanzarEjercitos(estado.ejercitos, trasExpansion.asentamientos, mapa);
+  const trasEjercitos = avanzarEjercitos(
+    estado.ejercitos,
+    trasExpansion.asentamientos,
+    mapa,
+    trasExpansion.facciones,
+    estado.relaciones,
+    instante,
+    rng
+  );
   eventosDominio.push(...comoEventosDominio(trasEjercitos.eventos, contexto));
 
   const trasMercado = avanzarMercado(trasEjercitos.asentamientos, estado.ordenes);
@@ -254,7 +262,9 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
 
   // Doc Fase_0_5 §8: se aplica la XP de construcción acumulada arriba junto a la del resto del tick (combate/
   // caravanas, aplicadas ya directamente sobre `facciones` en `engine/combate.ts`) antes de recalcular nivel.
-  const faccionesConXp = aplicarAjustesExperiencia(trasExpansion.facciones, ajustesExperiencia);
+  // `trasEjercitos.facciones` y no `trasExpansion.facciones`: un asedio ganado por un ejército otorga XP de
+  // combate/conquista y puede penalizar reputación, y ese resultado tiene que entrar en la cadena.
+  const faccionesConXp = aplicarAjustesExperiencia(trasEjercitos.facciones, ajustesExperiencia);
   const trasNivelFaccion = avanzarNivelesFaccion(faccionesConXp);
   eventosDominio.push(...comoEventosDominio(trasNivelFaccion.eventos, contexto));
 

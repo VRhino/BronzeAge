@@ -31,6 +31,7 @@ Se suma el poder de cada bando y **se multiplica cada uno por un factor aleatori
 **Los escuadrones son del JUGADOR, no del asentamiento** (a petición del usuario, 2026-09-01 — cierra una ambigüedad que el modelo arrastraba: el asentamiento los contenía, así que parecía dueño de ellos). El asentamiento es donde están **apostados**, no quien los posee. Consecuencias:
 
 - Un asentamiento **conquistado** hace que sus jugadores **pierdan los escuadrones que estaban apostados ahí**; conservan solo los que llevaban encima en campaña (5.12). Los perdidos **no pasan al conquistador** — son personales de otro jugador, no botín transferible.
+- **Y pierden la residencia, con ella los cargos locales** (decidido al implementar el Paso 7, 2026-09-04 — *pendiente de confirmación del usuario*): la ciudad cambia de dueño entera. El canon ya decía que el jugador de campaña queda huérfano, pero no qué pasa con los que estaban en casa; dejarlos como residentes de una ciudad ahora enemiga era incoherente con todo lo que la residencia habilita (Doc 2.5). Lo que NO se toca es la ciudad en sí: población, edificios, almacén y murallas siguen en pie, porque el premio de conquistar es justamente "un asentamiento completo y en funcionamiento" (5.12.4).
 - Sacar escuadrones a campaña los quita de la guarnición **de verdad**: dejan de defender y dejan de comer del almacén (5.13).
 - **Un jugador al que le conquistan su asentamiento estando de campaña queda HUÉRFANO** (decisión del usuario, 2026-09-02): conserva los escuadrones que lleva encima, pero se queda sin residencia — sin sitio donde reabastecer, reclutar ni volver. Sigue huérfano **hasta que entre en una Facción nueva que tenga asentamiento**. No es una derrota definitiva: es un estado del que se sale por la vía política (Doc 2.5, ciudadanía), no por la militar.
 
@@ -233,6 +234,10 @@ Un ejército puede además quedarse **estacionado** en un punto indefinidamente 
 ### 5.12.4 La guarnición es lo único que defiende
 
 Como los escuadrones que salen se van de verdad (5.4), **un asentamiento cuyos jugadores se llevaron todo queda indefenso**, y un asedio contra él lo conquista sin combate. Esta es la tensión central de la mecánica: atacar cuesta dejar la casa descubierta.
+
+**Llegar es asediar.** Un ejército que alcanza el final de su ruta sobre un asentamiento de otra Facción resuelve el asedio en ese mismo momento, sin ninguna orden adicional: movilizar contra una ciudad ya ERA la decisión. Se resuelve **una sola vez**, al llegar — un ejército acampado junto a una plaza enemiga no la muele a asaltos tick tras tick.
+
+El ejército **no entra en la ciudad** aunque la conquiste: se queda acampado fuera, con sus escuadrones. Meterlos en la guarnición del sitio los dejaría apostados donde su Jugador no reside, que es justo la incoherencia que la conquista deshace.
 
 **Y el premio justifica el riesgo** (decisión del usuario, 2026-09-02): conquistar entrega **un asentamiento completo y en funcionamiento**, y además **amplía los asentamientos de la Facción por encima del cupo de su nivel** (Doc Fase_0_5 §5). Conquistar es la única vía de crecer más allá del techo que marca el nivel de Facción — fundar sí respeta el cupo, conquistar no. Ese es el incentivo, y es lo que impide que la guerra sea un intercambio de pérdidas donde a nadie le compensa atacar.
 

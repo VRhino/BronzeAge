@@ -1,4 +1,4 @@
-import type { Asentamiento, CampamentoBandido, Caravana, Escuadron, Faccion, RelacionPolitica } from '../domain/types';
+import type { Asentamiento, CampamentoBandido, Caravana, Ejercito, Escuadron, Faccion, RelacionPolitica } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
 import { minutos, sumar, type Instante } from '../domain/tiempo';
 import type { RandomFn } from '../worldgen';
@@ -7,6 +7,7 @@ import { agregarRecurso } from './almacen';
 import { aplicarAjustesReputacion } from './reputacion';
 import { aplicarAjustesExperiencia, type AjusteExperiencia } from './faccion';
 import { multiplicadorDefensivoDeRecintos } from './muralla';
+import { CAMPO_CARGO } from './pertenencia';
 
 function estanAliadas(relaciones: RelacionPolitica[], aId: string, bId: string): boolean {
   return relaciones.some(
@@ -152,6 +153,38 @@ function jugadoresParticipantes(escuadrones: Escuadron[]): number {
 }
 
 /**
+ * Lo que le pasa a un asentamiento AL SER CONQUISTADO (Doc 5.4). La ciudad cambia de dueño entera:
+ *
+ * - **La guarnición se pierde y NO pasa al conquistador.** Los escuadrones son del Jugador, no del
+ *   asentamiento: son tropas personales de otro, no botín transferible. Antes se heredaban —el conquistador
+ *   se quedaba con el ejército del vencido—, que es exactamente lo que el Doc 5.4 prohíbe.
+ * - **Los antiguos residentes dejan de serlo**, y con ellos caen los cargos locales. De ahí sale el estado
+ *   HUÉRFANO (Doc 5.4): quien estuviera de campaña conserva los escuadrones que lleva encima pero se queda
+ *   sin sitio donde volver, reabastecer ni reclutar. No hace falta guardar ese estado en ninguna parte —
+ *   "huérfano" es no residir en ningún asentamiento, y eso ya se deriva de `esResidente`.
+ *
+ * DECISIÓN QUE EL DOC NO CIERRA (2026-09-04): el canon detalla el caso del jugador en campaña, pero no dice
+ * qué pasa con los residentes que estaban EN CASA. Se les retira la residencia igual, porque la alternativa
+ * es incoherente: seguirían siendo residentes de una ciudad de la Facción enemiga, con lo que eso habilita.
+ * Pendiente de confirmación del usuario.
+ *
+ * Lo que NO toca: población, edificios, almacén ni murallas. Conquistar entrega "un asentamiento completo y
+ * en funcionamiento" (Doc 5.12.4) — ese es el premio que hace que atacar compense.
+ */
+export function aplicarConquista(defensor: Asentamiento, faccionConquistadoraId: string): Asentamiento {
+  const cargos = { ...defensor.cargos };
+  for (const campo of Object.values(CAMPO_CARGO)) cargos[campo] = null;
+  return {
+    ...defensor,
+    faccionId: faccionConquistadoraId,
+    escuadrones: [],
+    jugadoresFundadoresIds: [],
+    casasCompradas: [],
+    cargos,
+  };
+}
+
+/**
  * Asedio de asentamientos (Doc 5.2.1): mortalidad severa, sin instancia visual (Fase 0 = cálculo). La conquista
  * exacta tras ganar el asedio queda PENDIENTE en el diseño (Preguntas_Abiertas) — Fase 0 asume CAPTURA directa
  * (reasignación de Facción), la opción más simple de las citadas ahí (captura/destrucción/vasallaje automático).
@@ -220,11 +253,9 @@ export function iniciarAsedio(
 
   return {
     atacante: { ...atacante, escuadrones: reemplazarEscuadrones(atacante, resultado.atacantes) },
-    defensor: {
-      ...defensor,
-      faccionId: conquistado ? atacante.faccionId : defensor.faccionId,
-      escuadrones: reemplazarEscuadrones(defensor, resultado.defensores),
-    },
+    defensor: conquistado
+      ? aplicarConquista(defensor, atacante.faccionId)
+      : { ...defensor, escuadrones: reemplazarEscuadrones(defensor, resultado.defensores) },
     facciones: faccionesFinal,
     eventos,
     conquistado,
@@ -405,5 +436,110 @@ export function atacarCampamentoBandidos(
     facciones: faccionesFinal,
     eventos,
     campamentoDestruido: gana,
+  };
+}
+
+/**
+ * Asedio disparado por la LLEGADA de un ejército a un asentamiento ajeno (Doc 5.12, Paso 7).
+ *
+ * Es el mismo combate que `iniciarAsedio` con dos diferencias que importan:
+ *
+ *  1. **El atacante es un ejército, no un asentamiento.** Sus escuadrones ya salieron de casa y viajan con él,
+ *     así que no hay que seleccionarlos ni exigir General: la decisión de quién sale se tomó al movilizar.
+ *  2. **Si no hay defensores, no hay combate.** Doc 5.12.4: un asentamiento cuyos jugadores se llevaron todo
+ *     queda indefenso y cae sin pelear. Y esta rama **no consume aleatoriedad**, que no es un detalle: una
+ *     partida donde nadie asedia una plaza defendida hace exactamente las mismas llamadas al RNG que antes de
+ *     existir el Paso 7, y el guardián de determinismo sigue verde sin tocarlo.
+ *
+ * El ejército NO entra en la ciudad al conquistarla: se queda acampado donde está (`avanzarEjercitos` lo pasa
+ * a `estacionado`). Meter sus escuadrones en la guarnición del sitio los convertiría en tropa apostada en un
+ * asentamiento donde su jugador no reside, que es justo la incoherencia que `aplicarConquista` deshace.
+ */
+export function asediarConEjercito(
+  ejercito: Ejercito,
+  defensor: Asentamiento,
+  facciones: Faccion[],
+  relaciones: RelacionPolitica[],
+  instante: Instante,
+  rng: RandomFn
+): { ejercito: Ejercito; defensor: Asentamiento; facciones: Faccion[]; eventos: EventoCrudo[]; conquistado: boolean } {
+  const defensores = defensor.escuadrones.filter((e) => e.cantidad > 0);
+  const atacantes = ejercito.escuadrones.filter((e) => e.cantidad > 0);
+
+  const payload: PayloadAsedio = {
+    atacanteId: ejercito.id,
+    defensorId: defensor.id,
+    faccionAtacanteId: ejercito.faccionId,
+    faccionDefensoraId: defensor.faccionId,
+  };
+
+  // Plaza desguarnecida: cae sin combate y sin tocar el RNG (Doc 5.12.4).
+  if (defensores.length === 0 || atacantes.length === 0) {
+    const cae = defensores.length === 0 && atacantes.length > 0;
+    const eventos: EventoCrudo[] = [
+      cae
+        ? {
+            codigo: 'combate.asedio_conquista',
+            mensaje: `${defensor.id} cae sin un solo defensor en pie ante el ejército ${ejercito.id}.`,
+            payload,
+          }
+        : {
+            codigo: 'combate.asedio_resistido',
+            mensaje: `El ejército ${ejercito.id} llega a ${defensor.id} sin nadie con quien combatir.`,
+            payload,
+          },
+    ];
+    return {
+      ejercito,
+      defensor: cae ? aplicarConquista(defensor, ejercito.faccionId) : defensor,
+      facciones: cae
+        ? aplicarAjustesExperiencia(facciones, [
+            { faccionId: ejercito.faccionId, delta: NIVEL_FACCION.xp.conquista, razon: 'conquista' },
+          ])
+        : facciones,
+      eventos,
+      conquistado: cae,
+    };
+  }
+
+  const resultado = resolverCombate(
+    atacantes,
+    defensores,
+    instante,
+    rng,
+    multiplicadorDefensivoDeRecintos(defensor.recintos ?? [])
+  );
+  const conquistado = resultado.ganador === 'atacante';
+
+  const eventos: EventoCrudo[] = [
+    ...resultado.eventos,
+    conquistado
+      ? { codigo: 'combate.asedio_conquista', mensaje: `El ejército ${ejercito.id} conquista ${defensor.id}.`, payload }
+      : { codigo: 'combate.asedio_resistido', mensaje: `${defensor.id} resiste el asedio del ejército ${ejercito.id}.`, payload },
+  ];
+
+  // Atacar a un Aliado sin romper la relación antes es la penalización MÁS SEVERA de reputación (Doc 2.7) —
+  // misma regla que por el camino del comando, para que no dependa de por dónde llegue el asedio.
+  const conReputacion = estanAliadas(relaciones, ejercito.faccionId, defensor.faccionId)
+    ? aplicarAjustesReputacion(facciones, [
+        { faccionId: ejercito.faccionId, delta: REPUTACION.penalizacionAtacarAliado, razon: 'atacar a un Aliado' },
+      ])
+    : facciones;
+
+  const ajustesXp: AjusteExperiencia[] = [
+    { faccionId: ejercito.faccionId, delta: NIVEL_FACCION.xp.combate * jugadoresParticipantes(atacantes), razon: 'combate (asedio)' },
+    { faccionId: defensor.faccionId, delta: NIVEL_FACCION.xp.combate * jugadoresParticipantes(defensores), razon: 'combate (asedio)' },
+  ];
+  if (conquistado) ajustesXp.push({ faccionId: ejercito.faccionId, delta: NIVEL_FACCION.xp.conquista, razon: 'conquista' });
+
+  const idsAtacantes = new Map(resultado.atacantes.map((e) => [e.id, e]));
+  return {
+    ejercito: { ...ejercito, escuadrones: ejercito.escuadrones.map((e) => idsAtacantes.get(e.id) ?? e) },
+    defensor: conquistado
+      ? aplicarConquista(defensor, ejercito.faccionId)
+      : { ...defensor, escuadrones: reemplazarEscuadrones(defensor, resultado.defensores) },
+    facciones: aplicarAjustesExperiencia(conReputacion, ajustesXp),
+    eventos,
+    conquistado,
   };
 }

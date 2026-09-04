@@ -8,12 +8,15 @@
 // referencia ni una proyección — salen de `Asentamiento.escuadrones` y entran en `Ejercito.escuadrones`. Por
 // eso la guarnición es lo único que defiende (Doc 5.12.4) sin necesidad de ningún predicado extra, y por eso
 // `consumoRacionTropas` ya cuenta solo lo que se quedó en casa sin tocar una línea.
-import type { Asentamiento, Ejercito, Escuadron, Jugador, Point } from '../domain/types';
+import type { Asentamiento, Ejercito, Escuadron, Faccion, Jugador, Point, RelacionPolitica } from '../domain/types';
 import type { Mapa } from '../world/mapa';
 import { calcularRuta } from '../world/rutas';
 import { distancia } from '../world/geometria';
 import { LOGISTICA, TROPAS_RECLUTABLES } from '../constants';
 import { atribuir, type EventoCrudo } from '../domain/eventos';
+import type { Instante } from '../domain/tiempo';
+import type { RandomFn } from '../worldgen';
+import { asediarConEjercito } from './combate';
 import { avanzarPosicionEnRuta } from './movimiento';
 import { agregarRecurso, cantidadDisponible, descontarRecursos } from './almacen';
 import { avanzarRacion, reservaDeTrigo } from './tropas';
@@ -278,16 +281,24 @@ function sinSoldados(ejercito: Ejercito): boolean {
 export interface ResultadoAvanceEjercitos {
   ejercitos: Ejercito[];
   asentamientos: Asentamiento[];
+  /** Las Facciones, que un asedio puede tocar: XP de combate y conquista, y la penalización de reputación por
+   * atacar a un Aliado. Vuelven tal cual si en el tick no hubo ningún asedio. */
+  facciones: Faccion[];
   eventos: EventoCrudo[];
 }
 
 /**
  * Un tick de todos los ejércitos en campaña: comer, moverse, llegar (Doc 5.12/5.13).
  *
- * NO consume aleatoriedad. Ni el hambre, ni el movimiento, ni la disolución la necesitan — y eso es
- * deliberado: colocada al final de la cadena del tick y sin tocar el RNG, el guardián de determinismo sigue
- * verde SIN modificarlo, que es una verificación más fuerte que actualizarlo. El RNG entrará cuando la
- * llegada dispare combate (Paso 7), y ahí sí habrá que ordenar canónicamente las resoluciones.
+ * Consume aleatoriedad SOLO cuando un asedio llega a resolverse contra una plaza defendida (Paso 7). Todo lo
+ * demás —hambre, movimiento, disolución, y la conquista de una plaza desguarnecida— es mudo de RNG, así que
+ * una partida sin asedios hace exactamente las mismas llamadas que antes de que existiera esta mecánica y el
+ * guardián de determinismo sigue verde SIN tocarlo.
+ *
+ * Y como el RNG ya entra aquí, los ejércitos se recorren en **orden canónico por id**: el orden del array es
+ * determinista pero arbitrario, y dos estados equivalentes con los ejércitos en distinto orden consumirían la
+ * secuencia aleatoria de forma distinta. Ordenar por id lo ancla al DATO y no a cómo quedó el array (§9,
+ * hallazgo de la revisión cruzada; el Paso 10 lo necesitará igual para los encuentros).
  *
  * Orden dentro de cada ejército, y por qué:
  *  1. **Comer primero.** Un ejército que se queda sin suministro este tick pierde moral este tick, avance
@@ -301,13 +312,20 @@ export interface ResultadoAvanceEjercitos {
 export function avanzarEjercitos(
   ejercitos: readonly Ejercito[],
   asentamientos: readonly Asentamiento[],
-  mapa: Mapa
+  mapa: Mapa,
+  facciones: readonly Faccion[],
+  relaciones: readonly RelacionPolitica[],
+  instante: Instante,
+  rng: RandomFn
 ): ResultadoAvanceEjercitos {
-  if (ejercitos.length === 0) return { ejercitos: [...ejercitos], asentamientos: [...asentamientos], eventos: [] };
+  if (ejercitos.length === 0) {
+    return { ejercitos: [...ejercitos], asentamientos: [...asentamientos], facciones: [...facciones], eventos: [] };
+  }
 
   const eventos: EventoCrudo[] = [];
   const porId = new Map(asentamientos.map((a) => [a.id, a]));
   const supervivientes: Ejercito[] = [];
+  let faccionesActuales = [...facciones];
 
   /** Devuelve escuadrones (y opcionalmente suministro) al asentamiento de origen. Si ya no existe, se pierden
    * con él: sus jugadores quedan huérfanos (Doc 5.4) y no hay dónde reintegrar. */
@@ -321,7 +339,7 @@ export function avanzarEjercitos(
     return true;
   };
 
-  for (const original of ejercitos) {
+  for (const original of [...ejercitos].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) {
     // 1. Comer. La MISMA regla del hambre que la guarnición, solo que de otra despensa (Doc 5.13).
     const factorConsumo = original.estado === 'estacionado' ? LOGISTICA.factorConsumoEstacionado : 1;
     const trigoEnCarro = original.suministro['trigo'] ?? 0;
@@ -371,18 +389,46 @@ export function avanzarEjercitos(
         });
         continue;
       }
-      // Llegó a su destino: acampa. El asedio lo añade el Paso 7.
+      // Llegó a su destino. Si ese destino es un asentamiento de otra Facción, la llegada ES el asedio
+      // (Doc 5.12.4) — y se resuelve UNA vez, al cruzar el final de la ruta. No se repite mientras el
+      // ejército siga acampado ahí: un asedio por tick convertiría cualquier plaza en una picadora de carne
+      // sin que nadie hubiera decidido nada. Lo que pase después con un ejército parado junto a una ciudad
+      // enemiga es el Paso 10 (encuentros por proximidad).
+      const objetivo = ejercito.objetivo.tipo === 'asentamiento' ? porId.get(ejercito.objetivo.id) : undefined;
+      if (objetivo && objetivo.faccionId !== ejercito.faccionId) {
+        const asedio = asediarConEjercito(ejercito, objetivo, faccionesActuales, [...relaciones], instante, rng);
+        ejercito = asedio.ejercito;
+        porId.set(objetivo.id, asedio.defensor);
+        faccionesActuales = asedio.facciones;
+        // A quién se le cuenta. Un evento se atribuye a UN asentamiento y lo ve la Facción que lo posee, así
+        // que un choque entre dos hay que narrarlo dos veces o alguien se queda sin enterarse:
+        //
+        //  - Siempre al **hogar del atacante**: es lo único que la Facción atacante posee con seguridad
+        //    (no reside en la plaza que ataca), y es quien tiene que saber cómo le fue a su columna.
+        //  - Y a la **plaza asediada**, SOLO si resistió. Si cae, pasa a manos del atacante, y atribuirle
+        //    también el evento se lo enseñaría dos veces al mismo jugador — duplicado en el log, medido en
+        //    vivo antes de esta condición.
+        //
+        // Queda un hueco conocido: al vencido no le llega la noticia de su propia derrota, porque pierde el
+        // asentamiento por el que la vería. Taparlo pide una audiencia por FACCIÓN que el modelo de eventos
+        // no tiene — el mismo agujero anotado para `combateCampoAbierto` en el Paso 11.
+        for (const e of asedio.eventos) {
+          eventos.push(atribuir(e, ejercito.origenAsentamientoId));
+          if (!asedio.conquistado) eventos.push(atribuir(e, objetivo.id));
+        }
+      } else {
+        eventos.push({
+          codigo: 'ejercito.llega',
+          asentamientoId: ejercito.origenAsentamientoId,
+          mensaje: `El ejército ${ejercito.id} llega a su destino y acampa.`,
+          payload: { ejercitoId: ejercito.id, objetivo: ejercito.objetivo },
+        });
+      }
       ejercito = { ...ejercito, estado: 'estacionado' };
-      eventos.push({
-        codigo: 'ejercito.llega',
-        asentamientoId: ejercito.origenAsentamientoId,
-        mensaje: `El ejército ${ejercito.id} llega a su destino y acampa.`,
-        payload: { ejercitoId: ejercito.id, objetivo: ejercito.objetivo },
-      });
     }
 
     supervivientes.push(ejercito);
   }
 
-  return { ejercitos: supervivientes, asentamientos: [...porId.values()], eventos };
+  return { ejercitos: supervivientes, asentamientos: [...porId.values()], facciones: faccionesActuales, eventos };
 }
