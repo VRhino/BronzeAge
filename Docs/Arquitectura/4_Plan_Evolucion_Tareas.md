@@ -180,7 +180,7 @@ devolver un resultado estructurado") que a este marcador — no sumar ni restar 
   - **Una partida por proceso** (decidido 2026-08-24, sigue vigente): Node ejecuta JS en un hilo, dos partidas compartirían hilo y el tick de una dejaría a la otra sin atender comandos. `GameSession` recibe `gameId` y no es singleton, y ahora tampoco `RunnerDePartida` — así la decisión sigue siendo reversible
   - Capa `server/` (no `session/`): mismo criterio que `persistenciaPartida.ts`, ya cubierto por la regla del test de arquitectura del commit anterior
   - Tests: 366 → 375
-- [ ] **Multihilo: NO construir ahora** (decidido 2026-08-24, ver doc 7 §8). Corrección de escala relevante: 500 jugadores ≈ 70-100 asentamientos, no 500 (`CIUDADANIA.casasBasePorAsentamiento` = 5 residentes + 2 por nivel), lo que da **~170-300 ms/tick** en vez de 1.9 s — tolerable sin multihilo. Además el multihilo **no resuelve** que no se apliquen comandos durante el tick (restricción lógica: un solo mutador del estado a la vez), solo evita bloquear el event loop. **Disparador para reconsiderarlo**: un tick medido por encima de ~500 ms en partida real, o desconexiones de WebSocket atribuibles al bloqueo
+- [x] **Multihilo: NO construir ahora** — es una DECISIÓN tomada (2026-08-24, ver doc 7 §8), no una tarea pendiente; la casilla estaba mal desde el principio. Corrección de escala relevante: 500 jugadores ≈ 70-100 asentamientos, no 500 (`CIUDADANIA.casasBasePorAsentamiento` = 5 residentes + 2 por nivel). Además el multihilo **no resuelve** que no se apliquen comandos durante el tick (restricción lógica: un solo mutador del estado a la vez), solo evita bloquear el event loop. **Disparador para reconsiderarlo**: un tick medido por encima de ~500 ms en partida real, o desconexiones de WebSocket atribuibles al bloqueo. **Al día 2026-09-05**: la decisión sale REFORZADA — el tick a 70-100 asentamientos son **70-111 ms** (no los ~170-300 ms que estimaba esta línea), a un factor 4,5 del disparador. Ver doc 6 §1
 - [x] Elegir runtime/framework del proceso backend Node.js — **decidido: Node.js + Fastify**. Motivo: el cuello de botella medido es la CPU del tick (~1.9 s a 500 asentamientos), no el HTTP, así que el req/s del framework es irrelevante; se elige Fastify por equilibrio de ecosistema, validación de esquemas integrada (sirve al punto 10 del doc 2) y `@fastify/websocket` maduro para la Fase C
 - [x] Elegir estrategia de persistencia inicial (snapshots simples vs. eventos+snapshots) y justificar la elección — **decidido: snapshot JSON por partida**, escritura atómica (`.tmp` + `rename`) con versión de concurrencia. Motivos: el estado completo mide ~2.4 MB a 500 asentamientos y serializarlo cuesta <1 ms (≈0.1% del tick); la cola serial por `gameId` elimina la concurrencia de escritura, que es la ventaja principal de SQLite; y el modelo de datos cambia entero en Fase D, así que definir esquema SQL ahora sería diseñar para algo que se va a tirar. **Disparadores para migrar a SQLite** (anotados, no ahora): auditoría/event-sourcing de Fase E, estado por encima de ~5 MB, o necesidad de consultar historial sin cargar la partida entera
 - [x] **⚠️ B3 — Mutaciones de `Mapa` hechas explícitas** (2026-08-25; era prerrequisito del guardado, ver [7_Diseno_GameSession.md](7_Diseno_GameSession.md) §7.3). Era lo único no funcional puro que quedaba del motor: `extraer` (desde `engine/construction.ts`) y `avanzarRegeneracion` (desde `engine/simulation.ts`) escribían el `estadoMapa` de la partida por dentro de una fachada compartida, fuera del valor de retorno. Al persistir tras cada tick se guarda *estado + eventos*, así que un fallo de escritura descartaba el estado nuevo pero **no** revertía los yacimientos ya vaciados: snapshot en disco y partida en memoria dejaban de coincidir. Cómo se resolvió:
@@ -221,7 +221,7 @@ devolver un resultado estructurado") que a este marcador — no sumar ni restar 
   - **Dos bugs de integración real encontrados y corregidos verificando en navegador** (no los detectaba `tsc` ni la suite, por diseño — son de la capa HTTP): (1) `POST /partidas` sin `forzar` devuelve 409 si el `gameId` ya está abierto en el proceso — correcto para el panel de admin, pero rompía la reconexión normal de `main.ts` en cada recarga de página (ya había una partida abierta de una carga anterior); `GameStore.crear()` ahora trata ese 409 como "ya está lista, conectate" en vez de propagarlo. (2) `apiCliente.ts` mandaba `content-type: application/json` en TODAS las peticiones, incluida `POST /tick` sin body — Fastify rechaza con 400 un `content-type: application/json` sobre un cuerpo vacío; el header ahora solo se manda cuando de verdad hay body
   - Cobertura de NPC portada de `app/__tests__/faccionNpc.test.ts` (probaba el `GameStore` local síncrono, ya no existe en esa forma) a `session/__tests__/npcGobernanza.test.ts`, contra `GameSession` directo — mismo comportamiento blindado, sin necesitar red. `app/__tests__/exportarImportar.test.ts` se retira sin reemplazo: probaba `importarSimulacion`, que ya no existe (admin, sin dueño todavía)
   - Tests: 405 → 400 (neto: -10 de las dos suites de `app/__tests__/` retiradas, +6 de `npcGobernanza.test.ts`, +9 del endpoint de comandos/`forzar`/bundling de tick en el commit anterior)
-- [ ] **Resolver el bloqueo de la cola serial por ticks largos** — un tick de ~1.9 s a 500 asentamientos son ~1.9 s sin procesar comandos de nadie (el doc 2 no lo contempla). Vías a evaluar: comandos por lotes entre ticks, partir el tick en fases cedibles, o mover el tick a un worker aparte del hilo que atiende comandos. **Decisión de LA SOLUCIÓN sigue pendiente, a propósito** (doc 7 §8.2: a la escala de arranque el tick mide ~170-300 ms, tolerable; el disparador para reconsiderar es un tick medido por encima de ~500 ms en partida real). Lo que sí se hizo en `RunnerDePartida` (2026-08-25) fue la preparación de coste cero del doc 7 §8.4: `ejecutar()`/`avanzarTick()` ya son `async` de cara a quien los llama, así que cualquiera de las tres vías se puede implementar DENTRO del runner el día que haga falta, sin cambiar su interfaz ni tocar `GameSession`
+- [ ] **Resolver el bloqueo de la cola serial** — **reencuadrado el 2026-09-05, sigue abierto**. El enunciado original de esta línea ("un tick de ~1.9 s a 500 asentamientos son ~1.9 s sin procesar comandos de nadie") ya no describe el problema: medido, el tick son **111 ms a 100 asentamientos** —la escala real de 500 jugadores— dentro de un intervalo de 60 000 ms, así que un comando que llegue a mitad espera una décima de segundo. Lo que sí bloquea la cola es la **ráfaga de catch-up** tras una caída: toda la ráfaga es UNA entrada de la cola, y con `MAX_TICKS_RAFAGA` = 10 080 (una semana) son ~18,6 minutos sin atender a nadie. Las tres vías que esta línea listaba (lotes entre ticks, fases cedibles, worker aparte) atacaban un tick lento; contra una ráfaga la palanca es otra —acotarla, o cederle la cola cada N ticks—. **Decisión de LA SOLUCIÓN sigue pendiente, a propósito**, ahora con números y con métrica que la vigila (`ultimaRafagaTicks`, E3). Ver doc 6 §1. Lo que sí se hizo en `RunnerDePartida` (2026-08-25) fue la preparación de coste cero del doc 7 §8.4: `ejecutar()`/`avanzarTick()` ya son `async` de cara a quien los llama, así que cualquiera de las tres vías se puede implementar DENTRO del runner el día que haga falta, sin cambiar su interfaz ni tocar `GameSession`
 
 ## Fase C — Multijugador sobre ticks (**solo servidor**)
 
@@ -309,7 +309,7 @@ puede importar de `server`), y para lograrlo reimplementó reglas de juego que y
 - [x] 532/532 tests, `tsc` limpio en ambos proyectos, y verificado en vivo sobre HTTP real: 401 sin sesión, 403 sin rol, 403 al jugador que intenta leer el estado de admin, 403 al admin que intenta jugar, y el cliente renderizando contra la superficie autenticada
 
 - [x] ~~**Pendiente**: `Membresia`/`Sesion` viven en memoria; no hay endpoint para revocar ni para otorgar `moderador`/`observador`~~ — **cerrado 2026-08-29**, ver "Cierre de Fase C" al final de esta sección
-- [ ] ~~`POST /partidas` y `POST /partidas/:gameId/tick` SIGUEN sin exigir sesión~~ — cerrado en C3
+- [x] ~~`POST /partidas` y `POST /partidas/:gameId/tick` SIGUEN sin exigir sesión~~ — cerrado en C3
 - [x] ~~`fundarAsentamiento` fabrica ids sintéticos en vez de usar el actor real~~ — corregido 2026-08-26
 
 ### Fundador real en `fundarAsentamiento` — completada 2026-08-26
@@ -355,7 +355,7 @@ guerra como mecánica de juego (con sus parámetros por definir) se movió a
 - [x] **Sin mensaje sintético de "conectado"**: el `open` nativo de WebSocket ya lo dice, y como la autenticación ocurre en `preValidation` antes del *handshake*, para cuando `open` dispara la conexión ya está autenticada. Se retiró tras un hallazgo real depurando los tests: mandarlo SÍNCRONAMENTE en el mismo tick en que arranca el handler compite con que el cliente termine de engancharse al evento `message` y se pierde — una carrera real del transporte (confirmada también con un cliente `ws` real sobre TCP real, no solo con el arnés de pruebas), no una peculiaridad de `injectWS`. Evitar el envío por completo es más simple y más robusto que retrasarlo con un `setImmediate`
 - [x] Al reconectar se pierden las suscripciones (doc 6 §2): no hay estado de suscripción que sobreviva al cierre del socket — el cliente se re-suscribe solo. Deliberado: más simple que reconstruir "qué tenía suscrito", y coherente con que las suscripciones describen QUÉ se quiere ver, no un historial que recuperar
 - [x] 25 tests nuevos (11 idempotencia en `RunnerDePartida`, 8 `canales.ts`, 14 WebSocket con `injectWS`, 1 idempotencia HTTP end-to-end), 581/581 en total, `tsc` limpio en ambos proyectos. Verificado en vivo con servidor real (`:3000`) y cliente `ws` real (no `injectWS`): conexión, suscripción y evento difundido, de punta a punta
-- [ ] **Pendiente**: los comandos siguen yendo por HTTP, no por el WebSocket (doc 6 §2 ya lo decidía así: "HTTP: comandos; WebSocket: solo notificar cambios") — nada que resolver aquí, es el diseño. Sin métricas de conexiones activas expuestas todavía (`hub.conexionesAbiertas` existe pero no hay endpoint que la lea) — llega con Fase E3
+- [x] Los comandos siguen yendo por HTTP, no por el WebSocket (doc 6 §2 ya lo decidía así: "HTTP: comandos; WebSocket: solo notificar cambios") — nada que resolver aquí, es el diseño, no una carencia. Lo único que quedaba pendiente de verdad de este punto eran las **métricas de conexiones activas**, y las expone `GET /v1/admin/metricas` desde la Fase E3 (2026-09-05) (`hub.conexionesAbiertas` existe pero no hay endpoint que la lea) — llega con Fase E3
 
 ### C6. Contrato publicable: versionado, CORS, OpenAPI, respuesta autosuficiente — completada 2026-08-26
 
@@ -396,9 +396,11 @@ guerra como mecánica de juego (con sus parámetros por definir) se movió a
   al exportar). 604/604 en total, `tsc` limpio. Verificado en vivo: servidor real levantado con
   `ADMINISTRADORES='dev:jefa'`, `curl http://localhost:.../v1/balance` responde 200 con `version:1` y
   `EDIFICIO_CATALOGO` real dentro de `catalogos`
-- [ ] Absorbe el grupo "de tabla" del hito C10 (`capFundacion`, `cupoVivienda`, `slotsPoliticaDisponibles`,
+- [x] Absorbe el grupo "de tabla" del hito C10 (`capFundacion`, `cupoVivienda`, `slotsPoliticaDisponibles`,
   `nivelFaccionInfo`, `CATALOGOS`): con el balance servido, un cliente sin motor ya puede resolverlas por
-  *lookup* — pero eso lo hace el cliente cuando exista uno sin `@motor/*` (C8-C13), no este hito
+  *lookup*. Quedaba pendiente de que existiera ese cliente — y **existe desde el commit `2dfe9e7`, en su
+  propio repositorio**, así que el trabajo que faltaba dejó de ser de ESTE repo. Cerrado por alcance, no
+  porque se implementara aquí
 
 ### Diagnóstico de aislamiento del cliente (2026-08-26)
 
@@ -545,8 +547,11 @@ Resumen de lo que afecta al plan:
 - **Lockstep determinista queda descartado** (el patrón de AoE/StarCraft: solo viajan comandos, cada cliente
   simula el mundo entero). Es **estructuralmente incompatible con la niebla de guerra** —de ahí los maphacks
   de StarCraft— y eso choca con C4, donde las proyecciones son frontera de seguridad. Segundo motivo: existe
-  para esconder latencia a 60 Hz, y aquí el tick mide ~1,9 s de CPU. Se confirma el modelo que C4/C5 ya
-  construyen: servidor autoritativo, cliente sin simulación
+  para esconder latencia a 60 Hz, y aquí **un tick ES UN MINUTO de tiempo de mundo** (Fase D): no hay latencia
+  de fotograma que disimular, el jugador espera por diseño. El argumento no depende de lo que cueste el tick
+  en CPU — la cifra de "~1,9 s" que traía esta línea era además una extrapolación de agosto ya corregida (hoy,
+  111 ms a 100 asentamientos). Se confirma el modelo que C4/C5 ya construyen: servidor autoritativo, cliente
+  sin simulación
 - **Pero la premisa sí necesitaba un matiz**: la frontera es **reglas vs. simulación**, no "motor sí/no". La
   simulación es solo del servidor; las **reglas** (costes, cupos, validez) el cliente las necesita para
   responder al instante, y la industria se las manda **como datos, no como código** (el *Static Data Export*
@@ -1336,8 +1341,8 @@ se modera lo que no se ha registrado.
   - **El tick es ~2,6-3,8× más lento** que en agosto a igualdad de asentamientos (a 52: 63,9 → 166,1 ms).
     La forma de la curva no cambió (O(n^1.42) frente a O(n^1.5)); cambió la constante, por el trabajo que
     añadieron trazado urbano, murallas, ejércitos y niebla.
-  - **A 70-100 asentamientos —el objetivo real de 500 jugadores— son 288-471 ms/tick**, no los 170-300 ms
-    que se estimaron en agosto.
+  - **A 70-100 asentamientos —el objetivo real de 500 jugadores— eran 288-471 ms/tick**, no los 170-300 ms
+    que se estimaron en agosto. Tras las dos optimizaciones que salieron de esta medición, **70-111 ms**.
   - **La decisión pendiente de la cola serial queda REENCUADRADA.** Un tick suelto ya no es el problema:
     471 ms dentro de un intervalo de 60 000 ms es el 0,8 %, y un comando que llegue a mitad espera medio
     segundo. El problema es la **ráfaga de catch-up**: `MAX_TICKS_RAFAGA` = 10 080 (una semana) a 471 ms por
@@ -1351,7 +1356,8 @@ se modera lo que no se ha registrado.
     **Resuelto el mismo día** con memoización por CONTENIDO (por referencia no valía: medido, la referencia
     del array se repite el 0 %) y clave exacta en vez de hash (486× más barata que el replay, sin riesgo de
     colisión). La cautela que este documento anotaba —"el orden es load-bearing"— estaba mal dirigida: el
-    orden importa al calcular, no al cachear. **471 → 132 ms a 100 asentamientos, O(n^1.42) → O(n^1.12).**
+    orden importa al calcular, no al cachear. **471 → 132 ms a 100 asentamientos**, y con el arreglo de
+    `bosqueParaLenera` que vino después, **→ 111 ms: 4,3× en total**.
     Equivalencia demostrada con sellos SHA-256 del estado completo sobre 150 ticks, idénticos byte a byte.
     Detalle en doc 6 §1. **Corregido después**: este punto daba `engine/zones.ts` como el siguiente objetivo
     con ≈27 % del tick, y era falso — el perfil medía el proceso entero y el 65 % de las muestras era el
@@ -1409,7 +1415,7 @@ solo diseñada.
 
 - [x] IDs resueltos exclusivamente en servidor, nunca confiados desde el cliente — el actor de cada comando es `Membresia.jugadorId`, resuelto de la sesión; los ids de entidad los genera `ContextoComando.ids` en el servidor (C2)
 - [x] Cola serial o control de versión por partida para comandos concurrentes — `RunnerDePartida` (cola serial por `gameId`, encadenando promesas) + `PartidaExportada.state.version` de concurrencia en `persistenciaPartida.ts` (Fase B)
-- [~] RNG determinista con estado persistido — `PartidaExportada.estadoRng` existe (2026‑08‑25), pero **la reproducibilidad a nivel de sesión estaba rota**: `ctx.momento` era reloj de pared y se persistía en el estado (doc 10 §7). El guard de autoridad temporal (2026‑08‑29) lo congela; D1 lo repara de raíz. El motor puro (`avanzarSimulacion`) sí es reproducible con seed y **eso es lo que se conserva** (lo consume el laboratorio batch) — `estadoRng` en snapshot queda sin consumidor real hasta que exista un replay de incidentes (doc 10 §5)
+- [~] RNG determinista con estado persistido — `PartidaExportada.estadoRng` existe (2026‑08‑25), pero **la reproducibilidad a nivel de sesión estaba rota**: `ctx.momento` era reloj de pared y se persistía en el estado (doc 10 §7). El guard de autoridad temporal (2026‑08‑29) lo congela y **D1 lo reparó de raíz** (2026‑08‑29): `ctx.momento` se deriva del tick, no del reloj de pared. El motor puro (`avanzarSimulacion`) sí es reproducible con seed y **eso es lo que se conserva** (lo consume el laboratorio batch) — `estadoRng` en snapshot queda sin consumidor real hasta que exista un replay de incidentes (doc 10 §5)
 - [x] DTOs/proyecciones por audiencia (nunca enviar `GameState` completo a un cliente no-admin) — `proyectarParaJugador` (C4): un jugador nunca recibe `GameSessionState` completo; solo su Facción + metadatos públicos. La niebla de guerra fina ("último conocido" de rivales) es una mecánica de juego, no una mitigación de riesgo — `Mecanicas a desarrollar.md` §12
 - [x] Snapshots y retención para el historial (nunca clones ilimitados en RAM) — **hecho en E2 (2026-09-05), corrigiendo la premisa**: no había pila de snapshots que podar (`guardarPartida` sobrescribe siempre `<gameId>.json`, una versión por partida). Lo que sí crecía sin techo era la AUDITORÍA, que ahora se poda por edad (`podarAuditoria`, 30 días), y lo que crecería son los RESPALDOS, que se podan por cuenta (`podarRespaldos`, 7) — por edad, una partida inactiva se quedaría sin ninguno justo cuando más difícil sería regenerarlo. Pasada periódica opt-in en `server/mantenimiento.ts`
 - [~] Balance versionado y ligado a partida/temporada (no global mutable) — **servido** (`GET /v1/balance`, C7) y `BALANCE_VERSION` estampada en cada snapshot; los overrides reales por partida/temporada siguen sin dueño

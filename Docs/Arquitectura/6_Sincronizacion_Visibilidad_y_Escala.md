@@ -55,8 +55,8 @@ corrección de más abajo, no una extrapolación.
 - **El estado creció solo ~1,4-1,5×**, bastante menos que el tick. O sea que lo que se había encarecido era el
   CÁLCULO por tick, no la cantidad de datos que se arrastra.
 - **La conclusión cualitativa de agosto sigue en pie**: el cuello de botella es la CPU del tick. Serializar el
-  estado cuesta **el 1 % de un tick** a 100 asentamientos (1,3 ms frente a 131,6 ms) — el porcentaje ha subido
-  solo porque el tick se ha hecho más barato, no porque persistir cueste más. Cualquier debate de rendimiento
+  estado cuesta **el 1,2 % de un tick** a 100 asentamientos (1,3 ms frente a 110,7 ms) — el porcentaje ha
+  subido solo porque el tick se ha hecho más barato, no porque persistir cueste más. Cualquier debate de rendimiento
   sobre framework HTTP o motor de persistencia sigue siendo el margen equivocado.
 
 ### La red de calles: el diagnóstico y su arreglo (2026-09-05)
@@ -150,23 +150,23 @@ tocar nada.
 
 > ⚠️ **Corrección de 2026-08-24, que sigue vigente: 500 jugadores NO son 500 asentamientos.** Un asentamiento
 > aloja `CIUDADANIA.casasBasePorAsentamiento` = 5 residentes (+2 por nivel adicional), así que el objetivo de
-> 500 jugadores cabe en **~70-100 asentamientos**: hoy, **86-132 ms por tick**. La cifra de 500 asentamientos
+> 500 jugadores cabe en **~70-100 asentamientos**: hoy, **70-111 ms por tick**. La cifra de 500 asentamientos
 > corresponde a una partida madura, con las facciones ya expandidas (`CAP_FUNDACION_POR_NIVEL`).
 
 ### Consecuencia para el bloqueo de la cola serial
 
 Esta era la razón de re-medir, así que conviene dejar la conclusión escrita en vez de solo los números.
 
-- **Un tick suelto no es el problema, y tras la optimización lo es aún menos.** 132 ms a 100 asentamientos
-  dentro de un intervalo de 60 000 ms: el motor ocupa el **0,2 %** del tiempo de mundo, y un comando que
-  llegue mientras corre un tick espera una décima de segundo. Muy lejos de los ~2 s que hicieron sonar la
+- **Un tick suelto no es el problema, y tras las optimizaciones lo es aún menos.** 111 ms a 100
+  asentamientos dentro de un intervalo de 60 000 ms: el motor ocupa el **0,18 %** del tiempo de mundo, y un
+  comando que llegue mientras corre un tick espera una décima de segundo. Muy lejos de los ~2 s que hicieron sonar la
   alarma en agosto sobre la extrapolación a 500 asentamientos.
 - **El problema real es la RÁFAGA DE CATCH-UP.** `RunnerDePartida.sincronizarConReloj` (D5) ejecuta los ticks
   vencidos tras un reinicio **en una sola entrada de la cola serial**, con tope `MAX_TICKS_RAFAGA` = 10 080
-  (una semana). A 132 ms por tick, ponerse al día de una semana caída son **~22 minutos con la cola
+  (una semana). A 111 ms por tick, ponerse al día de una semana caída son **~18,6 minutos con la cola
   bloqueada** (eran ~79 antes de optimizar): durante ese rato ningún comando de ningún jugador se procesa.
-  Una caída de una hora son ~8 s de cola parada. **Sigue siendo el punto a decidir**: la optimización lo ha
-  hecho 3,6× menos grave, no lo ha resuelto.
+  Una caída de una hora son ~7 s de cola parada. **Sigue siendo el punto a decidir**: las optimizaciones lo
+  han hecho 4,3× menos grave, no lo han resuelto.
 - Esto **reencuadra la decisión pendiente**: las tres vías que se plantearon en agosto (lotes de comandos
   entre ticks, partir el tick en fases cedibles, mover el tick a un worker) se propusieron contra un tick
   lento. Contra una ráfaga de catch-up, la palanca más barata es acotarla de otro modo — bajar
@@ -354,8 +354,10 @@ seguridad, no refinamiento**. Adoptar lockstep sería renunciar a las tres fuent
 "último conocido" de §3.2.
 
 **Razón 2: no hay latencia que esconder.** Lockstep y *client-side prediction* existen para dar respuesta
-instantánea a 60 Hz. El tick de este motor mide ~1,9 s de CPU a 500 asentamientos (§1). El jugador ya espera
-segundos por diseño. Se pagaría toda la disciplina de determinismo bit-exacto —que además arrastra que el
+instantánea a 60 Hz. Aquí **un tick es un MINUTO de tiempo de mundo** (Fase D, doc 10): el jugador espera por
+diseño, y no hay fotograma que disimular. Lo que cueste el tick en CPU es indiferente para este argumento
+— la cifra de "~1,9 s a 500 asentamientos" que traía esta línea era la extrapolación de agosto, corregida en
+§1 (hoy, 111 ms a 100 asentamientos, que es la escala real de 500 jugadores). Se pagaría toda la disciplina de determinismo bit-exacto —que además arrastra que el
 estado interno del RNG todavía no es serializable (A3, diferido a B3)— a cambio de nada.
 
 **Se confirma el modelo 3**: servidor autoritativo, cliente sin simulación, estado filtrado por audiencia. Es

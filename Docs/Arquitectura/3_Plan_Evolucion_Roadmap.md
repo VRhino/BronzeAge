@@ -29,9 +29,12 @@ Qué puede salir del servidor y qué no, módulo por módulo: ver
 [9_Reglas_vs_Simulacion.md](9_Reglas_vs_Simulacion.md) — referencia transversal, la ejecutan C7, C10 y C11.
 
 **Objetivo de escala (acordado 2026-08-24): mínimo 500 jugadores conectados
-simultáneamente en una misma partida.** Condiciona Fases B y C — el cuello de
-botella medido es la CPU del tick (~1.9 s a 500 asentamientos), no la red ni la
-persistencia; ver documento 6 para las mediciones y sus consecuencias.
+simultáneamente en una misma partida.** El cuello de botella es la CPU del tick, no la red ni la persistencia
+— eso no ha cambiado desde agosto; lo que ha cambiado es la magnitud. **Medido el 2026-09-05: 500 jugadores
+son ~70-100 asentamientos (no 500), y eso son 70-111 ms por tick** dentro de un intervalo de 60 000 ms. La
+cifra de "~1,9 s" que este documento traía era una extrapolación de agosto a 500 ASENTAMIENTOS, corregida
+dos veces desde entonces. Ver [documento 6](6_Sincronizacion_Visibilidad_y_Escala.md) §1 para las mediciones,
+la optimización que las mejoró 4,3× y lo que queda decidido y por decidir.
 
 Orden de fases (no reordenar sin justificar por qué el nuevo orden reduce riesgo,
 no solo por conveniencia):
@@ -188,7 +191,7 @@ Ninguna de estas bloqueó el cierre de su fase, y todas están declaradas dentro
 dejó fuera — **pero ahí no se ven**: un lector que recorra las casillas ve cinco fases en verde. Se listan
 aquí para que dejen de depender de que alguien relea el párrafo correcto.
 
-- [ ] **Bloqueo de la cola serial** — abierto, y **3,6× menos grave desde el 2026‑09‑05**. La re‑medición reencuadró el problema: no es un tick suelto (132 ms a 100 asentamientos dentro de un intervalo de 60 000 ms = una décima de segundo de espera para un comando) sino la **ráfaga de catch‑up** tras una caída — `MAX_TICKS_RAFAGA` = 10 080 a 132 ms/tick son ~22 minutos con la cola bloqueada, antes eran ~79. Las tres vías planteadas en agosto (lotes entre ticks, fases cedibles, worker aparte) atacaban un tick lento; contra una ráfaga la palanca es otra: acotarla, o cederle la cola cada N ticks. Ya hay métrica que la vigila (`ultimaRafagaTicks`, E3). **Decisión pendiente** — doc 6 §1.
+- [ ] **Bloqueo de la cola serial** — abierto, y **4,3× menos grave desde el 2026‑09‑05**. La re‑medición reencuadró el problema: no es un tick suelto (111 ms a 100 asentamientos dentro de un intervalo de 60 000 ms = una décima de segundo de espera para un comando) sino la **ráfaga de catch‑up** tras una caída — `MAX_TICKS_RAFAGA` = 10 080 a 111 ms/tick son ~18,6 minutos con la cola bloqueada, y eran ~79 antes de optimizar. Las tres vías planteadas en agosto (lotes entre ticks, fases cedibles, worker aparte) atacaban un tick lento; contra una ráfaga la palanca es otra: acotarla, o cederle la cola cada N ticks. Ya hay métrica que la vigila (`ultimaRafagaTicks`, E3). **Decisión pendiente** — doc 6 §1.
 - [x] **Re‑medir la escala tras la Fase D** — **hecha 2026‑09‑05** (`scripts/medicion-escala.ts`, doc 6 §1 reescrito), y de ella salió una optimización: el tick había engordado ~3× desde agosto, el perfilado señaló que la red de calles se rehacía entera cada tick por asentamiento sin haber cambiado nada, y memoizarla por contenido lo dejó **3,6× más rápido** (471 → 132 ms a 100 asentamientos) con el exponente cayendo de O(n^1.42) a **O(n^1.12)** — buena parte de lo superlineal era trabajo repetido, no simulación. Equivalencia demostrada con sellos SHA‑256 del estado completo a lo largo de 150 ticks, idénticos byte a byte.
 - [ ] **Balance por partida/temporada** (alcance que C7 declaró NO cubierto) — `BALANCE_VERSION` se estampa en
   cada snapshot, pero sigue siendo un único valor de proceso: dos partidas no pueden correr balances

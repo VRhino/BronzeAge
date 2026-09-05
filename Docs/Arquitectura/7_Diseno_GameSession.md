@@ -188,7 +188,14 @@ documentarlo — es parte de la superficie pública de la API.
 **Decisión: la cola NO vive dentro de `GameSession`.**
 
 El doc 2 (principio 5) exige procesar en serie por `gameId`, y el [doc 6](6_Sincronizacion_Visibilidad_y_Escala.md) §1
-midió el problema que eso crea: un tick de ~1.9 s a 500 asentamientos son ~1.9 s sin atender comandos.
+midió el problema que eso crea: mientras corre el tick no se atiende ningún comando.
+
+> **Cifras al día (2026-09-05).** Este apartado y el §8 se escribieron sobre la medición de agosto, que
+> extrapolaba **~1,9 s por tick a 500 asentamientos**. Esa cifra ya no vale por dos motivos independientes:
+> 500 jugadores son ~70-100 asentamientos y no 500, y el tick se optimizó 4,3× en la Fase E3. Hoy son
+> **70-111 ms**. **Ninguna decisión de este documento cambia** —salen todas reforzadas, que es justo por lo
+> que conviene actualizar los números en vez de dejarlos: un argumento que se apoya en una cifra falsa es
+> frágil aunque su conclusión sea correcta.
 
 Se separa en dos piezas:
 
@@ -373,8 +380,9 @@ equivocada. El tick largo causa **dos** problemas distintos:
 | **A** | Durante el tick no se APLICA ningún comando | **No.** La restricción es lógica, no de CPU: el estado solo admite un mutador a la vez. Mover el trabajo a otro hilo no cambia eso |
 | **B** | Durante el tick el event loop está bloqueado: los heartbeats de WebSocket no responden, no se aceptan conexiones nuevas, un health check expira | **Sí.** Este es el problema que el multihilo sí ataca |
 
-El problema B es el que de verdad duele a 500 jugadores: un event loop bloqueado 1.9 s puede hacer que los
-clientes den la conexión por muerta. El A es inherente a tener un estado consistente y no se elimina, solo se
+El problema B es el que de verdad duele a 500 jugadores: un event loop bloqueado durante segundos puede
+hacer que los clientes den la conexión por muerta. (Con las cifras de 2026-09-05 —111 ms— no llega a
+plantearse; sí lo hace durante una ráfaga de catch-up, ver doc 6 §1.) El A es inherente a tener un estado consistente y no se elimina, solo se
 gestiona (encolar y confirmar recepción aunque la aplicación llegue después).
 
 ### 8.2 La magnitud real es menor de lo estimado
@@ -383,7 +391,8 @@ Corrección importante sobre las cifras del [doc 6](6_Sincronizacion_Visibilidad
 jugadores no son 500 asentamientos**. Un asentamiento aloja `CIUDADANIA.casasBasePorAsentamiento` = 5
 residentes (+2 por nivel adicional), así que 500 jugadores caben en ~70-100 asentamientos.
 
-Sobre la curva medida (O(n^1.5)), eso da **~170-300 ms por tick**, no 1.9 s. Los 500 asentamientos son un
+Sobre la curva medida entonces (O(n^1.5)) eso daba **~170-300 ms por tick**, no 1,9 s; re-medido el
+2026-09-05 y tras optimizar, **70-111 ms**. Los 500 asentamientos son un
 escenario de partida madura (las facciones expanden con el tiempo, ver `CAP_FUNDACION_POR_NIVEL`), no el
 punto de partida.
 
@@ -421,7 +430,13 @@ aparezcan desconexiones de WebSocket atribuibles al bloqueo del event loop.
 Objeción legítima: el multihilo brilla cuando se puede **delegar trabajo en paralelo**. Que no encaje con el
 modelo de ticks no significa que no encaje con el de tiempo real. Se analizó con mediciones.
 
-**Medición: reparto del coste del tick** (100 asentamientos vivos, 60 ticks de calentamiento, media de 25):
+**Medición: reparto del coste del tick** (100 asentamientos vivos, 60 ticks de calentamiento, media de 25).
+
+> **Cifras de agosto de 2026.** El ABSOLUTO ya no vale: el tick completo a 100 asentamientos son **110,7 ms**
+> medidos el 2026-09-05, tras engordar con trazado urbano/murallas/ejércitos/niebla y adelgazar después 4,3×
+> con las optimizaciones de la Fase E3 (doc 6 §1). Lo que **sí se sostiene, y es lo que esta tabla existe para
+> argumentar, es el REPARTO**: re-perfilado el 2026-09-05, la geometría de zonas —la parte paralelizable— es
+> el 3,3 % del tick, del mismo orden que el 2,0 % de aquí. La conclusión de abajo no se mueve.
 
 | Fase | Coste | % del tick | ¿Paralelizable? |
 |---|---|---|---|
@@ -456,10 +471,10 @@ de imposible a posible.**
 
 **Sin embargo, seguirá siendo innecesario — por el ritmo deliberado del juego.**
 
-El coste no es por segundo de reloj, es por avance de simulación. A 100 asentamientos, un tick cuesta 78.5 ms.
-Si un tick representa ~1 minuto de tiempo de juego (el diseño pide explícitamente que los asentamientos
-crezcan despacio), eso es **0.13% de un núcleo**. Extrapolando a 500 asentamientos (~0.9-1.9 s por avance,
-según cómo se extrapole la curva) sigue siendo **~1.5%**. La carga total es minúscula porque el juego es lento
+El coste no es por segundo de reloj, es por avance de simulación. A 100 asentamientos, un tick cuesta
+**110,7 ms** (medido 2026-09-05; la cifra de 78,5 ms que traía esta línea era una extrapolación de agosto).
+Si un tick representa ~1 minuto de tiempo de juego —y desde la Fase D representa exactamente eso—, es
+**0,18 % de un núcleo**. Incluso extrapolando a 500 asentamientos sigue estando por debajo del 2 %. La carga total es minúscula porque el juego es lento
 **por diseño**.
 
 Conclusión: en tiempo real el paralelismo se vuelve *arquitectónicamente viable*, pero *económicamente
