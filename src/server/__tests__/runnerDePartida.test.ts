@@ -285,8 +285,11 @@ describe('RunnerDePartida — reloj de mundo (D5)', () => {
     r.iniciarRelojDeMundo(50);
     avanzar(3 * 50); // 3 intervalos de atraso, por debajo del umbral
     await esperar(150);
-    r.detenerRelojDeMundo();
+    // Drenar ANTES de parar, no después: la ráfaga comprueba `this.relojDeMundo` en cada iteración, así que
+    // `detenerRelojDeMundo` la ABORTA a medias (deliberado — un apagado no debe seguir avanzando el mundo).
+    // Con el orden inverso este test salía intermitente bajo carga.
     await r.esperarColaVacia();
+    r.detenerRelojDeMundo();
 
     expect(r.getState().tick).toBeGreaterThanOrEqual(3);
     expect(r.metricas().ticksOmitidos).toBe(0);

@@ -104,8 +104,11 @@ describe('recogerMetricas', () => {
     runner.iniciarRelojDeMundo(50);
     reloj.avanzar(3 * 50); // 3 intervalos de atraso: por debajo del umbral, se recuperan
     await esperar(150);
-    runner.detenerRelojDeMundo();
+    // Drenar ANTES de parar, no después: la ráfaga comprueba `this.relojDeMundo` en cada iteración, así que
+    // `detenerRelojDeMundo` la ABORTA a medias (deliberado — un apagado no debe seguir avanzando el mundo).
+    // Con el orden inverso este test salía intermitente bajo carga.
     await runner.esperarColaVacia();
+    runner.detenerRelojDeMundo();
 
     const p = recogerMetricas(fuentes({ ahora: reloj.ahora })).partidas[0]!;
     expect(p.mayorRafagaTicks).toBeGreaterThan(0);
