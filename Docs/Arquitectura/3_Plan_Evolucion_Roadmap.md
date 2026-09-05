@@ -1,11 +1,25 @@
 # Roadmap de evolución: backend multijugador y conversión temporal
 
+> **Verificado contra el commit `652a0aa` (2026-09-05)** — repaso de las casillas de las cinco fases contra el
+> código, no contra el documento anterior. Correcciones de esa pasada: las tres tareas derivadas del doc 6 §5
+> que seguían en `[ ]` estando hechas (suscripciones, mapa como asset, cursor de eventos) y la sección nueva
+> "Deuda arrastrada de fases cerradas", que rescata a la superficie el alcance que varios hitos `[x]`
+> declararon NO cubierto en su propio texto. Misma convención que
+> [1_Arquitectura_Actual.md](1_Arquitectura_Actual.md): al tocar este documento, anotar contra qué commit se
+> verificó — un roadmap sin marca de verificación no se distingue de uno correcto hasta que alguien se apoya
+> en él y falla.
+
 Este documento es el mapa de alto nivel. Se marca un hito `[x]` solo cuando está
 verificado (código, tests o documentación correspondiente), no cuando está "casi
 listo". El desglose en tareas pequeñas y accionables vive en
 [4_Plan_Evolucion_Tareas.md](4_Plan_Evolucion_Tareas.md); ese es el archivo que se
 actualiza con más frecuencia. Este archivo se actualiza cuando se cierra un hito o
 una fase completa.
+
+**Alcance: solo arquitectura.** El trabajo posterior al 2026-08-30 (movimiento de ejércitos, murallas, niebla
+de guerra) no aparece aquí porque son mecánicas de juego, no hitos de infraestructura: viven en
+[`Docs/Game/`](../Game/) (canon de reglas) y en [`Consideraciones/`](../../Consideraciones/) (decisiones y
+plan). Que este roadmap no se mueva durante semanas no significa que el repositorio esté parado.
 
 Contexto y justificación de cada fase: ver
 [2_Estudio_Evolucion_Backend_Multifrontend.md](2_Estudio_Evolucion_Backend_Multifrontend.md).
@@ -162,9 +176,34 @@ Objetivo: infraestructura lista para operar de forma continua, no solo para
 demostrar que funciona.
 
 - [x] ~~E1. Scheduler temporal definitivo + recuperación de eventos vencidos tras reinicio~~ — **hecho en D5** (2026‑08‑29): `RunnerDePartida.iniciarRelojDeMundo` con catch‑up en ráfaga tras reinicio. Se movió a D5 porque el reloj de mundo y el catch‑up son parte de la conversión temporal, no operación posterior
-- [ ] E2. Auditoría, snapshots, backups y pruebas de restauración
-- [ ] E3. Métricas (duración de tick/procesamiento, tamaño de cola, errores, clientes conectados) y herramientas de moderación
+- [x] E2. Auditoría, snapshots, backups y pruebas de restauración — **completada 2026-09-05**. `server/auditoria.ts` (JSONL append-only por partida, hermano del snapshot: aceptados Y rechazados, incluidos los 403 de autorización, que antes no dejaban ningún rastro; `GET /v1/admin/partidas/:gameId/auditoria` filtrable), `server/respaldos.ts` (copia fechada, y restauración que VERIFICA que el respaldo carga antes de sustituir el snapshot vigente — un respaldo corrupto falla sin tocar la partida buena), `server/mantenimiento.ts` (pasada periódica opt-in: respaldar + podar respaldos por cuenta + podar auditoría por edad) y `scripts/restaurar-partida.ts` como procedimiento ejecutable. **Corrige una premisa del plan**: no había pila de snapshots que podar — `guardarPartida` sobrescribe siempre el mismo archivo; lo que crecía sin techo era la auditoría. **Alcance NO cubierto, a propósito**: (a) la auditoría de cambios de BALANCE (doc 2 §8) sigue sin hacerse, bloqueada por la deuda de C7 — se pide sobre un balance versionado por partida que no existe; (b) restaurar exige el servidor parado, porque exponerlo por HTTP necesitaría que `RegistroDePartidas` supiera cerrar UNA partida y esa pieza no tiene consumidor todavía. 991 tests, `tsc` limpio, verificado en vivo por HTTP. Detalle en [4_Plan_Evolucion_Tareas.md](4_Plan_Evolucion_Tareas.md#e2--auditoría-snapshots-backups-y-restauración)
+- [~] E3. Métricas y herramientas de moderación — **métricas completadas 2026-09-05**, moderación abierta. `server/metricas.ts` + `GET /v1/admin/metricas` (administrador global, no por partida): duración de tick, profundidad de cola, recuento de comandos por resultado con las cuatro causas separadas, conexiones, memoria y **tamaño de las ráfagas de catch-up**. Ensambla lo que ya llevan el runner, la auditoría de E2 y el hub, en vez de duplicar contadores. Incluyó la **re-medición de escala** que el doc 6 pedía desde el cierre de la Fase D (`scripts/medicion-escala.ts`) — ver la deuda arrastrada abajo, que esa medición resuelve una y reencuadra otra. Falta la **moderación**: E2 y esto sirven el diagnóstico, pero el acto (expulsar, silenciar, revertir) depende de decisiones de diseño sin tomar. 1003 tests, `tsc` limpio, verificado en vivo por HTTP incluida una ráfaga de catch-up real
 - [ ] E4. Ciclos de servidor, Maravilla, legado NPC y temporadas
+
+---
+
+## Deuda arrastrada de fases cerradas
+
+Ninguna de estas bloqueó el cierre de su fase, y todas están declaradas dentro del texto del hito que las
+dejó fuera — **pero ahí no se ven**: un lector que recorra las casillas ve cinco fases en verde. Se listan
+aquí para que dejen de depender de que alguien relea el párrafo correcto.
+
+- [ ] **Bloqueo de la cola serial** — abierto, y **3,6× menos grave desde el 2026‑09‑05**. La re‑medición reencuadró el problema: no es un tick suelto (132 ms a 100 asentamientos dentro de un intervalo de 60 000 ms = una décima de segundo de espera para un comando) sino la **ráfaga de catch‑up** tras una caída — `MAX_TICKS_RAFAGA` = 10 080 a 132 ms/tick son ~22 minutos con la cola bloqueada, antes eran ~79. Las tres vías planteadas en agosto (lotes entre ticks, fases cedibles, worker aparte) atacaban un tick lento; contra una ráfaga la palanca es otra: acotarla, o cederle la cola cada N ticks. Ya hay métrica que la vigila (`ultimaRafagaTicks`, E3). **Decisión pendiente** — doc 6 §1.
+- [x] **Re‑medir la escala tras la Fase D** — **hecha 2026‑09‑05** (`scripts/medicion-escala.ts`, doc 6 §1 reescrito), y de ella salió una optimización: el tick había engordado ~3× desde agosto, el perfilado señaló que la red de calles se rehacía entera cada tick por asentamiento sin haber cambiado nada, y memoizarla por contenido lo dejó **3,6× más rápido** (471 → 132 ms a 100 asentamientos) con el exponente cayendo de O(n^1.42) a **O(n^1.12)** — buena parte de lo superlineal era trabajo repetido, no simulación. Equivalencia demostrada con sellos SHA‑256 del estado completo a lo largo de 150 ticks, idénticos byte a byte.
+- [ ] **Balance por partida/temporada** (alcance que C7 declaró NO cubierto) — `BALANCE_VERSION` se estampa en
+  cada snapshot, pero sigue siendo un único valor de proceso: dos partidas no pueden correr balances
+  distintos a la vez. El panel que lo mutaba en caliente (`app/balanceConfig.ts`) se eliminó en Fase B sin
+  reemplazo y sigue sin dueño. Es el único `[~]` que queda en el backlog de riesgos del doc 4. **Segundo consumidor esperándola desde 2026-09-05**: la auditoría de cambios de balance que E2 dejó fuera por esto mismo.
+- [ ] **`eventosDominio` entero en las lecturas de estado** (follow‑up que C13 dejó abierto) — el cursor
+  incremental existe, pero `EstadoAdmin` y `ProyeccionJugador` siguen trayendo la lista completa. Se aplazó
+  porque quitarlo habría roto `cliente/` sin que existiera un consumidor migrado al cursor; **esa condición
+  ya se cumplió** (el cliente de jugador vive en su propio repositorio desde `2dfe9e7`).
+- [ ] **Pasada de rebalanceo en tiempo** — explícitamente *no* es un hito de D (era el antiguo D7). Con
+  1 tick = 1 minuto real, población a ~12 %/minuto compuesto duplica cada ~6 min reales. Esfuerzo dedicado
+  apoyado en el laboratorio batch.
+- [ ] **Comandos programados a un `instante`** (de D5) — aplazados a conciencia: sus consumidores (asedios
+  formales, caravanas planificadas) son Fase 1+. Aterriza con la primera mecánica que lo pida, no antes;
+  construirlo ahora sería infraestructura especulativa sin consumidor.
 
 ---
 
@@ -189,4 +228,4 @@ _(completar con fecha y commit al cerrar cada fase)_
 - Fase B: 2026-08-26 (marcada retroactivamente; B1–B5 completas sin fecha de cierre propia — ver nota arriba)
 - Fase C: **completa** (2026-08-29). C0–C13 + huecos pequeños (identidad persistida, gestión de membresías, propiedad de escuadrones). C4 quedó completo: el "Slice 2" (niebla de guerra) no es de arquitectura sino una mecánica de juego con parámetros por definir — movida a `Mecanicas a desarrollar.md` §12. El cliente jugable completo es trabajo de un repo de interfaz aparte, fuera del alcance de este repo (solo servidor).
 - Fase D: **estructuralmente completa** (2026-08-29/30). D1–D6 + cierre del contrato. Pendiente, sin bloquear el cierre: (a) comandos programados de D5 — aplazados a Fase 1+ con su primera mecánica; (b) rebalanceo en tiempo — pasada dedicada, no es un hito de D.
-- Fase E: — (E1 hecho en D5; E2/E3/E4 abiertos)
+- Fase E: **en curso** (E1 hecho en D5; **E2 completa 2026-09-05**; **E3 a medias 2026-09-05** — métricas hechas, moderación abierta; E4 sin empezar). Ver además "Deuda arrastrada de fases cerradas" arriba.

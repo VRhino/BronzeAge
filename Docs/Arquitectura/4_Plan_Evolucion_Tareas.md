@@ -1,5 +1,9 @@
 # Desglose de tareas: evolución a backend multijugador
 
+> **Verificado contra el commit `652a0aa` (2026-09-05)**, en la misma pasada que
+> [3_Plan_Evolucion_Roadmap.md](3_Plan_Evolucion_Roadmap.md). Lo único que cambió aquí fue la Fase E, que
+> era una lista plana de seis viñetas sin nadie que dijera cuál iba primero.
+
 Este es el archivo de trabajo día a día. Cada tarea se marca `[x]` al completarse;
 si se aborda parcialmente, anotar entre paréntesis el estado y seguir marcada
 `[ ]`. Cuando se cierran todas las tareas de un hito, marcar ese hito en
@@ -111,6 +115,25 @@ no pasan por `avanzarSimulacion`/`ResultadoTick` — son eventos de COMANDO, no 
 trabajo relacionado pero distinto, más cercano al punto 6 de
 [2_Estudio_Evolucion_Backend_Multifrontend.md](2_Estudio_Evolucion_Backend_Multifrontend.md) ("comandos deberían
 devolver un resultado estructurado") que a este marcador — no sumar ni restar de la fracción 0/13 por ellos.
+
+> **Repaso 2026‑09‑05, antes de arrancar E2.** El 13/13 se sostiene: en `engine/` y `world/` no queda ni un
+> `eventos.push('texto')`. El combate, que este marcador declaraba fuera de alcance, se estructuró más tarde
+> por su cuenta.
+>
+> **`'legado'` ya no se emite en ninguna parte.** Medido, no leído: partida de 400 ticks con una Facción
+> cedida al NPC → 426 eventos, 17 códigos distintos, **0 con `codigo: 'legado'`**. Las ramas que todavía
+> construyen `{ codigo: 'legado' }` (`domain/eventos.ts`, `engine/simulation.ts`, `session/comandos/eventos.ts`,
+> `session/comandos/ejercitos.ts`) son el brazo `string` de la unión `EventoCrudo`, alcanzable por tipo pero
+> muerto en ejecución: todo productor real devuelve ya la forma estructurada.
+>
+> **Lo que sí queda, y es otra cosa:** `session/npcGobernanza.ts` narra en texto plano (3 sitios: campaña
+> lanzada, campaña replegada, asentamiento inicial fundado) y `comandos/avanzarFaccionesNpc.ts` los envuelve
+> a la salida bajo un único `codigo: 'npc.accion'`, sin `payload` — decisión consciente, documentada ahí
+> mismo: *"un código que al menos permite FILTRARLOS como grupo"*. Nunca entraron en la fracción 13/13 porque
+> el turno NPC no vive en `engine/`. Para la auditoría de E2 **no es un bloqueo**: el código es estable y
+> filtrable, que es lo que el gate de A5 exigía. Es solo grueso — 38 eventos de una partida de 400 ticks
+> comparten código y no se distinguen entre sí sin leer el `mensaje`. Migrarlo es una mejora de la auditoría,
+> no un prerrequisito suyo.
 
 ### A6. Diseño de contratos de identidad y permisos (solo documento, sin código) — ✅ completada 2026-08-24
 - [x] Redactar definición de `Usuario`, `Sesion`, `Jugador`, `Rol`, `Partida`, `Membresia`
@@ -1216,14 +1239,160 @@ de la migración estructural a conciencia. Era el antiguo D7.
 
 ## Fase E — Operación persistente
 
+Orden acordado con el usuario el **2026‑09‑05**: **E2 primero**. De las tres abiertas es la única que no
+depende de ninguna decisión de diseño de juego pendiente (E4 depende entera de ellas), ya tiene un hueco
+marcado en el código pidiendo ser sustituido, y es prerequisito de las herramientas de moderación de E3 — no
+se modera lo que no se ha registrado.
+
 - [x] ~~Scheduler temporal definitivo~~ — **hecho en D5** (`RunnerDePartida.iniciarRelojDeMundo`)
 - [x] ~~Recuperación de eventos vencidos tras caída/reinicio, verificada con pruebas~~ — **hecho en D5**
   (catch‑up en ráfaga; tests en `runnerDePartida.test.ts` y `registroDePartidas.test.ts`)
-- [ ] Pipeline de auditoría (quién, qué comando, cuándo, resultado, versión de partida)
-- [ ] Backups automáticos + prueba de restauración documentada
-- [ ] Métricas: duración de tick/procesamiento, tamaño de cola, tasa de errores, clientes conectados
-- [ ] Herramientas de moderación para administradores
-- [ ] Diseño e implementación de ciclos de servidor, Maravilla, legado NPC, temporadas
+
+### E2 — Auditoría, snapshots, backups y restauración
+
+> **No hay prerrequisito de eventos.** Se comprobó antes de empezar (ver el repaso al final de A5): `'legado'`
+> no se emite ya en ninguna parte, así que la premisa del gate de A5 —códigos estables para poder filtrar por
+> tipo— se cumple. El único grano grueso que queda es `npc.accion`, y afinarlo es mejora, no bloqueo.
+
+- [x] **Pipeline de auditoría de comandos** — **hecho 2026-09-05**. `server/auditoria.ts`: un JSONL por partida
+  (`<gameId>.auditoria.jsonl`), hermano del snapshot. **Dónde vive fue decisión del usuario**, sobre tres
+  alternativas (dentro de `PartidaExportada`, fichero aparte, SQLite): fichero aparte, porque `eventosDominio`
+  ya enseñó lo que pasa al meter un historial en el estado (crece sin techo, se reescribe entero en cada
+  guardado, viaja entero en cada lectura — por eso C13 tuvo que añadirle un cursor), porque la retención es
+  distinta a la del estado, y porque así no sube `FORMATO_SNAPSHOT_VERSION` ni hace falta migrar nada.
+  - **JSONL y no un array JSON**, y **append y no `.tmp`+`rename`**: un log al que solo se añade no puede
+    copiarse entero para agregar un renglón, y a cambio el formato tiene que aguantar un archivo truncado —
+    con JSONL se pierde la línea a medias y las anteriores siguen valiendo; un `[...]` truncado es ilegible
+    entero. `leerAuditoria` devuelve `corruptas` para que quien lee sepa que hay un agujero, en vez de creer
+    que el registro está completo.
+  - **Alcance: aceptados Y rechazados** (decisión del usuario). Las cuatro salidas de `ejecutarComandoHttp`
+    dejan línea — aceptado, rechazo de `autorizacion` (el 403), de `dominio` (`ok: false` con su
+    `codigoError`) y de `persistencia` (el 409) — más los 400 de `esquema`, que ajv rechaza ANTES del
+    manejador y captura el gancho `onError` de las dos rutas de comandos. **Es lo que convierte el registro en
+    herramienta de moderación**: antes de esto un 403 no dejaba absolutamente ningún rastro, y el abuso vive
+    justo en los intentos que no prosperan.
+  - **Un fallo de escritura no tumba el comando** — decisión con filo: con el disco lleno se sigue jugando y
+    se grita por `stderr`, con contador (`fallos`) para que E3 pueda exponerlo. Fallar en silencio SÍ sería
+    inaceptable; fallar el comando de un jugador por un problema de operación, también.
+  - **`GET /v1/admin/partidas/:gameId/auditoria`** (filtros `desde`/`actor`/`soloRechazos`), solo
+    administración — son datos de actividad de PERSONAS, más sensibles que el estado de juego, y no hay
+    equivalente en `/jugador/*` a propósito. Sin esta ruta la auditoría sería un archivo que nadie puede
+    consultar.
+  - **Efecto colateral necesario**: `soloRechazos` se declara como `enum ['true','false']` de tipo `string`, no
+    `boolean` — este servidor corre con `coerceTypes: false` desde C9, así que un query param nunca se
+    convierte solo y `?soloRechazos=true` fallaba con un 400. Lo detectó el test en el primer intento.
+- [x] **Auditoría de cambios de balance** — **NO se hace, y por qué**. Es otra cosa, aunque el nombre se
+  parezca: sale del doc 2 §8 *Separar administración y balance*, y lo que hoy la sustituye es el placeholder
+  `GameSession.registrarEventoAdministrativo`, cuyo comentario lleva desde la Fase C prometiendo su relevo.
+  **Bloqueada por la deuda de C7**: el doc 2 la pide sobre *"un balance versionado POR PARTIDA en vez de
+  global"*, y ese balance sigue sin dueño. Registrar "quién cambió qué" de un valor que es configuración del
+  PROCESO y no estado de la partida no dice nada útil. Se aborda con el balance por partida, no antes.
+- [x] **Política de retención** — **hecha 2026-09-05**, y con una corrección de premisa: el backlog de riesgos
+  hablaba de "retención de snapshots", pero **no hay pila de snapshots que podar** — `guardarPartida` escribe
+  siempre sobre `<gameId>.json`, así que en disco hay exactamente UNA versión de cada partida. Lo que sí
+  crecía sin techo es la auditoría, y lo que crecería son los respaldos. Dos criterios distintos, cada uno
+  por su razón: la **auditoría por EDAD** (`podarAuditoria`, 30 días por defecto — su valor es responder "qué
+  pasó el martes", y una línea de hace un año no responde a nada), los **respaldos por CUENTA**
+  (`podarRespaldos`, 7 por defecto — por edad, una partida inactiva se quedaría sin ninguno justo cuando más
+  difícil sería regenerarlo; `conservar: 0` es un `RangeError`, no un modo de uso).
+- [x] **Respaldos automáticos + prueba de restauración** — **hechos 2026-09-05**. `server/respaldos.ts`
+  (copia fechada, listar, podar, restaurar) y `server/mantenimiento.ts` (`TareaDeMantenimiento`: respaldar +
+  podar respaldos + podar auditoría, en una pasada periódica).
+  - **Opt-in, apagado por defecto** (`MANTENIMIENTO_INTERVALO_MS`), mismo criterio que `INTERVALO_TICK_MS` y
+    `ADMINISTRADORES`: un default que BORRA archivos es la clase de default que nadie nota hasta que ya borró
+    algo que hacía falta.
+  - **La restauración verifica antes de sustituir**, que es lo que la hace segura: `restaurarPartida` carga el
+    respaldo de verdad (`cargarPartida`, con su migración de formato) en un directorio aparte y solo entonces
+    hace el `rename` sobre el snapshot vigente. Un respaldo corrupto falla **sin haber tocado la partida
+    buena** — congelado en un test dedicado. Si esto fuera un `copyFile`, un respaldo truncado machacaría el
+    estado bueno sin forma de volver.
+  - **`scripts/restaurar-partida.ts`**: sin argumento de archivo lista los respaldos con su tamaño y la orden
+    exacta para restaurar. "Prueba de restauración documentada" no se cumple con una función exportada que
+    alguien tendría que envolver a mano en un momento de urgencia.
+  - **Limitación consciente, no resuelta**: restaurar exige **el servidor parado**. Un proceso con la partida
+    abierta conserva el estado viejo en memoria y lo escribiría encima al siguiente comando, deshaciendo la
+    restauración sin dar ningún síntoma. Exponerlo por HTTP requeriría que `RegistroDePartidas` supiera cerrar
+    UNA partida (hoy solo tiene `cerrar()` global), y esa pieza no tiene consumidor todavía. Avisado en el
+    script y en el comentario de `restaurarPartida`.
+- **Bug preexistente encontrado y corregido de paso**: `listarPartidas` lanzaba con un `.json` ilegible en el
+  directorio, así que **un solo archivo truncado tumbaba `GET /admin/partidas` con un 500 para TODAS las
+  partidas** — misma familia que el fallo de `identidad.json` que ya se corrigió una vez ahí. Lo destapó la
+  pasada de mantenimiento, que abortaba entera antes de respaldar nada. Ahora se excluye el archivo roto y se
+  grita por consola (no en silencio: una partida que desaparece del listado sin avisar es peor que un error
+  ruidoso). Regresión en `persistenciaPartida.test.ts`.
+- Verificación: **951 → 991 tests** (98 archivos), `tsc` limpio en `src/` y en `scripts/`. **En vivo sobre HTTP
+  real**: las cuatro salidas de comando dejan su línea con el actor resuelto en servidor (`admin:usuario-1` se
+  distingue de `usuario-2`); `MANTENIMIENTO_INTERVALO_MS=1500` respalda solo y respeta el tope de retención;
+  `GET .../auditoria?soloRechazos=true` devuelve el 403 registrado; y el ciclo completo jugar → respaldar →
+  seguir jugando → restaurar devuelve la partida a la versión respaldada, con lo posterior deshecho.
+
+### E3 — Métricas y moderación
+
+- [x] **Re-medición de escala tras la Fase D** — **hecha 2026-09-05**, y era deuda arrastrada, no parte
+  nominal de E3: el doc 6 §1 pedía rehacer la tabla al cerrar la Fase D y nunca se hizo. Script committeado
+  en `scripts/medicion-escala.ts`, metodología idéntica a la de agosto para que las cifras sean comparables
+  y no solo nuevas, tres pasadas con <1 % de varianza. **Tabla y conclusiones completas en el doc 6 §1**;
+  lo que cambia el plan:
+  - **El tick es ~2,6-3,8× más lento** que en agosto a igualdad de asentamientos (a 52: 63,9 → 166,1 ms).
+    La forma de la curva no cambió (O(n^1.42) frente a O(n^1.5)); cambió la constante, por el trabajo que
+    añadieron trazado urbano, murallas, ejércitos y niebla.
+  - **A 70-100 asentamientos —el objetivo real de 500 jugadores— son 288-471 ms/tick**, no los 170-300 ms
+    que se estimaron en agosto.
+  - **La decisión pendiente de la cola serial queda REENCUADRADA.** Un tick suelto ya no es el problema:
+    471 ms dentro de un intervalo de 60 000 ms es el 0,8 %, y un comando que llegue a mitad espera medio
+    segundo. El problema es la **ráfaga de catch-up**: `MAX_TICKS_RAFAGA` = 10 080 (una semana) a 471 ms por
+    tick son **~79 minutos con la cola bloqueada**. Las tres vías que se plantearon en agosto se propusieron
+    contra un tick lento; contra una ráfaga, la palanca barata es otra (acotar la ráfaga, o cederle la cola
+    cada N ticks). **Sigue siendo decisión pendiente**, pero ya con números.
+  - **Dónde se iba el tiempo, y qué se hizo** (perfilado con `--cpu-prof`, tiempo inclusivo):
+    `calcularRedDeCalles` era el **47,1 % del tick**, con `sitioEnBarrio` como llamador dominante (36,7 %).
+    No por frecuencia —~1 llamada por asentamiento y tick— sino porque el **81,2 % recalculaba con entradas
+    idénticas**: 61,6 % entre ticks (el asentamiento no había cambiado), 19,6 % dentro del mismo tick.
+    **Resuelto el mismo día** con memoización por CONTENIDO (por referencia no valía: medido, la referencia
+    del array se repite el 0 %) y clave exacta en vez de hash (486× más barata que el replay, sin riesgo de
+    colisión). La cautela que este documento anotaba —"el orden es load-bearing"— estaba mal dirigida: el
+    orden importa al calcular, no al cachear. **471 → 132 ms a 100 asentamientos, O(n^1.42) → O(n^1.12).**
+    Equivalencia demostrada con sellos SHA-256 del estado completo sobre 150 ticks, idénticos byte a byte.
+    Detalle en doc 6 §1. Queda sin tocar `engine/zones.ts` (≈27 % del tick), que merece su propio análisis.
+- [x] **Métricas: duración de tick/procesamiento, tamaño de cola, tasa de errores, clientes conectados** —
+  **hechas 2026-09-05**. `server/metricas.ts` + `GET /v1/admin/metricas`.
+  - **`metricas.ts` no mide, ENSAMBLA.** Cada número lo lleva quien lo conoce de primera mano:
+    `RunnerDePartida` (cola, cronómetro del tick, ráfagas), `RegistroDeAuditoria` (recuento por resultado,
+    fallos de escritura) y `HubDeDifusion` (conexiones, que ya exponía `conexionesAbiertas`). Un colector
+    global al que todos empujan acaba siendo un segundo sitio donde la verdad puede divergir del sitio donde
+    ocurre.
+  - **`ultimaRafagaTicks`/`mayorRafagaTicks` existen por la re-medición de arriba**: son la métrica del
+    problema que esa medición identificó. Sin ellas, 79 minutos de cola bloqueada solo se ven desde fuera
+    como "el servidor no responde".
+  - **El recuento de comandos sale de la auditoría de E2**, no de un contador nuevo: es ya el punto por el
+    que pasan todos, aceptados y rechazados. Las cuatro causas van **separadas y no agregadas en un
+    "rechazados"** — un pico de `autorizacion` es moderación, uno de `esquema` un cliente roto, uno de
+    `persistencia` el disco. Se cuenta lo que el servidor DECIDIÓ (antes de encolar la escritura), no lo que
+    llegó a registrarse: esa otra pregunta ya la responde `auditoriaFallida`, y **cualquier valor > 0 ahí es
+    un incidente** — hay comandos que ocurrieron sin dejar constancia.
+  - **`RegistroDePartidas.abiertas()`** (nuevo) es lo contrario de `listar()`, y la diferencia importa:
+    `listar()` lee el directorio y dice qué partidas existen; `abiertas()` dice de cuáles se ocupa ESTE
+    proceso, que son las que tienen cola, reloj y conexiones que medir.
+  - **Administrador GLOBAL, no por partida**: describe el proceso —memoria, uptime, todas las partidas
+    abiertas—, así que concederlo por membresía de una partida filtraría la actividad de las demás. Sin
+    autenticar sería más cómodo para un scraper, y es justo por eso que no: expone cuánta gente hay conectada
+    y cuándo el servidor va justo.
+  - `tick` vuelve a aparecer en un DTO, y es correcto: la Fase D lo retiró del contrato de JUEGO, pero una
+    métrica de operación mide el motor y el tick es su unidad real de trabajo.
+- [ ] **Herramientas de moderación para administradores.** Lo que E2 y las métricas dejan servido es el
+  DIAGNÓSTICO (quién intentó qué, qué se rechazó, cómo va el proceso); falta el ACTO — expulsar, silenciar,
+  revertir. Depende de decisiones de diseño que no están tomadas: qué sanciones existen, quién puede
+  aplicarlas y qué pasa con lo que el sancionado ya hizo en la partida.
+- Verificación: **991 → 1003 tests** (99 archivos), `tsc` limpio en `src/` y `scripts/`. **En vivo sobre HTTP
+  real**: `GET /v1/admin/metricas` con una partida abierta devuelve proceso, recuento por causa (1 aceptado,
+  1 `autorizacion`, 1 `esquema`) y los tiempos de tick; 403 para un jugador y 401 sin sesión. La **ráfaga de
+  catch-up medida de verdad**: snapshot con `guardadoEn` retrasado 12 minutos, proceso reabierto con reloj de
+  mundo → `ultimaRafagaTicks: 12`, `mayorRafagaTicks: 12`, tick 5 → 17.
+
+### E4 — Ciclos de servidor
+
+- [ ] Diseño e implementación de ciclos de servidor, Maravilla, legado NPC, temporadas. La más grande y la
+  menos definida: es diseño de juego antes que infraestructura.
 
 ---
 
@@ -1236,6 +1405,6 @@ solo diseñada.
 - [x] Cola serial o control de versión por partida para comandos concurrentes — `RunnerDePartida` (cola serial por `gameId`, encadenando promesas) + `PartidaExportada.state.version` de concurrencia en `persistenciaPartida.ts` (Fase B)
 - [~] RNG determinista con estado persistido — `PartidaExportada.estadoRng` existe (2026‑08‑25), pero **la reproducibilidad a nivel de sesión estaba rota**: `ctx.momento` era reloj de pared y se persistía en el estado (doc 10 §7). El guard de autoridad temporal (2026‑08‑29) lo congela; D1 lo repara de raíz. El motor puro (`avanzarSimulacion`) sí es reproducible con seed y **eso es lo que se conserva** (lo consume el laboratorio batch) — `estadoRng` en snapshot queda sin consumidor real hasta que exista un replay de incidentes (doc 10 §5)
 - [x] DTOs/proyecciones por audiencia (nunca enviar `GameState` completo a un cliente no-admin) — `proyectarParaJugador` (C4): un jugador nunca recibe `GameSessionState` completo; solo su Facción + metadatos públicos. La niebla de guerra fina ("último conocido" de rivales) es una mecánica de juego, no una mitigación de riesgo — `Mecanicas a desarrollar.md` §12
-- [ ] Snapshots y retención para el historial (nunca clones ilimitados en RAM) — snapshot por comando hecho; política de retención/poda, Fase E2
+- [x] Snapshots y retención para el historial (nunca clones ilimitados en RAM) — **hecho en E2 (2026-09-05), corrigiendo la premisa**: no había pila de snapshots que podar (`guardarPartida` sobrescribe siempre `<gameId>.json`, una versión por partida). Lo que sí crecía sin techo era la AUDITORÍA, que ahora se poda por edad (`podarAuditoria`, 30 días), y lo que crecería son los RESPALDOS, que se podan por cuenta (`podarRespaldos`, 7) — por edad, una partida inactiva se quedaría sin ninguno justo cuando más difícil sería regenerarlo. Pasada periódica opt-in en `server/mantenimiento.ts`
 - [~] Balance versionado y ligado a partida/temporada (no global mutable) — **servido** (`GET /v1/balance`, C7) y `BALANCE_VERSION` estampada en cada snapshot; los overrides reales por partida/temporada siguen sin dueño
 - [x] Frontends y endpoints de admin vs. jugador separados con roles técnicos distintos — `/admin/*` vs `/jugador/*` (C3), reforzado con la gestión de membresías del cierre de Fase C (2026-08-29)
