@@ -78,10 +78,11 @@ import { poderEscuadron } from '@motor/engine/combate';
 // --- Capa de partida: vive en el servidor, se habla por HTTP ---
 import type { EstadoAdmin, EventoLogAdmin } from '@motor/session/estado';
 import type { EventoDominio } from '@motor/domain/eventos';
+import type { EventoDominioConVersion } from '@motor/session/estado';
 import { isoDeInstante, proyectarLog } from '@motor/session/estado';
 import type { ParamsDe, TipoComando } from '@motor/session/comandos/registro';
 import type { MapaGenerado } from '@motor/worldgen';
-import { ApiError, consultarEstado, crearOResumirPartida, ejecutarComando, obtenerMapa } from './apiCliente';
+import { ApiError, consultarEstado, consultarEventos, crearOResumirPartida, ejecutarComando, obtenerMapa } from './apiCliente';
 
 /** Entrada de log en texto — Fase D: `momento` (ISO de mundo) en vez de `tick`. Mismo shape que
  * `EventoLogAdmin` del motor (`proyectarLog` la produce). */
@@ -208,7 +209,21 @@ export class GameStore {
    * deliberada (ver Docs/Arquitectura/4_Plan_Evolucion_Tareas.md, Fase B3). Con tope para no crecer sin límite
    * en una sesión de navegador muy larga. */
   private logEfimero: EventoLog[] = [];
-  /** Log en texto derivado de `eventosDominio`, cacheado contra el array del que sale (ver `getState`). */
+  /**
+   * Historial de eventos, MANTENIDO AQUÍ desde el 2026-09-05.
+   *
+   * Antes venía dentro de cada lectura de estado, y por eso este cliente no tenía que guardarlo. Dejó de
+   * venir porque era el 87-88 % de esa respuesta y crecía sin techo: se reenviaba entero, en cada lectura y
+   * en cada comando, un historial que este cliente ya tenía delante. Ahora se pide una vez al arrancar y
+   * después solo lo nuevo, por el cursor de C13 (`consultarEventos`).
+   *
+   * Más nuevo primero, igual que lo servía el estado — `proyectarLog` y la consola cuentan con ese orden.
+   */
+  private eventos: EventoDominioConVersion[] = [];
+  /** Mayor `version` ya incorporada a `eventos`: es lo que se le pide al cursor la próxima vez. 0 = nada
+   * todavía, que es justo lo que hay que mandar para que devuelva el historial completo. */
+  private cursorEventos = 0;
+  /** Log en texto derivado de `eventos`, cacheado contra el array del que sale (ver `getState`). */
   private logCache: { sobre: EventoDominio[]; log: EventoLog[] } | null = null;
   /** Fachada `Mapa` del estado en vivo, cacheada por referencia — se invalida sola en cuanto `estadoCache`
    * cambia (cada acción/tick trae un `estadoMapa` distinto). Un solo hueco, no un mapa: sin historial de fotos
@@ -231,6 +246,36 @@ export class GameStore {
     this.gameId = gameId;
     this.estadoCache = estadoInicial;
     this.mapaGeneradoCache = { id: estadoInicial.mapaId, mapa: mapaInicial };
+  }
+
+  /**
+   * Relee estado + eventos + mapa. Un solo método y no tres llamadas sueltas repetidas porque **estado y
+   * eventos dejaron de venir juntos** (2026-09-05): tenerlos en dos peticiones invita a que algún camino
+   * refresque uno y olvide el otro, y el síntoma sería una consola que deja de crecer sin que nada falle.
+   */
+  private async recargar(): Promise<void> {
+    this.estadoCache = await consultarEstado(this.gameId);
+    await this.sincronizarEventos();
+    await this.sincronizarMapa(this.estadoCache.mapaId);
+  }
+
+  /**
+   * Trae del cursor lo que haya pasado desde `cursorEventos` y lo antepone. Devuelve en orden cronológico
+   * (más viejo primero, ver `eventosDesde`), así que se invierte antes de anteponer para conservar el
+   * "más nuevo primero" que espera la consola.
+   *
+   * Un fallo aquí NO tumba la recarga: el estado ya está al día y el log se pondrá al día en el siguiente
+   * refresco. Lo contrario —perder el estado por no poder leer el historial— sería peor.
+   */
+  private async sincronizarEventos(): Promise<void> {
+    try {
+      const { eventos } = await consultarEventos(this.gameId, this.cursorEventos);
+      if (eventos.length === 0) return;
+      this.eventos = [...[...eventos].reverse(), ...this.eventos];
+      this.cursorEventos = Math.max(this.cursorEventos, ...eventos.map((e) => e.version));
+    } catch (err) {
+      this.registrarRechazoEfimero(`no se pudo leer el historial: ${this.mensajeDeError(err)}`);
+    }
   }
 
   /** Pide el mapa real si `mapaId` cambió desde la última sincronización (Fase C11) — en la inmensa mayoría
@@ -258,7 +303,12 @@ export class GameStore {
     }
     const estado = await consultarEstado(gameId);
     const mapa = await obtenerMapa(gameId, estado.mapaId);
-    return new GameStore(gameId, estado, mapa);
+    const store = new GameStore(gameId, estado, mapa);
+    // El historial completo, UNA vez. Antes venía dentro de `consultarEstado` y por tanto en cada lectura
+    // posterior; ahora se siembra al abrir y a partir de ahí solo llega lo nuevo. Sin esto la consola
+    // arrancaría vacía hasta el primer refresco.
+    await store.sincronizarEventos();
+    return store;
   }
 
   private get state(): Readonly<EstadoAdmin> {
@@ -272,8 +322,8 @@ export class GameStore {
    * solo al principio de la partida.
    */
   getState(): Readonly<GameState> {
-    if (this.logCache?.sobre !== this.estadoCache.eventosDominio) {
-      this.logCache = { sobre: this.estadoCache.eventosDominio, log: proyectarLog(this.estadoCache.eventosDominio) };
+    if (this.logCache?.sobre !== this.eventos) {
+      this.logCache = { sobre: this.eventos, log: proyectarLog(this.eventos) };
     }
     const log = this.logEfimero.length === 0 ? this.logCache.log : [...this.logEfimero, ...this.logCache.log];
     return { ...this.estadoCache, log };
@@ -316,8 +366,7 @@ export class GameStore {
     try {
       const respuesta = await ejecutarComando(this.gameId, tipo, params);
       if (respuesta.resultado.ok) {
-        this.estadoCache = await consultarEstado(this.gameId);
-        await this.sincronizarMapa(this.estadoCache.mapaId);
+        await this.recargar();
       } else {
         this.registrarRechazoEfimero(`${etiquetaRechazo}: ${respuesta.resultado.codigoError ?? 'desconocido'}`);
       }
@@ -737,8 +786,7 @@ export class GameStore {
    * Lo llama el botón "Refrescar" y el auto-refresco de `main.ts`. */
   async refrescar(): Promise<void> {
     try {
-      this.estadoCache = await consultarEstado(this.gameId);
-      await this.sincronizarMapa(this.estadoCache.mapaId);
+      await this.recargar();
     } catch (err) {
       this.registrarRechazoEfimero(this.mensajeDeError(err));
     }
@@ -753,6 +801,10 @@ export class GameStore {
   async regenerarMundo(seed: number, region?: RegionId): Promise<void> {
     try {
       await crearOResumirPartida(this.gameId, seed, region, true);
+      // Partida NUEVA: el historial anterior no es de esta, y sus `version` empiezan otra vez en 0 — sin
+      // reiniciar el cursor, el de la partida vieja los filtraría todos y la consola saldría vacía.
+      this.eventos = [];
+      this.cursorEventos = 0;
       this.estadoCache = await consultarEstado(this.gameId);
       // El único punto donde `sincronizarMapa` de verdad pide algo: regenerar SIEMPRE reemplaza la seed, así
       // que `mapaId` cambia siempre — a diferencia de `despachar`/`refrescar`, donde suele ser un no-op.
@@ -790,7 +842,7 @@ export class GameStore {
       faccionesNpcIds: this.state.faccionesNpcIds,
       // El formato de archivo v2 guarda el log en texto (es anterior a `eventosDominio`): se proyecta al
       // exportar en vez de arrastrarlo en el estado.
-      log: proyectarLog(this.state.eventosDominio),
+      log: proyectarLog(this.eventos),
       historialJugadores: this.state.historialJugadores,
     };
     return JSON.stringify(payload, null, 2);

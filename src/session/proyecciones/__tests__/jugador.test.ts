@@ -10,7 +10,7 @@ import { idDeMapa, type GameSessionState, type GeometriaAsentamientos } from '..
 import { computeTodasLasZonas } from '../../../engine/zones';
 import { estaExplorado, marcarVisto, rejillaDe } from '../../../engine/exploracion';
 import { MEMORIA_VACIA, type FichaConocida } from '../../../engine/memoria';
-import { proyectarParaJugador } from '../jugador';
+import { eventosDominioParaJugador, proyectarParaJugador } from '../jugador';
 import type { CaminoComercial, CampamentoBandido, Ejercito, Escuadron, Point } from '../../../domain/types';
 import { EXPLORACION, VISION, ZONA_INFLUENCIA } from '../../../constants';
 
@@ -194,21 +194,32 @@ describe('caravanas, acuerdos y ordenes: solo los que tocan un asentamiento prop
   });
 });
 
-describe('eventosDominio: sin asentamientoId (globales) o con uno propio', () => {
+// El filtro de propiedad de los eventos es la parte con valor de SEGURIDAD de todo esto, y sigue viva: desde
+// el 2026-09-05 `eventosDominio` no viaja en la proyección (follow-up de C13) y estos tests apuntan a
+// `eventosDominioParaJugador`, el cursor, que es donde el filtro vive ahora. Se mueven en vez de borrarse
+// justamente porque lo que protegen —que un jugador no vea lo que le pasa a un rival— no ha cambiado.
+describe('eventosDominioParaJugador: sin asentamientoId (globales) o con uno propio', () => {
   it('el evento de fundación (con asentamientoId propio) pasa el filtro', () => {
     const { sesion, asentamientoId, fundador } = partidaConAsentamiento();
-    const proyeccion = proyectarParaJugador(sesion.getState(), fundador, SIN_GEOMETRIA);
-    expect(proyeccion.eventosDominio.some((e) => e.asentamientoId === asentamientoId)).toBe(true);
+    const eventos = eventosDominioParaJugador(sesion.getState(), fundador, 0);
+    expect(eventos.some((e) => e.asentamientoId === asentamientoId)).toBe(true);
   });
 
-  it('un evento de asentamiento AJENO no aparece en la proyección de un jugador sin ese asentamiento', () => {
+  it('un evento de asentamiento AJENO no le llega a un jugador sin ese asentamiento', () => {
     const base = partidaConAsentamiento();
     const opcRival = { ...OPC, actor: 'rival' };
     const rf = base.sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, opcRival);
     const ra = base.sesion.ejecutar(fundarAsentamiento, { faccionId: rf.datos!.faccionId, posicion: { x: 900, y: 900 } }, opcRival);
 
-    const proyeccion = proyectarParaJugador(base.sesion.getState(), base.fundador, SIN_GEOMETRIA);
-    expect(proyeccion.eventosDominio.some((e) => e.asentamientoId === ra.datos!.asentamientoId)).toBe(false);
+    const eventos = eventosDominioParaJugador(base.sesion.getState(), base.fundador, 0);
+    expect(eventos.some((e) => e.asentamientoId === ra.datos!.asentamientoId)).toBe(false);
+  });
+
+  it('la proyección ya NO los lleva: se piden por el cursor, no en cada lectura de estado', () => {
+    // Lo que cierra el follow-up de C13. `eventosDominio` era el 88 % de una lectura de estado y crecía sin
+    // techo; ahora se pide una vez y se extiende con `?desde=<version>`.
+    const { sesion, fundador } = partidaConAsentamiento();
+    expect(proyectarParaJugador(sesion.getState(), fundador, SIN_GEOMETRIA)).not.toHaveProperty('eventosDominio');
   });
 });
 
@@ -779,7 +790,7 @@ describe('eventosDominio de campana: atribuidos a su origen, no globales', () =>
       ],
     };
 
-    const proyeccion = proyectarParaJugador(conEventos, fundador, SIN_GEOMETRIA);
-    expect(proyeccion.eventosDominio.some((e) => e.codigo === 'ejercito.llega')).toBe(false);
+    const eventos = eventosDominioParaJugador(conEventos, fundador, 0);
+    expect(eventos.some((e) => e.codigo === 'ejercito.llega')).toBe(false);
   });
 });

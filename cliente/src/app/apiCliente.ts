@@ -13,7 +13,7 @@
 // Las rutas son relativas: en dev, `vite.config.ts` las proxya al backend (mismo origen desde el navegador,
 // sin CORS); en producción, se sirven detrás del mismo host que el estático.
 import type { RegionId } from '@motor/domain/types';
-import type { EstadoAdmin } from '@motor/session/estado';
+import type { EstadoAdmin, EventoDominioConVersion } from '@motor/session/estado';
 import type { ResultadoComando } from '@motor/session/comandos/tipos';
 import type { DatosDe, ParamsDe, TipoComando } from '@motor/session/comandos/registro';
 import type { MapaGenerado } from '@motor/worldgen';
@@ -127,6 +127,20 @@ export function ejecutarComando<T extends TipoComando>(gameId: string, tipo: T, 
 /** Sin `mapa` (Fase C11): trae `mapaId` en su lugar. Ver `obtenerMapa` para pedir el mapa real. */
 export function consultarEstado(gameId: string): Promise<EstadoAdmin> {
   return peticion<EstadoAdmin>(`${V1}/admin/partidas/${encodeURIComponent(gameId)}`);
+}
+
+/**
+ * Cursor incremental de eventos (Fase C13, y desde el 2026-09-05 la ÚNICA vía: `eventosDominio` dejó de
+ * viajar dentro de la lectura de estado, donde era el 87-88 % del payload y crecía sin techo).
+ *
+ * `desde` es una `version` de partida, no una fecha ni un índice: se pide `0` la primera vez y después la
+ * mayor `version` ya vista. Devuelve solo lo posterior, así que el coste de mantener el log al día deja de
+ * depender de lo larga que sea la partida.
+ */
+export function consultarEventos(gameId: string, desde: number): Promise<{ eventos: EventoDominioConVersion[] }> {
+  return peticion<{ eventos: EventoDominioConVersion[] }>(
+    `${V1}/admin/partidas/${encodeURIComponent(gameId)}/eventos?desde=${desde}`
+  );
 }
 
 /**

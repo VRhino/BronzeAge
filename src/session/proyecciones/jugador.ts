@@ -211,7 +211,7 @@ export interface ProyeccionJugador {
   campamentosBandidos: CampamentoBandido[];
   /** Sin `asentamientoId` (eventos globales/de Facción) o con uno propio. Es el mismo criterio que evita la
    * fuga que el doc 7 §7.1 señalaba en el log administrativo: el log global narra TODO el mundo. */
-  eventosDominio: EventoDominioConVersion[];
+  /* `eventosDominio` NO viaja aquí (follow-up de C13, cerrado el 2026-09-05) — ver la nota de cabecera. */
   historial: EventoLogAdmin[];
   /** Geometría por frame (Fase C10, doc 9) — SOLO de los asentamientos propios, mismo criterio de "mejor no
    * ver nada del rival" que el resto de esta proyección: `computeZonaInfluencia` necesita la posición de
@@ -237,6 +237,28 @@ function faccionDe(estado: GameSessionState, jugadorId: string): string | null {
   return estado.facciones.find((f) => esCiudadano(f, jugadorId))?.id ?? null;
 }
 
+/**
+ * **Los eventos NO viajan en las lecturas de estado** (follow-up de C13, cerrado el 2026-09-05).
+ *
+ * C13 añadió el cursor incremental —`GET /admin|jugador/partidas/:gameId/eventos?desde=<version>`— pero dejó
+ * `eventosDominio` también dentro de `EstadoAdmin` y `ProyeccionJugador`, porque quitarlo habría roto al
+ * único cliente que existía sin que hubiera ninguno migrado al cursor. Ya no es el caso.
+ *
+ * Lo que costaba: `eventosDominio` **solo crece** —`exito()` antepone, nada poda— y era el **87-88 % de una
+ * lectura de estado** (medido: 1 017 eventos y 264 KB de 303 KB en el tick 200; 309 KB de 351 KB en el
+ * 1 200). Se pagaba entero en cada lectura Y en cada respuesta de comando, para reenviar un historial que el
+ * cliente ya tenía.
+ *
+ * Cómo se obtienen ahora, y por qué basta:
+ *  1. Al conectar, una vez: `?desde=0` — el mismo payload que antes, pero una vez en vez de siempre.
+ *  2. Después, lo nuevo: `?desde=<la mayor version vista>`.
+ *  3. Y de los comandos propios ni eso hace falta: `ResultadoComando.eventos` ya trae los del comando con su
+ *     `version` (C13), así que la respuesta que el cliente ya está leyendo le sirve de incremento.
+ *
+ * El filtro de propiedad —la parte con valor de SEGURIDAD, que un jugador no vea lo que le pasa a un rival—
+ * no se ha tocado: vive en `eventosDominioParaJugador`, aquí abajo, con los mismos tests que antes cubrían la
+ * proyección.
+ */
 /** Lo que "propio" significa para un jugador (Slice 1: su Facción, nada de rivales) — factorizado para que
  * `proyectarParaJugador` y `eventosDominioParaJugador` (cursor, Fase C13) usen exactamente el mismo criterio,
  * en vez de que cada uno recalcule su propia versión y puedan divergir. */
@@ -444,7 +466,6 @@ export function proyectarParaJugador(
     titulos: estado.titulos,
     caminos: caminosConocidos(estado.caminos, exploracion),
     campamentosBandidos: campamentosAvistados(estado.campamentosBandidos, asentamientosPropios, ejercitosPropios),
-    eventosDominio: estado.eventosDominio.filter((e) => e.asentamientoId === undefined || esPropio(e.asentamientoId)),
     historial: estado.historialJugadores[jugadorId] ?? [],
     zonas: zonasPropias,
     zonasFusionadas: geometria.zonasFusionadas.filter((zf) => zf.faccionId === faccionId),
