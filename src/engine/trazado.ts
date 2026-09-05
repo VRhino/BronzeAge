@@ -84,6 +84,14 @@ interface RedDeCallesMutable {
   caminos: Set<string>;
 }
 
+/** Un hueco donde cabe un edificio. `readonly` por el mismo motivo que `RedDeCalles`: desde 2026-09-05 la
+ * lista de huecos se entrega CACHEADA y compartida, así que mutarla corrompería la caché para los demás
+ * llamadores. Hoy ninguno lo hace —todos leen `[0]` o iteran— y el tipo lo convierte en garantía. */
+export interface SitioCandidato {
+  readonly punto: Point;
+  readonly rotado: boolean;
+}
+
 // --- Rejilla: celdas, puntos y huellas ---
 
 /** Edificios que viven en el espacio plano del asentamiento (coords locales) — los extractores del mapa
@@ -1017,10 +1025,66 @@ function claveDeTrazado(asentamientoId: string, edificios: readonly Edificio[], 
   return partes.join('|');
 }
 
-/** Vacía la caché. Para tests que quieran medir el cálculo real, o comprobar que cachear no cambia nada. No
- * hace falta llamarla por corrección: un acierto devuelve lo mismo que el cálculo. */
+// --- Memoización de la BÚSQUEDA DE COLOCACIÓN ---
+//
+// La segunda caché de este archivo, y conviene decir por qué no es la misma. La de arriba guarda la RED de un
+// asentamiento; esta guarda DÓNDE CABE un tipo concreto de edificio en esa red, que es una pregunta distinta
+// —depende además del tipo, su nivel, el radio urbano y el perfil— y mucho más cara: la red ya viene cacheada
+// y aun así `sitiosParaTipo` era el **60 % del tick** (perfilado a 100 asentamientos, 2026-09-05), casi todo
+// en `candidatosLibres`, `sitiosPorAtraccionDura` y `corredorHastaLaRed`.
+//
+// Mismo hecho de fondo que las otras dos optimizaciones: el motor recalcula por tick lo que solo cambia al
+// construir. Medido con clave de contenido exacta: `sitiosParaTipo` se llama **0,7 veces por asentamiento y
+// tick** —poco— pero **el 77 % de esas llamadas repite entradas idénticas**, porque `evaluarNecesidades`
+// vuelve a preguntar "¿dónde iría una Vivienda?" cada tick aunque no se haya construido nada.
+//
+// **Lo que esto NO arregla, y es lo que de verdad sobra**: `evaluarNecesidades` busca sitio ANTES de saber si
+// hay recursos para pagar, así que un asentamiento sin fondos paga la búsqueda entera cada tick para que el
+// resultado se descarte en el commit. Filtrar por "no me lo puedo permitir" sería mejor que cachear, pero NO
+// preserva el comportamiento: `nextId()` se consume por candidato propuesto (y ese consumo ya causó un bug de
+// ids duplicadas, ver `evaluarNecesidades`) y `asegurarAnclaPara` puede CREAR un ancla antes de la búsqueda.
+// Es una decisión de diseño sobre cuándo se decide construir, no una optimización, y se deja anotada.
+const LIMITE_CACHE_SITIOS = 512;
+const cacheSitios = new Map<string, readonly SitioCandidato[]>();
+
+/**
+ * Clave de la búsqueda: la de la red (`claveDeTrazado`, que ya cubre id + edificios + celdas de recinto) más
+ * lo demás que `calcularSitiosParaTipo` llega a leer. `radioPotencial` acota el radio urbano, y `perfil` YA
+ * viene resuelto como parámetro, así que el override en caliente del laboratorio (`TRAZADO.perfilForzado`)
+ * cambia la clave por sí solo en vez de dejar una entrada rancia.
+ *
+ * **`avance` de cada recinto entra aquí y NO en `claveDeTrazado`**, y la diferencia costó un test: la red de
+ * calles no lo mira —`celdasBloqueadasDeRecintos` bloquea el trazo entero desde que se compromete— pero la
+ * BÚSQUEDA sí, porque `conPreferenciaIntramuros` solo se aplica con un recinto COMPLETO
+ * (`integridadDeRecinto` = `(avance + 1) / celdas.length`). Dos asentamientos idénticos salvo en `avance`
+ * comparten red y NO comparten orden de candidatos; con la clave de la red a secas, la caché le daba a uno el
+ * orden del otro. Lo cazó `muralla.test.ts` al primer intento — es exactamente el fallo que el comentario de
+ * `claveDeTrazado` avisa de que hay que evitar: incluir un campo de más solo cuesta aciertos, incluir uno de
+ * menos da una respuesta equivocada.
+ */
+function claveDeSitios(
+  asentamiento: Pick<Asentamiento, 'id' | 'radioPotencial' | 'recintos'>,
+  ocupados: readonly Edificio[],
+  tipo: EdificioTipo,
+  nivelInterno: number | undefined,
+  ampliado: boolean,
+  perfil: PerfilTrazado
+): string {
+  const recintos = asentamiento.recintos ?? [];
+  const obra = recintos.map((r) => `${r.id}:${r.nivel}:${r.avance}:${r.mejorandoA ?? ''}`).join('/');
+  return `${claveDeTrazado(asentamiento.id, ocupados, recintos)}||${obra}|${asentamiento.radioPotencial}|${tipo}|${nivelInterno ?? ''}|${ampliado ? 1 : 0}|${perfil}`;
+}
+
+/** Vacía LAS DOS cachés de este archivo. Para tests que quieran medir el cálculo real, o comprobar que cachear
+ * no cambia nada. No hace falta llamarla por corrección: un acierto devuelve lo mismo que el cálculo. */
 export function limpiarCacheTrazado(): void {
   cacheTrazado.clear();
+  cacheSitios.clear();
+}
+
+/** Entradas de la caché de búsqueda de colocación. Solo para tests y diagnóstico. */
+export function tamanoCacheSitios(): number {
+  return cacheSitios.size;
 }
 
 /** Cuántas entradas tiene la caché ahora mismo. Solo para tests y diagnóstico. */
@@ -1966,6 +2030,13 @@ function conPreferenciaIntramuros(
   return [...dentro, ...fuera];
 }
 
+/**
+ * Huecos donde cabe `tipo`, en orden de preferencia — memoizada por contenido (ver el bloque de la caché de
+ * búsqueda, más arriba).
+ *
+ * Contrato idéntico al de antes: función pura de sus argumentos. La caché es un detalle de implementación y
+ * no cambia ni un resultado, por eso ningún llamador tuvo que tocarse.
+ */
 export function sitiosParaTipo(
   asentamiento: Pick<Asentamiento, 'id' | 'radioPotencial' | 'recintos'>,
   ocupados: Edificio[],
@@ -1975,7 +2046,32 @@ export function sitiosParaTipo(
   /** Perfil de trazado (§E6.23). Por defecto el que le toca al asentamiento (`resolverPerfil`: override del
    * laboratorio > tradición local); `construction.ts` pasa el de la política activa cuando hay una. */
   perfil: PerfilTrazado = resolverPerfil(asentamiento.id)
-): { punto: Point; rotado: boolean }[] {
+): readonly SitioCandidato[] {
+  const clave = claveDeSitios(asentamiento, ocupados, tipo, nivelInterno, ampliado, perfil);
+  const guardada = cacheSitios.get(clave);
+  if (guardada !== undefined) {
+    cacheSitios.delete(clave); // reinsertar = marcarla como la más reciente (LRU sobre el orden del `Map`)
+    cacheSitios.set(clave, guardada);
+    return guardada;
+  }
+
+  const sitios = calcularSitiosParaTipo(asentamiento, ocupados, tipo, nivelInterno, ampliado, perfil);
+  cacheSitios.set(clave, sitios);
+  if (cacheSitios.size > LIMITE_CACHE_SITIOS) {
+    const masVieja = cacheSitios.keys().next().value;
+    if (masVieja !== undefined) cacheSitios.delete(masVieja);
+  }
+  return sitios;
+}
+
+function calcularSitiosParaTipo(
+  asentamiento: Pick<Asentamiento, 'id' | 'radioPotencial' | 'recintos'>,
+  ocupados: Edificio[],
+  tipo: EdificioTipo,
+  nivelInterno: number | undefined,
+  ampliado: boolean,
+  perfil: PerfilTrazado
+): readonly SitioCandidato[] {
   const tamano = tamanoEdificio(tipo, nivelInterno);
   const { ocupadas, red } = sueloOcupado(asentamiento.id, ocupados, undefined, asentamiento.recintos ?? []);
   const aPunto = (candidatos: Candidato[]): { punto: Point; rotado: boolean }[] =>

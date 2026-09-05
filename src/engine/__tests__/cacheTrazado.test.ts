@@ -9,7 +9,7 @@ import type { Asentamiento, Edificio, Faccion } from '../../domain/types';
 import { avanzarSimulacion } from '../simulation';
 import { crearFaccion } from '../faccion';
 import { createRng } from '../../worldgen';
-import { limpiarCacheTrazado, redDeCalles, tamanoCacheTrazado } from '../trazado';
+import { limpiarCacheTrazado, redDeCalles, sitiosParaTipo, tamanoCacheSitios, tamanoCacheTrazado } from '../trazado';
 import {
   contextoDeTest,
   crearEstadoDeTest,
@@ -133,6 +133,53 @@ describe('memoización de redDeCalles', () => {
       redDeCalles(`asentamiento-sintetico-${i}`, a.edificios, []);
     }
     expect(tamanoCacheTrazado()).toBeLessThanOrEqual(512);
+  });
+
+  it('la búsqueda de colocación también acierta con otro array del mismo contenido', () => {
+    // Segunda caché del módulo (`sitiosParaTipo`, el 60 % del tick): mismo hecho que la de la red —el motor
+    // repregunta cada tick lo que solo cambia al construir— y misma técnica.
+    const { estado } = partidaAvanzada(3, 40);
+    const a = estado.asentamientos[0]!;
+    limpiarCacheTrazado();
+
+    const primera = sitiosParaTipo(a, a.edificios, 'almacen');
+    const copia: Edificio[] = a.edificios.map((e) => ({ ...e }));
+    const segunda = sitiosParaTipo(a, copia, 'almacen');
+
+    expect(segunda).toBe(primera);
+    expect(tamanoCacheSitios()).toBe(1);
+  });
+
+  it('el AVANCE de un recinto forma parte de la clave de la búsqueda, aunque no lo sea de la red', () => {
+    // Congela el fallo que casi se cuela al escribir esta caché: se reusó la clave de la red tal cual, y esa
+    // NO incluye `avance` —a la red le da igual, bloquea el trazo entero desde que se compromete—. Pero la
+    // búsqueda solo aplica la preferencia intramuros con el recinto COMPLETO, así que dos asentamientos
+    // idénticos salvo en `avance` comparten red y no comparten orden de candidatos. Lo cazó
+    // `muralla.test.ts`; esto lo deja congelado donde se rompió.
+    const { estado } = partidaAvanzada(3, 40);
+    const a = estado.asentamientos[0]!;
+    const anillo = { id: 'r1', nivel: 1, celdas: [{ col: 5, row: 5, clase: 'muro' as const }], avance: -1, comprometidoEn: 0 as never };
+    limpiarCacheTrazado();
+
+    sitiosParaTipo({ ...a, recintos: [anillo] }, a.edificios, 'almacen');
+    sitiosParaTipo({ ...a, recintos: [{ ...anillo, avance: 0 }] }, a.edificios, 'almacen');
+
+    // Dos entradas, no una: si `avance` no entrara en la clave, la segunda comería de la primera.
+    expect(tamanoCacheSitios()).toBe(2);
+  });
+
+  it('`limpiarCacheTrazado` vacía LAS DOS cachés', () => {
+    const { estado } = partidaAvanzada(2, 30);
+    const a = estado.asentamientos[0]!;
+    redDeCalles(a.id, a.edificios, a.recintos ?? []);
+    sitiosParaTipo(a, a.edificios, 'almacen');
+    expect(tamanoCacheTrazado()).toBeGreaterThan(0);
+    expect(tamanoCacheSitios()).toBeGreaterThan(0);
+
+    limpiarCacheTrazado();
+
+    expect(tamanoCacheTrazado()).toBe(0);
+    expect(tamanoCacheSitios()).toBe(0);
   });
 
   it('una partida completa avanza IGUAL con la caché fría que caliente', () => {
