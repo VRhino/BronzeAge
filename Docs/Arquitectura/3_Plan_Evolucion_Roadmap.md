@@ -31,10 +31,10 @@ Qué puede salir del servidor y qué no, módulo por módulo: ver
 **Objetivo de escala (acordado 2026-08-24): mínimo 500 jugadores conectados
 simultáneamente en una misma partida.** El cuello de botella es la CPU del tick, no la red ni la persistencia
 — eso no ha cambiado desde agosto; lo que ha cambiado es la magnitud. **Medido el 2026-09-05: 500 jugadores
-son ~70-100 asentamientos (no 500), y eso son 41-68 ms por tick** dentro de un intervalo de 60 000 ms. La
+son ~70-100 asentamientos (no 500), y eso son 44-62 ms por tick** dentro de un intervalo de 60 000 ms. La
 cifra de "~1,9 s" que este documento traía era una extrapolación de agosto a 500 ASENTAMIENTOS, corregida
 dos veces desde entonces. Ver [documento 6](6_Sincronizacion_Visibilidad_y_Escala.md) §1 para las mediciones,
-las tres optimizaciones que las mejoraron 6,9× —dejando el escalado en O(n^1.02), prácticamente lineal— y
+las cuatro optimizaciones que las mejoraron 7,6× —dejando el escalado en O(n^0.94), lineal— y
 lo que queda decidido y por decidir.
 
 Orden de fases (no reordenar sin justificar por qué el nuevo orden reduce riesgo,

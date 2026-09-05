@@ -20,9 +20,9 @@ Todo lo de aquí es diseño acordado, no implementado. Las tareas derivadas est�
 > nuevas; script committeado en [`scripts/medicion-escala.ts`](../../scripts/medicion-escala.ts), varias
 > pasadas con varianza por debajo del 1 %.
 >
-> **Optimizada el mismo día, en tres pasadas**: esa medición destapó que el motor recalculaba en cada tick
-> cosas que solo cambian al construir, y corregirlo dejó el tick **6,9× más rápido** con el escalado pasando
-> de O(n^1.5) a O(n^1.02). La tabla trae las tres columnas —agosto, septiembre antes de optimizar, septiembre
+> **Optimizada acto seguido, en cuatro pasadas**: esa medición destapó que el motor recalculaba en cada tick
+> cosas que solo cambian al construir —y que buscaba dónde poner edificios que no podía pagar—, y corregirlo
+> dejó el tick **7,6× más rápido** con el escalado pasando de O(n^1.5) a O(n^0.94), lineal. La tabla trae las tres columnas —agosto, septiembre antes de optimizar, septiembre
 > después— porque la comparación honesta necesita las tres: sin la del medio no se ve que el motor había
 > engordado, y sin la última no se ve cuánto de ese engorde era trabajo repetido.
 
@@ -36,10 +36,10 @@ y promediando 30 ticks:
 | 16 | 14.4 ms | 37.5 ms | **9.0 ms** | 110 KB |
 | 33 | 25.7 ms | 96.4 ms | **16.5 ms** | 225 KB |
 | 52 | 63.9 ms | 166.1 ms | **29.7 ms** | 369 KB |
-| 70 | — | 287.9 ms | **40.9 ms** | 498 KB |
-| 100 | — | 471.0 ms | **68.4 ms** | 753 KB |
+| 70 | — | 287.9 ms | **44.1 ms** | 498 KB |
+| 100 | — | 471.0 ms | **61.9 ms** | 753 KB |
 
-**Escalado: O(n^1.02)**, desde O(n^1.42) antes de optimizar y O(n^1.5) en agosto. El exponente cayendo hasta
+**Escalado: O(n^0.94)**, desde O(n^1.42) antes de optimizar y O(n^1.5) en agosto. El exponente cayendo hasta
 lo lineal es lo importante, más que las cifras: **lo superlineal casi no era el coste de simular más ciudades,
 era el mismo trabajo repetido**, y ese trabajo crecía con el tamaño de cada ciudad. Escalar a más
 asentamientos vuelve a costar proporcionalmente lo que cuesta cada uno.
@@ -55,7 +55,7 @@ corrección de más abajo, no una extrapolación.
 - **El estado creció solo ~1,4-1,5×**, bastante menos que el tick. O sea que lo que se había encarecido era el
   CÁLCULO por tick, no la cantidad de datos que se arrastra.
 - **La conclusión cualitativa de agosto sigue en pie**: el cuello de botella es la CPU del tick. Serializar el
-  estado cuesta **el 2 % de un tick** a 100 asentamientos (1,4 ms frente a 68,4 ms) — el porcentaje ha subido
+  estado cuesta **el 2,7 % de un tick** a 100 asentamientos (1,7 ms frente a 61,9 ms) — el porcentaje ha subido
   solo porque el tick se ha hecho más barato, no porque persistir cueste más. Cualquier debate de rendimiento
   sobre framework HTTP o motor de persistencia sigue siendo el margen equivocado.
 
@@ -134,14 +134,27 @@ red más el tipo, el nivel, el radio urbano y el perfil ya resuelto. **111 → 6
 > candidatos, y la caché le daba a uno el orden del otro. Es la regla que el propio código ya enunciaba:
 > **un campo de más en la clave solo cuesta aciertos; uno de menos da una respuesta equivocada.**
 
-**Lo que queda, y es una decisión de diseño, no una optimización.** `evaluarNecesidades` busca sitio **antes**
-de saber si hay recursos para pagar: un asentamiento sin fondos paga la búsqueda entera cada tick para que el
-resultado se descarte en el commit. Filtrar por "no me lo puedo permitir" sería mejor que cachear, pero **no
-preserva el comportamiento**: `nextId()` se consume por candidato propuesto (consumo *load-bearing* — ya causó
-un bug de ids duplicadas) y `asegurarAnclaPara` puede CREAR un ancla antes de la búsqueda. Decidir eso es
-decidir *cuándo se decide construir*, y queda abierto.
+**Y la cuarta, que era una decisión de diseño y el usuario tomó** (2026-09-06): `evaluarNecesidades` buscaba
+sitio **antes** de saber si había recursos, así que un asentamiento sin fondos pagaba la búsqueda entera cada
+tick para que el commit tirara el resultado — el **68 % de las búsquedas en crecimiento y el 92 % en madurez**
+eran para un edificio impagable. Ahora se pregunta antes, con `puedeIniciarConstruccion` sobre el stock entero
+del tick: la misma comprobación que hace el commit, así que descarta exactamente lo que se iba a rechazar y ni
+un candidato más. **71,5 → 61,9 ms.**
 
-**Lo que sí emergió, y ya está arreglado: `Mapa.bosqueParaLenera`** (`world/mapa.ts`), el 19,5 % del tick en
+> **Dos cosas que costó aprender, y por eso quedan escritas.** (1) El guardián va **después** de
+> `asegurarAnclaPara`: un ancla nace gratis y es infraestructura de trazado, no el edificio impagable — con el
+> guardián delante, una ciudad se quedaba sin su Patio de Gremios y el mundo divergía a los ~150 ticks. (2) La
+> ganancia es del 14 %, mucho menos que lo que sugería el 68-92 %, **porque la memoización ya absorbía casi
+> todo**: esas búsquedas repetidas eran aciertos de caché. Las dos se solapan; esta gana porque evita el
+> trabajo en vez de recordarlo.
+
+Lo único que no preserva son los **ids** de edificio, que se desplazan porque `nextId()` se consume por
+candidato propuesto. Verificado sobre 150 ticks: mismo censo de edificios tipo a tipo, mismas posiciones,
+mismos estados.
+
+**Lo que sí emergió, y ya está arreglado: `Mapa.bosqueParaLenera`**
+
+**Y `Mapa.bosqueParaLenera`** (`world/mapa.ts`), el 19,5 % del tick en
 una sola función. Recorría los **170 bosques del mundo** probando hasta 37 puntos de cada uno contra el
 polígono de influencia del asentamiento, y calculaba el punto de trabajo de TODOS antes de ordenar por
 distancia y quedarse con uno. Medido, por llamada: 154 evaluaciones, **5 698 tests de punto-en-polígono**,
@@ -162,9 +175,10 @@ parten del orden de `generado.bosques`), y ordenar solo los ~3 supervivientes en
 | Antes de optimizar (2026-09-05) | 471,0 ms |
 | Tras memoizar la red de calles | 131,6 ms |
 | Tras arreglar `bosqueParaLenera` | 110,7 ms |
-| **Tras memoizar la búsqueda de colocación** | **68,4 ms** |
+| Tras memoizar la búsqueda de colocación | 68,4 ms |
+| **Tras dejar de buscar lo impagable** | **61,9 ms** |
 
-**6,9× en total**, y el escalado de O(n^1.5) a O(n^1.02).
+**7,6× en total**, y el escalado de O(n^1.5) a **O(n^0.94)**: lineal.
 
 Las tres optimizaciones salieron del mismo hecho, y por eso conviene enunciarlo aparte: **el motor recalculaba
 en cada tick cosas que solo cambian al construir**. Ninguna de las tres cambió una regla; las tres se
@@ -173,16 +187,16 @@ trabajo repetido: es la decisión de diseño de arriba (buscar sitio antes de sa
 
 > ⚠️ **Corrección de 2026-08-24, que sigue vigente: 500 jugadores NO son 500 asentamientos.** Un asentamiento
 > aloja `CIUDADANIA.casasBasePorAsentamiento` = 5 residentes (+2 por nivel adicional), así que el objetivo de
-> 500 jugadores cabe en **~70-100 asentamientos**: hoy, **41-68 ms por tick**. La cifra de 500 asentamientos
+> 500 jugadores cabe en **~70-100 asentamientos**: hoy, **44-62 ms por tick**. La cifra de 500 asentamientos
 > corresponde a una partida madura, con las facciones ya expandidas (`CAP_FUNDACION_POR_NIVEL`).
 
 ### Consecuencia para el bloqueo de la cola serial
 
 Esta era la razón de re-medir, así que conviene dejar la conclusión escrita en vez de solo los números.
 
-- **Un tick suelto no es el problema, y tras las optimizaciones lo es aún menos.** 68 ms a 100 asentamientos
-  dentro de un intervalo de 60 000 ms: el motor ocupa el **0,11 %** del tiempo de mundo, y un comando que
-  llegue mientras corre un tick espera menos de una décima de segundo. Muy lejos de los ~2 s que hicieron sonar la
+- **Un tick suelto no es el problema, y tras las optimizaciones lo es aún menos.** 62 ms a 100 asentamientos
+  dentro de un intervalo de 60 000 ms: el motor ocupa el **0,10 %** del tiempo de mundo, y un comando que
+  llegue mientras corre un tick espera una décima de segundo escasa. Muy lejos de los ~2 s que hicieron sonar la
   alarma en agosto sobre la extrapolación a 500 asentamientos.
 - **El problema real era la RÁFAGA DE CATCH-UP, y está RESUELTO** (2026‑09‑05). `sincronizarConReloj` (D5)
   ejecutaba los ticks vencidos tras un reinicio **en una sola entrada de la cola serial**: con el tope de una
