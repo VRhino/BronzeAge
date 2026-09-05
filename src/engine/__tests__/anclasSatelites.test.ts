@@ -20,7 +20,6 @@ import {
   radioMaximoRanura,
   sitioParaTipo as sitioTrazado,
   sitiosPorAtraccionDura,
-  type RedDeCalles,
   tamanoDeEdificio,
   tamanoEdificio,
   tiposAfines,
@@ -361,7 +360,9 @@ describe('Etapa 4 (sin cambios) — orientación intercambiable (ancho↔alto)',
       col >= minCol && col < minCol + ancho && row >= minRow && row < minRow + alto;
 
     // Red: SOLO el anillo del ancla. Al construirla a mano, nada puede aparecer donde no se quiere.
-    const red: RedDeCalles = { calles: new Set(), caminos: new Set() };
+    // `RedDeCalles` es de solo lectura desde la Fase E3 (la red memoizada se comparte). Este test la fabrica
+    // a mano, así que declara los Set mutables y los rellena antes de pasarla.
+    const red = { calles: new Set<string>(), caminos: new Set<string>() };
     for (let col = anclaMin.col - anillo; col < anclaMin.col + anclaTamano.ancho + anillo; col++) {
       for (let row = anclaMin.row - anillo; row < anclaMin.row + anclaTamano.alto + anillo; row++) {
         if (dentro(col, row, anclaMin.col, anclaMin.row, anclaTamano.ancho, anclaTamano.alto)) continue;
@@ -446,7 +447,9 @@ describe('Regla de afinidad (2026-08-31) — desempate por vecindad con edificio
     const anclaMin = celdaMinimaDeEdificio(mercado);
     const anclaTam = tamanoDeEdificio(mercado);
 
-    const red: RedDeCalles = { calles: new Set(), caminos: new Set() };
+    // `RedDeCalles` es de solo lectura desde la Fase E3 (la red memoizada se comparte). Este test la fabrica
+    // a mano, así que declara los Set mutables y los rellena antes de pasarla.
+    const red = { calles: new Set<string>(), caminos: new Set<string>() };
     for (let dc = -1; dc <= anclaTam.ancho; dc++) {
       red.calles.add(`${anclaMin.col + dc},${anclaMin.row - 1}`);
       red.calles.add(`${anclaMin.col + dc},${anclaMin.row + anclaTam.alto}`);

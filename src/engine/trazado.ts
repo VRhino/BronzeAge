@@ -68,6 +68,18 @@ export interface RectanguloLocal {
  * Etapa 6 (§E6.2): eran claves de ARISTA. Que ahora sean celdas —del mismo espacio que las de los edificios— es
  * lo que permite meterlas en `ocupadas` y hacer que la calle cueste suelo. */
 export interface RedDeCalles {
+  readonly calles: ReadonlySet<string>;
+  readonly caminos: ReadonlySet<string>;
+}
+
+/**
+ * La misma red mientras se CONSTRUYE, dentro de este módulo. Existe por la memoización de más abajo: una red
+ * cacheada se entrega compartida a todos los llamadores, así que si alguno pudiera mutarla corrompería la
+ * caché para los demás. Hoy ninguno lo hace —los únicos `.add` están dentro de `calcularRedDeCalles`, todo lo
+ * demás solo consulta `.has`/`.size`— y este par de tipos convierte esa observación en una garantía que
+ * comprueba el compilador, sin copiar nada en ejecución.
+ */
+interface RedDeCallesMutable {
   calles: Set<string>;
   caminos: Set<string>;
 }
@@ -880,8 +892,8 @@ export const FONDO_MANZANA = 4;
  * franja de retículo pueden salir incompletos, y eso es correcto — un edificio grande desvía la calle
  * localmente, que es exactamente lo que significa "retículo blando" (§E6.8).
  */
-export function redDeCalles(asentamientoId: string, edificios: Edificio[], recintos: readonly Recinto[] = []): RedDeCalles {
-  const red: RedDeCalles = { calles: new Set(), caminos: new Set() };
+function calcularRedDeCalles(asentamientoId: string, edificios: Edificio[], recintos: readonly Recinto[]): RedDeCalles {
+  const red: RedDeCallesMutable = { calles: new Set(), caminos: new Set() };
   const internos = edificiosInternos(edificios);
   const centro = internos.find((e) => e.tipo === 'centroUrbano');
   if (!centro) return red;
@@ -954,6 +966,93 @@ export function redDeCalles(asentamientoId: string, edificios: Edificio[], recin
   return red;
 }
 
+// --- Memoización de la red de calles ---
+//
+// EL PROBLEMA, medido el 2026-09-05 (doc 6 §1): `calcularRedDeCalles` es el **47 % del tick** a 100
+// asentamientos, y el **81 % de sus llamadas recalculan con entradas idénticas**. El reparto explica por qué
+// hace falta una caché y no basta con reordenar llamadas: solo el 19,6 % son repeticiones dentro de un mismo
+// tick (eso se arreglaría pasando la red hacia abajo); el **61,6 % son entre ticks** — un asentamiento que no
+// construye nada rehace su red entera cada minuto, para siempre.
+//
+// POR QUÉ POR CONTENIDO Y NO POR REFERENCIA. El patrón que ya usa `RunnerDePartida.cacheGeometria`
+// —memoizar por identidad de referencia del array— aquí no sirve: medido, la referencia de `edificios` se
+// repite el **0 %** de las veces, porque el array se reconstruye en cada paso aunque su contenido no cambie.
+//
+// POR QUÉ ESTO NO ROMPE EL REPLAY. `calcularRedDeCalles` es un replay dependiente del orden, y ese orden es
+// load-bearing para el balance — pero eso importa al CALCULAR, no al cachear. La clave es el contenido
+// ORDENADO exacto, así que un acierto devuelve exactamente lo que devolvería el replay. Lo único que se evita
+// es repetir trabajo idéntico; ninguna decisión de trazado cambia.
+//
+// CLAVE EXACTA, NO HASH. Medido: construir la clave y consultar el `Map` cuesta 3,88 µs frente a 1885 µs del
+// replay — **486× más barato**. Con esa holgura no hay ninguna razón para aceptar riesgo de colisión: una
+// colisión daría una red de calles equivocada, en silencio, y ese es de los fallos más caros de rastrear.
+
+/** Tope de entradas. Cada edificio nuevo genera una clave nueva, así que sin tope esto sería una fuga. Con
+ * ~100 asentamientos activos sobra para que ninguno se quede fuera entre un tick y el siguiente. */
+const LIMITE_CACHE_TRAZADO = 512;
+
+/** `Map` y no otra cosa porque conserva el orden de inserción: eso da el LRU casi gratis (reinsertar en un
+ * acierto mueve la entrada al final; se desaloja la primera). */
+const cacheTrazado = new Map<string, RedDeCalles>();
+
+/**
+ * Clave de contenido: SOLO lo que `calcularRedDeCalles` llega a leer.
+ *
+ * De cada edificio, sus cinco campos de geometría — y **no** `estado` ni `completaEn`: comprobado leyendo la
+ * función, el trazado no los mira, así que un edificio en cola cuenta igual que uno activo y las transiciones
+ * de construcción no invalidan la entrada. De cada recinto, solo las celdas y su clase, que es lo único que
+ * `celdasBloqueadasDeRecintos` consulta.
+ *
+ * Meter aquí un campo de más solo costaría aciertos perdidos; meter uno de MENOS daría una red equivocada, así
+ * que ante la duda esta clave peca de incluir.
+ */
+function claveDeTrazado(asentamientoId: string, edificios: readonly Edificio[], recintos: readonly Recinto[]): string {
+  const partes: string[] = [asentamientoId];
+  for (const e of edificios) {
+    partes.push(`${e.tipo}:${e.posicion?.x ?? 0},${e.posicion?.y ?? 0}:${e.nivelInterno ?? 0}:${e.rotado ? 1 : 0}:${e.ambito ?? 'asentamiento'}`);
+  }
+  for (const r of recintos) {
+    partes.push('#' + r.celdas.map((c) => `${c.col},${c.row},${c.clase}`).join('/'));
+  }
+  return partes.join('|');
+}
+
+/** Vacía la caché. Para tests que quieran medir el cálculo real, o comprobar que cachear no cambia nada. No
+ * hace falta llamarla por corrección: un acierto devuelve lo mismo que el cálculo. */
+export function limpiarCacheTrazado(): void {
+  cacheTrazado.clear();
+}
+
+/** Cuántas entradas tiene la caché ahora mismo. Solo para tests y diagnóstico. */
+export function tamanoCacheTrazado(): number {
+  return cacheTrazado.size;
+}
+
+/**
+ * La red de calles y caminos del asentamiento — memoizada por contenido (ver el bloque de arriba).
+ *
+ * Contrato idéntico al de antes: función pura de `(asentamientoId, edificios, recintos)`. La caché es un
+ * detalle de implementación, no cambia ni un resultado, y por eso ningún llamador tuvo que tocarse.
+ */
+export function redDeCalles(asentamientoId: string, edificios: Edificio[], recintos: readonly Recinto[] = []): RedDeCalles {
+  const clave = claveDeTrazado(asentamientoId, edificios, recintos);
+  const guardada = cacheTrazado.get(clave);
+  if (guardada !== undefined) {
+    // Reinsertar = marcarla como la más reciente, que es lo que hace del `Map` un LRU.
+    cacheTrazado.delete(clave);
+    cacheTrazado.set(clave, guardada);
+    return guardada;
+  }
+
+  const red = calcularRedDeCalles(asentamientoId, edificios, recintos);
+  cacheTrazado.set(clave, red);
+  if (cacheTrazado.size > LIMITE_CACHE_TRAZADO) {
+    const masVieja = cacheTrazado.keys().next().value;
+    if (masVieja !== undefined) cacheTrazado.delete(masVieja);
+  }
+  return red;
+}
+
 /**
  * La red resuelta a RECTÁNGULOS en coordenadas locales, listos para dibujar — `ui/canvas.ts` nunca ve una
  * celda. Etapa 6: antes eran segmentos (líneas sin grosor), ahora son áreas, porque una calle ocupa suelo.
@@ -1015,7 +1114,9 @@ export function murallasDeRecintos(recintos: readonly Recinto[]): TrazadoMuralla
 }
 
 export function rectangulosDeRed(red: RedDeCalles): { calles: RectanguloLocal[]; caminos: RectanguloLocal[] } {
-  const fusionar = (celdas: Iterable<string>, excluir?: Set<string>): RectanguloLocal[] => {
+  // `excluir` solo se consulta (`.has`), nunca se escribe: `ReadonlySet` lo dice y deja pasar la red
+  // memoizada, que es de solo lectura desde la Fase E3.
+  const fusionar = (celdas: Iterable<string>, excluir?: ReadonlySet<string>): RectanguloLocal[] => {
     const porFila = new Map<number, number[]>();
     for (const clave of celdas) {
       if (excluir?.has(clave)) continue;
