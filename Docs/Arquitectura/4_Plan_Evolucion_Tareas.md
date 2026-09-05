@@ -1353,7 +1353,13 @@ se modera lo que no se ha registrado.
     colisión). La cautela que este documento anotaba —"el orden es load-bearing"— estaba mal dirigida: el
     orden importa al calcular, no al cachear. **471 → 132 ms a 100 asentamientos, O(n^1.42) → O(n^1.12).**
     Equivalencia demostrada con sellos SHA-256 del estado completo sobre 150 ticks, idénticos byte a byte.
-    Detalle en doc 6 §1. Queda sin tocar `engine/zones.ts` (≈27 % del tick), que merece su propio análisis.
+    Detalle en doc 6 §1. **Corregido después**: este punto daba `engine/zones.ts` como el siguiente objetivo
+    con ≈27 % del tick, y era falso — el perfil medía el proceso entero y el 65 % de las muestras era el
+    *setup* del propio banco (`posicionRecomendable`, una fixture de test). Re-atribuido solo a lo que cuelga
+    de `avanzarSimulacion`, `zones.ts` es el **3,3 %** y nunca fue un problema. Los objetivos reales que
+    quedan son `trazado.ts` (61,4 %, ahora la búsqueda de colocación y ya no el replay de la red) y
+    `Mapa.bosqueParaLenera` (19,5 % en una sola función, con el 98,3 % del trabajo descartable por una prueba
+    de distancia). Ver doc 6 §1.
 - [x] **Métricas: duración de tick/procesamiento, tamaño de cola, tasa de errores, clientes conectados** —
   **hechas 2026-09-05**. `server/metricas.ts` + `GET /v1/admin/metricas`.
   - **`metricas.ts` no mide, ENSAMBLA.** Cada número lo lleva quien lo conoce de primera mano:

@@ -98,8 +98,55 @@ seis sellos SHA-256 del estado COMPLETO — **idénticos byte a byte** con y sin
 forman parte de la clave; el techo de entradas se respeta).
 
 **Lo que NO arregla**: el 18,8 % de cálculos genuinamente nuevos sigue ahí — para eso haría falta un fold
-incremental, mucho más invasivo. Y `engine/zones.ts` es el otro gran consumidor del tick (≈27 % antes de esta
-pasada) y no se ha tocado; merece su propio análisis.
+incremental, mucho más invasivo.
+
+### Corrección: dónde se va el tick de verdad (2026-09-05, misma sesión)
+
+Una versión anterior de esta sección daba `engine/zones.ts` como "el otro gran consumidor, ≈27 % del tick".
+**Era falso, y por un error de método que conviene dejar escrito**: el perfil medía el proceso ENTERO, y el
+*setup* del banco de medición —`posicionRecomendable`, una fixture de test que barre hasta 2 500 posiciones de
+la rejilla llamando a `evaluarViabilidadFundacion` → `computeZonaInfluencia` para colocar cada asentamiento—
+era el 65 % de las muestras. Ese coste no ocurre nunca en una partida real: se paga al fundar, no cada tick.
+Re-atribuido contando solo lo que cuelga de `avanzarSimulacion`:
+
+| Archivo | % del tick, antes de memoizar | % del tick, después |
+|---|---|---|
+| `engine/trazado.ts` | **87,4 %** | **61,4 %** |
+| `world/mapa.ts` | 6,6 % | **21,0 %** |
+| `engine/zones.ts` | 1,2 % | 3,3 % |
+
+`zones.ts` **nunca fue un problema**. Y `trazado.ts` sigue siendo el dominante tras la memoización, pero ya no
+por el replay de la red (`calcularRedDeCalles` baja al 2,8 % del tick): lo que queda es la BÚSQUEDA DE
+COLOCACIÓN (`sitiosParaTipo`, `candidatosLibres`, `corredorHastaLaRed`, `sitiosPorAtraccionDura`).
+
+**Lo que sí emergió, y ya está arreglado: `Mapa.bosqueParaLenera`** (`world/mapa.ts`), el 19,5 % del tick en
+una sola función. Recorría los **170 bosques del mundo** probando hasta 37 puntos de cada uno contra el
+polígono de influencia del asentamiento, y calculaba el punto de trabajo de TODOS antes de ordenar por
+distancia y quedarse con uno. Medido, por llamada: 154 evaluaciones, **5 698 tests de punto-en-polígono**,
+~108 000 operaciones de arista, ~30 llamadas por tick con 30 asentamientos. **El 98,3 % era trabajo tirado**:
+solo **2,8 bosques de 170** están lo bastante cerca como para poder tocar el polígono siquiera.
+
+Resuelto con tres piezas que no cambian el resultado: descarte por distancia antes de mirar ninguna arista
+(conservador por la desigualdad triangular — todo punto probado cae dentro del disco del bosque, y el
+polígono dentro del suyo; el criterio es el que `hayBosqueEnRadio` ya usaba ahí mismo), ordenar antes y parar
+en el primero viable en vez de calcularlos todos y ordenar después (mismo ganador: `sort` es estable y ambos
+parten del orden de `generado.bosques`), y ordenar solo los ~3 supervivientes en vez de los 170.
+**131,6 → 110,7 ms por tick a 100 asentamientos.**
+
+### El acumulado de la Fase E3
+
+| | ms/tick a 100 asentamientos |
+|---|---|
+| Antes de optimizar (2026-09-05) | 471,0 ms |
+| Tras memoizar la red de calles | 131,6 ms |
+| **Tras arreglar `bosqueParaLenera`** | **110,7 ms** |
+
+**4,3× en total.** Y el reparto del tick vuelve a estar donde estaba al principio, solo que más pequeño: lo
+que queda dominante es `engine/trazado.ts`, pero ya no por el replay de la red —`calcularRedDeCalles` es el
+2,8 %— sino por la **búsqueda de colocación** (`sitiosParaTipo`, `candidatosLibres`, `corredorHastaLaRed`,
+`sitiosPorAtraccionDura`). Ese es el siguiente objetivo si hiciera falta seguir, y a diferencia de los dos
+anteriores no es trabajo repetido: es la forma del algoritmo, así que merece su propio diagnóstico antes de
+tocar nada.
 
 > ⚠️ **Corrección de 2026-08-24, que sigue vigente: 500 jugadores NO son 500 asentamientos.** Un asentamiento
 > aloja `CIUDADANIA.casasBasePorAsentamiento` = 5 residentes (+2 por nivel adicional), así que el objetivo de
