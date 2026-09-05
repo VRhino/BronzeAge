@@ -1,0 +1,8 @@
+# Qué NO entra en el grafo de graphify (sintaxis gitignore).
+# graphify ya respeta .gitignore, así que node_modules/, dist/, partidas/ e issues/
+# quedan fuera solos. Aquí van solo las exclusiones propias del grafo.
+
+# Documentación de diseño y decisiones: son prosa, y meterlas activa la extracción
+# semántica por LLM (subagentes + coste en tokens) en vez de la extracción AST gratuita.
+Docs/
+Consideraciones/

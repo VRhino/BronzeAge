@@ -39,3 +39,8 @@ issues/
 # Bundle del laboratorio visual (se regenera con `npm run lab`)
 /lab/dist/
 
+# Salidas de graphify — sin anclar a la raíz: escribe `graphify-out/` en el directorio
+# desde el que se lanza Y una caché de extracción dentro de la carpeta escaneada.
+# Todo se regenera con `/graphify <path>`; el grafo de `src/` pesa ~5 MB.
+graphify-out/
+
