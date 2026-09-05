@@ -197,10 +197,7 @@ aquí para que dejen de depender de que alguien relea el párrafo correcto.
   cada snapshot, pero sigue siendo un único valor de proceso: dos partidas no pueden correr balances
   distintos a la vez. El panel que lo mutaba en caliente (`app/balanceConfig.ts`) se eliminó en Fase B sin
   reemplazo y sigue sin dueño. Es el único `[~]` que queda en el backlog de riesgos del doc 4. **Segundo consumidor esperándola desde 2026-09-05**: la auditoría de cambios de balance que E2 dejó fuera por esto mismo.
-- [ ] **`eventosDominio` entero en las lecturas de estado** (follow‑up que C13 dejó abierto) — el cursor
-  incremental existe, pero `EstadoAdmin` y `ProyeccionJugador` siguen trayendo la lista completa. Se aplazó
-  porque quitarlo habría roto `cliente/` sin que existiera un consumidor migrado al cursor; **esa condición
-  ya se cumplió** (el cliente de jugador vive en su propio repositorio desde `2dfe9e7`).
+- [x] **`eventosDominio` entero en las lecturas de estado** — **cerrado 2026‑09‑05**, el follow‑up que C13 dejó abierto. Medido antes de tocarlo: el campo **solo crece** y era el **87‑88 % de una lectura de estado** (264 KB de 303 KB en el tick 200), reenviando en cada lectura y en cada respuesta de comando un historial que el cliente ya tenía. C13 lo aplazó porque quitarlo habría roto al único cliente sin que hubiera ninguno migrado al cursor; se cierra **migrándolo**: `cliente/` mantiene ahora el historial él mismo, sembrado con `?desde=0` al abrir y extendido con `?desde=<version>` después. El filtro de propiedad —la parte de seguridad— no se toca: sigue en `eventosDominioParaJugador`, con sus tests reapuntados ahí. Verificado en el navegador con el cliente real: la consola arranca con sus 941 entradas y tras un refresco pasa a 945, sin duplicar ninguna.
 - [ ] **Pasada de rebalanceo en tiempo** — explícitamente *no* es un hito de D (era el antiguo D7). Con
   1 tick = 1 minuto real, población a ~12 %/minuto compuesto duplica cada ~6 min reales. Esfuerzo dedicado
   apoyado en el laboratorio batch.
