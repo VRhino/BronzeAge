@@ -161,12 +161,19 @@ Esta era la razón de re-medir, así que conviene dejar la conclusión escrita e
   asentamientos dentro de un intervalo de 60 000 ms: el motor ocupa el **0,18 %** del tiempo de mundo, y un
   comando que llegue mientras corre un tick espera una décima de segundo. Muy lejos de los ~2 s que hicieron sonar la
   alarma en agosto sobre la extrapolación a 500 asentamientos.
-- **El problema real es la RÁFAGA DE CATCH-UP.** `RunnerDePartida.sincronizarConReloj` (D5) ejecuta los ticks
-  vencidos tras un reinicio **en una sola entrada de la cola serial**, con tope `MAX_TICKS_RAFAGA` = 10 080
-  (una semana). A 111 ms por tick, ponerse al día de una semana caída son **~18,6 minutos con la cola
-  bloqueada** (eran ~79 antes de optimizar): durante ese rato ningún comando de ningún jugador se procesa.
-  Una caída de una hora son ~7 s de cola parada. **Sigue siendo el punto a decidir**: las optimizaciones lo
-  han hecho 4,3× menos grave, no lo han resuelto.
+- **El problema real era la RÁFAGA DE CATCH-UP, y está RESUELTO** (2026‑09‑05). `sincronizarConReloj` (D5)
+  ejecutaba los ticks vencidos tras un reinicio **en una sola entrada de la cola serial**: con el tope de una
+  semana, ~18,6 minutos durante los cuales ningún comando de ningún jugador se procesaba.
+  - Se atacó como un problema de infraestructura —trocear la ráfaga, ceder la cola cada N ticks, un worker
+    aparte— hasta ver que **la pregunta de fondo era de diseño de juego**: si una caída del servidor consume
+    tiempo de mundo. El comentario del propio código lo daba por respondido sin decirlo ("no se puede actuar
+    ahora hasta que el mundo esté en ahora").
+  - **Decisión del usuario: el mundo NO avanza mientras el servidor está caído.** El reloj se ancla a "ahora"
+    al arrancar, reabrir una partida la reanuda en su tick, y **no hay ráfaga que pueda bloquear la cola**.
+    El problema desaparece en vez de gestionarse. Ver [10_Modelo_Temporal.md](10_Modelo_Temporal.md) §2.
+  - Queda un caso acotado: el proceso vivo pero congelado (host suspendido, salto de NTP). Ahí sí hay que
+    distinguir la deriva del temporizador —que se recupera, o el mundo correría lento— de una congelación
+    —que se descarta y se cuenta en `ticksOmitidos`—. La frontera es `MAX_TICKS_POR_PASADA` = 5.
 - Esto **reencuadra la decisión pendiente**: las tres vías que se plantearon en agosto (lotes de comandos
   entre ticks, partir el tick en fases cedibles, mover el tick a un worker) se propusieron contra un tick
   lento. Contra una ráfaga de catch-up, la palanca más barata es acotarla de otro modo — bajar
@@ -307,9 +314,9 @@ Tareas derivadas de este documento, reflejadas en
   nunca el reloj por su cuenta; la capa de aplicación lo inyecta. Es la regla (b) de §4 implementada, y dejó
   `tick` aislado en un solo sitio para poder retirarlo en Fase D sin tocar firmas. **Cumplido**: el cierre de
   Fase D (2026-08-30) eliminó `ContextoSimulacion.tick`; hoy el contexto es `{ instante, momento, rng }`.
-- [ ] Resolver el bloqueo de la cola serial por ticks largos — **sigue siendo decisión pendiente** (única de
-  esta lista). Es el punto que condiciona el objetivo de 500 jugadores; ver la nota de re-medición al final
-  de §1, que el cierre de Fase D dejó sin ejecutar.
+- [x] Resolver el bloqueo de la cola serial por ticks largos — **RESUELTO 2026-09-05**, y era la última
+  abierta de esta lista. No por ticks largos, que resultaron no serlo (111 ms), sino porque la **ráfaga de
+  catch-up** dejó de existir al decidir que una caída del servidor no consume tiempo de mundo. Ver §1.
 - [x] DTOs por audiencia (`proyectarParaJugador`, C4) — frontera de seguridad hecha. `ConocimientoJugador` y
   la proyección "último conocido" de rivales pasaron a `Mecanicas a desarrollar.md` §12: es mecánica de juego
   con parámetros por definir (radio de visualización, decaimiento del contacto), no arquitectura. El diseño

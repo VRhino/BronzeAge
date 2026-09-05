@@ -84,12 +84,28 @@ El `instante` es **derivado del `tick`, nunca almacenado ni leído del reloj de 
 - Un snapshot antiguo (sin campo de instante) **migra sin datos nuevos**: se recalcula del `tick`.
 - Reproducible: la misma partida en el mismo `tick` está siempre en el mismo `instante`.
 
-### El catch‑up tras una caída
+### Una caída no consume tiempo de mundo
 
-Si el servidor se cae 3 horas, al arrancar sabe —por el reloj de pared— que "faltan 180 ticks" y los ejecuta
-en ráfaga por la cola serial. Durante la ráfaga el `instante` avanza tick a tick, determinista. **El reloj de
-pared solo dice cuántos ticks faltan; nunca entra en el estado.** Esto es lo que hace que el catch‑up de D5
-sea exacto y no una fuente de bugs nueva — y es un uso concreto y cercano de P2.
+**Decisión del usuario, 2026‑09‑05.** Si el servidor se cae 3 horas, al volver la partida **se reanuda en el
+tick en que se quedó**: lo que estuviera en construcción sigue igual de lejos de acabarse, y nadie encuentra
+su partida saltada tres horas al volver. El mundo avanza solo mientras el reloj de mundo está en marcha, y
+por eso `referenciaMs` se ancla a "ahora" al arrancarlo (`RunnerDePartida.iniciarRelojDeMundo`).
+
+> **Esto invierte lo que hacía D5**, que ejecutaba los ticks vencidos en ráfaga. El motivo no fue técnico
+> sino de diseño de juego, y llegó por un camino que conviene dejar escrito: la ráfaga era **una sola entrada
+> de la cola serial**, así que durante ella ningún jugador podía ejecutar un comando — con el tope de una
+> semana, ~18,6 minutos. Se planteó como un problema de infraestructura ("trocear la ráfaga", "ceder la cola
+> cada N ticks") hasta que se vio que la pregunta de fondo era otra: **si una caída consume tiempo de mundo**.
+> Contestada esa, la infraestructura sobra. Ver [doc 6](6_Sincronizacion_Visibilidad_y_Escala.md) §1.
+
+Lo que **sí** se recupera es la deriva del temporizador: `setInterval` no dispara exacto y las décimas se
+acumulan hasta valer un tick entero cada ~10 minutos; sin recuperarlas el mundo correría más lento que el
+tiempo real y "1 tick = 1 minuto" dejaría de ser cierto. `MAX_TICKS_POR_PASADA` (5) separa esa deriva —que
+produce 2 ticks como mucho— de una congelación del proceso —que produce cientos y se descarta, contándola en
+la métrica `ticksOmitidos`—.
+
+**El reloj de pared solo dice cuántos ticks faltan; nunca entra en el estado.** Eso no cambia, y es lo que
+hace que lo que se ejecute sea determinista — un uso concreto y cercano de P2.
 
 ---
 
