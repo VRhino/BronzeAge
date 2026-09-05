@@ -14,9 +14,10 @@ import { esVigente, puedeAdministrar, puedeCrearPartida, puedeDescartarPartida, 
 import type { RolTecnico } from '../../acceso/tipos';
 import type { ActorDeComando } from '../../session/comandos/autorizacion';
 import { PartidaYaAbiertaError } from '../registroDePartidas';
+import { recogerMetricas } from '../metricas';
 import { eventosDesde, vistaAdminDeEstado } from '../../session/estado';
 import { ESQUEMA_SESION_AUTH } from '../openapi';
-import { ejecutarComandoHttp, ESQUEMA_EJECUTAR_COMANDO, type EjecutarComandoBody } from './comandos';
+import { auditarRechazoDeEsquema, ejecutarComandoHttp, ESQUEMA_EJECUTAR_COMANDO, type EjecutarComandoBody } from './comandos';
 import { enviarMapa, ESQUEMA_MAPA } from './mapa';
 import { ERROR_RESPUESTA, PARAMS_GAME_ID, QUERY_DESDE, RESUMEN_PARTIDA_RESPUESTA } from './esquemas';
 import {
@@ -149,6 +150,111 @@ const ESQUEMA_EXPORTAR = {
  * configurado por variable de entorno (`ADMINISTRADORES`), no repartible por partida. `servicio_npc` es
  * interno. */
 const ROLES_OTORGABLES: readonly RolTecnico[] = ['administrador_partida', 'moderador', 'observador'];
+
+const ESQUEMA_METRICAS = {
+  description:
+    'Metricas de operacion del proceso (Fase E3): duracion de tick, tamano de cola, recuento de comandos por ' +
+    'resultado, conexiones y rafagas de catch-up. Numeros crudos, sin interpretar. NO es por partida: ' +
+    'describe este proceso, asi que exige administrador global y no membresia de una partida.',
+  tags: ['admin'],
+  security: SEGURIDAD_ADMIN,
+  response: {
+    200: {
+      type: 'object',
+      properties: {
+        momento: { type: 'string' },
+        proceso: {
+          type: 'object',
+          properties: {
+            arribaSegundos: { type: 'number' },
+            memoriaMb: { type: 'object', properties: { rss: { type: 'number' }, heapUsado: { type: 'number' }, heapTotal: { type: 'number' } } },
+            partidasAbiertas: { type: 'number' },
+          },
+        },
+        comandos: {
+          type: 'object',
+          properties: { aceptados: { type: 'number' }, autorizacion: { type: 'number' }, esquema: { type: 'number' }, dominio: { type: 'number' }, persistencia: { type: 'number' } },
+        },
+        auditoriaFallida: { type: 'number' },
+        partidas: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              gameId: { type: 'string' },
+              tick: { type: 'number' },
+              version: { type: 'number' },
+              colaPendiente: { type: 'number' },
+              ticksEjecutados: { type: 'number' },
+              tickMsUltimo: { type: 'number' },
+              tickMsMedio: { type: 'number' },
+              tickMsMaximo: { type: 'number' },
+              ultimaRafagaTicks: { type: 'number' },
+              mayorRafagaTicks: { type: 'number' },
+              relojDeMundoActivo: { type: 'boolean' },
+              conexiones: { type: 'number' },
+            },
+          },
+        },
+      },
+      required: ['momento', 'proceso', 'comandos', 'auditoriaFallida', 'partidas'],
+    },
+  },
+} as const;
+
+const ESQUEMA_AUDITORIA = {
+  description:
+    'Registro de auditoria de comandos de esta partida (Fase E2): quien pidio que, cuando, y con que ' +
+    'resultado — incluidos los RECHAZADOS, que es donde se ve el abuso y de lo que `eventosDominio` no ' +
+    'sabe nada. Solo administracion: es un registro de actividad de personas, no estado de juego.',
+  tags: ['admin'],
+  security: SEGURIDAD_ADMIN,
+  params: PARAMS_GAME_ID,
+  querystring: {
+    type: 'object',
+    properties: {
+      desde: { type: 'string', description: 'ISO 8601 de reloj de PARED; descarta lo anterior.' },
+      actor: { type: 'string', description: 'Solo las lineas de este actor.' },
+      // `'true'`/`'false'` como TEXTO, no `type: 'boolean'`: este servidor corre con `coerceTypes: false`
+      // (Fase C9, ver `api.ts`), asi que un query param —que siempre llega como texto— nunca se convierte
+      // solo. Declararlo booleano hacia que `?soloRechazos=true` fallara la validacion con un 400.
+      soloRechazos: { type: 'string', enum: ['true', 'false'], description: 'Solo lo rechazado — la vista de moderacion.' },
+    },
+    additionalProperties: false,
+  },
+  response: {
+    200: {
+      type: 'object',
+      properties: {
+        entradas: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              formatoVersion: { type: 'number' },
+              momento: { type: 'string' },
+              instante: { type: 'number' },
+              gameId: { type: 'string' },
+              actor: { type: 'string' },
+              comando: { type: 'string' },
+              resultado: { type: 'string' },
+              causa: { type: 'string' },
+              detalle: { type: 'string' },
+              version: { type: 'number' },
+            },
+          },
+        },
+        corruptas: {
+          type: 'number',
+          description:
+            'Lineas ilegibles descartadas al leer (un corte de luz a mitad de escritura). Viaja siempre, y no ' +
+            'solo cuando es > 0: quien lee tiene que poder distinguir un registro completo de uno con agujeros.',
+        },
+      },
+      required: ['entradas', 'corruptas'],
+    },
+  },
+} as const;
 
 const ESQUEMA_LISTAR_MEMBRESIAS = {
   description:
@@ -360,7 +466,7 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
    */
   app.post<{ Params: ParametrosGameId; Body: EjecutarComandoBody }>(
     '/admin/partidas/:gameId/comandos',
-    { schema: ESQUEMA_COMANDOS_ADMIN },
+    { schema: ESQUEMA_COMANDOS_ADMIN, onError: auditarRechazoDeEsquema(deps) },
     async (request, reply) => {
       const acceso = exigirAdministracion(request, reply, deps);
       if (!acceso.ok) return acceso.respuesta;
@@ -370,7 +476,48 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
       // Un administrador sin personaje en la partida queda registrado como `admin:<usuarioId>`, para que su
       // huella en el log no se confunda con la de un jugador.
       const actorId = acceso.actorInstancia.membresia?.jugadorId ?? `admin:${acceso.actorInstancia.usuarioId}`;
-      return ejecutarComandoHttp(reply, acceso.runner, request.body, actor, actorId, deps.hub);
+      return ejecutarComandoHttp(reply, acceso.runner, request.body, actor, actorId, deps.hub, deps.auditoria);
+    }
+  );
+
+  /**
+   * Metricas de operacion (Fase E3).
+   *
+   * **Administrador GLOBAL, y no por partida**: describe el PROCESO —memoria, uptime, todas las partidas que
+   * tiene abiertas— asi que concederlo por membresia de una partida filtraria la actividad de las demas. Es
+   * la misma linea que ya separa crear una partida de administrarla.
+   *
+   * Sin autenticar seria mas comodo para un scraper de metricas, y es justo por eso que no se hace: expone
+   * cuantas partidas corren, cuanta gente hay conectada y cuando el servidor va justo.
+   */
+  app.get('/admin/metricas', { schema: ESQUEMA_METRICAS }, async (request, reply) => {
+    const resuelto = resolverActor(request, deps);
+    if (!resuelto) return sinSesion(reply);
+    if (!deps.administradores.esAdministradorGlobal(resuelto.usuario.id)) {
+      return sinPermiso(reply, 'se requiere administrador global');
+    }
+    return reply.send(recogerMetricas({ partidas: deps.partidas, auditoria: deps.auditoria, hub: deps.hub, ahora: deps.ahora }));
+  });
+
+  /**
+   * Auditoria de comandos (Fase E2). Exige administracion, igual que el estado completo: son datos de
+   * ACTIVIDAD DE PERSONAS (quien intento que y cuando), mas sensibles que el propio estado de juego, y no hay
+   * ninguna lectura equivalente en `/jugador/*` a proposito — un jugador no audita a los demas.
+   *
+   * Lee del archivo, no de memoria: el registro sobrevive al reinicio del proceso, que es la mitad de su
+   * razon de ser.
+   */
+  app.get<{ Params: ParametrosGameId; Querystring: { desde?: string; actor?: string; soloRechazos?: 'true' | 'false' } }>(
+    '/admin/partidas/:gameId/auditoria',
+    { schema: ESQUEMA_AUDITORIA },
+    async (request, reply) => {
+      const acceso = exigirAdministracion(request, reply, deps);
+      if (!acceso.ok) return acceso.respuesta;
+
+      const { desde, actor, soloRechazos } = request.query;
+      // `leer` drena antes: `registrar` escribe sin esperar, asi que sin eso el comando que acaba de
+      // ejecutarse podria no estar todavia en el archivo — justo el que se va a consultar.
+      return reply.send(await deps.auditoria.leer(request.params.gameId, { desde, actor, soloRechazos: soloRechazos === 'true' }));
     }
   );
 

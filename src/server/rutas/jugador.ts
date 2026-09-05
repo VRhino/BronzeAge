@@ -13,7 +13,7 @@ import { puedeJugar } from '../../acceso/rolesDePartida';
 import type { ActorDeComando } from '../../session/comandos/autorizacion';
 import { eventosDominioParaJugador, proyectarParaJugador } from '../../session/proyecciones/jugador';
 import { ESQUEMA_SESION_AUTH } from '../openapi';
-import { ejecutarComandoHttp, ESQUEMA_EJECUTAR_COMANDO, type EjecutarComandoBody } from './comandos';
+import { auditarRechazoDeEsquema, ejecutarComandoHttp, ESQUEMA_EJECUTAR_COMANDO, type EjecutarComandoBody } from './comandos';
 import { enviarMapa, ESQUEMA_MAPA } from './mapa';
 import { ERROR_RESPUESTA, PARAMS_GAME_ID, QUERY_DESDE } from './esquemas';
 import {
@@ -166,7 +166,7 @@ export function registrarRutasDeJugador(app: FastifyInstance, deps: Dependencias
 
   app.post<{ Params: ParametrosGameId; Body: EjecutarComandoBody }>(
     '/jugador/partidas/:gameId/comandos',
-    { schema: ESQUEMA_COMANDOS_JUGADOR },
+    { schema: ESQUEMA_COMANDOS_JUGADOR, onError: auditarRechazoDeEsquema(deps) },
     async (request, reply) => {
       const { gameId } = request.params;
       const resuelto = resolverActor(request, deps, gameId);
@@ -178,7 +178,7 @@ export function registrarRutasDeJugador(app: FastifyInstance, deps: Dependencias
 
       const jugadorId = resuelto.actor.membresia!.jugadorId!;
       const actor: ActorDeComando = { rol: 'jugador', jugadorId };
-      return ejecutarComandoHttp(reply, runner, request.body, actor, jugadorId, deps.hub, (r) => ({
+      return ejecutarComandoHttp(reply, runner, request.body, actor, jugadorId, deps.hub, deps.auditoria, (r) => ({
         proyeccion: {
           ...proyectarParaJugador(r.getState(), jugadorId, r.geometriaAsentamientos()),
           preciosReferencia: r.preciosReferencia(),

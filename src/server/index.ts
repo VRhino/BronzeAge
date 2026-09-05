@@ -31,6 +31,16 @@ const ORIGENES_PERMITIDOS = (process.env.ORIGENES_PERMITIDOS ?? '')
   .map((o) => o.trim())
   .filter((o) => o !== '');
 const INTERVALO_TICK_MS = process.env.INTERVALO_TICK_MS ? Number(process.env.INTERVALO_TICK_MS) : undefined;
+// Mantenimiento (Fase E2): respaldos y poda automaticos. Opt-in, como los ticks y los administradores: sin
+// `MANTENIMIENTO_INTERVALO_MS` no se respalda ni se borra nada por su cuenta. Los otros dos solo tienen
+// efecto si ese esta puesto, asi que no hace falta un flag aparte para encenderlo.
+const MANTENIMIENTO = process.env.MANTENIMIENTO_INTERVALO_MS
+  ? {
+      intervaloMs: Number(process.env.MANTENIMIENTO_INTERVALO_MS),
+      respaldosAConservar: process.env.RESPALDOS_A_CONSERVAR ? Number(process.env.RESPALDOS_A_CONSERVAR) : undefined,
+      retencionAuditoriaDias: process.env.RETENCION_AUDITORIA_DIAS ? Number(process.env.RETENCION_AUDITORIA_DIAS) : undefined,
+    }
+  : undefined;
 
 async function arrancar(): Promise<void> {
   // El dominio de acceso (usuarios, sesiones, membresías) se respalda en disco, junto a las partidas: sin
@@ -42,6 +52,7 @@ async function arrancar(): Promise<void> {
     administradoresGlobales: ADMINISTRADORES,
     origenesPermitidos: ORIGENES_PERMITIDOS,
     intervaloTickMs: INTERVALO_TICK_MS,
+    mantenimiento: MANTENIMIENTO,
     identidad: {
       proveedores: crearRegistroProveedores(proveedoresPorDefecto()),
       repositorio: identidadEnDisco.repositorio,
@@ -65,6 +76,13 @@ async function arrancar(): Promise<void> {
     console.warn("       ej: ADMINISTRADORES='dev:jefa' npm run server");
   } else {
     console.log(`administradores: ${ADMINISTRADORES.map((a) => `${a.proveedor}:${a.sujetoId}`).join(', ')}`);
+  }
+  if (MANTENIMIENTO === undefined) {
+    console.warn('AVISO: sin MANTENIMIENTO_INTERVALO_MS — no se hacen respaldos automaticos ni se poda la auditoria.');
+    console.warn("       ej: MANTENIMIENTO_INTERVALO_MS=3600000 npm run server");
+  } else {
+    const { intervaloMs, respaldosAConservar, retencionAuditoriaDias } = MANTENIMIENTO;
+    console.log(`mantenimiento cada ${intervaloMs} ms — respaldos: ${respaldosAConservar ?? 7}, auditoria: ${retencionAuditoriaDias ?? 30} dias`);
   }
   if (ORIGENES_PERMITIDOS.length === 0) {
     console.warn('AVISO: sin ORIGENES_PERMITIDOS configurados — CORS desactivado, ningún origen cruzado puede llamar a esta API.');

@@ -51,6 +51,15 @@ export class RegistroDePartidas {
     return this.runners.get(gameId);
   }
 
+  /**
+   * Partidas abiertas EN ESTE PROCESO (Fase E3, métricas). Es lo CONTRARIO de `listar()`, y la diferencia
+   * importa: `listar()` lee el directorio y responde "qué partidas existen"; esto responde "de cuáles se está
+   * ocupando este proceso ahora mismo", que es lo que tiene cola, reloj y conexiones que medir.
+   */
+  abiertas(): RunnerDePartida[] {
+    return [...this.runners.values()];
+  }
+
   /** Descubrimiento (Fase C12) — lee el directorio, no `this.runners`: ver el comentario de `listarPartidas`. */
   listar(): Promise<ResumenPartidaEnDisco[]> {
     return listarPartidas(this.directorio);

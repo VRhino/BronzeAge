@@ -325,7 +325,20 @@ export async function listarPartidas(directorio: string): Promise<ResumenPartida
   const gameIds = nombres.filter((n) => n.endsWith('.json')).map((n) => n.slice(0, -'.json'.length));
   const resumenes = await Promise.all(
     gameIds.map(async (gameId): Promise<ResumenPartidaEnDisco | null> => {
-      const snapshot = await leerSnapshotSiExiste(rutaDe(directorio, gameId));
+      let snapshot: SnapshotPartida | null;
+      try {
+        snapshot = await leerSnapshotSiExiste(rutaDe(directorio, gameId));
+      } catch (err) {
+        // Un archivo ILEGIBLE (JSON truncado por un corte a mitad de escritura, o basura) no puede tumbar el
+        // listado ENTERO. Es la misma clase de fallo que el `identidad.json` de más abajo, que ya dejó el
+        // endpoint de descubrimiento inservible una vez: un solo archivo defectuoso en el directorio y
+        // `GET /admin/partidas` devolvía 500 para todas las demás partidas. Aquí se descarta esa y las demás
+        // se listan — pero se GRITA, porque a diferencia de la carrera de abajo esto sí es un problema real
+        // que alguien tiene que mirar, y una partida que desaparece del listado en silencio es peor que un
+        // error ruidoso.
+        console.error(`[partidas] snapshot ilegible '${gameId}.json', se excluye del listado:`, err);
+        return null;
+      }
       // `null` aquí sería una carrera con un borrado externo entre `readdir` y esta lectura — se descarta en
       // silencio, no es un fallo de quien pidió la lista.
       if (!snapshot) return null;

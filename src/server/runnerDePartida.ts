@@ -24,6 +24,29 @@ import { trazadoParaAsentamiento } from '../engine/trazado';
 import { PRECIO_BASE } from '../constants';
 import { cargarPartida, guardarPartida } from './persistenciaPartida';
 
+/**
+ * Instrumentación de UNA partida (Fase E3). Números crudos, sin interpretar: quien los lee decide si 400 ms
+ * de tick son mucho o poco. Deliberadamente plano y todo numérico salvo el `gameId` — es lo que hace que
+ * sirva igual para una respuesta JSON que para un exportador de métricas futuro.
+ */
+export interface MetricasDePartida {
+  gameId: string;
+  /** Paso de integración interno del motor. Aquí SÍ (a diferencia del contrato de juego, del que la Fase D lo
+   * retiró): una métrica de operación mide el motor, y el tick es su unidad real de trabajo. */
+  tick: number;
+  version: number;
+  /** Entradas encoladas y aún sin resolver, incluida la que corre. > 0 sostenido = la cola no drena. */
+  colaPendiente: number;
+  ticksEjecutados: number;
+  tickMsUltimo: number;
+  tickMsMedio: number;
+  tickMsMaximo: number;
+  /** Ticks que ejecutó la última ráfaga de catch-up, y el mayor visto. Ver el comentario de `instrumentos`. */
+  ultimaRafagaTicks: number;
+  mayorRafagaTicks: number;
+  relojDeMundoActivo: boolean;
+}
+
 export interface OpcionesRunner {
   /** Directorio donde vive el snapshot de esta partida (`persistenciaPartida.ts`). */
   directorio: string;
@@ -57,6 +80,18 @@ export class RunnerDePartida {
    * arranque tras una caída larga (y el daño de un salto de reloj disparatado, p. ej. una corrección NTP);
    * lo que exceda se recupera en las pasadas siguientes del temporizador. 10 080 = una semana de mundo. */
   private static readonly MAX_TICKS_RAFAGA = 10_080;
+
+  /**
+   * Instrumentación de la partida (Fase E3). Vive AQUÍ y no en un colector global porque estos tres números
+   * solo los conoce el runner: cuánta cola tiene pendiente, cuánto tarda su tick y cuántos ticks ejecutó la
+   * última ráfaga de catch-up.
+   *
+   * La ráfaga se mide a propósito: la re-medición de escala del 2026-09-05 (doc 6 §1) concluyó que un tick
+   * suelto ya no bloquea la cola de forma preocupante (~0,5 s a 100 asentamientos) pero **una ráfaga de
+   * catch-up sí** — ponerse al día de una semana caída son ~79 minutos con la cola parada. Sin esta métrica,
+   * eso solo se ve desde fuera como "el servidor no responde".
+   */
+  private readonly instrumentos = { pendientes: 0, ticks: 0, msTotal: 0, msUltimo: 0, msMax: 0, ultimaRafaga: 0, mayorRafaga: 0 };
 
   /**
    * Cadena de la cola serial. INVARIANTE: siempre es una promesa que RESUELVE (nunca rechaza) — cada
@@ -251,10 +286,19 @@ export class RunnerDePartida {
    * solo persist para los tres. Sin encolar — lo llaman `avanzarTick` (una entrada de cola) y la ráfaga de
    * catch-up (`sincronizarConReloj`, también una sola entrada para toda la ráfaga). */
   private unTickCompleto(sesion: GameSession): ResultadoComando<void> {
+    const t0 = performance.now();
     const resultado = sesion.avanzarTick();
     if (!resultado.ok) return resultado;
     sesion.avanzarAutoComercio();
     sesion.avanzarFaccionesNpc();
+    // Se cronometra el tick COMPLETO (puro + auto-comercio + turno NPC), que es la unidad que ocupa la cola,
+    // no el `avanzarSimulacion` puro que mide `scripts/medicion-escala.ts`. Los dos números no son
+    // comparables a ciegas, y es correcto: aquí interesa lo que bloquea a un jugador.
+    const ms = performance.now() - t0;
+    this.instrumentos.ticks++;
+    this.instrumentos.msTotal += ms;
+    this.instrumentos.msUltimo = ms;
+    if (ms > this.instrumentos.msMax) this.instrumentos.msMax = ms;
     return resultado;
   }
 
@@ -306,6 +350,8 @@ export class RunnerDePartida {
     const adeudados = Math.min(Math.floor((ahoraMs - reloj.referenciaMs) / reloj.intervaloMs), RunnerDePartida.MAX_TICKS_RAFAGA);
     if (adeudados <= 0) return Promise.resolve();
     reloj.referenciaMs += adeudados * reloj.intervaloMs;
+    this.instrumentos.ultimaRafaga = adeudados;
+    if (adeudados > this.instrumentos.mayorRafaga) this.instrumentos.mayorRafaga = adeudados;
     return this.encolar(async () => {
       for (let i = 0; i < adeudados && this.relojDeMundo; i++) {
         await this.aplicarYPersistir((sesion) => this.unTickCompleto(sesion));
@@ -324,8 +370,40 @@ export class RunnerDePartida {
     await this.cola;
   }
 
+  /**
+   * Instantánea de instrumentación de esta partida (Fase E3). Copia, no la referencia interna: quien lee
+   * métricas no debe poder tocarlas.
+   *
+   * `tickMsMedio` es la media desde que arrancó el proceso, no una ventana móvil: para "¿este servidor va
+   * sobrado o justo?" la media larga es la respuesta honesta, y `tickMsMaximo` recoge el pico que una media
+   * esconde.
+   */
+  metricas(): MetricasDePartida {
+    const i = this.instrumentos;
+    return {
+      gameId: this.gameId,
+      tick: this.sesion.getState().tick,
+      version: this.sesion.getState().version,
+      colaPendiente: i.pendientes,
+      ticksEjecutados: i.ticks,
+      tickMsUltimo: i.msUltimo,
+      tickMsMedio: i.ticks === 0 ? 0 : i.msTotal / i.ticks,
+      tickMsMaximo: i.msMax,
+      ultimaRafagaTicks: i.ultimaRafaga,
+      mayorRafagaTicks: i.mayorRafaga,
+      relojDeMundoActivo: this.relojDeMundo !== null,
+    };
+  }
+
   private encolar<T>(trabajo: () => Promise<T>): Promise<T> {
+    // `pendientes` cuenta lo ENCOLADO y aún sin resolver, incluida la entrada en curso. Es la señal que
+    // delata un tick largo bloqueando comandos: si crece y no baja, la cola no está drenando.
+    this.instrumentos.pendientes++;
     const resultado = this.cola.then(trabajo);
+    void resultado.then(
+      () => this.instrumentos.pendientes--,
+      () => this.instrumentos.pendientes--
+    );
     this.cola = resultado.then(
       () => undefined,
       () => undefined

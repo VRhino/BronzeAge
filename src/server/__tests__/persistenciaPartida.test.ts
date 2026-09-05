@@ -5,7 +5,7 @@
 import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GameSession } from '../../session/gameSession';
 import { instanteDeTick } from '../../session/estado';
 import { crearFaccion } from '../../session/comandos/crearFaccion';
@@ -342,5 +342,23 @@ describe('listarPartidas (Fase C12: descubrimiento)', () => {
     const partidas = await listarPartidas(directorio);
 
     expect(partidas.map((p) => p.gameId)).toEqual([a.gameId]);
+  });
+
+  it('un snapshot ILEGIBLE se excluye del listado en vez de tumbarlo entero (Fase E2)', async () => {
+    // Misma familia que el caso de `identidad.json` de arriba, encontrada al escribir la pasada de
+    // mantenimiento: un `.json` que no parsea (truncado por un corte a mitad de escritura, o basura) hacia
+    // que `JSON.parse` lanzara y `GET /admin/partidas` devolviera 500 para TODAS las partidas, no solo para
+    // la rota. Ahora se excluye la rota y las demas se listan — con un grito por consola, porque a
+    // diferencia de `identidad.json` esto si es un problema que alguien tiene que mirar.
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const a = partidaEnMarcha(1);
+    await guardarPartida(directorio, a, MOMENTO);
+    await writeFile(join(directorio, 'rota.json'), '{"formatoVersion":7,"parti', 'utf-8');
+
+    const partidas = await listarPartidas(directorio);
+
+    expect(partidas.map((p) => p.gameId)).toEqual([a.gameId]);
+    expect(error).toHaveBeenCalled();
+    error.mockRestore();
   });
 });

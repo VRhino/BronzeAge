@@ -14,6 +14,7 @@ import type { DirectorioDeAdministradores } from '../identidad/administradoresGl
 import type { RegistroDePartidas } from '../registroDePartidas';
 import type { RunnerDePartida } from '../runnerDePartida';
 import type { HubDeDifusion } from '../difusion/hub';
+import type { RegistroDeAuditoria } from '../auditoria';
 import { idDeMapa, instanteDeTick } from '../../session/estado';
 import type { Instante } from '../../domain/tiempo';
 
@@ -25,6 +26,9 @@ export interface DependenciasDeRutas {
   ahora: () => string;
   /** Conexiones WebSocket activas (Fase C5) — a quién difundir tras un comando o un tick. */
   hub: HubDeDifusion;
+  /** Registro de auditoría de comandos (Fase E2). Se escribe desde `ejecutarComandoHttp`, que es el único
+   * punto por el que pasan TODOS los comandos de las dos superficies, aceptados y rechazados. */
+  auditoria: RegistroDeAuditoria;
 }
 
 export interface ParametrosGameId {
