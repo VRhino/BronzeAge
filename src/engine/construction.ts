@@ -626,6 +626,23 @@ function evaluarNecesidades(
     return id;
   };
   const ocupados = () => [...edificiosBase, ...candidatos.map((c) => c.edificio)];
+  /**
+   * ¿Alcanza el almacén para pagar un `tipo`, respetando la reserva? **Se pregunta ANTES de buscarle sitio**
+   * (decisión del usuario, 2026-09-06): buscar dónde poner algo que no se puede construir es trabajo que el
+   * commit de abajo iba a tirar igualmente, y la búsqueda de colocación es lo más caro del tick. Medido antes
+   * de añadir esto: el **68 % de las búsquedas en fase de crecimiento y el 92 % en madurez** eran para un
+   * edificio impagable.
+   *
+   * **Es conservador, no una heurística**: mira `asentamiento.almacen`, el stock ENTERO del tick. El commit
+   * paga en orden de score y el almacén solo baja, así que lo que no alcanza con todo no va a alcanzar
+   * después — esto descarta exactamente lo que `puedeIniciarConstruccion` iba a rechazar en el commit, ni un
+   * candidato más.
+   *
+   * Lo que NO filtra, a propósito: el CUPO (`maximoEnCola`) y los topes por tipo. Esos sí dependen del orden
+   * y de qué se comprometa antes, así que solo el commit puede decidirlos.
+   */
+  const puedePagar = (tipo: EdificioTipo): boolean =>
+    puedeIniciarConstruccion(asentamiento.almacen, EDIFICIO_CATALOGO[tipo].costo as Partial<Record<string, number>>, tipo, reserva);
   const proponer = (edificio: Edificio | null, score: number): void => {
     if (edificio) candidatos.push({ edificio, score });
   };
@@ -697,7 +714,8 @@ function evaluarNecesidades(
   if (
     (granjasActivasEdificios.length === 0 || enDeficitProyectado) &&
     !hayMejoraGranjaDisponible &&
-    granjasPendientes < limiteGranjasPendientes
+    granjasPendientes < limiteGranjasPendientes &&
+    puedePagar('granja')
   ) {
     const sitio = sitioEnBarrio(asentamiento, ocupados(), 'granja');
     if (sitio) {
@@ -711,7 +729,7 @@ function evaluarNecesidades(
   // si no hay ninguna, alta si la reserva proyectada de madera ya está comprometida, baja si solo falta
   // para llegar al tope.
   const leneras = edificiosPorTipoYEstado(asentamiento, 'lenera');
-  if (leneras.length < EXTRACCION_MAXIMOS.porTipo && !proyectoEnCurso('lenera')) {
+  if (leneras.length < EXTRACCION_MAXIMOS.porTipo && !proyectoEnCurso('lenera') && puedePagar('lenera')) {
     // Elegibilidad y `fuenteId` siguen saliendo del bosque que toca la zona en el mapa general (`sitioEnBosque`);
     // la Leñera se COLOCA dentro del espacio plano del asentamiento (posición local), no sobre el bosque.
     const fuente = sitioEnBosque(asentamiento, zonaPoligono, mapa, reclamos.lenerasPorBosque);
@@ -740,7 +758,11 @@ function evaluarNecesidades(
   // `extractoresTicksSinCupo` (ver `EXTRACTOR_DESEMPATE`).
   const extractorCandidatoIds: Partial<Record<EdificioTipo, string>> = {};
   for (const { tipo, recurso } of extractores) {
-    if (necesitaNuevoExtractor(asentamiento, tipo, mapa) && !proyectoEnCurso(tipo)) {
+    // `puedePagar` también aquí, y con una consecuencia que conviene decir: un extractor impagable ya no se
+    // propone, así que su `extractoresTicksSinCupo` deja de subir. Es lo correcto según lo que ese contador
+    // significa —ticks SIN CUPO, o sea perdiendo el desempate frente a otros extractores— y un extractor que
+    // no se construye porque la ciudad está sin recursos no está siendo desplazado por nadie.
+    if (necesitaNuevoExtractor(asentamiento, tipo, mapa) && !proyectoEnCurso(tipo) && puedePagar(tipo)) {
       const sitio = sitioCercaDeNodo(asentamiento, zonaPoligono, mapa, recurso, reclamos.nodos);
       if (sitio) {
         // Minas/Cantera se plantan SOBRE su nodo del mapa general (posición del nodo, `ambito:'mapa'`); el
@@ -772,7 +794,8 @@ function evaluarNecesidades(
   if (
     (capacidadPesantsVivienda === 0 || ocupacionMaxima >= NECESIDADES.umbralViviendaOcupada) &&
     !hayProyectoPendiente(asentamiento, 'vivienda') &&
-    !alcanzoTopeDeViviendas(asentamiento)
+    !alcanzoTopeDeViviendas(asentamiento) &&
+    puedePagar('vivienda')
   ) {
     edificiosBase = asegurarAnclaPara(asentamiento, edificiosBase, 'vivienda', nextId);
     const sitio = sitioEnBarrio(asentamiento, ocupados(), 'vivienda');
@@ -794,7 +817,8 @@ function evaluarNecesidades(
   if (
     ocupacionTrigo >= NECESIDADES.umbralAlmacenAmpliacion &&
     edificiosPorTipoYEstado(asentamiento, 'granero').length === 0 &&
-    !hayProyectoPendiente(asentamiento, 'granero')
+    !hayProyectoPendiente(asentamiento, 'granero') &&
+    puedePagar('granero')
   ) {
     const sitio = sitioEnBarrio(asentamiento, ocupados(), 'granero');
     if (sitio) {
@@ -813,7 +837,8 @@ function evaluarNecesidades(
   if (
     ocupacionAlmacenMaxima >= NECESIDADES.umbralAlmacenAmpliacion &&
     !hayProyectoPendiente(asentamiento, 'almacen') &&
-    !alcanzoTopeDeAlmacenes(asentamiento)
+    !alcanzoTopeDeAlmacenes(asentamiento) &&
+    puedePagar('almacen')
   ) {
     const sitio = sitioEnBarrio(asentamiento, ocupados(), 'almacen');
     if (sitio) {
@@ -841,6 +866,7 @@ function evaluarNecesidades(
     for (const tipo of ['curtiduria', 'armeria', 'fundicion'] as const) {
       if (alcanzoTopeDeTransformacion(asentamiento, tipo)) continue;
       if (!tieneInsumoDeArranque(asentamiento, tipo)) continue;
+      if (!puedePagar(tipo)) continue;
       edificiosBase = asegurarAnclaPara(asentamiento, edificiosBase, tipo, nextId);
       const sitio = lineasProduccionPriorizadas(asentamiento)
         ? sitioEnBarrioLineaProduccion(asentamiento, ocupados(), tipo)
@@ -859,7 +885,8 @@ function evaluarNecesidades(
   if (
     nivelActualDe(asentamiento) >= requisitoCarpinteria &&
     !alcanzoTopeDeTransformacion(asentamiento, 'carpinteria') &&
-    !hayProyectoPendiente(asentamiento, 'carpinteria')
+    !hayProyectoPendiente(asentamiento, 'carpinteria') &&
+    puedePagar('carpinteria')
   ) {
     edificiosBase = asegurarAnclaPara(asentamiento, edificiosBase, 'carpinteria', nextId);
     const sitio = sitioEnBarrio(asentamiento, ocupados(), 'carpinteria');
