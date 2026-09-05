@@ -58,8 +58,6 @@ describe('guardarPartida / cargarPartida', () => {
 
     expect(cargada).not.toBeNull();
     expect(cargada!.sesion.getState()).toEqual(sesion.getState());
-    // D5: `cargarPartida` también devuelve el `guardadoEn` del snapshot — la referencia del catch-up.
-    expect(cargada!.guardadoEn).toBe(MOMENTO);
   });
 
   it('la partida cargada continúa la misma secuencia de RNG, no la reinicia (a través del disco)', async () => {

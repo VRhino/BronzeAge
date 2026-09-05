@@ -53,7 +53,9 @@ describe('RegistroDePartidas — fuente de ticks (Fase C12)', () => {
     expect(runner.getState().tick).toBeGreaterThan(0);
   });
 
-  it('reabrir una partida guardada hace un rato ejecuta el catch-up de los ticks vencidos (D5)', async () => {
+  it('reabrir una partida guardada hace un rato la reanuda donde estaba, sin catch-up', async () => {
+    // De extremo a extremo, la decisión del 2026-09-05: el mundo no avanza mientras el servidor está caído.
+    // Este test probaba justo lo contrario hasta esa fecha (era la verificación de D5).
     let ahoraMs = Date.parse('2026-03-01T00:00:00.000Z');
     const reloj = () => new Date(ahoraMs).toISOString();
 
@@ -69,6 +71,7 @@ describe('RegistroDePartidas — fuente de ticks (Fase C12)', () => {
     await runner.esperarColaVacia();
     await segundo.cerrar();
 
-    expect(runner.getState().tick).toBe(4);
+    // Los 4 minutos de proceso caído no cuentan: la partida sigue en el tick en que se guardó.
+    expect(runner.getState().tick).toBe(0);
   });
 });

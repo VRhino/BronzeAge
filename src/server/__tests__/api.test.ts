@@ -1075,6 +1075,12 @@ describe('metricas de operacion (E3)', () => {
     expect(m.partidas[0].gameId).toBe('g1');
     expect(m.partidas[0].ticksEjecutados).toBe(1);
     expect(m.partidas[0].colaPendiente).toBe(0);
+    // Campo a campo y no `toMatchObject`: Fastify filtra la respuesta por el esquema, asi que un campo que
+    // exista en el tipo pero falte en `ESQUEMA_METRICAS` se descarta EN CALIENTE y ningun test que llame a
+    // `recogerMetricas` directo lo detectaria. Paso justo con `ticksOmitidos`, encontrado verificando en vivo.
+    for (const campo of ['tick', 'version', 'tickMsUltimo', 'tickMsMedio', 'tickMsMaximo', 'ultimaRafagaTicks', 'mayorRafagaTicks', 'ticksOmitidos', 'conexiones', 'relojDeMundoActivo']) {
+      expect(m.partidas[0]).toHaveProperty(campo);
+    }
   });
 
   it('exige administrador GLOBAL, no basta con administrar una partida', async () => {

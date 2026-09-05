@@ -41,9 +41,16 @@ export interface MetricasDePartida {
   tickMsUltimo: number;
   tickMsMedio: number;
   tickMsMaximo: number;
-  /** Ticks que ejecutó la última ráfaga de catch-up, y el mayor visto. Ver el comentario de `instrumentos`. */
+  /** Ticks que ejecutó la última pasada del reloj, y el mayor visto. Con el mundo congelado durante las
+   * caídas (2026-09-05) esto ya no mide un catch-up tras reinicio: mide la recuperación de la deriva del
+   * temporizador, y en un servidor sano vale 1. */
   ultimaRafagaTicks: number;
   mayorRafagaTicks: number;
+  /** Tiempo de mundo DESCARTADO desde que arrancó el proceso, en ticks: los atrasos que se dieron por
+   * "el servidor no estaba sirviendo" en vez de ejecutarlos. Es la consecuencia observable de que el mundo no
+   * avance durante las caídas — un valor alto tras un incidente es lo esperado; uno que crece con el servidor
+   * sano significa que `MAX_TICKS_POR_PASADA` se quedó corto. */
+  ticksOmitidos: number;
   relojDeMundoActivo: boolean;
 }
 
@@ -62,24 +69,37 @@ export class RunnerDePartida {
 
   /**
    * Reloj de mundo (Fase D / D5, doc 10 §2–3), `null` si no está en marcha. `referenciaMs` es el instante de
-   * PARED del último tick que este reloj dio por bueno — inicializado al `guardadoEn` del snapshot cargado
-   * (para el catch-up tras reinicio) o a "ahora" para una partida nueva; avanza en pasos de `intervaloMs` a
-   * medida que se ejecutan ticks, nunca por acumulación de `setInterval` (así el jitter del temporizador no
-   * deriva). El reloj de pared solo dice CUÁNTOS ticks faltan; el `instante` de cada uno lo deriva el motor
-   * del tick (doc 10 §2), así que la ráfaga de catch-up es determinista.
+   * PARED del último tick que este reloj dio por bueno; avanza en pasos de `intervaloMs` a medida que se
+   * ejecutan ticks, nunca por acumulación de `setInterval` (así el jitter del temporizador no deriva). El
+   * reloj de pared solo dice CUÁNTOS ticks faltan; el `instante` de cada uno lo deriva el motor del tick
+   * (doc 10 §2), así que lo que se ejecuta es determinista.
+   *
+   * **El mundo NO avanza mientras el servidor está caído** (decisión del usuario, 2026-09-05): la referencia
+   * se ancla a "ahora" al construir el runner, no al `guardadoEn` del snapshot. Reabrir una partida no
+   * ejecuta ni un tick atrasado. Ver `sincronizarConReloj` para lo que eso implica y para el único caso que
+   * sí se recupera.
    */
   private relojDeMundo: { intervaloMs: number; timer: ReturnType<typeof setInterval>; referenciaMs: number } | null = null;
 
-  /** Instante de PARED (ms) del último guardado conocido al construir el runner — `guardadoEn` del snapshot
-   * cargado, o "ahora" para una partida nueva. Junto a `tickAlConstruir` fija el punto de anclaje del reloj
-   * de mundo: "en `referenciaRelojInicialMs` el mundo estaba en `tickAlConstruir`". */
-  private readonly referenciaRelojInicialMs: number;
-  private readonly tickAlConstruir: number;
-
-  /** Tope de ticks que una sola pasada de `sincronizarConReloj` ejecuta en ráfaga. Acota la latencia de
-   * arranque tras una caída larga (y el daño de un salto de reloj disparatado, p. ej. una corrección NTP);
-   * lo que exceda se recupera en las pasadas siguientes del temporizador. 10 080 = una semana de mundo. */
-  private static readonly MAX_TICKS_RAFAGA = 10_080;
+  /**
+   * Cuántos ticks atrasados acepta ejecutar de golpe una pasada de `sincronizarConReloj`. Por encima de eso,
+   * el tiempo pendiente **se descarta** en vez de ejecutarse (ver `sincronizarConReloj`).
+   *
+   * **No es un tope de rendimiento, es dónde se traza la frontera** entre las dos cosas que producen un
+   * atraso, que se parecen mucho vistas desde aquí:
+   *
+   *  - **Deriva del temporizador**, que SÍ hay que recuperar: `setInterval` no dispara exacto, y unas décimas
+   *    por disparo se acumulan hasta valer un tick entero cada ~10 minutos. Si no se recuperaran, el mundo
+   *    correría más lento que el tiempo real y "1 tick = 1 minuto" dejaría de ser cierto. Esto produce 2
+   *    ticks de atraso como mucho.
+   *  - **El proceso no estuvo sirviendo** (host suspendido, event loop bloqueado un minuto largo, salto de
+   *    reloj por una corrección NTP), que NO hay que recuperar por la misma razón por la que no se recupera
+   *    un reinicio. Esto produce decenas o cientos.
+   *
+   * 5 separa las dos con holgura por los dos lados. Es el único número elegido a ojo de todo esto; súbelo si
+   * alguna vez se ven `ticksOmitidos` con el servidor sano.
+   */
+  private static readonly MAX_TICKS_POR_PASADA = 5;
 
   /**
    * Instrumentación de la partida (Fase E3). Vive AQUÍ y no en un colector global porque estos tres números
@@ -91,7 +111,7 @@ export class RunnerDePartida {
    * catch-up sí** — ponerse al día de una semana caída son ~79 minutos con la cola parada. Sin esta métrica,
    * eso solo se ve desde fuera como "el servidor no responde".
    */
-  private readonly instrumentos = { pendientes: 0, ticks: 0, msTotal: 0, msUltimo: 0, msMax: 0, ultimaRafaga: 0, mayorRafaga: 0 };
+  private readonly instrumentos = { pendientes: 0, ticks: 0, msTotal: 0, msUltimo: 0, msMax: 0, ultimaRafaga: 0, mayorRafaga: 0, omitidos: 0 };
 
   /**
    * Cadena de la cola serial. INVARIANTE: siempre es una promesa que RESUELVE (nunca rechaza) — cada
@@ -146,12 +166,10 @@ export class RunnerDePartida {
    */
   private cacheGeometria: { sobre: readonly Asentamiento[]; valor: GeometriaAsentamientos } | null = null;
 
-  private constructor(sesion: GameSession, opciones: OpcionesRunner, guardadoEn?: string) {
+  private constructor(sesion: GameSession, opciones: OpcionesRunner) {
     this.sesion = sesion;
     this.directorio = opciones.directorio;
     this.ahora = opciones.ahora ?? (() => new Date().toISOString());
-    this.referenciaRelojInicialMs = guardadoEn !== undefined ? Date.parse(guardadoEn) : new Date(this.ahora()).getTime();
-    this.tickAlConstruir = sesion.getState().tick;
   }
 
   static crear(gameId: string, config: { seed: number; region?: RegionId }, opciones: OpcionesRunner): RunnerDePartida {
@@ -182,7 +200,7 @@ export class RunnerDePartida {
   static async cargarOCrear(gameId: string, config: { seed: number; region?: RegionId }, opciones: OpcionesRunner): Promise<RunnerDePartida> {
     const existente = await cargarPartida(opciones.directorio, gameId);
     return existente
-      ? new RunnerDePartida(existente.sesion, opciones, existente.guardadoEn)
+      ? new RunnerDePartida(existente.sesion, opciones)
       : RunnerDePartida.crearYPersistir(gameId, config, opciones);
   }
 
@@ -283,8 +301,8 @@ export class RunnerDePartida {
   }
 
   /** Un tick "completo" tal y como lo entiende este runner: tick puro + auto-comercio + turno del NPC, un
-   * solo persist para los tres. Sin encolar — lo llaman `avanzarTick` (una entrada de cola) y la ráfaga de
-   * catch-up (`sincronizarConReloj`, también una sola entrada para toda la ráfaga). */
+   * solo persist para los tres. Sin encolar — lo llaman `avanzarTick` (una entrada de cola) y el reloj de
+   * mundo (`sincronizarConReloj`, también una sola entrada por pasada). */
   private unTickCompleto(sesion: GameSession): ResultadoComando<void> {
     const t0 = performance.now();
     const resultado = sesion.avanzarTick();
@@ -307,10 +325,15 @@ export class RunnerDePartida {
    * ejecutando un tick por cada `intervaloMs` de reloj de pared transcurrido. Con "mundo = tiempo real"
    * (doc 10 §2), `intervaloMs` = `SIMULACION.duracionTickMs` = 60 000: un tick por minuto real.
    *
-   * `referenciaMs` = "instante de pared en que el mundo llegó al tick ACTUAL". Se parte del anclaje del
-   * constructor (`referenciaRelojInicialMs` en `tickAlConstruir`) más un intervalo por cada tick avanzado
-   * desde entonces a mano (`POST .../tick`), para que arrancar el reloj después de unos ticks manuales no
-   * los cuente dos veces ni pare/reanude re-ejecute la ráfaga.
+   * **El mundo avanza solo mientras este reloj está en marcha** (decisión del usuario, 2026-09-05: "el mundo
+   * no avanza mientras el servidor está caído"). De ahí que `referenciaMs` se ancle a **"ahora"** al
+   * arrancar: da igual cuándo se guardó el snapshot, cuánto llevara el proceso levantado o cuántos ticks se
+   * dieran a mano — al arrancar el reloj no se debe ni un tick. Reabrir una partida de hace un mes la
+   * reanuda en el tick en el que se quedó.
+   *
+   * Es también la versión más simple de lo que había: la anterior anclaba al momento de CONSTRUIR el runner
+   * y luego descontaba un intervalo por cada tick manual dado desde entonces, para que el catch-up saliera
+   * bien. Sin catch-up entre reinicios, esa contabilidad no tiene nada que corregir.
    *
    * En el primer disparo —y tras cualquier hueco: proceso caído y reabierto, host dormido, GC largo—
    * ejecuta EN RÁFAGA los ticks adeudados (catch-up, doc 10 §2), por la misma cola serial que los comandos.
@@ -319,11 +342,8 @@ export class RunnerDePartida {
    */
   iniciarRelojDeMundo(intervaloMs: number): void {
     if (this.relojDeMundo) return; // ya en marcha: no duplicar el intervalo
-    const ticksAvanzadosAMano = this.sesion.getState().tick - this.tickAlConstruir;
-    const referenciaMs = this.referenciaRelojInicialMs + ticksAvanzadosAMano * intervaloMs;
     const timer = setInterval(() => void this.sincronizarConReloj(), intervaloMs);
-    this.relojDeMundo = { intervaloMs, timer, referenciaMs };
-    void this.sincronizarConReloj(); // catch-up inmediato, sin esperar al primer intervalo
+    this.relojDeMundo = { intervaloMs, timer, referenciaMs: new Date(this.ahora()).getTime() };
   }
 
   detenerRelojDeMundo(): void {
@@ -347,8 +367,20 @@ export class RunnerDePartida {
     const reloj = this.relojDeMundo;
     if (!reloj) return Promise.resolve();
     const ahoraMs = new Date(this.ahora()).getTime();
-    const adeudados = Math.min(Math.floor((ahoraMs - reloj.referenciaMs) / reloj.intervaloMs), RunnerDePartida.MAX_TICKS_RAFAGA);
+    const adeudados = Math.floor((ahoraMs - reloj.referenciaMs) / reloj.intervaloMs);
     if (adeudados <= 0) return Promise.resolve();
+
+    // Atraso grande = el proceso no estuvo sirviendo. Se DESCARTA el tiempo pendiente y se vuelve a anclar a
+    // "ahora": el mundo se queda donde estaba, que es la decisión, y no hay ráfaga que ocupe la cola. Se
+    // cuenta en `omitidos` porque es la consecuencia observable de esa decisión y quien opera debe verla —
+    // si aparece con el servidor sano, el que está mal es el umbral.
+    if (adeudados > RunnerDePartida.MAX_TICKS_POR_PASADA) {
+      reloj.referenciaMs = ahoraMs;
+      this.instrumentos.omitidos += adeudados;
+      this.instrumentos.ultimaRafaga = 0;
+      return Promise.resolve();
+    }
+
     reloj.referenciaMs += adeudados * reloj.intervaloMs;
     this.instrumentos.ultimaRafaga = adeudados;
     if (adeudados > this.instrumentos.mayorRafaga) this.instrumentos.mayorRafaga = adeudados;
@@ -391,6 +423,7 @@ export class RunnerDePartida {
       tickMsMaximo: i.msMax,
       ultimaRafagaTicks: i.ultimaRafaga,
       mayorRafagaTicks: i.mayorRafaga,
+      ticksOmitidos: i.omitidos,
       relojDeMundoActivo: this.relojDeMundo !== null,
     };
   }

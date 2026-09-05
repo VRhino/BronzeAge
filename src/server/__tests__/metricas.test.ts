@@ -1,7 +1,8 @@
 // Métricas de operación (Fase E3). Lo que se vigila aquí no es que los números existan, sino que **midan lo
 // que dicen medir**: que la cola refleje trabajo realmente pendiente, que el cronómetro del tick cuente el
-// tick completo, y que las ráfagas de catch-up queden registradas — que es la métrica que la re-medición de
-// escala del 2026-09-05 señaló como la importante (doc 6 §1).
+// tick completo, y que el reloj de mundo distinga la deriva del temporizador —que se recupera— del tiempo en
+// que el proceso no estuvo sirviendo —que se descarta y se cuenta en `ticksOmitidos`, decisión del
+// 2026-09-05: el mundo no avanza mientras el servidor está caído.
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,6 +11,11 @@ import { RegistroDePartidas } from '../registroDePartidas';
 import { RegistroDeAuditoria } from '../auditoria';
 import { HubDeDifusion } from '../difusion/hub';
 import { recogerMetricas } from '../metricas';
+
+/** Espera de reloj REAL, para dejar que el `setInterval` del reloj de mundo dispare. */
+function esperar(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 let directorio: string;
 let registro: RegistroDePartidas;
@@ -23,7 +29,8 @@ afterEach(async () => {
   await rm(directorio, { recursive: true, force: true });
 });
 
-/** Reloj de pared controlable, como en el resto de tests del servidor: el catch-up se mide contra él. */
+/** Reloj de pared controlable, como en el resto de tests del servidor: es contra él contra lo que el reloj de
+ * mundo decide cuántos ticks se deben. */
 function relojDesde(inicio: string) {
   let ms = new Date(inicio).getTime();
   return { ahora: () => new Date(ms).toISOString(), avanzar: (delta: number) => (ms += delta) };
@@ -87,40 +94,41 @@ describe('recogerMetricas', () => {
     expect(recogerMetricas(fuentes()).partidas[0]!.colaPendiente).toBe(0);
   });
 
-  it('registra el tamano de la rafaga de catch-up — la metrica que motivo todo esto', async () => {
-    // Es el escenario del doc 6 §1: proceso caído, reabierto tras un hueco, y el mundo se pone al día en
-    // ráfaga por la cola serial. Sin esta métrica, esos minutos solo se ven como "el servidor no responde".
+  it('mide los ticks que recupera una pasada del reloj (deriva del temporizador)', async () => {
+    // Desde el 2026-09-05 esto ya no mide un catch-up tras reinicio —el mundo no avanza con el servidor
+    // caído— sino la recuperación de la deriva del `setInterval`, que en un servidor sano vale 1.
     const reloj = relojDesde('2026-09-05T10:00:00.000Z');
     registro = new RegistroDePartidas(directorio, undefined, reloj.ahora);
     const runner = await registro.abrir('g1', { seed: 42 });
 
-    reloj.avanzar(5 * 60_000); // cinco minutos de mundo adeudados
-    runner.iniciarRelojDeMundo(60_000);
+    runner.iniciarRelojDeMundo(50);
+    reloj.avanzar(3 * 50); // 3 intervalos de atraso: por debajo del umbral, se recuperan
+    await esperar(150);
+    runner.detenerRelojDeMundo();
     await runner.esperarColaVacia();
 
     const p = recogerMetricas(fuentes({ ahora: reloj.ahora })).partidas[0]!;
-    expect(p.ultimaRafagaTicks).toBe(5);
-    expect(p.mayorRafagaTicks).toBe(5);
-    expect(p.tick).toBe(5);
-    expect(p.relojDeMundoActivo).toBe(true);
-    runner.detenerRelojDeMundo();
+    expect(p.mayorRafagaTicks).toBeGreaterThan(0);
+    expect(p.tick).toBeGreaterThanOrEqual(3);
+    expect(p.ticksOmitidos).toBe(0);
   });
 
-  it('`mayorRafagaTicks` conserva el pico aunque la ultima rafaga sea menor', async () => {
+  it('`ticksOmitidos` cuenta el tiempo de mundo DESCARTADO por una congelacion', async () => {
+    // La consecuencia observable de la decisión: si el proceso estuvo vivo pero sin servir, ese tiempo no se
+    // ejecuta. Quien opera tiene que poder verlo, o el mundo se quedaría atrás en silencio.
     const reloj = relojDesde('2026-09-05T10:00:00.000Z');
     registro = new RegistroDePartidas(directorio, undefined, reloj.ahora);
     const runner = await registro.abrir('g1', { seed: 42 });
 
-    reloj.avanzar(4 * 60_000);
-    runner.iniciarRelojDeMundo(60_000);
-    await runner.esperarColaVacia();
-    reloj.avanzar(1 * 60_000);
+    runner.iniciarRelojDeMundo(50);
+    reloj.avanzar(60 * 60_000); // una hora de golpe: congelación, no deriva
+    await esperar(150);
+    runner.detenerRelojDeMundo();
     await runner.esperarColaVacia();
 
     const p = recogerMetricas(fuentes({ ahora: reloj.ahora })).partidas[0]!;
-    // Un pico que solo se ve en la media queda escondido; el propósito del máximo es justo no perderlo.
-    expect(p.mayorRafagaTicks).toBe(4);
-    runner.detenerRelojDeMundo();
+    expect(p.tick).toBe(0);
+    expect(p.ticksOmitidos).toBeGreaterThan(0);
   });
 
   it('cuenta los comandos por resultado, con las causas separadas', async () => {

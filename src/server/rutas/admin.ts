@@ -191,6 +191,7 @@ const ESQUEMA_METRICAS = {
               tickMsMaximo: { type: 'number' },
               ultimaRafagaTicks: { type: 'number' },
               mayorRafagaTicks: { type: 'number' },
+              ticksOmitidos: { type: 'number' },
               relojDeMundoActivo: { type: 'boolean' },
               conexiones: { type: 'number' },
             },

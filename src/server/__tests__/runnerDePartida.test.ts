@@ -166,8 +166,8 @@ function esperar(ms: number): Promise<void> {
 }
 
 /** Runner con un reloj de PARED controlable: `avanzar(ms)` mueve el reloj hacia adelante, que es lo que el
- * reloj de mundo consulta para saber cuántos ticks se adeudan. `crear` (no `cargarOCrear`) ⇒ la referencia
- * inicial del catch-up es "ahora" en el momento de construir. */
+ * reloj de mundo consulta para saber cuántos ticks se adeudan. La referencia se ancla al ARRANCAR el reloj
+ * (`iniciarRelojDeMundo`), así que hay que avanzar el reloj DESPUÉS de arrancarlo para que se adeude algo. */
 function runnerConReloj(gameId: string, seed = 7): { r: RunnerDePartida; avanzar: (ms: number) => void } {
   let relojMs = Date.parse(MOMENTO);
   const r = RunnerDePartida.crear(gameId, { seed }, { directorio, ahora: () => new Date(relojMs).toISOString() });
@@ -175,45 +175,57 @@ function runnerConReloj(gameId: string, seed = 7): { r: RunnerDePartida; avanzar
 }
 
 describe('RunnerDePartida — reloj de mundo (D5)', () => {
-  it('al arrancar ejecuta EN RÁFAGA los ticks que el reloj de pared dice que se adeudan (catch-up)', async () => {
+  it('arrancar el reloj NO ejecuta nada de lo que pasó antes — el mundo no avanza con el reloj parado', async () => {
+    // El corazón de la decisión del 2026-09-05. Antes esto ejecutaba 5 ticks en ráfaga (catch-up); ahora la
+    // referencia se ancla a "ahora" al arrancar, así que el tiempo con el reloj parado sencillamente no
+    // cuenta — que es lo mismo que pasa cuando el proceso está caído.
     const { r, avanzar } = runnerConReloj('g-catchup');
-    avanzar(5 * 60_000); // 5 minutos reales antes de arrancar el reloj
+    avanzar(5 * 60_000); // 5 minutos reales con el reloj PARADO
     r.iniciarRelojDeMundo(60_000);
-    await r.esperarColaVacia(); // la ráfaga es una sola entrada de cola: esto la cubre entera, sin timers
+    await r.esperarColaVacia();
     r.detenerRelojDeMundo();
 
-    expect(r.getState().tick).toBe(5);
+    expect(r.getState().tick).toBe(0);
   });
 
-  it('no adelanta la referencia a "ahora": un resto sub-intervalo no se pierde entre paradas', async () => {
+  it('parar y reanudar el reloj re-ancla: el tiempo con el reloj parado no cuenta, ni el resto', async () => {
+    // Antes de la decisión del 2026-09-05 este test probaba lo CONTRARIO: que un resto sub-intervalo
+    // sobrevivía a una parada, para que el catch-up no perdiera fracciones. Con el mundo congelado mientras
+    // el reloj no corre, ese resto se va con el resto del tiempo parado — y es coherente, no una regresión:
+    // parar el reloj es exactamente lo que pasa cuando el proceso se apaga.
+    //
+    // El coste real está acotado: se pierde menos de un intervalo por arranque, y el reloj se arranca una vez
+    // por apertura de partida.
+    // Intervalo corto para que el `setInterval` REAL dispare dentro del test; el reloj de PARED que decide
+    // cuántos ticks se deben sigue siendo el inyectado, así que el escenario es el mismo.
     const { r, avanzar } = runnerConReloj('g-resto');
-    avanzar(2 * 60_000 + 40_000); // 2 intervalos + 40 s de resto
-    r.iniciarRelojDeMundo(60_000);
+    r.iniciarRelojDeMundo(50);
+    avanzar(2 * 50 + 30); // 2 intervalos + un resto, con el reloj EN MARCHA
+    await esperar(150);
+    r.detenerRelojDeMundo();
+    await r.esperarColaVacia();
+    expect(r.getState().tick).toBe(2);
+
+    // Con el reloj parado el tiempo no cuenta, y al reanudar la referencia vuelve a ser "ahora": el resto
+    // que faltaba para el tercer tick tampoco se arrastra.
+    avanzar(30);
+    r.iniciarRelojDeMundo(50);
     await r.esperarColaVacia();
     r.detenerRelojDeMundo();
     expect(r.getState().tick).toBe(2);
-
-    // 25 s más ⇒ 40 + 25 = 65 s desde el tick 2: si la referencia hubiera saltado a "ahora" al parar, esos
-    // 40 s se habrían perdido y esto seguiría en 2. Como la referencia es "cuándo se llegó al tick actual",
-    // vuelve a arrancar contando desde el tick 2 y ejecuta el tick que ya toca.
-    avanzar(25_000);
-    r.iniciarRelojDeMundo(60_000);
-    await r.esperarColaVacia();
-    r.detenerRelojDeMundo();
-    expect(r.getState().tick).toBe(3);
   });
 
   it('sigue avanzando con el tiempo y deja de avanzar al detenerlo', async () => {
     const { r, avanzar } = runnerConReloj('g-continuo');
     r.iniciarRelojDeMundo(20);
-    avanzar(200); // 10 intervalos de reloj de pared
-    await esperar(120); // deja que el setInterval real dispare y drene la ráfaga
+    avanzar(60); // 3 intervalos: por debajo de `MAX_TICKS_POR_PASADA`, así que se recuperan
+    await esperar(120); // deja que el setInterval real dispare
     await r.esperarColaVacia();
     r.detenerRelojDeMundo();
     const tickTrasParar = r.getState().tick;
     expect(tickTrasParar).toBeGreaterThan(0);
 
-    avanzar(200); // más "tiempo real"... pero el reloj ya está detenido
+    avanzar(60); // más "tiempo real"... pero el reloj ya está detenido
     await esperar(120);
     await r.esperarColaVacia();
     expect(r.getState().tick).toBe(tickTrasParar);
@@ -223,32 +235,61 @@ describe('RunnerDePartida — reloj de mundo (D5)', () => {
     const { r, avanzar } = runnerConReloj('g-doble');
     r.iniciarRelojDeMundo(20);
     r.iniciarRelojDeMundo(20); // si creara un SEGUNDO intervalo, `detener` (que limpia uno) dejaría el otro vivo
-    avanzar(200);
+    avanzar(60);
     await esperar(120);
     await r.esperarColaVacia();
     r.detenerRelojDeMundo();
     const tickTrasParar = r.getState().tick;
     expect(tickTrasParar).toBeGreaterThan(0);
 
-    avanzar(200);
+    avanzar(60);
     await esperar(120);
     await r.esperarColaVacia();
     expect(r.getState().tick).toBe(tickTrasParar);
   });
 
-  it('catch-up tras un reinicio: reabrir una partida guardada hace 3 "horas" ejecuta los ticks vencidos', async () => {
-    // Guarda una partida con `guardadoEn` = MOMENTO, tick 0.
+  it('reabrir una partida guardada hace 3 "horas" la reanuda donde estaba: el mundo no avanzó', async () => {
+    // Lo contrario de lo que hacía D5, y a propósito (decisión del usuario, 2026-09-05). Una caída del
+    // servidor no consume tiempo de mundo: lo que estuviera en construcción sigue igual de lejos de acabarse
+    // que cuando se cayó, y nadie encuentra su partida saltada tres horas al volver.
     await RunnerDePartida.crearYPersistir('g-reinicio', { seed: 3 }, { directorio, ahora: () => MOMENTO });
 
-    // "Reinicio del proceso": se reabre 3 minutos reales después. La referencia del catch-up es el
-    // `guardadoEn` del snapshot, no el instante de reapertura ⇒ 3 ticks adeudados.
-    const tresMinutosDespues = new Date(Date.parse(MOMENTO) + 3 * 60_000).toISOString();
-    const reabierta = await RunnerDePartida.cargarOCrear('g-reinicio', { seed: 3 }, { directorio, ahora: () => tresMinutosDespues });
+    const tresHorasDespues = new Date(Date.parse(MOMENTO) + 3 * 60 * 60_000).toISOString();
+    const reabierta = await RunnerDePartida.cargarOCrear('g-reinicio', { seed: 3 }, { directorio, ahora: () => tresHorasDespues });
     reabierta.iniciarRelojDeMundo(60_000);
     await reabierta.esperarColaVacia();
     reabierta.detenerRelojDeMundo();
 
-    expect(reabierta.getState().tick).toBe(3);
+    expect(reabierta.getState().tick).toBe(0);
+  });
+
+  it('un atraso GRANDE con el reloj en marcha se descarta y se cuenta, en vez de ejecutarse', async () => {
+    // El caso "proceso vivo pero congelado" (host suspendido, salto de reloj por NTP): se parece a la deriva
+    // del temporizador vista desde aquí, y `MAX_TICKS_POR_PASADA` es donde se traza la frontera. Por encima
+    // se descarta el tiempo, igual que en una caída, y queda constancia en `ticksOmitidos`.
+    const { r, avanzar } = runnerConReloj('g-congelado');
+    r.iniciarRelojDeMundo(50);
+    avanzar(60 * 60_000); // una hora de mundo adeudada de golpe
+    await esperar(150); // deja que el setInterval real dispare
+    r.detenerRelojDeMundo();
+    await r.esperarColaVacia();
+
+    expect(r.getState().tick).toBe(0);
+    expect(r.metricas().ticksOmitidos).toBeGreaterThan(0);
+  });
+
+  it('un atraso PEQUEÑO sí se recupera: es la deriva del temporizador, no una caída', async () => {
+    // Sin esto el mundo correría más lento que el tiempo real: `setInterval` no dispara exacto y las décimas
+    // se acumulan hasta valer un tick entero.
+    const { r, avanzar } = runnerConReloj('g-deriva');
+    r.iniciarRelojDeMundo(50);
+    avanzar(3 * 50); // 3 intervalos de atraso, por debajo del umbral
+    await esperar(150);
+    r.detenerRelojDeMundo();
+    await r.esperarColaVacia();
+
+    expect(r.getState().tick).toBeGreaterThanOrEqual(3);
+    expect(r.metricas().ticksOmitidos).toBe(0);
   });
 });
 

@@ -135,16 +135,19 @@ export async function guardarPartida(directorio: string, sesion: GameSession, gu
   await rename(rutaTemporal, ruta);
 }
 
-/** Lo que devuelve `cargarPartida`: la sesión reconstruida más el reloj de PARED del último guardado
- * (`SnapshotPartida.guardadoEn`). El `guardadoEn` es lo que necesita el reloj de mundo de D5 para saber
- * cuántos ticks se adeudan tras un reinicio — "hace 3 h reales que se guardó el último tick" ⇒ 180 ticks. */
+/** Lo que devuelve `cargarPartida`. Un objeto de un solo campo y no la `GameSession` a secas porque D5 le
+ * añadió el `guardadoEn` del snapshot, que el reloj de mundo necesitaba para calcular el catch-up tras un
+ * reinicio; **ese campo se retiró el 2026-09-05**, cuando se decidió que el mundo no avanza mientras el
+ * servidor está caído y dejó de haber catch-up que calcular. El envoltorio se queda: es el punto natural
+ * donde volver a colgar metadatos del archivo si alguna vez hacen falta, y quitarlo tocaría treinta llamadas
+ * a cambio de nada. El `guardadoEn` sigue existiendo donde sí tiene consumidor: `SnapshotPartida` (metadato
+ * del archivo) y `ResumenPartidaEnDisco` (lo sirve `GET /admin/partidas`). */
 export interface PartidaCargada {
   sesion: GameSession;
-  guardadoEn: string;
 }
 
 /**
- * Reconstruye la `GameSession` guardada en `directorio/<gameId>.json`, con el `guardadoEn` del snapshot.
+ * Reconstruye la `GameSession` guardada en `directorio/<gameId>.json`.
  * `null` si no existe ningún snapshot para ese `gameId` — no es un error, es el caso "partida nueva".
  */
 export async function cargarPartida(directorio: string, gameId: string): Promise<PartidaCargada | null> {
@@ -155,7 +158,7 @@ export async function cargarPartida(directorio: string, gameId: string): Promise
   if (partida.worldgenVersion !== WORLDGEN_VERSION) {
     throw new WorldgenVersionNoCoincideError(gameId, partida.worldgenVersion);
   }
-  return { sesion: GameSession.importar(partida), guardadoEn: snapshot.guardadoEn };
+  return { sesion: GameSession.importar(partida) };
 }
 
 /**
