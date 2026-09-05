@@ -257,6 +257,48 @@ describe('Mapa — equivalencia con el acceso crudo anterior', () => {
     }
   });
 
+  // Lo que sigue protege el DESCARTE POR DISTANCIA que `bosqueParaLenera` hace desde la Fase E3 (antes
+  // probaba los 170 bosques del mundo, uno a uno, contra el poligono). El test de arriba ya compara contra la
+  // implementacion ingenua sobre consultas aleatorias; estos dos cubren el caso limite que un muestreo
+  // aleatorio puede no tocar nunca, y que es justo donde un descarte mal puesto haria dano.
+
+  it('un bosque GRANDE y lejano cuyo BORDE alcanza el poligono no se descarta', () => {
+    // El descarte compara distancia entre centros contra la suma de radios, no contra el radio del poligono
+    // a secas. Un bosque de radio 80 cuyo centro esta a 100 del poligono SI puede tocarlo, y perderlo
+    // dejaria al asentamiento sin madera teniendo el bosque al lado — el mismo bug que
+    // `puntoDeTrabajoEnBosque` ya documenta haber sufrido una vez.
+    let casosReales = 0;
+    for (const seed of SEEDS) {
+      const { generado, mapa } = conMapa(seed);
+      // El bosque mas grande del mundo, que es donde el margen del radio mas se nota.
+      const grande = [...generado.bosques].sort((a, b) => b.radio - a.radio)[0]!;
+
+      // Poligono pequeno, PEGADO al borde del bosque pero lejos de su centro.
+      const centroPoligono = { x: grande.centro.x + grande.radio * 0.8, y: grande.centro.y };
+      const poligono = poligonoCircular(centroPoligono, grande.radio * 0.35);
+      expect(distancia(grande.centro, centroPoligono)).toBeGreaterThan(grande.radio * 0.35);
+
+      const referencia = mapa.puntoDeTrabajoEnBosque(grande.id, poligono, 0);
+      const obtenido = mapa.bosqueParaLenera(poligono, new Map(), centroPoligono);
+
+      // Si la referencia encuentra punto en ese bosque, el metodo optimizado no puede devolver null.
+      if (referencia) {
+        casosReales++;
+        expect(obtenido).not.toBeNull();
+      }
+    }
+    // Sin esto el test pasaria en silencio aunque el caso limite no se diera nunca, que es peor que no
+    // tenerlo: parece cubierto y no lo esta.
+    expect(casosReales).toBeGreaterThan(0);
+  });
+
+  it('un poligono vacio devuelve null sin reventar', () => {
+    // La version anterior llegaba a null dando el rodeo por los 170 bosques; la nueva sale antes, y de paso
+    // evita dividir entre cero al calcular el centroide.
+    const { mapa } = conMapa(SEEDS[0]!);
+    expect(mapa.bosqueParaLenera([], new Map(), { x: 0, y: 0 })).toBeNull();
+  });
+
   it('fertilidadEn coincide con el campo del mapa generado', () => {
     for (const seed of SEEDS) {
       const { mapa, rng } = conMapa(seed);
