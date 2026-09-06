@@ -44,6 +44,7 @@ import {
   unirseAEjercito,
 } from './ejercitos';
 import { entrarEnAsentamiento, marcharA, salirAlMundo, salirDeAsentamiento } from './presencia';
+import { cederLiderazgo, responderPeticionDeUnion, separarseDelEjercito, unirseEnCampo } from './columna';
 
 export const REGISTRO_COMANDOS = {
   fundarAsentamiento,
@@ -68,6 +69,10 @@ export const REGISTRO_COMANDOS = {
   marcharA,
   entrarEnAsentamiento,
   salirDeAsentamiento,
+  unirseEnCampo,
+  responderPeticionDeUnion,
+  separarseDelEjercito,
+  cederLiderazgo,
   movilizarEjercito,
   unirseAEjercito,
   replegarEjercito,

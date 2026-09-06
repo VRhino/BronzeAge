@@ -377,6 +377,39 @@ describe('guardarPartida / cargarPartida', () => {
     expect(jugadores.map((j) => j.id)).toEqual([...jugadores.map((j) => j.id)].sort());
   });
 
+  it('migra v9 -> v10: una columna en curso queda CERRADA a que se le una nadie', async () => {
+    // En una partida anterior a la mecánica nadie podía unirse en campo, así que ninguna columna había
+    // consentido a que se le sumara gente. `aceptar` habría abierto sus filas sin que su Líder lo decidiera.
+    const sesion = partidaEnMarcha();
+    await guardarPartida(directorio, sesion, MOMENTO);
+    const ruta = join(directorio, `${sesion.gameId}.json`);
+    const snap = JSON.parse(await readFile(ruta, 'utf-8'));
+    snap.formatoVersion = 9;
+    const asentamiento = snap.partida.state.asentamientos[0];
+    snap.partida.state.ejercitos = [
+      {
+        id: 'ejercito-viejo',
+        faccionId: asentamiento.faccionId,
+        origenAsentamientoId: asentamiento.id,
+        participantes: [{ jugadorId: 'j1', unidoEn: 0 }],
+        tipo: 'ejercito',
+        liderId: 'j1',
+        escuadrones: [],
+        suministro: { trigo: 100 },
+        caravanasAdjuntasIds: [],
+        objetivo: { tipo: 'punto', punto: { x: 9, y: 9 } },
+        ruta: [{ x: 0, y: 0 }, { x: 9, y: 9 }],
+        progreso: 0,
+        posicionActual: { x: 0, y: 0 },
+        estado: 'marchando',
+      },
+    ];
+    await writeFile(ruta, JSON.stringify(snap), 'utf-8');
+
+    const migrado = (await cargarPartida(directorio, sesion.gameId))!.sesion.getState().ejercitos[0]!;
+    expect(migrado.politicaDeUnion).toBe('rechazar');
+  });
+
   it('rechaza un snapshot generado con otra versión del generador de mundo', async () => {
     const sesion = partidaEnMarcha();
     await guardarPartida(directorio, sesion, MOMENTO);

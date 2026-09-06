@@ -57,6 +57,9 @@ export interface ParamsMovilizarEjercito {
   jugadorId: string;
   escuadronIds: string[];
   objetivo: ObjetivoEjercito;
+  /** Qué hacer con quien pida unirse por el camino (Doc 5.14.1). Se fija AQUÍ, al parir la columna, y no
+   * cambia. Ausente = `rechazar`, que es lo prudente: la columna sale con quien salió. */
+  politicaDeUnion?: 'rechazar' | 'aceptar' | 'preguntar';
 }
 
 export const movilizarEjercito = comando<ParamsMovilizarEjercito, { ejercitoId: string }>((estado, mapa, ctx, params) => {
@@ -72,7 +75,8 @@ export const movilizarEjercito = comando<ParamsMovilizarEjercito, { ejercitoId: 
     estado.asentamientos,
     mapa,
     `ejercito-${ejercitoId}`,
-    ctx.instante
+    ctx.instante,
+    params.politicaDeUnion
   );
 
   const destino = params.objetivo.tipo === 'asentamiento' ? params.objetivo.id : 'un punto del mapa';
@@ -175,7 +179,7 @@ export const replegarEjercito = comando<ParamsReplegarEjercito, void>((estado, m
   const origen = estado.asentamientos.find((a) => a.id === ejercitoActual.origenAsentamientoId);
   const desdeEstado = ejercitoActual.estado;
 
-  const ejercito = replegarEngine(ejercitoActual, origen, mapa);
+  const ejercito = replegarEngine(ejercitoActual, origen, mapa, ctx.actor);
 
   return exito(conEjercito(estado, ejercito), [
     evento(ctx, {

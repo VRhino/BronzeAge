@@ -27,6 +27,13 @@ export function duracion(ms: number): Duracion {
   return ms as Duracion;
 }
 
+/** Segundos. Existe por los plazos por DEBAJO del tick (60 s), como la caducidad de una petición de unión
+ * (Doc 5.14.1): en minutos serían fracciones ilícitas de leer. Que un plazo sea más corto que un tick no es
+ * un problema mientras nada tenga que DISPARARSE al vencer — se comprueba al leer. */
+export function segundos(n: number): Duracion {
+  return (n * 1_000) as Duracion;
+}
+
 export function minutos(n: number): Duracion {
   return (n * 60_000) as Duracion;
 }

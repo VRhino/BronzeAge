@@ -1524,6 +1524,15 @@ export const MOVIMIENTO = {
    * estar literalmente en la puerta, no en las afueras. Es lo que hace de "entrar" un acto y no un roce.
    */
   radioPuerta: 10,
+  /**
+   * Cuánto vive una petición de unión sin contestar, antes de darse por RECHAZADA (Doc 5.14.1). **10**, y
+   * corto a propósito: pocos para que el que pide no se quede plantado en mitad del mapa, bastantes para que
+   * un grupo que está hablando se organice. La consecuencia se asume: *preguntar* solo funciona con el Líder
+   * al teclado, así que una columna que marcha en serio elegirá casi siempre *aceptar* o *rechazar*.
+   *
+   * En segundos y no en minutos porque en minutos sería 1/6. Es el único plazo del juego por debajo del tick.
+   */
+  vidaPeticionUnionSegundos: 10,
 };
 
 /**

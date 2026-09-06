@@ -405,6 +405,25 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
     rolesPermitidos: ['jugador'],
     condicionJugador: (_estado, jugadorId, params) => jugadorId === params.jugadorId,
   },
+  // --- Composición de una columna compartida (Doc 5.14). Nadie se une, se separa ni cede el mando a nombre
+  // de otro. Lo demás —ir dentro, ser el Líder, la distancia— lo comprueba el motor, que es quien sabe
+  // dónde está cada columna y quién la manda. ---
+  unirseEnCampo: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (_estado, jugadorId, params) => jugadorId === params.jugadorId,
+  },
+  responderPeticionDeUnion: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (_estado, jugadorId, params) => jugadorId === params.jugadorId,
+  },
+  separarseDelEjercito: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (_estado, jugadorId, params) => jugadorId === params.jugadorId,
+  },
+  cederLiderazgo: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (_estado, jugadorId, params) => jugadorId === params.jugadorId,
+  },
   // --- Ejércitos (Doc 5.12): salir de campaña es sacar TUS escuadrones de TU asentamiento, así que la
   // condición es la misma pareja que el resto de lo militar (residencia + mando de los propios escuadrones).
   // Nadie moviliza a nombre de otro: `jugadorId` tiene que ser el actor, igual que en `reclutarTropa`. ---
@@ -425,6 +444,8 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
   // Replegar y estacionar mandan sobre el ejército entero, no sobre escuadrones sueltos: basta con tener
   // tropa dentro. El mando compartido de una coalición (quién decide cuando hay varios jugadores) necesita
   // un mecanismo de cesión que la Fase 0 no tiene — hoy cualquier participante puede ordenar el repliegue.
+  // Cancelar la marcha es del Líder, y solo suyo (Doc 5.14.3). Aquí se exige ir dentro, que es la condición
+  // barata; que además seas el Líder lo comprueba el motor, que es quien sabe quién manda esa columna.
   replegarEjercito: {
     rolesPermitidos: ['jugador'],
     condicionJugador: (estado, jugadorId, params) => participaEnEjercito(estado, jugadorId, params.ejercitoId),

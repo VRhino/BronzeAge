@@ -37,6 +37,7 @@ function ejercito(faccionId: string, x: number, y: number): Ejercito {
     origenAsentamientoId: 'origen',
     participantes: [{ jugadorId: 'j1', unidoEn: instante(0) }],
     tipo: 'ejercito',
+    politicaDeUnion: 'rechazar',
     liderId: 'j1',
     escuadrones: [escuadron],
     suministro: { trigo: 500 },

@@ -852,7 +852,9 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       // `entrarEnAsentamiento` y `salirDeAsentamiento`. Aquí la superficie CRECE, y también es parte del
       // diseño: entrar y salir dejan de ser efectos colaterales de otra cosa y pasan a ser actos del jugador.
       // +1 con `marcharA` (paso 4): la columna que el paso 3 crea, en marcha.
-      expect(cuerpo.oneOf.length).toBe(46);
+      // +4 con la composición de la columna (paso 4b): unirse en campo, contestar la petición, separarse y
+      // ceder el liderazgo.
+      expect(cuerpo.oneOf.length).toBe(50);
       const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
       expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
     });

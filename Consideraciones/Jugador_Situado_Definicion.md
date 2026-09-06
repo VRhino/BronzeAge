@@ -951,13 +951,20 @@ Cada paso deja el repo verde y jugable. El orden no es negociable en los tres pr
 4. ~~**`marcharA`**~~ — **HECHO (2026-09-06)**: destino rectificable desde donde estés, cuantas veces
    quieras, y **solo en columna `personal`**. Aquí ya se juega: es la mitad que le faltaba al paso 3,
    que saca al jugador de la plaza pero lo deja parado.
-4b. **`unirseEnCampo` / `separarseDelEjercito`** (decisiones 15-16). Va pegado al 4 porque es lo que le da
-   sentido: unirse cuesta la libertad de movimiento que el paso 4 acaba de conceder, y separarse la devuelve.
-   Ojo con no confundirlo con el `unirseAEjercito` de hoy, que valida otra geometría (§2.4).
-4c. **El Líder** (decisiones 24-25, 30-33): `politicaDeUnion` fijada al parir la columna, `cederLiderazgo`,
-   `replegarEjercito` restringido al Líder, y `peticionesDeUnion` con su caducidad de 10 s —que se comprueba
-   al leer, sin temporizador (decisión 32)— más el `segundos()` que le falta a `domain/tiempo.ts`. Va después
-   del 4b porque es lo que gobierna quién entra y quién manda una vez que unirse ya funciona.
+4b. ~~**`unirseEnCampo` / `separarseDelEjercito` + el Líder**~~ — **HECHO (2026-09-06)** en
+   `session/comandos/columna.ts`, con `politicaDeUnion`, `peticionesDeUnion` de caducidad perezosa,
+   `cederLiderazgo`, `replegarEjercito` restringido al Líder y el `segundos()` de `domain/tiempo.ts`.
+
+   **Los pasos 4b y 4c se hicieron JUNTOS, y el plan estaba mal separado.** Tenían que ir en dos porque la
+   composición y el mando parecían cosas distintas, pero no lo son: quién PUEDE unirse es la mitad de qué
+   significa unirse. Partirlos habría entregado un paso en el que cualquiera se suma a cualquier columna, y
+   el siguiente lo habría restringido — exactamente la dirección que el paso 3 evitó al dejar la puerta a
+   plazas ajenas cerrada de más en vez de de menos.
+
+   Lo que apareció al implementarlo: **el reparto entre autorización y motor**. La matriz de `autorizacion.ts`
+   comprueba lo barato —que nadie actúa a nombre de otro— y el motor lo caro —ir dentro, ser el Líder, la
+   distancia—, porque es quien sabe dónde está cada columna y quién la manda. Duplicarlo en la matriz habría
+   dejado dos verdades que se desincronizan.
 4d. **La desconexión** (decisiones 26-29 y 36): desaparición **diferida 2:30** con la columna aún moviéndose y
    aún atacable, el jugador se lleva sus tropas, sucesión del Líder por antigüedad, reaparición en el mismo
    punto, y caravanas adjuntas huérfanas de vuelta a su origen. Es el paso que una implementación ingenua se

@@ -272,7 +272,10 @@ export function movilizarEjercito(
   mapa: Mapa,
   id: string,
   /** Para fechar la entrada del que sale: la antigüedad decide la sucesión del líder (Doc 5.14.3). */
-  instante: Instante
+  instante: Instante,
+  /** Qué hacer con quien pida unirse por el camino (Doc 5.14.1). Se fija aquí y no cambia. Por defecto
+   * `rechazar`: lo prudente es que la columna salga con quien salió salvo que su Líder diga otra cosa. */
+  politicaDeUnion: Ejercito['politicaDeUnion'] = 'rechazar'
 ): { asentamiento: Asentamiento; ejercito: Ejercito; trigoCargado: number } {
   if (!esResidente(asentamiento, jugadorId)) {
     throw new MovilizacionInvalidaError('Solo un residente puede sacar tropas de este asentamiento.');
@@ -304,6 +307,7 @@ export function movilizarEjercito(
       // 5.12.1): rumbo fijo desde el primer paso, y otros pueden sumarse por el camino.
       tipo: 'ejercito',
       liderId: jugadorId,
+      politicaDeUnion,
       escuadrones,
       suministro: { trigo: carga.cargado },
       caravanasAdjuntasIds: [],
@@ -373,6 +377,9 @@ export function salirAlMundo(
       participantes: [{ jugadorId, unidoEn: instante }],
       tipo: 'personal',
       liderId: jugadorId,
+      // A una columna personal no se une nadie (Doc 5.12.1), así que su política no significa nada. Se pone
+      // la prudente para que, si alguna vez se leyera por descuido, no abra una puerta que no existe.
+      politicaDeUnion: 'rechazar',
       escuadrones,
       suministro: cargado.suministro,
       caravanasAdjuntasIds: [],
@@ -609,8 +616,19 @@ export function ladoPendienteParaEjercito(
  * En ninguno de los dos casos se teletransporta: volver cuesta el mismo camino que costó ir, y se sigue
  * comiendo del carro durante el regreso.
  */
-export function replegarEjercito(ejercito: Ejercito, origen: Asentamiento | undefined, mapa: Mapa): Ejercito {
+export function replegarEjercito(
+  ejercito: Ejercito,
+  origen: Asentamiento | undefined,
+  mapa: Mapa,
+  /** Quién lo pide. Cancelar es del Líder y solo suyo (Doc 5.14.3): el rumbo lo acordaron varios y deshacerlo
+   * no puede ser cosa de uno cualquiera. No atrapa a nadie — el que no quiera seguir se separa. Omitirlo es
+   * el camino del sistema (llegar, disolverse), que no tiene actor. */
+  quienLoPide?: string
+): Ejercito {
   if (ejercito.estado === 'regresando') throw new MovilizacionInvalidaError('El ejército ya está regresando.');
+  if (quienLoPide !== undefined && ejercito.liderId !== quienLoPide) {
+    throw new MovilizacionInvalidaError('Cancelar la marcha es del Líder; el que no quiera seguir puede separarse.');
+  }
   if (!origen) throw new MovilizacionInvalidaError('El ejército no tiene asentamiento al que volver.');
 
   const objetivo: ObjetivoEjercito = { tipo: 'asentamiento', id: origen.id };
@@ -661,6 +679,134 @@ export function marcharA(
   if (!ruta) throw new MovilizacionInvalidaError('No hay ruta por tierra hasta ese destino.');
 
   return { ...ejercito, estado: 'marchando', objetivo, ruta, progreso: 0 };
+}
+
+/**
+ * Funde una columna personal dentro de un Ejército que tiene delante (Doc 5.14.1).
+ *
+ * Lo que aporta es **lo que ya lleva encima** —sus escuadrones y su carro—, no tropas frescas de casa: eso
+ * es `unirseAEjercito`, que valida otra geometría (pasar cerca de TU plaza). Aquí la geometría es estar uno
+ * junto al otro.
+ *
+ * Y el precio está en la última línea: **adopta el destino del ejército**, que ya no puede rectificar. Es lo
+ * que hace que marchar acompañado cueste algo, sin ninguna regla extra que lo imponga (Doc 5.12.1).
+ */
+export function unirseEnCampo(ejercito: Ejercito, columna: Ejercito, instante: Instante): Ejercito {
+  if (ejercito.tipo !== 'ejercito') {
+    throw new MovilizacionInvalidaError('Dos viajeros que se cruzan no forman un ejército.');
+  }
+  if (columna.tipo !== 'personal') {
+    throw new MovilizacionInvalidaError('Un ejército no se une a otro ejército.');
+  }
+  if (ejercito.faccionId !== columna.faccionId) {
+    throw new MovilizacionInvalidaError('Un ejército lo componen ciudadanos de una sola Facción.');
+  }
+  if (distancia(ejercito.posicionActual, columna.posicionActual) > LOGISTICA.radioEncuentro) {
+    throw new MovilizacionInvalidaError('Hay que estar uno junto al otro para unirse en campo.');
+  }
+
+  const suministro = { ...ejercito.suministro };
+  for (const [recurso, cantidad] of Object.entries(columna.suministro)) {
+    suministro[recurso] = (suministro[recurso] ?? 0) + cantidad;
+  }
+
+  return {
+    ...ejercito,
+    participantes: [...ejercito.participantes, ...columna.participantes.map((p) => ({ ...p, unidoEn: instante }))],
+    escuadrones: [...ejercito.escuadrones, ...columna.escuadrones],
+    suministro,
+    // La petición atendida se retira: ya no hay nada que contestar.
+    peticionesDeUnion: ejercito.peticionesDeUnion?.filter((p) => !columna.participantes.some((q) => q.jugadorId === p.jugadorId)),
+  };
+}
+
+/**
+ * Saca a un jugador de un Ejército y le devuelve la libertad de movimiento (Doc 5.14.2): se lleva lo suyo y
+ * nace como columna personal donde estaba.
+ *
+ * Dos separaciones que el juego no permite, y ya no coinciden desde que un Invitado no puede ser Líder —que
+ * es una figura retirada, pero la regla se quedó enunciada aparte y conviene que siga estando:
+ *
+ *  - **El Líder no se separa.** Para irse cede antes el liderazgo.
+ *  - **El último tampoco.** Si no, la columna quedaría vacía en campo abierto con sus caravanas y su
+ *    suministro tirados; su salida es cancelar y volver (Doc 5.12.6).
+ *
+ * El origen NO cambia: la columna nueva hereda el asentamiento del que salió el ejército, no el suyo. Es
+ * donde se replegará.
+ */
+export function separarseDelEjercito(
+  ejercito: Ejercito,
+  jugadorId: string,
+  id: string
+): { ejercito: Ejercito; columna: Ejercito } {
+  const dentro = ejercito.participantes.find((p) => p.jugadorId === jugadorId);
+  if (!dentro) throw new MovilizacionInvalidaError('No vas en ese ejército.');
+  if (ejercito.tipo !== 'ejercito') {
+    throw new MovilizacionInvalidaError('De una columna personal no te separas: es tuya.');
+  }
+  if (ejercito.liderId === jugadorId) {
+    throw new MovilizacionInvalidaError('El Líder no puede separarse: primero tiene que ceder el liderazgo.');
+  }
+  if (ejercito.participantes.length <= 1) {
+    throw new MovilizacionInvalidaError('Eres el último: hay que cancelar la marcha, no vaciar la columna.');
+  }
+
+  const suyos = ejercito.escuadrones.filter((e) => e.jugadorId === jugadorId);
+  // Se lleva COMO MUCHO un carro, que es lo que aportó (Doc 5.13). Se reparte a prorrata sobre lo que haya:
+  // el carro es común mientras se marcha junto, así que no hay "su" trigo que devolver, solo una parte.
+  const total = Object.values(ejercito.suministro).reduce((suma, c) => suma + c, 0);
+  const seLleva = Math.min(capacidadCarrosDe(1), total);
+  const fraccion = total > 0 ? seLleva / total : 0;
+  const suministroColumna: Record<string, number> = {};
+  const suministroResto: Record<string, number> = {};
+  for (const [recurso, cantidad] of Object.entries(ejercito.suministro)) {
+    const parte = cantidad * fraccion;
+    if (parte > 0) suministroColumna[recurso] = parte;
+    if (cantidad - parte > 0) suministroResto[recurso] = cantidad - parte;
+  }
+
+  const idsSuyos = new Set(suyos.map((e) => e.id));
+  return {
+    ejercito: {
+      ...ejercito,
+      participantes: ejercito.participantes.filter((p) => p.jugadorId !== jugadorId),
+      escuadrones: ejercito.escuadrones.filter((e) => !idsSuyos.has(e.id)),
+      suministro: suministroResto,
+    },
+    columna: {
+      id,
+      faccionId: ejercito.faccionId,
+      // El origen se HEREDA (Doc 5.14.2): separarse no inventa una casa nueva.
+      origenAsentamientoId: ejercito.origenAsentamientoId,
+      participantes: [dentro],
+      tipo: 'personal',
+      liderId: jugadorId,
+      politicaDeUnion: 'rechazar',
+      escuadrones: suyos,
+      suministro: suministroColumna,
+      caravanasAdjuntasIds: [],
+      objetivo: { tipo: 'punto', punto: ejercito.posicionActual },
+      ruta: [],
+      progreso: 0,
+      posicionActual: ejercito.posicionActual,
+      estado: 'estacionado',
+    },
+  };
+}
+
+/** Eleva a otro integrante a Líder (Doc 5.14.3). Es el único camino para que el Líder pueda irse. */
+export function cederLiderazgo(ejercito: Ejercito, liderActualId: string, sucesorId: string): Ejercito {
+  if (ejercito.liderId !== liderActualId) throw new MovilizacionInvalidaError('Solo el Líder cede el liderazgo.');
+  if (sucesorId === liderActualId) throw new MovilizacionInvalidaError('Ya eres el Líder.');
+  if (!ejercito.participantes.some((p) => p.jugadorId === sucesorId)) {
+    throw new MovilizacionInvalidaError('El sucesor tiene que ir dentro de la columna.');
+  }
+  return { ...ejercito, liderId: sucesorId };
+}
+
+/** ¿Sigue viva esta petición? La caducidad se evalúa AL LEER (Doc 5.14.1): nada se dispara a los 10 s. */
+export function peticionViva(peticion: { expiraEn: Instante }, ahora: Instante): boolean {
+  return ahora < peticion.expiraEn;
 }
 
 export function estacionarEjercito(ejercito: Ejercito): Ejercito {

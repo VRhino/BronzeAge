@@ -664,6 +664,18 @@ export interface Ejercito {
    * cancela la marcha. Si se desconecta pasa al participante más antiguo. En una columna `personal` es su
    * único participante y no significa nada. */
   liderId: string;
+  /**
+   * Qué se hace con quien pide unirse en campo (Doc 5.14.1). La fija el Líder al parir la columna y no
+   * cambia: quien se une comparte tu carro, tu destino y tus encuentros, así que poder negarse no es un
+   * lujo.
+   */
+  politicaDeUnion: 'rechazar' | 'aceptar' | 'preguntar';
+  /**
+   * Peticiones vivas cuando la política es `preguntar` (Doc 5.14.1). **Caducan sin temporizador**: nada se
+   * dispara a los 10 s, lo comprueban contra el instante actual los dos únicos sitios que las miran —el
+   * comando con el que el Líder responde y la proyección del que pidió—. Ausente = ninguna viva.
+   */
+  peticionesDeUnion?: { jugadorId: string; pedidoEn: Instante; expiraEn: Instante }[];
   /** Escuadrones MOVIDOS aquí desde `Asentamiento.escuadrones` — se van de verdad, por eso la guarnición es
    * lo único que defiende (Doc 5.12.4) y por eso `consumoRacionTropas` ya cuenta solo lo que quedó en casa. */
   escuadrones: Escuadron[];

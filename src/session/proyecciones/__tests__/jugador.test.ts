@@ -281,6 +281,7 @@ function ejercito(id: string, faccionId: string, posicion: Point, escuadrones: E
     origenAsentamientoId: `origen-de-${id}`,
     participantes: [...new Set(escuadrones.map((e) => e.jugadorId))].map((jugadorId) => ({ jugadorId, unidoEn: instante(0) })),
     tipo: 'ejercito',
+    politicaDeUnion: 'rechazar',
     liderId: escuadrones[0]?.jugadorId ?? 'j1',
     escuadrones,
     suministro: { trigo: 500 },

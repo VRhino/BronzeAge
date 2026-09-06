@@ -43,9 +43,10 @@ import { ubicacionDeducida } from '../engine/ubicacion';
  * es 1:1 (`instanteDeTick`). v6 (movimiento de ejércitos): `jugadores` y `ejercitos`. v7 (niebla de guerra):
  * `memoriaPorFaccion`. v8 (jugador situado): `Ejercito` gana `participantes`, `tipo` y `liderId`. v9 (jugador
  * situado): `Jugador` gana `ubicacion` y deja de ser un registro opcional — la PRIMERA migración del repo
- * que no puede resolverse con un valor por defecto (ver `migrarV8aV9`).
+ * que no puede resolverse con un valor por defecto (ver `migrarV8aV9`). v10 (unirse y separarse en campo):
+ * `Ejercito.politicaDeUnion`.
  */
-export const FORMATO_SNAPSHOT_VERSION = 9;
+export const FORMATO_SNAPSHOT_VERSION = 10;
 
 export interface SnapshotPartida {
   formatoVersion: number;
@@ -190,6 +191,7 @@ function migrarSnapshot(gameId: string, snapshot: SnapshotPartida): PartidaExpor
   if (snapshot.formatoVersion < 7) migrarV6aV7(s);
   if (snapshot.formatoVersion < 8) migrarV7aV8(s);
   if (snapshot.formatoVersion < 9) migrarV8aV9(s);
+  if (snapshot.formatoVersion < 10) migrarV9aV10(s);
   return p as unknown as PartidaExportada;
 }
 
@@ -373,6 +375,19 @@ function migrarV8aV9(s: Record<string, any>): void {
     ...(yaConRegistro.get(id) ?? { id }),
     ubicacion: ubicacionDeducida(id, asentamientos, ejercitos),
   }));
+}
+
+/**
+ * v9 -> v10 (unirse en campo, Doc 5.14.1): `Ejercito` gana `politicaDeUnion`.
+ *
+ * A `rechazar`, que es lo prudente y además lo VERDADERO para una partida anterior a la mecánica: en ella
+ * nadie podía unirse en campo, así que ninguna columna en curso había consentido a que se le sumara nadie.
+ * Ponerlas en `aceptar` habría abierto sus filas sin que su Líder lo decidiera.
+ */
+function migrarV9aV10(s: Record<string, any>): void {
+  for (const ejercito of (s.ejercitos ?? []) as Record<string, any>[]) {
+    ejercito.politicaDeUnion ??= 'rechazar';
+  }
 }
 
 export interface ResumenPartidaEnDisco {

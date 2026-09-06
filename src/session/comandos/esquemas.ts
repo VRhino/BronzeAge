@@ -229,6 +229,15 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
     ['asentamientoId', 'jugadorId', 'escuadronIds', 'carga']
   ),
   marcharA: objeto({ jugadorId: IDENTIFICADOR, objetivo: OBJETIVO_EJERCITO }, ['jugadorId', 'objetivo']),
+  // Composición de una columna compartida (Doc 5.14). Separarse no lleva `ejercitoId`: se sale de la columna
+  // en la que vas, y solo puedes ir en una.
+  unirseEnCampo: objeto({ ejercitoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR }, ['ejercitoId', 'jugadorId']),
+  responderPeticionDeUnion: objeto(
+    { ejercitoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR, solicitanteId: IDENTIFICADOR, aceptar: { type: 'boolean' } },
+    ['ejercitoId', 'jugadorId', 'solicitanteId', 'aceptar']
+  ),
+  separarseDelEjercito: objeto({ jugadorId: IDENTIFICADOR }, ['jugadorId']),
+  cederLiderazgo: objeto({ ejercitoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR, sucesorId: IDENTIFICADOR }, ['ejercitoId', 'jugadorId', 'sucesorId']),
   entrarEnAsentamiento: objeto({ asentamientoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR }, ['asentamientoId', 'jugadorId']),
   salirDeAsentamiento: objeto({ asentamientoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR }, ['asentamientoId', 'jugadorId']),
   // Ejércitos (Doc 5.12).
@@ -238,6 +247,7 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
       jugadorId: IDENTIFICADOR,
       escuadronIds: LISTA_DE_IDENTIFICADORES,
       objetivo: OBJETIVO_EJERCITO,
+      politicaDeUnion: { type: 'string', enum: ['rechazar', 'aceptar', 'preguntar'] },
     },
     ['asentamientoId', 'jugadorId', 'escuadronIds', 'objetivo']
   ),
