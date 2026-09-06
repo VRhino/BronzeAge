@@ -46,7 +46,3 @@ export function asignarCargoLocal(
 
   return conCargoLocal(asentamiento, cargo, jugadorId);
 }
-
-export function liberarCargoLocal(asentamiento: Asentamiento, cargo: CargoTipo): Asentamiento {
-  return conCargoLocal(asentamiento, cargo, null);
-}

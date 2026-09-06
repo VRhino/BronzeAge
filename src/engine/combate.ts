@@ -57,12 +57,6 @@ export interface PayloadAsedio {
   faccionAtacanteId: string;
   faccionDefensoraId: string;
 }
-export interface PayloadIntercepcion {
-  atacanteId: string;
-  caravanaId: string;
-  /** Fracción del contenido capturada. Ausente si la intercepción falló. */
-  fraccionCapturada?: number;
-}
 export interface PayloadAtaqueCampamento {
   atacanteId: string;
   campamentoId: string;

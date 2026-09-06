@@ -168,20 +168,6 @@ export function calcularCostoMantenimiento(asentamiento: Asentamiento, capital: 
 }
 
 /**
- * Qué recursos cobra Mantenimiento a este nivel de asentamiento — igual criterio que `calcularCostoMantenimiento`
- * pero sin necesitar `capital`/distancia (esos solo afectan el MONTO, no qué recursos aparecen). Lo usa
- * `engine/construction.ts` para saber qué recursos debe respetar la reserva mínima de construcción
- * (`RESERVA_CONSTRUCCION`) en un momento dado — "los recursos que consuma el asentamiento en ese momento".
- * Trigo no aparece aquí (Mantenimiento ya no lo cobra directamente, ver `calcularCostoMantenimiento`).
- */
-export function recursosProtegidosPorMantenimiento(nivel: number): RecursoTipo[] {
-  const recursos: RecursoTipo[] = ['madera'];
-  if (nivel >= MANTENIMIENTO.nivelParaPiedra) recursos.push('piedra');
-  if (nivel >= MANTENIMIENTO.nivelParaOro) recursos.push('oro');
-  return recursos;
-}
-
-/**
  * Reserva mínima que la auto-construcción no puede tocar al comprometer (pagar) un proyecto nuevo — overhaul
  * de auto-construcción: reemplaza los umbrales fijos anteriores (`RESERVA_CONSTRUCCION` ya no lleva cifras
  * por recurso) por una proyección real de cuánto va a cobrar Mantenimiento + consumo de comida en los
