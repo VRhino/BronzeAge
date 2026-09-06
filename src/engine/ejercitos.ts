@@ -633,6 +633,36 @@ export function replegarEjercito(ejercito: Ejercito, origen: Asentamiento | unde
 
 /** Planta el ejército donde está (Doc 5.12.3): deja de avanzar y pasa a consumo reducido. Aparcar en un paso
  * de montaña es una jugada legítima, y por eso el consumo baja pero nunca llega a 0. */
+/**
+ * Fija o RECTIFICA el destino de una columna personal (Doc 5.12.1): clic en un punto y se recalcula la ruta
+ * desde donde esté, tantas veces como el jugador quiera.
+ *
+ * **Solo para columnas `personal`, y el criterio es el `tipo`, no cuánta gente va dentro.** Un ejército
+ * reducido a un solo miembro sigue siendo un ejército y sigue sin poder cambiar de rumbo: el destino se
+ * acordó entre varios al salir, y su única salida es cancelar y volver (Doc 5.12.6). Derivarlo de
+ * `participantes.length` reabriría justo el agujero que §1.1f cerró.
+ *
+ * La ruta se recalcula SIEMPRE desde `posicionActual`, no desde el origen: rectificar a mitad de camino es
+ * el caso normal, no la excepción.
+ */
+export function marcharA(
+  ejercito: Ejercito,
+  objetivo: ObjetivoEjercito,
+  asentamientos: readonly Asentamiento[],
+  mapa: Mapa
+): Ejercito {
+  if (ejercito.tipo !== 'personal') {
+    throw new MovilizacionInvalidaError('El rumbo de un ejército no se cambia: se cancela y se vuelve.');
+  }
+
+  const destino = puntoDeObjetivo(objetivo, asentamientos);
+  // El agua es infranqueable, igual que al movilizar: un viajero tampoco se embarca.
+  const ruta = calcularRuta(mapa, ejercito.posicionActual, destino);
+  if (!ruta) throw new MovilizacionInvalidaError('No hay ruta por tierra hasta ese destino.');
+
+  return { ...ejercito, estado: 'marchando', objetivo, ruta, progreso: 0 };
+}
+
 export function estacionarEjercito(ejercito: Ejercito): Ejercito {
   if (ejercito.estado === 'estacionado') throw new MovilizacionInvalidaError('El ejército ya está estacionado.');
   return { ...ejercito, estado: 'estacionado', objetivo: { tipo: 'punto', punto: ejercito.posicionActual } };

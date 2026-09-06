@@ -401,6 +401,10 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
     rolesPermitidos: ['jugador'],
     condicionJugador: (_estado, jugadorId, params) => jugadorId === params.jugadorId,
   },
+  marcharA: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (_estado, jugadorId, params) => jugadorId === params.jugadorId,
+  },
   // --- Ejércitos (Doc 5.12): salir de campaña es sacar TUS escuadrones de TU asentamiento, así que la
   // condición es la misma pareja que el resto de lo militar (residencia + mando de los propios escuadrones).
   // Nadie moviliza a nombre de otro: `jugadorId` tiene que ser el actor, igual que en `reclutarTropa`. ---

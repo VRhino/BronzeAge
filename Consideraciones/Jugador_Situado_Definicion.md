@@ -785,7 +785,7 @@ es una puerta.
 | Comando | Qué hace |
 |---|---|
 | `salirAlMundo(asentamientoId, escuadronIds, carga)` | Desde tu **residencia**: escuadrones (0..Liderazgo, la lista **puede ir vacía**) + carga elegida hasta llenar el carro → nace una columna `personal` (decisiones 34-35), `estacionado` junto a la plaza |
-| `marcharA` | Fija/rectifica destino, **solo si vas solo** (decisión 14). Con dos o más participantes se rechaza: Doc 5.12.6 sigue mandando y cancelar es volver |
+| `marcharA` | Fija/rectifica destino, **solo en columna `personal`** (decisión 14). El criterio es el `tipo`, **no cuánta gente va dentro** (§1.1f): un ejército de un solo miembro sigue sin poder girar, y su salida es cancelar (Doc 5.12.6) |
 | `entrarEnAsentamiento` | Exige proximidad (`MOVIMIENTO.radioPuerta`) y permiso. En residencia disuelve la columna; en cualquier otra la aparca |
 | `salirDeAsentamiento` | De una plaza ajena: retomas la columna aparcada, sin interfaz (decisión 4) |
 | `fijarPoliticaDeAcceso` / `vetarJugador` | Gobernador |
@@ -948,7 +948,9 @@ Cada paso deja el repo verde y jugable. El orden no es negociable en los tres pr
 
    Y la puerta a plazas AJENAS se deja cerrada de momento (solo misma Facción): la política de acceso es el
    paso 5, y hasta entonces conviene ser más restrictivo que la regla final, nunca menos.
-4. **`marcharA`** — destino rectificable, y solo yendo solo (decisión 14). Aquí ya se juega.
+4. ~~**`marcharA`**~~ — **HECHO (2026-09-06)**: destino rectificable desde donde estés, cuantas veces
+   quieras, y **solo en columna `personal`**. Aquí ya se juega: es la mitad que le faltaba al paso 3,
+   que saca al jugador de la plaza pero lo deja parado.
 4b. **`unirseEnCampo` / `separarseDelEjercito`** (decisiones 15-16). Va pegado al 4 porque es lo que le da
    sentido: unirse cuesta la libertad de movimiento que el paso 4 acaba de conceder, y separarse la devuelve.
    Ojo con no confundirlo con el `unirseAEjercito` de hoy, que valida otra geometría (§2.4).

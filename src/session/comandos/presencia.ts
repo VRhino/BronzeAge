@@ -16,8 +16,10 @@ import { MOVIMIENTO } from '../../constants';
 import {
   absorberColumna,
   enLaPuertaDe,
+  marcharA as marcharAEngine,
   salirAlMundo as salirAlMundoEngine,
   MovilizacionInvalidaError,
+  type ObjetivoEjercito,
 } from '../../engine/ejercitos';
 import { esResidente } from '../../engine/pertenencia';
 import { situarJugadores } from '../../engine/ubicacion';
@@ -65,6 +67,12 @@ export interface ParamsSalirDeAsentamiento {
  * viajero sin tropas también va dentro de la suya (Doc 5.12.1). */
 function columnaDe(estado: GameSessionState, jugadorId: string) {
   return estado.ejercitos.find((e) => e.participantes.some((p) => p.jugadorId === jugadorId));
+}
+
+/** Dónde está su cuerpo, que NO es lo mismo que a qué columna pertenece: quien entra en una plaza ajena
+ * sigue siendo participante de la columna que dejó aparcada a la puerta. */
+function ubicacionDe(estado: GameSessionState, jugadorId: string) {
+  return estado.jugadores.find((j) => j.id === jugadorId)?.ubicacion;
 }
 
 /**
@@ -221,5 +229,56 @@ export const salirDeAsentamiento = comando<ParamsSalirDeAsentamiento, { ejercito
       }),
     ],
     { ejercitoId: columna.id }
+  );
+});
+
+export interface ParamsMarcharA {
+  jugadorId: string;
+  objetivo: ObjetivoEjercito;
+}
+
+export interface PayloadMarchaFijada {
+  ejercitoId: string;
+  jugadorId: string;
+  objetivo: ObjetivoEjercito;
+  /** `true` si la columna ya iba a algún sitio: es un cambio de rumbo, no una salida. Lo distingue el
+   * cliente para narrarlo, y el log para que "clic, clic, clic" no parezca tres campañas. */
+  rectifica: boolean;
+}
+
+/**
+ * Fijar o rectificar el destino de tu columna (Doc 5.12.1): clic en un punto y la miniatura se pone en
+ * camino, tantas veces como quieras.
+ *
+ * Es la mitad que le faltaba a `salirAlMundo`: al salir apareces junto a la plaza SIN destino, y esto es lo
+ * que te pone en marcha. Solo funciona yendo en columna personal — si vas en un ejército el rumbo se acordó
+ * al salir y su única salida es cancelar (Doc 5.12.6).
+ */
+export const marcharA = comando<ParamsMarcharA, { ejercitoId: string }>((estado, mapa, ctx, params) => {
+  const columna = columnaDe(estado, params.jugadorId);
+  if (!columna) throw new MovilizacionInvalidaError('No estás en el mundo: no hay a dónde marchar.');
+  if (ubicacionDe(estado, params.jugadorId)?.tipo !== 'columna') {
+    throw new MovilizacionInvalidaError('Estás dentro de una plaza: hay que salir antes de ponerse en marcha.');
+  }
+
+  const rectifica = columna.estado === 'marchando';
+  const enMarcha = marcharAEngine(columna, params.objetivo, estado.asentamientos, mapa);
+  const aDonde = params.objetivo.tipo === 'asentamiento' ? params.objetivo.id : 'un punto del mapa';
+
+  return exito(
+    conHistorialDeJugador(
+      { ...estado, ejercitos: estado.ejercitos.map((e) => (e.id === enMarcha.id ? enMarcha : e)) },
+      params.jugadorId,
+      rectifica ? `Cambia de rumbo hacia ${aDonde}.` : `Se pone en marcha hacia ${aDonde}.`
+    ),
+    [
+      evento(ctx, {
+        codigo: 'jugador.marcha_fijada',
+        mensaje: rectifica ? `Una columna cambia de rumbo hacia ${aDonde}.` : `Una columna se pone en marcha hacia ${aDonde}.`,
+        payload: { ejercitoId: enMarcha.id, jugadorId: params.jugadorId, objetivo: params.objetivo, rectifica } satisfies PayloadMarchaFijada,
+        asentamientoId: enMarcha.origenAsentamientoId,
+      }),
+    ],
+    { ejercitoId: enMarcha.id }
   );
 });

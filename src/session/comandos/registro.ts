@@ -43,7 +43,7 @@ import {
   soltarCaravana,
   unirseAEjercito,
 } from './ejercitos';
-import { entrarEnAsentamiento, salirAlMundo, salirDeAsentamiento } from './presencia';
+import { entrarEnAsentamiento, marcharA, salirAlMundo, salirDeAsentamiento } from './presencia';
 
 export const REGISTRO_COMANDOS = {
   fundarAsentamiento,
@@ -65,6 +65,7 @@ export const REGISTRO_COMANDOS = {
   crearCaravana,
   proponerTrueque,
   salirAlMundo,
+  marcharA,
   entrarEnAsentamiento,
   salirDeAsentamiento,
   movilizarEjercito,

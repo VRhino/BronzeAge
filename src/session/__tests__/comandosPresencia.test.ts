@@ -6,7 +6,7 @@
 // columna aparcada sobrevive a lo que le pase a la plaza, y volver a casa la deshace.
 import { describe, expect, it } from 'vitest';
 import { GameSession } from '../gameSession';
-import { entrarEnAsentamiento, salirAlMundo, salirDeAsentamiento } from '../comandos/presencia';
+import { entrarEnAsentamiento, marcharA, salirAlMundo, salirDeAsentamiento } from '../comandos/presencia';
 import { movilizarEjercito } from '../comandos/ejercitos';
 import { OPC, partidaConAsentamiento } from './fixtures';
 import { LOGISTICA, MOVIMIENTO } from '../../constants';
@@ -45,6 +45,11 @@ function partidaLista() {
 }
 
 const opcDe = (jugadorId: string) => ({ ...OPC, actor: jugadorId });
+
+// La plaza del fixture está en (400,400), en llano. (500,500) es AGUA en la seed 42 — el mismo dato que
+// obliga a `partidaConAsentamiento` a fundar en (400,400) y no ahí.
+const TIERRA_FIRME = { x: 430, y: 430 };
+const AGUA = { x: 500, y: 500 };
 
 const ubicacionDe = (sesion: GameSession, jugadorId: string) => sesion.getState().jugadores.find((j) => j.id === jugadorId)!.ubicacion;
 
@@ -266,5 +271,82 @@ describe('salirDeAsentamiento — retomar lo aparcado (Doc 1.10.3)', () => {
     const r = sesion.ejecutar(salirDeAsentamiento, { asentamientoId, jugadorId: fundador }, opcDe(fundador));
 
     expect(r.ok, 'en tu casa hay un roster y un almacén que elegir; eso es otra operación').toBe(false);
+  });
+});
+
+describe('marcharA — el destino de un viajero se rectifica (Doc 5.12.1)', () => {
+  /** Fundador ya fuera, parado junto a su plaza: el estado en que lo deja `salirAlMundo`. */
+  function fuera() {
+    const base = partidaLista();
+    base.sesion.ejecutar(
+      salirAlMundo,
+      { asentamientoId: base.asentamientoId, jugadorId: base.fundador, escuadronIds: ['esc-1'], carga: { trigo: 100 } },
+      opcDe(base.fundador)
+    );
+    return base;
+  }
+
+  it('pone en marcha a la columna que salió parada', () => {
+    const { sesion, fundador } = fuera();
+    expect(sesion.getState().ejercitos[0]!.estado).toBe('estacionado');
+
+    const r = sesion.ejecutar(marcharA, { jugadorId: fundador, objetivo: { tipo: 'punto', punto: TIERRA_FIRME } }, opcDe(fundador));
+
+    expect(r.ok).toBe(true);
+    const columna = sesion.getState().ejercitos[0]!;
+    expect(columna.estado).toBe('marchando');
+    expect(columna.ruta.length).toBeGreaterThan(1);
+    expect(columna.progreso).toBe(0);
+  });
+
+  it('se rectifica en marcha, desde donde esté y cuantas veces quiera', () => {
+    const { sesion, fundador } = fuera();
+    sesion.ejecutar(marcharA, { jugadorId: fundador, objetivo: { tipo: 'punto', punto: TIERRA_FIRME } }, opcDe(fundador));
+    // Se le mueve a mitad de camino para comprobar que la ruta nueva sale de AHÍ y no del origen.
+    const payload = sesion.exportar();
+    const aMitad = GameSession.importar({
+      ...payload,
+      state: { ...payload.state, ejercitos: [{ ...payload.state.ejercitos[0]!, posicionActual: { x: 450, y: 450 }, progreso: 0.5 }] },
+    });
+
+    const r = aMitad.ejecutar(marcharA, { jugadorId: fundador, objetivo: { tipo: 'punto', punto: { x: 380, y: 460 } } }, opcDe(fundador));
+
+    expect(r.ok).toBe(true);
+    const columna = aMitad.getState().ejercitos[0]!;
+    expect(columna.ruta[0], 'la ruta nueva empieza donde estaba, no en su plaza').toEqual({ x: 450, y: 450 });
+    expect(columna.progreso, 'y el progreso se reinicia sobre la ruta nueva').toBe(0);
+  });
+
+  it('un EJÉRCITO no cambia de rumbo, aunque vaya uno solo dentro', () => {
+    // Es la regla que §1.1f corrigió: la línea no es cuánta gente va dentro, es cómo salió la columna.
+    const { sesion, asentamientoId, fundador } = partidaLista();
+    sesion.ejecutar(
+      movilizarEjercito,
+      { asentamientoId, jugadorId: fundador, escuadronIds: ['esc-1'], objetivo: { tipo: 'punto', punto: { x: 900, y: 900 } } },
+      opcDe(fundador)
+    );
+    expect(sesion.getState().ejercitos[0]!.participantes).toHaveLength(1);
+
+    const r = sesion.ejecutar(marcharA, { jugadorId: fundador, objetivo: { tipo: 'punto', punto: TIERRA_FIRME } }, opcDe(fundador));
+
+    expect(r.ok, 'el rumbo se acordó al salir: su salida es cancelar y volver').toBe(false);
+    expect(sesion.getState().ejercitos[0]!.objetivo).toEqual({ tipo: 'punto', punto: { x: 900, y: 900 } });
+  });
+
+  it('no se marcha desde dentro de una plaza: hay que salir antes', () => {
+    const { sesion, asentamientoId, fundador } = fuera();
+    sesion.ejecutar(entrarEnAsentamiento, { asentamientoId, jugadorId: fundador }, opcDe(fundador));
+
+    const r = sesion.ejecutar(marcharA, { jugadorId: fundador, objetivo: { tipo: 'punto', punto: TIERRA_FIRME } }, opcDe(fundador));
+
+    expect(r.ok).toBe(false);
+  });
+
+  it('no hay marcha por mar', () => {
+    const { sesion, fundador } = fuera();
+
+    const r = sesion.ejecutar(marcharA, { jugadorId: fundador, objetivo: { tipo: 'punto', punto: AGUA } }, opcDe(fundador));
+
+    expect(r.ok).toBe(false);
   });
 });

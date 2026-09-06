@@ -851,7 +851,8 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       // +3 con la presencia del jugador (paso 3 del jugador situado, 2026-09-06): `salirAlMundo`,
       // `entrarEnAsentamiento` y `salirDeAsentamiento`. Aquí la superficie CRECE, y también es parte del
       // diseño: entrar y salir dejan de ser efectos colaterales de otra cosa y pasan a ser actos del jugador.
-      expect(cuerpo.oneOf.length).toBe(45);
+      // +1 con `marcharA` (paso 4): la columna que el paso 3 crea, en marcha.
+      expect(cuerpo.oneOf.length).toBe(46);
       const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
       expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
     });

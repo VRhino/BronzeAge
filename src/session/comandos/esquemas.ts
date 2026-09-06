@@ -38,6 +38,15 @@ const PUNTO = {
   additionalProperties: false,
 } as const;
 const RECURSO = { type: 'string', enum: RECURSOS_TIPO } as const;
+// A dónde va una columna: un asentamiento por id, o un punto del mapa. Se valida con `oneOf` para que un
+// cliente no pueda colar un punto sin coordenadas ni un destino sin id. Lo comparten `movilizarEjercito`
+// (fijarlo al salir) y `marcharA` (rectificarlo cuantas veces quiera un viajero solo).
+const OBJETIVO_EJERCITO = {
+  oneOf: [
+    { type: 'object', properties: { tipo: { type: 'string', enum: ['asentamiento'] }, id: IDENTIFICADOR }, required: ['tipo', 'id'], additionalProperties: false },
+    { type: 'object', properties: { tipo: { type: 'string', enum: ['punto'] }, punto: PUNTO }, required: ['tipo', 'punto'], additionalProperties: false },
+  ],
+} as const;
 const CARGO_FACCION = { type: 'string', enum: CARGOS_TIPO } as const;
 const CARGO_CONSTRUCTOR = { type: 'string', enum: CARGOS_CONSTRUCTOR } as const;
 
@@ -219,24 +228,16 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
     },
     ['asentamientoId', 'jugadorId', 'escuadronIds', 'carga']
   ),
+  marcharA: objeto({ jugadorId: IDENTIFICADOR, objetivo: OBJETIVO_EJERCITO }, ['jugadorId', 'objetivo']),
   entrarEnAsentamiento: objeto({ asentamientoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR }, ['asentamientoId', 'jugadorId']),
   salirDeAsentamiento: objeto({ asentamientoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR }, ['asentamientoId', 'jugadorId']),
-  // Ejércitos (Doc 5.12). `objetivo` es una union: un asentamiento por id, o un punto del mapa. Se valida
-  // con `oneOf` para que un cliente no pueda colar un punto sin coordenadas ni un destino sin id.
+  // Ejércitos (Doc 5.12).
   movilizarEjercito: objeto(
     {
       asentamientoId: IDENTIFICADOR,
       jugadorId: IDENTIFICADOR,
       escuadronIds: LISTA_DE_IDENTIFICADORES,
-      objetivo: {
-        oneOf: [
-          objeto({ tipo: { type: 'string', enum: ['asentamiento'] }, id: IDENTIFICADOR }, ['tipo', 'id']),
-          objeto(
-            { tipo: { type: 'string', enum: ['punto'] }, punto: objeto({ x: NUMERO, y: NUMERO }, ['x', 'y']) },
-            ['tipo', 'punto']
-          ),
-        ],
-      },
+      objetivo: OBJETIVO_EJERCITO,
     },
     ['asentamientoId', 'jugadorId', 'escuadronIds', 'objetivo']
   ),
