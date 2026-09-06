@@ -14,7 +14,8 @@
 // valor de error, que es control de flujo por excepción en una capa que por lo demás es de funciones puras.
 // Queda encerrado dentro de `comando()`, no escapa nunca de un manejador, y es exactamente lo que ya hacía
 // `rechazoDesdeError` con los errores del motor — así que el mecanismo es uno, no dos.
-import type { Asentamiento, CampamentoBandido, Caravana, Faccion, Ejercito } from '../../domain/types';
+import { columnaDe } from '../../engine/ejercitos';
+import type { Asentamiento, CampamentoBandido, Caravana, Faccion, Ejercito, Jugador } from '../../domain/types';
 import type { GameSessionState } from '../estado';
 import { CODIGOS_ERROR, type CodigoError } from './codigosDeError';
 import { rechazo, rechazoDesdeError, type ManejadorComando } from './tipos';
@@ -93,6 +94,22 @@ export function exigirEjercito(estado: GameSessionState, ejercitoId: string): Ej
   const ejercito = estado.ejercitos.find((e) => e.id === ejercitoId);
   if (!ejercito) rechazar(CODIGOS_ERROR.ejercitoNoExiste);
   return ejercito;
+}
+
+/** El registro del jugador (Doc 1.10). Existe siempre para quien ha actuado alguna vez — el alta la hace
+ * `GameSession.ejecutar` —, así que faltar aquí es que ese id no ha jugado nunca. */
+export function exigirJugador(estado: GameSessionState, jugadorId: string): Jugador {
+  const jugador = estado.jugadores.find((j) => j.id === jugadorId);
+  if (!jugador) rechazar(CODIGOS_ERROR.jugadorNoExiste);
+  return jugador;
+}
+
+/** La columna en la que va este jugador (Doc 1.10). No estar en ninguna es "no estás en el mundo": no es una
+ * regla que romper, es que la entidad sobre la que actuar no existe — misma clase que las de arriba. */
+export function exigirColumnaDe(estado: GameSessionState, jugadorId: string): Ejercito {
+  const columna = columnaDe(estado.ejercitos, jugadorId);
+  if (!columna) rechazar(CODIGOS_ERROR.sinColumna);
+  return columna;
 }
 
 // --- Actualizadores: estado nuevo con una entidad sustituida ---

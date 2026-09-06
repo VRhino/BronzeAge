@@ -115,3 +115,22 @@ export function puedeEntrarEn(
       return faccionDelJugadorId === asentamiento.faccionId || estanAliadas(relaciones, faccionDelJugadorId, asentamiento.faccionId);
   }
 }
+
+export class PuertaInvalidaError extends Error {}
+
+/**
+ * Veta (o perdona) a un jugador en una plaza (Doc 1.10.5).
+ *
+ * **A un residente no se le veta.** Nadie se queda fuera de su propia casa, y echar a un vecino es el exilio
+ * (Doc 2.8) — que es otra cosa, con otro procedimiento. Sin esta regla, un Gobernador podría expulsar a un
+ * ciudadano del juego con un comando de puerta.
+ */
+export function conVeto(asentamiento: Asentamiento, vetadoId: string, vetar: boolean): Asentamiento {
+  if (vetar && esResidente(asentamiento, vetadoId)) {
+    throw new PuertaInvalidaError('A un residente no se le cierra su propia casa: eso es el exilio.');
+  }
+  const vetados = new Set(asentamiento.vetadosIds ?? []);
+  if (vetar) vetados.add(vetadoId);
+  else vetados.delete(vetadoId);
+  return { ...asentamiento, vetadosIds: [...vetados].sort() };
+}

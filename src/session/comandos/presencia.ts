@@ -12,22 +12,14 @@
 //
 // No hay un cuarto: salir de tu propia residencia SIEMPRE es `salirAlMundo`, porque ahí tienes tu roster
 // entero delante y hay algo que elegir.
-import { MOVIMIENTO } from '../../constants';
 import type { Asentamiento } from '../../domain/types';
-import {
-  absorberColumna,
-  enLaPuertaDe,
-  marcharA as marcharAEngine,
-  salirAlMundo as salirAlMundoEngine,
-  MovilizacionInvalidaError,
-  type ObjetivoEjercito,
-} from '../../engine/ejercitos';
-import { esResidente, puedeEntrarEn } from '../../engine/pertenencia';
-import { situarJugadores } from '../../engine/ubicacion';
+import { marcharA as marcharAEngine, salirAlMundo as salirAlMundoEngine, type ObjetivoEjercito } from '../../engine/ejercitos';
+import { conVeto } from '../../engine/pertenencia';
+import { cruzarLaPuerta, retomarColumna, situarJugadores } from '../../engine/ubicacion';
 import { liderazgoComprometido } from '../../engine/liderazgo';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito } from './tipos';
-import { comando, exigirAsentamiento, conAsentamiento } from './ayudas';
+import { comando, exigirAsentamiento, exigirColumnaDe, exigirJugador, conAsentamiento } from './ayudas';
 import { evento } from './eventos';
 
 export interface ParamsSalirAlMundo {
@@ -64,18 +56,6 @@ export interface ParamsSalirDeAsentamiento {
   jugadorId: string;
 }
 
-/** La columna en la que va este jugador, si va en alguna. Lee `participantes` y no los escuadrones: un
- * viajero sin tropas también va dentro de la suya (Doc 5.12.1). */
-function columnaDe(estado: GameSessionState, jugadorId: string) {
-  return estado.ejercitos.find((e) => e.participantes.some((p) => p.jugadorId === jugadorId));
-}
-
-/** Dónde está su cuerpo, que NO es lo mismo que a qué columna pertenece: quien entra en una plaza ajena
- * sigue siendo participante de la columna que dejó aparcada a la puerta. */
-function ubicacionDe(estado: GameSessionState, jugadorId: string) {
-  return estado.jugadores.find((j) => j.id === jugadorId)?.ubicacion;
-}
-
 /**
  * Salir al mundo desde la residencia (Doc 1.10.2): eliges tropas y carga, y apareces junto a la plaza.
  *
@@ -84,18 +64,14 @@ function ubicacionDe(estado: GameSessionState, jugadorId: string) {
  */
 export const salirAlMundo = comando<ParamsSalirAlMundo, { ejercitoId: string }>((estado, _mapa, ctx, params) => {
   const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
-  if (columnaDe(estado, params.jugadorId)) {
-    throw new MovilizacionInvalidaError('Ya estás fuera: no se puede salir dos veces.');
-  }
-
-  const ejercitoId = `ejercito-${ctx.ids.siguiente()}`;
   const { asentamiento: origen, ejercito } = salirAlMundoEngine(
     asentamiento,
     estado.jugadores.find((j) => j.id === params.jugadorId),
     params.jugadorId,
     params.escuadronIds,
     params.carga,
-    ejercitoId,
+    estado.ejercitos,
+    `ejercito-${ctx.ids.siguiente()}`,
     ctx.instante
   );
 
@@ -141,28 +117,12 @@ export const salirAlMundo = comando<ParamsSalirAlMundo, { ejercitoId: string }>(
  */
 export const entrarEnAsentamiento = comando<ParamsEntrarEnAsentamiento, void>((estado, _mapa, ctx, params) => {
   const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
-  const columna = columnaDe(estado, params.jugadorId);
-  if (!columna) throw new MovilizacionInvalidaError('No estás en el mundo: no hay puerta que cruzar.');
-  // Entrar es un acto INDIVIDUAL y una columna personal es de uno solo, así que disolverla o aparcarla no le
-  // hace nada a nadie más. Un Ejército lleva a varios: dejarle cruzar la puerta desde dentro lo disolvería
-  // con su gente dentro, y de paso sería una salida encubierta que se salta al Líder (Doc 5.14.2). Para
-  // entrar hay que separarse antes, que es un comando con sus propias reglas.
-  if (columna.tipo === 'ejercito') {
-    throw new MovilizacionInvalidaError('Vas en un ejército: hay que separarse antes de entrar en una plaza.');
-  }
-  if (!enLaPuertaDe(columna, asentamiento)) {
-    throw new MovilizacionInvalidaError(`Hay que estar a menos de ${MOVIMIENTO.radioPuerta} de la plaza para entrar.`);
-  }
-  if (!puedeEntrarEn(asentamiento, params.jugadorId, columna.faccionId, estado.relaciones)) {
-    throw new MovilizacionInvalidaError('Esa plaza no te deja entrar.');
-  }
+  const columna = exigirColumnaDe(estado, params.jugadorId);
+  const cruce = cruzarLaPuerta(columna, asentamiento, params.jugadorId, estado.relaciones);
 
-  const esSuResidencia = esResidente(asentamiento, params.jugadorId);
+  const esSuResidencia = cruce.disuelveColumna;
   const siguiente: GameSessionState = esSuResidencia
-    ? {
-        ...conAsentamiento(estado, absorberColumna(asentamiento, columna, true)),
-        ejercitos: estado.ejercitos.filter((e) => e.id !== columna.id),
-      }
+    ? { ...conAsentamiento(estado, cruce.asentamiento), ejercitos: estado.ejercitos.filter((e) => e.id !== columna.id) }
     : estado;
 
   return exito(
@@ -202,11 +162,8 @@ export const entrarEnAsentamiento = comando<ParamsEntrarEnAsentamiento, void>((e
  */
 export const salirDeAsentamiento = comando<ParamsSalirDeAsentamiento, { ejercitoId: string }>((estado, _mapa, ctx, params) => {
   const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
-  if (esResidente(asentamiento, params.jugadorId)) {
-    throw new MovilizacionInvalidaError('De tu propia residencia se sale eligiendo tropas y carga, con `salirAlMundo`.');
-  }
-  const columna = columnaDe(estado, params.jugadorId);
-  if (!columna) throw new MovilizacionInvalidaError('No tienes ninguna columna a la puerta que retomar.');
+  retomarColumna(asentamiento, params.jugadorId);
+  const columna = exigirColumnaDe(estado, params.jugadorId);
 
   return exito(
     conHistorialDeJugador(
@@ -253,14 +210,11 @@ export interface PayloadMarchaFijada {
  * al salir y su única salida es cancelar (Doc 5.12.6).
  */
 export const marcharA = comando<ParamsMarcharA, { ejercitoId: string }>((estado, mapa, ctx, params) => {
-  const columna = columnaDe(estado, params.jugadorId);
-  if (!columna) throw new MovilizacionInvalidaError('No estás en el mundo: no hay a dónde marchar.');
-  if (ubicacionDe(estado, params.jugadorId)?.tipo !== 'columna') {
-    throw new MovilizacionInvalidaError('Estás dentro de una plaza: hay que salir antes de ponerse en marcha.');
-  }
+  const columna = exigirColumnaDe(estado, params.jugadorId);
+  const jugador = exigirJugador(estado, params.jugadorId);
 
   const rectifica = columna.estado === 'marchando';
-  const enMarcha = marcharAEngine(columna, params.objetivo, estado.asentamientos, mapa);
+  const enMarcha = marcharAEngine(columna, jugador, params.objetivo, estado.asentamientos, mapa);
   const aDonde = params.objetivo.tipo === 'asentamiento' ? params.objetivo.id : 'un punto del mapa';
 
   return exito(
@@ -341,17 +295,10 @@ export const fijarPoliticaDeAcceso = comando<ParamsFijarPoliticaDeAcceso, void>(
  */
 export const vetarJugador = comando<ParamsVetarJugador, void>((estado, _mapa, ctx, params) => {
   const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
-  if (params.vetar && esResidente(asentamiento, params.vetadoId)) {
-    throw new MovilizacionInvalidaError('A un residente no se le cierra su propia casa: eso es el exilio.');
-  }
-
-  const vetados = new Set(asentamiento.vetadosIds ?? []);
-  if (params.vetar) vetados.add(params.vetadoId);
-  else vetados.delete(params.vetadoId);
 
   return exito(
     conHistorialDeJugador(
-      conAsentamiento(estado, { ...asentamiento, vetadosIds: [...vetados].sort() }),
+      conAsentamiento(estado, conVeto(asentamiento, params.vetadoId, params.vetar)),
       params.jugadorId,
       params.vetar ? `Veta a un jugador en ${asentamiento.id}.` : `Levanta un veto en ${asentamiento.id}.`
     ),

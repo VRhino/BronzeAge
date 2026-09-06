@@ -5,8 +5,10 @@
 // jugador actúa por primera vez y cuando se carga una partida anterior a esta mecánica— y en los dos hay que
 // DEDUCIRLA de lo que el mundo ya sabe. Una sola función para los dos casos, o la partida migrada acabaría
 // colocando a la gente en un sitio distinto del que la coloca el juego en marcha.
-import type { Asentamiento, Ejercito, Jugador, UbicacionJugador } from '../domain/types';
-import { esResidente } from './pertenencia';
+import type { Asentamiento, Ejercito, Jugador, RelacionPolitica, UbicacionJugador } from '../domain/types';
+import { MOVIMIENTO } from '../constants';
+import { absorberColumna, enLaPuertaDe, MovilizacionInvalidaError } from './ejercitos';
+import { esResidente, puedeEntrarEn } from './pertenencia';
 
 /**
  * Dónde está un jugador según lo que el mundo sabe de él, sin consultar su registro.
@@ -58,4 +60,52 @@ export function conJugadorAsegurado(
 export function situarJugadores(jugadores: readonly Jugador[], ids: readonly string[], ubicacion: UbicacionJugador): Jugador[] {
   const aSituar = new Set(ids);
   return jugadores.map((j) => (aSituar.has(j.id) ? { ...j, ubicacion } : j));
+}
+
+/**
+ * Cruzar la puerta de una plaza (Doc 1.10.3). Devuelve lo que pasa, sin decidir nada de estado: si la
+ * columna se disuelve dentro —y con qué asentamiento resultante— o si se queda aparcada a la puerta.
+ *
+ * Las cuatro condiciones, y qué tapa cada una:
+ *
+ *  1. **Solo en columna personal.** Un Ejército lleva a varios: dejarle cruzar la puerta desde dentro lo
+ *     disolvería con su gente dentro, y sería además una salida encubierta que se salta al Líder (Doc
+ *     5.14.2). Hay que separarse antes.
+ *  2. **En la puerta**, no en las afueras: entrar es un acto, no un roce (Doc 5.12.3).
+ *  3. **Con permiso** del Gobernador (Doc 1.10.5).
+ *  4. Y entonces, **residencia o no**, que es lo que decide si la columna se deshace o espera fuera.
+ */
+export function cruzarLaPuerta(
+  columna: Ejercito,
+  asentamiento: Asentamiento,
+  jugadorId: string,
+  relaciones: readonly RelacionPolitica[]
+): { asentamiento: Asentamiento; disuelveColumna: boolean } {
+  if (columna.tipo === 'ejercito') {
+    throw new MovilizacionInvalidaError('Vas en un ejército: hay que separarse antes de entrar en una plaza.');
+  }
+  if (!enLaPuertaDe(columna, asentamiento)) {
+    throw new MovilizacionInvalidaError(`Hay que estar a menos de ${MOVIMIENTO.radioPuerta} de la plaza para entrar.`);
+  }
+  if (!puedeEntrarEn(asentamiento, jugadorId, columna.faccionId, relaciones)) {
+    throw new MovilizacionInvalidaError('Esa plaza no te deja entrar.');
+  }
+
+  // En tu residencia la columna se DESHACE —tropas a la guarnición, carro al almacén— porque ahí tienes
+  // todo delante y volver a salir vuelve a elegir. En cualquier otra se queda esperando intacta.
+  return esResidente(asentamiento, jugadorId)
+    ? { asentamiento: absorberColumna(asentamiento, columna, true), disuelveColumna: true }
+    : { asentamiento, disuelveColumna: false };
+}
+
+/**
+ * Salir de una plaza AJENA retomando la columna aparcada (Doc 1.10.3), sin pantalla de equipamiento.
+ *
+ * Desde tu residencia se rechaza a propósito en vez de hacer lo mismo en silencio: allí hay un roster entero
+ * y un almacén que elegir, y eso es `salirAlMundo`.
+ */
+export function retomarColumna(asentamiento: Asentamiento, jugadorId: string): void {
+  if (esResidente(asentamiento, jugadorId)) {
+    throw new MovilizacionInvalidaError('De tu propia residencia se sale eligiendo tropas y carga, con `salirAlMundo`.');
+  }
 }

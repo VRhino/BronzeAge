@@ -867,6 +867,42 @@ el paso de un minuto, mientras que avanzar, tropezarse y llegar son las que pasa
 | `session/estado.ts` | Migración de snapshots (§6) |
 | `server/rutas/*`, `openapi.ts` | Contrato |
 
+### 3.1 Dónde va cada cosa — revisión de capas (2026-09-06)
+
+Auditado después del paso 5, y había una regresión real que conviene dejar escrita porque se repite sola.
+
+**La dirección de los imports estaba bien** — `src/__tests__/arquitectura.test.ts` la congela y pasa— pero
+eso no es lo que se había roto. Lo roto era **dónde vivían las reglas**: `comandos/presencia.ts` y
+`comandos/columna.ts` acumulaban **18 de las 23** reglas de toda la capa de comandos. El resto del repo tiene
+0 en `cargos`, `comercio`, `construccion` y `militar`, y 4 en `ejercitos` — o sea que la convención era clara
+y estos dos módulos la rompían solos.
+
+La regla, y es la del repo, no una nueva:
+
+| Capa | Qué le toca |
+|---|---|
+| `engine/` | **Las reglas.** Qué se puede hacer y qué pasa al hacerlo. Todo lo que Doc 1.10 o Doc 5.14 enuncian |
+| `session/comandos/` | **Orquestación**: buscar las entidades, llamar al motor, escribir el estado, emitir eventos. Y la matriz de autorización, que es lo único suyo de verdad |
+| `server/` | **Infraestructura**: HTTP, disco, migraciones. Ninguna regla |
+
+Lo que se movió: las condiciones de cruzar la puerta a `engine/ubicacion.ts` (`cruzarLaPuerta`,
+`retomarColumna`), la del veto a `engine/pertenencia.ts` (`conVeto`), y las de unirse, marchar y contestar
+peticiones a `engine/ejercitos.ts` (`anotarPeticionDeUnion`, `retirarPeticionDeUnion`, y las guardas dentro de
+`salirAlMundo`/`marcharA`/`unirseEnCampo`). Los comandos quedaron en **cero reglas**.
+
+Las búsquedas que fallan —"no vas en ninguna columna"— **no** son reglas: son la entidad sobre la que actuar,
+igual que `exigirAsentamiento`. Van a `comandos/ayudas.ts` con su código de error, que es donde el repo ya las
+tenía.
+
+**Y un error nuevo del motor hay que registrarlo**: `PuertaInvalidaError` no estaba en
+`session/erroresDeDominio.ts`, así que en vez de un rechazo limpio salía como excepción. Lo destapó un test
+que ya existía — la tabla está escrita justamente para que olvidarla no falle en silencio.
+
+**El reparto en `server/` sí estaba bien** y merece la pena decir por qué: las migraciones deciden *qué
+significa un archivo viejo* —que `liderId` sea el primer participante, que `politicaDeUnion` sea
+`rechazar`— y eso es infraestructura. Pero *dónde está un jugador* es regla, y por eso la migración llama a
+`ubicacionDeducida` en vez de reimplementarla.
+
 ## 4. Constantes nuevas (todas PLACEHOLDER, a calibrar por simulación)
 
 ```ts

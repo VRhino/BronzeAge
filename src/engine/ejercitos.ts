@@ -83,6 +83,12 @@ function seleccionarParaCampana(
  * Cuánta gente va DENTRO de la columna (Doc 5.12.1). Lee `participantes`, no los escuadrones: un jugador que
  * sale sin tropas —o que las pierde todas— sigue yendo dentro, y antes esto devolvía 0 por él.
  */
+/** En qué columna va este jugador, si va en alguna. Lee `participantes` y no los escuadrones: un viajero sin
+ * tropas también va dentro de la suya (Doc 5.12.1). */
+export function columnaDe(ejercitos: readonly Ejercito[], jugadorId: string): Ejercito | undefined {
+  return ejercitos.find((e) => e.participantes.some((p) => p.jugadorId === jugadorId));
+}
+
 export function participantesDe(ejercito: Pick<Ejercito, 'participantes'>): number {
   return ejercito.participantes.length;
 }
@@ -354,11 +360,16 @@ export function salirAlMundo(
   jugadorId: string,
   escuadronIds: readonly string[],
   carga: Readonly<Record<string, number>>,
+  /** Las columnas del mundo: salir estando ya fuera no es salir, y quien lo sabe es el mundo. */
+  ejercitos: readonly Ejercito[],
   id: string,
   instante: Instante
 ): { asentamiento: Asentamiento; ejercito: Ejercito } {
   if (!esResidente(asentamiento, jugadorId)) {
     throw new MovilizacionInvalidaError('Solo se sale al mundo desde la propia residencia.');
+  }
+  if (columnaDe(ejercitos, jugadorId)) {
+    throw new MovilizacionInvalidaError('Ya estás fuera: no se puede salir dos veces.');
   }
 
   const escuadrones = seleccionarParaCampana(asentamiento, jugadorId, escuadronIds, true);
@@ -665,12 +676,18 @@ export function replegarEjercito(
  */
 export function marcharA(
   ejercito: Ejercito,
+  jugador: Jugador,
   objetivo: ObjetivoEjercito,
   asentamientos: readonly Asentamiento[],
   mapa: Mapa
 ): Ejercito {
   if (ejercito.tipo !== 'personal') {
     throw new MovilizacionInvalidaError('El rumbo de un ejército no se cambia: se cancela y se vuelve.');
+  }
+  // Su columna puede estar aparcada a la puerta de una plaza mientras él está DENTRO (Doc 1.10.3): la
+  // columna no se mueve sola, hay que volver a ella primero.
+  if (jugador.ubicacion.tipo !== 'columna') {
+    throw new MovilizacionInvalidaError('Estás dentro de una plaza: hay que salir antes de ponerse en marcha.');
   }
 
   const destino = puntoDeObjetivo(objetivo, asentamientos);
@@ -692,6 +709,10 @@ export function marcharA(
  * que hace que marchar acompañado cueste algo, sin ninguna regla extra que lo imponga (Doc 5.12.1).
  */
 export function unirseEnCampo(ejercito: Ejercito, columna: Ejercito, instante: Instante): Ejercito {
+  if (ejercito.id === columna.id) throw new MovilizacionInvalidaError('Ya vas en esa columna.');
+  if (ejercito.politicaDeUnion === 'rechazar') {
+    throw new MovilizacionInvalidaError('Esa columna no admite a nadie más.');
+  }
   if (ejercito.tipo !== 'ejercito') {
     throw new MovilizacionInvalidaError('Dos viajeros que se cruzan no forman un ejército.');
   }
@@ -805,8 +826,40 @@ export function cederLiderazgo(ejercito: Ejercito, liderActualId: string, suceso
 }
 
 /** ¿Sigue viva esta petición? La caducidad se evalúa AL LEER (Doc 5.14.1): nada se dispara a los 10 s. */
-export function peticionViva(peticion: { expiraEn: Instante }, ahora: Instante): boolean {
+function peticionViva(peticion: { expiraEn: Instante }, ahora: Instante): boolean {
   return ahora < peticion.expiraEn;
+}
+
+/**
+ * Anota una petición de unión con su caducidad (Doc 5.14.1), reemplazando la que ese jugador tuviera y
+ * barriendo de paso las que ya vencieron — el único momento en que alguien las mira es este y el de
+ * contestarlas, así que aquí es donde se limpian sin necesidad de temporizador.
+ *
+ * Valida la unión ANTES de anotar: pedirle al Líder que decida sobre algo que el motor va a rechazar
+ * igualmente es hacerle perder los diez segundos que tiene.
+ */
+export function anotarPeticionDeUnion(ejercito: Ejercito, columna: Ejercito, ahora: Instante, expiraEn: Instante): Ejercito {
+  unirseEnCampo(ejercito, columna, ahora);
+  const jugadorId = columna.liderId;
+  const vivas = (ejercito.peticionesDeUnion ?? []).filter((p) => peticionViva(p, ahora) && p.jugadorId !== jugadorId);
+  return { ...ejercito, peticionesDeUnion: [...vivas, { jugadorId, pedidoEn: ahora, expiraEn }] };
+}
+
+/**
+ * Retira una petición contestada (Doc 5.14.1), comprobando lo que la hace contestable: que quien responde
+ * sea el Líder, y que la petición **siga viva**. La caducidad se mira aquí, al leer, porque nada la barrió
+ * al vencer.
+ */
+export function retirarPeticionDeUnion(ejercito: Ejercito, liderId: string, solicitanteId: string, ahora: Instante): Ejercito {
+  if (ejercito.liderId !== liderId) {
+    throw new MovilizacionInvalidaError('Solo el Líder contesta las peticiones de unión.');
+  }
+  const peticion = (ejercito.peticionesDeUnion ?? []).find((p) => p.jugadorId === solicitanteId);
+  if (!peticion) throw new MovilizacionInvalidaError('No hay ninguna petición de ese jugador.');
+  if (!peticionViva(peticion, ahora)) {
+    throw new MovilizacionInvalidaError('Esa petición ya caducó: el silencio cuenta como un no.');
+  }
+  return { ...ejercito, peticionesDeUnion: (ejercito.peticionesDeUnion ?? []).filter((p) => p.jugadorId !== solicitanteId) };
 }
 
 export function estacionarEjercito(ejercito: Ejercito): Ejercito {

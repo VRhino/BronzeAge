@@ -10,15 +10,15 @@
 import { MOVIMIENTO } from '../../constants';
 import { segundos, sumar } from '../../domain/tiempo';
 import {
+  anotarPeticionDeUnion,
   cederLiderazgo as cederEngine,
-  peticionViva,
+  retirarPeticionDeUnion,
   separarseDelEjercito as separarseEngine,
   unirseEnCampo as unirseEnCampoEngine,
-  MovilizacionInvalidaError,
 } from '../../engine/ejercitos';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito } from './tipos';
-import { comando, exigirEjercito } from './ayudas';
+import { comando, exigirColumnaDe, exigirEjercito } from './ayudas';
 import { evento } from './eventos';
 
 export interface ParamsUnirseEnCampo {
@@ -67,10 +67,6 @@ export interface PayloadLiderazgoCedido {
   sucesorId: string;
 }
 
-function columnaDe(estado: GameSessionState, jugadorId: string) {
-  return estado.ejercitos.find((e) => e.participantes.some((p) => p.jugadorId === jugadorId));
-}
-
 function conEjercitos(estado: GameSessionState, cambiados: GameSessionState['ejercitos']): GameSessionState {
   const porId = new Map(cambiados.map((e) => [e.id, e]));
   return { ...estado, ejercitos: estado.ejercitos.map((e) => porId.get(e.id) ?? e) };
@@ -88,21 +84,11 @@ function conEjercitos(estado: GameSessionState, cambiados: GameSessionState['eje
  */
 export const unirseEnCampo = comando<ParamsUnirseEnCampo, { unido: boolean }>((estado, _mapa, ctx, params) => {
   const ejercito = exigirEjercito(estado, params.ejercitoId);
-  const columna = columnaDe(estado, params.jugadorId);
-  if (!columna) throw new MovilizacionInvalidaError('No estás en el mundo con nada que aportar.');
-  if (columna.id === ejercito.id) throw new MovilizacionInvalidaError('Ya vas en esa columna.');
-
-  if (ejercito.politicaDeUnion === 'rechazar') {
-    throw new MovilizacionInvalidaError('Esa columna no admite a nadie más.');
-  }
+  const columna = exigirColumnaDe(estado, params.jugadorId);
 
   if (ejercito.politicaDeUnion === 'preguntar') {
-    // Se valida la unión ANTES de molestar al Líder: pedirle que decida sobre algo que el motor va a
-    // rechazar igualmente es hacerle perder los diez segundos que tiene.
-    unirseEnCampoEngine(ejercito, columna, ctx.instante);
     const expiraEn = sumar(ctx.instante, segundos(MOVIMIENTO.vidaPeticionUnionSegundos));
-    const vivas = (ejercito.peticionesDeUnion ?? []).filter((p) => peticionViva(p, ctx.instante) && p.jugadorId !== params.jugadorId);
-    const conPeticion = { ...ejercito, peticionesDeUnion: [...vivas, { jugadorId: params.jugadorId, pedidoEn: ctx.instante, expiraEn }] };
+    const conPeticion = anotarPeticionDeUnion(ejercito, columna, ctx.instante, expiraEn);
 
     return exito(
       conHistorialDeJugador(conEjercitos(estado, [conPeticion]), params.jugadorId, `Pide unirse al ejército ${ejercito.id}.`),
@@ -148,19 +134,7 @@ export const unirseEnCampo = comando<ParamsUnirseEnCampo, { unido: boolean }>((e
  */
 export const responderPeticionDeUnion = comando<ParamsResponderPeticion, { unido: boolean }>((estado, _mapa, ctx, params) => {
   const ejercito = exigirEjercito(estado, params.ejercitoId);
-  if (ejercito.liderId !== params.jugadorId) {
-    throw new MovilizacionInvalidaError('Solo el Líder contesta las peticiones de unión.');
-  }
-  const peticion = (ejercito.peticionesDeUnion ?? []).find((p) => p.jugadorId === params.solicitanteId);
-  if (!peticion) throw new MovilizacionInvalidaError('No hay ninguna petición de ese jugador.');
-  if (!peticionViva(peticion, ctx.instante)) {
-    throw new MovilizacionInvalidaError('Esa petición ya caducó: el silencio cuenta como un no.');
-  }
-
-  const sinLaPeticion = {
-    ...ejercito,
-    peticionesDeUnion: (ejercito.peticionesDeUnion ?? []).filter((p) => p.jugadorId !== params.solicitanteId),
-  };
+  const sinLaPeticion = retirarPeticionDeUnion(ejercito, params.jugadorId, params.solicitanteId, ctx.instante);
 
   if (!params.aceptar) {
     return exito(
@@ -177,8 +151,7 @@ export const responderPeticionDeUnion = comando<ParamsResponderPeticion, { unido
     );
   }
 
-  const columna = columnaDe(estado, params.solicitanteId);
-  if (!columna) throw new MovilizacionInvalidaError('El que lo pidió ya no está en el mundo.');
+  const columna = exigirColumnaDe(estado, params.solicitanteId);
   const fundido = unirseEnCampoEngine(sinLaPeticion, columna, ctx.instante);
 
   const siguiente: GameSessionState = {
@@ -211,8 +184,7 @@ export const responderPeticionDeUnion = comando<ParamsResponderPeticion, { unido
  * columna nunca se queda vacía en campo abierto— y por eso el motor las comprueba por separado.
  */
 export const separarseDelEjercito = comando<ParamsSepararse, { columnaId: string }>((estado, _mapa, ctx, params) => {
-  const ejercito = columnaDe(estado, params.jugadorId);
-  if (!ejercito) throw new MovilizacionInvalidaError('No vas en ninguna columna.');
+  const ejercito = exigirColumnaDe(estado, params.jugadorId);
 
   const columnaId = `ejercito-${ctx.ids.siguiente()}`;
   const separado = separarseEngine(ejercito, params.jugadorId, columnaId);
