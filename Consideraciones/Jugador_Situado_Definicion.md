@@ -1056,8 +1056,16 @@ Cada paso deja el repo verde y jugable. El orden no es negociable en los tres pr
    invariante de 2026-09-05 que decía que lo avistado no lleva edificios; lo que sigue fuera es lo que decide
    una guerra — almacén, guarnición, cola y cargos ajenos.
 
-7. **Presencia en la autorización**: los ~24 comandos. **Requiere haber decidido antes qué se hace con el NPC
-   de gobernanza** (§10.3): sin ubicación ni exención explícita, el batch se cae aquí.
+7. ~~**Presencia en la autorización**~~ — **HECHO (2026-09-06)**. Resultaron ser **24 comandos exactos**, y
+   el cambio cabe en **un solo sitio**: `reside()` y `residenteConCargo()` de la matriz pasan a exigir
+   además estar dentro. No hacía falta una condición nueva por comando — los 24 que exigían ser vecino
+   exigían en realidad *ser vecino y estar ahí*, solo que hasta ahora un jugador estaba en todas partes.
+
+   **Y el riesgo del NPC estaba mal medido** (ver §10.3): `npcGobernanza.ts` llama al MOTOR directamente —17
+   imports de `engine/`, cero de `comandos/`— así que nunca pasa por la matriz y este paso no le toca. No es
+   una laguna: un NPC de facción no es una persona parada en un sitio, es la abstracción de "la plaza se
+   gobierna sola", y no hay presencia que comprobar. Verificado corriendo el batch: 100 asentamientos vivos
+   después del cambio.
 8. **Las interacciones dejan de ser automáticas** (§1.1b). Es un paso grande y va en este orden interno:
    a) `CaravanaAvistada` en la proyección — sin ver, no hay clic;
    b) `inspeccionar` con su rango de 40 y su aviso al observado;
@@ -1344,9 +1352,15 @@ Y los de la tercera ronda, todos alrededor de la misma línea:
    correcta, y cada comando migrado lleva su test de rechazo por ausencia.
 2. **La migración de snapshots no tiene marcha atrás.** Un snapshot migrado no vuelve a cargar en una versión
    anterior. Mitigación: respaldo antes de la primera carga migrada (`server/respaldos.ts` ya existe).
-3. **El NPC de gobernanza no sabe estar en ningún sitio.** `npcGobernanza.ts` funda, construye y recluta como
-   si estuviera en todas partes. O se le da ubicación, o se le exime explícitamente — y si se le exime, el
-   batch deja de medir el juego que se está diseñando.
+3. ~~**El NPC de gobernanza no sabe estar en ningún sitio.**~~ — **DESCARTADO al llegar al paso 7
+   (2026-09-06).** El riesgo daba por hecho que el NPC pasaba por la matriz de autorización, y no pasa:
+   llama al motor directamente. La presencia se comprueba en la matriz, que es donde ya vivía la residencia,
+   así que el NPC no la ve.
+
+   Queda en pie una versión MUCHO más pequeña del mismo reparo, y conviene no perderla: el batch mide un
+   mundo donde nadie tiene que estar en ningún sitio para actuar, o sea que **no mide el coste de la
+   delegación** — lo que en una partida real obliga a repartir cargos, en el laboratorio es gratis. No rompe
+   nada; sesga hacia arriba la productividad de una plaza.
 4. **La continuidad con Fase 1 se puede erosionar sin querer.** Las cuatro reglas de §7.3 no las comprueba
    ningún test hoy. Vale la pena un guardián de arquitectura para la 2 (ningún plazo ni velocidad en ticks),
    que es la más fácil de romper por descuido — y la que más cuesta deshacer después, porque queda repartida

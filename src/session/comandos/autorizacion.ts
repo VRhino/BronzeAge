@@ -18,6 +18,7 @@ import type { Asentamiento, Caravana, Faccion } from '../../domain/types';
 import type { RolTecnico } from '../../acceso/tipos';
 import { esCiudadano } from '../../engine/faccion';
 import { esResidente, esReyDe, esReyOEmbajadorDe, tieneCargoLocal } from '../../engine/pertenencia';
+import { estaEnAsentamiento } from '../../engine/ubicacion';
 import type { GameSessionState } from '../estado';
 import type { ParamsDe, TipoComando } from './registro';
 
@@ -116,7 +117,22 @@ function esFaccionDelAsentamiento(estado: GameSessionState, jugadorId: string, a
 
 function reside(estado: GameSessionState, jugadorId: string, asentamientoId: string): boolean {
   const asentamiento = buscarAsentamiento(estado, asentamientoId);
-  return asentamiento === undefined || esResidente(asentamiento, jugadorId);
+  return asentamiento === undefined || (esResidente(asentamiento, jugadorId) && presente(estado, jugadorId, asentamientoId));
+}
+
+/**
+ * Está DENTRO de esa plaza (Doc 1.10.1). Es la segunda mitad de "la ciudadanía habilita, la presencia
+ * ejerce" (Doc 2.5), y por eso no es una condición aparte en la matriz sino que se suma a la residencia: los
+ * 24 comandos que exigían ser vecino exigían en realidad *ser vecino y estar ahí*, solo que hasta ahora un
+ * jugador estaba en todas partes a la vez.
+ *
+ * La consecuencia buscada: un Gobernador de campaña **sigue siendo** el Gobernador —no pierde el cargo— pero
+ * no gobierna desde el camino. Lo ya ordenado sigue corriendo solo; lo que no puede es dar órdenes nuevas.
+ *
+ * Y por eso la delegación pasa a importar, que era el punto (Doc 2.5).
+ */
+function presente(estado: GameSessionState, jugadorId: string, asentamientoId: string): boolean {
+  return estaEnAsentamiento(estado.jugadores, jugadorId, asentamientoId, estado.asentamientos, estado.ejercitos);
 }
 
 /**
@@ -147,11 +163,11 @@ function participaEnEjercito(estado: GameSessionState, jugadorId: string, ejerci
   return ejercito.escuadrones.some((e) => e.jugadorId === jugadorId);
 }
 
-/** Reside en el asentamiento Y ostenta ahí el cargo indicado. */
+/** Reside en el asentamiento, está DENTRO, y ostenta ahí el cargo indicado. */
 function residenteConCargo(estado: GameSessionState, jugadorId: string, asentamientoId: string, cargo: Parameters<typeof tieneCargoLocal>[1]): boolean {
   const asentamiento = buscarAsentamiento(estado, asentamientoId);
   if (!asentamiento) return true;
-  return esResidente(asentamiento, jugadorId) && tieneCargoLocal(asentamiento, cargo, jugadorId);
+  return esResidente(asentamiento, jugadorId) && presente(estado, jugadorId, asentamientoId) && tieneCargoLocal(asentamiento, cargo, jugadorId);
 }
 
 /** Ciudadano de esa Facción y además Rey o Embajador suyo — autoridad diplomática (Doc 2.2). */

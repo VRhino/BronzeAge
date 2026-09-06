@@ -138,3 +138,22 @@ export function conFotoTomadaPor(
 ): Jugador[] {
   return jugadores.map((j) => (j.id === jugadorId ? conFotoDelInterior(j, asentamiento, vistoEn) : j));
 }
+
+/**
+ * ¿Está este jugador DENTRO de esta plaza (Doc 2.5: la ciudadanía habilita, la presencia ejerce)?
+ *
+ * Sin registro se deduce, con la misma función que usan el alta y la proyección: quien nunca ha dado una
+ * orden está donde el mundo dice que está, no en ninguna parte. Si divergieran, un jugador recién llegado no
+ * podría hacer nada en su propia ciudad hasta haber hecho algo antes — que es imposible.
+ */
+export function estaEnAsentamiento(
+  jugadores: readonly Jugador[],
+  jugadorId: string,
+  asentamientoId: string,
+  asentamientos: readonly Asentamiento[],
+  ejercitos: readonly Ejercito[]
+): boolean {
+  const registrada = jugadores.find((j) => j.id === jugadorId)?.ubicacion;
+  const ubicacion = registrada ?? ubicacionDeducida(jugadorId, asentamientos, ejercitos);
+  return ubicacion.tipo === 'asentamiento' && ubicacion.asentamientoId === asentamientoId;
+}
