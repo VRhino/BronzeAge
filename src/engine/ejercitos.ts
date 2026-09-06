@@ -14,7 +14,7 @@ import { calcularRuta } from '../world/rutas';
 import { distancia } from '../world/geometria';
 import { CARAVANA_CATALOGO, LOGISTICA, MOVIMIENTO, TROPAS_RECLUTABLES } from '../constants';
 import { atribuir, type EventoCrudo } from '../domain/eventos';
-import type { Instante } from '../domain/tiempo';
+import { minutos, sumar, type Instante } from '../domain/tiempo';
 import type { RandomFn } from '../worldgen';
 import { asediarConEjercito, encuentroEntreEjercitos, interceptarCaravanaConEjercito } from './combate';
 import { avanzarPosicionEnRuta } from './movimiento';
@@ -711,7 +711,9 @@ export function marcharA(
   const ruta = calcularRuta(mapa, ejercito.posicionActual, destino);
   if (!ruta) throw new MovilizacionInvalidaError('No hay ruta por tierra hasta ese destino.');
 
-  return { ...ejercito, estado: 'marchando', objetivo, ruta, progreso: 0 };
+  // Elegir un destino nuevo es dejar de ir detras de alguien (Doc 5.12.3): no hay forma de marchar a un
+  // punto Y perseguir a la vez, y dejar la presa puesta la haria reaparecer en el proximo tick.
+  return { ...ejercito, estado: 'marchando', objetivo, ruta, progreso: 0, persiguiendo: undefined };
 }
 
 /**
@@ -915,6 +917,130 @@ export function inspeccionarCaravana(observador: Ejercito, objetivo: Caravana, e
       .filter((r) => (objetivo.contenido[r] ?? 0) > 0)
       .sort(),
   };
+}
+
+/** Esta en TREGUA ahora mismo (Doc 5.12.3)? Se comprueba AL LEER, como toda fecha del juego: nada se dispara
+ * al vencerla. */
+export function enTregua(ejercito: Ejercito, ahora: Instante): boolean {
+  return ejercito.enTreguaHasta !== undefined && ahora < ejercito.enTreguaHasta;
+}
+
+/** Ninguno de los dos puede estar en tregua para que haya pelea (Doc 5.12.3). Se comprueba de los DOS lados,
+ * que es lo que impide usar la inmunidad como escudo para depredar. */
+function exigirSinTregua(atacante: Ejercito, defensor: Ejercito, ahora: Instante): void {
+  if (enTregua(atacante, ahora)) throw new MovilizacionInvalidaError('Estas en tregua: no puedes atacar todavia.');
+  if (enTregua(defensor, ahora)) throw new MovilizacionInvalidaError('Ese objetivo esta en tregua: no se le puede tocar.');
+}
+
+/**
+ * Lo que le pasa al DERROTADO en campo abierto (Doc 5.12.3): entra en tregua, y si era un viajero con carro
+ * pierde la mitad de lo que llevaba.
+ *
+ * Perder la mitad y no todo es deliberado: dejarle algo es lo que hace que valga la pena seguir el viaje en
+ * vez de reiniciarlo, y lo que distingue un robo de una ruina. Con el carro vacio solo queda la tregua.
+ */
+function trasDerrota(perdedor: Ejercito, ahora: Instante): { perdedor: Ejercito; botin: Record<string, number> } {
+  const enTreguaHasta = sumar(ahora, minutos(MOVIMIENTO.treguaTrasDerrotaMinutos));
+  if (perdedor.tipo !== 'personal') return { perdedor: { ...perdedor, enTreguaHasta }, botin: {} };
+
+  const botin: Record<string, number> = {};
+  const queda: Record<string, number> = {};
+  for (const [recurso, cantidad] of Object.entries(perdedor.suministro)) {
+    const robado = cantidad * MOVIMIENTO.fraccionRobada;
+    if (robado > 0) botin[recurso] = robado;
+    if (cantidad - robado > 0) queda[recurso] = cantidad - robado;
+  }
+  return { perdedor: { ...perdedor, enTreguaHasta, suministro: queda, persiguiendo: undefined }, botin };
+}
+
+/**
+ * Atacar a una columna que tienes delante (Doc 5.12.3). Sustituye al choque que el tick resolvia solo por
+ * geometria: acercarse ya no basta, hay que pedirlo.
+ *
+ * Al perdedor le cae la TREGUA, y si era un viajero pierde la mitad de su carro en favor del ganador. El
+ * botin va limitado por la capacidad del que lo coge: un ladron sin sitio deja lo que no le cabe.
+ */
+export function atacarColumna(
+  atacante: Ejercito,
+  defensor: Ejercito,
+  facciones: Faccion[],
+  relaciones: readonly RelacionPolitica[],
+  capacidadDelAtacante: number,
+  instante: Instante,
+  rng: RandomFn
+): { atacante: Ejercito; defensor: Ejercito; facciones: Faccion[]; eventos: EventoCrudo[] } {
+  if (atacante.id === defensor.id) throw new MovilizacionInvalidaError('Esa columna es la tuya.');
+  if (atacante.faccionId === defensor.faccionId || estanAliadas(relaciones, atacante.faccionId, defensor.faccionId)) {
+    throw new MovilizacionInvalidaError('No se ataca a los tuyos ni a un aliado.');
+  }
+  if (distancia(atacante.posicionActual, defensor.posicionActual) > LOGISTICA.radioEncuentro) {
+    throw new MovilizacionInvalidaError(`Hay que estar a menos de ${LOGISTICA.radioEncuentro} para atacar.`);
+  }
+  exigirSinTregua(atacante, defensor, instante);
+
+  const choque = encuentroEntreEjercitos(atacante, defensor, facciones, instante, rng);
+  const gano = choque.a.escuadrones.some((e) => e.cantidad > 0) && !choque.b.escuadrones.some((e) => e.cantidad > 0);
+  // Quien pierde es quien se queda sin nadie en pie; si los dos siguen enteros no hay derrota que castigar.
+  const perdedor = gano ? choque.b : choque.a;
+  const ganador = gano ? choque.a : choque.b;
+  const secuela = trasDerrota(perdedor, instante);
+
+  const capacidadGanador = gano ? capacidadDelAtacante : capacidadCarrosDe(participantesDe(ganador));
+  const suministroGanador = { ...ganador.suministro };
+  let yaLleva = Object.values(suministroGanador).reduce((suma, c) => suma + c, 0);
+  for (const [recurso, cantidad] of Object.entries(secuela.botin)) {
+    const cabe = Math.max(0, capacidadGanador - yaLleva);
+    const cogido = Math.min(cabe, cantidad);
+    if (cogido > 0) {
+      suministroGanador[recurso] = (suministroGanador[recurso] ?? 0) + cogido;
+      yaLleva += cogido;
+    }
+  }
+  const conBotin = { ...ganador, suministro: suministroGanador };
+
+  return {
+    atacante: gano ? conBotin : secuela.perdedor,
+    defensor: gano ? secuela.perdedor : conBotin,
+    facciones: choque.facciones,
+    eventos: choque.eventos,
+  };
+}
+
+/** Interceptar una caravana que tienes delante (Doc 5.12.3). Mismo cambio que `atacarColumna`: lo que antes
+ * disparaba la geometria ahora lo pide el jugador. */
+export function interceptar(
+  ejercito: Ejercito,
+  caravana: Caravana,
+  capacidadCarga: number,
+  instante: Instante,
+  rng: RandomFn
+): { ejercito: Ejercito; capturada: boolean; eventos: EventoCrudo[] } {
+  if (enTregua(ejercito, instante)) throw new MovilizacionInvalidaError('Estas en tregua: no puedes atacar todavia.');
+  if (distancia(ejercito.posicionActual, caravana.posicionActual) > LOGISTICA.radioEncuentro) {
+    throw new MovilizacionInvalidaError(`Hay que estar a menos de ${LOGISTICA.radioEncuentro} para interceptar.`);
+  }
+  return interceptarCaravanaConEjercito(ejercito, caravana, capacidadCarga, instante, rng);
+}
+
+/**
+ * Fijar a quien persigues (Doc 5.12.3). No es un destino: es un objetivo que se mueve, y la ruta se
+ * recalcula cada tick hacia donde este.
+ *
+ * Termina de cuatro formas, y las cuatro estan decididas: al alcanzarlo (15, y entonces hay combate porque ya
+ * lo elegiste), al rectificar el rumbo con `marcharA`, al soltarlo, y si el objetivo entra en tregua.
+ */
+export function perseguir(ejercito: Ejercito, objetivo: { tipo: 'ejercito' | 'caravana'; id: string }, instante: Instante): Ejercito {
+  if (objetivo.tipo === 'ejercito' && objetivo.id === ejercito.id) {
+    throw new MovilizacionInvalidaError('No puedes perseguirte a ti mismo.');
+  }
+  if (enTregua(ejercito, instante)) throw new MovilizacionInvalidaError('Estas en tregua: tampoco puedes perseguir.');
+  return { ...ejercito, persiguiendo: objetivo, estado: 'marchando' };
+}
+
+/** Soltar la presa. Tambien lo hace cualquier `marcharA`: elegir un destino nuevo es dejar de ir detras de
+ * alguien. */
+export function dejarDePerseguir(ejercito: Ejercito): Ejercito {
+  return { ...ejercito, persiguiendo: undefined };
 }
 
 export function estacionarEjercito(ejercito: Ejercito): Ejercito {
@@ -1198,9 +1324,15 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
 }
 
 /**
- * Los encuentros de un tick: quién se cruza con quién, y qué pasa (Doc 5.12.3).
+ * Los encuentros de un tick (Doc 5.12.3) — **y ya no salen de la geometría**.
  *
- * Nadie los ordena — salen de la geometría. Las reglas que los acotan:
+ * Antes, dos columnas enemigas que pasaban a menos de 15 se masacraban solas dentro del tick. Ahora un
+ * encuentro exige que alguien lo haya PEDIDO: o con `atacar`/`interceptar` desde el menú, que se resuelven
+ * en su comando y no aquí, o **persiguiendo** — y esta funcion es la que cierra las persecuciones cuando el
+ * perseguidor alcanza a su presa. Elegir ir detrás de alguien ES elegir el combate; lo que desaparece es
+ * pelear por haber pasado cerca.
+ *
+ * Las reglas que lo acotan siguen siendo las mismas, y siguen haciendo falta:
  *
  *  - **Orden canónico por id.** Cada encuentro consume RNG, así que el orden decide el resultado. Ordenar por
  *    id lo ancla al DATO y no a cómo quedara el array (§9 de la revisión por consejo: sin esto el determinismo
@@ -1242,18 +1374,31 @@ function resolverEncuentros(
     const ejercito = porId.get(id)!;
     if (sinSoldados(ejercito)) continue;
 
-    // Candidatos: ejércitos enemigos que aún no han chocado, y caravanas enemigas SIN escolta.
-    const rivales = [...porId.values()]
-      .filter((o) => o.id !== id && !yaChocaron.has(o.id) && !sinSoldados(o) && enemiga(ejercito.faccionId, o.faccionId))
-      .filter((o) => distancia(o.posicionActual, ejercito.posicionActual) <= LOGISTICA.radioEncuentro);
-    const presas = caravanasVivas
-      .filter((c) => c.estado !== 'adjunta' && c.estado !== 'disponible')
-      .filter((c) => {
-        const duena = asentamientosPorId.get(c.origenAsentamientoId)?.faccionId;
-        // Sin dueño identificable no se puede decidir si es enemiga, así que no se toca.
-        return duena !== undefined && enemiga(ejercito.faccionId, duena);
-      })
-      .filter((c) => distancia(c.posicionActual, ejercito.posicionActual) <= LOGISTICA.radioEncuentro);
+    // **Solo se resuelve lo que se persigue.** Sin presa fijada no hay encuentro, por muy cerca que se pase.
+    const presaFijada = ejercito.persiguiendo;
+    if (!presaFijada) continue;
+    if (enTregua(ejercito, instante)) continue;
+
+    const rivales =
+      presaFijada.tipo === 'ejercito'
+        ? [...porId.values()]
+            .filter((o) => o.id === presaFijada.id)
+            .filter((o) => !yaChocaron.has(o.id) && !sinSoldados(o) && enemiga(ejercito.faccionId, o.faccionId))
+            .filter((o) => !enTregua(o, instante))
+            .filter((o) => distancia(o.posicionActual, ejercito.posicionActual) <= LOGISTICA.radioEncuentro)
+        : [];
+    const presas =
+      presaFijada.tipo === 'caravana'
+        ? caravanasVivas
+            .filter((c) => c.id === presaFijada.id)
+            .filter((c) => c.estado !== 'adjunta' && c.estado !== 'disponible')
+            .filter((c) => {
+              const duena = asentamientosPorId.get(c.origenAsentamientoId)?.faccionId;
+              // Sin dueño identificable no se puede decidir si es enemiga, así que no se toca.
+              return duena !== undefined && enemiga(ejercito.faccionId, duena);
+            })
+            .filter((c) => distancia(c.posicionActual, ejercito.posicionActual) <= LOGISTICA.radioEncuentro)
+        : [];
 
     const masCerca = <T extends { id: string; posicionActual: Point }>(lista: T[]): T | undefined =>
       [...lista].sort((x, y) => {
@@ -1262,13 +1407,20 @@ function resolverEncuentros(
         return dx !== dy ? dx - dy : porIdAsc(x, y);
       })[0];
 
-    // Un ejército enemigo manda sobre una caravana: es la amenaza real, y dejarla pasar para saquear un carro
-    // sería absurdo.
     const rival = masCerca(rivales);
     if (rival) {
       const choque = encuentroEntreEjercitos(ejercito, rival, faccionesActuales, instante, rng);
-      porId.set(ejercito.id, choque.a);
-      porId.set(rival.id, choque.b);
+      // Alcanzada la presa, la persecución termina: se persigue para pelear, y ya se peleo. Al que cae le
+      // toca la TREGUA, que es lo que impide rematarlo en cadena el minuto siguiente.
+      const gano = choque.a.escuadrones.some((e) => e.cantidad > 0) && !choque.b.escuadrones.some((e) => e.cantidad > 0);
+      const perdio = choque.b.escuadrones.some((e) => e.cantidad > 0) && !choque.a.escuadrones.some((e) => e.cantidad > 0);
+      const treguaHasta = sumar(instante, minutos(MOVIMIENTO.treguaTrasDerrotaMinutos));
+      porId.set(ejercito.id, {
+        ...choque.a,
+        persiguiendo: undefined,
+        ...(perdio ? { enTreguaHasta: treguaHasta } : {}),
+      });
+      porId.set(rival.id, { ...choque.b, ...(gano ? { enTreguaHasta: treguaHasta } : {}) });
       faccionesActuales = choque.facciones;
       for (const e of choque.eventos) {
         eventos.push(atribuir(e, ejercito.origenAsentamientoId));
@@ -1288,7 +1440,7 @@ function resolverEncuentros(
         instante,
         rng
       );
-      porId.set(ejercito.id, emboscada.ejercito);
+      porId.set(ejercito.id, { ...emboscada.ejercito, persiguiendo: undefined });
       if (emboscada.capturada) caravanasVivas = caravanasVivas.filter((c) => c.id !== presa.id);
       for (const e of emboscada.eventos) eventos.push(atribuir(e, ejercito.origenAsentamientoId));
       yaChocaron.add(ejercito.id);

@@ -13,7 +13,20 @@
 // el jugador sigue jugando a mano — ni asignándoles cargos, ni reservando su almacén, ni reclutando con sus
 // residentes, ni pactando trueques que comprometan sus recursos.
 import { describe, expect, it } from 'vitest';
-import type { Asentamiento, RecursoTipo } from '../../domain/types';
+import type { Asentamiento, Ejercito, RecursoTipo } from '../../domain/types';
+import { createRng } from '../../worldgen';
+import { avanzarSimulacion } from '../../engine/simulation';
+import { avanzarNpcGobernanza } from '../npcGobernanza';
+import {
+  contextoDeTest,
+  crearEstadoDeTest,
+  crearFacciones,
+  crearMapaDeterminista,
+  fundarAsentamientoDeTest,
+  instanteDeTest,
+} from '../../engine/__tests__/fixtures';
+
+const mapaDeterminista = crearMapaDeterminista(42);
 import { evaluarViabilidadFundacion } from '../../engine/settlement';
 import { GameSession } from '../gameSession';
 import { alternarFaccionNpc } from '../comandos/alternarFaccionNpc';
@@ -213,5 +226,95 @@ describe('Facción controlada por NPC', () => {
       mapa.nodosEnRadio(asentamiento.posicion, asentamiento.radioPotencial).some((n) => n.tipo === tipo)
     ).length;
     expect(bonusEncontrado).toBeGreaterThan(0);
+  });
+});
+
+// La politica de persecucion del NPC (paso 8e, Doc 5.12.3).
+//
+// Existe para tapar el riesgo mas silencioso de toda la mecanica: desde que los encuentros dejaron de salir
+// de la geometria, un combate solo ocurre si alguien lo pide — y en el laboratorio no hay nadie pidiendo. Sin
+// esto, las constantes militares ya calibradas se seguirian midiendo sobre un mundo en paz SIN QUE NINGUNA
+// PRUEBA FALLARA. Estos tests son esa prueba.
+describe('el NPC persigue: sin esto el batch se queda sin combates y nadie se entera', () => {
+  /** Dos columnas NPC enemigas a la vista una de otra, en campo abierto. */
+  function dosColumnasNpc() {
+    const facciones = crearFacciones();
+    const uno = fundarAsentamientoDeTest(mapaDeterminista, facciones, 'faccion-1', []);
+    const dos = fundarAsentamientoDeTest(mapaDeterminista, uno.facciones, 'faccion-2', [uno.asentamiento]);
+    const punto = { x: 1000, y: 1000 };
+    const tropa = (id: string, jugadorId: string) => ({
+      id,
+      nombre: 'milicia_lanceros',
+      jugadorId,
+      origen: 'pesants' as const,
+      cantidad: 30,
+      veterania: 0,
+      moral: 100,
+      tropaId: 'milicia_lanceros',
+    });
+    const columna = (id: string, faccionId: string, origenId: string, x: number): Ejercito => ({
+      id,
+      faccionId,
+      origenAsentamientoId: origenId,
+      participantes: [{ jugadorId: `j-${id}`, unidoEn: instanteDeTest(0) }],
+      tipo: 'ejercito',
+      liderId: `j-${id}`,
+      politicaDeUnion: 'rechazar',
+      escuadrones: [tropa(`esc-${id}`, `j-${id}`)],
+      suministro: { trigo: 500 },
+      caravanasAdjuntasIds: [],
+      objetivo: { tipo: 'punto', punto },
+      ruta: [punto, { x: punto.x + 10, y: punto.y }],
+      progreso: 0,
+      posicionActual: { x, y: punto.y },
+      estado: 'estacionado',
+    });
+    const estado = crearEstadoDeTest([uno.asentamiento, dos.asentamiento], dos.facciones, {
+      // A 10 una de otra: dentro del radio de encuentro, asi que la persecucion se cierra en el mismo tick.
+      ejercitos: [columna('col-a', 'faccion-1', uno.asentamiento.id, punto.x), columna('col-b', 'faccion-2', dos.asentamiento.id, punto.x + 10)],
+    });
+    return { estado, mapa: mapaDeterminista };
+  }
+
+  it('fija persecucion contra una columna enemiga que tiene a la vista', () => {
+    const { estado, mapa } = dosColumnasNpc();
+
+    const r = avanzarNpcGobernanza(estado, mapa, contextoDeTest(1, createRng(5)), {});
+
+    const cazador = r.estado.ejercitos.find((e) => e.id === 'col-a')!;
+    expect(cazador.persiguiendo, 'sin presa fijada no habria combate nunca').toEqual({ tipo: 'ejercito', id: 'col-b' });
+  });
+
+  it('y en el tick siguiente eso PRODUCE combate: el laboratorio no se queda en paz', () => {
+    const { estado, mapa } = dosColumnasNpc();
+    const conPresas = avanzarNpcGobernanza(estado, mapa, contextoDeTest(1, createRng(5)), {}).estado;
+
+    const sim = avanzarSimulacion(conPresas, mapa, contextoDeTest(2, createRng(5)));
+
+    expect(sim.eventosDominio.some((e) => e.codigo === 'combate.encuentro'), 'hubo combate').toBe(true);
+  });
+
+  it('no persigue a los suyos: solo a enemigos', () => {
+    const { estado, mapa } = dosColumnasNpc();
+    const mismaFaccion = {
+      ...estado,
+      ejercitos: estado.ejercitos.map((e) => ({ ...e, faccionId: 'faccion-1' })),
+    };
+
+    const r = avanzarNpcGobernanza(mismaFaccion, mapa, contextoDeTest(1, createRng(5)), {});
+
+    expect(r.estado.ejercitos.every((e) => e.persiguiendo === undefined)).toBe(true);
+  });
+
+  it('ni persigue estando en TREGUA: la regla vale igual para el NPC', () => {
+    const { estado, mapa } = dosColumnasNpc();
+    const enTregua = {
+      ...estado,
+      ejercitos: estado.ejercitos.map((e) => ({ ...e, enTreguaHasta: instanteDeTest(9999) })),
+    };
+
+    const r = avanzarNpcGobernanza(enTregua, mapa, contextoDeTest(1, createRng(5)), {});
+
+    expect(r.estado.ejercitos.every((e) => e.persiguiendo === undefined)).toBe(true);
   });
 });

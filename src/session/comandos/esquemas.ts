@@ -246,6 +246,9 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   // El menú de interacción (Doc 5.12.3). `objetivo` distingue columna de caravana: son entidades distintas
   // con anillos y consecuencias distintas, y mezclarlas en un id suelto obligaría al motor a adivinar.
   inspeccionar: objeto({ jugadorId: IDENTIFICADOR, objetivo: OBJETIVO_DE_INTERACCION }, ['jugadorId', 'objetivo']),
+  atacar: objeto({ jugadorId: IDENTIFICADOR, objetivo: OBJETIVO_DE_INTERACCION }, ['jugadorId', 'objetivo']),
+  perseguir: objeto({ jugadorId: IDENTIFICADOR, objetivo: OBJETIVO_DE_INTERACCION }, ['jugadorId', 'objetivo']),
+  dejarDePerseguir: objeto({ jugadorId: IDENTIFICADOR }, ['jugadorId']),
   cederLiderazgo: objeto({ ejercitoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR, sucesorId: IDENTIFICADOR }, ['ejercitoId', 'jugadorId', 'sucesorId']),
   entrarEnAsentamiento: objeto({ asentamientoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR }, ['asentamientoId', 'jugadorId']),
   // La puerta (Doc 1.10.5). No va en `politicasActivas` porque no expira: una puerta que se abre sola a las

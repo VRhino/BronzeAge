@@ -887,7 +887,10 @@ describe('escolta: cargar y entregar a mano', () => {
 // Paso 10 — encuentros por proximidad (Doc 5.12.3). Nadie los ordena: salen de la geometría.
 // ---------------------------------------------------------------------------------------------------------
 
-describe('encuentros por proximidad', () => {
+// Encuentros: **ya no salen de la geometria** (paso 8, Doc 5.12.3). Acercarse abre opciones; pelear hay que
+// pedirlo. Lo que esta funcion resuelve es el final de una PERSECUCION — elegir ir detras de alguien es
+// elegir el combate—, y lo que desaparece es pelear por haber pasado cerca.
+describe('encuentros: solo se resuelve lo que se persigue', () => {
   /** Dos ejércitos de Facciones distintas, a `separacion` uno de otro y sin nada más alrededor. */
   // El carro sale con 100 y no con miles: la capacidad de un carro son 500, y llenarlo por encima en el
   // fixture dejaba sitio 0 para el botín — que es exactamente lo que descubrió el test de la emboscada.
@@ -912,14 +915,64 @@ describe('encuentros por proximidad', () => {
     return { facciones: dos.facciones, asentamientos: [uno.asentamiento, dos.asentamiento], a, b };
   }
 
-  it('dos columnas enemigas que se cruzan combaten solas, sin que nadie lo ordene', () => {
+  it('dos columnas enemigas que se cruzan NO combaten: nadie lo ha pedido', () => {
+    // Era la regla contraria hasta el paso 8, y este test decia lo opuesto. Ahora pasar cerca no cuesta nada.
     const { facciones, asentamientos, a, b } = dosColumnas(LOGISTICA.radioEncuentro - 1);
 
     const r = avanzar([a, b], asentamientos, { facciones });
 
+    expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo.startsWith('combate.'))).toBe(false);
+    expect(r.ejercitos.every((e) => e.escuadrones[0]!.cantidad === 30), 'ni un rasguño').toBe(true);
+  });
+
+  it('pero si uno PERSIGUE al otro y lo alcanza, hay combate', () => {
+    const { facciones, asentamientos, a, b } = dosColumnas(LOGISTICA.radioEncuentro - 1);
+    const cazador: Ejercito = { ...a, persiguiendo: { tipo: 'ejercito', id: b.id } };
+
+    const r = avanzar([cazador, b], asentamientos, { facciones });
+
     expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo === 'combate.encuentro')).toBe(true);
     const totalDespues = r.ejercitos.reduce((n, e) => n + e.escuadrones.reduce((m, x) => m + x.cantidad, 0), 0);
     expect(totalDespues, 'los dos bandos sufren bajas').toBeLessThan(60);
+  });
+
+  it('y al alcanzarla suelta la presa: se persigue para pelear, y ya se peleo', () => {
+    const { facciones, asentamientos, a, b } = dosColumnas(LOGISTICA.radioEncuentro - 1);
+    const cazador: Ejercito = { ...a, persiguiendo: { tipo: 'ejercito', id: b.id } };
+
+    const r = avanzar([cazador, b], asentamientos, { facciones });
+
+    expect(r.ejercitos.find((e) => e.id === a.id)!.persiguiendo).toBeUndefined();
+  });
+
+  it('a quien NO persigue nadie no se le toca, aunque este pegado al que si', () => {
+    const { facciones, asentamientos, a, b } = dosColumnas(1);
+    const tercero: Ejercito = { ...b, id: 'ejercito-c', posicionActual: { ...a.posicionActual } };
+    const cazador: Ejercito = { ...a, persiguiendo: { tipo: 'ejercito', id: b.id } };
+
+    const r = avanzar([cazador, b, tercero], asentamientos, { facciones });
+
+    expect(r.ejercitos.find((e) => e.id === 'ejercito-c')!.escuadrones[0]!.cantidad, 'el tercero ni se entera').toBe(30);
+  });
+
+  it('un objetivo en TREGUA no se puede alcanzar, aunque lo persigas y lo tengas encima', () => {
+    const { facciones, asentamientos, a, b } = dosColumnas(1);
+    const cazador: Ejercito = { ...a, persiguiendo: { tipo: 'ejercito', id: b.id } };
+    const protegido: Ejercito = { ...b, enTreguaHasta: instanteDeTest(9999) };
+
+    const r = avanzar([cazador, protegido], asentamientos, { facciones });
+
+    expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo.startsWith('combate.'))).toBe(false);
+  });
+
+  it('y quien esta en tregua tampoco puede alcanzar a nadie: corta por los dos lados', () => {
+    // Sin esta mitad, la inmunidad seria un escudo para depredar sin riesgo.
+    const { facciones, asentamientos, a, b } = dosColumnas(1);
+    const enTregua: Ejercito = { ...a, persiguiendo: { tipo: 'ejercito', id: b.id }, enTreguaHasta: instanteDeTest(9999) };
+
+    const r = avanzar([enTregua, b], asentamientos, { facciones });
+
+    expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo.startsWith('combate.'))).toBe(false);
   });
 
   it('fuera del radio de encuentro no pasa nada, aunque se vean de sobra', () => {
@@ -952,11 +1005,12 @@ describe('encuentros por proximidad', () => {
     expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo.startsWith('combate.'))).toBe(false);
   });
 
-  it('un ejército choca UNA vez por tick, aunque tenga dos enemigos encima', () => {
+  it('un ejército choca UNA vez por tick, aunque dos le persigan a la vez', () => {
     const { facciones, asentamientos, a, b } = dosColumnas(1);
-    const tercero: Ejercito = { ...b, id: 'ejercito-c', posicionActual: { ...a.posicionActual } };
+    const tercero: Ejercito = { ...b, id: 'ejercito-c', posicionActual: { ...a.posicionActual }, persiguiendo: { tipo: 'ejercito' as const, id: a.id } };
+    const cazador: Ejercito = { ...b, persiguiendo: { tipo: 'ejercito' as const, id: a.id } };
 
-    const r = avanzar([a, b, tercero], asentamientos, { facciones });
+    const r = avanzar([a, cazador, tercero], asentamientos, { facciones });
 
     // Se cuentan PAREJAS y no eventos: cada encuentro se narra dos veces, una a cada hogar (ver la doble
     // atribución en `avanzarEjercitos`), así que contar eventos contaría el doble.
@@ -987,7 +1041,9 @@ describe('encuentros por proximidad', () => {
       contenido: { piedra: 100 },
     };
 
-    const r = avanzar([a], asentamientos, { facciones, caravanas: [presa], rng: createRng(3) });
+    const cazador: Ejercito = { ...a, persiguiendo: { tipo: 'caravana' as const, id: presa.id } };
+
+    const r = avanzar([cazador], asentamientos, { facciones, caravanas: [presa], rng: createRng(3) });
 
     const ev = r.eventos.find((e) => typeof e !== 'string' && e.codigo === 'combate.caravana_interceptada_por_ejercito');
     expect(ev, 'hubo emboscada').toBeDefined();
@@ -995,17 +1051,19 @@ describe('encuentros por proximidad', () => {
     expect(r.ejercitos[0]!.suministro['piedra'], 'el botín viaja en el carro').toBe(100 * MILITAR.umbralCapturaCaravana);
   });
 
-  it('una caravana ESCOLTADA no es un objetivo blando: el choque es con su ejército', () => {
+  it('una caravana ESCOLTADA no es un objetivo blando: perseguirla no la alcanza', () => {
+    // La escolta no la protege por un chequeo aparte: una caravana `adjunta` sencillamente no es presa. El
+    // que quiera su carga tiene que perseguir al EJÉRCITO que la lleva, que es otra decisión y otro riesgo.
     const { facciones, asentamientos, a, b } = dosColumnas(1);
     const escoltada: Caravana = { ...caravanaDe('c-esc', asentamientos[1]!.id, { ...b.posicionActual }), estado: 'adjunta', contenido: { piedra: 100 } };
     const conEscolta: Ejercito = { ...b, caravanasAdjuntasIds: ['c-esc'] };
+    const cazador: Ejercito = { ...a, persiguiendo: { tipo: 'caravana' as const, id: 'c-esc' } };
 
-    const r = avanzar([a, conEscolta], asentamientos, { facciones, caravanas: [escoltada] });
+    const r = avanzar([cazador, conEscolta], asentamientos, { facciones, caravanas: [escoltada] });
 
-    expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo === 'combate.encuentro'), 'chocan los ejércitos').toBe(true);
     expect(
       r.eventos.some((e) => typeof e !== 'string' && e.codigo === 'combate.caravana_interceptada_por_ejercito'),
-      'y NO se la emboscó por su cuenta'
+      'no se la embosca por su cuenta'
     ).toBe(false);
     expect(r.caravanas, 'sigue viva mientras su escolta aguante').toHaveLength(1);
   });

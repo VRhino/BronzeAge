@@ -14,15 +14,20 @@
 // El de 40 es el que hace de esto un juego de dos: la telemetría que la proyección niega a distancia se
 // consigue acercándose, y acercarse te delata. Nadie audita al rival desde el sofá.
 import {
+  atacarColumna,
+  capacidadCargaDe,
+  dejarDePerseguir as dejarDePerseguirEngine,
   inspeccionarCaravana as inspeccionarCaravanaEngine,
   inspeccionarColumna,
+  interceptar,
+  perseguir as perseguirEngine,
   type ComposicionColumna,
   type ContenidoCaravana,
 } from '../../engine/ejercitos';
-import { conHistorialDeJugador } from '../estado';
+import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito } from './tipos';
 import { comando, exigirCaravana, exigirColumnaDe, exigirEjercito } from './ayudas';
-import { evento } from './eventos';
+import { desdeCrudos, evento } from './eventos';
 
 /** A qué se puede apuntar desde el menú de interacción: una columna o una caravana. Es la misma forma que usa
  * la persecución, y no por casualidad — se persigue lo que se puede mirar. */
@@ -87,5 +92,139 @@ export const inspeccionar = comando<ParamsInspeccionar, ComposicionColumna | Con
       }),
     ],
     contenido
+  );
+});
+
+export interface ParamsAtacar {
+  jugadorId: string;
+  objetivo: ObjetivoDeInteraccion;
+}
+
+export interface ParamsPerseguir {
+  jugadorId: string;
+  objetivo: ObjetivoDeInteraccion;
+}
+
+export interface ParamsDejarDePerseguir {
+  jugadorId: string;
+}
+
+export interface PayloadPersecucion {
+  ejercitoId: string;
+  jugadorId: string;
+  objetivo?: ObjetivoDeInteraccion;
+}
+
+/**
+ * Atacar lo que tienes delante, a distancia de choque (Doc 5.12.3). Sustituye al combate que el tick
+ * resolvía solo por geometría: acercarse ya no basta.
+ *
+ * Al derrotado le cae la **tregua**, y si era un viajero pierde la mitad de su carro. Las dos mitades de la
+ * tregua se comprueban en el motor: ni se ataca estando en ella, ni se ataca a quien la tiene.
+ */
+export const atacar = comando<ParamsAtacar, void>((estado, _mapa, ctx, params) => {
+  const atacante = exigirColumnaDe(estado, params.jugadorId);
+
+  if (params.objetivo.tipo === 'ejercito') {
+    const defensor = exigirEjercito(estado, params.objetivo.id);
+    const choque = atacarColumna(
+      atacante,
+      defensor,
+      [...estado.facciones],
+      estado.relaciones,
+      capacidadCargaDe(atacante, estado.caravanas),
+      ctx.instante,
+      ctx.rng
+    );
+
+    const porId = new Map([
+      [choque.atacante.id, choque.atacante],
+      [choque.defensor.id, choque.defensor],
+    ]);
+    const siguiente: GameSessionState = {
+      ...estado,
+      ejercitos: estado.ejercitos.map((e) => porId.get(e.id) ?? e),
+      facciones: choque.facciones,
+    };
+
+    return exito(
+      conHistorialDeJugador(siguiente, params.jugadorId, `Ataca a la columna ${defensor.id}.`),
+      // El combate se narra a los DOS hogares: el que lo sufre tiene tanto derecho a saberlo como el que lo
+      // ordena, y sin la segunda atribución el atacado se enteraría por las bajas.
+      [
+        ...desdeCrudos(ctx, choque.eventos, atacante.origenAsentamientoId),
+        ...desdeCrudos(ctx, choque.eventos, defensor.origenAsentamientoId),
+      ]
+    );
+  }
+
+  const caravana = exigirCaravana(estado, params.objetivo.id);
+  const emboscada = interceptar(atacante, caravana, capacidadCargaDe(atacante, estado.caravanas), ctx.instante, ctx.rng);
+  const siguiente: GameSessionState = {
+    ...estado,
+    ejercitos: estado.ejercitos.map((e) => (e.id === emboscada.ejercito.id ? emboscada.ejercito : e)),
+    caravanas: emboscada.capturada ? estado.caravanas.filter((c) => c.id !== caravana.id) : estado.caravanas,
+  };
+
+  return exito(
+    conHistorialDeJugador(siguiente, params.jugadorId, `Intercepta la caravana ${caravana.id}.`),
+    [
+      ...desdeCrudos(ctx, emboscada.eventos, atacante.origenAsentamientoId),
+      ...desdeCrudos(ctx, emboscada.eventos, caravana.origenAsentamientoId),
+    ]
+  );
+});
+
+/**
+ * Ir a por alguien (Doc 5.12.3). No es un destino sino un objetivo que se mueve: la ruta se recalcula cada
+ * tick hacia donde esté, y al alcanzarlo hay combate — porque perseguir ES elegir el combate.
+ *
+ * Termina de cuatro formas: alcanzándolo, rectificando el rumbo con `marcharA`, soltándolo, o si el objetivo
+ * entra en tregua.
+ */
+export const perseguir = comando<ParamsPerseguir, void>((estado, _mapa, ctx, params) => {
+  const columna = exigirColumnaDe(estado, params.jugadorId);
+  // Que el objetivo exista lo comprueba aquí y no el motor: es una entidad que buscar, no una regla.
+  if (params.objetivo.tipo === 'ejercito') exigirEjercito(estado, params.objetivo.id);
+  else exigirCaravana(estado, params.objetivo.id);
+
+  const cazando = perseguirEngine(columna, params.objetivo, ctx.instante);
+
+  return exito(
+    conHistorialDeJugador(
+      { ...estado, ejercitos: estado.ejercitos.map((e) => (e.id === cazando.id ? cazando : e)) },
+      params.jugadorId,
+      `Sale en persecución de ${params.objetivo.id}.`
+    ),
+    [
+      evento(ctx, {
+        codigo: 'columna.persecucion_iniciada',
+        mensaje: `Una columna sale en persecución de ${params.objetivo.id}.`,
+        payload: { ejercitoId: cazando.id, jugadorId: params.jugadorId, objetivo: params.objetivo } satisfies PayloadPersecucion,
+        asentamientoId: cazando.origenAsentamientoId,
+      }),
+    ]
+  );
+});
+
+/** Soltar la presa. Lo hace también cualquier `marcharA`: elegir destino nuevo es dejar de ir detrás. */
+export const dejarDePerseguir = comando<ParamsDejarDePerseguir, void>((estado, _mapa, ctx, params) => {
+  const columna = exigirColumnaDe(estado, params.jugadorId);
+  const suelta = dejarDePerseguirEngine(columna);
+
+  return exito(
+    conHistorialDeJugador(
+      { ...estado, ejercitos: estado.ejercitos.map((e) => (e.id === suelta.id ? suelta : e)) },
+      params.jugadorId,
+      'Abandona la persecución.'
+    ),
+    [
+      evento(ctx, {
+        codigo: 'columna.persecucion_abandonada',
+        mensaje: 'Una columna abandona la persecución.',
+        payload: { ejercitoId: suelta.id, jugadorId: params.jugadorId } satisfies PayloadPersecucion,
+        asentamientoId: suelta.origenAsentamientoId,
+      }),
+    ]
   );
 });

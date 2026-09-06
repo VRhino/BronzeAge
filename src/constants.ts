@@ -1540,6 +1540,23 @@ export const MOVIMIENTO = {
    * —es mas rapido—, bastante cerca como para que mirar cueste ser visto mirando.
    */
   radioInspeccion: 40,
+  /**
+   * Cuanto dura la TREGUA de quien acaba de ser derrotado en campo abierto (Doc 5.12.3). **5 minutos**, y
+   * corta por los DOS lados: ni le atacan ni ataca.
+   *
+   * Las dos mitades hacen falta. Sin la primera, a un viajero se le puede acosar en cadena hasta arruinarlo.
+   * Sin la segunda, la inmunidad seria un escudo para depredar sin riesgo: cinco minutos de barra libre.
+   */
+  treguaTrasDerrotaMinutos: 5,
+  /**
+   * Que fraccion del carro se lleva quien derrota a un viajero (Doc 5.12.3). **La mitad**: dejarle algo es lo
+   * que hace que valga la pena seguir el viaje en vez de reiniciarlo, y lo que distingue un robo de una
+   * ruina. Con el carro vacio no hay botin, solo la tregua.
+   *
+   * Solo se aplica a una columna PERSONAL. A un ejercito derrotado se le quitan las caravanas adjuntas
+   * (Doc 5.13.2), que es su equivalente y ya existia.
+   */
+  fraccionRobada: 0.5,
 };
 
 /**

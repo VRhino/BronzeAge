@@ -728,6 +728,23 @@ export interface Ejercito {
   /** El carro: los de todos sus jugadores, ya sumados. Solo trigo en Fase 0. En marcha se come de AQUÍ, no
    * del almacén (Doc 5.13) — misma regla del hambre vía `avanzarRacion`, distinta despensa. */
   suministro: Record<string, number>;
+  /**
+   * A quien persigue, si persigue a alguien (Doc 5.12.3). Un objetivo MOVIL en vez de un punto: la ruta se
+   * recalcula cada tick hacia donde este. Ausente = marcha normal contra `objetivo`.
+   *
+   * La persecucion es lo que sustituye al choque automatico: acercarse ya no basta para pelear, hay que
+   * haber decidido ir a por alguien. Termina al alcanzarlo —y entonces si hay combate, porque ya lo elegiste—
+   * o al rectificar el rumbo.
+   */
+  persiguiendo?: { tipo: 'ejercito' | 'caravana'; id: string };
+  /**
+   * Derrotado hace poco (Doc 5.12.3). Corta por los DOS lados: nadie puede perseguirle ni atacarle, y el
+   * tampoco puede perseguir ni atacar.
+   *
+   * El nombre importa. Se llamo `noPerseguibleHasta` mientras se penso como una proteccion, y describia solo
+   * la mitad: asi implementada, la inmunidad seria un escudo para depredar sin riesgo.
+   */
+  enTreguaHasta?: Instante;
   /** Caravanas que marchan con el ejército (Doc 5.13.2): amplían la carga, entran en el `min` de velocidad,
    * pueden ir cargadas de mercancía (escolta, Doc 5.13.3) y se pierden si el ejército es derrotado. */
   caravanasAdjuntasIds: string[];

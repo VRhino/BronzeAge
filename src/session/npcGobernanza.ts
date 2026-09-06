@@ -47,8 +47,8 @@ import { construirCaravanaComercial, proponerTrueque, CaravanaInvalidaError, Tru
 import { computeTodasLasZonas } from '../engine/zones';
 import { calcularCostoMantenimiento, encontrarCapital } from '../engine/mantenimiento';
 import { evaluarViabilidadFundacion, fundarAsentamiento, FundacionInvalidaError } from '../engine/settlement';
-import { CAMPAMENTOS_BANDIDOS, LOGISTICA, MILITAR, TROPAS_RECLUTABLES } from '../constants';
-import { movilizarEjercito, replegarEjercito, MovilizacionInvalidaError } from '../engine/ejercitos';
+import { CAMPAMENTOS_BANDIDOS, LOGISTICA, MILITAR, TROPAS_RECLUTABLES, VISION } from '../constants';
+import { enTregua, movilizarEjercito, replegarEjercito, MovilizacionInvalidaError } from '../engine/ejercitos';
 import { reservaDeTrigo } from '../engine/tropas';
 import { estanAliadas } from '../engine/pertenencia';
 import { distancia } from '../world/geometria';
@@ -777,6 +777,70 @@ function alcanceDeIdaYVuelta(escuadrones: Escuadron[], trigoEnCarro: number): nu
  * El objetivo es la plaza rival MÁS CERCANA al alcance — desempate por id, porque de aquí sale una
  * movilización real y no puede depender del orden de la lista.
  */
+/**
+ * A quien persigue cada columna NPC (Doc 5.12.3, paso 8e).
+ *
+ * **Existe para que el batch siga midiendo el juego que se esta diseñando.** Desde que los encuentros dejaron
+ * de salir de la geometria, un combate solo ocurre si alguien lo pide — y en el laboratorio no hay nadie
+ * pidiendo. Sin esta politica, las constantes militares ya calibradas (poder, varianza, bajas, veterania) se
+ * seguirian midiendo sobre un mundo en paz sin que ninguna prueba fallara: el riesgo mas silencioso de toda
+ * la mecanica.
+ *
+ * La politica es deliberadamente simple, y esa simpleza es el punto: **va a por lo que tiene a la vista**.
+ * No pretende jugar bien, pretende que haya combates a un ritmo parecido al que la geometria producia antes,
+ * para que las cifras sigan significando lo mismo.
+ *
+ * Lo que respeta, porque son reglas y no cortesias: no persigue a los suyos ni a un aliado, no persigue en
+ * tregua, no persigue a quien esta en tregua, y no toca una caravana escoltada — esa no es presa.
+ */
+function fijarPersecucionesNpc(
+  ejercitos: Ejercito[],
+  caravanas: Caravana[],
+  asentamientos: Asentamiento[],
+  relaciones: RelacionPolitica[],
+  esNpc: (faccionId: string) => boolean,
+  instante: Instante
+): { ejercitos: Ejercito[]; persecucionesNuevas: number } {
+  const faccionDePlaza = new Map(asentamientos.map((a) => [a.id, a.faccionId]));
+  const adjuntas = new Set(ejercitos.flatMap((e) => e.caravanasAdjuntasIds));
+  const enemiga = (a: string, b: string) => a !== b && !estanAliadas(relaciones, a, b);
+  let persecucionesNuevas = 0;
+
+  const ejercitosActualizados = ejercitos.map((cazador) => {
+    if (!esNpc(cazador.faccionId) || cazador.persiguiendo || enTregua(cazador, instante)) return cazador;
+    if (cazador.escuadrones.every((e) => e.cantidad <= 0)) return cazador;
+
+    // Orden canonico por id: la eleccion de presa no consume RNG, pero SI decide que combates ocurren, y con
+    // ellos toda la secuencia aleatoria del tick siguiente.
+    const columna = [...ejercitos]
+      .filter((o) => o.id !== cazador.id && enemiga(cazador.faccionId, o.faccionId) && !enTregua(o, instante))
+      .filter((o) => o.escuadrones.some((e) => e.cantidad > 0))
+      .filter((o) => distancia(o.posicionActual, cazador.posicionActual) <= VISION.ejercito)
+      .sort((x, y) => (x.id < y.id ? -1 : 1))[0];
+    if (columna) {
+      persecucionesNuevas++;
+      return { ...cazador, persiguiendo: { tipo: 'ejercito' as const, id: columna.id } };
+    }
+
+    const caravana = [...caravanas]
+      .filter((c) => c.estado !== 'adjunta' && c.estado !== 'disponible' && !adjuntas.has(c.id))
+      .filter((c) => {
+        const duena = faccionDePlaza.get(c.origenAsentamientoId);
+        return duena !== undefined && enemiga(cazador.faccionId, duena);
+      })
+      .filter((c) => distancia(c.posicionActual, cazador.posicionActual) <= VISION.ejercito)
+      .sort((x, y) => (x.id < y.id ? -1 : 1))[0];
+    if (caravana) {
+      persecucionesNuevas++;
+      return { ...cazador, persiguiendo: { tipo: 'caravana' as const, id: caravana.id } };
+    }
+
+    return cazador;
+  });
+
+  return { ejercitos: ejercitosActualizados, persecucionesNuevas };
+}
+
 function lanzarCampanas(
   asentamientos: Asentamiento[],
   ejercitos: Ejercito[],
@@ -1239,6 +1303,22 @@ export function avanzarNpcGobernanza(
   const trasRepliegues = replegarLosQueYaTerminaron(trasCampanas.ejercitos, trasCampanas.asentamientos, mapa, esNpc);
   eventos.push(...trasRepliegues.eventos);
 
+  // Punto 7d: a por quien tienen delante (paso 8e). Va al FINAL de lo militar y antes de expandir: se decide
+  // con las columnas de este tick ya movilizadas y ya replegadas, para que una que acaba de recibir la orden
+  // de volver no salga corriendo detrás de nadie.
+  //
+  // Sin esto el batch se queda sin combates y NADIE SE ENTERA: desde que los encuentros dejaron de salir de
+  // la geometría, en el laboratorio no hay quien los pida, y las constantes militares se seguirían midiendo
+  // sobre un mundo en paz sin que ninguna prueba fallara.
+  const trasPersecuciones = fijarPersecucionesNpc(
+    trasRepliegues.ejercitos,
+    trasComercio.caravanas,
+    trasCampanas.asentamientos,
+    trasComercio.relaciones,
+    esNpc,
+    instante
+  );
+
   const trasExpansion = expandirSiPuede(
     trasCampanas.asentamientos,
     trasBandidos.facciones,
@@ -1257,7 +1337,7 @@ export function avanzarNpcGobernanza(
       asentamientos: trasExpansion.asentamientos,
       facciones: trasBandidos.facciones,
       caravanas: trasExpansion.caravanas,
-      ejercitos: trasRepliegues.ejercitos,
+      ejercitos: trasPersecuciones.ejercitos,
       campamentosBandidos: trasBandidos.campamentos,
       bandidosProximoSpawnEn: trasBandidos.bandidosProximoSpawnEn ?? trasComercio.bandidosProximoSpawnEn,
     },

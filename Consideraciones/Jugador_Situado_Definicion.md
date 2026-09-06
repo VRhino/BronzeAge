@@ -1066,14 +1066,24 @@ Cada paso deja el repo verde y jugable. El orden no es negociable en los tres pr
    una laguna: un NPC de facción no es una persona parada en un sitio, es la abstracción de "la plaza se
    gobierna sola", y no hay presencia que comprobar. Verificado corriendo el batch: 100 asentamientos vivos
    después del cambio.
-8. **Las interacciones dejan de ser automáticas** (§1.1b). Es un paso grande y va en este orden interno:
-   a) `CaravanaAvistada` en la proyección — sin ver, no hay clic;
-   b) `inspeccionar` con su rango de 40 y su aviso al observado;
-   c) `atacar` / `interceptar` / `asediar` explícitos, y **quitar** los disparos automáticos de
-      `resolverEncuentros` y de la llegada;
-   d) `perseguir` / `dejarDePerseguir` y la tregua (`enTreguaHasta`). Se recalcula **cada tick**, que la
-      medición de §9 dejó confirmado como asequible (0,254 ms por ruta);
-   e) política de persecución del NPC, sin la cual el batch se queda sin combates.
+8. ~~**Las interacciones dejan de ser automáticas**~~ — **HECHO (2026-09-06)**, los cinco sub-pasos.
+
+   a) `CaravanaAvistada`. Antes NINGUNA caravana ajena viajaba en la proyección, así que no había nada sobre
+      lo que pulsar. Se ve QUE lleva y si va escoltada, nunca CUÁNTO.
+   b) `inspeccionar` a 40, **con aviso al observado**. La telemetría que la proyección niega a distancia se
+      compra acercándose y delatándose.
+   c) `atacar` / `interceptar` explícitos, y **fuera el disparo automático**: dos columnas enemigas que se
+      cruzan ya no se pelean solas. El test que decía lo contrario ahora dice lo contrario de lo que decía.
+   d) `perseguir` / `dejarDePerseguir` y la **tregua**, que corta por los dos lados. `resolverEncuentros`
+      cambia de significado: deja de ser "quién se cruza con quién" y pasa a ser **el cierre de las
+      persecuciones** — perseguir ES elegir el combate; lo que desaparece es pelear por pasar cerca.
+   e) **Política de persecución del NPC**, con sus tests, que son la red del riesgo 5.
+
+   **Lo que hacía falta vigilar, vigilado.** El riesgo 5 decía que el batch se quedaría sin combates y nadie
+   se enteraría —las constantes militares se seguirían midiendo sobre un mundo en paz sin que ninguna prueba
+   fallara—. Ahora hay dos tests que fallan si eso ocurre: uno comprueba que el NPC fija presa, y otro que en
+   el tick siguiente eso **produce un `combate.encuentro`**.
+
 9. **Onboarding**: spawn aleatorio, memoria personal, fundar donde se está. Cierra la entrada del checklist.
 10. **Calibración** por batch — ahora nueve constantes, y con el combate ya intencional, que es lo que hace la
     medición representativa.
