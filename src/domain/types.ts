@@ -351,6 +351,41 @@ export interface Jugador {
    * ser opcional y las partidas guardadas sí necesitan migración.
    */
   ubicacion: UbicacionJugador;
+  /**
+   * Lo ultimo que vio del interior de cada plaza que ha pisado (Doc 1.10.1), por `asentamientoId`.
+   *
+   * **Es lo unico de todo el modelo que NO se puede derivar.** La proyeccion es una vista: sabe filtrar el
+   * presente, no recordar el pasado. "Trigo 4.200 hace doce minutos" no esta en ningun sitio del estado vivo
+   * —ahi pone 3.100— asi que o se anota al salir, o no existe.
+   *
+   * **Del JUGADOR y no de la Faccion**, que es la diferencia con `memoriaPorFaccion`. Si fuera de la Faccion,
+   * a un grupo le bastaria dejar a uno sentado en casa refrescandola para que todos vieran el almacen en vivo
+   * desde cualquier parte del mapa, y la mecanica entera se cae: la ciudadania habilita, la PRESENCIA ejerce
+   * (Doc 2.5).
+   *
+   * Se escribe al SALIR y no cada tick: mientras estas dentro ves lo vivo, asi que refrescar la foto no
+   * cambiaria nada de lo que ves y costaria trabajo en cada latido.
+   */
+  plazasRecordadas?: Record<string, InteriorRecordado>;
+}
+
+/**
+ * La foto MINIMA del interior de una plaza (decision del usuario, 2026-09-06): las tres cifras que se miran
+ * al volver a casa, y nada mas.
+ *
+ * Se descarto guardar el `Asentamiento` entero: seria fiel a "lo ultimo que viste" pero duplicaria en el
+ * snapshot lo que ya esta vivo, y engordaria justo la mecanica que nació para adelgazar la proyeccion.
+ */
+export interface InteriorRecordado {
+  /** Cuando se tomo. Es lo que convierte el dato en "hace doce minutos" en vez de en una mentira. */
+  vistoEn: Instante;
+  almacen: Record<string, RecursoAlmacenado>;
+  /** Lo que estaba levantandose o esperando turno: `en_cola` y `en_construccion` (lo `activo` es publico y
+   * viaja vivo en la ficha, no hace falta recordarlo). */
+  cola: Edificio[];
+  /** Quien defendia la plaza (Doc 5.12.4). El dato mas tactico del juego, y por eso solo se recuerda de
+   * donde has estado. */
+  guarnicion: Escuadron[];
 }
 
 export type OrigenTropa = 'pesants' | 'artesanos' | 'nobleza';

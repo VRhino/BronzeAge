@@ -5,7 +5,8 @@
 // jugador actúa por primera vez y cuando se carga una partida anterior a esta mecánica— y en los dos hay que
 // DEDUCIRLA de lo que el mundo ya sabe. Una sola función para los dos casos, o la partida migrada acabaría
 // colocando a la gente en un sitio distinto del que la coloca el juego en marcha.
-import type { Asentamiento, Ejercito, Jugador, RelacionPolitica, UbicacionJugador } from '../domain/types';
+import type { Asentamiento, Ejercito, InteriorRecordado, Jugador, RelacionPolitica, UbicacionJugador } from '../domain/types';
+import type { Instante } from '../domain/tiempo';
 import { MOVIMIENTO } from '../constants';
 import { absorberColumna, enLaPuertaDe, MovilizacionInvalidaError } from './ejercitos';
 import { esResidente, puedeEntrarEn } from './pertenencia';
@@ -108,4 +109,32 @@ export function retomarColumna(asentamiento: Asentamiento, jugadorId: string): v
   if (esResidente(asentamiento, jugadorId)) {
     throw new MovilizacionInvalidaError('De tu propia residencia se sale eligiendo tropas y carga, con `salirAlMundo`.');
   }
+}
+
+/**
+ * Congela lo que este jugador estaba viendo del interior de esta plaza (Doc 1.10.1), para que al salir le
+ * quede una foto fechada en vez de un agujero.
+ *
+ * Guarda solo la cola —`en_cola` y `en_construccion`—, el almacen y la guarnicion. Lo `activo` no entra: es
+ * publico y viaja vivo en la ficha, asi que recordarlo seria guardar dos veces el mismo hecho.
+ */
+export function conFotoDelInterior(jugador: Jugador, asentamiento: Asentamiento, vistoEn: Instante): Jugador {
+  const foto: InteriorRecordado = {
+    vistoEn,
+    almacen: asentamiento.almacen,
+    cola: asentamiento.edificios.filter((e) => e.estado !== 'activo'),
+    guarnicion: asentamiento.escuadrones,
+  };
+  return { ...jugador, plazasRecordadas: { ...jugador.plazasRecordadas, [asentamiento.id]: foto } };
+}
+
+/** Aplica la foto al jugador indicado, dejando intactos los demas. Envoltorio sobre `conFotoDelInterior` para
+ * que el comando no tenga que buscar y reemplazar a mano. */
+export function conFotoTomadaPor(
+  jugadores: readonly Jugador[],
+  jugadorId: string,
+  asentamiento: Asentamiento,
+  vistoEn: Instante
+): Jugador[] {
+  return jugadores.map((j) => (j.id === jugadorId ? conFotoDelInterior(j, asentamiento, vistoEn) : j));
 }

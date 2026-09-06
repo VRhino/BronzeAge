@@ -137,7 +137,16 @@ describe('asentamientosAvistados: la FICHA de lo ajeno, solo si se ve', () => {
     expect(proyeccion.asentamientosAvistados).toEqual([
       // `SIN_GEOMETRIA` no trae zonas, asi que el contorno viaja vacio en vez de romper la proyeccion — el
       // caso con geometria de verdad lo cubre el test de mas abajo.
-      { id: asentamientoRivalId, nombre: rival.nombre, faccionId: faccionRivalId, posicion: { x: 400, y: 470 }, nivel: rival.nivel, zona: [] },
+      {
+        id: asentamientoRivalId,
+        nombre: rival.nombre,
+        faccionId: faccionRivalId,
+        posicion: { x: 400, y: 470 },
+        nivel: rival.nivel,
+        zona: [],
+        // Lo que tiene EN PIE se ve desde fuera; ni cargos ni politicas, que son de puertas adentro.
+        edificios: rival.edificios.filter((e) => e.estado === 'activo'),
+      },
     ]);
   });
 
@@ -170,13 +179,36 @@ describe('asentamientosAvistados: la FICHA de lo ajeno, solo si se ve', () => {
     expect(Math.max(...lados)).toBeGreaterThan(5 * (Math.min(...lados) || 1));
   });
 
-  it('lo avistado NO lleva almacen, escuadrones, edificios, colas ni cargos: es telemetria de rival', () => {
+  it('lo avistado de un RIVAL no lleva almacen, guarnicion, cola ni cargos', () => {
     const { sesion, fundador } = conPlazaRivalEn({ x: 400, y: 470 });
     const avistado = proyectarParaJugador(sesion.getState(), fundador, SIN_GEOMETRIA).asentamientosAvistados[0]!;
 
-    // La ZONA si entra (decision del usuario, 2026-09-05): una frontera esta marcada sobre el terreno y
-    // quien pasa por delante la ve. Lo que la acota es la niebla, no la proyeccion.
-    expect(Object.keys(avistado).sort()).toEqual(['faccionId', 'id', 'nivel', 'nombre', 'posicion', 'zona']);
+    // Dos cosas SI entran, y las dos por decision del usuario:
+    //  - la ZONA (2026-09-05): una frontera esta marcada sobre el terreno y quien pasa por delante la ve;
+    //  - los EDIFICIOS en pie (2026-09-06): se ve lo levantado, no lo planeado.
+    // Lo que sigue fuera es lo que decide una guerra: que tiene guardado, con que se defiende, que esta
+    // construyendo y quien manda.
+    expect(Object.keys(avistado).sort()).toEqual(['edificios', 'faccionId', 'id', 'nivel', 'nombre', 'posicion', 'zona']);
+    expect(avistado.edificios.every((e) => e.estado === 'activo'), 'la cola es privada').toBe(true);
+  });
+
+  it('de una plaza de TU Faccion se ve ademas quien manda y bajo que politicas', () => {
+    // Dentro de casa los cargos son publicos; desde fuera no se sabe ni quien gobierna.
+    const base = partidaConAsentamiento();
+    const payload = base.sesion.exportar();
+    const primera = payload.state.asentamientos[0]!;
+    const sesion = GameSession.importar({
+      ...payload,
+      state: {
+        ...payload.state,
+        asentamientos: [primera, { ...primera, id: 'segunda-plaza', posicion: { x: 900, y: 900 }, jugadoresFundadoresIds: ['colono'], casasCompradas: [] }],
+      },
+    });
+
+    const propia = proyectarParaJugador(sesion.getState(), base.fundador, SIN_GEOMETRIA).asentamientosAvistados.find((a) => a.id === 'segunda-plaza')!;
+
+    expect(propia.cargos, 'de los tuyos sabes quien manda').toBeDefined();
+    expect(propia.politicasActivas).toBeDefined();
   });
 
   it('un ejercito propio en marcha tambien avista plazas rivales, a su propio radio', () => {
@@ -848,5 +880,69 @@ describe('eventosDominio de campana: atribuidos a su origen, no globales', () =>
 
     const eventos = eventosDominioParaJugador(conEventos, fundador, 0);
     expect(eventos.some((e) => e.codigo === 'ejercito.llega')).toBe(false);
+  });
+});
+
+// La foto del interior (paso 6b, Doc 1.10.1). Es lo unico del modelo que NO se deriva: una vista sabe
+// filtrar el presente, no recordar el pasado.
+describe('interiorRecordado: la foto minima de lo que dejaste atras', () => {
+  it('al salir queda una foto FECHADA del almacen, la cola y la guarnicion', () => {
+    const { sesion, asentamientoId, fundador } = partidaConAsentamiento();
+    const trigoAlSalir = sesion.getState().asentamientos[0]!.almacen['trigo']?.cantidad ?? 0;
+
+    sesion.ejecutar(salirAlMundo, { asentamientoId, jugadorId: fundador, escuadronIds: [], carga: {} }, { ...OPC, actor: fundador });
+
+    const ficha = proyectarParaJugador(sesion.getState(), fundador, SIN_GEOMETRIA).asentamientosAvistados[0]!;
+    expect(ficha.interiorRecordado, 'de donde has estado, recuerdas').toBeDefined();
+    expect(ficha.interiorRecordado!.almacen['trigo']?.cantidad).toBe(trigoAlSalir);
+    expect(ficha.interiorRecordado!.vistoEn, 'con fecha, o no seria una foto sino una mentira').toBeDefined();
+  });
+
+  it('y la foto NO se refresca sola: la ciudad sigue viviendo y el recuerdo se queda quieto', () => {
+    const { sesion, asentamientoId, fundador } = partidaConAsentamiento();
+    sesion.ejecutar(salirAlMundo, { asentamientoId, jugadorId: fundador, escuadronIds: [], carga: {} }, { ...OPC, actor: fundador });
+    const recordadoAlSalir = proyectarParaJugador(sesion.getState(), fundador, SIN_GEOMETRIA).asentamientosAvistados[0]!.interiorRecordado!;
+
+    for (let i = 0; i < 5; i++) sesion.avanzarTick();
+
+    const ahora = proyectarParaJugador(sesion.getState(), fundador, SIN_GEOMETRIA).asentamientosAvistados[0]!.interiorRecordado!;
+    expect(ahora.vistoEn, 'la foto es de cuando salio, no de ahora').toBe(recordadoAlSalir.vistoEn);
+    const vivo = sesion.getState().asentamientos[0]!.almacen['trigo']?.cantidad ?? 0;
+    expect(ahora.almacen['trigo']?.cantidad, 'y el almacen real se ha movido por debajo').not.toBe(vivo);
+  });
+
+  it('de una plaza que NUNCA has pisado no hay foto, aunque la veas', () => {
+    // Es de su propia Facción y la ve, pero nunca ha entrado: ficha sí, recuerdo no.
+    const base = partidaConAsentamiento();
+    const payload = base.sesion.exportar();
+    const primera = payload.state.asentamientos[0]!;
+    const sesion = GameSession.importar({
+      ...payload,
+      state: {
+        ...payload.state,
+        asentamientos: [primera, { ...primera, id: 'nunca-pisada', posicion: { x: 900, y: 900 }, jugadoresFundadoresIds: ['colono'], casasCompradas: [] }],
+      },
+    });
+
+    const avistada = proyectarParaJugador(sesion.getState(), base.fundador, SIN_GEOMETRIA).asentamientosAvistados.find(
+      (a) => a.id === 'nunca-pisada'
+    )!;
+
+    expect(avistada.interiorRecordado).toBeUndefined();
+  });
+
+  it('la foto es del JUGADOR, no de la Faccion: que otro siga dentro no te la refresca', () => {
+    // Es lo que sostiene la mecanica entera. Si fuera de la Faccion, bastaria dejar a uno sentado en casa
+    // para que todos vieran el almacen en vivo desde cualquier parte del mapa.
+    const { sesion, asentamientoId, fundador, vecino } = partidaConAsentamiento();
+    sesion.ejecutar(salirAlMundo, { asentamientoId, jugadorId: fundador, escuadronIds: [], carga: {} }, { ...OPC, actor: fundador });
+
+    // El vecino sigue dentro y ve el interior vivo; el fundador, fuera, solo su foto.
+    const dentro = proyectarParaJugador(sesion.getState(), vecino, SIN_GEOMETRIA);
+    const fuera = proyectarParaJugador(sesion.getState(), fundador, SIN_GEOMETRIA);
+
+    expect(dentro.asentamientos.map((a) => a.id), 'el que se queda ve la ciudad entera').toEqual([asentamientoId]);
+    expect(fuera.asentamientos, 'el que se fue, no').toEqual([]);
+    expect(fuera.asentamientosAvistados[0]!.interiorRecordado, 'solo su propia foto').toBeDefined();
   });
 });

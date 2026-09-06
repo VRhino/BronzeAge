@@ -15,7 +15,7 @@
 import type { Asentamiento } from '../../domain/types';
 import { marcharA as marcharAEngine, salirAlMundo as salirAlMundoEngine, type ObjetivoEjercito } from '../../engine/ejercitos';
 import { conVeto } from '../../engine/pertenencia';
-import { cruzarLaPuerta, retomarColumna, situarJugadores } from '../../engine/ubicacion';
+import { conFotoTomadaPor, cruzarLaPuerta, retomarColumna, situarJugadores } from '../../engine/ubicacion';
 import { liderazgoComprometido } from '../../engine/liderazgo';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito } from './tipos';
@@ -79,7 +79,15 @@ export const salirAlMundo = comando<ParamsSalirAlMundo, { ejercitoId: string }>(
   const siguiente: GameSessionState = {
     ...conAsentamiento(estado, origen),
     ejercitos: [...estado.ejercitos, ejercito],
-    jugadores: situarJugadores(estado.jugadores, [params.jugadorId], { tipo: 'columna', ejercitoId: ejercito.id }),
+    // Al cruzar la puerta hacia fuera se congela lo que estaba viendo de dentro (Doc 1.10.1). La foto se toma
+    // del asentamiento YA sin las tropas ni la carga que se lleva: es lo que deja atrás, no lo que había
+    // antes de hacer la maleta.
+    jugadores: conFotoTomadaPor(
+      situarJugadores(estado.jugadores, [params.jugadorId], { tipo: 'columna', ejercitoId: ejercito.id }),
+      params.jugadorId,
+      origen,
+      ctx.instante
+    ),
   };
 
   const conQue = ejercito.escuadrones.length === 0 ? 'sin tropas' : `con ${ejercito.escuadrones.length} escuadrón(es)`;

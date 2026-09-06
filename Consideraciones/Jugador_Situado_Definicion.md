@@ -1031,15 +1031,31 @@ Cada paso deja el repo verde y jugable. El orden no es negociable en los tres pr
    viaja como ficha en `asentamientosAvistados`. Dentro de una plaza AJENA no viaja interior: la capa
    pública sigue sin definirse (§9) y hasta entonces no se enseña de más.
 
-   6b. **El recuerdo del interior** — **BLOQUEADO, hace falta una decisión.** §1.2 dice que "el mecanismo ya
-   existe y ya está probado", y **no es cierto**: `FichaConocida` no tiene un solo campo de interior (id,
-   nombre, Facción, posición, nivel, radio), y `MemoriaFaccion.asentamientos` dice literalmente que las
-   propias no entran "porque viajan completas en la proyección" — la suposición que este paso acaba de
-   invalidar. Recordar un ALMACÉN, una COLA y una GUARNICIÓN es una forma de memoria que hoy no existe.
+   6b. ~~**El recuerdo del interior**~~ — **HECHO (2026-09-06)**, con la decisión del usuario: **foto
+   mínima** —almacén, cola y guarnición, fechada— y no una copia del asentamiento entero.
 
-   Lo que hay que decidir es **qué lleva la foto**, y el rango es real: desde una copia entera del
-   `Asentamiento` (fiel a "lo último que viste", pero duplica en el snapshot lo que ya está en estado vivo)
-   hasta un puñado de cifras —almacén, cola, guarnición— que es lo que de verdad se mira al volver.
+   Vive en `Jugador.plazasRecordadas`, **no en `memoriaPorFaccion`**, y esa es la parte que sostiene la
+   mecánica: si la foto fuera de la Facción, a un grupo le bastaría dejar a uno sentado en casa
+   refrescándola para que todos vieran el almacén en vivo desde cualquier parte del mapa. Se escribe al
+   SALIR y no cada tick — mientras estás dentro ves lo vivo, así que refrescarla no cambiaría nada.
+
+   **Es lo único de todo el modelo que no se deriva.** La proyección es una vista: sabe filtrar el presente,
+   no recordar el pasado. "Trigo 4.200 hace doce minutos" no está en ningún sitio del estado vivo.
+
+   **Y los tres niveles de visibilidad** (decisión del usuario, 2026-09-06), en un solo tipo con secciones
+   opcionales que rellena el SERVIDOR — mandar el dato y esconderlo en el cliente no lo esconde:
+
+   | Nivel | Quién | Qué añade |
+   |---|---|---|
+   | Público | cualquiera que la vea | posición, nivel, frontera, **edificios en pie** |
+   | De la Facción | ciudadano suyo, esté donde esté | **cargos y políticas** |
+   | De quien la pisa | dentro | el interior completo, que viaja en `asentamientos` |
+
+   La línea de los edificios cae sobre un campo que ya existía —`Edificio.estado`— así que "lo levantado sí,
+   lo planeado no" no necesita dos listas: lo público es `activo`, y la cola es lo demás. **Revierte** el
+   invariante de 2026-09-05 que decía que lo avistado no lleva edificios; lo que sigue fuera es lo que decide
+   una guerra — almacén, guarnición, cola y cargos ajenos.
+
 7. **Presencia en la autorización**: los ~24 comandos. **Requiere haber decidido antes qué se hace con el NPC
    de gobernanza** (§10.3): sin ubicación ni exención explícita, el batch se cae aquí.
 8. **Las interacciones dejan de ser automáticas** (§1.1b). Es un paso grande y va en este orden interno:

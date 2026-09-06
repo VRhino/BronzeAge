@@ -48,10 +48,14 @@ import type {
   CaminoComercial,
   CampamentoBandido,
   Caravana,
+  CargosAsentamiento,
+  Edificio,
   Ejercito,
   Faccion,
   OrdenMercado,
   Point,
+  InteriorRecordado,
+  PoliticaActiva,
   RelacionPolitica,
   Titulo,
   ZonaFaccion,
@@ -63,6 +67,7 @@ import type { EstadoMapa } from '../../world/mapa';
 import type { TrazadoAsentamiento } from '../../engine/trazado';
 import type { Instante } from '../../domain/tiempo';
 import { esCiudadano } from '../../engine/faccion';
+import { ubicacionDeducida } from '../../engine/ubicacion';
 // El mismo recuento que usa el motor para los carros (Doc 5.13): un participante es un carro Y un rombo.
 import { participantesDe } from '../../engine/ejercitos';
 import {
@@ -118,6 +123,21 @@ export interface EjercitoAvistado {
  * cargos, trazado urbano—: eso es telemetría de un rival, y es justo lo que esta proyección existe para
  * impedir.
  */
+/**
+ * Lo que se sabe de una plaza en la que NO se esta (Doc 1.10.4). Un solo tipo con secciones opcionales, y no
+ * un tipo por nivel de acceso (a peticion del usuario, 2026-09-06): el cliente pinta lo que llega y no
+ * pregunta por que falta, asi que un nivel nuevo no le rompe ningun camino.
+ *
+ * Lo que decide que secciones vienen es el SERVIDOR, siempre. Mandarlo todo y esconderlo en el cliente no lo
+ * esconde: el cliente corre en la maquina del jugador y basta leer la respuesta a pelo. La proyeccion es la
+ * frontera de seguridad, no una capa de presentacion.
+ *
+ * Tres niveles, de fuera hacia dentro:
+ *
+ *  1. **Publico** — lo que se ve desde el camino: donde esta, de quien es, y **lo que tiene en pie**.
+ *  2. **De la Faccion** — quien manda y bajo que politicas. Publico dentro de casa, opaco fuera.
+ *  3. **De quien la pisa** — el interior, y eso no viaja aqui: viaja completo en `asentamientos`.
+ */
 export interface AsentamientoAvistado {
   id: string;
   /** Opcional por el mismo motivo que en `Asentamiento`: ausente = el cliente muestra el `id`. */
@@ -139,6 +159,28 @@ export interface AsentamientoAvistado {
    * la de verdad. Entre "exacta con una pista de más" y "limpia pero falsa" se eligió la primera.
    */
   zona: Point[];
+  /**
+   * Los edificios EN PIE, y solo esos (decisión del usuario, 2026-09-06). Se ve lo que está levantado, no lo
+   * que está en el papel: un muro a medio construir se distingue desde fuera, el plan de construirlo no.
+   *
+   * La línea cae sobre un campo que ya existía —`Edificio.estado`— así que no hay dos listas que mantener:
+   * lo público es `activo`, y `en_cola`/`en_construccion` son la cola, que es privada.
+   */
+  edificios: Edificio[];
+  /** Quién manda aquí. **Solo para ciudadanos de su Facción** (decisión del usuario, 2026-09-06): dentro de
+   * casa es público, desde fuera no se sabe ni quién gobierna. Ausente = no eres de los suyos. */
+  cargos?: CargosAsentamiento;
+  /** Bajo qué políticas vive. Mismo nivel de acceso que `cargos`, y por el mismo motivo. */
+  politicasActivas?: PoliticaActiva[];
+  /**
+   * Lo último que ESTE jugador vio de su interior, con la fecha en que lo vio (Doc 1.10.1). Ausente si nunca
+   * la ha pisado — de una plaza en la que no has estado no recuerdas nada, la veas o no.
+   *
+   * Es información VIEJA a propósito, y por eso lleva `vistoEn`: el cliente escribe "hace 12 min" y quien la
+   * lee sabe que está decidiendo con una foto, no con la realidad. Es la tensión que busca la mecánica — un
+   * Gobernador de campaña manda sobre lo que recuerda.
+   */
+  interiorRecordado?: InteriorRecordado;
 }
 
 export interface ProyeccionJugador {
@@ -431,9 +473,15 @@ export function proyectarParaJugador(
   // La plaza que el jugador PISA, que es la única cuyo interior viaja (Doc 1.10.1). Se exige además que sea
   // de su Facción: dentro de una plaza ajena solo se ve la capa pública (Doc 1.10.4), y qué lleva esa capa
   // es una decisión que el diseño todavía no ha tomado — hasta que la tome, no enseñamos de más.
-  const ubicacion = estado.jugadores.find((j) => j.id === jugadorId)?.ubicacion;
+  const jugador = estado.jugadores.find((j) => j.id === jugadorId);
+  const recordadas = jugador?.plazasRecordadas ?? {};
+  // Sin registro se DEDUCE, con la misma función que usa el alta: proyectar es LEER, y una lectura no puede
+  // escribir en el estado para darse de alta a sí misma. Y pasa de verdad — un jugador que entra en la
+  // partida y pide su pantalla antes de dar ninguna orden todavía no tiene registro; sin esto vería un mundo
+  // vacío desde dentro de su propia ciudad.
+  const ubicacion = jugador?.ubicacion ?? ubicacionDeducida(jugadorId, estado.asentamientos, estado.ejercitos);
   const dentroDe =
-    ubicacion?.tipo === 'asentamiento'
+    ubicacion.tipo === 'asentamiento'
       ? asentamientosPropios.find((a) => a.id === ubicacion.asentamientoId)
       : undefined;
 
@@ -461,6 +509,9 @@ export function proyectarParaJugador(
       posicion: a.posicion,
       nivel: a.nivel,
       zona: poligonoDe.get(a.id) ?? [],
+      edificios: a.edificios.filter((e) => e.estado === 'activo'),
+      ...(esPropio(a.id) ? { cargos: a.cargos, politicasActivas: a.politicasActivas } : {}),
+      ...(recordadas[a.id] ? { interiorRecordado: recordadas[a.id] } : {}),
     }));
   const seVe = new Set(avistados.map((a) => a.id));
 
