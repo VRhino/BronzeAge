@@ -405,6 +405,17 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
     rolesPermitidos: ['jugador'],
     condicionJugador: (_estado, jugadorId, params) => jugadorId === params.jugadorId,
   },
+  // La puerta es del Gobernador (Doc 1.10.5), igual que designar cargos: mismo cargo, misma condición.
+  fijarPoliticaDeAcceso: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, jugadorId, params) =>
+      jugadorId === params.jugadorId && residenteConCargo(estado, jugadorId, params.asentamientoId, 'gobernador'),
+  },
+  vetarJugador: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, jugadorId, params) =>
+      jugadorId === params.jugadorId && residenteConCargo(estado, jugadorId, params.asentamientoId, 'gobernador'),
+  },
   // --- Composición de una columna compartida (Doc 5.14). Nadie se une, se separa ni cede el mando a nombre
   // de otro. Lo demás —ir dentro, ser el Líder, la distancia— lo comprueba el motor, que es quien sabe
   // dónde está cada columna y quién la manda. ---

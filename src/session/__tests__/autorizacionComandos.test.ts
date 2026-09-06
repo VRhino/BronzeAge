@@ -159,6 +159,30 @@ describe('comprarCasa', () => {
   });
 });
 
+describe('la puerta (Doc 1.10.5)', () => {
+  // Quien puede tocarla es autorización, no regla del comando: la matriz es la única verdad sobre quién
+  // puede ejecutar qué, y repetir el chequeo dentro del comando dejaría dos que se desincronizan.
+  it('fijar la política de acceso exige ser el Gobernador', () => {
+    const { sesion, asentamientoId, fundador } = partidaConAsentamiento();
+    const params = { asentamientoId, jugadorId: fundador, politica: 'abierto' as const };
+
+    expect(verificarAutorizacion('fijarPoliticaDeAcceso', params, sesion.getState(), jugador(fundador))).toEqual(POR_DOMINIO);
+
+    sesion.ejecutar(asignarCargoLocal, { asentamientoId, cargo: 'gobernador', jugadorId: fundador }, OPC);
+    expect(verificarAutorizacion('fijarPoliticaDeAcceso', params, sesion.getState(), jugador(fundador))).toEqual(AUTORIZADO);
+  });
+
+  it('vetar también', () => {
+    const { sesion, asentamientoId, fundador, vecino } = partidaConAsentamiento();
+    const params = { asentamientoId, jugadorId: fundador, vetadoId: vecino, vetar: true };
+
+    expect(verificarAutorizacion('vetarJugador', params, sesion.getState(), jugador(fundador))).toEqual(POR_DOMINIO);
+
+    sesion.ejecutar(asignarCargoLocal, { asentamientoId, cargo: 'gobernador', jugadorId: fundador }, OPC);
+    expect(verificarAutorizacion('vetarJugador', params, sesion.getState(), jugador(fundador))).toEqual(AUTORIZADO);
+  });
+});
+
 describe('asignarCargoLocal', () => {
   it('designar Gobernador es directo para un residente', () => {
     const { sesion, asentamientoId, fundador } = partidaConAsentamiento();

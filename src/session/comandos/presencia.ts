@@ -13,6 +13,7 @@
 // No hay un cuarto: salir de tu propia residencia SIEMPRE es `salirAlMundo`, porque ahí tienes tu roster
 // entero delante y hay algo que elegir.
 import { MOVIMIENTO } from '../../constants';
+import type { Asentamiento } from '../../domain/types';
 import {
   absorberColumna,
   enLaPuertaDe,
@@ -21,7 +22,7 @@ import {
   MovilizacionInvalidaError,
   type ObjetivoEjercito,
 } from '../../engine/ejercitos';
-import { esResidente } from '../../engine/pertenencia';
+import { esResidente, puedeEntrarEn } from '../../engine/pertenencia';
 import { situarJugadores } from '../../engine/ubicacion';
 import { liderazgoComprometido } from '../../engine/liderazgo';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
@@ -152,11 +153,8 @@ export const entrarEnAsentamiento = comando<ParamsEntrarEnAsentamiento, void>((e
   if (!enLaPuertaDe(columna, asentamiento)) {
     throw new MovilizacionInvalidaError(`Hay que estar a menos de ${MOVIMIENTO.radioPuerta} de la plaza para entrar.`);
   }
-  // La política de acceso del Gobernador es el paso 5 (Doc 1.10.5). Hasta entonces se entra solo en lo
-  // propio, que es MÁS restrictivo que la regla final y no al revés: ninguna partida se acostumbra a algo
-  // que luego se prohíba.
-  if (asentamiento.faccionId !== columna.faccionId) {
-    throw new MovilizacionInvalidaError('Todavía no se puede entrar en una plaza de otra Facción.');
+  if (!puedeEntrarEn(asentamiento, params.jugadorId, columna.faccionId, estado.relaciones)) {
+    throw new MovilizacionInvalidaError('Esa plaza no te deja entrar.');
   }
 
   const esSuResidencia = esResidente(asentamiento, params.jugadorId);
@@ -280,5 +278,90 @@ export const marcharA = comando<ParamsMarcharA, { ejercitoId: string }>((estado,
       }),
     ],
     { ejercitoId: enMarcha.id }
+  );
+});
+
+export interface ParamsFijarPoliticaDeAcceso {
+  asentamientoId: string;
+  jugadorId: string;
+  politica: NonNullable<Asentamiento['politicaDeAcceso']>;
+}
+
+export interface ParamsVetarJugador {
+  asentamientoId: string;
+  jugadorId: string;
+  vetadoId: string;
+  /** `false` para levantar el veto. Un comando y no dos: vetar y perdonar son el mismo interruptor. */
+  vetar: boolean;
+}
+
+export interface PayloadPuerta {
+  asentamientoId: string;
+  politica: NonNullable<Asentamiento['politicaDeAcceso']>;
+}
+
+export interface PayloadVeto {
+  asentamientoId: string;
+  vetadoId: string;
+  vetado: boolean;
+}
+
+/**
+ * El Gobernador decide quién cruza su puerta (Doc 1.10.5).
+ *
+ * No expira, a diferencia de las políticas de Doc 4.4: una puerta que se abre sola a las dos horas y media
+ * no es una puerta. Por eso vive en el asentamiento y no en `politicasActivas`.
+ */
+export const fijarPoliticaDeAcceso = comando<ParamsFijarPoliticaDeAcceso, void>((estado, _mapa, ctx, params) => {
+  const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
+
+  return exito(
+    conHistorialDeJugador(
+      conAsentamiento(estado, { ...asentamiento, politicaDeAcceso: params.politica }),
+      params.jugadorId,
+      `Fija la puerta de ${asentamiento.id} en ${params.politica}.`
+    ),
+    [
+      evento(ctx, {
+        codigo: 'asentamiento.puerta_fijada',
+        mensaje: `${asentamiento.id} pasa a estar ${params.politica === 'abierto' ? 'abierta a todos' : `en ${params.politica}`}.`,
+        payload: { asentamientoId: asentamiento.id, politica: params.politica } satisfies PayloadPuerta,
+        asentamientoId: asentamiento.id,
+      }),
+    ]
+  );
+});
+
+/**
+ * Veta (o perdona) a un jugador concreto por encima de la política (Doc 1.10.5).
+ *
+ * Es lo que hace útil tener la plaza abierta: se abre a todos MENOS a esos. **A un residente no se le veta**
+ * — nadie se queda fuera de su propia casa, y echar a un vecino es el exilio (Doc 2.8), que es otra cosa y
+ * pasa por otra puerta.
+ */
+export const vetarJugador = comando<ParamsVetarJugador, void>((estado, _mapa, ctx, params) => {
+  const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
+  if (params.vetar && esResidente(asentamiento, params.vetadoId)) {
+    throw new MovilizacionInvalidaError('A un residente no se le cierra su propia casa: eso es el exilio.');
+  }
+
+  const vetados = new Set(asentamiento.vetadosIds ?? []);
+  if (params.vetar) vetados.add(params.vetadoId);
+  else vetados.delete(params.vetadoId);
+
+  return exito(
+    conHistorialDeJugador(
+      conAsentamiento(estado, { ...asentamiento, vetadosIds: [...vetados].sort() }),
+      params.jugadorId,
+      params.vetar ? `Veta a un jugador en ${asentamiento.id}.` : `Levanta un veto en ${asentamiento.id}.`
+    ),
+    [
+      evento(ctx, {
+        codigo: 'asentamiento.veto',
+        mensaje: params.vetar ? `${asentamiento.id} cierra su puerta a un jugador.` : `${asentamiento.id} levanta un veto.`,
+        payload: { asentamientoId: asentamiento.id, vetadoId: params.vetadoId, vetado: params.vetar } satisfies PayloadVeto,
+        asentamientoId: asentamiento.id,
+      }),
+    ]
   );
 });

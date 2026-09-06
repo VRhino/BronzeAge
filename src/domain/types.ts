@@ -434,6 +434,17 @@ export interface Asentamiento {
   cargos: CargosAsentamiento;
   /** Jugadores que compraron casa aquí (Doc 2.5), vía de ciudadanía distinta de fundar. */
   casasCompradas: string[];
+  /**
+   * Quién puede cruzar la puerta (Doc 1.10.5). La fija el Gobernador y **no expira**: no es una política de
+   * las de Doc 4.4 — una puerta que se abre sola a las dos horas y media no es una puerta.
+   *
+   * Ausente = `faccion_y_aliados`, que es lo que una ciudad hace por defecto: los suyos y los amigos entran,
+   * el resto no. Un residente entra SIEMPRE, mire lo que mire esto: nadie se queda fuera de su propia casa.
+   */
+  politicaDeAcceso?: 'abierto' | 'faccion_y_aliados' | 'solo_faccion' | 'cerrado';
+  /** Vetados por el Gobernador, por encima de la política (Doc 1.10.5): un veto cierra la puerta a alguien
+   * concreto aunque la plaza esté abierta de par en par. Ausente = nadie. */
+  vetadosIds?: string[];
   politicasActivas: PoliticaActiva[];
   escuadrones: Escuadron[];
   /** Mantenimiento (Doc 4.5): medidor 0-100, empieza en 100; a 0 el asentamiento cae en ruinas (se elimina). */

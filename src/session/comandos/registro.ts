@@ -43,7 +43,7 @@ import {
   soltarCaravana,
   unirseAEjercito,
 } from './ejercitos';
-import { entrarEnAsentamiento, marcharA, salirAlMundo, salirDeAsentamiento } from './presencia';
+import { entrarEnAsentamiento, fijarPoliticaDeAcceso, marcharA, salirAlMundo, salirDeAsentamiento, vetarJugador } from './presencia';
 import { cederLiderazgo, responderPeticionDeUnion, separarseDelEjercito, unirseEnCampo } from './columna';
 
 export const REGISTRO_COMANDOS = {
@@ -69,6 +69,8 @@ export const REGISTRO_COMANDOS = {
   marcharA,
   entrarEnAsentamiento,
   salirDeAsentamiento,
+  fijarPoliticaDeAcceso,
+  vetarJugador,
   unirseEnCampo,
   responderPeticionDeUnion,
   separarseDelEjercito,

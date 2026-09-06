@@ -6,7 +6,7 @@
 // columna aparcada sobrevive a lo que le pase a la plaza, y volver a casa la deshace.
 import { describe, expect, it } from 'vitest';
 import { GameSession } from '../gameSession';
-import { entrarEnAsentamiento, marcharA, salirAlMundo, salirDeAsentamiento } from '../comandos/presencia';
+import { entrarEnAsentamiento, fijarPoliticaDeAcceso, marcharA, salirAlMundo, salirDeAsentamiento, vetarJugador } from '../comandos/presencia';
 import { movilizarEjercito } from '../comandos/ejercitos';
 import { OPC, partidaConAsentamiento } from './fixtures';
 import { LOGISTICA, MOVIMIENTO } from '../../constants';
@@ -346,6 +346,99 @@ describe('marcharA — el destino de un viajero se rectifica (Doc 5.12.1)', () =
     const { sesion, fundador } = fuera();
 
     const r = sesion.ejecutar(marcharA, { jugadorId: fundador, objetivo: { tipo: 'punto', punto: AGUA } }, opcDe(fundador));
+
+    expect(r.ok).toBe(false);
+  });
+});
+
+describe('la puerta la controla el Gobernador (Doc 1.10.5)', () => {
+  /** El fundador fuera con su columna, y esa misma plaza dejando de ser su residencia: el forastero. */
+  function forasteroEnLaPuerta() {
+    const base = partidaLista();
+    base.sesion.ejecutar(
+      salirAlMundo,
+      { asentamientoId: base.asentamientoId, jugadorId: base.fundador, escuadronIds: [], carga: {} },
+      opcDe(base.fundador)
+    );
+    const payload = base.sesion.exportar();
+    const a = payload.state.asentamientos[0]!;
+    const sesion = GameSession.importar({
+      ...payload,
+      state: {
+        ...payload.state,
+        asentamientos: [
+          {
+            ...a,
+            jugadoresFundadoresIds: a.jugadoresFundadoresIds.filter((id) => id !== base.fundador),
+            casasCompradas: a.casasCompradas.filter((id) => id !== base.fundador),
+            // El vecino se queda de Gobernador: alguien tiene que poder tocar la puerta.
+            cargos: { ...a.cargos, gobernadorId: base.vecino },
+          },
+          ...payload.state.asentamientos.slice(1),
+        ],
+      },
+    });
+    return { ...base, sesion };
+  }
+
+  it('por defecto una plaza deja entrar a los suyos', () => {
+    const { sesion, asentamientoId, fundador } = forasteroEnLaPuerta();
+    expect(sesion.getState().asentamientos[0]!.politicaDeAcceso, 'sin decidir nada').toBeUndefined();
+
+    expect(sesion.ejecutar(entrarEnAsentamiento, { asentamientoId, jugadorId: fundador }, opcDe(fundador)).ok).toBe(true);
+  });
+
+  it('cerrada, no entra ni uno de la propia Facción', () => {
+    const { sesion, asentamientoId, fundador, vecino } = forasteroEnLaPuerta();
+    sesion.ejecutar(fijarPoliticaDeAcceso, { asentamientoId, jugadorId: vecino, politica: 'cerrado' }, opcDe(vecino));
+
+    expect(sesion.ejecutar(entrarEnAsentamiento, { asentamientoId, jugadorId: fundador }, opcDe(fundador)).ok).toBe(false);
+  });
+
+  it('el veto pesa MÁS que la política: abierta a todos menos a ti', () => {
+    const { sesion, asentamientoId, fundador, vecino } = forasteroEnLaPuerta();
+    sesion.ejecutar(fijarPoliticaDeAcceso, { asentamientoId, jugadorId: vecino, politica: 'abierto' }, opcDe(vecino));
+    sesion.ejecutar(vetarJugador, { asentamientoId, jugadorId: vecino, vetadoId: fundador, vetar: true }, opcDe(vecino));
+
+    expect(sesion.ejecutar(entrarEnAsentamiento, { asentamientoId, jugadorId: fundador }, opcDe(fundador)).ok).toBe(false);
+  });
+
+  it('y se levanta con el mismo comando', () => {
+    const { sesion, asentamientoId, fundador, vecino } = forasteroEnLaPuerta();
+    sesion.ejecutar(fijarPoliticaDeAcceso, { asentamientoId, jugadorId: vecino, politica: 'abierto' }, opcDe(vecino));
+    sesion.ejecutar(vetarJugador, { asentamientoId, jugadorId: vecino, vetadoId: fundador, vetar: true }, opcDe(vecino));
+
+    sesion.ejecutar(vetarJugador, { asentamientoId, jugadorId: vecino, vetadoId: fundador, vetar: false }, opcDe(vecino));
+
+    expect(sesion.ejecutar(entrarEnAsentamiento, { asentamientoId, jugadorId: fundador }, opcDe(fundador)).ok).toBe(true);
+  });
+
+  it('un RESIDENTE entra aunque la plaza esté cerrada: nadie se queda fuera de su casa', () => {
+    const { sesion, asentamientoId, fundador, vecino } = partidaLista();
+    sesion.ejecutar(salirAlMundo, { asentamientoId, jugadorId: fundador, escuadronIds: [], carga: {} }, opcDe(fundador));
+    const payload = sesion.exportar();
+    const a = payload.state.asentamientos[0]!;
+    const cerrada = GameSession.importar({
+      ...payload,
+      state: {
+        ...payload.state,
+        asentamientos: [{ ...a, politicaDeAcceso: 'cerrado' as const, cargos: { ...a.cargos, gobernadorId: vecino } }, ...payload.state.asentamientos.slice(1)],
+      },
+    });
+
+    expect(cerrada.ejecutar(entrarEnAsentamiento, { asentamientoId, jugadorId: fundador }, opcDe(fundador)).ok).toBe(true);
+  });
+
+  it('y a un residente no se le veta: eso sería expulsarlo sin pasar por el exilio', () => {
+    const { sesion, asentamientoId, fundador, vecino } = partidaLista();
+    const payload = sesion.exportar();
+    const a = payload.state.asentamientos[0]!;
+    const conGobernador = GameSession.importar({
+      ...payload,
+      state: { ...payload.state, asentamientos: [{ ...a, cargos: { ...a.cargos, gobernadorId: vecino } }, ...payload.state.asentamientos.slice(1)] },
+    });
+
+    const r = conGobernador.ejecutar(vetarJugador, { asentamientoId, jugadorId: vecino, vetadoId: fundador, vetar: true }, opcDe(vecino));
 
     expect(r.ok).toBe(false);
   });

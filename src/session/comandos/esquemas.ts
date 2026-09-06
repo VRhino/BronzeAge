@@ -239,6 +239,20 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   separarseDelEjercito: objeto({ jugadorId: IDENTIFICADOR }, ['jugadorId']),
   cederLiderazgo: objeto({ ejercitoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR, sucesorId: IDENTIFICADOR }, ['ejercitoId', 'jugadorId', 'sucesorId']),
   entrarEnAsentamiento: objeto({ asentamientoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR }, ['asentamientoId', 'jugadorId']),
+  // La puerta (Doc 1.10.5). No va en `politicasActivas` porque no expira: una puerta que se abre sola a las
+  // dos horas y media no es una puerta.
+  fijarPoliticaDeAcceso: objeto(
+    {
+      asentamientoId: IDENTIFICADOR,
+      jugadorId: IDENTIFICADOR,
+      politica: { type: 'string', enum: ['abierto', 'faccion_y_aliados', 'solo_faccion', 'cerrado'] },
+    },
+    ['asentamientoId', 'jugadorId', 'politica']
+  ),
+  vetarJugador: objeto(
+    { asentamientoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR, vetadoId: IDENTIFICADOR, vetar: { type: 'boolean' } },
+    ['asentamientoId', 'jugadorId', 'vetadoId', 'vetar']
+  ),
   salirDeAsentamiento: objeto({ asentamientoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR }, ['asentamientoId', 'jugadorId']),
   // Ejércitos (Doc 5.12).
   movilizarEjercito: objeto(

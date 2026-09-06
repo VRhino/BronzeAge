@@ -82,3 +82,36 @@ export function estanAliadas(relaciones: readonly RelacionPolitica[], aId: strin
       ((r.faccionAId === aId && r.faccionBId === bId) || (r.faccionAId === bId && r.faccionBId === aId))
   );
 }
+
+/**
+ * ¿Puede este jugador cruzar la puerta de esta plaza (Doc 1.10.5)?
+ *
+ * El orden de las tres capas es la regla, y no es intercambiable:
+ *
+ *  1. **Un residente entra siempre.** Nadie se queda fuera de su propia casa, ni por política ni por veto
+ *     — un Gobernador que pudiera vetar a un vecino podría expulsarlo del juego sin pasar por el exilio
+ *     (Doc 2.8), que es la vía que el diseño sí contempla para eso.
+ *  2. **Un veto pesa más que la política.** Vetar a alguien concreto es lo que hace útil tener la plaza
+ *     abierta: se abre a todos MENOS a esos.
+ *  3. **Y luego la política**, que es lo general.
+ */
+export function puedeEntrarEn(
+  asentamiento: Asentamiento,
+  jugadorId: string,
+  faccionDelJugadorId: string,
+  relaciones: readonly RelacionPolitica[]
+): boolean {
+  if (esResidente(asentamiento, jugadorId)) return true;
+  if (asentamiento.vetadosIds?.includes(jugadorId)) return false;
+
+  switch (asentamiento.politicaDeAcceso ?? 'faccion_y_aliados') {
+    case 'abierto':
+      return true;
+    case 'cerrado':
+      return false;
+    case 'solo_faccion':
+      return faccionDelJugadorId === asentamiento.faccionId;
+    case 'faccion_y_aliados':
+      return faccionDelJugadorId === asentamiento.faccionId || estanAliadas(relaciones, faccionDelJugadorId, asentamiento.faccionId);
+  }
+}

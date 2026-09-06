@@ -969,7 +969,18 @@ Cada paso deja el repo verde y jugable. El orden no es negociable en los tres pr
    aún atacable, el jugador se lleva sus tropas, sucesión del Líder por antigüedad, reaparición en el mismo
    punto, y caravanas adjuntas huérfanas de vuelta a su origen. Es el paso que una implementación ingenua se
    salta entero retirando al jugador en el `disconnect` del socket.
-5. **La puerta**: `politicaDeAcceso`, vetos, comando del Gobernador.
+5. ~~**La puerta**~~ — **HECHO (2026-09-06)**: `politicaDeAcceso`, `vetadosIds` y los dos comandos del
+   Gobernador. **Sin migración**, a diferencia de los pasos 1, 2 y 4b: los dos campos son opcionales y su
+   ausencia significa algo — `faccion_y_aliados` y "nadie vetado"—, que es lo que una ciudad hace por
+   defecto.
+
+   El orden de las tres capas es la regla y no es intercambiable: **un residente entra siempre**, luego
+   **el veto**, y luego **la política**. La primera importa más de lo que parece: un Gobernador que
+   pudiera vetar a un vecino podría expulsarlo del juego sin pasar por el exilio (Doc 2.8), que es la vía
+   que el diseño sí contempla. Y la segunda es la que hace útil tener la plaza abierta: a todos MENOS a
+   esos.
+
+   Esto abre lo que el paso 3 había dejado cerrado a propósito.
 6. **La proyección**: interior de uno, ficha de los demás, recuerdo de los dejados atrás. Es el paso que más
    contrato rompe; va después de que el estado sea correcto, no antes.
 7. **Presencia en la autorización**: los ~24 comandos. **Requiere haber decidido antes qué se hace con el NPC
