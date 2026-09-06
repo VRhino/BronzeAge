@@ -855,7 +855,8 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       // +4 con la composición de la columna (paso 4b): unirse en campo, contestar la petición, separarse y
       // ceder el liderazgo.
       // +2 con la puerta (paso 5): fijar la política de acceso y vetar.
-      expect(cuerpo.oneOf.length).toBe(52);
+      // +1 con `inspeccionar` (paso 8a): sin ver no hay clíc, y sin acercarse no hay detalle.
+      expect(cuerpo.oneOf.length).toBe(53);
       const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
       expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
     });

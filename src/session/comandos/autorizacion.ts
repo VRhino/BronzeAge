@@ -432,6 +432,12 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
     condicionJugador: (estado, jugadorId, params) =>
       jugadorId === params.jugadorId && residenteConCargo(estado, jugadorId, params.asentamientoId, 'gobernador'),
   },
+  // El menú de interacción (Doc 5.12.3). La geometría —estar en el anillo— la comprueba el motor, que es
+  // quien sabe dónde está cada cosa; aquí solo que nadie mira a nombre de otro.
+  inspeccionar: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (_estado, jugadorId, params) => jugadorId === params.jugadorId,
+  },
   // --- Composición de una columna compartida (Doc 5.14). Nadie se une, se separa ni cede el mando a nombre
   // de otro. Lo demás —ir dentro, ser el Líder, la distancia— lo comprueba el motor, que es quien sabe
   // dónde está cada columna y quién la manda. ---

@@ -11,8 +11,9 @@ import { GameSession } from '../gameSession';
 import { cederLiderazgo, responderPeticionDeUnion, separarseDelEjercito, unirseEnCampo } from '../comandos/columna';
 import { marcharA, salirAlMundo } from '../comandos/presencia';
 import { movilizarEjercito, replegarEjercito } from '../comandos/ejercitos';
+import { inspeccionar } from '../comandos/interaccion';
 import { OPC, partidaConAsentamiento } from './fixtures';
-import { LOGISTICA, MOVIMIENTO, SIMULACION } from '../../constants';
+import { LOGISTICA, MOVIMIENTO, SIMULACION, VISION } from '../../constants';
 
 const opcDe = (jugadorId: string) => ({ ...OPC, actor: jugadorId });
 const PUNTO_LEJOS = { tipo: 'punto', punto: { x: 430, y: 430 } } as const;
@@ -311,5 +312,53 @@ describe('replegarEjercito — cancelar es del Líder (Doc 5.14.3)', () => {
 
     expect(r.ok).toBe(true);
     expect(base.sesion.getState().ejercitos[0]!.estado).toBe('regresando');
+  });
+});
+
+// El menu de interaccion (paso 8, Doc 5.12.3). Lo que congela este bloque es que mirar CUESTA: hay que
+// meterse en el anillo de 40 y el observado se entera.
+describe('inspeccionar — la informacion se compra acercandose', () => {
+  it('desde el anillo de 40 devuelve la composicion de la columna ajena', () => {
+    const { sesion, ejercitoId, vecino, fundador } = ejercitoYViajero('rechazar');
+
+    const r = sesion.ejecutar(inspeccionar, { jugadorId: vecino, objetivo: { tipo: 'ejercito', id: ejercitoId } }, opcDe(vecino));
+
+    expect(r.ok).toBe(true);
+    const composicion = r.datos as { jugadoresIds: string[]; escuadrones: { tropaId: string; jugadorId: string }[] };
+    expect(composicion.jugadoresIds, 'se ve de quien es').toEqual([fundador]);
+    expect(composicion.escuadrones.map((e) => e.tropaId), 'y con que tropas va').toEqual(['milicia_lanceros']);
+  });
+
+  it('y el observado RECIBE AVISO: mirar te delata', () => {
+    const { sesion, ejercitoId, vecino } = ejercitoYViajero('rechazar');
+
+    const r = sesion.ejecutar(inspeccionar, { jugadorId: vecino, objetivo: { tipo: 'ejercito', id: ejercitoId } }, opcDe(vecino));
+
+    const aviso = r.eventos!.find((e) => e.codigo === 'columna.observada');
+    expect(aviso, 'sin aviso, inspeccionar seria telemetria gratis').toBeDefined();
+    expect((aviso!.payload as { observadorId: string }).observadorId).toBe(vecino);
+  });
+
+  it('desde MAS LEJOS de 40 no se puede: hay que acercarse de verdad', () => {
+    const { sesion, ejercitoId, columnaId, vecino } = ejercitoYViajero('rechazar');
+    const payload = sesion.exportar();
+    const lejos = GameSession.importar({
+      ...payload,
+      state: {
+        ...payload.state,
+        ejercitos: payload.state.ejercitos.map((e) =>
+          e.id === columnaId ? { ...e, posicionActual: { x: e.posicionActual.x + MOVIMIENTO.radioInspeccion + 1, y: e.posicionActual.y } } : e
+        ),
+      },
+    });
+
+    const r = lejos.ejecutar(inspeccionar, { jugadorId: vecino, objetivo: { tipo: 'ejercito', id: ejercitoId } }, opcDe(vecino));
+
+    expect(r.ok).toBe(false);
+  });
+
+  it('y ese anillo esta ENTRE ver y chocar, que es lo que lo hace un juego de dos', () => {
+    expect(MOVIMIENTO.radioInspeccion).toBeGreaterThan(LOGISTICA.radioEncuentro);
+    expect(MOVIMIENTO.radioInspeccion).toBeLessThan(VISION.ejercito);
   });
 });

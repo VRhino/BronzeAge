@@ -388,14 +388,14 @@ describe('presencia: ser vecino ya no basta, hay que estar dentro', () => {
 
   it('dentro de su plaza, un vecino puede reclutar', () => {
     const { sesion, asentamientoId, fundador } = partidaConAsentamiento();
-    const params = { asentamientoId, jugadorId: fundador, tropaId: 'milicia_lanceros', cantidad: 1 };
+    const params = { asentamientoId, jugadorId: fundador, tropaId: 'milicia_lanceros', cantidad: 1, origen: 'pesants' as const };
 
     expect(verificarAutorizacion('reclutarTropa', params, sesion.getState(), jugador(fundador))).toEqual(AUTORIZADO);
   });
 
   it('en campaña NO, aunque siga siendo vecino de esa misma plaza', () => {
     const { sesion, asentamientoId, fundador } = deCampana();
-    const params = { asentamientoId, jugadorId: fundador, tropaId: 'milicia_lanceros', cantidad: 1 };
+    const params = { asentamientoId, jugadorId: fundador, tropaId: 'milicia_lanceros', cantidad: 1, origen: 'pesants' as const };
 
     expect(verificarAutorizacion('reclutarTropa', params, sesion.getState(), jugador(fundador))).toEqual(POR_DOMINIO);
   });
@@ -422,7 +422,7 @@ describe('presencia: ser vecino ya no basta, hay que estar dentro', () => {
   it('y al volver a entrar lo recupera', () => {
     const { sesion, asentamientoId, fundador } = deCampana();
     sesion.ejecutar(entrarEnAsentamiento, { asentamientoId, jugadorId: fundador }, { ...OPC, actor: fundador });
-    const params = { asentamientoId, jugadorId: fundador, tropaId: 'milicia_lanceros', cantidad: 1 };
+    const params = { asentamientoId, jugadorId: fundador, tropaId: 'milicia_lanceros', cantidad: 1, origen: 'pesants' as const };
 
     expect(verificarAutorizacion('reclutarTropa', params, sesion.getState(), jugador(fundador))).toEqual(AUTORIZADO);
   });
@@ -432,7 +432,7 @@ describe('presencia: ser vecino ya no basta, hay que estar dentro', () => {
     // deduccion no podria hacer nada en su propia ciudad hasta haber hecho algo antes, que es imposible.
     const { sesion, asentamientoId, vecino } = partidaConAsentamiento();
     expect(sesion.getState().jugadores.find((j) => j.id === vecino), 'no ha actuado nunca').toBeUndefined();
-    const params = { asentamientoId, jugadorId: vecino, tropaId: 'milicia_lanceros', cantidad: 1 };
+    const params = { asentamientoId, jugadorId: vecino, tropaId: 'milicia_lanceros', cantidad: 1, origen: 'pesants' as const };
 
     expect(verificarAutorizacion('reclutarTropa', params, sesion.getState(), jugador(vecino))).toEqual(AUTORIZADO);
   });

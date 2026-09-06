@@ -25,6 +25,22 @@ import { esResidente, estanAliadas } from './pertenencia';
 
 export class MovilizacionInvalidaError extends Error {}
 
+/** Lo que se saca de mirar de cerca una columna (Doc 5.12.3). Cantidades SI —es lo que se cuenta al verla— y
+ * nombre del jugador dueno de cada escuadron: saber a quien te enfrentas es la mitad del valor. */
+export interface ComposicionColumna {
+  ejercitoId: string;
+  faccionId: string;
+  jugadoresIds: string[];
+  escuadrones: { tropaId: string; cantidad: number; jugadorId: string }[];
+}
+
+/** Lo que se saca de mirar de cerca una caravana (Doc 5.12.3): QUE lleva y si va escoltada, nunca CUANTO. */
+export interface ContenidoCaravana {
+  caravanaId: string;
+  escoltada: boolean;
+  recursos: string[];
+}
+
 /** Fase A5 — payload de `ejercito.caravanas_perdidas` (Doc 5.13.2). */
 export interface PayloadCaravanasPerdidas {
   ejercitoId: string;
@@ -860,6 +876,45 @@ export function retirarPeticionDeUnion(ejercito: Ejercito, liderId: string, soli
     throw new MovilizacionInvalidaError('Esa petición ya caducó: el silencio cuenta como un no.');
   }
   return { ...ejercito, peticionesDeUnion: (ejercito.peticionesDeUnion ?? []).filter((p) => p.jugadorId !== solicitanteId) };
+}
+
+/**
+ * Lo que se distingue de una columna ajena al acercarse a mirarla (Doc 5.12.3): que tropas la componen y de
+ * quien son.
+ *
+ * Es la telemetria que la proyeccion prohibe a distancia de vista, y aqui se concede porque **se paga**: hay
+ * que meterse dentro del anillo de inspeccion (40), y el observado recibe aviso. Obtener informacion deja de
+ * ser gratis y pasa a ser una jugada con riesgo.
+ */
+export function inspeccionarColumna(observador: Ejercito, objetivo: Ejercito): ComposicionColumna {
+  if (observador.id === objetivo.id) throw new MovilizacionInvalidaError('Esa columna es la tuya.');
+  if (distancia(observador.posicionActual, objetivo.posicionActual) > MOVIMIENTO.radioInspeccion) {
+    throw new MovilizacionInvalidaError(`Hay que acercarse a menos de ${MOVIMIENTO.radioInspeccion} para inspeccionar.`);
+  }
+  return {
+    ejercitoId: objetivo.id,
+    faccionId: objetivo.faccionId,
+    jugadoresIds: objetivo.participantes.map((p) => p.jugadorId),
+    escuadrones: objetivo.escuadrones
+      .filter((e) => e.cantidad > 0)
+      .map((e) => ({ tropaId: e.tropaId, cantidad: e.cantidad, jugadorId: e.jugadorId })),
+  };
+}
+
+/** Lo que se distingue de una caravana al acercarse: si lleva escolta y QUE carga, nunca cuanto (Doc 5.12.3).
+ * Es lo mismo que ya se ve de lejos — inspeccionar una caravana no anade nada salvo certeza, y por eso
+ * tampoco cuesta mas que acercarse. */
+export function inspeccionarCaravana(observador: Ejercito, objetivo: Caravana, escoltada: boolean): ContenidoCaravana {
+  if (distancia(observador.posicionActual, objetivo.posicionActual) > MOVIMIENTO.radioInspeccion) {
+    throw new MovilizacionInvalidaError(`Hay que acercarse a menos de ${MOVIMIENTO.radioInspeccion} para inspeccionar.`);
+  }
+  return {
+    caravanaId: objetivo.id,
+    escoltada,
+    recursos: Object.keys(objetivo.contenido)
+      .filter((r) => (objetivo.contenido[r] ?? 0) > 0)
+      .sort(),
+  };
 }
 
 export function estacionarEjercito(ejercito: Ejercito): Ejercito {

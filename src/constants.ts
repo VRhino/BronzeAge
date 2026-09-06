@@ -1533,6 +1533,13 @@ export const MOVIMIENTO = {
    * En segundos y no en minutos porque en minutos sería 1/6. Es el único plazo del juego por debajo del tick.
    */
   vidaPeticionUnionSegundos: 10,
+  /**
+   * A que distancia se puede INSPECCIONAR una columna o una caravana ajena, y a la que el observado se entera
+   * (Doc 5.12.3). **40**: a media distancia entre ver (150) y chocar (15), que es lo que lo hace un juego de
+   * dos. Bastante lejos como para que un explorador se acerque y se vaya antes de que una columna lo alcance
+   * —es mas rapido—, bastante cerca como para que mirar cueste ser visto mirando.
+   */
+  radioInspeccion: 40,
 };
 
 /**

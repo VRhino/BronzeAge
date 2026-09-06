@@ -183,6 +183,27 @@ export interface AsentamientoAvistado {
   interiorRecordado?: InteriorRecordado;
 }
 
+/**
+ * Una caravana AJENA que se esta viendo (decision del usuario, 2026-09-06). Existe porque las interacciones
+ * dejaron de ser automaticas: si el jugador tiene que hacer clic para interceptar, primero tiene que verla.
+ * Antes de esto ninguna caravana ajena viajaba en la proyeccion, asi que no habia nada sobre lo que pulsar.
+ *
+ * **Se ve QUE lleva, no CUANTO.** Los nombres de los recursos y si va escoltada; ni una cifra. Es lo que se
+ * distingue de lejos: una fila de carros con sacos y unos hombres armados al lado. Y es justo lo que hace
+ * falta para decidir si vale la pena — sin convertir mirar en una auditoria del comercio rival.
+ */
+export interface CaravanaAvistada {
+  id: string;
+  posicionActual: Point;
+  /** De quien es, por su plaza de origen. Ausente si esa plaza ya no existe: entonces no es de nadie. */
+  faccionId?: string;
+  /** Si marcha con un ejercito (Doc 5.13.2). Cambia la decision entera: una caravana escoltada no es una
+   * presa, es un combate. */
+  escoltada: boolean;
+  /** QUE lleva, sin cuanto. Ordenado para que la lista no baile entre ticks por el orden del objeto. */
+  recursos: string[];
+}
+
 export interface ProyeccionJugador {
   gameId: string;
   /** Instante de MUNDO "ahora" de la partida (doc 10) — `instanteDeTick(estado.tick)`, derivado, no
@@ -249,7 +270,11 @@ export interface ProyeccionJugador {
    * Incluye lo que se está viendo AHORA aunque el tick todavía no lo haya grabado, para que la máscara nunca
    * deje un agujero justo donde el jugador está mirando. */
   exploracion: NieblaProyectada;
+  /** Las PROPIAS, completas: las que salen o llegan a una plaza tuya. */
   caravanas: Caravana[];
+  /** Las ajenas que se ven AHORA, redactadas (ver `CaravanaAvistada`). Fuera del radio de vision no existen
+   * para el jugador — no hay lista de "caravanas del mundo" que consultar. */
+  caravanasAvistadas: CaravanaAvistada[];
   /** Los de la Facción propia, COMPLETOS — mismo criterio que `asentamientos`: de lo tuyo se ve todo. */
   ejercitos: Ejercito[];
   /** Los de CUALQUIER otra Facción que se estén viendo ahora mismo, redactados (ver `EjercitoAvistado`).
@@ -463,6 +488,37 @@ function territorioDeCadaEjercito(
   return salida;
 }
 
+/**
+ * Las caravanas ajenas que se ven ahora mismo, redactadas (Doc 5.12.7 aplicado al comercio).
+ *
+ * Se excluyen las PROPIAS —ya viajan completas— y las `disponible`, que son flota aparcada dentro de una
+ * plaza y no algo que cruce el campo. Una caravana en estado `adjunta` SI se ve, y marcada como escoltada:
+ * es informacion que cambia la decision de quien la mira.
+ */
+function caravanasAvistadas(
+  estado: GameSessionState,
+  esPropio: (asentamientoId: string) => boolean,
+  asentamientosPropios: readonly Asentamiento[],
+  ejercitosPropios: readonly Ejercito[]
+): CaravanaAvistada[] {
+  const faccionDePlaza = new Map(estado.asentamientos.map((a) => [a.id, a.faccionId]));
+  const adjuntas = new Set(estado.ejercitos.flatMap((e) => e.caravanasAdjuntasIds));
+
+  return estado.caravanas
+    .filter((c) => !esPropio(c.origenAsentamientoId) && !(c.destinoAsentamientoId !== undefined && esPropio(c.destinoAsentamientoId)))
+    .filter((c) => c.estado !== 'disponible')
+    .filter((c) => seVeAhora(c.posicionActual, asentamientosPropios, ejercitosPropios))
+    .map((c) => ({
+      id: c.id,
+      posicionActual: c.posicionActual,
+      ...(faccionDePlaza.has(c.origenAsentamientoId) ? { faccionId: faccionDePlaza.get(c.origenAsentamientoId)! } : {}),
+      escoltada: adjuntas.has(c.id),
+      recursos: Object.keys(c.contenido)
+        .filter((r) => (c.contenido[r] ?? 0) > 0)
+        .sort(),
+    }));
+}
+
 export function proyectarParaJugador(
   estado: GameSessionState,
   jugadorId: string,
@@ -538,6 +594,7 @@ export function proyectarParaJugador(
     territorioPorEjercito: territorioDeCadaEjercito(ejercitosPropios, geometria.zonas, estado.asentamientos),
     exploracion,
     caravanas: estado.caravanas.filter((c) => esPropio(c.origenAsentamientoId) || (c.destinoAsentamientoId !== undefined && esPropio(c.destinoAsentamientoId))),
+    caravanasAvistadas: caravanasAvistadas(estado, esPropio, asentamientosPropios, ejercitosPropios),
     ejercitos: ejercitosPropios,
     ejercitosAvistados: estado.ejercitos
       .filter((e) => !propios.has(e.id) && seVeAhora(e.posicionActual, asentamientosPropios, ejercitosPropios))

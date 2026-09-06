@@ -41,6 +41,12 @@ const RECURSO = { type: 'string', enum: RECURSOS_TIPO } as const;
 // A dónde va una columna: un asentamiento por id, o un punto del mapa. Se valida con `oneOf` para que un
 // cliente no pueda colar un punto sin coordenadas ni un destino sin id. Lo comparten `movilizarEjercito`
 // (fijarlo al salir) y `marcharA` (rectificarlo cuantas veces quiera un viajero solo).
+const OBJETIVO_DE_INTERACCION = {
+  oneOf: [
+    { type: 'object', properties: { tipo: { type: 'string', enum: ['ejercito'] }, id: IDENTIFICADOR }, required: ['tipo', 'id'], additionalProperties: false },
+    { type: 'object', properties: { tipo: { type: 'string', enum: ['caravana'] }, id: IDENTIFICADOR }, required: ['tipo', 'id'], additionalProperties: false },
+  ],
+} as const;
 const OBJETIVO_EJERCITO = {
   oneOf: [
     { type: 'object', properties: { tipo: { type: 'string', enum: ['asentamiento'] }, id: IDENTIFICADOR }, required: ['tipo', 'id'], additionalProperties: false },
@@ -237,6 +243,9 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
     ['ejercitoId', 'jugadorId', 'solicitanteId', 'aceptar']
   ),
   separarseDelEjercito: objeto({ jugadorId: IDENTIFICADOR }, ['jugadorId']),
+  // El menú de interacción (Doc 5.12.3). `objetivo` distingue columna de caravana: son entidades distintas
+  // con anillos y consecuencias distintas, y mezclarlas en un id suelto obligaría al motor a adivinar.
+  inspeccionar: objeto({ jugadorId: IDENTIFICADOR, objetivo: OBJETIVO_DE_INTERACCION }, ['jugadorId', 'objetivo']),
   cederLiderazgo: objeto({ ejercitoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR, sucesorId: IDENTIFICADOR }, ['ejercitoId', 'jugadorId', 'sucesorId']),
   entrarEnAsentamiento: objeto({ asentamientoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR }, ['asentamientoId', 'jugadorId']),
   // La puerta (Doc 1.10.5). No va en `politicasActivas` porque no expira: una puerta que se abre sola a las
