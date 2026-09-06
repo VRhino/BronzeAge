@@ -1071,8 +1071,8 @@ Cada paso deja el repo verde y jugable. El orden no es negociable en los tres pr
    b) `inspeccionar` con su rango de 40 y su aviso al observado;
    c) `atacar` / `interceptar` / `asediar` explícitos, y **quitar** los disparos automáticos de
       `resolverEncuentros` y de la llegada;
-   d) `perseguir` / `dejarDePerseguir` y la tregua (`enTreguaHasta`). **Antes de esto hay que medir
-      `calcularRuta`** (§9): la persecución lo llama por objetivo y por tick;
+   d) `perseguir` / `dejarDePerseguir` y la tregua (`enTreguaHasta`). Se recalcula **cada tick**, que la
+      medición de §9 dejó confirmado como asequible (0,254 ms por ruta);
    e) política de persecución del NPC, sin la cual el batch se queda sin combates.
 9. **Onboarding**: spawn aleatorio, memoria personal, fundar donde se está. Cierra la entrada del checklist.
 10. **Calibración** por batch — ahora nueve constantes, y con el combate ya intencional, que es lo que hace la
@@ -1288,13 +1288,15 @@ Y los de la tercera ronda, todos alrededor de la misma línea:
   dueño? Lo natural es lo primero —sale a la puerta y retoma su columna— pero no está decidido, y es un caso
   que va a ocurrir.
 
-- **NUEVO — cuánto cuesta recalcular rutas, y hay que medirlo antes de comprometerse.** Dos cosas nuevas
-  piden pathfinding con frecuencia: rectificar destino (`marcharA`, tantas veces como el jugador quiera
-  hacer clic) y la persecución, que recalcula **cada tick** hacia donde esté el objetivo. `calcularRuta` es
-  A* sobre coste de terreno; hoy solo corre al movilizar, un puñado de veces por partida. Con N persecuciones
-  activas pasa a correr N veces por tick, dentro de un tick que hoy cuesta 62 ms a 100 asentamientos. No es
-  una objeción de diseño —la decisión de recalcular es correcta— es una medición que falta y que puede
-  cambiar el CÓMO: recalcular cada tick, cada k ticks, o solo cuando el objetivo se desvía lo suficiente.
+- ~~Cuánto cuesta recalcular rutas~~ — **MEDIDO (2026-09-06, `scripts/medicion-rutas.ts`), y sale barato:
+  se recalcula CADA TICK.** `calcularRuta` cuesta **0,254 ms** hacia un objetivo a la vista (las
+  persecuciones solo hacen rutas cortas; una larga cuesta 1,6x). Con 50 persecuciones simultáneas son
+  **12,7 ms/tick** — un tercio de lo que ya cuesta el tick entero a 100 asentamientos (34 ms), y el 0,02%
+  del intervalo de 60 s.
+
+  Se descartan por innecesarias las dos alternativas que la duda había abierto: recalcular cada k ticks, y
+  recalcular solo cuando el objetivo se desvía lo bastante. Las dos compran un ahorro que no hace falta a
+  cambio de que la persecución vaya a tirones, que es exactamente lo que el jugador notaría.
 - **Bandidos: asimetría aceptada, falta escribirla.** La decisión 8 dice "todas las interacciones son
   intencionales", y lo son *del lado del jugador*: atacar un campamento es una opción de menú a 15. Pero un
   campamento no tiene a nadie que pulse, así que **los bandidos siguen atacando caravanas por su cuenta**
