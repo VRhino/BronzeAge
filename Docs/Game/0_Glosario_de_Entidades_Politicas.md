@@ -7,6 +7,15 @@ Persona real que juega. Pertenece a 1 y SOLO 1 Facción en todo momento, y resid
 
 Es además el dueño de sus escuadrones: **los escuadrones son del Jugador, no del asentamiento** (Doc 5.4). El asentamiento es donde están apostados, no quien los posee. Tiene un valor de **Liderazgo** (Doc 5.11) que limita cuántos puede sacar a campaña a la vez.
 
+**Y está SITUADO en el mundo** (Doc 1.10): en todo momento está dentro de un asentamiento, dentro de una columna en el mapa, o desconectado. No es un observador que flota sobre el mapa: **solo ve el interior del asentamiento en el que está físicamente**, y solo puede dar órdenes ahí. Nace en mundo abierto, en un punto aleatorio, y funda donde decide pararse.
+
+**Combate por sí mismo** con el poder de UNA unidad de élite (Doc 5.1). Es poco a propósito — menos de un tercio del escuadrón más barato— así que frente a una columna no decide nada; decide frente a otro jugador solo. No muere ni sufre bajas: al perder entrega la mitad de su carro y entra en **Tregua**.
+
+## Columna personal
+Un Jugador solo, moviéndose por el mapa. Nace cuando sale de su residencia por su cuenta (Doc 1.10), lleve tropas o no. Es la misma ENTIDAD que un Ejército en el motor, pero **no es un Ejército** a efectos de reglas: elige destino libremente y lo rectifica cuando quiera, no puede llevar caravanas adjuntas, y nadie puede unirse a ella — dos viajeros que se cruzan no forman un ejército (Doc 5.12.1).
+
+Se disuelve al entrar en su residencia, o al fundirse en un Ejército que se cruce (Doc 5.14).
+
 ## Escuadrón / Tropa / Unidad
 Terminología cerrada (a petición del usuario, 2026-09-02). Son **tres conceptos distintos** y conviene no mezclarlos — la jerarquía de entidades es **Jugador → Escuadrón → Unidad**, y "tropa" es el TIPO, no la instancia:
 
@@ -20,11 +29,27 @@ Terminología cerrada (a petición del usuario, 2026-09-02). Son **tres concepto
 Los escuadrones apostados en un asentamiento, es decir, los que NO salieron a campaña. Son los únicos que lo defienden de un asedio (Doc 5.12). Un asentamiento cuyos jugadores se llevaron todo queda indefenso.
 
 ## Ejército
-Uno o más escuadrones que han salido del asentamiento y se mueven por el mapa como **una sola entidad** (Doc 5.12). Puede ser de un solo Jugador o de varios juntos; en ambos casos es la misma cosa, y cada Jugador que lo compone sigue limitado por su propio Liderazgo.
+Una columna nacida de **movilizarse contra un destino** desde un asentamiento, que se mueve por el mapa como **una sola entidad** (Doc 5.12). Lo que la hace un Ejército es cómo salió, no cuántos van dentro: puede empezar con uno solo y crecer según se le suman los demás. Cada uno sigue limitado por su propio Liderazgo, y **todos son de la misma Facción**: ni aliados ni neutrales pueden marchar dentro de una columna ajena (Doc 5.14.1).
+
+**Solo se origina en un asentamiento, nunca en campo abierto**, y **ser un Ejército es una identidad, no un recuento**: uno al que se le van separando miembros hasta quedar en uno solo **sigue siendo un Ejército** — conserva su ruta fija y sus caravanas. Lo contrario también: una Columna personal no se convierte en Ejército porque alguien se le sume. La diferencia práctica está en Doc 5.12.1.
+
+Un Ejército **nunca se queda vacío en campo abierto**: el último miembro es siempre su Líder y el Líder no puede separarse, así que la salida es cancelar y volver (Doc 5.14).
 
 Mientras está en campaña, un ejército **no come del almacén de su asentamiento**: lleva su propio carro de suministros (Doc 5.13) — uno por Jugador, de capacidad fija. Puede además llevar **caravanas adjuntas** que amplían su alcance, y que pueden ir cargadas de mercancía (escolta de caravanas, Doc 5.13.2-5.13.3). Si el ejército es derrotado, las caravanas adjuntas se pierden con él.
 
 Una marcha se puede **cancelar**, lo que dispara la vuelta por el mismo camino (Doc 5.12.6).
+
+## Líder (de un Ejército)
+El Jugador que **formó** el Ejército. No es un cargo político —no tiene nada que ver con los de Doc 2.2— sino el mando de una columna concreta mientras dura su campaña.
+
+**El Líder no puede separarse** (Doc 5.14): para irse tiene que **elevar a otro integrante a Líder**, y entonces sí. De ahí sale, sin necesidad de enunciarla aparte, que un Ejército nunca se quede vacío en campo abierto — el último que queda es siempre el Líder.
+
+Si se **desconecta**, el mando pasa solo al integrante con más antigüedad: no puede irse queriendo, pero una caída de conexión no deja a la columna sin mando. Y nunca falta candidato —todos los que van dentro son de su misma Facción—, así que mientras quede alguien hay Líder.
+
+Fija además la **política de unión** de su columna al formarla, responde las peticiones cuando esa política es *preguntar* —y si no contesta en 10 segundos, la petición se da por rechazada—, y es **el único que puede cancelar la marcha**: el resto, si no quiere seguir, se separa.
+
+## Tregua
+Estado temporal de quien acaba de ser derrotado en campo abierto (Doc 5.12.3). Dura unos minutos y **corta por los dos lados**: nadie puede perseguirle ni atacarle, y él tampoco puede perseguir ni atacar a nadie. Es lo que impide tanto el acoso en cadena al mismo viajero como usar la inmunidad de escudo para depredar sin riesgo.
 
 ## Huérfano
 Jugador al que conquistaron su asentamiento mientras estaba de campaña (Doc 5.4). Conserva los escuadrones que llevaba encima, pero se queda sin residencia: sin sitio donde reabastecer, reclutar ni volver. Deja de serlo cuando entra en una Facción que tenga asentamiento — se sale por la vía política, no por la militar.

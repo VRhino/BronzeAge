@@ -1,13 +1,31 @@
 # 5. Sistema Militar y de Combate
 
 ## 5.1 Principio general: héroe-comandante liderando tropa (heredado de Iberia)
-El jugador NO combate individualmente contra multitudes — asume el rol de HÉROE/COMANDANTE que lidera una tropa de N unidades NPC. Regla de oro: Tropa > Héroe. Puede llevar más de un regimiento a una batalla pero solo despliega uno a la vez, intercambiables en puntos tácticos de reabastecimiento dentro del combate.
+El jugador asume el rol de HÉROE/COMANDANTE que lidera una tropa de N unidades NPC. Regla de oro: **Tropa > Héroe**. Puede llevar más de un regimiento a una batalla pero solo despliega uno a la vez, intercambiables en puntos tácticos de reabastecimiento dentro del combate.
+
+**El héroe SÍ combate por sí mismo** (a petición del usuario, 2026-09-06 — corrige la versión anterior de esta línea, que decía que no lo hacía nunca). Lo que se mantiene es la regla de oro, y la cifra la hace cumplir sola:
+
+> **Un héroe solo vale lo que UNA unidad de la tropa de élite.**
+
+Se deriva del catálogo (5.8) en vez de escribirse a mano, por el mismo motivo que el coste de Liderazgo (5.11.1): `poderBase` sigue siendo placeholder, y un número suelto se desincronizaría al recalibrar. Hoy son **15**.
+
+Qué significa esa cifra, que es lo que dice si está bien puesta:
+
+| | Poder |
+|---|---|
+| Un héroe solo | **15** |
+| El escuadrón más barato completo (milicia, 25 × 2) | 50 |
+| Un escuadrón de élite (arqueros compuesto, 12 × 15) | 180 |
+
+Un héroe vale **menos de un tercio de la peor leva**. Frente a una columna no decide nada —Tropa > Héroe, intacto— y decide justo en el único combate que es suyo: **contra otro héroe solo**. Contra una caravana no: una caravana sin escolta se defiende de un jugador solo (Doc 3.10), a propósito.
+
+**El héroe no muere.** No sufre bajas, no queda herido y no gana veteranía —la veteranía es del escuadrón (5.8)—. Al perder en campo abierto entrega **la mitad de su carro** y entra en **Tregua** (5.12.3). Eso es todo lo que arriesga, y todo lo que gana quien le vence.
 
 ## 5.2 Modalidades de batalla instanciadas (heredado de Iberia)
 El combate ocurre en INSTANCIAS separadas del mapa global (aunque se desencadenen en él), límites simétricos fijos, 2 bandos (Atacante/Defensor), sin empates.
 
 1. **Asedio de asentamientos**: atacante captura banderas/áreas vitales antes de que expire el tiempo; defensor gana resistiendo. Solo defienden miembros de la Facción soberana del nodo o Facciones aliadas/vasallas confirmadas. Mortalidad severa (permadeath). Jugadores en cola desde mundo abierto rellenan la instancia dinámicamente según bajas.
-2. **Mundo abierto**: choque de patrullas/ejércitos. Bandera/campamento transitorio; quien la pierde se retira, deja loot, sufre debuff temporal "Herido". **No se declara: se produce por PROXIMIDAD entre dos ejércitos que se cruzan en el mapa** (5.12).
+2. **Mundo abierto**: choque de patrullas/ejércitos. Bandera/campamento transitorio; quien la pierde se retira, deja loot, sufre debuff temporal "Herido". **Se declara, pero solo estando delante**: la proximidad ofrece atacar y el jugador decide; nadie es arrastrado a un combate por pasar cerca (5.12.3). Alcanzar a quien huye es lo que hace la persecución.
 3. **Defensa/intercepción de caravanas**: combate asimétrico móvil (ver Doc 3, sección 3.10). Igual que el anterior, se dispara por proximidad de un ejército a una caravana (5.12).
 4. **Entrenamiento/matchmaking** (POSPUESTO a fase posterior a Fase 0/1): 15v15 puro, sin permadeath, para probar tácticas. CONFIRMADO: pospuesto de forma explícita, requiere factores no disponibles en Fase 0 (mismo motivo que Attack Timer, ver 5.6).
 
@@ -228,27 +246,82 @@ aunque la mecánica que lo otorga siga pendiente (`Docs/Mecanicas a desarrollar.
 
 Los ejércitos se mueven por el mapa del mundo para atacar, igual que las caravanas: siguen una ruta que rodea el terreno costoso, y tardan en llegar.
 
-### 5.12.1 Las dos formas de salir son la misma entidad
+### 5.12.1 Columna personal y Ejército: la misma entidad, distintas reglas
 
-El Jugador puede salir **solo** (eligiendo qué escuadrones se lleva) o **como parte de un ejército de varios jugadores** que se mueve como una sola entidad. No son dos cosas distintas: **salir solo es un ejército de un participante**. Un solo concepto, las mismas reglas de movimiento, suministro y combate en ambos casos.
+El Jugador puede salir **solo** (con las tropas que quiera, incluidas ninguna) o **junto a otros jugadores**. En el motor son **la misma entidad** y comparten movimiento, suministro y combate. En las REGLAS no son lo mismo, y la línea que los separa **no es cuánta gente va dentro: es cómo salió la columna** (a petición del usuario, 2026-09-06).
 
-Un Jugador **puede unirse a un ejército ya en campaña**, siempre que este pase por su asentamiento (si no, unirse sería teletransportar refuerzos). Al unirse aporta sus escuadrones —validados contra su propio Liderazgo— y su parte del carro de suministros.
+**Lo decide el acto de salir, y no cambia nunca:** salir *a lo tuyo* —sin destino— hace una Columna personal; **movilizarse contra un destino** hace un Ejército, aunque en ese primer momento vayas solo. Por eso "salir juntos" no necesita ninguna ceremonia aparte: uno moviliza y los demás se suman, en su plaza o en el campo (5.14).
+
+| | **Columna personal** | **Ejército** |
+|---|---|---|
+| Cómo nace | Se **sale al mundo** desde la residencia, **sin destino** | Se **moviliza** desde un asentamiento **contra un destino**, aunque salga uno solo |
+| Destino | **Se rectifica** en cualquier momento | Fijado al salir; cancelar es volver (5.12.6) |
+| Caravanas adjuntas | **No puede llevarlas** | Sí, y las conserva aunque baje a un miembro |
+| Se le pueden unir otros | No | Sí, **solo de su misma Facción** (5.14) |
+| Separarse | No aplica: separarse es disolverla | Sí, **mientras quede alguien** (5.14) |
+
+Dos reglas cierran el modelo:
+
+- **Un Ejército solo se origina en un asentamiento, nunca en campo abierto.** Dos viajeros que se cruzan en el camino no forman un ejército; lo que sí puede hacer uno es unirse a un ejército que ya existe.
+- **Ser un Ejército es una identidad, no un recuento.** Uno al que se le separan miembros hasta quedar en uno solo **sigue siendo un Ejército**: conserva su ruta fija y sus caravanas. No recupera la libertad de movimiento por haberse quedado corto.
+
+**Por qué el destino de un ejército no se toca.** Un jugador solo es libre de decidir porque decide por sí mismo; un ejército lleva a varios, así que su rumbo es un compromiso compartido y se fija al salir. Eso hace que **unirse a un ejército cueste la libertad de movimiento**, y que separarse la devuelva al instante — el precio de marchar acompañado, sin ninguna regla extra que lo imponga.
+
+*(El compromiso es un compromiso, no una cárcel: un grupo que quiera cambiar de rumbo puede separarse, moverse y volver a unirse. Cambiar una decisión compartida exige que todos vuelvan a actuar, que es exactamente lo que debe costar.)*
+
+**Un Jugador puede unirse a un ejército ya en campaña** de dos formas distintas, con geometrías distintas: pasando el ejército por **su asentamiento**, de donde saca tropas frescas; o **cruzándoselo en el campo**, aportando lo que ya lleva encima (5.14). En ambos casos sus escuadrones se validan contra su propio Liderazgo.
 
 ### 5.12.2 Identificación en el mapa
 
 Un ejército se dibuja como **rombos, uno por cada Jugador que va en él**, uno detrás de otro medio superpuestos, cada uno del color de su Facción. El rombo lo distingue del triángulo de caravana y del círculo de asentamiento.
 
-### 5.12.3 Un destino; los encuentros salen de la geometría
+### 5.12.3 La geometría OFRECE, el jugador decide
 
-Un ejército solo sabe **ir a un sitio** (un asentamiento o un punto del mapa). Todo lo demás se produce por proximidad, sin declararlo:
+**Nada se dispara por proximidad. La proximidad abre un menú** (a petición del usuario, 2026-09-06 — sustituye a la versión anterior de esta sección, donde acercarse bastaba para que ocurriera todo).
 
-- **Al llegar** a un asentamiento enemigo → asedio (5.2.1).
-- **Al cruzarse** con un ejército enemigo → combate en mundo abierto (5.2.2).
-- **Al pasar cerca** de una caravana enemiga → intercepción (5.2.3, Doc 3.10).
+Una columna se acerca a algo y el juego le ofrece lo que puede hacer con ello; el jugador elige, o sigue su camino:
 
-"Cruzarse" y "pasar cerca" son **15** unidades de mapa (decisión del usuario, 2026-09-04), frente a las **150** que alcanza la vista de un ejército (5.12.7). Que los dos números no se parezcan es el punto: **se ve diez veces más lejos de lo que se tropieza**, así que un ejército divisa a otro con muchísima antelación y le da tiempo a evitarlo, salirle al paso o prepararse. El encuentro es una decisión, no un accidente por pasar cerca.
+| Sobre qué | Qué se le ofrece |
+|---|---|
+| Ejército o columna ajena | **Inspeccionar** · **Perseguir** |
+| Caravana ajena o neutral | **Inspeccionar** · **Interceptar** |
+| Asentamiento, en su puerta | **Entrar** · **Asediar** · **Consultar** *(y Comerciar, cuando esa mecánica exista)* |
+| Campamento de bandidos | **Atacar** |
 
-Cuatro reglas acotan lo que pasa cuando sí se tropiezan:
+*Los bandidos son la excepción, y por el motivo obvio: un campamento no tiene a nadie que pulse. Los NPC siguen atacando caravanas por su cuenta — su intención es su política.*
+
+#### Los tres anillos
+
+Cada distancia significa una cosa distinta, y las tres juntas son el corazón de la mecánica:
+
+| Distancia | Qué habilita | Quién se entera |
+|---|---|---|
+| **150 / 80** (columna con tropas / jugador solo) | Ves que hay algo y de quién es | Nadie |
+| **40 — inspección** | Ver la composición: qué tropas, de quién. De una caravana, si lleva escolta y **qué** recursos carga, nunca cuántos | **El inspeccionado recibe aviso** |
+| **15 — encuentro** | Se cierra una persecución y se ofrece atacar | Los dos |
+
+**El anillo de inspección es lo que convierte el reconocimiento en un juego de dos.** Mirar cuesta ser visto mirando; y el que mira puede huir, porque va más rápido que una columna entera y porque no ha tenido que meterse hasta los 15. De lejos, un ejército ajeno sigue siendo lo que siempre fue: una bandera y unos estandartes, sin composición ni poder (5.12.7).
+
+#### Persecución
+
+Perseguir fija un objetivo **móvil** en vez de un punto: la ruta se recalcula hacia donde esté. Para inspeccionar no hace falta perseguir — basta con verlo. Una persecución termina de cuatro formas:
+
+- se llega a **15**, y ahí se ofrece atacar;
+- el perseguidor **cambia de destino**;
+- el objetivo entra en **Tregua** por haber sido derrotado;
+- o no llega a empezar, porque el objetivo ya estaba en Tregua.
+
+**El consentimiento es de una sola parte, y así debe ser:** el agresor elige perseguir, el perseguido no elige nada. Escapar depende de ser más rápido — lo que convierte la velocidad de tropa (5.12.5) en la estadística que decide quién puede forzar un combate.
+
+#### Tregua
+
+Quien pierde un choque en campo abierto entrega **la mitad de su carro** y queda en **Tregua** unos minutos. Con el carro vacío no hay botín: solo la Tregua.
+
+**Corta por los dos lados**: nadie puede perseguirle ni atacarle, **y él tampoco puede perseguir ni atacar**. La primera mitad evita el acoso en cadena al mismo viajero; la segunda evita que la inmunidad se use de escudo para depredar sin riesgo.
+
+#### Lo que sigue saliendo de la geometría
+
+Elegir atacar no es teletransportarse: hay que estar delante. Cuando dos columnas sí se enfrentan, estas reglas acotan lo que pasa:
 
 - **Un encuentro por ejército y minuto.** Sin ese tope, tres columnas juntas se trituran en cascada dentro del mismo tick y el resultado depende de a quién se mire primero.
 - **Los aliados no se cruzan**, ni las columnas de la misma Facción. Compartir camino con un amigo no puede costar una masacre cada minuto.
@@ -267,7 +340,11 @@ La cifra es lo que hace que estacionar signifique algo. Con la mitad del consumo
 
 Como los escuadrones que salen se van de verdad (5.4), **un asentamiento cuyos jugadores se llevaron todo queda indefenso**, y un asedio contra él lo conquista sin combate. Esta es la tensión central de la mecánica: atacar cuesta dejar la casa descubierta.
 
-**Llegar es asediar.** Un ejército que alcanza el final de su ruta sobre un asentamiento de otra Facción resuelve el asedio en ese mismo momento, sin ninguna orden adicional: movilizar contra una ciudad ya ERA la decisión. Se resuelve **una sola vez**, al llegar — un ejército acampado junto a una plaza enemiga no la muele a asaltos tick tras tick.
+**Llegar ya NO es asediar** (a petición del usuario, 2026-09-06 — antes lo era: alcanzar el final de la ruta sobre una plaza enemiga la asediaba sin ninguna orden). Ahora un ejército que llega **acampa delante**, y asediar es una acción que se elige en la puerta (5.12.3).
+
+Lo que esto abre y antes era imposible: **plantarse frente a una ciudad enemiga sin atacarla.** Bloquear, sitiar sin asaltar, esperar refuerzos o negociar con el ejército a la vista son ahora jugadas legítimas.
+
+Lo que no cambia: el asedio se resuelve **una sola vez** cuando se ordena. Un ejército acampado junto a una plaza no la muele a asaltos tick tras tick.
 
 El ejército **no entra en la ciudad** aunque la conquiste: se queda acampado fuera, con sus escuadrones. Meterlos en la guarnición del sitio los dejaría apostados donde su Jugador no reside, que es justo la incoherencia que la conquista deshace.
 
@@ -302,12 +379,19 @@ Consecuencias que salen del `min` sin escribir ninguna regla más:
 
 Una marcha en curso **se puede cancelar en cualquier momento**, y hacerlo **dispara la vuelta**: el ejército pasa a `regresando` y desanda su ruta hacia el asentamiento de origen. No se teletransporta ni se desvanece — volver cuesta el mismo camino que costó ir, y sigue comiendo del carro durante el regreso.
 
+**Esto vale para un EJÉRCITO. Una Columna personal no cancela: rectifica** (5.12.1). Un jugador solo hace clic en otro punto y su ruta se recalcula desde donde esté, tantas veces como quiera. Un ejército no tiene esa opción, y por eso cancelar —volver a casa— es su única salida de una marcha empezada: el rumbo lo acordaron varios.
+
+**Cancelar es del Líder, y solo suyo** (5.14.3). El rumbo lo acordaron varios y deshacerlo no puede ser cosa de uno cualquiera. No atrapa a nadie: el que no quiera seguir **se separa**, que eso sí puede hacerlo cualquiera.
+
+Y es la razón por la que **deshacer un ejército es replegarlo, no vaciarlo**: el último miembro no puede separarse (5.14), así que la vuelta es el camino.
+
 ### 5.12.7 Qué ve el jugador — la vista
 
-Un jugador ve de lo AJENO lo que alcancen sus dos clases de ojos:
+Un jugador ve de lo AJENO lo que alcancen sus tres clases de ojos:
 
 1. **Sus plazas**, que vigilan su radio de influencia **más 60** unidades de mapa. La ciudad mira algo más allá de su frontera, como una atalaya.
 2. **Sus ejércitos en marcha**, que ven **150** a la redonda.
+3. **Él mismo, viajando solo**, que ve **80**. Menos que una columna a propósito: un hombre solo no despliega batidores. Es bastante para viajar sin caer a ciegas en una emboscada, y poco para que el explorador solitario sea la mejor unidad de información del juego.
 
 **Los dos números solo se entienden comparados.** Que la columna vea más lejos que la plaza es lo que mantiene el valor de explorar: un ejército divisa una ciudad mucho antes de que la ciudad lo divise a él, y conserva la iniciativa. Y el margen de la plaza coincide con la distancia a la que un ejército puede repostar en ella (5.13), lo que da una regla fácil de recordar: **si una columna está lo bastante cerca como para repostar en tu ciudad, tu ciudad la ve.**
 
@@ -325,6 +409,10 @@ De lo ajeno se ve **quién es y dónde está, nunca su interior**:
 | **Asentamiento** | Nombre, Facción, posición y **nivel** | Almacén, guarnición, edificios, colas de construcción, cargos |
 
 El **nivel** de una plaza sí se ve porque una ciudad grande se ve grande desde fuera; no dice cuánta tropa tiene dentro, que es lo que decidiría un ataque.
+
+**Salvo que te acerques a mirar.** Esa tabla describe lo que llega A DISTANCIA DE VISTA, y sigue siendo la regla general. Dentro del **anillo de inspección (40)** se puede pedir ver la composición de una columna ajena —qué tropas y de quién son— y de una caravana, si lleva escolta y qué recursos carga, nunca cuántos (5.12.3). No es gratis: **el inspeccionado recibe aviso de que lo están mirando**. La telemetría de rival que esta sección prohíbe se paga acercándose y delatándose, que es lo contrario de obtenerla desde el sofá.
+
+**Las caravanas ajenas y neutrales solo se ven dentro del radio de visión.** Fuera de él están ocultas, y **sin memoria**: a diferencia de una ciudad, una caravana se mueve, así que una foto vieja no diría "aquí hubo una" — diría una mentira sobre dónde está ahora.
 
 ### 5.12.8 Qué recuerda el jugador — la memoria
 
@@ -395,7 +483,7 @@ Un ejército puede llevar **caravanas adjuntas** que amplían su capacidad de ca
 - Mientras va enganchada **viaja con el ejército**: su posición es la de la columna, no una ruta propia.
 - **Entran en el `min` de velocidad.** Una caravana comercial va a 16, así que adjuntarla baja un ejército ligero de 20 a 16 y **le quita la capacidad de cazar caravanas**. No se puede tener alcance profundo y velocidad de incursión a la vez.
 - **Cuestan comercio.** El cupo de caravanas de un Mercado es 2/4/6 según su nivel (Doc 3): enganchar la flota a un ejército es apagar tu comercio mientras dure la campaña.
-- **Si el ejército es derrotado, las caravanas adjuntas se pierden.** Eso convierte el tren de suministros en un objetivo militar de verdad: cortar la retaguardia gana campañas sin asaltar una muralla. Se pierden igualmente si el ejército **se deshace de hambre** (5.13.4): en los dos casos deja de existir en campo abierto, y lo que vuelve a casa son las *identidades* de sus escuadrones, no bienes físicos — una caravana sin nadie que la lleve no se teletransporta a ninguna parte.
+- **Si el ejército es derrotado, las caravanas adjuntas se pierden.** Eso convierte el tren de suministros en un objetivo militar de verdad: cortar la retaguardia gana campañas sin asaltar una muralla. Se pierden igualmente si la columna **se disuelve** por quedarse sin nadie dentro (5.13.4): en los dos casos deja de existir en campo abierto, y lo que vuelve a casa son las *identidades* de sus escuadrones, no bienes físicos — una caravana sin nadie que la lleve no se teletransporta a ninguna parte. *(Distinto es que se quede sola porque su gente se desconectó sin llegar a disolverla: entonces vuelve a su origen, Doc 3.10.)*
 
 ### 5.13.3 Escolta de caravanas
 
@@ -413,19 +501,96 @@ En la práctica son tres actos del jugador:
 
 La regla de velocidad lo equilibra sola: escoltar baja el ejército a la velocidad de la caravana, así que **no se puede escoltar y depredar a la vez**.
 
-### 5.13.4 Un ejército que se queda sin nada se disuelve
+### 5.13.4 Una columna se disuelve cuando no queda NADIE dentro
 
-Regla necesaria por el TIEMPO REAL (decisión del usuario, 2026-09-02). Un tick es un minuto real, así que un
-ejército cuyo jugador no vuelve sigue existiendo y consumiendo durante horas. Cuando el carro se vacía, la
-deserción por hambre lo lleva a cero — pero un escuadrón **persiste como identidad aunque se quede sin
-unidades** (5.4), de modo que sin una regla explícita quedaría un **ejército fantasma**: cero soldados (y por
-tanto cero ración, ya no pasa hambre) marchando indefinidamente, llegando a su destino y atacando con poder 0.
+Regla necesaria por el TIEMPO REAL (decisión del usuario, 2026-09-02). Un tick es un minuto real, así que una
+columna que nadie atiende seguiría existiendo y consumiendo durante horas. Sin una regla que la retire
+quedaría un **ejército fantasma** marchando indefinidamente, llegando a su destino y atacando con poder 0.
 
-Por eso: **un ejército cuyos escuadrones están todos a cero se disuelve**, y sus identidades de escuadrón
-—vacías pero con su nombre y su veteranía— **vuelven al asentamiento de origen**, que es donde se pueden
-rellenar reclutando (5.4). No se pierden: lo que murió son las unidades, no el squad.
+**Lo que la disuelve es quedarse sin gente, no sin soldados** (corregido 2026-09-06 con el jugador situado).
+Son dos cosas distintas y confundirlas costaba las dos mitades:
 
-Si el asentamiento de origen ya no existe, sus jugadores quedan huérfanos (5.4) y con ellos esas identidades,
-hasta que entren en una Facción con asentamiento.
+| | Qué pasa |
+|---|---|
+| Sus escuadrones caen todos | **Sigue existiendo.** Sus jugadores están dentro, solo que ahora viajan sin tropa: a la velocidad del viajero (5.12.5) y comiendo su ración de jugador. Lo que no puede es combatir |
+| No queda ningún jugador dentro | **Se disuelve** |
+
+La versión anterior de esta regla decía lo primero mal: disolvía la columna en cuanto moría el último soldado,
+y con ella **borraba del mapa a un jugador que seguía ahí**. Era el mismo error que hacía que un viajero sin
+tropas no existiera como participante y se moviera a velocidad cero (5.12.1).
+
+Al disolverse, las identidades de escuadrón —vacías pero con su nombre y su veteranía— **vuelven al
+asentamiento de origen**, que es donde se pueden rellenar reclutando (5.4). No se pierden: lo que murió son
+las unidades, no el squad. Si el asentamiento de origen ya no existe, sus jugadores quedan huérfanos (5.4) y
+con ellos esas identidades, hasta que entren en una Facción con asentamiento.
+
+**Quién vacía una columna, entonces:** separarse (5.14.2) y desconectarse (Doc 1.10.6) — y el último que
+queda no puede separarse, así que en la práctica una columna atendida no se disuelve nunca sola: vuelve a
+casa. La que se vacía de verdad es aquella cuya gente se desconectó, que es justo el caso que esta regla
+nació para cerrar.
 
 > El carro de suministros y los carros/animales de tiro del revamp de caravanas (`Docs/Mecanicas a desarrollar.md` §8) son el mismo concepto físico; unificarlos queda para cuando esa mecánica se diseñe.
+
+## 5.14 Unirse y separarse en campo (a petición del usuario, 2026-09-06)
+
+Un Jugador que se cruza con un Ejército en el camino **puede unirse a él**, y un Jugador que va en un Ejército **puede separarse** y seguir por libre. Las dos se ofrecen desde el menú de interacción (5.12.3), igual que inspeccionar o perseguir.
+
+### 5.14.1 Unirse en campo
+
+Es distinto de unirse pasando el ejército por tu asentamiento (5.12.1), y conviene no confundirlos:
+
+| | Unirse en tu plaza | Unirse en campo |
+|---|---|---|
+| Qué exige | Que el ejército pase cerca de **tu asentamiento** | Que estéis **uno junto al otro** en el mapa |
+| Qué aportas | Tropas frescas sacadas **de casa** | Lo que **ya llevas encima**: tus escuadrones y tu carro |
+
+En ambos casos lo que aportas se valida contra tu propio Liderazgo (5.11).
+
+**Quién puede unirse: solo gente de la MISMA Facción.** Ni neutrales ni **aliados** — una columna la componen compatriotas, y su bandera es la de todos los que van dentro.
+
+Es una frontera deliberada, y tiene precio: **una alianza no tiene brazo militar conjunto.** Dos Facciones aliadas que quieran hacer campaña juntas marchan como **dos columnas separadas**, y como una batalla enfrenta a una entidad contra otra, no suman: pelean por turnos. Concentrar fuerza dentro de una Facción vale más que sumarla entre dos. Las alianzas se ejercen en el comercio y en la no agresión (Doc 2), no dentro de la misma columna.
+
+Lo que sí pueden hacer es **compartir camino sin riesgo**: dos columnas aliadas que se cruzan no se atacan (5.12.3). Marchan juntas, llegan juntas, y pelean cada una lo suyo.
+
+**Y con permiso, según lo que decidiera el Líder al formar la columna.** Al crear un Ejército se fija su política de unión, y no cambia:
+
+| Política | Qué hace |
+|---|---|
+| **Rechazar** | Nadie se suma en campo. La columna sale con quien salió |
+| **Aceptar** | Cualquiera que cumpla lo de arriba se suma sin preguntar |
+| **Preguntar al Líder** | La petición le llega al Líder, que acepta o rechaza. **Vive 10 segundos**: si nadie contesta, se da por rechazada |
+
+Sin esto, un desconocido podría engancharse a tu marcha sin que pudieras negarte — y el que llega comparte tu carro, tu destino y tus encuentros.
+
+**El silencio es un no, y es breve a propósito.** Diez segundos son pocos para que el que pide no se quede esperando plantado en mitad del mapa, y bastantes para que un grupo que está hablando se organice. La consecuencia hay que asumirla: *preguntar* solo funciona con el Líder al teclado, así que una columna que marcha en serio elegirá casi siempre *aceptar* o *rechazar*.
+
+**Y la distancia se comprueba al aceptar, no al pedir.** El que entra tiene que estar junto a la columna en ese momento, no donde estaba cuando lo pidió.
+
+**Y ahí está el precio:** al unirte adoptas un destino que ya no puedes cambiar (5.12.1). Marchar acompañado cuesta la libertad de movimiento.
+
+**Solo se puede unir a un EJÉRCITO.** Dos Columnas personales que se cruzan no se fusionan — un ejército solo se origina en un asentamiento (5.12.1).
+
+### 5.14.2 Separarse
+
+Sales del Ejército con lo tuyo —tus escuadrones y **hasta un carro** de suministro, que es lo que aportaste— y naces como **Columna personal** en la posición donde estabas. Recuperas la libertad de movimiento al instante.
+
+**El origen NO cambia.** Tu columna nueva conserva el asentamiento del que salió el Ejército, no el tuyo: el destino puede cambiar, el origen no. Es donde te replegarás. *(Es también lo que ya ocurría al unirse pasando por tu plaza — un jugador que se suma a un ejército de otra ciudad vuelve con él a esa ciudad, no a la suya.)*
+
+**El Líder no puede separarse.** Para irse tiene que **elevar a otro integrante a Líder**, y entonces sí.
+
+De esa regla sale sola otra que no hace falta escribir aparte: **un Ejército nunca se queda vacío en campo abierto**, porque el último que queda es siempre su Líder —los demás se fueron cediendo el mando o sin tenerlo—. Deshacerlo es **cancelar y volver** (5.12.6), no irse vaciándolo — si no, sus caravanas adjuntas, su suministro y sus escuadrones quedarían abandonados en mitad del mapa.
+
+### 5.14.3 El Líder
+
+Es el Jugador que **formó** el Ejército. No es un cargo político (Doc 2.2): es el mando de una columna concreta mientras dura su campaña. Hace cuatro cosas:
+
+1. **Fija la política de unión** al formarla (5.14.1).
+2. **Responde las peticiones** cuando esa política es *preguntar*.
+3. **Cancela la marcha** — es suya en exclusiva (5.12.6).
+4. **No puede separarse** sin ceder antes el liderazgo (arriba).
+
+**Que cancelar sea solo suyo no atrapa a nadie**, porque cancelar no es la salida de la marcha: es hacer volver a todos. El que no quiera seguir **se separa**, y eso puede hacerlo cualquiera. Lo que el mando decide no es quién se queda, sino si la columna entera da media vuelta.
+
+**Si el Líder se desconecta, el mando pasa al integrante con más ANTIGÜEDAD** — y si ese también está fuera, al siguiente. No puede irse por su voluntad, pero sí puede caérsele la conexión, y una columna en campaña no puede quedarse sin nadie que la mande. **Nunca se queda sin candidato**: todos los que van dentro son de su misma Facción y cualquiera vale, así que mientras quede alguien hay Líder — y si no queda nadie, la columna ya se disolvió (Doc 1.10.6).
+
+Y como ser Ejército es una identidad y no un recuento (5.12.1), **el que se queda solo sigue en un Ejército**: mantiene la ruta fija y las caravanas. No hereda la libertad del viajero por quedarse sin compañía.
