@@ -616,9 +616,15 @@ Mientras no exista, la opción *Comerciar* sencillamente no aparece en el menú.
   saber dónde están ni qué pasa en el mundo.
 
 - **El interior propio se RECUERDA, no se apaga.** Cuando sales de tu ciudad, lo último que viste de dentro se
-  queda como foto fechada, igual que una plaza ajena avistada (`FichaConocida`, `engine/memoria.ts`). El
-  mecanismo ya existe y ya está probado; sería absurdo inventar un segundo olvido. "Última información: hace
-  3 horas" es exactamente lo que Doc 5.12.8 ya decidió para lo ajeno.
+  queda como foto fechada. "Última información: hace 3 horas" es exactamente lo que Doc 5.12.8 ya decidió
+  para lo ajeno.
+
+  > **CORRECCIÓN (paso 6a, 2026-09-06).** Este punto decía que "el mecanismo ya existe y ya está probado,
+  > sería absurdo inventar un segundo olvido", y era falso. `FichaConocida` no guarda **nada** del interior
+  > — es id, nombre, Facción, posición, nivel y radio—, y `MemoriaFaccion.asentamientos` excluye las plazas
+  > propias a propósito, con el motivo escrito: "viajan completas en la proyección". O sea que el mecanismo
+  > existente recuerda EXTERIORES de plazas AJENAS, que es justo lo contrario de lo que aquí hace falta.
+  > Sigue en pie la decisión —recordar, no apagar—; lo que falta es decidir qué lleva la foto (paso 6b).
 
 - **Memoria de exploración PERSONAL mientras no haya bandera.** Sin esto el onboarding es un paseo ciego: un
   jugador sin Facción no graba nada. Se le da memoria propia, que se **funde** con la de la Facción al fundar
@@ -1017,8 +1023,23 @@ Cada paso deja el repo verde y jugable. El orden no es negociable en los tres pr
    esos.
 
    Esto abre lo que el paso 3 había dejado cerrado a propósito.
-6. **La proyección**: interior de uno, ficha de los demás, recuerdo de los dejados atrás. Es el paso que más
-   contrato rompe; va después de que el estado sea correcto, no antes.
+6. **La proyección.** Va después de que el estado sea correcto, no antes, y es el paso que más contrato rompe.
+   Se parte en dos porque la segunda mitad **no está diseñada**:
+
+   6a. ~~**Interior de uno, ficha de los demás**~~ — **HECHO (2026-09-06)**. `asentamientos` pasa de "todos
+   los de mi Facción, completos" a "cero o uno: el que piso"; todo lo demás que se vea —propio incluido—
+   viaja como ficha en `asentamientosAvistados`. Dentro de una plaza AJENA no viaja interior: la capa
+   pública sigue sin definirse (§9) y hasta entonces no se enseña de más.
+
+   6b. **El recuerdo del interior** — **BLOQUEADO, hace falta una decisión.** §1.2 dice que "el mecanismo ya
+   existe y ya está probado", y **no es cierto**: `FichaConocida` no tiene un solo campo de interior (id,
+   nombre, Facción, posición, nivel, radio), y `MemoriaFaccion.asentamientos` dice literalmente que las
+   propias no entran "porque viajan completas en la proyección" — la suposición que este paso acaba de
+   invalidar. Recordar un ALMACÉN, una COLA y una GUARNICIÓN es una forma de memoria que hoy no existe.
+
+   Lo que hay que decidir es **qué lleva la foto**, y el rango es real: desde una copia entera del
+   `Asentamiento` (fiel a "lo último que viste", pero duplica en el snapshot lo que ya está en estado vivo)
+   hasta un puñado de cifras —almacén, cola, guarnición— que es lo que de verdad se mira al volver.
 7. **Presencia en la autorización**: los ~24 comandos. **Requiere haber decidido antes qué se hace con el NPC
    de gobernanza** (§10.3): sin ubicación ni exención explícita, el batch se cae aquí.
 8. **Las interacciones dejan de ser automáticas** (§1.1b). Es un paso grande y va en este orden interno:

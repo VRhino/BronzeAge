@@ -3,10 +3,12 @@
 // ciudadanía, no solo si cambia la proyección.
 import { describe, expect, it } from 'vitest';
 import { instante } from '../../../domain/tiempo';
+import { GameSession } from '../../gameSession';
 import { instanteDeTest } from '../../../engine/__tests__/fixtures';
 import { partidaConAsentamiento, MOMENTO, OPC } from '../../__tests__/fixtures';
 import { crearFaccion } from '../../comandos/crearFaccion';
 import { fundarAsentamiento } from '../../comandos/fundarAsentamiento';
+import { entrarEnAsentamiento, salirAlMundo } from '../../comandos/presencia';
 import { idDeMapa, type GameSessionState, type GeometriaAsentamientos } from '../../estado';
 import { computeTodasLasZonas } from '../../../engine/zones';
 import { estaExplorado, marcarVisto, rejillaDe } from '../../../engine/exploracion';
@@ -34,8 +36,8 @@ describe('faccionId se deriva de la ciudadanía, no de un campo guardado', () =>
   });
 });
 
-describe('asentamientos: solo los de la Facción propia', () => {
-  it('el fundador ve su asentamiento', () => {
+describe('asentamientos: SOLO el interior de la plaza que se pisa (Doc 1.10.1)', () => {
+  it('el fundador ve su asentamiento porque está DENTRO de él', () => {
     const { sesion, asentamientoId, fundador } = partidaConAsentamiento();
     const proyeccion = proyectarParaJugador(sesion.getState(), fundador, SIN_GEOMETRIA);
     expect(proyeccion.asentamientos.map((a) => a.id)).toEqual([asentamientoId]);
@@ -56,6 +58,55 @@ describe('asentamientos: solo los de la Facción propia', () => {
     const proyeccion = proyectarParaJugador(base.sesion.getState(), base.fundador, SIN_GEOMETRIA);
     expect(proyeccion.asentamientos).toHaveLength(1); // solo el propio, no los 2 que existen en la partida
     expect(proyeccion.asentamientos[0]!.faccionId).toBe(base.faccionId);
+  });
+  it('al salir al mundo deja de ver el interior de su propia ciudad, y pasa a verla como ficha', () => {
+    // Es el corazón de Doc 13b: la ciudadanía habilita, la presencia ejerce. Un Gobernador de campaña no ve
+    // su almacén desde el camino.
+    const { sesion, asentamientoId, fundador } = partidaConAsentamiento();
+    sesion.ejecutar(salirAlMundo, { asentamientoId, jugadorId: fundador, escuadronIds: [], carga: {} }, { ...OPC, actor: fundador });
+
+    const proyeccion = proyectarParaJugador(sesion.getState(), fundador, SIN_GEOMETRIA);
+
+    expect(proyeccion.asentamientos, 'ya no pisa ninguna plaza').toEqual([]);
+    expect(proyeccion.asentamientosAvistados.map((a) => a.id), 'pero la sigue viendo desde fuera').toEqual([asentamientoId]);
+  });
+
+  it('y al volver a entrar lo recupera', () => {
+    const { sesion, asentamientoId, fundador } = partidaConAsentamiento();
+    const opc = { ...OPC, actor: fundador };
+    sesion.ejecutar(salirAlMundo, { asentamientoId, jugadorId: fundador, escuadronIds: [], carga: {} }, opc);
+    sesion.ejecutar(entrarEnAsentamiento, { asentamientoId, jugadorId: fundador }, opc);
+
+    const proyeccion = proyectarParaJugador(sesion.getState(), fundador, SIN_GEOMETRIA);
+
+    expect(proyeccion.asentamientos.map((a) => a.id)).toEqual([asentamientoId]);
+    expect(proyeccion.asentamientosAvistados).toEqual([]);
+  });
+
+  it('de OTRA plaza de su propia Facción solo ve la ficha, aunque sea suya', () => {
+    // Lo que cambia con el jugador situado: antes viajaban COMPLETOS todos los asentamientos propios.
+    //
+    // La segunda plaza se inyecta en el estado en vez de fundarse: una Facción que ya tiene asentamiento se
+    // expande con caravana de fundación, no con `fundarAsentamiento`, y eso es maquinaria ajena a lo que se
+    // prueba aquí. Una plaza propia se ve a sí misma, así que entra en `avistados` esté donde esté.
+    const base = partidaConAsentamiento();
+    const payload = base.sesion.exportar();
+    const primera = payload.state.asentamientos[0]!;
+    const sesion = GameSession.importar({
+      ...payload,
+      state: {
+        ...payload.state,
+        asentamientos: [primera, { ...primera, id: 'segunda-plaza', posicion: { x: 900, y: 900 }, jugadoresFundadoresIds: ['colono'], casasCompradas: [] }],
+      },
+    });
+
+    const proyeccion = proyectarParaJugador(sesion.getState(), base.fundador, SIN_GEOMETRIA);
+
+    expect(proyeccion.asentamientos.map((a) => a.id), 'solo la que pisa').toEqual([base.asentamientoId]);
+    expect(
+      proyeccion.asentamientosAvistados.map((a) => a.id),
+      'la otra viaja redactada, sin almacén ni cola ni guarnición'
+    ).toEqual(['segunda-plaza']);
   });
 });
 

@@ -1,11 +1,18 @@
 // Proyección de jugador (Fase C4, Slice 1 — Docs/Arquitectura/6_Sincronizacion_Visibilidad_y_Escala.md §3).
 // Filtra `GameSessionState` a lo que un jugador concreto puede ver.
 //
-// Regla de base, deliberadamente conservadora: la Facción propia se ve COMPLETA (asentamientos, escuadrones,
-// colas, almacén); las demás Facciones no aportan ni un asentamiento, ni siquiera resumido. Mejor "no ves
-// nada del rival" que exponer un nivel de detalle que nadie ha decidido que sea seguro. Lo que SÍ viaja de
-// todas las Facciones son los metadatos ya públicos en la ficción del juego (nombre, nivel, reputación,
-// Rey/Embajador) — sin ellos la pantalla de diplomacia no tendría con qué pintarse.
+// Regla de base, desde el jugador situado (Doc 1.10, 2026-09-06): **se ve el interior de UNA plaza, la que
+// se está pisando**, y de todas las demás solo su ficha. Ni siquiera de las de la propia Facción: la
+// ciudadanía habilita, la presencia ejerce (Doc 2.5), y un Gobernador de campaña no ve su almacén desde el
+// camino.
+//
+// Es un cambio grande respecto a la versión anterior, que mandaba COMPLETOS todos los asentamientos de la
+// Facción propia. Y hace que la proyección ENCOJA: donde antes viajaban N interiores, ahora viaja uno más
+// N-1 fichas. Va en la misma dirección que el trabajo de escala, no en contra.
+//
+// De las demás Facciones no se aporta ni un asentamiento sin verlo. Lo que SÍ viaja de todas es lo ya
+// público en la ficción del juego (nombre, nivel, reputación, Rey/Embajador) — sin ello la pantalla de
+// diplomacia no tendría con qué pintarse.
 //
 // **La excepción es lo que se VE**, y viaja siempre REDACTADO: los ejércitos ajenos (`ejercitosAvistados`,
 // Doc 5.12.7) y los asentamientos ajenos (`asentamientosAvistados`, niebla de guerra Paso 1). De ambos se
@@ -158,12 +165,24 @@ export interface ProyeccionJugador {
    * ciudadanía) es información táctica — es el mismo tipo de dato público que "quién gobierna Troya" en la
    * ficción del juego. Lo táctico/económico vive en `Asentamiento`, que sí se filtra. */
   facciones: Faccion[];
-  /** SOLO los de la Facción propia, COMPLETOS. Lo ajeno que se vea va aparte, en `asentamientosAvistados`. */
+  /**
+   * El interior de la plaza donde el jugador ESTÁ FÍSICAMENTE, y solo esa (Doc 1.10.1). Cero o un elemento:
+   * cero si está en el mapa o desconectado, uno si está dentro de una plaza de su propia Facción.
+   *
+   * Sigue siendo un array y no un objeto opcional para no romper a un cliente que itera, y porque la
+   * mecánica de invitados —estar dentro de una plaza AJENA— tiene su propia capa pública pendiente de
+   * definir: cuando exista, entrará por aquí sin cambiar la forma.
+   */
   asentamientos: Asentamiento[];
-  /** Los de CUALQUIER otra Facción que se estén viendo AHORA, redactados a su ficha (ver
-   * `AsentamientoAvistado`). Array aparte y no mezclado con `asentamientos`, por el mismo motivo que
-   * `ejercitosAvistados`: la diferencia entre "lo veo entero" y "solo lo avisto" es de TIPO, no un campo
-   * opcional que el cliente pueda olvidarse de mirar. */
+  /**
+   * Todo lo que se ve AHORA y no se está pisando, redactado a su ficha (ver `AsentamientoAvistado`) —
+   * **incluidas las plazas de la propia Facción**, que es lo que cambió con el jugador situado: desde fuera,
+   * la ciudad de uno se ve igual que cualquier otra.
+   *
+   * Array aparte y no mezclado con `asentamientos`, por el mismo motivo que `ejercitosAvistados`: la
+   * diferencia entre "estoy dentro" y "lo veo de lejos" es de TIPO, no un campo opcional que el cliente
+   * pueda olvidarse de mirar.
+   */
   asentamientosAvistados: AsentamientoAvistado[];
   /** Las que se vieron ALGUNA VEZ y ahora no se ven: la última foto, con el instante en que se tomó (ver
    * `FichaConocida`). Nunca repite lo que ya está en `asentamientosAvistados` — cuando algo se ve y además se
@@ -409,6 +428,15 @@ export function proyectarParaJugador(
 ): Omit<ProyeccionJugador, 'preciosReferencia'> {
   const { faccionId, asentamientosPropios, esPropio } = propioDeJugador(estado, jugadorId);
 
+  // La plaza que el jugador PISA, que es la única cuyo interior viaja (Doc 1.10.1). Se exige además que sea
+  // de su Facción: dentro de una plaza ajena solo se ve la capa pública (Doc 1.10.4), y qué lleva esa capa
+  // es una decisión que el diseño todavía no ha tomado — hasta que la tome, no enseñamos de más.
+  const ubicacion = estado.jugadores.find((j) => j.id === jugadorId)?.ubicacion;
+  const dentroDe =
+    ubicacion?.tipo === 'asentamiento'
+      ? asentamientosPropios.find((a) => a.id === ubicacion.asentamientoId)
+      : undefined;
+
   // Un ejército es "propio" si es de tu Facción o si llevas tropa TUYA dentro. Lo segundo no es redundante:
   // un jugador huérfano (Doc 5.4) se queda sin Facción pero no sin los escuadrones que iban con él, y no
   // tendría sentido que dejara de ver la columna en la que va montado.
@@ -422,8 +450,10 @@ export function proyectarParaJugador(
   // aquí no cuesta un cálculo más. Una plaza sin zona en la geometría (no debería pasar) viaja con el
   // contorno vacío en vez de romper la proyección entera.
   const poligonoDe = new Map(geometria.zonas.map((z) => [z.asentamientoId, z.poligono]));
+  // Lo que se ve pero no se pisa. Los propios entran aquí igual que los ajenos: se excluye SOLO la plaza en
+  // la que el jugador está, que es la única que viaja entera.
   const avistados = estado.asentamientos
-    .filter((a) => !esPropio(a.id) && seVeAhora(a.posicion, asentamientosPropios, ejercitosPropios))
+    .filter((a) => a.id !== dentroDe?.id && seVeAhora(a.posicion, asentamientosPropios, ejercitosPropios))
     .map((a) => ({
       id: a.id,
       nombre: a.nombre,
@@ -448,11 +478,12 @@ export function proyectarParaJugador(
     mapaId: idDeMapa(estado.mapa),
     estadoMapa: estado.estadoMapa,
     facciones: estado.facciones,
-    asentamientos: asentamientosPropios,
+    asentamientos: dentroDe ? [dentroDe] : [],
     asentamientosAvistados: avistados,
-    // Lo recordado MENOS lo que se ve ahora, y menos lo que entretanto pasó a ser propio (eso viaja completo
-    // en `asentamientos`). Cada plaza aparece en una lista o en la otra, nunca en las dos.
-    asentamientosConocidos: Object.values(memoria.asentamientos).filter((f) => !seVe.has(f.asentamientoId) && !esPropio(f.asentamientoId)),
+    // Lo recordado MENOS lo que se ve ahora. Cada plaza aparece en una lista o en la otra, nunca en las dos.
+    // Las propias ya no se descuentan aquí: desde que solo viaja entera la que se pisa, una plaza de tu
+    // Facción que no estés viendo es exactamente igual de recordada que cualquier otra.
+    asentamientosConocidos: Object.values(memoria.asentamientos).filter((f) => !seVe.has(f.asentamientoId) && f.asentamientoId !== dentroDe?.id),
     territorioPorEjercito: territorioDeCadaEjercito(ejercitosPropios, geometria.zonas, estado.asentamientos),
     exploracion,
     caravanas: estado.caravanas.filter((c) => esPropio(c.origenAsentamientoId) || (c.destinoAsentamientoId !== undefined && esPropio(c.destinoAsentamientoId))),
