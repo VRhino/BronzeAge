@@ -54,8 +54,15 @@ function puntoDeObjetivo(objetivo: ObjetivoEjercito, asentamientos: readonly Ase
  * silencio: pedir un escuadrón que no es tuyo o que ya salió a campaña es un error del llamador, y
  * tragárselo dejaría al jugador saliendo con menos tropa de la que creía.
  */
-function seleccionarParaCampana(asentamiento: Asentamiento, jugadorId: string, escuadronIds: readonly string[]): Escuadron[] {
-  if (escuadronIds.length === 0) throw new MovilizacionInvalidaError('Hay que llevarse al menos un escuadrón.');
+function seleccionarParaCampana(
+  asentamiento: Asentamiento,
+  jugadorId: string,
+  escuadronIds: readonly string[],
+  /** `salirAlMundo` sí admite salir con las manos vacías (Doc 1.10.2): el viajero sin tropas es una forma de
+   * jugar, no un error. Movilizar una campaña contra un destino, no. */
+  permitirVacio = false
+): Escuadron[] {
+  if (escuadronIds.length === 0 && !permitirVacio) throw new MovilizacionInvalidaError('Hay que llevarse al menos un escuadrón.');
   const elegidos: Escuadron[] = [];
   for (const id of escuadronIds) {
     const escuadron = asentamiento.escuadrones.find((e) => e.id === id);
@@ -125,6 +132,47 @@ function adjuntasDe(ejercito: Ejercito, caravanas: readonly Caravana[]): Caravan
  * La reserva se mide sobre el asentamiento del que los escuadrones YA se han ido: dejan de comer de aquí en
  * el mismo acto, así que seguir contándolos protegería a bocas que ya no están.
  */
+/**
+ * Carga el carro con lo que el jugador ELIGE (Doc 1.10.2), no solo con trigo.
+ *
+ * Tres topes, y cada uno tapa algo distinto:
+ *
+ *  1. **La capacidad del carro**, medida sobre el TOTAL de recursos y no por recurso: es un carro, no una
+ *     estantería con un cajon por material.
+ *  2. **Lo que hay en el almacén**, descontando la reserva de comida de la plaza — sacar el carro no puede
+ *     dejar a la guarnición sin comer (misma regla que `cargarCarro`).
+ *  3. **Nada negativo.** Sin esto, "cargar" -100 de trigo sería un depósito encubierto que se salta la
+ *     reserva.
+ *
+ * Falla en vez de recortar en silencio: pedir más de lo que cabe es un error del que pide, y servirle menos
+ * sin decirlo le hace salir de campaña creyendo que lleva provisiones que no lleva.
+ *
+ * *Pendiente (Doc 1.10.2):* el tope que el Tesorero podrá fijar sobre cuánto puede retirar cada jugador. Hoy
+ * el único límite es físico.
+ */
+function cargarCarroElegido(
+  asentamiento: Asentamiento,
+  carga: Readonly<Record<string, number>>,
+  capacidad: number
+): { asentamiento: Asentamiento; suministro: Record<string, number> } {
+  const pedido = Object.entries(carga).filter(([, cantidad]) => cantidad !== 0);
+  if (pedido.some(([, cantidad]) => cantidad < 0)) {
+    throw new MovilizacionInvalidaError('No se puede cargar una cantidad negativa.');
+  }
+  const total = pedido.reduce((suma, [, cantidad]) => suma + cantidad, 0);
+  if (total > capacidad) {
+    throw new MovilizacionInvalidaError(`El carro admite ${capacidad} y se piden ${total}.`);
+  }
+  for (const [recurso, cantidad] of pedido) {
+    const reservado = recurso === 'trigo' ? reservaDeTrigo(asentamiento) : 0;
+    if (cantidad > cantidadDisponible(asentamiento.almacen, recurso) - reservado) {
+      throw new MovilizacionInvalidaError(`El almacén no tiene ${cantidad} de ${recurso} de sobra.`);
+    }
+  }
+  const suministro = Object.fromEntries(pedido);
+  return { asentamiento: { ...asentamiento, almacen: descontarRecursos(asentamiento.almacen, suministro) }, suministro };
+}
+
 function cargarCarro(
   asentamiento: Asentamiento,
   yaEnElCarro: number,
@@ -281,6 +329,84 @@ export function movilizarEjercito(
  * —sumar más escuadrones a un ejército en el que ya vas es legítimo— no aparece ningún carro nuevo, y sin ese
  * tope repetir la operación sería una bomba de trigo infinita desde el almacén.
  */
+/**
+ * Salir al mundo (Doc 1.10.2): el jugador deja su residencia y aparece en el mapa **junto a la plaza**, sin
+ * destino.
+ *
+ * Es hermana de `movilizarEjercito` y la diferencia no es de tamaño sino de intención, que es lo que fija el
+ * `tipo` de la columna para siempre (Doc 5.12.1): movilizar es salir CONTRA un destino y hace un `ejercito`;
+ * esto es salir a lo tuyo y hace una columna `personal`, que rectifica el rumbo cuando quiere, no lleva
+ * caravanas y a la que nadie se une.
+ *
+ * Tres cosas que la separan de movilizar, todas del canon:
+ *
+ *  - **Se puede salir sin tropas.** El viajero solo es una forma de jugar (Doc 5.12.1), no un caso raro.
+ *  - **La carga se ELIGE**, no se rellena de trigo hasta arriba.
+ *  - **Nace `estacionado` donde la plaza**, no marchando: el destino es un `marcharA` posterior.
+ */
+export function salirAlMundo(
+  asentamiento: Asentamiento,
+  jugador: Jugador | undefined,
+  jugadorId: string,
+  escuadronIds: readonly string[],
+  carga: Readonly<Record<string, number>>,
+  id: string,
+  instante: Instante
+): { asentamiento: Asentamiento; ejercito: Ejercito } {
+  if (!esResidente(asentamiento, jugadorId)) {
+    throw new MovilizacionInvalidaError('Solo se sale al mundo desde la propia residencia.');
+  }
+
+  const escuadrones = seleccionarParaCampana(asentamiento, jugadorId, escuadronIds, true);
+  exigirLiderazgo(jugador, escuadrones);
+
+  const idsFuera = new Set(escuadrones.map((e) => e.id));
+  const sinLosQueSalen = { ...asentamiento, escuadrones: asentamiento.escuadrones.filter((e) => !idsFuera.has(e.id)) };
+  const cargado = cargarCarroElegido(sinLosQueSalen, carga, capacidadCarrosDe(1));
+
+  return {
+    asentamiento: cargado.asentamiento,
+    ejercito: {
+      id,
+      faccionId: asentamiento.faccionId,
+      origenAsentamientoId: asentamiento.id,
+      participantes: [{ jugadorId, unidoEn: instante }],
+      tipo: 'personal',
+      liderId: jugadorId,
+      escuadrones,
+      suministro: cargado.suministro,
+      caravanasAdjuntasIds: [],
+      // Sin destino todavía: el objetivo es donde está. Un `marcharA` posterior es lo que la pone en camino.
+      objetivo: { tipo: 'punto', punto: asentamiento.posicion },
+      ruta: [],
+      progreso: 0,
+      posicionActual: asentamiento.posicion,
+      estado: 'estacionado',
+    },
+  };
+}
+
+/**
+ * Mete una columna entera dentro de un asentamiento: los escuadrones a la guarnición y el carro al almacén
+ * (Doc 1.10.3).
+ *
+ * Es la MISMA operación que hace un ejército al llegar a casa replegado, y por eso vive aquí y no duplicada
+ * en los dos sitios: si divergieran, volver a casa andando y volver a casa entrando por la puerta dejarían
+ * la plaza en estados distintos.
+ */
+export function absorberColumna(asentamiento: Asentamiento, ejercito: Ejercito, devolverSuministro: boolean): Asentamiento {
+  const almacen = devolverSuministro
+    ? Object.entries(ejercito.suministro).reduce((acc, [recurso, cantidad]) => agregarRecurso(acc, recurso, cantidad), asentamiento.almacen)
+    : asentamiento.almacen;
+  return { ...asentamiento, escuadrones: [...asentamiento.escuadrones, ...ejercito.escuadrones], almacen };
+}
+
+/** ¿Está la columna en la PUERTA de esta plaza (Doc 1.10.3)? Entrar es una acción que se ofrece al estar
+ * cerca, nunca algo que pase solo por pasar por al lado (Doc 5.12.3). */
+export function enLaPuertaDe(ejercito: Ejercito, asentamiento: Asentamiento): boolean {
+  return distancia(ejercito.posicionActual, asentamiento.posicion) <= MOVIMIENTO.radioPuerta;
+}
+
 export function unirseAEjercito(
   ejercito: Ejercito,
   asentamiento: Asentamiento,
@@ -632,10 +758,7 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
   const reintegrar = (ejercito: Ejercito, devolverSuministro: boolean): boolean => {
     const origen = porId.get(ejercito.origenAsentamientoId);
     if (!origen) return false;
-    const almacen = devolverSuministro
-      ? Object.entries(ejercito.suministro).reduce((acc, [recurso, cantidad]) => agregarRecurso(acc, recurso, cantidad), origen.almacen)
-      : origen.almacen;
-    porId.set(origen.id, { ...origen, escuadrones: [...origen.escuadrones, ...ejercito.escuadrones], almacen });
+    porId.set(origen.id, absorberColumna(origen, ejercito, devolverSuministro));
     return true;
   };
 

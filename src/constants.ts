@@ -1518,6 +1518,12 @@ export const MOVIMIENTO = {
    * absoluto —un carro lleno (500) da para más de 16 horas de viaje— pero nunca nada.
    */
   consumoPorParticipante: 0.5,
+  /**
+   * A qué distancia de una plaza se puede cruzar su puerta (Doc 1.10.3). **10**, la más corta de las
+   * distancias de interacción — por debajo del choque (15) y muy por debajo de ver (150): entrar exige
+   * estar literalmente en la puerta, no en las afueras. Es lo que hace de "entrar" un acto y no un roce.
+   */
+  radioPuerta: 10,
 };
 
 /**

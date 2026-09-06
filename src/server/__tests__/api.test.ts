@@ -847,7 +847,11 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       // retirados en el Paso 11 (2026-09-04) al pasar a ser resoluciones del motor por geometría. La
       // superficie de jugador encogió, que es parte del diseño: se manda un ejército en vez de declarar un
       // ataque desde el sofá.
-      expect(cuerpo.oneOf.length).toBe(42);
+      //
+      // +3 con la presencia del jugador (paso 3 del jugador situado, 2026-09-06): `salirAlMundo`,
+      // `entrarEnAsentamiento` y `salirDeAsentamiento`. Aquí la superficie CRECE, y también es parte del
+      // diseño: entrar y salir dejan de ser efectos colaterales de otra cosa y pasan a ser actos del jugador.
+      expect(cuerpo.oneOf.length).toBe(45);
       const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
       expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
     });

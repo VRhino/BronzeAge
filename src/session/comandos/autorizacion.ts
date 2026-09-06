@@ -382,6 +382,25 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
     condicionJugador: (estado, jugadorId, params) =>
       reside(estado, jugadorId, params.atacanteId) && comandaEscuadrones(estado, jugadorId, params.atacanteId, params.escuadronIds),
   },
+  // --- Presencia (Doc 1.10). Nadie sale, entra ni vuelve a salir a nombre de otro, así que la condición
+  // común es `jugadorId === actor`. Salir al mundo añade lo mismo que movilizar (residencia + mando de los
+  // propios escuadrones); entrar y salir de una plaza NO exigen residencia — justamente el caso interesante
+  // es la plaza ajena— y su geometría la comprueba el motor, que es quien sabe dónde está la columna. ---
+  salirAlMundo: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, jugadorId, params) =>
+      jugadorId === params.jugadorId &&
+      reside(estado, jugadorId, params.asentamientoId) &&
+      comandaEscuadrones(estado, jugadorId, params.asentamientoId, params.escuadronIds),
+  },
+  entrarEnAsentamiento: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (_estado, jugadorId, params) => jugadorId === params.jugadorId,
+  },
+  salirDeAsentamiento: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (_estado, jugadorId, params) => jugadorId === params.jugadorId,
+  },
   // --- Ejércitos (Doc 5.12): salir de campaña es sacar TUS escuadrones de TU asentamiento, así que la
   // condición es la misma pareja que el resto de lo militar (residencia + mando de los propios escuadrones).
   // Nadie moviliza a nombre de otro: `jugadorId` tiene que ser el actor, igual que en `reclutarTropa`. ---

@@ -934,9 +934,20 @@ Cada paso deja el repo verde y jugable. El orden no es negociable en los tres pr
    sobre la regla vieja** — reescrito: el fantasma nunca fue "sin soldados", fue "sin nadie".
 2. ~~**`Jugador.ubicacion` + migración de snapshots**~~ — **HECHO (2026-09-06)**, con la migración v8->v9 y el
    alta perezosa en el embudo de `GameSession` (§2.1). Nada la lee aún, salvo fundar, que sí sitúa.
-3. **`salirAlMundo` / `entrarEnAsentamiento` / `salirDeAsentamiento`**, con la simetría residencia/ajena y el
-   contrato de la decisión 35 — lista de escuadrones **que puede ir vacía**, carga elegida, y el carro como
-   saco de recursos. La ubicación empieza a moverse de verdad.
+3. ~~**`salirAlMundo` / `entrarEnAsentamiento` / `salirDeAsentamiento`**~~ — **HECHO (2026-09-06)**, en
+   `session/comandos/presencia.ts`, con el contrato de la decisión 35 y el carro como saco de recursos. Dos
+   reglas aparecieron al escribirlo y no estaban en el diseño:
+
+   - **No se entra en una plaza yendo en un EJÉRCITO**, solo en columna personal. Si no, volver a casa
+     disolvería la columna con la gente de los demás dentro, y sería además una salida encubierta que se
+     salta al Líder. Hay que separarse antes (paso 4b).
+   - **`participantes` dice a quién PERTENECE la columna, no dónde está su cuerpo.** El que entra en una
+     plaza ajena sigue siendo participante de su columna aparcada aunque su `ubicacion` diga `asentamiento`.
+     Es forzoso: si saliera de `participantes`, la columna se quedaría sin nadie dentro y se disolvería
+     sola (Doc 5.13.4), que es exactamente lo contrario de "queda aparcada a la puerta".
+
+   Y la puerta a plazas AJENAS se deja cerrada de momento (solo misma Facción): la política de acceso es el
+   paso 5, y hasta entonces conviene ser más restrictivo que la regla final, nunca menos.
 4. **`marcharA`** — destino rectificable, y solo yendo solo (decisión 14). Aquí ya se juega.
 4b. **`unirseEnCampo` / `separarseDelEjercito`** (decisiones 15-16). Va pegado al 4 porque es lo que le da
    sentido: unirse cuesta la libertad de movimiento que el paso 4 acaba de conceder, y separarse la devuelve.

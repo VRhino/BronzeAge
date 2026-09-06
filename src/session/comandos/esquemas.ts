@@ -207,6 +207,20 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
     { atacanteId: IDENTIFICADOR, defensorId: IDENTIFICADOR, escuadronIds: LISTA_DE_IDENTIFICADORES },
     ['atacanteId', 'defensorId', 'escuadronIds']
   ),
+  // Presencia del jugador (Doc 1.10). `carga` es un mapa recurso -> cantidad: el jugador elige QUÉ se lleva,
+  // no solo cuánto, así que no vale una lista de ids ni un número suelto. Las cantidades se validan en el
+  // motor (capacidad del carro, almacén, reserva); aquí solo que sean números.
+  salirAlMundo: objeto(
+    {
+      asentamientoId: IDENTIFICADOR,
+      jugadorId: IDENTIFICADOR,
+      escuadronIds: LISTA_DE_IDENTIFICADORES,
+      carga: { type: 'object', additionalProperties: NUMERO },
+    },
+    ['asentamientoId', 'jugadorId', 'escuadronIds', 'carga']
+  ),
+  entrarEnAsentamiento: objeto({ asentamientoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR }, ['asentamientoId', 'jugadorId']),
+  salirDeAsentamiento: objeto({ asentamientoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR }, ['asentamientoId', 'jugadorId']),
   // Ejércitos (Doc 5.12). `objetivo` es una union: un asentamiento por id, o un punto del mapa. Se valida
   // con `oneOf` para que un cliente no pueda colar un punto sin coordenadas ni un destino sin id.
   movilizarEjercito: objeto(
