@@ -2,6 +2,7 @@
 // mocks — así estas pruebas fallan de verdad si cambia la forma de `GameSessionState` o el significado de
 // ciudadanía, no solo si cambia la proyección.
 import { describe, expect, it } from 'vitest';
+import { instante } from '../../../domain/tiempo';
 import { instanteDeTest } from '../../../engine/__tests__/fixtures';
 import { partidaConAsentamiento, MOMENTO, OPC } from '../../__tests__/fixtures';
 import { crearFaccion } from '../../comandos/crearFaccion';
@@ -278,6 +279,9 @@ function ejercito(id: string, faccionId: string, posicion: Point, escuadrones: E
     id,
     faccionId,
     origenAsentamientoId: `origen-de-${id}`,
+    participantes: [...new Set(escuadrones.map((e) => e.jugadorId))].map((jugadorId) => ({ jugadorId, unidoEn: instante(0) })),
+    tipo: 'ejercito',
+    liderId: escuadrones[0]?.jugadorId ?? 'j1',
     escuadrones,
     suministro: { trigo: 500 },
     caravanasAdjuntasIds: [],

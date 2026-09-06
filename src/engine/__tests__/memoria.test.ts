@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Ejercito, Escuadron } from '../../domain/types';
 import { VISION } from '../../constants';
+import { instante } from '../../domain/tiempo';
 import { crearMapaDeterminista, crearFacciones, fundarAsentamientoDeTest, instanteDeTest } from './fixtures';
 import { celdasExploradas, estaExplorado, rejillaDe } from '../exploracion';
 import { grabarLoVisto, MEMORIA_VACIA } from '../memoria';
@@ -34,6 +35,9 @@ function ejercito(faccionId: string, x: number, y: number): Ejercito {
     id: `e-${faccionId}`,
     faccionId,
     origenAsentamientoId: 'origen',
+    participantes: [{ jugadorId: 'j1', unidoEn: instante(0) }],
+    tipo: 'ejercito',
+    liderId: 'j1',
     escuadrones: [escuadron],
     suministro: { trigo: 500 },
     caravanasAdjuntasIds: [],

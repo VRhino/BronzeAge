@@ -9,7 +9,8 @@
 // guardián de determinismo sigue verde sin tocarlo.
 import { describe, expect, it } from 'vitest';
 import type { AcuerdoTrueque, Asentamiento, Caravana, Ejercito, Escuadron, Faccion, RelacionPolitica } from '../../domain/types';
-import { CARAVANA_CATALOGO, LOGISTICA, MILITAR } from '../../constants';
+import { CARAVANA_CATALOGO, LOGISTICA, MILITAR, MOVIMIENTO, TROPAS_RECLUTABLES } from '../../constants';
+import { instante } from '../../domain/tiempo';
 import { entregarDesdeCaravanaAdjunta } from '../trade';
 import {
   adjuntarCaravana,
@@ -62,6 +63,9 @@ function ejercitoDe(origen: Asentamiento, escuadrones: Escuadron[], trigo: numbe
     id: 'ejercito-1',
     faccionId: origen.faccionId,
     origenAsentamientoId: origen.id,
+    participantes: [...new Set(escuadrones.map((e) => e.jugadorId))].map((jugadorId) => ({ jugadorId, unidoEn: instante(0) })),
+    tipo: 'ejercito',
+    liderId: escuadrones[0]?.jugadorId ?? 'jugador-1',
     escuadrones,
     suministro: { trigo },
     caravanasAdjuntasIds: [],
@@ -121,7 +125,9 @@ describe('avanzarEjercitos — comer y moverse', () => {
     const r = avanzar([ejercito], [asentamiento]);
 
     expect(r.ejercitos[0]!.progreso).toBeGreaterThan(0);
-    expect(r.ejercitos[0]!.suministro['trigo']).toBeCloseTo(100 - 10 * MILITAR.racionPorSoldadoPorMinuto);
+    // Comen los diez soldados Y el jugador que los lleva (Doc 5.13): la ración por participante es lo que
+    // impide que viajar salga gratis a quien va sin tropa.
+    expect(r.ejercitos[0]!.suministro['trigo']).toBeCloseTo(100 - 10 * MILITAR.racionPorSoldadoPorMinuto - MOVIMIENTO.consumoPorParticipante);
     // El almacén del asentamiento no se toca: en marcha se come del carro (Doc 5.13).
     expect(r.asentamientos[0]!.almacen['trigo']?.cantidad).toBe(trigoEnGranero);
   });
@@ -134,7 +140,7 @@ describe('avanzarEjercitos — comer y moverse', () => {
 
     expect(r.ejercitos[0]!.progreso).toBe(0);
     expect(r.ejercitos[0]!.posicionActual).toEqual(ejercito.posicionActual);
-    const racionCompleta = 10 * MILITAR.racionPorSoldadoPorMinuto;
+    const racionCompleta = 10 * MILITAR.racionPorSoldadoPorMinuto + MOVIMIENTO.consumoPorParticipante;
     expect(r.ejercitos[0]!.suministro['trigo']).toBeCloseTo(100 - racionCompleta * LOGISTICA.factorConsumoEstacionado);
     // Reducido, pero NUNCA cero: aparcar no es gratis.
     expect(r.ejercitos[0]!.suministro['trigo']).toBeLessThan(100);
@@ -151,19 +157,35 @@ describe('avanzarEjercitos — comer y moverse', () => {
 });
 
 describe('avanzarEjercitos — el ejército fantasma (Doc 5.13.4)', () => {
-  it('un ejército sin un solo soldado en pie SE DISUELVE, y sus identidades vuelven a casa', () => {
+  // Lo que retira una columna es quedarse SIN NADIE DENTRO, no sin soldados. La versión anterior de estos
+  // tests congelaba lo segundo, y con ello borraba del mapa a un jugador que seguía ahí.
+  it('sin un solo soldado en pie NO se disuelve: sus jugadores siguen dentro, ahora a pie', () => {
     const { asentamiento } = base();
     // Escuadrón aniquilado pero vivo como identidad: es lo que Doc 5.4 preserva para poder rellenarlo.
     const ejercito = ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros', 0)], 0);
 
     const r = avanzar([ejercito], [asentamiento]);
 
-    expect(r.ejercitos).toHaveLength(0);
-    const devuelto = r.asentamientos[0]!.escuadrones.find((e) => e.id === 'a');
-    expect(devuelto, 'la identidad vacía tiene que volver al asentamiento, es donde se rellena').toBeDefined();
-    expect(devuelto!.cantidad).toBe(0);
-    expect(devuelto!.nombre).toBe('milicia_lanceros');
-    expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo === 'ejercito.disuelto')).toBe(true);
+    expect(r.ejercitos, 'el jugador sigue viajando, solo que sin tropa').toHaveLength(1);
+    expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo === 'ejercito.disuelto')).toBe(false);
+  });
+
+  it('y viaja a la velocidad del JUGADOR, no a cero (Doc 5.12.1)', () => {
+    const { asentamiento } = base();
+    const ejercito = ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros', 0)], 100);
+
+    expect(velocidadDeEjercito(ejercito)).toBe(MOVIMIENTO.velocidadJugador);
+    // Por encima de CUALQUIER tropa: un hombre solo no arrastra impedimenta.
+    expect(velocidadDeEjercito(ejercito)).toBeGreaterThan(Math.max(...TROPAS_RECLUTABLES.map((t) => t.velocidad)));
+  });
+
+  it('come aunque no le quede un solo soldado: viajar nunca es gratis', () => {
+    const { asentamiento } = base();
+    const ejercito = enCampoAbierto(ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros', 0)], 100), asentamiento);
+
+    const r = avanzar([ejercito], [asentamiento]);
+
+    expect(r.ejercitos[0]!.suministro['trigo']).toBeCloseTo(100 - MOVIMIENTO.consumoPorParticipante, 5);
   });
 
   it('NO se disuelve mientras quede alguien, aunque otro escuadrón esté a cero', () => {
@@ -175,9 +197,25 @@ describe('avanzarEjercitos — el ejército fantasma (Doc 5.13.4)', () => {
     expect(r.ejercitos).toHaveLength(1);
   });
 
+  it('sin NADIE dentro sí se disuelve, y sus identidades vuelven a casa', () => {
+    const { asentamiento } = base();
+    // Vaciar la lista de participantes es lo que harán separarse (Doc 5.14.2) y desconectarse (Doc 1.10.6);
+    // aquí se construye a mano porque ninguno de los dos comandos existe todavía.
+    const ejercito = { ...ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros', 0)], 0), participantes: [] };
+
+    const r = avanzar([ejercito], [asentamiento]);
+
+    expect(r.ejercitos).toHaveLength(0);
+    const devuelto = r.asentamientos[0]!.escuadrones.find((e) => e.id === 'a');
+    expect(devuelto, 'la identidad vacía tiene que volver al asentamiento, es donde se rellena').toBeDefined();
+    expect(devuelto!.cantidad).toBe(0);
+    expect(devuelto!.nombre).toBe('milicia_lanceros');
+    expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo === 'ejercito.disuelto')).toBe(true);
+  });
+
   it('si su asentamiento ya no existe, se disuelve igual y las identidades se pierden con él', () => {
     const { asentamiento } = base();
-    const ejercito = ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros', 0)], 0);
+    const ejercito = { ...ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros', 0)], 0), participantes: [] };
 
     const r = avanzar([ejercito], []);
 
@@ -211,7 +249,7 @@ describe('avanzarEjercitos — llegar', () => {
     expect(r.ejercitos).toHaveLength(0);
     expect(r.asentamientos[0]!.escuadrones.map((e) => e.id)).toContain('a');
     // El sobrante vuelve al almacén — descontado lo que se comió en este último tick.
-    const comido = 10 * MILITAR.racionPorSoldadoPorMinuto;
+    const comido = 10 * MILITAR.racionPorSoldadoPorMinuto + MOVIMIENTO.consumoPorParticipante;
     expect(r.asentamientos[0]!.almacen['trigo']!.cantidad).toBeCloseTo(trigoAntes + 60 - comido);
     expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo === 'ejercito.regresa')).toBe(true);
   });
@@ -277,7 +315,7 @@ describe('atribucion de los eventos: un ejercito NO narra en global (Doc 5.12.7)
     const a = origen();
     // Ya en el ultimo tramo, para que llegue en este tick.
     const llega = { ...ejercitoDe(a, [escuadron('s1', 'milicia_lanceros')], 500), progreso: 0.999 };
-    const disuelto = { ...ejercitoDe(a, [escuadron('s2', 'milicia_lanceros', 0)], 0), id: 'ejercito-2' };
+    const disuelto = { ...ejercitoDe(a, [escuadron('s2', 'milicia_lanceros', 0)], 0), id: 'ejercito-2', participantes: [] };
     const vuelve = { ...ejercitoDe(a, [escuadron('s3', 'milicia_lanceros')], 500), id: 'ejercito-3', progreso: 0.999, estado: 'regresando' as const };
 
     const eventos = avanzar([llega, disuelto, vuelve], [a]).eventos;
@@ -710,8 +748,10 @@ describe('caravanas adjuntas', () => {
   it('si el ejército se deshace, las adjuntas se PIERDEN (Doc 5.13.2)', () => {
     const { asentamiento } = base();
     const c = caravanaDe('c1', asentamiento.id, asentamiento.posicion);
-    // Escuadrón aniquilado: el ejército se disuelve en este tick.
-    const e = adjuntarCaravana(ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros', 0)], 0), c, asentamiento).ejercito;
+    // Sin nadie dentro: la columna se disuelve en este tick (Doc 5.13.4). Antes bastaba con que sus
+    // escuadrones estuvieran a cero, y eso borraba del mapa a un jugador que seguía ahí.
+    const conCaravana = adjuntarCaravana(ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros', 0)], 0), c, asentamiento).ejercito;
+    const e = { ...conCaravana, participantes: [] };
 
     const r = avanzar([e], [asentamiento], { caravanas: [c] });
 

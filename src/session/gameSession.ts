@@ -12,7 +12,8 @@
 //   - HTTP, WebSocket, persistencia en disco: del runner y de la capa de transporte.
 //   - Notificar a una UI o llevar historial de depuración: del cliente.
 import type { RegionId } from '../domain/types';
-import { BALANCE_VERSION } from '../constants';
+import { BALANCE_VERSION, LIDERAZGO } from '../constants';
+import { conJugadorAsegurado } from '../engine/ubicacion';
 import { createRng, generarMapa, MAPA_DEFAULT, restaurarRng, WORLDGEN_VERSION, type RandomFn } from '../worldgen';
 import { crearEstadoMapa, crearMapa, type EstadoMapa, type Mapa } from '../world/mapa';
 import { GeneradorIds } from './idGenerator';
@@ -177,6 +178,23 @@ export class GameSession {
    * estado (`eventosDominio[].momento`), haciendo que el mismo comando con la misma seed produjera snapshots
    * distintos. El tiempo de mundo es función del tick y de nada más.
    */
+  /**
+   * Alta perezosa del Jugador que actúa (Doc 1.10): la primera vez que alguien ejecuta un comando con éxito,
+   * la partida le da registro y lo SITÚA. Va aquí, en el embudo, y no en cada comando — son dos docenas, y
+   * repartir el alta por todos ellos garantizaba olvidarla en alguno.
+   *
+   * La ubicación se deduce de lo que el mundo ya sabe (`ubicacionDeducida`), que es la MISMA función que usa
+   * la migración de snapshots: entrar por primera vez y cargar una partida vieja tienen que colocar a la
+   * gente en el mismo sitio.
+   *
+   * El sistema no es un jugador: el tick y el turno del NPC no crean registro.
+   */
+  private static conActorEnPartida(estado: GameSessionState, actor: ActorId): GameSessionState {
+    if (actor === ACTOR_SISTEMA) return estado;
+    const jugadores = conJugadorAsegurado(estado.jugadores, actor, LIDERAZGO.base, estado.asentamientos, estado.ejercitos);
+    return jugadores === estado.jugadores ? estado : { ...estado, jugadores };
+  }
+
   ejecutar<P, R>(manejador: ManejadorComando<P, R>, params: P, opciones: { actor?: ActorId } = {}): ResultadoComando<R> {
     const instante = instanteDeTick(this.estado.tick);
     const ctx: ContextoComando = {
@@ -198,7 +216,7 @@ export class GameSession {
       throw new Error('Un comando modificó el mapa pero no devolvió `estadoMapa` en su estado resultante.');
     }
 
-    this.estado = transicion.estado;
+    this.estado = transicion.resultado.ok ? GameSession.conActorEnPartida(transicion.estado, ctx.actor) : transicion.estado;
     return transicion.resultado;
   }
 

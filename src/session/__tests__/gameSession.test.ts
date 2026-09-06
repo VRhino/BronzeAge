@@ -284,3 +284,56 @@ describe('GameSession — exportar / importar', () => {
     expect(reconstruida.avanzarTick().ok).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------
+// Alta perezosa del Jugador (Doc 1.10): quien actúa, existe y está en algún sitio.
+// ---------------------------------------------------------------------------------------------------------
+
+describe('GameSession — el jugador que actúa entra en la partida', () => {
+  it('da de alta al actor la primera vez que ejecuta un comando con éxito', () => {
+    const sesion = partidaNueva();
+    expect(sesion.getState().jugadores).toEqual([]);
+
+    sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, { actor: ACTOR });
+
+    const jugador = sesion.getState().jugadores.find((j) => j.id === ACTOR);
+    expect(jugador, 'quien actúa tiene registro').toBeDefined();
+    // Sin residencia ni columna todavía: crear una Facción no te pone en ninguna parte.
+    expect(jugador!.ubicacion.tipo).toBe('desconectado');
+  });
+
+  it('al fundar queda situado DENTRO de su asentamiento', () => {
+    const { sesion, faccionId } = partidaConFaccion();
+
+    const r = sesion.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 0, y: 0 } }, { actor: ACTOR });
+    expect(r.ok, 'setup del test: la fundación tiene que salir').toBe(true);
+
+    const jugador = sesion.getState().jugadores.find((j) => j.id === ACTOR)!;
+    expect(jugador.ubicacion).toEqual({ tipo: 'asentamiento', asentamientoId: sesion.getState().asentamientos[0]!.id });
+  });
+
+  it('es idempotente: actuar dos veces no duplica el registro', () => {
+    const { sesion } = partidaConFaccion();
+    sesion.ejecutar(crearFaccion, { nombre: 'Tirinto' }, { actor: ACTOR });
+
+    expect(sesion.getState().jugadores.filter((j) => j.id === ACTOR)).toHaveLength(1);
+  });
+
+  it('un comando RECHAZADO no da de alta a nadie', () => {
+    const sesion = partidaNueva();
+
+    // Fundar sin Facción se rechaza en el motor.
+    const r = sesion.ejecutar(fundarAsentamiento, { faccionId: 'no-existe', posicion: { x: 0, y: 0 } }, { actor: 'fantasma' });
+
+    expect(r.ok).toBe(false);
+    expect(sesion.getState().jugadores).toEqual([]);
+  });
+
+  it('el SISTEMA no es un jugador: el tick no le da registro', () => {
+    const sesion = partidaNueva();
+
+    sesion.avanzarTick();
+
+    expect(sesion.getState().jugadores).toEqual([]);
+  });
+});

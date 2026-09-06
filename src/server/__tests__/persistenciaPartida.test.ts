@@ -246,8 +246,11 @@ describe('guardarPartida / cargarPartida', () => {
 
   it('migra v5 -> v6: un snapshot sin `jugadores` ni `ejercitos` los recibe vacíos', async () => {
     // Movimiento de ejércitos (Doc 5.11/5.12): dos colecciones nuevas. Una partida guardada de antes de la
-    // mecánica no tiene ejércitos en campaña, y un jugador sin registro en `jugadores` usa `LIDERAZGO.base`
-    // por diseño — así que no hay nada que reconstruir, solo que existan para que nadie lea `undefined`.
+    // mecánica no tiene ejércitos en campaña, así que `ejercitos` sí queda vacía.
+    //
+    // `jugadores` NO, y es a propósito: la cadena sigue hasta v9, que censa a los jugadores para poder
+    // situarlos (Doc 1.10). Un snapshot de v5 llega aquí con sus fundadores dentro — antes se quedaba vacío
+    // porque "sin registro" tenía un default, y la ubicación no lo tiene.
     const sesion = partidaEnMarcha();
     await guardarPartida(directorio, sesion, MOMENTO);
     const ruta = join(directorio, `${sesion.gameId}.json`);
@@ -259,8 +262,11 @@ describe('guardarPartida / cargarPartida', () => {
 
     const cargada = (await cargarPartida(directorio, sesion.gameId))!.sesion;
     const state = cargada.getState();
-    expect(state.jugadores).toEqual([]);
     expect(state.ejercitos).toEqual([]);
+    const fundador = state.asentamientos[0]!.jugadoresFundadoresIds[0]!;
+    const censado = state.jugadores.find((j) => j.id === fundador);
+    expect(censado, 'el fundador de una partida vieja tiene que salir censado').toBeDefined();
+    expect(censado!.ubicacion).toEqual({ tipo: 'asentamiento', asentamientoId: state.asentamientos[0]!.id });
     // Y la partida sigue siendo operable: la migración no toca nada más.
     expect(state.asentamientos.length).toBeGreaterThan(0);
   });
@@ -280,6 +286,95 @@ describe('guardarPartida / cargarPartida', () => {
     const cargada = (await cargarPartida(directorio, sesion.gameId))!.sesion;
     expect(cargada.getState().memoriaPorFaccion).toEqual({});
     expect(cargada.getState().asentamientos.length).toBeGreaterThan(0);
+  });
+
+  it('migra v7 -> v8: un ejército sin `participantes` los deduce de sus escuadrones', async () => {
+    // Jugador situado: `participantes` se derivaba de los escuadrones, así que deducirlo aquí reproduce
+    // EXACTAMENTE el comportamiento anterior — la migración no cambia el juego de una partida en curso.
+    const sesion = partidaEnMarcha();
+    await guardarPartida(directorio, sesion, MOMENTO);
+    const ruta = join(directorio, `${sesion.gameId}.json`);
+    const snap = JSON.parse(await readFile(ruta, 'utf-8'));
+    snap.formatoVersion = 7;
+    snap.partida.state.ejercitos = [
+      {
+        id: 'ejercito-viejo',
+        faccionId: 'f1',
+        origenAsentamientoId: 'a1',
+        // Dos escuadrones del mismo jugador y uno de otro: son DOS participantes, no tres.
+        escuadrones: [
+          { id: 's1', jugadorId: 'j1', tropaId: 'milicia_lanceros', nombre: 'L', origen: 'pesants', cantidad: 10, veterania: 0, moral: 100 },
+          { id: 's2', jugadorId: 'j1', tropaId: 'honderos', nombre: 'H', origen: 'pesants', cantidad: 5, veterania: 0, moral: 100 },
+          { id: 's3', jugadorId: 'j2', tropaId: 'milicia_lanceros', nombre: 'L2', origen: 'pesants', cantidad: 8, veterania: 0, moral: 100 },
+        ],
+        suministro: { trigo: 100 },
+        caravanasAdjuntasIds: [],
+        objetivo: { tipo: 'punto', punto: { x: 10, y: 10 } },
+        ruta: [{ x: 0, y: 0 }, { x: 10, y: 10 }],
+        progreso: 0,
+        posicionActual: { x: 0, y: 0 },
+        estado: 'marchando',
+      },
+    ];
+    await writeFile(ruta, JSON.stringify(snap), 'utf-8');
+
+    const migrado = (await cargarPartida(directorio, sesion.gameId))!.sesion.getState().ejercitos[0]!;
+    expect(migrado.participantes.map((p) => p.jugadorId)).toEqual(['j1', 'j2']);
+    // Antes de v8 la única forma de crear una columna era movilizar, que sale contra un destino.
+    expect(migrado.tipo).toBe('ejercito');
+    // Quién la formó no se guardaba en ninguna parte: el primero es lo mejor que hay.
+    expect(migrado.liderId).toBe('j1');
+  });
+
+  it('migra v8 -> v9: censa a los jugadores y los SITÚA — la columna gana a la residencia', async () => {
+    // Es la primera migración del repo sin valor por defecto: "ausente = está en ninguna parte" no significa
+    // nada, así que hay que censar. El censo sale de los cinco sitios donde el motor dejaba escritos a los
+    // jugadores antes de que existieran como entidad.
+    const sesion = partidaEnMarcha();
+    await guardarPartida(directorio, sesion, MOMENTO);
+    const ruta = join(directorio, `${sesion.gameId}.json`);
+    const snap = JSON.parse(await readFile(ruta, 'utf-8'));
+    snap.formatoVersion = 8;
+    const asentamiento = snap.partida.state.asentamientos[0];
+    const residente = asentamiento.jugadoresFundadoresIds[0];
+    asentamiento.casasCompradas = ['con-casa'];
+    asentamiento.cargos = { ...asentamiento.cargos, tesoreroId: 'solo-un-cargo' };
+    // 'de-campana' reside Y va de campaña: tiene que salir en la columna, no en su ciudad (Doc 2.5).
+    asentamiento.jugadoresFundadoresIds = [...asentamiento.jugadoresFundadoresIds, 'de-campana'];
+    snap.partida.state.ejercitos = [
+      {
+        id: 'ejercito-en-marcha',
+        faccionId: asentamiento.faccionId,
+        origenAsentamientoId: asentamiento.id,
+        participantes: [{ jugadorId: 'de-campana', unidoEn: 0 }],
+        tipo: 'ejercito',
+        liderId: 'de-campana',
+        escuadrones: [],
+        suministro: { trigo: 100 },
+        caravanasAdjuntasIds: [],
+        objetivo: { tipo: 'punto', punto: { x: 9, y: 9 } },
+        ruta: [{ x: 0, y: 0 }, { x: 9, y: 9 }],
+        progreso: 0,
+        posicionActual: { x: 0, y: 0 },
+        estado: 'marchando',
+      },
+    ];
+    delete snap.partida.state.jugadores;
+    await writeFile(ruta, JSON.stringify(snap), 'utf-8');
+
+    const jugadores = (await cargarPartida(directorio, sesion.gameId))!.sesion.getState().jugadores;
+    const de = (id: string) => jugadores.find((j) => j.id === id);
+
+    expect(de(residente)!.ubicacion).toEqual({ tipo: 'asentamiento', asentamientoId: asentamiento.id });
+    expect(de('con-casa')!.ubicacion).toEqual({ tipo: 'asentamiento', asentamientoId: asentamiento.id });
+    expect(de('de-campana')!.ubicacion, 'de campaña está en el camino, no dentro de su ciudad').toEqual({
+      tipo: 'columna',
+      ejercitoId: 'ejercito-en-marcha',
+    });
+    // Un cargo sin residencia ni columna existe, pero la partida no sabe dónde ponerlo.
+    expect(de('solo-un-cargo')!.ubicacion.tipo).toBe('desconectado');
+    // Y el censo es determinista: mismo snapshot, mismo orden.
+    expect(jugadores.map((j) => j.id)).toEqual([...jugadores.map((j) => j.id)].sort());
   });
 
   it('rechaza un snapshot generado con otra versión del generador de mundo', async () => {

@@ -12,7 +12,7 @@ import type { AcuerdoTrueque, Asentamiento, Caravana, Ejercito, Escuadron, Facci
 import type { Mapa } from '../world/mapa';
 import { calcularRuta } from '../world/rutas';
 import { distancia } from '../world/geometria';
-import { CARAVANA_CATALOGO, LOGISTICA, TROPAS_RECLUTABLES } from '../constants';
+import { CARAVANA_CATALOGO, LOGISTICA, MOVIMIENTO, TROPAS_RECLUTABLES } from '../constants';
 import { atribuir, type EventoCrudo } from '../domain/eventos';
 import type { Instante } from '../domain/tiempo';
 import type { RandomFn } from '../worldgen';
@@ -72,8 +72,12 @@ function seleccionarParaCampana(asentamiento: Asentamiento, jugadorId: string, e
  * de rombos que se dibujan en el mapa y el número de carros que lleva el ejército, porque las dos cosas
  * cuentan lo mismo: cuánta gente va ahí.
  */
-export function participantesDe(escuadrones: readonly Escuadron[]): number {
-  return new Set(escuadrones.map((e) => e.jugadorId)).size;
+/**
+ * Cuánta gente va DENTRO de la columna (Doc 5.12.1). Lee `participantes`, no los escuadrones: un jugador que
+ * sale sin tropas —o que las pierde todas— sigue yendo dentro, y antes esto devolvía 0 por él.
+ */
+export function participantesDe(ejercito: Pick<Ejercito, 'participantes'>): number {
+  return ejercito.participantes.length;
 }
 
 /**
@@ -86,21 +90,21 @@ export function participantesDe(escuadrones: readonly Escuadron[]): number {
  */
 export function capacidadCargaDe(ejercito: Ejercito, caravanas: readonly Caravana[] = []): number {
   return (
-    capacidadCarrosDe(ejercito.escuadrones) +
+    capacidadCarrosDe(participantesDe(ejercito)) +
     adjuntasDe(ejercito, caravanas).reduce((suma, c) => suma + CARAVANA_CATALOGO[c.tipo].capacidad, 0)
   );
 }
 
 /** Solo los carros de los Jugadores, sin caravanas. Existe aparte porque al MOVILIZAR todavía no hay ejército
- * al que preguntarle sus adjuntas: se está creando. */
-export function capacidadCarrosDe(escuadrones: readonly Escuadron[]): number {
-  return participantesDe(escuadrones) * LOGISTICA.capacidadCarroPorJugador;
+ * al que preguntarle sus adjuntas: se está creando — por eso toma el número y no la columna. */
+function capacidadCarrosDe(participantes: number): number {
+  return participantes * LOGISTICA.capacidadCarroPorJugador;
 }
 
 /** Las caravanas que este ejército lleva enganchadas, resueltas contra la lista del mundo. Una id que ya no
  * corresponda a ninguna caravana viva se ignora en silencio: perder una caravana es un hecho del juego (la
  * derrota del ejército, Doc 5.13.2), no un estado inconsistente que haya que reparar. */
-export function adjuntasDe(ejercito: Ejercito, caravanas: readonly Caravana[]): Caravana[] {
+function adjuntasDe(ejercito: Ejercito, caravanas: readonly Caravana[]): Caravana[] {
   if (ejercito.caravanasAdjuntasIds.length === 0) return [];
   const ids = new Set(ejercito.caravanasAdjuntasIds);
   return caravanas.filter((c) => ids.has(c.id));
@@ -218,7 +222,9 @@ export function movilizarEjercito(
   objetivo: ObjetivoEjercito,
   asentamientos: readonly Asentamiento[],
   mapa: Mapa,
-  id: string
+  id: string,
+  /** Para fechar la entrada del que sale: la antigüedad decide la sucesión del líder (Doc 5.14.3). */
+  instante: Instante
 ): { asentamiento: Asentamiento; ejercito: Ejercito; trigoCargado: number } {
   if (!esResidente(asentamiento, jugadorId)) {
     throw new MovilizacionInvalidaError('Solo un residente puede sacar tropas de este asentamiento.');
@@ -237,7 +243,7 @@ export function movilizarEjercito(
   if (!ruta) throw new MovilizacionInvalidaError('No hay ruta por tierra hasta ese destino.');
   const idsFuera = new Set(escuadrones.map((e) => e.id));
   const sinLosQueSalen = { ...asentamiento, escuadrones: asentamiento.escuadrones.filter((e) => !idsFuera.has(e.id)) };
-  const carga = cargarCarro(sinLosQueSalen, 0, capacidadCarrosDe(escuadrones));
+  const carga = cargarCarro(sinLosQueSalen, 0, capacidadCarrosDe(1));
 
   return {
     asentamiento: carga.asentamiento,
@@ -245,6 +251,11 @@ export function movilizarEjercito(
       id,
       faccionId: asentamiento.faccionId,
       origenAsentamientoId: asentamiento.id,
+      participantes: [{ jugadorId, unidoEn: instante }],
+      // Movilizar es salir CONTRA un destino, y eso es lo que hace un ejército aunque salga uno solo (Doc
+      // 5.12.1): rumbo fijo desde el primer paso, y otros pueden sumarse por el camino.
+      tipo: 'ejercito',
+      liderId: jugadorId,
       escuadrones,
       suministro: { trigo: carga.cargado },
       caravanasAdjuntasIds: [],
@@ -276,6 +287,8 @@ export function unirseAEjercito(
   jugador: Jugador | undefined,
   jugadorId: string,
   escuadronIds: readonly string[],
+  /** Para fechar su entrada: la antigüedad decide la sucesión del líder (Doc 5.14.3). */
+  instante: Instante,
   /** Las del mundo: el que se une llena hasta la capacidad TOTAL de la columna, adjuntas incluidas. */
   caravanas: readonly Caravana[] = []
 ): { asentamiento: Asentamiento; ejercito: Ejercito; trigoCargado: number } {
@@ -297,13 +310,18 @@ export function unirseAEjercito(
   const idsFuera = new Set(escuadrones.map((e) => e.id));
   const sinLosQueSalen = { ...asentamiento, escuadrones: asentamiento.escuadrones.filter((e) => !idsFuera.has(e.id)) };
   const escuadronesTotales = [...ejercito.escuadrones, ...escuadrones];
+  // Sumar más tropas a un ejército en el que YA vas es legítimo y no te convierte en dos participantes — ni
+  // aporta un carro nuevo, que es lo que el tope de carga de abajo mide.
+  const yaDentro = ejercito.participantes.some((p) => p.jugadorId === jugadorId);
+  const participantes = yaDentro ? ejercito.participantes : [...ejercito.participantes, { jugadorId, unidoEn: instante }];
   const enElCarro = ejercito.suministro['trigo'] ?? 0;
-  const carga = cargarCarro(sinLosQueSalen, enElCarro, capacidadCargaDe({ ...ejercito, escuadrones: escuadronesTotales }, caravanas));
+  const carga = cargarCarro(sinLosQueSalen, enElCarro, capacidadCargaDe({ ...ejercito, participantes, escuadrones: escuadronesTotales }, caravanas));
 
   return {
     asentamiento: carga.asentamiento,
     ejercito: {
       ...ejercito,
+      participantes,
       escuadrones: escuadronesTotales,
       suministro: { ...ejercito.suministro, trigo: enElCarro + carga.cargado },
     },
@@ -504,25 +522,43 @@ export function estacionarEjercito(ejercito: Ejercito): Ejercito {
  * (comercial va a 16). No hace falta ninguna regla más para separar los dos roles — y lo mismo vale para las
  * caravanas adjuntas, que entran en el mismo mínimo (Doc 5.13.2).
  *
- * Un ejército sin escuadrones vivos no se mueve — pero eso no debería llegar aquí: `disolverSiVacio` lo
- * retira antes (Doc 5.13.4).
+ * Una columna SIN escuadrones no es un caso degenerado: es un jugador viajando solo (Doc 5.12.1), y va a
+ * `MOVIMIENTO.velocidadJugador` — más rápido que cualquier tropa, porque no arrastra impedimenta. Antes esto
+ * devolvía 0, o sea que se quedaba clavado en el sitio.
  */
 export function velocidadDeEjercito(ejercito: Ejercito, caravanas: readonly Caravana[] = []): number {
   const velocidades = ejercito.escuadrones
+    // Un escuadrón aniquilado persiste como IDENTIDAD (Doc 5.4), pero no como gente que camine: no frena a
+    // nadie. Sin este filtro, perder hasta el último hombre de la tropa pesada seguiría lastrando la columna.
+    .filter((e) => e.cantidad > 0)
     .map((e) => TROPAS_RECLUTABLES.find((t) => t.id === e.tropaId)?.velocidad)
     .filter((v): v is number => v !== undefined);
   // Las caravanas adjuntas entran en el MISMO mínimo (Doc 5.13.2): una comercial va a 16, así que engancharla
   // baja una fuerza ligera de 20 a 16 y le quita la capacidad de cazar caravanas. Ahí está el equilibrio de la
   // escolta, sin ninguna regla extra: no se puede escoltar y depredar a la vez.
   for (const c of adjuntasDe(ejercito, caravanas)) velocidades.push(CARAVANA_CATALOGO[c.tipo].velocidad);
-  return velocidades.length === 0 ? 0 : Math.min(...velocidades);
+  if (velocidades.length === 0) {
+    // Sin escuadrones y sin adjuntas: o va gente dentro —y entonces es un viajero— o no queda nadie y la
+    // columna está a punto de disolverse, en cuyo caso da igual a qué velocidad no se mueve.
+    return participantesDe(ejercito) > 0 ? MOVIMIENTO.velocidadJugador : 0;
+  }
+  return Math.min(...velocidades);
 }
 
-/** ¿Se quedó sin nadie? Un escuadrón persiste como identidad con `cantidad: 0` (Doc 5.4), así que "vacío" es
- * que NINGUNO tenga soldados, no que la lista esté vacía — que es justo lo que `resolverCombate` no distingue
- * y lo que dejaría marchar a un ejército fantasma (Doc 5.13.4). */
+/** ¿No le queda un solo soldado en pie? Un escuadrón persiste como identidad con `cantidad: 0` (Doc 5.4), así
+ * que "sin soldados" es que NINGUNO tenga hombres, no que la lista esté vacía. Es lo que decide si puede
+ * combatir, no si sigue existiendo: para eso está `sinNadieDentro`. */
 function sinSoldados(ejercito: Ejercito): boolean {
   return ejercito.escuadrones.every((e) => e.cantidad <= 0);
+}
+
+/**
+ * ¿Se quedó sin NADIE? Es la condición de disolución (Doc 5.13.4), y no es la misma que quedarse sin
+ * soldados: una columna cuyos escuadrones caen todos sigue teniendo dentro a sus jugadores, que ahora viajan
+ * a pie. Se disuelve cuando ya no va nadie — lo que hoy solo ocurre al replegarse.
+ */
+function sinNadieDentro(ejercito: Ejercito): boolean {
+  return ejercito.participantes.length === 0;
 }
 
 /**
@@ -607,7 +643,7 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
     // 1. Comer. La MISMA regla del hambre que la guarnición, solo que de otra despensa (Doc 5.13).
     const factorConsumo = original.estado === 'estacionado' ? LOGISTICA.factorConsumoEstacionado : 1;
     const trigoEnCarro = original.suministro['trigo'] ?? 0;
-    const racion = avanzarRacion(original.escuadrones, trigoEnCarro, factorConsumo);
+    const racion = avanzarRacion(original.escuadrones, trigoEnCarro, factorConsumo, participantesDe(original));
     // `avanzarRacion` narra la deserción sin saber si es guarnición o campaña; aquí sí se sabe de quién es
     // esa columna, y sin atribuirla el evento saldría GLOBAL — o sea, contando a todo el mundo que a un
     // rival se le están desertando los hombres (Doc 5.12.7).
@@ -619,8 +655,9 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
       suministro: { ...original.suministro, trigo: trigoEnCarro - racion.trigoConsumido },
     };
 
-    // 2. ¿Se quedó sin nadie? Se disuelve y las identidades vacías vuelven a casa a poder rellenarse.
-    if (sinSoldados(ejercito)) {
+    // 2. ¿Se quedó sin nadie DENTRO? Se disuelve y las identidades vacías vuelven a casa a poder rellenarse.
+    // Perder todos los soldados ya no basta: los jugadores siguen ahí y ahora viajan a pie (Doc 5.12.1).
+    if (sinNadieDentro(ejercito)) {
       const volvieron = reintegrar(ejercito, true);
       // Las caravanas adjuntas se pierden con él (Doc 5.13.2). El canon lo dice de un ejército DERROTADO, y
       // aquí se aplica también al que se deshace por hambre: en los dos casos deja de existir en campo

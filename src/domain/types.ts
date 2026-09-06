@@ -324,13 +324,33 @@ export interface CargosAsentamiento {
  * Deliberadamente mínima: solo lo que el motor necesita HOY. La identidad (usuario, sesión, permisos) vive en
  * `session/`, no aquí; esto es estado de partida.
  */
+/**
+ * Dónde está un Jugador (Doc 1.10). Son los TRES únicos sitios donde puede estar, y la unión cerrada es lo
+ * que impide el cuarto estado que el motor tenía de facto: en ninguna parte, viendo el mundo entero.
+ *
+ * `desconectado` guarda un punto y no una columna a propósito: al salir del mundo la columna de un viajero
+ * solo deja de existir como entidad —no consume, no ve, no la ven— y al volver se reconstruye ahí mismo.
+ */
+export type UbicacionJugador =
+  | { tipo: 'asentamiento'; asentamientoId: string }
+  | { tipo: 'columna'; ejercitoId: string }
+  | { tipo: 'desconectado'; punto: Point };
+
 export interface Jugador {
   id: string;
   /** Liderazgo BASE (Doc 5.11). El efectivo es base + progresión, pero la progresión todavía no está
    * diseñada (`Docs/Mecanicas a desarrollar.md` §11), así que hoy coinciden. Un jugador SIN registro en
-   * `GameSessionState.jugadores` usa `LIDERAZGO.base` — por eso las partidas guardadas no necesitan
-   * migración. */
+   * `GameSessionState.jugadores` usa `LIDERAZGO.base`. */
   liderazgoBase: number;
+  /**
+   * Dónde está (Doc 1.10). Es lo que convierte al jugador en una entidad SITUADA: solo ve el interior del
+   * asentamiento en el que está, y solo puede dar órdenes ahí.
+   *
+   * Es el primer campo de este registro sin valor por defecto posible — "ausente = usa la base" funcionaba
+   * para el Liderazgo, pero "ausente = está en ninguna parte" no significa nada. Por eso el registro deja de
+   * ser opcional y las partidas guardadas sí necesitan migración.
+   */
+  ubicacion: UbicacionJugador;
 }
 
 export type OrigenTropa = 'pesants' | 'artesanos' | 'nobleza';
@@ -622,6 +642,28 @@ export interface Ejercito {
   /** De dónde salió y a dónde vuelve. Se reasigna al asentamiento propio más cercano si este cae; si la
    * Facción no conserva ninguno, el ejército queda sin hogar y sus jugadores huérfanos (Doc 5.4). */
   origenAsentamientoId: string;
+  /**
+   * Quién va DENTRO, con independencia de si aporta escuadrones (Doc 5.12.1). Antes se derivaba de los
+   * escuadrones, y por eso un jugador sin tropas no existía como participante y una columna cuyos soldados
+   * caían todos se volvía un ejército fantasma — con gente dentro y sin forma de decirlo.
+   *
+   * No es una lista de ids sino de entradas: la sucesión del líder va por ANTIGÜEDAD, y eso no se lee de un
+   * array de strings sin depender del orden de inserción, que separarse y volver a unirse reordena.
+   */
+  participantes: { jugadorId: string; unidoEn: Instante }[];
+  /**
+   * Qué NACIÓ esta columna, fijado al crearla y jamás modificado (Doc 5.12.1). Lo decide EL COMANDO que la
+   * pare: `salirAlMundo` —sin destino— hace una columna `personal`; `movilizarEjercito` —contra un
+   * destino— hace un `ejercito`, aunque salga uno solo.
+   *
+   * **No se deriva de `participantes.length`:** un ejército al que se le separan miembros hasta quedar en uno
+   * sigue siendo un ejército, con su ruta fija y sus caravanas.
+   */
+  tipo: 'personal' | 'ejercito';
+  /** Quién la formó (Doc 5.14.3). No puede separarse —para irse cede el liderazgo— y es el único que
+   * cancela la marcha. Si se desconecta pasa al participante más antiguo. En una columna `personal` es su
+   * único participante y no significa nada. */
+  liderId: string;
   /** Escuadrones MOVIDOS aquí desde `Asentamiento.escuadrones` — se van de verdad, por eso la guarnición es
    * lo único que defiende (Doc 5.12.4) y por eso `consumoRacionTropas` ya cuenta solo lo que quedó en casa. */
   escuadrones: Escuadron[];

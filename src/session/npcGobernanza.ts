@@ -784,7 +784,8 @@ function lanzarCampanas(
   relaciones: RelacionPolitica[],
   mapa: Mapa,
   esNpc: (faccionId: string) => boolean,
-  contador: number
+  contador: number,
+  instante: Instante
 ): { asentamientos: Asentamiento[]; ejercitos: Ejercito[]; eventos: string[]; campanasLanzadas: number; contador: number } {
   const eventos: string[] = [];
   let campanasLanzadas = 0;
@@ -841,7 +842,8 @@ function lanzarCampanas(
         { tipo: 'asentamiento', id: objetivo.id },
         asentamientos,
         mapa,
-        `ejercito-npc-${contador++}`
+        `ejercito-npc-${contador++}`,
+        instante
       );
       porId.set(origen.id, r.asentamiento);
       nuevos.push(r.ejercito);
@@ -1226,7 +1228,8 @@ export function avanzarNpcGobernanza(
           trasComercio.relaciones,
           mapa,
           esNpc,
-          contador
+          contador,
+          instante
         );
   contador = trasCampanas.contador;
   eventos.push(...trasCampanas.eventos);

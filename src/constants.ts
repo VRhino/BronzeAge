@@ -1500,6 +1500,27 @@ export const LOGISTICA = {
 };
 
 /**
+ * El jugador moviéndose por el mundo (Doc 1.10 y 5.12): lo que cuesta y lo que rinde ir por ahí, con tropas
+ * o sin ellas.
+ *
+ * PLACEHOLDER a calibrar por simulación, como el resto de constantes militares.
+ */
+export const MOVIMIENTO = {
+  /**
+   * Velocidad de una columna SIN escuadrones — un jugador viajando solo. Por encima de la tropa ligera (20)
+   * porque un hombre solo no arrastra impedimenta, y por debajo de la caravana de contrabando (24), que por
+   * diseño escapa de todo.
+   */
+  velocidadJugador: 22,
+  /**
+   * Trigo por participante y minuto, con tropas o sin ellas. Existe para que una columna sin soldados no
+   * consuma CERO: viajar tiene que costar algo, o el viajero solitario sería gratis e infinito. Poco en
+   * absoluto —un carro lleno (500) da para más de 16 horas de viaje— pero nunca nada.
+   */
+  consumoPorParticipante: 0.5,
+};
+
+/**
  * Niebla de guerra (Doc 5.12.7 y Doc 6 §12): hasta dónde alcanza la vista de cada cosa, en unidades de MAPA.
  *
  * Los dos radios viven juntos porque **solo se entienden comparados**: la relación entre ellos es la regla de

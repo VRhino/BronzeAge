@@ -459,7 +459,7 @@ export function proyectarParaJugador(
     ejercitos: ejercitosPropios,
     ejercitosAvistados: estado.ejercitos
       .filter((e) => !propios.has(e.id) && seVeAhora(e.posicionActual, asentamientosPropios, ejercitosPropios))
-      .map((e) => ({ id: e.id, faccionId: e.faccionId, posicionActual: e.posicionActual, participantes: participantesDe(e.escuadrones) })),
+      .map((e) => ({ id: e.id, faccionId: e.faccionId, posicionActual: e.posicionActual, participantes: participantesDe(e) })),
     acuerdos: estado.acuerdos.filter((a) => esPropio(a.asentamientoAId) || esPropio(a.asentamientoBId)),
     ordenes: estado.ordenes.filter((o) => esPropio(o.asentamientoId)),
     relaciones: estado.relaciones,

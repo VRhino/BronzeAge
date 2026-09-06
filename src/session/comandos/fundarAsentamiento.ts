@@ -1,5 +1,6 @@
 import type { Point } from '../../domain/types';
 import { fundarAsentamiento as fundarAsentamientoEngine } from '../../engine/settlement';
+import { situarJugadores } from '../../engine/ubicacion';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito } from './tipos';
 import { comando } from './ayudas';
@@ -56,6 +57,11 @@ export const fundarAsentamiento = comando<ParamsFundarAsentamiento, { asentamien
     ...estado,
     asentamientos: [...estado.asentamientos, resultado.asentamiento],
     facciones: resultado.facciones,
+    // Fundar es pararse y construir: el fundador queda DENTRO de lo que acaba de fundar (Doc 1.10). Es la
+    // única colocación que hace este comando, y hace falta porque el alta de `GameSession` no mueve a quien
+    // ya tenía registro — quien creó la Facción antes de fundar ya estaba dado de alta, y sin esto se
+    // quedaría marcado como fuera del mundo dentro de su propia ciudad.
+    jugadores: situarJugadores(estado.jugadores, jugadoresIds, { tipo: 'asentamiento', asentamientoId: resultado.asentamiento.id }),
   };
 
   const nombreFaccion = resultado.facciones.find((f) => f.id === params.faccionId)?.nombre ?? params.faccionId;

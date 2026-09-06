@@ -116,7 +116,7 @@ describe('liderazgoDe / liderazgoDisponible', () => {
 
   it('un jugador con más liderazgo saca más', () => {
     // El techo por progresión todavía no existe como mecánica, pero el motor ya lo admite por jugador.
-    const veterano: Jugador = { id: 'jugador-1', liderazgoBase: LIDERAZGO.base * 1.5 };
+    const veterano: Jugador = { id: 'jugador-1', liderazgoBase: LIDERAZGO.base * 1.5, ubicacion: { tipo: 'asentamiento', asentamientoId: 'a' } };
     const tres = [escuadron(deEscalon(5), 'a'), escuadron(deEscalon(4), 'a'), escuadron(deEscalon(3), 'a')];
     expect(puedeLlevar(veterano, [...tres, escuadron(deEscalon(2), 'a')])).toBe(true);
     expect(puedeLlevar(undefined, [...tres, escuadron(deEscalon(2), 'a')])).toBe(false);

@@ -53,7 +53,10 @@ function partidaConTropas(liderazgoBase?: number) {
         },
         ...payload.state.asentamientos.slice(1),
       ],
-      jugadores: liderazgoBase === undefined ? [] : [{ id: base.fundador, liderazgoBase }],
+      jugadores:
+        liderazgoBase === undefined
+          ? []
+          : [{ id: base.fundador, liderazgoBase, ubicacion: { tipo: 'asentamiento' as const, asentamientoId: payload.state.asentamientos[0]!.id } }],
     },
   });
   return { ...base, sesion };

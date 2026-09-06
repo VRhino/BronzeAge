@@ -23,6 +23,9 @@ import { GameSession, type PartidaExportada } from '../session/gameSession';
 import { idDeMapa, instanteDeTick, isoDeInstante } from '../session/estado';
 import { instante, type Instante } from '../domain/tiempo';
 import { WORLDGEN_VERSION } from '../worldgen';
+import { LIDERAZGO } from '../constants';
+import type { Asentamiento, Ejercito } from '../domain/types';
+import { ubicacionDeducida } from '../engine/ubicacion';
 
 /**
  * Versión del ENVOLTORIO del archivo de snapshot. NO es `PartidaExportada.state.version` (versión de LA
@@ -38,9 +41,11 @@ import { WORLDGEN_VERSION } from '../worldgen';
  * eventos y del log desaparece — `EventoDominio` se queda solo con `momento`, `EventoLogAdmin.tick` pasa a
  * `momento`. `migrarSnapshot` encadena las conversiones y todas son sin pérdida — la relación tick↔instante
  * es 1:1 (`instanteDeTick`). v6 (movimiento de ejércitos): `jugadores` y `ejercitos`. v7 (niebla de guerra):
- * `memoriaPorFaccion`.
+ * `memoriaPorFaccion`. v8 (jugador situado): `Ejercito` gana `participantes`, `tipo` y `liderId`. v9 (jugador
+ * situado): `Jugador` gana `ubicacion` y deja de ser un registro opcional — la PRIMERA migración del repo
+ * que no puede resolverse con un valor por defecto (ver `migrarV8aV9`).
  */
-export const FORMATO_SNAPSHOT_VERSION = 7;
+export const FORMATO_SNAPSHOT_VERSION = 9;
 
 export interface SnapshotPartida {
   formatoVersion: number;
@@ -183,6 +188,8 @@ function migrarSnapshot(gameId: string, snapshot: SnapshotPartida): PartidaExpor
   if (snapshot.formatoVersion < 5) migrarV4aV5(s);
   if (snapshot.formatoVersion < 6) migrarV5aV6(s);
   if (snapshot.formatoVersion < 7) migrarV6aV7(s);
+  if (snapshot.formatoVersion < 8) migrarV7aV8(s);
+  if (snapshot.formatoVersion < 9) migrarV8aV9(s);
   return p as unknown as PartidaExportada;
 }
 
@@ -294,6 +301,78 @@ function migrarV5aV6(s: Record<string, any>): void {
  * lo que se esté viendo en ese momento, y se va destapando de nuevo según se juega. */
 function migrarV6aV7(s: Record<string, any>): void {
   s.memoriaPorFaccion ??= {};
+}
+
+/**
+ * v7 -> v8 (jugador situado, Doc 5.12.1): `Ejercito` gana `participantes`, `tipo` y `liderId`.
+ *
+ * Sin pérdida, porque los tres se deducen de lo que ya había:
+ *
+ * - **`participantes`** se derivaba de los escuadrones (`new Set(e.jugadorId)`), así que derivarlo aquí
+ *   reproduce exactamente el comportamiento anterior. Se fechan todos en el instante del snapshot: no hay
+ *   historia de antigüedad que recuperar, y con la misma fecha la sucesión cae en el orden del array, que
+ *   es el único orden que ese snapshot conocía.
+ * - **`tipo`** es siempre `'ejercito'`: antes de v8 la única forma de crear una columna era
+ *   `movilizarEjercito`, que sale contra un destino.
+ * - **`liderId`** es el primer participante. Arbitrario, y no hay nada mejor — quien formó la columna no se
+ *   guardaba en ninguna parte. Es el precio de introducir el mando después de que existieran los ejércitos.
+ */
+function migrarV7aV8(s: Record<string, any>): void {
+  const unidoEn = instanteDeTick(Number(s.tick ?? 0));
+  for (const ejercito of (s.ejercitos ?? []) as Record<string, any>[]) {
+    const ids: string[] = [];
+    for (const escuadron of (ejercito.escuadrones ?? []) as Record<string, any>[]) {
+      if (escuadron.jugadorId && !ids.includes(escuadron.jugadorId)) ids.push(escuadron.jugadorId);
+    }
+    ejercito.participantes ??= ids.map((jugadorId) => ({ jugadorId, unidoEn }));
+    ejercito.tipo ??= 'ejercito';
+    ejercito.liderId ??= ids[0] ?? '';
+  }
+}
+
+/**
+ * v8 -> v9 (jugador situado, Doc 1.10): `Jugador` gana `ubicacion`, y con ella el registro deja de ser
+ * opcional.
+ *
+ * **Es la primera migración del repo sin valor por defecto.** Hasta ahora toda mecánica nueva se diseñó para
+ * que un snapshot viejo cargara sin tocarlo — la niebla con "Facción ausente = no ha visto nada", el
+ * Liderazgo con "jugador ausente = `LIDERAZGO.base`". Con la posición no hay equivalente: "ausente = está en
+ * ninguna parte" no significa nada.
+ *
+ * Así que hay que CENSAR a los jugadores, y el censo es la unión de los cinco sitios donde el motor los
+ * dejaba escritos antes de que existieran como entidad: `jugadores`, `jugadoresFundadoresIds`,
+ * `casasCompradas`, `cargos` y `Escuadron.jugadorId` (dentro y fuera de campaña). Faltar en el censo no es un
+ * error de datos: es alguien que la partida ya no conocía de ninguna forma.
+ *
+ * La ubicación se deduce con `ubicacionDeducida`, la MISMA que usa el alta perezosa de `GameSession`: entrar
+ * por primera vez y cargar una partida vieja tienen que colocar a la gente en el mismo sitio, o el juego
+ * diría una cosa y la migración otra.
+ */
+function migrarV8aV9(s: Record<string, any>): void {
+  const asentamientos = (s.asentamientos ?? []) as Asentamiento[];
+  const ejercitos = (s.ejercitos ?? []) as Ejercito[];
+  const jugadores = (s.jugadores ?? []) as Record<string, any>[];
+
+  const censo = new Set<string>(jugadores.map((j) => String(j.id)));
+  for (const a of asentamientos) {
+    for (const id of a.jugadoresFundadoresIds ?? []) censo.add(id);
+    for (const id of a.casasCompradas ?? []) censo.add(id);
+    for (const id of Object.values(a.cargos ?? {})) if (typeof id === 'string' && id) censo.add(id);
+    for (const e of a.escuadrones ?? []) if (e.jugadorId) censo.add(e.jugadorId);
+  }
+  for (const ej of ejercitos) {
+    for (const p of ej.participantes ?? []) censo.add(p.jugadorId);
+    for (const e of ej.escuadrones ?? []) if (e.jugadorId) censo.add(e.jugadorId);
+  }
+
+  const yaConRegistro = new Map(jugadores.map((j) => [String(j.id), j]));
+  s.jugadores = [...censo].sort().map((id) => ({
+    // Quien ya tenía registro conserva su Liderazgo; el que se censa ahora arranca en la base, que es
+    // exactamente lo que el motor le estaba aplicando por no tener registro.
+    liderazgoBase: LIDERAZGO.base,
+    ...(yaConRegistro.get(id) ?? { id }),
+    ubicacion: ubicacionDeducida(id, asentamientos, ejercitos),
+  }));
 }
 
 export interface ResumenPartidaEnDisco {

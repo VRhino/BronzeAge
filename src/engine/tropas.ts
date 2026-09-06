@@ -1,6 +1,6 @@
 import type { Asentamiento, Escuadron } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
-import { MILITAR, RESERVA_CONSTRUCCION, TROPAS_RECLUTABLES } from '../constants';
+import { MILITAR, MOVIMIENTO, RESERVA_CONSTRUCCION, TROPAS_RECLUTABLES } from '../constants';
 
 /** Fase A5 — payload de `tropas.desercion` (ver `avanzarMantenimientoTropas`). */
 export interface PayloadTropasDesercion {
@@ -132,6 +132,12 @@ export function consumoRacionDeEscuadrones(escuadrones: readonly Escuadron[], fa
   return totalSoldados * MILITAR.racionPorSoldadoPorMinuto * factorConsumo;
 }
 
+/** Lo que come una COLUMNA (Doc 5.13): sus soldados más sus jugadores. El sumando por participante es lo que
+ * impide que un viajero sin tropas viaje gratis — con cero escuadrones el término de arriba es 0. */
+function consumoRacionDeColumna(escuadrones: readonly Escuadron[], participantes: number, factorConsumo = 1): number {
+  return consumoRacionDeEscuadrones(escuadrones, factorConsumo) + participantes * MOVIMIENTO.consumoPorParticipante * factorConsumo;
+}
+
 /** Ración total de trigo/tick que exigen los escuadrones de la GUARNICIÓN (Doc 5.4) — usada tanto para
  * descontarla como para el "apartado de trigo" mostrado en Mantenimiento (ver `gameStore.mantenimientoInfo`).
  *
@@ -177,10 +183,13 @@ export function reservaDeTrigo(asentamiento: Asentamiento, consumoExtraPorMinuto
 export function avanzarRacion(
   escuadrones: readonly Escuadron[],
   trigoDisponible: number,
-  factorConsumo = 1
+  factorConsumo = 1,
+  /** Jugadores dentro de la columna, que también comen (Doc 5.13). 0 para la guarnición, que no lleva a
+   * nadie — sus jugadores comen de la población del asentamiento, no de una ración de campaña. */
+  participantes = 0
 ): { escuadrones: Escuadron[]; trigoConsumido: number; eventos: EventoCrudo[] } {
   const eventos: EventoCrudo[] = [];
-  const racionNecesaria = consumoRacionDeEscuadrones(escuadrones, factorConsumo);
+  const racionNecesaria = consumoRacionDeColumna(escuadrones, participantes, factorConsumo);
   const factorSuministro = racionNecesaria > 0 ? Math.min(1, trigoDisponible / racionNecesaria) : 1;
   const trigoConsumido = Math.min(trigoDisponible, racionNecesaria);
 

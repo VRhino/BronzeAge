@@ -71,7 +71,8 @@ export const movilizarEjercito = comando<ParamsMovilizarEjercito, { ejercitoId: 
     params.objetivo,
     estado.asentamientos,
     mapa,
-    `ejercito-${ejercitoId}`
+    `ejercito-${ejercitoId}`,
+    ctx.instante
   );
 
   const destino = params.objetivo.tipo === 'asentamiento' ? params.objetivo.id : 'un punto del mapa';
@@ -132,6 +133,7 @@ export const unirseAEjercito = comando<ParamsUnirseAEjercito, void>((estado, _ma
     jugadorDe(estado, params.jugadorId),
     params.jugadorId,
     params.escuadronIds,
+    ctx.instante,
     estado.caravanas
   );
 
