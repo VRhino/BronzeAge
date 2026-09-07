@@ -86,6 +86,15 @@ La vía limpia es la segunda: **que las plazas NPC publiquen órdenes de compra 
 está por construcción —el jugador la toma o no la toma—, la maquinaria existe entera (`engine/market.ts`), y
 convierte a la plaza NPC en el socio que la decisión 5 pide sin necesidad de ninguna IA de negociación.
 
+> **HECHO (2026-09-07).** Umbrales: vende por encima del 70% de silo, compra por debajo del 20%, y entre los
+> dos no hace nada — una plaza que va servida no tiene por qué estar siempre en el mercado. Vende solo un
+> cuarto del excedente de una vez: vaciar el silo de golpe la dejaría sin colíchon ante el primer tick malo.
+>
+> **Efecto en el laboratorio, medido:** el tick sigue costando lo mismo (35 ms a 100 asentamientos, frente a
+> 34 antes) y el mundo sigue llegando a **100 asentamientos vivos**, o sea que la economía no se rompe. Lo que
+> **no** está medido es el efecto sobre los PRECIOS de referencia: meter oferta y demanda nuevas los mueve por
+> definición. Para aislarlo está la palanca `colocarOrdenes: false`.
+
 ## 4. Lo que NO cambia: el peligro sigue existiendo
 
 Facciones defensivas no significan un mundo inofensivo, y conviene decirlo porque es la objeción obvia. El
@@ -121,6 +130,12 @@ y porque decide si el vestíbulo es un sitio donde se juega o una sala de espera
 2. **La puerta de fundación**, con sus dos constantes parametrizadas (decisión 3). Es la costura: lo que se
    decida después se enchufa ahí sin tocar el onboarding.
 3. **Postura del NPC** (decisión 5), con el laboratorio en agresiva.
-4. **Órdenes de mercado del NPC** (§3), que es lo que lo convierte en socio.
+4. ~~**Órdenes de mercado del NPC**~~ — **HECHO (2026-09-07)**. Las plazas NPC con Mercado activo **venden
+   lo que les sobra y compran lo que les falta**, y el clearing (`avanzarMercado`) ya empareja plazas de
+   cualquier Facción, así que un jugador les compra sin más. Va probado de punta a punta: el NPC publica, el
+   jugador coloca su compra, y la piedra cambia de manos.
+
+   El consentimiento está **por construcción**, que era el motivo de elegir esta vía y no el trueque: una
+   orden publicada no compromete a nadie — se toma o no se toma.
 5. El resto del paso 9 del jugador situado: spawn aleatorio, memoria personal, fundar donde se está.
 6. **Aparte, sin fecha:** qué hace un huésped (§5).

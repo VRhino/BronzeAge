@@ -16,6 +16,7 @@ import { describe, expect, it } from 'vitest';
 import type { Asentamiento, Ejercito, RecursoTipo } from '../../domain/types';
 import { createRng } from '../../worldgen';
 import { avanzarSimulacion } from '../../engine/simulation';
+import { avanzarMercado, colocarOrdenMercado } from '../../engine/market';
 import { avanzarNpcGobernanza } from '../npcGobernanza';
 import {
   contextoDeTest,
@@ -340,5 +341,112 @@ describe('postura defensiva: un vecino, no un depredador', () => {
     const r = avanzarNpcGobernanza(estado, mapa, contextoDeTest(1, createRng(5)), {});
 
     expect(r.estado.ejercitos.some((e) => e.persiguiendo !== undefined), 'el defecto no cambia').toBe(true);
+  });
+});
+
+// El NPC como SOCIO DE COMERCIO (Consideraciones/Entrada_Al_Mundo_Definicion.md §3).
+//
+// La via son ordenes de mercado y no trueques por una razon concreta: `proponerTrueque` pacta sin pedir
+// consentimiento al otro lado, asi que un NPC proponiendoselo a un jugador le comprometeria recursos sin
+// preguntarle. Una orden publicada no compromete a nadie — se toma o no se toma.
+describe('el NPC publica en el mercado: un vecino con quien comerciar', () => {
+  /** Una plaza NPC con Mercado activo, el silo de piedra a rebosar y el de madera casi vacio. */
+  function plazaConMercado() {
+    const facciones = crearFacciones();
+    const uno = fundarAsentamientoDeTest(mapaDeterminista, facciones, 'faccion-1', []);
+    const conMercado: Asentamiento = {
+      ...uno.asentamiento,
+      edificios: [...uno.asentamiento.edificios, { id: 'mercado-1', tipo: 'mercado', posicion: { x: 0, y: 0 }, estado: 'activo' }],
+      almacen: {
+        ...uno.asentamiento.almacen,
+        piedra: { capacidad: 1000, cantidad: 950 },
+        madera: { capacidad: 1000, cantidad: 50 },
+      },
+    };
+    return crearEstadoDeTest([conMercado], uno.facciones);
+  }
+
+  it('pone a la venta lo que le SOBRA', () => {
+    const estado = plazaConMercado();
+
+    const r = avanzarNpcGobernanza(estado, mapaDeterminista, contextoDeTest(1, createRng(5)), {});
+
+    const venta = r.estado.ordenes.find((o) => o.tipo === 'venta' && o.recurso === 'piedra');
+    expect(venta, 'el silo lleno se vende, que guardar de mas no sirve').toBeDefined();
+    expect(venta!.cantidad).toBeGreaterThan(0);
+  });
+
+  it('y publica compra de lo que le FALTA', () => {
+    const estado = plazaConMercado();
+
+    const r = avanzarNpcGobernanza(estado, mapaDeterminista, contextoDeTest(1, createRng(5)), {});
+
+    expect(r.estado.ordenes.find((o) => o.tipo === 'compra' && o.recurso === 'madera')).toBeDefined();
+  });
+
+  it('no duplica: si ya tiene una orden viva de ese recurso, no publica otra', () => {
+    const estado = plazaConMercado();
+    const uno = avanzarNpcGobernanza(estado, mapaDeterminista, contextoDeTest(1, createRng(5)), {});
+
+    const dos = avanzarNpcGobernanza(uno.estado, mapaDeterminista, contextoDeTest(2, createRng(5)), {});
+
+    const dePiedra = dos.estado.ordenes.filter((o) => o.recurso === 'piedra' && o.estado === 'activa');
+    expect(dePiedra).toHaveLength(1);
+  });
+
+  it('sin Mercado activo no publica nada: la regla del motor vale igual para el NPC', () => {
+    const facciones = crearFacciones();
+    const uno = fundarAsentamientoDeTest(mapaDeterminista, facciones, 'faccion-1', []);
+    const sinMercado = crearEstadoDeTest(
+      [{ ...uno.asentamiento, almacen: { ...uno.asentamiento.almacen, piedra: { capacidad: 1000, cantidad: 950 } } }],
+      uno.facciones
+    );
+
+    const r = avanzarNpcGobernanza(sinMercado, mapaDeterminista, contextoDeTest(1, createRng(5)), {});
+
+    expect(r.estado.ordenes).toEqual([]);
+  });
+
+  it('y con la palanca cerrada se comporta como antes de existir esto', () => {
+    const estado = plazaConMercado();
+
+    const r = avanzarNpcGobernanza(estado, mapaDeterminista, contextoDeTest(1, createRng(5)), { colocarOrdenes: false });
+
+    expect(r.estado.ordenes).toEqual([]);
+  });
+});
+
+// Y lo que de verdad prueba el objetivo: que un JUGADOR pueda comprarle. Publicar ordenes no sirve de nada
+// si nadie puede tomarlas — el clearing empareja plazas de CUALQUIER Faccion, y eso es lo que hace del NPC un
+// socio y no un escaparate.
+describe('un jugador puede comerciar con una plaza NPC', () => {
+  it('la venta del NPC se cruza con la compra del jugador, y la piedra cambia de manos', () => {
+    const facciones = crearFacciones();
+    const npc = fundarAsentamientoDeTest(mapaDeterminista, facciones, 'faccion-1', []);
+    const humano = fundarAsentamientoDeTest(mapaDeterminista, npc.facciones, 'faccion-2', [npc.asentamiento]);
+    const conMercado = (a: Asentamiento, piedra: number): Asentamiento => ({
+      ...a,
+      edificios: [...a.edificios, { id: `mercado-${a.id}`, tipo: 'mercado', posicion: { x: 0, y: 0 }, estado: 'activo' }],
+      almacen: { ...a.almacen, piedra: { capacidad: 1000, cantidad: piedra }, oro: { capacidad: 1000, cantidad: 500 } },
+    });
+    const plazaNpc = conMercado(npc.asentamiento, 950);
+    const plazaHumano = conMercado(humano.asentamiento, 0);
+    const estado = crearEstadoDeTest([plazaNpc, plazaHumano], humano.facciones);
+
+    // El NPC gobierna SOLO su Faccion: la del humano no la toca, como en una partida real.
+    const conOrdenes = avanzarNpcGobernanza(estado, mapaDeterminista, contextoDeTest(1, createRng(5)), {
+      faccionesIds: ['faccion-1'],
+    }).estado;
+    const venta = conOrdenes.ordenes.find((o) => o.tipo === 'venta' && o.recurso === 'piedra' && o.asentamientoId === plazaNpc.id);
+    expect(venta, 'el NPC ha puesto piedra a la venta').toBeDefined();
+
+    // Y el jugador coloca su compra a mano, como haria desde su pantalla de Mercado.
+    const compra = colocarOrdenMercado(conOrdenes.asentamientos, plazaHumano.id, 'compra', 'piedra', venta!.cantidad, instanteDeTest(1), venta!.precioUnitario, 99);
+    const trasClearing = avanzarMercado(conOrdenes.asentamientos, [...conOrdenes.ordenes, compra]);
+
+    const humanoDespues = trasClearing.asentamientos.find((a) => a.id === plazaHumano.id)!;
+    expect(humanoDespues.almacen['piedra']?.cantidad, 'el jugador se lleva la piedra del NPC').toBeGreaterThan(0);
+    const npcDespues = trasClearing.asentamientos.find((a) => a.id === plazaNpc.id)!;
+    expect(npcDespues.almacen['piedra']!.cantidad, 'y al NPC le queda menos').toBeLessThan(950);
   });
 });

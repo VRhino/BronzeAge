@@ -23,7 +23,9 @@
 //
 // Diseño, decisiones y limitaciones: `Consideraciones/NPC_Gobernanza_Facciones_Controladas.md`.
 
-import type { AcuerdoTrueque, Asentamiento, Caravana, CampamentoBandido, EdificioTipo, Ejercito, Escuadron, Faccion, Jugador, Point, RecursoTipo, RelacionPolitica } from '../domain/types';
+import type { AcuerdoTrueque, Asentamiento, Caravana, CampamentoBandido, EdificioTipo, Ejercito, Escuadron, Faccion, Jugador, OrdenMercado, Point, RecursoTipo, RelacionPolitica } from '../domain/types';
+import { RECURSOS_TIPO } from '../domain/types';
+import { colocarOrdenMercado } from '../engine/market';
 import type { Mapa } from '../world/mapa';
 import type { RandomFn } from '../worldgen';
 import type { ContextoSimulacion, EstadoSimulacion } from '../engine/simulation';
@@ -142,6 +144,20 @@ const COLCHON_EXCEDENTE_SUPERVIVENCIA = 0.3;
 /** Cantidad pactada por lado en cada trueque de supervivencia propuesto — mismo orden de magnitud que
  * `SIMULACION_AUTO_COMERCIO.cantidadPorTrueque` (30) en el motor. */
 const CANTIDAD_TRUEQUE_SUPERVIVENCIA = 30;
+/**
+ * A partir de que fraccion del almacen una plaza NPC considera que le SOBRA un recurso y lo pone a la venta
+ * (`Consideraciones/Entrada_Al_Mundo_Definicion.md` §3). **0,7**: por encima de eso el silo esta camino de
+ * llenarse y lo que entre de mas se desperdicia, asi que vender es mejor negocio que guardar.
+ *
+ * Por debajo de `UMBRAL_ESCASEZ_MERCADO` publica compra. Entre los dos umbrales no hace nada — una plaza que
+ * va servida no tiene por que estar siempre en el mercado.
+ */
+const UMBRAL_EXCEDENTE_MERCADO = 0.7;
+/** Por debajo de esta fraccion, la plaza NPC publica una orden de COMPRA: le falta y lo dice. */
+const UMBRAL_ESCASEZ_MERCADO = 0.2;
+/** Que parte del excedente se pone a la venta de una vez. No todo: una plaza que vacia su silo de golpe se
+ * queda sin colchon ante el primer tick malo. */
+const FRACCION_EXCEDENTE_A_VENDER = 0.25;
 /** Cuántos ticks de costo de Mantenimiento por delante hace falta tener cubiertos para NO considerarse en
  * riesgo — un trueque tarda en construirse (Mercado/caravana) y viajar, así que hay que pedir ayuda ANTES de
  * quedarse en 0 (para entonces ya sería tarde: el medidor empezaría a degradar sin nada que pagar). */
@@ -841,6 +857,71 @@ function fijarPersecucionesNpc(
   return { ejercitos: ejercitosActualizados, persecucionesNuevas };
 }
 
+/**
+ * Las plazas NPC publican ordenes de compra y venta (`Consideraciones/Entrada_Al_Mundo_Definicion.md` §3).
+ *
+ * **Es lo que convierte a una Faccion NPC en SOCIO DE COMERCIO**, que es lo que un jugador nuevo necesita
+ * encontrar al llegar. Y la via son ordenes de mercado y no trueques por una razon concreta: `proponerTrueque`
+ * pacta sin pedir consentimiento al otro lado, asi que un NPC proponiendole uno a un jugador le
+ * comprometeria recursos sin preguntarle. Una orden publicada no compromete a nadie — el jugador la toma o no
+ * la toma— y el clearing del mercado (`avanzarMercado`) ya empareja ordenes de CUALQUIER par de plazas, sean
+ * de la Faccion que sean. El consentimiento esta por construccion.
+ *
+ * La politica es deliberadamente simple: **vende lo que le sobra y compra lo que le falta**. No pretende
+ * negociar bien; pretende que en el mercado haya siempre algo con lo que comerciar.
+ *
+ * No duplica ordenes: si ya tiene una activa de ese recurso, no publica otra.
+ */
+function publicarOrdenesNpc(
+  asentamientos: readonly Asentamiento[],
+  ordenes: readonly OrdenMercado[],
+  esNpc: (faccionId: string) => boolean,
+  instante: Instante,
+  contadorInicial: number
+): { ordenes: OrdenMercado[]; eventos: string[]; contador: number; publicadas: number } {
+  const eventos: string[] = [];
+  const nuevas: OrdenMercado[] = [];
+  let contador = contadorInicial;
+
+  const yaTiene = (asentamientoId: string, recurso: string): boolean =>
+    [...ordenes, ...nuevas].some((o) => o.asentamientoId === asentamientoId && o.recurso === recurso && o.estado === 'activa');
+
+  // Orden canonico por id: publicar no consume aleatoriedad, pero SI decide que se empareja despues, y con
+  // ello el resto del tick.
+  for (const plaza of [...asentamientos].sort((a, b) => (a.id < b.id ? -1 : 1))) {
+    if (!esNpc(plaza.faccionId)) continue;
+    if (!tieneMercadoActivo(plaza)) continue;
+
+    for (const recurso of RECURSOS_TIPO) {
+      if (yaTiene(plaza.id, recurso)) continue;
+      const item = plaza.almacen[recurso];
+      if (!item || item.capacidad <= 0) continue;
+      const fraccion = fraccionDisponible(plaza, recurso);
+
+      let orden: OrdenMercado | undefined;
+      if (fraccion >= UMBRAL_EXCEDENTE_MERCADO) {
+        const excedente = item.cantidad - item.capacidad * UMBRAL_EXCEDENTE_MERCADO;
+        const cantidad = Math.floor(excedente * FRACCION_EXCEDENTE_A_VENDER);
+        if (cantidad > 0) {
+          orden = colocarOrdenMercado(asentamientos as Asentamiento[], plaza.id, 'venta', recurso, cantidad, instante, undefined, contador++);
+        }
+      } else if (fraccion <= UMBRAL_ESCASEZ_MERCADO) {
+        const hueco = Math.floor(item.capacidad * UMBRAL_ESCASEZ_MERCADO - item.cantidad);
+        if (hueco > 0) {
+          orden = colocarOrdenMercado(asentamientos as Asentamiento[], plaza.id, 'compra', recurso, hueco, instante, undefined, contador++);
+        }
+      }
+
+      if (orden) {
+        nuevas.push(orden);
+        eventos.push(`${plaza.id}: publica ${orden.tipo} de ${orden.cantidad} ${recurso}.`);
+      }
+    }
+  }
+
+  return { ordenes: [...ordenes, ...nuevas], eventos, contador, publicadas: nuevas.length };
+}
+
 function lanzarCampanas(
   asentamientos: Asentamiento[],
   ejercitos: Ejercito[],
@@ -1014,6 +1095,14 @@ export interface ConfigNpcGobernanza {
    * vecinos, otros jugadores la guerra de verdad.
    */
   postura?: 'agresiva' | 'defensiva';
+  /**
+   * Punto 7e: las plazas NPC publican ordenes de compra y venta (`publicarOrdenesNpc`). Por defecto `true`.
+   *
+   * Es lo que las convierte en SOCIO DE COMERCIO para un jugador, que es lo que un recien llegado necesita
+   * encontrar. `false` deja al NPC como antes de que existiera — la palanca para aislar su efecto sobre la
+   * economia en batch, porque poner oferta y demanda nuevas en el mercado mueve los precios de referencia.
+   */
+  colocarOrdenes?: boolean;
   /** Punto 7c: manda columnas contra plazas rivales (Paso 12). Por defecto `true`. `false` deja al NPC como
    * antes de que existiera el movimiento de ejércitos — la palanca para aislar su efecto en batch.
    *
@@ -1322,6 +1411,16 @@ export function avanzarNpcGobernanza(
   contador = trasCampanas.contador;
   eventos.push(...trasCampanas.eventos);
 
+  // Punto 7e: publicar en el mercado. Va DESPUES del comercio automatico y antes de lo militar, con el
+  // almacen de este tick ya movido: publicar sobre cifras viejas pondria a la venta un excedente que ya se
+  // gasto.
+  const trasOrdenes =
+    config.colocarOrdenes === false
+      ? { ordenes: trasComercio.ordenes, eventos: [] as string[], contador, publicadas: 0 }
+      : publicarOrdenesNpc(trasBandidos.asentamientos, trasComercio.ordenes, esNpc, instante, contador);
+  contador = trasOrdenes.contador;
+  eventos.push(...trasOrdenes.eventos);
+
   // Y saber volver: una columna que ya acampó terminó su campaña y se manda a casa. Va después de lanzar para
   // que una recién salida no se replegue en el mismo tick.
   const trasRepliegues = replegarLosQueYaTerminaron(trasCampanas.ejercitos, trasCampanas.asentamientos, mapa, esNpc);
@@ -1363,6 +1462,7 @@ export function avanzarNpcGobernanza(
       asentamientos: trasExpansion.asentamientos,
       facciones: trasBandidos.facciones,
       caravanas: trasExpansion.caravanas,
+      ordenes: trasOrdenes.ordenes,
       ejercitos: trasPersecuciones.ejercitos,
       campamentosBandidos: trasBandidos.campamentos,
       bandidosProximoSpawnEn: trasBandidos.bandidosProximoSpawnEn ?? trasComercio.bandidosProximoSpawnEn,
