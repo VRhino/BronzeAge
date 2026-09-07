@@ -120,6 +120,34 @@ La aceptación explícita necesita alguien que la dé, y en dos de los tres caso
 
 ## 7. Medido
 
-- **El tick no se mueve**: 35,5 ms a 100 asentamientos con 100 vivos, frente a 35 antes de tocar nada. Quitar
-  el emparejamiento no abarata el tick porque **casi nunca emparejaba**, que era la predicción de §3.
-- El escalado sigue en O(n^0,82).
+**El tick no se mueve**: 35,5 ms a 100 asentamientos con 100 vivos, frente a 35 antes de tocar nada, y el
+escalado sigue en O(n^0,82). Quitar el emparejamiento **no abarata el tick porque casi nunca emparejaba**,
+que era la predicción de §3.
+
+**La economía tampoco.** Batch de 400 ticks y 40 Facciones, la misma semilla, contra el commit anterior a
+todo esto (`4d13d73`):
+
+| | antes | después |
+|---|---|---|
+| asentamientos vivos | 47 | 51 |
+| oro medio | 155,7 | 155,2 |
+| acuerdos activos | 16 | 24 |
+| acuerdos cumplidos | 1 | 1 |
+| pesants medios | 186,2 | 187,1 |
+| ejércitos vivos | 21 | 26 |
+| nutrición media | 100 | 100 |
+| excepciones | 0 | 0 |
+
+Lo que importa de esa tabla es **"acuerdos cumplidos: 1" en las dos columnas**. Era el control: si la
+aceptación explícita hubiera roto la cadena del trueque NPC, ahí saldría un 0. Sale lo mismo — o sea que el
+número bajo es una propiedad de una corrida de 400 ticks y no algo que este cambio haya causado.
+
+Los acuerdos activos suben de 16 a 24. Lectura plausible, no demostrada: el NPC ahora **rechaza** lo que no
+puede servir, y una petición sin contestar ya cuenta como ayuda pedida (`yaTieneAyudaEnCaminoPara`), así que
+deja de amontonar pactos redundantes sobre un socio que iba a fallar. Con una sola semilla y 400 ticks no da
+para más que eso.
+
+**Lo que sigue sin medir**, y conviene no olvidarlo: el efecto sobre los **precios de referencia**. Las plazas
+NPC publican órdenes que ahora **nadie del laboratorio toma** —no hay jugadores que viajen—, así que en batch
+esas ofertas nacen y caducan. El precio de referencia se calcula sobre el stock global (Doc 3.4) y no sobre
+las órdenes, así que no debería moverse por esto; pero es una predicción, no una medida.
