@@ -79,6 +79,22 @@ El comercio por mar sigue fuera de alcance (Doc 3.11): sin barcos, dos costas en
 ## 1.3 Onboarding de nuevos jugadores
 - Jugador nuevo aparece en un punto ALEATORIO del mapa con una "caravana de asentamiento" para fundar donde decida.
 - **Aparecer ahí es literal (ver 1.10)**: el jugador nace situado en mundo abierto, con su columna, y se mueve por el mapa hasta el sitio donde quiera fundar. **Se funda DONDE SE ESTÁ** — no se elige un punto cualquiera sobre el mapa desde fuera. Caminar hasta un buen emplazamiento es la primera decisión del juego, y es lo que da sentido a explorar antes de asentarse.
+- **SE LLEGA A UN MUNDO HABITADO, no a un vacío** (a petición del usuario, 2026-09-07). El servidor arranca
+  con Facciones NPC ya asentadas, y son **vecinos, no depredadores**: se defienden si las tocan, pero no dan
+  caza a los recién llegados, y ofrecen con qué comerciar. Un novato no es aliado de nadie, así que unas
+  Facciones que cazaran a todo lo no aliado lo matarían antes de que tuviera con qué defenderse.
+
+  El mundo no se queda por eso inofensivo: el peligro de base lo dan los **bandidos** (1.9), que atacan por su
+  cuenta y no son de nadie. El reparto es **bandidos la amenaza, Facciones NPC los vecinos, otros jugadores la
+  guerra**.
+- **FUNDAR NO ES EL PRIMER ACTO.** Para fundar una Facción nueva hacen falta **varios ciudadanos** y **haber
+  sido ciudadano de alguna antes** — fundar es un **cisma**, gente que ya vivía en algún sitio y se marcha a
+  hacer el suyo. Sin esto, mil jugadores que entran son mil Facciones y mil aldeas en el primer minuto, y la
+  fundación grupal (hasta 5) *permitía* compartir pero no obligaba a nada.
+
+  Las dos exigencias son **parámetros** (`FUNDACION.minFundadoresParaFaccionNueva` y
+  `FUNDACION.exigeCiudadaniaPrevia`), y durante las primeras pruebas están **abiertas** —grupo de 1 y
+  ciudadanía opcional—: con cinco testers el freno estorba, con mil hace falta.
 - **Un jugador sin Facción recuerda lo que explora.** La memoria del mundo es de la Facción (Doc 5.12.8), pero quien todavía no tiene bandera lleva la suya propia, que se funde con la de la Facción al fundar o al entrar en una. Sin esto el primer minuto de juego sería un paseo a ciegas sin registro.
 - EDIFICIOS INICIALES: todo asentamiento nace con un Centro Urbano (marcador único, no construible por ningún otro medio), una Granja y 3 Viviendas, ya ACTIVOS sin pasar por la cola de construcción. La Leñera inicial condicional (ligada a bosque alcanzable) que existió en una versión anterior de esta mecánica fue RETIRADA (`engine/settlement.ts`, `edificiosIniciales`) — la reserva de materiales iniciales (ver abajo) ya bastaba por sí sola para evitar el deadlock de madera, dejando esa mitigación extra innecesaria.
 - FUNDACIÓN GRUPAL: hasta 5 jugadores pueden organizarse para aparecer juntos en el mismo punto, compartiendo una caravana, fundando el asentamiento entre los 5. Los 5 reciben Ciudadanía de inmediato.

@@ -20,6 +20,7 @@ Cuando una entrada de aquí se cierra, se borra de este archivo y se marca allí
 | 13b | JUGADOR | El jugador como entidad situada en el mundo | ✘ nada |
 | 14 | JUGADOR | Movimiento libre del jugador por el mapa | ✘ nada |
 | 15 | COMERCIO | Comerciar con una plaza ajena desde su puerta | ✘ nada |
+| 16 | JUGADOR | Qué hace un huésped: vida dentro de una Facción NPC | ✘ nada |
 
 Fuera de este índice, siguen sin código pero **sin ficha propia todavía** (ver checklist): tecnología y el
 árbol de desarrollo propio, los 4 gremios, el exilio, el Attack Timer, el spawn aleatorio de onboarding, los
@@ -266,3 +267,24 @@ Lo que hay que decidir cuando se aborde:
   no entre una persona y una plaza.
 
 Mientras esto no exista, la opción *Comerciar* no aparece en el menú de asentamiento: las otras tres sí.
+
+## 16. Qué hace un huésped: vida dentro de una Facción NPC
+
+**Estado: idea, sin diseñar.** Sale de la entrada al mundo
+(`Consideraciones/Entrada_Al_Mundo_Definicion.md` §5) y no es un adorno: **es el contenido del vestíbulo**.
+Sin ella, la fase de huésped —antes de poder fundar— se reduce a "espera", que es la peor versión de esto.
+
+La idea del usuario: **ganar posición dentro de una Facción IA haciendo cosas para ella** — escoltar sus
+caravanas, explorar, buscar cosas en el mapa de campaña. Acciones que sirven de tutorial y que dan recompensa
+dentro de esa misma Facción.
+
+**Lo que ya existe y reutilizaría:** la escolta de caravanas (`adjuntarCaravana`, Doc 5.13.3), la exploración
+(`engine/exploracion.ts`), la reputación de Facción y la experiencia (`REPUTACION`,
+`aplicarAjustesExperiencia`).
+
+**Lo que no existe, y es el corazón de la mecánica:** *standing por jugador dentro de una Facción*. Hoy la
+reputación y la experiencia son de la Facción entera, no de cada uno de sus miembros. Sin eso no hay nada que
+subir ni nada que recompensar.
+
+**Lo que hay que decidir:** qué encargos existen y quién los publica; qué se gana (¿acceso a reclutar? ¿casa?
+¿aval para fundar?); y si ese standing sobrevive a marcharse de la Facción.

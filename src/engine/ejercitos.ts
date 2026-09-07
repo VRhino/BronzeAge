@@ -12,7 +12,7 @@ import type { AcuerdoTrueque, Asentamiento, Caravana, Ejercito, Escuadron, Facci
 import type { Mapa } from '../world/mapa';
 import { calcularRuta } from '../world/rutas';
 import { distancia } from '../world/geometria';
-import { CARAVANA_CATALOGO, LOGISTICA, MOVIMIENTO, TROPAS_RECLUTABLES } from '../constants';
+import { CARAVANA_CATALOGO, LOGISTICA, MOVIMIENTO, TROPAS_RECLUTABLES, VISION } from '../constants';
 import { atribuir, type EventoCrudo } from '../domain/eventos';
 import { minutos, sumar, type Instante } from '../domain/tiempo';
 import type { RandomFn } from '../worldgen';
@@ -1041,6 +1041,18 @@ export function perseguir(ejercito: Ejercito, objetivo: { tipo: 'ejercito' | 'ca
  * alguien. */
 export function dejarDePerseguir(ejercito: Ejercito): Ejercito {
   return { ...ejercito, persiguiendo: undefined };
+}
+
+/**
+ * Hasta donde ve esta columna (Doc 1.10, Doc 5.12.7). Una con tropa despliega batidores y alcanza
+ * `VISION.ejercito`; **un jugador viajando solo, no**, y ve `VISION.jugadorSolo`.
+ *
+ * Es el mismo criterio que la velocidad (`velocidadDeEjercito`): lo que decide no es de quien sea la columna
+ * sino si lleva soldados en pie. Un escuadron aniquilado no ve mas que un hombre solo, igual que no frena
+ * mas que un hombre solo.
+ */
+export function alcanceDeVista(ejercito: Ejercito): number {
+  return ejercito.escuadrones.some((e) => e.cantidad > 0) ? VISION.ejercito : VISION.jugadorSolo;
 }
 
 export function estacionarEjercito(ejercito: Ejercito): Ejercito {

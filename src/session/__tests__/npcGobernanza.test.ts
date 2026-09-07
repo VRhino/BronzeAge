@@ -235,47 +235,47 @@ describe('Facción controlada por NPC', () => {
 // de la geometria, un combate solo ocurre si alguien lo pide — y en el laboratorio no hay nadie pidiendo. Sin
 // esto, las constantes militares ya calibradas se seguirian midiendo sobre un mundo en paz SIN QUE NINGUNA
 // PRUEBA FALLARA. Estos tests son esa prueba.
-describe('el NPC persigue: sin esto el batch se queda sin combates y nadie se entera', () => {
-  /** Dos columnas NPC enemigas a la vista una de otra, en campo abierto. */
-  function dosColumnasNpc() {
-    const facciones = crearFacciones();
-    const uno = fundarAsentamientoDeTest(mapaDeterminista, facciones, 'faccion-1', []);
-    const dos = fundarAsentamientoDeTest(mapaDeterminista, uno.facciones, 'faccion-2', [uno.asentamiento]);
-    const punto = { x: 1000, y: 1000 };
-    const tropa = (id: string, jugadorId: string) => ({
-      id,
-      nombre: 'milicia_lanceros',
-      jugadorId,
-      origen: 'pesants' as const,
-      cantidad: 30,
-      veterania: 0,
-      moral: 100,
-      tropaId: 'milicia_lanceros',
-    });
-    const columna = (id: string, faccionId: string, origenId: string, x: number): Ejercito => ({
-      id,
-      faccionId,
-      origenAsentamientoId: origenId,
-      participantes: [{ jugadorId: `j-${id}`, unidoEn: instanteDeTest(0) }],
-      tipo: 'ejercito',
-      liderId: `j-${id}`,
-      politicaDeUnion: 'rechazar',
-      escuadrones: [tropa(`esc-${id}`, `j-${id}`)],
-      suministro: { trigo: 500 },
-      caravanasAdjuntasIds: [],
-      objetivo: { tipo: 'punto', punto },
-      ruta: [punto, { x: punto.x + 10, y: punto.y }],
-      progreso: 0,
-      posicionActual: { x, y: punto.y },
-      estado: 'estacionado',
-    });
-    const estado = crearEstadoDeTest([uno.asentamiento, dos.asentamiento], dos.facciones, {
-      // A 10 una de otra: dentro del radio de encuentro, asi que la persecucion se cierra en el mismo tick.
-      ejercitos: [columna('col-a', 'faccion-1', uno.asentamiento.id, punto.x), columna('col-b', 'faccion-2', dos.asentamiento.id, punto.x + 10)],
-    });
-    return { estado, mapa: mapaDeterminista };
-  }
+/** Dos columnas NPC enemigas a la vista una de otra, en campo abierto. */
+function dosColumnasNpc() {
+  const facciones = crearFacciones();
+  const uno = fundarAsentamientoDeTest(mapaDeterminista, facciones, 'faccion-1', []);
+  const dos = fundarAsentamientoDeTest(mapaDeterminista, uno.facciones, 'faccion-2', [uno.asentamiento]);
+  const punto = { x: 1000, y: 1000 };
+  const tropa = (id: string, jugadorId: string) => ({
+    id,
+    nombre: 'milicia_lanceros',
+    jugadorId,
+    origen: 'pesants' as const,
+    cantidad: 30,
+    veterania: 0,
+    moral: 100,
+    tropaId: 'milicia_lanceros',
+  });
+  const columna = (id: string, faccionId: string, origenId: string, x: number): Ejercito => ({
+    id,
+    faccionId,
+    origenAsentamientoId: origenId,
+    participantes: [{ jugadorId: `j-${id}`, unidoEn: instanteDeTest(0) }],
+    tipo: 'ejercito',
+    liderId: `j-${id}`,
+    politicaDeUnion: 'rechazar',
+    escuadrones: [tropa(`esc-${id}`, `j-${id}`)],
+    suministro: { trigo: 500 },
+    caravanasAdjuntasIds: [],
+    objetivo: { tipo: 'punto', punto },
+    ruta: [punto, { x: punto.x + 10, y: punto.y }],
+    progreso: 0,
+    posicionActual: { x, y: punto.y },
+    estado: 'estacionado',
+  });
+  const estado = crearEstadoDeTest([uno.asentamiento, dos.asentamiento], dos.facciones, {
+    // A 10 una de otra: dentro del radio de encuentro, asi que la persecucion se cierra en el mismo tick.
+    ejercitos: [columna('col-a', 'faccion-1', uno.asentamiento.id, punto.x), columna('col-b', 'faccion-2', dos.asentamiento.id, punto.x + 10)],
+  });
+  return { estado, mapa: mapaDeterminista };
+}
 
+describe('el NPC persigue: sin esto el batch se queda sin combates y nadie se entera', () => {
   it('fija persecucion contra una columna enemiga que tiene a la vista', () => {
     const { estado, mapa } = dosColumnasNpc();
 
@@ -316,5 +316,29 @@ describe('el NPC persigue: sin esto el batch se queda sin combates y nadie se en
     const r = avanzarNpcGobernanza(enTregua, mapa, contextoDeTest(1, createRng(5)), {});
 
     expect(r.estado.ejercitos.every((e) => e.persiguiendo === undefined)).toBe(true);
+  });
+});
+
+// La POSTURA de una Faccion NPC (Consideraciones/Entrada_Al_Mundo_Definicion.md, decision 5).
+//
+// Las Facciones sembradas al arrancar el servidor tienen que ser vecinos, no depredadores: un recien llegado
+// no es aliado de nadie, asi que con la postura agresiva seria presa a la vista de cualquier columna NPC
+// antes de tener con que defenderse. Y el laboratorio necesita justo lo contrario, asi que es un ajuste y no
+// un borrado.
+describe('postura defensiva: un vecino, no un depredador', () => {
+  it('una Faccion DEFENSIVA no da caza a nadie, aunque lo tenga a tiro', () => {
+    const { estado, mapa } = dosColumnasNpc();
+
+    const r = avanzarNpcGobernanza(estado, mapa, contextoDeTest(1, createRng(5)), { postura: 'defensiva' });
+
+    expect(r.estado.ejercitos.every((e) => e.persiguiendo === undefined)).toBe(true);
+  });
+
+  it('y por defecto sigue siendo AGRESIVA: el batch no puede quedarse sin combates en silencio', () => {
+    const { estado, mapa } = dosColumnasNpc();
+
+    const r = avanzarNpcGobernanza(estado, mapa, contextoDeTest(1, createRng(5)), {});
+
+    expect(r.estado.ejercitos.some((e) => e.persiguiendo !== undefined), 'el defecto no cambia').toBe(true);
   });
 });

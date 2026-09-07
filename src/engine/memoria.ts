@@ -15,6 +15,7 @@
 import type { Asentamiento, Ejercito, Faccion, Point } from '../domain/types';
 import type { Instante } from '../domain/tiempo';
 import { VISION } from '../constants';
+import { alcanceDeVista } from './ejercitos';
 import { distancia } from '../world/geometria';
 import { marcarVisto, rejillaDe, SIN_EXPLORAR, type Exploracion } from './exploracion';
 
@@ -72,7 +73,7 @@ function ojosDe(faccionId: string, asentamientos: readonly Asentamiento[], ejerc
   }
   for (const e of ejercitos) {
     if (e.faccionId !== faccionId) continue;
-    ojos.push({ posicion: e.posicionActual, alcance: VISION.ejercito });
+    ojos.push({ posicion: e.posicionActual, alcance: alcanceDeVista(e) });
   }
   return ojos;
 }

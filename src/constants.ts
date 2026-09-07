@@ -100,6 +100,28 @@ export const ZONA_INFLUENCIA = {
 
 export const FUNDACION = {
   maxJugadoresFundacionGrupal: 5,
+  /**
+   * Cuantos ciudadanos hacen falta para fundar una Faccion NUEVA. **La palanca contra la ola de
+   * fundaciones** (`Consideraciones/Entrada_Al_Mundo_Definicion.md`): sin ella, 800 jugadores que entran son
+   * 800 Facciones y 800 asentamientos en el primer minuto, porque `crearFaccion` no pide nada.
+   *
+   * La fundacion grupal existia desde el principio pero PERMITIA compartir sin obligar a nada; esto es lo
+   * que la convierte en el freno que pretendia ser.
+   *
+   * **1 durante las primeras pruebas** (decision del usuario, 2026-09-07): con cinco testers el freno
+   * estorba. Se sube cuando la poblacion lo pida — es una constante justamente para que eso no sea un cambio
+   * de codigo.
+   */
+  minFundadoresParaFaccionNueva: 1,
+  /**
+   * Si para fundar hay que haber sido ciudadano de alguna Faccion antes. Convierte fundar en un **cisma**
+   * —gente que ya vivia en algun sitio y se marcha— en vez de en el primer acto del juego, y fuerza a pasar
+   * por la fase de huesped.
+   *
+   * **`false` durante las primeras pruebas** (decision del usuario, 2026-09-07), por lo mismo que la de
+   * arriba.
+   */
+  exigeCiudadaniaPrevia: false,
   // La caravana de fundación (Doc 1.3) trae una reserva inicial generosa: además de materiales básicos,
   // trigo suficiente para no entrar en déficit de comida desde el primer tick y oro para las primeras
   // operaciones de mercado/trueque.
@@ -1578,6 +1600,16 @@ export const VISION = {
    * razonable y con la escala declarada no llega ni al borde de la propia provincia.
    */
   ejercito: 150,
+  /**
+   * Lo que ve un jugador SOLO, sin tropa (Doc 1.10). **80**, por debajo de los 150 de una columna: un hombre
+   * solo no despliega batidores.
+   *
+   * La tension que fija el numero: bastante para viajar sin caer en emboscadas a ciegas —que es lo que hace
+   * jugable el primer minuto de partida—, poco para que el explorador solitario sea la mejor unidad de
+   * informacion del juego. Sigue por encima del anillo de inspeccion (40), asi que ver y mirar de cerca
+   * siguen siendo cosas distintas tambien para el.
+   */
+  jugadorSolo: 80,
   /**
    * Cuánto ve un asentamiento MÁS ALLÁ de su radio de influencia (decisión del usuario, 2026-09-04): la plaza
    * vigila algo más allá de su frontera, como una atalaya. **60**, por tres razones:

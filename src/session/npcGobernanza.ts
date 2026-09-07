@@ -996,8 +996,29 @@ export interface ConfigNpcGobernanza {
    * podrían chocar de id. El store pasa aquí su contador y luego lo adelanta con `contadorFinal` del resultado.
    */
   contadorInicial?: number;
+  /**
+   * Cómo se comporta esta Facción NPC con quien no es suyo
+   * (`Consideraciones/Entrada_Al_Mundo_Definicion.md`, decisión 5).
+   *
+   * - `'agresiva'` (por defecto): manda campañas contra plazas rivales y da caza a cualquier columna o
+   *   caravana no aliada que vea. Es lo que el LABORATORIO necesita — sin ello el batch se queda sin
+   *   combates y las constantes militares se miden sobre un mundo en paz (riesgo 5 del jugador situado, con
+   *   dos tests que fallan si desaparece).
+   * - `'defensiva'`: ni campañas ni caza. Se defiende si la tocan —el combate lo dispara quien ataca, no
+   *   ella— y sigue comerciando. Es lo que necesitan las Facciones SEMBRADAS al arrancar el servidor: un
+   *   recién llegado no tiene aliados, así que con la postura agresiva sería presa a la vista de cualquier
+   *   columna NPC antes de tener con qué defenderse.
+   *
+   * El mundo no se queda inofensivo por esto: el peligro de base lo dan los BANDIDOS, que atacan caravanas
+   * por su cuenta y no son de nadie. Queda un reparto limpio — bandidos la amenaza, Facciones NPC los
+   * vecinos, otros jugadores la guerra de verdad.
+   */
+  postura?: 'agresiva' | 'defensiva';
   /** Punto 7c: manda columnas contra plazas rivales (Paso 12). Por defecto `true`. `false` deja al NPC como
-   * antes de que existiera el movimiento de ejércitos — la palanca para aislar su efecto en batch. */
+   * antes de que existiera el movimiento de ejércitos — la palanca para aislar su efecto en batch.
+   *
+   * Una postura `'defensiva'` lo apaga igual: la postura es la decisión de diseño, esto es la palanca de
+   * experimento, y no hace falta acordarse de poner las dos. */
   lanzarCampanas?: boolean;
   /** Punto 7b: ataca campamentos de bandidos cercanos con todos los escuadrones disponibles. Por defecto
    * `true` (comportamiento de siempre, sin cambios). `false` es una palanca de EXPERIMENTO para aislar cuánto
@@ -1279,8 +1300,11 @@ export function avanzarNpcGobernanza(
 
   // Punto 7c: las campañas (Paso 12). Van DESPUÉS de reclutar y de los bandidos, y antes de expandir: se
   // decide con la guarnición ya repuesta de este tick, y sacar tropa no debe competir con fundar.
+  // Una Facción defensiva no manda columnas contra nadie: `postura` decide, y `lanzarCampanas` sigue siendo
+  // la palanca de experimento del batch. Cualquiera de las dos basta para apagarlo.
+  const defensiva = config.postura === 'defensiva';
   const trasCampanas =
-    config.lanzarCampanas === false
+    defensiva || config.lanzarCampanas === false
       ? { asentamientos: trasBandidos.asentamientos, ejercitos: trasComercio.ejercitos, eventos: [] as string[], campanasLanzadas: 0, contador }
       : lanzarCampanas(
           trasBandidos.asentamientos,
@@ -1310,14 +1334,16 @@ export function avanzarNpcGobernanza(
   // Sin esto el batch se queda sin combates y NADIE SE ENTERA: desde que los encuentros dejaron de salir de
   // la geometría, en el laboratorio no hay quien los pida, y las constantes militares se seguirían midiendo
   // sobre un mundo en paz sin que ninguna prueba fallara.
-  const trasPersecuciones = fijarPersecucionesNpc(
-    trasRepliegues.ejercitos,
-    trasComercio.caravanas,
-    trasCampanas.asentamientos,
-    trasComercio.relaciones,
-    esNpc,
-    instante
-  );
+  const trasPersecuciones = defensiva
+    ? { ejercitos: trasRepliegues.ejercitos, persecucionesNuevas: 0 }
+    : fijarPersecucionesNpc(
+        trasRepliegues.ejercitos,
+        trasComercio.caravanas,
+        trasCampanas.asentamientos,
+        trasComercio.relaciones,
+        esNpc,
+        instante
+      );
 
   const trasExpansion = expandirSiPuede(
     trasCampanas.asentamientos,

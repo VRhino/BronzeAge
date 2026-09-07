@@ -69,7 +69,7 @@ import type { Instante } from '../../domain/tiempo';
 import { esCiudadano } from '../../engine/faccion';
 import { ubicacionDeducida } from '../../engine/ubicacion';
 // El mismo recuento que usa el motor para los carros (Doc 5.13): un participante es un carro Y un rombo.
-import { participantesDe } from '../../engine/ejercitos';
+import { alcanceDeVista, participantesDe } from '../../engine/ejercitos';
 import {
   estaExplorado,
   marcarVisto,
@@ -358,7 +358,8 @@ function propioDeJugador(estado: GameSessionState, jugadorId: string) {
 /**
  * Fuente ESPACIAL de la niebla de guerra: un jugador ve de lo ajeno lo que sus plazas vigilan —su radio de
  * influencia MÁS `VISION.margenAsentamiento`, como una atalaya que mira algo más allá de la frontera— y lo
- * que sus ejércitos alcanzan a ver mientras marchan, `VISION.ejercito` a la redonda.
+ * que sus columnas alcanzan a ver mientras marchan — `VISION.ejercito` con tropa, `VISION.jugadorSolo` sin
+ * ella (`alcanceDeVista`).
  *
  * Un detalle que conviene tener presente: se mide contra `radioPotencial`, el DISCO, no contra el polígono de
  * la zona. La zona está recortada por las fronteras con Facciones rivales (`computeZonaInfluencia`) y ese
@@ -377,7 +378,7 @@ function seVeAhora(
 ): boolean {
   return (
     asentamientosPropios.some((a) => distancia(punto, a.posicion) <= a.radioPotencial + VISION.margenAsentamiento) ||
-    ejercitosPropios.some((e) => distancia(punto, e.posicionActual) <= VISION.ejercito)
+    ejercitosPropios.some((e) => distancia(punto, e.posicionActual) <= alcanceDeVista(e))
   );
 }
 
@@ -403,11 +404,11 @@ function nieblaDe(
   const rejilla = rejillaDe(estado.mapa.config);
   let visibles = SIN_EXPLORAR;
   for (const a of asentamientosPropios) visibles = marcarVisto(visibles, rejilla, a.posicion, a.radioPotencial + VISION.margenAsentamiento);
-  for (const e of ejercitosPropios) visibles = marcarVisto(visibles, rejilla, e.posicionActual, VISION.ejercito);
+  for (const e of ejercitosPropios) visibles = marcarVisto(visibles, rejilla, e.posicionActual, alcanceDeVista(e));
 
   let celdas = grabada;
   for (const a of asentamientosPropios) celdas = marcarVisto(celdas, rejilla, a.posicion, a.radioPotencial + VISION.margenAsentamiento);
-  for (const e of ejercitosPropios) celdas = marcarVisto(celdas, rejilla, e.posicionActual, VISION.ejercito);
+  for (const e of ejercitosPropios) celdas = marcarVisto(celdas, rejilla, e.posicionActual, alcanceDeVista(e));
 
   return proyectarNiebla(celdas, visibles, rejilla);
 }
@@ -541,11 +542,21 @@ export function proyectarParaJugador(
       ? asentamientosPropios.find((a) => a.id === ubicacion.asentamientoId)
       : undefined;
 
-  // Un ejército es "propio" si es de tu Facción o si llevas tropa TUYA dentro. Lo segundo no es redundante:
-  // un jugador huérfano (Doc 5.4) se queda sin Facción pero no sin los escuadrones que iban con él, y no
-  // tendría sentido que dejara de ver la columna en la que va montado.
+  // Un ejército es "propio" si es de tu Facción, si VAS DENTRO, o si llevas tropa tuya en él.
+  //
+  // La de en medio es la que hace posible existir sin bandera, y faltaba: un recién llegado no tiene Facción
+  // NI escuadrones, así que con las otras dos no cumplía ninguna — `seVeAhora` le salía siempre falso y
+  // caminaba por un mapa negro sin ver ni su propia columna, porque las propias son las que viajan en
+  // `ejercitos`. Leerlo de `participantes` es lo correcto por lo mismo que en el motor: un viajero sin tropas
+  // también va dentro de la suya (Doc 5.12.1).
+  //
+  // La tercera tampoco es redundante: un jugador huérfano (Doc 5.4) se queda sin Facción pero no sin los
+  // escuadrones que iban con él.
   const ejercitosPropios = estado.ejercitos.filter(
-    (e) => (faccionId !== null && e.faccionId === faccionId) || e.escuadrones.some((esc) => esc.jugadorId === jugadorId)
+    (e) =>
+      (faccionId !== null && e.faccionId === faccionId) ||
+      e.participantes.some((p) => p.jugadorId === jugadorId) ||
+      e.escuadrones.some((esc) => esc.jugadorId === jugadorId)
   );
   const zonasPropias = geometria.zonas.filter((z) => esPropio(z.asentamientoId));
   const propios = new Set(ejercitosPropios.map((e) => e.id));

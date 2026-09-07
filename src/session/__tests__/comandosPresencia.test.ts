@@ -9,7 +9,13 @@ import { GameSession } from '../gameSession';
 import { entrarEnAsentamiento, fijarPoliticaDeAcceso, marcharA, salirAlMundo, salirDeAsentamiento, vetarJugador } from '../comandos/presencia';
 import { movilizarEjercito } from '../comandos/ejercitos';
 import { OPC, partidaConAsentamiento } from './fixtures';
-import { LOGISTICA, MOVIMIENTO } from '../../constants';
+import { FUNDACION, LOGISTICA, MOVIMIENTO, VISION } from '../../constants';
+import { exigirPuertaDeFundacion } from '../../engine/settlement';
+import { proyectarParaJugador } from '../proyecciones/jugador';
+import type { GeometriaAsentamientos } from '../estado';
+
+/** Sin geometria calculada: la proyeccion no la necesita para lo que se prueba aqui. */
+const SIN_GEOMETRIA: GeometriaAsentamientos = { zonas: [], zonasFusionadas: [], trazadoPorAsentamiento: {} };
 
 /** Partida con un escuadrón del fundador ya puesto, y trigo de sobra para poder cargar el carro. */
 function partidaLista() {
@@ -441,5 +447,61 @@ describe('la puerta la controla el Gobernador (Doc 1.10.5)', () => {
     const r = conGobernador.ejecutar(vetarJugador, { asentamientoId, jugadorId: vecino, vetadoId: fundador, vetar: true }, opcDe(vecino));
 
     expect(r.ok).toBe(false);
+  });
+});
+
+// La puerta de fundacion (Consideraciones/Entrada_Al_Mundo_Definicion.md, decisiones 2-3).
+describe('la puerta de fundacion: el freno a la ola', () => {
+  it('con las palancas abiertas se funda como siempre — es la configuracion de las primeras pruebas', () => {
+    expect(FUNDACION.minFundadoresParaFaccionNueva, 'grupo de 1 mientras haya cinco testers').toBe(1);
+    expect(FUNDACION.exigeCiudadaniaPrevia, 'ciudadania opcional de momento').toBe(false);
+
+    const { sesion, asentamientoId } = partidaLista();
+
+    expect(sesion.getState().asentamientos.map((a) => a.id)).toContain(asentamientoId);
+  });
+
+  it('exigirPuertaDeFundacion rechaza un grupo corto', () => {
+    // Se prueba la puerta directamente y no via constante: lo que hay que congelar es que la regla EXISTE y
+    // muerde, no el valor de hoy, que esta puesto para que no muerda.
+    expect(() => exigirPuertaDeFundacion([], true)).toThrow();
+  });
+
+  it('y rechaza a quien nunca fue ciudadano, cuando se exige', () => {
+    // Mismo motivo: cuando la palanca se cierre, esto es lo que tiene que pasar.
+    const original = FUNDACION.exigeCiudadaniaPrevia;
+    try {
+      (FUNDACION as { exigeCiudadaniaPrevia: boolean }).exigeCiudadaniaPrevia = true;
+      expect(() => exigirPuertaDeFundacion(['alguien'], false)).toThrow();
+      expect(() => exigirPuertaDeFundacion(['alguien'], true), 'un ex-ciudadano si').not.toThrow();
+    } finally {
+      (FUNDACION as { exigeCiudadaniaPrevia: boolean }).exigeCiudadaniaPrevia = original;
+    }
+  });
+});
+
+// Existir sin bandera (Consideraciones/Entrada_Al_Mundo_Definicion.md §0): sin esto no hay vestibulo posible.
+describe('un jugador sin Faccion ve el mundo desde su columna', () => {
+  it('ve su PROPIA columna, que es lo minimo para poder jugar', () => {
+    const { sesion, asentamientoId, fundador } = partidaLista();
+    sesion.ejecutar(salirAlMundo, { asentamientoId, jugadorId: fundador, escuadronIds: [], carga: {} }, opcDe(fundador));
+    // Se le quita la Faccion: es el estado de un recien llegado, que no tiene ninguna.
+    const payload = sesion.exportar();
+    const sinBandera = GameSession.importar({
+      ...payload,
+      state: { ...payload.state, facciones: payload.state.facciones.map((f) => ({ ...f, ciudadanosIds: [] })) },
+    });
+
+    const proyeccion = proyectarParaJugador(sinBandera.getState(), fundador, SIN_GEOMETRIA);
+
+    expect(proyeccion.faccionId, 'no tiene bandera').toBeNull();
+    expect(proyeccion.ejercitos.map((e) => e.id), 'pero se ve a si mismo').toHaveLength(1);
+  });
+
+  it('y ve MENOS que una columna con tropa: un hombre solo no despliega batidores', () => {
+    expect(VISION.jugadorSolo).toBeLessThan(VISION.ejercito);
+    expect(VISION.jugadorSolo, 'pero mas que el anillo de inspeccion: ver y mirar de cerca siguen siendo distintos').toBeGreaterThan(
+      MOVIMIENTO.radioInspeccion
+    );
   });
 });

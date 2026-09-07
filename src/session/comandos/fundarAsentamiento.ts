@@ -1,5 +1,6 @@
 import type { Point } from '../../domain/types';
-import { fundarAsentamiento as fundarAsentamientoEngine } from '../../engine/settlement';
+import { exigirPuertaDeFundacion, fundarAsentamiento as fundarAsentamientoEngine } from '../../engine/settlement';
+import { esCiudadano } from '../../engine/faccion';
 import { situarJugadores } from '../../engine/ubicacion';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito } from './tipos';
@@ -42,6 +43,17 @@ export interface ParamsFundarAsentamiento {
  */
 export const fundarAsentamiento = comando<ParamsFundarAsentamiento, { asentamientoId: string }>((estado, mapa, ctx, params) => {
   const jugadoresIds = [ctx.actor];
+
+  // La puerta de entrada al mundo (`Consideraciones/Entrada_Al_Mundo_Definicion.md`): cuánta gente hace falta
+  // para fundar, y si hay que haber sido ciudadano antes. Hoy las dos palancas están abiertas para las
+  // primeras pruebas; lo que se decida después se enchufa en `exigirPuertaDeFundacion` y no aquí.
+  //
+  // "Ya fue ciudadano" se resuelve con `salidasFaccionPorJugador`, que es el registro de quien ALGUNA VEZ
+  // dejó una Facción, más la ciudadanía vigente. Un jugador que nunca ha estado en ninguna no aparece en
+  // ninguno de los dos.
+  const yaFueCiudadano =
+    estado.salidasFaccionPorJugador[ctx.actor] !== undefined || estado.facciones.some((f) => esCiudadano(f, ctx.actor));
+  exigirPuertaDeFundacion(jugadoresIds, yaFueCiudadano);
 
   const resultado = fundarAsentamientoEngine(
     mapa,

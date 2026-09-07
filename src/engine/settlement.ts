@@ -135,6 +135,29 @@ export function evaluarViabilidadFundacion(
  * inmediata de la Facción fundadora. Respeta el cap de fundación por Facción (Doc 1.7): no aplica a
  * conquista/anexión (fuera de alcance aquí), solo a fundación directa.
  */
+/**
+ * La PUERTA de fundacion (`Consideraciones/Entrada_Al_Mundo_Definicion.md`): quien puede fundar una Faccion
+ * nueva, y con cuanta gente.
+ *
+ * Existe como funcion propia y no como dos `if` dentro de `fundarAsentamiento` a proposito: es la costura por
+ * la que entrara todo lo que se decida sobre la entrada al mundo —cooldowns, cupos por servidor, avales— sin
+ * volver a tocar el onboarding. Hoy solo comprueba las dos palancas de `FUNDACION`, y las dos estan abiertas
+ * para las primeras pruebas.
+ *
+ * `yaFueCiudadano` lo resuelve el llamador: aqui no se sabe la historia de un jugador, y preguntarselo al
+ * estado entero convertiria una regla en una consulta.
+ */
+export function exigirPuertaDeFundacion(jugadoresFundadoresIds: readonly string[], yaFueCiudadano: boolean): void {
+  if (jugadoresFundadoresIds.length < FUNDACION.minFundadoresParaFaccionNueva) {
+    throw new FundacionInvalidaError(
+      `Fundar exige ${FUNDACION.minFundadoresParaFaccionNueva} fundadores y solo hay ${jugadoresFundadoresIds.length}.`
+    );
+  }
+  if (FUNDACION.exigeCiudadaniaPrevia && !yaFueCiudadano) {
+    throw new FundacionInvalidaError('Hay que haber sido ciudadano de una Faccion antes de fundar la propia.');
+  }
+}
+
 export function fundarAsentamiento(
   mapa: Mapa,
   facciones: Faccion[],
