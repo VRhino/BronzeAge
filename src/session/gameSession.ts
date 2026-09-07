@@ -189,13 +189,19 @@ export class GameSession {
    *
    * El sistema no es un jugador: el tick y el turno del NPC no crean registro.
    */
-  private conActorEnPartida(estado: GameSessionState, actor: ActorId, mapa: Mapa): GameSessionState {
+  private conActorEnPartida(estado: GameSessionState, actor: ActorId, mapa: Mapa, ctx: ContextoComando): GameSessionState {
     if (actor === ACTOR_SISTEMA) return estado;
-    const jugadores = conJugadorAsegurado(estado.jugadores, actor, LIDERAZGO.base, estado.asentamientos, estado.ejercitos, {
+    const alta = conJugadorAsegurado(estado.jugadores, actor, LIDERAZGO.base, estado.asentamientos, estado.ejercitos, {
       mapa,
       rng: this.rng,
+      // Mismo prefijo que usan `salirAlMundo`/`unirseEnCampo` para columnas nuevas — no es cosmético, es el
+      // mismo espacio de ids de ejército, y no debe poder chocar con uno que ya exista. Perezoso a propósito
+      // (ver el comentario de `aparicion` en `conJugadorAsegurado`): solo se consume si de verdad aparece.
+      generarId: () => `ejercito-${ctx.ids.siguiente()}`,
+      instante: ctx.instante,
     });
-    return jugadores === estado.jugadores ? estado : { ...estado, jugadores };
+    if (alta.jugadores === estado.jugadores) return estado;
+    return { ...estado, jugadores: alta.jugadores, ejercitos: alta.ejercitos };
   }
 
   ejecutar<P, R>(manejador: ManejadorComando<P, R>, params: P, opciones: { actor?: ActorId } = {}): ResultadoComando<R> {
@@ -219,7 +225,7 @@ export class GameSession {
       throw new Error('Un comando modificó el mapa pero no devolvió `estadoMapa` en su estado resultante.');
     }
 
-    this.estado = transicion.resultado.ok ? this.conActorEnPartida(transicion.estado, ctx.actor, mapa) : transicion.estado;
+    this.estado = transicion.resultado.ok ? this.conActorEnPartida(transicion.estado, ctx.actor, mapa, ctx) : transicion.estado;
     return transicion.resultado;
   }
 

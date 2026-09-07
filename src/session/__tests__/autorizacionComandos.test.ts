@@ -37,7 +37,7 @@ function partidaConFaccionRival() {
   const opcRival = { ...OPC, actor: CIUDADANO_RIVAL };
   const rf = base.sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, opcRival);
   const faccionRivalId = rf.datos!.faccionId;
-  const ra = base.sesion.ejecutar(fundarAsentamiento, { faccionId: faccionRivalId, posicion: { x: 900, y: 900 } }, opcRival);
+  const ra = base.sesion.ejecutar(fundarAsentamiento, { faccionId: faccionRivalId }, opcRival);
   return { ...base, faccionRivalId, asentamientoRivalId: ra.datos!.asentamientoId, ciudadanoRival: CIUDADANO_RIVAL };
 }
 
@@ -52,7 +52,7 @@ describe('filtro de rol técnico', () => {
     const { sesion, faccionId } = partidaConAsentamiento();
     const resultado = verificarAutorizacion(
       'fundarAsentamiento',
-      { faccionId, posicion: { x: 0, y: 0 } },
+      { faccionId },
       sesion.getState(),
       { rol: 'observador', jugadorId: null }
     );
@@ -63,7 +63,7 @@ describe('filtro de rol técnico', () => {
     const { sesion, faccionId } = partidaConAsentamiento();
     const resultado = verificarAutorizacion(
       'fundarAsentamiento',
-      { faccionId, posicion: { x: 0, y: 0 } },
+      { faccionId },
       sesion.getState(),
       { rol: 'jugador', jugadorId: null }
     );
@@ -76,7 +76,7 @@ describe('la Facción del actor se deriva de ciudadanosIds, no de la membresía'
     const { sesion, faccionId, fundador } = partidaConAsentamiento();
     const resultado = verificarAutorizacion(
       'fundarAsentamiento',
-      { faccionId, posicion: { x: 0, y: 0 } },
+      { faccionId },
       sesion.getState(),
       jugador(fundador)
     );
@@ -87,7 +87,7 @@ describe('la Facción del actor se deriva de ciudadanosIds, no de la membresía'
     const { sesion, faccionId } = partidaConAsentamiento();
     const resultado = verificarAutorizacion(
       'fundarAsentamiento',
-      { faccionId, posicion: { x: 0, y: 0 } },
+      { faccionId },
       sesion.getState(),
       jugador('forastero')
     );
@@ -102,7 +102,7 @@ describe('la Facción del actor se deriva de ciudadanosIds, no de la membresía'
 
     const resultado = verificarAutorizacion(
       'fundarAsentamiento',
-      { faccionId: rf.datos!.faccionId, posicion: { x: 500, y: 500 } },
+      { faccionId: rf.datos!.faccionId },
       sesion.getState(),
       jugador(ACTOR)
     );
@@ -115,7 +115,7 @@ describe('la Facción del actor se deriva de ciudadanosIds, no de la membresía'
 
     const resultado = verificarAutorizacion(
       'fundarAsentamiento',
-      { faccionId: rf.datos!.faccionId, posicion: { x: 900, y: 900 } },
+      { faccionId: rf.datos!.faccionId },
       sesion.getState(),
       jugador(fundador)
     );
@@ -127,7 +127,7 @@ describe('la Facción del actor se deriva de ciudadanosIds, no de la membresía'
 
     const resultado = verificarAutorizacion(
       'fundarAsentamiento',
-      { faccionId, posicion: { x: 0, y: 0 } },
+      { faccionId },
       sesion.getState(),
       jugador(ciudadanoRival)
     );

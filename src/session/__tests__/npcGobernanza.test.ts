@@ -42,30 +42,19 @@ const ACTOR = 'jugador-test';
 
 function partidaConDosFacciones(): { sesion: GameSession; faccionNpcId: string; faccionManualId: string } {
   const sesion = GameSession.crear('test-npc', { seed: SEED });
-  // Dos actores distintos al CREAR: un jugador solo puede crear una Facción (Doc 2 "Entidades"). Fundar sigue
-  // con `ACTOR` para las dos, sin conflicto — el motor no exige ciudadanía previa para fundar.
+  // Dos actores distintos: un jugador solo puede crear una Facción (Doc 2 "Entidades"), y desde que se funda
+  // donde se está (Doc 1.3) el fundador tiene que ser quien ya tiene columna en el mundo — que es quien
+  // acaba de crearla, no un tercero (`ACTOR`) que nunca ha actuado.
   const r1 = sesion.ejecutar(crearFaccion, { nombre: 'Facción NPC' }, { actor: 'jugador-npc' });
   const r2 = sesion.ejecutar(crearFaccion, { nombre: 'Facción Manual' }, { actor: 'jugador-manual' });
   if (!r1.ok || !r2.ok) throw new Error('setup del test: no se pudieron crear las Facciones');
   const faccionNpcId = r1.datos!.faccionId;
   const faccionManualId = r2.datos!.faccionId;
 
-  // Mismo barrido de grilla que el archivo original: el test no depende de que un punto elegido a mano sea
-  // viable con esta seed.
-  const { ancho, alto } = sesion.getMapa().limites;
-  const posiciones: { x: number; y: number }[] = [];
-  for (let x = 40; x < ancho && posiciones.length < 2; x += 40) {
-    for (let y = 40; y < alto && posiciones.length < 2; y += 40) {
-      const candidata = { x, y };
-      if (!evaluarViabilidadFundacion(sesion.getMapa(), candidata, sesion.getState().asentamientos).recomendable) continue;
-      if (posiciones.some((p) => Math.hypot(p.x - x, p.y - y) < 200)) continue;
-      posiciones.push(candidata);
-    }
-  }
-  expect(posiciones).toHaveLength(2);
-
-  sesion.ejecutar(fundarAsentamiento, { faccionId: faccionNpcId, posicion: posiciones[0]! }, { actor: ACTOR });
-  sesion.ejecutar(fundarAsentamiento, { faccionId: faccionManualId, posicion: posiciones[1]! }, { actor: ACTOR });
+  // Sin barrido de grilla ni punto elegido a mano: se funda donde se está (Doc 1.3), en el punto aleatorio
+  // donde cada fundador apareció al crear su Facción (misma SEED, así que es reproducible).
+  sesion.ejecutar(fundarAsentamiento, { faccionId: faccionNpcId }, { actor: 'jugador-npc' });
+  sesion.ejecutar(fundarAsentamiento, { faccionId: faccionManualId }, { actor: 'jugador-manual' });
   expect(sesion.getState().asentamientos).toHaveLength(2);
 
   return { sesion, faccionNpcId, faccionManualId };

@@ -752,7 +752,7 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
         method: 'POST',
         url: '/v1/jugador/partidas/g1/comandos',
         headers: auth,
-        // `fundarAsentamiento` exige `faccionId` y `posicion` — este cuerpo no trae ninguno.
+        // `fundarAsentamiento` exige `faccionId` — este cuerpo no trae ninguno.
         payload: { tipo: 'fundarAsentamiento', params: {} },
       });
 
@@ -903,12 +903,21 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
   it('una entidad inexistente NO es 403: la existencia la juzga el comando, con su codigo de error', async () => {
     await partidaCreada('g1');
     const auth = await jugadorEn('g1');
+    // Se funda donde se está (Doc 1.3): hace falta existir ya en el mundo, con columna, antes de poder
+    // fundar — un comando cualquiera de alta sirve, para que esta prueba mida lo que dice medir (una
+    // Facción inexistente) y no un jugador sin registrar.
+    await app.inject({
+      method: 'POST',
+      url: '/v1/jugador/partidas/g1/comandos',
+      headers: auth,
+      payload: { tipo: 'crearFaccion', params: { nombre: 'Placeholder' } },
+    });
 
     const res = await app.inject({
       method: 'POST',
       url: '/v1/jugador/partidas/g1/comandos',
       headers: auth,
-      payload: { tipo: 'fundarAsentamiento', params: { faccionId: 'no-existe', posicion: { x: 500, y: 500 } } },
+      payload: { tipo: 'fundarAsentamiento', params: { faccionId: 'no-existe' } },
     });
 
     expect(res.statusCode).toBe(200);

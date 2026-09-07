@@ -1,8 +1,9 @@
 # La entrada al mundo — decisiones y plan
 
-> **Estado (2026-09-07): diseñado a medias, en curso.** Nace de un hueco que el paso 9 del jugador situado
-> destapó y que es más de fondo que ese paso: **no hay sitio donde existir antes de tener bandera**, y nada
-> impide que 800 jugadores funden 800 asentamientos en el primer minuto.
+> **Estado (2026-09-07): plan §6 completo salvo el punto 6 (qué hace un huésped, sin fecha).** Nace de un
+> hueco que el paso 9 del jugador situado destapó y que es más de fondo que ese paso: **no hay sitio donde
+> existir antes de tener bandera**, y nada impide que 800 jugadores funden 800 asentamientos en el primer
+> minuto.
 >
 > Reglas de juego → `Docs/Game/1` §1.3. Aquí solo decisiones y plan.
 
@@ -137,7 +138,9 @@ y porque decide si el vestíbulo es un sitio donde se juega o una sala de espera
 
    El consentimiento está **por construcción**, que era el motivo de elegir esta vía y no el trueque: una
    orden publicada no compromete a nadie — se toma o no se toma.
-5. El resto del paso 9 del jugador situado: spawn aleatorio ~~HECHO~~, memoria personal ~~HECHO
-   (2026-09-07, inerte hasta (a))~~, y fundar donde se está — (a) aparecer con columna, (b) el contrato de
-   fundación, (c) disolver la columna al fundar. Ver `Jugador_Situado_Definicion.md` §5.9.
+5. ~~El resto del paso 9 del jugador situado~~ — **HECHO (2026-09-07)**: spawn aleatorio, memoria personal
+   (ya no inerte: hay columnas huérfanas de verdad que la alimentan) y fundar donde se está — aparecer con
+   columna, el contrato de fundación sin `posicion`, y la columna que se disuelve al fundar reutilizando
+   `cruzarLaPuerta`. Ver `Jugador_Situado_Definicion.md` §5.9 para el detalle y lo que cambió del plan
+   original.
 6. **Aparte, sin fecha:** qué hace un huésped (§5).

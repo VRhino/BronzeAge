@@ -1,10 +1,10 @@
 import type { Point } from '../../domain/types';
 import { exigirPuertaDeFundacion, fundarAsentamiento as fundarAsentamientoEngine } from '../../engine/settlement';
 import { esCiudadano } from '../../engine/faccion';
-import { situarJugadores } from '../../engine/ubicacion';
+import { cruzarLaPuerta, puntoDeFundacionDe, situarJugadores } from '../../engine/ubicacion';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito } from './tipos';
-import { comando, conExploracionFundida } from './ayudas';
+import { comando, conExploracionFundida, exigirJugador } from './ayudas';
 import { evento } from './eventos';
 
 export interface PayloadAsentamientoFundado {
@@ -16,12 +16,17 @@ export interface PayloadAsentamientoFundado {
 
 export interface ParamsFundarAsentamiento {
   faccionId: string;
-  posicion: Point;
 }
 
 /**
  * Funda un asentamiento nuevo para una Facción existente. El fundador es EL ACTOR: recibe casa y, con ella,
  * ciudadanía inmediata de la Facción (Doc 1.2/1.3).
+ *
+ * **Se funda DONDE SE ESTA** (Doc 1.3): la posición no la elige el cliente, sale de la columna del fundador
+ * (`puntoDeFundacionDe`) — hay que estar en campo abierto, ni dentro de una plaza ni desconectado. Fundar es
+ * ENTRAR en lo que se acaba de levantar, así que esa columna se deshace dentro (`cruzarLaPuerta`), con sus
+ * tropas y su carga si llevaba alguna: casi nunca, porque la columna con la que se aparece nace vacía, pero
+ * un ciudadano que funda de campaña con su propia columna sí puede llegar con algo.
  *
  * Autorización (`comandos/autorizacion.ts`): rol `jugador`, y ser ya ciudadano de esa Facción — salvo que no
  * sea ciudadano de ninguna, porque fundar es una de las dos vías de ENTRAR en una (la otra es `comprarCasa`).
@@ -55,24 +60,33 @@ export const fundarAsentamiento = comando<ParamsFundarAsentamiento, { asentamien
     estado.salidasFaccionPorJugador[ctx.actor] !== undefined || estado.facciones.some((f) => esCiudadano(f, ctx.actor));
   exigirPuertaDeFundacion(jugadoresIds, yaFueCiudadano);
 
+  const fundador = exigirJugador(estado, ctx.actor);
+  const { posicion, columna } = puntoDeFundacionDe(fundador, estado.ejercitos);
+
   const resultado = fundarAsentamientoEngine(
     mapa,
     estado.facciones,
     params.faccionId,
-    params.posicion,
+    posicion,
     jugadoresIds,
     estado.asentamientos,
     ctx.instante
   );
 
+  // Fundar es ENTRAR en lo que se acaba de levantar (Doc 1.10): el fundador ya es residente
+  // (`fundarAsentamientoEngine` lo puso en `jugadoresFundadoresIds`), así que la columna con la que llegó se
+  // deshace dentro — sus tropas a la guarnición, su carro al almacén — igual que al cruzar la puerta de
+  // cualquier otra residencia. Reutiliza `cruzarLaPuerta` en vez de repetir la regla: es la MISMA entrada,
+  // solo que a una plaza que nace en este mismo instante.
+  const cruce = cruzarLaPuerta(columna, resultado.asentamiento, ctx.actor, estado.relaciones);
+
   let siguiente: GameSessionState = {
     ...estado,
-    asentamientos: [...estado.asentamientos, resultado.asentamiento],
+    asentamientos: [...estado.asentamientos, cruce.asentamiento],
     facciones: resultado.facciones,
-    // Fundar es pararse y construir: el fundador queda DENTRO de lo que acaba de fundar (Doc 1.10). Es la
-    // única colocación que hace este comando, y hace falta porque el alta de `GameSession` no mueve a quien
-    // ya tenía registro — quien creó la Facción antes de fundar ya estaba dado de alta, y sin esto se
-    // quedaría marcado como fuera del mundo dentro de su propia ciudad.
+    ejercitos: cruce.disuelveColumna ? estado.ejercitos.filter((e) => e.id !== columna.id) : estado.ejercitos,
+    // Única colocación que hace este comando, y hace falta porque `cruzarLaPuerta` no toca `Jugador.ubicacion`
+    // — solo fusiona tropas y carga en el asentamiento.
     jugadores: situarJugadores(estado.jugadores, jugadoresIds, { tipo: 'asentamiento', asentamientoId: resultado.asentamiento.id }),
   };
 
@@ -88,11 +102,11 @@ export const fundarAsentamiento = comando<ParamsFundarAsentamiento, { asentamien
     [
       evento(ctx, {
         codigo: 'fundacion.asentamiento_fundado',
-        mensaje: `${nombreFaccion} funda asentamiento en (${Math.round(params.posicion.x)}, ${Math.round(params.posicion.y)}).`,
+        mensaje: `${nombreFaccion} funda asentamiento en (${Math.round(posicion.x)}, ${Math.round(posicion.y)}).`,
         payload: {
           asentamientoId: resultado.asentamiento.id,
           faccionId: params.faccionId,
-          posicion: params.posicion,
+          posicion,
           jugadoresIds,
         } satisfies PayloadAsentamientoFundado,
         asentamientoId: resultado.asentamiento.id,

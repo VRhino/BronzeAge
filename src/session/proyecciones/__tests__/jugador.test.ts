@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { instante } from '../../../domain/tiempo';
 import { GameSession } from '../../gameSession';
 import { instanteDeTest } from '../../../engine/__tests__/fixtures';
-import { partidaConAsentamiento, MOMENTO, OPC } from '../../__tests__/fixtures';
+import { enPie, partidaConAsentamiento, MOMENTO, OPC } from '../../__tests__/fixtures';
 import { crearFaccion } from '../../comandos/crearFaccion';
 import { fundarAsentamiento } from '../../comandos/fundarAsentamiento';
 import { entrarEnAsentamiento, salirAlMundo } from '../../comandos/presencia';
@@ -118,7 +118,9 @@ describe('asentamientosAvistados: la FICHA de lo ajeno, solo si se ve', () => {
     const base = partidaConAsentamiento();
     const opcRival = { ...OPC, actor: 'rival' };
     const rf = base.sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, opcRival);
-    const ra = base.sesion.ejecutar(fundarAsentamiento, { faccionId: rf.datos!.faccionId, posicion }, opcRival);
+    // Se funda donde se está (Doc 1.3): se lleva al rival al punto elegido antes de fundar.
+    base.sesion = enPie(base.sesion, 'rival', posicion);
+    const ra = base.sesion.ejecutar(fundarAsentamiento, { faccionId: rf.datos!.faccionId }, opcRival);
     return { ...base, faccionRivalId: rf.datos!.faccionId, asentamientoRivalId: ra.datos!.asentamientoId };
   }
 
@@ -570,7 +572,9 @@ describe('territorioPorEjercito: de quien es el suelo que pisas', () => {
     const base = partidaConAsentamiento();
     const opcRival = { ...OPC, actor: 'rival' };
     const rf = base.sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, opcRival);
-    base.sesion.ejecutar(fundarAsentamiento, { faccionId: rf.datos!.faccionId, posicion: { x: 400, y: 470 } }, opcRival);
+    // Se funda donde se está (Doc 1.3): se lleva al rival al punto elegido antes de fundar.
+    base.sesion = enPie(base.sesion, 'rival', { x: 400, y: 470 });
+    base.sesion.ejecutar(fundarAsentamiento, { faccionId: rf.datos!.faccionId }, opcRival);
     const asentamientos = base.sesion.getState().asentamientos.map((a) => ({ ...a, radioPotencial: 60 }));
     const zonas = computeTodasLasZonas(asentamientos);
     return {
@@ -610,7 +614,9 @@ describe('territorioPorEjercito: de quien es el suelo que pisas', () => {
     const base = partidaConAsentamiento();
     const opcRival = { ...OPC, actor: 'rival' };
     const rf = base.sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, opcRival);
-    base.sesion.ejecutar(fundarAsentamiento, { faccionId: rf.datos!.faccionId, posicion: { x: 1500, y: 1500 } }, opcRival);
+    // Se funda donde se está (Doc 1.3): se lleva al rival al punto elegido antes de fundar.
+    base.sesion = enPie(base.sesion, 'rival', { x: 1500, y: 1500 });
+    base.sesion.ejecutar(fundarAsentamiento, { faccionId: rf.datos!.faccionId }, opcRival);
     const asentamientos = base.sesion.getState().asentamientos.map((a) =>
       a.posicion.x === 1500 ? { ...a, radioPotencial: 300 } : a
     );
@@ -675,7 +681,9 @@ describe('la memoria proyectada: lo que se vio y ya no se ve', () => {
     const base = partidaConAsentamiento();
     const opcRival = { ...OPC, actor: 'rival' };
     const rf = base.sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, opcRival);
-    const ra = base.sesion.ejecutar(fundarAsentamiento, { faccionId: rf.datos!.faccionId, posicion: { x: 400, y: 470 } }, opcRival);
+    // Se funda donde se está (Doc 1.3): se lleva al rival al punto elegido antes de fundar.
+    base.sesion = enPie(base.sesion, 'rival', { x: 400, y: 470 });
+    const ra = base.sesion.ejecutar(fundarAsentamiento, { faccionId: rf.datos!.faccionId }, opcRival);
     const rivalId = ra.datos!.asentamientoId;
     const estado = recordando(base.sesion.getState(), base.faccionId, fichaDe(rivalId, { x: 400, y: 470 }));
 

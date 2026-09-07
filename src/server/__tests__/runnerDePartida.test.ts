@@ -114,9 +114,9 @@ describe('RunnerDePartida — aplicar -> persistir -> confirmar', () => {
 describe('RunnerDePartida.avanzarTick — bundlea auto-comercio y turno NPC', () => {
   it('el turno del NPC de gobernanza ocurre DENTRO de avanzarTick, sin un comando aparte', async () => {
     const r = runner('g-npc');
-    const creada = await r.ejecutar(crearFaccion, { nombre: 'Micenas' });
+    const creada = await r.ejecutar(crearFaccion, { nombre: 'Micenas' }, 'jugador-1');
     const faccionId = creada.datos!.faccionId;
-    await r.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 } });
+    await r.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 } }, 'jugador-1');
     await r.ejecutar(alternarFaccionNpc, { faccionId, activo: true });
 
     // Antes de este fix, `avanzarTick()` del runner solo aplicaba el tick puro — la primera decisión de
@@ -394,8 +394,8 @@ describe('RunnerDePartida — preciosReferencia (doc 9: entrada privilegiada, so
 
   it('pasado el minuto de TTL, la siguiente lectura recalcula', async () => {
     const { r, avanzarMs } = runnerConReloj(MOMENTO);
-    const creada = await r.ejecutar(crearFaccion, { nombre: 'Micenas' });
-    const rf = await r.ejecutar(fundarAsentamiento, { faccionId: creada.datos!.faccionId, posicion: { x: 500, y: 500 } });
+    const creada = await r.ejecutar(crearFaccion, { nombre: 'Micenas' }, 'jugador-1');
+    const rf = await r.ejecutar(fundarAsentamiento, { faccionId: creada.datos!.faccionId, posicion: { x: 500, y: 500 } }, 'jugador-1');
     expect(rf.ok).toBe(true);
 
     const primera = r.preciosReferencia(); // con un asentamiento recién fundado (stock inicial > 0)
@@ -410,8 +410,8 @@ describe('RunnerDePartida — preciosReferencia (doc 9: entrada privilegiada, so
     const sinAsentamientos = runnerConReloj(MOMENTO).r.preciosReferencia().madera!;
 
     const { r } = runnerConReloj(MOMENTO);
-    const creada = await r.ejecutar(crearFaccion, { nombre: 'Micenas' });
-    await r.ejecutar(fundarAsentamiento, { faccionId: creada.datos!.faccionId, posicion: { x: 500, y: 500 } });
+    const creada = await r.ejecutar(crearFaccion, { nombre: 'Micenas' }, 'jugador-1');
+    await r.ejecutar(fundarAsentamiento, { faccionId: creada.datos!.faccionId, posicion: { x: 500, y: 500 } }, 'jugador-1');
 
     expect(r.preciosReferencia().madera).toBeLessThanOrEqual(sinAsentamientos);
   });
@@ -433,8 +433,8 @@ describe('RunnerDePartida — geometriaAsentamientos (Fase C10: zonas/trazado po
     const r = runner();
     const antes = r.geometriaAsentamientos();
 
-    const creada = await r.ejecutar(crearFaccion, { nombre: 'Micenas' });
-    const fundada = await r.ejecutar(fundarAsentamiento, { faccionId: creada.datos!.faccionId, posicion: { x: 500, y: 500 } });
+    const creada = await r.ejecutar(crearFaccion, { nombre: 'Micenas' }, 'jugador-1');
+    const fundada = await r.ejecutar(fundarAsentamiento, { faccionId: creada.datos!.faccionId, posicion: { x: 500, y: 500 } }, 'jugador-1');
     expect(fundada.ok).toBe(true);
     const asentamientoId = fundada.datos!.asentamientoId;
 

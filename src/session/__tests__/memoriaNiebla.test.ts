@@ -55,8 +55,8 @@ describe('memoriaPorFaccion en la partida', () => {
 describe('exploracionPersonal se funde al conseguir bandera', () => {
   it('crear una Facción funde lo explorado sin bandera, y borra el registro personal', () => {
     const payload = GameSession.crear('g2', { seed: 42 }).exportar();
-    // Simula a alguien que ya anduvo sin bandera antes de fundar: `conJugadorAsegurado` todavía no deja
-    // columna al aparecer (paso 9 pendiente), así que se inyecta el registro a mano.
+    // Simula a alguien que ya anduvo sin bandera antes de fundar: se inyecta el registro a mano para probar
+    // la fusión aislada, sin depender de un tick real que vaya grabando `exploracionPersonal` poco a poco.
     const sesion = GameSession.importar({
       ...payload,
       state: {

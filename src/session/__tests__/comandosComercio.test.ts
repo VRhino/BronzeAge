@@ -7,18 +7,22 @@ import { GameSession } from '../gameSession';
 import { crearFaccion } from '../comandos/crearFaccion';
 import { fundarAsentamiento } from '../comandos/fundarAsentamiento';
 import { aceptarTrueque, colocarOrdenMercado, crearCaravana, proponerTrueque, rechazarTrueque } from '../comandos/comercio';
+import { enPie } from './fixtures';
 
 const OPC = { actor: 'jugador-test' };
 
 /** Dos asentamientos de Facciones distintas, lo bastante separados para que ambos sean fundables. */
 function partidaConDosAsentamientos() {
-  const sesion = GameSession.crear('comercio-test', { seed: 42 });
-  // Dos actores distintos al CREAR: un jugador solo puede crear una Facción (Doc 2 "Entidades"). Fundar sigue
-  // con el actor de `OPC` para las dos, sin conflicto — el motor no exige ciudadanía previa para fundar.
+  let sesion = GameSession.crear('comercio-test', { seed: 42 });
+  // Dos actores distintos al CREAR: un jugador solo puede crear una Facción (Doc 2 "Entidades"). Cada uno
+  // funda la suya: ya tiene columna en el mundo desde que la creó (Doc 1.3, se funda donde se está), así que
+  // ninguno de los dos necesita un alta aparte — se le lleva al punto elegido antes de fundar.
   const fa = sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, { ...OPC, actor: 'jugador-a' }).datos!.faccionId;
   const fb = sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, { ...OPC, actor: 'jugador-b' }).datos!.faccionId;
-  const a = sesion.ejecutar(fundarAsentamiento, { faccionId: fa, posicion: { x: 400, y: 400 } }, OPC);
-  const b = sesion.ejecutar(fundarAsentamiento, { faccionId: fb, posicion: { x: 900, y: 900 } }, OPC);
+  sesion = enPie(sesion, 'jugador-a', { x: 400, y: 400 });
+  const a = sesion.ejecutar(fundarAsentamiento, { faccionId: fa }, { ...OPC, actor: 'jugador-a' });
+  sesion = enPie(sesion, 'jugador-b', { x: 900, y: 900 });
+  const b = sesion.ejecutar(fundarAsentamiento, { faccionId: fb }, { ...OPC, actor: 'jugador-b' });
   if (!a.ok || !b.ok) throw new Error('setup del test: no se pudieron fundar los dos asentamientos');
   return { sesion, aId: a.datos!.asentamientoId, bId: b.datos!.asentamientoId };
 }

@@ -1084,43 +1084,57 @@ Cada paso deja el repo verde y jugable. El orden no es negociable en los tres pr
    fallara—. Ahora hay dos tests que fallan si eso ocurre: uno comprueba que el NPC fija presa, y otro que en
    el tick siguiente eso **produce un `combate.encuentro`**.
 
-9. **Onboarding.** A medias (2026-09-07). Lo que hay:
+9. **Onboarding. HECHO (2026-09-07).**
 
    - **`puntoDeAparicion`**: se aparece en un punto aleatorio del mundo, **donde se pueda fundar**. El listón
      es `fundable` y no `recomendable` a propósito — aparecer donde fundar es imposible dejaría al novato
      caminando sin saber por qué, y un sitio legal sigue sin ser un sitio bueno, así que la caminata conserva
      su sentido.
-   - **`puntoDeFundacionDe`**: de dónde sale el punto al fundar. Lista, sin usar todavía.
-   - **`Jugador.exploracionPersonal`** y **`fundirExploraciones`** (OR bit a bit). El campo existe y la fusión
-     también; falta que el tick GRABE en ella y que la proyección la use.
-   - **(d) HECHO (2026-09-07).** `grabarExploracionPersonal` (`engine/ubicacion.ts`) graba al final de cada
-     tick lo que ve la columna de quien no tiene bandera (`faccionId === ''`) — mismo momento y mismo motivo
-     que `grabarLoVisto`. `conExploracionFundida` (`session/comandos/ayudas.ts`) la funde en la
-     `MemoriaFaccion` correspondiente y borra el registro personal en los tres sitios donde un jugador
-     consigue bandera: `crearFaccion`, `fundarAsentamiento`, `unirseAFaccion`.
+   - **(a) Aparecer con COLUMNA.** `conJugadorAsegurado` ya no dejaba a quien nunca ha actuado en un punto
+     suelto (`ubicacion: 'desconectado'`): le da una columna nueva, sin tropas, sin carga y **sin casa**
+     (`origenAsentamientoId: ''`) — la condición de HUÉRFANO que el motor ya sabía manejar (Doc 5.4). Solo
+     dispara cuando `ubicacionDeducida` no encuentra nada (ni residencia ni columna): la migración de
+     snapshots sigue llamando a `conJugadorAsegurado` SIN `aparicion`, así que una partida vieja no recibe
+     columnas de la nada — solo empieza a pasar esto para quien actúa por primera vez a partir de hoy. **Sin
+     migración de snapshot**: ningún tipo cambió de forma, solo el CRITERIO con el que se construye un
+     `Ejercito` que ya existía.
+   - **(b) Fundar donde se está.** `posicion` sale de `ParamsFundarAsentamiento`; el comando la deriva de
+     `puntoDeFundacionDe(fundador, ejercitos)`, que exige estar en campo abierto (rechaza dentro de una plaza
+     o desconectado). El motor (`engine/settlement.ts`) NO se tocó: sigue recibiendo `posicion` como siempre,
+     así que la gobernanza NPC (que llama al motor directo) es inmune a este cambio.
+   - **(c) Disolver la columna al fundar.** No hizo falta escribir nada nuevo: fundar es ENTRAR en la plaza
+     que se acaba de levantar, y eso es exactamente lo que ya hacía `cruzarLaPuerta` al volver a la propia
+     residencia. Se reutiliza tal cual — el fundador siempre es residente de lo que acaba de fundar, así que
+     siempre entra por la vía que absorbe. **Efecto colateral bueno, no buscado:** si un ciudadano funda una
+     plaza nueva para su Facción llevando su PROPIA columna de campaña (con tropas y carga, vía
+     `salirAlMundo`), esas tropas pasan a ser la guarnición inicial y esa carga al almacén — la misma regla,
+     sin caso especial. Y de rebote, un actor que va en un `ejercito` de verdad (con más gente dentro) no
+     puede fundar sin separarse antes: `cruzarLaPuerta` ya lo impedía, y es la protección correcta —
+     fundar solo con SU columna habría dejado a los demás con un `ejercitoId` apuntando a nada.
+   - **`Jugador.exploracionPersonal`** deja de estar INERTE. `grabarExploracionPersonal` (motor) y
+     `conExploracionFundida` (sesión) ya estaban escritas y probadas por separado, pero nada producía todavía
+     su condición de disparo —columna con `faccionId === ''`—; con (a) ya hay columnas huérfanas de verdad que
+     las alimentan de punta a punta.
 
-     **Es correcto pero hoy está INERTE**, y hay que decirlo claro: la condición que dispara el registro
-     —columna con `faccionId === ''`— no la produce todavía nada vivo. `conJugadorAsegurado` sigue apareciendo
-     a la gente en un PUNTO (`ubicacion: 'desconectado'`), no en una columna; esa columna es exactamente (a),
-     que sigue sin hacerse. Falta la proyección tampoco usa el campo. Probado puro y aislado
-     (`engine/__tests__/ubicacion.test.ts`, `session/__tests__/memoriaNiebla.test.ts`), no de punta a punta,
-     porque de punta a punta no hay nada que recorrer todavía.
+   **Lo que cambió respecto al plan original:** se pensó `puntoDeFundacionDe` devolviendo solo el `Point`, y
+   una función aparte (`disolverColumnaDeAparicion`) que la borrara del array. Se descartó al escribirla:
+   habría ignorado tropas/carga de una columna no vacía, exactamente el caso que `cruzarLaPuerta` ya resuelve
+   bien. `puntoDeFundacionDe` devuelve `{ posicion, columna }` — la columna entera, no solo su id — para que
+   quien llama pueda hacerla ENTRAR, no solo borrarla.
 
-   **Lo que falta, y va junto porque se arrastra:**
+   **Por qué esta vez sí, tras la marcha atrás anterior:** el motor no se tocó, así que los tests con
+   geometría relativa (una plaza rival a tal distancia, columnas respecto a un asentamiento) no rompieron por
+   ese lado. Rompieron 41 tests de la CAPA DE SESIÓN — los que fundaban pasando una `posicion` de cliente — y
+   los 41 se arreglaron con el mismo patrón: un helper de fixture, `enPie(sesion, jugadorId, punto)`
+   (`session/__tests__/fixtures.ts`), que planta la columna de un actor en el punto que el test necesita antes
+   de fundar. Es más honesto que el código de antes, no un parche: ahora un test declara DÓNDE ESTÁ su
+   fundador, que es justo lo que la regla nueva exige, en vez de fundar a distancia sobre un mapa.
 
-   a) **Aparecer con COLUMNA**, no en un punto suelto. Los tres sitios donde un jugador puede estar son dentro
-      de una plaza, dentro de una columna o fuera del mundo (Doc 1.10); quien camina por el campo está en la
-      segunda. Sin ella no puede ni moverse ni fundar donde se para, y **(d) sigue sin tener nada que grabar**.
-   b) **Fundar donde se está**, que es la rotura de contrato: `posicion` sale de `ParamsFundarAsentamiento`.
-   c) **Disolver la columna de aparición al fundar** — fundar es entrar en la plaza que acabas de hacer, así
-      que la columna se deshace dentro, igual que al cruzar la puerta de tu residencia.
-
-   **Se intentó en una pasada y se dio marcha atrás**, no por dudas de diseño sino de tamaño: (a)+(b)+(c) se
-   arrastran entre sí y rompen **67 tests**, muchos con posiciones relativas unas de otras (una plaza rival a
-   tal distancia de la propia, columnas colocadas respecto a un asentamiento). Cada uno hay que pensarlo, no
-   solo migrarlo: un test que funda en un punto elegido pasa a necesitar LLEVAR ahí a su fundador.
-
-   Merece su propia pasada, con la cabeza fresca y sin nada más encima.
+   **Detalle de implementación que merece nombrarse:** dar de alta a un actor consume un id nuevo
+   (`ejercito-N`) SOLO si de verdad aparece — `conJugadorAsegurado` recibe un `generarId: () => string`
+   perezoso, no un id ya calculado, porque `GameSession.conActorEnPartida` corre en CADA comando de CADA
+   jugador ya registrado (el caso normal), y pedir el id por adelantado lo habría gastado sin usarlo casi
+   siempre.
 10. **Calibración** por batch — ahora nueve constantes, y con el combate ya intencional, que es lo que hace la
     medición representativa.
 
