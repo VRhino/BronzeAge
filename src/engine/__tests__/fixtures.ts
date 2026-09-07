@@ -93,6 +93,7 @@ export function crearEstadoDeTest(
     caminos: [],
     campamentosBandidos: [],
     bandidosProximoSpawnEn: instanteDeTest(0),
+    jugadores: [],
     ...overrides,
   };
 }

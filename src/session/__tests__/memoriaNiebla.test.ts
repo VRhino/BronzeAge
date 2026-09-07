@@ -3,8 +3,9 @@
 // están en `engine/__tests__/memoria.test.ts`; lo que aquí se congela es el cableado.
 import { describe, expect, it } from 'vitest';
 import { GameSession } from '../gameSession';
-import { partidaConAsentamiento } from './fixtures';
+import { ACTOR, OPC, partidaConAsentamiento } from './fixtures';
 import { celdasExploradas, estaExplorado, rejillaDe } from '../../engine/exploracion';
+import { crearFaccion } from '../comandos/crearFaccion';
 
 describe('memoriaPorFaccion en la partida', () => {
   it('una partida recién creada no recuerda nada', () => {
@@ -45,5 +46,31 @@ describe('memoriaPorFaccion en la partida', () => {
 
     const recargada = GameSession.importar(JSON.parse(JSON.stringify(sesion.exportar())));
     expect(recargada.getState().memoriaPorFaccion[faccionId]).toEqual(antes);
+  });
+});
+
+// La otra mitad de la niebla, la del jugador SIN bandera (`Jugador.exploracionPersonal`, Doc 1.3): el tick
+// que la graba se prueba puro en `engine/__tests__/ubicacion.test.ts`; esto congela que fundar la funde en
+// la Facción y la borra del jugador.
+describe('exploracionPersonal se funde al conseguir bandera', () => {
+  it('crear una Facción funde lo explorado sin bandera, y borra el registro personal', () => {
+    const payload = GameSession.crear('g2', { seed: 42 }).exportar();
+    // Simula a alguien que ya anduvo sin bandera antes de fundar: `conJugadorAsegurado` todavía no deja
+    // columna al aparecer (paso 9 pendiente), así que se inyecta el registro a mano.
+    const sesion = GameSession.importar({
+      ...payload,
+      state: {
+        ...payload.state,
+        jugadores: [
+          { id: ACTOR, liderazgoBase: 0, ubicacion: { tipo: 'desconectado' as const, punto: { x: 400, y: 400 } }, exploracionPersonal: 'ff' },
+        ],
+      },
+    });
+
+    const r = sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, OPC);
+    const estado = sesion.getState();
+
+    expect(estado.memoriaPorFaccion[r.datos!.faccionId]!.exploracion).toBe('ff');
+    expect(estado.jugadores.find((j) => j.id === ACTOR)!.exploracionPersonal).toBeUndefined();
   });
 });

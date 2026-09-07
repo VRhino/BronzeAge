@@ -862,6 +862,7 @@ async function main() {
     caminos: [],
     campamentosBandidos: [],
     bandidosProximoSpawnEn: instanteDeTick(0),
+    jugadores: [],
   };
 
   // Palancas de EXPERIMENTO, ninguna cambia el comportamiento por defecto:

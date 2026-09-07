@@ -13,8 +13,9 @@ import { evaluarViabilidadFundacion } from './settlement';
 import { distancia } from '../world/geometria';
 import type { Mapa } from '../world/mapa';
 import type { RandomFn } from '../worldgen';
-import { absorberColumna, enLaPuertaDe, MovilizacionInvalidaError } from './ejercitos';
+import { absorberColumna, alcanceDeVista, enLaPuertaDe, MovilizacionInvalidaError } from './ejercitos';
 import { esResidente, puedeEntrarEn } from './pertenencia';
+import { marcarVisto, rejillaDe, SIN_EXPLORAR } from './exploracion';
 
 /**
  * Dónde está un jugador según lo que el mundo sabe de él, sin consultar su registro.
@@ -239,4 +240,37 @@ export function puntoDeFundacionDe(jugador: Jugador, ejercitos: readonly Ejercit
   const columna = ejercitos.find((e) => e.id === (jugador.ubicacion as { ejercitoId: string }).ejercitoId);
   if (!columna) throw new MovilizacionInvalidaError('Tu columna ya no existe.');
   return columna.posicionActual;
+}
+
+/**
+ * Graba en `Jugador.exploracionPersonal` lo que ve quien todavia no tiene bandera (Doc 1.3): sin Faccion no
+ * hay `MemoriaFaccion` en la que anotarlo, y sin esto el tramo entre aparecer y fundar seria un paseo a
+ * ciegas SIN REGISTRO.
+ *
+ * Solo aplica a quien esta en una columna HUERFANA (`faccionId === ''`): un jugador con Faccion ya graba en
+ * `memoriaPorFaccion` (`engine/memoria.ts`), asi que tocar aqui su registro personal seria grabar el mismo
+ * hecho dos veces. Se llama al FINAL del tick, igual que `grabarLoVisto` y por el mismo motivo: lo que se
+ * graba es donde acabo la columna, no de donde salio.
+ */
+export function grabarExploracionPersonal(
+  jugadores: readonly Jugador[],
+  ejercitos: readonly Ejercito[],
+  limites: { ancho: number; alto: number }
+): Jugador[] {
+  const rejilla = rejillaDe(limites);
+  let salida: Jugador[] = jugadores as Jugador[];
+
+  jugadores.forEach((jugador, indice) => {
+    if (jugador.ubicacion.tipo !== 'columna') return;
+    const columna = ejercitos.find((e) => e.id === (jugador.ubicacion as { ejercitoId: string }).ejercitoId);
+    if (!columna || columna.faccionId !== '') return;
+
+    const explorado = marcarVisto(jugador.exploracionPersonal ?? SIN_EXPLORAR, rejilla, columna.posicionActual, alcanceDeVista(columna));
+    if (explorado === (jugador.exploracionPersonal ?? SIN_EXPLORAR)) return;
+
+    if (salida === jugadores) salida = [...jugadores];
+    salida[indice] = { ...jugador, exploracionPersonal: explorado };
+  });
+
+  return salida;
 }

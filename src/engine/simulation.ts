@@ -1,4 +1,4 @@
-import type { AcuerdoTrueque, Asentamiento, CaminoComercial, CampamentoBandido, Caravana, Ejercito, Faccion, OrdenMercado, RelacionPolitica, Titulo } from '../domain/types';
+import type { AcuerdoTrueque, Asentamiento, CaminoComercial, CampamentoBandido, Caravana, Ejercito, Faccion, Jugador, OrdenMercado, RelacionPolitica, Titulo } from '../domain/types';
 import type { EventoCrudo, EventoDominio } from '../domain/eventos';
 import type { Instante } from '../domain/tiempo';
 import type { EstadoMapa, Mapa } from '../world/mapa';
@@ -21,6 +21,7 @@ import { calcularTitulos, narrarCambiosDeTitulo } from './titulos';
 import { avanzarAtaquesBandidos, avanzarSpawnBandidos } from './bandidos';
 import { avanzarEjercitos } from './ejercitos';
 import { grabarLoVisto, type MemoriaFaccion } from './memoria';
+import { grabarExploracionPersonal } from './ubicacion';
 
 export interface EstadoSimulacion {
   asentamientos: Asentamiento[];
@@ -45,6 +46,9 @@ export interface EstadoSimulacion {
    * Una Facción ausente no ha visto nada todavía, así que las partidas guardadas antes de la mecánica no
    * necesitan migración. */
   memoriaPorFaccion: Record<string, MemoriaFaccion>;
+  /** Quien juega (Doc 1.10). El tick solo lo toca para grabar `exploracionPersonal` de quien aun no tiene
+   * bandera (`grabarExploracionPersonal`) — todo lo demas de un `Jugador` lo escribe un comando, no el tick. */
+  jugadores: Jugador[];
 }
 
 /**
@@ -313,6 +317,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
       limites: mapa.limites,
       instante,
     }),
+    jugadores: grabarExploracionPersonal(estado.jugadores, trasEjercitos.ejercitos, mapa.limites),
     estadoMapa: mapa.estadoActual(),
     eventosDominio,
   };

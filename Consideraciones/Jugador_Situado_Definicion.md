@@ -1093,16 +1093,27 @@ Cada paso deja el repo verde y jugable. El orden no es negociable en los tres pr
    - **`puntoDeFundacionDe`**: de dónde sale el punto al fundar. Lista, sin usar todavía.
    - **`Jugador.exploracionPersonal`** y **`fundirExploraciones`** (OR bit a bit). El campo existe y la fusión
      también; falta que el tick GRABE en ella y que la proyección la use.
+   - **(d) HECHO (2026-09-07).** `grabarExploracionPersonal` (`engine/ubicacion.ts`) graba al final de cada
+     tick lo que ve la columna de quien no tiene bandera (`faccionId === ''`) — mismo momento y mismo motivo
+     que `grabarLoVisto`. `conExploracionFundida` (`session/comandos/ayudas.ts`) la funde en la
+     `MemoriaFaccion` correspondiente y borra el registro personal en los tres sitios donde un jugador
+     consigue bandera: `crearFaccion`, `fundarAsentamiento`, `unirseAFaccion`.
+
+     **Es correcto pero hoy está INERTE**, y hay que decirlo claro: la condición que dispara el registro
+     —columna con `faccionId === ''`— no la produce todavía nada vivo. `conJugadorAsegurado` sigue apareciendo
+     a la gente en un PUNTO (`ubicacion: 'desconectado'`), no en una columna; esa columna es exactamente (a),
+     que sigue sin hacerse. Falta la proyección tampoco usa el campo. Probado puro y aislado
+     (`engine/__tests__/ubicacion.test.ts`, `session/__tests__/memoriaNiebla.test.ts`), no de punta a punta,
+     porque de punta a punta no hay nada que recorrer todavía.
 
    **Lo que falta, y va junto porque se arrastra:**
 
    a) **Aparecer con COLUMNA**, no en un punto suelto. Los tres sitios donde un jugador puede estar son dentro
       de una plaza, dentro de una columna o fuera del mundo (Doc 1.10); quien camina por el campo está en la
-      segunda. Sin ella no puede ni moverse ni fundar donde se para.
+      segunda. Sin ella no puede ni moverse ni fundar donde se para, y **(d) sigue sin tener nada que grabar**.
    b) **Fundar donde se está**, que es la rotura de contrato: `posicion` sale de `ParamsFundarAsentamiento`.
    c) **Disolver la columna de aparición al fundar** — fundar es entrar en la plaza que acabas de hacer, así
       que la columna se deshace dentro, igual que al cruzar la puerta de tu residencia.
-   d) Que el tick grabe la exploración personal, y que se funda con la de la Facción al fundar o al unirse.
 
    **Se intentó en una pasada y se dio marcha atrás**, no por dudas de diseño sino de tamaño: (a)+(b)+(c) se
    arrastran entre sí y rompen **67 tests**, muchos con posiciones relativas unas de otras (una plaza rival a

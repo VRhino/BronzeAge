@@ -137,5 +137,7 @@ y porque decide si el vestíbulo es un sitio donde se juega o una sala de espera
 
    El consentimiento está **por construcción**, que era el motivo de elegir esta vía y no el trueque: una
    orden publicada no compromete a nadie — se toma o no se toma.
-5. El resto del paso 9 del jugador situado: spawn aleatorio, memoria personal, fundar donde se está.
+5. El resto del paso 9 del jugador situado: spawn aleatorio ~~HECHO~~, memoria personal ~~HECHO
+   (2026-09-07, inerte hasta (a))~~, y fundar donde se está — (a) aparecer con columna, (b) el contrato de
+   fundación, (c) disolver la columna al fundar. Ver `Jugador_Situado_Definicion.md` §5.9.
 6. **Aparte, sin fecha:** qué hace un huésped (§5).

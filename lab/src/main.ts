@@ -206,6 +206,7 @@ function fundar(seed: number): void {
     caminos: [],
     campamentosBandidos: [],
     bandidosProximoSpawnEn: instanteDeTick(0),
+    jugadores: [],
   };
   tick = 0;
   contadorManual = 0;

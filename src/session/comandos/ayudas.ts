@@ -15,6 +15,8 @@
 // Queda encerrado dentro de `comando()`, no escapa nunca de un manejador, y es exactamente lo que ya hacía
 // `rechazoDesdeError` con los errores del motor — así que el mecanismo es uno, no dos.
 import { columnaDe } from '../../engine/ejercitos';
+import { fundirExploraciones } from '../../engine/exploracion';
+import { MEMORIA_VACIA } from '../../engine/memoria';
 import type { AcuerdoTrueque, Asentamiento, CampamentoBandido, Caravana, Faccion, Ejercito, Jugador } from '../../domain/types';
 import type { GameSessionState } from '../estado';
 import { CODIGOS_ERROR, type CodigoError } from './codigosDeError';
@@ -135,4 +137,26 @@ export function conAsentamientos(estado: GameSessionState, actualizados: Asentam
 /** Sustituye una Facción por su versión actualizada. */
 export function conFaccion(estado: GameSessionState, actualizada: Faccion): GameSessionState {
   return { ...estado, facciones: estado.facciones.map((f) => (f.id === actualizada.id ? actualizada : f)) };
+}
+
+/**
+ * Funde lo que un jugador exploró SIN bandera en la memoria de la Facción que acaba de fundar o unirse, y
+ * borra su registro personal: a partir de aquí manda el de la Facción (Doc 1.3). Llamar al fundar o al
+ * entrar en una Facción — los dos únicos momentos en que un jugador deja de estar sin bandera.
+ *
+ * Sin nada que fundir (nunca anduvo solo, o ya se fundió antes) devuelve el estado tal cual.
+ */
+export function conExploracionFundida(estado: GameSessionState, jugadorId: string, faccionId: string): GameSessionState {
+  const jugador = estado.jugadores.find((j) => j.id === jugadorId);
+  if (!jugador?.exploracionPersonal) return estado;
+
+  const memoriaPrevia = estado.memoriaPorFaccion[faccionId] ?? MEMORIA_VACIA;
+  return {
+    ...estado,
+    jugadores: estado.jugadores.map((j) => (j.id === jugadorId ? { ...j, exploracionPersonal: undefined } : j)),
+    memoriaPorFaccion: {
+      ...estado.memoriaPorFaccion,
+      [faccionId]: { ...memoriaPrevia, exploracion: fundirExploraciones(memoriaPrevia.exploracion, jugador.exploracionPersonal) },
+    },
+  };
 }

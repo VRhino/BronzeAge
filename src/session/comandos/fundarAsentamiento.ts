@@ -4,7 +4,7 @@ import { esCiudadano } from '../../engine/faccion';
 import { situarJugadores } from '../../engine/ubicacion';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito } from './tipos';
-import { comando } from './ayudas';
+import { comando, conExploracionFundida } from './ayudas';
 import { evento } from './eventos';
 
 export interface PayloadAsentamientoFundado {
@@ -78,6 +78,8 @@ export const fundarAsentamiento = comando<ParamsFundarAsentamiento, { asentamien
 
   const nombreFaccion = resultado.facciones.find((f) => f.id === params.faccionId)?.nombre ?? params.faccionId;
   for (const jugadorId of jugadoresIds) {
+    // Lo que anduvo sin bandera pasa a ser conocimiento de la Facción que acaba de fundar (Doc 1.3).
+    siguiente = conExploracionFundida(siguiente, jugadorId, params.faccionId);
     siguiente = conHistorialDeJugador(siguiente, jugadorId, `Funda ${resultado.asentamiento.id} (${nombreFaccion}) y recibe casa + ciudadanía.`);
   }
 

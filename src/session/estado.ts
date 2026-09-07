@@ -135,6 +135,7 @@ export function estadoSimulacionDe(estado: GameSessionState): EstadoSimulacion {
     campamentosBandidos: estado.campamentosBandidos,
     bandidosProximoSpawnEn: estado.bandidosProximoSpawnEn,
     memoriaPorFaccion: estado.memoriaPorFaccion,
+    jugadores: estado.jugadores,
   };
 }
 
@@ -155,6 +156,7 @@ export function conResultadoDeSimulacion(estado: GameSessionState, simulacion: E
     campamentosBandidos: simulacion.campamentosBandidos,
     bandidosProximoSpawnEn: simulacion.bandidosProximoSpawnEn,
     memoriaPorFaccion: simulacion.memoriaPorFaccion,
+    jugadores: simulacion.jugadores,
   };
 }
 

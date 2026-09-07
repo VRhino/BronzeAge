@@ -1460,9 +1460,9 @@ export function avanzarNpcGobernanza(
       : lanzarCampanas(
           trasBandidos.asentamientos,
           trasComercio.ejercitos,
-          // Sin registro de Jugador: `EstadoSimulacion` no lo lleva (vive en `GameSessionState`), y un
-          // jugador ausente usa `LIDERAZGO.base` por diseño (Doc 5.11). Los del NPC no se desvían de la base,
-          // así que no hay nada que consultar.
+          // Los fundadores NPC (`npc-<faccionId>-<n>`) son ids ficticios sin `Jugador` detrás, y un jugador
+          // ausente usa `LIDERAZGO.base` por diseño (Doc 5.11). No se desvían de la base, así que no hay
+          // nada que consultar.
           [],
           trasComercio.relaciones,
           mapa,

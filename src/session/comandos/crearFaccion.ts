@@ -1,9 +1,8 @@
 import { crearFaccion as crearFaccionEngine, esCiudadano, otorgarCiudadania } from '../../engine/faccion';
 import { CIUDADANIA } from '../../constants';
 import { dias, transcurrido } from '../../domain/tiempo';
-import type { GameSessionState } from '../estado';
 import { exito } from './tipos';
-import { comando, rechazar } from './ayudas';
+import { comando, conExploracionFundida, rechazar } from './ayudas';
 import { CODIGOS_ERROR } from './codigosDeError';
 import { evento } from './eventos';
 
@@ -45,7 +44,8 @@ export const crearFaccion = comando<ParamsCrearFaccion, { faccionId: string }>((
   }
 
   const nueva = otorgarCiudadania(crearFaccionEngine(`faccion-custom-${ctx.ids.siguiente()}`, nombre), ctx.actor);
-  const siguiente: GameSessionState = { ...estado, facciones: [...estado.facciones, nueva] };
+  // Lo que anduvo sin bandera pasa a ser conocimiento de la Facción recién creada (Doc 1.3).
+  const siguiente = conExploracionFundida({ ...estado, facciones: [...estado.facciones, nueva] }, ctx.actor, nueva.id);
   return exito(
     siguiente,
     [

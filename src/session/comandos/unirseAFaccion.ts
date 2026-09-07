@@ -2,7 +2,7 @@
 // diferencia de comprar casa, no consume cupo de vivienda ni ata al jugador a un asentamiento concreto: solo
 // otorga ciudadanía. Las dos vías conviven — `comprarCasa` sigue siendo la única que además da residencia.
 import { esCiudadano, otorgarCiudadania } from '../../engine/faccion';
-import { comando, conFaccion, exigirFaccion, rechazar } from './ayudas';
+import { comando, conExploracionFundida, conFaccion, exigirFaccion, rechazar } from './ayudas';
 import { exito, sinCambios } from './tipos';
 import { CODIGOS_ERROR } from './codigosDeError';
 import { evento } from './eventos';
@@ -28,7 +28,8 @@ export const unirseAFaccion = comando<ParamsUnirseAFaccion, void>((estado, _mapa
   }
 
   const actualizada = otorgarCiudadania(faccion, ctx.actor);
-  const siguiente = conFaccion(estado, actualizada);
+  // Lo que anduvo sin bandera pasa a ser conocimiento de la Facción a la que se une (Doc 1.3).
+  const siguiente = conExploracionFundida(conFaccion(estado, actualizada), ctx.actor, faccion.id);
   return exito(siguiente, [
     evento(ctx, {
       codigo: 'faccion.ciudadania_union',
