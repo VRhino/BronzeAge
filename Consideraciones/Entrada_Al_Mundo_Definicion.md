@@ -88,7 +88,7 @@ convierte a la plaza NPC en el socio que la decisión 5 pide sin necesidad de ni
 
 > **HECHO (2026-09-07).** Umbrales: vende por encima del 70% de silo, compra por debajo del 20%, y entre los
 > dos no hace nada — una plaza que va servida no tiene por qué estar siempre en el mercado. Vende solo un
-> cuarto del excedente de una vez: vaciar el silo de golpe la dejaría sin colíchon ante el primer tick malo.
+> cuarto del excedente de una vez: vaciar el silo de golpe la dejaría sin colchón ante el primer tick malo.
 >
 > **Efecto en el laboratorio, medido:** el tick sigue costando lo mismo (35 ms a 100 asentamientos, frente a
 > 34 antes) y el mundo sigue llegando a **100 asentamientos vivos**, o sea que la economía no se rompe. Lo que
