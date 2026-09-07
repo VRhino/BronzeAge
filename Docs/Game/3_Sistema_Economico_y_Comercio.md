@@ -21,11 +21,17 @@
 - La caravana sí viaja de verdad por el mapa: desde Fase 0.3, sobre una RUTA calculada por pathfinding (rodea terreno costoso, ver Doc 1.6/3.6) en vez de una línea recta, con velocidad ×2 respecto a la original (ver 3.6) modulada por el coste del terreno que cruza en cada momento — y entrega proporcionalmente al llegar. Al entregar, la caravana propia vuelve a estar 'disponible' en el origen — no desaparece, es un activo persistente y con costo (3.12), no un objeto de un solo uso.
 - Cumplir o incumplir un trueque ajusta el score de reputación de Facción (Doc 2.7) — esto sí está conectado.
 
-## 3.3 Órdenes de mercado (comercio abierto) — 🔷 implementado con simplificación intencional
+## 3.3 Órdenes de mercado (comercio abierto) — ✅ implementado
 - Un asentamiento coloca órdenes de compra/venta; cualquier jugador puede dejar lo pedido o comprar lo ofrecido.
 - Se pagan con ORO.
 - **Gate nuevo (ampliación de comercio, a petición del usuario)**: colocar una orden ahora exige tener un Mercado activo (ver 3.12) — antes cualquier asentamiento podía hacerlo desde el tick 0, sin edificio.
-- **SIMPLIFICACIÓN DE FASE 0 que sigue en pie (documentada en el propio código)**: las órdenes se EMPAREJAN Y LIQUIDAN AL INSTANTE entre cualquier par de asentamientos — no hay transporte/caravana modelado para este flujo (a diferencia del trueque, que sí usa la flota de caravanas, ver 3.2/3.12). **Plan: pasar a requerir transporte físico en Fase 1+**, coherente con el resto del sistema de comercio.
+- **EL MOSTRADOR (2026-09-07, decisión del usuario)**: una orden es una **oferta en pie EN UNA PLAZA**, no una entrada en una bolsa global. Se cumple **allí**, con alguien que ha ido hasta la plaza con su columna (`comerciarEnPlaza`). El emparejamiento automático entre cualquier par de asentamientos —que liquidaba al instante y sin que nada recorriera el mapa— **se retiró**: era la última simplificación viva del sistema, y la propia sección la marcaba como deuda.
+  - **La plaza VENDE**: el jugador paga oro DE SU CARRO y la mercancía sube AL CARRO. **La plaza COMPRA**: descarga mercancía DEL CARRO y el oro sube AL CARRO. El viaje completo son cuatro actos —cargar en tu plaza, llegar, comerciar, volver y depositar—; el último ya lo hacía entrar en tu residencia (Doc 1.10.3).
+  - **El oro pesa y ocupa carro** (3.1: es metal precioso pesado, no moneda acuñada). Eso pone un techo físico a cuánto se mueve de una tacada: comprar barato lejos y vender caro en casa cuesta viajes, no un clic.
+  - **Manda el Líder de la columna**: el carro es común (Doc 5.13.2), y sin esa condición cualquiera que se uniera en campo podría gastarse el oro de todos.
+  - **Sirve lo que puede** en vez de fallar cuando se pide de más —el tope sale a la vez de la orden, del almacén de la plaza, de su oro, del carro y de lo que se lleve encima—, pero **falla si no puede servir nada**.
+  - **Las órdenes CADUCAN** (`MERCADO.plazoOrdenMinutos`, 200 minutos, el mismo plazo que un trueque). No es un extra: sin emparejamiento automático nada las cerraría nunca, y una plaza acumularía ofertas eternas a precios de hace cien ticks.
+  - **Visibilidad**: el escaparate de una plaza ajena se ve **al estar en su puerta**, y solo lo que sigue en pie. Un mercado enseña sus ofertas a quien está dentro; una lista global dejaría leer los precios del mundo entero sin moverse.
 
 ## 3.4 Precios dinámicos — ✅ implementado
 - Precio de referencia por defecto: precio base escalado por escasez/abundancia GLOBAL (stock objetivo de referencia = 500, con clamp entre ×0.4 y ×3).
@@ -34,6 +40,7 @@
 
 ## 3.5 Comisiones de comercio — ✅ implementado (parcial, como marca el propio diseño)
 - Comisión del 3% dentro de la misma Facción vs. 8% externa, aplicada tanto en trueque como en mercado, modulable por política ("Aranceles/Comercio Abierto") y por reputación de Facción.
+- **En el mostrador (3.3), la paga quien toma la orden y se la queda la plaza donde ocurre (2026-09-07)**: comprando se paga de más, vendiendo se cobra de menos. Aquí el oro **se conserva** — el emparejamiento automático que esto sustituye acuñaba la comisión de la nada y se la regalaba al vendedor. La comisión de trueque (`comisionDeEntrega`) sigue como estaba.
 - PENDIENTE (sin cambios): en qué se usa la riqueza acumulada; nivel intermedio de comisión para Facciones aliadas/vasallas de la misma Liga.
 
 ## 3.6 Categorías de caravana (heredado de Iberia) — 🔶 parcial: catálogo existe, solo 1-2 de 4 se usan
@@ -45,12 +52,14 @@
 - **Movimiento con coste de terreno (Fase 0.3, ver Doc 1.1/1.5/1.6)**: la "velocidad" del catálogo sigue siendo la base, pero el avance real por tick ahora se divide entre el coste de terreno en la posición actual (llano≈1, colina/montaña más lento, agua/cima muy caro) — cruzar relieve accidentado de verdad tarda más ticks. Cada caravana calcula su propia RUTA por pathfinding al lanzarse (rodea relieve costoso en vez de ir en línea recta), salvo que ya exista un Camino Comercial para ese par de asentamientos (Doc 1.6), en cuyo caso reusa su polilínea y recibe además el bonus de velocidad del camino. Caravanas de partidas guardadas antes de Fase 0.3 (sin ruta) siguen moviéndose en línea recta sin coste de terreno — compatibilidad hacia atrás sin migración. Ver `engine/movimiento.ts`, `world/rutas.ts`.
 - PENDIENTE: conectar Militar/Contrabando a sus disparadores correspondientes (equipo militar antes de asedio, mecánica de detección reducida).
 
-## 3.7 Transporte individual espontáneo (heredado de Iberia) — ❌ no implementado
-No existe inventario personal de jugador ni transporte sin pasar por Mercado/acuerdo. Sigue siendo diseño puro, sin código.
+## 3.7 Transporte individual espontáneo (heredado de Iberia) — 🔶 el inventario existe; el transporte libre, no
+- **El inventario personal SÍ existe** desde el jugador situado: el carro de la columna (`Ejercito.suministro`, capacidad `LOGISTICA.capacidadCarroPorJugador` × participantes más las caravanas adjuntas, Doc 5.13.2) admite cualquier recurso, incluido el oro. Se carga al salir eligiendo qué llevar (Doc 1.10.2) y se vuelca al almacén al entrar en tu residencia (Doc 1.10.3).
+- Desde 2026-09-07 es además **la única vía por la que la mercancía de una orden de mercado cambia de manos** (3.3): el transporte físico dejó de ser opcional.
+- Lo que sigue sin existir es el intercambio **directo entre dos jugadores** fuera de una plaza — cara a cara en mitad del mapa, sin mercado ni acuerdo de por medio.
 
 ## 3.8 Bonificación por distancia (heredado de Iberia) — ✅ implementado (parcial, solo trueque)
 - Aplica como bonus a la comisión de trueque: hasta ×1.5 a partir de 600 unidades de distancia recorrida.
-- NO aplica a órdenes de mercado, que se liquidan al instante sin viaje (ver 3.3) — coherente con que ese flujo no simula transporte todavía.
+- NO aplica a órdenes de mercado. Ya no por la razón vieja —"se liquidan al instante sin viaje"—, que dejó de ser cierta en 2026-09-07: ahora el viaje existe, pero lo hace **el jugador**, y el bonus está definido sobre la distancia que recorre una CARAVANA de un acuerdo. Aplicarlo al mostrador es una decisión de diseño abierta, no un hueco de implementación.
 
 ## 3.9 Dependencia logística real (heredado de Iberia) — 🔶 implícita, no es mecánica dedicada
 No hay un sistema que detecte explícitamente "cortar una ruta" como evento de guerra económica. En la práctica, si no llegan caravanas, el receptor simplemente no recibe el recurso — es una consecuencia natural del modelo de trueque, no una mecánica de intercepción/guerra económica dedicada todavía (para eso hace falta que el combate de caravanas —3.10— interactúe activamente con acuerdos en curso, lo cual no está conectado aún).

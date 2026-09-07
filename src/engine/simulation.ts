@@ -8,7 +8,7 @@ import { avanzarConstruccion, reclamosDeFuentes } from './construction';
 import { avanzarNutricionPoblacion, crecerPoblacion } from './population';
 import { avanzarComercio } from './trade';
 import { avanzarCaravanasFundacion } from './expansion';
-import { avanzarMercado } from './market';
+import { caducarOrdenes } from './market';
 import { avanzarPoliticas } from './politicas';
 import { avanzarTributos } from './diplomacia';
 import { avanzarNivelesFaccion, aplicarAjustesExperiencia, calcularCupoNivel, type AjusteExperiencia } from './faccion';
@@ -269,10 +269,13 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   });
   eventosDominio.push(...comoEventosDominio(trasEjercitos.eventos, contexto));
 
-  const trasMercado = avanzarMercado(trasEjercitos.asentamientos, estado.ordenes);
+  // El mercado ya no LIQUIDA nada en el tick: una orden es una oferta en pie en una plaza y se cumple en el
+  // mostrador, con alguien que ha ido hasta alli (`comerciarEnPlaza`, `Comercio_Fisico_Definicion.md`). Lo
+  // unico que queda automatico es retirar las que nadie tomo — sin eso, nada las cerraria nunca.
+  const trasMercado = caducarOrdenes(estado.ordenes, instante);
   eventosDominio.push(...comoEventosDominio(trasMercado.eventos, contexto));
 
-  const trasTributos = avanzarTributos(estado.relaciones, trasMercado.asentamientos);
+  const trasTributos = avanzarTributos(estado.relaciones, trasEjercitos.asentamientos);
   eventosDominio.push(...comoEventosDominio(trasTributos.eventos, contexto));
 
   // Doc Fase_0_5 §8: se aplica la XP de construcción acumulada arriba junto a la del resto del tick (combate/

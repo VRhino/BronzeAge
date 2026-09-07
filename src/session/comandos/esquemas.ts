@@ -196,6 +196,10 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   ),
   aceptarTrueque: objeto({ acuerdoId: IDENTIFICADOR }, ['acuerdoId']),
   rechazarTrueque: objeto({ acuerdoId: IDENTIFICADOR }, ['acuerdoId']),
+  comerciarEnPlaza: objeto(
+    { jugadorId: IDENTIFICADOR, asentamientoId: IDENTIFICADOR, ordenId: IDENTIFICADOR, cantidad: NUMERO },
+    ['jugadorId', 'asentamientoId', 'ordenId', 'cantidad']
+  ),
   colocarOrdenMercado: {
     type: 'object',
     properties: {

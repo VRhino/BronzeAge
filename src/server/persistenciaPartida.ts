@@ -21,9 +21,9 @@ import { mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { GameSession, type PartidaExportada } from '../session/gameSession';
 import { idDeMapa, instanteDeTick, isoDeInstante } from '../session/estado';
-import { instante, type Instante } from '../domain/tiempo';
+import { instante, minutos, sumar, type Instante } from '../domain/tiempo';
 import { WORLDGEN_VERSION } from '../worldgen';
-import { LIDERAZGO } from '../constants';
+import { LIDERAZGO, MERCADO } from '../constants';
 import type { Asentamiento, Ejercito } from '../domain/types';
 import { ubicacionDeducida } from '../engine/ubicacion';
 
@@ -46,7 +46,7 @@ import { ubicacionDeducida } from '../engine/ubicacion';
  * que no puede resolverse con un valor por defecto (ver `migrarV8aV9`). v10 (unirse y separarse en campo):
  * `Ejercito.politicaDeUnion`.
  */
-export const FORMATO_SNAPSHOT_VERSION = 10;
+export const FORMATO_SNAPSHOT_VERSION = 11;
 
 export interface SnapshotPartida {
   formatoVersion: number;
@@ -192,6 +192,7 @@ function migrarSnapshot(gameId: string, snapshot: SnapshotPartida): PartidaExpor
   if (snapshot.formatoVersion < 8) migrarV7aV8(s);
   if (snapshot.formatoVersion < 9) migrarV8aV9(s);
   if (snapshot.formatoVersion < 10) migrarV9aV10(s);
+  if (snapshot.formatoVersion < 11) migrarV10aV11(s);
   return p as unknown as PartidaExportada;
 }
 
@@ -387,6 +388,25 @@ function migrarV8aV9(s: Record<string, any>): void {
 function migrarV9aV10(s: Record<string, any>): void {
   for (const ejercito of (s.ejercitos ?? []) as Record<string, any>[]) {
     ejercito.politicaDeUnion ??= 'rechazar';
+  }
+}
+
+/**
+ * v10 -> v11 (el comercio deja de ser magia, `Consideraciones/Comercio_Fisico_Definicion.md`):
+ * `OrdenMercado` gana `expiraEn`.
+ *
+ * Se le da el plazo COMPLETO contado desde ahora, no desde que se colocó. Lo segundo sería más fiel a la
+ * fecha, pero retiraría de golpe todas las órdenes de una partida vieja al primer tick tras actualizar — y
+ * esas órdenes se colocaron cuando el emparejamiento automático las habría cumplido solas. Darles el plazo
+ * entero es darles la oportunidad que la regla nueva les cambió.
+ *
+ * `AcuerdoTrueque` no necesita nada: un acuerdo guardado como 'activo' YA estaba pactado, que es exactamente
+ * lo que significa ahora.
+ */
+function migrarV10aV11(s: Record<string, any>): void {
+  const ahora = instanteDeTick((s.tick as number | undefined) ?? 0);
+  for (const orden of (s.ordenes ?? []) as Record<string, any>[]) {
+    orden.expiraEn ??= sumar(ahora, minutos(MERCADO.plazoOrdenMinutos));
   }
 }
 

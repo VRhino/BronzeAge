@@ -7,11 +7,13 @@ import {
   proponerTrueque as proponerTruequeEngine,
   rechazarTrueque as rechazarTruequeEngine,
 } from '../../engine/trade';
-import { colocarOrdenMercado as colocarOrdenMercadoEngine } from '../../engine/market';
+import { colocarOrdenMercado as colocarOrdenMercadoEngine, comerciarEnPlaza as comerciarEnPlazaEngine } from '../../engine/market';
+import { capacidadCargaDe } from '../../engine/ejercitos';
 import { asegurarCaminoComercial } from '../../engine/caminos';
 import type { GameSessionState } from '../estado';
 import { exito } from './tipos';
-import { comando, conAsentamiento, exigirAcuerdo, exigirAsentamiento } from './ayudas';
+import { comando, conAsentamiento, exigirAcuerdo, exigirAsentamiento, exigirColumnaDe, rechazar } from './ayudas';
+import { CODIGOS_ERROR } from './codigosDeError';
 import { evento, eventos as construirEventos, type EventoDeComando } from './eventos';
 
 export interface PayloadTruequePropuesto {
@@ -187,6 +189,79 @@ export const colocarOrdenMercado = comando<ParamsColocarOrdenMercado, { ordenId:
     { ordenId: nueva.id }
   );
 });
+
+export interface ParamsComerciarEnPlaza {
+  jugadorId: string;
+  asentamientoId: string;
+  ordenId: string;
+  /** Cuanto se quiere mover. Se sirve lo que se pueda: el tope real sale de la orden, del almacen de la plaza,
+   * de su oro, del carro y de lo que se lleve encima, y ninguno lo ve el cliente entero. */
+  cantidad: number;
+}
+
+export interface PayloadComercioEnPlaza {
+  jugadorId: string;
+  asentamientoId: string;
+  ordenId: string;
+  recurso: RecursoTipo;
+  cantidad: number;
+  valor: number;
+  comision: number;
+}
+
+/**
+ * **El mostrador** (Doc 3.3): el jugador toma una orden de la plaza donde esta, con su columna en la puerta.
+ *
+ * Es el unico camino por el que la mercancia de una orden cambia de manos desde que el emparejamiento
+ * automatico entre plazas desaparecio (`Consideraciones/Comercio_Fisico_Definicion.md`). Toda la regla vive en
+ * el motor; aqui solo se resuelven la columna, la plaza y la orden, y se recomponen las tres listas.
+ */
+export const comerciarEnPlaza = comando<ParamsComerciarEnPlaza, { cantidad: number; valor: number; comision: number }>(
+  (estado, _mapa, ctx, params) => {
+    const columna = exigirColumnaDe(estado, params.jugadorId);
+    const plaza = exigirAsentamiento(estado, params.asentamientoId);
+    const orden = estado.ordenes.find((o) => o.id === params.ordenId);
+    if (!orden) rechazar(CODIGOS_ERROR.ordenNoExiste);
+
+    const resultado = comerciarEnPlazaEngine(
+      columna,
+      params.jugadorId,
+      plaza,
+      orden,
+      params.cantidad,
+      capacidadCargaDe(columna, estado.caravanas),
+      ctx.instante
+    );
+
+    const siguiente: GameSessionState = {
+      ...conAsentamiento(estado, resultado.plaza),
+      ejercitos: estado.ejercitos.map((e) => (e.id === resultado.ejercito.id ? resultado.ejercito : e)),
+      ordenes: estado.ordenes.map((o) => (o.id === resultado.orden.id ? resultado.orden : o)),
+    };
+
+    const sentido = orden.tipo === 'venta' ? 'compra' : 'vende';
+    return exito(
+      siguiente,
+      [
+        evento(ctx, {
+          codigo: 'mercado.comercio_en_plaza',
+          mensaje: `Un jugador ${sentido} ${resultado.cantidad.toFixed(1)} ${orden.recurso} en el mercado de ${plaza.id} por ${resultado.valor.toFixed(1)} oro (comisión ${resultado.comision.toFixed(1)}).`,
+          payload: {
+            jugadorId: params.jugadorId,
+            asentamientoId: plaza.id,
+            ordenId: orden.id,
+            recurso: orden.recurso as RecursoTipo,
+            cantidad: resultado.cantidad,
+            valor: resultado.valor,
+            comision: resultado.comision,
+          } satisfies PayloadComercioEnPlaza,
+          asentamientoId: plaza.id,
+        }),
+      ],
+      { cantidad: resultado.cantidad, valor: resultado.valor, comision: resultado.comision }
+    );
+  }
+);
 
 export interface ParamsCrearCaravana {
   asentamientoId: string;

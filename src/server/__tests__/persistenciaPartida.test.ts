@@ -410,6 +410,37 @@ describe('guardarPartida / cargarPartida', () => {
     expect(migrado.politicaDeUnion).toBe('rechazar');
   });
 
+  it('migra v10 -> v11: una orden vieja recibe el plazo ENTERO, no lo que le quedaba', async () => {
+    // Las ordenes de una partida vieja se colocaron cuando el emparejamiento automatico las habria cumplido
+    // solas. Contarles el plazo desde que se colocaron las retiraria todas de golpe al primer tick tras
+    // actualizar, por una regla que no existia cuando se pusieron.
+    const sesion = partidaEnMarcha();
+    await guardarPartida(directorio, sesion, MOMENTO);
+    const ruta = join(directorio, `${sesion.gameId}.json`);
+    const snap = JSON.parse(await readFile(ruta, 'utf-8'));
+    snap.formatoVersion = 10;
+    const asentamiento = snap.partida.state.asentamientos[0];
+    snap.partida.state.ordenes = [
+      {
+        id: 'orden-vieja',
+        asentamientoId: asentamiento.id,
+        tipo: 'venta',
+        recurso: 'madera',
+        cantidad: 10,
+        cantidadCumplida: 0,
+        precioUnitario: 2,
+        creadoEn: 0,
+        estado: 'activa',
+      },
+    ];
+    await writeFile(ruta, JSON.stringify(snap), 'utf-8');
+
+    const cargada = (await cargarPartida(directorio, sesion.gameId))!.sesion.getState();
+    const migrada = cargada.ordenes[0]!;
+    expect(migrada.expiraEn).toBeGreaterThan(instanteDeTick(cargada.tick));
+    expect(migrada.estado).toBe('activa');
+  });
+
   it('rechaza un snapshot generado con otra versión del generador de mundo', async () => {
     const sesion = partidaEnMarcha();
     await guardarPartida(directorio, sesion, MOMENTO);

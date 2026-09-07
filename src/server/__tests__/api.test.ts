@@ -859,7 +859,9 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       // +3 con atacar, perseguir y dejar de perseguir (paso 8c/8d).
       // +2 con contestar un trueque (`aceptarTrueque`/`rechazarTrueque`): desde que un trueque necesita un sí
       // explícito, decir que sí y decir que no son actos del otro lado, no un efecto de proponer.
-      expect(cuerpo.oneOf.length).toBe(58);
+      // +1 con `comerciarEnPlaza`: desde que las órdenes se cumplen en el mostrador, tomar una es un acto del
+      // jugador que está allí, no un emparejamiento que ocurría solo en el tick.
+      expect(cuerpo.oneOf.length).toBe(59);
       const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
       expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
     });

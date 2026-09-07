@@ -859,7 +859,17 @@ export interface OrdenMercado {
   precioUnitario: number;
   /** Instante de mundo en que se colocó la orden (Fase D). */
   creadoEn: Instante;
-  estado: 'activa' | 'cumplida';
+  /**
+   * Cuando la oferta se retira sola (`MERCADO.plazoOrdenMinutos`).
+   *
+   * No es un adorno: desde que las ordenes se cumplen EN EL MOSTRADOR y no por emparejamiento automatico
+   * (`Consideraciones/Comercio_Fisico_Definicion.md` §3), una orden que nadie toma no se cierra nunca. Sin
+   * caducidad, una plaza acumularia ofertas eternas a precios viejos y no volveria a ajustarlos jamas.
+   *
+   * Ausente en ordenes de partidas guardadas antes de 2026-09-07; se rellena al migrar.
+   */
+  expiraEn: Instante;
+  estado: 'activa' | 'cumplida' | 'expirada';
 }
 
 // --- Sprint 4: Estructura política (Doc 2) ---

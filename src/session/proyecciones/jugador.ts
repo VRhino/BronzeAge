@@ -69,7 +69,7 @@ import type { Instante } from '../../domain/tiempo';
 import { esCiudadano } from '../../engine/faccion';
 import { ubicacionDeducida } from '../../engine/ubicacion';
 // El mismo recuento que usa el motor para los carros (Doc 5.13): un participante es un carro Y un rombo.
-import { alcanceDeVista, participantesDe } from '../../engine/ejercitos';
+import { alcanceDeVista, enLaPuertaDe, participantesDe } from '../../engine/ejercitos';
 import {
   estaExplorado,
   marcarVisto,
@@ -558,6 +558,12 @@ export function proyectarParaJugador(
       e.participantes.some((p) => p.jugadorId === jugadorId) ||
       e.escuadrones.some((esc) => esc.jugadorId === jugadorId)
   );
+  // Las plazas en cuya PUERTA hay una columna de este jugador. Un mercado enseña sus ofertas a quien esta
+  // dentro, y solo a ese: sin esto el mostrador (`comerciarEnPlaza`) seria inusable —habria que comprar a
+  // ciegas—, y con una lista global cualquiera podria leer los precios del mundo entero sin moverse.
+  const enElMostradorDe = new Set(
+    estado.asentamientos.filter((a) => ejercitosPropios.some((e) => enLaPuertaDe(e, a))).map((a) => a.id)
+  );
   const zonasPropias = geometria.zonas.filter((z) => esPropio(z.asentamientoId));
   const propios = new Set(ejercitosPropios.map((e) => e.id));
 
@@ -611,7 +617,11 @@ export function proyectarParaJugador(
       .filter((e) => !propios.has(e.id) && seVeAhora(e.posicionActual, asentamientosPropios, ejercitosPropios))
       .map((e) => ({ id: e.id, faccionId: e.faccionId, posicionActual: e.posicionActual, participantes: participantesDe(e) })),
     acuerdos: estado.acuerdos.filter((a) => esPropio(a.asentamientoAId) || esPropio(a.asentamientoBId)),
-    ordenes: estado.ordenes.filter((o) => esPropio(o.asentamientoId)),
+    // De las propias, todas —incluidas las cumplidas, que son el historial de tu mercado—. De una plaza ajena
+    // en cuya puerta estas, solo las que siguen EN PIE: es el escaparate, no su contabilidad.
+    ordenes: estado.ordenes.filter(
+      (o) => esPropio(o.asentamientoId) || (o.estado === 'activa' && enElMostradorDe.has(o.asentamientoId))
+    ),
     relaciones: estado.relaciones,
     titulos: estado.titulos,
     caminos: caminosConocidos(estado.caminos, exploracion),

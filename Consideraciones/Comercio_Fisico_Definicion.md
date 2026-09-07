@@ -98,12 +98,28 @@ La aceptación explícita necesita alguien que la dé, y en dos de los tres caso
 
 ## 5. Plan
 
-1. **Trueque: propuesta → aceptación.** Estado `'propuesto'`, comandos de aceptar y rechazar, el camino
-   comercial se traza al ACEPTAR y no al proponer, caducidad de la propuesta sin contestar, y los tres
-   aceptantes de §4. Migración de snapshot: lo ya pactado sigue pactado.
-2. **Órdenes con caducidad.** Es requisito del paso 3, no un adorno (§3).
-3. **El mostrador.** La operación de tomar una orden estando en la plaza, en el motor; su comando; y la
-   retirada del emparejamiento automático del tick.
-4. **Canon y medición.** Doc 3.2/3.3/3.7/3.8, y batch para confirmar que la economía del laboratorio no se
-   mueve — la predicción de §3 es que no se mueve nada, y si se mueve es que el clearing hacía más de lo que
-   creo.
+1. ~~**Trueque: propuesta → aceptación.**~~ **HECHO (2026-09-07).** Estado `'propuesto'`, comandos de aceptar
+   y rechazar, el camino comercial se traza al ACEPTAR y no al proponer, caducidad de la propuesta sin
+   contestar sin penalizar a nadie, y los tres aceptantes de §4. Sin migración de snapshot: los estados viejos
+   siguen siendo válidos y un acuerdo guardado como `'activo'` ya estaba pactado.
+2. ~~**Órdenes con caducidad.**~~ **HECHO.** `MERCADO.plazoOrdenMinutos` = 200, el mismo plazo que un trueque:
+   son la misma clase de compromiso y darles vidas distintas sería una diferencia sin justificar.
+3. ~~**El mostrador.**~~ **HECHO.** `comerciarEnPlaza` en el motor, su comando, y fuera el emparejamiento
+   automático del tick (queda solo `caducarOrdenes`). Snapshot v10 → v11.
+4. ~~**Canon y medición.**~~ **HECHO.** Doc 3.2/3.3/3.5/3.7/3.8.
+
+### Dos cosas que aparecieron implementando, y no estaban en el plan
+
+- **La visibilidad del escaparate.** El mostrador nace inusable: la proyección solo enseñaba las órdenes de tu
+  propia Facción, así que había que comprar a ciegas en una plaza ajena. Se abre a **quien está en su puerta**,
+  y solo a lo que sigue en pie — la regla de un mercado de verdad. Una lista global habría dejado leer los
+  precios del mundo entero sin moverse, que es justo lo que esta mecánica quita.
+- **La comisión deja de acuñarse.** El emparejamiento viejo la creaba de la nada y se la regalaba al vendedor.
+  En el mostrador la paga quien toma la orden y se la queda la plaza: el oro se conserva, y la comisión pasa a
+  significar algo concreto — lo que cuesta usar el mercado de otro.
+
+## 7. Medido
+
+- **El tick no se mueve**: 35,5 ms a 100 asentamientos con 100 vivos, frente a 35 antes de tocar nada. Quitar
+  el emparejamiento no abarata el tick porque **casi nunca emparejaba**, que era la predicción de §3.
+- El escalado sigue en O(n^0,82).

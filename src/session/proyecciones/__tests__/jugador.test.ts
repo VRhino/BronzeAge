@@ -14,7 +14,7 @@ import { computeTodasLasZonas } from '../../../engine/zones';
 import { estaExplorado, marcarVisto, rejillaDe } from '../../../engine/exploracion';
 import { MEMORIA_VACIA, type FichaConocida } from '../../../engine/memoria';
 import { eventosDominioParaJugador, proyectarParaJugador } from '../jugador';
-import type { CaminoComercial, CampamentoBandido, Ejercito, Escuadron, Point } from '../../../domain/types';
+import type { Asentamiento, CaminoComercial, CampamentoBandido, Ejercito, Escuadron, Point } from '../../../domain/types';
 import { EXPLORACION, VISION, ZONA_INFLUENCIA } from '../../../constants';
 
 // Estas pruebas verifican filtrado por Facción/ciudadanía, no la geometría por frame (Fase C10, cubierta en
@@ -247,13 +247,63 @@ describe('caravanas, acuerdos y ordenes: solo los que tocan un asentamiento prop
     const estadoConOrdenes = {
       ...sesion.getState(),
       ordenes: [
-        { id: 'o1', asentamientoId, tipo: 'venta' as const, recurso: 'trigo', cantidad: 10, cantidadCumplida: 0, precioUnitario: 1, creadoEn: instanteDeTest(0), estado: 'activa' as const },
-        { id: 'o2', asentamientoId: 'asentamiento-ajeno', tipo: 'venta' as const, recurso: 'trigo', cantidad: 10, cantidadCumplida: 0, precioUnitario: 1, creadoEn: instanteDeTest(0), estado: 'activa' as const },
+        { id: 'o1', asentamientoId, tipo: 'venta' as const, recurso: 'trigo', cantidad: 10, cantidadCumplida: 0, precioUnitario: 1, creadoEn: instanteDeTest(0), expiraEn: instanteDeTest(200), estado: 'activa' as const },
+        { id: 'o2', asentamientoId: 'asentamiento-ajeno', tipo: 'venta' as const, recurso: 'trigo', cantidad: 10, cantidadCumplida: 0, precioUnitario: 1, creadoEn: instanteDeTest(0), expiraEn: instanteDeTest(200), estado: 'activa' as const },
       ],
     };
 
     const proyeccion = proyectarParaJugador(estadoConOrdenes, fundador, SIN_GEOMETRIA);
     expect(proyeccion.ordenes.map((o) => o.id)).toEqual(['o1']);
+  });
+
+  // Desde que las ordenes se cumplen EN EL MOSTRADOR (`comerciarEnPlaza`), el filtro de arriba a secas dejaria
+  // la mecanica inusable: habria que comprar a ciegas en una plaza ajena. La regla es la de un mercado de
+  // verdad — ensena sus ofertas a quien esta dentro, y solo a ese.
+  it('el escaparate de una plaza AJENA se ve al estar en su puerta, y solo lo que sigue en pie', () => {
+    const { sesion, asentamientoId, fundador } = partidaConAsentamiento();
+    const base = sesion.getState();
+    const plazaAjena: Asentamiento = {
+      ...base.asentamientos.find((a) => a.id === asentamientoId)!,
+      id: 'plaza-ajena',
+      faccionId: 'faccion-ajena',
+      posicion: { x: 1200, y: 1200 },
+      jugadoresFundadoresIds: [],
+    };
+    const orden = (id: string, aId: string, estado: 'activa' | 'cumplida') => ({
+      id,
+      asentamientoId: aId,
+      tipo: 'venta' as const,
+      recurso: 'trigo',
+      cantidad: 10,
+      cantidadCumplida: 0,
+      precioUnitario: 1,
+      creadoEn: instanteDeTest(0),
+      expiraEn: instanteDeTest(200),
+      estado,
+    });
+    const columna = {
+      ...base.ejercitos[0],
+      id: 'columna-visitante',
+      faccionId: base.asentamientos.find((a) => a.id === asentamientoId)!.faccionId,
+      liderId: fundador,
+      tipo: 'personal',
+      participantes: [{ jugadorId: fundador, unidoEn: instanteDeTest(0) }],
+      escuadrones: [],
+      suministro: {},
+      caravanasAdjuntasIds: [],
+      posicionActual: plazaAjena.posicion,
+      estado: 'estacionado',
+    } as unknown as Ejercito;
+
+    const estado = {
+      ...base,
+      asentamientos: [...base.asentamientos, plazaAjena],
+      ejercitos: [columna],
+      ordenes: [orden('propia', asentamientoId, 'activa'), orden('ajena-viva', 'plaza-ajena', 'activa'), orden('ajena-cerrada', 'plaza-ajena', 'cumplida')],
+    };
+
+    const proyeccion = proyectarParaJugador(estado, fundador, SIN_GEOMETRIA);
+    expect(proyeccion.ordenes.map((o) => o.id).sort()).toEqual(['ajena-viva', 'propia']);
   });
 
   it('una caravana con destino (no origen) en un asentamiento propio también cuenta', () => {

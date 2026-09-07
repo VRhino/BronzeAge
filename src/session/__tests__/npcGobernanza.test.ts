@@ -16,7 +16,7 @@ import { describe, expect, it } from 'vitest';
 import type { Asentamiento, Ejercito, RecursoTipo } from '../../domain/types';
 import { createRng } from '../../worldgen';
 import { avanzarSimulacion } from '../../engine/simulation';
-import { avanzarMercado, colocarOrdenMercado } from '../../engine/market';
+import { comerciarEnPlaza } from '../../engine/market';
 import { avanzarNpcGobernanza } from '../npcGobernanza';
 import {
   contextoDeTest,
@@ -416,11 +416,11 @@ describe('el NPC publica en el mercado: un vecino con quien comerciar', () => {
   });
 });
 
-// Y lo que de verdad prueba el objetivo: que un JUGADOR pueda comprarle. Publicar ordenes no sirve de nada
-// si nadie puede tomarlas — el clearing empareja plazas de CUALQUIER Faccion, y eso es lo que hace del NPC un
-// socio y no un escaparate.
+// Y lo que de verdad prueba el objetivo: que un JUGADOR pueda comprarle. Publicar ordenes no sirve de nada si
+// nadie puede tomarlas — y desde 2026-09-07 tomarlas significa IR HASTA ALLI con el oro encima
+// (`Consideraciones/Comercio_Fisico_Definicion.md`), no un emparejamiento automatico entre almacenes.
 describe('un jugador puede comerciar con una plaza NPC', () => {
-  it('la venta del NPC se cruza con la compra del jugador, y la piedra cambia de manos', () => {
+  it('el NPC pone piedra a la venta, el jugador se planta en su puerta con oro, y se la lleva EN EL CARRO', () => {
     const facciones = crearFacciones();
     const npc = fundarAsentamientoDeTest(mapaDeterminista, facciones, 'faccion-1', []);
     const humano = fundarAsentamientoDeTest(mapaDeterminista, npc.facciones, 'faccion-2', [npc.asentamiento]);
@@ -440,13 +440,31 @@ describe('un jugador puede comerciar con una plaza NPC', () => {
     const venta = conOrdenes.ordenes.find((o) => o.tipo === 'venta' && o.recurso === 'piedra' && o.asentamientoId === plazaNpc.id);
     expect(venta, 'el NPC ha puesto piedra a la venta').toBeDefined();
 
-    // Y el jugador coloca su compra a mano, como haria desde su pantalla de Mercado.
-    const compra = colocarOrdenMercado(conOrdenes.asentamientos, plazaHumano.id, 'compra', 'piedra', venta!.cantidad, instanteDeTest(1), venta!.precioUnitario, 99);
-    const trasClearing = avanzarMercado(conOrdenes.asentamientos, [...conOrdenes.ordenes, compra]);
+    // El jugador ha viajado hasta la plaza del NPC con el carro cargado de oro. Esa caminata es la mecanica
+    // entera: sin ella no hay trato.
+    const plazaNpcAhora = conOrdenes.asentamientos.find((a) => a.id === plazaNpc.id)!;
+    const columna = {
+      id: 'columna-humano',
+      faccionId: 'faccion-2',
+      liderId: 'jugador-humano',
+      tipo: 'personal',
+      participantes: [{ jugadorId: 'jugador-humano', unidoEn: instanteDeTest(0) }],
+      escuadrones: [],
+      suministro: { oro: 400 },
+      caravanasAdjuntasIds: [],
+      posicionActual: plazaNpcAhora.posicion,
+      estado: 'estacionado',
+    } as unknown as Ejercito;
 
-    const humanoDespues = trasClearing.asentamientos.find((a) => a.id === plazaHumano.id)!;
-    expect(humanoDespues.almacen['piedra']?.cantidad, 'el jugador se lleva la piedra del NPC').toBeGreaterThan(0);
-    const npcDespues = trasClearing.asentamientos.find((a) => a.id === plazaNpc.id)!;
-    expect(npcDespues.almacen['piedra']!.cantidad, 'y al NPC le queda menos').toBeLessThan(950);
+    const trato = comerciarEnPlaza(columna, 'jugador-humano', plazaNpcAhora, venta!, venta!.cantidad, 5000, instanteDeTest(1));
+
+    expect(trato.cantidad, 'algo cambia de manos').toBeGreaterThan(0);
+    expect(trato.ejercito.suministro['piedra'], 'la piedra va en el carro, no en su ciudad').toBeGreaterThan(0);
+    expect(trato.plaza.almacen['piedra']!.cantidad, 'y al NPC le queda menos').toBeLessThan(950);
+
+    // Lo que este test existe para fijar: la ciudad del jugador NO ha recibido nada todavia. Falta el viaje de
+    // vuelta y depositar (`absorberColumna`), que es justo lo que el emparejamiento automatico se saltaba.
+    const suPlaza = conOrdenes.asentamientos.find((a) => a.id === plazaHumano.id)!;
+    expect(suPlaza.almacen['piedra']!.cantidad).toBe(0);
   });
 });

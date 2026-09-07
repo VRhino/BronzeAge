@@ -1178,6 +1178,20 @@ export const ASIGNACION_CARAVANA = {
   distanciaReferencia: 600,
 };
 
+/**
+ * Cuanto vive una orden de mercado sin que nadie la tome (Doc 3.3).
+ *
+ * **200 minutos, el mismo plazo que un trueque** (`TRUEQUE.plazoMinutosPorDefecto`), y a proposito: son la
+ * misma clase de compromiso —una oferta en pie— y darles vidas distintas seria una diferencia que habria que
+ * justificar y no hay con que.
+ *
+ * PLACEHOLDER a calibrar: es el numero que decide cada cuanto una plaza NPC revisa sus precios, porque solo
+ * republica cuando la anterior ha caducado.
+ */
+export const MERCADO = {
+  plazoOrdenMinutos: 200,
+};
+
 export const TRUEQUE = {
   // "expirar un plazo" sin número fijado en el diseño (ver Preguntas_Abiertas) — placeholder.
   plazoMinutosPorDefecto: 200,
