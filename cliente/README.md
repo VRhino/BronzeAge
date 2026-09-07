@@ -11,8 +11,8 @@ directamente en el navegador, sin tocar la API— y por tanto no podía aislarse
 carpeta a otro repositorio. Está en el historial de git por si hiciera falta rescatarlo como herramienta de
 desarrollo del backend.
 
-Ver también [`cliente-jugador/`](../cliente-jugador/) (boilerplate, hito C11b): un proyecto hermano, nuevo,
-que sí cumple el criterio de cierre de la Fase C — cero import del motor, habla solo por red.
+Ver también el **cliente de jugador**, que desde el commit `2dfe9e7` vive en su propio repositorio
+(`BronzeAgeClient`): sí cumple el criterio de cierre de la Fase C — cero import del motor, habla solo por red.
 
 ## Esta carpeta TODAVÍA NO puede moverse a su repositorio
 
@@ -31,8 +31,8 @@ El detalle de lo que había que resolver en el backend (hitos C7–C13, todos co
 Slice 2, niebla de guerra, bloqueado en una decisión de balance que ningún doc de este repo fija) está en el
 roadmap (`Docs/Arquitectura/3_Plan_Evolucion_Roadmap.md`) y diagnosticado en
 detalle en `Docs/Arquitectura/4_Plan_Evolucion_Tareas.md` § "Diagnóstico de aislamiento del cliente". Ver
-también [`cliente-jugador/`](../cliente-jugador/), un boilerplate que ya prueba que un cliente sin motor
-puede hablar con este backend. **La
+también el repositorio `BronzeAgeClient`, que ya prueba que un cliente sin motor puede hablar con este
+backend. **La
 Fase C no se cierra hasta que un cliente sin importar el código del motor de este repo pueda jugar una partida
 completa contra este backend** — eso NO significa cero lógica de dominio en el cliente, ver
 `Docs/Arquitectura/9_Reglas_vs_Simulacion.md` para el eje real (regla de entrada propia vs. simulación /

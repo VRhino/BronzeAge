@@ -33,8 +33,10 @@ Fase 0 (Sprints 1-6, el motor de simulación puro) está **implementada** en Typ
 proyecto siguió evolucionando **más allá de lo que describe esta sección** — ver
 **[`Docs/Arquitectura/1_Arquitectura_Actual.md`](Docs/Arquitectura/1_Arquitectura_Actual.md)** para el estado
 real hoy: este repositorio es ahora un **backend multijugador puro** (Fastify, autenticación/autorización por
-comando, proyecciones por audiencia, WebSocket), sin ningún cliente de navegador dentro — "validada jugando en
-el navegador" ya no aplica, el juego se prueba contra la API HTTP/WS. El roadmap completo de esa evolución
+comando, proyecciones por audiencia, WebSocket) — "validada jugando en el navegador" ya no aplica, el juego se
+prueba contra la API HTTP/WS. El cliente de JUGADOR vive desde `2dfe9e7` en su propio repositorio
+(`BronzeAgeClient`); aquí solo queda `cliente/`, la consola de administración/depuración, que todavía no puede
+salir porque sigue importando el motor (ver `cliente/README.md`). El roadmap completo de esa evolución
 (Fases A-E) vive en **[`Docs/Arquitectura/3_Plan_Evolucion_Roadmap.md`](Docs/Arquitectura/3_Plan_Evolucion_Roadmap.md)**.
 Ver **`Consideraciones/Correcciones_Durante_Desarrollo.md`** para el registro de bugs de diseño/lógica
 encontrados y corregidos durante la implementación de Fase 0 — varios de ellos resolvieron preguntas que
@@ -66,6 +68,4 @@ src/                                                Backend: domain/constants/wo
                                                      Fases B-C)
 cliente/                                            Cliente de depuración/administración (proyecto separado,
                                                      sigue importando el motor — ver cliente/README.md)
-cliente-jugador/                                    Boilerplate de cliente SIN motor (hito C11b): prueba de
-                                                     que la Fase C es alcanzable, no un cliente completo
 ```

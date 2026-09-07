@@ -833,7 +833,7 @@ había conectado con C11b: el terreno es **T2a** ("el terreno lo ven todos", ent
 hace falta que el SERVIDOR lo calcule para nadie, un cliente lo recalcula solo desde los parámetros públicos
 que ya sirve C11a. Cero rasterizado, cero dependencia nueva.
 
-- [x] **[`cliente-jugador/`](../../cliente-jugador/)** — proyecto nuevo, hermano de `cliente/`, con su propio
+- [x] **`cliente-jugador/`** (hoy el repositorio `BronzeAgeClient`) — proyecto nuevo, hermano de `cliente/`, con su propio
   `package.json`/`tsconfig.json`/`vite.config.ts`. Sin ningún alias `@motor/*` ni `paths` hacia `../src`: es
   la prueba de que un cliente PUEDE pintar el mundo sin el código del motor. Construir la interfaz jugable
   completa a partir de aquí es trabajo de un repo aparte — fuera del alcance de este repo (solo servidor)

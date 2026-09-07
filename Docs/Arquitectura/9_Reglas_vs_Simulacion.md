@@ -206,10 +206,10 @@ las vistas de estado llevan `mapaId` en vez de `mapa`.
 son *parámetros de ruido*, y el bioma no se guarda — se evalúa por punto con `evaluarBioma`. C11a sirve el
 `MapaGenerado` tal cual, indibujable sin código de evaluación — pero ese código es exactamente T2a (esta
 misma sección, arriba): "el terreno lo ven todos", entrada no privilegiada. No hacía falta que el servidor
-rasterizara nada: [`cliente-jugador/`](../../cliente-jugador/) (boilerplate nuevo, sin `@motor/*`) lleva su
+rasterizara nada: `cliente-jugador/` —hoy el repositorio `BronzeAgeClient`, sin `@motor/*`— lleva su
 propia copia de `evaluarElevacion`/`evaluarFertilidad`/`evaluarBioma` y recalcula el terreno él mismo desde
 los parámetros públicos de C11a — verificado en vivo que reproduce la misma geografía que el motor real, sin
-soporte de `region` todavía (limitación documentada, ver `cliente-jugador/src/terreno/README.md`).
+soporte de `region` todavía (limitación documentada, ver `src/terreno/README.md` en `BronzeAgeClient`).
 
 ---
 
