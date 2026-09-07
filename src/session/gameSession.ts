@@ -189,9 +189,12 @@ export class GameSession {
    *
    * El sistema no es un jugador: el tick y el turno del NPC no crean registro.
    */
-  private static conActorEnPartida(estado: GameSessionState, actor: ActorId): GameSessionState {
+  private conActorEnPartida(estado: GameSessionState, actor: ActorId, mapa: Mapa): GameSessionState {
     if (actor === ACTOR_SISTEMA) return estado;
-    const jugadores = conJugadorAsegurado(estado.jugadores, actor, LIDERAZGO.base, estado.asentamientos, estado.ejercitos);
+    const jugadores = conJugadorAsegurado(estado.jugadores, actor, LIDERAZGO.base, estado.asentamientos, estado.ejercitos, {
+      mapa,
+      rng: this.rng,
+    });
     return jugadores === estado.jugadores ? estado : { ...estado, jugadores };
   }
 
@@ -216,7 +219,7 @@ export class GameSession {
       throw new Error('Un comando modificó el mapa pero no devolvió `estadoMapa` en su estado resultante.');
     }
 
-    this.estado = transicion.resultado.ok ? GameSession.conActorEnPartida(transicion.estado, ctx.actor) : transicion.estado;
+    this.estado = transicion.resultado.ok ? this.conActorEnPartida(transicion.estado, ctx.actor, mapa) : transicion.estado;
     return transicion.resultado;
   }
 

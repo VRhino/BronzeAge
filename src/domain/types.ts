@@ -367,6 +367,18 @@ export interface Jugador {
    * cambiaria nada de lo que ves y costaria trabajo en cada latido.
    */
   plazasRecordadas?: Record<string, InteriorRecordado>;
+  /**
+   * Lo que ha explorado ANTES de tener bandera (Doc 1.3).
+   *
+   * La memoria del mundo es de la Faccion (`memoriaPorFaccion`), asi que sin esto el primer tramo de partida
+   * —el que va desde que apareces hasta que fundas o te unes— seria un paseo a ciegas SIN REGISTRO: cada vez
+   * que miraras el mapa estaria igual de negro que al empezar.
+   *
+   * Se FUNDE con la de la Faccion al fundar o al entrar en una, y desaparece: a partir de ahi manda la de la
+   * Faccion. Lo que anduviste solo pasa a ser conocimiento de los tuyos, que es lo que un recien llegado
+   * aporta de verdad.
+   */
+  exploracionPersonal?: Exploracion;
 }
 
 /**
@@ -387,6 +399,15 @@ export interface InteriorRecordado {
    * donde has estado. */
   guarnicion: Escuadron[];
 }
+
+/**
+ * Celdas exploradas, un bit por celda, en hexadecimal (niebla de guerra). Cadena vacia = nada explorado.
+ *
+ * Vive aqui y no en `engine/exploracion.ts` —que es donde esta toda su aritmetica— porque es un VALOR DEL
+ * ESTADO: lo guardan `MemoriaFaccion` y `Jugador.exploracionPersonal`, y `domain` no puede mirar hacia
+ * `engine`. El tipo es de quien lo almacena; las funciones que lo manipulan, del motor.
+ */
+export type Exploracion = string;
 
 export type OrigenTropa = 'pesants' | 'artesanos' | 'nobleza';
 

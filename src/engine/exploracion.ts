@@ -15,7 +15,7 @@
 // en cada snapshot, treinta veces al escribir la partida. Un bit por celda son 800 bytes, 1.600 caracteres
 // hex. Se eligió hex y no base64 para no depender de `Buffer` ni de `btoa` (este módulo es aritmética pura,
 // como el resto del motor) y porque un volcado hex se sigue pudiendo leer a ojo en un snapshot.
-import type { Point } from '../domain/types';
+import type { Exploracion as ExploracionInterna, Point } from '../domain/types';
 import { EXPLORACION } from '../constants';
 
 /**
@@ -24,10 +24,14 @@ import { EXPLORACION } from '../constants';
  *
  * Es un alias de `string` a propósito y no un tipo nominal: viaja en el snapshot y en la proyección como
  * JSON, y envolverlo obligaría a serializar/deserializar en cada frontera sin ganar nada.
+ *
+ * **El tipo vive en `domain/types.ts`** y se reexporta aquí, que es donde está toda su aritmética: lo
+ * almacenan entidades del dominio (`MemoriaFaccion`, `Jugador.exploracionPersonal`) y `domain` no puede
+ * mirar hacia `engine`.
  */
-export type Exploracion = string;
+export type { Exploracion } from '../domain/types';
 
-export const SIN_EXPLORAR: Exploracion = '';
+export const SIN_EXPLORAR: ExploracionInterna = '';
 
 /** Discretización del mundo. Se DERIVA de los límites del mapa en cada uso: no se guarda, porque duplicarla
  * en el estado abriría la puerta a que una partida cargada la tuviera desfasada respecto a su propio mapa. */
@@ -50,7 +54,7 @@ function bytesDe(rejilla: Rejilla): number {
   return Math.ceil((rejilla.columnas * rejilla.filas) / 8);
 }
 
-function aBytes(exploracion: Exploracion, rejilla: Rejilla): Uint8Array {
+function aBytes(exploracion: ExploracionInterna, rejilla: Rejilla): Uint8Array {
   const bytes = new Uint8Array(bytesDe(rejilla));
   // Se lee solo lo que quepa: una rejilla más pequeña que la cadena (mapa distinto) trunca en vez de romper.
   const pares = Math.min(bytes.length, Math.floor(exploracion.length / 2));
@@ -58,7 +62,7 @@ function aBytes(exploracion: Exploracion, rejilla: Rejilla): Uint8Array {
   return bytes;
 }
 
-function aTexto(bytes: Uint8Array): Exploracion {
+function aTexto(bytes: Uint8Array): ExploracionInterna {
   let salida = '';
   for (const byte of bytes) salida += byte.toString(16).padStart(2, '0');
   return salida;
@@ -72,7 +76,7 @@ function indiceDe(punto: Point, rejilla: Rejilla): number | null {
   return fila * rejilla.columnas + columna;
 }
 
-export function estaExplorado(exploracion: Exploracion, rejilla: Rejilla, punto: Point): boolean {
+export function estaExplorado(exploracion: ExploracionInterna, rejilla: Rejilla, punto: Point): boolean {
   const indice = indiceDe(punto, rejilla);
   if (indice === null) return false;
   const posicion = indice >> 3;
@@ -97,11 +101,11 @@ export function estaExplorado(exploracion: Exploracion, rejilla: Rejilla, punto:
  * un objeto distinto cada minuto.
  */
 export function marcarVisto(
-  exploracion: Exploracion,
+  exploracion: ExploracionInterna,
   rejilla: Rejilla,
   centro: Point,
   radio: number
-): Exploracion {
+): ExploracionInterna {
   const bytes = aBytes(exploracion, rejilla);
   const media = rejilla.tamanoCelda / 2;
   const desde = {
@@ -169,13 +173,13 @@ export interface NieblaProyectada {
    * el mundo fila a fila desde (0,0). 1 = explorado. El bit de la celda `(columna, fila)` es el
    * `fila * columnas + columna`, contando desde el bit MENOS significativo de cada byte, y cada byte son dos
    * caracteres hex. */
-  celdas: Exploracion;
+  celdas: ExploracionInterna;
   /** Lo que se está viendo AHORA MISMO, en el mismo formato y sobre la misma rejilla. Siempre es un
    * subconjunto de `celdas`. */
-  visibles: Exploracion;
+  visibles: ExploracionInterna;
 }
 
-export function proyectarNiebla(explorado: Exploracion, visible: Exploracion, rejilla: Rejilla): NieblaProyectada {
+export function proyectarNiebla(explorado: ExploracionInterna, visible: ExploracionInterna, rejilla: Rejilla): NieblaProyectada {
   return {
     tamanoCelda: rejilla.tamanoCelda,
     columnas: rejilla.columnas,
@@ -186,7 +190,31 @@ export function proyectarNiebla(explorado: Exploracion, visible: Exploracion, re
 }
 
 /** Cuántas celdas hay marcadas. Para tests y métricas del laboratorio — ninguna regla de juego lo consulta. */
-export function celdasExploradas(exploracion: Exploracion): number {
+/**
+ * Une dos exploraciones: lo explorado por cualquiera de las dos (Doc 1.3).
+ *
+ * Existe para el momento en que un jugador sin bandera entra en una Faccion: lo que anduvo por su cuenta pasa
+ * a ser conocimiento de los suyos, y no se pierde. Es un OR bit a bit — lo explorado no se desexplora, asi
+ * que no hay conflicto posible que resolver.
+ *
+ * Las dos pueden tener longitudes distintas si se grabaron con rejillas distintas; se toma la mas larga y la
+ * corta se completa con ceros, que es lo que significa "esa parte no la habia visto".
+ */
+export function fundirExploraciones(a: ExploracionInterna, b: ExploracionInterna): ExploracionInterna {
+  if (a === SIN_EXPLORAR) return b;
+  if (b === SIN_EXPLORAR) return a;
+
+  const largo = Math.max(a.length, b.length);
+  const izq = a.padEnd(largo, '0');
+  const der = b.padEnd(largo, '0');
+  let salida = '';
+  for (let i = 0; i < largo; i++) {
+    salida += (parseInt(izq[i]!, 16) | parseInt(der[i]!, 16)).toString(16);
+  }
+  return salida;
+}
+
+export function celdasExploradas(exploracion: ExploracionInterna): number {
   let total = 0;
   for (let i = 0; i + 1 < exploracion.length; i += 2) {
     let byte = Number.parseInt(exploracion.slice(i, i + 2), 16) || 0;

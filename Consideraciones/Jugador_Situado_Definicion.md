@@ -1084,7 +1084,32 @@ Cada paso deja el repo verde y jugable. El orden no es negociable en los tres pr
    fallara—. Ahora hay dos tests que fallan si eso ocurre: uno comprueba que el NPC fija presa, y otro que en
    el tick siguiente eso **produce un `combate.encuentro`**.
 
-9. **Onboarding**: spawn aleatorio, memoria personal, fundar donde se está. Cierra la entrada del checklist.
+9. **Onboarding.** A medias (2026-09-07). Lo que hay:
+
+   - **`puntoDeAparicion`**: se aparece en un punto aleatorio del mundo, **donde se pueda fundar**. El listón
+     es `fundable` y no `recomendable` a propósito — aparecer donde fundar es imposible dejaría al novato
+     caminando sin saber por qué, y un sitio legal sigue sin ser un sitio bueno, así que la caminata conserva
+     su sentido.
+   - **`puntoDeFundacionDe`**: de dónde sale el punto al fundar. Lista, sin usar todavía.
+   - **`Jugador.exploracionPersonal`** y **`fundirExploraciones`** (OR bit a bit). El campo existe y la fusión
+     también; falta que el tick GRABE en ella y que la proyección la use.
+
+   **Lo que falta, y va junto porque se arrastra:**
+
+   a) **Aparecer con COLUMNA**, no en un punto suelto. Los tres sitios donde un jugador puede estar son dentro
+      de una plaza, dentro de una columna o fuera del mundo (Doc 1.10); quien camina por el campo está en la
+      segunda. Sin ella no puede ni moverse ni fundar donde se para.
+   b) **Fundar donde se está**, que es la rotura de contrato: `posicion` sale de `ParamsFundarAsentamiento`.
+   c) **Disolver la columna de aparición al fundar** — fundar es entrar en la plaza que acabas de hacer, así
+      que la columna se deshace dentro, igual que al cruzar la puerta de tu residencia.
+   d) Que el tick grabe la exploración personal, y que se funda con la de la Facción al fundar o al unirse.
+
+   **Se intentó en una pasada y se dio marcha atrás**, no por dudas de diseño sino de tamaño: (a)+(b)+(c) se
+   arrastran entre sí y rompen **67 tests**, muchos con posiciones relativas unas de otras (una plaza rival a
+   tal distancia de la propia, columnas colocadas respecto a un asentamiento). Cada uno hay que pensarlo, no
+   solo migrarlo: un test que funda en un punto elegido pasa a necesitar LLEVAR ahí a su fundador.
+
+   Merece su propia pasada, con la cabeza fresca y sin nada más encima.
 10. **Calibración** por batch — ahora nueve constantes, y con el combate ya intencional, que es lo que hace la
     medición representativa.
 

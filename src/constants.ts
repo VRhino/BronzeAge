@@ -122,6 +122,19 @@ export const FUNDACION = {
    * arriba.
    */
   exigeCiudadaniaPrevia: false,
+  /**
+   * A que distancia MINIMA de una plaza existente aparece un jugador nuevo (Doc 1.3). **200**, poco mas de un
+   * radio de provincia: apareces en campo abierto, no dentro de la muralla de un desconocido, pero tampoco en
+   * la otra punta del mundo — con la vista de un hombre solo (80) tienes que andar un rato para encontrar a
+   * alguien, que es exactamente lo que hace que explorar valga la pena.
+   */
+  distanciaMinimaAparicion: 200,
+  /**
+   * Cuantos puntos se prueban antes de rendirse al buscar sitio donde aparecer. Con un mundo lleno puede no
+   * haber ninguno que cumpla la distancia minima; entonces se afloja esa exigencia antes que dejar a un
+   * jugador sin poder entrar.
+   */
+  intentosDeAparicion: 200,
   // La caravana de fundación (Doc 1.3) trae una reserva inicial generosa: además de materiales básicos,
   // trigo suficiente para no entrar en déficit de comida desde el primer tick y oro para las primeras
   // operaciones de mercado/trueque.
