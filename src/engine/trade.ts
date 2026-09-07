@@ -56,8 +56,17 @@ function distancia(a: Point, b: Point): number {
 
 /**
  * Propone un acuerdo de trueque entre dos asentamientos (Doc 3.2). "Funciona en ambas direcciones": cada lado
- * se compromete a entregar su propio recurso. En Fase 0 se acepta al proponerse (el flujo real de "el Tesorero
- * de B acepta" requiere un jugador interactivo real, fuera de alcance del prototipo), quedando "activo" ya mismo.
+ * se compromete a entregar su propio recurso.
+ *
+ * **Nace `'propuesto'`, y no obliga a nadie hasta que el otro lado acepta** (`aceptarTrueque`,
+ * `Consideraciones/Comercio_Fisico_Definicion.md` decision 5). Hasta 2026-09-07 nacia `'activo'` en el mismo
+ * acto, con este motivo escrito aqui: *"el flujo real de 'el Tesorero de B acepta' requiere un jugador
+ * interactivo real, fuera de alcance del prototipo"*. Ese motivo caduco con el jugador situado — ahora hay
+ * alguien concreto, en un sitio concreto, a quien preguntarle.
+ *
+ * Lo que esto desbloquea: proponerle un trueque a un JUGADOR ya no le compromete recursos sin su permiso, asi
+ * que las Facciones NPC pueden hacerlo (hasta ahora se lo prohibian a si mismas por eso mismo, ver
+ * `npcGobernanza`).
  */
 export function proponerTrueque(
   asentamientos: Asentamiento[],
@@ -91,9 +100,39 @@ export function proponerTrueque(
     cantidadEntregadaA: 0,
     cantidadEntregadaB: 0,
     creadoEn: instante,
+    // Mientras esta propuesto, el plazo es para CONTESTAR. `aceptarTrueque` lo vuelve a contar desde el si.
     expiraEn: sumar(instante, minutos(TRUEQUE.plazoMinutosPorDefecto)),
-    estado: 'activo',
+    estado: 'propuesto',
   };
+}
+
+/**
+ * El otro lado dice que si (Doc 3.2). Solo entonces el acuerdo obliga, y solo entonces las caravanas empiezan
+ * a mirarlo (`asignarCaravanasATrueque` filtra por `'activo'`).
+ *
+ * **El plazo se vuelve a contar desde aqui**, y no es un detalle: si se conservara el original, una propuesta
+ * contestada al filo nacería ya sin tiempo material de cumplirse, y el que acepta de buena fe se comería la
+ * penalizacion por incumplir (Doc 2.7) sin haber podido hacer nada.
+ */
+export function aceptarTrueque(acuerdo: AcuerdoTrueque, instante: Instante): AcuerdoTrueque {
+  exigirSinContestar(acuerdo);
+  return { ...acuerdo, estado: 'activo', expiraEn: sumar(instante, minutos(TRUEQUE.plazoMinutosPorDefecto)) };
+}
+
+/**
+ * El otro lado dice que no (Doc 3.2). Queda `'rechazado'` en vez de borrarse: una respuesta es informacion, y
+ * quien propuso tiene derecho a saber que le han contestado y no que se le ha olvidado a nadie.
+ */
+export function rechazarTrueque(acuerdo: AcuerdoTrueque): AcuerdoTrueque {
+  exigirSinContestar(acuerdo);
+  return { ...acuerdo, estado: 'rechazado' };
+}
+
+/** Un acuerdo solo se contesta una vez, y solo mientras sigue siendo una propuesta. */
+function exigirSinContestar(acuerdo: AcuerdoTrueque): void {
+  if (acuerdo.estado !== 'propuesto') {
+    throw new TruequeInvalidoError(`El trueque ${acuerdo.id} ya no esta pendiente de respuesta (${acuerdo.estado}).`);
+  }
 }
 
 /**
@@ -480,6 +519,19 @@ function asignarCaravanasATrueque(
   const pendientesPorOrigen = new Map<string, LadoPendiente[]>();
 
   for (const acuerdo of acuerdosPorId.values()) {
+    // Una propuesta que nadie contesta CADUCA, y sin penalizar a nadie: no hubo promesa que romper. Por eso
+    // sale por aqui y no por la rama de abajo, que si ajusta reputacion.
+    if (acuerdo.estado === 'propuesto') {
+      if (instante >= acuerdo.expiraEn) {
+        acuerdosPorId.set(acuerdo.id, { ...acuerdo, estado: 'expirado' });
+        eventos.push({
+          codigo: 'comercio.trueque_expirado',
+          mensaje: `Trueque ${acuerdo.id} caducó sin respuesta.`,
+          payload: { acuerdoId: acuerdo.id } satisfies PayloadTruequeExpirado,
+        });
+      }
+      continue;
+    }
     if (acuerdo.estado !== 'activo') continue;
     if (instante >= acuerdo.expiraEn) {
       acuerdosPorId.set(acuerdo.id, { ...acuerdo, estado: 'expirado' });

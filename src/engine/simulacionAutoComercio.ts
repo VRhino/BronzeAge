@@ -21,7 +21,7 @@ import type { Mapa } from '../world/mapa';
 import { CARAVANA_CATALOGO, SIMULACION_AUTO_COMERCIO } from '../constants';
 import { computeTodasLasZonas } from './zones';
 import { anadirEdificioManualmente, reclamosDeFuentes, RECURSO_A_EXTRACTOR, ConstruccionManualInvalidaError } from './construction';
-import { construirCaravanaComercial, proponerTrueque, CaravanaInvalidaError, TruequeInvalidoError } from './trade';
+import { aceptarTrueque, construirCaravanaComercial, proponerTrueque, CaravanaInvalidaError, TruequeInvalidoError } from './trade';
 import { cupoCaravanas, tieneMercadoActivo } from './asentamientoQuery';
 import { asignarCargoLocal, CargoInvalidoError } from './cargos';
 import { encontrarCapital } from './mantenimiento';
@@ -218,7 +218,11 @@ export function avanzarAutoComercioSimulado(estado: EstadoSimulacion, mapa: Mapa
             instante,
             contador++
           );
-          acuerdosNuevos.push(acuerdo);
+          // Los DOS lados son plazas de la misma simulación automática, así que el auto-comercio contesta
+          // por la receptora en el acto — pero pasando por `aceptarTrueque`, la misma función que usaría un
+          // jugador, y no escribiendo `'activo'` a mano. Si el laboratorio tuviera un atajo propio,
+          // mediríamos una economía que no es la del juego.
+          acuerdosNuevos.push(aceptarTrueque(acuerdo, instante));
         } catch (err) {
           if (!(err instanceof TruequeInvalidoError)) throw err;
         }

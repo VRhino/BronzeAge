@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Asentamiento, Caravana, CaminoComercial, Faccion, Point } from '../../domain/types';
 import { CARAVANA_COOLDOWN, CARAVANA_CATALOGO } from '../../constants';
-import { avanzarComercio, construirCaravanaComercial, proponerTrueque, CaravanaInvalidaError } from '../trade';
+import { aceptarTrueque, avanzarComercio, construirCaravanaComercial, proponerTrueque, CaravanaInvalidaError } from '../trade';
 import { lanzarCaravanaFundacion, ExpansionInvalidaError } from '../expansion';
 import { almacenSintetico, caravanaComercialCasiLlegando, mapaSintetico } from './tradeFixtures';
 import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instanteDeTest, posicionRecomendable } from './fixtures';
@@ -51,7 +51,13 @@ describe('orientación de la ruta al reutilizar un Camino Comercial existente', 
     // Trueque A<->B: A entrega cobre a B (caravana de A viaja A->B, a favor del camino), B entrega oro a A
     // (caravana de B viaja B->A, EN CONTRA del orden guardado del camino) — el mismo patrón de dos trueques
     // opuestos por el mismo camino que expuso el bug en la partida real.
-    const acuerdo = proponerTrueque([aTrasConstruir, bTrasConstruir], 'A', 'B', 'cobre', 'oro', 50, 20, instanteDeTest(0), 0);
+    // Un trueque nace 'propuesto' y no lo mira ninguna caravana hasta que el otro lado acepta
+    // (`Comercio_Fisico_Definicion.md`). Estos tests miden el TRANSPORTE, no la negociación, así que aceptan
+    // en el acto y en la misma línea.
+    const acuerdo = aceptarTrueque(
+      proponerTrueque([aTrasConstruir, bTrasConstruir], 'A', 'B', 'cobre', 'oro', 50, 20, instanteDeTest(0), 0),
+      instanteDeTest(0)
+    );
 
     const resultado = avanzarComercio(
       [aTrasConstruir, bTrasConstruir],
@@ -276,7 +282,10 @@ describe('reuso de caravana propia a través de varios envíos del mismo trueque
     const { asentamiento: origenTrasConstruir, caravana } = construirCaravanaComercial(origen0, [], instanteDeTest(0), 0);
     expect(caravana.estado).toBe('disponible');
 
-    const acuerdo = proponerTrueque([origenTrasConstruir, destino0], 'origen', 'destino', 'piedra', 'oro', PACTADAS, 1, instanteDeTest(0), 0);
+    const acuerdo = aceptarTrueque(
+      proponerTrueque([origenTrasConstruir, destino0], 'origen', 'destino', 'piedra', 'oro', PACTADAS, 1, instanteDeTest(0), 0),
+      instanteDeTest(0)
+    );
 
     let asentamientos = [origenTrasConstruir, destino0];
     let caravanas: Caravana[] = [caravana];

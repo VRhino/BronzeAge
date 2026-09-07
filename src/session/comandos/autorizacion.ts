@@ -115,6 +115,17 @@ function esFaccionDelAsentamiento(estado: GameSessionState, jugadorId: string, a
   return asentamiento === undefined || esFaccionPropia(estado, jugadorId, asentamiento.faccionId);
 }
 
+/**
+ * Residente presente en el asentamiento B de ese acuerdo — el que TIENE que contestar (Doc 3.2).
+ *
+ * Un acuerdo inexistente se deja pasar, mismo criterio fail-open que el resto de resolutores de este archivo:
+ * lo rechaza el propio comando con `acuerdo.no_existe`, que dice mucho mas que un "no autorizado".
+ */
+function resideEnElLadoQueContesta(estado: GameSessionState, jugadorId: string, acuerdoId: string): boolean {
+  const acuerdo = estado.acuerdos.find((a) => a.id === acuerdoId);
+  return acuerdo === undefined || reside(estado, jugadorId, acuerdo.asentamientoBId);
+}
+
 function reside(estado: GameSessionState, jugadorId: string, asentamientoId: string): boolean {
   const asentamiento = buscarAsentamiento(estado, asentamientoId);
   return asentamiento === undefined || (esResidente(asentamiento, jugadorId) && presente(estado, jugadorId, asentamientoId));
@@ -370,6 +381,16 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
   proponerTrueque: {
     rolesPermitidos: ['jugador'],
     condicionJugador: (estado, jugadorId, params) => reside(estado, jugadorId, params.asentamientoAId),
+  },
+  // Contestar es cosa del lado RECEPTOR (B): quien propuso ya dijo lo suyo, y dejarle aceptar su propia
+  // propuesta devolveria el pacto unilateral que este comando existe para quitar.
+  aceptarTrueque: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, jugadorId, params) => resideEnElLadoQueContesta(estado, jugadorId, params.acuerdoId),
+  },
+  rechazarTrueque: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, jugadorId, params) => resideEnElLadoQueContesta(estado, jugadorId, params.acuerdoId),
   },
   colocarOrdenMercado: {
     rolesPermitidos: ['jugador'],

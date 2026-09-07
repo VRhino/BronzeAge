@@ -15,7 +15,7 @@
 // Queda encerrado dentro de `comando()`, no escapa nunca de un manejador, y es exactamente lo que ya hacía
 // `rechazoDesdeError` con los errores del motor — así que el mecanismo es uno, no dos.
 import { columnaDe } from '../../engine/ejercitos';
-import type { Asentamiento, CampamentoBandido, Caravana, Faccion, Ejercito, Jugador } from '../../domain/types';
+import type { AcuerdoTrueque, Asentamiento, CampamentoBandido, Caravana, Faccion, Ejercito, Jugador } from '../../domain/types';
 import type { GameSessionState } from '../estado';
 import { CODIGOS_ERROR, type CodigoError } from './codigosDeError';
 import { rechazo, rechazoDesdeError, type ManejadorComando } from './tipos';
@@ -88,6 +88,12 @@ export function exigirCampamento(estado: GameSessionState, campamentoId: string)
   const campamento = estado.campamentosBandidos.find((c) => c.id === campamentoId);
   if (!campamento) rechazar(CODIGOS_ERROR.campamentoNoExiste);
   return campamento;
+}
+
+export function exigirAcuerdo(estado: GameSessionState, acuerdoId: string): AcuerdoTrueque {
+  const acuerdo = estado.acuerdos.find((a) => a.id === acuerdoId);
+  if (!acuerdo) rechazar(CODIGOS_ERROR.acuerdoNoExiste);
+  return acuerdo;
 }
 
 export function exigirEjercito(estado: GameSessionState, ejercitoId: string): Ejercito {

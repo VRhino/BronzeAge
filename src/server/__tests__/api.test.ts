@@ -857,7 +857,9 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       // +2 con la puerta (paso 5): fijar la política de acceso y vetar.
       // +1 con `inspeccionar` (paso 8a): sin ver no hay clíc, y sin acercarse no hay detalle.
       // +3 con atacar, perseguir y dejar de perseguir (paso 8c/8d).
-      expect(cuerpo.oneOf.length).toBe(56);
+      // +2 con contestar un trueque (`aceptarTrueque`/`rechazarTrueque`): desde que un trueque necesita un sí
+      // explícito, decir que sí y decir que no son actos del otro lado, no un efecto de proponer.
+      expect(cuerpo.oneOf.length).toBe(58);
       const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
       expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
     });

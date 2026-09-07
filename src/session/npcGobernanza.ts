@@ -41,11 +41,18 @@ import {
   hayProyectoPendiente,
   nutricionPoblacionDe,
 } from '../engine/asentamientoQuery';
-import { tieneRecursos } from '../engine/almacen';
+import { cantidadDisponible, tieneRecursos } from '../engine/almacen';
 import { asignarCargoLocal, CargoInvalidoError } from '../engine/cargos';
 import { anadirEdificioManualmente, reclamosDeFuentes, ConstruccionManualInvalidaError } from '../engine/construction';
 import { comprometerRecintoManualmente, RecintoInvalidoError } from '../engine/muralla';
-import { construirCaravanaComercial, proponerTrueque, CaravanaInvalidaError, TruequeInvalidoError } from '../engine/trade';
+import {
+  aceptarTrueque,
+  construirCaravanaComercial,
+  proponerTrueque,
+  rechazarTrueque,
+  CaravanaInvalidaError,
+  TruequeInvalidoError,
+} from '../engine/trade';
 import { computeTodasLasZonas } from '../engine/zones';
 import { calcularCostoMantenimiento, encontrarCapital } from '../engine/mantenimiento';
 import { evaluarViabilidadFundacion, fundarAsentamiento, FundacionInvalidaError } from '../engine/settlement';
@@ -477,9 +484,55 @@ function mejorRecursoDePagoSupervivencia(asentamiento: Asentamiento, recursoBusc
 function yaTieneAyudaEnCaminoPara(acuerdos: AcuerdoTrueque[], necesitadoId: string, recurso: RecursoTipo): boolean {
   return acuerdos.some(
     (ac) =>
-      ac.estado === 'activo' &&
+      // 'propuesto' cuenta igual que 'activo': desde que el trueque se acepta explicitamente
+      // (`Comercio_Fisico_Definicion.md`), una peticion sin contestar es ayuda YA pedida. Sin esto, un
+      // asentamiento cuyo socio tarda en responder repetiria la peticion cada tick.
+      (ac.estado === 'activo' || ac.estado === 'propuesto') &&
       ((ac.asentamientoAId === necesitadoId && ac.recursoB === recurso) || (ac.asentamientoBId === necesitadoId && ac.recursoA === recurso))
   );
+}
+
+/**
+ * Las plazas NPC CONTESTAN a los trueques que se les proponen (Doc 3.2). Desde que un trueque necesita un si
+ * explicito (`Consideraciones/Comercio_Fisico_Definicion.md` decision 5), sin esto ninguna propuesta dirigida
+ * a un NPC prosperaria jamas — ni la de un jugador ni la del NPC de al lado.
+ *
+ * El criterio es el MISMO colchon que se le exige al socio cuando el NPC va a pedir
+ * (`COLCHON_EXCEDENTE_SUPERVIVENCIA`): acepta si le sobra de verdad lo que tendria que entregar, y si no,
+ * dice que no. Que sea el mismo numero es lo que hace que el trueque entre dos NPC siga saliendo igual que
+ * antes de que la aceptacion existiera — el socio se elegia ya con esta condicion.
+ *
+ * Solo contesta como lado B, que es el lado receptor de la propuesta: el A es quien la hizo.
+ */
+function responderPropuestasNpc(
+  asentamientos: readonly Asentamiento[],
+  acuerdos: readonly AcuerdoTrueque[],
+  esNpc: (faccionId: string) => boolean,
+  instante: Instante
+): { acuerdos: AcuerdoTrueque[]; eventos: string[]; aceptados: number; rechazados: number } {
+  const eventos: string[] = [];
+  let aceptados = 0;
+  let rechazados = 0;
+
+  const resultantes = acuerdos.map((acuerdo) => {
+    if (acuerdo.estado !== 'propuesto') return acuerdo;
+    const plaza = asentamientos.find((a) => a.id === acuerdo.asentamientoBId);
+    if (!plaza || !esNpc(plaza.faccionId)) return acuerdo;
+
+    const puede =
+      fraccionDisponible(plaza, acuerdo.recursoB as RecursoTipo) > COLCHON_EXCEDENTE_SUPERVIVENCIA &&
+      cantidadDisponible(plaza.almacen, acuerdo.recursoB) > 0;
+    if (puede) {
+      aceptados++;
+      eventos.push(`${plaza.id} acepta el trueque ${acuerdo.id}.`);
+      return aceptarTrueque(acuerdo, instante);
+    }
+    rechazados++;
+    eventos.push(`${plaza.id} rechaza el trueque ${acuerdo.id}: no le sobra ${acuerdo.recursoB}.`);
+    return rechazarTrueque(acuerdo);
+  });
+
+  return { acuerdos: resultantes, eventos, aceptados, rechazados };
 }
 
 /**
@@ -513,10 +566,13 @@ function truequeDeSupervivencia(
     for (const recurso of enRiesgo) {
       if (yaTieneAyudaEnCaminoPara([...acuerdosExistentes, ...acuerdosNuevos], necesitado.id, recurso)) continue;
 
-      // El SOCIO también tiene que ser NPC: `proponerTrueque` (motor) pacta sin pedir consentimiento al otro
-      // lado, así que sin este filtro un NPC comprometería recursos de un asentamiento del jugador humano sin
-      // que este lo aprobara (a petición del usuario). En batch, donde no hay humano, `esNpc` es siempre true
-      // y el comportamiento es el de siempre: cualquier socio de cualquier Facción.
+      // El SOCIO también tiene que ser NPC, y **el motivo cambió** el 2026-09-07: ya no es el consentimiento
+      // —`proponerTrueque` solo propone, y `responderPropuestasNpc` contesta—, sino que esto es un SALVAVIDAS.
+      // Una plaza a la que le falta un recurso de Mantenimiento no puede quedarse esperando a que un humano
+      // se conecte y conteste; el NPC de al lado responde en el mismo tick. Un jugador que quiera comerciar
+      // con el NPC tiene los dos caminos abiertos: proponerle un trueque él (y el NPC contesta), o comprarle
+      // en el mostrador (`publicarOrdenesNpc`).
+      // En batch, donde no hay humano, `esNpc` es siempre true y el comportamiento es el de siempre.
       const socio = asentamientos.find(
         (s) => s.id !== necesitado.id && esNpc(s.faccionId) && fraccionDisponible(s, recurso) > COLCHON_EXCEDENTE_SUPERVIVENCIA
       );
@@ -1338,12 +1394,18 @@ export function avanzarNpcGobernanza(
   contador = trueque.contador;
   eventos.push(...trueque.eventos);
 
+  // Contestar va DESPUES de proponer y en el mismo tick: asi un trueque entre dos NPC nace y se acepta de
+  // una pasada, igual que antes de que la aceptacion existiera. Tambien recoge aqui las propuestas que un
+  // JUGADOR haya dejado pendientes desde su turno.
+  const respuestas = responderPropuestasNpc(asentamientos, [...estado.acuerdos, ...trueque.acuerdosNuevos], esNpc, instante);
+  eventos.push(...respuestas.eventos);
+
   const estadoConGobernanzaBase: EstadoSimulacion = {
     ...estado,
     asentamientos,
     facciones,
     caravanas,
-    acuerdos: [...estado.acuerdos, ...trueque.acuerdosNuevos],
+    acuerdos: respuestas.acuerdos,
   };
   // Trueque de especialización: se DELEGA en el motor (`avanzarAutoComercioSimulado`) sin tocarlo ni una
   // línea. Para acotarlo a las Facciones NPC se le pasa una VISTA del estado con `facciones` ya filtrado —

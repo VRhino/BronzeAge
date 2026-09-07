@@ -818,8 +818,20 @@ export interface AcuerdoTrueque {
   cantidadEntregadaB: number;
   /** Instantes de mundo de creación y vencimiento del acuerdo (Fase D). */
   creadoEn: Instante;
+  /**
+   * Cuando deja de valer. Mientras esta `'propuesto'` es el plazo para CONTESTAR; al aceptar se recalcula
+   * desde el instante de la aceptacion (`aceptarTrueque`, engine/trade.ts), para que una propuesta contestada
+   * tarde no nazca ya sin tiempo de cumplirse.
+   */
   expiraEn: Instante;
-  estado: 'activo' | 'cumplido' | 'expirado';
+  /**
+   * `'propuesto'` = ofrecido y sin contestar; no obliga a nadie y ninguna caravana lo mira todavia
+   * (`Consideraciones/Comercio_Fisico_Definicion.md`, decision 5). Nace asi SIEMPRE: hasta 2026-09-07 nacia
+   * `'activo'` porque no habia jugador interactivo al que preguntarle, y eso pactaba en nombre del otro.
+   *
+   * `'rechazado'` es distinto de `'expirado'` a proposito: uno es una respuesta y el otro un silencio.
+   */
+  estado: 'propuesto' | 'activo' | 'rechazado' | 'cumplido' | 'expirado';
 }
 
 /**
