@@ -649,6 +649,22 @@ export interface WorldConfig {
 
 export type CaravanaTipo = 'comercial' | 'militar' | 'construccion' | 'contrabando';
 
+/** Revamp de caravanas (Doc 3.13). Un carro se fabrica en el Mercado ('basico', 20 madera) o en la
+ * Carpintería ('reforzado', más capacidad). El catálogo se ampliará más adelante. Ver `CARRO_CATALOGO`. */
+export type CarroTipo = 'basico' | 'reforzado';
+
+/** Revamp de caravanas (Doc 3.13). Un carro lleva como mucho UN animal, obligatorio para que se mueva.
+ * Buey: lento, más carga, barato. Caballo: rápido, menos carga, caro. Camello: intermedio (la inmunidad al
+ * desierto está diferida — no hay bioma árido). Ver `ANIMAL_CATALOGO`. */
+export type AnimalTipo = 'buey' | 'caballo' | 'camello';
+
+/** Un carro de una caravana compuesta (Doc 3.13.1). Solo los carros CON animal viajan y cuentan capacidad;
+ * un carro sin animal se queda en el origen. */
+export interface CarroCaravana {
+  tipoCarro: CarroTipo;
+  animal?: AnimalTipo;
+}
+
 export interface Caravana {
   id: string;
   tipo: CaravanaTipo;
@@ -687,8 +703,27 @@ export interface Caravana {
    * y no un 'disponible' con una bandera aparte por una razón concreta: `asignarCaravanasATrueque` reparte
    * las 'disponible', así que dejarla ahí permitía que el comercio automático la despachara por debajo del
    * ejército que la lleva. Mientras esté 'adjunta' se mueve con la columna, y se carga y entrega A MANO
-   * (Doc 5.13.3) — el reparto automático no la ve. Soltarla la devuelve a 'disponible' donde esté. */
-  estado?: 'disponible' | 'adjunta' | 'en_transito' | 'retornando';
+   * (Doc 5.13.3) — el reparto automático no la ve. Soltarla la devuelve a 'disponible' donde esté.
+   *
+   * 'preparando' = revamp (Doc 3.13.3): lanzada a mano pero todavía en el origen mientras corre el tiempo de
+   * preparación (`preparaHasta`). La carga ya está reservada del almacén y las piezas/escolta bloqueadas;
+   * cancelar antes de salir lo devuelve todo. Sin cablear todavía (Paso 3 del plan). */
+  estado?: 'disponible' | 'preparando' | 'adjunta' | 'en_transito' | 'retornando';
+  /** Revamp de caravanas (Doc 3.13). Solo `tipo: 'comercial'`. La caravana deriva su capacidad y velocidad de
+   * esta lista (`capacidadCaravana`/`velocidadCaravana`, engine/caravanas.ts) en vez de `CARAVANA_CATALOGO`.
+   * Ausente = caravana pre-revamp (la migración de snapshot le pone 1 carro básico + 1 buey) o categoría sin
+   * revamp — en ambos casos el motor cae al catálogo. */
+  carros?: CarroCaravana[];
+  /** Revamp (Doc 3.13.4). Escuadrones que un residente del origen cede como escolta sin héroe, POR VIAJE.
+   * Presente solo en viaje (estado ≠ 'disponible'); los ids son de `Asentamiento.escuadrones` del origen y
+   * mientras están aquí esa guarnición no los cuenta. Sin cablear todavía (Paso 4). */
+  escoltaEscuadronIds?: string[];
+  /** Revamp (Doc 3.13.5). `true` = fuera del reparto automático (`asignarCaravanasATrueque`), decisión
+   * explícita del jugador, sea cual sea el tamaño de la caravana. */
+  reservadaManual?: boolean;
+  /** Revamp (Doc 3.13.3). Instante de mundo en que termina la preparación; presente solo en estado
+   * 'preparando'. Sin cablear todavía (Paso 3). */
+  preparaHasta?: Instante;
 }
 
 /**

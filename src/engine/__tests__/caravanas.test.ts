@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Asentamiento, Caravana, CaminoComercial, Faccion, Point } from '../../domain/types';
 import { CARAVANA_COOLDOWN, CARAVANA_CATALOGO } from '../../constants';
+import { capacidadCaravana, velocidadCaravana } from '../caravanas';
 import { aceptarTrueque, avanzarComercio, construirCaravanaComercial, proponerTrueque, CaravanaInvalidaError } from '../trade';
 import { lanzarCaravanaFundacion, ExpansionInvalidaError } from '../expansion';
 import { almacenSintetico, caravanaComercialCasiLlegando, mapaSintetico } from './tradeFixtures';
@@ -363,5 +364,46 @@ describe('reuso de caravana propia a través de varios envíos del mismo trueque
     expect(caravanas).toHaveLength(1);
     expect(caravanas[0]!.id).toBe(caravana.id);
     expect(caravanas[0]!.posicionActual).toEqual(origenPos);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------
+// Revamp de caravanas (Doc 3.13) — Paso 1: la capacidad y la velocidad se DERIVAN de los carros/animales.
+// El ancla de calibración (Ronda 2 con el usuario): 1 carro básico + 1 buey = los 500/16 de siempre, para
+// que el batch NPC no se mueva.
+// ---------------------------------------------------------------------------------------------------------
+describe('derivación de capacidad y velocidad de una caravana compuesta (Doc 3.13)', () => {
+  const base = (carros: Caravana['carros']): Caravana => ({
+    id: 'c', tipo: 'comercial', origenAsentamientoId: 'o', contenido: {}, posicionActual: { x: 0, y: 0 }, progreso: 0, carros,
+  });
+
+  it('sin `carros` cae al catálogo (caravana pre-revamp o categoría sin revamp)', () => {
+    const sinCarros = { ...base([]), carros: undefined };
+    expect(capacidadCaravana(sinCarros)).toBe(CARAVANA_CATALOGO.comercial.capacidad);
+    expect(velocidadCaravana(sinCarros)).toBe(CARAVANA_CATALOGO.comercial.velocidad);
+  });
+
+  it('el ancla: 1 carro básico + 1 buey reproduce 500/16', () => {
+    const porDefecto = base([{ tipoCarro: 'basico', animal: 'buey' }]);
+    expect(capacidadCaravana(porDefecto)).toBe(CARAVANA_CATALOGO.comercial.capacidad);
+    expect(velocidadCaravana(porDefecto)).toBe(CARAVANA_CATALOGO.comercial.velocidad);
+  });
+
+  it('capacidad = suma por carro con animal; velocidad = animal más lento', () => {
+    const mixta = base([
+      { tipoCarro: 'basico', animal: 'buey' }, // 500 × 1.0
+      { tipoCarro: 'reforzado', animal: 'caballo' }, // 800 × 0.5
+    ]);
+    expect(capacidadCaravana(mixta)).toBe(500 + 400);
+    expect(velocidadCaravana(mixta)).toBe(16); // el buey frena a la caravana entera
+  });
+
+  it('un carro sin animal no cuenta capacidad; sin ningún animal la caravana no puede salir (velocidad 0)', () => {
+    const conCarroSuelto = base([{ tipoCarro: 'basico', animal: 'buey' }, { tipoCarro: 'reforzado' }]);
+    expect(capacidadCaravana(conCarroSuelto)).toBe(500);
+
+    const sinTraccion = base([{ tipoCarro: 'basico' }, { tipoCarro: 'reforzado' }]);
+    expect(capacidadCaravana(sinTraccion)).toBe(0);
+    expect(velocidadCaravana(sinTraccion)).toBe(0);
   });
 });

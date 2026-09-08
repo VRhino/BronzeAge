@@ -12,7 +12,8 @@ import type { AcuerdoTrueque, Asentamiento, Caravana, Ejercito, Escuadron, Facci
 import type { Mapa } from '../world/mapa';
 import { calcularRuta } from '../world/rutas';
 import { distancia } from '../world/geometria';
-import { CARAVANA_CATALOGO, LOGISTICA, MOVIMIENTO, TROPAS_RECLUTABLES, VISION } from '../constants';
+import { LOGISTICA, MOVIMIENTO, TROPAS_RECLUTABLES, VISION } from '../constants';
+import { capacidadCaravana, velocidadCaravana } from './caravanas';
 import { atribuir, type EventoCrudo } from '../domain/eventos';
 import { minutos, sumar, type Instante } from '../domain/tiempo';
 import type { RandomFn } from '../worldgen';
@@ -120,7 +121,7 @@ export function participantesDe(ejercito: Pick<Ejercito, 'participantes'>): numb
 export function capacidadCargaDe(ejercito: Ejercito, caravanas: readonly Caravana[] = []): number {
   return (
     capacidadCarrosDe(participantesDe(ejercito)) +
-    adjuntasDe(ejercito, caravanas).reduce((suma, c) => suma + CARAVANA_CATALOGO[c.tipo].capacidad, 0)
+    adjuntasDe(ejercito, caravanas).reduce((suma, c) => suma + capacidadCaravana(c), 0)
   );
 }
 
@@ -576,7 +577,7 @@ export function cargarCaravanaAdjunta(
   }
 
   const yaCargado = Object.values(caravana.contenido).reduce((a, b) => a + b, 0);
-  const espacio = CARAVANA_CATALOGO[caravana.tipo].capacidad - yaCargado;
+  const espacio = capacidadCaravana(caravana) - yaCargado;
   if (espacio <= 0) throw new MovilizacionInvalidaError('La caravana ya va llena.');
 
   const cargado = Math.min(cantidad, espacio, cantidadDisponible(plaza.almacen, recurso));
@@ -1084,7 +1085,7 @@ export function velocidadDeEjercito(ejercito: Ejercito, caravanas: readonly Cara
   // Las caravanas adjuntas entran en el MISMO mínimo (Doc 5.13.2): una comercial va a 16, así que engancharla
   // baja una fuerza ligera de 20 a 16 y le quita la capacidad de cazar caravanas. Ahí está el equilibrio de la
   // escolta, sin ninguna regla extra: no se puede escoltar y depredar a la vez.
-  for (const c of adjuntasDe(ejercito, caravanas)) velocidades.push(CARAVANA_CATALOGO[c.tipo].velocidad);
+  for (const c of adjuntasDe(ejercito, caravanas)) velocidades.push(velocidadCaravana(c));
   if (velocidades.length === 0) {
     // Sin escuadrones y sin adjuntas: o va gente dentro —y entonces es un viajero— o no queda nadie y la
     // columna está a punto de disolverse, en cuyo caso da igual a qué velocidad no se mueve.

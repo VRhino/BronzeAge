@@ -35,6 +35,7 @@ export interface PayloadCaravanaSale {
   recurso: string;
 }
 import { ASIGNACION_CARAVANA, CARAVANA_CATALOGO, COMISION, REPUTACION, TRUEQUE } from '../constants';
+import { capacidadCaravana, velocidadCaravana } from './caravanas';
 import { minutos, sumar, type Instante } from '../domain/tiempo';
 import { COSTE_MOVIMIENTO } from '../worldgen';
 import type { Mapa } from '../world/mapa';
@@ -175,6 +176,10 @@ export function construirCaravanaComercial(
     posicionActual: asentamiento.posicion,
     progreso: 0,
     estado: 'disponible',
+    // Revamp (Doc 3.13): nace ya compuesta con la caravana por defecto — 1 carro básico + 1 buey deriva a los
+    // mismos 500/16 del catálogo anterior. Añadir/quitar carros y animales es el Paso 2.
+    carros: [{ tipoCarro: 'basico', animal: 'buey' }],
+    reservadaManual: false,
   };
   return { asentamiento: { ...asentamiento, almacen, ultimaCaravanaCreadaEn: instante }, caravana };
 }
@@ -229,7 +234,9 @@ function avanzarCaravanas(
     // cuántos ticks tarda la caravana, que depende de la longitud real de la polilínea de `ruta` (puede
     // rodear terreno costoso).
     const distanciaTotal = Math.max(1, distancia(puntoInicio, puntoFin));
-    const velocidadBase = CARAVANA_CATALOGO[caravana.tipo].velocidad;
+    // Revamp (Doc 3.13): una comercial con `carros` deriva su velocidad de sus animales; el resto cae al
+    // catálogo. Ver `velocidadCaravana`, engine/caravanas.ts.
+    const velocidadBase = velocidadCaravana(caravana);
     // "Rutas Rápidas" (Tesorero, ampliación de comercio) solo aplica a la flota comercial propia — no a
     // Caravanas de Fundación ni a los tipos todavía sin uso real (militar/contrabando, Doc 3.6).
     const velocidad = caravana.tipo === 'comercial' ? velocidadBase * factorVelocidadCaravana(origen) : velocidadBase;
@@ -573,7 +580,10 @@ function asignarCaravanasATrueque(
     const origen = asentamientosPorId.get(origenId);
     if (!origen) continue;
 
-    const disponibles = caravanas.filter((c) => c.tipo === 'comercial' && c.estado === 'disponible' && c.origenAsentamientoId === origenId);
+    // Revamp (Doc 3.13.5): `reservadaManual` la saca del reparto automático — el jugador la despacha a mano.
+    const disponibles = caravanas.filter(
+      (c) => c.tipo === 'comercial' && c.estado === 'disponible' && !c.reservadaManual && c.origenAsentamientoId === origenId
+    );
     if (disponibles.length === 0) continue;
 
     const conScore = pendientes
@@ -591,7 +601,9 @@ function asignarCaravanasATrueque(
 
       const disponibleStock = cantidadDisponible(origen.almacen, l.recurso);
       const pendiente = l.total - l.entregado;
-      const capacidad = CARAVANA_CATALOGO.comercial.capacidad * factorCapacidadCaravana(origen);
+      // Revamp (Doc 3.13): capacidad derivada de los carros de ESTA caravana (tras migración, 1 carro básico
+      // + 1 buey = 500, idéntico al fijo anterior). "Carga Ampliada" se aplica encima como siempre.
+      const capacidad = capacidadCaravana(caravana) * factorCapacidadCaravana(origen);
       const cantidad = Math.min(disponibleStock, pendiente, capacidad);
       if (cantidad <= 0) continue; // sin stock suficiente todavía: la caravana se reintenta el siguiente tick, no consume su turno
 

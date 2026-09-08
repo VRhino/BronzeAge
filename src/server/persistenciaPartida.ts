@@ -44,9 +44,11 @@ import { ubicacionDeducida } from '../engine/ubicacion';
  * `memoriaPorFaccion`. v8 (jugador situado): `Ejercito` gana `participantes`, `tipo` y `liderId`. v9 (jugador
  * situado): `Jugador` gana `ubicacion` y deja de ser un registro opcional — la PRIMERA migración del repo
  * que no puede resolverse con un valor por defecto (ver `migrarV8aV9`). v10 (unirse y separarse en campo):
- * `Ejercito.politicaDeUnion`.
+ * `Ejercito.politicaDeUnion`. v11 (comercio físico): `OrdenMercado.expiraEn`. v12 (revamp de caravanas, Doc
+ * 3.13): una `Caravana` comercial gana `carros` — la migración le pone 1 carro básico + 1 buey, que deriva a
+ * los mismos 500/16 de antes.
  */
-export const FORMATO_SNAPSHOT_VERSION = 11;
+export const FORMATO_SNAPSHOT_VERSION = 12;
 
 export interface SnapshotPartida {
   formatoVersion: number;
@@ -193,6 +195,7 @@ function migrarSnapshot(gameId: string, snapshot: SnapshotPartida): PartidaExpor
   if (snapshot.formatoVersion < 9) migrarV8aV9(s);
   if (snapshot.formatoVersion < 10) migrarV9aV10(s);
   if (snapshot.formatoVersion < 11) migrarV10aV11(s);
+  if (snapshot.formatoVersion < 12) migrarV11aV12(s);
   return p as unknown as PartidaExportada;
 }
 
@@ -407,6 +410,22 @@ function migrarV10aV11(s: Record<string, any>): void {
   const ahora = instanteDeTick((s.tick as number | undefined) ?? 0);
   for (const orden of (s.ordenes ?? []) as Record<string, any>[]) {
     orden.expiraEn ??= sumar(ahora, minutos(MERCADO.plazoOrdenMinutos));
+  }
+}
+
+/**
+ * v11 -> v12 (revamp de caravanas, Doc 3.13 / `Consideraciones/Revamp_Caravanas_Definicion.md`): una
+ * `Caravana` comercial deja de leer capacidad/velocidad de `CARAVANA_CATALOGO` y las deriva de sus `carros`.
+ * Toda comercial guardada sin `carros` recibe la caravana por defecto —1 carro básico + 1 buey— que deriva a
+ * los mismos 500/16 de antes (`capacidadCaravana`/`velocidadCaravana`, engine/caravanas.ts), así que ni el
+ * comercio en curso ni el batch cambian. Las de Fundación (`tipo: 'construccion'`) y las efímeras no se tocan.
+ */
+function migrarV11aV12(s: Record<string, any>): void {
+  for (const caravana of (s.caravanas ?? []) as Record<string, any>[]) {
+    if (caravana.tipo === 'comercial' && caravana.carros === undefined) {
+      caravana.carros = [{ tipoCarro: 'basico', animal: 'buey' }];
+      caravana.reservadaManual = false;
+    }
   }
 }
 

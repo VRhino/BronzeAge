@@ -442,6 +442,25 @@ describe('guardarPartida / cargarPartida', () => {
     expect(migrada.estado).toBe('activa');
   });
 
+  it('migra v11 -> v12: una caravana comercial vieja recibe 1 carro básico + 1 buey (deriva a los mismos 500/16)', async () => {
+    const sesion = partidaEnMarcha();
+    await guardarPartida(directorio, sesion, MOMENTO);
+    const ruta = join(directorio, `${sesion.gameId}.json`);
+    const snap = JSON.parse(await readFile(ruta, 'utf-8'));
+    snap.formatoVersion = 11;
+    snap.partida.state.caravanas = [
+      { id: 'cara-vieja', tipo: 'comercial', origenAsentamientoId: 'o', contenido: {}, posicionActual: { x: 0, y: 0 }, progreso: 0, estado: 'disponible' },
+      { id: 'fundacion', tipo: 'construccion', origenAsentamientoId: 'o', contenido: {}, posicionActual: { x: 0, y: 0 }, progreso: 0 },
+    ];
+    await writeFile(ruta, JSON.stringify(snap), 'utf-8');
+
+    const cargada = (await cargarPartida(directorio, sesion.gameId))!.sesion.getState();
+    const comercial = cargada.caravanas.find((c) => c.id === 'cara-vieja')!;
+    expect(comercial.carros).toEqual([{ tipoCarro: 'basico', animal: 'buey' }]);
+    expect(comercial.reservadaManual).toBe(false);
+    expect(cargada.caravanas.find((c) => c.id === 'fundacion')!.carros).toBeUndefined();
+  });
+
   it('rechaza un snapshot generado con otra versión del generador de mundo', async () => {
     const sesion = partidaEnMarcha();
     await guardarPartida(directorio, sesion, MOMENTO);

@@ -1161,6 +1161,30 @@ export const CARAVANA_COOLDOWN = {
 };
 
 /**
+ * Revamp de caravanas (Doc 3.13, `Consideraciones/Revamp_Caravanas_Definicion.md`). Una caravana `comercial`
+ * deja de tener capacidad/velocidad fijas (`CARAVANA_CATALOGO.comercial`, que queda como FALLBACK para las
+ * pre-revamp) y las DERIVA de sus carros y animales — ver `capacidadCaravana`/`velocidadCaravana` en
+ * `engine/caravanas.ts`.
+ *
+ * ANCLA DE CALIBRACIÓN (decisión del usuario, Ronda 2): `1 carro básico + 1 buey` reproduce los 500/16 de
+ * hoy, así que el batch NPC —que nunca compone nada más— no se mueve. Todas las demás cifras son PLACEHOLDER
+ * sin calibrar por simulación, como el resto de Fase 0.
+ */
+export const CARRO_CATALOGO = {
+  // capacidadBase se multiplica por el `factorCarga` del animal para dar la capacidad real del carro.
+  basico: { capacidadBase: 500, costo: { madera: 20 } },
+  reforzado: { capacidadBase: 800, costo: { madera: 40 } },
+} as const;
+
+export const ANIMAL_CATALOGO = {
+  // factorCarga multiplica la `capacidadBase` del carro; velocidad entra en el `min` de la caravana; costoOro
+  // es lo que cuesta comprarlo (la cría está diferida, Doc 3.13.7).
+  buey: { factorCarga: 1.0, velocidad: 16, costoOro: 20 },
+  caballo: { factorCarga: 0.5, velocidad: 24, costoOro: 60 },
+  camello: { factorCarga: 0.75, velocidad: 19, costoOro: 40 },
+} as const;
+
+/**
  * Scoring de asignación de caravanas disponibles a lados pendientes de trueque (ampliación de comercio, a
  * petición del usuario — "solo simulación": en el diseño objetivo el jugador elige la caravana y la carga a
  * mano, Doc 3.2; esto es el sustituto automático de Fase 0, ver `asignarCaravanasATrueque` en engine/trade.ts).
