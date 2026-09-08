@@ -44,7 +44,7 @@
 - PENDIENTE (sin cambios): en qué se usa la riqueza acumulada; nivel intermedio de comisión para Facciones aliadas/vasallas de la misma Liga.
 
 ## 3.6 Categorías de caravana (heredado de Iberia) — 🔶 parcial: catálogo existe, solo 1-2 de 4 se usan
-1. **Comercial**: ✅ implementada y en uso — única categoría que el motor instancia realmente para Trueque/Mercado, y la única que ahora es un activo PROPIO y persistente (`costoConstruccion`, ver 3.12), en vez de efímera. **El revamp de 3.13 (Pasos 1-2 implementados) ya la hace una caravana COMPUESTA** —lista de carros, cada uno con su animal— y deriva de ahí capacidad y velocidad; las otras tres categorías no cambian y siguen leyendo `CARAVANA_CATALOGO`.
+1. **Comercial**: ✅ implementada y en uso — única categoría que el motor instancia realmente para Trueque/Mercado, y la única que es un activo PROPIO y persistente (ver 3.12), en vez de efímera. **El revamp de 3.13 (Pasos 1-2 implementados) la hace una caravana COMPUESTA** —lista de carros, cada uno con su animal— y deriva de ahí capacidad y velocidad; ya **no** tiene entrada en `CARAVANA_CATALOGO`. Las otras tres categorías no cambian y siguen leyéndolo.
 2. **Militar**: catálogo definido (capacidad/velocidad propias) pero el motor NUNCA la dispara ni le da comportamiento distinto.
 3. **De construcción**: sí tiene uso real (Caravana de Fundación, Doc 1.8), pero es un mecanismo aparte del de Trueque/Mercado — no forma parte de la flota propia de 3.12.
 4. **De contrabando**: solo datos, sin uso real.
@@ -117,9 +117,10 @@ Pesos y la distancia de referencia (600 unidades) son PLACEHOLDER, confirmados c
 > plan de 5 pasos e invariantes en `Consideraciones/Revamp_Caravanas_Definicion.md`.
 >
 > **Hecho:** el modelo (`Caravana.carros`, `CARRO_CATALOGO`/`ANIMAL_CATALOGO`, `capacidadCaravana`/
-> `velocidadCaravana` con fallback al catálogo viejo, migración de snapshot v11→v12), el casco vacío gratis
-> (`crearCaravana`) y las piezas (`agregarCarroCaravana`, `comprarAnimalCaravana`, `reservarCaravana`). El
-> batch NPC quedó **bit-idéntico** en los dos pasos. **Pendiente:** §3.13.3 (preparación) y §3.13.4 (escolta).
+> `velocidadCaravana`, migración de snapshot v11→v12; el viejo `CARAVANA_CATALOGO.comercial` fijo se borró),
+> el casco vacío gratis (`crearCaravana`) y las piezas (`agregarCarroCaravana`, `comprarAnimalCaravana`,
+> `reservarCaravana`). El batch NPC quedó **bit-idéntico** en los dos pasos. **Pendiente:** §3.13.3
+> (preparación) y §3.13.4 (escolta).
 >
 > **Lo de 3.12 que NO cambia:** el Mercado como gate y como cupo de flota (2/4/6 + política), el activo
 > persistente con coste que no se desmantela, el `CARAVANA_COOLDOWN` de creación, la vuelta a `'disponible'`

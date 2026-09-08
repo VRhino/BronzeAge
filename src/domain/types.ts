@@ -128,7 +128,7 @@ export type EdificioTipo =
   | 'barracon'
   | 'galeriaDeTiro'
   // Ampliación de comercio (a petición del usuario): gatea las órdenes de Mercado (Doc 3.3) y aloja el cupo
-  // de la flota de caravanas propias (ver CARAVANA_CATALOGO.comercial, engine/trade.ts). Vía política del
+  // de la flota de caravanas propias (`cupoCaravanas`, engine/asentamientoQuery.ts). Vía política del
   // Tesorero, mismo patrón que Barracón/Galería de tiro/Palacio — no auto-construcción.
   | 'mercado'
   // Pieza satélite de la ZONA de Mercado (a petición del usuario, ver
@@ -709,10 +709,11 @@ export interface Caravana {
    * preparación (`preparaHasta`). La carga ya está reservada del almacén y las piezas/escolta bloqueadas;
    * cancelar antes de salir lo devuelve todo. Sin cablear todavía (Paso 3 del plan). */
   estado?: 'disponible' | 'preparando' | 'adjunta' | 'en_transito' | 'retornando';
-  /** Revamp de caravanas (Doc 3.13). Solo `tipo: 'comercial'`. La caravana deriva su capacidad y velocidad de
-   * esta lista (`capacidadCaravana`/`velocidadCaravana`, engine/caravanas.ts) en vez de `CARAVANA_CATALOGO`.
-   * Ausente = caravana pre-revamp (la migración de snapshot le pone 1 carro básico + 1 buey) o categoría sin
-   * revamp — en ambos casos el motor cae al catálogo. */
+  /** Revamp de caravanas (Doc 3.13). Solo `tipo: 'comercial'`, y ahí SIEMPRE presente desde el snapshot v12
+   * (la migración le puso 1 carro básico + 1 buey a las que venían del modelo viejo). La caravana deriva su
+   * capacidad y velocidad de esta lista (`capacidadCaravana`/`velocidadCaravana`, engine/caravanas.ts); sin
+   * carros con animal, ambas son 0. Opcional en el tipo solo porque las categorías militar/construccion/
+   * contrabando no lo llevan. */
   carros?: CarroCaravana[];
   /** Revamp (Doc 3.13.4). Escuadrones que un residente del origen cede como escolta sin héroe, POR VIAJE.
    * Presente solo en viaje (estado ≠ 'disponible'); los ids son de `Asentamiento.escuadrones` del origen y

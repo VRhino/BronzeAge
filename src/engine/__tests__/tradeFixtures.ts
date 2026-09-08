@@ -30,10 +30,10 @@ export function mapaSintetico(opciones: { limites?: { ancho: number; alto: numbe
 /**
  * Caravana comercial a un paso de llegar a `destino` — progreso 0.9999999: cualquier velocidad positiva
  * basta para completar el tramo que falta y disparar la llegada en el MISMO tick (ver
- * `avanzarPosicionEnRuta`, `engine/movimiento.ts`), sin depender del valor exacto de
- * `CARAVANA_CATALOGO.comercial.velocidad`. `posicionActual` se deja fija a `{x:999,y:0}` porque todos los
- * usos actuales colocan `destino` en `{x:1000,y:0}` — si algún test necesitara otra geometría, se pasa por
- * `overrides`.
+ * `avanzarPosicionEnRuta`, `engine/movimiento.ts`), sin depender del valor exacto de la velocidad derivada.
+ * Lleva la caravana por defecto (1 carro básico + 1 buey, Doc 3.13) para que `velocidadCaravana` dé 16 y no
+ * 0. `posicionActual` se deja fija a `{x:999,y:0}` porque todos los usos actuales colocan `destino` en
+ * `{x:1000,y:0}` — si algún test necesitara otra geometría, se pasa por `overrides`.
  */
 export function caravanaComercialCasiLlegando(origen: Asentamiento, destino: Asentamiento, overrides: Partial<Caravana> = {}): Caravana {
   return {
@@ -46,6 +46,7 @@ export function caravanaComercialCasiLlegando(origen: Asentamiento, destino: Ase
     progreso: 0.9999999,
     estado: 'en_transito',
     ruta: [origen.posicion, destino.posicion],
+    carros: [{ tipoCarro: 'basico', animal: 'buey' }],
     ...overrides,
   };
 }

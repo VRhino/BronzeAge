@@ -89,6 +89,7 @@ describe('eventos de dominio — trade.ts', () => {
       posicionActual: origen.posicion,
       progreso: 0,
       estado: 'disponible',
+      carros: [{ tipoCarro: 'basico', animal: 'buey' }], // sin carro con tracción, capacidad 0 → no la asignaría
     };
     const mapa = mapaSintetico();
 

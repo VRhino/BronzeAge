@@ -76,6 +76,11 @@ escolta sin héroe— y que haya una vía de preparación manual además del rep
     valor que aportaba era marginal (evitar un `crearCaravana` tras el Mercado, y ni siquiera hay espera: el
     casco vacío es gratis). Se cae. El enunciado ("el Mercado te da un carro y un animal") queda como sabor,
     no como mecánica.
+19. **Se elimina el modelo viejo y su fallback** (a petición del usuario: en fase de desarrollo no se dejan
+    versiones incompletas anteriores en el código). Fuera `CARAVANA_CATALOGO.comercial` (capacidad/velocidad/
+    `costoConstruccion` fijos) y fuera la rama `if (carros === undefined) → catálogo` de
+    `capacidadCaravana`/`velocidadCaravana`. La migración v11→v12 ya garantiza que toda comercial tenga
+    `carros`; el NPC reserva vía `costoCaravanaPorDefecto()`. Batch bit-idéntico.
 
 ## 2. Lo que ya existe y no hay que inventar
 
@@ -106,8 +111,9 @@ type AnimalTipo = 'buey' | 'caballo' | 'camello';
 
 interface Caravana {
   // ... campos actuales ...
-  /** Revamp (Doc 3.13). Una caravana comercial deriva capacidad/velocidad de aquí en vez de CARAVANA_CATALOGO.
-   *  Ausente = caravana pre-revamp o categoría sin revamp; el motor cae al catálogo. */
+  /** Revamp (Doc 3.13). Una caravana comercial deriva capacidad/velocidad de aquí. La migración de snapshot
+   *  v11→v12 la puso en TODAS las comerciales guardadas (1 carro básico + 1 buey), así que a partir de v12
+   *  siempre está presente en una comercial — sin `carros` con tracción, capacidad y velocidad son 0. */
   carros?: { tipoCarro: CarroTipo; animal?: AnimalTipo }[];
   /** Escuadrones cedidos como escolta sin héroe (Doc 3.13.4). Solo presente en viaje (estado ≠ 'disponible').
    *  Los ids apuntan a Escuadron de la guarnición del origen; mientras están aquí, esa guarnición no los
@@ -123,8 +129,9 @@ interface Caravana {
 
 ### Derivaciones (no se guardan)
 
-- `capacidadCaravana(c)` = Σ (`CARRO_CATALOGO[carro.tipoCarro].capacidadBase` × `ANIMAL_CATALOGO[carro.animal].factorCarga`) sobre los carros con animal, × factor de política `carga_ampliada`.
-- `velocidadCaravana(c)` = min de `ANIMAL_CATALOGO[animal].velocidad` sobre los carros con animal, × factor de política `rutas_rapidas`. Sin animales → no puede salir.
+- `capacidadCaravana(c)` = Σ (`CARRO_CATALOGO[carro.tipoCarro].capacidadBase` × `ANIMAL_CATALOGO[carro.animal].factorCarga`) sobre los carros con animal. **Sin fallback a un catálogo fijo** — sin carros con tracción da 0. El factor de política `carga_ampliada` lo aplica el llamador.
+- `velocidadCaravana(c)` = min de `ANIMAL_CATALOGO[animal].velocidad` sobre los carros con animal; 0 sin animales (no puede salir). El factor `rutas_rapidas` lo aplica el llamador.
+- `costoCaravanaPorDefecto()` = suma por recurso de `CARRO_CATALOGO.basico.costo` + `ANIMAL_CATALOGO.buey.costo` (hoy 50 madera) — lo que reserva el NPC de laboratorio antes de montar una caravana.
 - `prepTicks(c)` = `CARAVANA_PREPARACION.kPorCarro × max(0, nº carros − 1)`.
 - `poderDefensaCaravana(c, ctx)` = si `escoltaEscuadronIds?.length` → Σ `poderEscuadron` de esos escuadrones; si adjunta a ejército → poder del ejército (ya existe, 5.13.3); si no → `defensaBaseCaravana` (ya existe).
 - `cupoEscolta(mercado)` = `CARAVANA_ESCOLTA.cupoPorNivelMercado[nivelInterno − 1]`.
@@ -148,7 +155,10 @@ export const ANIMAL_CATALOGO = {
 // export const CARAVANA_ESCOLTA = { cupoPorNivelMercado: [1, 2, 3] };
 ```
 
-`CARAVANA_CATALOGO.comercial.capacidad/velocidad` quedan como **fallback** para caravanas sin `carros` (pre-revamp) y se marcan como tal en el comentario.
+**`CARAVANA_CATALOGO.comercial` se ELIMINA** (Ronda 5 §19): no queremos dejar el modelo viejo de capacidad/
+velocidad fijas conviviendo con el nuevo. La migración v11→v12 garantiza que toda comercial guardada tenga
+`carros`, así que no hay a quién servir de fallback. `CARAVANA_CATALOGO` se queda solo con `militar` /
+`construccion` (Fundación, Doc 1.8) / `contrabando`, que no son este revamp.
 
 ### Comandos nuevos (`src/session/comandos/`)
 
@@ -210,10 +220,11 @@ sin componer nada, hay un bug en la derivación.
 Cada paso respeta la separación motor / sesión / infra de arriba y verifica en el navegador de punta a punta
 (no basta boot+render — memoria `feedback_verificacion_end_to_end`).
 
-1. ~~**Modelo + migración + fallback.**~~ **HECHO (commit `8ca635d`).** Campos nuevos en `Caravana`,
-   `CarroTipo`/`AnimalTipo`, `CARRO_CATALOGO`/`ANIMAL_CATALOGO`, `capacidadCaravana`/`velocidadCaravana` con
-   fallback a `CARAVANA_CATALOGO` (engine/caravanas.ts). Estado `preparando` en el tipo (sin usar aún).
-   `asignarCaravanasATrueque` filtra `reservadaManual`. Snapshot v11→v12. **Batch bit-idéntico.**
+1. ~~**Modelo + migración.**~~ **HECHO (commit `8ca635d`, limpieza en un commit posterior).** Campos nuevos
+   en `Caravana`, `CarroTipo`/`AnimalTipo`, `CARRO_CATALOGO`/`ANIMAL_CATALOGO`, `capacidadCaravana`/
+   `velocidadCaravana` (engine/caravanas.ts). Estado `preparando` en el tipo (sin usar aún).
+   `asignarCaravanasATrueque` filtra `reservadaManual`. Snapshot v11→v12. `CARAVANA_CATALOGO.comercial` y el
+   fallback al catálogo se eliminaron (§19). **Batch bit-idéntico.**
 2. ~~**Piezas.**~~ **HECHO.** `crearCaravanaVacia` + `agregarCarroACaravana` + `comprarAnimalParaCaravana`
    (engine/trade.ts) y sus comandos `crearCaravana` / `agregarCarroCaravana` / `comprarAnimalCaravana` /
    `reservarCaravana`. `construirCaravanaComercial` recompone la caravana por defecto para el NPC (50 madera,

@@ -18,7 +18,8 @@
 import type { AcuerdoTrueque, Asentamiento, Caravana, Faccion, RecursoTipo } from '../domain/types';
 import type { Instante } from '../domain/tiempo';
 import type { Mapa } from '../world/mapa';
-import { CARAVANA_CATALOGO, SIMULACION_AUTO_COMERCIO } from '../constants';
+import { SIMULACION_AUTO_COMERCIO } from '../constants';
+import { costoCaravanaPorDefecto } from './caravanas';
 import { computeTodasLasZonas } from './zones';
 import { anadirEdificioManualmente, reclamosDeFuentes, RECURSO_A_EXTRACTOR, ConstruccionManualInvalidaError } from './construction';
 import { aceptarTrueque, construirCaravanaComercial, proponerTrueque, CaravanaInvalidaError, TruequeInvalidoError } from './trade';
@@ -115,7 +116,7 @@ function asegurarInfraestructuraComercial(
     }
   }
 
-  const reservaCaravana = CARAVANA_CATALOGO.comercial.costoConstruccion.madera;
+  const reservaCaravana = costoCaravanaPorDefecto()['madera'] ?? 0;
   if (actual.cargos.tesoreroId && (actual.reservaManual?.madera ?? 0) < reservaCaravana) {
     actual = { ...actual, reservaManual: { ...actual.reservaManual, madera: reservaCaravana } };
   }

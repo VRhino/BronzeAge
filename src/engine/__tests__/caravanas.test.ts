@@ -4,7 +4,7 @@
 // documenta su origen tal como lo hacía el archivo del que viene.
 import { describe, expect, it } from 'vitest';
 import type { Asentamiento, Caravana, CaminoComercial, Faccion, Point } from '../../domain/types';
-import { CARAVANA_COOLDOWN, CARAVANA_CATALOGO } from '../../constants';
+import { CARAVANA_COOLDOWN } from '../../constants';
 import { capacidadCaravana, velocidadCaravana } from '../caravanas';
 import {
   aceptarTrueque,
@@ -283,13 +283,16 @@ describe('reuso de caravana propia a través de varios envíos del mismo trueque
     // mide es el reúso de la MISMA caravana en dos viajes, y con números fijos dejaba de medirlo en cuanto la
     // capacidad cambiaba (pasó al subirla de 60 a 500 en el Paso 9 — con 100 pactadas ya cabían en un viaje).
     // Pactando 1,5 capacidades, siempre son exactamente dos: uno lleno y otro a la mitad.
-    const CAPACIDAD = CARAVANA_CATALOGO.comercial.capacidad;
-    const PACTADAS = CAPACIDAD * 1.5;
-    const SEGUNDO_ENVIO = PACTADAS - CAPACIDAD;
-    const origen0 = asentamientoSintetico('origen', origenPos, { madera: 50, piedra: PACTADAS }, true);
+    const origen0 = asentamientoSintetico('origen', origenPos, { madera: 50, piedra: 10_000 }, true);
     const destino0 = asentamientoSintetico('destino', destinoPos, { oro: 1000 }, false);
 
     const { asentamiento: origenTrasConstruir, caravana } = construirCaravanaComercial(origen0, [], instanteDeTest(0), 0);
+    // Se derivan de la capacidad de ESTA caravana: lo que mide el test es el reúso de la misma caravana en dos
+    // viajes, y con números fijos dejaba de medirlo en cuanto la capacidad cambiaba. Pactando 1,5 capacidades,
+    // siempre son exactamente dos envíos: uno lleno y otro a la mitad.
+    const CAPACIDAD = capacidadCaravana(caravana);
+    const PACTADAS = CAPACIDAD * 1.5;
+    const SEGUNDO_ENVIO = PACTADAS - CAPACIDAD;
     expect(caravana.estado).toBe('disponible');
 
     const acuerdo = aceptarTrueque(
@@ -377,25 +380,24 @@ describe('reuso de caravana propia a través de varios envíos del mismo trueque
 });
 
 // ---------------------------------------------------------------------------------------------------------
-// Revamp de caravanas (Doc 3.13) — Paso 1: la capacidad y la velocidad se DERIVAN de los carros/animales.
-// El ancla de calibración (Ronda 2 con el usuario): 1 carro básico + 1 buey = los 500/16 de siempre, para
-// que el batch NPC no se mueva.
+// Revamp de caravanas (Doc 3.13): la capacidad y la velocidad se DERIVAN de los carros/animales, sin catálogo
+// fijo de por medio. El ancla de calibración (Ronda 2): 1 carro básico + 1 buey = 500/16, el número que
+// costaba antes una caravana, para que el batch NPC no se mueva.
 // ---------------------------------------------------------------------------------------------------------
 describe('derivación de capacidad y velocidad de una caravana compuesta (Doc 3.13)', () => {
   const base = (carros: Caravana['carros']): Caravana => ({
     id: 'c', tipo: 'comercial', origenAsentamientoId: 'o', contenido: {}, posicionActual: { x: 0, y: 0 }, progreso: 0, carros,
   });
 
-  it('sin `carros` cae al catálogo (caravana pre-revamp o categoría sin revamp)', () => {
-    const sinCarros = { ...base([]), carros: undefined };
-    expect(capacidadCaravana(sinCarros)).toBe(CARAVANA_CATALOGO.comercial.capacidad);
-    expect(velocidadCaravana(sinCarros)).toBe(CARAVANA_CATALOGO.comercial.velocidad);
+  it('sin ningún carro con tracción → 0 (una caravana así no puede viajar ni cargar)', () => {
+    expect(capacidadCaravana(base([]))).toBe(0);
+    expect(velocidadCaravana(base([]))).toBe(0);
   });
 
-  it('el ancla: 1 carro básico + 1 buey reproduce 500/16', () => {
+  it('el ancla: 1 carro básico + 1 buey da 500/16', () => {
     const porDefecto = base([{ tipoCarro: 'basico', animal: 'buey' }]);
-    expect(capacidadCaravana(porDefecto)).toBe(CARAVANA_CATALOGO.comercial.capacidad);
-    expect(velocidadCaravana(porDefecto)).toBe(CARAVANA_CATALOGO.comercial.velocidad);
+    expect(capacidadCaravana(porDefecto)).toBe(500);
+    expect(velocidadCaravana(porDefecto)).toBe(16);
   });
 
   it('capacidad = suma por carro con animal; velocidad = animal más lento', () => {

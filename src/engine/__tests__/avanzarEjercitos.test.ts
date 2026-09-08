@@ -9,8 +9,9 @@
 // guardián de determinismo sigue verde sin tocarlo.
 import { describe, expect, it } from 'vitest';
 import type { AcuerdoTrueque, Asentamiento, Caravana, Ejercito, Escuadron, Faccion, RelacionPolitica } from '../../domain/types';
-import { CARAVANA_CATALOGO, LOGISTICA, MILITAR, MOVIMIENTO, TROPAS_RECLUTABLES } from '../../constants';
+import { LOGISTICA, MILITAR, MOVIMIENTO, TROPAS_RECLUTABLES } from '../../constants';
 import { instante } from '../../domain/tiempo';
+import { capacidadCaravana, velocidadCaravana } from '../caravanas';
 import { entregarDesdeCaravanaAdjunta } from '../trade';
 import {
   adjuntarCaravana,
@@ -660,12 +661,14 @@ const caravanaDe = (id: string, origenId: string, posicion: { x: number; y: numb
   posicionActual: posicion,
   progreso: 0,
   estado: 'disponible',
+  // Caravana por defecto del revamp (Doc 3.13): 1 carro básico + 1 buey → deriva 500/16.
+  carros: [{ tipoCarro: 'basico', animal: 'buey' }],
 });
 
 describe('caravanas adjuntas', () => {
   it('la capacidad de una caravana NO es menor que el carro de un Jugador (Doc 5.13.2)', () => {
     // El invariante que justifica el rebalance del Paso 9: si cargara menos, engancharla no tendría sentido.
-    expect(CARAVANA_CATALOGO.comercial.capacidad).toBeGreaterThanOrEqual(LOGISTICA.capacidadCarroPorJugador);
+    expect(capacidadCaravana(caravanaDe('c', 'o', { x: 0, y: 0 }))).toBeGreaterThanOrEqual(LOGISTICA.capacidadCarroPorJugador);
   });
 
   it('suman su capacidad a la del carro', () => {
@@ -675,9 +678,7 @@ describe('caravanas adjuntas', () => {
 
     expect(capacidadCargaDe(e, [])).toBe(LOGISTICA.capacidadCarroPorJugador);
     const conCaravana = adjuntarCaravana(e, c, asentamiento).ejercito;
-    expect(capacidadCargaDe(conCaravana, [c])).toBe(
-      LOGISTICA.capacidadCarroPorJugador + CARAVANA_CATALOGO.comercial.capacidad
-    );
+    expect(capacidadCargaDe(conCaravana, [c])).toBe(LOGISTICA.capacidadCarroPorJugador + capacidadCaravana(c));
   });
 
   it('entran en el MÍNIMO de velocidad: una comercial frena a una fuerza ligera de 20 a 16', () => {
@@ -687,7 +688,7 @@ describe('caravanas adjuntas', () => {
 
     const c = caravanaDe('c1', asentamiento.id, asentamiento.posicion);
     const conCaravana = adjuntarCaravana(ligero, c, asentamiento).ejercito;
-    expect(velocidadDeEjercito(conCaravana, [c])).toBe(CARAVANA_CATALOGO.comercial.velocidad);
+    expect(velocidadDeEjercito(conCaravana, [c])).toBe(velocidadCaravana(c));
     expect(velocidadDeEjercito(conCaravana, [c]), 'y eso le quita la capacidad de cazar una comercial').toBeLessThan(20);
   });
 
@@ -741,9 +742,7 @@ describe('caravanas adjuntas', () => {
     const r = avanzar([e], [rico], { caravanas: [c] });
 
     // Repostando en su propia plaza llena hasta carro + caravana, no solo hasta el carro.
-    expect(r.ejercitos[0]!.suministro['trigo']).toBe(
-      LOGISTICA.capacidadCarroPorJugador + CARAVANA_CATALOGO.comercial.capacidad
-    );
+    expect(r.ejercitos[0]!.suministro['trigo']).toBe(LOGISTICA.capacidadCarroPorJugador + capacidadCaravana(c));
   });
 
   it('si el ejército se deshace, las adjuntas se PIERDEN (Doc 5.13.2)', () => {

@@ -1120,28 +1120,11 @@ export const MURALLA = {
 // ticks de viaje (varios envíos en serie, uno por vez por cada lado del acuerdo, ver `asignarCaravanasATrueque`
 // en engine/trade.ts) que `TRUEQUE.plazoMinutosPorDefecto` — el acuerdo expiraba antes de poder completarse
 // pase lo que pase. Doblar la velocidad de las 4 a la vez mantiene el catálogo consistente entre sí.
+// Categorías de caravana sin flota propia (Doc 3.6): la de Fundación (`construccion`, Doc 1.8) es la única
+// con uso real; `militar`/`contrabando` siguen siendo solo datos, a la espera de sus disparadores. La
+// caravana `comercial` YA NO está aquí — desde el revamp (Doc 3.13) deriva capacidad y velocidad de sus
+// carros y animales (`capacidadCaravana`/`velocidadCaravana`, engine/caravanas.ts).
 export const CARAVANA_CATALOGO = {
-  // costoConstruccion (nuevo, ampliación de comercio): solo 'comercial' es un activo persistente que el
-  // jugador construye y conserva (flota propia, ver `construirCaravanaComercial`) — militar/construccion/
-  // contrabando siguen siendo instanciadas por su propio mecanismo (reclutamiento militar sin implementar
-  // todavía; Caravana de Fundación, Doc 1.8) y no tienen costo de flota propio.
-  /**
-   * **60 → 500 (2026-09-04, Paso 9 del movimiento de ejércitos).** Lo exige el canon: una caravana adjunta a
-   * un ejército tiene que cargar **al menos lo que el carro de un Jugador** (`LOGISTICA.capacidadCarroPorJugador`,
-   * Doc 5.13.2) — si cargara menos, engancharla como tren de suministros no tendría sentido.
-   *
-   * El plan marcaba este número como el cambio de MÁS riesgo de toda la mecánica, por multiplicar el oro que
-   * entrega cada viaje. **Medido en batch (300 ticks, 30 Facciones): CERO diferencia** en oro medio, acuerdos
-   * cumplidos, vivos, colapsos, niveles y tropas — idéntico dígito a dígito. La razón es que la capacidad
-   * nunca fue el límite: `asignarCaravanasATrueque` reparte
-   * `min(stock disponible, pendiente del acuerdo, capacidad)`, y un trueque automático son 30 unidades
-   * (`SIMULACION_AUTO_COMERCIO.cantidadPorTrueque`), la MITAD de la capacidad vieja. El riesgo era real en el
-   * papel y lo desactivan las otras dos cifras.
-   *
-   * Lo que sí habrá que revisar el día que los acuerdos crezcan por encima de 500: ahí la capacidad volvería a
-   * morder, y entonces este número sí decide el ritmo del comercio.
-   */
-  comercial: { capacidad: 500, velocidad: 16, costoConstruccion: { madera: 50 } },
   militar: { capacidad: 40, velocidad: 12 },
   construccion: { capacidad: 150, velocidad: 10 },
   contrabando: { capacidad: 20, velocidad: 24 },
@@ -1162,14 +1145,13 @@ export const CARAVANA_COOLDOWN = {
 
 /**
  * Revamp de caravanas (Doc 3.13, `Consideraciones/Revamp_Caravanas_Definicion.md`). Una caravana `comercial`
- * deja de tener capacidad/velocidad fijas (`CARAVANA_CATALOGO.comercial`, que queda como FALLBACK para las
- * pre-revamp) y las DERIVA de sus carros y animales — ver `capacidadCaravana`/`velocidadCaravana` en
- * `engine/caravanas.ts`.
+ * es una lista de carros, cada uno con su animal, y DERIVA de ahí su capacidad y velocidad
+ * (`capacidadCaravana`/`velocidadCaravana`, `engine/caravanas.ts`).
  *
- * ANCLA DE CALIBRACIÓN (decisión del usuario, Ronda 2): `1 carro básico + 1 buey` reproduce los 500/16 de
- * hoy, y su coste (20 madera del carro + 30 madera del buey = 50 madera) es el mismo que costaba antes crear
- * una caravana, así que el batch NPC —que nunca compone nada más, `construirCaravanaComercial`— no se mueve.
- * Todas las demás cifras son PLACEHOLDER sin calibrar por simulación, como el resto de Fase 0.
+ * ANCLA DE CALIBRACIÓN (decisión del usuario, Ronda 2): `1 carro básico + 1 buey` da 500/16, y su coste
+ * (20 madera del carro + 30 madera del buey = 50 madera) es el mismo que costaba antes crear una caravana, así
+ * que el batch NPC —que nunca compone nada más, `construirCaravanaComercial`— no se mueve. Todas las demás
+ * cifras son PLACEHOLDER sin calibrar por simulación, como el resto de Fase 0.
  */
 export const CARRO_CATALOGO = {
   // capacidadBase se multiplica por el `factorCarga` del animal para dar la capacidad real del carro.
