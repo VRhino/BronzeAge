@@ -110,7 +110,7 @@ Pesos y la distancia de referencia (600 unidades) son PLACEHOLDER, confirmados c
 
 **Verificado en el navegador** de punta a punta: colocar una orden o construir una caravana sin Mercado se rechaza; tras construir el Mercado (adición manual a la cola de Gobernador/Maestro de Obras, ver arriba), construir una caravana consume 50 madera y la deja 'disponible'; un trueque activo la asigna automáticamente (`asignarCaravanasATrueque`) y la hace viajar a la velocidad ×2 (tiempo de viaje observado coincide exactamente con distancia/velocidad); al entregar, vuelve a 'disponible' en vez de desaparecer. Sin errores de consola.
 
-## 3.13 Revamp de caravanas — la caravana compuesta — 🔶 Pasos 1-3 implementados (2026-09-08); escolta sin héroe pendiente
+## 3.13 Revamp de caravanas — la caravana compuesta — ✅ implementado (2026-09-08); calibración de placeholders continua
 
 > Sustituye el modelo de 3.12 —una caravana `comercial` es un activo único de capacidad y velocidad fijas
 > (500/16)— por una caravana **compuesta**: carros, animales y escolta. Decisiones, representación en el motor,
@@ -119,9 +119,10 @@ Pesos y la distancia de referencia (600 unidades) son PLACEHOLDER, confirmados c
 > **Hecho:** el modelo (`Caravana.carros`, `CARRO_CATALOGO`/`ANIMAL_CATALOGO`, `capacidadCaravana`/
 > `velocidadCaravana`, migración de snapshot v11→v12; el viejo `CARAVANA_CATALOGO.comercial` fijo se borró),
 > el casco vacío gratis (`crearCaravana`), las piezas (`agregarCarroCaravana`, `comprarAnimalCaravana`,
-> `reservarCaravana`, `moverCarroCaravana`) y el lanzamiento manual con preparación (`prepararCaravana`,
-> `cancelarCaravana`). El batch NPC quedó **bit-idéntico** en los tres pasos. **Pendiente:** §3.13.4 (escolta
-> sin héroe).
+> `reservarCaravana`, `moverCarroCaravana`), el lanzamiento manual con preparación (`prepararCaravana`,
+> `cancelarCaravana`) y la **escolta sin héroe** (§3.13.4). El batch NPC quedó **bit-idéntico** en los cuatro
+> pasos. Todas las cifras (`CARRO_CATALOGO`, `ANIMAL_CATALOGO`, `CARAVANA_PREPARACION`, `CARAVANA_ESCOLTA`)
+> son placeholder — calibración por simulación, continua.
 >
 > **Lo de 3.12 que NO cambia:** el Mercado como gate y como cupo de flota (2/4/6 + política), el activo
 > persistente con coste que no se desmantela, el `CARAVANA_COOLDOWN` de creación, la vuelta a `'disponible'`
@@ -197,22 +198,27 @@ Además del reparto automático (3.13.5), un residente del origen **lanza una ca
 
 Ciclo completo: `disponible → preparando → en_transito → retornando → disponible`.
 
-### 3.13.4 Escolta sin héroe
+### 3.13.4 Escolta sin héroe — ✅ implementado
 
 La tercera pata, la que no existía. Es distinta de la escolta por ejército (5.13.3), que exige a un jugador
 marchando con la caravana.
 
 - Un jugador **residente del asentamiento de origen** cede escuadrones de su guarnición a la caravana **al
-  lanzarla**. No necesita estar físicamente presente ni acompañar el viaje; lo que viaja son sus escuadrones.
-- Los recupera **cuando la caravana vuelve** — es una cesión **por viaje**, no un enganche permanente.
-- Mientras están cedidos: salen de la defensa de su asentamiento (como si estuvieran en un ejército, Doc
-  5.12.4) y **siguen contando contra el Liderazgo del jugador** (Doc 5.11). Ceder tropa a una escolta no
-  libera Liderazgo — es coste de oportunidad puro.
-- **No consumen ración.** Una escolta no es una campaña; se abstrae el suministro (a diferencia de 5.13).
-- **Cupo por nivel interno de Mercado**: placeholder 1 / 2 / 3 escuadrones por caravana.
-- **Combate**: se resuelve contra el poder real de los escuadrones-escolta, con la misma resolución asimétrica
-  que la intercepción entre Facciones (3.10) y que el ataque de bandidos (Doc 1.9) — los bandidos pegan a la
-  escolta, no a la caravana, igual que en 5.13.3.
+  lanzarla** (`prepararCaravana` con `escoltaEscuadronIds`). No necesita estar físicamente presente ni
+  acompañar el viaje; lo que viaja son sus escuadrones (`Caravana.escolta`).
+- Los recupera **cuando la caravana vuelve** — cesión **por viaje**, no enganche permanente. Al volver se
+  funden con su escuadrón de la guarnición si ya reclutó más de esa tropa mientras tanto.
+- Mientras están cedidos: **salen de la guarnición** del asentamiento, así que no lo defienden (Doc 5.12.4) y
+  **cuentan contra el Liderazgo del jugador** (Doc 5.11) — sumados a lo que ya tenga en otras escoltas. Ceder
+  tropa a una escolta no libera Liderazgo, es coste de oportunidad puro. *(Gap conocido: el tope no cruza con
+  lo que ese jugador lleve a la vez en un ejército — se afina cuando pique.)*
+- **No consumen ración.** Una escolta no es una campaña; se abstrae el suministro (a diferencia de 5.13), y
+  también el viaje de vuelta si la caravana cae: los supervivientes reaparecen en la guarnición del origen.
+- **Cupo por nivel interno de Mercado**: 1 / 2 / 3 escuadrones por caravana (`CARAVANA_ESCOLTA`, placeholder).
+- **Combate**: se resuelve contra el `poderTotal` de los escuadrones-escolta —con bono de cohesión— en vez de
+  la defensa base fija, tanto contra un ejército interceptor (3.10) como contra bandidos (Doc 1.9). La escolta
+  sufre bajas en los dos casos (leves si aguanta, fuertes si cae) y vuelve con el debuff de derrota
+  (`heridoHasta`). Si la caravana es capturada se pierde con **carga y carros** (3.13.6), no con la tropa.
 
 ### 3.13.5 Reparto automático vs preparación manual
 
@@ -229,12 +235,14 @@ marchando con la caravana.
   carro suelto, sin destino, no existe todavía — se mueve a otra caravana.)
 - La **planificación horaria** (dejar caravanas listas para cierta hora de mundo) queda diferida (3.13.7).
 
-### 3.13.6 Captura
+### 3.13.6 Captura — ✅ implementado
 
-Si el atacante gana: **carros y animales destruidos**; la carga es su botín, en su carro, exactamente como
-hoy (3.10). La **escolta vuelve a casa derrotada**, con el debuff de derrota — no se pierde la tropa, solo
-las unidades caídas en el combate (permadeath normal, Doc 5.8). El dueño reconstruye contra su cupo, con el
-`CARAVANA_COOLDOWN` de siempre.
+Si el atacante gana: **la caravana se elimina** (carros, animales y carga perdidos; la carga capturada va al
+carro del atacante, como en 3.10). El dueño reconstruye contra su cupo con el `CARAVANA_COOLDOWN` de siempre.
+
+La **escolta sin héroe no se pierde con el carro**: los supervivientes (permadeath de las bajas, Doc 5.8)
+reaparecen en la guarnición del origen con el debuff de derrota. El viaje de vuelta se abstrae, igual que la
+ración de la escolta — no marchan por el mapa como un ejército.
 
 ### 3.13.7 Diferido — se diseñó la forma, se implementa después
 

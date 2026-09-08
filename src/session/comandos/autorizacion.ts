@@ -420,7 +420,8 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
   },
   prepararCaravana: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => resideEnOrigenDeCaravana(estado, jugadorId, params.caravanaId),
+    condicionJugador: (estado, jugadorId, params) =>
+      jugadorId === params.jugadorId && resideEnOrigenDeCaravana(estado, jugadorId, params.caravanaId),
   },
   cancelarCaravana: {
     rolesPermitidos: ['jugador'],

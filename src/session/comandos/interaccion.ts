@@ -24,6 +24,7 @@ import {
   type ComposicionColumna,
   type ContenidoCaravana,
 } from '../../engine/ejercitos';
+import { devolverEscoltaAGuarnicion } from '../../engine/caravanas';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito } from './tipos';
 import { comando, exigirCaravana, exigirColumnaDe, exigirEjercito } from './ayudas';
@@ -78,7 +79,9 @@ export const inspeccionar = comando<ParamsInspeccionar, ComposicionColumna | Con
   }
 
   const caravana = exigirCaravana(estado, params.objetivo.id);
-  const escoltada = estado.ejercitos.some((e) => e.caravanasAdjuntasIds.includes(caravana.id));
+  // Escoltada = por un ejército (Doc 5.13.3) o por escuadrones cedidos sin héroe (Doc 3.13.4).
+  const escoltada =
+    estado.ejercitos.some((e) => e.caravanasAdjuntasIds.includes(caravana.id)) || (caravana.escolta?.length ?? 0) > 0;
   const contenido = inspeccionarCaravanaEngine(observador, caravana, escoltada);
 
   return exito(
@@ -160,10 +163,22 @@ export const atacar = comando<ParamsAtacar, void>((estado, _mapa, ctx, params) =
 
   const caravana = exigirCaravana(estado, params.objetivo.id);
   const emboscada = interceptar(atacante, caravana, capacidadCargaDe(atacante, estado.caravanas), ctx.instante, ctx.rng);
+  // Escolta sin héroe (Doc 3.13.4) que vuelve a la guarnición del origen tras perder la caravana.
+  const asentamientos =
+    emboscada.escoltaDevuelta.length > 0
+      ? estado.asentamientos.map((a) =>
+          a.id === caravana.origenAsentamientoId
+            ? { ...a, escuadrones: devolverEscoltaAGuarnicion(a.escuadrones, emboscada.escoltaDevuelta) }
+            : a
+        )
+      : estado.asentamientos;
   const siguiente: GameSessionState = {
     ...estado,
+    asentamientos,
     ejercitos: estado.ejercitos.map((e) => (e.id === emboscada.ejercito.id ? emboscada.ejercito : e)),
-    caravanas: emboscada.capturada ? estado.caravanas.filter((c) => c.id !== caravana.id) : estado.caravanas,
+    caravanas: emboscada.caravana
+      ? estado.caravanas.map((c) => (c.id === caravana.id ? emboscada.caravana! : c))
+      : estado.caravanas.filter((c) => c.id !== caravana.id),
   };
 
   return exito(

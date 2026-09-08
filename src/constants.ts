@@ -1180,6 +1180,13 @@ export const ANIMAL_CATALOGO = {
 export const CARAVANA_PREPARACION = { kPorCarro: 2 };
 
 /**
+ * Escolta sin héroe (Doc 3.13.4): un residente del origen cede escuadrones a una caravana como escolta
+ * permanente por viaje. `cupoPorNivelMercado[n-1]` es cuántos escuadrones admite una caravana según el nivel
+ * interno del Mercado del origen (1 → 1, 2 → 2, 3 → 3). Placeholder sin calibrar.
+ */
+export const CARAVANA_ESCOLTA = { cupoPorNivelMercado: [1, 2, 3] as const };
+
+/**
  * Scoring de asignación de caravanas disponibles a lados pendientes de trueque (ampliación de comercio, a
  * petición del usuario — "solo simulación": en el diseño objetivo el jugador elige la caravana y la carga a
  * mano, Doc 3.2; esto es el sustituto automático de Fase 0, ver `asignarCaravanasATrueque` en engine/trade.ts).

@@ -13,7 +13,7 @@ import type { Mapa } from '../world/mapa';
 import { calcularRuta } from '../world/rutas';
 import { distancia } from '../world/geometria';
 import { LOGISTICA, MOVIMIENTO, TROPAS_RECLUTABLES, VISION } from '../constants';
-import { capacidadCaravana, velocidadCaravana } from './caravanas';
+import { capacidadCaravana, devolverEscoltaAGuarnicion, velocidadCaravana, type EscoltaDevuelta } from './caravanas';
 import { atribuir, type EventoCrudo } from '../domain/eventos';
 import { minutos, sumar, type Instante } from '../domain/tiempo';
 import type { RandomFn } from '../worldgen';
@@ -1015,7 +1015,7 @@ export function interceptar(
   capacidadCarga: number,
   instante: Instante,
   rng: RandomFn
-): { ejercito: Ejercito; capturada: boolean; eventos: EventoCrudo[] } {
+): ReturnType<typeof interceptarCaravanaConEjercito> {
   if (enTregua(ejercito, instante)) throw new MovilizacionInvalidaError('Estas en tregua: no puedes atacar todavia.');
   if (distancia(ejercito.posicionActual, caravana.posicionActual) > LOGISTICA.radioEncuentro) {
     throw new MovilizacionInvalidaError(`Hay que estar a menos de ${LOGISTICA.radioEncuentro} para interceptar.`);
@@ -1327,9 +1327,21 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
   const conEncuentros = resolverEncuentros(supervivientes, caravanasActuales, faccionesActuales, relaciones, porId, instante, rng);
   eventos.push(...conEncuentros.eventos);
 
+  // Escolta sin héroe (Doc 3.13.4) que vuelve a la guarnición de su origen tras perder su caravana ante un
+  // ejército: se funde con la guarnición antes de que el asentamiento salga del tick.
+  let asentamientosFinal = [...porId.values()];
+  if (conEncuentros.escoltasDevueltas.length > 0) {
+    asentamientosFinal = asentamientosFinal.map((a) => {
+      const devueltas = conEncuentros.escoltasDevueltas.filter((d) => d.asentamientoId === a.id);
+      if (devueltas.length === 0) return a;
+      const escuadrones = devueltas.reduce((esc, d) => devolverEscoltaAGuarnicion(esc, d.escuadrones), a.escuadrones);
+      return { ...a, escuadrones };
+    });
+  }
+
   return {
     ejercitos: conEncuentros.ejercitos,
-    asentamientos: [...porId.values()],
+    asentamientos: asentamientosFinal,
     caravanas: conEncuentros.caravanas,
     facciones: conEncuentros.facciones,
     eventos,
@@ -1368,13 +1380,14 @@ function resolverEncuentros(
   asentamientosPorId: ReadonlyMap<string, Asentamiento>,
   instante: Instante,
   rng: RandomFn
-): { ejercitos: Ejercito[]; caravanas: Caravana[]; facciones: Faccion[]; eventos: EventoCrudo[] } {
+): { ejercitos: Ejercito[]; caravanas: Caravana[]; facciones: Faccion[]; eventos: EventoCrudo[]; escoltasDevueltas: EscoltaDevuelta[] } {
   const eventos: EventoCrudo[] = [];
   if (ejercitos.length === 0) {
-    return { ejercitos: [...ejercitos], caravanas: [...caravanas], facciones: [...facciones], eventos };
+    return { ejercitos: [...ejercitos], caravanas: [...caravanas], facciones: [...facciones], eventos, escoltasDevueltas: [] };
   }
 
   const porId = new Map(ejercitos.map((e) => [e.id, e]));
+  const escoltasDevueltas: EscoltaDevuelta[] = [];
   let caravanasVivas = [...caravanas];
   let faccionesActuales = [...facciones];
   const yaChocaron = new Set<string>();
@@ -1454,12 +1467,18 @@ function resolverEncuentros(
         rng
       );
       porId.set(ejercito.id, { ...emboscada.ejercito, persiguiendo: undefined });
-      if (emboscada.capturada) caravanasVivas = caravanasVivas.filter((c) => c.id !== presa.id);
+      caravanasVivas = emboscada.caravana
+        ? caravanasVivas.map((c) => (c.id === presa.id ? emboscada.caravana! : c))
+        : caravanasVivas.filter((c) => c.id !== presa.id);
+      // Escolta sin héroe (Doc 3.13.4) que vuelve a casa tras perder la caravana.
+      if (emboscada.escoltaDevuelta.length > 0) {
+        escoltasDevueltas.push({ asentamientoId: presa.origenAsentamientoId, escuadrones: emboscada.escoltaDevuelta });
+      }
       for (const e of emboscada.eventos) eventos.push(atribuir(e, ejercito.origenAsentamientoId));
       yaChocaron.add(ejercito.id);
     }
   }
 
-  return { ejercitos: [...porId.values()], caravanas: caravanasVivas, facciones: faccionesActuales, eventos };
+  return { ejercitos: [...porId.values()], caravanas: caravanasVivas, facciones: faccionesActuales, eventos, escoltasDevueltas };
 }
 

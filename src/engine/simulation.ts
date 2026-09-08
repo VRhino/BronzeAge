@@ -7,6 +7,7 @@ import { computeTodasLasZonas } from './zones';
 import { avanzarConstruccion, reclamosDeFuentes } from './construction';
 import { avanzarNutricionPoblacion, crecerPoblacion } from './population';
 import { avanzarComercio } from './trade';
+import { devolverEscoltaAGuarnicion } from './caravanas';
 import { avanzarCaravanasFundacion } from './expansion';
 import { caducarOrdenes } from './market';
 import { avanzarPoliticas } from './politicas';
@@ -255,6 +256,18 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   );
   eventosDominio.push(...comoEventosDominio(trasAtaquesBandidos.eventos, contexto));
 
+  // Escolta sin héroe que vuelve a casa tras perder contra los bandidos (Doc 3.13.4): se funde con la
+  // guarnición de su origen. `trasExpansion.asentamientos` es la lista con la que sigue el tick.
+  let asentamientosTrasEscolta = trasExpansion.asentamientos;
+  if (trasAtaquesBandidos.escoltasDevueltas.length > 0) {
+    asentamientosTrasEscolta = asentamientosTrasEscolta.map((a) => {
+      const devueltas = trasAtaquesBandidos.escoltasDevueltas.filter((d) => d.asentamientoId === a.id);
+      if (devueltas.length === 0) return a;
+      const escuadrones = devueltas.reduce((esc, d) => devolverEscoltaAGuarnicion(esc, d.escuadrones), a.escuadrones);
+      return { ...a, escuadrones };
+    });
+  }
+
   // Ejércitos (Doc 5.12): comer del carro, moverse, repostar, llegar. Va DESPUÉS de los bandidos, al final de
   // la cadena. Solo consume aleatoriedad cuando un asedio llega a resolverse contra una plaza defendida
   // (Paso 7): sin eso, una partida sin ejércitos hace exactamente las mismas llamadas al RNG, en el mismo
@@ -263,7 +276,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   // Recibe `trasAtaquesBandidos.caravanas` y NO `trasExpansion.caravanas`: los bandidos ya han podido
   // destruir alguna este tick, y partir de la lista anterior las habría resucitado al devolver la suya.
   const trasEjercitos = avanzarEjercitos(estado.ejercitos, {
-    asentamientos: trasExpansion.asentamientos,
+    asentamientos: asentamientosTrasEscolta,
     caravanas: trasAtaquesBandidos.caravanas,
     facciones: trasExpansion.facciones,
     relaciones: estado.relaciones,

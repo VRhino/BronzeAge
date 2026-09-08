@@ -29,7 +29,7 @@ export function poderTotal(escuadrones: readonly Escuadron[], instante: Instante
   return suma * (1 + MILITAR.bonusCohesionPorEscuadronExtra * (escuadrones.length - 1));
 }
 
-function aplicarBajas(escuadrones: Escuadron[], fraccionBajas: number, victoria: boolean, instante: Instante): Escuadron[] {
+export function aplicarBajas(escuadrones: readonly Escuadron[], fraccionBajas: number, victoria: boolean, instante: Instante): Escuadron[] {
   return escuadrones.map((e) => {
     const bajas = Math.round(e.cantidad * fraccionBajas);
     const cantidad = Math.max(0, e.cantidad - bajas);
@@ -531,14 +531,28 @@ export function interceptarCaravanaConEjercito(
   capacidadCarga: number,
   instante: Instante,
   rng: RandomFn
-): { ejercito: Ejercito; capturada: boolean; eventos: EventoCrudo[] } {
+): {
+  ejercito: Ejercito;
+  capturada: boolean;
+  eventos: EventoCrudo[];
+  /** La caravana tras el combate: `null` si fue capturada (se elimina), o con la escolta actualizada si aguantó. */
+  caravana: Caravana | null;
+  /** Escolta sin héroe (Doc 3.13.4) que vuelve a la guarnición del origen — solo si fue capturada. */
+  escoltaDevuelta: Escuadron[];
+} {
   const vivos = ejercito.escuadrones.filter((e) => e.cantidad > 0);
+  const conEscolta = (caravana.escolta?.length ?? 0) > 0;
+  const defensa = conEscolta ? poderTotal(caravana.escolta!, instante, true) : MILITAR.defensaBaseCaravana;
   const jitter = 1 + (rng() * 2 - 1) * MILITAR.varianzaCombate;
-  const gana = poderTotal(vivos, instante, false) * jitter > MILITAR.defensaBaseCaravana;
+  const gana = poderTotal(vivos, instante, false) * jitter > defensa;
 
   const fraccionBajas = gana ? 0.05 : 0.25;
   const conBajas = aplicarBajas(vivos, fraccionBajas, gana, instante);
   const porId = new Map(conBajas.map((e) => [e.id, e]));
+
+  // La escolta sin héroe sufre bajas y vuelve a casa con el debuff de derrota (Doc 3.13.6) — lo que se pierde
+  // son la carga y los carros, no la tropa.
+  const escoltaTrasCombate = conEscolta ? aplicarBajas(caravana.escolta!, gana ? 0.25 : 0.05, !gana, instante) : undefined;
 
   let suministro = ejercito.suministro;
   const botin: Record<string, number> = {};
@@ -573,5 +587,7 @@ export function interceptarCaravanaConEjercito(
     ejercito: { ...ejercito, escuadrones: ejercito.escuadrones.map((e) => porId.get(e.id) ?? e), suministro },
     capturada: gana,
     eventos,
+    caravana: gana ? null : escoltaTrasCombate ? { ...caravana, escolta: escoltaTrasCombate } : caravana,
+    escoltaDevuelta: gana && escoltaTrasCombate ? escoltaTrasCombate : [],
   };
 }

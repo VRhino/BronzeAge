@@ -9,9 +9,12 @@ import {
   prepararCaravanaManual as prepararCaravanaManualEngine,
   cancelarPreparacionCaravana as cancelarPreparacionEngine,
   moverCarroEntreCaravanas as moverCarroEngine,
+  seleccionarEscoltaCaravana,
+  escoltaDeJugador,
   proponerTrueque as proponerTruequeEngine,
   rechazarTrueque as rechazarTruequeEngine,
 } from '../../engine/trade';
+import { puedeLlevar } from '../../engine/liderazgo';
 import { colocarOrdenMercado as colocarOrdenMercadoEngine, comerciarEnPlaza as comerciarEnPlazaEngine } from '../../engine/market';
 import { capacidadCargaDe } from '../../engine/ejercitos';
 import { asegurarCaminoComercial } from '../../engine/caminos';
@@ -384,30 +387,57 @@ export const reservarCaravana = comando<ParamsReservarCaravana, { reservada: boo
 
 export interface ParamsPrepararCaravana {
   caravanaId: string;
+  jugadorId: string;
   destinoAsentamientoId: string;
   /** Mapa recurso -> cantidad: qué se carga del almacén del origen, hasta la capacidad de la caravana. */
   carga: Record<string, number>;
+  /** Escuadrones del jugador que van de escolta sin héroe (Doc 3.13.4), hasta el cupo del Mercado. */
+  escoltaEscuadronIds?: string[];
 }
 
 /**
- * Lanza una caravana comercial a mano (Doc 3.13.3): elige carga y destino. La caravana pasa por `'preparando'`
- * en el origen —tanto más tiempo cuantos más carros— y al terminar sale sola en el tick. `cancelarCaravana`
- * la revierte mientras siga preparándose.
+ * Lanza una caravana comercial a mano (Doc 3.13.3): elige carga, destino y una escolta opcional (Doc 3.13.4).
+ * La caravana pasa por `'preparando'` en el origen —tanto más tiempo cuantos más carros— y al terminar sale
+ * sola en el tick. `cancelarCaravana` la revierte mientras siga preparándose.
  */
 export const prepararCaravana = comando<ParamsPrepararCaravana, { caravanaId: string; preparaHasta?: number }>(
   (estado, mapa, ctx, params) => {
     const caravana = exigirCaravana(estado, params.caravanaId);
     const origen = exigirAsentamiento(estado, caravana.origenAsentamientoId);
     const destino = exigirAsentamiento(estado, params.destinoAsentamientoId);
-    const r = prepararCaravanaManualEngine(caravana, origen, destino, params.carga, mapa, estado.caminos, ctx.instante);
+
+    const escoltaIds = params.escoltaEscuadronIds ?? [];
+    const seleccion = seleccionarEscoltaCaravana(origen, params.jugadorId, escoltaIds);
+    if (seleccion.escolta.length > 0) {
+      // La escolta cuenta contra el Liderazgo del jugador mientras viaja (Doc 3.13.4), sumada a lo que ya
+      // tenga cedido en otras caravanas. (Gap conocido: no cruza con lo que ese jugador lleve en un ejército.)
+      const jugador = estado.jugadores.find((j) => j.id === params.jugadorId);
+      const yaCedido = escoltaDeJugador(estado.caravanas, params.jugadorId);
+      if (!puedeLlevar(jugador, [...yaCedido, ...seleccion.escolta])) {
+        rechazar(CODIGOS_ERROR.comercioCaravanaInvalida);
+      }
+    }
+
+    const r = prepararCaravanaManualEngine(
+      caravana,
+      seleccion.asentamiento,
+      destino,
+      params.carga,
+      seleccion.escolta,
+      mapa,
+      estado.caminos,
+      ctx.instante
+    );
     const siguiente: GameSessionState = { ...conAsentamiento(conCaravana(estado, r.caravana), r.asentamiento) };
     return exito(
       siguiente,
       [
         evento(ctx, {
           codigo: 'comercio.caravana_preparando',
-          mensaje: `La caravana ${caravana.id} carga para ${destino.id} y ${r.caravana.estado === 'preparando' ? 'se prepara' : 'sale ya'}.`,
-          payload: { caravanaId: caravana.id, destinoId: destino.id, estado: r.caravana.estado },
+          mensaje: `La caravana ${caravana.id} carga para ${destino.id}${
+            seleccion.escolta.length > 0 ? ` con ${seleccion.escolta.length} escuadrón(es) de escolta` : ''
+          } y ${r.caravana.estado === 'preparando' ? 'se prepara' : 'sale ya'}.`,
+          payload: { caravanaId: caravana.id, destinoId: destino.id, estado: r.caravana.estado, escolta: seleccion.escolta.length },
           asentamientoId: origen.id,
         }),
       ],

@@ -3,6 +3,7 @@ import { minutos, duracion, type Duracion, type Instante } from '../domain/tiemp
 import type { Mapa } from '../world/mapa';
 import {
   CARAVANA_COOLDOWN,
+  CARAVANA_ESCOLTA,
   EDIFICIO_CATALOGO,
   produccionTrigoDeGranja,
   NIVEL_ASENTAMIENTO,
@@ -75,6 +76,16 @@ export function cupoCaravanas(asentamiento: Asentamiento): number {
   const niveles = (EDIFICIO_CATALOGO.mercado as { niveles?: Record<number, { cupoCaravanas?: number }> }).niveles;
   const base = niveles?.[nivelInternoActual(mercado)]?.cupoCaravanas ?? 0;
   return base + cupoCaravanaExtra(asentamiento);
+}
+
+/**
+ * Cuántos escuadrones-escolta admite una caravana lanzada desde este asentamiento (Doc 3.13.4): según el
+ * nivel interno de su Mercado (1/2/3 → `CARAVANA_ESCOLTA.cupoPorNivelMercado`). 0 sin Mercado activo.
+ */
+export function cupoEscolta(asentamiento: Asentamiento): number {
+  const mercado = edificiosPorTipoYEstado(asentamiento, 'mercado')[0];
+  if (!mercado) return 0;
+  return CARAVANA_ESCOLTA.cupoPorNivelMercado[nivelInternoActual(mercado) - 1] ?? 0;
 }
 
 /**

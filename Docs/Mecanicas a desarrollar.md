@@ -11,7 +11,7 @@ Cuando una entrada de aquí se cierra, se borra de este archivo y se marca allí
 | 1 | MOTOR | Impuestos: generación de oro por población | ✘ nada |
 | 3 | CARAVANAS | Rutas de caravana avanzadas | ◐ solo el pathfinder base |
 | 5 | TRUEQUE | Trueque compuesto de varios materiales | ✘ nada |
-| 8 | CARAVANAS | Revamp de caravanas (carros, animales y escoltas) | ✘ nada — **diseño cerrado 2026-09-08** |
+| 8 | CARAVANAS | Revamp de caravanas — solo los trozos diferidos (§8.1) | ◐ **núcleo HECHO 2026-09-08** |
 | 9 | ASENTAMIENTO | Eventos de asentamiento | ✘ nada |
 | 10 | WORLDGEN | Landmarks reconocibles | ✘ nada |
 | 11 | JUGADOR | Progresión de Liderazgo del jugador | ✘ nada |
@@ -72,21 +72,20 @@ acuerdo debería poder llevar varios materiales por lado.
 
 ## 8. Revamp de caravanas
 
-> **DISEÑO CERRADO (2026-09-08), pendiente de implementar.** Cuatro rondas de decisiones con el usuario.
-> Reglas en `Docs/Game/3` §3.13 (más toques en §3.6, §3.10, Doc 4.2.1 Mercado, Doc 5.13.3); decisiones,
-> representación en el motor, plan de 5 pasos e invariantes en `Consideraciones/Revamp_Caravanas_Definicion.md`.
+> **NÚCLEO IMPLEMENTADO (2026-09-08), Pasos 1-5.** Seis rondas de decisiones con el usuario. Reglas en
+> `Docs/Game/3` §3.13 (más toques en §3.6, §3.10, Doc 4.2.1 Mercado, Doc 5.13.3); decisiones, motor, plan e
+> invariantes en `Consideraciones/Revamp_Caravanas_Definicion.md`. Batch NPC bit-idéntico en los cinco
+> commits.
 >
-> Lo esencial: una caravana `comercial` pasa a ser un **contenedor de tres partes** —carros, animales (uno
-> por carro), escolta— y deriva capacidad/velocidad de lo que se le monta. La **escolta sin héroe** son
-> escuadrones que un jugador residente cede por viaje, inmovilizados y contando Liderazgo, cupo por nivel de
-> Mercado, y vuelven a casa derrotados si la caravana cae. La caravana sigue siendo **persistente y se
-> reconfigura**; un flag `reservadaManual` la saca del reparto automático, que sigue vivo para NPC/batch con
-> la caravana por defecto (1 carro + 1 buey ≈ 500/16, ancla de calibración). Lanzar dispara un estado
-> `preparando` cancelable, tanto más largo cuantos más carros.
+> Hecho: la caravana `comercial` es un **contenedor de carros** (cada uno con un animal) que deriva
+> capacidad/velocidad; casco vacío gratis + piezas (carro básico/reforzado, buey/caballo/camello);
+> `reservadaManual` fuera del reparto automático; **lanzamiento manual** con estado `preparando` cancelable;
+> **escolta sin héroe** (escuadrones cedidos por viaje, cupo por nivel de Mercado, cuentan Liderazgo,
+> combate y vuelta a casa derrotada). El bootstrap del Mercado se descartó por medición.
 >
-> **Diferido** (forma diseñada, implementación posterior): planificación horaria, cría de animales,
-> visibilidad por tamaño, inmunidad del camello al desierto, catálogo ampliado de carros, unificación con
-> `Ejercito.suministro`. Detalle de cada uno en §8.1.
+> **Lo que queda son los trozos diferidos** — planificación horaria, cría de animales, visibilidad por
+> tamaño, inmunidad del camello al desierto, catálogo ampliado de carros, unificación con `Ejercito.suministro`.
+> Detalle de cada uno en §8.1.
 
 ### 8.1 Lo diferido — forma diseñada, implementación en un pase posterior
 

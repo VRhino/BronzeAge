@@ -1,4 +1,4 @@
-import type { AcuerdoTrueque, Asentamiento, CaminoComercial, Caravana, Faccion, Point } from '../domain/types';
+import type { AcuerdoTrueque, Asentamiento, CaminoComercial, Caravana, Escuadron, Faccion, Point } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
 
 /** Fase A5 — payload de `comercio.entrega_escoltada` (Doc 5.13.3). */
@@ -36,7 +36,7 @@ export interface PayloadCaravanaSale {
 }
 import { ANIMAL_CATALOGO, ASIGNACION_CARAVANA, CARAVANA_PREPARACION, CARRO_CATALOGO, COMISION, REPUTACION, TRUEQUE } from '../constants';
 import type { AnimalTipo, CarroTipo } from '../domain/types';
-import { capacidadCaravana, velocidadCaravana } from './caravanas';
+import { capacidadCaravana, devolverEscoltaAGuarnicion, velocidadCaravana } from './caravanas';
 import { minutos, sumar, type Instante } from '../domain/tiempo';
 import { COSTE_MOVIMIENTO } from '../worldgen';
 import type { Mapa } from '../world/mapa';
@@ -44,7 +44,7 @@ import { calcularRuta } from '../world/rutas';
 import { agregarRecurso, cantidadDisponible, descontarRecursos, tieneRecursos } from './almacen';
 import { buscarCamino } from './caminos';
 import { calcularPrecioReferencia } from './market';
-import { cupoCaravanas, puedeCrearCaravana, cooldownCaravanaRestante, tieneMercadoActivo } from './asentamientoQuery';
+import { cupoCaravanas, cupoEscolta, puedeCrearCaravana, cooldownCaravanaRestante, tieneMercadoActivo } from './asentamientoQuery';
 import { avanzarPosicionEnRuta } from './movimiento';
 import { factorCapacidadCaravana, factorComisionExterna, factorVelocidadCaravana } from './politicas';
 import { aplicarAjustesReputacion, factorComisionPorReputacion, type AjusteReputacion } from './reputacion';
@@ -272,16 +272,20 @@ function calcularRutaComercial(
 }
 
 /**
- * Lanza una caravana comercial A MANO (Doc 3.13.3): el jugador elige carga y destino. La carga se reserva del
- * almacén ya, y la caravana pasa por el estado `'preparando'` en el origen —`kPorCarro × (nº carros − 1)`
- * ticks, 0 para una de un solo carro— antes de salir. `cancelarPreparacionCaravana` la revierte con
- * devolución total.
+ * Lanza una caravana comercial A MANO (Doc 3.13.3): el jugador elige carga, destino y —opcionalmente— una
+ * escolta de escuadrones (Doc 3.13.4). La carga se reserva del almacén ya, y la caravana pasa por el estado
+ * `'preparando'` en el origen —`kPorCarro × (nº carros − 1)` ticks, 0 para una de un solo carro— antes de
+ * salir. `cancelarPreparacionCaravana` la revierte con devolución total (carga Y escolta).
+ *
+ * `escolta` son los escuadrones YA sacados de la guarnición por el llamador (la validación de propiedad y
+ * residencia vive en `session/`); aquí solo se comprueba el cupo del Mercado.
  */
 export function prepararCaravanaManual(
   caravana: Caravana,
   origen: Asentamiento,
   destino: Asentamiento,
   carga: Record<string, number>,
+  escolta: Escuadron[],
   mapa: Mapa,
   caminos: readonly CaminoComercial[],
   instante: Instante
@@ -310,6 +314,10 @@ export function prepararCaravanaManual(
       throw new CaravanaInvalidaError(`No hay ${recurso} suficiente en el almacén de ${origen.id}.`);
     }
   }
+  const cupo = cupoEscolta(origen);
+  if (escolta.length > cupo) {
+    throw new CaravanaInvalidaError(`La escolta (${escolta.length}) supera el cupo del Mercado (${cupo}).`);
+  }
   const ruta = calcularRutaComercial(mapa, caminos, origen, destino);
   if (!ruta) throw new CaravanaInvalidaError('No hay ruta por tierra hasta el destino (el agua es infranqueable).');
 
@@ -327,11 +335,39 @@ export function prepararCaravanaManual(
       progreso: 0,
       ruta,
       preparaHasta: prepTicks > 0 ? sumar(instante, minutos(prepTicks)) : undefined,
+      escolta: escolta.length > 0 ? escolta : undefined,
     },
   };
 }
 
-/** Cancela la preparación de una caravana y devuelve la carga al almacén (Doc 3.13.3). */
+/**
+ * Saca de la guarnición los escuadrones que un jugador cede como escolta (Doc 3.13.4): valida que son suyos,
+ * que están en este asentamiento y que no están aniquilados. Devuelve la escolta y el asentamiento SIN ella.
+ */
+export function seleccionarEscoltaCaravana(
+  asentamiento: Asentamiento,
+  jugadorId: string,
+  escuadronIds: readonly string[]
+): { escolta: Escuadron[]; asentamiento: Asentamiento } {
+  const escolta: Escuadron[] = [];
+  for (const id of escuadronIds) {
+    const e = asentamiento.escuadrones.find((s) => s.id === id);
+    if (!e) throw new CaravanaInvalidaError(`El escuadrón ${id} no está en ${asentamiento.id}.`);
+    if (e.jugadorId !== jugadorId) throw new CaravanaInvalidaError(`El escuadrón ${id} es de otro jugador.`);
+    if (e.cantidad <= 0) throw new CaravanaInvalidaError(`El escuadrón ${id} está aniquilado.`);
+    escolta.push(e);
+  }
+  const ids = new Set(escuadronIds);
+  return { escolta, asentamiento: { ...asentamiento, escuadrones: asentamiento.escuadrones.filter((s) => !ids.has(s.id)) } };
+}
+
+/** Escuadrones que un jugador tiene YA cedidos como escolta, sumando todas las caravanas (Doc 3.13.4) — para
+ * el tope de Liderazgo al ceder más. */
+export function escoltaDeJugador(caravanas: readonly Caravana[], jugadorId: string): Escuadron[] {
+  return caravanas.flatMap((c) => c.escolta ?? []).filter((e) => e.jugadorId === jugadorId);
+}
+
+/** Cancela la preparación de una caravana: devuelve la carga al almacén y la escolta a la guarnición (Doc 3.13.3). */
 export function cancelarPreparacionCaravana(
   caravana: Caravana,
   origen: Asentamiento
@@ -341,8 +377,9 @@ export function cancelarPreparacionCaravana(
   for (const [recurso, cantidad] of Object.entries(caravana.contenido)) {
     almacen = agregarRecurso(almacen, recurso, cantidad);
   }
+  const escuadrones = caravana.escolta ? devolverEscoltaAGuarnicion(origen.escuadrones, caravana.escolta) : origen.escuadrones;
   return {
-    asentamiento: { ...origen, almacen },
+    asentamiento: { ...origen, almacen, escuadrones },
     caravana: {
       ...caravana,
       estado: 'disponible',
@@ -351,6 +388,7 @@ export function cancelarPreparacionCaravana(
       ruta: undefined,
       progreso: 0,
       preparaHasta: undefined,
+      escolta: undefined,
     },
   };
 }
@@ -483,7 +521,13 @@ function avanzarCaravanas(
     if (retornando) {
       // Llegada de vuelta a `origen`: disponible de nuevo para un nuevo envío — sin entrega, comisión ni
       // peaje (viaje vacío, no hay contenido que cobrar). `ruta` se limpia: la siguiente asignación calcula
-      // una nueva desde `origen`.
+      // una nueva desde `origen`. La escolta (Doc 3.13.4) vuelve a la guarnición del origen.
+      if (caravana.escolta && caravana.escolta.length > 0) {
+        asentamientosPorId.set(origen.id, {
+          ...origen,
+          escuadrones: devolverEscoltaAGuarnicion(origen.escuadrones, caravana.escolta),
+        });
+      }
       restantes.push({
         ...caravana,
         estado: 'disponible',
@@ -494,6 +538,7 @@ function avanzarCaravanas(
         progreso: 0,
         posicionActual: origen.posicion,
         ruta: undefined,
+        escolta: undefined,
       });
       continue;
     }

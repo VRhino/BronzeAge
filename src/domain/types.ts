@@ -715,10 +715,11 @@ export interface Caravana {
    * carros con animal, ambas son 0. Opcional en el tipo solo porque las categorías militar/construccion/
    * contrabando no lo llevan. */
   carros?: CarroCaravana[];
-  /** Revamp (Doc 3.13.4). Escuadrones que un residente del origen cede como escolta sin héroe, POR VIAJE.
-   * Presente solo en viaje (estado ≠ 'disponible'); los ids son de `Asentamiento.escuadrones` del origen y
-   * mientras están aquí esa guarnición no los cuenta. Sin cablear todavía (Paso 4). */
-  escoltaEscuadronIds?: string[];
+  /** Revamp (Doc 3.13.4). Escuadrones que un residente del origen cede como escolta sin héroe, POR VIAJE. Son
+   * los escuadrones EN SÍ (no ids): salen de `Asentamiento.escuadrones` del origen al preparar la caravana y
+   * vuelven a la guarnición cuando la caravana regresa (`avanzarCaravanas`). Mientras viajan, la caravana se
+   * defiende con su poder (`poderTotal`) en vez de con la defensa base fija (Doc 3.10). Presente solo en viaje. */
+  escolta?: Escuadron[];
   /** Revamp (Doc 3.13.5). `true` = fuera del reparto automático (`asignarCaravanasATrueque`), decisión
    * explícita del jugador, sea cual sea el tamaño de la caravana. */
   reservadaManual?: boolean;
