@@ -32,7 +32,7 @@ export interface PayloadAsentamientoRuinas {
 export interface PayloadMantenimientoDeficit {
   medidor: number;
 }
-import { edificiosPorTipoYEstado, nivelActualDe, poblacionTotal } from './asentamientoQuery';
+import { edificiosPorTipoYEstado, estaOcupado, nivelActualDe, poblacionTotal } from './asentamientoQuery';
 import { descontarRecursos } from './almacen';
 import { reservaDeTrigo } from './tropas';
 
@@ -208,7 +208,12 @@ export function avanzarMantenimiento(
   capital: Asentamiento | undefined,
   instante: Instante
 ): { asentamiento: Asentamiento; eventos: EventoCrudo[]; destruido: boolean } {
-  if (transcurrido(asentamiento.fundadoEn, instante) < minutos(MANTENIMIENTO.graciaMinutos)) {
+  // Período de gracia de fundación — o ventana de ocupación (Ocupacion §2.4): el conquistador hereda una
+  // ciudad rota, no una en déficit inmediato; la degradación queda suspendida mientras dure la ocupación.
+  if (
+    transcurrido(asentamiento.fundadoEn, instante) < minutos(MANTENIMIENTO.graciaMinutos) ||
+    estaOcupado(asentamiento, instante)
+  ) {
     return { asentamiento, eventos: [], destruido: false };
   }
 

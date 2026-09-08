@@ -1,6 +1,7 @@
 import type { Asentamiento, Poblacion } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
-import { EDIFICIO_CATALOGO, IMPUESTOS, NIVEL_ASENTAMIENTO, POBLACION } from '../constants';
+import { EDIFICIO_CATALOGO, IMPUESTOS, NIVEL_ASENTAMIENTO, OCUPACION, POBLACION } from '../constants';
+import type { Instante } from '../domain/tiempo';
 
 /** Fase A5 — payload de `poblacion.hambruna_muerte` (ver `avanzarNutricionPoblacion`). Los eventos de
  * `crecerPoblacion` ('poblacion.primeros_artesanos'/'poblacion.primeros_nobles') no llevan payload — el
@@ -16,6 +17,7 @@ import {
   capacidadViviendaArtesanos,
   capacidadViviendaPesants,
   edificiosPorTipoYEstado,
+  estaOcupado,
   nutricionPoblacionDe,
   poblacionTotal,
 } from './asentamientoQuery';
@@ -43,7 +45,13 @@ function crecimientoEstocastico(actual: number, tasa: number, rng: RandomFn): nu
  * `capacidadViviendaArtesanos`, ver constants.ts `EDIFICIO_CATALOGO.vivienda`) — ya no compiten entre sí.
  * Nobleza sigue con su propio cupo aparte, la `capacidadNobles` del Palacio.
  */
-export function crecerPoblacion(asentamiento: Asentamiento, rng: RandomFn): { poblacion: Poblacion; eventos: EventoCrudo[] } {
+export function crecerPoblacion(
+  asentamiento: Asentamiento,
+  rng: RandomFn,
+  /** Para la ventana de ocupación (Ocupacion §2.4): si el asentamiento está ocupado, el crecimiento se frena
+   *  `× OCUPACION.factorCrecimiento`. Ausente = sin comprobación (comportamiento normal). */
+  instante?: Instante
+): { poblacion: Poblacion; eventos: EventoCrudo[] } {
   const eventos: EventoCrudo[] = [];
 
   // Hambruna (Doc 4.1, a petición del usuario): el factor de comida ya no es un booleano trigo>0?1:0.2 sino
@@ -59,7 +67,8 @@ export function crecerPoblacion(asentamiento: Asentamiento, rng: RandomFn): { po
   // donde entra el downside de "Presión Fiscal" (bloque "economía del oro", Doc 4.1/4.4): subir impuestos
   // frena el crecimiento de las 3 clases. `factorCrecimientoPoblacion` es 1 sin ninguna política fiscal
   // activa, así que el comportamiento por defecto no cambia.
-  const felicidad = factorCrecimientoPoblacion(asentamiento);
+  const ocupado = instante !== undefined && estaOcupado(asentamiento, instante);
+  const felicidad = factorCrecimientoPoblacion(asentamiento) * (ocupado ? OCUPACION.factorCrecimiento : 1);
 
   const capacidadPesants = capacidadViviendaPesants(asentamiento);
   const espacioPesantsFactor = capacidadPesants <= 0 ? 0 : Math.max(0, Math.min(1, 1 - asentamiento.poblacion.pesants / capacidadPesants));
@@ -145,11 +154,16 @@ export function consumoComidaPoblacion(asentamiento: Asentamiento): number {
  * `nivelActual` (ver comentario de `IMPUESTOS` en constants.ts). La suma al almacén (respetando capacidad) la
  * hace el llamador en `avanzarSimulacion`, entre `crecerPoblacion` y `avanzarMantenimiento`. El factor de la
  * política "Presión Fiscal" se aplica aquí dentro, mismo criterio que `factorConsumoComida` en el consumo.
+ *
+ * `instante` opcional: si se pasa y el asentamiento está bajo ocupación reciente (Ocupacion §2.4), la
+ * recaudación cae `× OCUPACION.factorRecaudacion` — conquistar no es un subidón inmediato de tesoro. Ausente =
+ * sin comprobación (comportamiento normal).
  */
-export function recaudacionOro(asentamiento: Asentamiento): number {
+export function recaudacionOro(asentamiento: Asentamiento, instante?: Instante): number {
   const { pesants, artesanos, nobleza } = asentamiento.poblacion;
   const base = pesants * IMPUESTOS.tasaPesants + artesanos * IMPUESTOS.tasaArtesanos + nobleza * IMPUESTOS.tasaNobleza;
-  return base * factorRecaudacion(asentamiento);
+  const ocupado = instante !== undefined && estaOcupado(asentamiento, instante);
+  return base * factorRecaudacion(asentamiento) * (ocupado ? OCUPACION.factorRecaudacion : 1);
 }
 
 /**

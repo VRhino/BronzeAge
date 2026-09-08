@@ -2,10 +2,10 @@
 // signo opuesto. Estos tests fijan el contrato: Σ(habitantes_clase × tasa_clase), Nobleza > Artesanos >
 // Pesants por cabeza, y el llamador (avanzarSimulacion) la suma al almacén respetando la capacidad.
 import { describe, expect, it } from 'vitest';
-import { IMPUESTOS } from '../../constants';
+import { IMPUESTOS, OCUPACION } from '../../constants';
 import { recaudacionOro } from '../population';
 import { agregarRecurso } from '../almacen';
-import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, posicionRecomendable } from './fixtures';
+import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instanteDeTest, posicionRecomendable } from './fixtures';
 
 function asentamientoDeTest() {
   const mapa = crearMapaDeterminista(42);
@@ -36,6 +36,17 @@ describe('recaudacionOro', () => {
     const soloN = { ...base, poblacion: { pesants: 0, artesanos: 0, nobleza: 1 } };
     expect(recaudacionOro(soloN)).toBeGreaterThan(recaudacionOro(soloA));
     expect(recaudacionOro(soloA)).toBeGreaterThan(recaudacionOro(soloP));
+  });
+
+  it('bajo ocupación reciente la recaudación cae × OCUPACION.factorRecaudacion (Ocupacion §2.4)', () => {
+    const base = { ...asentamientoDeTest(), poblacion: { pesants: 100, artesanos: 10, nobleza: 2 } };
+    const pleno = recaudacionOro(base, instanteDeTest(10));
+    const ocupado = { ...base, ocupacionHasta: instanteDeTest(100) };
+    expect(recaudacionOro(ocupado, instanteDeTest(10))).toBeCloseTo(pleno * OCUPACION.factorRecaudacion);
+    // Ya vencida la ventana: recaudación plena otra vez.
+    expect(recaudacionOro(ocupado, instanteDeTest(200))).toBeCloseTo(pleno);
+    // Sin instante: no se comprueba la ocupación (comportamiento normal).
+    expect(recaudacionOro(ocupado)).toBeCloseTo(pleno);
   });
 
   it('el oro recaudado respeta la capacidad del almacén (el sobrante se pierde)', () => {

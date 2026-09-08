@@ -204,18 +204,24 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     // de tocar la que sí lo es. Ver `Consideraciones/NPC_Gobernanza_Facciones_Controladas.md` §"Abierto".
     const { asentamiento: trasNutricion, eventos: eventosNutricion } = avanzarNutricionPoblacion(trasNivel);
     const { asentamiento: trasTropas, eventos: eventosTropas } = avanzarMantenimientoTropas(trasNutricion);
-    const { poblacion, eventos: eventosPoblacion } = crecerPoblacion(trasTropas, rng);
+    const { poblacion, eventos: eventosPoblacion } = crecerPoblacion(trasTropas, rng, instante);
     // Recaudación de oro por población (Doc 4.1, bloque "economía del oro"): se suma DESPUÉS de crecer (recauda
     // sobre la población de este tick) y ANTES de `avanzarMantenimiento` (que el oro recién recaudado pueda
     // cubrir el mantenimiento del mismo tick). Respeta la capacidad de almacén, igual que la producción de mina.
     const conPoblacion = {
       ...trasTropas,
       poblacion,
-      almacen: agregarRecurso(trasTropas.almacen, 'oro', recaudacionOro({ ...trasTropas, poblacion })),
+      almacen: agregarRecurso(trasTropas.almacen, 'oro', recaudacionOro({ ...trasTropas, poblacion }, instante)),
     };
 
     const capital = capitalesPorFaccion.get(asentamiento.faccionId);
     const { asentamiento: trasMantenimiento, eventos: eventosMantenimiento, destruido } = avanzarMantenimiento(conPoblacion, capital, instante);
+
+    // Fin de la ventana de ocupación (Ocupacion §2.5): tiempo fijo, sin nada que la acorte. Al vencer se
+    // limpia el `Instante` y la plaza vuelve a las reglas normales — la guarnición instalada SE QUEDA.
+    const venceOcupacion =
+      trasMantenimiento.ocupacionHasta !== undefined && instante >= trasMantenimiento.ocupacionHasta;
+    const asentamientoFinal = venceOcupacion ? { ...trasMantenimiento, ocupacionHasta: undefined } : trasMantenimiento;
 
     const eventosAsentamiento = [
       ...eventosConstruccion,
@@ -225,10 +231,13 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
       ...eventosNutricion,
       ...eventosPoblacion,
       ...eventosMantenimiento,
+      ...(venceOcupacion
+        ? [{ codigo: 'asentamiento.ocupacion_terminada', mensaje: `Termina la ocupación militar de ${asentamiento.id}.` }]
+        : []),
     ];
     eventosDominio.push(...comoEventosDominio(eventosAsentamiento, contexto, asentamiento.id));
 
-    return { asentamiento: trasMantenimiento, destruido };
+    return { asentamiento: asentamientoFinal, destruido };
   });
 
   // Ruinas por abandono/mal mantenimiento (Doc 4.5): el asentamiento se elimina, su zona queda libre.

@@ -396,39 +396,40 @@ supervivencia de saqueados.
 combate, **sin tocar el RNG**), el atacante acampa. Tests: inmunidad por el comando y por llegada de ejército
 (un segundo ejército el mismo tick rebota sin bajas).
 
-### Paso 6 — efectos de la ventana
+### Paso 6 — efectos de la ventana — ✅ HECHO (2026-09-08)
 
-- `recaudacionOro(a, instante)` — nuevo param; `× OCUPACION.factorRecaudacion` si `estaOcupado`.
-- `crecerPoblacion(a, rng, instante)` — nuevo param; el factor `felicidad` `× OCUPACION.factorCrecimiento` si
-  `estaOcupado`. (Ajustar los ~4 tests que llaman `crecerPoblacion` directo.)
-- `avanzarMantenimiento`: la rama que hoy es `transcurrido(fundadoEn, instante) < graciaMinutos` pasa a
-  `... || estaOcupado(a, instante)`.
-- `simulation.ts` pasa `instante` a las tres.
-- **Mide:** batch — `oroMedio` (la ocupación es un sink: recaudación de plazas conquistadas a la mitad).
+- `recaudacionOro(a, instante?)` y `crecerPoblacion(a, rng, instante?)` — param OPCIONAL (no obligatorio, para
+  no romper los ~5 tests que los llaman sin él): ausente = sin comprobación de ocupación. Con `instante` y
+  `estaOcupado` → `× OCUPACION.factorRecaudacion` / el factor `felicidad` `× OCUPACION.factorCrecimiento`.
+- `avanzarMantenimiento`: la rama de gracia pasa a `... || estaOcupado(a, instante)`.
+- `simulation.ts` pasa `instante` a `recaudacionOro` y `crecerPoblacion`.
+- El cliente (`gameStore.recaudacionInfo`) NO se tocó — no tiene `instante` a mano y es solo preview; la
+  recaudación mostrada durante la ocupación queda ligeramente optimista (`ponytail:` — arreglar si el cliente
+  gana un banner de ocupación).
+- **Mide:** batch — `oroMedio`.
 
-### Paso 7 — reconstrucción de lo dañado
+### Paso 7 — reconstrucción de lo dañado — ✅ HECHO (2026-09-08)
 
-En `avanzarConstruccion`, donde se cobra un proyecto `en_cola` al comprometerlo: si `edificio.danado`, el
-costo y el tiempo se multiplican por `OCUPACION.fraccionCosteReconstruccion`. Al pasar a `activo`, se limpia
-`danado`. Test: un `danado` cuesta la fracción y se levanta.
+En `avanzarConstruccion`, **Paso 2 (arranque de obra)**: un `en_cola` normal ya está pagado; uno `danado` NO
+(el saqueo lo encoló sin cobrar), así que se cobra ahí `ceil(costo_catálogo × OCUPACION.fraccionCosteReconstruccion)`
+y `ticks × esa fracción`. Si no hay recursos, espera en cola. Al pasar a `activo` se limpia `danado`. Evento
+`construccion.iniciada` dice "reconstrucción" en vez de "construcción".
 
-### Paso 8 — fin de la ventana
+### Paso 8 — fin de la ventana — ✅ HECHO (2026-09-08)
 
-En la pasada por asentamiento de `avanzarSimulacion`: si `a.ocupacionHasta !== undefined && instante >=
-a.ocupacionHasta` → `{ ...a, ocupacionHasta: undefined }`. Nada más — la guarnición se queda. Test: al vencer,
-recaudación y crecimiento vuelven a pleno y se puede asediar.
+En la pasada por asentamiento de `avanzarSimulacion`, tras `avanzarMantenimiento`: si `ocupacionHasta !==
+undefined && instante >= ocupacionHasta` → `{ ...a, ocupacionHasta: undefined }` + evento
+`asentamiento.ocupacion_terminada`. La guarnición se queda. (Tests 7-8 juntos en
+`eventosDominioConstruccion.test.ts`.)
 
-### Paso 9 — criterio del NPC
+### Paso 9 — criterio del NPC — ✅ HECHO (2026-09-08)
 
-- `lanzarCampanas`: filtro `!estaOcupado(origen, instante)` — una guarnición recién instalada no vuelve a
-  salir de campaña.
-- `reclutarParaTodos` (ya toca miembros de Facción tras el Paso 1): reponer la guarnición de una plaza que la
-  Facción conquistó y no tiene residentes — sale gratis del Paso 1, solo hay que asegurarse de que el NPC
-  itera esas plazas.
-- `replegarLosQueYaTerminaron`: tras conquistar ya no queda ejército `estacionado` (se consumió en la
-  guarnición) — comprobar que no rompe con `ejercito` inexistente.
-- **Mide:** batch — militar NPC (¿sigue limpiando campamentos? ¿las guarniciones de ocupación le comen la
-  mano de obra de las plazas conquistadas?).
+- `lanzarCampanas`: `if (estaOcupado(origen, instante)) continue;` — guarnición recién instalada no sale.
+- `reclutarParaTodos`: ya cubierto por el Paso 1 (itera dueños de escuadrones posados, no solo residentes) —
+  el NPC repone la guarnición de una plaza conquistada sin residentes sin código nuevo.
+- `replegarLosQueYaTerminaron`: sin cambios — tras conquistar el ejército ya no está en la lista (lo soltó
+  `avanzarEjercitos`), así que la función simplemente tiene menos que procesar. No rompe.
+- **Mide:** batch — militar NPC.
 
 ### Paso 10 — campaña de calibración
 

@@ -10,6 +10,7 @@ import {
   MERCADO_PUESTOS_POR_NIVEL,
   NECESIDADES,
   NIVEL_ASENTAMIENTO,
+  OCUPACION,
   produccionTrigoDeGranja,
   SCORE_BANDAS,
   ZONA_INFLUENCIA,
@@ -1292,7 +1293,9 @@ export function avanzarConstruccion(
       if (edificio.tipo === 'carpinteria') {
         puestosNuevos.push(...crearTalleresDeCarpinteria(asentamiento, [...asentamiento.edificios, ...puestosNuevos]));
       }
-      resultados.set(edificio.id, { ...edificio, estado: 'activo', completaEn: undefined });
+      // Reconstrucción de un edificio dañado por un saqueo (Ocupacion §2.2): al volver a `activo` se limpia
+      // el flag — vuelve a ser un edificio sano normal.
+      resultados.set(edificio.id, { ...edificio, estado: 'activo', completaEn: undefined, danado: undefined });
       continue;
     }
 
@@ -1354,13 +1357,33 @@ export function avanzarConstruccion(
       resultados.set(edificio.id, edificio);
       continue;
     }
+    // Un `en_cola` normal ya se pagó al comprometerse. Uno `danado` por un saqueo (Ocupacion §2.2) NO — se
+    // cobra aquí una fracción del costo de catálogo y tarda esa misma fracción. Si no hay con qué, espera.
+    let factorDanado = 1;
+    if (edificio.danado) {
+      const costoReparacion = Object.fromEntries(
+        Object.entries(EDIFICIO_CATALOGO[edificio.tipo].costo as Record<string, number>).map(([r, c]) => [
+          r,
+          Math.ceil(c * OCUPACION.fraccionCosteReconstruccion),
+        ])
+      );
+      if (!tieneRecursos(almacen, costoReparacion)) {
+        resultados.set(edificio.id, edificio);
+        continue;
+      }
+      almacen = descontarRecursos(almacen, costoReparacion);
+      factorDanado = OCUPACION.fraccionCosteReconstruccion;
+    }
     eventos.push({
       codigo: 'construccion.iniciada',
-      mensaje: `Comienza construcción de ${edificio.tipo}.`,
+      mensaje: `Comienza ${edificio.danado ? 'reconstrucción' : 'construcción'} de ${edificio.tipo}.`,
       payload: { edificioId: edificio.id, edificioTipo: edificio.tipo } satisfies PayloadConstruccionIniciada,
     });
     // Vía Rápida de Construcción (Maestro de Obras, Doc 2.2/4.4) acelera el tiempo restante al arrancar.
-    const ticks = Math.max(1, Math.round(EDIFICIO_CATALOGO[edificio.tipo].tiempoConstruccionMinutos * factorTiempoConstruccion(asentamiento)));
+    const ticks = Math.max(
+      1,
+      Math.round(EDIFICIO_CATALOGO[edificio.tipo].tiempoConstruccionMinutos * factorTiempoConstruccion(asentamiento) * factorDanado)
+    );
     resultados.set(edificio.id, { ...edificio, estado: 'en_construccion', completaEn: sumar(instante, minutos(ticks)) });
     cupoObraDisponible -= 1;
   }

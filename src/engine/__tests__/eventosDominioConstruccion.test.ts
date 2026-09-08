@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { avanzarSimulacion } from '../simulation';
 import { createRng } from '../../worldgen';
-import { contextoDeTest, crearEstadoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
+import { contextoDeTest, crearEstadoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instanteDeTest } from './fixtures';
 import type { PayloadConstruccionIniciada, PayloadNecesidadDetectada } from '../construction';
 
 const SEED = 7;
@@ -52,5 +52,55 @@ describe('eventos de dominio — construction.ts', () => {
     }
 
     expect(completados.length).toBeGreaterThan(0);
+  });
+
+  it('ocupación (Pasos 7-8): un edificio dañado se reconstruye barato y la ventana se cierra sola', () => {
+    const mapa = crearMapaDeterminista(SEED);
+    const facciones = crearFacciones();
+    const { asentamiento, facciones: faccionesTrasFundar } = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', []);
+    let estado = crearEstadoDeTest([asentamiento], faccionesTrasFundar);
+    const rng = createRng(SEED);
+
+    // Deja madurar la ciudad para que tenga varios edificios activos.
+    for (let tick = 1; tick <= 80; tick++) estado = avanzarSimulacion(estado, mapa, contextoDeTest(tick, rng));
+
+    // Simula el estado post-conquista: un edificio no esencial dañado + ventana de ocupación abierta + un
+    // almacén generoso para que la reconstrucción pueda pagarse.
+    const plaza = estado.asentamientos[0]!;
+    const victima = plaza.edificios.find(
+      (e) => e.estado === 'activo' && !['centroUrbano', 'granja', 'lenera'].includes(e.tipo)
+    )!;
+    expect(victima, 'la ciudad madura tiene algún edificio dañable').toBeDefined();
+    const almacenLleno = Object.fromEntries(
+      Object.entries(plaza.almacen).map(([r, v]) => [r, { ...v, cantidad: v.capacidad }])
+    );
+    estado = {
+      ...estado,
+      asentamientos: [
+        {
+          ...plaza,
+          almacen: almacenLleno,
+          ocupacionHasta: instanteDeTest(88),
+          edificios: plaza.edificios.map((e) => (e.id === victima.id ? { ...e, estado: 'en_cola' as const, danado: true } : e)),
+        },
+      ],
+    };
+
+    let vioReconstruccion = false;
+    let vioFinOcupacion = false;
+    for (let tick = 81; tick <= 140; tick++) {
+      const r = avanzarSimulacion(estado, mapa, contextoDeTest(tick, rng));
+      estado = r;
+      if (r.eventosDominio.some((e) => e.codigo === 'construccion.iniciada' && e.mensaje.includes('reconstrucción'))) vioReconstruccion = true;
+      if (r.eventosDominio.some((e) => e.codigo === 'asentamiento.ocupacion_terminada')) vioFinOcupacion = true;
+    }
+
+    expect(vioReconstruccion, 'el edificio dañado arrancó como reconstrucción').toBe(true);
+    expect(vioFinOcupacion, 'la ventana de ocupación se cerró al vencer').toBe(true);
+    const despues = estado.asentamientos[0]!;
+    expect(despues.ocupacionHasta, 'ya no está ocupado').toBeUndefined();
+    const reconstruido = despues.edificios.find((e) => e.id === victima.id)!;
+    expect(reconstruido.estado).toBe('activo');
+    expect(reconstruido.danado, 'el flag se limpia al volver a activo').toBeFalsy();
   });
 });

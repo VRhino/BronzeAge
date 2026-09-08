@@ -43,6 +43,22 @@ describe('eventos de dominio — mantenimiento.ts', () => {
     expect(p.nivelNuevo).toBe(2);
   });
 
+  it('avanzarMantenimiento: bajo ocupación reciente NO degrada aunque haya déficit (Ocupacion §2.4)', () => {
+    const asentamiento: Asentamiento = {
+      ...base(),
+      fundadoEn: instanteDeTest(0),
+      medidorMantenimiento: MANTENIMIENTO.medidorInicial,
+      almacen: { ...base().almacen, madera: { cantidad: 0, capacidad: 1000 } },
+      ocupacionHasta: instanteDeTest(MANTENIMIENTO.graciaMinutos + 100),
+    };
+
+    const resultado = avanzarMantenimiento(asentamiento, undefined, instanteDeTest(MANTENIMIENTO.graciaMinutos + 1));
+
+    expect(resultado.destruido).toBe(false);
+    expect(resultado.eventos).toHaveLength(0);
+    expect(resultado.asentamiento.medidorMantenimiento).toBe(MANTENIMIENTO.medidorInicial);
+  });
+
   it('avanzarMantenimiento: sin madera para pagar produce mantenimiento.deficit', () => {
     const asentamiento: Asentamiento = {
       ...base(),

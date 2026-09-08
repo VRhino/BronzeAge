@@ -3,10 +3,10 @@
 // tests verifican el mismo contrato: sin trigo la nutrición colapsa en un número de ticks fijo (100/20 = 5,
 // igual que la moral militar) y, sostenida en 0, empieza a costar población real (nobleza protegida).
 import { describe, expect, it } from 'vitest';
-import { POBLACION } from '../../constants';
+import { OCUPACION, POBLACION } from '../../constants';
 import { crecerPoblacion, avanzarNutricionPoblacion } from '../population';
 import { createRng } from '../../worldgen';
-import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, posicionRecomendable } from './fixtures';
+import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instanteDeTest, posicionRecomendable } from './fixtures';
 
 function asentamientoDeTest() {
   const mapa = crearMapaDeterminista(42);
@@ -80,5 +80,22 @@ describe('Hambruna: nutrición de la población', () => {
     const { poblacion: crecidoHambriento } = crecerPoblacion(hambriento, createRng(1));
 
     expect(crecidoHambriento.pesants - hambriento.poblacion.pesants).toBeLessThan(crecidoBien.pesants - bienAlimentado.poblacion.pesants);
+  });
+
+  it('bajo ocupación reciente el crecimiento se frena × OCUPACION.factorCrecimiento (Ocupacion §2.4)', () => {
+    // Mismo patrón que el test de "Presión Fiscal frena el crecimiento": acumulado sobre muchos ticks con
+    // semilla fija, para que el redondeo estocástico no tape la diferencia del factor.
+    const base = { ...asentamientoDeTest(), nutricionPoblacion: 100 };
+    const crecer40Ticks = (ocupado: boolean) => {
+      let a = { ...base, poblacion: { pesants: 10, artesanos: 0, nobleza: 0 } };
+      const rng = createRng(1);
+      for (let i = 0; i < 40; i++) {
+        a = { ...a, poblacion: crecerPoblacion(a, rng, ocupado ? instanteDeTest(i + 1) : undefined).poblacion };
+        if (ocupado) a = { ...a, ocupacionHasta: instanteDeTest(1000) };
+      }
+      return a.poblacion.pesants;
+    };
+    expect(OCUPACION.factorCrecimiento).toBeLessThan(1);
+    expect(crecer40Ticks(true)).toBeLessThan(crecer40Ticks(false));
   });
 });

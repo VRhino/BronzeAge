@@ -38,6 +38,7 @@ import {
   tieneMercadoActivo,
   cupoCaravanas,
   edificiosPorTipoYEstado,
+  estaOcupado,
   hayProyectoPendiente,
   nutricionPoblacionDe,
 } from '../engine/asentamientoQuery';
@@ -1005,6 +1006,9 @@ function lanzarCampanas(
   for (const origen of [...asentamientos].sort((a, b) => (a.id < b.id ? -1 : 1))) {
     if (!esNpc(origen.faccionId)) continue;
     if (conCampanaEnCurso.has(origen.id)) continue;
+    // Guarnición recién instalada tras una conquista (Ocupacion §2.4): no vuelve a salir de campaña hasta
+    // que la ventana vence y está repuesta.
+    if (estaOcupado(origen, instante)) continue;
     if (nivelActualDe(origen) < NIVEL_MINIMO_PARA_CAMPANA) continue;
 
     const vivos = origen.escuadrones.filter((e) => e.cantidad > 0);
