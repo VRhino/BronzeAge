@@ -60,6 +60,23 @@ escolta sin héroe— y que haya una vía de preparación manual además del rep
 15. **Auto vs manual: flag de reserva explícito.** `reservadaManual = true` saca la caravana del reparto
     automático sea cual sea su tamaño. No se infiere de la composición.
 
+### Ronda 5 (implementando el Paso 2)
+
+16. **`crearCaravana` crea un casco VACÍO, gratis.** El coste está en las piezas: carro básico 20 madera
+    (Mercado), carro reforzado 40 madera (Carpintería), y los animales aparte.
+17. **El buey se paga en MADERA (30), no en oro.** Mismo criterio que quitarle la piedra al Mercado (Doc
+    4.2.1): "todo animal cuesta oro" —enunciado original— revive el deadlock "sin caravana no hay comercio,
+    sin comercio no hay oro, sin oro no hay caravana" para cualquier asentamiento sin mina. El buey barato en
+    madera es la vía de entrada; caballo (60 oro) y camello (40 oro) son la mejora. `basico` + `buey` =
+    50 madera, el mismo coste que crear una caravana antes → el batch NPC no se mueve.
+18. **El bootstrap del Mercado (caravana #0 gratis) se DESCARTA.** Medido: una sola caravana gratis por
+    asentamiento al completarse el Mercado mueve 42 métricas del batch (seed 7, 40 Facciones, 400 ticks) —
+    `oroMedio` 155→122, artesanos y edificios de transformación a **cero**, `nivelFaccionMax` 8→7. Inunda el
+    mapa de caravanas de trueque activas y los asentamientos exportan lo que necesitan para subir de nivel. El
+    valor que aportaba era marginal (evitar un `crearCaravana` tras el Mercado, y ni siquiera hay espera: el
+    casco vacío es gratis). Se cae. El enunciado ("el Mercado te da un carro y un animal") queda como sabor,
+    no como mecánica.
+
 ## 2. Lo que ya existe y no hay que inventar
 
 - **El ciclo de estados de la caravana** ya es una máquina: `disponible | adjunta | en_transito | retornando`
@@ -121,13 +138,14 @@ export const CARRO_CATALOGO = {
 } as const;
 
 export const ANIMAL_CATALOGO = {
-  buey:    { factorCarga: 1.0,  velocidad: 16, costoOro: 20 },
-  caballo: { factorCarga: 0.5,  velocidad: 24, costoOro: 60 },
-  camello: { factorCarga: 0.75, velocidad: 19, costoOro: 40 },
+  buey:    { factorCarga: 1.0,  velocidad: 16, costo: { madera: 30 } }, // madera, no oro — ver Ronda 5 §17
+  caballo: { factorCarga: 0.5,  velocidad: 24, costo: { oro: 60 } },
+  camello: { factorCarga: 0.75, velocidad: 19, costo: { oro: 40 } },
 } as const;
 
-export const CARAVANA_PREPARACION = { kPorCarro: 2 };
-export const CARAVANA_ESCOLTA = { cupoPorNivelMercado: [1, 2, 3] };
+// Pendientes de los Pasos 3/4:
+// export const CARAVANA_PREPARACION = { kPorCarro: 2 };
+// export const CARAVANA_ESCOLTA = { cupoPorNivelMercado: [1, 2, 3] };
 ```
 
 `CARAVANA_CATALOGO.comercial.capacidad/velocidad` quedan como **fallback** para caravanas sin `carros` (pre-revamp) y se marcan como tal en el comentario.
@@ -136,13 +154,13 @@ export const CARAVANA_ESCOLTA = { cupoPorNivelMercado: [1, 2, 3] };
 
 | Comando | Qué hace |
 |---|---|
-| `construirCarro(caravanaId)` | Paga `CARRO_CATALOGO.basico.costo`, añade un carro sin animal. Requiere Mercado activo. |
-| `fabricarCarroReforzado(caravanaId)` | Igual pero receta de Carpintería. |
-| `comprarAnimal(caravanaId, tipo, carroIdx?)` | Paga `costoOro`, añade el animal; lo asigna a un carro libre si se indica. |
-| `moverPieza(desdeId, haciaId, pieza)` | Reasigna un carro o animal entre dos caravanas propias `'disponible'` en el mismo asentamiento. Sin coste. |
-| `reservarCaravana(caravanaId, valor)` | Set `reservadaManual`. |
-| `prepararCaravana(caravanaId, { carga, destinoAsentamientoId, escoltaEscuadronIds })` | Reserva carga del almacén, valida cupo de escolta y residencia del cedente, pasa a `'preparando'` con `preparaHasta`. |
-| `cancelarPreparacion(caravanaId)` | Solo en `'preparando'`. Devuelve carga, libera escolta, vuelve a `'disponible'`. |
+| `crearCaravana(asentamientoId)` | **HECHO (Paso 2).** Casco vacío, gratis, cuenta cupo + cooldown (`crearCaravanaVacia`, engine/trade.ts). |
+| `agregarCarroCaravana(caravanaId, tipoCarro)` | **HECHO (Paso 2).** Paga `CARRO_CATALOGO[tipo].costo`, añade un carro sin animal. `reforzado` exige Carpintería activa. Solo caravana `'disponible'`. |
+| `comprarAnimalCaravana(caravanaId, carroIndice, tipoAnimal)` | **HECHO (Paso 2).** Paga `ANIMAL_CATALOGO[tipo].costo`, engancha el animal a un carro sin tracción. |
+| `reservarCaravana(caravanaId, reservada)` | **HECHO (Paso 2).** Set `reservadaManual`. |
+| `moverPieza(desdeId, haciaId, pieza)` | Diferido a Paso 3 (no hay caller hasta la UI de preparación). Reasigna un carro entre dos caravanas propias `'disponible'` en el mismo asentamiento. Sin coste. |
+| `prepararCaravana(caravanaId, { carga, destinoAsentamientoId, escoltaEscuadronIds })` | Paso 3. Reserva carga del almacén, valida cupo de escolta y residencia del cedente, pasa a `'preparando'` con `preparaHasta`. |
+| `cancelarPreparacion(caravanaId)` | Paso 3. Solo en `'preparando'`. Devuelve carga, libera escolta, vuelve a `'disponible'`. |
 
 ### Motor
 
@@ -150,7 +168,7 @@ export const CARAVANA_ESCOLTA = { cupoPorNivelMercado: [1, 2, 3] };
 - `avanzarCaravanas` (`engine/trade.ts`): al llegar `preparaHasta`, `preparando → en_transito` con la ruta ya calculada.
 - `interceptarCaravanaConEjercito` (`engine/combate.ts`) y `engine/bandidos.ts`: usar `poderDefensaCaravana`; en captura de una caravana con escolta, devolver los escuadrones a la guarnición del origen con debuff de derrota, aplicar permadeath de bajas, destruir `carros`.
 - Guarnición defensora (`engine/combate.ts`, asedio): excluir los escuadrones cuyos ids están en `escoltaEscuadronIds` de alguna caravana de ese asentamiento no `'disponible'`.
-- Construcción del Mercado (`engine/construction.ts`): +50 oro al costo base; al completar, generar la caravana #0 con `carros: [{ tipoCarro: 'basico', animal: 'buey' }]`.
+- ~~Bootstrap del Mercado~~: descartado (Ronda 5 §18) — regresaba el batch NPC. El Mercado no cambia de coste.
 
 ### Migración de snapshot
 
@@ -192,19 +210,20 @@ sin componer nada, hay un bug en la derivación.
 Cada paso respeta la separación motor / sesión / infra de arriba y verifica en el navegador de punta a punta
 (no basta boot+render — memoria `feedback_verificacion_end_to_end`).
 
-1. **Modelo + migración + fallback.** Campos nuevos en `Caravana`, `CarroTipo`/`AnimalTipo`, catálogos,
-   `capacidadCaravana`/`velocidadCaravana`/`prepTicks` con fallback a `CARAVANA_CATALOGO`. Estado `preparando`
-   en el tipo (sin usarlo aún). `asignarCaravanasATrueque` filtra `reservadaManual`. Snapshot vN→vN+1. **El
-   batch corre igual** — es el checkpoint de medición.
-2. **Piezas.** Comandos `construirCarro` / `fabricarCarroReforzado` / `comprarAnimal` / `moverPieza` /
-   `reservarCaravana`. Receta de carro reforzado en Carpintería. Bootstrap: +50 oro al Mercado y caravana #0
-   al completarlo.
+1. ~~**Modelo + migración + fallback.**~~ **HECHO (commit `8ca635d`).** Campos nuevos en `Caravana`,
+   `CarroTipo`/`AnimalTipo`, `CARRO_CATALOGO`/`ANIMAL_CATALOGO`, `capacidadCaravana`/`velocidadCaravana` con
+   fallback a `CARAVANA_CATALOGO` (engine/caravanas.ts). Estado `preparando` en el tipo (sin usar aún).
+   `asignarCaravanasATrueque` filtra `reservadaManual`. Snapshot v11→v12. **Batch bit-idéntico.**
+2. ~~**Piezas.**~~ **HECHO.** `crearCaravanaVacia` + `agregarCarroACaravana` + `comprarAnimalParaCaravana`
+   (engine/trade.ts) y sus comandos `crearCaravana` / `agregarCarroCaravana` / `comprarAnimalCaravana` /
+   `reservarCaravana`. `construirCaravanaComercial` recompone la caravana por defecto para el NPC (50 madera,
+   sin cambio). Bootstrap descartado (§18). `moverPieza` diferido a Paso 3. **Batch bit-idéntico.**
 3. **Preparación.** Estado `preparando` operativo: `prepararCaravana` (lanzamiento manual con carga/destino),
-   `cancelarPreparacion`, countdown en `avanzarCaravanas`.
+   `cancelarPreparacion`, countdown en `avanzarCaravanas`. `moverPieza` cae aquí. `bandidos.ts` trata
+   `preparando` como "en el origen".
 4. **Escolta sin héroe.** Cesión y recuperación de escuadrones, exclusión de guarnición, cupo por nivel de
    Mercado, `poderDefensaCaravana` en intercepción y bandidos, vuelta a casa con debuff en captura.
-5. **Canon + medición.** Reconciliar Doc 3.13 / 4.2.1 / 5.13.3 con lo medido; batch de control contra el
-   commit anterior al Paso 1.
+5. **Canon + medición.** Reconciliar Doc 3.13 / 4.2.1 / 5.13.3 con lo medido; batch de control.
 
 ## 6. Invariantes
 

@@ -1,9 +1,11 @@
-// Comandos de comercio: proponer un trueque entre asentamientos, colocar una orden de mercado y construir
-// una caravana comercial.
-import type { AcuerdoTrueque, RecursoTipo } from '../../domain/types';
+// Comandos de comercio: proponer un trueque entre asentamientos, colocar una orden de mercado y componer
+// una caravana comercial (revamp, Doc 3.13: casco vacío + carros + animales).
+import type { AcuerdoTrueque, AnimalTipo, Caravana, CarroTipo, RecursoTipo } from '../../domain/types';
 import {
   aceptarTrueque as aceptarTruequeEngine,
-  construirCaravanaComercial as construirCaravanaComercialEngine,
+  crearCaravanaVacia as crearCaravanaVaciaEngine,
+  agregarCarroACaravana as agregarCarroEngine,
+  comprarAnimalParaCaravana as comprarAnimalEngine,
   proponerTrueque as proponerTruequeEngine,
   rechazarTrueque as rechazarTruequeEngine,
 } from '../../engine/trade';
@@ -12,7 +14,7 @@ import { capacidadCargaDe } from '../../engine/ejercitos';
 import { asegurarCaminoComercial } from '../../engine/caminos';
 import type { GameSessionState } from '../estado';
 import { exito } from './tipos';
-import { comando, conAsentamiento, exigirAcuerdo, exigirAsentamiento, exigirColumnaDe, rechazar } from './ayudas';
+import { comando, conAsentamiento, exigirAcuerdo, exigirAsentamiento, exigirCaravana, exigirColumnaDe, rechazar } from './ayudas';
 import { CODIGOS_ERROR } from './codigosDeError';
 import { evento, eventos as construirEventos, type EventoDeComando } from './eventos';
 
@@ -267,10 +269,15 @@ export interface ParamsCrearCaravana {
   asentamientoId: string;
 }
 
+/**
+ * Crea una caravana comercial VACÍA (revamp, Doc 3.13.2): cuenta contra el cupo del Mercado pero no puede
+ * viajar hasta que se le añadan carros (`agregarCarroCaravana`) y animales (`comprarAnimalCaravana`). El
+ * coste está en las piezas.
+ */
 export const crearCaravana = comando<ParamsCrearCaravana, { caravanaId: string }>((estado, _mapa, ctx, params) => {
   const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
 
-  const { asentamiento: actualizado, caravana } = construirCaravanaComercialEngine(
+  const { asentamiento: actualizado, caravana } = crearCaravanaVaciaEngine(
     asentamiento,
     estado.caravanas,
     ctx.instante,
@@ -285,11 +292,89 @@ export const crearCaravana = comando<ParamsCrearCaravana, { caravanaId: string }
     [
       evento(ctx, {
         codigo: 'comercio.caravana_construida',
-        mensaje: `Construye una caravana comercial (${caravana.id}).`,
+        mensaje: `Crea una caravana comercial vacía (${caravana.id}).`,
         payload: { caravanaId: caravana.id, asentamientoId: params.asentamientoId } satisfies PayloadCaravanaConstruida,
         asentamientoId: params.asentamientoId,
       }),
     ],
     { caravanaId: caravana.id }
+  );
+});
+
+function conCaravana(estado: GameSessionState, actualizada: Caravana): GameSessionState {
+  return { ...estado, caravanas: estado.caravanas.map((c) => (c.id === actualizada.id ? actualizada : c)) };
+}
+
+export interface ParamsAgregarCarro {
+  caravanaId: string;
+  tipoCarro: CarroTipo;
+}
+
+/** Fabrica un carro y lo añade a una caravana disponible (Doc 3.13.2). Básico → Mercado; reforzado → Carpintería. */
+export const agregarCarroCaravana = comando<ParamsAgregarCarro, { carros: number }>((estado, _mapa, ctx, params) => {
+  const caravana = exigirCaravana(estado, params.caravanaId);
+  const asentamiento = exigirAsentamiento(estado, caravana.origenAsentamientoId);
+  const r = agregarCarroEngine(caravana, asentamiento, params.tipoCarro);
+  const siguiente: GameSessionState = { ...conAsentamiento(conCaravana(estado, r.caravana), r.asentamiento) };
+  return exito(
+    siguiente,
+    [
+      evento(ctx, {
+        codigo: 'comercio.caravana_carro_agregado',
+        mensaje: `Añade un carro ${params.tipoCarro} a la caravana ${caravana.id} (${r.caravana.carros!.length} en total).`,
+        payload: { caravanaId: caravana.id, tipoCarro: params.tipoCarro, carros: r.caravana.carros!.length },
+        asentamientoId: asentamiento.id,
+      }),
+    ],
+    { carros: r.caravana.carros!.length }
+  );
+});
+
+export interface ParamsComprarAnimal {
+  caravanaId: string;
+  carroIndice: number;
+  tipoAnimal: AnimalTipo;
+}
+
+/** Compra un animal y lo engancha a un carro sin tracción de una caravana disponible (Doc 3.13.2). */
+export const comprarAnimalCaravana = comando<ParamsComprarAnimal, { caravanaId: string }>((estado, _mapa, ctx, params) => {
+  const caravana = exigirCaravana(estado, params.caravanaId);
+  const asentamiento = exigirAsentamiento(estado, caravana.origenAsentamientoId);
+  const r = comprarAnimalEngine(caravana, asentamiento, params.carroIndice, params.tipoAnimal);
+  const siguiente: GameSessionState = { ...conAsentamiento(conCaravana(estado, r.caravana), r.asentamiento) };
+  return exito(
+    siguiente,
+    [
+      evento(ctx, {
+        codigo: 'comercio.caravana_animal_comprado',
+        mensaje: `Compra un ${params.tipoAnimal} para el carro ${params.carroIndice} de la caravana ${caravana.id}.`,
+        payload: { caravanaId: caravana.id, carroIndice: params.carroIndice, tipoAnimal: params.tipoAnimal },
+        asentamientoId: asentamiento.id,
+      }),
+    ],
+    { caravanaId: caravana.id }
+  );
+});
+
+export interface ParamsReservarCaravana {
+  caravanaId: string;
+  reservada: boolean;
+}
+
+/** Marca o desmarca una caravana como reservada para envíos manuales (Doc 3.13.5) — fuera del reparto automático. */
+export const reservarCaravana = comando<ParamsReservarCaravana, { reservada: boolean }>((estado, _mapa, ctx, params) => {
+  const caravana = exigirCaravana(estado, params.caravanaId);
+  const siguiente = conCaravana(estado, { ...caravana, reservadaManual: params.reservada });
+  return exito(
+    siguiente,
+    [
+      evento(ctx, {
+        codigo: 'comercio.caravana_reserva',
+        mensaje: `La caravana ${caravana.id} ${params.reservada ? 'queda reservada para envíos manuales' : 'vuelve al reparto automático'}.`,
+        payload: { caravanaId: caravana.id, reservada: params.reservada },
+        asentamientoId: caravana.origenAsentamientoId,
+      }),
+    ],
+    { reservada: params.reservada }
   );
 });

@@ -15,7 +15,17 @@ import { dejarFaccion } from './dejarFaccion';
 import { alternarFaccionNpc } from './alternarFaccionNpc';
 import { activarPolitica, asignarCargoLocal, asignarEmbajador, asignarRey, comprarCasa } from './cargos';
 import { anexionar, fusionar, proponerRelacion, rebelionVasallo, romperRelacion } from './diplomacia';
-import { aceptarTrueque, colocarOrdenMercado, comerciarEnPlaza, crearCaravana, proponerTrueque, rechazarTrueque } from './comercio';
+import {
+  aceptarTrueque,
+  agregarCarroCaravana,
+  colocarOrdenMercado,
+  comerciarEnPlaza,
+  comprarAnimalCaravana,
+  crearCaravana,
+  proponerTrueque,
+  rechazarTrueque,
+  reservarCaravana,
+} from './comercio';
 import {
   atacarCampamentoBandidos,
   iniciarAsedio,
@@ -65,6 +75,9 @@ export const REGISTRO_COMANDOS = {
   romperRelacion,
   colocarOrdenMercado,
   crearCaravana,
+  agregarCarroCaravana,
+  comprarAnimalCaravana,
+  reservarCaravana,
   proponerTrueque,
   aceptarTrueque,
   rechazarTrueque,

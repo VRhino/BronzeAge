@@ -861,7 +861,9 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       // explícito, decir que sí y decir que no son actos del otro lado, no un efecto de proponer.
       // +1 con `comerciarEnPlaza`: desde que las órdenes se cumplen en el mostrador, tomar una es un acto del
       // jugador que está allí, no un emparejamiento que ocurría solo en el tick.
-      expect(cuerpo.oneOf.length).toBe(59);
+      // +3 con el revamp de caravanas (Doc 3.13): `agregarCarroCaravana`, `comprarAnimalCaravana` y
+      // `reservarCaravana` — la caravana pasa de un activo fijo a algo que el jugador compone pieza a pieza.
+      expect(cuerpo.oneOf.length).toBe(62);
       const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
       expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
     });

@@ -44,7 +44,7 @@
 - PENDIENTE (sin cambios): en qué se usa la riqueza acumulada; nivel intermedio de comisión para Facciones aliadas/vasallas de la misma Liga.
 
 ## 3.6 Categorías de caravana (heredado de Iberia) — 🔶 parcial: catálogo existe, solo 1-2 de 4 se usan
-1. **Comercial**: ✅ implementada y en uso — única categoría que el motor instancia realmente para Trueque/Mercado, y la única que ahora es un activo PROPIO y persistente (`costoConstruccion`, ver 3.12), en vez de efímera. **El revamp de 3.13 (diseñado, sin implementar) la convierte en una caravana COMPUESTA** —carros + animales + escolta— en vez de un activo de capacidad y velocidad fijas; las otras tres categorías no cambian.
+1. **Comercial**: ✅ implementada y en uso — única categoría que el motor instancia realmente para Trueque/Mercado, y la única que ahora es un activo PROPIO y persistente (`costoConstruccion`, ver 3.12), en vez de efímera. **El revamp de 3.13 (Pasos 1-2 implementados) ya la hace una caravana COMPUESTA** —lista de carros, cada uno con su animal— y deriva de ahí capacidad y velocidad; las otras tres categorías no cambian y siguen leyendo `CARAVANA_CATALOGO`.
 2. **Militar**: catálogo definido (capacidad/velocidad propias) pero el motor NUNCA la dispara ni le da comportamiento distinto.
 3. **De construcción**: sí tiene uso real (Caravana de Fundación, Doc 1.8), pero es un mecanismo aparte del de Trueque/Mercado — no forma parte de la flota propia de 3.12.
 4. **De contrabando**: solo datos, sin uso real.
@@ -110,11 +110,16 @@ Pesos y la distancia de referencia (600 unidades) son PLACEHOLDER, confirmados c
 
 **Verificado en el navegador** de punta a punta: colocar una orden o construir una caravana sin Mercado se rechaza; tras construir el Mercado (adición manual a la cola de Gobernador/Maestro de Obras, ver arriba), construir una caravana consume 50 madera y la deja 'disponible'; un trueque activo la asigna automáticamente (`asignarCaravanasATrueque`) y la hace viajar a la velocidad ×2 (tiempo de viaje observado coincide exactamente con distancia/velocidad); al entregar, vuelve a 'disponible' en vez de desaparecer. Sin errores de consola.
 
-## 3.13 Revamp de caravanas — la caravana compuesta — 🎯 diseñado (2026-09-08), implementación pendiente
+## 3.13 Revamp de caravanas — la caravana compuesta — 🔶 Pasos 1-2 implementados (2026-09-08); preparación y escolta pendientes
 
 > Sustituye el modelo de 3.12 —una caravana `comercial` es un activo único de capacidad y velocidad fijas
 > (500/16)— por una caravana **compuesta**: carros, animales y escolta. Decisiones, representación en el motor,
-> plan de pasos e invariantes en `Consideraciones/Revamp_Caravanas_Definicion.md`.
+> plan de 5 pasos e invariantes en `Consideraciones/Revamp_Caravanas_Definicion.md`.
+>
+> **Hecho:** el modelo (`Caravana.carros`, `CARRO_CATALOGO`/`ANIMAL_CATALOGO`, `capacidadCaravana`/
+> `velocidadCaravana` con fallback al catálogo viejo, migración de snapshot v11→v12), el casco vacío gratis
+> (`crearCaravana`) y las piezas (`agregarCarroCaravana`, `comprarAnimalCaravana`, `reservarCaravana`). El
+> batch NPC quedó **bit-idéntico** en los dos pasos. **Pendiente:** §3.13.3 (preparación) y §3.13.4 (escolta).
 >
 > **Lo de 3.12 que NO cambia:** el Mercado como gate y como cupo de flota (2/4/6 + política), el activo
 > persistente con coste que no se desmantela, el `CARAVANA_COOLDOWN` de creación, la vuelta a `'disponible'`
@@ -137,24 +142,38 @@ Una caravana `comercial` deja de tener capacidad y velocidad propias: las **deri
 
 ### 3.13.2 Carros y animales
 
-**Carros** — activo que se construye sobre una caravana concreta (el pool no vive suelto):
+La caravana comercial nace como un **casco vacío y gratis** (`crearCaravana`) — cuenta contra el cupo del
+Mercado y arranca el cooldown de creación, pero no puede viajar hasta que se le montan piezas. Todo el coste
+está en las piezas, que se construyen y compran **sobre una caravana concreta** (el pool no vive suelto).
+
+**Carros:**
 
 | Carro | Dónde se fabrica | Coste | Rol |
 |---|---|---|---|
 | Básico | Mercado | 20 madera | `capacidadBase` ancla — un carro básico + un buey reproduce los 500/16 de hoy |
-| Reforzado | Carpintería | placeholder | Solo **más `capacidadBase`**. El catálogo se ampliará más adelante (otros ejes: resistencia, penalización de velocidad) |
+| Reforzado | Carpintería | 40 madera | Solo **más `capacidadBase`** (800). El catálogo se ampliará más adelante (resistencia a captura, penalización de velocidad) |
 
-**Animales** — se compran con oro sobre una caravana; se asignan a un carro:
+**Animales** — se compran sobre una caravana y se enganchan a un carro sin tracción:
 
 | Animal | `factorCarga` | Velocidad | Coste | Nota |
 |---|---|---|---|---|
-| Buey | 1.0 | 16 | barato | El ancla del balance |
-| Caballo | 0.5 | 24 | caro | A esta velocidad **escapa de casi toda intercepción** (3.10 §"emboscada, no persecución") |
-| Camello | 0.75 | ~19 | medio | Opción intermedia. La **inmunidad al desierto queda diferida** (3.13.7): no existe bioma árido de primera clase |
+| Buey | 1.0 | 16 | **30 madera** | El ancla. Se paga en madera, no en oro (ver más abajo) |
+| Caballo | 0.5 | 24 | 60 oro | A esta velocidad **escapa de casi toda intercepción** (3.10 §"emboscada, no persecución") |
+| Camello | 0.75 | ~19 | 40 oro | Opción intermedia. La **inmunidad al desierto queda diferida** (3.13.7): no existe bioma árido de primera clase |
 
-Todas las cifras son placeholder a calibrar por simulación, como el resto de Fase 0. La **cría** de animales
-queda diferida (3.13.7): por ahora solo compra con oro. El livestock del Corral (Doc 1.4) es un recurso
-distinto de los animales de arrastre.
+**El buey se paga en madera, no en oro** (mismo criterio que quitarle la piedra al Mercado, Doc 4.2.1): el
+oro solo entra por mina o comercio, así que "todo animal cuesta oro" —enunciado original— revive el deadlock
+"sin caravana no hay comercio, sin comercio no hay oro, sin oro no hay caravana" en cualquier asentamiento sin
+mina alcanzable. El buey barato en madera es la vía de entrada; caballo y camello (oro) son la mejora.
+`carro básico` + `buey` = 50 madera, el mismo coste que crear una caravana antes del revamp.
+
+Todas las cifras son placeholder a calibrar por simulación. La **cría** de animales queda diferida (3.13.7):
+por ahora solo compra. El livestock del Corral (Doc 1.4) es un recurso distinto de los animales de arrastre.
+
+**El Mercado no regala ninguna caravana** al completarse (el enunciado original lo pedía). Se midió: una sola
+caravana gratis por asentamiento movía 42 métricas del batch NPC —artesanos y edificios de transformación a
+cero, oro medio −20%—, y el valor era marginal porque el casco vacío ya es gratis. Queda como sabor, no como
+mecánica.
 
 ### 3.13.3 Preparación
 

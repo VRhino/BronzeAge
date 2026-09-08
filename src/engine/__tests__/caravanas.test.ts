@@ -6,7 +6,16 @@ import { describe, expect, it } from 'vitest';
 import type { Asentamiento, Caravana, CaminoComercial, Faccion, Point } from '../../domain/types';
 import { CARAVANA_COOLDOWN, CARAVANA_CATALOGO } from '../../constants';
 import { capacidadCaravana, velocidadCaravana } from '../caravanas';
-import { aceptarTrueque, avanzarComercio, construirCaravanaComercial, proponerTrueque, CaravanaInvalidaError } from '../trade';
+import {
+  aceptarTrueque,
+  agregarCarroACaravana,
+  avanzarComercio,
+  comprarAnimalParaCaravana,
+  construirCaravanaComercial,
+  crearCaravanaVacia,
+  proponerTrueque,
+  CaravanaInvalidaError,
+} from '../trade';
 import { lanzarCaravanaFundacion, ExpansionInvalidaError } from '../expansion';
 import { almacenSintetico, caravanaComercialCasiLlegando, mapaSintetico } from './tradeFixtures';
 import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instanteDeTest, posicionRecomendable } from './fixtures';
@@ -405,5 +414,72 @@ describe('derivación de capacidad y velocidad de una caravana compuesta (Doc 3.
     const sinTraccion = base([{ tipoCarro: 'basico' }, { tipoCarro: 'reforzado' }]);
     expect(capacidadCaravana(sinTraccion)).toBe(0);
     expect(velocidadCaravana(sinTraccion)).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------
+// Revamp de caravanas (Doc 3.13) — Paso 2: casco vacío + piezas (carros del Mercado/Carpintería, animales
+// con oro/madera). `construirCaravanaComercial` (NPC) recompone la caravana por defecto y cuesta lo mismo
+// que antes (50 madera), así que el batch no se mueve.
+// ---------------------------------------------------------------------------------------------------------
+describe('composición de caravana por piezas (Doc 3.13.2)', () => {
+  function asentamiento(recursos: Record<string, number>, conCarpinteria = false): Asentamiento {
+    const mapa = crearMapaDeterminista(1);
+    const facciones = crearFacciones();
+    const { asentamiento: a } = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', []);
+    return {
+      ...a,
+      almacen: Object.fromEntries(
+        Object.entries({ madera: 0, oro: 0, ...recursos }).map(([r, c]) => [r, { cantidad: c, capacidad: 100_000 }])
+      ) as Asentamiento['almacen'],
+      edificios: [
+        ...a.edificios,
+        { id: 'mercado-x', tipo: 'mercado', posicion: { x: 1, y: 1 }, estado: 'activo', ambito: 'asentamiento' },
+        ...(conCarpinteria
+          ? [{ id: 'carp-x', tipo: 'carpinteria' as const, posicion: { x: 2, y: 2 }, estado: 'activo' as const, ambito: 'asentamiento' as const }]
+          : []),
+      ],
+    };
+  }
+
+  it('crearCaravanaVacia: nace sin carros, sin coste, y arranca el cooldown', () => {
+    const a = asentamiento({ madera: 0 });
+    const r = crearCaravanaVacia(a, [], instanteDeTest(3), 0);
+    expect(r.caravana.carros).toEqual([]);
+    expect(r.asentamiento.ultimaCaravanaCreadaEn).toBe(instanteDeTest(3));
+    expect(capacidadCaravana(r.caravana)).toBe(0); // no puede viajar hasta tener carro+animal
+  });
+
+  it('agregarCarroACaravana: cobra el carro; el reforzado exige Carpintería activa', () => {
+    const sinCarp = crearCaravanaVacia(asentamiento({ madera: 100 }), [], instanteDeTest(0), 0);
+    const c1 = agregarCarroACaravana(sinCarp.caravana, sinCarp.asentamiento, 'basico');
+    expect(c1.caravana.carros).toEqual([{ tipoCarro: 'basico' }]);
+    expect(c1.asentamiento.almacen['madera']!.cantidad).toBe(80); // 100 - 20
+
+    expect(() => agregarCarroACaravana(c1.caravana, c1.asentamiento, 'reforzado')).toThrow(CaravanaInvalidaError);
+
+    const conCarp = crearCaravanaVacia(asentamiento({ madera: 100 }, true), [], instanteDeTest(0), 1);
+    expect(() => agregarCarroACaravana(conCarp.caravana, conCarp.asentamiento, 'reforzado')).not.toThrow();
+  });
+
+  it('comprarAnimalParaCaravana: cobra el animal, exige carro libre e índice válido', () => {
+    const vacia = crearCaravanaVacia(asentamiento({ madera: 100 }), [], instanteDeTest(0), 0);
+    const conCarro = agregarCarroACaravana(vacia.caravana, vacia.asentamiento, 'basico');
+    const conBuey = comprarAnimalParaCaravana(conCarro.caravana, conCarro.asentamiento, 0, 'buey');
+    expect(conBuey.caravana.carros![0]!.animal).toBe('buey');
+    expect(conBuey.asentamiento.almacen['madera']!.cantidad).toBe(50); // 80 - 30 (buey en madera)
+    expect(capacidadCaravana(conBuey.caravana)).toBe(500);
+
+    expect(() => comprarAnimalParaCaravana(conBuey.caravana, conBuey.asentamiento, 0, 'caballo')).toThrow(CaravanaInvalidaError); // carro ocupado
+    expect(() => comprarAnimalParaCaravana(conBuey.caravana, conBuey.asentamiento, 5, 'caballo')).toThrow(CaravanaInvalidaError); // índice fuera de rango
+  });
+
+  it('construirCaravanaComercial (NPC): sigue costando 50 madera y da la caravana por defecto 500/16', () => {
+    const a = asentamiento({ madera: 50 });
+    const r = construirCaravanaComercial(a, [], instanteDeTest(0), 0);
+    expect(r.caravana.carros).toEqual([{ tipoCarro: 'basico', animal: 'buey' }]);
+    expect(capacidadCaravana(r.caravana)).toBe(500);
+    expect(velocidadCaravana(r.caravana)).toBe(16);
+    expect(r.asentamiento.almacen['madera']!.cantidad).toBe(0);
   });
 });

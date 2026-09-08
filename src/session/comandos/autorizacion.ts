@@ -126,6 +126,12 @@ function resideEnElLadoQueContesta(estado: GameSessionState, jugadorId: string, 
   return acuerdo === undefined || reside(estado, jugadorId, acuerdo.asentamientoBId);
 }
 
+/** Residente del asentamiento de origen de la caravana (revamp, Doc 3.13): componerla y reservarla es cosa de casa. */
+function resideEnOrigenDeCaravana(estado: GameSessionState, jugadorId: string, caravanaId: string): boolean {
+  const caravana = buscarCaravana(estado, caravanaId);
+  return caravana === undefined || reside(estado, jugadorId, caravana.origenAsentamientoId);
+}
+
 function reside(estado: GameSessionState, jugadorId: string, asentamientoId: string): boolean {
   const asentamiento = buscarAsentamiento(estado, asentamientoId);
   return asentamiento === undefined || (esResidente(asentamiento, jugadorId) && presente(estado, jugadorId, asentamientoId));
@@ -399,6 +405,18 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
   crearCaravana: {
     rolesPermitidos: ['jugador'],
     condicionJugador: (estado, jugadorId, params) => reside(estado, jugadorId, params.asentamientoId),
+  },
+  agregarCarroCaravana: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, jugadorId, params) => resideEnOrigenDeCaravana(estado, jugadorId, params.caravanaId),
+  },
+  comprarAnimalCaravana: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, jugadorId, params) => resideEnOrigenDeCaravana(estado, jugadorId, params.caravanaId),
+  },
+  reservarCaravana: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, jugadorId, params) => resideEnOrigenDeCaravana(estado, jugadorId, params.caravanaId),
   },
   // Comerciar en el mostrador de OTRO no exige residencia ni presencia dentro: exige estar alli con la
   // columna, y eso lo comprueba el motor (`comerciarEnPlaza`), que es donde vive la regla. Aqui solo se corta

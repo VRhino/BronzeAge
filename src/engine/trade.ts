@@ -34,7 +34,8 @@ export interface PayloadCaravanaSale {
   cantidad: number;
   recurso: string;
 }
-import { ASIGNACION_CARAVANA, CARAVANA_CATALOGO, COMISION, REPUTACION, TRUEQUE } from '../constants';
+import { ANIMAL_CATALOGO, ASIGNACION_CARAVANA, CARRO_CATALOGO, COMISION, REPUTACION, TRUEQUE } from '../constants';
+import type { AnimalTipo, CarroTipo } from '../domain/types';
 import { capacidadCaravana, velocidadCaravana } from './caravanas';
 import { minutos, sumar, type Instante } from '../domain/tiempo';
 import { COSTE_MOVIMIENTO } from '../worldgen';
@@ -137,14 +138,12 @@ function exigirSinContestar(acuerdo: AcuerdoTrueque): void {
 }
 
 /**
- * Construye una caravana comercial propia (ampliación de comercio, a petición del usuario): a diferencia del
- * resto de tipos de caravana (todavía efímeros), esta es un activo PERSISTENTE que el asentamiento conserva y
- * cuenta contra su `cupoCaravanas` (Mercado + política "Ampliación de Flota", ver asentamientoQuery.ts) hasta
- * que se pierda capturada en combate (Doc 3.10) — no se puede desmantelar voluntariamente (confirmado con el
- * usuario). Nace 'disponible', parada en el propio asentamiento, lista para que `asignarCaravanasATrueque`
- * la asigne a un envío.
+ * Crea una caravana comercial VACÍA (revamp, Doc 3.13.2): un activo PERSISTENTE que cuenta contra el
+ * `cupoCaravanas` del Mercado (+ política "Ampliación de Flota") y no se desmantela voluntariamente. Nace
+ * 'disponible' y SIN carros — no puede viajar hasta que se le añada al menos un carro con animal
+ * (`agregarCarroACaravana` + `comprarAnimalParaCaravana`). El coste está en las piezas, no en el casco.
  */
-export function construirCaravanaComercial(
+export function crearCaravanaVacia(
   asentamiento: Asentamiento,
   caravanasExistentes: Caravana[],
   instante: Instante,
@@ -163,11 +162,6 @@ export function construirCaravanaComercial(
   if (propias >= cupo) {
     throw new CaravanaInvalidaError(`Cupo de caravanas alcanzado (${propias}/${cupo}).`);
   }
-  const costo = CARAVANA_CATALOGO.comercial.costoConstruccion as Partial<Record<string, number>>;
-  if (!tieneRecursos(asentamiento.almacen, costo)) {
-    throw new CaravanaInvalidaError('No hay recursos suficientes para construir la caravana.');
-  }
-  const almacen = descontarRecursos(asentamiento.almacen, costo);
   const caravana: Caravana = {
     id: `caravana-comercial-${asentamiento.id}-${contador}`,
     tipo: 'comercial',
@@ -176,12 +170,86 @@ export function construirCaravanaComercial(
     posicionActual: asentamiento.posicion,
     progreso: 0,
     estado: 'disponible',
-    // Revamp (Doc 3.13): nace ya compuesta con la caravana por defecto — 1 carro básico + 1 buey deriva a los
-    // mismos 500/16 del catálogo anterior. Añadir/quitar carros y animales es el Paso 2.
-    carros: [{ tipoCarro: 'basico', animal: 'buey' }],
+    carros: [],
     reservadaManual: false,
   };
-  return { asentamiento: { ...asentamiento, almacen, ultimaCaravanaCreadaEn: instante }, caravana };
+  return { asentamiento: { ...asentamiento, ultimaCaravanaCreadaEn: instante }, caravana };
+}
+
+/** Solo se reconfigura una caravana parada en su origen — una en ruta lleva carga y no se toca. */
+function exigirReconfigurable(caravana: Caravana): void {
+  if (caravana.tipo !== 'comercial' || caravana.carros === undefined) {
+    throw new CaravanaInvalidaError('Solo las caravanas comerciales del revamp se componen con piezas.');
+  }
+  if (caravana.estado !== 'disponible') {
+    throw new CaravanaInvalidaError('La caravana está en viaje: solo se reconfigura estando disponible en el origen.');
+  }
+}
+
+/**
+ * Añade un carro a una caravana disponible (Doc 3.13.2). El básico se fabrica en el Mercado; el reforzado
+ * exige Carpintería activa. El carro nace SIN animal — hay que comprárselo aparte.
+ */
+export function agregarCarroACaravana(
+  caravana: Caravana,
+  asentamiento: Asentamiento,
+  tipoCarro: CarroTipo
+): { caravana: Caravana; asentamiento: Asentamiento } {
+  exigirReconfigurable(caravana);
+  const carro = CARRO_CATALOGO[tipoCarro];
+  if (carro.fabrica === 'carpinteria' && !asentamiento.edificios.some((e) => e.tipo === 'carpinteria' && e.estado === 'activo')) {
+    throw new CaravanaInvalidaError(`El carro ${tipoCarro} se fabrica en la Carpintería, y este asentamiento no tiene una activa.`);
+  }
+  if (!tieneRecursos(asentamiento.almacen, carro.costo)) {
+    throw new CaravanaInvalidaError(`No hay recursos suficientes para fabricar el carro ${tipoCarro}.`);
+  }
+  return {
+    caravana: { ...caravana, carros: [...caravana.carros!, { tipoCarro }] },
+    asentamiento: { ...asentamiento, almacen: descontarRecursos(asentamiento.almacen, carro.costo) },
+  };
+}
+
+/**
+ * Compra un animal y lo asigna a un carro sin tracción de una caravana disponible (Doc 3.13.2). Un carro
+ * lleva como mucho un animal; para cambiarlo hay que tener el carro libre.
+ */
+export function comprarAnimalParaCaravana(
+  caravana: Caravana,
+  asentamiento: Asentamiento,
+  carroIndice: number,
+  tipoAnimal: AnimalTipo
+): { caravana: Caravana; asentamiento: Asentamiento } {
+  exigirReconfigurable(caravana);
+  const carro = caravana.carros![carroIndice];
+  if (!carro) throw new CaravanaInvalidaError(`La caravana no tiene un carro en la posición ${carroIndice}.`);
+  if (carro.animal !== undefined) throw new CaravanaInvalidaError('Ese carro ya lleva un animal.');
+  const costo = ANIMAL_CATALOGO[tipoAnimal].costo;
+  if (!tieneRecursos(asentamiento.almacen, costo)) {
+    throw new CaravanaInvalidaError(`No hay recursos suficientes para comprar un ${tipoAnimal}.`);
+  }
+  return {
+    caravana: { ...caravana, carros: caravana.carros!.map((c, i) => (i === carroIndice ? { ...c, animal: tipoAnimal } : c)) },
+    asentamiento: { ...asentamiento, almacen: descontarRecursos(asentamiento.almacen, costo) },
+  };
+}
+
+/**
+ * Construye una caravana comercial COMPLETA con la configuración por defecto — casco + 1 carro básico + 1 buey
+ * (500/16, coste 50 madera). Es lo que usan el NPC de gobernanza y el laboratorio (`simulacionAutoComercio`),
+ * que no componen caravanas a mano, y el bootstrap del Mercado (Doc 3.13). Encadena `crearCaravanaVacia` +
+ * `agregarCarroACaravana` + `comprarAnimalParaCaravana`, así que pasa por las mismas comprobaciones que el
+ * jugador.
+ */
+export function construirCaravanaComercial(
+  asentamiento: Asentamiento,
+  caravanasExistentes: Caravana[],
+  instante: Instante,
+  contador = 0
+): { asentamiento: Asentamiento; caravana: Caravana } {
+  const vacia = crearCaravanaVacia(asentamiento, caravanasExistentes, instante, contador);
+  const conCarro = agregarCarroACaravana(vacia.caravana, vacia.asentamiento, 'basico');
+  const conAnimal = comprarAnimalParaCaravana(conCarro.caravana, conCarro.asentamiento, 0, 'buey');
+  return { asentamiento: conAnimal.asentamiento, caravana: conAnimal.caravana };
 }
 
 /** Tasa base (Doc 3.5); si es externa, el Tesorero del destino (quien cobra la comisión) puede modularla. */

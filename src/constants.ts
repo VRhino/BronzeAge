@@ -1167,21 +1167,27 @@ export const CARAVANA_COOLDOWN = {
  * `engine/caravanas.ts`.
  *
  * ANCLA DE CALIBRACIÓN (decisión del usuario, Ronda 2): `1 carro básico + 1 buey` reproduce los 500/16 de
- * hoy, así que el batch NPC —que nunca compone nada más— no se mueve. Todas las demás cifras son PLACEHOLDER
- * sin calibrar por simulación, como el resto de Fase 0.
+ * hoy, y su coste (20 madera del carro + 30 madera del buey = 50 madera) es el mismo que costaba antes crear
+ * una caravana, así que el batch NPC —que nunca compone nada más, `construirCaravanaComercial`— no se mueve.
+ * Todas las demás cifras son PLACEHOLDER sin calibrar por simulación, como el resto de Fase 0.
  */
 export const CARRO_CATALOGO = {
   // capacidadBase se multiplica por el `factorCarga` del animal para dar la capacidad real del carro.
-  basico: { capacidadBase: 500, costo: { madera: 20 } },
-  reforzado: { capacidadBase: 800, costo: { madera: 40 } },
+  basico: { capacidadBase: 500, costo: { madera: 20 }, fabrica: 'mercado' },
+  reforzado: { capacidadBase: 800, costo: { madera: 40 }, fabrica: 'carpinteria' },
 } as const;
 
 export const ANIMAL_CATALOGO = {
-  // factorCarga multiplica la `capacidadBase` del carro; velocidad entra en el `min` de la caravana; costoOro
-  // es lo que cuesta comprarlo (la cría está diferida, Doc 3.13.7).
-  buey: { factorCarga: 1.0, velocidad: 16, costoOro: 20 },
-  caballo: { factorCarga: 0.5, velocidad: 24, costoOro: 60 },
-  camello: { factorCarga: 0.75, velocidad: 19, costoOro: 40 },
+  // factorCarga multiplica la `capacidadBase` del carro; velocidad entra en el `min` de la caravana; costo es
+  // lo que cuesta comprarlo (la cría está diferida, Doc 3.13.7).
+  //
+  // El BUEY se paga en MADERA, no en oro (mismo criterio que quitarle la piedra al Mercado, Doc 4.2.1): el oro
+  // sólo entra por mina o comercio, así que "todo animal cuesta oro" —enunciado original— reviviría el deadlock
+  // "sin caravana no hay comercio, sin comercio no hay oro, sin oro no hay caravana" en cualquier asentamiento
+  // sin mina. El buey barato en madera es la vía de entrada; caballo y camello (oro) son la mejora.
+  buey: { factorCarga: 1.0, velocidad: 16, costo: { madera: 30 } },
+  caballo: { factorCarga: 0.5, velocidad: 24, costo: { oro: 60 } },
+  camello: { factorCarga: 0.75, velocidad: 19, costo: { oro: 40 } },
 } as const;
 
 /**
