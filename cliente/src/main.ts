@@ -446,13 +446,14 @@ function nivelTropaTxt(tropaId: string): string {
   return tropa ? `Nivel ${tropa.nivelRequerido}` : '—';
 }
 
-/** Desglose de costo de una tropa, por soldado y para el escuadrón completo (`unidadesPorDefecto`, tamaño fijo). */
+/** Desglose de costo de una tropa, por soldado y para el escuadrón completo (`unidadesPorDefecto`, tamaño fijo).
+ * Incluye el oro por escalón (Doc 5.8, "economía del oro") — salvo la Milicia del Centro Urbano, exenta. */
 function costoTropaTxt(tropa: (typeof CATALOGOS.tropasReclutables)[number], porSoldado: boolean): string {
-  const entradas = Object.entries(tropa.costoEquipo);
-  if (entradas.length === 0) return '—';
-  return entradas
-    .map(([r, c]) => `${(c ?? 0) * (porSoldado ? 1 : tropa.unidadesPorDefecto)} ${RECURSO_NOMBRE[r] ?? r}`)
-    .join(' + ');
+  const mult = porSoldado ? 1 : tropa.unidadesPorDefecto;
+  const partes = Object.entries(tropa.costoEquipo).map(([r, c]) => `${(c ?? 0) * mult} ${RECURSO_NOMBRE[r] ?? r}`);
+  const oro = gameStore.costoOroReclutamientoPorSoldado(tropa) * mult;
+  if (oro > 0) partes.push(`${oro} oro`);
+  return partes.length ? partes.join(' + ') : '—';
 }
 
 /** Segmento "Info:" bajo el combo de reclutamiento — catálogo de solo consulta (Fase C8): edificio/nivel
@@ -580,10 +581,11 @@ function renderPanelAsentamientos(state: GameState): void {
       const cargosHtml = CATALOGOS.cargos
         .map((c) => `<span class="registro-role"><b>${c}</b>${a.cargos[`${c}Id` as keyof typeof a.cargos] ?? '—'}</span>`)
         .join('');
+      const ocupada = gameStore.ocupacionInfo(a);
       return `<article class="registro-asentamiento">
         <header class="registro-asentamiento-header">
           <div>
-            <h3>${a.nombre ?? a.id}</h3>
+            <h3>${a.nombre ?? a.id}${ocupada ? ' <span class="chip" title="Ocupación militar reciente (Doc 5.12.9)">⚔ ocupada</span>' : ''}</h3>
             <p>${faccion?.nombre ?? a.faccionId} <span aria-hidden="true">·</span> ${a.id}</p>
           </div>
           <span class="registro-level">Nivel ${a.nivel}</span>
@@ -664,17 +666,21 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
   const posicionEnCola = new Map(colaGlobal.map((e, i) => [e.id, i + 1]));
   const enConstruccionCount = a.edificios.filter((e) => e.estado === 'en_construccion').length;
 
-  const edificiosPorTipo = new Map<string, { activos: number; enConstruccion: number[]; enCola: number[] }>();
+  const edificiosPorTipo = new Map<string, { activos: number; enConstruccion: number[]; enCola: number[]; danados: number }>();
   for (const e of a.edificios) {
-    const entry = edificiosPorTipo.get(e.tipo) ?? { activos: 0, enConstruccion: [], enCola: [] };
+    const entry = edificiosPorTipo.get(e.tipo) ?? { activos: 0, enConstruccion: [], enCola: [], danados: 0 };
     if (e.estado === 'activo') entry.activos += 1;
     // Fase D: la obra ya no lleva un contador `ticksRestantes` sino la fecha absoluta `completaEn` (Instante
     // de mundo) — la interfaz muestra los minutos de mundo que faltan contra `state.instante`.
     else if (e.estado === 'en_construccion')
       entry.enConstruccion.push(e.completaEn !== undefined ? Math.max(0, Math.round((e.completaEn - state.instante) / 60_000)) : 0);
     else entry.enCola.push(posicionEnCola.get(e.id)!);
+    // Ocupación post-conquista (Doc 5.12.9): un edificio dañado por el saqueo está en cola con `danado`; se
+    // reconstruye pagando solo una fracción del costo.
+    if (e.danado) entry.danados += 1;
     edificiosPorTipo.set(e.tipo, entry);
   }
+  const totalDanados = a.edificios.filter((e) => e.danado).length;
   const edificiosHtml = edificiosPorTipo.size
     ? `<table class="mini-table">
         <thead><tr><th>Edificio</th><th>Función</th><th>Activos</th><th>En construcción</th><th>En cola (${colaGlobal.length}/${CATALOGOS.maximoEdificiosEnCola})</th></tr></thead>
@@ -684,12 +690,14 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
               const construccionTxt = e.enConstruccion.length
                 ? e.enConstruccion.map((m) => `${m} min`).join(', ')
                 : '—';
-              const colaTxt = e.enCola.length ? e.enCola.map((p) => `#${p} de ${colaGlobal.length}`).join(', ') : '—';
+              const colaTxt = e.enCola.length
+                ? `${e.enCola.map((p) => `#${p} de ${colaGlobal.length}`).join(', ')}${e.danados > 0 ? ` <span class="legend-note">(${e.danados} dañado${e.danados > 1 ? 's' : ''})</span>` : ''}`
+                : '—';
               return `<tr><td>${EDIFICIO_NOMBRE[tipo] ?? tipo}</td><td>${EDIFICIO_FUNCION[tipo] ?? '—'}</td><td>${e.activos}</td><td>${construccionTxt}</td><td>${colaTxt}</td></tr>`;
             })
             .join('')}
         </tbody>
-      </table>`
+      </table>${totalDanados > 0 ? `<p class="legend-note">${totalDanados} edificio(s) dañado(s) por un saqueo de conquista — se reconstruyen a coste/tiempo reducido (Doc 5.12.9).</p>` : ''}`
     : '<p class="legend-note">Sin edificios.</p>';
 
   // Mejora manual de un edificio individual (Doc 4.2, a petición del usuario): la mejora automática de
@@ -837,11 +845,14 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
 
   const mantenimiento = gameStore.mantenimientoInfo(a);
   const recaudacion = gameStore.recaudacionInfo(a);
+  const ocupacion = gameStore.ocupacionInfo(a);
   const produccionPorRecurso = new Map<string, number>();
   for (const item of gameStore.produccionInfo(a)) {
     produccionPorRecurso.set(item.recurso, (produccionPorRecurso.get(item.recurso) ?? 0) + item.cantidadPorMinuto);
   }
-  const mantenimientoHtml = mantenimiento.enGracia
+  const mantenimientoHtml = mantenimiento.congeladoPorOcupacion
+    ? `<p class="legend-note">Ocupación reciente (Doc 5.12.9): la degradación de mantenimiento está suspendida — ${ocupacion?.minutosRestantes ?? 0} min restantes.</p>`
+    : mantenimiento.enGracia
     ? `<p class="legend-note">En periodo de gracia (recién fundado): sin coste todavía — ${mantenimiento.minutosParaFinGracia} min restantes.</p>`
     : mantenimiento.items.length
       ? `<table class="mini-table">
@@ -945,6 +956,11 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
         <div class="kv-row" style="margin-top:6px"><span>Progreso de nivel</span><span>${nivelTexto}</span></div>
         <div class="mantenimiento-bar"><div class="mantenimiento-fill" style="width:${nivelPorcentaje}%"></div></div>
         ${cupoBloqueoHtml}
+        ${
+          ocupacion
+            ? `<div class="fundacion-viabilidad aviso" style="margin-top:6px">⚔ Bajo ocupación militar (Doc 5.12.9) — ${ocupacion.minutosRestantes} min restantes. Inmune a un nuevo asedio; recaudación ×${ocupacion.factorRecaudacion} y crecimiento ×${ocupacion.factorCrecimiento}; mantenimiento congelado. La guarnición son escuadrones del conquistador (ver pestaña Militar).</div>`
+            : ''
+        }
         <div class="kv-row" style="margin-top:6px"><span>Mantenimiento</span><span>${a.medidorMantenimiento.toFixed(0)}/100</span></div>
         <div class="mantenimiento-bar"><div class="mantenimiento-fill" style="width:${Math.max(0, Math.min(100, a.medidorMantenimiento))}%"></div></div>
         <div class="kv-row" style="margin-top:6px"><span>Nutrición</span><span>${(a.nutricionPoblacion ?? 100).toFixed(0)}/100</span></div>
@@ -954,7 +970,7 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
       <div class="detail-section">
         <h3>Mantenimiento — consumo por minuto</h3>
         ${mantenimientoHtml}
-        <div class="kv-row" style="margin-top:6px"><span>Recaudación de oro</span><span>+${recaudacion.total.toFixed(2)}/min (P ${recaudacion.pesants.toFixed(2)} · A ${recaudacion.artesanos.toFixed(2)} · N ${recaudacion.nobleza.toFixed(2)})</span></div>
+        <div class="kv-row" style="margin-top:6px"><span>Recaudación de oro</span><span>+${recaudacion.total.toFixed(2)}/min${recaudacion.reducidaPorOcupacion ? ' <span class="legend-note">(reducida por ocupación)</span>' : ''} (P ${recaudacion.pesants.toFixed(2)} · A ${recaudacion.artesanos.toFixed(2)} · N ${recaudacion.nobleza.toFixed(2)})</span></div>
       </div>
 
       <div class="detail-section">
@@ -1035,7 +1051,7 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
                 <thead><tr><th>#</th><th>Edificio</th></tr></thead>
                 <tbody>
                   ${colaGlobal
-                    .map((e, i) => `<tr><td>${i + 1}</td><td>${EDIFICIO_NOMBRE[e.tipo] ?? e.tipo}</td></tr>`)
+                    .map((e, i) => `<tr><td>${i + 1}</td><td>${EDIFICIO_NOMBRE[e.tipo] ?? e.tipo}${e.danado ? ' <span class="legend-note">(dañado — reconstrucción)</span>' : ''}</td></tr>`)
                     .join('')}
                 </tbody>
               </table>`
@@ -1060,6 +1076,11 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
       <div class="settlement-detail-panel${asentamientoDetalleTab === 'militar' ? ' active' : ''}" data-settlement-detail-panel="militar" role="tabpanel">
       <div class="detail-section">
         <h3>Escuadrones</h3>
+        ${
+          ocupacion
+            ? `<p class="legend-note">Ocupación reciente (Doc 5.12.9): esta guarnición son los escuadrones del ejército conquistador, propiedad de jugadores que NO residen aquí. Defienden y su dueño los repone/re-moviliza. Inmune a un nuevo asedio ${ocupacion.minutosRestantes} min más.</p>`
+            : ''
+        }
         ${escuadronesHtml}
       </div>
       </div>
@@ -1931,6 +1952,7 @@ function actualizarTooltipEdificioAsentamiento(ev: MouseEvent): void {
 
   const economia = gameStore.edificioEconomiaInfo(asentamiento, edificio);
   const estado = edificio.estado === 'activo' ? 'Activo' : edificio.estado === 'en_construccion' ? 'En construcción' : 'En cola';
+  const estadoTxt = edificio.danado ? `${estado} · dañado (reconstrucción, Doc 5.12.9)` : estado;
   const filasEconomia = (items: { recurso: string; cantidadPorMinuto: number }[], vacio: string) =>
     items.length
       ? items.map((item) => `<div><span>${RECURSO_NOMBRE[item.recurso] ?? item.recurso}</span><strong>${item.cantidadPorMinuto.toFixed(1)}/min</strong></div>`).join('')
@@ -1938,7 +1960,7 @@ function actualizarTooltipEdificioAsentamiento(ev: MouseEvent): void {
 
   settlementBuildingTooltipEl.innerHTML = `
     <div class="settlement-tooltip-title">${EDIFICIO_NOMBRE[edificio.tipo] ?? edificio.tipo}</div>
-    <div class="settlement-tooltip-meta">Nivel ${edificio.nivelInterno ?? 1} · ${estado}</div>
+    <div class="settlement-tooltip-meta">Nivel ${edificio.nivelInterno ?? 1} · ${estadoTxt}</div>
     <div class="settlement-tooltip-group"><span>Producción</span>${filasEconomia(economia.produccion, 'Sin producción modelada')}</div>
     <div class="settlement-tooltip-group"><span>Consumo</span>${filasEconomia(economia.consumo, 'Sin consumo modelado')}</div>
   `;

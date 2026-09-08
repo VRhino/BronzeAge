@@ -1,5 +1,11 @@
 # Cliente de depuración / administración — Bronze Age Collapse
 
+> **v0.1.0 · último cambio 2026-09-08** — cableado del bloque "economía del oro" (coste de oro por soldado en
+> el catálogo de reclutamiento) y de la ocupación post-conquista (Doc 5.12.9): badge "ocupada" en la lista de
+> asentamientos, banner de ocupación + minutos restantes + factores en el detalle, nota en la pestaña Militar,
+> recaudación/mantenimiento anotados como reducido/congelado por ocupación, marca "(dañado)" en los edificios
+> de la cola y su tooltip. Todo es solo lectura: sigue sin despachar comandos de jugador.
+
 Interfaz de navegador que hablaba con el backend cuando ambos vivían en el mismo repositorio. Se separa aquí
 para poder inicializar con ella un repositorio propio (Fase C: este repo pasa a ser **solo servidor**, y los
 clientes —jugador y administración— viven fuera).

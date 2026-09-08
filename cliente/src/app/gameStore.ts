@@ -36,7 +36,7 @@ import type {
   ZonaFaccion,
   ZonaInfluencia,
 } from '@motor/domain/types';
-import { EDIFICIO_CATALOGO, IMPUESTOS, MANTENIMIENTO, NECESIDADES, NIVEL_FACCION, POLITICAS, POLITICA_CATALOGO, REJILLA_ASENTAMIENTO, SIMULACION, TROPAS_RECLUTABLES } from '@motor/constants';
+import { EDIFICIO_CATALOGO, IMPUESTOS, MANTENIMIENTO, NECESIDADES, NIVEL_FACCION, OCUPACION, POLITICAS, POLITICA_CATALOGO, RECLUTAMIENTO_ORO_POR_ESCALON, REJILLA_ASENTAMIENTO, SIMULACION, TROPAS_RECLUTABLES } from '@motor/constants';
 import { crearMapa, type EstadoMapa, type Mapa } from '@motor/world/mapa';
 import {
   produccionPorMinuto,
@@ -45,6 +45,7 @@ import {
   capacidadViviendaPesants,
   capacidadViviendaArtesanos,
   edificiosPorTipoYEstado,
+  estaOcupado,
   cupoCaravanas as cupoCaravanasEngine,
   cooldownCaravanaRestante as cooldownCaravanaRestanteEngine,
   tieneMercadoActivo as tieneMercadoActivoEngine,
@@ -494,14 +495,28 @@ export class GameStore {
     return { nivelObjetivo, ocupados, cupoTotal };
   }
 
+  /** Ocupación militar tras una conquista (Doc 5.12.9): `null` si no está ocupado. Mientras lo esté, la plaza
+   * es inmune a un nuevo asedio, recauda oro reducido, crece más lento y el mantenimiento no degrada. */
+  ocupacionInfo(asentamiento: Asentamiento): { minutosRestantes: number; factorRecaudacion: number; factorCrecimiento: number } | null {
+    if (!estaOcupado(asentamiento, this.state.instante)) return null;
+    return {
+      minutosRestantes: Math.max(0, Math.round((asentamiento.ocupacionHasta! - this.state.instante) / 60_000)),
+      factorRecaudacion: OCUPACION.factorRecaudacion,
+      factorCrecimiento: OCUPACION.factorCrecimiento,
+    };
+  }
+
   /** Coste de mantenimiento del tick actual, recurso por recurso, con lo disponible y si alcanza a cubrirlo. */
   mantenimientoInfo(asentamiento: Asentamiento): {
     enGracia: boolean;
+    /** El mantenimiento no degrada porque la plaza está bajo ocupación reciente (Doc 5.12.9), no por gracia. */
+    congeladoPorOcupacion: boolean;
     minutosParaFinGracia: number;
     items: { recurso: string; costoPorMinuto: number; disponible: number; cubierto: boolean }[];
   } {
     const minutosDesdeFundacion = (this.state.instante - asentamiento.fundadoEn) / 60_000;
-    const enGracia = minutosDesdeFundacion < MANTENIMIENTO.graciaMinutos;
+    const congeladoPorOcupacion = estaOcupado(asentamiento, this.state.instante);
+    const enGracia = minutosDesdeFundacion < MANTENIMIENTO.graciaMinutos || congeladoPorOcupacion;
     const capital = encontrarCapital(asentamiento.faccionId, this.state.asentamientos);
     const costo = calcularCostoMantenimiento(asentamiento, capital);
     const items = Object.entries(costo).map(([recurso, cantidad]) => {
@@ -511,19 +526,29 @@ export class GameStore {
     const costoTrigo = consumoComidaPoblacion(asentamiento) + consumoRacionTropas(asentamiento);
     const trigoDisponible = asentamiento.almacen['trigo']?.cantidad ?? 0;
     items.push({ recurso: 'trigo', costoPorMinuto: costoTrigo, disponible: trigoDisponible, cubierto: trigoDisponible >= costoTrigo });
-    return { enGracia, minutosParaFinGracia: Math.max(0, Math.round(MANTENIMIENTO.graciaMinutos - minutosDesdeFundacion)), items };
+    return { enGracia, congeladoPorOcupacion, minutosParaFinGracia: Math.max(0, Math.round(MANTENIMIENTO.graciaMinutos - minutosDesdeFundacion)), items };
   }
 
   /** Recaudación de oro por población (Doc 4.1, bloque "economía del oro") — solo lectura, calculada
-   * client-side desde población + `IMPUESTOS`, igual que `mantenimientoInfo` calcula los costes. */
-  recaudacionInfo(asentamiento: Asentamiento): { total: number; pesants: number; artesanos: number; nobleza: number } {
+   * client-side desde población + `IMPUESTOS`, igual que `mantenimientoInfo` calcula los costes. El `total`
+   * ya aplica la política "Presión Fiscal" y la reducción por ocupación reciente (Doc 5.12.9); el desglose
+   * por clase es la contribución bruta antes de esos factores. */
+  recaudacionInfo(asentamiento: Asentamiento): { total: number; pesants: number; artesanos: number; nobleza: number; reducidaPorOcupacion: boolean } {
     const { pesants, artesanos, nobleza } = asentamiento.poblacion;
     return {
       pesants: pesants * IMPUESTOS.tasaPesants,
       artesanos: artesanos * IMPUESTOS.tasaArtesanos,
       nobleza: nobleza * IMPUESTOS.tasaNobleza,
-      total: recaudacionOro(asentamiento),
+      total: recaudacionOro(asentamiento, this.state.instante),
+      reducidaPorOcupacion: estaOcupado(asentamiento, this.state.instante),
     };
+  }
+
+  /** Coste de oro de reclutar una tropa, por soldado (bloque "economía del oro", Doc 5.8): según el escalón
+   * (`nivelRequerido`). La Milicia del Centro Urbano está exenta — la defensa mínima no depende del tesoro. */
+  costoOroReclutamientoPorSoldado(tropa: { edificio: string; nivelRequerido: number }): number {
+    if (tropa.edificio === 'centroUrbano') return 0;
+    return RECLUTAMIENTO_ORO_POR_ESCALON[tropa.nivelRequerido] ?? 0;
   }
 
   /** Slots de política disponibles para `cargo` según el nivel de Facción (el Gobernador escala con el nivel). */
