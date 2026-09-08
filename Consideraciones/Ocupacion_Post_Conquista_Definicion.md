@@ -431,11 +431,31 @@ undefined && instante >= ocupacionHasta` → `{ ...a, ocupacionHasta: undefined 
   `avanzarEjercitos`), así que la función simplemente tiene menos que procesar. No rompe.
 - **Mide:** batch — militar NPC.
 
-### Paso 10 — campaña de calibración
+### Paso 10 — campaña de calibración — 🔶 EN CURSO (2026-09-08)
 
 Iterar `OCUPACION.*` contra: el ping-pong baja de verdad (conquistas por asentamiento único ↓), los saqueados
 no colapsan de más (`colapsados` ~igual), la guerra de conquista no se vuelve irracional para el NPC
 (`conquistasAcumuladas` no se desploma a 0), y el efecto neto en `oroMedio`. Diario de la campaña.
+
+**Instrumentación añadida (`BATCH_OCUPACION_DIAG=1`, commit `9ae7c12`):** línea de progreso por `FOTO_CADA`
+ticks (plazas/ocupadas/ejércitos/caravanas/conquistas + wall-clock) y, al final, la distribución
+"veces conquistada → nº de plazas".
+
+**Primera medición (30 facciones, mismo seed, baseline `f844f7a` vs `c2f21f4`, valores placeholder):**
+
+| tick | baseline: t / plazas / conquistas | ocupación: t / plazas / conquistas |
+|---|---|---|
+| 300 | 30 s / 38 / 12 | 31 s / 38 / **6** |
+| 500 | 53 s / 35 / 25 | 57 s / 35 / **10** |
+| 700 | 83 s / 43 / 42 | 85 s / 39 / **13** |
+| 900 | 125 s / 50 / 60 | 130 s / 47 / **17** |
+
+- **Ping-pong: −70 %** (a tick 900, 17 cambios de dueño vs 60). El NPC sigue conquistando (no cae a 0) —
+  deja de re-tomar la misma plaza cada tick.
+- **Coste por tick idéntico** (±5 %): la ocupación no infla el mundo ni el batch. El default 100 fac / 3000
+  ticks es ~20× el tamaño de calibración (40 / 1500) — de ahí la corrida de 1h20, no una regresión.
+- **Pendiente:** corrida limpia 40/1500 con máquina descargada para `oroMedio`, `colapsados`, la
+  distribución de reconquistas y el diario. La contención de CPU (tarea en paralelo) bloqueó la corrida final.
 
 ### Independencias
 
