@@ -454,8 +454,25 @@ ticks (plazas/ocupadas/ejércitos/caravanas/conquistas + wall-clock) y, al final
   deja de re-tomar la misma plaza cada tick.
 - **Coste por tick idéntico** (±5 %): la ocupación no infla el mundo ni el batch. El default 100 fac / 3000
   ticks es ~20× el tamaño de calibración (40 / 1500) — de ahí la corrida de 1h20, no una regresión.
-- **Pendiente:** corrida limpia 40/1500 con máquina descargada para `oroMedio`, `colapsados`, la
-  distribución de reconquistas y el diario. La contención de CPU (tarea en paralelo) bloqueó la corrida final.
+
+**Corrida 100 facciones / 1000 ticks (ocupación, `9ae7c12`) — distribución de reconquistas:**
+
+```
+plazas que cambiaron de dueño al menos una vez: 42
+cambios de dueño totales: 48   ·   media por plaza: 1.1
+máximo de veces que una plaza cambió de dueño: 3
+  1×: 37   ·   2×: 4   ·   3×: 1
+```
+
+El ping-pong queda **prácticamente eliminado**: 37 de 42 plazas conquistadas cambian de dueño **una sola
+vez** y se quedan. Comparar con el §0 ("176 conquistas con ~61 asentamientos vivos = se reconquistan sin
+parar"). `conquistasAcumuladas` sigue vivo (48 en 1000 ticks) — el NPC conquista, ya no traba.
+
+- **Nota de rendimiento:** la corrida a 100 facciones se degrada muchísimo por tick a partir de ~tick 700
+  (338 s / 100 ticks a tick 900). Pero la comparación controlada a 30 facciones muestra la MISMA curva de
+  degradación en baseline — es un problema de escalado del batch a 100 facciones (o contención de CPU de una
+  tarea en paralelo), no una regresión de la ocupación. Calibrar a 40.
+- **Pendiente:** corrida limpia 40/1500 con máquina descargada para `oroMedio`, `colapsados` y el diario.
 
 ### Independencias
 
