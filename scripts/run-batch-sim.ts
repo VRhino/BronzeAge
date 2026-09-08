@@ -963,6 +963,10 @@ async function main() {
   // llega el estado, así que se deduce comparando a quién pertenecía cada plaza.
   let conquistasAcumuladas = 0;
   let duenoPorAsentamiento = new Map(estado.asentamientos.map((a) => [a.id, a.faccionId]));
+  // `BATCH_OCUPACION_DIAG=1`: ping-pong de conquistas (Ocupacion §2.4). Cuenta cuántas veces cambió de dueño
+  // CADA plaza — si la ocupación funciona, la cola larga (una plaza tomada 5+ veces) desaparece.
+  const diagOcupacion = process.env['BATCH_OCUPACION_DIAG'] === '1';
+  const conquistasPorAsentamiento = new Map<string, number>();
 
   // `BATCH_RUINAS_DIAG=1`: diagnóstico de por qué colapsan asentamientos. Tallya cada `asentamiento.ruinas`
   // por recurso faltante / nivel / duración; los bosques alcanzables al fundar (iniciales e hijos, al radio
@@ -998,6 +1002,7 @@ async function main() {
   // Curtiduría auto llegaban nunca a construirse (edificios de transformación a 0 en ~la mitad de las seeds).
   let contadorNpc = 0;
 
+  const arranqueMs = Date.now();
   for (let tick = 1; tick <= TICKS; tick++) {
     try {
       // `instante`/`momento` derivados del tick con la misma fórmula que el backend (`instanteDeTick`,
@@ -1084,7 +1089,10 @@ async function main() {
       replieguesAcumulados += trasNpc.stats.repliegues;
       for (const a of estado.asentamientos) {
         const antes = duenoPorAsentamiento.get(a.id);
-        if (antes !== undefined && antes !== a.faccionId) conquistasAcumuladas++;
+        if (antes !== undefined && antes !== a.faccionId) {
+          conquistasAcumuladas++;
+          if (diagOcupacion) conquistasPorAsentamiento.set(a.id, (conquistasPorAsentamiento.get(a.id) ?? 0) + 1);
+        }
       }
       duenoPorAsentamiento = new Map(estado.asentamientos.map((a) => [a.id, a.faccionId]));
     } catch (err) {
@@ -1102,6 +1110,16 @@ async function main() {
       if (!idsVivosAhora.has(id)) idsColapsadosVistos.add(id);
     }
     idsVivosAntes = idsVivosAhora;
+
+    if (diagOcupacion && tick % FOTO_CADA === 0) {
+      const t = ((Date.now() - arranqueMs) / 1000).toFixed(1);
+      const ejercitos = estado.ejercitos.length;
+      const caravanas = estado.caravanas.length;
+      const ocupadas = estado.asentamientos.filter((a) => a.ocupacionHasta !== undefined).length;
+      process.stderr.write(
+        `[t=${t}s] tick ${tick}: ${estado.asentamientos.length} plazas (${ocupadas} ocup.), ${ejercitos} ejércitos, ${caravanas} caravanas, ${conquistasAcumuladas} conquistas\n`
+      );
+    }
 
     if (tick % FOTO_CADA === 0) {
       fotos.push(
@@ -1124,6 +1142,20 @@ async function main() {
   }
 
   console.log(`Excepciones totales: ${excepcionesAcumuladas}`);
+
+  if (diagOcupacion) {
+    const cuentas = [...conquistasPorAsentamiento.values()];
+    const plazasConquistadas = cuentas.length;
+    const total = cuentas.reduce((a, b) => a + b, 0);
+    const dist = new Map<number, number>();
+    for (const c of cuentas) dist.set(c, (dist.get(c) ?? 0) + 1);
+    console.log(`\n=== DIAGNÓSTICO ocupación / ping-pong ===`);
+    console.log(`plazas que cambiaron de dueño al menos una vez: ${plazasConquistadas}`);
+    console.log(`cambios de dueño totales: ${total}  ·  media por plaza conquistada: ${plazasConquistadas === 0 ? 0 : (total / plazasConquistadas).toFixed(1)}`);
+    console.log(`máximo de veces que una sola plaza cambió de dueño: ${cuentas.length === 0 ? 0 : Math.max(...cuentas)}`);
+    console.log(`distribución (veces conquistada → nº de plazas):`);
+    for (const [veces, n] of [...dist.entries()].sort((a, b) => a[0] - b[0])) console.log(`  ${veces}×: ${n}`);
+  }
 
   // --- El eje fortaleza↔metrópoli (§0/§18, Paso 2c) ---
   //

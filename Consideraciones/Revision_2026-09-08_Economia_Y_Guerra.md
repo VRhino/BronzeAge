@@ -18,11 +18,11 @@ Los detalles viven en los tres docs de definición; esto es el índice y el esta
 | **Fix: colapso por bosque saturado** (`evaluarViabilidadFundacion` exige bosque LIBRE) | ✅ implementado | ídem §10 |
 | Instrumentación de batch (`BATCH_RUINAS_DIAG`, `pctSueloOcupado`) | ✅ implementado | ídem §10 |
 | **Calibración (Paso 6) del bloque de oro** | 🔶 en curso — iter 2: oroMedio ×2.2 base y trepando | ídem §10 |
-| **Ocupación post-conquista** (saqueo, ventana, oro reducido) | 📐 diseño + plan técnico (§9), sin código | `Ocupacion_Post_Conquista_Definicion.md` |
-| **Guarnición-ejército** (el conquistador se vuelve guarnición) | 📐 diseño + plan | ídem §2.2, plan Paso 4 |
-| `guarnecer` (defender plaza propia marchando) | 📐 diseño; **follow-up, fuera del plan** | ídem §2.3 |
-| **Reclutamiento desatado de residencia** (reponer/mover fuera de casa; nuevo escuadrón solo en casa) | 📐 diseño + plan (Paso 1, independiente) | ídem §1 Ronda 2, §2.3b |
-| **Comando `cambiarResidencia`** | 📐 diseño + plan (Paso 2, independiente) | ídem §2.3c |
+| **Ocupación post-conquista** (saqueo, ventana, oro reducido) | ✅ implementado — pasos 3-9 (commits `26662b4`, `c2f21f4`); 🔶 calibración (paso 10) en curso | `Ocupacion_Post_Conquista_Definicion.md` |
+| **Guarnición-ejército** (el conquistador se vuelve guarnición) | ✅ implementado (Paso 4, `26662b4`) | ídem §2.2 |
+| `guarnecer` (defender plaza propia marchando) | 📐 diseño; **follow-up, fuera del plan**; anotado en `Mecanicas a desarrollar` §17 | ídem §2.3 |
+| **Reclutamiento desatado de residencia** (reponer/mover fuera de casa; nuevo escuadrón solo en casa) | ✅ implementado (Paso 1, commit `f844f7a`) | ídem §1 Ronda 2, §2.3b |
+| **Comando `cambiarResidencia`** | ✅ implementado (Paso 2, commit `f844f7a`) | ídem §2.3c |
 
 Leyenda: ✅ en código y commit · 🔶 en código, calibrando · ❌ descartado tras medir · 📐 diseño cerrado, sin
 código.
@@ -149,9 +149,9 @@ al reponer guarniciones — puede ayudar de forma no trivial); Taberna/intel.
 
 ## 7. Orden sugerido de trabajo a partir de aquí
 
-1. **Cerrar la calibración del bloque de oro** (Paso 6) — es lo único con código a medio calibrar. Iterar
-   `IMPUESTOS` / reclutamiento hasta que `oroMedio` acote, escribir el diario, mover las cifras a canon.
-2. **Implementar la ocupación post-conquista + guarnición + reclutamiento desatado + `cambiarResidencia`** —
-   diseño cerrado, plan de 10 pasos en `Ocupacion_Post_Conquista_Definicion.md` §9. Medir el efecto en el
-   ping-pong Y en `oroMedio` (la ocupación es también un sink).
+1. **Cerrar la calibración conjunta oro + ocupación** — la ocupación ya está en código (pasos 3-9). Correr el
+   batch con `BATCH_OCUPACION_DIAG=1`, ver si el ping-pong baja (distribución "veces conquistada → nº plazas")
+   y qué le hace a `oroMedio`; iterar `OCUPACION.*` / `IMPUESTOS` / reclutamiento. Escribir el diario.
+2. **Repartir a canon** — mapa en §3 de este doc y `Ocupacion §10`. Doc 5.4/5.12.4 tienen párrafos que ahora
+   CONTRADICEN el código (guarnición a 0, "la ciudad no se toca", "el ejército no entra"): hay que reescribirlos.
 3. **Diseñar la Taberna/intel** — el sink recurrente que le falta al bloque de oro.
