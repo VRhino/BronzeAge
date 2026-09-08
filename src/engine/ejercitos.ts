@@ -1293,6 +1293,29 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
         ejercito = asedio.ejercito;
         porId.set(objetivo.id, asedio.defensor);
         faccionesActuales = asedio.facciones;
+        if (asedio.ejercitoConsumido) {
+          // El ejército conquistador SE VUELVE la guarnición de la plaza tomada (Ocupacion §2.2): ya no es
+          // una columna en campo. Las adjuntas se pierden con él, igual que un ejército deshecho por hambre.
+          const perdidas = adjuntasDe(ejercito, caravanasActuales);
+          if (perdidas.length > 0) {
+            const ids = new Set(perdidas.map((c) => c.id));
+            caravanasActuales = caravanasActuales.filter((c) => !ids.has(c.id));
+            eventos.push({
+              codigo: 'ejercito.caravanas_perdidas',
+              asentamientoId: ejercito.origenAsentamientoId,
+              mensaje: `Con el ejército ${ejercito.id} se pierden ${perdidas.length} caravana(s) adjunta(s) al guarnecer ${objetivo.id}.`,
+              payload: { ejercitoId: ejercito.id, caravanaIds: perdidas.map((c) => c.id) } satisfies PayloadCaravanasPerdidas,
+            });
+          }
+          for (const e of asedio.eventos) eventos.push(atribuir(e, ejercito.origenAsentamientoId));
+          eventos.push({
+            codigo: 'ejercito.guarnece_conquista',
+            asentamientoId: objetivo.id,
+            mensaje: `El ejército ${ejercito.id} se instala como guarnición de ${objetivo.id} tras conquistarlo.`,
+            payload: { ejercitoId: ejercito.id, asentamientoId: objetivo.id },
+          });
+          continue;
+        }
         // A quién se le cuenta. Un evento se atribuye a UN asentamiento y lo ve la Facción que lo posee, así
         // que un choque entre dos hay que narrarlo dos veces o alguien se queda sin enterarse:
         //

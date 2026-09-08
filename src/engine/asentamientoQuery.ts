@@ -21,6 +21,12 @@ export function nivelActualDe(asentamiento: Asentamiento): number {
   return asentamiento.nivelActual;
 }
 
+/** ¿Está el asentamiento bajo ocupación militar tras una conquista (Doc 5.4)? Se lee, no se dispara nada al
+ * vencer — igual que `enTregua`/`heridoHasta`; `avanzarSimulacion` limpia `ocupacionHasta` cuando expira. */
+export function estaOcupado(asentamiento: Pick<Asentamiento, 'ocupacionHasta'>, instante: Instante): boolean {
+  return asentamiento.ocupacionHasta !== undefined && instante < asentamiento.ocupacionHasta;
+}
+
 export function edificiosPorTipoYEstado(
   asentamiento: Asentamiento,
   tipo: EdificioTipo,

@@ -1531,6 +1531,31 @@ export const MILITAR = {
 };
 
 /**
+ * Ocupación post-conquista (Doc 5.4, `Consideraciones/Ocupacion_Post_Conquista_Definicion.md`). Al conquistar,
+ * el ejército conquistador SE VUELVE la guarnición (`absorberColumna`), el asentamiento se saquea y entra en
+ * una ventana de ocupación de tiempo fijo: inmune a nuevo asedio, recaudación y crecimiento reducidos,
+ * mantenimiento congelado. Corta el ping-pong de conquistas — reconquistar exige ganar un asedio real contra
+ * la guarnición instalada. TODO PLACEHOLDER, a calibrar en batch (Paso 10 del plan).
+ */
+export const OCUPACION = {
+  duracionMinutos: 90,
+  /** Fracción de pesants+artesanos que se pierde en el saqueo (nobleza intacta, huye/negocia). */
+  fraccionSaqueoPoblacion: 0.25,
+  /** Fracción de los edificios `activo` que el saqueo baja a `en_cola` marcados `danado` — excluidos Centro
+   * Urbano y al menos una Granja y una Leñera activas. */
+  fraccionEdificiosDanados: 0.25,
+  /** Un edificio `danado` se reconstruye pagando esta fracción del costo de catálogo y tardando esa fracción
+   * de tiempo — se repara, no se levanta de cero. */
+  fraccionCosteReconstruccion: 0.5,
+  /** Reducción del `avance` de cada recinto completo (sobre `celdas.length`): la muralla se daña, no cae. */
+  fraccionDanoMuralla: 0.3,
+  /** Recaudación de oro del asentamiento durante la ventana (`recaudacionOro`). */
+  factorRecaudacion: 0.5,
+  /** Crecimiento de población durante la ventana (`crecerPoblacion`, factor `felicidad`). */
+  factorCrecimiento: 0.5,
+};
+
+/**
  * Liderazgo (Doc 5.11): cuánta tropa puede sacar a campaña un Jugador de una vez. Límite de SALIDA, no de
  * posesión — lo que se queda es la guarnición, y es lo único que defiende (Doc 5.12.4).
  *

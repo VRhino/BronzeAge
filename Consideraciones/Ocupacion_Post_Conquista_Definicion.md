@@ -347,14 +347,26 @@ tienen conquistas en curso). Capas: todo `engine` + `constants` salvo los comand
   §13b; `CIUDADANIA.cooldownCambioResidenciaDias` sigue reservado en §8, añadir cuando el abuso muerda).
 - **Independiente.**
 
-### Paso 3 — `OCUPACION` + los dos campos
+### Paso 3 — `OCUPACION` + los dos campos — ✅ HECHO (2026-09-08)
 
 - `OCUPACION` en `constants.ts` (§4). `Asentamiento.ocupacionHasta?: Instante`, `Edificio.danado?: boolean`.
 - Helper `estaOcupado(a, instante)` en `engine/asentamientoQuery.ts` (`a.ocupacionHasta !== undefined &&
   instante < a.ocupacionHasta`).
 - Sin efecto todavía — solo los tipos y el helper. Nada que medir.
 
-### Paso 4 — `aplicarConquista` reescrito (el corazón)
+### Paso 4 — `aplicarConquista` reescrito (el corazón) — ✅ HECHO (2026-09-08)
+
+`aplicarConquista(defensor, faccionConquistadoraId, guarnicionEntrante: Escuadron[], suministroEntrante, instante)`
+— firma con escuadrones + carro sueltos, no un `Ejercito`, para servir a los dos caminos (comando sin
+ejército / llegada de ejército). Cambios frente al plan original: el `absorberColumna` se hace inline (es
+`[...guarnicionEntrante]` + `agregarRecurso` del carro); `iniciarAsedio` filtra los escuadrones seleccionados
+de la guarnición del atacante y los pasa como `guarnicionEntrante`; `asediarConEjercito` devuelve
+`ejercitoConsumido: boolean` y `avanzarEjercitos` hace `continue` (sin `supervivientes.push`) emitiendo
+`ejercito.guarnece_conquista` + perdiendo las caravanas adjuntas igual que un ejército deshecho. Tests
+reescritos en `combate.test.ts` y `avanzarEjercitos.test.ts` (guarnición del conquistador ≠ 0, saqueo de
+población/edificios/murallas, exentos Centro Urbano + 1 Granja/1 Leñera, determinismo, ventana abierta).
+
+Plan original, para referencia:
 
 `aplicarConquista(defensor, faccionConquistadoraId, ejercitoConquistador, instante)`:
 
@@ -378,11 +390,11 @@ Tests: hay guarnición tras conquistar (≠ 0); población baja la fracción; N 
 **Mide:** batch — `conquistasAcumuladas` y conquistas por asentamiento único (¿baja el ping-pong?),
 supervivencia de saqueados.
 
-### Paso 5 — guard de asedio
+### Paso 5 — guard de asedio — ✅ HECHO (2026-09-08)
 
 `iniciarAsedio`/`asediarConEjercito`: si `estaOcupado(defensor, instante)` → rebota (`asedio_resistido`, sin
-combate, **sin tocar el RNG**), el atacante acampa. Test: invariante de inmunidad; el guardián de determinismo
-sigue verde (rama muda de RNG).
+combate, **sin tocar el RNG**), el atacante acampa. Tests: inmunidad por el comando y por llegada de ejército
+(un segundo ejército el mismo tick rebota sin bajas).
 
 ### Paso 6 — efectos de la ventana
 

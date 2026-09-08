@@ -2,12 +2,13 @@ import type { Asentamiento, CampamentoBandido, Caravana, Ejercito, Escuadron, Fa
 import type { EventoCrudo } from '../domain/eventos';
 import { minutos, sumar, type Instante } from '../domain/tiempo';
 import type { RandomFn } from '../worldgen';
-import { CAMPAMENTOS_BANDIDOS, MILITAR, NIVEL_FACCION, REPUTACION, TROPAS_RECLUTABLES } from '../constants';
+import { CAMPAMENTOS_BANDIDOS, MILITAR, NIVEL_FACCION, OCUPACION, REPUTACION, TROPAS_RECLUTABLES } from '../constants';
 import { agregarRecurso } from './almacen';
 import { aplicarAjustesReputacion } from './reputacion';
 import { aplicarAjustesExperiencia, type AjusteExperiencia } from './faccion';
 import { multiplicadorDefensivoDeRecintos } from './muralla';
 import { CAMPO_CARGO, estanAliadas } from './pertenencia';
+import { estaOcupado } from './asentamientoQuery';
 
 export class CombateInvalidoError extends Error {}
 
@@ -141,43 +142,88 @@ function jugadoresParticipantes(escuadrones: Escuadron[]): number {
 }
 
 /**
- * Lo que le pasa a un asentamiento AL SER CONQUISTADO (Doc 5.4). La ciudad cambia de dueño entera:
+ * Lo que le pasa a un asentamiento AL SER CONQUISTADO (Doc 5.4 /
+ * `Consideraciones/Ocupacion_Post_Conquista_Definicion.md`). La ciudad cambia de dueño entera:
  *
- * - **La guarnición cae a CERO unidades, pero los escuadrones NO desaparecen** (decisión del usuario,
- *   2026-09-04): conservan nombre, tropa, dueño y **veteranía**. Es la misma regla que el resto del juego ya
- *   aplica al aniquilar un regimiento (Doc 5.4: "el SQUAD persiste aunque el regimiento sea aniquilado — se
- *   puede rellenar con nuevos reclutas conservando el progreso") y la misma que deja volver a casa a los
- *   estandartes de un ejército deshecho por hambre. Lo que se pierde son los hombres, no la unidad.
- *
- *   Y **nada de eso pasa al conquistador**: los escuadrones son del Jugador, no del asentamiento — tropas
- *   personales de otro, no botín transferible. Antes se heredaban con sus unidades intactas, que es
- *   exactamente lo que el Doc 5.4 prohíbe.
- * - **Los antiguos residentes dejan de serlo**, y con ellos caen los cargos locales. De ahí sale el estado
- *   HUÉRFANO (Doc 5.4): quien estuviera de campaña conserva los escuadrones que lleva encima pero se queda
- *   sin sitio donde volver, reabastecer ni reclutar. No hace falta guardar ese estado en ninguna parte —
- *   "huérfano" es no residir en ningún asentamiento, y eso ya se deriva de `esResidente`.
- *
- *   Se les retira también a los que estaban EN CASA (decisión del usuario, 2026-09-04): la alternativa era
- *   dejarlos como residentes de una ciudad de la Facción enemiga, con todo lo que la residencia habilita.
- *
- * Los cascarones a cero se quedan EN el asentamiento conquistado, que es el único sitio donde el modelo sabe
- * guardar un escuadrón que no marcha. Ni su dueño puede rellenarlos (ya no reside ahí) ni el conquistador
- * puede usarlos (`movilizarEjercito` rechaza los de otro jugador), así que quedan congelados con su
- * veteranía a la espera de que la mecánica del huérfano decida cómo se recuperan.
- *
- * Lo que NO toca: población, edificios, almacén ni murallas. Conquistar entrega "un asentamiento completo y
- * en funcionamiento" (Doc 5.12.4) — ese es el premio que hace que atacar compense.
+ * - **La guarnición del conquistado la forman los escuadrones del CONQUISTADOR** (`guarnicionEntrante`): el
+ *   ejército conquistador —o los escuadrones seleccionados del asentamiento atacante— se vuelca dentro y su
+ *   carro al almacén (`suministroEntrante`, capado por capacidad como cualquier depósito). NUNCA queda a 0:
+ *   es el arreglo del ping-pong (antes caía sin un defensor cada vez que pasaba un ejército). Los escuadrones
+ *   siguen siendo de sus jugadores, que NO residen aquí — guarnición de no-residentes (§2.3b): defienden,
+ *   comen del trigo del asentamiento, su dueño los repone y re-moviliza.
+ * - **Los cascarones congelados de los desalojados NO se quedan**: salen (huérfanos, Doc 5.4). El llamador ya
+ *   no los pasa — antes se quedaban a 0 y dejaban la plaza indefensa.
+ * - **Los antiguos residentes dejan de serlo**, y con ellos caen los cargos locales (HUÉRFANO, Doc 5.4 — no
+ *   se guarda: es no residir en ningún sitio, se deriva de `esResidente`).
+ * - **Saqueo determinista** (sin `RandomFn` — esta función es pura): `pesants`/`artesanos` pierden
+ *   `OCUPACION.fraccionSaqueoPoblacion` (nobleza intacta, huye/negocia); `OCUPACION.fraccionEdificiosDanados`
+ *   de los edificios `activo` —por orden de id, exentos Centro Urbano + la 1ª Granja y la 1ª Leñera activas—
+ *   pasan a `en_cola` marcados `danado` (§3: sin comida ni madera el saqueo es una sentencia); cada recinto
+ *   completo pierde `floor(OCUPACION.fraccionDanoMuralla × celdas.length)` de `avance` (la muralla no cae,
+ *   deja de dar el multiplicador pleno hasta repararse por la vía normal de obra).
+ * - **`medidorMantenimiento: 100`** y **`ocupacionHasta`** — abre la ventana de ocupación (§2.4): inmune a un
+ *   nuevo asedio, recaudación y crecimiento reducidos, mantenimiento congelado, tiempo fijo.
  */
-export function aplicarConquista(defensor: Asentamiento, faccionConquistadoraId: string): Asentamiento {
+export function aplicarConquista(
+  defensor: Asentamiento,
+  faccionConquistadoraId: string,
+  guarnicionEntrante: readonly Escuadron[],
+  suministroEntrante: Record<string, number>,
+  instante: Instante
+): Asentamiento {
   const cargos = { ...defensor.cargos };
   for (const campo of Object.values(CAMPO_CARGO)) cargos[campo] = null;
+
+  const queda = 1 - OCUPACION.fraccionSaqueoPoblacion;
+  const poblacion = {
+    pesants: Math.floor(defensor.poblacion.pesants * queda),
+    artesanos: Math.floor(defensor.poblacion.artesanos * queda),
+    nobleza: defensor.poblacion.nobleza,
+  };
+
+  // Saqueo de edificios: orden por id (determinista), exentos Centro Urbano y la primera Granja/Leñera activas.
+  const activos = defensor.edificios
+    .filter((e) => e.estado === 'activo')
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const exento = new Set<string>();
+  for (const e of activos) if (e.tipo === 'centroUrbano') exento.add(e.id);
+  for (const tipo of ['granja', 'lenera'] as const) {
+    const primero = activos.find((e) => e.tipo === tipo);
+    if (primero) exento.add(primero.id);
+  }
+  const danables = activos.filter((e) => !exento.has(e.id));
+  const aDanar = new Set(
+    danables.slice(0, Math.ceil(OCUPACION.fraccionEdificiosDanados * danables.length)).map((e) => e.id)
+  );
+  const edificios = defensor.edificios.map((e) =>
+    aDanar.has(e.id) ? { ...e, estado: 'en_cola' as const, danado: true, completaEn: undefined } : e
+  );
+
+  // Saqueo de murallas: cada recinto completo pierde integridad; la reparación es la obra normal de recintos.
+  const recintos = defensor.recintos?.map((r) => {
+    if (r.avance < r.celdas.length - 1) return r;
+    const perdida = Math.floor(OCUPACION.fraccionDanoMuralla * r.celdas.length);
+    return { ...r, avance: Math.max(-1, r.avance - perdida) };
+  });
+
+  const almacen = Object.entries(suministroEntrante).reduce(
+    (acc, [recurso, cantidad]) => agregarRecurso(acc, recurso, cantidad),
+    defensor.almacen
+  );
+
   return {
     ...defensor,
     faccionId: faccionConquistadoraId,
-    escuadrones: defensor.escuadrones.map((e) => ({ ...e, cantidad: 0 })),
+    escuadrones: [...guarnicionEntrante],
     jugadoresFundadoresIds: [],
     casasCompradas: [],
     cargos,
+    poblacion,
+    edificios,
+    recintos,
+    almacen,
+    medidorMantenimiento: 100,
+    ocupacionHasta: sumar(instante, minutos(OCUPACION.duracionMinutos)),
   };
 }
 
@@ -199,6 +245,29 @@ export function iniciarAsedio(
     throw new CombateInvalidoError('No se puede asediar un asentamiento de la propia Facción.');
   }
   if (!atacante.cargos.generalId) throw new CombateInvalidoError('El atacante necesita un General para asediar.');
+
+  // Ventana de ocupación (Ocupacion §2.4): una plaza recién conquistada es INMUNE a un nuevo asedio hasta que
+  // el reloj vence. Rebota sin combate y sin tocar el RNG — la guarnición instalada sana y se repone en paz.
+  if (estaOcupado(defensor, instante)) {
+    return {
+      atacante,
+      defensor,
+      facciones,
+      eventos: [
+        {
+          codigo: 'combate.asedio_resistido',
+          mensaje: `${defensor.id} está bajo ocupación reciente y rechaza el asedio de ${atacante.id} sin combatir.`,
+          payload: {
+            atacanteId: atacante.id,
+            defensorId: defensor.id,
+            faccionAtacanteId: atacante.faccionId,
+            faccionDefensoraId: defensor.faccionId,
+          } satisfies PayloadAsedio,
+        },
+      ],
+      conquistado: false,
+    };
+  }
 
   const escuadronesAtacantes = seleccionarEscuadrones(atacante, escuadronIdsAtacantes);
   const escuadronesDefensores = seleccionarEscuadrones(defensor, defensor.escuadrones.map((e) => e.id));
@@ -248,10 +317,18 @@ export function iniciarAsedio(
   if (conquistado) ajustesXp.push({ faccionId: atacante.faccionId, delta: NIVEL_FACCION.xp.conquista, razon: 'conquista' });
   const faccionesFinal = aplicarAjustesExperiencia(faccionesConReputacion, ajustesXp);
 
+  // Al conquistar, los escuadrones seleccionados MARCHAN a guarnecer la plaza tomada y salen de la del
+  // atacante (Ocupacion §2.2: mismo principio que un ejército absorbido, sin ejército de por medio).
+  const idsSeleccionados = new Set(escuadronesAtacantes.map((e) => e.id));
   return {
-    atacante: { ...atacante, escuadrones: reemplazarEscuadrones(atacante, resultado.atacantes) },
+    atacante: {
+      ...atacante,
+      escuadrones: conquistado
+        ? atacante.escuadrones.filter((e) => !idsSeleccionados.has(e.id))
+        : reemplazarEscuadrones(atacante, resultado.atacantes),
+    },
     defensor: conquistado
-      ? aplicarConquista(defensor, atacante.faccionId)
+      ? aplicarConquista(defensor, atacante.faccionId, resultado.atacantes, {}, instante)
       : { ...defensor, escuadrones: reemplazarEscuadrones(defensor, resultado.defensores) },
     facciones: faccionesFinal,
     eventos,
@@ -348,9 +425,9 @@ export function atacarCampamentoBandidos(
  *     partida donde nadie asedia una plaza defendida hace exactamente las mismas llamadas al RNG que antes de
  *     existir el Paso 7, y el guardián de determinismo sigue verde sin tocarlo.
  *
- * El ejército NO entra en la ciudad al conquistarla: se queda acampado donde está (`avanzarEjercitos` lo pasa
- * a `estacionado`). Meter sus escuadrones en la guarnición del sitio los convertiría en tropa apostada en un
- * asentamiento donde su jugador no reside, que es justo la incoherencia que `aplicarConquista` deshace.
+ * Al CONQUISTAR, el ejército SE VUELVE la guarnición de la plaza tomada (Ocupacion §2.2): sus escuadrones y
+ * su carro se vuelcan dentro vía `aplicarConquista` y `ejercitoConsumido: true` le dice a `avanzarEjercitos`
+ * que lo suelte sin evento `disuelto`. Si resiste, el ejército sigue en campo y acampa (`estacionado`).
  */
 export function asediarConEjercito(
   ejercito: Ejercito,
@@ -359,7 +436,15 @@ export function asediarConEjercito(
   relaciones: RelacionPolitica[],
   instante: Instante,
   rng: RandomFn
-): { ejercito: Ejercito; defensor: Asentamiento; facciones: Faccion[]; eventos: EventoCrudo[]; conquistado: boolean } {
+): {
+  ejercito: Ejercito;
+  defensor: Asentamiento;
+  facciones: Faccion[];
+  eventos: EventoCrudo[];
+  conquistado: boolean;
+  /** El ejército se volcó en la guarnición del conquistado — `avanzarEjercitos` no debe conservarlo. */
+  ejercitoConsumido: boolean;
+} {
   const defensores = defensor.escuadrones.filter((e) => e.cantidad > 0);
   const atacantes = ejercito.escuadrones.filter((e) => e.cantidad > 0);
 
@@ -369,6 +454,25 @@ export function asediarConEjercito(
     faccionAtacanteId: ejercito.faccionId,
     faccionDefensoraId: defensor.faccionId,
   };
+
+  // Ventana de ocupación (Ocupacion §2.4): inmune a un nuevo asedio. Rebota sin combate ni RNG; el ejército
+  // acampa (`avanzarEjercitos` lo pasa a `estacionado`) y el Paso 10 decide qué hace un rival ahí plantado.
+  if (estaOcupado(defensor, instante)) {
+    return {
+      ejercito,
+      defensor,
+      facciones,
+      eventos: [
+        {
+          codigo: 'combate.asedio_resistido',
+          mensaje: `${defensor.id} está bajo ocupación reciente: el ejército ${ejercito.id} no puede asediarla todavía.`,
+          payload,
+        },
+      ],
+      conquistado: false,
+      ejercitoConsumido: false,
+    };
+  }
 
   // Plaza desguarnecida: cae sin combate y sin tocar el RNG (Doc 5.12.4).
   if (defensores.length === 0 || atacantes.length === 0) {
@@ -388,7 +492,9 @@ export function asediarConEjercito(
     ];
     return {
       ejercito,
-      defensor: cae ? aplicarConquista(defensor, ejercito.faccionId) : defensor,
+      defensor: cae
+        ? aplicarConquista(defensor, ejercito.faccionId, ejercito.escuadrones, ejercito.suministro, instante)
+        : defensor,
       facciones: cae
         ? aplicarAjustesExperiencia(facciones, [
             { faccionId: ejercito.faccionId, delta: NIVEL_FACCION.xp.conquista, razon: 'conquista' },
@@ -396,6 +502,7 @@ export function asediarConEjercito(
         : facciones,
       eventos,
       conquistado: cae,
+      ejercitoConsumido: cae,
     };
   }
 
@@ -430,14 +537,19 @@ export function asediarConEjercito(
   if (conquistado) ajustesXp.push({ faccionId: ejercito.faccionId, delta: NIVEL_FACCION.xp.conquista, razon: 'conquista' });
 
   const idsAtacantes = new Map(resultado.atacantes.map((e) => [e.id, e]));
+  const ejercitoTrasCombate: Ejercito = {
+    ...ejercito,
+    escuadrones: ejercito.escuadrones.map((e) => idsAtacantes.get(e.id) ?? e),
+  };
   return {
-    ejercito: { ...ejercito, escuadrones: ejercito.escuadrones.map((e) => idsAtacantes.get(e.id) ?? e) },
+    ejercito: ejercitoTrasCombate,
     defensor: conquistado
-      ? aplicarConquista(defensor, ejercito.faccionId)
+      ? aplicarConquista(defensor, ejercito.faccionId, ejercitoTrasCombate.escuadrones, ejercito.suministro, instante)
       : { ...defensor, escuadrones: reemplazarEscuadrones(defensor, resultado.defensores) },
     facciones: aplicarAjustesExperiencia(conReputacion, ajustesXp),
     eventos,
     conquistado,
+    ejercitoConsumido: conquistado,
   };
 }
 

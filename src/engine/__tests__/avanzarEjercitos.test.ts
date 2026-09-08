@@ -370,9 +370,7 @@ describe('llegada a un asentamiento ajeno = asedio (Paso 7)', () => {
     expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo === 'combate.asedio_conquista')).toBe(true);
   });
 
-  it('la guarnición del conquistado queda a CERO pero conserva dueño y veteranía (Doc 5.4)', () => {
-    // Veteranía y dueño distintos de los de la fixture para que la aserción diga algo: lo que se pierde son
-    // los hombres, no el escuadrón ni su progreso.
+  it('la guarnición del conquistado la forman los escuadrones del ejército conquistador (Ocupacion §2.2)', () => {
     const veterano: Escuadron = { ...escuadron('d1', 'milicia_lanceros', 1), jugadorId: 'rival-a', veterania: 3 };
     const { facciones, propio, enemigo, ejercito } = frenteDeGuerra([veterano]);
 
@@ -380,14 +378,13 @@ describe('llegada a un asentamiento ajeno = asedio (Paso 7)', () => {
 
     const despues = r.asentamientos.find((a) => a.id === enemigo.id)!;
     expect(despues.faccionId, 'con 50 atacantes contra 1 defensor la plaza cae').toBe('faccion-1');
-    // El escuadrón SOBREVIVE como cascarón: sin hombres, pero con su dueño y su veteranía (Doc 5.4 — "el
-    // SQUAD persiste aunque el regimiento sea aniquilado"). Lo que no hay es botín: cero unidades para nadie.
-    expect(despues.escuadrones.map((e) => e.cantidad)).toEqual([0]);
-    expect(despues.escuadrones[0]!.jugadorId, 'sigue siendo de su dueño, no del conquistador').toBe('rival-a');
-    expect(despues.escuadrones[0]!.veterania, 'el progreso del escuadrón no se pierde').toBe(3);
+    // El cascarón del vencido SALE (huérfano); la guarnición es ahora el escuadrón del conquistador, en pie.
+    expect(despues.escuadrones.map((e) => e.id)).toEqual(['a1']);
+    expect(despues.escuadrones[0]!.cantidad).toBeGreaterThan(0);
+    expect(despues.ocupacionHasta, 'abre la ventana de ocupación').toBeDefined();
   });
 
-  it('conquistar deja HUÉRFANOS a los residentes: pierden residencia y cargos (Doc 5.4)', () => {
+  it('conquistar deja HUÉRFANOS a los residentes y saquea la plaza (Doc 5.4 / Ocupacion §2.2)', () => {
     const { facciones, propio, enemigo, ejercito } = frenteDeGuerra([]);
     expect(enemigo.jugadoresFundadoresIds.length, 'la plaza arranca con residentes').toBeGreaterThan(0);
 
@@ -397,20 +394,42 @@ describe('llegada a un asentamiento ajeno = asedio (Paso 7)', () => {
     expect(despues.jugadoresFundadoresIds).toEqual([]);
     expect(despues.casasCompradas).toEqual([]);
     expect(Object.values(despues.cargos).every((v) => v === null)).toBe(true);
-    // Lo que NO se toca: la ciudad se entrega entera y en funcionamiento (Doc 5.12.4).
+    // Los edificios no se BORRAN (siguen en el array, dañados en la cola), pero la población se saquea.
     expect(despues.edificios.length).toBe(enemigo.edificios.length);
-    expect(despues.poblacion).toEqual(enemigo.poblacion);
+    expect(despues.poblacion.pesants).toBeLessThan(enemigo.poblacion.pesants);
+    expect(despues.poblacion.nobleza, 'la nobleza no se saquea').toBe(enemigo.poblacion.nobleza);
   });
 
-  it('el que asedia conserva su columna: no entra en la ciudad, acampa fuera', () => {
+  it('el ejército conquistador SE VUELVE la guarnición: no queda columna en campo (Ocupacion §2.2)', () => {
     const { facciones, propio, enemigo, ejercito } = frenteDeGuerra([]);
 
     const r = avanzar([ejercito], [propio, enemigo], { facciones });
 
-    expect(r.ejercitos).toHaveLength(1);
-    expect(r.ejercitos[0]!.estado).toBe('estacionado');
-    expect(r.ejercitos[0]!.escuadrones.map((e) => e.id)).toEqual(['a1']);
-    expect(r.asentamientos.find((a) => a.id === enemigo.id)!.escuadrones).toEqual([]);
+    expect(r.ejercitos, 'el ejército se volcó dentro — no sobrevive como columna').toHaveLength(0);
+    expect(r.asentamientos.find((a) => a.id === enemigo.id)!.escuadrones.map((e) => e.id)).toEqual(['a1']);
+    expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo === 'ejercito.guarnece_conquista')).toBe(true);
+  });
+
+  it('una plaza recién conquistada es INMUNE a un segundo ejército el mismo tick (Ocupacion §2.4)', () => {
+    const { facciones, propio, enemigo, ejercito } = frenteDeGuerra([]);
+    // La Facción desalojada manda un ejército a recuperar su plaza en el mismo tick — y rebota.
+    const segundo: Ejercito = {
+      ...ejercitoDe(propio, [escuadron('b1', 'milicia_lanceros', 80)], 5000),
+      id: 'ejercito-segundo',
+      faccionId: 'faccion-2',
+      origenAsentamientoId: propio.id,
+      objetivo: { tipo: 'asentamiento', id: enemigo.id },
+      ruta: [propio.posicion, enemigo.posicion],
+      progreso: 0.999,
+    };
+
+    const r = avanzar([ejercito, segundo], [propio, enemigo], { facciones });
+
+    const plaza = r.asentamientos.find((a) => a.id === enemigo.id)!;
+    expect(plaza.faccionId, 'la conquistó el primero; el segundo rebota').toBe('faccion-1');
+    expect(plaza.escuadrones.map((e) => e.id), 'guarnición del primero, intacta').toEqual(['a1']);
+    const segundoDespues = r.ejercitos.find((e) => e.id === 'ejercito-segundo')!;
+    expect(segundoDespues.escuadrones[0]!.cantidad, 'rebotó sin combatir: ni una baja').toBe(80);
   });
 
   it('el asedio se resuelve UNA vez: acampado junto a la plaza ya no vuelve a atacar', () => {

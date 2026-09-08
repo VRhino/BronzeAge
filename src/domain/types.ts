@@ -303,6 +303,12 @@ export interface Edificio {
    * pierde en vez de acumularse (ver `agregarRecursoConSobrante`, engine/almacen.ts). Solo informativo/UI,
    * no bloquea nada por sí mismo. Ausente/false si no aplica o produjo sin tope. */
   pausadoPorAlmacenLleno?: boolean;
+  /** Ocupación post-conquista (Doc 5.4, `Consideraciones/Ocupacion_Post_Conquista_Definicion.md` §2.2): el
+   * saqueo baja un edificio `activo` a `estado: 'en_cola'` marcándolo `danado`. Al comprometer la obra,
+   * `avanzarConstruccion` cobra solo `OCUPACION.fraccionCosteReconstruccion` del costo y tarda esa fracción
+   * de tiempo — un dañado NO se reconstruye desde cero, se repara. Se borra al volver a `activo`. Ausente =
+   * edificio sano (caso normal). */
+  danado?: boolean;
 }
 
 /** Cargos de nivel asentamiento (Doc 2.2), uno de cada, designados por el Gobernador salvo él mismo. */
@@ -503,6 +509,15 @@ export interface Asentamiento {
   vetadosIds?: string[];
   politicasActivas: PoliticaActiva[];
   escuadrones: Escuadron[];
+  /**
+   * Ocupación militar tras una conquista (Doc 5.4, `Consideraciones/Ocupacion_Post_Conquista_Definicion.md`):
+   * instante de mundo en que TERMINA. Mientras `instante < ocupacionHasta` el asentamiento es INMUNE a un
+   * nuevo asedio, recauda oro reducido (`OCUPACION.factorRecaudacion`), crece más lento
+   * (`OCUPACION.factorCrecimiento`) y su medidor de mantenimiento no degrada. La ventana es puro tiempo —
+   * no se acorta ni se cancela. Se comprueba AL LEER (`estaOcupado`, engine/asentamientoQuery.ts) salvo su
+   * expiración, que `avanzarSimulacion` limpia. Ausente = no ocupado (caso normal).
+   */
+  ocupacionHasta?: Instante;
   /** Mantenimiento (Doc 4.5): medidor 0-100, empieza en 100; a 0 el asentamiento cae en ruinas (se elimina). */
   medidorMantenimiento: number;
   /** Nutrición de la población (Doc 4.1, hambruna — a petición del usuario, espejo de la moral de tropas por

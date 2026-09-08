@@ -67,10 +67,10 @@ describe('iniciarAsedio — la muralla del DEFENSOR decide, no la del atacante',
     expect(resultado.conquistado).toBe(true);
   });
 
-  it('conquistar NO hereda la guarnición ni la residencia del vencido (Doc 5.4)', () => {
-    // Regresión: hasta 2026-09-04 el conquistador se quedaba con los escuadrones del vencido —los mismos que
-    // el doc llama "personales de otro jugador, no botín transferible"— y sus antiguos residentes seguían
-    // figurando como tales en una ciudad ahora enemiga. No lo cubría ningún test.
+  it('conquistar: la guarnición pasa a ser la del CONQUISTADOR, sin herencia ni residencia del vencido (Doc 5.4)', () => {
+    // Ocupacion §2.2: los escuadrones seleccionados del atacante MARCHAN a guarnecer la plaza tomada y salen
+    // de la suya; los cascarones congelados del vencido NO se quedan (huérfanos). Antes la guarnición caía a
+    // 0 y la plaza quedaba indefensa para siempre — el ping-pong de conquistas.
     const { atacante, defensor } = ciudades();
     expect(defensor.escuadrones.length, 'el defensor arranca con guarnición').toBeGreaterThan(0);
 
@@ -78,13 +78,55 @@ describe('iniciarAsedio — la muralla del DEFENSOR decide, no la del atacante',
 
     expect(resultado.conquistado).toBe(true);
     expect(resultado.defensor.faccionId).toBe(atacante.faccionId);
-    // Cascarones a cero: sin hombres, pero el escuadrón y su progreso siguen siendo de su dueño.
-    expect(resultado.defensor.escuadrones.map((e) => e.cantidad)).toEqual([0]);
-    expect(resultado.defensor.escuadrones[0]!.jugadorId).toBe(defensor.escuadrones[0]!.jugadorId);
-    expect(resultado.defensor.escuadrones[0]!.veterania).toBe(defensor.escuadrones[0]!.veterania);
+    // La guarnición es AHORA el escuadrón del conquistador (con sus bajas de asedio), no un cascarón del vencido.
+    expect(resultado.defensor.escuadrones.map((e) => e.id)).toEqual(['e-atacante']);
+    expect(resultado.defensor.escuadrones[0]!.jugadorId).toBe('jugador-atacante');
+    expect(resultado.defensor.escuadrones[0]!.cantidad).toBeGreaterThan(0);
+    // Y ha salido de la guarnición del atacante: marchó a la plaza tomada.
+    expect(resultado.atacante.escuadrones).toEqual([]);
+    // Residencia y cargos del vencido: vacíos.
     expect(resultado.defensor.jugadoresFundadoresIds).toEqual([]);
     expect(resultado.defensor.casasCompradas).toEqual([]);
     expect(Object.values(resultado.defensor.cargos).every((v) => v === null)).toBe(true);
+    // Abre la ventana de ocupación.
+    expect(resultado.defensor.ocupacionHasta).toBeDefined();
+  });
+
+  it('conquistar saquea: población baja, edificios dañados salvo Centro Urbano + 1 Granja/1 Leñera', () => {
+    const { atacante, defensor } = ciudades();
+    const pobAntes = { ...defensor.poblacion };
+    const activosAntes = defensor.edificios.filter((e) => e.estado === 'activo');
+    expect(activosAntes.length, 'la fixture trae edificios activos que saquear').toBeGreaterThan(2);
+
+    const r = iniciarAsedio(atacante, defensor, ['e-atacante'], crearFacciones(), [], instanteDeTest(0), rngSinVarianza).defensor;
+
+    expect(r.poblacion.pesants).toBeLessThan(pobAntes.pesants);
+    expect(r.poblacion.nobleza, 'la nobleza no se saquea').toBe(pobAntes.nobleza);
+    const centro = r.edificios.find((e) => e.tipo === 'centroUrbano')!;
+    expect(centro.estado, 'el Centro Urbano nunca se daña').toBe('activo');
+    expect(r.edificios.some((e) => e.danado), 'algún edificio queda dañado').toBe(true);
+    for (const tipo of ['granja', 'lenera'] as const) {
+      const activasDeTipo = activosAntes.filter((e) => e.tipo === tipo);
+      if (activasDeTipo.length > 0) {
+        expect(r.edificios.some((e) => e.tipo === tipo && e.estado === 'activo'), `queda al menos una ${tipo} activa`).toBe(true);
+      }
+    }
+  });
+
+  it('el saqueo es determinista: misma entrada, misma salida', () => {
+    const { atacante, defensor } = ciudades();
+    const a = iniciarAsedio(atacante, defensor, ['e-atacante'], crearFacciones(), [], instanteDeTest(0), rngSinVarianza).defensor;
+    const b = iniciarAsedio(atacante, defensor, ['e-atacante'], crearFacciones(), [], instanteDeTest(0), rngSinVarianza).defensor;
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+  });
+
+  it('una plaza bajo ocupación reciente es INMUNE: rebota sin combate ni conquista (Ocupacion §2.4)', () => {
+    const { atacante, defensor } = ciudades();
+    const ocupado: Asentamiento = { ...defensor, ocupacionHasta: instanteDeTest(100) };
+    const r = iniciarAsedio(atacante, ocupado, ['e-atacante'], crearFacciones(), [], instanteDeTest(10), rngSinVarianza);
+    expect(r.conquistado).toBe(false);
+    expect(r.defensor.faccionId).toBe(defensor.faccionId);
+    expect(r.eventos.map((e) => (typeof e !== 'string' ? e.codigo : e))).toEqual(['combate.asedio_resistido']);
   });
 
   it('un asedio RESISTIDO no toca ni residencia ni cargos: solo deja bajas', () => {
