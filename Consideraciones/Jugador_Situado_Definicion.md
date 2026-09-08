@@ -1098,10 +1098,11 @@ Cada paso deja el repo verde y jugable. El orden no es negociable en los tres pr
      columnas de la nada — solo empieza a pasar esto para quien actúa por primera vez a partir de hoy. **Sin
      migración de snapshot**: ningún tipo cambió de forma, solo el CRITERIO con el que se construye un
      `Ejercito` que ya existía.
-   - **(b) Fundar donde se está.** `posicion` sale de `ParamsFundarAsentamiento`; el comando la deriva de
-     `puntoDeFundacionDe(fundador, ejercitos)`, que exige estar en campo abierto (rechaza dentro de una plaza
-     o desconectado). El motor (`engine/settlement.ts`) NO se tocó: sigue recibiendo `posicion` como siempre,
-     así que la gobernanza NPC (que llama al motor directo) es inmune a este cambio.
+   - **(b) Fundar donde se está.** `posicion` NO viene en `ParamsFundarAsentamiento` (el único campo es
+     `faccionId`); el comando la deriva de `puntoDeFundacionDe(fundador, ejercitos)`, que exige estar en campo
+     abierto (rechaza dentro de una plaza o desconectado). El motor (`engine/settlement.ts`) NO se tocó: sigue
+     recibiendo `posicion` como siempre, así que la gobernanza NPC (que llama al motor directo) es inmune a
+     este cambio.
    - **(c) Disolver la columna al fundar.** No hizo falta escribir nada nuevo: fundar es ENTRAR en la plaza
      que se acaba de levantar, y eso es exactamente lo que ya hacía `cruzarLaPuerta` al volver a la propia
      residencia. Se reutiliza tal cual — el fundador siempre es residente de lo que acaba de fundar, así que

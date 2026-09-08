@@ -620,9 +620,11 @@ export class GameStore {
   /**
    * Funda un asentamiento. El fundador es siempre EL ACTOR que ejecuta el comando (Fase C2/C3): el backend
    * ya no acepta una lista de cofundadores — ver `session/comandos/fundarAsentamiento.ts` para el porqué.
+   * La posición tampoco la elige el cliente: se funda DONDE SE ESTÁ (Doc 1.3), el backend la deriva de la
+   * columna del fundador.
    */
-  async fundarAsentamiento(faccionId: string, posicion: { x: number; y: number }): Promise<void> {
-    await this.despachar('fundarAsentamiento', { faccionId, posicion }, 'Fundación rechazada');
+  async fundarAsentamiento(faccionId: string): Promise<void> {
+    await this.despachar('fundarAsentamiento', { faccionId }, 'Fundación rechazada');
   }
 
   async lanzarCaravanaFundacion(origenAsentamientoId: string, destino: { x: number; y: number }, numJugadores: number): Promise<void> {

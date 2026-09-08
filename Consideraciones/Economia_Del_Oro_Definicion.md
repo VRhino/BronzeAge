@@ -350,8 +350,9 @@ aleatoriedad ambiente (la caravana #0 usa un id determinista `caravana-comercial
 **Verificado al implementar:** `npx tsc --noEmit` limpio, suite 1170/1170 (4 tests nuevos + `caravanas.test.ts`
 ajustado por el buey en oro + `snapshot_baseline` re-generado por la recaudación — el diff del snapshot es
 **solo la cantidad de `oro`**, nada más se movió, lo que confirma que el cableado del Paso 1 está aislado).
-`cliente/` mantiene su único error de tipos preexistente (`gameStore.ts` `posicion` en `ParamsFundarAsentamiento`),
-no gateado, no introducido aquí.
+`cliente/` compila limpio (`npx tsc --noEmit`). *(Actualizado 2026-09-08: el error preexistente de
+`gameStore.ts` — `posicion` en `ParamsFundarAsentamiento` — quedó corregido; el cliente ya no manda `posicion`,
+el backend deriva la posición de la columna del fundador.)*
 
 ### Paso 1 — `recaudacionOro` + cableado — ✅ HECHO
 
