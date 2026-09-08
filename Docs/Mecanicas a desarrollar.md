@@ -41,6 +41,13 @@ materiales exóticos, el ciclo de servidor de 12 meses y la curva de onboarding 
 
 ## 1. Impuestos — generación de oro por población
 
+> **DISEÑO EN CURSO (2026-09-08).** Ronda 1 cerrada (4 decisiones): recaudación pasiva automática (espejo del
+> consumo de comida) + política de "Presión Fiscal" desde el pase 1; orden de clases Nobleza > Artesanos >
+> Pesants; magnitud intermedia; panel con desglose por clase. Decisiones, modelo, medición de batch, esbozo de
+> motor, puntos abiertos y el análisis del hueco de sinks de oro en
+> `Consideraciones/Impuestos_Definicion.md`. Falta la Ronda 2 (cargo de la política, números de arranque,
+> dirección del sink) y el plan técnico paso a paso.
+
 El oro hoy entra por **dos** vías: la `mina` (`produccionBaseOro: 4`) y las comisiones de comercio
 (`COMISION`). Un asentamiento sin mina cerca y sin comercio activo no genera oro, pase lo que pase con su
 población.
@@ -299,3 +306,10 @@ subir ni nada que recompensar.
 
 **Lo que hay que decidir:** qué encargos existen y quién los publica; qué se gana (¿acceso a reclutar? ¿casa?
 ¿aval para fundar?); y si ese standing sobrevive a marcharse de la Facción.
+
+
+-------------------- agregado
+
+tabernas e intel: con la mencanica de niebla de guerra que agregamos ahora el saber que esta pasando en otro sitio gana valor, agregaremos un edificio nuevo llamado taberna, en la taberna se puede comprar intel o mapas, que son para saber que esta pasando en otro sitio por un tiempo limitado, o como esta la situacion actual de alguna faccion. no solo la info visual en el mapa si no informacion interna de asentamientos, intel como asset. se puede comprar el layout de un asentamiento solamenta como info para prepara asedios a futuro)
+
+mapa politico como entidad, es de donde a donde llegan las fronteras actuales.

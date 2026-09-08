@@ -894,6 +894,13 @@ async function main() {
   let conquistasAcumuladas = 0;
   let duenoPorAsentamiento = new Map(estado.asentamientos.map((a) => [a.id, a.faccionId]));
 
+  // Contador de ids del NPC, hilado tick a tick igual que `session/comandos/avanzarFaccionesNpc.ts`: sin esto
+  // arranca en 0 cada tick y `anadirEdificioManualmente` genera ids `edificio-<asent>-manual-<n>` que chocan
+  // entre ticks. `avanzarConstruccion` indexa su `Map` de resultados por id, así que dos edificios con el
+  // mismo id se pisan — el Barracón/Galería que el NPC re-encola cada tick corrompía la cola y ni él ni la
+  // Curtiduría auto llegaban nunca a construirse (edificios de transformación a 0 en ~la mitad de las seeds).
+  let contadorNpc = 0;
+
   for (let tick = 1; tick <= TICKS; tick++) {
     try {
       // `instante`/`momento` derivados del tick con la misma fórmula que el backend (`instanteDeTick`,
@@ -902,7 +909,8 @@ async function main() {
       const instante = instanteDeTick(tick);
       const contexto = { instante, momento: isoDeInstante(instante), rng };
       const trasMotor = avanzarSimulacion(estado, mapa, contexto);
-      const trasNpc = avanzarNpcGobernanza(trasMotor, mapa, contexto, config);
+      const trasNpc = avanzarNpcGobernanza(trasMotor, mapa, contexto, { ...config, contadorInicial: contadorNpc });
+      contadorNpc = trasNpc.contadorFinal;
       estado = trasNpc.estado;
       reclutamientosAcumulados += trasNpc.stats.reclutamientosExitosos;
       campamentosDestruidosAcumulados += trasNpc.stats.campamentosDestruidos;
