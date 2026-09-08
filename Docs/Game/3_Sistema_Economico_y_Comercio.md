@@ -44,7 +44,7 @@
 - PENDIENTE (sin cambios): en qué se usa la riqueza acumulada; nivel intermedio de comisión para Facciones aliadas/vasallas de la misma Liga.
 
 ## 3.6 Categorías de caravana (heredado de Iberia) — 🔶 parcial: catálogo existe, solo 1-2 de 4 se usan
-1. **Comercial**: ✅ implementada y en uso — única categoría que el motor instancia realmente para Trueque/Mercado, y la única que ahora es un activo PROPIO y persistente (`costoConstruccion`, ver 3.12), en vez de efímera.
+1. **Comercial**: ✅ implementada y en uso — única categoría que el motor instancia realmente para Trueque/Mercado, y la única que ahora es un activo PROPIO y persistente (`costoConstruccion`, ver 3.12), en vez de efímera. **El revamp de 3.13 (diseñado, sin implementar) la convierte en una caravana COMPUESTA** —carros + animales + escolta— en vez de un activo de capacidad y velocidad fijas; las otras tres categorías no cambian.
 2. **Militar**: catálogo definido (capacidad/velocidad propias) pero el motor NUNCA la dispara ni le da comportamiento distinto.
 3. **De construcción**: sí tiene uso real (Caravana de Fundación, Doc 1.8), pero es un mecanismo aparte del de Trueque/Mercado — no forma parte de la flota propia de 3.12.
 4. **De contrabando**: solo datos, sin uso real.
@@ -66,7 +66,7 @@ No hay un sistema que detecte explícitamente "cortar una ruta" como evento de g
 
 ## 3.10 Combate de caravanas — ✅ implementado (simplificado)
 - **Ya NO es un comando** (2026-09-04, Paso 11 del movimiento de ejércitos): interceptar dejó de declararse desde un asentamiento y pasó a ser lo que le ocurre a un ejército que se cruza con una caravana enemiga en el mapa (Doc 5.12.3). No hace falta General porque no hace falta orden: hace falta tener una columna ahí, que es más caro y más interesante. El botín viaja en su carro y llega a casa al replegarse.
-- Calcula poder del atacante contra una defensa base de caravana FIJA — que sigue siendo el valor para una caravana SIN escolta. Con escolta ya no aplica: se resuelve contra el poder real del ejército que la acompaña (5.13.3), que era justo lo que este apartado daba por no modelado.
+- Calcula poder del atacante contra una defensa base de caravana FIJA — que sigue siendo el valor para una caravana SIN escolta. Con escolta ya no aplica: se resuelve contra el poder real del ejército que la acompaña (5.13.3), que era justo lo que este apartado daba por no modelado. **Con el revamp (3.13, sin implementar) hay TRES capas**: sin nada → `defensaBaseCaravana`; con escolta sin héroe (escuadrones cedidos, 3.13.4) → poder de esos escuadrones; adjunta a un ejército → poder del ejército. La defensa base pasa a ser el caso "cero de las tres partes".
 - **UNA CARAVANA SOLA SE DEFIENDE DE UN JUGADOR SOLO** (a petición del usuario, 2026-09-06). Desde que el héroe combate por sí mismo (Doc 5.1), la defensa base tiene que dejar clara una frontera: **un jugador solo no roba caravanas**. La caravana lleva carreteros y guardias; un hombre a caballo no la para.
   - La cifra **se deriva del poder del héroe**, no se escribe suelta: `defensaBaseCaravana = poderHeroe × 1.7`. Se deriva porque `poderBase` sigue siendo placeholder (Doc 5.8) y una constante a mano se desincronizaría en cuanto se recalibre el roster — mismo criterio que el coste de Liderazgo (5.11.1).
   - **Por qué 1.7 y no menos.** Con la varianza de combate (±15% por bando, 5.2.5), para ganar SIEMPRE hace falta superar `1.15 / 0.85 = 1.353`. 1.7 deja margen por encima de ese mínimo sin acercarse al escuadrón más barato: hoy son **25** de defensa, frente a 15 de un héroe y **50** de una milicia completa. Un jugador solo pierde siempre; cualquier escuadrón real gana siempre.
@@ -109,3 +109,104 @@ Pesos y la distancia de referencia (600 unidades) son PLACEHOLDER, confirmados c
 - "Rutas Rápidas": ×1.5 la velocidad de las caravanas propias.
 
 **Verificado en el navegador** de punta a punta: colocar una orden o construir una caravana sin Mercado se rechaza; tras construir el Mercado (adición manual a la cola de Gobernador/Maestro de Obras, ver arriba), construir una caravana consume 50 madera y la deja 'disponible'; un trueque activo la asigna automáticamente (`asignarCaravanasATrueque`) y la hace viajar a la velocidad ×2 (tiempo de viaje observado coincide exactamente con distancia/velocidad); al entregar, vuelve a 'disponible' en vez de desaparecer. Sin errores de consola.
+
+## 3.13 Revamp de caravanas — la caravana compuesta — 🎯 diseñado (2026-09-08), implementación pendiente
+
+> Sustituye el modelo de 3.12 —una caravana `comercial` es un activo único de capacidad y velocidad fijas
+> (500/16)— por una caravana **compuesta**: carros, animales y escolta. Decisiones, representación en el motor,
+> plan de pasos e invariantes en `Consideraciones/Revamp_Caravanas_Definicion.md`.
+>
+> **Lo de 3.12 que NO cambia:** el Mercado como gate y como cupo de flota (2/4/6 + política), el activo
+> persistente con coste que no se desmantela, el `CARAVANA_COOLDOWN` de creación, la vuelta a `'disponible'`
+> en el origen desandando la ruta (nunca hay teletransporte), y el reparto automático (`asignarCaravanasATrueque`)
+> como sustituto de Fase 0 de la carga manual. El revamp añade piezas y una vía manual; no tira nada de eso.
+
+### 3.13.1 Tres partes
+
+Una caravana `comercial` deja de tener capacidad y velocidad propias: las **deriva** de lo que se le monta.
+
+| Parte | Qué aporta | Modelo |
+|---|---|---|
+| **Carros** | Capacidad de carga; y cuanto más carros, más tarda en prepararse | Lista de carros; cada carro lleva **como mucho un animal** |
+| **Animales de carga** | Qué carros pueden moverse y a qué ritmo | Un animal por carro; sin animal, el carro no sale |
+| **Escolta** | Defensa propia sin ningún jugador acompañando | Escuadrones cedidos por un jugador, **por viaje** (3.13.4) |
+
+- **Solo viajan los carros con animal.** Un carro sin animal se queda `'disponible'` en el origen — no es lastre en ruta, simplemente no sale en ese envío.
+- **Capacidad de viaje** = suma de (`capacidadBase` del carro × `factorCarga` del animal) sobre los carros con animal.
+- **Velocidad** = la del animal **más lento** de la caravana. Los carros no capean velocidad todavía (todos los tipos actuales manejan igual); "tan rápida como su carro más lento" queda anotado para cuando el catálogo de carros crezca.
+
+### 3.13.2 Carros y animales
+
+**Carros** — activo que se construye sobre una caravana concreta (el pool no vive suelto):
+
+| Carro | Dónde se fabrica | Coste | Rol |
+|---|---|---|---|
+| Básico | Mercado | 20 madera | `capacidadBase` ancla — un carro básico + un buey reproduce los 500/16 de hoy |
+| Reforzado | Carpintería | placeholder | Solo **más `capacidadBase`**. El catálogo se ampliará más adelante (otros ejes: resistencia, penalización de velocidad) |
+
+**Animales** — se compran con oro sobre una caravana; se asignan a un carro:
+
+| Animal | `factorCarga` | Velocidad | Coste | Nota |
+|---|---|---|---|---|
+| Buey | 1.0 | 16 | barato | El ancla del balance |
+| Caballo | 0.5 | 24 | caro | A esta velocidad **escapa de casi toda intercepción** (3.10 §"emboscada, no persecución") |
+| Camello | 0.75 | ~19 | medio | Opción intermedia. La **inmunidad al desierto queda diferida** (3.13.7): no existe bioma árido de primera clase |
+
+Todas las cifras son placeholder a calibrar por simulación, como el resto de Fase 0. La **cría** de animales
+queda diferida (3.13.7): por ahora solo compra con oro. El livestock del Corral (Doc 1.4) es un recurso
+distinto de los animales de arrastre.
+
+### 3.13.3 Preparación
+
+Lanzar una caravana dispara un estado `'preparando'` en el origen durante `prepTicks = K × (nº carros − 1)`
+— una caravana de 1 carro sale al instante (`prepTicks = 0`), así que **el batch NPC no cambia de ritmo**;
+las grandes tardan. Durante la preparación quedan bloqueados la carga (reservada del almacén), los carros,
+los animales y la escolta. **Es cancelable con devolución total** mientras no haya salido, igual que quitar
+una obra `'en_cola'` de la cola de construcción (Doc 4.2).
+
+Ciclo completo: `disponible → preparando → en_transito → retornando → disponible`. La cancelación va
+`preparando → disponible`.
+
+### 3.13.4 Escolta sin héroe
+
+La tercera pata, la que no existía. Es distinta de la escolta por ejército (5.13.3), que exige a un jugador
+marchando con la caravana.
+
+- Un jugador **residente del asentamiento de origen** cede escuadrones de su guarnición a la caravana **al
+  lanzarla**. No necesita estar físicamente presente ni acompañar el viaje; lo que viaja son sus escuadrones.
+- Los recupera **cuando la caravana vuelve** — es una cesión **por viaje**, no un enganche permanente.
+- Mientras están cedidos: salen de la defensa de su asentamiento (como si estuvieran en un ejército, Doc
+  5.12.4) y **siguen contando contra el Liderazgo del jugador** (Doc 5.11). Ceder tropa a una escolta no
+  libera Liderazgo — es coste de oportunidad puro.
+- **No consumen ración.** Una escolta no es una campaña; se abstrae el suministro (a diferencia de 5.13).
+- **Cupo por nivel interno de Mercado**: placeholder 1 / 2 / 3 escuadrones por caravana.
+- **Combate**: se resuelve contra el poder real de los escuadrones-escolta, con la misma resolución asimétrica
+  que la intercepción entre Facciones (3.10) y que el ataque de bandidos (Doc 1.9) — los bandidos pegan a la
+  escolta, no a la caravana, igual que en 5.13.3.
+
+### 3.13.5 Reparto automático vs preparación manual
+
+- `asignarCaravanasATrueque` (3.2) sigue vivo para trueque / NPC / laboratorio, usando las caravanas **no
+  reservadas**.
+- Una caravana con `reservadaManual = true` sale del pool automático **sea cual sea su tamaño**. Una de 1
+  carro se puede reservar; una de 5 puede seguir en automático. La señal es explícita, no se infiere de la
+  composición.
+- El **NPC no compone** caravanas multi-carro ni asigna escolta en este pase — es afordancia de jugador. El
+  batch queda protegido.
+- La caravana es **persistente y se reconfigura**: entre viajes el jugador le añade o quita carros y animales.
+  Reasignar piezas entre dos caravanas propias es libre, sin coste ni tiempo, mientras ambas estén
+  `'disponible'` en el mismo asentamiento — es mantenimiento de flota, no una mecánica.
+- La **planificación horaria** (dejar caravanas listas para cierta hora de mundo) queda diferida (3.13.7).
+
+### 3.13.6 Captura
+
+Si el atacante gana: **carros y animales destruidos**; la carga es su botín, en su carro, exactamente como
+hoy (3.10). La **escolta vuelve a casa derrotada**, con el debuff de derrota — no se pierde la tropa, solo
+las unidades caídas en el combate (permadeath normal, Doc 5.8). El dueño reconstruye contra su cupo, con el
+`CARAVANA_COOLDOWN` de siempre.
+
+### 3.13.7 Diferido — se diseñó la forma, se implementa después
+
+Planificación horaria, cría de animales, visibilidad por tamaño, inmunidad del camello al desierto, catálogo
+ampliado de carros y unificación con `Ejercito.suministro` (5.13). **Cada uno con su forma y lo que le falta
+en `Docs/Mecanicas a desarrollar.md` §8.1.**

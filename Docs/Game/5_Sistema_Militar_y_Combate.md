@@ -501,6 +501,8 @@ En la práctica son tres actos del jugador:
 
 La regla de velocidad lo equilibra sola: escoltar baja el ejército a la velocidad de la caravana, así que **no se puede escoltar y depredar a la vez**.
 
+**Escolta SIN héroe — Doc 3.13.4 (diseñada, sin implementar).** El revamp de caravanas añade una tercera vía: un jugador residente del origen **cede escuadrones** a la caravana por viaje, sin que nadie marche con ella. La caravana se defiende sola con el poder de esos escuadrones. Es distinto de esta escolta por ejército (que exige un jugador en columna) y de la defensa base fija (Doc 3.10) — tres capas, misma resolución de combate.
+
 ### 5.13.4 Una columna se disuelve cuando no queda NADIE dentro
 
 Regla necesaria por el TIEMPO REAL (decisión del usuario, 2026-09-02). Un tick es un minuto real, así que una

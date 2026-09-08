@@ -11,7 +11,7 @@ Cuando una entrada de aquí se cierra, se borra de este archivo y se marca allí
 | 1 | MOTOR | Impuestos: generación de oro por población | ✘ nada |
 | 3 | CARAVANAS | Rutas de caravana avanzadas | ◐ solo el pathfinder base |
 | 5 | TRUEQUE | Trueque compuesto de varios materiales | ✘ nada |
-| 8 | CARAVANAS | Revamp de caravanas (carros, animales y escoltas) | ✘ nada |
+| 8 | CARAVANAS | Revamp de caravanas (carros, animales y escoltas) | ✘ nada — **diseño cerrado 2026-09-08** |
 | 9 | ASENTAMIENTO | Eventos de asentamiento | ✘ nada |
 | 10 | WORLDGEN | Landmarks reconocibles | ✘ nada |
 | 11 | JUGADOR | Progresión de Liderazgo del jugador | ✘ nada |
@@ -72,60 +72,72 @@ acuerdo debería poder llevar varios materiales por lado.
 
 ## 8. Revamp de caravanas
 
-Cuando construyes tu primer mercado te cuesta 50 de oro y te da un carro de caravana básico y un animal de
-arrastre.
+> **DISEÑO CERRADO (2026-09-08), pendiente de implementar.** Cuatro rondas de decisiones con el usuario.
+> Reglas en `Docs/Game/3` §3.13 (más toques en §3.6, §3.10, Doc 4.2.1 Mercado, Doc 5.13.3); decisiones,
+> representación en el motor, plan de 5 pasos e invariantes en `Consideraciones/Revamp_Caravanas_Definicion.md`.
+>
+> Lo esencial: una caravana `comercial` pasa a ser un **contenedor de tres partes** —carros, animales (uno
+> por carro), escolta— y deriva capacidad/velocidad de lo que se le monta. La **escolta sin héroe** son
+> escuadrones que un jugador residente cede por viaje, inmovilizados y contando Liderazgo, cupo por nivel de
+> Mercado, y vuelven a casa derrotados si la caravana cae. La caravana sigue siendo **persistente y se
+> reconfigura**; un flag `reservadaManual` la saca del reparto automático, que sigue vivo para NPC/batch con
+> la caravana por defecto (1 carro + 1 buey ≈ 500/16, ancla de calibración). Lanzar dispara un estado
+> `preparando` cancelable, tanto más largo cuantos más carros.
+>
+> **Diferido** (forma diseñada, implementación posterior): planificación horaria, cría de animales,
+> visibilidad por tamaño, inmunidad del camello al desierto, catálogo ampliado de carros, unificación con
+> `Ejercito.suministro`. Detalle de cada uno en §8.1.
 
-Se pueden comprar animales de arrastre (cuestan oro) u obtener vía cría. Están los bueyes, lentos pero llevan
-mucha carga y son más económicos; los caballos, más rápidos pero menos carga; y los camellos, más lentos que
-los caballos pero más rápidos que los bueyes, y no se mueren en los desiertos.
+### 8.1 Lo diferido — forma diseñada, implementación en un pase posterior
 
-Los carros hay de varios tipos: el más básico se fabrica en el mercado por 20 de madera, y en la carpintería
-se pueden fabricar mejores.
+El diseño de 2026-09-08 recortó seis piezas del enunciado original para no inflar el primer pase. Ninguna se
+descartó: se decidió su forma y se aparcó. Aquí queda cada una con lo que falta para abordarla.
 
-El mercado mantiene el cap de caravanas activas. Una caravana puede tener muchos carros asignados, y cada
-carro, dependiendo de su tipo, puede tener uno o varios animales asignados.
+**a) Planificación horaria de caravanas.** El enunciado pide que una caravana no solo se lance ahora, sino
+que se deje *programada* para salir a cierta hora de mundo. Es un scheduler: una caravana `preparada` con
+carga/destino/escolta fijados y una hora de disparo. El motor ya tiene el gancho — la infra de *scheduled
+commands* está documentada como "aterriza con su primera mecánica de Fase 1" (roadmap D5, Doc 7). Este sería
+ese primer consumidor. Falta: el comando `programarCaravana(id, { …, dispararEn: Instante })`, el estado
+`programada` y su ejecución diferida en el reloj de mundo (`RunnerDePartida`).
 
-**Una caravana se arma con TRES partes** (a petición del usuario, 2026-09-06):
+**b) Cría de animales de arrastre.** Hoy los animales solo se compran con oro. El enunciado quiere obtenerlos
+también por cría. El Corral (Doc 1.4/4.2.1) produce *livestock*, que es un recurso distinto — la cría de
+bueyes/caballos/camellos necesitaría su propio edificio o una receta que consuma livestock + trigo y tarde
+ticks. Falta: decidir si es un edificio nuevo o una función del Corral, el coste y el ritmo, y si cada tipo
+de animal exige condiciones (el camello, un bioma; el caballo, quizá un nivel de asentamiento).
 
-| Parte | Qué aporta |
-|---|---|
-| **Carros** | Capacidad de carga y, el más lento, la velocidad de toda la caravana |
-| **Animales de carga** | Qué carros pueden moverse y a qué ritmo — bueyes, caballos, camellos |
-| **Escuadrones de escolta** | Defensa propia, sin héroe |
+**c) Visibilidad por tamaño.** Las caravanas pequeñas no deberían aparecer en el mapa general salvo que haya
+un jugador cerca (regla de niebla actual); las grandes deberían **llamar la atención desde que se preparan**,
+al punto de ser visibles para asentamientos hasta cierta distancia, para que salgan a interceptarlas. Es el
+gancho de conflicto del enunciado. Falta: un umbral de tamaño (nº de carros y/o carga) que decida si la
+caravana entra en la proyección de niebla de otras Facciones y a qué radio, y que eso aplique **durante el
+estado `preparando`**, no solo en ruta. Engancha con Doc 5.12 (niebla de guerra) y con §12.
 
-**La escolta por defecto, sin héroe** — es la tercera pata y la que no existía en el enunciado original.
-Según el **nivel del asentamiento y de su Mercado**, se pueden asignar escuadrones a una caravana como
-escolta permanente, sin que ningún jugador los acompañe. Es distinto de la escolta por ejército (Doc 5.13.3),
-que exige a un jugador marchando con ella: aquí la caravana se defiende sola.
+**d) Inmunidad del camello al desierto.** El camello "no se muere en los desiertos"; buey y caballo sí. Pero
+no existe un bioma `desierto` de primera clase (el tipo es `agua|costa|estepa|llanuraFertil|colina|montana|
+cima`; la aridez del Nilo es `estepa` de fertilidad baja). Sin terreno árido real, la inmunidad no tiene a
+qué agarrarse y el camello se queda como "opción media" a secas. Falta: o un `BiomaTipo` nuevo, o anclar el
+"desierto" a `estepa` por debajo de un umbral de fertilidad — y entonces una regla de *attrition* por tick
+sobre buey/caballo al cruzarlo. Posible que llegue con §10 (landmarks / worldgen).
 
-Lo que hay que decidir al abordarlo:
+**e) Catálogo ampliado de carros.** El primer pase trae solo dos carros: el básico (Mercado) y uno
+"reforzado" (Carpintería) que solo da más capacidad. El enunciado habla de "varios tipos" fabricables en la
+Carpintería. Falta: los ejes que diferencian un carro de otro más allá de la capacidad — resistencia a la
+captura (un carro que sobrevive a una derrota), penalización de velocidad (un carro que no frena tanto al
+animal rápido), coste en recursos más caros. Se abre cuando la Carpintería tenga niveles internos que lo
+justifiquen.
 
-- **Cuántos escuadrones por nivel**, y si el cupo lo marca el nivel del asentamiento, el del Mercado, o ambos.
-- **De quién son esos escuadrones.** Hoy todo escuadrón pertenece a un Jugador (Doc 5.4) y cuenta contra su
-  Liderazgo. Una escolta sin héroe rompe eso: o son tropa del asentamiento —una figura nueva— o son de un
-  jugador que las cede y las tiene inmovilizadas mientras la caravana viaja.
-- **Cómo se relaciona con la defensa base** de una caravana sin escolta (Doc 3.10), que ya existe y que
-  precisamente está calibrada para frenar a un jugador solo. Con escoltas reales, esa defensa base pasa a ser
-  el caso "sin ninguna de las tres partes".
-- **Qué pasa con la escolta si la caravana es capturada**: se pierde con ella, o vuelve a casa.
+**f) Unificación con el carro de columna.** `Ejercito.suministro` (Doc 5.13) y los carros de una caravana son
+el mismo concepto físico: un vehículo con capacidad tirado para llevar carga por el mapa. Doc 5.13.3 ya dejó
+anotado que se unifican "cuando se diseñe el revamp". El revamp los deja **separados a propósito** en este
+pase —una caravana adjunta a un ejército sigue siendo su propia entidad— porque unificar el modelo físico es
+un refactor sin premio de juego inmediato. Falta: un tipo `Carro` compartido y que tanto `Ejercito` como
+`Caravana` lo compongan.
 
-Una caravana, mientras más carros tenga, dura más en prepararse; aparte es tan rápida como su carro más lento.
-
-Tiene que haber una interfaz de preparación de caravana y de planificación, es decir, que se lance no solo
-automáticamente sino que se dejen planificadas para cierta hora.
-
-Las caravanas pequeñas no llaman la atención, por ende no aparecen en el mapa general: tiene que haber un
-jugador cerca para que le aparezca.
-
-Las caravanas grandes (muchos carros, mucho contenido) llaman mucho la atención desde que se empiezan a
-preparar, al punto de que jugadores de asentamientos hasta cierta distancia pueden ver que se está preparando,
-para salir a interceptarla. Así incentivamos el conflicto.
-
-*Lo que ya existe y hay que respetar al implementar esto:* capacidad y velocidad fijas por categoría
-(`CARAVANA_CATALOGO`), flota propia construible (`construirCaravanaComercial`), cupo ampliable por política
-(`cupo_caravana_extra`), cooldown de creación (`CARAVANA_COOLDOWN`) y asignación automática por scoring
-(`ASIGNACION_CARAVANA`) — esta última es el sustituto de Fase 0 de la carga manual, y es justo lo que la
-interfaz de preparación vendría a reemplazar.
+*Lo que ya existe y el revamp respeta al implementar el primer pase:* flota propia construible
+(`construirCaravanaComercial`), cupo por Mercado y política (`cupo_caravana_extra`), cooldown de creación
+(`CARAVANA_COOLDOWN`), asignación automática por scoring (`ASIGNACION_CARAVANA`) como sustituto de Fase 0 de
+la carga manual, y la separación de capas motor / sesión / infra (ver el plan en el Definicion).
 
 ## 9. Eventos de asentamiento
 
