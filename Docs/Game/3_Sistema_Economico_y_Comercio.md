@@ -110,7 +110,7 @@ Pesos y la distancia de referencia (600 unidades) son PLACEHOLDER, confirmados c
 
 **Verificado en el navegador** de punta a punta: colocar una orden o construir una caravana sin Mercado se rechaza; tras construir el Mercado (adición manual a la cola de Gobernador/Maestro de Obras, ver arriba), construir una caravana consume 50 madera y la deja 'disponible'; un trueque activo la asigna automáticamente (`asignarCaravanasATrueque`) y la hace viajar a la velocidad ×2 (tiempo de viaje observado coincide exactamente con distancia/velocidad); al entregar, vuelve a 'disponible' en vez de desaparecer. Sin errores de consola.
 
-## 3.13 Revamp de caravanas — la caravana compuesta — 🔶 Pasos 1-2 implementados (2026-09-08); preparación y escolta pendientes
+## 3.13 Revamp de caravanas — la caravana compuesta — 🔶 Pasos 1-3 implementados (2026-09-08); escolta sin héroe pendiente
 
 > Sustituye el modelo de 3.12 —una caravana `comercial` es un activo único de capacidad y velocidad fijas
 > (500/16)— por una caravana **compuesta**: carros, animales y escolta. Decisiones, representación en el motor,
@@ -118,9 +118,10 @@ Pesos y la distancia de referencia (600 unidades) son PLACEHOLDER, confirmados c
 >
 > **Hecho:** el modelo (`Caravana.carros`, `CARRO_CATALOGO`/`ANIMAL_CATALOGO`, `capacidadCaravana`/
 > `velocidadCaravana`, migración de snapshot v11→v12; el viejo `CARAVANA_CATALOGO.comercial` fijo se borró),
-> el casco vacío gratis (`crearCaravana`) y las piezas (`agregarCarroCaravana`, `comprarAnimalCaravana`,
-> `reservarCaravana`). El batch NPC quedó **bit-idéntico** en los dos pasos. **Pendiente:** §3.13.3
-> (preparación) y §3.13.4 (escolta).
+> el casco vacío gratis (`crearCaravana`), las piezas (`agregarCarroCaravana`, `comprarAnimalCaravana`,
+> `reservarCaravana`, `moverCarroCaravana`) y el lanzamiento manual con preparación (`prepararCaravana`,
+> `cancelarCaravana`). El batch NPC quedó **bit-idéntico** en los tres pasos. **Pendiente:** §3.13.4 (escolta
+> sin héroe).
 >
 > **Lo de 3.12 que NO cambia:** el Mercado como gate y como cupo de flota (2/4/6 + política), el activo
 > persistente con coste que no se desmantela, el `CARAVANA_COOLDOWN` de creación, la vuelta a `'disponible'`
@@ -176,16 +177,25 @@ caravana gratis por asentamiento movía 42 métricas del batch NPC —artesanos 
 cero, oro medio −20%—, y el valor era marginal porque el casco vacío ya es gratis. Queda como sabor, no como
 mecánica.
 
-### 3.13.3 Preparación
+### 3.13.3 Preparación y lanzamiento manual — ✅ implementado
 
-Lanzar una caravana dispara un estado `'preparando'` en el origen durante `prepTicks = K × (nº carros − 1)`
-— una caravana de 1 carro sale al instante (`prepTicks = 0`), así que **el batch NPC no cambia de ritmo**;
-las grandes tardan. Durante la preparación quedan bloqueados la carga (reservada del almacén), los carros,
-los animales y la escolta. **Es cancelable con devolución total** mientras no haya salido, igual que quitar
-una obra `'en_cola'` de la cola de construcción (Doc 4.2).
+Además del reparto automático (3.13.5), un residente del origen **lanza una caravana a mano**
+(`prepararCaravana`): elige **carga** —del almacén del origen, hasta la capacidad de la caravana— y
+**destino**. La caravana pasa por un estado `'preparando'` en el origen durante
+`prepTicks = CARAVANA_PREPARACION.kPorCarro × (nº carros − 1)` — una caravana de 1 carro sale al instante
+(`prepTicks = 0`), las grandes tardan. La carga se **reserva del almacén ya** (se descuenta al preparar).
 
-Ciclo completo: `disponible → preparando → en_transito → retornando → disponible`. La cancelación va
-`preparando → disponible`.
+- **`cancelarCaravana`** mientras siga `'preparando'` la devuelve a `'disponible'` y **reingresa la carga
+  entera** al almacén — igual que quitar una obra `'en_cola'` (Doc 4.2).
+- Al vencer `preparaHasta`, el tick la pasa a `'en_transito'` sobre la ruta ya calculada (si al preparar no
+  había ruta por tierra, el comando se rechaza — el agua es infranqueable, 3.10).
+- Una caravana `'preparando'` **no es interceptable**: está en su ciudad, no en el camino.
+- Al llegar a destino, **vuelca la carga en su almacén y paga la comisión de comercio** (3.5), como cualquier
+  entrega; luego hace el viaje de vuelta (`'retornando'`). En este pase el lanzamiento manual **no se
+  vincula a un trueque concreto** — es logística de recursos (mover mercancía a plaza propia o aliada); el
+  reparto automático sigue cubriendo los trueques.
+
+Ciclo completo: `disponible → preparando → en_transito → retornando → disponible`.
 
 ### 3.13.4 Escolta sin héroe
 
@@ -213,9 +223,10 @@ marchando con la caravana.
   composición.
 - El **NPC no compone** caravanas multi-carro ni asigna escolta en este pase — es afordancia de jugador. El
   batch queda protegido.
-- La caravana es **persistente y se reconfigura**: entre viajes el jugador le añade o quita carros y animales.
-  Reasignar piezas entre dos caravanas propias es libre, sin coste ni tiempo, mientras ambas estén
-  `'disponible'` en el mismo asentamiento — es mantenimiento de flota, no una mecánica.
+- La caravana es **persistente y se reconfigura**: entre viajes el jugador le añade carros y animales, y
+  **mueve carros entre dos caravanas suyas** (`moverCarroCaravana`) — libre, sin coste ni tiempo, mientras
+  ambas estén `'disponible'` en el mismo asentamiento. Es mantenimiento de flota, no una mecánica. (Quitar un
+  carro suelto, sin destino, no existe todavía — se mueve a otra caravana.)
 - La **planificación horaria** (dejar caravanas listas para cierta hora de mundo) queda diferida (3.13.7).
 
 ### 3.13.6 Captura

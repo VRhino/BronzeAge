@@ -129,7 +129,8 @@ export function avanzarAtaquesBandidos(
     ejercitos.find((e) => e.caravanasAdjuntasIds.includes(caravanaId));
 
   for (const caravana of caravanas) {
-    if (caravana.estado === 'disponible') continue; // parada en origen, no viajando — nada que interceptar.
+    // Parada en su ciudad (disponible, o preparándose para un envío manual, Doc 3.13.3) — nada que interceptar.
+    if (caravana.estado === 'disponible' || caravana.estado === 'preparando') continue;
     const campamentoCercano = campamentos.find(
       (c) => distancia(c.posicion, caravana.posicionActual) <= CAMPAMENTOS_BANDIDOS.radioAtaqueCaravana
     );

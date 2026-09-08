@@ -34,7 +34,7 @@ export interface PayloadCaravanaSale {
   cantidad: number;
   recurso: string;
 }
-import { ANIMAL_CATALOGO, ASIGNACION_CARAVANA, CARRO_CATALOGO, COMISION, REPUTACION, TRUEQUE } from '../constants';
+import { ANIMAL_CATALOGO, ASIGNACION_CARAVANA, CARAVANA_PREPARACION, CARRO_CATALOGO, COMISION, REPUTACION, TRUEQUE } from '../constants';
 import type { AnimalTipo, CarroTipo } from '../domain/types';
 import { capacidadCaravana, velocidadCaravana } from './caravanas';
 import { minutos, sumar, type Instante } from '../domain/tiempo';
@@ -236,9 +236,8 @@ export function comprarAnimalParaCaravana(
 /**
  * Construye una caravana comercial COMPLETA con la configuración por defecto — casco + 1 carro básico + 1 buey
  * (500/16, coste 50 madera). Es lo que usan el NPC de gobernanza y el laboratorio (`simulacionAutoComercio`),
- * que no componen caravanas a mano, y el bootstrap del Mercado (Doc 3.13). Encadena `crearCaravanaVacia` +
- * `agregarCarroACaravana` + `comprarAnimalParaCaravana`, así que pasa por las mismas comprobaciones que el
- * jugador.
+ * que no componen caravanas a mano. Encadena `crearCaravanaVacia` + `agregarCarroACaravana` +
+ * `comprarAnimalParaCaravana`, así que pasa por las mismas comprobaciones que el jugador.
  */
 export function construirCaravanaComercial(
   asentamiento: Asentamiento,
@@ -250,6 +249,139 @@ export function construirCaravanaComercial(
   const conCarro = agregarCarroACaravana(vacia.caravana, vacia.asentamiento, 'basico');
   const conAnimal = comprarAnimalParaCaravana(conCarro.caravana, conCarro.asentamiento, 0, 'buey');
   return { asentamiento: conAnimal.asentamiento, caravana: conAnimal.caravana };
+}
+
+/**
+ * Ruta que sigue una caravana entre dos asentamientos (Fase 0.3): reusa el Camino Comercial del par si existe
+ * —con la polilínea orientada origen→destino— y si no la calcula por pathfinding. `undefined` = no hay ruta
+ * por tierra (el agua es infranqueable, Doc 3.10): la caravana no sale.
+ */
+function calcularRutaComercial(
+  mapa: Mapa,
+  caminos: readonly CaminoComercial[],
+  origen: Asentamiento,
+  destino: Asentamiento
+): Point[] | undefined {
+  const camino = buscarCamino(caminos, origen.id, destino.id);
+  const orientada = camino
+    ? camino.asentamientoAId === origen.id
+      ? camino.puntos
+      : [...camino.puntos].reverse()
+    : undefined;
+  return orientada ?? calcularRuta(mapa, origen.posicion, destino.posicion) ?? undefined;
+}
+
+/**
+ * Lanza una caravana comercial A MANO (Doc 3.13.3): el jugador elige carga y destino. La carga se reserva del
+ * almacén ya, y la caravana pasa por el estado `'preparando'` en el origen —`kPorCarro × (nº carros − 1)`
+ * ticks, 0 para una de un solo carro— antes de salir. `cancelarPreparacionCaravana` la revierte con
+ * devolución total.
+ */
+export function prepararCaravanaManual(
+  caravana: Caravana,
+  origen: Asentamiento,
+  destino: Asentamiento,
+  carga: Record<string, number>,
+  mapa: Mapa,
+  caminos: readonly CaminoComercial[],
+  instante: Instante
+): { caravana: Caravana; asentamiento: Asentamiento } {
+  if (caravana.tipo !== 'comercial' || caravana.carros === undefined) {
+    throw new CaravanaInvalidaError('Solo se lanzan a mano las caravanas comerciales del revamp.');
+  }
+  if (caravana.estado !== 'disponible') {
+    throw new CaravanaInvalidaError('La caravana no está disponible en su origen.');
+  }
+  if (caravana.origenAsentamientoId !== origen.id) {
+    throw new CaravanaInvalidaError('Ese asentamiento no es el origen de la caravana.');
+  }
+  const capacidad = capacidadCaravana(caravana) * factorCapacidadCaravana(origen);
+  if (capacidad <= 0) {
+    throw new CaravanaInvalidaError('La caravana no tiene ningún carro con animal: no puede viajar.');
+  }
+  const totalCarga = Object.values(carga).reduce((a, b) => a + b, 0);
+  if (totalCarga <= 0) throw new CaravanaInvalidaError('Hay que cargar algo en la caravana.');
+  if (totalCarga > capacidad + 1e-6) {
+    throw new CaravanaInvalidaError(`La carga (${totalCarga.toFixed(0)}) supera la capacidad de la caravana (${capacidad.toFixed(0)}).`);
+  }
+  for (const [recurso, cantidad] of Object.entries(carga)) {
+    if (cantidad < 0) throw new CaravanaInvalidaError('Las cantidades de carga no pueden ser negativas.');
+    if (cantidadDisponible(origen.almacen, recurso) < cantidad) {
+      throw new CaravanaInvalidaError(`No hay ${recurso} suficiente en el almacén de ${origen.id}.`);
+    }
+  }
+  const ruta = calcularRutaComercial(mapa, caminos, origen, destino);
+  if (!ruta) throw new CaravanaInvalidaError('No hay ruta por tierra hasta el destino (el agua es infranqueable).');
+
+  const prepTicks = CARAVANA_PREPARACION.kPorCarro * Math.max(0, caravana.carros.length - 1);
+  const contenido = Object.fromEntries(Object.entries(carga).filter(([, c]) => c > 0));
+
+  return {
+    asentamiento: { ...origen, almacen: descontarRecursos(origen.almacen, carga) },
+    caravana: {
+      ...caravana,
+      estado: prepTicks > 0 ? 'preparando' : 'en_transito',
+      destinoAsentamientoId: destino.id,
+      contenido,
+      posicionActual: origen.posicion,
+      progreso: 0,
+      ruta,
+      preparaHasta: prepTicks > 0 ? sumar(instante, minutos(prepTicks)) : undefined,
+    },
+  };
+}
+
+/** Cancela la preparación de una caravana y devuelve la carga al almacén (Doc 3.13.3). */
+export function cancelarPreparacionCaravana(
+  caravana: Caravana,
+  origen: Asentamiento
+): { caravana: Caravana; asentamiento: Asentamiento } {
+  if (caravana.estado !== 'preparando') throw new CaravanaInvalidaError('La caravana no se está preparando.');
+  let almacen = origen.almacen;
+  for (const [recurso, cantidad] of Object.entries(caravana.contenido)) {
+    almacen = agregarRecurso(almacen, recurso, cantidad);
+  }
+  return {
+    asentamiento: { ...origen, almacen },
+    caravana: {
+      ...caravana,
+      estado: 'disponible',
+      destinoAsentamientoId: undefined,
+      contenido: {},
+      ruta: undefined,
+      progreso: 0,
+      preparaHasta: undefined,
+    },
+  };
+}
+
+/**
+ * Mueve un carro (con su animal) de una caravana disponible a otra del mismo asentamiento (Doc 3.13.5).
+ * Sin coste ni tiempo — es mantenimiento de flota, no una mecánica.
+ */
+export function moverCarroEntreCaravanas(
+  desde: Caravana,
+  hacia: Caravana,
+  carroIndice: number
+): { desde: Caravana; hacia: Caravana } {
+  for (const c of [desde, hacia]) {
+    if (c.tipo !== 'comercial' || c.carros === undefined) {
+      throw new CaravanaInvalidaError('Las dos tienen que ser caravanas comerciales del revamp.');
+    }
+    if (c.estado !== 'disponible') {
+      throw new CaravanaInvalidaError('Solo se reconfiguran caravanas disponibles en su origen.');
+    }
+  }
+  if (desde.id === hacia.id) throw new CaravanaInvalidaError('Origen y destino son la misma caravana.');
+  if (desde.origenAsentamientoId !== hacia.origenAsentamientoId) {
+    throw new CaravanaInvalidaError('Las dos caravanas tienen que ser del mismo asentamiento.');
+  }
+  const carro = desde.carros![carroIndice];
+  if (!carro) throw new CaravanaInvalidaError(`La caravana no tiene un carro en la posición ${carroIndice}.`);
+  return {
+    desde: { ...desde, carros: desde.carros!.filter((_, i) => i !== carroIndice) },
+    hacia: { ...hacia, carros: [...hacia.carros!, carro] },
+  };
 }
 
 /** Tasa base (Doc 3.5); si es externa, el Tesorero del destino (quien cobra la comisión) puede modularla. */
@@ -271,12 +403,34 @@ function avanzarCaravanas(
   asentamientosPorId: Map<string, Asentamiento>,
   acuerdosPorId: Map<string, AcuerdoTrueque>,
   facciones: Faccion[],
+  instante: Instante,
   eventos: EventoCrudo[],
   ajustesReputacion: AjusteReputacion[]
 ): Caravana[] {
   const restantes: Caravana[] = [];
 
   for (const caravana of caravanas) {
+    // Revamp (Doc 3.13.3): una caravana lanzada a mano espera en el origen hasta que se cumple su
+    // `preparaHasta`, y entonces sale. Mientras tanto no se mueve ni es interceptable (está en su ciudad).
+    if (caravana.estado === 'preparando') {
+      if (caravana.preparaHasta !== undefined && instante >= caravana.preparaHasta) {
+        const destino = asentamientosPorId.get(caravana.destinoAsentamientoId ?? '');
+        restantes.push({ ...caravana, estado: 'en_transito', preparaHasta: undefined });
+        eventos.push({
+          codigo: 'comercio.caravana_sale',
+          mensaje: `Caravana comercial de ${caravana.origenAsentamientoId} termina de prepararse y sale hacia ${destino?.id ?? caravana.destinoAsentamientoId}.`,
+          payload: {
+            origenId: caravana.origenAsentamientoId,
+            destinoId: caravana.destinoAsentamientoId ?? '',
+            cantidad: Object.values(caravana.contenido).reduce((a, b) => a + b, 0),
+            recurso: Object.keys(caravana.contenido)[0] ?? '',
+          } satisfies PayloadCaravanaSale,
+        });
+      } else {
+        restantes.push(caravana);
+      }
+      continue;
+    }
     if (!caravana.destinoAsentamientoId) {
       // Sin destino todavía: o es una Caravana de Fundación (Doc 1.8, destino = punto del mapa, la avanza
       // `avanzarCaravanasFundacion` en engine/expansion.ts, no esta función), o es una caravana comercial
@@ -686,17 +840,10 @@ function asignarCaravanasATrueque(
       // polilínea; si no, `progreso: 0` caía en el extremo del camino más cercano al DESTINO en vez del
       // propio origen, y la caravana "saltaba" allí en su primer paso de movimiento (ver `avanzarPosicionEnRuta`,
       // que siempre mide el progreso desde `ruta[0]` hacia adelante).
-      const caminoExistente = buscarCamino(caminos, origen.id, destino.id);
-      const rutaOrientada = caminoExistente
-        ? caminoExistente.asentamientoAId === origen.id
-          ? caminoExistente.puntos
-          : [...caminoExistente.puntos].reverse()
-        : undefined;
       // El agua es infranqueable: sin camino por tierra la caravana NO sale y la carga se queda en el
-      // almacén. Comprobado ANTES de descontar recursos, y de forma explícita porque `Caravana.ruta` es
-      // opcional: un `undefined` no daría error de tipos y la caravana caería a la fórmula de línea recta de
-      // siempre (ver `avanzarCaravanas` más arriba), o sea que cruzaría el mar en silencio.
-      const ruta = rutaOrientada ?? calcularRuta(mapa, origen.posicion, destino.posicion);
+      // almacén. Comprobado ANTES de descontar recursos. Ver `calcularRutaComercial` (reusa el Camino
+      // Comercial del par si existe, orientado origen→destino).
+      const ruta = calcularRutaComercial(mapa, caminos, origen, destino);
       if (!ruta) continue;
 
       asentamientosPorId.set(origen.id, { ...origen, almacen: descontarRecursos(origen.almacen, { [l.recurso]: cantidad }) });
@@ -736,7 +883,7 @@ export function avanzarComercio(
   const asentamientosPorId = new Map(asentamientos.map((a) => [a.id, { ...a }]));
   const acuerdosPorId = new Map(acuerdos.map((a) => [a.id, a]));
 
-  const trasMovimiento = avanzarCaravanas(caravanas, mapa, caminos, asentamientosPorId, acuerdosPorId, facciones, eventos, ajustesReputacion);
+  const trasMovimiento = avanzarCaravanas(caravanas, mapa, caminos, asentamientosPorId, acuerdosPorId, facciones, instante, eventos, ajustesReputacion);
   const trasAsignacion = asignarCaravanasATrueque(mapa, caminos, acuerdosPorId, asentamientosPorId, trasMovimiento, instante, eventos, ajustesReputacion);
 
   return {

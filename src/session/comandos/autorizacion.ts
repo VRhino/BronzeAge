@@ -418,6 +418,18 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
     rolesPermitidos: ['jugador'],
     condicionJugador: (estado, jugadorId, params) => resideEnOrigenDeCaravana(estado, jugadorId, params.caravanaId),
   },
+  prepararCaravana: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, jugadorId, params) => resideEnOrigenDeCaravana(estado, jugadorId, params.caravanaId),
+  },
+  cancelarCaravana: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, jugadorId, params) => resideEnOrigenDeCaravana(estado, jugadorId, params.caravanaId),
+  },
+  moverCarroCaravana: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, jugadorId, params) => resideEnOrigenDeCaravana(estado, jugadorId, params.desdeCaravanaId),
+  },
   // Comerciar en el mostrador de OTRO no exige residencia ni presencia dentro: exige estar alli con la
   // columna, y eso lo comprueba el motor (`comerciarEnPlaza`), que es donde vive la regla. Aqui solo se corta
   // que nadie opere en nombre de otro.

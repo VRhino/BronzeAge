@@ -150,8 +150,8 @@ export const ANIMAL_CATALOGO = {
   camello: { factorCarga: 0.75, velocidad: 19, costo: { oro: 40 } },
 } as const;
 
-// Pendientes de los Pasos 3/4:
-// export const CARAVANA_PREPARACION = { kPorCarro: 2 };
+export const CARAVANA_PREPARACION = { kPorCarro: 2 };
+// Pendiente del Paso 4:
 // export const CARAVANA_ESCOLTA = { cupoPorNivelMercado: [1, 2, 3] };
 ```
 
@@ -168,14 +168,14 @@ velocidad fijas conviviendo con el nuevo. La migración v11→v12 garantiza que 
 | `agregarCarroCaravana(caravanaId, tipoCarro)` | **HECHO (Paso 2).** Paga `CARRO_CATALOGO[tipo].costo`, añade un carro sin animal. `reforzado` exige Carpintería activa. Solo caravana `'disponible'`. |
 | `comprarAnimalCaravana(caravanaId, carroIndice, tipoAnimal)` | **HECHO (Paso 2).** Paga `ANIMAL_CATALOGO[tipo].costo`, engancha el animal a un carro sin tracción. |
 | `reservarCaravana(caravanaId, reservada)` | **HECHO (Paso 2).** Set `reservadaManual`. |
-| `moverPieza(desdeId, haciaId, pieza)` | Diferido a Paso 3 (no hay caller hasta la UI de preparación). Reasigna un carro entre dos caravanas propias `'disponible'` en el mismo asentamiento. Sin coste. |
-| `prepararCaravana(caravanaId, { carga, destinoAsentamientoId, escoltaEscuadronIds })` | Paso 3. Reserva carga del almacén, valida cupo de escolta y residencia del cedente, pasa a `'preparando'` con `preparaHasta`. |
-| `cancelarPreparacion(caravanaId)` | Paso 3. Solo en `'preparando'`. Devuelve carga, libera escolta, vuelve a `'disponible'`. |
+| `moverCarroCaravana(desdeCaravanaId, haciaCaravanaId, carroIndice)` | **HECHO (Paso 3).** Mueve un carro (con su animal) entre dos caravanas propias `'disponible'` del mismo asentamiento. Sin coste. |
+| `prepararCaravana(caravanaId, destinoAsentamientoId, carga)` | **HECHO (Paso 3).** Reserva la carga del almacén, calcula/valida la ruta, pasa a `'preparando'` (o directo a `'en_transito'` si `prepTicks = 0`). La escolta (`escoltaEscuadronIds`) se añade en el Paso 4. |
+| `cancelarCaravana(caravanaId)` | **HECHO (Paso 3).** Solo en `'preparando'`. Devuelve la carga entera, vuelve a `'disponible'`. |
 
 ### Motor
 
-- `asignarCaravanasATrueque` (`engine/trade.ts`): filtrar `!c.reservadaManual`.
-- `avanzarCaravanas` (`engine/trade.ts`): al llegar `preparaHasta`, `preparando → en_transito` con la ruta ya calculada.
+- ~~`asignarCaravanasATrueque`: filtrar `!c.reservadaManual`~~ (Paso 2). ~~`avanzarCaravanas`: al vencer
+  `preparaHasta`, `preparando → en_transito`~~ (Paso 3). Ambos hechos.
 - `interceptarCaravanaConEjercito` (`engine/combate.ts`) y `engine/bandidos.ts`: usar `poderDefensaCaravana`; en captura de una caravana con escolta, devolver los escuadrones a la guarnición del origen con debuff de derrota, aplicar permadeath de bajas, destruir `carros`.
 - Guarnición defensora (`engine/combate.ts`, asedio): excluir los escuadrones cuyos ids están en `escoltaEscuadronIds` de alguna caravana de ese asentamiento no `'disponible'`.
 - ~~Bootstrap del Mercado~~: descartado (Ronda 5 §18) — regresaba el batch NPC. El Mercado no cambia de coste.
@@ -229,9 +229,14 @@ Cada paso respeta la separación motor / sesión / infra de arriba y verifica en
    (engine/trade.ts) y sus comandos `crearCaravana` / `agregarCarroCaravana` / `comprarAnimalCaravana` /
    `reservarCaravana`. `construirCaravanaComercial` recompone la caravana por defecto para el NPC (50 madera,
    sin cambio). Bootstrap descartado (§18). `moverPieza` diferido a Paso 3. **Batch bit-idéntico.**
-3. **Preparación.** Estado `preparando` operativo: `prepararCaravana` (lanzamiento manual con carga/destino),
-   `cancelarPreparacion`, countdown en `avanzarCaravanas`. `moverPieza` cae aquí. `bandidos.ts` trata
-   `preparando` como "en el origen".
+3. ~~**Preparación.**~~ **HECHO.** `prepararCaravanaManual` (elige carga + destino, reserva la carga, calcula
+   y valida la ruta), estado `'preparando'` con `preparaHasta`, `cancelarPreparacionCaravana` (devolución
+   total), transición `preparando → en_transito` en `avanzarCaravanas` al vencer el plazo. `CARAVANA_PREPARACION`.
+   `moverCarroEntreCaravanas`. `bandidos.ts` ignora `preparando`. La lógica de ruta se extrajo a
+   `calcularRutaComercial`, reusada por el reparto automático. **Decisión al implementar:** el lanzamiento
+   manual **no se vincula a un trueque** — vuelca la carga en el almacén del destino y paga comisión, como
+   cualquier entrega; es logística de recursos, no cumplimiento de acuerdos (eso lo sigue haciendo el reparto
+   automático). Enganchar un envío manual a un trueque concreto queda como mejora futura. Batch bit-idéntico.
 4. **Escolta sin héroe.** Cesión y recuperación de escuadrones, exclusión de guarnición, cupo por nivel de
    Mercado, `poderDefensaCaravana` en intercepción y bandidos, vuelta a casa con debuff en captura.
 5. **Canon + medición.** Reconciliar Doc 3.13 / 4.2.1 / 5.13.3 con lo medido; batch de control.

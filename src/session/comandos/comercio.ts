@@ -6,6 +6,9 @@ import {
   crearCaravanaVacia as crearCaravanaVaciaEngine,
   agregarCarroACaravana as agregarCarroEngine,
   comprarAnimalParaCaravana as comprarAnimalEngine,
+  prepararCaravanaManual as prepararCaravanaManualEngine,
+  cancelarPreparacionCaravana as cancelarPreparacionEngine,
+  moverCarroEntreCaravanas as moverCarroEngine,
   proponerTrueque as proponerTruequeEngine,
   rechazarTrueque as rechazarTruequeEngine,
 } from '../../engine/trade';
@@ -378,3 +381,89 @@ export const reservarCaravana = comando<ParamsReservarCaravana, { reservada: boo
     { reservada: params.reservada }
   );
 });
+
+export interface ParamsPrepararCaravana {
+  caravanaId: string;
+  destinoAsentamientoId: string;
+  /** Mapa recurso -> cantidad: qué se carga del almacén del origen, hasta la capacidad de la caravana. */
+  carga: Record<string, number>;
+}
+
+/**
+ * Lanza una caravana comercial a mano (Doc 3.13.3): elige carga y destino. La caravana pasa por `'preparando'`
+ * en el origen —tanto más tiempo cuantos más carros— y al terminar sale sola en el tick. `cancelarCaravana`
+ * la revierte mientras siga preparándose.
+ */
+export const prepararCaravana = comando<ParamsPrepararCaravana, { caravanaId: string; preparaHasta?: number }>(
+  (estado, mapa, ctx, params) => {
+    const caravana = exigirCaravana(estado, params.caravanaId);
+    const origen = exigirAsentamiento(estado, caravana.origenAsentamientoId);
+    const destino = exigirAsentamiento(estado, params.destinoAsentamientoId);
+    const r = prepararCaravanaManualEngine(caravana, origen, destino, params.carga, mapa, estado.caminos, ctx.instante);
+    const siguiente: GameSessionState = { ...conAsentamiento(conCaravana(estado, r.caravana), r.asentamiento) };
+    return exito(
+      siguiente,
+      [
+        evento(ctx, {
+          codigo: 'comercio.caravana_preparando',
+          mensaje: `La caravana ${caravana.id} carga para ${destino.id} y ${r.caravana.estado === 'preparando' ? 'se prepara' : 'sale ya'}.`,
+          payload: { caravanaId: caravana.id, destinoId: destino.id, estado: r.caravana.estado },
+          asentamientoId: origen.id,
+        }),
+      ],
+      { caravanaId: caravana.id, preparaHasta: r.caravana.preparaHasta }
+    );
+  }
+);
+
+export interface ParamsCancelarCaravana {
+  caravanaId: string;
+}
+
+/** Cancela una caravana que se está preparando y devuelve la carga al almacén (Doc 3.13.3). */
+export const cancelarCaravana = comando<ParamsCancelarCaravana, { caravanaId: string }>((estado, _mapa, ctx, params) => {
+  const caravana = exigirCaravana(estado, params.caravanaId);
+  const origen = exigirAsentamiento(estado, caravana.origenAsentamientoId);
+  const r = cancelarPreparacionEngine(caravana, origen);
+  const siguiente: GameSessionState = { ...conAsentamiento(conCaravana(estado, r.caravana), r.asentamiento) };
+  return exito(
+    siguiente,
+    [
+      evento(ctx, {
+        codigo: 'comercio.caravana_cancelada',
+        mensaje: `Se cancela la preparación de la caravana ${caravana.id}; la carga vuelve al almacén.`,
+        payload: { caravanaId: caravana.id },
+        asentamientoId: origen.id,
+      }),
+    ],
+    { caravanaId: caravana.id }
+  );
+});
+
+export interface ParamsMoverCarro {
+  desdeCaravanaId: string;
+  haciaCaravanaId: string;
+  carroIndice: number;
+}
+
+/** Mueve un carro (con su animal) entre dos caravanas disponibles del mismo asentamiento (Doc 3.13.5). */
+export const moverCarroCaravana = comando<ParamsMoverCarro, { desdeCarros: number; haciaCarros: number }>(
+  (estado, _mapa, ctx, params) => {
+    const desde = exigirCaravana(estado, params.desdeCaravanaId);
+    const hacia = exigirCaravana(estado, params.haciaCaravanaId);
+    const r = moverCarroEngine(desde, hacia, params.carroIndice);
+    const siguiente = conCaravana(conCaravana(estado, r.desde), r.hacia);
+    return exito(
+      siguiente,
+      [
+        evento(ctx, {
+          codigo: 'comercio.caravana_carro_movido',
+          mensaje: `Mueve un carro de la caravana ${desde.id} a la ${hacia.id}.`,
+          payload: { desdeCaravanaId: desde.id, haciaCaravanaId: hacia.id },
+          asentamientoId: desde.origenAsentamientoId,
+        }),
+      ],
+      { desdeCarros: r.desde.carros!.length, haciaCarros: r.hacia.carros!.length }
+    );
+  }
+);

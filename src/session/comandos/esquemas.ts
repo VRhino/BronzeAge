@@ -224,6 +224,15 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
     ['caravanaId', 'carroIndice', 'tipoAnimal']
   ),
   reservarCaravana: objeto({ caravanaId: IDENTIFICADOR, reservada: { type: 'boolean' } }, ['caravanaId', 'reservada']),
+  prepararCaravana: objeto(
+    { caravanaId: IDENTIFICADOR, destinoAsentamientoId: IDENTIFICADOR, carga: { type: 'object', additionalProperties: NUMERO } },
+    ['caravanaId', 'destinoAsentamientoId', 'carga']
+  ),
+  cancelarCaravana: objeto({ caravanaId: IDENTIFICADOR }, ['caravanaId']),
+  moverCarroCaravana: objeto(
+    { desdeCaravanaId: IDENTIFICADOR, haciaCaravanaId: IDENTIFICADOR, carroIndice: NUMERO },
+    ['desdeCaravanaId', 'haciaCaravanaId', 'carroIndice']
+  ),
 
   // --- Militar ---
   reclutarTropa: objeto(

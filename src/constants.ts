@@ -1173,6 +1173,13 @@ export const ANIMAL_CATALOGO = {
 } as const;
 
 /**
+ * Preparación de una caravana lanzada a mano (Doc 3.13.3): antes de salir pasa por el estado `'preparando'`
+ * en el origen durante `kPorCarro × max(0, nº carros − 1)` ticks — una caravana de 1 carro sale al instante,
+ * las grandes tardan. Placeholder sin calibrar.
+ */
+export const CARAVANA_PREPARACION = { kPorCarro: 2 };
+
+/**
  * Scoring de asignación de caravanas disponibles a lados pendientes de trueque (ampliación de comercio, a
  * petición del usuario — "solo simulación": en el diseño objetivo el jugador elige la caravana y la carga a
  * mano, Doc 3.2; esto es el sustituto automático de Fase 0, ver `asignarCaravanasATrueque` en engine/trade.ts).

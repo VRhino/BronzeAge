@@ -4,15 +4,18 @@
 // documenta su origen tal como lo hacía el archivo del que viene.
 import { describe, expect, it } from 'vitest';
 import type { Asentamiento, Caravana, CaminoComercial, Faccion, Point } from '../../domain/types';
-import { CARAVANA_COOLDOWN } from '../../constants';
+import { CARAVANA_COOLDOWN, CARAVANA_PREPARACION } from '../../constants';
 import { capacidadCaravana, velocidadCaravana } from '../caravanas';
 import {
   aceptarTrueque,
   agregarCarroACaravana,
   avanzarComercio,
+  cancelarPreparacionCaravana,
   comprarAnimalParaCaravana,
   construirCaravanaComercial,
   crearCaravanaVacia,
+  moverCarroEntreCaravanas,
+  prepararCaravanaManual,
   proponerTrueque,
   CaravanaInvalidaError,
 } from '../trade';
@@ -483,5 +486,79 @@ describe('composición de caravana por piezas (Doc 3.13.2)', () => {
     expect(capacidadCaravana(r.caravana)).toBe(500);
     expect(velocidadCaravana(r.caravana)).toBe(16);
     expect(r.asentamiento.almacen['madera']!.cantidad).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------
+// Revamp de caravanas (Doc 3.13.3) — Paso 3: lanzamiento a mano con estado 'preparando'.
+// ---------------------------------------------------------------------------------------------------------
+describe('lanzamiento manual de una caravana (Doc 3.13.3)', () => {
+  const origen = { id: 'origen', faccionId: 'f-1', posicion: { x: 0, y: 0 }, almacen: almacenSintetico({ madera: 1000, piedra: 300 }), politicasActivas: [] } as unknown as Asentamiento;
+  const destino = { id: 'destino', faccionId: 'f-1', posicion: { x: 200, y: 0 }, almacen: almacenSintetico({ oro: 0 }), politicasActivas: [] } as unknown as Asentamiento;
+
+  const caravanaDe = (carros: Caravana['carros']): Caravana => ({
+    id: 'c1', tipo: 'comercial', origenAsentamientoId: 'origen', contenido: {}, posicionActual: origen.posicion, progreso: 0, estado: 'disponible', carros,
+  });
+
+  function preparar(caravana: Caravana, carga: Record<string, number>) {
+    return prepararCaravanaManual(caravana, origen, destino, carga, mapaSintetico(), [], instanteDeTest(0));
+  }
+
+  it('una caravana de 1 carro sale al instante (prepTicks 0): pasa directo a en_transito', () => {
+    const r = preparar(caravanaDe([{ tipoCarro: 'basico', animal: 'buey' }]), { piedra: 100 });
+    expect(r.caravana.estado).toBe('en_transito');
+    expect(r.caravana.preparaHasta).toBeUndefined();
+    expect(r.caravana.contenido).toEqual({ piedra: 100 });
+    expect(r.asentamiento.almacen['piedra']!.cantidad).toBe(200); // 300 - 100 reservadas
+  });
+
+  it('con más de un carro pasa por preparando, y avanzarComercio la saca cuando vence preparaHasta', () => {
+    const dos = caravanaDe([
+      { tipoCarro: 'basico', animal: 'buey' },
+      { tipoCarro: 'basico', animal: 'buey' },
+    ]);
+    const r = preparar(dos, { piedra: 100 });
+    expect(r.caravana.estado).toBe('preparando');
+    expect(r.caravana.preparaHasta).toBe(instanteDeTest(CARAVANA_PREPARACION.kPorCarro)); // 2 × (2−1) = 2 ticks
+
+    const antes = avanzarComercio([origen, destino], [] as Faccion[], [r.caravana], [], mapaSintetico(), [], instanteDeTest(1));
+    expect(antes.caravanas[0]!.estado).toBe('preparando'); // todavía no vence
+
+    const despues = avanzarComercio([origen, destino], [] as Faccion[], [r.caravana], [], mapaSintetico(), [], instanteDeTest(CARAVANA_PREPARACION.kPorCarro));
+    expect(despues.caravanas[0]!.estado).toBe('en_transito');
+  });
+
+  it('cancelar mientras se prepara devuelve la carga al almacén', () => {
+    const dos = caravanaDe([
+      { tipoCarro: 'basico', animal: 'buey' },
+      { tipoCarro: 'basico', animal: 'buey' },
+    ]);
+    const r = preparar(dos, { piedra: 120 });
+    const cancelada = cancelarPreparacionCaravana(r.caravana, r.asentamiento);
+    expect(cancelada.caravana.estado).toBe('disponible');
+    expect(cancelada.caravana.contenido).toEqual({});
+    expect(cancelada.caravana.destinoAsentamientoId).toBeUndefined();
+    expect(cancelada.asentamiento.almacen['piedra']!.cantidad).toBe(300); // devueltas
+  });
+
+  it('rechaza carga por encima de la capacidad, sin stock, o si la caravana no puede viajar', () => {
+    expect(() => preparar(caravanaDe([{ tipoCarro: 'basico', animal: 'buey' }]), { piedra: 600 })).toThrow(CaravanaInvalidaError); // 600 > 500
+    expect(() => preparar(caravanaDe([{ tipoCarro: 'basico', animal: 'buey' }]), { estano: 10 })).toThrow(CaravanaInvalidaError); // sin estaño
+    expect(() => preparar(caravanaDe([{ tipoCarro: 'basico' }]), { piedra: 10 })).toThrow(CaravanaInvalidaError); // carro sin animal
+    expect(() => preparar(caravanaDe([{ tipoCarro: 'basico', animal: 'buey' }]), {})).toThrow(CaravanaInvalidaError); // carga vacía
+  });
+
+  it('moverCarroEntreCaravanas mueve el carro con su animal entre dos disponibles del mismo origen', () => {
+    const a = caravanaDe([
+      { tipoCarro: 'basico', animal: 'buey' },
+      { tipoCarro: 'reforzado', animal: 'caballo' },
+    ]);
+    const b = { ...caravanaDe([]), id: 'c2' };
+    const r = moverCarroEntreCaravanas(a, b, 1);
+    expect(r.desde.carros).toEqual([{ tipoCarro: 'basico', animal: 'buey' }]);
+    expect(r.hacia.carros).toEqual([{ tipoCarro: 'reforzado', animal: 'caballo' }]);
+
+    expect(() => moverCarroEntreCaravanas(a, { ...b, estado: 'en_transito' }, 0)).toThrow(CaravanaInvalidaError);
+    expect(() => moverCarroEntreCaravanas(a, { ...b, origenAsentamientoId: 'otro' }, 0)).toThrow(CaravanaInvalidaError);
   });
 });
