@@ -8,7 +8,7 @@ Cuando una entrada de aquí se cierra, se borra de este archivo y se marca allí
 
 | # | Área | Mecánica | Código hoy |
 |---|---|---|---|
-| 1 | MOTOR | Impuestos: generación de oro por población | ✘ nada |
+| 1 | MOTOR | Impuestos: generación de oro por población | ◐ **motor HECHO 2026-09-08**, calibrando |
 | 3 | CARAVANAS | Rutas de caravana avanzadas | ◐ solo el pathfinder base |
 | 5 | TRUEQUE | Trueque compuesto de varios materiales | ✘ nada |
 | 8 | CARAVANAS | Revamp de caravanas — solo los trozos diferidos (§8.1) | ◐ **núcleo HECHO 2026-09-08** |
@@ -42,8 +42,8 @@ materiales exóticos, el ciclo de servidor de 12 meses y la curva de onboarding 
 
 ## 1. Impuestos — generación de oro por población
 
-> **DISEÑO CERRADO (2026-09-08), pendiente de implementar.** Tres rondas de decisiones. El impuesto no se
-> diseña solo: es la FUENTE de un bloque económico ("el oro como presupuesto") cuyo sentido es que el oro te
+> **MOTOR IMPLEMENTADO (2026-09-08), calibración (Paso 6) EN CURSO.** Tres rondas de decisiones. El impuesto no
+> se diseña solo: es la FUENTE de un bloque económico ("el oro como presupuesto") cuyo sentido es que el oro te
 > obligue a elegir entre ejército, flota comercial e intel. Decisiones: recaudación pasiva (espejo del consumo
 > de comida) + política "Presión Fiscal" (cargo Tesorero); clases Nobleza > Artesanos > Pesants;
 > **reclutamiento en oro salvo la milicia inicial**; **buey (y todos los animales de caravana) en oro**;
@@ -53,7 +53,9 @@ materiales exóticos, el ciclo de servidor de 12 meses y la curva de onboarding 
 > Canon escrito: Doc 3 §3.1/§3.13.2, Doc 4 §4.1/§4.4/§4.5, Doc 5 §5.8. **Motor IMPLEMENTADO (2026-09-08, suite
 > verde, tsc limpio, sin migración de snapshot). Paso 6 (calibración) EN CURSO — iter 2: `IMPUESTOS` ÷2 +
 > caravana #0 gratis quitada + arreglo de `evaluarViabilidadFundacion` (bosque libre) → supervivencia NPC
-> arreglada (ruinas −48%, colapso de madera −77%); queda que `oroMedio` sigue trepando (×2.2, no mesetea).**
+> arreglada (ruinas −48%, colapso de madera −77%); queda que `oroMedio` sigue trepando (×2.2, no mesetea).
+> Iteración 3 pendiente: con la ocupación post-conquista (Doc 5.12.9), que baja la recaudación de las plazas
+> conquistadas — calibrar `OCUPACION.*` e `IMPUESTOS` juntos.**
 
 El oro hoy entra por **dos** vías: la `mina` (`produccionBaseOro: 4`) y las comisiones de comercio
 (`COMISION`). Un asentamiento sin mina cerca y sin comercio activo no genera oro, pase lo que pase con su
@@ -320,18 +322,20 @@ subir ni nada que recompensar.
 Facción A, aparcado en la puerta de una plaza de la Facción A que NO es la residencia de sus jugadores, puede
 **guarnecerla**: sus escuadrones se vuelcan en la guarnición del asentamiento (`absorberColumna` con destino
 ≠ hogar), el ejército se consume. Los escuadrones de no-residentes en una guarnición defienden, comen del
-trigo del almacén y su dueño los repone y re-moviliza (esto último ya llega con el bloque de ocupación,
-`Consideraciones/Ocupacion_Post_Conquista_Definicion.md` §2.3b y Paso 1 del plan).
+trigo del almacén y su dueño los repone y re-moviliza — **esto último YA está en el código** (bloque de
+ocupación post-conquista, Pasos 1-9, implementado 2026-09-08: `engine/pertenencia.ts` `puedeReclutarEn`,
+gate relajado de `movilizarEjercito`, Doc 5.8 y 5.12.9).
 
 Hoy **un ejército propio aparcado en tu ciudad no ayuda a defenderla** (`asediarConEjercito` solo mira
 `defensor.escuadrones`), así que "proteger a un aliado/una plaza propia marchando a defenderla" (Doc 2, Doc
-5.12.4) no funciona. `guarnecer` lo cierra.
+5.12.4) no funciona salvo AL CONQUISTAR (ahí la columna se vuelve guarnición sola, Doc 5.12.9). `guarnecer` lo
+cierra para el caso general — marchar a una plaza que YA es tuya y volcar la tropa.
 
 **Por qué está aquí y no en el bloque de ocupación:** el arreglo del ping-pong de conquistas NO lo necesita —
-la conquista guarnece sola. `guarnecer` es la capacidad general, y se implementa cuando toque. Falta: el
-comando `guarnecer` (`session/comandos/`), su gate (ejército en `enLaPuertaDe` de plaza propia con permiso), y
-decidir si al llegar a una plaza propia se ofrece como acción o si arrancar la marcha con destino "guarnecer
-X" ya lo implica.
+la conquista guarnece sola. `guarnecer` es la capacidad general, y se implementa cuando toque. Falta SOLO: el
+comando `guarnecer` (`session/comandos/`, envoltorio de `absorberColumna` con destino ≠ hogar), su gate
+(ejército en `enLaPuertaDe` de plaza propia con permiso), y decidir si al llegar a una plaza propia se ofrece
+como acción o si arrancar la marcha con destino "guarnecer X" ya lo implica.
 
 Diseño detallado en `Consideraciones/Ocupacion_Post_Conquista_Definicion.md` §2.3.
 

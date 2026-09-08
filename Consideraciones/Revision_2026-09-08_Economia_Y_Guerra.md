@@ -43,9 +43,12 @@ Falta cerrar en canon (tras la campaña de calibración, Paso 6): las cifras fin
 
 ---
 
-## 3. Lo diseñado sin implementar — mapa de canon
+## 3. Mapa de canon — ✅ REPARTIDO (2026-09-08)
 
-### 3.1 Ocupación post-conquista → `Docs/Game/5` §5.4 (nuevo sub-bloque "Qué pasa al conquistar")
+Todo lo de esta sección está **implementado y en canon**. Destino final entre paréntesis en cada apartado;
+detalle del reparto en `Ocupacion_Post_Conquista_Definicion.md` §10.
+
+### 3.1 Ocupación post-conquista → **`Docs/Game/5` §5.12.9 nuevo** + bullets de §5.4
 
 - El ejército conquistador se convierte en la guarnición (`absorberColumna`). **Nunca queda a 0.**
 - Saqueo: −25% pesants+artesanos (nobleza intacta); ~25% de edificios `activo` → `en_cola` dañados,
@@ -55,7 +58,7 @@ Falta cerrar en canon (tras la campaña de calibración, Paso 6): las cifras fin
   crecimiento ×0.5, mantenimiento no degrada. Al vencer: la guarnición se queda, el resto vuelve a normal.
 - Constante nueva `OCUPACION` (todo placeholder).
 
-### 3.2 Guarnición-ejército y `guarnecer` → `Docs/Game/5` §5.12.4
+### 3.2 Guarnición-ejército → `Docs/Game/5` §5.12.4 + §5.12.9 (`guarnecer` general = follow-up, `Mecanicas a desarrollar` §17)
 
 "La guarnición es lo único que defiende" se matiza: **la guarnición puede ser una fuerza posada por un
 ejército** (`guarnecer` — marchar a una plaza propia y volcar los escuadrones en su guarnición), no solo
@@ -63,7 +66,7 @@ tropa de residentes. Cierra el hueco "proteger una plaza propia marchando a defe
 funciona). Un escuadrón de no-residente en una guarnición defiende, come trigo y su dueño lo repone y
 re-moviliza.
 
-### 3.3 Reclutamiento desatado de residencia → `Docs/Game/5` §5.4/§5.8 y `Docs/Game/2` §2.5
+### 3.3 Reclutamiento desatado de residencia → **`Docs/Game/5` §5.8** (bloque nuevo) y **`Docs/Game/2` §2.5**
 
 | Acción | Requisito |
 |---|---|
@@ -75,12 +78,12 @@ Supera la regla de Doc 2.5 (2026-09-06) "reclutar únicamente en tu residencia".
 jugador **y por asentamiento** (puedes tener el mismo `tropaId` en dos plazas). El Liderazgo sigue topando
 solo lo que sacas a campaña.
 
-### 3.4 Comando `cambiarResidencia` → `Docs/Game/2` §2.5/§2.6
+### 3.4 Comando `cambiarResidencia` → **`Docs/Game/2` §2.5**
 
 Atómico: deja la residencia actual (libera vivienda, vacía cargos locales viejos, los escuadrones posados se
 quedan como guarnición de no-residente) + toma la nueva (`comprarCasa`). Precondiciones: misma Facción, hueco
-de vivienda, permiso, cooldown (`CIUDADANIA.cooldownCambioResidenciaDias`, placeholder). Cierra la limitación
-conocida de Doc 2.6 ("no hay comando vender casa / dejar residencia").
+de vivienda, permiso. Cooldown (`CIUDADANIA.cooldownCambioResidenciaDias`) reservado, sin implementar (necesita
+jugador situado). Cierra la limitación conocida de Doc 2.5 ("no hay comando dejar residencia").
 
 Es el prerrequisito de que un JUGADOR consolide una conquista (recluta nuevo ahí, cargos, recaudación 100%).
 El NPC no lo necesita — sostiene por la guarnición-ejército.

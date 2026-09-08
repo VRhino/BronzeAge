@@ -7,7 +7,7 @@ Lo que sigue sin resolver del todo. La mayoría son ajustes numéricos/de balanc
 
 Pendiente:
 - ¿Cómo se declara una guerra? ¿Requiere condición previa (frontera compartida, casus belli) o es libre?
-- ¿Cómo se conquista un asentamiento enemigo exactamente tras ganar el asedio? ¿Se captura, se destruye, se vasalliza automáticamente?
+- ~~¿Cómo se conquista un asentamiento enemigo exactamente tras ganar el asedio?~~ **[RESUELTO 2026-09-08]** Captura directa (reasignación de Facción) + **ocupación post-conquista**: el ejército conquistador se vuelve la guarnición, saqueo determinista de población/edificios/murallas, ventana de ocupación de tiempo fijo (inmune a nuevo asedio, recaudación y crecimiento a la mitad, mantenimiento congelado). Canon en Doc 5.12.9; diseño y plan en `Ocupacion_Post_Conquista_Definicion.md`.
 - ¿Existen unidades navales de combate?
 - Ventana horaria exacta del Attack Timer (pospuesto, no bloqueante para Fase 0)
 - Establos / carros de guerra del roster anterior: sin edificio de reclutamiento definido en el rediseño — retirar de Fase 0 o crear edificio propio

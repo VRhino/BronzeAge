@@ -48,8 +48,9 @@ Se suma el poder de cada bando y **se multiplica cada uno por un factor aleatori
 
 **Los escuadrones son del JUGADOR, no del asentamiento** (a petición del usuario, 2026-09-01 — cierra una ambigüedad que el modelo arrastraba: el asentamiento los contenía, así que parecía dueño de ellos). El asentamiento es donde están **apostados**, no quien los posee. Consecuencias:
 
-- Un asentamiento **conquistado** deja los escuadrones apostados ahí **a cero unidades**, pero **sin perder el escuadrón ni su veteranía** (decisión del usuario, 2026-09-04). Es la misma regla que ya rige cualquier aniquilación: se pierden los hombres, no la unidad ni su progreso — se rellena reclutando. Sus dueños conservan además, intacto, lo que llevaran encima en campaña (5.12). Y **nada pasa al conquistador**: son escuadrones personales de otro jugador, no botín transferible.
-- **Y pierden la residencia, con ella los cargos locales** (decisión del usuario, 2026-09-04): la ciudad cambia de dueño entera, y eso vale tanto para los que estaban de campaña como para los que estaban en casa. Dejar a estos últimos como residentes de una ciudad ahora enemiga era incoherente con todo lo que la residencia habilita (Doc 2.5). Lo que NO se toca es la ciudad en sí: población, edificios, almacén y murallas siguen en pie, porque el premio de conquistar es justamente "un asentamiento completo y en funcionamiento" (5.12.4).
+- Al **conquistar** un asentamiento (2026-09-08, ocupación post-conquista — ver 5.12.9 para el detalle completo), los escuadrones congelados de los desalojados **salen** (sus dueños quedan HUÉRFANOS, abajo) y la guarnición pasa a formarla **el ejército conquistador**: sus escuadrones se vuelcan dentro (`absorberColumna`), su carro al almacén. Nunca queda a cero unidades — antes sí, y una plaza sin un defensor cambiaba de manos cada vez que pasaba un ejército. Esos escuadrones siguen siendo **personales de sus jugadores**, que NO residen ahí (guarnición de no-residentes, 5.8): defienden, comen del trigo del asentamiento, su dueño los repone y los re-moviliza.
+- **Los antiguos residentes pierden la residencia y con ella los cargos locales** (decisión del usuario, 2026-09-04): la ciudad cambia de dueño entera, valga para los que estaban de campaña como para los que estaban en casa. Dejar a estos últimos como residentes de una ciudad ahora enemiga era incoherente con todo lo que la residencia habilita (Doc 2.5).
+- La ciudad **no se entrega intacta**: la conquista la saquea (población, edificios, murallas) y abre una **ventana de ocupación** de tiempo fijo — inmune a un nuevo asedio, recaudación y crecimiento a la mitad, mantenimiento congelado. El premio sigue siendo "un asentamiento en funcionamiento" (5.12.4), pero **es una inversión que tarda en rendir**, no un subidón inmediato. Detalle en 5.12.9.
 - Sacar escuadrones a campaña los quita de la guarnición **de verdad**: dejan de defender y dejan de comer del almacén (5.13).
 - **Un jugador al que le conquistan su asentamiento estando de campaña queda HUÉRFANO** (decisión del usuario, 2026-09-02): conserva los escuadrones que lleva encima, pero se queda sin residencia — sin sitio donde reabastecer, reclutar ni volver. Sigue huérfano **hasta que entre en una Facción nueva que tenga asentamiento**. No es una derrota definitiva: es un estado del que se sale por la vía política (Doc 2.5, ciudadanía), no por la militar.
 
@@ -175,6 +176,16 @@ El roster ya no se organiza por Tier abstracto (inspiración Total War Troy, foc
 **Auditado contra el código real, código muerto RETIRADO**: el texto anterior de esta sección decía que el ascenso automático de tier por veteranía (`ascenderTierSiCorresponde`, `TROPA_CATALOGO`, `ASCENSO_TROPA`) "convivía" con el sistema de tropas de equipo, aplicándose a Artesanos/Nobleza. Eso no era cierto — Nobleza no recluta tropas en absoluto (ver arriba), y Artesanos recluta por el mismo carril `reclutarTropa` que Pesants, que SIEMPRE asigna `tropaId`. Como `ascenderTierSiCorresponde` se desactivaba explícitamente en cuanto `tropaId` estaba presente, ningún escuadrón real pasaba por esa rama — era código muerto. Se retiró por completo: `TROPA_CATALOGO`, `ASCENSO_TROPA`, `ascenderTierSiCorresponde` y el campo `Escuadron.tier` (siempre valía 1, nunca cambiaba) ya no existen en el código. `Escuadron.tropaId` pasó de opcional a OBLIGATORIO (único origen real de escuadrones). La UI (tabla de escuadrones en Asentamientos, panel militar en Guerra) mostraba "Tier 1" de forma engañosa para toda tropa sin excepción — ahora muestra el `nivelRequerido` real de la tropa reclutada (Doc 5.8, catálogo `TROPAS_RECLUTABLES`). Verificado en el navegador reclutando Milicia de lanceros: se muestra "Nivel 1" correctamente en ambas vistas, sin errores de consola.
 
 **Escuadrón por jugador, no por asentamiento** (RESUELTO — bug real reportado por el usuario en la UI de Combate: dos escuadrones de 25 aparecían fundidos en un solo chip de 50, inseleccionable de forma independiente y que además fallaba al validarlo en el ataque): `reclutarTropa` fusionaba por `tropaId` a nivel de ASENTAMIENTO (`asentamiento.escuadrones.find(e => e.tropaId === tropaId)`), así que dos jugadores reclutando la misma tropa en el mismo asentamiento —o el mismo jugador reclutando dos veces— terminaban compartiendo un único escuadrón. Causa raíz real, más de fondo que el bug puntual: el modelo correcto (Doc 2.1/2.5, a petición del usuario) es que CADA jugador residente tiene su PROPIO escuadrón de cada tropa — el jugador reside en un solo asentamiento (Doc 2.1) y ahí solo puede tener sus propias tropas, nunca las de otro. `Escuadron` ahora lleva `jugadorId` (domain/types.ts) y `reclutarTropa` empareja por `jugadorId` + `tropaId` (engine/tropas.ts): cada jugador tiene como mucho un escuadrón por tropa, tope `unidadesPorDefecto`; reclutar de nuevo repone el faltante si hay bajas (ver párrafo "Unidades por defecto" arriba), nunca crea un segundo escuadrón del mismo jugador. Reclutar deja de exigir un General asignado (Doc 2.2 vs 2.5, ganó 2.5): solo exige que el jugador sea residente (fundador o casa comprada, Doc 2.5) — y por eso `comprarCasa` (engine/faccion.ts) ahora rechaza que un jugador resida en más de un asentamiento a la vez, invariante que antes no existía. La UI de Combate (chips de escuadrones propios) agrupa los chips por jugador: seleccionar 1+ chips bajo cada jugador representa "estos jugadores se unen al combate, cada uno con las tropas marcadas" (ver Doc 5.2/5.10, combate multi-escuadrón ya soportado sin cambios).
+
+**Reclutar y mover tropa fuera de la residencia** (2026-09-08, `engine/pertenencia.ts` `puedeReclutarEn`, `engine/tropas.ts`, `engine/ejercitos.ts`). El "solo en tu residencia" anterior se matiza — un **escuadrón es por jugador Y por asentamiento** (puedes tener el mismo `tropaId` posado en dos plazas):
+
+| Acción | Requisito |
+|---|---|
+| Reclutar un escuadrón **NUEVO** / cambiar de composición | Residir en el asentamiento **y** estar en él (sin cambios) |
+| **Reponer** un escuadrón que ya tienes ahí (en su guarnición o en tu columna) | Estar presente en una plaza **de tu Facción** que lo permita (`politicaDeAcceso` ≠ `cerrado`, sin veto). Gasta población y almacén de esa plaza, autolimitado por la reserva de trigo |
+| **Mover** escuadrones propios | Donde estén: `movilizarEjercito` deja de exigir residir si tienes escuadrones vivos propios posados en la plaza |
+
+Esto es lo que hace posible que la guarnición de una plaza conquistada (escuadrones de no-residentes, 5.4/5.12.9) se defienda, se reponga y se re-movilice sin que su dueño mude la residencia. Consolidar de verdad —reclutar escuadrones nuevos ahí, cargos, recaudación al 100%— sí exige mudar la residencia (`cambiarResidencia`, Doc 2.5).
 
 PENDIENTE:
 - Establos / unidades de carro de guerra (Carros escaramuzadores, Carros de guerra reforzados del roster anterior): sin edificio de reclutamiento definido en el rediseño — Carpintería solo cubre armas de asedio (ariete, torre de asedio), no carros. Queda sin resolver si se retiran de Fase 0 o necesitan su propio edificio.
@@ -348,9 +359,9 @@ Lo que esto abre y antes era imposible: **plantarse frente a una ciudad enemiga 
 
 Lo que no cambia: el asedio se resuelve **una sola vez** cuando se ordena. Un ejército acampado junto a una plaza no la muele a asaltos tick tras tick.
 
-El ejército **no entra en la ciudad** aunque la conquiste: se queda acampado fuera, con sus escuadrones. Meterlos en la guarnición del sitio los dejaría apostados donde su Jugador no reside, que es justo la incoherencia que la conquista deshace.
+Si el asedio **resiste**, el ejército se queda acampado fuera con sus escuadrones. Si **conquista**, el ejército **se vuelve la guarnición** de la plaza tomada (2026-09-08): sus escuadrones se vuelcan dentro, su carro al almacén, y ya no queda columna en campo. Eran del Jugador y lo siguen siendo — una guarnición puede contener escuadrones de no-residentes posados por un ejército, no solo tropa de sus residentes. Antes el ejército se quedaba fuera y la guarnición del conquistado caía a cero: la plaza quedaba indefensa para siempre y cambiaba de manos cada tick que pasaba un ejército. Ver 5.12.9.
 
-**Y el premio justifica el riesgo** (decisión del usuario, 2026-09-02): conquistar entrega **un asentamiento completo y en funcionamiento**, y además **amplía los asentamientos de la Facción por encima del cupo de su nivel** (Doc Fase_0_5 §5). Conquistar es la única vía de crecer más allá del techo que marca el nivel de Facción — fundar sí respeta el cupo, conquistar no. Ese es el incentivo, y es lo que impide que la guerra sea un intercambio de pérdidas donde a nadie le compensa atacar.
+**Y el premio justifica el riesgo** (decisión del usuario, 2026-09-02): conquistar entrega **un asentamiento en funcionamiento** — saqueado y bajo ocupación un tiempo (5.12.9), pero tuyo — y además **amplía los asentamientos de la Facción por encima del cupo de su nivel** (Doc Fase_0_5 §5; la ocupación no toca esa regla — un conquistado conserva su `nivel` sin verificar cupo, igual que antes). Conquistar es la única vía de crecer más allá del techo que marca el nivel de Facción — fundar sí respeta el cupo, conquistar no. Ese es el incentivo, y es lo que impide que la guerra sea un intercambio de pérdidas donde a nadie le compensa atacar.
 
 ### 5.12.5 Velocidad
 
@@ -450,6 +461,33 @@ De una frontera que solo **recuerdas** queda hasta dónde llegaba, no su trazo e
 **Y sabes en tierra de quién estás cuando marchas.** Una columna que entra en territorio ajeno lo nota, aunque no alcance a ver la ciudad que manda ahí — que es posible: una capital de nivel 5 vigila 240 y una columna ve 150, así que hay una franja en la que estás dentro de sus dominios sin haberla divisado. Lo que se sabe es **de qué Facción es el suelo**, nunca dónde tiene su capital.
 
 > **El terreno lo tapa el cliente de jugador, no el servidor.** La geografía no es información táctica —es la misma para todos— así que el servidor solo dice QUÉ has explorado y cada cliente decide cómo pintarlo. El de administración no tapa nada: es una herramienta de operación, no un jugador.
+
+### 5.12.9 Ocupación tras la conquista (2026-09-08)
+
+**El problema que resuelve:** antes, conquistar dejaba la guarnición a cero y la ciudad indefensa para siempre — cambiaba de manos cada tick que pasaba un ejército (medido en batch: ~176 conquistas sobre ~61 asentamientos vivos). Con la ocupación, el ping-pong cae ~70%: de las plazas conquistadas, la gran mayoría cambia de dueño **una sola vez y se queda**. El NPC sigue conquistando; deja de re-tomar lo mismo sin parar.
+
+Diseño y plan técnico completos en `Consideraciones/Ocupacion_Post_Conquista_Definicion.md`. Cifras en `constants.ts` `OCUPACION`, **placeholder a calibrar por simulación**.
+
+**Al conquistar** (`aplicarConquista`, `engine/combate.ts`):
+
+1. **La guarnición pasa a ser el ejército conquistador** (`absorberColumna`): escuadrones dentro, carro al almacén, la columna se consume — ya no queda ejército en campo (por el camino del comando `iniciarAsedio`, sin ejército, son los escuadrones atacantes seleccionados los que marchan a guarnecer). Nunca queda a cero. Los cascarones congelados de los desalojados **salen** (huérfanos, 5.4).
+2. **Saqueo determinista** (sin azar): `pesants` y `artesanos` pierden `OCUPACION.fraccionSaqueoPoblacion` (nobleza intacta, huye/negocia); una fracción `OCUPACION.fraccionEdificiosDanados` de los edificios activos —por orden de id, **exentos Centro Urbano y al menos una Granja y una Leñera**— pasan a la cola marcados `danado`; cada recinto de muralla completo pierde `OCUPACION.fraccionDanoMuralla` de su `avance` (la muralla no cae, deja de dar el multiplicador defensivo pleno hasta repararse por la vía normal de obra).
+3. `medidorMantenimiento` a 100 y se abre la **ventana de ocupación** (`Asentamiento.ocupacionHasta`, `OCUPACION.duracionMinutos`, mismo orden que el período de gracia de fundación).
+
+**Un edificio `danado`** se reconstruye por la auto-construcción normal, pero al arrancar la obra cuesta solo `OCUPACION.fraccionCosteReconstruccion` del costo de catálogo y tarda esa misma fracción — se repara, no se levanta de cero. El flag se limpia al volver a activo.
+
+**Durante la ventana** (mientras `instante < ocupacionHasta`):
+
+| Efecto | Valor |
+|---|---|
+| Inmune a un nuevo asedio | rebota sin combate ni azar; el atacante acampa |
+| Recaudación de oro | `× OCUPACION.factorRecaudacion` |
+| Crecimiento de población | el factor de felicidad `× OCUPACION.factorCrecimiento` |
+| Mantenimiento | no degrada (misma rama que el período de gracia) |
+
+**Al vencer** (tiempo fijo, nada la acorta): se limpia `ocupacionHasta`, la plaza vuelve a las reglas normales — y **la guarnición se queda**. Reconquistarla ahora exige ganar un asedio de verdad contra esa guarnición, con sus bajas (→ oro para reponer). Para un JUGADOR, consolidar la conquista (reclutar escuadrones nuevos ahí, ejercer cargos, recaudación al 100%) exige mover la residencia a la plaza tomada (`cambiarResidencia`, Doc 2.5). Para el NPC no hace falta: sostiene por la guarnición-ejército mientras la mantenga a flote.
+
+**Supervivencia:** el saqueo nunca toca el Centro Urbano ni deja al asentamiento sin una Granja y una Leñera activas, el mantenimiento queda suspendido toda la ventana y la reconstrucción es barata — para que un asentamiento pequeño saqueado no colapse por la penalización.
 
 ## 5.13 Suministro en campaña (a petición del usuario, 2026-09-01)
 

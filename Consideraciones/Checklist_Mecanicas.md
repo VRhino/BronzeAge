@@ -170,7 +170,9 @@ geometría, control por zona de influencia, peaje en oro, tipo de dominio y rend
 - ✅ Roster de tropas por edificio y nivel interno, con costo en equipo fabricado en Armería; Nobleza vía Gran Fundición — `código: ✔` (`TROPAS_RECLUTABLES`, `engine/tropas.ts`)
 - ✅ La veteranía sube el poder del MISMO escuadrón y nunca cambia su `tropaId`; el código muerto del sistema de tiers se retiró por completo — `código: ✔`
 - ✅ Moral por raciones, con deserción permanente a moral 0 — `código: ✔`
-- ✅ Conquista tras asedio — `código: ✔` (`aplicarConquista`)
+- ✅ Conquista tras asedio + **ocupación post-conquista** (guarnición = ejército conquistador, saqueo determinista, ventana de ocupación: inmune a nuevo asedio, recaudación/crecimiento ×0.5, mantenimiento congelado) — `código: ✔` (`aplicarConquista`, `estaOcupado`, `OCUPACION`; Doc 5.12.9; cifras placeholder, calibración batch en curso)
+- ✅ Reclutar/reponer/mover tropa fuera de la residencia (nuevo escuadrón = residencia; reponer/mover = cualquier plaza propia con permiso, estando presente) + comando `cambiarResidencia` — `código: ✔` (`puedeReclutarEn`, `cambiarResidencia`; Doc 2.5, 5.8)
+- 🔶 `guarnecer` (marchar a defender una plaza propia que YA es tuya) — capacidad diferida; la conquista guarnece sola — `código: ✘` (`Docs/Mecanicas a desarrollar.md` §17)
 - ✅ Adaptación temática completa (cobre / estaño) — `código: ✔`
 - ✅ **Attack Timer** — decidido y **pospuesto** a fase posterior a Fase 0 (Doc 5.6) — `código: ✘`
 - ✅ **Exilio** como política de soberanía (Doc 5.9 / 2.8) — diseño cerrado, **`código: ✘`**

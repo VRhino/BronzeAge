@@ -55,7 +55,7 @@ Nueve decisiones más, todas respuesta a hallazgos del consejo (§9) o ampliaci�
 13. **Velocidad por tropa**: ligera 20 / media 16 / pesada 12, bajo dos reglas del usuario — una caravana inicial no puede ser más rápida que un ejército, y un jugador solo con infantería ligera tiene que poder alcanzar una caravana inicial.
 14. **Cancelar una marcha en curso dispara la vuelta** (pasa a `regresando` y desanda la ruta).
 15. **El jugador cuyo asentamiento cae estando de campaña queda HUÉRFANO** hasta entrar en una Facción que tenga asentamiento.
-16. **Incentivo de conquista**: un asentamiento completo + ampliar los asentamientos de la Facción **por encima del cupo de su nivel**. Cierra el hallazgo del consejo de que la guerra era suma negativa — y resulta que **ya es el comportamiento implementado**: `iniciarAsedio` conserva el nivel del conquistado sin verificar cupo, anotado en el código como "punto abierto #2" a la espera de que alguien decidiera si era intencional. Lo era.
+16. **Incentivo de conquista**: un asentamiento completo + ampliar los asentamientos de la Facción **por encima del cupo de su nivel**. Cierra el hallazgo del consejo de que la guerra era suma negativa — y resulta que **ya es el comportamiento implementado**: `iniciarAsedio` conserva el nivel del conquistado sin verificar cupo, anotado en el código como "punto abierto #2" a la espera de que alguien decidiera si era intencional. Lo era. *(La ocupación post-conquista de 2026-09-08 no toca esta regla — un conquistado sigue conservando su `nivel` sin verificar cupo; lo que cambia es que la plaza se saquea y entra en una ventana de ocupación, Doc 5.12.9.)*
 
 ### 1.1c Cerrada al revisar el impacto del TIEMPO REAL (2026-09-02)
 
@@ -983,8 +983,10 @@ el cliente al pintar la cola.
 Se cierran de una tacada las cuatro decisiones que quedaban colgando, y salen dos cambios más:
 
 1. **Residencia al conquistar** — se retira también a los que estaban EN CASA, como se había implementado.
-   Y sus escuadrones **quedan a 0 unidades sin perder la veteranía**: se pierden los hombres, no la unidad ni
-   su progreso, exactamente igual que en cualquier otra aniquilación (Doc 5.4). Antes se borraban del todo.
+   ~~Y sus escuadrones quedan a 0 unidades sin perder la veteranía.~~ **SUPERADO (2026-09-08, ocupación
+   post-conquista, Doc 5.12.9):** los cascarones de los desalojados **salen** de la plaza (sus dueños quedan
+   huérfanos) y la guarnición pasa a ser la del ejército conquistador. Dejarlos a 0 era lo que dejaba la
+   plaza indefensa para siempre — el ping-pong que la ocupación arregla.
 2. **Varianza de combate ±15% — se queda** (§1.4 cerrada). El corolario sigue en pie y sigue siendo el dato
    de diseño útil: hace falta un 35% más de poder para tener la victoria asegurada.
 3. **Radio de encuentro = 15**, contra los 150 de visión. Cierra el conflicto que estaba anotado: con los 60

@@ -454,6 +454,14 @@ madera.
   arreglo impide fundar sobre bosque ya lleno, no que un vecino lo llene luego. Cerrarlas = opción (c),
   reservar 1 slot de Leñera por asentamiento.
 
+**Iteración 3 — pendiente: con la ocupación post-conquista (implementada 2026-09-08, Doc 5.12.9 /
+`Ocupacion_Post_Conquista_Definicion.md`).** La ocupación mete un dampener nuevo sobre `oroMedio`: una plaza
+recién conquistada recauda `× OCUPACION.factorRecaudacion` durante la ventana, y reponer la guarnición de
+ocupación drena la mano de obra y el almacén de esa plaza. Además corta el ping-pong de conquistas (−70% en
+la primera medición), lo que reduce el churn militar improductivo. Calibrar `OCUPACION.*` e `IMPUESTOS`
+**juntos** en la próxima corrida (40 facciones / 1500 ticks) — la pregunta abierta #1 (`oroMedio` no mesetea)
+puede aliviarse aquí de forma no trivial.
+
 **Diagnóstico del `vivos` 34 (`BATCH_RUINAS_DIAG=1`, 2026-09-08):**
 
 | ruinas | Base | Iter 1 |

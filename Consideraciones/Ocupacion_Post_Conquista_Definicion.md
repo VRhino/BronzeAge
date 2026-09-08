@@ -1,14 +1,12 @@
 # Ocupación post-conquista: diseño
 
-> **DISEÑO CERRADO (2026-09-08), con plan técnico (§9, ponytail full). Pendiente de implementar.** Rondas 1-3
-> de decisiones. Cierra la pregunta abierta de
-> `Consideraciones/Preguntas_Abiertas.md` §1 ("cómo se conquista un asentamiento enemigo exactamente tras
-> ganar el asedio") y el punto abierto #2 de `Movimiento_Ejercitos_Definicion.md`. Ata con el bloque
-> `Economia_Del_Oro_Definicion.md` (§5, la guerra como sink) vía la recaudación reducida.
+> **IMPLEMENTADO (2026-09-08), pasos 3-9 (commits `26662b4`, `c2f21f4`). Canon repartido (§10). Calibración
+> batch (paso 10) EN CURSO — cifras `OCUPACION.*` placeholder.** Rondas 1-3 de decisiones, plan técnico §9
+> (ponytail full).
 >
-> **Revisa canon militar:** Doc 5.4/5.8 (reclutamiento ya no es solo-en-residencia) y Doc 5.12.4 ("la
-> guarnición es lo único que defiende" — la guarnición ahora puede contener escuadrones de no-residentes,
-> posados por un ejército).
+> **Canon vivo:** Doc **5.12.9** ("Ocupación tras la conquista" — el bloque entero), Doc 5.4 y 5.12.4
+> (conquista reescrita), Doc 5.8 y 2.5 (reclutar/mover fuera de residencia + `cambiarResidencia`).
+> `Preguntas_Abiertas.md` §1 marcada resuelta. Este documento queda como registro de decisiones + plan.
 
 ## 0. El problema
 
@@ -480,18 +478,23 @@ parar"). `conquistasAcumuladas` sigue vivo (48 en 1000 ticks) — el NPC conquis
 - Pasos **3-9** son el bloque de ocupación, en orden (cada uno mide una cosa).
 - `guarnecer` (comando) y "reponer columna de paso" — follow-ups fuera de este plan.
 
-## 10. Canon a actualizar al cerrar
+## 10. Canon a actualizar al cerrar — ✅ REPARTIDO (2026-09-08)
 
-- **Doc 5.4 / 5.8:** reclutar escuadrón nuevo = residencia; reponer/mover escuadrones propios = cualquier plaza
-  de la Facción con permiso, estando presente. Guarnición puede contener escuadrones de no-residentes.
-- **Doc 5.12.4:** "la guarnición es lo único que defiende" — matizado: la guarnición puede ser una fuerza
-  posada por un ejército (`guarnecer`), no solo tropa de residentes. Cierra "proteger una plaza marchando".
-- **Doc 5.4 (conquista):** qué pasa exactamente — guarnición del conquistador, saqueo, ventana de ocupación.
-- **Doc 2.5 / 2.6:** el "beneficio de ciudadanía: reclutar" se matiza; anotar el comando "cambiar de
-  residencia" pendiente.
-- **`Preguntas_Abiertas.md` §1** ("cómo se conquista exactamente") — resuelto.
-- **`Movimiento_Ejercitos_Definicion.md`** punto abierto #2 — resuelto.
-- **`Economia_Del_Oro_Definicion.md` §5** — nota: la ocupación reduce recaudación; la guerra de conquista
-  drena oro (reponer guarniciones y bajas de asedio).
-9. Canon: Doc 5.4 (qué pasa exactamente al conquistar), `Preguntas_Abiertas.md` §1, `Movimiento_Ejercitos`
-   punto abierto #2, nota en `Economia_Del_Oro_Definicion.md` §5.
+- ✅ **Doc 5.8** (nuevo bloque "Reclutar y mover tropa fuera de la residencia") + **Doc 2.5** — reclutar
+  escuadrón nuevo = residencia; reponer/mover escuadrones propios = cualquier plaza de la Facción con permiso,
+  estando presente. Guarnición puede contener escuadrones de no-residentes.
+- ✅ **Doc 5.12.4** — "la guarnición es lo único que defiende" matizado: al conquistar, el ejército se vuelve
+  la guarnición; una guarnición puede contener fuerza posada por un ejército. (`guarnecer` general sigue
+  siendo follow-up, `Mecanicas a desarrollar` §17.)
+- ✅ **Doc 5.4** (bullets de conquista reescritos) + **Doc 5.12.9 nuevo** ("Ocupación tras la conquista") —
+  guarnición del conquistador, saqueo determinista, ventana de ocupación, reconstrucción barata de dañados.
+- ✅ **Doc 2.5** — el "beneficio de ciudadanía: reclutar" matizado; comando `cambiarResidencia` documentado
+  (Doc 2.6 no aplica — es fusión de Facciones).
+- ✅ **`Preguntas_Abiertas.md` §1** ("cómo se conquista exactamente") — marcado RESUELTO.
+- ✅ **`Movimiento_Ejercitos_Definicion.md`** §11.1 y punto #16 — nota de que la ocupación supera "escuadrones
+  a 0 al conquistar" y no toca el cupo de nivel.
+- ✅ **`Economia_Del_Oro_Definicion.md`** §Paso 6 — "Iteración 3": la ocupación es un dampener nuevo de
+  `oroMedio` (recaudación ×0.5 en plazas ocupadas + drenaje al reponer guarniciones), a calibrar junto con
+  `IMPUESTOS`.
+- ✅ **`Checklist_Mecanicas.md`** — "Conquista tras asedio" ampliado; filas nuevas para reclutamiento
+  desatado / `cambiarResidencia` y para `guarnecer` (diferido).
