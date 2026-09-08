@@ -1,6 +1,6 @@
 import type { Asentamiento, Escuadron } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
-import { MILITAR, MOVIMIENTO, RESERVA_CONSTRUCCION, TROPAS_RECLUTABLES } from '../constants';
+import { MILITAR, MOVIMIENTO, RECLUTAMIENTO_ORO_POR_ESCALON, RESERVA_CONSTRUCCION, TROPAS_RECLUTABLES } from '../constants';
 
 /** Fase A5 — payload de `tropas.desercion` (ver `avanzarMantenimientoTropas`). */
 export interface PayloadTropasDesercion {
@@ -75,11 +75,17 @@ export function reclutarTropa(
   }
 
   const factorCosto = factorCostoReclutamiento(asentamiento);
-  const costoTotal = Object.fromEntries(
+  const costoTotal: Record<string, number> = Object.fromEntries(
     Object.entries(tropa.costoEquipo).map(([recurso, cantidadUnitaria]) => [recurso, (cantidadUnitaria ?? 0) * cantidad * factorCosto])
   );
+  // Oro por soldado según escalón (Doc 5.8, bloque "economía del oro"): se suma al coste de equipo, SALVO la
+  // milicia del Centro Urbano. `factorCostoReclutamiento` ("Leva Forzosa") no lo toca — solo el equipo.
+  if (tropa.edificio !== 'centroUrbano') {
+    const oroPorSoldado = RECLUTAMIENTO_ORO_POR_ESCALON[tropa.escalon] ?? 0;
+    if (oroPorSoldado > 0) costoTotal['oro'] = (costoTotal['oro'] ?? 0) + oroPorSoldado * cantidad;
+  }
   if (!tieneRecursos(asentamiento.almacen, costoTotal)) {
-    throw new ReclutamientoInvalidoError('No hay equipo suficiente para reclutar esta tropa.');
+    throw new ReclutamientoInvalidoError('No hay recursos suficientes (equipo u oro) para reclutar esta tropa.');
   }
 
   // Reserva de trigo ANTES de reclutar (a petición del usuario — mano de obra/reclutamiento a futuro con

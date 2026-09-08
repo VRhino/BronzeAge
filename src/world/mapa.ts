@@ -469,6 +469,20 @@ export class Mapa {
     return this.generado.bosques.some((b) => distancia(b.centro, centro) < radio + b.radio);
   }
 
+  /**
+   * Como `hayBosqueEnRadio`, pero además exige que algún bosque alcanzable tenga capacidad de Leñera SIN
+   * reclamar — `capacidadLeneras` menos las Leñeras ya contadas para ese bosque en `lenerasPorBosque`. Un
+   * bosque a tope no sirve para fundar: `bosqueParaLenera` no colocará una Leñera ahí y el asentamiento se
+   * queda sin madera (ver `evaluarViabilidadFundacion` y el diagnóstico de
+   * `Consideraciones/Economia_Del_Oro_Definicion.md` §10 — la mayoría de las muertes por madera del batch NPC
+   * son por fundar sobre un bosque que un vecino ya trabaja).
+   */
+  hayBosqueLibreEnRadio(centro: Point, radio: number, lenerasPorBosque: Map<string, number>): boolean {
+    return this.generado.bosques.some(
+      (b) => distancia(b.centro, centro) < radio + b.radio && (lenerasPorBosque.get(b.id) ?? 0) < this.capacidadLeneras(b.id)
+    );
+  }
+
   /** Cuántas Leñeras admite un bosque a la vez según su tamaño (mín 1 / máx 3, ver `LENERA_POR_BOSQUE`). */
   capacidadLeneras(bosqueId: string): number {
     const bosque = this.bosque(bosqueId);

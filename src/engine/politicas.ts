@@ -96,7 +96,9 @@ type CampoFactor =
   | 'factorCostoReclutamiento'
   | 'factorProduccionTrigo'
   | 'factorCapacidadCaravana'
-  | 'factorVelocidadCaravana';
+  | 'factorVelocidadCaravana'
+  | 'factorRecaudacion'
+  | 'factorCrecimientoPoblacion';
 
 function productoFactor(asentamiento: Asentamiento, campo: CampoFactor): number {
   return asentamiento.politicasActivas.reduce((acc, activa) => {
@@ -132,6 +134,13 @@ function sumaFactorPolitica(asentamiento: Asentamiento, campo: string): number {
 
 /** "Ampliación de Flota" (Tesorero): cupo extra de caravanas propias, sumado al que ya da el nivel de Mercado. */
 export const cupoCaravanaExtra = (a: Asentamiento): number => sumaFactorPolitica(a, 'cupoCaravanaExtra');
+
+/** "Presión Fiscal" (Tesorero, bloque "economía del oro"): multiplica la recaudación de oro por población
+ * (`recaudacionOro`, engine/population.ts). 1 si no hay ninguna activa. */
+export const factorRecaudacion = (a: Asentamiento): number => productoFactor(a, 'factorRecaudacion');
+/** "Presión Fiscal" (Tesorero): frena el crecimiento de las 3 clases de población — es el downside de subir
+ * impuestos, aplicado en `crecerPoblacion` (engine/population.ts) mientras no exista un medidor de felicidad. */
+export const factorCrecimientoPoblacion = (a: Asentamiento): number => productoFactor(a, 'factorCrecimientoPoblacion');
 
 /** Campos FLAG (a diferencia de `productoFactor`/`sumaFactorPolitica`/`valorMaximoPolitica`): true si CUALQUIER
  * política activa lo declara `true`, sin escalar ni sumar nada — sirve para políticas de tipo interruptor. */

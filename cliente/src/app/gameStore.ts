@@ -36,7 +36,7 @@ import type {
   ZonaFaccion,
   ZonaInfluencia,
 } from '@motor/domain/types';
-import { EDIFICIO_CATALOGO, MANTENIMIENTO, NECESIDADES, NIVEL_FACCION, POLITICAS, POLITICA_CATALOGO, REJILLA_ASENTAMIENTO, SIMULACION, TROPAS_RECLUTABLES } from '@motor/constants';
+import { EDIFICIO_CATALOGO, IMPUESTOS, MANTENIMIENTO, NECESIDADES, NIVEL_FACCION, POLITICAS, POLITICA_CATALOGO, REJILLA_ASENTAMIENTO, SIMULACION, TROPAS_RECLUTABLES } from '@motor/constants';
 import { crearMapa, type EstadoMapa, type Mapa } from '@motor/world/mapa';
 import {
   produccionPorMinuto,
@@ -56,7 +56,7 @@ import {
 } from '@motor/engine/asentamientoQuery';
 export type { ProduccionItem, ManoObraInfo } from '@motor/engine/asentamientoQuery';
 import { encontrarCapital, calcularCostoMantenimiento, calcularNivelAsentamiento } from '@motor/engine/mantenimiento';
-import { consumoComidaPoblacion } from '@motor/engine/population';
+import { consumoComidaPoblacion, recaudacionOro } from '@motor/engine/population';
 import { slotsDisponibles } from '@motor/engine/politicas';
 // --- Motor: SOLO consultas derivadas ---
 // Los COMANDOS ya no se importan aquí: viven en `session/comandos/` y se ejecutan en el SERVIDOR, a través de
@@ -512,6 +512,18 @@ export class GameStore {
     const trigoDisponible = asentamiento.almacen['trigo']?.cantidad ?? 0;
     items.push({ recurso: 'trigo', costoPorMinuto: costoTrigo, disponible: trigoDisponible, cubierto: trigoDisponible >= costoTrigo });
     return { enGracia, minutosParaFinGracia: Math.max(0, Math.round(MANTENIMIENTO.graciaMinutos - minutosDesdeFundacion)), items };
+  }
+
+  /** Recaudación de oro por población (Doc 4.1, bloque "economía del oro") — solo lectura, calculada
+   * client-side desde población + `IMPUESTOS`, igual que `mantenimientoInfo` calcula los costes. */
+  recaudacionInfo(asentamiento: Asentamiento): { total: number; pesants: number; artesanos: number; nobleza: number } {
+    const { pesants, artesanos, nobleza } = asentamiento.poblacion;
+    return {
+      pesants: pesants * IMPUESTOS.tasaPesants,
+      artesanos: artesanos * IMPUESTOS.tasaArtesanos,
+      nobleza: nobleza * IMPUESTOS.tasaNobleza,
+      total: recaudacionOro(asentamiento),
+    };
   }
 
   /** Slots de política disponibles para `cargo` según el nivel de Facción (el Gobernador escala con el nivel). */

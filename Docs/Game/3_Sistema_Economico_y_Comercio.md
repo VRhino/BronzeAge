@@ -4,8 +4,9 @@
 
 ## 3.1 Oro — ✅ implementado
 - NO es moneda acuñada: es METAL PRECIOSO EN BRUTO PESADO (sistema tipo siclo/shekel).
-- ORIGEN: mina de oro en el mapa, mismo patrón que cantera/mina de cobre (nodo finito, con reemplazo automático al agotarse — ver Doc 4.2).
-- USO: medio de pago en Mercado (3.3) y en comisiones (3.5). Compra de tecnología/mercenarios/sueldos: esos sistemas en sí (Aedas, mercenarios) no están implementados todavía en Fase 0, así que ese uso del oro no aplica aún en la práctica.
+- ORIGEN: mina de oro en el mapa, mismo patrón que cantera/mina de cobre (nodo finito, con reemplazo automático al agotarse — ver Doc 4.2); comisiones de comercio (3.5); y **recaudación en el asentamiento según población y clase** (Doc 4.1, bloque "economía del oro").
+- USO: medio de pago en Mercado (3.3) y en comisiones (3.5); **coste de reclutamiento** salvo la milicia inicial (Doc 5.7/5.8); **compra de animales de arrastre para caravanas**, buey incluido (3.13.2); Maravilla (Doc 4.2.1); **intel/mapas en la Taberna** (ficha aparte, sin implementar). Compra de tecnología/mercenarios/sueldos: esos sistemas (Aedas, mercenarios) no están implementados todavía en Fase 0.
+- **BLOQUE "ECONOMÍA DEL ORO" (2026-09-08 — diseño cerrado, calibración en curso; `Consideraciones/Economia_Del_Oro_Definicion.md`):** el oro es la única moneda que convierte entre ambiciones (ejército / flota comercial / intel). El sentido del bloque es que el oro te obligue a elegir: no se puede ir a por las tres a la vez. La recaudación por población es la FUENTE que lo hace pagable sin mina; el reclutamiento en oro y los animales en oro son los SINKS (la intel de taberna, el sink recurrente, va aparte); y la política "Presión Fiscal" (Tesorero, Doc 4.4) es el knob de más-oro-a-cambio-de-menos-crecimiento.
 - ENTRE JUGADORES: recurso más de trueque, sin restricción especial.
 
 ## 3.2 Trueque de materiales (acuerdos entre Facciones) — 🔷 implementado con simplificación intencional
@@ -145,6 +146,10 @@ Una caravana `comercial` deja de tener capacidad y velocidad propias: las **deri
 
 ### 3.13.2 Carros y animales
 
+> **Bloque "economía del oro" (2026-09-08 — `Consideraciones/Economia_Del_Oro_Definicion.md`, calibración en
+> curso):** el buey pasa de 30 madera a ~12 oro. Se probó reintroducir la caravana #0 gratis y se descartó por
+> medición. Ver los dos últimos párrafos de esta sección.
+
 La caravana comercial nace como un **casco vacío y gratis** (`crearCaravana`) — cuenta contra el cupo del
 Mercado y arranca el cooldown de creación, pero no puede viajar hasta que se le montan piezas. Todo el coste
 está en las piezas, que se construyen y compran **sobre una caravana concreta** (el pool no vive suelto).
@@ -160,23 +165,24 @@ está en las piezas, que se construyen y compran **sobre una caravana concreta**
 
 | Animal | `factorCarga` | Velocidad | Coste | Nota |
 |---|---|---|---|---|
-| Buey | 1.0 | 16 | **30 madera** | El ancla. Se paga en madera, no en oro (ver más abajo) |
+| Buey | 1.0 | 16 | **~12 oro** (era 30 madera) | El ancla. Pasa a oro con el bloque "economía del oro" (ver más abajo) |
 | Caballo | 0.5 | 24 | 60 oro | A esta velocidad **escapa de casi toda intercepción** (3.10 §"emboscada, no persecución") |
 | Camello | 0.75 | ~19 | 40 oro | Opción intermedia. La **inmunidad al desierto queda diferida** (3.13.7): no existe bioma árido de primera clase |
 
-**El buey se paga en madera, no en oro** (mismo criterio que quitarle la piedra al Mercado, Doc 4.2.1): el
-oro solo entra por mina o comercio, así que "todo animal cuesta oro" —enunciado original— revive el deadlock
-"sin caravana no hay comercio, sin comercio no hay oro, sin oro no hay caravana" en cualquier asentamiento sin
-mina alcanzable. El buey barato en madera es la vía de entrada; caballo y camello (oro) son la mejora.
-`carro básico` + `buey` = 50 madera, el mismo coste que crear una caravana antes del revamp.
+**El buey se paga en ORO (~12), no en madera** (bloque "economía del oro", 2026-09-08 — diseño cerrado,
+calibración en curso; `Consideraciones/Economia_Del_Oro_Definicion.md`). El texto anterior lo pagaba en madera
+para esquivar el deadlock "sin caravana no hay comercio, sin comercio no hay oro, sin oro no hay caravana" —
+razonamiento que dependía de que el oro solo entrara por mina o comercio. El bloque lo corta porque **la
+fundación ya entrega 100 oro** (`FUNDACION.materialesIniciales`) y la recaudación de oro por población (3.1 /
+Doc 4.1) lo repone aunque no haya mina: un asentamiento nuevo se paga su primera caravana (20 madera + 12 oro)
+con lo de fundar. Buey barato (~12) para que sea una decisión de *cuántas* caravanas montar, no un muro. Cifras
+placeholder a calibrar. La **cría** de animales queda diferida (3.13.7): por ahora solo compra. El livestock
+del Corral (Doc 1.4) es un recurso distinto.
 
-Todas las cifras son placeholder a calibrar por simulación. La **cría** de animales queda diferida (3.13.7):
-por ahora solo compra. El livestock del Corral (Doc 1.4) es un recurso distinto de los animales de arrastre.
-
-**El Mercado no regala ninguna caravana** al completarse (el enunciado original lo pedía). Se midió: una sola
-caravana gratis por asentamiento movía 42 métricas del batch NPC —artesanos y edificios de transformación a
-cero, oro medio −20%—, y el valor era marginal porque el casco vacío ya es gratis. Queda como sabor, no como
-mecánica.
+**El Mercado NO regala ninguna caravana** (sin cambios respecto a la decisión original de 3.13.2). El bloque
+"economía del oro" probó reintroducir una caravana #0 gratis como on-ramp del buey en oro, la midió en batch y
+la quitó: era también un amplificador de la fuente (todo asentamiento comerciando desde el tick 1 → más
+comisiones → más oro), y con los 100 oro de fundación cubriendo el arranque, no compensaba.
 
 ### 3.13.3 Preparación y lanzamiento manual — ✅ implementado
 

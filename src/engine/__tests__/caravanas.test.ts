@@ -54,7 +54,7 @@ describe('orientación de la ruta al reutilizar un Camino Comercial existente', 
   it('una caravana que viaja B -> A recibe la polilínea invertida, no la original A -> B', () => {
     const posA: Point = { x: 0, y: 0 };
     const posB: Point = { x: 1000, y: 0 };
-    const a = asentamientoConMercado('A', posA, { madera: 50, cobre: 200 });
+    const a = asentamientoConMercado('A', posA, { madera: 50, cobre: 200, oro: 100 });
     const b = asentamientoConMercado('B', posB, { madera: 50, oro: 1000 });
 
     // Camino ya construido A -> B (mismo patrón que un save real: la infraestructura persiste
@@ -290,7 +290,7 @@ describe('reuso de caravana propia a través de varios envíos del mismo trueque
     // mide es el reúso de la MISMA caravana en dos viajes, y con números fijos dejaba de medirlo en cuanto la
     // capacidad cambiaba (pasó al subirla de 60 a 500 en el Paso 9 — con 100 pactadas ya cabían en un viaje).
     // Pactando 1,5 capacidades, siempre son exactamente dos: uno lleno y otro a la mitad.
-    const origen0 = asentamientoSintetico('origen', origenPos, { madera: 50, piedra: 10_000 }, true);
+    const origen0 = asentamientoSintetico('origen', origenPos, { madera: 50, piedra: 10_000, oro: 100 }, true);
     const destino0 = asentamientoSintetico('destino', destinoPos, { oro: 1000 }, false);
 
     const { asentamiento: origenTrasConstruir, caravana } = construirCaravanaComercial(origen0, [], instanteDeTest(0), 0);
@@ -427,9 +427,9 @@ describe('derivación de capacidad y velocidad de una caravana compuesta (Doc 3.
 });
 
 // ---------------------------------------------------------------------------------------------------------
-// Revamp de caravanas (Doc 3.13) — Paso 2: casco vacío + piezas (carros del Mercado/Carpintería, animales
-// con oro/madera). `construirCaravanaComercial` (NPC) recompone la caravana por defecto y cuesta lo mismo
-// que antes (50 madera), así que el batch no se mueve.
+// Revamp de caravanas (Doc 3.13) — Paso 2: casco vacío + piezas (carro del Mercado/Carpintería en madera,
+// animal comprado aparte). Bloque "economía del oro" (Paso 5): el buey pasa de 30 madera a 12 oro, así que
+// `construirCaravanaComercial` (NPC) recompone la caravana por defecto por 20 madera + 12 oro.
 // ---------------------------------------------------------------------------------------------------------
 describe('composición de caravana por piezas (Doc 3.13.2)', () => {
   function asentamiento(recursos: Record<string, number>, conCarpinteria = false): Asentamiento {
@@ -471,25 +471,27 @@ describe('composición de caravana por piezas (Doc 3.13.2)', () => {
     expect(() => agregarCarroACaravana(conCarp.caravana, conCarp.asentamiento, 'reforzado')).not.toThrow();
   });
 
-  it('comprarAnimalParaCaravana: cobra el animal, exige carro libre e índice válido', () => {
-    const vacia = crearCaravanaVacia(asentamiento({ madera: 100 }), [], instanteDeTest(0), 0);
+  it('comprarAnimalParaCaravana: cobra el animal (buey en oro), exige carro libre e índice válido', () => {
+    const vacia = crearCaravanaVacia(asentamiento({ madera: 100, oro: 50 }), [], instanteDeTest(0), 0);
     const conCarro = agregarCarroACaravana(vacia.caravana, vacia.asentamiento, 'basico');
     const conBuey = comprarAnimalParaCaravana(conCarro.caravana, conCarro.asentamiento, 0, 'buey');
     expect(conBuey.caravana.carros![0]!.animal).toBe('buey');
-    expect(conBuey.asentamiento.almacen['madera']!.cantidad).toBe(50); // 80 - 30 (buey en madera)
+    expect(conBuey.asentamiento.almacen['oro']!.cantidad).toBe(38); // 50 - 12 (buey en oro)
+    expect(conBuey.asentamiento.almacen['madera']!.cantidad).toBe(80); // solo el carro (20), el buey ya no es madera
     expect(capacidadCaravana(conBuey.caravana)).toBe(500);
 
     expect(() => comprarAnimalParaCaravana(conBuey.caravana, conBuey.asentamiento, 0, 'caballo')).toThrow(CaravanaInvalidaError); // carro ocupado
     expect(() => comprarAnimalParaCaravana(conBuey.caravana, conBuey.asentamiento, 5, 'caballo')).toThrow(CaravanaInvalidaError); // índice fuera de rango
   });
 
-  it('construirCaravanaComercial (NPC): sigue costando 50 madera y da la caravana por defecto 500/16', () => {
-    const a = asentamiento({ madera: 50 });
+  it('construirCaravanaComercial (NPC): cuesta 20 madera + 12 oro y da la caravana por defecto 500/16', () => {
+    const a = asentamiento({ madera: 50, oro: 50 });
     const r = construirCaravanaComercial(a, [], instanteDeTest(0), 0);
     expect(r.caravana.carros).toEqual([{ tipoCarro: 'basico', animal: 'buey' }]);
     expect(capacidadCaravana(r.caravana)).toBe(500);
     expect(velocidadCaravana(r.caravana)).toBe(16);
-    expect(r.asentamiento.almacen['madera']!.cantidad).toBe(0);
+    expect(r.asentamiento.almacen['madera']!.cantidad).toBe(30); // 50 - 20 (carro básico)
+    expect(r.asentamiento.almacen['oro']!.cantidad).toBe(38); // 50 - 12 (buey)
   });
 });
 

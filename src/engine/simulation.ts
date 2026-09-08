@@ -5,7 +5,8 @@ import type { EstadoMapa, Mapa } from '../world/mapa';
 import type { RandomFn } from '../worldgen';
 import { computeTodasLasZonas } from './zones';
 import { avanzarConstruccion, reclamosDeFuentes } from './construction';
-import { avanzarNutricionPoblacion, crecerPoblacion } from './population';
+import { avanzarNutricionPoblacion, crecerPoblacion, recaudacionOro } from './population';
+import { agregarRecurso } from './almacen';
 import { avanzarComercio } from './trade';
 import { devolverEscoltaAGuarnicion } from './caravanas';
 import { avanzarCaravanasFundacion } from './expansion';
@@ -204,7 +205,14 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     const { asentamiento: trasNutricion, eventos: eventosNutricion } = avanzarNutricionPoblacion(trasNivel);
     const { asentamiento: trasTropas, eventos: eventosTropas } = avanzarMantenimientoTropas(trasNutricion);
     const { poblacion, eventos: eventosPoblacion } = crecerPoblacion(trasTropas, rng);
-    const conPoblacion = { ...trasTropas, poblacion };
+    // Recaudación de oro por población (Doc 4.1, bloque "economía del oro"): se suma DESPUÉS de crecer (recauda
+    // sobre la población de este tick) y ANTES de `avanzarMantenimiento` (que el oro recién recaudado pueda
+    // cubrir el mantenimiento del mismo tick). Respeta la capacidad de almacén, igual que la producción de mina.
+    const conPoblacion = {
+      ...trasTropas,
+      poblacion,
+      almacen: agregarRecurso(trasTropas.almacen, 'oro', recaudacionOro({ ...trasTropas, poblacion })),
+    };
 
     const capital = capitalesPorFaccion.get(asentamiento.faccionId);
     const { asentamiento: trasMantenimiento, eventos: eventosMantenimiento, destruido } = avanzarMantenimiento(conPoblacion, capital, instante);

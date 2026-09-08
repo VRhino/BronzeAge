@@ -41,12 +41,18 @@ materiales exóticos, el ciclo de servidor de 12 meses y la curva de onboarding 
 
 ## 1. Impuestos — generación de oro por población
 
-> **DISEÑO EN CURSO (2026-09-08).** Ronda 1 cerrada (4 decisiones): recaudación pasiva automática (espejo del
-> consumo de comida) + política de "Presión Fiscal" desde el pase 1; orden de clases Nobleza > Artesanos >
-> Pesants; magnitud intermedia; panel con desglose por clase. Decisiones, modelo, medición de batch, esbozo de
-> motor, puntos abiertos y el análisis del hueco de sinks de oro en
-> `Consideraciones/Impuestos_Definicion.md`. Falta la Ronda 2 (cargo de la política, números de arranque,
-> dirección del sink) y el plan técnico paso a paso.
+> **DISEÑO CERRADO (2026-09-08), pendiente de implementar.** Tres rondas de decisiones. El impuesto no se
+> diseña solo: es la FUENTE de un bloque económico ("el oro como presupuesto") cuyo sentido es que el oro te
+> obligue a elegir entre ejército, flota comercial e intel. Decisiones: recaudación pasiva (espejo del consumo
+> de comida) + política "Presión Fiscal" (cargo Tesorero); clases Nobleza > Artesanos > Pesants;
+> **reclutamiento en oro salvo la milicia inicial**; **buey (y todos los animales de caravana) en oro**;
+> `MANTENIMIENTO.nivelParaOro: 3→2`; oro de reclutamiento/animales como regla de motor uniforme (NPC +
+> jugador); intel de taberna como sink recurrente (ficha aparte). Revisa `Revamp_Caravanas_Definicion.md` §17.
+> Decisiones, medición de batch, invariantes y plan técnico en `Consideraciones/Economia_Del_Oro_Definicion.md`.
+> Canon escrito: Doc 3 §3.1/§3.13.2, Doc 4 §4.1/§4.4/§4.5, Doc 5 §5.8. **Motor IMPLEMENTADO (2026-09-08, suite
+> verde, tsc limpio, sin migración de snapshot). Paso 6 (calibración) EN CURSO — iter 2: `IMPUESTOS` ÷2 +
+> caravana #0 gratis quitada + arreglo de `evaluarViabilidadFundacion` (bosque libre) → supervivencia NPC
+> arreglada (ruinas −48%, colapso de madera −77%); queda que `oroMedio` sigue trepando (×2.2, no mesetea).**
 
 El oro hoy entra por **dos** vías: la `mina` (`produccionBaseOro: 4`) y las comisiones de comercio
 (`COMISION`). Un asentamiento sin mina cerca y sin comercio activo no genera oro, pase lo que pase con su

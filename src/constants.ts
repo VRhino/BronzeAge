@@ -191,6 +191,27 @@ export const POBLACION = {
 };
 
 /**
+ * Recaudación de oro por población (Doc 4.1, bloque "economía del oro" —
+ * `Consideraciones/Economia_Del_Oro_Definicion.md`): cada asentamiento genera oro cada minuto según cuánta
+ * población tiene y de qué clase. `recaudacionOro` (engine/population.ts) es el espejo exacto de
+ * `consumoComidaPoblacion`, signo opuesto: `Σ(habitantes_clase × tasa_clase)`, sumado al almacén.
+ *
+ * Nobleza > Artesanos > Pesants por cabeza (base imponible por riqueza). NO escala por distancia a la capital
+ * (ese eje ya es el "impuesto de cohesión" del lado del coste, `MANTENIMIENTO.factorDistanciaMax`) ni por
+ * `nivelActual`. Modulable por la política "Presión Fiscal" del Tesorero (`factorRecaudacion`).
+ *
+ * Todo PLACEHOLDER, a calibrar en la campaña conjunta del bloque (junto con el oro de reclutamiento, el buey y
+ * `MANTENIMIENTO.nivelParaOro`). Las tasas son oro/minuto por habitante de cada clase.
+ */
+export const IMPUESTOS = {
+  // A la mitad de la primera tentativa (0.008/0.03/0.12) — la medición de Pasos 1-5 dejó `oroMedio` en ×4 la
+  // línea base con expansión desbocada. Calibración en curso (Paso 6). PLACEHOLDER.
+  tasaPesants: 0.004,
+  tasaArtesanos: 0.015,
+  tasaNobleza: 0.06,
+};
+
+/**
  * Receta de crafting de un edificio de transformación (Doc 4.2.1, rediseño de progreso Fase 0): `produccionBase`
  * es la tasa objetivo por minuto (mismo criterio que produccionBaseTrigo/produccionBasePiedra etc.);
  * `consumePorUnidad` es cuánto de cada insumo hace falta por cada unidad de output, derivado de la proporción
@@ -1163,11 +1184,14 @@ export const ANIMAL_CATALOGO = {
   // factorCarga multiplica la `capacidadBase` del carro; velocidad entra en el `min` de la caravana; costo es
   // lo que cuesta comprarlo (la cría está diferida, Doc 3.13.7).
   //
-  // El BUEY se paga en MADERA, no en oro (mismo criterio que quitarle la piedra al Mercado, Doc 4.2.1): el oro
-  // sólo entra por mina o comercio, así que "todo animal cuesta oro" —enunciado original— reviviría el deadlock
-  // "sin caravana no hay comercio, sin comercio no hay oro, sin oro no hay caravana" en cualquier asentamiento
-  // sin mina. El buey barato en madera es la vía de entrada; caballo y camello (oro) son la mejora.
-  buey: { factorCarga: 1.0, velocidad: 16, costo: { madera: 30 } },
+  // El BUEY se paga en ORO (~12), no en madera (bloque "economía del oro", Doc 3.13.2 —
+  // `Consideraciones/Economia_Del_Oro_Definicion.md` Paso 5). El deadlock que antes justificaba la madera
+  // ("sin caravana no hay comercio, sin comercio no hay oro, sin oro no hay caravana") se corta porque la
+  // fundación ya entrega 100 oro (`FUNDACION.materialesIniciales`) y la recaudación de oro por población
+  // (Doc 4.1) lo repone aunque no haya mina — un asentamiento nuevo se paga su primera caravana (20 madera +
+  // 12 oro) con lo que trae de fundar. Buey barato para que sea una decisión de cuántas caravanas montar, no
+  // un muro. PLACEHOLDER — la caravana #0 gratis se probó y se quitó en calibración.
+  buey: { factorCarga: 1.0, velocidad: 16, costo: { oro: 12 } },
   caballo: { factorCarga: 0.5, velocidad: 24, costo: { oro: 60 } },
   camello: { factorCarga: 0.75, velocidad: 19, costo: { oro: 40 } },
 } as const;
@@ -1395,6 +1419,12 @@ export const POLITICA_CATALOGO = [
   // A petición del usuario: sube la producción de trigo de TODAS las Granjas activas ×1.5 (madera/piedra sin
   // cambios) — ver `factorProduccionTrigo` en engine/politicas.ts, aplicado en `avanzarConstruccion`.
   { id: 'edicto_cosecha', cargo: 'gobernador', nombre: 'Edicto de Cosecha', factorProduccionTrigo: 1.5 },
+  // Presión Fiscal (Tesorero, bloque "economía del oro", Doc 4.1/4.4): sube la recaudación de oro por población
+  // a cambio de frenar el crecimiento de las 3 clases. Sin sistema de felicidad todavía — el downside es
+  // directo sobre el crecimiento (`factorCrecimientoPoblacion` en `crecerPoblacion`). Números PLACEHOLDER, a
+  // calibrar en la campaña conjunta del bloque. "Alivio Fiscal" (ir por debajo del baseline) no entra en el
+  // primer pase.
+  { id: 'presion_fiscal', cargo: 'tesorero', nombre: 'Presión Fiscal', factorRecaudacion: 1.6, factorCrecimientoPoblacion: 0.8 },
 ] as const;
 
 // --- Sprint 5: Guerra simplificada (Doc 5) ---
@@ -1536,6 +1566,19 @@ export const LIDERAZGO = {
   base: 100,
   costePorEscalon: { 1: 7, 2: 14, 3: 22, 4: 32, 5: 45 } as Record<number, number>,
 };
+
+/**
+ * Oro por soldado al reclutar (Doc 5.8, bloque "economía del oro" — `Consideraciones/Economia_Del_Oro_Definicion.md`
+ * Paso 4): además del equipo (`costoEquipo`), reclutar cuesta oro según el escalón de la tropa. Curva que sube
+ * más deprisa que el poder, igual criterio que `LIDERAZGO.costePorEscalon`. El coste total de oro es este
+ * valor × nº de soldados reclutados/repuestos.
+ *
+ * **Única excepción: la Milicia de lanceros del Centro Urbano** (`tropa.edificio === 'centroUrbano'`), que
+ * sigue costando solo madera — la defensa mínima no depende del tesoro. Todo lo del Barracón/Galería cuesta
+ * oro, escalón 1 incluido. `factorCostoReclutamiento` ("Leva Forzosa") NO toca esta línea, solo el equipo.
+ * Regla de motor uniforme (NPC + jugador). Todo PLACEHOLDER, a calibrar en la campaña conjunta del bloque.
+ */
+export const RECLUTAMIENTO_ORO_POR_ESCALON: Record<number, number> = { 1: 1, 2: 2, 3: 4, 4: 7, 5: 11 };
 
 /**
  * Logística de campaña (Doc 5.13). Todo PLACEHOLDER a calibrar.
@@ -1855,7 +1898,12 @@ export const MANTENIMIENTO = {
   // calibración por simulación (ver Preguntas_Abiertas.md).
   nivelParaPiedra: 2,
   piedraBase: 3,
-  nivelParaOro: 3,
+  // Bajado de 3 a 2 (bloque "economía del oro", Doc 4.5 — `Consideraciones/Economia_Del_Oro_Definicion.md`
+  // Paso 3): con el oro cobrándose solo a nivel 3 —que el NPC casi nunca alcanza— el mantenimiento-oro era
+  // letra muerta. A nivel 2 se convierte en un drenaje involuntario real para ~la mitad de los asentamientos
+  // y da a la calibración un sink de oro contra el que medir. Riesgo medido en la campaña: si sube demasiado
+  // la tasa de colapso, se recalibra `oroBase` a la baja para el nuevo escalón. PLACEHOLDER.
+  nivelParaOro: 2,
   oroBase: 2,
   // Escala por POBLACIÓN real, no por nivel (Doc Fase_0_5 §3.2, reemplaza `factorCrecimientoPorNivel`, a
   // petición del usuario: "más allá de al tamaño del asentamiento y a la cantidad de edificios" — un nivel 3

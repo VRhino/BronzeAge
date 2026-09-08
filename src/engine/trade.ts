@@ -235,9 +235,10 @@ export function comprarAnimalParaCaravana(
 
 /**
  * Construye una caravana comercial COMPLETA con la configuración por defecto — casco + 1 carro básico + 1 buey
- * (500/16, coste 50 madera). Es lo que usan el NPC de gobernanza y el laboratorio (`simulacionAutoComercio`),
- * que no componen caravanas a mano. Encadena `crearCaravanaVacia` + `agregarCarroACaravana` +
- * `comprarAnimalParaCaravana`, así que pasa por las mismas comprobaciones que el jugador.
+ * (500/16, coste 20 madera + 12 oro). Es lo que usan el NPC de gobernanza y el laboratorio
+ * (`simulacionAutoComercio`), que no componen caravanas a mano. Encadena `crearCaravanaVacia` +
+ * `agregarCarroACaravana` + `comprarAnimalParaCaravana`, así que pasa por las mismas comprobaciones (y cobra
+ * lo mismo) que el jugador.
  */
 export function construirCaravanaComercial(
   asentamiento: Asentamiento,

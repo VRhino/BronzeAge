@@ -65,8 +65,11 @@ export interface ViabilidadFundacion {
   radioInicial: number;
   dentroDelMapa: boolean;
   posicionLibre: boolean;
-  /** Hay al menos un bosque cuyo borde entra en el radio inicial — condición crítica, ver `evaluarViabilidadFundacion`. */
+  /** Hay al menos un bosque cuyo borde entra en el radio inicial (geometría pura, para la previsualización). */
   bosqueAlcanzable: boolean;
+  /** Además de alcanzable, ese bosque tiene capacidad de Leñera SIN reclamar por asentamientos vecinos —
+   * condición crítica que alimenta `recomendable`. Un bosque ya lleno de Leñeras ajenas no da madera. */
+  bosqueLibreAlcanzable: boolean;
   /** Nodos de recurso que caen dentro del radio inicial, agrupados por tipo. */
   recursosEnRadio: { tipo: string; nodos: number }[];
   /** `false` si el terreno es 'cima' (banda de elevación más alta) o 'agua' — inhabitables. */
@@ -85,6 +88,13 @@ export interface ViabilidadFundacion {
  * dominante de Leñera/Granja/Vivienda/Barracón. Fundar sin un bosque al alcance del radio inicial es una
  * sentencia: en 200 runs × 900 ticks, exigir bosque alcanzable bajó el colapso del 70% al 47% y subió la
  * proporción de asentamientos que llegan a tener tropa del 50% al 98%.
+ *
+ * **`recomendable` exige bosque LIBRE, no solo alcanzable (2026-09-08).** Diagnóstico del batch NPC: el 96%
+ * de las muertes por madera eran asentamientos fundados junto a un bosque que un vecino ya trabajaba a tope
+ * (`LENERA_POR_BOSQUE` topa 1-3 Leñeras según el tamaño). `bosqueParaLenera` no pone una Leñera en bosque
+ * lleno, así que nacían sin forma de sacar madera y caían ~18 min tras la gracia. `bosqueLibreAlcanzable`
+ * descuenta las Leñeras de `asentamientosExistentes` sobre cada bosque; `bosqueAlcanzable` (geometría pura) se
+ * conserva para la previsualización. Ver `Consideraciones/Economia_Del_Oro_Definicion.md` §10.
  *
  * Deliberadamente NO bloquea la fundación (decisión de diseño confirmada con el usuario): `fundarAsentamiento`
  * sigue aceptando cualquier posición legal. Esto solo alimenta el aviso de la interfaz — el jugador conserva
@@ -111,6 +121,20 @@ export function evaluarViabilidadFundacion(
   // criterio único del mapa (`hayBosqueEnRadio`), el mismo que usa la colocación de Leñeras.
   const bosqueAlcanzable = mapa.hayBosqueEnRadio(posicion, radio);
 
+  // Pero un bosque alcanzable no basta si YA está lleno de Leñeras de vecinos: `bosqueParaLenera` no pondrá
+  // otra (`LENERA_POR_BOSQUE` topa 1-3 según el tamaño), así que el asentamiento nace sin forma de sacar
+  // madera y muere de déficit ~18 min tras la gracia. Medido: era el 96% de las muertes por madera del batch
+  // NPC (ver `Consideraciones/Economia_Del_Oro_Definicion.md` §10). `recomendable` pasa a exigir bosque LIBRE.
+  const lenerasPorBosque = new Map<string, number>();
+  for (const otro of asentamientosExistentes) {
+    for (const edificio of otro.edificios) {
+      if (edificio.tipo === 'lenera' && edificio.fuenteId) {
+        lenerasPorBosque.set(edificio.fuenteId, (lenerasPorBosque.get(edificio.fuenteId) ?? 0) + 1);
+      }
+    }
+  }
+  const bosqueLibreAlcanzable = mapa.hayBosqueLibreEnRadio(posicion, radio, lenerasPorBosque);
+
   const porTipo = new Map<string, number>();
   for (const nodo of mapa.nodosEnRadio(posicion, radio)) {
     porTipo.set(nodo.tipo, (porTipo.get(nodo.tipo) ?? 0) + 1);
@@ -122,10 +146,11 @@ export function evaluarViabilidadFundacion(
     dentroDelMapa: enMapa,
     posicionLibre: libre,
     bosqueAlcanzable,
+    bosqueLibreAlcanzable,
     recursosEnRadio: [...porTipo.entries()].map(([tipo, nodos]) => ({ tipo, nodos })),
     terrenoValido,
     fundable,
-    recomendable: fundable && bosqueAlcanzable,
+    recomendable: fundable && bosqueLibreAlcanzable,
   };
 }
 

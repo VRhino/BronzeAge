@@ -1,6 +1,6 @@
 import type { Asentamiento, Poblacion } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
-import { EDIFICIO_CATALOGO, NIVEL_ASENTAMIENTO, POBLACION } from '../constants';
+import { EDIFICIO_CATALOGO, IMPUESTOS, NIVEL_ASENTAMIENTO, POBLACION } from '../constants';
 
 /** Fase A5 — payload de `poblacion.hambruna_muerte` (ver `avanzarNutricionPoblacion`). Los eventos de
  * `crecerPoblacion` ('poblacion.primeros_artesanos'/'poblacion.primeros_nobles') no llevan payload — el
@@ -19,7 +19,7 @@ import {
   nutricionPoblacionDe,
   poblacionTotal,
 } from './asentamientoQuery';
-import { factorConsumoComida, factorCrecimientoNobleza } from './politicas';
+import { factorConsumoComida, factorCrecimientoNobleza, factorCrecimientoPoblacion, factorRecaudacion } from './politicas';
 
 /** Incremento entero esperado = actual*tasa, con redondeo estocástico para no estancarse con poblaciones pequeñas. */
 function crecimientoEstocastico(actual: number, tasa: number, rng: RandomFn): number {
@@ -55,7 +55,11 @@ export function crecerPoblacion(asentamiento: Asentamiento, rng: RandomFn): { po
   const { factorCrecimientoMinimo } = POBLACION.hambre;
   const comidaFactor = factorCrecimientoMinimo + (1 - factorCrecimientoMinimo) * (nutricion / 100);
   const estabilidad = 1;
-  const felicidad = 1;
+  // `felicidad` sigue siendo el placeholder de política/Sacerdote (Sprint 4+), pero mientras tanto es también
+  // donde entra el downside de "Presión Fiscal" (bloque "economía del oro", Doc 4.1/4.4): subir impuestos
+  // frena el crecimiento de las 3 clases. `factorCrecimientoPoblacion` es 1 sin ninguna política fiscal
+  // activa, así que el comportamiento por defecto no cambia.
+  const felicidad = factorCrecimientoPoblacion(asentamiento);
 
   const capacidadPesants = capacidadViviendaPesants(asentamiento);
   const espacioPesantsFactor = capacidadPesants <= 0 ? 0 : Math.max(0, Math.min(1, 1 - asentamiento.poblacion.pesants / capacidadPesants));
@@ -132,6 +136,20 @@ export function crecerPoblacion(asentamiento: Asentamiento, rng: RandomFn): { po
  * `gameStore.mantenimientoInfo`), que suma esto con `consumoRacionTropas` (engine/tropas.ts). */
 export function consumoComidaPoblacion(asentamiento: Asentamiento): number {
   return poblacionTotal(asentamiento) * POBLACION.consumoComidaPorHabitante * factorConsumoComida(asentamiento);
+}
+
+/**
+ * Recaudación de oro por población (Doc 4.1, bloque "economía del oro"): espejo exacto de
+ * `consumoComidaPoblacion`, signo opuesto — `Σ(habitantes_clase × IMPUESTOS.tasa_clase)`, oro/minuto. Nobleza
+ * rinde más per cápita que Artesanos, y estos más que Pesants. NO escala por distancia a la capital ni por
+ * `nivelActual` (ver comentario de `IMPUESTOS` en constants.ts). La suma al almacén (respetando capacidad) la
+ * hace el llamador en `avanzarSimulacion`, entre `crecerPoblacion` y `avanzarMantenimiento`. El factor de la
+ * política "Presión Fiscal" se aplica aquí dentro, mismo criterio que `factorConsumoComida` en el consumo.
+ */
+export function recaudacionOro(asentamiento: Asentamiento): number {
+  const { pesants, artesanos, nobleza } = asentamiento.poblacion;
+  const base = pesants * IMPUESTOS.tasaPesants + artesanos * IMPUESTOS.tasaArtesanos + nobleza * IMPUESTOS.tasaNobleza;
+  return base * factorRecaudacion(asentamiento);
 }
 
 /**

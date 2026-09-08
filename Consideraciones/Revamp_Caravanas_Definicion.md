@@ -70,6 +70,9 @@ escolta sin héroe— y que haya una vía de preparación manual además del rep
     sin comercio no hay oro, sin oro no hay caravana" para cualquier asentamiento sin mina. El buey barato en
     madera es la vía de entrada; caballo (60 oro) y camello (40 oro) son la mejora. `basico` + `buey` =
     50 madera, el mismo coste que crear una caravana antes → el batch NPC no se mueve.
+    > **EN REVISIÓN (2026-09-08, `Economia_Del_Oro_Definicion.md` §4.3):** el bloque de economía del oro pasa
+    > el buey a oro (~12). El deadlock que justificaba la madera se corta por otras dos vías en ese bloque —
+    > el impuesto de población (oro pasivo sin mina) y la caravana #0 gratis (punto 18, revertido).
 18. **El bootstrap del Mercado (caravana #0 gratis) se DESCARTA.** Medido: una sola caravana gratis por
     asentamiento al completarse el Mercado mueve 42 métricas del batch (seed 7, 40 Facciones, 400 ticks) —
     `oroMedio` 155→122, artesanos y edificios de transformación a **cero**, `nivelFaccionMax` 8→7. Inunda el
@@ -77,6 +80,12 @@ escolta sin héroe— y que haya una vía de preparación manual además del rep
     valor que aportaba era marginal (evitar un `crearCaravana` tras el Mercado, y ni siquiera hay espera: el
     casco vacío es gratis). Se cae. El enunciado ("el Mercado te da un carro y un animal") queda como sabor,
     no como mecánica.
+    > **SIGUE DESCARTADA (2026-09-08, `Economia_Del_Oro_Definicion.md` §4.3 y §10 Paso 5):** el bloque
+    > "economía del oro" probó reintroducirla como on-ramp del buey en oro, la re-midió con el arnés ya
+    > arreglado, y la quitó — además de on-ramp era un amplificador de la fuente (todo asentamiento comerciando
+    > desde el tick 1 → más comisiones → más oro), y con los 100 oro de fundación cubriendo el arranque no
+    > compensaba. La medición original de este punto estaba contaminada por el bug de ids, pero la conclusión
+    > (bootstrap fuera) se sostiene post-fix.
 19. **Se elimina el modelo viejo y su fallback** (a petición del usuario: en fase de desarrollo no se dejan
     versiones incompletas anteriores en el código). Fuera `CARAVANA_CATALOGO.comercial` (capacidad/velocidad/
     `costoConstruccion` fijos) y fuera la rama `if (carros === undefined) → catálogo` de

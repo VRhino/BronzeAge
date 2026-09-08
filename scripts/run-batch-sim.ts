@@ -5,7 +5,9 @@ import { avanzarSimulacion, type EstadoSimulacion } from '../src/engine/simulati
 import { crearFaccion } from '../src/engine/faccion';
 import { evaluarViabilidadFundacion, fundarAsentamiento } from '../src/engine/settlement';
 import { nivelActualDe, tieneMercadoActivo, edificiosPorTipoYEstado, nutricionPoblacionDe } from '../src/engine/asentamientoQuery';
-import { calcularNivelAsentamiento } from '../src/engine/mantenimiento';
+import { calcularNivelAsentamiento, type PayloadAsentamientoRuinas } from '../src/engine/mantenimiento';
+import type { PayloadAsentamientoFundado } from '../src/engine/expansion';
+import { computeZonaInfluencia, computeTodasLasZonas, pointInPolygon } from '../src/engine/zones';
 
 import { reservaDeTrigo } from '../src/engine/tropas';
 import { NECESIDADES } from '../src/constants';
@@ -126,6 +128,38 @@ function capacidadLenerasEnRadio(mapa: Mapa, centro: Point, radio: number): numb
     .listarBosques()
     .filter((b) => Math.hypot(b.centro.x - centro.x, b.centro.y - centro.y) < radio + b.radio)
     .reduce((suma: number, b) => suma + mapa.capacidadLeneras(b.id), 0);
+}
+
+/** `BATCH_RUINAS_DIAG`: bosques cuyo borde entra en el círculo (centro, radio) y su capacidad de Leñeras
+ * sumada. Igual criterio que `capacidadLenerasEnRadio`/`mapa.hayBosqueEnRadio`, pero devuelve también el
+ * conteo — para separar "0 bosques alcanzables" de "1 bosque pero da poco". */
+function bosquesEnRadio(mapa: Mapa, centro: Point, radio: number): { n: number; capacidad: number } {
+  const alcanzables = mapa
+    .listarBosques()
+    .filter((b) => Math.hypot(b.centro.x - centro.x, b.centro.y - centro.y) < radio + b.radio);
+  return { n: alcanzables.length, capacidad: alcanzables.reduce((s, b) => s + mapa.capacidadLeneras(b.id), 0) };
+}
+
+/**
+ * % del suelo HABITABLE del mapa (ni agua ni cima) que cae dentro de alguna zona de influencia. Barrido en
+ * rejilla de paso 40 sobre los 2000×2000. Alto = poco margen para fundar nuevos asentamientos; si sube rápido
+ * al principio, las Facciones se están fundando pegadas.
+ */
+function pctSueloOcupado(mapa: Mapa, asentamientos: Asentamiento[]): number {
+  const zonas = computeTodasLasZonas(asentamientos).filter((z) => z.poligono.length > 0);
+  const paso = 40;
+  let habitables = 0;
+  let ocupadas = 0;
+  for (let x = paso / 2; x < mapa.limites.ancho; x += paso) {
+    for (let y = paso / 2; y < mapa.limites.alto; y += paso) {
+      const p = { x, y };
+      const t = mapa.terrenoEn(p);
+      if (t === 'agua' || t === 'cima') continue;
+      habitables++;
+      if (zonas.some((z) => pointInPolygon(p, z.poligono))) ocupadas++;
+    }
+  }
+  return habitables === 0 ? 0 : Math.round((ocupadas / habitables) * 1000) / 10;
 }
 
 /**
@@ -418,6 +452,9 @@ interface Foto {
   tick: number;
   vivos: number;
   colapsados: number;
+  /** % del suelo habitable del mapa dentro de alguna zona de influencia (`pctSueloOcupado`). Termómetro de
+   * cuánto margen queda para fundar; si sube rápido pronto, las Facciones se fundan pegadas. */
+  pctSueloOcupado: number;
   excepcionesAcumuladas: number;
   nivelesFaccion: Record<string, number>;
   nivelFaccionMax: number;
@@ -542,6 +579,7 @@ interface Foto {
 
 function construirFotoResumen(
   estado: EstadoSimulacion,
+  mapa: Mapa,
   tick: number,
   colapsados: number,
   excepcionesAcumuladas: number,
@@ -554,6 +592,7 @@ function construirFotoResumen(
   conquistasAcumuladas: number
 ): Foto {
   const vivos = estado.asentamientos.length;
+  const sueloOcupado = pctSueloOcupado(mapa, estado.asentamientos);
 
   const nivelesFaccion: Record<string, number> = {};
   let nivelFaccionMax = 0;
@@ -756,6 +795,7 @@ function construirFotoResumen(
     tick,
     vivos,
     colapsados,
+    pctSueloOcupado: sueloOcupado,
     excepcionesAcumuladas,
     nivelesFaccion,
     nivelFaccionMax,
@@ -849,6 +889,36 @@ async function main() {
     facciones = resultado.facciones;
   }
 
+  // `BATCH_RUINAS_DIAG=1`: bosques alcanzables al fundar, medidos al RADIO INICIAL (30) y al techo de nivel 1
+  // (60) — no al radio maduro de nivel 2 (90) que usa el filtro de fundación. La hipótesis: un sitio se funda
+  // porque tiene bosque dentro de 90, pero el bosque más cercano cae fuera de 30-60, así que el asentamiento
+  // no puede levantar una Leñera en la ventana crítica (antes de agotar la madera de fundación) y muere.
+  const diagFundacion = process.env['BATCH_RUINAS_DIAG'] === '1';
+  // id -> bosques alcanzables al fundar, al radio inicial (30) y al techo de nivel 1 (60). Se llena con los
+  // 40 iniciales aquí y con cada asentamiento hijo (evento `expansion.asentamiento_fundado`) en el bucle.
+  const bosquesAlFundar = new Map<string, { r30: { n: number; capacidad: number }; r60: { n: number; capacidad: number }; hijo: boolean }>();
+  const registrarBosquesAlFundar = (id: string, pos: Point, hijo: boolean) => {
+    bosquesAlFundar.set(id, {
+      r30: bosquesEnRadio(mapa, pos, ZONA_INFLUENCIA.radioInicial),
+      r60: bosquesEnRadio(mapa, pos, ZONA_INFLUENCIA.radioMaximoPorNivel[1] ?? 60),
+      hijo,
+    });
+  };
+  if (diagFundacion) {
+    for (let i = 0; i < candidatos.length; i++) registrarBosquesAlFundar(idsFundados[i]!, candidatos[i]!.posicion, false);
+    // ¿Los 40 iniciales están pegados? Caja envolvente como % del mapa + distancia media al vecino más cercano.
+    const ps = candidatos.map((c) => c.posicion);
+    const minX = Math.min(...ps.map((p) => p.x)), maxX = Math.max(...ps.map((p) => p.x));
+    const minY = Math.min(...ps.map((p) => p.y)), maxY = Math.max(...ps.map((p) => p.y));
+    const cajaPct = (((maxX - minX) * (maxY - minY)) / (mapa.limites.ancho * mapa.limites.alto)) * 100;
+    const vecinoMasCercano = ps.map((p) => Math.min(...ps.filter((q) => q !== p).map((q) => Math.hypot(p.x - q.x, p.y - q.y))));
+    const nnMedia = vecinoMasCercano.reduce((a, b) => a + b, 0) / vecinoMasCercano.length;
+    console.log(
+      `\n[FUNDACIÓN INICIAL] ${ps.length} asentamientos · caja envolvente = ${cajaPct.toFixed(0)}% del mapa · ` +
+        `distancia media al vecino más cercano = ${nnMedia.toFixed(0)} (separación mínima exigida ${MIN_SEPARACION})`
+    );
+  }
+
   let estado: EstadoSimulacion = {
     asentamientos,
     facciones,
@@ -894,6 +964,33 @@ async function main() {
   let conquistasAcumuladas = 0;
   let duenoPorAsentamiento = new Map(estado.asentamientos.map((a) => [a.id, a.faccionId]));
 
+  // `BATCH_RUINAS_DIAG=1`: diagnóstico de por qué colapsan asentamientos. Tallya cada `asentamiento.ruinas`
+  // por recurso faltante / nivel / duración; los bosques alcanzables al fundar (iniciales e hijos, al radio
+  // 30 y 60); y de las muertes por MADERA, cuántas Leñeras tenía, cuántos bosques a su radio real, y si la
+  // colocación de Leñera tenía sitio libre / saturado por vecinos / sin bosque en la zona. Sin la variable no
+  // cambia nada del batch. Diagnóstico 2026-09-08: 96% de las muertes por madera son por bosque saturado por
+  // Leñeras de vecinos (ver `Consideraciones/Economia_Del_Oro_Definicion.md` §10).
+  const ruinasPorRecurso = new Map<string, number>();
+  const ruinasPorNivel = new Map<number, number>();
+  const ruinasDuraciones: number[] = [];
+  // Muertes con `madera` en los faltantes: nº de Leñeras (activas / en cualquier estado) que tenía, bosques
+  // alcanzables a su radio real (`radioPotencial`), y bosques que tenía al fundar.
+  const maderaDeathLeneras = new Map<number, number>();
+  const maderaDeathLenerasTotal = new Map<number, number>();
+  const maderaDeathBosques = new Map<number, number>();
+  const maderaDeathBosquesAlFundar = new Map<number, number>();
+  let maderaDeaths = 0;
+  // De los muertos por madera sin ninguna Leñera: ¿la colocación PODRÍA haber puesto una? (`bosqueParaLenera`
+  // con la zona real y sin bosques ocupados). Si mayormente `null`, el bug es de colocación, no de balance.
+  let maderaDeathConSitioLenera = 0; // bosque libre en la zona → se podría poner Leñera
+  let maderaDeathBosqueSaturado = 0; // hay bosque en la zona pero lo tienen lleno los vecinos
+  let maderaDeathSinBosqueEnZona = 0; // no hay ningún punto de bosque dentro de la zona clipeada
+  const maderaDeathMaderaEnAlmacen: number[] = [];
+  let maderaDeathConLeneraEnCola = 0;
+  const maderaDeathEdificiosCount: number[] = [];
+  // Asentamientos que en algún tick tuvieron al menos una Leñera en cualquier estado (cola/construcción/activa).
+  const tuvoLeneraAlgunaVez = new Set<string>();
+
   // Contador de ids del NPC, hilado tick a tick igual que `session/comandos/avanzarFaccionesNpc.ts`: sin esto
   // arranca en 0 cada tick y `anadirEdificioManualmente` genera ids `edificio-<asent>-manual-<n>` que chocan
   // entre ticks. `avanzarConstruccion` indexa su `Map` de resultados por id, así que dos edificios con el
@@ -908,7 +1005,74 @@ async function main() {
       // así que nada del contexto puede depender del reloj de la máquina.
       const instante = instanteDeTick(tick);
       const contexto = { instante, momento: isoDeInstante(instante), rng };
+      const asentamientosPrevios = diagFundacion ? estado.asentamientos : [];
+      const estadoPrevio = diagFundacion
+        ? new Map(
+            estado.asentamientos.map((a) => {
+              const lenerasTotal = a.edificios.filter((e) => e.tipo === 'lenera').length;
+              if (lenerasTotal > 0) tuvoLeneraAlgunaVez.add(a.id);
+              return [
+                a.id,
+                {
+                  nivel: a.nivel,
+                  radioPotencial: a.radioPotencial,
+                  posicion: a.posicion,
+                  leneras: edificiosPorTipoYEstado(a, 'lenera').length,
+                  lenerasTotal,
+                },
+              ];
+            })
+          )
+        : new Map();
       const trasMotor = avanzarSimulacion(estado, mapa, contexto);
+      if (diagFundacion) {
+        for (const ev of trasMotor.eventosDominio) {
+          if (ev.codigo === 'expansion.asentamiento_fundado') {
+            const nuevoId = (ev.payload as PayloadAsentamientoFundado).asentamientoId;
+            const nuevo = trasMotor.asentamientos.find((a) => a.id === nuevoId);
+            if (nuevo) registrarBosquesAlFundar(nuevoId, nuevo.posicion, true);
+            continue;
+          }
+          if (ev.codigo !== 'asentamiento.ruinas') continue;
+          const p = ev.payload as PayloadAsentamientoRuinas;
+          ruinasDuraciones.push(p.duro / 60_000);
+          const prev = ev.asentamientoId ? estadoPrevio.get(ev.asentamientoId) : undefined;
+          const nv = prev?.nivel ?? 0;
+          ruinasPorNivel.set(nv, (ruinasPorNivel.get(nv) ?? 0) + 1);
+          const faltantes = p.faltantes && p.faltantes.length > 0 ? p.faltantes.map((f) => f.recurso).sort() : [];
+          const clave = faltantes.length > 0 ? faltantes.join('+') : '(déficit sostenido)';
+          ruinasPorRecurso.set(clave, (ruinasPorRecurso.get(clave) ?? 0) + 1);
+          if (faltantes.includes('madera') && prev) {
+            maderaDeaths++;
+            maderaDeathLeneras.set(prev.leneras, (maderaDeathLeneras.get(prev.leneras) ?? 0) + 1);
+            maderaDeathLenerasTotal.set(prev.lenerasTotal, (maderaDeathLenerasTotal.get(prev.lenerasTotal) ?? 0) + 1);
+            const b = bosquesEnRadio(mapa, prev.posicion, prev.radioPotencial).n;
+            maderaDeathBosques.set(b, (maderaDeathBosques.get(b) ?? 0) + 1);
+            const alFundar = ev.asentamientoId ? bosquesAlFundar.get(ev.asentamientoId)?.r30.n : undefined;
+            if (alFundar !== undefined) maderaDeathBosquesAlFundar.set(alFundar, (maderaDeathBosquesAlFundar.get(alFundar) ?? 0) + 1);
+            // ¿La colocación de Leñera podría haber encontrado sitio en la zona real del asentamiento muerto?
+            const muerto = asentamientosPrevios.find((a) => a.id === ev.asentamientoId);
+            if (muerto && prev.lenerasTotal === 0) {
+              const zona = computeZonaInfluencia(muerto, asentamientosPrevios).poligono;
+              // Ocupación REAL de cada bosque: Leñeras de TODOS los asentamientos (lo que ve `reclamos`).
+              const ocupacion = new Map<string, number>();
+              for (const a of asentamientosPrevios) {
+                for (const e of a.edificios) {
+                  if (e.tipo === 'lenera' && e.fuenteId) ocupacion.set(e.fuenteId, (ocupacion.get(e.fuenteId) ?? 0) + 1);
+                }
+              }
+              const sitio = mapa.bosqueParaLenera(zona, ocupacion, muerto.posicion);
+              const sitioSinOcupacion = mapa.bosqueParaLenera(zona, new Map(), muerto.posicion);
+              if (sitio) maderaDeathConSitioLenera++;
+              else if (sitioSinOcupacion) maderaDeathBosqueSaturado++;
+              else maderaDeathSinBosqueEnZona++;
+              maderaDeathMaderaEnAlmacen.push(muerto.almacen['madera']?.cantidad ?? 0);
+              if (muerto.edificios.some((e) => e.tipo === 'lenera' && e.estado !== 'activo')) maderaDeathConLeneraEnCola++;
+              maderaDeathEdificiosCount.push(muerto.edificios.length);
+            }
+          }
+        }
+      }
       const trasNpc = avanzarNpcGobernanza(trasMotor, mapa, contexto, { ...config, contadorInicial: contadorNpc });
       contadorNpc = trasNpc.contadorFinal;
       estado = trasNpc.estado;
@@ -943,6 +1107,7 @@ async function main() {
       fotos.push(
         construirFotoResumen(
           estado,
+          mapa,
           tick,
           idsColapsadosVistos.size,
           excepcionesAcumuladas,
@@ -1002,6 +1167,49 @@ async function main() {
   }
   console.log(`\nRecintos vivos al final de la corrida: ${filasMuralla.length}`);
   console.log(JSON.stringify(filasMuralla, null, 2));
+
+  if (diagFundacion) {
+    const total = ruinasDuraciones.length;
+    const orden = [...ruinasDuraciones].sort((a, b) => a - b);
+    const mediana = total === 0 ? 0 : orden[Math.floor(total / 2)]!;
+    console.log(`\n=== DIAGNÓSTICO asentamiento.ruinas (${total} eventos) ===`);
+    console.log(`duración antes de caer: mediana ${mediana.toFixed(0)} min, min ${(orden[0] ?? 0).toFixed(0)}, max ${(orden[total - 1] ?? 0).toFixed(0)}`);
+    console.log(`nivel al caer:`);
+    for (const [nv, n] of [...ruinasPorNivel.entries()].sort()) console.log(`  nivel ${nv}: ${n} (${((n / total) * 100).toFixed(0)}%)`);
+    console.log(`recurso(s) que faltaron en el tick del colapso:`);
+    for (const [k, v] of [...ruinasPorRecurso.entries()].sort((a, b) => b[1] - a[1])) {
+      console.log(`  ${k.padEnd(28)} ${v} (${((v / total) * 100).toFixed(0)}%)`);
+    }
+
+    const iniciales = [...bosquesAlFundar.values()].filter((v) => !v.hijo);
+    const hijos = [...bosquesAlFundar.values()].filter((v) => v.hijo);
+    console.log(`\n=== BOSQUES AL FUNDAR (${iniciales.length} iniciales + ${hijos.length} hijos) ===`);
+    const distr = (vals: { r30: { n: number }; r60: { n: number } }[], fn: (v: { r30: { n: number }; r60: { n: number } }) => number) => {
+      const m = new Map<number, number>();
+      for (const v of vals) m.set(fn(v), (m.get(fn(v)) ?? 0) + 1);
+      return [...m.entries()].sort().map(([k, n]) => `${k}→${n}`).join('  ');
+    };
+    for (const [nombre, vals] of [['iniciales', iniciales], ['hijos', hijos]] as const) {
+      if (vals.length === 0) continue;
+      console.log(`  ${nombre}: bosques al radio inicial (${ZONA_INFLUENCIA.radioInicial}): ${distr(vals, (v) => v.r30.n)}  |  al radio nivel 1 (${ZONA_INFLUENCIA.radioMaximoPorNivel[1]}): ${distr(vals, (v) => v.r60.n)}`);
+      console.log(`  ${nombre}: SIN bosque al radio inicial: ${vals.filter((v) => v.r30.n === 0).length}/${vals.length}  ·  sin bosque ni al radio nivel 1: ${vals.filter((v) => v.r60.n === 0).length}/${vals.length}`);
+    }
+
+    console.log(`\n=== MUERTES POR FALTA DE MADERA (${maderaDeaths}) ===`);
+    const pct = (c: number) => `${((c / Math.max(1, maderaDeaths)) * 100).toFixed(0)}%`;
+    console.log(`Leñeras ACTIVAS al morir:        ${[...maderaDeathLeneras.entries()].sort().map(([n, c]) => `${n}→${c} (${pct(c)})`).join('  ')}`);
+    console.log(`Leñeras en CUALQUIER estado:     ${[...maderaDeathLenerasTotal.entries()].sort().map(([n, c]) => `${n}→${c} (${pct(c)})`).join('  ')}`);
+    console.log(`bosques alcanzables a su radio real al morir:  ${[...maderaDeathBosques.entries()].sort().map(([n, c]) => `${n}→${c}`).join('  ')}`);
+    console.log(`bosques que tenían al FUNDAR (radio inicial):  ${[...maderaDeathBosquesAlFundar.entries()].sort().map(([n, c]) => `${n}→${c}`).join('  ')}`);
+    console.log(`de los muertos sin Leñera (${maderaDeathConSitioLenera + maderaDeathBosqueSaturado + maderaDeathSinBosqueEnZona}):`);
+    console.log(`  bosque LIBRE en la zona (se podría poner Leñera):     ${maderaDeathConSitioLenera}`);
+    console.log(`  bosque en la zona pero SATURADO por Leñeras vecinas:  ${maderaDeathBosqueSaturado}`);
+    console.log(`  NINGÚN punto de bosque dentro de la zona clipeada:    ${maderaDeathSinBosqueEnZona}`);
+    const avg = (xs: number[]) => (xs.length === 0 ? 0 : xs.reduce((a, b) => a + b, 0) / xs.length);
+    console.log(`madera en almacén al morir: media ${avg(maderaDeathMaderaEnAlmacen).toFixed(1)}, max ${Math.max(0, ...maderaDeathMaderaEnAlmacen).toFixed(1)}`);
+    console.log(`tenían una Leñera EN COLA (no activa) al morir: ${maderaDeathConLeneraEnCola}`);
+    console.log(`nº de edificios que tenían al morir: media ${avg(maderaDeathEdificiosCount).toFixed(1)}`);
+  }
 
   console.log(JSON.stringify({ fotos, excepciones: excepcionesAcumuladas }, null, 2));
 }

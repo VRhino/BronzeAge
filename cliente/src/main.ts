@@ -836,6 +836,7 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
     : '';
 
   const mantenimiento = gameStore.mantenimientoInfo(a);
+  const recaudacion = gameStore.recaudacionInfo(a);
   const produccionPorRecurso = new Map<string, number>();
   for (const item of gameStore.produccionInfo(a)) {
     produccionPorRecurso.set(item.recurso, (produccionPorRecurso.get(item.recurso) ?? 0) + item.cantidadPorMinuto);
@@ -953,6 +954,7 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
       <div class="detail-section">
         <h3>Mantenimiento — consumo por minuto</h3>
         ${mantenimientoHtml}
+        <div class="kv-row" style="margin-top:6px"><span>Recaudación de oro</span><span>+${recaudacion.total.toFixed(2)}/min (P ${recaudacion.pesants.toFixed(2)} · A ${recaudacion.artesanos.toFixed(2)} · N ${recaudacion.nobleza.toFixed(2)})</span></div>
       </div>
 
       <div class="detail-section">
