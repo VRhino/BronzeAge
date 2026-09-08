@@ -634,14 +634,22 @@ function reclutarParaTodos(
     return { asentamiento, reclutamientosExitosos: 0, contador: contadorInicial };
   }
 
-  const residentes = residentesDe(asentamiento);
+  // Residentes (reclutan escuadrón nuevo) + dueños de escuadrones YA posados aquí que no residen (solo
+  // reponen — el caso de una guarnición instalada al conquistar una plaza sin residentes propios). Todos son
+  // ciudadanos de la Facción del asentamiento en el mundo NPC, así que `asentamiento.faccionId` es su Facción.
+  const jugadores = [
+    ...new Set([
+      ...residentesDe(asentamiento),
+      ...asentamiento.escuadrones.filter((e) => e.cantidad > 0).map((e) => e.jugadorId),
+    ]),
+  ];
 
   let actual = asentamiento;
   let contador = contadorInicial;
   let exitosos = 0;
-  for (const jugadorId of residentes) {
+  for (const jugadorId of jugadores) {
     try {
-      actual = reclutarTropa(actual, jugadorId, tropaId, origen, contador++);
+      actual = reclutarTropa(actual, jugadorId, asentamiento.faccionId, tropaId, origen, contador++);
       exitosos++;
     } catch (err) {
       if (!(err instanceof ReclutamientoInvalidoError)) throw err;

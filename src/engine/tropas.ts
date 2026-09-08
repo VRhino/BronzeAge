@@ -12,7 +12,7 @@ import { descontarRecursos, tieneRecursos } from './almacen';
 import { edificiosPorTipoYEstado, poblacionDisponibleParaReclutar } from './asentamientoQuery';
 import { consumoComidaPoblacion } from './population';
 import { factorCostoReclutamiento } from './politicas';
-import { esResidente } from './pertenencia';
+import { puedeReclutarEn } from './pertenencia';
 
 export class ReclutamientoInvalidoError extends Error {}
 
@@ -39,17 +39,26 @@ export class ReclutamientoInvalidoError extends Error {}
 export function reclutarTropa(
   asentamiento: Asentamiento,
   jugadorId: string,
+  /** Facción del jugador — para `puedeReclutarEn` (Doc 5.4/5.8, revisión 2026-09-08). Para el NPC siempre es
+   * `asentamiento.faccionId`; para un comando, la Facción del actor. */
+  faccionDelJugadorId: string,
   tropaId: string,
   origen: 'pesants' | 'artesanos',
   contador = 0
 ): Asentamiento {
-  if (!esResidente(asentamiento, jugadorId)) {
-    throw new ReclutamientoInvalidoError('Solo un jugador residente de este asentamiento puede reclutar aquí.');
+  const permiso = puedeReclutarEn(asentamiento, jugadorId, faccionDelJugadorId);
+  if (permiso === 'no') {
+    throw new ReclutamientoInvalidoError('No puedes reclutar aquí: ni resides ni es una plaza de tu Facción que lo permita.');
   }
   const tropa = TROPAS_RECLUTABLES.find((t) => t.id === tropaId);
   if (!tropa) throw new ReclutamientoInvalidoError('La tropa no existe en el catálogo.');
 
   const existente = asentamiento.escuadrones.find((e) => e.jugadorId === jugadorId && e.tropaId === tropaId);
+  // Fuera de tu residencia solo REPONES lo que ya tienes aquí (guarnición o columna) — nunca un escuadrón
+  // nuevo ni una tropa distinta.
+  if (permiso === 'solo_reponer' && !existente) {
+    throw new ReclutamientoInvalidoError('Fuera de tu residencia solo puedes reponer un escuadrón que ya tienes aquí, no reclutar uno nuevo.');
+  }
   const cantidad = tropa.unidadesPorDefecto - (existente?.cantidad ?? 0);
   if (cantidad <= 0) {
     throw new ReclutamientoInvalidoError('Este escuadrón ya está al tope de unidades.');

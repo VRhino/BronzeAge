@@ -17,7 +17,7 @@
 import type { Asentamiento, Caravana, Faccion } from '../../domain/types';
 import type { RolTecnico } from '../../acceso/tipos';
 import { esCiudadano } from '../../engine/faccion';
-import { esResidente, esReyDe, esReyOEmbajadorDe, tieneCargoLocal } from '../../engine/pertenencia';
+import { esResidente, esReyDe, esReyOEmbajadorDe, puedeReclutarEn, tieneCargoLocal } from '../../engine/pertenencia';
 import { estaEnAsentamiento } from '../../engine/ubicacion';
 import type { GameSessionState } from '../estado';
 import type { ParamsDe, TipoComando } from './registro';
@@ -135,6 +135,28 @@ function resideEnOrigenDeCaravana(estado: GameSessionState, jugadorId: string, c
 function reside(estado: GameSessionState, jugadorId: string, asentamientoId: string): boolean {
   const asentamiento = buscarAsentamiento(estado, asentamientoId);
   return asentamiento === undefined || (esResidente(asentamiento, jugadorId) && presente(estado, jugadorId, asentamientoId));
+}
+/** Reclutar (revisión 2026-09-08): residir aquí, O ser ciudadano de la Facción del asentamiento y que este lo
+ * permita — en ambos casos, estando presente. El detalle "solo reponer si no resides" lo hace el motor. */
+function puedeReclutarEnPlaza(estado: GameSessionState, jugadorId: string, asentamientoId: string): boolean {
+  const asentamiento = buscarAsentamiento(estado, asentamientoId);
+  if (!asentamiento) return true;
+  const faccionJugador = estado.facciones.find((f) => f.ciudadanosIds.includes(jugadorId));
+  return (
+    puedeReclutarEn(asentamiento, jugadorId, faccionJugador?.id ?? '') !== 'no' &&
+    presente(estado, jugadorId, asentamientoId)
+  );
+}
+/** Sacar tropa a campaña (revisión 2026-09-08): residir aquí, O tener escuadrones vivos propios ya posados
+ * aquí (guarnición tras conquistar/guarnecer) — estando presente. Mismo criterio que el gate del motor en
+ * `movilizarEjercito`. */
+function puedeMoverTropaDe(estado: GameSessionState, jugadorId: string, asentamientoId: string): boolean {
+  const asentamiento = buscarAsentamiento(estado, asentamientoId);
+  if (!asentamiento) return true;
+  const tieneTropaAqui =
+    esResidente(asentamiento, jugadorId) ||
+    asentamiento.escuadrones.some((e) => e.jugadorId === jugadorId && e.cantidad > 0);
+  return tieneTropaAqui && presente(estado, jugadorId, asentamientoId);
 }
 
 /**
@@ -271,6 +293,17 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
       if (jugadorId !== params.jugadorId) return false;
       const asentamiento = buscarAsentamiento(estado, params.asentamientoId);
       return asentamiento === undefined || esFaccionPropiaOSinFaccion(estado, jugadorId, asentamiento.faccionId);
+    },
+  },
+  // Cambiar de residencia: nadie a nombre de otro; y el destino tiene que ser de la propia Facción (a
+  // diferencia de comprarCasa, aquí el jugador YA es ciudadano de una — el motor lo exige). El resto de
+  // condiciones (hueco de vivienda, permiso, no residir ya ahí) las valida `cambiarResidencia`.
+  cambiarResidencia: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, jugadorId, params) => {
+      if (jugadorId !== params.jugadorId) return false;
+      const destino = buscarAsentamiento(estado, params.destinoId);
+      return destino === undefined || estado.facciones.some((f) => f.id === destino.faccionId && f.ciudadanosIds.includes(jugadorId));
     },
   },
 
@@ -445,7 +478,9 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
   reclutarTropa: {
     rolesPermitidos: ['jugador'],
     // Nadie recluta a nombre de otro: `Escuadron.jugadorId` sería el del actor, no el que mande el cliente.
-    condicionJugador: (estado, jugadorId, params) => jugadorId === params.jugadorId && reside(estado, jugadorId, params.asentamientoId),
+    // Residir → escuadrón nuevo; plaza de tu Facción con permiso, estando presente → solo reponer (lo acota
+    // el motor). Ver `puedeReclutarEn`, Doc 5.4/5.8.
+    condicionJugador: (estado, jugadorId, params) => jugadorId === params.jugadorId && puedeReclutarEnPlaza(estado, jugadorId, params.asentamientoId),
   },
   iniciarAsedio: {
     rolesPermitidos: ['jugador'],
@@ -535,7 +570,7 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
     rolesPermitidos: ['jugador'],
     condicionJugador: (estado, jugadorId, params) =>
       jugadorId === params.jugadorId &&
-      reside(estado, jugadorId, params.asentamientoId) &&
+      puedeMoverTropaDe(estado, jugadorId, params.asentamientoId) &&
       comandaEscuadrones(estado, jugadorId, params.asentamientoId, params.escuadronIds),
   },
   unirseAEjercito: {

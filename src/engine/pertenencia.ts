@@ -32,6 +32,32 @@ export function resideEnOtroAsentamiento(asentamientos: Asentamiento[], asentami
   return asentamientos.some((a) => a.id !== asentamientoId && esResidente(a, jugadorId));
 }
 
+/**
+ * Qué reclutamiento permite este asentamiento a este jugador (Doc 5.4/5.8, revisión 2026-09-08):
+ *
+ *  - `'todo'` — RESIDE aquí: escuadrón nuevo, reposición, cualquier tropa que habiliten los edificios.
+ *  - `'solo_reponer'` — no reside, pero es ciudadano de la Facción del asentamiento y el asentamiento lo
+ *    permite (no vetado, `politicaDeAcceso` ≠ `cerrado`): SOLO reponer un escuadrón que ya tiene aquí —posado
+ *    en la guarnición o traído en su columna—, nunca uno nuevo ni cambiar de composición. La regla "mueve tu
+ *    propia tropa esté donde esté, pero fórjala solo en casa".
+ *  - `'no'` — ni reside ni es plaza de su Facción con permiso.
+ *
+ * La distinción `'todo'` vs `'solo_reponer'` (¿existe ya el escuadrón?) la hace `reclutarTropa`
+ * (`engine/tropas.ts`) — aquí solo se decide el NIVEL de permiso. `faccionDelJugadorId` lo pasa el llamador
+ * (para el NPC, siempre es `asentamiento.faccionId`; para un comando, la Facción del actor).
+ */
+export function puedeReclutarEn(
+  asentamiento: Asentamiento,
+  jugadorId: string,
+  faccionDelJugadorId: string
+): 'todo' | 'solo_reponer' | 'no' {
+  if (esResidente(asentamiento, jugadorId)) return 'todo';
+  if (faccionDelJugadorId !== asentamiento.faccionId) return 'no';
+  if (asentamiento.vetadosIds?.includes(jugadorId)) return 'no';
+  if (asentamiento.politicaDeAcceso === 'cerrado') return 'no';
+  return 'solo_reponer';
+}
+
 /** El cargo está OCUPADO por alguien (pregunta de regla de juego: "¿hay Gobernador?"). Distinta de
  * `tieneCargoLocal`, que pregunta por un jugador concreto — ver el comentario de ahí. */
 export function cargoOcupado(asentamiento: Asentamiento, cargo: CargoTipo): boolean {

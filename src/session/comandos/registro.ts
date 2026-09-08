@@ -13,7 +13,7 @@ import { crearFaccion } from './crearFaccion';
 import { unirseAFaccion } from './unirseAFaccion';
 import { dejarFaccion } from './dejarFaccion';
 import { alternarFaccionNpc } from './alternarFaccionNpc';
-import { activarPolitica, asignarCargoLocal, asignarEmbajador, asignarRey, comprarCasa } from './cargos';
+import { activarPolitica, asignarCargoLocal, asignarEmbajador, asignarRey, cambiarResidencia, comprarCasa } from './cargos';
 import { anexionar, fusionar, proponerRelacion, rebelionVasallo, romperRelacion } from './diplomacia';
 import {
   aceptarTrueque,
@@ -71,6 +71,7 @@ export const REGISTRO_COMANDOS = {
   asignarEmbajador,
   asignarRey,
   comprarCasa,
+  cambiarResidencia,
   anexionar,
   fusionar,
   proponerRelacion,

@@ -6,11 +6,11 @@
 // los narra esta capa entera: es la que sabe a quién se nombró y en qué Facción.
 import type { CargoTipo } from '../../domain/types';
 import { asignarCargoLocal as asignarCargoLocalEngine, asignarEmbajador as asignarEmbajadorEngine, asignarRey as asignarReyEngine } from '../../engine/cargos';
-import { comprarCasa as comprarCasaEngine } from '../../engine/faccion';
+import { comprarCasa as comprarCasaEngine, cambiarResidencia as cambiarResidenciaEngine } from '../../engine/faccion';
 import { activarPolitica as activarPoliticaEngine } from '../../engine/politicas';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito, type ContextoComando, type TransicionComando } from './tipos';
-import { comando, conAsentamiento, conFaccion, exigirAsentamiento, exigirFaccion, exigirFaccionDe } from './ayudas';
+import { comando, conAsentamiento, conAsentamientos, conFaccion, exigirAsentamiento, exigirFaccion, exigirFaccionDe } from './ayudas';
 import { evento } from './eventos';
 
 export interface PayloadCargoFaccion {
@@ -26,6 +26,11 @@ export interface PayloadCargoLocal {
 export interface PayloadCasaComprada {
   asentamientoId: string;
   jugadorId: string;
+}
+export interface PayloadResidenciaCambiada {
+  jugadorId: string;
+  origenId: string;
+  destinoId: string;
 }
 export interface PayloadPoliticaActivada {
   asentamientoId: string;
@@ -118,6 +123,28 @@ export const comprarCasa = comando<ParamsComprarCasa, void>((estado, _mapa, ctx,
       mensaje: `${params.jugadorId} compra casa en ${params.asentamientoId} y obtiene ciudadanía.`,
       payload: { asentamientoId: resultado.asentamiento.id, jugadorId: params.jugadorId } satisfies PayloadCasaComprada,
       asentamientoId: resultado.asentamiento.id,
+    }),
+  ]);
+});
+
+export interface ParamsCambiarResidencia {
+  destinoId: string;
+  jugadorId: string;
+}
+
+export const cambiarResidencia = comando<ParamsCambiarResidencia, void>((estado, _mapa, ctx, params) => {
+  const { origen, destino } = cambiarResidenciaEngine(estado.facciones, estado.asentamientos, params.destinoId, params.jugadorId);
+  const siguiente = conHistorialDeJugador(
+    conAsentamientos(estado, [origen, destino]),
+    params.jugadorId,
+    `Cambia su residencia de ${origen.id} a ${destino.id}.`
+  );
+  return exito(siguiente, [
+    evento(ctx, {
+      codigo: 'ciudadania.residencia_cambiada',
+      mensaje: `${params.jugadorId} deja de residir en ${origen.id} y se muda a ${destino.id}.`,
+      payload: { jugadorId: params.jugadorId, origenId: origen.id, destinoId: destino.id } satisfies PayloadResidenciaCambiada,
+      asentamientoId: destino.id,
     }),
   ]);
 });

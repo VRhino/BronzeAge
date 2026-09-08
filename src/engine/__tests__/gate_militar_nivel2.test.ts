@@ -91,7 +91,7 @@ describe('Barracón / Galería de tiro — gate de construcción a nivel 2', () 
     };
 
     // `lanceros_mimbre`: Barracón, nivelRequerido 1, cuesta armaMadera — la tropa más barata de la vía militar.
-    const trasReclutar = reclutarTropa(degradado, 'jugador-faccion-1-1', 'lanceros_mimbre', 'pesants', 0);
+    const trasReclutar = reclutarTropa(degradado, 'jugador-faccion-1-1', 'faccion-1', 'lanceros_mimbre', 'pesants', 0);
     expect(trasReclutar.escuadrones.some((e) => e.tropaId === 'lanceros_mimbre')).toBe(true);
   });
 });

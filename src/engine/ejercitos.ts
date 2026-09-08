@@ -300,8 +300,13 @@ export function movilizarEjercito(
    * `rechazar`: lo prudente es que la columna salga con quien salió salvo que su Líder diga otra cosa. */
   politicaDeUnion: Ejercito['politicaDeUnion'] = 'rechazar'
 ): { asentamiento: Asentamiento; ejercito: Ejercito; trigoCargado: number } {
-  if (!esResidente(asentamiento, jugadorId)) {
-    throw new MovilizacionInvalidaError('Solo un residente puede sacar tropas de este asentamiento.');
+  // Mueves tu propia tropa esté donde esté (revisión 2026-09-08): residir aquí, O tener ya escuadrones vivos
+  // propios posados aquí (guarnición tras conquistar/guarnecer). Reclutar/cambiar roster sigue atado a residir.
+  if (
+    !esResidente(asentamiento, jugadorId) &&
+    !asentamiento.escuadrones.some((e) => e.jugadorId === jugadorId && e.cantidad > 0)
+  ) {
+    throw new MovilizacionInvalidaError('Solo puedes sacar de aquí tropas propias: residiendo, o escuadrones tuyos ya posados aquí.');
   }
   if (objetivo.tipo === 'asentamiento' && objetivo.id === asentamiento.id) {
     throw new MovilizacionInvalidaError('El destino no puede ser el propio asentamiento de origen.');

@@ -21,6 +21,7 @@ Cuando una entrada de aquí se cierra, se borra de este archivo y se marca allí
 | 14 | JUGADOR | Movimiento libre del jugador por el mapa | ✘ nada |
 | 15 | COMERCIO | Comerciar con una plaza ajena desde su puerta | ✘ nada |
 | 16 | JUGADOR | Qué hace un huésped: vida dentro de una Facción NPC | ✘ nada |
+| 17 | MILITAR | `guarnecer`: defender una plaza propia marchando a ella | ✘ nada |
 
 Fuera de este índice, siguen sin código pero **sin ficha propia todavía** (ver checklist): tecnología y el
 árbol de desarrollo propio, los 4 gremios, el exilio, el Attack Timer, el spawn aleatorio de onboarding, los
@@ -312,6 +313,27 @@ subir ni nada que recompensar.
 
 **Lo que hay que decidir:** qué encargos existen y quién los publica; qué se gana (¿acceso a reclutar? ¿casa?
 ¿aval para fundar?); y si ese standing sobrevive a marcharse de la Facción.
+
+## 17. `guarnecer`: defender una plaza propia marchando a ella
+
+**Estado: forma diseñada, separada a propósito del bloque de ocupación post-conquista.** Un ejército de la
+Facción A, aparcado en la puerta de una plaza de la Facción A que NO es la residencia de sus jugadores, puede
+**guarnecerla**: sus escuadrones se vuelcan en la guarnición del asentamiento (`absorberColumna` con destino
+≠ hogar), el ejército se consume. Los escuadrones de no-residentes en una guarnición defienden, comen del
+trigo del almacén y su dueño los repone y re-moviliza (esto último ya llega con el bloque de ocupación,
+`Consideraciones/Ocupacion_Post_Conquista_Definicion.md` §2.3b y Paso 1 del plan).
+
+Hoy **un ejército propio aparcado en tu ciudad no ayuda a defenderla** (`asediarConEjercito` solo mira
+`defensor.escuadrones`), así que "proteger a un aliado/una plaza propia marchando a defenderla" (Doc 2, Doc
+5.12.4) no funciona. `guarnecer` lo cierra.
+
+**Por qué está aquí y no en el bloque de ocupación:** el arreglo del ping-pong de conquistas NO lo necesita —
+la conquista guarnece sola. `guarnecer` es la capacidad general, y se implementa cuando toque. Falta: el
+comando `guarnecer` (`session/comandos/`), su gate (ejército en `enLaPuertaDe` de plaza propia con permiso), y
+decidir si al llegar a una plaza propia se ofrece como acción o si arrancar la marcha con destino "guarnecer
+X" ya lo implica.
+
+Diseño detallado en `Consideraciones/Ocupacion_Post_Conquista_Definicion.md` §2.3.
 
 
 -------------------- agregado

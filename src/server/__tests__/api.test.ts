@@ -865,7 +865,8 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       // `reservarCaravana` — la caravana se compone pieza a pieza.
       // +3 con el Paso 3 (Doc 3.13.3): `prepararCaravana`, `cancelarCaravana`, `moverCarroCaravana` — el
       // lanzamiento manual con estado de preparación.
-      expect(cuerpo.oneOf.length).toBe(65);
+      // +1 con `cambiarResidencia` (Doc 2.5/2.6): mudar la base de un asentamiento a otro de la propia Facción.
+      expect(cuerpo.oneOf.length).toBe(66);
       const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
       expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
     });
