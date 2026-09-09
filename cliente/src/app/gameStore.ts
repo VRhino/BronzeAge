@@ -906,7 +906,12 @@ export class GameStore {
 }
 
 /** Conecta con `gameId` (lo crea si no existe todavía — no destructivo) y devuelve un `GameStore` listo para
- * usar. `main.ts` la llama una vez al arrancar, antes de montar el resto de la interfaz. */
-export function crearGameStore(gameId = 'local', seed = 1): Promise<GameStore> {
+ * usar. `main.ts` la llama una vez al arrancar, antes de montar el resto de la interfaz. `gameId`/`seed` salen
+ * de `VITE_GAME_ID`/`VITE_SEED` (por defecto `local`/`1`) para poder apuntar a la partida que toque sin
+ * recompilar. */
+export function crearGameStore(
+  gameId = import.meta.env.VITE_GAME_ID ?? 'local',
+  seed = Number(import.meta.env.VITE_SEED ?? 1)
+): Promise<GameStore> {
   return GameStore.crear(gameId, seed);
 }
