@@ -32,6 +32,7 @@ export const CODIGOS_ERROR = {
   asentamientoNoExiste: 'asentamiento.no_existe',
   faccionNoExiste: 'faccion.no_existe',
   caravanaNoExiste: 'caravana.no_existe',
+  caravanaNoAparcadaAqui: 'caravana.no_aparcada_aqui',
   campamentoNoExiste: 'campamento.no_existe',
   ejercitoNoExiste: 'ejercito.no_existe',
   acuerdoNoExiste: 'acuerdo.no_existe',

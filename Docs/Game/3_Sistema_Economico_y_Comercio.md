@@ -250,7 +250,20 @@ La **escolta sin héroe no se pierde con el carro**: los supervivientes (permade
 reaparecen en la guarnición del origen con el debuff de derrota. El viaje de vuelta se abstrae, igual que la
 ración de la escolta — no marchan por el mapa como un ejército.
 
-### 3.13.7 Diferido — se diseñó la forma, se implementa después
+### 3.13.7 Caravana aparcada — cuando un ejército la deja al `guarnecer` — ✅ implementado (2026-09-09)
+
+Un ejército con caravanas adjuntas que **guarnece** una plaza de su Facción (Doc 5.12.4) no las pierde: quedan
+**aparcadas** en esa plaza. Una caravana aparcada:
+
+- **Sigue siendo de su origen.** No la reparte el comercio automático de la plaza anfitriona, no cuenta contra
+  su cupo de Mercado, y los bandidos no la tocan (está en una plaza amiga).
+- **Intercambia con el almacén de la anfitriona.** Un residente de su origen presente en la plaza puede cargar
+  recursos del almacén al carro y descargar del carro al almacén.
+- **Solo sale de dos formas:** enganchada a un ejército de la Facción (cualquiera, no solo el que la trajo), o
+  **enviada a su origen** — si va vacía aparece allí al instante, si lleva carga recorre el mapa de vuelta y
+  la vuelca en el almacén del origen al llegar (una caravana con carga nunca se teletransporta).
+
+### 3.13.8 Diferido — se diseñó la forma, se implementa después
 
 Planificación horaria, cría de animales, visibilidad por tamaño, inmunidad del camello al desierto, catálogo
 ampliado de carros y unificación con `Ejercito.suministro` (5.13). **Cada uno con su forma y lo que le falta

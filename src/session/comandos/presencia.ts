@@ -13,7 +13,7 @@
 // No hay un cuarto: salir de tu propia residencia SIEMPRE es `salirAlMundo`, porque ahí tienes tu roster
 // entero delante y hay algo que elegir.
 import type { Asentamiento } from '../../domain/types';
-import { marcharA as marcharAEngine, salirAlMundo as salirAlMundoEngine, type ObjetivoEjercito } from '../../engine/ejercitos';
+import { guarnecer as guarnecerEngine, marcharA as marcharAEngine, salirAlMundo as salirAlMundoEngine, type ObjetivoEjercito } from '../../engine/ejercitos';
 import { conVeto } from '../../engine/pertenencia';
 import { conFotoTomadaPor, cruzarLaPuerta, retomarColumna, situarJugadores } from '../../engine/ubicacion';
 import { liderazgoComprometido } from '../../engine/liderazgo';
@@ -54,6 +54,18 @@ export interface PayloadPresencia {
 export interface ParamsSalirDeAsentamiento {
   asentamientoId: string;
   jugadorId: string;
+}
+
+export interface ParamsGuarnecer {
+  asentamientoId: string;
+  jugadorId: string;
+}
+
+export interface PayloadGuarnecer {
+  asentamientoId: string;
+  ejercitoId: string;
+  escuadrones: number;
+  caravanasAparcadas: string[];
 }
 
 /**
@@ -155,6 +167,53 @@ export const entrarEnAsentamiento = comando<ParamsEntrarEnAsentamiento, void>((e
           jugadorId: params.jugadorId,
           ejercitoId: columna.id,
         } satisfies PayloadPresencia,
+        asentamientoId: asentamiento.id,
+      }),
+    ]
+  );
+});
+
+/**
+ * `guarnecer` (Ocupacion §2.3): marchar un EJÉRCITO a una plaza de tu Facción y volcar la tropa en su
+ * guarnición. El ejército se consume; los jugadores quedan DENTRO de la plaza que acaban de reforzar (17.1) —
+ * salen luego con `movilizarEjercito` (el gate ya lo permite: "escuadrones tuyos ya posados aquí").
+ *
+ * Las caravanas adjuntas no se pierden: pasan a `'aparcada'` en la plaza (§2.3d). No es `entrarEnAsentamiento`
+ * —ese exige columna personal y aparca la columna intacta— sino la vía de un ejército para acabar en una
+ * plaza propia sin conquistarla.
+ */
+export const guarnecer = comando<ParamsGuarnecer, void>((estado, _mapa, ctx, params) => {
+  const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
+  const columna = exigirColumnaDe(estado, params.jugadorId);
+
+  const r = guarnecerEngine(asentamiento, columna, estado.caravanas);
+  const aparcadasPorId = new Map(r.caravanasAparcadas.map((c) => [c.id, c]));
+  const jugadoresDeLaColumna = columna.participantes.map((p) => p.jugadorId);
+
+  const siguiente: GameSessionState = {
+    ...conAsentamiento(estado, r.asentamiento),
+    ejercitos: estado.ejercitos.filter((e) => e.id !== columna.id),
+    caravanas: estado.caravanas.map((c) => aparcadasPorId.get(c.id) ?? c),
+    jugadores: situarJugadores(estado.jugadores, jugadoresDeLaColumna, { tipo: 'asentamiento', asentamientoId: asentamiento.id }),
+  };
+
+  const conCaravanas = r.caravanasAparcadas.length > 0 ? ` y ${r.caravanasAparcadas.length} caravana(s) quedan aparcadas` : '';
+  return exito(
+    conHistorialDeJugador(
+      siguiente,
+      params.jugadorId,
+      `Guarnece ${asentamiento.id}: ${columna.escuadrones.length} escuadrón(es) a la guarnición${conCaravanas}.`
+    ),
+    [
+      evento(ctx, {
+        codigo: 'ejercito.guarnece',
+        mensaje: `El ejército ${columna.id} guarnece ${asentamiento.id}: ${columna.escuadrones.length} escuadrón(es) se suman a su guarnición.`,
+        payload: {
+          asentamientoId: asentamiento.id,
+          ejercitoId: columna.id,
+          escuadrones: columna.escuadrones.length,
+          caravanasAparcadas: r.caravanasAparcadas.map((c) => c.id),
+        } satisfies PayloadGuarnecer,
         asentamientoId: asentamiento.id,
       }),
     ]

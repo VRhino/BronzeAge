@@ -23,6 +23,8 @@ import {
   comerciarEnPlaza,
   comprarAnimalCaravana,
   crearCaravana,
+  enviarCaravanaAlOrigen,
+  moverCargaCaravanaAparcada,
   moverCarroCaravana,
   prepararCaravana,
   proponerTrueque,
@@ -56,7 +58,7 @@ import {
   soltarCaravana,
   unirseAEjercito,
 } from './ejercitos';
-import { entrarEnAsentamiento, fijarPoliticaDeAcceso, marcharA, salirAlMundo, salirDeAsentamiento, vetarJugador } from './presencia';
+import { entrarEnAsentamiento, fijarPoliticaDeAcceso, guarnecer, marcharA, salirAlMundo, salirDeAsentamiento, vetarJugador } from './presencia';
 import { cederLiderazgo, responderPeticionDeUnion, separarseDelEjercito, unirseEnCampo } from './columna';
 import { atacar, dejarDePerseguir, inspeccionar, perseguir } from './interaccion';
 
@@ -89,10 +91,13 @@ export const REGISTRO_COMANDOS = {
   aceptarTrueque,
   rechazarTrueque,
   comerciarEnPlaza,
+  moverCargaCaravanaAparcada,
+  enviarCaravanaAlOrigen,
   salirAlMundo,
   marcharA,
   entrarEnAsentamiento,
   salirDeAsentamiento,
+  guarnecer,
   fijarPoliticaDeAcceso,
   vetarJugador,
   inspeccionar,

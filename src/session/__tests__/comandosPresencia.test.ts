@@ -6,7 +6,7 @@
 // columna aparcada sobrevive a lo que le pase a la plaza, y volver a casa la deshace.
 import { describe, expect, it } from 'vitest';
 import { GameSession } from '../gameSession';
-import { entrarEnAsentamiento, fijarPoliticaDeAcceso, marcharA, salirAlMundo, salirDeAsentamiento, vetarJugador } from '../comandos/presencia';
+import { entrarEnAsentamiento, fijarPoliticaDeAcceso, guarnecer, marcharA, salirAlMundo, salirDeAsentamiento, vetarJugador } from '../comandos/presencia';
 import { movilizarEjercito } from '../comandos/ejercitos';
 import { OPC, partidaConAsentamiento } from './fixtures';
 import { FUNDACION, LOGISTICA, MOVIMIENTO, VISION } from '../../constants';
@@ -277,6 +277,51 @@ describe('salirDeAsentamiento — retomar lo aparcado (Doc 1.10.3)', () => {
     const r = sesion.ejecutar(salirDeAsentamiento, { asentamientoId, jugadorId: fundador }, opcDe(fundador));
 
     expect(r.ok, 'en tu casa hay un roster y un almacén que elegir; eso es otra operación').toBe(false);
+  });
+});
+
+describe('guarnecer — un ejército marcha a una plaza propia y vuelca la tropa (Ocupacion §2.3)', () => {
+  /** Fundador con un EJÉRCITO (movilizado, no columna personal) parado en la puerta de su propia plaza. */
+  function ejercitoEnLaPuerta() {
+    const { sesion, asentamientoId, fundador } = partidaLista();
+    sesion.ejecutar(
+      movilizarEjercito,
+      { asentamientoId, jugadorId: fundador, escuadronIds: ['esc-1'], objetivo: { tipo: 'punto', punto: { x: 900, y: 900 } } },
+      opcDe(fundador)
+    );
+    const payload = sesion.exportar();
+    const plaza = payload.state.asentamientos[0]!;
+    return {
+      asentamientoId,
+      fundador,
+      sesion: GameSession.importar({
+        ...payload,
+        state: {
+          ...payload.state,
+          ejercitos: [{ ...payload.state.ejercitos[0]!, posicionActual: plaza.posicion, estado: 'estacionado' as const }],
+        },
+      }),
+    };
+  }
+
+  it('vuelca los escuadrones en la guarnición, consume el ejército y deja al jugador dentro', () => {
+    const { sesion, asentamientoId, fundador } = ejercitoEnLaPuerta();
+
+    const r = sesion.ejecutar(guarnecer, { asentamientoId, jugadorId: fundador }, opcDe(fundador));
+
+    expect(r.ok).toBe(true);
+    expect(sesion.getState().ejercitos, 'el ejército se consume').toHaveLength(0);
+    expect(sesion.getState().asentamientos[0]!.escuadrones.map((e) => e.id)).toEqual(['esc-1']);
+    expect(ubicacionDe(sesion, fundador)).toEqual({ tipo: 'asentamiento', asentamientoId });
+  });
+
+  it('una columna PERSONAL no guarnece: hay que separarse antes', () => {
+    const { sesion, asentamientoId, fundador } = partidaLista();
+    sesion.ejecutar(salirAlMundo, { asentamientoId, jugadorId: fundador, escuadronIds: [], carga: {} }, opcDe(fundador));
+
+    const r = sesion.ejecutar(guarnecer, { asentamientoId, jugadorId: fundador }, opcDe(fundador));
+
+    expect(r.ok).toBe(false);
   });
 });
 

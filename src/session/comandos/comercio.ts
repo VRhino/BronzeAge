@@ -9,6 +9,8 @@ import {
   prepararCaravanaManual as prepararCaravanaManualEngine,
   cancelarPreparacionCaravana as cancelarPreparacionEngine,
   moverCarroEntreCaravanas as moverCarroEngine,
+  moverCargaCarroAparcada as moverCargaCarroAparcadaEngine,
+  enviarCaravanaAlOrigen as enviarCaravanaAlOrigenEngine,
   seleccionarEscoltaCaravana,
   escoltaDeJugador,
   proponerTrueque as proponerTruequeEngine,
@@ -475,6 +477,84 @@ export interface ParamsMoverCarro {
   haciaCaravanaId: string;
   carroIndice: number;
 }
+
+export interface ParamsMoverCargaCaravanaAparcada {
+  jugadorId: string;
+  caravanaId: string;
+  /** La plaza que hospeda la caravana aparcada (donde está su carro). */
+  asentamientoId: string;
+  recurso: RecursoTipo;
+  cantidad: number;
+  sentido: 'cargar' | 'descargar';
+}
+
+/**
+ * Carga o descarga el carro de una caravana `'aparcada'` (Ocupacion §2.3d) contra el almacén de la plaza que
+ * la hospeda. Toda la regla vive en el motor; aquí solo se resuelven la caravana y la plaza.
+ */
+export const moverCargaCaravanaAparcada = comando<ParamsMoverCargaCaravanaAparcada, { movido: number }>(
+  (estado, _mapa, ctx, params) => {
+    const caravana = exigirCaravana(estado, params.caravanaId);
+    const plaza = exigirAsentamiento(estado, params.asentamientoId);
+    if (caravana.posicionActual.x !== plaza.posicion.x || caravana.posicionActual.y !== plaza.posicion.y) {
+      rechazar(CODIGOS_ERROR.caravanaNoAparcadaAqui);
+    }
+    const r = moverCargaCarroAparcadaEngine(caravana, plaza, params.recurso, params.cantidad, params.sentido);
+    const antes = caravana.contenido[params.recurso] ?? 0;
+    const despues = r.caravana.contenido[params.recurso] ?? 0;
+    const movido = Math.abs(despues - antes);
+    return exito(
+      conCaravana(conAsentamiento(estado, r.plaza), r.caravana),
+      [
+        evento(ctx, {
+          codigo: 'comercio.carga_caravana_aparcada',
+          mensaje: `La caravana ${caravana.id} ${params.sentido === 'cargar' ? 'carga' : 'descarga'} ${movido.toFixed(0)} ${params.recurso} en ${plaza.id}.`,
+          payload: { caravanaId: caravana.id, asentamientoId: plaza.id, recurso: params.recurso, cantidad: movido, sentido: params.sentido },
+          asentamientoId: plaza.id,
+        }),
+      ],
+      { movido }
+    );
+  }
+);
+
+export interface ParamsEnviarCaravanaAlOrigen {
+  jugadorId: string;
+  caravanaId: string;
+  /** La plaza que hospeda la caravana aparcada. */
+  asentamientoId: string;
+}
+
+/**
+ * Envía una caravana `'aparcada'` (Ocupacion §2.3d) de vuelta a su origen. Vacía: aparece allí al instante.
+ * Con carga: viaja el mapa (`'retornando'`) y vuelca en el almacén del origen al llegar.
+ */
+export const enviarCaravanaAlOrigen = comando<ParamsEnviarCaravanaAlOrigen, { caravanaId: string; enTransito: boolean }>(
+  (estado, mapa, ctx, params) => {
+    const caravana = exigirCaravana(estado, params.caravanaId);
+    const anfitriona = exigirAsentamiento(estado, params.asentamientoId);
+    const origen = exigirAsentamiento(estado, caravana.origenAsentamientoId);
+    if (caravana.posicionActual.x !== anfitriona.posicion.x || caravana.posicionActual.y !== anfitriona.posicion.y) {
+      rechazar(CODIGOS_ERROR.caravanaNoAparcadaAqui);
+    }
+    const r = enviarCaravanaAlOrigenEngine(caravana, anfitriona, origen, mapa);
+    const enTransito = r.caravana.estado === 'retornando';
+    return exito(
+      conCaravana(estado, r.caravana),
+      [
+        evento(ctx, {
+          codigo: 'comercio.caravana_enviada_al_origen',
+          mensaje: enTransito
+            ? `La caravana ${caravana.id} sale de ${anfitriona.id} de vuelta a ${origen.id} con su carga.`
+            : `La caravana ${caravana.id} vuelve vacía a ${origen.id}.`,
+          payload: { caravanaId: caravana.id, origenId: origen.id, anfitrionaId: anfitriona.id, enTransito },
+          asentamientoId: origen.id,
+        }),
+      ],
+      { caravanaId: caravana.id, enTransito }
+    );
+  }
+);
 
 /** Mueve un carro (con su animal) entre dos caravanas disponibles del mismo asentamiento (Doc 3.13.5). */
 export const moverCarroCaravana = comando<ParamsMoverCarro, { desdeCarros: number; haciaCarros: number }>(

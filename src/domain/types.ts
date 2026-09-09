@@ -722,8 +722,14 @@ export interface Caravana {
    *
    * 'preparando' = revamp (Doc 3.13.3): lanzada a mano pero todavía en el origen mientras corre el tiempo de
    * preparación (`preparaHasta`). La carga ya está reservada del almacén y las piezas/escolta bloqueadas;
-   * cancelar antes de salir lo devuelve todo. Sin cablear todavía (Paso 3 del plan). */
-  estado?: 'disponible' | 'preparando' | 'adjunta' | 'en_transito' | 'retornando';
+   * cancelar antes de salir lo devuelve todo. Sin cablear todavía (Paso 3 del plan).
+   *
+   * 'aparcada' = una caravana adjunta que su ejército dejó en una plaza de la Facción al `guarnecer`
+   * (`Ocupacion_Post_Conquista_Definicion.md` §2.3d). Sigue siendo de su `origenAsentamientoId`, hospedada en
+   * otra plaza (su `posicionActual`): NO la usa la plaza anfitriona ni el reparto automático, intercambia con
+   * el almacén de esa plaza (`moverCargaCarroAparcada`), y solo sale enganchada a un ejército
+   * (`adjuntarCaravana`) o enviada a su origen (`enviarCaravanaAlOrigen`). */
+  estado?: 'disponible' | 'preparando' | 'adjunta' | 'aparcada' | 'en_transito' | 'retornando';
   /** Revamp de caravanas (Doc 3.13). Solo `tipo: 'comercial'`, y ahí SIEMPRE presente desde el snapshot v12
    * (la migración le puso 1 carro básico + 1 buey a las que venían del modelo viejo). La caravana deriva su
    * capacidad y velocidad de esta lista (`capacidadCaravana`/`velocidadCaravana`, engine/caravanas.ts); sin

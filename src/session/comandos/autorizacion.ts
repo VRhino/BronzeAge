@@ -132,6 +132,17 @@ function resideEnOrigenDeCaravana(estado: GameSessionState, jugadorId: string, c
   return caravana === undefined || reside(estado, jugadorId, caravana.origenAsentamientoId);
 }
 
+/**
+ * Operar una caravana `'aparcada'` en una plaza anfitriona (Ocupacion §2.3d): ser residente de SU ORIGEN
+ * —sigue siendo tuya— y estar PRESENTE en la plaza donde está aparcada (no en el origen, del que marchaste).
+ */
+function puedeOperarCaravanaAparcada(estado: GameSessionState, jugadorId: string, caravanaId: string, asentamientoId: string): boolean {
+  const caravana = buscarCaravana(estado, caravanaId);
+  const origen = caravana && buscarAsentamiento(estado, caravana.origenAsentamientoId);
+  if (!caravana || !origen) return true; // lo rechaza el comando con un código que dice más
+  return esResidente(origen, jugadorId) && presente(estado, jugadorId, asentamientoId);
+}
+
 function reside(estado: GameSessionState, jugadorId: string, asentamientoId: string): boolean {
   const asentamiento = buscarAsentamiento(estado, asentamientoId);
   return asentamiento === undefined || (esResidente(asentamiento, jugadorId) && presente(estado, jugadorId, asentamientoId));
@@ -464,6 +475,17 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
     rolesPermitidos: ['jugador'],
     condicionJugador: (estado, jugadorId, params) => resideEnOrigenDeCaravana(estado, jugadorId, params.desdeCaravanaId),
   },
+  // Caravana 'aparcada' (Ocupacion §2.3d): residente de SU ORIGEN, presente en la plaza que la hospeda.
+  moverCargaCaravanaAparcada: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, jugadorId, params) =>
+      jugadorId === params.jugadorId && puedeOperarCaravanaAparcada(estado, jugadorId, params.caravanaId, params.asentamientoId),
+  },
+  enviarCaravanaAlOrigen: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, jugadorId, params) =>
+      jugadorId === params.jugadorId && puedeOperarCaravanaAparcada(estado, jugadorId, params.caravanaId, params.asentamientoId),
+  },
   // Comerciar en el mostrador de OTRO no exige residencia ni presencia dentro: exige estar alli con la
   // columna, y eso lo comprueba el motor (`comerciarEnPlaza`), que es donde vive la regla. Aqui solo se corta
   // que nadie opere en nombre de otro.
@@ -508,6 +530,12 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
     condicionJugador: (_estado, jugadorId, params) => jugadorId === params.jugadorId,
   },
   salirDeAsentamiento: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (_estado, jugadorId, params) => jugadorId === params.jugadorId,
+  },
+  // `guarnecer` (Ocupacion §2.3): como `entrarEnAsentamiento` — la geometría (ejército en la puerta de una
+  // plaza de su Facción) la valida el motor, que sabe dónde está la columna. Aquí solo que no actúe por otro.
+  guarnecer: {
     rolesPermitidos: ['jugador'],
     condicionJugador: (_estado, jugadorId, params) => jugadorId === params.jugadorId,
   },

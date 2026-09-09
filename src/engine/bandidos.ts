@@ -131,8 +131,9 @@ export function avanzarAtaquesBandidos(
 
   const resultado: Caravana[] = [];
   for (const caravana of caravanas) {
-    // Parada en su ciudad (disponible, o preparándose para un envío manual, Doc 3.13.3) — nada que interceptar.
-    if (caravana.estado === 'disponible' || caravana.estado === 'preparando') {
+    // Parada en una plaza (disponible en su origen; preparándose para un envío manual, Doc 3.13.3; o
+    // 'aparcada' en una plaza anfitriona tras guarnecer, Ocupacion §2.3d) — nada que interceptar.
+    if (caravana.estado === 'disponible' || caravana.estado === 'preparando' || caravana.estado === 'aparcada') {
       resultado.push(caravana);
       continue;
     }

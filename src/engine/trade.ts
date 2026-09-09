@@ -395,6 +395,75 @@ export function cancelarPreparacionCaravana(
 }
 
 /**
+ * Intercambia carga entre el carro de una caravana APARCADA (Ocupacion §2.3d) y el almacén de la plaza que la
+ * hospeda. Espeja `cargarCaravanaAdjunta` (engine/ejercitos.ts) sin los checks de ejército: la caravana está
+ * en la plaza por definición.
+ *
+ * `'cargar'` = almacén → carro (topado por `capacidadCaravana` y por lo que haya en el almacén).
+ * `'descargar'` = carro → almacén (topado por lo que quepa en el almacén — nunca se pierde carga que no
+ * cabe, igual que el mostrador `comerciarEnPlaza`).
+ */
+export function moverCargaCarroAparcada(
+  caravana: Caravana,
+  plaza: Asentamiento,
+  recurso: string,
+  cantidad: number,
+  sentido: 'cargar' | 'descargar'
+): { caravana: Caravana; plaza: Asentamiento } {
+  if (caravana.estado !== 'aparcada') throw new CaravanaInvalidaError('Esta caravana no está aparcada en una plaza.');
+  if (cantidad <= 0) throw new CaravanaInvalidaError('La cantidad tiene que ser positiva.');
+  const enElCarro = caravana.contenido[recurso] ?? 0;
+
+  if (sentido === 'cargar') {
+    const yaCargado = Object.values(caravana.contenido).reduce((a, b) => a + b, 0);
+    const espacio = capacidadCaravana(caravana) - yaCargado;
+    const movido = Math.min(cantidad, espacio, cantidadDisponible(plaza.almacen, recurso));
+    if (movido <= 0) throw new CaravanaInvalidaError(`No se puede cargar: sin ${recurso} en el almacén de ${plaza.id}, o la caravana va llena.`);
+    return {
+      caravana: { ...caravana, contenido: { ...caravana.contenido, [recurso]: enElCarro + movido } },
+      plaza: { ...plaza, almacen: descontarRecursos(plaza.almacen, { [recurso]: movido }) },
+    };
+  }
+
+  const item = plaza.almacen[recurso];
+  const hueco = item ? Math.max(0, item.capacidad - item.cantidad) : 0;
+  const movido = Math.min(cantidad, enElCarro, hueco);
+  if (movido <= 0) throw new CaravanaInvalidaError(`No se puede descargar: la caravana no lleva ${recurso}, o el almacén de ${plaza.id} no tiene sitio.`);
+  const contenido = { ...caravana.contenido };
+  if (enElCarro - movido > 0) contenido[recurso] = enElCarro - movido;
+  else delete contenido[recurso];
+  return {
+    caravana: { ...caravana, contenido },
+    plaza: { ...plaza, almacen: agregarRecurso(plaza.almacen, recurso, movido) },
+  };
+}
+
+/**
+ * Envía una caravana APARCADA (Ocupacion §2.3d) de vuelta a su origen. Vacía: aparece en el origen al
+ * instante (no hay carga que teletransportar). Con carga: pasa a `'retornando'` y recorre el mapa de vuelta,
+ * volcando lo que lleve en el almacén del origen al llegar (`avanzarCaravanas`, rama `retornando`).
+ */
+export function enviarCaravanaAlOrigen(
+  caravana: Caravana,
+  anfitriona: Asentamiento,
+  origen: Asentamiento,
+  mapa: Mapa
+): { caravana: Caravana } {
+  if (caravana.estado !== 'aparcada') throw new CaravanaInvalidaError('Solo se envía al origen una caravana aparcada.');
+  const carga = Object.values(caravana.contenido).reduce((a, b) => a + b, 0);
+  if (carga <= 0) {
+    return {
+      caravana: { ...caravana, estado: 'disponible', posicionActual: origen.posicion, ruta: undefined, destinoAsentamientoId: undefined },
+    };
+  }
+  const ruta = calcularRuta(mapa, anfitriona.posicion, origen.posicion);
+  if (!ruta) throw new CaravanaInvalidaError('No hay ruta por tierra de vuelta al origen desde aquí.');
+  return {
+    caravana: { ...caravana, estado: 'retornando', destinoAsentamientoId: anfitriona.id, ruta, progreso: 0, posicionActual: anfitriona.posicion },
+  };
+}
+
+/**
  * Mueve un carro (con su animal) de una caravana disponible a otra del mismo asentamiento (Doc 3.13.5).
  * Sin coste ni tiempo — es mantenimiento de flota, no una mecánica.
  */
@@ -471,10 +540,9 @@ function avanzarCaravanas(
       continue;
     }
     if (!caravana.destinoAsentamientoId) {
-      // Sin destino todavía: o es una Caravana de Fundación (Doc 1.8, destino = punto del mapa, la avanza
-      // `avanzarCaravanasFundacion` en engine/expansion.ts, no esta función), o es una caravana comercial
-      // propia 'disponible' (ampliación de comercio, construida pero sin asignar todavía, Doc 3.2). Ambas se
-      // dejan pasar sin tocar — una disponible no se mueve hasta que `asignarCaravanasATrueque` la asigne.
+      // Sin destino: una Caravana de Fundación (Doc 1.8, la avanza `avanzarCaravanasFundacion`), una comercial
+      // propia 'disponible' sin asignar (Doc 3.2), una 'adjunta' (la mueve `avanzarEjercitos`), o una
+      // 'aparcada' en una plaza tras guarnecer (Ocupacion §2.3d). Ninguna se mueve aquí: se dejan pasar.
       restantes.push(caravana);
       continue;
     }
@@ -521,14 +589,19 @@ function avanzarCaravanas(
 
     if (retornando) {
       // Llegada de vuelta a `origen`: disponible de nuevo para un nuevo envío — sin entrega, comisión ni
-      // peaje (viaje vacío, no hay contenido que cobrar). `ruta` se limpia: la siguiente asignación calcula
-      // una nueva desde `origen`. La escolta (Doc 3.13.4) vuelve a la guarnición del origen.
+      // peaje. `ruta` se limpia: la siguiente asignación calcula una nueva desde `origen`. La escolta (Doc
+      // 3.13.4) vuelve a la guarnición del origen.
+      let origenTrasLlegada = origen;
       if (caravana.escolta && caravana.escolta.length > 0) {
-        asentamientosPorId.set(origen.id, {
-          ...origen,
-          escuadrones: devolverEscoltaAGuarnicion(origen.escuadrones, caravana.escolta),
-        });
+        origenTrasLlegada = { ...origenTrasLlegada, escuadrones: devolverEscoltaAGuarnicion(origenTrasLlegada.escuadrones, caravana.escolta) };
       }
+      // El retorno de comercio siempre llega vacío (entregó en destino). Una caravana ENVIADA A CASA desde
+      // una plaza anfitriona (Ocupacion §2.3d, `enviarCaravanaAlOrigen`) puede llegar cargada: se vuelca en
+      // el almacén del origen antes de volver al pool. Defensivo para el caso de comercio (contenido ya vacío).
+      for (const [recurso, cantidad] of Object.entries(caravana.contenido)) {
+        if (cantidad > 0) origenTrasLlegada = { ...origenTrasLlegada, almacen: agregarRecurso(origenTrasLlegada.almacen, recurso, cantidad) };
+      }
+      if (origenTrasLlegada !== origen) asentamientosPorId.set(origen.id, origenTrasLlegada);
       restantes.push({
         ...caravana,
         estado: 'disponible',

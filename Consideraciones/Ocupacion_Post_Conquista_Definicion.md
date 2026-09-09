@@ -108,9 +108,8 @@ Cambia respecto a hoy:
 
 ### 2.3 `guarnecer` — posar escuadrones en una plaza de tu Facción
 
-> **El comando `guarnecer` es follow-up, NO va en el plan de §9** (revisión ponytail): la conquista guarnece
-> sola. Esta sección describe la capacidad general; se implementa aparte cuando toque "defender una plaza
-> propia marchando".
+> **IMPLEMENTADO (2026-09-09), plan en §11.** Se hizo aparte del bloque de ocupación (§9): la conquista
+> guarnece sola, `guarnecer` es la capacidad general "defender una plaza propia marchando".
 
 Capacidad general, no solo de la conquista (Ronda 2, decisión 7). Un ejército propio en la puerta de una
 plaza de su Facción puede **guarnecerla**: sus escuadrones pasan a `asentamiento.escuadrones` (el ejército se
@@ -534,8 +533,8 @@ parar"). `conquistasAcumuladas` sigue vivo (48 en 1000 ticks) — el NPC conquis
   escuadrón nuevo = residencia; reponer/mover escuadrones propios = cualquier plaza de la Facción con permiso,
   estando presente. Guarnición puede contener escuadrones de no-residentes.
 - ✅ **Doc 5.12.4** — "la guarnición es lo único que defiende" matizado: al conquistar, el ejército se vuelve
-  la guarnición; una guarnición puede contener fuerza posada por un ejército. (`guarnecer` general sigue
-  siendo follow-up, `Mecanicas a desarrollar` §17.)
+  la guarnición; una guarnición puede contener fuerza posada por un ejército — al conquistar o con el comando
+  `guarnecer` (implementado 2026-09-09, §11).
 - ✅ **Doc 5.4** (bullets de conquista reescritos) + **Doc 5.12.9 nuevo** ("Ocupación tras la conquista") —
   guarnición del conquistador, saqueo determinista, ventana de ocupación, reconstrucción barata de dañados.
 - ✅ **Doc 2.5** — el "beneficio de ciudadanía: reclutar" matizado; comando `cambiarResidencia` documentado
@@ -549,16 +548,34 @@ parar"). `conquistasAcumuladas` sigue vivo (48 en 1000 ticks) — el NPC conquis
 - ✅ **`Checklist_Mecanicas.md`** — "Conquista tras asedio" ampliado; filas nuevas para reclutamiento
   desatado / `cambiarResidencia` y para `guarnecer` (diferido).
 
-## 11. Plan técnico de `guarnecer` (ponytail full) — elegido para desarrollo 2026-09-09
+## 11. Plan técnico de `guarnecer` (ponytail full) — HECHO (2026-09-09)
 
-Diseño en §2.3 / §2.3d. Se hace ahora, junto con la niebla Paso 4 (`Niebla_De_Guerra_Definicion.md`). Los dos
-son independientes entre sí. Decisiones del usuario (2026-09-09): jugador queda dentro de la plaza tras
-guarnecer (17.1); adjuntas → `'aparcada'` con intercambio de almacén y dos vías de salida (17.2); cualquier
-ejército de la Facción puede recoger una `'aparcada'`; el viaje de vuelta cargada **reusa `'retornando'`**.
+Diseño en §2.3 / §2.3d. Hecho junto con la niebla Paso 4 (`Niebla_De_Guerra_Definicion.md`), independientes
+entre sí. Decisiones del usuario (2026-09-09): jugador queda dentro de la plaza tras guarnecer (17.1);
+adjuntas → `'aparcada'` con intercambio de almacén y dos vías de salida (17.2); cualquier ejército de la
+Facción puede recoger una `'aparcada'`; el viaje de vuelta cargada reusa `'retornando'`.
 
-**Sin migración de snapshot** (`'aparcada'` es un valor de enum añadido). **Método:** cada paso deja el repo
-verde, batch NPC bit-idéntico (el NPC no usa `guarnecer` fuera de la conquista, que ya está — así que ningún
-paso mueve el batch; si lo mueve, es un bug).
+**Sin migración de snapshot** (`'aparcada'` es un valor de enum añadido). **Batch NPC bit-idéntico**: nada de
+lo nuevo entra en el tick salvo el volcado de carga en la llegada `'retornando'` de `avanzarCaravanas`, y ahí
+el retorno de comercio siempre llega con `contenido` vacío → mismo comportamiento. Suite 1186 → 1200, tsc
+limpio, batch de 20fac/400t sin excepciones.
+
+**Lo que aterrizó, por capa:**
+
+- **DOMINIO** · `Caravana.estado` gana `'aparcada'`.
+- **MOTOR** · `engine/ejercitos.ts` `guarnecer(asent, ejercito, caravanas)` (gates: `tipo==='ejercito'`,
+  misma Facción, `enLaPuertaDe`; efecto: `absorberColumna` + adjuntas → `'aparcada'` en la plaza) ·
+  `adjuntarCaravana` acepta `'aparcada'` · `engine/trade.ts` `moverCargaCarroAparcada` y
+  `enviarCaravanaAlOrigen` · `avanzarCaravanas` vuelca `contenido` no vacío al llegar `'retornando'` ·
+  `engine/bandidos.ts` salta `'aparcada'`.
+- **SESIÓN** · `session/comandos/presencia.ts` `guarnecer` (envuelve el motor + `situarJugadores`
+  participantes → asentamiento) · `session/comandos/comercio.ts` `moverCargaCaravanaAparcada` y
+  `enviarCaravanaAlOrigen` (gate: residente del origen de la caravana + presente en la anfitriona,
+  `puedeOperarCaravanaAparcada` en `autorizacion.ts`) · `esquemas.ts` · `registro.ts` · nuevo código de error
+  `caravana.no_aparcada_aqui`.
+- **INFRA** · nada.
+- **Tests** · `engine/__tests__/guarnecer.test.ts` (12) + `session/__tests__/comandosPresencia.test.ts`
+  bloque "guarnecer" (2) + `api.test.ts` recuento de comandos 66 → 69.
 
 ### Paso 1 — el comando `guarnecer`, sin caravanas
 
@@ -626,12 +643,12 @@ paso mueve el batch; si lo mueve, es un bug).
 - Pasos 2-4 son el bloque de caravanas, en orden (2 habilita 3 y 4).
 - Independiente por completo de la niebla Paso 4.
 
-### Canon a actualizar al cerrar
+### Canon actualizado al cerrar (2026-09-09)
 
-- **Doc 5.12.4 / 5.12.9** — `guarnecer` general deja de ser follow-up: marchar a una plaza propia y volcar la
+- ✅ **Doc 5.12.4 / 5.12.9** — `guarnecer` general ya no es follow-up: marchar a una plaza propia y volcar la
   tropa en su guarnición, con los jugadores quedando dentro.
-- **Doc 3.13** (revamp de caravanas) — estado `'aparcada'`: una caravana adjunta que su ejército deja en una
-  plaza de la Facción al guarnecer; no la usa la plaza anfitriona, intercambia con su almacén, sale solo
+- ✅ **Doc 3.13** (revamp de caravanas) — estado `'aparcada'`: una caravana adjunta que su ejército deja en
+  una plaza de la Facción al guarnecer; no la usa la plaza anfitriona, intercambia con su almacén, sale solo
   enganchada a un ejército o enviada a su origen.
-- **`Docs/Mecanicas a desarrollar.md` §17** — se retira al cerrar (diseño + implementación).
-- **`Checklist_Mecanicas.md`** — fila de `guarnecer` de `código: ✘` a `✔`.
+- ✅ **`Docs/Mecanicas a desarrollar.md` §17** — retirada (diseño + implementación cerrados).
+- ✅ **`Checklist_Mecanicas.md`** — fila de `guarnecer` a `código: ✔`.

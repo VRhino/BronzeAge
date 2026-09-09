@@ -20,7 +20,7 @@ Los detalles viven en los tres docs de definición; esto es el índice y el esta
 | **Calibración (Paso 6) del bloque de oro** | 🔶 en curso — iter 2: oroMedio ×2.2 base y trepando | ídem §10 |
 | **Ocupación post-conquista** (saqueo, ventana, oro reducido) | ✅ implementado — pasos 3-9 (commits `26662b4`, `c2f21f4`); 🔶 calibración (paso 10) en curso | `Ocupacion_Post_Conquista_Definicion.md` |
 | **Guarnición-ejército** (el conquistador se vuelve guarnición) | ✅ implementado (Paso 4, `26662b4`) | ídem §2.2 |
-| `guarnecer` (defender plaza propia marchando) | 📐 diseño; **follow-up, fuera del plan**; anotado en `Mecanicas a desarrollar` §17 | ídem §2.3 |
+| `guarnecer` (defender plaza propia marchando) | ✅ implementado **2026-09-09** (follow-up separado del plan de ocupación) | `Ocupacion_Post_Conquista_Definicion.md` §2.3/§11 |
 | **Reclutamiento desatado de residencia** (reponer/mover fuera de casa; nuevo escuadrón solo en casa) | ✅ implementado (Paso 1, commit `f844f7a`) | ídem §1 Ronda 2, §2.3b |
 | **Comando `cambiarResidencia`** | ✅ implementado (Paso 2, commit `f844f7a`) | ídem §2.3c |
 
@@ -58,7 +58,7 @@ detalle del reparto en `Ocupacion_Post_Conquista_Definicion.md` §10.
   crecimiento ×0.5, mantenimiento no degrada. Al vencer: la guarnición se queda, el resto vuelve a normal.
 - Constante nueva `OCUPACION` (todo placeholder).
 
-### 3.2 Guarnición-ejército → `Docs/Game/5` §5.12.4 + §5.12.9 (`guarnecer` general = follow-up, `Mecanicas a desarrollar` §17)
+### 3.2 Guarnición-ejército → `Docs/Game/5` §5.12.4 + §5.12.9 (`guarnecer` general implementado 2026-09-09, ver §11)
 
 "La guarnición es lo único que defiende" se matiza: **la guarnición puede ser una fuerza posada por un
 ejército** (`guarnecer` — marchar a una plaza propia y volcar los escuadrones en su guarnición), no solo

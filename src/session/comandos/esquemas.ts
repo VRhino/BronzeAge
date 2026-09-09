@@ -240,6 +240,22 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
     { desdeCaravanaId: IDENTIFICADOR, haciaCaravanaId: IDENTIFICADOR, carroIndice: NUMERO },
     ['desdeCaravanaId', 'haciaCaravanaId', 'carroIndice']
   ),
+  // Caravanas 'aparcadas' tras guarnecer (Ocupacion §2.3d).
+  moverCargaCaravanaAparcada: objeto(
+    {
+      jugadorId: IDENTIFICADOR,
+      caravanaId: IDENTIFICADOR,
+      asentamientoId: IDENTIFICADOR,
+      recurso: RECURSO,
+      cantidad: NUMERO,
+      sentido: { type: 'string', enum: ['cargar', 'descargar'] },
+    },
+    ['jugadorId', 'caravanaId', 'asentamientoId', 'recurso', 'cantidad', 'sentido']
+  ),
+  enviarCaravanaAlOrigen: objeto(
+    { jugadorId: IDENTIFICADOR, caravanaId: IDENTIFICADOR, asentamientoId: IDENTIFICADOR },
+    ['jugadorId', 'caravanaId', 'asentamientoId']
+  ),
 
   // --- Militar ---
   reclutarTropa: objeto(
@@ -299,6 +315,8 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
     ['asentamientoId', 'jugadorId', 'vetadoId', 'vetar']
   ),
   salirDeAsentamiento: objeto({ asentamientoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR }, ['asentamientoId', 'jugadorId']),
+  // `guarnecer` (Ocupacion §2.3): marchar un ejército a una plaza propia y volcar la tropa en su guarnición.
+  guarnecer: objeto({ asentamientoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR }, ['asentamientoId', 'jugadorId']),
   // Ejércitos (Doc 5.12).
   movilizarEjercito: objeto(
     {

@@ -447,6 +447,44 @@ export function enLaPuertaDe(ejercito: Ejercito, asentamiento: Asentamiento): bo
   return distancia(ejercito.posicionActual, asentamiento.posicion) <= MOVIMIENTO.radioPuerta;
 }
 
+/**
+ * `guarnecer` (Ocupacion §2.3): un EJÉRCITO en la puerta de una plaza de su Facción vuelca la tropa en su
+ * guarnición y se consume. Es `absorberColumna` con destino ≠ hogar — la misma operación que hace la
+ * conquista sola (§2.2), pero pedida por el jugador para reforzar una plaza propia o aliada sin mudar su
+ * residencia. Cierra el hueco de Doc 5.12.4 ("hoy un ejército aparcado no ayuda a defender").
+ *
+ * Las **caravanas adjuntas** (§2.3d) NO se pierden: pasan a `'aparcada'` en la plaza anfitriona — siguen
+ * siendo de su origen, no las usa la anfitriona, y salen luego enganchadas a un ejército o enviadas a casa.
+ *
+ * Puro: no toca `session` ni decide dónde queda el jugador (eso es del comando, `situarJugadores`).
+ */
+export function guarnecer(
+  asentamiento: Asentamiento,
+  ejercito: Ejercito,
+  caravanas: readonly Caravana[]
+): { asentamiento: Asentamiento; caravanasAparcadas: Caravana[] } {
+  if (ejercito.tipo !== 'ejercito') {
+    throw new MovilizacionInvalidaError('Solo un ejército guarnece: una columna personal no trae tropa que volcar en la guarnición.');
+  }
+  if (ejercito.faccionId !== asentamiento.faccionId) {
+    throw new MovilizacionInvalidaError('Solo se guarnece una plaza de tu propia Facción.');
+  }
+  if (!enLaPuertaDe(ejercito, asentamiento)) {
+    throw new MovilizacionInvalidaError(`Hay que estar a menos de ${MOVIMIENTO.radioPuerta} de la plaza para guarnecerla.`);
+  }
+
+  const caravanasAparcadas = adjuntasDe(ejercito, caravanas).map((c) => ({
+    ...c,
+    estado: 'aparcada' as const,
+    posicionActual: asentamiento.posicion,
+  }));
+
+  return {
+    asentamiento: absorberColumna(asentamiento, ejercito, true),
+    caravanasAparcadas,
+  };
+}
+
 export function unirseAEjercito(
   ejercito: Ejercito,
   asentamiento: Asentamiento,
@@ -522,8 +560,10 @@ export function adjuntarCaravana(
   if (!origen || origen.faccionId !== ejercito.faccionId) {
     throw new MovilizacionInvalidaError('La caravana no es de la Facción de este ejército.');
   }
-  if (caravana.estado !== 'disponible') {
-    throw new MovilizacionInvalidaError('Solo se puede enganchar una caravana que esté disponible, no una ya despachada.');
+  // 'aparcada' (Ocupacion §2.3d): una adjunta que otro ejército dejó en una plaza de la Facción al guarnecer.
+  // Cualquier ejército de la Facción puede recogerla — sigue siendo de su origen, no de la plaza anfitriona.
+  if (caravana.estado !== 'disponible' && caravana.estado !== 'aparcada') {
+    throw new MovilizacionInvalidaError('Solo se puede enganchar una caravana disponible o aparcada, no una ya despachada.');
   }
   if (distancia(caravana.posicionActual, ejercito.posicionActual) > LOGISTICA.radioReabastecimiento) {
     throw new MovilizacionInvalidaError('La caravana está demasiado lejos del ejército.');

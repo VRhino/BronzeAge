@@ -866,7 +866,10 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       // +3 con el Paso 3 (Doc 3.13.3): `prepararCaravana`, `cancelarCaravana`, `moverCarroCaravana` — el
       // lanzamiento manual con estado de preparación.
       // +1 con `cambiarResidencia` (Doc 2.5/2.6): mudar la base de un asentamiento a otro de la propia Facción.
-      expect(cuerpo.oneOf.length).toBe(66);
+      // +3 con `guarnecer` (Ocupacion §2.3): marchar un ejército a una plaza propia y volcar la tropa; y las
+      // dos operaciones de la caravana que queda 'aparcada' allí — `moverCargaCaravanaAparcada` y
+      // `enviarCaravanaAlOrigen` (§2.3d).
+      expect(cuerpo.oneOf.length).toBe(69);
       const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
       expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
     });

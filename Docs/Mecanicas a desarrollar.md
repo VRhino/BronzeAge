@@ -20,7 +20,6 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 11 | JUGADOR | Progresión de Liderazgo del jugador | ✘ nada |
 | 13 | POLÍTICA | La capital como decisión del jugador | ✘ proxy placeholder |
 | 16 | JUGADOR | Qué hace un huésped: vida dentro de una Facción NPC | ✘ nada |
-| 17 | MILITAR | `guarnecer`: defender una plaza propia marchando a ella | ✘ nada |
 | 18 | INTEL | Taberna + intel como asset con revelado temporal | ✘ nada |
 | 19 | POLÍTICA | El mapa político como entidad | ✘ nada |
 | 20 | TECNOLOGÍA | Tecnología: árbol de desarrollo propio, 3 vías, Aedas | ✘ nada |
@@ -192,34 +191,6 @@ subir ni nada que recompensar.
 
 **Lo que hay que decidir:** qué encargos existen y quién los publica; qué se gana (¿acceso a reclutar? ¿casa?
 ¿aval para fundar?); y si ese standing sobrevive a marcharse de la Facción.
-
-## 17. `guarnecer`: defender una plaza propia marchando a ella
-
-> **Plan técnico escrito (2026-09-09), en desarrollo.** 4 pasos por capas en
-> `Consideraciones/Ocupacion_Post_Conquista_Definicion.md` §11. Decisiones: el jugador queda dentro de la
-> plaza; las caravanas adjuntas pasan a `'aparcada'` (intercambian con el almacén anfitrión, salen solo
-> enganchadas a un ejército de la Facción o enviadas a su origen). Sin migración de snapshot.
-
-**Estado: forma diseñada, separada a propósito del bloque de ocupación post-conquista.** Un ejército de la
-Facción A, aparcado en la puerta de una plaza de la Facción A que NO es la residencia de sus jugadores, puede
-**guarnecerla**: sus escuadrones se vuelcan en la guarnición del asentamiento (`absorberColumna` con destino
-≠ hogar), el ejército se consume. Los escuadrones de no-residentes en una guarnición defienden, comen del
-trigo del almacén y su dueño los repone y re-moviliza — **esto último YA está en el código** (bloque de
-ocupación post-conquista, Pasos 1-9, implementado 2026-09-08: `engine/pertenencia.ts` `puedeReclutarEn`,
-gate relajado de `movilizarEjercito`, Doc 5.8 y 5.12.9).
-
-Hoy **un ejército propio aparcado en tu ciudad no ayuda a defenderla** (`asediarConEjercito` solo mira
-`defensor.escuadrones`), así que "proteger a un aliado/una plaza propia marchando a defenderla" (Doc 2, Doc
-5.12.4) no funciona salvo AL CONQUISTAR (ahí la columna se vuelve guarnición sola, Doc 5.12.9). `guarnecer` lo
-cierra para el caso general — marchar a una plaza que YA es tuya y volcar la tropa.
-
-**Por qué está aquí y no en el bloque de ocupación:** el arreglo del ping-pong de conquistas NO lo necesita —
-la conquista guarnece sola. `guarnecer` es la capacidad general, y se implementa cuando toque. Falta SOLO: el
-comando `guarnecer` (`session/comandos/`, envoltorio de `absorberColumna` con destino ≠ hogar), su gate
-(ejército en `enLaPuertaDe` de plaza propia con permiso), y decidir si al llegar a una plaza propia se ofrece
-como acción o si arrancar la marcha con destino "guarnecer X" ya lo implica.
-
-Diseño detallado en `Consideraciones/Ocupacion_Post_Conquista_Definicion.md` §2.3.
 
 ## 18. Taberna + intel como asset
 
