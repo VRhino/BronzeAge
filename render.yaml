@@ -1,0 +1,31 @@
+# Render Blueprint. Sube este archivo y Render crea el servicio solo (o "New > Blueprint" en el dashboard).
+# Todo lo genérico (Dockerfile, puerto, /salud, adaptador libSQL) vive en `main`; aquí solo la config de Render.
+#
+# Plan free: el servicio DUERME tras 15 min sin tráfico y el disco es EFÍMERO — por eso la persistencia va a
+# libSQL (`ALMACEN_URL`), no a disco. Ver DEPLOY_RENDER.md.
+services:
+  - type: web
+    name: bronze-age-collapse
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /salud
+    autoDeploy: true
+    envVars:
+      # --- Secretos: se ponen en el dashboard de Render (sync:false = no en este archivo) ---
+      - key: ALMACEN_URL        # libsql://<db>.turso.io  (crea la BD con `turso db create`)
+        sync: false
+      - key: ALMACEN_TOKEN      # turso db tokens create <db>
+        sync: false
+      - key: ADMINISTRADORES    # p.ej. dev:jefa
+        sync: false
+      - key: CODIGO_REGISTRO    # código de invitación del playtest
+        sync: false
+      - key: ORIGENES_PERMITIDOS  # https://<tu-cliente>.pages.dev  (si el front va en otro dominio)
+        sync: false
+      # --- No secreto ---
+      - key: INTERVALO_TICK_MS
+        value: "60000"          # 1 tick = 1 min real. Con el sleep de Render el mundo se queda atrás
+                                # mientras nadie juega — ver el pinger en DEPLOY_RENDER.md.
+      - key: NODE_ENV
+        value: production

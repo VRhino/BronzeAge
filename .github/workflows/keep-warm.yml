@@ -1,0 +1,21 @@
+# Mantiene despierto el servicio de Render free (duerme a los 15 min sin tráfico), llamando a /salud.
+# Configura la URL en Settings > Secrets and variables > Actions > Variables como RENDER_URL.
+# Nota: los cron de GitHub Actions se retrasan bajo carga y se desactivan tras 60 días sin commits;
+# para algo fiable usa cron-job.org (ver DEPLOY_RENDER.md).
+name: keep-warm
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: ping /salud
+        run: |
+          if [ -z "${RENDER_URL}" ]; then echo "RENDER_URL no configurada, nada que hacer"; exit 0; fi
+          curl -sS -m 30 -o /dev/null -w 'HTTP %{http_code} en %{time_total}s\n' "${RENDER_URL%/}/salud" || true
+        env:
+          RENDER_URL: ${{ vars.RENDER_URL }}
