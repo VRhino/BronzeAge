@@ -1,8 +1,10 @@
 # El comercio deja de ser magia — decisiones y plan
 
-> **Estado (2026-09-07): decidido, en implementación.** Cierra las **dos únicas simplificaciones de Fase 0
-> que quedaban vivas en el sistema económico**, y que el propio canon marcaba como deuda con un "Plan: …en
-> Fase 1+" desde que se auditó (Doc 3.2 y 3.3).
+> **Estado (2026-09-07): IMPLEMENTADO** (plan §5 completo, snapshot v10→v11). Cerró las **dos únicas
+> simplificaciones de Fase 0 que quedaban vivas en el sistema económico**, y que el propio canon marcaba como
+> deuda con un "Plan: …en Fase 1+" desde que se auditó (Doc 3.2 y 3.3). También cierra la entrada que fue §15
+> de `Docs/Mecanicas a desarrollar.md` (comerciar con una plaza ajena desde su puerta) — ver §8. Quedan dos
+> palancas menores, sin diseñar (§8).
 >
 > Reglas de juego → `Docs/Game/3` §3.2, §3.3, §3.7, §3.8. Aquí solo decisiones y plan.
 
@@ -151,3 +153,16 @@ para más que eso.
 NPC publican órdenes que ahora **nadie del laboratorio toma** —no hay jugadores que viajen—, así que en batch
 esas ofertas nacen y caducan. El precio de referencia se calcula sobre el stock global (Doc 3.4) y no sobre
 las órdenes, así que no debería moverse por esto; pero es una predicción, no una medida.
+
+## 8. Puntos abiertos — comercio del forastero desde la puerta
+
+`comerciarEnPlaza` cubre el enunciado (un forastero en la puerta toma las órdenes activas de esa plaza, contra
+su carro, con comisión externa). Esto cierra la entrada que fue §15 de `Docs/Mecanicas a desarrollar.md`.
+Quedan dos palancas menores, sin diseñar:
+
+- **¿El forastero puede publicar sus propias órdenes en un mercado ajeno, o solo tomar las publicadas?** Hoy
+  `colocarOrdenMercado` exige residencia/ciudadanía, así que solo toma. Abrirlo pediría decidir el cupo, la
+  comisión de publicar siendo de fuera, y qué pasa con la orden si el forastero se marcha.
+- **¿Puede el Gobernador cerrar el mercado sin cerrar la puerta?** Es la palanca diplomática obvia —dejar
+  pasar pero no vender, o vender solo a aliados—. Hoy `politicaDeAcceso` (jugador situado, Doc 1.10) controla
+  la puerta pero no el mostrador. Sería una segunda política de acceso, o un modificador de la misma.

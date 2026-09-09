@@ -238,9 +238,14 @@ mirar.** Y solo el segundo lleva `conocidoEn`, porque solo el segundo puede esta
       Migración de snapshot v6 -> v7. Todavía no se proyecta: solo se acumula. Ver §5.2.
 - [x] **Paso 3 — Proyectar la memoria** (estados 1 y 2). **HECHO (2026-09-04).** `exploracion` y
       `asentamientosConocidos` en `ProyeccionJugador`, con lo visto en vivo ganando a lo recordado. Ver §5.3.
-- [ ] **Paso 4 — Visión compartida por alianza.** En vivo, y solo mientras la alianza esté activa: al
-      romperse, lo que se veía por ella pasa a ser recuerdo (con la fecha de la ruptura) o desaparece —
-      **decidir al llegar**, no antes.
+- [x] **Paso 4 — Visión compartida por alianza y vasallaje. HECHO (2026-09-09).** En vivo, solo mientras la
+      relación esté activa; comparten visión `alianza` **y** `vasallaje` (12.1); al romperse, lo que se veía
+      por ella **desaparece** (no se congela — la visión aliada nunca toca `memoriaPorFaccion`).
+      `compartenVision` en `engine/pertenencia.ts` (hoja, junto a `estanAliadas` que NO se toca);
+      `proyectarParaJugador` suma los ojos aliados **solo** a la capa "en vivo" (`nieblaDe.visibles`,
+      `avistados`, `ejercitosAvistados`, `caravanasAvistadas`, `campamentosAvistados`) — nunca a `celdas`,
+      `memoriaPorFaccion`, `ejercitos:`, `asentamientosConocidos`, `territorioPorEjercito`. Sin migración.
+      Suite 1186, tsc limpio, batch NPC inalterado (la proyección no entra en el tick). Ver §5.6.
 - [x] **Paso 5 — Render en el cliente de JUGADOR.** **HECHO (2026-09-04).** Tapa el terreno no explorado y
       pinta lo recordado con filtro oscuro. El de ADMINISTRACIÓN no se toca: no tapa nada, es herramienta de
       operación y no un jugador. Ver §5.4.
@@ -406,9 +411,63 @@ zona rival que cae fuera de lo explorado se desvanece bajo la máscara; una plaz
 punteado a media luz; y una tercera Facción sin descubrir no manda ni un vértice, aunque su nombre sí esté en
 `facciones` como metadato público.
 
+### 5.6 Paso 4 — visión compartida por alianza y vasallaje — HECHO (2026-09-09)
+
+**Decisiones del usuario:** alianza **y** vasallaje comparten visión (12.1). Al romperse la relación, lo visto
+por ella **desaparece** (no se congela). Esto sale gratis: la visión del aliado vive solo en la capa "en
+vivo" de la proyección, que se recalcula cada vez — nunca toca `memoriaPorFaccion`, que la escribe el tick por
+Facción. Relación rota → siguiente proyección no añade esos ojos → esas celdas vuelven a "nunca visto" (o a tu
+propia foto vieja si habías estado allí).
+
+**Lo que se escribió:**
+
+- `engine/pertenencia.ts` · `compartenVision(relaciones, aId, bId)` — `estado === 'activa'` y `tipo` `'alianza'`
+  o `'vasallaje'`, cualquier dirección. `estanAliadas` intacto (sus consumidores son solo-alianza).
+- `session/proyecciones/jugador.ts` · `proyectarParaJugador`: `faccionesQueComparten` →
+  `asentamientosAliados` / `ejercitosAliados` → `ojosAsent` / `ojosEjercito` (= propios + aliados; se reusa el
+  array propio si no hay aliados). Esos ojos van a `seVeAhora` (avistados de plazas y ejércitos,
+  `caravanasAvistadas`, `campamentosAvistados`) y al acumulador `visibles` de `nieblaDe` (nuevo 5º/6º
+  parámetro opcional). `celdas` de `nieblaDe` sigue solo con los propios; `caminosConocidos` lee `celdas`, así
+  que un camino visto solo por un aliado no viaja hasta explorarlo en persona — coherente (un camino es
+  infraestructura, va por "explorado").
+- Un ejército/caravana **del propio aliado** también aparece ahora en los `*Avistados` (no es "mío", pero lo
+  veo). Correcto.
+- Tests: `proyecciones/__tests__/jugador.test.ts` describe "visión compartida por alianza y vasallaje (Paso
+  4)" — sin relación no hay visión; con alianza se ve el rival pegado al aliado pero NO entra en `celdas` ni
+  en `asentamientosConocidos`; el vasallaje comparte en las dos direcciones; relación rota → desaparece.
+
+Separación de capas:
+
+- **MOTOR** · `engine/pertenencia.ts` · `compartenVision(relaciones, aId, bId): boolean` — pura, hoja (solo
+  `domain/types`), al lado de `estanAliadas`. `relaciones.some(r => r.estado === 'activa' && (r.tipo ===
+  'alianza' || r.tipo === 'vasallaje') && par(aId, bId))`. `estanAliadas` **no se toca**: tiene consumidores
+  con semántica de solo-alianza (reabastecer aliados, "los aliados no se cruzan en combate").
+- **SESIÓN** · `session/proyecciones/jugador.ts` · `proyectarParaJugador`: tras `faccionId`, calcular
+  `faccionesQueComparten = estado.facciones.filter(f => f.id !== faccionId && compartenVision(estado.relaciones,
+  faccionId, f.id))`, y de ahí `asentamientosAliados` + `ejercitosAliados`. Pasar `[...propios, ...aliados]`
+  **solo** a la capa "viéndolo ahora":
+  - `nieblaDe` — el acumulador `visibles` (no `celdas`: `celdas` = memoria propia + ojos propios, y esa es la
+    que decide qué se tapa de forma persistente).
+  - `ejercitosAvistados`, `caravanasAvistadas`, `campamentosAvistados`.
+  - el `seVe` de asentamientos ajenos (`asentamientosAvistados`).
+  - **NO** a `celdas`/memoria, `ejercitos: ejercitosPropios`, `asentamientosConocidos`, `dentroDe`,
+    `territorioPorEjercito`, el mostrador (`enElMostradorDe`).
+- **INFRA** · nada. Sin migración.
+
+`nieblaDe` cambia de firma para recibir un segundo set de ojos (solo para `visibles`), o se le pasa el set ya
+unido y se calcula `celdas` aparte con los propios — lo que salga más limpio al escribirlo.
+
+**Checks** (`proyecciones/__tests__/jugador.test.ts`):
+
+- A y B **aliadas**: un ejército de A junto a una plaza enemiga que B no ve por sí sola → la proyección de B
+  lo trae en `visibles`/`ejercitosAvistados`, **no** en `asentamientosConocidos` ni en `celdas`.
+- Lo mismo con B **vasallo** de A (y con A señor de B — las dos direcciones).
+- Se rompe la relación (`estado` ≠ `'activa'`) → esa visión desaparece de la proyección siguiente.
+- Un tercero **ni aliado ni vasallo** no aporta ojos.
+
 ## 6. Invariantes a congelar en tests
 
-Los nueve están congelados. Entre paréntesis, dónde.
+Están congelados (la numeración arrastra dos repetidos históricos — 8 y 9). Entre paréntesis, dónde.
 
 1. Un asentamiento rival **fuera** de radio+margen y de la vista de todo ejército propio **no aparece en
    absoluto** en la proyección — ni redactado. (`proyecciones/__tests__/jugador.test.ts`)
@@ -434,3 +493,7 @@ Los nueve están congelados. Entre paréntesis, dónde.
    todos sus puntos. (`proyecciones/__tests__/jugador.test.ts`)
 9. Un campamento de bandidos en un rincón **explorado pero que ahora no se ve no viaja**, aunque el camino
    que pasa por ese mismo rincón sí. Es la asimetría de §2.8 en un solo test. (ídem)
+10. **Visión compartida (Paso 4):** lo que ve un aliado/señor/vasallo entra en `visibles` y en los
+    `*Avistados`, **nunca** en `celdas` ni en `asentamientosConocidos`; al pasar la relación a `'rota'`
+    desaparece. Alianza y vasallaje, las dos direcciones. (`proyecciones/__tests__/jugador.test.ts`, describe
+    "visión compartida por alianza y vasallaje (Paso 4)")

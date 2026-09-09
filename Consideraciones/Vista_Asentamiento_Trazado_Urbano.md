@@ -277,9 +277,10 @@ mecanismos incompatibles en la misma sección confunde más de lo que documenta.
 > no antes, para no dejar el documento a medias entre dos mecanismos. Hasta entonces, la referencia válida
 > sobre cómo funciona el trazado HOY es esta sección, no las numeradas.
 
-El disparador declarado (`Docs/Mecanicas a desarrollar.md` §7) es el paso a 3D: una calle sobre una arista no
-tiene ancho, y en 3D hay que darle uno. Al medir el modelo actual antes de diseñar el reemplazo, el problema
-resultó ser bastante más grande que un detalle de representación.
+El disparador declarado (el paso a 3D, enunciado histórico §7 de `Docs/Mecanicas a desarrollar.md`, ya
+retirado de esa lista) es que una calle sobre una arista no tiene ancho, y en 3D hay que darle uno. Al medir
+el modelo actual antes de diseñar el reemplazo, el problema resultó ser bastante más grande que un detalle de
+representación.
 
 ### E6.1 La medición
 

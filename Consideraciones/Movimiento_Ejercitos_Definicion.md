@@ -152,8 +152,8 @@ tras pulsar un botón; ahora marchas 30-50 minutos reales, dejas la ciudad indef
 compromiso, peor sienta el azar — y en Fase 0 el combate **no se ve** (es cálculo y log de texto), así que un
 swing del 15% no se lee como tensión sino como "el juego me quitó el ejército".
 
-**El argumento de fondo:** ya hay diseñada una fuente de incertidumbre mejor. La niebla de guerra
-(`Mecanicas a desarrollar.md` §12) hace que no sepas qué guarnición hay en casa — incertidumbre **reducible
+**El argumento de fondo:** ya hay una fuente de incertidumbre mejor. La niebla de guerra
+(`Niebla_De_Guerra_Definicion.md`) hace que no sepas qué guarnición hay en casa — incertidumbre **reducible
 jugando bien** (explorar, mantener contacto), diegética, y que no cuesta determinismo. El jitter es
 incertidumbre que no puedes reducir por mucho que juegues. El contraargumento clásico ("sin azar nadie ataca
 salvo que ya haya ganado sobre el papel") **solo aplica con información perfecta**, que es justo lo que la
@@ -768,9 +768,10 @@ usuario dio la tabla real. Calibrarla es un cambio de **datos**, no de código.
 ## 7. Abierto — lo que este documento deja sin cerrar a propósito
 
 - **Los números de liderazgo** (§1.3) — pendiente de confirmación del usuario.
-- **Visibilidad de ejércitos ajenos.** Fase 0 proyecta los propios completos y los ajenos **nada** — slice
-  conservador coherente con el Slice 1 actual de `proyectarParaJugador`. El radio de visión depende de
-  `Docs/Mecanicas a desarrollar.md` §12 (niebla de guerra), que sigue sin parámetros. **No bloquea.**
+- ~~**Visibilidad de ejércitos ajenos.**~~ **RESUELTO** con la niebla de guerra (2026-09-04/09,
+  `Niebla_De_Guerra_Definicion.md`): `proyectarParaJugador` avista ejércitos ajenos redactados dentro de
+  `VISION.ejercito`/`VISION.margenAsentamiento`, y un aliado/vasallo comparte su vista en vivo (Paso 4).
+  Queda solo la calibración de esos radios (Paso 6).
 - **Progresión del liderazgo** — es §11 (*progreso jugador y tropa*), sin diseñar.
 - **Convergencia con el revamp de caravanas (§8)** — el carro de suministros y los carros/animales de tiro
   son el mismo concepto físico; Fase 0 lo resuelve como un número.

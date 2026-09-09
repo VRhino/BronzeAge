@@ -1,9 +1,10 @@
 # La economía del oro — el oro como presupuesto: diseño
 
 > **DISEÑO CERRADO (2026-09-08). IMPLEMENTACIÓN: Pasos 1-5 hechos, falta el Paso 6 (campaña de calibración).**
-> Tres rondas de decisiones con el usuario. Cubre la ficha `Docs/Mecanicas a desarrollar.md` §1 (Impuestos) y
-> el lado de la DEMANDA que la hace tener sentido (reclutamiento en oro, animales de caravana en oro, intel de
-> taberna). Plan técnico y estado por paso en §10. Canon escrito: Doc 3 §3.1/§3.13.2, Doc 4 §4.1/§4.4/§4.5,
+> Tres rondas de decisiones con el usuario. **Cierra la entrada que fue §1 (Impuestos) de
+> `Docs/Mecanicas a desarrollar.md`** y cubre el lado de la DEMANDA que la hace tener sentido (reclutamiento en
+> oro, animales de caravana en oro, intel de taberna). El sink recurrente de intel/taberna sigue siendo su
+> propia mecánica pendiente (`Docs/Mecanicas a desarrollar.md` §18). Plan técnico y estado por paso en §10. Canon escrito: Doc 3 §3.1/§3.13.2, Doc 4 §4.1/§4.4/§4.5,
 > Doc 5 §5.8. Tests: `recaudacionOro` · `presionFiscal` · `reclutamientoOro` (+ ajustes en `caravanas.test.ts`
 > por el buey en oro, y `snapshot_baseline` re-generado por la recaudación).
 >

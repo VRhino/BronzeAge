@@ -121,6 +121,37 @@ propia marchando a defenderla" (Doc 5.12.4, hoy un ejército aparcado no ayuda a
 Al conquistar, esto pasa **automáticamente** (§2.2). En una plaza que ya es tuya, es un **comando** del
 jugador (el NPC guarnece automáticamente al conquistar; rotar guarniciones en frontera es pasada posterior).
 
+**Tras guarnecer, los jugadores de la columna quedan DENTRO de la plaza** (`ubicacion: { tipo:'asentamiento',
+asentamientoId }`) — han entrado a la plaza que acaban de reforzar. Salen con `movilizarEjercito` (el gate ya
+lo permite: "escuadrones tuyos ya posados aquí", Paso 1) o se quedan a gestionarla. No hay columna aparcada
+que retomar.
+
+### 2.3d Las caravanas adjuntas al guarnecer — quedan APARCADAS en la plaza
+
+Escenario: asentamientos A y B son de la Facción 1. Un ejército sale de A con sus jugadores, sus escuadrones y
+**sus caravanas adjuntas**, y guarnece B. Los escuadrones y el carro del ejército se vuelcan en B (arriba).
+Cada **caravana adjunta** pasa a `estado: 'aparcada'` en B (`posicionActual = B.posicion`;
+`origenAsentamientoId` sigue siendo A).
+
+Una caravana `'aparcada'`:
+
+- **No la usa B.** `'aparcada'` ≠ `'disponible'`, así que `asignarCaravanasATrueque` no la reparte y el cupo
+  de Mercado de B no la cuenta (el cupo va por `origenAsentamientoId`, que sigue siendo A). Es de A, hospedada
+  en B.
+- **Intercambia con el almacén de B.** Un residente de A presente en B puede cargar recursos del almacén de B
+  a su carro y descargar del carro al almacén de B (comando `moverCargaCaravanaAparcada`, motor espeja
+  `cargarCaravanaAdjunta` sin los checks de ejército; capacidad vía `capacidadCaravana`).
+- **A salvo.** Los bandidos ya saltan `'disponible'`/`'preparando'`; se añade `'aparcada'`. Está en una plaza
+  amiga, tan segura como la plaza.
+- **Solo sale de dos formas:**
+  1. **Enganchada a un ejército** — `adjuntarCaravana` acepta `'aparcada'` además de `'disponible'`. Cualquier
+     ejército de la Facción sirve (un ejército no es "B"; el gate "misma Facción" ya lo cubre). Al engancharla
+     vuelve a `'adjunta'`.
+  2. **Enviada a su origen** (comando `enviarCaravanaAlOrigen`): si el carro va **vacío**, aparece
+     instantáneamente en A como `'disponible'` (vacía = sin carga que teletransportar, permitido); si va **con
+     carga**, pasa a `'retornando'` y **recorre el mapa** de vuelta a A, volcando la carga en el almacén de A
+     al llegar (una caravana con contenido nunca se teletransporta — misma regla que el retorno de comercio).
+
 ### 2.3b Reponer y re-movilizar escuadrones de no-residentes
 
 Un escuadrón en la guarnición de una plaza donde su dueño NO reside:
@@ -250,13 +281,21 @@ export const OCUPACION = {
 - `aplicarConquista` (+ `absorberColumna` al conquistar), `recaudacionOro`, `crecerPoblacion`,
   `avanzarMantenimiento`, el guard de asedio, el fin de ventana, `guarnecer`, la reposición en campaña, el
   gate relajado de `movilizarEjercito` → `engine` (funciones puras sobre `Asentamiento`/`Ejercito`).
+- **`guarnecer` con caravanas (§2.3d):** `engine/ejercitos.ts` `guarnecer()` devuelve las caravanas
+  actualizadas a `'aparcada'` y **no** decide nada de jugadores; `engine/trade.ts`
+  `moverCargaCarroAparcada()` y `enviarCaravanaAlOrigen()` son puras; el volcado de carga en la llegada
+  `'retornando'` vive en `avanzarCaravanas` (`engine/trade.ts`). Los comandos `guarnecer`,
+  `moverCargaCaravanaAparcada` y `enviarCaravanaAlOrigen` → `session/comandos/` (envoltorios). El
+  `situarJugadores(participantes → asentamiento)` lo hace el comando `guarnecer`, no el motor.
 - El gate de reclutamiento (`reclutarTropa`: residencia para escuadrón nuevo; misma-Facción + permiso para
   reponer) → `engine/tropas.ts` + `engine/pertenencia.ts` (helper `puedeReclutarEn`/`puedeReponerEn`).
 - Los comandos `guarnecer` y "reponer en campaña" → `session/comandos/` (envoltorio del motor).
 - El criterio del NPC (guarnecer al conquistar, reponer la guarnición de una plaza conquistada, no salir de
   campaña de un asentamiento ocupado) → `session/npcGobernanza.ts`.
 - **Migración de snapshot:** `ocupacionHasta` opcional, ausente = no ocupado. `danado` opcional en `Edificio`,
-  ausente = sano. **Sin migración** — las partidas viejas no tienen conquistas en curso.
+  ausente = sano. El valor `'aparcada'` de `Caravana.estado` es un añadido al enum, no un cambio de forma —
+  ninguna caravana guardada lo tiene. **Sin migración** — las partidas viejas no tienen conquistas ni
+  `guarnecer` en curso. Confirmar contra `arquitectura.test.ts` y los tests de snapshot que no fuercen bump.
 
 ## 7. Invariantes
 
@@ -271,6 +310,11 @@ export const OCUPACION = {
 - El saqueo **nunca toca** Centro Urbano ni deja al asentamiento sin al menos una Granja y una Leñera activas.
 - El saqueo es **determinista** (orden por id/tipo, no rng) — `aplicarConquista` es pura y sin `RandomFn`.
 - Sin conquistas ni `guarnecer` en curso, el comportamiento del motor no cambia.
+- Una caravana `'aparcada'` (§2.3d) **no se mueve sola, no la reparte el comercio automático y no la atacan
+  los bandidos**. Solo sale enganchada a un ejército o enviada a su origen. Su `origenAsentamientoId` nunca
+  cambia por guarnecer.
+- **Una caravana con `contenido` no vacío nunca se teletransporta** — ni al enviarla al origen (viaja
+  `'retornando'`), ni en el retorno de comercio. Solo la caravana vacía aparece instantáneamente en su origen.
 
 ## 8. Puntos abiertos
 
@@ -282,6 +326,12 @@ export const OCUPACION = {
   posesión permanente y acorta la ventana) es candidata para después.
 - **Rotación de guarnición del NPC** — un NPC que quiere reforzar una frontera con `guarnecer` fuera de una
   conquista. Pasada posterior de `npcGobernanza`.
+- **Caravana `'aparcada'` cuando su plaza anfitriona cae** — hoy no la tocaría nadie: se quedaría `'aparcada'`
+  en la posición de una plaza ahora enemiga. Debería poder capturarse o huir. Fuera de este pase.
+- **UI de "caravanas aparcadas aquí"** — la proyección de un asentamiento lista sus caravanas por
+  `origenAsentamientoId`, así que una caravana ajena aparcada no sale en su ficha. Añadir
+  `caravanas.filter(c => c.estado === 'aparcada' && cerca(c.posicionActual, a.posicion))` a la proyección.
+  No bloquea (el jugador sabe dónde la dejó y `adjuntarCaravana` la encuentra por rango).
 - **Revuelta** — un asentamiento ocupado/sin residentes con "felicidad" baja podría revertir a independiente o
   a la Facción anterior. Mecánica más grande, fuera de este pase.
 - **Re-conquista durante la ventana con fuerza abrumadora** — descartado por ahora (inmunidad pura). Si el
@@ -498,3 +548,90 @@ parar"). `conquistasAcumuladas` sigue vivo (48 en 1000 ticks) — el NPC conquis
   `IMPUESTOS`.
 - ✅ **`Checklist_Mecanicas.md`** — "Conquista tras asedio" ampliado; filas nuevas para reclutamiento
   desatado / `cambiarResidencia` y para `guarnecer` (diferido).
+
+## 11. Plan técnico de `guarnecer` (ponytail full) — elegido para desarrollo 2026-09-09
+
+Diseño en §2.3 / §2.3d. Se hace ahora, junto con la niebla Paso 4 (`Niebla_De_Guerra_Definicion.md`). Los dos
+son independientes entre sí. Decisiones del usuario (2026-09-09): jugador queda dentro de la plaza tras
+guarnecer (17.1); adjuntas → `'aparcada'` con intercambio de almacén y dos vías de salida (17.2); cualquier
+ejército de la Facción puede recoger una `'aparcada'`; el viaje de vuelta cargada **reusa `'retornando'`**.
+
+**Sin migración de snapshot** (`'aparcada'` es un valor de enum añadido). **Método:** cada paso deja el repo
+verde, batch NPC bit-idéntico (el NPC no usa `guarnecer` fuera de la conquista, que ya está — así que ningún
+paso mueve el batch; si lo mueve, es un bug).
+
+### Paso 1 — el comando `guarnecer`, sin caravanas
+
+- **MOTOR** · `engine/ejercitos.ts` · `guarnecer(asent, ejercito): { asentamiento }` — gates: `ejercito.tipo
+  === 'ejercito'`, `ejercito.faccionId === asent.faccionId`, `enLaPuertaDe(ejercito, asent)`,
+  `ejercito.caravanasAdjuntasIds` vacío (Paso 2 lo levanta). Efecto: `absorberColumna(asent, ejercito, true)`.
+  Puro, sin `RandomFn`, sin `session`.
+- **SESIÓN** · `session/comandos/presencia.ts` · `guarnecer({ jugadorId, asentamientoId })` — resuelve la
+  columna con `exigirColumnaDe`, llama al motor, quita el ejército del estado,
+  `situarJugadores(participantes → { tipo:'asentamiento', asentamientoId })`, evento `ejercito.guarnece`
+  (atribuido a `asent`).
+- **SESIÓN** · `registro.ts` (import + entrada), `esquemas.ts` (`{ jugadorId, asentamientoId }`,
+  `IDENTIFICADOR`), `autorizacion.ts` (`rolesPermitidos:['jugador']`,
+  `condicionJugador: jugadorId === params.jugadorId` — geometría y mando los valida el comando, igual que
+  `entrarEnAsentamiento`).
+- **Check:** ejército de A en la puerta de una plaza de A → `guarnecer` → escuadrones en `asent.escuadrones`,
+  carro en el almacén, ejército fuera del estado, participante con `ubicacion.asentamientoId`; negativo:
+  `tipo: 'personal'` → error.
+- **Independiente:** se puede shippear solo (ya cubre "defender una plaza propia marchando", el hueco de Doc
+  5.12.4).
+
+### Paso 2 — caravanas adjuntas → `'aparcada'`
+
+- **DOMINIO** · `domain/types.ts` · `Caravana.estado` gana `'aparcada'` en el enum + una línea de comentario.
+- **MOTOR** · `guarnecer()` deja de rechazar adjuntas: por cada una, `{ ...c, estado:'aparcada',
+  posicionActual: asent.posicion, contenido: c.contenido }` fuera de `ejercito.caravanasAdjuntasIds`; se
+  devuelven en el resultado. `engine/bandidos.ts` y `asignarCaravanasATrueque`: añadir `'aparcada'` a lo que
+  se salta (junto a `'disponible'`/`'preparando'`).
+- **SESIÓN** · el comando `guarnecer` propaga las caravanas actualizadas al estado.
+- **Check:** guarnecer con 1 adjunta → adjunta `'aparcada'` en `asent.posicion`, fuera de
+  `caravanasAdjuntasIds`; un tick después sigue quieta y sin asignar.
+
+### Paso 3 — intercambio con el almacén anfitrión
+
+- **MOTOR** · `engine/trade.ts` · `moverCargaCarroAparcada(caravana, plaza, recurso, cantidad, sentido:
+  'cargar'|'descargar'): { caravana, plaza }` — espeja `cargarCaravanaAdjunta` menos los checks de ejército;
+  capacidad vía `capacidadCaravana`; `descargar` es el reverso (carro → `plaza.almacen`).
+- **SESIÓN** · `session/comandos/comercio.ts` · `moverCargaCaravanaAparcada({ jugadorId, caravanaId, recurso,
+  cantidad, sentido })`. `autorizacion.ts`: jugador **residente del `origenAsentamientoId` de la caravana** y
+  **presente** en la plaza donde está (`reside` + `presente`, reusados).
+- `registro.ts` / `esquemas.ts`: entrada nueva.
+- **Check:** caravana `'aparcada'` en B con carro vacío → `cargar` mueve trigo de B al carro y lo descuenta de
+  `B.almacen`; `descargar` lo devuelve; respeta `capacidadCaravana`.
+
+### Paso 4 — las dos vías de salida
+
+- **MOTOR** · `adjuntarCaravana` (`engine/ejercitos.ts`): aceptar `caravana.estado === 'aparcada'` además de
+  `'disponible'` (una condición `||`). El gate "misma Facción" ya deja pasar cualquier ejército de la Facción.
+- **MOTOR** · `engine/trade.ts` · `enviarCaravanaAlOrigen(caravana, origen, mapa): { caravana }` — carro
+  vacío: `{ ...c, estado:'disponible', posicionActual: origen.posicion, ruta: undefined }`. Carro con carga:
+  `{ ...c, estado:'retornando', destinoAsentamientoId: <plaza actual>, ruta: calcularRuta(mapa, posActual,
+  origen.posicion), progreso: 0 }`.
+- **MOTOR** · `engine/trade.ts` · `avanzarCaravanas`, rama de llegada `'retornando'`: si `contenido` no vacío,
+  volcar cada recurso en `origen.almacen` antes de pasar a `'disponible'` (hoy lo limpia asumiendo vacío —
+  generalización defensiva; el retorno de comercio sigue igual porque ahí `contenido` siempre está vacío).
+- **SESIÓN** · `session/comandos/comercio.ts` · `enviarCaravanaAlOrigen({ jugadorId, caravanaId })`. Mismo
+  gate que Paso 3. `adjuntarCaravana` no cambia en sesión (el motor ya acepta `'aparcada'`).
+- **Check:** `'aparcada'` vacía → `enviarCaravanaAlOrigen` la pone `'disponible'` en el origen ese tick;
+  `'aparcada'` con trigo → `'retornando'`, y N ticks después el trigo está en el almacén del origen y la
+  caravana es `'disponible'`.
+
+### Independencias
+
+- Paso 1 es autónomo (guarnecer sin caravanas ya cierra el hueco de canon).
+- Pasos 2-4 son el bloque de caravanas, en orden (2 habilita 3 y 4).
+- Independiente por completo de la niebla Paso 4.
+
+### Canon a actualizar al cerrar
+
+- **Doc 5.12.4 / 5.12.9** — `guarnecer` general deja de ser follow-up: marchar a una plaza propia y volcar la
+  tropa en su guarnición, con los jugadores quedando dentro.
+- **Doc 3.13** (revamp de caravanas) — estado `'aparcada'`: una caravana adjunta que su ejército deja en una
+  plaza de la Facción al guarnecer; no la usa la plaza anfitriona, intercambia con su almacén, sale solo
+  enganchada a un ejército o enviada a su origen.
+- **`Docs/Mecanicas a desarrollar.md` §17** — se retira al cerrar (diseño + implementación).
+- **`Checklist_Mecanicas.md`** — fila de `guarnecer` de `código: ✘` a `✔`.

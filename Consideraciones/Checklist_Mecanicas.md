@@ -18,34 +18,43 @@ de cosas que ya no existen en el repo:
 | `código: —` | no aplica (ambientación, roadmap, decisión de alcance) |
 
 Ver `Docs/Game/0_Glosario_de_Entidades_Politicas.md` para las definiciones centrales.
-Las mecánicas **pendientes** mantienen su ficha larga en `Docs/Mecanicas a desarrollar.md`; aquí solo
-aparecen el resumen y el estado.
+Las mecánicas **pendientes** son la lista de `Docs/Mecanicas a desarrollar.md`; aquí solo aparecen el resumen
+y el estado, con un puntero a su sección allí.
 
 ---
 
-## Auditoría 2026-09-06 — lo que NO está en el código
+## Auditoría — lo que NO está en el código (revisado 2026-09-09)
 
 Diseñado (a veces "cerrado") pero **sin una línea en `src/`**:
 
 - **Tecnología**: no existe. Ni árbol, ni las 3 vías (comercio / desarrollo propio / Aedas), ni compra con
   oro. Lo único que hay con el nombre "Aedas" es la narración de cambios de título (`engine/titulos.ts`).
+  (`Mecanicas a desarrollar.md` §20)
 - **Gremios** (los 4 gremios escasos a nivel de servidor, con sus 4 requisitos y su tirada periódica):
   `patioDeGremios` en `constants.ts` es solo una parcela decorativa del trazado urbano, nada más.
-- **Exilio** como política de soberanía (Doc 5.9).
+  (`Mecanicas a desarrollar.md` §21)
+- **Exilio** como política de soberanía (Doc 5.9). (`Mecanicas a desarrollar.md` §22)
 - **Attack Timer** (Doc 5.6) — estaba marcado como pospuesto, sigue pospuesto.
 - **Comercio marítimo / unidades navales** — fuera de alcance de Fase 0, coherente.
-- **Onboarding**: spawn aleatorio del jugador en el mundo. La *fundación grupal* sí está
-  (`FUNDACION.maxJugadoresFundacionGrupal`, `engine/settlement.ts`); el spawn no.
 - **Ciclo de servidor de 12 meses + legado NPC de la Facción ganadora** (el edificio Maravilla sí está).
-- **Impuestos / generación de oro por población** — el oro solo entra por mina y por comercio.
+  (`Mecanicas a desarrollar.md` §24)
 - **Trueque compuesto** de varios materiales — `AcuerdoTrueque` es 1 recurso ↔ 1 recurso.
-- ~~**Revamp de caravanas**~~ — **NÚCLEO IMPLEMENTADO 2026-09-08** (ver Comercio y economía más abajo). Solo quedan los trozos diferidos (planificación horaria, cría, visibilidad por tamaño, camello/desierto, catálogo de carros, unificación con `Ejercito.suministro`).
-- **Eventos de asentamiento**, **landmarks del mundo**, **la capital como decisión**, **el jugador como
-  entidad situada en el mundo** y su **movimiento libre**.
+  (`Mecanicas a desarrollar.md` §5)
+- ~~**Revamp de caravanas**~~ — **NÚCLEO IMPLEMENTADO 2026-09-08** (ver Comercio y economía más abajo). Solo quedan los trozos diferidos (planificación horaria, cría, visibilidad por tamaño, camello/desierto, catálogo de carros, unificación con `Ejercito.suministro`) — `Mecanicas a desarrollar.md` §8.1.
+- **Eventos de asentamiento** y **landmarks del mundo** (`Mecanicas a desarrollar.md` §9, §10); **la capital
+  como decisión** (§13).
 - **Progresión de Liderazgo del jugador**: `Jugador.liderazgoBase` existe y el propio código anota que el
   efectivo debería ser base + progresión, pero esa progresión no está ni diseñada ni implementada.
-- **Visión compartida por alianza** (Paso 4 de la niebla de guerra).
-- **Materiales exóticos** (los pide el diseño de la Maravilla) y **NPCs hostiles** más allá de los bandidos.
+  (`Mecanicas a desarrollar.md` §11)
+- ~~**Visión compartida por alianza**~~ — **HECHO 2026-09-09** (Paso 4, ampliado a vasallaje;
+  `Niebla_De_Guerra_Definicion.md` §5.6).
+- **Materiales exóticos** (los pide el diseño de la Maravilla — `Mecanicas a desarrollar.md` §23) y **NPCs
+  hostiles** más allá de los bandidos (§9).
+
+**Cerrado desde la auditoría anterior (2026-09-06 → 2026-09-08):** impuestos / el oro como presupuesto
+(`Economia_Del_Oro_Definicion.md`, motor hecho, calibrando); el jugador como entidad situada + su movimiento
+libre + el spawn aleatorio de onboarding (`Jugador_Situado_Definicion.md`, 2026-09-07); comerciar con una
+plaza ajena desde su puerta (`Comercio_Fisico_Definicion.md`, 2026-09-07).
 
 Y una corrección en sentido contrario: **los chokepoints ya no existen**. Estaban marcados aquí como
 implementados; `WORLDGEN_VERSION` v15 (2026-08-26, decisión explícita del usuario) los retiró por completo —
@@ -60,7 +69,7 @@ geometría, control por zona de influencia, peaje en oro, tipo de dominio y rend
 ## Fundación y zonas de influencia
 - ✅ Fundación libre, zona de influencia automática, reglas de construcción, fronteras con límite duro — `código: ✔` (`engine/zones.ts`, `engine/settlement.ts`)
 - ✅ Fundación grupal (hasta 5 jugadores) — `código: ✔` (`engine/settlement.ts`)
-- 🔶 Onboarding: spawn aleatorio del jugador en el mundo abierto — `código: ✘` (ligado al jugador como entidad situada, ver esa sección)
+- ✅ Onboarding: spawn aleatorio del jugador en el mundo abierto — `código: ✔` (2026-09-07, parte del jugador situado — `Jugador_Situado_Definicion.md` §5 paso 9)
 - ❌ **Chokepoints estratégicos — DESCARTADOS (2026-08-26, decisión del usuario: "no me está dando nada en este momento")** — `código: ✘`. Retirados por completo en `WORLDGEN_VERSION` v15: `worldgen/chokepoints.ts`, `engine/chokepoints.ts`, `CHOKEPOINTS_PEAJE`, el tipo `Chokepoint` y su renderizado. El resto del mundo sale bit a bit idéntico para la misma seed.
 - ✅ Cap de fundación por Facción, escala con el nivel de Facción (1→7) — `código: ✔` (`CAP_FUNDACION_POR_NIVEL`)
 - ✅ Período de gracia sin cobro de Mantenimiento al fundar — `código: ✔` (`MANTENIMIENTO.graciaMinutos = 60`)
@@ -70,7 +79,7 @@ geometría, control por zona de influencia, peaje en oro, tipo de dominio y rend
 - ✅ Cooldown compartido de creación de caravanas (Fundación y comercial) — `código: ✔` (`CARAVANA_COOLDOWN`)
 
 ## Tecnología
-- ✅ Tres vías de acceso (comercio, desarrollo propio, Aedas); sistema de Aedas; tecnología se compra con oro — **`código: ✘` — no existe nada**
+- ✅ Tres vías de acceso (comercio, desarrollo propio, Aedas); sistema de Aedas; tecnología se compra con oro — **`código: ✘` — no existe nada** (`Docs/Mecanicas a desarrollar.md` §20)
 - ✅ Narración de Aedas/Poetas al cambiar de manos un título de servidor — `código: ✔` (`engine/titulos.ts`, lo único "Aeda" que hay)
 - 🔶 Árbol tecnológico del desarrollo propio: estructurado o libre/emergente — `código: ✘`
 
@@ -87,8 +96,8 @@ geometría, control por zona de influencia, peaje en oro, tipo de dominio y rend
 - 🔶 **Rutas de caravana avanzadas**: rodear bosques, no cruzar ríos, fusión de caminos próximos en caminos principales por puntos de uso, paso obligado y comisión al cruzar una ciudad intermedia, inmunidad al cruzar ciudad neutral o aliada — `código: ◐`. El pathfinder por coste de terreno y la impasabilidad del agua sí están; los puntos de uso, la fusión de caminos, la comisión de paso y la inmunidad, no. Ficha en `Docs/Mecanicas a desarrollar.md` §3.
 - ✅ **Revamp de caravanas — NÚCLEO IMPLEMENTADO (2026-09-08, Pasos 1-5)** — `código: ✔`: la caravana `comercial` es un contenedor de carros (cada uno con un animal) y deriva capacidad/velocidad (`capacidadCaravana`/`velocidadCaravana`, `engine/caravanas.ts`; el viejo `CARAVANA_CATALOGO.comercial` fijo se borró). Casco vacío gratis (`crearCaravana`) + piezas (`agregarCarroCaravana` 20/40 madera, `comprarAnimalCaravana` buey 30 madera / caballo 60 oro / camello 40 oro, `moverCarroCaravana`); `reservadaManual` fuera del reparto automático; **lanzamiento manual** con estado `'preparando'` cancelable (`prepararCaravana`/`cancelarCaravana`, `CARAVANA_PREPARACION`); **escolta sin héroe** (`Caravana.escolta`, `CARAVANA_ESCOLTA`, `cupoEscolta`; escuadrones cedidos por viaje que salen de la guarnición, cuentan Liderazgo, resuelven combate por `poderTotal` y vuelven a casa derrotados); migración de snapshot v11→v12. Batch NPC **bit-idéntico** en los cinco commits. Descartado por medición: el bootstrap del Mercado. Reglas en `Docs/Game/3` §3.13; decisiones y plan en `Consideraciones/Revamp_Caravanas_Definicion.md`. Todas las cifras son placeholder (calibración continua). **Quedan solo los trozos diferidos**: planificación horaria, cría, visibilidad por tamaño, inmunidad del camello al desierto, catálogo ampliado de carros, unificación con `Ejercito.suministro` (ver `Docs/Mecanicas a desarrollar.md` §8.1).
 - 🔶 **Trueque compuesto** de varios materiales por lado — **`código: ✘`**, `AcuerdoTrueque` es 1 recurso ↔ 1 recurso.
-- 🔶 **Comerciar con una plaza ajena desde su puerta** (mercader visitante): estando fuera de un asentamiento que no es tuyo, abrir su interfaz de comercio, ver sus órdenes activas y comprarle o venderle — **`código: ✘`**. Hoy el comercio es intra-Facción y desde asentamiento propio: un forastero en la puerta no tiene ninguna vía. Salió del diseño del jugador situado (2026-09-06) y se sacó a mecánica propia por decisión del usuario. Ficha en `Docs/Mecanicas a desarrollar.md` §15.
-- 🔶 **Impuestos**: generación de oro en el asentamiento según población y clase social — **`código: ✘`**. El oro solo entra por `mina` y por comisiones de comercio. Ficha en `Docs/Mecanicas a desarrollar.md` §1.
+- ✅ **Comerciar con una plaza ajena desde su puerta** (mercader visitante): estando en la puerta de un asentamiento que no es tuyo, abrir su escaparate, ver sus órdenes activas y comprarle o venderle contra su carro — `código: ✔` (2026-09-07): `comerciarEnPlaza` (motor + comando), escaparate visible solo para quien está en la puerta, oro que pesa y ocupa carro, comisión externa conservada. Diseño en `Comercio_Fisico_Definicion.md` (§8 puntos abiertos: publicar órdenes propias, cerrar mercado sin cerrar puerta). Reglas Doc 3 §3.2/§3.3/§3.5/§3.7/§3.8. Migración v10→v11.
+- ✅ **Impuestos**: generación de oro en el asentamiento según población y clase social — `código: ✔` (motor 2026-09-08, calibración Paso 6 en curso). `recaudacionOro` + política Presión Fiscal + reclutamiento/animales en oro. Diseño y calibración en `Economia_Del_Oro_Definicion.md`. Canon Doc 3 §3.1/§3.13.2, Doc 4 §4.1/§4.4/§4.5, Doc 5 §5.8.
 - 🔶 Uso de riqueza por comisiones; fórmula exacta de comisión — `código: ◐` (la fórmula existe, con cifras placeholder)
 
 ## Recursos
@@ -98,7 +107,7 @@ geometría, control por zona de influencia, peaje en oro, tipo de dominio y rend
 - ✅ Cadenas de producción invisibles; almacenamiento con límites — `código: ✔` (`LINEAS_PRODUCCION`, `ALMACEN`, tope de Almacenes por nivel)
 - ✅ **Regeneración de nodos agotados** con cooldown por tipo (metales / livestock) — `código: ✔` (`REGENERACION_NODOS`)
 - 🔶 Lista completa de cultivos/livestock; pasos de procesamiento adicionales — `código: ◐`
-- 🔶 Materiales **exóticos** (los pide el diseño de la Maravilla) — `código: ✘`
+- 🔶 Materiales **exóticos** (los pide el diseño de la Maravilla) — `código: ✘` (`Docs/Mecanicas a desarrollar.md` §23)
 
 ## Población
 - ✅ 3 clases (Pesants, Artesanos, Nobleza) con roles, condiciones de aparición y fórmulas propias — `código: ✔` (`engine/population.ts`)
@@ -133,11 +142,11 @@ geometría, control por zona de influencia, peaje en oro, tipo de dominio y rend
 - ✅ Progresión: independiente → vasallaje/alianza → Liga → Gran Rey (prestigio) — `código: ✔` (`engine/liga.ts`, `engine/titulos.ts`)
 - ✅ Reglas de vasallaje completas (tributo, defensa mutua, 4 vías de ruptura) — `código: ✔` (`engine/diplomacia.ts`, comando `rebelionVasallo`)
 - ✅ Coste de gobernanza absorbido en Mantenimiento — `código: ✔`
-- 🔶 Identidad visual (sigilo / estandarte) — `código: ✘`
+- 🔶 Identidad visual (sigilo / estandarte) — `código: ✘` (`Docs/Mecanicas a desarrollar.md` §27)
 
 ## Ciudadanía
 - ✅ Ligada a la Facción; obtención por fundación o compra de casa; cupo de casas por nivel; cooldown anti-abuso al crear Facción — `código: ✔` (`CIUDADANIA`, `engine/faccion.ts` `comprarCasa`)
-- 🔶 Los 5 beneficios (residencia en cualquier asentamiento, protección militar, voz en política exterior, nivel intermedio de comisiones…) — `código: ◐`: solo el de comisiones y el de residencia/reclutamiento están en el motor
+- 🔶 Los 5 beneficios (residencia en cualquier asentamiento, protección militar, voz en política exterior, nivel intermedio de comisiones…) — `código: ◐`: solo el de comisiones y el de residencia/reclutamiento están en el motor (`Docs/Mecanicas a desarrollar.md` §26)
 
 ## Cargos
 - ✅ Nivel Facción (Rey, Embajador) y nivel asentamiento (Gobernador, Tesorero, General, Maestro de Obras, Sacerdote) — `código: ✔` (`engine/cargos.ts`)
@@ -172,11 +181,11 @@ geometría, control por zona de influencia, peaje en oro, tipo de dominio y rend
 - ✅ Moral por raciones, con deserción permanente a moral 0 — `código: ✔`
 - ✅ Conquista tras asedio + **ocupación post-conquista** (guarnición = ejército conquistador, saqueo determinista, ventana de ocupación: inmune a nuevo asedio, recaudación/crecimiento ×0.5, mantenimiento congelado) — `código: ✔` (`aplicarConquista`, `estaOcupado`, `OCUPACION`; Doc 5.12.9; cifras placeholder, calibración batch en curso)
 - ✅ Reclutar/reponer/mover tropa fuera de la residencia (nuevo escuadrón = residencia; reponer/mover = cualquier plaza propia con permiso, estando presente) + comando `cambiarResidencia` — `código: ✔` (`puedeReclutarEn`, `cambiarResidencia`; Doc 2.5, 5.8)
-- 🔶 `guarnecer` (marchar a defender una plaza propia que YA es tuya) — capacidad diferida; la conquista guarnece sola — `código: ✘` (`Docs/Mecanicas a desarrollar.md` §17)
+- 🔶 `guarnecer` (marchar a defender una plaza propia que YA es tuya) — `código: ✘`, **plan técnico escrito (2026-09-09), en desarrollo** (`Ocupacion_Post_Conquista_Definicion.md` §11; `Docs/Mecanicas a desarrollar.md` §17). Incluye las caravanas adjuntas → estado `'aparcada'`.
 - ✅ Adaptación temática completa (cobre / estaño) — `código: ✔`
 - ✅ **Attack Timer** — decidido y **pospuesto** a fase posterior a Fase 0 (Doc 5.6) — `código: ✘`
-- ✅ **Exilio** como política de soberanía (Doc 5.9 / 2.8) — diseño cerrado, **`código: ✘`**
-- 🔶 Declaración formal de guerra; unidades navales — `código: ✘`
+- ✅ **Exilio** como política de soberanía (Doc 5.9 / 2.8) — diseño cerrado, **`código: ✘`** (`Docs/Mecanicas a desarrollar.md` §22)
+- 🔶 Declaración formal de guerra — `código: ✘` (`Docs/Mecanicas a desarrollar.md` §28); unidades navales — fuera de alcance de Fase 0
 - 🔶 Establos / carros de guerra sin edificio de reclutamiento definido; `poderBase` de las tropas es placeholder — `código: ◐`
 - 🔶 Varianza de combate (abierta en `Movimiento_Ejercitos_Definicion.md` §1.4) — `código: ◐`
 
@@ -198,7 +207,7 @@ geometría, control por zona de influencia, peaje en oro, tipo de dominio y rend
 - ✅ Paso 3 — la memoria se proyecta: `asentamientosConocidos` + máscara `exploracion`; lo visto en vivo gana a lo recordado — `código: ✔`
 - ✅ Paso 5 — se pinta: el cliente de jugador tapa lo no explorado y oscurece lo recordado a partir de dos máscaras (`celdas` y `visibles`); el cliente de administración no aplica máscara — `código: ✔`
 - ✅ Fronteras ajenas (2026-09-05) — `código: ✔`
-- 🔶 **Paso 4 — visión compartida por alianza**, en vivo y no "último conocido" — **`código: ✘`**
+- ✅ **Paso 4 — visión compartida por alianza y vasallaje**, en vivo y no "último conocido" — `código: ✔` (2026-09-09). `compartenVision` (`engine/pertenencia.ts`) + ojos aliados solo en la capa "en vivo" de `proyectarParaJugador`; nunca en memoria. Sin migración. `Niebla_De_Guerra_Definicion.md` §5.6.
 - 🔶 Paso 6 — calibración del margen de asentamiento y del tamaño de celda — `código: ◐`
 
 ## Diplomacia
@@ -214,7 +223,7 @@ geometría, control por zona de influencia, peaje en oro, tipo de dominio y rend
 ## Progresión de imperio
 - ✅ Sandbox sin condición de victoria; títulos dinámicos de prestigio a nivel de servidor, narrados por los Aedas — `código: ✔` (`engine/titulos.ts`)
 - 🔶 Diferencia imperio vs alianza grande; fragmentación; catálogo completo de títulos — `código: ◐`
-- 🔶 Identidad visual y de audio — `código: ✘`
+- 🔶 Identidad visual y de audio — `código: ✘` (`Docs/Mecanicas a desarrollar.md` §27)
 
 ## Políticas
 - ✅ Duración, renovación, múltiples activas, no cancelables; conexión con auto-construcción — `código: ✔` (`engine/politicas.ts`, `POLITICAS`)
@@ -223,14 +232,14 @@ geometría, control por zona de influencia, peaje en oro, tipo de dominio y rend
 - ✅ Las 4 políticas "Construir Barracón / Galería / Palacio / Mercado" se retiraron: eso pasó al control manual de cola — `código: ✔`
 - ✅ **Exclusión dentro de un slot, resuelta sin regla nueva**: las 4 ordenanzas de trazado + Vía Rápida + Líneas de Producción comparten el único slot de Maestro de Obras, así que ya son mutuamente excluyentes. Como una política dura 150 ticks y nada mueve lo ya construido, cada una deja un ESTRATO en la ciudad — `código: ✔`
 - ❌ **"Protección de Riesgos" (Maestro de Obras) ya NO existe** — este documento la daba por viva ("ampliada a 2 Leñeras + 3 Granjas"); no está en `POLITICA_CATALOGO` ni en el cliente. Su función la cubren hoy el tope por tipo de extractor (`EXTRACCION_MAXIMOS.porTipo`) y el disparador de Granja por déficit real — `código: ✘`
-- 🔶 Las ordenanzas de trazado no tienen todavía coste/beneficio mecánico propio, así que compiten en desventaja contra Vía Rápida (−25% de tiempo de obra) — `código: ◐` (anotado como pendiente en el propio `constants.ts`)
+- 🔶 Las ordenanzas de trazado no tienen todavía coste/beneficio mecánico propio, así que compiten en desventaja contra Vía Rápida (−25% de tiempo de obra) — `código: ◐` (anotado como pendiente en el propio `constants.ts`; `Docs/Mecanicas a desarrollar.md` §25)
 
 ## Fusión y crecimiento de Facciones
 - ✅ Menú con 2 opciones (Anexión / Fusión), reglas de Rey y cargos resultantes — `código: ✔` (`engine/fusion.ts`, comandos `anexionar` / `fusionar`)
 - 🔶 Aceptación mutua obligatoria vs. anexión forzable unilateralmente — `código: ◐`
 
 ## Gremios
-- ✅ 4 gremios (Comerciantes, Artesanos, Constructores, Ladrones), escasos a nivel de servidor, con tirada periódica sujeta a 4 requisitos simultáneos (reputación >90, título de servidor específico, nivel de asentamiento en el máximo y mantenimiento >90%); mecanismo de pérdida resuelto — **`código: ✘`**. El `patioDeGremios` de `constants.ts` es una parcela decorativa del trazado urbano, sin relación con esta mecánica.
+- ✅ 4 gremios (Comerciantes, Artesanos, Constructores, Ladrones), escasos a nivel de servidor, con tirada periódica sujeta a 4 requisitos simultáneos (reputación >90, título de servidor específico, nivel de asentamiento en el máximo y mantenimiento >90%); mecanismo de pérdida resuelto — **`código: ✘`**. El `patioDeGremios` de `constants.ts` es una parcela decorativa del trazado urbano, sin relación con esta mecánica. (`Docs/Mecanicas a desarrollar.md` §21)
 - 🔶 Beneficios concretos y números — `código: ✘`
 
 ## Bandidos y eventos del mundo
@@ -239,28 +248,23 @@ geometría, control por zona de influencia, peaje en oro, tipo de dominio y rend
 
 ## El jugador como entidad en el mundo
 
-> **Diseño CERRADO el 2026-09-06, sin implementar.** Las dos entradas de abajo se diseñaron juntas —la segunda
-> es el verbo de la primera— en `Consideraciones/Jugador_Situado_Definicion.md`: treinta y seis decisiones del usuario
-> en once rondas, representación en el motor, plan de 10 pasos, invariantes y abiertos. El movimiento es clic a
-> destino (miniatura estilo Total War), así que Fase 0 y Fase 1 comparten modelo y **no hace falta netcode**.
->
-> La **segunda ronda** cambió el modelo de interacción: nada se dispara por proximidad, la proximidad abre un
-> menú (inspeccionar / perseguir / atacar / entrar / asediar / consultar), con tres radios —vista 150/80,
-> inspección 40 con aviso al observado, encuentro 15—. Eso revisa tres reglas de Doc 5.12 y saca el comercio
-> con plaza ajena a mecánica propia (§15). La tercera y la cuarta separaron la **columna personal** del
-> **ejército** —y la línea la marca de dónde viene la columna, no cuántos van dentro—, y la quinta cerró el
-> último bloqueante: **el héroe combate** con el poder de una unidad de élite, no muere, y al perder entrega
-> media carga y entra en tregua. Eso obliga a reescribir Doc 5.1 ("el jugador nunca combate individualmente").
+> **IMPLEMENTADO (2026-09-07).** Las dos entradas de abajo se diseñaron juntas —la segunda es el verbo de la
+> primera— en `Consideraciones/Jugador_Situado_Definicion.md`: treinta y seis decisiones del usuario en once
+> rondas, representación en el motor, plan de 10 pasos (todos cerrados), invariantes y abiertos. El movimiento
+> es clic a destino (miniatura estilo Total War), así que Fase 0 y Fase 1 comparten modelo y **no hace falta
+> netcode**. Canon: Doc 0 (glosario), Doc 1 §1.3/§1.10, Doc 2 §2.5, Doc 5 §5.1/§5.12/§5.14. El comercio con
+> plaza ajena salió a mecánica propia y también está hecho (`Comercio_Fisico_Definicion.md`). Queda solo
+> calibración de `MOVIMIENTO.*` / `VISION.*`.
 
-- ✅ El jugador tiene una ubicación física: nace en mundo abierto, funda y entra en el asentamiento, sale, entra en otros; ve el mapa de lo conocido desde cualquier parte pero **nunca** el interior de un asentamiento en el que no esté físicamente; el Gobernador puede prohibir la entrada a neutrales o enemigos — **`código: ✘`**: `Jugador` solo tiene `id` y `liderazgoBase`, no hay posición. Ficha en `Docs/Mecanicas a desarrollar.md` §13b; diseño en `Consideraciones/Jugador_Situado_Definicion.md`.
-- ✅ Movimiento libre por el mapa general: más rápido sin tropas, consumo de trigo casi nulo, por clic sobre el mapa — **`código: ✘`**. La salida del asentamiento sí está, como movilización de ejército. La duda de "100% cliente" está **resuelta: no** (la posición es T3 por doc 9). Ficha en `Docs/Mecanicas a desarrollar.md` §14.
+- ✅ El jugador tiene una ubicación física: nace en mundo abierto, funda y entra en el asentamiento, sale, entra en otros; ve el mapa de lo conocido desde cualquier parte pero **nunca** el interior de un asentamiento en el que no esté físicamente; el Gobernador puede prohibir la entrada a neutrales o enemigos — `código: ✔` (2026-09-07). `Jugador.ubicacion` (`asentamiento`|`columna`|`desconectado`), proyección recortada al interior de la plaza que se pisa, `plazasRecordadas`, `politicaDeAcceso` + `vetarJugador`. Migración v8→v9/v10. Diseño en `Consideraciones/Jugador_Situado_Definicion.md`; canon Doc 0/1/2/5.
+- ✅ Movimiento libre por el mapa general: más rápido sin tropas (`MOVIMIENTO.velocidadJugador`), consumo de trigo casi nulo, por clic sobre el mapa (`salirAlMundo`/`marcharA`) — `código: ✔` (2026-09-07). La duda de "100% cliente" quedó **resuelta: no** (la posición es T3 por doc 9). Comandos de interacción por anillo: `inspeccionar`/`atacar`/`perseguir`.
 
 ## Onboarding y curva inicial
-- 🔶 Curva de progresión inicial más gradual: sin decidir qué se desbloquea y cuándo; pospuesto hasta que exista una interfaz de jugador individual (la actual es de GM) — `código: ✘`
+- 🔶 Curva de progresión inicial más gradual: sin decidir qué se desbloquea y cuándo; pospuesto hasta que exista una interfaz de jugador individual (la actual es de GM) — `código: ✘` (`Docs/Mecanicas a desarrollar.md` §29)
 
 ## Maravilla y ciclo de servidor
 - ✅ **El edificio** está implementado: único, exige nivel de asentamiento máximo (5, antes 3), disponible vía control manual de cola, sin recetas ni niveles — es un trofeo — `código: ✔` (`EDIFICIO_CATALOGO.maravilla`). Coste placeholder con recursos existentes; los materiales **exóticos** del diseño no existen todavía.
-- 🔶 **El ciclo**: 12 meses de servidor + cierre al completarla + la Facción ganadora persiste como legado NPC — diseño cerrado, **`código: ✘`** (requiere infraestructura de servidor / multi-instancia; ver `Roadmap_Escalado.md` Eje 4)
+- 🔶 **El ciclo**: 12 meses de servidor + cierre al completarla + la Facción ganadora persiste como legado NPC — diseño cerrado, **`código: ✘`** (requiere infraestructura de servidor / multi-instancia; ver `Roadmap_Escalado.md` Eje 4; `Docs/Mecanicas a desarrollar.md` §24)
 
 ## Interfaz (herramienta de depuración, no mecánica de juego)
 - ✅ Control manual de la cola de construcción (añadir / quitar / reordenar), con ubicación siempre automática, panel y segmento "Info:" — `código: ✔` (motor `engine/construction.ts`; comandos `anadirEdificioManualmente` / `quitarDeCola` / `moverEnCola`)

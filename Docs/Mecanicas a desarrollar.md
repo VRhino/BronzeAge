@@ -1,69 +1,44 @@
 # Mecánicas por desarrollar
 
-Solo lo **pendiente**. El estado completo de todas las mecánicas del juego —las hechas, las descartadas y
-estas— vive en `Consideraciones/Checklist_Mecanicas.md`, contrastado contra el código el 2026-09-06.
-Cuando una entrada de aquí se cierra, se borra de este archivo y se marca allí.
+La **lista única de lo pendiente**. El estado completo de todas las mecánicas del juego —hechas, descartadas y
+estas— vive en `Consideraciones/Checklist_Mecanicas.md`, que para lo pendiente solo resume y apunta aquí.
+Re-contrastado contra `src/` el 2026-09-09.
+
+Cuando una entrada se cierra (diseño **y** implementación), se **borra entera** de este archivo: lo útil que
+no esté ya en el canon (`Docs/Game/`) o en una ficha de `Consideraciones/` se mueve allí primero. Mientras una
+mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí como notas.
 
 ## Índice
 
 | # | Área | Mecánica | Código hoy |
 |---|---|---|---|
-| 1 | MOTOR | Impuestos: generación de oro por población | ◐ **motor HECHO 2026-09-08**, calibrando |
 | 3 | CARAVANAS | Rutas de caravana avanzadas | ◐ solo el pathfinder base |
 | 5 | TRUEQUE | Trueque compuesto de varios materiales | ✘ nada |
-| 8 | CARAVANAS | Revamp de caravanas — solo los trozos diferidos (§8.1) | ◐ **núcleo HECHO 2026-09-08** |
+| 8 | CARAVANAS | Revamp de caravanas — solo los trozos diferidos (§8.1) | ◐ núcleo hecho; §8.1 no |
 | 9 | ASENTAMIENTO | Eventos de asentamiento | ✘ nada |
 | 10 | WORLDGEN | Landmarks reconocibles | ✘ nada |
 | 11 | JUGADOR | Progresión de Liderazgo del jugador | ✘ nada |
-| 12 | VISIBILIDAD | Niebla de guerra — visión de alianza y calibración | ◐ pasos 1-3 y 5 hechos |
-| 13 | POLÍTICA | La capital como decisión del jugador | ✘ hay un proxy placeholder |
-| 13b | JUGADOR | El jugador como entidad situada en el mundo | ✘ nada |
-| 14 | JUGADOR | Movimiento libre del jugador por el mapa | ✘ nada |
-| 15 | COMERCIO | Comerciar con una plaza ajena desde su puerta | ✘ nada |
+| 13 | POLÍTICA | La capital como decisión del jugador | ✘ proxy placeholder |
 | 16 | JUGADOR | Qué hace un huésped: vida dentro de una Facción NPC | ✘ nada |
 | 17 | MILITAR | `guarnecer`: defender una plaza propia marchando a ella | ✘ nada |
+| 18 | INTEL | Taberna + intel como asset con revelado temporal | ✘ nada |
+| 19 | POLÍTICA | El mapa político como entidad | ✘ nada |
+| 20 | TECNOLOGÍA | Tecnología: árbol de desarrollo propio, 3 vías, Aedas | ✘ nada |
+| 21 | POLÍTICA | Los 4 gremios escasos a nivel de servidor | ✘ nada |
+| 22 | POLÍTICA | Exilio como política de soberanía | ✘ nada |
+| 23 | RECURSOS | Materiales exóticos | ✘ nada |
+| 24 | SERVIDOR | Ciclo de servidor de 12 meses + Maravilla + legado NPC | ◐ solo el edificio |
+| 25 | POLÍTICA | Coste/beneficio mecánico de las ordenanzas de trazado | ◐ existen, sin coste propio |
+| 26 | CIUDADANÍA | Los beneficios de ciudadanía sin implementar | ◐ 2 de 5 |
+| 27 | AMBIENTACIÓN | Identidad visual y de audio | ✘ nada |
+| 28 | MILITAR | Declaración formal de guerra | ✘ nada |
+| 29 | ONBOARDING | Curva de progresión inicial gradual | ✘ nada |
 
-Fuera de este índice, siguen sin código pero **sin ficha propia todavía** (ver checklist): tecnología y el
-árbol de desarrollo propio, los 4 gremios, el exilio, el Attack Timer, el spawn aleatorio de onboarding, los
-materiales exóticos, el ciclo de servidor de 12 meses y la curva de onboarding gradual.
-
-> **Cerradas y retiradas de este índice:**
-> - **Movimiento de ejércitos por el mapa — HECHO (2026-09-04).** Reglas en
->   `Docs/Game/5_Sistema_Militar_y_Combate.md` §5.11-5.13 y en el glosario; decisiones, plan y mediciones en
->   `Consideraciones/Movimiento_Ejercitos_Definicion.md`. Se llevó por delante dos entradas más: la **escolta
->   de caravanas** (Doc 3.10, que llevaba años marcada como "no modelada") y la **fuente espacial** de la
->   niebla de guerra, que estaba bloqueada por faltar el radio de visión.
-> - **Políticas de ubicación de construcción (antes §4) — HECHO.** Las cuatro ordenanzas de perfil de trazado
->   del Maestro de Obras (`postura_defensiva` / `arterias_comerciales` / `barrios_gremiales` /
->   `plazas_mayores`) más `lineas_produccion` son exactamente esto: el jugador orienta *cómo* se distribuye la
->   ciudad. Elegir la parcela concreta de un edificio sigue siendo imposible **por invariante de diseño**, no
->   por falta de trabajo. Lo único que queda es darles coste/beneficio mecánico propio, anotado ya en
->   `constants.ts` y recogido en el checklist.
-
-## 1. Impuestos — generación de oro por población
-
-> **MOTOR IMPLEMENTADO (2026-09-08), calibración (Paso 6) EN CURSO.** Tres rondas de decisiones. El impuesto no
-> se diseña solo: es la FUENTE de un bloque económico ("el oro como presupuesto") cuyo sentido es que el oro te
-> obligue a elegir entre ejército, flota comercial e intel. Decisiones: recaudación pasiva (espejo del consumo
-> de comida) + política "Presión Fiscal" (cargo Tesorero); clases Nobleza > Artesanos > Pesants;
-> **reclutamiento en oro salvo la milicia inicial**; **buey (y todos los animales de caravana) en oro**;
-> `MANTENIMIENTO.nivelParaOro: 3→2`; oro de reclutamiento/animales como regla de motor uniforme (NPC +
-> jugador); intel de taberna como sink recurrente (ficha aparte). Revisa `Revamp_Caravanas_Definicion.md` §17.
-> Decisiones, medición de batch, invariantes y plan técnico en `Consideraciones/Economia_Del_Oro_Definicion.md`.
-> Canon escrito: Doc 3 §3.1/§3.13.2, Doc 4 §4.1/§4.4/§4.5, Doc 5 §5.8. **Motor IMPLEMENTADO (2026-09-08, suite
-> verde, tsc limpio, sin migración de snapshot). Paso 6 (calibración) EN CURSO — iter 2: `IMPUESTOS` ÷2 +
-> caravana #0 gratis quitada + arreglo de `evaluarViabilidadFundacion` (bosque libre) → supervivencia NPC
-> arreglada (ruinas −48%, colapso de madera −77%); queda que `oroMedio` sigue trepando (×2.2, no mesetea).
-> Iteración 3 pendiente: con la ocupación post-conquista (Doc 5.12.9), que baja la recaudación de las plazas
-> conquistadas — calibrar `OCUPACION.*` e `IMPUESTOS` juntos.**
-
-El oro hoy entra por **dos** vías: la `mina` (`produccionBaseOro: 4`) y las comisiones de comercio
-(`COMISION`). Un asentamiento sin mina cerca y sin comercio activo no genera oro, pase lo que pase con su
-población.
-
-Falta la tercera: recaudación en el asentamiento **según cuánta población tiene y de qué clase**. Pesants,
-Artesanos y Nobleza no deberían rendir lo mismo. Es también lo que daría sentido económico a hacer crecer un
-asentamiento más allá de su producción de materiales.
+**Pospuesto explícitamente, fuera de esta lista:** el **Attack Timer** (Doc 5.6, decidido y aplazado a
+fase posterior a Fase 0) y el **comercio marítimo / unidades navales** (fuera del alcance de Fase 0 por
+diseño). Los ajustes de calibración de mecánicas ya construidas viven en cada ficha de `Consideraciones/` y en
+`Preguntas_Abiertas.md`, no aquí. Lo ya cerrado (diseño + implementación) se retira de este archivo por
+completo; su estado queda en el checklist.
 
 ## 3. Rutas de caravana avanzadas
 
@@ -81,27 +56,20 @@ Cuando se forma un camino se evalúa la proximidad con otros caminos; cada otra 
 agrega 1 punto. Mientras más puntos, más grande se ve en el mapa real y atrae con más fuerza a otras rutas
 para que se desvíen, aunque sea un poco, de su camino — creando caminos principales.
 
+*Relacionado:* que un río corte el paso necesita vados o puentes para no fragmentar el mapa
+(`Docs/Game/1` §1.6, `worldgen/costeMovimiento.ts`).
+
 ## 5. Trueque compuesto de varios materiales
 
 `AcuerdoTrueque` es hoy un intercambio de **un** recurso por **un** recurso (`recursoA` / `recursoB`). Un
 acuerdo debería poder llevar varios materiales por lado.
 
-## 8. Revamp de caravanas
+## 8. Revamp de caravanas — trozos diferidos
 
-> **NÚCLEO IMPLEMENTADO (2026-09-08), Pasos 1-5.** Seis rondas de decisiones con el usuario. Reglas en
-> `Docs/Game/3` §3.13 (más toques en §3.6, §3.10, Doc 4.2.1 Mercado, Doc 5.13.3); decisiones, motor, plan e
-> invariantes en `Consideraciones/Revamp_Caravanas_Definicion.md`. Batch NPC bit-idéntico en los cinco
-> commits.
->
-> Hecho: la caravana `comercial` es un **contenedor de carros** (cada uno con un animal) que deriva
-> capacidad/velocidad; casco vacío gratis + piezas (carro básico/reforzado, buey/caballo/camello);
-> `reservadaManual` fuera del reparto automático; **lanzamiento manual** con estado `preparando` cancelable;
-> **escolta sin héroe** (escuadrones cedidos por viaje, cupo por nivel de Mercado, cuentan Liderazgo,
-> combate y vuelta a casa derrotada). El bootstrap del Mercado se descartó por medición.
->
-> **Lo que queda son los trozos diferidos** — planificación horaria, cría de animales, visibilidad por
-> tamaño, inmunidad del camello al desierto, catálogo ampliado de carros, unificación con `Ejercito.suministro`.
-> Detalle de cada uno en §8.1.
+El **núcleo está implementado** (2026-09-08, Pasos 1-5): la caravana `comercial` es un contenedor de carros
+con animal que deriva capacidad/velocidad, casco vacío + piezas, lanzamiento manual con estado `preparando`,
+y escolta sin héroe. Reglas en `Docs/Game/3` §3.13; decisiones, motor y plan en
+`Consideraciones/Revamp_Caravanas_Definicion.md`.
 
 ### 8.1 Lo diferido — forma diseñada, implementación en un pase posterior
 
@@ -126,14 +94,15 @@ un jugador cerca (regla de niebla actual); las grandes deberían **llamar la ate
 al punto de ser visibles para asentamientos hasta cierta distancia, para que salgan a interceptarlas. Es el
 gancho de conflicto del enunciado. Falta: un umbral de tamaño (nº de carros y/o carga) que decida si la
 caravana entra en la proyección de niebla de otras Facciones y a qué radio, y que eso aplique **durante el
-estado `preparando`**, no solo en ruta. Engancha con Doc 5.12 (niebla de guerra) y con §12.
+estado `preparando`**, no solo en ruta. Engancha con Doc 5.12 (niebla de guerra).
 
-**d) Inmunidad del camello al desierto.** El camello "no se muere en los desiertos"; buey y caballo sí. Pero
-no existe un bioma `desierto` de primera clase (el tipo es `agua|costa|estepa|llanuraFertil|colina|montana|
-cima`; la aridez del Nilo es `estepa` de fertilidad baja). Sin terreno árido real, la inmunidad no tiene a
-qué agarrarse y el camello se queda como "opción media" a secas. Falta: o un `BiomaTipo` nuevo, o anclar el
-"desierto" a `estepa` por debajo de un umbral de fertilidad — y entonces una regla de *attrition* por tick
-sobre buey/caballo al cruzarlo. Posible que llegue con §10 (landmarks / worldgen).
+**d) Inmunidad del camello al desierto — POSPUESTO a fase posterior a Fase 0** (decisión del usuario,
+2026-09-09). El camello "no se muere en los desiertos"; buey y caballo sí. Pero no existe un bioma `desierto`
+de primera clase (el tipo es `agua|costa|estepa|llanuraFertil|colina|montana|cima`; la aridez del Nilo es
+`estepa` de fertilidad baja). Necesitaría o un `BiomaTipo` nuevo, o anclar el "desierto" a `estepa` bajo un
+umbral de fertilidad + una regla de *attrition* por tick sobre buey/caballo al cruzarlo. Es un cambio de
+worldgen que no aporta a Fase 0; se retoma cuando el mapa tenga terreno árido real. Mientras tanto el camello
+es una "opción media" a secas, aceptado.
 
 **e) Catálogo ampliado de carros.** El primer pase trae solo dos carros: el básico (Mercado) y uno
 "reforzado" (Carpintería) que solo da más capacidad. El enunciado habla de "varios tipos" fabricables en la
@@ -149,11 +118,6 @@ pase —una caravana adjunta a un ejército sigue siendo su propia entidad— po
 un refactor sin premio de juego inmediato. Falta: un tipo `Carro` compartido y que tanto `Ejercito` como
 `Caravana` lo compongan.
 
-*Lo que ya existe y el revamp respeta al implementar el primer pase:* flota propia construible
-(`construirCaravanaComercial`), cupo por Mercado y política (`cupo_caravana_extra`), cooldown de creación
-(`CARAVANA_COOLDOWN`), asignación automática por scoring (`ASIGNACION_CARAVANA`) como sustituto de Fase 0 de
-la carga manual, y la separación de capas motor / sesión / infra (ver el plan en el Definicion).
-
 ## 9. Eventos de asentamiento
 
 Los asentamientos tienen eventos propios como, por ejemplo, ser sitiados por bandidos (y los jugadores tienen
@@ -163,6 +127,9 @@ mantengan entretenido el juego.
 *Base ya disponible:* los campamentos de bandidos existen y atacan caravanas cada tick
 (`engine/bandidos.ts`), pero nunca asedian un asentamiento.
 
+*Incluye:* **NPCs hostiles más allá de los bandidos** — hoy los bandidos son la única amenaza no-jugador del
+mundo. Fauna peligrosa, incursores estacionales, u otros agresores ambientales caben aquí.
+
 ## 10. Landmarks
 
 Hay que añadir la creación de landmarks reconocibles en el mapa, de modo que el jugador que lo explora pueda
@@ -171,25 +138,13 @@ reconocer por dónde va sin perderse del todo — algo que ayude a reconocer qu�
 ## 11. Progresión de Liderazgo del jugador
 
 `Jugador` tiene hoy `liderazgoBase` y nada más. El propio código lo anota: *"el efectivo es base + progresión,
-pero la progresión todavía no está diseñada, así que hoy coinciden"*. Un jugador sin registro usa
-`LIDERAZGO.base`.
+pero la progresión todavía no está diseñada, así que hoy coinciden"* (`domain/types.ts`, `constants.ts` §1587).
+Un jugador sin registro usa `LIDERAZGO.base`.
 
 Falta decidir qué hace subir el liderazgo (combatir, ganar, tiempo al mando, cargo militar…) y con qué curva.
 La progresión de la **tropa** sí existe: la veteranía sube el poder del mismo escuadrón sin cambiarle nunca la
-identidad (Doc 5.8).
-
-## 12. Niebla de guerra — lo que queda
-
-El grueso está hecho (2026-09-04/05): la vista, la memoria por Facción, su proyección, el pintado en el
-cliente de jugador y las fronteras ajenas. Registro completo en
-`Consideraciones/Niebla_De_Guerra_Definicion.md`; reglas de juego en Doc 5.12.7/5.12.8.
-
-Queda:
-
-- **Paso 4 — visión compartida por alianza**: en vivo, no "último conocido", porque la alianza es cooperación
-  explícita.
-- **Paso 6 — calibración** del margen de asentamiento (`VISION.margenAsentamiento`) y del tamaño de celda de
-  la rejilla de exploración.
+identidad (Doc 5.8). La mecánica de Liderazgo ya admite un efectivo > base sin tocar nada — solo falta la
+fuente.
 
 ## 13. La capital como decisión del jugador
 
@@ -217,84 +172,6 @@ Dos cosas que hay que decidir con ello:
   (ver la escala del mundo), 400 son ~5 provincias — o sea que el "radio cómodo" de un reino ya está fijado en
   el código sin que nadie lo decidiera.
 
-## 13b. El jugador como entidad en el mundo
-
-El jugador como partícipe del mundo, no como ente volador superior. Es decir: el jugador tiene una ubicación
-en el mundo. Nace en mundo abierto, en un lugar aleatorio, cuando se une por primera vez al juego; luego funda
-un asentamiento, y al fundarlo entra en él; luego puede salir al mundo abierto y moverse por él, entrar a otros
-asentamientos y demás. Puede ver el mapa superior de lo conocido (ya aplicado) desde cualquier parte abriendo
-el mapa (tecla `,` o botón en alguna parte superior o inferior), pero nunca puede ver ningún asentamiento en el
-que no esté físicamente dentro. Se le puede prohibir la entrada a jugadores neutrales o enemigos a
-asentamientos (el gobernador).
-
-*Estado en código:* `Jugador` solo tiene `id` y `liderazgoBase` — no hay posición. El spawn aleatorio de
-onboarding depende de esta entrada.
-
-> **DISEÑO CERRADO (2026-09-06), pendiente de implementar.** Treinta y seis decisiones con el usuario en once rondas, con las reglas ya escritas en `Docs/Game/`,
-> representación en el motor, plan de 10 pasos, invariantes y puntos abiertos en
-> `Consideraciones/Jugador_Situado_Definicion.md`. Se diseñó **junto con §14**, que es su verbo, y sacó §15 a
-> mecánica propia.
->
-> Lo esencial: la regla "solo ves donde estás" es de visión **y** de acción; en ciudad ajena solo se ve la
-> capa pública; salir es `movilizarEjercito` con 0 escuadrones permitidos y carga elegida; la columna se
-> disuelve solo en tu residencia y se aparca a la puerta en cualquier otra; al desconectarse el viajero
-> desaparece en el punto donde quedó; y el movimiento es **clic a destino** —miniatura estilo Total War— así
-> que Fase 0 y Fase 1 comparten modelo y no hace falta netcode (§7 de ese documento).
->
-> **Segunda ronda:** nada se dispara por proximidad, la proximidad abre un **menú**. Tres radios: vista
-> 150/80, **inspección 40 con aviso al observado**, encuentro 15. La persecución pasa a ser un estado con
-> debuff de derrota. Eso revisa tres reglas de Doc 5.12 (§1.1c de ese documento).
->
-> **Tercera, cuarta y quinta ronda:** la línea entre **columna personal** y **ejército** la marca de dónde
-> viene la columna, no cuántos van dentro (§1.1f); un ejército solo nace en una plaza y nunca se queda vacío
-> en campo abierto; y **el héroe combate**, con el poder de una unidad de élite derivado del catálogo — lo
-> que obliga a reescribir Doc 5.1 ("el jugador nunca combate individualmente"). **Sin bloqueantes.**
-
-## 14. Movimiento libre del jugador
-
-> **Se diseñó junto con §13b** — es el verbo de esa mecánica y no tiene sujeto sin ella. Registro completo en
-> `Consideraciones/Jugador_Situado_Definicion.md`. La pregunta que esta ficha dejaba abierta ("ver si se puede
-> mover esta lógica a que sea 100% cliente") está **contestada: no.** La posición es T3 por el criterio del
-> propio `Docs/Arquitectura/9_Reglas_vs_Simulacion.md` —muta cada tick y decide el resultado de otros
-> jugadores (intercepciones, encuentros, asedios)—, así que es del servidor. Del cliente son la interpolación
-> entre ticks, la previsualización de la ruta y la cámara.
-
-Hay que implementar el movimiento libre de los jugadores en el mapa general. La salida del asentamiento ya
-está aplicada (como movilización de ejército, `movilizarEjercito`), pero en el caso de un jugador que sale
-solo sin tropas, este debería moverse más rápido que uno que lleva sus tropas y consumir casi nada de trigo al
-moverse por el mundo. Usando el clic sobre el mapa en el cliente — aquí estaría la base para poder hacerlo, o
-para ver si se puede mover esta lógica a que sea 100% cliente, a analizar.
-
-## 15. Comerciar con una plaza ajena desde su puerta
-
-Salió del diseño de §13b (`Consideraciones/Jugador_Situado_Definicion.md` §1.1d) y se sacó a ficha propia
-**por decisión del usuario**: era una de las cuatro opciones del menú de asentamiento —*entrar*, *asediar*,
-*comerciar*, *consultar*— y pesa más que las otras tres juntas. Las otras tres son un botón sobre algo que ya
-existe; esta es un sistema económico nuevo.
-
-Lo que se pidió: estando en el radio de puerta de un asentamiento que no es tuyo, poder abrir **su interfaz
-de comercio** — ver si tiene órdenes de compra o de venta activas, y venderle o comprarle contra ellas.
-
-*Estado en código:* nada. El comercio de hoy es **intra-Facción y desde asentamiento propio**: las órdenes de
-mercado (`colocarOrdenMercado`), el trueque (`proponerTrueque`) y las caravanas (`crearCaravana`) exigen
-ciudadanía o residencia, y se ejecutan sobre plazas de la propia Facción. Un forastero delante de una puerta
-no tiene hoy ninguna vía de comerciar.
-
-Lo que hay que decidir cuando se aborde:
-
-- **Qué puede comprar y vender un extranjero**, y contra qué. ¿Solo las órdenes ya publicadas del mercado, o
-  puede publicar las suyas?
-- **La comisión.** `COMISION` ya distingue misma Facción de fuera, así que hay dónde apoyarse, pero falta el
-  caso "ni ciudadano ni aliado, plantado en la puerta".
-- **Con qué se paga y dónde va lo comprado.** El forastero lleva un carro con capacidad (Doc 5.13), así que
-  su almacén es ese carro — comprar más de lo que cabe no puede ser posible.
-- **Si el Gobernador puede cerrar el mercado sin cerrar la puerta**, que es la palanca diplomática obvia:
-  dejar pasar pero no vender, o vender solo a aliados.
-- **Qué relación tiene con el trueque entre asentamientos**, que es la vía existente y funciona entre plazas,
-  no entre una persona y una plaza.
-
-Mientras esto no exista, la opción *Comerciar* no aparece en el menú de asentamiento: las otras tres sí.
-
 ## 16. Qué hace un huésped: vida dentro de una Facción NPC
 
 **Estado: idea, sin diseñar.** Sale de la entrada al mundo
@@ -305,8 +182,8 @@ La idea del usuario: **ganar posición dentro de una Facción IA haciendo cosas 
 caravanas, explorar, buscar cosas en el mapa de campaña. Acciones que sirven de tutorial y que dan recompensa
 dentro de esa misma Facción.
 
-**Lo que ya existe y reutilizaría:** la escolta de caravanas (`adjuntarCaravana`, Doc 5.13.3), la exploración
-(`engine/exploracion.ts`), la reputación de Facción y la experiencia (`REPUTACION`,
+**Lo que ya existe y reutilizaría:** la escolta de caravanas (`Caravana.escolta` / `adjuntarCaravana`, Doc
+5.13.3), la exploración (`engine/exploracion.ts`), la reputación de Facción y la experiencia (`REPUTACION`,
 `aplicarAjustesExperiencia`).
 
 **Lo que no existe, y es el corazón de la mecánica:** *standing por jugador dentro de una Facción*. Hoy la
@@ -317,6 +194,11 @@ subir ni nada que recompensar.
 ¿aval para fundar?); y si ese standing sobrevive a marcharse de la Facción.
 
 ## 17. `guarnecer`: defender una plaza propia marchando a ella
+
+> **Plan técnico escrito (2026-09-09), en desarrollo.** 4 pasos por capas en
+> `Consideraciones/Ocupacion_Post_Conquista_Definicion.md` §11. Decisiones: el jugador queda dentro de la
+> plaza; las caravanas adjuntas pasan a `'aparcada'` (intercambian con el almacén anfitrión, salen solo
+> enganchadas a un ejército de la Facción o enviadas a su origen). Sin migración de snapshot.
 
 **Estado: forma diseñada, separada a propósito del bloque de ocupación post-conquista.** Un ejército de la
 Facción A, aparcado en la puerta de una plaza de la Facción A que NO es la residencia de sus jugadores, puede
@@ -339,9 +221,110 @@ como acción o si arrancar la marcha con destino "guarnecer X" ya lo implica.
 
 Diseño detallado en `Consideraciones/Ocupacion_Post_Conquista_Definicion.md` §2.3.
 
+## 18. Taberna + intel como asset
 
--------------------- agregado
+**Estado: idea, sin diseñar (`Consideraciones/Taberna_Intel_Definicion.md`, aún vacío).** Con la niebla de
+guerra ya en el juego, saber qué pasa en otro sitio gana valor — y ese valor es el **sink recurrente de oro**
+que la calibración de la economía del oro asume que va a llegar
+(`Economia_Del_Oro_Definicion.md`, "Fuera de este plan").
 
-tabernas e intel: con la mencanica de niebla de guerra que agregamos ahora el saber que esta pasando en otro sitio gana valor, agregaremos un edificio nuevo llamado taberna, en la taberna se puede comprar intel o mapas, que son para saber que esta pasando en otro sitio por un tiempo limitado, o como esta la situacion actual de alguna faccion. no solo la info visual en el mapa si no informacion interna de asentamientos, intel como asset. se puede comprar el layout de un asentamiento solamenta como info para prepara asedios a futuro)
+La idea del usuario: un edificio nuevo, la **taberna**, donde se compra **intel** o **mapas** — información
+con **revelado temporal**: qué está pasando en otro sitio durante un tiempo limitado, o la situación actual
+de una Facción. No solo lo visual del mapa: también información interna de asentamientos. El **layout de un
+asentamiento** se puede comprar como asset, para preparar asedios a futuro.
 
-mapa politico como entidad, es de donde a donde llegan las fronteras actuales.
+*Estado en código:* nada. No hay edificio `taberna` ni concepto de "intel como asset".
+
+## 19. El mapa político como entidad
+
+**Estado: idea, sin diseñar.** Las fronteras "de dónde a dónde llegan" como una entidad de primera clase, no
+algo que se recalcula al vuelo. Hoy las zonas de influencia y las fronteras ajenas se derivan
+(`engine/zones.ts`, fronteras ajenas 2026-09-05); no existe un "mapa político" consultable como objeto.
+
+## 20. Tecnología: árbol de desarrollo propio, 3 vías, Aedas
+
+**Estado: diseño en el canon (`Docs/Game/6_Sistema_de_Tecnologia_y_Aedas.md`), `código: ✘` — nada.** Ni
+árbol, ni las tres vías de acceso (comercio / desarrollo propio / Aedas), ni la compra de tecnología con oro,
+ni el sistema de Aedas. Lo único con el nombre "Aeda" en el código es la narración de cambios de título de
+servidor (`engine/titulos.ts`), que no tiene relación con esto.
+
+Abierto en el propio canon: si el árbol del desarrollo propio es estructurado o libre/emergente
+(checklist "Tecnología").
+
+## 21. Los 4 gremios escasos a nivel de servidor
+
+**Estado: diseño parcial en el canon (Doc 2.10), `código: ✘` — nada.** Los 4 gremios (Comerciantes,
+Artesanos, Constructores, Ladrones), escasos a nivel de servidor, con una tirada periódica sujeta a cuatro
+requisitos simultáneos (reputación > 90, título de servidor específico, nivel de asentamiento en el máximo,
+mantenimiento > 90 %), y su mecanismo de pérdida. El `patioDeGremios` de `constants.ts` es solo una parcela
+decorativa del trazado urbano, sin relación con esta mecánica.
+
+Pendiente de decidir (Preguntas_Abiertas §14): valores numéricos de cada requisito por gremio, el título de
+servidor asociado a cada uno, el detalle de beneficios de Comerciantes/Artesanos/Constructores, y si hay
+margen de gracia antes de perder el gremio.
+
+## 22. Exilio como política de soberanía
+
+**Estado: diseño cerrado en el canon (Doc 5.9 / 2.8), `código: ✘` — nada.** El exilio como palanca de
+soberanía de una Facción sobre sus miembros. Sin implementar.
+
+## 23. Materiales exóticos
+
+**Estado: `código: ✘` — no existe ese tipo de recurso.** Los pide el diseño de la Maravilla (Doc 6 / §24) y
+posiblemente el catálogo de commodities de Nobleza. Hoy la Maravilla se paga con un coste placeholder de
+recursos ya existentes. Falta: qué materiales son, de dónde salen (¿nodos raros? ¿bioma? ¿solo comercio de
+larga distancia?), y qué los consume además de la Maravilla.
+
+## 24. Ciclo de servidor de 12 meses + Maravilla + legado NPC
+
+**Estado: el EDIFICIO Maravilla implementado (único, nivel de asentamiento máximo, vía cola manual, coste
+placeholder); el CICLO no.** Diseño cerrado en `Consideraciones/Roadmap_Escalado.md` Eje 4 y
+`Preguntas_Abiertas.md` §14d: 12 meses de servidor, cierre anticipado por la primera Facción que complete la
+Maravilla, y la Facción ganadora persiste como Facción-legado NPC de solo mantenimiento y comercio.
+
+Requiere infraestructura de servidor / multi-instancia (reset, generación del nuevo mapa, destino de las
+Facciones no ganadoras, si la legado es atacable). Nada de eso tiene código. Ver la lista completa en el
+Roadmap.
+
+## 25. Coste/beneficio mecánico de las ordenanzas de trazado
+
+**Estado: las cinco ordenanzas existen y funcionan (`código: ◐`), pero no tienen coste/beneficio propio.** Las
+cuatro ordenanzas de perfil de trazado del Maestro de Obras (`postura_defensiva` / `arterias_comerciales` /
+`barrios_gremiales` / `plazas_mayores`) más `lineas_produccion` orientan *cómo* se distribuye la ciudad, y ya
+compiten por el único slot de Maestro de Obras. Pero compiten en desventaja contra Vía Rápida (−25 % de tiempo
+de obra), que sí da un beneficio medible.
+
+Falta: darle a cada ordenanza un coste o un beneficio mecánico propio, de modo que elegir una sobre otra sea
+una decisión con precio. Anotado como pendiente en el propio `constants.ts`. Diseño del trazado en
+`Consideraciones/Vista_Asentamiento_Trazado_Urbano.md`.
+
+## 26. Los beneficios de ciudadanía sin implementar
+
+**Estado: `código: ◐` — 2 de 5.** La ciudadanía da hoy en el motor el nivel intermedio de comisiones y la
+residencia/reclutamiento. Los otros tres beneficios del diseño (residencia en cualquier asentamiento de la
+Facción, protección militar explícita, voz en política exterior) no están cableados. Doc 2 (`CIUDADANIA`).
+
+## 27. Identidad visual y de audio
+
+**Estado: `código: ✘` — nada.** Sigilo / estandarte de Facción, identidad visual y de audio de imperios y
+títulos. Sin referencias estéticas concretas decididas (micénica, hitita, mesopotámica…). Preguntas_Abiertas
+§9. Es sobre todo trabajo de un repo de interfaz aparte, pero la *representación* (qué campo lleva el sigilo,
+dónde vive) toca este repo.
+
+## 28. Declaración formal de guerra
+
+**Estado: `código: ✘` — nada.** Hoy el combate es un cálculo puntual entre columnas y plazas; no existe un
+estado de "guerra activa" entre dos Facciones. Falta decidir si declarar la guerra requiere una condición
+previa (frontera compartida, casus belli) o es libre, y qué habilita (Preguntas_Abiertas §1). Bloquea el
+bloqueo/escolta militar de chokepoints que quedó a medias en Fase 0.3 (Preguntas_Abiertas §3).
+
+## 29. Curva de progresión inicial gradual
+
+**Estado: decisión de diseño real pendiente (Preguntas_Abiertas §14e), `código: ✘`.** El inicio del juego
+debe ser suave, con sistemas desbloqueándose progresivamente en vez de exponer los 7 cargos, la
+Liga/vasallaje, la reputación y los gremios desde el primer tick.
+
+Sin resolver: qué sistemas se difieren y cuáles no; si el desbloqueo se ata al nivel de asentamiento, al nivel
+de Facción, al tiempo o a una combinación; y si aplica solo a la interfaz (ocultar) o también a las reglas
+(bloquear). Distinto de §16 (contenido del vestíbulo) y del onboarding ya hecho (spawn + fundación grupal):
+esto es el ritmo de la primera hora una vez dentro.

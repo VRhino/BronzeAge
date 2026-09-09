@@ -1,8 +1,11 @@
 # El jugador como entidad situada en el mundo — cierre de diseño y plan de ejecución
 
-> **Estado (2026-09-06): DISEÑO CERRADO, canon escrito, sin implementar.** Treinta y seis decisiones con el usuario en once rondas, las
-> derivadas resueltas y el plan escrito. Ni una línea de motor todavía — mismo criterio que
-> `Murallas_Definicion.md` y `Movimiento_Ejercitos_Definicion.md`: la especificación ANTES de tocar el código.
+> **Estado (2026-09-07): IMPLEMENTADO.** Plan de ejecución §5 completo (pasos 1-9, onboarding incluido). Cierra
+> las entradas que fueron §13b (el jugador como entidad situada) y §14 (movimiento libre) de
+> `Docs/Mecanicas a desarrollar.md`, y desbloqueó el spawn aleatorio de onboarding del checklist. Queda solo
+> calibración de `MOVIMIENTO.*` / `VISION.*` (placeholders). Diseño cerrado el 2026-09-06: treinta y seis
+> decisiones con el usuario en once rondas, las derivadas resueltas, el plan escrito y el canon en `Docs/Game/`
+> ANTES de tocar el código — mismo criterio que `Murallas_Definicion.md` y `Movimiento_Ejercitos_Definicion.md`.
 >
 > La **segunda ronda (§1.1b)** cambió el modelo de interacción: nada se dispara por proximidad, la proximidad
 > abre un menú. Eso toca canon vigente (§1.1c) y saca el comercio con plaza ajena a mecánica propia (§1.1d).
