@@ -22,6 +22,8 @@ import fastifyCors from '@fastify/cors';
 import fastifySwagger from '@fastify/swagger';
 import { crearRegistroProveedores } from '../acceso/proveedorIdentidad';
 import type { ContextoAutenticacion } from '../acceso/servicioAutenticacion';
+import type { AlmacenDeObjetos } from './almacen/almacenDeObjetos';
+import { crearAlmacenEnDisco } from './almacen/enDisco';
 import { proveedoresPorDefecto } from './identidad/proveedoresActivos';
 import { crearRepositorioIdentidadEnMemoria } from './identidad/repositorioEnMemoria';
 import { crearDirectorioDeAdministradores, type AdministradorConfigurado } from './identidad/administradoresGlobales';
@@ -38,8 +40,14 @@ import { opcionesOpenApi } from './openapi';
 import type { DependenciasDeRutas } from './rutas/contexto';
 
 export interface OpcionesServidor {
-  /** Directorio donde `persistenciaPartida.ts` guarda los snapshots. */
+  /** Directorio de disco. Se usa (a) como raíz del `AlmacenDeObjetos` por defecto —snapshots, eventos,
+   * auditoría, identidad— si no se pasa `almacen`, y (b) para el subsistema de respaldos (`respaldos.ts`),
+   * que es de disco a propósito. */
   directorio: string;
+  /** Almacén de bytes para toda la persistencia salvo respaldos. Por defecto, disco bajo `directorio`
+   * (`crearAlmacenEnDisco`). Se inyecta otro (object storage, base de datos) para desplegar en un proveedor
+   * sin disco persistente — ver `server/almacen/almacenDeObjetos.ts`. */
+  almacen?: AlmacenDeObjetos;
   /** Contexto de autenticación (proveedores + repositorio). Por defecto, solo el proveedor de desarrollo
    * sobre un repositorio en memoria — inyectable para tests o para un proceso con otros proveedores. */
   identidad?: ContextoAutenticacion;
@@ -109,19 +117,22 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
     repositorio: crearRepositorioIdentidadEnMemoria(),
   };
 
+  // Almacén de persistencia: el inyectado, o disco bajo `directorio` por defecto.
+  const almacen = opciones.almacen ?? crearAlmacenEnDisco(opciones.directorio);
+
   const ahora = opciones.ahora ?? (() => new Date().toISOString());
   const deps: DependenciasDeRutas = {
     identidad,
     administradores: crearDirectorioDeAdministradores(opciones.administradoresGlobales ?? [], identidad.repositorio),
     // Mismo reloj de pared que el resto del servidor: así el reloj de mundo de cada partida y su catch-up
     // (D5, `RunnerDePartida.iniciarRelojDeMundo`) son inyectables en tests, no solo el reloj del sistema.
-    partidas: new RegistroDePartidas(opciones.directorio, opciones.intervaloTickMs, ahora),
+    partidas: new RegistroDePartidas(almacen, opciones.intervaloTickMs, ahora),
     ahora,
     hub: opciones.hub ?? new HubDeDifusion(),
-    // Fase E2. Mismo directorio que los snapshots —una partida y su auditoría se copian, archivan y borran
-    // juntas— y el mismo reloj de pared inyectado que el resto del servidor, para que un test pueda fechar
-    // sus líneas de forma determinista en vez de depender de la hora del sistema.
-    auditoria: new RegistroDeAuditoria(opciones.directorio, ahora),
+    // Fase E2. Mismo almacén que los snapshots —una partida y su auditoría se archivan y podan juntas— y el
+    // mismo reloj de pared inyectado que el resto del servidor, para que un test pueda fechar sus líneas de
+    // forma determinista en vez de depender de la hora del sistema.
+    auditoria: new RegistroDeAuditoria(almacen, ahora),
     codigoRegistro: opciones.codigoRegistro,
   };
 
@@ -129,7 +140,9 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
   // su cola (un tick a medio persistir no se aborta). `app.close()` —lo llama el handler de SIGINT/SIGTERM
   // en `index.ts`, y todos los tests en su `afterEach`— dispara este hook.
   // Mantenimiento (Fase E2): respaldos y poda periódicos. Solo si se configura.
-  const mantenimiento = opciones.mantenimiento ? new TareaDeMantenimiento(opciones.directorio, opciones.mantenimiento, ahora) : undefined;
+  const mantenimiento = opciones.mantenimiento
+    ? new TareaDeMantenimiento(almacen, opciones.directorio, opciones.mantenimiento, ahora)
+    : undefined;
   mantenimiento?.iniciar();
 
   app.addHook('onClose', async () => {
@@ -140,6 +153,10 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
     await deps.auditoria.drenar();
     await opciones.alCerrar?.();
   });
+
+  // Health check para el orquestador del hosting (Render/Fly/...). Fuera de `/v1` y sin autenticar: es lo que
+  // un load balancer sondea para decidir si el proceso está vivo, no parte del contrato de la API.
+  app.get('/salud', async () => ({ ok: true }));
 
   // Todas las superficies bajo /v1 (Fase C6) — ver el comentario de cabecera.
   app.register(

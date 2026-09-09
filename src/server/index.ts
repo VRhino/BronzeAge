@@ -19,14 +19,23 @@
 // los ticks vencidos tras un reinicio. Sin declarar, `undefined` — ninguna partida avanza sola (ver el
 // comentario de `RegistroDePartidas`). Con "mundo = tiempo real" (doc 10 §2) el valor es 60000 (=
 // `SIMULACION.duracionTickMs`): un minuto real por tick.
-import { join } from 'node:path';
+//
+// `ALMACEN_URL` elige el backend de persistencia (`server/almacen/`): sin declararlo, disco local bajo
+// `DIRECTORIO_PARTIDAS`; con una URL de libSQL (`libsql://…`, `file:…`) usa esa base — es lo que hace falta
+// para desplegar donde el disco es efímero. `ALMACEN_TOKEN` es el authToken si el proveedor lo pide (Turso).
 import { crearServidor } from './api';
 import { crearRegistroProveedores } from '../acceso/proveedorIdentidad';
+import type { AlmacenDeObjetos } from './almacen/almacenDeObjetos';
+import { crearAlmacenEnDisco } from './almacen/enDisco';
+import { crearAlmacenEnLibsql } from './almacen/enLibsql';
 import { parsearAdministradores } from './identidad/administradoresGlobales';
 import { proveedoresDeProceso } from './identidad/proveedoresActivos';
-import { crearRepositorioIdentidadEnDisco } from './identidad/repositorioEnDisco';
+import { crearRepositorioIdentidadPersistente } from './identidad/repositorioPersistente';
 
-const PUERTO = Number(process.env.PUERTO ?? 3000);
+// `PORT` primero: es lo que inyecta la mayoría de PaaS (Render, Fly, Railway...). `PUERTO` se mantiene para
+// el uso local ya existente.
+const PUERTO = Number(process.env.PORT ?? process.env.PUERTO ?? 3000);
+const ALMACEN_URL = process.env.ALMACEN_URL?.trim() || undefined;
 const DIRECTORIO_PARTIDAS = process.env.DIRECTORIO_PARTIDAS ?? './partidas';
 const ADMINISTRADORES = parsearAdministradores(process.env.ADMINISTRADORES);
 // Código de invitación para `POST /v1/registro` (alta de cuenta local con contraseña). Sin declararlo, el
@@ -50,23 +59,30 @@ const MANTENIMIENTO = process.env.MANTENIMIENTO_INTERVALO_MS
   : undefined;
 
 async function arrancar(): Promise<void> {
-  // El dominio de acceso (usuarios, sesiones, membresías) se respalda en disco, junto a las partidas: sin
+  // Un solo almacén para TODA la persistencia (snapshots, eventos, auditoría, identidad). Disco si no hay
+  // `ALMACEN_URL`; si la hay, libSQL (Turso u otro) — para desplegar donde el disco no persiste.
+  const almacen: AlmacenDeObjetos = ALMACEN_URL
+    ? await crearAlmacenEnLibsql({ url: ALMACEN_URL, authToken: process.env.ALMACEN_TOKEN })
+    : crearAlmacenEnDisco(DIRECTORIO_PARTIDAS);
+
+  // El dominio de acceso (usuarios, sesiones, membresías, credenciales) se persiste junto a las partidas: sin
   // esto, un reinicio del proceso deja a todos sin sesión y sin membresía (cierre de Fase C).
-  const identidadEnDisco = await crearRepositorioIdentidadEnDisco(join(DIRECTORIO_PARTIDAS, 'identidad.json'));
+  const identidad = await crearRepositorioIdentidadPersistente(almacen);
 
   const app = crearServidor({
     directorio: DIRECTORIO_PARTIDAS,
+    almacen,
     administradoresGlobales: ADMINISTRADORES,
     origenesPermitidos: ORIGENES_PERMITIDOS,
     intervaloTickMs: INTERVALO_TICK_MS,
     mantenimiento: MANTENIMIENTO,
     identidad: {
-      proveedores: crearRegistroProveedores(proveedoresDeProceso(identidadEnDisco.repositorio)),
-      repositorio: identidadEnDisco.repositorio,
+      proveedores: crearRegistroProveedores(proveedoresDeProceso(identidad.repositorio)),
+      repositorio: identidad.repositorio,
     },
     codigoRegistro: CODIGO_REGISTRO,
     // Cerrar el servidor drena las escrituras de identidad pendientes (ver `alCerrar` en `api.ts`).
-    alCerrar: () => identidadEnDisco.esperarEscrituras(),
+    alCerrar: () => identidad.esperarEscrituras(),
   });
 
   // Apagado limpio: `app.close()` ya drena las escrituras de identidad por el gancho `alCerrar`, así que
@@ -78,7 +94,13 @@ async function arrancar(): Promise<void> {
   }
 
   await app.listen({ port: PUERTO, host: '0.0.0.0' });
-  console.log(`servidor escuchando en :${PUERTO} — partidas en '${DIRECTORIO_PARTIDAS}'`);
+  console.log(`servidor escuchando en :${PUERTO}`);
+  if (ALMACEN_URL) {
+    console.log(`persistencia: libSQL (${ALMACEN_URL.replace(/\/\/[^@/]*@/, '//***@')})`);
+  } else {
+    console.log(`persistencia: disco local en '${DIRECTORIO_PARTIDAS}'`);
+    console.warn('AVISO: sin ALMACEN_URL — la persistencia es de disco local. En un host con disco efimero se pierde en cada reinicio.');
+  }
   if (ADMINISTRADORES.length === 0) {
     console.warn('AVISO: sin ADMINISTRADORES configurados — nadie puede crear partidas.');
     console.warn("       ej: ADMINISTRADORES='dev:jefa' npm run server");

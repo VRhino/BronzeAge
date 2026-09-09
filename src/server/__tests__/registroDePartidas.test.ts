@@ -5,12 +5,15 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { crearAlmacenEnDisco } from '../almacen/enDisco';
 import { RegistroDePartidas } from '../registroDePartidas';
 
 let directorio: string;
+let almacen: ReturnType<typeof crearAlmacenEnDisco>;
 
 beforeEach(async () => {
   directorio = await mkdtemp(join(tmpdir(), 'bronzeage-registro-'));
+  almacen = crearAlmacenEnDisco(directorio);
 });
 
 afterEach(async () => {
@@ -23,7 +26,7 @@ function esperar(ms: number): Promise<void> {
 
 describe('RegistroDePartidas — fuente de ticks (Fase C12)', () => {
   it('sin intervaloTickMs (default), una partida abierta NO avanza sola', async () => {
-    const registro = new RegistroDePartidas(directorio);
+    const registro = new RegistroDePartidas(almacen);
     const runner = await registro.abrir('g1', { seed: 1 });
 
     await esperar(100);
@@ -32,7 +35,7 @@ describe('RegistroDePartidas — fuente de ticks (Fase C12)', () => {
   });
 
   it('con intervaloTickMs configurado, una partida recién abierta avanza sola', async () => {
-    const registro = new RegistroDePartidas(directorio, 10);
+    const registro = new RegistroDePartidas(almacen, 10);
     const runner = await registro.abrir('g1', { seed: 1 });
 
     await esperar(150);
@@ -43,7 +46,7 @@ describe('RegistroDePartidas — fuente de ticks (Fase C12)', () => {
   });
 
   it('con intervaloTickMs configurado, una partida creada por `descartarYCrear` también avanza sola', async () => {
-    const registro = new RegistroDePartidas(directorio, 10);
+    const registro = new RegistroDePartidas(almacen, 10);
     const runner = await registro.descartarYCrear('g1', { seed: 1 });
 
     await esperar(150);
@@ -60,13 +63,13 @@ describe('RegistroDePartidas — fuente de ticks (Fase C12)', () => {
     const reloj = () => new Date(ahoraMs).toISOString();
 
     // Se crea y persiste (tick 0) con un `RegistroDePartidas` que NO avanza solo.
-    const primero = new RegistroDePartidas(directorio, undefined, reloj);
+    const primero = new RegistroDePartidas(almacen, undefined, reloj);
     await primero.abrir('g-catchup', { seed: 5 });
     await primero.cerrar();
 
     // "Reinicio del proceso" 4 minutos después, esta vez con reloj de mundo de 1 min por tick.
     ahoraMs += 4 * 60_000;
-    const segundo = new RegistroDePartidas(directorio, 60_000, reloj);
+    const segundo = new RegistroDePartidas(almacen, 60_000, reloj);
     const runner = await segundo.abrir('g-catchup', { seed: 5 });
     await runner.esperarColaVacia();
     await segundo.cerrar();

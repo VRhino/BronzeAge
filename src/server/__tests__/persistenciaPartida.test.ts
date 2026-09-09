@@ -6,6 +6,7 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { crearAlmacenEnDisco } from '../almacen/enDisco';
 import { GameSession } from '../../session/gameSession';
 import { instanteDeTick } from '../../session/estado';
 import { crearFaccion } from '../../session/comandos/crearFaccion';
@@ -44,9 +45,11 @@ function sinHistorial(estado: ReturnType<GameSession['getState']>) {
 }
 
 let directorio: string;
+let almacen: ReturnType<typeof crearAlmacenEnDisco>;
 
 beforeEach(async () => {
   directorio = await mkdtemp(join(tmpdir(), 'bronzeage-persistencia-'));
+  almacen = crearAlmacenEnDisco(directorio);
 });
 
 afterEach(async () => {
@@ -55,14 +58,14 @@ afterEach(async () => {
 
 describe('guardarPartida / cargarPartida', () => {
   it('cargarPartida devuelve null si no hay snapshot para ese gameId', async () => {
-    expect(await cargarPartida(directorio, 'no-existe')).toBeNull();
+    expect(await cargarPartida(almacen, 'no-existe')).toBeNull();
   });
 
   it('lo que se carga reconstruye el mismo estado que se guardó (incluido el mapa, regenerado de la seed)', async () => {
     const sesion = partidaEnMarcha();
-    await guardarPartida(directorio, sesion, MOMENTO);
+    await guardarPartida(almacen, sesion, MOMENTO);
 
-    const cargada = await cargarPartida(directorio, sesion.gameId);
+    const cargada = await cargarPartida(almacen, sesion.gameId);
 
     expect(cargada).not.toBeNull();
     // El mapa no se guarda (formato v13): `cargarPartida` lo regenera con `generarMapa(config)`. Que esta
@@ -73,7 +76,7 @@ describe('guardarPartida / cargarPartida', () => {
 
   it('el snapshot en disco NO contiene el terreno ni el historial (formato v13)', async () => {
     const sesion = partidaEnMarcha();
-    await guardarPartida(directorio, sesion, MOMENTO);
+    await guardarPartida(almacen, sesion, MOMENTO);
     const { partida } = JSON.parse(await readFile(join(directorio, `${sesion.gameId}.json`), 'utf-8')) as SnapshotPartida;
 
     expect(partida.state.eventosDominio).toEqual([]);
@@ -85,8 +88,8 @@ describe('guardarPartida / cargarPartida', () => {
     // Repite la prueba de continuidad de `session/__tests__/gameSession.test.ts` pero a través del disco de
     // verdad — es el camino que de verdad usará la reconstrucción de un incidente de producción.
     const sesion = partidaEnMarcha();
-    await guardarPartida(directorio, sesion, MOMENTO);
-    const cargada = (await cargarPartida(directorio, sesion.gameId))!.sesion;
+    await guardarPartida(almacen, sesion, MOMENTO);
+    const cargada = (await cargarPartida(almacen, sesion.gameId))!.sesion;
 
     for (let i = 0; i < 5; i++) {
       sesion.avanzarTick();
@@ -97,98 +100,98 @@ describe('guardarPartida / cargarPartida', () => {
   });
 
   it('la escritura es atómica: no queda ningún .tmp tras un guardado exitoso', async () => {
-    await guardarPartida(directorio, partidaEnMarcha(), MOMENTO);
+    await guardarPartida(almacen, partidaEnMarcha(), MOMENTO);
     const archivos = await readdir(directorio);
     expect(archivos.every((f) => !f.endsWith('.tmp'))).toBe(true);
   });
 
   it('guardar dos veces la MISMA versión no lanza — es un reintento válido, no un conflicto', async () => {
     const sesion = partidaEnMarcha();
-    await guardarPartida(directorio, sesion, MOMENTO);
-    await expect(guardarPartida(directorio, sesion, MOMENTO)).resolves.toBeUndefined();
+    await guardarPartida(almacen, sesion, MOMENTO);
+    await expect(guardarPartida(almacen, sesion, MOMENTO)).resolves.toBeUndefined();
   });
 
   it('rechaza sobreescribir con una versión MENOR que la que ya hay en disco, y no toca el archivo', async () => {
     const sesion = partidaEnMarcha();
-    await guardarPartida(directorio, sesion, MOMENTO); // versión N en disco
+    await guardarPartida(almacen, sesion, MOMENTO); // versión N en disco
 
-    const antesDelConflicto = (await cargarPartida(directorio, sesion.gameId))?.sesion ?? null;
+    const antesDelConflicto = (await cargarPartida(almacen, sesion.gameId))?.sesion ?? null;
 
     // Una sesión "atrasada" (por ejemplo, una réplica en memoria que no vio los últimos comandos) intenta
     // guardar una versión anterior a la que ya hay en disco.
     const atrasada = GameSession.importar(sesion.exportar());
-    await expect(guardarPartida(directorio, atrasada, MOMENTO)).resolves.toBeUndefined(); // misma versión: ok
+    await expect(guardarPartida(almacen, atrasada, MOMENTO)).resolves.toBeUndefined(); // misma versión: ok
     sesion.avanzarTick(); // sesion avanza; `atrasada` se queda atrás
-    await guardarPartida(directorio, sesion, MOMENTO); // disco ahora en versión N+1
+    await guardarPartida(almacen, sesion, MOMENTO); // disco ahora en versión N+1
 
-    await expect(guardarPartida(directorio, atrasada, MOMENTO)).rejects.toThrow(ConflictoDeVersionError);
+    await expect(guardarPartida(almacen, atrasada, MOMENTO)).rejects.toThrow(ConflictoDeVersionError);
 
     // El archivo sigue reflejando la versión N+1 que había antes del intento fallido, no algo a medias.
-    const trasElConflicto = (await cargarPartida(directorio, sesion.gameId))?.sesion ?? null;
+    const trasElConflicto = (await cargarPartida(almacen, sesion.gameId))?.sesion ?? null;
     expect(trasElConflicto!.getState().version).toBe(sesion.getState().version);
     expect(trasElConflicto!.getState().version).toBeGreaterThan(antesDelConflicto!.getState().version);
   });
 
   it('rechaza un snapshot de un formato de envoltorio que esta build no espera', async () => {
     const sesion = partidaEnMarcha();
-    await guardarPartida(directorio, sesion, MOMENTO);
+    await guardarPartida(almacen, sesion, MOMENTO);
     const ruta = join(directorio, `${sesion.gameId}.json`);
     const snapshot = JSON.parse(await readFile(ruta, 'utf-8')) as SnapshotPartida;
     snapshot.formatoVersion = FORMATO_SNAPSHOT_VERSION + 1;
     await writeFile(ruta, JSON.stringify(snapshot), 'utf-8');
 
-    await expect(cargarPartida(directorio, sesion.gameId)).rejects.toThrow(FormatoSnapshotNoSoportadoError);
+    await expect(cargarPartida(almacen, sesion.gameId)).rejects.toThrow(FormatoSnapshotNoSoportadoError);
   });
 
   it('un snapshot de un formato ANTERIOR se rechaza — ya no se migra (cadena retirada 2026-09-09)', async () => {
     const sesion = partidaEnMarcha();
-    await guardarPartida(directorio, sesion, MOMENTO);
+    await guardarPartida(almacen, sesion, MOMENTO);
     const ruta = join(directorio, `${sesion.gameId}.json`);
     const snapshot = JSON.parse(await readFile(ruta, 'utf-8')) as SnapshotPartida;
     snapshot.formatoVersion = FORMATO_SNAPSHOT_VERSION - 1;
     await writeFile(ruta, JSON.stringify(snapshot), 'utf-8');
 
-    await expect(cargarPartida(directorio, sesion.gameId)).rejects.toThrow(FormatoSnapshotNoSoportadoError);
+    await expect(cargarPartida(almacen, sesion.gameId)).rejects.toThrow(FormatoSnapshotNoSoportadoError);
   });
 
   it('rechaza un snapshot generado con otra versión del generador de mundo', async () => {
     const sesion = partidaEnMarcha();
-    await guardarPartida(directorio, sesion, MOMENTO);
+    await guardarPartida(almacen, sesion, MOMENTO);
     const ruta = join(directorio, `${sesion.gameId}.json`);
     const snapshot = JSON.parse(await readFile(ruta, 'utf-8')) as SnapshotPartida;
     snapshot.partida.worldgenVersion += 1;
     await writeFile(ruta, JSON.stringify(snapshot), 'utf-8');
 
-    await expect(cargarPartida(directorio, sesion.gameId)).rejects.toThrow(WorldgenVersionNoCoincideError);
+    await expect(cargarPartida(almacen, sesion.gameId)).rejects.toThrow(WorldgenVersionNoCoincideError);
   });
 
   it('dos partidas distintas en el mismo directorio no se pisan', async () => {
     const a = partidaEnMarcha(1);
     const b = GameSession.crear('otra-partida', { seed: 2 });
-    await guardarPartida(directorio, a, MOMENTO);
-    await guardarPartida(directorio, b, MOMENTO);
+    await guardarPartida(almacen, a, MOMENTO);
+    await guardarPartida(almacen, b, MOMENTO);
 
-    expect((await cargarPartida(directorio, a.gameId))!.sesion.getState().asentamientos).toHaveLength(1);
-    expect((await cargarPartida(directorio, b.gameId))!.sesion.getState().asentamientos).toHaveLength(0);
+    expect((await cargarPartida(almacen, a.gameId))!.sesion.getState().asentamientos).toHaveLength(1);
+    expect((await cargarPartida(almacen, b.gameId))!.sesion.getState().asentamientos).toHaveLength(0);
   });
 });
 
 describe('listarPartidas (Fase C12: descubrimiento)', () => {
   it('directorio inexistente: lista vacía, no un error', async () => {
-    expect(await listarPartidas(join(directorio, 'no-existe-todavia'))).toEqual([]);
+    expect(await listarPartidas(crearAlmacenEnDisco(join(directorio, 'no-existe-todavia')))).toEqual([]);
   });
 
   it('directorio vacío: lista vacía', async () => {
-    expect(await listarPartidas(directorio)).toEqual([]);
+    expect(await listarPartidas(almacen)).toEqual([]);
   });
 
   it('lee TODAS las partidas guardadas, no solo las que hay abiertas en memoria (no hay "memoria" aquí)', async () => {
     const a = partidaEnMarcha(1);
     const b = GameSession.crear('otra-partida', { seed: 2 });
-    await guardarPartida(directorio, a, MOMENTO);
-    await guardarPartida(directorio, b, MOMENTO);
+    await guardarPartida(almacen, a, MOMENTO);
+    await guardarPartida(almacen, b, MOMENTO);
 
-    const partidas = await listarPartidas(directorio);
+    const partidas = await listarPartidas(almacen);
 
     expect(partidas.map((p) => p.gameId).sort()).toEqual([a.gameId, b.gameId].sort());
     const resumenA = partidas.find((p) => p.gameId === a.gameId)!;
@@ -199,14 +202,14 @@ describe('listarPartidas (Fase C12: descubrimiento)', () => {
   });
 
   it('ignora un .json del directorio que no sea una partida — `identidad.json` vive AQUI', async () => {
-    // Reproduce el 500 real de `GET /admin/partidas`: `crearRepositorioIdentidadEnDisco` guarda
+    // Reproduce el 500 real de `GET /admin/partidas`: el repositorio de identidad guarda
     // `identidad.json` en el mismo directorio que los snapshots (`server/index.ts`), asi que el filtro por
     // extension lo colaba y `snapshot.partida.state` reventaba. Bastaba con haber iniciado sesion una vez.
     const a = partidaEnMarcha(1);
-    await guardarPartida(directorio, a, MOMENTO);
+    await guardarPartida(almacen, a, MOMENTO);
     await writeFile(join(directorio, 'identidad.json'), JSON.stringify({ formatoVersion: 1, datos: { usuarios: [] } }), 'utf-8');
 
-    const partidas = await listarPartidas(directorio);
+    const partidas = await listarPartidas(almacen);
 
     expect(partidas.map((p) => p.gameId)).toEqual([a.gameId]);
   });
@@ -219,10 +222,10 @@ describe('listarPartidas (Fase C12: descubrimiento)', () => {
     // diferencia de `identidad.json` esto si es un problema que alguien tiene que mirar.
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     const a = partidaEnMarcha(1);
-    await guardarPartida(directorio, a, MOMENTO);
+    await guardarPartida(almacen, a, MOMENTO);
     await writeFile(join(directorio, 'rota.json'), '{"formatoVersion":7,"parti', 'utf-8');
 
-    const partidas = await listarPartidas(directorio);
+    const partidas = await listarPartidas(almacen);
 
     expect(partidas.map((p) => p.gameId)).toEqual([a.gameId]);
     expect(error).toHaveBeenCalled();

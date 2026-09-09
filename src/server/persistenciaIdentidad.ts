@@ -1,17 +1,19 @@
-// Guardado del dominio de acceso en disco (cierre de Fase C: "Membresia y Sesion viven en memoria — se
-// pierden al reiniciar el proceso").
+// Guardado del dominio de acceso (usuarios, sesiones, membresías, credenciales locales) en el
+// `AlmacenDeObjetos`, bajo una única clave.
 //
-// Mismo criterio y misma técnica que `persistenciaPartida.ts`: escritura ATÓMICA (`.tmp` + `rename`) para
-// que un corte a mitad de escritura nunca deje un archivo corrupto, y capa `server/` porque toca `fs` y el
-// dominio de acceso (`acceso/`) no puede depender de infraestructura.
+// Mismo criterio que `persistenciaPartida.ts`: el adaptador garantiza la escritura ATÓMICA (en disco,
+// `.tmp` + `rename`) para que un corte a mitad nunca deje el archivo corrupto. Capa `server/` porque toca
+// infraestructura y el dominio de acceso (`acceso/`) no puede depender de ella.
 //
-// A diferencia de una partida, aquí NO hay versión de concurrencia: el dominio de acceso lo escribe un solo
-// proceso (el mismo que sirve la API), las mutaciones son pequeñas y frecuentes (un login, un unirse), y el
-// adaptador (`repositorioEnDisco.ts`) las serializa en una cola. El archivo entero se reescribe en cada
-// cambio — es diminuto comparado con un snapshot de partida.
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+// A diferencia de una partida, aquí NO hay versión de concurrencia: lo escribe un solo proceso, las
+// mutaciones son pequeñas y frecuentes (un login, un unirse), y el adaptador (`repositorioPersistente.ts`)
+// las serializa en una cola. El objeto entero se reescribe en cada cambio — es diminuto comparado con un
+// snapshot de partida.
+import type { AlmacenDeObjetos } from './almacen/almacenDeObjetos';
 import type { DatosIdentidad } from './identidad/repositorioEnMemoria';
+
+/** Clave del dominio de acceso en el almacén. */
+export const CLAVE_IDENTIDAD = 'identidad.json';
 
 /** Versión del envoltorio del archivo — sube solo si cambia su FORMA, para poder rechazar o migrar un
  * archivo de una build anterior sin adivinar por su contenido. */
@@ -33,16 +35,13 @@ export class FormatoIdentidadNoSoportadoError extends Error {
   }
 }
 
-/** Lee el archivo de identidad. Devuelve el snapshot vacío si no existe todavía — es el caso "primer
- * arranque", no un error. */
-export async function leerIdentidad(ruta: string): Promise<DatosIdentidad> {
-  let contenido: string;
-  try {
-    contenido = await readFile(ruta, 'utf-8');
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { ...VACIO };
-    throw err;
-  }
+/** Lee el dominio de acceso. Devuelve el snapshot vacío si aún no existe — es el caso "primer arranque", no
+ * un error. Tolera un archivo sin `credencialesLocales` (anterior a la introducción del proveedor `clave`):
+ * lo rellena con `[]` vía `VACIO`, sin migrar. */
+export async function leerIdentidad(almacen: AlmacenDeObjetos): Promise<DatosIdentidad> {
+  const contenido = await almacen.leer(CLAVE_IDENTIDAD);
+  if (contenido === null) return { ...VACIO };
+
   const archivo = JSON.parse(contenido) as ArchivoIdentidad;
   if (archivo.formatoVersion !== FORMATO_IDENTIDAD_VERSION) {
     throw new FormatoIdentidadNoSoportadoError(archivo.formatoVersion);
@@ -50,11 +49,8 @@ export async function leerIdentidad(ruta: string): Promise<DatosIdentidad> {
   return { ...VACIO, ...archivo.datos };
 }
 
-/** Escribe el snapshot completo de forma atómica. Crea el directorio si no existe. */
-export async function escribirIdentidad(ruta: string, datos: DatosIdentidad): Promise<void> {
-  await mkdir(dirname(ruta), { recursive: true });
+/** Escribe el snapshot completo (el adaptador lo hace de forma atómica). */
+export async function escribirIdentidad(almacen: AlmacenDeObjetos, datos: DatosIdentidad): Promise<void> {
   const archivo: ArchivoIdentidad = { formatoVersion: FORMATO_IDENTIDAD_VERSION, datos };
-  const rutaTemporal = `${ruta}.tmp`;
-  await writeFile(rutaTemporal, JSON.stringify(archivo), 'utf-8');
-  await rename(rutaTemporal, ruta);
+  await almacen.escribir(CLAVE_IDENTIDAD, JSON.stringify(archivo));
 }

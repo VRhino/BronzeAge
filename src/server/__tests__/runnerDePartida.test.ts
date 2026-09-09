@@ -7,15 +7,18 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { crearFaccion } from '../../session/comandos/crearFaccion';
 import { fundarAsentamiento } from '../../session/comandos/fundarAsentamiento';
 import { alternarFaccionNpc } from '../../session/comandos/alternarFaccionNpc';
+import { crearAlmacenEnDisco } from '../almacen/enDisco';
 import { RunnerDePartida } from '../runnerDePartida';
 import { cargarPartida, type SnapshotPartida } from '../persistenciaPartida';
 
 const MOMENTO = '2026-01-01T00:00:00.000Z';
 
 let directorio: string;
+let almacen: ReturnType<typeof crearAlmacenEnDisco>;
 
 beforeEach(async () => {
   directorio = await mkdtemp(join(tmpdir(), 'bronzeage-runner-'));
+  almacen = crearAlmacenEnDisco(directorio);
 });
 
 afterEach(async () => {
@@ -23,7 +26,7 @@ afterEach(async () => {
 });
 
 function runner(gameId = 'partida-runner', seed = 7): RunnerDePartida {
-  return RunnerDePartida.crear(gameId, { seed }, { directorio, ahora: () => MOMENTO });
+  return RunnerDePartida.crear(gameId, { seed }, { almacen, ahora: () => MOMENTO });
 }
 
 describe('RunnerDePartida — cola serial', () => {
@@ -64,7 +67,7 @@ describe('RunnerDePartida — aplicar -> persistir -> confirmar', () => {
     const r = runner('g-persistido');
     await r.ejecutar(crearFaccion, { nombre: 'Micenas' });
 
-    const cargada = await cargarPartida(directorio, 'g-persistido');
+    const cargada = await cargarPartida(almacen, 'g-persistido');
     expect(cargada!.sesion.getState().facciones).toHaveLength(1);
   });
 
@@ -130,17 +133,17 @@ describe('RunnerDePartida.avanzarTick — bundlea auto-comercio y turno NPC', ()
 
 describe('RunnerDePartida.cargarOCrear', () => {
   it('sin snapshot previo, crea una partida nueva', async () => {
-    const r = await RunnerDePartida.cargarOCrear('g-nueva', { seed: 1 }, { directorio, ahora: () => MOMENTO });
+    const r = await RunnerDePartida.cargarOCrear('g-nueva', { seed: 1 }, { almacen, ahora: () => MOMENTO });
     expect(r.getState().tick).toBe(0);
     expect(r.getState().facciones).toEqual([]);
   });
 
   it('una partida nueva se persiste antes de devolverla (Fase C12): sobrevive a un "reinicio" sin ningún comando de por medio', async () => {
-    await RunnerDePartida.cargarOCrear('g-recien-creada', { seed: 1 }, { directorio, ahora: () => MOMENTO });
+    await RunnerDePartida.cargarOCrear('g-recien-creada', { seed: 1 }, { almacen, ahora: () => MOMENTO });
 
     // "Reinicio del proceso" simulado: pedirla de nuevo debe RETOMARLA (mismo tick/estado), no crear otra
     // desde cero — solo pasa si la primera llamada la escribió a disco sin que se ejecutara ningún comando.
-    const retomada = await RunnerDePartida.cargarOCrear('g-recien-creada', { seed: 99 }, { directorio, ahora: () => MOMENTO });
+    const retomada = await RunnerDePartida.cargarOCrear('g-recien-creada', { seed: 99 }, { almacen, ahora: () => MOMENTO });
     expect(retomada.getState().mapa.config.seed).toBe(1); // la seed de la PRIMERA llamada, no la 99 de esta
   });
 
@@ -149,7 +152,7 @@ describe('RunnerDePartida.cargarOCrear', () => {
     await original.ejecutar(crearFaccion, { nombre: 'Micenas' });
     await original.avanzarTick();
 
-    const retomado = await RunnerDePartida.cargarOCrear('g-retomada', { seed: 1 }, { directorio, ahora: () => MOMENTO });
+    const retomado = await RunnerDePartida.cargarOCrear('g-retomada', { seed: 1 }, { almacen, ahora: () => MOMENTO });
     await original.avanzarTick();
     await retomado.avanzarTick();
 
@@ -170,7 +173,7 @@ function esperar(ms: number): Promise<void> {
  * (`iniciarRelojDeMundo`), así que hay que avanzar el reloj DESPUÉS de arrancarlo para que se adeude algo. */
 function runnerConReloj(gameId: string, seed = 7): { r: RunnerDePartida; avanzar: (ms: number) => void } {
   let relojMs = Date.parse(MOMENTO);
-  const r = RunnerDePartida.crear(gameId, { seed }, { directorio, ahora: () => new Date(relojMs).toISOString() });
+  const r = RunnerDePartida.crear(gameId, { seed }, { almacen, ahora: () => new Date(relojMs).toISOString() });
   return { r, avanzar: (ms) => (relojMs += ms) };
 }
 
@@ -252,10 +255,10 @@ describe('RunnerDePartida — reloj de mundo (D5)', () => {
     // Lo contrario de lo que hacía D5, y a propósito (decisión del usuario, 2026-09-05). Una caída del
     // servidor no consume tiempo de mundo: lo que estuviera en construcción sigue igual de lejos de acabarse
     // que cuando se cayó, y nadie encuentra su partida saltada tres horas al volver.
-    await RunnerDePartida.crearYPersistir('g-reinicio', { seed: 3 }, { directorio, ahora: () => MOMENTO });
+    await RunnerDePartida.crearYPersistir('g-reinicio', { seed: 3 }, { almacen, ahora: () => MOMENTO });
 
     const tresHorasDespues = new Date(Date.parse(MOMENTO) + 3 * 60 * 60_000).toISOString();
-    const reabierta = await RunnerDePartida.cargarOCrear('g-reinicio', { seed: 3 }, { directorio, ahora: () => tresHorasDespues });
+    const reabierta = await RunnerDePartida.cargarOCrear('g-reinicio', { seed: 3 }, { almacen, ahora: () => tresHorasDespues });
     reabierta.iniciarRelojDeMundo(60_000);
     await reabierta.esperarColaVacia();
     reabierta.detenerRelojDeMundo();
@@ -370,7 +373,7 @@ describe('RunnerDePartida — preciosReferencia (doc 9: entrada privilegiada, so
    * probar el TTL de un minuto real sin depender de `Date.now()` de verdad. */
   function runnerConReloj(momentoInicial: string) {
     let momento = momentoInicial;
-    const r = RunnerDePartida.crear('partida-precios', { seed: 1 }, { directorio, ahora: () => momento });
+    const r = RunnerDePartida.crear('partida-precios', { seed: 1 }, { almacen, ahora: () => momento });
     return { r, avanzarMs: (ms: number) => (momento = new Date(new Date(momento).getTime() + ms).toISOString()) };
   }
 
@@ -460,7 +463,7 @@ describe('RunnerDePartida — el reloj de pared NO entra en el estado (Fase D / 
   async function snapshotTras(ahora: () => string): Promise<{ partida: SnapshotPartida['partida']; eventos: unknown[] }> {
     const dir = await mkdtemp(join(tmpdir(), 'bronzeage-reloj-'));
     try {
-      const r = RunnerDePartida.crear('g', { seed: 7 }, { directorio: dir, ahora });
+      const r = RunnerDePartida.crear('g', { seed: 7 }, { almacen: crearAlmacenEnDisco(dir), ahora });
       const creada = await r.ejecutar(crearFaccion, { nombre: 'Micenas' }, 'ana');
       await r.ejecutar(fundarAsentamiento, { faccionId: creada.datos!.faccionId, posicion: { x: 500, y: 500 } }, 'ana');
       await r.avanzarTick();

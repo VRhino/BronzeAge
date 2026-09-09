@@ -22,6 +22,7 @@ import { calcularPrecioReferencia } from '../engine/market';
 import { computeTodasLasZonas, computeZonasFusionadasPorFaccion } from '../engine/zones';
 import { trazadoParaAsentamiento } from '../engine/trazado';
 import { PRECIO_BASE } from '../constants';
+import type { AlmacenDeObjetos } from './almacen/almacenDeObjetos';
 import { cargarPartida, guardarPartida } from './persistenciaPartida';
 import { anexarEventos } from './eventosDePartida';
 
@@ -56,8 +57,8 @@ export interface MetricasDePartida {
 }
 
 export interface OpcionesRunner {
-  /** Directorio donde vive el snapshot de esta partida (`persistenciaPartida.ts`). */
-  directorio: string;
+  /** Almacén donde viven el snapshot y el historial de eventos de esta partida (`server/almacen/`). */
+  almacen: AlmacenDeObjetos;
   /** Reloj inyectado — igual que en toda `session/`, nunca se lee `Date.now()` sin pasar por aquí. Los tests
    * inyectan uno controlado; por defecto, el reloj real. */
   ahora?: () => string;
@@ -65,7 +66,7 @@ export interface OpcionesRunner {
 
 export class RunnerDePartida {
   private sesion: GameSession;
-  private readonly directorio: string;
+  private readonly almacen: AlmacenDeObjetos;
   private readonly ahora: () => string;
 
   /**
@@ -177,7 +178,7 @@ export class RunnerDePartida {
 
   private constructor(sesion: GameSession, opciones: OpcionesRunner) {
     this.sesion = sesion;
-    this.directorio = opciones.directorio;
+    this.almacen = opciones.almacen;
     this.ahora = opciones.ahora ?? (() => new Date().toISOString());
     this.versionEventosAnexados = sesion.getState().version;
   }
@@ -199,7 +200,7 @@ export class RunnerDePartida {
     persistencia: { forzar?: boolean } = {}
   ): Promise<RunnerDePartida> {
     const runner = RunnerDePartida.crear(gameId, config, opciones);
-    await guardarPartida(opciones.directorio, runner.sesion, runner.ahora(), persistencia);
+    await guardarPartida(opciones.almacen, runner.sesion, runner.ahora(), persistencia);
     return runner;
   }
 
@@ -208,7 +209,7 @@ export class RunnerDePartida {
    * con `config` (y la persiste, ver `crearYPersistir`). `config` se ignora si se carga un snapshot
    * existente. */
   static async cargarOCrear(gameId: string, config: { seed: number; region?: RegionId }, opciones: OpcionesRunner): Promise<RunnerDePartida> {
-    const existente = await cargarPartida(opciones.directorio, gameId);
+    const existente = await cargarPartida(opciones.almacen, gameId);
     return existente
       ? new RunnerDePartida(existente.sesion, opciones)
       : RunnerDePartida.crearYPersistir(gameId, config, opciones);
@@ -466,7 +467,7 @@ export class RunnerDePartida {
     if (!resultado.ok) return resultado; // rechazado: GameSession no cambió nada, no hay nada que persistir
 
     try {
-      await guardarPartida(this.directorio, this.sesion, this.ahora());
+      await guardarPartida(this.almacen, this.sesion, this.ahora());
     } catch (err) {
       this.sesion = GameSession.importar(previo);
       throw err;
@@ -491,7 +492,7 @@ export class RunnerDePartida {
     const estado = this.sesion.getState();
     if (estado.version === this.versionEventosAnexados) return;
     try {
-      await anexarEventos(this.directorio, this.gameId, eventosDesde(estado, this.versionEventosAnexados));
+      await anexarEventos(this.almacen, this.gameId, eventosDesde(estado, this.versionEventosAnexados));
       this.versionEventosAnexados = estado.version;
     } catch (err) {
       console.error(

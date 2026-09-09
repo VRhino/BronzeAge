@@ -7,15 +7,18 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GameSession } from '../../session/gameSession';
 import { crearFaccion } from '../../session/comandos/crearFaccion';
+import { crearAlmacenEnDisco } from '../almacen/enDisco';
 import { guardarPartida } from '../persistenciaPartida';
 import { leerAuditoria, RegistroDeAuditoria } from '../auditoria';
 import { listarRespaldos } from '../respaldos';
 import { TareaDeMantenimiento } from '../mantenimiento';
 
 let directorio: string;
+let almacen: ReturnType<typeof crearAlmacenEnDisco>;
 
 beforeEach(async () => {
   directorio = await mkdtemp(join(tmpdir(), 'bronzeage-mantenimiento-'));
+  almacen = crearAlmacenEnDisco(directorio);
 });
 
 afterEach(async () => {
@@ -26,7 +29,7 @@ afterEach(async () => {
 async function partidaEnDisco(gameId: string): Promise<void> {
   const sesion = GameSession.crear(gameId, { seed: 42 });
   sesion.ejecutar(crearFaccion, { nombre: 'Una' }, { actor: 'jugador-1' });
-  await guardarPartida(directorio, sesion, '2026-09-05T10:00:00.000Z');
+  await guardarPartida(almacen, sesion, '2026-09-05T10:00:00.000Z');
 }
 
 /** Reloj de pared controlable: la pasada fecha respaldos y calcula el límite de retención con él. */
@@ -41,7 +44,7 @@ describe('TareaDeMantenimiento', () => {
     // necesita respaldo (mismo criterio que `listarPartidas`, C12).
     await partidaEnDisco('g1');
     await partidaEnDisco('g2');
-    const tarea = new TareaDeMantenimiento(directorio, { intervaloMs: 60_000 }, relojDesde('2026-09-05T11:00:00.000Z'));
+    const tarea = new TareaDeMantenimiento(almacen, directorio, { intervaloMs: 60_000 }, relojDesde('2026-09-05T11:00:00.000Z'));
 
     const resumen = await tarea.ejecutarPasada();
 
@@ -58,7 +61,7 @@ describe('TareaDeMantenimiento', () => {
       '2026-09-03T10:00:00.000Z',
       '2026-09-04T10:00:00.000Z'
     );
-    const tarea = new TareaDeMantenimiento(directorio, { intervaloMs: 60_000, respaldosAConservar: 2 }, reloj);
+    const tarea = new TareaDeMantenimiento(almacen, directorio, { intervaloMs: 60_000, respaldosAConservar: 2 }, reloj);
 
     await tarea.ejecutarPasada();
     await tarea.ejecutarPasada();
@@ -72,12 +75,13 @@ describe('TareaDeMantenimiento', () => {
 
   it('poda la auditoria vencida por EDAD y conserva la reciente', async () => {
     await partidaEnDisco('g1');
-    const registro = new RegistroDeAuditoria(directorio, relojDesde('2026-07-01T10:00:00.000Z', '2026-09-04T10:00:00.000Z'));
+    const registro = new RegistroDeAuditoria(almacen, relojDesde('2026-07-01T10:00:00.000Z', '2026-09-04T10:00:00.000Z'));
     registro.registrar({ gameId: 'g1', actor: 'ana', comando: 'crearFaccion', resultado: 'aceptado', version: 1 });
     registro.registrar({ gameId: 'g1', actor: 'ana', comando: 'crearFaccion', resultado: 'aceptado', version: 2 });
     await registro.drenar();
     // Retención de 30 días desde el 5 de septiembre: la línea de julio vence, la del 4 de septiembre no.
     const tarea = new TareaDeMantenimiento(
+      almacen,
       directorio,
       { intervaloMs: 60_000, retencionAuditoriaDias: 30 },
       relojDesde('2026-09-05T10:00:00.000Z')
@@ -86,7 +90,7 @@ describe('TareaDeMantenimiento', () => {
     const resumen = await tarea.ejecutarPasada();
 
     expect(resumen.auditoriaBorrada).toBe(1);
-    const { entradas } = await leerAuditoria(directorio, 'g1');
+    const { entradas } = await leerAuditoria(almacen, 'g1');
     expect(entradas.map((e) => e.version)).toEqual([2]);
   });
 
@@ -107,13 +111,13 @@ describe('TareaDeMantenimiento', () => {
     expect(await listarRespaldos(directorio, 'g2')).toHaveLength(1);
 
     function tarea() {
-      return new TareaDeMantenimiento(directorio, { intervaloMs: 60_000 }, relojDesde('2026-09-05T11:00:00.000Z'));
+      return new TareaDeMantenimiento(almacen, directorio, { intervaloMs: 60_000 }, relojDesde('2026-09-05T11:00:00.000Z'));
     }
   });
 
   it('una pasada no arranca si otra sigue en curso', async () => {
     await partidaEnDisco('g1');
-    const tarea = new TareaDeMantenimiento(directorio, { intervaloMs: 60_000 }, relojDesde('2026-09-05T11:00:00.000Z'));
+    const tarea = new TareaDeMantenimiento(almacen, directorio, { intervaloMs: 60_000 }, relojDesde('2026-09-05T11:00:00.000Z'));
 
     // Sin la guarda de reentrada, dos pasadas simultáneas competirían por los mismos archivos: una podando lo
     // que la otra acaba de escribir.
@@ -124,7 +128,7 @@ describe('TareaDeMantenimiento', () => {
   });
 
   it('iniciar dos veces no duplica el temporizador', async () => {
-    const tarea = new TareaDeMantenimiento(directorio, { intervaloMs: 60_000 }, relojDesde('2026-09-05T11:00:00.000Z'));
+    const tarea = new TareaDeMantenimiento(almacen, directorio, { intervaloMs: 60_000 }, relojDesde('2026-09-05T11:00:00.000Z'));
     const intervalos = vi.spyOn(globalThis, 'setInterval');
 
     tarea.iniciar();
@@ -135,7 +139,7 @@ describe('TareaDeMantenimiento', () => {
   });
 
   it('un directorio sin ninguna partida no falla ni escribe nada', async () => {
-    const tarea = new TareaDeMantenimiento(directorio, { intervaloMs: 60_000 }, relojDesde('2026-09-05T11:00:00.000Z'));
+    const tarea = new TareaDeMantenimiento(almacen, directorio, { intervaloMs: 60_000 }, relojDesde('2026-09-05T11:00:00.000Z'));
     await expect(tarea.ejecutarPasada()).resolves.toMatchObject({ partidas: 0, respaldadas: 0, fallos: [] });
   });
 
@@ -143,7 +147,7 @@ describe('TareaDeMantenimiento', () => {
     await partidaEnDisco('g1');
     await writeFile(join(directorio, 'g2.json'), 'esto no es json', 'utf-8');
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    const tarea = new TareaDeMantenimiento(directorio, { intervaloMs: 60_000 }, relojDesde('2026-09-05T11:00:00.000Z'));
+    const tarea = new TareaDeMantenimiento(almacen, directorio, { intervaloMs: 60_000 }, relojDesde('2026-09-05T11:00:00.000Z'));
 
     // Encontrado escribiendo este test: `listarPartidas` lanzaba con un JSON ilegible y abortaba la pasada
     // ANTES del bucle, así que ninguna partida llegaba a respaldarse. El mismo fallo tumbaba

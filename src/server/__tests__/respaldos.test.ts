@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { GameSession } from '../../session/gameSession';
 import { crearFaccion } from '../../session/comandos/crearFaccion';
+import { crearAlmacenEnDisco } from '../almacen/enDisco';
 import { cargarPartida, guardarPartida } from '../persistenciaPartida';
 import { RegistroDeAuditoria } from '../auditoria';
 import { anexarEventos, leerEventos } from '../eventosDePartida';
@@ -20,9 +21,11 @@ import {
 } from '../respaldos';
 
 let directorio: string;
+let almacen: ReturnType<typeof crearAlmacenEnDisco>;
 
 beforeEach(async () => {
   directorio = await mkdtemp(join(tmpdir(), 'bronzeage-respaldos-'));
+  almacen = crearAlmacenEnDisco(directorio);
 });
 
 afterEach(async () => {
@@ -34,7 +37,7 @@ afterEach(async () => {
 async function partidaConFacciones(gameId: string, n: number): Promise<GameSession> {
   const sesion = GameSession.crear(gameId, { seed: 42 });
   for (let i = 0; i < n; i++) sesion.ejecutar(crearFaccion, { nombre: `Faccion ${i}` }, { actor: `jugador-${i}` });
-  await guardarPartida(directorio, sesion, '2026-09-05T10:00:00.000Z');
+  await guardarPartida(almacen, sesion, '2026-09-05T10:00:00.000Z');
   return sesion;
 }
 
@@ -59,7 +62,7 @@ describe('respaldarPartida', () => {
   it('se lleva la auditoria consigo', async () => {
     // Restaurar sin su auditoría dejaría el registro narrando una partida que ya no es la que hay.
     await partidaConFacciones('g1', 1);
-    const registro = new RegistroDeAuditoria(directorio, () => '2026-09-05T10:00:00.000Z');
+    const registro = new RegistroDeAuditoria(almacen, () => '2026-09-05T10:00:00.000Z');
     registro.registrar({ gameId: 'g1', actor: 'ana', comando: 'crearFaccion', resultado: 'aceptado', version: 1 });
     await registro.drenar();
 
@@ -71,20 +74,20 @@ describe('respaldarPartida', () => {
 
   it('se lleva el historial de eventos consigo, y `restaurarPartida` lo devuelve al punto respaldado', async () => {
     await partidaConFacciones('g1', 1);
-    await anexarEventos(directorio, 'g1', [{ codigo: 'faccion.creada', mensaje: 'x', momento: '2026-01-01T00:00:00.000Z', version: 1 }]);
+    await anexarEventos(almacen, 'g1', [{ codigo: 'faccion.creada', mensaje: 'x', momento: '2026-01-01T00:00:00.000Z', version: 1 }]);
     await respaldarPartida(directorio, 'g1', '2026-09-05T11:22:33.444Z');
 
     // La partida y su historial siguen adelante...
     const sesion2 = await partidaConFacciones('g1', 3);
-    await anexarEventos(directorio, 'g1', [{ codigo: 'faccion.creada', mensaje: 'y', momento: '2026-01-01T00:01:00.000Z', version: 3 }]);
-    expect((await leerEventos(directorio, 'g1')).map((e) => e.version)).toEqual([3, 1]);
+    await anexarEventos(almacen, 'g1', [{ codigo: 'faccion.creada', mensaje: 'y', momento: '2026-01-01T00:01:00.000Z', version: 3 }]);
+    expect((await leerEventos(almacen, 'g1')).map((e) => e.version)).toEqual([3, 1]);
     void sesion2;
 
     const respaldo = (await listarRespaldos(directorio, 'g1'))[0]!;
     await restaurarPartida(directorio, 'g1', respaldo.archivo);
 
     // ...y la restauración deja el historial como estaba: solo el evento de la versión 1.
-    expect((await leerEventos(directorio, 'g1')).map((e) => e.version)).toEqual([1]);
+    expect((await leerEventos(almacen, 'g1')).map((e) => e.version)).toEqual([1]);
   });
 
   it('el nombre del archivo no lleva ":" — inservible en Windows — y conserva el momento exacto', async () => {
@@ -130,13 +133,13 @@ describe('restaurarPartida — la prueba de restauracion', () => {
     // La partida sigue: dos Facciones más, guardadas encima del snapshot anterior.
     sesion.ejecutar(crearFaccion, { nombre: 'Posterior A' }, { actor: 'jugador-a' });
     sesion.ejecutar(crearFaccion, { nombre: 'Posterior B' }, { actor: 'jugador-b' });
-    await guardarPartida(directorio, sesion, '2026-09-05T12:00:00.000Z');
-    expect((await cargarPartida(directorio, 'g1'))!.sesion.getState().facciones).toHaveLength(4);
+    await guardarPartida(almacen, sesion, '2026-09-05T12:00:00.000Z');
+    expect((await cargarPartida(almacen, 'g1'))!.sesion.getState().facciones).toHaveLength(4);
 
     const versionRestaurada = await restaurarPartida(directorio, 'g1', respaldo!.archivo);
 
     expect(versionRestaurada).toBe(versionRespaldada);
-    const recuperada = (await cargarPartida(directorio, 'g1'))!.sesion;
+    const recuperada = (await cargarPartida(almacen, 'g1'))!.sesion;
     expect(recuperada.getState().version).toBe(versionRespaldada);
     expect(recuperada.getState().facciones.map((f) => f.nombre)).toEqual(faccionesRespaldadas);
     // Y lo posterior al respaldo desapareció de verdad, no quedó mezclado.
@@ -177,7 +180,7 @@ describe('restaurarPartida — la prueba de restauracion', () => {
 describe('podarRespaldos', () => {
   it('conserva los N mas recientes y borra el resto, con su auditoria adjunta', async () => {
     await partidaConFacciones('g1', 1);
-    const registro = new RegistroDeAuditoria(directorio, () => '2026-09-01T10:00:00.000Z');
+    const registro = new RegistroDeAuditoria(almacen, () => '2026-09-01T10:00:00.000Z');
     registro.registrar({ gameId: 'g1', actor: 'ana', comando: 'crearFaccion', resultado: 'aceptado' });
     await registro.drenar();
     for (const dia of ['01', '03', '05', '07', '09']) await respaldarPartida(directorio, 'g1', `2026-09-${dia}T10:00:00.000Z`);

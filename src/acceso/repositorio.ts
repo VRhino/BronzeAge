@@ -3,7 +3,7 @@
 // externa, y las `Sesion`/`Membresia` vigentes.
 //
 // Aquí vive solo el CONTRATO. Las implementaciones son adaptadores y viven en `server/`:
-// `repositorioEnMemoria.ts` (tests y despliegue efímero) y `repositorioEnDisco.ts` (el proceso real, mismo
+// `repositorioEnMemoria.ts` (tests y despliegue efímero) y `repositorioPersistente.ts` (el proceso real, mismo
 // adaptador de memoria con carga/guardado de un JSON atómico). Una base de datos real sería otro adaptador
 // más, sin que `servicioAutenticacion.ts` ni ninguna ruta se enteren.
 import type { CredencialLocal, IdentidadVinculada, Membresia, Sesion, Usuario } from './tipos';

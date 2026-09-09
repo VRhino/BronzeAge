@@ -2,13 +2,13 @@
 // se guardan los datos de acceso, no qué significan.
 //
 // Se pierde al reiniciar el proceso — aceptable para tests y para un despliegue efímero. El proceso real
-// (`server/index.ts`) usa `repositorioEnDisco.ts`, que es ESTE adaptador con un `inicial` cargado de disco y
-// un `alCambiar` que reescribe el archivo tras cada mutación. Por eso este archivo expone el snapshot
-// (`DatosIdentidad`) y el gancho de cambio: para no duplicar la lógica de los índices en dos adaptadores.
+// (`server/index.ts`) usa `repositorioPersistente.ts`, que es ESTE adaptador con un `inicial` cargado del
+// `AlmacenDeObjetos` y un `alCambiar` que lo reescribe tras cada mutación. Por eso este archivo expone el
+// snapshot (`DatosIdentidad`) y el gancho de cambio: para no duplicar la lógica de los índices.
 import type { RepositorioIdentidad } from '../../acceso/repositorio';
 import type { CredencialLocal, IdentidadVinculada, Membresia, Sesion, Usuario } from '../../acceso/tipos';
 
-/** Todo lo que el dominio de acceso guarda, en forma plana y serializable — lo que viaja a disco. */
+/** Todo lo que el dominio de acceso guarda, en forma plana y serializable — lo que se persiste. */
 export interface DatosIdentidad {
   usuarios: Usuario[];
   /** En orden de vinculación: el primero de cada `usuarioId` es el que resuelve `buscarIdentidadDeUsuario`
@@ -22,9 +22,9 @@ export interface DatosIdentidad {
 }
 
 export interface OpcionesRepositorioEnMemoria {
-  /** Estado con el que arranca el repositorio (lo carga `repositorioEnDisco.ts`). Vacío por defecto. */
+  /** Estado con el que arranca el repositorio (lo carga `repositorioPersistente.ts`). Vacío por defecto. */
   inicial?: DatosIdentidad;
-  /** Se invoca con el snapshot COMPLETO tras cada mutación. `repositorioEnDisco.ts` lo usa para persistir;
+  /** Se invoca con el snapshot COMPLETO tras cada mutación. `repositorioPersistente.ts` lo usa para persistir;
    * el adaptador puro no lo pasa. */
   alCambiar?: (datos: DatosIdentidad) => void;
 }

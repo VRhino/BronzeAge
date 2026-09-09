@@ -12,7 +12,8 @@ import type { FastifyInstance } from 'fastify';
 import { crearServidor } from '../api';
 import { crearRegistroProveedores } from '../../acceso/proveedorIdentidad';
 import { proveedoresPorDefecto } from '../identidad/proveedoresActivos';
-import { crearRepositorioIdentidadEnDisco } from '../identidad/repositorioEnDisco';
+import { crearAlmacenEnDisco } from '../almacen/enDisco';
+import { crearRepositorioIdentidadPersistente } from '../identidad/repositorioPersistente';
 import { instanteDeTick } from '../../session/estado';
 
 /** El operador declara administradores por identidad externa; `dev jefa` es la de las pruebas. */
@@ -1051,10 +1052,10 @@ describe('gestión de membresías técnicas (/admin/partidas/:gameId/membresias,
 });
 
 describe('persistencia de identidad tras "reinicio del proceso" (cierre de Fase C)', () => {
-  let enDisco: Awaited<ReturnType<typeof crearRepositorioIdentidadEnDisco>>;
+  let enDisco: Awaited<ReturnType<typeof crearRepositorioIdentidadPersistente>>;
 
   async function servidorConIdentidadEnDisco(): Promise<FastifyInstance> {
-    enDisco = await crearRepositorioIdentidadEnDisco(join(directorio, 'identidad.json'));
+    enDisco = await crearRepositorioIdentidadPersistente(crearAlmacenEnDisco(directorio));
     return crearServidor({
       directorio,
       administradoresGlobales: ADMINS,
@@ -1139,7 +1140,7 @@ describe('auditoría de comandos (E2)', () => {
   async function auditoriaDe(gameId: string) {
     await app.close();
     const { leerAuditoria } = await import('../auditoria');
-    return (await leerAuditoria(directorio, gameId)).entradas;
+    return (await leerAuditoria(crearAlmacenEnDisco(directorio), gameId)).entradas;
   }
 
   it('un comando ACEPTADO deja linea con actor, version e instante de mundo', async () => {
@@ -1272,7 +1273,7 @@ describe('auditoría de comandos (E2)', () => {
 
     await app.close();
     const { leerAuditoria } = await import('../auditoria');
-    expect((await leerAuditoria(directorio, 'g1')).entradas.map((e) => e.gameId)).toEqual(['g1']);
-    expect((await leerAuditoria(directorio, 'g2')).entradas.map((e) => e.gameId)).toEqual(['g2']);
+    expect((await leerAuditoria(crearAlmacenEnDisco(directorio), 'g1')).entradas.map((e) => e.gameId)).toEqual(['g1']);
+    expect((await leerAuditoria(crearAlmacenEnDisco(directorio), 'g2')).entradas.map((e) => e.gameId)).toEqual(['g2']);
   });
 });

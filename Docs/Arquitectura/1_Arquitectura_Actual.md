@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Versión** | 2.2 |
+| **Versión** | 2.3 |
 | **Actualizado** | 2026-09-09 |
-| **Verificado contra** | árbol de trabajo sobre `1b52862` — 1203 tests en 110 archivos, todos en verde |
+| **Verificado contra** | árbol de trabajo sobre `1b52862` — 1211 tests en 111 archivos, todos en verde |
 
 > **Por qué existe este campo.** La v1.0 se escribió el 2026-08-26 y para el 2026-09-05 había derivado en
 > ocho puntos concretos (número de comandos, número de tests, tamaño de `constants.ts`, estado de la niebla
@@ -19,6 +19,7 @@
 
 | Versión | Fecha | Cambio |
 |---|---|---|
+| 2.3 | 2026-09-09 | Puerto **`AlmacenDeObjetos`** (`server/almacen/`): toda la persistencia salvo respaldos —snapshots, eventos, auditoría, identidad— pasa por `leer`/`escribir`/`anexar`/`listar` por clave, con un adaptador de disco (`enDisco.ts`) como único hoy. `persistenciaPartida`/`eventosDePartida`/`auditoria`/`persistenciaIdentidad` dejan de tocar `node:fs`; `crearServidor` acepta un `almacen` inyectado (disco por defecto). Prepara el cambio limpio de proveedor (object storage, SQLite/HTTP, Postgres) para desplegar en un free tier con disco efímero. `repositorioEnDisco.ts` → `repositorioPersistente.ts`. Tests 1203/110 → 1211/111. |
 | 2.2 | 2026-09-09 | Identidad de jugador con contraseña para el playtest: proveedor `clave` (nick + contraseña, hash scrypt de stdlib, secreto en `identidad.json` — sin subir `FORMATO_IDENTIDAD_VERSION`, el archivo v1 se lee con `credencialesLocales: []`), endpoint `POST /v1/registro` con `CODIGO_REGISTRO` opcional. El proceso real monta `clave` + `dev` (`proveedoresDeProceso`); `dev` queda solo para el cliente de administración en local. Tests 1189/108 → 1203/110. |
 | 2.1 | 2026-09-09 | Reconciliación con el código medido: comandos 42 → 69, tests 951/95 → 1189/108, `constants.ts` 51 tablas/1786 líneas → 60/2004, `engine/` 32 módulos/11.064 líneas → 34/13.392, niebla de guerra Paso 4 (visión compartida por alianza/vasallaje) de "pendiente" a hecho, Fase E documentada (E2 auditoría/respaldos/mantenimiento y E3 métricas — completas), rutas nuevas listadas (`/admin/metricas`, `/admin/.../auditoria`, `GET`/`POST`/`DELETE /admin/.../membresias`). Además, tres cambios de persistencia de esta misma fecha: **(a)** retirada la cadena de migraciones de snapshot (sin partidas anteriores al formato vigente); **(b)** formato **v13** — el snapshot deja de guardar el terreno (se regenera de la seed) y el historial de eventos (`<gameId>.eventos.jsonl`, append-only); de ~450 KB creciendo a ~9 KB plano; **(c)** borrado `session/estado.proyectarLog` (sin llamador de producción — la consola de admin que derivaba de él vive en el repo de cliente). |
 | 2.0 | 2026-09-05 | Reconciliación con el código medido: comandos 30 → 42, tests 640/80 → 951/95, `constants.ts` 39 tablas/~1240 líneas → 51/1786, niebla de guerra de "pendiente" a Pasos 1-3 y 5 hechos, `cliente-jugador/` movido a otro repositorio (`2dfe9e7`), retirada la mención a `exportar-unity`, y `domain/` documentado como tres archivos. |
@@ -93,8 +94,8 @@ apunta "hacia arriba". Dos invariantes tienen además su propio test en lenguaje
 `session/` es el único punto que ve los dos dominios —juego y acceso— porque la autorización de comandos lo
 exige: qué rol técnico tiene el actor Y qué relación de juego guarda con la entidad objetivo.
 
-**1203 tests en 110 archivos** cubren las seis capas (medido 2026-09-09, `npm run test:run`). Reparto por
-capa: `engine/` 56 archivos, `session/` 23, `server/` 20, `world/` 5, `acceso/` 3, `__tests__/` 2 (los de
+**1211 tests en 111 archivos** cubren las seis capas (medido 2026-09-09, `npm run test:run`). Reparto por
+capa: `engine/` 56 archivos, `session/` 23, `server/` 21, `world/` 5, `acceso/` 3, `__tests__/` 2 (los de
 frontera), `worldgen/` 1. Ese último número es el punto más fino de la red: `worldgen/` es la capa con la
 promesa más fuerte —semilla + `WORLDGEN_VERSION` (hoy **15**) reproducen el mapa exactamente— y la que menos
 test tiene.
@@ -236,19 +237,24 @@ ruta, sin alias sin versión). En total ~22 endpoints:
 
 Piezas de soporte:
 
-- `server/persistenciaPartida.ts` — snapshot de partida a disco: estado, tick, IDs, `config`/semilla del
-  mundo y **el estado del RNG**; escritura atómica (`.tmp` + `rename`, nunca un archivo a medias), con
-  comprobación de versión como red de seguridad contra dos procesos escribiendo el mismo `gameId`. Desde el
-  formato **v13** NO guarda el terreno (se regenera de la seed al cargar) ni el historial de eventos (vive en
-  `eventosDePartida.ts`) — ver "Persistencia" más abajo. `FORMATO_SNAPSHOT_VERSION` (hoy **13**) rechaza
-  cualquier otro formato; ya no hay cadena de migraciones.
+- `server/almacen/` — **puerto `AlmacenDeObjetos`** (`leer`/`escribir`/`anexar`/`listar` por clave plana) y
+  su único adaptador hoy, `enDisco.ts` (un archivo por clave, `.tmp` + `rename` para la escritura atómica).
+  Es la ÚNICA frontera que sabe DÓNDE viven los bytes de la persistencia (snapshots, eventos, auditoría,
+  identidad). Cambiar de proveedor —disco → object storage → base de datos, para desplegar en un free tier
+  sin disco persistente— es escribir otro adaptador y elegirlo en `index.ts`; ningún módulo de persistencia
+  se entera. `respaldos.ts` es la excepción: sigue siendo de disco a propósito (ver abajo).
+- `server/persistenciaPartida.ts` — snapshot de partida (vía el almacén): estado, tick, IDs, `config`/semilla
+  del mundo y **el estado del RNG**; comprobación de versión como red de seguridad contra dos procesos
+  escribiendo el mismo `gameId`. Desde el formato **v13** NO guarda el terreno (se regenera de la seed al
+  cargar) ni el historial de eventos (vive en `eventosDePartida.ts`) — ver "Persistencia" más abajo.
+  `FORMATO_SNAPSHOT_VERSION` (hoy **13**) rechaza cualquier otro formato; ya no hay cadena de migraciones.
 - `server/eventosDePartida.ts` — el historial de `EventoDominio` de una partida en un JSONL append-only
   hermano del snapshot (`<gameId>.eventos.jsonl`), mismo patrón que `auditoria.ts`. `anexarEventos` añade una
   línea por evento; `leerEventos` lo devuelve más-nuevo-primero para que `cargarPartida` rehidrate
   `eventosDominio`.
 - `server/persistenciaIdentidad.ts` — el dominio de acceso (usuarios/sesiones/membresías/credenciales
-  locales) a disco, misma escritura atómica. Solo `index.ts` lo cablea; `crearServidor` trae el repositorio **en memoria** por
-  defecto.
+  locales) bajo la clave `identidad.json` del mismo almacén, reescrito entero en cada mutación. Solo
+  `index.ts` lo cablea; `crearServidor` trae el repositorio **en memoria** por defecto.
 - `server/runnerDePartida.ts` — la pieza entre `GameSession` y el proceso real: una **cola serial** por
   partida (dos llamadas concurrentes se aplican en orden de llegada, nunca intercaladas), el ciclo
   "aplicar → persistir → confirmar" (si falla la escritura, `GameSession` vuelve atrás), idempotencia de
@@ -344,12 +350,17 @@ descubre qué partidas existen en disco, incluidas las que nadie ha reabierto to
 
 ## Persistencia, historial y observabilidad
 
-- Cada partida es un snapshot JSON en disco (`server/persistenciaPartida.ts`), no una base de datos —
-  suficiente para el volumen actual; el doc 4 registra por qué no hace falta SQLite todavía (la cola serial ya
-  elimina la concurrencia de escritura). Se reescribe entero en cada comando aceptado (`.tmp` + `rename`),
-  pero desde el formato **v13** (2026-09-09) es **plano**: ~9 KB da igual la edad de la partida, porque ya no
-  contiene ni el terreno ni el historial (ver los dos puntos siguientes). Antes eran ~450 KB a 35 000 ticks y
-  creciendo.
+- Toda la persistencia pasa por el puerto **`AlmacenDeObjetos`** (`server/almacen/`): objetos de texto por
+  clave plana, con un único adaptador hoy —`enDisco.ts`, un archivo por clave, `.tmp` + `rename`—. Es el
+  punto por el que se cambia de proveedor sin tocar ningún módulo de persistencia (object storage, SQLite
+  sobre HTTP, Postgres) — pensado para poder desplegar en un free tier con disco efímero. `respaldos.ts` es
+  la excepción deliberada: copias fechadas de archivos, un concepto de sistema de ficheros; con un almacén
+  remoto el respaldo lo hace el proveedor.
+- Cada partida es un snapshot JSON (`server/persistenciaPartida.ts`), no una base de datos — suficiente para
+  el volumen actual; el doc 4 registra por qué no hace falta SQLite todavía (la cola serial ya elimina la
+  concurrencia de escritura). Se reescribe entero en cada comando aceptado, pero desde el formato **v13**
+  (2026-09-09) es **plano**: ~9 KB da igual la edad de la partida, porque ya no contiene ni el terreno ni el
+  historial (ver los dos puntos siguientes). Antes eran ~450 KB a 35 000 ticks y creciendo.
 - **El mapa no se guarda: se regenera.** El snapshot conserva de `state.mapa` solo `{ version, config }`;
   `cargarPartida` reconstruye el `MapaGenerado` con `generarMapa(config)` (función pura de la seed). Es lo que
   el propio `MapaGenerado.version` decía que debía pasar — el rechazo por `worldgenVersion` ya garantizaba que
@@ -369,9 +380,10 @@ descubre qué partidas existen en disco, incluidas las que nadie ha reabierto to
   acepta solo el formato vigente y rechaza el resto con `FormatoSnapshotNoSoportadoError` — mismo criterio que
   `persistenciaIdentidad.ts` desde el principio. La próxima mecánica que cambie la forma del snapshot sube el
   número y, si en ese momento existen partidas que preservar, vuelve a añadir su función de migración puntual.
-- El estado de acceso (usuarios/sesiones/membresías) se persiste aparte en `identidad.json`, en el mismo
-  directorio (`server/persistenciaIdentidad.ts`). El repositorio en disco solo lo cablea `index.ts`; el
-  `crearServidor` por defecto usa el **en memoria** — un embebido que no lo sustituya pierde todo al reiniciar.
+- El estado de acceso (usuarios/sesiones/membresías/credenciales locales) se persiste bajo la clave
+  `identidad.json` del mismo almacén (`server/persistenciaIdentidad.ts`). El repositorio persistente solo lo
+  cablea `index.ts`; el `crearServidor` por defecto usa el **en memoria** — un embebido que no lo sustituya
+  pierde todo al reiniciar.
 - Los eventos de dominio son estructurados (código estable + payload tipado, A5), no mensajes de log en
   texto. Cada uno lleva la `version` de partida en la que se emitió (**C13**), y
   `GET .../eventos?desde=<version>` sirve solo los nuevos — un cliente que escucha por WebSocket ya no
@@ -455,6 +467,9 @@ descubre qué partidas existen en disco, incluidas las que nadie ha reabierto to
   acepta cualquier sujeto sin verificar, así que la superficie de admin **no debe exponerse en público** tal
   cual. El repositorio de identidad por defecto de `crearServidor` es el **en memoria** (el proceso real usa
   el de disco).
+- Persistencia: hay puerto (`AlmacenDeObjetos`) pero **solo el adaptador de disco**. Un adaptador remoto
+  (object storage, SQLite/HTTP, Postgres) está por escribir — es lo que haría falta para un free tier con
+  disco efímero. `respaldos.ts` sigue siendo de disco por diseño.
 - Respaldos y poda **apagados por defecto** (`MANTENIMIENTO_INTERVALO_MS`): un despliegue que lo olvide no
   tiene copias.
 - Producción corre TypeScript vía `tsx` directo — no hay target de build para el servidor.

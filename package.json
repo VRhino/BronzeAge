@@ -3,12 +3,15 @@
   "version": "0.0.1",
   "description": "Backend de simulacion (motor + partida + API). Fase 0 - datos puros, sin arte/3D. Ver Consideraciones/Fase_0_Definicion.md",
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "server": "tsx src/server/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
-    "prepare": "husky",
+    "prepare": "husky || true",
     "lab": "tsx scripts/lab.ts",
     "typecheck:lab": "tsc --noEmit -p lab/tsconfig.json",
     "typecheck:scripts": "tsc --noEmit -p scripts/tsconfig.json"
@@ -16,16 +19,17 @@
   "devDependencies": {
     "@types/node": "^26.3.0",
     "@types/ws": "^8.18.1",
+    "esbuild": "^0.28.2",
     "husky": "^9.1.7",
-    "tsx": "^4.23.12",
     "typescript": "^5.6.3",
-    "vitest": "^4.1.10",
-    "esbuild": "^0.28.2"
+    "vitest": "^4.1.10"
   },
   "dependencies": {
     "@fastify/cors": "^11.3.0",
     "@fastify/swagger": "^9.8.1",
     "@fastify/websocket": "^11.3.0",
-    "fastify": "^5.12.1"
+    "@libsql/client": "^0.18.0",
+    "fastify": "^5.12.1",
+    "tsx": "^4.23.12"
   }
 }

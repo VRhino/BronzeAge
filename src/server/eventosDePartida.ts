@@ -14,29 +14,33 @@
 //
 // APPEND, no reescritura, por lo mismo que la auditoría: copiar un log que crece sin límite para añadirle un
 // renglón es justo lo que un append-only existe para evitar. JSONL y no un array JSON para que una última
-// línea a medias (corte a mitad de escritura) se descarte sola sin llevarse el resto por delante.
-import { appendFile, mkdir, readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+// línea a medias (corte a mitad de escritura) se descarte sola sin llevarse el resto por delante. Los bytes
+// van al `AlmacenDeObjetos` (`server/almacen/`) — en disco es un `appendFile`, con un adaptador remoto sin
+// append sería leer+concatenar+escribir.
+import type { AlmacenDeObjetos } from './almacen/almacenDeObjetos';
 import type { EventoDominioConVersion } from '../session/estado';
 
-/** Sufijo propio, como `.auditoria.jsonl`, para que un `readdir` del directorio de datos distinga de un
- * vistazo el snapshot (`<gameId>.json`) de sus dos hermanos append-only. */
-export function rutaDeEventos(directorio: string, gameId: string): string {
-  return join(directorio, `${gameId}.eventos.jsonl`);
+/** Clave del historial en el almacén. Sufijo propio, como `.auditoria.jsonl`, para distinguir de un vistazo
+ * el snapshot (`<gameId>.json`) de sus dos hermanos append-only. */
+export function claveDeEventos(gameId: string): string {
+  return `${gameId}.eventos.jsonl`;
 }
 
 /** Añade eventos al final del historial, uno por línea, EN EL ORDEN DADO (que `RunnerDePartida` pasa
- * cronológico — más viejo primero). No reescribe nada. Crea el directorio si no existe. */
-export async function anexarEventos(directorio: string, gameId: string, eventos: readonly EventoDominioConVersion[]): Promise<void> {
+ * cronológico — más viejo primero). No reescribe nada. */
+export async function anexarEventos(
+  almacen: AlmacenDeObjetos,
+  gameId: string,
+  eventos: readonly EventoDominioConVersion[]
+): Promise<void> {
   if (eventos.length === 0) return;
-  await mkdir(directorio, { recursive: true });
-  await appendFile(rutaDeEventos(directorio, gameId), eventos.map((e) => `${JSON.stringify(e)}\n`).join(''), 'utf-8');
+  await almacen.anexar(claveDeEventos(gameId), eventos.map((e) => `${JSON.stringify(e)}\n`).join(''));
 }
 
 /**
  * Lee el historial completo de una partida, MÁS NUEVO PRIMERO — el mismo orden en que vive
  * `GameSessionState.eventosDominio` (`exito()` antepone), para que `cargarPartida` lo devuelva listo para
- * asignar. `[]` si aún no hay archivo (partida sin comandos todavía, no un error).
+ * asignar. `[]` si aún no hay historial (partida sin comandos todavía, no un error).
  *
  * `hasta` descarta los eventos con `version` MAYOR: defensa contra líneas "del futuro" que quedaran de un
  * comando cuyo snapshot se revirtió después de haber anexado sus eventos (ver
@@ -44,14 +48,13 @@ export async function anexarEventos(directorio: string, gameId: string, eventos:
  * un corte entre las dos escrituras aún la deja abierta). Una línea ilegible se descarta, como en
  * `auditoria.ts`.
  */
-export async function leerEventos(directorio: string, gameId: string, hasta = Infinity): Promise<EventoDominioConVersion[]> {
-  let contenido: string;
-  try {
-    contenido = await readFile(rutaDeEventos(directorio, gameId), 'utf-8');
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
-    throw err;
-  }
+export async function leerEventos(
+  almacen: AlmacenDeObjetos,
+  gameId: string,
+  hasta = Infinity
+): Promise<EventoDominioConVersion[]> {
+  const contenido = await almacen.leer(claveDeEventos(gameId));
+  if (contenido === null) return [];
 
   const eventos: EventoDominioConVersion[] = [];
   for (const linea of contenido.split('\n')) {

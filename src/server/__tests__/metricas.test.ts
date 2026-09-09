@@ -7,6 +7,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { crearAlmacenEnDisco } from '../almacen/enDisco';
 import { RegistroDePartidas } from '../registroDePartidas';
 import { RegistroDeAuditoria } from '../auditoria';
 import { HubDeDifusion } from '../difusion/hub';
@@ -18,10 +19,12 @@ function esperar(ms: number): Promise<void> {
 }
 
 let directorio: string;
+let almacen: ReturnType<typeof crearAlmacenEnDisco>;
 let registro: RegistroDePartidas;
 
 beforeEach(async () => {
   directorio = await mkdtemp(join(tmpdir(), 'bronzeage-metricas-'));
+  almacen = crearAlmacenEnDisco(directorio);
 });
 
 afterEach(async () => {
@@ -39,7 +42,7 @@ function relojDesde(inicio: string) {
 function fuentes(extra: Partial<Parameters<typeof recogerMetricas>[0]> = {}) {
   return {
     partidas: registro,
-    auditoria: new RegistroDeAuditoria(directorio, () => '2026-09-05T10:00:00.000Z'),
+    auditoria: new RegistroDeAuditoria(almacen, () => '2026-09-05T10:00:00.000Z'),
     hub: new HubDeDifusion(),
     ahora: () => '2026-09-05T10:00:00.000Z',
     ...extra,
@@ -48,7 +51,7 @@ function fuentes(extra: Partial<Parameters<typeof recogerMetricas>[0]> = {}) {
 
 describe('recogerMetricas', () => {
   it('un proceso sin partidas abiertas no falla y lo dice', async () => {
-    registro = new RegistroDePartidas(directorio);
+    registro = new RegistroDePartidas(almacen);
     const m = recogerMetricas(fuentes());
 
     expect(m.proceso.partidasAbiertas).toBe(0);
@@ -57,7 +60,7 @@ describe('recogerMetricas', () => {
   });
 
   it('una partida abierta aparece con su tick, version y conexiones', async () => {
-    registro = new RegistroDePartidas(directorio);
+    registro = new RegistroDePartidas(almacen);
     await registro.abrir('g1', { seed: 42 });
 
     const m = recogerMetricas(fuentes());
@@ -69,7 +72,7 @@ describe('recogerMetricas', () => {
   });
 
   it('el cronometro del tick mide el tick COMPLETO y acumula media y maximo', async () => {
-    registro = new RegistroDePartidas(directorio);
+    registro = new RegistroDePartidas(almacen);
     const runner = await registro.abrir('g1', { seed: 42 });
     await runner.avanzarTick();
     await runner.avanzarTick();
@@ -83,7 +86,7 @@ describe('recogerMetricas', () => {
   });
 
   it('la cola refleja trabajo pendiente mientras lo hay, y vuelve a cero al drenar', async () => {
-    registro = new RegistroDePartidas(directorio);
+    registro = new RegistroDePartidas(almacen);
     const runner = await registro.abrir('g1', { seed: 42 });
 
     // Tres ticks encolados sin esperar: la cola es serial, así que hay pendientes de verdad.
@@ -98,7 +101,7 @@ describe('recogerMetricas', () => {
     // Desde el 2026-09-05 esto ya no mide un catch-up tras reinicio —el mundo no avanza con el servidor
     // caído— sino la recuperación de la deriva del `setInterval`, que en un servidor sano vale 1.
     const reloj = relojDesde('2026-09-05T10:00:00.000Z');
-    registro = new RegistroDePartidas(directorio, undefined, reloj.ahora);
+    registro = new RegistroDePartidas(almacen, undefined, reloj.ahora);
     const runner = await registro.abrir('g1', { seed: 42 });
 
     runner.iniciarRelojDeMundo(50);
@@ -120,7 +123,7 @@ describe('recogerMetricas', () => {
     // La consecuencia observable de la decisión: si el proceso estuvo vivo pero sin servir, ese tiempo no se
     // ejecuta. Quien opera tiene que poder verlo, o el mundo se quedaría atrás en silencio.
     const reloj = relojDesde('2026-09-05T10:00:00.000Z');
-    registro = new RegistroDePartidas(directorio, undefined, reloj.ahora);
+    registro = new RegistroDePartidas(almacen, undefined, reloj.ahora);
     const runner = await registro.abrir('g1', { seed: 42 });
 
     runner.iniciarRelojDeMundo(50);
@@ -135,8 +138,8 @@ describe('recogerMetricas', () => {
   });
 
   it('cuenta los comandos por resultado, con las causas separadas', async () => {
-    registro = new RegistroDePartidas(directorio);
-    const auditoria = new RegistroDeAuditoria(directorio, () => '2026-09-05T10:00:00.000Z');
+    registro = new RegistroDePartidas(almacen);
+    const auditoria = new RegistroDeAuditoria(almacen, () => '2026-09-05T10:00:00.000Z');
     const base = { gameId: 'g1', actor: 'ana', comando: 'crearFaccion' } as const;
     auditoria.registrar({ ...base, resultado: 'aceptado' });
     auditoria.registrar({ ...base, resultado: 'rechazado', causa: 'autorizacion' });
@@ -154,8 +157,8 @@ describe('recogerMetricas', () => {
   it('el recuento no depende de que la escritura en disco funcione', async () => {
     // Cuenta lo que el servidor DECIDIÓ, no lo que se pudo registrar: son dos preguntas distintas, y la
     // segunda ya la responde `auditoriaFallida`.
-    registro = new RegistroDePartidas(directorio);
-    const auditoria = new RegistroDeAuditoria(directorio, () => '2026-09-05T10:00:00.000Z');
+    registro = new RegistroDePartidas(almacen);
+    const auditoria = new RegistroDeAuditoria(almacen, () => '2026-09-05T10:00:00.000Z');
     auditoria.registrar({ gameId: 'g1', actor: 'ana', comando: 'crearFaccion', resultado: 'aceptado' });
 
     // Sin drenar: la escritura ni siquiera ha ocurrido todavía y el recuento ya es correcto.
@@ -164,8 +167,8 @@ describe('recogerMetricas', () => {
   });
 
   it('los contadores que devuelve son copias, no las internas', async () => {
-    registro = new RegistroDePartidas(directorio);
-    const auditoria = new RegistroDeAuditoria(directorio, () => '2026-09-05T10:00:00.000Z');
+    registro = new RegistroDePartidas(almacen);
+    const auditoria = new RegistroDeAuditoria(almacen, () => '2026-09-05T10:00:00.000Z');
     auditoria.registrar({ gameId: 'g1', actor: 'ana', comando: 'crearFaccion', resultado: 'aceptado' });
     await auditoria.drenar();
 

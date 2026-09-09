@@ -16,11 +16,18 @@
 // Convive con `auditoria.ts` sin mezclarse: el registro de auditoría explica QUIÉN llevó la partida hasta
 // aquí, un respaldo permite VOLVER. Se respaldan juntos porque una restauración sin su auditoría deja un
 // hueco inexplicable en el registro.
+//
+// **Este módulo es de DISCO** (`copyFile`, `rename`, `stat`) — copias fechadas de archivos, con la
+// verificación-antes-de-sustituir como garantía. A diferencia del resto de la persistencia, NO pasa por
+// `AlmacenDeObjetos`: su modelo entero (una copia por fecha, intocable) es un concepto de sistema de
+// archivos. Con un almacén remoto (object storage, base de datos), el respaldo lo hace el proveedor —
+// versionado de objetos, `pg_dump`— y `mantenimiento.ts` deja de invocar este módulo.
 import { copyFile, mkdir, readdir, rename, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
+import { crearAlmacenEnDisco } from './almacen/enDisco';
 import { cargarPartida } from './persistenciaPartida';
-import { rutaDeAuditoria } from './auditoria';
-import { rutaDeEventos } from './eventosDePartida';
+import { claveDeAuditoria } from './auditoria';
+import { claveDeEventos } from './eventosDePartida';
 
 /** Subdirectorio de respaldos, hermano de los snapshots. Aparte y no mezclado con ellos para que
  * `listarPartidas` —que lee el directorio de datos— no confunda un respaldo con una partida viva. */
@@ -90,7 +97,7 @@ export async function respaldarPartida(directorio: string, gameId: string, momen
   // registro y el log contando una historia que ya no corresponde al estado. Que no existan es normal
   // (partida sin comandos todavía).
   for (const sufijo of [SUFIJO_AUDITORIA, SUFIJO_EVENTOS]) {
-    const origenHermano = sufijo === SUFIJO_AUDITORIA ? rutaDeAuditoria(directorio, gameId) : rutaDeEventos(directorio, gameId);
+    const origenHermano = join(directorio, sufijo === SUFIJO_AUDITORIA ? claveDeAuditoria(gameId) : claveDeEventos(gameId));
     try {
       await copyFile(origenHermano, join(destinoDir, nombreDeRespaldo(gameId, momento, sufijo)));
     } catch (err) {
@@ -189,14 +196,14 @@ export async function restaurarPartida(directorio: string, gameId: string, archi
       }
     );
 
-    const cargada = await cargarPartida(pruebas, gameId);
+    const cargada = await cargarPartida(crearAlmacenEnDisco(pruebas), gameId);
     if (!cargada) throw new RespaldoInservibleError(archivo, 'no contiene una partida legible');
     const version = cargada.sesion.getState().version;
 
     // Verificado: ahora sí, sustitución atómica del snapshot vigente y de su historial.
     await rename(candidato, join(directorio, `${gameId}${SUFIJO_PARTIDA}`));
-    if (tieneEventos) await rename(join(pruebas, `${gameId}${SUFIJO_EVENTOS}`), rutaDeEventos(directorio, gameId));
-    else await rm(rutaDeEventos(directorio, gameId), { force: true });
+    if (tieneEventos) await rename(join(pruebas, `${gameId}${SUFIJO_EVENTOS}`), join(directorio, claveDeEventos(gameId)));
+    else await rm(join(directorio, claveDeEventos(gameId)), { force: true });
     return version;
   } catch (err) {
     if (err instanceof RespaldoInservibleError) throw err;

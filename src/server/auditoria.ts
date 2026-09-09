@@ -19,14 +19,12 @@
 //      anterior se sigue cargando igual — simplemente no tiene auditoría anterior a este cambio.
 //
 // APPEND, no reescritura: a diferencia de `persistenciaPartida.ts`/`persistenciaIdentidad.ts` —que
-// reescriben el archivo entero de forma atómica (`.tmp`+`rename`)— aquí se añade una línea al final. El
-// truco del `.tmp` no vale: copiar un registro que crece sin límite para añadirle un renglón es
-// exactamente lo que un log append-only existe para evitar. A cambio, el formato tiene que aguantar un
-// archivo truncado por un corte de luz, y por eso es JSONL y no un array JSON: si la última línea queda a
-// medias, se descarta ESA línea y las anteriores siguen siendo válidas. Un `[...]` truncado es ilegible
-// entero.
-import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+// reescriben el objeto entero de forma atómica— aquí se añade una línea al final (`almacen.anexar`). Copiar
+// un registro que crece sin límite para añadirle un renglón es exactamente lo que un log append-only existe
+// para evitar. A cambio, el formato tiene que aguantar un archivo truncado por un corte de luz, y por eso es
+// JSONL y no un array JSON: si la última línea queda a medias, se descarta ESA línea y las anteriores siguen
+// siendo válidas. Un `[...]` truncado es ilegible entero.
+import type { AlmacenDeObjetos } from './almacen/almacenDeObjetos';
 
 /** Versión del formato de CADA LÍNEA. Va en la línea, no en una cabecera de archivo: un log al que solo se
  * añade puede contener líneas escritas por builds distintas, y no habría dónde poner una cabecera que las
@@ -83,10 +81,10 @@ export interface EntradaAuditoria {
   version?: number;
 }
 
-/** Nombre del archivo de una partida. Sufijo propio y no una extensión suelta para que un `readdir` del
- * directorio de datos distinga de un vistazo snapshots (`<gameId>.json`) de auditorías. */
-export function rutaDeAuditoria(directorio: string, gameId: string): string {
-  return join(directorio, `${gameId}.auditoria.jsonl`);
+/** Clave del registro de una partida en el almacén. Sufijo propio y no una extensión suelta para que un
+ * `listar` distinga de un vistazo snapshots (`<gameId>.json`) de auditorías. */
+export function claveDeAuditoria(gameId: string): string {
+  return `${gameId}.auditoria.jsonl`;
 }
 
 /**
@@ -115,7 +113,7 @@ export class RegistroDeAuditoria {
   private readonly _recuento = { aceptados: 0, autorizacion: 0, esquema: 0, dominio: 0, persistencia: 0 };
 
   constructor(
-    private readonly directorio: string,
+    private readonly almacen: AlmacenDeObjetos,
     private readonly ahora: () => string = () => new Date().toISOString()
   ) {}
 
@@ -144,8 +142,7 @@ export class RegistroDeAuditoria {
     else if (entrada.causa !== undefined) this._recuento[entrada.causa]++;
     this.cola = this.cola.then(async () => {
       try {
-        await mkdir(this.directorio, { recursive: true });
-        await appendFile(rutaDeAuditoria(this.directorio, entrada.gameId), `${JSON.stringify(linea)}\n`, 'utf-8');
+        await this.almacen.anexar(claveDeAuditoria(entrada.gameId), `${JSON.stringify(linea)}\n`);
       } catch (err) {
         this._fallos++;
         console.error(`[auditoria] no se pudo registrar ${entrada.comando} de ${entrada.actor}:`, err);
@@ -163,12 +160,12 @@ export class RegistroDeAuditoria {
    * comando recién ejecutado podría no estar todavía en el archivo — justo el que se va a consultar.
    *
    * Existe como método, y no solo como la función suelta `leerAuditoria`, para que quien lee no tenga que
-   * saber en qué directorio escribe el registro. Sin esto, la ruta HTTP tendría que sacar esa ruta de algún
-   * otro sitio (el `directorio` privado del `RunnerDePartida`, por ejemplo) y las dos podrían divergir.
+   * saber contra qué almacén escribe el registro. Sin esto, la ruta HTTP tendría que sacar esa referencia de
+   * algún otro sitio y las dos podrían divergir.
    */
   async leer(gameId: string, filtro?: FiltroAuditoria): Promise<{ entradas: EntradaAuditoria[]; corruptas: number }> {
     await this.drenar();
-    return leerAuditoria(this.directorio, gameId, filtro);
+    return leerAuditoria(this.almacen, gameId, filtro);
   }
 }
 
@@ -203,17 +200,12 @@ export interface FiltroAuditoria {
  * tiene un agujero en vez de creer que está completo.
  */
 export async function leerAuditoria(
-  directorio: string,
+  almacen: AlmacenDeObjetos,
   gameId: string,
   filtro?: FiltroAuditoria
 ): Promise<{ entradas: EntradaAuditoria[]; corruptas: number }> {
-  let contenido: string;
-  try {
-    contenido = await readFile(rutaDeAuditoria(directorio, gameId), 'utf-8');
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { entradas: [], corruptas: 0 };
-    throw err;
-  }
+  const contenido = await almacen.leer(claveDeAuditoria(gameId));
+  if (contenido === null) return { entradas: [], corruptas: 0 };
 
   const entradas: EntradaAuditoria[] = [];
   let corruptas = 0;
@@ -238,20 +230,16 @@ export async function leerAuditoria(
  * Poda el registro de una partida: conserva solo las entradas con `momento >= limite` y devuelve cuántas se
  * descartaron.
  *
- * Reescribe con `.tmp`+`rename` —aquí SÍ, a diferencia del append— porque podar es por definición reescribir
- * el archivo entero, y hacerlo en el sitio dejaría el registro a medias si el proceso muere a mitad. Las
- * líneas corruptas se pierden en la poda: no se pueden fechar, así que no hay forma de decidir si entran o
- * salen, y conservarlas para siempre convertiría el agujero en permanente.
+ * Reescribe el objeto entero (`almacen.escribir`, atómico) —aquí SÍ, a diferencia del append— porque podar
+ * es por definición reescribir. Las líneas corruptas se pierden en la poda: no se pueden fechar, así que no
+ * hay forma de decidir si entran o salen, y conservarlas para siempre convertiría el agujero en permanente.
  */
-export async function podarAuditoria(directorio: string, gameId: string, limite: string): Promise<number> {
-  const { entradas, corruptas } = await leerAuditoria(directorio, gameId);
+export async function podarAuditoria(almacen: AlmacenDeObjetos, gameId: string, limite: string): Promise<number> {
+  const { entradas, corruptas } = await leerAuditoria(almacen, gameId);
   const conservadas = entradas.filter((e) => e.momento >= limite);
   const descartadas = entradas.length - conservadas.length + corruptas;
   if (descartadas === 0) return 0;
 
-  const ruta = rutaDeAuditoria(directorio, gameId);
-  const temporal = `${ruta}.tmp`;
-  await writeFile(temporal, conservadas.map((e) => `${JSON.stringify(e)}\n`).join(''), 'utf-8');
-  await rename(temporal, ruta);
+  await almacen.escribir(claveDeAuditoria(gameId), conservadas.map((e) => `${JSON.stringify(e)}\n`).join(''));
   return descartadas;
 }

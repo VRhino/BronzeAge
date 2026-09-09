@@ -7,18 +7,16 @@
 // toque el sistema de archivos tiene que vivir en una capa que sí pueda ser async — de ahí `server/`, la
 // primera pieza de una capa que en Fase B/C también tendrá el `RunnerDePartida` y la API HTTP.
 //
-// Escritura ATÓMICA (`.tmp` + `rename`, decidido en el doc 4): escribir directo sobre el nombre final
-// dejaría un archivo a medias si el proceso muere a mitad escritura. Con `rename` —atómico en el mismo
-// volumen, tanto en NTFS como en los filesystems POSIX habituales— el archivo final SIEMPRE es una versión
-// completa y válida, o no cambia en absoluto.
+// Escritura ATÓMICA: la garantiza el adaptador de `AlmacenDeObjetos` (en disco, `.tmp` + `rename`, decidido
+// en el doc 4). Escribir directo sobre el nombre final dejaría un archivo a medias si el proceso muere a
+// mitad. Este módulo solo pide `almacen.escribir(clave, contenido)` y confía en que sea todo-o-nada.
 //
-// Versión de concurrencia: la cola serial por `gameId` del futuro `RunnerDePartida` ya elimina la
-// concurrencia de escritura en operación normal (doc 4: "la ventaja principal de SQLite" que no hace falta
-// aquí). La comprobación de versión de este módulo no es el mecanismo principal de control de concurrencia
-// — es una red de seguridad que detecta el síntoma de un bug real (dos procesos escribiendo el mismo
-// `gameId`) y se niega a perder datos en silencio en vez de prevenirlo por diseño.
-import { mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+// Versión de concurrencia: la cola serial por `gameId` del `RunnerDePartida` ya elimina la concurrencia de
+// escritura en operación normal (doc 4: "la ventaja principal de SQLite" que no hace falta aquí). La
+// comprobación de versión de este módulo no es el mecanismo principal de control de concurrencia — es una
+// red de seguridad que detecta el síntoma de un bug real (dos procesos escribiendo el mismo `gameId`) y se
+// niega a perder datos en silencio en vez de prevenirlo por diseño.
+import type { AlmacenDeObjetos } from './almacen/almacenDeObjetos';
 import { GameSession, type PartidaExportada } from '../session/gameSession';
 import { idDeMapa, instanteDeTick } from '../session/estado';
 import type { Instante } from '../domain/tiempo';
@@ -101,18 +99,14 @@ export class WorldgenVersionNoCoincideError extends Error {
   }
 }
 
-function rutaDe(directorio: string, gameId: string): string {
-  return join(directorio, `${gameId}.json`);
+/** Clave del snapshot en el almacén. */
+export function claveDeSnapshot(gameId: string): string {
+  return `${gameId}.json`;
 }
 
-async function leerSnapshotSiExiste(ruta: string): Promise<SnapshotPartida | null> {
-  try {
-    const contenido = await readFile(ruta, 'utf-8');
-    return JSON.parse(contenido) as SnapshotPartida;
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
-    throw err;
-  }
+async function leerSnapshotSiExiste(almacen: AlmacenDeObjetos, gameId: string): Promise<SnapshotPartida | null> {
+  const contenido = await almacen.leer(claveDeSnapshot(gameId));
+  return contenido === null ? null : (JSON.parse(contenido) as SnapshotPartida);
 }
 
 /**
@@ -126,16 +120,14 @@ async function leerSnapshotSiExiste(ruta: string): Promise<SnapshotPartida | nul
  * creación (`RunnerDePartida.crearYPersistir`) es justo lo que hace visible ese conflicto ahora, antes solo
  * pasaba cuando llegaba el primer comando/tick de la partida nueva.
  */
-export async function guardarPartida(directorio: string, sesion: GameSession, guardadoEn: string, opciones: { forzar?: boolean } = {}): Promise<void> {
+export async function guardarPartida(almacen: AlmacenDeObjetos, sesion: GameSession, guardadoEn: string, opciones: { forzar?: boolean } = {}): Promise<void> {
   const partida = sesion.exportar();
-  const ruta = rutaDe(directorio, sesion.gameId);
 
-  const existente = await leerSnapshotSiExiste(ruta);
+  const existente = await leerSnapshotSiExiste(almacen, sesion.gameId);
   if (!opciones.forzar && existente && existente.partida.state.version > partida.state.version) {
     throw new ConflictoDeVersionError(sesion.gameId, existente.partida.state.version, partida.state.version);
   }
 
-  await mkdir(directorio, { recursive: true });
   const snapshot: SnapshotPartida = {
     formatoVersion: FORMATO_SNAPSHOT_VERSION,
     guardadoEn,
@@ -155,9 +147,7 @@ export async function guardarPartida(directorio: string, sesion: GameSession, gu
       },
     },
   };
-  const rutaTemporal = `${ruta}.tmp`;
-  await writeFile(rutaTemporal, JSON.stringify(snapshot), 'utf-8');
-  await rename(rutaTemporal, ruta);
+  await almacen.escribir(claveDeSnapshot(sesion.gameId), JSON.stringify(snapshot));
 }
 
 /** Lo que devuelve `cargarPartida`. Un objeto de un solo campo y no la `GameSession` a secas porque D5 le
@@ -172,11 +162,11 @@ export interface PartidaCargada {
 }
 
 /**
- * Reconstruye la `GameSession` guardada en `directorio/<gameId>.json`.
+ * Reconstruye la `GameSession` guardada bajo la clave `<gameId>.json`.
  * `null` si no existe ningún snapshot para ese `gameId` — no es un error, es el caso "partida nueva".
  */
-export async function cargarPartida(directorio: string, gameId: string): Promise<PartidaCargada | null> {
-  const snapshot = await leerSnapshotSiExiste(rutaDe(directorio, gameId));
+export async function cargarPartida(almacen: AlmacenDeObjetos, gameId: string): Promise<PartidaCargada | null> {
+  const snapshot = await leerSnapshotSiExiste(almacen, gameId);
   if (!snapshot) return null;
 
   // Sin migración: solo el formato vigente se carga, el resto se rechaza (ver `FORMATO_SNAPSHOT_VERSION`).
@@ -193,7 +183,7 @@ export async function cargarPartida(directorio: string, gameId: string): Promise
   //  - el historial de eventos, desde el JSONL hermano (filtrado a `<= version` por si un append quedó por
   //    delante de un snapshot revertido).
   partida.state.mapa = generarMapa(partida.state.mapa.config);
-  partida.state.eventosDominio = await leerEventos(directorio, gameId, partida.state.version);
+  partida.state.eventosDominio = await leerEventos(almacen, gameId, partida.state.version);
   return { sesion: GameSession.importar(partida) };
 }
 
@@ -210,28 +200,22 @@ export interface ResumenPartidaEnDisco {
 
 /**
  * Descubrimiento de partidas (Fase C12, doc 4: "un cliente externo no puede descubrir a qué conectarse; el
- * gameId llega fuera de banda"). Lee el DIRECTORIO, no `RegistroDePartidas`: ese solo conoce lo abierto EN
- * ESTE PROCESO, y una partida que existe en disco pero nadie ha tocado desde el último reinicio debe seguir
- * siendo descubrible. Lectura ligera — `JSON.parse` de cada snapshot, sin reconstruir ninguna `GameSession` —
- * mismo motivo que `RunnerDePartida` es deliberadamente "una partida por proceso": no hay razón para pagar
- * ese coste solo para listar.
+ * gameId llega fuera de banda"). Lee el ALMACÉN, no `RegistroDePartidas`: ese solo conoce lo abierto EN ESTE
+ * PROCESO, y una partida que existe en disco pero nadie ha tocado desde el último reinicio debe seguir siendo
+ * descubrible. Lectura ligera — `JSON.parse` de cada snapshot, sin reconstruir ninguna `GameSession` — mismo
+ * motivo que `RunnerDePartida` es deliberadamente "una partida por proceso": no hay razón para pagar ese
+ * coste solo para listar.
  */
-export async function listarPartidas(directorio: string): Promise<ResumenPartidaEnDisco[]> {
-  let nombres: string[];
-  try {
-    nombres = await readdir(directorio);
-  } catch (err) {
-    // Directorio inexistente = ninguna partida se ha guardado todavía en este despliegue, no un error.
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
-    throw err;
-  }
-
+export async function listarPartidas(almacen: AlmacenDeObjetos): Promise<ResumenPartidaEnDisco[]> {
+  const nombres = await almacen.listar('');
+  // `.json` pero no `.eventos.jsonl`/`.auditoria.jsonl` (acaban en `.jsonl`); `identidad.json` sí cuela y se
+  // descarta abajo por su forma.
   const gameIds = nombres.filter((n) => n.endsWith('.json')).map((n) => n.slice(0, -'.json'.length));
   const resumenes = await Promise.all(
     gameIds.map(async (gameId): Promise<ResumenPartidaEnDisco | null> => {
       let snapshot: SnapshotPartida | null;
       try {
-        snapshot = await leerSnapshotSiExiste(rutaDe(directorio, gameId));
+        snapshot = await leerSnapshotSiExiste(almacen, gameId);
       } catch (err) {
         // Un archivo ILEGIBLE (JSON truncado por un corte a mitad de escritura, o basura) no puede tumbar el
         // listado ENTERO. Es la misma clase de fallo que el `identidad.json` de más abajo, que ya dejó el
@@ -246,8 +230,8 @@ export async function listarPartidas(directorio: string): Promise<ResumenPartida
       // `null` aquí sería una carrera con un borrado externo entre `readdir` y esta lectura — se descarta en
       // silencio, no es un fallo de quien pidió la lista.
       if (!snapshot) return null;
-      // No todo `.json` del directorio es una partida: `crearRepositorioIdentidadEnDisco` guarda su
-      // `identidad.json` AQUÍ MISMO (`server/index.ts`), así que el filtro por extensión lo colaba y
+      // No todo `.json` del almacén es una partida: el repositorio de identidad guarda su `identidad.json`
+      // en el mismo almacén (`server/index.ts`), así que el filtro por extensión lo colaba y
       // `snapshot.partida.state` reventaba con un 500 — bastaba con que alguien hubiera iniciado sesión
       // alguna vez para que el endpoint de descubrimiento (Fase C12) dejara de funcionar del todo. Se
       // descarta como la carrera de arriba: lo que no tiene forma de partida, no es una partida.

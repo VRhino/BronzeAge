@@ -7,6 +7,7 @@
 // de administración y las de jugador, y tenerlo como `Map` suelto dentro del constructor de rutas lo hacía
 // invisible para cualquiera que no leyera esa función entera.
 import type { RegionId } from '../domain/types';
+import type { AlmacenDeObjetos } from './almacen/almacenDeObjetos';
 import { RunnerDePartida } from './runnerDePartida';
 import { listarPartidas, type ResumenPartidaEnDisco } from './persistenciaPartida';
 
@@ -42,7 +43,7 @@ export class RegistroDePartidas {
    * para que su reloj de mundo y su catch-up sean inyectables en tests, no solo el reloj real del sistema.
    */
   constructor(
-    private readonly directorio: string,
+    private readonly almacen: AlmacenDeObjetos,
     private readonly intervaloTickMs?: number,
     private readonly ahora: () => string = () => new Date().toISOString()
   ) {}
@@ -62,7 +63,7 @@ export class RegistroDePartidas {
 
   /** Descubrimiento (Fase C12) — lee el directorio, no `this.runners`: ver el comentario de `listarPartidas`. */
   listar(): Promise<ResumenPartidaEnDisco[]> {
-    return listarPartidas(this.directorio);
+    return listarPartidas(this.almacen);
   }
 
   /**
@@ -75,7 +76,7 @@ export class RegistroDePartidas {
    */
   async abrir(gameId: string, config: ConfiguracionPartida): Promise<RunnerDePartida> {
     if (this.runners.has(gameId)) throw new PartidaYaAbiertaError(gameId);
-    const runner = await RunnerDePartida.cargarOCrear(gameId, config, { directorio: this.directorio, ahora: this.ahora });
+    const runner = await RunnerDePartida.cargarOCrear(gameId, config, { almacen: this.almacen, ahora: this.ahora });
     this.runners.set(gameId, runner);
     this.arrancarRelojSiConfigurado(runner);
     return runner;
@@ -92,7 +93,7 @@ export class RegistroDePartidas {
     // `forzar: true`: la partida descartada puede seguir en disco con una version > 0 — este reemplazo,
     // que empieza en 0, es deliberado, no el conflicto de concurrencia que `guardarPartida` normalmente
     // detecta (ver su comentario).
-    const runner = await RunnerDePartida.crearYPersistir(gameId, config, { directorio: this.directorio, ahora: this.ahora }, { forzar: true });
+    const runner = await RunnerDePartida.crearYPersistir(gameId, config, { almacen: this.almacen, ahora: this.ahora }, { forzar: true });
     this.runners.set(gameId, runner);
     this.arrancarRelojSiConfigurado(runner);
     return runner;

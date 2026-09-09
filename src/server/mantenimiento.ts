@@ -6,9 +6,15 @@
 // configurarlo, ni un test ni un proceso de desarrollo escriben respaldos ni borran nada. Un default que
 // borra archivos es exactamente la clase de default que nadie nota hasta que ya borró algo que hacía falta.
 //
-// Trabaja sobre el DIRECTORIO, no sobre el registro de partidas abiertas: así respalda también las partidas
-// que este proceso no tiene abiertas (mismo criterio que `listarPartidas` en Fase C12 — una partida guardada
-// antes de un reinicio sigue siendo descubrible) y no depende de que haya un servidor corriendo.
+// Trabaja sobre TODAS las partidas (`listarPartidas`), no sobre el registro de las abiertas: así respalda
+// también las que este proceso no tiene abiertas (mismo criterio que Fase C12 — una partida guardada antes
+// de un reinicio sigue siendo descubrible) y no depende de que haya un servidor corriendo.
+//
+// Recibe DOS cosas: el `almacen` (para `listarPartidas` y `podarAuditoria`, que van por el puerto de
+// persistencia) y el `directorio` de disco (para los respaldos, que son de archivos — ver la cabecera de
+// `respaldos.ts`). Con un almacén remoto, los respaldos los hace el proveedor y basta con no activar el
+// mantenimiento.
+import type { AlmacenDeObjetos } from './almacen/almacenDeObjetos';
 import { listarPartidas } from './persistenciaPartida';
 import { podarAuditoria } from './auditoria';
 import { podarRespaldos, respaldarPartida } from './respaldos';
@@ -48,6 +54,7 @@ export class TareaDeMantenimiento {
   private enCurso = false;
 
   constructor(
+    private readonly almacen: AlmacenDeObjetos,
     private readonly directorio: string,
     private readonly config: ConfiguracionMantenimiento,
     private readonly ahora: () => string = () => new Date().toISOString()
@@ -89,13 +96,13 @@ export class TareaDeMantenimiento {
         new Date(momento).getTime() - (this.config.retencionAuditoriaDias ?? POR_DEFECTO.retencionAuditoriaDias) * MS_POR_DIA
       ).toISOString();
 
-      const partidas = await listarPartidas(this.directorio);
+      const partidas = await listarPartidas(this.almacen);
       resumen.partidas = partidas.length;
       for (const { gameId } of partidas) {
         try {
           if (await respaldarPartida(this.directorio, gameId, momento)) resumen.respaldadas++;
           resumen.respaldosBorrados += await podarRespaldos(this.directorio, gameId, this.config.respaldosAConservar ?? POR_DEFECTO.respaldosAConservar);
-          resumen.auditoriaBorrada += await podarAuditoria(this.directorio, gameId, limiteAuditoria);
+          resumen.auditoriaBorrada += await podarAuditoria(this.almacen, gameId, limiteAuditoria);
         } catch (err) {
           resumen.fallos.push({ gameId, error: err instanceof Error ? err.message : String(err) });
         }
