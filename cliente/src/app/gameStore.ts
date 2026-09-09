@@ -80,14 +80,30 @@ import { poderEscuadron } from '@motor/engine/combate';
 import type { EstadoAdmin, EventoLogAdmin } from '@motor/session/estado';
 import type { EventoDominio } from '@motor/domain/eventos';
 import type { EventoDominioConVersion } from '@motor/session/estado';
-import { isoDeInstante, proyectarLog } from '@motor/session/estado';
+import { isoDeInstante } from '@motor/session/estado';
 import type { ParamsDe, TipoComando } from '@motor/session/comandos/registro';
 import type { MapaGenerado } from '@motor/worldgen';
 import { ApiError, consultarEstado, consultarEventos, crearOResumirPartida, ejecutarComando, obtenerMapa } from './apiCliente';
 
 /** Entrada de log en texto — Fase D: `momento` (ISO de mundo) en vez de `tick`. Mismo shape que
- * `EventoLogAdmin` del motor (`proyectarLog` la produce). */
+ * `EventoLogAdmin` del motor (`proyectarLog`, aquí abajo, la produce). */
 export type EventoLog = EventoLogAdmin;
+
+/**
+ * Deriva el log administrativo en texto a partir de los eventos estructurados. Es PRESENTACIÓN, no estado: el
+ * servidor manda `eventosDominio` y esto pinta la consola de este cliente de admin. Un evento atribuido a un
+ * asentamiento se prefija con su id (los `mensaje` no lo llevan, el id va aparte en `asentamientoId`), que es
+ * lo que hacía `avanzarSimulacion` cuando el tick llevaba su propio array de texto.
+ *
+ * Vivía en `@motor/session/estado` hasta el 2026-09-09, cuando se retiró de ahí por ser puro cliente y su
+ * único consumidor de producción ser esta herramienta.
+ */
+function proyectarLog(eventos: readonly EventoDominio[]): EventoLog[] {
+  return eventos.map((e) => ({
+    momento: e.momento,
+    mensaje: e.asentamientoId ? `${e.asentamientoId}: ${e.mensaje}` : e.mensaje,
+  }));
+}
 
 const EPOCA_MUNDO_MS = new Date(SIMULACION.epocaInicial).getTime();
 
@@ -102,7 +118,7 @@ export function fmtTiempoMundo(t: number | string): string {
 
 /**
  * Lo que la interfaz consume: el estado que devuelve el servidor MÁS el log en texto, que ya no es estado
- * persistido sino una proyección de `eventosDominio` (ver `proyectarLog`, `session/estado.ts`). Se deriva
+ * persistido sino una proyección de `eventosDominio` (ver `proyectarLog`, aquí en `gameStore.ts`). Se deriva
  * aquí, en el cliente, a partir de los eventos que el servidor ya manda — así el mismo hecho no viaja dos
  * veces por la red ni se guarda dos veces en el snapshot.
  *
