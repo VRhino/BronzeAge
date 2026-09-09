@@ -454,9 +454,10 @@ describe('RunnerDePartida — geometriaAsentamientos (Fase C10: zonas/trazado po
 });
 
 describe('RunnerDePartida — el reloj de pared NO entra en el estado (Fase D / doc 10 §7, regresión del bug)', () => {
-  /** Corre la misma secuencia con un `ahora` (reloj de pared) distinto y devuelve el snapshot resultante,
-   * ignorando `guardadoEn` (que SÍ es reloj de pared, y a propósito — es metadato del archivo). */
-  async function snapshotTras(ahora: () => string): Promise<unknown> {
+  /** Corre la misma secuencia con un `ahora` (reloj de pared) distinto y devuelve el snapshot resultante y el
+   * historial de eventos (JSONL hermano, formato v13), ignorando `guardadoEn` (que SÍ es reloj de pared, y a
+   * propósito — es metadato del archivo). */
+  async function snapshotTras(ahora: () => string): Promise<{ partida: SnapshotPartida['partida']; eventos: unknown[] }> {
     const dir = await mkdtemp(join(tmpdir(), 'bronzeage-reloj-'));
     try {
       const r = RunnerDePartida.crear('g', { seed: 7 }, { directorio: dir, ahora });
@@ -465,22 +466,26 @@ describe('RunnerDePartida — el reloj de pared NO entra en el estado (Fase D / 
       await r.avanzarTick();
       await r.avanzarTick();
       const { partida } = JSON.parse(await readFile(join(dir, 'g.json'), 'utf-8')) as SnapshotPartida;
-      return partida;
+      const jsonl = await readFile(join(dir, 'g.eventos.jsonl'), 'utf-8');
+      const eventos = jsonl.split('\n').filter((l) => l.trim() !== '').map((l) => JSON.parse(l));
+      return { partida, eventos };
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
   }
 
-  it('mismo comando + misma seed con relojes de pared distintos → snapshot IDÉNTICO (incluidos los eventos)', async () => {
+  it('mismo comando + misma seed con relojes de pared distintos → snapshot Y eventos IDÉNTICOS', async () => {
     const enEnero = await snapshotTras(() => '2026-01-01T00:00:00.000Z');
     const enJulio = await snapshotTras(() => '2026-07-15T12:34:56.000Z');
     // Antes de D1 esto fallaba: `ctx.momento` era `ahora()` y viajaba a `eventosDominio[].momento`.
-    expect(enJulio).toEqual(enEnero);
+    expect(enJulio.partida).toEqual(enEnero.partida);
+    expect(enJulio.eventos).toEqual(enEnero.eventos);
   });
 
   it('los eventos se fechan con el instante de MUNDO (derivado del tick), no con el reloj de pared', async () => {
-    const partida = (await snapshotTras(() => '2099-12-31T23:59:59.000Z')) as SnapshotPartida['partida'];
-    for (const evento of partida.state.eventosDominio) {
+    const { eventos } = await snapshotTras(() => '2099-12-31T23:59:59.000Z');
+    expect(eventos.length).toBeGreaterThan(0);
+    for (const evento of eventos as Array<{ momento: string }>) {
       expect(evento.momento.startsWith('2026-01-01T00:0')).toBe(true); // época + unos pocos minutos, no 2099
     }
   });

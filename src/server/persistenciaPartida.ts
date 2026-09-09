@@ -20,35 +20,34 @@
 import { mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { GameSession, type PartidaExportada } from '../session/gameSession';
-import { idDeMapa, instanteDeTick, isoDeInstante } from '../session/estado';
-import { instante, minutos, sumar, type Instante } from '../domain/tiempo';
-import { WORLDGEN_VERSION } from '../worldgen';
-import { LIDERAZGO, MERCADO } from '../constants';
-import type { Asentamiento, Ejercito } from '../domain/types';
-import { ubicacionDeducida } from '../engine/ubicacion';
+import { idDeMapa, instanteDeTick } from '../session/estado';
+import type { Instante } from '../domain/tiempo';
+import { generarMapa, WORLDGEN_VERSION, type MapaGenerado } from '../worldgen';
+import { leerEventos } from './eventosDePartida';
 
 /**
  * Versión del ENVOLTORIO del archivo de snapshot. NO es `PartidaExportada.state.version` (versión de LA
  * PARTIDA, sube en cada comando aceptado) ni `worldgenVersion` (versión del generador de mundo) — esta sube
- * solo si cambia la FORMA del archivo en sí, para poder rechazar o migrar snapshots de una build anterior
- * sin adivinar por la forma del JSON.
+ * solo si cambia la FORMA del archivo en sí, para poder rechazar snapshots de una build anterior sin adivinar
+ * por la forma del JSON.
  *
- * v2 (Fase D / doc 10): los campos temporales pasan de `*EnTick: number` (ordinal de tick) a `*En: Instante`
- * (ms de mundo). v3 (Fase D / D3): el contador de construcción `Edificio.ticksRestantes` pasa a
- * `Edificio.completaEn: Instante` (fecha absoluta, no contador — doc 6 §4). v4 (Fase D / D6): el único campo
- * de entidad con unidad de tick en su nombre, `RelacionPolitica.tributo.cantidadPorTick`, pasa a
- * `cantidadPorMinuto` (mismo valor — 1 tick = 1 minuto). v5 (cierre de Fase D): el `tick` provisional de los
- * eventos y del log desaparece — `EventoDominio` se queda solo con `momento`, `EventoLogAdmin.tick` pasa a
- * `momento`. `migrarSnapshot` encadena las conversiones y todas son sin pérdida — la relación tick↔instante
- * es 1:1 (`instanteDeTick`). v6 (movimiento de ejércitos): `jugadores` y `ejercitos`. v7 (niebla de guerra):
- * `memoriaPorFaccion`. v8 (jugador situado): `Ejercito` gana `participantes`, `tipo` y `liderId`. v9 (jugador
- * situado): `Jugador` gana `ubicacion` y deja de ser un registro opcional — la PRIMERA migración del repo
- * que no puede resolverse con un valor por defecto (ver `migrarV8aV9`). v10 (unirse y separarse en campo):
- * `Ejercito.politicaDeUnion`. v11 (comercio físico): `OrdenMercado.expiraEn`. v12 (revamp de caravanas, Doc
- * 3.13): una `Caravana` comercial gana `carros` — la migración le pone 1 carro básico + 1 buey, que deriva a
- * los mismos 500/16 de antes.
+ * Historia (v1→v12): modelo temporal en `Instante`/`momento`, construcción por fecha en vez de contador,
+ * `jugadores`/`ejercitos`, niebla de guerra, jugador situado, unión en campo, comercio físico, revamp de
+ * caravanas. Cada salto tuvo su función de migración encadenada en `cargarPartida`.
+ *
+ * **Esa cadena se retiró el 2026-09-09**: no quedaban partidas de un formato anterior que arrastrar (todas
+ * las de disco ya estaban en v12), y mantener 11 conversiones vivas por si acaso era coste sin consumidor.
+ * `cargarPartida` ahora acepta solo el formato vigente y rechaza el resto — mismo criterio que
+ * `persistenciaIdentidad.ts` desde el principio. La próxima mecánica que cambie la forma del snapshot sube
+ * este número y, SI en ese momento existen partidas que preservar, vuelve a añadir su migración puntual.
+ *
+ * v13 (2026-09-09): el snapshot deja de contener dos cosas que lo engordaban sin ser fuente de verdad —
+ *   - `state.mapa` se guarda solo como `{ version, config }` y se REGENERA al cargar (`generarMapa`, función
+ *     pura de la seed; el rechazo por `worldgenVersion` ya garantizaba que se puede). Eran ~130 KB constantes.
+ *   - `state.eventosDominio` se va a `<gameId>.eventos.jsonl` (append-only, ver `eventosDePartida.ts`). Eran
+ *     ~300 KB y creciendo, reescritos en cada comando.
  */
-export const FORMATO_SNAPSHOT_VERSION = 12;
+export const FORMATO_SNAPSHOT_VERSION = 13;
 
 export interface SnapshotPartida {
   formatoVersion: number;
@@ -76,8 +75,8 @@ export class ConflictoDeVersionError extends Error {
   }
 }
 
-/** Se lanza al cargar un snapshot de un formato de envoltorio que esta build no sabe leer NI migrar (hoy:
- * cualquiera fuera del rango v1..v5). */
+/** Se lanza al cargar un snapshot de un formato de envoltorio distinto del vigente. Ya no se migra ningún
+ * formato anterior (ver la nota en `FORMATO_SNAPSHOT_VERSION`). */
 export class FormatoSnapshotNoSoportadoError extends Error {
   constructor(
     public readonly gameId: string,
@@ -137,7 +136,25 @@ export async function guardarPartida(directorio: string, sesion: GameSession, gu
   }
 
   await mkdir(directorio, { recursive: true });
-  const snapshot: SnapshotPartida = { formatoVersion: FORMATO_SNAPSHOT_VERSION, guardadoEn, partida };
+  const snapshot: SnapshotPartida = {
+    formatoVersion: FORMATO_SNAPSHOT_VERSION,
+    guardadoEn,
+    partida: {
+      ...partida,
+      state: {
+        ...partida.state,
+        // El mapa es función pura de la seed (`generarMapa`) — se guarda solo lo mínimo para regenerarlo
+        // (`config`) e identificarlo (`version`, para `idDeMapa` en `listarPartidas`), no los ~130 KB de
+        // terreno/nodos/ríos. `cargarPartida` lo reconstruye; el rechazo por `worldgenVersion` garantiza
+        // que sale idéntico al guardado.
+        mapa: { version: partida.state.mapa.version, config: partida.state.mapa.config } as MapaGenerado,
+        // El historial vive en `<gameId>.eventos.jsonl` (append-only, ver `eventosDePartida.ts`), no aquí —
+        // el snapshot se reescribe entero en cada comando y `eventosDominio` solo crece. Lo anexa
+        // `RunnerDePartida` tras cada guardado; `cargarPartida` lo rehidrata.
+        eventosDominio: [],
+      },
+    },
+  };
   const rutaTemporal = `${ruta}.tmp`;
   await writeFile(rutaTemporal, JSON.stringify(snapshot), 'utf-8');
   await rename(rutaTemporal, ruta);
@@ -162,271 +179,22 @@ export async function cargarPartida(directorio: string, gameId: string): Promise
   const snapshot = await leerSnapshotSiExiste(rutaDe(directorio, gameId));
   if (!snapshot) return null;
 
-  const partida = migrarSnapshot(gameId, snapshot);
+  // Sin migración: solo el formato vigente se carga, el resto se rechaza (ver `FORMATO_SNAPSHOT_VERSION`).
+  if (snapshot.formatoVersion !== FORMATO_SNAPSHOT_VERSION) {
+    throw new FormatoSnapshotNoSoportadoError(gameId, snapshot.formatoVersion);
+  }
+  const partida = snapshot.partida;
   if (partida.worldgenVersion !== WORLDGEN_VERSION) {
     throw new WorldgenVersionNoCoincideError(gameId, partida.worldgenVersion);
   }
+
+  // Reconstruye lo que el snapshot ya no guarda (formato v13):
+  //  - el mapa, función pura de la seed — `worldgenVersion` ya se comprobó, así que sale idéntico al guardado.
+  //  - el historial de eventos, desde el JSONL hermano (filtrado a `<= version` por si un append quedó por
+  //    delante de un snapshot revertido).
+  partida.state.mapa = generarMapa(partida.state.mapa.config);
+  partida.state.eventosDominio = await leerEventos(directorio, gameId, partida.state.version);
   return { sesion: GameSession.importar(partida) };
-}
-
-/**
- * Lleva un snapshot al formato actual encadenando migraciones (v1 -> ... -> v5). La versión actual se
- * devuelve tal cual; cualquier versión fuera del rango soportado se rechaza. La migración NO se persiste sola
- * — el próximo comando o tick reescribe el archivo ya en la versión actual.
- *
- * Trabaja sobre el JSON crudo (`Record<string, any>`): las formas de cada versión difieren en nombres de
- * campo, así que tipar el intermedio no aporta — el resultado sí es un `PartidaExportada` válido.
- */
-function migrarSnapshot(gameId: string, snapshot: SnapshotPartida): PartidaExportada {
-  if (snapshot.formatoVersion === FORMATO_SNAPSHOT_VERSION) return snapshot.partida;
-  if (snapshot.formatoVersion < 1 || snapshot.formatoVersion > FORMATO_SNAPSHOT_VERSION) {
-    throw new FormatoSnapshotNoSoportadoError(gameId, snapshot.formatoVersion);
-  }
-
-  const p = snapshot.partida as unknown as Record<string, any>;
-  const s = p.state as Record<string, any>;
-  if (snapshot.formatoVersion < 2) migrarV1aV2(s);
-  if (snapshot.formatoVersion < 3) migrarV2aV3(s);
-  if (snapshot.formatoVersion < 4) migrarV3aV4(s);
-  if (snapshot.formatoVersion < 5) migrarV4aV5(s);
-  if (snapshot.formatoVersion < 6) migrarV5aV6(s);
-  if (snapshot.formatoVersion < 7) migrarV6aV7(s);
-  if (snapshot.formatoVersion < 8) migrarV7aV8(s);
-  if (snapshot.formatoVersion < 9) migrarV8aV9(s);
-  if (snapshot.formatoVersion < 10) migrarV9aV10(s);
-  if (snapshot.formatoVersion < 11) migrarV10aV11(s);
-  if (snapshot.formatoVersion < 12) migrarV11aV12(s);
-  return p as unknown as PartidaExportada;
-}
-
-/** v1 -> v2 (Fase D / doc 10): campos temporales `*EnTick: number` (ordinal de tick) -> `*En: Instante` (ms
- * de mundo), relación 1:1 vía `instanteDeTick`. `salidasFaccionPorJugador` guardaba ISO en v1. */
-function migrarV1aV2(s: Record<string, any>): void {
-  const iso = (isoOTick: unknown) => (typeof isoOTick === 'string' ? instante(Date.parse(isoOTick)) : instanteDeTick(Number(isoOTick)));
-
-  for (const a of s.asentamientos ?? []) {
-    a.fundadoEn = instanteDeTick(a.fundadoEnTick ?? 0);
-    delete a.fundadoEnTick;
-    if (a.ultimaCaravanaCreadaEnTick !== undefined) {
-      a.ultimaCaravanaCreadaEn = instanteDeTick(a.ultimaCaravanaCreadaEnTick);
-      delete a.ultimaCaravanaCreadaEnTick;
-    }
-    for (const e of a.escuadrones ?? []) {
-      if (e.heridoHastaTick !== undefined) {
-        e.heridoHasta = instanteDeTick(e.heridoHastaTick);
-        delete e.heridoHastaTick;
-      }
-    }
-    for (const pol of a.politicasActivas ?? []) {
-      pol.activadaEn = instanteDeTick(pol.activadaEnTick ?? 0);
-      pol.expiraEn = instanteDeTick(pol.expiraEnTick ?? 0);
-      delete pol.activadaEnTick;
-      delete pol.expiraEnTick;
-    }
-  }
-  for (const ac of s.acuerdos ?? []) {
-    ac.creadoEn = instanteDeTick(ac.creadoEnTick ?? 0);
-    ac.expiraEn = instanteDeTick(ac.expiraEnTick ?? 0);
-    delete ac.creadoEnTick;
-    delete ac.expiraEnTick;
-  }
-  for (const o of s.ordenes ?? []) {
-    o.creadoEn = instanteDeTick(o.creadoEnTick ?? 0);
-    delete o.creadoEnTick;
-  }
-  for (const r of s.relaciones ?? []) {
-    r.creadoEn = instanteDeTick(r.creadoEnTick ?? 0);
-    delete r.creadoEnTick;
-  }
-  s.bandidosProximoSpawnEn = instanteDeTick(s.bandidosProximoSpawnTick ?? 0);
-  delete s.bandidosProximoSpawnTick;
-  s.salidasFaccionPorJugador = Object.fromEntries(
-    Object.entries(s.salidasFaccionPorJugador ?? {}).map(([jugador, valor]) => [jugador, iso(valor)])
-  );
-  const mapa = s.estadoMapa as Record<string, any>;
-  if (mapa?.regeneraEnTick !== undefined) {
-    mapa.regeneraEn = Object.fromEntries(Object.entries(mapa.regeneraEnTick).map(([id, tick]) => [id, instanteDeTick(Number(tick))]));
-    delete mapa.regeneraEnTick;
-  }
-}
-
-/** v2 -> v3 (Fase D / D3): el contador `Edificio.ticksRestantes` -> `Edificio.completaEn: Instante`. Solo un
- * edificio `en_construccion` lleva `completaEn` (instante en que la obra terminará = tick actual + los ticks
- * que le quedaban); `en_cola` y `activo` simplemente pierden el contador. */
-function migrarV2aV3(s: Record<string, any>): void {
-  const tickActual = Number(s.tick ?? 0);
-  for (const a of s.asentamientos ?? []) {
-    for (const e of a.edificios ?? []) {
-      if (e.ticksRestantes === undefined) continue;
-      if (e.estado === 'en_construccion') {
-        e.completaEn = instanteDeTick(tickActual + Number(e.ticksRestantes));
-      }
-      delete e.ticksRestantes;
-    }
-  }
-}
-
-/** v3 -> v4 (Fase D / D6): `RelacionPolitica.tributo.cantidadPorTick` -> `cantidadPorMinuto`. Mismo valor
- * (1 tick = 1 minuto) — solo cambia el nombre para que la unidad la diga el campo. */
-function migrarV3aV4(s: Record<string, any>): void {
-  for (const r of s.relaciones ?? []) {
-    if (r.tributo?.cantidadPorTick === undefined) continue;
-    r.tributo.cantidadPorMinuto = r.tributo.cantidadPorTick;
-    delete r.tributo.cantidadPorTick;
-  }
-}
-
-/** v4 -> v5 (cierre de Fase D): el `tick` provisional se retira del contrato de eventos. Los eventos
- * guardados pierden `tick` (ya llevan `momento`); las entradas del log por jugador cambian `tick` por el
- * `momento` de mundo equivalente (`isoDeInstante(instanteDeTick(tick))`). */
-function migrarV4aV5(s: Record<string, any>): void {
-  for (const e of s.eventosDominio ?? []) delete e.tick;
-  for (const entradas of Object.values(s.historialJugadores ?? {})) {
-    for (const entrada of entradas as Array<Record<string, any>>) {
-      if (entrada.tick === undefined) continue;
-      entrada.momento = isoDeInstante(instanteDeTick(Number(entrada.tick)));
-      delete entrada.tick;
-    }
-  }
-}
-
-/** v5 -> v6 (movimiento de ejércitos, Doc 5.11/5.12): dos colecciones nuevas en el estado. Se rellenan
- * vacías y ya está — una partida de antes de la mecánica no tiene ejércitos en campaña, y un jugador sin
- * registro en `jugadores` usa `LIDERAZGO.base` por diseño (ver `liderazgoDe`, engine/liderazgo.ts), así que
- * no hay nada que reconstruir ni ningún valor que adivinar. */
-function migrarV5aV6(s: Record<string, any>): void {
-  s.jugadores ??= [];
-  s.ejercitos ??= [];
-}
-
-/** v6 -> v7 (niebla de guerra, Paso 2): `memoriaPorFaccion`. Se rellena vacío: nadie ha explorado nada
- * todavía, que es exactamente lo cierto — la partida no venía guardando qué había visto cada Facción, así que
- * inventar un pasado sería peor que empezar a recordar desde el primer tick que corra con la mecánica.
- *
- * Consecuencia asumida, y visible para el jugador: al cargar una partida vieja el mapa se tapa entero salvo
- * lo que se esté viendo en ese momento, y se va destapando de nuevo según se juega. */
-function migrarV6aV7(s: Record<string, any>): void {
-  s.memoriaPorFaccion ??= {};
-}
-
-/**
- * v7 -> v8 (jugador situado, Doc 5.12.1): `Ejercito` gana `participantes`, `tipo` y `liderId`.
- *
- * Sin pérdida, porque los tres se deducen de lo que ya había:
- *
- * - **`participantes`** se derivaba de los escuadrones (`new Set(e.jugadorId)`), así que derivarlo aquí
- *   reproduce exactamente el comportamiento anterior. Se fechan todos en el instante del snapshot: no hay
- *   historia de antigüedad que recuperar, y con la misma fecha la sucesión cae en el orden del array, que
- *   es el único orden que ese snapshot conocía.
- * - **`tipo`** es siempre `'ejercito'`: antes de v8 la única forma de crear una columna era
- *   `movilizarEjercito`, que sale contra un destino.
- * - **`liderId`** es el primer participante. Arbitrario, y no hay nada mejor — quien formó la columna no se
- *   guardaba en ninguna parte. Es el precio de introducir el mando después de que existieran los ejércitos.
- */
-function migrarV7aV8(s: Record<string, any>): void {
-  const unidoEn = instanteDeTick(Number(s.tick ?? 0));
-  for (const ejercito of (s.ejercitos ?? []) as Record<string, any>[]) {
-    const ids: string[] = [];
-    for (const escuadron of (ejercito.escuadrones ?? []) as Record<string, any>[]) {
-      if (escuadron.jugadorId && !ids.includes(escuadron.jugadorId)) ids.push(escuadron.jugadorId);
-    }
-    ejercito.participantes ??= ids.map((jugadorId) => ({ jugadorId, unidoEn }));
-    ejercito.tipo ??= 'ejercito';
-    ejercito.liderId ??= ids[0] ?? '';
-  }
-}
-
-/**
- * v8 -> v9 (jugador situado, Doc 1.10): `Jugador` gana `ubicacion`, y con ella el registro deja de ser
- * opcional.
- *
- * **Es la primera migración del repo sin valor por defecto.** Hasta ahora toda mecánica nueva se diseñó para
- * que un snapshot viejo cargara sin tocarlo — la niebla con "Facción ausente = no ha visto nada", el
- * Liderazgo con "jugador ausente = `LIDERAZGO.base`". Con la posición no hay equivalente: "ausente = está en
- * ninguna parte" no significa nada.
- *
- * Así que hay que CENSAR a los jugadores, y el censo es la unión de los cinco sitios donde el motor los
- * dejaba escritos antes de que existieran como entidad: `jugadores`, `jugadoresFundadoresIds`,
- * `casasCompradas`, `cargos` y `Escuadron.jugadorId` (dentro y fuera de campaña). Faltar en el censo no es un
- * error de datos: es alguien que la partida ya no conocía de ninguna forma.
- *
- * La ubicación se deduce con `ubicacionDeducida`, la MISMA que usa el alta perezosa de `GameSession`: entrar
- * por primera vez y cargar una partida vieja tienen que colocar a la gente en el mismo sitio, o el juego
- * diría una cosa y la migración otra.
- */
-function migrarV8aV9(s: Record<string, any>): void {
-  const asentamientos = (s.asentamientos ?? []) as Asentamiento[];
-  const ejercitos = (s.ejercitos ?? []) as Ejercito[];
-  const jugadores = (s.jugadores ?? []) as Record<string, any>[];
-
-  const censo = new Set<string>(jugadores.map((j) => String(j.id)));
-  for (const a of asentamientos) {
-    for (const id of a.jugadoresFundadoresIds ?? []) censo.add(id);
-    for (const id of a.casasCompradas ?? []) censo.add(id);
-    for (const id of Object.values(a.cargos ?? {})) if (typeof id === 'string' && id) censo.add(id);
-    for (const e of a.escuadrones ?? []) if (e.jugadorId) censo.add(e.jugadorId);
-  }
-  for (const ej of ejercitos) {
-    for (const p of ej.participantes ?? []) censo.add(p.jugadorId);
-    for (const e of ej.escuadrones ?? []) if (e.jugadorId) censo.add(e.jugadorId);
-  }
-
-  const yaConRegistro = new Map(jugadores.map((j) => [String(j.id), j]));
-  s.jugadores = [...censo].sort().map((id) => ({
-    // Quien ya tenía registro conserva su Liderazgo; el que se censa ahora arranca en la base, que es
-    // exactamente lo que el motor le estaba aplicando por no tener registro.
-    liderazgoBase: LIDERAZGO.base,
-    ...(yaConRegistro.get(id) ?? { id }),
-    ubicacion: ubicacionDeducida(id, asentamientos, ejercitos),
-  }));
-}
-
-/**
- * v9 -> v10 (unirse en campo, Doc 5.14.1): `Ejercito` gana `politicaDeUnion`.
- *
- * A `rechazar`, que es lo prudente y además lo VERDADERO para una partida anterior a la mecánica: en ella
- * nadie podía unirse en campo, así que ninguna columna en curso había consentido a que se le sumara nadie.
- * Ponerlas en `aceptar` habría abierto sus filas sin que su Líder lo decidiera.
- */
-function migrarV9aV10(s: Record<string, any>): void {
-  for (const ejercito of (s.ejercitos ?? []) as Record<string, any>[]) {
-    ejercito.politicaDeUnion ??= 'rechazar';
-  }
-}
-
-/**
- * v10 -> v11 (el comercio deja de ser magia, `Consideraciones/Comercio_Fisico_Definicion.md`):
- * `OrdenMercado` gana `expiraEn`.
- *
- * Se le da el plazo COMPLETO contado desde ahora, no desde que se colocó. Lo segundo sería más fiel a la
- * fecha, pero retiraría de golpe todas las órdenes de una partida vieja al primer tick tras actualizar — y
- * esas órdenes se colocaron cuando el emparejamiento automático las habría cumplido solas. Darles el plazo
- * entero es darles la oportunidad que la regla nueva les cambió.
- *
- * `AcuerdoTrueque` no necesita nada: un acuerdo guardado como 'activo' YA estaba pactado, que es exactamente
- * lo que significa ahora.
- */
-function migrarV10aV11(s: Record<string, any>): void {
-  const ahora = instanteDeTick((s.tick as number | undefined) ?? 0);
-  for (const orden of (s.ordenes ?? []) as Record<string, any>[]) {
-    orden.expiraEn ??= sumar(ahora, minutos(MERCADO.plazoOrdenMinutos));
-  }
-}
-
-/**
- * v11 -> v12 (revamp de caravanas, Doc 3.13 / `Consideraciones/Revamp_Caravanas_Definicion.md`): una
- * `Caravana` comercial deja de leer capacidad/velocidad de `CARAVANA_CATALOGO` y las deriva de sus `carros`.
- * Toda comercial guardada sin `carros` recibe la caravana por defecto —1 carro básico + 1 buey— que deriva a
- * los mismos 500/16 de antes (`capacidadCaravana`/`velocidadCaravana`, engine/caravanas.ts), así que ni el
- * comercio en curso ni el batch cambian. Las de Fundación (`tipo: 'construccion'`) y las efímeras no se tocan.
- */
-function migrarV11aV12(s: Record<string, any>): void {
-  for (const caravana of (s.caravanas ?? []) as Record<string, any>[]) {
-    if (caravana.tipo === 'comercial' && caravana.carros === undefined) {
-      caravana.carros = [{ tipoCarro: 'basico', animal: 'buey' }];
-      caravana.reservadaManual = false;
-    }
-  }
 }
 
 export interface ResumenPartidaEnDisco {

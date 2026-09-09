@@ -82,9 +82,8 @@ export type ManejadorComando<P, R> = (
  * `estado` debe llegar ya con los cambios de dominio aplicados; esta función solo añade lo transversal.
  *
  * Ya no escribe un `log` en texto en paralelo: era el MISMO hecho guardado dos veces en el estado (y
- * persistido dos veces en cada snapshot). El log que muestra la consola se DERIVA de `eventosDominio` en la
- * capa de presentación (`proyectarLog`, `session/estado.ts`) — ver doc 2 punto 6: el texto es presentación,
- * el contrato es el evento estructurado.
+ * persistido dos veces en cada snapshot). El contrato es el evento estructurado (código + payload); el texto
+ * de una consola de administración lo compone quien la pinta, en el repo de cliente — ver doc 2 punto 6.
  */
 export function exito<T>(estado: GameSessionState, eventos: EventoDominio[], datos?: T): TransicionComando<T> {
   const version = estado.version + 1;

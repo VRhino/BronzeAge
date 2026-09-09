@@ -9,6 +9,7 @@ import { GameSession } from '../../session/gameSession';
 import { crearFaccion } from '../../session/comandos/crearFaccion';
 import { cargarPartida, guardarPartida } from '../persistenciaPartida';
 import { RegistroDeAuditoria } from '../auditoria';
+import { anexarEventos, leerEventos } from '../eventosDePartida';
 import {
   DIRECTORIO_RESPALDOS,
   listarRespaldos,
@@ -66,6 +67,24 @@ describe('respaldarPartida', () => {
 
     const copiados = await readdir(join(directorio, DIRECTORIO_RESPALDOS));
     expect(copiados.some((a) => a.endsWith('.auditoria.jsonl'))).toBe(true);
+  });
+
+  it('se lleva el historial de eventos consigo, y `restaurarPartida` lo devuelve al punto respaldado', async () => {
+    await partidaConFacciones('g1', 1);
+    await anexarEventos(directorio, 'g1', [{ codigo: 'faccion.creada', mensaje: 'x', momento: '2026-01-01T00:00:00.000Z', version: 1 }]);
+    await respaldarPartida(directorio, 'g1', '2026-09-05T11:22:33.444Z');
+
+    // La partida y su historial siguen adelante...
+    const sesion2 = await partidaConFacciones('g1', 3);
+    await anexarEventos(directorio, 'g1', [{ codigo: 'faccion.creada', mensaje: 'y', momento: '2026-01-01T00:01:00.000Z', version: 3 }]);
+    expect((await leerEventos(directorio, 'g1')).map((e) => e.version)).toEqual([3, 1]);
+    void sesion2;
+
+    const respaldo = (await listarRespaldos(directorio, 'g1'))[0]!;
+    await restaurarPartida(directorio, 'g1', respaldo.archivo);
+
+    // ...y la restauración deja el historial como estaba: solo el evento de la versión 1.
+    expect((await leerEventos(directorio, 'g1')).map((e) => e.version)).toEqual([1]);
   });
 
   it('el nombre del archivo no lleva ":" — inservible en Windows — y conserva el momento exacto', async () => {

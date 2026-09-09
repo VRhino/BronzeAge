@@ -43,8 +43,9 @@ import { instante, type Instante } from '../domain/tiempo';
 const EPOCA_MS = new Date(SIMULACION.epocaInicial).getTime();
 
 /**
- * Entrada de log en texto. Ya no se guarda un log global en el estado (se deriva de `eventosDominio` con
- * `proyectarLog`); este tipo sigue siendo el de esa proyección y el de `historialJugadores`.
+ * Entrada de log en texto. Ya no hay un log global en el estado (la consola de administración se derivaba de
+ * `eventosDominio`, y esa consola vive ahora en el repo de cliente); este tipo se queda como el de
+ * `historialJugadores` y el de `ProyeccionJugador.historial`.
  *
  * Administración: nunca viaja a un jugador tal cual (Docs/Arquitectura/7_Diseno_GameSession.md §7.1 — el log
  * global narra lo que pasa en TODO el mundo, así que incluirlo en una proyección de jugador sería una fuga de
@@ -102,10 +103,13 @@ export interface GameSessionState {
    */
   salidasFaccionPorJugador: Record<string, Instante>;
   /**
-   * Todo lo que ha ocurrido en la partida, en forma estructurada: la ÚNICA representación de los hechos que
-   * se guarda. El log en texto que muestra la consola se deriva de aquí con `proyectarLog()` — antes se
-   * persistía además un `log: EventoLogAdmin[]` en paralelo, que era el mismo hecho dos veces en el estado y
-   * dos veces en cada snapshot, y una de las dos copias (texto plano) no se podía filtrar por audiencia.
+   * Todo lo que ha ocurrido en la partida, en forma estructurada: la ÚNICA representación de los hechos, en
+   * texto estructurado y no plano (antes se persistía además un `log: EventoLogAdmin[]` en paralelo, el mismo
+   * hecho dos veces, y la copia de texto plano no se podía filtrar por audiencia).
+   *
+   * Vive aquí EN MEMORIA, pero NO en el snapshot: desde el formato v13 se persiste aparte, en un JSONL
+   * append-only (`server/eventosDePartida.ts`), y `cargarPartida` lo rehidrata. El snapshot solo crece con el
+   * estado de juego, no con el historial.
    *
    * Administración: NO viaja a un jugador tal cual (doc 7 §7.1 — narra lo que pasa en TODO el mundo, así que
    * mandarlo entero sería una fuga de información de facciones rivales). Las proyecciones por audiencia de
@@ -161,23 +165,6 @@ export function conResultadoDeSimulacion(estado: GameSessionState, simulacion: E
 }
 
 /**
- * Deriva el log administrativo en texto a partir de los eventos estructurados. Es PRESENTACIÓN, no estado: no
- * se guarda ni viaja como tal — el servidor manda `eventosDominio` y quien pinta la consola llama a esto.
- *
- * Un evento atribuido a un asentamiento se prefija con su id, que es lo que hacía `avanzarSimulacion` cuando
- * el tick llevaba su propio array de texto (`eventos`, retirado por redundante). Al pasar el log a derivarse
- * de `eventosDominio` —cuyos `mensaje` NO llevan el prefijo, porque el id va aparte en `asentamientoId`— la
- * consola había empezado a mostrar "granja completado." sin decir de qué asentamiento. Reconstruirlo aquí lo
- * deja en un solo sitio, en vez de en cada emisor.
- */
-export function proyectarLog(eventos: readonly EventoDominio[]): EventoLogAdmin[] {
-  return eventos.map((e) => ({
-    momento: e.momento,
-    mensaje: e.asentamientoId ? `${e.asentamientoId}: ${e.mensaje}` : e.mensaje,
-  }));
-}
-
-/**
  * Eventos con `version` estrictamente mayor que `desde` (Fase C13) — la mitad "sin filtrar por audiencia" del
  * cursor incremental; `proyectarParaJugador`/`eventosDominioParaJugador` en `session/proyecciones/jugador.ts`
  * hacen la versión filtrada. `estado.eventosDominio` vive más nuevo primero (`exito()` los antepone); se
@@ -211,7 +198,7 @@ export function eventoAdministrativo(tick: number, mensaje: string): EventoDomin
  * cambia de verdad (`regenerarMundo`/`forzar`, o una subida de `WORLDGEN_VERSION`).
  *
  * No es un hash: es legible a propósito, para poder leer un id en un log o una URL y saber de qué mapa se
- * trata sin decodificar nada. Nunca se guarda — se deriva cada vez que hace falta, igual que `proyectarLog`.
+ * trata sin decodificar nada. Nunca se guarda — se deriva cada vez que hace falta, igual que `instanteDeTick`.
  */
 export function idDeMapa(mapa: GameSessionState['mapa']): string {
   return `v${mapa.version}-s${mapa.config.seed}${mapa.config.region ? `-${mapa.config.region}` : ''}`;

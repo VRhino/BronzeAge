@@ -17,12 +17,13 @@
 import type { Asentamiento, RegionId } from '../domain/types';
 import { GameSession, type PartidaExportada, type ResultadoComando } from '../session/gameSession';
 import type { ActorId, ManejadorComando } from '../session/comandos/tipos';
-import type { GeometriaAsentamientos } from '../session/estado';
+import { eventosDesde, type GeometriaAsentamientos } from '../session/estado';
 import { calcularPrecioReferencia } from '../engine/market';
 import { computeTodasLasZonas, computeZonasFusionadasPorFaccion } from '../engine/zones';
 import { trazadoParaAsentamiento } from '../engine/trazado';
 import { PRECIO_BASE } from '../constants';
 import { cargarPartida, guardarPartida } from './persistenciaPartida';
+import { anexarEventos } from './eventosDePartida';
 
 /**
  * Instrumentación de UNA partida (Fase E3). Números crudos, sin interpretar: quien los lee decide si 400 ms
@@ -166,10 +167,19 @@ export class RunnerDePartida {
    */
   private cacheGeometria: { sobre: readonly Asentamiento[]; valor: GeometriaAsentamientos } | null = null;
 
+  /**
+   * Última `version` cuyos eventos ya están en `<gameId>.eventos.jsonl` (`eventosDePartida.ts`). Arranca en la
+   * versión cargada: para una partida en disco, el JSONL ya tiene su historial hasta ahí (lo rehidrató
+   * `cargarPartida`); para una nueva, es 0. Solo avanza cuando un `anexarEventos` termina bien — si falla, el
+   * próximo guardado reintenta ese tramo (los eventos siguen en memoria hasta un reinicio).
+   */
+  private versionEventosAnexados: number;
+
   private constructor(sesion: GameSession, opciones: OpcionesRunner) {
     this.sesion = sesion;
     this.directorio = opciones.directorio;
     this.ahora = opciones.ahora ?? (() => new Date().toISOString());
+    this.versionEventosAnexados = sesion.getState().version;
   }
 
   static crear(gameId: string, config: { seed: number; region?: RegionId }, opciones: OpcionesRunner): RunnerDePartida {
@@ -457,10 +467,37 @@ export class RunnerDePartida {
 
     try {
       await guardarPartida(this.directorio, this.sesion, this.ahora());
-      return resultado;
     } catch (err) {
       this.sesion = GameSession.importar(previo);
       throw err;
+    }
+
+    await this.anexarEventosNuevos();
+    return resultado;
+  }
+
+  /**
+   * Anexa al JSONL de eventos (`eventosDePartida.ts`) lo emitido desde el último guardado. El corte se hace
+   * por `version` y no por `ResultadoComando.eventos` porque un tick completo son hasta tres mutaciones (tick
+   * + auto-comercio + turno del NPC) y solo la primera vuelve en el resultado — `eventosDesde` las recoge las
+   * tres.
+   *
+   * Va DESPUÉS de `guardarPartida`, y su fallo NO revierte el comando: el snapshot es la fuente de verdad del
+   * estado, este archivo es el historial derivado (mismo trato que `auditoria.ts`). Si el append falla se
+   * grita y el cursor NO avanza, así que el próximo guardado reintenta ese tramo — los eventos siguen en
+   * memoria hasta un reinicio.
+   */
+  private async anexarEventosNuevos(): Promise<void> {
+    const estado = this.sesion.getState();
+    if (estado.version === this.versionEventosAnexados) return;
+    try {
+      await anexarEventos(this.directorio, this.gameId, eventosDesde(estado, this.versionEventosAnexados));
+      this.versionEventosAnexados = estado.version;
+    } catch (err) {
+      console.error(
+        `[eventos] no se pudieron anexar los de '${this.gameId}' (versiones ${this.versionEventosAnexados + 1}–${estado.version}):`,
+        err
+      );
     }
   }
 }

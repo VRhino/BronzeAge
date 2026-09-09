@@ -29,7 +29,7 @@ Así que esto ya no es una mecánica desde cero: es **completar** lo que quedó 
 | Ver asentamientos ajenos por espacio | **Hecho** (Paso 1, 2026-09-04) |
 | Memoria ("último conocido") | **Hecha** (Pasos 2-3) |
 | Terreno tapado donde nunca se estuvo | **Hecho** (Paso 5, en el cliente de jugador) |
-| Visión compartida por alianza | Falta |
+| Visión compartida por alianza y vasallaje | **Hecho** (Paso 4, 2026-09-09) |
 
 ## 2. Decisiones cerradas con el usuario (2026-09-04)
 
