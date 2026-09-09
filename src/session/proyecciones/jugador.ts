@@ -73,6 +73,7 @@ import { ubicacionDeducida } from '../../engine/ubicacion';
 import { alcanceDeVista, enLaPuertaDe, participantesDe } from '../../engine/ejercitos';
 import {
   estaExplorado,
+  fundirExploraciones,
   marcarVisto,
   proyectarNiebla,
   rejillaDe,
@@ -614,9 +615,15 @@ export function proyectarParaJugador(
   const seVe = new Set(avistados.map((a) => a.id));
 
   const memoria = (faccionId !== null ? estado.memoriaPorFaccion[faccionId] : undefined) ?? MEMORIA_VACIA;
+  // El jugador ve SIEMPRE por donde ha andado él, tenga bandera o no. El tick graba ese rastro en
+  // `Jugador.exploracionPersonal` mientras su columna sea huérfana (`grabarExploracionPersonal`), y hay que
+  // fundirlo con la memoria de la Facción: un ciudadano cuya columna de aparición nunca se marcó con su
+  // bandera —`unirseAFaccion` funde lo andado ANTES de unirse, pero lo de después queda solo aquí— caminaría
+  // si no por un mapa que se cierra de nuevo tras cada paso (niebla de guerra, los tres niveles).
+  const exploradoDelJugador = fundirExploraciones(memoria.exploracion, jugador?.exploracionPersonal ?? SIN_EXPLORAR);
   // La niebla se calcula ANTES del objeto porque además de viajar es el filtro de los caminos: la misma
   // máscara que tapa el terreno decide qué calzadas existen para este jugador.
-  const exploracion = nieblaDe(memoria.exploracion, estado, asentamientosPropios, ejercitosPropios, asentamientosAliados, ejercitosAliados);
+  const exploracion = nieblaDe(exploradoDelJugador, estado, asentamientosPropios, ejercitosPropios, asentamientosAliados, ejercitosAliados);
 
   return {
     gameId: estado.gameId,
