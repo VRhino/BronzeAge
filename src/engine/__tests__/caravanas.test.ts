@@ -4,11 +4,28 @@
 // documenta su origen tal como lo hacía el archivo del que viene.
 import { describe, expect, it } from 'vitest';
 import type { Asentamiento, Caravana, CaminoComercial, Faccion, Point } from '../../domain/types';
-import { CARAVANA_COOLDOWN } from '../../constants';
-import { avanzarComercio, construirCaravanaComercial, proponerTrueque, CaravanaInvalidaError } from '../trade';
+import type { Escuadron } from '../../domain/types';
+import { CARAVANA_COOLDOWN, CARAVANA_ESCOLTA, CARAVANA_PREPARACION } from '../../constants';
+import { capacidadCaravana, devolverEscoltaAGuarnicion, velocidadCaravana } from '../caravanas';
+import { cupoEscolta } from '../asentamientoQuery';
+import { avanzarAtaquesBandidos } from '../bandidos';
+import { createRng } from '../../worldgen';
+import {
+  aceptarTrueque,
+  agregarCarroACaravana,
+  avanzarComercio,
+  cancelarPreparacionCaravana,
+  comprarAnimalParaCaravana,
+  construirCaravanaComercial,
+  crearCaravanaVacia,
+  moverCarroEntreCaravanas,
+  prepararCaravanaManual,
+  proponerTrueque,
+  CaravanaInvalidaError,
+} from '../trade';
 import { lanzarCaravanaFundacion, ExpansionInvalidaError } from '../expansion';
 import { almacenSintetico, caravanaComercialCasiLlegando, mapaSintetico } from './tradeFixtures';
-import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, posicionRecomendable } from './fixtures';
+import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instanteDeTest, posicionRecomendable } from './fixtures';
 
 // ---------------------------------------------------------------------------------------------------------
 // Orientación de la ruta al reutilizar un Camino Comercial existente
@@ -30,14 +47,14 @@ describe('orientación de la ruta al reutilizar un Camino Comercial existente', 
       posicion,
       almacen: almacenSintetico(recursos),
       politicasActivas: [],
-      edificios: [{ id: `mercado-${id}`, tipo: 'mercado', posicion, estado: 'activo', ticksRestantes: 0, nivelInterno: 1 }],
+      edificios: [{ id: `mercado-${id}`, tipo: 'mercado', posicion, estado: 'activo', nivelInterno: 1 }],
     } as unknown as Asentamiento;
   }
 
   it('una caravana que viaja B -> A recibe la polilínea invertida, no la original A -> B', () => {
     const posA: Point = { x: 0, y: 0 };
     const posB: Point = { x: 1000, y: 0 };
-    const a = asentamientoConMercado('A', posA, { madera: 50, cobre: 200 });
+    const a = asentamientoConMercado('A', posA, { madera: 50, cobre: 200, oro: 100 });
     const b = asentamientoConMercado('B', posB, { madera: 50, oro: 1000 });
 
     // Camino ya construido A -> B (mismo patrón que un save real: la infraestructura persiste
@@ -45,13 +62,19 @@ describe('orientación de la ruta al reutilizar un Camino Comercial existente', 
     const caminoAB: CaminoComercial = { id: 'camino-A-B', asentamientoAId: 'A', asentamientoBId: 'B', puntos: [posA, { x: 500, y: 0 }, posB] };
 
     // Cada asentamiento construye su propia caravana (mismo patrón que el save real: una por lado).
-    const { asentamiento: aTrasConstruir, caravana: caravanaA } = construirCaravanaComercial(a, [], 0, 0);
-    const { asentamiento: bTrasConstruir, caravana: caravanaB } = construirCaravanaComercial(b, [caravanaA], 0, 1);
+    const { asentamiento: aTrasConstruir, caravana: caravanaA } = construirCaravanaComercial(a, [], instanteDeTest(0), 0);
+    const { asentamiento: bTrasConstruir, caravana: caravanaB } = construirCaravanaComercial(b, [caravanaA], instanteDeTest(0), 1);
 
     // Trueque A<->B: A entrega cobre a B (caravana de A viaja A->B, a favor del camino), B entrega oro a A
     // (caravana de B viaja B->A, EN CONTRA del orden guardado del camino) — el mismo patrón de dos trueques
     // opuestos por el mismo camino que expuso el bug en la partida real.
-    const acuerdo = proponerTrueque([aTrasConstruir, bTrasConstruir], 'A', 'B', 'cobre', 'oro', 50, 20, 0, 0);
+    // Un trueque nace 'propuesto' y no lo mira ninguna caravana hasta que el otro lado acepta
+    // (`Comercio_Fisico_Definicion.md`). Estos tests miden el TRANSPORTE, no la negociación, así que aceptan
+    // en el acto y en la misma línea.
+    const acuerdo = aceptarTrueque(
+      proponerTrueque([aTrasConstruir, bTrasConstruir], 'A', 'B', 'cobre', 'oro', 50, 20, instanteDeTest(0), 0),
+      instanteDeTest(0)
+    );
 
     const resultado = avanzarComercio(
       [aTrasConstruir, bTrasConstruir],
@@ -60,7 +83,7 @@ describe('orientación de la ruta al reutilizar un Camino Comercial existente', 
       [acuerdo],
       mapaSintetico(),
       [caminoAB],
-      1
+      instanteDeTest(1)
     );
 
     const cA = resultado.caravanas.find((c) => c.id === caravanaA.id)!;
@@ -86,7 +109,7 @@ describe('orientación de la ruta al reutilizar un Camino Comercial existente', 
 // Cooldown de creación de caravanas (antes `caravana_cooldown.test.ts`)
 //
 // A petición del usuario: tras crear una caravana (Fundación o comercial) desde un asentamiento, hay que
-// esperar `CARAVANA_COOLDOWN.ticksCooldown` ticks antes de poder crear otra desde el mismo asentamiento —
+// esperar `CARAVANA_COOLDOWN.cooldownMinutos` ticks antes de poder crear otra desde el mismo asentamiento —
 // evita spam de creación cuando una caravana recién salida es destruida (bandidos, intercepción) y el
 // cupo/recursos vuelven a estar disponibles de inmediato. Ver `Docs/3_Sistema_Economico_y_Comercio.md` y
 // `engine/asentamientoQuery.ts` (`puedeCrearCaravana`).
@@ -101,7 +124,7 @@ describe('cooldown de creación de caravanas', () => {
       almacen: { ...asentamiento.almacen, madera: { cantidad: 1000, capacidad: 2000 } },
       edificios: [
         ...asentamiento.edificios,
-        { id: 'mercado-test', tipo: 'mercado', posicion: { x: 100, y: 100 }, estado: 'activo', ticksRestantes: 0, ambito: 'asentamiento' },
+        { id: 'mercado-test', tipo: 'mercado', posicion: { x: 100, y: 100 }, estado: 'activo', ambito: 'asentamiento' },
       ],
     };
   }
@@ -109,27 +132,27 @@ describe('cooldown de creación de caravanas', () => {
   describe('caravana comercial (construirCaravanaComercial)', () => {
     it('rechaza crear una segunda caravana antes de que pase el cooldown', () => {
       const asentamiento = asentamientoConMercado();
-      const r1 = construirCaravanaComercial(asentamiento, [], 0, 0);
-      expect(() => construirCaravanaComercial(r1.asentamiento, [r1.caravana], 1, 1)).toThrow(CaravanaInvalidaError);
+      const r1 = construirCaravanaComercial(asentamiento, [], instanteDeTest(0), 0);
+      expect(() => construirCaravanaComercial(r1.asentamiento, [r1.caravana], instanteDeTest(1), 1)).toThrow(CaravanaInvalidaError);
     });
 
-    it('permite crear otra en cuanto pasa CARAVANA_COOLDOWN.ticksCooldown ticks', () => {
+    it('permite crear otra en cuanto pasa CARAVANA_COOLDOWN.cooldownMinutos ticks', () => {
       const asentamiento = asentamientoConMercado();
-      const r1 = construirCaravanaComercial(asentamiento, [], 0, 0);
+      const r1 = construirCaravanaComercial(asentamiento, [], instanteDeTest(0), 0);
       expect(() =>
-        construirCaravanaComercial(r1.asentamiento, [r1.caravana], CARAVANA_COOLDOWN.ticksCooldown, 1)
+        construirCaravanaComercial(r1.asentamiento, [r1.caravana], instanteDeTest(CARAVANA_COOLDOWN.cooldownMinutos), 1)
       ).not.toThrow();
     });
 
-    it('registra el tick de creación en ultimaCaravanaCreadaEnTick', () => {
+    it('registra el instante de creación en ultimaCaravanaCreadaEn', () => {
       const asentamiento = asentamientoConMercado();
-      const r1 = construirCaravanaComercial(asentamiento, [], 5, 0);
-      expect(r1.asentamiento.ultimaCaravanaCreadaEnTick).toBe(5);
+      const r1 = construirCaravanaComercial(asentamiento, [], instanteDeTest(5), 0);
+      expect(r1.asentamiento.ultimaCaravanaCreadaEn).toBe(instanteDeTest(5));
     });
 
     it('un asentamiento que nunca creó ninguna no está en cooldown', () => {
       const asentamiento = asentamientoConMercado();
-      expect(() => construirCaravanaComercial(asentamiento, [], 0, 0)).not.toThrow();
+      expect(() => construirCaravanaComercial(asentamiento, [], instanteDeTest(0), 0)).not.toThrow();
     });
   });
 
@@ -153,15 +176,15 @@ describe('cooldown de creación de caravanas', () => {
 
     it('rechaza lanzar una segunda Caravana de Fundación antes de que pase el cooldown', () => {
       const { mapa, asentamiento, faccion, destino } = contextoNivel2();
-      const r1 = lanzarCaravanaFundacion(mapa, asentamiento, faccion, destino, [asentamiento], [], 1, 0, 0);
+      const r1 = lanzarCaravanaFundacion(mapa, asentamiento, faccion, destino, [asentamiento], [], 1, instanteDeTest(0), 0);
       expect(() =>
-        lanzarCaravanaFundacion(mapa, r1.origenActualizado, faccion, destino, [asentamiento], [r1.caravana], 1, 1, 1)
+        lanzarCaravanaFundacion(mapa, r1.origenActualizado, faccion, destino, [asentamiento], [r1.caravana], 1, instanteDeTest(0), 1)
       ).toThrow(ExpansionInvalidaError);
     });
 
-    it('permite lanzar otra en cuanto pasa CARAVANA_COOLDOWN.ticksCooldown ticks', () => {
+    it('permite lanzar otra en cuanto pasa CARAVANA_COOLDOWN.cooldownMinutos ticks', () => {
       const { mapa, asentamiento, faccion, destino } = contextoNivel2();
-      const r1 = lanzarCaravanaFundacion(mapa, asentamiento, faccion, destino, [asentamiento], [], 1, 0, 0);
+      const r1 = lanzarCaravanaFundacion(mapa, asentamiento, faccion, destino, [asentamiento], [], 1, instanteDeTest(0), 0);
       expect(() =>
         lanzarCaravanaFundacion(
           mapa,
@@ -171,7 +194,7 @@ describe('cooldown de creación de caravanas', () => {
           [asentamiento],
           [r1.caravana],
           1,
-          CARAVANA_COOLDOWN.ticksCooldown,
+          instanteDeTest(CARAVANA_COOLDOWN.cooldownMinutos),
           1
         )
       ).not.toThrow();
@@ -192,7 +215,7 @@ describe('retorno real de una caravana comercial tras entregar', () => {
   const destino = { id: 'destino', faccionId: 'faccion-1', posicion: { x: 1000, y: 0 }, almacen: almacenSintetico({ oro: 0 }), politicasActivas: [] } as unknown as Asentamiento;
 
   function avanzar(caravanas: Caravana[]) {
-    return avanzarComercio([origen, destino], [] as Faccion[], caravanas, [], mapaSintetico(), [], 1);
+    return avanzarComercio([origen, destino], [] as Faccion[], caravanas, [], mapaSintetico(), [], instanteDeTest(1));
   }
 
   it('al entregar pasa a "retornando" en destino, NO a "disponible" en origen', () => {
@@ -251,7 +274,7 @@ describe('reuso de caravana propia a través de varios envíos del mismo trueque
       almacen: almacenSintetico(recursos),
       politicasActivas: [],
       edificios: conMercado
-        ? [{ id: `mercado-${id}`, tipo: 'mercado', posicion, estado: 'activo', ticksRestantes: 0, nivelInterno: 1 }]
+        ? [{ id: `mercado-${id}`, tipo: 'mercado', posicion, estado: 'activo', nivelInterno: 1 }]
         : [],
     } as unknown as Asentamiento;
   }
@@ -263,15 +286,26 @@ describe('reuso de caravana propia a través de varios envíos del mismo trueque
     const destinoPos: Point = { x: 30, y: 0 };
     const mapa = mapaSintetico({ limites: { ancho: 1000, alto: 1000 } });
 
-    const origen0 = asentamientoSintetico('origen', origenPos, { madera: 50, piedra: 200 }, true);
+    // Las cantidades se DERIVAN de la capacidad de la caravana en vez de escribirse a mano: lo que este test
+    // mide es el reúso de la MISMA caravana en dos viajes, y con números fijos dejaba de medirlo en cuanto la
+    // capacidad cambiaba (pasó al subirla de 60 a 500 en el Paso 9 — con 100 pactadas ya cabían en un viaje).
+    // Pactando 1,5 capacidades, siempre son exactamente dos: uno lleno y otro a la mitad.
+    const origen0 = asentamientoSintetico('origen', origenPos, { madera: 50, piedra: 10_000, oro: 100 }, true);
     const destino0 = asentamientoSintetico('destino', destinoPos, { oro: 1000 }, false);
 
-    const { asentamiento: origenTrasConstruir, caravana } = construirCaravanaComercial(origen0, [], 0, 0);
+    const { asentamiento: origenTrasConstruir, caravana } = construirCaravanaComercial(origen0, [], instanteDeTest(0), 0);
+    // Se derivan de la capacidad de ESTA caravana: lo que mide el test es el reúso de la misma caravana en dos
+    // viajes, y con números fijos dejaba de medirlo en cuanto la capacidad cambiaba. Pactando 1,5 capacidades,
+    // siempre son exactamente dos envíos: uno lleno y otro a la mitad.
+    const CAPACIDAD = capacidadCaravana(caravana);
+    const PACTADAS = CAPACIDAD * 1.5;
+    const SEGUNDO_ENVIO = PACTADAS - CAPACIDAD;
     expect(caravana.estado).toBe('disponible');
 
-    // 100 piedra pactadas, capacidad de una caravana comercial = 60 (CARAVANA_CATALOGO.comercial.capacidad):
-    // fuerza DOS envíos con la misma caravana en vez de uno.
-    const acuerdo = proponerTrueque([origenTrasConstruir, destino0], 'origen', 'destino', 'piedra', 'oro', 100, 1, 0, 0);
+    const acuerdo = aceptarTrueque(
+      proponerTrueque([origenTrasConstruir, destino0], 'origen', 'destino', 'piedra', 'oro', PACTADAS, 1, instanteDeTest(0), 0),
+      instanteDeTest(0)
+    );
 
     let asentamientos = [origenTrasConstruir, destino0];
     let caravanas: Caravana[] = [caravana];
@@ -279,18 +313,18 @@ describe('reuso de caravana propia a través de varios envíos del mismo trueque
     const facciones: Faccion[] = [];
 
     function tick(n: number) {
-      const resultado = avanzarComercio(asentamientos, facciones, caravanas, acuerdos, mapa, [], n);
+      const resultado = avanzarComercio(asentamientos, facciones, caravanas, acuerdos, mapa, [], instanteDeTest(n));
       asentamientos = resultado.asentamientos;
       caravanas = resultado.caravanas;
       acuerdos = resultado.acuerdos;
       return resultado;
     }
 
-    // Tick 1: se asigna la caravana disponible al primer envío (sale con 60 piedra, tope de capacidad).
+    // Tick 1: se asigna la caravana disponible al primer envío (sale a tope de capacidad).
     tick(1);
     expect(caravanas).toHaveLength(1);
     expect(caravanas[0]!.estado).toBe('en_transito');
-    expect(caravanas[0]!.contenido['piedra']).toBe(60);
+    expect(caravanas[0]!.contenido['piedra']).toBe(CAPACIDAD);
 
     // Avanza hasta que entregue el primer envío (distancia 30, velocidad 16/tick -> llega en tick 2).
     let entregoUna = false;
@@ -299,8 +333,8 @@ describe('reuso de caravana propia a través de varios envíos del mismo trueque
       if (acuerdos[0]!.cantidadEntregadaA > 0) entregoUna = true;
     }
     expect(entregoUna).toBe(true);
-    expect(acuerdos[0]!.cantidadEntregadaA).toBe(60);
-    expect(acuerdos[0]!.estado).toBe('activo'); // aún falta el segundo envío (40 piedra) — no "cumplido" todavía.
+    expect(acuerdos[0]!.cantidadEntregadaA).toBe(CAPACIDAD);
+    expect(acuerdos[0]!.estado).toBe('activo'); // aún falta el segundo envío — no "cumplido" todavía.
 
     // Justo tras entregar: la MISMA caravana (mismo id, no una nueva) está "retornando", no "disponible" — no
     // puede recibir un segundo envío hasta volver de verdad a origen.
@@ -308,7 +342,7 @@ describe('reuso de caravana propia a través de varios envíos del mismo trueque
     expect(caravanas[0]!.id).toBe(caravana.id);
     expect(caravanas[0]!.estado).toBe('retornando');
 
-    // Mientras retorna, nada la reasigna al resto pendiente del trueque (40 piedra) aunque origen tenga stock:
+    // Mientras retorna, nada la reasigna al resto pendiente del trueque aunque origen tenga stock:
     // sigue "retornando", a medio camino (ni 0 ni 1) — prueba de que de verdad viaja, no se teletransporta.
     tick(6);
     expect(caravanas[0]!.estado).toBe('retornando');
@@ -316,7 +350,7 @@ describe('reuso de caravana propia a través de varios envíos del mismo trueque
     expect(caravanas[0]!.progreso).toBeLessThan(1);
 
     // Avanza hasta que vuelva a origen — el mismo tick en que llega, `asignarCaravanasATrueque` la reasigna
-    // de inmediato al resto pendiente (40 piedra) y sale por segunda vez: sigue siendo la MISMA caravana.
+    // de inmediato al resto pendiente y sale por segunda vez: sigue siendo la MISMA caravana.
     let salioSegundaVez = false;
     for (let t = 7; t < 20 && !salioSegundaVez; t++) {
       tick(t);
@@ -325,16 +359,16 @@ describe('reuso de caravana propia a través de varios envíos del mismo trueque
     expect(salioSegundaVez).toBe(true);
     expect(caravanas).toHaveLength(1); // ninguna caravana nueva se creó ni la original desapareció.
     expect(caravanas[0]!.id).toBe(caravana.id);
-    expect(caravanas[0]!.contenido['piedra']).toBe(40);
+    expect(caravanas[0]!.contenido['piedra']).toBe(SEGUNDO_ENVIO);
 
-    // Entrega el segundo envío: el trueque queda completo en 100/100 con la MISMA caravana, en dos viajes reales.
+    // Entrega el segundo envío: el trueque queda completo con la MISMA caravana, en dos viajes reales.
     let entregoDos = false;
     for (let t = 21; t < 30 && !entregoDos; t++) {
       tick(t);
-      if (acuerdos[0]!.cantidadEntregadaA >= 100) entregoDos = true;
+      if (acuerdos[0]!.cantidadEntregadaA >= PACTADAS) entregoDos = true;
     }
     expect(entregoDos).toBe(true);
-    expect(acuerdos[0]!.cantidadEntregadaA).toBe(100);
+    expect(acuerdos[0]!.cantidadEntregadaA).toBe(PACTADAS);
     expect(caravanas).toHaveLength(1);
     expect(caravanas[0]!.id).toBe(caravana.id);
     expect(caravanas[0]!.estado).toBe('retornando'); // vuelve a casa una última vez, ya sin más pendiente.
@@ -349,5 +383,267 @@ describe('reuso de caravana propia a través de varios envíos del mismo trueque
     expect(caravanas).toHaveLength(1);
     expect(caravanas[0]!.id).toBe(caravana.id);
     expect(caravanas[0]!.posicionActual).toEqual(origenPos);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------
+// Revamp de caravanas (Doc 3.13): la capacidad y la velocidad se DERIVAN de los carros/animales, sin catálogo
+// fijo de por medio. El ancla de calibración (Ronda 2): 1 carro básico + 1 buey = 500/16, el número que
+// costaba antes una caravana, para que el batch NPC no se mueva.
+// ---------------------------------------------------------------------------------------------------------
+describe('derivación de capacidad y velocidad de una caravana compuesta (Doc 3.13)', () => {
+  const base = (carros: Caravana['carros']): Caravana => ({
+    id: 'c', tipo: 'comercial', origenAsentamientoId: 'o', contenido: {}, posicionActual: { x: 0, y: 0 }, progreso: 0, carros,
+  });
+
+  it('sin ningún carro con tracción → 0 (una caravana así no puede viajar ni cargar)', () => {
+    expect(capacidadCaravana(base([]))).toBe(0);
+    expect(velocidadCaravana(base([]))).toBe(0);
+  });
+
+  it('el ancla: 1 carro básico + 1 buey da 500/16', () => {
+    const porDefecto = base([{ tipoCarro: 'basico', animal: 'buey' }]);
+    expect(capacidadCaravana(porDefecto)).toBe(500);
+    expect(velocidadCaravana(porDefecto)).toBe(16);
+  });
+
+  it('capacidad = suma por carro con animal; velocidad = animal más lento', () => {
+    const mixta = base([
+      { tipoCarro: 'basico', animal: 'buey' }, // 500 × 1.0
+      { tipoCarro: 'reforzado', animal: 'caballo' }, // 800 × 0.5
+    ]);
+    expect(capacidadCaravana(mixta)).toBe(500 + 400);
+    expect(velocidadCaravana(mixta)).toBe(16); // el buey frena a la caravana entera
+  });
+
+  it('un carro sin animal no cuenta capacidad; sin ningún animal la caravana no puede salir (velocidad 0)', () => {
+    const conCarroSuelto = base([{ tipoCarro: 'basico', animal: 'buey' }, { tipoCarro: 'reforzado' }]);
+    expect(capacidadCaravana(conCarroSuelto)).toBe(500);
+
+    const sinTraccion = base([{ tipoCarro: 'basico' }, { tipoCarro: 'reforzado' }]);
+    expect(capacidadCaravana(sinTraccion)).toBe(0);
+    expect(velocidadCaravana(sinTraccion)).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------
+// Revamp de caravanas (Doc 3.13) — Paso 2: casco vacío + piezas (carro del Mercado/Carpintería en madera,
+// animal comprado aparte). Bloque "economía del oro" (Paso 5): el buey pasa de 30 madera a 12 oro, así que
+// `construirCaravanaComercial` (NPC) recompone la caravana por defecto por 20 madera + 12 oro.
+// ---------------------------------------------------------------------------------------------------------
+describe('composición de caravana por piezas (Doc 3.13.2)', () => {
+  function asentamiento(recursos: Record<string, number>, conCarpinteria = false): Asentamiento {
+    const mapa = crearMapaDeterminista(1);
+    const facciones = crearFacciones();
+    const { asentamiento: a } = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', []);
+    return {
+      ...a,
+      almacen: Object.fromEntries(
+        Object.entries({ madera: 0, oro: 0, ...recursos }).map(([r, c]) => [r, { cantidad: c, capacidad: 100_000 }])
+      ) as Asentamiento['almacen'],
+      edificios: [
+        ...a.edificios,
+        { id: 'mercado-x', tipo: 'mercado', posicion: { x: 1, y: 1 }, estado: 'activo', ambito: 'asentamiento' },
+        ...(conCarpinteria
+          ? [{ id: 'carp-x', tipo: 'carpinteria' as const, posicion: { x: 2, y: 2 }, estado: 'activo' as const, ambito: 'asentamiento' as const }]
+          : []),
+      ],
+    };
+  }
+
+  it('crearCaravanaVacia: nace sin carros, sin coste, y arranca el cooldown', () => {
+    const a = asentamiento({ madera: 0 });
+    const r = crearCaravanaVacia(a, [], instanteDeTest(3), 0);
+    expect(r.caravana.carros).toEqual([]);
+    expect(r.asentamiento.ultimaCaravanaCreadaEn).toBe(instanteDeTest(3));
+    expect(capacidadCaravana(r.caravana)).toBe(0); // no puede viajar hasta tener carro+animal
+  });
+
+  it('agregarCarroACaravana: cobra el carro; el reforzado exige Carpintería activa', () => {
+    const sinCarp = crearCaravanaVacia(asentamiento({ madera: 100 }), [], instanteDeTest(0), 0);
+    const c1 = agregarCarroACaravana(sinCarp.caravana, sinCarp.asentamiento, 'basico');
+    expect(c1.caravana.carros).toEqual([{ tipoCarro: 'basico' }]);
+    expect(c1.asentamiento.almacen['madera']!.cantidad).toBe(80); // 100 - 20
+
+    expect(() => agregarCarroACaravana(c1.caravana, c1.asentamiento, 'reforzado')).toThrow(CaravanaInvalidaError);
+
+    const conCarp = crearCaravanaVacia(asentamiento({ madera: 100 }, true), [], instanteDeTest(0), 1);
+    expect(() => agregarCarroACaravana(conCarp.caravana, conCarp.asentamiento, 'reforzado')).not.toThrow();
+  });
+
+  it('comprarAnimalParaCaravana: cobra el animal (buey en oro), exige carro libre e índice válido', () => {
+    const vacia = crearCaravanaVacia(asentamiento({ madera: 100, oro: 50 }), [], instanteDeTest(0), 0);
+    const conCarro = agregarCarroACaravana(vacia.caravana, vacia.asentamiento, 'basico');
+    const conBuey = comprarAnimalParaCaravana(conCarro.caravana, conCarro.asentamiento, 0, 'buey');
+    expect(conBuey.caravana.carros![0]!.animal).toBe('buey');
+    expect(conBuey.asentamiento.almacen['oro']!.cantidad).toBe(38); // 50 - 12 (buey en oro)
+    expect(conBuey.asentamiento.almacen['madera']!.cantidad).toBe(80); // solo el carro (20), el buey ya no es madera
+    expect(capacidadCaravana(conBuey.caravana)).toBe(500);
+
+    expect(() => comprarAnimalParaCaravana(conBuey.caravana, conBuey.asentamiento, 0, 'caballo')).toThrow(CaravanaInvalidaError); // carro ocupado
+    expect(() => comprarAnimalParaCaravana(conBuey.caravana, conBuey.asentamiento, 5, 'caballo')).toThrow(CaravanaInvalidaError); // índice fuera de rango
+  });
+
+  it('construirCaravanaComercial (NPC): cuesta 20 madera + 12 oro y da la caravana por defecto 500/16', () => {
+    const a = asentamiento({ madera: 50, oro: 50 });
+    const r = construirCaravanaComercial(a, [], instanteDeTest(0), 0);
+    expect(r.caravana.carros).toEqual([{ tipoCarro: 'basico', animal: 'buey' }]);
+    expect(capacidadCaravana(r.caravana)).toBe(500);
+    expect(velocidadCaravana(r.caravana)).toBe(16);
+    expect(r.asentamiento.almacen['madera']!.cantidad).toBe(30); // 50 - 20 (carro básico)
+    expect(r.asentamiento.almacen['oro']!.cantidad).toBe(38); // 50 - 12 (buey)
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------
+// Revamp de caravanas (Doc 3.13.3) — Paso 3: lanzamiento a mano con estado 'preparando'.
+// ---------------------------------------------------------------------------------------------------------
+describe('lanzamiento manual de una caravana (Doc 3.13.3)', () => {
+  const origen = {
+    id: 'origen', faccionId: 'f-1', posicion: { x: 0, y: 0 }, almacen: almacenSintetico({ madera: 1000, piedra: 300 }),
+    politicasActivas: [], escuadrones: [],
+    edificios: [{ id: 'm', tipo: 'mercado', posicion: { x: 1, y: 1 }, estado: 'activo', ambito: 'asentamiento' }],
+  } as unknown as Asentamiento;
+  const destino = { id: 'destino', faccionId: 'f-1', posicion: { x: 200, y: 0 }, almacen: almacenSintetico({ oro: 0 }), politicasActivas: [], escuadrones: [], edificios: [] } as unknown as Asentamiento;
+
+  const caravanaDe = (carros: Caravana['carros']): Caravana => ({
+    id: 'c1', tipo: 'comercial', origenAsentamientoId: 'origen', contenido: {}, posicionActual: origen.posicion, progreso: 0, estado: 'disponible', carros,
+  });
+
+  function preparar(caravana: Caravana, carga: Record<string, number>, escolta: Caravana['escolta'] = []) {
+    return prepararCaravanaManual(caravana, origen, destino, carga, escolta ?? [], mapaSintetico(), [], instanteDeTest(0));
+  }
+
+  it('una caravana de 1 carro sale al instante (prepTicks 0): pasa directo a en_transito', () => {
+    const r = preparar(caravanaDe([{ tipoCarro: 'basico', animal: 'buey' }]), { piedra: 100 });
+    expect(r.caravana.estado).toBe('en_transito');
+    expect(r.caravana.preparaHasta).toBeUndefined();
+    expect(r.caravana.contenido).toEqual({ piedra: 100 });
+    expect(r.asentamiento.almacen['piedra']!.cantidad).toBe(200); // 300 - 100 reservadas
+  });
+
+  it('con más de un carro pasa por preparando, y avanzarComercio la saca cuando vence preparaHasta', () => {
+    const dos = caravanaDe([
+      { tipoCarro: 'basico', animal: 'buey' },
+      { tipoCarro: 'basico', animal: 'buey' },
+    ]);
+    const r = preparar(dos, { piedra: 100 });
+    expect(r.caravana.estado).toBe('preparando');
+    expect(r.caravana.preparaHasta).toBe(instanteDeTest(CARAVANA_PREPARACION.kPorCarro)); // 2 × (2−1) = 2 ticks
+
+    const antes = avanzarComercio([origen, destino], [] as Faccion[], [r.caravana], [], mapaSintetico(), [], instanteDeTest(1));
+    expect(antes.caravanas[0]!.estado).toBe('preparando'); // todavía no vence
+
+    const despues = avanzarComercio([origen, destino], [] as Faccion[], [r.caravana], [], mapaSintetico(), [], instanteDeTest(CARAVANA_PREPARACION.kPorCarro));
+    expect(despues.caravanas[0]!.estado).toBe('en_transito');
+  });
+
+  it('cancelar mientras se prepara devuelve la carga al almacén', () => {
+    const dos = caravanaDe([
+      { tipoCarro: 'basico', animal: 'buey' },
+      { tipoCarro: 'basico', animal: 'buey' },
+    ]);
+    const r = preparar(dos, { piedra: 120 });
+    const cancelada = cancelarPreparacionCaravana(r.caravana, r.asentamiento);
+    expect(cancelada.caravana.estado).toBe('disponible');
+    expect(cancelada.caravana.contenido).toEqual({});
+    expect(cancelada.caravana.destinoAsentamientoId).toBeUndefined();
+    expect(cancelada.asentamiento.almacen['piedra']!.cantidad).toBe(300); // devueltas
+  });
+
+  it('rechaza carga por encima de la capacidad, sin stock, o si la caravana no puede viajar', () => {
+    expect(() => preparar(caravanaDe([{ tipoCarro: 'basico', animal: 'buey' }]), { piedra: 600 })).toThrow(CaravanaInvalidaError); // 600 > 500
+    expect(() => preparar(caravanaDe([{ tipoCarro: 'basico', animal: 'buey' }]), { estano: 10 })).toThrow(CaravanaInvalidaError); // sin estaño
+    expect(() => preparar(caravanaDe([{ tipoCarro: 'basico' }]), { piedra: 10 })).toThrow(CaravanaInvalidaError); // carro sin animal
+    expect(() => preparar(caravanaDe([{ tipoCarro: 'basico', animal: 'buey' }]), {})).toThrow(CaravanaInvalidaError); // carga vacía
+  });
+
+  it('moverCarroEntreCaravanas mueve el carro con su animal entre dos disponibles del mismo origen', () => {
+    const a = caravanaDe([
+      { tipoCarro: 'basico', animal: 'buey' },
+      { tipoCarro: 'reforzado', animal: 'caballo' },
+    ]);
+    const b = { ...caravanaDe([]), id: 'c2' };
+    const r = moverCarroEntreCaravanas(a, b, 1);
+    expect(r.desde.carros).toEqual([{ tipoCarro: 'basico', animal: 'buey' }]);
+    expect(r.hacia.carros).toEqual([{ tipoCarro: 'reforzado', animal: 'caballo' }]);
+
+    expect(() => moverCarroEntreCaravanas(a, { ...b, estado: 'en_transito' }, 0)).toThrow(CaravanaInvalidaError);
+    expect(() => moverCarroEntreCaravanas(a, { ...b, origenAsentamientoId: 'otro' }, 0)).toThrow(CaravanaInvalidaError);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------
+// Revamp de caravanas (Doc 3.13.4) — Paso 4: escolta sin héroe.
+// ---------------------------------------------------------------------------------------------------------
+describe('escolta sin héroe (Doc 3.13.4)', () => {
+  const esc = (id: string, cantidad = 20): Escuadron => ({
+    id, nombre: 'lanceros', jugadorId: 'j1', origen: 'pesants', cantidad, veterania: 0, moral: 100, tropaId: 'milicia_lanceros',
+  });
+
+  function origenConMercado(nivelMercado = 1, escuadrones: Escuadron[] = []): Asentamiento {
+    return {
+      id: 'origen', faccionId: 'f-1', posicion: { x: 0, y: 0 }, almacen: almacenSintetico({ piedra: 1000 }),
+      politicasActivas: [], escuadrones,
+      edificios: [{ id: 'm', tipo: 'mercado', posicion: { x: 1, y: 1 }, estado: 'activo', ambito: 'asentamiento', nivelInterno: nivelMercado }],
+    } as unknown as Asentamiento;
+  }
+  const destino = { id: 'destino', faccionId: 'f-2', posicion: { x: 200, y: 0 }, almacen: almacenSintetico({}), politicasActivas: [], escuadrones: [], edificios: [] } as unknown as Asentamiento;
+  const caravana1Carro = (): Caravana => ({
+    id: 'c1', tipo: 'comercial', origenAsentamientoId: 'origen', contenido: {}, posicionActual: { x: 0, y: 0 }, progreso: 0, estado: 'disponible',
+    carros: [{ tipoCarro: 'basico', animal: 'buey' }],
+  });
+
+  it('cupoEscolta sale del nivel interno del Mercado (1/2/3)', () => {
+    expect(cupoEscolta(origenConMercado(1))).toBe(CARAVANA_ESCOLTA.cupoPorNivelMercado[0]);
+    expect(cupoEscolta(origenConMercado(3))).toBe(CARAVANA_ESCOLTA.cupoPorNivelMercado[2]);
+  });
+
+  it('prepararCaravanaManual engancha la escolta y rechaza por encima del cupo', () => {
+    const origen = origenConMercado(1);
+    const r = prepararCaravanaManual(caravana1Carro(), origen, destino, { piedra: 100 }, [esc('e1')], mapaSintetico(), [], instanteDeTest(0));
+    expect(r.caravana.escolta).toHaveLength(1);
+
+    expect(() =>
+      prepararCaravanaManual(caravana1Carro(), origen, destino, { piedra: 100 }, [esc('e1'), esc('e2')], mapaSintetico(), [], instanteDeTest(0))
+    ).toThrow(CaravanaInvalidaError); // cupo nivel 1 = 1
+  });
+
+  it('cancelar devuelve la escolta a la guarnición del origen', () => {
+    const origen = origenConMercado(2, []);
+    const r = prepararCaravanaManual(caravana1Carro(), origen, destino, { piedra: 100 }, [esc('e1')], mapaSintetico(), [], instanteDeTest(0));
+    const cancelada = cancelarPreparacionCaravana({ ...r.caravana, estado: 'preparando' }, r.asentamiento);
+    expect(cancelada.caravana.escolta).toBeUndefined();
+    expect(cancelada.asentamiento.escuadrones.map((e) => e.id)).toContain('e1');
+  });
+
+  it('un bandido tira contra el poder de la escolta, no contra la defensa base', () => {
+    const conEscoltaFuerte: Caravana = { ...caravana1Carro(), estado: 'en_transito', posicionActual: { x: 500, y: 500 }, escolta: [esc('e1', 40), esc('e2', 40)] };
+    const campamento = { id: 'camp', posicion: { x: 500, y: 500 }, poder: 20, bosqueId: 'b', proximoSpawnEn: instanteDeTest(999) } as any;
+    const r = avanzarAtaquesBandidos([campamento], [conEscoltaFuerte], createRng(1), [], instanteDeTest(1));
+    // Escolta de 80 lanceros aguanta a un campamento de poder 20: la caravana escapa y la tropa sufre bajas leves.
+    expect(r.caravanas).toHaveLength(1);
+    expect(r.caravanas[0]!.escolta![0]!.cantidad).toBeLessThan(40);
+    expect(r.escoltasDevueltas).toHaveLength(0);
+  });
+
+  it('si el bandido gana, la caravana se pierde pero la escolta vuelve a casa derrotada', () => {
+    const conEscoltaDebil: Caravana = { ...caravana1Carro(), estado: 'en_transito', posicionActual: { x: 500, y: 500 }, escolta: [esc('e1', 1)] };
+    const campamento = { id: 'camp', posicion: { x: 500, y: 500 }, poder: 9999, bosqueId: 'b', proximoSpawnEn: instanteDeTest(999) } as any;
+    const r = avanzarAtaquesBandidos([campamento], [conEscoltaDebil], createRng(1), [], instanteDeTest(1));
+    expect(r.caravanas).toHaveLength(0); // caravana destruida
+    expect(r.escoltasDevueltas).toEqual([{ asentamientoId: 'origen', escuadrones: expect.any(Array) }]);
+    expect(r.escoltasDevueltas[0]!.escuadrones[0]!.heridoHasta).toBeDefined(); // debuff de derrota
+  });
+
+  it('devolverEscoltaAGuarnicion funde por jugador+tropa; crea el escuadrón si no existía', () => {
+    const guarnicion = [esc('g1', 10)];
+    const fundido = devolverEscoltaAGuarnicion(guarnicion, [{ ...esc('e1', 5), veterania: 3 }]);
+    expect(fundido).toHaveLength(1);
+    expect(fundido[0]!.cantidad).toBe(15);
+    expect(fundido[0]!.veterania).toBe(3);
+
+    const nuevo = devolverEscoltaAGuarnicion([], [esc('e1', 5)]);
+    expect(nuevo).toHaveLength(1);
   });
 });

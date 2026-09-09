@@ -55,7 +55,6 @@ describe('Almacén: tope por nivel de asentamiento', () => {
       tipo: 'almacen',
       posicion: { x: 30 + i * 12, y: 0 },
       estado,
-      ticksRestantes: 0,
       ambito: 'asentamiento',
     }));
     return { ...base, edificios: [...base.edificios, ...almacenes] };
@@ -149,7 +148,6 @@ describe('Vivienda: tope por nivel de asentamiento', () => {
       tipo: 'vivienda',
       posicion: { x: 30 + i * 12, y: 0 },
       estado,
-      ticksRestantes: 0,
       ambito: 'asentamiento',
     }));
     return { ...base, edificios: [...base.edificios, ...viviendas] };

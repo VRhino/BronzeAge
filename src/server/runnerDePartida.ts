@@ -24,6 +24,36 @@ import { trazadoParaAsentamiento } from '../engine/trazado';
 import { PRECIO_BASE } from '../constants';
 import { cargarPartida, guardarPartida } from './persistenciaPartida';
 
+/**
+ * Instrumentación de UNA partida (Fase E3). Números crudos, sin interpretar: quien los lee decide si 400 ms
+ * de tick son mucho o poco. Deliberadamente plano y todo numérico salvo el `gameId` — es lo que hace que
+ * sirva igual para una respuesta JSON que para un exportador de métricas futuro.
+ */
+export interface MetricasDePartida {
+  gameId: string;
+  /** Paso de integración interno del motor. Aquí SÍ (a diferencia del contrato de juego, del que la Fase D lo
+   * retiró): una métrica de operación mide el motor, y el tick es su unidad real de trabajo. */
+  tick: number;
+  version: number;
+  /** Entradas encoladas y aún sin resolver, incluida la que corre. > 0 sostenido = la cola no drena. */
+  colaPendiente: number;
+  ticksEjecutados: number;
+  tickMsUltimo: number;
+  tickMsMedio: number;
+  tickMsMaximo: number;
+  /** Ticks que ejecutó la última pasada del reloj, y el mayor visto. Con el mundo congelado durante las
+   * caídas (2026-09-05) esto ya no mide un catch-up tras reinicio: mide la recuperación de la deriva del
+   * temporizador, y en un servidor sano vale 1. */
+  ultimaRafagaTicks: number;
+  mayorRafagaTicks: number;
+  /** Tiempo de mundo DESCARTADO desde que arrancó el proceso, en ticks: los atrasos que se dieron por
+   * "el servidor no estaba sirviendo" en vez de ejecutarlos. Es la consecuencia observable de que el mundo no
+   * avance durante las caídas — un valor alto tras un incidente es lo esperado; uno que crece con el servidor
+   * sano significa que `MAX_TICKS_POR_PASADA` se quedó corto. */
+  ticksOmitidos: number;
+  relojDeMundoActivo: boolean;
+}
+
 export interface OpcionesRunner {
   /** Directorio donde vive el snapshot de esta partida (`persistenciaPartida.ts`). */
   directorio: string;
@@ -36,7 +66,52 @@ export class RunnerDePartida {
   private sesion: GameSession;
   private readonly directorio: string;
   private readonly ahora: () => string;
-  private temporizador: ReturnType<typeof setInterval> | null = null;
+
+  /**
+   * Reloj de mundo (Fase D / D5, doc 10 §2–3), `null` si no está en marcha. `referenciaMs` es el instante de
+   * PARED del último tick que este reloj dio por bueno; avanza en pasos de `intervaloMs` a medida que se
+   * ejecutan ticks, nunca por acumulación de `setInterval` (así el jitter del temporizador no deriva). El
+   * reloj de pared solo dice CUÁNTOS ticks faltan; el `instante` de cada uno lo deriva el motor del tick
+   * (doc 10 §2), así que lo que se ejecuta es determinista.
+   *
+   * **El mundo NO avanza mientras el servidor está caído** (decisión del usuario, 2026-09-05): la referencia
+   * se ancla a "ahora" al construir el runner, no al `guardadoEn` del snapshot. Reabrir una partida no
+   * ejecuta ni un tick atrasado. Ver `sincronizarConReloj` para lo que eso implica y para el único caso que
+   * sí se recupera.
+   */
+  private relojDeMundo: { intervaloMs: number; timer: ReturnType<typeof setInterval>; referenciaMs: number } | null = null;
+
+  /**
+   * Cuántos ticks atrasados acepta ejecutar de golpe una pasada de `sincronizarConReloj`. Por encima de eso,
+   * el tiempo pendiente **se descarta** en vez de ejecutarse (ver `sincronizarConReloj`).
+   *
+   * **No es un tope de rendimiento, es dónde se traza la frontera** entre las dos cosas que producen un
+   * atraso, que se parecen mucho vistas desde aquí:
+   *
+   *  - **Deriva del temporizador**, que SÍ hay que recuperar: `setInterval` no dispara exacto, y unas décimas
+   *    por disparo se acumulan hasta valer un tick entero cada ~10 minutos. Si no se recuperaran, el mundo
+   *    correría más lento que el tiempo real y "1 tick = 1 minuto" dejaría de ser cierto. Esto produce 2
+   *    ticks de atraso como mucho.
+   *  - **El proceso no estuvo sirviendo** (host suspendido, event loop bloqueado un minuto largo, salto de
+   *    reloj por una corrección NTP), que NO hay que recuperar por la misma razón por la que no se recupera
+   *    un reinicio. Esto produce decenas o cientos.
+   *
+   * 5 separa las dos con holgura por los dos lados. Es el único número elegido a ojo de todo esto; súbelo si
+   * alguna vez se ven `ticksOmitidos` con el servidor sano.
+   */
+  private static readonly MAX_TICKS_POR_PASADA = 5;
+
+  /**
+   * Instrumentación de la partida (Fase E3). Vive AQUÍ y no en un colector global porque estos tres números
+   * solo los conoce el runner: cuánta cola tiene pendiente, cuánto tarda su tick y cuántos ticks ejecutó la
+   * última ráfaga de catch-up.
+   *
+   * La ráfaga se mide a propósito: la re-medición de escala del 2026-09-05 (doc 6 §1) concluyó que un tick
+   * suelto ya no bloquea la cola de forma preocupante (~0,5 s a 100 asentamientos) pero **una ráfaga de
+   * catch-up sí** — ponerse al día de una semana caída son ~79 minutos con la cola parada. Sin esta métrica,
+   * eso solo se ve desde fuera como "el servidor no responde".
+   */
+  private readonly instrumentos = { pendientes: 0, ticks: 0, msTotal: 0, msUltimo: 0, msMax: 0, ultimaRafaga: 0, mayorRafaga: 0, omitidos: 0 };
 
   /**
    * Cadena de la cola serial. INVARIANTE: siempre es una promesa que RESUELVE (nunca rechaza) — cada
@@ -124,7 +199,9 @@ export class RunnerDePartida {
    * existente. */
   static async cargarOCrear(gameId: string, config: { seed: number; region?: RegionId }, opciones: OpcionesRunner): Promise<RunnerDePartida> {
     const existente = await cargarPartida(opciones.directorio, gameId);
-    return existente ? new RunnerDePartida(existente, opciones) : RunnerDePartida.crearYPersistir(gameId, config, opciones);
+    return existente
+      ? new RunnerDePartida(existente.sesion, opciones)
+      : RunnerDePartida.crearYPersistir(gameId, config, opciones);
   }
 
   get gameId(): string {
@@ -190,7 +267,10 @@ export class RunnerDePartida {
    * resolver — es protección contra la reconexión, no contra un cliente que genera mal sus claves.
    */
   ejecutar<P, R>(manejador: ManejadorComando<P, R>, params: P, actor?: ActorId, idempotencyKey?: string): Promise<ResultadoComando<R>> {
-    const operacion = () => this.aplicarYPersistir((sesion) => sesion.ejecutar(manejador, params, { momento: this.ahora(), actor }));
+    // Sin `momento`: `GameSession` lo deriva del tick (`instanteDeTick`, Fase D / doc 10). `this.ahora()`
+    // —el reloj de pared— se reserva para lo que NO es estado de partida: `guardarPartida` (abajo), el TTL de
+    // `preciosReferencia`, y el catch-up del reloj de mundo (`sincronizarConReloj`, D5).
+    const operacion = () => this.aplicarYPersistir((sesion) => sesion.ejecutar(manejador, params, { actor }));
     if (idempotencyKey === undefined) return this.encolar(operacion);
 
     const clave = `${actor ?? ''}:${idempotencyKey}`;
@@ -217,50 +297,146 @@ export class RunnerDePartida {
    * aplicado pero el turno NPC no, con la partida y el disco de acuerdo en un estado que nadie pidió.
    */
   avanzarTick(): Promise<ResultadoComando<void>> {
-    return this.encolar(() =>
-      this.aplicarYPersistir((sesion) => {
-        const momento = this.ahora();
-        const resultado = sesion.avanzarTick(momento);
-        if (!resultado.ok) return resultado;
-        sesion.avanzarAutoComercio(momento);
-        sesion.avanzarFaccionesNpc(momento);
-        return resultado;
-      })
-    );
+    return this.encolar(() => this.aplicarYPersistir((sesion) => this.unTickCompleto(sesion)));
+  }
+
+  /** Un tick "completo" tal y como lo entiende este runner: tick puro + auto-comercio + turno del NPC, un
+   * solo persist para los tres. Sin encolar — lo llaman `avanzarTick` (una entrada de cola) y el reloj de
+   * mundo (`sincronizarConReloj`, también una sola entrada por pasada). */
+  private unTickCompleto(sesion: GameSession): ResultadoComando<void> {
+    const t0 = performance.now();
+    const resultado = sesion.avanzarTick();
+    if (!resultado.ok) return resultado;
+    sesion.avanzarAutoComercio();
+    sesion.avanzarFaccionesNpc();
+    // Se cronometra el tick COMPLETO (puro + auto-comercio + turno NPC), que es la unidad que ocupa la cola,
+    // no el `avanzarSimulacion` puro que mide `scripts/medicion-escala.ts`. Los dos números no son
+    // comparables a ciegas, y es correcto: aquí interesa lo que bloquea a un jugador.
+    const ms = performance.now() - t0;
+    this.instrumentos.ticks++;
+    this.instrumentos.msTotal += ms;
+    this.instrumentos.msUltimo = ms;
+    if (ms > this.instrumentos.msMax) this.instrumentos.msMax = ms;
+    return resultado;
   }
 
   /**
-   * Programa `avanzarTick()` cada `intervaloMs`, a través de la misma cola serial que los comandos —
-   * `setInterval` solo dispara la llamada, el orden real lo sigue decidiendo la cola. Un tick que tarde más
-   * que `intervaloMs` no se solapa consigo mismo: la siguiente llamada simplemente espera su turno como
-   * cualquier otro trabajo encolado.
+   * Arranca el RELOJ DE MUNDO (Fase D / D5): mantiene `estado.tick` sincronizado con el tiempo real,
+   * ejecutando un tick por cada `intervaloMs` de reloj de pared transcurrido. Con "mundo = tiempo real"
+   * (doc 10 §2), `intervaloMs` = `SIMULACION.duracionTickMs` = 60 000: un tick por minuto real.
+   *
+   * **El mundo avanza solo mientras este reloj está en marcha** (decisión del usuario, 2026-09-05: "el mundo
+   * no avanza mientras el servidor está caído"). De ahí que `referenciaMs` se ancle a **"ahora"** al
+   * arrancar: da igual cuándo se guardó el snapshot, cuánto llevara el proceso levantado o cuántos ticks se
+   * dieran a mano — al arrancar el reloj no se debe ni un tick. Reabrir una partida de hace un mes la
+   * reanuda en el tick en el que se quedó.
+   *
+   * Es también la versión más simple de lo que había: la anterior anclaba al momento de CONSTRUIR el runner
+   * y luego descontaba un intervalo por cada tick manual dado desde entonces, para que el catch-up saliera
+   * bien. Sin catch-up entre reinicios, esa contabilidad no tiene nada que corregir.
+   *
+   * En el primer disparo —y tras cualquier hueco: proceso caído y reabierto, host dormido, GC largo—
+   * ejecuta EN RÁFAGA los ticks adeudados (catch-up, doc 10 §2), por la misma cola serial que los comandos.
+   * `setInterval` solo dispara la comprobación; cuántos ticks faltan lo decide siempre el reloj de pared
+   * contra `referenciaMs`, no un contador que acumule el jitter del temporizador.
    */
-  iniciarTicksAutomaticos(intervaloMs: number): void {
-    if (this.temporizador) return; // ya en marcha: no duplicar el intervalo
-    this.temporizador = setInterval(() => {
-      void this.avanzarTick();
-    }, intervaloMs);
+  iniciarRelojDeMundo(intervaloMs: number): void {
+    if (this.relojDeMundo) return; // ya en marcha: no duplicar el intervalo
+    const timer = setInterval(() => void this.sincronizarConReloj(), intervaloMs);
+    this.relojDeMundo = { intervaloMs, timer, referenciaMs: new Date(this.ahora()).getTime() };
   }
 
-  detenerTicksAutomaticos(): void {
-    if (!this.temporizador) return;
-    clearInterval(this.temporizador);
-    this.temporizador = null;
+  detenerRelojDeMundo(): void {
+    if (!this.relojDeMundo) return;
+    clearInterval(this.relojDeMundo.timer);
+    this.relojDeMundo = null;
+  }
+
+  /**
+   * Ejecuta los ticks que el reloj de pared dice que se adeudan desde `referenciaMs`, y adelanta la
+   * referencia EXACTAMENTE ese número de intervalos (nunca a "ahora": así un resto sub-intervalo no se
+   * pierde). Adelantar la referencia ANTES de encolar la ráfaga hace que un segundo disparo del `setInterval`
+   * durante una ráfaga larga vea 0 adeudados y no duplique trabajo.
+   *
+   * Toda la ráfaga es UNA sola entrada de la cola serial: un comando de jugador que llegue a mitad del
+   * catch-up espera a que el mundo termine de ponerse al día (correcto — no se puede actuar "ahora" hasta
+   * que el mundo esté en "ahora"), y `esperarColaVacia` cubre la ráfaga entera. Si el reloj se detiene a
+   * mitad (`detenerRelojDeMundo`, apagado del proceso), la ráfaga para donde va.
+   */
+  private sincronizarConReloj(): Promise<void> {
+    const reloj = this.relojDeMundo;
+    if (!reloj) return Promise.resolve();
+    const ahoraMs = new Date(this.ahora()).getTime();
+    const adeudados = Math.floor((ahoraMs - reloj.referenciaMs) / reloj.intervaloMs);
+    if (adeudados <= 0) return Promise.resolve();
+
+    // Atraso grande = el proceso no estuvo sirviendo. Se DESCARTA el tiempo pendiente y se vuelve a anclar a
+    // "ahora": el mundo se queda donde estaba, que es la decisión, y no hay ráfaga que ocupe la cola. Se
+    // cuenta en `omitidos` porque es la consecuencia observable de esa decisión y quien opera debe verla —
+    // si aparece con el servidor sano, el que está mal es el umbral.
+    if (adeudados > RunnerDePartida.MAX_TICKS_POR_PASADA) {
+      reloj.referenciaMs = ahoraMs;
+      this.instrumentos.omitidos += adeudados;
+      this.instrumentos.ultimaRafaga = 0;
+      return Promise.resolve();
+    }
+
+    reloj.referenciaMs += adeudados * reloj.intervaloMs;
+    this.instrumentos.ultimaRafaga = adeudados;
+    if (adeudados > this.instrumentos.mayorRafaga) this.instrumentos.mayorRafaga = adeudados;
+    return this.encolar(async () => {
+      for (let i = 0; i < adeudados && this.relojDeMundo; i++) {
+        await this.aplicarYPersistir((sesion) => this.unTickCompleto(sesion));
+      }
+    });
   }
 
   /**
    * Se resuelve cuando la cola queda vacía: todo lo encolado hasta este instante ha terminado, con éxito o
-   * con error. `detenerTicksAutomaticos` impide que se ENCOLE trabajo nuevo, pero no cancela el que ya
-   * estaba en cola (un tick a medio persistir no se aborta) — esto es para esperar a que ese resto drene.
-   * Pensado tanto para un apagado limpio del proceso como para pruebas que necesiten un punto determinista
-   * después de parar el scheduler.
+   * con error. `detenerRelojDeMundo` impide que se ENCOLE trabajo nuevo, pero no cancela el que ya estaba en
+   * cola (un tick a medio persistir no se aborta) — esto es para esperar a que ese resto drene. Pensado
+   * tanto para un apagado limpio del proceso como para pruebas que necesiten un punto determinista después
+   * de parar el reloj.
    */
   async esperarColaVacia(): Promise<void> {
     await this.cola;
   }
 
+  /**
+   * Instantánea de instrumentación de esta partida (Fase E3). Copia, no la referencia interna: quien lee
+   * métricas no debe poder tocarlas.
+   *
+   * `tickMsMedio` es la media desde que arrancó el proceso, no una ventana móvil: para "¿este servidor va
+   * sobrado o justo?" la media larga es la respuesta honesta, y `tickMsMaximo` recoge el pico que una media
+   * esconde.
+   */
+  metricas(): MetricasDePartida {
+    const i = this.instrumentos;
+    return {
+      gameId: this.gameId,
+      tick: this.sesion.getState().tick,
+      version: this.sesion.getState().version,
+      colaPendiente: i.pendientes,
+      ticksEjecutados: i.ticks,
+      tickMsUltimo: i.msUltimo,
+      tickMsMedio: i.ticks === 0 ? 0 : i.msTotal / i.ticks,
+      tickMsMaximo: i.msMax,
+      ultimaRafagaTicks: i.ultimaRafaga,
+      mayorRafagaTicks: i.mayorRafaga,
+      ticksOmitidos: i.omitidos,
+      relojDeMundoActivo: this.relojDeMundo !== null,
+    };
+  }
+
   private encolar<T>(trabajo: () => Promise<T>): Promise<T> {
+    // `pendientes` cuenta lo ENCOLADO y aún sin resolver, incluida la entrada en curso. Es la señal que
+    // delata un tick largo bloqueando comandos: si crece y no baja, la cola no está drenando.
+    this.instrumentos.pendientes++;
     const resultado = this.cola.then(trabajo);
+    void resultado.then(
+      () => this.instrumentos.pendientes--,
+      () => this.instrumentos.pendientes--
+    );
     this.cola = resultado.then(
       () => undefined,
       () => undefined

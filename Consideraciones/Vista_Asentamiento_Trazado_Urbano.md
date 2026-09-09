@@ -8,6 +8,10 @@ abierto.
 > El log de "Estado"/"Etapa N" que sigue es cronológico e histórico: la primera entrada ("CERO código de
 > anclas") describe el arranque del diseño, no el estado actual. Las secciones numeradas (§1 en adelante) ya
 > reflejan la implementación de la Etapa 5, no las etapas anteriores.
+>
+> **Excepción: la Etapa 6 (calles como celdas) está implementada hasta su Paso 2** — las calles ocupan celdas
+> desde 2026-08-31. Las secciones numeradas (§1 en adelante) siguen describiendo el modelo de ARISTAS y están
+> pendientes de reescritura. Ver "Etapa 6" al final del log.
 
 ## Principio rector
 
@@ -265,7 +269,989 @@ partidas reales.
 el texto viejo como referencia histórica esta vez, a diferencia de la nota de la Etapa 3, porque describir dos
 mecanismos incompatibles en la misma sección confunde más de lo que documenta.
 
+## Etapa 6 (2026-08-30): las calles pasan de aristas a CELDAS — diseño cerrado, CERO código escrito
+
+> **ESTADO (2026-08-31): implementada hasta el Paso 2 incluido.** Las calles ya corren sobre CELDAS en el
+> código. §1-§4, §5.2/§5.3, §6 y §10-§12 más abajo siguen describiendo el modelo de ARISTAS y por tanto **ya
+> no describen el código** — se reescriben cuando la Etapa 6 se cierre del todo (ver la lista final de §E6.15),
+> no antes, para no dejar el documento a medias entre dos mecanismos. Hasta entonces, la referencia válida
+> sobre cómo funciona el trazado HOY es esta sección, no las numeradas.
+
+El disparador declarado (el paso a 3D, enunciado histórico §7 de `Docs/Mecanicas a desarrollar.md`, ya
+retirado de esa lista) es que una calle sobre una arista no tiene ancho, y en 3D hay que darle uno. Al medir
+el modelo actual antes de diseñar el reemplazo, el problema resultó ser bastante más grande que un detalle de
+representación.
+
+### E6.1 La medición
+
+Simulación real con los fixtures del propio repo (`crearMapaDeterminista` / `fundarAsentamientoDeTest`,
+300 ticks — el mismo montaje que `engine/__tests__/trazado.test.ts`), tres seeds:
+
+| Medida | seed 99 | seed 7 | seed 42 |
+|---|---|---|---|
+| Aristas de calle de **ancho cero** (separan dos edificios DISTINTOS, ambos ocupando su celda) | 25/29 = **86%** | 24/29 = **83%** | 78/97 = **80%** |
+| Edificios con **frente de calle real** (arista de la red con celda LIBRE al otro lado) | 8/25 = **32%** | 8/28 = **29%** | 18/73 = **25%** |
+| Núcleo urbano (sin afueras): caja y ocupación | 7x7, **69%** | 7x7, **73%** | 17x14, **48%** |
+| `radioPotencial` disponible | 60 (≈20 celdas Ø) | 60 | 90 |
+
+**Entre el 80% y el 86% de la red de calles no existe físicamente.** Son aristas marcadas como calle que
+corren por el muro compartido de dos edificios pegados pared con pared. Solo uno de cada cuatro edificios
+tiene delante algo por lo que se pueda caminar. Y el núcleo urbano es un coágulo de 7x7 celdas al 70% de
+ocupación dentro de un disco de ~20x20: **no falta espacio, sobra.**
+
+**Corrección al instrumentar el batch (mismo día): a escala real el ancho cero es del 51%, no del 80-86%.**
+La tabla de arriba salió de ciudades de UN asentamiento aislado (fixture de `trazado.test.ts`, 300 ticks). La
+línea base reproducible —`BATCH_SEED=7 BATCH_FACCIONES=20 BATCH_TICKS=1500`, gobernanza NPC, 18 asentamientos
+vivos, el mismo montaje con el que se midieron las Etapas 1 y 2— dice:
+
+| Métrica | Línea base (tick 1500) |
+|---|---|
+| `callesAnchoCeroPct` | **51.04%** |
+| `edificiosConFrenteRealPct` | **32.98%** |
+| `ocupacionNucleoPct` | **64.12%** |
+| `manzanasCerradasMedia` | 3.89 |
+| `dispersionViviendaCentro` | 3.44 |
+
+La diferencia tiene explicación y no invalida el diagnóstico: una ciudad grande abre más anclas, y cada anilla
+de ancla aporta tramos que sí dan a suelo libre, así que el porcentaje de ancho cero baja con el tamaño. **Los
+números que valen son los del batch** (reproducibles desde el repo); los de la tabla anterior se dejan porque
+son los que dispararon la investigación, no como cifra de referencia. Aun con el número bueno: **la mitad de
+la red no existe y dos de cada tres edificios no tienen por dónde salir.**
+
+**Ojo con el techo del batch**: las tres métricas quedan CONGELADAS entre el tick 500 y el 1500 (valores
+idénticos) — las ciudades dejan de crecer ahí por el colapso de la transición a nivel 2 ya documentado en
+"Estado". La línea base es válida para comparar, pero no ejercita ciudades grandes; para eso hace falta
+resolver antes ese colapso, o medir con un fixture aparte.
+
+### E6.2 El diagnóstico: el problema es económico, no geométrico
+
+Una arista es **gratis**. Pegar dos edificios pared con pared regala una "calle" en el borde compartido, sin
+pagar suelo. Y la atracción dura (§5.3: *"la prioridad de un satélite es estar lo más pegado posible a su
+ancla; eso manda sobre todo lo demás"*) empuja activamente a apelotonar. Nada en el sistema paga por el
+espacio de circular, así que nadie lo deja: las manzanas emergentes de §10 no emergen, y las que el batch
+contaba como cerradas (`manzanasCerradasMedia` 2.78, Etapa 2) se apoyan mayoritariamente en calles de ancho
+cero.
+
+De ahí la lectura que ordena todo el rediseño:
+
+> **Las celdas arreglan el 3D como efecto secundario. Lo que arreglan de fondo es que la calle pase a costar
+> suelo** — y ese coste es la única presión capaz de producir hileras y manzanas de verdad.
+
+Las tres garantías "gratis" de §1 resultan ser gratis porque no garantizan nada real. Con celdas, dos de las
+tres pasan de garantía a obligación:
+
+| Garantía hoy gratis (por aristas) | Con celdas |
+|---|---|
+| Un edificio nunca cae encima de una calle | **Validación**: las celdas de calle entran en `ocupadas` |
+| Una calle nunca cae encima de otra | **Sigue gratis** (`Set` de celdas) |
+| Un tramo nunca atraviesa un edificio | **Validación**: el trazado rodea, no cruza |
+| Todo edificio toca la red | Cambia de *"comparte una arista"* a *"es adyacente a una celda de calle"* — hoy lo cumpliría el 25-32% |
+
+### E6.3 Decisiones cerradas con el usuario (2026-08-30)
+
+| # | Decisión | Elegido |
+|---|---|---|
+| 1 | Ancho de calle | **1 celda uniforme** (= media Vivienda; sin jerarquía avenida/callejón por ahora) |
+| 2 | Cómo se decide qué celda es calle | **Retículo blando**: preferencia fuerte, nunca reserva dura |
+| 3 | Conectividad | **Grafo conexo, invariante duro** — se congela como test |
+| 4 | Alcance | **Representación + densidad**: incluye revisar la atracción dura, causa medida del coágulo |
+| 5 | Ancla vs. coste de calle en el scoring | **Ancla primero**; la calle entra como GATE duro y como desempate |
+
+### E6.4 La conectividad sale gratis, por inducción
+
+La decisión 3 suena cara (comprobar puntos de articulación en cada colocación). No hace falta ninguna
+comprobación:
+
+- Las celdas de calle están en `ocupadas`, así que **ningún edificio puede partir jamás un corredor
+  existente**. El riesgo clásico desaparece por construcción.
+- La red arranca conexa: el anillo del Centro Urbano.
+- Cada edificio nuevo cae en uno de dos casos: **(a)** ya es adyacente a una celda de calle → no añade nada,
+  la red no cambia; **(b)** reclama un corredor de celdas libres desde su perímetro hasta la red → un corredor
+  es un camino, así que la unión sigue conexa.
+
+Conexa por inducción, sin excepciones. El coste real de la decisión no es el chequeo: es que **(b) puede no
+existir** — a 70% de ocupación local puede no quedar corredor libre. Eso obliga a lo siguiente.
+
+### E6.5 La conexión pasa de reparación a CONDICIÓN DE VALIDEZ
+
+`conectarEdificio` (§4) corre hoy DESPUÉS de colocar, y no puede fallar nunca: siempre hay una arista
+disponible. Con celdas sí puede fallar, y un fallo posterior sería exactamente el bug que costó la Etapa 5
+—*"el edificio se colocaba primero y el ancla se intentaba después, fallando en silencio"*— trasladado a la
+capa de calle.
+
+**Un candidato que no se pueda conectar no es un candidato.** La conexión se evalúa dentro del filtro de
+candidatos, nunca después de elegir.
+
+### E6.6 La pieza técnica: campo de distancia a la calle
+
+La versión ingenua de §E6.5 sería un BFS por candidato — inviable: `candidatosLibres` produce miles por
+colocación. Invertido:
+
+> **Un BFS multi-origen desde TODAS las celdas de calle a la vez, sobre celdas libres, una sola vez por
+> colocación**, que rellena `distanciaACalle[celda]` para todo el disco en una pasada.
+
+Con ese campo, el coste de conexión de un candidato es un *lookup*: el mínimo del campo sobre las celdas de su
+perímetro. Sustituye de golpe a `conectarEdificio`, al chequeo de conectividad y al nivel 0-3 de `Candidato`, y
+entrega gratis el número que pide la decisión 4: **cuántas celdas de suelo cuesta poner el edificio ahí**.
+Es más barato que el `continuaFila` por candidato de hoy. El corredor concreto se traza solo para el candidato
+ganador, descendiendo el gradiente del campo — un único trazo por colocación.
+
+### E6.7 "Pegado al ancla" pasa de gap 0 a gap 1 (la trampa)
+
+Toda ancla siembra su anillo (§5.2). Con celdas, ese anillo **ocupa** el marco de celdas que rodea al ancla.
+Por lo tanto:
+
+> `gapCeldas(satélite, ancla) == 0` se vuelve **geométricamente imposible** para cualquier ancla con anillo.
+
+Si `sitiosPorAtraccionDura` se reescala sin más y sigue buscando gap 0, no encontrará nada nunca y caerá al
+fallback — que es **literalmente** el bug corregido en §5.7 (*"38/38 piezas de Mercado con gap 0 respecto a su
+ancla; antes algunas quedaban a 2 filas"*), reintroducido entero y en silencio.
+
+**El objetivo pasa a ser gap 1: el satélite mira a su ancla desde el otro lado de la calle del anillo.** Que
+además es lo correcto en 3D — un satélite pegado sin calle en medio no tiene puerta. Es una reescritura del
+criterio, no un reescalado.
+
+### E6.8 Retículo blando = predicado de celda
+
+`esBordeDeManzana(indice, paso, desfase)` responde hoy *"¿esta LÍNEA es un borde de manzana?"*. Pasa a
+responder *"¿esta columna/fila es de CALLE?"*, con período `largoFila + anchoCalle` (el bloque más su calle),
+no `largoFila`.
+
+Sigue siendo **preferencia, no reserva** (decisión 2): un candidato que deja su calle sobre la línea del
+retículo puntúa mejor, pero un edificio grande —Galería de tiro, 4x8 celdas nuevas— puede atravesarla y
+desviar la calle localmente. Se mantiene intacto el principio rector: nada se pre-genera, solo hay un criterio
+de dónde caería la calle el día que alguien la necesite.
+
+**Coste de suelo**: bloque de 12x4 celdas de edificio con período 13x5 → **26% de sobrecoste**. El núcleo
+medido (34 celdas ocupadas) necesitaría ~46 → sigue siendo una caja de 7x7 dentro de un disco de 20x20.
+**Ningún radio necesita recalibrarse** (`ZONA_INFLUENCIA`, `radioAfuerasMin`, `radioMapa` se quedan igual).
+
+### E6.9 Orden del scoring (decisión 5)
+
+Se **mantiene** §5.3: la cercanía al ancla sigue siendo el criterio principal, y la legibilidad de distritos
+que costó cinco etapas no se pone en riesgo. La presión anti-coágulo viene del gate, no de invertir la
+prioridad:
+
+1. **Gate duro** — coste de conexión ≤ `capCorredor`; si no, candidato inválido (§E6.5).
+2. **Cercanía al ancla** (`gapCeldas`, objetivo 1 y no 0 — §E6.7).
+3. **Coste de calle** (menos celdas nuevas mejor) — el término que hoy no existe.
+4. **Alineación al retículo** (§E6.8).
+5. Continuación de fila / borde compartido / semilla determinista — sin cambios.
+
+### E6.10 El cap de corredor es POR CLASE, no global
+
+Un cap único rompería las afueras: Granja y Corral viven a ≥20 celdas del centro por diseño
+(`radioAfuerasMin`) y su camino es largo **a propósito**. `esDeAfueras` ya existe como discriminador:
+
+- **Urbano**: cap corto — es lo que impide enterrarse dentro de un coágulo.
+- **Afueras**: cap largo o nulo; su corredor es un `camino`, no una calle (§11 se mantiene: son dos clases,
+  no dos grosores).
+
+Conectividad (§E6.4) se mide sobre la UNIÓN de calles y caminos, igual que hoy hace `yaConectado`.
+
+### E6.11 La escala ×2 no cuesta nada
+
+`tamanoCelda: 6 → 3` y todas las huellas ×2. El álgebra se conserva: `puntoDeRectangulo` da **exactamente el
+mismo punto local** (`6·col + 3·ancho` en ambos modelos). (El Centro Urbano tenía una excepción de
+coordenadas —resuelta en §E6.20, 2026-08-31: su `posicion` ahora es su centro, sin caso especial.)
+
+Consecuencias:
+
+- **`Edificio.posicion` no se mueve ni un decimal → cero migración de snapshot.**
+- La red ya es derivada (`GeometriaAsentamientos`, calculada en `RunnerDePartida`, nunca persistida) →
+  tampoco migra.
+- El único contrato que cambia es `TrazadoAsentamiento.calles` (de `SegmentoTrazado[]` a celdas/rectángulos):
+  DTO derivado, así que es esquema + cliente, sin tocar disco. Conviene emitir **tiradas de celdas fusionadas**
+  (mismo formato que `huellas`) y no celda a celda, por el presupuesto de payload de doc 6.
+- **Coste de CPU: ×4 candidatos** por colocación (`candidatosLibres` barre `(2·radio/T)²`). Es la razón por la
+  que ×2 es el factor correcto y no uno mayor: cuadruplicar la resolución sería ×16 y el laboratorio batch
+  (100 facciones × 3000 ticks) es una herramienta que no se puede permitir perder. **Medir antes de
+  comprometerse.**
+
+| Constante | Hoy | Nueva | Nota |
+|---|---|---|---|
+| `REJILLA_ASENTAMIENTO.tamanoCelda` | 6 | **3** | preserva coordenadas locales |
+| `EDIFICIO_TAMANO.*`, `granja.niveles[n].tamano`, `PUESTO_MERCADO_FORMA` | — | **×2** | |
+| `FONDO_MANZANA` | 2 | **4** | sigue siendo 2 hileras espalda con espalda |
+| `TRAZADO.largoFilaMin` / `largoFilaMax` | 4 / 8 | **8 / 16** | |
+| `TRAZADO.separacionMinimaAnclas` | 6 | **12** | `RADIO_INICIAL_RANURA`/`RADIO_MAXIMO_RANURA` derivan solas |
+| `TRAZADO.separacionSeguridadAnclas` | 2 | **4** | |
+| `TRAZADO.anchoCalle` | — | **1** (nueva) | decisión 1 |
+| `radioAfuerasMin` / `anchoBandaAfueras` / `radioMapa` | 60 / 36 / 150 | **sin cambio** | ya están en unidades locales |
+
+### E6.12 Invariantes a congelar
+
+| `trazado.test.ts` hoy | Etapa 6 |
+|---|---|
+| ningún par de edificios comparte celda | **se mantiene**, + ningún edificio pisa una celda de calle |
+| todo edificio toca la red por una arista de su perímetro | **todo edificio es adyacente a una celda de calle** (hoy lo cumpliría el 25-32%) |
+| ningún tramo es diagonal ni se repite | **obsoleto** (no hay tramos) → lo sustituye: la red es **un único componente conexo** |
+| Granja y Corral se quedan a las afueras | se mantiene |
+| la red es determinista | se mantiene |
+
+Y uno nuevo que hoy no se puede ni formular: **toda celda de calle es alcanzable a pie desde el Centro
+Urbano** — que es lo que 3D necesita de verdad y lo que el modelo de aristas nunca garantizó.
+
+### E6.13 Qué NO se toca
+
+El árbol único de anclas (§5.4), `semillaSaturada` / `anclaLlena` (§5.3.1/§5.6), las categorías, el sorteo de
+tipo de ancla, el eje rotado (§5.8), las afueras (§11), la orientación intercambiable y el desempate por borde
+compartido (Etapa 4, puntos 1-2). Todo eso razona en **celdas y rectángulos**, no en aristas: sobrevive con las
+constantes escaladas. El revamp es quirúrgico sobre la capa de red y el filtro de candidatos, no sobre el
+sistema de anclas.
+
+### E6.14 Línea base y coste operativo
+
+- ~~**Instrumentar el batch ANTES de tocar nada**~~ — **hecho (2026-08-30)**, igual que hizo la Etapa 0 y antes
+  de tocar una línea de `engine/trazado.ts`. `scripts/run-batch-sim.ts` gana `medirCalles` y tres campos en
+  `Foto`, junto a `dispersionViviendaCentro`/`manzanasCerradasMedia`, que ya vivían ahí:
+
+  | Campo | Qué mide | Valor esperado tras la Etapa 6 |
+  |---|---|---|
+  | `callesAnchoCeroPct` | % de tramos que separan dos edificios distintos | **0**, por construcción |
+  | `edificiosConFrenteRealPct` | % con un tramo de red y celda LIBRE enfrente | **100**, es el invariante de §E6.12 |
+  | `ocupacionNucleoPct` | % de ocupación del núcleo (sin afueras) en su propia caja | **debe bajar** — es el coágulo que afloja la decisión 4 |
+
+  Las tres trabajan sobre `segmentosDeRed` (coordenadas locales) y `celdasDeEdificio`, **nunca sobre las claves
+  de arista**: el formato `H i,j`/`V i,j` es interno de `trazado.ts` y desaparece con la Etapa 6, así que la
+  instrumentación no puede depender de él o moriría con el cambio que debe medir. Sobreviven al cambio de
+  modelo sin tocarse.
+- **Las partidas guardadas hay que borrarlas.** No por migración (no hay: §E6.11), sino porque sus edificios
+  están colocados bajo reglas viejas y, al recalcularse la red, pueden no satisfacer la conectividad de §E6.4.
+  Es la política ya establecida del proyecto (§8, "Resueltos"), pero aquí hay que hacerla explícita en el plan.
+
+### E6.15 Plan de ejecución
+
+Misma convención que `Docs/Arquitectura/4_Plan_Evolucion_Tareas.md`: checkbox por tarea, y cada paso se cierra
+anotando aquí lo que se midió de verdad, no lo que se esperaba medir.
+
+**El criterio que ordena los pasos es la atribución**: cada paso cambia UNA cosa medible, para que un
+movimiento en las métricas tenga un solo culpable posible. Es el método de `git stash` + seed fija que ya
+usaron las Etapas 1 y 2 (§"Etapa 1"/"Etapa 2"), donde separar los cambios fue lo único que permitió leer los
+resultados.
+
+#### Paso 0. Línea base instrumentada — ✅ completada 2026-08-30
+- [x] `medirCalles` + `celdasSeparadasPor` + `celdaDePunto` en `scripts/run-batch-sim.ts`; tres campos nuevos
+      en `Foto` (`callesAnchoCeroPct`, `edificiosConFrenteRealPct`, `ocupacionNucleoPct`)
+- [x] Construidas sobre `segmentosDeRed`/`celdasDeEdificio`, nunca sobre claves de arista (§E6.14) — así
+      sobreviven al cambio de modelo que tienen que medir
+- [x] Corrida de referencia `BATCH_SEED=7 BATCH_FACCIONES=20 BATCH_TICKS=1500`, 18 vivos, 0 excepciones:
+      **`callesAnchoCeroPct` 51.04 · `edificiosConFrenteRealPct` 32.98 · `ocupacionNucleoPct` 64.12 ·
+      `manzanasCerradasMedia` 3.89 · `dispersionViviendaCentro` 3.44**
+- [x] **Corrección registrada**: la cifra de cabecera 80-86% de §E6.1 era de ciudades de un solo asentamiento;
+      a escala de batch el ancho cero es 51%. Los números del batch son los válidos
+- [x] Anotado el techo del instrumento: las métricas se congelan del tick 500 al 1500 (las ciudades dejan de
+      crecer por el colapso de transición a nivel 2) — la línea base no ejercita ciudades grandes
+- [x] 685/685 tests, `tsc --noEmit` limpio, `engine/trazado.ts` sin tocar
+
+#### Paso 1. La escala ×2, todavía sobre aristas — ✅ completada 2026-08-31, con un hallazgo que abre el Paso 1b
+Aísla la variable de COSTE antes de mezclarla con el cambio de modelo. **No es un no-op**: la rejilla más fina
+habilita posiciones a media celda que antes no existían, así que las colocaciones cambian aunque el modelo de
+red no.
+- [x] `REJILLA_ASENTAMIENTO.tamanoCelda` 6 → 3
+- [x] `EDIFICIO_TAMANO.*`, `EDIFICIO_CATALOGO.granja.niveles[n].tamano` y `PUESTO_MERCADO_FORMA` ×2
+- [x] `FONDO_MANZANA` 2 → 4; `TRAZADO.largoFilaMin`/`largoFilaMax` 4/8 → 8/16;
+      `separacionMinimaAnclas` 6 → 12; `separacionSeguridadAnclas` 4
+- [x] `radioAfuerasMin`/`anchoBandaAfueras`/`radioMapa` NO se tocan — están en unidades locales; anotado en la
+      propia constante para que no se reescalen por inercia en el futuro
+- [x] **El default oculto**: `tamanoEdificio` devolvía el literal `{1,1}` para los tipos ausentes de la tabla
+      (Vivienda, Leñera, las 3 minas, Gran Fundición, Maravilla, Muralla). Reescalar solo la tabla habría dejado
+      al edificio MÁS NUMEROSO de cualquier ciudad a la mitad de su tamaño físico, con síntoma "las casas
+      encogieron" y no un error de tipos. Extraído a `EDIFICIO_TAMANO_POR_DEFECTO` (`constants.ts`)
+- [x] Conservación de coordenadas **probada, no afirmada**: `engine/__tests__/escalaRejilla.test.ts` — 40 casos
+      (todos los tipos + niveles de Granja + formas de Puesto + rotaciones) generados con el código real a
+      `tamanoCelda = 6` y anclados en la celda (1,−2), que siguen en verde a `tamanoCelda = 3` sin editar un
+      número. Es una aserción CRUZADA ENTRE VERSIONES; ahí está todo su valor. Incluye un test genérico de que
+      `posicion`↔celda son inversas exactas a cualquier escala
+- [x] **`CELDA_METRICA` congelada en 6** (`scripts/run-batch-sim.ts`): las métricas de distancia
+      (`dispersion*`, `UMBRAL_COMPONENTE_CELDAS`) estaban expresadas EN CELDAS, así que al partir la celda por
+      la mitad se habrían duplicado solas —3.44 → 6.88 sin que nada empeorase— y la comparación contra el Paso 0
+      y contra los números históricos de las Etapas 1 y 2 habría quedado corrupta en silencio
+- [x] Tests: 685 → **688**, `tsc --noEmit` limpio, `cliente/` compila (deriva el tamaño de celda del catálogo)
+
+**Métricas, corrida de referencia idéntica al Paso 0** (`BATCH_SEED=7 BATCH_FACCIONES=20 BATCH_TICKS=1500`):
+
+| Métrica | Paso 0 | Paso 1 | Lectura |
+|---|---|---|---|
+| **tiempo de corrida** | 1m40s | **8m08s** | **×4.9** — ver Paso 1b |
+| vivos / colapsados | 18 / 2 | 18 / 2 | la SIMULACIÓN no se movió |
+| `viviendasMedia` / `pesantsMedia` | 13 / 168.17 | 13.06 / 168.11 | idem |
+| `ocupacionNucleoPct` | 64.12 | **56.71** | **−7.4 puntos: el coágulo se aflojó solo** |
+| `dispersionViviendaCentro` | 3.44 | **3.13** | −9%, más pegado al ancla |
+| `dispersionPuestoMercado` | 2.38 | **2.27** | −5% |
+| `manzanasCerradasMedia` | 3.89 | 3.50 | −10%, leve regresión del guardián |
+| `conAlgunaManzanaCerrada` | 18 | 18 | sin cambio |
+| `callesAnchoCeroPct` | 51.04 | 47.13 | −3.9, esperado: el MODELO no cambió |
+| `edificiosConFrenteRealPct` | 32.98 | 32.08 | −0.9, idem |
+
+Lo relevante: **la simulación es idéntica** (mismos vivos, colapsos, población y viviendas), así que el
+reescalado es puramente geométrico, como se diseñó. Y la rejilla más fina ya afloja el coágulo 7 puntos y
+acerca los satélites a su ancla, gratis, antes de tocar el modelo de calles. La regresión de
+`manzanasCerradasMedia` queda anotada para vigilarla en el Paso 3 — pero mide ciclos de una red que sigue
+siendo falsa en un 47%, así que su valor informativo hoy es limitado.
+
+`snapshot_baseline` re-baselineado con un diff de **3 líneas en todo el fichero**: una Vivienda que arranca
+obra un tick más tarde (y sus 10 de madera sin gastar). Todos los cortes posteriores quedaron idénticos byte a
+byte ⇒ la obra se hizo y la partida converge; no es una construcción perdida.
+
+Dos tests necesitaron arreglo, ninguno por un bug del motor:
+- `mejoraManual`: la Granja al mejorar ya NO cambia de `posicion`. Con la rejilla original, una huella de alto
+  par y otra de alto impar no podían compartir centro (habría exigido media celda); ahora sí, y la Granja se
+  muda una celda conservando el centro. El edificio sí se mueve — dejó de ser cierto que moverse implique
+  cambiar de `posicion`. El test compara ahora la HUELLA.
+- `anclasSatelites`: el helper `ocupante(col, row)` prometía "ocupa ESTA celda" y los bucles de relleno
+  iteraban celda a celda contando con eso; con Vivienda a 2x2 cada relleno se desbordaba sobre sus vecinos,
+  incluido el hueco que el test dejaba libre a propósito. Síntoma: "0 candidatos", que no dice nada de la
+  causa. Ahora hay un `rellenar()` que recorre a pasos de la huella real y descarta por solape de rectángulos.
+  Además el margen de relleno se DERIVA de `RADIO_MAXIMO_RANURA` (exportada) en vez de ser un literal que el
+  reescalado dejó corto.
+
+#### Paso 1b. Coste de la colocación — ✅ completada 2026-08-31 (bloqueo del Paso 2 levantado con evidencia)
+El Paso 1 disparó su propio punto de abandono: **×4.9 en tiempo de corrida**. Proyectado al batch por defecto
+(100 facciones × 3000 ticks, ~10× esta corrida) son **~17 min → ~80 min**, impracticable para una herramienta
+de calibración iterativa. Y el laboratorio de balance no es opcional: es lo que sustituye al equipo de QA que
+el proyecto no tiene (doc 10 §5).
+
+**El factor de escala NO se replantea.** ×2 viene exigido por el diseño (`anchoCalle = 1` = media Vivienda,
+decisión 1 de §E6.3) y bajarlo mataría el modelo entero. El coste es un artefacto de fuerza bruta, no algo
+intrínseco:
+
+- `candidatosLibres` barre `(2·radioPotencial/T + 1)²` posiciones → **×4** al doblar la resolución.
+- Y para CADA posición comprueba celda a celda si la huella cabe, `O(ancho×alto)` — y la huella también se
+  cuadruplicó. Los dos factores se multiplican; de ahí que 4.9 supere al ×4 previsto.
+
+- [x] **Tabla de sumas acumuladas 2D** (`OcupacionAcumulada`, `engine/trazado.ts`) sobre celdas ocupadas,
+      construida una vez por barrido recorriendo `ocupadas` (cientos de entradas) y no la caja (decenas de
+      miles). "¿Cabe este rectángulo?" pasa de `O(ancho×alto)` consultas con clave de texto a una resta de
+      cuatro enteros; la comprobación de "pared con pared" pasa de `O(ancho+alto)` a cuatro consultas O(1).
+      **8m08s → 4m57s.**
+- [x] **Decorar-ordenar-desdecorar en los dos `sort`.** `distanciaAlOrigen` (`Math.hypot`) y
+      `semillaCandidato` (plantilla de texto + FNV-1a + `Math.sin`) son CONSTANTES por candidato y se estaban
+      recalculando dentro del comparador, que corre `O(n log n)` veces. **5m02s → 3m48s.**
+- [x] **Hipótesis refutada, y queda escrita en el código.** Se probó evitar el array intermedio de
+      `aristasDeRectangulo` con un bucle de salida temprana (`algunaAristaEnRed`), suponiendo que dominaba la
+      asignación: **4m57s → 5m02s, o sea nada**. El coste no es el array, son las 2·(ancho+alto) claves de
+      texto por candidato. Se dejó la función porque no asigna y hace legible el perfil, pero con el resultado
+      negativo anotado para que nadie lo vuelva a intentar por el mismo camino.
+- [x] Métricas **idénticas** en las tres iteraciones (`callesAnchoCeroPct` 47.13, `frenteReal` 32.08,
+      `ocupacionNucleo` 56.71, `manzanas` 3.50, dispersiones 2.27/3.13, 18 vivos / 2 colapsados) y 688/688
+      tests, incluida la línea base de snapshot ⇒ la colocación es bit a bit la del Paso 1. Es la única
+      garantía válida para un cambio puramente de rendimiento.
+
+**Resultado: 8m08s → 3m48s (2.1× más rápido).** El objetivo era "volver al orden de 1m40s" y **no se alcanzó**:
+quedan 2.3× sobre el Paso 0.
+
+**Pero el objetivo estaba mal planteado, y el perfil lo demuestra.** Medido con `node --cpu-prof` después de la
+pasada (total muestreado 26.2s → 19.3s, −26%):
+
+| Función | % del tiempo restante | ¿Sobrevive al Paso 2? |
+|---|---|---|
+| `algunaAristaEnRed` | **31.1%** | **no** — es la consulta de frente de calle POR ARISTAS |
+| `candidatosLibres` (el barrido en sí) | 15.0% | sí, es el coste inherente del ×4 de posiciones |
+| `extremosDeArista` | 6.8% | **no** — parsea claves de arista |
+| `porDistanciaAlOrigen` | 5.3% | sí |
+| `verticesDeRed` | 4.8% | **no** — reconstruye los vértices de la red de aristas |
+| `pseudoAleatorio` | 4.1% | sí (era 11.9% antes de la pasada) |
+
+**~43% de lo que queda es maquinaria de ARISTAS que el Paso 2 borra por construcción**: con calles sobre
+celdas, "¿tiene frente de calle?" pasa a ser una lectura sobre la misma clase de tabla que `OcupacionAcumulada`
+—sin texto, en O(1)— y `extremosDeArista`/`verticesDeRed` dejan de existir. Seguir optimizando la
+representación de aristas sería trabajo que el Paso 2 borra.
+
+- [x] **El bloqueo del Paso 2 se levanta con esta evidencia**: el Paso 2 no añade coste sobre un punto de
+      partida malo, es *parte de la solución*. Lo que sí queda es volver a medir el tiempo al cerrarlo y, si
+      entonces sigue lejos del Paso 0, atacar el 15% de `candidatosLibres` (el ×4 de posiciones es inherente a
+      la resolución, pero el barrido podría acotarse a anillos en vez de al disco entero).
+
+#### Paso 2. El modelo de celdas — ✅ completada 2026-08-31 (absorbió el Paso 3 y el Paso 4)
+Las tres piezas van juntas porque §E6.4 y §E6.5 son la misma decisión: sin el campo de distancia no hay forma
+barata de convertir la conexión en validez, y sin validez la conexión falla en silencio.
+- [x] `RedDeCalles` pasa de `Set` de claves de arista a `Set` de CELDAS (`"col,row"`, el mismo espacio que
+      `celdasOcupadas`). `calles`/`caminos` siguen separados
+- [x] `redDeCalles` reescrita: el anillo del Centro Urbano y el de cada ancla son marcos de celdas
+- [x] Campo de distancia (§E6.6): `DistanciaALaCalle`, BFS multiorigen desde todas las celdas de calle a la
+      vez, **una pasada por barrido** en vez de un BFS por candidato
+- [x] Las celdas de calle entran en `ocupadas` (§E6.2) — centralizado en `sueloOcupado()`, una sola función,
+      porque olvidarlo en UNO de los cuatro puntos de colocación bastaba para plantar edificios sobre las
+      calles, y el síntoma habría sido visual y tardío, no un error de tipos
+- [x] `conectarEdificio` eliminada. La conexión es GATE DURO dentro de `candidatosLibres`: un sitio del que no
+      se puede salir a la calle no es un sitio. El corredor se traza solo para el ganador (`corredorHastaLaRed`)
+- [x] Invariantes nuevos en `trazado.test.ts` (§E6.12): ningún edificio pisa celda de calle · todo edificio
+      tiene celda de calle adyacente · **la red es un ÚNICO componente conexo alcanzable a pie desde el Centro
+      Urbano**. Retirado "ningún tramo diagonal ni repetido" (ya no hay tramos)
+- [x] 685 → **689 tests**, `tsc` limpio en motor, `scripts/` y `cliente/`, `vite build` verde
+
+**Dos fallos de diseño que solo aparecieron al escribir el código.** Los dos estaban en este documento, dados
+por buenos:
+
+1. **La inducción de conectividad de §E6.4 tenía un hueco.** El argumento —"la red arranca conexa y cada
+   edificio o ya la toca o abre un corredor, que es un camino"— es correcto pero **solo cubre el corredor**.
+   El anillo de un ancla y las franjas del retículo se añadían incondicionalmente y podían nacer sueltas:
+   medido, **48 de 95 celdas de calle inalcanzables a pie** en un asentamiento real. Cerrado con
+   `anadirConectadas`, que solo añade las celdas del grupo que conectan con la red existente. Resulta MÁS fiel
+   al principio rector que la versión anterior: una franja del retículo que todavía no llega a la ciudad
+   simplemente no existe aún, que es literalmente lo que dice §10.
+
+2. **§E6.7 (gap 0 → gap 1) NO era separable, y este plan lo tenía mal.** Estaba asignado al Paso 3. En cuanto
+   las anclas siembran anillos de celdas, `gapCeldas(satélite, ancla) === 0` se vuelve geométricamente
+   imposible y los tests lo demuestran de inmediato — no hay un estado intermedio en el que el Paso 2 esté
+   hecho y el Paso 3 pendiente. Resuelto midiendo contra el ancla **expandida por su anillo**
+   (`rectAnclaConAnillo`): así "hueco 0" recupera su significado —el satélite mira a su ancla desde el otro
+   lado de la calle— y tanto el bucle de anillos como el desempate por borde compartido siguen valiendo sin
+   tocarse. **El Paso 3 queda por tanto absorbido en su parte de §E6.7**; lo que sigue abierto de aquel paso es
+   solo el orden del scoring de §E6.9 y la calibración de `capCorredor`.
+
+**Un test hubo que rehacerlo, y la razón importa.** El de orientación girada (Etapa 4, punto 1) montaba su
+escenario con una simulación real y un hueco "del tamaño exacto de la huella girada". Eso dejó de ser
+construible desde fuera: **21 de las 32 celdas del hueco aparecían ocupadas por calles que el propio motor
+decide poner ahí**. No es un fallo — es la calle costando suelo, que es el objetivo del rediseño. Pasó a ser
+test UNITARIO sobre `sitiosPorAtraccionDura`, con `ocupadas` y `red` construidas a mano.
+
+**`snapshot_baseline` re-baselineado, y el resultado es la mejor evidencia del cambio**: el diff son las MISMAS
+3 líneas del Paso 1, en sentido INVERSO — la Vivienda vuelve a arrancar obra en su tick original. Es decir que
+un cambio tan de fondo como que la calle pase a ocupar suelo deja la composición de la ciudad, en todos los
+cortes de referencia, exactamente donde estaba antes de la Etapa 6. **Cambia cómo se ORDENA la ciudad, no
+cuánto construye ni a qué ritmo.**
+
+
+**Resultados medidos del Paso 2** (misma corrida de referencia que los pasos anteriores):
+
+| Métrica | Paso 0 | Paso 1b | **Paso 2** | |
+|---|---|---|---|---|
+| `edificiosConFrenteRealPct` | 32.98 | 32.08 | **100** | objetivo alcanzado |
+| `componentesDeRedMedia` | *(no medible)* | *(no medible)* | **1** | la red es UNA, se recorre entera a pie |
+| `ocupacionNucleoPct` | 64.12 | 56.71 | **41.28** | **−23 puntos**: el coágulo se abrió |
+| `manzanasCerradasMedia` | 3.89 | 3.50 | **4.83** | +24%, y ahora cuenta manzanas REALES |
+| `dispersionViviendaCentro` | 3.44 | 3.13 | 3.72 | +0.6, ≈ el anillo de calle que ahora hay en medio |
+| `dispersionPuestoMercado` | 2.38 | 2.27 | 2.75 | idem |
+| vivos / colapsados | 18 / 2 | 18 / 2 | 18 / 2 | la simulación no se movió |
+| `viviendasMedia` / `pesantsMedia` | 13 / 168.17 | 13.06 / 168.11 | 13.06 / 168.11 | idem |
+
+Las dos métricas que la Etapa 6 existía para arreglar dieron **exactamente** en el objetivo: 100% de edificios
+con salida real a la calle, y la red en UN solo componente. `ocupacionNucleoPct` baja 23 puntos: la ciudad
+dejó de ser un coágulo, que era la decisión 4. Y `manzanasCerradasMedia` SUBE — el guardián de regresión de
+las Etapas 1 y 2 no solo no empeoró, sino que ahora cuenta ciclos de una red que existe de verdad, no de una
+red que era falsa en un 47%.
+
+Las dos dispersiones suben ~0.5-0.6 celdas métricas. **No es deriva, es el anillo**: desde §E6.7 un satélite
+mira a su ancla desde el otro lado de su calle, así que está literalmente una calle más lejos. Era la
+consecuencia prevista de la decisión, no una regresión de la atracción.
+
+**Coste, y una predicción mía que salió mal.** El Paso 1b cerró afirmando que "~43% de lo que queda es
+maquinaria de aristas que el Paso 2 borra por construcción", y de ahí que el Paso 2 fuese *parte de la
+solución*. **Falso**: la primera versión del Paso 2 subió de 3m48s a 7m18s. Sí desapareció la maquinaria de
+aristas, pero el campo de distancia que la sustituye costaba más que ella — consultaba `ocupadas` y la red con
+una clave de texto por celda de la caja y por vecina, unas 75.000 cadenas por barrido. Perfilado:
+`tieneFrenteDeCalle` sola era el 16.5%, y el cluster de conexión el 34%.
+
+Reescrito sobre MÁSCARAS INDEXADAS (`Uint8Array` sobre la caja, rellenada recorriendo los conjuntos y no la
+caja; `costeDesde` recorre las cuatro franjas por aritmética de índices sin asignar nada), el perfil vuelve a
+**19.3s, exactamente el nivel del Paso 1b**. Una segunda pasada sobre `corredorHastaLaRed` (claves numéricas
+en vez de texto) lo bajó del 22% al 10% pero dejó el total plano — el coste se trasladó a los closures. Ahí se
+paró: rendimientos decrecientes.
+
+**Reloj final: 3m42s**, contra 3m48s del Paso 1b y 1m40s del Paso 0. **El modelo de celdas sale gratis: es
+incluso marginalmente más rápido que el modelo de aristas que sustituye**, después de haber costado el doble
+en su primera versión.
+
+Lo que NO se recupera es el ×2.2 sobre la línea base del Paso 0: ese factor es el ×4 de posiciones que trae la
+rejilla fina, parcialmente compensado por las dos pasadas de optimización. Bajar de ahí exige acotar el
+barrido de `candidatosLibres` a anillos en vez de al disco entero — trabajo aparte, no de este paso.
+
+#### Paso 4. Contrato de dibujo y `cliente/` — ✅ completada 2026-08-31 (adelantada: sin ella nada se ve)
+- [x] `TrazadoAsentamiento.calles`/`caminos`: de `SegmentoTrazado[]` (líneas) a `RectanguloLocal[]` (ÁREAS),
+      con las celdas fusionadas en tiradas horizontales antes de salir — una avenida de 20 celdas viaja como
+      UN rectángulo, no como 20 (presupuesto de payload del doc 6)
+- [x] `segmentosDeRed` → `rectangulosDeRed`. `SegmentoTrazado` desaparece; `RectanguloLocal` sirve igual para
+      la huella de un edificio y para una tirada de calle
+- [x] Derivado, sin tocar disco (§E6.11): esquemas y `ProyeccionJugador`/`EstadoAdmin` viajan por
+      `GeometriaAsentamientos`, que ya se calculaba en `RunnerDePartida`
+- [x] `cliente/src/ui/canvas.ts`: `dibujarTramos` → `dibujarTiradas`, que **rellena** en vez de trazar. Es
+      justo lo que el modelo de aristas no podía representar: una línea no tiene ancho
+- [ ] **Playtest en la interfaz — PENDIENTE.** No es opcional: los bugs de §5.7 (Mercado pegado al Centro
+      Urbano) y de la Etapa 5 (anclas huérfanas) los encontró el usuario mirando la pantalla, no la suite
+
+#### Paso 3. Orden del scoring y cap por clase — ⬜ pendiente (reducido: §E6.7 se lo llevó el Paso 2)
+Separado del Paso 2 a propósito: son los cambios que mueven la DENSIDAD, y mezclarlos con el cambio de modelo
+haría ilegible cuál movió qué. **Lo que este paso ya NO incluye**: el gap 0 → gap 1 de §E6.7, que resultó
+inseparable del Paso 2 (ver allí) y aterrizó con él.
+- [x] `sitiosPorAtraccionDura`: objetivo gap **1**, no 0 (§E6.7) — hecho en el Paso 2, por obligación
+- [x] `esBordeDeManzana` pasa de "¿esta línea es borde?" a "¿esta columna/fila es de calle?", período
+      `largoFila + anchoCalle` (§E6.8) — hecho en el Paso 2: sin él la red de celdas no se podía escribir
+- [ ] Orden del scoring de §E6.9: gate duro → cercanía al ancla → **coste de calle** → retículo →
+      fila/borde/semilla. Hoy el coste de calle solo actúa como GATE (`capCorredor`), no como término de
+      desempate — falta esa mitad
+- [ ] `capCorredor` por clase (§E6.10) está IMPLEMENTADO (`capCorredorUrbano` 12 / `capCorredorAfueras` 200)
+      pero los dos números están puestos a ojo, sin calibrar
+- [ ] Vigilar `manzanasCerradasMedia` y `dispersionViviendaCentro` contra el Paso 0 — son los guardianes de
+      regresión de las Etapas 1 y 2, y este paso es el que puede romperlos
+
+#### Paso 5. Calibración — ⬜ pendiente
+- [ ] `capCorredor` urbano y de afueras, contra la línea base del Paso 0
+- [ ] Reevaluar el pendiente "ancla creada sin garantizar sitio para al menos un satélite" (§"Abierto") bajo el
+      criterio de gap 1, que cambia la pregunta
+- [ ] Decidir si el retículo blando basta o hace falta endurecerlo (§"Abierto")
+
+#### Antes de dar la Etapa 6 por cerrada
+- [ ] Borrar `partidas/` (§E6.14) — los snapshots viejos tienen edificios colocados con reglas viejas
+- [ ] Reescribir §1, §2, §3, §4, §5.2, §5.3, §6, §10, §11 y §12 al modelo de celdas y retirar el banner de
+      "CERO código escrito" de la cabecera de la Etapa 6 y de §1
+
+### E6.16 Hallazgo del laboratorio: edificios sobre celdas de calle (RESUELTO 2026-09-02)
+
+Al recuperar el laboratorio visual (`lab/`, ver más abajo) y correr su ciudad —seed 1, 200 ticks— aparecen
+**2 edificios pisando 6 celdas de calle**, violando el invariante de §E6.12 que la suite da por bueno. El test
+`trazado.test.ts` no lo ve porque corre otra ciudad (seed 99) que no lo toca: **es exactamente el tipo de bug
+que el laboratorio existe para encontrar y la suite no.**
+
+Aislado a mano, replicando el replay incremental:
+
+```
+celda -4,-3  aparece como calle al procesar [orden  9] lenera
+celda -5,-3  aparece como calle al procesar [orden 12] lenera
+   ... y las pisa  [orden 15] almacen
+celda 9,-8   aparece como calle al procesar [orden 33] patioDeGremios
+   ... y las pisa  [orden 35] vivienda
+```
+
+Las calles existen ANTES, en el orden del array, que los edificios que las pisan. La colocación no las vio.
+
+**Causa raíz, y NO la introdujo la Etapa 6.** `evaluarNecesidades` (`engine/construction.ts`) propone
+candidatos uno a uno —cada uno consultando `sueloOcupado` sobre `[...edificiosBase, ...candidatos]`, es decir
+en ORDEN DE PROPUESTA— pero los compromete ordenados por score:
+
+```ts
+for (const candidato of [...candidatos].sort((a, b) => b.score - a.score))   // construction.ts:809
+```
+
+Y además descarta por el camino los que no tienen cupo, materiales o pasan un tope. De modo que **el orden del
+array final no es el orden en que cada candidato calculó su sitio**, y `redDeCalles` —que es un replay
+dependiente del orden— produce entonces una red distinta de la que cada uno vio.
+
+Con las calles sobre ARISTAS esta divergencia ya existía pero era invisible: una arista no ocupa superficie,
+así que "solaparse" con ella no significaba nada. Al pasar la calle a costar suelo, el mismo desajuste se
+vuelve un edificio construido encima de una calle.
+
+**Cuatro salidas, ninguna gratis** (decisión pendiente del usuario, porque tres de ellas tocan balance):
+
+1. **Comprometer en orden de propuesta** — una línea, pero el orden por score existe a propósito: es el que
+   decide qué se paga primero cuando no hay cupo o materiales para todo (`Edificio.prioridad`).
+2. **Proponer ya en orden de score** — exige evaluar la necesidad ANTES de calcular el sitio, o sea partir
+   `evaluarNecesidades` en dos fases.
+3. **Revalidar tras el commit** — recalcular la red y reubicar o descartar los candidatos que hayan quedado
+   sobre una calle. Es el parche más contenido y no toca el orden de pago, pero añade una pasada.
+4. **Hacer `redDeCalles` independiente del orden** — el replay incremental es lo que produce el crecimiento
+   emergente (§2, §10); quitarlo sería rediseñar la mecánica entera. Descartada salvo sorpresa.
+
+**Antes de arreglarlo hay que congelar el caso**: el fixture de `trazado.test.ts` (seed 99) no lo reproduce,
+así que el arreglo no tendría guardián. La ciudad del laboratorio (seed 1, 200 ticks) sí — conviene añadirla
+como segundo caso del test.
+
+---
+
+#### RESUELTO (2026-09-02) — salida 3, "revalidar antes de pagar"
+
+**El guardián apareció solo.** Al duplicar la producción base de Granja (rebalanceo de trigo, Doc Game 4.2.1)
+las ciudades crecen más, y `perfilesTrazado.test.ts` empezó a fallar con *"gremial: vivienda pisa la celda de
+calle -7,-5"*. Comprobado revirtiendo el cambio: sin 2x pasa, con 2x falla. **El 2x no introdujo el bug, lo
+hizo alcanzable por la suite** — que es justo lo que este apartado pedía antes de tocar nada.
+
+**Qué se implementó**: `pisaCalleComprometida` (`engine/construction.ts`), llamada dentro del bucle de commit
+**después** de las comprobaciones de cupo, tope y fondos, y **antes** de pagar. Recalcula `redDeCalles` sobre
+`[...edificiosBase, ...yaComprometidos, candidato]` — es decir, sobre el orden REAL en que va a quedar la
+ciudad — y si alguna celda del candidato cae sobre calle, lo descarta con un `continue`. Al ir después de las
+otras comprobaciones, corre como mucho `NECESIDADES.maximoEnCola` (4) veces por asentamiento y tick, no una
+por candidato propuesto.
+
+**Por qué basta con mirar el prefijo ya comprometido y no hay que revalidar a los anteriores** (esto es lo que
+hace viable la salida 3 y no estaba en el análisis original): `anadirConectadas` (`trazado.ts:433`) **nunca
+siembra calle sobre una celda ya ocupada**, y el replay marca las celdas de cada edificio como ocupadas ANTES
+de sembrar sus calles. Así que ningún edificio puede quedar bajo una calle nacida después de él. Validar cada
+candidato contra su prefijo es suficiente **y el resultado es estable** — no hace falta iterar a punto fijo.
+
+**Por qué no las otras salidas**: 1 y 2 cambian QUÉ se paga primero cuando no alcanza para todo, y eso es
+balance (el orden por score existe a propósito); 4 sería rediseñar el crecimiento emergente entero.
+
+**Coste medido: cero.** Batch de 15 facciones × 600 ticks, misma seed, antes y después del arreglo:
+`vivos`, `colapsados`, `pesantsMedia`, `viviendasMedia`, `granjasActivasMedia`, `conGateNivel2Cumplido`,
+`tropasVivas`, `manzanasCerradasMedia`, `edificiosConFrenteRealPct`, `componentesDeRedMedia` y
+`ocupacionNucleoPct` salen **idénticos**. El rechazo es raro; cuando dispara, evita la violación sin frenar la
+construcción.
+
+**Guardián permanente**: `src/engine/__tests__/edificiosSobreCalle.test.ts`, con la ciudad del laboratorio
+(**seed 1**, 200 ticks) que pedía este apartado, más las seeds 60 y 200. Verificado además a mano sobre 15
+seeds antes de recortar: ninguna ciudad superviviente pisa calle. 786/786 tests, `tsc --noEmit` limpio.
+
+
+### E6.17 Las afueras crecen hacia AFUERA (corregido 2026-08-31)
+
+Reportado por el usuario jugando con el laboratorio: *"las granjas al subir de nivel están creciendo hacia el
+centro de la ciudad ocupando espacio que era utilizado por otros edificios; estos deben crecer hacia afuera"*.
+
+Medido antes de tocar nada, siguiendo el borde INTERIOR de cada Granja a lo largo de sus mejoras:
+
+```
+granja A  nivel 1→2→3→4   borde interior  88.2 → 65.8 → 57.9 → 39.0     (radioAfuerasMin = 60)
+granja B  nivel 1→2→3→4   borde interior  88.2 → 60.1 → 70.0 → 64.9
+```
+
+A nivel 4 la Granja A tenía su borde a **39**: veintiún unidades DENTRO del radio vedado, comiéndose el suelo
+del casco urbano. **Tres causas independientes**, todas anteriores a este reporte:
+
+1. **El veto se medía contra el CENTRO, no contra la huella.** `distanciaMinima` filtraba
+   `distancia(centroDelCandidato, origen)`. Una Granja de nivel 4 mide 36 unidades de lado: con su centro
+   justo en 60, medio edificio quedaba dentro. Corregido con `distanciaBordeAlCentro` — *"las afueras empiezan
+   en 60"* pasa a significar que ninguna CELDA del edificio entra de 60 para dentro.
+2. **La reubicación no tenía dirección.** `reubicarPorTamano` elegía el hueco más cercano a donde estaba, y
+   como `posicion` es el CENTRO, al crecer el rectángulo se expandía por igual hacia dentro y hacia fuera.
+   Ahora descarta primero los huecos que acercarían el edificio al centro, y solo entre los que respetan eso
+   elige el más cercano — para que la Granja siga junto a sus campos. Si NINGUNO evita acercarse, se muda
+   igual: la mejora manda sobre la dirección.
+3. **La banda de afueras no cabía.** `radioMaximoAfueras` topaba el CENTRO en
+   `radioAfuerasMin + anchoBandaAfueras` = 96, y la banda mide 36 — exactamente el lado de una Granja de nivel
+   4. Literalmente no había sitio para crecer sin retroceder. El tope ahora suma la media diagonal del
+   edificio: la banda tiene que poder CONTENERLO, no solo a su punto medio.
+
+**Y un cuarto fallo que estos destaparon, este sí introducido por el Paso 2**: el cap de corredor no se estaba
+pasando por clase en `sitiosParaTipo`/`reubicarPorTamano`, así que a las afueras se les aplicaba
+`capCorredorUrbano` = 12. Con el veto corregido empujando los candidatos más lejos, **ninguno** pasaba el gate
+de conexión y la Granja inicial caía al fallback `(0,0)` — encima del Centro Urbano. §E6.10 avisaba
+literalmente de esto (*"un cap único los rechazaría a todos"*) y aun así se coló: escribí la advertencia y
+después cometí el error.
+
+**Resultado medido, misma ciudad:**
+
+| | antes | después |
+|---|---|---|
+| borde interior final de las Granjas | 39.0 / 64.9 | **96 / 96** |
+| afueras con alguna celda dentro del radio vedado | varias | **0** |
+| mejoras que acercan el edificio al centro | 8 de 9 | 3 de 9, y ninguna entra en la ciudad |
+
+Las 3 que aún retroceden lo hacen dentro de las afueras (de 96 a 88) cuando no hay hueco exterior libre en ese
+momento — es el fallback deliberado del punto 2.
+
+`vista_asentamiento.test.ts` se actualizó al criterio nuevo: el veto se comprueba sobre la HUELLA (piso duro) y
+por arriba no se exige un techo fijo —§11 dice que las afueras llegan *"al menos"* hasta la banda, y el techo
+real sube con `radioPotencial` y con el tamaño del edificio—, solo que el edificio quepa entero en el espacio
+local dibujable.
+
+---
+
+### E6.18 Regla de afinidad: los edificios se agrupan con los suyos (añadida 2026-08-31)
+
+A petición del usuario, **un tercer criterio de desempate** en la colocación de satélites, encima de los dos
+que ya había:
+
+1. **1º — hueco al ancla** (`gapCeldas`): el anillo concéntrico más pegado al ancla que ofrezca un hueco
+   conectado. Sin cambios.
+2. **2º — lado compartido con el ANCLA** (`bordeCompartido` contra el ancla expandida por su anillo, §E6.7):
+   entre huecos del mismo anillo, el que más borde pega al ancla. Regla original.
+3. **3º — lado compartido con los AFINES** (`bordeAfinDe` — NUEVO): entre huecos igual de pegados al ancla, el
+   que más lado comparte con edificios *afines* ya construidos.
+4. **4º — semilla determinista** (`semillaCandidato`). Sin cambios; ahora se consulta menos.
+
+**Afín** = mismo tipo exacto (Vivienda con Vivienda, Puesto de Mercado con Puesto de Mercado) **o** misma
+categoría funcional de `CATEGORIA_POR_TIPO` (Fundición / Curtiduría / Armería, todas `industria`, se buscan
+entre sí). Los tipos de ancla puros (Centro Urbano, Plaza de Armas, Patio de Gremios…) no están en esa tabla,
+así que un satélite nunca sale "afín" a su propia ancla por esta vía — la adyacencia al ancla ya es el
+criterio 2 y contarla otra vez la duplicaría. El ancla concreta a la que se atrae el satélite se excluye
+explícitamente (`celdasDeTiposAfines(..., anclaInstancia.id)`).
+
+Es un **desempate puro**: nunca convierte un hueco inválido en válido ni cambia qué se construye, solo cuál de
+varios huecos equivalentes gana. La política "Líneas de Producción" (`ampliado`) lo ignora — esa reordena los
+candidatos por distancia a sus insumos.
+
+**Medido, 8 semillas × 250 ticks** (script A/B efímero, `bordeAfinDe` → `return 0` para el "antes"):
+
+| | homogeneidad¹ | aristas mismo-tipo | aristas mismo-cat. | aristas mezcladas |
+|---|---|---|---|---|
+| antes | 80 % | 826 | 276 | 270 |
+| después | **89 %** | 964 | 362 | **156** |
+
+¹ `(mismo-tipo + mismo-categoría) / (todas las aristas edificio-edificio)`, media sobre las 8 ciudades.
+
+Las aristas entre categorías distintas caen un 42 % y ninguna semilla empeora. El recuento de edificios queda
+casi idéntico (una ciudad pasa de 68 a 66, el resto sin cambio): reordena, no altera el ritmo. Calibración
+fina (¿pesar el término en vez de dejarlo lexicográfico?) queda para el pase de balance (§E6.15 Paso 5).
+
+Cobertura: `anclasSatelites.test.ts` → *"Regla de afinidad (2026-08-31)"* (unidad de `tiposAfines` + un
+escenario geométrico que prueba que el desempate elige el hueco que toca a los suyos).
+
+---
+
+### E6.19 Calibración por playtest del laboratorio (2026-08-31)
+
+Valores fijados tras jugar con el laboratorio visual. Solo tocan `constants.ts`; ninguna lógica.
+
+| Constante | Antes | Ahora |
+|---|---|---|
+| `TRAZADO.separacionSeguridadAnclas` | 4 | **6** (borde a borde) — deja sitio para una calle y una hilera de satélites entre dos anclas vecinas |
+| `PUESTO_MERCADO_FORMA` 1 / 2 / 3 | 4×4 / 6×4 / 2×2 | **2×4 / 2×6 / 2×2** — tres piezas estrechas, mercadillo de puestos alargados |
+| `MERCADO_PUESTOS_POR_NIVEL` (forma×cantidad, acumulativo) | 3 / 10 / 12 piezas | **6 / 13 / 17** — niv1 `1×2 2×2 3×1` · niv2 `1×2 2×2 3×3` · niv3 `1×1 2×2 3×1` |
+
+Tests actualizados: `mercado_zona.test.ts` (conteo 6/13/17), `escalaRejilla.test.ts` (filas doradas de
+`puestoMercado` formas 1 y 2 — un cambio de tamaño físico sí actualiza su fila, a diferencia de un cambio de
+escala).
+
+**Buena práctica añadida al laboratorio:** en la pestaña Parámetros, todo campo cuyo valor difiera del de
+`constants.ts` al abrir la pestaña se pinta en **amarillo** (`input.lab-cambiado`) — así se localizan de un
+vistazo los que se han tocado.
+
+**Hallazgos del mismo playtest (seed 60, Mercado a mano en el tick 1, nivel 3 al tick 452):**
+
+1. **Doble Patio de Gremios en el mismo tick, uno de ellos huérfano y sin calle (RESUELTO 2026-08-31, fix
+   `b`).** Reproducido: seed 60, Mercado a mano en el tick 1, **tick 120** → aparecen DOS
+   `patioDeGremios` a la vez (ids consecutivos `-37` y `-38`); `-37` nace `anclaLlena`, sin calle y sin
+   satélites, `-38` conecta y recibe la Armería. Sin el Mercado manual, seed 60 crea un solo Patio en ese
+   tick — el Mercado + sus 12 puestos (que también nacen en el tick 120) ocupan el núcleo y empujan la ranura
+   de industria fuera del alcance del corredor.
+
+   **Cadena exacta** (bucle de transformación de `evaluarNecesidades`, `construction.ts` ~L775):
+   - iteración `curtiduria`: `asegurarAnclaPara` no encuentra Patio → `crearAnclaNueva` coloca **Patio -37**.
+     `huecoEnDireccion` solo comprueba colisión + `separacionSeguridadAnclas`, **no** alcance a la red: -37
+     cae a más de `capCorredorUrbano` (12) de cualquier calle → nace desconectado. En el replay de
+     `redDeCalles`, `anadirConectadas(anillo)` se salta su anillo por no conectar.
+   - `sitioEnBarrioLineaProduccion('curtiduria')` → `anclaMasCercana` elige -37 →
+     `sitiosPorAtraccionDura(-37, …)` no tiene ningún candidato que alcance la red → `[]` → sin sitio, **sin
+     `break`**.
+   - iteración `armeria`: `asegurarAnclaPara` de nuevo. `anclaActivaParaCategoria` prueba -37 →
+     `sitiosPorAtraccionDura` `[]` → marca **-37 `anclaLlena`** y, como no hay instancia usable, llama otra
+     vez a `crearAnclaNueva` → **Patio -38**. Este conecta, la Armería se coloca, `break`.
+   - Daño: un `patioDeGremios` permanente en la ciudad, `anclaLlena` para siempre (nunca se desmarca), que no
+     hospeda nada. Se "auto-cura" la calle más tarde (tick ~197 la red crece hasta él) pero sigue `anclaLlena`.
+
+   El caso benigno `1→2` en otros seeds (sin Mercado manual, ~tick 200+) NO es este bug: ahí el Patio #1 sí
+   tiene 3-4 satélites activos, su núcleo está lleno de verdad y el #2 es expansión correcta.
+
+   **Fix aplicado (opción b):** `asegurarAnclaPara` (`construction.ts`), tras `crearAnclaNueva`, comprueba con
+   `sitiosPorAtraccionDura(nuevaAncla, tamaño-del-satélite, …)` que un satélite de `tipo` puede pegarse de
+   verdad al ancla recién creada. Si no hay sitio, el ancla **no se commitea** —se devuelve `edificiosBase`
+   sin ella (conservando las `semillaSaturada`, que sí son un hecho geométrico)— y la construcción se
+   reintenta el tick siguiente, cuando la ciudad haya crecido. Así:
+   - nunca queda un `patioDeGremios`/`plazaDeArmas` huérfano ocupando suelo y árbol de anclas;
+   - la iteración siguiente del bucle vuelve a intentar `crearAnclaNueva` (mismo slot, determinista), vuelve a
+     rechazarlo, y **no encadena** una segunda ancla — como mucho paga el coste de un `redDeCalles` extra
+     mientras está atascado, cosa rara.
+
+   Se descartó la opción `a` (chequeo de alcance a la red en `huecoEnDireccion`): un ancla legítima que nace
+   en el radio máximo de ranura (`separacionMinimaAnclas × 3` = 36 celdas) queda ~29 celdas de la calle de su
+   semilla, por encima de `capCorredorUrbano` (12), así que ese gate rechazaba anclas buenas. La opción `b`
+   pregunta lo correcto directamente: *¿cabe el satélite?*, sin depender de un cap.
+
+   Verificado: 30 corridas (15 seeds × con/sin Mercado manual, 320 ticks) — `huérfanos = 0` en todas,
+   `industria = 9` sin regresión, seed 60+M ahora crea **un solo Patio conectado** en el tick 126 (6 ticks
+   más tarde, esperando a que se abra un hueco de satélite). 691 tests.
+
+2. **Talleres de Carpintería que no se crean (ABIERTO, sin diagnosticar).** Observado en el mismo playtest de
+   seed 60; probablemente la misma familia (`crearTalleresDeCarpinteria` con la Carpintería como ancla propia).
+
+3. **Los Puestos de Mercado salían siempre con la misma orientación (RESUELTO 2026-08-31).** `puestoMercado`
+   salió de `TIPOS_SIN_ROTACION` — su `nivelInterno` identifica una FORMA *relativa*, no una orientación
+   absoluta (el propio Mercado ya nace girado o no, `orientacionesDeAncla`), así que no había ninguna
+   identidad que preservar. Ahora `sitiosPorAtraccionDura` ofrece las dos orientaciones y el desempate por
+   `bordeCompartido` elige la que pega el lado LARGO al Mercado. `crearPuestosDeMercado` (construction.ts)
+   tuvo que empezar a persistir `rotado` — antes lo ignoraba, inofensivo solo porque el puesto nunca giraba.
+   Verificado en el lab: 12 puestos, 3 girados, 0 solapes.
+
+---
+
+### E6.20 El `posicion` del Centro Urbano pasa a ser su CENTRO (2026-08-31)
+
+Hasta ahora el Centro Urbano era la ÚNICA excepción de coordenadas del sistema: su `posicion` `(0,0)` no era
+su centro geométrico sino el VÉRTICE de una esquina (originalmente a petición del usuario). Efecto medido: con
+6×6, su huella caía en las columnas 0..5 y filas -6..-1 — **todo el edificio en un solo cuadrante**, con el
+origen pegado a una esquina. Y peor: `cu.posicion` valía `(0,0)` pero `centroDeRectangulo(rectanguloDeEdificio(cu))`
+valía `(9,-9)` local — **dos "centros" distintos** según qué función preguntara. `semillaActiva` (más cercana
+al origen) y `anclaMasCercana` medían contra `(0,0)`; `crearAnclaNueva` proyectaba sus 8 ranuras desde `(9,-9)`.
+De ahí los "comportamientos algo extraños" que reportó el usuario.
+
+**Cambio:** se quitó el caso especial de `celdaMinimaDeEdificio` (`engine/trazado.ts`). Ahora `(0,0)` es el
+CENTRO del Centro Urbano, igual que en cualquier otro edificio. Con 6×6 ocupa las columnas -3..2 y las filas
+-3..2, **simétrico alrededor del origen**, y `cu.posicion === centroDeRectangulo(rectanguloDeEdificio(cu))`.
+
+Toca solo `celdaMinimaDeEdificio` (una rama menos). `settlement.ts` ya creaba el CU con `posicion: (0,0)` —
+sigue igual, solo cambia qué significa. `cliente/` importa la función del motor, no tiene copia. Tests:
+`escalaRejilla.test.ts` (fila dorada del CU, ahora con la misma huella de anclaje que el resto; se quitó su
+`continue` de la prueba de inversa exacta). Suite verde (691). Partidas guardadas con el CU en `(0,0)` lo verán
+desplazado ~4 celdas — pero ya hay que borrarlas por la Etapa 6 (§E6.14), así que no se migra.
+
+---
+
+### E6.21 El núcleo de un ancla es la BANDA DE UNA MANZANA, y "lleno" es geométrico (2026-08-31)
+
+Reportado por el usuario con el laboratorio (seed 60, Mercado a mano en los primeros ticks): **el asentamiento
+se quedaba clavado en nivel 1** — no podía construir las viviendas que le faltaban para llegar a 200 pesants
+"porque se llena el ancla del Centro Urbano cuando todavía tiene espacio".
+
+**Diagnóstico:** `sitiosPorAtraccionDura` daba el ancla por llena (`[]`) en cuanto no quedaba un hueco **con
+frente de calle** (nivel 0/1), aunque la banda tuviera **130+ celdas libres** de segunda hilera (nivel 2/3).
+`anclaActivaParaCategoria` marcaba el Centro Urbano `anclaLlena` —un latch permanente, §"Detalle D"— y a partir
+de ahí ninguna vivienda más. El fix de §E6.19 lo agravaba: al intentar crear un `plaza`/`pozo`/`parque` de
+relevo, su propio gate (`sitiosPorAtraccionDura` del ancla nueva) también veía "sin frente de calle" y lo
+rechazaba. Resultado medido: seed 60 y 42 atascadas en nivel 1 con viv≈10 durante 300+ ticks; seed 60+M en
+nivel 2 con viv=14 (necesita 40).
+
+**Cambio en `sitiosPorAtraccionDura`:**
+
+1. **El núcleo pasa a ser la BANDA DE UNA MANZANA** alrededor del ancla — el anillo de calle (§E6.7) más
+   `FONDO_MANZANA` celdas de fondo (dos hileras de satélites espalda con espalda, lo más hondo posible sin
+   traer otra calle). En términos de `hueco` (que se mide desde el ancla ya expandida por su anillo) el tope
+   es `FONDO_MANZANA` a secas. Antes era `separacionMinimaAnclas / 2` (= 6), un número sin relación con la
+   geometría de manzana.
+2. **El ancla está LLENA solo cuando la banda no tiene ni un hueco geométrico libre.** Se aceptan los
+   candidatos de nivel 2/3: todos ya alcanzan la red dentro de `capCorredorUrbano` (gate duro de
+   `candidatosLibres`), así que `redDeCalles` les estira un corredor y el retículo cierra la manzana según la
+   ciudad crece hacia ahí.
+3. El bucle de anillos concéntricos (que con `FONDO_MANZANA` = 4 y tope 6 solo iteraba en 0 y 4, dejando
+   muerta la franja hueco 5-6 — §"Detalle A") se sustituye por un único filtro de banda + orden:
+   **`hueco` ↑ → `nivel` ↑ → `bordeCompartido` con el ancla ↓ → `bordeAfinDe` ↓ → semilla.**
+
+**Resultado medido** (8 escenarios, 15 seeds × con/sin Mercado manual × 400 ticks): todas las semillas antes
+atascadas llegan a **nivel 2 con viv = 40**; **0 edificios sin calle adyacente** (los nivel 2/3 se conectan
+por corredor); sin regresión en las semillas sanas. Lab verificado: seed 60+M → nivel 2, 81 edificios, banda
+del CU llena, ciudad compacta y coherente. 691 tests.
+
+`separacionMinimaAnclas` deja de definir el núcleo (sigue mandando en la búsqueda de ranura del árbol,
+`radioInicialRanura`/`radioMaximoRanura`). El latch de `anclaLlena` (§"Detalle D") sigue ahí — pero ahora se
+dispara mucho más tarde y con relevo (`plaza`/`pozo`/`parque`) funcionando, así que deja de bloquear.
+
+---
+
+### E6.22 El árbol de anclas pasa de 8 ranuras cardinales a 5 equidistantes (2026-08-31)
+
+A petición del usuario, tras ver en el laboratorio que "rara vez se crean las 8": las **8 direcciones**
+(cardinales + intercardinales, 45°) de cada semilla del árbol pasan a **5 ranuras equidistantes a 72°**.
+
+**Por qué:** con 8, casi la mitad de las ranuras de una semilla apuntaban de vuelta al centro ya construido
+y fallaban `huecoEnDireccion` casi siempre, así que la semilla se descartaba (`semillaSaturada`) con la mitad
+de sus ranuras sin estrenar y el árbol saltaba a otra. 5 a 72° reparten el crecimiento mejor sin dejar tantas
+ranuras muertas.
+
+**Cambio** (`engine/trazado.ts`):
+- `NUM_RANURAS = 5`, `PASO_RANURA = 2π/5`, `ANGULO_RANURA_0 = -π/2` (la ranura 0 apunta hacia arriba —
+  "partiendo del medio" del marco). Se borran `DIRECCIONES_CARDINALES` / `VECTOR_DIRECCION` / `ANGULO_DIRECCION`
+  (el sistema de nombres N/NE/E/… ya no aporta nada).
+- `direccionesRotadas` genera las 5 por aritmética de ángulo en vez de mapear los cardinales.
+- `anguloRotacionEje`: rango `[0, PASO_RANURA)` (una ranura completa) en vez de `[0°, 45°)`.
+- `ranuraOcupada`: el margen angular `EPS_ANGULO` pasa a derivarse de `MEDIA_RANURA_DIRECCION` (self-scaling).
+- Códigos del árbol en el laboratorio: `a`–`e` (5 letras) en vez de `a`–`h`, dígitos `1`–`5`.
+
+**Medido** (10 seeds × con/sin Mercado manual, 400 ticks): sin regresión — todas llegan a nivel 2 con
+viv≈40, 3–5 anclas por asentamiento repartidas en ranuras distintas, `sinCalle≈0`. Lab verificado: seed 13 →
+árbol CU + Patio de Gremios (ranura `a`) + Parque (ranura `e`), bien separados. 691 tests.
+
+Experimento: si no convence, revertir es cambiar `NUM_RANURAS` de vuelta a 8 y restaurar el ángulo base
+`ANGULO_RANURA_0 = 0` (o volver a los cardinales nombrados).
+
+---
+
+### E6.23 Perfiles de trazado: una política cambia la FORMA de la ciudad (2026-08-31)
+
+A petición del usuario: *"eligiendo una política en específico, generar ciudades de formas diferentes pero
+siendo orgánicas al mismo tiempo"*.
+
+#### El principio
+
+Hay dos formas de hacerlo y una mata lo orgánico:
+
+- ❌ **Plantilla global** ("política X → traza una retícula / una estrella"). La forma deja de emerger y pasa a
+  estar impuesta — es exactamente el plano pre-generado que se rechazó al empezar la mecánica.
+- ✅ **Cambiar qué PREFIERE un edificio suelto** entre huecos igual de válidos. Las reglas siguen siendo
+  locales, la forma sigue emergiendo, pero la estadística agregada cambia.
+
+Lo segundo es lo que ya hacía `lineas_produccion` (§5.3, `ampliado`), que es el precedente: **el patrón
+"una política sustituye el criterio de orden" ya estaba implementado y probado**. Y `postura_defensiva` llevaba
+en el catálogo desde el principio marcada `// flag de layout, Doc 4.2 — sin efecto visual en Fase 0`, o sea:
+el hueco estaba reservado.
+
+#### La palanca
+
+El desempate de `sitiosPorAtraccionDura` es **lexicográfico**, así que el primer término domina de forma
+absoluta y los cuatro valores **ya se calculaban**. Un perfil es una PERMUTACIÓN de ese orden:
+
+| Perfil | Manda | Silueta |
+|---|---|---|
+| `nucleos` | `hueco` | Racimos densos concéntricos por ancla — el orden histórico |
+| `caminera` | `nivel` | Se encadena a las calles que ya existen |
+| `compacta` | `centro` | Cada barrio llena primero su cara interior; ciudad más apretada |
+| `gremial` | `bordeAfin` | Barrios monocromos, oficios segregados |
+
+Permutación y no suma ponderada: los pesos habría que calibrarlos, se prestan a que un término se coma a otro
+sin que se note, y destruyen la garantía de que un criterio se respeta SIEMPRE.
+
+**Un quinto perfil se probó y se descartó:** «palatina», que hacía dominar `bordeCompartido` con el ancla.
+Salió **idéntico a `nucleos`** — ese término solo tiene señal cuando el candidato toca el anillo del ancla
+(hueco 0), así que como criterio dominante vale 0 en casi toda la banda y cae al siguiente. Se sustituyó por
+`centro` (distancia al origen del asentamiento), el único término que mira la ciudad entera en vez de la
+vecindad del ancla — por eso es el que produce una silueta global distinta. `bordeCompartido` sigue en el
+desempate de los cuatro perfiles, donde sí sirve, pero no puede encabezar ninguno.
+
+#### De dónde sale el perfil
+
+`resolverPerfil(id, porPolitica)` — precedencia en un solo sitio:
+
+```
+TRAZADO.perfilForzado (laboratorio / BATCH_PERFIL)  >  política activa  >  tradición local
+```
+
+- **Tradición local** (`perfilPorTradicion`): derivada del id del asentamiento, determinista y permanente.
+  Mismo mecanismo que `anguloRotacionEje` y `largoMaxFila`. Es lo que hace que **dos ciudades NPC no salgan
+  iguales aunque nadie active ninguna política** — el problema de fondo se arregla también sin jugador.
+- **Política**: cuatro ordenanzas del Maestro de Obras (`postura_defensiva` → compacta, `arterias_comerciales`
+  → caminera, `barrios_gremiales` → gremial, `plazas_mayores` → nucleos). **Excluyentes sin ninguna regla
+  nueva**: `maestroObras` tiene un único slot, así que activar una obliga a esperar a que expire la anterior.
+  Compiten en ese mismo slot con Vía Rápida y Líneas de Producción — forma contra velocidad contra logística.
+
+`trazado.ts` no sabe nada de políticas (sigue siendo geometría pura): la decisión *"qué perfil toca"* vive en
+`construction.ts::perfilDe`, la de *"qué hace ese perfil"* en `ORDEN_POR_PERFIL`.
+
+#### Estratos, no reformas
+
+Una política dura `duracionMinutosPorDefecto` = **150 ticks** (1 tick = 1 minuto) y nada mueve lo ya
+construido. Así que una ordenanza de trazado **no produce una ciudad de esa forma — produce un ESTRATO**: un
+núcleo gremial con un anillo compacto encima, etc. La ciudad acaba registrando su historia política en su
+geometría. Es deliberado y creo que es mejor que el efecto puro, pero implica que nunca se verá una ciudad
+"100 % caminera".
+
+#### Medido
+
+Batch, 12 facciones × 400 ticks, mismas semillas (`BATCH_PERFIL=<perfil>`):
+
+| perfil | frente real | componentes de red | ocupación núcleo | manzanas cerradas |
+|---|---|---|---|---|
+| `nucleos` | 99.7 % | 1 | 43.0 % | 4.45 |
+| `caminera` | 100 % | 1 | 41.9 % | 4.55 |
+| `compacta` | 100 % | 1 | **49.4 %** | **5.55** |
+| `gremial` | 100 % | 1 | 41.7 % | 5.27 |
+
+- **Ningún perfil rompe nada**: frente real ~100 % y red de UN solo componente en los cuatro.
+- `compacta` es medible: +15 % de densidad y +25 % de manzanas cerradas.
+- `gremial` cierra más manzanas a la misma densidad (la segregación aprieta los bloques). En medición aparte,
+  homogeneidad de vecindad 86-92 % contra 68-76 % de base.
+- **`caminera` es el más flojo**: apenas se separa en estas métricas. La causa es la misma que mató a
+  «palatina», más suave: `nivel` vale 0 o 1 para casi todos los candidatos de una banda sana, así que
+  discrimina poco. Es distinto (ciudad distinta, test lo congela) pero el efecto es sutil — candidato a
+  reforzarse o a sustituirse.
+
+Cobertura: `perfilesTrazado.test.ts` — cada perfil da una ciudad distinta (lo que impide que vuelva a colarse
+un perfil decorativo), ninguno rompe invariantes, ninguno altera el CENSO de edificios (la forma no puede ser
+una ventaja económica encubierta), precedencia, y exclusividad por slot.
+
+#### Pendiente
+
+**Ninguna ordenanza tiene coste/beneficio mecánico propio**, así que hoy compiten en desventaja contra Vía
+Rápida (−25 % de tiempo de obra) y son, en la práctica, una elección estética. Una política de forma que solo
+cambia la forma es cosmética y nadie la elegirá: **la forma tiene que ser la consecuencia de un trade-off, no
+el trade-off**. `barrios_gremiales` es la que más cerca está de tener uno solo — agrupar industria acorta la
+distancia a los insumos, que `factorLineaProduccion` ya mide y ya premia. Sin calibrar ni medir.
+
+---
+
 ## 1. Geometría de las calles
+
+> **DESACTUALIZADO desde 2026-08-31.** Esta sección y las siguientes describen el modelo de ARISTAS, que YA NO
+> es el que corre: la Etapa 6 (Paso 2) lo sustituyó por calles sobre CELDAS. La referencia válida está en esa
+> sección del log de arriba; estas se reescriben cuando la Etapa 6 se cierre del todo.
 
 Las calles corren sobre las **aristas** de la rejilla, no sobre celdas: pasan entre celdas, por los vértices,
 y no consumen superficie construible.
@@ -821,6 +1807,23 @@ manzanas). El camino solo conecta — se dibuja más fino y no genera manzanas n
   huérfano desde el tick en que se crea. Coincide con el diagnóstico original que motivó toda la Etapa 5 (ver
   arriba, "El motivo"): el ancla nace resuelta geométricamente, pero nadie verifica que resuelva el problema
   que la originó. Sin corregir todavía.
+- **Etapa 6 — `capCorredor` sin calibrar, y son dos números.** El cap urbano (§E6.10) es lo único que ejerce la
+  presión anti-coágulo una vez que la cercanía al ancla sigue mandando (decisión 5): demasiado alto y la ciudad
+  vuelve al coágulo medido en §E6.1; demasiado bajo y las colocaciones empiezan a rechazarse. El de afueras casi
+  con seguridad debe ser nulo, pero tampoco está probado.
+- **Etapa 6 — ¿basta el retículo blando para que las manzanas emerjan?** La decisión 2 apuesta a que una
+  preferencia fuerte converge a rejilla sin reservar celdas. Es exactamente la hipótesis que hay que medir con
+  `manzanasCerradasMedia` una vez que la métrica cuente solo calles de ancho real. Si no converge, el
+  siguiente escalón es el retículo duro, que ya se evaluó y se descartó por chocar con el principio rector.
+- **Etapa 6 — el ×4 de CPU no está medido.** `candidatosLibres` barre el cuadrado del radio en celdas (§E6.11).
+  El laboratorio batch es infraestructura crítica (doc 10 §5) y no puede volverse impracticable: hay que medir
+  antes de comprometerse, y el campo de distancia de §E6.6 debería compensar parte del coste.
+- **Etapa 6 — jerarquía de calles aplazada, no descartada.** La decisión 1 fijó 1 celda uniforme. Las celdas
+  hacen posible por primera vez distinguir callejón / avenida (algo que las aristas nunca pudieron expresar);
+  queda como ampliación natural si la ciudad en 3D se lee plana.
+- **Etapa 6 vs. "ancla creada sin garantizar sitio para un satélite"** (punto de más arriba): el cambio de
+  gap 0 a gap 1 (§E6.7) mueve el criterio de "¿tendrá sitio?", así que ese pendiente hay que re-evaluarlo con
+  el modelo nuevo en vez de arrastrarlo tal cual.
 - **Nombres provisionales que siguen provisionales.** `Pozo` y `Parque` (Etapa 4) son nombres de trabajo,
   igual que lo fueron en su momento `Plaza`/`Plaza de Armas`/`Patio de Gremios`/`Taller de carpintería` (esos
   cuatro ya están fijados en el catálogo desde la Etapa 3).

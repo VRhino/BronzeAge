@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { Caravana } from '../../domain/types';
 import { avanzarCaravanasFundacion } from '../expansion';
 import type { PayloadAsentamientoFundado, PayloadCaravanaFundacionPerdida, PayloadFundacionFallida } from '../expansion';
-import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, posicionRecomendable } from './fixtures';
+import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, posicionRecomendable, instanteDeTest } from './fixtures';
 
 function caravanaFundacionLlegando(origenId: string, destino: { x: number; y: number }, overrides: Partial<Caravana> = {}): Caravana {
   return {
@@ -25,7 +25,7 @@ describe('eventos de dominio — expansion.ts', () => {
     const mapa = crearMapaDeterminista(7);
     const caravana = caravanaFundacionLlegando('asentamiento-inexistente', { x: 500, y: 500 });
 
-    const resultado = avanzarCaravanasFundacion([caravana], mapa, crearFacciones(), [], 1);
+    const resultado = avanzarCaravanasFundacion([caravana], mapa, crearFacciones(), [], instanteDeTest(1));
 
     expect(resultado.eventos).toHaveLength(1);
     const evento = resultado.eventos[0]!;
@@ -45,7 +45,7 @@ describe('eventos de dominio — expansion.ts', () => {
     // `fundarAsentamiento` rechaza por cap alcanzado en vez de fundar.
     const faccionesConCap = faccionesTrasFundar.map((f) => (f.id === 'faccion-1' ? { ...f, nivel: 2 } : f));
 
-    const resultado = avanzarCaravanasFundacion([caravana], mapa, faccionesConCap, [origen], 1);
+    const resultado = avanzarCaravanasFundacion([caravana], mapa, faccionesConCap, [origen], instanteDeTest(1));
 
     const evento = resultado.eventos.find((e) => typeof e !== 'string' && e.codigo === 'expansion.asentamiento_fundado');
     expect(evento).toBeDefined();
@@ -61,7 +61,7 @@ describe('eventos de dominio — expansion.ts', () => {
     // Destino = la posición del propio origen: cae dentro de su propia zona de influencia, rechazo garantizado.
     const caravana = caravanaFundacionLlegando(origen.id, origen.posicion);
 
-    const resultado = avanzarCaravanasFundacion([caravana], mapa, faccionesTrasFundar, [origen], 1);
+    const resultado = avanzarCaravanasFundacion([caravana], mapa, faccionesTrasFundar, [origen], instanteDeTest(1));
 
     expect(resultado.eventos).toHaveLength(1);
     const evento = resultado.eventos[0]!;

@@ -2,6 +2,7 @@
 // aparecer con su `cantidadInicial` completa pasados N ticks de cooldown — no antes, no quedarse agotado
 // para siempre — y livestock debe regenerar más rápido que un yacimiento mineral (`REGENERACION_NODOS`).
 import { describe, expect, it } from 'vitest';
+import { instanteDeTest } from '../../engine/__tests__/fixtures';
 import type { NodoRecurso } from '../../domain/types';
 import { REGENERACION_NODOS } from '../../constants';
 import { generarMapa, MAPA_DEFAULT } from '../../worldgen';
@@ -23,7 +24,7 @@ function agotar(mapa: ReturnType<typeof crearMapa>, nodo: NodoRecurso): void {
 
 describe('Mapa.avanzarRegeneracion — yacimientos agotados', () => {
   it('livestock tiene menos cooldown que un yacimiento mineral (regenera más rápido)', () => {
-    expect(REGENERACION_NODOS.livestock.ticksCooldown).toBeLessThan(REGENERACION_NODOS.metales.ticksCooldown);
+    expect(REGENERACION_NODOS.livestock.cooldownMinutos).toBeLessThan(REGENERACION_NODOS.metales.cooldownMinutos);
   });
 
   it('no regenera antes del cooldown y regenera a cantidadInicial completa justo al cumplirse', () => {
@@ -35,18 +36,18 @@ describe('Mapa.avanzarRegeneracion — yacimientos agotados', () => {
 
     // Tick en el que se agota de verdad (primera llamada tras la extracción): solo agenda, no regenera.
     const tickAgotamiento = 1;
-    let eventos = mapa.avanzarRegeneracion(tickAgotamiento);
+    let eventos = mapa.avanzarRegeneracion(instanteDeTest(tickAgotamiento));
     expect(eventos).toHaveLength(0);
     expect(mapa.stock(mineral.id)).toBe(0);
 
-    const tickRegen = tickAgotamiento + REGENERACION_NODOS.metales.ticksCooldown;
+    const tickRegen = tickAgotamiento + REGENERACION_NODOS.metales.cooldownMinutos;
     for (let tick = tickAgotamiento + 1; tick < tickRegen; tick++) {
-      eventos = mapa.avanzarRegeneracion(tick);
+      eventos = mapa.avanzarRegeneracion(instanteDeTest(tick));
       expect(eventos).toHaveLength(0);
       expect(mapa.stock(mineral.id)).toBe(0);
     }
 
-    eventos = mapa.avanzarRegeneracion(tickRegen);
+    eventos = mapa.avanzarRegeneracion(instanteDeTest(tickRegen));
     expect(eventos).toHaveLength(1);
     expect(mapa.stock(mineral.id)).toBe(mineral.cantidadInicial);
   });
@@ -61,10 +62,10 @@ describe('Mapa.avanzarRegeneracion — yacimientos agotados', () => {
     agotar(mapa, mineral);
 
     const tickAgotamiento = 5;
-    mapa.avanzarRegeneracion(tickAgotamiento); // agenda ambos
+    mapa.avanzarRegeneracion(instanteDeTest(tickAgotamiento)); // agenda ambos
 
-    const tickRegenLivestock = tickAgotamiento + REGENERACION_NODOS.livestock.ticksCooldown;
-    const eventosEnRegenLivestock = mapa.avanzarRegeneracion(tickRegenLivestock);
+    const tickRegenLivestock = tickAgotamiento + REGENERACION_NODOS.livestock.cooldownMinutos;
+    const eventosEnRegenLivestock = mapa.avanzarRegeneracion(instanteDeTest(tickRegenLivestock));
 
     expect(mapa.stock(livestock.id)).toBe(livestock.cantidadInicial);
     expect(

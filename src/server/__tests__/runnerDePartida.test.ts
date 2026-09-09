@@ -1,5 +1,5 @@
 // Contrato de RunnerDePartida (Docs/Arquitectura/7_Diseno_GameSession.md §4, §8.4): cola serial, ciclo
-// "aplicar -> persistir -> confirmar" con descarte en fallo, y el scheduler de ticks automáticos.
+// "aplicar -> persistir -> confirmar" con descarte en fallo, y el reloj de mundo con catch-up (D5, doc 10).
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -65,7 +65,7 @@ describe('RunnerDePartida — aplicar -> persistir -> confirmar', () => {
     await r.ejecutar(crearFaccion, { nombre: 'Micenas' });
 
     const cargada = await cargarPartida(directorio, 'g-persistido');
-    expect(cargada!.getState().facciones).toHaveLength(1);
+    expect(cargada!.sesion.getState().facciones).toHaveLength(1);
   });
 
   it('si la persistencia falla, el comando se descarta: GameSession vuelve a como estaba antes', async () => {
@@ -114,9 +114,9 @@ describe('RunnerDePartida — aplicar -> persistir -> confirmar', () => {
 describe('RunnerDePartida.avanzarTick — bundlea auto-comercio y turno NPC', () => {
   it('el turno del NPC de gobernanza ocurre DENTRO de avanzarTick, sin un comando aparte', async () => {
     const r = runner('g-npc');
-    const creada = await r.ejecutar(crearFaccion, { nombre: 'Micenas' });
+    const creada = await r.ejecutar(crearFaccion, { nombre: 'Micenas' }, 'jugador-1');
     const faccionId = creada.datos!.faccionId;
-    await r.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 } });
+    await r.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 } }, 'jugador-1');
     await r.ejecutar(alternarFaccionNpc, { faccionId, activo: true });
 
     // Antes de este fix, `avanzarTick()` del runner solo aplicaba el tick puro — la primera decisión de
@@ -157,50 +157,142 @@ describe('RunnerDePartida.cargarOCrear', () => {
   });
 });
 
-// Timers REALES a propósito, no `vi.useFakeTimers()`: cada tick del scheduler dispara E/S real a disco
+// Timers REALES a propósito, no `vi.useFakeTimers()`: cada tick del reloj de mundo dispara E/S real a disco
 // (`avanzarTick` -> `guardarPartida`), y avanzar un reloj falso no adelanta una escritura de archivo de
-// verdad — con timers falsos, la mayoría de los ticks programados nunca llegaban a completar su persistencia
-// antes de que el test comprobara el resultado (flakiness verificada al escribir este archivo). El coste es
-// unos pocos cientos de ms reales de duración de test; a cambio, prueba el mecanismo de verdad.
+// verdad — con timers falsos, la mayoría de los ticks nunca llegaban a completar su persistencia antes de
+// que el test comprobara el resultado (flakiness verificada al escribir este archivo).
 function esperar(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-describe('RunnerDePartida — ticks automáticos', () => {
-  it('avanza ticks mientras está activo, y deja de avanzar al detenerlo', async () => {
-    const r = runner('g-scheduler');
-    r.iniciarTicksAutomaticos(10);
-    await esperar(200);
-    r.detenerTicksAutomaticos();
-    // `detener` impide que se ENCOLE trabajo nuevo, pero no cancela el último tick que ya se hubiera
-    // disparado y estuviera a medio persistir — se espera a que ese resto drene antes de fijar la
-    // referencia, o un backlog bajo carga (suite completa, no este archivo solo) se leería como que el
-    // scheduler seguía corriendo.
-    await r.esperarColaVacia();
-    const tickTrasParar = r.getState().tick;
+/** Runner con un reloj de PARED controlable: `avanzar(ms)` mueve el reloj hacia adelante, que es lo que el
+ * reloj de mundo consulta para saber cuántos ticks se adeudan. La referencia se ancla al ARRANCAR el reloj
+ * (`iniciarRelojDeMundo`), así que hay que avanzar el reloj DESPUÉS de arrancarlo para que se adeude algo. */
+function runnerConReloj(gameId: string, seed = 7): { r: RunnerDePartida; avanzar: (ms: number) => void } {
+  let relojMs = Date.parse(MOMENTO);
+  const r = RunnerDePartida.crear(gameId, { seed }, { directorio, ahora: () => new Date(relojMs).toISOString() });
+  return { r, avanzar: (ms) => (relojMs += ms) };
+}
 
+describe('RunnerDePartida — reloj de mundo (D5)', () => {
+  it('arrancar el reloj NO ejecuta nada de lo que pasó antes — el mundo no avanza con el reloj parado', async () => {
+    // El corazón de la decisión del 2026-09-05. Antes esto ejecutaba 5 ticks en ráfaga (catch-up); ahora la
+    // referencia se ancla a "ahora" al arrancar, así que el tiempo con el reloj parado sencillamente no
+    // cuenta — que es lo mismo que pasa cuando el proceso está caído.
+    const { r, avanzar } = runnerConReloj('g-catchup');
+    avanzar(5 * 60_000); // 5 minutos reales con el reloj PARADO
+    r.iniciarRelojDeMundo(60_000);
+    await r.esperarColaVacia();
+    r.detenerRelojDeMundo();
+
+    expect(r.getState().tick).toBe(0);
+  });
+
+  it('parar y reanudar el reloj re-ancla: el tiempo con el reloj parado no cuenta, ni el resto', async () => {
+    // Antes de la decisión del 2026-09-05 este test probaba lo CONTRARIO: que un resto sub-intervalo
+    // sobrevivía a una parada, para que el catch-up no perdiera fracciones. Con el mundo congelado mientras
+    // el reloj no corre, ese resto se va con el resto del tiempo parado — y es coherente, no una regresión:
+    // parar el reloj es exactamente lo que pasa cuando el proceso se apaga.
+    //
+    // El coste real está acotado: se pierde menos de un intervalo por arranque, y el reloj se arranca una vez
+    // por apertura de partida.
+    // Intervalo corto para que el `setInterval` REAL dispare dentro del test; el reloj de PARED que decide
+    // cuántos ticks se deben sigue siendo el inyectado, así que el escenario es el mismo.
+    const { r, avanzar } = runnerConReloj('g-resto');
+    r.iniciarRelojDeMundo(50);
+    avanzar(2 * 50 + 30); // 2 intervalos + un resto, con el reloj EN MARCHA
+    await esperar(150);
+    r.detenerRelojDeMundo();
+    await r.esperarColaVacia();
+    expect(r.getState().tick).toBe(2);
+
+    // Con el reloj parado el tiempo no cuenta, y al reanudar la referencia vuelve a ser "ahora": el resto
+    // que faltaba para el tercer tick tampoco se arrastra.
+    avanzar(30);
+    r.iniciarRelojDeMundo(50);
+    await r.esperarColaVacia();
+    r.detenerRelojDeMundo();
+    expect(r.getState().tick).toBe(2);
+  });
+
+  it('sigue avanzando con el tiempo y deja de avanzar al detenerlo', async () => {
+    const { r, avanzar } = runnerConReloj('g-continuo');
+    r.iniciarRelojDeMundo(20);
+    avanzar(60); // 3 intervalos: por debajo de `MAX_TICKS_POR_PASADA`, así que se recuperan
+    await esperar(120); // deja que el setInterval real dispare
+    await r.esperarColaVacia();
+    r.detenerRelojDeMundo();
+    const tickTrasParar = r.getState().tick;
     expect(tickTrasParar).toBeGreaterThan(0);
 
-    // Si `detenerTicksAutomaticos` no hubiera parado el intervalo de verdad, seguiría subiendo aquí.
-    await esperar(200);
+    avanzar(60); // más "tiempo real"... pero el reloj ya está detenido
+    await esperar(120);
     await r.esperarColaVacia();
     expect(r.getState().tick).toBe(tickTrasParar);
   });
 
-  it('llamar dos veces a iniciar no deja un segundo intervalo huérfano sin detener', async () => {
-    const r = runner('g-scheduler-doble');
-    r.iniciarTicksAutomaticos(10);
-    r.iniciarTicksAutomaticos(10); // si esto creara un SEGUNDO intervalo, `detener` (que solo limpia uno) lo dejaría corriendo para siempre
-    await esperar(200);
-    r.detenerTicksAutomaticos();
+  it('llamar dos veces a iniciar no deja un segundo intervalo huérfano', async () => {
+    const { r, avanzar } = runnerConReloj('g-doble');
+    r.iniciarRelojDeMundo(20);
+    r.iniciarRelojDeMundo(20); // si creara un SEGUNDO intervalo, `detener` (que limpia uno) dejaría el otro vivo
+    avanzar(60);
+    await esperar(120);
     await r.esperarColaVacia();
+    r.detenerRelojDeMundo();
     const tickTrasParar = r.getState().tick;
-
     expect(tickTrasParar).toBeGreaterThan(0);
 
-    await esperar(200);
+    avanzar(60);
+    await esperar(120);
     await r.esperarColaVacia();
     expect(r.getState().tick).toBe(tickTrasParar);
+  });
+
+  it('reabrir una partida guardada hace 3 "horas" la reanuda donde estaba: el mundo no avanzó', async () => {
+    // Lo contrario de lo que hacía D5, y a propósito (decisión del usuario, 2026-09-05). Una caída del
+    // servidor no consume tiempo de mundo: lo que estuviera en construcción sigue igual de lejos de acabarse
+    // que cuando se cayó, y nadie encuentra su partida saltada tres horas al volver.
+    await RunnerDePartida.crearYPersistir('g-reinicio', { seed: 3 }, { directorio, ahora: () => MOMENTO });
+
+    const tresHorasDespues = new Date(Date.parse(MOMENTO) + 3 * 60 * 60_000).toISOString();
+    const reabierta = await RunnerDePartida.cargarOCrear('g-reinicio', { seed: 3 }, { directorio, ahora: () => tresHorasDespues });
+    reabierta.iniciarRelojDeMundo(60_000);
+    await reabierta.esperarColaVacia();
+    reabierta.detenerRelojDeMundo();
+
+    expect(reabierta.getState().tick).toBe(0);
+  });
+
+  it('un atraso GRANDE con el reloj en marcha se descarta y se cuenta, en vez de ejecutarse', async () => {
+    // El caso "proceso vivo pero congelado" (host suspendido, salto de reloj por NTP): se parece a la deriva
+    // del temporizador vista desde aquí, y `MAX_TICKS_POR_PASADA` es donde se traza la frontera. Por encima
+    // se descarta el tiempo, igual que en una caída, y queda constancia en `ticksOmitidos`.
+    const { r, avanzar } = runnerConReloj('g-congelado');
+    r.iniciarRelojDeMundo(50);
+    avanzar(60 * 60_000); // una hora de mundo adeudada de golpe
+    await esperar(150); // deja que el setInterval real dispare
+    r.detenerRelojDeMundo();
+    await r.esperarColaVacia();
+
+    expect(r.getState().tick).toBe(0);
+    expect(r.metricas().ticksOmitidos).toBeGreaterThan(0);
+  });
+
+  it('un atraso PEQUEÑO sí se recupera: es la deriva del temporizador, no una caída', async () => {
+    // Sin esto el mundo correría más lento que el tiempo real: `setInterval` no dispara exacto y las décimas
+    // se acumulan hasta valer un tick entero.
+    const { r, avanzar } = runnerConReloj('g-deriva');
+    r.iniciarRelojDeMundo(50);
+    avanzar(3 * 50); // 3 intervalos de atraso, por debajo del umbral
+    await esperar(150);
+    // Drenar ANTES de parar, no después: la ráfaga comprueba `this.relojDeMundo` en cada iteración, así que
+    // `detenerRelojDeMundo` la ABORTA a medias (deliberado — un apagado no debe seguir avanzando el mundo).
+    // Con el orden inverso este test salía intermitente bajo carga.
+    await r.esperarColaVacia();
+    r.detenerRelojDeMundo();
+
+    expect(r.getState().tick).toBeGreaterThanOrEqual(3);
+    expect(r.metricas().ticksOmitidos).toBe(0);
   });
 });
 
@@ -302,8 +394,8 @@ describe('RunnerDePartida — preciosReferencia (doc 9: entrada privilegiada, so
 
   it('pasado el minuto de TTL, la siguiente lectura recalcula', async () => {
     const { r, avanzarMs } = runnerConReloj(MOMENTO);
-    const creada = await r.ejecutar(crearFaccion, { nombre: 'Micenas' });
-    const rf = await r.ejecutar(fundarAsentamiento, { faccionId: creada.datos!.faccionId, posicion: { x: 500, y: 500 } });
+    const creada = await r.ejecutar(crearFaccion, { nombre: 'Micenas' }, 'jugador-1');
+    const rf = await r.ejecutar(fundarAsentamiento, { faccionId: creada.datos!.faccionId, posicion: { x: 500, y: 500 } }, 'jugador-1');
     expect(rf.ok).toBe(true);
 
     const primera = r.preciosReferencia(); // con un asentamiento recién fundado (stock inicial > 0)
@@ -318,8 +410,8 @@ describe('RunnerDePartida — preciosReferencia (doc 9: entrada privilegiada, so
     const sinAsentamientos = runnerConReloj(MOMENTO).r.preciosReferencia().madera!;
 
     const { r } = runnerConReloj(MOMENTO);
-    const creada = await r.ejecutar(crearFaccion, { nombre: 'Micenas' });
-    await r.ejecutar(fundarAsentamiento, { faccionId: creada.datos!.faccionId, posicion: { x: 500, y: 500 } });
+    const creada = await r.ejecutar(crearFaccion, { nombre: 'Micenas' }, 'jugador-1');
+    await r.ejecutar(fundarAsentamiento, { faccionId: creada.datos!.faccionId, posicion: { x: 500, y: 500 } }, 'jugador-1');
 
     expect(r.preciosReferencia().madera).toBeLessThanOrEqual(sinAsentamientos);
   });
@@ -341,8 +433,8 @@ describe('RunnerDePartida — geometriaAsentamientos (Fase C10: zonas/trazado po
     const r = runner();
     const antes = r.geometriaAsentamientos();
 
-    const creada = await r.ejecutar(crearFaccion, { nombre: 'Micenas' });
-    const fundada = await r.ejecutar(fundarAsentamiento, { faccionId: creada.datos!.faccionId, posicion: { x: 500, y: 500 } });
+    const creada = await r.ejecutar(crearFaccion, { nombre: 'Micenas' }, 'jugador-1');
+    const fundada = await r.ejecutar(fundarAsentamiento, { faccionId: creada.datos!.faccionId, posicion: { x: 500, y: 500 } }, 'jugador-1');
     expect(fundada.ok).toBe(true);
     const asentamientoId = fundada.datos!.asentamientoId;
 
@@ -358,5 +450,38 @@ describe('RunnerDePartida — geometriaAsentamientos (Fase C10: zonas/trazado po
     const primera = r.geometriaAsentamientos();
     await r.ejecutar(crearFaccion, { nombre: 'Micenas' }); // no funda: `estado.asentamientos` sigue siendo el mismo array
     expect(r.geometriaAsentamientos()).toBe(primera);
+  });
+});
+
+describe('RunnerDePartida — el reloj de pared NO entra en el estado (Fase D / doc 10 §7, regresión del bug)', () => {
+  /** Corre la misma secuencia con un `ahora` (reloj de pared) distinto y devuelve el snapshot resultante,
+   * ignorando `guardadoEn` (que SÍ es reloj de pared, y a propósito — es metadato del archivo). */
+  async function snapshotTras(ahora: () => string): Promise<unknown> {
+    const dir = await mkdtemp(join(tmpdir(), 'bronzeage-reloj-'));
+    try {
+      const r = RunnerDePartida.crear('g', { seed: 7 }, { directorio: dir, ahora });
+      const creada = await r.ejecutar(crearFaccion, { nombre: 'Micenas' }, 'ana');
+      await r.ejecutar(fundarAsentamiento, { faccionId: creada.datos!.faccionId, posicion: { x: 500, y: 500 } }, 'ana');
+      await r.avanzarTick();
+      await r.avanzarTick();
+      const { partida } = JSON.parse(await readFile(join(dir, 'g.json'), 'utf-8')) as SnapshotPartida;
+      return partida;
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  }
+
+  it('mismo comando + misma seed con relojes de pared distintos → snapshot IDÉNTICO (incluidos los eventos)', async () => {
+    const enEnero = await snapshotTras(() => '2026-01-01T00:00:00.000Z');
+    const enJulio = await snapshotTras(() => '2026-07-15T12:34:56.000Z');
+    // Antes de D1 esto fallaba: `ctx.momento` era `ahora()` y viajaba a `eventosDominio[].momento`.
+    expect(enJulio).toEqual(enEnero);
+  });
+
+  it('los eventos se fechan con el instante de MUNDO (derivado del tick), no con el reloj de pared', async () => {
+    const partida = (await snapshotTras(() => '2099-12-31T23:59:59.000Z')) as SnapshotPartida['partida'];
+    for (const evento of partida.state.eventosDominio) {
+      expect(evento.momento.startsWith('2026-01-01T00:0')).toBe(true); // época + unos pocos minutos, no 2099
+    }
   });
 });

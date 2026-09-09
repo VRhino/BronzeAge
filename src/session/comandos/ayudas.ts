@@ -14,7 +14,10 @@
 // valor de error, que es control de flujo por excepción en una capa que por lo demás es de funciones puras.
 // Queda encerrado dentro de `comando()`, no escapa nunca de un manejador, y es exactamente lo que ya hacía
 // `rechazoDesdeError` con los errores del motor — así que el mecanismo es uno, no dos.
-import type { Asentamiento, CampamentoBandido, Caravana, Faccion } from '../../domain/types';
+import { columnaDe } from '../../engine/ejercitos';
+import { fundirExploraciones } from '../../engine/exploracion';
+import { MEMORIA_VACIA } from '../../engine/memoria';
+import type { AcuerdoTrueque, Asentamiento, CampamentoBandido, Caravana, Faccion, Ejercito, Jugador } from '../../domain/types';
 import type { GameSessionState } from '../estado';
 import { CODIGOS_ERROR, type CodigoError } from './codigosDeError';
 import { rechazo, rechazoDesdeError, type ManejadorComando } from './tipos';
@@ -89,6 +92,34 @@ export function exigirCampamento(estado: GameSessionState, campamentoId: string)
   return campamento;
 }
 
+export function exigirAcuerdo(estado: GameSessionState, acuerdoId: string): AcuerdoTrueque {
+  const acuerdo = estado.acuerdos.find((a) => a.id === acuerdoId);
+  if (!acuerdo) rechazar(CODIGOS_ERROR.acuerdoNoExiste);
+  return acuerdo;
+}
+
+export function exigirEjercito(estado: GameSessionState, ejercitoId: string): Ejercito {
+  const ejercito = estado.ejercitos.find((e) => e.id === ejercitoId);
+  if (!ejercito) rechazar(CODIGOS_ERROR.ejercitoNoExiste);
+  return ejercito;
+}
+
+/** El registro del jugador (Doc 1.10). Existe siempre para quien ha actuado alguna vez — el alta la hace
+ * `GameSession.ejecutar` —, así que faltar aquí es que ese id no ha jugado nunca. */
+export function exigirJugador(estado: GameSessionState, jugadorId: string): Jugador {
+  const jugador = estado.jugadores.find((j) => j.id === jugadorId);
+  if (!jugador) rechazar(CODIGOS_ERROR.jugadorNoExiste);
+  return jugador;
+}
+
+/** La columna en la que va este jugador (Doc 1.10). No estar en ninguna es "no estás en el mundo": no es una
+ * regla que romper, es que la entidad sobre la que actuar no existe — misma clase que las de arriba. */
+export function exigirColumnaDe(estado: GameSessionState, jugadorId: string): Ejercito {
+  const columna = columnaDe(estado.ejercitos, jugadorId);
+  if (!columna) rechazar(CODIGOS_ERROR.sinColumna);
+  return columna;
+}
+
 // --- Actualizadores: estado nuevo con una entidad sustituida ---
 
 /** Sustituye un asentamiento por su versión actualizada, dejando el resto intacto. */
@@ -106,4 +137,26 @@ export function conAsentamientos(estado: GameSessionState, actualizados: Asentam
 /** Sustituye una Facción por su versión actualizada. */
 export function conFaccion(estado: GameSessionState, actualizada: Faccion): GameSessionState {
   return { ...estado, facciones: estado.facciones.map((f) => (f.id === actualizada.id ? actualizada : f)) };
+}
+
+/**
+ * Funde lo que un jugador exploró SIN bandera en la memoria de la Facción que acaba de fundar o unirse, y
+ * borra su registro personal: a partir de aquí manda el de la Facción (Doc 1.3). Llamar al fundar o al
+ * entrar en una Facción — los dos únicos momentos en que un jugador deja de estar sin bandera.
+ *
+ * Sin nada que fundir (nunca anduvo solo, o ya se fundió antes) devuelve el estado tal cual.
+ */
+export function conExploracionFundida(estado: GameSessionState, jugadorId: string, faccionId: string): GameSessionState {
+  const jugador = estado.jugadores.find((j) => j.id === jugadorId);
+  if (!jugador?.exploracionPersonal) return estado;
+
+  const memoriaPrevia = estado.memoriaPorFaccion[faccionId] ?? MEMORIA_VACIA;
+  return {
+    ...estado,
+    jugadores: estado.jugadores.map((j) => (j.id === jugadorId ? { ...j, exploracionPersonal: undefined } : j)),
+    memoriaPorFaccion: {
+      ...estado.memoriaPorFaccion,
+      [faccionId]: { ...memoriaPrevia, exploracion: fundirExploraciones(memoriaPrevia.exploracion, jugador.exploracionPersonal) },
+    },
+  };
 }

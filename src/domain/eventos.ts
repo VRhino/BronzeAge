@@ -20,18 +20,12 @@ export interface EventoDominio {
   /** Mensaje en texto ya formateado — única fuente de verdad mientras dure la migración (ver `codigo`). */
   mensaje: string;
   /**
-   * Momento de simulación en que ocurrió el evento (ISO 8601). **Este es el campo temporal definitivo**: el
-   * protocolo hacia los clientes debe usar SIEMPRE este y nunca `tick` (ver
-   * Docs/Arquitectura/6_Sincronizacion_Visibilidad_y_Escala.md §4, regla (b)) — así el día que el motor pase
-   * a tiempo real (Fase D) el contrato no cambia. Lo inyecta quien avanza la simulación
-   * (`ContextoSimulacion.momento`, ver `engine/simulation.ts`); el motor nunca lee el reloj por su cuenta.
+   * Instante de MUNDO en que ocurrió el evento (ISO 8601). **El único campo temporal del evento** (Fase D
+   * cerrada — el `tick` provisional se retiró; doc 6 §4 regla (b)): derivado del tick por quien avanza la
+   * simulación (`isoDeInstante(instanteDeTick(tick))`, ver `engine/simulation.ts` / `session/comandos/eventos.ts`),
+   * nunca leído del reloj de pared.
    */
   momento: string;
-  /**
-   * Tick en el que ocurrió el evento. **PROVISIONAL**: desaparece al completarse la Fase D — es la unidad
-   * interna del motor, no un contrato temporal. Para cualquier consumidor externo, usar `momento`.
-   */
-  tick: number;
   /** Asentamiento al que se atribuye, si aplica (mismo criterio que hoy usa `simulation.ts` para prefijar
    * cada mensaje de un asentamiento con su id). Ausente en eventos globales (comercio, mercado, títulos...). */
   asentamientoId?: string;
@@ -46,8 +40,9 @@ export interface EventoDominio {
 
 /**
  * Lo que un subsistema del motor (`engine/*.ts`) empuja a su array `eventos` DENTRO de un `avanzarX`, antes de
- * que `engine/simulation.ts` le añada el contexto que el subsistema no conoce (`momento`, `tick`,
- * `asentamientoId`). Dos formas, a propósito, para que la migración por subsistema (Docs/Arquitectura/
+ * que `engine/simulation.ts` le añada el contexto que el subsistema no conoce (`momento` y `asentamientoId` —
+ * el `tick` provisional se retiró al cerrar la Fase D, doc 10 §8). Dos formas, a propósito, para que la
+ * migración por subsistema (Docs/Arquitectura/
  * 4_Plan_Evolucion_Tareas.md, Fase A5, marcador 13 subsistemas) sea de uno en uno sin tocar los demás:
  *
  * - Un `string` plano: atajo "legado", mismo comportamiento que existía antes de A5 — se envuelve como
@@ -59,4 +54,37 @@ export interface EventoDominio {
  * interfaz (`GameStore`/`main.ts`) — migrar un subsistema añade estructura, no le quita nada a nadie que ya
  * consuma el texto.
  */
-export type EventoCrudo = string | { codigo: string; mensaje: string; payload?: unknown };
+export type EventoCrudo =
+  | string
+  | {
+      codigo: string;
+      mensaje: string;
+      payload?: unknown;
+      /**
+       * Asentamiento al que se atribuye ESTE evento concreto, cuando el subsistema lo sabe y quien lo llama
+       * no. `engine/simulation.ts` atribuye por lotes —le pasa un `asentamientoId` a `comoEventosDominio`
+       * porque lo sabe por el bucle que recorre asentamiento a asentamiento—, pero un subsistema GLOBAL que
+       * itera sobre otra cosa (los ejércitos, cada uno con su origen distinto) no cabe en ese molde: sin
+       * esto sus eventos salen sin atribuir, y un evento sin atribuir es GLOBAL, o sea visible para todo el
+       * mundo en `proyectarParaJugador`. Ahí es donde deja de ser una cuestión de forma: narrar a todos que
+       * "el ejército X llega a su destino" es exactamente la telemetría de rival que Doc 5.12.7 prohíbe.
+       *
+       * Cuando está, gana sobre la atribución por lotes. Es el mismo campo, con el mismo significado, que
+       * `EventoDeComando` (`session/comandos/eventos.ts`) ya tenía por el lado de los comandos.
+       */
+      asentamientoId?: string;
+    };
+
+/**
+ * Atribuye a un asentamiento un evento que ya venía hecho. Existe para el caso en que quien PRODUCE el
+ * evento no sabe a quién atribuirlo y quien lo consume sí: `avanzarRacion` narra la deserción de un
+ * escuadrón sin saber si ese escuadrón está en una guarnición o en un carro a media marcha, y es
+ * `avanzarEjercitos` —que sí lo sabe— quien le pone el origen del ejército antes de acumularlo.
+ *
+ * Respeta una atribución previa: si el evento ya venía atribuido, ese dato es más específico que el del
+ * llamador y no se pisa.
+ */
+export function atribuir(evento: EventoCrudo, asentamientoId: string): EventoCrudo {
+  if (typeof evento === 'string') return { codigo: 'legado', mensaje: evento, asentamientoId };
+  return evento.asentamientoId === undefined ? { ...evento, asentamientoId } : evento;
+}

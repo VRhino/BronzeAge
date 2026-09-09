@@ -896,22 +896,6 @@ body {
   background: #4a4436;
 }
 
-.altura-unity-label {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  white-space: nowrap;
-}
-
-.altura-unity-label input[type='number'] {
-  width: 60px;
-  font-size: 11px;
-  padding: 3px 5px;
-  background: rgba(26, 24, 20, 0.85);
-  border: 1px solid #4a4436;
-  color: #e8e0c8;
-  border-radius: 3px;
-}
 
 .controls-panel.viendo-pasado .tab-panel#tab-acciones,
 .controls-panel.viendo-pasado .tab-panel#tab-comercio {
@@ -1216,10 +1200,6 @@ h2 {
 
 .simulation-status-bar .time-travel button {
   min-height: 29px;
-}
-
-.simulation-status-bar .altura-unity-label {
-  color: var(--admin-muted);
 }
 
 .controls-panel {
@@ -2585,6 +2565,17 @@ select:hover, input:hover {
   color: var(--admin-muted);
   font-size: 11px;
   white-space: nowrap;
+}
+
+/* Reloj de mundo (Fase D): el servidor avanza solo, esto es el "ahora" de la partida. */
+.reloj-mundo {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--admin-fg, #e8e8e8);
+  background: var(--admin-panel-alt, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--admin-border, rgba(255, 255, 255, 0.12));
+  border-radius: 6px;
+  padding: 4px 8px;
 }
 
 .admin-title-actions input[type='range'] {

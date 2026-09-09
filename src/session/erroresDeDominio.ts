@@ -16,13 +16,17 @@ import { PoliticaInvalidaError } from '../engine/politicas';
 import { FundacionInvalidaError } from '../engine/settlement';
 import { CaravanaInvalidaError, TruequeInvalidoError } from '../engine/trade';
 import { ReclutamientoInvalidoError } from '../engine/tropas';
+import { RecintoInvalidoError } from '../engine/muralla';
+import { MovilizacionInvalidaError } from '../engine/ejercitos';
+import { PuertaInvalidaError } from '../engine/pertenencia';
 import { CODIGOS_ERROR, type CodigoError } from './comandos/codigosDeError';
 
-/** Los 13 tipos de error de dominio que el motor puede lanzar, y su código estable. Orden alfabético por
+/** Los 16 tipos de error de dominio que el motor puede lanzar, y su código estable. Orden alfabético por
  * código, no por módulo — así un código nuevo se ubica por lo que significa, no por dónde vive en `engine/`. */
 const CODIGOS_DE_ERROR = new Map<Function, CodigoError>([
   [CargoInvalidoError, CODIGOS_ERROR.cargoInvalido],
   [CombateInvalidoError, CODIGOS_ERROR.combateInvalido],
+  [MovilizacionInvalidaError, CODIGOS_ERROR.movilizacionInvalida],
   [ConstruccionManualInvalidaError, CODIGOS_ERROR.construccionInvalida],
   [DiplomaciaInvalidaError, CODIGOS_ERROR.diplomaciaInvalida],
   [ExpansionInvalidaError, CODIGOS_ERROR.expansionInvalida],
@@ -31,9 +35,11 @@ const CODIGOS_DE_ERROR = new Map<Function, CodigoError>([
   [FusionInvalidaError, CODIGOS_ERROR.fusionInvalida],
   [OrdenInvalidaError, CODIGOS_ERROR.mercadoOrdenInvalida],
   [PoliticaInvalidaError, CODIGOS_ERROR.politicaInvalida],
+  [PuertaInvalidaError, CODIGOS_ERROR.puertaInvalida],
   [ReclutamientoInvalidoError, CODIGOS_ERROR.tropasReclutamientoInvalido],
   [CaravanaInvalidaError, CODIGOS_ERROR.comercioCaravanaInvalida],
   [TruequeInvalidoError, CODIGOS_ERROR.comercioTruequeInvalido],
+  [RecintoInvalidoError, CODIGOS_ERROR.recintoInvalido],
 ]);
 
 /**

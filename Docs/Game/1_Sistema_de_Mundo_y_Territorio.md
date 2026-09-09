@@ -1,5 +1,62 @@
 # 1. Sistema de Mundo y Territorio
 
+
+## 1.0a La escala del mundo (a petición del usuario, 2026-09-02)
+
+El motor maneja **dos espacios** y hasta ahora nadie había declarado cómo se relacionan, así que el código los
+trataba como iguales. La equivalencia es:
+
+> **1 unidad de mapa = 40 unidades locales de la Vista de Asentamiento.**
+
+De ahí sale la jerarquía territorial de la ficción:
+
+| | radio | equivale a |
+|---|---|---|
+| **Ciudad** (casco urbano + afueras) | 121-205 unidades locales = **3-5 de mapa** | el núcleo habitado |
+| **Provincia** (zona de influencia) | **30-180 de mapa**, según nivel | lo que controla un asentamiento |
+| **Reino** | todas las provincias de una Facción | sin número fijo: una Facción podría llegar a todo el mapa |
+
+**Cuántas provincias caben.** El mundo mide 2000×2000 y el 91% es habitable (medido: solo 7,6% agua y 1,3%
+cima), o sea 3,64 millones de unidades². Repartido entre las **200 provincias** que Fase 0 quiere, salen
+18.207 u² por provincia: un **radio de ~76**, casi exactamente el tope de zona de influencia de nivel 1 que ya
+existía (60). **La escala de las provincias ya era buena; lo que fallaba era la ciudad.**
+
+**Por qué 40 y no 10.** Una ciudad tiene un TAMAÑO MÍNIMO de ~121 unidades locales que no encoge —al fundar,
+la Granja inicial no cabe más cerca— mientras que la provincia sí arranca pequeña (radio 30). Con un factor de
+10, una aldea recién fundada ocupaba el **40%** de su provincia y solo llegaba a la décima en niveles altos.
+Con 40, ese peor caso mide 3,0 de mapa dentro de una provincia de 30: el **10,1%**. De ahí para arriba el
+ratio solo baja (5% en nivel 1, 3% en nivel 5), porque la provincia crece y el mínimo de la ciudad no.
+
+**La regla, entonces: una ciudad nunca pasa de una décima de su provincia.** El resto es campo, bosque y
+minas — lo que debe haber entre dos ciudades.
+
+**Qué estaba roto.** Al compartir unidades sin decirlo, una ciudad medía ~121 y su provincia 30-180: **la urbe
+era más grande que el territorio que controlaba**. El código incluso lo daba por hecho — `radioMaximoAfueras`
+documenta que "el campo de una ciudad está FUERA de su zona de influencia", que es justo el síntoma.
+
+**Un reino mide ~5 provincias**, y eso tampoco lo había decidido nadie: sale de `MANTENIMIENTO.escalaDistancia`
+= 400, la distancia a la capital a la que el coste de mantenimiento toca su tope (×2). 400 / 76 ≈ 5.
+
+> La corrección es **conceptual, no numérica**: ni el trazado urbano ni las zonas de influencia cambian de
+> tamaño. Lo que cambia es que la equivalencia está dicha, y que `radioUrbanoDe` (`engine/trazado.ts`) es el
+> único punto donde los dos espacios se tocan — antes `radioPotencial` hacía los dos trabajos a la vez.
+
+## 1.0b El agua es un OBSTÁCULO (a petición del usuario, 2026-09-02)
+
+**Ni los ejércitos ni las caravanas pueden moverse sobre agua.** No es terreno caro: es infranqueable. Todo lo que se desplaza por el mapa —caravanas de comercio, caravanas de fundación, ejércitos y el trazado de los caminos comerciales— la rodea o no llega.
+
+Esto **revierte una decisión de Fase 0.3**, que la penalizaba fuerte (coste 15) pero la dejaba cruzable "para no romper el pathfinding en un mundo donde el camino más corto la roce". El síntoma que la tumbó: trazando un ejército tick a tick se le veía arrastrarse sobre el mar a **1/14 de su velocidad**, en vez de bordearlo. Nadie camina sobre el agua.
+
+Tres consecuencias, todas deliberadas:
+
+1. **Un destino puede quedar SIN RUTA.** Una isla, una península cortada. Antes el pathfinder caía a una línea recta cuando no encontraba camino; ahora **devuelve "no hay ruta"** y quien lo pidió decide qué hacer — no se moviliza el ejército, no sale la caravana, no se traza el camino comercial. Una recta de reserva sería precisamente una ruta por el mar.
+2. **No se puede fundar sobre agua.** Antes solo era absurdo; ahora sería una trampa, porque el asentamiento quedaría incomunicado para siempre. `'agua'` se suma a `'cima'` como terreno inhabitable.
+3. **`cima` sigue siendo transitable**, solo que cara (coste 12): es terreno difícil, no un medio distinto.
+
+**No cubre los RÍOS**, que en este motor no son terreno sino una entidad aparte y que el coste de movimiento nunca ha mirado. Que un río corte el paso es parte del rediseño de rutas de caravana (`Docs/Mecanicas a desarrollar.md` §3) y necesita vados o puentes para no fragmentar el mapa.
+
+El comercio por mar sigue fuera de alcance (Doc 3.11): sin barcos, dos costas enfrentadas no comercian.
+
 ## 1.1 Generación del mundo (Fase 0)
 - Mapa CUADRADO, espacio de coordenadas continuo (no grid discreto).
 - Tamaño base: 1000x1000 unidades, PARAMETRIZABLE.
@@ -21,6 +78,24 @@
 
 ## 1.3 Onboarding de nuevos jugadores
 - Jugador nuevo aparece en un punto ALEATORIO del mapa con una "caravana de asentamiento" para fundar donde decida.
+- **Aparecer ahí es literal (ver 1.10)**: el jugador nace situado en mundo abierto, con su columna, y se mueve por el mapa hasta el sitio donde quiera fundar. **Se funda DONDE SE ESTÁ** — no se elige un punto cualquiera sobre el mapa desde fuera. Caminar hasta un buen emplazamiento es la primera decisión del juego, y es lo que da sentido a explorar antes de asentarse.
+- **SE LLEGA A UN MUNDO HABITADO, no a un vacío** (a petición del usuario, 2026-09-07). El servidor arranca
+  con Facciones NPC ya asentadas, y son **vecinos, no depredadores**: se defienden si las tocan, pero no dan
+  caza a los recién llegados, y ofrecen con qué comerciar. Un novato no es aliado de nadie, así que unas
+  Facciones que cazaran a todo lo no aliado lo matarían antes de que tuviera con qué defenderse.
+
+  El mundo no se queda por eso inofensivo: el peligro de base lo dan los **bandidos** (1.9), que atacan por su
+  cuenta y no son de nadie. El reparto es **bandidos la amenaza, Facciones NPC los vecinos, otros jugadores la
+  guerra**.
+- **FUNDAR NO ES EL PRIMER ACTO.** Para fundar una Facción nueva hacen falta **varios ciudadanos** y **haber
+  sido ciudadano de alguna antes** — fundar es un **cisma**, gente que ya vivía en algún sitio y se marcha a
+  hacer el suyo. Sin esto, mil jugadores que entran son mil Facciones y mil aldeas en el primer minuto, y la
+  fundación grupal (hasta 5) *permitía* compartir pero no obligaba a nada.
+
+  Las dos exigencias son **parámetros** (`FUNDACION.minFundadoresParaFaccionNueva` y
+  `FUNDACION.exigeCiudadaniaPrevia`), y durante las primeras pruebas están **abiertas** —grupo de 1 y
+  ciudadanía opcional—: con cinco testers el freno estorba, con mil hace falta.
+- **Un jugador sin Facción recuerda lo que explora.** La memoria del mundo es de la Facción (Doc 5.12.8), pero quien todavía no tiene bandera lleva la suya propia, que se funde con la de la Facción al fundar o al entrar en una. Sin esto el primer minuto de juego sería un paseo a ciegas sin registro.
 - EDIFICIOS INICIALES: todo asentamiento nace con un Centro Urbano (marcador único, no construible por ningún otro medio), una Granja y 3 Viviendas, ya ACTIVOS sin pasar por la cola de construcción. La Leñera inicial condicional (ligada a bosque alcanzable) que existió en una versión anterior de esta mecánica fue RETIRADA (`engine/settlement.ts`, `edificiosIniciales`) — la reserva de materiales iniciales (ver abajo) ya bastaba por sí sola para evitar el deadlock de madera, dejando esa mitigación extra innecesaria.
 - FUNDACIÓN GRUPAL: hasta 5 jugadores pueden organizarse para aparecer juntos en el mismo punto, compartiendo una caravana, fundando el asentamiento entre los 5. Los 5 reciben Ciudadanía de inmediato.
 - MATERIALES INICIALES (confirmado durante implementación de Fase 0): la caravana de fundación entrega una reserva inicial de recursos al fundar, suficiente para arrancar la primera construcción. Sin esto el asentamiento queda bloqueado permanentemente (el edificio que produce madera también cuesta madera para construirse — deadlock detectado y corregido en Sprint 2, ver `Correcciones_Durante_Desarrollo.md`). Cifras actuales (`FUNDACION.materialesIniciales`/`POBLACION.pesants.inicial`, constants.ts, placeholder sin calibrar): 50 madera + 20 piedra + 100 trigo + 100 oro, y población inicial de 20 pesants.
@@ -98,3 +173,73 @@ PENDIENTE (calibración, no diseño):
 - Ajustar poder/radio/recompensa/cadencia por simulación.
 - Si el campamento debería escalar con región/proximidad a Facciones fuertes, o seguir fijo.
 - Si el campamento tiene algún efecto pasivo sobre el bosque que ocupa (ej. bloquear su explotación) o solo amenaza caravanas de paso — actualmente NO bloquea nada, solo amenaza caravanas.
+
+## 1.10 El jugador está SITUADO en el mundo (a petición del usuario, 2026-09-06)
+
+El jugador es un partícipe del mundo, no un ente volador superior. En todo momento está en **uno** de tres sitios, nunca en dos y nunca en ninguno:
+
+| Dónde | Qué significa |
+|---|---|
+| **Dentro de un asentamiento** | Ve su interior completo y puede dar órdenes ahí |
+| **En una columna, en el mapa** | Se mueve, ve lo que su columna alcanza, interactúa con lo que se cruza (Doc 5.12) |
+| **Desconectado** | Fuera del mundo, con su sitio guardado |
+
+### 1.10.1 Solo ves donde estás, y solo actúas donde estás
+
+**Nunca se ve el interior de un asentamiento en el que no se está físicamente.** Ni siquiera uno propio, ni siquiera siendo su Gobernador. Almacén, guarnición, colas de construcción, cargos y trazado urbano son cosas que se miran desde dentro.
+
+Y la regla es también de ACCIÓN: **construir, reclutar, comerciar, activar políticas y designar cargos exige estar dentro** de la plaza en cuestión (Doc 2.5). Con acción remota el jugador seguiría siendo un ojo volador, solo que con una venda.
+
+**Lo ya ordenado sigue corriendo solo.** Salir no congela tu ciudad: la auto-construcción avanza, las colas terminan, las caravanas en ruta llegan, la producción produce. Lo que no puedes es darle órdenes NUEVAS mientras no estés.
+
+**Lo que se deja atrás se RECUERDA.** Al salir de una plaza queda la última foto de su interior, fechada — el mismo mecanismo con el que se recuerda una ciudad ajena que se dejó de ver (Doc 5.12.8). El jugador juzga si fiarse de un dato de hace tres horas.
+
+> **Esto NO toca la niebla de guerra.** Tus plazas siguen vigilando su radio para toda tu Facción aunque no estés dentro de ninguna, y lo avistado y lo recordado del MAPA siguen igual (Doc 5.12.7-5.12.8). Lo que se restringe son los INTERIORES, no saber dónde están las cosas ni qué pasa en el mundo.
+
+### 1.10.2 Salir al mundo
+
+Se sale desde la **residencia**, que es donde el jugador tiene su roster entero de tropas. Al salir elige, en una sola pantalla:
+
+1. **Con qué tropas sale**, bajo su Liderazgo (Doc 5.11) — puede ser una sola, todas las que el Liderazgo permita, o **ninguna**.
+2. **Con qué materiales sale**, hasta llenar su carro (Doc 5.13).
+
+Y aparece en el mapa de mundo **junto al asentamiento**, sin destino todavía.
+
+*Pendiente:* que el **Tesorero** pueda fijar cuánto material del almacén puede retirar cada jugador.
+
+### 1.10.3 Entrar en un asentamiento
+
+Se entra estando en la **puerta** —a corta distancia de la plaza— y se ofrece como una acción, no ocurre solo (Doc 5.12.3). Lo que pasa con la columna depende de dónde entres:
+
+| Entras en… | Tu columna |
+|---|---|
+| **Tu residencia** | Se disuelve: los escuadrones vuelven a la guarnición y el carro al almacén |
+| **Cualquier otra plaza** | Se queda **aparcada a la puerta**. Al salir la retomas con lo que llevabas, sin ninguna pantalla de equipamiento |
+
+De ahí salen dos consecuencias sin necesidad de más reglas: si conquistan la plaza ajena mientras estás dentro, tu columna está fuera y la retomas; y si te destruyen la columna aparcada, sales a pie.
+
+### 1.10.4 Dentro de una plaza ajena solo se ve la capa pública
+
+Trazado, edificios visibles y mercado. **Nunca** almacén exacto, guarnición, colas de construcción ni cargos.
+
+Entrar es reconocimiento legítimo —ves si la ciudad es grande, rica y está amurallada— y por eso cerrar la puerta sigue siendo una defensa real sin que abrirla sea suicida.
+
+### 1.10.5 La puerta la controla el Gobernador
+
+El Gobernador fija quién puede entrar en su plaza: **abierta a todos**, **solo a su Facción**, **a su Facción y sus aliados**, o **cerrada**. Puede además vetar a jugadores concretos por encima de esa política.
+
+No es una política de las que expiran (Doc 4.4): una puerta que se abre sola a las dos horas y media no es una puerta.
+
+### 1.10.6 Desconectarse
+
+**Al desconectarse, el jugador desaparece del mundo en el punto donde quedó, y reaparece ahí al volver.** No es una excepción caprichosa: es lo que hace jugable un mundo persistente para una persona sola.
+
+**Y se lleva sus tropas con él.** El jugador y todo lo que carga —sus escuadrones y su carro— entran y salen del mundo juntos. Al volver aparece con ellos en el último sitio donde estuvo, lo que le da la oportunidad de alcanzar a los suyos si iba en un ejército.
+
+Si iba en un **Ejército**, este **sigue su marcha sin él**, más débil: mecánicamente, desconectarse es separarse (Doc 5.14.2) y desaparecer. Y si el que se desconecta era el **Líder**, el mando pasa al integrante con más antigüedad (Doc 5.14.3) — el Líder no puede separarse por voluntad propia, pero sí puede caerse la conexión, y la columna no puede quedarse sin mando.
+
+> **Alcanzar de vuelta a tu ejército no siempre se puede.** Una columna va al ritmo de su escuadrón más lento (Doc 5.12.5), así que solo alcanzas a los tuyos si tus tropas son más rápidas que la más lenta de la columna. El que llevaba la tropa pesada que frenaba a todos no vuelve a alcanzarlos.
+
+**Desaparecer tarda dos minutos y medio.** No es instantáneo: al desconectarse, el jugador sigue en el mundo ese rato —moviéndose como iba— y solo entonces se lo lleva todo consigo. Es lo que impide desconectarse para escapar de un combate que ya se tiene encima, sin castigar por ello a quien sufre un corte de verdad: en 2:30 un perseguidor cubre 30-55 unidades, así que alcanza a quien ya tenía a tiro y no a quien iba lejos.
+
+**Si se desconectan TODOS los integrantes de un ejército**, cada uno se lleva lo suyo y las **caravanas adjuntas vuelven solas a su asentamiento de origen** — haciendo el camino, así que son interceptables durante el regreso. No es lo mismo que perderlas: a un ejército DERROTADO se las quita el enemigo (Doc 5.13.2), y a estas no las venció nadie. Si su origen ya no existe, se pierden.

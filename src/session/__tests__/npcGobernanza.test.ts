@@ -13,7 +13,21 @@
 // el jugador sigue jugando a mano — ni asignándoles cargos, ni reservando su almacén, ni reclutando con sus
 // residentes, ni pactando trueques que comprometan sus recursos.
 import { describe, expect, it } from 'vitest';
-import type { Asentamiento, RecursoTipo } from '../../domain/types';
+import type { Asentamiento, Ejercito, RecursoTipo } from '../../domain/types';
+import { createRng } from '../../worldgen';
+import { avanzarSimulacion } from '../../engine/simulation';
+import { comerciarEnPlaza } from '../../engine/market';
+import { avanzarNpcGobernanza } from '../npcGobernanza';
+import {
+  contextoDeTest,
+  crearEstadoDeTest,
+  crearFacciones,
+  crearMapaDeterminista,
+  fundarAsentamientoDeTest,
+  instanteDeTest,
+} from '../../engine/__tests__/fixtures';
+
+const mapaDeterminista = crearMapaDeterminista(42);
 import { evaluarViabilidadFundacion } from '../../engine/settlement';
 import { GameSession } from '../gameSession';
 import { alternarFaccionNpc } from '../comandos/alternarFaccionNpc';
@@ -24,35 +38,23 @@ import { fundarAsentamiento } from '../comandos/fundarAsentamiento';
 // ('local', { seed: 1 })`): varios tests de abajo dependen de que este mundo concreto tenga minerales extra
 // alcanzables cerca de sitios con madera+piedra.
 const SEED = 1;
-const MOMENTO = '2026-01-01T00:00:00.000Z';
 const ACTOR = 'jugador-test';
 
 function partidaConDosFacciones(): { sesion: GameSession; faccionNpcId: string; faccionManualId: string } {
   const sesion = GameSession.crear('test-npc', { seed: SEED });
-  // Dos actores distintos al CREAR: un jugador solo puede crear una Facción (Doc 2 "Entidades"). Fundar sigue
-  // con `ACTOR` para las dos, sin conflicto — el motor no exige ciudadanía previa para fundar.
-  const r1 = sesion.ejecutar(crearFaccion, { nombre: 'Facción NPC' }, { momento: MOMENTO, actor: 'jugador-npc' });
-  const r2 = sesion.ejecutar(crearFaccion, { nombre: 'Facción Manual' }, { momento: MOMENTO, actor: 'jugador-manual' });
+  // Dos actores distintos: un jugador solo puede crear una Facción (Doc 2 "Entidades"), y desde que se funda
+  // donde se está (Doc 1.3) el fundador tiene que ser quien ya tiene columna en el mundo — que es quien
+  // acaba de crearla, no un tercero (`ACTOR`) que nunca ha actuado.
+  const r1 = sesion.ejecutar(crearFaccion, { nombre: 'Facción NPC' }, { actor: 'jugador-npc' });
+  const r2 = sesion.ejecutar(crearFaccion, { nombre: 'Facción Manual' }, { actor: 'jugador-manual' });
   if (!r1.ok || !r2.ok) throw new Error('setup del test: no se pudieron crear las Facciones');
   const faccionNpcId = r1.datos!.faccionId;
   const faccionManualId = r2.datos!.faccionId;
 
-  // Mismo barrido de grilla que el archivo original: el test no depende de que un punto elegido a mano sea
-  // viable con esta seed.
-  const { ancho, alto } = sesion.getMapa().limites;
-  const posiciones: { x: number; y: number }[] = [];
-  for (let x = 40; x < ancho && posiciones.length < 2; x += 40) {
-    for (let y = 40; y < alto && posiciones.length < 2; y += 40) {
-      const candidata = { x, y };
-      if (!evaluarViabilidadFundacion(sesion.getMapa(), candidata, sesion.getState().asentamientos).recomendable) continue;
-      if (posiciones.some((p) => Math.hypot(p.x - x, p.y - y) < 200)) continue;
-      posiciones.push(candidata);
-    }
-  }
-  expect(posiciones).toHaveLength(2);
-
-  sesion.ejecutar(fundarAsentamiento, { faccionId: faccionNpcId, posicion: posiciones[0]! }, { momento: MOMENTO, actor: ACTOR });
-  sesion.ejecutar(fundarAsentamiento, { faccionId: faccionManualId, posicion: posiciones[1]! }, { momento: MOMENTO, actor: ACTOR });
+  // Sin barrido de grilla ni punto elegido a mano: se funda donde se está (Doc 1.3), en el punto aleatorio
+  // donde cada fundador apareció al crear su Facción (misma SEED, así que es reproducible).
+  sesion.ejecutar(fundarAsentamiento, { faccionId: faccionNpcId }, { actor: 'jugador-npc' });
+  sesion.ejecutar(fundarAsentamiento, { faccionId: faccionManualId }, { actor: 'jugador-manual' });
   expect(sesion.getState().asentamientos).toHaveLength(2);
 
   return { sesion, faccionNpcId, faccionManualId };
@@ -69,15 +71,15 @@ function asentamientoDe(sesion: GameSession, faccionId: string): Asentamiento {
  * Este helper reproduce ese mismo bundling para el test. */
 function avanzar(sesion: GameSession, n: number): void {
   for (let i = 0; i < n; i++) {
-    sesion.avanzarTick(MOMENTO);
-    sesion.avanzarFaccionesNpc(MOMENTO);
+    sesion.avanzarTick();
+    sesion.avanzarFaccionesNpc();
   }
 }
 
 describe('Facción controlada por NPC', () => {
   it('gobierna la Facción cedida y no toca la que juega el jugador', () => {
     const { sesion, faccionNpcId, faccionManualId } = partidaConDosFacciones();
-    sesion.ejecutar(alternarFaccionNpc, { faccionId: faccionNpcId, activo: true }, { momento: MOMENTO, actor: ACTOR });
+    sesion.ejecutar(alternarFaccionNpc, { faccionId: faccionNpcId, activo: true }, { actor: ACTOR });
     avanzar(sesion, 40);
 
     const npc = asentamientoDe(sesion, faccionNpcId);
@@ -110,13 +112,13 @@ describe('Facción controlada por NPC', () => {
     avanzar(sesion, 20);
     expect(asentamientoDe(sesion, faccionNpcId).cargos.gobernadorId).toBeNull();
 
-    sesion.ejecutar(alternarFaccionNpc, { faccionId: faccionNpcId, activo: true }, { momento: MOMENTO, actor: ACTOR });
+    sesion.ejecutar(alternarFaccionNpc, { faccionId: faccionNpcId, activo: true }, { actor: ACTOR });
     expect(sesion.getState().faccionesNpcIds).toContain(faccionNpcId);
     avanzar(sesion, 5);
     expect(asentamientoDe(sesion, faccionNpcId).cargos.gobernadorId).toBeTruthy();
 
     // Retomar el control no deshace lo que el NPC ya hizo (es estado normal del juego): solo deja de decidir.
-    sesion.ejecutar(alternarFaccionNpc, { faccionId: faccionNpcId, activo: false }, { momento: MOMENTO, actor: ACTOR });
+    sesion.ejecutar(alternarFaccionNpc, { faccionId: faccionNpcId, activo: false }, { actor: ACTOR });
     expect(sesion.getState().faccionesNpcIds).not.toContain(faccionNpcId);
     const antes = asentamientoDe(sesion, faccionNpcId);
     avanzar(sesion, 5);
@@ -127,7 +129,7 @@ describe('Facción controlada por NPC', () => {
 
   it('la marca de NPC sobrevive a exportar/importar la partida', () => {
     const { sesion, faccionNpcId } = partidaConDosFacciones();
-    sesion.ejecutar(alternarFaccionNpc, { faccionId: faccionNpcId, activo: true }, { momento: MOMENTO, actor: ACTOR });
+    sesion.ejecutar(alternarFaccionNpc, { faccionId: faccionNpcId, activo: true }, { actor: ACTOR });
     avanzar(sesion, 5);
 
     // `exportar()`/`GameSession.importar()`, no el formato de archivo de descarga del navegador — es la vía
@@ -138,13 +140,13 @@ describe('Facción controlada por NPC', () => {
 
   it('se funda a sí misma si se cede sin ningún asentamiento (reportado por el usuario: quedaba inerte)', () => {
     const sesion = GameSession.crear('test-npc-inerte', { seed: SEED });
-    const creada = sesion.ejecutar(crearFaccion, { nombre: 'Facción NPC' }, { momento: MOMENTO, actor: ACTOR });
+    const creada = sesion.ejecutar(crearFaccion, { nombre: 'Facción NPC' }, { actor: ACTOR });
     if (!creada.ok) throw new Error('setup del test: no se pudo crear la Facción');
     const faccionId = creada.datos!.faccionId;
 
     // A diferencia de `partidaConDosFacciones`, aquí NO se funda nada a mano: el jugador crea la Facción, la
     // marca NPC y avanza tick — el punto de partida real que reportó el fallo.
-    sesion.ejecutar(alternarFaccionNpc, { faccionId, activo: true }, { momento: MOMENTO, actor: ACTOR });
+    sesion.ejecutar(alternarFaccionNpc, { faccionId, activo: true }, { actor: ACTOR });
     expect(sesion.getState().asentamientos).toHaveLength(0);
 
     avanzar(sesion, 10);
@@ -156,11 +158,11 @@ describe('Facción controlada por NPC', () => {
 
   it('funda su asentamiento inicial en un sitio con madera Y piedra alcanzables (a petición del usuario)', () => {
     const sesion = GameSession.crear('test-npc-piedra', { seed: SEED });
-    const creada = sesion.ejecutar(crearFaccion, { nombre: 'Facción NPC Piedra' }, { momento: MOMENTO, actor: ACTOR });
+    const creada = sesion.ejecutar(crearFaccion, { nombre: 'Facción NPC Piedra' }, { actor: ACTOR });
     if (!creada.ok) throw new Error('setup del test: no se pudo crear la Facción');
     const faccionId = creada.datos!.faccionId;
 
-    sesion.ejecutar(alternarFaccionNpc, { faccionId, activo: true }, { momento: MOMENTO, actor: ACTOR });
+    sesion.ejecutar(alternarFaccionNpc, { faccionId, activo: true }, { actor: ACTOR });
     for (let i = 0; i < 5 && sesion.getState().asentamientos.length === 0; i++) avanzar(sesion, 1);
 
     const asentamiento = sesion.getState().asentamientos.find((a) => a.faccionId === faccionId);
@@ -203,10 +205,10 @@ describe('Facción controlada por NPC', () => {
     }
     expect(candidatosConBonus).toBeGreaterThan(0);
 
-    const creada = sesion.ejecutar(crearFaccion, { nombre: 'Facción NPC Rica' }, { momento: MOMENTO, actor: ACTOR });
+    const creada = sesion.ejecutar(crearFaccion, { nombre: 'Facción NPC Rica' }, { actor: ACTOR });
     if (!creada.ok) throw new Error('setup del test: no se pudo crear la Facción');
     const faccionId = creada.datos!.faccionId;
-    sesion.ejecutar(alternarFaccionNpc, { faccionId, activo: true }, { momento: MOMENTO, actor: ACTOR });
+    sesion.ejecutar(alternarFaccionNpc, { faccionId, activo: true }, { actor: ACTOR });
     for (let i = 0; i < 5 && sesion.getState().asentamientos.length === 0; i++) avanzar(sesion, 1);
 
     const asentamiento = sesion.getState().asentamientos.find((a) => a.faccionId === faccionId)!;
@@ -214,5 +216,244 @@ describe('Facción controlada por NPC', () => {
       mapa.nodosEnRadio(asentamiento.posicion, asentamiento.radioPotencial).some((n) => n.tipo === tipo)
     ).length;
     expect(bonusEncontrado).toBeGreaterThan(0);
+  });
+});
+
+// La politica de persecucion del NPC (paso 8e, Doc 5.12.3).
+//
+// Existe para tapar el riesgo mas silencioso de toda la mecanica: desde que los encuentros dejaron de salir
+// de la geometria, un combate solo ocurre si alguien lo pide — y en el laboratorio no hay nadie pidiendo. Sin
+// esto, las constantes militares ya calibradas se seguirian midiendo sobre un mundo en paz SIN QUE NINGUNA
+// PRUEBA FALLARA. Estos tests son esa prueba.
+/** Dos columnas NPC enemigas a la vista una de otra, en campo abierto. */
+function dosColumnasNpc() {
+  const facciones = crearFacciones();
+  const uno = fundarAsentamientoDeTest(mapaDeterminista, facciones, 'faccion-1', []);
+  const dos = fundarAsentamientoDeTest(mapaDeterminista, uno.facciones, 'faccion-2', [uno.asentamiento]);
+  const punto = { x: 1000, y: 1000 };
+  const tropa = (id: string, jugadorId: string) => ({
+    id,
+    nombre: 'milicia_lanceros',
+    jugadorId,
+    origen: 'pesants' as const,
+    cantidad: 30,
+    veterania: 0,
+    moral: 100,
+    tropaId: 'milicia_lanceros',
+  });
+  const columna = (id: string, faccionId: string, origenId: string, x: number): Ejercito => ({
+    id,
+    faccionId,
+    origenAsentamientoId: origenId,
+    participantes: [{ jugadorId: `j-${id}`, unidoEn: instanteDeTest(0) }],
+    tipo: 'ejercito',
+    liderId: `j-${id}`,
+    politicaDeUnion: 'rechazar',
+    escuadrones: [tropa(`esc-${id}`, `j-${id}`)],
+    suministro: { trigo: 500 },
+    caravanasAdjuntasIds: [],
+    objetivo: { tipo: 'punto', punto },
+    ruta: [punto, { x: punto.x + 10, y: punto.y }],
+    progreso: 0,
+    posicionActual: { x, y: punto.y },
+    estado: 'estacionado',
+  });
+  const estado = crearEstadoDeTest([uno.asentamiento, dos.asentamiento], dos.facciones, {
+    // A 10 una de otra: dentro del radio de encuentro, asi que la persecucion se cierra en el mismo tick.
+    ejercitos: [columna('col-a', 'faccion-1', uno.asentamiento.id, punto.x), columna('col-b', 'faccion-2', dos.asentamiento.id, punto.x + 10)],
+  });
+  return { estado, mapa: mapaDeterminista };
+}
+
+describe('el NPC persigue: sin esto el batch se queda sin combates y nadie se entera', () => {
+  it('fija persecucion contra una columna enemiga que tiene a la vista', () => {
+    const { estado, mapa } = dosColumnasNpc();
+
+    const r = avanzarNpcGobernanza(estado, mapa, contextoDeTest(1, createRng(5)), {});
+
+    const cazador = r.estado.ejercitos.find((e) => e.id === 'col-a')!;
+    expect(cazador.persiguiendo, 'sin presa fijada no habria combate nunca').toEqual({ tipo: 'ejercito', id: 'col-b' });
+  });
+
+  it('y en el tick siguiente eso PRODUCE combate: el laboratorio no se queda en paz', () => {
+    const { estado, mapa } = dosColumnasNpc();
+    const conPresas = avanzarNpcGobernanza(estado, mapa, contextoDeTest(1, createRng(5)), {}).estado;
+
+    const sim = avanzarSimulacion(conPresas, mapa, contextoDeTest(2, createRng(5)));
+
+    expect(sim.eventosDominio.some((e) => e.codigo === 'combate.encuentro'), 'hubo combate').toBe(true);
+  });
+
+  it('no persigue a los suyos: solo a enemigos', () => {
+    const { estado, mapa } = dosColumnasNpc();
+    const mismaFaccion = {
+      ...estado,
+      ejercitos: estado.ejercitos.map((e) => ({ ...e, faccionId: 'faccion-1' })),
+    };
+
+    const r = avanzarNpcGobernanza(mismaFaccion, mapa, contextoDeTest(1, createRng(5)), {});
+
+    expect(r.estado.ejercitos.every((e) => e.persiguiendo === undefined)).toBe(true);
+  });
+
+  it('ni persigue estando en TREGUA: la regla vale igual para el NPC', () => {
+    const { estado, mapa } = dosColumnasNpc();
+    const enTregua = {
+      ...estado,
+      ejercitos: estado.ejercitos.map((e) => ({ ...e, enTreguaHasta: instanteDeTest(9999) })),
+    };
+
+    const r = avanzarNpcGobernanza(enTregua, mapa, contextoDeTest(1, createRng(5)), {});
+
+    expect(r.estado.ejercitos.every((e) => e.persiguiendo === undefined)).toBe(true);
+  });
+});
+
+// La POSTURA de una Faccion NPC (Consideraciones/Entrada_Al_Mundo_Definicion.md, decision 5).
+//
+// Las Facciones sembradas al arrancar el servidor tienen que ser vecinos, no depredadores: un recien llegado
+// no es aliado de nadie, asi que con la postura agresiva seria presa a la vista de cualquier columna NPC
+// antes de tener con que defenderse. Y el laboratorio necesita justo lo contrario, asi que es un ajuste y no
+// un borrado.
+describe('postura defensiva: un vecino, no un depredador', () => {
+  it('una Faccion DEFENSIVA no da caza a nadie, aunque lo tenga a tiro', () => {
+    const { estado, mapa } = dosColumnasNpc();
+
+    const r = avanzarNpcGobernanza(estado, mapa, contextoDeTest(1, createRng(5)), { postura: 'defensiva' });
+
+    expect(r.estado.ejercitos.every((e) => e.persiguiendo === undefined)).toBe(true);
+  });
+
+  it('y por defecto sigue siendo AGRESIVA: el batch no puede quedarse sin combates en silencio', () => {
+    const { estado, mapa } = dosColumnasNpc();
+
+    const r = avanzarNpcGobernanza(estado, mapa, contextoDeTest(1, createRng(5)), {});
+
+    expect(r.estado.ejercitos.some((e) => e.persiguiendo !== undefined), 'el defecto no cambia').toBe(true);
+  });
+});
+
+// El NPC como SOCIO DE COMERCIO (Consideraciones/Entrada_Al_Mundo_Definicion.md §3).
+//
+// La via son ordenes de mercado y no trueques por una razon concreta: `proponerTrueque` pacta sin pedir
+// consentimiento al otro lado, asi que un NPC proponiendoselo a un jugador le comprometeria recursos sin
+// preguntarle. Una orden publicada no compromete a nadie — se toma o no se toma.
+describe('el NPC publica en el mercado: un vecino con quien comerciar', () => {
+  /** Una plaza NPC con Mercado activo, el silo de piedra a rebosar y el de madera casi vacio. */
+  function plazaConMercado() {
+    const facciones = crearFacciones();
+    const uno = fundarAsentamientoDeTest(mapaDeterminista, facciones, 'faccion-1', []);
+    const conMercado: Asentamiento = {
+      ...uno.asentamiento,
+      edificios: [...uno.asentamiento.edificios, { id: 'mercado-1', tipo: 'mercado', posicion: { x: 0, y: 0 }, estado: 'activo' }],
+      almacen: {
+        ...uno.asentamiento.almacen,
+        piedra: { capacidad: 1000, cantidad: 950 },
+        madera: { capacidad: 1000, cantidad: 50 },
+      },
+    };
+    return crearEstadoDeTest([conMercado], uno.facciones);
+  }
+
+  it('pone a la venta lo que le SOBRA', () => {
+    const estado = plazaConMercado();
+
+    const r = avanzarNpcGobernanza(estado, mapaDeterminista, contextoDeTest(1, createRng(5)), {});
+
+    const venta = r.estado.ordenes.find((o) => o.tipo === 'venta' && o.recurso === 'piedra');
+    expect(venta, 'el silo lleno se vende, que guardar de mas no sirve').toBeDefined();
+    expect(venta!.cantidad).toBeGreaterThan(0);
+  });
+
+  it('y publica compra de lo que le FALTA', () => {
+    const estado = plazaConMercado();
+
+    const r = avanzarNpcGobernanza(estado, mapaDeterminista, contextoDeTest(1, createRng(5)), {});
+
+    expect(r.estado.ordenes.find((o) => o.tipo === 'compra' && o.recurso === 'madera')).toBeDefined();
+  });
+
+  it('no duplica: si ya tiene una orden viva de ese recurso, no publica otra', () => {
+    const estado = plazaConMercado();
+    const uno = avanzarNpcGobernanza(estado, mapaDeterminista, contextoDeTest(1, createRng(5)), {});
+
+    const dos = avanzarNpcGobernanza(uno.estado, mapaDeterminista, contextoDeTest(2, createRng(5)), {});
+
+    const dePiedra = dos.estado.ordenes.filter((o) => o.recurso === 'piedra' && o.estado === 'activa');
+    expect(dePiedra).toHaveLength(1);
+  });
+
+  it('sin Mercado activo no publica nada: la regla del motor vale igual para el NPC', () => {
+    const facciones = crearFacciones();
+    const uno = fundarAsentamientoDeTest(mapaDeterminista, facciones, 'faccion-1', []);
+    const sinMercado = crearEstadoDeTest(
+      [{ ...uno.asentamiento, almacen: { ...uno.asentamiento.almacen, piedra: { capacidad: 1000, cantidad: 950 } } }],
+      uno.facciones
+    );
+
+    const r = avanzarNpcGobernanza(sinMercado, mapaDeterminista, contextoDeTest(1, createRng(5)), {});
+
+    expect(r.estado.ordenes).toEqual([]);
+  });
+
+  it('y con la palanca cerrada se comporta como antes de existir esto', () => {
+    const estado = plazaConMercado();
+
+    const r = avanzarNpcGobernanza(estado, mapaDeterminista, contextoDeTest(1, createRng(5)), { colocarOrdenes: false });
+
+    expect(r.estado.ordenes).toEqual([]);
+  });
+});
+
+// Y lo que de verdad prueba el objetivo: que un JUGADOR pueda comprarle. Publicar ordenes no sirve de nada si
+// nadie puede tomarlas — y desde 2026-09-07 tomarlas significa IR HASTA ALLI con el oro encima
+// (`Consideraciones/Comercio_Fisico_Definicion.md`), no un emparejamiento automatico entre almacenes.
+describe('un jugador puede comerciar con una plaza NPC', () => {
+  it('el NPC pone piedra a la venta, el jugador se planta en su puerta con oro, y se la lleva EN EL CARRO', () => {
+    const facciones = crearFacciones();
+    const npc = fundarAsentamientoDeTest(mapaDeterminista, facciones, 'faccion-1', []);
+    const humano = fundarAsentamientoDeTest(mapaDeterminista, npc.facciones, 'faccion-2', [npc.asentamiento]);
+    const conMercado = (a: Asentamiento, piedra: number): Asentamiento => ({
+      ...a,
+      edificios: [...a.edificios, { id: `mercado-${a.id}`, tipo: 'mercado', posicion: { x: 0, y: 0 }, estado: 'activo' }],
+      almacen: { ...a.almacen, piedra: { capacidad: 1000, cantidad: piedra }, oro: { capacidad: 1000, cantidad: 500 } },
+    });
+    const plazaNpc = conMercado(npc.asentamiento, 950);
+    const plazaHumano = conMercado(humano.asentamiento, 0);
+    const estado = crearEstadoDeTest([plazaNpc, plazaHumano], humano.facciones);
+
+    // El NPC gobierna SOLO su Faccion: la del humano no la toca, como en una partida real.
+    const conOrdenes = avanzarNpcGobernanza(estado, mapaDeterminista, contextoDeTest(1, createRng(5)), {
+      faccionesIds: ['faccion-1'],
+    }).estado;
+    const venta = conOrdenes.ordenes.find((o) => o.tipo === 'venta' && o.recurso === 'piedra' && o.asentamientoId === plazaNpc.id);
+    expect(venta, 'el NPC ha puesto piedra a la venta').toBeDefined();
+
+    // El jugador ha viajado hasta la plaza del NPC con el carro cargado de oro. Esa caminata es la mecanica
+    // entera: sin ella no hay trato.
+    const plazaNpcAhora = conOrdenes.asentamientos.find((a) => a.id === plazaNpc.id)!;
+    const columna = {
+      id: 'columna-humano',
+      faccionId: 'faccion-2',
+      liderId: 'jugador-humano',
+      tipo: 'personal',
+      participantes: [{ jugadorId: 'jugador-humano', unidoEn: instanteDeTest(0) }],
+      escuadrones: [],
+      suministro: { oro: 400 },
+      caravanasAdjuntasIds: [],
+      posicionActual: plazaNpcAhora.posicion,
+      estado: 'estacionado',
+    } as unknown as Ejercito;
+
+    const trato = comerciarEnPlaza(columna, 'jugador-humano', plazaNpcAhora, venta!, venta!.cantidad, 5000, instanteDeTest(1));
+
+    expect(trato.cantidad, 'algo cambia de manos').toBeGreaterThan(0);
+    expect(trato.ejercito.suministro['piedra'], 'la piedra va en el carro, no en su ciudad').toBeGreaterThan(0);
+    expect(trato.plaza.almacen['piedra']!.cantidad, 'y al NPC le queda menos').toBeLessThan(950);
+
+    // Lo que este test existe para fijar: la ciudad del jugador NO ha recibido nada todavia. Falta el viaje de
+    // vuelta y depositar (`absorberColumna`), que es justo lo que el emparejamiento automatico se saltaba.
+    const suPlaza = conOrdenes.asentamientos.find((a) => a.id === plazaHumano.id)!;
+    expect(suPlaza.almacen['piedra']!.cantidad).toBe(0);
   });
 });

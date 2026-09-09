@@ -13,13 +13,26 @@ import { crearFaccion } from './crearFaccion';
 import { unirseAFaccion } from './unirseAFaccion';
 import { dejarFaccion } from './dejarFaccion';
 import { alternarFaccionNpc } from './alternarFaccionNpc';
-import { activarPolitica, asignarCargoLocal, asignarEmbajador, asignarRey, comprarCasa } from './cargos';
+import { activarPolitica, asignarCargoLocal, asignarEmbajador, asignarRey, cambiarResidencia, comprarCasa } from './cargos';
 import { anexionar, fusionar, proponerRelacion, rebelionVasallo, romperRelacion } from './diplomacia';
-import { colocarOrdenMercado, crearCaravana, proponerTrueque } from './comercio';
+import {
+  aceptarTrueque,
+  agregarCarroCaravana,
+  cancelarCaravana,
+  colocarOrdenMercado,
+  comerciarEnPlaza,
+  comprarAnimalCaravana,
+  crearCaravana,
+  enviarCaravanaAlOrigen,
+  moverCargaCaravanaAparcada,
+  moverCarroCaravana,
+  prepararCaravana,
+  proponerTrueque,
+  rechazarTrueque,
+  reservarCaravana,
+} from './comercio';
 import {
   atacarCampamentoBandidos,
-  combateCampoAbierto,
-  interceptarCaravana,
   iniciarAsedio,
   reclutarTropa,
 } from './militar';
@@ -33,6 +46,21 @@ import {
   renombrarAsentamiento,
 } from './construccion';
 import { desarmarCaravanaFundacion, lanzarCaravanaFundacion } from './expansion';
+import { abandonarRecinto, comprometerRecinto, mejorarRecinto } from './murallas';
+import {
+  adjuntarCaravana,
+  alternarReabastecerAliados,
+  cargarCaravana,
+  entregarDeCaravana,
+  estacionarEjercito,
+  movilizarEjercito,
+  replegarEjercito,
+  soltarCaravana,
+  unirseAEjercito,
+} from './ejercitos';
+import { entrarEnAsentamiento, fijarPoliticaDeAcceso, guarnecer, marcharA, salirAlMundo, salirDeAsentamiento, vetarJugador } from './presencia';
+import { cederLiderazgo, responderPeticionDeUnion, separarseDelEjercito, unirseEnCampo } from './columna';
+import { atacar, dejarDePerseguir, inspeccionar, perseguir } from './interaccion';
 
 export const REGISTRO_COMANDOS = {
   fundarAsentamiento,
@@ -45,6 +73,7 @@ export const REGISTRO_COMANDOS = {
   asignarEmbajador,
   asignarRey,
   comprarCasa,
+  cambiarResidencia,
   anexionar,
   fusionar,
   proponerRelacion,
@@ -52,10 +81,43 @@ export const REGISTRO_COMANDOS = {
   romperRelacion,
   colocarOrdenMercado,
   crearCaravana,
+  agregarCarroCaravana,
+  comprarAnimalCaravana,
+  reservarCaravana,
+  prepararCaravana,
+  cancelarCaravana,
+  moverCarroCaravana,
   proponerTrueque,
+  aceptarTrueque,
+  rechazarTrueque,
+  comerciarEnPlaza,
+  moverCargaCaravanaAparcada,
+  enviarCaravanaAlOrigen,
+  salirAlMundo,
+  marcharA,
+  entrarEnAsentamiento,
+  salirDeAsentamiento,
+  guarnecer,
+  fijarPoliticaDeAcceso,
+  vetarJugador,
+  inspeccionar,
+  atacar,
+  perseguir,
+  dejarDePerseguir,
+  unirseEnCampo,
+  responderPeticionDeUnion,
+  separarseDelEjercito,
+  cederLiderazgo,
+  movilizarEjercito,
+  unirseAEjercito,
+  replegarEjercito,
+  estacionarEjercito,
+  alternarReabastecerAliados,
+  adjuntarCaravana,
+  soltarCaravana,
+  cargarCaravana,
+  entregarDeCaravana,
   atacarCampamentoBandidos,
-  combateCampoAbierto,
-  interceptarCaravana,
   iniciarAsedio,
   reclutarTropa,
   alternarAutoConstruccion,
@@ -67,6 +129,9 @@ export const REGISTRO_COMANDOS = {
   renombrarAsentamiento,
   desarmarCaravanaFundacion,
   lanzarCaravanaFundacion,
+  comprometerRecinto,
+  abandonarRecinto,
+  mejorarRecinto,
 } satisfies Record<string, ManejadorComando<any, any>>;
 
 export type TipoComando = keyof typeof REGISTRO_COMANDOS;

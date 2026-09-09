@@ -1,10 +1,10 @@
 // Superficie de JUGADOR (`/jugador/*`). Todo lo que un cliente de jugador necesita: unirse a una partida,
 // leer su proyección del estado, y ejecutar comandos en ella.
 //
-// El `GET` de lectura (Fase C4, Slice 1) NO es el estado completo: pasa por `proyectarParaJugador`, que hoy
-// solo expone la Facción propia — nada de las demás. Es deliberadamente conservador, ver el comentario de
-// cabecera de `session/proyecciones/jugador.ts` para el porqué (la niebla de guerra completa del doc 6
-// depende de un número de balance que no está definido en ningún doc de este repo).
+// El `GET` de lectura (Fase C4) NO es el estado completo: pasa por `proyectarParaJugador`, que expone la
+// Facción propia y, de las demás, solo los EJÉRCITOS que se estén viendo, redactados (Doc 5.12.7). Ver el
+// comentario de cabecera de `session/proyecciones/jugador.ts` para el porqué de cada cosa, y qué parte de la
+// niebla de guerra del doc 6 sigue pendiente (la memoria: el "último conocido").
 //
 // Un administrador NO pasa este filtro aunque tenga acceso total a la partida: para jugar hace falta ser
 // jugador (doc 5, "Diferencia entre rol técnico y cargo de juego").
@@ -13,7 +13,7 @@ import { puedeJugar } from '../../acceso/rolesDePartida';
 import type { ActorDeComando } from '../../session/comandos/autorizacion';
 import { eventosDominioParaJugador, proyectarParaJugador } from '../../session/proyecciones/jugador';
 import { ESQUEMA_SESION_AUTH } from '../openapi';
-import { ejecutarComandoHttp, ESQUEMA_EJECUTAR_COMANDO, type EjecutarComandoBody } from './comandos';
+import { auditarRechazoDeEsquema, ejecutarComandoHttp, ESQUEMA_EJECUTAR_COMANDO, type EjecutarComandoBody } from './comandos';
 import { enviarMapa, ESQUEMA_MAPA } from './mapa';
 import { ERROR_RESPUESTA, PARAMS_GAME_ID, QUERY_DESDE } from './esquemas';
 import {
@@ -166,7 +166,7 @@ export function registrarRutasDeJugador(app: FastifyInstance, deps: Dependencias
 
   app.post<{ Params: ParametrosGameId; Body: EjecutarComandoBody }>(
     '/jugador/partidas/:gameId/comandos',
-    { schema: ESQUEMA_COMANDOS_JUGADOR },
+    { schema: ESQUEMA_COMANDOS_JUGADOR, onError: auditarRechazoDeEsquema(deps) },
     async (request, reply) => {
       const { gameId } = request.params;
       const resuelto = resolverActor(request, deps, gameId);
@@ -178,7 +178,7 @@ export function registrarRutasDeJugador(app: FastifyInstance, deps: Dependencias
 
       const jugadorId = resuelto.actor.membresia!.jugadorId!;
       const actor: ActorDeComando = { rol: 'jugador', jugadorId };
-      return ejecutarComandoHttp(reply, runner, request.body, actor, jugadorId, deps.hub, (r) => ({
+      return ejecutarComandoHttp(reply, runner, request.body, actor, jugadorId, deps.hub, deps.auditoria, (r) => ({
         proyeccion: {
           ...proyectarParaJugador(r.getState(), jugadorId, r.geometriaAsentamientos()),
           preciosReferencia: r.preciosReferencia(),

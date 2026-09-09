@@ -1,4 +1,4 @@
-import type { Asentamiento, BiomaTipo, CaminoComercial, CampamentoBandido, Caravana, Edificio, EdificioTipo, Faccion, Point, RecursoTipo, ZonaFaccion } from '@motor/domain/types';
+import type { Asentamiento, BiomaTipo, CaminoComercial, CampamentoBandido, Caravana, Edificio, EdificioTipo, Ejercito, Faccion, Point, RecursoTipo, ZonaFaccion } from '@motor/domain/types';
 import type { Mapa } from '@motor/world/mapa';
 
 export const FACCION_COLORES = ['#c0392b', '#2980b9', '#27ae60', '#8e44ad', '#d35400', '#16a085'];
@@ -238,6 +238,7 @@ export const EDIFICIO_ETIQUETA: Record<EdificioTipo, string> = {
   cantera: 'Cantera',
   lenera: 'Leñera',
   almacen: 'Almacén',
+  granero: 'Granero',
   mina: 'Mina (oro)',
   minaCobre: 'Mina (cobre)',
   minaEstano: 'Mina (estaño)',
@@ -253,7 +254,6 @@ export const EDIFICIO_ETIQUETA: Record<EdificioTipo, string> = {
   mercado: 'Mercado',
   puestoMercado: 'Puesto de mercado',
   maravilla: 'Maravilla',
-  muralla: 'Muralla',
   plaza: 'Plaza',
   plazaDeArmas: 'Plaza de Armas',
   patioDeGremios: 'Patio de Gremios',
@@ -269,6 +269,9 @@ export const EDIFICIO_COLOR: Record<EdificioTipo, string> = {
   cantera: '#8d8d8d',
   lenera: '#3f7d3a',
   almacen: '#7a5c3a',
+  // Grano: dorado apagado, emparentado con la Granja (#d4b106) pero más terroso — se lee como "aquí va el
+  // trigo" sin confundirse con el campo que lo produce.
+  granero: '#b8933f',
   mina: '#f1c40f',
   minaCobre: '#c0703c',
   minaEstano: '#2f6fd1',
@@ -287,8 +290,6 @@ export const EDIFICIO_COLOR: Record<EdificioTipo, string> = {
   // retirada del lienzo el color es lo único que agrupa el conjunto a la vista.
   puestoMercado: '#7fc9bf',
   maravilla: '#ffd700',
-  // Muralla (Doc Fase_0_6): gris piedra oscuro, distinto del gris de Cantera para no confundirlos.
-  muralla: '#5a5a5a',
   // Anclas y satélites, Etapa 3: tonos más claros de sus propias categorías (mismo criterio que puestoMercado
   // frente a mercado) — marcan visualmente que son piezas de zona, no edificios independientes.
   plaza: '#f0e8c8',
@@ -322,6 +323,8 @@ export interface DrawState {
   caminos: CaminoComercial[];
   /** Campamentos de bandidos (Doc 1.9) — estado de partida, se dibujan en vivo igual que las caravanas. */
   campamentosBandidos: CampamentoBandido[];
+  /** Ejércitos en campaña (Doc 5.12) — estado de partida, en vivo como las caravanas. */
+  ejercitos: Ejercito[];
 }
 
 /**
@@ -569,6 +572,58 @@ export function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, s
     ctx.stroke();
   }
 
+  // Ejércitos en campaña (Doc 5.12.2): traza de ruta + ROMBOS, uno por cada jugador que va dentro, apilados
+  // medio superpuestos y del color de la Facción.
+  //
+  // El número de rombos no es un dato del estado: se DERIVA de los `jugadorId` distintos de sus escuadrones
+  // (Doc 5.12.1 — salir solo es un ejército de un participante). Así, de un vistazo, el tamaño del racimo
+  // dice cuánta gente va en esa columna, que es justo lo que un rival necesita para decidir si le planta cara.
+  //
+  // Rombo y no triángulo (caravana) ni círculo (asentamiento) ni diamante rojo (campamento bandido): las
+  // cuatro cosas que se mueven o amenazan en este mapa tienen forma propia, para no depender del color.
+  ctx.strokeStyle = 'rgba(241, 230, 200, 0.35)';
+  ctx.lineWidth = 1.5;
+  for (const ejercito of state.ejercitos) {
+    // Estacionado no tiene trayecto pendiente que enseñar (acampó); marchando y regresando sí.
+    if (ejercito.estado === 'estacionado' || ejercito.ruta.length < 2) continue;
+    ctx.beginPath();
+    ejercito.ruta.forEach((p, i) => {
+      const x = p.x * scale;
+      const y = p.y * scale;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  }
+
+  for (const ejercito of state.ejercitos) {
+    const origen = state.asentamientos.find((a) => a.id === ejercito.origenAsentamientoId);
+    const color = origen ? faccionColor(origen.faccionId, state.facciones) : faccionColor(ejercito.faccionId, state.facciones);
+    const participantes = new Set(ejercito.escuadrones.map((e) => e.jugadorId)).size;
+    const r = 5;
+    // Cada rombo se desplaza medio ancho respecto al anterior (solape del 50%), y el racimo entero se
+    // recentra para que la POSICIÓN del ejército siga cayendo en el medio y no en el primer rombo.
+    const inicio = ((participantes - 1) * r) / 2;
+    const cx = ejercito.posicionActual.x * scale;
+    const cy = ejercito.posicionActual.y * scale;
+
+    // De atrás hacia delante, para que el primero quede ENCIMA y el racimo se lea como una columna.
+    for (let i = participantes - 1; i >= 0; i--) {
+      const x = cx - inicio + i * r;
+      ctx.beginPath();
+      ctx.moveTo(x, cy - r);
+      ctx.lineTo(x + r, cy);
+      ctx.lineTo(x, cy + r);
+      ctx.lineTo(x - r, cy);
+      ctx.closePath();
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.strokeStyle = '#1b1a17';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+
   // Campamentos de bandidos (Doc 1.9): marcador en forma de diamante, distinto de asentamientos (círculos) y
   // caravanas (puntos claros) para que se reconozca de un vistazo como amenaza, no como activo propio.
   for (const campamento of state.campamentosBandidos) {
@@ -606,10 +661,11 @@ export interface DrawAsentamientoState {
   asentamiento: Asentamiento;
   /** Nombre a mostrar (el `nombre` del asentamiento o su `id`) — lo resuelve el caller. */
   etiqueta: string;
-  /** Tramos de calle urbana, en coordenadas locales — `gameStore.getTrazadoAsentamiento`. */
-  calles: { desde: Point; hasta: Point }[];
-  /** Tramos de camino rural (a Granja/Corral, en las afueras): clase aparte de la calle, más fina. */
-  caminos: { desde: Point; hasta: Point }[];
+  /** Tiradas de calle urbana, en coordenadas locales — `gameStore.getTrazadoAsentamiento`.
+   * Etapa 6: son ÁREAS (la calle ocupa suelo), no líneas sin grosor. */
+  calles: { x: number; y: number; ancho: number; alto: number }[];
+  /** Tiradas de camino rural (a Granja/Corral, en las afueras): clase aparte de la calle, se pinta más apagada. */
+  caminos: { x: number; y: number; ancho: number; alto: number }[];
   /** Rectángulo que ocupa cada edificio interno, por id, en unidades locales (esquina superior izquierda +
    * ancho/alto). Los tamaños varían por tipo y, en Granja, por nivel interno. */
   huellas: Record<string, { x: number; y: number; ancho: number; alto: number }>;
@@ -664,27 +720,22 @@ function dibujarEdificioLocal(
   }
 }
 
-/** Pinta una tanda de tramos ya resueltos por el motor. No decide ningún trazado: solo une los puntos que le
- * llegan, que siempre forman segmentos horizontales o verticales sobre las líneas de la rejilla. */
-function dibujarTramos(
+/** Pinta una tanda de tiradas de calle ya resueltas por el motor. No decide ningún trazado: solo rellena los
+ * rectángulos que le llegan. Etapa 6: la calle es SUPERFICIE, así que se rellena en vez de trazarse — que es
+ * justamente lo que el modelo de aristas no podía representar (una línea no tiene ancho). */
+function dibujarTiradas(
   ctx: CanvasRenderingContext2D,
-  tramos: { desde: Point; hasta: Point }[],
+  tiradas: { x: number; y: number; ancho: number; alto: number }[],
   aPantalla: (p: Point) => Point,
-  color: string,
-  grosor: number
+  escala: number,
+  color: string
 ): void {
-  if (tramos.length === 0) return;
-  ctx.strokeStyle = color;
-  ctx.lineWidth = grosor;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  for (const tramo of tramos) {
-    const a = aPantalla(tramo.desde);
-    const b = aPantalla(tramo.hasta);
-    ctx.moveTo(a.x, a.y);
-    ctx.lineTo(b.x, b.y);
+  if (tiradas.length === 0) return;
+  ctx.fillStyle = color;
+  for (const t of tiradas) {
+    const esquina = aPantalla({ x: t.x, y: t.y });
+    ctx.fillRect(esquina.x, esquina.y, t.ancho * escala, t.alto * escala);
   }
-  ctx.stroke();
 }
 
 /**
@@ -735,8 +786,8 @@ export function drawAsentamiento(ctx: CanvasRenderingContext2D, canvas: HTMLCanv
 
   // Trazado: caminos primero (más finos, van por debajo) y calles encima. Los tramos vienen ya resueltos del
   // motor; aquí no se decide por dónde pasa ninguno.
-  dibujarTramos(ctx, caminos, aPantalla, 'rgba(140, 118, 88, 0.55)', 1.5);
-  dibujarTramos(ctx, calles, aPantalla, 'rgba(120, 92, 58, 0.75)', 3);
+  dibujarTiradas(ctx, caminos, aPantalla, escala, 'rgba(140, 118, 88, 0.45)');
+  dibujarTiradas(ctx, calles, aPantalla, escala, 'rgba(120, 92, 58, 0.60)');
 
   // Edificios: cada uno con su huella real (varía por tipo, y por nivel interno en Granja). Se dibujan las
   // Viviendas primero para que las etiquetas de los edificios singulares queden por encima.

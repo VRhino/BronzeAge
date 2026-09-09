@@ -72,7 +72,6 @@ describe('Barracón / Galería de tiro — gate de construcción a nivel 2', () 
       tipo: 'barracon',
       posicion: { x: 18, y: 0 },
       estado: 'activo',
-      ticksRestantes: 0,
       ambito: 'asentamiento',
     };
     // `nivelActual` 1 sobre `nivel` 2 es exactamente la forma de un asentamiento degradado (Doc Fase_0_5 §6.2):
@@ -92,7 +91,7 @@ describe('Barracón / Galería de tiro — gate de construcción a nivel 2', () 
     };
 
     // `lanceros_mimbre`: Barracón, nivelRequerido 1, cuesta armaMadera — la tropa más barata de la vía militar.
-    const trasReclutar = reclutarTropa(degradado, 'jugador-faccion-1-1', 'lanceros_mimbre', 'pesants', 0, 0);
+    const trasReclutar = reclutarTropa(degradado, 'jugador-faccion-1-1', 'faccion-1', 'lanceros_mimbre', 'pesants', 0);
     expect(trasReclutar.escuadrones.some((e) => e.tropaId === 'lanceros_mimbre')).toBe(true);
   });
 });

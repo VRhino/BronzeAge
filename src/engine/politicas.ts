@@ -1,6 +1,7 @@
 import type { Asentamiento, CargoTipo, Faccion, PoliticaActiva } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
-import { POLITICAS, POLITICA_CATALOGO } from '../constants';
+import { minutos, sumar, type Instante } from '../domain/tiempo';
+import { POLITICAS, POLITICA_CATALOGO, type PerfilTrazado } from '../constants';
 import { cargoOcupado } from './pertenencia';
 
 /** Fase A5 — payload de `politica.expirada` (ver `avanzarPoliticas`). */
@@ -41,7 +42,7 @@ export function activarPolitica(
   faccion: Faccion,
   cargo: CargoTipo,
   politicaId: string,
-  tickActual: number,
+  instante: Instante,
   contador = 0
 ): Asentamiento {
   const def = definicion(politicaId);
@@ -60,20 +61,20 @@ export function activarPolitica(
   }
 
   const nueva: PoliticaActiva = {
-    id: `politica-${asentamiento.id}-${tickActual}-${contador}`,
+    id: `politica-${asentamiento.id}-${contador}`,
     politicaId,
     cargo,
-    activadaEnTick: tickActual,
-    expiraEnTick: tickActual + POLITICAS.duracionTicksPorDefecto,
+    activadaEn: instante,
+    expiraEn: sumar(instante, minutos(POLITICAS.duracionMinutosPorDefecto)),
   };
   return { ...asentamiento, politicasActivas: [...asentamiento.politicasActivas, nueva] };
 }
 
 /** Expira políticas cuyo plazo terminó; no hay cancelación anticipada (Doc 4.4). */
-export function avanzarPoliticas(asentamiento: Asentamiento, tickActual: number): { asentamiento: Asentamiento; eventos: EventoCrudo[] } {
+export function avanzarPoliticas(asentamiento: Asentamiento, instante: Instante): { asentamiento: Asentamiento; eventos: EventoCrudo[] } {
   const eventos: EventoCrudo[] = [];
   const vigentes = asentamiento.politicasActivas.filter((p) => {
-    const expirada = tickActual >= p.expiraEnTick;
+    const expirada = instante >= p.expiraEn;
     if (expirada) {
       const def = definicion(p.politicaId);
       eventos.push({
@@ -95,7 +96,9 @@ type CampoFactor =
   | 'factorCostoReclutamiento'
   | 'factorProduccionTrigo'
   | 'factorCapacidadCaravana'
-  | 'factorVelocidadCaravana';
+  | 'factorVelocidadCaravana'
+  | 'factorRecaudacion'
+  | 'factorCrecimientoPoblacion';
 
 function productoFactor(asentamiento: Asentamiento, campo: CampoFactor): number {
   return asentamiento.politicasActivas.reduce((acc, activa) => {
@@ -132,6 +135,13 @@ function sumaFactorPolitica(asentamiento: Asentamiento, campo: string): number {
 /** "Ampliación de Flota" (Tesorero): cupo extra de caravanas propias, sumado al que ya da el nivel de Mercado. */
 export const cupoCaravanaExtra = (a: Asentamiento): number => sumaFactorPolitica(a, 'cupoCaravanaExtra');
 
+/** "Presión Fiscal" (Tesorero, bloque "economía del oro"): multiplica la recaudación de oro por población
+ * (`recaudacionOro`, engine/population.ts). 1 si no hay ninguna activa. */
+export const factorRecaudacion = (a: Asentamiento): number => productoFactor(a, 'factorRecaudacion');
+/** "Presión Fiscal" (Tesorero): frena el crecimiento de las 3 clases de población — es el downside de subir
+ * impuestos, aplicado en `crecerPoblacion` (engine/population.ts) mientras no exista un medidor de felicidad. */
+export const factorCrecimientoPoblacion = (a: Asentamiento): number => productoFactor(a, 'factorCrecimientoPoblacion');
+
 /** Campos FLAG (a diferencia de `productoFactor`/`sumaFactorPolitica`/`valorMaximoPolitica`): true si CUALQUIER
  * política activa lo declara `true`, sin escalar ni sumar nada — sirve para políticas de tipo interruptor. */
 function algunaPoliticaActiva(asentamiento: Asentamiento, campo: string): boolean {
@@ -145,3 +155,22 @@ function algunaPoliticaActiva(asentamiento: Asentamiento, campo: string): boolea
  * sitúan cerca de la fuente de sus insumos en vez del primer hueco libre (ver `sitioConcentricoLineaProduccion`,
  * engine/construction.ts). */
 export const lineasProduccionPriorizadas = (a: Asentamiento): boolean => algunaPoliticaActiva(a, 'lineasProduccionPriorizadas');
+
+/**
+ * Perfil de trazado impuesto por una ordenanza activa del Maestro de Obras (doc trazado §E6.23), o `null` si
+ * no hay ninguna — en cuyo caso el asentamiento usa su tradición local (`resolverPerfil`, engine/trazado.ts).
+ *
+ * Devuelve el PRIMERO que encuentre, no un producto ni una suma: un perfil es una elección discreta, no un
+ * factor. En la práctica nunca hay dos, porque las cuatro ordenanzas viven en el único slot de `maestroObras`
+ * — pero el Gobernador tiene pool completa y varios slots, así que la ambigüedad es alcanzable y conviene
+ * resolverla de forma determinista (orden del catálogo) en vez de dejarla al azar del array.
+ */
+export function perfilTrazadoDePolitica(asentamiento: Partial<Pick<Asentamiento, 'politicasActivas'>>): PerfilTrazado | null {
+  const activas = asentamiento.politicasActivas;
+  if (!activas || activas.length === 0) return null;
+  for (const def of POLITICA_CATALOGO) {
+    const perfil = (def as { perfilTrazado?: PerfilTrazado }).perfilTrazado;
+    if (perfil && activas.some((a) => a.politicaId === def.id)) return perfil;
+  }
+  return null;
+}

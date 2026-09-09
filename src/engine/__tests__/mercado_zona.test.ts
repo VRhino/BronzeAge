@@ -12,7 +12,7 @@ import { cupoCaravanas, tieneMercadoActivo } from '../asentamientoQuery';
 import { anadirEdificioManualmente, ConstruccionManualInvalidaError } from '../construction';
 import { avanzarSimulacion } from '../simulation';
 import { createRng } from '../../worldgen';
-import { contextoDeTest, crearEstadoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
+import { contextoDeTest, crearEstadoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instanteDeTest } from './fixtures';
 
 const SEED = 42;
 
@@ -39,7 +39,6 @@ function conMercado(base: Asentamiento, nivelInterno: number): Asentamiento {
     tipo: 'mercado',
     posicion: { x: 30, y: 0 },
     estado: 'activo',
-    ticksRestantes: 0,
     ambito: 'asentamiento',
     nivelInterno,
   };
@@ -51,7 +50,6 @@ function conMercado(base: Asentamiento, nivelInterno: number): Asentamiento {
         tipo: 'puestoMercado',
         posicion: { x: 30 + puestos.length + 1, y: 0 },
         estado: 'activo',
-        ticksRestantes: 0,
         ambito: 'asentamiento',
         nivelInterno: forma,
       });
@@ -70,10 +68,11 @@ function puestos(asentamiento: Asentamiento): Edificio[] {
 }
 
 describe('Mercado como zona de varias piezas', () => {
-  it('la composición por nivel es 3 / 10 / 12 piezas', () => {
-    expect(piezasEsperadas(1)).toBe(3);
-    expect(piezasEsperadas(2)).toBe(10);
-    expect(piezasEsperadas(3)).toBe(12);
+  it('la composición por nivel es 6 / 13 / 17 piezas', () => {
+    // Composición fijada en el playtest del laboratorio (2026-08-31) — ver MERCADO_PUESTOS_POR_NIVEL.
+    expect(piezasEsperadas(1)).toBe(6);
+    expect(piezasEsperadas(2)).toBe(13);
+    expect(piezasEsperadas(3)).toBe(17);
   });
 
   it('todas las formas de puesto declaradas existen en la tabla de formas', () => {
@@ -128,7 +127,7 @@ describe('Mercado como zona de varias piezas', () => {
       tipo: 'mercado',
       posicion: { x: 30, y: 0 },
       estado: 'en_construccion',
-      ticksRestantes: 1,
+      completaEn: instanteDeTest(1),
       ambito: 'asentamiento',
       nivelInterno: 1,
     };

@@ -4,7 +4,7 @@
 // cada tick dentro de `avanzarSimulacion`); el ataque MANUAL de un jugador contra un campamento vive en
 // `engine/combate.ts` (`atacarCampamentoBandidos`), junto al resto de resolución de combate.
 
-import type { Asentamiento, Caravana, CampamentoBandido, Point, ZonaBosque, ZonaInfluencia } from '../domain/types';
+import type { Asentamiento, Caravana, CampamentoBandido, Ejercito, Point, ZonaBosque, ZonaInfluencia } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
 
 /** Fase A5 — payloads de los eventos de este subsistema (ver `avanzarSpawnBandidos`/`avanzarAtaquesBandidos`). */
@@ -22,7 +22,10 @@ export interface PayloadCaravanaEscapa {
 import type { Mapa } from '../world/mapa';
 import type { RandomFn } from '../worldgen';
 import { CAMPAMENTOS_BANDIDOS, MILITAR } from '../constants';
+import type { Instante } from '../domain/tiempo';
 import { pointInPolygon } from './zones';
+import { aplicarBajas, poderTotal } from './combate';
+import type { EscoltaDevuelta } from './caravanas';
 
 function distancia(a: Point, b: Point): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
@@ -66,14 +69,14 @@ function bosqueNoReclamadoMasCercano(mapa: Mapa, zonas: ZonaInfluencia[], ocupad
  */
 export function avanzarSpawnBandidos(
   campamentos: CampamentoBandido[],
-  proximoSpawnEnTick: number,
+  proximoSpawnEn: Instante,
   zonas: ZonaInfluencia[],
   asentamientos: Asentamiento[],
   mapa: Mapa,
-  tickActual: number,
+  instante: Instante,
   contador = 0
 ): { campamentos: CampamentoBandido[]; eventos: EventoCrudo[] } {
-  if (campamentos.length >= asentamientos.length || tickActual < proximoSpawnEnTick) {
+  if (campamentos.length >= asentamientos.length || instante < proximoSpawnEn) {
     return { campamentos, eventos: [] };
   }
   const asentamientoObjetivo = asentamientoSinCampamento(asentamientos, campamentos);
@@ -84,7 +87,7 @@ export function avanzarSpawnBandidos(
   if (!bosque) return { campamentos, eventos: [] };
 
   const nuevo: CampamentoBandido = {
-    id: `campamento-${tickActual}-${contador}`,
+    id: `campamento-${contador}`,
     posicion: bosque.centro,
     bosqueId: bosque.id,
     asentamientoId: asentamientoObjetivo.id,
@@ -104,40 +107,84 @@ export function avanzarSpawnBandidos(
 
 /**
  * Campamentos de bandidos atacan caravanas que pasen cerca (Doc 1.9/3.10) — mismo tipo de resolución que
- * `interceptarCaravana` (engine/combate.ts): poder fijo del atacante con jitter contra la defensa base de
+ * `interceptarCaravanaConEjercito` (engine/combate.ts): poder del atacante con jitter contra la defensa base de
  * caravana, sin escolta de jugadores modelada en detalle. A diferencia de la intercepción entre Facciones,
  * el bandido no tiene almacén propio que reciba la carga capturada — si gana, la caravana se pierde por
  * completo (Doc 3.10: "se elimina si es capturada"), sin transferencia a nadie.
  */
-export function avanzarAtaquesBandidos(campamentos: CampamentoBandido[], caravanas: Caravana[], rng: RandomFn): { caravanas: Caravana[]; eventos: EventoCrudo[] } {
-  if (campamentos.length === 0) return { caravanas, eventos: [] };
+export function avanzarAtaquesBandidos(
+  campamentos: CampamentoBandido[],
+  caravanas: Caravana[],
+  rng: RandomFn,
+  /** Ejércitos en campaña: una caravana que va enganchada a uno se defiende con el poder de la COLUMNA, no
+   * con su defensa base (Doc 5.13.3, decisión del usuario 2026-09-04). Sin esto, escoltar no protegía de lo
+   * único que hoy ataca caravanas en el mundo. */
+  ejercitos: readonly Ejercito[] = [],
+  instante?: Instante
+): { caravanas: Caravana[]; eventos: EventoCrudo[]; escoltasDevueltas: EscoltaDevuelta[] } {
+  if (campamentos.length === 0) return { caravanas, eventos: [], escoltasDevueltas: [] };
   const eventos: EventoCrudo[] = [];
-  const perdidas = new Set<string>();
+  const escoltasDevueltas: EscoltaDevuelta[] = [];
 
+  const escoltaEjercitoDe = (caravanaId: string): Ejercito | undefined =>
+    ejercitos.find((e) => e.caravanasAdjuntasIds.includes(caravanaId));
+
+  const resultado: Caravana[] = [];
   for (const caravana of caravanas) {
-    if (caravana.estado === 'disponible') continue; // parada en origen, no viajando — nada que interceptar.
+    // Parada en una plaza (disponible en su origen; preparándose para un envío manual, Doc 3.13.3; o
+    // 'aparcada' en una plaza anfitriona tras guarnecer, Ocupacion §2.3d) — nada que interceptar.
+    if (caravana.estado === 'disponible' || caravana.estado === 'preparando' || caravana.estado === 'aparcada') {
+      resultado.push(caravana);
+      continue;
+    }
     const campamentoCercano = campamentos.find(
       (c) => distancia(c.posicion, caravana.posicionActual) <= CAMPAMENTOS_BANDIDOS.radioAtaqueCaravana
     );
-    if (!campamentoCercano) continue;
+    if (!campamentoCercano) {
+      resultado.push(caravana);
+      continue;
+    }
+
+    const conEscoltaSinHeroe = (caravana.escolta?.length ?? 0) > 0 && instante !== undefined;
+
+    // Contra qué defensa tira el bandido, de más a menos protegida:
+    //  - escoltada por un EJÉRCITO (Doc 5.13.3): el bandido choca con la columna, `poderTotal` de sus escuadrones.
+    //  - escolta SIN HÉROE (Doc 3.13.4): `poderTotal` de los escuadrones cedidos a la caravana.
+    //  - sin nada: la defensa base fija (Doc 3.10) — frena a un jugador solo y nada más.
+    const escoltaEjercito = escoltaEjercitoDe(caravana.id);
+    const defensa =
+      escoltaEjercito && instante !== undefined
+        ? poderTotal(escoltaEjercito.escuadrones, instante, true)
+        : conEscoltaSinHeroe
+          ? poderTotal(caravana.escolta!, instante!, true)
+          : MILITAR.defensaBaseCaravana;
 
     const jitter = 1 + (rng() * 2 - 1) * MILITAR.varianzaCombate;
-    const gana = campamentoCercano.poder * jitter > MILITAR.defensaBaseCaravana;
+    const gana = campamentoCercano.poder * jitter > defensa;
+
+    // La escolta sin héroe sufre bajas en los dos casos (ligeras si aguanta, fuertes si cae) y vuelve a casa
+    // con el debuff de derrota — lo que se pierde son la carga y los carros, no la tropa (Doc 3.13.6).
+    const escoltaTrasCombate = conEscoltaSinHeroe ? aplicarBajas(caravana.escolta!, gana ? 0.25 : 0.05, !gana, instante!) : undefined;
+
     if (gana) {
-      perdidas.add(caravana.id);
       eventos.push({
         codigo: 'bandidos.caravana_interceptada',
         mensaje: `Un campamento de bandidos (${campamentoCercano.id}) intercepta y destruye la caravana ${caravana.id}.`,
         payload: { campamentoId: campamentoCercano.id, caravanaId: caravana.id } satisfies PayloadCaravanaInterceptada,
       });
-    } else {
-      eventos.push({
-        codigo: 'bandidos.caravana_escapa',
-        mensaje: `La caravana ${caravana.id} escapa de un campamento de bandidos cercano.`,
-        payload: { caravanaId: caravana.id } satisfies PayloadCaravanaEscapa,
-      });
+      // La caravana se elimina (Doc 3.10). Si llevaba escolta sin héroe, los supervivientes vuelven a la
+      // guarnición del origen (`simulation.ts` los mete); la tropa no se pierde con el carro.
+      if (escoltaTrasCombate) escoltasDevueltas.push({ asentamientoId: caravana.origenAsentamientoId, escuadrones: escoltaTrasCombate });
+      continue;
     }
+
+    eventos.push({
+      codigo: 'bandidos.caravana_escapa',
+      mensaje: `La caravana ${caravana.id} escapa de un campamento de bandidos cercano.`,
+      payload: { caravanaId: caravana.id } satisfies PayloadCaravanaEscapa,
+    });
+    resultado.push(escoltaTrasCombate ? { ...caravana, escolta: escoltaTrasCombate } : caravana);
   }
 
-  return { caravanas: perdidas.size === 0 ? caravanas : caravanas.filter((c) => !perdidas.has(c.id)), eventos };
+  return { caravanas: resultado, eventos, escoltasDevueltas };
 }

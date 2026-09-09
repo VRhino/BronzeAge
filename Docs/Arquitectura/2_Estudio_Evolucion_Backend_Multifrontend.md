@@ -300,7 +300,8 @@ Los sistemas con mayor impacto serán producción/consumo, población, hambre, m
 1. Añadir usuarios, membresías y roles.
 2. Validar comandos según actor, facción, asentamiento y cargo.
 3. Añadir WebSocket/SSE, reconexión e idempotencia.
-4. Crear frontend de jugador con proyecciones restringidas.
+4. Servir proyecciones por audiencia (nunca el estado completo a un jugador). El frontend de jugador en sí
+   queda fuera del alcance de este repo — se construye en un repo de interfaz aparte.
 
 ### Fase D: conversión temporal total
 

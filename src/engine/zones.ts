@@ -140,7 +140,7 @@ export function posicionLibreParaFundar(p: Point, asentamientos: Asentamiento[])
  * propio), pero rinden como si estuvieran sobre el mejor suelo que la zona de influencia toca en el mapa
  * general: se muestrea el radio potencial (mismo patrón que la antigua colocación por fertilidad),
  * quedándose con la fertilidad MÁS ALTA de los puntos que caen dentro del polígono de zona. Ese único valor
- * lo comparten TODAS las Granjas del asentamiento (`avanzarConstruccion`/`produccionPorTick`).
+ * lo comparten TODAS las Granjas del asentamiento (`avanzarConstruccion`/`produccionPorMinuto`).
  *
  * `zonaPoligono` vacío (sin zona calculada) o sin ningún punto dentro cae al valor del propio centro —
  * nunca devuelve 0 por falta de muestras.

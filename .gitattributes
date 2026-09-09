@@ -1,0 +1,9 @@
+# Los hooks de husky los ejecuta `sh`, que NO tolera CRLF: un `\r` al final de línea
+# entra dentro del último token y rompe comparaciones y `exit`. Este repo trabaja con
+# `core.autocrlf=true`, así que sin esta regla un clon en Windows recibiría los hooks
+# con CRLF y fallarían en cuanto tuvieran más de una línea.
+#
+# Deliberadamente acotado a scripts de shell: no se toca el final de línea del resto
+# del repo, que hoy se normaliza solo con autocrlf.
+.husky/** text eol=lf
+*.sh text eol=lf

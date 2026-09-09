@@ -14,7 +14,9 @@ import type { DirectorioDeAdministradores } from '../identidad/administradoresGl
 import type { RegistroDePartidas } from '../registroDePartidas';
 import type { RunnerDePartida } from '../runnerDePartida';
 import type { HubDeDifusion } from '../difusion/hub';
-import { idDeMapa } from '../../session/estado';
+import type { RegistroDeAuditoria } from '../auditoria';
+import { idDeMapa, instanteDeTick } from '../../session/estado';
+import type { Instante } from '../../domain/tiempo';
 
 export interface DependenciasDeRutas {
   identidad: ContextoAutenticacion;
@@ -24,6 +26,9 @@ export interface DependenciasDeRutas {
   ahora: () => string;
   /** Conexiones WebSocket activas (Fase C5) — a quién difundir tras un comando o un tick. */
   hub: HubDeDifusion;
+  /** Registro de auditoría de comandos (Fase E2). Se escribe desde `ejecutarComandoHttp`, que es el único
+   * punto por el que pasan TODOS los comandos de las dos superficies, aceptados y rechazados. */
+  auditoria: RegistroDeAuditoria;
 }
 
 export interface ParametrosGameId {
@@ -32,7 +37,10 @@ export interface ParametrosGameId {
 
 export interface ResumenPartida {
   gameId: string;
-  tick: number;
+  /** Instante de MUNDO de la partida (doc 10) — `instanteDeTick(estado.tick)`, derivado, no almacenado. La
+   * ÚNICA referencia temporal del contrato (Fase D cerrada): viaja en TODA respuesta con resumen para que el
+   * cliente sepa la hora de mundo. El `tick` interno del motor no sale de aquí. */
+  instante: Instante;
   version: number;
   /** Identidad del mapa vigente (Fase C11, doc 9) — nunca el mapa en sí. Presente en TODA respuesta que
    * incluya un resumen (crear partida, tick, comando) para que el cliente sepa, sin una petición aparte, si
@@ -43,7 +51,12 @@ export interface ResumenPartida {
 
 export function resumenDe(runner: RunnerDePartida): ResumenPartida {
   const estado = runner.getState();
-  return { gameId: runner.gameId, tick: estado.tick, version: estado.version, mapaId: idDeMapa(estado.mapa) };
+  return {
+    gameId: runner.gameId,
+    instante: instanteDeTick(estado.tick),
+    version: estado.version,
+    mapaId: idDeMapa(estado.mapa),
+  };
 }
 
 export function mensajeDe(err: unknown): string {

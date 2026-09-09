@@ -8,13 +8,20 @@ import { crearFaccion, type PayloadFaccionCreada } from '../comandos/crearFaccio
 import { unirseAFaccion, type PayloadFaccionUnion } from '../comandos/unirseAFaccion';
 import { dejarFaccion, type PayloadFaccionAbandonada } from '../comandos/dejarFaccion';
 import { asignarRey } from '../comandos/cargos';
-import { CIUDADANIA } from '../../constants';
+import { CIUDADANIA, SIMULACION } from '../../constants';
 
-const MOMENTO = '2026-01-01T00:00:00.000Z';
-const OPC = { momento: MOMENTO, actor: 'jugador-a' };
+const OPC = { actor: 'jugador-a' };
 
-function momentoMasDias(dias: number): string {
-  return new Date(new Date(MOMENTO).getTime() + dias * 24 * 60 * 60 * 1000).toISOString();
+const TICKS_POR_DIA = (24 * 60 * 60 * 1000) / SIMULACION.duracionTickMs;
+
+/**
+ * Adelanta la partida `dias` de MUNDO (Fase D: 1 tick = 1 minuto real, así que el tiempo de mundo es función
+ * del tick). Se hace por `exportar`/`importar` en vez de ejecutar `dias × 1440` ticks reales — el cooldown
+ * solo mira `instanteDeTick(estado.tick)`, no lo que pasó entre medias.
+ */
+function adelantarDias(sesion: GameSession, dias: number): GameSession {
+  const exportada = sesion.exportar();
+  return GameSession.importar({ ...exportada, state: { ...exportada.state, tick: dias * TICKS_POR_DIA } });
 }
 
 describe('crearFaccion — ciudadanía automática', () => {
@@ -56,26 +63,24 @@ describe('crearFaccion — un jugador, una Facción', () => {
 });
 
 describe('crearFaccion — cooldown tras abandonar', () => {
-  it(`rechaza crear antes de que pasen los ${CIUDADANIA.cooldownCreacionFaccionDias} días desde la última salida`, () => {
-    const sesion = GameSession.crear('t', { seed: 1 });
+  it(`rechaza crear antes de que pasen los ${CIUDADANIA.cooldownCreacionFaccionDias} días de MUNDO desde la última salida`, () => {
+    let sesion = GameSession.crear('t', { seed: 1 });
     sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, OPC);
     sesion.ejecutar(dejarFaccion, {}, OPC);
 
-    const reintento = sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, { ...OPC, momento: momentoMasDias(1) });
+    sesion = adelantarDias(sesion, 1);
+    const reintento = sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, OPC);
     expect(reintento.ok).toBe(false);
     expect(reintento.codigoError).toBe('faccion.cooldown_creacion');
   });
 
   it('permite crear de nuevo justo al cumplirse el cooldown', () => {
-    const sesion = GameSession.crear('t', { seed: 1 });
+    let sesion = GameSession.crear('t', { seed: 1 });
     sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, OPC);
     sesion.ejecutar(dejarFaccion, {}, OPC);
 
-    const reintento = sesion.ejecutar(
-      crearFaccion,
-      { nombre: 'Troya' },
-      { ...OPC, momento: momentoMasDias(CIUDADANIA.cooldownCreacionFaccionDias) }
-    );
+    sesion = adelantarDias(sesion, CIUDADANIA.cooldownCreacionFaccionDias);
+    const reintento = sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, OPC);
     expect(reintento.ok).toBe(true);
   });
 

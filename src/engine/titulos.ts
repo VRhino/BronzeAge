@@ -1,4 +1,4 @@
-import type { Asentamiento, Faccion, RelacionPolitica, Titulo } from '../domain/types';
+import type { Asentamiento, Ejercito, Faccion, RelacionPolitica, Titulo } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
 
 /** Fase A5 — payloads de los eventos de este subsistema (ver `narrarCambiosDeTitulo`). */
@@ -23,7 +23,12 @@ import { computeLigas } from './liga';
  * "General con más victorias" queda fuera: exigiría rastrear estadísticas por jugador individual, un nivel de
  * detalle que el modelo actual (centrado en Facción/Asentamiento) no lleva y que la lista abierta no obliga a cubrir.
  */
-export function calcularTitulos(facciones: Faccion[], asentamientos: Asentamiento[], relaciones: RelacionPolitica[]): Titulo[] {
+export function calcularTitulos(
+  facciones: Faccion[],
+  asentamientos: Asentamiento[],
+  relaciones: RelacionPolitica[],
+  ejercitos: readonly Ejercito[] = []
+): Titulo[] {
   if (facciones.length === 0) return [];
   const titulos: Titulo[] = [];
 
@@ -40,8 +45,14 @@ export function calcularTitulos(facciones: Faccion[], asentamientos: Asentamient
   const masRica = [...facciones].sort((a, b) => oroPorFaccion(b) - oroPorFaccion(a))[0]!;
   titulos.push({ nombre: 'Mayor poder económico', poseedorId: masRica.id, valorMetrica: oroPorFaccion(masRica) });
 
+  // Guarnición + campo (Doc 5.12): desde que los escuadrones se van DE VERDAD del asentamiento al salir de
+  // campaña, contar solo `asentamiento.escuadrones` haría que el título cambiara de manos cada vez que
+  // alguien marcha —y que los Aedas narraran un `titulo.cambia_manos` que no ha ocurrido—. El ejército no
+  // desaparece por estar fuera de casa.
+  const soldados = (escuadrones: readonly { cantidad: number }[]) => escuadrones.reduce((acc, e) => acc + e.cantidad, 0);
   const tropasPorFaccion = (f: Faccion) =>
-    porFaccion(f).reduce((acc, a) => acc + a.escuadrones.reduce((acc2, e) => acc2 + e.cantidad, 0), 0);
+    porFaccion(f).reduce((acc, a) => acc + soldados(a.escuadrones), 0) +
+    ejercitos.filter((e) => e.faccionId === f.id).reduce((acc, e) => acc + soldados(e.escuadrones), 0);
   const mayorEjercito = [...facciones].sort((a, b) => tropasPorFaccion(b) - tropasPorFaccion(a))[0]!;
   titulos.push({ nombre: 'Ejército más grande', poseedorId: mayorEjercito.id, valorMetrica: tropasPorFaccion(mayorEjercito) });
 

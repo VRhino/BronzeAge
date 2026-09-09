@@ -31,11 +31,17 @@ export function asegurarCaminoComercial(
 ): CaminoComercial[] {
   if (buscarCamino(caminos, asentamientoA.id, asentamientoB.id)) return [...caminos];
 
+  // Sin ruta por tierra no hay camino que trazar: el agua es infranqueable y una recta de reserva sería un
+  // camino comercial dibujado sobre el mar. Se devuelve la lista intacta — quien comercia por mar necesita
+  // comercio marítimo, que está fuera de alcance (Doc 3.11).
+  const puntos = calcularRuta(mapa, asentamientoA.posicion, asentamientoB.posicion);
+  if (!puntos) return [...caminos];
+
   const nuevo: CaminoComercial = {
     id: `camino-${asentamientoA.id}-${asentamientoB.id}`,
     asentamientoAId: asentamientoA.id,
     asentamientoBId: asentamientoB.id,
-    puntos: calcularRuta(mapa, asentamientoA.posicion, asentamientoB.posicion),
+    puntos,
   };
   return [...caminos, nuevo];
 }

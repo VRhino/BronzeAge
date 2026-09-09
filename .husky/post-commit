@@ -1,0 +1,38 @@
+# Mantiene fresco el grafo de graphify de `src/` tras cada commit que lo toque.
+#
+# Va en `.husky/` y NO en `.git/hooks/` porque este repo tiene `core.hooksPath=.husky/_`:
+# un hook en `.git/hooks/` no lo ejecutaría git nunca. Por eso tampoco sirve aquí
+# `graphify hook install`, que escribe en `.git/hooks` sin mirar `core.hooksPath`.
+#
+# Reglas de convivencia, en orden:
+#   1. Nunca hace ruido ni falla un commit. Husky corre esto con `sh -e` y avisa si sale
+#      distinto de 0, así que todo va guardado y termina en `exit 0`.
+#   2. Si graphify no está instalado, no pasa nada. El grafo es una herramienta local,
+#      no un requisito para contribuir: quien clone sin graphify no nota que existe.
+#   3. Solo trabaja si el commit tocó `src/`. Cambios en Docs/ o en el cliente no
+#      invalidan el grafo, que se construye solo sobre `src/`.
+#   4. Salidas ignoradas por git (`graphify-out/`), así que esto no ensucia el árbol.
+#
+# Para saltárselo en un commit puntual:  GRAPHIFY_SKIP_HOOK=1 git commit ...
+
+[ "${GRAPHIFY_SKIP_HOOK:-0}" = "1" ] && exit 0
+
+# Sin graphify no hay nada que hacer.
+command -v graphify >/dev/null 2>&1 || exit 0
+
+# El primer commit del repo no tiene padre contra el que comparar.
+git rev-parse --verify HEAD~1 >/dev/null 2>&1 || exit 0
+
+# ¿Tocó este commit algo de src/?
+git diff --name-only HEAD~1 HEAD -- src/ | grep -q . || exit 0
+
+# Extracción AST incremental: sin LLM, sin red y con caché en src/graphify-out/cache.
+# Si falla (p. ej. la guarda anti-encogimiento cuando se borra código), se calla y
+# deja el grafo anterior intacto: reconstruir a mano es `graphify update src --force`.
+if graphify update src >/dev/null 2>&1; then
+  echo "graphify: grafo de src/ actualizado"
+else
+  echo "graphify: no se pudo actualizar el grafo (se conserva el anterior); revisa con 'graphify update src'"
+fi
+
+exit 0

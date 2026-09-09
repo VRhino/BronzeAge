@@ -15,44 +15,210 @@ Todo lo de aquí es diseño acordado, no implementado. Las tareas derivadas est�
 
 ## 1. Medición de escala del motor actual
 
+> **Re-medida el 2026-09-05 (Fase E3)**, que es lo que la nota al pie de la medición de agosto pedía hacer al
+> cerrar la Fase D y nunca se hizo. Metodología idéntica para que las cifras sean comparables y no solo
+> nuevas; script committeado en [`scripts/medicion-escala.ts`](../../scripts/medicion-escala.ts), varias
+> pasadas con varianza por debajo del 1 %.
+>
+> **Optimizada acto seguido, en cuatro pasadas**: esa medición destapó que el motor recalculaba en cada tick
+> cosas que solo cambian al construir —y que buscaba dónde poner edificios que no podía pagar—, y corregirlo
+> dejó el tick **7,6× más rápido** con el escalado pasando de O(n^1.5) a O(n^0.94), lineal. La tabla trae las tres columnas —agosto, septiembre antes de optimizar, septiembre
+> después— porque la comparación honesta necesita las tres: sin la del medio no se ve que el motor había
+> engordado, y sin la última no se ve cuánto de ese engorde era trabajo repetido.
+
 Medido sobre el motor real (`avanzarSimulacion`) en la máquina de desarrollo, fundando N asentamientos con
 una Facción cada uno (el cap de fundación de nivel 1 es 1 asentamiento por Facción), 50 ticks de calentamiento
 y promediando 30 ticks:
 
-| Asentamientos vivos | ms/tick | Estado serializado |
+| Asentamientos vivos | ms/tick (ago.) | ms/tick (sep., antes) | **ms/tick (sep., optimizado)** | Estado |
+|---|---|---|---|---|
+| 10 | 5.5 ms | 16.7 ms | **6.4 ms** | 72 KB |
+| 16 | 14.4 ms | 37.5 ms | **9.0 ms** | 110 KB |
+| 33 | 25.7 ms | 96.4 ms | **16.5 ms** | 225 KB |
+| 52 | 63.9 ms | 166.1 ms | **29.7 ms** | 369 KB |
+| 70 | — | 287.9 ms | **44.1 ms** | 498 KB |
+| 100 | — | 471.0 ms | **61.9 ms** | 753 KB |
+
+**Escalado: O(n^0.94)**, desde O(n^1.42) antes de optimizar y O(n^1.5) en agosto. El exponente cayendo hasta
+lo lineal es lo importante, más que las cifras: **lo superlineal casi no era el coste de simular más ciudades,
+era el mismo trabajo repetido**, y ese trabajo crecía con el tamaño de cada ciudad. Escalar a más
+asentamientos vuelve a costar proporcionalmente lo que cuesta cada uno.
+
+Las dos filas nuevas, 70 y 100, son las que de verdad importan: son el objetivo de 500 jugadores según la
+corrección de más abajo, no una extrapolación.
+
+### Qué cambió, y qué no
+
+- **Entre agosto y septiembre el tick se volvió ~2,6-3,8× más lento** a igualdad de asentamientos. No era
+  deriva de medición: era trabajo nuevo de verdad, el que añadieron el trazado urbano, las murallas, el
+  movimiento de ejércitos y la memoria de niebla.
+- **El estado creció solo ~1,4-1,5×**, bastante menos que el tick. O sea que lo que se había encarecido era el
+  CÁLCULO por tick, no la cantidad de datos que se arrastra.
+- **La conclusión cualitativa de agosto sigue en pie**: el cuello de botella es la CPU del tick. Serializar el
+  estado cuesta **el 2,7 % de un tick** a 100 asentamientos (1,7 ms frente a 61,9 ms) — el porcentaje ha subido
+  solo porque el tick se ha hecho más barato, no porque persistir cueste más. Cualquier debate de rendimiento
+  sobre framework HTTP o motor de persistencia sigue siendo el margen equivocado.
+
+### La red de calles: el diagnóstico y su arreglo (2026-09-05)
+
+Perfilado con `--cpu-prof` a 100 asentamientos durante 80 ticks, midiendo tiempo INCLUSIVO (no self):
+`calcularRedDeCalles` era el **47,1 % del tick**, con `sitioEnBarrio` → `sitiosParaTipo` → `sueloOcupado` como
+llamador dominante (36,7 % del tick entero) y `asegurarAnclaPara` muy por detrás (7,7 %).
+
+Lo que la hacía cara **no era la frecuencia** —se llama ~1 vez por asentamiento y tick— sino que el **81,2 %
+de esas llamadas recalculaban con entradas idénticas**. El reparto es lo que decidió la solución:
+
+| | |
+|---|---|
+| Recálculos **entre ticks** (el asentamiento no había cambiado nada) | **61,6 %** |
+| Recálculos **dentro** del mismo tick | 19,6 % |
+| Cálculos genuinamente nuevos | 18,8 % |
+
+Como el grueso está *entre* ticks, no bastaba con calcular una vez por asentamiento y pasar la red hacia
+abajo: eso solo habría recuperado el 19,6 %. Hacía falta una caché que sobreviva al tick.
+
+**Por contenido, no por referencia.** El patrón que ya usa `RunnerDePartida.cacheGeometria` —memoizar por
+identidad de referencia del array— aquí no sirve: medido, la referencia de `edificios` se repite el **0 %** de
+las veces, porque el array se reconstruye en cada paso aunque su contenido sea idéntico.
+
+**Clave exacta, no hash.** Construir la clave y consultar el `Map` cuesta 3,88 µs frente a 1885 µs del replay
+— **486× más barato**. Con esa holgura no había razón para aceptar riesgo de colisión: una colisión daría una
+red de calles equivocada en silencio, y el trazado decide dónde cabe cada edificio, así que un desvío de una
+celda diverge la partida entera.
+
+**Por qué esto no rompe el replay dependiente del orden.** Una versión anterior de este documento anotaba la
+memoización como "arriesgada" por eso. Era una cautela mal dirigida: el orden importa al CALCULAR, no al
+cachear. La clave es el contenido ordenado exacto, así que un acierto devuelve exactamente lo que devolvería
+el replay — el orden sigue siendo load-bearing y ninguna decisión de trazado cambia.
+
+**Verificado con la prueba fuerte, no solo con tests de unidad**: 150 ticks, 25 asentamientos, 441 edificios,
+seis sellos SHA-256 del estado COMPLETO — **idénticos byte a byte** con y sin memoización. Más
+`snapshot_baseline.test.ts` (que congela el mundo en los ticks 1/10/25/50/100) sin moverse, y
+`engine/__tests__/cacheTrazado.test.ts` para los invariantes de la caché (el orden y el id del asentamiento
+forman parte de la clave; el techo de entradas se respeta).
+
+**Lo que NO arregla**: el 18,8 % de cálculos genuinamente nuevos sigue ahí — para eso haría falta un fold
+incremental, mucho más invasivo.
+
+### Corrección: dónde se va el tick de verdad (2026-09-05, misma sesión)
+
+Una versión anterior de esta sección daba `engine/zones.ts` como "el otro gran consumidor, ≈27 % del tick".
+**Era falso, y por un error de método que conviene dejar escrito**: el perfil medía el proceso ENTERO, y el
+*setup* del banco de medición —`posicionRecomendable`, una fixture de test que barre hasta 2 500 posiciones de
+la rejilla llamando a `evaluarViabilidadFundacion` → `computeZonaInfluencia` para colocar cada asentamiento—
+era el 65 % de las muestras. Ese coste no ocurre nunca en una partida real: se paga al fundar, no cada tick.
+Re-atribuido contando solo lo que cuelga de `avanzarSimulacion`:
+
+| Archivo | % del tick, antes de memoizar | % del tick, después |
 |---|---|---|
-| 10 | 5.5 ms | 52 KB |
-| 16 | 14.4 ms | 80 KB |
-| 33 | 25.7 ms | 161 KB |
-| 52 | 63.9 ms | 246 KB |
+| `engine/trazado.ts` | **87,4 %** | **61,4 %** |
+| `world/mapa.ts` | 6,6 % | **21,0 %** |
+| `engine/zones.ts` | 1,2 % | 3,3 % |
 
-**Escalado: O(n^1.5)** — superlineal pero no cuadrático. Extrapolando a ~500 asentamientos: **~1.9 s por tick**
-y **~2.4 MB de estado**.
+`zones.ts` **nunca fue un problema**. Y `trazado.ts` sigue siendo el dominante tras la memoización, pero ya no
+por el replay de la red (`calcularRedDeCalles` baja al 2,8 % del tick): lo que queda es la BÚSQUEDA DE
+COLOCACIÓN (`sitiosParaTipo`, `candidatosLibres`, `corredorHastaLaRed`, `sitiosPorAtraccionDura`).
 
-> ⚠️ **Corrección posterior (2026-08-24): 500 jugadores NO son 500 asentamientos.** Un asentamiento aloja
-> `CIUDADANIA.casasBasePorAsentamiento` = 5 residentes (+2 por nivel adicional), así que el objetivo de 500
-> jugadores cabe en **~70-100 asentamientos** → **~170-300 ms por tick**, no 1.9 s. La cifra de 500
-> asentamientos corresponde a una partida madura, con las facciones ya expandidas
-> (`CAP_FUNDACION_POR_NIVEL`), no al punto de partida. Las conclusiones cualitativas de abajo no cambian (el
-> cuello de botella sigue siendo la CPU del tick), pero la **urgencia** del problema del tick bloqueante sí:
-> ~200 ms es tolerable, 1.9 s no. Ver [7_Diseno_GameSession.md](7_Diseno_GameSession.md) §8.
+**La búsqueda de colocación, la tercera y la que cerró la curva** (2026-09-05). Con la red memoizada,
+`trazado.ts` seguía siendo el 76 % del tick por otra rama: `evaluarNecesidades` → `sitioEnBarrio` →
+`sitiosParaTipo`, un 60 % repartido entre `candidatosLibres` (32 %), `corredorHastaLaRed` (23 %) y
+`sitiosPorAtraccionDura` (20 %). Mismo hecho de fondo que las otras dos: se llama **0,7 veces por asentamiento
+y tick** pero **el 77 % de las llamadas repite entradas idénticas** — `evaluarNecesidades` vuelve a preguntar
+"¿dónde iría una Vivienda?" cada tick aunque no se haya construido nada. Memoizada igual, con la clave de la
+red más el tipo, el nivel, el radio urbano y el perfil ya resuelto. **111 → 68 ms.**
 
-Consecuencias:
+> **Un fallo que la suite cazó y conviene no olvidar.** La primera versión reusó la clave de la red tal cual, y
+> esa **no incluye `avance`** de los recintos: a la red le da igual —bloquea el trazo entero desde que se
+> compromete— pero la búsqueda sí lo mira, porque la preferencia intramuros solo se aplica con el recinto
+> COMPLETO. Dos asentamientos idénticos salvo en `avance` comparten red y **no** comparten orden de
+> candidatos, y la caché le daba a uno el orden del otro. Es la regla que el propio código ya enunciaba:
+> **un campo de más en la clave solo cuesta aciertos; uno de menos da una respuesta equivocada.**
 
-- **El cuello de botella es la CPU del tick, no la red ni la persistencia.** Un tick de 1.9 s frente a ~0.4 ms
-  de serializar el estado: persistir cuesta menos del 0.1% del tick. Cualquier debate de rendimiento sobre
-  framework HTTP o motor de persistencia es optimizar el margen equivocado.
-- **El estado completo sigue siendo pequeño** (2.4 MB), lo que valida persistir por snapshot en vez de montar
-  una base de datos relacional en la etapa provisional.
-- **Problema nuevo: el tick bloquea la cola serial.** El principio 5 del doc 2 exige procesar en serie por
-  `gameId`. Un tick de ~2 s son ~2 s en los que ningún comando de ningún jugador se procesa. Con 500 jugadores
-  eso se nota. No está contemplado en el doc 2 y hay que resolverlo en Fase B/C — posibles vías: procesar
-  comandos por lotes entre ticks, partir el tick en fases cedibles, o mover el tick a un worker aparte del
-  hilo que atiende comandos. **Decisión pendiente.**
+**Y la cuarta, que era una decisión de diseño y el usuario tomó** (2026-09-06): `evaluarNecesidades` buscaba
+sitio **antes** de saber si había recursos, así que un asentamiento sin fondos pagaba la búsqueda entera cada
+tick para que el commit tirara el resultado — el **68 % de las búsquedas en crecimiento y el 92 % en madurez**
+eran para un edificio impagable. Ahora se pregunta antes, con `puedeIniciarConstruccion` sobre el stock entero
+del tick: la misma comprobación que hace el commit, así que descarta exactamente lo que se iba a rechazar y ni
+un candidato más. **71,5 → 61,9 ms.**
 
-> Nota: las cifras son de una máquina de desarrollo y del balance vigente en 2026-08-24. Sirven para decidir
-> orden de magnitud y forma de la curva, no como SLA. Conviene re-medir al cerrar la Fase D (el modelo
-> temporal cambia el coste por tick).
+> **Dos cosas que costó aprender, y por eso quedan escritas.** (1) El guardián va **después** de
+> `asegurarAnclaPara`: un ancla nace gratis y es infraestructura de trazado, no el edificio impagable — con el
+> guardián delante, una ciudad se quedaba sin su Patio de Gremios y el mundo divergía a los ~150 ticks. (2) La
+> ganancia es del 14 %, mucho menos que lo que sugería el 68-92 %, **porque la memoización ya absorbía casi
+> todo**: esas búsquedas repetidas eran aciertos de caché. Las dos se solapan; esta gana porque evita el
+> trabajo en vez de recordarlo.
+
+Lo único que no preserva son los **ids** de edificio, que se desplazan porque `nextId()` se consume por
+candidato propuesto. Verificado sobre 150 ticks: mismo censo de edificios tipo a tipo, mismas posiciones,
+mismos estados.
+
+**Lo que sí emergió, y ya está arreglado: `Mapa.bosqueParaLenera`**
+
+**Y `Mapa.bosqueParaLenera`** (`world/mapa.ts`), el 19,5 % del tick en
+una sola función. Recorría los **170 bosques del mundo** probando hasta 37 puntos de cada uno contra el
+polígono de influencia del asentamiento, y calculaba el punto de trabajo de TODOS antes de ordenar por
+distancia y quedarse con uno. Medido, por llamada: 154 evaluaciones, **5 698 tests de punto-en-polígono**,
+~108 000 operaciones de arista, ~30 llamadas por tick con 30 asentamientos. **El 98,3 % era trabajo tirado**:
+solo **2,8 bosques de 170** están lo bastante cerca como para poder tocar el polígono siquiera.
+
+Resuelto con tres piezas que no cambian el resultado: descarte por distancia antes de mirar ninguna arista
+(conservador por la desigualdad triangular — todo punto probado cae dentro del disco del bosque, y el
+polígono dentro del suyo; el criterio es el que `hayBosqueEnRadio` ya usaba ahí mismo), ordenar antes y parar
+en el primero viable en vez de calcularlos todos y ordenar después (mismo ganador: `sort` es estable y ambos
+parten del orden de `generado.bosques`), y ordenar solo los ~3 supervivientes en vez de los 170.
+**131,6 → 110,7 ms por tick a 100 asentamientos.**
+
+### El acumulado de la Fase E3
+
+| | ms/tick a 100 asentamientos |
+|---|---|
+| Antes de optimizar (2026-09-05) | 471,0 ms |
+| Tras memoizar la red de calles | 131,6 ms |
+| Tras arreglar `bosqueParaLenera` | 110,7 ms |
+| Tras memoizar la búsqueda de colocación | 68,4 ms |
+| **Tras dejar de buscar lo impagable** | **61,9 ms** |
+
+**7,6× en total**, y el escalado de O(n^1.5) a **O(n^0.94)**: lineal.
+
+Las tres optimizaciones salieron del mismo hecho, y por eso conviene enunciarlo aparte: **el motor recalculaba
+en cada tick cosas que solo cambian al construir**. Ninguna de las tres cambió una regla; las tres se
+verificaron con sellos SHA-256 del estado completo, idénticos byte a byte. Lo que queda por hacer ya **no** es
+trabajo repetido: es la decisión de diseño de arriba (buscar sitio antes de saber si se puede pagar).
+
+> ⚠️ **Corrección de 2026-08-24, que sigue vigente: 500 jugadores NO son 500 asentamientos.** Un asentamiento
+> aloja `CIUDADANIA.casasBasePorAsentamiento` = 5 residentes (+2 por nivel adicional), así que el objetivo de
+> 500 jugadores cabe en **~70-100 asentamientos**: hoy, **44-62 ms por tick**. La cifra de 500 asentamientos
+> corresponde a una partida madura, con las facciones ya expandidas (`CAP_FUNDACION_POR_NIVEL`).
+
+### Consecuencia para el bloqueo de la cola serial
+
+Esta era la razón de re-medir, así que conviene dejar la conclusión escrita en vez de solo los números.
+
+- **Un tick suelto no es el problema, y tras las optimizaciones lo es aún menos.** 62 ms a 100 asentamientos
+  dentro de un intervalo de 60 000 ms: el motor ocupa el **0,10 %** del tiempo de mundo, y un comando que
+  llegue mientras corre un tick espera una décima de segundo escasa. Muy lejos de los ~2 s que hicieron sonar la
+  alarma en agosto sobre la extrapolación a 500 asentamientos.
+- **El problema real era la RÁFAGA DE CATCH-UP, y está RESUELTO** (2026‑09‑05). `sincronizarConReloj` (D5)
+  ejecutaba los ticks vencidos tras un reinicio **en una sola entrada de la cola serial**: con el tope de una
+  semana, ~18,6 minutos durante los cuales ningún comando de ningún jugador se procesaba.
+  - Se atacó como un problema de infraestructura —trocear la ráfaga, ceder la cola cada N ticks, un worker
+    aparte— hasta ver que **la pregunta de fondo era de diseño de juego**: si una caída del servidor consume
+    tiempo de mundo. El comentario del propio código lo daba por respondido sin decirlo ("no se puede actuar
+    ahora hasta que el mundo esté en ahora").
+  - **Decisión del usuario: el mundo NO avanza mientras el servidor está caído.** El reloj se ancla a "ahora"
+    al arrancar, reabrir una partida la reanuda en su tick, y **no hay ráfaga que pueda bloquear la cola**.
+    El problema desaparece en vez de gestionarse. Ver [10_Modelo_Temporal.md](10_Modelo_Temporal.md) §2.
+  - Queda un caso acotado: el proceso vivo pero congelado (host suspendido, salto de NTP). Ahí sí hay que
+    distinguir la deriva del temporizador —que se recupera, o el mundo correría lento— de una congelación
+    —que se descarta y se cuenta en `ticksOmitidos`—. La frontera es `MAX_TICKS_POR_PASADA` = 5.
+- Esto **reencuadra la decisión pendiente**: las tres vías que se plantearon en agosto (lotes de comandos
+  entre ticks, partir el tick en fases cedibles, mover el tick a un worker) se propusieron contra un tick
+  lento. Contra una ráfaga de catch-up, la palanca más barata es acotarla de otro modo — bajar
+  `MAX_TICKS_RAFAGA`, o ceder la cola cada N ticks de la ráfaga para que los comandos se intercalen. Sigue
+  siendo **decisión pendiente**, pero ahora con números y con el problema en su sitio.
+
+> Nota: las cifras son de una máquina de desarrollo. Sirven para decidir orden de magnitud y forma de la
+> curva, no como SLA. Re-medir cuando entre una mecánica que toque el bucle del tick.
 
 ## 2. Arquitectura de conexiones: una conexión, muchas suscripciones
 
@@ -157,31 +323,49 @@ Doble beneficio, y el primero aplica ya hoy: con un contador el servidor tiene q
 **cero tráfico adicional**. Reduce ancho de banda ahora y hace gratis la migración después. El doc 2 ya lo
 anticipaba ("La API no debe exponer solo `ticksRestantes`"); esta es una segunda justificación independiente.
 
-**(b) Los eventos llevan momento, no número de tick.** `EventoDominio` (Fase A5) debe llevar `momento` además
-de `tick`, para que el día que el tick desaparezca el contrato no cambie.
+> **Estado (Fase D / D3–D4): hecho.** `Edificio.ticksRestantes` pasó a `Edificio.completaEn: Instante` (D3,
+> ms de mundo — el último contador de deadline) y ya viaja así en el DTO (el edificio va crudo, y su campo
+> temporal es ya una fecha absoluta). D4 añadió `instante` (la hora de mundo "ahora") a `ResumenPartida`/
+> `EstadoAdmin`/`ProyeccionJugador`, que es contra lo que el cliente resta para pintar la cuenta atrás. `tick`
+> sigue en el contrato, marcado provisional.
+
+**(b) Los eventos llevan momento, no número de tick.** **Hecho (cierre de Fase D).** `EventoDominio` y
+`EventoLogAdmin` llevan `momento` (ISO 8601) y NADA de `tick`. Los DTOs (`ResumenPartida`, `ProyeccionJugador`,
+…) llevan `instante`. El `tick` solo existe como paso de integración interno del motor.
 
 **(c) Las suscripciones describen QUÉ, no CUÁNDO.** El cliente se suscribe a `asentamiento/X`; el servidor
 empuja cuando X cambia. Al cliente le da igual si el cambio lo provocó un tick o un evento de tiempo real.
 **Esta es la regla que hace que el frontend no cambie ni una línea el día de la migración.**
 
 **(d) Las ventanas de validez son temporales.** "Contacto mientras esté vivo" se modela con `desde`/`hasta` en
-tiempo, no en número de tick — igual que `heridoHastaTick`, `regeneraEnTick` y los cooldowns que el doc 2 ya
-marca para migrar en D2.
+tiempo, no en número de tick. **Hecho en D2/D6**: `heridoHasta`, `regeneraEn`, `expiraEn` y los cooldowns son
+`Instante`/`Duracion` de mundo; las constantes de plazo se declaran en minutos.
 
 ## 5. Consecuencias para el roadmap
 
 Tareas derivadas de este documento, reflejadas en
 [4_Plan_Evolucion_Tareas.md](4_Plan_Evolucion_Tareas.md):
 
-- ✅ **Hecho 2026-08-24** — `momento` (ISO 8601) añadido a `EventoDominio`, e introducido
-  `ContextoSimulacion { tick, momento, rng }` como entrada única de `avanzarSimulacion` y
-  `avanzarNpcGobernanza`. El motor no lee nunca el reloj por su cuenta; la capa de aplicación lo inyecta. Es
-  la regla (b) de §4 implementada, y deja `tick` aislado en un solo sitio para poder retirarlo en Fase D sin
-  tocar firmas.
-- [ ] Resolver el bloqueo de la cola serial por ticks largos (Fase B/C, decisión pendiente).
-- [ ] Diseñar `ConocimientoJugador` y la proyección "último conocido" (Fase C, junto a los DTOs por audiencia).
-- [ ] Protocolo de suscripciones sobre conexión única (Fase C3).
-- [ ] Ver §6: el mapa deja de ser estado y pasa a ser asset cacheable (C11), y `eventosDominio` deja de viajar entero (C13).
+- [x] **Hecho 2026-08-24** — `momento` (ISO 8601) añadido a `EventoDominio`, e introducido
+  `ContextoSimulacion` como entrada única de `avanzarSimulacion` y `avanzarNpcGobernanza`. El motor no lee
+  nunca el reloj por su cuenta; la capa de aplicación lo inyecta. Es la regla (b) de §4 implementada, y dejó
+  `tick` aislado en un solo sitio para poder retirarlo en Fase D sin tocar firmas. **Cumplido**: el cierre de
+  Fase D (2026-08-30) eliminó `ContextoSimulacion.tick`; hoy el contexto es `{ instante, momento, rng }`.
+- [x] Resolver el bloqueo de la cola serial por ticks largos — **RESUELTO 2026-09-05**, y era la última
+  abierta de esta lista. No por ticks largos, que resultaron no serlo (111 ms), sino porque la **ráfaga de
+  catch-up** dejó de existir al decidir que una caída del servidor no consume tiempo de mundo. Ver §1.
+- [x] DTOs por audiencia (`proyectarParaJugador`, C4) — frontera de seguridad hecha. `ConocimientoJugador` y
+  la proyección "último conocido" de rivales pasaron a `Mecanicas a desarrollar.md` §12: es mecánica de juego
+  con parámetros por definir (radio de visualización, decaimiento del contacto), no arquitectura. El diseño
+  de fondo vive en §3.2 de este doc. **Esa mecánica ya está en ejecución** (2026-09-04/05): la memoria por
+  Facción y su proyección existen, con el plan de 6 pasos en
+  [`Consideraciones/Niebla_De_Guerra_Definicion.md`](../../Consideraciones/Niebla_De_Guerra_Definicion.md).
+- [x] Protocolo de suscripciones sobre conexión única — hecho en **C5** (no C3, como decía esta línea):
+  `server/difusion/hub.ts` multiplexa canales sobre una única conexión y serializa el mensaje una vez por
+  evento, no una por conexión.
+- [~] Ver §6: el mapa deja de ser estado y pasa a ser asset cacheable (**C11a, hecho** — 125,4 KB que ya no
+  viajan en cada acción), y `eventosDominio` deja de viajar entero (**C13, a medias**: el cursor incremental
+  `?desde=<version>` existe, pero `EstadoAdmin`/`ProyeccionJugador` siguen trayendo la lista completa).
 
 ## 6. Modelo de sincronización: reglas al cliente, simulación en el servidor
 
@@ -214,8 +398,10 @@ seguridad, no refinamiento**. Adoptar lockstep sería renunciar a las tres fuent
 "último conocido" de §3.2.
 
 **Razón 2: no hay latencia que esconder.** Lockstep y *client-side prediction* existen para dar respuesta
-instantánea a 60 Hz. El tick de este motor mide ~1,9 s de CPU a 500 asentamientos (§1). El jugador ya espera
-segundos por diseño. Se pagaría toda la disciplina de determinismo bit-exacto —que además arrastra que el
+instantánea a 60 Hz. Aquí **un tick es un MINUTO de tiempo de mundo** (Fase D, doc 10): el jugador espera por
+diseño, y no hay fotograma que disimular. Lo que cueste el tick en CPU es indiferente para este argumento
+— la cifra de "~1,9 s a 500 asentamientos" que traía esta línea era la extrapolación de agosto, corregida en
+§1 (hoy, 111 ms a 100 asentamientos, que es la escala real de 500 jugadores). Se pagaría toda la disciplina de determinismo bit-exacto —que además arrastra que el
 estado interno del RNG todavía no es serializable (A3, diferido a B3)— a cambio de nada.
 
 **Se confirma el modelo 3**: servidor autoritativo, cliente sin simulación, estado filtrado por audiencia. Es
@@ -226,7 +412,7 @@ lo que ya construyen C4/C5, y este análisis no lo cambia — lo justifica.
 El eje correcto no es si el cliente tiene motor, sino qué parte:
 
 - **Simulación** (avanzar el mundo, resolver combates, producir, consumir): **solo servidor**, sin matices.
-- **Reglas** (qué cuesta un granero, cuántos slots da este nivel, es válida esta posición): el cliente **las
+- **Reglas** (qué cuesta un almacén, cuántos slots da este nivel, es válida esta posición): el cliente **las
   necesita** para dar respuesta inmediata. Un *tooltip* que hace viaje de ida y vuelta es inusable.
 
 La industria manda las reglas al cliente **como datos, no como código**. EVE Online lo llama *Static Data

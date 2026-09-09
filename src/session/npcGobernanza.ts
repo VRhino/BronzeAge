@@ -14,7 +14,7 @@
 //
 // En ambos casos el patrón es el mismo, y siempre DESPUÉS del tick del motor:
 //
-//   const contexto = { tick, momento, rng };                        // ver ContextoSimulacion
+//   const contexto = { instante, momento, rng };                    // ver ContextoSimulacion
 //   estado = avanzarSimulacion(estado, mapa, contexto);             // motor real, sin tocar
 //   estado = avanzarNpcGobernanza(estado, mapa, contexto, cfg).estado;
 //
@@ -23,7 +23,9 @@
 //
 // Diseño, decisiones y limitaciones: `Consideraciones/NPC_Gobernanza_Facciones_Controladas.md`.
 
-import type { AcuerdoTrueque, Asentamiento, Caravana, CampamentoBandido, EdificioTipo, Faccion, Point, RecursoTipo } from '../domain/types';
+import type { AcuerdoTrueque, Asentamiento, Caravana, CampamentoBandido, EdificioTipo, Ejercito, Escuadron, Faccion, Jugador, OrdenMercado, Point, RecursoTipo, RelacionPolitica } from '../domain/types';
+import { RECURSOS_TIPO } from '../domain/types';
+import { colocarOrdenMercado } from '../engine/market';
 import type { Mapa } from '../world/mapa';
 import type { RandomFn } from '../worldgen';
 import type { ContextoSimulacion, EstadoSimulacion } from '../engine/simulation';
@@ -36,17 +38,31 @@ import {
   tieneMercadoActivo,
   cupoCaravanas,
   edificiosPorTipoYEstado,
+  estaOcupado,
   hayProyectoPendiente,
   nutricionPoblacionDe,
 } from '../engine/asentamientoQuery';
-import { tieneRecursos } from '../engine/almacen';
+import { cantidadDisponible, tieneRecursos } from '../engine/almacen';
 import { asignarCargoLocal, CargoInvalidoError } from '../engine/cargos';
 import { anadirEdificioManualmente, reclamosDeFuentes, ConstruccionManualInvalidaError } from '../engine/construction';
-import { construirCaravanaComercial, proponerTrueque, CaravanaInvalidaError, TruequeInvalidoError } from '../engine/trade';
+import { comprometerRecintoManualmente, RecintoInvalidoError } from '../engine/muralla';
+import {
+  aceptarTrueque,
+  construirCaravanaComercial,
+  proponerTrueque,
+  rechazarTrueque,
+  CaravanaInvalidaError,
+  TruequeInvalidoError,
+} from '../engine/trade';
 import { computeTodasLasZonas } from '../engine/zones';
 import { calcularCostoMantenimiento, encontrarCapital } from '../engine/mantenimiento';
 import { evaluarViabilidadFundacion, fundarAsentamiento, FundacionInvalidaError } from '../engine/settlement';
-import { CAMPAMENTOS_BANDIDOS, TROPAS_RECLUTABLES } from '../constants';
+import { CAMPAMENTOS_BANDIDOS, LOGISTICA, MILITAR, TROPAS_RECLUTABLES, VISION } from '../constants';
+import { enTregua, movilizarEjercito, replegarEjercito, MovilizacionInvalidaError } from '../engine/ejercitos';
+import { reservaDeTrigo } from '../engine/tropas';
+import { estanAliadas } from '../engine/pertenencia';
+import { distancia } from '../world/geometria';
+import { minutos, sumar, type Instante } from '../domain/tiempo';
 
 /**
  * Reserva mínima de madera antes de reclutar (a petición del usuario, tras diagnosticar el colapso masivo de
@@ -136,6 +152,20 @@ const COLCHON_EXCEDENTE_SUPERVIVENCIA = 0.3;
 /** Cantidad pactada por lado en cada trueque de supervivencia propuesto — mismo orden de magnitud que
  * `SIMULACION_AUTO_COMERCIO.cantidadPorTrueque` (30) en el motor. */
 const CANTIDAD_TRUEQUE_SUPERVIVENCIA = 30;
+/**
+ * A partir de que fraccion del almacen una plaza NPC considera que le SOBRA un recurso y lo pone a la venta
+ * (`Consideraciones/Entrada_Al_Mundo_Definicion.md` §3). **0,7**: por encima de eso el silo esta camino de
+ * llenarse y lo que entre de mas se desperdicia, asi que vender es mejor negocio que guardar.
+ *
+ * Por debajo de `UMBRAL_ESCASEZ_MERCADO` publica compra. Entre los dos umbrales no hace nada — una plaza que
+ * va servida no tiene por que estar siempre en el mercado.
+ */
+const UMBRAL_EXCEDENTE_MERCADO = 0.7;
+/** Por debajo de esta fraccion, la plaza NPC publica una orden de COMPRA: le falta y lo dice. */
+const UMBRAL_ESCASEZ_MERCADO = 0.2;
+/** Que parte del excedente se pone a la venta de una vez. No todo: una plaza que vacia su silo de golpe se
+ * queda sin colchon ante el primer tick malo. */
+const FRACCION_EXCEDENTE_A_VENDER = 0.25;
 /** Cuántos ticks de costo de Mantenimiento por delante hace falta tener cubiertos para NO considerarse en
  * riesgo — un trueque tarda en construirse (Mercado/caravana) y viajar, así que hay que pedir ayuda ANTES de
  * quedarse en 0 (para entonces ya sería tarde: el medidor empezaría a degradar sin nada que pagar). */
@@ -145,6 +175,10 @@ export interface StatsNpcGobernanza {
   reclutamientosExitosos: number;
   truequesSupervivenciaPropuestos: number;
   campamentosDestruidos: number;
+  /** Campañas lanzadas este tick (Paso 12): columnas que salen contra una plaza rival. */
+  campanasLanzadas: number;
+  /** Columnas mandadas a casa este tick por haber terminado su campaña. */
+  repliegues: number;
   campamentosAtacadosSinExito: number;
   caravanasFundacionLanzadas: number;
 }
@@ -305,7 +339,7 @@ function asegurarInfraestructuraComercial(
   mapa: Mapa,
   capital: Asentamiento | undefined,
   reclamos: ReturnType<typeof reclamosDeFuentes>,
-  tickActual: number,
+  instante: Instante,
   contador: number
 ): { asentamiento: Asentamiento; caravanaNueva?: Caravana } {
   if (!asentamiento.cargos.gobernadorId) return { asentamiento };
@@ -323,7 +357,7 @@ function asegurarInfraestructuraComercial(
   const propias = caravanas.filter((c) => c.tipo === 'comercial' && c.origenAsentamientoId === asentamiento.id).length;
   if (propias < cupoCaravanas(asentamiento)) {
     try {
-      const resultado = construirCaravanaComercial(asentamiento, caravanas, tickActual, contador);
+      const resultado = construirCaravanaComercial(asentamiento, caravanas, instante, contador);
       return { asentamiento: resultado.asentamiento, caravanaNueva: resultado.caravana };
     } catch (err) {
       if (!(err instanceof CaravanaInvalidaError)) throw err;
@@ -372,6 +406,29 @@ function asegurarNucleoMilitar(
     return anadirEdificioManualmente(asentamiento, faccion, 'gobernador', faltante, zonaPoligono, mapa, capital, reclamos, contador);
   } catch (err) {
     if (!(err instanceof ConstruccionManualInvalidaError)) throw err;
+    return asentamiento;
+  }
+}
+
+/**
+ * Primer recinto a mano para CUALQUIER asentamiento con Gobernador (`Consideraciones/Murallas_Definicion.md`,
+ * Paso 2c) — mismo agujero que `asegurarNucleoMilitar` documenta para Barracón/Galería: no hay
+ * auto-construcción de murallas (§8 del doc), así que sin este paso ninguna Facción NPC del batch alcanzaría
+ * jamás el gate de nivel 4 que el recinto completo sustituye (`NIVEL_ASENTAMIENTO.requisitos[4]`, Paso 5).
+ *
+ * Solo el PRIMER recinto: si ya hay uno (en obra o terminado), este paso no hace nada — ampliar tiene sus
+ * propios gates (integridad 1 + `MURALLA.arrabalMinimo` extramuros, §10) y es responsabilidad del Paso 3, no
+ * de este. Nivel 1 (empalizada) a propósito: es el más barato, y subir de nivel un recinto ya trazado es la
+ * mejora del Paso 3, no algo que decidir al comprometer.
+ */
+function asegurarMuralla(asentamiento: Asentamiento, instante: Instante): Asentamiento {
+  if (!asentamiento.cargos.gobernadorId) return asentamiento;
+  if ((asentamiento.recintos ?? []).length > 0) return asentamiento;
+
+  try {
+    return comprometerRecintoManualmente(asentamiento, 'gobernador', 1, instante);
+  } catch (err) {
+    if (!(err instanceof RecintoInvalidoError)) throw err;
     return asentamiento;
   }
 }
@@ -428,9 +485,55 @@ function mejorRecursoDePagoSupervivencia(asentamiento: Asentamiento, recursoBusc
 function yaTieneAyudaEnCaminoPara(acuerdos: AcuerdoTrueque[], necesitadoId: string, recurso: RecursoTipo): boolean {
   return acuerdos.some(
     (ac) =>
-      ac.estado === 'activo' &&
+      // 'propuesto' cuenta igual que 'activo': desde que el trueque se acepta explicitamente
+      // (`Comercio_Fisico_Definicion.md`), una peticion sin contestar es ayuda YA pedida. Sin esto, un
+      // asentamiento cuyo socio tarda en responder repetiria la peticion cada tick.
+      (ac.estado === 'activo' || ac.estado === 'propuesto') &&
       ((ac.asentamientoAId === necesitadoId && ac.recursoB === recurso) || (ac.asentamientoBId === necesitadoId && ac.recursoA === recurso))
   );
+}
+
+/**
+ * Las plazas NPC CONTESTAN a los trueques que se les proponen (Doc 3.2). Desde que un trueque necesita un si
+ * explicito (`Consideraciones/Comercio_Fisico_Definicion.md` decision 5), sin esto ninguna propuesta dirigida
+ * a un NPC prosperaria jamas — ni la de un jugador ni la del NPC de al lado.
+ *
+ * El criterio es el MISMO colchon que se le exige al socio cuando el NPC va a pedir
+ * (`COLCHON_EXCEDENTE_SUPERVIVENCIA`): acepta si le sobra de verdad lo que tendria que entregar, y si no,
+ * dice que no. Que sea el mismo numero es lo que hace que el trueque entre dos NPC siga saliendo igual que
+ * antes de que la aceptacion existiera — el socio se elegia ya con esta condicion.
+ *
+ * Solo contesta como lado B, que es el lado receptor de la propuesta: el A es quien la hizo.
+ */
+function responderPropuestasNpc(
+  asentamientos: readonly Asentamiento[],
+  acuerdos: readonly AcuerdoTrueque[],
+  esNpc: (faccionId: string) => boolean,
+  instante: Instante
+): { acuerdos: AcuerdoTrueque[]; eventos: string[]; aceptados: number; rechazados: number } {
+  const eventos: string[] = [];
+  let aceptados = 0;
+  let rechazados = 0;
+
+  const resultantes = acuerdos.map((acuerdo) => {
+    if (acuerdo.estado !== 'propuesto') return acuerdo;
+    const plaza = asentamientos.find((a) => a.id === acuerdo.asentamientoBId);
+    if (!plaza || !esNpc(plaza.faccionId)) return acuerdo;
+
+    const puede =
+      fraccionDisponible(plaza, acuerdo.recursoB as RecursoTipo) > COLCHON_EXCEDENTE_SUPERVIVENCIA &&
+      cantidadDisponible(plaza.almacen, acuerdo.recursoB) > 0;
+    if (puede) {
+      aceptados++;
+      eventos.push(`${plaza.id} acepta el trueque ${acuerdo.id}.`);
+      return aceptarTrueque(acuerdo, instante);
+    }
+    rechazados++;
+    eventos.push(`${plaza.id} rechaza el trueque ${acuerdo.id}: no le sobra ${acuerdo.recursoB}.`);
+    return rechazarTrueque(acuerdo);
+  });
+
+  return { acuerdos: resultantes, eventos, aceptados, rechazados };
 }
 
 /**
@@ -446,7 +549,7 @@ function truequeDeSupervivencia(
   asentamientos: Asentamiento[],
   capitalesPorFaccion: Map<string, Asentamiento | undefined>,
   acuerdosExistentes: AcuerdoTrueque[],
-  tickActual: number,
+  instante: Instante,
   contadorInicial: number,
   esNpc: (faccionId: string) => boolean
 ): { acuerdosNuevos: AcuerdoTrueque[]; eventos: string[]; contador: number; propuestos: number } {
@@ -464,10 +567,13 @@ function truequeDeSupervivencia(
     for (const recurso of enRiesgo) {
       if (yaTieneAyudaEnCaminoPara([...acuerdosExistentes, ...acuerdosNuevos], necesitado.id, recurso)) continue;
 
-      // El SOCIO también tiene que ser NPC: `proponerTrueque` (motor) pacta sin pedir consentimiento al otro
-      // lado, así que sin este filtro un NPC comprometería recursos de un asentamiento del jugador humano sin
-      // que este lo aprobara (a petición del usuario). En batch, donde no hay humano, `esNpc` es siempre true
-      // y el comportamiento es el de siempre: cualquier socio de cualquier Facción.
+      // El SOCIO también tiene que ser NPC, y **el motivo cambió** el 2026-09-07: ya no es el consentimiento
+      // —`proponerTrueque` solo propone, y `responderPropuestasNpc` contesta—, sino que esto es un SALVAVIDAS.
+      // Una plaza a la que le falta un recurso de Mantenimiento no puede quedarse esperando a que un humano
+      // se conecte y conteste; el NPC de al lado responde en el mismo tick. Un jugador que quiera comerciar
+      // con el NPC tiene los dos caminos abiertos: proponerle un trueque él (y el NPC contesta), o comprarle
+      // en el mostrador (`publicarOrdenesNpc`).
+      // En batch, donde no hay humano, `esNpc` es siempre true y el comportamiento es el de siempre.
       const socio = asentamientos.find(
         (s) => s.id !== necesitado.id && esNpc(s.faccionId) && fraccionDisponible(s, recurso) > COLCHON_EXCEDENTE_SUPERVIVENCIA
       );
@@ -485,7 +591,7 @@ function truequeDeSupervivencia(
           recurso,
           CANTIDAD_TRUEQUE_SUPERVIVENCIA,
           CANTIDAD_TRUEQUE_SUPERVIVENCIA,
-          tickActual,
+          instante,
           contador++
         );
         acuerdosNuevos.push(acuerdo);
@@ -521,7 +627,6 @@ function truequeDeSupervivencia(
  */
 function reclutarParaTodos(
   asentamiento: Asentamiento,
-  tickActual: number,
   contadorInicial: number,
   tropaId: string,
   origen: 'pesants' | 'artesanos'
@@ -530,14 +635,22 @@ function reclutarParaTodos(
     return { asentamiento, reclutamientosExitosos: 0, contador: contadorInicial };
   }
 
-  const residentes = residentesDe(asentamiento);
+  // Residentes (reclutan escuadrón nuevo) + dueños de escuadrones YA posados aquí que no residen (solo
+  // reponen — el caso de una guarnición instalada al conquistar una plaza sin residentes propios). Todos son
+  // ciudadanos de la Facción del asentamiento en el mundo NPC, así que `asentamiento.faccionId` es su Facción.
+  const jugadores = [
+    ...new Set([
+      ...residentesDe(asentamiento),
+      ...asentamiento.escuadrones.filter((e) => e.cantidad > 0).map((e) => e.jugadorId),
+    ]),
+  ];
 
   let actual = asentamiento;
   let contador = contadorInicial;
   let exitosos = 0;
-  for (const jugadorId of residentes) {
+  for (const jugadorId of jugadores) {
     try {
-      actual = reclutarTropa(actual, jugadorId, tropaId, origen, tickActual, contador++);
+      actual = reclutarTropa(actual, jugadorId, asentamiento.faccionId, tropaId, origen, contador++);
       exitosos++;
     } catch (err) {
       if (!(err instanceof ReclutamientoInvalidoError)) throw err;
@@ -569,14 +682,14 @@ function atacarCampamentosCercanos(
   asentamientos: Asentamiento[],
   campamentos: CampamentoBandido[],
   facciones: Faccion[],
-  tickActual: number,
+  instante: Instante,
   esNpc: (faccionId: string) => boolean,
   rng: RandomFn
 ): {
   asentamientos: Asentamiento[];
   facciones: Faccion[];
   campamentos: CampamentoBandido[];
-  bandidosProximoSpawnTick: number | undefined;
+  bandidosProximoSpawnEn: Instante | undefined;
   eventos: string[];
   destruidos: number;
   fallidos: number;
@@ -587,7 +700,7 @@ function atacarCampamentosCercanos(
   const eventos: string[] = [];
   let destruidos = 0;
   let fallidos = 0;
-  let bandidosProximoSpawnTick: number | undefined;
+  let bandidosProximoSpawnEn: Instante | undefined;
 
   for (const campamento of campamentos) {
     const asentamiento = asentamientosActuales.find((a) => a.id === campamento.asentamientoId);
@@ -605,7 +718,7 @@ function atacarCampamentosCercanos(
         asentamiento,
         asentamiento.escuadrones.map((e) => e.id),
         campamento,
-        tickActual,
+        instante,
         faccionesActuales,
         rng
       );
@@ -618,7 +731,7 @@ function atacarCampamentosCercanos(
       eventos.push(...resultado.eventos.map((e) => (typeof e === 'string' ? e : e.mensaje)));
       if (resultado.campamentoDestruido) {
         campamentosActuales = campamentosActuales.filter((c) => c.id !== campamento.id);
-        bandidosProximoSpawnTick = tickActual + CAMPAMENTOS_BANDIDOS.ticksRespawn;
+        bandidosProximoSpawnEn = sumar(instante, minutos(CAMPAMENTOS_BANDIDOS.respawnMinutos));
         destruidos++;
       } else {
         fallidos++;
@@ -628,7 +741,7 @@ function atacarCampamentosCercanos(
     }
   }
 
-  return { asentamientos: asentamientosActuales, facciones: faccionesActuales, campamentos: campamentosActuales, bandidosProximoSpawnTick, eventos, destruidos, fallidos };
+  return { asentamientos: asentamientosActuales, facciones: faccionesActuales, campamentos: campamentosActuales, bandidosProximoSpawnEn, eventos, destruidos, fallidos };
 }
 
 /**
@@ -645,7 +758,7 @@ function expandirSiPuede(
   facciones: Faccion[],
   caravanas: Caravana[],
   mapa: Mapa,
-  tickActual: number,
+  instante: Instante,
   contadorInicial: number,
   buscarDestino: (origen: Asentamiento, mapa: Mapa, asentamientos: Asentamiento[]) => Point | undefined,
   jugadoresPorCaravana: number,
@@ -675,7 +788,7 @@ function expandirSiPuede(
         asentamientosActuales,
         caravanasActuales,
         jugadoresPorCaravana,
-        tickActual,
+        instante,
         contador++
       );
       asentamientosActuales = asentamientosActuales.map((a) => (a.id === resultado.origenActualizado.id ? resultado.origenActualizado : a));
@@ -687,6 +800,321 @@ function expandirSiPuede(
   }
 
   return { asentamientos: asentamientosActuales, caravanas: caravanasActuales, lanzadas, contador };
+}
+
+/**
+ * Puertas de prudencia antes de lanzar una CAMPAÑA (Paso 12 del movimiento de ejércitos).
+ *
+ * Nacen leídas de la historia de este mismo archivo. El diagnóstico del colapso masivo de los campamentos de
+ * bandidos (ver `UMBRAL_NUTRICION_ANTES_DE_ATACAR` arriba) terminaba diciendo exactamente qué faltaba:
+ *
+ * > "probablemente hace falta pausar el PRIMER combate hasta que el asentamiento tenga cierta madurez (nivel,
+ * > población, ticks desde la fundación), no seguir ajustando el umbral de un gate reactivo."
+ *
+ * Un gate REACTIVO no sirve porque antes de la primera pelea no hay daño que mirar. Estos son PREVENTIVOS:
+ *
+ * - `NIVEL_MINIMO_PARA_CAMPANA` — el gate de madurez que aquel análisis pedía. Un asentamiento recién fundado
+ *   no manda expediciones: primero se sostiene.
+ * - `ESCUADRONES_MINIMOS_PARA_CAMPANA` y `FRACCION_MAXIMA_EN_CAMPANA` — nunca se va todo. La guarnición es lo
+ *   ÚNICO que defiende (Doc 5.12.4), así que un NPC que vaciara su plaza para atacar se estaría regalando a sí
+ *   mismo. Se lleva como mucho la mitad, y solo si le sobra con qué.
+ * - `AUTONOMIA_MINIMA_TICKS` — no se sale sin comida para el viaje. Una columna que no llega es peor que no
+ *   salir: pierde la tropa Y deja la casa desguarnecida mientras tanto.
+ */
+const NIVEL_MINIMO_PARA_CAMPANA = 2;
+const ESCUADRONES_MINIMOS_PARA_CAMPANA = 2;
+const FRACCION_MAXIMA_EN_CAMPANA = 0.5;
+const AUTONOMIA_MINIMA_TICKS = 20;
+
+/**
+ * ¿Hasta dónde puede llegar y volver esta columna con lo que carga? (Doc 5.13.1, la regla del radio operativo
+ * aplicada al revés.)
+ *
+ * La autonomía se mide en TICKS, no en distancia: `trigo / (soldados × ración)`. Multiplicada por la
+ * velocidad da distancia recorrible, y la mitad es hasta dónde se puede ir sabiendo que hay que volver. Es la
+ * misma cuenta con la que se dedujo la capacidad del carro, resuelta para la otra incógnita.
+ */
+function alcanceDeIdaYVuelta(escuadrones: Escuadron[], trigoEnCarro: number): number {
+  const soldados = escuadrones.reduce((n, e) => n + e.cantidad, 0);
+  if (soldados <= 0) return 0;
+  const ticks = trigoEnCarro / (soldados * MILITAR.racionPorSoldadoPorMinuto);
+  if (ticks < AUTONOMIA_MINIMA_TICKS) return 0;
+  const velocidades = escuadrones
+    .map((e) => TROPAS_RECLUTABLES.find((t) => t.id === e.tropaId)?.velocidad)
+    .filter((v): v is number => v !== undefined);
+  const velocidad = velocidades.length === 0 ? 0 : Math.min(...velocidades);
+  return (ticks * velocidad) / 2;
+}
+
+/**
+ * Punto 7c: el NPC **marcha** (Paso 12). Hasta aquí solo sabía atacar campamentos de bandidos desde casa, sin
+ * moverse; con la mecánica de ejércitos ya completa, puede mandar una columna contra una plaza rival.
+ *
+ * Deliberadamente conservador, y las razones están en `NIVEL_MINIMO_PARA_CAMPANA`: la lección de este archivo
+ * es que un guion que ataca en cuanto puede colapsa el mundo. Un asentamiento lanza como mucho UNA campaña a
+ * la vez, con la mitad de su guarnición, solo si es maduro y solo contra un objetivo al que pueda llegar y
+ * volver con la comida que carga.
+ *
+ * El objetivo es la plaza rival MÁS CERCANA al alcance — desempate por id, porque de aquí sale una
+ * movilización real y no puede depender del orden de la lista.
+ */
+/**
+ * A quien persigue cada columna NPC (Doc 5.12.3, paso 8e).
+ *
+ * **Existe para que el batch siga midiendo el juego que se esta diseñando.** Desde que los encuentros dejaron
+ * de salir de la geometria, un combate solo ocurre si alguien lo pide — y en el laboratorio no hay nadie
+ * pidiendo. Sin esta politica, las constantes militares ya calibradas (poder, varianza, bajas, veterania) se
+ * seguirian midiendo sobre un mundo en paz sin que ninguna prueba fallara: el riesgo mas silencioso de toda
+ * la mecanica.
+ *
+ * La politica es deliberadamente simple, y esa simpleza es el punto: **va a por lo que tiene a la vista**.
+ * No pretende jugar bien, pretende que haya combates a un ritmo parecido al que la geometria producia antes,
+ * para que las cifras sigan significando lo mismo.
+ *
+ * Lo que respeta, porque son reglas y no cortesias: no persigue a los suyos ni a un aliado, no persigue en
+ * tregua, no persigue a quien esta en tregua, y no toca una caravana escoltada — esa no es presa.
+ */
+function fijarPersecucionesNpc(
+  ejercitos: Ejercito[],
+  caravanas: Caravana[],
+  asentamientos: Asentamiento[],
+  relaciones: RelacionPolitica[],
+  esNpc: (faccionId: string) => boolean,
+  instante: Instante
+): { ejercitos: Ejercito[]; persecucionesNuevas: number } {
+  const faccionDePlaza = new Map(asentamientos.map((a) => [a.id, a.faccionId]));
+  const adjuntas = new Set(ejercitos.flatMap((e) => e.caravanasAdjuntasIds));
+  const enemiga = (a: string, b: string) => a !== b && !estanAliadas(relaciones, a, b);
+  let persecucionesNuevas = 0;
+
+  const ejercitosActualizados = ejercitos.map((cazador) => {
+    if (!esNpc(cazador.faccionId) || cazador.persiguiendo || enTregua(cazador, instante)) return cazador;
+    if (cazador.escuadrones.every((e) => e.cantidad <= 0)) return cazador;
+
+    // Orden canonico por id: la eleccion de presa no consume RNG, pero SI decide que combates ocurren, y con
+    // ellos toda la secuencia aleatoria del tick siguiente.
+    const columna = [...ejercitos]
+      .filter((o) => o.id !== cazador.id && enemiga(cazador.faccionId, o.faccionId) && !enTregua(o, instante))
+      .filter((o) => o.escuadrones.some((e) => e.cantidad > 0))
+      .filter((o) => distancia(o.posicionActual, cazador.posicionActual) <= VISION.ejercito)
+      .sort((x, y) => (x.id < y.id ? -1 : 1))[0];
+    if (columna) {
+      persecucionesNuevas++;
+      return { ...cazador, persiguiendo: { tipo: 'ejercito' as const, id: columna.id } };
+    }
+
+    const caravana = [...caravanas]
+      .filter((c) => c.estado !== 'adjunta' && c.estado !== 'disponible' && !adjuntas.has(c.id))
+      .filter((c) => {
+        const duena = faccionDePlaza.get(c.origenAsentamientoId);
+        return duena !== undefined && enemiga(cazador.faccionId, duena);
+      })
+      .filter((c) => distancia(c.posicionActual, cazador.posicionActual) <= VISION.ejercito)
+      .sort((x, y) => (x.id < y.id ? -1 : 1))[0];
+    if (caravana) {
+      persecucionesNuevas++;
+      return { ...cazador, persiguiendo: { tipo: 'caravana' as const, id: caravana.id } };
+    }
+
+    return cazador;
+  });
+
+  return { ejercitos: ejercitosActualizados, persecucionesNuevas };
+}
+
+/**
+ * Las plazas NPC publican ordenes de compra y venta (`Consideraciones/Entrada_Al_Mundo_Definicion.md` §3).
+ *
+ * **Es lo que convierte a una Faccion NPC en SOCIO DE COMERCIO**, que es lo que un jugador nuevo necesita
+ * encontrar al llegar. Y la via son ordenes de mercado y no trueques por una razon concreta: `proponerTrueque`
+ * pacta sin pedir consentimiento al otro lado, asi que un NPC proponiendole uno a un jugador le
+ * comprometeria recursos sin preguntarle. Una orden publicada no compromete a nadie — el jugador la toma o no
+ * la toma— y el clearing del mercado (`avanzarMercado`) ya empareja ordenes de CUALQUIER par de plazas, sean
+ * de la Faccion que sean. El consentimiento esta por construccion.
+ *
+ * La politica es deliberadamente simple: **vende lo que le sobra y compra lo que le falta**. No pretende
+ * negociar bien; pretende que en el mercado haya siempre algo con lo que comerciar.
+ *
+ * No duplica ordenes: si ya tiene una activa de ese recurso, no publica otra.
+ */
+function publicarOrdenesNpc(
+  asentamientos: readonly Asentamiento[],
+  ordenes: readonly OrdenMercado[],
+  esNpc: (faccionId: string) => boolean,
+  instante: Instante,
+  contadorInicial: number
+): { ordenes: OrdenMercado[]; eventos: string[]; contador: number; publicadas: number } {
+  const eventos: string[] = [];
+  const nuevas: OrdenMercado[] = [];
+  let contador = contadorInicial;
+
+  const yaTiene = (asentamientoId: string, recurso: string): boolean =>
+    [...ordenes, ...nuevas].some((o) => o.asentamientoId === asentamientoId && o.recurso === recurso && o.estado === 'activa');
+
+  // Orden canonico por id: publicar no consume aleatoriedad, pero SI decide que se empareja despues, y con
+  // ello el resto del tick.
+  for (const plaza of [...asentamientos].sort((a, b) => (a.id < b.id ? -1 : 1))) {
+    if (!esNpc(plaza.faccionId)) continue;
+    if (!tieneMercadoActivo(plaza)) continue;
+
+    for (const recurso of RECURSOS_TIPO) {
+      if (yaTiene(plaza.id, recurso)) continue;
+      const item = plaza.almacen[recurso];
+      if (!item || item.capacidad <= 0) continue;
+      const fraccion = fraccionDisponible(plaza, recurso);
+
+      let orden: OrdenMercado | undefined;
+      if (fraccion >= UMBRAL_EXCEDENTE_MERCADO) {
+        const excedente = item.cantidad - item.capacidad * UMBRAL_EXCEDENTE_MERCADO;
+        const cantidad = Math.floor(excedente * FRACCION_EXCEDENTE_A_VENDER);
+        if (cantidad > 0) {
+          orden = colocarOrdenMercado(asentamientos as Asentamiento[], plaza.id, 'venta', recurso, cantidad, instante, undefined, contador++);
+        }
+      } else if (fraccion <= UMBRAL_ESCASEZ_MERCADO) {
+        const hueco = Math.floor(item.capacidad * UMBRAL_ESCASEZ_MERCADO - item.cantidad);
+        if (hueco > 0) {
+          orden = colocarOrdenMercado(asentamientos as Asentamiento[], plaza.id, 'compra', recurso, hueco, instante, undefined, contador++);
+        }
+      }
+
+      if (orden) {
+        nuevas.push(orden);
+        eventos.push(`${plaza.id}: publica ${orden.tipo} de ${orden.cantidad} ${recurso}.`);
+      }
+    }
+  }
+
+  return { ordenes: [...ordenes, ...nuevas], eventos, contador, publicadas: nuevas.length };
+}
+
+function lanzarCampanas(
+  asentamientos: Asentamiento[],
+  ejercitos: Ejercito[],
+  jugadores: Jugador[],
+  relaciones: RelacionPolitica[],
+  mapa: Mapa,
+  esNpc: (faccionId: string) => boolean,
+  contador: number,
+  instante: Instante
+): { asentamientos: Asentamiento[]; ejercitos: Ejercito[]; eventos: string[]; campanasLanzadas: number; contador: number } {
+  const eventos: string[] = [];
+  let campanasLanzadas = 0;
+  const porId = new Map(asentamientos.map((a) => [a.id, a]));
+  const nuevos: Ejercito[] = [];
+  const conCampanaEnCurso = new Set(ejercitos.map((e) => e.origenAsentamientoId));
+
+  for (const origen of [...asentamientos].sort((a, b) => (a.id < b.id ? -1 : 1))) {
+    if (!esNpc(origen.faccionId)) continue;
+    if (conCampanaEnCurso.has(origen.id)) continue;
+    // Guarnición recién instalada tras una conquista (Ocupacion §2.4): no vuelve a salir de campaña hasta
+    // que la ventana vence y está repuesta.
+    if (estaOcupado(origen, instante)) continue;
+    if (nivelActualDe(origen) < NIVEL_MINIMO_PARA_CAMPANA) continue;
+
+    const vivos = origen.escuadrones.filter((e) => e.cantidad > 0);
+    if (vivos.length < ESCUADRONES_MINIMOS_PARA_CAMPANA) continue;
+
+    // Se lleva como mucho la mitad, y todos del MISMO jugador: el Liderazgo se valida por jugador (Doc 5.11),
+    // así que mezclar dueños solo complicaría la selección sin aportar nada al NPC.
+    const porJugador = new Map<string, Escuadron[]>();
+    for (const e of vivos) porJugador.set(e.jugadorId, [...(porJugador.get(e.jugadorId) ?? []), e]);
+    const tope = Math.floor(vivos.length * FRACCION_MAXIMA_EN_CAMPANA);
+    if (tope < 1) continue;
+
+    const candidato = [...porJugador.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).find(([, lista]) => lista.length >= 1);
+    if (!candidato) continue;
+    const [jugadorId, suyos] = candidato;
+    const expedicion = suyos.slice(0, Math.min(tope, suyos.length));
+
+    // ¿Hasta dónde llega? Se estima con lo que el almacén podría darle, no con lo que ya lleva (todavía no
+    // existe el carro): `movilizarEjercito` cargará hasta ahí respetando la reserva de comida.
+    const trigoDisponible = Math.max(
+      0,
+      (origen.almacen['trigo']?.cantidad ?? 0) - reservaDeTrigo({ ...origen, escuadrones: origen.escuadrones.filter((e) => !expedicion.includes(e)) })
+    );
+    const carro = Math.min(trigoDisponible, LOGISTICA.capacidadCarroPorJugador);
+    const alcance = alcanceDeIdaYVuelta(expedicion, carro);
+    if (alcance <= 0) continue;
+
+    const objetivo = asentamientos
+      .filter((a) => a.faccionId !== origen.faccionId && !estanAliadas(relaciones, origen.faccionId, a.faccionId))
+      .filter((a) => distancia(a.posicion, origen.posicion) <= alcance)
+      .sort((a, b) => {
+        const da = distancia(a.posicion, origen.posicion);
+        const db = distancia(b.posicion, origen.posicion);
+        return da !== db ? da - db : a.id < b.id ? -1 : 1;
+      })[0];
+    if (!objetivo) continue;
+
+    try {
+      const r = movilizarEjercito(
+        porId.get(origen.id)!,
+        jugadores.find((j) => j.id === jugadorId),
+        jugadorId,
+        expedicion.map((e) => e.id),
+        { tipo: 'asentamiento', id: objetivo.id },
+        asentamientos,
+        mapa,
+        `ejercito-npc-${contador++}`,
+        instante
+      );
+      porId.set(origen.id, r.asentamiento);
+      nuevos.push(r.ejercito);
+      conCampanaEnCurso.add(origen.id);
+      campanasLanzadas++;
+      eventos.push(`${origen.id}: lanza una campaña contra ${objetivo.id} con ${expedicion.length} escuadrón(es).`);
+    } catch (err) {
+      // Sin ruta por tierra, sin Liderazgo o sin escuadrones válidos: el NPC simplemente no sale este tick.
+      // Igual que con `atacarCampamentosCercanos`, un rechazo del motor no es un fallo del guion.
+      if (!(err instanceof MovilizacionInvalidaError)) throw err;
+    }
+  }
+
+  return { asentamientos: [...porId.values()], ejercitos: [...ejercitos, ...nuevos], eventos, campanasLanzadas, contador };
+}
+
+/**
+ * Una columna ACAMPADA ya terminó su campaña, así que el NPC la manda a casa.
+ *
+ * El asedio se resuelve UNA vez, al llegar (Doc 5.12.4): a partir de ahí, quedarse plantado no vuelve a
+ * atacar nada. Acampar indefinidamente es una jugada legítima para un humano —cortar un paso de montaña—,
+ * pero para un guion es sencillamente no saber volver: la tropa se queda fuera, y su asentamiento no puede
+ * lanzar otra campaña porque ya tiene una en curso.
+ *
+ * La primera versión de esta regla replegaba solo por HAMBRE, con el mismo `AUTONOMIA_MINIMA_TICKS` con el que
+ * decide salir. **Medido: no se disparaba ni una vez en 600 ticks.** Con el consumo de estacionado a 1/10
+ * (decisión del usuario, Doc 5.12.3), un carro de 500 sostiene a veinte soldados unos 1.600 ticks — el hambre
+ * no llega nunca, y el gate correcto resultó ser inútil por medir lo que no era. Lo que dejaba a las columnas
+ * fuera no era el hambre: era no tener motivo para volver.
+ */
+function replegarLosQueYaTerminaron(
+  ejercitos: Ejercito[],
+  asentamientos: Asentamiento[],
+  mapa: Mapa,
+  esNpc: (faccionId: string) => boolean
+): { ejercitos: Ejercito[]; eventos: string[]; repliegues: number } {
+  const eventos: string[] = [];
+  let repliegues = 0;
+  const porId = new Map(asentamientos.map((a) => [a.id, a]));
+
+  const actualizados = ejercitos.map((ejercito) => {
+    if (!esNpc(ejercito.faccionId) || ejercito.estado !== 'estacionado') return ejercito;
+    if (ejercito.escuadrones.every((e) => e.cantidad <= 0)) return ejercito; // ya es un fantasma: lo disuelve el motor
+
+    try {
+      const vuelta = replegarEjercito(ejercito, porId.get(ejercito.origenAsentamientoId), mapa);
+      repliegues++;
+      eventos.push(`${ejercito.id}: campaña terminada, se repliega a ${ejercito.origenAsentamientoId}.`);
+      return vuelta;
+    } catch (err) {
+      // Sin hogar al que volver (conquistado) o sin ruta por tierra: se queda donde está. El motor ya tiene
+      // decidido qué pasa entonces — se deshará por hambre y sus jugadores quedarán huérfanos (Doc 5.4).
+      if (!(err instanceof MovilizacionInvalidaError)) throw err;
+      return ejercito;
+    }
+  });
+
+  return { ejercitos: actualizados, eventos, repliegues };
 }
 
 export interface ConfigNpcGobernanza {
@@ -717,6 +1145,38 @@ export interface ConfigNpcGobernanza {
    * podrían chocar de id. El store pasa aquí su contador y luego lo adelanta con `contadorFinal` del resultado.
    */
   contadorInicial?: number;
+  /**
+   * Cómo se comporta esta Facción NPC con quien no es suyo
+   * (`Consideraciones/Entrada_Al_Mundo_Definicion.md`, decisión 5).
+   *
+   * - `'agresiva'` (por defecto): manda campañas contra plazas rivales y da caza a cualquier columna o
+   *   caravana no aliada que vea. Es lo que el LABORATORIO necesita — sin ello el batch se queda sin
+   *   combates y las constantes militares se miden sobre un mundo en paz (riesgo 5 del jugador situado, con
+   *   dos tests que fallan si desaparece).
+   * - `'defensiva'`: ni campañas ni caza. Se defiende si la tocan —el combate lo dispara quien ataca, no
+   *   ella— y sigue comerciando. Es lo que necesitan las Facciones SEMBRADAS al arrancar el servidor: un
+   *   recién llegado no tiene aliados, así que con la postura agresiva sería presa a la vista de cualquier
+   *   columna NPC antes de tener con qué defenderse.
+   *
+   * El mundo no se queda inofensivo por esto: el peligro de base lo dan los BANDIDOS, que atacan caravanas
+   * por su cuenta y no son de nadie. Queda un reparto limpio — bandidos la amenaza, Facciones NPC los
+   * vecinos, otros jugadores la guerra de verdad.
+   */
+  postura?: 'agresiva' | 'defensiva';
+  /**
+   * Punto 7e: las plazas NPC publican ordenes de compra y venta (`publicarOrdenesNpc`). Por defecto `true`.
+   *
+   * Es lo que las convierte en SOCIO DE COMERCIO para un jugador, que es lo que un recien llegado necesita
+   * encontrar. `false` deja al NPC como antes de que existiera — la palanca para aislar su efecto sobre la
+   * economia en batch, porque poner oferta y demanda nuevas en el mercado mueve los precios de referencia.
+   */
+  colocarOrdenes?: boolean;
+  /** Punto 7c: manda columnas contra plazas rivales (Paso 12). Por defecto `true`. `false` deja al NPC como
+   * antes de que existiera el movimiento de ejércitos — la palanca para aislar su efecto en batch.
+   *
+   * Una postura `'defensiva'` lo apaga igual: la postura es la decisión de diseño, esto es la palanca de
+   * experimento, y no hace falta acordarse de poner las dos. */
+  lanzarCampanas?: boolean;
   /** Punto 7b: ataca campamentos de bandidos cercanos con todos los escuadrones disponibles. Por defecto
    * `true` (comportamiento de siempre, sin cambios). `false` es una palanca de EXPERIMENTO para aislar cuánto
    * del reclutamiento continuo del NPC lo sostiene reponer bajas de combate frente a deserción por hambre —
@@ -828,7 +1288,7 @@ function fundarAsentamientosIniciales(
   facciones: Faccion[],
   faccionesIds: string[],
   mapa: Mapa,
-  tickActual: number,
+  instante: Instante,
   jugadoresPorFundacion: number,
   buscarPosicion: (mapa: Mapa, asentamientos: Asentamiento[]) => Point | undefined
 ): { asentamientos: Asentamiento[]; facciones: Faccion[]; eventos: string[] } {
@@ -846,7 +1306,7 @@ function fundarAsentamientosIniciales(
 
     const jugadoresIds = Array.from({ length: jugadoresPorFundacion }, (_, i) => `npc-${faccionId}-${i + 1}`);
     try {
-      const resultado = fundarAsentamiento(mapa, faccionesActuales, faccionId, posicion, jugadoresIds, asentamientosActuales, tickActual);
+      const resultado = fundarAsentamiento(mapa, faccionesActuales, faccionId, posicion, jugadoresIds, asentamientosActuales, instante);
       asentamientosActuales = [...asentamientosActuales, resultado.asentamiento];
       faccionesActuales = resultado.facciones;
       eventos.push(`${faccion.nombre} funda su asentamiento inicial ${resultado.asentamiento.id}.`);
@@ -861,11 +1321,11 @@ function fundarAsentamientosIniciales(
 /**
  * Un tick completo de decisiones del NPC de gobernanza: gobernanza+reserva base → **Granjas mínimas
  * (gate: sin esto, no se avanza a los dos pasos siguientes este tick)** → infraestructura comercial
- * (Mercado+caravana, para cualquier asentamiento) → núcleo militar (Barracón/Galería) → trueque de
- * SUPERVIVENCIA (cualquier Facción, prioriza lo que Mantenimiento necesita) → trueque de especialización
- * (delega en `avanzarAutoComercioSimulado`, sin reimplementarlo — solo dentro de la misma Facción) →
- * reclutamiento (con gate de reserva) → ataque a campamentos de bandidos → expansión. Llamar DESPUÉS de
- * `avanzarSimulacion` en el mismo tick.
+ * (Mercado+caravana, para cualquier asentamiento) → núcleo militar (Barracón/Galería) → **primer recinto de
+ * muralla (`asegurarMuralla`, Paso 2c)** → trueque de SUPERVIVENCIA (cualquier Facción, prioriza lo que
+ * Mantenimiento necesita) → trueque de especialización (delega en `avanzarAutoComercioSimulado`, sin
+ * reimplementarlo — solo dentro de la misma Facción) → reclutamiento (con gate de reserva) → ataque a
+ * campamentos de bandidos → expansión. Llamar DESPUÉS de `avanzarSimulacion` en el mismo tick.
  */
 export function avanzarNpcGobernanza(
   estado: EstadoSimulacion,
@@ -875,7 +1335,7 @@ export function avanzarNpcGobernanza(
 ): ResultadoNpcGobernanza {
   // Mismo contexto que consume el motor (`avanzarSimulacion`): el NPC decide con las funciones PÚBLICAS del
   // motor, así que necesita exactamente las mismas entradas externas — tick, momento y aleatoriedad.
-  const { tick: tickActual, rng } = contexto;
+  const { instante, rng } = contexto;
   const eventos: string[] = [];
   let contador = config.contadorInicial ?? 0;
 
@@ -896,7 +1356,7 @@ export function avanzarNpcGobernanza(
       facciones,
       config.faccionesIds,
       mapa,
-      tickActual,
+      instante,
       config.jugadoresPorFundacionInicial ?? 5,
       config.buscarPosicionFundacionInicial ?? buscarPosicionFundacionInicialPorDefecto
     );
@@ -934,23 +1394,30 @@ export function avanzarNpcGobernanza(
       mapa,
       capital,
       reclamos,
-      tickActual,
+      instante,
       contador++
     );
     if (resultado.caravanaNueva) caravanas = [...caravanas, resultado.caravanaNueva];
-    return asegurarNucleoMilitar(resultado.asentamiento, faccion, zonaPoligono, mapa, capital, reclamos, contador++);
+    const conNucleoMilitar = asegurarNucleoMilitar(resultado.asentamiento, faccion, zonaPoligono, mapa, capital, reclamos, contador++);
+    return asegurarMuralla(conNucleoMilitar, instante);
   });
 
-  const trueque = truequeDeSupervivencia(asentamientos, capitalesPorFaccion, estado.acuerdos, tickActual, contador, esNpc);
+  const trueque = truequeDeSupervivencia(asentamientos, capitalesPorFaccion, estado.acuerdos, instante, contador, esNpc);
   contador = trueque.contador;
   eventos.push(...trueque.eventos);
+
+  // Contestar va DESPUES de proponer y en el mismo tick: asi un trueque entre dos NPC nace y se acepta de
+  // una pasada, igual que antes de que la aceptacion existiera. Tambien recoge aqui las propuestas que un
+  // JUGADOR haya dejado pendientes desde su turno.
+  const respuestas = responderPropuestasNpc(asentamientos, [...estado.acuerdos, ...trueque.acuerdosNuevos], esNpc, instante);
+  eventos.push(...respuestas.eventos);
 
   const estadoConGobernanzaBase: EstadoSimulacion = {
     ...estado,
     asentamientos,
     facciones,
     caravanas,
-    acuerdos: [...estado.acuerdos, ...trueque.acuerdosNuevos],
+    acuerdos: respuestas.acuerdos,
   };
   // Trueque de especialización: se DELEGA en el motor (`avanzarAutoComercioSimulado`) sin tocarlo ni una
   // línea. Para acotarlo a las Facciones NPC se le pasa una VISTA del estado con `facciones` ya filtrado —
@@ -965,7 +1432,7 @@ export function avanzarNpcGobernanza(
   // Este paso solo hace algo con `SIMULACION_AUTO_COMERCIO.activo = 1` (apagado por defecto, encendible en
   // caliente desde la pestaña "Valores de simulación"). Con el flag apagado el NPC conserva los otros 6 pasos.
   const faccionesNpc = facciones.filter((f) => esNpc(f.id));
-  const trasComercioParcial = avanzarAutoComercioSimulado({ ...estadoConGobernanzaBase, facciones: faccionesNpc }, mapa, tickActual);
+  const trasComercioParcial = avanzarAutoComercioSimulado({ ...estadoConGobernanzaBase, facciones: faccionesNpc }, mapa, instante);
   const trasComercio: EstadoSimulacion = { ...trasComercioParcial, facciones };
 
   asentamientos = trasComercio.asentamientos;
@@ -974,7 +1441,7 @@ export function avanzarNpcGobernanza(
   const origenReclutamiento = config.origenReclutamiento ?? 'pesants';
   asentamientos = asentamientos.map((a) => {
     if (!esNpc(a.faccionId)) return a;
-    const resultado = reclutarParaTodos(a, tickActual, contador, tropaId, origenReclutamiento);
+    const resultado = reclutarParaTodos(a, contador, tropaId, origenReclutamiento);
     contador = resultado.contador;
     reclutamientosExitosos += resultado.reclutamientosExitosos;
     return resultado.asentamiento;
@@ -986,20 +1453,77 @@ export function avanzarNpcGobernanza(
           asentamientos,
           facciones: trasComercio.facciones,
           campamentos: trasComercio.campamentosBandidos,
-          bandidosProximoSpawnTick: undefined,
+          bandidosProximoSpawnEn: undefined,
           eventos: [] as string[],
           destruidos: 0,
           fallidos: 0,
         }
-      : atacarCampamentosCercanos(asentamientos, trasComercio.campamentosBandidos, trasComercio.facciones, tickActual, esNpc, rng);
+      : atacarCampamentosCercanos(asentamientos, trasComercio.campamentosBandidos, trasComercio.facciones, instante, esNpc, rng);
   eventos.push(...trasBandidos.eventos);
 
+  // Punto 7c: las campañas (Paso 12). Van DESPUÉS de reclutar y de los bandidos, y antes de expandir: se
+  // decide con la guarnición ya repuesta de este tick, y sacar tropa no debe competir con fundar.
+  // Una Facción defensiva no manda columnas contra nadie: `postura` decide, y `lanzarCampanas` sigue siendo
+  // la palanca de experimento del batch. Cualquiera de las dos basta para apagarlo.
+  const defensiva = config.postura === 'defensiva';
+  const trasCampanas =
+    defensiva || config.lanzarCampanas === false
+      ? { asentamientos: trasBandidos.asentamientos, ejercitos: trasComercio.ejercitos, eventos: [] as string[], campanasLanzadas: 0, contador }
+      : lanzarCampanas(
+          trasBandidos.asentamientos,
+          trasComercio.ejercitos,
+          // Los fundadores NPC (`npc-<faccionId>-<n>`) son ids ficticios sin `Jugador` detrás, y un jugador
+          // ausente usa `LIDERAZGO.base` por diseño (Doc 5.11). No se desvían de la base, así que no hay
+          // nada que consultar.
+          [],
+          trasComercio.relaciones,
+          mapa,
+          esNpc,
+          contador,
+          instante
+        );
+  contador = trasCampanas.contador;
+  eventos.push(...trasCampanas.eventos);
+
+  // Punto 7e: publicar en el mercado. Va DESPUES del comercio automatico y antes de lo militar, con el
+  // almacen de este tick ya movido: publicar sobre cifras viejas pondria a la venta un excedente que ya se
+  // gasto.
+  const trasOrdenes =
+    config.colocarOrdenes === false
+      ? { ordenes: trasComercio.ordenes, eventos: [] as string[], contador, publicadas: 0 }
+      : publicarOrdenesNpc(trasBandidos.asentamientos, trasComercio.ordenes, esNpc, instante, contador);
+  contador = trasOrdenes.contador;
+  eventos.push(...trasOrdenes.eventos);
+
+  // Y saber volver: una columna que ya acampó terminó su campaña y se manda a casa. Va después de lanzar para
+  // que una recién salida no se replegue en el mismo tick.
+  const trasRepliegues = replegarLosQueYaTerminaron(trasCampanas.ejercitos, trasCampanas.asentamientos, mapa, esNpc);
+  eventos.push(...trasRepliegues.eventos);
+
+  // Punto 7d: a por quien tienen delante (paso 8e). Va al FINAL de lo militar y antes de expandir: se decide
+  // con las columnas de este tick ya movilizadas y ya replegadas, para que una que acaba de recibir la orden
+  // de volver no salga corriendo detrás de nadie.
+  //
+  // Sin esto el batch se queda sin combates y NADIE SE ENTERA: desde que los encuentros dejaron de salir de
+  // la geometría, en el laboratorio no hay quien los pida, y las constantes militares se seguirían midiendo
+  // sobre un mundo en paz sin que ninguna prueba fallara.
+  const trasPersecuciones = defensiva
+    ? { ejercitos: trasRepliegues.ejercitos, persecucionesNuevas: 0 }
+    : fijarPersecucionesNpc(
+        trasRepliegues.ejercitos,
+        trasComercio.caravanas,
+        trasCampanas.asentamientos,
+        trasComercio.relaciones,
+        esNpc,
+        instante
+      );
+
   const trasExpansion = expandirSiPuede(
-    trasBandidos.asentamientos,
+    trasCampanas.asentamientos,
     trasBandidos.facciones,
     trasComercio.caravanas,
     mapa,
-    tickActual,
+    instante,
     contador,
     config.buscarDestinoFundacion ?? buscarDestinoFundacionPorDefecto,
     config.jugadoresPorCaravanaFundacion ?? 5,
@@ -1012,14 +1536,18 @@ export function avanzarNpcGobernanza(
       asentamientos: trasExpansion.asentamientos,
       facciones: trasBandidos.facciones,
       caravanas: trasExpansion.caravanas,
+      ordenes: trasOrdenes.ordenes,
+      ejercitos: trasPersecuciones.ejercitos,
       campamentosBandidos: trasBandidos.campamentos,
-      bandidosProximoSpawnTick: trasBandidos.bandidosProximoSpawnTick ?? trasComercio.bandidosProximoSpawnTick,
+      bandidosProximoSpawnEn: trasBandidos.bandidosProximoSpawnEn ?? trasComercio.bandidosProximoSpawnEn,
     },
     eventos,
     stats: {
       reclutamientosExitosos,
       truequesSupervivenciaPropuestos: trueque.propuestos,
       campamentosDestruidos: trasBandidos.destruidos,
+      campanasLanzadas: trasCampanas.campanasLanzadas,
+      repliegues: trasRepliegues.repliegues,
       campamentosAtacadosSinExito: trasBandidos.fallidos,
       caravanasFundacionLanzadas: trasExpansion.lanzadas,
     },

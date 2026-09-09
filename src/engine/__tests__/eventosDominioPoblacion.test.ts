@@ -8,7 +8,7 @@ import { avanzarNutricionPoblacion, crecerPoblacion, type PayloadHambrunaMuerte 
 import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
 
 function edificioActivo(id: string, tipo: Edificio['tipo']): Edificio {
-  return { id, tipo, posicion: { x: 0, y: 0 }, estado: 'activo', ticksRestantes: 0, ambito: 'asentamiento' };
+  return { id, tipo, posicion: { x: 0, y: 0 }, estado: 'activo', ambito: 'asentamiento' };
 }
 
 function base(): Asentamiento {

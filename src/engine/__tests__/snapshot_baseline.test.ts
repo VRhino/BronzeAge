@@ -3,6 +3,22 @@
 // en el motor que altere el resultado de una partida "de referencia" — aunque no toque ninguna invariante
 // ni reproduzca ninguno de los bugs históricos ya cubiertos — hará que este test falle y obligue a revisar
 // el diff a propósito (`vitest run -u` para aceptarlo conscientemente) en vez de colarse en silencio.
+//
+// **Re-baselineado en el Paso 1 de la Etapa 6** (2026-08-30, `Consideraciones/
+// Vista_Asentamiento_Trazado_Urbano.md` §E6.11/§E6.15). La rejilla del asentamiento pasó a discretizarse al
+// doble de resolución (`tamanoCelda` 6 → 3, huellas ×2), lo que habilita posiciones a media celda que antes no
+// existían, así que la colocación cambia aunque la geometría física no.
+//
+// El diff aceptado fue mínimo y conviene dejarlo escrito, porque es la evidencia de que el reescalado no
+// alteró la simulación: **un solo corte**, con una Vivienda que arrancaba obra en ese tick arrancando un tick
+// más tarde (y sus 10 de madera todavía sin gastar). Todos los cortes posteriores quedaron IDÉNTICOS byte a
+// byte, lo que confirma que la obra sí se hizo y que la partida converge — no es una construcción perdida.
+//
+// **Re-baselineado otra vez en el Paso 2** (calles sobre celdas), y el resultado es llamativo: el diff son las
+// MISMAS 3 líneas, en sentido inverso — la Vivienda vuelve a arrancar en su tick original. O sea que un cambio
+// tan de fondo como que la calle pase a ocupar suelo deja la composición de la ciudad, en todos los cortes de
+// referencia, exactamente donde estaba antes de la Etapa 6. Cambia cómo se ORDENA la ciudad, no cuánto
+// construye ni a qué ritmo.
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Asentamiento, Faccion } from '../../domain/types';
 import { avanzarSimulacion } from '../simulation';

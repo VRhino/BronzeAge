@@ -7,6 +7,7 @@
 // a la Fase C— los metadatos de autorización de cada uno (matriz del doc 5) pueden vivir junto a su lógica en
 // vez de en una tabla paralela que se desincroniza.
 import type { EventoDominio } from '../../domain/eventos';
+import type { Instante } from '../../domain/tiempo';
 import type { Mapa } from '../../world/mapa';
 import type { RandomFn } from '../../worldgen';
 import type { EventoDominioConVersion, GameSessionState } from '../estado';
@@ -22,18 +23,20 @@ export type ActorId = string;
  * Se corresponde con el rol técnico `servicio_npc` del doc 5. */
 export const ACTOR_SISTEMA: ActorId = 'sistema';
 
-/** Actor de la consola local de administración (`app/gameStore.ts`), donde todavía no hay autenticación y
- * quien pulsa el botón es siempre el mismo. Desaparece en la Fase C, cuando el actor lo resuelva la sesión
- * autenticada en vez de fijarlo el cliente (doc 2, principio 3). */
-export const ACTOR_LOCAL: ActorId = 'local';
-
 /**
  * Contexto de ejecución de un comando: lo que NO es dato del comando pero hace falta para resolverlo.
  * Deliberadamente simétrico a `ContextoSimulacion` (`engine/simulation.ts`) — y por el mismo motivo: el
  * momento y la aleatoriedad se inyectan, nunca se leen aquí dentro.
  */
 export interface ContextoComando {
-  /** Momento de simulación (ISO 8601). Lo decide el llamador; ningún comando llama a `Date.now()`. */
+  /** Instante de MUNDO (`Instante`, ms), derivado del tick por `GameSession.ejecutar` (`instanteDeTick`,
+   * Fase D / doc 10). Ni el comando ni el llamador lo pasan: es función del `tick` y de nada más — el reloj
+   * de pared no entra en el estado de partida. Es con lo que se fechan los campos `*En: Instante`. */
+  instante: Instante;
+  /** El mismo instante en ISO 8601, para fechar eventos (`EventoDominio.momento`). Redundante con `instante`
+   * a propósito y de forma permanente: el núcleo puro no puede construir un `Date` (`isoDeInstante` vive en
+   * `session/estado.ts`), así que quien ejecuta el comando lo pasa ya formateado — mismo criterio que
+   * `ContextoSimulacion.momento`. */
   momento: string;
   actor: ActorId;
   rng: RandomFn;

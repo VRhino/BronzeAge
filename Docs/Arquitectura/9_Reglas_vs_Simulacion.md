@@ -47,8 +47,9 @@ entregue. El aviso de viabilidad al fundar (`evaluarViabilidadFundacion`) necesi
 asentamientos para comprobar separación: mandar el resultado en vez de la entrada reduce la fuga, no la
 elimina — de dónde *no* puedes fundar se deduce dónde hay alguien.
 
-Es una decisión de diseño de niebla de guerra (**C4 Slice 2**), no un problema de transporte. Queda anotado
-aquí para que no se cuele como resuelto.
+Es una decisión de diseño de niebla de guerra (`Consideraciones/Niebla_De_Guerra_Definicion.md`), no un
+problema de transporte. `evaluarViabilidadFundacion` ya se retiró del cliente por esto (C10); si vuelve como
+consulta servida, tendrá que respetar la visibilidad del jugador.
 
 ---
 
@@ -205,10 +206,10 @@ las vistas de estado llevan `mapaId` en vez de `mapa`.
 son *parámetros de ruido*, y el bioma no se guarda — se evalúa por punto con `evaluarBioma`. C11a sirve el
 `MapaGenerado` tal cual, indibujable sin código de evaluación — pero ese código es exactamente T2a (esta
 misma sección, arriba): "el terreno lo ven todos", entrada no privilegiada. No hacía falta que el servidor
-rasterizara nada: [`cliente-jugador/`](../../cliente-jugador/) (boilerplate nuevo, sin `@motor/*`) lleva su
+rasterizara nada: `cliente-jugador/` —hoy el repositorio `BronzeAgeClient`, sin `@motor/*`— lleva su
 propia copia de `evaluarElevacion`/`evaluarFertilidad`/`evaluarBioma` y recalcula el terreno él mismo desde
 los parámetros públicos de C11a — verificado en vivo que reproduce la misma geografía que el motor real, sin
-soporte de `region` todavía (limitación documentada, ver `cliente-jugador/src/terreno/README.md`).
+soporte de `region` todavía (limitación documentada, ver `src/terreno/README.md` en `BronzeAgeClient`).
 
 ---
 
@@ -232,8 +233,6 @@ viajando en la proyección — hoy pesa 0,3 KB al tick 200, es irrelevante.
 
 No entran en la clasificación porque no son ni regla ni simulación de partida:
 
-- `world/exportUnity.ts` (`exportarParaUnityTerrain`) — herramienta de *worldgen*, no del juego. El
-  [doc 8](8_Triaje_Consultas.md) ya la marcaba como endpoint de administración; hoy corre en el navegador.
 - `GameStore.exportarSimulacion` — serializa la partida a un archivo. Administración (**C12**).
 - `engine/simulacionAutoComercio.ts` — simulación de desarrollo, apagada por defecto.
 

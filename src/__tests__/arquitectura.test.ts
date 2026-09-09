@@ -9,29 +9,12 @@
 // que `scripts/run-batch-sim.ts` corre sin tocar `app/`/`ui/` — este test es la versión automática de esa
 // misma garantía, para que "backend" y "lógica de juego" no se puedan enredar sin que algo lo señale.
 //
-// Lee el árbol con `node:fs`. Antes usaba `import.meta.glob` (Vite) porque el repo era "100% navegador/Vite,
-// sin `@types/node`" — premisa que dejó de ser cierta al separar el cliente a su propio proyecto (`cliente/`,
-// Fase C): esto es ya un proyecto de Node puro, y depender de una función de bundler para leer archivos sería
-// arrastrar un acoplamiento que ya no paga nada.
-import { readdirSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+// La lectura del árbol de `src/` vive en `fuenteDelProyecto.ts`, compartida con `autoridadTemporal.test.ts`
+// (el guard de "el núcleo puro no lee reloj ni aleatoriedad", Docs/Arquitectura/10_Modelo_Temporal.md). Antes
+// se leía con `import.meta.glob` (Vite) porque el repo era "100% navegador/Vite, sin `@types/node`" — premisa
+// que dejó de ser cierta al separar el cliente a su propio proyecto (Fase C).
 import { describe, expect, it } from 'vitest';
-
-const RAIZ_SRC = fileURLToPath(new URL('..', import.meta.url));
-
-/** Todo el código fuente de producción como texto plano, indexado por ruta absoluta-desde-raíz
- * (`/src/engine/population.ts`), que es el formato que espera el resto del test. */
-function leerArbolFuente(directorio = RAIZ_SRC, prefijo = '/src'): Record<string, string> {
-  const archivos: Record<string, string> = {};
-  for (const entrada of readdirSync(directorio, { withFileTypes: true })) {
-    const ruta = `${prefijo}/${entrada.name}`;
-    if (entrada.isDirectory()) Object.assign(archivos, leerArbolFuente(`${directorio}/${entrada.name}`, ruta));
-    else if (entrada.name.endsWith('.ts')) archivos[ruta] = readFileSync(`${directorio}/${entrada.name}`, 'utf-8');
-  }
-  return archivos;
-}
-
-const ARCHIVOS_FUENTE = leerArbolFuente();
+import { ARCHIVOS_FUENTE, archivosDeCapa } from './fuenteDelProyecto';
 
 /**
  * Capas hacia las que cada capa puede importar, además de sí misma (siempre permitido, no hace falta
@@ -94,15 +77,6 @@ function importsRelativos(contenido: string): string[] {
   for (const m of contenido.matchAll(/\bfrom\s+['"]([^'"]+)['"]/g)) specs.push(m[1]!);
   for (const m of contenido.matchAll(/\bimport\(\s*['"]([^'"]+)['"]\s*\)/g)) specs.push(m[1]!);
   return specs.filter((s) => s.startsWith('.'));
-}
-
-/** Archivos de producción (excluye `__tests__` y `*.test.ts`: los tests tienen sus propias conveniencias —
- * fixtures compartidas, etc. — y no son parte del contrato de arquitectura) de una capa dada. */
-function archivosDeCapa(capa: string): [ruta: string, contenido: string][] {
-  const prefijo = capa === 'constants' ? `/src/${capa}.ts` : `/src/${capa}/`;
-  return Object.entries(ARCHIVOS_FUENTE).filter(
-    ([ruta]) => (ruta === prefijo || ruta.startsWith(prefijo)) && !ruta.includes('/__tests__/') && !ruta.endsWith('.test.ts')
-  );
 }
 
 describe('fronteras de arquitectura entre capas', () => {

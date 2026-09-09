@@ -2,9 +2,9 @@
 // arreglaron una vez. Cada test aquí reproduce la condición que los disparaba — si alguien reintroduce el
 // bug (a propósito o sin querer, ej. al refactorizar), el test correspondiente debe fallar.
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { EdificioTipo } from '../../domain/types';
 import { avanzarSimulacion } from '../simulation';
 import { createRng, type RandomFn } from '../../worldgen';
+import { EDIFICIO_CATALOGO } from '../../constants';
 import {
   contextoDeTest,
   crearEstadoDeTest,
@@ -32,10 +32,6 @@ function estadoInicialConUnAsentamiento(posicion?: { x: number; y: number }) {
   return { mapa, estado };
 }
 
-function contarPorTipo(edificios: { tipo: EdificioTipo; estado: string }[], tipo: EdificioTipo): number {
-  return edificios.filter((e) => e.tipo === tipo).length;
-}
-
 describe('regresiones históricas (Correcciones_Durante_Desarrollo.md)', () => {
   let rng: RandomFn;
 
@@ -45,15 +41,15 @@ describe('regresiones históricas (Correcciones_Durante_Desarrollo.md)', () => {
 
   // Bug #7: "muerte instantánea de todo asentamiento nuevo" — el coste de Mantenimiento exigía trigo desde
   // el tick 1, antes de que la Granja llegara a completarse, destruyendo el asentamiento en ~9 ticks siempre.
-  // La corrección es MANTENIMIENTO.graciaTicks: ningún asentamiento puede caer en ruinas antes de esos ticks.
+  // La corrección es MANTENIMIENTO.graciaMinutos: ningún asentamiento puede caer en ruinas antes de esos ticks.
   it('un asentamiento recién fundado no puede caer en ruinas durante la gracia de mantenimiento, sin importar su emplazamiento', () => {
     // Posición deliberadamente sin garantía de bosque cercano (a diferencia de `posicionRecomendable`):
     // si la gracia no protegiera, este sería justo el caso que colapsaría en ~9 ticks.
     const { mapa, estado: estadoInicial } = estadoInicialConUnAsentamiento({ x: 500, y: 500 });
     let estado = estadoInicial;
-    const graciaTicks = 60;
+    const graciaMinutos = 60;
 
-    for (let tick = 1; tick < graciaTicks; tick++) {
+    for (let tick = 1; tick < graciaMinutos; tick++) {
       estado = avanzarSimulacion(estado, mapa, contextoDeTest(tick, rng));
       expect(estado.asentamientos, `tick ${tick}: el asentamiento sigue en pie durante la gracia`).toHaveLength(1);
       expect(estado.asentamientos[0]!.medidorMantenimiento, `tick ${tick}: medidor intacto durante la gracia`).toBe(100);
@@ -79,22 +75,42 @@ describe('regresiones históricas (Correcciones_Durante_Desarrollo.md)', () => {
     expect(leneraActiva, 'una Leñera se activó dentro de los primeros 40 ticks').toBe(true);
   });
 
-  // Bug #2: "hambruna silenciosa" — solo se construía una Granja en toda la vida del asentamiento aunque la
-  // población (y por tanto el consumo de trigo) siguiera creciendo sin límite; el trigo caía a 0 sin que se
-  // disparara ninguna respuesta automática. La corrección hace que la auto-construcción encole Granjas
-  // adicionales mientras la producción de trigo esté por debajo del consumo (ver `enDeficitTrigo`, construction.ts).
-  it('la Granja escala con la demanda: aparece más de una según crece la población', () => {
+  // Bug #2: "hambruna silenciosa" — la producción de trigo se quedaba clavada en la Granja inicial aunque la
+  // población (y con ella el consumo) creciera sin límite; el trigo caía a 0 sin que se disparara ninguna
+  // respuesta automática. La corrección hace que la auto-construcción reaccione al déficit (ver
+  // `enDeficitTrigo`, construction.ts).
+  //
+  // Lo que se afirma es que HAY respuesta, no CUÁL: el motor tiene dos palancas —encolar otra Granja o
+  // mejorar la que hay— y prefiere la segunda a propósito (`hayMejoraGranjaDisponible`, construction.ts:
+  // una Granja más diluye la mano de obra de las que ya existen; mejorar la existente no). Este test decía
+  // "más de una Granja", que era la palanca que se veía en 2026-08; al doblar el rinde base a 60
+  // (2026-09-04) una sola Granja de nivel 4 cubre 300 ticks de crecimiento y la palanca observable pasó a
+  // ser la mejora. Se generaliza la aserción en vez de ablandarla: si alguien reintrodujera el bug —cero
+  // respuesta— la capacidad se quedaría en la Granja inicial de nivel 1 y esto seguiría fallando igual.
+  it('la producción de trigo escala con la demanda: más Granjas, mejores Granjas, o ambas', () => {
     const posicion = posicionRecomendable(crearMapaDeterminista(SEED));
     const { mapa, estado: estadoInicial } = estadoInicialConUnAsentamiento(posicion);
     let estado = estadoInicial;
 
-    let maxGranjas = 0;
+    const nivelesGranja = EDIFICIO_CATALOGO.granja.niveles as Record<number, { produccionBaseTrigo?: number }>;
+    const rindeDe = (nivelInterno?: number) => nivelesGranja[nivelInterno ?? 1]?.produccionBaseTrigo ?? 0;
+    const rindeInicial = rindeDe(1);
+
+    let maxProduccion = 0;
+    let trigoMinimo = Infinity;
     for (let tick = 1; tick <= 300; tick++) {
       estado = avanzarSimulacion(estado, mapa, contextoDeTest(tick, rng));
       if (estado.asentamientos.length === 0) break; // se arruinó — no es lo que este test evalúa.
-      maxGranjas = Math.max(maxGranjas, contarPorTipo(estado.asentamientos[0]!.edificios, 'granja'));
+      const a = estado.asentamientos[0]!;
+      const produccion = a.edificios
+        .filter((e) => e.tipo === 'granja' && e.estado === 'activo')
+        .reduce((suma, g) => suma + rindeDe(g.nivelInterno), 0);
+      maxProduccion = Math.max(maxProduccion, produccion);
+      trigoMinimo = Math.min(trigoMinimo, a.almacen['trigo']?.cantidad ?? 0);
     }
 
-    expect(maxGranjas, 'en algún momento de la simulación hay más de 1 Granja (activa o en camino)').toBeGreaterThan(1);
+    expect(maxProduccion, 'la capacidad de producir trigo creció por encima de la Granja inicial').toBeGreaterThan(rindeInicial);
+    // El síntoma del bug original, comprobado aparte: el trigo nunca tocó fondo.
+    expect(trigoMinimo, 'el trigo nunca llegó a 0 (la "hambruna silenciosa")').toBeGreaterThan(0);
   });
 });

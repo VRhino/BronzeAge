@@ -21,6 +21,14 @@ Cada clase tiene FÓRMULA DE CRECIMIENTO INDEPENDIENTE (no comparten los mismos 
 - Mientras la nutrición se MANTIENE en 0 (hambre sostenida, no solo un bache puntual), cada tick cuesta una fracción real de población — **5% de pesants+artesanos**, mismo valor que la fracción de deserción de tropas sin moral. **Nobleza queda protegida** ("los nobles comen primero") — nunca se purga por hambre, igual que `nivel`/población ya asentada nunca se purga por un solo bache de Mantenimiento (§4.5).
 - PLACEHOLDER sin calibrar por simulación todavía, igual que el resto de cifras de esta fase (`POBLACION.hambre`, `constants.ts`). Implementación: `avanzarNutricionPoblacion`, `engine/population.ts` — corre cada tick antes de `crecerPoblacion`, en el mismo lugar donde antes corría `consumirComida` (ver `engine/simulation.ts`). Visible en el panel del asentamiento junto a la barra de Mantenimiento (`src/main.ts`).
 
+**Recaudación de oro por clase (bloque "economía del oro", 2026-09-08 — diseño cerrado, en implementación; `Consideraciones/Economia_Del_Oro_Definicion.md`):**
+- Cada tick, el asentamiento **genera oro según su población y de qué clase es**, `recaudacionOro(asentamiento)` en `engine/population.ts` — espejo exacto de `consumoComidaPoblacion`, signo opuesto: `Σ(habitantes_clase × IMPUESTOS.tasa_clase)`, sumado a `almacen.oro` con `agregarRecurso` (respeta capacidad; el sobrante se pierde, igual que la producción de mina).
+- **Nobleza > Artesanos > Pesants** por cabeza (`IMPUESTOS` en `constants.ts`, PLACEHOLDER en calibración: 0.004 / 0.015 / 0.06 oro/min tras la iteración 1). Base imponible por riqueza — crecer Nobleza = asentamiento rico; refuerza el valor del Palacio.
+- **NO escala por distancia a la capital ni por `nivelActual`** — el eje de distancia ya es el "impuesto de cohesión" del lado del coste (Mantenimiento, 4.5). Dejar el ingreso plano hace que el impuesto premie crecer alto y cohesionado.
+- `estabilidad`/`felicidad` = 1 placeholder, igual que las 3 fórmulas de crecimiento. Cuando exista bienestar (Sprint 4+, Sacerdote), entra como multiplicador por el mismo sitio.
+- Corre entre `crecerPoblacion` y `avanzarMantenimiento` en el tick (que el oro recién recaudado pueda pagar el mantenimiento del mismo tick). Visible en el panel del asentamiento como "recaudación: +X oro/min" desglosada por clase.
+- Modulable por la política **"Presión Fiscal"** del Tesorero (4.4).
+
 **Reclutamiento militar (doble carril):**
 - Carril COMBATE REAL (Pesants + Artesanos): deben salir a combatir (PvP o PvE) para "veteranizar" y subir de tier.
 - Carril PROGRESIÓN PLANA (Nobleza): conversión INSTANTÁNEA a unidades de élite si hay equipo disponible.
@@ -79,7 +87,7 @@ Fase 0 descarta por completo los requisitos de "Planos de X" (vía Aedas, Doc 6)
 | Edificio | Recurso | Costo | Trabajadores | Tiempo | Producción base |
 |---|---|---|---|---|---|
 | Corral (nuevo) | Livestock | 30 madera | 4 | 6 ticks | 3 livestock |
-| Granja | Trigo | 30 madera | 4 | 6 ticks | 15 trigo |
+| Granja | Trigo | 30 madera | 4 | 6 ticks | **30 trigo** |
 | Leñera | Madera | 10 madera | 4 | 3 ticks | 5 madera |
 | Mina de oro | Oro | 40 madera + 10 piedra | 6 | 6 ticks | 2 oro |
 | Mina de cobre | Cobre | 30 madera + 5 piedra | 8 | 4 ticks | 5 cobre |
@@ -87,13 +95,38 @@ Fase 0 descarta por completo los requisitos de "Planos de X" (vía Aedas, Doc 6)
 
 Corral sigue el mismo patrón que Cantera/minas (ver 4.2): liga a un nodo finito de livestock (Doc 1.4), con reemplazo automático al agotarse. Cantera (piedra) no cambia respecto a la versión ya implementada — no está en esta tabla porque sus cifras siguen igual.
 
-**Producción de Granja recalibrada** (post rediseño de progreso, ver `Correcciones_Durante_Desarrollo.md` y 4.5): con una sola Granja por asentamiento y población creciendo un 12%/tick compuesto (sin techo — más población no aumenta la producción una vez cubiertos los `trabajadoresRequeridos`, ver `ratioManoObra`), la producción fija original de 5 trigo/tick no alcanzaba a sostener el consumo — el trigo llegaba a 0 sistemáticamente entre los ticks 45 y 90. Subida primero a 10 y recalibrada de nuevo a **15 trigo/tick**: mejora real, combinada con el disparador de Granja rediseñado (ver 4.2) para reaccionar antes de que el trigo se agote.
+**Producción de Granja recalibrada** (post rediseño de progreso, ver `Correcciones_Durante_Desarrollo.md` y 4.5): con una sola Granja por asentamiento y población creciendo un 12%/tick compuesto (sin techo — más población no aumenta la producción una vez cubiertos los `trabajadoresRequeridos`, ver `ratioManoObra`), la producción fija original de 5 trigo/tick no alcanzaba a sostener el consumo — el trigo llegaba a 0 sistemáticamente entre los ticks 45 y 90. Subida primero a 10 y recalibrada de nuevo a 15 trigo/tick: mejora real, combinada con el disparador de Granja rediseñado (ver 4.2) para reaccionar antes de que el trigo se agote.
+
+**Recalibrada otra vez a 30 trigo/tick — el doble en TODOS los niveles (2026-09-02, medido en batch).** Los 15 seguían sin cerrar la cuenta, y esta vez se vio con aritmética antes que con simulación: un asentamiento **nivel 1 a tope de población (300 habitantes) come 30 trigo/tick** (`consumoComidaPorHabitante` 0.1) mientras **una Granja nivel 1 producía 15** — el asentamiento nacía en déficit estructural, y en nivel 3 (techo 6.000) harían falta ~13 Granjas nivel 4. Niveles: 15/22.5/30/45 → **30/45/60/90**.
+
+Experimento A/B/C con la misma semilla (15 facciones, 600 ticks, palanca `BATCH_TRIGO_X` en `scripts/run-batch-sim.ts`):
+
+| | 1x (antes) | **2x (adoptado)** | 3x |
+|---|---|---|---|
+| Nutrición media (tick 600) | 28.98 y **cayendo** | **100** | 100 |
+| Asentamientos en nivel 2 | 7 / 13 | **11 / 13** | 11 / 13 |
+| Nivel de Facción máx | 3 | **5** | 5 |
+| Tropas vivas en todo el mundo | **15** | 777 | 943 |
+
+El dato que cierra la discusión: a 1x **las tropas se morían de hambre** (23 → 15 a lo largo de la corrida), o sea aproximadamente una tropa por asentamiento en todo el mundo. **3x no aporta nada sobre 2x** salvo sostener más ejército: nutrición, población, viviendas y niveles son idénticos, porque a 2x la nutrición ya satura. Por eso se adopta 2x y no 3x.
+
+Dos cosas que este experimento dejó ABIERTAS y conviene no perder de vista:
+- **El trigo NO es el cuello de botella de nivel 3**: con el triple de comida, `nivel 3 = 0` igual. La causa sospechada es `artesanos = 0` — ver `issues/npc_no_alcanzan_nivel_3.md`.
+- **Subir la producción base ESQUIVA el problema de escalado de Granjas** (`granjasActivasMedia = 2` y nivel interno 1 en las tres configuraciones: el NPC no construye más ni las mejora). Ver `issues/granjas_no_escalan_con_poblacion.md`.
 
 ### Especiales
 
 **Centro urbano** — edificio inicial, se construye automáticamente al fundar (Doc 1.3), no por ninguna otra vía.
 
 **Almacén** — auto-construcción, sin cambios de diseño. Costo: 50 madera + 30 piedra. Tiempo: 6 ticks.
+
+**Granero** (a petición del usuario, 2026-09-04) — almacén ESPECIALIZADO en grano: solo guarda trigo, y a cambio guarda mucho más que el Almacén general. **Uno por asentamiento**: no crece por número sino por **nivel interno**, cuatro escalones que llevan su capacidad de **2.000 a 6.000** de trigo (×1 / ×1,5 / ×2 / ×3 sobre el nivel 1, la misma forma que el rinde de la Granja).
+
+- **Costo**: 50 madera. Tiempo: 6 ticks. Mejoras que duplican sobre la base, con piedra a partir del nivel 2: 100+30, 200+60, 400+120.
+- **Gates de mejora**: subir al nivel 2 exige asentamiento de nivel 2; llegar al nivel 4 exige nivel 3. Se miden contra el nivel OPERATIVO, así que un asentamiento degradado deja de poder ampliar su granero hasta recuperarse.
+- **Auto-construcción**: se encola cuando el trigo pasa el mismo umbral de ocupación que dispara la ampliación de Almacén, mirando SOLO el trigo. Cuando lo que desborda es el grano, 300 de capacidad general es mucho peor negocio que 2.000 de grano.
+
+Para dimensionarlo: la reserva de comida de una ciudad de nivel 1 a tope ronda los 330, y el carro de suministros de un ejército son 500 (Doc 5.13). Un Granero de nivel 4 permite acumular una docena de campañas — es la pieza que convierte el excedente de trigo en capacidad militar en vez de perderlo contra el techo del almacén.
 
 **Murallas** — edificación defensiva, fuera de alcance de Fase 0 (sin cambios).
 
@@ -155,6 +188,7 @@ Van por AUTO-CONSTRUCCIÓN (igual que Granja/Cantera), disparadas en cuanto se c
 - Sin gate de nivel de asentamiento para la construcción BASE. Requisito nivel 2 (mejora): Asentamiento nivel 2. Requisito nivel 3 (mejora): Asentamiento nivel 3.
 - **Costo: construcción 100 madera (SIN piedra — a petición del usuario, ver Fase_0_5_Definicion_Especializacion_y_Cupos.md §"lo primero que hay que hacer")**: un asentamiento sin mineral alcanzable en su zona nunca junta más de los 20 piedra de reserva inicial (Doc 1.3), y el Mercado pedía 40 — deadlock real: sin Mercado no hay caravana propia, y sin caravana propia ningún lado de un trueque puede entregar lo pactado (cada lado envía desde su propio origen). El comercio no puede depender de tener ya el recurso que el comercio existe para resolver. Mejora 1: 150 madera + 100 piedra; mejora 2: 450 madera + 200 piedra (SIN cambios — para cuando el asentamiento mejora el Mercado ya tuvo tiempo de conseguir piedra, por extracción propia o por el comercio que el Mercado nivel 1 acaba de destrabar). Tiempo de construcción: 8 ticks.
 - Cupo de caravanas por nivel interno: nivel 1 → 2; nivel 2 → 4; nivel 3 → 6 (más el bonus aditivo de la política "Ampliación de Flota", ver 4.4).
+- **Revamp de caravanas (Doc 3.13):** el costo del Mercado NO cambia y NO regala ninguna caravana al completarse — el "+50 oro / carro + animal de bootstrap" del enunciado se midió y regresaba el batch NPC (ver Doc 3.13.2). El nivel interno gatea ahora tres cosas: colocar órdenes, el **cupo de flota** (2/4/6) y el **cupo de escuadrones-escolta por caravana** (1/2/3, `CARAVANA_ESCOLTA`, Doc 3.13.4).
 
 ### Trofeo
 
@@ -166,6 +200,12 @@ Van por AUTO-CONSTRUCCIÓN (igual que Granja/Cantera), disparadas en cuanto se c
 
 ## 4.3 Almacenamiento
 Límites de almacenaje por recurso, ampliables construyendo más capacidad. El superávit que excede el límite dispara construcción automática de más almacenamiento.
+
+Un asentamiento **nace con 400 de capacidad por recurso** (a petición del usuario, 2026-09-04, tras jugar varias partidas: 200 se quedaba corto). No es holgura: con 200 la ciudad quedaba **encerrada**, porque la reserva de construcción que protege el mantenimiento le impedía gastar los 50 de madera del Almacén… que era justamente el edificio que subía ese techo. Medido en batch, el cambio lleva los Almacenes construidos de 0 a 114 y los Graneros de 0 a 28, sin mover ni colapsos ni niveles alcanzados.
+
+Dos edificios lo amplían, y no compiten: el **Almacén** sube la capacidad de TODOS los recursos por igual (+300 cada uno, varios por asentamiento según nivel), y el **Granero** sube solo la del **trigo** (+2.000 a +6.000 según su nivel interno, uno por asentamiento). Ver 4.2.
+
+**Producción de trigo**: la base de la Granja se ha doblado dos veces a petición del usuario (15 → 30 el 2026-09-02, 30 → 60 el 2026-09-04). La primera vez porque una ciudad nivel 1 a tope come 30/minuto y la Granja rendía 15, o sea que nacía en déficit estructural. La segunda porque, con la mecánica de suministro en campaña ya medida, 26 de 28 ciudades no podían meter ni un grano en el carro de un ejército sin bajar de su reserva de comida (ver `Consideraciones/Movimiento_Ejercitos_Definicion.md` §10).
 
 ## 4.4 Políticas (mecanismo de influencia del jugador)
 - Interfaz: decisiones DISCRETAS tipo menú (no sliders continuos).
@@ -179,6 +219,7 @@ Límites de almacenaje por recurso, ampliables construyendo más capacidad. El s
 - Reglas: duración determinada, renovable indefinidamente, NO cancelable antes de tiempo (hay que esperar a que termine para renovar o cambiar).
 - **"Protección de Riesgos" — RETIRADA (a petición del usuario)**: ver nota de retirada en 4.2.
 - **"Edicto de Cosecha"** (Gobernador, nueva, a petición del usuario): multiplica ×1.5 la producción de trigo de todas las Granjas activas del asentamiento. No afecta a madera ni piedra. Ver 4.2.1 (Granja) y 4.5 (panel de producción).
+- **"Presión Fiscal"** (Tesorero, bloque "economía del oro", 2026-09-08 — diseño cerrado, en implementación; `Consideraciones/Economia_Del_Oro_Definicion.md`): sube la recaudación de oro (`factorRecaudacion` ×1.6 PLACEHOLDER, ver 4.1) **a cambio de** frenar el crecimiento de las 3 clases de población (`factorCrecimientoPoblacion` ×0.8). Sin política activa = baseline (factor 1). Es el knob de "más oro ahora ↔ menos gente mañana" — no hace falta un sistema de felicidad para que tenga un coste real. El Gobernador, con pool completa, también puede activarla. "Alivio Fiscal" (ir por debajo del baseline) NO entra en el primer pase.
 - **"Racionamiento"** (Sacerdote, implementada, pendiente de haber sido documentada aquí): reduce el consumo de trigo de la población (×0.8). No afecta al consumo/ración de tropas (Doc 5.4). Ver 4.1.
 - **"Vía Rápida de Construcción"** (Maestro de Obras, implementada, pendiente de haber sido documentada aquí): multiplica ×0.75 el tiempo de construcción de cualquier edificio que arranque obra mientras esté activa (25% más rápido) — no afecta al costo en recursos, solo a los ticks de obra. Ver `factorTiempoConstruccion`, aplicado al arrancar construcción (4.2).
 - **"Líneas de Producción"** (Maestro de Obras, nueva, a petición del usuario): mientras esté activa, un edificio de transformación NUEVO (Curtiduría/Armería/Fundición) ya no se sitúa en el primer hueco libre del crecimiento concéntrico de siempre — evalúa TODOS los huecos disponibles en la zona y elige el que minimiza la penalización de distancia a la fuente de sus insumos (mismo criterio de 4.2, "el eslabón más débil manda"), para que produzca a mejor ritmo desde el primer tick. Compite por el ÚNICO slot de Maestro de Obras con "Vía Rápida de Construcción" — no hay una regla de exclusión explícita entre ambas, es consecuencia directa de que el Maestro de Obras solo tiene 1 slot (ver "SLOTS Y POOLS POR CARGO" arriba) y las dos pertenecen a su pool: con una activa no queda hueco para la otra hasta que expire (duración fija, no cancelable antes de tiempo). Si el edificio no tiene recetas (Carpintería) o ya existe una fuente igual de cerca en cualquier hueco, el resultado no cambia respecto a tenerla desactivada.
@@ -199,13 +240,13 @@ Límites de almacenaje por recurso, ampliables construyendo más capacidad. El s
 - COSTE PERIÓDICO en recursos + oro, que escala por (a) NIVEL del asentamiento y (b) DISTANCIA al centro de poder de la Facción (más lejos = más caro; mecanismo anti-snowball).
 - Escalado del coste por nivel (se van SUMANDO materiales, no reemplazando) — **umbrales confirmados**:
   - Nivel 1: madera.
-  - Nivel 2: madera + piedra.
+  - Nivel 2: madera + piedra + **oro** (`MANTENIMIENTO.nivelParaOro: 3 → 2`, bloque "economía del oro", 2026-09-08 — diseño cerrado, en implementación; `Consideraciones/Economia_Del_Oro_Definicion.md`). Motivo: con el oro solo cobrándose a nivel 3 —que el NPC casi nunca alcanza— el mantenimiento-oro era letra muerta; adelantarlo a nivel 2 lo convierte en un drenaje involuntario real para ~la mitad de los asentamientos y da a la calibración un sink de oro contra el que medir. Riesgo: sube la tasa de colapso — si es inasumible se recalibra `oroBase` a la baja para el nuevo escalón.
   - Nivel 3 (tope real de Fase 0): madera + piedra + oro.
   - Niveles 4-5 (planeados, NO implementados en Fase 0, ver Doc 1.2 y `Correcciones_Durante_Desarrollo.md`): fuera de alcance, sin escalado definido todavía.
 - **Trigo — fix de mecánica repetida (detectado jugando, ver `Correcciones_Durante_Desarrollo.md`)**: el trigo YA NO forma parte del coste periódico anterior. Antes, Mantenimiento cobraba un valor fijo de trigo (placeholder desconectado de la realidad) ADEMÁS del consumo real de comida de población + tropas, que ya se descontaba por separado cada tick — un doble descuento sobre el mismo recurso por dos razones que en el fondo eran la misma ("alimentar al asentamiento"). Ahora el "apartado de trigo" que se muestra en el panel de Mantenimiento es directamente `consumo de comida de la población (4.1) + ración de tropas (Doc 5.4)` — el valor real, sin placeholder — pero se sigue descontando UNA sola vez, donde siempre se descontó (población/tropas), no aquí. Efecto colateral a tener en cuenta: un déficit de trigo NUNCA degrada este medidor directamente — el medidor de Mantenimiento depende solo de madera (+piedra/oro por nivel). Eso NO significa que un déficit de trigo sea inofensivo: desde la mecánica de Hambruna (§4.1) tiene su propio medidor de nutrición aparte, que primero frena el crecimiento y, sostenido, cuesta población real — solo queda desacoplado de ESTE medidor (Mantenimiento) y de la ruta de "caer en ruinas" de abajo.
 - Si NO se cumple algún pago (madera/piedra/oro), el medidor BAJA de 100 a 0 de forma PROPORCIONAL al déficit (degradación gradual, no corte binario).
 - Al llegar a 0: el asentamiento se DESTRUYE y cae en RUINAS → se limpia la zona → queda disponible para otro jugador/grupo. Esta es la MISMA ruta mecánica que el caso de abandono total (sea el asentamiento literalmente abandonado o simplemente mal gestionado mientras sigue activo).
-- **Calibración** (ajustada durante implementación, sigue siendo placeholder): el coste base de madera y la velocidad de degradación se redujeron respecto a la versión inicial (que generaba espiral de déficit incluso en asentamientos bien gestionados); se subió también la velocidad de regeneración cuando el pago es íntegro. Producción base de Granja recalibrada dos veces (5→10→15 trigo/tick, ver 4.2.1), combinada con el disparador de Granja basado en déficit real (producción < consumo, hasta 3 Granjas a la vez en déficit, ver 4.2) y la política "Edicto de Cosecha" (×1.5, ver 4.4) — conjunto que mitiga bastante el desajuste entre población exponencial y producción de Granja, aunque no lo elimina del todo en fundaciones con fertilidad baja.
+- **Calibración** (ajustada durante implementación, sigue siendo placeholder): el coste base de madera y la velocidad de degradación se redujeron respecto a la versión inicial (que generaba espiral de déficit incluso en asentamientos bien gestionados); se subió también la velocidad de regeneración cuando el pago es íntegro. Producción base de Granja recalibrada tres veces (5→10→15→30 trigo/tick, ver 4.2.1), combinada con el disparador de Granja basado en déficit real (producción < consumo, hasta 3 Granjas a la vez en déficit, ver 4.2) y la política "Edicto de Cosecha" (×1.5, ver 4.4) — conjunto que mitiga bastante el desajuste entre población exponencial y producción de Granja, aunque no lo elimina del todo en fundaciones con fertilidad baja.
 - PENDIENTE: cantidades exactas finales por nivel, velocidad exacta de degradación/regeneración, duración exacta del período de gracia inicial, y el número fijo de extractores por tipo (RESUELTO el umbral piedra/oro por nivel, ver escalado arriba; sigue pendiente el número fijo de extractores) — todo sigue siendo ajustable, pendiente de nueva calibración por simulación tras el rediseño de progreso (el validado en pruebas de 150-300 ticks corresponde al modelo anterior).
 
 ## 4.6 Entrada tardía y mundo lleno

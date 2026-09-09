@@ -9,7 +9,7 @@
 // `CargoTipo -> campo de Asentamiento.cargos` estaba copiado CUATRO veces (dos en `cargos.ts`, una en
 // `politicas.ts`, una más en la capa de autorización), y la regla de residencia TRES (`tropas.ts`,
 // `faccion.ts`, autorización). Añadir un cargo nuevo obligaba a acertar en los cuatro sitios.
-import type { Asentamiento, CargoTipo, Faccion } from '../domain/types';
+import type { Asentamiento, CargoTipo, Faccion, RelacionPolitica } from '../domain/types';
 
 /** Único mapa `CargoTipo -> campo de `Asentamiento.cargos``. Si se añade un cargo, el tipo `CargoTipo`
  * (domain/types.ts) obliga a completarlo aquí, y todo lo demás lo hereda. */
@@ -30,6 +30,32 @@ export function esResidente(asentamiento: Asentamiento, jugadorId: string): bool
 /** Reside en ALGÚN asentamiento distinto del indicado — un jugador solo puede residir en uno (Doc 2.1). */
 export function resideEnOtroAsentamiento(asentamientos: Asentamiento[], asentamientoId: string, jugadorId: string): boolean {
   return asentamientos.some((a) => a.id !== asentamientoId && esResidente(a, jugadorId));
+}
+
+/**
+ * Qué reclutamiento permite este asentamiento a este jugador (Doc 5.4/5.8, revisión 2026-09-08):
+ *
+ *  - `'todo'` — RESIDE aquí: escuadrón nuevo, reposición, cualquier tropa que habiliten los edificios.
+ *  - `'solo_reponer'` — no reside, pero es ciudadano de la Facción del asentamiento y el asentamiento lo
+ *    permite (no vetado, `politicaDeAcceso` ≠ `cerrado`): SOLO reponer un escuadrón que ya tiene aquí —posado
+ *    en la guarnición o traído en su columna—, nunca uno nuevo ni cambiar de composición. La regla "mueve tu
+ *    propia tropa esté donde esté, pero fórjala solo en casa".
+ *  - `'no'` — ni reside ni es plaza de su Facción con permiso.
+ *
+ * La distinción `'todo'` vs `'solo_reponer'` (¿existe ya el escuadrón?) la hace `reclutarTropa`
+ * (`engine/tropas.ts`) — aquí solo se decide el NIVEL de permiso. `faccionDelJugadorId` lo pasa el llamador
+ * (para el NPC, siempre es `asentamiento.faccionId`; para un comando, la Facción del actor).
+ */
+export function puedeReclutarEn(
+  asentamiento: Asentamiento,
+  jugadorId: string,
+  faccionDelJugadorId: string
+): 'todo' | 'solo_reponer' | 'no' {
+  if (esResidente(asentamiento, jugadorId)) return 'todo';
+  if (faccionDelJugadorId !== asentamiento.faccionId) return 'no';
+  if (asentamiento.vetadosIds?.includes(jugadorId)) return 'no';
+  if (asentamiento.politicaDeAcceso === 'cerrado') return 'no';
+  return 'solo_reponer';
 }
 
 /** El cargo está OCUPADO por alguien (pregunta de regla de juego: "¿hay Gobernador?"). Distinta de
@@ -63,4 +89,93 @@ export function esReyDe(faccion: Faccion, jugadorId: string): boolean {
 /** Cargos de Facción con autoridad diplomática (Doc 2.2): el Rey, y el Embajador que él designa. */
 export function esReyOEmbajadorDe(faccion: Faccion, jugadorId: string): boolean {
   return faccion.reyId === jugadorId || faccion.embajadorId === jugadorId;
+}
+
+/**
+ * ¿Hay una alianza ACTIVA entre estas dos Facciones? (Doc 2.4).
+ *
+ * Vivía como función privada de `engine/combate.ts`, donde solo servía para la penalización de reputación por
+ * atacar a un Aliado. Sube aquí al aparecer el segundo consumidor con una pregunta distinta: el
+ * reabastecimiento en ruta, que deja repostar en una plaza aliada (Doc 5.13). Es un predicado de pertenencia
+ * política como los de arriba, y este módulo es hoja (solo importa `domain/types`), así que no crea ciclo con
+ * nadie.
+ */
+export function estanAliadas(relaciones: readonly RelacionPolitica[], aId: string, bId: string): boolean {
+  return relaciones.some(
+    (r) =>
+      r.estado === 'activa' &&
+      r.tipo === 'alianza' &&
+      ((r.faccionAId === aId && r.faccionBId === bId) || (r.faccionAId === bId && r.faccionBId === aId))
+  );
+}
+
+/**
+ * ¿Comparten estas dos Facciones VISIÓN de guerra (niebla, Paso 4)? Alianza **o** vasallaje activo, en
+ * cualquier dirección.
+ *
+ * Distinto de `estanAliadas` —solo alianza, y con consumidores propios (reabastecer aliados, "los aliados no
+ * se cruzan en combate")— porque el vasallaje también implica defensa mutua, y ver lo que el otro ve es parte
+ * de eso (decisión del usuario, 2026-09-09). Al romperse la relación deja de devolver `true` y la visión
+ * compartida desaparece en la proyección siguiente: nunca se graba en `memoriaPorFaccion`, solo se suma a la
+ * capa "viéndolo ahora".
+ */
+export function compartenVision(relaciones: readonly RelacionPolitica[], aId: string, bId: string): boolean {
+  return relaciones.some(
+    (r) =>
+      r.estado === 'activa' &&
+      (r.tipo === 'alianza' || r.tipo === 'vasallaje') &&
+      ((r.faccionAId === aId && r.faccionBId === bId) || (r.faccionAId === bId && r.faccionBId === aId))
+  );
+}
+
+/**
+ * ¿Puede este jugador cruzar la puerta de esta plaza (Doc 1.10.5)?
+ *
+ * El orden de las tres capas es la regla, y no es intercambiable:
+ *
+ *  1. **Un residente entra siempre.** Nadie se queda fuera de su propia casa, ni por política ni por veto
+ *     — un Gobernador que pudiera vetar a un vecino podría expulsarlo del juego sin pasar por el exilio
+ *     (Doc 2.8), que es la vía que el diseño sí contempla para eso.
+ *  2. **Un veto pesa más que la política.** Vetar a alguien concreto es lo que hace útil tener la plaza
+ *     abierta: se abre a todos MENOS a esos.
+ *  3. **Y luego la política**, que es lo general.
+ */
+export function puedeEntrarEn(
+  asentamiento: Asentamiento,
+  jugadorId: string,
+  faccionDelJugadorId: string,
+  relaciones: readonly RelacionPolitica[]
+): boolean {
+  if (esResidente(asentamiento, jugadorId)) return true;
+  if (asentamiento.vetadosIds?.includes(jugadorId)) return false;
+
+  switch (asentamiento.politicaDeAcceso ?? 'faccion_y_aliados') {
+    case 'abierto':
+      return true;
+    case 'cerrado':
+      return false;
+    case 'solo_faccion':
+      return faccionDelJugadorId === asentamiento.faccionId;
+    case 'faccion_y_aliados':
+      return faccionDelJugadorId === asentamiento.faccionId || estanAliadas(relaciones, faccionDelJugadorId, asentamiento.faccionId);
+  }
+}
+
+export class PuertaInvalidaError extends Error {}
+
+/**
+ * Veta (o perdona) a un jugador en una plaza (Doc 1.10.5).
+ *
+ * **A un residente no se le veta.** Nadie se queda fuera de su propia casa, y echar a un vecino es el exilio
+ * (Doc 2.8) — que es otra cosa, con otro procedimiento. Sin esta regla, un Gobernador podría expulsar a un
+ * ciudadano del juego con un comando de puerta.
+ */
+export function conVeto(asentamiento: Asentamiento, vetadoId: string, vetar: boolean): Asentamiento {
+  if (vetar && esResidente(asentamiento, vetadoId)) {
+    throw new PuertaInvalidaError('A un residente no se le cierra su propia casa: eso es el exilio.');
+  }
+  const vetados = new Set(asentamiento.vetadosIds ?? []);
+  if (vetar) vetados.add(vetadoId);
+  else vetados.delete(vetadoId);
+  return { ...asentamiento, vetadosIds: [...vetados].sort() };
 }

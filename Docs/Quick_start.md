@@ -16,11 +16,11 @@ $env:ADMINISTRADORES='dev:jefa'; npm run server
 ```shell
 cd cliente; npm install; npm run dev
 ```
-3. Jugador:(**:5174**)
+3. Jugador — vive en **otro repositorio** (`BronzeAgeClient`, movido en el commit `2dfe9e7`):(**:5174**)
 ```shell
-cd cliente-jugador; npm install; npm run dev
+cd ../BronzeAgeClient; npm install; npm run dev
 ```
-Ambos vite.config.ts proxyan /v1 → http://localhost:3000, así que en desarrollo no necesitas CORS.
+Los dos vite.config.ts proxyan /v1 → http://localhost:3000, así que en desarrollo no necesitas CORS.
 
 Las variables que importan
 
@@ -34,7 +34,7 @@ Todas se leen en src/server/index.ts:20 y ninguna tiene default permisivo — es
 |```ORIGENES_PERMITIDOS``` | VACIO | CORS APAGADO, DA IGUAL SI USAS EL PROXY DE VITE |
 | ```INTERVALO_TICKS_MS``` | ```undefined``` | el mundo no vanasa solo, solo con ```POST .../ticks``` |
 
-El sujeto con el que se identifica el cliente se pone con VITE_USUARIO (por defecto jefa en cliente/, ana en cliente-jugador/) y tiene que figurar en ADMINISTRADORES o el backend devuelve 403 al crear partida. cliente-jugador además usa VITE_GAME_ID (default local) y asume que la partida ya existe — no la crea.
+El sujeto con el que se identifica el cliente se pone con VITE_USUARIO (por defecto jefa en cliente/, ana en el cliente de jugador) y tiene que figurar en ADMINISTRADORES o el backend devuelve 403 al crear partida. El cliente de jugador además usa VITE_GAME_ID (default local) y asume que la partida ya existe — no la crea.
 
 Un arranque completo típico, con ticks automáticos:
 

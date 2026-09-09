@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Mapa } from '../../world/mapa';
 import { evaluarViabilidadFundacion, fundarAsentamiento, FundacionInvalidaError } from '../settlement';
-import { crearFacciones, crearMapaDeterminista } from './fixtures';
+import { crearFacciones, crearMapaDeterminista, instanteDeTest } from './fixtures';
 
 const SEED = 1;
 
@@ -37,7 +37,7 @@ describe('fundación en terreno de cima (Fase 0.1)', () => {
     const punto = encontrarPuntoEnCima(mapa);
     const facciones = crearFacciones();
 
-    expect(() => fundarAsentamiento(mapa, facciones, 'faccion-1', punto, ['jugador-1'], [], 0)).toThrow(
+    expect(() => fundarAsentamiento(mapa, facciones, 'faccion-1', punto, ['jugador-1'], [], instanteDeTest(0))).toThrow(
       FundacionInvalidaError
     );
   });

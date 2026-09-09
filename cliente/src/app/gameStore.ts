@@ -36,20 +36,18 @@ import type {
   ZonaFaccion,
   ZonaInfluencia,
 } from '@motor/domain/types';
-import { EDIFICIO_CATALOGO, MANTENIMIENTO, NECESIDADES, NIVEL_FACCION, POLITICAS, POLITICA_CATALOGO, REJILLA_ASENTAMIENTO, TROPAS_RECLUTABLES } from '@motor/constants';
+import { EDIFICIO_CATALOGO, IMPUESTOS, MANTENIMIENTO, NECESIDADES, NIVEL_FACCION, OCUPACION, POLITICAS, POLITICA_CATALOGO, RECLUTAMIENTO_ORO_POR_ESCALON, REJILLA_ASENTAMIENTO, SIMULACION, TROPAS_RECLUTABLES } from '@motor/constants';
 import { crearMapa, type EstadoMapa, type Mapa } from '@motor/world/mapa';
-import { exportarParaUnityTerrain, UNITY_EXPORT_DEFAULT, type ExportUnityResultado, type OpcionesExportUnity } from '@motor/world/exportUnity';
-
-export { UNITY_EXPORT_DEFAULT };
 import {
-  produccionPorTick,
+  produccionPorMinuto,
   manoObraInfo as calcularManoObraInfo,
   progresoNivelAsentamiento,
   capacidadViviendaPesants,
   capacidadViviendaArtesanos,
   edificiosPorTipoYEstado,
+  estaOcupado,
   cupoCaravanas as cupoCaravanasEngine,
-  ticksCooldownCaravanaRestantes as ticksCooldownCaravanaRestantesEngine,
+  cooldownCaravanaRestante as cooldownCaravanaRestanteEngine,
   tieneMercadoActivo as tieneMercadoActivoEngine,
   nivelActualDe,
   ratioManoObraArtesanos,
@@ -59,7 +57,7 @@ import {
 } from '@motor/engine/asentamientoQuery';
 export type { ProduccionItem, ManoObraInfo } from '@motor/engine/asentamientoQuery';
 import { encontrarCapital, calcularCostoMantenimiento, calcularNivelAsentamiento } from '@motor/engine/mantenimiento';
-import { consumoComidaPoblacion } from '@motor/engine/population';
+import { consumoComidaPoblacion, recaudacionOro } from '@motor/engine/population';
 import { slotsDisponibles } from '@motor/engine/politicas';
 // --- Motor: SOLO consultas derivadas ---
 // Los COMANDOS ya no se importan aquí: viven en `session/comandos/` y se ejecutan en el SERVIDOR, a través de
@@ -75,27 +73,31 @@ import {
   type EstadoMejoraEdificio,
 } from '@motor/engine/construction';
 export type { EstadoMejoraEdificio } from '@motor/engine/construction';
-import {
-  celdaMinimaDeEdificio,
-  edificiosInternos,
-  redDeCalles,
-  segmentosDeRed,
-  tamanoDeEdificio,
-  type SegmentoTrazado,
-} from '@motor/engine/trazado';
+import { trazadoParaAsentamiento, type TrazadoAsentamiento } from '@motor/engine/trazado';
 import { poderEscuadron } from '@motor/engine/combate';
 
 // --- Capa de partida: vive en el servidor, se habla por HTTP ---
-import type { EstadoAdmin } from '@motor/session/estado';
+import type { EstadoAdmin, EventoLogAdmin } from '@motor/session/estado';
 import type { EventoDominio } from '@motor/domain/eventos';
-import { proyectarLog } from '@motor/session/estado';
+import type { EventoDominioConVersion } from '@motor/session/estado';
+import { isoDeInstante, proyectarLog } from '@motor/session/estado';
 import type { ParamsDe, TipoComando } from '@motor/session/comandos/registro';
 import type { MapaGenerado } from '@motor/worldgen';
-import { ApiError, avanzarTick as apiAvanzarTick, consultarEstado, crearOResumirPartida, ejecutarComando, obtenerMapa } from './apiCliente';
+import { ApiError, consultarEstado, consultarEventos, crearOResumirPartida, ejecutarComando, obtenerMapa } from './apiCliente';
 
-export interface EventoLog {
-  tick: number;
-  mensaje: string;
+/** Entrada de log en texto — Fase D: `momento` (ISO de mundo) en vez de `tick`. Mismo shape que
+ * `EventoLogAdmin` del motor (`proyectarLog` la produce). */
+export type EventoLog = EventoLogAdmin;
+
+const EPOCA_MUNDO_MS = new Date(SIMULACION.epocaInicial).getTime();
+
+/** Tiempo de mundo legible ("día D · HH:MM") desde un `Instante` (ms) o su forma ISO — para la interfaz.
+ * Fase D: los campos temporales del estado son `Instante`/`Duracion` de mundo, no ordinales de tick. */
+export function fmtTiempoMundo(t: number | string): string {
+  const ms = typeof t === 'string' ? Date.parse(t) : t;
+  const min = Math.max(0, Math.round((ms - EPOCA_MUNDO_MS) / 60_000));
+  const dia = Math.floor(min / 1440);
+  return `día ${dia} · ${String(Math.floor((min % 1440) / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
 }
 
 /**
@@ -133,7 +135,7 @@ export interface SimulacionExportada {
   titulos: Titulo[];
   caminos?: CaminoComercial[];
   campamentosBandidos?: CampamentoBandido[];
-  bandidosProximoSpawnTick?: number;
+  bandidosProximoSpawnEn?: number;
   faccionesNpcIds?: string[];
   log: EventoLog[];
   historialJugadores: Record<string, EventoLog[]>;
@@ -147,7 +149,7 @@ export const CATALOGOS = {
   recursosTrueque: ['madera', 'piedra', 'trigo', 'cobre', 'estano', 'oro', 'livestock'] as RecursoTipo[],
   recursosMercado: ['madera', 'piedra', 'trigo', 'cobre', 'estano', 'livestock'] as RecursoTipo[],
   politicas: POLITICA_CATALOGO,
-  duracionPoliticaTicks: POLITICAS.duracionTicksPorDefecto,
+  duracionPoliticaMinutos: POLITICAS.duracionMinutosPorDefecto,
   slotsPorCargoBase: POLITICAS.slotsPorCargo,
   nivelFaccionPorSlotExtraGobernador: POLITICAS.nivelFaccionPorSlotExtraGobernador,
   maximoEdificiosEnCola: NECESIDADES.maximoEnCola,
@@ -167,14 +169,14 @@ export const CATALOGOS = {
     .map((tipo) => {
       const def = EDIFICIO_CATALOGO[tipo] as {
         costo: Partial<Record<string, number>>;
-        tiempoConstruccionTicks: number;
+        tiempoConstruccionMinutos: number;
         requisitoNivelAsentamientoConstruccion?: number;
         nivelFaccionMinimo?: number;
       };
       return {
         tipo,
         costo: def.costo,
-        tiempoConstruccionTicks: def.tiempoConstruccionTicks,
+        tiempoConstruccionMinutos: def.tiempoConstruccionMinutos,
         requisitoNivelAsentamiento: def.requisitoNivelAsentamientoConstruccion ?? 0,
         requisitoNivelFaccion: def.nivelFaccionMinimo ?? 0,
       };
@@ -208,7 +210,21 @@ export class GameStore {
    * deliberada (ver Docs/Arquitectura/4_Plan_Evolucion_Tareas.md, Fase B3). Con tope para no crecer sin límite
    * en una sesión de navegador muy larga. */
   private logEfimero: EventoLog[] = [];
-  /** Log en texto derivado de `eventosDominio`, cacheado contra el array del que sale (ver `getState`). */
+  /**
+   * Historial de eventos, MANTENIDO AQUÍ desde el 2026-09-05.
+   *
+   * Antes venía dentro de cada lectura de estado, y por eso este cliente no tenía que guardarlo. Dejó de
+   * venir porque era el 87-88 % de esa respuesta y crecía sin techo: se reenviaba entero, en cada lectura y
+   * en cada comando, un historial que este cliente ya tenía delante. Ahora se pide una vez al arrancar y
+   * después solo lo nuevo, por el cursor de C13 (`consultarEventos`).
+   *
+   * Más nuevo primero, igual que lo servía el estado — `proyectarLog` y la consola cuentan con ese orden.
+   */
+  private eventos: EventoDominioConVersion[] = [];
+  /** Mayor `version` ya incorporada a `eventos`: es lo que se le pide al cursor la próxima vez. 0 = nada
+   * todavía, que es justo lo que hay que mandar para que devuelva el historial completo. */
+  private cursorEventos = 0;
+  /** Log en texto derivado de `eventos`, cacheado contra el array del que sale (ver `getState`). */
   private logCache: { sobre: EventoDominio[]; log: EventoLog[] } | null = null;
   /** Fachada `Mapa` del estado en vivo, cacheada por referencia — se invalida sola en cuanto `estadoCache`
    * cambia (cada acción/tick trae un `estadoMapa` distinto). Un solo hueco, no un mapa: sin historial de fotos
@@ -231,6 +247,36 @@ export class GameStore {
     this.gameId = gameId;
     this.estadoCache = estadoInicial;
     this.mapaGeneradoCache = { id: estadoInicial.mapaId, mapa: mapaInicial };
+  }
+
+  /**
+   * Relee estado + eventos + mapa. Un solo método y no tres llamadas sueltas repetidas porque **estado y
+   * eventos dejaron de venir juntos** (2026-09-05): tenerlos en dos peticiones invita a que algún camino
+   * refresque uno y olvide el otro, y el síntoma sería una consola que deja de crecer sin que nada falle.
+   */
+  private async recargar(): Promise<void> {
+    this.estadoCache = await consultarEstado(this.gameId);
+    await this.sincronizarEventos();
+    await this.sincronizarMapa(this.estadoCache.mapaId);
+  }
+
+  /**
+   * Trae del cursor lo que haya pasado desde `cursorEventos` y lo antepone. Devuelve en orden cronológico
+   * (más viejo primero, ver `eventosDesde`), así que se invierte antes de anteponer para conservar el
+   * "más nuevo primero" que espera la consola.
+   *
+   * Un fallo aquí NO tumba la recarga: el estado ya está al día y el log se pondrá al día en el siguiente
+   * refresco. Lo contrario —perder el estado por no poder leer el historial— sería peor.
+   */
+  private async sincronizarEventos(): Promise<void> {
+    try {
+      const { eventos } = await consultarEventos(this.gameId, this.cursorEventos);
+      if (eventos.length === 0) return;
+      this.eventos = [...[...eventos].reverse(), ...this.eventos];
+      this.cursorEventos = Math.max(this.cursorEventos, ...eventos.map((e) => e.version));
+    } catch (err) {
+      this.registrarRechazoEfimero(`no se pudo leer el historial: ${this.mensajeDeError(err)}`);
+    }
   }
 
   /** Pide el mapa real si `mapaId` cambió desde la última sincronización (Fase C11) — en la inmensa mayoría
@@ -258,7 +304,12 @@ export class GameStore {
     }
     const estado = await consultarEstado(gameId);
     const mapa = await obtenerMapa(gameId, estado.mapaId);
-    return new GameStore(gameId, estado, mapa);
+    const store = new GameStore(gameId, estado, mapa);
+    // El historial completo, UNA vez. Antes venía dentro de `consultarEstado` y por tanto en cada lectura
+    // posterior; ahora se siembra al abrir y a partir de ahí solo llega lo nuevo. Sin esto la consola
+    // arrancaría vacía hasta el primer refresco.
+    await store.sincronizarEventos();
+    return store;
   }
 
   private get state(): Readonly<EstadoAdmin> {
@@ -272,8 +323,8 @@ export class GameStore {
    * solo al principio de la partida.
    */
   getState(): Readonly<GameState> {
-    if (this.logCache?.sobre !== this.estadoCache.eventosDominio) {
-      this.logCache = { sobre: this.estadoCache.eventosDominio, log: proyectarLog(this.estadoCache.eventosDominio) };
+    if (this.logCache?.sobre !== this.eventos) {
+      this.logCache = { sobre: this.eventos, log: proyectarLog(this.eventos) };
     }
     const log = this.logEfimero.length === 0 ? this.logCache.log : [...this.logEfimero, ...this.logCache.log];
     return { ...this.estadoCache, log };
@@ -298,7 +349,7 @@ export class GameStore {
   }
 
   private registrarRechazoEfimero(mensaje: string): void {
-    this.logEfimero = [{ tick: this.estadoCache.tick, mensaje }, ...this.logEfimero].slice(0, 50);
+    this.logEfimero = [{ momento: isoDeInstante(this.estadoCache.instante), mensaje }, ...this.logEfimero].slice(0, 50);
   }
 
   private mensajeDeError(err: unknown): string {
@@ -316,8 +367,7 @@ export class GameStore {
     try {
       const respuesta = await ejecutarComando(this.gameId, tipo, params);
       if (respuesta.resultado.ok) {
-        this.estadoCache = await consultarEstado(this.gameId);
-        await this.sincronizarMapa(this.estadoCache.mapaId);
+        await this.recargar();
       } else {
         this.registrarRechazoEfimero(`${etiquetaRechazo}: ${respuesta.resultado.codigoError ?? 'desconocido'}`);
       }
@@ -363,24 +413,15 @@ export class GameStore {
    * de camino, y el rectángulo que ocupa cada edificio (por id). Todo derivado en el motor
    * (`engine/trazado.ts`), nada persistido.
    */
-  getTrazadoAsentamiento(asentamiento: Asentamiento): {
-    calles: SegmentoTrazado[];
-    caminos: SegmentoTrazado[];
-    huellas: Record<string, { x: number; y: number; ancho: number; alto: number }>;
-  } {
-    const { calles, caminos } = segmentosDeRed(redDeCalles(asentamiento.id, asentamiento.edificios));
-    const huellas: Record<string, { x: number; y: number; ancho: number; alto: number }> = {};
-    for (const edificio of edificiosInternos(asentamiento.edificios)) {
-      const min = celdaMinimaDeEdificio(edificio);
-      const tamano = tamanoDeEdificio(edificio);
-      huellas[edificio.id] = {
-        x: min.col * CATALOGOS.tamanoCeldaAsentamiento,
-        y: min.row * CATALOGOS.tamanoCeldaAsentamiento,
-        ancho: tamano.ancho * CATALOGOS.tamanoCeldaAsentamiento,
-        alto: tamano.alto * CATALOGOS.tamanoCeldaAsentamiento,
-      };
-    }
-    return { calles, caminos, huellas };
+  /**
+   * Delegado directo en `trazadoParaAsentamiento` (motor) — hasta el Paso 6 de
+   * `Consideraciones/Murallas_Definicion.md` esta función mantenía su PROPIA copia (Fase C10, doc 9 T2a:
+   * "cliente/ sigue con su propia copia hasta que se reescriba sin @motor/*"), que se quedó sin `recintos` —
+   * ni bloqueaba suelo de muralla en el dibujo ni sabía pintar el anillo. Con la UI de murallas ya hacía
+   * falta lo segundo de todos modos, así que se unificó: una sola definición, no dos que puedan divergir.
+   */
+  getTrazadoAsentamiento(asentamiento: Asentamiento): TrazadoAsentamiento {
+    return trazadoParaAsentamiento(asentamiento);
   }
 
 
@@ -454,24 +495,60 @@ export class GameStore {
     return { nivelObjetivo, ocupados, cupoTotal };
   }
 
+  /** Ocupación militar tras una conquista (Doc 5.12.9): `null` si no está ocupado. Mientras lo esté, la plaza
+   * es inmune a un nuevo asedio, recauda oro reducido, crece más lento y el mantenimiento no degrada. */
+  ocupacionInfo(asentamiento: Asentamiento): { minutosRestantes: number; factorRecaudacion: number; factorCrecimiento: number } | null {
+    if (!estaOcupado(asentamiento, this.state.instante)) return null;
+    return {
+      minutosRestantes: Math.max(0, Math.round((asentamiento.ocupacionHasta! - this.state.instante) / 60_000)),
+      factorRecaudacion: OCUPACION.factorRecaudacion,
+      factorCrecimiento: OCUPACION.factorCrecimiento,
+    };
+  }
+
   /** Coste de mantenimiento del tick actual, recurso por recurso, con lo disponible y si alcanza a cubrirlo. */
   mantenimientoInfo(asentamiento: Asentamiento): {
     enGracia: boolean;
-    ticksParaFinGracia: number;
-    items: { recurso: string; costoPorTick: number; disponible: number; cubierto: boolean }[];
+    /** El mantenimiento no degrada porque la plaza está bajo ocupación reciente (Doc 5.12.9), no por gracia. */
+    congeladoPorOcupacion: boolean;
+    minutosParaFinGracia: number;
+    items: { recurso: string; costoPorMinuto: number; disponible: number; cubierto: boolean }[];
   } {
-    const ticksDesdeFundacion = this.state.tick - asentamiento.fundadoEnTick;
-    const enGracia = ticksDesdeFundacion < MANTENIMIENTO.graciaTicks;
+    const minutosDesdeFundacion = (this.state.instante - asentamiento.fundadoEn) / 60_000;
+    const congeladoPorOcupacion = estaOcupado(asentamiento, this.state.instante);
+    const enGracia = minutosDesdeFundacion < MANTENIMIENTO.graciaMinutos || congeladoPorOcupacion;
     const capital = encontrarCapital(asentamiento.faccionId, this.state.asentamientos);
     const costo = calcularCostoMantenimiento(asentamiento, capital);
     const items = Object.entries(costo).map(([recurso, cantidad]) => {
       const disponible = asentamiento.almacen[recurso]?.cantidad ?? 0;
-      return { recurso, costoPorTick: cantidad ?? 0, disponible, cubierto: disponible >= (cantidad ?? 0) };
+      return { recurso, costoPorMinuto: cantidad ?? 0, disponible, cubierto: disponible >= (cantidad ?? 0) };
     });
     const costoTrigo = consumoComidaPoblacion(asentamiento) + consumoRacionTropas(asentamiento);
     const trigoDisponible = asentamiento.almacen['trigo']?.cantidad ?? 0;
-    items.push({ recurso: 'trigo', costoPorTick: costoTrigo, disponible: trigoDisponible, cubierto: trigoDisponible >= costoTrigo });
-    return { enGracia, ticksParaFinGracia: Math.max(0, MANTENIMIENTO.graciaTicks - ticksDesdeFundacion), items };
+    items.push({ recurso: 'trigo', costoPorMinuto: costoTrigo, disponible: trigoDisponible, cubierto: trigoDisponible >= costoTrigo });
+    return { enGracia, congeladoPorOcupacion, minutosParaFinGracia: Math.max(0, Math.round(MANTENIMIENTO.graciaMinutos - minutosDesdeFundacion)), items };
+  }
+
+  /** Recaudación de oro por población (Doc 4.1, bloque "economía del oro") — solo lectura, calculada
+   * client-side desde población + `IMPUESTOS`, igual que `mantenimientoInfo` calcula los costes. El `total`
+   * ya aplica la política "Presión Fiscal" y la reducción por ocupación reciente (Doc 5.12.9); el desglose
+   * por clase es la contribución bruta antes de esos factores. */
+  recaudacionInfo(asentamiento: Asentamiento): { total: number; pesants: number; artesanos: number; nobleza: number; reducidaPorOcupacion: boolean } {
+    const { pesants, artesanos, nobleza } = asentamiento.poblacion;
+    return {
+      pesants: pesants * IMPUESTOS.tasaPesants,
+      artesanos: artesanos * IMPUESTOS.tasaArtesanos,
+      nobleza: nobleza * IMPUESTOS.tasaNobleza,
+      total: recaudacionOro(asentamiento, this.state.instante),
+      reducidaPorOcupacion: estaOcupado(asentamiento, this.state.instante),
+    };
+  }
+
+  /** Coste de oro de reclutar una tropa, por soldado (bloque "economía del oro", Doc 5.8): según el escalón
+   * (`nivelRequerido`). La Milicia del Centro Urbano está exenta — la defensa mínima no depende del tesoro. */
+  costoOroReclutamientoPorSoldado(tropa: { edificio: string; nivelRequerido: number }): number {
+    if (tropa.edificio === 'centroUrbano') return 0;
+    return RECLUTAMIENTO_ORO_POR_ESCALON[tropa.nivelRequerido] ?? 0;
   }
 
   /** Slots de política disponibles para `cargo` según el nivel de Facción (el Gobernador escala con el nivel). */
@@ -482,30 +559,30 @@ export class GameStore {
   /** Producción por tick de cada edificio activo de extracción/producción primaria, agrupada por tipo. */
   produccionInfo(asentamiento: Asentamiento): ProduccionItem[] {
     const zona = this.getZonas().find((z) => z.asentamientoId === asentamiento.id);
-    return produccionPorTick(asentamiento, this.getMapa(), zona?.poligono ?? []);
+    return produccionPorMinuto(asentamiento, this.getMapa(), zona?.poligono ?? []);
   }
 
   /** Producción y consumo estimados del edificio individual para el tooltip de la vista urbana. */
   edificioEconomiaInfo(asentamiento: Asentamiento, edificio: Pick<Edificio, 'tipo' | 'nivelInterno' | 'estado' | 'posicion' | 'ambito'>): {
-    produccion: { recurso: string; cantidadPorTick: number }[];
-    consumo: { recurso: string; cantidadPorTick: number }[];
-    consumoTotal: { recurso: string; cantidadPorTick: number }[];
+    produccion: { recurso: string; cantidadPorMinuto: number }[];
+    consumo: { recurso: string; cantidadPorMinuto: number }[];
+    consumoTotal: { recurso: string; cantidadPorMinuto: number }[];
   } {
     const activosDelTipo = asentamiento.edificios.filter((e) => e.tipo === edificio.tipo && e.estado === 'activo').length;
     if ((edificio.estado !== undefined && edificio.estado !== 'activo') || activosDelTipo === 0 || edificio.tipo === 'centroUrbano') return { produccion: [], consumo: [], consumoTotal: [] };
 
     const produccionAgregada = this.produccionInfo(asentamiento).filter((item) => item.tipo === edificio.tipo);
-    const produccion = produccionAgregada.map((item) => ({ recurso: item.recurso, cantidadPorTick: item.cantidadPorTick / activosDelTipo }));
+    const produccion = produccionAgregada.map((item) => ({ recurso: item.recurso, cantidadPorMinuto: item.cantidadPorMinuto / activosDelTipo }));
     const definicion = EDIFICIO_CATALOGO[edificio.tipo] as { niveles?: Record<number, { recetas?: { produce: string; produccionBase: number; consumePorUnidad: Record<string, number> }[] }> };
     const recetas = definicion.niveles?.[edificio.nivelInterno ?? 1]?.recetas ?? [];
     const consumo = recetas.flatMap((receta) => {
-      const salida = produccion.find((item) => item.recurso === receta.produce)?.cantidadPorTick ?? 0;
-      return Object.entries(receta.consumePorUnidad).map(([recurso, cantidad]) => ({ recurso, cantidadPorTick: cantidad * salida }));
+      const salida = produccion.find((item) => item.recurso === receta.produce)?.cantidadPorMinuto ?? 0;
+      return Object.entries(receta.consumePorUnidad).map(([recurso, cantidad]) => ({ recurso, cantidadPorMinuto: cantidad * salida }));
     });
     const ratioArtesano = ratioManoObraArtesanos(asentamiento);
     const consumoTotal = recetas.flatMap((receta) => {
       const salidaTotal = receta.produccionBase * ratioArtesano * factorLineaProduccion(edificio as Edificio, receta, asentamiento);
-      return Object.entries(receta.consumePorUnidad).map(([recurso, cantidad]) => ({ recurso, cantidadPorTick: cantidad * salidaTotal }));
+      return Object.entries(receta.consumePorUnidad).map(([recurso, cantidad]) => ({ recurso, cantidadPorMinuto: cantidad * salidaTotal }));
     });
     return { produccion, consumo, consumoTotal };
   }
@@ -514,7 +591,7 @@ export class GameStore {
   poderMilitarInfo(asentamiento: Asentamiento): { soldados: number; poder: number } {
     return {
       soldados: asentamiento.escuadrones.reduce((total, escuadron) => total + escuadron.cantidad, 0),
-      poder: asentamiento.escuadrones.reduce((total, escuadron) => total + poderEscuadron(escuadron, this.state.tick), 0),
+      poder: asentamiento.escuadrones.reduce((total, escuadron) => total + poderEscuadron(escuadron, this.state.instante), 0),
     };
   }
 
@@ -543,9 +620,11 @@ export class GameStore {
   /**
    * Funda un asentamiento. El fundador es siempre EL ACTOR que ejecuta el comando (Fase C2/C3): el backend
    * ya no acepta una lista de cofundadores — ver `session/comandos/fundarAsentamiento.ts` para el porqué.
+   * La posición tampoco la elige el cliente: se funda DONDE SE ESTÁ (Doc 1.3), el backend la deriva de la
+   * columna del fundador.
    */
-  async fundarAsentamiento(faccionId: string, posicion: { x: number; y: number }): Promise<void> {
-    await this.despachar('fundarAsentamiento', { faccionId, posicion }, 'Fundación rechazada');
+  async fundarAsentamiento(faccionId: string): Promise<void> {
+    await this.despachar('fundarAsentamiento', { faccionId }, 'Fundación rechazada');
   }
 
   async lanzarCaravanaFundacion(origenAsentamientoId: string, destino: { x: number; y: number }, numJugadores: number): Promise<void> {
@@ -661,7 +740,7 @@ export class GameStore {
     disponibles: number;
     enTransito: number;
     retornando: number;
-    ticksCooldownRestantes: number;
+    cooldownCreacionRestanteMin: number;
   } {
     const propias = this.state.caravanas.filter((c) => c.tipo === 'comercial' && c.origenAsentamientoId === asentamiento.id);
     return {
@@ -670,7 +749,8 @@ export class GameStore {
       disponibles: propias.filter((c) => c.estado === 'disponible').length,
       enTransito: propias.filter((c) => c.estado === 'en_transito').length,
       retornando: propias.filter((c) => c.estado === 'retornando').length,
-      ticksCooldownRestantes: ticksCooldownCaravanaRestantesEngine(asentamiento, this.state.tick),
+      // El motor devuelve una `Duracion` en ms; la interfaz la muestra en minutos de mundo.
+      cooldownCreacionRestanteMin: Math.round(cooldownCaravanaRestanteEngine(asentamiento, this.state.instante) / 60_000),
     };
   }
 
@@ -730,22 +810,7 @@ export class GameStore {
     await this.despachar('iniciarAsedio', { atacanteId, defensorId, escuadronIds: idsNoVacios(escuadronesCsv) }, 'Asedio rechazado');
   }
 
-  async combateCampoAbierto(asentamientoAId: string, escuadronesACsv: string, asentamientoBId: string, escuadronesBCsv: string): Promise<void> {
-    await this.despachar(
-      'combateCampoAbierto',
-      {
-        asentamientoAId,
-        escuadronIdsA: idsNoVacios(escuadronesACsv),
-        asentamientoBId,
-        escuadronIdsB: idsNoVacios(escuadronesBCsv),
-      },
-      'Combate rechazado'
-    );
-  }
 
-  async interceptarCaravana(atacanteId: string, escuadronesCsv: string, caravanaId: string): Promise<void> {
-    await this.despachar('interceptarCaravana', { atacanteId, escuadronIds: idsNoVacios(escuadronesCsv), caravanaId }, 'Intercepción rechazada');
-  }
 
   async atacarCampamentoBandidos(atacanteId: string, escuadronesCsv: string, campamentoId: string): Promise<void> {
     await this.despachar(
@@ -755,14 +820,12 @@ export class GameStore {
     );
   }
 
-  /** Un tick completo tal como lo pide la interfaz — el tick del motor, el trueque automático de simulación
-   * (apagado por defecto) y el turno del NPC de gobernanza van los tres en el SERVIDOR, dentro de la misma
-   * operación (`RunnerDePartida.avanzarTick`). Aquí solo queda pedirlo y refrescar el estado. */
-  async avanzarTick(): Promise<void> {
+  /** Re-pide el estado completo al servidor. El mundo avanza SOLO en el servidor (reloj de mundo, Fase D /
+   * D5: un tick por minuto real, con catch-up tras reinicio) — la interfaz no lo empuja, solo vuelve a leer.
+   * Lo llama el botón "Refrescar" y el auto-refresco de `main.ts`. */
+  async refrescar(): Promise<void> {
     try {
-      await apiAvanzarTick(this.gameId);
-      this.estadoCache = await consultarEstado(this.gameId);
-      await this.sincronizarMapa(this.estadoCache.mapaId);
+      await this.recargar();
     } catch (err) {
       this.registrarRechazoEfimero(this.mensajeDeError(err));
     }
@@ -777,9 +840,13 @@ export class GameStore {
   async regenerarMundo(seed: number, region?: RegionId): Promise<void> {
     try {
       await crearOResumirPartida(this.gameId, seed, region, true);
+      // Partida NUEVA: el historial anterior no es de esta, y sus `version` empiezan otra vez en 0 — sin
+      // reiniciar el cursor, el de la partida vieja los filtraría todos y la consola saldría vacía.
+      this.eventos = [];
+      this.cursorEventos = 0;
       this.estadoCache = await consultarEstado(this.gameId);
       // El único punto donde `sincronizarMapa` de verdad pide algo: regenerar SIEMPRE reemplaza la seed, así
-      // que `mapaId` cambia siempre — a diferencia de `despachar`/`avanzarTick`, donde suele ser un no-op.
+      // que `mapaId` cambia siempre — a diferencia de `despachar`/`refrescar`, donde suele ser un no-op.
       await this.sincronizarMapa(this.estadoCache.mapaId);
       this.mapaCache = null;
       this.zonasFusionadasCache = null;
@@ -810,23 +877,16 @@ export class GameStore {
       titulos: this.state.titulos,
       caminos: this.state.caminos,
       campamentosBandidos: this.state.campamentosBandidos,
-      bandidosProximoSpawnTick: this.state.bandidosProximoSpawnTick,
+      bandidosProximoSpawnEn: this.state.bandidosProximoSpawnEn,
       faccionesNpcIds: this.state.faccionesNpcIds,
       // El formato de archivo v2 guarda el log en texto (es anterior a `eventosDominio`): se proyecta al
       // exportar en vez de arrastrarlo en el estado.
-      log: proyectarLog(this.state.eventosDominio),
+      log: proyectarLog(this.eventos),
       historialJugadores: this.state.historialJugadores,
     };
     return JSON.stringify(payload, null, 2);
   }
 
-  /**
-   * Heightmap (RAW 16-bit) + metadata (posiciones de nodos/bosques/ríos/asentamientos en metros)
-   * del mapa actual, listos para Unity Terrain. Puro respecto al estado: no muta nada.
-   */
-  exportarMapaUnity(opciones?: OpcionesExportUnity): ExportUnityResultado {
-    return exportarParaUnityTerrain(this.mapaGeneradoCache.mapa, this.state.asentamientos, opciones);
-  }
 }
 
 /** Conecta con `gameId` (lo crea si no existe todavía — no destructivo) y devuelve un `GameStore` listo para

@@ -12,7 +12,7 @@ import { createRng } from '../../worldgen';
 import { contextoDeTest, crearEstadoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
 
 describe('eventos de dominio (Fase A5)', () => {
-  it('eventosDominio trae tick/momento correctos y asentamientoId solo donde aplica', () => {
+  it('eventosDominio trae momento correcto y asentamientoId solo donde aplica', () => {
     const mapa = crearMapaDeterminista(1);
     const facciones = crearFacciones();
     const { asentamiento, facciones: faccionesTrasFundar } = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', []);
@@ -33,7 +33,6 @@ describe('eventos de dominio (Fase A5)', () => {
     // esta migración existe para habilitar.
     for (const evento of resultado.eventosDominio) {
       expect(evento.codigo).not.toBe('');
-      expect(evento.tick).toBe(tick);
       expect(evento.momento).toBe(contexto.momento);
     }
 

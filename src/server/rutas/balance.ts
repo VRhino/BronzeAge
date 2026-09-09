@@ -1,4 +1,4 @@
-// Sirve el balance como DATOS, no como código (Fase C7, doc 9 — patrón *Static Data Export*): las 39 tablas
+// Sirve el balance como DATOS, no como código (Fase C7, doc 9 — patrón *Static Data Export*): las 40 tablas
 // de `constants.ts` completas, más `version` (`BALANCE_VERSION`) para que un cliente sepa cuándo invalidar lo
 // que tenga cacheado. Ninguna de las 39 es privilegiada (T1 en doc 9: regla pública, no estado de un rival),
 // así que a diferencia de `/admin/*` y `/jugador/*` esta ruta no exige sesión — mismo criterio que
@@ -46,6 +46,7 @@ import {
   REPUTACION,
   RESERVA_CONSTRUCCION,
   SCORE_BANDAS,
+  SIMULACION,
   SIMULACION_AUTO_COMERCIO,
   SITIO,
   TRAZADO,
@@ -56,9 +57,9 @@ import {
 
 export const ESQUEMA_BALANCE = {
   description:
-    'Las 39 tablas de balance del proceso (recursos, edificios, economía, población, construcción, combate, ' +
-    'política, mundo), más `version` (Fase C7, patrón Static Data Export). Sin autenticar: es regla pública, ' +
-    'no estado de partida. Cuerpo no modelado en este esquema por su tamaño — ver esquemas.ts.',
+    'Las 40 tablas de balance del proceso (recursos, edificios, economía, población, construcción, combate, ' +
+    'política, mundo, tiempo), más `version` (Fase C7, patrón Static Data Export). Sin autenticar: es regla ' +
+    'pública, no estado de partida. Cuerpo no modelado en este esquema por su tamaño — ver esquemas.ts.',
   tags: ['balance'],
 } as const;
 
@@ -75,6 +76,9 @@ function balancePublicado() {
     mundoYMilitar: { ZONA_INFLUENCIA, FUNDACION, POBLACION, MILITAR, LENERA_POR_BOSQUE },
     caravanas: { CARAVANA_COOLDOWN, ASIGNACION_CARAVANA },
     reputacion: { REPUTACION },
+    // Modelo temporal (Fase D / doc 10): un cliente necesita `epocaInicial` + `duracionTickMs` para
+    // traducir el `tick` de una partida a fecha de mundo (`instante = epocaInicial + tick × duracionTickMs`).
+    temporal: { SIMULACION },
     internas: { CAMPAMENTOS_BANDIDOS, REGENERACION_NODOS, SCORE_BANDAS, EXTRACTOR_DESEMPATE, LINEAS_PRODUCCION, EXTRACCION_MAXIMOS, SIMULACION_AUTO_COMERCIO },
   };
 }

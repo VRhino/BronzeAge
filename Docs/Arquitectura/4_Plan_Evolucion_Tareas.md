@@ -1,5 +1,9 @@
 # Desglose de tareas: evolución a backend multijugador
 
+> **Verificado contra el commit `652a0aa` (2026-09-05)**, en la misma pasada que
+> [3_Plan_Evolucion_Roadmap.md](3_Plan_Evolucion_Roadmap.md). Lo único que cambió aquí fue la Fase E, que
+> era una lista plana de seis viñetas sin nadie que dijera cuál iba primero.
+
 Este es el archivo de trabajo día a día. Cada tarea se marca `[x]` al completarse;
 si se aborda parcialmente, anotar entre paréntesis el estado y seguir marcada
 `[ ]`. Cuando se cierran todas las tareas de un hito, marcar ese hito en
@@ -112,6 +116,25 @@ trabajo relacionado pero distinto, más cercano al punto 6 de
 [2_Estudio_Evolucion_Backend_Multifrontend.md](2_Estudio_Evolucion_Backend_Multifrontend.md) ("comandos deberían
 devolver un resultado estructurado") que a este marcador — no sumar ni restar de la fracción 0/13 por ellos.
 
+> **Repaso 2026‑09‑05, antes de arrancar E2.** El 13/13 se sostiene: en `engine/` y `world/` no queda ni un
+> `eventos.push('texto')`. El combate, que este marcador declaraba fuera de alcance, se estructuró más tarde
+> por su cuenta.
+>
+> **`'legado'` ya no se emite en ninguna parte.** Medido, no leído: partida de 400 ticks con una Facción
+> cedida al NPC → 426 eventos, 17 códigos distintos, **0 con `codigo: 'legado'`**. Las ramas que todavía
+> construyen `{ codigo: 'legado' }` (`domain/eventos.ts`, `engine/simulation.ts`, `session/comandos/eventos.ts`,
+> `session/comandos/ejercitos.ts`) son el brazo `string` de la unión `EventoCrudo`, alcanzable por tipo pero
+> muerto en ejecución: todo productor real devuelve ya la forma estructurada.
+>
+> **Lo que sí queda, y es otra cosa:** `session/npcGobernanza.ts` narra en texto plano (3 sitios: campaña
+> lanzada, campaña replegada, asentamiento inicial fundado) y `comandos/avanzarFaccionesNpc.ts` los envuelve
+> a la salida bajo un único `codigo: 'npc.accion'`, sin `payload` — decisión consciente, documentada ahí
+> mismo: *"un código que al menos permite FILTRARLOS como grupo"*. Nunca entraron en la fracción 13/13 porque
+> el turno NPC no vive en `engine/`. Para la auditoría de E2 **no es un bloqueo**: el código es estable y
+> filtrable, que es lo que el gate de A5 exigía. Es solo grueso — 38 eventos de una partida de 400 ticks
+> comparten código y no se distinguen entre sí sin leer el `mensaje`. Migrarlo es una mejora de la auditoría,
+> no un prerrequisito suyo.
+
 ### A6. Diseño de contratos de identidad y permisos (solo documento, sin código) — ✅ completada 2026-08-24
 - [x] Redactar definición de `Usuario`, `Sesion`, `Jugador`, `Rol`, `Partida`, `Membresia`
 - [x] Redactar matriz de autorización por tipo de comando — construida sobre la superficie real de `GameStore` (~35 comandos mutables), no una lista abstracta
@@ -157,7 +180,7 @@ devolver un resultado estructurado") que a este marcador — no sumar ni restar 
   - **Una partida por proceso** (decidido 2026-08-24, sigue vigente): Node ejecuta JS en un hilo, dos partidas compartirían hilo y el tick de una dejaría a la otra sin atender comandos. `GameSession` recibe `gameId` y no es singleton, y ahora tampoco `RunnerDePartida` — así la decisión sigue siendo reversible
   - Capa `server/` (no `session/`): mismo criterio que `persistenciaPartida.ts`, ya cubierto por la regla del test de arquitectura del commit anterior
   - Tests: 366 → 375
-- [ ] **Multihilo: NO construir ahora** (decidido 2026-08-24, ver doc 7 §8). Corrección de escala relevante: 500 jugadores ≈ 70-100 asentamientos, no 500 (`CIUDADANIA.casasBasePorAsentamiento` = 5 residentes + 2 por nivel), lo que da **~170-300 ms/tick** en vez de 1.9 s — tolerable sin multihilo. Además el multihilo **no resuelve** que no se apliquen comandos durante el tick (restricción lógica: un solo mutador del estado a la vez), solo evita bloquear el event loop. **Disparador para reconsiderarlo**: un tick medido por encima de ~500 ms en partida real, o desconexiones de WebSocket atribuibles al bloqueo
+- [x] **Multihilo: NO construir ahora** — es una DECISIÓN tomada (2026-08-24, ver doc 7 §8), no una tarea pendiente; la casilla estaba mal desde el principio. Corrección de escala relevante: 500 jugadores ≈ 70-100 asentamientos, no 500 (`CIUDADANIA.casasBasePorAsentamiento` = 5 residentes + 2 por nivel). Además el multihilo **no resuelve** que no se apliquen comandos durante el tick (restricción lógica: un solo mutador del estado a la vez), solo evita bloquear el event loop. **Disparador para reconsiderarlo**: un tick medido por encima de ~500 ms en partida real, o desconexiones de WebSocket atribuibles al bloqueo. **Al día 2026-09-05**: la decisión sale REFORZADA — el tick a 70-100 asentamientos son **44-62 ms** (no los ~170-300 ms que estimaba esta línea), a un factor 8 del disparador. Ver doc 6 §1
 - [x] Elegir runtime/framework del proceso backend Node.js — **decidido: Node.js + Fastify**. Motivo: el cuello de botella medido es la CPU del tick (~1.9 s a 500 asentamientos), no el HTTP, así que el req/s del framework es irrelevante; se elige Fastify por equilibrio de ecosistema, validación de esquemas integrada (sirve al punto 10 del doc 2) y `@fastify/websocket` maduro para la Fase C
 - [x] Elegir estrategia de persistencia inicial (snapshots simples vs. eventos+snapshots) y justificar la elección — **decidido: snapshot JSON por partida**, escritura atómica (`.tmp` + `rename`) con versión de concurrencia. Motivos: el estado completo mide ~2.4 MB a 500 asentamientos y serializarlo cuesta <1 ms (≈0.1% del tick); la cola serial por `gameId` elimina la concurrencia de escritura, que es la ventaja principal de SQLite; y el modelo de datos cambia entero en Fase D, así que definir esquema SQL ahora sería diseñar para algo que se va a tirar. **Disparadores para migrar a SQLite** (anotados, no ahora): auditoría/event-sourcing de Fase E, estado por encima de ~5 MB, o necesidad de consultar historial sin cargar la partida entera
 - [x] **⚠️ B3 — Mutaciones de `Mapa` hechas explícitas** (2026-08-25; era prerrequisito del guardado, ver [7_Diseno_GameSession.md](7_Diseno_GameSession.md) §7.3). Era lo único no funcional puro que quedaba del motor: `extraer` (desde `engine/construction.ts`) y `avanzarRegeneracion` (desde `engine/simulation.ts`) escribían el `estadoMapa` de la partida por dentro de una fachada compartida, fuera del valor de retorno. Al persistir tras cada tick se guarda *estado + eventos*, así que un fallo de escritura descartaba el estado nuevo pero **no** revertía los yacimientos ya vaciados: snapshot en disco y partida en memoria dejaban de coincidir. Cómo se resolvió:
@@ -198,7 +221,7 @@ devolver un resultado estructurado") que a este marcador — no sumar ni restar 
   - **Dos bugs de integración real encontrados y corregidos verificando en navegador** (no los detectaba `tsc` ni la suite, por diseño — son de la capa HTTP): (1) `POST /partidas` sin `forzar` devuelve 409 si el `gameId` ya está abierto en el proceso — correcto para el panel de admin, pero rompía la reconexión normal de `main.ts` en cada recarga de página (ya había una partida abierta de una carga anterior); `GameStore.crear()` ahora trata ese 409 como "ya está lista, conectate" en vez de propagarlo. (2) `apiCliente.ts` mandaba `content-type: application/json` en TODAS las peticiones, incluida `POST /tick` sin body — Fastify rechaza con 400 un `content-type: application/json` sobre un cuerpo vacío; el header ahora solo se manda cuando de verdad hay body
   - Cobertura de NPC portada de `app/__tests__/faccionNpc.test.ts` (probaba el `GameStore` local síncrono, ya no existe en esa forma) a `session/__tests__/npcGobernanza.test.ts`, contra `GameSession` directo — mismo comportamiento blindado, sin necesitar red. `app/__tests__/exportarImportar.test.ts` se retira sin reemplazo: probaba `importarSimulacion`, que ya no existe (admin, sin dueño todavía)
   - Tests: 405 → 400 (neto: -10 de las dos suites de `app/__tests__/` retiradas, +6 de `npcGobernanza.test.ts`, +9 del endpoint de comandos/`forzar`/bundling de tick en el commit anterior)
-- [ ] **Resolver el bloqueo de la cola serial por ticks largos** — un tick de ~1.9 s a 500 asentamientos son ~1.9 s sin procesar comandos de nadie (el doc 2 no lo contempla). Vías a evaluar: comandos por lotes entre ticks, partir el tick en fases cedibles, o mover el tick a un worker aparte del hilo que atiende comandos. **Decisión de LA SOLUCIÓN sigue pendiente, a propósito** (doc 7 §8.2: a la escala de arranque el tick mide ~170-300 ms, tolerable; el disparador para reconsiderar es un tick medido por encima de ~500 ms en partida real). Lo que sí se hizo en `RunnerDePartida` (2026-08-25) fue la preparación de coste cero del doc 7 §8.4: `ejecutar()`/`avanzarTick()` ya son `async` de cara a quien los llama, así que cualquiera de las tres vías se puede implementar DENTRO del runner el día que haga falta, sin cambiar su interfaz ni tocar `GameSession`
+- [x] **Resolver el bloqueo de la cola serial** — **RESUELTO 2026-09-05**. El enunciado original de esta línea ("un tick de ~1.9 s a 500 asentamientos son ~1.9 s sin procesar comandos de nadie") nunca fue el problema real: medido, el tick son 111 ms a 100 asentamientos —la escala de 500 jugadores— dentro de un intervalo de 60 000 ms. Lo que sí bloqueaba la cola era la **ráfaga de catch-up** tras una caída, una sola entrada de cola de hasta ~18,6 minutos. Las tres vías que esta línea listaba atacaban un tick lento; ninguna se implementó porque **la pregunta de fondo era de diseño de juego**: si una caída del servidor consume tiempo de mundo. Decisión del usuario: **no consume**. El reloj de mundo se ancla a "ahora" al arrancar (`RunnerDePartida.iniciarRelojDeMundo`), reabrir una partida la reanuda en el tick en que se quedó, y sin ráfaga no hay nada que bloquee la cola — el problema desaparece en vez de gestionarse. Verificado en vivo: partida en tick 3, snapshot retrasado 12 h, proceso reabierto → sigue en tick 3, y un comando responde en 0,22 s. Detalle en doc 10 §2 y doc 6 §1.
 
 ## Fase C — Multijugador sobre ticks (**solo servidor**)
 
@@ -285,8 +308,8 @@ puede importar de `server`), y para lograrlo reimplementó reglas de juego que y
 - [x] **Cliente actualizado** (`cliente/`): habla `/admin/*` (es lo que siempre hizo: crea partidas, avanza tick, lee estado completo), con login de desarrollo y sesión en memoria. No es desarrollo de cliente, es repuntar el wrapper para que el repo no quede roto
 - [x] 532/532 tests, `tsc` limpio en ambos proyectos, y verificado en vivo sobre HTTP real: 401 sin sesión, 403 sin rol, 403 al jugador que intenta leer el estado de admin, 403 al admin que intenta jugar, y el cliente renderizando contra la superficie autenticada
 
-- [ ] **Pendiente**: `Membresia` sigue viviendo en memoria (se pierde al reiniciar el proceso, igual que `Sesion`); no hay endpoint para revocar ni para otorgar `moderador`/`observador`, solo se crean por unirse o por crear partida
-- [ ] ~~`POST /partidas` y `POST /partidas/:gameId/tick` SIGUEN sin exigir sesión~~ — cerrado en C3
+- [x] ~~**Pendiente**: `Membresia`/`Sesion` viven en memoria; no hay endpoint para revocar ni para otorgar `moderador`/`observador`~~ — **cerrado 2026-08-29**, ver "Cierre de Fase C" al final de esta sección
+- [x] ~~`POST /partidas` y `POST /partidas/:gameId/tick` SIGUEN sin exigir sesión~~ — cerrado en C3
 - [x] ~~`fundarAsentamiento` fabrica ids sintéticos en vez de usar el actor real~~ — corregido 2026-08-26
 
 ### Fundador real en `fundarAsentamiento` — completada 2026-08-26
@@ -301,24 +324,26 @@ existían.
 - [x] **Fundación grupal (hasta 5 cofundadores) queda diferida a propósito**: el motor la soporta, pero exponerla exigiría un mecanismo de CONSENTIMIENTO que hoy no existe — sin él, un cliente podría meter a cualquier jugador en una Facción sin que lo pidiera, y como solo se pertenece a una (Doc 0), dejarlo bloqueado para la que quería. Es una vía de acoso, no una función; documentado en el propio comando
 - [x] Autorización (`comandos/autorizacion.ts`): nueva `puedeFundarEn` — ciudadano de la Facción, **o** caso de arranque (Facción sin ningún ciudadano todavía Y actor sin Facción propia). La excepción es estrecha: fundar consume el cap de fundación de la Facción (Doc 1.7), así que no se abre a cualquiera, solo al primer ciudadano de una Facción recién creada — sin ella, `crearFaccion` → `fundarAsentamiento` sería imposible
 - [x] Cliente (`cliente/`) repuntado: quitado el campo "Jugadores fundadores" del panel de Mundo y el parámetro del método `gameStore.fundarAsentamiento`
-- [x] 534 tests (arreglados 2 que asumían fundación grupal ficticia, añadidos los del caso de arranque y su exclusión), `tsc` limpio en ambos proyectos, y verificado en vivo sobre HTTP real: `jugadoresFundadoresIds`/`ciudadanosIds` quedan con el `usuarioId` real de quien funda; un segundo jugador sin Facción es rechazado (`condicion_dominio`) en cuanto la Facción deja de estar vacía. "Escuadrones propios del jugador o de otros residentes autorizados" (doc 5, fila de combate) sigue sin comprobarse: la condición implementada solo exige residencia en el asentamiento atacante, no la propiedad de cada `escuadronId` — pendiente
+- [x] 534 tests (arreglados 2 que asumían fundación grupal ficticia, añadidos los del caso de arranque y su exclusión), `tsc` limpio en ambos proyectos, y verificado en vivo sobre HTTP real: `jugadoresFundadoresIds`/`ciudadanosIds` quedan con el `usuarioId` real de quien funda; un segundo jugador sin Facción es rechazado (`condicion_dominio`) en cuanto la Facción deja de estar vacía. "Escuadrones propios del jugador" (doc 5, fila de combate) — **comprobado desde 2026-08-29** (`comandaEscuadrones`, ver "Cierre de Fase C"). "De otros residentes autorizados" sigue fuera: necesita un mecanismo de cesión de tropas que la Fase 0 no tiene
 
-### C4 Slice 1. Proyección de jugador sin niebla de guerra — completada 2026-08-26
+### C4. Proyección de jugador por audiencia — completada 2026-08-26
 
 Alcance decidido explícitamente con el usuario: la niebla de guerra completa (`ConocimientoJugador`, las 3
 fuentes de visibilidad) necesita un **radio de visualización** — número de BALANCE, no de arquitectura — que
 no está definido en ningún doc de este repo (las referencias "Doc 1.2", "Doc 2.5" etc. apuntan a un documento
 de diseño externo). Inventar ese número habría sido una decisión de diseño de juego disfrazada de código, así
 que se separó en dos: esta pasada resuelve la fuga de seguridad (nunca `GameState` completo a un jugador) con
-una regla conservadora; la niebla de guerra queda como Slice 2, con sus parámetros pendientes de definir.
+una regla conservadora — **eso es todo lo que C4 le pide a la arquitectura, y está hecho**. La niebla de
+guerra como mecánica de juego (con sus parámetros por definir) se movió a
+[`Docs/Mecanicas a desarrollar.md`](../Mecanicas%20a%20desarrollar.md) §12.
 
 - [x] `session/proyecciones/jugador.ts`: `proyectarParaJugador(estado, jugadorId)` — Facción propia COMPLETA (asentamientos, escuadrones, colas, almacén); las demás Facciones no aportan ni un asentamiento, ni resumido. Deliberadamente conservador: mejor "no ves nada del rival" que exponer un nivel de detalle que nadie ha decidido que sea seguro
 - [x] Público sin filtrar, por no ser información táctica: `facciones` (nombre/nivel/reputación/Rey/Embajador — necesario para que la pantalla de diplomacia tenga con qué pintarse), `relaciones`, `titulos` (un ranking que no se puede ver no sirve como ranking), `caminos`, `campamentosBandidos` (entidades del mundo, no de ninguna Facción), `mapa`/`estadoMapa` (geografía, no secreta — lo que se filtra son las entidades sobre el mapa)
 - [x] Filtrados por `asentamientoId` propio: `caravanas` (origen o destino), `acuerdos`, `ordenes`, `eventosDominio` (sin `asentamientoId` = global, o uno propio — mismo criterio que evita la fuga que el doc 7 §7.1 señalaba en el log administrativo)
 - [x] `GET /jugador/partidas/:gameId` (Fase C3 lo había dejado explícitamente sin implementar): exige rol `jugador` — un administrador sigue sin poder leerlo, aunque administre esa misma partida
 - [x] 20 tests nuevos (13 unitarios con estado de partida genuino, 5 HTTP), 552/552 en total, `tsc` limpio en ambos proyectos. Verificado en vivo sobre HTTP real: un jugador sin Facción ve `facciones` pero `asentamientos: []`; el fundador ve el suyo; un admin recibe 403
-- [ ] **Slice 2, pendiente y con parámetros por definir**: `ConocimientoJugador` (entidad qué-sabe-cada-jugador-desde-cuándo), visibilidad espacial (zona de influencia + radio de visualización — falta el número), contacto (trueque, mientras siga vivo — falta decidir si decae o se congela indefinidamente) y alianza (visibilidad en vivo de aliados). La decisión de fondo ya está tomada (2026-08-24): se muestra el ÚLTIMO ESTADO CONOCIDO, no el actual — patrón de niebla de guerra de RTS, evita filtrar telemetría en vivo de rivales
-- [x] ~~Construir frontend de jugador (acciones y datos restringidos a su proyección)~~ — **fuera de alcance de este repositorio** desde el replanteo de 2026-08-25: el cliente de jugador vive en otro repositorio. Lo que sí es responsabilidad de aquí es que su proyección exista y esté documentada (tareas de proyecciones y de contrato)
+- [x] La **niebla de guerra** (`ConocimientoJugador`, visibilidad espacial/contacto/alianza, "último conocido") **NO es de arquitectura** — es una mecánica de juego con parámetros por definir (radio de visualización, si el contacto decae o se congela). Movida a [`Docs/Mecanicas a desarrollar.md`](../Mecanicas%20a%20desarrollar.md) §12. El backend ya tiene la costura (`proyectarParaJugador`, mismo sitio) para añadir el filtrado cuando esos parámetros existan
+- [x] ~~Construir frontend de jugador~~ — **fuera de alcance de este repositorio** (solo servidor). El cliente jugable vive en un repo de interfaz aparte; aquí solo importa que su proyección exista y esté documentada
 
 ### C5. WebSocket, canales e idempotencia — completada 2026-08-26
 
@@ -330,7 +355,7 @@ una regla conservadora; la niebla de guerra queda como Slice 2, con sus parámet
 - [x] **Sin mensaje sintético de "conectado"**: el `open` nativo de WebSocket ya lo dice, y como la autenticación ocurre en `preValidation` antes del *handshake*, para cuando `open` dispara la conexión ya está autenticada. Se retiró tras un hallazgo real depurando los tests: mandarlo SÍNCRONAMENTE en el mismo tick en que arranca el handler compite con que el cliente termine de engancharse al evento `message` y se pierde — una carrera real del transporte (confirmada también con un cliente `ws` real sobre TCP real, no solo con el arnés de pruebas), no una peculiaridad de `injectWS`. Evitar el envío por completo es más simple y más robusto que retrasarlo con un `setImmediate`
 - [x] Al reconectar se pierden las suscripciones (doc 6 §2): no hay estado de suscripción que sobreviva al cierre del socket — el cliente se re-suscribe solo. Deliberado: más simple que reconstruir "qué tenía suscrito", y coherente con que las suscripciones describen QUÉ se quiere ver, no un historial que recuperar
 - [x] 25 tests nuevos (11 idempotencia en `RunnerDePartida`, 8 `canales.ts`, 14 WebSocket con `injectWS`, 1 idempotencia HTTP end-to-end), 581/581 en total, `tsc` limpio en ambos proyectos. Verificado en vivo con servidor real (`:3000`) y cliente `ws` real (no `injectWS`): conexión, suscripción y evento difundido, de punta a punta
-- [ ] **Pendiente**: los comandos siguen yendo por HTTP, no por el WebSocket (doc 6 §2 ya lo decidía así: "HTTP: comandos; WebSocket: solo notificar cambios") — nada que resolver aquí, es el diseño. Sin métricas de conexiones activas expuestas todavía (`hub.conexionesAbiertas` existe pero no hay endpoint que la lea) — llega con Fase E3
+- [x] Los comandos siguen yendo por HTTP, no por el WebSocket (doc 6 §2 ya lo decidía así: "HTTP: comandos; WebSocket: solo notificar cambios") — nada que resolver aquí, es el diseño, no una carencia. Lo único que quedaba pendiente de verdad de este punto eran las **métricas de conexiones activas**, y las expone `GET /v1/admin/metricas` desde la Fase E3 (2026-09-05) (`hub.conexionesAbiertas` existe pero no hay endpoint que la lea) — llega con Fase E3
 
 ### C6. Contrato publicable: versionado, CORS, OpenAPI, respuesta autosuficiente — completada 2026-08-26
 
@@ -371,9 +396,11 @@ una regla conservadora; la niebla de guerra queda como Slice 2, con sus parámet
   al exportar). 604/604 en total, `tsc` limpio. Verificado en vivo: servidor real levantado con
   `ADMINISTRADORES='dev:jefa'`, `curl http://localhost:.../v1/balance` responde 200 con `version:1` y
   `EDIFICIO_CATALOGO` real dentro de `catalogos`
-- [ ] Absorbe el grupo "de tabla" del hito C10 (`capFundacion`, `cupoVivienda`, `slotsPoliticaDisponibles`,
+- [x] Absorbe el grupo "de tabla" del hito C10 (`capFundacion`, `cupoVivienda`, `slotsPoliticaDisponibles`,
   `nivelFaccionInfo`, `CATALOGOS`): con el balance servido, un cliente sin motor ya puede resolverlas por
-  *lookup* — pero eso lo hace el cliente cuando exista uno sin `@motor/*` (C8-C13), no este hito
+  *lookup*. Quedaba pendiente de que existiera ese cliente — y **existe desde el commit `2dfe9e7`, en su
+  propio repositorio**, así que el trabajo que faltaba dejó de ser de ESTE repo. Cerrado por alcance, no
+  porque se implementara aquí
 
 ### Diagnóstico de aislamiento del cliente (2026-08-26)
 
@@ -520,8 +547,11 @@ Resumen de lo que afecta al plan:
 - **Lockstep determinista queda descartado** (el patrón de AoE/StarCraft: solo viajan comandos, cada cliente
   simula el mundo entero). Es **estructuralmente incompatible con la niebla de guerra** —de ahí los maphacks
   de StarCraft— y eso choca con C4, donde las proyecciones son frontera de seguridad. Segundo motivo: existe
-  para esconder latencia a 60 Hz, y aquí el tick mide ~1,9 s de CPU. Se confirma el modelo que C4/C5 ya
-  construyen: servidor autoritativo, cliente sin simulación
+  para esconder latencia a 60 Hz, y aquí **un tick ES UN MINUTO de tiempo de mundo** (Fase D): no hay latencia
+  de fotograma que disimular, el jugador espera por diseño. El argumento no depende de lo que cueste el tick
+  en CPU — la cifra de "~1,9 s" que traía esta línea era además una extrapolación de agosto ya corregida (hoy,
+  111 ms a 100 asentamientos). Se confirma el modelo que C4/C5 ya construyen: servidor autoritativo, cliente
+  sin simulación
 - **Pero la premisa sí necesitaba un matiz**: la frontera es **reglas vs. simulación**, no "motor sí/no". La
   simulación es solo del servidor; las **reglas** (costes, cupos, validez) el cliente las necesita para
   responder al instante, y la industria se las manda **como datos, no como código** (el *Static Data Export*
@@ -548,11 +578,11 @@ escuadrón/Facción **propios** — doc 9, tabla T2a). El cliente las resuelve s
 (doc 3) nunca contó este grupo como pendiente de C10, y tenía razón; esta sección de doc 4 sí lo hacía y
 quedó sin corregir hasta ahora. (`getLigas` tampoco va aquí — es T2a, ver la nota del hallazgo 4.)
 
-> **Matiz que SÍ sigue abierto, pero no es de C10**: `mantenimientoInfo`/`poblacionInfo`/`caravanasInfo`/
-> `infoMejoraEdificio` aplicados a un asentamiento RIVAL (no propio) sí necesitarían proyección filtrada por
-> visibilidad — es la clasificación "Proyección por audiencia (5)" del triaje original del doc 8. Bloqueado en
-> lo mismo que siempre: **C4 Slice 2** (niebla de guerra), sin radio de visualización definido en ningún doc.
-> No es un hueco de C10 — es un hueco de C4 que C10 no puede cerrar por su cuenta.
+> **Matiz que SÍ sigue abierto, pero no es de C10 ni de arquitectura**: `mantenimientoInfo`/`poblacionInfo`/
+> `caravanasInfo`/`infoMejoraEdificio` aplicados a un asentamiento RIVAL (no propio) necesitarían proyección
+> filtrada por visibilidad — es la "Proyección por audiencia (5)" del triaje del doc 8. Depende de la **niebla
+> de guerra** (`Mecanicas a desarrollar.md` §12, parámetros por definir). Hasta entonces la regla conservadora
+> de C4 (nada de un rival) los cubre: un jugador no recibe ese asentamiento, así que no hay `info` que filtrar.
 
 > **`precioReferencia` — hecho 2026-08-26.** Primera de este grupo en moverse: `RunnerDePartida.preciosReferencia()`,
 > caché con TTL de un minuto real (no un `setInterval` — se recalcula perezosamente en la siguiente lectura
@@ -803,9 +833,10 @@ había conectado con C11b: el terreno es **T2a** ("el terreno lo ven todos", ent
 hace falta que el SERVIDOR lo calcule para nadie, un cliente lo recalcula solo desde los parámetros públicos
 que ya sirve C11a. Cero rasterizado, cero dependencia nueva.
 
-- [x] **[`cliente-jugador/`](../../cliente-jugador/)** — proyecto nuevo, hermano de `cliente/`, con su propio
+- [x] **`cliente-jugador/`** (hoy el repositorio `BronzeAgeClient`) — proyecto nuevo, hermano de `cliente/`, con su propio
   `package.json`/`tsconfig.json`/`vite.config.ts`. Sin ningún alias `@motor/*` ni `paths` hacia `../src`: es
-  la prueba de que el criterio de cierre de la Fase C es alcanzable, no solo una intención
+  la prueba de que un cliente PUEDE pintar el mundo sin el código del motor. Construir la interfaz jugable
+  completa a partir de aquí es trabajo de un repo aparte — fuera del alcance de este repo (solo servidor)
 - [x] **`src/terreno/`** — copia deliberada (no import) de la parte de `worldgen/` que evalúa por punto:
   `ruido.ts` (`evaluarRuido`/`evaluarRuidoParcial`, SIN `generarCampoRuido` — eso consume RNG, es generación,
   se queda en el servidor), `elevacion.ts`, `fertilidad.ts`, `biomas.ts`, `rios.ts` (solo
@@ -929,27 +960,455 @@ que ya sirve C11a. Cero rasterizado, cero dependencia nueva.
   `GameSession.ejecutar`, no un array fabricado a mano) y en `api.test.ts` (las dos superficies, filtrado por
   audiencia, `400` en `desde` inválido). 640/640 en total, `tsc` limpio. Verificado en vivo con `curl`
 
+### Cierre de Fase C — huecos pequeños (2026-08-29)
+
+Tras revisar los 9 docs de arquitectura, el usuario eligió cerrar los pendientes menores que quedaban de
+Fase C antes de arrancar Fase D. Tres piezas de código + dos de documentación. Con esto Fase C queda
+**completa** (la niebla de guerra fina se movió a `Mecanicas a desarrollar.md` §12 — es mecánica de juego, no
+arquitectura).
+
+- [x] **Persistencia del dominio de acceso** — `Membresia`/`Sesion`/`Usuario`/`IdentidadVinculada` ya no se
+  pierden al reiniciar el proceso (era el pendiente citado en C1 y C3).
+  - `src/server/persistenciaIdentidad.ts` (capa `server/`, como `persistenciaPartida.ts` — `acceso/` no puede
+    tocar `fs`): `leerIdentidad`/`escribirIdentidad`, escritura **atómica** (`.tmp` + `rename`),
+    `formatoVersion` de envoltorio con su propia excepción de rechazo. **Sin versión de concurrencia**, a
+    diferencia de una partida: lo escribe un solo proceso, las mutaciones son diminutas y el adaptador las
+    serializa en una cola — el archivo entero se reescribe en cada cambio.
+  - `src/server/identidad/repositorioEnMemoria.ts` **refactorizado, no duplicado**: gana `inicial?`
+    (snapshot cargado) y `alCambiar?` (gancho de persistencia). `crearRepositorioIdentidadEnDisco` (adaptador
+    nuevo) = ese mismo repositorio con los dos ganchos cableados a disco + una cola de escrituras encadenadas
+    (misma técnica que `RunnerDePartida`) y `esperarEscrituras()` para apagado limpio y tests deterministas.
+    La lógica de índices, "primera identidad gana" y el contador de ids vive en UN solo sitio.
+  - `RepositorioIdentidad` (puerto, `acceso/`) gana `listarMembresiasDePartida` y `revocarMembresia` — las
+    necesita la superficie de administración (siguiente punto). Actualizados los dos implementadores (el de
+    memoria y el doble de test de `acceso/`).
+  - `server/index.ts` pasa a `async`: carga el repositorio de disco (`identidad.json`, junto a los snapshots
+    de partida) antes de `crearServidor`, y registra un handler de `SIGINT`/`SIGTERM` que espera la última
+    escritura antes de salir. `crearServidor` **no cambia**: sigue con el repositorio en memoria por defecto
+    (tests), el de disco se le inyecta vía `identidad`.
+- [x] **Endpoints de gestión de membresías** en `/admin/*` (era el otro pendiente de C1/C3: "no hay endpoint
+  para revocar ni para otorgar `moderador`/`observador`").
+  - `GET /admin/partidas/:gameId/membresias` — lista (usuarioId, jugadorId, rol, desde, hasta, `vigente`).
+  - `POST /admin/partidas/:gameId/membresias` `{ usuarioId, rol }` — `rol` ∈ `administrador_partida` /
+    `moderador` / `observador` (enum cerrado en el esquema, mismo criterio que C9: `jugador` se obtiene por la
+    superficie de jugador, `administrador_global` es de instancia y solo por `ADMINISTRADORES`,
+    `servicio_npc` es interno). 404 si el usuario nunca inició sesión, 409 si ya tiene membresía (revocar
+    primero — no hay cambio de rol silencioso).
+  - `DELETE /admin/partidas/:gameId/membresias/:usuarioId` — revoca poniendo `hasta` (no borra, doc 5).
+  - `acceso/rolesDePartida.ts` gana `puedeGestionarMembresias`: `administrador_partida` o
+    `administrador_global`, **no `moderador`** (doc 5: "subset de administrador_partida, sin acceso a
+    balance/regeneración" — repartir accesos es competencia del administrador de partida).
+- [x] **Propiedad de escuadrones en combate** (`session/comandos/autorizacion.ts`). `comandaEscuadrones`:
+  cada `escuadronId` comprometido que EXISTE en el asentamiento atacante debe pertenecer al actor
+  (`Escuadron.jugadorId`). Se mantiene la exigencia de residencia. Añadido a `iniciarAsedio`,
+  `interceptarCaravana`, `atacarCampamentoBandidos` (residente + dueño de todos) y `combateCampoAbierto`
+  (dueño en cada lado donde resida). Un id inexistente se deja pasar (fail-open, lo rechaza el comando).
+  **"De otros residentes autorizados" (doc 5) sigue fuera**: la delegación de mando —un General al que se le
+  ceden tropas— no existe en Fase 0.
+- [x] **Follow-ups de C13 — anotados, no implementados a propósito.** Quitar `eventosDominio` entero de
+  `EstadoAdmin`/`ProyeccionJugador` y convertir la difusión WebSocket en deltas aplicables siguen sin
+  consumidor: `cliente/` (el único cliente real hoy) todavía lee el array completo para su línea de tiempo de
+  depuración, y no hay ningún cliente migrado al cursor `?desde=` que lo reemplace. Cambiar el contrato sin un
+  reemplazo listo es peor que dejarlo — queda como follow-up para cuando exista un cliente que use el cursor
+  (ver el "Alcance NO cubierto" de C13 arriba, sin cambios).
+- [x] Verificación: 654 → **669 tests** (`autorizacionComandos.test.ts` +4 sobre estado genuino,
+  `persistenciaIdentidad.test.ts` nuevo, `api.test.ts` +6 de gestión de membresías y persistencia tras
+  reinicio), `tsc --noEmit` limpio. **Verificado en vivo** con servidor real escuchando en un puerto y HTTP
+  real (`fetch`, no `inject`): otorgar moderador → beto administra → beto NO reparte roles (403) → revocar →
+  beto vuelve a 403; una membresía de jugador y una revocación sobreviven a recrear el servidor sobre el
+  mismo directorio.
+
+**Fase C: completa (2026-08-29).** El backend cumple todo lo que le toca. Lo que queda son cosas de OTRAS
+capas, no de este repo:
+
+- **Niebla de guerra** — no es de arquitectura sino una mecánica de juego con parámetros por definir (radio
+  de visualización, si el contacto decae o se congela). Movida a `Mecanicas a desarrollar.md` §12. El backend
+  ya tiene la costura (`proyectarParaJugador`) para el filtrado cuando esos parámetros existan; hasta entonces
+  la regla conservadora de C4 (un jugador ve cero de cualquier Facción rival) es segura.
+- **El cliente jugable completo** — trabajo de un repo de interfaz aparte (este repo es solo servidor). El
+  backend ya sirve balance, geometría, terreno recalculable, esquema de comandos, cursor de eventos,
+  descubrimiento e identidad persistente.
+
 ## Fase D — Conversión temporal total
 
-- [ ] Introducir reloj de simulación y campos de fecha en el estado, sin retirar aún el tick
-- [ ] Migrar construcción, políticas y cooldowns de `ticksRestantes`/`enTick` a duraciones o fechas de finalización
-- [ ] Migrar producción/consumo/población/hambre/mantenimiento a tasas o acumuladores por tiempo transcurrido
-- [ ] Migrar caravanas (salida, velocidad, tiempo transcurrido en vez de posición por tick)
-- [ ] Migrar comercio, bandidos, NPC y combate a eventos temporales
-- [ ] Escribir migración explícita de partidas guardadas en formato "ticks" a formato "tiempo real"
-- [ ] Actualizar DTOs y frontends: contadores → fechas/duraciones/eventos
-- [ ] Recalibrar valores de balance con simulaciones de referencia tras el cambio de modelo temporal
-- [ ] Persistir `ultimoProcesadoEn` y procesar eventos vencidos tras un reinicio de servidor
+> **Re‑planteada 2026‑08‑29** — modelo completo en [10_Modelo_Temporal.md](10_Modelo_Temporal.md). Resumen de
+> la investigación previa:
+>
+> - **Inventario medido**: 128 usos de `*Tick` en 3 arquetipos — **instantes** (7 campos: `expiraEnTick`,
+>   `fundadoEnTick`, `heridoHastaTick`, `activadaEnTick`, `creadoEnTick`, `bandidosProximoSpawnTick`,
+>   `ultimaCaravanaCreadaEnTick`), **contadores** (`ticksRestantes`, `rachaMantenimientoSano`), **tasas**
+>   (~15 constantes `/tick`). El motor solo usa `tick` para la aritmética y `momento` para fechar eventos —
+>   `ContextoSimulacion` ya está listo, nada lee el reloj.
+> - **Dos bugs temporales en producción, verificados** (doc 10 §7): `ctx.momento` es reloj de pared y se
+>   persiste en el estado (mismo comando + misma seed → snapshots distintos); el cooldown de `crearFaccion`
+>   (7 días) corre contra reloj de pared con la partida congelada.
+> - **"Independencia del tamaño del paso" (doc 2) es inalcanzable** — RNG escala 1:1 con los pasos, población
+>   compuesta (15 % de divergencia en 6 pasos). Se retira; el paso es fijo.
+> - **Decisión del usuario**: mundo = tiempo real, 1 tick = 1 minuto real, `instante` derivado del tick.
+
+- [x] **Guard de autoridad temporal** (antes de D1) — `src/__tests__/autoridadTemporal.test.ts`: el núcleo
+  puro (`domain`/`constants`/`worldgen`/`world`/`engine`) no nombra `Date` ni consume aleatoriedad ambiental
+  (`Math.random`/`crypto.*`/`performance.now`); `session` no lee el reloj de pared (`Date.now()`/`new Date()`
+  vacío) — puede parsear un ISO recibido hasta D2. Extrae la lectura del árbol de `arquitectura.test.ts` a
+  `src/__tests__/fuenteDelProyecto.ts` (compartida). Corrige de paso `world/exportUnity.ts`: dejaba de ser
+  núcleo puro por un `new Date().toISOString()` en la metadata — ahora el servidor le pasa `generadoEn` por
+  opciones (`MetadataExportUnity.generadoEn` pasa a opcional; ningún test asertaba sobre él). 669 → 675 tests,
+  `tsc` limpio, verificado por prueba negativa (reintroducir el `new Date()` hace fallar el guard con
+  `exportUnity.ts:291`)
+- [x] **D1** — **hecho 2026‑08‑29**. Decisión de diseño al implementar: `momentoSimulacion` **NO se almacena**
+  en el estado — se deriva (`instanteDeTick(tick) = epocaInicial + tick × duracionTickMs`, función pura en
+  `session/estado.ts`, mismo patrón que `idDeMapa`). Consecuencia: **el formato de snapshot no cambia**, un
+  snapshot viejo se reconstruye del `tick` sin datos nuevos.
+  - `SIMULACION` en `constants.ts` (`epocaInicial: '2026-01-01T00:00:00.000Z'`, `duracionTickMs: 60_000`),
+    `BALANCE_VERSION` 1 → 2, servido en `GET /v1/balance` bajo `temporal` (40 tablas, no 39)
+  - `GameSession.ejecutar(manejador, params, opciones?)` — el tercer parámetro pasa de `{ momento; actor? }` a
+    `{ actor? }`; `ctx.momento` lo deriva `ejecutar` de `instanteDeTick(this.estado.tick)`. Las 3 operaciones
+    de sistema (`avanzarTick`/`avanzarAutoComercio`/`avanzarFaccionesNpc`) pierden el parámetro `momento`
+  - `avanzarTick.ts` fecha los eventos del tick con `instanteDeTick(nuevoTick)` — el instante RESULTANTE,
+    coherente con `ContextoSimulacion.tick` (el nuevo). `avanzarFaccionesNpc` no necesita override: corre tras
+    el tick, así que `this.estado.tick` ya es el nuevo
+  - `RunnerDePartida.ejecutar`/`avanzarTick` dejan de pasar `this.ahora()`. `ahora` (reloj de pared) queda para
+    `guardarPartida` (param renombrado `momento` → `guardadoEn`), el TTL de `preciosReferencia`, y el catch‑up
+    de D5
+  - `crearFaccion` cooldown: automáticamente pasa a tiempo de mundo (compara dos `instanteDeTick`). Test
+    reescrito para adelantar la partida por `exportar`/`importar` con `tick` alto en vez de inyectar `momento`
+  - `engine/__tests__/fixtures.ts` (`contextoDeTest`) y `scripts/run-batch-sim.ts` alineados a `SIMULACION` —
+    ya derivaban el momento del tick con la misma fórmula, ahora con la constante compartida
+  - **Regresión congelada** (`runnerDePartida.test.ts`): mismo comando + relojes de pared distintos → snapshot
+    idéntico; eventos fechados en tiempo de mundo aunque `ahora()` diga 2099. Verificado en vivo sobre HTTP
+    real (balance v2 con `SIMULACION`; 6 eventos de un tick, todos en `2026-01-01T00:0X`, no en la fecha real).
+    669 → 677 tests, `tsc` limpio
+- [x] **D2** — **hecho**. Tipos branded y migración de los campos‑instante.
+  - `domain/tiempo.ts` (módulo hoja, cero imports): `Instante`/`Duracion` (`number` con marca de tipo) +
+    `instante`/`duracion`/`minutos`/`dias`/`sumar`/`transcurrido`. El compilador ya no deja sumar dos
+    instantes ni confundir un instante de mundo con un `tick` ordinal — es la red que hizo la migración
+    verificable (`tsc` señaló ~55 sitios).
+  - `constants.ts` ganó `ticksComoDuracion(n): Duracion` (`n × SIMULACION.duracionTickMs`) como puente para
+    las constantes que aún se declaraban en ticks. **D6 lo eliminó**: esas constantes ahora son `*Minutos` y
+    el motor usa `minutos()` de `domain/tiempo.ts` directamente.
+  - `session/estado.ts`: `instanteDeTick(tick): Instante` (antes devolvía ISO), `isoDeInstante(i): string`
+    para lo que sale por el cable.
+  - **Campos renombrados** `*EnTick: number` → `*En: Instante`: `Escuadron.heridoHasta`, `Asentamiento.fundadoEn`/
+    `ultimaCaravanaCreadaEn`, `AcuerdoTrueque.creadoEn`/`expiraEn`, `OrdenMercado.creadoEn`,
+    `PoliticaActiva.activadaEn`/`expiraEn`, `RelacionPolitica.creadoEn`, `EstadoSimulacion`/`GameSessionState.bandidosProximoSpawnEn`,
+    `EstadoMapa.regeneraEn`, `GameSessionState.salidasFaccionPorJugador` (ISO → `Instante`).
+    `PayloadAsentamientoRuinas.duracionTicks` → `duro: Duracion`.
+  - `ContextoSimulacion` y `ContextoComando` ganan `instante: Instante`; conservan `momento: string` (ISO)
+    solo para fechar eventos — redundante a propósito, D4 lo unifica. Los ~15 archivos de motor que tomaban
+    `tickActual: number` para una comparación de deadline ahora toman `instante: Instante`. `avanzarSimulacion`
+    ya no necesita `tick` (solo `comoEventosDominio` lo usa, para el campo `tick` heredado del evento).
+  - **`reclutarTropa` y varios ids** dejan de llevar el tick en el string (`escuadron-<asentamiento>-<contador>`,
+    etc.): el contador de `GeneradorIds` ya garantiza unicidad, el tick era redundante.
+  - **`crearFaccion` cooldown**: `transcurrido(salida, ctx.instante) < dias(CIUDADANIA.cooldownCreacionFaccionDias)` —
+    aritmética de `Instante`/`Duracion` pura, se acabó el `new Date(...).getTime()`.
+  - **Migración de snapshot v1 → v2** (`persistenciaPartida.ts` `migrarSnapshot`, `FORMATO_SNAPSHOT_VERSION` → 2):
+    cada `*EnTick: N` → `*En: instanteDeTick(N)` (relación 1:1, sin pérdida), ISOs de `salidasFaccionPorJugador`
+    → `Instante`. No se persiste sola — el próximo comando reescribe el archivo en v2. Test con snapshot v1
+    sintético que cubre los 8 tipos de campo.
+  - **El guard NO se endureció** (doc 10 §4): el único `new Date` que queda en `session` es `instanteDeTick`
+    (construye el ms) e `isoDeInstante` (lo formatea) — construir un `Date` desde un valor no es leer el reloj.
+  - 677 → 678 tests, `tsc` limpio, verificado en vivo (servidor real: `asentamiento.fundadoEn` es un `Instante`
+    de 13 dígitos, sin campo `fundadoEnTick`; eventos fechados en tiempo de mundo).
+- [x] **D3** — `Edificio.ticksRestantes: number` → `Edificio.completaEn?: Instante` (implementa doc 6 §4 (a),
+  "fechas absolutas, nunca contadores"). Era el último contador de deadline; `rachaMantenimientoSano` y
+  `extractoresTicksSinCupo` son rachas/acumuladores y se quedan hasta D6.
+  - `completaEn` presente SOLO mientras `estado === 'en_construccion'`; ausente en `en_cola` (la Vía Rápida
+    del Maestro de Obras fija la duración al arrancar, el valor viejo en cola nunca era autoritativo) y en
+    `activo`. `domain/types.ts`, más los literales `activo` de `settlement.ts`/`trazado.ts`/`construction.ts`.
+  - `avanzarConstruccion(asentamiento, zona, mapa, capital, reclamos, instante)`: en el Paso 1 compara
+    `instante >= edificio.completaEn` en vez de `--ticksRestantes <= 0`; en el Paso 2 fija
+    `completaEn: sumar(instante, minutos(ticks))` (tras D6; mismo `ticks` con `factorTiempoConstruccion`).
+    `simulation.ts` le pasa `instante`. Un `en_construccion` sin `completaEn` (dato viejo colado) se completa
+    en cuanto se evalúa — no se cuelga.
+  - **Timing tick‑a‑tick idéntico**: el snapshot baseline (`snapshot_baseline.test.ts`, cuenta
+    `tipo:estado` en ticks 1/10/25/50/100) no se movió — los mismos edificios están `en_construccion` en los
+    mismos ticks que antes.
+  - **Migración de snapshot v2 → v3** (`FORMATO_SNAPSHOT_VERSION` → 3): `migrarSnapshot` ahora encadena
+    (`v1→v2` y `v2→v3` como funciones separadas). `v2→v3`: un `en_construccion` gana
+    `completaEn: instanteDeTick(state.tick + ticksRestantes)`; `en_cola`/`activo` solo pierden el contador.
+    Tests: el de v1 sintético ahora llega hasta v3 (obra + cola), más un test v2→v3 dedicado.
+  - **De paso**: `scripts/run-batch-sim.ts` (fuera de `tsconfig`, sin type‑check) estaba roto desde D2 —
+    `ContextoSimulacion` sin `instante`, `fundarAsentamiento(…, 0)`, `bandidosProximoSpawnTick`. Al día ahora,
+    con `instanteDeTick`/`isoDeInstante`. Y `scoreAsignacion` (trade.ts): variable local `ticksRestantes`
+    (que ya era ms desde D2) → `restante`.
+  - 678 → 679 tests, `tsc` limpio, verificado con el laboratorio batch en vivo (120 ticks, niveles de
+    Facción progresan 1→2, 0 excepciones, construcción no se completa de golpe).
+- [x] **D4** — DTOs con instante de mundo. `ResumenPartida` (`server/rutas/contexto.ts`),
+  `ResumenPartidaEnDisco` (`server/persistenciaPartida.ts`), `EstadoAdmin` y `ProyeccionJugador` ganan
+  `instante: Instante` (ms de mundo).
+  - Derivado como `mapaId` — `instanteDeTick(estado.tick)` en `resumenDe`/`vistaAdminDeEstado`/
+    `proyectarParaJugador`/`listarPartidas`; nunca almacenado. En `EstadoAdmin` es campo del TIPO (no lo
+    borra `CAMPOS_IMPUROS`, es puro). `listarPartidas` lee `state.tick` del JSON crudo — presente en todo
+    formato de snapshot, no hace falta migrar.
+  - `tick` sigue viajando en cada DTO, con el comentario "PROVISIONAL, se cae del contrato al cerrar Fase D;
+    usar `instante`". El comentario de `GameSessionState.tick` explica que el instante se deriva de él, no al
+    revés, y que hacia afuera la referencia es `instante`/`momento`.
+  - Esquemas de respuesta: `RESUMEN_PARTIDA_RESPUESTA` (`esquemas.ts`) y el `items` de `ESQUEMA_LISTAR_PARTIDAS`
+    (`admin.ts`) ganan `instante: { type: 'number' }` en `properties` + `required` — Fastify filtra la
+    respuesta por schema, un campo ausente se descartaría en caliente. Las rutas de proyección/estado/comando
+    no tienen schema de cuerpo (deliberado, Fase C6) — `instante` pasa sin tocar.
+  - **Sin campo ISO redundante.** Split: estado vivo en `Instante` ms (aritmética directa del cliente contra
+    `completaEn`/`expiraEn`/`heridoHasta`, que ya viajaban absolutos desde D2/D3); eventos en `momento` ISO
+    (legible en un log, ya existía). `isoDeInstante` es una línea en el cliente si hace falta formatear.
+  - D4 dejó `EventoLogAdmin` (`{tick, mensaje}`) y `ResumenPartida.tick`/`ProyeccionJugador.tick` con el
+    `tick` provisional — **resuelto en el cierre de Fase D** (ver más abajo): `EventoLogAdmin.tick` →
+    `momento`, y los DTOs sueltan `tick`.
+  - Tests: `api.test.ts` — las 2 aserciones `toEqual` exactas de `resumenDe` + la de la lista ahora incluyen
+    `instante`. 679 tests, `tsc` limpio, verificado en vivo sobre las 4 superficies
+    (`POST`/`GET /admin/partidas`, `GET /admin/partidas/:id`, `GET /jugador/partidas/:id`): `instante` = época
+    + tick×60 000 ms en todas, 1 tick = 60 000 ms.
+- [~] **D5** — reloj de mundo + catch‑up **hechos** (= el antiguo E1). Comandos programados: aplazados.
+  - **`RunnerDePartida.iniciarRelojDeMundo(intervaloMs)` / `detenerRelojDeMundo()`** sustituyen al metrónomo
+    `iniciarTicksAutomaticos`/`detener`. Mantiene `estado.tick` sincronizado con el reloj de pared: la
+    referencia (`relojDeMundo.referenciaMs`) es "instante de pared en que el mundo llegó al tick actual" —
+    parte del anclaje del constructor (`referenciaRelojInicialMs` = `guardadoEn` del snapshot, o "ahora"
+    para una partida nueva; en `tickAlConstruir`) más un intervalo por cada tick avanzado a mano antes de
+    arrancar el reloj (así `POST .../tick` manuales no se cuentan dos veces, y parar/reanudar no re‑ejecuta
+    la ráfaga). Cada disparo: `adeudados = ⌊(ahora − referenciaMs) / intervaloMs⌋`, capado a
+    `MAX_TICKS_RAFAGA` (10 080 = una semana; lo que exceda se recupera en pasadas siguientes — acota la
+    latencia de arranque y el daño de un salto de reloj). La referencia avanza EXACTAMENTE ese nº de
+    intervalos (nunca a "ahora": el resto sub‑intervalo se conserva). Sin acumular jitter del `setInterval`.
+  - **Catch‑up = una sola entrada de la cola serial** para toda la ráfaga (`sincronizarConReloj` →
+    `encolar`): un comando de jugador que llegue a mitad espera a que el mundo se ponga al día (correcto —
+    no se puede actuar "ahora" hasta que el mundo esté en "ahora"). El tick puro + auto‑comercio + turno
+    NPC de cada tick de la ráfaga salen de `unTickCompleto`, extraído de `avanzarTick`.
+  - **`cargarPartida` → `PartidaCargada { sesion, guardadoEn }`** (antes `GameSession | null`): el
+    `guardadoEn` es la referencia del catch‑up. `RunnerDePartida` privado gana el 3er parámetro `guardadoEn?`.
+  - **`RegistroDePartidas`** recibe el reloj de pared inyectado (3er parámetro, = `deps.ahora` en `api.ts`)
+    y lo pasa a los runners → el reloj de mundo y su catch‑up son inyectables en tests. Nuevo `cerrar()`:
+    para el reloj de cada partida abierta y drena su cola; lo llama el hook `onClose` de Fastify (SIGINT/
+    SIGTERM en `index.ts`, y el `afterEach` de todos los tests).
+  - **`server/index.ts`**: mensaje de arranque actualizado (ya no es un "placeholder"; es el reloj de mundo
+    con catch‑up). `INTERVALO_TICK_MS` sigue opt‑in; con "mundo = tiempo real" el valor es 60000.
+  - Tests: `runnerDePartida.test.ts` — describe "reloj de mundo (D5)" reescrito con reloj de pared
+    controlable (`runnerConReloj`): catch‑up al arrancar, resto sub‑intervalo entre paradas, avance
+    continuo + parada, doble‑iniciar sin fuga de intervalo, catch‑up tras reinicio (reabrir con
+    `cargarOCrear`). `registroDePartidas.test.ts` — catch‑up de extremo a extremo (crear+persistir con un
+    registro que no avanza → reabrir 4 min después con otro que sí → tick 4). `persistenciaPartida.test.ts`
+    — `cargarPartida` devuelve `guardadoEn`. 679 → 683 tests, `tsc` limpio.
+  - **Verificado en vivo por HTTP**: proceso A crea la partida (tick 0), se apaga; proceso B la reabre 7 min
+    reales después con reloj de mundo de 1 min/tick → `GET /admin/partidas/g` da **tick 7**,
+    `instante = instanteDeTick(7)`. El catch‑up mide tiempo real transcurrido, no salta a la fecha del
+    calendario.
+  - **Comandos programados a un `instante` — APLAZADOS.** Sus consumidores concretos están pospuestos a
+    Fase 1+ por decisión explícita del diseño: asedios formales en ventanas horarias
+    ([`Docs/Game/5_Sistema_Militar_y_Combate.md`](../Game/5_Sistema_Militar_y_Combate.md): *"pospuesto a
+    Fase 1+ de forma explícita — requiere... sistema de colas/horarios"*), planificación manual de
+    caravanas ([`Docs/Game/3_Sistema_Economico_y_Comercio.md`](../Game/3_Sistema_Economico_y_Comercio.md):
+    *"pasar a asignación/carga manual en Fase 1+"*). Construir ahora el almacén de comandos pendientes +
+    su despacho en el tick + la migración de snapshot sería infraestructura especulativa sin consumidor —
+    justo lo que este repo evita a conciencia en todas partes ("inventar aquí sería una decisión de diseño
+    de juego disfrazada de código"). Aterriza con la primera mecánica que lo pida, en su fase.
+- [x] **D6** — constantes de `constants.ts` de tick a minuto, **sin tocar valores** (1 tick = 1 minuto).
+  - **Plazos** `*Ticks` → `*Minutos`: `EDIFICIO_CATALOGO[*].tiempoConstruccionMinutos` (~30 entradas),
+    `POLITICAS.duracionMinutosPorDefecto`, `TRUEQUE.plazoMinutosPorDefecto`, `MILITAR.duracionHeridoMinutos`,
+    `CAMPAMENTOS_BANDIDOS.respawnMinutos`, `CARAVANA_COOLDOWN.cooldownMinutos`,
+    `REGENERACION_NODOS.*.cooldownMinutos`, `MANTENIMIENTO.graciaMinutos` /
+    `minutosSanosParaRecuperarNivel`, `RESERVA_CONSTRUCCION.horizonteMinutosMantenimiento/Comida`.
+  - **Tasas** `*PorTick` → `*PorMinuto`: `racionPorSoldadoPorMinuto`, `regeneracionMoralPorMinuto`,
+    `desercionFraccionPorMinutoSinMoral`, `decaimientoPorMinuto`, `bonusPorMinutoAlianzaActiva`,
+    `fraccionMuertePorMinutoHambre`, `regeneracionPorMinuto`, `bonusPorMinutoStarved`. Comentarios `X/tick` →
+    `X/minuto` donde eran unidad de tasa (los "tick N" ordinales del laboratorio batch se dejan — el motor
+    sigue integrando en pasos discretos).
+  - **`ticksComoDuracion` eliminado** de `constants.ts` — los 9 llamadores usan `minutos()` de
+    `domain/tiempo.ts` directamente. `SIMULACION.duracionTickMs` queda como el único sitio que "sabe" cuánto
+    dura un tick.
+  - **`RelacionPolitica.tributo.cantidadPorTick` → `cantidadPorMinuto`** (campo persistido) + la query
+    `produccionPorTick`/`ProduccionItem.cantidadPorTick` (derivada, T2a) → `*PorMinuto`. Migración de
+    snapshot **v3 → v4** (`migrarV3aV4`, renombra el campo de `tributo`, mismo valor). `BALANCE_VERSION` 2 → 3
+    (claves distintas en el JSON servido, mismos valores).
+  - **Queda como está a propósito:** los contadores persistidos `Asentamiento.rachaMantenimientoSano` y
+    `extractoresTicksSinCupo` — cuentan pasos consecutivos, no son plazos; renombrarlos no aporta y exigiría
+    otra migración.
+  - Tests: `persistenciaPartida.test.ts` — test v3→v4 dedicado. Renombres reflejados en tests de
+    diplomacia/mantenimiento/caravanas/bandidos. 683 → 684 tests, `tsc` limpio.
+- [x] **Cierre de Fase D** — se retira el `tick` provisional del CONTRATO (quedaba de D4/D6).
+  - `EventoDominio` se queda solo con `momento` (ISO); `EventoLogAdmin.tick` → `momento`;
+    `ContextoSimulacion.tick` eliminado (solo lo leía `comoEventosDominio`); `ResumenPartida`,
+    `ResumenPartidaEnDisco` y `ProyeccionJugador` pierden `tick` (ya llevan `instante` desde D4). Los
+    esquemas de respuesta (`RESUMEN_PARTIDA_RESPUESTA`, `ESQUEMA_LISTAR_PARTIDAS`) sueltan `tick`.
+  - `session/comandos/eventos.ts`: `evento`/`eventos`/`desdeCrudos` dejan de recibir `estado` (solo servía
+    para `estado.tick`) — 29 llamadas en ~13 comandos actualizadas. `eventoAdministrativo` y
+    `conHistorialDeJugador` fechan con `momento` derivado.
+  - Migración de snapshot **v4 → v5** (`migrarV4aV5`): `delete e.tick` de cada `eventosDominio[]`;
+    `historialJugadores[*][]` cambia `tick` por `isoDeInstante(instanteDeTick(tick))`.
+  - **Se queda:** `GameSessionState.tick` (paso de integración interno del motor, del que se DERIVA el
+    `instante` — no al revés) y `EstadoAdmin.tick` (heredado, diagnóstico del panel admin).
+  - Tests: `eventos_dominio`/`proyeccionLog`/`canales`/`api` actualizados; test v4→v5 dedicado + el de v1
+    ahora encadena hasta v5. 684 → 685 tests, `tsc` limpio, verificado en vivo por HTTP (evento con
+    `momento` y sin `tick`; proyección con `instante` y sin `tick`; carga de un snapshot v4 lo migra).
+
+**Fuera de Fase D, después:** pasada de rebalanceo en tiempo (población a ~12 %/minuto compuesto = duplica
+cada ~6 min reales, absurdo para un juego lento). Esfuerzo dedicado apoyado en el laboratorio batch; se separa
+de la migración estructural a conciencia. Era el antiguo D7.
 
 ## Fase E — Operación persistente
 
-- [ ] Implementar scheduler temporal definitivo (reemplaza el avance manual de tick como mecanismo principal)
-- [ ] Recuperación de eventos vencidos tras caída/reinicio, verificada con pruebas
-- [ ] Pipeline de auditoría (quién, qué comando, cuándo, resultado, versión de partida)
-- [ ] Backups automáticos + prueba de restauración documentada
-- [ ] Métricas: duración de tick/procesamiento, tamaño de cola, tasa de errores, clientes conectados
-- [ ] Herramientas de moderación para administradores
-- [ ] Diseño e implementación de ciclos de servidor, Maravilla, legado NPC, temporadas
+Orden acordado con el usuario el **2026‑09‑05**: **E2 primero**. De las tres abiertas es la única que no
+depende de ninguna decisión de diseño de juego pendiente (E4 depende entera de ellas), ya tiene un hueco
+marcado en el código pidiendo ser sustituido, y es prerequisito de las herramientas de moderación de E3 — no
+se modera lo que no se ha registrado.
+
+- [x] ~~Scheduler temporal definitivo~~ — **hecho en D5** (`RunnerDePartida.iniciarRelojDeMundo`)
+- [x] ~~Recuperación de eventos vencidos tras caída/reinicio, verificada con pruebas~~ — **hecho en D5**
+  (catch‑up en ráfaga; tests en `runnerDePartida.test.ts` y `registroDePartidas.test.ts`)
+
+### E2 — Auditoría, snapshots, backups y restauración
+
+> **No hay prerrequisito de eventos.** Se comprobó antes de empezar (ver el repaso al final de A5): `'legado'`
+> no se emite ya en ninguna parte, así que la premisa del gate de A5 —códigos estables para poder filtrar por
+> tipo— se cumple. El único grano grueso que queda es `npc.accion`, y afinarlo es mejora, no bloqueo.
+
+- [x] **Pipeline de auditoría de comandos** — **hecho 2026-09-05**. `server/auditoria.ts`: un JSONL por partida
+  (`<gameId>.auditoria.jsonl`), hermano del snapshot. **Dónde vive fue decisión del usuario**, sobre tres
+  alternativas (dentro de `PartidaExportada`, fichero aparte, SQLite): fichero aparte, porque `eventosDominio`
+  ya enseñó lo que pasa al meter un historial en el estado (crece sin techo, se reescribe entero en cada
+  guardado, viaja entero en cada lectura — por eso C13 tuvo que añadirle un cursor), porque la retención es
+  distinta a la del estado, y porque así no sube `FORMATO_SNAPSHOT_VERSION` ni hace falta migrar nada.
+  - **JSONL y no un array JSON**, y **append y no `.tmp`+`rename`**: un log al que solo se añade no puede
+    copiarse entero para agregar un renglón, y a cambio el formato tiene que aguantar un archivo truncado —
+    con JSONL se pierde la línea a medias y las anteriores siguen valiendo; un `[...]` truncado es ilegible
+    entero. `leerAuditoria` devuelve `corruptas` para que quien lee sepa que hay un agujero, en vez de creer
+    que el registro está completo.
+  - **Alcance: aceptados Y rechazados** (decisión del usuario). Las cuatro salidas de `ejecutarComandoHttp`
+    dejan línea — aceptado, rechazo de `autorizacion` (el 403), de `dominio` (`ok: false` con su
+    `codigoError`) y de `persistencia` (el 409) — más los 400 de `esquema`, que ajv rechaza ANTES del
+    manejador y captura el gancho `onError` de las dos rutas de comandos. **Es lo que convierte el registro en
+    herramienta de moderación**: antes de esto un 403 no dejaba absolutamente ningún rastro, y el abuso vive
+    justo en los intentos que no prosperan.
+  - **Un fallo de escritura no tumba el comando** — decisión con filo: con el disco lleno se sigue jugando y
+    se grita por `stderr`, con contador (`fallos`) para que E3 pueda exponerlo. Fallar en silencio SÍ sería
+    inaceptable; fallar el comando de un jugador por un problema de operación, también.
+  - **`GET /v1/admin/partidas/:gameId/auditoria`** (filtros `desde`/`actor`/`soloRechazos`), solo
+    administración — son datos de actividad de PERSONAS, más sensibles que el estado de juego, y no hay
+    equivalente en `/jugador/*` a propósito. Sin esta ruta la auditoría sería un archivo que nadie puede
+    consultar.
+  - **Efecto colateral necesario**: `soloRechazos` se declara como `enum ['true','false']` de tipo `string`, no
+    `boolean` — este servidor corre con `coerceTypes: false` desde C9, así que un query param nunca se
+    convierte solo y `?soloRechazos=true` fallaba con un 400. Lo detectó el test en el primer intento.
+- [x] **Auditoría de cambios de balance** — **NO se hace, y por qué**. Es otra cosa, aunque el nombre se
+  parezca: sale del doc 2 §8 *Separar administración y balance*, y lo que hoy la sustituye es el placeholder
+  `GameSession.registrarEventoAdministrativo`, cuyo comentario lleva desde la Fase C prometiendo su relevo.
+  **Bloqueada por la deuda de C7**: el doc 2 la pide sobre *"un balance versionado POR PARTIDA en vez de
+  global"*, y ese balance sigue sin dueño. Registrar "quién cambió qué" de un valor que es configuración del
+  PROCESO y no estado de la partida no dice nada útil. Se aborda con el balance por partida, no antes.
+- [x] **Política de retención** — **hecha 2026-09-05**, y con una corrección de premisa: el backlog de riesgos
+  hablaba de "retención de snapshots", pero **no hay pila de snapshots que podar** — `guardarPartida` escribe
+  siempre sobre `<gameId>.json`, así que en disco hay exactamente UNA versión de cada partida. Lo que sí
+  crecía sin techo es la auditoría, y lo que crecería son los respaldos. Dos criterios distintos, cada uno
+  por su razón: la **auditoría por EDAD** (`podarAuditoria`, 30 días por defecto — su valor es responder "qué
+  pasó el martes", y una línea de hace un año no responde a nada), los **respaldos por CUENTA**
+  (`podarRespaldos`, 7 por defecto — por edad, una partida inactiva se quedaría sin ninguno justo cuando más
+  difícil sería regenerarlo; `conservar: 0` es un `RangeError`, no un modo de uso).
+- [x] **Respaldos automáticos + prueba de restauración** — **hechos 2026-09-05**. `server/respaldos.ts`
+  (copia fechada, listar, podar, restaurar) y `server/mantenimiento.ts` (`TareaDeMantenimiento`: respaldar +
+  podar respaldos + podar auditoría, en una pasada periódica).
+  - **Opt-in, apagado por defecto** (`MANTENIMIENTO_INTERVALO_MS`), mismo criterio que `INTERVALO_TICK_MS` y
+    `ADMINISTRADORES`: un default que BORRA archivos es la clase de default que nadie nota hasta que ya borró
+    algo que hacía falta.
+  - **La restauración verifica antes de sustituir**, que es lo que la hace segura: `restaurarPartida` carga el
+    respaldo de verdad (`cargarPartida`, con su migración de formato) en un directorio aparte y solo entonces
+    hace el `rename` sobre el snapshot vigente. Un respaldo corrupto falla **sin haber tocado la partida
+    buena** — congelado en un test dedicado. Si esto fuera un `copyFile`, un respaldo truncado machacaría el
+    estado bueno sin forma de volver.
+  - **`scripts/restaurar-partida.ts`**: sin argumento de archivo lista los respaldos con su tamaño y la orden
+    exacta para restaurar. "Prueba de restauración documentada" no se cumple con una función exportada que
+    alguien tendría que envolver a mano en un momento de urgencia.
+  - **Limitación consciente, no resuelta**: restaurar exige **el servidor parado**. Un proceso con la partida
+    abierta conserva el estado viejo en memoria y lo escribiría encima al siguiente comando, deshaciendo la
+    restauración sin dar ningún síntoma. Exponerlo por HTTP requeriría que `RegistroDePartidas` supiera cerrar
+    UNA partida (hoy solo tiene `cerrar()` global), y esa pieza no tiene consumidor todavía. Avisado en el
+    script y en el comentario de `restaurarPartida`.
+- **Bug preexistente encontrado y corregido de paso**: `listarPartidas` lanzaba con un `.json` ilegible en el
+  directorio, así que **un solo archivo truncado tumbaba `GET /admin/partidas` con un 500 para TODAS las
+  partidas** — misma familia que el fallo de `identidad.json` que ya se corrigió una vez ahí. Lo destapó la
+  pasada de mantenimiento, que abortaba entera antes de respaldar nada. Ahora se excluye el archivo roto y se
+  grita por consola (no en silencio: una partida que desaparece del listado sin avisar es peor que un error
+  ruidoso). Regresión en `persistenciaPartida.test.ts`.
+- Verificación: **951 → 991 tests** (98 archivos), `tsc` limpio en `src/` y en `scripts/`. **En vivo sobre HTTP
+  real**: las cuatro salidas de comando dejan su línea con el actor resuelto en servidor (`admin:usuario-1` se
+  distingue de `usuario-2`); `MANTENIMIENTO_INTERVALO_MS=1500` respalda solo y respeta el tope de retención;
+  `GET .../auditoria?soloRechazos=true` devuelve el 403 registrado; y el ciclo completo jugar → respaldar →
+  seguir jugando → restaurar devuelve la partida a la versión respaldada, con lo posterior deshecho.
+
+### E3 — Métricas y moderación
+
+- [x] **Re-medición de escala tras la Fase D** — **hecha 2026-09-05**, y era deuda arrastrada, no parte
+  nominal de E3: el doc 6 §1 pedía rehacer la tabla al cerrar la Fase D y nunca se hizo. Script committeado
+  en `scripts/medicion-escala.ts`, metodología idéntica a la de agosto para que las cifras sean comparables
+  y no solo nuevas, tres pasadas con <1 % de varianza. **Tabla y conclusiones completas en el doc 6 §1**;
+  lo que cambia el plan:
+  - **El tick es ~2,6-3,8× más lento** que en agosto a igualdad de asentamientos (a 52: 63,9 → 166,1 ms).
+    La forma de la curva no cambió (O(n^1.42) frente a O(n^1.5)); cambió la constante, por el trabajo que
+    añadieron trazado urbano, murallas, ejércitos y niebla.
+  - **A 70-100 asentamientos —el objetivo real de 500 jugadores— eran 288-471 ms/tick**, no los 170-300 ms
+    que se estimaron en agosto. Tras las CUATRO optimizaciones que salieron de esta medición, **44-62 ms**.
+  - **La decisión pendiente de la cola serial queda REENCUADRADA.** Un tick suelto ya no es el problema:
+    471 ms dentro de un intervalo de 60 000 ms es el 0,8 %, y un comando que llegue a mitad espera medio
+    segundo. El problema es la **ráfaga de catch-up**: `MAX_TICKS_RAFAGA` = 10 080 (una semana) a 471 ms por
+    tick son **~79 minutos con la cola bloqueada**. Las tres vías que se plantearon en agosto se propusieron
+    contra un tick lento; contra una ráfaga, la palanca barata es otra (acotar la ráfaga, o cederle la cola
+    cada N ticks). **Sigue siendo decisión pendiente**, pero ya con números.
+  - **Dónde se iba el tiempo, y qué se hizo** (perfilado con `--cpu-prof`, tiempo inclusivo):
+    `calcularRedDeCalles` era el **47,1 % del tick**, con `sitioEnBarrio` como llamador dominante (36,7 %).
+    No por frecuencia —~1 llamada por asentamiento y tick— sino porque el **81,2 % recalculaba con entradas
+    idénticas**: 61,6 % entre ticks (el asentamiento no había cambiado), 19,6 % dentro del mismo tick.
+    **Resuelto el mismo día** con memoización por CONTENIDO (por referencia no valía: medido, la referencia
+    del array se repite el 0 %) y clave exacta en vez de hash (486× más barata que el replay, sin riesgo de
+    colisión). La cautela que este documento anotaba —"el orden es load-bearing"— estaba mal dirigida: el
+    orden importa al calcular, no al cachear. **471 → 132 ms a 100 asentamientos**; con el arreglo de
+    `bosqueParaLenera`, → 111 ms; y memoizando además la BÚSQUEDA de colocación (el otro 60 % del tick, con
+    el 77 % de sus llamadas repetidas), → 68 ms; y dejando de buscar sitio para lo que no se puede pagar
+    (decisión del usuario, 2026-09-06), **→ 62 ms: 7,6× en total, con el escalado de O(n^1.5) a O(n^0.94)**.
+    Las tres primeras salieron del mismo hecho —el motor recalculaba por tick lo que solo cambia al
+    construir—; la cuarta, de que buscaba dónde poner lo que no podía pagar.
+    Equivalencia demostrada con sellos SHA-256 del estado completo sobre 150 ticks, idénticos byte a byte.
+    Detalle en doc 6 §1. **Corregido después**: este punto daba `engine/zones.ts` como el siguiente objetivo
+    con ≈27 % del tick, y era falso — el perfil medía el proceso entero y el 65 % de las muestras era el
+    *setup* del propio banco (`posicionRecomendable`, una fixture de test). Re-atribuido solo a lo que cuelga
+    de `avanzarSimulacion`, `zones.ts` es el **3,3 %** y nunca fue un problema. Los objetivos reales que
+    quedan son `trazado.ts` (61,4 %, ahora la búsqueda de colocación y ya no el replay de la red) y
+    `Mapa.bosqueParaLenera` (19,5 % en una sola función, con el 98,3 % del trabajo descartable por una prueba
+    de distancia). Ver doc 6 §1.
+- [x] **Métricas: duración de tick/procesamiento, tamaño de cola, tasa de errores, clientes conectados** —
+  **hechas 2026-09-05**. `server/metricas.ts` + `GET /v1/admin/metricas`.
+  - **`metricas.ts` no mide, ENSAMBLA.** Cada número lo lleva quien lo conoce de primera mano:
+    `RunnerDePartida` (cola, cronómetro del tick, ráfagas), `RegistroDeAuditoria` (recuento por resultado,
+    fallos de escritura) y `HubDeDifusion` (conexiones, que ya exponía `conexionesAbiertas`). Un colector
+    global al que todos empujan acaba siendo un segundo sitio donde la verdad puede divergir del sitio donde
+    ocurre.
+  - **`ultimaRafagaTicks`/`mayorRafagaTicks` existen por la re-medición de arriba**: son la métrica del
+    problema que esa medición identificó. Sin ellas, 79 minutos de cola bloqueada solo se ven desde fuera
+    como "el servidor no responde".
+  - **El recuento de comandos sale de la auditoría de E2**, no de un contador nuevo: es ya el punto por el
+    que pasan todos, aceptados y rechazados. Las cuatro causas van **separadas y no agregadas en un
+    "rechazados"** — un pico de `autorizacion` es moderación, uno de `esquema` un cliente roto, uno de
+    `persistencia` el disco. Se cuenta lo que el servidor DECIDIÓ (antes de encolar la escritura), no lo que
+    llegó a registrarse: esa otra pregunta ya la responde `auditoriaFallida`, y **cualquier valor > 0 ahí es
+    un incidente** — hay comandos que ocurrieron sin dejar constancia.
+  - **`RegistroDePartidas.abiertas()`** (nuevo) es lo contrario de `listar()`, y la diferencia importa:
+    `listar()` lee el directorio y dice qué partidas existen; `abiertas()` dice de cuáles se ocupa ESTE
+    proceso, que son las que tienen cola, reloj y conexiones que medir.
+  - **Administrador GLOBAL, no por partida**: describe el proceso —memoria, uptime, todas las partidas
+    abiertas—, así que concederlo por membresía de una partida filtraría la actividad de las demás. Sin
+    autenticar sería más cómodo para un scraper, y es justo por eso que no: expone cuánta gente hay conectada
+    y cuándo el servidor va justo.
+  - `tick` vuelve a aparecer en un DTO, y es correcto: la Fase D lo retiró del contrato de JUEGO, pero una
+    métrica de operación mide el motor y el tick es su unidad real de trabajo.
+- [ ] **Herramientas de moderación para administradores.** Lo que E2 y las métricas dejan servido es el
+  DIAGNÓSTICO (quién intentó qué, qué se rechazó, cómo va el proceso); falta el ACTO — expulsar, silenciar,
+  revertir. Depende de decisiones de diseño que no están tomadas: qué sanciones existen, quién puede
+  aplicarlas y qué pasa con lo que el sancionado ya hizo en la partida.
+- Verificación: **991 → 1003 tests** (99 archivos), `tsc` limpio en `src/` y `scripts/`. **En vivo sobre HTTP
+  real**: `GET /v1/admin/metricas` con una partida abierta devuelve proceso, recuento por causa (1 aceptado,
+  1 `autorizacion`, 1 `esquema`) y los tiempos de tick; 403 para un jugador y 401 sin sesión. La **ráfaga de
+  catch-up medida de verdad**: snapshot con `guardadoEn` retrasado 12 minutos, proceso reabierto con reloj de
+  mundo → `ultimaRafagaTicks: 12`, `mayorRafagaTicks: 12`, tick 5 → 17.
+
+### E4 — Ciclos de servidor
+
+- [ ] Diseño e implementación de ciclos de servidor, Maravilla, legado NPC, temporadas. La más grande y la
+  menos definida: es diseño de juego antes que infraestructura.
 
 ---
 
@@ -958,10 +1417,10 @@ que ya sirve C11a. Cero rasterizado, cero dependencia nueva.
 Marcar cuando la mitigación correspondiente esté implementada y verificada, no
 solo diseñada.
 
-- [ ] IDs resueltos exclusivamente en servidor, nunca confiados desde el cliente
-- [ ] Cola serial o control de versión por partida para comandos concurrentes
-- [x] RNG determinista con estado persistido (partidas reproducibles tras reinicio) — `PartidaExportada.estadoRng` + `src/server/persistenciaPartida.ts` (2026-08-25)
-- [ ] DTOs/proyecciones por audiencia (nunca enviar `GameState` completo a un cliente no-admin)
-- [ ] Snapshots y retención para el historial (nunca clones ilimitados en RAM)
-- [ ] Balance versionado y ligado a partida/temporada (no global mutable)
-- [ ] Frontends y endpoints de admin vs. jugador separados con roles técnicos distintos
+- [x] IDs resueltos exclusivamente en servidor, nunca confiados desde el cliente — el actor de cada comando es `Membresia.jugadorId`, resuelto de la sesión; los ids de entidad los genera `ContextoComando.ids` en el servidor (C2)
+- [x] Cola serial o control de versión por partida para comandos concurrentes — `RunnerDePartida` (cola serial por `gameId`, encadenando promesas) + `PartidaExportada.state.version` de concurrencia en `persistenciaPartida.ts` (Fase B)
+- [~] RNG determinista con estado persistido — `PartidaExportada.estadoRng` existe (2026‑08‑25), pero **la reproducibilidad a nivel de sesión estaba rota**: `ctx.momento` era reloj de pared y se persistía en el estado (doc 10 §7). El guard de autoridad temporal (2026‑08‑29) lo congela y **D1 lo reparó de raíz** (2026‑08‑29): `ctx.momento` se deriva del tick, no del reloj de pared. El motor puro (`avanzarSimulacion`) sí es reproducible con seed y **eso es lo que se conserva** (lo consume el laboratorio batch) — `estadoRng` en snapshot queda sin consumidor real hasta que exista un replay de incidentes (doc 10 §5)
+- [x] DTOs/proyecciones por audiencia (nunca enviar `GameState` completo a un cliente no-admin) — `proyectarParaJugador` (C4): un jugador nunca recibe `GameSessionState` completo; solo su Facción + metadatos públicos. La niebla de guerra fina ("último conocido" de rivales) es una mecánica de juego, no una mitigación de riesgo — `Mecanicas a desarrollar.md` §12
+- [x] Snapshots y retención para el historial (nunca clones ilimitados en RAM) — **hecho en E2 (2026-09-05), corrigiendo la premisa**: no había pila de snapshots que podar (`guardarPartida` sobrescribe siempre `<gameId>.json`, una versión por partida). Lo que sí crecía sin techo era la AUDITORÍA, que ahora se poda por edad (`podarAuditoria`, 30 días), y lo que crecería son los RESPALDOS, que se podan por cuenta (`podarRespaldos`, 7) — por edad, una partida inactiva se quedaría sin ninguno justo cuando más difícil sería regenerarlo. Pasada periódica opt-in en `server/mantenimiento.ts`
+- [~] Balance versionado y ligado a partida/temporada (no global mutable) — **servido** (`GET /v1/balance`, C7) y `BALANCE_VERSION` estampada en cada snapshot; los overrides reales por partida/temporada siguen sin dueño
+- [x] Frontends y endpoints de admin vs. jugador separados con roles técnicos distintos — `/admin/*` vs `/jugador/*` (C3), reforzado con la gestión de membresías del cierre de Fase C (2026-08-29)

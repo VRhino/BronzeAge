@@ -1,7 +1,7 @@
 import type { Asentamiento, Faccion } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
 import { CAP_FUNDACION_POR_NIVEL, CIUDADANIA, CUPO_NIVEL_ASENTAMIENTO, NIVEL_FACCION } from '../constants';
-import { resideEnOtroAsentamiento } from './pertenencia';
+import { CAMPO_CARGO, esResidente, resideEnOtroAsentamiento } from './pertenencia';
 
 /** Fase A5 — payload de `faccion.nivel_subio` (ver `avanzarNivelesFaccion`). */
 export interface PayloadFaccionNivelSubio {
@@ -148,5 +148,62 @@ export function comprarCasa(
   return {
     facciones: facciones.map((f) => (f.id === faccion.id ? otorgarCiudadania(f, jugadorId) : f)),
     asentamiento: { ...asentamiento, casasCompradas: [...asentamiento.casasCompradas, jugadorId] },
+  };
+}
+
+/**
+ * Cambiar de residencia (Doc 2.5/2.6, comando nuevo 2026-09-08 — cierra la limitación conocida "no hay comando
+ * vender casa / dejar residencia"): atómico, deja la residencia actual y toma otra plaza de la MISMA Facción.
+ *
+ * Deja la vieja: fuera de `casasCompradas` Y `jugadoresFundadoresIds` (ya no reside por ninguna vía), y sus
+ * cargos LOCALES ahí se vacían (no se gobierna donde no se vive — misma regla que la conquista). Los
+ * escuadrones que tuviera POSADOS en la guarnición vieja NO se tocan — pasan a ser guarnición de no-residente
+ * (Doc 5.4, revisión 2026-09-08): defiende, la repone y la re-moviliza igual.
+ *
+ * La ciudadanía de Facción no cambia (es la misma Facción). Un HUÉRFANO —sin residencia de la que salir— usa
+ * `comprarCasa`/`unirseAFaccion`, no este comando.
+ *
+ * `ponytail:` sin cooldown ni coste todavía — el abuso "mudarse en cada conquista para exprimir el impuesto"
+ * necesita un `Jugador.ultimoCambioResidenciaEn` y jugadores reales (§13b, sin implementar). Añadir cuando
+ * muerda de verdad — `CIUDADANIA.cooldownCambioResidenciaDias` está reservado en el doc.
+ */
+export function cambiarResidencia(
+  facciones: Faccion[],
+  asentamientos: Asentamiento[],
+  destinoId: string,
+  jugadorId: string
+): { origen: Asentamiento; destino: Asentamiento } {
+  const destino = asentamientos.find((a) => a.id === destinoId);
+  if (!destino) throw new FaccionInvalidaError('El asentamiento de destino no existe.');
+  const faccion = facciones.find((f) => f.id === destino.faccionId);
+  if (!faccion || !esCiudadano(faccion, jugadorId)) {
+    throw new FaccionInvalidaError('Solo se reside en un asentamiento de la propia Facción.');
+  }
+  const origen = asentamientos.find((a) => a.id !== destinoId && esResidente(a, jugadorId));
+  if (!origen) {
+    throw new FaccionInvalidaError('El jugador no reside en ningún asentamiento: usa comprarCasa, no cambiarResidencia.');
+  }
+  if (destino.casasCompradas.includes(jugadorId) || destino.jugadoresFundadoresIds.includes(jugadorId)) {
+    throw new FaccionInvalidaError('El jugador ya reside en el destino.');
+  }
+  if (destino.vetadosIds?.includes(jugadorId) || destino.politicaDeAcceso === 'cerrado') {
+    throw new FaccionInvalidaError('El asentamiento de destino no admite nuevos residentes ahora mismo.');
+  }
+  if (destino.casasCompradas.length + destino.jugadoresFundadoresIds.length >= capacidadCasas(destino)) {
+    throw new FaccionInvalidaError('No quedan espacios de vivienda en el destino.');
+  }
+
+  const cargosOrigen = { ...origen.cargos };
+  for (const campo of Object.values(CAMPO_CARGO)) {
+    if (cargosOrigen[campo] === jugadorId) cargosOrigen[campo] = null;
+  }
+  return {
+    origen: {
+      ...origen,
+      jugadoresFundadoresIds: origen.jugadoresFundadoresIds.filter((id) => id !== jugadorId),
+      casasCompradas: origen.casasCompradas.filter((id) => id !== jugadorId),
+      cargos: cargosOrigen,
+    },
+    destino: { ...destino, casasCompradas: [...destino.casasCompradas, jugadorId] },
   };
 }

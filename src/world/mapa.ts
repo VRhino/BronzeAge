@@ -16,6 +16,7 @@
 // le pasan como parámetro — el motor sigue mandando.
 
 import { LENERA_POR_BOSQUE, REGENERACION_NODOS } from '../constants';
+import { minutos, sumar, type Instante } from '../domain/tiempo';
 import type { BiomaTipo, NodoRecurso, Point, RegionId, RioZona, TerrenoTipo, ZonaBosque } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
 
@@ -27,6 +28,7 @@ export interface PayloadYacimientoRegenerado {
 }
 import {
   costeEnPunto,
+  esTransitable,
   distanciaARioMasCercano,
   evaluarBioma,
   evaluarElevacion,
@@ -88,19 +90,19 @@ export interface OpcionesNodos {
 export interface EstadoMapa {
   /** Cuánto se lleva sacado de cada yacimiento (id de nodo -> unidades). Ausente = intacto. */
   extraido: Record<string, number>;
-  /** Tick en el que un yacimiento agotado (stock 0) vuelve a aparecer con su `cantidadInicial` completa
-   * (id de nodo -> tick, ver `Mapa.avanzarRegeneracion`). Ausente = productivo o todavía sin agendar. */
-  regeneraEnTick: Record<string, number>;
+  /** Instante de mundo en que un yacimiento agotado (stock 0) vuelve a aparecer con su `cantidadInicial`
+   * completa (id de nodo -> `Instante`, ver `Mapa.avanzarRegeneracion`). Ausente = productivo o sin agendar. */
+  regeneraEn: Record<string, Instante>;
 }
 
 export function crearEstadoMapa(): EstadoMapa {
-  return { extraido: {}, regeneraEnTick: {} };
+  return { extraido: {}, regeneraEn: {} };
 }
 
 /** Copia independiente del estado de partida del mapa. Son dos registros de números: clonar cuesta lo que
  * cuesta recorrer los nodos ya tocados, no los ~117 del mundo. */
 function copiarEstadoMapa(estado: EstadoMapa): EstadoMapa {
-  return { extraido: { ...estado.extraido }, regeneraEnTick: { ...estado.regeneraEnTick } };
+  return { extraido: { ...estado.extraido }, regeneraEn: { ...estado.regeneraEn } };
 }
 
 /**
@@ -278,6 +280,12 @@ export class Mapa {
     return costeEnPunto(this.generado.elevacion, p);
   }
 
+  /** ¿Se puede pisar este punto? El agua es un OBSTÁCULO, no terreno caro (a petición del usuario) — ver
+   * `esTransitable` en `worldgen/costeMovimiento.ts` para lo que eso implica en el pathfinding. */
+  esTransitable(p: Point): boolean {
+    return esTransitable(this.generado.elevacion, p);
+  }
+
   // --- Ríos ---
 
   listarRios(): readonly RioZona[] {
@@ -376,26 +384,26 @@ export class Mapa {
   /**
    * Avanza la regeneración de yacimientos agotados (a petición del usuario): SEGUNDA y única otra vía de
    * mutación del mapa además de `extraer`. Un nodo que llega a stock 0 agenda su reaparición para
-   * `tickActual + N` (N según su tipo, `REGENERACION_NODOS`) la primera vez que se detecta agotado; cuando
-   * ese tick llega, vuelve a stock completo (se borra lo extraído) y se olvida el calendario. Un nodo
-   * agotado de una partida guardada ANTES de que existiera este sistema (sin entrada en `regeneraEnTick`)
+   * `instante + N` (N según su tipo, `REGENERACION_NODOS`) la primera vez que se detecta agotado; cuando
+   * ese instante llega, vuelve a stock completo (se borra lo extraído) y se olvida el calendario. Un nodo
+   * agotado de una partida guardada ANTES de que existiera este sistema (sin entrada en `regeneraEn`)
    * se agenda solo la primera vez que corre esto — autocurativo, no hace falta migrar datos.
    */
-  avanzarRegeneracion(tickActual: number): EventoCrudo[] {
+  avanzarRegeneracion(instante: Instante): EventoCrudo[] {
     const eventos: EventoCrudo[] = [];
     for (const nodo of this.generado.nodos) {
       if (this.stock(nodo.id) > 0) continue;
-      const pendiente = this.estado.regeneraEnTick[nodo.id];
+      const pendiente = this.estado.regeneraEn[nodo.id];
       if (pendiente === undefined) {
-        const cooldown =
-          nodo.tipo === 'livestock' ? REGENERACION_NODOS.livestock.ticksCooldown : REGENERACION_NODOS.metales.ticksCooldown;
-        this.estado.regeneraEnTick[nodo.id] = tickActual + cooldown;
+        const cooldownTicks =
+          nodo.tipo === 'livestock' ? REGENERACION_NODOS.livestock.cooldownMinutos : REGENERACION_NODOS.metales.cooldownMinutos;
+        this.estado.regeneraEn[nodo.id] = sumar(instante, minutos(cooldownTicks));
         this.mutaciones++;
         continue;
       }
-      if (tickActual >= pendiente) {
+      if (instante >= pendiente) {
         delete this.estado.extraido[nodo.id];
-        delete this.estado.regeneraEnTick[nodo.id];
+        delete this.estado.regeneraEn[nodo.id];
         this.mutaciones++;
         eventos.push({
           codigo: 'mapa.yacimiento_regenerado',
@@ -461,6 +469,20 @@ export class Mapa {
     return this.generado.bosques.some((b) => distancia(b.centro, centro) < radio + b.radio);
   }
 
+  /**
+   * Como `hayBosqueEnRadio`, pero además exige que algún bosque alcanzable tenga capacidad de Leñera SIN
+   * reclamar — `capacidadLeneras` menos las Leñeras ya contadas para ese bosque en `lenerasPorBosque`. Un
+   * bosque a tope no sirve para fundar: `bosqueParaLenera` no colocará una Leñera ahí y el asentamiento se
+   * queda sin madera (ver `evaluarViabilidadFundacion` y el diagnóstico de
+   * `Consideraciones/Economia_Del_Oro_Definicion.md` §10 — la mayoría de las muertes por madera del batch NPC
+   * son por fundar sobre un bosque que un vecino ya trabaja).
+   */
+  hayBosqueLibreEnRadio(centro: Point, radio: number, lenerasPorBosque: Map<string, number>): boolean {
+    return this.generado.bosques.some(
+      (b) => distancia(b.centro, centro) < radio + b.radio && (lenerasPorBosque.get(b.id) ?? 0) < this.capacidadLeneras(b.id)
+    );
+  }
+
   /** Cuántas Leñeras admite un bosque a la vez según su tamaño (mín 1 / máx 3, ver `LENERA_POR_BOSQUE`). */
   capacidadLeneras(bosqueId: string): number {
     const bosque = this.bosque(bosqueId);
@@ -508,23 +530,65 @@ export class Mapa {
    * según `ocupacionPorBosque` y (b) tenga algún punto suyo dentro del polígono.
    * `ocupacionPorBosque` (cuántas Leñeras tiene ya cada bosque) lo aporta el motor: es estado del
    * asentamiento, no del mapa.
+   *
+   * **Descarta lejos, ordena poco, para pronto** (Fase E3, 2026-09-05). La versión anterior calculaba el
+   * punto de trabajo de TODOS los bosques y solo después ordenaba por distancia para quedarse con uno.
+   * Medido, era el 19,5 % del tick: 170 bosques por llamada, 154 evaluaciones, **5 698 tests de
+   * punto-en-polígono, ~108 000 operaciones de arista** — y ~30 llamadas por tick con 30 asentamientos.
+   * El **98,3 % era trabajo tirado**: solo ~2,8 bosques de 170 están lo bastante cerca como para poder tocar
+   * el polígono siquiera.
+   *
+   * El resultado es EL MISMO, y conviene decir por qué en las tres piezas:
+   *
+   *  1. El descarte por distancia es **conservador por construcción**: todo punto que
+   *     `puntoDeTrabajoEnBosque` llega a probar cae dentro del disco `(bosque.centro, bosque.radio)` —el
+   *     preferido a 0,4·radio, los anillos a radio·k/3 con k≤3—, y el polígono cabe entero en el disco
+   *     `(centroide, radioEnvolvente)`. Si un punto estuviera en los dos, la desigualdad triangular obliga a
+   *     que los centros disten como mucho la suma de los radios. Rechazar por encima de eso no puede perder
+   *     ningún bosque que hubiera dado un punto válido.
+   *  2. Ordenar ANTES y parar en el primero viable da el mismo ganador que calcularlos todos y ordenar
+   *     después: en los dos casos gana el bosque viable de menor distancia a `cercaDe`, y los empates rompen
+   *     igual porque `sort` es estable y ambos parten del orden de `generado.bosques`.
+   *  3. Se ordenan solo los supervivientes del descarte (~3 de 170), no los 170: ordenar es lo caro de esta
+   *     forma de resolverlo, y así deja de serlo.
+   *
+   * El criterio de cercanía es el mismo que `hayBosqueEnRadio` de más arriba — no es un invento local.
    */
   bosqueParaLenera(
     poligono: Point[],
     ocupacionPorBosque: Map<string, number>,
     cercaDe: Point
   ): { posicion: Point; fuenteId: string } | null {
-    const candidatos = this.generado.bosques
-      .map((bosque) => {
-        const ocupadas = ocupacionPorBosque.get(bosque.id) ?? 0;
-        if (ocupadas >= this.capacidadLeneras(bosque.id)) return null;
-        const punto = this.puntoDeTrabajoEnBosque(bosque.id, poligono, ocupadas);
-        return punto ? { bosque, punto } : null;
-      })
-      .filter((c): c is { bosque: ZonaBosque; punto: Point } => c !== null)
-      .sort((a, b) => distancia(a.bosque.centro, cercaDe) - distancia(b.bosque.centro, cercaDe));
-    const elegido = candidatos[0];
-    return elegido ? { posicion: elegido.punto, fuenteId: elegido.bosque.id } : null;
+    // Sin polígono no hay nada que contenga un punto. La versión anterior llegaba a `null` dando el rodeo
+    // completo por los 170 bosques; salir aquí es lo mismo, y de paso evita dividir entre cero.
+    if (poligono.length === 0) return null;
+
+    // Disco que envuelve al polígono: centroide de los vértices más la distancia al más lejano. O(vértices)
+    // —19 de media— una sola vez por llamada.
+    let cx = 0;
+    let cy = 0;
+    for (const v of poligono) {
+      cx += v.x;
+      cy += v.y;
+    }
+    const centroide: Point = { x: cx / poligono.length, y: cy / poligono.length };
+    let radioEnvolvente = 0;
+    for (const v of poligono) {
+      const d = distancia(v, centroide);
+      if (d > radioEnvolvente) radioEnvolvente = d;
+    }
+
+    const alcanzables = this.generado.bosques
+      .filter((b) => distancia(b.centro, centroide) <= radioEnvolvente + b.radio)
+      .sort((a, b) => distancia(a.centro, cercaDe) - distancia(b.centro, cercaDe));
+
+    for (const bosque of alcanzables) {
+      const ocupadas = ocupacionPorBosque.get(bosque.id) ?? 0;
+      if (ocupadas >= this.capacidadLeneras(bosque.id)) continue;
+      const punto = this.puntoDeTrabajoEnBosque(bosque.id, poligono, ocupadas);
+      if (punto) return { posicion: punto, fuenteId: bosque.id };
+    }
+    return null;
   }
 }
 

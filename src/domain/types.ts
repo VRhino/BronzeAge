@@ -3,6 +3,8 @@
 // Ver Consideraciones/Plan_Implementacion_Tecnica.md para el modelo de datos completo.
 // Murallas/torres/puerto (edificios estratégicos de colocación manual, Doc 4.2) quedan fuera de Fase 0.
 
+import type { Instante } from './tiempo';
+
 export interface Point {
   x: number;
   y: number;
@@ -109,6 +111,9 @@ export type EdificioTipo =
   | 'cantera'
   | 'lenera'
   | 'almacen'
+  // Almacén especializado en grano (a petición del usuario, 2026-09-04): solo trigo, mucha más capacidad,
+  // uno por asentamiento y con 4 niveles internos. Ver `EDIFICIO_CATALOGO.granero`.
+  | 'granero'
   | 'mina'
   | 'minaCobre'
   | 'minaEstano'
@@ -123,7 +128,7 @@ export type EdificioTipo =
   | 'barracon'
   | 'galeriaDeTiro'
   // Ampliación de comercio (a petición del usuario): gatea las órdenes de Mercado (Doc 3.3) y aloja el cupo
-  // de la flota de caravanas propias (ver CARAVANA_CATALOGO.comercial, engine/trade.ts). Vía política del
+  // de la flota de caravanas propias (`cupoCaravanas`, engine/asentamientoQuery.ts). Vía política del
   // Tesorero, mismo patrón que Barracón/Galería de tiro/Palacio — no auto-construcción.
   | 'mercado'
   // Pieza satélite de la ZONA de Mercado (a petición del usuario, ver
@@ -136,10 +141,6 @@ export type EdificioTipo =
   // EDIFICIO en sí — el ciclo de servidor de 12 meses que cierra al completarla queda fuera de esta pasada
   // (requiere infraestructura de servidor/multi-instancia que Fase 0 no tiene, ver Roadmap_Escalado.md).
   | 'maravilla'
-  // Muralla (Doc Fase_0_6, a petición del usuario): implementación mínima a propósito — solo el edificio
-  // (1 celda, cuesta piedra), sin niveles ni efecto mecánico en combate/asedio todavía. Gatea subir a
-  // nivel de asentamiento 4 (ver NIVEL_ASENTAMIENTO.requisitos).
-  | 'muralla'
   // Anclas y satélites, Etapa 3 (Consideraciones/Vista_Asentamiento_Trazado_Urbano.md §5): "marcadores
   // gratis" — mismo patrón que 'puestoMercado' (costo {}, nacen ya activos, nunca pasan por cola, no se
   // pueden añadir a mano). 'plaza' es el ancla de saturación del núcleo residencial (nunca ancla primaria:
@@ -168,6 +169,7 @@ const TODOS_LOS_EDIFICIOS: Record<EdificioTipo, true> = {
   cantera: true,
   lenera: true,
   almacen: true,
+  granero: true,
   mina: true,
   minaCobre: true,
   minaEstano: true,
@@ -183,7 +185,6 @@ const TODOS_LOS_EDIFICIOS: Record<EdificioTipo, true> = {
   mercado: true,
   puestoMercado: true,
   maravilla: true,
-  muralla: true,
   plaza: true,
   plazaDeArmas: true,
   patioDeGremios: true,
@@ -194,6 +195,45 @@ const TODOS_LOS_EDIFICIOS: Record<EdificioTipo, true> = {
 export const EDIFICIOS_TIPO = Object.keys(TODOS_LOS_EDIFICIOS) as EdificioTipo[];
 
 export type EstadoEdificio = 'en_cola' | 'en_construccion' | 'activo';
+
+/**
+ * Una celda del anillo de un recinto amurallado (`Consideraciones/Murallas_Definicion.md`).
+ *
+ * `clase` se decide AL TRAZAR y no cambia nunca: una celda que nació puerta muere puerta (§5.1 — las puertas
+ * se congelan con el trazo, así que un recinto ya levantado no gana puertas jamás y ningún camino posterior lo
+ * atraviesa). Lo que el nivel del recinto cambia es lo que esa puerta VALE, no que exista.
+ */
+export interface CeldaMuro {
+  col: number;
+  row: number;
+  clase: 'muro' | 'puerta' | 'torre';
+}
+
+/**
+ * Un recinto amurallado: un ANILLO CERRADO DE CELDAS alrededor del casco urbano. No es un edificio —no tiene
+ * huella rectangular, se paga por celda y se levanta celda a celda—, por eso es una entidad propia y no un
+ * `EdificioTipo` (el `muralla` de 1 celda que existía antes desaparece, §13 del doc).
+ *
+ * Es la primera FRONTERA persistente del motor: divide el asentamiento en intramuros y arrabal.
+ */
+export interface Recinto {
+  id: string;
+  /** 1 = empalizada · 2 = muro de piedra · 3 = muralla con adarve (§7 del doc). */
+  nivel: number;
+  /** El anillo completo, EN ORDEN DE RECORRIDO desde la puerta principal — que es el orden en que se levanta.
+   * Congelado al comprometerse: ni una mejora de nivel ni el crecimiento de la ciudad lo modifican. */
+  celdas: CeldaMuro[];
+  /** Índice de la última celda YA LEVANTADA del recorrido. -1 = trazo comprometido pero sin una sola celda en
+   * pie. Las celdas todavía no levantadas **ocupan suelo igual** desde el commit: si no, un edificio se
+   * plantaría encima del trazo a medio hacer y el anillo dejaría de poder cerrarse. */
+  avance: number;
+  /** Nivel al que se está mejorando ahora mismo, si hay una mejora en curso (§7 del doc). Mientras esté
+   * presente, `avance` mide el progreso de la MEJORA (reiniciado a -1 al empezarla), no el de la construcción
+   * original — solo se puede mejorar un recinto ya completo. Se borra al terminar, cuando `nivel` sube. */
+  mejorandoA?: number;
+  comprometidoEn: Instante;
+  completadoEn?: Instante;
+}
 
 export interface Edificio {
   id: string;
@@ -208,7 +248,13 @@ export interface Edificio {
    */
   posicion: Point;
   estado: EstadoEdificio;
-  ticksRestantes: number;
+  /**
+   * Fase D / doc 10 — instante de MUNDO en el que la obra pasa a `activo` (FECHA ABSOLUTA, no un contador
+   * descendente: doc 6 §4, regla (a) "fechas, nunca contadores"). Presente SOLO mientras
+   * `estado === 'en_construccion'`; ausente en `en_cola` (la obra aún no arrancó y su duración se fija al
+   * empezar, ver Vía Rápida en `avanzarConstruccion`) y en `activo` (ya terminó).
+   */
+  completaEn?: Instante;
   /**
    * Espacio lógico en el que vive el edificio (Vista de Asentamiento). Ausente = `'asentamiento'` (el caso
    * común: casi todo edificio se construye DENTRO del espacio plano del asentamiento). Solo los extractores
@@ -233,14 +279,14 @@ export interface Edificio {
    * nuevas anclas (`semillaActiva`/`crearAnclaNueva`) — se marca una sola vez y nunca se revisa. No tiene
    * relación con la saturación del núcleo de satélites de un ancla (`anclaLlena`, Lógica 2, sin cambios): un
    * ancla puede estar `semillaSaturada` y seguir teniendo hueco de sobra para sus propios satélites, o estar
-   * `anclaLlena` y seguir siendo la semilla activa del árbol mientras sus 8 ranuras tengan sitio — CRITERIOS
+   * `anclaLlena` y seguir siendo la semilla activa del árbol mientras sus 5 ranuras tengan sitio — CRITERIOS
    * INDEPENDIENTES, ninguno dispara al otro (confirmado con el usuario tras una primera corrección que sí los
    * mezclaba). */
   semillaSaturada?: boolean;
   /** Lógica 2 (satélites, `sitiosPorAtraccionDura`/`anclaActivaParaCategoria`, engine/trazado.ts): esta
    * instancia ya no tiene hueco para el próximo edificio dependiente de su categoría — se marca una sola vez y
    * nunca se revisa (nada libera celdas). Es un concepto DISTINTO de `semillaSaturada` (Lógica 1: agotamiento
-   * de las 8 ranuras de crecimiento del árbol, radio mucho mayor) y no la afecta — `anclaLlena` solo cambia a
+   * de las 5 ranuras de crecimiento del árbol, radio mucho mayor) y no la afecta — `anclaLlena` solo cambia a
    * qué instancia se atrae el PRÓXIMO satélite de esa categoría (`anclaActivaParaCategoria`), nunca decide
    * dónde nace la siguiente ancla. Antes de esto, la búsqueda de a qué instancia atraerse siempre volvía a la
    * más cercana al origen sin memoria de si tenía hueco — con Centro Urbano (`posicion` fija en el origen)
@@ -257,6 +303,12 @@ export interface Edificio {
    * pierde en vez de acumularse (ver `agregarRecursoConSobrante`, engine/almacen.ts). Solo informativo/UI,
    * no bloquea nada por sí mismo. Ausente/false si no aplica o produjo sin tope. */
   pausadoPorAlmacenLleno?: boolean;
+  /** Ocupación post-conquista (Doc 5.4, `Consideraciones/Ocupacion_Post_Conquista_Definicion.md` §2.2): el
+   * saqueo baja un edificio `activo` a `estado: 'en_cola'` marcándolo `danado`. Al comprometer la obra,
+   * `avanzarConstruccion` cobra solo `OCUPACION.fraccionCosteReconstruccion` del costo y tarda esa fracción
+   * de tiempo — un dañado NO se reconstruye desde cero, se repara. Se borra al volver a `activo`. Ausente =
+   * edificio sano (caso normal). */
+  danado?: boolean;
 }
 
 /** Cargos de nivel asentamiento (Doc 2.2), uno de cada, designados por el Gobernador salvo él mismo. */
@@ -267,6 +319,101 @@ export interface CargosAsentamiento {
   maestroObrasId: string | null;
   sacerdoteId: string | null;
 }
+
+/**
+ * Jugador (Doc 0/Glosario, Doc 5.11) — entidad NUEVA en el motor, creada por el Liderazgo.
+ *
+ * Hasta ahora el jugador era solo un `jugadorId: string` repartido por `Escuadron`, `jugadoresFundadoresIds`,
+ * `casasCompradas`, `cargos`, `historialJugadores` y `salidasFaccionPorJugador` — `engine/combate.ts` lo
+ * dejaba anotado como pendiente "si llega a necesitar un propósito propio". El Liderazgo es ese propósito.
+ *
+ * Deliberadamente mínima: solo lo que el motor necesita HOY. La identidad (usuario, sesión, permisos) vive en
+ * `session/`, no aquí; esto es estado de partida.
+ */
+/**
+ * Dónde está un Jugador (Doc 1.10). Son los TRES únicos sitios donde puede estar, y la unión cerrada es lo
+ * que impide el cuarto estado que el motor tenía de facto: en ninguna parte, viendo el mundo entero.
+ *
+ * `desconectado` guarda un punto y no una columna a propósito: al salir del mundo la columna de un viajero
+ * solo deja de existir como entidad —no consume, no ve, no la ven— y al volver se reconstruye ahí mismo.
+ */
+export type UbicacionJugador =
+  | { tipo: 'asentamiento'; asentamientoId: string }
+  | { tipo: 'columna'; ejercitoId: string }
+  | { tipo: 'desconectado'; punto: Point };
+
+export interface Jugador {
+  id: string;
+  /** Liderazgo BASE (Doc 5.11). El efectivo es base + progresión, pero la progresión todavía no está
+   * diseñada (`Docs/Mecanicas a desarrollar.md` §11), así que hoy coinciden. Un jugador SIN registro en
+   * `GameSessionState.jugadores` usa `LIDERAZGO.base`. */
+  liderazgoBase: number;
+  /**
+   * Dónde está (Doc 1.10). Es lo que convierte al jugador en una entidad SITUADA: solo ve el interior del
+   * asentamiento en el que está, y solo puede dar órdenes ahí.
+   *
+   * Es el primer campo de este registro sin valor por defecto posible — "ausente = usa la base" funcionaba
+   * para el Liderazgo, pero "ausente = está en ninguna parte" no significa nada. Por eso el registro deja de
+   * ser opcional y las partidas guardadas sí necesitan migración.
+   */
+  ubicacion: UbicacionJugador;
+  /**
+   * Lo ultimo que vio del interior de cada plaza que ha pisado (Doc 1.10.1), por `asentamientoId`.
+   *
+   * **Es lo unico de todo el modelo que NO se puede derivar.** La proyeccion es una vista: sabe filtrar el
+   * presente, no recordar el pasado. "Trigo 4.200 hace doce minutos" no esta en ningun sitio del estado vivo
+   * —ahi pone 3.100— asi que o se anota al salir, o no existe.
+   *
+   * **Del JUGADOR y no de la Faccion**, que es la diferencia con `memoriaPorFaccion`. Si fuera de la Faccion,
+   * a un grupo le bastaria dejar a uno sentado en casa refrescandola para que todos vieran el almacen en vivo
+   * desde cualquier parte del mapa, y la mecanica entera se cae: la ciudadania habilita, la PRESENCIA ejerce
+   * (Doc 2.5).
+   *
+   * Se escribe al SALIR y no cada tick: mientras estas dentro ves lo vivo, asi que refrescar la foto no
+   * cambiaria nada de lo que ves y costaria trabajo en cada latido.
+   */
+  plazasRecordadas?: Record<string, InteriorRecordado>;
+  /**
+   * Lo que ha explorado ANTES de tener bandera (Doc 1.3).
+   *
+   * La memoria del mundo es de la Faccion (`memoriaPorFaccion`), asi que sin esto el primer tramo de partida
+   * —el que va desde que apareces hasta que fundas o te unes— seria un paseo a ciegas SIN REGISTRO: cada vez
+   * que miraras el mapa estaria igual de negro que al empezar.
+   *
+   * Se FUNDE con la de la Faccion al fundar o al entrar en una, y desaparece: a partir de ahi manda la de la
+   * Faccion. Lo que anduviste solo pasa a ser conocimiento de los tuyos, que es lo que un recien llegado
+   * aporta de verdad.
+   */
+  exploracionPersonal?: Exploracion;
+}
+
+/**
+ * La foto MINIMA del interior de una plaza (decision del usuario, 2026-09-06): las tres cifras que se miran
+ * al volver a casa, y nada mas.
+ *
+ * Se descarto guardar el `Asentamiento` entero: seria fiel a "lo ultimo que viste" pero duplicaria en el
+ * snapshot lo que ya esta vivo, y engordaria justo la mecanica que nació para adelgazar la proyeccion.
+ */
+export interface InteriorRecordado {
+  /** Cuando se tomo. Es lo que convierte el dato en "hace doce minutos" en vez de en una mentira. */
+  vistoEn: Instante;
+  almacen: Record<string, RecursoAlmacenado>;
+  /** Lo que estaba levantandose o esperando turno: `en_cola` y `en_construccion` (lo `activo` es publico y
+   * viaja vivo en la ficha, no hace falta recordarlo). */
+  cola: Edificio[];
+  /** Quien defendia la plaza (Doc 5.12.4). El dato mas tactico del juego, y por eso solo se recuerda de
+   * donde has estado. */
+  guarnicion: Escuadron[];
+}
+
+/**
+ * Celdas exploradas, un bit por celda, en hexadecimal (niebla de guerra). Cadena vacia = nada explorado.
+ *
+ * Vive aqui y no en `engine/exploracion.ts` —que es donde esta toda su aritmetica— porque es un VALOR DEL
+ * ESTADO: lo guardan `MemoriaFaccion` y `Jugador.exploracionPersonal`, y `domain` no puede mirar hacia
+ * `engine`. El tipo es de quien lo almacena; las funciones que lo manipulan, del motor.
+ */
+export type Exploracion = string;
 
 export type OrigenTropa = 'pesants' | 'artesanos' | 'nobleza';
 
@@ -293,8 +440,9 @@ export interface Escuadron {
   veterania: number;
   /** Moral 0-100 por suministro de raciones (Doc 5.4); a 0 hay deserción permanente continua. */
   moral: number;
-  /** Debuff temporal tras perder en mundo abierto (Doc 5.2.2), penaliza poder de combate mientras dura. */
-  heridoHastaTick?: number;
+  /** Debuff temporal tras perder en mundo abierto (Doc 5.2.2): penaliza el poder de combate hasta este
+   * instante de mundo (Fase D). Ausente = sano. */
+  heridoHasta?: Instante;
   /** Tropa reclutada vía Centro Urbano/Barracón/Galería de tiro (Doc 5.7/5.8, ver TROPAS_RECLUTABLES en
    * constants.ts) — determina el poderBase (`poderEscuadron`, engine/combate.ts). Único origen de escuadrones
    * en el motor (`reclutarTropa`, engine/tropas.ts), por eso es obligatorio: "mejorar" una tropa siempre es
@@ -330,21 +478,46 @@ export interface Asentamiento {
    * nunca apaga nada ni purga población. */
   nivelActual: number;
   /** Racha de ticks CONSECUTIVOS con Mantenimiento pagado en full (Doc Fase_0_5 §6.2) — al llegar a
-   * `MANTENIMIENTO.ticksSanosParaRecuperarNivel` sube `nivelActual` un escalón (tope `nivel`) y se reinicia a
+   * `MANTENIMIENTO.minutosSanosParaRecuperarNivel` sube `nivelActual` un escalón (tope `nivel`) y se reinicia a
    * 0; cualquier tick en déficit también la reinicia a 0. Ausente = 0. */
   rachaMantenimientoSano?: number;
-  fundadoEnTick: number;
+  /** Instante de mundo en que se fundó el asentamiento (Fase D). */
+  fundadoEn: Instante;
   /** Radio "potencial" de la zona de influencia si no hubiera fronteras vecinas; crece con el tiempo/nivel. */
   radioPotencial: number;
   poblacion: Poblacion;
   /** Recurso -> cantidad almacenada y capacidad actual (Doc 4.3). */
   almacen: Record<string, RecursoAlmacenado>;
   edificios: Edificio[];
+  /** Recintos amurallados, del más interior al más exterior (orden de construcción). Al ampliar, el recinto
+   * viejo SE QUEDA con sus puertas abiertas —estratos, no reformas— así que esto es una lista, no un campo
+   * único. Ausente = asentamiento sin murallas, que es el caso normal. */
+  recintos?: Recinto[];
   cargos: CargosAsentamiento;
   /** Jugadores que compraron casa aquí (Doc 2.5), vía de ciudadanía distinta de fundar. */
   casasCompradas: string[];
+  /**
+   * Quién puede cruzar la puerta (Doc 1.10.5). La fija el Gobernador y **no expira**: no es una política de
+   * las de Doc 4.4 — una puerta que se abre sola a las dos horas y media no es una puerta.
+   *
+   * Ausente = `faccion_y_aliados`, que es lo que una ciudad hace por defecto: los suyos y los amigos entran,
+   * el resto no. Un residente entra SIEMPRE, mire lo que mire esto: nadie se queda fuera de su propia casa.
+   */
+  politicaDeAcceso?: 'abierto' | 'faccion_y_aliados' | 'solo_faccion' | 'cerrado';
+  /** Vetados por el Gobernador, por encima de la política (Doc 1.10.5): un veto cierra la puerta a alguien
+   * concreto aunque la plaza esté abierta de par en par. Ausente = nadie. */
+  vetadosIds?: string[];
   politicasActivas: PoliticaActiva[];
   escuadrones: Escuadron[];
+  /**
+   * Ocupación militar tras una conquista (Doc 5.4, `Consideraciones/Ocupacion_Post_Conquista_Definicion.md`):
+   * instante de mundo en que TERMINA. Mientras `instante < ocupacionHasta` el asentamiento es INMUNE a un
+   * nuevo asedio, recauda oro reducido (`OCUPACION.factorRecaudacion`), crece más lento
+   * (`OCUPACION.factorCrecimiento`) y su medidor de mantenimiento no degrada. La ventana es puro tiempo —
+   * no se acorta ni se cancela. Se comprueba AL LEER (`estaOcupado`, engine/asentamientoQuery.ts) salvo su
+   * expiración, que `avanzarSimulacion` limpia. Ausente = no ocupado (caso normal).
+   */
+  ocupacionHasta?: Instante;
   /** Mantenimiento (Doc 4.5): medidor 0-100, empieza en 100; a 0 el asentamiento cae en ruinas (se elimina). */
   medidorMantenimiento: number;
   /** Nutrición de la población (Doc 4.1, hambruna — a petición del usuario, espejo de la moral de tropas por
@@ -361,6 +534,15 @@ export interface Asentamiento {
    * La adición MANUAL de edificios (`anadirEdificioManualmente`, Gobernador/Maestro de Obras) no se ve
    * afectada. Ausente/`false` = activa. */
   autoConstruccionPausada?: boolean;
+  /**
+   * ¿Este asentamiento deja repostar a los ejércitos de sus ALIADOS? (Doc 5.13, Paso 8). Ausente = `false`:
+   * abrir tu almacén a la columna de otro es una decisión explícita, no el estado por defecto — te cuesta
+   * stock real y la reserva de comida protege a tu propia gente, no a la suya.
+   *
+   * No aplica a los ejércitos propios, que reponen SIEMPRE en cualquier plaza de su Facción sin permiso que
+   * valga, ni a los neutrales u hostiles, que no reponen nunca.
+   */
+  permiteReabastecerAliados?: boolean;
   /** Reserva manual por recurso (0-999, a petición del usuario), calibrada por el Tesorero: se SUMA a
    * `reservaDinamicaConstruccion` (engine/mantenimiento.ts) y solo la respeta el camino AUTOMÁTICO de
    * construcción (`avanzarConstruccion`/`avanzarMejoras`, engine/construction.ts) — `anadirEdificioManualmente`
@@ -372,12 +554,12 @@ export interface Asentamiento {
    * válido en `evaluarNecesidades` sin conseguir cupo — se resetea a 0 en cuanto el tipo consigue cupo o deja
    * de ser candidato. Ausente/tipo ausente = 0 (comportamiento sin cambios: sin historial de inanición). */
   extractoresTicksSinCupo?: Partial<Record<EdificioTipo, number>>;
-  /** Último tick en el que este asentamiento creó una caravana (Fundación o comercial) — cooldown compartido
-   * entre los dos mecanismos (`CARAVANA_COOLDOWN.ticksCooldown`, constants.ts): evita que se spamee la
-   * creación cuando una caravana recién salida es destruida (bandidos, intercepción) y el cupo/recursos
-   * vuelven a estar disponibles de inmediato (a petición del usuario). Ausente = nunca creó ninguna, así que el
-   * cooldown no aplica. Ver `puedeCrearCaravana`/`ticksCooldownCaravanaRestantes`, engine/asentamientoQuery.ts. */
-  ultimaCaravanaCreadaEnTick?: number;
+  /** Instante de mundo en que este asentamiento creó su última caravana (Fundación o comercial) — cooldown
+   * compartido entre los dos mecanismos (`CARAVANA_COOLDOWN.cooldownMinutos`, constants.ts): evita que se
+   * spamee la creación cuando una caravana recién salida es destruida y el cupo/recursos vuelven a estar
+   * disponibles. Ausente = nunca creó ninguna, así que el cooldown no aplica. Ver `puedeCrearCaravana`,
+   * engine/asentamientoQuery.ts. */
+  ultimaCaravanaCreadaEn?: Instante;
 }
 
 export interface ZonaInfluencia {
@@ -482,6 +664,22 @@ export interface WorldConfig {
 
 export type CaravanaTipo = 'comercial' | 'militar' | 'construccion' | 'contrabando';
 
+/** Revamp de caravanas (Doc 3.13). Un carro se fabrica en el Mercado ('basico', 20 madera) o en la
+ * Carpintería ('reforzado', más capacidad). El catálogo se ampliará más adelante. Ver `CARRO_CATALOGO`. */
+export type CarroTipo = 'basico' | 'reforzado';
+
+/** Revamp de caravanas (Doc 3.13). Un carro lleva como mucho UN animal, obligatorio para que se mueva.
+ * Buey: lento, más carga, barato. Caballo: rápido, menos carga, caro. Camello: intermedio (la inmunidad al
+ * desierto está diferida — no hay bioma árido). Ver `ANIMAL_CATALOGO`. */
+export type AnimalTipo = 'buey' | 'caballo' | 'camello';
+
+/** Un carro de una caravana compuesta (Doc 3.13.1). Solo los carros CON animal viajan y cuentan capacidad;
+ * un carro sin animal se queda en el origen. */
+export interface CarroCaravana {
+  tipoCarro: CarroTipo;
+  animal?: AnimalTipo;
+}
+
 export interface Caravana {
   id: string;
   tipo: CaravanaTipo;
@@ -514,8 +712,130 @@ export interface Caravana {
    * NUNCA se teletransporta), pasa a 'retornando' — recorre la MISMA `ruta` en sentido inverso (ver
    * `avanzarCaravanas`, engine/trade.ts) de vuelta a `origenAsentamientoId`, vacía, y solo entonces vuelve a
    * 'disponible'. Ausente para caravanas de Fundación y para los tipos de caravana todavía sin uso real
-   * (militar/contrabando, Doc 3.6). */
-  estado?: 'disponible' | 'en_transito' | 'retornando';
+   * (militar/contrabando, Doc 3.6).
+   *
+   * 'adjunta' = enganchada a un ejército como tren de suministros o escolta (Doc 5.13.2). Es un ESTADO propio
+   * y no un 'disponible' con una bandera aparte por una razón concreta: `asignarCaravanasATrueque` reparte
+   * las 'disponible', así que dejarla ahí permitía que el comercio automático la despachara por debajo del
+   * ejército que la lleva. Mientras esté 'adjunta' se mueve con la columna, y se carga y entrega A MANO
+   * (Doc 5.13.3) — el reparto automático no la ve. Soltarla la devuelve a 'disponible' donde esté.
+   *
+   * 'preparando' = revamp (Doc 3.13.3): lanzada a mano pero todavía en el origen mientras corre el tiempo de
+   * preparación (`preparaHasta`). La carga ya está reservada del almacén y las piezas/escolta bloqueadas;
+   * cancelar antes de salir lo devuelve todo. Sin cablear todavía (Paso 3 del plan).
+   *
+   * 'aparcada' = una caravana adjunta que su ejército dejó en una plaza de la Facción al `guarnecer`
+   * (`Ocupacion_Post_Conquista_Definicion.md` §2.3d). Sigue siendo de su `origenAsentamientoId`, hospedada en
+   * otra plaza (su `posicionActual`): NO la usa la plaza anfitriona ni el reparto automático, intercambia con
+   * el almacén de esa plaza (`moverCargaCarroAparcada`), y solo sale enganchada a un ejército
+   * (`adjuntarCaravana`) o enviada a su origen (`enviarCaravanaAlOrigen`). */
+  estado?: 'disponible' | 'preparando' | 'adjunta' | 'aparcada' | 'en_transito' | 'retornando';
+  /** Revamp de caravanas (Doc 3.13). Solo `tipo: 'comercial'`, y ahí SIEMPRE presente desde el snapshot v12
+   * (la migración le puso 1 carro básico + 1 buey a las que venían del modelo viejo). La caravana deriva su
+   * capacidad y velocidad de esta lista (`capacidadCaravana`/`velocidadCaravana`, engine/caravanas.ts); sin
+   * carros con animal, ambas son 0. Opcional en el tipo solo porque las categorías militar/construccion/
+   * contrabando no lo llevan. */
+  carros?: CarroCaravana[];
+  /** Revamp (Doc 3.13.4). Escuadrones que un residente del origen cede como escolta sin héroe, POR VIAJE. Son
+   * los escuadrones EN SÍ (no ids): salen de `Asentamiento.escuadrones` del origen al preparar la caravana y
+   * vuelven a la guarnición cuando la caravana regresa (`avanzarCaravanas`). Mientras viajan, la caravana se
+   * defiende con su poder (`poderTotal`) en vez de con la defensa base fija (Doc 3.10). Presente solo en viaje. */
+  escolta?: Escuadron[];
+  /** Revamp (Doc 3.13.5). `true` = fuera del reparto automático (`asignarCaravanasATrueque`), decisión
+   * explícita del jugador, sea cual sea el tamaño de la caravana. */
+  reservadaManual?: boolean;
+  /** Revamp (Doc 3.13.3). Instante de mundo en que termina la preparación; presente solo en estado
+   * 'preparando'. Sin cablear todavía (Paso 3). */
+  preparaHasta?: Instante;
+}
+
+/**
+ * Ejército (Doc 5.12): uno o más escuadrones que salieron del asentamiento y se mueven por el mapa como UNA
+ * sola entidad, con la misma maquinaria de rutas que las caravanas (`calcularRuta` + `avanzarPosicionEnRuta`).
+ *
+ * Salir SOLO y salir en ejército no son dos casos: salir solo es un ejército de un participante. Por eso no
+ * hay dos tipos ni una lista de participantes guardada — los participantes se DERIVAN de los `jugadorId`
+ * distintos de sus escuadrones, y ese mismo número es el de rombos a dibujar en el mapa (Doc 5.12.2).
+ *
+ * Tampoco se guardan: la Facción y el color (salen de `origenAsentamientoId`), el poder (`poderTotal`), la
+ * capacidad del carro (nº de participantes × `LOGISTICA.capacidadCarroPorJugador`) ni la velocidad (el `min`
+ * sobre las velocidades de sus escuadrones y caravanas adjuntas).
+ */
+export interface Ejercito {
+  id: string;
+  faccionId: string;
+  /** De dónde salió y a dónde vuelve. Se reasigna al asentamiento propio más cercano si este cae; si la
+   * Facción no conserva ninguno, el ejército queda sin hogar y sus jugadores huérfanos (Doc 5.4). */
+  origenAsentamientoId: string;
+  /**
+   * Quién va DENTRO, con independencia de si aporta escuadrones (Doc 5.12.1). Antes se derivaba de los
+   * escuadrones, y por eso un jugador sin tropas no existía como participante y una columna cuyos soldados
+   * caían todos se volvía un ejército fantasma — con gente dentro y sin forma de decirlo.
+   *
+   * No es una lista de ids sino de entradas: la sucesión del líder va por ANTIGÜEDAD, y eso no se lee de un
+   * array de strings sin depender del orden de inserción, que separarse y volver a unirse reordena.
+   */
+  participantes: { jugadorId: string; unidoEn: Instante }[];
+  /**
+   * Qué NACIÓ esta columna, fijado al crearla y jamás modificado (Doc 5.12.1). Lo decide EL COMANDO que la
+   * pare: `salirAlMundo` —sin destino— hace una columna `personal`; `movilizarEjercito` —contra un
+   * destino— hace un `ejercito`, aunque salga uno solo.
+   *
+   * **No se deriva de `participantes.length`:** un ejército al que se le separan miembros hasta quedar en uno
+   * sigue siendo un ejército, con su ruta fija y sus caravanas.
+   */
+  tipo: 'personal' | 'ejercito';
+  /** Quién la formó (Doc 5.14.3). No puede separarse —para irse cede el liderazgo— y es el único que
+   * cancela la marcha. Si se desconecta pasa al participante más antiguo. En una columna `personal` es su
+   * único participante y no significa nada. */
+  liderId: string;
+  /**
+   * Qué se hace con quien pide unirse en campo (Doc 5.14.1). La fija el Líder al parir la columna y no
+   * cambia: quien se une comparte tu carro, tu destino y tus encuentros, así que poder negarse no es un
+   * lujo.
+   */
+  politicaDeUnion: 'rechazar' | 'aceptar' | 'preguntar';
+  /**
+   * Peticiones vivas cuando la política es `preguntar` (Doc 5.14.1). **Caducan sin temporizador**: nada se
+   * dispara a los 10 s, lo comprueban contra el instante actual los dos únicos sitios que las miran —el
+   * comando con el que el Líder responde y la proyección del que pidió—. Ausente = ninguna viva.
+   */
+  peticionesDeUnion?: { jugadorId: string; pedidoEn: Instante; expiraEn: Instante }[];
+  /** Escuadrones MOVIDOS aquí desde `Asentamiento.escuadrones` — se van de verdad, por eso la guarnición es
+   * lo único que defiende (Doc 5.12.4) y por eso `consumoRacionTropas` ya cuenta solo lo que quedó en casa. */
+  escuadrones: Escuadron[];
+  /** El carro: los de todos sus jugadores, ya sumados. Solo trigo en Fase 0. En marcha se come de AQUÍ, no
+   * del almacén (Doc 5.13) — misma regla del hambre vía `avanzarRacion`, distinta despensa. */
+  suministro: Record<string, number>;
+  /**
+   * A quien persigue, si persigue a alguien (Doc 5.12.3). Un objetivo MOVIL en vez de un punto: la ruta se
+   * recalcula cada tick hacia donde este. Ausente = marcha normal contra `objetivo`.
+   *
+   * La persecucion es lo que sustituye al choque automatico: acercarse ya no basta para pelear, hay que
+   * haber decidido ir a por alguien. Termina al alcanzarlo —y entonces si hay combate, porque ya lo elegiste—
+   * o al rectificar el rumbo.
+   */
+  persiguiendo?: { tipo: 'ejercito' | 'caravana'; id: string };
+  /**
+   * Derrotado hace poco (Doc 5.12.3). Corta por los DOS lados: nadie puede perseguirle ni atacarle, y el
+   * tampoco puede perseguir ni atacar.
+   *
+   * El nombre importa. Se llamo `noPerseguibleHasta` mientras se penso como una proteccion, y describia solo
+   * la mitad: asi implementada, la inmunidad seria un escudo para depredar sin riesgo.
+   */
+  enTreguaHasta?: Instante;
+  /** Caravanas que marchan con el ejército (Doc 5.13.2): amplían la carga, entran en el `min` de velocidad,
+   * pueden ir cargadas de mercancía (escolta, Doc 5.13.3) y se pierden si el ejército es derrotado. */
+  caravanasAdjuntasIds: string[];
+  objetivo: { tipo: 'asentamiento'; id: string } | { tipo: 'punto'; punto: Point };
+  /** Polilínea calculada al movilizar, igual que en `Caravana.ruta`. */
+  ruta: Point[];
+  /** 0-1 a lo largo de `ruta`. Al cancelar o al terminar, el regreso desanda la MISMA ruta invertida. */
+  progreso: number;
+  posicionActual: Point;
+  /** `estacionado` consume reducido pero nunca 0 (Doc 5.12.3). Cancelar una marcha pasa a `regresando`
+   * (Doc 5.12.6). */
+  estado: 'marchando' | 'estacionado' | 'regresando';
 }
 
 /**
@@ -554,9 +874,22 @@ export interface AcuerdoTrueque {
   cantidadTotalB: number;
   cantidadEntregadaA: number;
   cantidadEntregadaB: number;
-  creadoEnTick: number;
-  expiraEnTick: number;
-  estado: 'activo' | 'cumplido' | 'expirado';
+  /** Instantes de mundo de creación y vencimiento del acuerdo (Fase D). */
+  creadoEn: Instante;
+  /**
+   * Cuando deja de valer. Mientras esta `'propuesto'` es el plazo para CONTESTAR; al aceptar se recalcula
+   * desde el instante de la aceptacion (`aceptarTrueque`, engine/trade.ts), para que una propuesta contestada
+   * tarde no nazca ya sin tiempo de cumplirse.
+   */
+  expiraEn: Instante;
+  /**
+   * `'propuesto'` = ofrecido y sin contestar; no obliga a nadie y ninguna caravana lo mira todavia
+   * (`Consideraciones/Comercio_Fisico_Definicion.md`, decision 5). Nace asi SIEMPRE: hasta 2026-09-07 nacia
+   * `'activo'` porque no habia jugador interactivo al que preguntarle, y eso pactaba en nombre del otro.
+   *
+   * `'rechazado'` es distinto de `'expirado'` a proposito: uno es una respuesta y el otro un silencio.
+   */
+  estado: 'propuesto' | 'activo' | 'rechazado' | 'cumplido' | 'expirado';
 }
 
 /**
@@ -582,8 +915,19 @@ export interface OrdenMercado {
   cantidad: number;
   cantidadCumplida: number;
   precioUnitario: number;
-  creadoEnTick: number;
-  estado: 'activa' | 'cumplida';
+  /** Instante de mundo en que se colocó la orden (Fase D). */
+  creadoEn: Instante;
+  /**
+   * Cuando la oferta se retira sola (`MERCADO.plazoOrdenMinutos`).
+   *
+   * No es un adorno: desde que las ordenes se cumplen EN EL MOSTRADOR y no por emparejamiento automatico
+   * (`Consideraciones/Comercio_Fisico_Definicion.md` §3), una orden que nadie toma no se cierra nunca. Sin
+   * caducidad, una plaza acumularia ofertas eternas a precios viejos y no volveria a ajustarlos jamas.
+   *
+   * Ausente en ordenes de partidas guardadas antes de 2026-09-07; se rellena al migrar.
+   */
+  expiraEn: Instante;
+  estado: 'activa' | 'cumplida' | 'expirada';
 }
 
 // --- Sprint 4: Estructura política (Doc 2) ---
@@ -605,8 +949,9 @@ export interface PoliticaActiva {
   id: string;
   politicaId: string;
   cargo: CargoTipo;
-  activadaEnTick: number;
-  expiraEnTick: number;
+  /** Instantes de mundo de activación y vencimiento (Fase D). Duración fija, no cancelable antes de tiempo. */
+  activadaEn: Instante;
+  expiraEn: Instante;
 }
 
 /**
@@ -619,9 +964,11 @@ export interface RelacionPolitica {
   tipo: 'vasallaje' | 'alianza';
   faccionAId: string;
   faccionBId: string;
-  /** Tributo periódico del vasallo al señor (Doc 2.4), solo aplica a vasallaje. */
-  tributo?: { recurso: string; cantidadPorTick: number };
-  creadoEnTick: number;
+  /** Tributo periódico del vasallo al señor (Doc 2.4), solo aplica a vasallaje — `cantidadPorMinuto` unidades
+   * de mundo por minuto (D6; 1 tick = 1 minuto, ver `SIMULACION`). */
+  tributo?: { recurso: string; cantidadPorMinuto: number };
+  /** Instante de mundo en que se estableció la relación (Fase D). */
+  creadoEn: Instante;
   estado: 'activa' | 'rota';
 }
 

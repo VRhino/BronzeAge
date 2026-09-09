@@ -38,6 +38,21 @@ const PUNTO = {
   additionalProperties: false,
 } as const;
 const RECURSO = { type: 'string', enum: RECURSOS_TIPO } as const;
+// A dónde va una columna: un asentamiento por id, o un punto del mapa. Se valida con `oneOf` para que un
+// cliente no pueda colar un punto sin coordenadas ni un destino sin id. Lo comparten `movilizarEjercito`
+// (fijarlo al salir) y `marcharA` (rectificarlo cuantas veces quiera un viajero solo).
+const OBJETIVO_DE_INTERACCION = {
+  oneOf: [
+    { type: 'object', properties: { tipo: { type: 'string', enum: ['ejercito'] }, id: IDENTIFICADOR }, required: ['tipo', 'id'], additionalProperties: false },
+    { type: 'object', properties: { tipo: { type: 'string', enum: ['caravana'] }, id: IDENTIFICADOR }, required: ['tipo', 'id'], additionalProperties: false },
+  ],
+} as const;
+const OBJETIVO_EJERCITO = {
+  oneOf: [
+    { type: 'object', properties: { tipo: { type: 'string', enum: ['asentamiento'] }, id: IDENTIFICADOR }, required: ['tipo', 'id'], additionalProperties: false },
+    { type: 'object', properties: { tipo: { type: 'string', enum: ['punto'] }, punto: PUNTO }, required: ['tipo', 'punto'], additionalProperties: false },
+  ],
+} as const;
 const CARGO_FACCION = { type: 'string', enum: CARGOS_TIPO } as const;
 const CARGO_CONSTRUCTOR = { type: 'string', enum: CARGOS_CONSTRUCTOR } as const;
 
@@ -49,7 +64,9 @@ function objeto(properties: Record<string, unknown>, required: readonly string[]
 
 export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   // --- Fundación y expansión ---
-  fundarAsentamiento: objeto({ faccionId: IDENTIFICADOR, posicion: PUNTO }, ['faccionId', 'posicion']),
+  // Sin `posicion`: se funda donde se está (Doc 1.3), y ese punto sale de la columna del fundador, no de un
+  // parámetro que el cliente pueda elegir.
+  fundarAsentamiento: objeto({ faccionId: IDENTIFICADOR }, ['faccionId']),
   lanzarCaravanaFundacion: objeto(
     { origenAsentamientoId: IDENTIFICADOR, destino: PUNTO, numJugadores: NUMERO },
     ['origenAsentamientoId', 'destino', 'numJugadores']
@@ -72,6 +89,7 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
     ['asentamientoId', 'cargo', 'jugadorId']
   ),
   comprarCasa: objeto({ asentamientoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR }, ['asentamientoId', 'jugadorId']),
+  cambiarResidencia: objeto({ destinoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR }, ['destinoId', 'jugadorId']),
 
   // --- Construcción y gestión local ---
   activarPolitica: objeto(
@@ -100,6 +118,26 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
     ['asentamientoId', 'cargo', 'edificioId']
   ),
   alternarAutoConstruccion: objeto({ asentamientoId: IDENTIFICADOR, pausada: { type: 'boolean' } }, ['asentamientoId', 'pausada']),
+  alternarReabastecerAliados: objeto({ asentamientoId: IDENTIFICADOR, permitido: { type: 'boolean' } }, ['asentamientoId', 'permitido']),
+  adjuntarCaravana: objeto({ ejercitoId: IDENTIFICADOR, caravanaId: IDENTIFICADOR, jugadorId: IDENTIFICADOR }, [
+    'ejercitoId',
+    'caravanaId',
+    'jugadorId',
+  ]),
+  soltarCaravana: objeto({ ejercitoId: IDENTIFICADOR, caravanaId: IDENTIFICADOR, jugadorId: IDENTIFICADOR }, [
+    'ejercitoId',
+    'caravanaId',
+    'jugadorId',
+  ]),
+  cargarCaravana: objeto(
+    { ejercitoId: IDENTIFICADOR, caravanaId: IDENTIFICADOR, asentamientoId: IDENTIFICADOR, recurso: RECURSO, cantidad: NUMERO },
+    ['ejercitoId', 'caravanaId', 'asentamientoId', 'recurso', 'cantidad']
+  ),
+  entregarDeCaravana: objeto({ ejercitoId: IDENTIFICADOR, caravanaId: IDENTIFICADOR, acuerdoId: IDENTIFICADOR }, [
+    'ejercitoId',
+    'caravanaId',
+    'acuerdoId',
+  ]),
   calibrarReservaManual: objeto({ asentamientoId: IDENTIFICADOR, recurso: RECURSO, valor: NUMERO }, [
     'asentamientoId',
     'recurso',
@@ -108,6 +146,18 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   // Sin `minLength` en `nombre`: vacío es un valor legítimo aquí ("volver a mostrar el id",
   // `renombrarAsentamiento`, `construccion.ts`) — no un error de forma.
   renombrarAsentamiento: objeto({ asentamientoId: IDENTIFICADOR, nombre: { type: 'string' } }, ['asentamientoId', 'nombre']),
+
+  // --- Murallas (Consideraciones/Murallas_Definicion.md, Paso 2c) ---
+  comprometerRecinto: objeto(
+    { asentamientoId: IDENTIFICADOR, cargo: CARGO_CONSTRUCTOR, nivel: { type: 'integer', enum: [1, 2, 3] } },
+    ['asentamientoId', 'cargo', 'nivel']
+  ),
+  // Sin `cargo`: abandonar es solo del Gobernador (§8 del doc), no un `CargoConstructor` cualquiera.
+  abandonarRecinto: objeto({ asentamientoId: IDENTIFICADOR, recintoId: IDENTIFICADOR }, ['asentamientoId', 'recintoId']),
+  mejorarRecinto: objeto(
+    { asentamientoId: IDENTIFICADOR, cargo: CARGO_CONSTRUCTOR, recintoId: IDENTIFICADOR },
+    ['asentamientoId', 'cargo', 'recintoId']
+  ),
 
   // --- Diplomacia ---
   proponerRelacion: {
@@ -147,6 +197,12 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
     },
     ['asentamientoAId', 'recursoA', 'cantidadA', 'asentamientoBId', 'recursoB', 'cantidadB']
   ),
+  aceptarTrueque: objeto({ acuerdoId: IDENTIFICADOR }, ['acuerdoId']),
+  rechazarTrueque: objeto({ acuerdoId: IDENTIFICADOR }, ['acuerdoId']),
+  comerciarEnPlaza: objeto(
+    { jugadorId: IDENTIFICADOR, asentamientoId: IDENTIFICADOR, ordenId: IDENTIFICADOR, cantidad: NUMERO },
+    ['jugadorId', 'asentamientoId', 'ordenId', 'cantidad']
+  ),
   colocarOrdenMercado: {
     type: 'object',
     properties: {
@@ -160,6 +216,46 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
     additionalProperties: false,
   },
   crearCaravana: objeto({ asentamientoId: IDENTIFICADOR }, ['asentamientoId']),
+  agregarCarroCaravana: objeto(
+    { caravanaId: IDENTIFICADOR, tipoCarro: { type: 'string', enum: ['basico', 'reforzado'] } },
+    ['caravanaId', 'tipoCarro']
+  ),
+  comprarAnimalCaravana: objeto(
+    { caravanaId: IDENTIFICADOR, carroIndice: NUMERO, tipoAnimal: { type: 'string', enum: ['buey', 'caballo', 'camello'] } },
+    ['caravanaId', 'carroIndice', 'tipoAnimal']
+  ),
+  reservarCaravana: objeto({ caravanaId: IDENTIFICADOR, reservada: { type: 'boolean' } }, ['caravanaId', 'reservada']),
+  prepararCaravana: objeto(
+    {
+      caravanaId: IDENTIFICADOR,
+      jugadorId: IDENTIFICADOR,
+      destinoAsentamientoId: IDENTIFICADOR,
+      carga: { type: 'object', additionalProperties: NUMERO },
+      escoltaEscuadronIds: { type: 'array', items: IDENTIFICADOR },
+    },
+    ['caravanaId', 'jugadorId', 'destinoAsentamientoId', 'carga']
+  ),
+  cancelarCaravana: objeto({ caravanaId: IDENTIFICADOR }, ['caravanaId']),
+  moverCarroCaravana: objeto(
+    { desdeCaravanaId: IDENTIFICADOR, haciaCaravanaId: IDENTIFICADOR, carroIndice: NUMERO },
+    ['desdeCaravanaId', 'haciaCaravanaId', 'carroIndice']
+  ),
+  // Caravanas 'aparcadas' tras guarnecer (Ocupacion §2.3d).
+  moverCargaCaravanaAparcada: objeto(
+    {
+      jugadorId: IDENTIFICADOR,
+      caravanaId: IDENTIFICADOR,
+      asentamientoId: IDENTIFICADOR,
+      recurso: RECURSO,
+      cantidad: NUMERO,
+      sentido: { type: 'string', enum: ['cargar', 'descargar'] },
+    },
+    ['jugadorId', 'caravanaId', 'asentamientoId', 'recurso', 'cantidad', 'sentido']
+  ),
+  enviarCaravanaAlOrigen: objeto(
+    { jugadorId: IDENTIFICADOR, caravanaId: IDENTIFICADOR, asentamientoId: IDENTIFICADOR },
+    ['jugadorId', 'caravanaId', 'asentamientoId']
+  ),
 
   // --- Militar ---
   reclutarTropa: objeto(
@@ -175,19 +271,69 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
     { atacanteId: IDENTIFICADOR, defensorId: IDENTIFICADOR, escuadronIds: LISTA_DE_IDENTIFICADORES },
     ['atacanteId', 'defensorId', 'escuadronIds']
   ),
-  combateCampoAbierto: objeto(
+  // Presencia del jugador (Doc 1.10). `carga` es un mapa recurso -> cantidad: el jugador elige QUÉ se lleva,
+  // no solo cuánto, así que no vale una lista de ids ni un número suelto. Las cantidades se validan en el
+  // motor (capacidad del carro, almacén, reserva); aquí solo que sean números.
+  salirAlMundo: objeto(
     {
-      asentamientoAId: IDENTIFICADOR,
-      escuadronIdsA: LISTA_DE_IDENTIFICADORES,
-      asentamientoBId: IDENTIFICADOR,
-      escuadronIdsB: LISTA_DE_IDENTIFICADORES,
+      asentamientoId: IDENTIFICADOR,
+      jugadorId: IDENTIFICADOR,
+      escuadronIds: LISTA_DE_IDENTIFICADORES,
+      carga: { type: 'object', additionalProperties: NUMERO },
     },
-    ['asentamientoAId', 'escuadronIdsA', 'asentamientoBId', 'escuadronIdsB']
+    ['asentamientoId', 'jugadorId', 'escuadronIds', 'carga']
   ),
-  interceptarCaravana: objeto(
-    { atacanteId: IDENTIFICADOR, escuadronIds: LISTA_DE_IDENTIFICADORES, caravanaId: IDENTIFICADOR },
-    ['atacanteId', 'escuadronIds', 'caravanaId']
+  marcharA: objeto({ jugadorId: IDENTIFICADOR, objetivo: OBJETIVO_EJERCITO }, ['jugadorId', 'objetivo']),
+  // Composición de una columna compartida (Doc 5.14). Separarse no lleva `ejercitoId`: se sale de la columna
+  // en la que vas, y solo puedes ir en una.
+  unirseEnCampo: objeto({ ejercitoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR }, ['ejercitoId', 'jugadorId']),
+  responderPeticionDeUnion: objeto(
+    { ejercitoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR, solicitanteId: IDENTIFICADOR, aceptar: { type: 'boolean' } },
+    ['ejercitoId', 'jugadorId', 'solicitanteId', 'aceptar']
   ),
+  separarseDelEjercito: objeto({ jugadorId: IDENTIFICADOR }, ['jugadorId']),
+  // El menú de interacción (Doc 5.12.3). `objetivo` distingue columna de caravana: son entidades distintas
+  // con anillos y consecuencias distintas, y mezclarlas en un id suelto obligaría al motor a adivinar.
+  inspeccionar: objeto({ jugadorId: IDENTIFICADOR, objetivo: OBJETIVO_DE_INTERACCION }, ['jugadorId', 'objetivo']),
+  atacar: objeto({ jugadorId: IDENTIFICADOR, objetivo: OBJETIVO_DE_INTERACCION }, ['jugadorId', 'objetivo']),
+  perseguir: objeto({ jugadorId: IDENTIFICADOR, objetivo: OBJETIVO_DE_INTERACCION }, ['jugadorId', 'objetivo']),
+  dejarDePerseguir: objeto({ jugadorId: IDENTIFICADOR }, ['jugadorId']),
+  cederLiderazgo: objeto({ ejercitoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR, sucesorId: IDENTIFICADOR }, ['ejercitoId', 'jugadorId', 'sucesorId']),
+  entrarEnAsentamiento: objeto({ asentamientoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR }, ['asentamientoId', 'jugadorId']),
+  // La puerta (Doc 1.10.5). No va en `politicasActivas` porque no expira: una puerta que se abre sola a las
+  // dos horas y media no es una puerta.
+  fijarPoliticaDeAcceso: objeto(
+    {
+      asentamientoId: IDENTIFICADOR,
+      jugadorId: IDENTIFICADOR,
+      politica: { type: 'string', enum: ['abierto', 'faccion_y_aliados', 'solo_faccion', 'cerrado'] },
+    },
+    ['asentamientoId', 'jugadorId', 'politica']
+  ),
+  vetarJugador: objeto(
+    { asentamientoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR, vetadoId: IDENTIFICADOR, vetar: { type: 'boolean' } },
+    ['asentamientoId', 'jugadorId', 'vetadoId', 'vetar']
+  ),
+  salirDeAsentamiento: objeto({ asentamientoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR }, ['asentamientoId', 'jugadorId']),
+  // `guarnecer` (Ocupacion §2.3): marchar un ejército a una plaza propia y volcar la tropa en su guarnición.
+  guarnecer: objeto({ asentamientoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR }, ['asentamientoId', 'jugadorId']),
+  // Ejércitos (Doc 5.12).
+  movilizarEjercito: objeto(
+    {
+      asentamientoId: IDENTIFICADOR,
+      jugadorId: IDENTIFICADOR,
+      escuadronIds: LISTA_DE_IDENTIFICADORES,
+      objetivo: OBJETIVO_EJERCITO,
+      politicaDeUnion: { type: 'string', enum: ['rechazar', 'aceptar', 'preguntar'] },
+    },
+    ['asentamientoId', 'jugadorId', 'escuadronIds', 'objetivo']
+  ),
+  unirseAEjercito: objeto(
+    { ejercitoId: IDENTIFICADOR, asentamientoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR, escuadronIds: LISTA_DE_IDENTIFICADORES },
+    ['ejercitoId', 'asentamientoId', 'jugadorId', 'escuadronIds']
+  ),
+  replegarEjercito: objeto({ ejercitoId: IDENTIFICADOR }, ['ejercitoId']),
+  estacionarEjercito: objeto({ ejercitoId: IDENTIFICADOR }, ['ejercitoId']),
   atacarCampamentoBandidos: objeto(
     { atacanteId: IDENTIFICADOR, escuadronIds: LISTA_DE_IDENTIFICADORES, campamentoId: IDENTIFICADOR },
     ['atacanteId', 'escuadronIds', 'campamentoId']

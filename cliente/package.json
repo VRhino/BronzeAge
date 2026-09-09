@@ -1,6 +1,6 @@
 {
   "name": "bronze-age-cliente-debug",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Cliente de navegador (depuracion/administracion). Separado del backend para poder vivir en su propio repositorio; todavia no puede moverse: depende del motor (ver README).",
   "type": "module",
   "scripts": {

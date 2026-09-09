@@ -9,16 +9,16 @@
 // son los que más ganan con `codigo`/`payload` estructurados: las proyecciones por audiencia de Fase C
 // filtran sobre eso. Los payloads de combate los declara `engine/combate.ts`, que es quien resuelve.
 import { reclutarTropa as reclutarTropaEngine } from '../../engine/tropas';
+import { esCiudadano } from '../../engine/faccion';
 import {
   atacarCampamentoBandidos as atacarCampamentoBandidosEngine,
-  combateCampoAbierto as combateCampoAbiertoEngine,
-  interceptarCaravana as interceptarCaravanaEngine,
   iniciarAsedio as iniciarAsedioEngine,
 } from '../../engine/combate';
 import { CAMPAMENTOS_BANDIDOS } from '../../constants';
+import { minutos, sumar } from '../../domain/tiempo';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito } from './tipos';
-import { comando, conAsentamiento, conAsentamientos, exigirAsentamiento, exigirCampamento, exigirCaravana } from './ayudas';
+import { comando, conAsentamiento, conAsentamientos, exigirAsentamiento, exigirCampamento } from './ayudas';
 import { desdeCrudos, evento } from './eventos';
 
 /** Reclutamiento: lo narra esta capa (el motor devuelve el asentamiento actualizado, sin eventos). */
@@ -44,7 +44,15 @@ export const reclutarTropa = comando<ParamsReclutarTropa, { reclutados: number }
     a.escuadrones.find((e) => e.jugadorId === params.jugadorId && e.tropaId === params.tropaId)?.cantidad ?? 0;
 
   const antes = cantidadDe(asentamiento);
-  const actualizado = reclutarTropaEngine(asentamiento, params.jugadorId, params.tropaId, params.origen, estado.tick, ctx.ids.siguiente());
+  const faccionDelJugador = estado.facciones.find((f) => esCiudadano(f, params.jugadorId));
+  const actualizado = reclutarTropaEngine(
+    asentamiento,
+    params.jugadorId,
+    faccionDelJugador?.id ?? '',
+    params.tropaId,
+    params.origen,
+    ctx.ids.siguiente()
+  );
   const reclutados = cantidadDe(actualizado) - antes;
 
   const siguiente = conHistorialDeJugador(
@@ -55,7 +63,7 @@ export const reclutarTropa = comando<ParamsReclutarTropa, { reclutados: number }
   return exito(
     siguiente,
     [
-      evento(ctx, estado, {
+      evento(ctx, {
         codigo: 'tropas.reclutadas',
         mensaje: `${params.jugadorId} recluta ${reclutados} de la tropa "${params.tropaId}" (${params.origen}).`,
         payload: { ...params, reclutados } satisfies PayloadReclutamiento,
@@ -76,53 +84,22 @@ export const iniciarAsedio = comando<ParamsIniciarAsedio, { conquistado: boolean
   const atacante = exigirAsentamiento(estado, params.atacanteId);
   const defensor = exigirAsentamiento(estado, params.defensorId);
 
-  const resultado = iniciarAsedioEngine(atacante, defensor, params.escuadronIds, estado.facciones, estado.relaciones, estado.tick, ctx.rng);
+  const resultado = iniciarAsedioEngine(atacante, defensor, params.escuadronIds, estado.facciones, estado.relaciones, ctx.instante, ctx.rng);
   const siguiente: GameSessionState = {
     ...conAsentamientos(estado, [resultado.atacante, resultado.defensor]),
     facciones: resultado.facciones,
   };
-  return exito(siguiente, desdeCrudos(ctx, estado, resultado.eventos, atacante.id), { conquistado: resultado.conquistado });
+  return exito(siguiente, desdeCrudos(ctx, resultado.eventos, atacante.id), { conquistado: resultado.conquistado });
 });
 
-export interface ParamsCombateCampoAbierto {
-  asentamientoAId: string;
-  escuadronIdsA: string[];
-  asentamientoBId: string;
-  escuadronIdsB: string[];
-}
-
-export const combateCampoAbierto = comando<ParamsCombateCampoAbierto, void>((estado, _mapa, ctx, params) => {
-  const a = exigirAsentamiento(estado, params.asentamientoAId);
-  const b = exigirAsentamiento(estado, params.asentamientoBId);
-
-  const resultado = combateCampoAbiertoEngine(a, params.escuadronIdsA, b, params.escuadronIdsB, estado.facciones, estado.relaciones, estado.tick, ctx.rng);
-  const siguiente: GameSessionState = {
-    ...conAsentamientos(estado, [resultado.asentamientoA, resultado.asentamientoB]),
-    facciones: resultado.facciones,
-  };
-  // Sin `asentamientoId`: el choque es entre DOS asentamientos, atribuirlo a uno sería arbitrario — los ids de
-  // ambos bandos van en el `payload` de `combate.resuelto`.
-  return exito(siguiente, desdeCrudos(ctx, estado, resultado.eventos));
-});
-
-export interface ParamsInterceptarCaravana {
-  atacanteId: string;
-  escuadronIds: string[];
-  caravanaId: string;
-}
-
-export const interceptarCaravana = comando<ParamsInterceptarCaravana, { capturada: boolean }>((estado, _mapa, ctx, params) => {
-  const atacante = exigirAsentamiento(estado, params.atacanteId);
-  const caravana = exigirCaravana(estado, params.caravanaId);
-
-  const resultado = interceptarCaravanaEngine(atacante, params.escuadronIds, caravana, estado.tick, estado.facciones, estado.asentamientos, ctx.rng);
-  const siguiente: GameSessionState = {
-    ...conAsentamiento(estado, resultado.atacante),
-    facciones: resultado.facciones,
-    caravanas: resultado.caravanaCapturada ? estado.caravanas.filter((c) => c.id !== caravana.id) : estado.caravanas,
-  };
-  return exito(siguiente, desdeCrudos(ctx, estado, resultado.eventos, atacante.id), { capturada: resultado.caravanaCapturada });
-});
+// `combateCampoAbierto` e `interceptarCaravana` VIVÍAN AQUÍ y se retiraron en el Paso 11 del movimiento de
+// ejércitos (2026-09-04). No se han perdido: son ahora resoluciones del MOTOR disparadas por la geometría
+// (`resolverEncuentros`, engine/ejercitos.ts), y el jugador llega a ellas mandando un ejército en vez de
+// declarando un ataque desde el sofá. Ver Doc 5.12.3 y §2.6 del documento de ejecución.
+//
+// Retirarlos no era solo limpieza: `interceptarCaravana` resolvía contra una defensa base FIJA, que es
+// exactamente lo que la escolta (Doc 5.13.3) sustituyó — mantener los dos habría dejado dos reglas distintas
+// para el mismo hecho según por dónde se entrara.
 
 export interface ParamsAtacarCampamentoBandidos {
   atacanteId: string;
@@ -134,7 +111,7 @@ export const atacarCampamentoBandidos = comando<ParamsAtacarCampamentoBandidos, 
   const atacante = exigirAsentamiento(estado, params.atacanteId);
   const campamento = exigirCampamento(estado, params.campamentoId);
 
-  const resultado = atacarCampamentoBandidosEngine(atacante, params.escuadronIds, campamento, estado.tick, estado.facciones, ctx.rng);
+  const resultado = atacarCampamentoBandidosEngine(atacante, params.escuadronIds, campamento, ctx.instante, estado.facciones, ctx.rng);
   const siguiente: GameSessionState = {
     ...conAsentamiento(estado, resultado.atacante),
     facciones: resultado.facciones,
@@ -142,9 +119,9 @@ export const atacarCampamentoBandidos = comando<ParamsAtacarCampamentoBandidos, 
     campamentosBandidos: resultado.campamentoDestruido
       ? estado.campamentosBandidos.filter((c) => c.id !== campamento.id)
       : estado.campamentosBandidos,
-    bandidosProximoSpawnTick: resultado.campamentoDestruido
-      ? estado.tick + CAMPAMENTOS_BANDIDOS.ticksRespawn
-      : estado.bandidosProximoSpawnTick,
+    bandidosProximoSpawnEn: resultado.campamentoDestruido
+      ? sumar(ctx.instante, minutos(CAMPAMENTOS_BANDIDOS.respawnMinutos))
+      : estado.bandidosProximoSpawnEn,
   };
-  return exito(siguiente, desdeCrudos(ctx, estado, resultado.eventos, atacante.id), { destruido: resultado.campamentoDestruido });
+  return exito(siguiente, desdeCrudos(ctx, resultado.eventos, atacante.id), { destruido: resultado.campamentoDestruido });
 });

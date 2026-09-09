@@ -1,0 +1,307 @@
+# Revamp de caravanas — decisiones y plan
+
+> **Estado (2026-09-08): IMPLEMENTADO (Pasos 1-5).** Seis rondas de decisiones con el usuario. Reglas de
+> juego → `Docs/Game/3` §3.13 (y toques en §3.6, §3.10, Doc 4.2.1 Mercado, Doc 5.13.3). Aquí quedan las
+> decisiones, la representación en el motor, el plan (todo tachado) y los invariantes. El batch NPC quedó
+> **bit-idéntico** en los cinco commits. Todas las cifras son placeholder — la calibración es continua.
+>
+> Sale de `Docs/Mecanicas a desarrollar.md` §8. Difiere trozos a fichas/pases posteriores (§7 de este
+> documento).
+
+## 0. El punto de partida
+
+Hoy una caravana `comercial` (Doc 3.12, implementado) es un **activo único** con capacidad y velocidad fijas
+por catálogo (`CARAVANA_CATALOGO.comercial = 500 / 16`). Se construye por 50 madera contra el `cupoCaravanas`
+del Mercado, nace `'disponible'`, y `asignarCaravanasATrueque` la reparte por scoring a los lados pendientes de
+un trueque. El comercio NPC y el laboratorio dependen enteramente de ese reparto automático.
+
+El enunciado de §8 pide que una caravana se **arme con piezas** —carros, animales de arrastre, escuadrones de
+escolta sin héroe— y que haya una vía de preparación manual además del reparto automático.
+
+## 1. Decisiones cerradas con el usuario (2026-09-08)
+
+### Ronda 1
+
+1. **Una caravana `comercial` pasa a ser un contenedor de tres partes**: carros, animales, escolta. Capacidad y
+   velocidad se **derivan**, no se guardan.
+2. **Cada carro lleva como mucho UN animal** (Ronda 2 lo cerró: exactamente uno, no varios). Un carro es en la
+   práctica un par `{tipoCarro, animal?}`.
+3. **Escolta sin héroe = escuadrones cedidos por un jugador**, no una figura de "tropa del asentamiento" nueva.
+4. **Modelo nivel-caravana**, no árbol por carro: la caravana tiene una lista plana de carros.
+5. **Se difieren**: cría de animales (solo compra con oro), planificación horaria, visibilidad por tamaño,
+   fusión de caminos (eso es §3, no §8).
+
+### Ronda 2
+
+6. **Escolta: cupo por nivel interno de Mercado** (placeholder 1/2/3). Si la caravana es capturada, los
+   escuadrones **vuelven a casa derrotados** (con debuff de derrota); se pierden carga y carros, no la tropa.
+7. **La escolta no consume ración** — abstracción. No es una campaña (a diferencia de Doc 5.13).
+8. **Baseline de calibración**: `1 carro básico + 1 buey ≈ 500 / 16`. Todo lo demás se calibra alrededor de esa
+   ancla; el batch NPC no debe moverse.
+9. **La caravana es persistente y se reconfigura** (como hoy). El pool de carros/animales **vive dentro de
+   caravanas**, no suelto: se construye un carro y se compra su animal *sobre* una caravana concreta.
+
+### Ronda 3
+
+10. **Caravana capturada: carros y animales destruidos.** El atacante se queda solo con la carga, en su carro,
+    como hoy. Sin transferencia de activos entre Facciones.
+11. **Estado `'preparando'` en el origen: bloquea todo, cancelable con devolución total** mientras no haya
+    salido. Igual que quitar una obra `'en_cola'` (Doc 4.2).
+12. **Escolta por viaje**: se cede al lanzar, se recupera cuando la caravana vuelve. No es un enganche
+    permanente.
+13. **Carro de Carpintería: por ahora solo uno, "reforzado", que da más capacidad.** El catálogo de carros se
+    amplía más adelante (otros ejes: resistencia a captura, penalización de velocidad).
+
+### Ronda 4
+
+14. **Inmunidad del camello al desierto: diferida.** No existe bioma `desierto` de primera clase (el tipo es
+    `agua|costa|estepa|llanuraFertil|colina|montana|cima`; la aridez del Nilo es `estepa` de fertilidad baja).
+    En este pase el camello es solo "opción media: entre buey y caballo en velocidad y carga, más barato que
+    el caballo". La inmunidad se diseña cuando exista un bioma árido real.
+15. **Auto vs manual: flag de reserva explícito.** `reservadaManual = true` saca la caravana del reparto
+    automático sea cual sea su tamaño. No se infiere de la composición.
+
+### Ronda 5 (implementando el Paso 2)
+
+16. **`crearCaravana` crea un casco VACÍO, gratis.** El coste está en las piezas: carro básico 20 madera
+    (Mercado), carro reforzado 40 madera (Carpintería), y los animales aparte.
+17. **El buey se paga en MADERA (30), no en oro.** Mismo criterio que quitarle la piedra al Mercado (Doc
+    4.2.1): "todo animal cuesta oro" —enunciado original— revive el deadlock "sin caravana no hay comercio,
+    sin comercio no hay oro, sin oro no hay caravana" para cualquier asentamiento sin mina. El buey barato en
+    madera es la vía de entrada; caballo (60 oro) y camello (40 oro) son la mejora. `basico` + `buey` =
+    50 madera, el mismo coste que crear una caravana antes → el batch NPC no se mueve.
+    > **EN REVISIÓN (2026-09-08, `Economia_Del_Oro_Definicion.md` §4.3):** el bloque de economía del oro pasa
+    > el buey a oro (~12). El deadlock que justificaba la madera se corta por otras dos vías en ese bloque —
+    > el impuesto de población (oro pasivo sin mina) y la caravana #0 gratis (punto 18, revertido).
+18. **El bootstrap del Mercado (caravana #0 gratis) se DESCARTA.** Medido: una sola caravana gratis por
+    asentamiento al completarse el Mercado mueve 42 métricas del batch (seed 7, 40 Facciones, 400 ticks) —
+    `oroMedio` 155→122, artesanos y edificios de transformación a **cero**, `nivelFaccionMax` 8→7. Inunda el
+    mapa de caravanas de trueque activas y los asentamientos exportan lo que necesitan para subir de nivel. El
+    valor que aportaba era marginal (evitar un `crearCaravana` tras el Mercado, y ni siquiera hay espera: el
+    casco vacío es gratis). Se cae. El enunciado ("el Mercado te da un carro y un animal") queda como sabor,
+    no como mecánica.
+    > **SIGUE DESCARTADA (2026-09-08, `Economia_Del_Oro_Definicion.md` §4.3 y §10 Paso 5):** el bloque
+    > "economía del oro" probó reintroducirla como on-ramp del buey en oro, la re-midió con el arnés ya
+    > arreglado, y la quitó — además de on-ramp era un amplificador de la fuente (todo asentamiento comerciando
+    > desde el tick 1 → más comisiones → más oro), y con los 100 oro de fundación cubriendo el arranque no
+    > compensaba. La medición original de este punto estaba contaminada por el bug de ids, pero la conclusión
+    > (bootstrap fuera) se sostiene post-fix.
+19. **Se elimina el modelo viejo y su fallback** (a petición del usuario: en fase de desarrollo no se dejan
+    versiones incompletas anteriores en el código). Fuera `CARAVANA_CATALOGO.comercial` (capacidad/velocidad/
+    `costoConstruccion` fijos) y fuera la rama `if (carros === undefined) → catálogo` de
+    `capacidadCaravana`/`velocidadCaravana`. La migración v11→v12 ya garantiza que toda comercial tenga
+    `carros`; el NPC reserva vía `costoCaravanaPorDefecto()`. Batch bit-idéntico.
+
+### Ronda 6 (implementando el Paso 4 — escolta)
+
+20. Tres decisiones tomadas al implementar la escolta, coherentes con lo ya cerrado:
+    - **La escolta viaja como copias en `Caravana.escolta`**, no como ids que apuntan a la guarnición. Sale de
+      `Asentamiento.escuadrones` al preparar y vuelve al regresar. Así el combate lee la escolta directamente y
+      no hay que enhebrar la guarnición por tres sitios de combate.
+    - **Captura → caravana eliminada** (como la caravana sin escolta, Doc 3.10 y §3.13.6). No se conserva un
+      "casco vacío" — el dueño reconstruye contra su cupo. Lo que sobrevive es la escolta.
+    - **El regreso de la escolta tras una derrota se abstrae** (teletransporte a la guarnición del origen),
+      igual que ya se abstrae su ración. No se convierte en una mini-columna que marche por el mapa.
+    - **Gap conocido, anotado en el canon**: el tope de Liderazgo al ceder escolta suma lo que el jugador ya
+      tiene en otras escoltas, pero NO lo que lleve a la vez en un ejército. Se cruza cuando pique.
+
+## 2. Lo que ya existe y no hay que inventar
+
+- **El ciclo de estados de la caravana** ya es una máquina: `disponible | adjunta | en_transito | retornando`
+  (`Caravana.estado`). Añadir `preparando` es un estado más, no un sistema nuevo.
+- **La vuelta a casa desandando la ruta** (`retornando`, `avanzarCaravanas` en `engine/trade.ts`) ya está — el
+  revamp no toca el "nunca hay teletransporte".
+- **Ceder escuadrones y sacarlos de la guarnición** ya tiene precedente exacto: `movilizarEjercito` mueve
+  escuadrones de `Asentamiento.escuadrones` a `Ejercito.escuadrones` y por eso la guarnición deja de contar
+  con ellos (Doc 5.12.4). La escolta hace lo mismo con destino una caravana en vez de un ejército.
+- **La resolución de combate asimétrico** (atacante vs defensa) ya sirve para tres casos: intercepción entre
+  Facciones (`interceptarCaravanaConEjercito`), bandidos (`engine/bandidos.ts`) y la defensa base fija
+  (`defensaBaseCaravana`, Doc 3.10). La escolta añade un cuarto: atacante vs poder de los escuadrones-escolta.
+- **El cupo de flota, el cooldown y el scoring de asignación** (Doc 3.12) no cambian.
+- **Las políticas del Tesorero** `carga_ampliada` (×1.5 capacidad) y `rutas_rapidas` (×1.5 velocidad) siguen
+  aplicando — como multiplicador FINAL sobre la capacidad/velocidad ya derivadas.
+
+## 3. Representación en el motor
+
+### Cambios en `Caravana` (`src/domain/types.ts`)
+
+Solo para `tipo: 'comercial'`. Las otras tres categorías (militar/construccion/contrabando) no cambian y
+siguen leyendo `CARAVANA_CATALOGO`.
+
+```ts
+type CarroTipo = 'basico' | 'reforzado';
+type AnimalTipo = 'buey' | 'caballo' | 'camello';
+
+interface Caravana {
+  // ... campos actuales ...
+  /** Revamp (Doc 3.13). Una caravana comercial deriva capacidad/velocidad de aquí. La migración de snapshot
+   *  v11→v12 la puso en TODAS las comerciales guardadas (1 carro básico + 1 buey), así que a partir de v12
+   *  siempre está presente en una comercial — sin `carros` con tracción, capacidad y velocidad son 0. */
+  carros?: { tipoCarro: CarroTipo; animal?: AnimalTipo }[];
+  /** Escuadrones cedidos como escolta sin héroe (Doc 3.13.4) — los escuadrones EN SÍ, no ids (§20). Salen de
+   *  `Asentamiento.escuadrones` del origen al preparar y vuelven al regresar; mientras viajan, esa guarnición
+   *  no los cuenta. Solo presente en viaje. */
+  escolta?: Escuadron[];
+  /** Fuera del reparto automático (asignarCaravanasATrueque) cuando true. Decisión explícita del jugador. */
+  reservadaManual?: boolean;
+  /** Instante en que termina la preparación, presente solo en estado 'preparando'. */
+  preparaHasta?: Instante;
+  estado?: 'disponible' | 'preparando' | 'adjunta' | 'en_transito' | 'retornando';
+}
+```
+
+### Derivaciones (no se guardan)
+
+- `capacidadCaravana(c)` = Σ (`CARRO_CATALOGO[carro.tipoCarro].capacidadBase` × `ANIMAL_CATALOGO[carro.animal].factorCarga`) sobre los carros con animal. **Sin fallback a un catálogo fijo** — sin carros con tracción da 0. El factor de política `carga_ampliada` lo aplica el llamador.
+- `velocidadCaravana(c)` = min de `ANIMAL_CATALOGO[animal].velocidad` sobre los carros con animal; 0 sin animales (no puede salir). El factor `rutas_rapidas` lo aplica el llamador.
+- `costoCaravanaPorDefecto()` = suma por recurso de `CARRO_CATALOGO.basico.costo` + `ANIMAL_CATALOGO.buey.costo` (hoy 50 madera) — lo que reserva el NPC de laboratorio antes de montar una caravana.
+- `prepTicks(c)` = `CARAVANA_PREPARACION.kPorCarro × max(0, nº carros − 1)` (en `prepararCaravanaManual`, `engine/trade.ts`).
+- Defensa de la caravana en combate: si `caravana.escolta?.length` → `poderTotal(escolta, cohesión)`; si adjunta a un ejército → poder del ejército (5.13.3); si no → `MILITAR.defensaBaseCaravana` (3.10). Resuelto en `bandidos.ts` e `interceptarCaravanaConEjercito` directamente, sin un `poderDefensaCaravana` central (no hacía falta).
+- `cupoEscolta(asentamiento)` = `CARAVANA_ESCOLTA.cupoPorNivelMercado[nivelInternoMercado − 1]` (`engine/asentamientoQuery.ts`).
+- `devolverEscoltaAGuarnicion(guarnición, escolta)` = funde por `jugadorId + tropaId` (`engine/caravanas.ts`).
+
+### Constantes nuevas (`src/constants.ts`) — todas placeholder
+
+```ts
+export const CARRO_CATALOGO = {
+  basico:    { capacidadBase: 500, costo: { madera: 20 }, fabrica: 'mercado' },
+  reforzado: { capacidadBase: 800, costo: { madera: 40, /* placeholder */ }, fabrica: 'carpinteria' },
+} as const;
+
+export const ANIMAL_CATALOGO = {
+  buey:    { factorCarga: 1.0,  velocidad: 16, costo: { madera: 30 } }, // madera, no oro — ver Ronda 5 §17
+  caballo: { factorCarga: 0.5,  velocidad: 24, costo: { oro: 60 } },
+  camello: { factorCarga: 0.75, velocidad: 19, costo: { oro: 40 } },
+} as const;
+
+export const CARAVANA_PREPARACION = { kPorCarro: 2 };
+export const CARAVANA_ESCOLTA = { cupoPorNivelMercado: [1, 2, 3] as const };
+```
+
+**`CARAVANA_CATALOGO.comercial` se ELIMINA** (Ronda 5 §19): no queremos dejar el modelo viejo de capacidad/
+velocidad fijas conviviendo con el nuevo. La migración v11→v12 garantiza que toda comercial guardada tenga
+`carros`, así que no hay a quién servir de fallback. `CARAVANA_CATALOGO` se queda solo con `militar` /
+`construccion` (Fundación, Doc 1.8) / `contrabando`, que no son este revamp.
+
+### Comandos nuevos (`src/session/comandos/`)
+
+| Comando | Qué hace |
+|---|---|
+| `crearCaravana(asentamientoId)` | **HECHO (Paso 2).** Casco vacío, gratis, cuenta cupo + cooldown (`crearCaravanaVacia`, engine/trade.ts). |
+| `agregarCarroCaravana(caravanaId, tipoCarro)` | **HECHO (Paso 2).** Paga `CARRO_CATALOGO[tipo].costo`, añade un carro sin animal. `reforzado` exige Carpintería activa. Solo caravana `'disponible'`. |
+| `comprarAnimalCaravana(caravanaId, carroIndice, tipoAnimal)` | **HECHO (Paso 2).** Paga `ANIMAL_CATALOGO[tipo].costo`, engancha el animal a un carro sin tracción. |
+| `reservarCaravana(caravanaId, reservada)` | **HECHO (Paso 2).** Set `reservadaManual`. |
+| `moverCarroCaravana(desdeCaravanaId, haciaCaravanaId, carroIndice)` | **HECHO (Paso 3).** Mueve un carro (con su animal) entre dos caravanas propias `'disponible'` del mismo asentamiento. Sin coste. |
+| `prepararCaravana(caravanaId, jugadorId, destinoAsentamientoId, carga, escoltaEscuadronIds?)` | **HECHO (Pasos 3-4).** Reserva la carga, saca la escolta de la guarnición y valida su cupo, calcula/valida la ruta, pasa a `'preparando'` (o directo a `'en_transito'` si `prepTicks = 0`). |
+| `cancelarCaravana(caravanaId)` | **HECHO (Paso 3).** Solo en `'preparando'`. Devuelve la carga entera y la escolta a la guarnición, vuelve a `'disponible'`. |
+
+### Motor
+
+- ~~`asignarCaravanasATrueque`: filtrar `!c.reservadaManual`~~ (Paso 2). ~~`avanzarCaravanas`: al vencer
+  `preparaHasta`, `preparando → en_transito`~~ (Paso 3). ~~Bootstrap del Mercado~~: descartado (§18). Todo hecho.
+- `interceptarCaravanaConEjercito` (`engine/combate.ts`) y `engine/bandidos.ts`: tiran contra
+  `poderTotal(caravana.escolta)` si la hay. Devuelven la caravana actualizada (`null` si capturada) y las
+  `escoltasDevueltas`; la caravana capturada se elimina (§20) y la escolta superviviente vuelve a la guarnición
+  del origen vía `simulation.ts` / `avanzarEjercitos` / `interaccion.ts`.
+- Guarnición defensora: **cero código** — los escuadrones-escolta ya no están en `Asentamiento.escuadrones`
+  mientras viajan, así que no defienden por construcción.
+
+### Migración de snapshot
+
+`vN → vN+1`: toda `Caravana` con `tipo === 'comercial'` y sin `carros` recibe
+`carros: [{ tipoCarro: 'basico', animal: 'buey' }]`, `reservadaManual: false`. Estado y ruta se conservan. Las
+de Fundación (`tipo: 'construccion'`) y las efímeras no se tocan.
+
+### Separación de capas — se respeta la que ya hay (`CAPAS_PERMITIDAS`, `src/__tests__/arquitectura.test.ts`)
+
+Nada de este revamp cruza una frontera nueva. Cada pieza cae en su capa:
+
+| Capa | Qué le toca | Reglas que sigue valiendo |
+|---|---|---|
+| **`domain`** | Campos nuevos de `Caravana`, tipos `CarroTipo` / `AnimalTipo`, estado `'preparando'` | Sin dependencias. Solo datos. |
+| **`constants`** | `CARRO_CATALOGO`, `ANIMAL_CATALOGO`, `CARAVANA_PREPARACION`, `CARAVANA_ESCOLTA` | Solo ve `domain`. |
+| **`engine`** | `capacidadCaravana` / `velocidadCaravana` / `devolverEscoltaAGuarnicion` (`caravanas.ts`); `prepararCaravanaManual` / `seleccionarEscoltaCaravana` / `calcularRutaComercial` (`trade.ts`); el filtro `!reservadaManual` en `asignarCaravanasATrueque`; el countdown `preparando → en_transito` en `avanzarCaravanas`; la resolución de escolta en `interceptarCaravanaConEjercito` / `bandidos.ts` | **Puro y sin reloj**: `preparaHasta` es un `Instante`; `avanzarCaravanas` lo compara contra `ctx.instante`, nunca contra `Date.now()`. El motor **no sabe de sesiones**: recibe la escolta ya seleccionada (`Escuadron[]`) y solo la mueve. |
+| **`session`** | Los comandos (`crearCaravana`, `agregarCarroCaravana`, `comprarAnimalCaravana`, `reservarCaravana`, `moverCarroCaravana`, `prepararCaravana`, `cancelarCaravana`); la autorización (residente del origen + `jugadorId === actor` en `prepararCaravana`) en `comandos/autorizacion.ts`; el tope de Liderazgo al ceder escolta (`puedeLlevar` + `escoltaDeJugador`) | **Comando como función pura, síncrona, sin E/S** (Doc 7). La propiedad de los escuadrones (`seleccionarEscoltaCaravana` valida `jugadorId`), la residencia y el Liderazgo se comprueban en esta capa. |
+| **`server`** | La migración de snapshot en `persistenciaPartida.ts` (`migrarSnapshot`, `FORMATO_SNAPSHOT_VERSION`) | Único sitio con disco. La planificación horaria (diferida) aterrizaría aquí, en `RunnerDePartida` — no en este pase. |
+
+El test de fronteras (`arquitectura.test.ts`) es el guardián: si un paso mete un `import` de `session` en
+`engine`, falla en rojo antes de nada.
+
+## 4. La tensión de verdad: el batch
+
+Quitarle a la caravana su capacidad/velocidad fijas es tocar el número que mueve toda la economía NPC del
+laboratorio. La defensa es doble:
+
+1. **La caravana por defecto (1 carro básico + 1 buey) reproduce 500 / 16 exactos.** El NPC nunca compone
+   nada más, así que en batch toda caravana es esa. Debe medir **idéntico** al commit anterior — mismo oro
+   medio, mismos acuerdos cumplidos, mismos vivos.
+2. **`prepTicks(1 carro) = 0`.** Sin esto, meter un retardo de preparación en cada envío de trueque frenaría
+   el comercio NPC de forma medible. Con 1 carro sale al instante, como hoy.
+
+El control de la medición es "acuerdos cumplidos" y "oro medio": si el revamp del modelo los mueve con el NPC
+sin componer nada, hay un bug en la derivación.
+
+## 5. Plan
+
+Cada paso respeta la separación motor / sesión / infra de arriba y verifica en el navegador de punta a punta
+(no basta boot+render — memoria `feedback_verificacion_end_to_end`).
+
+1. ~~**Modelo + migración.**~~ **HECHO (commit `8ca635d`, limpieza en un commit posterior).** Campos nuevos
+   en `Caravana`, `CarroTipo`/`AnimalTipo`, `CARRO_CATALOGO`/`ANIMAL_CATALOGO`, `capacidadCaravana`/
+   `velocidadCaravana` (engine/caravanas.ts). Estado `preparando` en el tipo (sin usar aún).
+   `asignarCaravanasATrueque` filtra `reservadaManual`. Snapshot v11→v12. `CARAVANA_CATALOGO.comercial` y el
+   fallback al catálogo se eliminaron (§19). **Batch bit-idéntico.**
+2. ~~**Piezas.**~~ **HECHO.** `crearCaravanaVacia` + `agregarCarroACaravana` + `comprarAnimalParaCaravana`
+   (engine/trade.ts) y sus comandos `crearCaravana` / `agregarCarroCaravana` / `comprarAnimalCaravana` /
+   `reservarCaravana`. `construirCaravanaComercial` recompone la caravana por defecto para el NPC (50 madera,
+   sin cambio). Bootstrap descartado (§18). `moverPieza` diferido a Paso 3. **Batch bit-idéntico.**
+3. ~~**Preparación.**~~ **HECHO.** `prepararCaravanaManual` (elige carga + destino, reserva la carga, calcula
+   y valida la ruta), estado `'preparando'` con `preparaHasta`, `cancelarPreparacionCaravana` (devolución
+   total), transición `preparando → en_transito` en `avanzarCaravanas` al vencer el plazo. `CARAVANA_PREPARACION`.
+   `moverCarroEntreCaravanas`. `bandidos.ts` ignora `preparando`. La lógica de ruta se extrajo a
+   `calcularRutaComercial`, reusada por el reparto automático. **Decisión al implementar:** el lanzamiento
+   manual **no se vincula a un trueque** — vuelca la carga en el almacén del destino y paga comisión, como
+   cualquier entrega; es logística de recursos, no cumplimiento de acuerdos (eso lo sigue haciendo el reparto
+   automático). Enganchar un envío manual a un trueque concreto queda como mejora futura. Batch bit-idéntico.
+4. ~~**Escolta sin héroe.**~~ **HECHO.** `Caravana.escolta: Escuadron[]` (los escuadrones EN SÍ, no ids) — se
+   sacan de la guarnición al preparar (`seleccionarEscoltaCaravana`), vuelven al regresar la caravana o al
+   cancelar (`devolverEscoltaAGuarnicion`, funde por jugador+tropa). `cupoEscolta(asentamiento)` por nivel de
+   Mercado (`CARAVANA_ESCOLTA`). Combate: `bandidos.ts` e `interceptarCaravanaConEjercito` tiran contra
+   `poderTotal(caravana.escolta)` en vez de `defensaBaseCaravana`; la escolta sufre bajas (0.05 si aguanta,
+   0.25 si cae) y `heridoHasta`. Captura → caravana eliminada, escolta superviviente devuelta vía
+   `escoltasDevueltas` (bandidos → `simulation.ts`; ejército → `avanzarEjercitos`; comando `interceptar` →
+   `interaccion.ts`). Liderazgo: check al ceder (suma la escolta ya cedida del jugador). **Decisiones al
+   implementar** (§20). Batch bit-idéntico.
+5. **Canon + medición.** Reconciliar Doc 3.13 / 4.2.1 / 5.13.3 con lo medido — **hecho**. Batch de control:
+   bit-idéntico en los cuatro pasos.
+
+## 6. Invariantes
+
+- Una caravana `comercial` que puede viajar tiene **≥1 carro con animal**. El casco vacío (`crearCaravana`)
+  tiene 0 carros y no puede salir hasta que se le monten piezas.
+- **Solo los carros con animal** cuentan capacidad y viajan. Un carro sin animal se queda en el origen.
+- `caravana.escolta` no vacío ⇒ `estado !== 'disponible'`. La escolta solo existe en viaje; sus escuadrones
+  NO están a la vez en `Asentamiento.escuadrones`.
+- Ceder tropa a una escolta **cuenta contra el Liderazgo** del jugador cedente (no lo libera).
+- `reservadaManual` ⇒ invisible a `asignarCaravanasATrueque`.
+- `prepTicks` de una caravana de 1 carro es **0** — el timing del batch no cambia.
+- La captura **elimina la caravana** (carros, animales, carga); **nunca** transfiere carros/animales a otra
+  Facción. La escolta superviviente vuelve a la guarnición del origen.
+- La caravana **nunca se teletransporta**: `retornando` desanda la ruta (regla heredada de 3.12). La escolta
+  sí se abstrae al volver tras una derrota (§20).
+- **El motor no importa `session` ni lee el reloj.** La validación de residencia y propiedad de escuadrones
+  vive en `session`; el motor compara `preparaHasta` contra `ctx.instante`. `arquitectura.test.ts` lo vigila.
+
+## 7. Puntos abiertos
+
+- **Todas las cifras son placeholder** sin calibrar por simulación: `kPorCarro`, `factorCarga`/`velocidad`/
+  `costoOro` de cada animal, `capacidadBase` de cada carro, `cupoPorNivelMercado`.
+- **¿El camello se gana el sitio sin su inmunidad al desierto?** Riesgo de que sea un "buey peor" hasta que
+  exista el bioma árido. Vigilar en calibración; si no aporta nada, recortarlo del catálogo hasta entonces.
+- **Experiencia de Facción por defensa de caravana.** Hoy `NIVEL_FACCION.xp.defensaCaravana` no se multiplica
+  por jugadores participantes porque "la escolta no tiene escuadrones/jugadores reales" (comentario en
+  `constants.ts`). Con escolta real de escuadrones, decidir si pasa a multiplicarse como el resto de combate.
+- **Visibilidad por tamaño y planificación horaria** (diferidas) condicionan la UI de preparación: construirla
+  sin cerrarles la puerta.
+- **Unificación con `Ejercito.suministro`** (Doc 5.13, nota de 5.13.3): sigue diferida; el carro de columna y
+  el carro de caravana son el mismo concepto físico y algún día se unifican.

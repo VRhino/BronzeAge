@@ -10,6 +10,10 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { crearServidor } from '../api';
+import { crearRegistroProveedores } from '../../acceso/proveedorIdentidad';
+import { proveedoresPorDefecto } from '../identidad/proveedoresActivos';
+import { crearRepositorioIdentidadEnDisco } from '../identidad/repositorioEnDisco';
+import { instanteDeTick } from '../../session/estado';
 
 /** El operador declara administradores por identidad externa; `dev jefa` es la de las pruebas. */
 const ADMINS = [{ proveedor: 'dev', sujetoId: 'jefa' }];
@@ -119,6 +123,8 @@ describe('GET /admin/partidas (Fase C12: descubrimiento)', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().partidas.map((p: { gameId: string }) => p.gameId).sort()).toEqual(['g1', 'g2']);
     expect(res.json().partidas[0]).toHaveProperty('mapaId');
+    // D4/D6: el resumen fecha la partida con el instante de mundo (el tick interno no viaja).
+    expect(res.json().partidas[0]).toMatchObject({ instante: instanteDeTick(0) });
   });
 
   it('401 sin sesion, 403 sin ser administrador global', async () => {
@@ -135,7 +141,7 @@ describe('POST /admin/partidas', () => {
     const { res } = await partidaCreada('g1');
 
     expect(res.statusCode).toBe(201);
-    expect(res.json()).toEqual({ gameId: 'g1', tick: 0, version: 0, mapaId: expect.any(String) });
+    expect(res.json()).toEqual({ gameId: 'g1', instante: instanteDeTick(0), version: 0, mapaId: expect.any(String) });
   });
 
   it('401 sin sesion — antes de C3 este endpoint era abierto', async () => {
@@ -215,7 +221,7 @@ describe('POST /admin/partidas', () => {
     const res = await app.inject({ method: 'POST', url: '/v1/admin/partidas', headers: admin, payload: { gameId: 'g1', seed: 999, forzar: true } });
 
     expect(res.statusCode).toBe(201);
-    expect(res.json()).toEqual({ gameId: 'g1', tick: 0, version: 0, mapaId: expect.any(String) });
+    expect(res.json()).toEqual({ gameId: 'g1', instante: instanteDeTick(0), version: 0, mapaId: expect.any(String) });
   });
 });
 
@@ -225,7 +231,7 @@ describe('POST /admin/partidas/:gameId/tick', () => {
     const res = await app.inject({ method: 'POST', url: '/v1/admin/partidas/g1/tick', headers: admin });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json().tick).toBe(1);
+    expect(res.json().instante).toBe(instanteDeTick(1));
   });
 
   it('401 sin sesion; 403 para un jugador de la partida', async () => {
@@ -309,41 +315,6 @@ describe('GET /admin/partidas/:gameId/exportar (Fase C12)', () => {
 
     const jugador = await jugadorEn('g1');
     expect((await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/exportar', headers: jugador })).statusCode).toBe(403);
-  });
-});
-
-describe('GET /admin/partidas/:gameId/exportar-unity (Fase C12)', () => {
-  it('devuelve heightmap/splatmap en base64 y metadata, a resolución reducida', async () => {
-    const { admin } = await partidaCreada('g1', 3);
-
-    const res = await app.inject({
-      method: 'GET',
-      url: '/v1/admin/partidas/g1/exportar-unity?resolucion=513&resolucionSplatmap=128',
-      headers: admin,
-    });
-
-    expect(res.statusCode).toBe(200);
-    const cuerpo = res.json();
-    expect(cuerpo.metadata.formatoVersion).toBe(1);
-    expect(typeof cuerpo.heightmapRaw).toBe('string');
-    // 513² muestras × 2 bytes = 526338 bytes -> ~701784 caracteres en base64 (4/3 + relleno).
-    expect(Buffer.from(cuerpo.heightmapRaw, 'base64').byteLength).toBe(513 * 513 * 2);
-    expect(cuerpo.splatmap.resolucion).toBe(128);
-    expect(Object.keys(cuerpo.splatmap.capas).length).toBeGreaterThan(0);
-  });
-
-  it('400 si la resolucion no cumple 2^n+1 (la exige el importador RAW de Unity)', async () => {
-    const { admin } = await partidaCreada('g1');
-    const res = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/exportar-unity?resolucion=500', headers: admin });
-    expect(res.statusCode).toBe(400);
-  });
-
-  it('401 sin sesion, 403 para un jugador', async () => {
-    await partidaCreada('g1');
-    expect((await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/exportar-unity' })).statusCode).toBe(401);
-
-    const jugador = await jugadorEn('g1');
-    expect((await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/exportar-unity', headers: jugador })).statusCode).toBe(403);
   });
 });
 
@@ -781,7 +752,7 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
         method: 'POST',
         url: '/v1/jugador/partidas/g1/comandos',
         headers: auth,
-        // `fundarAsentamiento` exige `faccionId` y `posicion` — este cuerpo no trae ninguno.
+        // `fundarAsentamiento` exige `faccionId` — este cuerpo no trae ninguno.
         payload: { tipo: 'fundarAsentamiento', params: {} },
       });
 
@@ -869,7 +840,36 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       // `@fastify/swagger` convierte `const` a `enum: [valorUnico]` al publicar: OpenAPI 3.0 no tiene `const`
       // (llegó en JSON Schema draft 6, y 3.0 se basa en un dialecto anterior) — ajv en runtime sí lo entiende
       // tal cual (la validación de verdad usa el `schema.body` de Fastify, no este documento).
-      expect(cuerpo.oneOf.length).toBe(32); // 30 + `unirseAFaccion`/`dejarFaccion` (2026-08-27)
+      // 35 + los 4 de ejércitos (Paso 3 del movimiento de ejércitos, 2026-09-02: movilizar, unirse, replegar
+      // y estacionar) + `alternarReabastecerAliados` (Paso 8: abrir el almacén a los ejércitos aliados) +
+      // `adjuntarCaravana`/`soltarCaravana` (Paso 9a: el tren de suministros) + `cargarCaravana`/
+      // `entregarDeCaravana` (Paso 9b: la escolta) — MENOS `combateCampoAbierto` e `interceptarCaravana`,
+      // retirados en el Paso 11 (2026-09-04) al pasar a ser resoluciones del motor por geometría. La
+      // superficie de jugador encogió, que es parte del diseño: se manda un ejército en vez de declarar un
+      // ataque desde el sofá.
+      //
+      // +3 con la presencia del jugador (paso 3 del jugador situado, 2026-09-06): `salirAlMundo`,
+      // `entrarEnAsentamiento` y `salirDeAsentamiento`. Aquí la superficie CRECE, y también es parte del
+      // diseño: entrar y salir dejan de ser efectos colaterales de otra cosa y pasan a ser actos del jugador.
+      // +1 con `marcharA` (paso 4): la columna que el paso 3 crea, en marcha.
+      // +4 con la composición de la columna (paso 4b): unirse en campo, contestar la petición, separarse y
+      // ceder el liderazgo.
+      // +2 con la puerta (paso 5): fijar la política de acceso y vetar.
+      // +1 con `inspeccionar` (paso 8a): sin ver no hay clíc, y sin acercarse no hay detalle.
+      // +3 con atacar, perseguir y dejar de perseguir (paso 8c/8d).
+      // +2 con contestar un trueque (`aceptarTrueque`/`rechazarTrueque`): desde que un trueque necesita un sí
+      // explícito, decir que sí y decir que no son actos del otro lado, no un efecto de proponer.
+      // +1 con `comerciarEnPlaza`: desde que las órdenes se cumplen en el mostrador, tomar una es un acto del
+      // jugador que está allí, no un emparejamiento que ocurría solo en el tick.
+      // +3 con el revamp de caravanas Paso 2 (Doc 3.13.2): `agregarCarroCaravana`, `comprarAnimalCaravana` y
+      // `reservarCaravana` — la caravana se compone pieza a pieza.
+      // +3 con el Paso 3 (Doc 3.13.3): `prepararCaravana`, `cancelarCaravana`, `moverCarroCaravana` — el
+      // lanzamiento manual con estado de preparación.
+      // +1 con `cambiarResidencia` (Doc 2.5/2.6): mudar la base de un asentamiento a otro de la propia Facción.
+      // +3 con `guarnecer` (Ocupacion §2.3): marchar un ejército a una plaza propia y volcar la tropa; y las
+      // dos operaciones de la caravana que queda 'aparcada' allí — `moverCargaCaravanaAparcada` y
+      // `enviarCaravanaAlOrigen` (§2.3d).
+      expect(cuerpo.oneOf.length).toBe(69);
       const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
       expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
     });
@@ -911,12 +911,21 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
   it('una entidad inexistente NO es 403: la existencia la juzga el comando, con su codigo de error', async () => {
     await partidaCreada('g1');
     const auth = await jugadorEn('g1');
+    // Se funda donde se está (Doc 1.3): hace falta existir ya en el mundo, con columna, antes de poder
+    // fundar — un comando cualquiera de alta sirve, para que esta prueba mida lo que dice medir (una
+    // Facción inexistente) y no un jugador sin registrar.
+    await app.inject({
+      method: 'POST',
+      url: '/v1/jugador/partidas/g1/comandos',
+      headers: auth,
+      payload: { tipo: 'crearFaccion', params: { nombre: 'Placeholder' } },
+    });
 
     const res = await app.inject({
       method: 'POST',
       url: '/v1/jugador/partidas/g1/comandos',
       headers: auth,
-      payload: { tipo: 'fundarAsentamiento', params: { faccionId: 'no-existe', posicion: { x: 500, y: 500 } } },
+      payload: { tipo: 'fundarAsentamiento', params: { faccionId: 'no-existe' } },
     });
 
     expect(res.statusCode).toBe(200);
@@ -961,6 +970,309 @@ describe('reanudacion tras "reinicio del proceso"', () => {
     const res = await app.inject({ method: 'POST', url: '/v1/admin/partidas', headers: nuevaSesion, payload: { gameId: 'g1', seed: 999 } });
 
     expect(res.statusCode).toBe(201);
-    expect(res.json().tick).toBe(2); // retomó los 2 ticks ya guardados, no volvió a 0
+    expect(res.json().instante).toBe(instanteDeTick(2)); // retomó los 2 ticks ya guardados, no volvió a 0
+  });
+});
+
+describe('gestión de membresías técnicas (/admin/partidas/:gameId/membresias, cierre de Fase C)', () => {
+  /** `usuarioId` de un sujeto tras iniciar sesión — lo que un admin necesita para otorgarle un rol. */
+  async function usuarioIdDe(sujetoId: string): Promise<string> {
+    const login = await app.inject({ method: 'POST', url: '/v1/sesiones', headers: { authorization: `dev ${sujetoId}` } });
+    return login.json().usuarioId;
+  }
+
+  it('el admin otorga un rol, aparece en la lista, y se puede revocar', async () => {
+    const { admin } = await partidaCreada('g1');
+    const beto = await usuarioIdDe('beto');
+
+    const otorgar = await app.inject({
+      method: 'POST',
+      url: '/v1/admin/partidas/g1/membresias',
+      headers: admin,
+      payload: { usuarioId: beto, rol: 'moderador' },
+    });
+    expect(otorgar.statusCode).toBe(201);
+
+    const lista = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/membresias', headers: admin });
+    expect(lista.json().membresias).toContainEqual(expect.objectContaining({ usuarioId: beto, rol: 'moderador', vigente: true }));
+
+    // Beto ya puede administrar la partida.
+    const betoAuth = { authorization: `sesion ${(await app.inject({ method: 'POST', url: '/v1/sesiones', headers: { authorization: 'dev beto' } })).json().sesionId}` };
+    expect((await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1', headers: betoAuth })).statusCode).toBe(200);
+
+    const revocar = await app.inject({ method: 'DELETE', url: `/v1/admin/partidas/g1/membresias/${beto}`, headers: admin });
+    expect(revocar.statusCode).toBe(200);
+
+    // Revocada: ya no administra, y la lista lo marca no vigente.
+    expect((await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1', headers: betoAuth })).statusCode).toBe(403);
+    const listaTras = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/membresias', headers: admin });
+    expect(listaTras.json().membresias).toContainEqual(expect.objectContaining({ usuarioId: beto, vigente: false }));
+  });
+
+  it('404 si el usuario nunca inició sesión; 409 si ya tiene membresía', async () => {
+    const { admin } = await partidaCreada('g1');
+    expect(
+      (await app.inject({ method: 'POST', url: '/v1/admin/partidas/g1/membresias', headers: admin, payload: { usuarioId: 'usuario-999', rol: 'moderador' } })).statusCode
+    ).toBe(404);
+
+    const beto = await usuarioIdDe('beto');
+    await app.inject({ method: 'POST', url: '/v1/admin/partidas/g1/membresias', headers: admin, payload: { usuarioId: beto, rol: 'observador' } });
+    const repetido = await app.inject({ method: 'POST', url: '/v1/admin/partidas/g1/membresias', headers: admin, payload: { usuarioId: beto, rol: 'moderador' } });
+    expect(repetido.statusCode).toBe(409);
+  });
+
+  it('el esquema rechaza un rol no otorgable (jugador, administrador_global)', async () => {
+    const { admin } = await partidaCreada('g1');
+    const beto = await usuarioIdDe('beto');
+    for (const rol of ['jugador', 'administrador_global', 'servicio_npc']) {
+      const res = await app.inject({ method: 'POST', url: '/v1/admin/partidas/g1/membresias', headers: admin, payload: { usuarioId: beto, rol } });
+      expect(res.statusCode).toBe(400);
+    }
+  });
+
+  it('un moderador puede administrar la partida pero NO repartir roles', async () => {
+    const { admin } = await partidaCreada('g1');
+    const beto = await usuarioIdDe('beto');
+    await app.inject({ method: 'POST', url: '/v1/admin/partidas/g1/membresias', headers: admin, payload: { usuarioId: beto, rol: 'moderador' } });
+    const betoAuth = { authorization: `sesion ${(await app.inject({ method: 'POST', url: '/v1/sesiones', headers: { authorization: 'dev beto' } })).json().sesionId}` };
+    const carlos = await usuarioIdDe('carlos');
+
+    const res = await app.inject({ method: 'POST', url: '/v1/admin/partidas/g1/membresias', headers: betoAuth, payload: { usuarioId: carlos, rol: 'observador' } });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('404 al revocar una membresía inexistente; 403 sin sesión de administración', async () => {
+    const { admin } = await partidaCreada('g1');
+    expect((await app.inject({ method: 'DELETE', url: '/v1/admin/partidas/g1/membresias/usuario-999', headers: admin })).statusCode).toBe(404);
+
+    const ana = await sesionDe('ana');
+    expect((await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/membresias', headers: ana })).statusCode).toBe(403);
+  });
+});
+
+describe('persistencia de identidad tras "reinicio del proceso" (cierre de Fase C)', () => {
+  let enDisco: Awaited<ReturnType<typeof crearRepositorioIdentidadEnDisco>>;
+
+  async function servidorConIdentidadEnDisco(): Promise<FastifyInstance> {
+    enDisco = await crearRepositorioIdentidadEnDisco(join(directorio, 'identidad.json'));
+    return crearServidor({
+      directorio,
+      administradoresGlobales: ADMINS,
+      identidad: { proveedores: crearRegistroProveedores(proveedoresPorDefecto()), repositorio: enDisco.repositorio },
+      // Sin esto, `afterEach` borraba el directorio con una escritura de identidad en vuelo y el test salía
+      // intermitente con ENOTEMPTY en Windows.
+      alCerrar: () => enDisco.esperarEscrituras(),
+    });
+  }
+
+  it('una membresía de jugador sobrevive a recrear el servidor sobre el mismo directorio', async () => {
+    await app.close();
+    app = await servidorConIdentidadEnDisco();
+
+    const admin = await sesionDe('jefa');
+    await app.inject({ method: 'POST', url: '/v1/admin/partidas', headers: admin, payload: { gameId: 'g1', seed: 42 } });
+    const ana = await sesionDe('ana');
+    await app.inject({ method: 'POST', url: '/v1/jugador/partidas/g1/membresia', headers: ana });
+    await enDisco.esperarEscrituras();
+    await app.close();
+
+    // Proceso "nuevo": relee el archivo de identidad.
+    app = await servidorConIdentidadEnDisco();
+    const anaOtraVez = await sesionDe('ana');
+    const res = await app.inject({ method: 'GET', url: '/v1/sesiones/actual?gameId=g1', headers: anaOtraVez });
+    expect(res.json().rol).toBe('jugador');
+  });
+});
+
+// Auditoría de comandos (Fase E2). Lo que se vigila aquí es que las CUATRO salidas de `ejecutarComandoHttp`
+// dejen línea, más el 400 de esquema que ni siquiera llega a esa función (lo rechaza ajv antes, y lo captura
+// el gancho `onError` de la ruta). El módulo por su cuenta se prueba en `auditoria.test.ts`.
+// Metricas de operacion (Fase E3). Lo que se vigila por HTTP es la FRONTERA: quien puede pedirlas y que
+// llegan con la forma declarada. Que cada numero mida lo que dice, en `metricas.test.ts`.
+describe('metricas de operacion (E3)', () => {
+  it('GET /admin/metricas devuelve proceso, comandos y partidas abiertas', async () => {
+    const { admin } = await partidaCreada('g1');
+    const ana = await jugadorEn('g1');
+    await app.inject({ method: 'POST', url: '/v1/jugador/partidas/g1/comandos', headers: ana, payload: { tipo: 'crearFaccion', params: { nombre: 'A' } } });
+    await app.inject({ method: 'POST', url: '/v1/admin/partidas/g1/tick', headers: admin });
+
+    const res = await app.inject({ method: 'GET', url: '/v1/admin/metricas', headers: admin });
+
+    expect(res.statusCode).toBe(200);
+    const m = res.json();
+    expect(m.proceso.partidasAbiertas).toBe(1);
+    expect(m.comandos.aceptados).toBeGreaterThanOrEqual(1);
+    expect(m.auditoriaFallida).toBe(0);
+    expect(m.partidas[0].gameId).toBe('g1');
+    expect(m.partidas[0].ticksEjecutados).toBe(1);
+    expect(m.partidas[0].colaPendiente).toBe(0);
+    // Campo a campo y no `toMatchObject`: Fastify filtra la respuesta por el esquema, asi que un campo que
+    // exista en el tipo pero falte en `ESQUEMA_METRICAS` se descarta EN CALIENTE y ningun test que llame a
+    // `recogerMetricas` directo lo detectaria. Paso justo con `ticksOmitidos`, encontrado verificando en vivo.
+    for (const campo of ['tick', 'version', 'tickMsUltimo', 'tickMsMedio', 'tickMsMaximo', 'ultimaRafagaTicks', 'mayorRafagaTicks', 'ticksOmitidos', 'conexiones', 'relojDeMundoActivo']) {
+      expect(m.partidas[0]).toHaveProperty(campo);
+    }
+  });
+
+  it('exige administrador GLOBAL, no basta con administrar una partida', async () => {
+    // Describe el PROCESO —memoria, uptime, TODAS las partidas abiertas—, asi que concederlo por membresia de
+    // una partida filtraria la actividad de las demas.
+    await partidaCreada('g1');
+    const ana = await jugadorEn('g1');
+    expect((await app.inject({ method: 'GET', url: '/v1/admin/metricas', headers: ana })).statusCode).toBe(403);
+    expect((await app.inject({ method: 'GET', url: '/v1/admin/metricas' })).statusCode).toBe(401);
+  });
+
+  it('los rechazos quedan contados por causa, no agregados', async () => {
+    const { admin } = await partidaCreada('g1');
+    await app.inject({ method: 'POST', url: '/v1/admin/partidas/g1/comandos', headers: admin, payload: { tipo: 'crearFaccion', params: { nombre: 'X' } } }); // 403
+
+    const m = (await app.inject({ method: 'GET', url: '/v1/admin/metricas', headers: admin })).json();
+    expect(m.comandos.autorizacion).toBe(1);
+    expect(m.comandos.dominio).toBe(0);
+  });
+});
+
+describe('auditoría de comandos (E2)', () => {
+  /** La auditoría escribe sin esperar (ver `RegistroDeAuditoria.registrar`), así que hay que drenar antes de
+   * leer. Cerrar la app lo hace por el hook `onClose`; aquí basta con un ciclo de la cola. */
+  async function auditoriaDe(gameId: string) {
+    await app.close();
+    const { leerAuditoria } = await import('../auditoria');
+    return (await leerAuditoria(directorio, gameId)).entradas;
+  }
+
+  it('un comando ACEPTADO deja linea con actor, version e instante de mundo', async () => {
+    await partidaCreada('g1');
+    const ana = await jugadorEn('g1');
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/jugador/partidas/g1/comandos',
+      headers: ana,
+      payload: { tipo: 'crearFaccion', params: { nombre: 'Los Alfareros' } },
+    });
+    expect(res.statusCode).toBe(200);
+
+    const entradas = await auditoriaDe('g1');
+    expect(entradas).toHaveLength(1);
+    expect(entradas[0]).toMatchObject({ gameId: 'g1', comando: 'crearFaccion', resultado: 'aceptado' });
+    // El actor lo resuelve el servidor de la sesión, nunca del cuerpo (doc 2, principio 3). Es el
+    // `jugadorId` de la Membresia, que por diseño REUTILIZA el id del Usuario (ver `jugador.ts`: "mismo
+    // valor que hoy usa el motor como jugadorId", sin generador de ids aparte).
+    expect(entradas[0]!.actor).toMatch(/^usuario-/);
+    // `version` e `instante` describen la partida DESPUÉS del comando: son lo que permite cruzar esta línea
+    // con el evento de dominio que produjo (`EventoDominioConVersion.version`, C13).
+    expect(entradas[0]!.version).toBeGreaterThan(0);
+    expect(entradas[0]!.instante).toBe(instanteDeTick(0));
+  });
+
+  it('un 403 de autorizacion deja linea — antes de E2 no dejaba ningun rastro', async () => {
+    // Es la línea de moderación por excelencia: el intento de actuar sobre lo que no es tuyo.
+    const { admin } = await partidaCreada('g1');
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/admin/partidas/g1/comandos',
+      headers: admin,
+      payload: { tipo: 'crearFaccion', params: { nombre: 'X' } },
+    });
+    expect(res.statusCode).toBe(403);
+
+    const entradas = await auditoriaDe('g1');
+    expect(entradas).toHaveLength(1);
+    expect(entradas[0]).toMatchObject({ comando: 'crearFaccion', resultado: 'rechazado', causa: 'autorizacion' });
+    expect(entradas[0]!.detalle).toBeTruthy();
+    // No llegó a ejecutarse, así que no hay instante de mundo que atribuirle.
+    expect(entradas[0]!.instante).toBeUndefined();
+  });
+
+  it('un rechazo de DOMINIO deja linea con su codigo de error, y no se confunde con un rechazo de permiso', async () => {
+    await partidaCreada('g1');
+    const ana = await jugadorEn('g1');
+    await app.inject({
+      method: 'POST',
+      url: '/v1/jugador/partidas/g1/comandos',
+      headers: ana,
+      payload: { tipo: 'crearFaccion', params: { nombre: 'Primera' } },
+    });
+    // Segunda Facción con el mismo jugador: el dominio dice que no (un jugador solo crea una).
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/jugador/partidas/g1/comandos',
+      headers: ana,
+      payload: { tipo: 'crearFaccion', params: { nombre: 'Segunda' } },
+    });
+    expect(res.statusCode).toBe(200); // 200 con `resultado.ok: false`: el dominio rechaza, no la ruta
+    expect(res.json().resultado.ok).toBe(false);
+
+    const entradas = await auditoriaDe('g1');
+    expect(entradas.map((e) => e.resultado)).toEqual(['aceptado', 'rechazado']);
+    expect(entradas[1]).toMatchObject({ causa: 'dominio' });
+    expect(entradas[1]!.detalle).toBe(res.json().resultado.codigoError);
+  });
+
+  it('un 400 de esquema deja linea aunque nunca llegue al manejador', async () => {
+    await partidaCreada('g1');
+    const ana = await jugadorEn('g1');
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/jugador/partidas/g1/comandos',
+      headers: ana,
+      payload: { tipo: 'crearFaccion', params: { nombre: 123 } }, // `nombre` no es string
+    });
+    expect(res.statusCode).toBe(400);
+
+    const entradas = await auditoriaDe('g1');
+    expect(entradas).toHaveLength(1);
+    expect(entradas[0]).toMatchObject({ comando: 'crearFaccion', resultado: 'rechazado', causa: 'esquema' });
+    // Se identifica al actor pese a que la petición no pasó validación: la sesión se resuelve de la cabecera,
+    // que es independiente del cuerpo malformado.
+    expect(entradas[0]!.actor).toMatch(/^usuario-/);
+  });
+
+  it('GET /admin/partidas/:gameId/auditoria devuelve el registro, filtrable', async () => {
+    // Sin esta ruta la auditoria seria un archivo que nadie puede consultar.
+    const { admin } = await partidaCreada('g1');
+    const ana = await jugadorEn('g1');
+    await app.inject({ method: 'POST', url: '/v1/jugador/partidas/g1/comandos', headers: ana, payload: { tipo: 'crearFaccion', params: { nombre: 'A' } } });
+    await app.inject({ method: 'POST', url: '/v1/admin/partidas/g1/comandos', headers: admin, payload: { tipo: 'crearFaccion', params: { nombre: 'X' } } }); // 403
+
+    const todo = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/auditoria', headers: admin });
+    expect(todo.statusCode).toBe(200);
+    expect(todo.json().entradas).toHaveLength(2);
+    // `corruptas` viaja siempre, no solo cuando es > 0: quien lee tiene que poder distinguir un registro
+    // completo de uno con agujeros.
+    expect(todo.json().corruptas).toBe(0);
+
+    // La vista de moderacion: solo lo rechazado.
+    const rechazos = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/auditoria?soloRechazos=true', headers: admin });
+    expect(rechazos.json().entradas.map((e: { causa: string }) => e.causa)).toEqual(['autorizacion']);
+  });
+
+  it('la auditoria es SOLO de administracion: un jugador no audita a los demas', async () => {
+    await partidaCreada('g1');
+    const ana = await jugadorEn('g1');
+    const res = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/auditoria', headers: ana });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('una partida sin auditoria todavia responde vacio, no 404', async () => {
+    const { admin } = await partidaCreada('g1');
+    const res = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/auditoria', headers: admin });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ entradas: [], corruptas: 0 });
+  });
+
+  it('cada partida audita en su propio archivo', async () => {
+    await partidaCreada('g1');
+    await partidaCreada('g2');
+    const ana = await jugadorEn('g1');
+    const bruno = await jugadorEn('g2', 'bruno');
+    await app.inject({ method: 'POST', url: '/v1/jugador/partidas/g1/comandos', headers: ana, payload: { tipo: 'crearFaccion', params: { nombre: 'A' } } });
+    await app.inject({ method: 'POST', url: '/v1/jugador/partidas/g2/comandos', headers: bruno, payload: { tipo: 'crearFaccion', params: { nombre: 'B' } } });
+
+    await app.close();
+    const { leerAuditoria } = await import('../auditoria');
+    expect((await leerAuditoria(directorio, 'g1')).entradas.map((e) => e.gameId)).toEqual(['g1']);
+    expect((await leerAuditoria(directorio, 'g2')).entradas.map((e) => e.gameId)).toEqual(['g2']);
   });
 });

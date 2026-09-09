@@ -1,4 +1,5 @@
 import type { Asentamiento, Edificio, Faccion, Point, RecursoAlmacenado } from '../domain/types';
+import type { Instante } from '../domain/tiempo';
 import { ALMACEN, FUNDACION, MANTENIMIENTO, POBLACION, ZONA_INFLUENCIA } from '../constants';
 import type { Mapa } from '../world/mapa';
 import { posicionLibreParaFundar } from './zones';
@@ -24,7 +25,6 @@ function edificiosIniciales(idBase: string): Edificio[] {
     tipo: 'centroUrbano',
     posicion: { x: 0, y: 0 },
     estado: 'activo',
-    ticksRestantes: 0,
     ambito: 'asentamiento',
   };
 
@@ -39,7 +39,6 @@ function edificiosIniciales(idBase: string): Edificio[] {
       tipo: 'vivienda',
       posicion,
       estado: 'activo',
-      ticksRestantes: 0,
       ambito: 'asentamiento',
       rotado: sitio?.rotado,
     });
@@ -51,7 +50,6 @@ function edificiosIniciales(idBase: string): Edificio[] {
     tipo: 'granja',
     posicion: posicionGranja,
     estado: 'activo',
-    ticksRestantes: 0,
     ambito: 'asentamiento',
   });
 
@@ -67,14 +65,17 @@ export interface ViabilidadFundacion {
   radioInicial: number;
   dentroDelMapa: boolean;
   posicionLibre: boolean;
-  /** Hay al menos un bosque cuyo borde entra en el radio inicial — condición crítica, ver `evaluarViabilidadFundacion`. */
+  /** Hay al menos un bosque cuyo borde entra en el radio inicial (geometría pura, para la previsualización). */
   bosqueAlcanzable: boolean;
+  /** Además de alcanzable, ese bosque tiene capacidad de Leñera SIN reclamar por asentamientos vecinos —
+   * condición crítica que alimenta `recomendable`. Un bosque ya lleno de Leñeras ajenas no da madera. */
+  bosqueLibreAlcanzable: boolean;
   /** Nodos de recurso que caen dentro del radio inicial, agrupados por tipo. */
   recursosEnRadio: { tipo: string; nodos: number }[];
-  /** `false` si el terreno es 'cima' (Fase 0.1) — banda de elevación más alta, inhabitable. */
+  /** `false` si el terreno es 'cima' (banda de elevación más alta) o 'agua' — inhabitables. */
   terrenoValido: boolean;
   /** Se puede fundar aquí (lo que valida `fundarAsentamiento`): dentro del mapa, sin solapar otra zona y en
-   * terreno habitable (no 'cima'). */
+   * terreno habitable (ni 'cima' ni 'agua'). */
   fundable: boolean;
   /** Además de fundable, el emplazamiento es SOSTENIBLE (tiene madera al alcance). */
   recomendable: boolean;
@@ -88,6 +89,13 @@ export interface ViabilidadFundacion {
  * sentencia: en 200 runs × 900 ticks, exigir bosque alcanzable bajó el colapso del 70% al 47% y subió la
  * proporción de asentamientos que llegan a tener tropa del 50% al 98%.
  *
+ * **`recomendable` exige bosque LIBRE, no solo alcanzable (2026-09-08).** Diagnóstico del batch NPC: el 96%
+ * de las muertes por madera eran asentamientos fundados junto a un bosque que un vecino ya trabajaba a tope
+ * (`LENERA_POR_BOSQUE` topa 1-3 Leñeras según el tamaño). `bosqueParaLenera` no pone una Leñera en bosque
+ * lleno, así que nacían sin forma de sacar madera y caían ~18 min tras la gracia. `bosqueLibreAlcanzable`
+ * descuenta las Leñeras de `asentamientosExistentes` sobre cada bosque; `bosqueAlcanzable` (geometría pura) se
+ * conserva para la previsualización. Ver `Consideraciones/Economia_Del_Oro_Definicion.md` §10.
+ *
  * Deliberadamente NO bloquea la fundación (decisión de diseño confirmada con el usuario): `fundarAsentamiento`
  * sigue aceptando cualquier posición legal. Esto solo alimenta el aviso de la interfaz — el jugador conserva
  * la libertad de fundar en un mal sitio a sabiendas.
@@ -99,13 +107,33 @@ export function evaluarViabilidadFundacion(
 ): ViabilidadFundacion {
   const enMapa = mapa.dentroDelMapa(posicion);
   const libre = posicionLibreParaFundar(posicion, asentamientosExistentes);
-  // Fase 0.1: 'cima' (banda de elevación más alta) es inhabitable — no se puede fundar ahí.
-  const terrenoValido = mapa.terrenoEn(posicion) !== 'cima';
+  // Terreno inhabitable: 'cima' (banda de elevación más alta, Fase 0.1) y 'agua'.
+  //
+  // El agua se añadió el 2026-09-02, al hacerla infranqueable para ejércitos y caravanas: hasta entonces
+  // fundar en el mar era solo absurdo, y desde entonces es una TRAMPA — un asentamiento sobre agua queda
+  // incomunicado para siempre, sin caravana ni ejército que pueda entrar o salir. Lo destapó el fixture de
+  // pruebas, que llevaba fundando en (500,500) de la seed 42 sin que nadie notara que ahí hay mar.
+  const terreno = mapa.terrenoEn(posicion);
+  const terrenoValido = terreno !== 'cima' && terreno !== 'agua';
   const radio = ZONA_INFLUENCIA.radioInicial;
 
   // Un bosque es alcanzable si su BORDE entra en el radio inicial, no hace falta que lo esté su centro —
   // criterio único del mapa (`hayBosqueEnRadio`), el mismo que usa la colocación de Leñeras.
   const bosqueAlcanzable = mapa.hayBosqueEnRadio(posicion, radio);
+
+  // Pero un bosque alcanzable no basta si YA está lleno de Leñeras de vecinos: `bosqueParaLenera` no pondrá
+  // otra (`LENERA_POR_BOSQUE` topa 1-3 según el tamaño), así que el asentamiento nace sin forma de sacar
+  // madera y muere de déficit ~18 min tras la gracia. Medido: era el 96% de las muertes por madera del batch
+  // NPC (ver `Consideraciones/Economia_Del_Oro_Definicion.md` §10). `recomendable` pasa a exigir bosque LIBRE.
+  const lenerasPorBosque = new Map<string, number>();
+  for (const otro of asentamientosExistentes) {
+    for (const edificio of otro.edificios) {
+      if (edificio.tipo === 'lenera' && edificio.fuenteId) {
+        lenerasPorBosque.set(edificio.fuenteId, (lenerasPorBosque.get(edificio.fuenteId) ?? 0) + 1);
+      }
+    }
+  }
+  const bosqueLibreAlcanzable = mapa.hayBosqueLibreEnRadio(posicion, radio, lenerasPorBosque);
 
   const porTipo = new Map<string, number>();
   for (const nodo of mapa.nodosEnRadio(posicion, radio)) {
@@ -118,10 +146,11 @@ export function evaluarViabilidadFundacion(
     dentroDelMapa: enMapa,
     posicionLibre: libre,
     bosqueAlcanzable,
+    bosqueLibreAlcanzable,
     recursosEnRadio: [...porTipo.entries()].map(([tipo, nodos]) => ({ tipo, nodos })),
     terrenoValido,
     fundable,
-    recomendable: fundable && bosqueAlcanzable,
+    recomendable: fundable && bosqueLibreAlcanzable,
   };
 }
 
@@ -131,6 +160,29 @@ export function evaluarViabilidadFundacion(
  * inmediata de la Facción fundadora. Respeta el cap de fundación por Facción (Doc 1.7): no aplica a
  * conquista/anexión (fuera de alcance aquí), solo a fundación directa.
  */
+/**
+ * La PUERTA de fundacion (`Consideraciones/Entrada_Al_Mundo_Definicion.md`): quien puede fundar una Faccion
+ * nueva, y con cuanta gente.
+ *
+ * Existe como funcion propia y no como dos `if` dentro de `fundarAsentamiento` a proposito: es la costura por
+ * la que entrara todo lo que se decida sobre la entrada al mundo —cooldowns, cupos por servidor, avales— sin
+ * volver a tocar el onboarding. Hoy solo comprueba las dos palancas de `FUNDACION`, y las dos estan abiertas
+ * para las primeras pruebas.
+ *
+ * `yaFueCiudadano` lo resuelve el llamador: aqui no se sabe la historia de un jugador, y preguntarselo al
+ * estado entero convertiria una regla en una consulta.
+ */
+export function exigirPuertaDeFundacion(jugadoresFundadoresIds: readonly string[], yaFueCiudadano: boolean): void {
+  if (jugadoresFundadoresIds.length < FUNDACION.minFundadoresParaFaccionNueva) {
+    throw new FundacionInvalidaError(
+      `Fundar exige ${FUNDACION.minFundadoresParaFaccionNueva} fundadores y solo hay ${jugadoresFundadoresIds.length}.`
+    );
+  }
+  if (FUNDACION.exigeCiudadaniaPrevia && !yaFueCiudadano) {
+    throw new FundacionInvalidaError('Hay que haber sido ciudadano de una Faccion antes de fundar la propia.');
+  }
+}
+
 export function fundarAsentamiento(
   mapa: Mapa,
   facciones: Faccion[],
@@ -138,7 +190,7 @@ export function fundarAsentamiento(
   posicion: Point,
   jugadoresFundadoresIds: string[],
   asentamientosExistentes: Asentamiento[],
-  tickActual: number
+  fundadoEn: Instante
 ): { asentamiento: Asentamiento; facciones: Faccion[] } {
   if (jugadoresFundadoresIds.length < 1 || jugadoresFundadoresIds.length > FUNDACION.maxJugadoresFundacionGrupal) {
     throw new FundacionInvalidaError(
@@ -190,7 +242,7 @@ export function fundarAsentamiento(
     nivel: 1,
     nivelActual: 1,
     rachaMantenimientoSano: 0,
-    fundadoEnTick: tickActual,
+    fundadoEn,
     radioPotencial: ZONA_INFLUENCIA.radioInicial,
     poblacion: { pesants: POBLACION.pesants.inicial, artesanos: 0, nobleza: 0 },
     almacen: almacenInicial,

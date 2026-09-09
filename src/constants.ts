@@ -6,7 +6,7 @@
 // partida guardada solo almacena la seed y regenera el mapa al cargar. Ver el encabezado de `worldgen/config.ts`.
 //
 // Servido por HTTP sin autenticar en `GET /v1/balance` (Fase C7, `server/rutas/balance.ts`) — es regla
-// pública (T1 en doc 9), no estado de partida: publicar las 39 tablas completas es más simple que mantener
+// pública (T1 en doc 9), no estado de partida: publicar las 40 tablas completas es más simple que mantener
 // una lista de exclusión, y ninguna es una fuga de estado de un rival. El panel de administración que las
 // editaba en caliente (`app/balanceConfig.ts`) se retiró al extraer el cliente (Fase C0) y no tiene dueño
 // todavía — hoy este módulo es de solo lectura en tiempo de ejecución, mutable únicamente editando el código.
@@ -23,8 +23,42 @@
  *
  * v1 (2026-08-26): primera versión con número explícito — el balance existía desde antes, pero sin
  * identificador publicable.
+ * v2 (2026-08-29): añadida la tabla `SIMULACION` (modelo temporal, Fase D — ver doc 10).
+ * v3 (2026-08-29): D6 — plazos renombrados de ticks a minutos (`tiempoConstruccionMinutos`,
+ *   `plazoMinutosPorDefecto`, `graciaMinutos`, `cooldownMinutos`, `respawnMinutos`, `duracionHeridoMinutos`,
+ *   `duracionMinutosPorDefecto`) y tasas `*PorTick` → `*PorMinuto`. Mismos VALORES (1 tick = 1 min), otras
+ *   claves en el JSON servido.
+ * v4-v7: bumps sin entrada aquí (el registro se dejó de mantener entre 2026-08-29 y 2026-09-04).
+ * v8 (2026-09-04): niebla de guerra, Paso 1 — nueva tabla `VISION`, con `radioVisionEjercito` mudado desde
+ *   `LOGISTICA` (mismo valor, 150) y el nuevo `margenAsentamiento`. Ninguna de las dos se sirve todavía por
+ *   `GET /v1/balance`, que arrastra nueve tablas sin dar de alta.
  */
-export const BALANCE_VERSION = 1;
+export const BALANCE_VERSION = 8;
+
+/**
+ * Modelo temporal (Fase D, Docs/Arquitectura/10_Modelo_Temporal.md). **Decisión del usuario (2026-08-29):
+ * mundo = tiempo real, 1 tick = 1 minuto real, sin aceleración** (modelo OGame). No es un placeholder — es el
+ * modelo. Lo que SÍ queda pendiente es el rebalanceo de los VALORES de las demás tablas para ese ritmo (una
+ * pasada dedicada sobre el laboratorio batch, doc 10 §8), no el modelo en sí.
+ *
+ * El `instante` de mundo es `epocaInicial + tick × duracionTickMs`, DERIVADO del tick — nunca se lee el reloj
+ * de pared ni se guarda en el estado (ver `instanteDeTick`, `session/estado.ts`). Un snapshot antiguo se
+ * reconstruye del `tick` sin datos nuevos.
+ *
+ * `duracionTickMs` y `INTERVALO_TICK_MS` (el intervalo del reloj de mundo, `server/index.ts`) son 60 000 por
+ * defecto —el mismo número, porque no hay aceleración—, pero se mantienen separados: uno calcula el `instante`,
+ * el otro alimenta el `setInterval` de `RunnerDePartida.iniciarRelojDeMundo`, y así un "servidor rápido" no
+ * exige rediseño.
+ */
+export const SIMULACION = {
+  /** Fecha de mundo de la que arranca toda partida (ISO 8601). Neutral a propósito; la interfaz muestra
+   * "día N desde la fundación" restando esto. */
+  epocaInicial: '2026-01-01T00:00:00.000Z',
+  /** Tiempo de mundo que representa un tick, en ms. 60 000 = 1 minuto (= 1:1 con el tiempo real). Es el
+   * único sitio del repo que "sabe" cuánto dura un tick: el resto de plazos se declaran ya en minutos
+   * (`*Minutos`) y el motor los convierte con `minutos()` de `domain/tiempo.ts` (D6, doc 10 §6). */
+  duracionTickMs: 60_000,
+} as const;
 
 /**
  * Capacidad de Leñeras por bosque según su tamaño (a petición del usuario): un bosque grande admite más de
@@ -66,6 +100,41 @@ export const ZONA_INFLUENCIA = {
 
 export const FUNDACION = {
   maxJugadoresFundacionGrupal: 5,
+  /**
+   * Cuantos ciudadanos hacen falta para fundar una Faccion NUEVA. **La palanca contra la ola de
+   * fundaciones** (`Consideraciones/Entrada_Al_Mundo_Definicion.md`): sin ella, 800 jugadores que entran son
+   * 800 Facciones y 800 asentamientos en el primer minuto, porque `crearFaccion` no pide nada.
+   *
+   * La fundacion grupal existia desde el principio pero PERMITIA compartir sin obligar a nada; esto es lo
+   * que la convierte en el freno que pretendia ser.
+   *
+   * **1 durante las primeras pruebas** (decision del usuario, 2026-09-07): con cinco testers el freno
+   * estorba. Se sube cuando la poblacion lo pida — es una constante justamente para que eso no sea un cambio
+   * de codigo.
+   */
+  minFundadoresParaFaccionNueva: 1,
+  /**
+   * Si para fundar hay que haber sido ciudadano de alguna Faccion antes. Convierte fundar en un **cisma**
+   * —gente que ya vivia en algun sitio y se marcha— en vez de en el primer acto del juego, y fuerza a pasar
+   * por la fase de huesped.
+   *
+   * **`false` durante las primeras pruebas** (decision del usuario, 2026-09-07), por lo mismo que la de
+   * arriba.
+   */
+  exigeCiudadaniaPrevia: false,
+  /**
+   * A que distancia MINIMA de una plaza existente aparece un jugador nuevo (Doc 1.3). **200**, poco mas de un
+   * radio de provincia: apareces en campo abierto, no dentro de la muralla de un desconocido, pero tampoco en
+   * la otra punta del mundo — con la vista de un hombre solo (80) tienes que andar un rato para encontrar a
+   * alguien, que es exactamente lo que hace que explorar valga la pena.
+   */
+  distanciaMinimaAparicion: 200,
+  /**
+   * Cuantos puntos se prueban antes de rendirse al buscar sitio donde aparecer. Con un mundo lleno puede no
+   * haber ninguno que cumpla la distancia minima; entonces se afloja esa exigencia antes que dejar a un
+   * jugador sin poder entrar.
+   */
+  intentosDeAparicion: 200,
   // La caravana de fundación (Doc 1.3) trae una reserva inicial generosa: además de materiales básicos,
   // trigo suficiente para no entrar en déficit de comida desde el primer tick y oro para las primeras
   // operaciones de mercado/trueque.
@@ -97,36 +166,57 @@ export const POBLACION = {
   // Rediseño de progreso (Fase 0): además de este mínimo, ahora también requiere Palacio construido
   // (Doc 4.2.1 — "desbloquea la aparición de la población noble"), ver engine/population.ts.
   nobleza: { minCiudadanos: 3, tasaCrecimientoBase: 0.01 },
-  consumoComidaPorHabitante: 0.1, // trigo/tick por habitante (pesants+artesanos+nobleza)
+  consumoComidaPorHabitante: 0.1, // trigo/minuto por habitante (pesants+artesanos+nobleza)
   /**
    * Hambruna (a petición del usuario): efecto negativo de no poder mantener a la población con trigo — espejo
-   * deliberado de `MILITAR.regeneracionMoralPorTick`/`degradacionMoralSinRacion`/`desercionFraccionPorTickSinMoral`
+   * deliberado de `MILITAR.regeneracionMoralPorMinuto`/`degradacionMoralSinRacion`/`desercionFraccionPorMinutoSinMoral`
    * (mismo diseño ya validado para tropas, ver engine/tropas.ts). El medidor de nutrición sube/baja con la
-   * fracción de consumo cubierta cada tick (`avanzarNutricionPoblacion`, engine/population.ts); con estos
+   * fracción de consumo cubierta cada minuto (`avanzarNutricionPoblacion`, engine/population.ts); con estos
    * valores, trigo en 0 sostenido colapsa el medidor en 100/20 = 5 ticks, igual que la moral de tropas.
    * PLACEHOLDER sin calibrar por simulación todavía, igual que el resto de esta fase.
    */
   hambre: {
     nutricionInicial: 100,
-    regeneracionPorTick: 5,
+    regeneracionPorMinuto: 5,
     degradacionSinComida: 20,
     // Suelo del factor de crecimiento cuando la nutrición está en 0 (Doc 4.1: antes era un booleano
     // trigo>0?1:0.2 — ahora escala linealmente entre este suelo y 1 según `nutricionPoblacion`/100).
     factorCrecimientoMinimo: 0.2,
     // Nutrición <= este umbral empieza a costar población real, no solo crecimiento.
     umbralMuertePorHambre: 0,
-    // Fracción de pesants+artesanos (nobleza protegida) perdida por tick mientras la nutrición sigue en el
+    // Fracción de pesants+artesanos (nobleza protegida) perdida por minuto mientras la nutrición sigue en el
     // umbral — mismo valor que la deserción de tropas sin moral, por coherencia entre ambos sistemas.
-    fraccionMuertePorTickHambre: 0.05,
+    fraccionMuertePorMinutoHambre: 0.05,
   },
 };
 
 /**
+ * Recaudación de oro por población (Doc 4.1, bloque "economía del oro" —
+ * `Consideraciones/Economia_Del_Oro_Definicion.md`): cada asentamiento genera oro cada minuto según cuánta
+ * población tiene y de qué clase. `recaudacionOro` (engine/population.ts) es el espejo exacto de
+ * `consumoComidaPoblacion`, signo opuesto: `Σ(habitantes_clase × tasa_clase)`, sumado al almacén.
+ *
+ * Nobleza > Artesanos > Pesants por cabeza (base imponible por riqueza). NO escala por distancia a la capital
+ * (ese eje ya es el "impuesto de cohesión" del lado del coste, `MANTENIMIENTO.factorDistanciaMax`) ni por
+ * `nivelActual`. Modulable por la política "Presión Fiscal" del Tesorero (`factorRecaudacion`).
+ *
+ * Todo PLACEHOLDER, a calibrar en la campaña conjunta del bloque (junto con el oro de reclutamiento, el buey y
+ * `MANTENIMIENTO.nivelParaOro`). Las tasas son oro/minuto por habitante de cada clase.
+ */
+export const IMPUESTOS = {
+  // A la mitad de la primera tentativa (0.008/0.03/0.12) — la medición de Pasos 1-5 dejó `oroMedio` en ×4 la
+  // línea base con expansión desbocada. Calibración en curso (Paso 6). PLACEHOLDER.
+  tasaPesants: 0.004,
+  tasaArtesanos: 0.015,
+  tasaNobleza: 0.06,
+};
+
+/**
  * Receta de crafting de un edificio de transformación (Doc 4.2.1, rediseño de progreso Fase 0): `produccionBase`
- * es la tasa objetivo por tick (mismo criterio que produccionBaseTrigo/produccionBasePiedra etc.);
+ * es la tasa objetivo por minuto (mismo criterio que produccionBaseTrigo/produccionBasePiedra etc.);
  * `consumePorUnidad` es cuánto de cada insumo hace falta por cada unidad de output, derivado de la proporción
  * de la receta original documentada (ej. "8 Lingote de Cobre + 2 Lingote de Estaño -> 5 Lingote de Bronce" con
- * produccionBase 1 LB/tick => consumePorUnidad { lingoteCobre: 1.6, lingoteEstano: 0.4 }). La producción real de
+ * produccionBase 1 LB/minuto => consumePorUnidad { lingoteCobre: 1.6, lingoteEstano: 0.4 }). La producción real de
  * cada tick se limita por `min(produccionBase * ratioManoObraArtesanos, insumo_disponible / consumePorUnidad)`,
  * mismo criterio que ya usan los extractores minerales contra `nodo.cantidad` (ver engine/construction.ts).
  */
@@ -152,6 +242,11 @@ interface NivelEdificioTransformacion {
   /** Solo Granja (trazado urbano dinámico, a petición del usuario): rinde trigo en vez de ejecutar recetas
    * (recetas: []), así que su producción escala por nivel aquí — ver `produccionTrigoDeGranja`. */
   produccionBaseTrigo?: number;
+  /** Solo Granero (a petición del usuario, 2026-09-04): capacidad de TRIGO que aporta este nivel — total, no
+   * incremental. Mismo patrón que `cupoCaravanas` en Mercado: un edificio sin recetas cuyo nivel interno no
+   * cambia lo que produce sino lo que habilita. Se aplica como DELTA contra el nivel anterior al mejorar,
+   * ver `avanzarMejoras` (engine/construction.ts). */
+  capacidadTrigo?: number;
   /** Solo Granja: su huella en la rejilla CRECE con el nivel interno (1x1 → 6x6), a diferencia del resto de
    * tipos, cuyo tamaño es fijo (`EDIFICIO_TAMANO`). Ver `tamanoEdificio`, engine/trazado.ts. */
   tamano?: { ancho: number; alto: number };
@@ -171,7 +266,7 @@ interface NivelEdificioTransformacion {
  * Se repite en los 3 niveles porque las recetas se REEMPLAZAN al mejorar, no se acumulan: sin esto, mejorar
  * la Armería quitaría la capacidad de armar milicia.
  *
- * Cifras deliberadamente modestas (2/tick a cambio de 4 madera/tick): `avanzarRecetas` NO respeta la reserva
+ * Cifras deliberadamente modestas (2/minuto a cambio de 4 madera/minuto): `avanzarRecetas` NO respeta la reserva
  * dinámica de Mantenimiento (a diferencia de la construcción, ver `puedeIniciarConstruccion`) — vacía el
  * stock hasta donde llegue. Una tasa más alta convertiría la Armería en una vía de colapso por falta de
  * madera para Mantenimiento.
@@ -180,20 +275,26 @@ const RECETA_ARMA_MADERA = { produce: 'armaMadera', produccionBase: 2, consumePo
 
 export const EDIFICIO_CATALOGO = {
   // Único edificio que NO pasa por la cola de construcción (ni automática ni manual, Doc 1.3): nace
-  // ya activo al fundar. costo/tiempoConstruccionTicks quedan en 0 solo por consistencia de forma con
+  // ya activo al fundar. costo/tiempoConstruccionMinutos quedan en 0 solo por consistencia de forma con
   // el resto del catálogo — nunca se leen, porque construirlo por otra vía no es posible.
-  centroUrbano: { costo: {}, tiempoConstruccionTicks: 0 },
+  centroUrbano: { costo: {}, tiempoConstruccionMinutos: 0 },
   // Cupos SEPARADOS por clase (a petición del usuario, ver Correcciones): antes un único pool compartido
   // entre Pesants y Artesanos hacía que Pesants (crece ~2.4x más rápido) acaparara todo el cupo y dejara a
   // Artesanos varado — cada Vivienda ahora aporta 15 espacios de Pesants Y, por separado, 5 de Artesanos.
-  vivienda: { costo: { madera: 10 }, tiempoConstruccionTicks: 4, capacidadPesants: 15, capacidadArtesanos: 5 },
+  vivienda: { costo: { madera: 10 }, tiempoConstruccionMinutos: 4, capacidadPesants: 15, capacidadArtesanos: 5 },
   /**
    * Granja: 4 niveles internos (a petición del usuario, trazado urbano dinámico). El costo en materiales
    * DUPLICA en cada salto, tomando como base su `costo` de construcción (madera 30 → 60, 120, 240).
    *
-   * El rinde de trigo sube MUCHO más despacio que el costo, a petición del usuario tras ver que duplicarlo
-   * también desbalanceaba la comida: los multiplicadores son sobre el nivel 1, no acumulativos —
-   * ×1 / ×1.5 / ×2 / ×3 (15 → 22.5 → 30 → 45). Una granja de nivel 4 cuesta 8 veces la de nivel 1 y rinde 3.
+   * El rinde de trigo sube MUCHO más despacio que el costo: los multiplicadores son sobre el nivel 1, no
+   * acumulativos — ×1 / ×1.5 / ×2 / ×3. Una granja de nivel 4 cuesta 8 veces la de nivel 1 y rinde 3.
+   *
+   * **La base se ha DOBLADO dos veces** (15 → 30 el 2026-09-02, 30 → 60 el 2026-09-04), las dos a petición del
+   * usuario y las dos por la misma razón: el trigo era el cuello de botella de todo lo demás. La primera vez
+   * fue por el nivel 3 (`Mecanicas` §9.4: un asentamiento nivel 1 a tope come 30/minuto y una Granja rendía
+   * 15, o sea que nacía en déficit estructural). La segunda, porque medir el Paso 6 del movimiento de
+   * ejércitos demostró que 26 de 28 ciudades no podían meter NI UN GRANO en el carro de un ejército sin
+   * bajar de su reserva de comida (`Consideraciones/Movimiento_Ejercitos_Definicion.md` §10).
    *
    * El tamaño por nivel vive aquí mismo (`tamano`) y no en `EDIFICIO_TAMANO`, porque es el único tipo cuya
    * huella cambia con el nivel. `trabajadoresRequeridos` se repite igual en los 4 (el valor plano que Granja
@@ -201,47 +302,76 @@ export const EDIFICIO_CATALOGO = {
    */
   granja: {
     costo: { madera: 30 },
-    tiempoConstruccionTicks: 6,
-    produccionBaseTrigo: 15,
+    tiempoConstruccionMinutos: 6,
+    produccionBaseTrigo: 60,
     trabajadoresRequeridos: 4,
     niveles: {
-      1: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 15, tamano: { ancho: 2, alto: 2 } },
+      1: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 60, tamano: { ancho: 4, alto: 4 } },
       // Piedra añadida a las mejoras (Doc Fase_0_6, a petición del usuario): antes 100% madera. Sin gate de
       // nivel de asentamiento — las 4 mejoras siguen alcanzables estando en nivel 1.
-      2: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 22.5, tamano: { ancho: 2, alto: 3 }, costoMejora: { madera: 60, piedra: 20 } },
-      3: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 30, tamano: { ancho: 4, alto: 3 }, costoMejora: { madera: 120, piedra: 40 } },
-      4: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 45, tamano: { ancho: 6, alto: 6 }, costoMejora: { madera: 240, piedra: 80 } },
+      2: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 90, tamano: { ancho: 4, alto: 6 }, costoMejora: { madera: 60, piedra: 20 } },
+      3: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 120, tamano: { ancho: 8, alto: 6 }, costoMejora: { madera: 120, piedra: 40 } },
+      4: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 180, tamano: { ancho: 12, alto: 12 }, costoMejora: { madera: 240, piedra: 80 } },
     } as Record<number, NivelEdificioTransformacion>,
   },
-  cantera: { costo: { madera: 20 }, tiempoConstruccionTicks: 5, produccionBasePiedra: 5, trabajadoresRequeridos: 4 },
-  lenera: { costo: { madera: 10 }, tiempoConstruccionTicks: 3, produccionBaseMadera: 5, trabajadoresRequeridos: 4 },
+  cantera: { costo: { madera: 20 }, tiempoConstruccionMinutos: 5, produccionBasePiedra: 5, trabajadoresRequeridos: 4 },
+  lenera: { costo: { madera: 10 }, tiempoConstruccionMinutos: 3, produccionBaseMadera: 5, trabajadoresRequeridos: 4 },
   // Sin piedra en la construcción BASE (Doc Fase_0_6, a petición del usuario): nivel 1 completo se paga solo
   // en madera — la piedra recién se introduce en nivel 2 (ver EDIFICIO_CATALOGO.fundicion/curtiduria/armeria).
-  almacen: { costo: { madera: 50 }, tiempoConstruccionTicks: 6, capacidadPorRecursoAdicional: 300 },
+  almacen: { costo: { madera: 50 }, tiempoConstruccionMinutos: 6, capacidadPorRecursoAdicional: 300 },
+  /**
+   * Granero (a petición del usuario, 2026-09-04): almacén ESPECIALIZADO en grano. A diferencia del Almacén
+   * —que amplía la capacidad de todos los recursos por igual, 300 cada uno— este solo guarda trigo, y a
+   * cambio guarda mucho más.
+   *
+   * **Uno por asentamiento** (`EDIFICIOS_UNICOS`): crece por NIVEL INTERNO, no por número. Los cuatro niveles
+   * escalan la capacidad con la misma forma que el rinde de la Granja —×1 / ×1.5 / ×2 / ×3 sobre el nivel 1,
+   * no acumulativa— así que el techo va de 2.000 a 6.000. Para comparar: la reserva de comida de una ciudad
+   * nivel 1 a tope ronda los 330 y el carro de un ejército son 500, o sea que un Granero de nivel 4 permite
+   * acumular una docena de campañas.
+   *
+   * Los gates de mejora los fijó el usuario: subir al nivel 2 exige asentamiento nivel 2, y llegar al 4 exige
+   * nivel 3. El gate del 2 al 3 se declara explícitamente aunque parezca redundante (no se puede tener un
+   * Granero 2 sin haber sido nivel 2): un asentamiento DEGRADADO a nivel 1 sí existiría en ese estado, y sin
+   * el gate podría seguir ampliando granero mientras se cae a pedazos.
+   *
+   * Costos siguiendo el estándar del resto del catálogo: base solo en madera (Doc Fase_0_6 — la piedra se
+   * introduce a partir del nivel 2) y mejoras que DUPLICAN sobre la base, igual que Granja.
+   */
+  granero: {
+    costo: { madera: 50 },
+    tiempoConstruccionMinutos: 6,
+    niveles: {
+      1: { trabajadoresRequeridos: 0, recetas: [], capacidadTrigo: 2000 },
+      2: { trabajadoresRequeridos: 0, recetas: [], capacidadTrigo: 3000, requisitoNivelAsentamiento: 2, costoMejora: { madera: 100, piedra: 30 } },
+      3: { trabajadoresRequeridos: 0, recetas: [], capacidadTrigo: 4000, requisitoNivelAsentamiento: 2, costoMejora: { madera: 200, piedra: 60 } },
+      4: { trabajadoresRequeridos: 0, recetas: [], capacidadTrigo: 6000, requisitoNivelAsentamiento: 3, costoMejora: { madera: 400, piedra: 120 } },
+    } as Record<number, NivelEdificioTransformacion>,
+  },
   // Oro: metal precioso en bruto, origen en minas igual que cualquier otro recurso (Doc 3.1). produccionBaseOro
-  // recalibrado (verificación batch del overhaul de auto-construcción): a 2/tick, una sola Mina (2) ya no
+  // recalibrado (verificación batch del overhaul de auto-construcción): a 2/minuto, una sola Mina (2) ya no
   // alcanzaba a cubrir el costo de Mantenimiento de oro a nivel 3 (`MANTENIMIENTO.oroBase` × escala ≈
-  // 2.6-5.2/tick) ni siquiera con el nodo recién descubierto — a diferencia de piedra/Cantera, este era un
+  // 2.6-5.2/minuto) ni siquiera con el nodo recién descubierto — a diferencia de piedra/Cantera, este era un
   // problema real de TASA, no solo de tamaño de nodo. Sube a 4 para dar el mismo margen que Cantera tiene
   // sobre su propio costo de Mantenimiento (~1.4-1.5×) en la distancia base.
   // Sin piedra en la construcción BASE (Doc Fase_0_6): las 3 minas son extractores de nivel 1, tienen que ser
   // alcanzables sin piedra — es justo lo que hace falta construir para cumplir el gate de subir a nivel 2
   // (NIVEL_ASENTAMIENTO.requisitos[2], ≥3 edificios de extracción).
-  mina: { costo: { madera: 40 }, tiempoConstruccionTicks: 6, produccionBaseOro: 4, trabajadoresRequeridos: 6 },
+  mina: { costo: { madera: 40 }, tiempoConstruccionMinutos: 6, produccionBaseOro: 4, trabajadoresRequeridos: 6 },
   // Cobre (Doc 1.1/5.7): "relativamente abundante" — igual patrón que cantera/mina pero sobre nodos de cobre.
-  minaCobre: { costo: { madera: 30 }, tiempoConstruccionTicks: 4, produccionBaseCobre: 5, trabajadoresRequeridos: 8 },
+  minaCobre: { costo: { madera: 30 }, tiempoConstruccionMinutos: 4, produccionBaseCobre: 5, trabajadoresRequeridos: 8 },
   // Estaño (Doc 1.1/5.7): raro y concentrado (menos nodos que cobre/oro, ver RECURSO_RAREZA.raro) — costo más
   // alto y producción base más baja que el resto de minas, coherente con ser el cuello de botella del bronce.
   // produccionBaseEstano subido de 1.5 a 3 (pruebas del usuario) — el estaño era el cuello de botella más
   // duro de la cadena de bronce, más de lo que el diseño original pretendía.
-  minaEstano: { costo: { madera: 50 }, tiempoConstruccionTicks: 7, produccionBaseEstano: 3, trabajadoresRequeridos: 8 },
+  minaEstano: { costo: { madera: 50 }, tiempoConstruccionMinutos: 7, produccionBaseEstano: 3, trabajadoresRequeridos: 8 },
   // Corral (Doc 4.2.1, rediseño de progreso Fase 0): extractor de livestock, mismo patrón que cantera/minas —
   // liga a un nodo finito de livestock (Doc 1.4), con reemplazo automático al agotarse (ver EXTRACCION_MAXIMOS).
-  corral: { costo: { madera: 30 }, tiempoConstruccionTicks: 6, produccionBaseLivestock: 3, trabajadoresRequeridos: 4 },
+  corral: { costo: { madera: 30 }, tiempoConstruccionMinutos: 6, produccionBaseLivestock: 3, trabajadoresRequeridos: 4 },
   // "Único edificio de tier élite, exclusivo de asentamientos/Facciones de mayor nivel" — gate por nivel de Facción.
   // Se mantiene sin cambios (Doc 4.2, rediseño de progreso): queda para iteraciones posteriores la integración
   // con la nueva Fundición.
-  granFundicion: { costo: { madera: 150, piedra: 100, oro: 50 }, tiempoConstruccionTicks: 20, nivelFaccionMinimo: 3 },
+  granFundicion: { costo: { madera: 150, piedra: 100, oro: 50 }, tiempoConstruccionMinutos: 20, nivelFaccionMinimo: 3 },
 
   // --- Edificios de transformación (Doc 4.2.1, rediseño de progreso Fase 0): auto-construcción (sin gate de
   // nivel para la construcción BASE — solo las mejoras de nivel interno lo exigen), disparan Artesanos (Doc
@@ -250,7 +380,7 @@ export const EDIFICIO_CATALOGO = {
 
   fundicion: {
     costo: { madera: 80, piedra: 40 },
-    tiempoConstruccionTicks: 6,
+    tiempoConstruccionMinutos: 6,
     // Doc Fase_0_6 (a petición del usuario): construcción BASE gateada a nivel 2 — antes era construible
     // desde nivel 1. Con esto la responsabilidad de "producir transformación" queda exclusivamente en manos
     // de los edificios de nivel 2.
@@ -275,7 +405,7 @@ export const EDIFICIO_CATALOGO = {
 
   curtiduria: {
     costo: { madera: 80, piedra: 30 },
-    tiempoConstruccionTicks: 8,
+    tiempoConstruccionMinutos: 8,
     // Doc Fase_0_6: construcción BASE gateada a nivel 2 (ver nota en `fundicion`).
     requisitoNivelAsentamientoConstruccion: 2,
     niveles: {
@@ -310,7 +440,7 @@ export const EDIFICIO_CATALOGO = {
   // que fabrique — confirmado con el usuario que era un error de tipeo por "Arma de Cobre" (AC).
   armeria: {
     costo: { madera: 80, piedra: 30 },
-    tiempoConstruccionTicks: 6,
+    tiempoConstruccionMinutos: 6,
     // Doc Fase_0_6: construcción BASE gateada a nivel 2 (ver nota en `fundicion`).
     requisitoNivelAsentamientoConstruccion: 2,
     niveles: {
@@ -361,7 +491,7 @@ export const EDIFICIO_CATALOGO = {
   // que antes, pero ahora llega un escalón más tarde — se desbloquea junto con Murallas en nivel 3.
   carpinteria: {
     costo: { madera: 60, piedra: 20 },
-    tiempoConstruccionTicks: 6,
+    tiempoConstruccionMinutos: 6,
     requisitoNivelAsentamientoConstruccion: 3,
     niveles: {
       1: { trabajadoresRequeridos: 0, recetas: [] },
@@ -378,7 +508,7 @@ export const EDIFICIO_CATALOGO = {
 
   barracon: {
     costo: { madera: 30 },
-    tiempoConstruccionTicks: 6,
+    tiempoConstruccionMinutos: 6,
     // Construcción BASE gateada a nivel 2 (trazado de anclas, ver Vista_Asentamiento_Trazado_Urbano.md §5.7.1):
     // el primer edificio militar arrastra tras de sí la Plaza de Armas, y al fundar (disco urbano de 5 celdas)
     // no existe ningún hueco que respete la separación mínima entre anclas — el núcleo militar nacía pegado al
@@ -411,7 +541,7 @@ export const EDIFICIO_CATALOGO = {
   // Galería de tiro sigue su propio camino de progresión, confirmado con el usuario que no se uniforma.
   galeriaDeTiro: {
     costo: { madera: 50 },
-    tiempoConstruccionTicks: 6,
+    tiempoConstruccionMinutos: 6,
     // Mismo gate y mismo motivo que Barracón (ver arriba): es el otro tipo capaz de abrir el grupo militar y
     // arrastrar la Plaza de Armas consigo.
     requisitoNivelAsentamientoConstruccion: 2,
@@ -435,23 +565,12 @@ export const EDIFICIO_CATALOGO = {
     } as Record<number, NivelEdificioTransformacion>,
   },
 
-  // Muralla (Doc Fase_0_6, a petición del usuario): implementación MÍNIMA a propósito — 1 celda (tamaño por
-  // defecto, no está en EDIFICIO_TAMANO), solo piedra, sin niveles ni recetas, sin efecto mecánico en
-  // combate/asedio todavía (no interactúa con `engine/combate.ts` en esta pasada — existe como edificio
-  // construible, nada más, ver Doc 5.10 para cuándo se le dé mecánica real). Gate de construcción nivel 3
-  // (junto con Carpintería); construirla es requisito para subir a nivel 4 (NIVEL_ASENTAMIENTO.requisitos).
-  muralla: {
-    costo: { piedra: 2000 },
-    tiempoConstruccionTicks: 15,
-    requisitoNivelAsentamientoConstruccion: 3,
-  },
-
   // Único tier — desbloquea la aparición de Nobleza (además del mínimo de ciudadanos ya existente, ver
   // engine/population.ts). requisitoNivelAsentamientoConstruccion gatea la construcción BASE (no hay mejoras).
   // Gate subido de nivel 3 a nivel 4 (Doc Fase_0_6): construirlo pasa a ser requisito para subir a nivel 5.
   palacio: {
     costo: { madera: 1500, piedra: 1000 },
-    tiempoConstruccionTicks: 20,
+    tiempoConstruccionMinutos: 20,
     requisitoNivelAsentamientoConstruccion: 4,
     capacidadNobles: 200,
   },
@@ -473,7 +592,7 @@ export const EDIFICIO_CATALOGO = {
     // piedra sin cambios — para entonces el asentamiento ya tuvo tiempo de conseguirla, por extracción propia
     // o por el propio comercio que el Mercado nivel 1 acaba de destrabar.
     costo: { madera: 100 },
-    tiempoConstruccionTicks: 8,
+    tiempoConstruccionMinutos: 8,
     niveles: {
       1: { trabajadoresRequeridos: 0, recetas: [], cupoCaravanas: 2 },
       2: {
@@ -497,19 +616,19 @@ export const EDIFICIO_CATALOGO = {
   // gratis y ya activa, cuando el Mercado alcanza cada nivel interno (ver `crearPuestosDeMercado`,
   // engine/construction.ts). El costo y el tiempo van a cero por la misma razón que en centroUrbano — la
   // entrada existe solo porque `EDIFICIO_CATALOGO[tipo]` se indexa con `EdificioTipo` en varios sitios.
-  puestoMercado: { costo: {}, tiempoConstruccionTicks: 0 },
+  puestoMercado: { costo: {}, tiempoConstruccionMinutos: 0 },
 
   // Anclas y satélites, Etapa 3 (Consideraciones/Vista_Asentamiento_Trazado_Urbano.md §5): "marcadores
   // gratis", mismo patrón que puestoMercado — nunca pasan por cola ni se añaden a mano, nacen ya activos por
   // la regla de semilla de grupo (engine/trazado.ts).
-  plaza: { costo: {}, tiempoConstruccionTicks: 0 },
-  plazaDeArmas: { costo: {}, tiempoConstruccionTicks: 0 },
-  patioDeGremios: { costo: {}, tiempoConstruccionTicks: 0 },
+  plaza: { costo: {}, tiempoConstruccionMinutos: 0 },
+  plazaDeArmas: { costo: {}, tiempoConstruccionMinutos: 0 },
+  patioDeGremios: { costo: {}, tiempoConstruccionMinutos: 0 },
   // Pieza satélite de la zona de Carpintería (§9) — mismo patrón que puestoMercado, ver `crearTalleresDeCarpinteria`.
-  tallerCarpinteria: { costo: {}, tiempoConstruccionTicks: 0 },
+  tallerCarpinteria: { costo: {}, tiempoConstruccionMinutos: 0 },
   // Variedad de anclas residenciales (Etapa 4, punto 4) — mismo patrón "marcador gratis" que plaza.
-  pozo: { costo: {}, tiempoConstruccionTicks: 0 },
-  parque: { costo: {}, tiempoConstruccionTicks: 0 },
+  pozo: { costo: {}, tiempoConstruccionMinutos: 0 },
+  parque: { costo: {}, tiempoConstruccionMinutos: 0 },
 
   // Maravilla (Roadmap_Escalado.md Eje 4, a petición del usuario) — SOLO el edificio en esta pasada: el ciclo
   // de servidor de 12 meses que se cierra al completarla (reset + Facción ganadora persistiendo como legado
@@ -522,13 +641,34 @@ export const EDIFICIO_CATALOGO = {
   // es un trofeo, no un edificio productivo.
   maravilla: {
     costo: { madera: 5000, piedra: 5000, oro: 500, cobre: 300, estano: 200, livestock: 200 },
-    tiempoConstruccionTicks: 200,
+    tiempoConstruccionMinutos: 200,
     requisitoNivelAsentamientoConstruccion: 5,
   },
 } as const;
 
 export const ALMACEN = {
-  capacidadInicialPorRecurso: 200,
+  /**
+   * Capacidad de almacén con la que NACE un asentamiento, por recurso.
+   *
+   * **200 → 400 (2026-09-04, a petición del usuario tras jugar varias partidas).** No es un ajuste de holgura:
+   * 200 producía un **interbloqueo**. La reserva de construcción impide gastar por debajo de
+   * `mantenimiento × RESERVA_CONSTRUCCION.horizonteMinutosMantenimiento`, que en una ciudad madura del batch
+   * son ~167 de madera; el Almacén cuesta 50; y como la capacidad de madera SOLO crece construyendo Almacenes,
+   * el techo de 200 dejaba `200 − 50 = 150 < 167`. O sea: para subir el techo había que construir un Almacén,
+   * y para construirlo hacía falta más margen del que el techo permitía guardar. El asentamiento quedaba
+   * encerrado, y no al madurar sino desde el principio — mientras es pequeño la madera se va en Granja, Leñera
+   * y extractores, que van en banda de score superior y cobran primero.
+   *
+   * Medido en batch (300 ticks, 30 Facciones), 200 → 400: **Almacenes 0 → 114, Graneros 0 → 28** (los
+   * construyen TODOS), tropas vivas +44%, y el excedente de trigo disponible para el carro de un ejército pasa
+   * de **10 a 4.792** — de un 2% de un carro a nueve carros llenos. Los asentamientos que no podían aportar ni
+   * un grano pasan de 28 de 30 a **ninguno**. Colapsos y niveles alcanzados no se mueven: esto no regala
+   * progreso, desatasca el que ya había.
+   *
+   * Se midió también 500 y **no aporta nada**: exactamente los +100 de capacidad extra en el excedente y un
+   * Almacén menos. La diferencia estructural está entre 200 y 400, no más arriba.
+   */
+  capacidadInicialPorRecurso: 400,
 };
 
 // Umbrales que disparan auto-construcción por necesidad (Doc 4.2). Placeholders razonables.
@@ -600,7 +740,7 @@ export const SCORE_BANDAS = {
  * el bonus nunca pueda hacer que un extractor le gane el turno a Granja/Leñera.
  */
 export const EXTRACTOR_DESEMPATE = {
-  bonusPorTickStarved: 1,
+  bonusPorMinutoStarved: 1,
   bonusMaximo: 400,
 };
 
@@ -631,7 +771,7 @@ export const LINEAS_PRODUCCION = {
  * progreso Fase 0): antes escalaba 1:1 con el nivel del asentamiento (hasta 10, el nivelMaximo anterior); con
  * el tope de nivel bajando a 3 (ver NIVEL_ASENTAMIENTO) un máximo ligado al nivel se quedaría corto, así que
  * se desacopla a un número fijo. Calibrado por simulación (150-600 ticks): con porTipo=5 y la tasa de
- * crecimiento de Pesants ya existente (12%/tick, sin tope salvo Vivienda), todo asentamiento colapsaba por
+ * crecimiento de Pesants ya existente (12%/minuto, sin tope salvo Vivienda), todo asentamiento colapsaba por
  * déficit de Mantenimiento hacia el tick 200-700 — el tope de extracción se quedaba corto frente a una
  * población sin límite real, algo que el sistema anterior evitaba dejando llegar hasta 10 extractores por
  * tipo. Sube a 10 (mismo techo que el nivelMaximo anterior) para no perder ese margen. Sigue siendo
@@ -666,45 +806,126 @@ export const SITIO = {
  * lienzo, así que el zoom no varía a medida que el asentamiento crece — solo se va llenando. Debe cubrir con
  * margen el mayor `radioPotencial` alcanzable (tope 120, nivel 3 — ver `ZONA_INFLUENCIA.radioMaximoPorNivel`),
  * para que ningún edificio colocado por `sitioEnBarrio` quede jamás fuera del área dibujada.
+ *
+ * **150 -> 220 (2026-09-02): se había quedado corto.** Ese "tope 120, nivel 3" dejó de ser cierto cuando
+ * Fase 0.6 subió el tope de asentamiento a nivel 5, y con él `radioMaximoPorNivel` hasta 180. La ciudad real
+ * de un nivel 5 llega a **205** unidades locales (`radioMaximoAfueras`: 180 + la media diagonal de una Granja
+ * nivel 4), así que sus afueras habrían caído FUERA del lienzo. Latente y sin observar todavía porque hoy
+ * ningún asentamiento pasa de nivel 2 en batch, pero el bug estaba puesto. 220 cubre 205 con margen.
+ *
+ * Es solo PRESENTACIÓN: `radioMapa` decide el zoom del lienzo de la Vista de Asentamiento, nunca dónde se
+ * coloca un edificio. Cambiarlo no mueve la simulación.
  */
+/**
+ * ESCALA DEL MUNDO (a petición del usuario, 2026-09-02) — la equivalencia que faltaba declarar.
+ *
+ * El motor maneja DOS espacios y hasta ahora nadie había dicho cómo se relacionan, así que el código los
+ * trataba como iguales:
+ *
+ *  - **Mapa general** (`Asentamiento.posicion`, `radioPotencial`, rutas, ejércitos): 2000×2000 unidades.
+ *  - **Vista de Asentamiento** (`Edificio.posicion`, `REJILLA_ASENTAMIENTO`, todo `engine/trazado.ts`):
+ *    espacio plano y separado, centrado en el Centro Urbano.
+ *
+ * Sin esta declaración la ficción no cerraba: una zona de influencia debe ser una PROVINCIA y la ciudad un
+ * punto dentro de ella, pero al compartir unidades la ciudad medía ~121 y su provincia 30-180 — la urbe era
+ * más grande que el territorio que controlaba, y el propio `radioMaximoAfueras` lo daba por hecho ("el campo
+ * de una ciudad está FUERA de su zona de influencia").
+ *
+ * **Por qué 40 y no 10.** El primer intento fue 10, y no bastaba: la ciudad tiene un TAMAÑO MÍNIMO de ~121
+ * unidades locales que no encoge —el suelo `max(radioUrbano, radioAfuerasMin + anchoBandaAfueras)` de
+ * `radioMaximoAfueras`, que existe porque al fundar la Granja inicial no cabe más cerca— mientras que la
+ * provincia SÍ arranca pequeña (`radioInicial` 30). Con 10, una aldea recién fundada ocupaba el 40% de su
+ * provincia y solo llegaba a la décima en los niveles altos.
+ *
+ * 40 es el factor que cubre el PEOR caso: al fundar, esa ciudad mínima mide 3,0 unidades de mapa dentro de
+ * una provincia de 30 — el 10,1%. De ahí para arriba el ratio solo baja (5% en nivel 1, 3% en nivel 5),
+ * porque la provincia crece y el suelo de la ciudad no. Es decir: **la ciudad nunca pasa de una décima de su
+ * provincia**, que era la proporción buscada.
+ *
+ * Se llegó aquí sin tocar el trazado urbano ni `radioInicial`, que es lo que el usuario pidió preservar: la
+ * escala local es la palanca, y basta con hacerla más pequeña frente a la mundial.
+ *
+ * **No cambia ningún número de la simulación**: el trazado urbano sigue midiendo lo mismo en sus unidades y
+ * la zona de influencia sigue midiendo lo mismo en las suyas. Lo que cambia es que ahora está DICHO, y que
+ * `radioUrbanoDe` (engine/asentamientoQuery.ts) es el único punto donde los dos espacios se tocan.
+ */
+export const ESCALA = {
+  unidadesLocalesPorUnidadMapa: 40,
+};
+
 export const REJILLA_ASENTAMIENTO = {
-  tamanoCelda: 6,
-  radioMapa: 150,
+  /**
+   * Lado de una celda en unidades locales. **6 → 3 en el Paso 1 de la Etapa 6** (doc trazado §E6.11): la
+   * rejilla se discretiza al DOBLE de resolución y todas las huellas de `EDIFICIO_TAMANO` se doblan a la vez,
+   * de modo que el tamaño FÍSICO de cada edificio no cambia — una Vivienda sigue midiendo 6 unidades locales,
+   * solo que ahora son 2x2 celdas en vez de 1x1.
+   *
+   * Para qué: con las calles sobre CELDAS (Etapa 6) una calle necesita ancho propio, y a la resolución
+   * anterior el ancho mínimo posible era una Vivienda entera. Al doblar la resolución, `anchoCalle = 1` mide
+   * media Vivienda, que es la proporción buscada.
+   *
+   * La identidad `punto = (col + ancho/2) · tamanoCelda` se conserva EXACTA al doblar ambos a la vez
+   * (`(2·col + 2·ancho/2) · 3 = (col + ancho/2) · 6`), así que `Edificio.posicion` —que está persistido en
+   * unidades locales— no se mueve y **no hace falta migrar ninguna partida**. Congelado en
+   * `engine/__tests__/escalaRejilla.test.ts` con una tabla generada antes del cambio.
+   */
+  tamanoCelda: 3,
+  radioMapa: 220,
 };
 
 /**
  * Huella de cada tipo de edificio en la rejilla local, en celdas (a petición del usuario). Un tipo ausente
- * mide 1x1 — el caso por defecto (Vivienda, Leñera). Granja NO está aquí: es el único tipo cuya huella cambia
- * con el nivel interno, y vive en `EDIFICIO_CATALOGO.granja.niveles[n].tamano`.
+ * mide `EDIFICIO_TAMANO_POR_DEFECTO` — el caso por defecto (Vivienda, Leñera, las minas). Granja NO está aquí:
+ * es el único tipo cuya huella cambia con el nivel interno, y vive en
+ * `EDIFICIO_CATALOGO.granja.niveles[n].tamano`.
  *
  * Se lee siempre a través de `tamanoEdificio` (engine/trazado.ts), nunca directo, para que el caso de Granja
  * quede resuelto en un solo sitio.
+ *
+ * **Todos los valores se doblaron en el Paso 1 de la Etapa 6** (doc trazado §E6.11), a la vez que
+ * `REJILLA_ASENTAMIENTO.tamanoCelda` pasaba de 6 a 3: el tamaño FÍSICO no cambia, solo la resolución a la que
+ * se discretiza. Los comentarios que mencionan medidas ("2x2", "3x2") siguen refiriéndose a la rejilla
+ * ORIGINAL, que es la unidad en la que se acordaron con el usuario.
  */
 export const EDIFICIO_TAMANO: Record<string, { ancho: number; alto: number }> = {
-  centroUrbano: { ancho: 3, alto: 3 },
+  centroUrbano: { ancho: 6, alto: 6 },
   // 5x4 → 4x2 (Etapa 3, §9): Carpintería pasa a ser la PIEZA PRINCIPAL de su propia zona de tres piezas — los
   // otros dos talleres (`tallerCarpinteria`) ocupan el resto de lo que antes era un bloque monolítico único.
-  carpinteria: { ancho: 4, alto: 2 },
-  fundicion: { ancho: 2, alto: 2 },
-  curtiduria: { ancho: 2, alto: 2 },
-  armeria: { ancho: 2, alto: 3 },
-  barracon: { ancho: 2, alto: 2 },
-  galeriaDeTiro: { ancho: 2, alto: 4 },
-  mercado: { ancho: 3, alto: 2 },
-  palacio: { ancho: 4, alto: 4 },
-  corral: { ancho: 4, alto: 3 },
-  almacen: { ancho: 2, alto: 1 },
-  // Anclas y satélites, Etapa 3 (§5.1/§6): las tres anclas nuevas miden 2x2.
-  plaza: { ancho: 2, alto: 2 },
-  plazaDeArmas: { ancho: 2, alto: 2 },
-  patioDeGremios: { ancho: 2, alto: 2 },
-  // Taller de carpintería (§9): 2x2, igual que las otras piezas satélite pequeñas.
-  tallerCarpinteria: { ancho: 2, alto: 2 },
-  // Variedad de anclas residenciales (Etapa 4, punto 4): pozo 1x1 (marcador mínimo), parque 3x2 (el único no
-  // cuadrado de los tres, ejercita la orientación intercambiable del punto 1 también en anclas).
-  pozo: { ancho: 1, alto: 1 },
-  parque: { ancho: 3, alto: 2 },
+  carpinteria: { ancho: 8, alto: 4 },
+  fundicion: { ancho: 4, alto: 4 },
+  curtiduria: { ancho: 4, alto: 4 },
+  armeria: { ancho: 4, alto: 6 },
+  barracon: { ancho: 4, alto: 4 },
+  galeriaDeTiro: { ancho: 4, alto: 8 },
+  mercado: { ancho: 6, alto: 4 },
+  palacio: { ancho: 8, alto: 8 },
+  corral: { ancho: 8, alto: 6 },
+  almacen: { ancho: 4, alto: 2 },
+  // Granero: el doble de largo que el Almacén (4x2 de la rejilla original) — guarda un solo recurso pero
+  // mucha cantidad, y que se distinga a simple vista del Almacén importa en la Vista de Asentamiento.
+  granero: { ancho: 8, alto: 4 },
+  // Anclas y satélites, Etapa 3 (§5.1/§6): las tres anclas nuevas miden 2x2 de la rejilla original.
+  plaza: { ancho: 4, alto: 4 },
+  plazaDeArmas: { ancho: 4, alto: 4 },
+  patioDeGremios: { ancho: 4, alto: 4 },
+  // Taller de carpintería (§9): igual que las otras piezas satélite pequeñas.
+  tallerCarpinteria: { ancho: 4, alto: 4 },
+  // Variedad de anclas residenciales (Etapa 4, punto 4): pozo el marcador mínimo (1x1 original), parque el
+  // único no cuadrado de los tres (3x2 original), que ejercita la orientación intercambiable también en anclas.
+  pozo: { ancho: 2, alto: 2 },
+  parque: { ancho: 6, alto: 4 },
 };
+
+/**
+ * Huella de un tipo AUSENTE de `EDIFICIO_TAMANO` (Vivienda, Leñera, las tres minas, Gran Fundición, Maravilla,
+ * Muralla). Es 1x1 de la rejilla ORIGINAL, o sea 2x2 tras el Paso 1 de la Etapa 6.
+ *
+ * Existe como constante con nombre y no como literal en `tamanoEdificio` porque el reescalado tenía que
+ * alcanzarla igual que a la tabla: dejarla en `{1,1}` habría dejado a la Vivienda —el edificio más numeroso de
+ * cualquier ciudad— a la MITAD de su tamaño físico, y el síntoma habría sido "las casas encogieron", no un
+ * error de tipos. Un literal repetido dentro de una función es justo lo que un reescalado se salta.
+ */
+export const EDIFICIO_TAMANO_POR_DEFECTO = { ancho: 2, alto: 2 };
 
 /**
  * Formas que puede tener un puesto de Mercado (a petición del usuario: la zona se compone de piezas de tamaños
@@ -713,22 +934,37 @@ export const EDIFICIO_TAMANO: Record<string, { ancho: number; alto: number }> = 
  * engine/trazado.ts) en vez de persistir el tamaño en el `Edificio` — el tamaño siempre se DERIVA del tipo.
  */
 export const PUESTO_MERCADO_FORMA: Record<number, { ancho: number; alto: number }> = {
-  1: { ancho: 2, alto: 2 },
-  2: { ancho: 3, alto: 2 },
-  3: { ancho: 1, alto: 1 },
+  // Formas fijadas tras el playtest del laboratorio (2026-08-31): tres piezas estrechas (2 celdas de ancho),
+  // que apiladas contra el Mercado forman un mercadillo de puestos alargados en vez de bloques cuadrados.
+  1: { ancho: 2, alto: 4 },
+  2: { ancho: 2, alto: 6 },
+  3: { ancho: 2, alto: 2 },
 };
 
 /**
  * Puestos que se AÑADEN al alcanzar cada nivel interno de Mercado, como lista de formas
- * (`PUESTO_MERCADO_FORMA`). No es acumulativo: cada nivel suma los suyos a los que ya había.
+ * (`PUESTO_MERCADO_FORMA`). Es ACUMULATIVO: cada nivel suma los suyos a los que ya había.
  *
- * Con la pieza principal (el propio Mercado, 3x2) la zona queda en 3 piezas en nivel 1, 10 en nivel 2 y 12 en
- * nivel 3, que es la composición acordada en Consideraciones/Vista_Asentamiento_Trazado_Urbano.md.
+ * Composición fijada en el playtest del laboratorio (2026-08-31). Con la pieza principal (el propio Mercado),
+ * la zona queda en 6 piezas en nivel 1, 13 en nivel 2 y 17 en nivel 3.
+ *   nivel 1 — forma 1 ×2, forma 2 ×2, forma 3 ×1
+ *   nivel 2 — forma 1 ×2, forma 2 ×2, forma 3 ×3
+ *   nivel 3 — forma 1 ×1, forma 2 ×2, forma 3 ×1
  */
 export const MERCADO_PUESTOS_POR_NIVEL: Record<number, number[]> = {
-  1: [1, 1],
-  2: [3, 3, 3, 3, 1, 1, 1],
-  3: [2, 2],
+  1: [1, 1, 2, 2, 3],
+  2: [1, 1, 2, 2, 3, 3, 3],
+  3: [1, 2, 2, 3],
+};
+
+/**
+ * Zona de la Carpinteria (§9 del doc de trazado urbano). A diferencia del Mercado, no escalona por nivel
+ * interno: los `talleres` nacen todos de una vez al completarse la pieza principal. Objeto (no un literal
+ * suelto) para que el laboratorio pueda ajustar `talleres` en caliente -- misma razon que
+ * `MERCADO_PUESTOS_POR_NIVEL`.
+ */
+export const CARPINTERIA_ZONA = {
+  talleres: 2,
 };
 
 /** Rinde de trigo de UNA Granja según su nivel interno — la mejora duplica producción y costo a la vez (ver
@@ -758,22 +994,142 @@ export function produccionTrigoDeGranja(nivelInterno: number | undefined): numbe
  *   habría NINGÚN hueco válido para la Granja inicial y caería al fallback del origen, encima del Centro
  *   Urbano. Y tiene sentido de fondo: el campo de una ciudad está fuera de su zona de influencia, no dentro.
  */
+/**
+ * PERFIL DE TRAZADO (doc trazado §E6.23) — qué prefiere un edificio cuando elige entre huecos igual de
+ * válidos dentro del núcleo de su ancla. Es una PERMUTACIÓN del desempate de `sitiosPorAtraccionDura`
+ * (engine/trazado.ts), no una plantilla: las reglas siguen siendo locales y la forma sigue emergiendo, pero
+ * la silueta agregada cambia.
+ *
+ * - `nucleos`   — pegado al ancla manda. Racimos densos concéntricos. Es el comportamiento histórico.
+ * - `caminera`  — el frente de calle manda. La ciudad se encadena a las calles que ya existen.
+ * - `compacta`  — la cercanía al CENTRO de la ciudad manda. Cada barrio llena primero su cara interior.
+ * - `gremial`   — el lado compartido con los AFINES manda. Barrios monocromos, oficios segregados.
+ *
+ * Un quinto candidato, "palatina" (dominaba `bordeCompartido` con el ancla), se PROBÓ Y SE DESCARTÓ: ese
+ * término solo tiene señal cuando el candidato toca el anillo del ancla, así que como criterio dominante vale
+ * 0 en casi toda la banda y el resultado salía idéntico a `nucleos` (medido, doc trazado §E6.23). Sigue en el
+ * desempate de todos los perfiles, donde sí sirve — pero no puede encabezar ninguno.
+ */
+export type PerfilTrazado = 'nucleos' | 'caminera' | 'compacta' | 'gremial';
+
+export const PERFILES_TRAZADO: readonly PerfilTrazado[] = ['nucleos', 'caminera', 'compacta', 'gremial'];
+
 export const TRAZADO = {
-  largoFilaMin: 4,
-  largoFilaMax: 8,
+  /**
+   * Override de perfil para el LABORATORIO: `null` = cada asentamiento usa el suyo (política > tradición,
+   * ver `resolverPerfil` en engine/trazado.ts). Con un valor, TODOS los asentamientos usan ese perfil.
+   *
+   * Existe para poder comparar perfiles en el laboratorio y en el batch (`BATCH_PERFIL`) sin montar cargos ni
+   * políticas. Nunca debería tener valor en una partida real — es una palanca de desarrollo, igual que el
+   * resto de campos que el laboratorio muta en caliente.
+   */
+  perfilForzado: null as PerfilTrazado | null,
+  // Ancho de manzana en celdas — doblado en el Paso 1 de la Etapa 6 (§E6.11) junto con `tamanoCelda`: la
+  // manzana mide lo mismo físicamente, se discretiza al doble de resolución.
+  largoFilaMin: 8,
+  largoFilaMax: 16,
+  // `radioAfuerasMin` y `anchoBandaAfueras` están en UNIDADES LOCALES, no en celdas (ver `radioMaximoAfueras`,
+  // engine/trazado.ts, que los compara contra `radioPotencial`): el reescalado de la Etapa 6 NO los toca.
   radioAfuerasMin: 60,
   anchoBandaAfueras: 36,
   // Anclas y satélites, Etapa 2 (Consideraciones/Vista_Asentamiento_Trazado_Urbano.md §5.3/5.7): separación
-  // mínima en celdas entre centros de ancla. `radioMaximoNucleo = separacionMinimaAnclas / 2` (engine/trazado.ts,
-  // `sitiosPorAtraccionDura`) es lo que evita que dos núcleos vecinos se invadan. Sin calibrar por simulación
-  // todavía — ver "Abierto" en el doc.
-  separacionMinimaAnclas: 6,
+  // mínima en celdas entre centros de ancla, usada por la búsqueda de ranura del árbol (`radioInicialRanura` /
+  // `radioMaximoRanura`, engine/trazado.ts, que se derivan de aquí y se reescalan solas).
+  // Ya NO define el núcleo de un ancla: desde §E6.21 ese es la banda de una manzana (`FONDO_MANZANA` celdas
+  // desde el anillo de calle, en `sitiosPorAtraccionDura`), no `separacionMinimaAnclas / 2`.
+  // Doblada en el Paso 1 de la Etapa 6 (§E6.11) — 6 celdas de la rejilla original.
+  separacionMinimaAnclas: 12,
   // Zona de seguridad entre anclas (a petición del usuario): un PISO DURO, no relajable — a diferencia de
   // `separacionMinimaAnclas`, que el doc describe como negociable, esta nunca cede. Ningún ancla real nueva
   // (Mercado, Carpintería — `ANCLAS_REALES`, engine/trazado.ts) puede colocarse a menos de esta distancia,
-  // centro a centro, de OTRA ancla ya construida (`sitiosParaTipo`). Si ningún hueco la cumple, no hay sitio
-  // válido en ese tick — la colocación se salta o se reintenta, igual que cualquier otro "no cabe" del trazado.
-  separacionSeguridadAnclas: 2,
+  // BORDE A BORDE (`gapCeldas` en `huecoEnDireccion`), de OTRA ancla ya construida. Si ningún hueco la
+  // cumple, no hay sitio válido en ese tick — la colocación se salta o se reintenta, igual que cualquier otro
+  // "no cabe" del trazado.
+  // Fijada en 6 celdas tras el playtest del laboratorio (2026-08-31) — deja espacio para una calle y una
+  // hilera de satélites entre dos anclas vecinas sin que se pisen los núcleos.
+  separacionSeguridadAnclas: 6,
+  /**
+   * Ancho de una calle EN CELDAS (Etapa 6, decisión 1 del doc trazado §E6.3). Con la rejilla del Paso 1
+   * (`tamanoCelda` 3), una celda es media Vivienda: callejón estrecho, muy de la Edad de Bronce.
+   *
+   * Es la constante que hace que la calle CUESTE SUELO, que es el fondo del rediseño: con las calles sobre
+   * aristas eran gratis, y por eso el 51% de la red medida no existía físicamente (§E6.1/§E6.2).
+   *
+   * Uniforme a propósito: la jerarquía callejón/avenida queda aplazada, no descartada (ver "Abierto").
+   */
+  anchoCalle: 1,
+  /**
+   * Largo máximo, en celdas, del corredor que un edificio puede reclamar para alcanzar la red (§E6.10).
+   * Es lo que impide enterrarse dentro de un coágulo: cuanto más corto, más se pega la ciudad a las calles
+   * que ya existen. Sin calibrar todavía — es uno de los dos números del Paso 5.
+   *
+   * Granja y Corral NO lo usan: viven a `radioAfuerasMin` por diseño y su camino es largo a propósito, así que
+   * tienen su propio tope (`capCorredorAfueras`). Un cap único los rechazaría a todos.
+   */
+  capCorredorUrbano: 12,
+  capCorredorAfueras: 200,
+};
+
+/**
+ * Murallas (`Consideraciones/Murallas_Definicion.md`). Un recinto es un ANILLO CERRADO DE CELDAS alrededor del
+ * casco urbano, no un edificio: se paga por celda, se levanta celda a celda y sus puertas se congelan al
+ * trazarlo.
+ *
+ * La razón de ser (§0 del doc) es lo que fija estas cifras: la muralla es una ventaja defensiva abrumadora
+ * —**menos puertas benefician al defensor**, que solo tiene que defender un embudo— y por eso tiene que ser
+ * cara de obtener Y de mantener. De ahí que el coste escale con el perímetro y que exista upkeep.
+ *
+ * TODO PLACEHOLDER, y las tarifas están MAL A PROPÓSITO hasta el Paso 1: salían de suponer un núcleo urbano
+ * de 17x14 celdas, pero la medición del Paso 0 (§11.1) encontró tejidos de 22-29 celdas de radio en nivel 2 y
+ * 33-44 en nivel 3 — el perímetro real es 2-3 veces mayor. Se fijan cuando `trazarRecinto` dé el perímetro
+ * del trazo de verdad, no antes.
+ */
+export const MURALLA = {
+  /** Gate de construcción (§8 del doc): el mismo nivel de asentamiento que exigía el viejo edificio `muralla`
+   * que este recinto sustituye (`EDIFICIO_CATALOGO.muralla.requisitoNivelAsentamientoConstruccion`). */
+  nivelMinimoConstruccion: 3,
+  /** Nivel más alto de recinto (§7: 1 empalizada · 2 muro de piedra · 3 muralla con adarve). Tope de
+   * `iniciarMejoraDeRecinto` — no hay nivel 4 de muralla. */
+  nivelMaximo: 3,
+  /** Celdas libres entre el último edificio y el muro (el *pomerium*): la banda por la que se circula y se
+   * defiende. Es también la palanca contra el riesgo de que un muro interior asfixie el casco antiguo tras
+   * una ampliación (§10 del doc). */
+  franjaDeRonda: 1,
+  /** Cada cuántas celdas de tramo recto aparece una torre, por nivel de recinto. Las esquinas convexas llevan
+   * torre siempre. El nivel 1 (empalizada) no tiene torres, por eso no está en la tabla. */
+  pasoTorres: { 2: 8, 3: 5 } as Record<number, number>,
+  /** Edificios extramuros necesarios para poder AMPLIAR el recinto (§10). Sin un mínimo, ampliar sería spam. */
+  arrabalMinimo: 6,
+  /** Ritmo de obra: celdas levantadas por minuto (= por tick) mientras haya materiales. Es lo que hace que el
+   * anillo se vea cerrarse poco a poco en vez de aparecer de golpe. */
+  celdasPorMinuto: 1,
+  /** Multiplicadores de tarifa sobre la celda de muro llana. Una puerta es una casa-puerta, no un hueco. */
+  factorPuerta: 4,
+  factorTorre: 3,
+  /** Coste de UNA celda de muro llana. Nivel 1 = empalizada (madera domina); 2 y 3 son el coste de MEJORAR
+   * cada celda al nivel siguiente, no el coste total acumulado. */
+  tarifaPorCelda: {
+    1: { madera: 20, piedra: 2 },
+    2: { madera: 5, piedra: 25 },
+    3: { madera: 10, piedra: 20 },
+  } as Record<number, Partial<Record<string, number>>>,
+  /** Upkeep por celda y por tick. La mitad de "difícil de obtener Y DE MANTENER": sin esto, una ventaja
+   * abrumadora se pagaría una sola vez y duraría para siempre. */
+  upkeepPorCelda: {
+    1: { madera: 0.02 },
+    2: { piedra: 0.02 },
+    3: { piedra: 0.04 },
+  } as Record<number, Partial<Record<string, number>>>,
+  /**
+   * Bono defensivo base del recinto. El multiplicador REAL que se aplica a los defensores es
+   *
+   *     1 + (bonoDefensaPorNivel[nivel] − 1) × integridad / nºPuertas
+   *
+   * El divisor por puertas es lo que hace real el eje fortaleza↔metrópoli (§0): amurallar pronto da un
+   * embudo barato, amurallar tarde protege más ciudad con más frente que cubrir. El "1 +" garantiza que un
+   * muro NUNCA perjudique al defensor por muchas puertas que tenga.
+   */
+  bonoDefensaPorNivel: { 1: 1.3, 2: 1.8, 3: 2.5 } as Record<number, number>,
 };
 
 // --- Sprint 3: Economía (Doc 3) ---
@@ -783,14 +1139,13 @@ export const TRAZADO = {
 // Velocidad ×2 en las 4 categorías (a petición del usuario, ampliación de comercio): el batch de diagnóstico
 // mostró que a la velocidad original un trueque de tamaño moderado a distancia media podía necesitar más
 // ticks de viaje (varios envíos en serie, uno por vez por cada lado del acuerdo, ver `asignarCaravanasATrueque`
-// en engine/trade.ts) que `TRUEQUE.plazoTicksPorDefecto` — el acuerdo expiraba antes de poder completarse
+// en engine/trade.ts) que `TRUEQUE.plazoMinutosPorDefecto` — el acuerdo expiraba antes de poder completarse
 // pase lo que pase. Doblar la velocidad de las 4 a la vez mantiene el catálogo consistente entre sí.
+// Categorías de caravana sin flota propia (Doc 3.6): la de Fundación (`construccion`, Doc 1.8) es la única
+// con uso real; `militar`/`contrabando` siguen siendo solo datos, a la espera de sus disparadores. La
+// caravana `comercial` YA NO está aquí — desde el revamp (Doc 3.13) deriva capacidad y velocidad de sus
+// carros y animales (`capacidadCaravana`/`velocidadCaravana`, engine/caravanas.ts).
 export const CARAVANA_CATALOGO = {
-  // costoConstruccion (nuevo, ampliación de comercio): solo 'comercial' es un activo persistente que el
-  // jugador construye y conserva (flota propia, ver `construirCaravanaComercial`) — militar/construccion/
-  // contrabando siguen siendo instanciadas por su propio mecanismo (reclutamiento militar sin implementar
-  // todavía; Caravana de Fundación, Doc 1.8) y no tienen costo de flota propio.
-  comercial: { capacidad: 60, velocidad: 16, costoConstruccion: { madera: 50 } },
   militar: { capacidad: 40, velocidad: 12 },
   construccion: { capacidad: 150, velocidad: 10 },
   contrabando: { capacidad: 20, velocidad: 24 },
@@ -799,15 +1154,61 @@ export const CARAVANA_CATALOGO = {
 /**
  * Cooldown de creación de caravanas (a petición del usuario): tras crear una caravana desde un asentamiento
  * —Fundación (`lanzarCaravanaFundacion`, engine/expansion.ts) o comercial (`construirCaravanaComercial`,
- * engine/trade.ts), COMPARTIDO entre las dos— hay que esperar `ticksCooldown` ticks antes de poder crear otra
+ * engine/trade.ts), COMPARTIDO entre las dos— hay que esperar `cooldownMinutos` ticks antes de poder crear otra
  * desde el mismo asentamiento. Evita que se spamee la creación cuando una caravana recién salida es destruida
  * (bandidos, `engine/bandidos.ts`; intercepción de otra Facción, `engine/combate.ts`) y el cupo/recursos
- * vuelven a estar disponibles de inmediato. Mismo patrón que `CAMPAMENTOS_BANDIDOS.ticksRespawn` /
- * `REGENERACION_NODOS.*.ticksCooldown` — un solo número parametrizable, sin calibrar por simulación todavía.
+ * vuelven a estar disponibles de inmediato. Mismo patrón que `CAMPAMENTOS_BANDIDOS.respawnMinutos` /
+ * `REGENERACION_NODOS.*.cooldownMinutos` — un solo número parametrizable, sin calibrar por simulación todavía.
  */
 export const CARAVANA_COOLDOWN = {
-  ticksCooldown: 10,
+  cooldownMinutos: 10,
 };
+
+/**
+ * Revamp de caravanas (Doc 3.13, `Consideraciones/Revamp_Caravanas_Definicion.md`). Una caravana `comercial`
+ * es una lista de carros, cada uno con su animal, y DERIVA de ahí su capacidad y velocidad
+ * (`capacidadCaravana`/`velocidadCaravana`, `engine/caravanas.ts`).
+ *
+ * ANCLA DE CALIBRACIÓN (decisión del usuario, Ronda 2): `1 carro básico + 1 buey` da 500/16, y su coste
+ * (20 madera del carro + 30 madera del buey = 50 madera) es el mismo que costaba antes crear una caravana, así
+ * que el batch NPC —que nunca compone nada más, `construirCaravanaComercial`— no se mueve. Todas las demás
+ * cifras son PLACEHOLDER sin calibrar por simulación, como el resto de Fase 0.
+ */
+export const CARRO_CATALOGO = {
+  // capacidadBase se multiplica por el `factorCarga` del animal para dar la capacidad real del carro.
+  basico: { capacidadBase: 500, costo: { madera: 20 }, fabrica: 'mercado' },
+  reforzado: { capacidadBase: 800, costo: { madera: 40 }, fabrica: 'carpinteria' },
+} as const;
+
+export const ANIMAL_CATALOGO = {
+  // factorCarga multiplica la `capacidadBase` del carro; velocidad entra en el `min` de la caravana; costo es
+  // lo que cuesta comprarlo (la cría está diferida, Doc 3.13.7).
+  //
+  // El BUEY se paga en ORO (~12), no en madera (bloque "economía del oro", Doc 3.13.2 —
+  // `Consideraciones/Economia_Del_Oro_Definicion.md` Paso 5). El deadlock que antes justificaba la madera
+  // ("sin caravana no hay comercio, sin comercio no hay oro, sin oro no hay caravana") se corta porque la
+  // fundación ya entrega 100 oro (`FUNDACION.materialesIniciales`) y la recaudación de oro por población
+  // (Doc 4.1) lo repone aunque no haya mina — un asentamiento nuevo se paga su primera caravana (20 madera +
+  // 12 oro) con lo que trae de fundar. Buey barato para que sea una decisión de cuántas caravanas montar, no
+  // un muro. PLACEHOLDER — la caravana #0 gratis se probó y se quitó en calibración.
+  buey: { factorCarga: 1.0, velocidad: 16, costo: { oro: 12 } },
+  caballo: { factorCarga: 0.5, velocidad: 24, costo: { oro: 60 } },
+  camello: { factorCarga: 0.75, velocidad: 19, costo: { oro: 40 } },
+} as const;
+
+/**
+ * Preparación de una caravana lanzada a mano (Doc 3.13.3): antes de salir pasa por el estado `'preparando'`
+ * en el origen durante `kPorCarro × max(0, nº carros − 1)` ticks — una caravana de 1 carro sale al instante,
+ * las grandes tardan. Placeholder sin calibrar.
+ */
+export const CARAVANA_PREPARACION = { kPorCarro: 2 };
+
+/**
+ * Escolta sin héroe (Doc 3.13.4): un residente del origen cede escuadrones a una caravana como escolta
+ * permanente por viaje. `cupoPorNivelMercado[n-1]` es cuántos escuadrones admite una caravana según el nivel
+ * interno del Mercado del origen (1 → 1, 2 → 2, 3 → 3). Placeholder sin calibrar.
+ */
+export const CARAVANA_ESCOLTA = { cupoPorNivelMercado: [1, 2, 3] as const };
 
 /**
  * Scoring de asignación de caravanas disponibles a lados pendientes de trueque (ampliación de comercio, a
@@ -827,9 +1228,23 @@ export const ASIGNACION_CARAVANA = {
   distanciaReferencia: 600,
 };
 
+/**
+ * Cuanto vive una orden de mercado sin que nadie la tome (Doc 3.3).
+ *
+ * **200 minutos, el mismo plazo que un trueque** (`TRUEQUE.plazoMinutosPorDefecto`), y a proposito: son la
+ * misma clase de compromiso —una oferta en pie— y darles vidas distintas seria una diferencia que habria que
+ * justificar y no hay con que.
+ *
+ * PLACEHOLDER a calibrar: es el numero que decide cada cuanto una plaza NPC revisa sus precios, porque solo
+ * republica cuando la anterior ha caducado.
+ */
+export const MERCADO = {
+  plazoOrdenMinutos: 200,
+};
+
 export const TRUEQUE = {
   // "expirar un plazo" sin número fijado en el diseño (ver Preguntas_Abiertas) — placeholder.
-  plazoTicksPorDefecto: 200,
+  plazoMinutosPorDefecto: 200,
 };
 
 // Precio de referencia por defecto, según escasez/abundancia GLOBAL (Doc 3.4, sin componente de distancia).
@@ -947,7 +1362,7 @@ export const POLITICAS = {
     sacerdote: { base: 1, maximo: 1 },
   } as const,
   nivelFaccionPorSlotExtraGobernador: 3,
-  duracionTicksPorDefecto: 150,
+  duracionMinutosPorDefecto: 150,
 };
 
 /**
@@ -959,7 +1374,27 @@ export const POLITICA_CATALOGO = [
   { id: 'racionamiento', cargo: 'sacerdote', nombre: 'Racionamiento', factorConsumoComida: 0.8 },
   { id: 'culto_fertilidad', cargo: 'sacerdote', nombre: 'Culto a la Fertilidad', factorCrecimientoNobleza: 1.5 },
   { id: 'via_rapida', cargo: 'maestroObras', nombre: 'Vía Rápida de Construcción', factorTiempoConstruccion: 0.75 },
-  { id: 'postura_defensiva', cargo: 'maestroObras', nombre: 'Postura Defensiva' }, // flag de layout, Doc 4.2 — sin efecto visual en Fase 0
+  // --- Ordenanzas de TRAZADO (doc trazado §E6.23) ---
+  //
+  // Las cuatro fijan el `perfilTrazado` del asentamiento mientras están activas: cambian QUÉ PREFIERE un
+  // edificio al elegir entre huecos igual de válidos, no imponen ninguna plantilla — la forma sigue emergiendo
+  // (ver `ORDEN_POR_PERFIL`, engine/trazado.ts). Son EXCLUYENTES ENTRE SÍ sin necesidad de ninguna regla nueva:
+  // `maestroObras` tiene un único slot (`POLITICAS.slotsPorCargo`), así que activar una obliga a esperar a que
+  // expire la anterior. Compiten en ese mismo slot con Vía Rápida y Líneas de Producción, que es la tensión
+  // interesante: forma contra velocidad contra logística.
+  //
+  // Como una política dura `duracionMinutosPorDefecto` (150 ticks) y nada mueve lo ya construido, cada una
+  // deja un ESTRATO en la ciudad en vez de reformarla entera — la ciudad acaba registrando su historia
+  // política en su geometría.
+  //
+  // PENDIENTE (a propósito, no olvido): ninguna tiene todavía coste/beneficio mecánico propio, así que hoy
+  // compiten en desventaja contra Vía Rápida (−25% de tiempo de obra). `barrios_gremiales` es la que más cerca
+  // está de tener uno solo: agrupar industria acorta la distancia a los insumos, que `factorLineaProduccion`
+  // (engine/construction.ts) ya mide y ya premia. Sin calibrar.
+  { id: 'postura_defensiva', cargo: 'maestroObras', nombre: 'Postura Defensiva', perfilTrazado: 'compacta' },
+  { id: 'arterias_comerciales', cargo: 'maestroObras', nombre: 'Arterias Comerciales', perfilTrazado: 'caminera' },
+  { id: 'barrios_gremiales', cargo: 'maestroObras', nombre: 'Barrios Gremiales', perfilTrazado: 'gremial' },
+  { id: 'plazas_mayores', cargo: 'maestroObras', nombre: 'Plazas Mayores', perfilTrazado: 'nucleos' },
   // A petición del usuario, líneas de producción (Doc 4.2.1): mientras esté activa, la auto-construcción sitúa
   // los edificios de transformación nuevos (Fundición/Curtiduría/Armería) en el hueco de su zona que minimiza
   // la penalización de distancia a la fuente de sus insumos (`sitioConcentricoLineaProduccion`,
@@ -984,6 +1419,12 @@ export const POLITICA_CATALOGO = [
   // A petición del usuario: sube la producción de trigo de TODAS las Granjas activas ×1.5 (madera/piedra sin
   // cambios) — ver `factorProduccionTrigo` en engine/politicas.ts, aplicado en `avanzarConstruccion`.
   { id: 'edicto_cosecha', cargo: 'gobernador', nombre: 'Edicto de Cosecha', factorProduccionTrigo: 1.5 },
+  // Presión Fiscal (Tesorero, bloque "economía del oro", Doc 4.1/4.4): sube la recaudación de oro por población
+  // a cambio de frenar el crecimiento de las 3 clases. Sin sistema de felicidad todavía — el downside es
+  // directo sobre el crecimiento (`factorCrecimientoPoblacion` en `crecerPoblacion`). Números PLACEHOLDER, a
+  // calibrar en la campaña conjunta del bloque. "Alivio Fiscal" (ir por debajo del baseline) no entra en el
+  // primer pase.
+  { id: 'presion_fiscal', cargo: 'tesorero', nombre: 'Presión Fiscal', factorRecaudacion: 1.6, factorCrecimientoPoblacion: 0.8 },
 ] as const;
 
 // --- Sprint 5: Guerra simplificada (Doc 5) ---
@@ -1004,8 +1445,25 @@ export const POLITICA_CATALOGO = [
  * contradiciendo la propia terminología del diseño: "una tropa es el tipo de escuadrón que se recluta DE UNA
  * VEZ", Doc 0/Glosario y Doc 5.8): cada tropa forma un escuadrón de un tamaño fijo al reclutarse — `costoEquipo`
  * sigue siendo POR SOLDADO, así que el coste total de reclutar se multiplica por este número (ver
- * `reclutarTropa`, engine/tropas.ts). Cifras PLACEHOLDER sin calibrar por simulación todavía.
+ * `reclutarTropa`, engine/tropas.ts).
+ *
+ * **Ya no se escribe por tropa: se DERIVA del escalón** (`UNIDADES_POR_ESCALON`, decisión del usuario
+ * 2026-09-04). Cuanto más de élite, menos cuerpos. La razón es que al pasar el coste de Liderazgo a escalones
+ * planos, el tamaño del escuadrón se convirtió en la única variable que decide el poder nominal por punto de
+ * Liderazgo — y estaba puesta a ojo. El resultado medido era una tropa DOMINANTE: los Arqueros traían 25
+ * hombres (tamaño de leva) con poder de veterana y rendían 10,2 de poder por punto, más que cualquier leva,
+ * mientras la élite rendía 6,7 y la pesada 5,6. La élite salía más eficiente que la pesada: invertido.
+ *
+ * Derivarlo en vez de corregir once números a mano es lo que impide que vuelva a desalinearse: una tropa
+ * nueva hereda el tamaño de su escalón y no hay forma de escribir uno que lo contradiga.
  */
+
+/**
+ * Cuántos soldados forma un escuadrón, según su escalón (Doc 5.11.1). La élite viene en pocos cuerpos y la
+ * leva en muchos: es lo que hace que subir de escalón sea calidad y no cantidad, y lo que ordena el poder por
+ * punto de Liderazgo de mayor (leva) a menor (élite).
+ */
+export const UNIDADES_POR_ESCALON: Record<number, number> = { 1: 25, 2: 20, 3: 18, 4: 15, 5: 12 };
 export const TROPAS_RECLUTABLES: {
   id: string;
   nombre: string;
@@ -1013,8 +1471,18 @@ export const TROPAS_RECLUTABLES: {
   nivelRequerido: number;
   costoEquipo: Partial<Record<string, number>>;
   poderBase: number;
+  /** Soldados del escuadrón. NO se escribe por tropa: lo pone el `.map` del final a partir del escalón
+   * (`UNIDADES_POR_ESCALON`), que es lo que impide que vuelva a desalinearse. */
   unidadesPorDefecto: number;
-}[] = [
+  /** Velocidad de marcha por el mapa general (Doc 5.12.5). Un ejército va al ritmo de su escuadrón MÁS
+   * LENTO, así que meter un solo escuadrón pesado en una partida de incursión la frena. Las dos reglas que
+   * fijan estos números: una caravana inicial (comercial, 16) no puede ser más rápida que un ejército, y un
+   * jugador solo con infantería ligera tiene que poder alcanzarla. */
+  velocidad: number;
+  /** Escalón de élite, 1 (leva) a 5 (élite). Decide su coste de Liderazgo — ver `LIDERAZGO.costePorEscalon`. */
+  escalon: 1 | 2 | 3 | 4 | 5;
+}[] = (
+  [
   // Escalón de entrada (a petición del usuario: la defensa mínima no debe depender de Barracón — que exige
   // añadirlo MANUALMENTE a la cola vía Gobernador/Maestro de Obras antes de siquiera empezar a construirse,
   // ver `anadirEdificioManualmente` en engine/construction.ts — sino de Centro Urbano, el único edificio que
@@ -1025,40 +1493,278 @@ export const TROPAS_RECLUTABLES: {
   // pasar por Armería. Débil a propósito (poderBase 2, por debajo de todo lo demás): existe para que el bucle
   // de juego arranque y las primeras escaramuzas ocurran pronto, no para ganar batallas. Sigue exigiendo un
   // General asignado (`reclutarTropa` en engine/tropas.ts) — eso no cambia, solo el edificio.
-  { id: 'milicia_lanceros', nombre: 'Milicia de lanceros', edificio: 'centroUrbano', nivelRequerido: 1, costoEquipo: { madera: 2 }, poderBase: 2, unidadesPorDefecto: 25 },
+  { id: 'milicia_lanceros', nombre: 'Milicia de lanceros', edificio: 'centroUrbano', nivelRequerido: 1, costoEquipo: { madera: 2 }, poderBase: 2, velocidad: 20, escalon: 1 },
   // Recosteadas a `armaMadera` (ver RECETA_ARMA_MADERA): antes exigían la cadena del cobre/cuero entera, lo
   // que era además temáticamente incoherente — un escudo de MIMBRE pagado con un arma de cobre, y unos
   // Honderos (una honda y una piedra) pagados con armadura de cuero. El cobre pasa a ser la MEJORA
   // (`espadachines_cobre`, que sí lo conserva), no el ticket de entrada.
-  { id: 'lanceros_mimbre', nombre: 'Lanceros con escudo de mimbre', edificio: 'barracon', nivelRequerido: 1, costoEquipo: { armaMadera: 1 }, poderBase: 3, unidadesPorDefecto: 20 },
-  { id: 'espadachines_cobre', nombre: 'Espadachines de espada corta de cobre', edificio: 'barracon', nivelRequerido: 1, costoEquipo: { armaCobre: 1, armaduraBasica: 1 }, poderBase: 4, unidadesPorDefecto: 20 },
-  { id: 'hacheros_ligeros', nombre: 'Hacheros ligeros', edificio: 'barracon', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraBasica: 1 }, poderBase: 7, unidadesPorDefecto: 18 },
-  { id: 'espadachines_bronce', nombre: 'Espadachines con espadas y escudos de bronce', edificio: 'barracon', nivelRequerido: 2, costoEquipo: { armaBronce: 2, armaduraIntermedia: 1 }, poderBase: 9, unidadesPorDefecto: 18 },
-  { id: 'lanceros_pesados', nombre: 'Lanceros pesados micénicos', edificio: 'barracon', nivelRequerido: 3, costoEquipo: { armaBronce: 2, armaduraIntermedia: 2 }, poderBase: 14, unidadesPorDefecto: 15 },
-  { id: 'hacheros_armados', nombre: 'Hacheros armados', edificio: 'barracon', nivelRequerido: 3, costoEquipo: { armaBronce: 1, armaduraIntermedia: 1 }, poderBase: 12, unidadesPorDefecto: 15 },
-  { id: 'honderos', nombre: 'Honderos', edificio: 'galeriaDeTiro', nivelRequerido: 1, costoEquipo: { armaMadera: 1 }, poderBase: 5, unidadesPorDefecto: 25 },
-  { id: 'escaramuzadores_jabalina', nombre: 'Escaramuzadores con jabalina', edificio: 'galeriaDeTiro', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraBasica: 1 }, poderBase: 8, unidadesPorDefecto: 20 },
-  { id: 'arqueros', nombre: 'Arqueros', edificio: 'galeriaDeTiro', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraIntermedia: 1 }, poderBase: 9, unidadesPorDefecto: 25 },
-  { id: 'arqueros_compuesto', nombre: 'Arqueros con arco compuesto', edificio: 'galeriaDeTiro', nivelRequerido: 3, costoEquipo: { armaBronce: 3, armaduraIntermedia: 2 }, poderBase: 15, unidadesPorDefecto: 20 },
-];
+  { id: 'lanceros_mimbre', nombre: 'Lanceros con escudo de mimbre', edificio: 'barracon', nivelRequerido: 1, costoEquipo: { armaMadera: 1 }, poderBase: 3, velocidad: 20, escalon: 1 },
+  { id: 'espadachines_cobre', nombre: 'Espadachines de espada corta de cobre', edificio: 'barracon', nivelRequerido: 1, costoEquipo: { armaCobre: 1, armaduraBasica: 1 }, poderBase: 4, velocidad: 16, escalon: 2 },
+  { id: 'hacheros_ligeros', nombre: 'Hacheros ligeros', edificio: 'barracon', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraBasica: 1 }, poderBase: 7, velocidad: 16, escalon: 3 },
+  { id: 'espadachines_bronce', nombre: 'Espadachines con espadas y escudos de bronce', edificio: 'barracon', nivelRequerido: 2, costoEquipo: { armaBronce: 2, armaduraIntermedia: 1 }, poderBase: 9, velocidad: 16, escalon: 3 },
+  { id: 'lanceros_pesados', nombre: 'Lanceros pesados micénicos', edificio: 'barracon', nivelRequerido: 3, costoEquipo: { armaBronce: 2, armaduraIntermedia: 2 }, poderBase: 14, velocidad: 12, escalon: 4 },
+  { id: 'hacheros_armados', nombre: 'Hacheros armados', edificio: 'barracon', nivelRequerido: 3, costoEquipo: { armaBronce: 1, armaduraIntermedia: 1 }, poderBase: 12, velocidad: 12, escalon: 4 },
+  { id: 'honderos', nombre: 'Honderos', edificio: 'galeriaDeTiro', nivelRequerido: 1, costoEquipo: { armaMadera: 1 }, poderBase: 5, velocidad: 20, escalon: 2 },
+  { id: 'escaramuzadores_jabalina', nombre: 'Escaramuzadores con jabalina', edificio: 'galeriaDeTiro', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraBasica: 1 }, poderBase: 8, velocidad: 20, escalon: 3 },
+  { id: 'arqueros', nombre: 'Arqueros', edificio: 'galeriaDeTiro', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraIntermedia: 1 }, poderBase: 9, velocidad: 16, escalon: 3 },
+  { id: 'arqueros_compuesto', nombre: 'Arqueros con arco compuesto', edificio: 'galeriaDeTiro', nivelRequerido: 3, costoEquipo: { armaBronce: 3, armaduraIntermedia: 2 }, poderBase: 15, velocidad: 12, escalon: 5 },
+  ] as const
+).map((t) => ({ ...t, unidadesPorDefecto: UNIDADES_POR_ESCALON[t.escalon]! }));
 
 export const MILITAR = {
-  racionPorSoldadoPorTick: 0.15,
-  regeneracionMoralPorTick: 5,
+  racionPorSoldadoPorMinuto: 0.15,
+  regeneracionMoralPorMinuto: 5,
   degradacionMoralSinRacion: 20,
-  // Fracción de la cantidad del escuadrón que deserta por tick mientras la moral está a 0 (Doc 5.4).
-  desercionFraccionPorTickSinMoral: 0.05,
+  // Fracción de la cantidad del escuadrón que deserta por minuto mientras la moral está a 0 (Doc 5.4).
+  desercionFraccionPorMinutoSinMoral: 0.05,
   bonusVeteraniaPorPunto: 0.05,
   veteraniaGanadaPorVictoria: 1,
   veteraniaGanadaPorDerrota: 0.5,
   // Cohesión entre escuadrones defendiendo juntos (Doc 5.3), abstraída como bonus de poder (sin formaciones renderizadas).
   bonusCohesionPorEscuadronExtra: 0.1,
-  duracionHeridoTicks: 30,
+  duracionHeridoMinutos: 30,
   penalizacionHerido: 0.5,
   varianzaCombate: 0.15,
   // Combate de caravanas (Doc 3.10): umbral de captura del 50% y defensa base de una escolta no modelada en detalle.
   umbralCapturaCaravana: 0.5,
   defensaBaseCaravana: 15,
+};
+
+/**
+ * Ocupación post-conquista (Doc 5.4, `Consideraciones/Ocupacion_Post_Conquista_Definicion.md`). Al conquistar,
+ * el ejército conquistador SE VUELVE la guarnición (`absorberColumna`), el asentamiento se saquea y entra en
+ * una ventana de ocupación de tiempo fijo: inmune a nuevo asedio, recaudación y crecimiento reducidos,
+ * mantenimiento congelado. Corta el ping-pong de conquistas — reconquistar exige ganar un asedio real contra
+ * la guarnición instalada. TODO PLACEHOLDER, a calibrar en batch (Paso 10 del plan).
+ */
+export const OCUPACION = {
+  duracionMinutos: 90,
+  /** Fracción de pesants+artesanos que se pierde en el saqueo (nobleza intacta, huye/negocia). */
+  fraccionSaqueoPoblacion: 0.25,
+  /** Fracción de los edificios `activo` que el saqueo baja a `en_cola` marcados `danado` — excluidos Centro
+   * Urbano y al menos una Granja y una Leñera activas. */
+  fraccionEdificiosDanados: 0.25,
+  /** Un edificio `danado` se reconstruye pagando esta fracción del costo de catálogo y tardando esa fracción
+   * de tiempo — se repara, no se levanta de cero. */
+  fraccionCosteReconstruccion: 0.5,
+  /** Reducción del `avance` de cada recinto completo (sobre `celdas.length`): la muralla se daña, no cae. */
+  fraccionDanoMuralla: 0.3,
+  /** Recaudación de oro del asentamiento durante la ventana (`recaudacionOro`). */
+  factorRecaudacion: 0.5,
+  /** Crecimiento de población durante la ventana (`crecerPoblacion`, factor `felicidad`). */
+  factorCrecimiento: 0.5,
+};
+
+/**
+ * Liderazgo (Doc 5.11): cuánta tropa puede sacar a campaña un Jugador de una vez. Límite de SALIDA, no de
+ * posesión — lo que se queda es la guarnición, y es lo único que defiende (Doc 5.12.4).
+ *
+ * **El coste va por ESCALÓN, no derivado del poder (rediseño 2026-09-04, decisión del usuario).** Antes era
+ * `poderBase × unidades × factor`, y esa fórmula tenía un defecto de fondo que el consejo ya había señalado:
+ * al ser el coste exactamente proporcional al poder nominal, **el poder por punto de Liderazgo salía idéntico
+ * para las once tropas**. La élite no era mejor por punto, solo venía en envase más pequeño — así que elegir
+ * no era una decisión, era aritmética.
+ *
+ * Con coste por escalón el coste crece MÁS DEPRISA que el poder, y eso es lo que se busca: la élite es
+ * deliberadamente ineficiente por punto. Se la lleva uno porque veinte cuerpos de élite aguantan un paso que
+ * cien de leva no, no porque rindan más por punto gastado.
+ *
+ * Los cinco escalones y su presupuesto están elegidos para que las composiciones interesantes queden JUSTO en
+ * el techo, que es lo que hace que la decisión duela:
+ *
+ * | Escalón | Coste | Caben con 100 |
+ * |---|---|---|
+ * | 1 — leva | 7 | 14 |
+ * | 2 — tropa de línea | 14 | 7 |
+ * | 3 — veterana | 22 | 4 |
+ * | 4 — pesada | 32 | 3 |
+ * | 5 — élite | 45 | 2 |
+ *
+ * Y las mezclas máximas salen redondas: **1 élite + 1 pesada + 1 veterana = 99**, **2 pesadas + 1 veterana +
+ * 1 de línea = 100**. Ninguna sobra ni falta por poco.
+ *
+ * `base` 100 (decisión del usuario). El techo con equipo queda para cuando exista la artesanía de armaduras
+ * (`Docs/Mecanicas a desarrollar.md` §11, progresión de jugador): la mecánica ya lo admite sin tocar nada —
+ * `Jugador.liderazgoBase` es por jugador y quien no lo tenga usa este valor.
+ */
+export const LIDERAZGO = {
+  base: 100,
+  costePorEscalon: { 1: 7, 2: 14, 3: 22, 4: 32, 5: 45 } as Record<number, number>,
+};
+
+/**
+ * Oro por soldado al reclutar (Doc 5.8, bloque "economía del oro" — `Consideraciones/Economia_Del_Oro_Definicion.md`
+ * Paso 4): además del equipo (`costoEquipo`), reclutar cuesta oro según el escalón de la tropa. Curva que sube
+ * más deprisa que el poder, igual criterio que `LIDERAZGO.costePorEscalon`. El coste total de oro es este
+ * valor × nº de soldados reclutados/repuestos.
+ *
+ * **Única excepción: la Milicia de lanceros del Centro Urbano** (`tropa.edificio === 'centroUrbano'`), que
+ * sigue costando solo madera — la defensa mínima no depende del tesoro. Todo lo del Barracón/Galería cuesta
+ * oro, escalón 1 incluido. `factorCostoReclutamiento` ("Leva Forzosa") NO toca esta línea, solo el equipo.
+ * Regla de motor uniforme (NPC + jugador). Todo PLACEHOLDER, a calibrar en la campaña conjunta del bloque.
+ */
+export const RECLUTAMIENTO_ORO_POR_ESCALON: Record<number, number> = { 1: 1, 2: 2, 3: 4, 4: 7, 5: 11 };
+
+/**
+ * Logística de campaña (Doc 5.13). Todo PLACEHOLDER a calibrar.
+ *
+ * `capacidadCarroPorJugador` NO es un número elegido: sale del RADIO OPERATIVO objetivo que fijó el usuario
+ * —"un jugador solo tiene que poder recorrer al menos un cuarto del mapa ida y vuelta"— sobre el mapa de
+ * 2000×2000. Son 1.000 unidades de recorrido; una carga máxima de liderazgo (~70 soldados) a velocidad
+ * ligera (20) tarda 50 ticks y come `70 × 0.15 × 50 = 525`. De ahí el 500 redondeado.
+ *
+ * IMPORTANTE al rebalancear: si cambia la ración o la producción de trigo, RECALCULAR desde el radio en vez
+ * de ajustar este número a ojo — si no, el radio operativo se rompe en silencio. `autonomiaTicksObjetivo` es
+ * el invariante de diseño del que cuelga todo lo demás.
+ */
+export const LOGISTICA = {
+  capacidadCarroPorJugador: 500,
+  autonomiaTicksObjetivo: 50,
+  /**
+   * Cuánto come un ejército ACAMPADO respecto a uno en marcha (Doc 5.12.3). **Una décima parte** (decisión
+   * del usuario, 2026-09-04): con 0.5 estacionar apenas compraba tiempo —un carro lleno aguantaba el doble en
+   * vez de diez veces más— y "plantarse en un sitio" no llegaba a ser una jugada. A 0.1 sí lo es: sostener un
+   * paso de montaña deja de ser una carrera contra el hambre.
+   *
+   * Nunca 0, que es la otra mitad de la regla: acampar cuesta comida, solo que poca.
+   */
+  factorConsumoEstacionado: 0.1,
+  radioReabastecimiento: 60,
+  /**
+   * A qué distancia dos cosas que se mueven se TROPIEZAN (Paso 10). **15** (decisión del usuario,
+   * 2026-09-04), frente a los 150 de visión: ver y chocar son cosas distintas y por eso los números no se
+   * parecen. Con 15 un ejército divisa a otro con muchísima antelación y puede evitarlo, interceptarlo o
+   * prepararse — el encuentro es una DECISIÓN, no un accidente por pasar cerca.
+   *
+   * El conflicto que esto cierra: con 60 (el valor de reabastecimiento, heredado sin decidir) el margen entre
+   * ver y chocar era de solo 2.5×, y cualquier cruce de rutas acababa en combate quisiera o no.
+   */
+  radioEncuentro: 15,
+};
+
+/**
+ * El jugador moviéndose por el mundo (Doc 1.10 y 5.12): lo que cuesta y lo que rinde ir por ahí, con tropas
+ * o sin ellas.
+ *
+ * PLACEHOLDER a calibrar por simulación, como el resto de constantes militares.
+ */
+export const MOVIMIENTO = {
+  /**
+   * Velocidad de una columna SIN escuadrones — un jugador viajando solo. Por encima de la tropa ligera (20)
+   * porque un hombre solo no arrastra impedimenta, y por debajo de la caravana de contrabando (24), que por
+   * diseño escapa de todo.
+   */
+  velocidadJugador: 22,
+  /**
+   * Trigo por participante y minuto, con tropas o sin ellas. Existe para que una columna sin soldados no
+   * consuma CERO: viajar tiene que costar algo, o el viajero solitario sería gratis e infinito. Poco en
+   * absoluto —un carro lleno (500) da para más de 16 horas de viaje— pero nunca nada.
+   */
+  consumoPorParticipante: 0.5,
+  /**
+   * A qué distancia de una plaza se puede cruzar su puerta (Doc 1.10.3). **10**, la más corta de las
+   * distancias de interacción — por debajo del choque (15) y muy por debajo de ver (150): entrar exige
+   * estar literalmente en la puerta, no en las afueras. Es lo que hace de "entrar" un acto y no un roce.
+   */
+  radioPuerta: 10,
+  /**
+   * Cuánto vive una petición de unión sin contestar, antes de darse por RECHAZADA (Doc 5.14.1). **10**, y
+   * corto a propósito: pocos para que el que pide no se quede plantado en mitad del mapa, bastantes para que
+   * un grupo que está hablando se organice. La consecuencia se asume: *preguntar* solo funciona con el Líder
+   * al teclado, así que una columna que marcha en serio elegirá casi siempre *aceptar* o *rechazar*.
+   *
+   * En segundos y no en minutos porque en minutos sería 1/6. Es el único plazo del juego por debajo del tick.
+   */
+  vidaPeticionUnionSegundos: 10,
+  /**
+   * A que distancia se puede INSPECCIONAR una columna o una caravana ajena, y a la que el observado se entera
+   * (Doc 5.12.3). **40**: a media distancia entre ver (150) y chocar (15), que es lo que lo hace un juego de
+   * dos. Bastante lejos como para que un explorador se acerque y se vaya antes de que una columna lo alcance
+   * —es mas rapido—, bastante cerca como para que mirar cueste ser visto mirando.
+   */
+  radioInspeccion: 40,
+  /**
+   * Cuanto dura la TREGUA de quien acaba de ser derrotado en campo abierto (Doc 5.12.3). **5 minutos**, y
+   * corta por los DOS lados: ni le atacan ni ataca.
+   *
+   * Las dos mitades hacen falta. Sin la primera, a un viajero se le puede acosar en cadena hasta arruinarlo.
+   * Sin la segunda, la inmunidad seria un escudo para depredar sin riesgo: cinco minutos de barra libre.
+   */
+  treguaTrasDerrotaMinutos: 5,
+  /**
+   * Que fraccion del carro se lleva quien derrota a un viajero (Doc 5.12.3). **La mitad**: dejarle algo es lo
+   * que hace que valga la pena seguir el viaje en vez de reiniciarlo, y lo que distingue un robo de una
+   * ruina. Con el carro vacio no hay botin, solo la tregua.
+   *
+   * Solo se aplica a una columna PERSONAL. A un ejercito derrotado se le quitan las caravanas adjuntas
+   * (Doc 5.13.2), que es su equivalente y ya existia.
+   */
+  fraccionRobada: 0.5,
+};
+
+/**
+ * Niebla de guerra (Doc 5.12.7 y Doc 6 §12): hasta dónde alcanza la vista de cada cosa, en unidades de MAPA.
+ *
+ * Los dos radios viven juntos porque **solo se entienden comparados**: la relación entre ellos es la regla de
+ * juego, no cada cifra por su lado.
+ */
+export const VISION = {
+  /**
+   * Campo de visión de un ejército en marcha.
+   *
+   * 150 sobre un mapa de 2000 es ~2 radios de provincia (~76, ver `ESCALA` y Doc 1.0a): un ejército ve
+   * VARIAS ciudades por delante si la geografía lo permite, que es lo que se pedía. Y queda holgadamente por
+   * debajo del radio de cohesión de un reino (`MANTENIMIENTO.escalaDistancia` = 400, ~5 provincias), así que
+   * ver no equivale a controlar.
+   *
+   * Se descartó 30 —el radio de una zona de influencia recién fundada— porque bajo la escala rota parecía
+   * razonable y con la escala declarada no llega ni al borde de la propia provincia.
+   */
+  ejercito: 150,
+  /**
+   * Lo que ve un jugador SOLO, sin tropa (Doc 1.10). **80**, por debajo de los 150 de una columna: un hombre
+   * solo no despliega batidores.
+   *
+   * La tension que fija el numero: bastante para viajar sin caer en emboscadas a ciegas —que es lo que hace
+   * jugable el primer minuto de partida—, poco para que el explorador solitario sea la mejor unidad de
+   * informacion del juego. Sigue por encima del anillo de inspeccion (40), asi que ver y mirar de cerca
+   * siguen siendo cosas distintas tambien para el.
+   */
+  jugadorSolo: 80,
+  /**
+   * Cuánto ve un asentamiento MÁS ALLÁ de su radio de influencia (decisión del usuario, 2026-09-04): la plaza
+   * vigila algo más allá de su frontera, como una atalaya. **60**, por tres razones:
+   *
+   * - **Menos que la vista de un ejército** (150), que es lo que mantiene el valor de explorar: una columna en
+   *   marcha divisa una plaza mucho antes de que la plaza la divise a ella, y conserva la iniciativa.
+   * - **Duplica el área vigilada de una plaza recién fundada**, cuya zona ronda 30-60. El margen se nota desde
+   *   el primer minuto en vez de ser un detalle que solo importa tarde.
+   * - Coincide con `LOGISTICA.radioReabastecimiento`, y esa coincidencia se lee bien: **si una columna está lo
+   *   bastante cerca como para repostar en tu ciudad, tu ciudad la ve.**
+   *
+   * Consecuencia anotada para calibración (§2.1 del doc de niebla): como el radio crece con el nivel
+   * (60 -> 180, `ZONA_INFLUENCIA.radioMaximoPorNivel`), una plaza de nivel 5 vigila 240 y por tanto ve más
+   * lejos que un ejército. Es coherente con la ficción, pero diluye la ventaja de explorar cerca de las
+   * grandes ciudades.
+   */
+  margenAsentamiento: 60,
+};
+
+/**
+ * Discretización de lo EXPLORADO (niebla de guerra, Paso 2 — ver `engine/exploracion.ts`). Lo que una Facción
+ * ha llegado a ver alguna vez es un área, y un área hay que trocearla para poder guardarla.
+ *
+ * **25** unidades de mapa por celda, que es un compromiso entre dos cosas medibles:
+ *
+ * - **Cómo se lee la frontera de la niebla.** Lo que vigila una plaza recién fundada (30 de radio + 60 de
+ *   margen = 90) son ~3,6 celdas de radio, y la vista de un ejército (150), 6. Con celdas más gruesas la
+ *   frontera se leería como un cuadrado en vez de como una forma.
+ * - **Lo que ocupa en el snapshot.** Sobre el mundo de 2000 salen 80x80 = 6.400 celdas, o sea 800 bytes por
+ *   Facción — 24 KB con las 30 del laboratorio, frente a los 125 KB que ya ocupa el mapa. Doblar la
+ *   resolución multiplicaría eso por cuatro.
+ */
+export const EXPLORACION = {
+  tamanoCelda: 25,
 };
 
 /**
@@ -1076,7 +1782,7 @@ export const CAMPAMENTOS_BANDIDOS = {
   // expresado en ticks — Fase 0 no tiene mapeo tick-a-tiempo-real todavía). Bajado de 60 a 10 (pruebas del
   // usuario) — a 60 ticks el farming de XP de Facción vía campamentos era demasiado lento frente al resto
   // de fuentes de experiencia.
-  ticksRespawn: 10,
+  respawnMinutos: 10,
   // Recompensa fija al destruirlo (botín).
   recompensa: { madera: 40, piedra: 20, oro: 15 } as Partial<Record<string, number>>,
 };
@@ -1084,7 +1790,7 @@ export const CAMPAMENTOS_BANDIDOS = {
 /**
  * Regeneración de yacimientos agotados (a petición del usuario): un `NodoRecurso` que llega a stock 0
  * (`Mapa.stock`, ver `world/mapa.ts`) vuelve a aparecer con su `cantidadInicial` completa pasados N ticks —
- * mismo patrón que la reaparición de campamentos de bandidos (`CAMPAMENTOS_BANDIDOS.ticksRespawn`). Dos
+ * mismo patrón que la reaparición de campamentos de bandidos (`CAMPAMENTOS_BANDIDOS.respawnMinutos`). Dos
  * cadencias: `livestock` (fauna, se recupera por reproducción/migración) más rápido que `metales` (todo el
  * resto de nodos: piedra/cobre/estaño/oro — yacimientos minerales, se repone más despacio). Bajadas de
  * 200/100 a 10/3 (pruebas del usuario) — a las cifras viejas, agotar un nodo dejaba al extractor parado
@@ -1092,8 +1798,8 @@ export const CAMPAMENTOS_BANDIDOS = {
  * Cifras PLACEHOLDER, sin calibrar por simulación todavía, mismo criterio que el resto del proyecto.
  */
 export const REGENERACION_NODOS = {
-  metales: { ticksCooldown: 10 },
-  livestock: { ticksCooldown: 3 },
+  metales: { cooldownMinutos: 10 },
+  livestock: { cooldownMinutos: 3 },
 };
 
 /**
@@ -1156,15 +1862,24 @@ export const NIVEL_ASENTAMIENTO = {
       edificiosMinimo: 3,
     },
     3: { pesants: 500, artesanos: 200, edificios: ['armeria', 'curtiduria', 'fundicion', 'barracon', 'galeriaDeTiro'] },
-    4: { pesants: 1000, artesanos: 400, edificios: ['muralla'] },
+    // Sustituye al viejo `edificios: ['muralla']` (Paso 5, `Consideraciones/Murallas_Definicion.md` §13): el
+    // recinto ya no es un `EdificioTipo`, así que el gate deja de poder contarlo como edificio y pasa a
+    // `recintoCompletoNivelMinimo` — cualquier recinto TERMINADO (integridad 1) de nivel 1 en adelante basta,
+    // la empalizada barata cuenta igual que la muralla de piedra. `edificios: []` es intencional, no un
+    // descuido: sin ningún tipo en la lista, `cumpleEdificios` es trivialmente cierto y el gate real es el
+    // del recinto.
+    4: { pesants: 1000, artesanos: 400, edificios: [], recintoCompletoNivelMinimo: 1 },
     5: { pesants: 2000, artesanos: 800, edificios: ['palacio'] },
-  } as Record<number, { pesants: number; artesanos: number; edificios: string[]; edificiosMinimo?: number }>,
+  } as Record<
+    number,
+    { pesants: number; artesanos: number; edificios: string[]; edificiosMinimo?: number; recintoCompletoNivelMinimo?: number }
+  >,
   /**
    * Techo de POBLACIÓN TOTAL (pesants+artesanos+nobleza) por nivel (Doc Fase_0_5 §3.1, a petición del
    * usuario) — por encima de este número, la Vivienda/Palacio dejan de dar cupo efectivo aunque tengan
    * capacidad física de sobra: el nivel pasa a ser lo que abre el techo de habitantes, no solo una llave de
    * edificios. Pieza central del rediseño de dependencia: un nivel 3 en su techo (6000 hab) consume 600
-   * trigo/tick contra un techo agrícola real de 150-450 (ver diagnóstico en Fase_0_5_Definicion...md §1) —
+   * trigo/minuto contra un techo agrícola real de 150-450 (ver diagnóstico en Fase_0_5_Definicion...md §1) —
    * no puede sostenerse sin importar. Ligado a `asentamiento.nivel` (nivelAlcanzado, nunca baja — Doc §6.2:
    * un fallo de suministro NUNCA purga población ya asentada, solo congela capacidad de construir/mejorar).
    * Niveles 4/5 (Doc Fase_0_6): desacelera el múltiplo anterior (×5, ×4) a ×2/×1.7, asumiendo que son
@@ -1185,14 +1900,35 @@ export const MANTENIMIENTO = {
   // consumo real de comida que ya se descuenta en `avanzarNutricionPoblacion`/`avanzarMantenimientoTropas`, duplicando
   // el gasto). El "apartado de trigo" que se muestra en el panel de Mantenimiento ahora es la suma real de
   // consumo de población + tropas (ver `gameStore.mantenimientoInfo`), no un placeholder desconectado.
-  costoBase: { madera: 3 },
+  /**
+   * Mantenimiento base en madera por minuto, antes de escalar por población y distancia a la capital.
+   *
+   * **A LA MITAD desde el 2026-09-04 (3 → 1.5, decisión del usuario).** El motivo, medido: era lo que
+   * inflaba la reserva de construcción hasta hacerla infranqueable. La reserva de un recurso es su
+   * mantenimiento × `RESERVA_CONSTRUCCION.horizonteMinutosMantenimiento`, así que una ciudad madura del batch
+   * llegaba a exigirse **194 de madera guardada** mientras acumulaba **142** — y con eso
+   * `puedeIniciarConstruccion` le vetaba CUALQUIER gasto discrecional para siempre. Resultado: cero Almacenes
+   * y cero Graneros en 600 ticks, aunque hubiera madera entrando (ver
+   * `Consideraciones/Movimiento_Ejercitos_Definicion.md` §11.1).
+   *
+   * No era un problema de producción sino del techo que el propio mantenimiento se imponía: la reserva escala
+   * con el mantenimiento, que escala con lo construido, así que cuanto más crecía la ciudad menos podía
+   * construir. Se eligió esta palanca sobre las otras tres (bajar el horizonte de reserva, subir el rinde de
+   * la Leñera, eximir al almacenaje de la reserva) por ser la que ataca la causa y no el síntoma.
+   */
+  costoBase: { madera: 1.5 },
   // Rediseño de progreso (Fase 0): con el tope de nivel bajando de 10 a 3 (ver NIVEL_ASENTAMIENTO), los
   // umbrales de piedra/oro (antes nivel 3 y nivel 8, pensados para un rango 1-10) se recalibran al rango 1-3
   // para que los 3 niveles tengan una escalada de coste real — cifra exacta PLACEHOLDER pendiente de
   // calibración por simulación (ver Preguntas_Abiertas.md).
   nivelParaPiedra: 2,
   piedraBase: 3,
-  nivelParaOro: 3,
+  // Bajado de 3 a 2 (bloque "economía del oro", Doc 4.5 — `Consideraciones/Economia_Del_Oro_Definicion.md`
+  // Paso 3): con el oro cobrándose solo a nivel 3 —que el NPC casi nunca alcanza— el mantenimiento-oro era
+  // letra muerta. A nivel 2 se convierte en un drenaje involuntario real para ~la mitad de los asentamientos
+  // y da a la calibración un sink de oro contra el que medir. Riesgo medido en la campaña: si sube demasiado
+  // la tasa de colapso, se recalibra `oroBase` a la baja para el nuevo escalón. PLACEHOLDER.
+  nivelParaOro: 2,
   oroBase: 2,
   // Escala por POBLACIÓN real, no por nivel (Doc Fase_0_5 §3.2, reemplaza `factorCrecimientoPorNivel`, a
   // petición del usuario: "más allá de al tamaño del asentamiento y a la cantidad de edificios" — un nivel 3
@@ -1203,7 +1939,7 @@ export const MANTENIMIENTO = {
   // abajo, que ya es el mecanismo real de "imperio disperso cuesta más" — sumar ambos habría castigado DOBLE
   // al imperio distribuido que el diseño quiere fomentar (ver Fase_0_5_Definicion...md §5.1). Placeholder sin
   // calibrar: a poblacionReferencia=500, nivel 1 en su techo (300 hab) paga factor 1.6; nivel 3 en su techo
-  // (6000 hab) paga factor 13 — frente a un techo de extracción propia de ~50 madera/tick, el mantenimiento
+  // (6000 hab) paga factor 13 — frente a un techo de extracción propia de ~50 madera/minuto, el mantenimiento
   // solo ya se come casi toda la producción bruta de una ciudad llena, antes de sumar comida/ejército/mejoras.
   poblacionReferencia: 500,
   escalaDistancia: 400,
@@ -1213,14 +1949,14 @@ export const MANTENIMIENTO = {
   // Protección temporal a asentamientos recién fundados (Doc 1.3, pendiente en el diseño): sin esto, todo
   // asentamiento nuevo entra en déficit desde el tick 1 (antes de que la Granja llegue a construirse) y cae
   // en ruinas pase lo que pase. La gracia cubre el tiempo típico de estabilizar la economía base.
-  graciaTicks: 60,
+  graciaMinutos: 60,
   // nivelActual (Doc Fase_0_5 §6.2, rediseño a petición del usuario): al tocar 0 el medidor, `nivelActual`
   // baja un escalón (nivel 3→2→1→ruinas, solo cae en ruinas ya en nivelActual 1) EN VEZ de destruirse
   // directamente, y el medidor se reinicia a `medidorInicial` — el asentamiento sigue vivo y produciendo,
   // solo pierde capacidad de construir/mejorar/reclutar de nivel alto hasta recuperarse. Solo vuelve a subir
-  // tras `ticksSanosParaRecuperarNivel` ticks SEGUIDOS con mantenimiento pagado en full (no cada tick que
+  // tras `minutosSanosParaRecuperarNivel` ticks SEGUIDOS con mantenimiento pagado en full (no cada tick que
   // esté sano) — evita el yo-yo de subir/bajar por un solo bache. Placeholder sin calibrar por simulación.
-  ticksSanosParaRecuperarNivel: 30,
+  minutosSanosParaRecuperarNivel: 30,
 };
 
 /**
@@ -1232,7 +1968,7 @@ export const MANTENIMIENTO = {
  * `calcularCostoMantenimiento`). Corrige un colapso real documentado: tras subir de nivel (piedra/oro
  * entran a cobrarse) la reserva fija se quedaba corta frente al mantenimiento real ya escalado. Cifras de
  * horizonte PLACEHOLDER (ver Preguntas_Abiertas.md), calibradas contra `FUNDACION.materialesIniciales`: con
- * el stock inicial de madera (50) y el costo base de Mantenimiento a nivel 1 (3/tick), un horizonte de 15
+ * el stock inicial de madera (50) y el costo base de Mantenimiento a nivel 1 (3/minuto), un horizonte de 15
  * ticks reservaría 45 — casi todo el stock inicial, congelando cualquier construcción no exenta (Vivienda,
  * extractores...) durante los primeros ticks incluso en un asentamiento sano con acceso a bosque. 8 ticks dan
  * un margen real (protege contra el patrón de colapso post-ascenso de nivel ya documentado) sin dejar al
@@ -1243,8 +1979,8 @@ export const MANTENIMIENTO = {
  * por la misma escasez que deben resolver sería un huevo-y-la-gallina sin salida.
  */
 export const RESERVA_CONSTRUCCION = {
-  horizonteTicksMantenimiento: 8,
-  horizonteTicksComida: 8,
+  horizonteMinutosMantenimiento: 8,
+  horizonteMinutosComida: 8,
 };
 
 /**
@@ -1252,14 +1988,14 @@ export const RESERVA_CONSTRUCCION = {
  * Cifras exactas de cada evento sin cerrar en el diseño (Preguntas_Abiertas) — valores placeholder razonables.
  */
 export const REPUTACION = {
-  decaimientoPorTick: 0.2,
+  decaimientoPorMinuto: 0.2,
   bonusTruequeCumplido: 5,
   penalizacionTruequeIncumplido: -8,
   bonusLiberarVasalloVoluntario: 6,
   penalizacionRebelionParaSenora: -10,
   penalizacionRomperAlianza: -12,
   penalizacionAtacarAliado: -25,
-  bonusPorTickAlianzaActiva: 0.05,
+  bonusPorMinutoAlianzaActiva: 0.05,
   // Restricción del Embajador (Doc 2.7, uso 3): por debajo de este umbral no puede proponer alianzas.
   umbralBajoParaEmbajador: -40,
   // Términos de comercio asimétricos (Doc 2.7, uso 1): score bajo encarece la comisión que paga esa Facción.

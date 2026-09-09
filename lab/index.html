@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bronze Age Collapse — Laboratorio de anclas (debug)</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0;
+        background: #1d1b17;
+        color: #e8e2d4;
+        font: 13px/1.45 system-ui, "Segoe UI", sans-serif;
+      }
+      button {
+        background: #3a352b;
+        color: #e8e2d4;
+        border: 1px solid #5a5343;
+        border-radius: 3px;
+        padding: 4px 10px;
+        cursor: pointer;
+        font: inherit;
+      }
+      button:hover { background: #4a4436; }
+      button:disabled { opacity: 0.45; cursor: default; }
+      input, select {
+        background: #26231d;
+        color: #e8e2d4;
+        border: 1px solid #5a5343;
+        border-radius: 3px;
+        padding: 3px 6px;
+        font: inherit;
+      }
+      /* Parámetro editado en la pestaña Parámetros: difiere del valor de constants.ts al abrir la pestaña. */
+      input.lab-cambiado {
+        background: #4a4020;
+        border-color: #d9b93a;
+        color: #ffe9a8;
+      }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { border: 1px solid #4a4436; padding: 2px 6px; text-align: left; white-space: nowrap; }
+      th { background: #302c24; position: sticky; top: 0; }
+      .lab-check { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; }
+    </style>
+    <style>
+      #lab {
+        display: grid;
+        grid-template-columns: 900px 1fr;
+        gap: 12px;
+        padding: 12px;
+        align-items: start;
+      }
+      .lab-canvas-wrap {
+        border: 1px solid #4a4436;
+        background: #2a2721;
+        line-height: 0;
+      }
+      .lab-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        min-width: 520px;
+      }
+      .lab-anclas-wrap {
+        overflow-x: auto;
+      }
+      .lab-anclas-wrap tr[data-id] {
+        cursor: pointer;
+      }
+      table.lab-anclas tr.hover {
+        outline: 2px solid #ffffff;
+        outline-offset: -2px;
+      }
+      .lab-tree-wrap {
+        overflow: auto;
+        border: 1px solid #4a4436;
+        background: #1b1a17;
+        max-height: 420px;
+        line-height: 0;
+      }
+      .lab-tree-legend {
+        font-size: 10px;
+        color: #a89f88;
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .lab-tree-legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .lab-tree-legend i {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: inline-block;
+      }
+      .lab-panel h1 {
+        font-size: 15px;
+        margin: 0;
+      }
+      .lab-panel p.hint {
+        font-size: 11px;
+        color: #a89f88;
+        margin: 0;
+      }
+      .lab-row {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .lab-row input[type='number'] {
+        width: 90px;
+        background: #1b1a17;
+        color: #e8e2d0;
+        border: 1px solid #4a4436;
+        padding: 4px 6px;
+      }
+      .lab-row button {
+        background: #3a352b;
+        color: #e8e2d0;
+        border: 1px solid #4a4436;
+        padding: 5px 10px;
+        cursor: pointer;
+        font-size: 12px;
+      }
+      .lab-row button:hover {
+        background: #4a4436;
+      }
+      .lab-row button.activo {
+        background: #6b5a2a;
+        border-color: #ffd23f;
+      }
+      .lab-status {
+        font-size: 12px;
+        color: #e8e2d0;
+      }
+      table.lab-anclas {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 11px;
+      }
+      table.lab-anclas th,
+      table.lab-anclas td {
+        border-bottom: 1px solid #3a352b;
+        padding: 3px 6px;
+        text-align: left;
+        white-space: nowrap;
+      }
+      table.lab-anclas tr.activa {
+        background: rgba(255, 210, 63, 0.12);
+      }
+      table.lab-anclas tr.huerfana {
+        color: #ff8080;
+      }
+      .lab-tabs {
+        display: flex;
+        gap: 4px;
+      }
+      .lab-tabs button {
+        background: #2a2721;
+        color: #a89f88;
+        border: 1px solid #4a4436;
+        border-bottom: none;
+        padding: 5px 10px;
+        cursor: pointer;
+        font-size: 12px;
+      }
+      .lab-tabs button.activo {
+        background: #3a352b;
+        color: #e8e2d0;
+      }
+      .lab-manual-row {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+      /* Perfiles de trazado: radios excluyentes, se aplican en vivo (no requieren refundar). */
+      .lab-perfiles { display: flex; flex-direction: column; gap: 4px; }
+      .lab-perfil-titulo { font-weight: 600; }
+      .lab-perfiles label {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        border: 1px solid #4a4436;
+        border-radius: 3px;
+        padding: 3px 8px;
+        cursor: pointer;
+        background: #2a2721;
+      }
+      .lab-perfiles label:hover { background: #3a352b; }
+      .lab-perfiles label.activo {
+        background: #6b5a2a;
+        border-color: #ffd23f;
+        color: #fff3c4;
+      }
+      .lab-manual-row select {
+        background: #1b1a17;
+        color: #e8e2d0;
+        border: 1px solid #4a4436;
+        padding: 4px 6px;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="lab">
+      <div class="lab-canvas-wrap">
+        <canvas id="lab-canvas" width="900" height="900"></canvas>
+      </div>
+      <div class="lab-panel">
+        <h1>Laboratorio de crecimiento de asentamientos</h1>
+        <p class="hint">
+          Ámbito aislado: un asentamiento sobre motor real (`avanzarSimulacion`), sin partida ni facciones de
+          más alrededor. La Facción del lab nace a nivel máximo: así el cupo de asentamientos por nivel de
+          Facción (`CUPO_NIVEL_ASENTAMIENTO`) no bloquea la subida a nivel 3, que es un límite de la partida,
+          no del crecimiento urbano que se estudia aquí. Código de árbol: R = Centro Urbano, a-e = hijos directos de R (una letra por ranura),
+          a1/a11... = generaciones siguientes (un dígito 1-5 por ranura). Anillo dorado = semilla activa ·
+          borde rojo punteado = semilla saturada (Lógica 1, árbol de anclas — 5 ranuras agotadas) · "Ancla
+          llena" = sin hueco para el próximo edificio dependiente (Lógica 2 — al llenarse, la búsqueda de
+          satélites pasa a la siguiente instancia elegible de esa categoría) · "!" rojo = ancla sin NINGÚN
+          satélite alcanzable (huérfana).
+        </p>
+        <div class="lab-row">
+          <label for="lab-seed">Seed</label>
+          <input id="lab-seed" type="number" value="1" />
+          <button id="lab-fundar">Fundar</button>
+        </div>
+        <div class="lab-row">
+          <button id="lab-tick-1">+1 tick</button>
+          <button id="lab-tick-10">+10</button>
+          <button id="lab-tick-50">+50</button>
+          <button id="lab-auto">▶ Auto</button>
+        <label class="lab-check"><input type="checkbox" id="lab-rejilla" checked /> rejilla</label>
+        </div>
+
+        <div class="lab-perfiles">
+          <div class="lab-row" id="lab-perfil-opciones"><span class="lab-perfil-titulo">Perfil de trazado</span></div>
+          <p class="hint">
+            Excluyentes entre sí. Cada uno permuta el desempate de colocación: qué prefiere un edificio entre
+            huecos igual de válidos del núcleo de su ancla. <b>Se aplica en vivo, sin refundar</b> — lo ya
+            construido no se mueve, así que cambiar de perfil a mitad de partida deja un ESTRATO visible, igual
+            que hará una política real al expirar. «Tradición» = el que le toca al asentamiento por su id.
+          </p>
+        </div>
+
+        <div class="lab-perfiles">
+          <div class="lab-row">
+            <span class="lab-perfil-titulo">Muralla</span>
+            <button id="lab-muralla-trazar">Trazar recinto</button>
+            <button id="lab-muralla-comprometer">Comprometer</button>
+            <button id="lab-muralla-abandonar">Abandonar</button>
+            <button id="lab-muralla-quitar">Quitar</button>
+            <label class="lab-check">nivel
+              <select id="lab-muralla-nivel">
+                <option value="1">1 · empalizada</option>
+                <option value="2" selected>2 · piedra</option>
+                <option value="3">3 · adarve</option>
+              </select>
+            </label>
+          </div>
+          <p class="hint">
+            Presupuesto, <b>no compromete nada</b>: enseña dónde caería el anillo hoy y cuánto costaría. El
+            trazo cambia según crece la ciudad — vuelve a pulsar tras avanzar ticks para verlo. El dato
+            irreversible es el <b>nº de puertas</b>: se congelan al comprometer y menos puertas es MÁS defensa
+            (embudo), a cambio de que los caminos rurales rodeen.
+          </p>
+          <div class="lab-status" id="lab-muralla-status">—</div>
+        </div>
+
+        <div class="lab-status" id="lab-status">—</div>
+
+        <div class="lab-tabs">
+          <button id="lab-tab-anclas" class="activo">Anclas</button>
+          <button id="lab-tab-edificios">Edificios</button>
+          <button id="lab-tab-manual">Construcción manual</button>
+          <button id="lab-tab-parametros">Parámetros</button>
+        </div>
+
+        <div id="lab-panel-anclas">
+          <div class="lab-anclas-wrap">
+            <table class="lab-anclas">
+              <thead>
+                <tr>
+                  <th>Tipo</th>
+                  <th title="Posición en el árbol: R = Centro Urbano, a-e = hijos de R, a1/a11... = generaciones siguientes">Código</th>
+                  <th title="Profundidad en el árbol (R = 0)">Nivel</th>
+                  <th title="Distancia en celdas a su padre directo (la semilla de la que nació) — no a la raíz última del árbol">Dist. a su raíz</th>
+                  <th title="¿Es la semilla activa ahora mismo?">Semilla activa</th>
+                  <th title="Lógica 1: ¿esta semilla ya agotó sus 5 ranuras?">Semilla saturada</th>
+                  <th title="Lógica 2: ¿ya no le queda hueco a este ancla para un satélite más? (persistido, campo Edificio.anclaLlena)">Ancla llena</th>
+                  <th title="Sin ningún satélite alcanzable — señal de ancla huérfana">Huérfana</th>
+                  <th>Edad</th>
+                </tr>
+              </thead>
+              <tbody id="lab-anclas-body"></tbody>
+            </table>
+          </div>
+          <h1>Vista árbol</h1>
+          <p class="hint">Pasá el cursor por un ancla en el mapa o en el árbol — se resalta en el otro.</p>
+          <div class="lab-tree-legend">
+            <span><i style="background:#ffd23f"></i>semilla activa</span>
+            <span><i style="background:#8a6a4a"></i>semilla saturada</span>
+            <span><i style="background:#ff4d4d"></i>huérfana</span>
+            <span><i style="background:#7fae63"></i>normal</span>
+          </div>
+          <div class="lab-tree-wrap">
+            <canvas id="lab-tree-canvas" width="500" height="300"></canvas>
+          </div>
+        </div>
+
+        <div id="lab-panel-edificios" style="display: none">
+          <p class="hint">Todos los edificios del asentamiento, en orden de construcción. Los del mapa general (minas, cantera) van al final.</p>
+          <div class="lab-status" id="lab-edificios-resumen">—</div>
+          <div class="lab-anclas-wrap">
+            <table class="lab-anclas">
+              <thead>
+                <tr><th>#</th><th>Tipo</th><th>Nivel</th><th>Estado</th><th>Huella</th><th>Celda</th><th>id</th></tr>
+              </thead>
+              <tbody id="lab-edificios-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="lab-panel-manual" style="display: none">
+          <p class="hint">
+            El asentamiento arranca con 9999 de cada material y un Gobernador propio — encolá cualquier
+            edificio del catálogo (mismo camino que `anadirEdificioManualmente`, ubicación siempre automática)
+            para forzar demanda y probar el crecimiento con edificios que solo se construyen a mano.
+          </p>
+          <div class="lab-manual-row">
+            <label for="lab-manual-tipo">Edificio</label>
+            <select id="lab-manual-tipo"></select>
+            <button id="lab-manual-encolar">Encolar</button>
+          </div>
+          <div class="lab-status" id="lab-manual-status">—</div>
+          <div class="lab-anclas-wrap">
+            <table class="lab-anclas">
+              <thead>
+                <tr>
+                  <th>Tipo</th>
+                  <th>Estado</th>
+                  <th>Min. restantes</th>
+                </tr>
+              </thead>
+              <tbody id="lab-cola-body"></tbody>
+            </table>
+          </div>
+          <h1>Mejora manual (subir de nivel)</h1>
+          <p class="hint">Mismos gates y costo que `avanzarMejoras` — solo adelanta la mejora de un edificio elegido. Granja: al crecer se muda a las afueras.</p>
+          <div class="lab-anclas-wrap">
+            <table class="lab-anclas">
+              <thead>
+                <tr><th>Tipo</th><th>Nivel</th><th>Costo</th><th>Acción</th><th>id</th></tr>
+              </thead>
+              <tbody id="lab-mejoras-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="lab-panel-parametros" style="display: none"></div>
+      </div>
+    </div>
+    <script type="module" src="/dist/main.js"></script>
+  </body>
+</html>

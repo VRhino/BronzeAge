@@ -16,7 +16,7 @@ import { createRng } from '../../worldgen';
 import { factorLineaProduccion, factorPorDistancia, sitioEnBarrio, sitioEnBarrioLineaProduccion, tieneInsumoDeArranque } from '../construction';
 import { celdaMinimaDeEdificio, crearAnclaNueva } from '../trazado';
 import { activarPolitica, lineasProduccionPriorizadas } from '../politicas';
-import { contextoDeTest, crearEstadoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
+import { contextoDeTest, crearEstadoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instanteDeTest } from './fixtures';
 
 const SEED = 42;
 
@@ -29,7 +29,7 @@ function conAlmacen(asentamiento: Asentamiento, valores: Partial<Record<string, 
 }
 
 function edificio(tipo: Edificio['tipo'], posicion: { x: number; y: number }, overrides: Partial<Edificio> = {}): Edificio {
-  return { id: `test-${tipo}-${posicion.x}-${posicion.y}`, tipo, posicion, estado: 'activo', ticksRestantes: 0, ...overrides };
+  return { id: `test-${tipo}-${posicion.x}-${posicion.y}`, tipo, posicion, estado: 'activo', ...overrides };
 }
 
 describe('gate de materia prima para auto-construcción de transformación', () => {
@@ -166,7 +166,7 @@ describe('política "Líneas de Producción" del Maestro de Obras', () => {
 
     const conCargo = { ...base, cargos: { ...base.cargos, maestroObrasId: 'jugador-test' } };
     const faccion = facciones.find((f) => f.id === 'faccion-1')!;
-    const conPolitica = activarPolitica(conCargo, faccion, 'maestroObras', 'lineas_produccion', 1);
+    const conPolitica = activarPolitica(conCargo, faccion, 'maestroObras', 'lineas_produccion', instanteDeTest(1));
     expect(lineasProduccionPriorizadas(conPolitica)).toBe(true);
   });
 
@@ -196,7 +196,6 @@ describe('política "Líneas de Producción" del Maestro de Obras', () => {
       tipo: 'corral',
       posicion: { x: (patioMin.col - 5) * T, y: (patioMin.row + 1) * T },
       estado: 'activo',
-      ticksRestantes: 0,
       ambito: 'asentamiento',
       fuenteId: 'nodo-livestock-inexistente', // basta el tipo/estado para `fuentesDeRecurso`; no se extrae aquí
     };
@@ -228,7 +227,6 @@ describe('política "Líneas de Producción" del Maestro de Obras', () => {
         tipo: 'minaCobre',
         posicion: { x: base.posicion.x + base.radioPotencial * 0.95, y: base.posicion.y },
         estado: 'activo',
-        ticksRestantes: 0,
       };
 
       function fundicionPropuesta(conPolitica: boolean): { x: number; y: number } {
@@ -244,7 +242,7 @@ describe('política "Líneas de Producción" del Maestro de Obras', () => {
         if (conPolitica) {
           asentamiento = { ...asentamiento, cargos: { ...asentamiento.cargos, maestroObrasId: 'jugador-test' } };
           const faccion = facs.find((f) => f.id === 'faccion-1')!;
-          asentamiento = activarPolitica(asentamiento, faccion, 'maestroObras', 'lineas_produccion', 1);
+          asentamiento = activarPolitica(asentamiento, faccion, 'maestroObras', 'lineas_produccion', instanteDeTest(1));
         }
         let estado = crearEstadoDeTest([asentamiento], facs);
         // 150, no 40: con el sitio de fundación real de esta seed, ambas ramas tardan ~76-77 ticks en

@@ -76,3 +76,12 @@ export function puedeCrearPartida(actor: ActorDeInstancia): boolean {
 export function puedeDescartarPartida(actor: ActorDeInstancia): boolean {
   return actor.esAdministradorGlobal || actor.membresia?.rol === 'administrador_partida';
 }
+
+/**
+ * Otorgar o revocar membresías de administración/observación de una partida (cierre de Fase C). Mismo
+ * criterio que descartar: un `moderador` administra la partida pero no reparte roles — conceder acceso
+ * técnico a otros es competencia de `administrador_partida`/`administrador_global`.
+ */
+export function puedeGestionarMembresias(actor: ActorDeInstancia): boolean {
+  return actor.esAdministradorGlobal || actor.membresia?.rol === 'administrador_partida';
+}

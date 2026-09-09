@@ -7,10 +7,10 @@ import { GameSession } from '../gameSession';
 import { BALANCE_VERSION } from '../../constants';
 import { crearFaccion } from '../comandos/crearFaccion';
 import { fundarAsentamiento } from '../comandos/fundarAsentamiento';
+import { instanteDeTick, isoDeInstante } from '../estado';
 import { exito, type ManejadorComando } from '../comandos/tipos';
 
 const SEED = 42;
-const MOMENTO = '2026-01-01T00:00:00.000Z';
 const ACTOR = 'jugador-test';
 
 function partidaNueva(): GameSession {
@@ -20,7 +20,7 @@ function partidaNueva(): GameSession {
 /** Partida con una Facción ya creada: el motor exige que exista antes de fundar (`engine/settlement.ts`). */
 function partidaConFaccion(): { sesion: GameSession; faccionId: string } {
   const sesion = partidaNueva();
-  const r = sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, { momento: MOMENTO, actor: ACTOR });
+  const r = sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, { actor: ACTOR });
   if (!r.ok) throw new Error('setup del test: no se pudo crear la Facción');
   return { sesion, faccionId: r.datos!.faccionId };
 }
@@ -29,13 +29,13 @@ describe('GameSession — despachador', () => {
   it('adopta el estado que devuelve el comando (única vía de mutación de la partida)', () => {
     const sesion = partidaNueva();
     expect(sesion.getState().facciones).toEqual([]);
-    sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, { momento: MOMENTO, actor: ACTOR });
+    sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, { actor: ACTOR });
     expect(sesion.getState().facciones).toHaveLength(1);
   });
 
   it('sin `actor` explícito usa el actor de sistema (operaciones del scheduler, no de un jugador)', () => {
     const sesion = partidaNueva();
-    const resultado = sesion.ejecutar(crearFaccion, { nombre: 'Ugarit' }, { momento: MOMENTO });
+    const resultado = sesion.ejecutar(crearFaccion, { nombre: 'Ugarit' }, {});
     expect(resultado.ok).toBe(true);
   });
 });
@@ -45,7 +45,7 @@ describe('comando fundarAsentamiento', () => {
     const { sesion, faccionId } = partidaConFaccion();
     const versionPrevia = sesion.getState().version;
 
-    const resultado = sesion.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 } }, { momento: MOMENTO, actor: ACTOR });
+    const resultado = sesion.ejecutar(fundarAsentamiento, { faccionId }, { actor: ACTOR });
 
     expect(resultado.ok).toBe(true);
     expect(resultado.codigoError).toBeUndefined();
@@ -56,36 +56,42 @@ describe('comando fundarAsentamiento', () => {
 
   it('éxito: el evento lleva el asentamientoId y el `momento` INYECTADO, no un reloj leído dentro', () => {
     const { sesion, faccionId } = partidaConFaccion();
-    const resultado = sesion.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 } }, { momento: MOMENTO, actor: ACTOR });
+    const resultado = sesion.ejecutar(fundarAsentamiento, { faccionId }, { actor: ACTOR });
 
     expect(resultado.eventos).toHaveLength(1);
-    expect(resultado.eventos[0]!.momento).toBe(MOMENTO);
+    expect(resultado.eventos[0]!.momento).toBe(isoDeInstante(instanteDeTick(0))); // comando a tick 0 → instante = época
     expect(resultado.eventos[0]!.asentamientoId).toBe(resultado.datos!.asentamientoId);
     // Código estable, ya no `'legado'`: los eventos de comando se migraron junto a los 13 subsistemas del
     // tick (A5) para que Fase C pueda filtrarlos por audiencia sin parsear el texto.
     expect(resultado.eventos[0]!.codigo).toBe('fundacion.asentamiento_fundado');
-    expect(resultado.eventos[0]!.payload).toMatchObject({ faccionId, posicion: { x: 500, y: 500 } });
+    // Se funda DONDE SE ESTA (Doc 1.3): la posicion ya no la elige el test, sale de la columna con la que
+    // apareció el actor — se compara contra el asentamiento resultante, no contra un punto fijo.
+    expect(resultado.eventos[0]!.payload).toMatchObject({ faccionId, posicion: sesion.getState().asentamientos[0]!.posicion });
   });
 
   it('éxito: registra en el historial del actor, que es el único fundador', () => {
     // Desde que `fundarAsentamiento` dejó de fabricar fundadores ficticios (`jugador-<faccionId>-<n>`), el
     // fundador es SIEMPRE el actor que ejecuta el comando — nunca una lista con más gente que él.
     const { sesion, faccionId } = partidaConFaccion();
-    sesion.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 } }, { momento: MOMENTO, actor: ACTOR });
+    sesion.ejecutar(fundarAsentamiento, { faccionId }, { actor: ACTOR });
 
     const historial = sesion.getState().historialJugadores;
     expect(Object.keys(historial)).toEqual([ACTOR]);
     expect(historial[ACTOR]![0]!.mensaje).toContain('Funda');
   });
 
-  it('rechazo: posición fuera del mapa devuelve codigoError sin mutar nada ni subir la versión', () => {
+  it('rechazo: fundar dentro de una plaza devuelve codigoError sin mutar nada ni subir la versión', () => {
+    // Ya no se puede pedir una posición fuera del mapa (Doc 1.3: se funda donde se está, no donde se elige) —
+    // el equivalente reachable es intentarlo desde DENTRO de una plaza, que `puntoDeFundacionDe` rechaza
+    // igual que antes rechazaba una posición inválida: sin tocar el estado ni subir versión.
     const { sesion, faccionId } = partidaConFaccion();
+    sesion.ejecutar(fundarAsentamiento, { faccionId }, { actor: ACTOR }); // el actor queda DENTRO de lo fundado
     const antes = sesion.getState();
 
-    const resultado = sesion.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: -100, y: -100 } }, { momento: MOMENTO, actor: ACTOR });
+    const resultado = sesion.ejecutar(fundarAsentamiento, { faccionId }, { actor: ACTOR });
 
     expect(resultado.ok).toBe(false);
-    expect(resultado.codigoError).toBe('fundacion.invalida');
+    expect(resultado.codigoError).toBe('movilizacion.invalida');
     expect(resultado.datos).toBeUndefined();
     expect(resultado.eventos).toEqual([]);
     expect(resultado.version).toBe(antes.version);
@@ -94,8 +100,10 @@ describe('comando fundarAsentamiento', () => {
   });
 
   it('rechazo: Facción inexistente también se traduce a codigoError, sin excepción sin capturar', () => {
-    const sesion = partidaNueva();
-    const resultado = sesion.ejecutar(fundarAsentamiento, { faccionId: 'no-existe', posicion: { x: 500, y: 500 } }, { momento: MOMENTO, actor: ACTOR });
+    // Hace falta existir ya en el mundo —con columna— para que la posición pueda derivarse: se le da de alta
+    // al actor con la propia Facción real antes de intentarlo contra una que no existe.
+    const { sesion } = partidaConFaccion();
+    const resultado = sesion.ejecutar(fundarAsentamiento, { faccionId: 'no-existe' }, { actor: ACTOR });
     expect(resultado.ok).toBe(false);
     expect(resultado.codigoError).toBe('fundacion.invalida');
   });
@@ -104,7 +112,7 @@ describe('comando fundarAsentamiento', () => {
 describe('comando crearFaccion', () => {
   it('éxito: crea la facción y devuelve su id', () => {
     const sesion = partidaNueva();
-    const resultado = sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, { momento: MOMENTO, actor: ACTOR });
+    const resultado = sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, { actor: ACTOR });
 
     expect(resultado.ok).toBe(true);
     expect(resultado.datos?.faccionId).toBeTruthy();
@@ -113,7 +121,7 @@ describe('comando crearFaccion', () => {
 
   it('rechazo: nombre vacío no crea nada', () => {
     const sesion = partidaNueva();
-    const resultado = sesion.ejecutar(crearFaccion, { nombre: '   ' }, { momento: MOMENTO, actor: ACTOR });
+    const resultado = sesion.ejecutar(crearFaccion, { nombre: '   ' }, { actor: ACTOR });
     expect(resultado.ok).toBe(false);
     expect(resultado.codigoError).toBe('faccion.nombre_vacio');
     expect(sesion.getState().facciones).toEqual([]);
@@ -121,8 +129,8 @@ describe('comando crearFaccion', () => {
 
   it('rechazo: nombre duplicado (sin distinguir mayúsculas) no crea una segunda facción', () => {
     const sesion = partidaNueva();
-    sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, { momento: MOMENTO, actor: ACTOR });
-    const resultado = sesion.ejecutar(crearFaccion, { nombre: 'micenas' }, { momento: MOMENTO, actor: ACTOR });
+    sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, { actor: ACTOR });
+    const resultado = sesion.ejecutar(crearFaccion, { nombre: 'micenas' }, { actor: ACTOR });
     expect(resultado.ok).toBe(false);
     expect(resultado.codigoError).toBe('faccion.nombre_duplicado');
     expect(sesion.getState().facciones).toHaveLength(1);
@@ -130,25 +138,27 @@ describe('comando crearFaccion', () => {
 });
 
 describe('operaciones del sistema — avanzarTick', () => {
-  it('avanza el tick, sube la versión y produce eventos con el `momento` correcto', () => {
+  it('avanza el tick, sube la versión y fecha los eventos con el instante del tick RESULTANTE', () => {
     const { sesion, faccionId } = partidaConFaccion();
-    sesion.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 } }, { momento: MOMENTO, actor: ACTOR });
+    sesion.ejecutar(fundarAsentamiento, { faccionId }, { actor: ACTOR });
     const versionPrevia = sesion.getState().version;
 
-    const resultado = sesion.avanzarTick(MOMENTO);
+    const resultado = sesion.avanzarTick();
 
     expect(resultado.ok).toBe(true);
     expect(sesion.getState().tick).toBe(1);
     expect(resultado.version).toBe(versionPrevia + 1);
-    for (const evento of resultado.eventos) expect(evento.momento).toBe(MOMENTO);
+    // El tick lleva el mundo de instanteDeTick(0) a instanteDeTick(1) = época + 1 minuto (Fase D, doc 10):
+    // sus eventos se fechan con el instante resultante, no con el de partida.
+    for (const evento of resultado.eventos) expect(evento.momento).toBe(isoDeInstante(instanteDeTick(1)));
   });
 
   it('es determinista: mismo seed y misma secuencia producen el mismo estado', () => {
     function correr(): unknown {
       const sesion = GameSession.crear('det', { seed: SEED });
-      const r = sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, { momento: MOMENTO, actor: ACTOR });
-      sesion.ejecutar(fundarAsentamiento, { faccionId: r.datos!.faccionId, posicion: { x: 500, y: 500 } }, { momento: MOMENTO, actor: ACTOR });
-      for (let tick = 1; tick <= 20; tick++) sesion.avanzarTick(`2026-01-01T00:${String(tick).padStart(2, '0')}:00.000Z`);
+      const r = sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, { actor: ACTOR });
+      sesion.ejecutar(fundarAsentamiento, { faccionId: r.datos!.faccionId }, { actor: ACTOR });
+      for (let tick = 1; tick <= 20; tick++) sesion.avanzarTick();
       return sesion.getState();
     }
 
@@ -161,7 +171,7 @@ describe('operaciones del sistema — avanzarFaccionesNpc', () => {
   // se construye el estado vía `importar()`, que acepta cualquier `GameSessionState` válido.
   function partidaConFaccionNpc(): GameSession {
     const { sesion, faccionId } = partidaConFaccion();
-    sesion.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 } }, { momento: MOMENTO, actor: ACTOR });
+    sesion.ejecutar(fundarAsentamiento, { faccionId }, { actor: ACTOR });
     const payload = sesion.exportar();
     return GameSession.importar({ ...payload, state: { ...payload.state, faccionesNpcIds: [faccionId] } });
   }
@@ -169,14 +179,14 @@ describe('operaciones del sistema — avanzarFaccionesNpc', () => {
   it('sin Facciones NPC no hace nada y no sube la versión', () => {
     const { sesion } = partidaConFaccion();
     const antes = sesion.getState();
-    const resultado = sesion.avanzarFaccionesNpc(MOMENTO);
+    const resultado = sesion.avanzarFaccionesNpc();
     expect(resultado).toEqual({ ok: true, eventos: [], version: antes.version });
     expect(sesion.getState()).toBe(antes);
   });
 
   it('con una Facción NPC toma decisiones de gobernanza sobre su asentamiento', () => {
     const sesion = partidaConFaccionNpc();
-    const resultado = sesion.avanzarFaccionesNpc(MOMENTO);
+    const resultado = sesion.avanzarFaccionesNpc();
 
     expect(resultado.ok).toBe(true);
     // La primera decisión de gobernanza base es asignar Gobernador; no depende de ticks previos.
@@ -196,7 +206,7 @@ describe('GameSession — el mapa es estado devuelto, no efecto lateral', () => 
     const base = partidaNueva();
     const payload = base.exportar();
     const nodo = payload.state.mapa.nodos[0]!;
-    payload.state.estadoMapa = { extraido: { [nodo.id]: nodo.cantidadInicial }, regeneraEnTick: {} };
+    payload.state.estadoMapa = { extraido: { [nodo.id]: nodo.cantidadInicial }, regeneraEn: {} };
     return { sesion: GameSession.importar(payload), nodoId: nodo.id };
   }
 
@@ -204,10 +214,10 @@ describe('GameSession — el mapa es estado devuelto, no efecto lateral', () => 
     const { sesion, nodoId } = partidaConYacimientoAgotado();
     const anterior = sesion.getState();
 
-    sesion.avanzarTick(MOMENTO);
+    sesion.avanzarTick();
 
-    expect(sesion.getState().estadoMapa.regeneraEnTick[nodoId]).toBeGreaterThan(0);
-    expect(anterior.estadoMapa.regeneraEnTick).toEqual({});
+    expect(sesion.getState().estadoMapa.regeneraEn[nodoId]).toBeGreaterThan(0);
+    expect(anterior.estadoMapa.regeneraEn).toEqual({});
     expect(sesion.getState().estadoMapa).not.toBe(anterior.estadoMapa);
   });
 
@@ -219,15 +229,15 @@ describe('GameSession — el mapa es estado devuelto, no efecto lateral', () => 
       return exito(estado, []); // olvida `estadoMapa` en el estado resultante
     };
 
-    expect(() => sesion.ejecutar(descuidado, undefined, { momento: MOMENTO })).toThrow(/estadoMapa/);
+    expect(() => sesion.ejecutar(descuidado, undefined, {})).toThrow(/estadoMapa/);
   });
 });
 
 describe('GameSession — exportar / importar', () => {
   it('reconstruye una partida con el mismo estado', () => {
     const { sesion, faccionId } = partidaConFaccion();
-    sesion.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 } }, { momento: MOMENTO, actor: ACTOR });
-    sesion.avanzarTick(MOMENTO);
+    sesion.ejecutar(fundarAsentamiento, { faccionId }, { actor: ACTOR });
+    sesion.avanzarTick();
 
     const reconstruida = GameSession.importar(sesion.exportar());
 
@@ -242,10 +252,10 @@ describe('GameSession — exportar / importar', () => {
 
   it('la sesión importada sigue siendo operable', () => {
     const { sesion, faccionId } = partidaConFaccion();
-    sesion.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 } }, { momento: MOMENTO, actor: ACTOR });
+    sesion.ejecutar(fundarAsentamiento, { faccionId }, { actor: ACTOR });
 
     const reconstruida = GameSession.importar(sesion.exportar());
-    const resultado = reconstruida.avanzarTick(MOMENTO);
+    const resultado = reconstruida.avanzarTick();
 
     expect(resultado.ok).toBe(true);
     expect(reconstruida.getState().tick).toBe(1);
@@ -258,14 +268,14 @@ describe('GameSession — exportar / importar', () => {
     // mismo punto, avanzadas por los mismos ticks, tienen que llegar exactamente al mismo sitio —
     // reclutamiento, ataques de bandidos y demás sistemas que consumen `ctx.rng` incluidos.
     const { sesion, faccionId } = partidaConFaccion();
-    sesion.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 } }, { momento: MOMENTO, actor: ACTOR });
-    for (let i = 0; i < 10; i++) sesion.avanzarTick(MOMENTO); // el contador del RNG ya no está en su posición inicial
+    sesion.ejecutar(fundarAsentamiento, { faccionId }, { actor: ACTOR });
+    for (let i = 0; i < 10; i++) sesion.avanzarTick(); // el contador del RNG ya no está en su posición inicial
 
     const reconstruida = GameSession.importar(sesion.exportar());
 
     for (let i = 0; i < 10; i++) {
-      sesion.avanzarTick(MOMENTO);
-      reconstruida.avanzarTick(MOMENTO);
+      sesion.avanzarTick();
+      reconstruida.avanzarTick();
     }
 
     expect(reconstruida.getState()).toEqual(sesion.getState());
@@ -273,12 +283,67 @@ describe('GameSession — exportar / importar', () => {
 
   it('sin `estadoRng` (formato de archivo v2, anterior a esto) cae de vuelta a la seed del mundo', () => {
     const { sesion } = partidaConFaccion();
-    sesion.avanzarTick(MOMENTO);
+    sesion.avanzarTick();
     const payload = sesion.exportar();
     delete payload.estadoRng;
 
     const reconstruida = GameSession.importar(payload);
 
-    expect(reconstruida.avanzarTick(MOMENTO).ok).toBe(true);
+    expect(reconstruida.avanzarTick().ok).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------
+// Alta perezosa del Jugador (Doc 1.10): quien actúa, existe y está en algún sitio.
+// ---------------------------------------------------------------------------------------------------------
+
+describe('GameSession — el jugador que actúa entra en la partida', () => {
+  it('da de alta al actor la primera vez que ejecuta un comando con éxito', () => {
+    const sesion = partidaNueva();
+    expect(sesion.getState().jugadores).toEqual([]);
+
+    sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, { actor: ACTOR });
+
+    const jugador = sesion.getState().jugadores.find((j) => j.id === ACTOR);
+    expect(jugador, 'quien actúa tiene registro').toBeDefined();
+    // Aparece CON COLUMNA (Doc 1.3): crear una Facción no da residencia, pero sí es la primera vez que actúa,
+    // así que ya está en el mundo — en el campo, no en ninguna plaza.
+    expect(jugador!.ubicacion.tipo).toBe('columna');
+  });
+
+  it('al fundar queda situado DENTRO de su asentamiento', () => {
+    const { sesion, faccionId } = partidaConFaccion();
+
+    const r = sesion.ejecutar(fundarAsentamiento, { faccionId }, { actor: ACTOR });
+    expect(r.ok, 'setup del test: la fundación tiene que salir').toBe(true);
+
+    const jugador = sesion.getState().jugadores.find((j) => j.id === ACTOR)!;
+    expect(jugador.ubicacion).toEqual({ tipo: 'asentamiento', asentamientoId: sesion.getState().asentamientos[0]!.id });
+  });
+
+  it('es idempotente: actuar dos veces no duplica el registro', () => {
+    const { sesion } = partidaConFaccion();
+    sesion.ejecutar(crearFaccion, { nombre: 'Tirinto' }, { actor: ACTOR });
+
+    expect(sesion.getState().jugadores.filter((j) => j.id === ACTOR)).toHaveLength(1);
+  });
+
+  it('un comando RECHAZADO no da de alta a nadie', () => {
+    const sesion = partidaNueva();
+
+    // Fundar sin haber actuado nunca se rechaza antes de llegar al motor: no hay columna de la que sacar
+    // dónde se está.
+    const r = sesion.ejecutar(fundarAsentamiento, { faccionId: 'no-existe' }, { actor: 'fantasma' });
+
+    expect(r.ok).toBe(false);
+    expect(sesion.getState().jugadores).toEqual([]);
+  });
+
+  it('el SISTEMA no es un jugador: el tick no le da registro', () => {
+    const sesion = partidaNueva();
+
+    sesion.avanzarTick();
+
+    expect(sesion.getState().jugadores).toEqual([]);
   });
 });

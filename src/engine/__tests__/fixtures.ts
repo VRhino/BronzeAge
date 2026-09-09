@@ -2,8 +2,10 @@
 // usando las funciones REALES del motor (generarMapa/crearFaccion/fundarAsentamiento), nunca objetos
 // inventados a mano — así un test que pasa hoy sigue significando "el motor real produce esto".
 import type { Asentamiento, Faccion } from '../../domain/types';
+import { instante, type Instante } from '../../domain/tiempo';
 import { generarMapa, MAPA_DEFAULT, type RandomFn } from '../../worldgen';
 import { crearMapa, type Mapa } from '../../world/mapa';
+import { SIMULACION } from '../../constants';
 import { crearFaccion } from '../faccion';
 import { evaluarViabilidadFundacion, fundarAsentamiento } from '../settlement';
 import type { ContextoSimulacion, EstadoSimulacion } from '../simulation';
@@ -12,21 +14,23 @@ export function crearMapaDeterminista(seed: number): Mapa {
   return crearMapa(generarMapa({ ancho: MAPA_DEFAULT.ancho, alto: MAPA_DEFAULT.alto, seed }));
 }
 
-/** Fecha arbitraria y FIJA de la que arrancan los tests — ver `contextoDeTest`. */
-const INICIO_PARTIDA_DE_TEST = Date.UTC(2026, 0, 1, 0, 0, 0);
-/** Duración de simulación que se atribuye a cada tick en los tests. Arbitraria: nada del motor la usa
- * todavía (el tick no tiene duración real hasta la Fase D), solo sirve para que `momento` avance de forma
- * monótona y reproducible. */
-const MS_POR_TICK_DE_TEST = 60_000;
+const EPOCA_MS = new Date(SIMULACION.epocaInicial).getTime();
+
+/** Instante de mundo de un `tick`, misma fórmula que `instanteDeTick` (`session/estado.ts`, Fase D / doc 10)
+ * — para que un test que razona en ticks pueda pasar el `Instante` que el motor ahora espera. */
+export function instanteDeTest(tick = 0): Instante {
+  return instante(EPOCA_MS + tick * SIMULACION.duracionTickMs);
+}
 
 /**
- * `ContextoSimulacion` para tests, con `momento` DERIVADO DEL TICK y nunca del reloj real: el motor tiene que
- * ser reproducible (ver `determinismo.test.ts`, que compara dos corridas completas), así que un `Date.now()`
- * aquí haría divergir dos corridas idénticas por los timestamps. Pasar el MISMO `rng` en todos los ticks de
- * una corrida — es una secuencia con estado, no una fábrica.
+ * `ContextoSimulacion` para tests, con `instante`/`momento` DERIVADOS DEL TICK y nunca del reloj real: el
+ * motor tiene que ser reproducible (ver `determinismo.test.ts`), así que un `Date.now()` aquí haría divergir
+ * dos corridas idénticas. Pasar el MISMO `rng` en todos los ticks de una corrida — es una secuencia con
+ * estado, no una fábrica.
  */
 export function contextoDeTest(tick: number, rng: RandomFn): ContextoSimulacion {
-  return { tick, momento: new Date(INICIO_PARTIDA_DE_TEST + tick * MS_POR_TICK_DE_TEST).toISOString(), rng };
+  const i = instanteDeTest(tick);
+  return { instante: i, momento: new Date(i).toISOString(), rng };
 }
 
 /**
@@ -58,7 +62,7 @@ export function fundarAsentamientoDeTest(
   posicion?: { x: number; y: number }
 ): { asentamiento: Asentamiento; facciones: Faccion[] } {
   const pos = posicion ?? posicionRecomendable(mapa, asentamientosExistentes);
-  return fundarAsentamiento(mapa, facciones, faccionId, pos, [`jugador-${faccionId}-1`], asentamientosExistentes, tickActual);
+  return fundarAsentamiento(mapa, facciones, faccionId, pos, [`jugador-${faccionId}-1`], asentamientosExistentes, instanteDeTest(tickActual));
 }
 
 export function crearFacciones(): Faccion[] {
@@ -80,13 +84,16 @@ export function crearEstadoDeTest(
     asentamientos,
     facciones,
     caravanas: [],
+    ejercitos: [],
+    memoriaPorFaccion: {},
     acuerdos: [],
     ordenes: [],
     relaciones: [],
     titulos: [],
     caminos: [],
     campamentosBandidos: [],
-    bandidosProximoSpawnTick: 0,
+    bandidosProximoSpawnEn: instanteDeTest(0),
+    jugadores: [],
     ...overrides,
   };
 }

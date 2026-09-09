@@ -10,14 +10,14 @@
 // Separar las superficies es lo que permite cerrarlos sin romper la de jugador.
 import type { FastifyInstance } from 'fastify';
 import type { RegionId } from '../../domain/types';
-import { puedeAdministrar, puedeCrearPartida, puedeDescartarPartida, rolEnPartida } from '../../acceso/rolesDePartida';
+import { esVigente, puedeAdministrar, puedeCrearPartida, puedeDescartarPartida, puedeGestionarMembresias, rolEnPartida } from '../../acceso/rolesDePartida';
 import type { RolTecnico } from '../../acceso/tipos';
 import type { ActorDeComando } from '../../session/comandos/autorizacion';
 import { PartidaYaAbiertaError } from '../registroDePartidas';
+import { recogerMetricas } from '../metricas';
 import { eventosDesde, vistaAdminDeEstado } from '../../session/estado';
-import { exportarParaUnityTerrain, UNITY_EXPORT_DEFAULT } from '../../world/exportUnity';
 import { ESQUEMA_SESION_AUTH } from '../openapi';
-import { ejecutarComandoHttp, ESQUEMA_EJECUTAR_COMANDO, type EjecutarComandoBody } from './comandos';
+import { auditarRechazoDeEsquema, ejecutarComandoHttp, ESQUEMA_EJECUTAR_COMANDO, type EjecutarComandoBody } from './comandos';
 import { enviarMapa, ESQUEMA_MAPA } from './mapa';
 import { ERROR_RESPUESTA, PARAMS_GAME_ID, QUERY_DESDE, RESUMEN_PARTIDA_RESPUESTA } from './esquemas';
 import {
@@ -63,12 +63,12 @@ const ESQUEMA_LISTAR_PARTIDAS = {
             type: 'object',
             properties: {
               gameId: { type: 'string' },
-              tick: { type: 'number' },
+              instante: { type: 'number' },
               version: { type: 'number' },
               mapaId: { type: 'string' },
               guardadoEn: { type: 'string' },
             },
-            required: ['gameId', 'tick', 'version', 'mapaId', 'guardadoEn'],
+            required: ['gameId', 'instante', 'version', 'mapaId', 'guardadoEn'],
           },
         },
       },
@@ -145,25 +145,201 @@ const ESQUEMA_EXPORTAR = {
   response: { 401: ERROR_RESPUESTA, 403: ERROR_RESPUESTA, 404: ERROR_RESPUESTA },
 } as const;
 
-const ESQUEMA_EXPORTAR_UNITY = {
+/** Roles que un administrador de partida puede otorgar por esta superficie. `jugador` no está: se obtiene por
+ * la superficie de jugador (necesita un `jugadorId`). `administrador_global` tampoco: es de instancia,
+ * configurado por variable de entorno (`ADMINISTRADORES`), no repartible por partida. `servicio_npc` es
+ * interno. */
+const ROLES_OTORGABLES: readonly RolTecnico[] = ['administrador_partida', 'moderador', 'observador'];
+
+const ESQUEMA_METRICAS = {
   description:
-    'Heightmap (16-bit RAW) + splatmap de biomas + metadata para Unity Terrain (Fase C12), en un solo JSON: ' +
-    'los binarios viajan en base64 (`heightmapRaw`, cada `splatmap.capas[bioma]`) — quien lo descarga decide ' +
-    'si los escribe a `.raw`/`.png` por su cuenta. Antes corría en el navegador (`GameStore.exportarMapaUnity`, ' +
-    '`world/exportUnity.ts` vía `@motor/*`); el cálculo no cambió, solo dónde se ejecuta. Resolución por ' +
-    'defecto alta (4097² el heightmap) — cara: pensada para pedirse una vez, no para *polling*.',
+    'Metricas de operacion del proceso (Fase E3): duracion de tick, tamano de cola, recuento de comandos por ' +
+    'resultado, conexiones y rafagas de catch-up. Numeros crudos, sin interpretar. NO es por partida: ' +
+    'describe este proceso, asi que exige administrador global y no membresia de una partida.',
+  tags: ['admin'],
+  security: SEGURIDAD_ADMIN,
+  response: {
+    200: {
+      type: 'object',
+      properties: {
+        momento: { type: 'string' },
+        proceso: {
+          type: 'object',
+          properties: {
+            arribaSegundos: { type: 'number' },
+            memoriaMb: { type: 'object', properties: { rss: { type: 'number' }, heapUsado: { type: 'number' }, heapTotal: { type: 'number' } } },
+            partidasAbiertas: { type: 'number' },
+          },
+        },
+        comandos: {
+          type: 'object',
+          properties: { aceptados: { type: 'number' }, autorizacion: { type: 'number' }, esquema: { type: 'number' }, dominio: { type: 'number' }, persistencia: { type: 'number' } },
+        },
+        auditoriaFallida: { type: 'number' },
+        partidas: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              gameId: { type: 'string' },
+              tick: { type: 'number' },
+              version: { type: 'number' },
+              colaPendiente: { type: 'number' },
+              ticksEjecutados: { type: 'number' },
+              tickMsUltimo: { type: 'number' },
+              tickMsMedio: { type: 'number' },
+              tickMsMaximo: { type: 'number' },
+              ultimaRafagaTicks: { type: 'number' },
+              mayorRafagaTicks: { type: 'number' },
+              ticksOmitidos: { type: 'number' },
+              relojDeMundoActivo: { type: 'boolean' },
+              conexiones: { type: 'number' },
+            },
+          },
+        },
+      },
+      required: ['momento', 'proceso', 'comandos', 'auditoriaFallida', 'partidas'],
+    },
+  },
+} as const;
+
+const ESQUEMA_AUDITORIA = {
+  description:
+    'Registro de auditoria de comandos de esta partida (Fase E2): quien pidio que, cuando, y con que ' +
+    'resultado — incluidos los RECHAZADOS, que es donde se ve el abuso y de lo que `eventosDominio` no ' +
+    'sabe nada. Solo administracion: es un registro de actividad de personas, no estado de juego.',
   tags: ['admin'],
   security: SEGURIDAD_ADMIN,
   params: PARAMS_GAME_ID,
   querystring: {
     type: 'object',
     properties: {
-      resolucion: { type: 'string', pattern: '^[0-9]+$' },
-      alturaMaximaMetros: { type: 'string', pattern: '^[0-9]+$' },
-      resolucionSplatmap: { type: 'string', pattern: '^[0-9]+$' },
+      desde: { type: 'string', description: 'ISO 8601 de reloj de PARED; descarta lo anterior.' },
+      actor: { type: 'string', description: 'Solo las lineas de este actor.' },
+      // `'true'`/`'false'` como TEXTO, no `type: 'boolean'`: este servidor corre con `coerceTypes: false`
+      // (Fase C9, ver `api.ts`), asi que un query param —que siempre llega como texto— nunca se convierte
+      // solo. Declararlo booleano hacia que `?soloRechazos=true` fallara la validacion con un 400.
+      soloRechazos: { type: 'string', enum: ['true', 'false'], description: 'Solo lo rechazado — la vista de moderacion.' },
+    },
+    additionalProperties: false,
+  },
+  response: {
+    200: {
+      type: 'object',
+      properties: {
+        entradas: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              formatoVersion: { type: 'number' },
+              momento: { type: 'string' },
+              instante: { type: 'number' },
+              gameId: { type: 'string' },
+              actor: { type: 'string' },
+              comando: { type: 'string' },
+              resultado: { type: 'string' },
+              causa: { type: 'string' },
+              detalle: { type: 'string' },
+              version: { type: 'number' },
+            },
+          },
+        },
+        corruptas: {
+          type: 'number',
+          description:
+            'Lineas ilegibles descartadas al leer (un corte de luz a mitad de escritura). Viaja siempre, y no ' +
+            'solo cuando es > 0: quien lee tiene que poder distinguir un registro completo de uno con agujeros.',
+        },
+      },
+      required: ['entradas', 'corruptas'],
     },
   },
-  response: { 400: ERROR_RESPUESTA, 401: ERROR_RESPUESTA, 403: ERROR_RESPUESTA, 404: ERROR_RESPUESTA },
+} as const;
+
+const ESQUEMA_LISTAR_MEMBRESIAS = {
+  description:
+    'Membresías técnicas de esta partida (cierre de Fase C): quién tiene rol de administración/observación, ' +
+    'vigente o revocado. `vigente` aplica el filtro de `hasta` sobre el reloj del servidor.',
+  tags: ['admin'],
+  security: SEGURIDAD_ADMIN,
+  params: PARAMS_GAME_ID,
+  response: {
+    200: {
+      type: 'object',
+      properties: {
+        membresias: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              usuarioId: { type: 'string' },
+              jugadorId: { type: ['string', 'null'] },
+              rol: { type: 'string' },
+              desde: { type: 'string' },
+              hasta: { type: 'string' },
+              vigente: { type: 'boolean' },
+            },
+            required: ['usuarioId', 'rol', 'desde', 'vigente'],
+          },
+        },
+      },
+      required: ['membresias'],
+    },
+    401: ERROR_RESPUESTA,
+    403: ERROR_RESPUESTA,
+    404: ERROR_RESPUESTA,
+  },
+} as const;
+
+const ESQUEMA_OTORGAR_MEMBRESIA = {
+  description:
+    'Otorga a un usuario un rol técnico sobre esta partida (cierre de Fase C). El usuario debe haber iniciado ' +
+    'sesión alguna vez (404 si no); repetir sobre un usuario que ya tiene membresía es 409, no un cambio de rol.',
+  tags: ['admin'],
+  security: SEGURIDAD_ADMIN,
+  params: PARAMS_GAME_ID,
+  body: {
+    type: 'object',
+    required: ['usuarioId', 'rol'],
+    additionalProperties: false,
+    properties: {
+      usuarioId: { type: 'string', minLength: 1 },
+      rol: { type: 'string', enum: ROLES_OTORGABLES },
+    },
+  },
+  response: {
+    201: {
+      type: 'object',
+      properties: { usuarioId: { type: 'string' }, rol: { type: 'string' }, desde: { type: 'string' } },
+      required: ['usuarioId', 'rol', 'desde'],
+    },
+    400: ERROR_RESPUESTA,
+    401: ERROR_RESPUESTA,
+    403: ERROR_RESPUESTA,
+    404: ERROR_RESPUESTA,
+    409: ERROR_RESPUESTA,
+  },
+} as const;
+
+const ESQUEMA_REVOCAR_MEMBRESIA = {
+  description:
+    'Revoca la membresía técnica de un usuario en esta partida poniéndole `hasta` (no borra el historial, ' +
+    'doc 5). 404 si ese usuario no tenía ninguna. No revoca al `administrador_global` de instancia: su acceso ' +
+    'no sale de una `Membresia`.',
+  tags: ['admin'],
+  security: SEGURIDAD_ADMIN,
+  params: {
+    type: 'object',
+    properties: { gameId: { type: 'string' }, usuarioId: { type: 'string' } },
+    required: ['gameId', 'usuarioId'],
+  },
+  response: {
+    200: { type: 'object', properties: { revocada: { type: 'boolean' } }, required: ['revocada'] },
+    401: ERROR_RESPUESTA,
+    403: ERROR_RESPUESTA,
+    404: ERROR_RESPUESTA,
+  },
 } as const;
 
 const ESQUEMA_COMANDOS_ADMIN = {
@@ -276,45 +452,6 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
     return reply.send(acceso.runner.exportar());
   });
 
-  /** Export para Unity Terrain (Fase C12) — ver `ESQUEMA_EXPORTAR_UNITY`. */
-  app.get<{ Params: ParametrosGameId; Querystring: { resolucion?: string; alturaMaximaMetros?: string; resolucionSplatmap?: string } }>(
-    '/admin/partidas/:gameId/exportar-unity',
-    { schema: ESQUEMA_EXPORTAR_UNITY },
-    async (request, reply) => {
-      const acceso = exigirAdministracion(request, reply, deps);
-      if (!acceso.ok) return acceso.respuesta;
-
-      const opciones = {
-        resolucion: request.query.resolucion ? Number(request.query.resolucion) : UNITY_EXPORT_DEFAULT.resolucion,
-        alturaMaximaMetros: request.query.alturaMaximaMetros
-          ? Number(request.query.alturaMaximaMetros)
-          : UNITY_EXPORT_DEFAULT.alturaMaximaMetros,
-        resolucionSplatmap: request.query.resolucionSplatmap
-          ? Number(request.query.resolucionSplatmap)
-          : UNITY_EXPORT_DEFAULT.resolucionSplatmap,
-      };
-
-      let resultado: ReturnType<typeof exportarParaUnityTerrain>;
-      try {
-        resultado = exportarParaUnityTerrain(acceso.runner.getState().mapa, acceso.runner.getState().asentamientos, opciones);
-      } catch (err) {
-        // Único fallo posible: `resolucion` no cumple 2^n+1 (`validarResolucionHeightmap`) — error de forma
-        // del cliente, no un 500 del servidor.
-        return reply.code(400).send({ error: mensajeDe(err) });
-      }
-
-      return reply.send({
-        metadata: resultado.metadata,
-        nombreBase: resultado.nombreBase,
-        heightmapRaw: Buffer.from(resultado.heightmapRaw).toString('base64'),
-        splatmap: {
-          resolucion: resultado.splatmap.resolucion,
-          capas: Object.fromEntries(Object.entries(resultado.splatmap.capas).map(([bioma, datos]) => [bioma, Buffer.from(datos).toString('base64')])),
-        },
-      });
-    }
-  );
-
   /** El mapa como asset (Fase C11) — ver `mapa.ts`. Misma comprobación de administración que el resto de esta
    * superficie: el mapa no es secreto, pero la partida sí exige sesión para entrar en su gameId. */
   app.get<{ Params: ParametrosGameId & { mapaId: string } }>('/admin/partidas/:gameId/mapa/:mapaId', { schema: ESQUEMA_MAPA }, async (request, reply) => {
@@ -330,7 +467,7 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
    */
   app.post<{ Params: ParametrosGameId; Body: EjecutarComandoBody }>(
     '/admin/partidas/:gameId/comandos',
-    { schema: ESQUEMA_COMANDOS_ADMIN },
+    { schema: ESQUEMA_COMANDOS_ADMIN, onError: auditarRechazoDeEsquema(deps) },
     async (request, reply) => {
       const acceso = exigirAdministracion(request, reply, deps);
       if (!acceso.ok) return acceso.respuesta;
@@ -340,7 +477,110 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
       // Un administrador sin personaje en la partida queda registrado como `admin:<usuarioId>`, para que su
       // huella en el log no se confunda con la de un jugador.
       const actorId = acceso.actorInstancia.membresia?.jugadorId ?? `admin:${acceso.actorInstancia.usuarioId}`;
-      return ejecutarComandoHttp(reply, acceso.runner, request.body, actor, actorId, deps.hub);
+      return ejecutarComandoHttp(reply, acceso.runner, request.body, actor, actorId, deps.hub, deps.auditoria);
+    }
+  );
+
+  /**
+   * Metricas de operacion (Fase E3).
+   *
+   * **Administrador GLOBAL, y no por partida**: describe el PROCESO —memoria, uptime, todas las partidas que
+   * tiene abiertas— asi que concederlo por membresia de una partida filtraria la actividad de las demas. Es
+   * la misma linea que ya separa crear una partida de administrarla.
+   *
+   * Sin autenticar seria mas comodo para un scraper de metricas, y es justo por eso que no se hace: expone
+   * cuantas partidas corren, cuanta gente hay conectada y cuando el servidor va justo.
+   */
+  app.get('/admin/metricas', { schema: ESQUEMA_METRICAS }, async (request, reply) => {
+    const resuelto = resolverActor(request, deps);
+    if (!resuelto) return sinSesion(reply);
+    if (!deps.administradores.esAdministradorGlobal(resuelto.usuario.id)) {
+      return sinPermiso(reply, 'se requiere administrador global');
+    }
+    return reply.send(recogerMetricas({ partidas: deps.partidas, auditoria: deps.auditoria, hub: deps.hub, ahora: deps.ahora }));
+  });
+
+  /**
+   * Auditoria de comandos (Fase E2). Exige administracion, igual que el estado completo: son datos de
+   * ACTIVIDAD DE PERSONAS (quien intento que y cuando), mas sensibles que el propio estado de juego, y no hay
+   * ninguna lectura equivalente en `/jugador/*` a proposito — un jugador no audita a los demas.
+   *
+   * Lee del archivo, no de memoria: el registro sobrevive al reinicio del proceso, que es la mitad de su
+   * razon de ser.
+   */
+  app.get<{ Params: ParametrosGameId; Querystring: { desde?: string; actor?: string; soloRechazos?: 'true' | 'false' } }>(
+    '/admin/partidas/:gameId/auditoria',
+    { schema: ESQUEMA_AUDITORIA },
+    async (request, reply) => {
+      const acceso = exigirAdministracion(request, reply, deps);
+      if (!acceso.ok) return acceso.respuesta;
+
+      const { desde, actor, soloRechazos } = request.query;
+      // `leer` drena antes: `registrar` escribe sin esperar, asi que sin eso el comando que acaba de
+      // ejecutarse podria no estar todavia en el archivo — justo el que se va a consultar.
+      return reply.send(await deps.auditoria.leer(request.params.gameId, { desde, actor, soloRechazos: soloRechazos === 'true' }));
+    }
+  );
+
+  /** Membresías técnicas de la partida (cierre de Fase C) — ver `ESQUEMA_LISTAR_MEMBRESIAS`. */
+  app.get<{ Params: ParametrosGameId }>('/admin/partidas/:gameId/membresias', { schema: ESQUEMA_LISTAR_MEMBRESIAS }, async (request, reply) => {
+    const acceso = exigirAdministracion(request, reply, deps);
+    if (!acceso.ok) return acceso.respuesta;
+
+    const ahora = deps.ahora();
+    const membresias = deps.identidad.repositorio.listarMembresiasDePartida(acceso.runner.gameId).map((m) => ({
+      usuarioId: m.usuarioId,
+      jugadorId: m.jugadorId,
+      rol: m.rol,
+      desde: m.desde,
+      ...(m.hasta !== undefined ? { hasta: m.hasta } : {}),
+      vigente: esVigente(m, ahora),
+    }));
+    return reply.send({ membresias });
+  });
+
+  /** Otorgar rol técnico (cierre de Fase C) — ver `ESQUEMA_OTORGAR_MEMBRESIA`. Exige `administrador_partida`
+   * o `administrador_global`: un `moderador` administra la partida pero no reparte accesos. */
+  app.post<{ Params: ParametrosGameId; Body: { usuarioId: string; rol: RolTecnico } }>(
+    '/admin/partidas/:gameId/membresias',
+    { schema: ESQUEMA_OTORGAR_MEMBRESIA },
+    async (request, reply) => {
+      const acceso = exigirAdministracion(request, reply, deps);
+      if (!acceso.ok) return acceso.respuesta;
+      if (!puedeGestionarMembresias(acceso.actorInstancia)) {
+        return sinPermiso(reply, 'otorgar membresías exige rol administrador_partida o administrador_global');
+      }
+
+      const { usuarioId, rol } = request.body;
+      if (!deps.identidad.repositorio.obtenerUsuario(usuarioId)) {
+        return reply.code(404).send({ error: `no existe el usuario '${usuarioId}' (¿ha iniciado sesión alguna vez?)` });
+      }
+      if (deps.identidad.repositorio.obtenerMembresia(usuarioId, acceso.runner.gameId)) {
+        return reply.code(409).send({ error: `el usuario '${usuarioId}' ya tiene una membresía en esta partida; revócala antes de cambiar el rol` });
+      }
+
+      const desde = deps.ahora();
+      // `jugadorId: null` — ninguno de los roles otorgables por esta vía requiere un `Jugador` (ese lo crea la
+      // superficie de jugador al unirse).
+      deps.identidad.repositorio.otorgarMembresia({ usuarioId, gameId: acceso.runner.gameId, jugadorId: null, rol, desde });
+      return reply.code(201).send({ usuarioId, rol, desde });
+    }
+  );
+
+  /** Revocar membresía (cierre de Fase C) — ver `ESQUEMA_REVOCAR_MEMBRESIA`. */
+  app.delete<{ Params: { gameId: string; usuarioId: string } }>(
+    '/admin/partidas/:gameId/membresias/:usuarioId',
+    { schema: ESQUEMA_REVOCAR_MEMBRESIA },
+    async (request, reply) => {
+      const acceso = exigirAdministracion(request, reply, deps);
+      if (!acceso.ok) return acceso.respuesta;
+      if (!puedeGestionarMembresias(acceso.actorInstancia)) {
+        return sinPermiso(reply, 'revocar membresías exige rol administrador_partida o administrador_global');
+      }
+
+      const revocada = deps.identidad.repositorio.revocarMembresia(request.params.usuarioId, request.params.gameId, deps.ahora());
+      if (!revocada) return reply.code(404).send({ error: `el usuario '${request.params.usuarioId}' no tiene membresía en esta partida` });
+      return reply.send({ revocada: true });
     }
   );
 }

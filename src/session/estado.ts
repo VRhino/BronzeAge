@@ -16,9 +16,9 @@ import type {
   RelacionPolitica,
   Titulo,
   ZonaFaccion,
-  ZonaInfluencia,
-} from '../domain/types';
+  ZonaInfluencia, Ejercito, Jugador } from '../domain/types';
 import type { TrazadoAsentamiento } from '../engine/trazado';
+import type { MemoriaFaccion } from '../engine/memoria';
 import type { EventoDominio } from '../domain/eventos';
 
 /**
@@ -35,6 +35,12 @@ export interface EventoDominioConVersion extends EventoDominio {
 import type { MapaGenerado } from '../worldgen';
 import type { EstadoMapa } from '../world/mapa';
 import type { EstadoSimulacion } from '../engine/simulation';
+import { SIMULACION } from '../constants';
+import { instante, type Instante } from '../domain/tiempo';
+
+/** `SIMULACION.epocaInicial` en ms, para `instanteDeTick` (más abajo). Al principio del módulo para que
+ * ninguna función declarada arriba dependa de un `const` en zona muerta temporal. */
+const EPOCA_MS = new Date(SIMULACION.epocaInicial).getTime();
 
 /**
  * Entrada de log en texto. Ya no se guarda un log global en el estado (se deriva de `eventosDominio` con
@@ -45,7 +51,9 @@ import type { EstadoSimulacion } from '../engine/simulation';
  * información de facciones rivales).
  */
 export interface EventoLogAdmin {
-  tick: number;
+  /** Instante de MUNDO (ISO 8601) del hecho — mismo criterio que `EventoDominio.momento`, de donde se deriva.
+   * Fase D cerrada: ya no lleva `tick` (doc 6 §4 regla (b)). */
+  momento: string;
   mensaje: string;
 }
 
@@ -60,17 +68,27 @@ export interface GameSessionState {
   asentamientos: Asentamiento[];
   facciones: Faccion[];
   caravanas: Caravana[];
+  /** Jugadores con estado propio de partida (Doc 5.11) — hoy solo su Liderazgo. NO es el registro de
+   * identidad (eso vive en `session/identidad`): es estado de juego. Un jugador que no aparezca aquí usa
+   * `LIDERAZGO.base`, así que la lista solo necesita crecer cuando alguien se desvíe del valor por defecto. */
+  jugadores: Jugador[];
+  /** Ejércitos en campaña (Doc 5.12) — los mueve `avanzarEjercitos` al final de la cadena del tick. */
+  ejercitos: Ejercito[];
   acuerdos: AcuerdoTrueque[];
   ordenes: OrdenMercado[];
   relaciones: RelacionPolitica[];
   titulos: Titulo[];
   caminos: CaminoComercial[];
   campamentosBandidos: CampamentoBandido[];
-  bandidosProximoSpawnTick: number;
+  bandidosProximoSpawnEn: Instante;
   /** Facciones que gobierna el NPC en vez de un jugador humano. Vive en la partida y no en el runner
    * (doc 7 §7.2): cambia el resultado del tick, así que un reinicio con otra configuración divergiría de lo
    * que el snapshot dice haber pasado. En partida real no cambia en caliente una vez elegida. */
   faccionesNpcIds: string[];
+  /** Contador de avances del motor — su unidad interna PROVISIONAL (doc 10). Se guarda porque el instante de
+   * mundo se DERIVA de él (`instanteDeTick`), no al revés. Para cualquier contrato hacia afuera (DTOs,
+   * eventos) la referencia temporal es el `instante`/`momento`, nunca este número — ver `EstadoAdmin.instante`,
+   * `ProyeccionJugador.instante`, `EventoDominio.momento`. */
   tick: number;
   /** Sube en cada mutación aceptada. Un comando rechazado NUNCA la incrementa — base del control de
    * concurrencia optimista de Fase B3. */
@@ -82,7 +100,7 @@ export interface GameSessionState {
    * `CIUDADANIA.cooldownCreacionFaccionDias` — anti-abuso contra "crear, abandonar, crear" en bucle. No es
    * historial (no guarda TODAS las salidas, solo la última) ni afecta a `unirseAFaccion`, que no tiene cooldown.
    */
-  salidasFaccionPorJugador: Record<string, string>;
+  salidasFaccionPorJugador: Record<string, Instante>;
   /**
    * Todo lo que ha ocurrido en la partida, en forma estructurada: la ÚNICA representación de los hechos que
    * se guarda. El log en texto que muestra la consola se deriva de aquí con `proyectarLog()` — antes se
@@ -94,6 +112,11 @@ export interface GameSessionState {
    * Fase C filtran sobre `codigo`/`payload`, que es justamente para lo que existe.
    */
   eventosDominio: EventoDominioConVersion[];
+  /** Lo que cada Facción RECUERDA del mundo (niebla de guerra — `engine/memoria.ts`), por `faccionId`: qué
+   * terreno ha llegado a ver y la última ficha de cada plaza ajena que vio. Lo que ve AHORA no está aquí: se
+   * deriva al proyectar. Una Facción ausente no ha visto nada, así que un snapshot viejo no necesita
+   * migración — solo empieza a recordar a partir del primer tick que corra con la mecánica. */
+  memoriaPorFaccion: Record<string, MemoriaFaccion>;
 }
 
 /** Proyecta el estado de partida al subconjunto que consume el motor. El motor no conoce `gameId`, `version`,
@@ -103,13 +126,16 @@ export function estadoSimulacionDe(estado: GameSessionState): EstadoSimulacion {
     asentamientos: estado.asentamientos,
     facciones: estado.facciones,
     caravanas: estado.caravanas,
+    ejercitos: estado.ejercitos,
     acuerdos: estado.acuerdos,
     ordenes: estado.ordenes,
     relaciones: estado.relaciones,
     titulos: estado.titulos,
     caminos: estado.caminos,
     campamentosBandidos: estado.campamentosBandidos,
-    bandidosProximoSpawnTick: estado.bandidosProximoSpawnTick,
+    bandidosProximoSpawnEn: estado.bandidosProximoSpawnEn,
+    memoriaPorFaccion: estado.memoriaPorFaccion,
+    jugadores: estado.jugadores,
   };
 }
 
@@ -121,13 +147,16 @@ export function conResultadoDeSimulacion(estado: GameSessionState, simulacion: E
     asentamientos: simulacion.asentamientos,
     facciones: simulacion.facciones,
     caravanas: simulacion.caravanas,
+    ejercitos: simulacion.ejercitos,
     acuerdos: simulacion.acuerdos,
     ordenes: simulacion.ordenes,
     relaciones: simulacion.relaciones,
     titulos: simulacion.titulos,
     caminos: simulacion.caminos,
     campamentosBandidos: simulacion.campamentosBandidos,
-    bandidosProximoSpawnTick: simulacion.bandidosProximoSpawnTick,
+    bandidosProximoSpawnEn: simulacion.bandidosProximoSpawnEn,
+    memoriaPorFaccion: simulacion.memoriaPorFaccion,
+    jugadores: simulacion.jugadores,
   };
 }
 
@@ -143,7 +172,7 @@ export function conResultadoDeSimulacion(estado: GameSessionState, simulacion: E
  */
 export function proyectarLog(eventos: readonly EventoDominio[]): EventoLogAdmin[] {
   return eventos.map((e) => ({
-    tick: e.tick,
+    momento: e.momento,
     mensaje: e.asentamientoId ? `${e.asentamientoId}: ${e.mensaje}` : e.mensaje,
   }));
 }
@@ -167,10 +196,11 @@ export function eventosDesde(estado: GameSessionState, desde: number): EventoDom
 /**
  * Hecho administrativo que NO es un comando de partida (hoy solo los cambios de balance, ver
  * `GameSession.registrarEventoAdministrativo`). Mantiene `mensaje` como texto libre a propósito: es un rastro
- * temporal, y lo sustituye la auditoría real de Fase C (actor, fecha, versión previa y nueva).
+ * temporal, y lo sustituye la auditoría real de Fase C (actor, fecha, versión previa y nueva). `tick` solo
+ * sirve para derivar el `momento` de mundo.
  */
-export function eventoAdministrativo(momento: string, tick: number, mensaje: string): EventoDominio {
-  return { codigo: 'administrativo', mensaje, momento, tick };
+export function eventoAdministrativo(tick: number, mensaje: string): EventoDominio {
+  return { codigo: 'administrativo', mensaje, momento: isoDeInstante(instanteDeTick(tick)) };
 }
 
 /**
@@ -185,6 +215,25 @@ export function eventoAdministrativo(momento: string, tick: number, mensaje: str
  */
 export function idDeMapa(mapa: GameSessionState['mapa']): string {
   return `v${mapa.version}-s${mapa.config.seed}${mapa.config.region ? `-${mapa.config.region}` : ''}`;
+}
+
+/**
+ * Instante de MUNDO (`Instante`, ms desde época) correspondiente a un `tick` (Fase D, doc 10 §2):
+ * `epocaInicial + tick × duracionTickMs`. Igual que `idDeMapa`: función pura, **derivada del estado, nunca
+ * almacenada** — así un snapshot antiguo se reconstruye sin datos nuevos y dos partidas con la misma seed en
+ * el mismo tick están en el mismo instante.
+ *
+ * Es el ÚNICO puente entre el `tick` (unidad interna del motor) y el tiempo que fechan las reglas. El reloj
+ * de pared (`Date.now()`) no participa: vive en `server/` y solo para cosas que no son estado de partida.
+ */
+export function instanteDeTick(tick: number): Instante {
+  return instante(EPOCA_MS + tick * SIMULACION.duracionTickMs);
+}
+
+/** `Instante` (ms) → ISO 8601, para lo que sale por el cable (`EventoDominio.momento`, DTOs). Vive aquí y no
+ * en el núcleo puro porque construye un `Date`; nunca lee el reloj. */
+export function isoDeInstante(i: Instante): string {
+  return new Date(i).toISOString();
 }
 
 /** Geometría por frame de TODOS los asentamientos (Fase C10) — lo que calcula
@@ -220,17 +269,26 @@ export interface GeometriaAsentamientos {
  * tampoco la calcula esta función pura: la añade `RunnerDePartida.geometriaAsentamientos()`, mismo criterio
  * que `preciosReferencia` aunque sin TTL (ver el comentario de `cacheGeometria` en ese archivo).
  */
-export type EstadoAdmin = Omit<GameSessionState, 'mapa'> &
-  GeometriaAsentamientos & { mapaId: string; preciosReferencia: Record<string, number> };
+export type EstadoAdmin = Omit<GameSessionState, 'mapa' | 'eventosDominio'> &
+  GeometriaAsentamientos & {
+    mapaId: string;
+    /** Instante de MUNDO de la partida (doc 10 / D4) — `instanteDeTick(tick)`, derivado como `mapaId`, no
+     * almacenado. Es la referencia temporal del contrato: `tick` sigue viajando pero es la unidad interna. */
+    instante: Instante;
+    preciosReferencia: Record<string, number>;
+  };
 
+/** `eventosDominio` sale de aquí desde el 2026-09-05 (follow-up de C13): crecía sin techo y era el 87-88 %
+ * de esta respuesta, para reenviar en cada lectura un historial que el cliente ya tenía. Se pide por el
+ * cursor `GET .../eventos?desde=<version>`. Ver la nota de cabecera de `session/proyecciones/jugador.ts`. */
 const CAMPOS_IMPUROS = ['preciosReferencia', 'zonas', 'zonasFusionadas', 'trazadoPorAsentamiento'] as const;
 
 /** Devuelve todo MENOS los campos impuros de arriba: los añade el llamador HTTP — spread sobre este resultado
  * más `{ preciosReferencia: runner.preciosReferencia(), ...runner.geometriaAsentamientos() }` completa un
  * `EstadoAdmin`. */
 export function vistaAdminDeEstado(estado: GameSessionState): Omit<EstadoAdmin, (typeof CAMPOS_IMPUROS)[number]> {
-  const { mapa, ...resto } = estado;
-  return { ...resto, mapaId: idDeMapa(mapa) };
+  const { mapa, eventosDominio, ...resto } = estado;
+  return { ...resto, mapaId: idDeMapa(mapa), instante: instanteDeTick(estado.tick) };
 }
 
 /** Añade una entrada al historial de un jugador concreto (administración, igual que el log). */
@@ -239,6 +297,9 @@ export function conHistorialDeJugador(estado: GameSessionState, jugadorId: strin
   const previo = estado.historialJugadores[jugadorId] ?? [];
   return {
     ...estado,
-    historialJugadores: { ...estado.historialJugadores, [jugadorId]: [{ tick: estado.tick, mensaje }, ...previo] },
+    historialJugadores: {
+      ...estado.historialJugadores,
+      [jugadorId]: [{ momento: isoDeInstante(instanteDeTick(estado.tick)), mensaje }, ...previo],
+    },
   };
 }

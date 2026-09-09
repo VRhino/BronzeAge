@@ -6,11 +6,13 @@
 // Un test que quiera un actor con Facción tiene que fundarla y ganarse la ciudadanía como en el juego real,
 // así que estas pruebas fallan si cambia el significado de ciudadanía, residencia o cargo en `engine/`.
 import { describe, expect, it } from 'vitest';
+import { instanteDeTick } from '../estado';
 import { GameSession } from '../gameSession';
 import { partidaConAsentamiento, ACTOR, OPC } from './fixtures';
 import { crearFaccion } from '../comandos/crearFaccion';
 import { fundarAsentamiento } from '../comandos/fundarAsentamiento';
 import { asignarCargoLocal, asignarRey } from '../comandos/cargos';
+import { entrarEnAsentamiento, salirAlMundo } from '../comandos/presencia';
 import { REGISTRO_COMANDOS } from '../comandos/registro';
 import { MATRIZ_AUTORIZACION, verificarAutorizacion, type ActorDeComando } from '../comandos/autorizacion';
 
@@ -35,7 +37,7 @@ function partidaConFaccionRival() {
   const opcRival = { ...OPC, actor: CIUDADANO_RIVAL };
   const rf = base.sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, opcRival);
   const faccionRivalId = rf.datos!.faccionId;
-  const ra = base.sesion.ejecutar(fundarAsentamiento, { faccionId: faccionRivalId, posicion: { x: 900, y: 900 } }, opcRival);
+  const ra = base.sesion.ejecutar(fundarAsentamiento, { faccionId: faccionRivalId }, opcRival);
   return { ...base, faccionRivalId, asentamientoRivalId: ra.datos!.asentamientoId, ciudadanoRival: CIUDADANO_RIVAL };
 }
 
@@ -50,7 +52,7 @@ describe('filtro de rol técnico', () => {
     const { sesion, faccionId } = partidaConAsentamiento();
     const resultado = verificarAutorizacion(
       'fundarAsentamiento',
-      { faccionId, posicion: { x: 0, y: 0 } },
+      { faccionId },
       sesion.getState(),
       { rol: 'observador', jugadorId: null }
     );
@@ -61,7 +63,7 @@ describe('filtro de rol técnico', () => {
     const { sesion, faccionId } = partidaConAsentamiento();
     const resultado = verificarAutorizacion(
       'fundarAsentamiento',
-      { faccionId, posicion: { x: 0, y: 0 } },
+      { faccionId },
       sesion.getState(),
       { rol: 'jugador', jugadorId: null }
     );
@@ -74,7 +76,7 @@ describe('la Facción del actor se deriva de ciudadanosIds, no de la membresía'
     const { sesion, faccionId, fundador } = partidaConAsentamiento();
     const resultado = verificarAutorizacion(
       'fundarAsentamiento',
-      { faccionId, posicion: { x: 0, y: 0 } },
+      { faccionId },
       sesion.getState(),
       jugador(fundador)
     );
@@ -85,7 +87,7 @@ describe('la Facción del actor se deriva de ciudadanosIds, no de la membresía'
     const { sesion, faccionId } = partidaConAsentamiento();
     const resultado = verificarAutorizacion(
       'fundarAsentamiento',
-      { faccionId, posicion: { x: 0, y: 0 } },
+      { faccionId },
       sesion.getState(),
       jugador('forastero')
     );
@@ -100,7 +102,7 @@ describe('la Facción del actor se deriva de ciudadanosIds, no de la membresía'
 
     const resultado = verificarAutorizacion(
       'fundarAsentamiento',
-      { faccionId: rf.datos!.faccionId, posicion: { x: 500, y: 500 } },
+      { faccionId: rf.datos!.faccionId },
       sesion.getState(),
       jugador(ACTOR)
     );
@@ -113,7 +115,7 @@ describe('la Facción del actor se deriva de ciudadanosIds, no de la membresía'
 
     const resultado = verificarAutorizacion(
       'fundarAsentamiento',
-      { faccionId: rf.datos!.faccionId, posicion: { x: 900, y: 900 } },
+      { faccionId: rf.datos!.faccionId },
       sesion.getState(),
       jugador(fundador)
     );
@@ -125,7 +127,7 @@ describe('la Facción del actor se deriva de ciudadanosIds, no de la membresía'
 
     const resultado = verificarAutorizacion(
       'fundarAsentamiento',
-      { faccionId, posicion: { x: 0, y: 0 } },
+      { faccionId },
       sesion.getState(),
       jugador(ciudadanoRival)
     );
@@ -155,6 +157,30 @@ describe('comprarCasa', () => {
       jugador(fundador)
     );
     expect(resultado).toEqual(POR_DOMINIO);
+  });
+});
+
+describe('la puerta (Doc 1.10.5)', () => {
+  // Quien puede tocarla es autorización, no regla del comando: la matriz es la única verdad sobre quién
+  // puede ejecutar qué, y repetir el chequeo dentro del comando dejaría dos que se desincronizan.
+  it('fijar la política de acceso exige ser el Gobernador', () => {
+    const { sesion, asentamientoId, fundador } = partidaConAsentamiento();
+    const params = { asentamientoId, jugadorId: fundador, politica: 'abierto' as const };
+
+    expect(verificarAutorizacion('fijarPoliticaDeAcceso', params, sesion.getState(), jugador(fundador))).toEqual(POR_DOMINIO);
+
+    sesion.ejecutar(asignarCargoLocal, { asentamientoId, cargo: 'gobernador', jugadorId: fundador }, OPC);
+    expect(verificarAutorizacion('fijarPoliticaDeAcceso', params, sesion.getState(), jugador(fundador))).toEqual(AUTORIZADO);
+  });
+
+  it('vetar también', () => {
+    const { sesion, asentamientoId, fundador, vecino } = partidaConAsentamiento();
+    const params = { asentamientoId, jugadorId: fundador, vetadoId: vecino, vetar: true };
+
+    expect(verificarAutorizacion('vetarJugador', params, sesion.getState(), jugador(fundador))).toEqual(POR_DOMINIO);
+
+    sesion.ejecutar(asignarCargoLocal, { asentamientoId, cargo: 'gobernador', jugadorId: fundador }, OPC);
+    expect(verificarAutorizacion('vetarJugador', params, sesion.getState(), jugador(fundador))).toEqual(AUTORIZADO);
   });
 });
 
@@ -253,11 +279,65 @@ describe('residencia en el asentamiento objetivo', () => {
   });
 });
 
+describe('combate: residente del atacante Y dueño de los escuadrones comprometidos', () => {
+  /** Estado con dos escuadrones en el asentamiento de la fixture: uno del fundador, otro del vecino. */
+  function conEscuadrones(sesion: ReturnType<typeof partidaConAsentamiento>['sesion'], fundador: string, vecino: string) {
+    const estado = sesion.getState();
+    const asentamiento = estado.asentamientos[0]!;
+    return {
+      ...estado,
+      asentamientos: [
+        {
+          ...asentamiento,
+          escuadrones: [
+            { id: 'esc-fundador', nombre: 'A', jugadorId: fundador, origen: 'pesants' as const, cantidad: 10, veterania: 0, moral: 100, tropaId: 't1' },
+            { id: 'esc-vecino', nombre: 'B', jugadorId: vecino, origen: 'pesants' as const, cantidad: 10, veterania: 0, moral: 100, tropaId: 't1' },
+          ],
+        },
+        ...estado.asentamientos.slice(1),
+      ],
+    };
+  }
+
+  it('iniciarAsedio: el residente puede comprometer SU escuadrón, no el de un co-residente', () => {
+    const { sesion, asentamientoId, fundador, vecino } = partidaConAsentamiento();
+    const estado = conEscuadrones(sesion, fundador, vecino);
+
+    expect(
+      verificarAutorizacion('iniciarAsedio', { atacanteId: asentamientoId, defensorId: 'x', escuadronIds: ['esc-fundador'] }, estado, jugador(fundador))
+    ).toEqual(AUTORIZADO);
+    expect(
+      verificarAutorizacion('iniciarAsedio', { atacanteId: asentamientoId, defensorId: 'x', escuadronIds: ['esc-vecino'] }, estado, jugador(fundador))
+    ).toEqual(POR_DOMINIO);
+    expect(
+      verificarAutorizacion(
+        'iniciarAsedio',
+        { atacanteId: asentamientoId, defensorId: 'x', escuadronIds: ['esc-fundador', 'esc-vecino'] },
+        estado,
+        jugador(fundador)
+      )
+    ).toEqual(POR_DOMINIO);
+  });
+
+  it('un escuadronId inexistente se deja pasar: lo rechaza el comando, no la autorización', () => {
+    const { sesion, asentamientoId, fundador, vecino } = partidaConAsentamiento();
+    const estado = conEscuadrones(sesion, fundador, vecino);
+    expect(
+      verificarAutorizacion('atacarCampamentoBandidos', { atacanteId: asentamientoId, campamentoId: 'c', escuadronIds: ['no-existe'] }, estado, jugador(fundador))
+    ).toEqual(AUTORIZADO);
+  });
+
+  // El caso de `combateCampoAbierto` ("solo se exige propiedad en el lado donde el actor reside") se fue con
+  // el comando en el Paso 11. La regla que probaba —que un jugador solo dispone de SUS escuadrones— no se ha
+  // perdido: vive en `movilizarEjercito`, que rechaza sacar un escuadrón de otro (`seleccionarParaCampana`,
+  // engine/ejercitos.ts), y se comprueba en `comandosEjercitos.test.ts`.
+});
+
 describe('diplomacia: ciudadanía + autoridad de Rey/Embajador', () => {
   function conRelacion(sesion: ReturnType<typeof partidaConAsentamiento>['sesion'], tipo: 'alianza' | 'vasallaje', aId: string, bId: string) {
     return {
       ...sesion.getState(),
-      relaciones: [{ id: 'r1', tipo, faccionAId: aId, faccionBId: bId, creadoEnTick: 0, estado: 'activa' as const }],
+      relaciones: [{ id: 'r1', tipo, faccionAId: aId, faccionBId: bId, creadoEn: instanteDeTick(0), estado: 'activa' as const }],
     };
   }
 
@@ -288,5 +368,72 @@ describe('diplomacia: ciudadanía + autoridad de Rey/Embajador', () => {
 
     sesion.ejecutar(asignarRey, { faccionId, jugadorId: fundador }, OPC);
     expect(verificarAutorizacion('anexionar', params, sesion.getState(), jugador(fundador))).toEqual(AUTORIZADO);
+  });
+});
+
+// La presencia (paso 7, Doc 2.5: "la ciudadania habilita, la presencia ejerce"). Hasta aqui un jugador
+// estaba en todas partes a la vez y le bastaba ser vecino; ahora ademas tiene que estar ahi.
+describe('presencia: ser vecino ya no basta, hay que estar dentro', () => {
+  /** Saca al fundador de su plaza y devuelve la sesion con el ya en el mapa. */
+  function deCampana() {
+    const base = partidaConAsentamiento();
+    const r = base.sesion.ejecutar(
+      salirAlMundo,
+      { asentamientoId: base.asentamientoId, jugadorId: base.fundador, escuadronIds: [], carga: {} },
+      { ...OPC, actor: base.fundador }
+    );
+    expect(r.ok, 'setup del test: tiene que poder salir').toBe(true);
+    return base;
+  }
+
+  it('dentro de su plaza, un vecino puede reclutar', () => {
+    const { sesion, asentamientoId, fundador } = partidaConAsentamiento();
+    const params = { asentamientoId, jugadorId: fundador, tropaId: 'milicia_lanceros', cantidad: 1, origen: 'pesants' as const };
+
+    expect(verificarAutorizacion('reclutarTropa', params, sesion.getState(), jugador(fundador))).toEqual(AUTORIZADO);
+  });
+
+  it('en campaña NO, aunque siga siendo vecino de esa misma plaza', () => {
+    const { sesion, asentamientoId, fundador } = deCampana();
+    const params = { asentamientoId, jugadorId: fundador, tropaId: 'milicia_lanceros', cantidad: 1, origen: 'pesants' as const };
+
+    expect(verificarAutorizacion('reclutarTropa', params, sesion.getState(), jugador(fundador))).toEqual(POR_DOMINIO);
+  });
+
+  it('un GOBERNADOR de campaña sigue siendo Gobernador, pero no gobierna desde el camino', () => {
+    // Es la consecuencia buscada de Doc 2.5: no pierde el cargo, pierde la capacidad de dar ordenes nuevas.
+    // Y por eso la delegacion pasa a importar.
+    const base = partidaConAsentamiento();
+    base.sesion.ejecutar(asignarCargoLocal, { asentamientoId: base.asentamientoId, cargo: 'gobernador', jugadorId: base.fundador }, OPC);
+    const params = { asentamientoId: base.asentamientoId, jugadorId: base.fundador, cargo: 'tesorero' as const };
+    expect(verificarAutorizacion('asignarCargoLocal', params, base.sesion.getState(), jugador(base.fundador))).toEqual(AUTORIZADO);
+
+    base.sesion.ejecutar(
+      salirAlMundo,
+      { asentamientoId: base.asentamientoId, jugadorId: base.fundador, escuadronIds: [], carga: {} },
+      { ...OPC, actor: base.fundador }
+    );
+
+    const enCampana = base.sesion.getState();
+    expect(enCampana.asentamientos[0]!.cargos.gobernadorId, 'el cargo NO se pierde').toBe(base.fundador);
+    expect(verificarAutorizacion('asignarCargoLocal', params, enCampana, jugador(base.fundador))).toEqual(POR_DOMINIO);
+  });
+
+  it('y al volver a entrar lo recupera', () => {
+    const { sesion, asentamientoId, fundador } = deCampana();
+    sesion.ejecutar(entrarEnAsentamiento, { asentamientoId, jugadorId: fundador }, { ...OPC, actor: fundador });
+    const params = { asentamientoId, jugadorId: fundador, tropaId: 'milicia_lanceros', cantidad: 1, origen: 'pesants' as const };
+
+    expect(verificarAutorizacion('reclutarTropa', params, sesion.getState(), jugador(fundador))).toEqual(AUTORIZADO);
+  });
+
+  it('quien nunca ha dado una orden puede actuar en su residencia: la ubicacion se DEDUCE', () => {
+    // El alta de jugador ocurre al ejecutar un comando, asi que un recien llegado no tiene registro. Sin
+    // deduccion no podria hacer nada en su propia ciudad hasta haber hecho algo antes, que es imposible.
+    const { sesion, asentamientoId, vecino } = partidaConAsentamiento();
+    expect(sesion.getState().jugadores.find((j) => j.id === vecino), 'no ha actuado nunca').toBeUndefined();
+    const params = { asentamientoId, jugadorId: vecino, tropaId: 'milicia_lanceros', cantidad: 1, origen: 'pesants' as const };
+
+    expect(verificarAutorizacion('reclutarTropa', params, sesion.getState(), jugador(vecino))).toEqual(AUTORIZADO);
   });
 });

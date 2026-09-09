@@ -1,4 +1,4 @@
-import type { Asentamiento, Edificio, EdificioTipo, Faccion, Point, RecursoAlmacenado, RecursoTipo } from '../domain/types';
+import type { Asentamiento, Edificio, EdificioTipo, Faccion, Point, Recinto, RecursoAlmacenado, RecursoTipo } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
 import type { RecetaProduccion } from '../constants';
 import {
@@ -6,13 +6,16 @@ import {
   EXTRACCION_MAXIMOS,
   EXTRACTOR_DESEMPATE,
   LINEAS_PRODUCCION,
+  CARPINTERIA_ZONA,
   MERCADO_PUESTOS_POR_NIVEL,
   NECESIDADES,
   NIVEL_ASENTAMIENTO,
+  OCUPACION,
   produccionTrigoDeGranja,
   SCORE_BANDAS,
   ZONA_INFLUENCIA,
 } from '../constants';
+import { minutos, sumar, type Instante } from '../domain/tiempo';
 import type { Mapa } from '../world/mapa';
 import { mejorFertilidadEnZona } from './zones';
 // `sitioParaTipo` del trazado se importa con alias: en este archivo ya existe una función con ese nombre, la
@@ -20,13 +23,20 @@ import { mejorFertilidadEnZona } from './zones';
 import {
   anclaActivaParaCategoria,
   CATEGORIA_POR_TIPO,
+  celdasDeEdificio,
   crearAnclaNueva,
+  esDeAfueras,
+  permiteRotacion,
   redDeCalles,
+  resolverPerfil,
   reubicarPorTamano,
   sitioParaTipo as sitioEnTrazado,
   sitiosParaTipo,
+  sitiosPorAtraccionDura,
+  sueloOcupado,
   tamanoEdificio,
   tipoAnclaParaCategoria,
+  type PerfilTrazado,
 } from './trazado';
 import {
   capacidadViviendaArtesanos,
@@ -37,9 +47,10 @@ import {
   ratioManoObra,
   ratioManoObraArtesanos,
 } from './asentamientoQuery';
-import { agregarRecurso, agregarRecursoConSobrante, descontarRecursos, tieneRecursos } from './almacen';
+import { agregarRecurso, agregarRecursoConSobrante, ampliarCapacidad, descontarRecursos, tieneRecursos } from './almacen';
+import { avanzarObraDeRecintos } from './muralla';
 import { reservaDinamicaConstruccion } from './mantenimiento';
-import { factorProduccionTrigo, factorTiempoConstruccion, lineasProduccionPriorizadas } from './politicas';
+import { factorProduccionTrigo, factorTiempoConstruccion, lineasProduccionPriorizadas, perfilTrazadoDePolitica } from './politicas';
 import { consumoComidaPoblacion } from './population';
 import { consumoRacionTropas } from './tropas';
 
@@ -141,19 +152,40 @@ export { CATEGORIA_POR_TIPO } from './trazado';
 export type { CategoriaAsentamiento } from './trazado';
 
 /**
+ * Lo mínimo que necesita cualquier colocación: id + radio, y OPCIONALMENTE las políticas activas para poder
+ * resolver el perfil de trazado (§E6.23).
+ *
+ * `politicasActivas` es opcional a propósito: durante la FUNDACIÓN (`engine/settlement.ts`) todavía no existe
+ * un `Asentamiento` completo, y un asentamiento recién fundado no tiene ninguna política de todos modos. Sin
+ * ellas se cae a la tradición local del asentamiento, que es la respuesta correcta.
+ */
+type ContextoColocacion = Pick<Asentamiento, 'id' | 'radioPotencial'> & Partial<Pick<Asentamiento, 'politicasActivas'>>;
+
+/**
+ * Perfil de trazado efectivo del asentamiento: ordenanza activa del Maestro de Obras si la hay, si no su
+ * tradición local (y por encima de todo, el override del laboratorio — ver `resolverPerfil`).
+ *
+ * Vive AQUÍ y no en `engine/trazado.ts` a propósito: trazado es geometría pura y no sabe nada de cargos ni de
+ * catálogos de política. La decisión "qué perfil toca" es regla de juego; "qué hace ese perfil" es geometría.
+ */
+function perfilDe(asentamiento: ContextoColocacion): PerfilTrazado {
+  return resolverPerfil(asentamiento.id, perfilTrazadoDePolitica(asentamiento));
+}
+
+/**
  * Hueco para un edificio de tipo `tipo` dentro de la Vista de Asentamiento — delega en `sitioParaTipo`
  * (engine/trazado.ts), que resuelve huella, barrio, filas y afueras. Se conserva el nombre porque lo usan
  * `engine/settlement.ts` (fundación), la auto-construcción y la construcción manual.
  *
- * Solo necesita `id` + `radioPotencial` de `asentamiento` (narrowing deliberado, no el `Asentamiento`
- * completo) para poder reutilizarse durante la FUNDACIÓN, antes de que exista un `Asentamiento` completo.
+ * Es también el punto donde se resuelve el PERFIL DE TRAZADO (§E6.23): al pasar por aquí toda la colocación
+ * urbana, la ordenanza activa se aplica sin que ningún llamante tenga que acordarse de propagarla.
  */
 export function sitioEnBarrio(
-  asentamiento: Pick<Asentamiento, 'id' | 'radioPotencial'>,
+  asentamiento: ContextoColocacion,
   ocupados: Edificio[],
   tipo: EdificioTipo
 ): { punto: Point; rotado: boolean } | null {
-  return sitioEnTrazado(asentamiento, ocupados, tipo);
+  return sitioEnTrazado(asentamiento, ocupados, tipo, undefined, perfilDe(asentamiento));
 }
 
 /**
@@ -177,7 +209,7 @@ export function sitioEnBarrioLineaProduccion(
   if (!categoria) return sitioEnBarrio(asentamiento, ocupados, tipo);
 
   const recetas = nivelesDe(tipo)?.[1]?.recetas ?? [];
-  const candidatos = sitiosParaTipo(asentamiento, ocupados, tipo, undefined, true);
+  const candidatos = sitiosParaTipo(asentamiento, ocupados, tipo, undefined, true, perfilDe(asentamiento));
   if (recetas.length === 0) return candidatos[0] ?? null;
 
   let mejor: { punto: Point; rotado: boolean; score: number } | null = null;
@@ -187,7 +219,6 @@ export function sitioEnBarrioLineaProduccion(
       tipo,
       posicion: candidato.punto,
       estado: 'activo',
-      ticksRestantes: 0,
       ambito: 'asentamiento',
       rotado: candidato.rotado,
     };
@@ -296,7 +327,8 @@ function crearEdificioEnCola(tipo: EdificioTipo, posicion: Point, id: string, fu
     tipo,
     posicion,
     estado: 'en_cola',
-    ticksRestantes: EDIFICIO_CATALOGO[tipo].tiempoConstruccionTicks,
+    // `completaEn` ausente: la obra aún no arrancó. Su duración se fija al pasar a `en_construccion`
+    // (Paso 2 de `avanzarConstruccion`), donde la Vía Rápida del Maestro de Obras puede acelerarla.
     ambito: ambitoDe(tipo),
   };
   return { ...edificio, ...(fuenteId ? { fuenteId } : {}), ...(rotado ? { rotado } : {}) };
@@ -314,7 +346,7 @@ function crearEdificioEnCola(tipo: EdificioTipo, posicion: Point, id: string, fu
  * la pieza principal, tenga o no todo su acompañamiento.
  */
 function crearPuestosDeMercado(
-  asentamiento: Pick<Asentamiento, 'id' | 'radioPotencial'>,
+  asentamiento: ContextoColocacion,
   nivel: number,
   existentes: Edificio[]
 ): Edificio[] {
@@ -328,7 +360,7 @@ function crearPuestosDeMercado(
   const nuevos: Edificio[] = [];
 
   for (const forma of formas) {
-    const sitio = sitioEnTrazado(asentamiento, [...existentes, ...nuevos], 'puestoMercado', forma);
+    const sitio = sitioEnTrazado(asentamiento, [...existentes, ...nuevos], 'puestoMercado', forma, perfilDe(asentamiento));
     if (!sitio) continue;
     let id = `edificio-${asentamiento.id}-${contador++}`;
     while (idsUsadas.has(id)) id = `edificio-${asentamiento.id}-${contador++}`;
@@ -338,10 +370,13 @@ function crearPuestosDeMercado(
       tipo: 'puestoMercado',
       posicion: sitio.punto,
       estado: 'activo',
-      ticksRestantes: 0,
       ambito: 'asentamiento',
       // En un puesto `nivelInterno` no es progresión: identifica su FORMA (ver `PUESTO_MERCADO_FORMA`).
       nivelInterno: forma,
+      // `sitioEnTrazado` puede devolver la forma GIRADA si pega mejor al Mercado (2026-08-31: `puestoMercado`
+      // salió de `TIPOS_SIN_ROTACION`). `posicion` ya está calculada para esa orientación, así que hay que
+      // persistir `rotado` o `tamanoDeEdificio` la leería con la huella sin girar y la pieza se solaparía.
+      ...(sitio.rotado ? { rotado: true } : {}),
     });
   }
   return nuevos;
@@ -356,18 +391,18 @@ function crearPuestosDeMercado(
  * `existentes` debe incluir todo lo que ya ocupa suelo, mismo criterio que `crearPuestosDeMercado`. Si un
  * taller no encuentra hueco se salta en silencio: la zona es superficie, no función.
  */
-function crearTalleresDeCarpinteria(asentamiento: Pick<Asentamiento, 'id' | 'radioPotencial'>, existentes: Edificio[]): Edificio[] {
+function crearTalleresDeCarpinteria(asentamiento: ContextoColocacion, existentes: Edificio[]): Edificio[] {
   const idsUsadas = new Set(existentes.map((e) => e.id));
   let contador = existentes.length;
   const nuevos: Edificio[] = [];
 
-  for (let i = 0; i < 2; i++) {
-    const sitio = sitioEnTrazado(asentamiento, [...existentes, ...nuevos], 'tallerCarpinteria');
+  for (let i = 0; i < CARPINTERIA_ZONA.talleres; i++) {
+    const sitio = sitioEnTrazado(asentamiento, [...existentes, ...nuevos], 'tallerCarpinteria', undefined, perfilDe(asentamiento));
     if (!sitio) continue;
     let id = `edificio-${asentamiento.id}-${contador++}`;
     while (idsUsadas.has(id)) id = `edificio-${asentamiento.id}-${contador++}`;
     idsUsadas.add(id);
-    nuevos.push({ id, tipo: 'tallerCarpinteria', posicion: sitio.punto, estado: 'activo', ticksRestantes: 0, ambito: 'asentamiento' });
+    nuevos.push({ id, tipo: 'tallerCarpinteria', posicion: sitio.punto, estado: 'activo', ambito: 'asentamiento' });
   }
   return nuevos;
 }
@@ -506,8 +541,9 @@ function asegurarAnclaPara(asentamiento: Asentamiento, edificios: Edificio[], ti
   const categoria = CATEGORIA_POR_TIPO[tipo];
   if (!categoria) return edificios;
 
-  const red = redDeCalles(asentamiento.id, edificios);
-  const { instancia, anclasRecienLlenas } = anclaActivaParaCategoria(categoria, tipo, undefined, edificios, red);
+  const red = redDeCalles(asentamiento.id, edificios, asentamiento.recintos ?? []);
+  const perfil = perfilDe(asentamiento);
+  const { instancia, anclasRecienLlenas } = anclaActivaParaCategoria(categoria, tipo, undefined, edificios, red, perfil, asentamiento.recintos ?? []);
   const edificiosConLlenas = edificios.map((e) => (anclasRecienLlenas.includes(e.id) ? { ...e, anclaLlena: true } : e));
   if (instancia) return edificiosConLlenas;
 
@@ -515,12 +551,27 @@ function asegurarAnclaPara(asentamiento: Asentamiento, edificios: Edificio[], ti
   const idAncla = nextId();
   const tipoAncla = tipoAnclaParaCategoria(categoria, idAncla);
   if (!tipoAncla) return edificiosConLlenas;
-  const resultado = crearAnclaNueva(asentamiento.id, edificiosConLlenas, tipoAncla, idAncla);
+  const resultado = crearAnclaNueva(asentamiento.id, edificiosConLlenas, tipoAncla, idAncla, asentamiento.recintos ?? []);
   if (!resultado) return edificiosConLlenas;
+
   const conSaturadasMarcadas = edificiosConLlenas.map((e) =>
     resultado.anclasRecienSaturadas.includes(e.id) ? { ...e, semillaSaturada: true } : e
   );
-  return [...conSaturadasMarcadas, resultado.nuevaAncla];
+  const conAncla = [...conSaturadasMarcadas, resultado.nuevaAncla];
+
+  // GATE de utilidad (doc trazado §E6.19): `crearAnclaNueva` solo mira geometría + `separacionSeguridadAnclas`,
+  // así que en un núcleo saturado (p. ej. el Mercado y sus 12 puestos recién nacidos empujando la ranura de
+  // industria fuera del alcance de toda calle) puede colocar un ancla a la que NINGÚN satélite de `tipo` se
+  // puede pegar. Comprometerla dejaría un `patioDeGremios`/`plazaDeArmas` huérfano permanente en la ciudad; y
+  // como la iteración siguiente del bucle de transformación la vería inútil y volvería a llamar aquí, salían
+  // DOS anclas en el mismo tick (bug reportado). Si no hay sitio para el satélite, no se commitea el ancla —
+  // se reintenta el tick siguiente, cuando la ciudad haya crecido. `semillaSaturada` SÍ se conserva: esas
+  // semillas están agotadas geométricamente, sea o no útil el ancla que se intentó.
+  const tamanoSat = tamanoEdificio(tipo);
+  const { ocupadas, red: redConAncla } = sueloOcupado(asentamiento.id, conAncla, undefined, asentamiento.recintos ?? []);
+  const haySitioSatelite =
+    sitiosPorAtraccionDura(resultado.nuevaAncla, tamanoSat, ocupadas, redConAncla, permiteRotacion(tipo, tamanoSat), false, new Set(), perfil).length > 0;
+  return haySitioSatelite ? conAncla : conSaturadasMarcadas;
 }
 
 /**
@@ -576,6 +627,23 @@ function evaluarNecesidades(
     return id;
   };
   const ocupados = () => [...edificiosBase, ...candidatos.map((c) => c.edificio)];
+  /**
+   * ¿Alcanza el almacén para pagar un `tipo`, respetando la reserva? **Se pregunta ANTES de buscarle sitio**
+   * (decisión del usuario, 2026-09-06): buscar dónde poner algo que no se puede construir es trabajo que el
+   * commit de abajo iba a tirar igualmente, y la búsqueda de colocación es lo más caro del tick. Medido antes
+   * de añadir esto: el **68 % de las búsquedas en fase de crecimiento y el 92 % en madurez** eran para un
+   * edificio impagable.
+   *
+   * **Es conservador, no una heurística**: mira `asentamiento.almacen`, el stock ENTERO del tick. El commit
+   * paga en orden de score y el almacén solo baja, así que lo que no alcanza con todo no va a alcanzar
+   * después — esto descarta exactamente lo que `puedeIniciarConstruccion` iba a rechazar en el commit, ni un
+   * candidato más.
+   *
+   * Lo que NO filtra, a propósito: el CUPO (`maximoEnCola`) y los topes por tipo. Esos sí dependen del orden
+   * y de qué se comprometa antes, así que solo el commit puede decidirlos.
+   */
+  const puedePagar = (tipo: EdificioTipo): boolean =>
+    puedeIniciarConstruccion(asentamiento.almacen, EDIFICIO_CATALOGO[tipo].costo as Partial<Record<string, number>>, tipo, reserva);
   const proponer = (edificio: Edificio | null, score: number): void => {
     if (edificio) candidatos.push({ edificio, score });
   };
@@ -647,7 +715,8 @@ function evaluarNecesidades(
   if (
     (granjasActivasEdificios.length === 0 || enDeficitProyectado) &&
     !hayMejoraGranjaDisponible &&
-    granjasPendientes < limiteGranjasPendientes
+    granjasPendientes < limiteGranjasPendientes &&
+    puedePagar('granja')
   ) {
     const sitio = sitioEnBarrio(asentamiento, ocupados(), 'granja');
     if (sitio) {
@@ -661,7 +730,7 @@ function evaluarNecesidades(
   // si no hay ninguna, alta si la reserva proyectada de madera ya está comprometida, baja si solo falta
   // para llegar al tope.
   const leneras = edificiosPorTipoYEstado(asentamiento, 'lenera');
-  if (leneras.length < EXTRACCION_MAXIMOS.porTipo && !proyectoEnCurso('lenera')) {
+  if (leneras.length < EXTRACCION_MAXIMOS.porTipo && !proyectoEnCurso('lenera') && puedePagar('lenera')) {
     // Elegibilidad y `fuenteId` siguen saliendo del bosque que toca la zona en el mapa general (`sitioEnBosque`);
     // la Leñera se COLOCA dentro del espacio plano del asentamiento (posición local), no sobre el bosque.
     const fuente = sitioEnBosque(asentamiento, zonaPoligono, mapa, reclamos.lenerasPorBosque);
@@ -690,7 +759,11 @@ function evaluarNecesidades(
   // `extractoresTicksSinCupo` (ver `EXTRACTOR_DESEMPATE`).
   const extractorCandidatoIds: Partial<Record<EdificioTipo, string>> = {};
   for (const { tipo, recurso } of extractores) {
-    if (necesitaNuevoExtractor(asentamiento, tipo, mapa) && !proyectoEnCurso(tipo)) {
+    // `puedePagar` también aquí, y con una consecuencia que conviene decir: un extractor impagable ya no se
+    // propone, así que su `extractoresTicksSinCupo` deja de subir. Es lo correcto según lo que ese contador
+    // significa —ticks SIN CUPO, o sea perdiendo el desempate frente a otros extractores— y un extractor que
+    // no se construye porque la ciudad está sin recursos no está siendo desplazado por nadie.
+    if (necesitaNuevoExtractor(asentamiento, tipo, mapa) && !proyectoEnCurso(tipo) && puedePagar(tipo)) {
       const sitio = sitioCercaDeNodo(asentamiento, zonaPoligono, mapa, recurso, reclamos.nodos);
       if (sitio) {
         // Minas/Cantera se plantan SOBRE su nodo del mapa general (posición del nodo, `ambito:'mapa'`); el
@@ -703,7 +776,7 @@ function evaluarNecesidades(
           .filter((e) => e.tipo === tipo)
           .some((e) => mapa.nodoProductivo(e.fuenteId));
         const ticksSinCupo = asentamiento.extractoresTicksSinCupo?.[tipo] ?? 0;
-        const bonusDesempate = Math.min(ticksSinCupo * EXTRACTOR_DESEMPATE.bonusPorTickStarved, EXTRACTOR_DESEMPATE.bonusMaximo);
+        const bonusDesempate = Math.min(ticksSinCupo * EXTRACTOR_DESEMPATE.bonusPorMinutoStarved, EXTRACTOR_DESEMPATE.bonusMaximo);
         const edificio = crearEdificioEnCola(tipo, posicion, nextId(), sitio.fuenteId, local?.rotado);
         extractorCandidatoIds[tipo] = edificio.id;
         proponer(edificio, conUrgencia(SCORE_BANDAS.extractorBase, conFuenteViva ? 40 : 100, bonusDesempate));
@@ -722,7 +795,8 @@ function evaluarNecesidades(
   if (
     (capacidadPesantsVivienda === 0 || ocupacionMaxima >= NECESIDADES.umbralViviendaOcupada) &&
     !hayProyectoPendiente(asentamiento, 'vivienda') &&
-    !alcanzoTopeDeViviendas(asentamiento)
+    !alcanzoTopeDeViviendas(asentamiento) &&
+    puedePagar('vivienda')
   ) {
     edificiosBase = asegurarAnclaPara(asentamiento, edificiosBase, 'vivienda', nextId);
     const sitio = sitioEnBarrio(asentamiento, ocupados(), 'vivienda');
@@ -730,6 +804,28 @@ function evaluarNecesidades(
       proponer(
         crearEdificioEnCola('vivienda', sitio.punto, nextId(), undefined, sitio.rotado),
         conUrgencia(SCORE_BANDAS.crecimiento, ocupacionMaxima * 100)
+      );
+    }
+  }
+
+  // Granero: mismo mecanismo que el Almacén de abajo, pero mirando SOLO la ocupación del trigo — es lo único
+  // que guarda. Va ANTES a propósito: cuando lo que se está desbordando es el grano, ampliar capacidad general
+  // a 300 por recurso es mucho peor negocio que un Granero, y sin esta regla la comida de más que produce la
+  // Granja (doblada dos veces) se perdería contra el techo del almacén en vez de acumularse para una campaña.
+  // No lleva tope propio: el Granero es único por asentamiento (`EDIFICIOS_UNICOS`) y crece por nivel interno.
+  const trigoAlmacenado = asentamiento.almacen['trigo'];
+  const ocupacionTrigo = trigoAlmacenado && trigoAlmacenado.capacidad > 0 ? trigoAlmacenado.cantidad / trigoAlmacenado.capacidad : 0;
+  if (
+    ocupacionTrigo >= NECESIDADES.umbralAlmacenAmpliacion &&
+    edificiosPorTipoYEstado(asentamiento, 'granero').length === 0 &&
+    !hayProyectoPendiente(asentamiento, 'granero') &&
+    puedePagar('granero')
+  ) {
+    const sitio = sitioEnBarrio(asentamiento, ocupados(), 'granero');
+    if (sitio) {
+      proponer(
+        crearEdificioEnCola('granero', sitio.punto, nextId(), undefined, sitio.rotado),
+        conUrgencia(SCORE_BANDAS.crecimiento, ocupacionTrigo * 100)
       );
     }
   }
@@ -742,7 +838,8 @@ function evaluarNecesidades(
   if (
     ocupacionAlmacenMaxima >= NECESIDADES.umbralAlmacenAmpliacion &&
     !hayProyectoPendiente(asentamiento, 'almacen') &&
-    !alcanzoTopeDeAlmacenes(asentamiento)
+    !alcanzoTopeDeAlmacenes(asentamiento) &&
+    puedePagar('almacen')
   ) {
     const sitio = sitioEnBarrio(asentamiento, ocupados(), 'almacen');
     if (sitio) {
@@ -770,6 +867,7 @@ function evaluarNecesidades(
     for (const tipo of ['curtiduria', 'armeria', 'fundicion'] as const) {
       if (alcanzoTopeDeTransformacion(asentamiento, tipo)) continue;
       if (!tieneInsumoDeArranque(asentamiento, tipo)) continue;
+      if (!puedePagar(tipo)) continue;
       edificiosBase = asegurarAnclaPara(asentamiento, edificiosBase, tipo, nextId);
       const sitio = lineasProduccionPriorizadas(asentamiento)
         ? sitioEnBarrioLineaProduccion(asentamiento, ocupados(), tipo)
@@ -788,7 +886,8 @@ function evaluarNecesidades(
   if (
     nivelActualDe(asentamiento) >= requisitoCarpinteria &&
     !alcanzoTopeDeTransformacion(asentamiento, 'carpinteria') &&
-    !hayProyectoPendiente(asentamiento, 'carpinteria')
+    !hayProyectoPendiente(asentamiento, 'carpinteria') &&
+    puedePagar('carpinteria')
   ) {
     edificiosBase = asegurarAnclaPara(asentamiento, edificiosBase, 'carpinteria', nextId);
     const sitio = sitioEnBarrio(asentamiento, ocupados(), 'carpinteria');
@@ -816,6 +915,12 @@ function evaluarNecesidades(
     }
     const costo = EDIFICIO_CATALOGO[candidato.edificio.tipo].costo as Partial<Record<string, number>>;
     if (!puedeIniciarConstruccion(almacenActual, costo, candidato.edificio.tipo, reserva)) continue;
+    // §E6.16: última comprobación antes de pagar — el sitio se eligió en orden de propuesta, pero la ciudad
+    // se replaya en el orden de ESTE bucle. Va después de cupo/tope/fondos a propósito: así se ejecuta como
+    // mucho `NECESIDADES.maximoEnCola` veces por asentamiento y tick, no una por candidato propuesto.
+    if (pisaCalleComprometida(asentamiento.id, edificiosBase, nuevos, candidato.edificio, asentamiento.recintos ?? [])) {
+      continue;
+    }
     almacenActual = descontarRecursos(almacenActual, costo);
     const comprometido = { ...candidato.edificio, prioridad: candidato.score };
     nuevos.push(comprometido);
@@ -839,15 +944,62 @@ function evaluarNecesidades(
   return { nuevos, almacen: almacenActual, extractoresTicksSinCupo, edificiosBase };
 }
 
+/**
+ * ¿El candidato caería encima de una calle, mirando la ciudad tal y como va a quedar REALMENTE ordenada?
+ * (doc trazado §E6.16, salida 3 — "revalidar tras el commit".)
+ *
+ * El bug que cierra: `evaluarNecesidades` calcula el sitio de cada candidato consultando `sueloOcupado` en
+ * ORDEN DE PROPUESTA, pero los compromete ordenados por score y descarta por el camino los que no tienen
+ * cupo, materiales o tope. El array final no queda en el orden en que cada uno eligió su hueco, y
+ * `redDeCalles` es un replay dependiente del orden: una calle que en el orden final ya existe cuando le toca
+ * al candidato pudo no existir cuando el candidato eligió. Con calles sobre aristas la divergencia era
+ * invisible (una arista no ocupa superficie); desde que la calle cuesta suelo, es un edificio encima de una
+ * calle.
+ *
+ * Por qué basta con mirar el prefijo ya comprometido y no hace falta revalidar a los anteriores:
+ * `anadirConectadas` (trazado.ts) NUNCA siembra calle sobre una celda ya ocupada, y el replay marca las
+ * celdas de cada edificio como ocupadas ANTES de sembrar sus calles. Así que ningún edificio puede quedar
+ * bajo una calle nacida después de él: validar cada candidato contra `[...base, ...yaComprometidos, él]` es
+ * suficiente y el resultado es estable.
+ *
+ * No se eligieron las otras salidas de §E6.16: comprometer en orden de propuesta (1) o proponer ya en orden
+ * de score (2) cambian QUÉ se paga primero cuando no alcanza para todo, y eso es balance; hacer `redDeCalles`
+ * independiente del orden (4) sería rediseñar el crecimiento emergente entero.
+ */
+function pisaCalleComprometida(
+  asentamientoId: string,
+  edificiosBase: Edificio[],
+  yaComprometidos: Edificio[],
+  candidato: Edificio,
+  recintos: readonly Recinto[]
+): boolean {
+  // Solo aplica a edificios internos: los de afueras se conectan por CAMINO, no forman manzana y el
+  // invariante de §E6.12 no los cubre.
+  if (esDeAfueras(candidato.tipo)) return false;
+  const red = redDeCalles(asentamientoId, [...edificiosBase, ...yaComprometidos, candidato], recintos);
+  if (red.calles.size === 0) return false;
+  for (const c of celdasDeEdificio(candidato)) {
+    if (red.calles.has(`${c.col},${c.row}`)) return true;
+  }
+  return false;
+}
+
 /** Tipos de edificio de transformación con tiers (Doc 4.2.1): mejoran de nivelInterno y ejecutan recetas.
  * Mercado se suma aquí solo por el mecanismo de MEJORA de nivel interno (`avanzarMejoras`) — sus "recetas"
  * están vacías, el nivel interno solo cambia `cupoCaravanas` (ver `cupoCaravanas`, asentamientoQuery.ts).
  * Granja también, y con dos particularidades propias: su nivel sube el rinde de trigo
  * (`produccionTrigoDeGranja`) y AGRANDA su huella, lo que obliga a mudarla (ver `avanzarMejoras`). */
-const EDIFICIOS_CON_NIVELES = ['fundicion', 'curtiduria', 'armeria', 'carpinteria', 'barracon', 'galeriaDeTiro', 'mercado', 'granja'] as const;
+const EDIFICIOS_CON_NIVELES = ['fundicion', 'curtiduria', 'armeria', 'carpinteria', 'barracon', 'galeriaDeTiro', 'mercado', 'granja', 'granero'] as const;
 
 function nivelesDe(tipo: EdificioTipo): Record<number, { trabajadoresRequeridos: number; recetas: { produce: string; produccionBase: number; consumePorUnidad: Partial<Record<string, number>> }[]; costoMejora?: Partial<Record<string, number>>; requisitoNivelAsentamiento?: number; requiereEdificio?: string; requiereEdificioNivel?: number }> | undefined {
   return (EDIFICIO_CATALOGO[tipo] as { niveles?: Record<number, any> }).niveles;
+}
+
+/** Capacidad de trigo que aporta un Granero en `nivelInterno` — TOTAL, no incremental (ver
+ * `EDIFICIO_CATALOGO.granero`). Un nivel inexistente da 0, que es lo que hace que el delta de una mejora
+ * salga bien sin casos especiales. */
+function capacidadTrigoDeGranero(nivelInterno: number | undefined): number {
+  return EDIFICIO_CATALOGO.granero.niveles[nivelInterno ?? 1]?.capacidadTrigo ?? 0;
 }
 
 /** Resultado de evaluar SOLO los gates de la siguiente mejora (nivel de asentamiento + edificio previo, si
@@ -951,6 +1103,15 @@ function avanzarMejoras(
     // La zona de Mercado se puebla al subir de nivel: los puestos se añaden a ESTA misma lista, no a una
     // aparte, para que las mejoras que queden por evaluar en este mismo tick vean sus celdas ya ocupadas.
     if (edificio.tipo === 'mercado') edificios.push(...crearPuestosDeMercado(asentamiento, nivelSiguiente, edificios));
+    // El Granero amplía la capacidad de trigo con el DELTA entre los dos niveles: `capacidadTrigo` es el
+    // total de cada nivel, así que sumar el total otra vez lo contaría dos veces.
+    if (edificio.tipo === 'granero') {
+      almacenActual = ampliarCapacidad(
+        almacenActual,
+        'trigo',
+        capacidadTrigoDeGranero(nivelSiguiente) - capacidadTrigoDeGranero(nivelActual)
+      );
+    }
   }
   return { asentamiento: { ...asentamiento, edificios }, almacen: almacenActual, eventos };
 }
@@ -1076,7 +1237,8 @@ export function avanzarConstruccion(
   zonaPoligono: Point[],
   mapa: Mapa,
   capital: Asentamiento | undefined,
-  reclamos: ReclamosFuentes
+  reclamos: ReclamosFuentes,
+  instante: Instante
 ): { asentamiento: Asentamiento; eventos: EventoCrudo[]; edificiosCompletados: number } {
   const eventos: EventoCrudo[] = [];
   let almacen = asentamiento.almacen;
@@ -1098,34 +1260,42 @@ export function avanzarConstruccion(
   // `en_cola` se resuelven en un segundo paso por PRIORIDAD (ver abajo), no aquí.
   for (const edificio of asentamiento.edificios) {
     if (edificio.estado === 'en_construccion') {
-      const restantes = edificio.ticksRestantes - 1;
-      if (restantes <= 0) {
-        eventos.push({
-          codigo: 'construccion.edificio_completado',
-          mensaje: `${edificio.tipo} completado.`,
-          payload: { edificioId: edificio.id, edificioTipo: edificio.tipo } satisfies PayloadEdificioCompletado,
-        });
-        edificiosCompletadosEsteTick += 1;
-        if (edificio.tipo === 'almacen') {
-          const bonus = EDIFICIO_CATALOGO.almacen.capacidadPorRecursoAdicional;
-          for (const recurso of Object.keys(almacen)) {
-            almacen = { ...almacen, [recurso]: { ...almacen[recurso]!, capacidad: almacen[recurso]!.capacidad + bonus } };
-          }
-        }
-        // El Mercado no nace solo: al terminarse aparece con los puestos de su nivel 1 (a petición del
-        // usuario, es una ZONA). Los de niveles 2 y 3 los añade `avanzarMejoras` al subir de nivel interno.
-        if (edificio.tipo === 'mercado') {
-          puestosNuevos.push(...crearPuestosDeMercado(asentamiento, 1, [...asentamiento.edificios, ...puestosNuevos]));
-        }
-        // Carpintería tampoco nace sola (§9, Etapa 3 de anclas y satélites): al completarse aparecen sus 2
-        // talleres de una vez (no progresan por nivel interno, a diferencia del Mercado).
-        if (edificio.tipo === 'carpinteria') {
-          puestosNuevos.push(...crearTalleresDeCarpinteria(asentamiento, [...asentamiento.edificios, ...puestosNuevos]));
-        }
-        resultados.set(edificio.id, { ...edificio, estado: 'activo', ticksRestantes: 0 });
-      } else {
-        resultados.set(edificio.id, { ...edificio, ticksRestantes: restantes });
+      // Fecha absoluta, no contador (doc 6 §4 regla (a) / doc 10): la obra termina cuando el instante de
+      // mundo alcanza `completaEn` — fijado al arrancar (Paso 2). Un `en_construccion` sin `completaEn`
+      // (dato de un formato viejo que se coló) se completa en cuanto se evalúa, no se queda colgado.
+      if (edificio.completaEn !== undefined && instante < edificio.completaEn) {
+        resultados.set(edificio.id, edificio); // sigue en obra: sin cambios (ya no hay contador que bajar).
+        continue;
       }
+
+      eventos.push({
+        codigo: 'construccion.edificio_completado',
+        mensaje: `${edificio.tipo} completado.`,
+        payload: { edificioId: edificio.id, edificioTipo: edificio.tipo } satisfies PayloadEdificioCompletado,
+      });
+      edificiosCompletadosEsteTick += 1;
+      if (edificio.tipo === 'almacen') {
+        const bonus = EDIFICIO_CATALOGO.almacen.capacidadPorRecursoAdicional;
+        for (const recurso of Object.keys(almacen)) almacen = ampliarCapacidad(almacen, recurso, bonus);
+      }
+      // El Granero nace en su nivel 1 y solo toca el trigo. Las ampliaciones por mejora las aplica
+      // `avanzarMejoras`, con el delta contra el nivel anterior.
+      if (edificio.tipo === 'granero') {
+        almacen = ampliarCapacidad(almacen, 'trigo', capacidadTrigoDeGranero(1));
+      }
+      // El Mercado no nace solo: al terminarse aparece con los puestos de su nivel 1 (a petición del
+      // usuario, es una ZONA). Los de niveles 2 y 3 los añade `avanzarMejoras` al subir de nivel interno.
+      if (edificio.tipo === 'mercado') {
+        puestosNuevos.push(...crearPuestosDeMercado(asentamiento, 1, [...asentamiento.edificios, ...puestosNuevos]));
+      }
+      // Carpintería tampoco nace sola (§9, Etapa 3 de anclas y satélites): al completarse aparecen sus 2
+      // talleres de una vez (no progresan por nivel interno, a diferencia del Mercado).
+      if (edificio.tipo === 'carpinteria') {
+        puestosNuevos.push(...crearTalleresDeCarpinteria(asentamiento, [...asentamiento.edificios, ...puestosNuevos]));
+      }
+      // Reconstrucción de un edificio dañado por un saqueo (Ocupacion §2.2): al volver a `activo` se limpia
+      // el flag — vuelve a ser un edificio sano normal.
+      resultados.set(edificio.id, { ...edificio, estado: 'activo', completaEn: undefined, danado: undefined });
       continue;
     }
 
@@ -1187,14 +1357,34 @@ export function avanzarConstruccion(
       resultados.set(edificio.id, edificio);
       continue;
     }
+    // Un `en_cola` normal ya se pagó al comprometerse. Uno `danado` por un saqueo (Ocupacion §2.2) NO — se
+    // cobra aquí una fracción del costo de catálogo y tarda esa misma fracción. Si no hay con qué, espera.
+    let factorDanado = 1;
+    if (edificio.danado) {
+      const costoReparacion = Object.fromEntries(
+        Object.entries(EDIFICIO_CATALOGO[edificio.tipo].costo as Record<string, number>).map(([r, c]) => [
+          r,
+          Math.ceil(c * OCUPACION.fraccionCosteReconstruccion),
+        ])
+      );
+      if (!tieneRecursos(almacen, costoReparacion)) {
+        resultados.set(edificio.id, edificio);
+        continue;
+      }
+      almacen = descontarRecursos(almacen, costoReparacion);
+      factorDanado = OCUPACION.fraccionCosteReconstruccion;
+    }
     eventos.push({
       codigo: 'construccion.iniciada',
-      mensaje: `Comienza construcción de ${edificio.tipo}.`,
+      mensaje: `Comienza ${edificio.danado ? 'reconstrucción' : 'construcción'} de ${edificio.tipo}.`,
       payload: { edificioId: edificio.id, edificioTipo: edificio.tipo } satisfies PayloadConstruccionIniciada,
     });
     // Vía Rápida de Construcción (Maestro de Obras, Doc 2.2/4.4) acelera el tiempo restante al arrancar.
-    const ticks = Math.max(1, Math.round(EDIFICIO_CATALOGO[edificio.tipo].tiempoConstruccionTicks * factorTiempoConstruccion(asentamiento)));
-    resultados.set(edificio.id, { ...edificio, estado: 'en_construccion', ticksRestantes: ticks });
+    const ticks = Math.max(
+      1,
+      Math.round(EDIFICIO_CATALOGO[edificio.tipo].tiempoConstruccionMinutos * factorTiempoConstruccion(asentamiento) * factorDanado)
+    );
+    resultados.set(edificio.id, { ...edificio, estado: 'en_construccion', completaEn: sumar(instante, minutos(ticks)) });
     cupoObraDisponible -= 1;
   }
 
@@ -1254,15 +1444,39 @@ export function avanzarConstruccion(
     });
   }
 
-  const edificiosFinal = [...edificiosBase, ...nuevosProyectos];
-  // Reordena los `en_cola` por `prioridad` (mismo criterio que el Paso 2) para que la posición mostrada en la
-  // UI (ver main.ts) coincida con el orden real en que arrancarán en el próximo tick.
-  const enColaOrdenados = edificiosFinal.filter((e) => e.estado === 'en_cola').sort((a, b) => (b.prioridad ?? 0) - (a.prioridad ?? 0));
-  let indiceEnCola = 0;
-  const edificiosOrdenados = edificiosFinal.map((e) => (e.estado === 'en_cola' ? enColaOrdenados[indiceEnCola++]! : e));
+  // Obra de murallas: fuera de la cola de edificios a propósito (es una obra pública, no un proyecto), pero
+  // sujeta a la MISMA reserva de mantenimiento — es lo que impide que una muralla mate de hambre a su ciudad.
+  // Va después de `evaluarNecesidades` para que la construcción normal tenga preferencia sobre los materiales:
+  // una ciudad que deja de producir por levantar su muro no sobrevive para verlo terminado.
+  const obra = avanzarObraDeRecintos(asentamientoConProgreso.recintos ?? [], almacenFinal, reserva, instante, asentamientoConProgreso.edificios);
+  almacenFinal = obra.almacen;
+  eventos.push(...obra.eventos);
+
+  /**
+   * El array de edificios es el HISTORIAL DE CRECIMIENTO, y su orden es load-bearing: `redDeCalles` lo replaya
+   * de principio a fin para reconstruir la ciudad paso a paso, y una calle solo puede nacer en suelo que
+   * estuviera libre CUANDO le tocó a ese edificio. Permutarlo mueve las calles.
+   *
+   * Aquí había una reordenación de los `en_cola` por `prioridad`, puesta para que la posición que muestra la
+   * interfaz coincidiera con el orden en que arrancarán. Era un problema de PRESENTACIÓN resuelto permutando
+   * el historial, y rompía §E6.12 ("ningún edificio encima de una calle"): un proyecto encolado con score alto
+   * saltaba por delante de edificios YA CONSTRUIDOS en el array, así que en el replay se procesaba antes que
+   * ellos —cuando su suelo aún constaba como libre— y les tendía una calle por debajo. El chequeo de §E6.16
+   * (`pisaCalleComprometida`) no podía verlo: valida al candidato contra el prefijo real en el momento de
+   * pagar, y esta permutación ocurre DESPUÉS.
+   *
+   * Latente desde que existe la reordenación; salió al añadir el Granero (2026-09-04), que se encola con
+   * urgencia máxima —el trigo desbordado— y por tanto salta muy arriba. Reproducido: en la seed 42, perfil
+   * `nucleos`, tick 29, el Granero pasaba a la posición 14 y dejaba a la Vivienda 15 con la celda (1,-6)
+   * convertida en calle bajo sus cimientos.
+   *
+   * El orden de la cola no se pierde: vive en `prioridad`, que es el dato, y quien la muestre ordena por él
+   * (`cliente/src/main.ts`) igual que ya hacen `avanzarConstruccion` y `moverEnCola` aquí mismo.
+   */
+  const edificiosOrdenados = [...edificiosBase, ...nuevosProyectos];
 
   return {
-    asentamiento: { ...asentamientoConProgreso, almacen: almacenFinal, edificios: edificiosOrdenados, extractoresTicksSinCupo },
+    asentamiento: { ...asentamientoConProgreso, almacen: almacenFinal, edificios: edificiosOrdenados, extractoresTicksSinCupo, ...(obra.recintos.length > 0 ? { recintos: obra.recintos } : {}) },
     eventos,
     // Doc Fase_0_5 §8: cuántos edificios completó ESTE asentamiento este tick — el llamador (simulation.ts)
     // lo usa para otorgar experiencia de Facción (`NIVEL_FACCION.xp.edificioCompletado`).
@@ -1275,15 +1489,14 @@ export class ConstruccionManualInvalidaError extends Error {}
 /** Tipos que solo admiten UNA instancia por asentamiento (progresan por `nivelInterno` en vez de repetirse) —
  * añadir una segunda no tiene sentido estructural, sea cual sea el mecanismo (auto o manual). */
 const EDIFICIOS_UNICOS = new Set<EdificioTipo>([
+  // El Granero crece por NIVEL INTERNO, no por número: uno por asentamiento, de 2.000 a 6.000 de trigo.
+  'granero',
   'barracon',
   'galeriaDeTiro',
   'palacio',
   'mercado',
   'granFundicion',
   'maravilla',
-  // Muralla (Doc Fase_0_6): una sola por asentamiento, mismo patrón que Palacio/Mercado — no auto-
-  // construcción, se añade manualmente (Gobernador/Maestro de Obras).
-  'muralla',
 ]);
 
 /** Cupo de cada tipo de edificio de transformaciÃ³n por nivel operativo del asentamiento.

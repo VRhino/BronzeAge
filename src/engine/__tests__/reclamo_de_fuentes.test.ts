@@ -129,15 +129,15 @@ describe('reclamo de fuentes del mapa', () => {
         ...asentamientos[0]!,
         edificios: [
           ...asentamientos[0]!.edificios,
-          { id: 'e1', tipo: 'cantera', posicion: { x: 0, y: 0 }, estado: 'activo', ticksRestantes: 0, fuenteId: 'nodo-x' },
-          { id: 'e2', tipo: 'lenera', posicion: { x: 0, y: 0 }, estado: 'activo', ticksRestantes: 0, fuenteId: 'bosque-y' },
+          { id: 'e1', tipo: 'cantera', posicion: { x: 0, y: 0 }, estado: 'activo', fuenteId: 'nodo-x' },
+          { id: 'e2', tipo: 'lenera', posicion: { x: 0, y: 0 }, estado: 'activo', fuenteId: 'bosque-y' },
         ],
       },
       {
         ...asentamientos[1]!,
         edificios: [
           ...asentamientos[1]!.edificios,
-          { id: 'e3', tipo: 'lenera', posicion: { x: 0, y: 0 }, estado: 'en_cola', ticksRestantes: 5, fuenteId: 'bosque-y' },
+          { id: 'e3', tipo: 'lenera', posicion: { x: 0, y: 0 }, estado: 'en_cola', fuenteId: 'bosque-y' },
         ],
       },
     ];

@@ -24,7 +24,7 @@ export function avanzarFaccionesNpc(
     return sinCambios(estado);
   }
 
-  const contexto: ContextoSimulacion = { tick: estado.tick, momento: ctx.momento, rng: ctx.rng };
+  const contexto: ContextoSimulacion = { instante: ctx.instante, momento: ctx.momento, rng: ctx.rng };
   const config: ConfigNpcGobernanza = { faccionesIds: estado.faccionesNpcIds, contadorInicial: ctx.ids.actual() };
   const resultado = avanzarNpcGobernanza(estadoSimulacionDe(estado), mapa, contexto, config);
 
@@ -38,7 +38,6 @@ export function avanzarFaccionesNpc(
   // un código que al menos permite FILTRARLOS como grupo (ej. no mandar el ruido del NPC a los clientes).
   const eventos = construirEventos(
     ctx,
-    estado,
     resultado.eventos.map((mensaje) => ({ codigo: 'npc.accion', mensaje: `[NPC] ${mensaje}` }))
   );
 

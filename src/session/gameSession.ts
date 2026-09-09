@@ -12,11 +12,12 @@
 //   - HTTP, WebSocket, persistencia en disco: del runner y de la capa de transporte.
 //   - Notificar a una UI o llevar historial de depuración: del cliente.
 import type { RegionId } from '../domain/types';
-import { BALANCE_VERSION } from '../constants';
+import { BALANCE_VERSION, LIDERAZGO } from '../constants';
+import { conJugadorAsegurado } from '../engine/ubicacion';
 import { createRng, generarMapa, MAPA_DEFAULT, restaurarRng, WORLDGEN_VERSION, type RandomFn } from '../worldgen';
 import { crearEstadoMapa, crearMapa, type EstadoMapa, type Mapa } from '../world/mapa';
 import { GeneradorIds } from './idGenerator';
-import { eventoAdministrativo, type GameSessionState } from './estado';
+import { eventoAdministrativo, instanteDeTick, isoDeInstante, type GameSessionState } from './estado';
 import { avanzarAutoComercio } from './comandos/avanzarAutoComercio';
 import { avanzarFaccionesNpc } from './comandos/avanzarFaccionesNpc';
 import { avanzarTick } from './comandos/avanzarTick';
@@ -76,13 +77,16 @@ export class GameSession {
       asentamientos: [],
       facciones: [],
       caravanas: [],
+      jugadores: [],
+      ejercitos: [],
       acuerdos: [],
       ordenes: [],
       relaciones: [],
       titulos: [],
       caminos: [],
       campamentosBandidos: [],
-      bandidosProximoSpawnTick: 0,
+      bandidosProximoSpawnEn: instanteDeTick(0),
+      memoriaPorFaccion: {},
       faccionesNpcIds: [],
       tick: 0,
       version: 0,
@@ -148,12 +152,12 @@ export class GameSession {
    * Sí incrementa `version` porque el evento es parte del estado persistido: cualquier cambio de
    * `GameSessionState` tiene que versionarse para que el control de concurrencia optimista siga siendo válido.
    */
-  registrarEventoAdministrativo(momento: string, mensaje: string): void {
+  registrarEventoAdministrativo(mensaje: string): void {
     const version = this.estado.version + 1;
     this.estado = {
       ...this.estado,
       version,
-      eventosDominio: [{ ...eventoAdministrativo(momento, this.estado.tick, mensaje), version }, ...this.estado.eventosDominio],
+      eventosDominio: [{ ...eventoAdministrativo(this.estado.tick, mensaje), version }, ...this.estado.eventosDominio],
     };
   }
 
@@ -168,10 +172,43 @@ export class GameSession {
    * El comando recibe una fachada `Mapa` RECIÉN CREADA sobre una copia del estado del mapa. Es lo que cierra
    * el último resquicio por el que un comando podía dejar rastro sin devolverlo: si no adopta lo que escribió
    * en la fachada, se descarta con ella.
+   *
+   * `ctx.momento` se DERIVA del tick actual (`instanteDeTick`, Fase D / doc 10), no lo pasa el llamador —
+   * antes `RunnerDePartida` inyectaba aquí `Date.now()` y ese reloj de pared terminaba persistido en el
+   * estado (`eventosDominio[].momento`), haciendo que el mismo comando con la misma seed produjera snapshots
+   * distintos. El tiempo de mundo es función del tick y de nada más.
    */
-  ejecutar<P, R>(manejador: ManejadorComando<P, R>, params: P, opciones: { momento: string; actor?: ActorId }): ResultadoComando<R> {
+  /**
+   * Alta perezosa del Jugador que actúa (Doc 1.10): la primera vez que alguien ejecuta un comando con éxito,
+   * la partida le da registro y lo SITÚA. Va aquí, en el embudo, y no en cada comando — son dos docenas, y
+   * repartir el alta por todos ellos garantizaba olvidarla en alguno.
+   *
+   * La ubicación se deduce de lo que el mundo ya sabe (`ubicacionDeducida`), que es la MISMA función que usa
+   * la migración de snapshots: entrar por primera vez y cargar una partida vieja tienen que colocar a la
+   * gente en el mismo sitio.
+   *
+   * El sistema no es un jugador: el tick y el turno del NPC no crean registro.
+   */
+  private conActorEnPartida(estado: GameSessionState, actor: ActorId, mapa: Mapa, ctx: ContextoComando): GameSessionState {
+    if (actor === ACTOR_SISTEMA) return estado;
+    const alta = conJugadorAsegurado(estado.jugadores, actor, LIDERAZGO.base, estado.asentamientos, estado.ejercitos, {
+      mapa,
+      rng: this.rng,
+      // Mismo prefijo que usan `salirAlMundo`/`unirseEnCampo` para columnas nuevas — no es cosmético, es el
+      // mismo espacio de ids de ejército, y no debe poder chocar con uno que ya exista. Perezoso a propósito
+      // (ver el comentario de `aparicion` en `conJugadorAsegurado`): solo se consume si de verdad aparece.
+      generarId: () => `ejercito-${ctx.ids.siguiente()}`,
+      instante: ctx.instante,
+    });
+    if (alta.jugadores === estado.jugadores) return estado;
+    return { ...estado, jugadores: alta.jugadores, ejercitos: alta.ejercitos };
+  }
+
+  ejecutar<P, R>(manejador: ManejadorComando<P, R>, params: P, opciones: { actor?: ActorId } = {}): ResultadoComando<R> {
+    const instante = instanteDeTick(this.estado.tick);
     const ctx: ContextoComando = {
-      momento: opciones.momento,
+      instante,
+      momento: isoDeInstante(instante),
       actor: opciones.actor ?? ACTOR_SISTEMA,
       rng: this.rng,
       ids: this.ids,
@@ -188,27 +225,28 @@ export class GameSession {
       throw new Error('Un comando modificó el mapa pero no devolvió `estadoMapa` en su estado resultante.');
     }
 
-    this.estado = transicion.estado;
+    this.estado = transicion.resultado.ok ? this.conActorEnPartida(transicion.estado, ctx.actor, mapa, ctx) : transicion.estado;
     return transicion.resultado;
   }
 
   // --- Operaciones del sistema ---
   //
-  // Atajos con nombre para las dos operaciones que NO inicia un jugador sino el propio servidor (el scheduler
+  // Atajos con nombre para las operaciones que NO inicia un jugador sino el propio servidor (el scheduler
   // del runner). Se distinguen de los comandos de jugador a propósito: en producción no deben quedar
   // expuestas como endpoints públicos (doc 2: "el servidor sigue siendo quien avance y resuelva los ticks").
+  // Ninguna recibe `momento`: el instante de mundo lo deriva `ejecutar` del tick (Fase D).
 
-  avanzarTick(momento: string): ResultadoComando<void> {
-    return this.ejecutar(avanzarTick, undefined, { momento, actor: ACTOR_SISTEMA });
+  avanzarTick(): ResultadoComando<void> {
+    return this.ejecutar(avanzarTick, undefined, { actor: ACTOR_SISTEMA });
   }
 
   /** Trueque automático de simulación (apagado por defecto). Va DESPUÉS del tick y ANTES del NPC de
    * gobernanza — mismo orden que tenía en `GameStore`. */
-  avanzarAutoComercio(momento: string): ResultadoComando<void> {
-    return this.ejecutar(avanzarAutoComercio, undefined, { momento, actor: ACTOR_SISTEMA });
+  avanzarAutoComercio(): ResultadoComando<void> {
+    return this.ejecutar(avanzarAutoComercio, undefined, { actor: ACTOR_SISTEMA });
   }
 
-  avanzarFaccionesNpc(momento: string): ResultadoComando<void> {
-    return this.ejecutar(avanzarFaccionesNpc, undefined, { momento, actor: ACTOR_SISTEMA });
+  avanzarFaccionesNpc(): ResultadoComando<void> {
+    return this.ejecutar(avanzarFaccionesNpc, undefined, { actor: ACTOR_SISTEMA });
   }
 }

@@ -32,18 +32,32 @@ export class RegistroDePartidas {
    * sobrevive hasta producción sin que nadie lo note, y aquí además arriesgaría dejar temporizadores reales
    * corriendo en cientos de servidores de prueba que nunca los paran explícitamente).
    *
-   * El intervalo en sí es un PLACEHOLDER (igual que los valores de `constants.ts`, ver su cabecera): cada
-   * cuánto debe avanzar el mundo es una decisión de RITMO DE JUEGO, no de arquitectura, y no está tomada en
-   * ningún doc de este repo — E1 (Fase E) es quien cierra esto de verdad, con recuperación de eventos
-   * vencidos tras un reinicio. Esto es solo "que exista alguna fuente", no la definitiva.
+   * Con "mundo = tiempo real" (doc 10 §2) el valor natural es `SIMULACION.duracionTickMs` (60 000): un tick
+   * de mundo por minuto real. D5 cerró el mecanismo de verdad — el reloj de mundo de `RunnerDePartida` con
+   * catch-up tras reinicio (`referenciaRelojInicialMs`); ya no es un metrónomo tonto. Cuánto debe medir un
+   * tick de JUEGO (si algún día no es un minuto real) sigue siendo una decisión de ritmo pendiente, pero eso
+   * es `duracionTickMs`, no este intervalo.
+   *
+   * `ahora` es el reloj de pared del proceso (el mismo que `deps.ahora` en `api.ts`) — se le pasa al runner
+   * para que su reloj de mundo y su catch-up sean inyectables en tests, no solo el reloj real del sistema.
    */
   constructor(
     private readonly directorio: string,
-    private readonly intervaloTickMs?: number
+    private readonly intervaloTickMs?: number,
+    private readonly ahora: () => string = () => new Date().toISOString()
   ) {}
 
   obtener(gameId: string): RunnerDePartida | undefined {
     return this.runners.get(gameId);
+  }
+
+  /**
+   * Partidas abiertas EN ESTE PROCESO (Fase E3, métricas). Es lo CONTRARIO de `listar()`, y la diferencia
+   * importa: `listar()` lee el directorio y responde "qué partidas existen"; esto responde "de cuáles se está
+   * ocupando este proceso ahora mismo", que es lo que tiene cola, reloj y conexiones que medir.
+   */
+  abiertas(): RunnerDePartida[] {
+    return [...this.runners.values()];
   }
 
   /** Descubrimiento (Fase C12) — lee el directorio, no `this.runners`: ver el comentario de `listarPartidas`. */
@@ -61,9 +75,9 @@ export class RegistroDePartidas {
    */
   async abrir(gameId: string, config: ConfiguracionPartida): Promise<RunnerDePartida> {
     if (this.runners.has(gameId)) throw new PartidaYaAbiertaError(gameId);
-    const runner = await RunnerDePartida.cargarOCrear(gameId, config, { directorio: this.directorio });
+    const runner = await RunnerDePartida.cargarOCrear(gameId, config, { directorio: this.directorio, ahora: this.ahora });
     this.runners.set(gameId, runner);
-    this.arrancarTicksSiConfigurado(runner);
+    this.arrancarRelojSiConfigurado(runner);
     return runner;
   }
 
@@ -78,13 +92,25 @@ export class RegistroDePartidas {
     // `forzar: true`: la partida descartada puede seguir en disco con una version > 0 — este reemplazo,
     // que empieza en 0, es deliberado, no el conflicto de concurrencia que `guardarPartida` normalmente
     // detecta (ver su comentario).
-    const runner = await RunnerDePartida.crearYPersistir(gameId, config, { directorio: this.directorio }, { forzar: true });
+    const runner = await RunnerDePartida.crearYPersistir(gameId, config, { directorio: this.directorio, ahora: this.ahora }, { forzar: true });
     this.runners.set(gameId, runner);
-    this.arrancarTicksSiConfigurado(runner);
+    this.arrancarRelojSiConfigurado(runner);
     return runner;
   }
 
-  private arrancarTicksSiConfigurado(runner: RunnerDePartida): void {
-    if (this.intervaloTickMs !== undefined) runner.iniciarTicksAutomaticos(this.intervaloTickMs);
+  private arrancarRelojSiConfigurado(runner: RunnerDePartida): void {
+    if (this.intervaloTickMs !== undefined) runner.iniciarRelojDeMundo(this.intervaloTickMs);
+  }
+
+  /** Detiene el reloj de mundo de cada partida abierta y espera a que su cola serial drene — apagado limpio
+   * del proceso (`server/index.ts`). Sin esto, un `setInterval` por partida mantendría el proceso vivo y
+   * podría dejar un tick a medio persistir al salir. */
+  async cerrar(): Promise<void> {
+    await Promise.all(
+      [...this.runners.values()].map(async (runner) => {
+        runner.detenerRelojDeMundo();
+        await runner.esperarColaVacia();
+      })
+    );
   }
 }

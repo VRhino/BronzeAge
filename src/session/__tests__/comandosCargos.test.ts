@@ -9,7 +9,6 @@ import { alternarFaccionNpc } from '../comandos/alternarFaccionNpc';
 import { activarPolitica, asignarCargoLocal, asignarEmbajador, asignarRey } from '../comandos/cargos';
 import { OPC, partidaConAsentamiento } from './fixtures';
 
-const MOMENTO = OPC.momento;
 
 describe('asignarRey / asignarEmbajador', () => {
   it('éxito: un ciudadano fundador puede ser Rey, y queda registrado en su historial', () => {
@@ -93,7 +92,7 @@ describe('alternarFaccionNpc', () => {
     const { sesion, faccionId } = partidaConAsentamiento();
     sesion.ejecutar(alternarFaccionNpc, { faccionId, activo: true }, OPC);
 
-    const resultado = sesion.avanzarFaccionesNpc(MOMENTO);
+    const resultado = sesion.avanzarFaccionesNpc();
 
     expect(resultado.ok).toBe(true);
     expect(sesion.getState().asentamientos[0]!.cargos.gobernadorId).toBeTruthy();

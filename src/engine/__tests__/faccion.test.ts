@@ -5,9 +5,9 @@
 // de la MISMA Facción.
 import { describe, expect, it } from 'vitest';
 import type { Asentamiento, Faccion } from '../../domain/types';
-import { crearFacciones, crearMapaDeterminista, posicionRecomendable } from './fixtures';
+import { crearFacciones, crearMapaDeterminista, posicionRecomendable, instanteDeTest } from './fixtures';
 import { fundarAsentamiento } from '../settlement';
-import { comprarCasa, FaccionInvalidaError } from '../faccion';
+import { cambiarResidencia, comprarCasa, FaccionInvalidaError } from '../faccion';
 
 /** El cap de fundación en nivel 1 es 1 asentamiento por Facción (`CAP_FUNDACION_POR_NIVEL`, constants.ts) —
  * para probar residencia cruzada entre DOS asentamientos de la misma Facción, se sube el nivel a mano tras
@@ -23,7 +23,7 @@ function fundarDosAsentamientosDeFaccion(): { asentamientoA: Asentamiento; asent
     posicionRecomendable(mapa),
     ['jugador-a'],
     [],
-    0
+    instanteDeTest(0)
   );
   const faccionesNivel2 = faccionesTrasA.map((f) => (f.id === 'faccion-1' ? { ...f, nivel: 2 } : f));
   const { asentamiento: asentamientoB, facciones: faccionesTrasB } = fundarAsentamiento(
@@ -33,7 +33,7 @@ function fundarDosAsentamientosDeFaccion(): { asentamientoA: Asentamiento; asent
     posicionRecomendable(mapa, [asentamientoA]),
     ['jugador-b'],
     [asentamientoA],
-    0
+    instanteDeTest(0)
   );
 
   return { asentamientoA, asentamientoB, facciones: faccionesTrasB };
@@ -53,5 +53,49 @@ describe('comprarCasa — residencia única (Doc 2.1)', () => {
 
     const resultado = comprarCasa(facciones, [asentamientoA, asentamientoB], asentamientoB.id, 'jugador-c');
     expect(resultado.asentamiento.casasCompradas).toContain('jugador-c');
+  });
+});
+
+describe('cambiarResidencia (Doc 2.5/2.6, comando nuevo)', () => {
+  it('mueve al jugador: fuera de la vieja (fundador y casa), dentro de la nueva', () => {
+    const { asentamientoA, asentamientoB, facciones } = fundarDosAsentamientosDeFaccion();
+    const conCargo: Asentamiento = { ...asentamientoA, cargos: { ...asentamientoA.cargos, gobernadorId: 'jugador-a' } };
+
+    const { origen, destino } = cambiarResidencia(facciones, [conCargo, asentamientoB], asentamientoB.id, 'jugador-a');
+
+    expect(origen.jugadoresFundadoresIds).not.toContain('jugador-a');
+    expect(origen.casasCompradas).not.toContain('jugador-a');
+    expect(origen.cargos.gobernadorId).toBeNull(); // cargo local vacío al mudarse
+    expect(destino.casasCompradas).toContain('jugador-a');
+  });
+
+  it('los escuadrones posados en la residencia vieja NO se tocan', () => {
+    const { asentamientoA, asentamientoB, facciones } = fundarDosAsentamientosDeFaccion();
+    const conGuarnicion: Asentamiento = {
+      ...asentamientoA,
+      escuadrones: [
+        { id: 'e1', nombre: 'x', jugadorId: 'jugador-a', origen: 'pesants', cantidad: 20, veterania: 0, moral: 100, tropaId: 'milicia_lanceros' },
+      ],
+    };
+    const { origen } = cambiarResidencia(facciones, [conGuarnicion, asentamientoB], asentamientoB.id, 'jugador-a');
+    expect(origen.escuadrones).toHaveLength(1);
+    expect(origen.escuadrones[0]!.jugadorId).toBe('jugador-a');
+  });
+
+  it('un huérfano (sin residencia de la que salir) es rechazado', () => {
+    const { asentamientoA, asentamientoB, facciones } = fundarDosAsentamientosDeFaccion();
+    // jugador-c es ciudadano tras comprar casa en B; luego se le quita la casa (simulando conquista) → huérfano.
+    const conC = comprarCasa(facciones, [asentamientoA, asentamientoB], asentamientoB.id, 'jugador-c');
+    const bSinC: Asentamiento = { ...conC.asentamiento, casasCompradas: [] };
+    expect(() => cambiarResidencia(conC.facciones, [asentamientoA, bSinC], asentamientoA.id, 'jugador-c')).toThrow(
+      FaccionInvalidaError
+    );
+  });
+
+  it('un jugador de otra Facción no puede residir aquí', () => {
+    const { asentamientoA, asentamientoB, facciones } = fundarDosAsentamientosDeFaccion();
+    expect(() => cambiarResidencia(facciones, [asentamientoA, asentamientoB], asentamientoB.id, 'jugador-de-faccion-2')).toThrow(
+      FaccionInvalidaError
+    );
   });
 });

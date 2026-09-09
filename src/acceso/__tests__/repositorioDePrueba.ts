@@ -35,5 +35,12 @@ export function repositorioDePrueba(): RepositorioIdentidad {
     buscarSesion: (id) => sesiones.get(id),
     obtenerMembresia: (usuarioId, gameId) => membresias.get(`${usuarioId}:${gameId}`),
     otorgarMembresia: (m) => void membresias.set(`${m.usuarioId}:${m.gameId}`, m),
+    listarMembresiasDePartida: (gameId) => [...membresias.values()].filter((m) => m.gameId === gameId),
+    revocarMembresia: (usuarioId, gameId, hasta) => {
+      const m = membresias.get(`${usuarioId}:${gameId}`);
+      if (!m) return false;
+      membresias.set(`${usuarioId}:${gameId}`, { ...m, hasta });
+      return true;
+    },
   };
 }

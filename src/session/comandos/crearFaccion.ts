@@ -1,8 +1,8 @@
 import { crearFaccion as crearFaccionEngine, esCiudadano, otorgarCiudadania } from '../../engine/faccion';
 import { CIUDADANIA } from '../../constants';
-import type { GameSessionState } from '../estado';
+import { dias, transcurrido } from '../../domain/tiempo';
 import { exito } from './tipos';
-import { comando, rechazar } from './ayudas';
+import { comando, conExploracionFundida, rechazar } from './ayudas';
 import { CODIGOS_ERROR } from './codigosDeError';
 import { evento } from './eventos';
 
@@ -15,8 +15,6 @@ export interface PayloadFaccionCreada {
 export interface ParamsCrearFaccion {
   nombre: string;
 }
-
-const MS_POR_DIA = 24 * 60 * 60 * 1000;
 
 /**
  * Crea una Facción nueva y otorga ciudadanía inmediata a quien la crea (a petición del usuario, 2026-08-27:
@@ -41,19 +39,17 @@ export const crearFaccion = comando<ParamsCrearFaccion, { faccionId: string }>((
     rechazar(CODIGOS_ERROR.faccionYaPerteneces);
   }
   const salida = estado.salidasFaccionPorJugador[ctx.actor];
-  if (salida !== undefined) {
-    const cooldownMs = CIUDADANIA.cooldownCreacionFaccionDias * MS_POR_DIA;
-    if (new Date(ctx.momento).getTime() - new Date(salida).getTime() < cooldownMs) {
-      rechazar(CODIGOS_ERROR.faccionCooldownCreacion);
-    }
+  if (salida !== undefined && transcurrido(salida, ctx.instante) < dias(CIUDADANIA.cooldownCreacionFaccionDias)) {
+    rechazar(CODIGOS_ERROR.faccionCooldownCreacion);
   }
 
   const nueva = otorgarCiudadania(crearFaccionEngine(`faccion-custom-${ctx.ids.siguiente()}`, nombre), ctx.actor);
-  const siguiente: GameSessionState = { ...estado, facciones: [...estado.facciones, nueva] };
+  // Lo que anduvo sin bandera pasa a ser conocimiento de la Facción recién creada (Doc 1.3).
+  const siguiente = conExploracionFundida({ ...estado, facciones: [...estado.facciones, nueva] }, ctx.actor, nueva.id);
   return exito(
     siguiente,
     [
-      evento(ctx, estado, {
+      evento(ctx, {
         codigo: 'faccion.creada',
         mensaje: `Se crea la Facción "${nueva.nombre}", fundada por ${ctx.actor}.`,
         payload: { faccionId: nueva.id, nombre: nueva.nombre, fundadorId: ctx.actor } satisfies PayloadFaccionCreada,

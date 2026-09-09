@@ -1,6 +1,7 @@
 // Fase A5 (Docs/Arquitectura/4_Plan_Evolucion_Tareas.md): `trade.ts` migrado. Reusa las fixtures sintéticas
 // de `tradeFixtures.ts`.
 import { describe, expect, it } from 'vitest';
+import { instanteDeTest } from './fixtures';
 import type { AcuerdoTrueque, Asentamiento, Caravana, Faccion } from '../../domain/types';
 import { avanzarComercio } from '../trade';
 import type {
@@ -22,7 +23,7 @@ describe('eventos de dominio — trade.ts', () => {
     const mapa = mapaSintetico();
     const caravana = caravanaComercialCasiLlegando(origen, destino, { contenido: { madera: 10 } });
 
-    const resultado = avanzarComercio([origen, destino], [] as Faccion[], [caravana], [], mapa, [], 1);
+    const resultado = avanzarComercio([origen, destino], [] as Faccion[], [caravana], [], mapa, [], instanteDeTest(1));
 
     const evento = resultado.eventos.find((e) => typeof e !== 'string' && e.codigo === 'comercio.caravana_llega');
     expect(evento).toBeDefined();
@@ -46,13 +47,13 @@ describe('eventos de dominio — trade.ts', () => {
       cantidadTotalB: 100,
       cantidadEntregadaA: 0,
       cantidadEntregadaB: 0,
-      creadoEnTick: 0,
-      expiraEnTick: 1,
+      creadoEn: instanteDeTest(0),
+      expiraEn: instanteDeTest(1),
       estado: 'activo',
     };
     const mapa = mapaSintetico();
 
-    const resultado = avanzarComercio([origen, destino], [] as Faccion[], [], [acuerdo], mapa, [], 5);
+    const resultado = avanzarComercio([origen, destino], [] as Faccion[], [], [acuerdo], mapa, [], instanteDeTest(5));
 
     const evento = resultado.eventos.find((e) => typeof e !== 'string' && e.codigo === 'comercio.trueque_expirado');
     expect(evento).toBeDefined();
@@ -75,8 +76,8 @@ describe('eventos de dominio — trade.ts', () => {
       cantidadTotalB: 50,
       cantidadEntregadaA: 0,
       cantidadEntregadaB: 0,
-      creadoEnTick: 0,
-      expiraEnTick: 100,
+      creadoEn: instanteDeTest(0),
+      expiraEn: instanteDeTest(100),
       estado: 'activo',
     };
     const caravanaDisponible: Caravana = {
@@ -88,10 +89,11 @@ describe('eventos de dominio — trade.ts', () => {
       posicionActual: origen.posicion,
       progreso: 0,
       estado: 'disponible',
+      carros: [{ tipoCarro: 'basico', animal: 'buey' }], // sin carro con tracción, capacidad 0 → no la asignaría
     };
     const mapa = mapaSintetico();
 
-    const resultado = avanzarComercio([origen, destino], [] as Faccion[], [caravanaDisponible], [acuerdo], mapa, [], 1);
+    const resultado = avanzarComercio([origen, destino], [] as Faccion[], [caravanaDisponible], [acuerdo], mapa, [], instanteDeTest(1));
 
     const evento = resultado.eventos.find((e) => typeof e !== 'string' && e.codigo === 'comercio.caravana_sale');
     expect(evento).toBeDefined();
@@ -114,8 +116,8 @@ describe('eventos de dominio — trade.ts', () => {
       cantidadTotalB: 10,
       cantidadEntregadaA: 10,
       cantidadEntregadaB: 0,
-      creadoEnTick: 0,
-      expiraEnTick: 100,
+      creadoEn: instanteDeTest(0),
+      expiraEn: instanteDeTest(100),
       estado: 'activo',
     };
     const mapa = mapaSintetico();
@@ -127,7 +129,7 @@ describe('eventos de dominio — trade.ts', () => {
       ladoAcuerdo: 'B',
     });
 
-    const resultado = avanzarComercio([origen, destino], [] as Faccion[], [caravana], [acuerdo], mapa, [], 1);
+    const resultado = avanzarComercio([origen, destino], [] as Faccion[], [caravana], [acuerdo], mapa, [], instanteDeTest(1));
 
     const evento = resultado.eventos.find((e) => typeof e !== 'string' && e.codigo === 'comercio.trueque_cumplido');
     expect(evento).toBeDefined();

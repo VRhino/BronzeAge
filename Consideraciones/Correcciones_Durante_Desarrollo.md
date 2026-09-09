@@ -430,6 +430,136 @@ escasez de recursos sea una variable más a controlar al probar el árbol de anc
 
 ---
 
+## Rebalanceo de trigo y §E6.16 (2026-09-02)
+
+### 48. Producción base de Granja ×2 — el asentamiento nacía en déficit estructural
+
+**Encontrado** midiendo para responder a la revisión por consejo del movimiento de ejércitos, no buscándolo:
+un asentamiento **nivel 1 a tope de población (300) come 30 trigo/tick** y una **Granja nivel 1 producía 15**.
+No hacía falta simular para verlo. Lo que sí hizo falta simular fue decidir cuánto subirla.
+
+Experimento A/B/C con la misma seed (15 facciones, 600 ticks), palanca `BATCH_TRIGO_X` nueva en
+`scripts/run-batch-sim.ts` — mismo criterio que `BATCH_SIN_RECLUTAMIENTO`/`BATCH_SIN_ATAQUES`, muta el
+catálogo que es el punto único de lectura (`produccionTrigoDeGranja`):
+
+| | 1x | **2x** | 3x |
+|---|---|---|---|
+| Nutrición media (t600) | 28.98, **cayendo** | **100** | 100 |
+| Nivel 2 | 7/13 | **11/13** | 11/13 |
+| Nivel Facción máx | 3 | **5** | 5 |
+| Tropas vivas (mundo entero) | **15** | 777 | 943 |
+
+A 1x **las tropas se morían de hambre** (23→15). **3x es idéntico a 2x** en todo salvo en cuánto ejército
+sostiene: a 2x la nutrición ya satura, así que triplicar es trigo sin destino. Adoptado **2x**: 15/22.5/30/45
+→ **30/45/60/90**, `BALANCE_VERSION` 3→4, snapshot de regresión actualizado.
+
+Dos límites que conviene no olvidar: **nivel 3 sigue en 0 incluso a 3x** (no es alimentario — issue nuevo
+`issues/npc_no_alcanzan_nivel_3.md`, causa sospechada `artesanos = 0`), y subir la base **esquiva** el
+problema de que las Granjas no escalan (`granjasActivasMedia = 2`, nivel interno 1 en las tres
+configuraciones) en vez de resolverlo.
+
+### 49. §E6.16: edificios construidos sobre celdas de calle — el guardián lo trajo el punto 48
+
+Al aplicar el 2x, `perfilesTrazado.test.ts` empezó a fallar (*"gremial: vivienda pisa la celda de calle
+-7,-5"*). Comprobado revirtiendo el cambio: **sin 2x pasa, con 2x falla**. Pero no es un bug nuevo — es
+§E6.16, abierto y diagnosticado desde el 31 de agosto, que el usuario había encontrado a mano en el
+laboratorio y que **la suite no alcanzaba**. Las ciudades más grandes lo hicieron reproducible.
+
+Ese apartado decía textualmente que antes de arreglarlo hacía falta un caso que lo congelara. Apareció solo.
+
+**Arreglo (salida 3 de las cuatro documentadas)**: `pisaCalleComprometida` en `engine/construction.ts`,
+dentro del bucle de commit, **después** de cupo/tope/fondos y **antes** de pagar. Recalcula `redDeCalles` sobre
+el orden REAL en que va a quedar la ciudad y descarta el candidato si cae sobre calle.
+
+**Lo que hizo viable esa salida, y no estaba en el análisis original**: `anadirConectadas` (`trazado.ts:433`)
+nunca siembra calle sobre celda ya ocupada, y el replay ocupa las celdas de cada edificio antes de sembrar sus
+calles. Luego **ningún edificio puede quedar bajo una calle nacida después de él**, y validar cada candidato
+contra su prefijo basta: no hace falta iterar a punto fijo ni deshacer pagos.
+
+No se eligieron 1 ni 2 porque cambian qué se paga primero cuando no alcanza para todo (eso es balance), ni 4
+porque sería rediseñar el crecimiento emergente.
+
+**Coste medido: cero.** Batch idéntico antes/después en las 11 métricas de ciudad y simulación.
+**Guardián**: `src/engine/__tests__/edificiosSobreCalle.test.ts` con la ciudad del laboratorio (seed 1, 200
+ticks) que §E6.16 pedía, más seeds 60 y 200. Verificado a mano sobre 15 seeds antes de recortar.
+786/786 tests, `tsc --noEmit` limpio en motor, cliente y lab.
+
+### 50. El agua pasa de terreno caro a OBSTÁCULO (2026-09-02)
+
+A petición del usuario: "los ejércitos y las caravanas no deben poder moverse sobre agua, el agua es un
+obstáculo". **Revierte una decisión explícita de Fase 0.3**, cuyo comentario decía: *"Agua/cima no se prohíben
+duro (romperían el pathfinding en cualquier mundo donde el camino más corto los roce) — se penalizan lo
+bastante fuerte para que A* los evite salvo que no haya alternativa real"*. El síntoma que la tumbó salió
+trazando un ejército tick a tick en el Paso 4: se le veía arrastrarse sobre el mar a 1/14 de su velocidad.
+
+`Mapa.esTransitable` nuevo; A* salta las celdas de agua en vez de darles coste alto; `calcularRuta` devuelve
+`Point[] | undefined`. **Lo importante es lo segundo**: antes caía a `[origen, destino]` cuando no encontraba
+camino, y con el agua infranqueable esa recta de reserva sería justo una ruta por el mar.
+
+Tres cosas que salieron al hacerlo, y ninguna era la que se buscaba:
+
+**(a) La caja de búsqueda de A\* tenía margen fijo**, así que un rodeo más largo que el margen no se
+encontraba. Daba igual mientras hubiera recta de reserva; ahora significaba rechazar un viaje posible. Se
+añadió un reintento sobre el mapa entero cuando la caja ajustada falla — barato (a `ESPACIADO_MALLA`=45 un
+mapa de 2000×2000 son ~1.900 celdas) y solo se paga tras fallar.
+
+**(b) Dos llamadores no daban error de tipos y eran los peligrosos.** `Caravana.ruta` es OPCIONAL, así que
+pasarle un `undefined` compilaba — y la caravana caería a la fórmula de línea recta de siempre
+(`avanzarCaravanas`), es decir, cruzaría el mar en silencio. Rechazan explícitamente: la caravana de comercio
+no sale (y la carga se queda en el almacén, comprobado ANTES de descontar), la de fundación tampoco.
+
+**(c) Se podía FUNDAR SOBRE AGUA.** `evaluarViabilidadFundacion` solo excluía `'cima'`. Era inocuo mientras el
+agua fuera cara; con ella infranqueable, un asentamiento en el mar queda incomunicado para siempre. Lo destapó
+el fixture de pruebas, que llevaba fundando en (500,500) de la seed 42 —donde hay mar— sin que nadie lo
+notara, porque nada dependía del terreno. `'agua'` se suma a `'cima'` como inhabitable, y el fixture se movió
+a (400,400).
+
+**Coste medido: cero.** Batch de 15 facciones × 600 ticks, misma seed: las 10 métricas idénticas antes y
+después. Reglas en Doc 1.0b (mundo), 5.12.5 (ejércitos) y 3.10 (caravanas).
+
+### 51. El laboratorio de batch llevaba un paso entero roto, y el type-check no lo veía
+
+Al medir el punto 50 el batch daba **600 excepciones**. No era el agua: `avanzarEjercitos` recibía
+`ejercitos` undefined porque el script construye su propio `EstadoSimulacion` y se le olvidó el campo al
+añadir la entidad en el Paso 4. Peor: **atribuí el daño al cambio equivocado** hasta instrumentar el error, y
+comparé contra una línea base anterior al paso que lo rompió.
+
+Causa de fondo: `tsconfig.json` tiene `"include": ["src"]`, así que **`scripts/` nunca se type-checkea**. Es
+exactamente el mismo agujero que ya mordió en Fase D2, cuando el mismo script quedó roto sin que nadie se
+enterara. Dos veces es un patrón.
+
+Arreglado con `scripts/tsconfig.json` + `npm run typecheck:scripts`, mismo patrón que `typecheck:lab`. No es
+un script de usar y tirar: de sus corridas salen calibradas las constantes del juego.
+
+**`catalogo-edificios.ts` arreglado en la misma pasada** (a petición del usuario, que prefirió no diferirlo):
+sus 15 errores eran una fila `'muralla'` obsoleta —el tipo se retiró en el Paso 5 de murallas, así que el
+script llevaba roto EN EJECUCIÓN desde entonces, no solo en tipos— más 14 sitios de
+`noUncheckedIndexedAccess`. La fila de muralla se elimina sin sustituto: una muralla ya no es un edificio sino
+la entidad `Recinto`, y este catálogo cubre edificios. Verificado ejecutándolo en sus tres modos (informe,
+`--json`, `--md`), no solo compilándolo: llevaba roto y compilar no demuestra que produzca la salida correcta.
+Los tres scripts quedan dentro de `typecheck:scripts` — dejar uno fuera es como se llega a este tipo de
+agujeros.
+
+Y el contador de excepciones del batch ahora puede imprimir las 3 primeras con `BATCH_MOSTRAR_ERRORES=1`:
+decía QUE algo fallaba, nunca QUÉ.
+
+### 52. Cerrar el servidor no drenaba las escrituras de identidad
+
+Salió como un test intermitente de `api.test.ts` (`ENOTEMPTY` al borrar el directorio temporal en Windows,
+1 de cada ~4 corridas), pero el fallo no era del test: **`app.close()` no esperaba a las escrituras de
+identidad pendientes**. El repositorio en disco las encola en segundo plano, y hasta ahora había que acordarse
+de llamar a `esperarEscrituras()` A MANO antes de cerrar — así lo hacía el handler de SIGINT en `index.ts`.
+Quien no lo hiciera perdía la última escritura, o en Windows chocaba el `rename` en vuelo contra el `rmdir`.
+
+Es el mismo fallo que ya se corrigió una vez en `persistenciaIdentidad.test.ts`, arreglado allí caso por caso.
+Volver a verlo en otro archivo dice que el arreglo puntual no bastaba: el orden correcto era fácil de olvidar
+porque no estaba en ningún sitio que lo hiciera cumplir.
+
+Arreglado con un gancho `alCerrar` en `OpcionesServidor`, invocado desde el hook `onClose` de Fastify junto al
+cierre de partidas. Ahora **cerrar el servidor drena de verdad**: `index.ts` ya no ordena nada a mano (su
+handler de señales se simplifica a `app.close()`) y ningún test tiene que recordarlo. Verificado repitiendo la
+suite de API 5 veces seguidas, todas limpias.
+
 ## Nota general
 
 Todas las correcciones anteriores son de **diseño/balance**, no de sintaxis: el proyecto compiló sin errores de TypeScript en todo momento salvo en los pasos intermedios normales de refactor (añadir un campo a un tipo y luego actualizar todos los lugares que lo instancian), que se resolvieron sobre la marcha y no se listan aquí por ser rutinarios.
