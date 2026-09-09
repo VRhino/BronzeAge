@@ -32,8 +32,7 @@ import { parsearAdministradores } from './identidad/administradoresGlobales';
 import { proveedoresDeProceso } from './identidad/proveedoresActivos';
 import { crearRepositorioIdentidadPersistente } from './identidad/repositorioPersistente';
 
-// `PORT` primero: es lo que inyecta la mayoría de PaaS (Render, Fly, Railway...). `PUERTO` se mantiene para
-// el uso local ya existente.
+// `PORT` primero: es lo que inyecta la mayoría de PaaS. `PUERTO` se mantiene para el uso local ya existente.
 const PUERTO = Number(process.env.PORT ?? process.env.PUERTO ?? 3000);
 const ALMACEN_URL = process.env.ALMACEN_URL?.trim() || undefined;
 const DIRECTORIO_PARTIDAS = process.env.DIRECTORIO_PARTIDAS ?? './partidas';

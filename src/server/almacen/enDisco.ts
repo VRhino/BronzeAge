@@ -3,9 +3,9 @@
 // `persistenciaIdentidad.ts` (cada uno con su `join(directorio, ...)` y su `.tmp`+`rename`), ahora en un
 // solo sitio.
 //
-// Es el adaptador por defecto y el único hoy. Para un despliegue en un free tier con disco efímero (Render,
-// Koyeb) o para escalar, se escribe otro adaptador (object storage, SQLite sobre HTTP, Postgres) y se elige
-// en `server/index.ts` — nada más cambia.
+// Es el adaptador por defecto y el único que no necesita servicios externos. Para un host con disco efímero,
+// o para escalar, se escribe otro adaptador (object storage, SQLite sobre HTTP, Postgres) y se elige en
+// `server/index.ts` — nada más cambia.
 import { appendFile, mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { AlmacenDeObjetos } from './almacenDeObjetos';

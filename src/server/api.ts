@@ -154,8 +154,8 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
     await opciones.alCerrar?.();
   });
 
-  // Health check para el orquestador del hosting (Render/Fly/...). Fuera de `/v1` y sin autenticar: es lo que
-  // un load balancer sondea para decidir si el proceso está vivo, no parte del contrato de la API.
+  // Health check para el orquestador del hosting. Fuera de `/v1` y sin autenticar: es lo que un load
+  // balancer sondea para decidir si el proceso está vivo, no parte del contrato de la API.
   app.get('/salud', async () => ({ ok: true }));
 
   // Todas las superficies bajo /v1 (Fase C6) — ver el comentario de cabecera.

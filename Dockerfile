@@ -1,4 +1,5 @@
-# Imagen de despliegue del backend, genérica (Render, Fly, Railway, Koyeb, cualquier host de contenedores).
+# Imagen de despliegue del backend, genérica para cualquier host de contenedores. La config de cada
+# proveedor concreto va en su propia rama de despliegue, no aquí.
 # No hay paso de build: el servidor corre TypeScript directo con `tsx` (por eso `tsx` está en `dependencies`,
 # no en `devDependencies`).
 FROM node:22-slim

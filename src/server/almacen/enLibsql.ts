@@ -1,6 +1,6 @@
 // Adaptador de `AlmacenDeObjetos` sobre libSQL (SQLite en red): una tabla KV genérica `objetos(clave,
-// contenido)`. Sirve para desplegar en un free tier con disco efímero (Render, Koyeb, Railway...) — el URL
-// apunta a un Turso, a un sqld propio, o a un `file:`/`":memory:"` local para pruebas.
+// contenido)`. Es la persistencia para cualquier host con disco efímero — el URL apunta a un Turso, a un
+// sqld propio, o a un `file:`/`":memory:"` local para pruebas.
 //
 // El puerto encaja casi sin fricción porque el modelo ya era "blobs pequeños con clave":
 //   - `escribir` = UPSERT.
