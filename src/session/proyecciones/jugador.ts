@@ -67,6 +67,7 @@ import type { EstadoMapa } from '../../world/mapa';
 import type { TrazadoAsentamiento } from '../../engine/trazado';
 import type { Instante } from '../../domain/tiempo';
 import { esCiudadano } from '../../engine/faccion';
+import { compartenVision } from '../../engine/pertenencia';
 import { ubicacionDeducida } from '../../engine/ubicacion';
 // El mismo recuento que usa el motor para los carros (Doc 5.13): un participante es un carro Y un rombo.
 import { alcanceDeVista, enLaPuertaDe, participantesDe } from '../../engine/ejercitos';
@@ -399,12 +400,17 @@ function nieblaDe(
   grabada: string,
   estado: GameSessionState,
   asentamientosPropios: readonly Asentamiento[],
-  ejercitosPropios: readonly Ejercito[]
+  ejercitosPropios: readonly Ejercito[],
+  /** Ojos de aliados/señor/vasallo (`compartenVision`, niebla Paso 4). Solo cuentan para lo VISIBLE ahora,
+   * nunca para lo explorado (`celdas`): la visión compartida es en vivo y no se graba — al romperse la
+   * relación desaparece en la proyección siguiente. */
+  asentamientosAliados: readonly Asentamiento[] = [],
+  ejercitosAliados: readonly Ejercito[] = []
 ): NieblaProyectada {
   const rejilla = rejillaDe(estado.mapa.config);
   let visibles = SIN_EXPLORAR;
-  for (const a of asentamientosPropios) visibles = marcarVisto(visibles, rejilla, a.posicion, a.radioPotencial + VISION.margenAsentamiento);
-  for (const e of ejercitosPropios) visibles = marcarVisto(visibles, rejilla, e.posicionActual, alcanceDeVista(e));
+  for (const a of [...asentamientosPropios, ...asentamientosAliados]) visibles = marcarVisto(visibles, rejilla, a.posicion, a.radioPotencial + VISION.margenAsentamiento);
+  for (const e of [...ejercitosPropios, ...ejercitosAliados]) visibles = marcarVisto(visibles, rejilla, e.posicionActual, alcanceDeVista(e));
 
   let celdas = grabada;
   for (const a of asentamientosPropios) celdas = marcarVisto(celdas, rejilla, a.posicion, a.radioPotencial + VISION.margenAsentamiento);
@@ -567,6 +573,25 @@ export function proyectarParaJugador(
   const zonasPropias = geometria.zonas.filter((z) => esPropio(z.asentamientoId));
   const propios = new Set(ejercitosPropios.map((e) => e.id));
 
+  // Niebla Paso 4: un aliado (o señor/vasallo) ve lo que ves tú, EN VIVO. Sus plazas y columnas se suman a la
+  // capa "viéndolo ahora" —`seVeAhora`, avistados, la máscara `visibles`—, nunca a la memoria ni a lo
+  // explorado: al romperse la relación, `compartenVision` deja de incluir esa Facción y en la proyección
+  // siguiente lo que solo veías por ella desaparece (no queda "último conocido"). Ver `Niebla_De_Guerra_Definicion.md` §5.6.
+  const faccionesQueComparten =
+    faccionId !== null
+      ? new Set(
+          estado.facciones
+            .filter((f) => f.id !== faccionId && compartenVision(estado.relaciones, faccionId, f.id))
+            .map((f) => f.id)
+        )
+      : new Set<string>();
+  const asentamientosAliados = estado.asentamientos.filter((a) => faccionesQueComparten.has(a.faccionId));
+  const ejercitosAliados = estado.ejercitos.filter((e) => faccionesQueComparten.has(e.faccionId));
+  // Los ojos que cuentan para "ver ahora" = propios + aliados. Se reutiliza el mismo array cuando no hay
+  // aliados para no reasignar nada en el caso normal.
+  const ojosAsent = asentamientosAliados.length > 0 ? [...asentamientosPropios, ...asentamientosAliados] : asentamientosPropios;
+  const ojosEjercito = ejercitosAliados.length > 0 ? [...ejercitosPropios, ...ejercitosAliados] : ejercitosPropios;
+
   // La zona sale de `geometria`, que el runner ya calculó y cachea para TODOS los asentamientos: adjuntarla
   // aquí no cuesta un cálculo más. Una plaza sin zona en la geometría (no debería pasar) viaja con el
   // contorno vacío en vez de romper la proyección entera.
@@ -574,7 +599,7 @@ export function proyectarParaJugador(
   // Lo que se ve pero no se pisa. Los propios entran aquí igual que los ajenos: se excluye SOLO la plaza en
   // la que el jugador está, que es la única que viaja entera.
   const avistados = estado.asentamientos
-    .filter((a) => a.id !== dentroDe?.id && seVeAhora(a.posicion, asentamientosPropios, ejercitosPropios))
+    .filter((a) => a.id !== dentroDe?.id && seVeAhora(a.posicion, ojosAsent, ojosEjercito))
     .map((a) => ({
       id: a.id,
       nombre: a.nombre,
@@ -591,7 +616,7 @@ export function proyectarParaJugador(
   const memoria = (faccionId !== null ? estado.memoriaPorFaccion[faccionId] : undefined) ?? MEMORIA_VACIA;
   // La niebla se calcula ANTES del objeto porque además de viajar es el filtro de los caminos: la misma
   // máscara que tapa el terreno decide qué calzadas existen para este jugador.
-  const exploracion = nieblaDe(memoria.exploracion, estado, asentamientosPropios, ejercitosPropios);
+  const exploracion = nieblaDe(memoria.exploracion, estado, asentamientosPropios, ejercitosPropios, asentamientosAliados, ejercitosAliados);
 
   return {
     gameId: estado.gameId,
@@ -611,10 +636,10 @@ export function proyectarParaJugador(
     territorioPorEjercito: territorioDeCadaEjercito(ejercitosPropios, geometria.zonas, estado.asentamientos),
     exploracion,
     caravanas: estado.caravanas.filter((c) => esPropio(c.origenAsentamientoId) || (c.destinoAsentamientoId !== undefined && esPropio(c.destinoAsentamientoId))),
-    caravanasAvistadas: caravanasAvistadas(estado, esPropio, asentamientosPropios, ejercitosPropios),
+    caravanasAvistadas: caravanasAvistadas(estado, esPropio, ojosAsent, ojosEjercito),
     ejercitos: ejercitosPropios,
     ejercitosAvistados: estado.ejercitos
-      .filter((e) => !propios.has(e.id) && seVeAhora(e.posicionActual, asentamientosPropios, ejercitosPropios))
+      .filter((e) => !propios.has(e.id) && seVeAhora(e.posicionActual, ojosAsent, ojosEjercito))
       .map((e) => ({ id: e.id, faccionId: e.faccionId, posicionActual: e.posicionActual, participantes: participantesDe(e) })),
     acuerdos: estado.acuerdos.filter((a) => esPropio(a.asentamientoAId) || esPropio(a.asentamientoBId)),
     // De las propias, todas —incluidas las cumplidas, que son el historial de tu mercado—. De una plaza ajena
@@ -625,7 +650,7 @@ export function proyectarParaJugador(
     relaciones: estado.relaciones,
     titulos: estado.titulos,
     caminos: caminosConocidos(estado.caminos, exploracion),
-    campamentosBandidos: campamentosAvistados(estado.campamentosBandidos, asentamientosPropios, ejercitosPropios),
+    campamentosBandidos: campamentosAvistados(estado.campamentosBandidos, ojosAsent, ojosEjercito),
     historial: estado.historialJugadores[jugadorId] ?? [],
     zonas: zonasPropias,
     zonasFusionadas: geometria.zonasFusionadas.filter((zf) => zf.faccionId === faccionId),

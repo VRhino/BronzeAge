@@ -110,6 +110,25 @@ export function estanAliadas(relaciones: readonly RelacionPolitica[], aId: strin
 }
 
 /**
+ * ¿Comparten estas dos Facciones VISIÓN de guerra (niebla, Paso 4)? Alianza **o** vasallaje activo, en
+ * cualquier dirección.
+ *
+ * Distinto de `estanAliadas` —solo alianza, y con consumidores propios (reabastecer aliados, "los aliados no
+ * se cruzan en combate")— porque el vasallaje también implica defensa mutua, y ver lo que el otro ve es parte
+ * de eso (decisión del usuario, 2026-09-09). Al romperse la relación deja de devolver `true` y la visión
+ * compartida desaparece en la proyección siguiente: nunca se graba en `memoriaPorFaccion`, solo se suma a la
+ * capa "viéndolo ahora".
+ */
+export function compartenVision(relaciones: readonly RelacionPolitica[], aId: string, bId: string): boolean {
+  return relaciones.some(
+    (r) =>
+      r.estado === 'activa' &&
+      (r.tipo === 'alianza' || r.tipo === 'vasallaje') &&
+      ((r.faccionAId === aId && r.faccionBId === bId) || (r.faccionAId === bId && r.faccionBId === aId))
+  );
+}
+
+/**
  * ¿Puede este jugador cruzar la puerta de esta plaza (Doc 1.10.5)?
  *
  * El orden de las tres capas es la regla, y no es intercambiable:

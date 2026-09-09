@@ -561,6 +561,87 @@ describe('ejercitosAvistados: lo ajeno, solo si se ve y siempre redactado', () =
   });
 });
 
+// Niebla de guerra, Paso 4 (2026-09-09): un aliado —o un señor/vasallo— ve lo que ves tu, EN VIVO. Se suma a
+// la capa "viendolo ahora" (avistados, mascara `visibles`), nunca a la memoria ni a lo explorado (`celdas`):
+// al romperse la relacion desaparece en la proyeccion siguiente. Alianza Y vasallaje comparten vision.
+describe('vision compartida por alianza y vasallaje (Paso 4)', () => {
+  /**
+   * Partida propia en (400,400). Una Faccion `esparta` con una columna lejos, en (2000,2000). Un ejercito de
+   * `faccion-rival` a un paso de esa columna, fuera del alcance de todo lo propio. Devuelve un estado sin
+   * relacion todavia — cada test pone la que quiere probar.
+   */
+  function conAliadoLejano() {
+    const base = partidaConAsentamiento();
+    const rf = base.sesion.ejecutar(crearFaccion, { nombre: 'Esparta' }, { ...OPC, actor: 'espartano' });
+    const espartaId = rf.datos!.faccionId as string;
+    // Lejos de la plaza propia (400,400) — su alcance es ~90 — y dentro del mapa de 2000x2000.
+    const columnaAliada = ejercito('e-aliado', espartaId, { x: 1700, y: 1700 }, [escuadron('sa', 'espartano')]);
+    const rivalCerca = ejercito('e-rival', 'faccion-rival', { x: 1700, y: 1700 + VISION.ejercito - 1 }, [escuadron('sr', 'otro')]);
+    const rivalLejos = ejercito('e-lejos', 'faccion-rival', { x: 1700, y: 300 }, [escuadron('sl', 'otro')]);
+    const estado: GameSessionState = {
+      ...base.sesion.getState(),
+      ejercitos: [columnaAliada, rivalCerca, rivalLejos],
+    };
+    return { estado, fundador: base.fundador, faccionId: base.faccionId, espartaId };
+  }
+
+  const relacion = (tipo: 'alianza' | 'vasallaje', a: string, b: string, estado: 'activa' | 'rota') => ({
+    id: `rel-${tipo}`,
+    tipo,
+    faccionAId: a,
+    faccionBId: b,
+    creadoEn: instante(0),
+    estado,
+  });
+
+  it('sin relacion, la columna del aliado NO presta vision', () => {
+    const { estado, fundador } = conAliadoLejano();
+    const proyeccion = proyectarParaJugador(estado, fundador, SIN_GEOMETRIA);
+    expect(proyeccion.ejercitosAvistados.map((e) => e.id).sort()).toEqual([]);
+  });
+
+  it('con ALIANZA activa se ve lo que ve el aliado, pero NO entra en la memoria ni en lo explorado', () => {
+    const { estado, fundador, faccionId, espartaId } = conAliadoLejano();
+    const conAlianza: GameSessionState = { ...estado, relaciones: [relacion('alianza', faccionId, espartaId, 'activa')] };
+
+    const proyeccion = proyectarParaJugador(conAlianza, fundador, SIN_GEOMETRIA);
+
+    // El rival pegado a la columna aliada se ve; el que esta en la otra punta del mapa, no. La propia columna
+    // del aliado tambien aparece como avistada (no es "mia", pero la veo).
+    expect(proyeccion.ejercitosAvistados.map((e) => e.id).sort()).toEqual(['e-aliado', 'e-rival']);
+
+    const rejilla = {
+      columnas: proyeccion.exploracion.columnas,
+      filas: proyeccion.exploracion.filas,
+      tamanoCelda: proyeccion.exploracion.tamanoCelda,
+    };
+    // Lo que ve el aliado esta en `visibles` (en vivo) pero NO en `celdas` (explorado/memoria): la vision
+    // compartida no se graba.
+    expect(estaExplorado(proyeccion.exploracion.visibles, rejilla, { x: 1700, y: 1700 })).toBe(true);
+    expect(estaExplorado(proyeccion.exploracion.celdas, rejilla, { x: 1700, y: 1700 })).toBe(false);
+    expect(proyeccion.asentamientosConocidos).toEqual([]);
+  });
+
+  it('un VASALLAJE tambien comparte vision, en las dos direcciones', () => {
+    const { estado, fundador, faccionId, espartaId } = conAliadoLejano();
+    // Da igual quien es el señor y quien el vasallo: la relacion es simetrica para la vista.
+    const comoSenor: GameSessionState = { ...estado, relaciones: [relacion('vasallaje', faccionId, espartaId, 'activa')] };
+    const comoVasallo: GameSessionState = { ...estado, relaciones: [relacion('vasallaje', espartaId, faccionId, 'activa')] };
+
+    expect(proyectarParaJugador(comoSenor, fundador, SIN_GEOMETRIA).ejercitosAvistados.map((e) => e.id)).toContain('e-rival');
+    expect(proyectarParaJugador(comoVasallo, fundador, SIN_GEOMETRIA).ejercitosAvistados.map((e) => e.id)).toContain('e-rival');
+  });
+
+  it('al romperse la relacion, lo que solo se veia por ella DESAPARECE', () => {
+    const { estado, fundador, faccionId, espartaId } = conAliadoLejano();
+    const rota: GameSessionState = { ...estado, relaciones: [relacion('alianza', faccionId, espartaId, 'rota')] };
+
+    const proyeccion = proyectarParaJugador(rota, fundador, SIN_GEOMETRIA);
+    expect(proyeccion.ejercitosAvistados.map((e) => e.id)).not.toContain('e-rival');
+    expect(proyeccion.ejercitosAvistados.map((e) => e.id)).not.toContain('e-aliado');
+  });
+});
+
 // Niebla de guerra, Paso 3: la MEMORIA proyectada. Los tres estados que ve el jugador, y sobre todo el
 // transito entre ellos — "al dejar de verlo, cae en la categoria anterior", que era el punto que la primera
 // version del diseño se dejaba fuera.
