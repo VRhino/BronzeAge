@@ -44,6 +44,21 @@ export interface Sesion {
   expiraEn: string;
 }
 
+/**
+ * Secreto de una cuenta local (nick + contraseña), lo único que el proveedor `clave`
+ * (`server/identidad/proveedorClave.ts`) necesita recordar entre logins. El `dev` no guarda nada porque no
+ * verifica nada; una contraseña necesita un sitio contra el que comprobarse, y `RepositorioIdentidad` es el
+ * puerto de persistencia de este dominio. El HASH no se hace aquí — eso es infraestructura y vive en el
+ * adaptador; aquí solo la forma del dato.
+ */
+export interface CredencialLocal {
+  /** Clave de búsqueda: nick normalizado (trim + minúsculas). Es también el `sujetoId` de la identidad `clave`. */
+  nick: string;
+  hash: string;
+  salt: string;
+  creadaEn: string;
+}
+
 // `Jugador` (identidad DENTRO de una partida) está diseñado en el doc 5 pero NO se declara aquí: hoy nada
 // lo usaría. `Membresia.jugadorId` ya lleva el vínculo `Usuario` -> id de jugador que el motor consume, y
 // una interfaz sin un solo consumidor es peso muerto que envejece mal. Se añadirá cuando haya algo que

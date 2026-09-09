@@ -29,6 +29,8 @@ export interface DependenciasDeRutas {
   /** Registro de auditoría de comandos (Fase E2). Se escribe desde `ejecutarComandoHttp`, que es el único
    * punto por el que pasan TODOS los comandos de las dos superficies, aceptados y rechazados. */
   auditoria: RegistroDeAuditoria;
+  /** Código de invitación exigido en `POST /v1/registro`. `undefined` = registro abierto. */
+  codigoRegistro?: string;
 }
 
 export interface ParametrosGameId {

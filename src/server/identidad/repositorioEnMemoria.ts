@@ -6,7 +6,7 @@
 // un `alCambiar` que reescribe el archivo tras cada mutación. Por eso este archivo expone el snapshot
 // (`DatosIdentidad`) y el gancho de cambio: para no duplicar la lógica de los índices en dos adaptadores.
 import type { RepositorioIdentidad } from '../../acceso/repositorio';
-import type { IdentidadVinculada, Membresia, Sesion, Usuario } from '../../acceso/tipos';
+import type { CredencialLocal, IdentidadVinculada, Membresia, Sesion, Usuario } from '../../acceso/tipos';
 
 /** Todo lo que el dominio de acceso guarda, en forma plana y serializable — lo que viaja a disco. */
 export interface DatosIdentidad {
@@ -16,6 +16,9 @@ export interface DatosIdentidad {
   identidades: IdentidadVinculada[];
   sesiones: Sesion[];
   membresias: Membresia[];
+  /** Cuentas locales del proveedor `clave` (nick + hash). Ausente en archivos anteriores a su introducción:
+   * `leerIdentidad` lo rellena con `[]` (ver `VACIO`), así que no hace falta migrar. */
+  credencialesLocales: CredencialLocal[];
 }
 
 export interface OpcionesRepositorioEnMemoria {
@@ -42,6 +45,7 @@ export function crearRepositorioIdentidadEnMemoria(opciones: OpcionesRepositorio
   const identidadesEnOrden: IdentidadVinculada[] = [];
   const sesiones = new Map<string, Sesion>((inicial?.sesiones ?? []).map((s) => [s.id, s]));
   const membresias = new Map<string, Membresia>((inicial?.membresias ?? []).map((m) => [`${m.usuarioId}:${m.gameId}`, m]));
+  const credencialesLocales = new Map<string, CredencialLocal>((inicial?.credencialesLocales ?? []).map((c) => [c.nick, c]));
 
   for (const vinculo of inicial?.identidades ?? []) registrarVinculo(vinculo);
 
@@ -62,6 +66,7 @@ export function crearRepositorioIdentidadEnMemoria(opciones: OpcionesRepositorio
       identidades: [...identidadesEnOrden],
       sesiones: [...sesiones.values()],
       membresias: [...membresias.values()],
+      credencialesLocales: [...credencialesLocales.values()],
     };
   }
 
@@ -88,6 +93,13 @@ export function crearRepositorioIdentidadEnMemoria(opciones: OpcionesRepositorio
     },
     buscarIdentidadDeUsuario(usuarioId) {
       return identidadesPorUsuario.get(usuarioId);
+    },
+    buscarCredencialLocal(nick) {
+      return credencialesLocales.get(nick);
+    },
+    guardarCredencialLocal(credencial) {
+      credencialesLocales.set(credencial.nick, credencial);
+      notificar();
     },
     crearSesion(sesion) {
       sesiones.set(sesion.id, sesion);

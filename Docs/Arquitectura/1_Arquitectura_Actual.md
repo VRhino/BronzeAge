@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Versión** | 2.0 |
-| **Actualizado** | 2026-09-05 |
-| **Verificado contra** | commit `652a0aa` — 951 tests en 95 archivos, todos en verde |
+| **Versión** | 2.2 |
+| **Actualizado** | 2026-09-09 |
+| **Verificado contra** | árbol de trabajo sobre `1b52862` — 1203 tests en 110 archivos, todos en verde |
 
 > **Por qué existe este campo.** La v1.0 se escribió el 2026-08-26 y para el 2026-09-05 había derivado en
 > ocho puntos concretos (número de comandos, número de tests, tamaño de `constants.ts`, estado de la niebla
@@ -19,6 +19,8 @@
 
 | Versión | Fecha | Cambio |
 |---|---|---|
+| 2.2 | 2026-09-09 | Identidad de jugador con contraseña para el playtest: proveedor `clave` (nick + contraseña, hash scrypt de stdlib, secreto en `identidad.json` — sin subir `FORMATO_IDENTIDAD_VERSION`, el archivo v1 se lee con `credencialesLocales: []`), endpoint `POST /v1/registro` con `CODIGO_REGISTRO` opcional. El proceso real monta `clave` + `dev` (`proveedoresDeProceso`); `dev` queda solo para el cliente de administración en local. Tests 1189/108 → 1203/110. |
+| 2.1 | 2026-09-09 | Reconciliación con el código medido: comandos 42 → 69, tests 951/95 → 1189/108, `constants.ts` 51 tablas/1786 líneas → 60/2004, `engine/` 32 módulos/11.064 líneas → 34/13.392, niebla de guerra Paso 4 (visión compartida por alianza/vasallaje) de "pendiente" a hecho, Fase E documentada (E2 auditoría/respaldos/mantenimiento y E3 métricas — completas), rutas nuevas listadas (`/admin/metricas`, `/admin/.../auditoria`, `GET`/`POST`/`DELETE /admin/.../membresias`). Además, tres cambios de persistencia de esta misma fecha: **(a)** retirada la cadena de migraciones de snapshot (sin partidas anteriores al formato vigente); **(b)** formato **v13** — el snapshot deja de guardar el terreno (se regenera de la seed) y el historial de eventos (`<gameId>.eventos.jsonl`, append-only); de ~450 KB creciendo a ~9 KB plano; **(c)** borrado `session/estado.proyectarLog` (sin llamador de producción — la consola de admin que derivaba de él vive en el repo de cliente). |
 | 2.0 | 2026-09-05 | Reconciliación con el código medido: comandos 30 → 42, tests 640/80 → 951/95, `constants.ts` 39 tablas/~1240 líneas → 51/1786, niebla de guerra de "pendiente" a Pasos 1-3 y 5 hechos, `cliente-jugador/` movido a otro repositorio (`2dfe9e7`), retirada la mención a `exportar-unity`, y `domain/` documentado como tres archivos. |
 | 1.0 | 2026-08-26 | Reescritura completa para describir el backend real, tras varias sesiones en las que el documento seguía describiendo el prototipo de un solo `GameStore` en el navegador (Fase 0/A) mientras el código avanzaba hasta la Fase C. |
 
@@ -43,11 +45,15 @@ pintar el mundo sin una línea del motor— y su marcha es precisamente lo que l
 pérdida. Cualquier referencia a un directorio `cliente-jugador/` dentro de este repo es histórica.
 
 Cuánto de esta superficie tiene hoy consumidor está medido en `docs/Analisis_Brecha_Backend.md` de ese
-repositorio (2026-09-06): consume 5 de los 9 endpoints y **6 de los 42 comandos**, y no usa todavía el
-WebSocket, el cursor de eventos ni `GET /v1/balance`. Es brecha de interfaz, no de backend — la matriz de
-`autorizacion.ts` ya admite al rol `jugador` en los 42 comandos.
+repositorio (2026-09-06, cifra pendiente de re-medir): consumía entonces 5 de los 9 endpoints y una fracción
+de los comandos, y no usaba todavía el WebSocket, el cursor de eventos ni `GET /v1/balance`. Es brecha de
+interfaz, no de backend — la matriz de `autorizacion.ts` ya admite al rol `jugador` en los **69** comandos.
 
-Por el lado del BACKEND, la Fase C está **completa** (C0–C13). C4 dio la proyección por audiencia
+Por el lado del BACKEND, la Fase C está **completa** (C0–C13) y la Fase D **estructuralmente completa**
+(reloj de mundo + catch-up, contrato en `instante`/`momento`, `tick` retirado del contrato — solo queda como
+paso de integración interno del motor). La **Fase E** está en curso: E1 y E2 hechas (auditoría, respaldos,
+mantenimiento), E3 con las métricas hechas y la moderación abierta, E4 sin empezar (ver
+[3_Plan_Evolucion_Roadmap.md](3_Plan_Evolucion_Roadmap.md)). C4 dio la proyección por audiencia
 (`proyectarParaJugador`: un jugador nunca recibe el estado completo), y sobre esa frontera se construyó
 después la niebla de guerra, que **ya no es trabajo pendiente**: ver "Niebla de guerra" más abajo.
 
@@ -87,17 +93,18 @@ apunta "hacia arriba". Dos invariantes tienen además su propio test en lenguaje
 `session/` es el único punto que ve los dos dominios —juego y acceso— porque la autorización de comandos lo
 exige: qué rol técnico tiene el actor Y qué relación de juego guarda con la entidad objetivo.
 
-**951 tests en 95 archivos** cubren las seis capas (medido 2026-09-05, `npm run test:run`). Reparto por capa:
-`engine/` 48 archivos, `session/` 22, `server/` 14, `world/` 5, `acceso/` 3, `__tests__/` 2 (los de frontera),
-`worldgen/` 1. Ese último número es el punto más fino de la red: `worldgen/` es la capa con la promesa más
-fuerte —semilla + `WORLDGEN_VERSION` reproducen el mapa exactamente— y la que menos test tiene.
+**1203 tests en 110 archivos** cubren las seis capas (medido 2026-09-09, `npm run test:run`). Reparto por
+capa: `engine/` 56 archivos, `session/` 23, `server/` 20, `world/` 5, `acceso/` 3, `__tests__/` 2 (los de
+frontera), `worldgen/` 1. Ese último número es el punto más fino de la red: `worldgen/` es la capa con la
+promesa más fuerte —semilla + `WORLDGEN_VERSION` (hoy **15**) reproducen el mapa exactamente— y la que menos
+test tiene.
 
 ## Capas y responsabilidades
 
 ### Dominio: `src/domain/`
 
-Tres archivos, 904 líneas, y es el punto de mayor fan-in de todo el repo: **413 aristas de import entran
-aquí** desde el resto de capas (medido sobre el grafo del código, 2026-09-05).
+Tres archivos, ~1.130 líneas (`types.ts` 986), y es el punto de mayor fan-in de todo el repo: **cientos de
+aristas de import entran aquí** desde el resto de capas (413 medidas sobre el grafo del código el 2026-09-05).
 
 - `types.ts` — contratos de datos centrales: facciones, asentamientos, edificios, población, escuadrones,
   caravanas, mercado, relaciones políticas, recursos, nodos de mapa, ejércitos y geometría básica. También
@@ -112,7 +119,7 @@ tener un `Jugador` por partida).
 
 ### Configuración: `src/constants.ts`
 
-51 tablas exportadas, 1786 líneas (medido 2026-09-05; `BALANCE_VERSION` va por 8): recursos, edificios,
+60 tablas exportadas, 2004 líneas (medido 2026-09-09; `BALANCE_VERSION` va por 8): recursos, edificios,
 economía, población, construcción, combate, política, mundo, murallas, visión y balance. **Servida completa y sin autenticar en `GET /v1/balance`** desde el hito **C7** (2026-08-26), con
 `BALANCE_VERSION` estampada en cada partida al crearla. Sigue siendo **global al proceso** — la parte
 "versionado por partida/temporada, con overrides reales" del hito queda deliberadamente sin construir, sin un
@@ -153,7 +160,7 @@ lastrando la suite.)
 
 ### Motor: `src/engine/`
 
-**32 módulos, 11.064 líneas** — el 44 % del código de producción del repo. Reglas por subsistema: fundación,
+**34 módulos, 13.392 líneas** — el mayor bloque de código de producción del repo. Reglas por subsistema: fundación,
 expansión, zonas, construcción, trazado urbano, murallas, población, mantenimiento, almacenamiento, mercado,
 comercio, caravanas, caminos, movimiento, facciones, pertenencia, cargos, liderazgo, diplomacia, ligas, fusión,
 combate, tropas, ejércitos, bandidos, reputación, títulos, y —desde 2026-09-04— exploración y memoria (las dos
@@ -204,39 +211,73 @@ que se lo pasen por parámetro) — así es fácil de probar y la async vive en 
 
 ### Servidor: `src/server/`
 
-El único punto async del backend. `api.ts` es la raíz de composición: monta Fastify, CORS, WebSocket, OpenAPI,
-y registra tres superficies bajo `/v1` (Fase C6 — versionado por prefijo de ruta, sin alias sin versión):
+El único punto async del backend, ~3.800 líneas (12 archivos de raíz + 9 de `rutas/` + 6 adaptadores de
+identidad + el hub). `api.ts` es la raíz de composición: monta
+Fastify, CORS, WebSocket, OpenAPI, y registra las superficies bajo `/v1` (Fase C6 — versionado por prefijo de
+ruta, sin alias sin versión). En total ~22 endpoints:
 
-- **`/v1/sesiones`** — login (proveedor de desarrollo hoy, `Authorization: dev <sujeto>`) y whoami. La puerta
-  a las otras dos.
-- **`/v1/admin/*`** (`rutas/admin.ts`) — gobierno de la partida como objeto: crear/reabrir, avanzar tick, leer
-  estado completo. Exige `administrador_global` o una `Membresia` de administración (`administrador_partida`/
-  `moderador`) en esa partida — política en `acceso/rolesDePartida.ts`.
-- **`/v1/jugador/*`** (`rutas/jugador.ts`) — unirse (crea la `Membresia`), leer la proyección propia, ejecutar
-  comandos. Un administrador **no** pasa este filtro: tener acceso técnico no da autoridad de jugador (doc 5).
+- **`/v1/sesiones`** — `POST /sesiones` (login: `Authorization: <esquema> <credencial>` — hoy `clave
+  <nick>:<contraseña>` para jugadores, `dev <sujeto>` para el cliente de administración en local),
+  `POST /registro` (alta de cuenta local: `{nick, clave, codigo?}`, opcionalmente tras un `CODIGO_REGISTRO`),
+  `GET /sesiones/actual` (whoami). La puerta a las otras dos.
+- **`/v1/admin/*`** (`rutas/admin.ts`) — gobierno de la partida como objeto: `GET`/`POST /admin/partidas`
+  (descubrir/crear), `POST .../:id/tick`, `GET .../:id` (estado completo), `.../eventos?desde=` (cursor C13),
+  `.../exportar`, `.../mapa/:mapaId`, `POST .../:id/comandos`, `.../auditoria` (E2), `GET`/`POST`/`DELETE
+  .../:id/membresias[/:usuarioId]`, y `GET /admin/metricas` (E3, por proceso — no por partida). Exige
+  `administrador_global` o una `Membresia` de administración (`administrador_partida`/`moderador`) — política
+  en `acceso/rolesDePartida.ts`.
+- **`/v1/jugador/*`** (`rutas/jugador.ts`) — `POST .../:id/membresia` (unirse), `GET .../:id` (proyección
+  propia + niebla), `.../eventos?desde=`, `.../mapa/:mapaId`, `POST .../:id/comandos`. Un administrador **no**
+  pasa este filtro: tener acceso técnico no da autoridad de jugador (doc 5).
 - **`/v1/.../tiempo-real`** (`rutas/tiempoReal.ts`, Fase C5) — WebSocket con canales suscribibles, autorizados
-  por `session/canales.ts`; difunde eventos de dominio, nunca ejecuta comandos por este canal.
-- **`GET /v1/openapi.json`** — el contrato publicado, sin autenticar a propósito, para que otros repos generen
-  su cliente.
+  por `session/canales.ts`; difunde eventos de dominio en bruto, nunca ejecuta comandos por este canal.
+- **`GET /v1/balance`** (C7) y **`GET /v1/openapi.json`** — reglas públicas y el contrato publicado, sin
+  autenticar a propósito, para que otros repos generen su cliente.
 
 Piezas de soporte:
 
-- `server/identidad/` — adaptadores de los puertos de `acceso`: proveedor de desarrollo, repositorio en
-  memoria, parseo de cabecera `Authorization`, y el directorio de administradores globales
-  (`ADMINISTRADORES=proveedor:sujetoId` por variable de entorno — vacío por defecto, sin él nadie administra).
-- `server/persistenciaPartida.ts` — snapshot de partida a disco: `PartidaExportada` completa (estado, tick,
-  eventos, mapa/yacimientos, IDs y **el estado del RNG**), escritura atómica (`.tmp` + `rename`, nunca un
-  archivo a medias), con comprobación de versión como red de seguridad contra dos procesos escribiendo el
-  mismo `gameId`.
+- `server/persistenciaPartida.ts` — snapshot de partida a disco: estado, tick, IDs, `config`/semilla del
+  mundo y **el estado del RNG**; escritura atómica (`.tmp` + `rename`, nunca un archivo a medias), con
+  comprobación de versión como red de seguridad contra dos procesos escribiendo el mismo `gameId`. Desde el
+  formato **v13** NO guarda el terreno (se regenera de la seed al cargar) ni el historial de eventos (vive en
+  `eventosDePartida.ts`) — ver "Persistencia" más abajo. `FORMATO_SNAPSHOT_VERSION` (hoy **13**) rechaza
+  cualquier otro formato; ya no hay cadena de migraciones.
+- `server/eventosDePartida.ts` — el historial de `EventoDominio` de una partida en un JSONL append-only
+  hermano del snapshot (`<gameId>.eventos.jsonl`), mismo patrón que `auditoria.ts`. `anexarEventos` añade una
+  línea por evento; `leerEventos` lo devuelve más-nuevo-primero para que `cargarPartida` rehidrate
+  `eventosDominio`.
+- `server/persistenciaIdentidad.ts` — el dominio de acceso (usuarios/sesiones/membresías/credenciales
+  locales) a disco, misma escritura atómica. Solo `index.ts` lo cablea; `crearServidor` trae el repositorio **en memoria** por
+  defecto.
 - `server/runnerDePartida.ts` — la pieza entre `GameSession` y el proceso real: una **cola serial** por
   partida (dos llamadas concurrentes se aplican en orden de llegada, nunca intercaladas), el ciclo
   "aplicar → persistir → confirmar" (si falla la escritura, `GameSession` vuelve atrás), idempotencia de
-  comandos por `actor:idempotencyKey` (reconexión sin duplicar acciones, Fase C5), caché con TTL de un minuto
-  real de `preciosReferencia()` (regla de entrada privilegiada, C10), y un scheduler opcional de ticks
-  automáticos.
-- `server/registroDePartidas.ts` — qué partidas están abiertas en este proceso.
+  comandos por `actor:idempotencyKey` (reconexión sin duplicar acciones, Fase C5), el anexado del historial de
+  eventos al JSONL tras cada guardado (`eventosDePartida.ts`), caché con TTL de un minuto real de
+  `preciosReferencia()` (regla de entrada privilegiada, C10), caché de geometría por frame (C10), el **reloj
+  de mundo** con catch-up (Fase D5) e instrumentación por partida (E3).
+- `server/registroDePartidas.ts` — qué partidas están abiertas en este proceso (un `Map`; `abrir` lanza si ya
+  lo está). Un proceso = una partida activa de facto: nada shardea ni coordina varios procesos sobre el mismo
+  directorio.
+- `server/auditoria.ts` (E2) — log JSONL append-only por partida, hermano del snapshot: comandos aceptados **y
+  rechazados**, con las cuatro causas de rechazo tipadas (`autorizacion`/`esquema`/`dominio`/`persistencia`).
+  Poda por edad. `GET /admin/.../auditoria` la sirve filtrable.
+- `server/respaldos.ts` (E2) — copias fechadas en `respaldos/` (snapshot + sus hermanos `.auditoria.jsonl` y
+  `.eventos.jsonl`); `restaurar` comprueba que el respaldo **carga de verdad** antes de tocar el snapshot
+  vigente. Exige el servidor parado (`scripts/restaurar-partida.ts`).
+- `server/mantenimiento.ts` (E2) — tarea periódica **opt-in** (`MANTENIMIENTO_INTERVALO_MS`, apagada por
+  defecto): respaldar + podar respaldos por cuenta + podar auditoría por edad.
+- `server/metricas.ts` (E3) — **ensambla**, no mide: junta cola/tick/ráfagas del runner, recuentos de la
+  auditoría y conexiones del hub en una instantánea. Pull-only (`GET /admin/metricas`), sin exportador.
 - `server/difusion/hub.ts` — registro de conexiones WebSocket y envío a las suscritas a un canal; la decisión
   de quién puede suscribirse a qué vive en `session/canales.ts`, no aquí.
+- `server/identidad/` — adaptadores de los puertos de `acceso`: proveedores de identidad (`proveedorClave` —
+  cuentas locales nick + contraseña, hash scrypt de stdlib, secreto en el propio repositorio de identidad; y
+  `proveedorDesarrollo` — sin verificar nada, solo para el cliente de administración en local), repositorios
+  en memoria y en disco, parseo de cabecera `Authorization`, y el directorio de administradores globales
+  (`ADMINISTRADORES=proveedor:sujetoId` por variable de entorno — vacío por defecto, sin él nadie administra).
+  `proveedoresDeProceso` monta la lista real; `proveedoresPorDefecto` (solo `dev`) es el default de
+  `crearServidor` para los tests.
 - `server/openapi.ts` — configuración de `@fastify/swagger` para el contrato publicado.
 
 ## Niebla de guerra
@@ -273,8 +314,9 @@ incoherente con todo lo demás. Que además sea unas cinco veces más barato de 
 Una partida guardada antes de esta mecánica **no necesita migración**: una Facción sin registro vale cadena
 vacía, que es exactamente "nada explorado".
 
-**Pendiente:** Paso 4 (visión compartida por alianza, en vivo y solo mientras la alianza esté activa) y
-Paso 6 (calibración de márgenes contra la vista de ejército).
+El **Paso 4** (visión compartida por alianza y vasallaje, en vivo y solo mientras la relación esté activa)
+está **hecho** (`f20d64e`). **Pendiente:** solo el Paso 6 (calibración de márgenes contra la vista de
+ejército).
 
 ## Estado de partida y ciclo de un tick
 
@@ -292,28 +334,57 @@ POST /admin/.../tick  (o el scheduler opcional de RunnerDePartida)
   -> UN solo persist para las tres (un fallo a mitad no deja tick aplicado sin NPC resuelto)
 ```
 
-Los ticks siguen siendo la unidad de simulación (Fase D no ha empezado): se avanzan a mano vía
-`POST /admin/.../tick`, o solos si el despliegue configura `INTERVALO_TICK_MS` (**C12**, opt-in — sin
-configurarlo, ninguna partida avanza sola, ni siquiera en los tests). `GET /admin/partidas` descubre qué
-partidas existen en disco, incluidas las que nadie ha reabierto todavía en este proceso.
+El tick es la unidad de integración interna del motor (retirado del contrato hacia afuera en el cierre de la
+Fase D — lo que viaja es `instante`/`momento`). Se avanza a mano vía `POST /admin/.../tick`, o solo por el
+**reloj de mundo** de `RunnerDePartida` (Fase D5) si el despliegue configura `INTERVALO_TICK_MS` (**C12**,
+opt-in — sin configurarlo, ninguna partida avanza sola, ni siquiera en los tests). El reloj ancla su
+referencia a "ahora" al abrir la partida: **el mundo no avanza mientras el servidor está caído**, y un atraso
+mayor que `MAX_TICKS_POR_PASADA` (5) se descarta en vez de ejecutarse en ráfaga. `GET /admin/partidas`
+descubre qué partidas existen en disco, incluidas las que nadie ha reabierto todavía en este proceso.
 
 ## Persistencia, historial y observabilidad
 
 - Cada partida es un snapshot JSON en disco (`server/persistenciaPartida.ts`), no una base de datos —
   suficiente para el volumen actual; el doc 4 registra por qué no hace falta SQLite todavía (la cola serial ya
-  elimina la concurrencia de escritura).
-- El snapshot incluye estado completo, tick, RNG, IDs, configuración/semilla del mundo y eventos de dominio —
-  no solo el estado "de superficie".
+  elimina la concurrencia de escritura). Se reescribe entero en cada comando aceptado (`.tmp` + `rename`),
+  pero desde el formato **v13** (2026-09-09) es **plano**: ~9 KB da igual la edad de la partida, porque ya no
+  contiene ni el terreno ni el historial (ver los dos puntos siguientes). Antes eran ~450 KB a 35 000 ticks y
+  creciendo.
+- **El mapa no se guarda: se regenera.** El snapshot conserva de `state.mapa` solo `{ version, config }`;
+  `cargarPartida` reconstruye el `MapaGenerado` con `generarMapa(config)` (función pura de la seed). Es lo que
+  el propio `MapaGenerado.version` decía que debía pasar — el rechazo por `worldgenVersion` ya garantizaba que
+  se puede. Eran ~130 KB constantes en cada escritura.
+- **El historial de eventos vive en `<gameId>.eventos.jsonl`**, append-only, hermano del snapshot — mismo
+  patrón que `auditoria.ts` (cuyo comentario ya decía que meter un historial en el estado era "tropezar dos
+  veces con la misma piedra"). `RunnerDePartida` anexa los eventos nuevos tras cada guardado (cortando por
+  `version`, no por `ResultadoComando.eventos`, para cubrir el tick completo); `cargarPartida` rehidrata
+  `GameSessionState.eventosDominio` desde el archivo, así que el cursor `?desde=` funciona igual tras un
+  reinicio. Un fallo de escritura del JSONL no revierte el comando (el snapshot es la fuente de verdad, esto
+  el historial derivado); el cursor no avanza y el siguiente guardado reintenta ese tramo. Las lecturas de
+  estado completo (`EstadoAdmin`/`ProyeccionJugador`) ya no traían `eventosDominio` desde el follow-up de C13
+  (2026-09-05).
+- El snapshot incluye estado, tick, RNG, IDs y `config`/semilla del mundo — no el terreno, no el historial.
+- **`FORMATO_SNAPSHOT_VERSION` es 13 y no hay cadena de migraciones.** La hubo (v1→v12) mientras había
+  partidas de builds anteriores que arrastrar; se retiró el 2026-09-09 al no quedar ninguna. `cargarPartida`
+  acepta solo el formato vigente y rechaza el resto con `FormatoSnapshotNoSoportadoError` — mismo criterio que
+  `persistenciaIdentidad.ts` desde el principio. La próxima mecánica que cambie la forma del snapshot sube el
+  número y, si en ese momento existen partidas que preservar, vuelve a añadir su función de migración puntual.
+- El estado de acceso (usuarios/sesiones/membresías) se persiste aparte en `identidad.json`, en el mismo
+  directorio (`server/persistenciaIdentidad.ts`). El repositorio en disco solo lo cablea `index.ts`; el
+  `crearServidor` por defecto usa el **en memoria** — un embebido que no lo sustituya pierde todo al reiniciar.
 - Los eventos de dominio son estructurados (código estable + payload tipado, A5), no mensajes de log en
   texto. Cada uno lleva la `version` de partida en la que se emitió (**C13**), y
   `GET .../eventos?desde=<version>` sirve solo los nuevos — un cliente que escucha por WebSocket ya no
-  necesita releer el histórico completo para ponerse al día. Las lecturas de estado completo siguen trayendo
-  `eventosDominio` entero, sin cursor todavía (crecen sin techo dentro de una partida larga: 2 → 41 → 102 KB
-  entre los ticks 0 y 200 con 4 facciones) — migrar esas lecturas exige un cliente real usando el cursor
-  primero, que hoy no existe.
+  necesita releer el histórico completo para ponerse al día.
 - No hay historial de línea de tiempo por tick en el servidor (lo que hacía `GameStore` en el prototipo, para
   depuración) — esa herramienta de desarrollo, si se necesita, vive del lado de un cliente de depuración, no
   del backend de producción.
+- **Auditoría** (E2, `server/auditoria.ts`): un JSONL append-only por partida registra todos los comandos —
+  aceptados y rechazados, con la causa — que es lo que `eventosDominio` no cuenta (quién lo pidió, qué se
+  intentó y falló). **Métricas** (E3, `GET /admin/metricas`): cola, duración de tick, ráfagas de catch-up,
+  recuento de comandos por resultado, conexiones y memoria, ensambladas de quien ya lleva cada número.
+- **Sin logging de request**: `Fastify({ logger: false })`. La auditoría cubre comandos; lecturas y errores
+  generales no dejan rastro. Tampoco hay rate limiting ni límite de tamaño de body más allá del esquema.
 
 ## Comunicación, identidad y permisos
 
@@ -339,7 +410,7 @@ partidas existen en disco, incluidas las que nadie ha reabierto todavía en este
 
 - Dirección de dependencias congelada por test (`arquitectura.test.ts`); `acceso/` sin dependencias y
   `session/` síncrona y sin E/S, lo que hace ambas capas triviales de probar con dobles.
-- 951 tests en 95 archivos cubren motor, sesión, acceso y servidor (medido 2026-09-05).
+- 1189 tests en 108 archivos cubren motor, sesión, acceso y servidor (medido 2026-09-09).
 - El mundo generado tiene semilla y versión, y se sirve como asset inmutable cacheado (C11a) en vez de viajar
   en cada respuesta.
 - El snapshot de partida persiste el estado del RNG: una partida recargada continúa siendo determinista, no
@@ -368,14 +439,25 @@ partidas existen en disco, incluidas las que nadie ha reabierto todavía en este
 - Balance (`constants.ts`) servido (**C7**), pero global al proceso — sin overrides por partida/temporada.
 - Fuente de ticks opt-in (**C12**): sin configurar `INTERVALO_TICK_MS`, ninguna partida avanza sola. El
   intervalo, si se configura, es un placeholder de ritmo de juego sin decisión de balance tomada.
-- Las lecturas de estado completo (`EstadoAdmin`/`ProyeccionJugador`) siguen trayendo `eventosDominio` entero,
-  sin el cursor de **C13** — crecen sin techo dentro de una partida larga. Migrarlas exige un cliente real que
-  ya use el cursor, que hoy no existe. El WebSocket sigue difundiendo eventos en bruto, no deltas de estado
-  aplicables — la única reacción de un cliente sin motor a un evento es releer, aunque ahora puede releer solo
-  lo nuevo en vez del estado completo.
-- Niebla de guerra: **implementada** salvo dos piezas — el Paso 4 (visión compartida por alianza, en vivo y
-  solo mientras la alianza esté activa) y el Paso 6 (calibración de los márgenes de visión). Detalle y estado
-  en la sección propia más abajo.
+- El WebSocket difunde eventos en bruto, no deltas de estado aplicables — la única reacción de un cliente sin
+  motor a un evento es releer, aunque desde C13 puede releer solo lo nuevo (`?desde=`) en vez del estado
+  completo.
+- `RunnerDePartida` mantiene el historial de eventos entero en RAM (rehidratado al cargar). ~300 KB a 35 000
+  ticks — nada hoy, pero crece sin techo; el disco ya no (formato v13, JSONL append-only). El día que la RAM
+  importe, acotar la cola en memoria y leer lo antiguo del archivo para un `?desde=` profundo.
+- Niebla de guerra: **implementada** salvo el Paso 6 (calibración de los márgenes de visión contra la vista de
+  ejército). Detalle y estado en la sección propia más abajo.
+- **Un proceso, una partida activa.** `RegistroDePartidas` es un `Map` en memoria; nada shardea ni coordina
+  varios procesos sobre el mismo directorio. Sin historia de escalado horizontal.
+- Identidad de jugador: `proveedorClave` (nick + contraseña, hash scrypt, sin verificación de email ni
+  recuperación de contraseña ni rate-limiting en el login). Suficiente para el playtest; un IdP real sería
+  otro adaptador. El proveedor `dev` sigue activo en el proceso para el cliente de administración local —
+  acepta cualquier sujeto sin verificar, así que la superficie de admin **no debe exponerse en público** tal
+  cual. El repositorio de identidad por defecto de `crearServidor` es el **en memoria** (el proceso real usa
+  el de disco).
+- Respaldos y poda **apagados por defecto** (`MANTENIMIENTO_INTERVALO_MS`): un despliegue que lo olvide no
+  tiene copias.
+- Producción corre TypeScript vía `tsx` directo — no hay target de build para el servidor.
 - El terreno se evalúa en dos sitios: aquí y en el cliente de jugador, que ahora está en otro repositorio.
   Nada verifica automáticamente que sigan de acuerdo (ver la nota de deuda en "Generación de mundo").
 - El cliente jugable completo (UI de comandos, etc.) es trabajo de un repo de interfaz aparte — fuera del

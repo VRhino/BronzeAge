@@ -5,7 +5,7 @@
 // Guarda en memoria y devuelve los mismos objetos que recibe (sin clonar), para que un test pueda mutar un
 // `Usuario` y simular un baneo aplicado por fuera del flujo de autenticación.
 import type { RepositorioIdentidad } from '../repositorio';
-import type { IdentidadVinculada, Membresia, Sesion, Usuario } from '../tipos';
+import type { CredencialLocal, IdentidadVinculada, Membresia, Sesion, Usuario } from '../tipos';
 
 export function repositorioDePrueba(): RepositorioIdentidad {
   const usuarios = new Map<string, Usuario>();
@@ -13,6 +13,7 @@ export function repositorioDePrueba(): RepositorioIdentidad {
   const identidadPorUsuario = new Map<string, IdentidadVinculada>();
   const sesiones = new Map<string, Sesion>();
   const membresias = new Map<string, Membresia>();
+  const credencialesLocales = new Map<string, CredencialLocal>();
   let n = 0;
 
   return {
@@ -31,6 +32,8 @@ export function repositorioDePrueba(): RepositorioIdentidad {
       if (!identidadPorUsuario.has(v.usuarioId)) identidadPorUsuario.set(v.usuarioId, v);
     },
     buscarIdentidadDeUsuario: (usuarioId) => identidadPorUsuario.get(usuarioId),
+    buscarCredencialLocal: (nick) => credencialesLocales.get(nick),
+    guardarCredencialLocal: (c) => void credencialesLocales.set(c.nick, c),
     crearSesion: (s) => void sesiones.set(s.id, s),
     buscarSesion: (id) => sesiones.get(id),
     obtenerMembresia: (usuarioId, gameId) => membresias.get(`${usuarioId}:${gameId}`),

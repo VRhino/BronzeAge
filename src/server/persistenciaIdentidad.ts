@@ -22,7 +22,7 @@ interface ArchivoIdentidad {
   datos: DatosIdentidad;
 }
 
-const VACIO: DatosIdentidad = { usuarios: [], identidades: [], sesiones: [], membresias: [] };
+const VACIO: DatosIdentidad = { usuarios: [], identidades: [], sesiones: [], membresias: [], credencialesLocales: [] };
 
 /** Se lanza al leer un archivo de un formato que esta build no sabe interpretar. Sin migración automática
  * todavía: no hay despliegues reales con datos que migrar. */

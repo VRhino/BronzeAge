@@ -6,7 +6,7 @@
 // `repositorioEnMemoria.ts` (tests y despliegue efímero) y `repositorioEnDisco.ts` (el proceso real, mismo
 // adaptador de memoria con carga/guardado de un JSON atómico). Una base de datos real sería otro adaptador
 // más, sin que `servicioAutenticacion.ts` ni ninguna ruta se enteren.
-import type { IdentidadVinculada, Membresia, Sesion, Usuario } from './tipos';
+import type { CredencialLocal, IdentidadVinculada, Membresia, Sesion, Usuario } from './tipos';
 
 export interface RepositorioIdentidad {
   obtenerUsuario(usuarioId: string): Usuario | undefined;
@@ -17,6 +17,10 @@ export interface RepositorioIdentidad {
    * administradores de la instancia (`server/identidad/administradoresGlobales.ts`), que se configura por
    * `proveedor:sujetoId` —lo que un operador conoce— y no por el `usuarioId` interno, que se asigna solo. */
   buscarIdentidadDeUsuario(usuarioId: string): IdentidadVinculada | undefined;
+  /** Secreto de una cuenta local por nick normalizado, para el proveedor `clave`. `undefined` si ese nick no
+   * está registrado — es lo que distingue "alta nueva" de "verificar" en el flujo de registro/login. */
+  buscarCredencialLocal(nick: string): CredencialLocal | undefined;
+  guardarCredencialLocal(credencial: CredencialLocal): void;
   crearSesion(sesion: Sesion): void;
   buscarSesion(sesionId: string): Sesion | undefined;
   obtenerMembresia(usuarioId: string, gameId: string): Membresia | undefined;

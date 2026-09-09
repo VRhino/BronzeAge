@@ -83,6 +83,9 @@ export interface OpcionesServidor {
    * que `intervaloTickMs`: sin configurarlo no se escribe ni se borra nada por su cuenta — un default que
    * borra archivos es el que nadie nota hasta que ya borró algo que hacía falta. */
   mantenimiento?: ConfiguracionMantenimiento;
+  /** Código de invitación exigido en `POST /v1/registro` (alta de cuenta local). `undefined` = registro
+   * abierto. */
+  codigoRegistro?: string;
 }
 
 export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
@@ -119,6 +122,7 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
     // juntas— y el mismo reloj de pared inyectado que el resto del servidor, para que un test pueda fechar
     // sus líneas de forma determinista en vez de depender de la hora del sistema.
     auditoria: new RegistroDeAuditoria(opciones.directorio, ahora),
+    codigoRegistro: opciones.codigoRegistro,
   };
 
   // Apagado limpio: al cerrar la instancia, parar el reloj de mundo de cada partida abierta y dejar drenar

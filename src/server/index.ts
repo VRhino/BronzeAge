@@ -7,6 +7,9 @@
 //
 // `ADMINISTRADORES` es una lista `proveedor:sujetoId` separada por comas, ej. `dev:jefa,oauth:1234`.
 //
+// `CODIGO_REGISTRO` protege el alta de cuentas locales (`POST /v1/registro`). Sin declararlo, el registro
+// queda abierto. Con él, el cliente debe mandarlo en el cuerpo del alta.
+//
 // `ORIGENES_PERMITIDOS` (Fase C6, CORS) es una lista de orígenes separada por comas, ej.
 // `https://jugador.ejemplo.com,https://admin.ejemplo.com`. Vacía por defecto: sin ella, ningún origen
 // cruzado puede llamar a esta API — mismo criterio que `ADMINISTRADORES`.
@@ -20,12 +23,16 @@ import { join } from 'node:path';
 import { crearServidor } from './api';
 import { crearRegistroProveedores } from '../acceso/proveedorIdentidad';
 import { parsearAdministradores } from './identidad/administradoresGlobales';
-import { proveedoresPorDefecto } from './identidad/proveedoresActivos';
+import { proveedoresDeProceso } from './identidad/proveedoresActivos';
 import { crearRepositorioIdentidadEnDisco } from './identidad/repositorioEnDisco';
 
 const PUERTO = Number(process.env.PUERTO ?? 3000);
 const DIRECTORIO_PARTIDAS = process.env.DIRECTORIO_PARTIDAS ?? './partidas';
 const ADMINISTRADORES = parsearAdministradores(process.env.ADMINISTRADORES);
+// Código de invitación para `POST /v1/registro` (alta de cuenta local con contraseña). Sin declararlo, el
+// registro queda ABIERTO — mismo criterio de "opt-in explícito" que el resto: para un playtest privado va,
+// para un servidor público conviene ponerlo y pasárselo a los jugadores.
+const CODIGO_REGISTRO = process.env.CODIGO_REGISTRO?.trim() || undefined;
 const ORIGENES_PERMITIDOS = (process.env.ORIGENES_PERMITIDOS ?? '')
   .split(',')
   .map((o) => o.trim())
@@ -54,9 +61,10 @@ async function arrancar(): Promise<void> {
     intervaloTickMs: INTERVALO_TICK_MS,
     mantenimiento: MANTENIMIENTO,
     identidad: {
-      proveedores: crearRegistroProveedores(proveedoresPorDefecto()),
+      proveedores: crearRegistroProveedores(proveedoresDeProceso(identidadEnDisco.repositorio)),
       repositorio: identidadEnDisco.repositorio,
     },
+    codigoRegistro: CODIGO_REGISTRO,
     // Cerrar el servidor drena las escrituras de identidad pendientes (ver `alCerrar` en `api.ts`).
     alCerrar: () => identidadEnDisco.esperarEscrituras(),
   });
@@ -83,6 +91,9 @@ async function arrancar(): Promise<void> {
   } else {
     const { intervaloMs, respaldosAConservar, retencionAuditoriaDias } = MANTENIMIENTO;
     console.log(`mantenimiento cada ${intervaloMs} ms — respaldos: ${respaldosAConservar ?? 7}, auditoria: ${retencionAuditoriaDias ?? 30} dias`);
+  }
+  if (CODIGO_REGISTRO === undefined) {
+    console.warn('AVISO: sin CODIGO_REGISTRO — POST /v1/registro esta abierto, cualquiera puede crear una cuenta.');
   }
   if (ORIGENES_PERMITIDOS.length === 0) {
     console.warn('AVISO: sin ORIGENES_PERMITIDOS configurados — CORS desactivado, ningún origen cruzado puede llamar a esta API.');
