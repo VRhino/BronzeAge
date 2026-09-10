@@ -88,10 +88,12 @@ export function otorgarCiudadania(faccion: Faccion, jugadorId: string): Faccion 
 }
 
 /**
- * Retira la ciudadanía (comando `dejarFaccion`, a petición del usuario). Libera también Rey/Embajador si el
- * jugador ocupaba alguno — un cargo de Facción ocupado por quien ya no es ciudadano es un estado inconsistente
- * (aunque `conAutoridadDiplomatica`, `session/comandos/autorizacion.ts`, ya exige ciudadanía además del cargo,
- * así que no habilitaría nada por sí solo; se libera igual para no dejar un "Rey" fantasma en el estado).
+ * Retira la ciudadanía (comando `dejarFaccion`, a petición del usuario).
+ *
+ * **Sucesión del trono (a petición del usuario, 2026-09-10): una Facción SIEMPRE tiene Rey mientras le quede
+ * al menos un ciudadano.** Si se va el Rey, el trono pasa al siguiente de `ciudadanosIds` (orden de ingreso —
+ * el fundador primero). Solo queda `reyId: null` si la Facción se queda sin nadie. Si el heredero ocupaba la
+ * embajada, esta se vacía (la re-designa el nuevo Rey). El Embajador que se va también libera su cargo.
  *
  * NO toca residencia (`Asentamiento.casasCompradas`/`jugadoresFundadoresIds`) ni cargos LOCALES (Gobernador,
  * etc.): Doc 2.5 no define qué pasa con la vivienda al abandonar la Facción, y no existe todavía un comando
@@ -99,11 +101,13 @@ export function otorgarCiudadania(faccion: Faccion, jugadorId: string): Faccion 
  */
 export function quitarCiudadania(faccion: Faccion, jugadorId: string): Faccion {
   if (!esCiudadano(faccion, jugadorId)) return faccion;
+  const ciudadanosIds = faccion.ciudadanosIds.filter((id) => id !== jugadorId);
+  const reyId = faccion.reyId === jugadorId ? (ciudadanosIds[0] ?? null) : faccion.reyId;
   return {
     ...faccion,
-    ciudadanosIds: faccion.ciudadanosIds.filter((id) => id !== jugadorId),
-    reyId: faccion.reyId === jugadorId ? null : faccion.reyId,
-    embajadorId: faccion.embajadorId === jugadorId ? null : faccion.embajadorId,
+    ciudadanosIds,
+    reyId,
+    embajadorId: faccion.embajadorId === jugadorId || faccion.embajadorId === reyId ? null : faccion.embajadorId,
   };
 }
 

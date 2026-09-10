@@ -12,6 +12,7 @@ import type { FastifyInstance } from 'fastify';
 import { puedeJugar } from '../../acceso/rolesDePartida';
 import type { ActorDeComando } from '../../session/comandos/autorizacion';
 import { eventosDominioParaJugador, proyectarParaJugador } from '../../session/proyecciones/jugador';
+import type { RunnerDePartida } from '../runnerDePartida';
 import { ESQUEMA_SESION_AUTH } from '../openapi';
 import { auditarRechazoDeEsquema, ejecutarComandoHttp, ESQUEMA_EJECUTAR_COMANDO, type EjecutarComandoBody } from './comandos';
 import { enviarMapa, ESQUEMA_MAPA } from './mapa';
@@ -26,6 +27,22 @@ import {
 } from './contexto';
 
 const SEGURIDAD_JUGADOR = [{ [ESQUEMA_SESION_AUTH]: [] }];
+
+/**
+ * Proyección de wire completa: `proyectarParaJugador` + los campos IMPUROS que el `RunnerDePartida` calcula y
+ * la capa pura no puede (`preciosReferencia`, `produccionDeAsentamiento`) — ver la nota de cabecera de
+ * `session/proyecciones/jugador.ts`. `produccionDeAsentamiento` solo viaja cuando el jugador está DENTRO de
+ * una plaza (`asentamientos[0]`), que es la única cuya producción tiene sentido enseñar.
+ */
+function conImpuros(runner: RunnerDePartida, jugadorId: string): Record<string, unknown> {
+  const proyeccion = proyectarParaJugador(runner.getState(), jugadorId, runner.geometriaAsentamientos());
+  const dentro = proyeccion.asentamientos[0];
+  return {
+    ...proyeccion,
+    preciosReferencia: runner.preciosReferencia(),
+    ...(dentro ? { produccionDeAsentamiento: runner.produccionDeAsentamiento(dentro.id) } : {}),
+  };
+}
 
 const ESQUEMA_MEMBRESIA = {
   description: 'Unirse a una partida como jugador: crea la Membresia (rol jugador) que exige el resto de esta superficie.',
@@ -124,10 +141,7 @@ export function registrarRutasDeJugador(app: FastifyInstance, deps: Dependencias
     if (!runner) return partidaNoAbierta(reply, gameId);
 
     const jugadorId = resuelto.actor.membresia!.jugadorId!;
-    return reply.send({
-      ...proyectarParaJugador(runner.getState(), jugadorId, runner.geometriaAsentamientos()),
-      preciosReferencia: runner.preciosReferencia(),
-    });
+    return reply.send(conImpuros(runner, jugadorId));
   });
 
   /** Cursor de eventos (Fase C13) — ver `ESQUEMA_EVENTOS`. */
@@ -179,10 +193,7 @@ export function registrarRutasDeJugador(app: FastifyInstance, deps: Dependencias
       const jugadorId = resuelto.actor.membresia!.jugadorId!;
       const actor: ActorDeComando = { rol: 'jugador', jugadorId };
       return ejecutarComandoHttp(reply, runner, request.body, actor, jugadorId, deps.hub, deps.auditoria, (r) => ({
-        proyeccion: {
-          ...proyectarParaJugador(r.getState(), jugadorId, r.geometriaAsentamientos()),
-          preciosReferencia: r.preciosReferencia(),
-        },
+        proyeccion: conImpuros(r, jugadorId),
       }));
     }
   );

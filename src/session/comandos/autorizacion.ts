@@ -227,6 +227,17 @@ function conAutoridadDiplomatica(estado: GameSessionState, jugadorId: string, fa
   return esCiudadano(faccion, jugadorId) && esReyOEmbajadorDe(faccion, jugadorId);
 }
 
+/** Rey de la Facción dueña de ese asentamiento (Doc 2.2: designar Gobernador es potestad exclusiva del Rey,
+ * a petición del usuario 2026-09-10). Es un acto de nivel Facción, como designar Embajador: NO exige que el
+ * Rey resida ni esté presente en la plaza. */
+function esReyDelAsentamiento(estado: GameSessionState, jugadorId: string, asentamientoId: string): boolean {
+  const asentamiento = buscarAsentamiento(estado, asentamientoId);
+  if (!asentamiento) return true;
+  const faccion = buscarFaccion(estado, asentamiento.faccionId);
+  if (!faccion) return true;
+  return esCiudadano(faccion, jugadorId) && esReyDe(faccion, jugadorId);
+}
+
 export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
   // --- Fundación y expansión: Facción propia (con el caso de arranque, ver `puedeFundarEn`) ---
   // El fundador es el propio actor: el comando ya no acepta una lista de fundadores (ver
@@ -285,13 +296,14 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
     },
   },
 
-  // --- Cargos locales: designar Gobernador es directo entre residentes (Doc 2.2, "Fase 0: designación
-  // directa"); los demás cargos los designa el Gobernador vigente. ---
+  // --- Cargos locales: designar Gobernador es potestad EXCLUSIVA del Rey de la Facción (Doc 2.2, a petición
+  // del usuario 2026-09-10 — antes lo hacía cualquier residente); los demás cargos los designa el Gobernador
+  // vigente, residente y presente. ---
   asignarCargoLocal: {
     rolesPermitidos: ['jugador'],
     condicionJugador: (estado, jugadorId, params) =>
       params.cargo === 'gobernador'
-        ? reside(estado, jugadorId, params.asentamientoId)
+        ? esReyDelAsentamiento(estado, jugadorId, params.asentamientoId)
         : residenteConCargo(estado, jugadorId, params.asentamientoId, 'gobernador'),
   },
 

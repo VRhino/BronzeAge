@@ -7,7 +7,6 @@ import { GameSession } from '../gameSession';
 import { crearFaccion, type PayloadFaccionCreada } from '../comandos/crearFaccion';
 import { unirseAFaccion, type PayloadFaccionUnion } from '../comandos/unirseAFaccion';
 import { dejarFaccion, type PayloadFaccionAbandonada } from '../comandos/dejarFaccion';
-import { asignarRey } from '../comandos/cargos';
 import { CIUDADANIA, SIMULACION } from '../../constants';
 
 const OPC = { actor: 'jugador-a' };
@@ -38,6 +37,12 @@ describe('crearFaccion — ciudadanía automática', () => {
     const sesion = GameSession.crear('t', { seed: 1 });
     const r = sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, OPC);
     expect((r.eventos[0]!.payload as PayloadFaccionCreada).fundadorId).toBe(OPC.actor);
+  });
+
+  it('quien crea la Facción queda además como su Rey (2026-09-10: siempre hay Rey)', () => {
+    const sesion = GameSession.crear('t', { seed: 1 });
+    const r = sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, OPC);
+    expect(sesion.getState().facciones.find((f) => f.id === r.datos!.faccionId)!.reyId).toBe(OPC.actor);
   });
 });
 
@@ -154,14 +159,22 @@ describe('dejarFaccion', () => {
     expect(union.ok).toBe(true);
   });
 
-  it('libera el trono si el que se va era Rey', () => {
+  it('el trono queda vacío solo si se va el último ciudadano', () => {
     const sesion = GameSession.crear('t', { seed: 1 });
     const faccionId = sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, OPC).datos!.faccionId;
-    sesion.ejecutar(asignarRey, { faccionId, jugadorId: OPC.actor }, OPC);
-    expect(sesion.getState().facciones[0]!.reyId).toBe(OPC.actor);
+    expect(sesion.getState().facciones[0]!.reyId).toBe(OPC.actor); // Rey desde la creación
 
     sesion.ejecutar(dejarFaccion, {}, OPC);
     expect(sesion.getState().facciones.find((f) => f.id === faccionId)!.reyId).toBeNull();
+  });
+
+  it('sucesión: si se va el Rey y quedan ciudadanos, el trono pasa al siguiente', () => {
+    const sesion = GameSession.crear('t', { seed: 1 });
+    const faccionId = sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, OPC).datos!.faccionId;
+    sesion.ejecutar(unirseAFaccion, { faccionId }, { ...OPC, actor: 'jugador-b' });
+
+    sesion.ejecutar(dejarFaccion, {}, OPC); // se va el Rey (el creador)
+    expect(sesion.getState().facciones.find((f) => f.id === faccionId)!.reyId).toBe('jugador-b');
   });
 
   it('rechaza si el actor no es ciudadano de ninguna Facción', () => {

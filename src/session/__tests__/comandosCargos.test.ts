@@ -11,33 +11,33 @@ import { OPC, partidaConAsentamiento } from './fixtures';
 
 
 describe('asignarRey / asignarEmbajador', () => {
-  it('éxito: un ciudadano fundador puede ser Rey, y queda registrado en su historial', () => {
-    const { sesion, faccionId, fundador } = partidaConAsentamiento();
-    const resultado = sesion.ejecutar(asignarRey, { faccionId, jugadorId: fundador }, OPC);
-
-    expect(resultado.ok).toBe(true);
+  it('la Facción nace con Rey: su creador (a petición del usuario, 2026-09-10)', () => {
+    const { sesion, fundador } = partidaConAsentamiento();
     expect(sesion.getState().facciones[0]!.reyId).toBe(fundador);
-    expect(sesion.getState().historialJugadores[fundador]!.some((e) => e.mensaje.includes('Rey'))).toBe(true);
   });
 
-  it('rechazo: un no-ciudadano no puede ser Rey', () => {
-    const { sesion, faccionId } = partidaConAsentamiento();
+  it('traspaso: el Rey vigente puede pasar el trono a otro ciudadano, y queda en el historial', () => {
+    const { sesion, faccionId, vecino } = partidaConAsentamiento();
+    const resultado = sesion.ejecutar(asignarRey, { faccionId, jugadorId: vecino }, OPC);
+
+    expect(resultado.ok).toBe(true);
+    expect(sesion.getState().facciones[0]!.reyId).toBe(vecino);
+    expect(sesion.getState().historialJugadores[vecino]!.some((e) => e.mensaje.includes('Rey'))).toBe(true);
+  });
+
+  it('rechazo: un no-ciudadano no puede ser Rey; el trono no cambia', () => {
+    const { sesion, faccionId, fundador } = partidaConAsentamiento();
     const resultado = sesion.ejecutar(asignarRey, { faccionId, jugadorId: 'forastero' }, OPC);
 
     expect(resultado.ok).toBe(false);
     expect(resultado.codigoError).toBe('cargo.invalido');
-    expect(sesion.getState().facciones[0]!.reyId).toBeNull();
+    expect(sesion.getState().facciones[0]!.reyId).toBe(fundador);
   });
 
-  it('Embajador exige que la Facción ya tenga Rey', () => {
+  it('Embajador: el Rey lo designa (la Facción siempre tiene Rey desde su creación)', () => {
     const { sesion, faccionId, fundador } = partidaConAsentamiento();
-    const sinRey = sesion.ejecutar(asignarEmbajador, { faccionId, jugadorId: fundador }, OPC);
-    expect(sinRey.ok).toBe(false);
-    expect(sinRey.codigoError).toBe('cargo.invalido');
-
-    sesion.ejecutar(asignarRey, { faccionId, jugadorId: fundador }, OPC);
-    const conRey = sesion.ejecutar(asignarEmbajador, { faccionId, jugadorId: fundador }, OPC);
-    expect(conRey.ok).toBe(true);
+    const r = sesion.ejecutar(asignarEmbajador, { faccionId, jugadorId: fundador }, OPC);
+    expect(r.ok).toBe(true);
     expect(sesion.getState().facciones[0]!.embajadorId).toBe(fundador);
   });
 });

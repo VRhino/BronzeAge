@@ -88,11 +88,11 @@ Título dinámico de PRESTIGIO (no cargo mecánico nuevo) otorgado al Rey de la 
 ---
 
 ## Cargos (nivel Facción)
-- **Rey:** autoridad sobre vasallaje, políticas superiores hacia los asentamientos de la Facción, y todas las funciones del Embajador. Por defecto en Liga-por-vasallaje; electo por voto en Liga-por-alianza.
+- **Rey:** autoridad sobre vasallaje, designación de Gobernadores, políticas superiores hacia los asentamientos de la Facción, y todas las funciones del Embajador. Por defecto en Liga-por-vasallaje; electo por voto en Liga-por-alianza. **Fase 0: una Facción SIEMPRE tiene Rey** — quien la crea lo es, y al abandonarla el trono pasa al siguiente ciudadano (ver Doc 2.2).
 - **Embajador:** crea alianzas y declara guerras. Designado por el Rey.
 
 ## Cargos (nivel asentamiento, uno de cada por asentamiento)
-- **Gobernador:** electo por ciudadanos, máxima autoridad del asentamiento, designa al resto de cargos locales.
+- **Gobernador:** máxima autoridad del asentamiento, designa al resto de cargos locales. Canónicamente electo por ciudadanos; **en Fase 0 lo designa el Rey de la Facción** (ver Doc 2.2).
 - **Tesorero:** gestión económica (acuerdos de trueque + Mercado).
 - **General:** mando militar del asentamiento.
 - **Maestro de Obras:** gestiona prioridades de auto-construcción, bonus de tiempos de construcción.

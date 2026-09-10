@@ -428,6 +428,22 @@ describe('GET /jugador/partidas/:gameId (proyeccion, Fase C4 Slice 1)', () => {
     expect(Object.keys(res.json().preciosReferencia).sort()).toEqual(['cobre', 'estano', 'livestock', 'madera', 'piedra', 'trigo'].sort());
   });
 
+  it('produccionDeAsentamiento: viaja solo cuando el jugador pisa una plaza propia (la calcula el servidor)', async () => {
+    await partidaCreada('g1');
+    const ana = await jugadorEn('g1', 'ana');
+
+    // En el mundo, sin plaza: no viaja.
+    const fuera = await app.inject({ method: 'GET', url: '/v1/jugador/partidas/g1', headers: ana });
+    expect(fuera.json().produccionDeAsentamiento).toBeUndefined();
+
+    const f = await app.inject({ method: 'POST', url: '/v1/jugador/partidas/g1/comandos', headers: ana, payload: { tipo: 'crearFaccion', params: { nombre: 'Micenas' } } });
+    await app.inject({ method: 'POST', url: '/v1/jugador/partidas/g1/comandos', headers: ana, payload: { tipo: 'fundarAsentamiento', params: { faccionId: f.json().resultado.datos.faccionId, posicion: { x: 500, y: 500 } } } });
+
+    // Dentro de la plaza recién fundada: viaja (array — vacío mientras solo esté el Centro Urbano).
+    const dentro = await app.inject({ method: 'GET', url: '/v1/jugador/partidas/g1', headers: ana });
+    expect(Array.isArray(dentro.json().produccionDeAsentamiento)).toBe(true);
+  });
+
   it('no incluye asentamientos de una Faccion rival, aunque el admin sí los vea', async () => {
     await partidaCreada('g1');
     const ana = await jugadorEn('g1', 'ana');

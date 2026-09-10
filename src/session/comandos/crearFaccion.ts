@@ -1,4 +1,5 @@
 import { crearFaccion as crearFaccionEngine, esCiudadano, otorgarCiudadania } from '../../engine/faccion';
+import { asignarRey } from '../../engine/cargos';
 import { CIUDADANIA } from '../../constants';
 import { dias, transcurrido } from '../../domain/tiempo';
 import { exito } from './tipos';
@@ -20,6 +21,11 @@ export interface ParamsCrearFaccion {
  * Crea una Facción nueva y otorga ciudadanía inmediata a quien la crea (a petición del usuario, 2026-08-27:
  * antes nacía sin ciudadanos, y solo se convertía en la Facción de su fundador cuando este fundaba un
  * asentamiento o compraba una casa — un hueco entre "crear" y "pertenecer" que no tenía por qué existir).
+ *
+ * Quien la crea queda además como su **primer Rey** (a petición del usuario, 2026-09-10): una Facción SIEMPRE
+ * tiene Rey. Es el caso base de "Rey automático si la Liga se formó por vasallaje" (Doc 2.2) aplicado a una
+ * Facción de un solo miembro — sin votación. La sucesión al abandonar el trono la cubre `quitarCiudadania`
+ * (`engine/faccion.ts`): pasa al siguiente ciudadano mientras quede alguno.
  *
  * Tres validaciones viven AQUÍ y no en el motor — son reglas de ESTA partida, no del modelo de juego:
  *  - nombre vacío / duplicado (ya existían)
@@ -43,7 +49,10 @@ export const crearFaccion = comando<ParamsCrearFaccion, { faccionId: string }>((
     rechazar(CODIGOS_ERROR.faccionCooldownCreacion);
   }
 
-  const nueva = otorgarCiudadania(crearFaccionEngine(`faccion-custom-${ctx.ids.siguiente()}`, nombre), ctx.actor);
+  const nueva = asignarRey(
+    otorgarCiudadania(crearFaccionEngine(`faccion-custom-${ctx.ids.siguiente()}`, nombre), ctx.actor),
+    ctx.actor
+  );
   // Lo que anduvo sin bandera pasa a ser conocimiento de la Facción recién creada (Doc 1.3).
   const siguiente = conExploracionFundida({ ...estado, facciones: [...estado.facciones, nueva] }, ctx.actor, nueva.id);
   return exito(
@@ -51,7 +60,7 @@ export const crearFaccion = comando<ParamsCrearFaccion, { faccionId: string }>((
     [
       evento(ctx, {
         codigo: 'faccion.creada',
-        mensaje: `Se crea la Facción "${nueva.nombre}", fundada por ${ctx.actor}.`,
+        mensaje: `Se crea la Facción "${nueva.nombre}", fundada por ${ctx.actor}, que queda como su Rey.`,
         payload: { faccionId: nueva.id, nombre: nueva.nombre, fundadorId: ctx.actor } satisfies PayloadFaccionCreada,
       }),
     ],

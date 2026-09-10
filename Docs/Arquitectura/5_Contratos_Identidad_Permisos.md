@@ -150,10 +150,12 @@ cumplirse. "Facción propia" significa `Jugador.faccionId` del actor debe coinci
 | `fundarAsentamiento`, `lanzarCaravanaFundacion`, `desarmarCaravanaFundacion` | jugador | Facción propia |
 | `crearFaccion` | jugador | **RESUELTO 2026-08-27** (antes "abierto"): no ser ya ciudadano de ninguna Facción, y no haber abandonado una hace menos de `CIUDADANIA.cooldownCreacionFaccionDias` (7 días) — ambas son rechazo de DOMINIO dentro del propio comando (`faccion.ya_pertenece`/`faccion.cooldown_creacion`), no de esta matriz: cualquier `jugador` puede intentarlo, igual que nombre vacío/duplicado. Otorga ciudadanía inmediata a quien la crea |
 | `unirseAFaccion` | jugador | no ser ya ciudadano de OTRA Facción (`faccion.ya_pertenece`); ya ciudadano de la misma es idempotente. Sin cooldown — solo `crearFaccion` lo tiene |
-| `dejarFaccion` | jugador | ser ciudadano de alguna (`faccion.no_pertenece` si no); sin parámetros, solo puede dejar la PROPIA. Libera Rey/Embajador si los ocupaba; NO libera residencia ni cargos locales (limitación documentada en Doc 2.5) |
+| `dejarFaccion` | jugador | ser ciudadano de alguna (`faccion.no_pertenece` si no); sin parámetros, solo puede dejar la PROPIA. Si era Rey, el trono pasa al siguiente ciudadano (queda vacío solo si era el último — Doc 2.2); si era Embajador, libera la embajada. NO libera residencia ni cargos locales (limitación documentada en Doc 2.5) |
 | `alternarFaccionNpc` | jugador (rey) o administrador_partida | Facción propia si es jugador; sin restricción si es admin |
-| `asignarRey`, `asignarEmbajador` | jugador | Facción propia, cargo de rey vigente (o primera asignación) |
-| `asignarCargoLocal` | jugador | residente del asentamiento, con el cargo que otorga ese poder según reglas de dominio ya existentes |
+| `asignarRey` | jugador | ciudadano de la Facción y (trono vacío **o** ser el Rey vigente). Nota: `crearFaccion` ya deja Rey, así que "trono vacío" solo se da tras una conquista/fusión |
+| `asignarEmbajador` | jugador | ciudadano de la Facción y ser su Rey |
+| `asignarCargoLocal` (Gobernador) | jugador | **ser el REY de la Facción dueña del asentamiento** (2026-09-10 — antes: cualquier residente). Acto de nivel Facción: no exige residir ni estar presente |
+| `asignarCargoLocal` (resto de cargos) | jugador | residente **y presente** en el asentamiento, y Gobernador vigente de él |
 | `comprarCasa` | jugador | Facción propia del asentamiento objetivo (ciudadanía) |
 | `activarPolitica`, `anadirEdificioManualmente`, `quitarDeCola`, `moverEnCola`, `mejorarEdificioAhora`, `pausarAutoConstruccion`, `reanudarAutoConstruccion`, `calibrarReservaManual` | jugador | residente + cargo exigido por el comando (`gobernador`/`maestroObras`, ya validado hoy por el motor) |
 | `renombrarAsentamiento` | jugador | residente (o cargo específico — abierto, hoy no lo exige el motor) |
@@ -188,7 +190,7 @@ cargo correspondiente. Las dos jerarquías son ortogonales:
 
 ```text
 Eje técnico (este documento):     jugador -> moderador -> administrador_partida -> administrador_global
-Eje de juego (ya existe, dominio): residente -> {gobernador|tesorero|general|maestroObras|sacerdote} -> rey/embajador de Facción
+Eje de juego (ya existe, dominio): ciudadano -> rey de Facción -> designa Gobernador -> Gobernador designa {tesorero|general|maestroObras|sacerdote}
 ```
 
 ## Preguntas abiertas

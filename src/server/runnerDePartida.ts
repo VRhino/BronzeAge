@@ -21,6 +21,7 @@ import { eventosDesde, type GeometriaAsentamientos } from '../session/estado';
 import { calcularPrecioReferencia } from '../engine/market';
 import { computeTodasLasZonas, computeZonasFusionadasPorFaccion } from '../engine/zones';
 import { trazadoParaAsentamiento } from '../engine/trazado';
+import { produccionPorMinuto, type ProduccionItem } from '../engine/asentamientoQuery';
 import { PRECIO_BASE } from '../constants';
 import type { AlmacenDeObjetos } from './almacen/almacenDeObjetos';
 import { cargarPartida, guardarPartida } from './persistenciaPartida';
@@ -259,6 +260,18 @@ export class RunnerDePartida {
       this.cacheGeometria = { sobre: asentamientos, valor };
     }
     return this.cacheGeometria.valor;
+  }
+
+  /** Producción por minuto de mundo de cada edificio productor/transformador de un asentamiento — la muestra
+   * el cliente de jugador en la pantalla de asentamiento. No la calcula un cliente: `produccionPorMinuto`
+   * necesita la fachada `Mapa` (bosques, stock de yacimientos) y el polígono de zona, entrada privilegiada.
+   * Barata: solo lectura sobre estado ya en memoria, sin caché propia — se pide como mucho una vez por
+   * proyección y solo para la plaza que el jugador pisa. */
+  produccionDeAsentamiento(asentamientoId: string): ProduccionItem[] {
+    const asentamiento = this.sesion.getState().asentamientos.find((a) => a.id === asentamientoId);
+    if (!asentamiento) return [];
+    const zona = this.geometriaAsentamientos().zonas.find((z) => z.asentamientoId === asentamientoId)?.poligono ?? [];
+    return produccionPorMinuto(asentamiento, this.sesion.getMapa(), zona);
   }
 
   /**

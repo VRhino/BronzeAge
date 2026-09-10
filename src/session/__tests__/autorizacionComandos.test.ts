@@ -245,12 +245,11 @@ describe('alternarFaccionNpc', () => {
   });
 
   it('un ciudadano que no es Rey se rechaza; el Rey pasa', () => {
-    const { sesion, faccionId, fundador } = partidaConAsentamiento();
+    const { sesion, faccionId, fundador, vecino } = partidaConAsentamiento();
     const params = { faccionId, activo: true };
 
-    expect(verificarAutorizacion('alternarFaccionNpc', params, sesion.getState(), jugador(fundador))).toEqual(POR_DOMINIO);
-
-    sesion.ejecutar(asignarRey, { faccionId, jugadorId: fundador }, OPC);
+    // El fundador es Rey desde que creó la Facción; el vecino es ciudadano (compró casa) pero no Rey.
+    expect(verificarAutorizacion('alternarFaccionNpc', params, sesion.getState(), jugador(vecino))).toEqual(POR_DOMINIO);
     expect(verificarAutorizacion('alternarFaccionNpc', params, sesion.getState(), jugador(fundador))).toEqual(AUTORIZADO);
   });
 });
@@ -342,12 +341,11 @@ describe('diplomacia: ciudadanía + autoridad de Rey/Embajador', () => {
   }
 
   it('romperRelacion exige ser Rey/Embajador de la Facción iniciadora', () => {
-    const { sesion, faccionId, faccionRivalId, fundador } = partidaConFaccionRival();
+    const { sesion, faccionId, faccionRivalId, fundador, vecino } = partidaConFaccionRival();
     const params = { relacionId: 'r1', iniciadorFaccionId: faccionId };
 
-    expect(verificarAutorizacion('romperRelacion', params, conRelacion(sesion, 'alianza', faccionId, faccionRivalId), jugador(fundador))).toEqual(POR_DOMINIO);
-
-    sesion.ejecutar(asignarRey, { faccionId, jugadorId: fundador }, OPC);
+    // vecino es ciudadano de la Facción iniciadora pero ni Rey ni Embajador; el fundador es su Rey.
+    expect(verificarAutorizacion('romperRelacion', params, conRelacion(sesion, 'alianza', faccionId, faccionRivalId), jugador(vecino))).toEqual(POR_DOMINIO);
     expect(verificarAutorizacion('romperRelacion', params, conRelacion(sesion, 'alianza', faccionId, faccionRivalId), jugador(fundador))).toEqual(AUTORIZADO);
   });
 
@@ -361,12 +359,10 @@ describe('diplomacia: ciudadanía + autoridad de Rey/Embajador', () => {
   });
 
   it('anexionar exige autoridad en la Facción absorbente', () => {
-    const { sesion, faccionId, faccionRivalId, fundador } = partidaConFaccionRival();
+    const { sesion, faccionId, faccionRivalId, fundador, vecino } = partidaConFaccionRival();
     const params = { faccionAId: faccionId, faccionBId: faccionRivalId };
 
-    expect(verificarAutorizacion('anexionar', params, sesion.getState(), jugador(fundador))).toEqual(POR_DOMINIO);
-
-    sesion.ejecutar(asignarRey, { faccionId, jugadorId: fundador }, OPC);
+    expect(verificarAutorizacion('anexionar', params, sesion.getState(), jugador(vecino))).toEqual(POR_DOMINIO);
     expect(verificarAutorizacion('anexionar', params, sesion.getState(), jugador(fundador))).toEqual(AUTORIZADO);
   });
 });

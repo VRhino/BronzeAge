@@ -82,6 +82,7 @@ import {
   type Rejilla,
 } from '../../engine/exploracion';
 import { MEMORIA_VACIA, type FichaConocida } from '../../engine/memoria';
+import type { ProduccionItem } from '../../engine/asentamientoQuery';
 import {
   eventosDesde,
   idDeMapa,
@@ -319,6 +320,12 @@ export interface ProyeccionJugador {
    * impuro) y esta función NO lo rellena — igual que `mapaId`, es parte del contrato de wire pero lo añade
    * el llamador HTTP, ver `server/rutas/jugador.ts`. */
   preciosReferencia: Record<string, number>;
+  /** Producción por minuto de mundo de cada edificio productor/transformador de la plaza que el jugador PISA
+   * (`asentamientos[0]`) — `undefined` si está en el mundo. `produccionPorMinuto` (`engine/asentamientoQuery.ts`)
+   * necesita la fachada `Mapa` y el polígono de zona (entrada privilegiada: bosques, stock de yacimientos),
+   * así que el cliente de jugador —sin motor— no puede calcularlo. Lo rellena `RunnerDePartida` y lo fusiona
+   * la ruta HTTP, igual que `preciosReferencia`. */
+  produccionDeAsentamiento?: ProduccionItem[];
 }
 
 function faccionDe(estado: GameSessionState, jugadorId: string): string | null {
@@ -531,7 +538,7 @@ export function proyectarParaJugador(
   estado: GameSessionState,
   jugadorId: string,
   geometria: GeometriaAsentamientos
-): Omit<ProyeccionJugador, 'preciosReferencia'> {
+): Omit<ProyeccionJugador, 'preciosReferencia' | 'produccionDeAsentamiento'> {
   const { faccionId, asentamientosPropios, esPropio } = propioDeJugador(estado, jugadorId);
 
   // La plaza que el jugador PISA, que es la única cuyo interior viaja (Doc 1.10.1). Se exige además que sea
