@@ -313,6 +313,7 @@ app.innerHTML = `
             </select>
           </label>
           <button type="button" id="regenerar-btn">Regenerar mundo</button>
+          <p class="legend-note" id="regenerar-estado" hidden></p>
         </div>
       </div>
     </div>
@@ -2017,11 +2018,41 @@ setInterval(() => {
   if (!document.hidden) void gameStore.refrescar();
 }, 5000);
 
-document.getElementById('regenerar-btn')!.addEventListener('click', async () => {
-  const confirmado = window.confirm('Esto descarta la partida actual y crea una nueva. Se pierde todo el progreso. ¿Continuar?');
-  if (!confirmado) return;
+// Confirmación en dos clics en vez de `window.confirm`: el diálogo nativo lo bloquean navegadores embebidos y
+// el "no volver a preguntar" — y cuando devuelve `false` el botón no hacía nada ni lo decía. El primer clic
+// arma el botón (rojo, 5 s); el segundo regenera. `#regenerar-estado` da el resultado, éxito o error.
+const regenerarBtn = document.getElementById('regenerar-btn') as HTMLButtonElement;
+const regenerarEstado = document.getElementById('regenerar-estado')!;
+let regenerarArmado = false;
+let regenerarTimer: ReturnType<typeof setTimeout> | undefined;
+
+function desarmarRegenerar(): void {
+  regenerarArmado = false;
+  regenerarBtn.classList.remove('btn-armado');
+  regenerarBtn.textContent = 'Regenerar mundo';
+  if (regenerarTimer) clearTimeout(regenerarTimer);
+}
+
+regenerarBtn.addEventListener('click', async () => {
+  if (!regenerarArmado) {
+    regenerarArmado = true;
+    regenerarBtn.classList.add('btn-armado');
+    regenerarBtn.textContent = '⚠ Confirmar — borra la partida actual';
+    regenerarEstado.hidden = true;
+    regenerarTimer = setTimeout(desarmarRegenerar, 5000);
+    return;
+  }
+  desarmarRegenerar();
   const region = regionSelect.value as RegionId | '';
-  await gameStore.regenerarMundo(Number(seedInput.value) || 0, region || undefined);
+  const seed = Number(seedInput.value) || 0;
+  regenerarBtn.disabled = true;
+  regenerarEstado.hidden = false;
+  regenerarEstado.textContent = 'Regenerando mundo…';
+  const ok = await gameStore.regenerarMundo(seed, region || undefined);
+  regenerarBtn.disabled = false;
+  regenerarEstado.textContent = ok
+    ? `✓ Partida nueva creada · seed ${seed}${region ? ` · ${REGION_NOMBRE[region as RegionId]}` : ' · región libre'}`
+    : '✗ No se pudo regenerar — ver el Registro para el motivo';
 });
 
 document.getElementById('exportar-btn')!.addEventListener('click', () => {

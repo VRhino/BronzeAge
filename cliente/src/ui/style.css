@@ -2602,6 +2602,18 @@ select:hover, input:hover {
   margin-top: auto;
 }
 
+/* Botón "armado" para el segundo clic de confirmación de "Regenerar mundo" (ver main.ts). */
+button.btn-armado,
+button.btn-armado:hover {
+  border-color: var(--admin-danger);
+  background: #6b2f28;
+  color: #ffe3dd;
+}
+
+#regenerar-estado {
+  margin-top: 8px;
+}
+
 @media (max-width: 760px) {
   .admin-titlebar {
     align-items: flex-start;

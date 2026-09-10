@@ -853,7 +853,7 @@ export class GameStore {
    * (`crearOResumirPartida(..., forzar: true)`, ver `apiCliente.ts`). Pierde todo lo que hubiera en la
    * partida en curso; la interfaz debe confirmar con el usuario ANTES de llamar a esto, no lo hace `GameStore`.
    */
-  async regenerarMundo(seed: number, region?: RegionId): Promise<void> {
+  async regenerarMundo(seed: number, region?: RegionId): Promise<boolean> {
     try {
       await crearOResumirPartida(this.gameId, seed, region, true);
       // Partida NUEVA: el historial anterior no es de esta, y sus `version` empiezan otra vez en 0 — sin
@@ -867,10 +867,13 @@ export class GameStore {
       this.mapaCache = null;
       this.zonasFusionadasCache = null;
       this.logEfimero = [];
+      this.notify();
+      return true;
     } catch (err) {
       this.registrarRechazoEfimero(this.mensajeDeError(err));
+      this.notify();
+      return false;
     }
-    this.notify();
   }
 
   /** Serializa la simulación completa (mundo, asentamientos, facciones, log, historial de jugadores...) a
