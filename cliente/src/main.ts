@@ -213,7 +213,7 @@ app.innerHTML = `
       <button class="tab-btn" data-tab="jugadores">Jugadores</button>
       <button class="tab-btn" data-tab="politicas">Políticas</button>
       <button class="tab-btn" data-tab="registros">Registros</button>
-      <button class="tab-btn" data-tab="generacionMundo">Generación de mundo</button>
+      <button class="tab-btn" data-tab="generacionMundo">Mundo</button>
     </div>
 
 
@@ -293,9 +293,13 @@ app.innerHTML = `
     </div>
 
     <div class="tab-panel" id="tab-generacionMundo" hidden>
-      <div class="section-title registros-heading">Generación de mundo</div>
-      <p class="legend-note registros-intro">Regenera el mapa procedural del mundo.</p>
+      <div class="section-title registros-heading">Mundo</div>
+      <p class="legend-note registros-intro">Datos de la partida conectada y regeneración del mapa procedural.</p>
       <div class="controls-grid world-generation-grid">
+        <div class="controls">
+          <h2>Datos de la partida</h2>
+          <div class="kv-grid" id="info-partida"></div>
+        </div>
         <div class="controls">
           <h2>Regenerar mundo</h2>
           <p class="legend-note">Descarta la partida actual y crea una nueva con la seed y región indicadas — acción destructiva, pide confirmación.</p>
@@ -381,6 +385,26 @@ const politicaPanelEl = document.getElementById('politica-panel')!;
 const economiaPanelEl = document.getElementById('economia-panel')!;
 const seedInput = document.getElementById('seed-input') as HTMLInputElement;
 const regionSelect = document.getElementById('region-select') as HTMLSelectElement;
+const infoPartidaEl = document.getElementById('info-partida')!;
+
+/** Pestaña "Mundo": identifica a qué partida está conectada esta consola. `gameId` sale del estado; el resto
+ * lo inyecta `vite.config.ts` desde el entorno del servidor de dev (ver `vite-env.d.ts`). "Local" vs "En la
+ * nube" se deduce de si el backend proxeado es localhost. */
+function renderInfoPartida(state: GameState): void {
+  const backendUrl = import.meta.env.VITE_BACKEND_URL ?? '';
+  const esLocal = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?\/?$/i.test(backendUrl);
+  const codigo = import.meta.env.VITE_CODIGO_INVITACION ?? '';
+  const filas: [string, string][] = [
+    ['Nombre', state.gameId],
+    ['Ubicación', backendUrl ? (esLocal ? 'Local' : 'En la nube') : '—'],
+    ['Backend', backendUrl || '—'],
+    ['Proveedor', import.meta.env.VITE_PROVEEDOR_AUTH || 'dev'],
+    ['Código de invitación', codigo || '— (registro abierto)'],
+  ];
+  infoPartidaEl.innerHTML = filas
+    .map(([k, v]) => `<div class="kv-row"><span>${k}</span><span>${v}</span></div>`)
+    .join('');
+}
 
 // Fase C8: el administrador observa, no interactúa como jugador — los selects de abajo solo alimentan
 // paneles de SOLO CONSULTA (materiales comerciables, estado de flota, catálogo de reclutamiento). Los
@@ -1907,6 +1931,7 @@ function render(): void {
   renderPanelEconomia(state);
   renderLeyenda(state);
   renderRegistro(state);
+  renderInfoPartida(state);
 }
 
 // Única suscripción: cualquier acción del store dispara un re-render. La interfaz nunca

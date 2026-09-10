@@ -1,6 +1,9 @@
 # Cliente de depuración / administración — Bronze Age Collapse
 
-> **v0.1.0 · último cambio 2026-09-08** — cableado del bloque "economía del oro" (coste de oro por soldado en
+> **v0.1.1 · último cambio 2026-09-10** — documentación reconciliada con el backend: la niebla de guerra ya
+> está implementada; este cliente sigue siendo solo de lectura y continúa acoplado al motor.
+>
+> El cambio funcional anterior (2026-09-08) cableó el bloque "economía del oro" (coste de oro por soldado en
 > el catálogo de reclutamiento) y de la ocupación post-conquista (Doc 5.12.9): badge "ocupada" en la lista de
 > asentamientos, banner de ocupación + minutos restantes + factores en el detalle, nota en la pestaña Militar,
 > recaudación/mantenimiento anotados como reducido/congelado por ocupación, marca "(dañado)" en los edificios
@@ -33,9 +36,9 @@ hablar con el backend por red. Eso convierte `@motor/*` en un defecto a eliminar
 repuntar — quedan descartadas las opciones que este README recomendaba antes (copiar el motor, submódulo,
 paquete npm).
 
-El detalle de lo que había que resolver en el backend (hitos C7–C13, todos completos ahora — salvo C4
-Slice 2, niebla de guerra, bloqueado en una decisión de balance que ningún doc de este repo fija) está en el
-roadmap (`Docs/Arquitectura/3_Plan_Evolucion_Roadmap.md`) y diagnosticado en
+Los hitos de aislamiento del backend C7–C13 están completos y la niebla de guerra, que fue el antiguo
+"Slice 2" de C4, también está implementada. El detalle histórico del aislamiento está en el roadmap
+(`Docs/Arquitectura/3_Plan_Evolucion_Roadmap.md`) y diagnosticado en
 detalle en `Docs/Arquitectura/4_Plan_Evolucion_Tareas.md` § "Diagnóstico de aislamiento del cliente". Ver
 también el repositorio `BronzeAgeClient`, que ya prueba que un cliente sin motor puede hablar con este
 backend. **La
@@ -68,7 +71,10 @@ npm install
 npm run dev
 ```
 
-`vite.config.ts` proxya `/v1` entero hacia `:3000` para evitar CORS en desarrollo.
+`vite.config.ts` proxya `/v1` entero hacia `:3000` para evitar CORS en desarrollo. `BACKEND_URL` lo repunta a
+otra instancia (`BACKEND_URL=https://…onrender.com npm run dev`). La pestaña **Mundo** de la consola muestra a
+qué partida está conectada: nombre (`VITE_GAME_ID`), Local/En la nube y backend (de `BACKEND_URL`), proveedor
+(`PROVEEDOR_AUTH`, por defecto `dev`) y código de invitación (`CODIGO_REGISTRO`, el mismo del backend).
 
 El sujeto se cambia con `VITE_USUARIO`; el que se use debe figurar en `ADMINISTRADORES` del servidor, o el
 backend responderá 403 al crear la partida. Sin `ADMINISTRADORES` no hay ningún administrador y nadie puede

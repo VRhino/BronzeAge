@@ -15,6 +15,14 @@ export default defineConfig({
   // El target por defecto de Vite no lo admite, así que se declara el mismo que ya usa `tsconfig.json` — sin
   // esto `vite build` falla, aunque `vite dev` funcione.
   build: { target: 'es2022' },
+  // La pestaña "Mundo" muestra a qué partida está conectada la consola. Estas tres salen del entorno del
+  // servidor de dev (mismas variables que ya usa `BACKEND_URL` arriba y `CODIGO_REGISTRO` en el backend), no
+  // de config duplicada: `BACKEND_URL=https://… CODIGO_REGISTRO=… npm run dev` y la pestaña lo refleja.
+  define: {
+    'import.meta.env.VITE_BACKEND_URL': JSON.stringify(process.env.BACKEND_URL ?? 'http://localhost:3000'),
+    'import.meta.env.VITE_CODIGO_INVITACION': JSON.stringify(process.env.CODIGO_REGISTRO ?? ''),
+    'import.meta.env.VITE_PROVEEDOR_AUTH': JSON.stringify(process.env.PROVEEDOR_AUTH ?? 'dev'),
+  },
   server: {
     port: 5173,
     // El backend (Fastify) corre aparte, con todo bajo `/v1` (Fase C6: versionado del contrato). El proxy
