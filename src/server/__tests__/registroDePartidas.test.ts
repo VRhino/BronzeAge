@@ -56,6 +56,28 @@ describe('RegistroDePartidas — fuente de ticks (Fase C12)', () => {
     expect(runner.getState().tick).toBeGreaterThan(0);
   });
 
+  it('descartarYCrear detiene el runner anterior — no sigue persistiendo el snapshot por detrás', async () => {
+    // Regresión: si el reloj del runner viejo sigue vivo tras `descartarYCrear`, sigue escribiendo el
+    // snapshot en cada tick y el runner nuevo (versión 0) choca al primer comando con "alguien más escribió
+    // este snapshot primero".
+    const registro = new RegistroDePartidas(almacen, 10);
+    const anterior = await registro.abrir('g1', { seed: 1 });
+
+    await esperar(200);
+    const tickAlDescartar = anterior.getState().tick;
+    expect(tickAlDescartar).toBeGreaterThan(4);
+
+    const nuevo = await registro.descartarYCrear('g1', { seed: 2 });
+    await esperar(50);
+    nuevo.detenerRelojDeMundo();
+    await nuevo.esperarColaVacia();
+
+    // El viejo quedó congelado en el tick que tenía: su reloj se paró antes de crear el nuevo.
+    expect(anterior.getState().tick).toBe(tickAlDescartar);
+    // El nuevo arrancó de cero, ajeno a la versión alta que el viejo tenía en disco.
+    expect(nuevo.getState().tick).toBeLessThan(tickAlDescartar);
+  });
+
   it('reabrir una partida guardada hace un rato la reanuda donde estaba, sin catch-up', async () => {
     // De extremo a extremo, la decisión del 2026-09-05: el mundo no avanza mientras el servidor está caído.
     // Este test probaba justo lo contrario hasta esa fecha (era la verificación de D5).

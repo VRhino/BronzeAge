@@ -89,6 +89,15 @@ export class RegistroDePartidas {
    * disco seguiría siendo el de la partida DESCARTADA hasta el primer comando/tick — un reinicio del proceso
    * en ese hueco reviviría exactamente lo que `forzar: true` pedía borrar. */
   async descartarYCrear(gameId: string, config: ConfiguracionPartida): Promise<RunnerDePartida> {
+    // Parar el runner anterior ANTES de crear el nuevo: si no, su reloj de mundo (`setInterval`) sigue
+    // vivo y sigue persistiendo el snapshot en cada tick. El runner nuevo empieza en versión 0 y, al
+    // primer comando, `guardarPartida` ve en disco la versión alta del viejo y rechaza con "alguien más
+    // escribió este snapshot primero". Mismo apagado ordenado que `cerrar()`.
+    const anterior = this.runners.get(gameId);
+    if (anterior) {
+      anterior.detenerRelojDeMundo();
+      await anterior.esperarColaVacia();
+    }
     this.runners.delete(gameId);
     // `forzar: true`: la partida descartada puede seguir en disco con una version > 0 — este reemplazo,
     // que empieza en 0, es deliberado, no el conflicto de concurrencia que `guardarPartida` normalmente
