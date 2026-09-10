@@ -56,6 +56,18 @@ describe('RegistroDePartidas — fuente de ticks (Fase C12)', () => {
     expect(runner.getState().tick).toBeGreaterThan(0);
   });
 
+  it('descartarYCrear con intervaloTickMs propio arranca el reloj aunque el proceso no lo tenga', async () => {
+    const registro = new RegistroDePartidas(almacen); // sin default de proceso: ninguna partida avanzaría sola
+    const runner = await registro.descartarYCrear('g1', { seed: 1 }, 10);
+
+    await esperar(120);
+    expect(runner.intervaloRelojDeMundoMs()).toBe(10);
+    expect(runner.getState().tick).toBeGreaterThan(0);
+
+    runner.detenerRelojDeMundo();
+    await runner.esperarColaVacia();
+  });
+
   it('descartarYCrear detiene el runner anterior — no sigue persistiendo el snapshot por detrás', async () => {
     // Regresión: si el reloj del runner viejo sigue vivo tras `descartarYCrear`, sigue escribiendo el
     // snapshot en cada tick y el runner nuevo (versión 0) choca al primer comando con "alguien más escribió

@@ -853,9 +853,9 @@ export class GameStore {
    * (`crearOResumirPartida(..., forzar: true)`, ver `apiCliente.ts`). Pierde todo lo que hubiera en la
    * partida en curso; la interfaz debe confirmar con el usuario ANTES de llamar a esto, no lo hace `GameStore`.
    */
-  async regenerarMundo(seed: number, region?: RegionId): Promise<boolean> {
+  async regenerarMundo(seed: number, region?: RegionId, intervaloTickMs?: number): Promise<boolean> {
     try {
-      await crearOResumirPartida(this.gameId, seed, region, true);
+      await crearOResumirPartida(this.gameId, seed, region, true, intervaloTickMs);
       // Partida NUEVA: el historial anterior no es de esta, y sus `version` empiezan otra vez en 0 — sin
       // reiniciar el cursor, el de la partida vieja los filtraría todos y la consola saldría vacía.
       this.eventos = [];

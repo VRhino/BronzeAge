@@ -313,6 +313,15 @@ body {
   border-bottom: 10px solid #c0392b;
 }
 
+/* Rombo: forma propia de un ejército / columna en el mapa (ver `draw`, ui/canvas.ts). */
+.swatch-rhombus {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  transform: rotate(45deg);
+  border: 1px solid #1b1a17;
+}
+
 .controls-panel {
   display: flex;
   flex-direction: column;

@@ -88,7 +88,7 @@ export class RegistroDePartidas {
    * Persiste la nueva partida antes de devolverla (`crearYPersistir`, Fase C12): sin esto, el archivo en
    * disco seguiría siendo el de la partida DESCARTADA hasta el primer comando/tick — un reinicio del proceso
    * en ese hueco reviviría exactamente lo que `forzar: true` pedía borrar. */
-  async descartarYCrear(gameId: string, config: ConfiguracionPartida): Promise<RunnerDePartida> {
+  async descartarYCrear(gameId: string, config: ConfiguracionPartida, intervaloTickMs?: number): Promise<RunnerDePartida> {
     // Parar el runner anterior ANTES de crear el nuevo: si no, su reloj de mundo (`setInterval`) sigue
     // vivo y sigue persistiendo el snapshot en cada tick. El runner nuevo empieza en versión 0 y, al
     // primer comando, `guardarPartida` ve en disco la versión alta del viejo y rechaza con "alguien más
@@ -104,12 +104,16 @@ export class RegistroDePartidas {
     // detecta (ver su comentario).
     const runner = await RunnerDePartida.crearYPersistir(gameId, config, { almacen: this.almacen, ahora: this.ahora }, { forzar: true });
     this.runners.set(gameId, runner);
-    this.arrancarRelojSiConfigurado(runner);
+    this.arrancarRelojSiConfigurado(runner, intervaloTickMs);
     return runner;
   }
 
-  private arrancarRelojSiConfigurado(runner: RunnerDePartida): void {
-    if (this.intervaloTickMs !== undefined) runner.iniciarRelojDeMundo(this.intervaloTickMs);
+  /** `intervaloOverride` (Fase E, consola de administración): al regenerar, el operador puede fijar la
+   * velocidad de tick de ESA partida por encima del `INTERVALO_TICK_MS` del proceso — o encender el reloj de
+   * mundo aunque el proceso arrancara sin él. Solo en memoria: un reinicio vuelve al valor del proceso. */
+  private arrancarRelojSiConfigurado(runner: RunnerDePartida, intervaloOverride?: number): void {
+    const intervalo = intervaloOverride ?? this.intervaloTickMs;
+    if (intervalo !== undefined) runner.iniciarRelojDeMundo(intervalo);
   }
 
   /** Detiene el reloj de mundo de cada partida abierta y espera a que su cola serial drene — apagado limpio

@@ -45,6 +45,25 @@ const REGION_NOMBRE: Record<RegionId, string> = {
   mesopotamia: 'Mesopotamia',
 };
 
+/** Opciones del selector "Velocidad de tick" al regenerar (ms de reloj de PARED entre ticks). Un tick =
+ * 1 minuto de mundo (`SIMULACION.duracionTickMs`), así que 1000 ms = 1 día de mundo cada 24 s reales. */
+const TICK_INTERVALOS: [number, string][] = [
+  [500, '2 ticks/s (rápido)'],
+  [1000, '1 tick/s'],
+  [2000, '1 tick cada 2 s'],
+  [5000, '1 tick cada 5 s'],
+  [10000, '1 tick cada 10 s'],
+  [30000, '1 tick cada 30 s'],
+  [60000, '1 tick por minuto (tiempo real)'],
+];
+
+function fmtIntervaloTick(ms: number | null | undefined): string {
+  if (ms == null) return 'reloj parado (solo tick manual)';
+  const conocido = TICK_INTERVALOS.find(([valor]) => valor === ms);
+  if (conocido) return conocido[1];
+  return ms % 1000 === 0 ? `1 tick cada ${ms / 1000} s` : `1 tick cada ${ms} ms`;
+}
+
 /** Biomas (Fase 0.1) en orden de elevación creciente — así la leyenda se lee como una escala de altura.
  * Usado con el toggle "Detalle de biomas" activado (`mostrarDetalleBiomas`, ver `BIOMA_COLOR`). */
 const BIOMA_NOMBRE: [BiomaTipo, string][] = [
@@ -312,6 +331,12 @@ app.innerHTML = `
                 .join('')}
             </select>
           </label>
+          <label>Velocidad de tick
+            <select id="tick-intervalo">
+              <option value="">Por defecto del servidor</option>
+              ${TICK_INTERVALOS.map(([ms, txt]) => `<option value="${ms}">${txt}</option>`).join('')}
+            </select>
+          </label>
           <button type="button" id="regenerar-btn">Regenerar mundo</button>
           <p class="legend-note" id="regenerar-estado" hidden></p>
         </div>
@@ -386,6 +411,7 @@ const politicaPanelEl = document.getElementById('politica-panel')!;
 const economiaPanelEl = document.getElementById('economia-panel')!;
 const seedInput = document.getElementById('seed-input') as HTMLInputElement;
 const regionSelect = document.getElementById('region-select') as HTMLSelectElement;
+const tickIntervaloSelect = document.getElementById('tick-intervalo') as HTMLSelectElement;
 const infoPartidaEl = document.getElementById('info-partida')!;
 
 /** Pestaña "Mundo": identifica a qué partida está conectada esta consola. `gameId` sale del estado; el resto
@@ -401,6 +427,7 @@ function renderInfoPartida(state: GameState): void {
     ['Backend', backendUrl || '—'],
     ['Proveedor', import.meta.env.VITE_PROVEEDOR_AUTH || 'dev'],
     ['Código de invitación', codigo || '— (registro abierto)'],
+    ['Velocidad de tick', fmtIntervaloTick(state.relojDeMundoIntervaloMs)],
   ];
   infoPartidaEl.innerHTML = filas
     .map(([k, v]) => `<div class="kv-row"><span>${k}</span><span>${v}</span></div>`)
@@ -1742,6 +1769,7 @@ function renderLeyenda(state: GameState): void {
     </div>
     <div class="legend-group">
       <h3>Otros</h3>
+      <div class="legend-row"><span class="swatch-rhombus" style="background:#c9a35a"></span>Ejército / columna (un rombo por participante; color = Facción, dorado = sin Facción aún)</div>
       <div class="legend-row"><span class="swatch-triangle"></span>Caravana en tránsito (color = Facción de origen)</div>
       <div class="legend-row"><span class="swatch-poly" style="background:#8b1a1a"></span>Campamento de bandidos</div>
     </div>
@@ -2045,13 +2073,14 @@ regenerarBtn.addEventListener('click', async () => {
   desarmarRegenerar();
   const region = regionSelect.value as RegionId | '';
   const seed = Number(seedInput.value) || 0;
+  const intervaloTick = Number(tickIntervaloSelect.value) || undefined;
   regenerarBtn.disabled = true;
   regenerarEstado.hidden = false;
   regenerarEstado.textContent = 'Regenerando mundo…';
-  const ok = await gameStore.regenerarMundo(seed, region || undefined);
+  const ok = await gameStore.regenerarMundo(seed, region || undefined, intervaloTick);
   regenerarBtn.disabled = false;
   regenerarEstado.textContent = ok
-    ? `✓ Partida nueva creada · seed ${seed}${region ? ` · ${REGION_NOMBRE[region as RegionId]}` : ' · región libre'}`
+    ? `✓ Partida nueva creada · seed ${seed}${region ? ` · ${REGION_NOMBRE[region as RegionId]}` : ' · región libre'}${intervaloTick ? ` · ${fmtIntervaloTick(intervaloTick)}` : ''}`
     : '✗ No se pudo regenerar — ver el Registro para el motivo';
 });
 

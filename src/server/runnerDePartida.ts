@@ -439,6 +439,14 @@ export class RunnerDePartida {
     };
   }
 
+  /** ms de reloj de PARED entre ticks para esta partida, o `null` si su reloj de mundo está parado (solo
+   * avanza con `POST .../tick`). Lo fija `INTERVALO_TICK_MS` del proceso, o el override que reciba
+   * `RegistroDePartidas.descartarYCrear` al regenerar. La consola de administración lo muestra en la
+   * pestaña "Mundo". */
+  intervaloRelojDeMundoMs(): number | null {
+    return this.relojDeMundo?.intervaloMs ?? null;
+  }
+
   private encolar<T>(trabajo: () => Promise<T>): Promise<T> {
     // `pendientes` cuenta lo ENCOLADO y aún sin resolver, incluida la entrada en curso. Es la señal que
     // delata un tick largo bloqueando comandos: si crece y no baja, la cola no está drenando.

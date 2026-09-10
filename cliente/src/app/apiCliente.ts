@@ -104,10 +104,16 @@ async function peticion<T>(url: string, opciones: RequestInit = {}): Promise<T> 
  * lo es (descarta y empieza de cero): lo usa `GameStore.regenerarMundo`, nunca el bootstrap de
  * `GameStore.crear`. Exige rol `administrador_global`; `forzar`, además, no lo permite un `moderador`.
  */
-export function crearOResumirPartida(gameId: string, seed: number, region?: RegionId, forzar?: boolean): Promise<ResumenPartida> {
+export function crearOResumirPartida(
+  gameId: string,
+  seed: number,
+  region?: RegionId,
+  forzar?: boolean,
+  intervaloTickMs?: number
+): Promise<ResumenPartida> {
   return peticion<ResumenPartida>(`${V1}/admin/partidas`, {
     method: 'POST',
-    body: JSON.stringify({ gameId, seed, region, forzar }),
+    body: JSON.stringify({ gameId, seed, region, forzar, intervaloTickMs }),
   });
 }
 

@@ -41,6 +41,11 @@ interface CrearPartidaBody {
    * interfaz debe confirmarlo con el usuario antes de pedirlo. Exige `administrador_partida` o
    * `administrador_global`; un `moderador` NO puede (doc 5: sin acceso a regeneración de mundo). */
   forzar?: boolean;
+  /** ms de reloj de pared entre ticks para esta partida (solo se aplica con `forzar`): arranca —o repunta—
+   * su reloj de mundo a esta velocidad, por encima del `INTERVALO_TICK_MS` del proceso. Vive solo en memoria:
+   * un reinicio del servidor vuelve al valor del proceso. Herramienta de administración, ver la pestaña
+   * "Mundo" de la consola. */
+  intervaloTickMs?: number;
 }
 
 const REGIONES: readonly RegionId[] = ['greciaContinental', 'anatolia', 'egeo', 'nilo', 'mesopotamia'];
@@ -92,6 +97,7 @@ const ESQUEMA_CREAR_PARTIDA = {
       seed: { type: 'number' },
       region: { type: 'string', enum: REGIONES },
       forzar: { type: 'boolean' },
+      intervaloTickMs: { type: 'number', minimum: 50 },
     },
   },
   response: {
@@ -374,7 +380,7 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
    * (`alternarFaccionNpc`), porque esa matriz razona sobre roles DE PARTIDA.
    */
   app.post<{ Body: CrearPartidaBody }>('/admin/partidas', { schema: ESQUEMA_CREAR_PARTIDA }, async (request, reply) => {
-    const { gameId, seed, region, forzar } = request.body;
+    const { gameId, seed, region, forzar, intervaloTickMs } = request.body;
     const resuelto = resolverActor(request, deps, gameId);
     if (!resuelto) return sinSesion(reply);
     if (!puedeCrearPartida(resuelto.actor)) {
@@ -385,7 +391,7 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
     }
 
     const runner = forzar
-      ? await deps.partidas.descartarYCrear(gameId, { seed, region })
+      ? await deps.partidas.descartarYCrear(gameId, { seed, region }, intervaloTickMs)
       : await deps.partidas.abrir(gameId, { seed, region }).catch((err: unknown) => {
           if (err instanceof PartidaYaAbiertaError) return undefined;
           throw err;
@@ -423,6 +429,7 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
     return reply.send({
       ...vistaAdminDeEstado(acceso.runner.getState()),
       preciosReferencia: acceso.runner.preciosReferencia(),
+      relojDeMundoIntervaloMs: acceso.runner.intervaloRelojDeMundoMs(),
       ...acceso.runner.geometriaAsentamientos(),
     });
   });

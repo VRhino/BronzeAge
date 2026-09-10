@@ -575,9 +575,10 @@ export function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, s
   // Ejércitos en campaña (Doc 5.12.2): traza de ruta + ROMBOS, uno por cada jugador que va dentro, apilados
   // medio superpuestos y del color de la Facción.
   //
-  // El número de rombos no es un dato del estado: se DERIVA de los `jugadorId` distintos de sus escuadrones
-  // (Doc 5.12.1 — salir solo es un ejército de un participante). Así, de un vistazo, el tamaño del racimo
-  // dice cuánta gente va en esa columna, que es justo lo que un rival necesita para decidir si le planta cara.
+  // El número de rombos es `ejercito.participantes.length` (Doc 5.12.1): quién va DENTRO, aporte tropas o no
+  // — un ciudadano que sale solo a explorar es un ejército de un participante y SIN escuadrones. Derivarlo de
+  // los `jugadorId` de los escuadrones (como se hacía antes) lo dejaba invisible en el mapa. Así, de un
+  // vistazo, el tamaño del racimo dice cuánta gente va en esa columna.
   //
   // Rombo y no triángulo (caravana) ni círculo (asentamiento) ni diamante rojo (campamento bandido): las
   // cuatro cosas que se mueven o amenazan en este mapa tienen forma propia, para no depender del color.
@@ -598,8 +599,14 @@ export function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, s
 
   for (const ejercito of state.ejercitos) {
     const origen = state.asentamientos.find((a) => a.id === ejercito.origenAsentamientoId);
-    const color = origen ? faccionColor(origen.faccionId, state.facciones) : faccionColor(ejercito.faccionId, state.facciones);
-    const participantes = new Set(ejercito.escuadrones.map((e) => e.jugadorId)).size;
+    // Columna de un ciudadano sin Facción todavía (Doc 5.12.1): dorado neutro, no el color de una Facción,
+    // para no confundirla con un ejército.
+    const color = ejercito.faccionId
+      ? origen
+        ? faccionColor(origen.faccionId, state.facciones)
+        : faccionColor(ejercito.faccionId, state.facciones)
+      : '#f1d38b';
+    const participantes = Math.max(1, ejercito.participantes.length);
     const r = 5;
     // Cada rombo se desplaza medio ancho respecto al anterior (solape del 50%), y el racimo entero se
     // recentra para que la POSICIÓN del ejército siga cayendo en el medio y no en el primer rombo.

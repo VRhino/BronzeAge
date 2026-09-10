@@ -263,16 +263,20 @@ export type EstadoAdmin = Omit<GameSessionState, 'mapa' | 'eventosDominio'> &
      * almacenado. Es la referencia temporal del contrato: `tick` sigue viajando pero es la unidad interna. */
     instante: Instante;
     preciosReferencia: Record<string, number>;
+    /** ms de reloj de PARED entre ticks para esta partida, o `null` si su reloj de mundo está parado. Impuro
+     * como `preciosReferencia`: vive en el `RunnerDePartida` (`server/`), no en el estado — lo fusiona la
+     * ruta HTTP. La consola de administración lo muestra en la pestaña "Mundo". */
+    relojDeMundoIntervaloMs: number | null;
   };
 
 /** `eventosDominio` sale de aquí desde el 2026-09-05 (follow-up de C13): crecía sin techo y era el 87-88 %
  * de esta respuesta, para reenviar en cada lectura un historial que el cliente ya tenía. Se pide por el
  * cursor `GET .../eventos?desde=<version>`. Ver la nota de cabecera de `session/proyecciones/jugador.ts`. */
-const CAMPOS_IMPUROS = ['preciosReferencia', 'zonas', 'zonasFusionadas', 'trazadoPorAsentamiento'] as const;
+const CAMPOS_IMPUROS = ['preciosReferencia', 'zonas', 'zonasFusionadas', 'trazadoPorAsentamiento', 'relojDeMundoIntervaloMs'] as const;
 
 /** Devuelve todo MENOS los campos impuros de arriba: los añade el llamador HTTP — spread sobre este resultado
- * más `{ preciosReferencia: runner.preciosReferencia(), ...runner.geometriaAsentamientos() }` completa un
- * `EstadoAdmin`. */
+ * más `{ preciosReferencia: runner.preciosReferencia(), relojDeMundoIntervaloMs:
+ * runner.intervaloRelojDeMundoMs(), ...runner.geometriaAsentamientos() }` completa un `EstadoAdmin`. */
 export function vistaAdminDeEstado(estado: GameSessionState): Omit<EstadoAdmin, (typeof CAMPOS_IMPUROS)[number]> {
   const { mapa, eventosDominio, ...resto } = estado;
   return { ...resto, mapaId: idDeMapa(mapa), instante: instanteDeTick(estado.tick) };
