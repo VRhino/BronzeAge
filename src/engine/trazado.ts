@@ -612,7 +612,7 @@ const ANGULO_RANURA_0 = -Math.PI / 2;
 /** Categoría funcional de cada tipo de edificio "urbano". Ausente = sin categoría fija: Granja/Corral van a
  * las afueras y Palacio junto al centro (ver `sitiosParaTipo`); Centro Urbano es el origen;
  * mina/minaCobre/minaEstano/cantera viven en el mapa general (`ambito: 'mapa'`), fuera de esta rejilla. */
-export type CategoriaAsentamiento = 'residencial' | 'industria' | 'militar' | 'mercado' | 'almacenaje' | 'carpinteria';
+export type CategoriaAsentamiento = 'residencial' | 'industria' | 'militar' | 'mercado' | 'almacenaje';
 
 /** Categoría de cada tipo — exportado para que `app/gameStore.ts` pueda pasárselo a `ui/canvas.ts`
  * (acoplamiento 0: la UI solo lee este dato, nunca lo decide). */
@@ -636,9 +636,6 @@ export const CATEGORIA_POR_TIPO: Partial<Record<EdificioTipo, CategoriaAsentamie
   // Los puestos comparten el barrio del Mercado: así la acreción que ya existe (`distanciaAlBarrio`) los
   // agrupa alrededor de la pieza principal sola, sin ninguna regla nueva de "quedar pegados".
   puestoMercado: 'mercado',
-  // Mismo truco que puestoMercado/mercado (Etapa 3, §9): categoría propia cuyo único ancla es la Carpintería
-  // misma, así el mecanismo de ancla de una sola instancia sirve sin tocarlo para pegar los talleres a ella.
-  tallerCarpinteria: 'carpinteria',
 };
 
 /**
@@ -687,24 +684,22 @@ function bordeAfinDe(rect: RectanguloCeldas, celdasAfines: Set<string>): number 
 
 /**
  * Ancla PRIMARIA de cada categoría — la que ya existe (o se construye normalmente) sin pasar por el árbol de
- * anclas (Etapa 5). Residencial, mercado y carpinteria la tienen: Centro Urbano nace con la fundación, Mercado
- * y Carpintería son construcción normal por cola (aunque, como son ancla de su propia categoría y no tienen a
- * qué atraerse, su propia colocación también pasa por el árbol de anclas — ver `sitiosParaTipo`). Militar e
- * industria NO tienen ancla primaria — nacen enteramente por el árbol, ver `ANCLA_SATURACION_POR_CATEGORIA` y
- * `crearAnclaNueva`.
+ * anclas (Etapa 5). Residencial y mercado la tienen: Centro Urbano nace con la fundación, Mercado es
+ * construcción normal por cola (aunque, como es ancla de su propia categoría y no tiene a qué atraerse, su
+ * propia colocación también pasa por el árbol de anclas — ver `sitiosParaTipo`). Militar e industria NO tienen
+ * ancla primaria — nacen enteramente por el árbol, ver `ANCLA_SATURACION_POR_CATEGORIA` y `crearAnclaNueva`.
  */
 export const ANCLA_PRIMARIA_POR_CATEGORIA: Partial<Record<CategoriaAsentamiento, EdificioTipo>> = {
   residencial: 'centroUrbano',
   mercado: 'mercado',
-  carpinteria: 'carpinteria',
 };
 
 /**
  * Anclas DE SATURACIÓN de cada categoría (lista en vez de tipo único desde la Etapa 4, a petición del usuario)
  * — los tipos entre los que se sortea (determinista, ver `crearAnclaNueva`) cuando hace falta una ancla nueva
  * de esta categoría. Militar e industria siguen con un solo tipo — mismo mecanismo, sin caso especial, listas
- * de un elemento. Mercado y carpinteria no tienen entrada aquí a propósito: son su propia ancla primaria y
- * nunca necesitan una ancla adicional.
+ * de un elemento. Mercado no tiene entrada aquí a propósito: es su propia ancla primaria y nunca necesita una
+ * ancla adicional.
  */
 export const ANCLA_SATURACION_POR_CATEGORIA: Partial<Record<CategoriaAsentamiento, EdificioTipo[]>> = {
   residencial: ['plaza', 'pozo', 'parque'],
@@ -1919,9 +1914,7 @@ export function anclaActivaParaCategoria(
  * - Palacio, Almacén y Leñera: 360°, el más CERCANO al centro, dentro de la trama urbana, sin ancla propia (a
  *   petición del usuario: Almacén/Leñera llenan huecos libres desde Centro Urbano hacia afuera, sin cuña).
  * - Mercado: es su propia ancla primaria — no tiene a qué atraerse, nace directamente por el árbol único de
- *   anclas (`crearAnclaNueva`), igual que cualquier otra ancla (Etapa 5, Lógica 1). Carpintería, en cambio, es
- *   categoría `militar` (satélite de Plaza de Armas, como Barracón) — solo `tallerCarpinteria` usa a
- *   Carpintería como su propia ancla, y eso vive en `crearTalleresDeCarpinteria`, construction.ts.
+ *   anclas (`crearAnclaNueva`), igual que cualquier otra ancla (Etapa 5, Lógica 1).
  * - Resto (con categoría y ancla de saturación — residencial/militar/industria): atracción dura a la instancia
  *   ALCANZABLE Y CON HUECO más cercana al origen (`anclaMasCercana`, filtrada por `!anclaLlena` — Lógica 2).
  *   Si no hay ninguna, devuelve `[]` — quien llama (`asegurarAnclaPara`, construction.ts) debe haber
@@ -2106,9 +2099,9 @@ function calcularSitiosParaTipo(
   const categoria = CATEGORIA_POR_TIPO[tipo];
   if (!categoria) return [];
 
-  // Mercado/Carpintería son su propia ancla primaria (Etapa 5): nacen por el árbol único de anclas igual que
-  // cualquier otra. El id es solo semilla determinista para esta consulta — el llamante genera el id real al
-  // comprometer la construcción (`crearEdificioEnCola`, construction.ts).
+  // Mercado es su propia ancla primaria (Etapa 5): nace por el árbol único de anclas igual que cualquier otra.
+  // El id es solo semilla determinista para esta consulta — el llamante genera el id real al comprometer la
+  // construcción (`crearEdificioEnCola`, construction.ts).
   if (ANCLA_PRIMARIA_POR_CATEGORIA[categoria] === tipo) {
     const resultado = crearAnclaNueva(asentamiento.id, ocupados, tipo, `consulta-${tipo}`, asentamiento.recintos ?? []);
     return resultado ? [{ punto: resultado.nuevaAncla.posicion, rotado: resultado.nuevaAncla.rotado ?? false }] : [];

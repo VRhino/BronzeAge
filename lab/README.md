@@ -56,7 +56,7 @@ la experiencia en cada tick.)
   *Dimensiones de edificios* (agrupadas por categoría de ancla asociada: residencial, mercado, militar, industria, almacenaje, afueras; anclas primero en cada grupo), *Trazado y anclas*
   (separación mínima y zona de seguridad entre anclas, ancho de calle, caps de corredor, radio y banda de
   afueras, largo de fila), y *Piezas dependientes* (formas de puesto de mercado, cuántos puestos añade cada
-  nivel de Mercado, talleres de la Carpintería). Nada cambia hasta "Aplicar y refundar"; "Restaurar valores"
+  nivel de Mercado). Nada cambia hasta "Aplicar y refundar"; "Restaurar valores"
   vuelve a los de `constants.ts`. Todo campo que difiera de su valor original se marca en **amarillo**
   (`input.lab-cambiado`) — para no perder de vista qué se ha tocado.
 

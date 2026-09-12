@@ -624,8 +624,6 @@ export const EDIFICIO_CATALOGO = {
   plaza: { costo: {}, tiempoConstruccionMinutos: 0 },
   plazaDeArmas: { costo: {}, tiempoConstruccionMinutos: 0 },
   patioDeGremios: { costo: {}, tiempoConstruccionMinutos: 0 },
-  // Pieza satélite de la zona de Carpintería (§9) — mismo patrón que puestoMercado, ver `crearTalleresDeCarpinteria`.
-  tallerCarpinteria: { costo: {}, tiempoConstruccionMinutos: 0 },
   // Variedad de anclas residenciales (Etapa 4, punto 4) — mismo patrón "marcador gratis" que plaza.
   pozo: { costo: {}, tiempoConstruccionMinutos: 0 },
   parque: { costo: {}, tiempoConstruccionMinutos: 0 },
@@ -889,8 +887,6 @@ export const REJILLA_ASENTAMIENTO = {
  */
 export const EDIFICIO_TAMANO: Record<string, { ancho: number; alto: number }> = {
   centroUrbano: { ancho: 6, alto: 6 },
-  // 5x4 → 4x2 (Etapa 3, §9): Carpintería pasa a ser la PIEZA PRINCIPAL de su propia zona de tres piezas — los
-  // otros dos talleres (`tallerCarpinteria`) ocupan el resto de lo que antes era un bloque monolítico único.
   carpinteria: { ancho: 8, alto: 4 },
   fundicion: { ancho: 4, alto: 4 },
   curtiduria: { ancho: 4, alto: 4 },
@@ -908,8 +904,6 @@ export const EDIFICIO_TAMANO: Record<string, { ancho: number; alto: number }> = 
   plaza: { ancho: 4, alto: 4 },
   plazaDeArmas: { ancho: 4, alto: 4 },
   patioDeGremios: { ancho: 4, alto: 4 },
-  // Taller de carpintería (§9): igual que las otras piezas satélite pequeñas.
-  tallerCarpinteria: { ancho: 4, alto: 4 },
   // Variedad de anclas residenciales (Etapa 4, punto 4): pozo el marcador mínimo (1x1 original), parque el
   // único no cuadrado de los tres (3x2 original), que ejercita la orientación intercambiable también en anclas.
   pozo: { ancho: 2, alto: 2 },
@@ -955,16 +949,6 @@ export const MERCADO_PUESTOS_POR_NIVEL: Record<number, number[]> = {
   1: [1, 1, 2, 2, 3],
   2: [1, 1, 2, 2, 3, 3, 3],
   3: [1, 2, 2, 3],
-};
-
-/**
- * Zona de la Carpinteria (§9 del doc de trazado urbano). A diferencia del Mercado, no escalona por nivel
- * interno: los `talleres` nacen todos de una vez al completarse la pieza principal. Objeto (no un literal
- * suelto) para que el laboratorio pueda ajustar `talleres` en caliente -- misma razon que
- * `MERCADO_PUESTOS_POR_NIVEL`.
- */
-export const CARPINTERIA_ZONA = {
-  talleres: 2,
 };
 
 /** Rinde de trigo de UNA Granja según su nivel interno — la mejora duplica producción y costo a la vez (ver
@@ -1041,7 +1025,7 @@ export const TRAZADO = {
   separacionMinimaAnclas: 12,
   // Zona de seguridad entre anclas (a petición del usuario): un PISO DURO, no relajable — a diferencia de
   // `separacionMinimaAnclas`, que el doc describe como negociable, esta nunca cede. Ningún ancla real nueva
-  // (Mercado, Carpintería — `ANCLAS_REALES`, engine/trazado.ts) puede colocarse a menos de esta distancia,
+  // (Mercado — `ANCLAS_REALES`, engine/trazado.ts) puede colocarse a menos de esta distancia,
   // BORDE A BORDE (`gapCeldas` en `huecoEnDireccion`), de OTRA ancla ya construida. Si ningún hueco la
   // cumple, no hay sitio válido en ese tick — la colocación se salta o se reintenta, igual que cualquier otro
   // "no cabe" del trazado.

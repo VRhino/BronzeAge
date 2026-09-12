@@ -61,7 +61,6 @@ const NOMBRE: Record<EdificioTipo, string> = {
   plaza: 'Plaza',
   plazaDeArmas: 'Plaza de Armas',
   patioDeGremios: 'Patio de Gremios',
-  tallerCarpinteria: 'Taller de carpintería',
   pozo: 'Pozo',
   parque: 'Parque',
 };
@@ -85,7 +84,6 @@ const GRATIS_NO_CONSTRUIBLES = new Set<EdificioTipo>([
   'plaza',
   'plazaDeArmas',
   'patioDeGremios',
-  'tallerCarpinteria',
   'pozo',
   'parque',
 ]);

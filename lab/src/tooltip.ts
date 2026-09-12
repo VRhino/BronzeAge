@@ -54,12 +54,8 @@ function ficha(asentamiento: Asentamiento, edificio: Edificio, codigoAncla: stri
   if (edificio.semillaSaturada) lineas.push('<span style="color:#c98">semilla saturada</span>');
   if (edificio.anclaLlena) lineas.push('<span style="color:#c98">ancla llena</span>');
 
-  const piezas = asentamiento.edificios.filter(
-    (e) =>
-      (edificio.tipo === 'mercado' && e.tipo === 'puestoMercado') ||
-      (edificio.tipo === 'carpinteria' && e.tipo === 'tallerCarpinteria')
-  );
-  if (edificio.tipo === 'mercado' || edificio.tipo === 'carpinteria') {
+  if (edificio.tipo === 'mercado') {
+    const piezas = asentamiento.edificios.filter((e) => e.tipo === 'puestoMercado');
     lineas.push(`<span style="color:#a89f88">piezas dependientes: ${piezas.length}</span>`);
   }
 

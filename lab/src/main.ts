@@ -43,7 +43,7 @@ const RECURSOS_LAB: RecursoTipo[] = [
 /** Tipos construibles manualmente en la pestaña "Construcción manual" — mismo criterio que
  * `anadirEdificioManualmente` (engine/construction.ts): excluye Centro Urbano y Puesto de Mercado (ambos
  * rechazados ahí explícitamente) y los "marcadores gratis" que solo nacen por la regla de semilla de grupo
- * (plaza/plazaDeArmas/patioDeGremios/tallerCarpinteria/pozo/parque, Etapa 5) — esos no tienen sitio propio
+ * (plaza/plazaDeArmas/patioDeGremios/pozo/parque, Etapa 5) — esos no tienen sitio propio
  * fuera del árbol de anclas y `sitioParaTipo` no sabe colocarlos sueltos. */
 const TIPOS_CONSTRUIBLES_MANUAL: EdificioTipo[] = [
   'vivienda', 'granja', 'cantera', 'lenera', 'almacen', 'mina', 'minaCobre', 'minaEstano',
@@ -108,6 +108,7 @@ const murallaStatusEl = document.getElementById('lab-muralla-status')!;
 const murallaComprometerBtn = document.getElementById('lab-muralla-comprometer') as HTMLButtonElement;
 const murallaQuitarBtn = document.getElementById('lab-muralla-quitar') as HTMLButtonElement;
 const murallaAbandonarBtn = document.getElementById('lab-muralla-abandonar') as HTMLButtonElement;
+const exportarBtn = document.getElementById('lab-exportar') as HTMLButtonElement;
 const perfilOpcionesEl = document.getElementById('lab-perfil-opciones')!;
 const statusEl = document.getElementById('lab-status')!;
 const anclasBodyEl = document.getElementById('lab-anclas-body')!;
@@ -292,7 +293,50 @@ function publicarEnConsola(): void {
     EDIFICIO_TAMANO,
     murallaTrazo,
     trazarRecinto,
+    // Para pedir el mismo export que hace el botón "Exportar proyección" desde la consola/automatización,
+    // sin tener que simular un click: `window.__lab.exportarProyeccion()` devuelve el objeto (no lo descarga).
+    exportarProyeccion: () => (cacheAsentamiento ? construirProyeccionLab(cacheAsentamiento, cacheTrazado) : null),
   };
+}
+
+/**
+ * Envoltorio del asentamiento del laboratorio en la misma FORMA que trae `ProyeccionJugador`
+ * (`session/proyecciones/jugador.ts`) para sus dos campos de interior: `asentamientos` y
+ * `trazadoPorAsentamiento`. `asentamiento` y `trazado` son los objetos REALES del motor —el segundo sale de
+ * `trazadoParaAsentamiento`, la misma función que usa el backend por HTTP (ver el comentario de `computar()`
+ * más abajo)—, así que un lector de Unity puede tratar este export igual que el interior de una proyección
+ * de verdad.
+ *
+ * Lo que NO es: una respuesta HTTP capturada. El laboratorio no tiene servidor ni partida (cabecera de este
+ * archivo) — no hay `gameId` real, ni `Membresia`, ni niebla de guerra, ni rivales que redactar. Los campos
+ * de "contexto" (`gameId`, `mapaId`, `jugadorId`, `version`) son deliberadamente sintéticos y están
+ * marcados como tales; no pretenden ser los que devolvería `/v1/jugador/partidas/:gameId`.
+ */
+function construirProyeccionLab(asentamiento: Asentamiento, trazado: TrazadoAsentamiento) {
+  return {
+    _origen: 'laboratorio de trazado (lab/), no una respuesta HTTP capturada — ver comentario de construirProyeccionLab en lab/src/main.ts',
+    gameId: 'lab',
+    instante: instanteDeTick(tick),
+    version: tick,
+    jugadorId: 'jugador-lab',
+    faccionId: faccionLab.id,
+    facciones: [faccionLab],
+    asentamientos: [asentamiento],
+    trazadoPorAsentamiento: { [asentamiento.id]: trazado },
+  };
+}
+
+function exportarProyeccion(): void {
+  if (!cacheAsentamiento) return;
+  const payload = construirProyeccionLab(cacheAsentamiento, cacheTrazado);
+  const json = JSON.stringify(payload, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const enlace = document.createElement('a');
+  enlace.href = url;
+  enlace.download = `lab-proyeccion-${cacheAsentamiento.id}-tick${tick}.json`;
+  enlace.click();
+  URL.revokeObjectURL(url);
 }
 
 /** Recalcula todo lo que depende del motor (trazado, árbol, filas) tras fundar o avanzar ticks, guarda el
@@ -662,6 +706,7 @@ murallaNivelSel.addEventListener('change', () => {
   if (murallaPropuesta) trazarMuralla();
 });
 
+exportarBtn.addEventListener('click', exportarProyeccion);
 fundarBtn.addEventListener('click', () => fundar(Number(seedInput.value) || 1));
 tick1Btn.addEventListener('click', () => avanzarNTicks(1));
 tick10Btn.addEventListener('click', () => avanzarNTicks(10));

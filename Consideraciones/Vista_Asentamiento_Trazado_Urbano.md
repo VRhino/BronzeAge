@@ -1690,7 +1690,17 @@ satélite de tipo `puestoMercado` que aparecen al alcanzar cada nivel interno.
   un mensaje explícito (`SimulacionExportada.version`, `app/gameStore.ts`) en vez de rellenarse/migrarse. Ver
   también §"Abierto".
 
-## 9. Carpintería: zona de tres piezas
+## 9. Carpintería: zona de tres piezas (REVERTIDO 2026-09-12)
+
+**Esta sección describe una mecánica que ya no existe en el código.** Una corrida en batch del laboratorio
+(`scripts/lab-batch-trazado.ts`) sobre muchas seeds encontró que la Carpintería era, con enorme diferencia, el
+tipo que más generaba anclas huérfanas y anclas sin padre reconocible en el árbol único — el doble rol de la
+Carpintería (satélite de la Plaza de Armas para su PROPIA colocación, pero ancla primaria de una categoría
+`carpinteria` aparte solo para sus talleres) es justo el caso que `sitiosParaTipo`/`construirArbol` no manejaban
+bien. Coincide con el bug ya anotado como abierto en el punto 2 de "Abierto" (talleres que no se crean, seed 60).
+A petición del usuario se eliminó el rol de ancla, `tallerCarpinteria` y toda esta lógica especial: la
+Carpintería vuelve a ser un edificio de transformación normal (categoría `militar`, satélite de Plaza de Armas,
+sin piezas dependientes) — el resto de esta sección queda como registro histórico de la decisión revertida.
 
 Misma idea que el Mercado, aplicada al núcleo militar. La Carpintería deja de ser un bloque único de 5x4 y
 pasa a ser una zona de **tres piezas**:

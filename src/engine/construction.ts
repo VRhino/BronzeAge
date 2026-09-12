@@ -6,7 +6,6 @@ import {
   EXTRACCION_MAXIMOS,
   EXTRACTOR_DESEMPATE,
   LINEAS_PRODUCCION,
-  CARPINTERIA_ZONA,
   MERCADO_PUESTOS_POR_NIVEL,
   NECESIDADES,
   NIVEL_ASENTAMIENTO,
@@ -378,31 +377,6 @@ function crearPuestosDeMercado(
       // persistir `rotado` o `tamanoDeEdificio` la leería con la huella sin girar y la pieza se solaparía.
       ...(sitio.rotado ? { rotado: true } : {}),
     });
-  }
-  return nuevos;
-}
-
-/**
- * Talleres que se añaden a la ZONA de Carpintería al completarse (§9 del doc de trazado urbano, Etapa 3 de
- * anclas y satélites): 2 piezas gratis, ya activas, iguales entre sí — a diferencia del Mercado, Carpintería
- * no tiene recetas que progresen por nivel interno, así que no hay nada que escalonar: los 2 talleres nacen
- * juntos, una sola vez, al completarse la pieza principal (no en las subidas de nivel interno posteriores).
- *
- * `existentes` debe incluir todo lo que ya ocupa suelo, mismo criterio que `crearPuestosDeMercado`. Si un
- * taller no encuentra hueco se salta en silencio: la zona es superficie, no función.
- */
-function crearTalleresDeCarpinteria(asentamiento: ContextoColocacion, existentes: Edificio[]): Edificio[] {
-  const idsUsadas = new Set(existentes.map((e) => e.id));
-  let contador = existentes.length;
-  const nuevos: Edificio[] = [];
-
-  for (let i = 0; i < CARPINTERIA_ZONA.talleres; i++) {
-    const sitio = sitioEnTrazado(asentamiento, [...existentes, ...nuevos], 'tallerCarpinteria', undefined, perfilDe(asentamiento));
-    if (!sitio) continue;
-    let id = `edificio-${asentamiento.id}-${contador++}`;
-    while (idsUsadas.has(id)) id = `edificio-${asentamiento.id}-${contador++}`;
-    idsUsadas.add(id);
-    nuevos.push({ id, tipo: 'tallerCarpinteria', posicion: sitio.punto, estado: 'activo', ambito: 'asentamiento' });
   }
   return nuevos;
 }
@@ -1287,11 +1261,6 @@ export function avanzarConstruccion(
       // usuario, es una ZONA). Los de niveles 2 y 3 los añade `avanzarMejoras` al subir de nivel interno.
       if (edificio.tipo === 'mercado') {
         puestosNuevos.push(...crearPuestosDeMercado(asentamiento, 1, [...asentamiento.edificios, ...puestosNuevos]));
-      }
-      // Carpintería tampoco nace sola (§9, Etapa 3 de anclas y satélites): al completarse aparecen sus 2
-      // talleres de una vez (no progresan por nivel interno, a diferencia del Mercado).
-      if (edificio.tipo === 'carpinteria') {
-        puestosNuevos.push(...crearTalleresDeCarpinteria(asentamiento, [...asentamiento.edificios, ...puestosNuevos]));
       }
       // Reconstrucción de un edificio dañado por un saqueo (Ocupacion §2.2): al volver a `activo` se limpia
       // el flag — vuelve a ser un edificio sano normal.

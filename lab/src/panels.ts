@@ -4,7 +4,6 @@
 import type { Asentamiento, Edificio, EdificioTipo } from '../../src/domain/types';
 import { EDIFICIOS_TIPO } from '../../src/domain/types';
 import {
-  CARPINTERIA_ZONA,
   EDIFICIO_CATALOGO,
   EDIFICIO_TAMANO,
   EDIFICIO_TAMANO_POR_DEFECTO,
@@ -111,7 +110,6 @@ interface Snapshot {
   granja: Record<number, { ancho: number; alto: number }>;
   formaPuesto: Record<number, { ancho: number; alto: number }>;
   puestosPorNivel: Record<number, number[]>;
-  talleres: number;
   trazado: Record<string, number>;
 }
 
@@ -127,7 +125,6 @@ function tomarSnapshot(): Snapshot {
     granja: { 1: { ...gn[1]!.tamano! }, 2: { ...gn[2]!.tamano! }, 3: { ...gn[3]!.tamano! }, 4: { ...gn[4]!.tamano! } },
     formaPuesto: JSON.parse(JSON.stringify(PUESTO_MERCADO_FORMA)),
     puestosPorNivel: JSON.parse(JSON.stringify(MERCADO_PUESTOS_POR_NIVEL)),
-    talleres: CARPINTERIA_ZONA.talleres,
     trazado: JSON.parse(JSON.stringify(TRAZADO)),
   };
 }
@@ -147,7 +144,6 @@ function restaurar(s: Snapshot): void {
     PUESTO_MERCADO_FORMA[Number(k)]!.alto = v.alto;
   }
   for (const [k, v] of Object.entries(s.puestosPorNivel)) MERCADO_PUESTOS_POR_NIVEL[Number(k)] = [...v];
-  CARPINTERIA_ZONA.talleres = s.talleres;
   for (const [k, v] of Object.entries(s.trazado)) (TRAZADO as unknown as Record<string, number>)[k] = v;
 }
 
@@ -254,7 +250,6 @@ const GRUPOS_DIM: { clave: GrupoDim; etiqueta: string }[] = [
   { clave: 'residencial', etiqueta: 'Residencial · ancla Centro Urbano / Plaza-Pozo-Parque' },
   { clave: 'mercado', etiqueta: 'Mercado · ancla Mercado' },
   { clave: 'militar', etiqueta: 'Militar · ancla Plaza de Armas' },
-  { clave: 'carpinteria', etiqueta: 'Carpintería · ancla Carpintería (sub-zona militar)' },
   { clave: 'industria', etiqueta: 'Industria · ancla Patio de Gremios' },
   { clave: 'almacenaje', etiqueta: 'Almacenaje · sin ancla, regla genérica' },
   { clave: 'afueras', etiqueta: 'Afueras · sin ancla, van al borde de la ciudad' },
@@ -464,14 +459,6 @@ export function montarPanelParametros(contenedor: HTMLElement, onRefundar: () =>
     }
     t3.appendChild(b3);
 
-    const carp = document.createElement('div');
-    carp.className = 'lab-row';
-    carp.style.marginTop = '4px';
-    carp.append(
-      document.createTextNode('Carpintería · talleres dependientes: '),
-      inputNum(CARPINTERIA_ZONA as unknown as Record<string, number>, 'talleres', 60, 0, snap.talleres)
-    );
-
-    contenedor.appendChild(seccion('Piezas dependientes', false, hMerc, wrap(t2), wrap(t3), carp));
+    contenedor.appendChild(seccion('Piezas dependientes', false, hMerc, wrap(t2), wrap(t3)));
   }
 }

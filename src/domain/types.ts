@@ -150,9 +150,6 @@ export type EdificioTipo =
   | 'plaza'
   | 'plazaDeArmas'
   | 'patioDeGremios'
-  // Pieza satélite de la zona de Carpintería (§9, mismo patrón que 'puestoMercado'): al completarse la
-  // Carpintería (ahora la pieza principal de su propia zona, 4x2) nacen 2 talleres gratis a su alrededor.
-  | 'tallerCarpinteria'
   // Variedad de anclas residenciales (Etapa 4, punto 4, a petición del usuario): mismo patrón "marcador
   // gratis" que 'plaza' — cuando el núcleo residencial satura, se sortea (determinista) entre las tres.
   | 'pozo'
@@ -188,7 +185,6 @@ const TODOS_LOS_EDIFICIOS: Record<EdificioTipo, true> = {
   plaza: true,
   plazaDeArmas: true,
   patioDeGremios: true,
-  tallerCarpinteria: true,
   pozo: true,
   parque: true,
 };
