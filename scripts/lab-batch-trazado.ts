@@ -325,7 +325,7 @@ function finalizar(
   // `nacimientos`/`tickFinal` REALES (no un Map vacío ni un tick fijo): `inspeccionarAnclas` calcula la edad
   // de cada ancla contra ellos, y `huerfana` exige `edad >= GRACIA_TICKS_HUERFANA` (debugAnclas.ts) — con un
   // Map vacío la edad sale siempre 0 y ninguna ancla puede marcarse huérfana jamás, sin importar la corrida.
-  resultado.anclas = inspeccionarAnclas(asentamientoFinal.edificios, asentamientoFinal.id, tickFinal, nacimientos);
+  resultado.anclas = inspeccionarAnclas(asentamientoFinal.edificios, asentamientoFinal.id, tickFinal, nacimientos, asentamientoFinal.recintos ?? []);
   resultado.calles = analizarCalles(asentamientoFinal);
   return resultado;
 }

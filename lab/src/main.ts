@@ -367,7 +367,7 @@ function computar(): void {
   cacheEscala = proy.escala;
   cacheAPantalla = proy.aPantalla;
 
-  cacheFilas = inspeccionarAnclas(asentamiento.edificios, asentamiento.id, tick, nacimientos);
+  cacheFilas = inspeccionarAnclas(asentamiento.edificios, asentamiento.id, tick, nacimientos, asentamiento.recintos ?? []);
   cacheLayoutArbol = calcularLayoutArbol(cacheFilas);
 
   const perfilActivo = resolverPerfil(asentamiento.id);

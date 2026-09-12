@@ -3,7 +3,7 @@
 // ui/canvas.ts) el estado del árbol único de anclas (Etapa 5, Lógica 1: `engine/trazado.ts`), para poder ver
 // a simple vista si una semilla reparte sus 5 ranuras antes de pasar a una hija y si toda ancla de árbol
 // tiene algún satélite alcanzable.
-import type { Edificio, EdificioTipo, Point } from '../../src/domain/types';
+import type { Edificio, EdificioTipo, Point, Recinto } from '../../src/domain/types';
 import { REJILLA_ASENTAMIENTO, TRAZADO } from '../../src/constants';
 import {
   ANCLAS_REALES,
@@ -70,7 +70,7 @@ function distanciaAlOrigenLocal(p: Point): number {
  * historial (`edificios` nunca se reordena — orden de creación) — si el resultado coincide EXACTO con la
  * posición real del ancla, ese es su padre y su ranura; si no coincide con ninguna, no se inventa nada.
  */
-function construirArbol(edificios: Edificio[], asentamientoId: string): Map<string, NodoArbol> {
+function construirArbol(edificios: Edificio[], asentamientoId: string, recintos: readonly Recinto[]): Map<string, NodoArbol> {
   const internos = edificiosInternos(edificios);
   const direcciones = direccionesRotadas(asentamientoId);
   const nodos = new Map<string, NodoArbol>();
@@ -91,9 +91,14 @@ function construirArbol(edificios: Edificio[], asentamientoId: string): Map<stri
       continue;
     }
 
-    // MISMO suelo que vio el motor al crear esta ancla: edificios Y celdas de calle. Con solo los edificios
-    // (como hacía antes de la Etapa 6) `huecoEnDireccion` devuelve otra posición y el ancla queda sin padre.
-    const ocupadasHastaAqui = sueloOcupado(asentamientoId, internos.slice(0, i)).ocupadas;
+    // MISMO suelo que vio el motor al crear esta ancla: edificios, celdas de calle Y recintos amurallados.
+    // Con solo los edificios (como hacía antes de la Etapa 6) `huecoEnDireccion` devuelve otra posición y el
+    // ancla queda sin padre — mismo síntoma que documenta `sueloOcupado` para "casas encima del anillo", aquí
+    // aplicado a la reconstrucción del árbol en vez de a la colocación real. Se pasan los recintos ACTUALES
+    // (no los que existían en el tick i): una simplificación deliberada — el recinto no se descomete nunca, así
+    // que para cualquier ancla nacida DESPUÉS de comprometerlo es exactamente lo que vio el motor, y para una
+    // nacida antes el hueco candidato cae cerca del núcleo, lejos del anillo, así que no cambia el resultado.
+    const ocupadasHastaAqui = sueloOcupado(asentamientoId, internos.slice(0, i), undefined, recintos).ocupadas;
     const tamanoE = tamanoDeEdificio(e);
     const candidatos = [...anclasVistas]
       .filter((a) => !excluidas.has(a.id))
@@ -193,14 +198,21 @@ export interface FilaAncla {
 
 /**
  * Filas para el panel lateral del laboratorio: una por cada ancla de árbol presente en el asentamiento
- * (incluye Centro Urbano/Mercado/Carpintería — también nacen y crecen por el árbol único, ver
- * `construirArbol`). `nacimientos` es el registro que lleva `main.ts` de en qué tick apareció cada id — las
- * anclas nacen ya `activo` (no pasan por cola), así que no llevan tick de nacimiento propio en el dominio.
+ * (incluye Centro Urbano/Mercado — también nacen y crecen por el árbol único, ver `construirArbol`).
+ * `nacimientos` es el registro que lleva `main.ts` de en qué tick apareció cada id — las anclas nacen ya
+ * `activo` (no pasan por cola), así que no llevan tick de nacimiento propio en el dominio. `recintos` (por
+ * defecto ninguno): ver el comentario sobre `sueloOcupado` dentro de `construirArbol`.
  */
-export function inspeccionarAnclas(edificios: Edificio[], asentamientoId: string, tick: number, nacimientos: Map<string, number>): FilaAncla[] {
+export function inspeccionarAnclas(
+  edificios: Edificio[],
+  asentamientoId: string,
+  tick: number,
+  nacimientos: Map<string, number>,
+  recintos: readonly Recinto[] = []
+): FilaAncla[] {
   const internos = edificiosInternos(edificios);
   const activa = semillaActiva(edificios, new Set());
-  const arbol = construirArbol(edificios, asentamientoId);
+  const arbol = construirArbol(edificios, asentamientoId, recintos);
   return internos
     .filter((e) => ANCLAS_REALES.has(e.tipo))
     .map((e) => {
