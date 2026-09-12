@@ -5,6 +5,7 @@
 // tiene algún satélite alcanzable.
 import type { Edificio, EdificioTipo, Point, Recinto } from '../../src/domain/types';
 import { REJILLA_ASENTAMIENTO, TRAZADO } from '../../src/constants';
+import { instanteDeTick } from '../../src/session/estado';
 import {
   ANCLAS_REALES,
   ANCLA_PRIMARIA_POR_CATEGORIA,
@@ -70,7 +71,16 @@ function distanciaAlOrigenLocal(p: Point): number {
  * historial (`edificios` nunca se reordena — orden de creación) — si el resultado coincide EXACTO con la
  * posición real del ancla, ese es su padre y su ranura; si no coincide con ninguna, no se inventa nada.
  */
-function construirArbol(edificios: Edificio[], asentamientoId: string, recintos: readonly Recinto[]): Map<string, NodoArbol> {
+function construirArbol(
+  edificios: Edificio[],
+  asentamientoId: string,
+  recintos: readonly Recinto[],
+  /** Tick en el que nació cada ancla (`nacimientos` de `main.ts`) y el tick actual — para saber, ancla por
+   * ancla, qué recintos existían YA cuando nació. Ver el comentario en el bucle: un recinto comprometido
+   * DESPUÉS del nacimiento de una ancla no formaba parte del suelo que vio el motor al colocarla. */
+  nacimientos: Map<string, number>,
+  tickActual: number
+): Map<string, NodoArbol> {
   const internos = edificiosInternos(edificios);
   const direcciones = direccionesRotadas(asentamientoId);
   const nodos = new Map<string, NodoArbol>();
@@ -91,14 +101,16 @@ function construirArbol(edificios: Edificio[], asentamientoId: string, recintos:
       continue;
     }
 
-    // MISMO suelo que vio el motor al crear esta ancla: edificios, celdas de calle Y recintos amurallados.
-    // Con solo los edificios (como hacía antes de la Etapa 6) `huecoEnDireccion` devuelve otra posición y el
-    // ancla queda sin padre — mismo síntoma que documenta `sueloOcupado` para "casas encima del anillo", aquí
-    // aplicado a la reconstrucción del árbol en vez de a la colocación real. Se pasan los recintos ACTUALES
-    // (no los que existían en el tick i): una simplificación deliberada — el recinto no se descomete nunca, así
-    // que para cualquier ancla nacida DESPUÉS de comprometerlo es exactamente lo que vio el motor, y para una
-    // nacida antes el hueco candidato cae cerca del núcleo, lejos del anillo, así que no cambia el resultado.
-    const ocupadasHastaAqui = sueloOcupado(asentamientoId, internos.slice(0, i), undefined, recintos).ocupadas;
+    // MISMO suelo que vio el motor al crear esta ancla: edificios, celdas de calle Y recintos amurallados —
+    // pero SOLO los recintos que YA existían cuando esta ancla nació. Pasar los recintos actuales tal cual
+    // (probado y descartado: seed 1 del laboratorio) rompe la reconstrucción de cualquier ancla nacida ANTES
+    // de comprometer la muralla cuyo hueco original quede cerca de donde el muro termina cayendo — el mismo
+    // síntoma que ya documenta `sueloOcupado` para "casas encima del anillo", aquí aplicado a la
+    // reconstrucción del árbol en vez de a la colocación real: el recinto (que no existía todavía) le tapa a
+    // `huecoEnDireccion` el hueco que el motor sí vio libre en su momento, y el ancla queda sin padre ("?").
+    const nacimientoE = nacimientos.get(e.id) ?? tickActual;
+    const recintosDeEntonces = recintos.filter((r) => r.comprometidoEn <= instanteDeTick(nacimientoE));
+    const ocupadasHastaAqui = sueloOcupado(asentamientoId, internos.slice(0, i), undefined, recintosDeEntonces).ocupadas;
     const tamanoE = tamanoDeEdificio(e);
     const candidatos = [...anclasVistas]
       .filter((a) => !excluidas.has(a.id))
@@ -212,7 +224,7 @@ export function inspeccionarAnclas(
 ): FilaAncla[] {
   const internos = edificiosInternos(edificios);
   const activa = semillaActiva(edificios, new Set());
-  const arbol = construirArbol(edificios, asentamientoId, recintos);
+  const arbol = construirArbol(edificios, asentamientoId, recintos, nacimientos, tick);
   return internos
     .filter((e) => ANCLAS_REALES.has(e.tipo))
     .map((e) => {
