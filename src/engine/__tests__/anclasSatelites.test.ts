@@ -178,7 +178,7 @@ describe('Etapa 5 — árbol único de anclas, a nivel de motor (trazado.ts)', (
     const pozo: Edificio = {
       id: 'pozo-semilla-mixta',
       tipo: 'pozo',
-      posicion: { x: 60 * T, y: 0 },
+      posicion: { x: 10 * T, y: 0 },
       estado: 'activo',
       ambito: 'asentamiento',
     };
@@ -207,22 +207,49 @@ describe('Etapa 5 — árbol único de anclas, a nivel de motor (trazado.ts)', (
     // (§E6.11) lo dejó corto —el radio de búsqueda se dobló y el relleno no— y Centro Urbano seguía
     // encontrando hueco justo por fuera, así que nunca se marcaba como saturado.
     const margen = radioMaximoRanura() + cuTamano.ancho;
+
+    // Segunda ancla candidata, alcanzable por corredor — necesario desde que `crearAnclaNueva` exige un
+    // corredor real hasta la red (gate duro, mismo criterio que `candidatosLibres`, §E6.5): un mercado a 200
+    // celdas sin nada que lo conecte ya no es un sitio válido, ni para él ni para la ancla que dependería de
+    // su anillo (justo el bug que reportó el usuario con Plaza de Armas tras comprometer una muralla — seeds
+    // 1/10 del laboratorio). Se abre un "pasillo" de cuadrados pegados a lo largo del ÁNGULO MÁS ANCHO entre
+    // dos ranuras rotadas de este asentamiento (`direccionesRotadas`) — lo bastante fino (6 celdas) para no
+    // invadir el cono de las ranuras vecinas ni siquiera cerca de `radioInicialRanura`, así que el relleno
+    // sigue bloqueando las 5 ranuras REALES de Centro Urbano tal cual antes.
+    const angulos = direccionesRotadas(asentamiento.id)
+      .map((d) => d.angulo)
+      .sort((a, b) => a - b);
+    let medioGap = 0;
+    let mejorGap = -Infinity;
+    for (let i = 0; i < angulos.length; i++) {
+      const a = angulos[i]!;
+      const b = i === angulos.length - 1 ? angulos[0]! + 2 * Math.PI : angulos[i + 1]!;
+      if (b - a > mejorGap) {
+        mejorGap = b - a;
+        medioGap = (a + b) / 2;
+      }
+    }
+    const LADO_PASILLO = 6;
+    const pasillo: { minCol: number; minRow: number; ancho: number; alto: number }[] = [];
+    for (let r = 6; r <= 90; r += 3) {
+      const cx = Math.round(r * Math.cos(medioGap));
+      const cy = Math.round(r * Math.sin(medioGap));
+      pasillo.push({ minCol: cx - LADO_PASILLO / 2, minRow: cy - LADO_PASILLO / 2, ancho: LADO_PASILLO, alto: LADO_PASILLO });
+    }
+    const mercadoLejano: Edificio = {
+      id: 'mercado-lejano',
+      tipo: 'mercado',
+      posicion: { x: Math.round(20 * Math.cos(medioGap)) * T, y: Math.round(20 * Math.sin(medioGap)) * T },
+      estado: 'activo',
+      ambito: 'asentamiento',
+    };
     const relleno = rellenar(
       cuMin.col - margen,
       cuMin.col + cuTamano.ancho + margen,
       cuMin.row - margen,
       cuMin.row + cuTamano.alto + margen,
-      [{ minCol: cuMin.col, minRow: cuMin.row, ancho: cuTamano.ancho, alto: cuTamano.alto }]
+      [{ minCol: cuMin.col, minRow: cuMin.row, ancho: cuTamano.ancho, alto: cuTamano.alto }, ...pasillo]
     );
-    // Una segunda ancla, bien lejos del relleno, con sitio de sobra alrededor — debe ser la que reciba la
-    // ancla nueva una vez Centro Urbano quede descartado.
-    const mercadoLejano: Edificio = {
-      id: 'mercado-lejano',
-      tipo: 'mercado',
-      posicion: { x: 200 * T, y: 200 * T },
-      estado: 'activo',
-      ambito: 'asentamiento',
-    };
     const edificios = [...asentamiento.edificios, ...relleno, mercadoLejano];
 
     const resultado = crearAnclaNueva(asentamiento.id, edificios, 'plazaDeArmas', 'test-descarte');

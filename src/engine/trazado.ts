@@ -2227,10 +2227,23 @@ function direccionesBarajadas(semillaId: string, asentamientoId: string): Point[
 /**
  * Crea una ancla nueva de `tipoAncla` en el árbol único de anclas (Etapa 5, Lógica 1) — recorre la semilla
  * activa (la ancla no saturada más cercana a la raíz, de CUALQUIER tipo, sin distinguir categoría) probando
- * sus 5 ranuras en orden aleatorio; si ninguna de las 5 tiene hueco real (`huecoEnDireccion`), esa semilla
- * se descarta PARA SIEMPRE (`anclasRecienSaturadas`, que el llamante debe persistir como `semillaSaturada` en
- * el array real de edificios) y se prueba la siguiente semilla más cercana. `null` si no queda ninguna semilla
- * disponible en absoluto — caso límite: el asentamiento ya no tiene dónde crecer para este tipo de ancla.
+ * sus 5 ranuras en orden aleatorio; si ninguna de las 5 tiene hueco real Y CONECTADO (`huecoEnDireccion` más el
+ * GATE DURO de corredor, ver más abajo), esa semilla se descarta PARA SIEMPRE (`anclasRecienSaturadas`, que el
+ * llamante debe persistir como `semillaSaturada` en el array real de edificios) y se prueba la siguiente
+ * semilla más cercana. `null` si no queda ninguna semilla disponible en absoluto — caso límite: el asentamiento
+ * ya no tiene dónde crecer para este tipo de ancla.
+ *
+ * **Gate duro de corredor (a petición del usuario, tras el laboratorio: seeds 1/10, Plaza de Armas nacía sin
+ * frente de calle mientras su propio Barracón sí conectaba).** `candidatosLibres` ya exige esto para
+ * Almacén/Palacio/Granero/Leñera/afueras (§E6.5, "si no hay corredor, ese sitio no es un sitio") pero esta
+ * función lo pasaba por alto: elegía el primer hueco geométricamente libre sin comprobar si `calcularRedDeCalles`
+ * lograría después estirarle un corredor hasta la red. Con un recinto recién comprometido eso pasa a ser
+ * frecuente — el muro tapa exactamente el camino corto hacia la red existente — y el ancla nacía plantada donde
+ * la red nunca podría alcanzarla, silenciosamente (sin excepción, sin reintento: el motor simplemente la deja
+ * sin frente de calle para siempre, porque una ancla no se reubica). Los satélites normales (`sitiosPorAtraccionDura`)
+ * no llevan este gate — buscan pegados al ancla, dentro de la misma manzana que ella ya siembra, así que
+ * heredan su conexión; una ancla nueva, en cambio, puede nacer lejos de toda calle existente y necesita
+ * comprobarlo ella misma.
  */
 function anguloNormalizado(a: number): number {
   let r = a % (Math.PI * 2);
@@ -2270,7 +2283,7 @@ export function crearAnclaNueva(
   recintos: readonly Recinto[] = []
 ): { nuevaAncla: Edificio; anclasRecienSaturadas: string[] } | null {
   const tamanoBase = tamanoEdificio(tipoAncla);
-  const { ocupadas } = sueloOcupado(asentamientoId, edificios, undefined, recintos);
+  const { ocupadas, red } = sueloOcupado(asentamientoId, edificios, undefined, recintos);
   const excluidas = new Set<string>();
   let semilla = semillaActiva(edificios, excluidas);
 
@@ -2291,6 +2304,9 @@ export function crearAnclaNueva(
       for (const { tamano, rotado } of orientacionesDeAncla(`${semilla.id}-${id}`, tamanoBase)) {
         const rect = huecoEnDireccion(centroSemilla, direccion, tamano, ocupadas, otrasAnclas);
         if (!rect) continue;
+        // GATE DURO de corredor (mismo criterio que `candidatosLibres`, §E6.5): un hueco geométricamente libre
+        // pero que `calcularRedDeCalles` nunca podría conectar a la red no es un sitio válido.
+        if (!tieneFrenteDeCalle(rect, red) && !corredorHastaLaRed(rect, ocupadas, red, TRAZADO.capCorredorUrbano)) continue;
         return {
           nuevaAncla: {
             id,
