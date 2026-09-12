@@ -901,10 +901,26 @@ function calcularRedDeCalles(asentamientoId: string, edificios: Edificio[], reci
   const centro = internos.find((e) => e.tipo === 'centroUrbano');
   if (!centro) return red;
 
-  // Ocupación acumulada: solo los edificios YA procesados. El replay tiene que ver la ciudad como estaba en el
-  // momento de construir cada uno, no como está al final — si no, dejaría de ser un crecimiento paso a paso.
+  // `ocupadas` (obstáculos para el corredor) lleva TODOS los edificios desde el principio — a propósito,
+  // distinto de `red` (que sí crece paso a paso, más abajo). Un corredor es un camino físico por la ciudad TAL
+  // COMO ES AHORA: nunca puede atravesar un edificio que existe hoy, viva donde viva en el orden del array.
+  //
+  // Antes solo llevaba los edificios YA procesados, con la idea de que el replay viera la ciudad como estaba
+  // "en el momento de construir cada uno". Eso escondía un bug real (visto en el laboratorio, seeds 1/10):
+  // comprometer una muralla bloquea el camino corto que un edificio ANTERIOR en el array usaba para llegar a
+  // la red, así que su corredor tiene que recalcularse por otra ruta — y esa ruta nueva, calculada aquí sin
+  // saber todavía que un edificio POSTERIOR en el array ya ocupa una de sus celdas (no se añade a `ocupadas`
+  // hasta que le toca su turno), podía atravesarlo limpiamente. El síntoma: una Vivienda o un Almacén ya
+  // construidos apareciendo "pisando" una celda de calle/camino, sin haberse movido — el corredor nació encima
+  // suyo, no al revés. Precomputar `ocupadas` con todo el asentamiento cierra ese hueco sin tocar el
+  // crecimiento paso a paso de `red` (que sigue decidiendo, en el mismo orden de siempre, quién se conecta
+  // primero y con qué preferencia).
   const ocupadas = new Set<string>();
   for (const c of celdasDeEdificio(centro)) ocupadas.add(claveCelda(c.col, c.row));
+  for (const edificio of internos) {
+    if (edificio.tipo === 'centroUrbano') continue;
+    for (const c of celdasDeEdificio(edificio)) ocupadas.add(claveCelda(c.col, c.row));
+  }
 
   // La muralla entra ANTES del replay: muro y torre OCUPAN, así que ninguna calle nueva puede nacer encima ni
   // un corredor atravesarlas. Las PUERTAS no entran — se quedan libres, que es lo que las hace transitables.
@@ -929,7 +945,6 @@ function calcularRedDeCalles(asentamientoId: string, edificios: Edificio[], reci
   for (const edificio of internos) {
     if (edificio.tipo === 'centroUrbano') continue;
     const rect = rectanguloDeEdificio(edificio);
-    for (const c of celdasDeEdificio(edificio)) ocupadas.add(claveCelda(c.col, c.row));
 
     const deAfueras = esDeAfueras(edificio.tipo);
     const destino = deAfueras ? red.caminos : red.calles;
