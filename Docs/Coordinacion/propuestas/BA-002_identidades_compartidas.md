@@ -68,12 +68,11 @@ lugar:
    de `squadId` no es "dentro del contenedor donde vive" (confundía ubicación con identidad) — es único y
    estable dentro de `gameId` con independencia de dónde esté guardada la escuadra en cada momento
    (guarnición/ejército/escolta/reserva de batalla), con invariante de exclusividad: solo en UNO de esos
-   contenedores a la vez. El invariante "un `Escuadron` por `tropaId` por héroe/asentamiento" también se
-   revisa: no puede depender de que dos escuadras del mismo `tropaId` nunca coincidan en la misma lista —una
-   escuadra que sale de un asentamiento y otra reclutada después del mismo `tropaId` podrían volver a
-   coexistir. Queda como pendiente de implementación decidir el mecanismo exacto (fusionar, bloquear
-   reclutamiento mientras la original esté fuera, o permitir varias instancias del mismo `tropaId`) — no es
-   una decisión de identidad, es una regla de negocio a definir junto con el corte de modelo (BA-004).
+   contenedores a la vez. **Regla (decisión del usuario, 2026-09-13):** un héroe tiene como mucho
+   UNA `Escuadron` por `tropaId` en toda la partida, esté donde esté. Se comprueba contra todas sus
+   escuadras, no solo contra la lista del asentamiento; si ya tiene una de ese tipo fuera, no se recluta
+   otra: solo se repone donde está. Sin duplicados posibles, volver nunca obliga a fusionar. Detalle en
+   `Docs/Coordinacion/01_Modelo_de_datos_compartido.md` §13.
 4. **No hay cambio de héroe dentro de una partida**, justamente porque solo puede existir uno por mundo — no
    hace falta diseñar sustitución/reasignación. Confirmado.
 5. **Identidad de escuadra aniquilada y repuesta** — respuesta original correcta, sin cambios: `Escuadron.id`

@@ -44,3 +44,4 @@ issues/
 # Todo se regenera con `/graphify <path>`; el grafo de `src/` pesa ~5 MB.
 graphify-out/
 
+Docs/Coordinacion/fixtures/*

@@ -12,7 +12,7 @@
 //   - HTTP, WebSocket, persistencia en disco: del runner y de la capa de transporte.
 //   - Notificar a una UI o llevar historial de depuración: del cliente.
 import type { RegionId } from '../domain/types';
-import { BALANCE_VERSION, LIDERAZGO } from '../constants';
+import { BALANCE_VERSION, LAYOUT_VERSION, LIDERAZGO } from '../constants';
 import { conJugadorAsegurado } from '../engine/ubicacion';
 import { createRng, generarMapa, MAPA_DEFAULT, restaurarRng, WORLDGEN_VERSION, type RandomFn } from '../worldgen';
 import { crearEstadoMapa, crearMapa, type EstadoMapa, type Mapa } from '../world/mapa';
@@ -42,6 +42,9 @@ export interface PartidaExportada {
    * sobre la carga (a diferencia de `worldgenVersion`, un desajuste no se rechaza; ver el comentario de
    * `BALANCE_VERSION`). */
   balanceVersion: number;
+  /** `LAYOUT_VERSION` (`constants.ts`) vigente al exportar. A diferencia de `balanceVersion`, un desajuste SÍ se
+   * rechaza al cargar (`cargarPartida`): la huella de cada edificio se deriva del catálogo vigente, no se guarda. */
+  layoutVersion: number;
   /**
    * Contador interno del RNG de partida (`RandomFn.estado()`), para que una sesión reconstruida CONTINÚE
    * la misma secuencia en vez de reiniciarla desde la seed del mundo — importa para la reconstrucción de
@@ -132,6 +135,7 @@ export class GameSession {
       siguienteId: this.ids.actual(),
       worldgenVersion: WORLDGEN_VERSION,
       balanceVersion: BALANCE_VERSION,
+      layoutVersion: LAYOUT_VERSION,
       estadoRng: this.rng.estado(),
     };
   }

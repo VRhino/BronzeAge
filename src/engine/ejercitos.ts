@@ -979,16 +979,14 @@ function exigirSinTregua(atacante: Ejercito, defensor: Ejercito, ahora: Instante
 }
 
 /**
- * Lo que le pasa al DERROTADO en campo abierto (Doc 5.12.3): entra en tregua, y si era un viajero con carro
- * pierde la mitad de lo que llevaba.
+ * Lo que le pasa al DERROTADO en campo abierto (Doc 5.12.3): entra en tregua y pierde la mitad de su carro,
+ * igual una columna personal que un Ejercito, cuyo `suministro` es ya el de todos sus miembros.
  *
  * Perder la mitad y no todo es deliberado: dejarle algo es lo que hace que valga la pena seguir el viaje en
  * vez de reiniciarlo, y lo que distingue un robo de una ruina. Con el carro vacio solo queda la tregua.
  */
 function trasDerrota(perdedor: Ejercito, ahora: Instante): { perdedor: Ejercito; botin: Record<string, number> } {
   const enTreguaHasta = sumar(ahora, minutos(MOVIMIENTO.treguaTrasDerrotaMinutos));
-  if (perdedor.tipo !== 'personal') return { perdedor: { ...perdedor, enTreguaHasta }, botin: {} };
-
   const botin: Record<string, number> = {};
   const queda: Record<string, number> = {};
   for (const [recurso, cantidad] of Object.entries(perdedor.suministro)) {
@@ -996,14 +994,30 @@ function trasDerrota(perdedor: Ejercito, ahora: Instante): { perdedor: Ejercito;
     if (robado > 0) botin[recurso] = robado;
     if (cantidad - robado > 0) queda[recurso] = cantidad - robado;
   }
-  return { perdedor: { ...perdedor, enTreguaHasta, suministro: queda, persiguiendo: undefined }, botin };
+  const derrotado = { ...perdedor, enTreguaHasta, suministro: queda };
+  // Soltar la presa sigue siendo solo de la columna personal, como antes de que el Ejercito perdiera el carro.
+  return { perdedor: perdedor.tipo === 'personal' ? { ...derrotado, persiguiendo: undefined } : derrotado, botin };
+}
+
+/** El ganador carga el botin de `trasDerrota` hasta su `capacidad`: un ladron sin sitio deja lo que no le cabe. */
+function cargarBotin(ganador: Ejercito, botin: Record<string, number>, capacidad: number): Ejercito {
+  const suministro = { ...ganador.suministro };
+  let yaLleva = Object.values(suministro).reduce((suma, c) => suma + c, 0);
+  for (const [recurso, cantidad] of Object.entries(botin)) {
+    const cogido = Math.min(Math.max(0, capacidad - yaLleva), cantidad);
+    if (cogido > 0) {
+      suministro[recurso] = (suministro[recurso] ?? 0) + cogido;
+      yaLleva += cogido;
+    }
+  }
+  return { ...ganador, suministro };
 }
 
 /**
  * Atacar a una columna que tienes delante (Doc 5.12.3). Sustituye al choque que el tick resolvia solo por
  * geometria: acercarse ya no basta, hay que pedirlo.
  *
- * Al perdedor le cae la TREGUA, y si era un viajero pierde la mitad de su carro en favor del ganador. El
+ * Al perdedor le cae la TREGUA y pierde la mitad de su carro en favor del ganador, sea viajero o Ejercito. El
  * botin va limitado por la capacidad del que lo coge: un ladron sin sitio deja lo que no le cabe.
  */
 export function atacarColumna(
@@ -1032,17 +1046,7 @@ export function atacarColumna(
   const secuela = trasDerrota(perdedor, instante);
 
   const capacidadGanador = gano ? capacidadDelAtacante : capacidadCarrosDe(participantesDe(ganador));
-  const suministroGanador = { ...ganador.suministro };
-  let yaLleva = Object.values(suministroGanador).reduce((suma, c) => suma + c, 0);
-  for (const [recurso, cantidad] of Object.entries(secuela.botin)) {
-    const cabe = Math.max(0, capacidadGanador - yaLleva);
-    const cogido = Math.min(cabe, cantidad);
-    if (cogido > 0) {
-      suministroGanador[recurso] = (suministroGanador[recurso] ?? 0) + cogido;
-      yaLleva += cogido;
-    }
-  }
-  const conBotin = { ...ganador, suministro: suministroGanador };
+  const conBotin = cargarBotin(ganador, secuela.botin, capacidadGanador);
 
   return {
     atacante: gano ? conBotin : secuela.perdedor,
@@ -1505,16 +1509,23 @@ function resolverEncuentros(
     if (rival) {
       const choque = encuentroEntreEjercitos(ejercito, rival, faccionesActuales, instante, rng);
       // Alcanzada la presa, la persecución termina: se persigue para pelear, y ya se peleo. Al que cae le
-      // toca la TREGUA, que es lo que impide rematarlo en cadena el minuto siguiente.
+      // toca lo mismo que en un ataque (`trasDerrota`): la TREGUA, que impide rematarlo en cadena el minuto
+      // siguiente, y la mitad del carro para el otro.
       const gano = choque.a.escuadrones.some((e) => e.cantidad > 0) && !choque.b.escuadrones.some((e) => e.cantidad > 0);
       const perdio = choque.b.escuadrones.some((e) => e.cantidad > 0) && !choque.a.escuadrones.some((e) => e.cantidad > 0);
-      const treguaHasta = sumar(instante, minutos(MOVIMIENTO.treguaTrasDerrotaMinutos));
-      porId.set(ejercito.id, {
-        ...choque.a,
-        persiguiendo: undefined,
-        ...(perdio ? { enTreguaHasta: treguaHasta } : {}),
-      });
-      porId.set(rival.id, { ...choque.b, ...(gano ? { enTreguaHasta: treguaHasta } : {}) });
+      let cazador = choque.a;
+      let alcanzado = choque.b;
+      if (gano) {
+        const secuela = trasDerrota(choque.b, instante);
+        alcanzado = secuela.perdedor;
+        cazador = cargarBotin(choque.a, secuela.botin, capacidadCargaDe(choque.a, caravanasVivas));
+      } else if (perdio) {
+        const secuela = trasDerrota(choque.a, instante);
+        cazador = secuela.perdedor;
+        alcanzado = cargarBotin(choque.b, secuela.botin, capacidadCargaDe(choque.b, caravanasVivas));
+      }
+      porId.set(ejercito.id, { ...cazador, persiguiendo: undefined });
+      porId.set(rival.id, alcanzado);
       faccionesActuales = choque.facciones;
       for (const e of choque.eventos) {
         eventos.push(atribuir(e, ejercito.origenAsentamientoId));

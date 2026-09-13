@@ -1,7 +1,12 @@
 # Fixtures de reconstrucción de asentamiento
 
-Dos ejemplos reales para que Codex/Unity pueda levantar cubos de colores sobre la huella de un asentamiento
-de BronzeAge. Elegir según lo que se necesite verificar:
+Ejemplos reales para que Codex/Unity pueda levantar cubos de colores sobre la huella de un asentamiento de
+BronzeAge. Elegir según lo que se necesite verificar:
+
+- **`lab-asentamiento-0-40-80-ba005/`** — **referencia geométrica vigente** (`layoutVersion` 2, BA-005:
+  huellas partidas por dos y Centro Urbano 4×4). Mismo guion y misma procedencia que el fixture de laboratorio
+  de abajo; incluye muralla cerrada, nivel 4 y 21 tipos. Los dos fixtures siguientes son de la geometría
+  anterior: sus huellas miden el doble de lado y ya no coinciden con el motor.
 
 - **`asentamiento-0-1108-1328/`** — cuerpo EXACTO de una respuesta HTTP real de
   `GET /v1/jugador/partidas/:gameId`, capturada contra una copia aislada de una partida real (sin murallas,

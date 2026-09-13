@@ -178,7 +178,6 @@ export const CATALOGOS = {
         tipo !== 'plaza' &&
         tipo !== 'plazaDeArmas' &&
         tipo !== 'patioDeGremios' &&
-        tipo !== 'tallerCarpinteria' &&
         tipo !== 'pozo' &&
         tipo !== 'parque'
     )

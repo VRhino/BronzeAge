@@ -121,7 +121,7 @@ tener un `Jugador` por partida).
 
 ### Configuración: `src/constants.ts`
 
-60 tablas exportadas, 2004 líneas (medido 2026-09-09; `BALANCE_VERSION` va por 8): recursos, edificios,
+60 tablas exportadas, 2004 líneas (medido 2026-09-09; `BALANCE_VERSION` va por 9 desde BA-005, 2026-09-13): recursos, edificios,
 economía, población, construcción, combate, política, mundo, murallas, visión y balance. **Servida completa y sin autenticar en `GET /v1/balance`** desde el hito **C7** (2026-08-26), con
 `BALANCE_VERSION` estampada en cada partida al crearla. Sigue siendo **global al proceso** — la parte
 "versionado por partida/temporada, con overrides reales" del hito queda deliberadamente sin construir, sin un
@@ -249,6 +249,7 @@ Piezas de soporte:
   escribiendo el mismo `gameId`. Desde el formato **v13** NO guarda el terreno (se regenera de la seed al
   cargar) ni el historial de eventos (vive en `eventosDePartida.ts`) — ver "Persistencia" más abajo.
   `FORMATO_SNAPSHOT_VERSION` (hoy **13**) rechaza cualquier otro formato; ya no hay cadena de migraciones.
+  También rechaza un `worldgenVersion` o un `layoutVersion` distintos de los de la build (ver "Persistencia").
 - `server/eventosDePartida.ts` — el historial de `EventoDominio` de una partida en un JSONL append-only
   hermano del snapshot (`<gameId>.eventos.jsonl`), mismo patrón que `auditoria.ts`. `anexarEventos` añade una
   línea por evento; `leerEventos` lo devuelve más-nuevo-primero para que `cargarPartida` rehidrate
@@ -381,6 +382,11 @@ descubre qué partidas existen en disco, incluidas las que nadie ha reabierto to
   acepta solo el formato vigente y rechaza el resto con `FormatoSnapshotNoSoportadoError` — mismo criterio que
   `persistenciaIdentidad.ts` desde el principio. La próxima mecánica que cambie la forma del snapshot sube el
   número y, si en ese momento existen partidas que preservar, vuelve a añadir su función de migración puntual.
+- **Dos versiones de contenido también rechazan, sin migrar:** `worldgenVersion` (`WorldgenVersionNoCoincideError`
+  — el mapa se regenera de la seed y otro algoritmo daría otro mapa) y, desde BA-005 (2026-09-13),
+  `layoutVersion` (`LayoutVersionNoCoincideError`, `LAYOUT_VERSION` en `constants.ts`) — la huella de cada
+  edificio se deriva del catálogo vigente, así que sus `posicion` guardadas no encajarían en otra geometría.
+  `balanceVersion` en cambio solo se registra.
 - El estado de acceso (usuarios/sesiones/membresías/credenciales locales) se persiste bajo la clave
   `identidad.json` del mismo almacén (`server/persistenciaIdentidad.ts`). El repositorio persistente solo lo
   cablea `index.ts`; el `crearServidor` por defecto usa el **en memoria** — un embebido que no lo sustituya

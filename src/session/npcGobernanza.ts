@@ -30,7 +30,7 @@ import type { Mapa } from '../world/mapa';
 import type { RandomFn } from '../worldgen';
 import type { ContextoSimulacion, EstadoSimulacion } from '../engine/simulation';
 import { avanzarAutoComercioSimulado } from '../engine/simulacionAutoComercio';
-import { reclutarTropa, ReclutamientoInvalidoError } from '../engine/tropas';
+import { reclutarTropa, ReclutamientoInvalidoError, type MundoEscuadras } from '../engine/tropas';
 import { atacarCampamentoBandidos, CombateInvalidoError } from '../engine/combate';
 import { lanzarCaravanaFundacion, costoCaravanaFundacion, ExpansionInvalidaError } from '../engine/expansion';
 import {
@@ -627,6 +627,7 @@ function truequeDeSupervivencia(
  */
 function reclutarParaTodos(
   asentamiento: Asentamiento,
+  mundo: MundoEscuadras,
   contadorInicial: number,
   tropaId: string,
   origen: 'pesants' | 'artesanos'
@@ -650,7 +651,7 @@ function reclutarParaTodos(
   let exitosos = 0;
   for (const jugadorId of jugadores) {
     try {
-      actual = reclutarTropa(actual, jugadorId, asentamiento.faccionId, tropaId, origen, contador++);
+      actual = reclutarTropa(actual, mundo, jugadorId, asentamiento.faccionId, tropaId, origen, contador++);
       exitosos++;
     } catch (err) {
       if (!(err instanceof ReclutamientoInvalidoError)) throw err;
@@ -1439,13 +1440,17 @@ export function avanzarNpcGobernanza(
   let reclutamientosExitosos = 0;
   const tropaId = config.tropaId ?? 'milicia_lanceros';
   const origenReclutamiento = config.origenReclutamiento ?? 'pesants';
-  asentamientos = asentamientos.map((a) => {
-    if (!esNpc(a.faccionId)) return a;
-    const resultado = reclutarParaTodos(a, contador, tropaId, origenReclutamiento);
+  // Bucle y no `map`: la unicidad por `tropaId` es de toda la partida, así que cada plaza tiene que ver lo que
+  // las anteriores ya reclutaron este mismo tick (un NPC puede residir en dos).
+  asentamientos = [...asentamientos];
+  for (let i = 0; i < asentamientos.length; i++) {
+    const a = asentamientos[i]!;
+    if (!esNpc(a.faccionId)) continue;
+    const resultado = reclutarParaTodos(a, { ...trasComercio, asentamientos }, contador, tropaId, origenReclutamiento);
     contador = resultado.contador;
     reclutamientosExitosos += resultado.reclutamientosExitosos;
-    return resultado.asentamiento;
-  });
+    asentamientos[i] = resultado.asentamiento;
+  }
 
   const trasBandidos =
     config.atacarCampamentos === false

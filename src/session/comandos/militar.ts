@@ -47,6 +47,7 @@ export const reclutarTropa = comando<ParamsReclutarTropa, { reclutados: number }
   const faccionDelJugador = estado.facciones.find((f) => esCiudadano(f, params.jugadorId));
   const actualizado = reclutarTropaEngine(
     asentamiento,
+    estado,
     params.jugadorId,
     faccionDelJugador?.id ?? '',
     params.tropaId,

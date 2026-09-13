@@ -1,4 +1,4 @@
-import type { Asentamiento, Escuadron } from '../domain/types';
+import type { Asentamiento, Caravana, Ejercito, Escuadron } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
 import { MILITAR, MOVIMIENTO, RECLUTAMIENTO_ORO_POR_ESCALON, RESERVA_CONSTRUCCION, TROPAS_RECLUTABLES } from '../constants';
 
@@ -16,6 +16,26 @@ import { puedeReclutarEn } from './pertenencia';
 
 export class ReclutamientoInvalidoError extends Error {}
 
+/** Dónde puede estar una escuadra fuera del asentamiento que recluta: otra guarnición, un ejército o la escolta
+ * de una caravana. Solo los campos que mira la unicidad — `GameSessionState` y `EstadoSimulacion` encajan tal cual. */
+export interface MundoEscuadras {
+  asentamientos: readonly Pick<Asentamiento, 'id' | 'nombre' | 'escuadrones'>[];
+  ejercitos: readonly Pick<Ejercito, 'id' | 'escuadrones'>[];
+  caravanas: readonly Pick<Caravana, 'id' | 'escolta'>[];
+}
+
+/** Dónde tiene el jugador su escuadra de `tropaId` FUERA de `asentamientoId`, o `undefined` si no la tiene. */
+function escuadraFuera(mundo: MundoEscuadras, asentamientoId: string, jugadorId: string, tropaId: string): string | undefined {
+  const esSuya = (e: Escuadron) => e.jugadorId === jugadorId && e.tropaId === tropaId;
+  const plaza = mundo.asentamientos.find((a) => a.id !== asentamientoId && a.escuadrones.some(esSuya));
+  if (plaza) return `la guarnición de ${plaza.nombre ?? plaza.id}`;
+  const ejercito = mundo.ejercitos.find((e) => e.escuadrones.some(esSuya));
+  if (ejercito) return `el ejército ${ejercito.id}`;
+  const caravana = mundo.caravanas.find((c) => c.escolta?.some(esSuya));
+  if (caravana) return `la escolta de la caravana ${caravana.id}`;
+  return undefined;
+}
+
 /**
  * Reclutamiento por equipo (Doc 5.7/5.8): recluta una tropa específica vía Barracón/Galería de tiro, según
  * el nivel interno del edificio, pagando el equipo fabricado en Armería en vez de cobre directo. Pesants Y
@@ -29,7 +49,8 @@ export class ReclutamientoInvalidoError extends Error {}
  * Escuadrón de UN jugador, no del asentamiento (Doc 2.5, a petición del usuario — corrige el bug donde dos
  * jugadores reclutando la misma tropa en el mismo asentamiento se fundían en un solo escuadrón compartido):
  * cada jugador residente (fundador o con casa comprada, ver `Asentamiento.jugadoresFundadoresIds`/
- * `casasCompradas`) tiene como mucho UN escuadrón por `tropaId`, tope `tropa.unidadesPorDefecto`. Reclutar ya
+ * `casasCompradas`) tiene como mucho UN escuadrón por `tropaId` en TODA la partida (no por asentamiento: se
+ * busca también en `mundo` — otras guarniciones, ejércitos y escoltas), tope `tropa.unidadesPorDefecto`. Reclutar ya
  * no es un gate del cargo de General (Doc 2.2 vs 2.5 — 2.5 ganó la ambigüedad: reclutar es beneficio de
  * ciudadanía/residencia, no de cargo): cualquier residente puede reclutar o reponer SU propio escuadrón.
  * "Reponer bajas" no es un mecanismo aparte: si el jugador ya tiene el escuadrón por debajo del tope, reclutar
@@ -38,6 +59,8 @@ export class ReclutamientoInvalidoError extends Error {}
  */
 export function reclutarTropa(
   asentamiento: Asentamiento,
+  /** El resto de la partida, para la unicidad global por `tropaId` (Doc 2.5). */
+  mundo: MundoEscuadras,
   jugadorId: string,
   /** Facción del jugador — para `puedeReclutarEn` (Doc 5.4/5.8, revisión 2026-09-08). Para el NPC siempre es
    * `asentamiento.faccionId`; para un comando, la Facción del actor. */
@@ -54,6 +77,11 @@ export function reclutarTropa(
   if (!tropa) throw new ReclutamientoInvalidoError('La tropa no existe en el catálogo.');
 
   const existente = asentamiento.escuadrones.find((e) => e.jugadorId === jugadorId && e.tropaId === tropaId);
+  // La escuadra es una sola en toda la partida: si está fuera, ni se crea otra ni se repone a distancia.
+  const fuera = existente ? undefined : escuadraFuera(mundo, asentamiento.id, jugadorId, tropaId);
+  if (fuera) {
+    throw new ReclutamientoInvalidoError(`Ya tienes una escuadra de ${tropa.nombre}: está en ${fuera}. Solo puedes reponerla donde está.`);
+  }
   // Fuera de tu residencia solo REPONES lo que ya tienes aquí (guarnición o columna) — nunca un escuadrón
   // nuevo ni una tropa distinta.
   if (permiso === 'solo_reponer' && !existente) {

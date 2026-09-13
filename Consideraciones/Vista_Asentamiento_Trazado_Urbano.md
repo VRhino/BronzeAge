@@ -451,6 +451,9 @@ Conectividad (§E6.4) se mide sobre la UNIÓN de calles y caminos, igual que hoy
 
 ### E6.11 La escala ×2 no cuesta nada
 
+> **Nota (2026-09-13):** BA-005 (§E6.24) deshizo el ×2 de las huellas y de las constantes de escala de
+> edificio, pero NO la celda de 3. Las cifras de esta sección son las de su momento.
+
 `tamanoCelda: 6 → 3` y todas las huellas ×2. El álgebra se conserva: `puntoDeRectangulo` da **exactamente el
 mismo punto local** (`6·col + 3·ancho` en ambos modelos). (El Centro Urbano tenía una excepción de
 coordenadas —resuelta en §E6.20, 2026-08-31: su `posicion` ahora es su centro, sin caso especial.)
@@ -1057,6 +1060,9 @@ vistazo los que se han tocado.
 
 ### E6.20 El `posicion` del Centro Urbano pasa a ser su CENTRO (2026-08-31)
 
+> **Nota (2026-09-13):** desde BA-005 el CU mide 4×4 (columnas y filas -2..1); se eligió par precisamente para
+> conservar lo que decidió esta sección — ver §E6.24.
+
 Hasta ahora el Centro Urbano era la ÚNICA excepción de coordenadas del sistema: su `posicion` `(0,0)` no era
 su centro geométrico sino el VÉRTICE de una esquina (originalmente a petición del usuario). Efecto medido: con
 6×6, su huella caía en las columnas 0..5 y filas -6..-1 — **todo el edificio en un solo cuadrante**, con el
@@ -1244,6 +1250,45 @@ Rápida (−25 % de tiempo de obra) y son, en la práctica, una elección estét
 cambia la forma es cosmética y nadie la elegirá: **la forma tiene que ser la consecuencia de un trade-off, no
 el trade-off**. `barrios_gremiales` es la que más cerca está de tener uno solo — agrupar industria acorta la
 distancia a los insumos, que `factorLineaProduccion` ya mide y ya premia. Sin calibrar ni medir.
+
+### E6.24 BA-005: huellas a la mitad, calles igual (2026-09-13)
+
+Origen: propuesta de Codex `Docs/Coordinacion/propuestas/BA-005_huellas_y_escala_asentamiento.md`, tras el
+playtest del usuario en el SettlementPreview de Unity. El ancho de calle (una celda = 3 unidades locales) está
+validado para combate; los edificios ocupaban demasiado frente a él.
+
+**Decisiones del usuario:**
+
+- Todas las huellas ÷2 en ancho y fondo. Ninguna dimensión impar: todas exactas. Vuelven a ser las cifras de
+  la rejilla original (§6), pero sobre la celda de 3 — deshacen el ×2 de §E6.11 sin deshacer la celda.
+- **Centro Urbano 4×4, no 3×3.** Con lados impares su centro no puede caer en `(0,0)`: `celdaMinimaDeEdificio`
+  redondea `-1.5` a `-1` y la huella queda media celda al lado de su `posicion`. Se descartaron desplazar la
+  rejilla media celda (toca todas las conversiones celda↔local) y mover el CU a `(1.5, 1.5)` (rompe §E6.20 y el
+  "origen = centro del CU" del contrato con Unity).
+- La celda de muralla NO se divide: comparte escala con la calle y ya es correcta.
+
+**Constantes (criterio de Claude, a petición del usuario):** las de escala de EDIFICIO se parten con las
+huellas; las de escala de CALLE no se tocan.
+
+| Constante | Antes | BA-005 | Escala |
+|---|---|---|---|
+| `EDIFICIO_TAMANO.*`, `granja.niveles[n].tamano`, `PUESTO_MERCADO_FORMA`, `EDIFICIO_TAMANO_POR_DEFECTO` | Etapa 6 | **÷2** (CU 6×6 → 4×4) | edificio |
+| `FONDO_MANZANA` | 4 | **2** | edificio — dos hileras de Vivienda |
+| `TRAZADO.largoFilaMin` / `largoFilaMax` | 8 / 16 | **4 / 8** | edificio |
+| `TRAZADO.separacionMinimaAnclas` | 12 | **6** | edificio (las ranuras derivan solas) |
+| `TRAZADO.separacionSeguridadAnclas` | 6 | **3** | edificio |
+| `REJILLA_ASENTAMIENTO.tamanoCelda`, `TRAZADO.anchoCalle` | 3 / 1 | sin cambio | calle |
+| `TRAZADO.capCorredorUrbano` / `capCorredorAfueras` | 12 / 200 | sin cambio | calle — palanca si la ciudad sale esponjosa |
+| `MURALLA.*` | — | sin cambio | calle |
+| `radioAfuerasMin` / `anchoBandaAfueras` / `radioMapa` | 60 / 36 / 220 | sin cambio | unidades locales |
+
+**Partidas guardadas.** A diferencia de §E6.11, esto SÍ mueve la geometría de lo persistido: una Vivienda 2×2
+guardada, leída como 1×1, cae media celda al lado. Sin migración (regla general del usuario): nueva
+`LAYOUT_VERSION` (`constants.ts`) en el snapshot, y `cargarPartida` rechaza una distinta igual que
+`worldgenVersion`. `BALANCE_VERSION` no servía: solo es registro, no rechaza.
+
+**Tests.** `escalaRejilla.test.ts` deja de congelar la identidad de §E6.11 (ya no aplica) y congela la tabla
+BA-005 (27 tipos, 32 combinaciones), el CU centrado en el origen y la inversa exacta posición↔celda.
 
 ---
 
@@ -1490,7 +1535,8 @@ construidas. Con el árbol único de anclas (§5.4 actual), no hay nada que rela
 pasó a ser el **radio inicial** desde el que `crearAnclaNueva` empieza a probar huecos a lo largo de una
 dirección (`RADIO_INICIAL_RANURA`), creciendo de `FONDO_MANZANA` en `FONDO_MANZANA` hasta un tope
 (`RADIO_MAXIMO_RANURA = separacionMinimaAnclas × 3`). El único piso que de verdad nunca cede sigue siendo
-`separacionSeguridadAnclas` (2, fijo) — ahora es el ÚNICO criterio de rechazo duro para una ranura nueva.
+`separacionSeguridadAnclas` (fijo; hoy 3 celdas — 6 tras §E6.19, partido por dos en §E6.24) — ahora es el ÚNICO
+criterio de rechazo duro para una ranura nueva.
 
 **BUG (2026-08-19) medido por el usuario en la interfaz, y corregido el mismo día — la primera versión medía
 centro a centro, no borde a borde.** El usuario fundó un asentamiento, dejó que el NPC construyera, y encontró
@@ -1620,14 +1666,13 @@ variedad de silueta entre ciudades: un Mercado 3x2 puede nacer como 3x2 o como 2
 
 | Tipo | Tamaño | Ubicación |
 |---|---|---|
-| Centro Urbano | 3x3 | origen — primer ancla |
+| Centro Urbano | 4x4 (3x3 hasta BA-005, §E6.24) | origen — primer ancla |
 | Plaza | 2x2 | ancla residencial adicional (1 de 3, sorteada) |
 | Pozo | 1x1 | ancla residencial adicional (1 de 3, sorteada) |
 | Parque | 3x2 | ancla residencial adicional (1 de 3, sorteada) |
 | Plaza de Armas | 2x2 | ancla militar |
 | Patio de Gremios | 2x2 | ancla de industria |
 | Carpintería (pieza principal) | 4x2 | satélite de Plaza de Armas |
-| Taller de carpintería | 2x2 | satélite de Carpintería |
 | Fundición | 2x2 | satélite de Patio de Gremios |
 | Curtiduría | 2x2 | satélite de Patio de Gremios |
 | Armería | 2x3 | satélite de Patio de Gremios |
@@ -1637,7 +1682,7 @@ variedad de silueta entre ciudades: un Mercado 3x2 puede nacer como 3x2 o como 2
 | Leñera | 1x1 | regla genérica |
 | Almacén | 2x1 | regla genérica |
 | Mercado (pieza principal) | 3x2 | ancla de mercado |
-| Puesto de mercado | 2x2, 3x2 o 1x1 según la pieza | satélite de Mercado |
+| Puesto de mercado | 1x2, 1x3 o 1x1 según la pieza | satélite de Mercado |
 | Palacio | 4x4 | sin ancla, lo más cerca posible del centro |
 | Corral | 4x3 | afueras |
 | Granja | 2x2 → 2x3 → 4x3 → 6x6 (niveles 1-4) | afueras |

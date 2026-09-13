@@ -1,6 +1,6 @@
 # BA-005 — Huellas de edificios y escala de la grilla de asentamiento
 
-**Estado:** LISTO_PARA_REVISION  
+**Estado:** ACEPTADO — implementado en la rama `ba-005-huellas` de BronzeAge, pendiente de commit y de la validación de Codex con el fixture nuevo (ver "Revisión de Claude" al final)  
 **Fecha:** 2026-09-13  
 **Autor:** Codex · **Implementación BronzeAge:** Claude  
 **Origen:** playtest del usuario en SettlementPreview y encargo de documentar/proponer el cambio.
@@ -94,3 +94,90 @@ Las reglas económicas (producción, costes, población, desbloqueos) no se reca
 
 **Tamaños ambiguos:** ninguno en el código inspeccionado.  
 **Claude:** convención de origen/paridad, tratamiento de partidas existentes, versión geométrica y discrepancia de catálogo del fixture. Si una solución requiere alterar decisiones de producto (por ejemplo mover el origen del centro urbano), debe presentarla al usuario antes de aplicarla.
+
+---
+
+## Revisión de Claude (2026-09-13)
+
+**Veredicto: ACEPTADO con correcciones.** Inventario verificado contra el código: 27 tipos, 32 combinaciones,
+cero dimensiones impares. Implementado en la rama `ba-005-huellas`; decisiones de producto tomadas por el usuario
+donde se indica.
+
+### Correcciones a la propuesta
+
+1. **Constantes de trazado medidas en celdas.** La Etapa 6 no solo dobló las huellas: dobló también
+   `FONDO_MANZANA`, `TRAZADO.largoFila*` y la separación entre anclas. Partir solo las huellas habría dejado
+   manzanas de cuatro hileras de Vivienda —las dos centrales sin frente de calle, contra el invariante "todo
+   edificio toca calle"—. Se parten con las huellas las de escala de EDIFICIO; las de escala de CALLE no se tocan.
+2. **Murallas** (decisión del usuario): la celda de muro comparte escala con la calle y ya es correcta. No se
+   divide nada de `MURALLA`.
+3. **`tallerCarpinteria`**: se retiró del motor el 2026-09-12 (doc trazado §9, revertido a petición del
+   usuario); el README del fixture anterior es de antes de esa fecha. Se quitaron sus restos en `cliente/`. No
+   hay ningún catálogo adicional fuera de los 27 tipos.
+
+### Origen y paridad — decisión del usuario
+
+**Centro Urbano 4×4, no 3×3**: lados pares, su centro cae en un vértice de la rejilla y `(0,0)` sigue siendo su
+centro exacto y el origen del asentamiento. Sin desplazar la rejilla y sin excepciones ni en BronzeAge ni en
+Unity. Es la única entrada de la tabla que no es "÷2" (6×6 → 4×4). Descartadas: rejilla desplazada medio paso
+(tocaba toda conversión celda↔local) y CU en `(1.5, 1.5)` (rompía el contrato "origen = centro del CU").
+
+### Constantes
+
+| Constante | Antes | Ahora | Escala |
+|---|---|---|---|
+| Huellas (`EDIFICIO_TAMANO`, `granja.niveles[n].tamano`, `PUESTO_MERCADO_FORMA`, `EDIFICIO_TAMANO_POR_DEFECTO`) | tabla de arriba | ÷2, CU 4×4 | edificio |
+| `FONDO_MANZANA` | 4 | 2 | edificio (dos hileras de Vivienda) |
+| `TRAZADO.largoFilaMin` / `largoFilaMax` | 8 / 16 | 4 / 8 | edificio |
+| `TRAZADO.separacionMinimaAnclas` | 12 | 6 | edificio |
+| `TRAZADO.separacionSeguridadAnclas` | 6 | 3 | edificio |
+| `REJILLA_ASENTAMIENTO.tamanoCelda` / `TRAZADO.anchoCalle` | 3 / 1 | sin cambio | calle |
+| `TRAZADO.capCorredorUrbano` / `capCorredorAfueras` | 12 / 200 | sin cambio | calle |
+| `MURALLA.*` | — | sin cambio | calle |
+| `radioAfuerasMin` / `anchoBandaAfueras` / `radioMapa` | 60 / 36 / 220 | sin cambio | unidades locales |
+
+Registro de diseño en `Consideraciones/Vista_Asentamiento_Trazado_Urbano.md` §E6.24.
+
+### Compatibilidad de partidas y versión geométrica
+
+Sin migración (regla general del usuario). Nueva **`LAYOUT_VERSION = 2`** (`src/constants.ts`), global de build
+(hay una sola geometría por build, no una por asentamiento):
+
+- Se guarda en el snapshot (`PartidaExportada.layoutVersion`), y `cargarPartida` rechaza una distinta con
+  `LayoutVersionNoCoincideError`, igual que `worldgenVersion`. Los snapshots anteriores a BA-005 no traen el
+  campo y se rechazan. Nada se recoloca en silencio.
+- Se publica en `GET /v1/balance` → `geometriaUrbana.LAYOUT_VERSION` y viaja en el export del laboratorio
+  (`layoutVersion`). No es el `version` de la proyección.
+- `BALANCE_VERSION` sube a 9 porque cambia el contenido de tablas servidas, pero sigue sin rechazar nada.
+- `01_Modelo_de_datos_compartido.md` actualizado: §3 (huella) y §17 (`layoutVersion` y factor celda→local).
+
+### Pruebas
+
+- `escalaRejilla.test.ts` reescrito: congela la tabla de las 32 combinaciones, el CU centrado en el origen y la
+  inversa exacta posición↔celda para todo tipo, rotación y coordenadas negativas. Se retiró la tabla dorada de la
+  Etapa 6, que congelaba la identidad ×2 que BA-005 rompe a propósito.
+- `persistenciaPartida.test.ts`: rechazo de un snapshot sin `layoutVersion`.
+- Suite completa 1236/1236 y typecheck de motor, lab, scripts y `cliente/`. Los tests de trazado (no solape,
+  frente de calle, anclas/satélites, crecimiento de granjas, murallas) pasan sin tocar expectativas: comprueban
+  propiedades, no cifras.
+
+### Fixture nuevo
+
+`Docs/Coordinacion/fixtures/lab-asentamiento-0-40-80-ba005/`: export del laboratorio más vista cenital, con
+seed, pasos, revisión geométrica, recuentos e invariantes comprobados en su README. La proyección HTTP usa la
+misma función (`RunnerDePartida` → `trazadoParaAsentamiento`, `src/server/runnerDePartida.ts`). El fixture
+anterior (`lab-asentamiento-0-40-80/`) queda como histórico de la geometría previa; no se editó.
+
+**Observado en el laboratorio (seed 1, mismo guion que el fixture anterior).** Tick 850: nivel 2 con 76
+edificios, igual que antes. Tras encolar los cinco edificios de nivel 3, tick 1150: nivel 3 con 144 edificios.
+Con la muralla cerrada, tick 1400: nivel 4 con 196 edificios. Muralla de nivel 2: 95 celdas, 3 puertas y 10
+torres (el fixture anterior tenía 191, 9 y 17): la ciudad es mucho más compacta y el perímetro baja a la
+mitad. La economía no se recalibró; lo que cambia es la densidad.
+
+### Pendiente para Codex
+
+- Incorporar el fixture nuevo y contrastar huellas y centros. Mantener `S` y el margen 0.99, sin ningún factor
+  0.5 adicional. Comprobar recorrido, colisiones y acceso por puertas.
+- Contrastar la `layoutVersion` del fixture (2) con la esperada.
+
+Cierre cruzado cuando Codex documente la compatibilidad con el fixture nuevo.

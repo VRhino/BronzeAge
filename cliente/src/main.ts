@@ -119,7 +119,6 @@ const EDIFICIO_NOMBRE: Record<string, string> = {
   plaza: 'Plaza',
   plazaDeArmas: 'Plaza de Armas',
   patioDeGremios: 'Patio de Gremios',
-  tallerCarpinteria: 'Taller de carpintería',
   pozo: 'Pozo',
   parque: 'Parque',
 };
@@ -149,7 +148,6 @@ const EDIFICIO_FUNCION: Record<string, string> = {
   plaza: 'Ancla de saturación del núcleo residencial: no se construye ni cuesta nada, aparece sola cuando el núcleo de Vivienda alrededor del Centro Urbano se llena. Solo ocupa suelo.',
   plazaDeArmas: 'Ancla del núcleo militar: no se construye ni cuesta nada, aparece sola frente al primer edificio militar (Barracón/Galería de tiro/Carpintería) que se construye. Solo ocupa suelo.',
   patioDeGremios: 'Ancla del núcleo de industria: no se construye ni cuesta nada, aparece sola frente al primer edificio de transformación (Fundición/Curtiduría/Armería/Gran Fundición/Maravilla) que se construye. Solo ocupa suelo.',
-  tallerCarpinteria: 'Pieza de la zona de Carpintería: no se construye ni cuesta nada, aparecen dos al completarse la Carpintería. Solo ocupa suelo.',
   pozo: 'Ancla de saturación del núcleo residencial (una de tres posibles, sorteada al azar): no se construye ni cuesta nada. Solo ocupa suelo.',
   parque: 'Ancla de saturación del núcleo residencial (una de tres posibles, sorteada al azar): no se construye ni cuesta nada. Solo ocupa suelo.',
 };

@@ -117,6 +117,19 @@ ambigüedad (corrección R03).
 con la vigente en la `Batalla` — si `ticketRevision` cambió (sustitución de participante antes de empezar),
 una asignación/inicio de la revisión vieja se rechaza con `409`.
 
+**Dos orquestadores con la misma batalla (R02/R03, añadido 2026-09-13).** `GET /pendientes` puede devolver
+la misma batalla a dos orquestadores a la vez; quien decide es el `POST .../asignacion`. BronzeAge acepta la
+primera asignación válida para esa `battleId` y `ticketRevision` y rechaza las demás con `409`
+(`batalla.ya_asignada`). Repetir el POST con el mismo `intentoAsignacionId` es idempotente: devuelve `200`
+con la asignación ya aceptada. No hace falta un paso previo de reserva: todas las mutaciones de una partida
+pasan por la misma cola serial del runner, así que dos asignaciones nunca se aplican a la vez. Como estas
+rutas no llevan `gameId`, BronzeAge mantiene un índice `battleId → gameId` para encontrar la partida.
+
+**Reintentos del servidor de batalla.** Conquest reintenta `asignacion`, `inicio` y `resultado`, espaciando
+cada vez más los intentos, hasta recibir una respuesta definitiva: 2xx, o un 4xx que no sea transitorio. Es
+lo que permite que una caída de BronzeAge no pierda un resultado. La tabla completa de transiciones, con los
+vencimientos y lo que pasa en cada caída, está en doc 01 §15.
+
 `POST .../resultado` sigue el flujo de idempotencia del doc 01 §16: mismo `resultId`+hash → `200` con el
 resultado ya aplicado; mismo `resultId` con hash distinto → `409` (auditado). Solo se acepta si la
 `Batalla` está `en_curso` (nunca `cancelada`/`aplicada`/`fallida`/`convocando`/`asignada`). Antes de
@@ -133,9 +146,11 @@ aplicar, valida en orden (checklist ampliado — corrección R03/R04/R05):
 7. ganador/razón compatibles con `BattleRules` del ticket;
 8. fechas/duración coherentes;
 9. `schemaVersion`/versión de build/balance autorizada;
-10. la credencial que firma pertenece al `intentoAsignacionId` activo de esta `Batalla`.
+10. la credencial que firma pertenece al `intentoAsignacionId` activo de esta `Batalla`;
+11. `xpGanada` de cada héroe y escuadra es un entero ≥ 0 y no supera el tope por batalla de `BattleRules`
+    si lo hay (la XP la calcula Unity desde 2026-09-13, doc 01 §15).
 
-Cualquier fallo de 1-10 responde `409` con el detalle — nunca se aplica una consecuencia parcial (mismo
+Cualquier fallo de 1-11 responde `409` con el detalle — nunca se aplica una consecuencia parcial (mismo
 principio del §2: o se aplica entero, o no ocurrió nada).
 
 ### 3.4 Lectura y recuperación de la propia asignación (jugador) — corrección R02/R06
@@ -177,10 +192,17 @@ de `src/server/rutas/jugador.ts`, ya consumidas por `BronzeAgeClient/src/apiClie
 ```text
 POST /jugador/partidas/:gameId/membresia    unirse a una partida (crea/recupera Membresia+jugadorId)
 GET  /jugador/partidas/:gameId               proyección filtrada del estado (con Heroe/heroeId cuando exista)
-GET  /jugador/partidas/:gameId/eventos       recuperación de eventos perdidos — protocolo cursor/versión,
-                                             para reconectar sin perder estado estratégico
+GET  /jugador/partidas/:gameId/eventos?desde=<version>
+                                             eventos con version > desde, filtrados como la proyección
+                                             (cursor ya existente, Fase C13)
 GET  /jugador/partidas/:gameId/mapa/:mapaId   recursos de mapa (worldgen, doc 01 §11/§18)
 ```
+
+**Reconexión (ya funciona así hoy).** El cliente guarda el `version` de la última proyección o evento que
+recibió. Al reconectar el WebSocket, vuelve a suscribirse a sus canales (las suscripciones no sobreviven a
+un cierre) y pide `GET .../eventos?desde=<ese version>` para recuperar lo que se perdió; si el hueco es
+grande, le basta con pedir la proyección entera otra vez. El WebSocket solo avisa: nunca es la única copia de
+un dato.
 
 Estas rutas NO cambian de forma para dar soporte a `Heroe` — solo su contenido crece (`jugadorId` sigue
 existiendo en la respuesta; `heroeId` se añade cuando el modelo de héroe esté implementado). Unity debe
@@ -192,6 +214,62 @@ los endpoints de batalla, antes de poder sustituir a Vite en cualquier partida r
 `asentamientosPropios` (residencia/ciudadanía), NO por "el héroe está físicamente ahí en este instante". Ver
 doc 01 §19 para el detalle — este documento no amplía ese permiso al llevarlo a Unity: el DTO que sirve
 Unity respeta la misma regla de acceso que ya sirve a Vite hoy.
+
+### 4.1 Qué añade el modelo de héroe a la proyección de jugador (R08, añadido 2026-09-13)
+
+La proyección actual (`proyectarParaJugador`, `session/proyecciones/jugador.ts`) ya trae, entre otros:
+`gameId`, `instante`, `version`, `jugadorId`, `faccionId`, `mapaId`, `estadoMapa`, `facciones`,
+`asentamientos` (solo el interior del asentamiento propio en el que está), `asentamientosAvistados`,
+`asentamientosConocidos`, caravanas y ejércitos propios y avistados, `acuerdos`, `ordenes`, `relaciones`,
+`titulos`, `caminos`, `campamentosBandidos`, `historial`, `zonas`, `zonasFusionadas` y
+`trazadoPorAsentamiento`. Esa forma se mantiene. El modelo de héroe añade:
+
+```text
+heroe                  el héroe propio completo (doc 01 §12), con:
+  escuadrones[]        todas sus escuadras, con contenedor, enGuarnicion y reservaBatalla
+  loadouts[]           cada uno con su liderazgoTotal, DERIVADO al servir (no se persiste)
+  cupoGuarnicion       DERIVADO: cupo en el asentamiento donde reside (0 si es huérfano)
+batallas[]             batallas en las que participa, solo estado público (el token va por §3.4)
+```
+
+De los héroes ajenos que el jugador puede ver (en columnas y ejércitos avistados, o en su mismo
+asentamiento), la proyección trae solo su parte pública (decisión del usuario, 2026-09-13; canon Doc
+5.16.7):
+
+```text
+HeroePublico
+  heroeId
+  displayName
+  classDefinitionId
+  nivel
+  heridoHasta?           si está herido, hasta cuándo
+  escuadrasQueLleva[]    solo las que lleva consigo: { tropaId, cantidad, nivel }
+  equipamiento           por hueco, la definición del objeto que lleva puesto (no su inventario)
+```
+
+Nada más del héroe ajeno viaja al cliente: ni experiencia, puntos, atributos, perks o Liderazgo, ni su
+residencia, los escuadrones de su campamento, sus loadouts, su inventario o sus monedas, ni género, avatar o
+si es humano o bot.
+
+### 4.2 Comandos del héroe (nuevos, mismo mecanismo del §2)
+
+| Comando | Parámetros | Devuelve (`resultado.datos`) | Rechazos de dominio |
+|---|---|---|---|
+| `crearHeroe` | `displayName`, `classDefinitionId`, `genero`, `avatar` | `{ heroeId }` | ya tiene héroe en esta partida; clase inexistente |
+| `repartirPuntos` | `atributos?` (atributo → puntos), `perks?` (ids) | — | sin puntos suficientes en esa bolsa; perk no disponible |
+| `equipar` | `slot`, `itemInstanceId` o `null` | — | objeto que no es suyo; hueco no válido |
+| `guardarLoadout` | `loadoutId?`, `displayName`, `squadIds[]`, `perksSeleccionados[]`, `activo?` | `{ loadoutId, liderazgoTotal }` | escuadra que no es suya; supera su Liderazgo |
+| `borrarLoadout` | `loadoutId` | — | no existe |
+| `asignarGuarnicion` | `squadId` | — | no reside aquí; escuadra fuera de su campamento; supera el cupo |
+| `retirarGuarnicion` | `squadId` | — | no está en guarnición |
+
+- Una `Membresia` sin héroe no puede hacer nada más en la partida hasta crearlo. Crear el héroe es un
+  comando aparte de `POST .../membresia` porque necesita datos del jugador (nombre, clase, aspecto).
+- Trasladar el campamento es el `cambiarResidencia` que ya existe (Doc 2.5): no hace falta un comando nuevo.
+- Salir con un loadout reutiliza `salirAlMundo` y `movilizarEjercito`, que pasan a aceptar un `loadoutId`
+  además de la lista de escuadras.
+- Como el resto de comandos de `/jugador/*`, todos devuelven en la misma respuesta la proyección propia
+  actualizada, y los rechazos de dominio salen como `resultado.ok: false` con su `codigoError`.
 
 ## 5. Formato de error y versión
 
@@ -232,7 +310,5 @@ del modelo de cooperación) — pendiente de escribir junto con el código, no e
   superficie.
 - Rotación/revocación de la credencial servidor-a-servidor si una instancia de Conquest se compromete —
   fuera de alcance de este documento, es política operativa.
-- Formato exacto de paginación/cursor de `GET /jugador/partidas/:gameId/eventos` (§4) — se declara que debe
-  existir un protocolo de reconexión sin perder estado, pero no su forma concreta todavía.
 - Verificabilidad del worldgen híbrido (fixtures de paridad TS/C# vs. datos canónicos servidos) — doc 01
   §18, todavía sin decidir cuál de las dos vías se adopta.

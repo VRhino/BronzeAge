@@ -54,10 +54,10 @@ Contrastado contra `src/domain/types.ts`, `src/acceso/tipos.ts` y
   pasa de `jugadorId` a `heroeId`. La primera lectura de esta revisión confundía ubicación con identidad al
   decir que el ámbito de `squadId` era "dentro del contenedor" — es único y estable dentro de `gameId` con
   independencia de en qué contenedor esté en cada momento (`Asentamiento.escuadrones`/`Ejercito.escuadrones`/
-  escolta/reserva de batalla), con invariante de exclusividad: solo en uno a la vez. El invariante "un
-  `Escuadron` por `tropaId` por héroe/asentamiento" queda pendiente de revisión de implementación: no puede
-  depender de que dos escuadras del mismo `tropaId` nunca coincidan en la misma lista (una sale y otra se
-  recluta después — ambas podrían volver a coexistir).
+  escolta/reserva de batalla), con invariante de exclusividad: solo en uno a la vez. Unicidad
+  (decisión del usuario, 2026-09-13): como mucho una `Escuadron` por (`heroeId`, `tropaId`) en toda la
+  partida, comprobada contra todas las escuadras del héroe y no solo contra la lista del asentamiento — ver
+  `01_Modelo_de_datos_compartido.md` §13.
 
 ### 2. Propiedad de escuadras por jugador y asignación por loadout
 
@@ -142,10 +142,11 @@ calcula/valida en BronzeAge y nunca se acepta como verdad enviada por el cliente
    cambio de héroe dentro de una partida (no hace falta diseñar sustitución, al ser único por mundo).
 2. **Veteranía BronzeAge vs nivel/XP Conquest — RESUELTO, decisión del usuario (2026-09-11): gana
    Conquest.** El modelo de nivel/XP es más completo; `Escuadron.veterania` (un solo número que sube
-   combatiendo) se **reemplaza** por nivel + experiencia al estilo Conquest. El servidor de batalla Unity
-   reporta los hechos (bajas, victoria/derrota, objetivos) y BronzeAge sigue siendo quien calcula el
-   incremento de XP/nivel a partir de esos hechos — el servidor de batalla nunca envía XP ya calculada, solo
-   los hechos tácticos, mismo principio de autoridad que ya fija BA-001.
+   combatiendo) se **reemplaza** por nivel + experiencia al estilo Conquest. **Actualizado 2026-09-13
+   (decisión del usuario, sustituye lo que decía aquí):** la XP ganada la calcula el servidor de batalla
+   Unity, porque depende del desempeño (bajas, héroes abatidos, capturas, daño, MVP, puesto en la tabla) y
+   eso solo lo ve Unity. Llega como delta en el `BattleResult`; BronzeAge la valida, la suma y aplica la
+   curva de nivel. Detalle en `01_Modelo_de_datos_compartido.md` §15.
 3. **Herido vs muerto — RESUELTO, decisión del usuario (2026-09-11): gana BronzeAge.** El `heridoHasta` que
    mencionaba la revisión anterior es un estado que debe aplicar al **héroe** (que ahora sí combate
    directamente en la partida real de Unity), no a la escuadra. **Las escuadras no tienen estado de
@@ -153,7 +154,7 @@ calcula/valida en BronzeAge y nunca se acepta como verdad enviada por el cliente
    funciona hoy — Conquest no impone su distinción herido/muerto sobre las escuadras. El `BattleResult`
    reporta por escuadra solo supervivientes/muertos (sin heridos), y por separado puede indicar si el héroe
    de un lado quedó herido (debuff temporal, análogo al actual `heridoHasta` pero movido de `Escuadron` a
-   `Heroe`).
+   `Heroe`). Duración: 2 minutos de mundo (decisión del usuario, 2026-09-13).
 4. **Economía/monedas de héroe.** `Heroe` sí existe (decisión #1), así que sí hay que resolverlo: las
    monedas de héroe de Conquest (`bronze/silver/gold` de `HeroData`) y el oro de Facción/asentamiento de
    BronzeAge se mantienen como economías DISTINTAS, sin fusión automática por nombre — mismo criterio que ya
