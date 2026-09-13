@@ -34,6 +34,10 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 29 | ONBOARDING | Curva de progresión inicial gradual | ✘ nada |
 | 30 | MILITAR | Batallas con héroes: guarnición, campamento y héroes bot | ✘ nada (hoy defienden todas las escuadras) |
 | 31 | HÉROE | Modelo de Héroe: uno por jugador y mundo, dueño de los escuadrones | ✘ nada (hoy manda el Jugador) |
+| 32 | POLÍTICA | Cabos sueltos de diseño político | ✘ sin decidir |
+| 33 | COMERCIO | Cabos sueltos de diseño comercial | ✘ sin decidir |
+| 34 | SUMINISTRO | La economía no llena el carro de un ejército | ✘ sin decidir |
+| 35 | VARIOS | Cabos sueltos de mundo, población y militar | ✘ sin decidir |
 
 **Pospuesto explícitamente, fuera de esta lista:** el **Attack Timer** (Doc 5.6, decidido y aplazado a
 fase posterior a Fase 0) y el **comercio marítimo / unidades navales** (fuera del alcance de Fase 0 por
@@ -143,8 +147,8 @@ pero la progresión todavía no está diseñada, así que hoy coinciden"* (`doma
 Un jugador sin registro usa `LIDERAZGO.base`.
 
 Falta decidir qué hace subir el liderazgo (combatir, ganar, tiempo al mando, cargo militar…) y con qué curva.
-La progresión de la **tropa** sí existe: la veteranía sube el poder del mismo escuadrón sin cambiarle nunca la
-identidad (Doc 5.8). La mecánica de Liderazgo ya admite un efectivo > base sin tocar nada — solo falta la
+Los **escuadrones** progresan por nivel y experiencia (Doc 5.16.3), sin cambiar nunca de tropa (Doc 5.8); el
+motor aún usa veteranía (§31). La mecánica de Liderazgo ya admite un efectivo > base sin tocar nada — solo falta la
 fuente.
 
 ## 13. La capital como decisión del jugador
@@ -221,8 +225,7 @@ algo que se recalcula al vuelo. Hoy las zonas de influencia y las fronteras ajen
 ni el sistema de Aedas. Lo único con el nombre "Aeda" en el código es la narración de cambios de título de
 servidor (`engine/titulos.ts`), que no tiene relación con esto.
 
-Abierto en el propio canon: si el árbol del desarrollo propio es estructurado o libre/emergente
-(checklist "Tecnología").
+Sin decidir: si el árbol del desarrollo propio es estructurado o libre/emergente (checklist "Tecnología").
 
 ## 21. Los 4 gremios escasos a nivel de servidor
 
@@ -277,6 +280,13 @@ una decisión con precio. Anotado como pendiente en el propio `constants.ts`. Di
 residencia/reclutamiento. Los otros tres beneficios del diseño (residencia en cualquier asentamiento de la
 Facción, protección militar explícita, voz en política exterior) no están cableados. Doc 2 (`CIUDADANIA`).
 
+También sin cerrar:
+
+- **Cooldown de cambio de residencia**: `CIUDADANIA.cooldownCambioResidenciaDias` está reservado, sin valor ni
+  efecto. Frenaría mudarse en cada conquista para exprimir la recaudación.
+- **Dejar una casa sin tomar otra**: abandonar la Facción no libera la residencia ni los cargos locales, y no
+  hay forma de vender una casa a secas.
+
 ## 27. Identidad visual y de audio
 
 **Estado: `código: ✘` — nada.** Sigilo / estandarte de Facción, identidad visual y de audio de imperios y
@@ -309,7 +319,11 @@ defienden todas las escuadras del asentamiento y se resuelve con números (`inic
 `aplicarConquista`, `engine/combate.ts`). El motor también sigue con reglas que el canon ya no tiene: la
 Tregua por columna en vez del estado Herido del héroe, `guarnecer` (que vuelca escuadrones de no residentes
 en la guarnición), el ejército conquistador como guarnición de la plaza tomada, y la escolta que vuelve
-herida a la guarnición del origen. Depende del modelo de Héroe
+herida a la guarnición del origen. También distinto del canon: `cambiarResidencia` deja los escuadrones de la
+residencia vieja como guarnición de no residente en vez de trasladar el campamento (Doc 2.5); el campamento de
+bandidos se ataca con un comando desde un asentamiento (`atacarCampamentoBandidos`) en vez de con una columna
+que llegue a él (Doc 1.9); y el Liderazgo que ocupa una escolta sin héroe no se suma a lo que ese héroe lleva a
+la vez en un ejército (Doc 3.13.4). Depende del modelo de Héroe
 (`Docs/Coordinacion/01_Modelo_de_datos_compartido.md`) y del ciclo de `Batalla` con Unity (BA-001; CQ-002
 en Conquest para la IA de escuadras sin héroe y de héroes bot).
 
@@ -317,6 +331,7 @@ Sin resolver:
 
 - Cómo nacen los héroes bot de una Facción NPC y cuántos tiene cada una.
 - Valores de balance: liderazgo de guarnición por edificio y por política, y topes de héroes por batalla.
+- Si el ataque de un héroe humano a un campamento de bandidos se juega en Unity o se resuelve con números.
 
 ## 31. Modelo de Héroe
 
@@ -330,3 +345,60 @@ Sin resolver:
 
 - La estructura traída de Conquest que falta cerrar: objetos del inventario, huecos de equipo, género y
   avatar.
+
+## 32. Cabos sueltos de diseño político
+
+**Estado: preguntas abiertas que el canon (Docs 2 y 4) no cierra, `código: ✘`.** Piezas pequeñas, sin
+mecánica propia:
+
+- **Sucesión con Liga** (Doc 2.2): si el Rey de una Liga abandona su Facción, ¿se hereda el vasallaje? ¿se
+  re-vota en una federación? Depende de la votación real.
+- **Desarme del señor** (Doc 2.4): la condición exacta por la que un señor cuenta como "desarmado" y sus
+  vasallos quedan libres.
+- **Fusión/anexión** (Doc 2.6): si requiere aceptación mutua explícita, o si la anexión se puede forzar con
+  suficiente diferencia de poder.
+- **Reputación** (Doc 2.7): el valor de cada evento, la velocidad de decaimiento y los umbrales de cada uso.
+- **Cupo de nivel 4 y 5** (Doc 2.2.1): hoy no tienen cupo por Facción; falta decidir si deben tenerlo y con
+  qué curva.
+- **Catálogo de políticas** (Doc 4.4): las políticas concretas de cada pool más allá de las que existen, y si
+  son excluyentes entre sí dentro de un slot.
+- **Redistribución de Vivienda** (idea): una política que cambie la proporción fija 15/5 de Pesants/Artesanos
+  de cada Vivienda. Falta si desplaza cupo de una clase a otra o añade cupo extra, sus valores y de qué cargo
+  es (Maestro de Obras o Sacerdote).
+
+## 33. Cabos sueltos de diseño comercial
+
+**Estado: preguntas abiertas que el canon (Docs 1 y 3) no cierra.**
+
+- **Caravanas militar y de contrabando** (Doc 3.6): existen en `CARAVANA_CATALOGO` con capacidad y velocidad,
+  pero el motor nunca las instancia. Falta conectarlas: la militar, a llevar equipo antes de un asedio; la de
+  contrabando, a una mecánica de detección reducida.
+- **Riqueza acumulada** (Doc 3.5): en qué se usa el oro que las plazas acumulan por comisiones.
+- **Comisión intermedia** para Facciones aliadas o vasallas de la misma Liga (Doc 3.5 y §26).
+- **Bonus por distancia en el mostrador** (Doc 3.8): solo aplica al trueque; aplicarlo a las órdenes de
+  mercado es una decisión de diseño abierta.
+- **Intercambio directo entre jugadores** (Doc 3.7): cara a cara en mitad del mapa, sin plaza ni acuerdo de
+  por medio. No existe.
+- **Cortar rutas como guerra económica** (Doc 3.9): que el combate de caravanas interactúe con los acuerdos en
+  curso.
+- **Retirada del almacén al salir** (Doc 1.10.2): que el Tesorero pueda fijar cuánto material puede llevarse
+  cada héroe.
+
+## 34. La economía no llena el carro de un ejército
+
+**Estado: medido el 2026-09-04, sin decidir.** La capacidad del carro (Doc 5.13.1) se derivó del radio
+operativo sin comprobar que hubiera trigo con el que llenarlo. En batch, ningún asentamiento llegaba a llenar un
+carro y 26 de 28 no podían aportar ni un grano sin bajar de su reserva de comida. Después se dobló la
+producción de la Granja (Doc 4.2.1); falta volver a medir. Cifras, causa y las cuatro palancas posibles en
+`Consideraciones/Movimiento_Ejercitos_Definicion.md` §10.
+
+## 35. Cabos sueltos de mundo, población y militar
+
+- **Campamentos de bandidos** (Doc 1.9): si su poder debería escalar con la región o con la cercanía de
+  Facciones fuertes, y si deberían bloquear la explotación del bosque que ocupan.
+- **Cola de prioridad de reclutamiento** (Doc 4.1): con qué criterio se reparte el pool de población cuando la
+  demanda de reclutas lo supera.
+- **Gran Fundición** (Doc 4.2.1, 5.7): está en el catálogo (nivel de Facción 3) pero no tiene función desde que
+  la Nobleza dejó de reclutarse; falta decidir su papel junto a la Fundición.
+- **Armas de asedio** (Doc 4.2.1): la Carpintería está pensada para arietes y torres de asedio, que Fase 0 no
+  tiene.

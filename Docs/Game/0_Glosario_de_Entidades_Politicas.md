@@ -22,7 +22,7 @@ Un Héroe solo, moviéndose por el mapa. Nace cuando sale de su residencia por s
 Se disuelve al entrar en su residencia, o al fundirse en un Ejército que se cruce (Doc 5.14).
 
 ## Escuadrón / Tropa / Unidad
-Terminología cerrada (a petición del usuario, 2026-09-02). Son **tres conceptos distintos** y conviene no mezclarlos — la jerarquía de entidades es **Héroe → Escuadrón → Unidad**, y "tropa" es el TIPO, no la instancia:
+Son **tres conceptos distintos** y conviene no mezclarlos — la jerarquía de entidades es **Héroe → Escuadrón → Unidad**, y "tropa" es el TIPO, no la instancia:
 
 - **Escuadrón:** la entidad. El grupo de soldados que un Héroe recluta y comanda como un bloque. Un Héroe tiene muchos escuadrones, pero **no más de uno de cada tropa en toda la partida**, esté donde esté. Persiste como identidad (nombre, nivel y experiencia) aunque se quede sin unidades (Doc 5.4). Nunca queda herido: sus bajas son siempre permanentes. Es lo que se cuenta: "tres escuadrones".
 - **Tropa:** el TIPO de escuadrón — "Milicia de lanceros", "Honderos", "Arqueros con arco compuesto"… El catálogo completo está en Doc 5.8. Determina el poder por unidad, el equipo que cuesta reclutarlo, cuántas unidades trae y su coste de Liderazgo (Doc 5.11). Un escuadrón **jamás cambia de tropa**: subir de nivel lo hace más fuerte, nunca lo convierte en otro (Doc 5.8).
@@ -69,13 +69,11 @@ Valor del Héroe que limita **cuánto puede llevarse consigo a la vez** — no c
 ## Loadout
 Selección de escuadrones que un Héroe deja guardada para salir a mundo abierto o unirse a un Ejército, limitada por su Liderazgo. Es una comodidad: no cambia lo que puede llevarse, solo lo deja preparado (Doc 5.16.5).
 
-## Almacén (y por qué NO se llama "granero")
+## Almacén y Granero
 
-La despensa de un asentamiento es su **almacén** — `Asentamiento.almacen` en el motor, ampliable con el edificio `almacen` del catálogo. Ahí es donde vive el trigo, y de ahí come la guarnición.
+La despensa general de un asentamiento es su **almacén** (`Asentamiento.almacen`): guarda todos los recursos, y su capacidad la amplía el edificio **Almacén**. De ahí come la población y la tropa que no está en campaña, y de ahí se carga el carro de un ejército.
 
-**No existe ningún edificio llamado "granero".** La palabra sí está cogida, pero para otra cosa: un **Granero** es un *rol de asentamiento*, el que se especializa en producir trigo, junto a Aserradero, Cuenca Minera, Dehesa y Ciudad (`Consideraciones/Fase_0_5_Definicion_Especializacion_y_Cupos.md` §4). Es una **vocación de un asentamiento entero**, no un edificio suyo.
-
-Así que "el ejército come del granero" no solo nombraba un edificio inexistente: colisionaba con un término del diseño que significa algo distinto. Se dice **almacén**.
+El **Granero** es un edificio que amplía solo la capacidad de **trigo**, mucho más que un Almacén (Doc 4.2.1). No confundir con el **rol** de especialización de un asentamiento que se dedica a producir trigo, que también se llama granero, junto a Aserradero, Cuenca Minera, Dehesa y Ciudad (`Consideraciones/Fase_0_5_Definicion_Especializacion_y_Cupos.md` §4): uno es un edificio; el otro, la vocación de un asentamiento entero.
 
 ## Asentamiento
 Unidad territorial con zona de influencia, edificios (auto-construidos), población NPC (Pesants/Artesanos/Nobleza), y cargos LOCALES (Gobernador, Tesorero, General, Maestro de Obras, Sacerdote). Pertenece a 1 y SOLO 1 Facción. Una Facción puede tener muchos asentamientos.
@@ -112,9 +110,9 @@ Título dinámico de PRESTIGIO (no cargo mecánico nuevo) otorgado al Rey de la 
 
 ## Población NPC: Pesants / Artesanos / Nobleza
 Las 3 clases de población NPC de un asentamiento (distintas de los Héroes).
-- **Pesants:** base, crecimiento rápido, origen de tropas básicas.
-- **Artesanos:** operan edificios de producción especializada, origen de tropas Tier 2.
-- **Nobleza:** crecimiento lento, requiere cantidad mínima de ciudadanos (Héroes) en el asentamiento, origen de tropas de élite.
+- **Pesants:** base, crecimiento rápido; trabajan los recursos genéricos y se reclutan como tropa.
+- **Artesanos:** operan los edificios de transformación y también se reclutan como tropa.
+- **Nobleza:** crecimiento lento; aparece con Palacio y un mínimo de ciudadanos (Héroes) en el asentamiento. Es la clase que más oro recauda. No se recluta (Doc 5.8).
 
 ## Aedas / Poetas
 Mismo rol: los NPCs viajantes que dan acceso a tecnología (itinerantes o residentes si hay nobleza) Y narran el lore/histórico del servidor (títulos de prestigio, hazañas).

@@ -5,8 +5,6 @@
 2. **Desarrollo propio**: más costoso, genera un logro/lore ÚNICO registrado en el servidor.
 3. **NPCs viajantes (Aedas)**: ver 6.2.
 
-PENDIENTE: si el desarrollo propio (vía 2) sigue un árbol tecnológico estructurado o es libre/emergente.
-
 ## 6.2 Sistema de Aedas
 - Los Aedas SON los NPCs viajantes de la vía 3 — no es una vía nueva y separada.
 - **Itinerantes**: dan acceso puntual a tecnologías básicas (armas, armaduras, cultura, construcciones) al pasar por un asentamiento. Se compran con ORO.
@@ -21,5 +19,5 @@ Además de la función tecnológica, los Aedas/Poetas generan el LORE DEL SERVID
 ## 6.4 Reputación de Facción y Aedas
 Una Facción con score de confiabilidad muy bajo (ver Doc 2.7) tiene más difícil atraer Aedas residentes.
 
-## 6.5 Fase 0: fuera de alcance
-El sistema de Aedas no tiene implementación real en Fase 0 (existe solo como texto de sabor en la narración de cambios de título, Doc 2.9). Consecuencia directa para el catálogo de edificios (Doc 4.2.1, rediseño de progreso de asentamientos): ningún edificio exige "Planos de X" para construirse ni para mejorar de nivel interno — todos los gates de mejora se resuelven solo con nivel de asentamiento y/o edificios previos, sin depender de Aedas/Planos. Se retoma en una fase posterior junto con la implementación real del sistema descrito en 6.1-6.4.
+## 6.5 Fase 0: sin Aedas
+Fase 0 no tiene sistema de Aedas: solo aparecen como narradores de los cambios de título (Doc 2.9). Por eso ningún edificio exige "Planos de X" para construirse ni para mejorar de nivel interno (Doc 4.2.1): todos los requisitos se resuelven con nivel de asentamiento y/o edificios previos.
