@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Versión** | 2.3 |
-| **Actualizado** | 2026-09-09 |
-| **Verificado contra** | árbol de trabajo sobre `1b52862` — 1211 tests en 111 archivos, todos en verde |
+| **Versión** | 2.4 |
+| **Actualizado** | 2026-09-10 |
+| **Verificado contra** | árbol de trabajo sobre `3047c46` — 1222 tests en 112 archivos, todos en verde |
 
 > **Por qué existe este campo.** La v1.0 se escribió el 2026-08-26 y para el 2026-09-05 había derivado en
 > ocho puntos concretos (número de comandos, número de tests, tamaño de `constants.ts`, estado de la niebla
@@ -19,6 +19,7 @@
 
 | Versión | Fecha | Cambio |
 |---|---|---|
+| 2.4 | 2026-09-10 | Reconciliación de documentación operativa con el árbol de trabajo: `npm run typecheck` limpio y 1222 tests en 112 archivos en verde. Se corrigen las referencias obsoletas de arranque (`INTERVALO_TICK_MS`, `POST .../tick`) y del cliente de administración (la niebla de guerra ya no es pendiente). |
 | 2.3 | 2026-09-09 | Puerto **`AlmacenDeObjetos`** (`server/almacen/`): toda la persistencia salvo respaldos —snapshots, eventos, auditoría, identidad— pasa por `leer`/`escribir`/`anexar`/`listar` por clave, con un adaptador de disco (`enDisco.ts`) como único hoy. `persistenciaPartida`/`eventosDePartida`/`auditoria`/`persistenciaIdentidad` dejan de tocar `node:fs`; `crearServidor` acepta un `almacen` inyectado (disco por defecto). Prepara el cambio limpio de proveedor (object storage, SQLite/HTTP, Postgres) para desplegar en un free tier con disco efímero. `repositorioEnDisco.ts` → `repositorioPersistente.ts`. Tests 1203/110 → 1211/111. |
 | 2.2 | 2026-09-09 | Identidad de jugador con contraseña para el playtest: proveedor `clave` (nick + contraseña, hash scrypt de stdlib, secreto en `identidad.json` — sin subir `FORMATO_IDENTIDAD_VERSION`, el archivo v1 se lee con `credencialesLocales: []`), endpoint `POST /v1/registro` con `CODIGO_REGISTRO` opcional. El proceso real monta `clave` + `dev` (`proveedoresDeProceso`); `dev` queda solo para el cliente de administración en local. Tests 1189/108 → 1203/110. |
 | 2.1 | 2026-09-09 | Reconciliación con el código medido: comandos 42 → 69, tests 951/95 → 1189/108, `constants.ts` 51 tablas/1786 líneas → 60/2004, `engine/` 32 módulos/11.064 líneas → 34/13.392, niebla de guerra Paso 4 (visión compartida por alianza/vasallaje) de "pendiente" a hecho, Fase E documentada (E2 auditoría/respaldos/mantenimiento y E3 métricas — completas), rutas nuevas listadas (`/admin/metricas`, `/admin/.../auditoria`, `GET`/`POST`/`DELETE /admin/.../membresias`). Además, tres cambios de persistencia de esta misma fecha: **(a)** retirada la cadena de migraciones de snapshot (sin partidas anteriores al formato vigente); **(b)** formato **v13** — el snapshot deja de guardar el terreno (se regenera de la seed) y el historial de eventos (`<gameId>.eventos.jsonl`, append-only); de ~450 KB creciendo a ~9 KB plano; **(c)** borrado `session/estado.proyectarLog` (sin llamador de producción — la consola de admin que derivaba de él vive en el repo de cliente). |
@@ -94,7 +95,7 @@ apunta "hacia arriba". Dos invariantes tienen además su propio test en lenguaje
 `session/` es el único punto que ve los dos dominios —juego y acceso— porque la autorización de comandos lo
 exige: qué rol técnico tiene el actor Y qué relación de juego guarda con la entidad objetivo.
 
-**1211 tests en 111 archivos** cubren las seis capas (medido 2026-09-09, `npm run test:run`). Reparto por
+**1222 tests en 112 archivos** cubren las seis capas (medido 2026-09-10, `npm run test:run`). Reparto por
 capa: `engine/` 56 archivos, `session/` 23, `server/` 21, `world/` 5, `acceso/` 3, `__tests__/` 2 (los de
 frontera), `worldgen/` 1. Ese último número es el punto más fino de la red: `worldgen/` es la capa con la
 promesa más fuerte —semilla + `WORLDGEN_VERSION` (hoy **15**) reproducen el mapa exactamente— y la que menos
@@ -422,7 +423,7 @@ descubre qué partidas existen en disco, incluidas las que nadie ha reabierto to
 
 - Dirección de dependencias congelada por test (`arquitectura.test.ts`); `acceso/` sin dependencias y
   `session/` síncrona y sin E/S, lo que hace ambas capas triviales de probar con dobles.
-- 1189 tests en 108 archivos cubren motor, sesión, acceso y servidor (medido 2026-09-09).
+- 1222 tests en 112 archivos cubren motor, sesión, acceso y servidor (medido 2026-09-10).
 - El mundo generado tiene semilla y versión, y se sirve como asset inmutable cacheado (C11a) en vez de viajar
   en cada respuesta.
 - El snapshot de partida persiste el estado del RNG: una partida recargada continúa siendo determinista, no

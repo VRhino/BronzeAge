@@ -112,8 +112,8 @@ el mapa de asentamiento es una espacio logico que se genera tomando en cuenta el
     + en al vista de cliente(admin) falta una pestaña para gestionar partida, el game id, jugadores conectados, crear partida y demas
 ----- 29/08/2025
 issues:
-+ en el motor en cuanto a calidad de codigo hay mucho magic strings cosas que se pueden pasar a constantes
-+ hay que hacer revision de trazado
++ hay q revisar el tiempo en tics de la construccion con respecto al movimiento de elementos por el mapa no tiene sentido que ejercito dure 40 tics en navegar por el mapa y durante ese tiempo se construyan un monton de edificios, no tiene sentido
+
 ideas:
 + estudiar la idea de manejar poligonoes mas complejos para bosques y zonas de influeencia y que implica
 

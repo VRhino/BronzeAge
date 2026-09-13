@@ -32,7 +32,7 @@ Todas se leen en src/server/index.ts:20 y ninguna tiene default permisivo — es
 |```PUERTO``` | 3000 | --- |
 |```DIRECTORIO_PARTIDAS```| ```./partidas``` | --- |
 |```ORIGENES_PERMITIDOS``` | VACIO | CORS APAGADO, DA IGUAL SI USAS EL PROXY DE VITE |
-| ```INTERVALO_TICKS_MS``` | ```undefined``` | el mundo no vanasa solo, solo con ```POST .../ticks``` |
+| ```INTERVALO_TICK_MS``` | ```undefined``` | el mundo no avanza solo; solo con ```POST .../tick``` |
 
 El sujeto con el que se identifica el cliente se pone con VITE_USUARIO (por defecto jefa en cliente/, ana en el cliente de jugador) y tiene que figurar en ADMINISTRADORES o el backend devuelve 403 al crear partida. El cliente de jugador además usa VITE_GAME_ID (default local) y asume que la partida ya existe — no la crea.
 
