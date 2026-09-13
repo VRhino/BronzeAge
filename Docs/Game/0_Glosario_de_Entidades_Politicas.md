@@ -2,6 +2,8 @@
 
 Consultar este documento ante cualquier duda de terminología — el resto de documentos asume estas definiciones.
 
+> **Modelo de Héroe (decisiones del usuario, 2026-09-11 y 2026-09-13 — diseño cerrado, sin implementar).** En el juego que se está construyendo con Unity, quien reside, lidera, posee escuadrones, ocupa cargos y combate es el **Héroe** (ver abajo, Doc 5.15 y 5.16), y el **Jugador** queda como la persona y su cuenta. Mientras no se implemente, este glosario y el resto del canon siguen diciendo "Jugador" para esas funciones: en el modelo nuevo, léase "Héroe" en todas ellas. Los párrafos existentes no se reescriben.
+
 ## Jugador
 Persona real que juega. Pertenece a 1 y SOLO 1 Facción en todo momento, y reside en 1 y SOLO 1 asentamiento a la vez (Doc 2.5) — es lo que le permite tener como mucho UN escuadrón de cada tropa (ver abajo, y Doc 5.8).
 
@@ -10,6 +12,12 @@ Es además el dueño de sus escuadrones: **los escuadrones son del Jugador, no d
 **Y está SITUADO en el mundo** (Doc 1.10): en todo momento está dentro de un asentamiento, dentro de una columna en el mapa, o desconectado. No es un observador que flota sobre el mapa: **solo ve el interior del asentamiento en el que está físicamente**, y solo puede dar órdenes ahí. Nace en mundo abierto, en un punto aleatorio, y funda donde decide pararse.
 
 **Combate por sí mismo** con el poder de UNA unidad de élite (Doc 5.1). Es poco a propósito — menos de un tercio del escuadrón más barato— así que frente a una columna no decide nada; decide frente a otro jugador solo. No muere ni sufre bajas: al perder entrega la mitad de su carro y entra en **Tregua**.
+
+## Héroe
+*(Modelo de Héroe, diseño cerrado sin implementar — Doc 5.15 y 5.16.)* El personaje con el que un Jugador está en el mundo. **Cada Jugador tiene exactamente un Héroe en cada mundo**: pertenece a esa partida, no a la cuenta, y no se puede cambiar por otro dentro de ella. Hace todo lo que hoy el canon atribuye al Jugador como entidad de juego: reside en un asentamiento, lidera, tiene Liderazgo, está situado en el mundo, recuerda y explora, ocupa cargos y **es el dueño de los escuadrones**. Trae de Conquest su estructura de personaje: clase, nivel y experiencia, atributos, perks, equipo e inventario.
+
+## Héroe bot
+*(Modelo de Héroe.)* Héroe de una Facción NPC, manejado por la IA del juego. Combate contra los héroes humanos en las partidas de Unity; NPC contra NPC se sigue resolviendo con números (Doc 5.15.6).
 
 ## Columna personal
 Un Jugador solo, moviéndose por el mapa. Nace cuando sale de su residencia por su cuenta (Doc 1.10), lleve tropas o no. Es la misma ENTIDAD que un Ejército en el motor, pero **no es un Ejército** a efectos de reglas: elige destino libremente y lo rectifica cuando quiera, no puede llevar caravanas adjuntas, y nadie puede unirse a ella — dos viajeros que se cruzan no forman un ejército (Doc 5.12.1).
@@ -25,8 +33,15 @@ Terminología cerrada (a petición del usuario, 2026-09-02). Son **tres concepto
 
 > **"Tropa" se usa además en sentido colectivo** en todos los documentos ("las tropas consumen raciones", "mantenimiento de tropas", "reclutar tropas"), igual que en castellano corriente. Eso es deliberado y no choca: en singular y referido a un catálogo es el tipo; en plural y genérico es el colectivo. **La entidad contable es siempre el escuadrón** — y por eso lleva ese nombre, para que "tropa" quede libre para los otros dos usos.
 
+> **Modelo de Héroe (2026-09-13):** el escuadrón es del Héroe, y "no más de uno de cada tropa" vale en toda la partida, esté el escuadrón donde esté. La veteranía se sustituye por **nivel y experiencia**, y un escuadrón nunca queda herido: sus bajas son siempre permanentes (Doc 5.16).
+
 ## Guarnición
 Los escuadrones apostados en un asentamiento, es decir, los que NO salieron a campaña. Son los únicos que lo defienden de un asedio (Doc 5.12). Un asentamiento cuyos jugadores se llevaron todo queda indefenso.
+
+> **Modelo de Héroe (2026-09-13):** cambia de sentido. La guarnición son solo los escuadrones que cada héroe residente **asigna** a su asentamiento, dentro de un cupo que dan los edificios y las políticas; los maneja la IA del juego. El resto de escuadrones guardados en el asentamiento no defienden sin su héroe. Tras una conquista el asentamiento queda sin guarnición (Doc 5.15.3 y 5.15.5).
+
+## Campamento
+*(Modelo de Héroe.)* Donde un Héroe guarda los escuadrones que no lleva consigo; está en el asentamiento donde reside. Un Héroe sin residencia no tiene campamento: es huérfano (Doc 5.15.2).
 
 ## Ejército
 Una columna nacida de **movilizarse contra un destino** desde un asentamiento, que se mueve por el mapa como **una sola entidad** (Doc 5.12). Lo que la hace un Ejército es cómo salió, no cuántos van dentro: puede empezar con uno solo y crecer según se le suman los demás. Cada uno sigue limitado por su propio Liderazgo, y **todos son de la misma Facción**: ni aliados ni neutrales pueden marchar dentro de una columna ajena (Doc 5.14.1).
@@ -54,8 +69,15 @@ Estado temporal de quien acaba de ser derrotado en campo abierto (Doc 5.12.3). D
 ## Huérfano
 Jugador al que conquistaron su asentamiento mientras estaba de campaña (Doc 5.4). Conserva los escuadrones que llevaba encima, pero se queda sin residencia: sin sitio donde reabastecer, reclutar ni volver. Deja de serlo cuando entra en una Facción que tenga asentamiento — se sale por la vía política, no por la militar.
 
+> **Modelo de Héroe (2026-09-13):** al perder su asentamiento, el Héroe pasa a residir en el asentamiento más cercano de su Facción, adonde se muda su campamento; solo queda huérfano si su Facción no tiene ninguno. Sus escuadrones siguen siendo suyos, a 0 unidades, con su nivel y experiencia, hasta que vuelva a residir en algún sitio (Doc 5.15.5).
+
 ## Liderazgo
 Valor del Jugador que limita **cuánto puede sacar a campaña a la vez** — no cuánto puede poseer. Cada tropa tiene un coste de Liderazgo proporcional a su poder; la suma de lo que un Jugador se lleva no puede exceder su Liderazgo (Doc 5.11). Lo que se queda, defiende (ver Guarnición).
+
+> **Modelo de Héroe (2026-09-13):** "lo que se queda, defiende" deja de ser cierto: solo defiende la guarnición asignada, que tiene su propio cupo y no gasta Liderazgo (Doc 5.15.3). Con el Liderazgo se prepara el **loadout** (abajo).
+
+## Loadout
+*(Modelo de Héroe, traído de Conquest.)* Selección de escuadrones que un Héroe deja guardada para salir a mundo abierto o unirse a un Ejército, limitada por su Liderazgo. Es una comodidad: no cambia lo que puede llevarse, solo lo deja preparado (Doc 5.16.5).
 
 ## Almacén (y por qué NO se llama "granero")
 

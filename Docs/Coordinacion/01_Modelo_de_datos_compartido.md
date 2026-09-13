@@ -71,7 +71,7 @@ Usuario (acceso/)
   └── Sesion (acceso/, credenciales activas)
   └── Membresia (acceso/): usuarioId + gameId + jugadorId + rol + vigencia
         └── Heroe (domain/): jugadorId (= Membresia.jugadorId) — 1:1 dentro de gameId
-              ├── Escuadron[] (heroeId)
+              ├── Escuadron[] (heroeId) — todas sus escuadras, estén donde estén (§13)
               └── Loadout[] (heroeId)
 ```
 
@@ -82,6 +82,12 @@ el mismo valor que `Membresia.jugadorId`, no una copia con otro significado.
 Resolución de un actor autenticado: `Sesion -> Usuario -> Membresia -> jugadorId -> Heroe`. Las reglas de
 juego reciben `heroeId`; auditoría y autorización conservan también `usuarioId`/`jugadorId`.
 `GameSessionState.jugadores` se reemplaza por `heroes`.
+
+**Héroes bot (decisión del usuario, 2026-09-13):** las Facciones NPC también tendrán héroes, manejados por
+la IA de juego. Se llaman "héroes bot" para no confundirlos con los humanos. Un héroe bot es un `Heroe` con
+`controlador: 'bot'`: no tiene `Usuario` ni `Membresia` (su `jugadorId` es `null`) y su dueño es la Facción
+NPC, que ya actúa como `servicio_npc`. La unicidad "un héroe por jugador y mundo" solo aplica a los humanos.
+Cómo nacen y cuántos tiene cada Facción NPC está pendiente (`Docs/Mecanicas a desarrollar.md` §30).
 
 ### Tabla de identidad y ámbito
 
@@ -149,7 +155,11 @@ Asentamiento
   vetadosIds?[]                    vetados por el Gobernador, por encima de la política — existente. Tras
                                    este modelo, heroeId[]
   politicasActivas: PoliticaActiva[]   ver abajo — existente
-  escuadrones: Escuadron[]          guarnición — existente, dueño pasa a heroeId (§13)
+  escuadrones: Escuadron[]          existente — DESAPARECE en el modelo de héroe: las escuadras pasan a
+                                   vivir en `Heroe.escuadrones` (§13). La guarnición es un subconjunto
+                                   derivado: escuadras de sus residentes con `enGuarnicion`. El cupo de
+                                   guarnición de cada héroe también es derivado (edificios y políticas de
+                                   este asentamiento, Doc 5.15); no se persiste.
   ocupacionHasta?: Instante          ocupación militar tras conquista — existente
   medidorMantenimiento             0-100, empieza en 100; a 0 cae en ruinas — existente
   nutricionPoblacion?              0-100, hambruna por déficit de trigo — existente
@@ -462,7 +472,8 @@ loadout) se recalcula contra el catálogo versionado vigente.
 ```text
 Heroe
   id                    heroeId — nuevo
-  jugadorId             dueño — Membresia.jugadorId, 1:1 por gameId — nuevo
+  jugadorId: string | null   dueño — Membresia.jugadorId, 1:1 por gameId; null en héroes bot — nuevo
+  controlador: 'humano' | 'bot'   nuevo (§1)
   displayName           editable, nunca llave de ningún contrato — nuevo
   classDefinitionId      catálogo versionado (Conquest) — nuevo
   genero, avatar          nuevo
@@ -476,15 +487,20 @@ Heroe
                                   `puntosSinGastar` perdería esa distinción al traer el modelo.
   atributosBase          valores base, sin equipo aplicado — nuevo
   perksDesbloqueados[]     nuevo
-  tiposReclutablesDesbloqueados[]   nuevo — PENDIENTE: destino de `availableSquads` de Conquest (qué
-                                  `tropaId` puede reclutar este héroe más allá del catálogo base del
-                                  asentamiento). Sin decidir todavía si vive aquí o en otro sitio.
+                                  (Sin campo de tipos reclutables propios — decisión del usuario
+                                  2026-09-13: un héroe solo recluta los `tropaId` que le permite el
+                                  asentamiento. El `availableSquads` de Conquest no se persiste en
+                                  BronzeAge; el adaptador de Unity lo deriva del catálogo reclutable del
+                                  asentamiento donde está.)
   liderazgoBase          migra desde el actual domain.Jugador.liderazgoBase — existente, cambia de dueño
   ubicacion               migra desde domain.Jugador.ubicacion (asentamiento | columna | desconectado) —
                          existente, cambia de dueño
   plazasRecordadas?       migra desde domain.Jugador.plazasRecordadas — existente, cambia de dueño
   exploracionPersonal?    migra desde domain.Jugador.exploracionPersonal — existente, cambia de dueño
-  heridoHasta?           Instante — debuff temporal (antes vivía en Escuadron, ver §13) — nuevo
+  heridoHasta?           Instante — debuff temporal (antes vivía en Escuadron, ver §13) — nuevo. Dura 2
+                         minutos de tiempo de MUNDO (decisión del usuario 2026-09-13; 2 ticks). Efecto del
+                         debuff: PENDIENTE de decisión del usuario. Cuándo se aplica: ver §15.
+  escuadrones: Escuadron[]   TODAS sus escuadras, estén donde estén (§13) — nuevo
   loadouts: Loadout[]     nuevo
   inventario: ItemInstancia[]     por itemInstanceId — nuevo, forma PENDIENTE (ver abajo)
   equipamiento: Record<slot, itemInstanceId>   nuevo, `slot` PENDIENTE de enumerar
@@ -499,6 +515,12 @@ enumerarse cerrado (arma/armadura/accesorio/... — igual que `RolTecnico`/`Edif
 persisten estadísticas ya calculadas con equipo puesto — se recalculan contra la versión de catálogo
 vigente (mismo principio que el resto del documento).
 
+**Campamento del héroe (decisión del usuario, 2026-09-13).** Es donde guarda las escuadras que no lleva
+consigo, y coincide con su residencia: no es un campo nuevo, se deriva de dónde reside (§3). Si el héroe no
+reside en ningún sitio, no tiene campamento (huérfano) y sus escuadras siguen siendo suyas hasta que vuelva a
+residir en algún asentamiento. Las reglas de juego completas (qué pasa al caer su asentamiento, guarnición,
+escolta) están en `Docs/Game/5_Sistema_Militar_y_Combate.md` §5.15.
+
 ## 13. `Escuadron` — campos v1 (actualizado)
 
 ```text
@@ -510,39 +532,90 @@ Escuadron
   cantidad               contador agregado, sin unidades individuales persistentes — existente
   nivel, experiencia     `experiencia` es ACUMULADA (nunca baja), reemplaza a `veterania` — nombre
                         deliberadamente distinto de `Heroe.experienciaHaciaSiguienteNivel` (§12), semántica
-                        diferente — nuevo
+                        diferente — nuevo. La XP ganada en batalla la calcula Unity y llega en el
+                        `BattleResult` (§15); BronzeAge la suma y aplica la curva de nivel.
   moral                   existente
   habilidadesDesbloqueadas[], formacionesDesbloqueadas[], formacionSeleccionada   nuevo
-  contenedor: { tipo: 'asentamiento' | 'ejercito' | 'escolta'; id }   nuevo — dónde vive FÍSICAMENTE
-                        ahora mismo. Almacenamiento: SIGUE EMBEBIDO en la lista de su contenedor
-                        (`Asentamiento.escuadrones`/`Ejercito.escuadrones`/`Caravana.escolta`), como hoy —
-                        no se normaliza a una colección aparte. `contenedor` es la referencia de vuelta que
-                        permite resolver un `squadId` sin recorrer los tres arrays; moverlo de un
-                        contenedor a otro sigue siendo una única operación atómica de dominio (ya es así
-                        hoy: `salirAlMundo`/`movilizarEjercito`/etc. ya mueven escuadrones enteros en un
-                        solo comando).
-  reservaBatalla?: { battleId; contenedorOrigen: { tipo; id } }   nuevo — presente SOLO mientras la
-                        escuadra está reservada para una `Batalla` (§15). NO es un cuarto valor de
-                        `contenedor` (corrección tras R09): la escuadra sigue registrada en su contenedor
-                        real; esto es un candado encima que además recuerda a dónde volver. Si el origen
-                        deja de existir o cambia de dueño mientras la batalla está en curso (ej. el
-                        asentamiento es conquistado), la liberación sigue la misma regla ya usada por
-                        `Ejercito.origenAsentamientoId`: se reasigna al asentamiento propio más cercano del
-                        mismo héroe/facción; si no queda ninguno, la escuadra queda huérfana (mismo criterio
-                        que un ejército sin hogar, Doc 5.4).
+  contenedor: { tipo: 'campamento' } | { tipo: 'ejercito'; ejercitoId } | { tipo: 'escolta'; caravanaId }
+                        nuevo — dónde está FÍSICAMENTE. `'campamento'` = en el campamento del héroe (su
+                        residencia, §12), o en ninguna parte si el héroe es huérfano.
+  enGuarnicion: boolean   nuevo — solo con contenedor `'campamento'` y héroe residente: asignada a la
+                        guarnición de su asentamiento. La maneja la IA de juego y el héroe no puede usarla
+                        mientras siga asignada (Doc 5.15).
+  reservaBatalla?: { battleId }   nuevo — candado: presente solo mientras la escuadra está en una
+                        `Batalla` (§15). Una batalla nunca cambia de sitio una escuadra (el atacante la lleva
+                        en su columna, el defensor la tiene donde está, la guarnición en su asentamiento, la
+                        escolta en su caravana), así que no hace falta recordar a dónde volver: se quitó
+                        `contenedorOrigen` (2026-09-13). Lo que pasa con las escuadras del bando que pierde
+                        un asentamiento es una regla de juego aparte, Doc 5.15.
 ```
+
+**Almacenamiento (cambia el 2026-09-13).** Todas las escuadras de un héroe viven en `Heroe.escuadrones`;
+`Ejercito` y `Caravana` pasan a guardar solo los `squadId` que llevan. Antes se proponía mantenerlas
+embebidas en su contenedor (`Asentamiento.escuadrones`...), pero en el modelo de héroe una escuadra puede no
+tener asentamiento (héroe huérfano) y el campamento se traslada con el héroe. Guardarlas bajo el héroe hace
+que trasladar un campamento no mueva nada y que la unicidad por `tropaId` sea una búsqueda en una sola lista.
 
 **Sin `heridoHasta`** — se elimina de `Escuadron` (gana el modelo de BronzeAge). Una baja de escuadra
 reduce `cantidad` de forma permanente, nunca hay estado intermedio de "herida". El adaptador de Conquest
 debe dejar de interpretar `SquadInstanceData.unitsInjured` como resultado persistente compartido.
 
-**Decisión (corrige la versión anterior, que lo dejaba pendiente): se permiten varias `Escuadron` del mismo
-`tropaId` para el mismo héroe, sin fusión.** El invariante antiguo "un `Escuadron` por `tropaId` por
-héroe/asentamiento" se ELIMINA — no se sostenía: una escuadra que sale (a un `Ejercito` o a
-`reservaBatalla`) y otra reclutada después del mismo `tropaId` en el asentamiento de origen pueden volver a
-coexistir, y forzar una fusión al reunirse rompería IDs y progresión individual (nivel/XP/moral de cada
-una) — exactamente lo que Codex advirtió que había que evitar. La UI simplemente muestra varias entradas
-del mismo `tropaId` cuando ocurre; no es un caso de error.
+**Regla (decisión del usuario, 2026-09-13 — corrige la versión anterior, que permitía varias): un héroe
+tiene como mucho UNA `Escuadron` por `tropaId` en toda la partida.** `tropaId` es el tipo de tropa
+(`honderos`, `arqueros`...) y el par (`heroeId`, `tropaId`) es único dentro de `gameId`, esté la escuadra
+en el contenedor que esté. Es la regla que el juego ya tenía (Doc 2.5, comentario de `Escuadron` en
+`types.ts`); lo que fallaba era dónde se comprobaba.
+
+Lo que señaló Codex (corregido en BronzeAge el 2026-09-13, sin esperar a `heroeId`): la unicidad solo se
+comprobaba en la lista del asentamiento. Si la escuadra estaba fuera (en un `Ejercito` o de escolta en una
+`Caravana`), la búsqueda no la veía y reclutar ese tipo creaba una segunda. Hoy `reclutarTropa`
+(`engine/tropas.ts`) recibe el resto de la partida y rechaza si la escuadra existe en otra guarnición, ejército
+o escolta; la reserva para una `Batalla` tendrá que sumarse a esa búsqueda cuando exista. Antes del arreglo, al
+volver, los dos caminos de regreso hacían cosas distintas:
+`devolverEscoltaAGuarnicion` (`engine/caravanas.ts`) las fusiona (suma efectivos, se queda con la mejor
+veteranía y la peor moral, y una de las dos identidades desaparece) y `absorberColumna`
+(`engine/ejercitos.ts`) las concatena (quedan dos, y solo la primera se puede reponer).
+
+Solución: la unicidad se comprueba contra TODAS las escuadras del héroe, estén donde estén (con
+`contenedor` es una búsqueda directa). Si ya tiene una de ese tipo, reclutar solo puede REPONERLA, y solo
+donde está físicamente: en su guarnición, o en una plaza propia donde esté su columna, que es lo que ya
+permite `solo_reponer`. Si está lejos, no se recluta otra. Como nunca pueden existir dos, volver nunca
+obliga a fusionar: los dos caminos de regreso pasan a ser un simple movimiento, y la rama de fusión de
+`devolverEscoltaAGuarnicion` desaparece en el modelo nuevo. `squadId` sigue siendo el ID opaco que
+referencian tickets y resultados (el nombre es editable), aunque en la práctica (`heroeId`, `tropaId`)
+funciona como clave natural.
+
+### Equivalencia de tropas con Conquest (catálogo puente, R04 — añadido 2026-09-13)
+
+BronzeAge es dueño de las reglas estratégicas de cada tropa: qué edificio la recluta, coste, unidades por
+escuadrón, coste de Liderazgo y escalón. Conquest es dueño de las tácticas: daño, formaciones, habilidades,
+movimiento en batalla y prefab. El `id` canónico de una tropa es el `tropaId` de BronzeAge, y Conquest crea
+una definición de escuadra con ese mismo `id` para cada una. Las unidades y el coste de Liderazgo los
+decide BronzeAge: Conquest recibe las unidades en `SquadSnapshot.efectivosAutorizados` y no usa su propio
+`leadershipCost` para nada que tenga autoridad (el Liderazgo lo valida BronzeAge).
+
+Hoy Conquest tiene 3 definiciones (`spm01` Spearmen, `arc01` Levy Archers, `sqd01` Squires) y BronzeAge 11
+tropas. La última columna es la propuesta de qué definición actual sirve de base provisional a cada una
+hasta que Conquest haga la suya (pedido en CQ-003). Esos tres `id` actuales quedan como alias durante la
+migración.
+
+| `tropaId` | Nombre | Escalón | Unidades | Coste de Liderazgo | Tipo | Base provisional en Conquest |
+|---|---|---:|---:|---:|---|---|
+| `milicia_lanceros` | Milicia de lanceros | 1 | 25 | 7 | cuerpo a cuerpo | `spm01` Spearmen |
+| `lanceros_mimbre` | Lanceros con escudo de mimbre | 1 | 25 | 7 | cuerpo a cuerpo | `spm01` Spearmen |
+| `espadachines_cobre` | Espadachines de espada corta de cobre | 2 | 20 | 14 | cuerpo a cuerpo | `sqd01` Squires |
+| `hacheros_ligeros` | Hacheros ligeros | 3 | 18 | 22 | cuerpo a cuerpo | `sqd01` Squires |
+| `espadachines_bronce` | Espadachines con espadas y escudos de bronce | 3 | 18 | 22 | cuerpo a cuerpo | `sqd01` Squires |
+| `lanceros_pesados` | Lanceros pesados micénicos | 4 | 15 | 32 | cuerpo a cuerpo | `spm01` Spearmen |
+| `hacheros_armados` | Hacheros armados | 4 | 15 | 32 | cuerpo a cuerpo | `sqd01` Squires |
+| `honderos` | Honderos | 2 | 20 | 14 | a distancia | `arc01` Levy Archers |
+| `escaramuzadores_jabalina` | Escaramuzadores con jabalina | 3 | 18 | 22 | a distancia | `arc01` Levy Archers |
+| `arqueros` | Arqueros | 3 | 18 | 22 | a distancia | `arc01` Levy Archers |
+| `arqueros_compuesto` | Arqueros con arco compuesto | 5 | 12 | 45 | a distancia | `arc01` Levy Archers |
+
+Fuente: `TROPAS_RECLUTABLES`, `UNIDADES_POR_ESCALON` y `LIDERAZGO.costePorEscalon` (`src/constants.ts`), al
+2026-09-13. Al publicar `src/contratos/v1/`, esta tabla se genera desde esas constantes en vez de copiarse a
+mano. Falta acordar con Conquest cómo corresponde el escalón (1 leva … 5 élite) con su `SquadRarity`.
 
 ## 14. `Loadout`
 
@@ -586,17 +659,51 @@ Batalla
   intentoAsignacionId?      del BattleServerAssignment activo — ver abajo
   expiraEn: Instante        fijado al crear/reasignar — timeout de infraestructura, tiempo de MUNDO
                           (ver nota de reloj en §0/§12: no confundir con expiración de credenciales)
+  iniciadaEn?: Instante      al pasar a `en_curso`
+  limiteEnCurso?: Instante   iniciadaEn + duración máxima de `BattleRules` + margen — tiempo de MUNDO
   bandos: BatallaBando[]     capacidad independiente por bando (asimétrico permitido)
-  participantes: BatallaParticipante[]   por heroeId, nunca jugadorId directo
+  participantes: BatallaParticipante[]   por heroeId (humanos y bot), nunca jugadorId directo
   reservas: BatallaReserva    escuadras/suministro inmovilizados, liberables
   appliedResultId?          idempotencia — ver §16
   huellaPayloadAplicado?    hash del BattleResult ya aplicado
   instanteAplicado?, versionAplicada?
 ```
 
-**Ciclo corregido (R01):** `convocando -> asignada -> en_curso -> aplicada`, con salidas a `cancelada`
-(desde `convocando`/`asignada`, antes de `en_curso`) y `fallida` (timeout o fallo de infraestructura antes
-de `en_curso`).
+**Ciclo y transiciones (R01; tabla añadida el 2026-09-13):**
+
+| Desde | Hasta | Quién y cómo | Condición | Qué se guarda |
+|---|---|---|---|---|
+| — | `convocando` | BronzeAge, al comprometer el combate (comando de ataque o de asedio) | participantes y escuadras válidos y sin otro candado | la `Batalla`, los candados `reservaBatalla`, el `BattleTicket` (revisión 0) y `expiraEn` = ahora + plazo de asignación |
+| `convocando` | `asignada` | Conquest, `POST /v1/batallas/:battleId/asignacion` | `ticketRevision` vigente y ninguna asignación aceptada antes | `BattleServerAssignment`, `intentoAsignacionId`; `expiraEn` = ahora + plazo de inicio |
+| `asignada` | `en_curso` | Conquest, `POST .../inicio` | mismo `intentoAsignacionId` y revisión vigente | `iniciadaEn` y `limiteEnCurso` |
+| `en_curso` | `aplicada` | Conquest, `POST .../resultado` | checklist de doc 02 §3.3 | consecuencias, XP, liberación de candados e idempotencia (§16), todo en una sola mutación |
+| `convocando` o `asignada` | `convocando` (revisión + 1) | BronzeAge, al sustituir a un participante antes del inicio | antes de `en_curso` | ticket nuevo y `huellaTicket`; la asignación y los tokens anteriores dejan de valer |
+| `convocando` o `asignada` | `cancelada` | BronzeAge, comando `cancelarBatalla` | antes de `en_curso` | libera los candados y deja un evento |
+| `convocando` o `asignada` | `fallida` | BronzeAge, al vencer `expiraEn` | nadie asignó o nadie inició a tiempo | libera los candados sin penalizar a nadie y deja un evento auditable |
+| `en_curso` | `fallida` | BronzeAge, al vencer `limiteEnCurso` | el servidor de batalla no mandó resultado | igual que la fila anterior |
+
+`aplicada`, `cancelada` y `fallida` son estados finales. Un `POST .../resultado` repetido sobre una batalla
+`aplicada` responde con el resultado ya aplicado (§16); sobre una `cancelada` o `fallida` se rechaza y no
+aplica nada.
+
+**Cuándo se comprueban los vencimientos (1.ª revisión de Codex, punto 5):** en cada tick, como el resto de
+plazos de mundo, y además justo antes de validar cualquier acción que quiera usar una escuadra con candado.
+Así una batalla vencida nunca deja una escuadra bloqueada solo porque nadie haya consultado su ficha. Cada
+paso a `fallida` deja un evento persistente y auditable.
+
+**Si se cae BronzeAge durante una batalla (R07):** mientras está caído, el tiempo de mundo no avanza
+(`Docs/Arquitectura/10_Modelo_Temporal.md`, "una caída no consume tiempo de mundo"), así que `expiraEn` y
+`limiteEnCurso` tampoco: al volver, la batalla sigue `en_curso`. La partida en Unity no depende de BronzeAge
+y se sigue jugando. Conquest reintenta el `POST .../resultado`, espaciando cada vez más los intentos, hasta
+recibir una respuesta definitiva (2xx, o un 409 que no sea transitorio), y BronzeAge lo acepta al volver. Los
+tokens de entrada caducan en tiempo real (§0): una caída larga solo impide entrar tarde a la partida, no
+afecta a quien ya está jugando. Tras una caída corta, el motor recupera de golpe los ticks pendientes; el
+margen de `limiteEnCurso` existe para que esa recuperación no dé por fallida una batalla que ya terminó.
+
+**Si se cae el servidor de batalla:** si el resultado no llega nunca, al vencer `limiteEnCurso` la batalla
+pasa a `fallida`, sin penalizar a nadie.
+
+Los plazos (de asignación, de inicio y el margen) son constantes de configuración; no se fijan aquí.
 
 - **Se elimina `propuesta`** — el lobby/convocatoria vive FUERA de `Batalla` (`Ejercito`/`participantes`,
   sin persistencia nueva); no hay una fase "propuesta pero sin reservar" dentro de `Batalla`, porque
@@ -623,7 +730,8 @@ BattleTicket
   schemaVersion, battleId, gameId, ticketRevision
   vigencia (emitidoEn, expiraEn)
   contextoEstrategico        qué se está disputando (asentamiento/campo abierto/caravana)
-  bandos: [{ ladoId, capacidadMinima, capacidadMaxima, participantes: BattleParticipantSnapshot[] }]
+  bandos: [{ ladoId, capacidadMinima, capacidadMaxima, participantes: BattleParticipantSnapshot[],
+             escuadrasSinHeroe: SquadSnapshot[] }]
   mapa: BattleMapReference | SettlementBattleSnapshot   ver §17 para la forma de SettlementBattleSnapshot
   reglas: BattleRules         ver abajo
   autorizacion                limitada a esta battleId + ticketRevision, ver doc 02 §3
@@ -634,7 +742,14 @@ BattleTicket
 `BattleResult` que referencie una `ticketRevision` distinta de la vigente en `Batalla` se **rechaza** — así
 una asignación vieja no puede cerrar una revisión nueva.
 
-**`BattleParticipantSnapshot`:** `heroeId`, `ladoId`, `HeroSnapshot`, `SquadSnapshot[]`.
+**`BattleParticipantSnapshot`:** `heroeId`, `ladoId`, `controlador` (`'humano'` | `'bot'`),
+`HeroSnapshot`, `SquadSnapshot[]` (solo las escuadras que lleva ese héroe, limitadas por su liderazgo).
+
+**Composición de un bando (decisión del usuario, 2026-09-13, Doc 5.15):** héroes (humanos o bot) con sus
+escuadras, más `escuadrasSinHeroe` (la guarnición del asentamiento o la escolta de la caravana), que maneja
+la IA de juego. `capacidadMaxima` cuenta HÉROES (por ejemplo 15 por bando en un asedio): las escuadras sin
+héroe no ocupan plaza y entran directamente. Los héroes que superan la capacidad esperan en cola y entran a
+medida que caen otros.
 
 **`HeroSnapshot` — forma mínima (R04, antes indefinida):** `heroeId`, `displayName`, `classDefinitionId`,
 `nivel`, `atributosEfectivos` (post-equipo, recalculados por BronzeAge contra el catálogo vigente — nunca
@@ -655,16 +770,16 @@ partida, condiciones de victoria permitidas por este contexto, `versionCatalogoT
 `versionCatalogoHeroe`. Las capacidades asimétricas por bando ya viven en `bandos[].capacidadMinima/Maxima`
 (BA-001), no se duplican aquí.
 
-**Escoltas sin dueño presente (R04):** una escuadra de `Caravana.escolta` puede entrar en las reservas de
-un bando como propiedad administrativa de su `heroeId` sin que ese héroe sea un `BattleParticipant` físico
-(no está presente en la partida real) — el `SquadSnapshot` lleva su `heroeId` de referencia igual, pero no
-exige una entrada en `participantes` para él. Distinto de que el héroe combata en persona.
+**Escuadras sin héroe (escolta y guarnición):** combaten sin su héroe, manejadas por la IA de juego, y van
+en `escuadrasSinHeroe` del bando. El `SquadSnapshot` lleva su `heroeId` como dueño, pero ese héroe no es
+participante. Son los dos únicos casos en que una escuadra combate sin su héroe (Doc 5.15).
 
-**Batallas sin humanos (NPC vs NPC) — fuera de alcance v1 (R04):** el ciclo persistente de `Batalla` es
-para encuentros con al menos un `BattleParticipant` humano por bando. El combate íbamos NPC-contra-NPC del
-mundo abierto sigue resolviéndose con el resolver numérico actual (`engine/combate.ts`), sin tocar, hasta
-que se acuerde una representación táctica para ese caso — no se inventa un héroe humano de relleno para
-encajarlo en este contrato.
+**Quién tiene que haber en una batalla (corregido 2026-09-13).** Al menos un héroe humano en toda la
+batalla. Un bando puede no tener ninguno: solo héroes bot, solo escuadras sin héroe (un asentamiento sin
+defensores presentes, una caravana con escolta) o incluso nadie (un asentamiento sin guarnición ni
+defensores: la batalla se juega igual, sin defensores). La versión anterior exigía un humano por bando, lo que
+dejaba fuera la escolta y la guarnición. Sin ningún humano (NPC contra NPC) se sigue resolviendo con el
+resolver numérico actual (`engine/combate.ts`) y nunca llega a Unity.
 
 ### `BattleResult` (DTO, producido por el servidor de batalla Unity) — completitud corregida
 
@@ -673,8 +788,8 @@ BattleResult
   schemaVersion, battleId, resultId, ticketRevision
   inicio, fin, ganador, razon
   objetivos: ObjectiveResult[]
-  porEscuadra: [{ squadId, desplegados, supervivientesAlCierre, muertos }]
-  porHeroe: [{ heroeId, participo, sobrevivioAlCierre, herido?: boolean }]
+  porEscuadra: [{ squadId, desplegados, supervivientesAlCierre, muertos, xpGanada }]
+  porHeroe: [{ heroeId, participo, sobrevivioAlCierre, herido: boolean, xpGanada }]
   versionServidor, autenticidad
 ```
 
@@ -697,21 +812,38 @@ cuenta una sola vez, al CIERRE de la batalla, nunca por evento de despliegue int
 
 **`sobrevivioAlCierre` de un héroe (R05):** describe solo el estado FINAL al cerrar la partida — si el
 servidor de batalla permite respawn del héroe durante la partida, eso es asunto táctico de Unity y no se
-reporta aquí; BronzeAge solo necesita saber si terminó vivo. `herido` se deriva de las reglas del ticket
-(`BattleRules`) aplicadas sobre los hechos — la fórmula exacta queda **pendiente de decidir junto con XP**
-(siguiente punto), no inventada aquí.
+reporta aquí; BronzeAge solo necesita saber si terminó vivo.
 
-**Hechos que alimentan XP/nivel en v1 — declarado explícito (R05):** `participo`, `ganador` (¿su bando
-ganó?) y duración de la partida. Capturas u otras bajas atribuidas individualmente NO entran en v1 —
-si se necesitan más adelante, es una versión de contrato nueva, no una ampliación silenciosa de esta.
+**`herido` del héroe (actualizado 2026-09-13):** lo marca Unity, igual que la XP, porque es quien ve el
+combate — pendiente de que el usuario confirme este criterio y el efecto del debuff. Cuando llega
+`herido: true`, BronzeAge fija `Heroe.heridoHasta` = instante de aplicación + 2 minutos de mundo (decisión
+del usuario, §12).
+
+**XP — la calcula Unity (decisión del usuario 2026-09-13; sustituye a la regla anterior de "BronzeAge
+calcula la XP a partir de participó/ganó/duración").** La XP depende del desempeño en batalla: unidades y
+héroes abatidos, capturas de bandera, daño hecho y recibido, MVP, puesto en la tabla de su bando, etc.
+Todo eso solo lo tiene el servidor de batalla, así que `xpGanada` llega ya calculada por héroe y por
+escuadra. Cómo se aplica:
+
+- Es un DELTA de la batalla, nunca un total: BronzeAge lo suma a la experiencia persistida y aplica la curva
+  de nivel del catálogo versionado (`versionCatalogoHeroe`/`versionCatalogoTropas`). Al ser delta,
+  reintentar el mismo `resultId` no duplica nada (§16) y no pisa progreso ganado en otro sitio.
+- Viene del servidor de batalla autenticado, nunca de un cliente Unity individual — el mismo nivel de
+  confianza que ya tiene para declarar muertos y ganador (`02_Arquitectura_objetivo.md`).
+- BronzeAge la valida igual que el resto del resultado: entero, ≥ 0 y, si `BattleRules` define un tope de
+  XP por batalla (valor de balance, no fijado aquí), por debajo de ese tope.
+- Los hechos que usa Unity para calcularla (bajas atribuidas, capturas, daño...) no tienen que viajar a
+  BronzeAge: solo el resultado.
 
 **Daño de asedio — fuera de alcance v1, declarado explícito (R05):** este `BattleResult` NO lleva daño de
 edificios/murallas. Un asedio que destruye algo persistente es una decisión de dominio que todavía no se ha
 tomado (ver §17); hasta que se tome, un asedio dentro de este contrato no persiste destrucción física.
 
-El resultado contiene hechos tácticos, nunca deltas de progresión ya calculados. BronzeAge sigue calculando
-nivel/XP de escuadra, herida de héroe, conquista, ocupación y liberación de reservas a partir de estos
-hechos, contra los catálogos vigentes.
+El resultado contiene hechos tácticos más la XP ganada (única excepción al "solo hechos", decidida por el
+usuario el 2026-09-13). BronzeAge aplica esa XP y la curva de nivel, y sigue decidiendo por su cuenta la
+herida del héroe (duración), conquista, ocupación y liberación de reservas a partir de los hechos, contra
+los catálogos vigentes. Qué les pasa a los héroes, escuadras y guarnición del bando que pierde un
+asentamiento está en Doc 5.15.
 
 ### `BattleServerAssignment`
 
@@ -831,6 +963,9 @@ es también un asunto de PERMISO, y hay que ser preciso con la diferencia:
 - **Filtrado por niebla de guerra/memoria (dentro de los asentamientos PROPIOS):** si el héroe no está
   presente ahora en uno de sus propios asentamientos, se sirve la última foto memorizada
   (`Heroe.plazasRecordadas`, antes `Jugador.plazasRecordadas`) en vez del estado vivo.
+- **Héroes ajenos — PENDIENTE de decisión del usuario:** qué se ve de un héroe que no es tuyo (¿nombre y
+  clase? ¿nivel y equipo?). Hasta decidirlo, el DTO de lectura no incluye datos de héroes ajenos más allá de
+  lo que ya muestran columnas y ejércitos avistados.
 - **Nunca sale al cliente:** hashes/secretos de `Usuario`, credenciales de `BattleServerAssignment`,
   `runtimeEntityId` de Conquest, cualquier campo interno de cálculo (ver `Titulo.valorMetrica` como derivado,
   no autoritativo).

@@ -226,6 +226,8 @@ marchando con la caravana.
   sufre bajas en los dos casos (leves si aguanta, fuertes si cae) y vuelve con el debuff de derrota
   (`heridoHasta`). Si la caravana es capturada se pierde con **carga y carros** (3.13.6), no con la tropa.
 
+> **Modelo de Héroe (2026-09-13):** cambia en dos puntos. La escolta ya no queda herida (los escuadrones no tienen estado de herido, Doc 5.16), y no reaparece en la guarnición del origen: sigue con la caravana hasta que esta termina el viaje o se destruye, y si se destruye queda a 0 unidades y vuelve al campamento de su héroe. En combate la maneja la IA del juego (Doc 5.15.4).
+
 ### 3.13.5 Reparto automático vs preparación manual
 
 - `asignarCaravanasATrueque` (3.2) sigue vivo para trueque / NPC / laboratorio, usando las caravanas **no

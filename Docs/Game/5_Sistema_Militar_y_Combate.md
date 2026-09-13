@@ -21,6 +21,8 @@ Un héroe vale **menos de un tercio de la peor leva**. Frente a una columna no d
 
 **El héroe no muere.** No sufre bajas, no queda herido y no gana veteranía —la veteranía es del escuadrón (5.8)—. Al perder en campo abierto entrega **la mitad de su carro** y entra en **Tregua** (5.12.3). Eso es todo lo que arriesga, y todo lo que gana quien le vence.
 
+> **Modelo de Héroe (2026-09-13):** en las batallas jugadas en Unity el héroe combate como un personaje de Conquest (clase, atributos, equipo), **puede quedar herido** (2 minutos) y **gana nivel y experiencia** (5.16). Eso sustituye a "no queda herido y no gana veteranía". La cifra de poder de arriba sigue valiendo para el resolver numérico (NPC contra NPC, 5.15.6). Qué pierde un héroe al ser derrotado en una partida real está pendiente (`Docs/Mecanicas a desarrollar.md` §31).
+
 ## 5.2 Modalidades de batalla instanciadas (heredado de Iberia)
 El combate ocurre en INSTANCIAS separadas del mapa global (aunque se desencadenen en él), límites simétricos fijos, 2 bandos (Atacante/Defensor), sin empates.
 
@@ -28,6 +30,8 @@ El combate ocurre en INSTANCIAS separadas del mapa global (aunque se desencadene
 2. **Mundo abierto**: choque de patrullas/ejércitos. Bandera/campamento transitorio; quien la pierde se retira, deja loot, sufre debuff temporal "Herido". **Se declara, pero solo estando delante**: la proximidad ofrece atacar y el jugador decide; nadie es arrastrado a un combate por pasar cerca (5.12.3). Alcanzar a quien huye es lo que hace la persecución.
 3. **Defensa/intercepción de caravanas**: combate asimétrico móvil (ver Doc 3, sección 3.10). Igual que el anterior, se dispara por proximidad de un ejército a una caravana (5.12).
 4. **Entrenamiento/matchmaking** (POSPUESTO a fase posterior a Fase 0/1): 15v15 puro, sin permadeath, para probar tácticas. CONFIRMADO: pospuesto de forma explícita, requiere factores no disponibles en Fase 0 (mismo motivo que Attack Timer, ver 5.6).
+
+> **Modelo de Héroe (2026-09-13):** "Herido" es un estado del **héroe** y dura **2 minutos** de tiempo de mundo. Los escuadrones no quedan heridos: sus bajas son siempre permanentes (5.16.4). Quién decide que un héroe queda herido y qué efecto tiene está pendiente.
 
 ### 5.2.5 Resolución numérica y varianza de combate
 
@@ -54,10 +58,12 @@ Se suma el poder de cada bando y **se multiplica cada uno por un factor aleatori
 - Sacar escuadrones a campaña los quita de la guarnición **de verdad**: dejan de defender y dejan de comer del almacén (5.13).
 - **Un jugador al que le conquistan su asentamiento estando de campaña queda HUÉRFANO** (decisión del usuario, 2026-09-02): conserva los escuadrones que lleva encima, pero se queda sin residencia — sin sitio donde reabastecer, reclutar ni volver. Sigue huérfano **hasta que entre en una Facción nueva que tenga asentamiento**. No es una derrota definitiva: es un estado del que se sale por la vía política (Doc 2.5, ciudadanía), no por la militar.
 
+> **Modelo de héroe (2026-09-13):** cuando se implemente, lo que pasa con escuadras y residentes al conquistar un asentamiento lo sustituye 5.15.5: no hay captura de guarnición, las escuadras que el héroe no llevaba quedan a 0 y se van con su campamento. Los puntos de arriba describen el motor actual.
+
 Ciclo de vida propiamente dicho:
 
 - PERMADEATH individual (excepto modo entrenamiento): bajas son permanentes.
-- El SQUAD (nombre, nivel veterano) persiste aunque el regimiento sea aniquilado — se puede rellenar con nuevos reclutas conservando el progreso.
+- El SQUAD (nombre, nivel veterano) persiste aunque el regimiento sea aniquilado — se puede rellenar con nuevos reclutas conservando el progreso. *(Modelo de Héroe, 2026-09-13: el "nivel veterano" pasa a ser nivel y experiencia, 5.16.3.)*
 - DESERCIÓN POR HAMBRE: tropas consumen raciones continuamente; sin suministro, la moral colapsa y desertan permanentemente (mismo efecto que perderlas en combate). **Es la misma regla en guarnición y en campaña** — solo cambia de qué despensa se come (5.13).
 - **Población civil come ANTES que las Tropas** (rediseño, a petición del usuario — pensando en escala
   multijugador real: cantidad de jugadores por asentamiento y presión militar PvP crecen con el servidor,
@@ -94,6 +100,8 @@ Ciclo de vida propiamente dicho:
 ## 5.5 Doble carril de progresión (ver también Doc 4, sección 4.1)
 - Carril COMBATE REAL (Pesants + Artesanos): tropas Tier bajo/medio, deben veteranizar combatiendo de verdad.
 - Carril PROGRESIÓN PLANA (Nobleza): conversión instantánea a élite con equipo disponible.
+
+> **Modelo de Héroe (2026-09-13):** la veteranía se sustituye por **nivel y experiencia** de escuadrón, al estilo de Conquest; la experiencia se gana según el desempeño en la batalla (5.16.3).
 
 ## 5.6 Attack Timer (heredado de Iberia, pospuesto a fase posterior a Fase 0)
 Asedios FORMALES en ventanas limitadas (ej. 2 veces/semana, horario fijo, ~1h de duración). Ataques logísticos (mundo abierto, caravanas) libres 24/7. CONFIRMADO: pospuesto a Fase 1+ de forma explícita — requiere factores no disponibles en Fase 0 (infraestructura de instanciado multijugador programado, sistema de colas/horarios), no implementable en el prototipo de datos puros.
@@ -203,6 +211,8 @@ Todo lo instanciado/visual (combate real en escena, formaciones renderizadas, mo
 Cada Jugador tiene un valor de **Liderazgo**, y cada tropa (tipo) un **coste de Liderazgo**. Al salir a campaña, la suma de los costes de los escuadrones que ese Jugador se lleva no puede exceder su Liderazgo.
 
 **Es un límite de SALIDA, no de posesión.** Se pueden poseer muchos más escuadrones de los que se pueden sacar de una vez; lo que se queda forma la guarnición y defiende el asentamiento (5.12). Esto convierte "¿qué me llevo?" en la decisión central de cada campaña, y le da un propósito real a la guarnición, que antes era simplemente "todo lo que tienes".
+
+> **Modelo de Héroe (2026-09-13):** el Liderazgo es del Héroe. "Lo que se queda forma la guarnición y defiende" deja de ser cierto: solo defiende la guarnición asignada, que tiene su propio cupo y no gasta Liderazgo (5.15.3). La selección de qué llevarse se puede guardar como **loadout** (5.16.5).
 
 En un ejército de varios jugadores, **cada uno se valida contra SU propio Liderazgo, por separado**. No hay tope agregado del ejército: cuatro jugadores juntos sacan cuatro veces más.
 
@@ -351,6 +361,8 @@ La cifra es lo que hace que estacionar signifique algo. Con la mitad del consumo
 
 ### 5.12.4 La guarnición es lo único que defiende
 
+> **Modelo de héroe (2026-09-13):** deja de ser cierto cuando se implemente. Solo combaten las escuadras que un héroe presente mete en la batalla, más la guarnición que los residentes asignan dentro de su cupo (5.15). Este apartado describe el motor actual.
+
 Como los escuadrones que salen se van de verdad (5.4), **un asentamiento cuyos jugadores se llevaron todo queda indefenso**, y un asedio contra él lo conquista sin combate. Esta es la tensión central de la mecánica: atacar cuesta dejar la casa descubierta.
 
 **Llegar ya NO es asediar** (a petición del usuario, 2026-09-06 — antes lo era: alcanzar el final de la ruta sobre una plaza enemiga la asediaba sin ninguna orden). Ahora un ejército que llega **acampa delante**, y asediar es una acción que se elige en la puerta (5.12.3).
@@ -466,6 +478,8 @@ De una frontera que solo **recuerdas** queda hasta dónde llegaba, no su trazo e
 
 ### 5.12.9 Ocupación tras la conquista (2026-09-08)
 
+> **Modelo de héroe (2026-09-13):** todo lo que este apartado dice de la guarnición conquistadora (el punto 1 y "la guarnición se queda" al vencer la ventana) desaparece cuando se implemente 5.15: la plaza conquistada queda sin guarnición hasta que un héroe conquistador traslade allí su campamento y la asigne (5.15.5). El saqueo y la ventana de ocupación no cambian.
+
 **El problema que resuelve:** antes, conquistar dejaba la guarnición a cero y la ciudad indefensa para siempre — cambiaba de manos cada tick que pasaba un ejército (medido en batch: ~176 conquistas sobre ~61 asentamientos vivos). Con la ocupación, el ping-pong cae ~70%: de las plazas conquistadas, la gran mayoría cambia de dueño **una sola vez y se queda**. El NPC sigue conquistando; deja de re-tomar lo mismo sin parar.
 
 Diseño y plan técnico completos en `Consideraciones/Ocupacion_Post_Conquista_Definicion.md`. Cifras en `constants.ts` `OCUPACION`, **placeholder a calibrar por simulación**.
@@ -544,6 +558,8 @@ En la práctica son tres actos del jugador:
 La regla de velocidad lo equilibra sola: escoltar baja el ejército a la velocidad de la caravana, así que **no se puede escoltar y depredar a la vez**.
 
 **Escolta SIN héroe — Doc 3.13.4 (implementado 2026-09-08).** El revamp de caravanas añade una tercera vía: un jugador residente del origen **cede escuadrones** a la caravana por viaje (`Caravana.escolta`), sin que nadie marche con ella. Salen de la guarnición, cuentan Liderazgo, no comen ración, y la caravana se defiende con su `poderTotal`. Es distinto de esta escolta por ejército (que exige un jugador en columna) y de la defensa base fija (Doc 3.10) — tres capas, misma resolución de combate.
+
+> **Modelo de héroe (2026-09-13):** la escolta sin héroe combate manejada por la IA del juego. Si la caravana es destruida, la escuadra queda a 0 unidades y vuelve al campamento de su héroe (5.15.4).
 
 ### 5.13.4 Una columna se disuelve cuando no queda NADIE dentro
 
@@ -638,3 +654,77 @@ Es el Jugador que **formó** el Ejército. No es un cargo político (Doc 2.2): e
 **Si el Líder se desconecta, el mando pasa al integrante con más ANTIGÜEDAD** — y si ese también está fuera, al siguiente. No puede irse por su voluntad, pero sí puede caérsele la conexión, y una columna en campaña no puede quedarse sin nadie que la mande. **Nunca se queda sin candidato**: todos los que van dentro son de su misma Facción y cualquiera vale, así que mientras quede alguien hay Líder — y si no queda nadie, la columna ya se disolvió (Doc 1.10.6).
 
 Y como ser Ejército es una identidad y no un recuento (5.12.1), **el que se queda solo sigue en un Ejército**: mantiene la ruta fija y las caravanas. No hereda la libertad del viajero por quedarse sin compañía.
+
+## 5.15 Batallas con héroes: quién combate, guarnición y campamento (decisión del usuario, 2026-09-13)
+
+> **Diseño cerrado, sin implementar.** Describe el modelo de Héroe (5.16; datos en `Docs/Coordinacion/01_Modelo_de_datos_compartido.md`), con las batallas jugadas como partidas reales en Unity. Hasta que se implemente, el motor sigue funcionando como cuentan 5.4, 5.12.4 y 5.12.9. Lo que falta por decidir y construir está en `Docs/Mecanicas a desarrollar.md` §30.
+
+### 5.15.1 Una escuadra combate con su héroe
+
+Las batallas dejan de ser automáticas, salvo NPC contra NPC, que se sigue resolviendo con números. **Una escuadra solo combate si su héroe entra en la batalla y la usa**, y cuántas lleva lo limita su Liderazgo (5.11). En un asedio atacan héroes con sus escuadras y defienden los héroes presentes en el asentamiento, cada uno con las escuadras que le permite su Liderazgo. El Liderazgo equilibra los dos bandos.
+
+Las escuadras de un héroe que no está en la batalla no combaten, estén donde estén. Solo hay dos excepciones, en las que una escuadra combate sin su héroe, manejada por la IA del juego: la **guarnición** de un asentamiento (5.15.3) y la **escolta** de una caravana (5.15.4).
+
+Los topes de una batalla cuentan **héroes** (por ejemplo 15 por bando en un asedio y 5 en mundo abierto; son valores de balance). Los héroes que sobran esperan en cola y entran a medida que caen otros. Las escuadras sin héroe no ocupan plaza.
+
+### 5.15.2 El campamento del héroe
+
+El campamento es donde un héroe guarda las escuadras que no lleva consigo, y está en el asentamiento donde reside. Si no reside en ninguno, no tiene campamento: es **huérfano**, y sus escuadras siguen siendo suyas, con su experiencia y su nivel, hasta que vuelva a residir en algún asentamiento.
+
+### 5.15.3 La guarnición
+
+- Un héroe puede asignar algunas de sus escuadras a la guarnición del asentamiento **donde reside**, y solo ahí.
+- Tiene un **cupo propio por héroe** que decide el asentamiento: sus edificios y políticas dan "liderazgo de guarnición" a cada héroe. Por ejemplo, el Barracón da el suficiente para una escuadra básica y una política suma algo más. **No gasta el Liderazgo del héroe**, que sigue siendo lo que lleva consigo.
+- Una escuadra en guarnición se **entrega a la IA**: la maneja la IA y el héroe no puede usarla mientras siga asignada, aunque esté presente en la batalla.
+- En un asedio entra directamente, sin ocupar plaza de héroe.
+- Si no hay héroes defensores presentes, la guarnición es la única defensa: la batalla se juega igual, con ella, o sin defensores si no hay guarnición.
+
+### 5.15.4 La escolta
+
+Una escuadra cedida como escolta sigue con la caravana hasta que esta termina el viaje o es destruida. **Si la caravana es destruida, por el motivo que sea, la escuadra queda a 0 unidades y vuelve al campamento de su héroe** (a donde resida).
+
+### 5.15.5 Cuando cae el asentamiento
+
+Si los atacantes conquistan un asentamiento:
+
+- **Cada héroe defensor queda fuera**, en el mundo, junto al asentamiento, con las escuadras que usó en la batalla (las que sobrevivieron).
+- **El resto de las escuadras de sus residentes, guarnición incluida, quedan a 0 unidades** y se van con el campamento de su héroe al asentamiento más cercano de su Facción, **donde el héroe pasa a residir**. Si la Facción no tiene ninguno, quedan a 0 unidades y sin asentamiento (huérfanas), pero siguen siendo de su héroe, con su experiencia y su nivel, hasta que el héroe traslade su campamento a otro asentamiento (ciudadanía, Doc 2.5).
+- **No hay captura**: la guarnición no pasa al conquistador. Cae a 0 y sigue siendo de su héroe.
+- **El asentamiento conquistado queda sin guarnición** (decisión del usuario, 2026-09-13). Nadie lo guarnece solo por haberlo ganado: los héroes conquistadores pueden trasladar allí su campamento (pasar a residir) y asignar guarnición dentro del cupo que dé el asentamiento. **Si se quiere defender algo, hay que defenderlo activamente.** La ventana de ocupación (5.12.9) sigue dándole inmunidad durante un tiempo fijo; después, sin guarnición ni defensores presentes, un asedio se juega sin defensores.
+
+### 5.15.6 Facciones NPC
+
+Las Facciones NPC tienen **héroes bot**, manejados por la IA del juego. Un humano que ataca a una Facción NPC combate contra sus héroes bot y su guarnición. NPC contra NPC se sigue resolviendo con números, sin partida en Unity.
+
+Un bando puede no tener ningún humano (solo héroes bot, solo guarnición o escolta, o nadie); la batalla necesita al menos un héroe humano en total.
+
+## 5.16 El Héroe (decisiones del usuario, 2026-09-11 y 2026-09-13)
+
+> **Diseño cerrado, sin implementar.** Es la otra mitad del modelo de Héroe, junto con 5.15. El detalle de datos está en `Docs/Coordinacion/01_Modelo_de_datos_compartido.md` §12-§14; lo que falta decidir y construir, en `Docs/Mecanicas a desarrollar.md` §31.
+
+### 5.16.1 Un héroe por jugador y mundo
+
+- Cada Jugador tiene **exactamente un Héroe en cada mundo**. El Héroe pertenece a esa partida, no a la cuenta: su progreso no pasa de un mundo a otro.
+- **No se cambia de héroe** dentro de una partida.
+- El Héroe hace, dentro del juego, todo lo que hasta ahora el canon atribuye al Jugador: reside, lidera, tiene Liderazgo, está situado en el mundo, recuerda y explora, ocupa cargos y posee los escuadrones. El Jugador queda como la persona y su cuenta.
+- Trae de Conquest su estructura de personaje: clase, nivel y experiencia, puntos de atributo y puntos de perk por separado, atributos, perks, equipo, inventario y sus propias monedas. Si esas monedas se relacionan con el oro de BronzeAge está pendiente.
+
+### 5.16.2 Sus escuadrones
+
+- **Todos los escuadrones son del Héroe**, estén donde estén: en su campamento, en su columna o de escolta (5.15.2).
+- **Como mucho un escuadrón de cada tropa en toda la partida.** Si ya tiene uno de ese tipo, solo puede reponerlo allí donde está; no se recluta otro mientras el primero esté fuera.
+- **Solo recluta las tropas que le permite el asentamiento.** El Héroe no tiene tipos de tropa desbloqueados propios.
+- Las bajas de un escuadrón son siempre **permanentes**: los escuadrones no tienen estado de herido.
+
+### 5.16.3 Progresión
+
+- La **veteranía se sustituye por nivel y experiencia**, al estilo de Conquest.
+- **La experiencia del Héroe depende de su desempeño en la batalla**: unidades y héroes abatidos, capturas de bandera, daño hecho y recibido, si fue el mejor de la partida, en qué puesto de la tabla de su bando terminó, entre otros factores. La calcula la propia partida (Unity), que es la única que ve esos datos. Si la experiencia de los escuadrones se calcula igual está pendiente de confirmar.
+
+### 5.16.4 Herido
+
+"Herido" es un estado del **Héroe**, no de sus escuadrones. Dura **2 minutos** de tiempo de mundo. Quién decide que un héroe queda herido y qué efecto tiene está pendiente.
+
+### 5.16.5 Loadout
+
+Traído de Conquest: el Héroe puede guardar selecciones de escuadrones (**loadouts**) para salir a mundo abierto o unirse a un Ejército. Cada una está limitada por su Liderazgo (5.11). Es una comodidad: no cambia lo que puede llevarse, solo lo deja preparado.

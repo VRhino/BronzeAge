@@ -34,6 +34,8 @@ Cada clase tiene FÓRMULA DE CRECIMIENTO INDEPENDIENTE (no comparten los mismos 
 - Carril PROGRESIÓN PLANA (Nobleza): conversión INSTANTÁNEA a unidades de élite si hay equipo disponible.
 - Cola de PRIORIDAD cuando la demanda excede el pool disponible (criterio exacto pendiente).
 
+> **Modelo de Héroe (2026-09-13):** "veteranizar" pasa a ser ganar nivel y experiencia de escuadrón (Doc 5.16.3).
+
 ## 4.2 Auto-construcción por necesidad
 - El jugador NO elige UBICACIÓN de edificio, EXCEPTO: edificio de fundación, y edificios estratégicos (murallas, torres, puerto) que sí se colocan manualmente — la ubicación sigue siendo siempre automática, sin excepciones nuevas (ver control de cola más abajo, que NO toca este punto).
 - **Control manual de la cola de auto-construcción — IMPLEMENTADO (cambio de base a petición del usuario, inspirado en análisis comparativo con Travian)**: Gobernador y Maestro de Obras (ver Doc 2.2) ven la cola completa (`en_cola`) desde su interfaz, REORDENAN las entradas ya encoladas (arriba/abajo), y AÑADEN o QUITAN proyectos manualmente. Esto da control sobre el TIPO y el ORDEN de lo que se construye — la UBICACIÓN sigue sin poder elegirse nunca, la decide siempre el algoritmo de colocación (ver más abajo).

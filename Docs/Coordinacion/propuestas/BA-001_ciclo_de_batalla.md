@@ -43,13 +43,16 @@ efectivos, mapa, versiones de reglas y autorización limitada a la batalla.
   modelo de BronzeAge).
 - **por héroe:** participó/sobrevivió y, si aplica, **herido** (debuff temporal análogo al `heridoHasta`
   que hoy tiene `Escuadron`, pero movido a `Heroe` — el héroe sí combate directamente en la partida real de
-  Unity, la escuadra no tiene ese estado).
+  Unity, la escuadra no tiene ese estado). Dura 2 minutos de mundo (decisión del usuario, 2026-09-13).
+- **XP ganada por héroe y por escuadra, ya calculada por Unity** (decisión del usuario, 2026-09-13): depende
+  del desempeño en batalla, que solo conoce el servidor de batalla. Llega como delta; BronzeAge la valida,
+  la suma y aplica la curva de nivel.
 
 Más versión de servidor y autenticidad.
 
-El resultado contiene hechos tácticos, no órdenes como "conquistar asentamiento". BronzeAge interpreta los
-hechos y aplica conquista, ocupación, nivel/XP de escuadra (reemplaza a veteranía, decisión BA-004 #2),
-herida de héroe, suministro y liberación de reservas.
+El resultado contiene hechos tácticos más la XP ganada, no órdenes como "conquistar asentamiento".
+BronzeAge interpreta los hechos y aplica conquista, ocupación, herida de héroe, suministro y liberación de
+reservas, y suma la XP recibida (nivel/XP de escuadra reemplaza a veteranía, decisión BA-004 #2).
 
 ## Criterios de aceptación
 
@@ -100,8 +103,9 @@ herida de héroe, suministro y liberación de reservas.
    `survivors + deaths == deployed` por escuadra; (d) ninguna cifra es negativa ni supera lo reservado; (e)
    ganador y razón son compatibles con las reglas del ticket; (f) fechas/duración son coherentes; (g) la
    versión de contrato/build/balance está autorizada; (h) la batalla está en un estado desde el que ESE
-   productor puede cerrarla. BronzeAge sigue calculando XP, nivel, herida de héroe, conquista y ocupación —
-   Unity reporta hechos, nunca deltas de progresión ya calculados.
+   productor puede cerrarla. BronzeAge sigue decidiendo herida de héroe, conquista y ocupación a partir de
+   los hechos. **Excepción, decisión del usuario 2026-09-13:** la XP sí llega ya calculada por Unity (solo
+   el servidor de batalla ve el desempeño); BronzeAge la valida, la suma y calcula el nivel.
 
 ## Plan de implementación (listo del lado de BronzeAge)
 

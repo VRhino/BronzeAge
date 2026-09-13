@@ -32,6 +32,8 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 27 | AMBIENTACIÓN | Identidad visual y de audio | ✘ nada |
 | 28 | MILITAR | Declaración formal de guerra | ✘ nada |
 | 29 | ONBOARDING | Curva de progresión inicial gradual | ✘ nada |
+| 30 | MILITAR | Batallas con héroes: guarnición, campamento y héroes bot | ✘ nada (hoy defienden todas las escuadras) |
+| 31 | HÉROE | Modelo de Héroe: uno por jugador y mundo, dueño de los escuadrones | ✘ nada (hoy manda el Jugador) |
 
 **Pospuesto explícitamente, fuera de esta lista:** el **Attack Timer** (Doc 5.6, decidido y aplazado a
 fase posterior a Fase 0) y el **comercio marítimo / unidades navales** (fuera del alcance de Fase 0 por
@@ -299,3 +301,35 @@ Sin resolver: qué sistemas se difieren y cuáles no; si el desbloqueo se ata al
 de Facción, al tiempo o a una combinación; y si aplica solo a la interfaz (ocultar) o también a las reglas
 (bloquear). Distinto de §16 (contenido del vestíbulo) y del onboarding ya hecho (spawn + fundación grupal):
 esto es el ritmo de la primera hora una vez dentro.
+
+## 30. Batallas con héroes: guarnición, campamento y héroes bot
+
+**Estado: reglas principales cerradas (canon Doc 5.15, 2026-09-13), `código: ✘`.** Hoy un asedio lo
+defienden todas las escuadras del asentamiento y se resuelve con números (`iniciarAsedio` y
+`aplicarConquista`, `engine/combate.ts`). Depende del modelo de Héroe
+(`Docs/Coordinacion/01_Modelo_de_datos_compartido.md`) y del ciclo de `Batalla` con Unity (BA-001; CQ-002
+en Conquest para la IA de escuadras sin héroe y de héroes bot).
+
+Sin resolver:
+
+- Cómo nacen los héroes bot de una Facción NPC y cuántos tiene cada una.
+- Valores de balance: liderazgo de guarnición por edificio y por política, y topes de héroes por batalla.
+
+## 31. Modelo de Héroe
+
+**Estado: reglas principales cerradas (canon Doc 5.16 y glosario, 2026-09-11 y 2026-09-13), `código: ✘`.**
+Hoy el motor usa `Jugador` para todo lo que el modelo nuevo atribuye al Héroe. Datos y orden de
+implementación en `Docs/Coordinacion/01_Modelo_de_datos_compartido.md` §12-§14 y BA-004: primero el
+contrato de identidad, los schemas y los fixtures, y solo después renombrar `jugadorId`.
+
+Sin resolver:
+
+- Qué efecto tiene el estado "herido" del héroe (dura 2 minutos de mundo) y quién lo decide (propuesto: la
+  partida de Unity).
+- Si la experiencia de los escuadrones también la calcula la partida, como la del héroe.
+- Qué pierde un héroe al ser derrotado en una partida real (hoy, en campo abierto: la mitad de su carro y
+  Tregua, Doc 5.1).
+- La estructura traída de Conquest que falta cerrar: objetos del inventario, huecos de equipo, género y
+  avatar.
+- Si las monedas del héroe se relacionan con el oro de BronzeAge o son una economía aparte.
+- Qué ve un jugador de un héroe ajeno (¿nombre y clase? ¿nivel y equipo?).
