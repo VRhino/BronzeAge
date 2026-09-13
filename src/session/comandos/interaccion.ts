@@ -135,7 +135,7 @@ export const atacar = comando<ParamsAtacar, void>((estado, _mapa, ctx, params) =
       defensor,
       [...estado.facciones],
       estado.relaciones,
-      capacidadCargaDe(atacante, estado.caravanas),
+      estado.caravanas,
       ctx.instante,
       ctx.rng
     );

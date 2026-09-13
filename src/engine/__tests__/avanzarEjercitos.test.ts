@@ -1017,12 +1017,24 @@ describe('encuentros: solo se resuelve lo que se persigue', () => {
     // Un ataque que no tumba al defensor es una derrota del ATACANTE: con 5 contra 300 no depende del RNG.
     const { facciones, a, b } = dosColumnas(1, 5, 300);
 
-    const r = atacarColumna(a, b, facciones, [], capacidadCargaDe(a, []), instanteDeTest(1), createRng(1));
+    const r = atacarColumna(a, b, facciones, [], [], instanteDeTest(1), createRng(1));
 
     expect(r.atacante.tipo).toBe('ejercito');
     expect(r.atacante.suministro['trigo'], 'se queda con la mitad').toBe(50);
     expect(r.defensor.suministro['trigo'], 'y el vencedor carga la otra mitad').toBe(150);
     expect(r.atacante.enTreguaHasta, 'la tregua sigue igual').toBeDefined();
+  });
+
+  it('el DEFENSOR que gana carga el botín con sus caravanas adjuntas, igual que el atacante (Doc 5.13.2)', () => {
+    // Antes solo contaban sus carros: con el carro por encima de 500 gracias a la adjunta, no le cabía nada.
+    const { facciones, a, b } = dosColumnas(1, 5, 300);
+    const adjunta: Caravana = { ...caravanaDe('c-b', b.origenAsentamientoId, b.posicionActual), estado: 'adjunta' };
+    const defensor: Ejercito = { ...b, caravanasAdjuntasIds: [adjunta.id], suministro: { trigo: 800 } };
+    expect(capacidadCargaDe(defensor, [adjunta]), 'cabe más que el carro solo').toBeGreaterThan(850);
+
+    const r = atacarColumna(a, defensor, facciones, [], [adjunta], instanteDeTest(1), createRng(1));
+
+    expect(r.defensor.suministro['trigo'], 'carga la mitad del carro del atacante').toBe(850);
   });
 
   it('fuera del radio de encuentro no pasa nada, aunque se vean de sobra', () => {

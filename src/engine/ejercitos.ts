@@ -1025,7 +1025,8 @@ export function atacarColumna(
   defensor: Ejercito,
   facciones: Faccion[],
   relaciones: readonly RelacionPolitica[],
-  capacidadDelAtacante: number,
+  /** Las del mundo: de aquí salen las adjuntas del que gane, sea quien sea, para saber cuánto botín le cabe. */
+  caravanas: readonly Caravana[],
   instante: Instante,
   rng: RandomFn
 ): { atacante: Ejercito; defensor: Ejercito; facciones: Faccion[]; eventos: EventoCrudo[] } {
@@ -1045,8 +1046,7 @@ export function atacarColumna(
   const ganador = gano ? choque.a : choque.b;
   const secuela = trasDerrota(perdedor, instante);
 
-  const capacidadGanador = gano ? capacidadDelAtacante : capacidadCarrosDe(participantesDe(ganador));
-  const conBotin = cargarBotin(ganador, secuela.botin, capacidadGanador);
+  const conBotin = cargarBotin(ganador, secuela.botin, capacidadCargaDe(ganador, caravanas));
 
   return {
     atacante: gano ? conBotin : secuela.perdedor,
