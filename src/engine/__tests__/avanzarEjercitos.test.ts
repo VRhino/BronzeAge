@@ -15,6 +15,7 @@ import { capacidadCaravana, velocidadCaravana } from '../caravanas';
 import { entregarDesdeCaravanaAdjunta } from '../trade';
 import {
   adjuntarCaravana,
+  atacarColumna,
   cargarCaravanaAdjunta,
   ladoPendienteParaEjercito,
   avanzarEjercitos,
@@ -973,6 +974,24 @@ describe('encuentros: solo se resuelve lo que se persigue', () => {
     expect(r.ejercitos.find((e) => e.id === 'ejercito-c')!.escuadrones[0]!.cantidad, 'el tercero ni se entera').toBe(30);
   });
 
+  it('quien cae al ser alcanzado entrega la mitad del carro al que lo persiguió, igual que en un ataque (Doc 5.12.3)', () => {
+    // Un soldado contra trescientos cae entero: en el tick solo cuenta como derrota quedarse sin nadie en pie.
+    const { facciones, asentamientos, a, b } = dosColumnas(LOGISTICA.radioEncuentro - 1, 300, 1);
+    const cazador: Ejercito = { ...a, persiguiendo: { tipo: 'ejercito', id: b.id } };
+    // El mismo tick sin combate da lo que queda en cada carro después de comer, que va antes de los encuentros.
+    const sinChoque = avanzar([a, b], asentamientos, { facciones }).ejercitos;
+    const carroA = sinChoque.find((e) => e.id === a.id)!.suministro['trigo'] ?? 0;
+    const carroB = sinChoque.find((e) => e.id === b.id)!.suministro['trigo'] ?? 0;
+
+    const r = avanzar([cazador, b], asentamientos, { facciones }).ejercitos;
+    const presa = r.find((e) => e.id === b.id)!;
+
+    expect(presa.escuadrones.every((e) => e.cantidad === 0), 'la presa cae entera').toBe(true);
+    expect(presa.enTreguaHasta, 'la tregua sigue igual').toBeDefined();
+    expect(presa.suministro['trigo'], 'se queda con la mitad').toBe(carroB / 2);
+    expect(r.find((e) => e.id === a.id)!.suministro['trigo'], 'y el cazador carga la otra mitad').toBe(carroA + carroB / 2);
+  });
+
   it('un objetivo en TREGUA no se puede alcanzar, aunque lo persigas y lo tengas encima', () => {
     const { facciones, asentamientos, a, b } = dosColumnas(1);
     const cazador: Ejercito = { ...a, persiguiendo: { tipo: 'ejercito', id: b.id } };
@@ -991,6 +1010,19 @@ describe('encuentros: solo se resuelve lo que se persigue', () => {
     const r = avanzar([enTregua, b], asentamientos, { facciones });
 
     expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo.startsWith('combate.'))).toBe(false);
+  });
+
+  it('un EJÉRCITO derrotado en campo abierto entrega la mitad del carro, igual que un viajero (Doc 5.12.3)', () => {
+    // Hasta el 2026-09-13 solo la columna personal perdía el carro: el ejército se iba con la tregua y nada más.
+    // Un ataque que no tumba al defensor es una derrota del ATACANTE: con 5 contra 300 no depende del RNG.
+    const { facciones, a, b } = dosColumnas(1, 5, 300);
+
+    const r = atacarColumna(a, b, facciones, [], capacidadCargaDe(a, []), instanteDeTest(1), createRng(1));
+
+    expect(r.atacante.tipo).toBe('ejercito');
+    expect(r.atacante.suministro['trigo'], 'se queda con la mitad').toBe(50);
+    expect(r.defensor.suministro['trigo'], 'y el vencedor carga la otra mitad').toBe(150);
+    expect(r.atacante.enTreguaHasta, 'la tregua sigue igual').toBeDefined();
   });
 
   it('fuera del radio de encuentro no pasa nada, aunque se vean de sobra', () => {

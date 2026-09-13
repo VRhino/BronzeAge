@@ -122,7 +122,7 @@ export interface PayloadPersecucion {
  * Atacar lo que tienes delante, a distancia de choque (Doc 5.12.3). Sustituye al combate que el tick
  * resolvía solo por geometría: acercarse ya no basta.
  *
- * Al derrotado le cae la **tregua**, y si era un viajero pierde la mitad de su carro. Las dos mitades de la
+ * Al derrotado le cae la **tregua** y pierde la mitad de su carro, sea viajero o Ejército. Las dos mitades de la
  * tregua se comprueban en el motor: ni se ataca estando en ella, ni se ataca a quien la tiene.
  */
 export const atacar = comando<ParamsAtacar, void>((estado, _mapa, ctx, params) => {

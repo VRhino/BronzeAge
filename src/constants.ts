@@ -1692,12 +1692,12 @@ export const MOVIMIENTO = {
    */
   treguaTrasDerrotaMinutos: 5,
   /**
-   * Que fraccion del carro se lleva quien derrota a un viajero (Doc 5.12.3). **La mitad**: dejarle algo es lo
-   * que hace que valga la pena seguir el viaje en vez de reiniciarlo, y lo que distingue un robo de una
-   * ruina. Con el carro vacio no hay botin, solo la tregua.
+   * Que fraccion del carro se lleva quien derrota a una columna en campo abierto (Doc 5.12.3). **La mitad**:
+   * dejarle algo es lo que hace que valga la pena seguir el viaje en vez de reiniciarlo, y lo que distingue un
+   * robo de una ruina. Con el carro vacio no hay botin, solo la tregua.
    *
-   * Solo se aplica a una columna PERSONAL. A un ejercito derrotado se le quitan las caravanas adjuntas
-   * (Doc 5.13.2), que es su equivalente y ya existia.
+   * Vale igual para una columna personal que para un Ejercito, cuyo carro es el de todos sus miembros. Las
+   * caravanas adjuntas no entran: esas se pierden aparte, si el ejercito se deshace (Doc 5.13.2).
    */
   fraccionRobada: 0.5,
 };
