@@ -17,7 +17,7 @@ import type { Asentamiento, Edificio, EdificioTipo } from '../../domain/types';
 import { EDIFICIO_CATALOGO } from '../../constants';
 import { anadirEdificioManualmente, ConstruccionManualInvalidaError } from '../construction';
 import { reclutarTropa } from '../tropas';
-import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
+import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, SIN_MUNDO } from './fixtures';
 
 const SEED = 42;
 const RECLAMOS_VACIOS = { nodos: new Set<string>(), lenerasPorBosque: new Map<string, number>() };
@@ -91,7 +91,7 @@ describe('Barracón / Galería de tiro — gate de construcción a nivel 2', () 
     };
 
     // `lanceros_mimbre`: Barracón, nivelRequerido 1, cuesta armaMadera — la tropa más barata de la vía militar.
-    const trasReclutar = reclutarTropa(degradado, 'jugador-faccion-1-1', 'faccion-1', 'lanceros_mimbre', 'pesants', 0);
+    const trasReclutar = reclutarTropa(degradado, SIN_MUNDO, 'jugador-faccion-1-1', 'faccion-1', 'lanceros_mimbre', 'pesants', 0);
     expect(trasReclutar.escuadrones.some((e) => e.tropaId === 'lanceros_mimbre')).toBe(true);
   });
 });

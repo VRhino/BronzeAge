@@ -7,6 +7,8 @@
 import { describe, expect, it } from 'vitest';
 import { GameSession } from '../gameSession';
 import { atacarCampamentoBandidos, reclutarTropa } from '../comandos/militar';
+import { movilizarEjercito } from '../comandos/ejercitos';
+import { CODIGOS_ERROR } from '../comandos/codigosDeError';
 import { OPC, partidaConAsentamiento } from './fixtures';
 
 /**
@@ -22,19 +24,23 @@ import { OPC, partidaConAsentamiento } from './fixtures';
  */
 function partidaAbastecida() {
   const base = partidaConAsentamiento();
-  const payload = base.sesion.exportar();
+  return { ...base, sesion: abastecer(base.sesion) };
+}
+
+/** Almacén lleno y 200 pesants en el (único) asentamiento — ver `partidaAbastecida`. */
+function abastecer(original: GameSession): GameSession {
+  const payload = original.exportar();
   const asentamiento = payload.state.asentamientos[0]!;
   const almacen = Object.fromEntries(
     Object.entries(asentamiento.almacen).map(([recurso, item]) => [recurso, { ...item, cantidad: item.capacidad }])
   );
-  const sesion = GameSession.importar({
+  return GameSession.importar({
     ...payload,
     state: {
       ...payload.state,
       asentamientos: [{ ...asentamiento, almacen, poblacion: { ...asentamiento.poblacion, pesants: 200 } }],
     },
   });
-  return { ...base, sesion };
 }
 
 describe('reclutarTropa', () => {
@@ -50,6 +56,24 @@ describe('reclutarTropa', () => {
     expect(resultado.datos!.reclutados).toBeGreaterThan(0);
     expect(sesion.getState().asentamientos[0]!.escuadrones).toHaveLength(1);
     expect(sesion.getState().historialJugadores[fundador]!.some((e) => e.mensaje.includes('Recluta'))).toBe(true);
+  });
+
+  it('con su escuadra dentro de un ejército, el jugador no recluta otra de ese tipo en casa (Doc 2.5)', () => {
+    const { sesion, asentamientoId, fundador, vecino } = partidaAbastecida();
+    const params = (jugadorId: string) => ({ asentamientoId, jugadorId, tropaId: 'milicia_lanceros', origen: 'pesants' as const });
+    expect(sesion.ejecutar(reclutarTropa, params(fundador), OPC).ok).toBe(true);
+    const escuadronIds = sesion.getState().asentamientos[0]!.escuadrones.map((e) => e.id);
+    const objetivo = { tipo: 'punto', punto: { x: 900, y: 900 } } as const;
+    expect(sesion.ejecutar(movilizarEjercito, { asentamientoId, jugadorId: fundador, escuadronIds, objetivo }, OPC).ok).toBe(true);
+    // El carro del ejército se lleva trigo del almacén hasta la reserva: se rellena para que lo único que
+    // pueda rechazar sea la unicidad.
+    const enCampana = abastecer(sesion);
+
+    const segunda = enCampana.ejecutar(reclutarTropa, params(fundador), OPC);
+    expect(segunda.codigoError).toBe(CODIGOS_ERROR.tropasReclutamientoInvalido);
+    // Control: la plaza SÍ puede reclutar esa tropa ahora mismo (el vecino lo consigue), así que el rechazo de
+    // arriba es por la unicidad y no por falta de pesants, equipo o trigo.
+    expect(enCampana.ejecutar(reclutarTropa, params(vecino), OPC).ok).toBe(true);
   });
 });
 

@@ -9,10 +9,15 @@ import { SIMULACION } from '../../constants';
 import { crearFaccion } from '../faccion';
 import { evaluarViabilidadFundacion, fundarAsentamiento } from '../settlement';
 import type { ContextoSimulacion, EstadoSimulacion } from '../simulation';
+import type { MundoEscuadras } from '../tropas';
 
 export function crearMapaDeterminista(seed: number): Mapa {
   return crearMapa(generarMapa({ ancho: MAPA_DEFAULT.ancho, alto: MAPA_DEFAULT.alto, seed }));
 }
+
+/** Partida sin nada fuera del asentamiento que recluta — para los tests de `reclutarTropa` que no miran la
+ * unicidad global por `tropaId`. */
+export const SIN_MUNDO: MundoEscuadras = { asentamientos: [], ejercitos: [], caravanas: [] };
 
 const EPOCA_MS = new Date(SIMULACION.epocaInicial).getTime();
 
