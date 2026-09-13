@@ -174,9 +174,9 @@ PENDIENTE (calibración, no diseño):
 - Si el campamento debería escalar con región/proximidad a Facciones fuertes, o seguir fijo.
 - Si el campamento tiene algún efecto pasivo sobre el bosque que ocupa (ej. bloquear su explotación) o solo amenaza caravanas de paso — actualmente NO bloquea nada, solo amenaza caravanas.
 
-## 1.10 El jugador está SITUADO en el mundo (a petición del usuario, 2026-09-06)
+## 1.10 El héroe está SITUADO en el mundo (a petición del usuario, 2026-09-06)
 
-El jugador es un partícipe del mundo, no un ente volador superior. En todo momento está en **uno** de tres sitios, nunca en dos y nunca en ninguno:
+El héroe de cada jugador es un partícipe del mundo, no un ente volador superior. En todo momento está en **uno** de tres sitios, nunca en dos y nunca en ninguno:
 
 | Dónde | Qué significa |
 |---|---|

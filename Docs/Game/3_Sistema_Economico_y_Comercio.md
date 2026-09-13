@@ -67,7 +67,7 @@ No hay un sistema que detecte explícitamente "cortar una ruta" como evento de g
 
 ## 3.10 Combate de caravanas — ✅ implementado (simplificado)
 - **Ya NO es un comando** (2026-09-04, Paso 11 del movimiento de ejércitos): interceptar dejó de declararse desde un asentamiento y pasó a ser lo que le ocurre a un ejército que se cruza con una caravana enemiga en el mapa (Doc 5.12.3). No hace falta General porque no hace falta orden: hace falta tener una columna ahí, que es más caro y más interesante. El botín viaja en su carro y llega a casa al replegarse.
-- Calcula poder del atacante contra una defensa base de caravana FIJA — que sigue siendo el valor para una caravana SIN escolta. Con escolta ya no aplica: se resuelve contra el poder real del ejército que la acompaña (5.13.3), que era justo lo que este apartado daba por no modelado. **Con el revamp (3.13, sin implementar) hay TRES capas**: sin nada → `defensaBaseCaravana`; con escolta sin héroe (escuadrones cedidos, 3.13.4) → poder de esos escuadrones; adjunta a un ejército → poder del ejército. La defensa base pasa a ser el caso "cero de las tres partes".
+- Calcula poder del atacante contra una defensa base de caravana FIJA — que sigue siendo el valor para una caravana SIN escolta. Con escolta ya no aplica: se resuelve contra el poder real del ejército que la acompaña (5.13.3), que era justo lo que este apartado daba por no modelado. **Con el revamp (3.13) hay TRES capas**: sin nada → `defensaBaseCaravana`; con escolta sin héroe (escuadrones cedidos, 3.13.4) → la escolta, manejada por la IA del juego; adjunta a un ejército → poder del ejército. La defensa base pasa a ser el caso "cero de las tres partes".
 - **UNA CARAVANA SOLA SE DEFIENDE DE UN JUGADOR SOLO** (a petición del usuario, 2026-09-06). Desde que el héroe combate por sí mismo (Doc 5.1), la defensa base tiene que dejar clara una frontera: **un jugador solo no roba caravanas**. La caravana lleva carreteros y guardias; un hombre a caballo no la para.
   - La cifra **se deriva del poder del héroe**, no se escribe suelta: `defensaBaseCaravana = poderHeroe × 1.7`. Se deriva porque `poderBase` sigue siendo placeholder (Doc 5.8) y una constante a mano se desincronizaría en cuanto se recalibre el roster — mismo criterio que el coste de Liderazgo (5.11.1).
   - **Por qué 1.7 y no menos.** Con la varianza de combate (±15% por bando, 5.2.5), para ganar SIEMPRE hace falta superar `1.15 / 0.85 = 1.353`. 1.7 deja margen por encima de ese mínimo sin acercarse al escuadrón más barato: hoy son **25** de defensa, frente a 15 de un héroe y **50** de una milicia completa. Un jugador solo pierde siempre; cualquier escuadrón real gana siempre.
@@ -138,7 +138,7 @@ Una caravana `comercial` deja de tener capacidad y velocidad propias: las **deri
 |---|---|---|
 | **Carros** | Capacidad de carga; y cuanto más carros, más tarda en prepararse | Lista de carros; cada carro lleva **como mucho un animal** |
 | **Animales de carga** | Qué carros pueden moverse y a qué ritmo | Un animal por carro; sin animal, el carro no sale |
-| **Escolta** | Defensa propia sin ningún jugador acompañando | Escuadrones cedidos por un jugador, **por viaje** (3.13.4) |
+| **Escolta** | Defensa propia sin ningún héroe acompañando | Escuadrones cedidos por un héroe, **por viaje** (3.13.4) |
 
 - **Solo viajan los carros con animal.** Un carro sin animal se queda `'disponible'` en el origen — no es lastre en ruta, simplemente no sale en ese envío.
 - **Capacidad de viaje** = suma de (`capacidadBase` del carro × `factorCarga` del animal) sobre los carros con animal.
@@ -204,29 +204,27 @@ Además del reparto automático (3.13.5), un residente del origen **lanza una ca
 
 Ciclo completo: `disponible → preparando → en_transito → retornando → disponible`.
 
-### 3.13.4 Escolta sin héroe — ✅ implementado
+### 3.13.4 Escolta sin héroe
 
-La tercera pata, la que no existía. Es distinta de la escolta por ejército (5.13.3), que exige a un jugador
-marchando con la caravana.
+La tercera pata. Es distinta de la escolta por ejército (5.13.3), que exige a un héroe marchando con la
+caravana.
 
-- Un jugador **residente del asentamiento de origen** cede escuadrones de su guarnición a la caravana **al
-  lanzarla** (`prepararCaravana` con `escoltaEscuadronIds`). No necesita estar físicamente presente ni
-  acompañar el viaje; lo que viaja son sus escuadrones (`Caravana.escolta`).
-- Los recupera **cuando la caravana vuelve** — cesión **por viaje**, no enganche permanente. Al volver se
-  funden con su escuadrón de la guarnición si ya reclutó más de esa tropa mientras tanto.
-- Mientras están cedidos: **salen de la guarnición** del asentamiento, así que no lo defienden (Doc 5.12.4) y
-  **cuentan contra el Liderazgo del jugador** (Doc 5.11) — sumados a lo que ya tenga en otras escoltas. Ceder
-  tropa a una escolta no libera Liderazgo, es coste de oportunidad puro. *(Gap conocido: el tope no cruza con
-  lo que ese jugador lleve a la vez en un ejército — se afina cuando pique.)*
-- **No consumen ración.** Una escolta no es una campaña; se abstrae el suministro (a diferencia de 5.13), y
-  también el viaje de vuelta si la caravana cae: los supervivientes reaparecen en la guarnición del origen.
+- Un héroe **residente del asentamiento de origen** cede escuadrones de su campamento a la caravana **al
+  lanzarla** (`prepararCaravana` con `escoltaEscuadronIds`). No necesita estar presente ni acompañar el viaje;
+  lo que viaja son sus escuadrones (`Caravana.escolta`).
+- **Siguen con la caravana hasta que termina el viaje o es destruida** — cesión **por viaje**, no enganche
+  permanente. Al terminar vuelven al campamento de su héroe. Si la caravana es destruida o capturada, por el
+  motivo que sea, quedan a 0 unidades y vuelven igualmente al campamento de su héroe (Doc 5.15.4).
+- Mientras están cedidos no están en el campamento, así que tampoco pueden estar en guarnición, y **cuentan
+  contra el Liderazgo del héroe** (Doc 5.11) — sumados a lo que ya tenga en otras escoltas. Ceder tropa a una
+  escolta no libera Liderazgo, es coste de oportunidad puro. *(Gap conocido: el tope no cruza con lo que ese
+  héroe lleve a la vez en un ejército — se afina cuando pique.)*
+- **No consumen ración.** Una escolta no es una campaña; se abstrae el suministro (a diferencia de 5.13).
 - **Cupo por nivel interno de Mercado**: 1 / 2 / 3 escuadrones por caravana (`CARAVANA_ESCOLTA`, placeholder).
-- **Combate**: se resuelve contra el `poderTotal` de los escuadrones-escolta —con bono de cohesión— en vez de
-  la defensa base fija, tanto contra un ejército interceptor (3.10) como contra bandidos (Doc 1.9). La escolta
-  sufre bajas en los dos casos (leves si aguanta, fuertes si cae) y vuelve con el debuff de derrota
-  (`heridoHasta`). Si la caravana es capturada se pierde con **carga y carros** (3.13.6), no con la tropa.
-
-> **Modelo de Héroe (2026-09-13):** cambia en dos puntos. La escolta ya no queda herida (los escuadrones no tienen estado de herido, Doc 5.16), y no reaparece en la guarnición del origen: sigue con la caravana hasta que esta termina el viaje o se destruye, y si se destruye queda a 0 unidades y vuelve al campamento de su héroe. En combate la maneja la IA del juego (Doc 5.15.4).
+- **Combate**: la escolta combate manejada por la IA del juego. Contra un héroe que intercepta la caravana
+  (3.10) es una batalla de Unity; contra bandidos (Doc 1.9), sin ningún héroe humano en juego, se resuelve con
+  números (Doc 5.15.6). Sus bajas son permanentes y no queda herida: los escuadrones no tienen ese estado (Doc
+  5.16). Si la caravana es capturada, se pierde con **carga y carros** (3.13.6).
 
 ### 3.13.5 Reparto automático vs preparación manual
 

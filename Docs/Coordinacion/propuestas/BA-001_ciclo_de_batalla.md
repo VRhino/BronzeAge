@@ -41,9 +41,9 @@ efectivos, mapa, versiones de reglas y autorización limitada a la batalla.
 - **por escuadra:** efectivos desplegados/supervivientes/**muertos** — sin "heridos": una escuadra dañada
   pierde efectivos de forma permanente, nunca queda en un estado intermedio (decisión BA-004 #3, gana el
   modelo de BronzeAge).
-- **por héroe:** participó/sobrevivió y, si aplica, **herido** (debuff temporal análogo al `heridoHasta`
-  que hoy tiene `Escuadron`, pero movido a `Heroe` — el héroe sí combate directamente en la partida real de
-  Unity, la escuadra no tiene ese estado). Dura 2 minutos de mundo (decisión del usuario, 2026-09-13).
+- **por héroe:** participó/sobrevivió. El estado **herido** ya no viaja en el resultado: BronzeAge se lo
+  aplica a todos los héroes del bando perdedor, 2 minutos de mundo, y sustituye a la Tregua (decisión del
+  usuario, 2026-09-13; Doc 5.16.4).
 - **XP ganada por héroe y por escuadra, ya calculada por Unity** (decisión del usuario, 2026-09-13): depende
   del desempeño en batalla, que solo conoce el servidor de batalla. Llega como delta; BronzeAge la valida,
   la suma y aplica la curva de nivel.

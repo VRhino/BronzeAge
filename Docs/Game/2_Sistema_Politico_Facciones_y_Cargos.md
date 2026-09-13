@@ -1,9 +1,9 @@
 # 2. Sistema Político: Facciones, Cargos y Diplomacia
 
 ## 2.1 Glosario rápido (ver página "Glosario de Entidades Políticas" para el detalle completo)
-- **Jugador**: pertenece a 1 y solo 1 Facción, y reside en 1 y solo 1 asentamiento (Doc 2.5, a petición del usuario — es lo que le permite tener como mucho un escuadrón de cada tropa, ver Doc 5.8). Sus escuadrones son SUYOS, no del asentamiento (Doc 5.4), y su Liderazgo limita cuántos puede sacar a campaña (Doc 5.11).
+- **Héroe** (el personaje de cada Jugador en el mundo, uno por mundo, Doc 5.16): pertenece a 1 y solo 1 Facción, y reside en 1 y solo 1 asentamiento (Doc 2.5). Tiene como mucho un escuadrón de cada tropa en toda la partida (Doc 5.8); sus escuadrones son SUYOS, no del asentamiento (Doc 5.4), y su Liderazgo limita cuántos puede llevarse consigo (Doc 5.11).
 - **Asentamiento**: pertenece a 1 y solo 1 Facción.
-- **Facción**: entidad política soberana, agrupa jugadores y asentamientos. Tiene cargos de nivel Facción (Rey, Embajador).
+- **Facción**: entidad política soberana, agrupa héroes y asentamientos. Tiene cargos de nivel Facción (Rey, Embajador).
 - **Liga**: red de Facciones conectadas entre sí (por vasallaje y/o alianza). NO tiene cargos ni ciudadanía propia.
 - **Vasallo/Señor**: relación ATADA entre 2 Facciones.
 - **Aliado**: relación LIBRE y revocable entre 2 Facciones.

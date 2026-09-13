@@ -334,7 +334,8 @@ Ejercito
   escuadrones: Escuadron[]    movidos aquí desde Asentamiento.escuadrones — existente
   suministro: Record<string, number>   solo trigo en Fase 0 — existente
   persiguiendo?: { tipo: 'ejercito' | 'caravana'; id: string }   objetivo móvil — existente
-  enTreguaHasta?: Instante     tras derrota reciente, corta perseguir Y ser perseguido — existente
+  enTreguaHasta?: Instante     tras derrota reciente, corta perseguir Y ser perseguido — existente.
+                            DESAPARECE en el modelo de héroe: la sustituye `Heroe.heridoHasta` (§12)
   caravanasAdjuntasIds[]        existente
   objetivo: { tipo: 'asentamiento'; id: string } | { tipo: 'punto'; punto: Point }   existente
   ruta: Point[]               polilínea calculada al movilizar — existente
@@ -498,14 +499,17 @@ Heroe
   plazasRecordadas?       migra desde domain.Jugador.plazasRecordadas — existente, cambia de dueño
   exploracionPersonal?    migra desde domain.Jugador.exploracionPersonal — existente, cambia de dueño
   heridoHasta?           Instante — debuff temporal (antes vivía en Escuadron, ver §13) — nuevo. Dura 2
-                         minutos de tiempo de MUNDO (decisión del usuario 2026-09-13; 2 ticks). Efecto del
-                         debuff: PENDIENTE de decisión del usuario. Cuándo se aplica: ver §15.
+                         minutos de tiempo de MUNDO (decisión del usuario 2026-09-13; 2 ticks). Lo reciben
+                         todos los héroes del bando perdedor de cualquier batalla; mientras dura no puede
+                         ser perseguido, perseguir ni entrar en batallas. Sustituye a
+                         `Ejercito.enTreguaHasta` (la Tregua desaparece, Doc 5.16.4).
   escuadrones: Escuadron[]   TODAS sus escuadras, estén donde estén (§13) — nuevo
   loadouts: Loadout[]     nuevo
   inventario: ItemInstancia[]     por itemInstanceId — nuevo, forma PENDIENTE (ver abajo)
   equipamiento: Record<slot, itemInstanceId>   nuevo, `slot` PENDIENTE de enumerar
   monedasHeroe: { bronce, plata, oro }   nombres explícitos, economía DISTINTA del oro/recursos de
-                                        BronzeAge — nuevo
+                                        BronzeAge, sin relación con el oro recurso (decisión del usuario
+                                        2026-09-13) — nuevo
 ```
 
 **`ItemInstancia` — PENDIENTE de forma (R04/R09).** Al menos: `itemInstanceId`, `itemDefinitionId`
@@ -789,7 +793,7 @@ BattleResult
   inicio, fin, ganador, razon
   objetivos: ObjectiveResult[]
   porEscuadra: [{ squadId, desplegados, supervivientesAlCierre, muertos, xpGanada }]
-  porHeroe: [{ heroeId, participo, sobrevivioAlCierre, herido: boolean, xpGanada }]
+  porHeroe: [{ heroeId, participo, sobrevivioAlCierre, xpGanada }]
   versionServidor, autenticidad
 ```
 
@@ -814,10 +818,11 @@ cuenta una sola vez, al CIERRE de la batalla, nunca por evento de despliegue int
 servidor de batalla permite respawn del héroe durante la partida, eso es asunto táctico de Unity y no se
 reporta aquí; BronzeAge solo necesita saber si terminó vivo.
 
-**`herido` del héroe (actualizado 2026-09-13):** lo marca Unity, igual que la XP, porque es quien ve el
-combate — pendiente de que el usuario confirme este criterio y el efecto del debuff. Cuando llega
-`herido: true`, BronzeAge fija `Heroe.heridoHasta` = instante de aplicación + 2 minutos de mundo (decisión
-del usuario, §12).
+**Herido del héroe (decidido 2026-09-13, Doc 5.16.4):** no lo manda Unity. BronzeAge lo aplica al aplicar
+el resultado: todos los héroes del bando perdedor quedan heridos 2 minutos de mundo (`Heroe.heridoHasta`).
+Mientras dura no pueden ser perseguidos, perseguir ni entrar en batallas: los comandos que lo intenten se
+rechazan, y un héroe herido no puede figurar en un `BattleTicket` nuevo. Por eso `porHeroe` ya no lleva el
+campo `herido`. Sustituye a la Tregua de `Ejercito`.
 
 **XP — la calcula Unity (decisión del usuario 2026-09-13; sustituye a la regla anterior de "BronzeAge
 calcula la XP a partir de participó/ganó/duración").** La XP depende del desempeño en batalla: unidades y
@@ -841,9 +846,10 @@ tomado (ver §17); hasta que se tome, un asedio dentro de este contrato no persi
 
 El resultado contiene hechos tácticos más la XP ganada (única excepción al "solo hechos", decidida por el
 usuario el 2026-09-13). BronzeAge aplica esa XP y la curva de nivel, y sigue decidiendo por su cuenta la
-herida del héroe (duración), conquista, ocupación y liberación de reservas a partir de los hechos, contra
+herida de los héroes del bando perdedor, conquista, ocupación y liberación de reservas a partir de los hechos, contra
 los catálogos vigentes. Qué les pasa a los héroes, escuadras y guarnición del bando que pierde un
-asentamiento está en Doc 5.15.
+asentamiento está en Doc 5.15. Si la batalla fue en mundo abierto, el héroe derrotado pierde además la mitad
+de su carro (Doc 5.16.6).
 
 ### `BattleServerAssignment`
 
@@ -963,9 +969,10 @@ es también un asunto de PERMISO, y hay que ser preciso con la diferencia:
 - **Filtrado por niebla de guerra/memoria (dentro de los asentamientos PROPIOS):** si el héroe no está
   presente ahora en uno de sus propios asentamientos, se sirve la última foto memorizada
   (`Heroe.plazasRecordadas`, antes `Jugador.plazasRecordadas`) en vez del estado vivo.
-- **Héroes ajenos — PENDIENTE de decisión del usuario:** qué se ve de un héroe que no es tuyo (¿nombre y
-  clase? ¿nivel y equipo?). Hasta decidirlo, el DTO de lectura no incluye datos de héroes ajenos más allá de
-  lo que ya muestran columnas y ejércitos avistados.
+- **Héroes ajenos (decisión del usuario, 2026-09-13; canon Doc 5.16.7):** de un héroe que puedes ver, ves
+  nombre, clase, nivel, si está herido y hasta cuándo, los escuadrones que lleva consigo (tipo, unidades y
+  nivel) y el equipo que lleva puesto. Todo lo demás del héroe es privado de su jugador. Dónde está sigue
+  sujeto a la niebla de guerra. Forma del dato en doc 02 §4.1 (`HeroePublico`).
 - **Nunca sale al cliente:** hashes/secretos de `Usuario`, credenciales de `BattleServerAssignment`,
   `runtimeEntityId` de Conquest, cualquier campo interno de cálculo (ver `Titulo.valorMetrica` como derivado,
   no autoritativo).

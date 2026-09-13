@@ -7,7 +7,7 @@ Los JUGADORES son una categoría SEPARADA de estas 3 clases.
 |---|---|---|---|
 | Pesants | Trabajan recursos genéricos (granjas, canteras, bosques); tropas básicas | Desde la fundación, sin condición | Rápido, fórmula propia |
 | Artesanos | Operan edificios de producción especializada (Fundición, Curtiduría, Armería, Carpintería — ver catálogo en 4.2); reclutables junto con Pesants vía Barracón/Galería de tiro (Tier 2, Doc 5) — ambos edificios reclutan de los dos pools, no son exclusivos de Artesanos | Automática: dispara el PRIMERO que se construya entre Curtiduría/Armería/Fundición/Carpintería | Fórmula propia independiente (pendiente detalle numérico); tope de población limitado (ver nota abajo) |
-| Nobleza | Tropas de élite (vía equipo, sin grindeo) | Cantidad MÍNIMA de ciudadanos (jugadores) en el asentamiento (único requisito) | Muy lento; acelerado por el Sacerdote (no requisito) |
+| Nobleza | Tropas de élite (vía equipo, sin grindeo) | Cantidad MÍNIMA de ciudadanos (héroes) en el asentamiento (único requisito) | Muy lento; acelerado por el Sacerdote (no requisito) |
 
 Cada clase tiene FÓRMULA DE CRECIMIENTO INDEPENDIENTE (no comparten los mismos pesos). Fórmula base de referencia (Pesants): comida disponible + vivienda disponible + estabilidad + felicidad.
 
@@ -30,12 +30,9 @@ Cada clase tiene FÓRMULA DE CRECIMIENTO INDEPENDIENTE (no comparten los mismos 
 - Modulable por la política **"Presión Fiscal"** del Tesorero (4.4).
 
 **Reclutamiento militar (doble carril):**
-- Carril COMBATE REAL (Pesants + Artesanos): deben salir a combatir (PvP o PvE) para "veteranizar" y subir de tier.
+- Carril COMBATE REAL (Pesants + Artesanos): deben salir a combatir (PvP o PvE) para ganar nivel y experiencia de escuadrón (Doc 5.16.3).
 - Carril PROGRESIÓN PLANA (Nobleza): conversión INSTANTÁNEA a unidades de élite si hay equipo disponible.
 - Cola de PRIORIDAD cuando la demanda excede el pool disponible (criterio exacto pendiente).
-
-> **Modelo de Héroe (2026-09-13):** "veteranizar" pasa a ser ganar nivel y experiencia de escuadrón (Doc 5.16.3).
-
 ## 4.2 Auto-construcción por necesidad
 - El jugador NO elige UBICACIÓN de edificio, EXCEPTO: edificio de fundación, y edificios estratégicos (murallas, torres, puerto) que sí se colocan manualmente — la ubicación sigue siendo siempre automática, sin excepciones nuevas (ver control de cola más abajo, que NO toca este punto).
 - **Control manual de la cola de auto-construcción — IMPLEMENTADO (cambio de base a petición del usuario, inspirado en análisis comparativo con Travian)**: Gobernador y Maestro de Obras (ver Doc 2.2) ven la cola completa (`en_cola`) desde su interfaz, REORDENAN las entradas ya encoladas (arriba/abajo), y AÑADEN o QUITAN proyectos manualmente. Esto da control sobre el TIPO y el ORDEN de lo que se construye — la UBICACIÓN sigue sin poder elegirse nunca, la decide siempre el algoritmo de colocación (ver más abajo).

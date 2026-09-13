@@ -232,8 +232,24 @@ heroe                  el héroe propio completo (doc 01 §12), con:
 batallas[]             batallas en las que participa, solo estado público (el token va por §3.4)
 ```
 
-Qué se ve de un héroe ajeno está pendiente de decisión del usuario (doc 01 §19). Hasta entonces, la
-proyección no añade datos de héroes ajenos a lo que ya muestran columnas y ejércitos avistados.
+De los héroes ajenos que el jugador puede ver (en columnas y ejércitos avistados, o en su mismo
+asentamiento), la proyección trae solo su parte pública (decisión del usuario, 2026-09-13; canon Doc
+5.16.7):
+
+```text
+HeroePublico
+  heroeId
+  displayName
+  classDefinitionId
+  nivel
+  heridoHasta?           si está herido, hasta cuándo
+  escuadrasQueLleva[]    solo las que lleva consigo: { tropaId, cantidad, nivel }
+  equipamiento           por hueco, la definición del objeto que lleva puesto (no su inventario)
+```
+
+Nada más del héroe ajeno viaja al cliente: ni experiencia, puntos, atributos, perks o Liderazgo, ni su
+residencia, los escuadrones de su campamento, sus loadouts, su inventario o sus monedas, ni género, avatar o
+si es humano o bot.
 
 ### 4.2 Comandos del héroe (nuevos, mismo mecanismo del §2)
 
