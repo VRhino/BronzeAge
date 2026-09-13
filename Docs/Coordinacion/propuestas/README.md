@@ -12,4 +12,8 @@ El modelo completo de cooperación está en
 
 ## Pendiente de revisión
 
-- [BA-005 — Huellas y escala del asentamiento](BA-005_huellas_y_escala_asentamiento.md): división de dimensiones lógicas por dos, inventario de 27 tipos y definición de celda lógica/escala física. Incluye origen de grilla, compatibilidad de partidas y entrega de fixtures para Unity.
+Ninguna.
+
+## Aceptadas, pendientes de cierre cruzado
+
+- [BA-005 — Huellas y escala del asentamiento](BA-005_huellas_y_escala_asentamiento.md): huellas ÷2 (Centro Urbano 4×4), constantes de trazado de escala de edificio ÷2, `LAYOUT_VERSION` con rechazo de partidas viejas, fixture nuevo `fixtures/lab-asentamiento-0-40-80-ba005/`. Falta la validación de Codex con el fixture.

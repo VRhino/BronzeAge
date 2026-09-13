@@ -17,6 +17,7 @@ import {
   FormatoSnapshotNoSoportadoError,
   FORMATO_SNAPSHOT_VERSION,
   guardarPartida,
+  LayoutVersionNoCoincideError,
   listarPartidas,
   WorldgenVersionNoCoincideError,
   type SnapshotPartida,
@@ -163,6 +164,17 @@ describe('guardarPartida / cargarPartida', () => {
     await writeFile(ruta, JSON.stringify(snapshot), 'utf-8');
 
     await expect(cargarPartida(almacen, sesion.gameId)).rejects.toThrow(WorldgenVersionNoCoincideError);
+  });
+
+  it('rechaza un snapshot de otra revisión geométrica, incluido uno anterior a BA-005 sin el campo', async () => {
+    const sesion = partidaEnMarcha();
+    await guardarPartida(almacen, sesion, MOMENTO);
+    const ruta = join(directorio, `${sesion.gameId}.json`);
+    const snapshot = JSON.parse(await readFile(ruta, 'utf-8')) as SnapshotPartida;
+    delete (snapshot.partida as Partial<SnapshotPartida['partida']>).layoutVersion;
+    await writeFile(ruta, JSON.stringify(snapshot), 'utf-8');
+
+    await expect(cargarPartida(almacen, sesion.gameId)).rejects.toThrow(LayoutVersionNoCoincideError);
   });
 
   it('dos partidas distintas en el mismo directorio no se pisan', async () => {

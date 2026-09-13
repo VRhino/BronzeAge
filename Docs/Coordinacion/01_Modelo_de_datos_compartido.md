@@ -231,7 +231,8 @@ pozo · parque
 ```
 
 Footprint (ancho×alto en celdas) por tipo/nivel: `EDIFICIO_TAMANO` / `EDIFICIO_CATALOGO[tipo].niveles[n].tamano`
-— fijo por tipo salvo Granja, la única cuya huella crece con `nivelInterno` (1×1→6×6).
+— fijo por tipo salvo Granja, la única cuya huella crece con `nivelInterno` (2×2→6×6). Tabla completa y escala
+(una celda = ancho de calle = 3 unidades locales) en BA-005; revisión geométrica vigente en `LAYOUT_VERSION` (§17).
 
 ### `CargosAsentamiento`
 
@@ -750,8 +751,12 @@ que faltan añadir (opcionales, no rompen nada):
   un `id` explícito por celda solo si el consumo desde Unity lo simplifica.
 - `Asentamiento.layoutVersion` (§3) + seed/perfil de trazado — calles/trazado son datos DERIVADOS, no
   persistidos punto a punto; sin esto Unity no puede reconstruirlas idénticas con una versión distinta del
-  algoritmo.
-- Factor de conversión celda→unidad Unity — sistema de coordenadas explícito, pendiente de definir.
+  algoritmo. **Parcial (BA-005):** existe como constante global `LAYOUT_VERSION` (`constants.ts`), no por
+  asentamiento — hay una sola geometría por build. Se publica en `GET /v1/balance` (`geometriaUrbana`), viaja
+  en el export del laboratorio y el snapshot de partida la guarda: `cargarPartida` rechaza una distinta.
+- Factor de conversión celda→unidad Unity — **definido (BA-005):** una celda = `REJILLA_ASENTAMIENTO.tamanoCelda`
+  = 3 unidades locales; Unity aplica su propia escala `S` (3.5 hoy) y `(X,Z) = (x·S, −y·S)`. BronzeAge no
+  conoce `S`.
 
 **Invariante:** una variante 3D nunca cambia huella, acceso, producción ni colisión estratégica — solo
 aspecto.

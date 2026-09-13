@@ -26,8 +26,8 @@ function estadoBase(): { estado: EstadoSimulacion; mapa: ReturnType<typeof crear
     nivelActual: 2,
     // `radioPotencial` sube con construcción activa (`crecimientoPorEdificioCompletado`), no con el nivel a
     // secas — este fixture fuerza el nivel sin simular ninguna obra, así que hay que subirlo a mano al tope de
-    // nivel 2 o el disco se queda en el mínimo de fundación (30 = 5 celdas). Con el Centro Urbano ya ocupando
-    // buena parte de esas 5 celdas, la zona de seguridad entre anclas (2 celdas, `separacionSeguridadAnclas`)
+    // nivel 2 o el disco se queda en el mínimo de fundación (30 unidades locales). Con el Centro Urbano ya
+    // ocupando buena parte de ese disco, la zona de seguridad entre anclas (`separacionSeguridadAnclas`)
     // no encuentra ningún hueco para el Mercado y la prueba deja de poder verificar lo que quiere verificar
     // (la lógica de gobernanza militar, no el espacio disponible).
     radioPotencial: ZONA_INFLUENCIA.radioMaximoPorNivel[2]!,

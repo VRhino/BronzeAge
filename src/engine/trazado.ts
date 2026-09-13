@@ -105,10 +105,9 @@ export function edificiosInternos(edificios: Edificio[]): Edificio[] {
  * interno (ver `EDIFICIO_CATALOGO.granja.niveles`); el resto lo tiene fijo en `EDIFICIO_TAMANO`, y un tipo
  * ausente de esa tabla mide `EDIFICIO_TAMANO_POR_DEFECTO`.
  *
- * Ojo con las medidas escritas en los comentarios de este archivo y del catálogo: se acordaron con el usuario
- * en la rejilla ORIGINAL y siguen expresadas así, pero el Paso 1 de la Etapa 6 (doc trazado §E6.11) dobló
- * todas las huellas al partir la celda por la mitad. Lo que era "1x1" son hoy 2x2 celdas, y sigue midiendo lo
- * mismo en unidades locales.
+ * Desde BA-005 las medidas del catálogo y del doc trazado (§6) vuelven a estar en celdas ACTUALES (una celda =
+ * ancho de calle). Los comentarios que narran mediciones de la Etapa 6 hablan en las huellas dobladas de
+ * entonces — ver el historial en `REJILLA_ASENTAMIENTO.tamanoCelda`.
  */
 export function tamanoEdificio(tipo: EdificioTipo, nivelInterno?: number): TamanoEdificio {
   if (tipo === 'granja') {
@@ -127,12 +126,8 @@ export function tamanoDeEdificio(edificio: Pick<Edificio, 'tipo' | 'nivelInterno
 
 /**
  * Centro del rectángulo `tamano` cuya esquina mínima (menor col, menor row) es `celdaMin` — el valor que se
- * guarda en `Edificio.posicion`.
- *
- * De esta fórmula depende que reescalar la rejilla no mueva ninguna partida guardada: doblar `col` y `ancho`
- * a la vez que se parte `T` por la mitad devuelve EXACTAMENTE el mismo punto local
- * (`(2·col + 2·ancho/2)·(T/2) = (col + ancho/2)·T`). Congelado en `escalaRejilla.test.ts` con una tabla
- * generada antes del Paso 1 de la Etapa 6 (doc trazado §E6.11).
+ * guarda en `Edificio.posicion`. Inversa exacta de `celdaMinimaDeEdificio` para cualquier tamaño, congelada en
+ * `escalaRejilla.test.ts`.
  */
 export function puntoDeRectangulo(celdaMin: Celda, tamano: TamanoEdificio): Point {
   return {
@@ -149,8 +144,9 @@ export function puntoDeRectangulo(celdaMin: Celda, tamano: TamanoEdificio): Poin
  * SIN excepciones desde 2026-08-31 (doc trazado §E6.20): el Centro Urbano tenía un caso especial —su `posicion`
  * `(0,0)` era el VÉRTICE de una esquina, no su centro— que a petición del usuario se quitó. Ahora `(0,0)` es su
  * CENTRO real, como en cualquier otro edificio: `centroDeRectangulo(rectanguloDeEdificio(cu))` y `cu.posicion`
- * coinciden, y la ciudad crece simétrica alrededor del origen. Con 6x6 el CU ocupa las columnas -3..2 y las
- * filas -3..2.
+ * coinciden, y la ciudad crece simétrica alrededor del origen. Con 4x4 el CU ocupa las columnas -2..1 y las
+ * filas -2..1. Eso exige que el CU tenga lados PARES: con un lado impar su centro cae en mitad de una celda,
+ * `(0,0)` no puede serlo y este redondeo lo desplazaría media celda (BA-005, por eso mide 4x4 y no 3x3).
  */
 export function celdaMinimaDeEdificio(edificio: Pick<Edificio, 'tipo' | 'nivelInterno' | 'posicion' | 'rotado'>): Celda {
   const tamano = tamanoDeEdificio(edificio);
@@ -175,11 +171,7 @@ function rectanguloDeEdificio(edificio: Pick<Edificio, 'tipo' | 'nivelInterno' |
   return { minCol: min.col, minRow: min.row, ancho: tamano.ancho, alto: tamano.alto };
 }
 
-/**
- * Centro geométrico (coords locales) de un rectángulo de celdas. Para el Centro Urbano, cuyo `posicion` es el
- * VÉRTICE de su esquina y no su centro (excepción documentada arriba), `centroDeRectangulo(rectanguloDeEdificio(cu))`
- * da el punto correcto sin ningún caso especial adicional — `celdaMinimaDeEdificio` ya resuelve esa excepción.
- */
+/** Centro geométrico (coords locales) de un rectángulo de celdas — para un edificio, su `posicion`. */
 function centroDeRectangulo(r: RectanguloCeldas): Point {
   return puntoDeRectangulo({ col: r.minCol, row: r.minRow }, { ancho: r.ancho, alto: r.alto });
 }
@@ -866,10 +858,10 @@ function esBordeDeManzana(indice: number, paso: number, desfase: number): boolea
  * quedan alargados, como una manzana de verdad, y no un cuadrado lleno de callejones interiores para dar
  * salida a los edificios del centro.
  *
- * 2 → 4 en el Paso 1 de la Etapa 6 (§E6.11): sigue siendo "dos hileras de Vivienda espalda con espalda", solo
- * que una Vivienda mide ahora 2 celdas de lado en vez de 1.
+ * Escala de EDIFICIO: "dos hileras de Vivienda espalda con espalda" — 2 → 4 en la Etapa 6 (§E6.11), cuando la
+ * Vivienda pasó a 2 celdas de lado, y de vuelta a 2 con BA-005, que la dejó en 1.
  */
-export const FONDO_MANZANA = 4;
+export const FONDO_MANZANA = 2;
 
 /**
  * La red de calles y caminos del asentamiento, reconstruida desde cero (§2 del doc: derivada, no persistida).

@@ -21,6 +21,7 @@ import { GameSession, type PartidaExportada } from '../session/gameSession';
 import { idDeMapa, instanteDeTick } from '../session/estado';
 import type { Instante } from '../domain/tiempo';
 import { generarMapa, WORLDGEN_VERSION, type MapaGenerado } from '../worldgen';
+import { LAYOUT_VERSION } from '../constants';
 import { leerEventos } from './eventosDePartida';
 
 /**
@@ -95,6 +96,22 @@ export class WorldgenVersionNoCoincideError extends Error {
     super(
       `partida '${gameId}': el mundo se generó con la versión ${versionEnDisco} del generador y esta build usa la ` +
         `${WORLDGEN_VERSION} — el mapa no se puede reconstruir igual a partir de la seed.`
+    );
+  }
+}
+
+/** Se lanza al cargar un snapshot guardado con otra revisión de la geometría del asentamiento
+ * (`LAYOUT_VERSION`, constants.ts): la huella de cada edificio se deriva del catálogo vigente, así que sus
+ * `posicion` guardadas se reinterpretarían en silencio. Los snapshots anteriores a BA-005 no traen el campo
+ * (`undefined`) y caen aquí también. */
+export class LayoutVersionNoCoincideError extends Error {
+  constructor(
+    public readonly gameId: string,
+    public readonly versionEnDisco: number | undefined
+  ) {
+    super(
+      `partida '${gameId}': guardada con la revisión geométrica ${versionEnDisco ?? '(anterior a BA-005)'} y esta ` +
+        `build usa la ${LAYOUT_VERSION} — los edificios guardados no encajan en las huellas actuales.`
     );
   }
 }
@@ -176,6 +193,9 @@ export async function cargarPartida(almacen: AlmacenDeObjetos, gameId: string): 
   const partida = snapshot.partida;
   if (partida.worldgenVersion !== WORLDGEN_VERSION) {
     throw new WorldgenVersionNoCoincideError(gameId, partida.worldgenVersion);
+  }
+  if (partida.layoutVersion !== LAYOUT_VERSION) {
+    throw new LayoutVersionNoCoincideError(gameId, partida.layoutVersion);
   }
 
   // Reconstruye lo que el snapshot ya no guarda (formato v13):

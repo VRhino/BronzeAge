@@ -383,7 +383,7 @@ export function montarPanelParametros(contenedor: HTMLElement, onRefundar: () =>
     body.append(
       filaParam(T, 'separacionMinimaAnclas', 'Separación mínima entre anclas', 'Celdas centro a centro. También es el radio inicial y (×3) el máximo de la búsqueda de ranura del árbol.', 1, snap.trazado['separacionMinimaAnclas']),
       filaParam(T, 'separacionSeguridadAnclas', 'Zona de seguridad entre anclas', 'Piso DURO no relajable: ninguna ancla real nueva puede quedar más cerca de otra que esto.', 1, snap.trazado['separacionSeguridadAnclas']),
-      filaParam(T, 'anchoCalle', 'Ancho de calle', 'Celdas de grosor de una calle. 1 = media Vivienda. Es lo que hace que la calle cueste suelo.', 1, snap.trazado['anchoCalle']),
+      filaParam(T, 'anchoCalle', 'Ancho de calle', 'Celdas de grosor de una calle. 1 = el lado de una Vivienda. Es lo que hace que la calle cueste suelo.', 1, snap.trazado['anchoCalle']),
       filaParam(T, 'capCorredorUrbano', 'Cap de corredor (urbano)', 'Celdas máximas que un edificio urbano abre para llegar a la red. Corto = más pegado a las calles que ya existen.', 1, snap.trazado['capCorredorUrbano']),
       filaParam(T, 'capCorredorAfueras', 'Cap de corredor (afueras)', 'Igual pero para Granja/Corral, cuyo camino es largo a propósito.', 1, snap.trazado['capCorredorAfueras']),
       filaParam(T, 'radioAfuerasMin', 'Radio vedado de afueras', 'Unidades locales. Ninguna celda de Granja/Corral entra de aquí para dentro.', 1, snap.trazado['radioAfuerasMin']),

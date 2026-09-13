@@ -257,7 +257,6 @@ export const EDIFICIO_ETIQUETA: Record<EdificioTipo, string> = {
   plaza: 'Plaza',
   plazaDeArmas: 'Plaza de Armas',
   patioDeGremios: 'Patio de Gremios',
-  tallerCarpinteria: 'Taller de carpintería',
   pozo: 'Pozo',
   parque: 'Parque',
 };
@@ -295,7 +294,6 @@ export const EDIFICIO_COLOR: Record<EdificioTipo, string> = {
   plaza: '#f0e8c8',
   plazaDeArmas: '#c97a7a',
   patioDeGremios: '#c99a6b',
-  tallerCarpinteria: '#a87850',
   pozo: '#d8e4e8',
   parque: '#c8e0b8',
 };

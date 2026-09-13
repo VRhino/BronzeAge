@@ -18,6 +18,7 @@ import {
   REJILLA_ASENTAMIENTO,
   TRAZADO,
   EDIFICIO_TAMANO,
+  LAYOUT_VERSION,
   NIVEL_FACCION,
   PERFILES_TRAZADO,
   type PerfilTrazado,
@@ -316,6 +317,8 @@ function construirProyeccionLab(asentamiento: Asentamiento, trazado: TrazadoAsen
   return {
     _origen: 'laboratorio de trazado (lab/), no una respuesta HTTP capturada — ver comentario de construirProyeccionLab en lab/src/main.ts',
     gameId: 'lab',
+    // Revisión geométrica con la que se trazó (BA-005): un lector de Unity la contrasta con la que espera.
+    layoutVersion: LAYOUT_VERSION,
     instante: instanteDeTick(tick),
     version: tick,
     jugadorId: 'jugador-lab',

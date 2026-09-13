@@ -579,7 +579,7 @@ function evaluarNecesidades(
   let contador = asentamiento.edificios.length;
   // Etapa 5: las anclas que se crean ANTES de colocar un edificio (`asegurarAnclaPara`) se acumulan aquí, no
   // en `nuevos` — nacen "gratis" (sin cola, sin costo) y no compiten por `cupoDisponible`, mismo criterio que
-  // `puestoMercado`/`tallerCarpinteria`. El array también refleja las `semillaSaturada` marcadas en el camino.
+  // `puestoMercado`. El array también refleja las `semillaSaturada` marcadas en el camino.
   // Se devuelve al final para que `avanzarConstruccion` lo use como base en vez de `asentamiento.edificios`.
   let edificiosBase = asentamiento.edificios;
   /**
