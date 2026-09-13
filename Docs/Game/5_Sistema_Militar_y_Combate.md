@@ -282,6 +282,8 @@ Perseguir fija un objetivo **móvil** en vez de un punto: la ruta se recalcula h
 
 Quien pierde un choque en campo abierto entrega **la mitad de su carro** —igual una columna personal que un ejército, cuyo carro es el de todos sus miembros— y sus héroes quedan **heridos** 2 minutos (5.16.4). Con el carro vacío no hay botín: solo la herida.
 
+Esa mitad pasa al carro del vencedor, gane quien gane, y **cabe solo lo que quepa**: sus carros más los de sus caravanas adjuntas. Lo que no cabe se pierde.
+
 **La herida corta por los dos lados**: nadie puede perseguir ni atacar a un héroe herido, **y él tampoco puede perseguir ni entrar en batallas**. La primera mitad evita el acoso en cadena al mismo viajero; la segunda evita que la inmunidad se use de escudo para depredar sin riesgo.
 
 #### Lo que sigue saliendo de la geometría
