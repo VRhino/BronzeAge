@@ -56,8 +56,11 @@ import { leerEventos } from './eventosDePartida';
  *
  * v16 (2026-09-14): modelo de Héroe, fase 3 — el héroe gana su progresión de personaje (nivel, experiencia,
  *   puntos, atributos, perks, loadouts, inventario, equipamiento y monedas). Sin migración.
+ *
+ * v17 (2026-09-14): el estado Herido del héroe (`Heroe.heridoHasta`, Doc 5.16.4) sustituye a la Tregua de la
+ *   columna (`Ejercito.enTreguaHasta`, retirado). Sin migración.
  */
-export const FORMATO_SNAPSHOT_VERSION = 16;
+export const FORMATO_SNAPSHOT_VERSION = 17;
 
 export interface SnapshotPartida {
   formatoVersion: number;

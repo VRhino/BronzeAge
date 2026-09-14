@@ -20,11 +20,15 @@ import {
   inspeccionarCaravana as inspeccionarCaravanaEngine,
   inspeccionarColumna,
   interceptar,
+  MovilizacionInvalidaError,
   perseguir as perseguirEngine,
   type ComposicionColumna,
   type ContenidoCaravana,
 } from '../../engine/ejercitos';
+import { heridosEn, herir } from '../../engine/heroe';
 import { conEscolta, indiceTropa, sinEscolta } from '../../engine/tropa';
+import type { Ejercito } from '../../domain/types';
+import type { Instante } from '../../domain/tiempo';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito } from './tipos';
 import { comando, conColumnas, conTropaDe, exigirCaravana, exigirColumnaDe, exigirEjercito } from './ayudas';
@@ -118,14 +122,22 @@ export interface PayloadPersecucion {
   objetivo?: ObjetivoDeInteraccion;
 }
 
+/** Un héroe herido no entra en batallas ni persigue (Doc 5.16.4). Devuelve los heridos de ahora, que el motor necesita. */
+function exigirSano(estado: GameSessionState, heroeId: string, ahora: Instante): Set<string> {
+  const heridos = heridosEn(estado.heroes, ahora);
+  if (heridos.has(heroeId)) throw new MovilizacionInvalidaError('Estás herido: no puedes entrar en batalla ni perseguir.');
+  return heridos;
+}
+
 /**
  * Atacar lo que tienes delante, a distancia de choque (Doc 5.12.3). Sustituye al combate que el tick
  * resolvía solo por geometría: acercarse ya no basta.
  *
- * Al derrotado le cae la **tregua** y pierde la mitad de su carro, sea viajero o Ejército. Las dos mitades de la
- * tregua se comprueban en el motor: ni se ataca estando en ella, ni se ataca a quien la tiene.
+ * Los héroes del bando derrotado quedan **heridos** (Doc 5.16.4) y pierde la mitad de su carro, sea viajero o
+ * Ejército. Un herido no ataca, sus escuadras no combaten, y a una columna de solo heridos no se la puede tocar.
  */
 export const atacar = comando<ParamsAtacar, void>((estado, _mapa, ctx, params) => {
+  const heridos = exigirSano(estado, params.heroeId, ctx.instante);
   const atacante = exigirColumnaDe(estado, params.heroeId);
 
   if (params.objetivo.tipo === 'ejercito') {
@@ -136,11 +148,12 @@ export const atacar = comando<ParamsAtacar, void>((estado, _mapa, ctx, params) =
       [...estado.facciones],
       estado.relaciones,
       estado.caravanas,
-      ctx.instante,
+      heridos,
       ctx.rng
     );
 
-    const siguiente: GameSessionState = { ...conColumnas(estado, [choque.atacante, choque.defensor]), facciones: choque.facciones };
+    const trasChoque = conColumnas(estado, [choque.atacante, choque.defensor]);
+    const siguiente: GameSessionState = { ...trasChoque, facciones: choque.facciones, heroes: herir(trasChoque.heroes, choque.vencidos, ctx.instante) };
 
     return exito(
       conHistorialDeJugador(siguiente, params.heroeId, `Ataca a la columna ${defensor.id}.`),
@@ -158,7 +171,7 @@ export const atacar = comando<ParamsAtacar, void>((estado, _mapa, ctx, params) =
     conTropaDe(estado, atacante),
     conEscolta(caravana, indiceTropa(estado.heroes)),
     capacidadCargaDe(atacante, estado.caravanas),
-    ctx.instante,
+    heridos,
     ctx.rng
   );
   // La escolta vuelve a su héroe: la de una caravana capturada, a 0 y al campamento (Doc 5.15.4).
@@ -166,6 +179,7 @@ export const atacar = comando<ParamsAtacar, void>((estado, _mapa, ctx, params) =
   const conAtacante = conColumnas(estado, [emboscada.ejercito], [...emboscada.escoltaPerdida, ...(queda?.tropa ?? [])]);
   const siguiente: GameSessionState = {
     ...conAtacante,
+    heroes: herir(conAtacante.heroes, emboscada.vencidos, ctx.instante),
     caravanas: queda
       ? conAtacante.caravanas.map((c) => (c.id === caravana.id ? queda.caravana : c))
       : conAtacante.caravanas.filter((c) => c.id !== caravana.id),
@@ -184,16 +198,18 @@ export const atacar = comando<ParamsAtacar, void>((estado, _mapa, ctx, params) =
  * Ir a por alguien (Doc 5.12.3). No es un destino sino un objetivo que se mueve: la ruta se recalcula cada
  * tick hacia donde esté, y al alcanzarlo hay combate — porque perseguir ES elegir el combate.
  *
- * Termina de cuatro formas: alcanzándolo, rectificando el rumbo con `marcharA`, soltándolo, o si el objetivo
- * entra en tregua.
+ * Termina de tres formas: alcanzándolo, rectificando el rumbo con `marcharA` o soltándolo. Un herido no persigue,
+ * y a una columna de solo heridos no se la puede perseguir (Doc 5.16.4).
  */
 export const perseguir = comando<ParamsPerseguir, void>((estado, _mapa, ctx, params) => {
+  const heridos = exigirSano(estado, params.heroeId, ctx.instante);
   const columna = exigirColumnaDe(estado, params.heroeId);
   // Que el objetivo exista lo comprueba aquí y no el motor: es una entidad que buscar, no una regla.
-  if (params.objetivo.tipo === 'ejercito') exigirEjercito(estado, params.objetivo.id);
+  let presa: Ejercito | undefined;
+  if (params.objetivo.tipo === 'ejercito') presa = exigirEjercito(estado, params.objetivo.id);
   else exigirCaravana(estado, params.objetivo.id);
 
-  const cazando = perseguirEngine(columna, params.objetivo, ctx.instante);
+  const cazando = perseguirEngine(columna, params.objetivo, heridos, presa);
 
   return exito(
     conHistorialDeJugador(

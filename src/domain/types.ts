@@ -408,6 +408,10 @@ export interface Heroe {
   equipamiento: Equipamiento;
   /** Economía propia del héroe, sin relación con el oro recurso (Doc 5.16.1). */
   monedasHeroe: { bronce: number; plata: number; oro: number };
+  /** Herido hasta este instante (Doc 5.16.4): no persigue, no se le persigue, no entra en batallas y sus escuadras no
+   * combaten sin él. Se comprueba al leer (`estaHerido`, engine/heroe.ts); ausente o vencido = sano. Sustituye a la
+   * Tregua que antes tenía la columna. */
+  heridoHasta?: Instante;
 }
 
 export const ATRIBUTOS_HEROE = ['fuerza', 'destreza', 'armadura', 'vitalidad'] as const;
@@ -886,14 +890,6 @@ export interface Ejercito {
    * o al rectificar el rumbo.
    */
   persiguiendo?: { tipo: 'ejercito' | 'caravana'; id: string };
-  /**
-   * Derrotado hace poco (Doc 5.12.3). Corta por los DOS lados: nadie puede perseguirle ni atacarle, y el
-   * tampoco puede perseguir ni atacar.
-   *
-   * El nombre importa. Se llamo `noPerseguibleHasta` mientras se penso como una proteccion, y describia solo
-   * la mitad: asi implementada, la inmunidad seria un escudo para depredar sin riesgo.
-   */
-  enTreguaHasta?: Instante;
   /** Caravanas que marchan con el ejército (Doc 5.13.2): amplían la carga, entran en el `min` de velocidad,
    * pueden ir cargadas de mercancía (escolta, Doc 5.13.3) y se pierden si el ejército es derrotado. */
   caravanasAdjuntasIds: string[];

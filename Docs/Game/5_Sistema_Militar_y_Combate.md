@@ -674,6 +674,9 @@ El detalle de datos del héroe está en `Docs/Coordinacion/01_Modelo_de_datos_co
 - Dura **2 minutos** de tiempo de mundo.
 - Mientras dura, el héroe **no puede ser perseguido, no puede perseguir y no puede entrar en batallas**.
 - Como es por héroe, una columna se puede atacar mientras lleve algún héroe sano; los heridos no entran en esa batalla. Si todos los héroes de la columna están heridos, nadie puede tocarla.
+- Las escuadras de un héroe herido tampoco combaten: sin su héroe solo combaten la escolta de una caravana y la guarnición (decisión del usuario, 2026-09-14). Si una columna con algún herido pierde en mundo abierto, pierde igualmente la mitad entera del carro, porque el carro es de la columna.
+- En un asedio, el loadout de un residente herido no defiende (la guarnición sí). Un ejército con todos sus héroes heridos espera a la puerta a que alguno sane antes de asediar (decisión del usuario, 2026-09-14).
+- Perder cuenta también cuando una caravana se zafa del ataque o un campamento de bandidos aguanta. Sin combate —una plaza que cae sin defensores, o una ocupada que rebota el asedio— no pierde nadie.
 
 ### 5.16.5 Loadout
 

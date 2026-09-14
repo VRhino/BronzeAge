@@ -68,6 +68,7 @@ import { calcularCapFundacion, calcularCupoNivel, capacidadCasas } from '@motor/
 import { computeLigas, type LigaInfo } from '@motor/engine/liga';
 import { consumoRacionDeEscuadrones } from '@motor/engine/tropas';
 import { campamentoDe, defensaDe } from '@motor/engine/tropa';
+import { heridosEn } from '@motor/engine/heroe';
 import {
   estadoMejoraEdificio as estadoMejoraEdificioEngine,
   factorLineaProduccion,
@@ -81,7 +82,7 @@ import { poderEscuadron } from '@motor/engine/combate';
 import type { EstadoAdmin, EventoLogAdmin } from '@motor/session/estado';
 import type { EventoDominio } from '@motor/domain/eventos';
 import type { EventoDominioConVersion } from '@motor/session/estado';
-import { isoDeInstante } from '@motor/session/estado';
+import { instanteDeTick, isoDeInstante } from '@motor/session/estado';
 import type { ParamsDe, TipoComando } from '@motor/session/comandos/registro';
 import type { MapaGenerado } from '@motor/worldgen';
 import { ApiError, consultarEstado, consultarEventos, crearOResumirPartida, ejecutarComando, obtenerMapa } from './apiCliente';
@@ -608,9 +609,9 @@ export class GameStore {
     return campamentoDe(asentamiento, this.state.heroes);
   }
 
-  /** Resumen militar de solo lectura: lo que defendería la plaza ahora (guarnición y loadouts de quien está dentro). */
+  /** Resumen militar de solo lectura: lo que defendería la plaza ahora (guarnición y loadouts de quien está dentro y sano). */
   poderMilitarInfo(asentamiento: Asentamiento): { soldados: number; poder: number } {
-    const guarnicion = defensaDe(asentamiento, this.state.heroes);
+    const guarnicion = defensaDe(asentamiento, this.state.heroes, heridosEn(this.state.heroes, instanteDeTick(this.state.tick)));
     return {
       soldados: guarnicion.reduce((total, escuadron) => total + escuadron.cantidad, 0),
       poder: guarnicion.reduce((total, escuadron) => total + poderEscuadron(escuadron), 0),

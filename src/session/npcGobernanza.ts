@@ -32,7 +32,7 @@ import type { ContextoSimulacion, EstadoSimulacion } from '../engine/simulation'
 import { avanzarAutoComercioSimulado } from '../engine/simulacionAutoComercio';
 import { reclutarTropa, ReclutamientoInvalidoError } from '../engine/tropas';
 import { campamentoDe, conEscuadrones, indiceTropa, sinTropa, type IndiceTropa } from '../engine/tropa';
-import { guardarLoadout, progresionInicial } from '../engine/heroe';
+import { guardarLoadout, heridosEn, progresionInicial } from '../engine/heroe';
 import { puedeLlevar } from '../engine/liderazgo';
 import { atacarCampamentoBandidos, CombateInvalidoError, poderEscuadron } from '../engine/combate';
 import { lanzarCaravanaFundacion, costoCaravanaFundacion, ExpansionInvalidaError } from '../engine/expansion';
@@ -62,7 +62,7 @@ import { calcularCostoMantenimiento, encontrarCapital } from '../engine/mantenim
 import { evaluarViabilidadFundacion, fundarAsentamiento, FundacionInvalidaError } from '../engine/settlement';
 import { CAMPAMENTOS_BANDIDOS, LIDERAZGO, LOGISTICA, MILITAR, TROPAS_RECLUTABLES, VISION } from '../constants';
 import { situarHeroes } from '../engine/ubicacion';
-import { enTregua, movilizarEjercito, replegarEjercito, MovilizacionInvalidaError } from '../engine/ejercitos';
+import { movilizarEjercito, replegarEjercito, tieneHeroeSano, MovilizacionInvalidaError } from '../engine/ejercitos';
 import { consumoRacionDeEscuadrones, reservaDeTrigo } from '../engine/tropas';
 import { estanAliadas } from '../engine/pertenencia';
 import { distancia } from '../world/geometria';
@@ -911,8 +911,9 @@ function alcanceDeIdaYVuelta(escuadrones: Escuadron[], trigoEnCarro: number): nu
  * No pretende jugar bien, pretende que haya combates a un ritmo parecido al que la geometria producia antes,
  * para que las cifras sigan significando lo mismo.
  *
- * Lo que respeta, porque son reglas y no cortesias: no persigue a los suyos ni a un aliado, no persigue en
- * tregua, no persigue a quien esta en tregua, y no toca una caravana escoltada — esa no es presa.
+ * Lo que respeta, porque son reglas y no cortesias: no persigue a los suyos ni a un aliado, no persigue con
+ * todos sus héroes heridos ni a una columna de solo heridos (Doc 5.16.4), y no toca una caravana escoltada — esa
+ * no es presa.
  */
 function fijarPersecucionesNpc(
   ejercitos: Ejercito[],
@@ -920,7 +921,8 @@ function fijarPersecucionesNpc(
   asentamientos: Asentamiento[],
   relaciones: RelacionPolitica[],
   esNpc: (faccionId: string) => boolean,
-  instante: Instante,
+  /** Los héroes heridos ahora (`heridosEn`). */
+  heridos: ReadonlySet<string>,
   /** Las escuadras de todos: solo caza, y solo es presa, una columna con soldados en pie. */
   tropa: IndiceTropa
 ): { ejercitos: Ejercito[]; persecucionesNuevas: number } {
@@ -931,13 +933,13 @@ function fijarPersecucionesNpc(
   let persecucionesNuevas = 0;
 
   const ejercitosActualizados = ejercitos.map((cazador) => {
-    if (!esNpc(cazador.faccionId) || cazador.persiguiendo || enTregua(cazador, instante)) return cazador;
+    if (!esNpc(cazador.faccionId) || cazador.persiguiendo || !tieneHeroeSano(cazador, heridos)) return cazador;
     if (!conSoldados(cazador)) return cazador;
 
     // Orden canonico por id: la eleccion de presa no consume RNG, pero SI decide que combates ocurren, y con
     // ellos toda la secuencia aleatoria del tick siguiente.
     const columna = [...ejercitos]
-      .filter((o) => o.id !== cazador.id && enemiga(cazador.faccionId, o.faccionId) && !enTregua(o, instante))
+      .filter((o) => o.id !== cazador.id && enemiga(cazador.faccionId, o.faccionId) && tieneHeroeSano(o, heridos))
       .filter(conSoldados)
       .filter((o) => distancia(o.posicionActual, cazador.posicionActual) <= VISION.ejercito)
       .sort((x, y) => (x.id < y.id ? -1 : 1))[0];
@@ -1610,7 +1612,7 @@ export function avanzarNpcGobernanza(
         trasCampanas.asentamientos,
         trasComercio.relaciones,
         esNpc,
-        instante,
+        heridosEn(estado.heroes, instante),
         tropa
       );
 

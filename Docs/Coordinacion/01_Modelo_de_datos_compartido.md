@@ -337,8 +337,7 @@ Ejercito
   escuadrones: Escuadron[]    movidos aquí desde Asentamiento.escuadrones — existente
   suministro: Record<string, number>   solo trigo en Fase 0 — existente
   persiguiendo?: { tipo: 'ejercito' | 'caravana'; id: string }   objetivo móvil — existente
-  enTreguaHasta?: Instante     tras derrota reciente, corta perseguir Y ser perseguido — existente.
-                            DESAPARECE en el modelo de héroe: la sustituye `Heroe.heridoHasta` (§12)
+  (enTreguaHasta)             RETIRADO 2026-09-14: lo sustituye `Heroe.heridoHasta` (§12, Doc 5.16.4)
   caravanasAdjuntasIds[]        existente
   objetivo: { tipo: 'asentamiento'; id: string } | { tipo: 'punto'; punto: Point }   existente
   ruta: Point[]               polilínea calculada al movilizar — existente

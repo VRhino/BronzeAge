@@ -1,6 +1,7 @@
 // El Héroe como personaje (Doc 5.16, doc 01 §12): con qué nace y cómo reparte sus puntos, con las reglas que
 // ya tiene Conquest. Sus escuadras viven aparte (`engine/tropa.ts`).
 import type { Asentamiento, AtributosHeroe, Heroe, Loadout } from '../domain/types';
+import { minutos, sumar, type Instante } from '../domain/tiempo';
 import { HEROE } from '../constants';
 import { costeLiderazgo, liderazgoComprometido, puedeLlevar } from './liderazgo';
 import { cupoGuarnicion } from './asentamientoQuery';
@@ -136,6 +137,25 @@ export function asignarGuarnicion(heroe: Heroe, residencia: Asentamiento | undef
 export function retirarGuarnicion(heroe: Heroe, squadId: string): Heroe {
   if (!heroe.escuadrones.find((e) => e.id === squadId)?.enGuarnicion) throw new HeroeInvalidoError('Esa escuadra no está en la guarnición.');
   return conGuarnicion(heroe, squadId, false);
+}
+
+/** ¿Está herido ahora (Doc 5.16.4)? Se comprueba AL LEER, como toda fecha del juego: nada se dispara al vencer. */
+export function estaHerido(heroe: Pick<Heroe, 'heridoHasta'>, ahora: Instante): boolean {
+  return heroe.heridoHasta !== undefined && ahora < heroe.heridoHasta;
+}
+
+/** Los ids de los heridos ahora: lo que el motor de combate necesita para apartarlos. */
+export function heridosEn(heroes: readonly Heroe[], ahora: Instante): Set<string> {
+  return new Set(heroes.filter((h) => estaHerido(h, ahora)).map((h) => h.id));
+}
+
+/** Hiere a los héroes del bando que pierde una batalla (Doc 5.16.4), `HEROE.heridoMinutos` de mundo. A quien ya lo
+ * está no se le alarga: un herido no entra en batallas, así que no ha podido volver a perder. */
+export function herir(heroes: readonly Heroe[], ids: Iterable<string>, ahora: Instante): Heroe[] {
+  const aHerir = new Set(ids);
+  if (aHerir.size === 0) return heroes as Heroe[];
+  const hasta = sumar(ahora, minutos(HEROE.heridoMinutos));
+  return heroes.map((h) => (aHerir.has(h.id) && !estaHerido(h, ahora) ? { ...h, heridoHasta: hasta } : h));
 }
 
 export function borrarLoadout(heroe: Heroe, loadoutId: string): Heroe {

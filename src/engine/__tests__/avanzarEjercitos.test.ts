@@ -106,11 +106,15 @@ function avanzar(
     campamento?: Escuadron[];
     /** Para encadenar ticks: los héroes que devolvió el anterior. Sin él se sacan de las vistas. */
     heroes?: Heroe[];
+    /** Héroes heridos durante todo el tick (Doc 5.16.4). */
+    heridos?: string[];
   } = {}
 ) {
   // Una vista que pasó por `adjuntarCaravana` sigue llevando su tropa aunque el tipo la pierda.
   const enColumnas = ejercitos.flatMap((e) => ('escuadrones' in e ? sinTropa(e as EjercitoConTropa).tropa : []));
-  const heroes = opciones.heroes ?? heroesCon([...enColumnas, ...(opciones.campamento ?? [])], [...new Set(asentamientos.flatMap((a) => a.heroesFundadoresIds))]);
+  const heroes = (
+    opciones.heroes ?? heroesCon([...enColumnas, ...(opciones.campamento ?? [])], [...new Set(asentamientos.flatMap((a) => a.heroesFundadoresIds))])
+  ).map((h) => (opciones.heridos?.includes(h.id) ? { ...h, heridoHasta: instanteDeTest(9999) } : h));
   const r = avanzarEjercitos(ejercitos, {
     asentamientos,
     caravanas: opciones.caravanas ?? [],
@@ -400,6 +404,15 @@ describe('llegada a un asentamiento ajeno = asedio (Paso 7)', () => {
     expect(despues.faccionId).toBe('faccion-1');
     expect(tiradas, 'conquistar una plaza desguarnecida no debe tocar el RNG').toBe(0);
     expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo === 'combate.asedio_conquista')).toBe(true);
+  });
+
+  it('con todos sus héroes heridos, el ejército espera a la puerta en vez de asediar (Doc 5.16.4)', () => {
+    const { facciones, propio, enemigo, ejercito } = frenteDeGuerra([]);
+
+    const r = avanzar([ejercito], [propio, enemigo], { facciones, heridos: ejercito.participantes.map((p) => p.heroeId) });
+
+    expect(r.asentamientos.find((a) => a.id === enemigo.id)!.faccionId, 'la plaza no cae').toBe(enemigo.faccionId);
+    expect(r.ejercitos[0]!.estado, 'no acampa: la llegada se vuelve a mirar el tick siguiente').toBe('marchando');
   });
 
   it('conquistar deja la plaza SIN guarnición y al vencido con su campamento a 0, pero suyo (Doc 5.15.5)', () => {
@@ -1016,31 +1029,32 @@ describe('encuentros: solo se resuelve lo que se persigue', () => {
     const carroA = sinChoque.find((e) => e.id === a.id)!.suministro['trigo'] ?? 0;
     const carroB = sinChoque.find((e) => e.id === b.id)!.suministro['trigo'] ?? 0;
 
-    const r = avanzar([cazador, b], asentamientos, { facciones }).ejercitos;
+    const tras = avanzar([cazador, b], asentamientos, { facciones });
+    const r = tras.ejercitos;
     const presa = r.find((e) => e.id === b.id)!;
 
     expect(presa.escuadrones.every((e) => e.cantidad === 0), 'la presa cae entera').toBe(true);
-    expect(presa.enTreguaHasta, 'la tregua sigue igual').toBeDefined();
+    expect(tras.heroes.find((h) => h.id === RIVAL)!.heridoHasta, 'su héroe queda herido (Doc 5.16.4)').toBeDefined();
+    expect(tras.heroes.find((h) => h.id === RESIDENTE)!.heridoHasta, 'el que gana, no').toBeUndefined();
     expect(presa.suministro['trigo'], 'se queda con la mitad').toBe(carroB / 2);
     expect(r.find((e) => e.id === a.id)!.suministro['trigo'], 'y el cazador carga la otra mitad').toBe(carroA + carroB / 2);
   });
 
-  it('un objetivo en TREGUA no se puede alcanzar, aunque lo persigas y lo tengas encima', () => {
+  it('una columna con todos sus héroes HERIDOS no se puede alcanzar, aunque la persigas y la tengas encima', () => {
     const { facciones, asentamientos, a, b } = dosColumnas(1);
     const cazador: Ejercito = { ...a, persiguiendo: { tipo: 'ejercito', id: b.id } };
-    const protegido: Ejercito = { ...b, enTreguaHasta: instanteDeTest(9999) };
 
-    const r = avanzar([cazador, protegido], asentamientos, { facciones });
+    const r = avanzar([cazador, b], asentamientos, { facciones, heridos: [RIVAL] });
 
     expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo.startsWith('combate.'))).toBe(false);
   });
 
-  it('y quien esta en tregua tampoco puede alcanzar a nadie: corta por los dos lados', () => {
+  it('y quien lleva a todos sus héroes heridos tampoco alcanza a nadie: corta por los dos lados', () => {
     // Sin esta mitad, la inmunidad seria un escudo para depredar sin riesgo.
     const { facciones, asentamientos, a, b } = dosColumnas(1);
-    const enTregua: Ejercito = { ...a, persiguiendo: { tipo: 'ejercito', id: b.id }, enTreguaHasta: instanteDeTest(9999) };
+    const cazador: Ejercito = { ...a, persiguiendo: { tipo: 'ejercito', id: b.id } };
 
-    const r = avanzar([enTregua, b], asentamientos, { facciones });
+    const r = avanzar([cazador, b], asentamientos, { facciones, heridos: [RESIDENTE] });
 
     expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo.startsWith('combate.'))).toBe(false);
   });
@@ -1050,12 +1064,12 @@ describe('encuentros: solo se resuelve lo que se persigue', () => {
     // Un ataque que no tumba al defensor es una derrota del ATACANTE: con 5 contra 300 no depende del RNG.
     const { facciones, a, b } = dosColumnas(1, 5, 300);
 
-    const r = atacarColumna(a, b, facciones, [], [], instanteDeTest(1), createRng(1));
+    const r = atacarColumna(a, b, facciones, [], [], new Set(), createRng(1));
 
     expect(r.atacante.tipo).toBe('ejercito');
     expect(r.atacante.suministro['trigo'], 'se queda con la mitad').toBe(50);
     expect(r.defensor.suministro['trigo'], 'y el vencedor carga la otra mitad').toBe(150);
-    expect(r.atacante.enTreguaHasta, 'la tregua sigue igual').toBeDefined();
+    expect(r.vencidos, 'y sus héroes quedan heridos (Doc 5.16.4)').toEqual([RESIDENTE]);
   });
 
   it('el DEFENSOR que gana carga el botín con sus caravanas adjuntas, igual que el atacante (Doc 5.13.2)', () => {
@@ -1065,9 +1079,33 @@ describe('encuentros: solo se resuelve lo que se persigue', () => {
     const defensor: EjercitoConTropa = { ...b, caravanasAdjuntasIds: [adjunta.id], suministro: { trigo: 800 } };
     expect(capacidadCargaDe(defensor, [adjunta]), 'cabe más que el carro solo').toBeGreaterThan(850);
 
-    const r = atacarColumna(a, defensor, facciones, [], [adjunta], instanteDeTest(1), createRng(1));
+    const r = atacarColumna(a, defensor, facciones, [], [adjunta], new Set(), createRng(1));
 
     expect(r.defensor.suministro['trigo'], 'carga la mitad del carro del atacante').toBe(850);
+  });
+
+  it('las escuadras de un héroe herido no combaten: se apartan y vuelven intactas (Doc 5.16.4)', () => {
+    // El sano lleva 1 soldado contra 300: cae entero, que es lo que el motor cuenta como derrota del defensor.
+    const { facciones, a, b } = dosColumnas(1, 300, 1);
+    const herida: Escuadron = { ...escuadron('b2', 'milicia_lanceros', 30), heroeId: 'heroe-herido' };
+    const mixta: EjercitoConTropa = {
+      ...b,
+      escuadronIds: [...b.escuadronIds, herida.id],
+      escuadrones: [...b.escuadrones, herida],
+      participantes: [...b.participantes, { heroeId: 'heroe-herido', unidoEn: instante(0) }],
+    };
+
+    const r = atacarColumna(a, mixta, facciones, [], [], new Set(['heroe-herido']), createRng(1));
+
+    expect(r.defensor.escuadrones.find((e) => e.id === 'b2')!.cantidad, 'ni pelea ni sufre bajas').toBe(30);
+    expect(r.defensor.escuadrones.find((e) => e.id === 'b1')!.cantidad, 'la del sano sí').toBe(0);
+    expect(r.vencidos, 'pierde la columna entera').toEqual([RIVAL, 'heroe-herido']);
+  });
+
+  it('a una columna de solo heridos no se la puede atacar, y una de solo heridos no ataca', () => {
+    const { facciones, a, b } = dosColumnas(1);
+    expect(() => atacarColumna(a, b, facciones, [], [], new Set([RIVAL]), createRng(1))).toThrow('solo lleva héroes heridos');
+    expect(() => atacarColumna(a, b, facciones, [], [], new Set([RESIDENTE]), createRng(1))).toThrow('están heridos');
   });
 
   it('fuera del radio de encuentro no pasa nada, aunque se vean de sobra', () => {

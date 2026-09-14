@@ -33,7 +33,7 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 28 | MILITAR | Declaración formal de guerra | ✘ nada |
 | 29 | ONBOARDING | Curva de progresión inicial gradual | ✘ nada |
 | 30 | MILITAR | Batallas con héroes: guarnición, campamento y héroes bot | ◐ campamento, guarnición y conquista del canon; el asedio aún con números |
-| 31 | HÉROE | Modelo de Héroe: uno por jugador y mundo, dueño de los escuadrones | ◐ fases 1-3 en la rama `heroe-dominio`; faltan perks, equipo y herido |
+| 31 | HÉROE | Modelo de Héroe: uno por jugador y mundo, dueño de los escuadrones | ◐ fases 1-3 y Herido en la rama `heroe-dominio`; faltan perks y equipo |
 | 32 | POLÍTICA | Cabos sueltos de diseño político | ✘ sin decidir |
 | 33 | COMERCIO | Cabos sueltos de diseño comercial | ✘ sin decidir |
 | 34 | SUMINISTRO | La economía no llena el carro de un ejército | ✘ sin decidir |
@@ -326,7 +326,7 @@ defienden la guarnición y el loadout activo de los residentes que están dentro
 defiende. Los héroes bot no usan la guarnición, defienden con su loadout.
 
 Sigue distinto del canon: el asedio se resuelve con números (`iniciarAsedio`, `engine/combate.ts`), no como
-batalla de Unity; la Tregua por columna en vez del estado Herido del héroe; el campamento de bandidos se ataca con un comando
+batalla de Unity; el campamento de bandidos se ataca con un comando
 desde un asentamiento (`atacarCampamentoBandidos`) en vez de con una columna que llegue a él (Doc 1.9); quien
 está DENTRO de una plaza cuando cae conserva esa ubicación, cuando el canon lo deja fuera; y el desalojo no mira
 el cupo de viviendas de la plaza que recibe a los vencidos (`desalojarResidentes`). Depende del ciclo de
@@ -349,12 +349,13 @@ ejército o escolta), nivel y experiencia en vez de veteranía, sin `heridoHasta
 solo ids—. La fase 3 añade la progresión del héroe (nace como en Conquest: nivel 1, sin puntos, 500 de bronce y el
 loadout "Default"), `repartirPuntos` (solo atributos), `guardarLoadout`/`borrarLoadout`,
 `asignarGuarnicion`/`retirarGuarnicion`, y en la proyección `heroe` (con el coste de Liderazgo de cada escuadra y la guarnición ocupada), `heroesVisibles`
-(`HeroePublico`) y `nombresDeCompaneros`. Falta:
-los perks y `equipar`, que esperan a los catálogos de Conquest (CQ-004; decisión del usuario 2026-09-14); de
-dónde salen los puntos de atributo (en Conquest ningún nivel los da) y la subida de nivel (CQ-001); el estado
-Herido del héroe; y en el cliente de jugador (`BronzeAgeClient`), que ya lee los datos nuevos y tiene los
-comandos tipados, la interfaz: la pantalla de crear héroe definitiva y la del héroe (su
-`docs/Features_Pendientes.md` §0).
+(`HeroePublico`) y `nombresDeCompaneros`. Y el estado Herido (Doc 5.16.4, 2026-09-14), que sustituye a la Tregua de
+columna: 2 minutos para todos los héroes del bando que pierde cualquier batalla; mientras dura no persiguen, no se
+les persigue ni entran en batallas, y sus escuadras no combaten. Falta: los perks y `equipar`, que esperan a los
+catálogos de Conquest (CQ-004; decisión del usuario 2026-09-14); de dónde salen los puntos de atributo (en Conquest
+ningún nivel los da) y la subida de nivel (CQ-001); y en el cliente de jugador (`BronzeAgeClient`, que ya tiene el
+panel del héroe) la pantalla de crear héroe definitiva, el equipo, la ficha de los héroes ajenos y enseñar el
+Herido (su `docs/Features_Pendientes.md` §0).
 
 Sin resolver:
 

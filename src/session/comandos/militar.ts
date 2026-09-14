@@ -12,14 +12,23 @@ import { reclutarTropa as reclutarTropaEngine } from '../../engine/tropas';
 import { esCiudadano } from '../../engine/faccion';
 import {
   atacarCampamentoBandidos as atacarCampamentoBandidosEngine,
+  CombateInvalidoError,
   desalojarResidentes,
   iniciarAsedio as iniciarAsedioEngine,
 } from '../../engine/combate';
-import { conEscuadrones, defensaDe } from '../../engine/tropa';
+import { heridosEn, herir } from '../../engine/heroe';
+import { conEscuadrones, defensaDe, heroesQueDefienden } from '../../engine/tropa';
 import type { Escuadron } from '../../domain/types';
 
-/** Lo que un héroe puede sacar de su campamento: la guarnición la maneja la IA de la plaza (Doc 5.15.3). */
-const fueraDeGuarnicion = (tropa: Escuadron[]): Escuadron[] => tropa.filter((e) => !e.enGuarnicion);
+/** Lo que se puede sacar del campamento a combatir: la guarnición la maneja la IA de la plaza (Doc 5.15.3), y las
+ * escuadras de un héroe herido no combaten (Doc 5.16.4). */
+function combatientes(tropa: readonly Escuadron[], ids: readonly string[], heridos: ReadonlySet<string>): Escuadron[] {
+  if (tropa.some((e) => ids.includes(e.id) && heridos.has(e.heroeId))) throw new CombateInvalidoError('Las escuadras de un héroe herido no combaten.');
+  return tropa.filter((e) => !e.enGuarnicion);
+}
+
+/** Los héroes que llevan a la batalla las escuadras elegidas: si pierden, quedan heridos (Doc 5.16.4). */
+const duenosDe = (tropa: readonly Escuadron[], ids: readonly string[]): string[] => [...new Set(tropa.filter((e) => ids.includes(e.id)).map((e) => e.heroeId))];
 import { CAMPAMENTOS_BANDIDOS } from '../../constants';
 import { minutos, sumar } from '../../domain/tiempo';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
@@ -91,22 +100,27 @@ export interface ParamsIniciarAsedio {
 export const iniciarAsedio = comando<ParamsIniciarAsedio, { conquistado: boolean }>((estado, _mapa, ctx, params) => {
   const atacante = exigirAsentamiento(estado, params.atacanteId);
   const defensor = exigirAsentamiento(estado, params.defensorId);
+  const heridos = heridosEn(estado.heroes, ctx.instante);
+  const tropa = combatientes(campamentoEn(estado, atacante), params.escuadronIds, heridos);
+  const defensores = heroesQueDefienden(defensor, estado.heroes, heridos);
 
   const resultado = iniciarAsedioEngine(
     atacante,
-    fueraDeGuarnicion(campamentoEn(estado, atacante)),
+    tropa,
     defensor,
-    defensaDe(defensor, estado.heroes),
+    defensaDe(defensor, estado.heroes, heridos),
     params.escuadronIds,
     estado.facciones,
     estado.relaciones,
     ctx.instante,
     ctx.rng
   );
+  // Los héroes del bando que pierde quedan heridos (Doc 5.16.4). Una plaza ocupada rebota sin combate (`tropa` vacía).
+  const vencidos = resultado.tropa.length === 0 ? [] : resultado.conquistado ? defensores.map((h) => h.id) : duenosDe(tropa, params.escuadronIds);
   const tras: GameSessionState = {
     ...conAsentamiento(estado, resultado.defensor),
     facciones: resultado.facciones,
-    heroes: conEscuadrones(estado.heroes, resultado.tropa),
+    heroes: herir(conEscuadrones(estado.heroes, resultado.tropa), vencidos, ctx.instante),
   };
   // Los residentes derrotados se van con su campamento a 0 a la plaza más cercana de su Facción (Doc 5.15.5).
   const desalojo = resultado.conquistado ? desalojarResidentes(defensor, tras.asentamientos, tras.heroes) : undefined;
@@ -133,11 +147,13 @@ export const atacarCampamentoBandidos = comando<ParamsAtacarCampamentoBandidos, 
   const atacante = exigirAsentamiento(estado, params.atacanteId);
   const campamento = exigirCampamento(estado, params.campamentoId);
 
-  const resultado = atacarCampamentoBandidosEngine(atacante, fueraDeGuarnicion(campamentoEn(estado, atacante)), params.escuadronIds, campamento, estado.facciones, ctx.rng);
+  const tropa = combatientes(campamentoEn(estado, atacante), params.escuadronIds, heridosEn(estado.heroes, ctx.instante));
+  const resultado = atacarCampamentoBandidosEngine(atacante, tropa, params.escuadronIds, campamento, estado.facciones, ctx.rng);
   const siguiente: GameSessionState = {
     ...conAsentamiento(estado, resultado.atacante),
     facciones: resultado.facciones,
-    heroes: conEscuadrones(estado.heroes, resultado.tropa),
+    // Si el campamento aguanta, perdieron los héroes que mandaron la tropa (Doc 5.16.4).
+    heroes: herir(conEscuadrones(estado.heroes, resultado.tropa), resultado.campamentoDestruido ? [] : duenosDe(tropa, params.escuadronIds), ctx.instante),
     // Al destruirlo se agenda su reaparición; el spawn en sí lo evalúa el tick (`avanzarSpawnBandidos`).
     campamentosBandidos: resultado.campamentoDestruido
       ? estado.campamentosBandidos.filter((c) => c.id !== campamento.id)

@@ -62,19 +62,29 @@ export function guarnicionDe(asentamiento: Asentamiento, heroes: readonly Heroe[
   return campamentoDe(asentamiento, heroes).filter((e) => e.enGuarnicion);
 }
 
+/** Los héroes que defienden una plaza en persona: residentes que están DENTRO y sanos (Doc 5.12.4, 5.16.4). Son el
+ * bando que pierde si la plaza cae. */
+export function heroesQueDefienden(asentamiento: Asentamiento, heroes: readonly Heroe[], heridos: ReadonlySet<string>): Heroe[] {
+  return heroes.filter(
+    (h) =>
+      esResidente(asentamiento, h.id) &&
+      !heridos.has(h.id) &&
+      h.ubicacion.tipo === 'asentamiento' &&
+      h.ubicacion.asentamientoId === asentamiento.id
+  );
+}
+
 /**
  * Quién defiende una plaza en un asedio que se resuelve con números (Doc 5.12.4): su guarnición, y cada residente
- * que está DENTRO con las escuadras de su loadout activo que tenga en el campamento (decisión del usuario
- * 2026-09-14). El resto del campamento no defiende. El Liderazgo del loadout ya se comprobó al guardarlo.
+ * que está DENTRO y sano con las escuadras de su loadout activo que tenga en el campamento (decisión del usuario
+ * 2026-09-14). El loadout de un herido no defiende; la guarnición sí, porque no tiene héroe (Doc 5.16.4). El resto
+ * del campamento no defiende. El Liderazgo del loadout ya se comprobó al guardarlo.
  */
-export function defensaDe(asentamiento: Asentamiento, heroes: readonly Heroe[]): Escuadron[] {
+export function defensaDe(asentamiento: Asentamiento, heroes: readonly Heroe[], heridos: ReadonlySet<string>): Escuadron[] {
+  const enPersona = new Set(heroesQueDefienden(asentamiento, heroes, heridos).flatMap((h) => h.loadouts.find((l) => l.activo)?.squadIds ?? []));
   return heroes
     .filter((h) => esResidente(asentamiento, h.id))
-    .flatMap((h) => {
-      const dentro = h.ubicacion.tipo === 'asentamiento' && h.ubicacion.asentamientoId === asentamiento.id;
-      const loadout = new Set(dentro ? (h.loadouts.find((l) => l.activo)?.squadIds ?? []) : []);
-      return h.escuadrones.filter((e) => e.contenedor.tipo === 'campamento' && (e.enGuarnicion || loadout.has(e.id)));
-    });
+    .flatMap((h) => h.escuadrones.filter((e) => e.contenedor.tipo === 'campamento' && (e.enGuarnicion || enPersona.has(e.id))));
 }
 
 /** Suelta la guarnición de un héroe que deja de residir donde la tenía: solo se guarnece la residencia (5.15.3). */

@@ -43,7 +43,7 @@
 //
 // Lo que sigue faltando es la visión compartida por ALIANZA (Paso 4).
 import { cupoGuarnicion } from '../../engine/asentamientoQuery';
-import { guarnicionOcupada, liderazgoDeLoadout } from '../../engine/heroe';
+import { estaHerido, guarnicionOcupada, liderazgoDeLoadout } from '../../engine/heroe';
 import { costeLiderazgo } from '../../engine/liderazgo';
 import type {
   AcuerdoTrueque,
@@ -153,25 +153,28 @@ function heroeProyectado(heroe: Heroe, asentamientos: readonly Asentamiento[]): 
 }
 
 /**
- * Lo que un jugador ve de un héroe ajeno (Doc 5.16.7): nombre, clase, nivel, las escuadras que lleva consigo y el
- * equipo que tiene puesto. Nada de su campamento, sus puntos, su Liderazgo ni si es humano o bot. `ponytail:` sin
- * `heridoHasta` hasta que exista el estado Herido del héroe (Mecánicas §30).
+ * Lo que un jugador ve de un héroe ajeno (Doc 5.16.7): nombre, clase, nivel, si está herido y hasta cuándo, las
+ * escuadras que lleva consigo y el equipo que tiene puesto. Nada de su campamento, sus puntos, su Liderazgo ni si
+ * es humano o bot.
  */
 export interface HeroePublico {
   heroeId: string;
   displayName: string;
   classDefinitionId: string;
   nivel: number;
+  /** Solo mientras está herido (Doc 5.16.4). */
+  heridoHasta?: Instante;
   escuadrasQueLleva: { tropaId: string; cantidad: number; nivel: number }[];
   equipamiento: Record<SlotEquipo, string | null>;
 }
 
-function heroePublico(heroe: Heroe): HeroePublico {
+function heroePublico(heroe: Heroe, ahora: Instante): HeroePublico {
   return {
     heroeId: heroe.id,
     displayName: heroe.displayName,
     classDefinitionId: heroe.classDefinitionId,
     nivel: heroe.nivel,
+    ...(estaHerido(heroe, ahora) ? { heridoHasta: heroe.heridoHasta } : {}),
     escuadrasQueLleva: heroe.escuadrones
       .filter((e) => e.contenedor.tipo === 'ejercito')
       .map((e) => ({ tropaId: e.tropaId, cantidad: e.cantidad, nivel: e.nivel })),
@@ -750,7 +753,7 @@ export function proyectarParaJugador(
       heroeIds: e.participantes.map((p) => p.heroeId),
     })),
     heroe: jugador ? heroeProyectado(jugador, estado.asentamientos) : null,
-    heroesVisibles: estado.heroes.filter((h) => idsVisibles.has(h.id)).map(heroePublico),
+    heroesVisibles: estado.heroes.filter((h) => idsVisibles.has(h.id)).map((h) => heroePublico(h, instanteDeTick(estado.tick))),
     nombresDeCompaneros: Object.fromEntries(
       estado.heroes.filter((h) => faccionPropia && esCiudadano(faccionPropia, h.id)).map((h) => [h.id, h.displayName])
     ),

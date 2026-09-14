@@ -39,7 +39,7 @@
  *   `bonusExperienciaPorPunto`/`experienciaGanada*` (mismos valores), y salen `duracionHeridoMinutos` y
  *   `penalizacionHerido`: los escuadrones ya no quedan heridos.
  */
-export const BALANCE_VERSION = 10;
+export const BALANCE_VERSION = 11;
 
 /**
  * Modelo temporal (Fase D, Docs/Arquitectura/10_Modelo_Temporal.md). **Decisión del usuario (2026-08-29):
@@ -1602,6 +1602,9 @@ export const LIDERAZGO = {
 export const HEROE = {
   bronceInicial: 500,
   topeAtributo: 100,
+  /** Cuánto dura el estado Herido (Doc 5.16.4), en minutos de mundo. Lo sufren todos los héroes del bando que pierde
+   * una batalla, y mientras dura no persiguen, no se les persigue ni entran en batallas. Sustituye a la Tregua. */
+  heridoMinutos: 2,
 };
 
 /** Cupo de guarnición de cada héroe residente (Doc 5.15.3), en la escala del coste de Liderazgo (5.11.1). La
@@ -1704,17 +1707,9 @@ export const MOVIMIENTO = {
    */
   radioInspeccion: 40,
   /**
-   * Cuanto dura la TREGUA de quien acaba de ser derrotado en campo abierto (Doc 5.12.3). **5 minutos**, y
-   * corta por los DOS lados: ni le atacan ni ataca.
-   *
-   * Las dos mitades hacen falta. Sin la primera, a un viajero se le puede acosar en cadena hasta arruinarlo.
-   * Sin la segunda, la inmunidad seria un escudo para depredar sin riesgo: cinco minutos de barra libre.
-   */
-  treguaTrasDerrotaMinutos: 5,
-  /**
    * Que fraccion del carro se lleva quien derrota a una columna en campo abierto (Doc 5.12.3). **La mitad**:
    * dejarle algo es lo que hace que valga la pena seguir el viaje en vez de reiniciarlo, y lo que distingue un
-   * robo de una ruina. Con el carro vacio no hay botin, solo la tregua.
+   * robo de una ruina. Con el carro vacio no hay botin; solo quedan los heridos (`HEROE.heridoMinutos`).
    *
    * Vale igual para una columna personal que para un Ejercito, cuyo carro es el de todos sus miembros. Las
    * caravanas adjuntas no entran: esas se pierden aparte, si el ejercito se deshace (Doc 5.13.2).

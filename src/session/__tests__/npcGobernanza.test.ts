@@ -259,14 +259,14 @@ describe('el NPC persigue: sin esto el batch se queda sin combates y nadie se en
     expect(r.estado.ejercitos.every((e) => e.persiguiendo === undefined)).toBe(true);
   });
 
-  it('ni persigue estando en TREGUA: la regla vale igual para el NPC', () => {
+  it('ni persigue con todos sus héroes HERIDOS: la regla vale igual para el NPC (Doc 5.16.4)', () => {
     const { estado, mapa } = dosColumnasNpc();
-    const enTregua = {
+    const heridos = {
       ...estado,
-      ejercitos: estado.ejercitos.map((e) => ({ ...e, enTreguaHasta: instanteDeTest(9999) })),
+      heroes: estado.heroes.map((h) => ({ ...h, heridoHasta: instanteDeTest(9999) })),
     };
 
-    const r = avanzarNpcGobernanza(enTregua, mapa, contextoDeTest(1, createRng(5)), {});
+    const r = avanzarNpcGobernanza(heridos, mapa, contextoDeTest(1, createRng(5)), {});
 
     expect(r.estado.ejercitos.every((e) => e.persiguiendo === undefined)).toBe(true);
   });

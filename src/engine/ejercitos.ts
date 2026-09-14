@@ -21,6 +21,7 @@ import {
   conEscuadrones,
   conTropa,
   defensaDe,
+  heroesQueDefienden,
   indiceTropa,
   sinEscolta,
   sinTropa,
@@ -29,7 +30,7 @@ import {
   type IndiceTropa,
 } from './tropa';
 import { atribuir, type EventoCrudo } from '../domain/eventos';
-import { minutos, sumar, type Instante } from '../domain/tiempo';
+import type { Instante } from '../domain/tiempo';
 import type { RandomFn } from '../worldgen';
 import { asediarConEjercito, desalojarResidentes, encuentroEntreEjercitos, interceptarCaravanaConEjercito } from './combate';
 import { avanzarPosicionEnRuta } from './movimiento';
@@ -37,6 +38,7 @@ import { agregarRecurso, cantidadDisponible, descontarRecursos } from './almacen
 import { avanzarRacion, consumoRacionDeEscuadrones, reservaDeTrigo } from './tropas';
 import { puedeLlevar } from './liderazgo';
 import { esResidente, estanAliadas } from './pertenencia';
+import { heridosEn, herir } from './heroe';
 
 export class MovilizacionInvalidaError extends Error {}
 
@@ -1024,28 +1026,42 @@ export function inspeccionarCaravana(observador: Ejercito, objetivo: Caravana, e
   };
 }
 
-/** Esta en TREGUA ahora mismo (Doc 5.12.3)? Se comprueba AL LEER, como toda fecha del juego: nada se dispara
- * al vencerla. */
-export function enTregua(ejercito: Ejercito, ahora: Instante): boolean {
-  return ejercito.enTreguaHasta !== undefined && ahora < ejercito.enTreguaHasta;
+/**
+ * ¿Se puede tocar esta columna? Solo mientras lleve algún héroe sano (Doc 5.16.4): los heridos no persiguen, no
+ * se les persigue ni entran en batallas, así que una columna de solo heridos es intocable. Vale igual para quien
+ * ataca: sin un héroe sano no hay quien lleve a la tropa.
+ */
+export function tieneHeroeSano(ejercito: Ejercito, heridos: ReadonlySet<string>): boolean {
+  return ejercito.participantes.some((p) => !heridos.has(p.heroeId));
 }
 
-/** Ninguno de los dos puede estar en tregua para que haya pelea (Doc 5.12.3). Se comprueba de los DOS lados,
- * que es lo que impide usar la inmunidad como escudo para depredar. */
-function exigirSinTregua(atacante: Ejercito, defensor: Ejercito, ahora: Instante): void {
-  if (enTregua(atacante, ahora)) throw new MovilizacionInvalidaError('Estas en tregua: no puedes atacar todavia.');
-  if (enTregua(defensor, ahora)) throw new MovilizacionInvalidaError('Ese objetivo esta en tregua: no se le puede tocar.');
+/** Lo que entra en una batalla: las escuadras de un héroe herido no combaten (Doc 5.16.4; decisión del usuario,
+ * 2026-09-14: sin su héroe solo combaten la escolta de una caravana y la guarnición). */
+function sinHeridos(ejercito: EjercitoConTropa, heridos: ReadonlySet<string>): EjercitoConTropa {
+  return { ...ejercito, escuadrones: ejercito.escuadrones.filter((e) => !heridos.has(e.heroeId)) };
+}
+
+/** Devuelve a la columna las escuadras que `sinHeridos` dejó fuera, intactas y en su orden. */
+function conApartadas(trasCombate: EjercitoConTropa, antes: EjercitoConTropa): EjercitoConTropa {
+  const peleadas = new Map(trasCombate.escuadrones.map((e) => [e.id, e]));
+  return { ...trasCombate, escuadrones: antes.escuadrones.map((e) => peleadas.get(e.id) ?? e) };
+}
+
+function exigirTocables(atacante: Ejercito, defensor: Ejercito, heridos: ReadonlySet<string>): void {
+  if (!tieneHeroeSano(atacante, heridos)) throw new MovilizacionInvalidaError('Todos los héroes de tu columna están heridos: no pueden entrar en batalla.');
+  if (!tieneHeroeSano(defensor, heridos)) throw new MovilizacionInvalidaError('Esa columna solo lleva héroes heridos: no se la puede tocar.');
 }
 
 /**
- * Lo que le pasa al DERROTADO en campo abierto (Doc 5.12.3): entra en tregua y pierde la mitad de su carro,
- * igual una columna personal que un Ejercito, cuyo `suministro` es ya el de todos sus miembros.
+ * Lo que le pasa al DERROTADO en campo abierto (Doc 5.12.3, 5.16.4): pierde la mitad de su carro, igual una
+ * columna personal que un Ejercito, cuyo `suministro` es ya el de todos sus miembros, y sus héroes quedan heridos
+ * (`vencidos`: los hiere el llamador, que es quien tiene los héroes). La mitad entera aunque alguno ya fuera herido
+ * y no combatiera: el carro es de la columna (decisión del usuario, 2026-09-14).
  *
  * Perder la mitad y no todo es deliberado: dejarle algo es lo que hace que valga la pena seguir el viaje en
- * vez de reiniciarlo, y lo que distingue un robo de una ruina. Con el carro vacio solo queda la tregua.
+ * vez de reiniciarlo, y lo que distingue un robo de una ruina.
  */
-function trasDerrota<E extends Ejercito>(perdedor: E, ahora: Instante): { perdedor: E; botin: Record<string, number> } {
-  const enTreguaHasta = sumar(ahora, minutos(MOVIMIENTO.treguaTrasDerrotaMinutos));
+function trasDerrota<E extends Ejercito>(perdedor: E): { perdedor: E; botin: Record<string, number>; vencidos: string[] } {
   const botin: Record<string, number> = {};
   const queda: Record<string, number> = {};
   for (const [recurso, cantidad] of Object.entries(perdedor.suministro)) {
@@ -1053,9 +1069,13 @@ function trasDerrota<E extends Ejercito>(perdedor: E, ahora: Instante): { perded
     if (robado > 0) botin[recurso] = robado;
     if (cantidad - robado > 0) queda[recurso] = cantidad - robado;
   }
-  const derrotado = { ...perdedor, enTreguaHasta, suministro: queda };
+  const derrotado = { ...perdedor, suministro: queda };
   // Soltar la presa sigue siendo solo de la columna personal, como antes de que el Ejercito perdiera el carro.
-  return { perdedor: perdedor.tipo === 'personal' ? { ...derrotado, persiguiendo: undefined } : derrotado, botin };
+  return {
+    perdedor: perdedor.tipo === 'personal' ? { ...derrotado, persiguiendo: undefined } : derrotado,
+    botin,
+    vencidos: perdedor.participantes.map((p) => p.heroeId),
+  };
 }
 
 /** El ganador carga el botin de `trasDerrota` hasta su `capacidad`: un ladron sin sitio deja lo que no le cabe. */
@@ -1076,8 +1096,9 @@ function cargarBotin<E extends Ejercito>(ganador: E, botin: Record<string, numbe
  * Atacar a una columna que tienes delante (Doc 5.12.3). Sustituye al choque que el tick resolvia solo por
  * geometria: acercarse ya no basta, hay que pedirlo.
  *
- * Al perdedor le cae la TREGUA y pierde la mitad de su carro en favor del ganador, sea viajero o Ejercito. El
- * botin va limitado por la capacidad del que lo coge: un ladron sin sitio deja lo que no le cabe.
+ * Los héroes del perdedor quedan heridos (`vencidos`, Doc 5.16.4) y pierde la mitad de su carro en favor del
+ * ganador, sea viajero o Ejercito. El botin va limitado por la capacidad del que lo coge: un ladron sin sitio deja
+ * lo que no le cabe. Las escuadras de los heridos no combaten.
  */
 export function atacarColumna(
   atacante: EjercitoConTropa,
@@ -1086,9 +1107,10 @@ export function atacarColumna(
   relaciones: readonly RelacionPolitica[],
   /** Las del mundo: de aquí salen las adjuntas del que gane, sea quien sea, para saber cuánto botín le cabe. */
   caravanas: readonly Caravana[],
-  instante: Instante,
+  /** Los héroes heridos ahora (`heridosEn`). */
+  heridos: ReadonlySet<string>,
   rng: RandomFn
-): { atacante: EjercitoConTropa; defensor: EjercitoConTropa; facciones: Faccion[]; eventos: EventoCrudo[] } {
+): { atacante: EjercitoConTropa; defensor: EjercitoConTropa; facciones: Faccion[]; eventos: EventoCrudo[]; vencidos: string[] } {
   if (atacante.id === defensor.id) throw new MovilizacionInvalidaError('Esa columna es la tuya.');
   if (atacante.faccionId === defensor.faccionId || estanAliadas(relaciones, atacante.faccionId, defensor.faccionId)) {
     throw new MovilizacionInvalidaError('No se ataca a los tuyos ni a un aliado.');
@@ -1096,14 +1118,14 @@ export function atacarColumna(
   if (distancia(atacante.posicionActual, defensor.posicionActual) > LOGISTICA.radioEncuentro) {
     throw new MovilizacionInvalidaError(`Hay que estar a menos de ${LOGISTICA.radioEncuentro} para atacar.`);
   }
-  exigirSinTregua(atacante, defensor, instante);
+  exigirTocables(atacante, defensor, heridos);
 
-  const choque = encuentroEntreEjercitos(atacante, defensor, facciones, rng);
+  const choque = encuentroEntreEjercitos(sinHeridos(atacante, heridos), sinHeridos(defensor, heridos), facciones, rng);
   const gano = choque.a.escuadrones.some((e) => e.cantidad > 0) && !choque.b.escuadrones.some((e) => e.cantidad > 0);
   // Quien pierde es quien se queda sin nadie en pie; si los dos siguen enteros no hay derrota que castigar.
-  const perdedor = gano ? choque.b : choque.a;
-  const ganador = gano ? choque.a : choque.b;
-  const secuela = trasDerrota(perdedor, instante);
+  const perdedor = gano ? conApartadas(choque.b, defensor) : conApartadas(choque.a, atacante);
+  const ganador = gano ? conApartadas(choque.a, atacante) : conApartadas(choque.b, defensor);
+  const secuela = trasDerrota(perdedor);
 
   const conBotin = cargarBotin(ganador, secuela.botin, capacidadCargaDe(ganador, caravanas));
 
@@ -1112,37 +1134,47 @@ export function atacarColumna(
     defensor: gano ? secuela.perdedor : conBotin,
     facciones: choque.facciones,
     eventos: choque.eventos,
+    vencidos: secuela.vencidos,
   };
 }
 
 /** Interceptar una caravana que tienes delante (Doc 5.12.3). Mismo cambio que `atacarColumna`: lo que antes
- * disparaba la geometria ahora lo pide el jugador. */
+ * disparaba la geometria ahora lo pide el jugador. Si la caravana se zafa, pierde el atacante y sus héroes quedan
+ * heridos (`vencidos`, Doc 5.16.4); la escolta de la caravana no tiene héroe. */
 export function interceptar(
   ejercito: EjercitoConTropa,
   caravana: CaravanaConEscolta,
   capacidadCarga: number,
-  instante: Instante,
+  heridos: ReadonlySet<string>,
   rng: RandomFn
-): ReturnType<typeof interceptarCaravanaConEjercito> {
-  if (enTregua(ejercito, instante)) throw new MovilizacionInvalidaError('Estas en tregua: no puedes atacar todavia.');
+): ReturnType<typeof interceptarCaravanaConEjercito> & { vencidos: string[] } {
+  if (!tieneHeroeSano(ejercito, heridos)) throw new MovilizacionInvalidaError('Todos los héroes de tu columna están heridos: no pueden entrar en batalla.');
   if (distancia(ejercito.posicionActual, caravana.posicionActual) > LOGISTICA.radioEncuentro) {
     throw new MovilizacionInvalidaError(`Hay que estar a menos de ${LOGISTICA.radioEncuentro} para interceptar.`);
   }
-  return interceptarCaravanaConEjercito(ejercito, caravana, capacidadCarga, rng);
+  const r = interceptarCaravanaConEjercito(sinHeridos(ejercito, heridos), caravana, capacidadCarga, rng);
+  return { ...r, ejercito: conApartadas(r.ejercito, ejercito), vencidos: r.capturada ? [] : ejercito.participantes.map((p) => p.heroeId) };
 }
 
 /**
  * Fijar a quien persigues (Doc 5.12.3). No es un destino: es un objetivo que se mueve, y la ruta se
  * recalcula cada tick hacia donde este.
  *
- * Termina de cuatro formas, y las cuatro estan decididas: al alcanzarlo (15, y entonces hay combate porque ya
- * lo elegiste), al rectificar el rumbo con `marcharA`, al soltarlo, y si el objetivo entra en tregua.
+ * Termina de tres formas: al alcanzarlo (15, y entonces hay combate porque ya lo elegiste), al rectificar el
+ * rumbo con `marcharA` y al soltarlo. Mientras la presa solo lleve héroes heridos no hay combate (Doc 5.16.4).
  */
-export function perseguir(ejercito: Ejercito, objetivo: { tipo: 'ejercito' | 'caravana'; id: string }, instante: Instante): Ejercito {
+export function perseguir(
+  ejercito: Ejercito,
+  objetivo: { tipo: 'ejercito' | 'caravana'; id: string },
+  heridos: ReadonlySet<string>,
+  /** La columna perseguida, si es una: a una de solo heridos no se la puede perseguir. */
+  presa?: Ejercito
+): Ejercito {
   if (objetivo.tipo === 'ejercito' && objetivo.id === ejercito.id) {
     throw new MovilizacionInvalidaError('No puedes perseguirte a ti mismo.');
   }
-  if (enTregua(ejercito, instante)) throw new MovilizacionInvalidaError('Estas en tregua: tampoco puedes perseguir.');
+  if (!tieneHeroeSano(ejercito, heridos)) throw new MovilizacionInvalidaError('Todos los héroes de tu columna están heridos: no pueden perseguir.');
+  if (presa && !tieneHeroeSano(presa, heridos)) throw new MovilizacionInvalidaError('Esa columna solo lleva héroes heridos: no se la puede perseguir.');
   return { ...ejercito, persiguiendo: objetivo, estado: 'marchando' };
 }
 
@@ -1291,6 +1323,8 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
   // puesta y se deshacen al final. Lo que cambia FUERA de una columna —el campamento que defiende un asedio, la
   // tropa que vuelve a casa— se aplica en el momento, porque el siguiente asedio o reposte tiene que verlo.
   let heroes = [...contexto.heroes];
+  /** Heridos al empezar el tick (Doc 5.16.4): sus escuadras no asedian, y un ejército de solo heridos espera. */
+  const heridos = heridosEn(heroes, instante);
   const indice = indiceTropa(heroes);
   let caravanasActuales: CaravanaConEscolta[] = caravanas.map((c) => conEscolta(c, indice));
   const consumoTropasDe = (plaza: Asentamiento): number => consumoRacionDeEscuadrones(campamentoDe(plaza, heroes));
@@ -1429,12 +1463,23 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
       // sin que nadie hubiera decidido nada. Lo que pase después con un ejército parado junto a una ciudad
       // enemiga es el Paso 10 (encuentros por proximidad).
       const objetivo = ejercito.objetivo.tipo === 'asentamiento' ? porId.get(ejercito.objetivo.id) : undefined;
+      if (objetivo && objetivo.faccionId !== ejercito.faccionId && !tieneHeroeSano(ejercito, heridos)) {
+        // Todos sus héroes están heridos: espera a la puerta y asedia cuando alguno sane (Doc 5.16.4; decisión del
+        // usuario, 2026-09-14). Sigue `marchando` con la ruta acabada, así la llegada se vuelve a mirar cada tick.
+        supervivientes.push(ejercito);
+        continue;
+      }
       if (objetivo && objetivo.faccionId !== ejercito.faccionId) {
-        const asedio = asediarConEjercito(ejercito, objetivo, defensaDe(objetivo, heroes), faccionesActuales, [...relaciones], instante, rng);
-        ejercito = asedio.ejercito;
+        const defensores = heroesQueDefienden(objetivo, heroes, heridos);
+        const asedio = asediarConEjercito(sinHeridos(ejercito, heridos), objetivo, defensaDe(objetivo, heroes, heridos), faccionesActuales, [...relaciones], instante, rng);
+        ejercito = conApartadas(asedio.ejercito, ejercito);
         porId.set(objetivo.id, asedio.defensor);
         heroes = conEscuadrones(heroes, asedio.tropaDefensora);
         faccionesActuales = asedio.facciones;
+        // Los héroes del bando que pierde quedan heridos (Doc 5.16.4). Sin combate —plaza vacía u ocupada— no pierde nadie.
+        if (asedio.tropaDefensora.length > 0) {
+          heroes = herir(heroes, asedio.conquistado ? defensores.map((h) => h.id) : ejercito.participantes.map((p) => p.heroeId), instante);
+        }
         // Conquistar no convierte al ejército en guarnición (Doc 5.15.5): acampa a la puerta, y los residentes
         // derrotados se van con su campamento a 0 a la plaza más cercana de su Facción.
         if (asedio.conquistado) {
@@ -1478,7 +1523,8 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
   // Va en una segunda pasada y no dentro del bucle de arriba porque un encuentro depende de dónde acabaron
   // TODOS: resolverlo mientras la mitad de las columnas aún no se ha movido daría choques con posiciones de
   // dos momentos distintos, y el resultado dependería del orden del array.
-  const conEncuentros = resolverEncuentros(supervivientes, caravanasActuales, faccionesActuales, relaciones, porId, instante, rng);
+  // Los heridos de nuevo, no los del principio: quien perdió un asedio en este tick ya no persigue a nadie.
+  const conEncuentros = resolverEncuentros(supervivientes, caravanasActuales, faccionesActuales, relaciones, porId, heridosEn(heroes, instante), rng);
   eventos.push(...conEncuentros.eventos);
 
   // Se deshacen las vistas: cada escuadra vuelve a su héroe, marcada donde acabó. La escolta de una caravana
@@ -1500,7 +1546,7 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
     asentamientos: [...porId.values()],
     caravanas: caravanasFinal,
     facciones: conEncuentros.facciones,
-    heroes: conEscuadrones(heroes, tropaFinal),
+    heroes: herir(conEscuadrones(heroes, tropaFinal), conEncuentros.vencidos, instante),
     eventos,
   };
 }
@@ -1535,7 +1581,8 @@ function resolverEncuentros(
   relaciones: readonly RelacionPolitica[],
   /** `asentamientoId -> Asentamiento` del tick ya avanzado: de aquí sale de qué Facción es cada caravana. */
   asentamientosPorId: ReadonlyMap<string, Asentamiento>,
-  instante: Instante,
+  /** Los héroes heridos ahora: ni persiguen, ni se les alcanza, ni sus escuadras combaten (Doc 5.16.4). */
+  heridos: ReadonlySet<string>,
   rng: RandomFn
 ): {
   ejercitos: EjercitoConTropa[];
@@ -1543,14 +1590,17 @@ function resolverEncuentros(
   facciones: Faccion[];
   eventos: EventoCrudo[];
   escoltasPerdidas: Escuadron[];
+  /** Los héroes de los bandos que perdieron: los hiere quien tiene los héroes. */
+  vencidos: string[];
 } {
   const eventos: EventoCrudo[] = [];
   if (ejercitos.length === 0) {
-    return { ejercitos: [...ejercitos], caravanas: [...caravanas], facciones: [...facciones], eventos, escoltasPerdidas: [] };
+    return { ejercitos: [...ejercitos], caravanas: [...caravanas], facciones: [...facciones], eventos, escoltasPerdidas: [], vencidos: [] };
   }
 
   const porId = new Map(ejercitos.map((e) => [e.id, e]));
   const escoltasPerdidas: Escuadron[] = [];
+  const vencidos: string[] = [];
   let caravanasVivas = [...caravanas];
   let faccionesActuales = [...facciones];
   const yaChocaron = new Set<string>();
@@ -1561,19 +1611,19 @@ function resolverEncuentros(
   for (const id of [...porId.keys()].sort()) {
     if (yaChocaron.has(id)) continue;
     const ejercito = porId.get(id)!;
-    if (sinSoldados(ejercito)) continue;
+    // Pelea lo que no está herido (Doc 5.16.4): sin héroe sano no se persigue, y sin soldados sanos no se choca.
+    if (!tieneHeroeSano(ejercito, heridos) || sinSoldados(sinHeridos(ejercito, heridos))) continue;
 
     // **Solo se resuelve lo que se persigue.** Sin presa fijada no hay encuentro, por muy cerca que se pase.
     const presaFijada = ejercito.persiguiendo;
     if (!presaFijada) continue;
-    if (enTregua(ejercito, instante)) continue;
 
     const rivales =
       presaFijada.tipo === 'ejercito'
         ? [...porId.values()]
             .filter((o) => o.id === presaFijada.id)
-            .filter((o) => !yaChocaron.has(o.id) && !sinSoldados(o) && enemiga(ejercito.faccionId, o.faccionId))
-            .filter((o) => !enTregua(o, instante))
+            .filter((o) => !yaChocaron.has(o.id) && !sinSoldados(sinHeridos(o, heridos)) && enemiga(ejercito.faccionId, o.faccionId))
+            .filter((o) => tieneHeroeSano(o, heridos))
             .filter((o) => distancia(o.posicionActual, ejercito.posicionActual) <= LOGISTICA.radioEncuentro)
         : [];
     const presas =
@@ -1598,22 +1648,24 @@ function resolverEncuentros(
 
     const rival = masCerca(rivales);
     if (rival) {
-      const choque = encuentroEntreEjercitos(ejercito, rival, faccionesActuales, rng);
+      const choque = encuentroEntreEjercitos(sinHeridos(ejercito, heridos), sinHeridos(rival, heridos), faccionesActuales, rng);
       // Alcanzada la presa, la persecución termina: se persigue para pelear, y ya se peleo. Al que cae le
-      // toca lo mismo que en un ataque (`trasDerrota`): la TREGUA, que impide rematarlo en cadena el minuto
-      // siguiente, y la mitad del carro para el otro.
+      // toca lo mismo que en un ataque (`trasDerrota`): sus héroes heridos, que impide rematarlo en cadena el
+      // minuto siguiente, y la mitad del carro para el otro.
       const gano = choque.a.escuadrones.some((e) => e.cantidad > 0) && !choque.b.escuadrones.some((e) => e.cantidad > 0);
       const perdio = choque.b.escuadrones.some((e) => e.cantidad > 0) && !choque.a.escuadrones.some((e) => e.cantidad > 0);
-      let cazador = choque.a;
-      let alcanzado = choque.b;
+      let cazador = conApartadas(choque.a, ejercito);
+      let alcanzado = conApartadas(choque.b, rival);
       if (gano) {
-        const secuela = trasDerrota(choque.b, instante);
+        const secuela = trasDerrota(alcanzado);
         alcanzado = secuela.perdedor;
-        cazador = cargarBotin(choque.a, secuela.botin, capacidadCargaDe(choque.a, caravanasVivas));
+        cazador = cargarBotin(cazador, secuela.botin, capacidadCargaDe(cazador, caravanasVivas));
+        vencidos.push(...secuela.vencidos);
       } else if (perdio) {
-        const secuela = trasDerrota(choque.a, instante);
+        const secuela = trasDerrota(cazador);
         cazador = secuela.perdedor;
-        alcanzado = cargarBotin(choque.b, secuela.botin, capacidadCargaDe(choque.b, caravanasVivas));
+        alcanzado = cargarBotin(alcanzado, secuela.botin, capacidadCargaDe(alcanzado, caravanasVivas));
+        vencidos.push(...secuela.vencidos);
       }
       porId.set(ejercito.id, { ...cazador, persiguiendo: undefined });
       porId.set(rival.id, alcanzado);
@@ -1629,8 +1681,10 @@ function resolverEncuentros(
 
     const presa = masCerca(presas);
     if (presa) {
-      const emboscada = interceptarCaravanaConEjercito(ejercito, presa, capacidadCargaDe(ejercito, caravanasVivas), rng);
-      porId.set(ejercito.id, { ...emboscada.ejercito, persiguiendo: undefined });
+      const emboscada = interceptarCaravanaConEjercito(sinHeridos(ejercito, heridos), presa, capacidadCargaDe(ejercito, caravanasVivas), rng);
+      porId.set(ejercito.id, { ...conApartadas(emboscada.ejercito, ejercito), persiguiendo: undefined });
+      // Si la caravana se zafa, perdió el que la perseguía (Doc 5.16.4).
+      if (!emboscada.capturada) vencidos.push(...ejercito.participantes.map((p) => p.heroeId));
       caravanasVivas = emboscada.caravana
         ? caravanasVivas.map((c) => (c.id === presa.id ? emboscada.caravana! : c))
         : caravanasVivas.filter((c) => c.id !== presa.id);
@@ -1641,6 +1695,6 @@ function resolverEncuentros(
     }
   }
 
-  return { ejercitos: [...porId.values()], caravanas: caravanasVivas, facciones: faccionesActuales, eventos, escoltasPerdidas };
+  return { ejercitos: [...porId.values()], caravanas: caravanasVivas, facciones: faccionesActuales, eventos, escoltasPerdidas, vencidos };
 }
 

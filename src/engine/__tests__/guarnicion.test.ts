@@ -63,13 +63,19 @@ describe('defensaDe', () => {
   it('dentro de la plaza, el residente defiende con su loadout activo además de la guarnición', () => {
     const a = plaza();
     const heroes = [conLoadout({ tipo: 'asentamiento', asentamientoId: a.id })];
-    expect(defensaDe(a, heroes).map((e) => e.id)).toEqual(['en-guarnicion', 'en-loadout']);
+    expect(defensaDe(a, heroes, new Set()).map((e) => e.id)).toEqual(['en-guarnicion', 'en-loadout']);
   });
 
   it('fuera de ella solo queda la guarnición; el resto del campamento nunca defiende', () => {
     const a = plaza();
     const heroes = [conLoadout({ tipo: 'desconectado', punto: { x: 0, y: 0 } })];
-    expect(defensaDe(a, heroes).map((e) => e.id)).toEqual(['en-guarnicion']);
+    expect(defensaDe(a, heroes, new Set()).map((e) => e.id)).toEqual(['en-guarnicion']);
     expect(guarnicionDe(a, heroes).map((e) => e.id)).toEqual(['en-guarnicion']);
+  });
+
+  it('herido, su loadout no defiende aunque esté dentro; la guarnición sí, no tiene héroe (Doc 5.16.4)', () => {
+    const a = plaza();
+    const heroes = [conLoadout({ tipo: 'asentamiento', asentamientoId: a.id })];
+    expect(defensaDe(a, heroes, new Set([RESIDENTE])).map((e) => e.id)).toEqual(['en-guarnicion']);
   });
 });
