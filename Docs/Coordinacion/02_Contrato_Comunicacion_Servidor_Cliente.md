@@ -148,9 +148,13 @@ aplicar, valida en orden (checklist ampliado — corrección R03/R04/R05):
 9. `schemaVersion`/versión de build/balance autorizada;
 10. la credencial que firma pertenece al `intentoAsignacionId` activo de esta `Batalla`;
 11. `xpGanada` de cada héroe y escuadra es un entero ≥ 0 y no supera el tope por batalla de `BattleRules`
-    si lo hay (la XP la calcula Unity desde 2026-09-13, doc 01 §15).
+    si lo hay (la XP la calcula Unity desde 2026-09-13, doc 01 §15);
+12. `botin` de cada héroe (doc 01 §15): solo en héroes con `participo: true`; cada `itemDefinitionId` existe
+    en `versionCatalogoObjetos` del ticket; cantidades enteras > 0 y monedas enteras ≥ 0, por debajo del tope
+    de `BattleRules` si lo hay; los objetos no superan `casillasInventarioLibres` del `HeroSnapshot`; cada
+    `itemInstanceId` es nuevo en la partida.
 
-Cualquier fallo de 1-11 responde `409` con el detalle — nunca se aplica una consecuencia parcial (mismo
+Cualquier fallo de 1-12 responde `409` con el detalle — nunca se aplica una consecuencia parcial (mismo
 principio del §2: o se aplica entero, o no ocurrió nada).
 
 ### 3.4 Lectura y recuperación de la propia asignación (jugador) — corrección R02/R06
@@ -257,7 +261,7 @@ si es humano o bot.
 |---|---|---|---|
 | `crearHeroe` | `displayName`, `classDefinitionId`, `genero`, `avatar` | `{ heroeId }` | ya tiene héroe en esta partida; clase inexistente |
 | `repartirPuntos` | `atributos?` (atributo → puntos), `perks?` (ids) | — | sin puntos suficientes en esa bolsa; perk no disponible |
-| `equipar` | `slot`, `itemInstanceId` o `null` | — | objeto que no es suyo; hueco no válido |
+| `equipar` | `slot`, `itemInstanceId` de un objeto de su inventario, o `null` para desequipar | — | objeto que no es suyo; hueco no válido; el objeto no va en ese hueco; sin casilla libre para lo que sale del hueco |
 | `guardarLoadout` | `loadoutId?`, `displayName`, `squadIds[]`, `perksSeleccionados[]`, `activo?` | `{ loadoutId, liderazgoTotal }` | escuadra que no es suya; supera su Liderazgo |
 | `borrarLoadout` | `loadoutId` | — | no existe |
 | `asignarGuarnicion` | `squadId` | — | no reside aquí; escuadra fuera de su campamento; supera el cupo |
@@ -265,6 +269,8 @@ si es humano o bot.
 
 - Una `Membresia` sin héroe no puede hacer nada más en la partida hasta crearlo. Crear el héroe es un
   comando aparte de `POST .../membresia` porque necesita datos del jugador (nombre, clase, aspecto).
+- `equipar` saca el objeto del inventario y lo pone en el hueco; lo que ocupaba el hueco vuelve a una casilla
+  libre (doc 01 §12.1). Qué va en cada hueco lo dice el catálogo de objetos de Conquest.
 - Trasladar el campamento es el `cambiarResidencia` que ya existe (Doc 2.5): no hace falta un comando nuevo.
 - Salir con un loadout reutiliza `salirAlMundo` y `movilizarEjercito`, que pasan a aceptar un `loadoutId`
   además de la lista de escuadras.

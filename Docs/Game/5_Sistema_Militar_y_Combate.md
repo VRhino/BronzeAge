@@ -650,6 +650,7 @@ El detalle de datos del héroe está en `Docs/Coordinacion/01_Modelo_de_datos_co
 
 - Héroe y escuadrones progresan con **nivel y experiencia**, al estilo de Conquest.
 - **La experiencia del Héroe depende de su desempeño en la batalla**: unidades y héroes abatidos, capturas de bandera, daño hecho y recibido, si fue el mejor de la partida, en qué puesto de la tabla de su bando terminó, entre otros factores. La calcula la propia partida (Unity), que es la única que ve esos datos. **La de los escuadrones también**: la calcula la partida con toda la información de la batalla.
+- **El botín también lo decide la partida**: qué objetos y cuántas monedas gana cada héroe en una batalla lo calcula Unity, igual que la experiencia, y el héroe lo guarda en su inventario y sus monedas.
 
 ### 5.16.4 Herido
 

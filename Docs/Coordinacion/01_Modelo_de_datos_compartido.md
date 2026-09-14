@@ -462,10 +462,12 @@ RioZona
 punto, se consultan (`Mapa.terrenoEn`/`evaluarBioma`). No hace falta persistirlos punto a punto para Unity:
 se recalculan igual del lado C# con la misma seed y `worldgenVersion`, o se sirven como chunks — ver §18.
 
-## 12. `Heroe` — campos v1 (borrador de trabajo, NO lista cerrada)
+## 12. `Heroe` — campos v1
 
-**Corrección de Codex (R09):** llamar a esto "lista cerrada" antes de fijar los tipos abiertos de abajo era
-prematuro. Sigue siendo borrador hasta que se resuelvan los puntos marcados `PENDIENTE`.
+**Corrección de Codex (R09):** llamar a esto "lista cerrada" antes de fijar los tipos abiertos era
+prematuro. Esos tipos (forma de `ItemInstancia`, huecos de equipo, género, avatar y atributos) se cerraron el
+2026-09-14 transcribiendo la estructura que Conquest ya persiste (`Hero.Data.cs`, `InventoryItem`,
+`Equipment`, `AvatarParts`).
 
 No se persisten caches ni atributos calculados — todo lo derivado (poder efectivo, liderazgo total de un
 loadout) se recalcula contra el catálogo versionado vigente.
@@ -477,7 +479,10 @@ Heroe
   controlador: 'humano' | 'bot'   nuevo (§1)
   displayName           editable, nunca llave de ningún contrato — nuevo
   classDefinitionId      catálogo versionado (Conquest) — nuevo
-  genero, avatar          nuevo
+  genero: 'masculino' | 'femenino'   nuevo — Conquest `Gender { Male, Female }`
+  avatar: { cabezaId, peloId, barbaId, cejasId }   nuevo — ids de piezas del catálogo visual de Conquest
+                                  (`AvatarParts`: headId, hairId, beardId, eyebrowId). Cosmético: BronzeAge
+                                  lo guarda y lo sirve, no lo interpreta
   nivel                   nuevo
   experienciaHaciaSiguienteNivel   nuevo. **Corrección R09:** "hacia el siguiente nivel", no acumulada
                                   desde el inicio — Conquest (`Hero.Data.cs`) ya usa esta semántica; se
@@ -486,8 +491,10 @@ Heroe
   puntosDeAtributoSinGastar, puntosDePerkSinGastar   nuevo. **Corrección R09: DOS bolsas separadas**, no
                                   una — Conquest (`Hero.Data.cs:33-36`) ya las distingue; un solo
                                   `puntosSinGastar` perdería esa distinción al traer el modelo.
-  atributosBase          valores base, sin equipo aplicado — nuevo
-  perksDesbloqueados[]     nuevo
+  atributosBase: { fuerza, destreza, armadura, vitalidad }   enteros, sin equipo aplicado — nuevo
+                                  (Conquest `strength`, `dexterity`, `armor`, `vitality`)
+  perksDesbloqueados: number[]   ids numéricos del catálogo de perks de Conquest (`unlockedPerks:
+                                  List<int>`) — nuevo
                                   (Sin campo de tipos reclutables propios — decisión del usuario
                                   2026-09-13: un héroe solo recluta los `tropaId` que le permite el
                                   asentamiento. El `availableSquads` de Conquest no se persiste en
@@ -505,19 +512,40 @@ Heroe
                          `Ejercito.enTreguaHasta` (la Tregua desaparece, Doc 5.16.4).
   escuadrones: Escuadron[]   TODAS sus escuadras, estén donde estén (§13) — nuevo
   loadouts: Loadout[]     nuevo
-  inventario: ItemInstancia[]     por itemInstanceId — nuevo, forma PENDIENTE (ver abajo)
-  equipamiento: Record<slot, itemInstanceId>   nuevo, `slot` PENDIENTE de enumerar
+  inventario: ItemInstancia[]     lo que lleva y NO tiene puesto (§12.1) — nuevo
+  equipamiento: Record<SlotEquipo, ItemInstancia | null>   lo que tiene puesto (§12.1) — nuevo. Equipar SACA
+                                  el objeto del inventario y lo guarda entero en su hueco; desequipar lo
+                                  devuelve a una casilla libre (así lo hace Conquest, `EquipmentManagerService`)
   monedasHeroe: { bronce, plata, oro }   nombres explícitos, economía DISTINTA del oro/recursos de
                                         BronzeAge, sin relación con el oro recurso (decisión del usuario
                                         2026-09-13) — nuevo
 ```
 
-**`ItemInstancia` — PENDIENTE de forma (R04/R09).** Al menos: `itemInstanceId`, `itemDefinitionId`
-(catálogo versionado), cantidad o estadísticas únicas si el ítem las tiene. Slots de `equipamiento` deben
-enumerarse cerrado (arma/armadura/accesorio/... — igual que `RolTecnico`/`EdificioTipo`, un
-`Record<Slot, true>` que fuerce exhaustividad en compilación) antes de escribir el schema JSON. No se
-persisten estadísticas ya calculadas con equipo puesto — se recalculan contra la versión de catálogo
-vigente (mismo principio que el resto del documento).
+### 12.1 Inventario y equipo (forma de Conquest, `InventoryItem` / `Equipment`)
+
+```text
+ItemInstancia
+  itemDefinitionId        catálogo versionado de objetos de Conquest (`itemId`)
+  tipo: 'arma' | 'armadura' | 'consumible' | 'visual'   (`ItemType`, sin su valor `None`)
+  cantidad                 entero ≥ 1; lo no apilable lleva 1
+  itemInstanceId?          solo el equipo único (`instanceId`), único dentro de gameId; ausente = apilable
+  estadisticas?: [{ nombre, valor }]   solo en equipo único (`serializedStats`). Se generan al crear la
+                           instancia, así que son DATOS de ese objeto, no un cálculo derivado: dos objetos de
+                           la misma definición pueden salir distintos
+  precio                   fijado al crear la instancia; por unidad si es apilable (`price`)
+  casillaInventario        posición en la rejilla del inventario; -1 si no ocupa casilla (`slotIndex`)
+```
+
+- **Apilables** (consumibles y similares) se identifican por `itemDefinitionId`; **equipo único**, por
+  `itemInstanceId`.
+- **`SlotEquipo`** — cerrado, los seis huecos de `Equipment`: `'arma' | 'casco' | 'torso' | 'guantes' |
+  'pantalones' | 'botas'`. Se declara como `Record<SlotEquipo, true>` para forzar exhaustividad al compilar.
+- Qué objeto va en qué hueco (tipo, categoría de arma o armadura, compatibilidad del arma con armadura
+  ligera/media/pesada) lo decide el **catálogo de objetos de Conquest**. BronzeAge lo consulta en la versión
+  vigente para validar `equipar` y el botín (§15); no lo redefine.
+- La rejilla del inventario tiene tamaño limitado, y ese tamaño lo fija Conquest.
+- Lo único derivado, y por eso no persistido, son los atributos efectivos con el equipo puesto: se recalculan
+  contra el catálogo vigente (`HeroSnapshot.atributosEfectivos`, §15).
 
 **Campamento del héroe (decisión del usuario, 2026-09-13).** Es donde guarda las escuadras que no lleva
 consigo, y coincide con su residencia: no es un campo nuevo, se deriva de dónde reside (§3). Si el héroe no
@@ -758,7 +786,8 @@ medida que caen otros.
 **`HeroSnapshot` — forma mínima (R04, antes indefinida):** `heroeId`, `displayName`, `classDefinitionId`,
 `nivel`, `atributosEfectivos` (post-equipo, recalculados por BronzeAge contra el catálogo vigente — nunca
 copiados de un cálculo del cliente), `perksDesbloqueados[]`, `equipamiento` (igual forma que
-`Heroe.equipamiento`, §12), `versionCatalogoHeroe`.
+`Heroe.equipamiento`, §12.1: cada objeto entero, con sus estadísticas), `casillasInventarioLibres` (cuánto
+botín le cabe, ver `BattleResult`), `versionCatalogoHeroe`, `versionCatalogoObjetos`.
 
 **`SquadSnapshot` — forma mínima (R04, antes solo tenía `squadId`+cantidad+`tropaId`):** `squadId`,
 `tropaId`, `efectivosAutorizados` (renombrado desde "desplegados" — es la fuerza RESERVADA/autorizada, no
@@ -771,7 +800,8 @@ transportarla).
 
 **`BattleRules` — forma mínima (R04, antes indefinida):** `schemaVersionBalance`, duración máxima de
 partida, condiciones de victoria permitidas por este contexto, `versionCatalogoTropas`,
-`versionCatalogoHeroe`. Las capacidades asimétricas por bando ya viven en `bandos[].capacidadMinima/Maxima`
+`versionCatalogoHeroe`, `versionCatalogoObjetos` y, si los hay, los topes de XP y de monedas por batalla.
+Las capacidades asimétricas por bando ya viven en `bandos[].capacidadMinima/Maxima`
 (BA-001), no se duplican aquí.
 
 **Escuadras sin héroe (escolta y guarnición):** combaten sin su héroe, manejadas por la IA de juego, y van
@@ -793,7 +823,7 @@ BattleResult
   inicio, fin, ganador, razon
   objetivos: ObjectiveResult[]
   porEscuadra: [{ squadId, desplegados, supervivientesAlCierre, muertos, xpGanada }]
-  porHeroe: [{ heroeId, participo, sobrevivioAlCierre, xpGanada }]
+  porHeroe: [{ heroeId, participo, sobrevivioAlCierre, xpGanada, botin? }]
   versionServidor, autenticidad
 ```
 
@@ -840,12 +870,35 @@ escuadra. Cómo se aplica:
 - Los hechos que usa Unity para calcularla (bajas atribuidas, capturas, daño...) no tienen que viajar a
   BronzeAge: solo el resultado.
 
+**Botín — lo decide Unity, igual que la XP (decisión del usuario, 2026-09-14).** Unity sabe qué ganó cada
+héroe en la partida; BronzeAge lo guarda, porque el inventario y las monedas del héroe viven en él (§12).
+
+```text
+botin
+  objetos: [{ itemDefinitionId, cantidad, itemInstanceId?, estadisticas? }]   forma de ItemInstancia (§12.1)
+                                        sin tipo, precio ni casilla: los completa BronzeAge desde el catálogo
+                                        y al colocarlo en el inventario
+  monedas: { bronce, plata, oro }       suma a `monedasHeroe`
+```
+
+- Es un DELTA, como la XP: se suma a lo que el héroe ya tiene, y reintentar el mismo `resultId` no lo
+  duplica (§16).
+- Solo lo reciben héroes con `participo: true`.
+- Unity no da más objetos de los que caben (`HeroSnapshot.casillasInventarioLibres`). Un botín que no cabe
+  invalida el resultado entero, igual que cualquier otra cifra por encima de lo autorizado.
+- Cada `itemDefinitionId` existe en `versionCatalogoObjetos` del ticket, y cada `itemInstanceId` es nuevo en
+  la partida. Las estadísticas de un objeto nuevo no se validan: vienen del servidor de batalla autenticado,
+  con la misma confianza que la XP.
+- Qué se gana y cuánto es balance de Conquest. Si en la partida se gastan consumibles o se pierde equipo, v1
+  no lo recoge: está preguntado en CQ-004.
+
 **Daño de asedio — fuera de alcance v1, declarado explícito (R05):** este `BattleResult` NO lleva daño de
 edificios/murallas. Un asedio que destruye algo persistente es una decisión de dominio que todavía no se ha
 tomado (ver §17); hasta que se tome, un asedio dentro de este contrato no persiste destrucción física.
 
-El resultado contiene hechos tácticos más la XP ganada (única excepción al "solo hechos", decidida por el
-usuario el 2026-09-13). BronzeAge aplica esa XP y la curva de nivel, y sigue decidiendo por su cuenta la
+El resultado contiene hechos tácticos más la XP ganada y el botín (las dos excepciones al "solo hechos",
+decididas por el usuario el 2026-09-13 y el 2026-09-14). BronzeAge aplica esa XP con la curva de nivel y
+guarda el botín, y sigue decidiendo por su cuenta la
 herida de los héroes del bando perdedor, conquista, ocupación y liberación de reservas a partir de los hechos, contra
 los catálogos vigentes. Qué les pasa a los héroes, escuadras y guarnición del bando que pierde un
 asentamiento está en Doc 5.15. Si la batalla fue en mundo abierto, el héroe derrotado pierde además la mitad

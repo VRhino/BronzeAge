@@ -343,8 +343,9 @@ contrato de identidad, los schemas y los fixtures, y solo después renombrar `ju
 
 Sin resolver:
 
-- La estructura traída de Conquest que falta cerrar: objetos del inventario, huecos de equipo, género y
-  avatar.
+- Lo que el botín deja abierto (preguntado a Conquest en CQ-004): si en batalla se gastan consumibles o se
+  pierde equipo, quién aplica la compatibilidad arma/armadura al equipar, y si el héroe tiene fuentes de
+  objetos y monedas fuera de la batalla (tienda, recompensas).
 
 ## 32. Cabos sueltos de diseño político
 
