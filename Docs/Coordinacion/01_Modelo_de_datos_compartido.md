@@ -1077,7 +1077,8 @@ es también un asunto de PERMISO, y hay que ser preciso con la diferencia:
 - **Héroes ajenos (decisión del usuario, 2026-09-13; canon Doc 5.16.7):** de un héroe que puedes ver, ves
   nombre, clase, nivel, si está herido y hasta cuándo, los escuadrones que lleva consigo (tipo, unidades y
   nivel) y el equipo que lleva puesto. Todo lo demás del héroe es privado de su jugador. Dónde está sigue
-  sujeto a la niebla de guerra. Forma del dato en doc 02 §4.1 (`HeroePublico`).
+  sujeto a la niebla de guerra. Forma del dato en doc 02 §4.1 (`HeroePublico`). El nombre de un compañero de
+  Facción lo ven todos sus ciudadanos aunque no lo vean (decisión del usuario, 2026-09-14; `nombresDeCompaneros`).
 - **Nunca sale al cliente:** hashes/secretos de `Usuario`, credenciales de `BattleServerAssignment`,
   `runtimeEntityId` de Conquest, cualquier campo interno de cálculo (ver `Titulo.valorMetrica` como derivado,
   no autoritativo).

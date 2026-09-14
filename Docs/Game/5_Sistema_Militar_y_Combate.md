@@ -687,5 +687,6 @@ Un héroe derrotado en una partida real pierde **parte de las tropas que llevó 
 
 - **Público:** nombre, clase, nivel, si está herido (y hasta cuándo), los escuadrones que lleva consigo (tipo, unidades y nivel) y el equipo que lleva puesto.
 - **Privado, solo para su jugador:** todo lo demás — experiencia, puntos sin gastar, atributos, perks, Liderazgo, residencia, los escuadrones de su campamento, loadouts, inventario, monedas, género, avatar y si es humano o bot.
+- **Entre compañeros de Facción:** cada ciudadano conoce el **nombre** de todos los demás ciudadanos de su Facción, los vea o no (decisión del usuario, 2026-09-14). El resto de su ficha sigue la regla de lo público.
 
 "Público" significa que lo ve cualquiera que pueda ver al héroe. Dónde está un héroe sigue sujeto a la niebla de guerra (5.12.7), y su memoria y exploración son solo suyas (5.12.8).

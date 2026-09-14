@@ -348,11 +348,13 @@ admin con héroes bot— y la fase 2 —las escuadras viven en `Heroe.escuadrone
 ejército o escolta), nivel y experiencia en vez de veteranía, sin `heridoHasta`; ejércitos y caravanas guardan
 solo ids—. La fase 3 añade la progresión del héroe (nace como en Conquest: nivel 1, sin puntos, 500 de bronce y el
 loadout "Default"), `repartirPuntos` (solo atributos), `guardarLoadout`/`borrarLoadout`,
-`asignarGuarnicion`/`retirarGuarnicion`, y en la proyección `heroe` y `heroesVisibles` (`HeroePublico`). Falta:
+`asignarGuarnicion`/`retirarGuarnicion`, y en la proyección `heroe` (con el coste de Liderazgo de cada escuadra y la guarnición ocupada), `heroesVisibles`
+(`HeroePublico`) y `nombresDeCompaneros`. Falta:
 los perks y `equipar`, que esperan a los catálogos de Conquest (CQ-004; decisión del usuario 2026-09-14); de
 dónde salen los puntos de atributo (en Conquest ningún nivel los da) y la subida de nivel (CQ-001); el estado
-Herido del héroe; y en el cliente de jugador (`BronzeAgeClient`) la pantalla de crear héroe y leer
-`escuadronIds`, `heroe` y `heroesVisibles` de la proyección.
+Herido del héroe; y en el cliente de jugador (`BronzeAgeClient`), que ya lee los datos nuevos y tiene los
+comandos tipados, la interfaz: la pantalla de crear héroe definitiva y la del héroe (su
+`docs/Features_Pendientes.md` §0).
 
 Sin resolver:
 

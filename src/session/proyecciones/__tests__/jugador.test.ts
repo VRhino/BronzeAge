@@ -593,6 +593,24 @@ describe('ejercitosAvistados: lo ajeno, solo si se ve y siempre redactado', () =
     expect(heroe).not.toHaveProperty('plazasRecordadas');
     expect(proyectarParaJugador(sesion.getState(), 'sin-heroe', SIN_GEOMETRIA).heroe).toBeNull();
   });
+
+  it('cada escuadra propia lleva su coste de Liderazgo, y la guarnición lo que ocupa', () => {
+    const { sesion, fundador } = partidaConAsentamiento();
+    const estado = sesion.getState();
+    const enGuarnicion = { ...escuadron('s1', fundador), contenedor: { tipo: 'campamento' as const }, enGuarnicion: true };
+    const conGuarnicion = { ...estado, heroes: estado.heroes.map((h) => (h.id === fundador ? { ...h, escuadrones: [enGuarnicion] } : h)) };
+
+    const heroe = proyectarParaJugador(conGuarnicion, fundador, SIN_GEOMETRIA).heroe!;
+    expect(heroe.escuadrones[0]!.costeLiderazgo).toBeGreaterThan(0);
+    expect(heroe.guarnicionOcupada).toBe(heroe.escuadrones[0]!.costeLiderazgo);
+  });
+
+  it('el nombre de cada compañero de Facción viaja se le vea o no; sin Facción, ninguno (Doc 5.16.7)', () => {
+    const { sesion, fundador, vecino } = partidaConAsentamiento();
+    const nombres = proyectarParaJugador(sesion.getState(), fundador, SIN_GEOMETRIA).nombresDeCompaneros;
+    expect(Object.keys(nombres).sort()).toEqual([fundador, vecino].sort());
+    expect(proyectarParaJugador(sesion.getState(), 'forastero', SIN_GEOMETRIA).nombresDeCompaneros).toEqual({});
+  });
 });
 
 // Niebla de guerra, Paso 4 (2026-09-09): un aliado —o un señor/vasallo— ve lo que ves tu, EN VIVO. Se suma a

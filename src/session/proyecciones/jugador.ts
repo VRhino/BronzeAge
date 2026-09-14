@@ -43,7 +43,8 @@
 //
 // Lo que sigue faltando es la visión compartida por ALIANZA (Paso 4).
 import { cupoGuarnicion } from '../../engine/asentamientoQuery';
-import { liderazgoDeLoadout } from '../../engine/heroe';
+import { guarnicionOcupada, liderazgoDeLoadout } from '../../engine/heroe';
+import { costeLiderazgo } from '../../engine/liderazgo';
 import type {
   AcuerdoTrueque,
   Asentamiento,
@@ -53,6 +54,7 @@ import type {
   CargosAsentamiento,
   Edificio,
   Ejercito,
+  Escuadron,
   Faccion,
   Heroe,
   Loadout,
@@ -126,13 +128,16 @@ export interface EjercitoAvistado {
 }
 
 /**
- * El héroe propio, completo (doc 02 §4.1), con lo que se deriva al servir: el Liderazgo de cada loadout y el cupo de
- * guarnición en su residencia (0 si es huérfano). Memoria y exploración no viajan aquí: ya van fundidas en
- * `asentamientosConocidos` y en la niebla.
+ * El héroe propio, completo (doc 02 §4.1), con lo que se deriva al servir: lo que cuesta en Liderazgo cada escuadra,
+ * lo que suma cada loadout, y el cupo de guarnición en su residencia (0 si es huérfano) con lo que ya tiene ocupado.
+ * Así el cliente sabe si un loadout cabe antes de guardarlo sin copiar la tabla de costes (decisión del usuario,
+ * 2026-09-14). Memoria y exploración no viajan aquí: ya van fundidas en `asentamientosConocidos` y en la niebla.
  */
-export type HeroeProyectado = Omit<Heroe, 'plazasRecordadas' | 'exploracionPersonal' | 'loadouts'> & {
+export type HeroeProyectado = Omit<Heroe, 'plazasRecordadas' | 'exploracionPersonal' | 'escuadrones' | 'loadouts'> & {
+  escuadrones: (Escuadron & { costeLiderazgo: number })[];
   loadouts: (Loadout & { liderazgoTotal: number })[];
   cupoGuarnicion: number;
+  guarnicionOcupada: number;
 };
 
 function heroeProyectado(heroe: Heroe, asentamientos: readonly Asentamiento[]): HeroeProyectado {
@@ -140,8 +145,10 @@ function heroeProyectado(heroe: Heroe, asentamientos: readonly Asentamiento[]): 
   const residencia = asentamientos.find((a) => esResidente(a, heroe.id));
   return {
     ...resto,
+    escuadrones: heroe.escuadrones.map((e) => ({ ...e, costeLiderazgo: costeLiderazgo(e.tropaId) })),
     loadouts: heroe.loadouts.map((l) => ({ ...l, liderazgoTotal: liderazgoDeLoadout(heroe, l) })),
     cupoGuarnicion: residencia ? cupoGuarnicion(residencia) : 0,
+    guarnicionOcupada: guarnicionOcupada(heroe),
   };
 }
 
@@ -347,6 +354,10 @@ export interface ProyeccionJugador {
   /** Los héroes ajenos que se ven —en una columna propia o avistada, o dentro de la plaza que se pisa—, solo en su
    * parte pública (Doc 5.16.7). */
   heroesVisibles: HeroePublico[];
+  /** `heroeId` -> nombre de cada ciudadano de tu Facción, tú incluido, se le vea o no (decisión del usuario, 2026-09-14,
+   * Doc 5.16.7): un compañero de Facción no es un desconocido. Solo el nombre; el resto de su ficha sigue la regla de
+   * lo que se ve. Vacío sin Facción. */
+  nombresDeCompaneros: Record<string, string>;
   acuerdos: AcuerdoTrueque[];
   ordenes: OrdenMercado[];
   /** Las relaciones diplomáticas son públicas por naturaleza — quién está aliado o es vasallo de quién no es
@@ -709,6 +720,7 @@ export function proyectarParaJugador(
     ...estado.heroes.filter((h) => dentroDe && h.ubicacion.tipo === 'asentamiento' && h.ubicacion.asentamientoId === dentroDe.id).map((h) => h.id),
   ]);
   idsVisibles.delete(heroeId);
+  const faccionPropia = estado.facciones.find((f) => f.id === faccionId);
 
   return {
     gameId: estado.gameId,
@@ -739,6 +751,9 @@ export function proyectarParaJugador(
     })),
     heroe: jugador ? heroeProyectado(jugador, estado.asentamientos) : null,
     heroesVisibles: estado.heroes.filter((h) => idsVisibles.has(h.id)).map(heroePublico),
+    nombresDeCompaneros: Object.fromEntries(
+      estado.heroes.filter((h) => faccionPropia && esCiudadano(faccionPropia, h.id)).map((h) => [h.id, h.displayName])
+    ),
     acuerdos: estado.acuerdos.filter((a) => esPropio(a.asentamientoAId) || esPropio(a.asentamientoBId)),
     // De las propias, todas —incluidas las cumplidas, que son el historial de tu mercado—. De una plaza ajena
     // en cuya puerta estas, solo las que siguen EN PIE: es el escaparate, no su contabilidad.

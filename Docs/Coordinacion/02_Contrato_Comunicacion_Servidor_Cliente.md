@@ -233,9 +233,11 @@ La proyección actual (`proyectarParaJugador`, `session/proyecciones/jugador.ts`
 
 ```text
 heroe                  el héroe propio completo (doc 01 §12), con:
-  escuadrones[]        todas sus escuadras, con contenedor, enGuarnicion y reservaBatalla
-  loadouts[]           cada uno con su liderazgoTotal, DERIVADO al servir (no se persiste)
+  escuadrones[]        todas sus escuadras, con contenedor, enGuarnicion y reservaBatalla, y su
+                       costeLiderazgo, DERIVADO al servir (no se persiste)
+  loadouts[]           cada uno con su liderazgoTotal, DERIVADO
   cupoGuarnicion       DERIVADO: cupo en el asentamiento donde reside (0 si es huérfano)
+  guarnicionOcupada    DERIVADO: Liderazgo de sus escuadras en guarnición
 batallas[]             batallas en las que participa, solo estado público (el token va por §3.4)
 ```
 
@@ -255,6 +257,8 @@ HeroePublico
 ```
 
 Viajan en `heroesVisibles`, y cada ejército avistado lleva `heroeIds` para saber quién va en él (2026-09-14).
+Aparte, `nombresDeCompaneros` (`heroeId` → nombre) trae el nombre de todos los ciudadanos de la Facción del
+jugador, se les vea o no (decisión del usuario, 2026-09-14; Doc 5.16.7).
 
 Nada más del héroe ajeno viaja al cliente: ni experiencia, puntos, atributos, perks o Liderazgo, ni su
 residencia, los escuadrones de su campamento, sus loadouts, su inventario o sus monedas, ni género, avatar o
