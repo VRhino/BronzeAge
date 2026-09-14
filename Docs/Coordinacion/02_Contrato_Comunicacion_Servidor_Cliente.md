@@ -254,6 +254,8 @@ HeroePublico
   equipamiento           por hueco, la definición del objeto que lleva puesto (no su inventario)
 ```
 
+Viajan en `heroesVisibles`, y cada ejército avistado lleva `heroeIds` para saber quién va en él (2026-09-14).
+
 Nada más del héroe ajeno viaja al cliente: ni experiencia, puntos, atributos, perks o Liderazgo, ni su
 residencia, los escuadrones de su campamento, sus loadouts, su inventario o sus monedas, ni género, avatar o
 si es humano o bot.

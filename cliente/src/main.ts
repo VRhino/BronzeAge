@@ -931,15 +931,15 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
       : '<p class="legend-note">Sin coste de mantenimiento.</p>';
 
   const poderMilitar = gameStore.poderMilitarInfo(a);
-  const guarnicion = gameStore.guarnicionDe(a);
-  const escuadronesHtml = guarnicion.length
+  const campamento = gameStore.campamentoDe(a);
+  const escuadronesHtml = campamento.length
     ? `<table class="mini-table">
-        <thead><tr><th>Escuadrón</th><th>Jugador</th><th>Origen</th><th>Nivel</th><th>Cantidad</th><th>Experiencia</th><th>Moral</th></tr></thead>
+        <thead><tr><th>Escuadrón</th><th>Jugador</th><th>Origen</th><th>Nivel</th><th>Cantidad</th><th>Experiencia</th><th>Moral</th><th>Guarnición</th></tr></thead>
         <tbody>
-          ${guarnicion
+          ${campamento
             .map(
               (e) =>
-                `<tr><td>${e.nombre}</td><td>${e.heroeId}</td><td>${e.origen}</td><td>${nivelTropaTxt(e.tropaId)}</td><td>${e.cantidad}</td><td>${e.experiencia.toFixed(1)}</td><td>${e.moral.toFixed(0)}</td></tr>`
+                `<tr><td>${e.nombre}</td><td>${e.heroeId}</td><td>${e.origen}</td><td>${nivelTropaTxt(e.tropaId)}</td><td>${e.cantidad}</td><td>${e.experiencia.toFixed(1)}</td><td>${e.moral.toFixed(0)}</td><td>${e.enGuarnicion ? 'sí' : ''}</td></tr>`
             )
             .join('')}
         </tbody>
@@ -1594,7 +1594,7 @@ function renderPanelMilitar(state: GameState): void {
       const poder = gameStore.poderMilitarInfo(a);
       const escuadronesHtml =
         gameStore
-          .guarnicionDe(a)
+          .campamentoDe(a)
           .map(
             (e) =>
               `<div class="registro-squad"><div><strong>${e.nombre}</strong><small>${e.id} · ${e.heroeId}</small></div><span>${e.cantidad} soldados</span><span>${nivelTropaTxt(e.tropaId)}</span><span>Moral ${e.moral.toFixed(0)}</span></div>`

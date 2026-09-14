@@ -1407,6 +1407,8 @@ export const POLITICA_CATALOGO = [
   { id: 'comercio_abierto', cargo: 'tesorero', nombre: 'Comercio Abierto', factorComisionExterna: 0.6 },
   { id: 'aranceles', cargo: 'tesorero', nombre: 'Aranceles Proteccionistas', factorComisionExterna: 1.5 },
   { id: 'leva_forzosa', cargo: 'general', nombre: 'Leva Forzosa', factorCostoReclutamiento: 0.7 },
+  // Doc 4.4 / 5.15.3: suma al cupo de guarnición de CADA héroe residente. Aditivo, como `cupoCaravanaExtra`.
+  { id: 'levas_guarnicion', cargo: 'general', nombre: 'Levas de guarnición', cupoGuarnicionExtra: 14 },
   // Retirado (a petición del usuario, cambio de base del control de cola): las 4 políticas "Construir
   // Barracón/Galería de Tiro/Palacio/Mercado" y el mecanismo `politicaActivaDesbloqueaEdificio` que las leía
   // desaparecen por completo. Barracón/Galería de tiro/Palacio/Mercado dejan de depender de una política
@@ -1600,6 +1602,14 @@ export const LIDERAZGO = {
 export const HEROE = {
   bronceInicial: 500,
   topeAtributo: 100,
+};
+
+/** Cupo de guarnición de cada héroe residente (Doc 5.15.3), en la escala del coste de Liderazgo (5.11.1). La
+ * política "Levas de guarnición" suma lo suyo desde `POLITICA_CATALOGO` (`cupoGuarnicionExtra`). */
+export const GUARNICION = {
+  /** Barracón y Galería de tiro, cada uno por su nivel interno 1/2/3. Sin ninguno de los dos, no hay guarnición. */
+  cupoPorNivelEdificio: [7, 14, 22],
+  recintoCompleto: 14,
 };
 
 /**

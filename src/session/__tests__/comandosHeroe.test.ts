@@ -5,9 +5,12 @@ import type { Heroe } from '../../domain/types';
 import { GameSession } from '../gameSession';
 import { crearHeroe } from '../comandos/crearHeroe';
 import { crearFaccionNpc } from '../comandos/crearFaccionNpc';
-import { borrarLoadout, guardarLoadout, repartirPuntos } from '../comandos/heroe';
+import { asignarGuarnicion, borrarLoadout, guardarLoadout, repartirPuntos, retirarGuarnicion } from '../comandos/heroe';
+import { cambiarResidencia } from '../comandos/cargos';
 import { HEROE, LIDERAZGO } from '../../constants';
 import { escuadronDePrueba } from '../../engine/__tests__/fixtures';
+import { conEscuadrones } from '../../engine/tropa';
+import { conHeroe, partidaConAsentamiento } from './fixtures';
 
 const PARAMS = { displayName: 'Ana', classDefinitionId: 'Spear', genero: 'femenino' as const, avatar: { cabezaId: 'c1', peloId: 'p1', barbaId: '', cejasId: 'e1' } };
 
@@ -119,6 +122,66 @@ describe('loadouts (Doc 5.16.5)', () => {
     expect(sesion.ejecutar(borrarLoadout, { loadoutId: porDefecto }, { actor: heroeId }).ok).toBe(true);
     expect(heroe().loadouts).toEqual([]);
     expect(sesion.ejecutar(borrarLoadout, { loadoutId: porDefecto }, { actor: heroeId }).codigoError).toBe('heroe.invalido');
+  });
+});
+
+describe('guarnición (Doc 5.15.3)', () => {
+  /** El fundador reside en la plaza de la fixture, que tiene un Barracón de nivel 1: cupo 7, una escuadra de leva. */
+  function residenteConBarracon(conBarracon = true) {
+    const base = partidaConAsentamiento();
+    const payload = base.sesion.exportar();
+    const a = payload.state.asentamientos[0]!;
+    const barracon = { id: 'barracon-test', tipo: 'barracon' as const, posicion: { x: 18, y: 0 }, estado: 'activo' as const, ambito: 'asentamiento' as const };
+    const sesion = GameSession.importar({
+      ...payload,
+      state: {
+        ...payload.state,
+        asentamientos: [{ ...a, edificios: conBarracon ? [...a.edificios, barracon] : a.edificios }, ...payload.state.asentamientos.slice(1)],
+        heroes: conEscuadrones(payload.state.heroes, dosDeLeva(base.fundador)),
+      },
+    });
+    const escuadra = (id: string) => sesion.getState().heroes.find((h) => h.id === base.fundador)!.escuadrones.find((e) => e.id === id)!;
+    return { ...base, sesion, escuadra };
+  }
+
+  it('asigna dentro del cupo, rechaza pasarse, y retirar la devuelve al campamento', () => {
+    const { sesion, fundador, escuadra } = residenteConBarracon();
+    const opc = { actor: fundador };
+
+    expect(sesion.ejecutar(asignarGuarnicion, { squadId: 'esc-1' }, opc).ok).toBe(true);
+    expect(escuadra('esc-1').enGuarnicion).toBe(true);
+    expect(sesion.ejecutar(asignarGuarnicion, { squadId: 'esc-2' }, opc).codigoError, 'dos de leva no caben en 7').toBe('heroe.invalido');
+
+    expect(sesion.ejecutar(retirarGuarnicion, { squadId: 'esc-1' }, opc).ok).toBe(true);
+    expect(escuadra('esc-1').enGuarnicion).toBe(false);
+    expect(sesion.ejecutar(retirarGuarnicion, { squadId: 'esc-1' }, opc).codigoError).toBe('heroe.invalido');
+  });
+
+  it('sin Barracón ni Galería de tiro no hay cupo, y quien no reside no tiene guarnición', () => {
+    const { sesion, fundador } = residenteConBarracon(false);
+    expect(sesion.ejecutar(asignarGuarnicion, { squadId: 'esc-1' }, { actor: fundador }).codigoError).toBe('heroe.invalido');
+
+    const conForastero = conHeroe(residenteConBarracon().sesion, 'forastero');
+    const payload = conForastero.exportar();
+    const sesionForastero = GameSession.importar({
+      ...payload,
+      state: { ...payload.state, heroes: conEscuadrones(payload.state.heroes, [escuadronDePrueba('esc-f', 'forastero')]) },
+    });
+    expect(sesionForastero.ejecutar(asignarGuarnicion, { squadId: 'esc-f' }, { actor: 'forastero' }).codigoError).toBe('heroe.invalido');
+  });
+
+  it('mudarse suelta la guarnición: solo se guarnece la plaza donde se reside', () => {
+    const { sesion, fundador, escuadra } = residenteConBarracon();
+    sesion.ejecutar(asignarGuarnicion, { squadId: 'esc-1' }, { actor: fundador });
+    // Una segunda plaza de su Facción a la que mudarse: se construye a mano, el cap de fundación en nivel 1 es uno.
+    const payload = sesion.exportar();
+    const a = payload.state.asentamientos[0]!;
+    const otra = { ...a, id: 'otra-plaza', heroesFundadoresIds: [], casasCompradas: [], posicion: { x: a.posicion.x + 300, y: a.posicion.y } };
+    const conOtra = GameSession.importar({ ...payload, state: { ...payload.state, asentamientos: [...payload.state.asentamientos, otra] } });
+
+    expect(conOtra.ejecutar(cambiarResidencia, { destinoId: 'otra-plaza', heroeId: fundador }, { actor: fundador }).ok).toBe(true);
+    expect(conOtra.getState().heroes.find((h) => h.id === fundador)!.escuadrones.find((e) => e.id === 'esc-1')!.enGuarnicion).toBe(false);
+    expect(escuadra('esc-1').enGuarnicion, 'la sesión original no cambia').toBe(true);
   });
 });
 

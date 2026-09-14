@@ -134,6 +134,8 @@ function sumaFactorPolitica(asentamiento: Asentamiento, campo: string): number {
 
 /** "Ampliación de Flota" (Tesorero): cupo extra de caravanas propias, sumado al que ya da el nivel de Mercado. */
 export const cupoCaravanaExtra = (a: Asentamiento): number => sumaFactorPolitica(a, 'cupoCaravanaExtra');
+/** "Levas de guarnición" (General, Doc 5.15.3): cupo extra de guarnición por héroe residente. */
+export const cupoGuarnicionExtra = (a: Asentamiento): number => sumaFactorPolitica(a, 'cupoGuarnicionExtra');
 
 /** "Presión Fiscal" (Tesorero, bloque "economía del oro"): multiplica la recaudación de oro por población
  * (`recaudacionOro`, engine/population.ts). 1 si no hay ninguna activa. */

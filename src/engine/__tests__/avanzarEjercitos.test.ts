@@ -368,7 +368,8 @@ function frenteDeGuerra(defensores: Escuadron[], atacantes = [escuadron('a1', 'm
   const propio = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', []);
   const enemigoBase = fundarAsentamientoDeTest(mapa, propio.facciones, 'faccion-2', [propio.asentamiento]);
   const enemigo = enemigoBase.asentamiento;
-  const campamento = defensores.map((e) => ({ ...e, heroeId: RIVAL }));
+  // Defienden desde la guarnición: el resto del campamento no defiende (Doc 5.15.3).
+  const campamento = defensores.map((e) => ({ ...e, heroeId: RIVAL, enGuarnicion: true }));
 
   const ejercito: EjercitoConTropa = {
     ...ejercitoDe(propio.asentamiento, atacantes, 5000),

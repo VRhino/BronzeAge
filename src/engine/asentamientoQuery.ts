@@ -5,12 +5,13 @@ import {
   CARAVANA_COOLDOWN,
   CARAVANA_ESCOLTA,
   EDIFICIO_CATALOGO,
+  GUARNICION,
   produccionTrigoDeGranja,
   NIVEL_ASENTAMIENTO,
   POBLACION,
   type RecetaProduccion,
 } from '../constants';
-import { cupoCaravanaExtra, factorProduccionTrigo } from './politicas';
+import { cupoCaravanaExtra, cupoGuarnicionExtra, factorProduccionTrigo } from './politicas';
 import { mejorFertilidadEnZona } from './zones';
 import { integridadDeRecinto } from './trazado';
 
@@ -92,6 +93,20 @@ export function cupoEscolta(asentamiento: Asentamiento): number {
   const mercado = edificiosPorTipoYEstado(asentamiento, 'mercado')[0];
   if (!mercado) return 0;
   return CARAVANA_ESCOLTA.cupoPorNivelMercado[nivelInternoActual(mercado) - 1] ?? 0;
+}
+
+/**
+ * Cupo de guarnición que da esta plaza a CADA héroe residente (Doc 5.15.3), en puntos de Liderazgo: Barracón y
+ * Galería de tiro según su nivel interno, más un recinto de muralla completo y la política "Levas de
+ * guarnición". Sin Barracón ni Galería de tiro no hay guarnición. Un recinto que se está mejorando vuelve a
+ * integridad 0, así que mientras tanto no suma.
+ */
+export function cupoGuarnicion(asentamiento: Asentamiento): number {
+  const edificios = (['barracon', 'galeriaDeTiro'] as const).flatMap((tipo) => edificiosPorTipoYEstado(asentamiento, tipo).slice(0, 1));
+  if (edificios.length === 0) return 0;
+  const porEdificios = edificios.reduce((suma, e) => suma + (GUARNICION.cupoPorNivelEdificio[nivelInternoActual(e) - 1] ?? 0), 0);
+  const muralla = (asentamiento.recintos ?? []).some((r) => integridadDeRecinto(r) >= 1) ? GUARNICION.recintoCompleto : 0;
+  return porEdificios + muralla + cupoGuarnicionExtra(asentamiento);
 }
 
 /**

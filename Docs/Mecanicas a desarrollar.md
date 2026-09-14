@@ -32,8 +32,8 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 27 | AMBIENTACIÓN | Identidad visual y de audio | ✘ nada |
 | 28 | MILITAR | Declaración formal de guerra | ✘ nada |
 | 29 | ONBOARDING | Curva de progresión inicial gradual | ✘ nada |
-| 30 | MILITAR | Batallas con héroes: guarnición, campamento y héroes bot | ◐ campamento y conquista del canon; el asedio aún con números |
-| 31 | HÉROE | Modelo de Héroe: uno por jugador y mundo, dueño de los escuadrones | ◐ fases 1-2 en la rama `heroe-dominio`; falta la 3 |
+| 30 | MILITAR | Batallas con héroes: guarnición, campamento y héroes bot | ◐ campamento, guarnición y conquista del canon; el asedio aún con números |
+| 31 | HÉROE | Modelo de Héroe: uno por jugador y mundo, dueño de los escuadrones | ◐ fases 1-3 en la rama `heroe-dominio`; faltan perks, equipo y herido |
 | 32 | POLÍTICA | Cabos sueltos de diseño político | ✘ sin decidir |
 | 33 | COMERCIO | Cabos sueltos de diseño comercial | ✘ sin decidir |
 | 34 | SUMINISTRO | La economía no llena el carro de un ejército | ✘ sin decidir |
@@ -320,11 +320,13 @@ esto es el ritmo de la primera hora una vez dentro.
 solo si todos los que van dentro residen ahí; conquistar deja la plaza sin guarnición, el ejército acampado a
 la puerta y a los residentes vencidos con su campamento a 0 en la plaza más cercana de su Facción (huérfanos si
 no queda ninguna); cambiar de residencia traslada el campamento; la escolta de una caravana perdida vuelve a 0
-al campamento; y el Liderazgo suma la escolta a lo que el héroe lleva en columna (Doc 3.13.4).
+al campamento; y el Liderazgo suma la escolta a lo que el héroe lleva en columna (Doc 3.13.4). Desde la fase 3,
+también la guarnición: cada residente asigna escuadras a la de su residencia dentro de su cupo, y un asedio lo
+defienden la guarnición y el loadout activo de los residentes que están dentro; el resto del campamento no
+defiende. Los héroes bot no usan la guarnición, defienden con su loadout.
 
-Sigue distinto del canon: un asedio lo defiende el campamento entero y se resuelve con números
-(`iniciarAsedio`, `engine/combate.ts`), porque la guarnición (`enGuarnicion`) no se puede elegir hasta la fase
-3; la Tregua por columna en vez del estado Herido del héroe; el campamento de bandidos se ataca con un comando
+Sigue distinto del canon: el asedio se resuelve con números (`iniciarAsedio`, `engine/combate.ts`), no como
+batalla de Unity; la Tregua por columna en vez del estado Herido del héroe; el campamento de bandidos se ataca con un comando
 desde un asentamiento (`atacarCampamentoBandidos`) en vez de con una columna que llegue a él (Doc 1.9); quien
 está DENTRO de una plaza cuando cae conserva esa ubicación, cuando el canon lo deja fuera; y el desalojo no mira
 el cupo de viviendas de la plaza que recibe a los vencidos (`desalojarResidentes`). Depende del ciclo de
@@ -344,9 +346,13 @@ Hecho: el contrato (`src/contratos/v1/`) y, en la rama `heroe-dominio` (2026-09-
 dominio con su identidad, `heroeId` como dueño en todo el motor, `crearHeroe`, y Facciones NPC creadas por el
 admin con héroes bot— y la fase 2 —las escuadras viven en `Heroe.escuadrones` con su `contenedor` (campamento,
 ejército o escolta), nivel y experiencia en vez de veteranía, sin `heridoHasta`; ejércitos y caravanas guardan
-solo ids—. Falta: los comandos de puntos, equipo, loadouts y guarnición (`enGuarnicion` existe pero no se puede
-activar), el estado Herido del héroe, la proyección del héroe y de `HeroePublico`, y en el cliente de jugador
-(`BronzeAgeClient`) la pantalla de crear héroe y leer `escuadronIds` en los ejércitos de la proyección.
+solo ids—. La fase 3 añade la progresión del héroe (nace como en Conquest: nivel 1, sin puntos, 500 de bronce y el
+loadout "Default"), `repartirPuntos` (solo atributos), `guardarLoadout`/`borrarLoadout`,
+`asignarGuarnicion`/`retirarGuarnicion`, y en la proyección `heroe` y `heroesVisibles` (`HeroePublico`). Falta:
+los perks y `equipar`, que esperan a los catálogos de Conquest (CQ-004; decisión del usuario 2026-09-14); de
+dónde salen los puntos de atributo (en Conquest ningún nivel los da) y la subida de nivel (CQ-001); el estado
+Herido del héroe; y en el cliente de jugador (`BronzeAgeClient`) la pantalla de crear héroe y leer
+`escuadronIds`, `heroe` y `heroesVisibles` de la proyección.
 
 Sin resolver:
 

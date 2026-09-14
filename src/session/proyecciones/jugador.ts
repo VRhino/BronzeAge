@@ -42,6 +42,8 @@
 // foto. Cuando las dos coinciden gana la de en vivo — estar mirándolo es mejor información que recordarlo.
 //
 // Lo que sigue faltando es la visión compartida por ALIANZA (Paso 4).
+import { cupoGuarnicion } from '../../engine/asentamientoQuery';
+import { liderazgoDeLoadout } from '../../engine/heroe';
 import type {
   AcuerdoTrueque,
   Asentamiento,
@@ -52,11 +54,14 @@ import type {
   Edificio,
   Ejercito,
   Faccion,
+  Heroe,
+  Loadout,
   OrdenMercado,
   Point,
   InteriorRecordado,
   PoliticaActiva,
   RelacionPolitica,
+  SlotEquipo,
   Titulo,
   ZonaFaccion,
   ZonaInfluencia,
@@ -67,7 +72,7 @@ import type { EstadoMapa } from '../../world/mapa';
 import type { TrazadoAsentamiento } from '../../engine/trazado';
 import type { Instante } from '../../domain/tiempo';
 import { esCiudadano } from '../../engine/faccion';
-import { compartenVision } from '../../engine/pertenencia';
+import { compartenVision, esResidente } from '../../engine/pertenencia';
 import { ubicacionDeducida } from '../../engine/ubicacion';
 // El mismo recuento que usa el motor para los carros (Doc 5.13): un participante es un carro Y un rombo.
 import { alcanceDeVista, enLaPuertaDe, participantesDe } from '../../engine/ejercitos';
@@ -116,6 +121,57 @@ export interface EjercitoAvistado {
   posicionActual: Point;
   /** Jugadores distintos que marchan en él. Es el único dato de "tamaño" que viaja. */
   participantes: number;
+  /** Quiénes van: un héroe que se ve es público (Doc 5.16.7). Su ficha viaja en `heroesVisibles`. */
+  heroeIds: string[];
+}
+
+/**
+ * El héroe propio, completo (doc 02 §4.1), con lo que se deriva al servir: el Liderazgo de cada loadout y el cupo de
+ * guarnición en su residencia (0 si es huérfano). Memoria y exploración no viajan aquí: ya van fundidas en
+ * `asentamientosConocidos` y en la niebla.
+ */
+export type HeroeProyectado = Omit<Heroe, 'plazasRecordadas' | 'exploracionPersonal' | 'loadouts'> & {
+  loadouts: (Loadout & { liderazgoTotal: number })[];
+  cupoGuarnicion: number;
+};
+
+function heroeProyectado(heroe: Heroe, asentamientos: readonly Asentamiento[]): HeroeProyectado {
+  const { plazasRecordadas, exploracionPersonal, ...resto } = heroe;
+  const residencia = asentamientos.find((a) => esResidente(a, heroe.id));
+  return {
+    ...resto,
+    loadouts: heroe.loadouts.map((l) => ({ ...l, liderazgoTotal: liderazgoDeLoadout(heroe, l) })),
+    cupoGuarnicion: residencia ? cupoGuarnicion(residencia) : 0,
+  };
+}
+
+/**
+ * Lo que un jugador ve de un héroe ajeno (Doc 5.16.7): nombre, clase, nivel, las escuadras que lleva consigo y el
+ * equipo que tiene puesto. Nada de su campamento, sus puntos, su Liderazgo ni si es humano o bot. `ponytail:` sin
+ * `heridoHasta` hasta que exista el estado Herido del héroe (Mecánicas §30).
+ */
+export interface HeroePublico {
+  heroeId: string;
+  displayName: string;
+  classDefinitionId: string;
+  nivel: number;
+  escuadrasQueLleva: { tropaId: string; cantidad: number; nivel: number }[];
+  equipamiento: Record<SlotEquipo, string | null>;
+}
+
+function heroePublico(heroe: Heroe): HeroePublico {
+  return {
+    heroeId: heroe.id,
+    displayName: heroe.displayName,
+    classDefinitionId: heroe.classDefinitionId,
+    nivel: heroe.nivel,
+    escuadrasQueLleva: heroe.escuadrones
+      .filter((e) => e.contenedor.tipo === 'ejercito')
+      .map((e) => ({ tropaId: e.tropaId, cantidad: e.cantidad, nivel: e.nivel })),
+    equipamiento: Object.fromEntries(
+      Object.entries(heroe.equipamiento).map(([hueco, objeto]) => [hueco, objeto?.itemDefinitionId ?? null])
+    ) as Record<SlotEquipo, string | null>,
+  };
 }
 
 /**
@@ -285,6 +341,12 @@ export interface ProyeccionJugador {
    * Van en un array aparte y no mezclados con `ejercitos` a propósito: la diferencia entre "lo veo entero"
    * y "solo lo avisto" es de tipo, no de un campo opcional que el cliente pueda olvidarse de mirar. */
   ejercitosAvistados: EjercitoAvistado[];
+  /** El héroe propio, completo (doc 02 §4.1). `null` si el id no tiene héroe: la ruta HTTP, sin héroe, responde
+   * `sinHeroe` en vez de proyectar. */
+  heroe: HeroeProyectado | null;
+  /** Los héroes ajenos que se ven —en una columna propia o avistada, o dentro de la plaza que se pisa—, solo en su
+   * parte pública (Doc 5.16.7). */
+  heroesVisibles: HeroePublico[];
   acuerdos: AcuerdoTrueque[];
   ordenes: OrdenMercado[];
   /** Las relaciones diplomáticas son públicas por naturaleza — quién está aliado o es vasallo de quién no es
@@ -639,6 +701,15 @@ export function proyectarParaJugador(
   // máscara que tapa el terreno decide qué calzadas existen para este jugador.
   const exploracion = nieblaDe(exploradoDelJugador, estado, asentamientosPropios, ejercitosPropios, asentamientosAliados, ejercitosAliados);
 
+  const ejercitosAvistados = estado.ejercitos.filter((e) => !propios.has(e.id) && seVeAhora(e.posicionActual, ojosAsent, ojosEjercito, tropa));
+  // Los héroes ajenos que se ven (doc 02 §4.1): los que van en una columna propia o avistada, y los que están dentro
+  // de la plaza que se pisa. De ellos solo viaja su parte pública.
+  const idsVisibles = new Set([
+    ...[...ejercitosPropios, ...ejercitosAvistados].flatMap((e) => e.participantes.map((p) => p.heroeId)),
+    ...estado.heroes.filter((h) => dentroDe && h.ubicacion.tipo === 'asentamiento' && h.ubicacion.asentamientoId === dentroDe.id).map((h) => h.id),
+  ]);
+  idsVisibles.delete(heroeId);
+
   return {
     gameId: estado.gameId,
     instante: instanteDeTick(estado.tick),
@@ -659,9 +730,15 @@ export function proyectarParaJugador(
     caravanas: estado.caravanas.filter((c) => esPropio(c.origenAsentamientoId) || (c.destinoAsentamientoId !== undefined && esPropio(c.destinoAsentamientoId))),
     caravanasAvistadas: caravanasAvistadas(estado, esPropio, ojosAsent, ojosEjercito, tropa),
     ejercitos: ejercitosPropios,
-    ejercitosAvistados: estado.ejercitos
-      .filter((e) => !propios.has(e.id) && seVeAhora(e.posicionActual, ojosAsent, ojosEjercito, tropa))
-      .map((e) => ({ id: e.id, faccionId: e.faccionId, posicionActual: e.posicionActual, participantes: participantesDe(e) })),
+    ejercitosAvistados: ejercitosAvistados.map((e) => ({
+      id: e.id,
+      faccionId: e.faccionId,
+      posicionActual: e.posicionActual,
+      participantes: participantesDe(e),
+      heroeIds: e.participantes.map((p) => p.heroeId),
+    })),
+    heroe: jugador ? heroeProyectado(jugador, estado.asentamientos) : null,
+    heroesVisibles: estado.heroes.filter((h) => idsVisibles.has(h.id)).map(heroePublico),
     acuerdos: estado.acuerdos.filter((a) => esPropio(a.asentamientoAId) || esPropio(a.asentamientoBId)),
     // De las propias, todas —incluidas las cumplidas, que son el historial de tu mercado—. De una plaza ajena
     // en cuya puerta estas, solo las que siguen EN PIE: es el escaparate, no su contabilidad.

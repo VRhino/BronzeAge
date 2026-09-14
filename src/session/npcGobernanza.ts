@@ -32,8 +32,9 @@ import type { ContextoSimulacion, EstadoSimulacion } from '../engine/simulation'
 import { avanzarAutoComercioSimulado } from '../engine/simulacionAutoComercio';
 import { reclutarTropa, ReclutamientoInvalidoError } from '../engine/tropas';
 import { campamentoDe, conEscuadrones, indiceTropa, sinTropa, type IndiceTropa } from '../engine/tropa';
-import { progresionInicial } from '../engine/heroe';
-import { atacarCampamentoBandidos, CombateInvalidoError } from '../engine/combate';
+import { guardarLoadout, progresionInicial } from '../engine/heroe';
+import { puedeLlevar } from '../engine/liderazgo';
+import { atacarCampamentoBandidos, CombateInvalidoError, poderEscuadron } from '../engine/combate';
 import { lanzarCaravanaFundacion, costoCaravanaFundacion, ExpansionInvalidaError } from '../engine/expansion';
 import {
   nivelActualDe,
@@ -660,6 +661,30 @@ function reclutarParaTodos(
 }
 
 /**
+ * La defensa de una plaza NPC (Doc 5.12.4): cada héroe bot residente deja como loadout activo las escuadras de su
+ * campamento que le caben en el Liderazgo, las más fuertes primero, y defiende con ellas mientras está en casa.
+ * Los bots no usan la guarnición (decisión del usuario 2026-09-14): con una escuadra por bot, llenarla les dejaba
+ * sin nada con lo que salir de campaña. El que sale se lleva sus escuadras y deja de defender.
+ */
+function prepararDefensaNpc(asentamiento: Asentamiento, heroes: Heroe[]): Heroe[] {
+  const residentes = new Set(residentesDe(asentamiento));
+  return heroes.map((heroe) => {
+    if (heroe.controlador !== 'bot' || !residentes.has(heroe.id)) return heroe;
+    const porFuerza = heroe.escuadrones
+      .filter((e) => e.contenedor.tipo === 'campamento' && e.cantidad > 0 && !e.enGuarnicion)
+      .sort((a, b) => poderEscuadron(b) - poderEscuadron(a) || (a.id < b.id ? -1 : 1));
+    const elegidas: Escuadron[] = [];
+    for (const e of porFuerza) if (puedeLlevar(heroe, [...elegidas, e])) elegidas.push(e);
+    const activo = heroe.loadouts.find((l) => l.activo);
+    return guardarLoadout(
+      heroe,
+      { id: activo?.id, displayName: activo?.displayName ?? 'Default', squadIds: elegidas.map((e) => e.id), perksSeleccionados: [], activo: true },
+      () => `${heroe.id}-loadout-default`
+    );
+  });
+}
+
+/**
  * Ataque a campamentos de bandidos (punto 7b): si el asentamiento asignado a un campamento sigue vivo, tiene
  * AL MENOS UN escuadrón (de cualquier residente), su nutrición no está por debajo de
  * `UMBRAL_NUTRICION_ANTES_DE_ATACAR` y sus escuadrones no están ya heridos por debajo de
@@ -707,7 +732,8 @@ function atacarCampamentosCercanos(
 
   for (const campamento of campamentos) {
     const asentamiento = asentamientosActuales.find((a) => a.id === campamento.asentamientoId);
-    const tropa = asentamiento ? campamentoDe(asentamiento, heroesActuales) : [];
+    // La guarnición la maneja la IA de la plaza: no sale a por bandidos (Doc 5.15.3).
+    const tropa = asentamiento ? campamentoDe(asentamiento, heroesActuales).filter((e) => !e.enGuarnicion) : [];
     if (
       !asentamiento ||
       !esNpc(asentamiento.faccionId) ||
@@ -1030,7 +1056,7 @@ function lanzarCampanas(
     if (nivelActualDe(origen) < NIVEL_MINIMO_PARA_CAMPANA) continue;
 
     const campamento = campamentoDe(origen, heroesActuales);
-    const vivos = campamento.filter((e) => e.cantidad > 0);
+    const vivos = campamento.filter((e) => e.cantidad > 0 && !e.enGuarnicion);
     if (vivos.length < ESCUADRONES_MINIMOS_PARA_CAMPANA) continue;
 
     // Se lleva como mucho la mitad, y todos del MISMO jugador: el Liderazgo se valida por jugador (Doc 5.11),
@@ -1511,6 +1537,7 @@ export function avanzarNpcGobernanza(
     asentamientos[i] = resultado.asentamiento;
     heroes = resultado.heroes;
   }
+  for (const a of asentamientos) if (esNpc(a.faccionId)) heroes = prepararDefensaNpc(a, heroes);
 
   const trasBandidos =
     config.atacarCampamentos === false

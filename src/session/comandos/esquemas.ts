@@ -103,6 +103,8 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
     ['displayName', 'squadIds', 'perksSeleccionados']
   ),
   borrarLoadout: objeto({ loadoutId: IDENTIFICADOR }, ['loadoutId']),
+  asignarGuarnicion: objeto({ squadId: IDENTIFICADOR }, ['squadId']),
+  retirarGuarnicion: objeto({ squadId: IDENTIFICADOR }, ['squadId']),
   // Admin. Sin `posicion`, la gobernanza NPC busca el sitio (`buscarPosicionFundacionInicialPorDefecto`).
   crearFaccionNpc: objeto({ nombre: { type: 'string' }, posicion: PUNTO }, ['nombre']),
   unirseAFaccion: objeto({ faccionId: IDENTIFICADOR }, ['faccionId']),

@@ -273,6 +273,9 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
   repartirPuntos: { rolesPermitidos: ['jugador'] },
   guardarLoadout: { rolesPermitidos: ['jugador'] },
   borrarLoadout: { rolesPermitidos: ['jugador'] },
+  // Que resida donde guarnece y el cupo los comprueba el motor, que sabe dónde está su campamento.
+  asignarGuarnicion: { rolesPermitidos: ['jugador'] },
+  retirarGuarnicion: { rolesPermitidos: ['jugador'] },
   // Las Facciones NPC las crea el admin, ya asentadas; ninguna Facción de jugador pasa a la IA.
   crearFaccionNpc: { rolesPermitidos: ['administrador_partida', 'administrador_global'] },
   asignarRey: {

@@ -15,7 +15,11 @@ import {
   desalojarResidentes,
   iniciarAsedio as iniciarAsedioEngine,
 } from '../../engine/combate';
-import { conEscuadrones } from '../../engine/tropa';
+import { conEscuadrones, defensaDe } from '../../engine/tropa';
+import type { Escuadron } from '../../domain/types';
+
+/** Lo que un héroe puede sacar de su campamento: la guarnición la maneja la IA de la plaza (Doc 5.15.3). */
+const fueraDeGuarnicion = (tropa: Escuadron[]): Escuadron[] => tropa.filter((e) => !e.enGuarnicion);
 import { CAMPAMENTOS_BANDIDOS } from '../../constants';
 import { minutos, sumar } from '../../domain/tiempo';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
@@ -90,9 +94,9 @@ export const iniciarAsedio = comando<ParamsIniciarAsedio, { conquistado: boolean
 
   const resultado = iniciarAsedioEngine(
     atacante,
-    campamentoEn(estado, atacante),
+    fueraDeGuarnicion(campamentoEn(estado, atacante)),
     defensor,
-    campamentoEn(estado, defensor),
+    defensaDe(defensor, estado.heroes),
     params.escuadronIds,
     estado.facciones,
     estado.relaciones,
@@ -129,7 +133,7 @@ export const atacarCampamentoBandidos = comando<ParamsAtacarCampamentoBandidos, 
   const atacante = exigirAsentamiento(estado, params.atacanteId);
   const campamento = exigirCampamento(estado, params.campamentoId);
 
-  const resultado = atacarCampamentoBandidosEngine(atacante, campamentoEn(estado, atacante), params.escuadronIds, campamento, estado.facciones, ctx.rng);
+  const resultado = atacarCampamentoBandidosEngine(atacante, fueraDeGuarnicion(campamentoEn(estado, atacante)), params.escuadronIds, campamento, estado.facciones, ctx.rng);
   const siguiente: GameSessionState = {
     ...conAsentamiento(estado, resultado.atacante),
     facciones: resultado.facciones,

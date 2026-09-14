@@ -305,7 +305,7 @@ La cifra es lo que hace que estacionar signifique algo: a una décima parte, un 
 
 ### 5.12.4 Quién defiende un asentamiento
 
-Un asentamiento lo defienden **los héroes que están dentro cuando lo atacan**, cada uno con los escuadrones que le permite su Liderazgo, y **su guarnición**, que maneja la IA del juego (5.15). Los escuadrones que se quedaron en el campamento sin estar en guarnición no defienden. **Un asentamiento sin defensores presentes ni guarnición se asedia igual, sin defensores.** Esta es la tensión central de la mecánica: atacar cuesta dejar la casa descubierta, salvo lo que se deje en guarnición.
+Un asentamiento lo defienden **los héroes que están dentro cuando lo atacan**, cada uno con las escuadras de su loadout activo (5.16.5) que tenga en el campamento, que ya caben en su Liderazgo, y **su guarnición**, que maneja la IA del juego (5.15). Los escuadrones que se quedaron en el campamento sin estar en guarnición no defienden. **Un asentamiento sin defensores presentes ni guarnición se asedia igual, sin defensores.** Esta es la tensión central de la mecánica: atacar cuesta dejar la casa descubierta, salvo lo que se deje en guarnición.
 
 **Llegar no es asediar.** Un ejército que llega **acampa delante**, y asediar es una acción que se elige en la puerta (5.12.3).
 
@@ -618,6 +618,7 @@ El campamento es donde un héroe guarda las escuadras que no lleva consigo, y es
   Sin Barracón ni Galería de tiro no hay guarnición. Con todo al máximo son 72 —unas dos escuadras pesadas y una de leva—, por debajo de los 100 de Liderazgo que el héroe se lleva consigo. Como el cupo es por héroe, cuantos más residentes tenga una plaza, más guarnición puede tener.
 - Una escuadra en guarnición se **entrega a la IA**: la maneja la IA y el héroe no puede usarla mientras siga asignada, aunque esté presente en la batalla.
 - En un asedio entra directamente, sin ocupar plaza de héroe.
+- Si el cupo baja por debajo de lo que ya tiene asignado (expira la política, se daña un edificio), lo asignado se queda; solo se impide asignar más.
 - Si no hay héroes defensores presentes, la guarnición es la única defensa: la batalla se juega igual, con ella, o sin defensores si no hay guarnición.
 
 ### 5.15.4 La escolta
@@ -635,7 +636,7 @@ Si los atacantes conquistan un asentamiento:
 
 ### 5.15.6 Facciones NPC
 
-Las Facciones NPC las crea el admin, ya asentadas, y así siguen hasta que se destruyen: una Facción de jugador nunca pasa a la IA. Tienen **héroes bot**, manejados por la IA del juego: nacen como los fundadores de su primer asentamiento (5, el primero como Rey) y viven en el servidor como un héroe más. Un humano que ataca a una Facción NPC combate contra sus héroes bot y su guarnición. NPC contra NPC se resuelve con números, sin partida en Unity.
+Las Facciones NPC las crea el admin, ya asentadas, y así siguen hasta que se destruyen: una Facción de jugador nunca pasa a la IA. Tienen **héroes bot**, manejados por la IA del juego: nacen como los fundadores de su primer asentamiento (5, el primero como Rey) y viven en el servidor como un héroe más. Un humano que ataca a una Facción NPC combate contra sus héroes bot y su guarnición. NPC contra NPC se resuelve con números, sin partida en Unity. Los héroes bot no usan la guarnición: defienden su plaza con su loadout activo mientras están en ella.
 
 **Un héroe que ataca un campamento de bandidos también combate en Unity**: su columna contra las tropas del campamento, manejadas por la IA del juego (Doc 1.9).
 

@@ -20,6 +20,7 @@ import {
   conEscolta,
   conEscuadrones,
   conTropa,
+  defensaDe,
   indiceTropa,
   sinEscolta,
   sinTropa,
@@ -1429,7 +1430,7 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
       // enemiga es el Paso 10 (encuentros por proximidad).
       const objetivo = ejercito.objetivo.tipo === 'asentamiento' ? porId.get(ejercito.objetivo.id) : undefined;
       if (objetivo && objetivo.faccionId !== ejercito.faccionId) {
-        const asedio = asediarConEjercito(ejercito, objetivo, campamentoDe(objetivo, heroes), faccionesActuales, [...relaciones], instante, rng);
+        const asedio = asediarConEjercito(ejercito, objetivo, defensaDe(objetivo, heroes), faccionesActuales, [...relaciones], instante, rng);
         ejercito = asedio.ejercito;
         porId.set(objetivo.id, asedio.defensor);
         heroes = conEscuadrones(heroes, asedio.tropaDefensora);

@@ -1,8 +1,9 @@
 // El Héroe como personaje (Doc 5.16, doc 01 §12): con qué nace y cómo reparte sus puntos, con las reglas que
 // ya tiene Conquest. Sus escuadras viven aparte (`engine/tropa.ts`).
-import type { AtributosHeroe, Heroe, Loadout } from '../domain/types';
+import type { Asentamiento, AtributosHeroe, Heroe, Loadout } from '../domain/types';
 import { HEROE } from '../constants';
-import { liderazgoComprometido, puedeLlevar } from './liderazgo';
+import { costeLiderazgo, liderazgoComprometido, puedeLlevar } from './liderazgo';
+import { cupoGuarnicion } from './asentamientoQuery';
 
 export class HeroeInvalidoError extends Error {}
 
@@ -103,6 +104,38 @@ export function guardarLoadout(heroe: Heroe, datos: DatosLoadout, nuevoId: () =>
     ? heroe.loadouts.map((l) => (l.id === loadout.id ? loadout : otros(l)))
     : [...heroe.loadouts.map(otros), loadout];
   return { ...heroe, loadouts };
+}
+
+/** Cupo de guarnición que ya ocupa un héroe (Doc 5.15.3), en la escala del coste de Liderazgo. */
+export function guarnicionOcupada(heroe: Heroe): number {
+  return liderazgoComprometido(heroe.escuadrones.filter((e) => e.enGuarnicion));
+}
+
+const conGuarnicion = (heroe: Heroe, squadId: string, enGuarnicion: boolean): Heroe => ({
+  ...heroe,
+  escuadrones: heroe.escuadrones.map((e) => (e.id === squadId ? { ...e, enGuarnicion } : e)),
+});
+
+/**
+ * Entrega una escuadra de su campamento a la guarnición de la plaza donde reside (Doc 5.15.3), dentro del cupo que
+ * esa plaza le da. Si el cupo baja después, lo asignado se queda: solo impide asignar más (decisión del usuario
+ * 2026-09-14).
+ */
+export function asignarGuarnicion(heroe: Heroe, residencia: Asentamiento | undefined, squadId: string): Heroe {
+  if (!residencia) throw new HeroeInvalidoError('No resides en ningún asentamiento: no tienes guarnición.');
+  const escuadra = heroe.escuadrones.find((e) => e.id === squadId);
+  if (!escuadra) throw new HeroeInvalidoError(`La escuadra ${squadId} no es tuya.`);
+  if (escuadra.contenedor.tipo !== 'campamento') throw new HeroeInvalidoError('Esa escuadra no está en tu campamento.');
+  if (escuadra.enGuarnicion) throw new HeroeInvalidoError('Esa escuadra ya está en la guarnición.');
+  const cupo = cupoGuarnicion(residencia);
+  const ocupado = guarnicionOcupada(heroe) + costeLiderazgo(escuadra.tropaId);
+  if (ocupado > cupo) throw new HeroeInvalidoError(`Supera tu cupo de guarnición en ${residencia.id}: ${ocupado} de ${cupo}.`);
+  return conGuarnicion(heroe, squadId, true);
+}
+
+export function retirarGuarnicion(heroe: Heroe, squadId: string): Heroe {
+  if (!heroe.escuadrones.find((e) => e.id === squadId)?.enGuarnicion) throw new HeroeInvalidoError('Esa escuadra no está en la guarnición.');
+  return conGuarnicion(heroe, squadId, false);
 }
 
 export function borrarLoadout(heroe: Heroe, loadoutId: string): Heroe {

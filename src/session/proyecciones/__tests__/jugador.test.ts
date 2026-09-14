@@ -557,13 +557,41 @@ describe('ejercitosAvistados: lo ajeno, solo si se ve y siempre redactado', () =
     ]);
     const estado = conColumnas(sesion.getState(), propio, rival);
 
-    const avistado = proyectarParaJugador(estado, fundador, SIN_GEOMETRIA).ejercitosAvistados[0]!;
-    expect(avistado).toEqual({
+    const proyeccion = proyectarParaJugador(estado, fundador, SIN_GEOMETRIA);
+    expect(proyeccion.ejercitosAvistados[0]).toEqual({
       id: 'e-rival',
       faccionId: 'faccion-rival',
       posicionActual: { x: 1050, y: 1000 },
       participantes: 2,
+      heroeIds: ['rival-a', 'rival-b'],
     });
+    // De los héroes que van dentro, solo su parte pública (Doc 5.16.7): lo que llevan consigo y su equipo puesto.
+    expect(proyeccion.heroesVisibles.find((h) => h.heroeId === 'rival-a')).toEqual({
+      heroeId: 'rival-a',
+      displayName: 'rival-a',
+      classDefinitionId: 'Spear',
+      nivel: 1,
+      escuadrasQueLleva: [
+        { tropaId: 'milicia_lanceros', cantidad: 10, nivel: 1 },
+        { tropaId: 'milicia_lanceros', cantidad: 10, nivel: 1 },
+      ],
+      equipamiento: { arma: null, casco: null, torso: null, guantes: null, pantalones: null, botas: null },
+    });
+    // Los dos que van en la columna avistada, y el vecino, que está dentro de la misma plaza que el fundador.
+    expect(proyeccion.heroesVisibles.map((h) => h.heroeId).sort()).toEqual(['jugador-vecino', 'rival-a', 'rival-b']);
+  });
+
+  it('el héroe propio viaja completo, con el Liderazgo de cada loadout y su cupo de guarnición derivados', () => {
+    const { sesion, fundador } = partidaConAsentamiento();
+    const heroe = proyectarParaJugador(sesion.getState(), fundador, SIN_GEOMETRIA).heroe!;
+
+    expect(heroe.id).toBe(fundador);
+    expect(heroe.loadouts).toEqual([
+      { id: `${fundador}-loadout-default`, displayName: 'Default', squadIds: [], perksSeleccionados: [], activo: true, liderazgoTotal: 0 },
+    ]);
+    expect(heroe.cupoGuarnicion, 'la plaza de la fixture no tiene Barracón ni Galería de tiro').toBe(0);
+    expect(heroe).not.toHaveProperty('plazasRecordadas');
+    expect(proyectarParaJugador(sesion.getState(), 'sin-heroe', SIN_GEOMETRIA).heroe).toBeNull();
   });
 });
 

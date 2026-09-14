@@ -8,6 +8,7 @@ import type { CargoTipo } from '../../domain/types';
 import { asignarCargoLocal as asignarCargoLocalEngine, asignarEmbajador as asignarEmbajadorEngine, asignarRey as asignarReyEngine } from '../../engine/cargos';
 import { comprarCasa as comprarCasaEngine, cambiarResidencia as cambiarResidenciaEngine } from '../../engine/faccion';
 import { activarPolitica as activarPoliticaEngine } from '../../engine/politicas';
+import { sinGuarnicion } from '../../engine/tropa';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito, type ContextoComando, type TransicionComando } from './tipos';
 import { comando, conAsentamiento, conAsentamientos, conFaccion, exigirAsentamiento, exigirFaccion, exigirFaccionDe } from './ayudas';
@@ -134,8 +135,9 @@ export interface ParamsCambiarResidencia {
 
 export const cambiarResidencia = comando<ParamsCambiarResidencia, void>((estado, _mapa, ctx, params) => {
   const { origen, destino } = cambiarResidenciaEngine(estado.facciones, estado.asentamientos, params.destinoId, params.heroeId);
+  // El campamento se muda con él, pero la guarnición era de la plaza que deja (Doc 5.15.3).
   const siguiente = conHistorialDeJugador(
-    conAsentamientos(estado, [origen, destino]),
+    { ...conAsentamientos(estado, [origen, destino]), heroes: sinGuarnicion(estado.heroes, params.heroeId) },
     params.heroeId,
     `Cambia su residencia de ${origen.id} a ${destino.id}.`
   );

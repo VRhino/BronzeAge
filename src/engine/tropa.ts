@@ -49,12 +49,41 @@ export function alCampamentoPorIds(heroes: readonly Heroe[], ids: readonly strin
   return conEscuadrones(heroes, alCampamento(ids.flatMap((id) => indice.get(id) ?? [])));
 }
 
-/** El campamento de una plaza: lo que sus residentes no llevan consigo (Doc 5.15.2). Hoy es también su guarnición
- * entera, porque `enGuarnicion` no se puede activar todavía (fase 3). */
+/** El campamento de una plaza: lo que sus residentes no llevan consigo (Doc 5.15.2). Todo él come del almacén,
+ * pero solo defiende lo que dice `defensaDe`. */
 export function campamentoDe(asentamiento: Asentamiento, heroes: readonly Heroe[]): Escuadron[] {
   return heroes
     .filter((h) => esResidente(asentamiento, h.id))
     .flatMap((h) => h.escuadrones.filter((e) => e.contenedor.tipo === 'campamento'));
+}
+
+/** La guarnición de una plaza: lo que sus residentes han entregado a la IA (Doc 5.15.3). */
+export function guarnicionDe(asentamiento: Asentamiento, heroes: readonly Heroe[]): Escuadron[] {
+  return campamentoDe(asentamiento, heroes).filter((e) => e.enGuarnicion);
+}
+
+/**
+ * Quién defiende una plaza en un asedio que se resuelve con números (Doc 5.12.4): su guarnición, y cada residente
+ * que está DENTRO con las escuadras de su loadout activo que tenga en el campamento (decisión del usuario
+ * 2026-09-14). El resto del campamento no defiende. El Liderazgo del loadout ya se comprobó al guardarlo.
+ */
+export function defensaDe(asentamiento: Asentamiento, heroes: readonly Heroe[]): Escuadron[] {
+  return heroes
+    .filter((h) => esResidente(asentamiento, h.id))
+    .flatMap((h) => {
+      const dentro = h.ubicacion.tipo === 'asentamiento' && h.ubicacion.asentamientoId === asentamiento.id;
+      const loadout = new Set(dentro ? (h.loadouts.find((l) => l.activo)?.squadIds ?? []) : []);
+      return h.escuadrones.filter((e) => e.contenedor.tipo === 'campamento' && (e.enGuarnicion || loadout.has(e.id)));
+    });
+}
+
+/** Suelta la guarnición de un héroe que deja de residir donde la tenía: solo se guarnece la residencia (5.15.3). */
+export function sinGuarnicion(heroes: readonly Heroe[], heroeId: string): Heroe[] {
+  return heroes.map((h) =>
+    h.id === heroeId && h.escuadrones.some((e) => e.enGuarnicion)
+      ? { ...h, escuadrones: h.escuadrones.map((e) => (e.enGuarnicion ? { ...e, enGuarnicion: false } : e)) }
+      : h
+  );
 }
 
 /** Devuelve a su héroe las escuadras que cambiaron (por id) y añade las nuevas. Una escuadra sin héroe es un

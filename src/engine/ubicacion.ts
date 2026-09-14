@@ -6,7 +6,7 @@
 // DEDUCIRLA de lo que el mundo ya sabe. Una sola función para los dos casos, o la partida migrada acabaría
 // colocando a la gente en un sitio distinto del que la coloca el juego en marcha.
 import type { Asentamiento, Ejercito, Escuadron, InteriorRecordado, Heroe, Point, RelacionPolitica, UbicacionHeroe } from '../domain/types';
-import { campamentoDe, indiceTropa, type EjercitoConTropa } from './tropa';
+import { guarnicionDe, indiceTropa, type EjercitoConTropa } from './tropa';
 import type { Instante } from '../domain/tiempo';
 import { FUNDACION, MOVIMIENTO } from '../constants';
 import { calcularRuta } from '../world/rutas';
@@ -165,7 +165,7 @@ export function conFotoTomadaPor(
   asentamiento: Asentamiento,
   vistoEn: Instante
 ): Heroe[] {
-  const guarnicion = campamentoDe(asentamiento, heroes);
+  const guarnicion = guarnicionDe(asentamiento, heroes);
   return heroes.map((j) => (j.id === heroeId ? conFotoDelInterior(j, asentamiento, guarnicion, vistoEn) : j));
 }
 
