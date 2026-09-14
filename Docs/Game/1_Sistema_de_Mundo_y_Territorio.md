@@ -140,12 +140,12 @@ Mecanismo COMPLEMENTARIO al Cap de Fundación (1.7) — ambos coexisten, no se s
 - Aparecen únicamente en BOSQUES (ver 1.4) que NO se solapan con ninguna zona de influencia existente — territorio no reclamado por ninguna Facción. Se comprueba el CENTRO del bosque contra los polígonos de zona, no el círculo completo.
 - **UNO por asentamiento, SIEMPRE**: cada asentamiento vivo tiene el suyo, en SU bosque no reclamado MÁS CERCANO, y queda ASIGNADO a él. Así nunca aparece en la otra punta del mapa sin ningún asentamiento cerca, ni pegado a una zona de influencia. Un asentamiento sin campamento propio siempre puede recibir el suyo, sin importar lo cerca que esté de otro ya atendido. Mientras haya asentamientos sin cubrir y se cumpla el plazo de reaparición, cada minuto se cubre como mucho uno.
 - Mientras el campamento sigue en pie, ATACA CARAVANAS (Doc 3.10) que pasen dentro de un radio fijo de su posición, cada minuto — se resuelve con números, contra la defensa de la caravana. Si gana, la caravana se pierde por completo (nadie la recibe: el bandido no tiene almacén propio).
-- **Se ataca con una columna que llegue a él** (Doc 5.12.3). SIN gate de cargo: a diferencia de un asedio, un campamento bandido es una amenaza de mundo abierto, no una acción de guerra entre Facciones. Al ser DESTRUIDO entrega una RECOMPENSA (loot) fija a quien lo destruye y se agenda el plazo de reaparición.
+- **Se ataca con una columna que llegue a él** (Doc 5.12.3), y la batalla se juega en Unity: los héroes de la columna contra las tropas del campamento, manejadas por la IA del juego (Doc 5.15.6). SIN gate de cargo: a diferencia de un asedio, un campamento bandido es una amenaza de mundo abierto, no una acción de guerra entre Facciones. Al ser DESTRUIDO entrega una RECOMPENSA (loot) fija a quien lo destruye y se agenda el plazo de reaparición.
 - REAPARICIÓN: tras destruirse, aparece un campamento nuevo pasado el plazo — cerca del primer asentamiento sin cobertura que encuentre (no necesariamente el mismo que perdió el suyo).
 - En el mapa se marca como un diamante rojo.
 
 Cifras, todas PLACEHOLDER (`CAMPAMENTOS_BANDIDOS`):
-- Poder de combate: 30 (fijo, sin escalado por región).
+- Tropas: una escuadra de milicia de lanceros con 15 unidades, sin dueño y manejada por la IA (poder 30, fijo, sin escalado por región). Es lo que combate en Unity contra un héroe, y lo que pesa en el cálculo cuando el campamento ataca una caravana.
 - Radio de ataque a caravanas: 40 unidades del mapa.
 - Recompensa: 40 madera + 20 piedra + 15 oro.
 - Reaparición: 60 minutos tras destruirse.

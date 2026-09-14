@@ -38,6 +38,7 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 33 | COMERCIO | Cabos sueltos de diseño comercial | ✘ sin decidir |
 | 34 | SUMINISTRO | La economía no llena el carro de un ejército | ✘ sin decidir |
 | 35 | VARIOS | Cabos sueltos de mundo, población y militar | ✘ sin decidir |
+| 36 | HÉROE | Comportamiento de los héroes bot en el mundo | ✘ nada |
 
 **Pospuesto explícitamente, fuera de esta lista:** el **Attack Timer** (Doc 5.6, decidido y aplazado a
 fase posterior a Fase 0) y el **comercio marítimo / unidades navales** (fuera del alcance de Fase 0 por
@@ -329,9 +330,8 @@ en Conquest para la IA de escuadras sin héroe y de héroes bot).
 
 Sin resolver:
 
-- Cómo nacen los héroes bot de una Facción NPC y cuántos tiene cada una.
-- Valores de balance: liderazgo de guarnición por edificio y por política, y topes de héroes por batalla.
-- Si el ataque de un héroe humano a un campamento de bandidos se juega en Unity o se resuelve con números.
+- La XP de las escuadras en batallas que se resuelven con números: se fija cuando Conquest publique su curva
+  de XP (CQ-001).
 
 ## 31. Modelo de Héroe
 
@@ -403,3 +403,12 @@ producción de la Granja (Doc 4.2.1); falta volver a medir. Cifras, causa y las 
   la Nobleza dejó de reclutarse; falta decidir su papel junto a la Fundición.
 - **Armas de asedio** (Doc 4.2.1): la Carpintería está pensada para arietes y torres de asedio, que Fase 0 no
   tiene.
+
+## 36. Comportamiento de los héroes bot en el mundo
+
+**Estado: sin diseñar, `código: ✘`.** Los héroes bot los crea el admin y viven en la partida como cualquier
+otro héroe (Doc 0, Doc 5.15.6; comando `crearHeroeBot`, `Docs/Coordinacion/02` §4.2). Falta decidir qué hacen
+en el mundo de BronzeAge: si salen con columnas, defienden sus plazas en persona, reclutan y reponen
+escuadrones, se unen a ejércitos, ocupan cargos...
+
+Su comportamiento EN batalla no es de BronzeAge: lo maneja la IA de Conquest (CQ-002).

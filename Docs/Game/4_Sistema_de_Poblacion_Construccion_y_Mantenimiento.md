@@ -101,7 +101,7 @@ Los extractores de nivel 1 se pagan solo con madera: son justo lo que hay que co
 
 Para dimensionarlo: la reserva de comida de una ciudad de nivel 1 a tope ronda los 330, y el carro de suministros de un ejército son 500 (Doc 5.13). Un Granero de nivel 4 permite acumular una docena de campañas — es la pieza que convierte el excedente de trigo en capacidad militar en vez de perderlo contra el techo del almacén.
 
-**Murallas** — no son un edificio del catálogo sino un **recinto** que rodea la ciudad y se levanta por obra, desde la empalizada barata hasta la muralla de piedra (`Consideraciones/Murallas_Definicion.md`). Tener un recinto completo es requisito del nivel 4 (4.5).
+**Murallas** — no son un edificio del catálogo sino un **recinto** que rodea la ciudad y se levanta por obra, desde la empalizada barata hasta la muralla de piedra (`Consideraciones/Murallas_Definicion.md`). Tener un recinto completo es requisito del nivel 4 (4.5) y suma +14 al cupo de guarnición de cada héroe residente (Doc 5.15.3).
 
 ### Transformación de recursos
 
@@ -143,10 +143,12 @@ Van por AUTO-CONSTRUCCIÓN (igual que Granja/Cantera), disparadas en cuanto se c
 **Barracón** — reclutamiento de tropas cuerpo a cuerpo (unidades y coste en equipo: ver Doc 5.8). Adición MANUAL de Gobernador/Maestro de Obras a la cola (ver 4.2), no auto-construcción.
 - Construcción: Asentamiento nivel 2 (ver nota del requisito militar abajo). Nivel interno 2: Asentamiento nivel 2 + poseer Carpintería. Nivel interno 3: Asentamiento nivel 3 + poseer Palacio.
 - Coste: construcción 30 madera; mejora 1: 100 madera + 60 piedra; mejora 2: 300 madera + 200 piedra. Tiempo de construcción: 6 minutos.
+- Cupo de guarnición de cada héroe residente (Doc 5.15.3): 7 / 14 / 22 según su nivel interno.
 
 **Galería de tiro** — reclutamiento de tropas a distancia (unidades y coste en equipo: ver Doc 5.8). Adición MANUAL de Gobernador/Maestro de Obras a la cola (ver 4.2), no auto-construcción.
 - Construcción: Asentamiento nivel 2 (ver nota del requisito militar abajo). Nivel interno 2: Asentamiento nivel 2 + poseer Carpintería. Nivel interno 3: Asentamiento nivel 3 + Carpintería nivel 2 (asimetría INTENCIONAL respecto a Armería/Barracón, que piden Palacio — la Galería de tiro sigue su propio camino de progresión).
 - Coste: construcción 50 madera; mejora 1: 140 madera + 20 piedra; mejora 2: 400 madera + 100 piedra. Tiempo de construcción: 6 minutos.
+- Cupo de guarnición de cada héroe residente (Doc 5.15.3): 7 / 14 / 22 según su nivel interno.
 
 > **Requisito militar de nivel 2 — por qué existe.** Barracón y Galería de tiro son los dos únicos tipos capaces de abrir el grupo militar en el trazado urbano, y el primero que se construye arrastra consigo la Plaza de Armas (ver `Consideraciones/Vista_Asentamiento_Trazado_Urbano.md` §5.7.1). Al fundar, el disco urbano mide 5 celdas y no existe ningún hueco que respete la separación mínima entre anclas: el núcleo militar nacería pegado al Centro Urbano y se quedaría ahí el resto de la partida, porque **ningún ancla se muda nunca**.
 >
@@ -193,6 +195,7 @@ Dos edificios lo amplían, y no compiten: el **Almacén** sube la capacidad de T
 - **"Vía Rápida de Construcción"** (Maestro de Obras): multiplica ×0.75 el tiempo de construcción de cualquier edificio que arranque obra mientras esté activa (25% más rápido) — no afecta al coste en recursos, solo a los minutos de obra.
 - **"Líneas de Producción"** (Maestro de Obras): mientras esté activa, un edificio de transformación NUEVO (Curtiduría/Armería/Fundición) no se sitúa en el primer hueco libre del crecimiento concéntrico — evalúa TODOS los huecos disponibles en la zona y elige el que minimiza la penalización de distancia a la fuente de sus insumos (4.2, "el eslabón más débil manda"), para que produzca a mejor ritmo desde el primer minuto. Compite por el ÚNICO slot de Maestro de Obras con "Vía Rápida de Construcción": con una activa no queda hueco para la otra hasta que expire. Si el edificio no tiene recetas (Carpintería) o ya existe una fuente igual de cerca en cualquier hueco, el resultado no cambia respecto a tenerla desactivada.
 - **Políticas de flota de caravanas** (Tesorero, ver Doc 3.12): "Ampliación de Flota" suma +1 al cupo de caravanas propias (aditivo, no multiplicativo — a diferencia del resto de políticas de este catálogo); "Carga Ampliada" multiplica ×1.5 la capacidad de carga de las caravanas propias; "Rutas Rápidas" multiplica ×1.5 su velocidad.
+- **"Levas de guarnición"** (General): mientras esté activa, suma +14 al cupo de guarnición de cada héroe residente (Doc 5.15.3).
 
 ## 4.5 Mantenimiento de asentamientos (sistema unificado, incluye ex-"Coste de Gobernanza")
 - **NIVEL DE ASENTAMIENTO — por requisitos**: sube cuando cumple A LA VEZ los de población y los de edificios, no por una fórmula continua. Nivel máximo: 5.

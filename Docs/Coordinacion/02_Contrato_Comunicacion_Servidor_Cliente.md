@@ -269,6 +269,11 @@ si es humano o bot.
 
 - Una `Membresia` sin héroe no puede hacer nada más en la partida hasta crearlo. Crear el héroe es un
   comando aparte de `POST .../membresia` porque necesita datos del jugador (nombre, clase, aspecto).
+- **Los héroes bot los crea el admin** con el comando `crearHeroeBot` (`faccionId`, `residenciaId`,
+  `displayName`, `classDefinitionId`, `genero`, `avatar`), por la vía de comandos de admin que ya existe
+  (`POST /admin/partidas/:gameId/comandos`). Nacen con `controlador: 'bot'` y `jugadorId: null`, y viven en
+  la partida como cualquier otro héroe. Rechazos: Facción inexistente o no NPC; residencia que no es de esa
+  Facción; clase inexistente.
 - `equipar` saca el objeto del inventario y lo pone en el hueco; lo que ocupaba el hueco vuelve a una casilla
   libre (doc 01 §12.1). Qué va en cada hueco lo dice el catálogo de objetos de Conquest.
 - Trasladar el campamento es el `cambiarResidencia` que ya existe (Doc 2.5): no hace falta un comando nuevo.

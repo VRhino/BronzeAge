@@ -87,7 +87,9 @@ juego reciben `heroeId`; auditoría y autorización conservan también `usuarioI
 la IA de juego. Se llaman "héroes bot" para no confundirlos con los humanos. Un héroe bot es un `Heroe` con
 `controlador: 'bot'`: no tiene `Usuario` ni `Membresia` (su `jugadorId` es `null`) y su dueño es la Facción
 NPC, que ya actúa como `servicio_npc`. La unicidad "un héroe por jugador y mundo" solo aplica a los humanos.
-Cómo nacen y cuántos tiene cada Facción NPC está pendiente (`Docs/Mecanicas a desarrollar.md` §30).
+Los crea el admin (comando `crearHeroeBot`, doc 02 §4.2) y viven en la partida como cualquier otro héroe, con
+`controlador: 'bot'`. Su comportamiento en el mundo de BronzeAge está pendiente (`Docs/Mecanicas a
+desarrollar.md` §36); en batalla los maneja la IA de Conquest (CQ-002).
 
 ### Tabla de identidad y ámbito
 
@@ -689,10 +691,10 @@ Batalla
   ticketRevision: number    empieza en 0; sube si hace falta una revisión nueva del ticket (§ABAJO)
   huellaTicket             hash del BattleTicket vigente para la ticketRevision actual
   intentoAsignacionId?      del BattleServerAssignment activo — ver abajo
-  expiraEn: Instante        fijado al crear/reasignar — timeout de infraestructura, tiempo de MUNDO
+  expiraEn: Instante        fijado al crear/reasignar — timeout de infraestructura (5 minutos), tiempo de MUNDO
                           (ver nota de reloj en §0/§12: no confundir con expiración de credenciales)
   iniciadaEn?: Instante      al pasar a `en_curso`
-  limiteEnCurso?: Instante   iniciadaEn + duración máxima de `BattleRules` + margen — tiempo de MUNDO
+  limiteEnCurso?: Instante   iniciadaEn + duración máxima de `BattleRules` + margen (5 minutos) — tiempo de MUNDO
   bandos: BatallaBando[]     capacidad independiente por bando (asimétrico permitido)
   participantes: BatallaParticipante[]   por heroeId (humanos y bot), nunca jugadorId directo
   reservas: BatallaReserva    escuadras/suministro inmovilizados, liberables
@@ -778,8 +780,9 @@ una asignación vieja no puede cerrar una revisión nueva.
 `HeroSnapshot`, `SquadSnapshot[]` (solo las escuadras que lleva ese héroe, limitadas por su liderazgo).
 
 **Composición de un bando (decisión del usuario, 2026-09-13, Doc 5.15):** héroes (humanos o bot) con sus
-escuadras, más `escuadrasSinHeroe` (la guarnición del asentamiento o la escolta de la caravana), que maneja
-la IA de juego. `capacidadMaxima` cuenta HÉROES (por ejemplo 15 por bando en un asedio): las escuadras sin
+escuadras, más `escuadrasSinHeroe` (la guarnición del asentamiento, la escolta de la caravana o las tropas de un campamento de bandidos), que maneja
+la IA de juego. `capacidadMaxima` cuenta HÉROES (15 por bando en un asedio; 5 en mundo abierto, contra una caravana o contra un campamento de bandidos —
+Doc 5.15.1): las escuadras sin
 héroe no ocupan plaza y entran directamente. Los héroes que superan la capacidad esperan en cola y entran a
 medida que caen otros.
 
@@ -801,12 +804,20 @@ transportarla).
 **`BattleRules` — forma mínima (R04, antes indefinida):** `schemaVersionBalance`, duración máxima de
 partida, condiciones de victoria permitidas por este contexto, `versionCatalogoTropas`,
 `versionCatalogoHeroe`, `versionCatalogoObjetos` y, si los hay, los topes de XP y de monedas por batalla.
+Valores v1 (2026-09-14): duración máxima 30 minutos en un asedio y 15 en el resto; sin tope de XP ni de
+monedas hasta que Conquest publique su curva de XP (CQ-001).
 Las capacidades asimétricas por bando ya viven en `bandos[].capacidadMinima/Maxima`
 (BA-001), no se duplican aquí.
 
 **Escuadras sin héroe (escolta y guarnición):** combaten sin su héroe, manejadas por la IA de juego, y van
 en `escuadrasSinHeroe` del bando. El `SquadSnapshot` lleva su `heroeId` como dueño, pero ese héroe no es
 participante. Son los dos únicos casos en que una escuadra combate sin su héroe (Doc 5.15).
+
+**Tropas de un campamento de bandidos (decisión del usuario, 2026-09-14):** un héroe que ataca un campamento
+combate en Unity (Doc 1.9). Las tropas del campamento van también en `escuadrasSinHeroe`, pero sin `heroeId`:
+no son de nadie y no persisten entre batallas. Composición v1: una escuadra de milicia de lanceros con 15
+unidades, el mismo poder (30) que el campamento tiene hoy (Doc 1.9). Igual van los **carreteros** de una
+caravana sin escolta atacada por un héroe: una escuadra de milicia con 13 unidades, sin dueño (Doc 3.10).
 
 **Quién tiene que haber en una batalla (corregido 2026-09-13).** Al menos un héroe humano en toda la
 batalla. Un bando puede no tener ninguno: solo héroes bot, solo escuadras sin héroe (un asentamiento sin
@@ -892,9 +903,11 @@ botin
 - Qué se gana y cuánto es balance de Conquest. Si en la partida se gastan consumibles o se pierde equipo, v1
   no lo recoge: está preguntado en CQ-004.
 
-**Daño de asedio — fuera de alcance v1, declarado explícito (R05):** este `BattleResult` NO lleva daño de
-edificios/murallas. Un asedio que destruye algo persistente es una decisión de dominio que todavía no se ha
-tomado (ver §17); hasta que se tome, un asedio dentro de este contrato no persiste destrucción física.
+**Daño de asedio — lo decide BronzeAge y no viaja en el resultado (R05; decisión del usuario 2026-09-14).**
+Si el atacante conquista, BronzeAge aplica el saqueo determinista que ya existe en el motor (Doc 5.12.9,
+`OCUPACION`): nada se destruye; una parte de los edificios queda `danado`, a reparar pagando de nuevo una
+fracción de su coste, y cada recinto de muralla pierde parte de su `avance`. Si el asedio resiste, no hay
+daño. Unity no reporta daño de edificios ni de murallas.
 
 El resultado contiene hechos tácticos más la XP ganada y el botín (las dos excepciones al "solo hechos",
 decididas por el usuario el 2026-09-13 y el 2026-09-14). BronzeAge aplica esa XP con la curva de nivel y
@@ -981,8 +994,8 @@ curso (nueva construcción, mejora de muralla) NO tocan este snapshot ya congela
 reconstrucciones de la misma ciudad (vista normal vigente vs. escenario de asedio congelado) pueden diferir
 mientras la batalla dura; eso es esperado, no un bug de sincronización.
 
-**Daño de asedio:** sigue sin decidirse si un asedio puede destruir algo persistente — §15 ya declara que
-`BattleResult` v1 no lleva esa información. Este snapshot no necesita un campo para ello todavía.
+**Daño de asedio:** lo aplica BronzeAge al conquistar, no Unity (§15): edificios dañados a reparar y murallas
+con menos avance, nada destruido. Este snapshot no necesita ningún campo para ello.
 
 ## 18. Frontera cosmético/autoritativo de mundo
 

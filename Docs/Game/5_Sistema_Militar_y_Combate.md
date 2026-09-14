@@ -30,7 +30,7 @@ El combate ocurre en INSTANCIAS separadas del mapa global (aunque se desencadene
 4. **Entrenamiento/matchmaking** (pospuesto a una fase posterior a Fase 0/1): 15v15 puro, sin permadeath, para probar tácticas. Requiere lo mismo que el Attack Timer (5.6).
 ### 5.2.5 Resolución numérica y varianza de combate
 
-Las batallas que se resuelven con números (5.15.6) suman el poder de cada bando y **multiplican cada uno por un factor aleatorio de ±15%** (`MILITAR.varianzaCombate`). Gana quien saque el producto más alto. Cuanto más ajustado el resultado, más bajas sufre también el ganador; el perdedor siempre pierde más. El azar entra **una sola vez por bando y por combate** — no hay tiradas por unidad ni por ronda.
+Las batallas que se resuelven con números (5.15.6) suman el poder de cada bando y **multiplican cada uno por un factor aleatorio de ±15%** (`MILITAR.varianzaCombate`). Gana quien saque el producto más alto. Cuanto más ajustado el resultado, más bajas sufre también el ganador; el perdedor siempre pierde más. El azar entra **una sola vez por bando y por combate** — no hay tiradas por unidad ni por ronda. El poder de cada escuadrón sube un **5% por cada nivel** que tenga (5.16.3).
 
 **Qué implica ese ±15%**: los multiplicadores van de 0.85 a 1.15, así que el cociente entre ambos bandos va de 0.74 a 1.35. Es decir, **un atacante necesita un 35% más de poder para tener la victoria garantizada**; por debajo de eso siempre puede perder. Ese margen no es un detalle de implementación: es lo que decide cuándo merece la pena atacar, sabiendo que marchar cuesta tiempo real, deja la ciudad descubierta, vacía el almacén y las bajas son permanentes.
 
@@ -595,7 +595,9 @@ Las batallas no son automáticas, salvo NPC contra NPC, que se resuelve con núm
 
 Las escuadras de un héroe que no está en la batalla no combaten, estén donde estén. Solo hay dos excepciones, en las que una escuadra combate sin su héroe, manejada por la IA del juego: la **guarnición** de un asentamiento (5.15.3) y la **escolta** de una caravana (5.15.4).
 
-Los topes de una batalla cuentan **héroes** (por ejemplo 15 por bando en un asedio y 5 en mundo abierto; son valores de balance). Los héroes que sobran esperan en cola y entran a medida que caen otros. Las escuadras sin héroe no ocupan plaza.
+Los topes de una batalla cuentan **héroes**: **15 por bando en un asedio**, y **5** en mundo abierto, contra una caravana o contra un campamento de bandidos. Los héroes que sobran esperan en cola y entran a medida que caen otros. Las escuadras sin héroe no ocupan plaza.
+
+Una partida dura como mucho **30 minutos en un asedio** y **15 en el resto**. Si un asedio agota su tiempo, gana el defensor (5.2).
 
 ### 5.15.2 El campamento del héroe
 
@@ -604,7 +606,16 @@ El campamento es donde un héroe guarda las escuadras que no lleva consigo, y es
 ### 5.15.3 La guarnición
 
 - Un héroe puede asignar algunas de sus escuadras a la guarnición del asentamiento **donde reside**, y solo ahí.
-- Tiene un **cupo propio por héroe** que decide el asentamiento: sus edificios y políticas dan "liderazgo de guarnición" a cada héroe. Por ejemplo, el Barracón da el suficiente para una escuadra básica y una política suma algo más. **No gasta el Liderazgo del héroe**, que sigue siendo lo que lleva consigo.
+- Tiene un **cupo propio por héroe** que decide el asentamiento: sus edificios y políticas dan "liderazgo de guarnición" a cada héroe residente, en la misma escala que el coste de Liderazgo de las tropas (5.11.1: leva 7, línea 14, veterana 22, pesada 32, élite 45). **No gasta el Liderazgo del héroe**, que sigue siendo lo que lleva consigo.
+
+  | Fuente | Cupo de guarnición |
+  |---|---|
+  | Barracón, nivel 1 / 2 / 3 | 7 / 14 / 22 |
+  | Galería de tiro, nivel 1 / 2 / 3 | 7 / 14 / 22 |
+  | Recinto de muralla completo | +14 |
+  | Política "Levas de guarnición" (General, Doc 4.4) | +14 |
+
+  Sin Barracón ni Galería de tiro no hay guarnición. Con todo al máximo son 72 —unas dos escuadras pesadas y una de leva—, por debajo de los 100 de Liderazgo que el héroe se lleva consigo. Como el cupo es por héroe, cuantos más residentes tenga una plaza, más guarnición puede tener.
 - Una escuadra en guarnición se **entrega a la IA**: la maneja la IA y el héroe no puede usarla mientras siga asignada, aunque esté presente en la batalla.
 - En un asedio entra directamente, sin ocupar plaza de héroe.
 - Si no hay héroes defensores presentes, la guarnición es la única defensa: la batalla se juega igual, con ella, o sin defensores si no hay guarnición.
@@ -624,7 +635,9 @@ Si los atacantes conquistan un asentamiento:
 
 ### 5.15.6 Facciones NPC
 
-Las Facciones NPC tienen **héroes bot**, manejados por la IA del juego. Un humano que ataca a una Facción NPC combate contra sus héroes bot y su guarnición. NPC contra NPC se resuelve con números, sin partida en Unity.
+Las Facciones NPC tienen **héroes bot**, manejados por la IA del juego. Los crea el admin y viven en el servidor como un héroe más. Un humano que ataca a una Facción NPC combate contra sus héroes bot y su guarnición. NPC contra NPC se resuelve con números, sin partida en Unity.
+
+**Un héroe que ataca un campamento de bandidos también combate en Unity**: su columna contra las tropas del campamento, manejadas por la IA del juego (Doc 1.9).
 
 Un bando puede no tener ningún humano (solo héroes bot, solo guarnición o escolta, o nadie); la batalla necesita al menos un héroe humano en total.
 
