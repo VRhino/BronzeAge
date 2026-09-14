@@ -32,8 +32,8 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 27 | AMBIENTACIÓN | Identidad visual y de audio | ✘ nada |
 | 28 | MILITAR | Declaración formal de guerra | ✘ nada |
 | 29 | ONBOARDING | Curva de progresión inicial gradual | ✘ nada |
-| 30 | MILITAR | Batallas con héroes: guarnición, campamento y héroes bot | ✘ nada (hoy defienden todas las escuadras) |
-| 31 | HÉROE | Modelo de Héroe: uno por jugador y mundo, dueño de los escuadrones | ✘ nada (hoy manda el Jugador) |
+| 30 | MILITAR | Batallas con héroes: guarnición, campamento y héroes bot | ◐ campamento y conquista del canon; el asedio aún con números |
+| 31 | HÉROE | Modelo de Héroe: uno por jugador y mundo, dueño de los escuadrones | ◐ fases 1-2 en la rama `heroe-dominio`; falta la 3 |
 | 32 | POLÍTICA | Cabos sueltos de diseño político | ✘ sin decidir |
 | 33 | COMERCIO | Cabos sueltos de diseño comercial | ✘ sin decidir |
 | 34 | SUMINISTRO | La economía no llena el carro de un ejército | ✘ sin decidir |
@@ -315,34 +315,38 @@ esto es el ritmo de la primera hora una vez dentro.
 
 ## 30. Batallas con héroes: guarnición, campamento y héroes bot
 
-**Estado: reglas principales cerradas (canon Doc 5.15, 2026-09-13), `código: ✘`.** Hoy un asedio lo
-defienden todas las escuadras del asentamiento y se resuelve con números (`iniciarAsedio` y
-`aplicarConquista`, `engine/combate.ts`). El motor también sigue con reglas que el canon ya no tiene: la
-Tregua por columna en vez del estado Herido del héroe, `guarnecer` (que vuelca escuadrones de no residentes
-en la guarnición), el ejército conquistador como guarnición de la plaza tomada, y la escolta que vuelve
-herida a la guarnición del origen. También distinto del canon: `cambiarResidencia` deja los escuadrones de la
-residencia vieja como guarnición de no residente en vez de trasladar el campamento (Doc 2.5); el campamento de
-bandidos se ataca con un comando desde un asentamiento (`atacarCampamentoBandidos`) en vez de con una columna
-que llegue a él (Doc 1.9); y el Liderazgo que ocupa una escolta sin héroe no se suma a lo que ese héroe lleva a
-la vez en un ejército (Doc 3.13.4). Depende del modelo de Héroe
-(`Docs/Coordinacion/01_Modelo_de_datos_compartido.md`) y del ciclo de `Batalla` con Unity (BA-001; CQ-002
-en Conquest para la IA de escuadras sin héroe y de héroes bot).
+**Estado: reglas principales cerradas (canon Doc 5.15, 2026-09-13), `código: ◐`.** Desde la fase 2 del Héroe
+(rama `heroe-dominio`, 2026-09-14) las escuadras viven en su héroe y el campamento sigue el canon: se guarnece
+solo si todos los que van dentro residen ahí; conquistar deja la plaza sin guarnición, el ejército acampado a
+la puerta y a los residentes vencidos con su campamento a 0 en la plaza más cercana de su Facción (huérfanos si
+no queda ninguna); cambiar de residencia traslada el campamento; la escolta de una caravana perdida vuelve a 0
+al campamento; y el Liderazgo suma la escolta a lo que el héroe lleva en columna (Doc 3.13.4).
+
+Sigue distinto del canon: un asedio lo defiende el campamento entero y se resuelve con números
+(`iniciarAsedio`, `engine/combate.ts`), porque la guarnición (`enGuarnicion`) no se puede elegir hasta la fase
+3; la Tregua por columna en vez del estado Herido del héroe; el campamento de bandidos se ataca con un comando
+desde un asentamiento (`atacarCampamentoBandidos`) en vez de con una columna que llegue a él (Doc 1.9); quien
+está DENTRO de una plaza cuando cae conserva esa ubicación, cuando el canon lo deja fuera; y el desalojo no mira
+el cupo de viviendas de la plaza que recibe a los vencidos (`desalojarResidentes`). Depende del ciclo de
+`Batalla` con Unity (BA-001; CQ-002 en Conquest para la IA de escuadras sin héroe y de héroes bot).
 
 Sin resolver:
 
-- La XP de las escuadras en batallas que se resuelven con números: se fija cuando Conquest publique su curva
-  de XP (CQ-001).
+- La XP de las escuadras en batallas que se resuelven con números: hoy `experiencia` suma lo que sumaba la
+  veteranía (+1 al ganar, +0,5 al perder) y `nivel` se queda en 1; la curva se fija cuando Conquest publique
+  la suya (CQ-001).
+
 ## 31. Modelo de Héroe
 
-**Estado: reglas principales cerradas (canon Doc 5.16 y glosario, 2026-09-11 y 2026-09-13), `código: ✘`.**
-Hoy el motor usa `Jugador` para todo lo que el canon atribuye al Héroe, y sigue con la veteranía y el
-estado herido de los escuadrones. Datos y orden de
-implementación en `Docs/Coordinacion/01_Modelo_de_datos_compartido.md` §12-§14 y BA-004. Hecho: el contrato
-(`src/contratos/v1/`) y la fase 1 en la rama `heroe-dominio` (2026-09-14): `Heroe` en el dominio con su
-identidad, `heroeId` como dueño en todo el motor, `crearHeroe`, y Facciones NPC creadas por el admin con héroes
-bot. Falta: las escuadras en el héroe (contenedor, nivel/XP, sin `heridoHasta`), los comandos de puntos,
-equipo, loadouts y guarnición, la proyección del héroe y de `HeroePublico`, y la pantalla de crear héroe en el
-cliente de jugador (`BronzeAgeClient`).
+**Estado: reglas principales cerradas (canon Doc 5.16 y glosario, 2026-09-11 y 2026-09-13), `código: ◐`.**
+Datos y orden de implementación en `Docs/Coordinacion/01_Modelo_de_datos_compartido.md` §12-§14 y BA-004.
+Hecho: el contrato (`src/contratos/v1/`) y, en la rama `heroe-dominio` (2026-09-14), la fase 1 —`Heroe` en el
+dominio con su identidad, `heroeId` como dueño en todo el motor, `crearHeroe`, y Facciones NPC creadas por el
+admin con héroes bot— y la fase 2 —las escuadras viven en `Heroe.escuadrones` con su `contenedor` (campamento,
+ejército o escolta), nivel y experiencia en vez de veteranía, sin `heridoHasta`; ejércitos y caravanas guardan
+solo ids—. Falta: los comandos de puntos, equipo, loadouts y guarnición (`enGuarnicion` existe pero no se puede
+activar), el estado Herido del héroe, la proyección del héroe y de `HeroePublico`, y en el cliente de jugador
+(`BronzeAgeClient`) la pantalla de crear héroe y leer `escuadronIds` en los ejércitos de la proyección.
 
 Sin resolver:
 

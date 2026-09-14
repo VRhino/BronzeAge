@@ -1,10 +1,10 @@
-// Reclutamiento/movimiento desatado de residencia (Doc 5.4/5.8, revisión 2026-09-08): `movilizarEjercito`
-// deja de exigir residir — basta con tener escuadrones vivos propios ya posados en la plaza (guarnición tras
-// conquistar/guarnecer). Reclutar/cambiar roster sí sigue atado a residir (ver tropas.test.ts).
+// Movilizar exige residir (Doc 5.15.2, fase 2 del Héroe): la tropa de un héroe está en su campamento, y el
+// campamento está en su residencia. La revisión 2026-09-08 dejaba salir a un no-residente con escuadras
+// "posadas" en la plaza tras conquistar o guarnecer; ya no existen esas escuadras sueltas.
 import { describe, expect, it } from 'vitest';
 import type { Asentamiento, Escuadron } from '../../domain/types';
 import { movilizarEjercito, MovilizacionInvalidaError } from '../ejercitos';
-import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instanteDeTest, posicionRecomendable } from './fixtures';
+import { crearFacciones, crearMapaDeterminista, escuadronDePrueba, fundarAsentamientoDeTest, instanteDeTest, posicionRecomendable } from './fixtures';
 
 const mapa = crearMapaDeterminista(42);
 
@@ -13,51 +13,31 @@ function plaza(faccionId: string, existentes: Asentamiento[] = []): Asentamiento
   return { ...asentamiento, poblacion: { pesants: 300, artesanos: 0, nobleza: 0 } };
 }
 
-const escuadronDe = (heroeId: string): Escuadron => ({
-  id: `esc-${heroeId}`,
-  nombre: `Milicia de ${heroeId}`,
-  heroeId,
-  origen: 'pesants',
-  cantidad: 20,
-  veterania: 0,
-  moral: 100,
-  tropaId: 'milicia_lanceros',
-});
-
-describe('movilizarEjercito sin residir', () => {
-  const origen = plaza('faccion-1'); // el jugador NO es fundador ni casa-comprada aquí
+describe('movilizarEjercito exige residir', () => {
+  const origen = plaza('faccion-1'); // reside jugador-faccion-1-1
   const destino = plaza('faccion-2', [origen]);
+  const salir = (heroeId: string, campamento: Escuadron[]) =>
+    movilizarEjercito(
+      origen,
+      campamento,
+      undefined,
+      heroeId,
+      [`esc-${heroeId}`],
+      { tipo: 'asentamiento', id: destino.id },
+      [origen, destino],
+      mapa,
+      'ejercito-test',
+      instanteDeTest(0)
+    );
 
-  it('un no-residente CON escuadrones propios posados aquí puede sacarlos a campaña', () => {
-    const conGuarnicionAjena: Asentamiento = { ...origen, escuadrones: [escuadronDe('jugador-ocupante')] };
-    expect(() =>
-      movilizarEjercito(
-        conGuarnicionAjena,
-        undefined,
-        'jugador-ocupante',
-        ['esc-jugador-ocupante'],
-        { tipo: 'asentamiento', id: destino.id },
-        [conGuarnicionAjena, destino],
-        mapa,
-        'ejercito-test-0',
-        instanteDeTest(0)
-      )
-    ).not.toThrow();
+  it('el residente saca a campaña las escuadras de su campamento', () => {
+    const r = salir('jugador-faccion-1-1', [escuadronDePrueba('esc-jugador-faccion-1-1', 'jugador-faccion-1-1', 'milicia_lanceros', 20)]);
+    expect(r.ejercito.escuadronIds).toEqual(['esc-jugador-faccion-1-1']);
   });
 
-  it('un no-residente SIN escuadrones propios aquí NO puede movilizar', () => {
-    expect(() =>
-      movilizarEjercito(
-        origen,
-        undefined,
-        'jugador-forastero',
-        ['esc-x'],
-        { tipo: 'asentamiento', id: destino.id },
-        [origen, destino],
-        mapa,
-        'ejercito-test-1',
-        instanteDeTest(0)
-      )
-    ).toThrow(MovilizacionInvalidaError);
+  it('un no-residente NO moviliza desde aquí, aunque tenga escuadras delante', () => {
+    expect(() => salir('jugador-ocupante', [escuadronDePrueba('esc-jugador-ocupante', 'jugador-ocupante', 'milicia_lanceros', 20)])).toThrow(
+      MovilizacionInvalidaError
+    );
   });
 });

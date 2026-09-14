@@ -5,9 +5,10 @@
 // de la MISMA Facción.
 import { describe, expect, it } from 'vitest';
 import type { Asentamiento, Faccion } from '../../domain/types';
-import { crearFacciones, crearMapaDeterminista, posicionRecomendable, instanteDeTest } from './fixtures';
+import { crearFacciones, crearMapaDeterminista, escuadronDePrueba, heroeDePrueba, posicionRecomendable, instanteDeTest } from './fixtures';
 import { fundarAsentamiento } from '../settlement';
 import { cambiarResidencia, comprarCasa, FaccionInvalidaError } from '../faccion';
+import { campamentoDe } from '../tropa';
 
 /** El cap de fundación en nivel 1 es 1 asentamiento por Facción (`CAP_FUNDACION_POR_NIVEL`, constants.ts) —
  * para probar residencia cruzada entre DOS asentamientos de la misma Facción, se sube el nivel a mano tras
@@ -69,17 +70,17 @@ describe('cambiarResidencia (Doc 2.5/2.6, comando nuevo)', () => {
     expect(destino.casasCompradas).toContain('jugador-a');
   });
 
-  it('los escuadrones posados en la residencia vieja NO se tocan', () => {
+  it('el campamento se muda con el héroe: sus escuadras pasan a la residencia nueva (Doc 5.15.2)', () => {
     const { asentamientoA, asentamientoB, facciones } = fundarDosAsentamientosDeFaccion();
-    const conGuarnicion: Asentamiento = {
-      ...asentamientoA,
-      escuadrones: [
-        { id: 'e1', nombre: 'x', heroeId: 'jugador-a', origen: 'pesants', cantidad: 20, veterania: 0, moral: 100, tropaId: 'milicia_lanceros' },
-      ],
-    };
-    const { origen } = cambiarResidencia(facciones, [conGuarnicion, asentamientoB], asentamientoB.id, 'jugador-a');
-    expect(origen.escuadrones).toHaveLength(1);
-    expect(origen.escuadrones[0]!.heroeId).toBe('jugador-a');
+    const heroes = [
+      heroeDePrueba('jugador-a', { tipo: 'asentamiento', asentamientoId: asentamientoA.id }, { escuadrones: [escuadronDePrueba('e1', 'jugador-a')] }),
+    ];
+    expect(campamentoDe(asentamientoA, heroes).map((e) => e.id)).toEqual(['e1']);
+
+    const { origen, destino } = cambiarResidencia(facciones, [asentamientoA, asentamientoB], asentamientoB.id, 'jugador-a');
+
+    expect(campamentoDe(origen, heroes)).toEqual([]);
+    expect(campamentoDe(destino, heroes).map((e) => e.id)).toEqual(['e1']);
   });
 
   it('un huérfano (sin residencia de la que salir) es rechazado', () => {

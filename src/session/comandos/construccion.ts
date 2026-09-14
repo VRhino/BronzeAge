@@ -13,8 +13,9 @@ import {
 } from '../../engine/construction';
 import { computeTodasLasZonas } from '../../engine/zones';
 import { encontrarCapital } from '../../engine/mantenimiento';
+import { consumoRacionDeEscuadrones } from '../../engine/tropas';
 import { exito, sinCambios } from './tipos';
-import { comando, conAsentamiento, exigirAsentamiento, exigirFaccionDe, rechazar } from './ayudas';
+import { campamentoEn, comando, conAsentamiento, exigirAsentamiento, exigirFaccionDe, rechazar } from './ayudas';
 import { CODIGOS_ERROR } from './codigosDeError';
 import { evento } from './eventos';
 
@@ -66,7 +67,8 @@ export const anadirEdificioManualmente = comando<ParamsAnadirEdificio, void>((es
     mapa,
     capital,
     reclamos,
-    ctx.ids.siguiente()
+    ctx.ids.siguiente(),
+    consumoRacionDeEscuadrones(campamentoEn(estado, asentamiento))
   );
   return exito(conAsentamiento(estado, actualizado), [
     evento(ctx, {
@@ -129,7 +131,13 @@ export const mejorarEdificioAhora = comando<ParamsMejorarEdificio, void>((estado
   const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
 
   const capital = encontrarCapital(asentamiento.faccionId, estado.asentamientos);
-  const actualizado = mejorarEdificioManualmenteEngine(asentamiento, params.cargo, params.edificioId, capital);
+  const actualizado = mejorarEdificioManualmenteEngine(
+    asentamiento,
+    params.cargo,
+    params.edificioId,
+    capital,
+    consumoRacionDeEscuadrones(campamentoEn(estado, asentamiento))
+  );
   return exito(conAsentamiento(estado, actualizado), [
     evento(ctx, {
       codigo: 'construccion.mejora_forzada',

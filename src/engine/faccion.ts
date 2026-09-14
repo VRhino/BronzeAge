@@ -160,9 +160,9 @@ export function comprarCasa(
  * vender casa / dejar residencia"): atómico, deja la residencia actual y toma otra plaza de la MISMA Facción.
  *
  * Deja la vieja: fuera de `casasCompradas` Y `heroesFundadoresIds` (ya no reside por ninguna vía), y sus
- * cargos LOCALES ahí se vacían (no se gobierna donde no se vive — misma regla que la conquista). Los
- * escuadrones que tuviera POSADOS en la guarnición vieja NO se tocan — pasan a ser guarnición de no-residente
- * (Doc 5.4, revisión 2026-09-08): defiende, la repone y la re-moviliza igual.
+ * cargos LOCALES ahí se vacían (no se gobierna donde no se vive — misma regla que la conquista). Su campamento
+ * se traslada con él (Doc 2.5/5.15.2) sin mover nada: las escuadras viven en el héroe y el campamento es su
+ * residencia.
  *
  * La ciudadanía de Facción no cambia (es la misma Facción). Un HUÉRFANO —sin residencia de la que salir— usa
  * `comprarCasa`/`unirseAFaccion`, no este comando.

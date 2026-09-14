@@ -7,7 +7,7 @@ import type { Asentamiento, CeldaMuro, Escuadron, Recinto } from '../../domain/t
 import { MURALLA } from '../../constants';
 import type { RandomFn } from '../../worldgen';
 import { iniciarAsedio, resolverCombate } from '../combate';
-import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instanteDeTest } from './fixtures';
+import { crearFacciones, crearMapaDeterminista, escuadronDePrueba, fundarAsentamientoDeTest, instanteDeTest } from './fixtures';
 
 /** RNG SIN varianza: `rng() = 0.5` deja `jitter = 1 + (0.5×2−1)×varianza = 1` exacto en los dos bandos, así
  * que el resultado depende SOLO del poder calculado, no de una tirada — necesario para que estos tests sean
@@ -15,7 +15,7 @@ import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instan
 const rngSinVarianza: RandomFn = Object.assign(() => 0.5, { estado: () => 0 });
 
 function escuadron(id: string, heroeId: string, cantidad: number): Escuadron {
-  return { id, nombre: id, heroeId, origen: 'pesants', tropaId: 'milicia_lanceros', cantidad, veterania: 0, moral: 100 };
+  return escuadronDePrueba(id, heroeId, 'milicia_lanceros', cantidad);
 }
 
 // `milicia_lanceros`: poderBase 2. Con un solo escuadrón por bando no entra la cohesión (exige length > 1),
@@ -25,18 +25,18 @@ const DEFENSOR = [escuadron('e-defensor', 'jugador-defensor', 90)]; // poder 180
 
 describe('resolverCombate — el multiplicador defensivo (Paso 3b)', () => {
   it('sin multiplicador (o en 1), gana quien tiene más poder — aquí, el atacante', () => {
-    const resultado = resolverCombate(ATACANTE, DEFENSOR, instanteDeTest(0), rngSinVarianza);
+    const resultado = resolverCombate(ATACANTE, DEFENSOR, rngSinVarianza);
     expect(resultado.ganador).toBe('atacante');
   });
 
   it('con el multiplicador de una muralla de nivel 3 y una puerta (×2.5), el mismo defensor RESISTE', () => {
-    const resultado = resolverCombate(ATACANTE, DEFENSOR, instanteDeTest(0), rngSinVarianza, MURALLA.bonoDefensaPorNivel[3]);
+    const resultado = resolverCombate(ATACANTE, DEFENSOR, rngSinVarianza, MURALLA.bonoDefensaPorNivel[3]);
     expect(resultado.ganador).toBe('defensor');
   });
 
   it('un multiplicador de 1 (sin muro) es indistinguible de no pasar el parámetro', () => {
-    const conUno = resolverCombate(ATACANTE, DEFENSOR, instanteDeTest(0), rngSinVarianza, 1);
-    const sinParametro = resolverCombate(ATACANTE, DEFENSOR, instanteDeTest(0), rngSinVarianza);
+    const conUno = resolverCombate(ATACANTE, DEFENSOR, rngSinVarianza, 1);
+    const sinParametro = resolverCombate(ATACANTE, DEFENSOR, rngSinVarianza);
     expect(conUno.ganador).toBe(sinParametro.ganador);
   });
 });
@@ -47,9 +47,9 @@ describe('iniciarAsedio — la muralla del DEFENSOR decide, no la del atacante',
     const facciones = crearFacciones();
     const { asentamiento: base1 } = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', [], 0, { x: 0, y: 0 });
     const { asentamiento: base2 } = fundarAsentamientoDeTest(mapa, facciones, 'faccion-2', [base1], 0, { x: 2000, y: 2000 });
-    const atacante: Asentamiento = { ...base2, cargos: { ...base2.cargos, generalId: 'jugador-atacante' }, escuadrones: ATACANTE };
-    const defensor: Asentamiento = { ...base1, escuadrones: DEFENSOR };
-    return { atacante, defensor };
+    // Las tropas de cada lado son sus campamentos (`campamentoDe`), que se pasan aparte: ATACANTE y DEFENSOR.
+    const atacante: Asentamiento = { ...base2, cargos: { ...base2.cargos, generalId: 'jugador-atacante' } };
+    return { atacante, defensor: base1 };
   }
 
   function recintoCompleto(nivel: number, puertas: number, totalCeldas: number): Recinto {
@@ -63,27 +63,22 @@ describe('iniciarAsedio — la muralla del DEFENSOR decide, no la del atacante',
 
   it('sin recinto, el defensor cae exactamente como hoy (sin cambio de comportamiento)', () => {
     const { atacante, defensor } = ciudades();
-    const resultado = iniciarAsedio(atacante, defensor, ['e-atacante'], crearFacciones(), [], instanteDeTest(0), rngSinVarianza);
+    const resultado = iniciarAsedio(atacante, ATACANTE, defensor, DEFENSOR, ['e-atacante'], crearFacciones(), [], instanteDeTest(0), rngSinVarianza);
     expect(resultado.conquistado).toBe(true);
   });
 
-  it('conquistar: la guarnición pasa a ser la del CONQUISTADOR, sin herencia ni residencia del vencido (Doc 5.4)', () => {
-    // Ocupacion §2.2: los escuadrones seleccionados del atacante MARCHAN a guarnecer la plaza tomada y salen
-    // de la suya; los cascarones congelados del vencido NO se quedan (huérfanos). Antes la guarnición caía a
-    // 0 y la plaza quedaba indefensa para siempre — el ping-pong de conquistas.
+  it('conquistar no mueve a nadie: la plaza queda SIN guarnición y sin residencia del vencido (Doc 5.15.5)', () => {
+    // Los atacantes siguen en su campamento con sus bajas; a los residentes vencidos los desaloja el llamador
+    // (`desalojarResidentes`). La plaza tomada no hereda tropa de nadie.
     const { atacante, defensor } = ciudades();
-    expect(defensor.escuadrones.length, 'el defensor arranca con guarnición').toBeGreaterThan(0);
 
-    const resultado = iniciarAsedio(atacante, defensor, ['e-atacante'], crearFacciones(), [], instanteDeTest(0), rngSinVarianza);
+    const resultado = iniciarAsedio(atacante, ATACANTE, defensor, DEFENSOR, ['e-atacante'], crearFacciones(), [], instanteDeTest(0), rngSinVarianza);
 
     expect(resultado.conquistado).toBe(true);
     expect(resultado.defensor.faccionId).toBe(atacante.faccionId);
-    // La guarnición es AHORA el escuadrón del conquistador (con sus bajas de asedio), no un cascarón del vencido.
-    expect(resultado.defensor.escuadrones.map((e) => e.id)).toEqual(['e-atacante']);
-    expect(resultado.defensor.escuadrones[0]!.heroeId).toBe('jugador-atacante');
-    expect(resultado.defensor.escuadrones[0]!.cantidad).toBeGreaterThan(0);
-    // Y ha salido de la guarnición del atacante: marchó a la plaza tomada.
-    expect(resultado.atacante.escuadrones).toEqual([]);
+    const suya = resultado.tropa.find((e) => e.id === 'e-atacante')!;
+    expect(suya.cantidad, 'con sus bajas de asedio, pero en pie').toBeGreaterThan(0);
+    expect(suya.contenedor, 'y sin cambiar de sitio').toEqual({ tipo: 'campamento' });
     // Residencia y cargos del vencido: vacíos.
     expect(resultado.defensor.heroesFundadoresIds).toEqual([]);
     expect(resultado.defensor.casasCompradas).toEqual([]);
@@ -98,7 +93,7 @@ describe('iniciarAsedio — la muralla del DEFENSOR decide, no la del atacante',
     const activosAntes = defensor.edificios.filter((e) => e.estado === 'activo');
     expect(activosAntes.length, 'la fixture trae edificios activos que saquear').toBeGreaterThan(2);
 
-    const r = iniciarAsedio(atacante, defensor, ['e-atacante'], crearFacciones(), [], instanteDeTest(0), rngSinVarianza).defensor;
+    const r = iniciarAsedio(atacante, ATACANTE, defensor, DEFENSOR, ['e-atacante'], crearFacciones(), [], instanteDeTest(0), rngSinVarianza).defensor;
 
     expect(r.poblacion.pesants).toBeLessThan(pobAntes.pesants);
     expect(r.poblacion.nobleza, 'la nobleza no se saquea').toBe(pobAntes.nobleza);
@@ -115,15 +110,15 @@ describe('iniciarAsedio — la muralla del DEFENSOR decide, no la del atacante',
 
   it('el saqueo es determinista: misma entrada, misma salida', () => {
     const { atacante, defensor } = ciudades();
-    const a = iniciarAsedio(atacante, defensor, ['e-atacante'], crearFacciones(), [], instanteDeTest(0), rngSinVarianza).defensor;
-    const b = iniciarAsedio(atacante, defensor, ['e-atacante'], crearFacciones(), [], instanteDeTest(0), rngSinVarianza).defensor;
+    const a = iniciarAsedio(atacante, ATACANTE, defensor, DEFENSOR, ['e-atacante'], crearFacciones(), [], instanteDeTest(0), rngSinVarianza).defensor;
+    const b = iniciarAsedio(atacante, ATACANTE, defensor, DEFENSOR, ['e-atacante'], crearFacciones(), [], instanteDeTest(0), rngSinVarianza).defensor;
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
   });
 
   it('una plaza bajo ocupación reciente es INMUNE: rebota sin combate ni conquista (Ocupacion §2.4)', () => {
     const { atacante, defensor } = ciudades();
     const ocupado: Asentamiento = { ...defensor, ocupacionHasta: instanteDeTest(100) };
-    const r = iniciarAsedio(atacante, ocupado, ['e-atacante'], crearFacciones(), [], instanteDeTest(10), rngSinVarianza);
+    const r = iniciarAsedio(atacante, ATACANTE, ocupado, DEFENSOR, ['e-atacante'], crearFacciones(), [], instanteDeTest(10), rngSinVarianza);
     expect(r.conquistado).toBe(false);
     expect(r.defensor.faccionId).toBe(defensor.faccionId);
     expect(r.eventos.map((e) => (typeof e !== 'string' ? e.codigo : e))).toEqual(['combate.asedio_resistido']);
@@ -133,25 +128,25 @@ describe('iniciarAsedio — la muralla del DEFENSOR decide, no la del atacante',
     const { atacante, defensor } = ciudades();
     const amurallado: Asentamiento = { ...defensor, recintos: [recintoCompleto(3, 1, 10)] };
 
-    const resultado = iniciarAsedio(atacante, amurallado, ['e-atacante'], crearFacciones(), [], instanteDeTest(0), rngSinVarianza);
+    const resultado = iniciarAsedio(atacante, ATACANTE, amurallado, DEFENSOR, ['e-atacante'], crearFacciones(), [], instanteDeTest(0), rngSinVarianza);
 
     expect(resultado.conquistado).toBe(false);
     expect(resultado.defensor.faccionId).toBe(defensor.faccionId);
     expect(resultado.defensor.heroesFundadoresIds).toEqual(defensor.heroesFundadoresIds);
-    expect(resultado.defensor.escuadrones.length).toBe(defensor.escuadrones.length);
+    expect(resultado.tropa.filter((e) => e.heroeId === 'jugador-defensor')).toHaveLength(DEFENSOR.length);
   });
 
   it('con un recinto nivel 3 de una puerta, completo, el defensor resiste el MISMO ataque', () => {
     const { atacante, defensor } = ciudades();
     const amurallado: Asentamiento = { ...defensor, recintos: [recintoCompleto(3, 1, 10)] };
-    const resultado = iniciarAsedio(atacante, amurallado, ['e-atacante'], crearFacciones(), [], instanteDeTest(0), rngSinVarianza);
+    const resultado = iniciarAsedio(atacante, ATACANTE, amurallado, DEFENSOR, ['e-atacante'], crearFacciones(), [], instanteDeTest(0), rngSinVarianza);
     expect(resultado.conquistado).toBe(false);
   });
 
   it('la muralla del ATACANTE no cuenta para nada: solo importa la del defensor', () => {
     const { atacante, defensor } = ciudades();
     const atacanteAmurallado: Asentamiento = { ...atacante, recintos: [recintoCompleto(3, 1, 10)] };
-    const resultado = iniciarAsedio(atacanteAmurallado, defensor, ['e-atacante'], crearFacciones(), [], instanteDeTest(0), rngSinVarianza);
+    const resultado = iniciarAsedio(atacanteAmurallado, ATACANTE, defensor, DEFENSOR, ['e-atacante'], crearFacciones(), [], instanteDeTest(0), rngSinVarianza);
     expect(resultado.conquistado).toBe(true); // igual que sin ningún recinto de por medio
   });
 
@@ -159,7 +154,7 @@ describe('iniciarAsedio — la muralla del DEFENSOR decide, no la del atacante',
     const { atacante, defensor } = ciudades();
     const sinLevantar: Recinto = { ...recintoCompleto(3, 1, 10), avance: -1 }; // integridad 0
     const amurallado: Asentamiento = { ...defensor, recintos: [sinLevantar] };
-    const resultado = iniciarAsedio(atacante, amurallado, ['e-atacante'], crearFacciones(), [], instanteDeTest(0), rngSinVarianza);
+    const resultado = iniciarAsedio(atacante, ATACANTE, amurallado, DEFENSOR, ['e-atacante'], crearFacciones(), [], instanteDeTest(0), rngSinVarianza);
     expect(resultado.conquistado).toBe(true); // igual que sin ningún recinto: no hay nada en pie que atravesar
   });
 });

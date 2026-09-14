@@ -37,6 +37,7 @@ export const crearHeroe = comando<ParamsCrearHeroe, { heroeId: string }>((estado
     avatar: params.avatar,
     liderazgoBase: LIDERAZGO.base,
     ubicacion: { tipo: 'columna', ejercitoId: columna.id },
+    escuadrones: [],
   };
   return exito(
     { ...estado, heroes: [...estado.heroes, heroe], ejercitos: [...estado.ejercitos, columna] },

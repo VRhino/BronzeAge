@@ -66,7 +66,8 @@ import { slotsDisponibles } from '@motor/engine/politicas';
 import { computeTodasLasZonas, computeZonasFusionadasPorFaccion } from '@motor/engine/zones';
 import { calcularCapFundacion, calcularCupoNivel, capacidadCasas } from '@motor/engine/faccion';
 import { computeLigas, type LigaInfo } from '@motor/engine/liga';
-import { consumoRacionTropas } from '@motor/engine/tropas';
+import { consumoRacionDeEscuadrones } from '@motor/engine/tropas';
+import { campamentoDe } from '@motor/engine/tropa';
 import {
   estadoMejoraEdificio as estadoMejoraEdificioEngine,
   factorLineaProduccion,
@@ -538,7 +539,7 @@ export class GameStore {
       const disponible = asentamiento.almacen[recurso]?.cantidad ?? 0;
       return { recurso, costoPorMinuto: cantidad ?? 0, disponible, cubierto: disponible >= (cantidad ?? 0) };
     });
-    const costoTrigo = consumoComidaPoblacion(asentamiento) + consumoRacionTropas(asentamiento);
+    const costoTrigo = consumoComidaPoblacion(asentamiento) + consumoRacionDeEscuadrones(this.guarnicionDe(asentamiento));
     const trigoDisponible = asentamiento.almacen['trigo']?.cantidad ?? 0;
     items.push({ recurso: 'trigo', costoPorMinuto: costoTrigo, disponible: trigoDisponible, cubierto: trigoDisponible >= costoTrigo });
     return { enGracia, congeladoPorOcupacion, minutosParaFinGracia: Math.max(0, Math.round(MANTENIMIENTO.graciaMinutos - minutosDesdeFundacion)), items };
@@ -602,11 +603,17 @@ export class GameStore {
     return { produccion, consumo, consumoTotal };
   }
 
+  /** La guarnición de una plaza: el campamento de sus residentes (las escuadras viven en sus héroes). */
+  guarnicionDe(asentamiento: Asentamiento): GameState['heroes'][number]['escuadrones'] {
+    return campamentoDe(asentamiento, this.state.heroes);
+  }
+
   /** Resumen militar de solo lectura para la interfaz del asentamiento. */
   poderMilitarInfo(asentamiento: Asentamiento): { soldados: number; poder: number } {
+    const guarnicion = this.guarnicionDe(asentamiento);
     return {
-      soldados: asentamiento.escuadrones.reduce((total, escuadron) => total + escuadron.cantidad, 0),
-      poder: asentamiento.escuadrones.reduce((total, escuadron) => total + poderEscuadron(escuadron, this.state.instante), 0),
+      soldados: guarnicion.reduce((total, escuadron) => total + escuadron.cantidad, 0),
+      poder: guarnicion.reduce((total, escuadron) => total + poderEscuadron(escuadron), 0),
     };
   }
 

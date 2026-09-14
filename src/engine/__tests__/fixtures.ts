@@ -1,7 +1,7 @@
 // Fixtures compartidas para los tests de regresión del motor: construyen mapa/facción/asentamiento
 // usando las funciones REALES del motor (generarMapa/crearFaccion/fundarAsentamiento), nunca objetos
 // inventados a mano — así un test que pasa hoy sigue significando "el motor real produce esto".
-import type { Asentamiento, Faccion, Heroe, UbicacionHeroe } from '../../domain/types';
+import type { Asentamiento, Escuadron, Faccion, Heroe, UbicacionHeroe } from '../../domain/types';
 import { instante, type Instante } from '../../domain/tiempo';
 import { generarMapa, MAPA_DEFAULT, type RandomFn } from '../../worldgen';
 import { crearMapa, type Mapa } from '../../world/mapa';
@@ -9,7 +9,7 @@ import { LIDERAZGO, SIMULACION } from '../../constants';
 import { crearFaccion } from '../faccion';
 import { evaluarViabilidadFundacion, fundarAsentamiento } from '../settlement';
 import type { ContextoSimulacion, EstadoSimulacion } from '../simulation';
-import type { MundoEscuadras } from '../tropas';
+import { PROGRESION_INICIAL } from '../tropas';
 
 /** Un héroe humano de prueba. Su `jugadorId` es su propio id, así que un test actúa con `{ actor: id }`. */
 export function heroeDePrueba(id: string, ubicacion: UbicacionHeroe, extra: Partial<Heroe> = {}): Heroe {
@@ -23,17 +23,45 @@ export function heroeDePrueba(id: string, ubicacion: UbicacionHeroe, extra: Part
     avatar: { cabezaId: '', peloId: '', barbaId: '', cejasId: '' },
     liderazgoBase: LIDERAZGO.base,
     ubicacion,
+    escuadrones: [],
     ...extra,
   };
+}
+
+/** Un escuadrón de prueba, por defecto en el campamento de su héroe. */
+export function escuadronDePrueba(
+  id: string,
+  heroeId: string,
+  tropaId = 'milicia_lanceros',
+  cantidad = 10,
+  extra: Partial<Escuadron> = {}
+): Escuadron {
+  return {
+    id,
+    nombre: tropaId,
+    heroeId,
+    origen: 'pesants',
+    cantidad,
+    ...PROGRESION_INICIAL,
+    moral: 100,
+    tropaId,
+    contenedor: { tipo: 'campamento' },
+    enGuarnicion: false,
+    ...extra,
+  };
+}
+
+/** Los héroes dueños de estas escuadras —uno por `heroeId`, con las suyas dentro—, más los indicados sin tropa.
+ * Las escuadras viven en su héroe (`engine/tropa.ts`): sin su registro no hay dónde guardarlas. */
+export function heroesCon(escuadrones: readonly Escuadron[], sinTropa: readonly string[] = []): Heroe[] {
+  const porHeroe = new Map<string, Escuadron[]>(sinTropa.map((id) => [id, []]));
+  for (const e of escuadrones) porHeroe.set(e.heroeId, [...(porHeroe.get(e.heroeId) ?? []), e]);
+  return [...porHeroe].map(([id, suyas]) => heroeDePrueba(id, { tipo: 'desconectado', punto: { x: 0, y: 0 } }, { escuadrones: suyas }));
 }
 
 export function crearMapaDeterminista(seed: number): Mapa {
   return crearMapa(generarMapa({ ancho: MAPA_DEFAULT.ancho, alto: MAPA_DEFAULT.alto, seed }));
 }
-
-/** Partida sin nada fuera del asentamiento que recluta — para los tests de `reclutarTropa` que no miran la
- * unicidad global por `tropaId`. */
-export const SIN_MUNDO: MundoEscuadras = { asentamientos: [], ejercitos: [], caravanas: [] };
 
 const EPOCA_MS = new Date(SIMULACION.epocaInicial).getTime();
 

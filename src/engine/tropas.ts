@@ -1,4 +1,4 @@
-import type { Asentamiento, Caravana, Ejercito, Escuadron } from '../domain/types';
+import type { Asentamiento, Ejercito, Escuadron, Heroe } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
 import { MILITAR, MOVIMIENTO, RECLUTAMIENTO_ORO_POR_ESCALON, RESERVA_CONSTRUCCION, TROPAS_RECLUTABLES } from '../constants';
 
@@ -12,28 +12,38 @@ import { descontarRecursos, tieneRecursos } from './almacen';
 import { edificiosPorTipoYEstado, poblacionDisponibleParaReclutar } from './asentamientoQuery';
 import { consumoComidaPoblacion } from './population';
 import { factorCostoReclutamiento } from './politicas';
-import { puedeReclutarEn } from './pertenencia';
+import { esResidente, puedeReclutarEn } from './pertenencia';
+import { campamentoDe, conEscuadrones } from './tropa';
+import { distancia } from '../world/geometria';
 
 export class ReclutamientoInvalidoError extends Error {}
 
-/** Dónde puede estar una escuadra fuera del asentamiento que recluta: otra guarnición, un ejército o la escolta
- * de una caravana. Solo los campos que mira la unicidad — `GameSessionState` y `EstadoSimulacion` encajan tal cual. */
-export interface MundoEscuadras {
-  asentamientos: readonly Pick<Asentamiento, 'id' | 'nombre' | 'escuadrones'>[];
-  ejercitos: readonly Pick<Ejercito, 'id' | 'escuadrones'>[];
-  caravanas: readonly Pick<Caravana, 'id' | 'escolta'>[];
+/** Con qué nace un escuadrón: nivel 1, sin experiencia y sin progresión táctica de Conquest. */
+export const PROGRESION_INICIAL: Pick<
+  Escuadron,
+  'nivel' | 'experiencia' | 'habilidadesDesbloqueadas' | 'formacionesDesbloqueadas' | 'formacionSeleccionada'
+> = { nivel: 1, experiencia: 0, habilidadesDesbloqueadas: [], formacionesDesbloqueadas: [], formacionSeleccionada: 0 };
+
+/** Dónde está una escuadra, para decírselo a quien intenta reclutar otra de la misma tropa. */
+function dondeEsta(e: Escuadron): string {
+  switch (e.contenedor.tipo) {
+    case 'campamento':
+      return 'tu campamento';
+    case 'ejercito':
+      return `el ejército ${e.contenedor.ejercitoId}`;
+    case 'escolta':
+      return `la escolta de la caravana ${e.contenedor.caravanaId}`;
+  }
 }
 
-/** Dónde tiene el jugador su escuadra de `tropaId` FUERA de `asentamientoId`, o `undefined` si no la tiene. */
-function escuadraFuera(mundo: MundoEscuadras, asentamientoId: string, heroeId: string, tropaId: string): string | undefined {
-  const esSuya = (e: Escuadron) => e.heroeId === heroeId && e.tropaId === tropaId;
-  const plaza = mundo.asentamientos.find((a) => a.id !== asentamientoId && a.escuadrones.some(esSuya));
-  if (plaza) return `la guarnición de ${plaza.nombre ?? plaza.id}`;
-  const ejercito = mundo.ejercitos.find((e) => e.escuadrones.some(esSuya));
-  if (ejercito) return `el ejército ${ejercito.id}`;
-  const caravana = mundo.caravanas.find((c) => c.escolta?.some(esSuya));
-  if (caravana) return `la escolta de la caravana ${caravana.id}`;
-  return undefined;
+/** ¿Se repone AQUÍ? Solo donde está físicamente (Doc 5.16.2): en el campamento de su héroe si reside en esta
+ * plaza, o en su columna si está a la puerta. */
+function reponibleAqui(e: Escuadron, asentamiento: Asentamiento, ejercitos: readonly Ejercito[]): boolean {
+  const contenedor = e.contenedor;
+  if (contenedor.tipo === 'campamento') return esResidente(asentamiento, e.heroeId);
+  if (contenedor.tipo === 'escolta') return false;
+  const columna = ejercitos.find((x) => x.id === contenedor.ejercitoId);
+  return !!columna && distancia(columna.posicionActual, asentamiento.posicion) <= MOVIMIENTO.radioPuerta;
 }
 
 /**
@@ -43,24 +53,19 @@ function escuadraFuera(mundo: MundoEscuadras, asentamientoId: string, heroeId: s
  * pools — reemplaza el antiguo reclutamiento directo de Artesanos con cobre a secas, y el de Nobleza vía Gran
  * Fundición, ambos retirados). Una tropa NUNCA cambia de identidad (Doc 5.8, a petición del usuario): "mejorar"
  * no es ascenso automático del mismo escuadrón, es reclutar una tropa DISTINTA y mejor cuando el edificio suba
- * de nivel interno — ver `poderEscuadron` en engine/combate.ts, que aplica el bonus de veteranía sin tocar
+ * de nivel interno — ver `poderEscuadron` en engine/combate.ts, que aplica el bonus de experiencia sin tocar
  * nunca `tropaId`.
  *
- * Escuadrón de UN jugador, no del asentamiento (Doc 2.5, a petición del usuario — corrige el bug donde dos
- * jugadores reclutando la misma tropa en el mismo asentamiento se fundían en un solo escuadrón compartido):
- * cada jugador residente (fundador o con casa comprada, ver `Asentamiento.heroesFundadoresIds`/
- * `casasCompradas`) tiene como mucho UN escuadrón por `tropaId` en TODA la partida (no por asentamiento: se
- * busca también en `mundo` — otras guarniciones, ejércitos y escoltas), tope `tropa.unidadesPorDefecto`. Reclutar ya
- * no es un gate del cargo de General (Doc 2.2 vs 2.5 — 2.5 ganó la ambigüedad: reclutar es beneficio de
- * ciudadanía/residencia, no de cargo): cualquier residente puede reclutar o reponer SU propio escuadrón.
- * "Reponer bajas" no es un mecanismo aparte: si el jugador ya tiene el escuadrón por debajo del tope, reclutar
- * de nuevo paga y añade solo las unidades que faltan hasta el tope (mismo costo por soldado que reclutar desde
- * cero) en vez de sumar otro bloque completo.
+ * Escuadrón de UN héroe, no del asentamiento (Doc 2.5/5.16.2): como mucho UNO por `tropaId` en TODA la partida,
+ * tope `tropa.unidadesPorDefecto`. Si ya lo tiene, reclutar solo lo REPONE —paga y añade las unidades que faltan
+ * hasta el tope—, y solo donde está: en su campamento o en su columna a la puerta (`reponibleAqui`). Reclutar no
+ * es un gate del cargo de General (Doc 2.2 vs 2.5 — 2.5 ganó la ambigüedad: es beneficio de residencia).
  */
 export function reclutarTropa(
   asentamiento: Asentamiento,
-  /** El resto de la partida, para la unicidad global por `tropaId` (Doc 2.5). */
-  mundo: MundoEscuadras,
+  heroes: readonly Heroe[],
+  /** Las columnas del mundo: una escuadra que va en una solo se repone con la columna a la puerta. */
+  ejercitos: readonly Ejercito[],
   heroeId: string,
   /** Facción del jugador — para `puedeReclutarEn` (Doc 5.4/5.8, revisión 2026-09-08). Para el NPC siempre es
    * `asentamiento.faccionId`; para un comando, la Facción del actor. */
@@ -68,21 +73,21 @@ export function reclutarTropa(
   tropaId: string,
   origen: 'pesants' | 'artesanos',
   contador = 0
-): Asentamiento {
+): { asentamiento: Asentamiento; heroes: Heroe[] } {
   const permiso = puedeReclutarEn(asentamiento, heroeId, faccionDelJugadorId);
   if (permiso === 'no') {
     throw new ReclutamientoInvalidoError('No puedes reclutar aquí: ni resides ni es una plaza de tu Facción que lo permita.');
   }
   const tropa = TROPAS_RECLUTABLES.find((t) => t.id === tropaId);
   if (!tropa) throw new ReclutamientoInvalidoError('La tropa no existe en el catálogo.');
+  const heroe = heroes.find((h) => h.id === heroeId);
+  if (!heroe) throw new ReclutamientoInvalidoError('Ese héroe no existe.');
 
-  const existente = asentamiento.escuadrones.find((e) => e.heroeId === heroeId && e.tropaId === tropaId);
-  // La escuadra es una sola en toda la partida: si está fuera, ni se crea otra ni se repone a distancia.
-  const fuera = existente ? undefined : escuadraFuera(mundo, asentamiento.id, heroeId, tropaId);
-  if (fuera) {
-    throw new ReclutamientoInvalidoError(`Ya tienes una escuadra de ${tropa.nombre}: está en ${fuera}. Solo puedes reponerla donde está.`);
+  const existente = heroe.escuadrones.find((e) => e.tropaId === tropaId);
+  if (existente && !reponibleAqui(existente, asentamiento, ejercitos)) {
+    throw new ReclutamientoInvalidoError(`Ya tienes una escuadra de ${tropa.nombre}: está en ${dondeEsta(existente)}. Solo puedes reponerla donde está.`);
   }
-  // Fuera de tu residencia solo REPONES lo que ya tienes aquí (guarnición o columna) — nunca un escuadrón
+  // Fuera de tu residencia solo REPONES lo que ya tienes aquí (tu columna a la puerta) — nunca un escuadrón
   // nuevo ni una tropa distinta.
   if (permiso === 'solo_reponer' && !existente) {
     throw new ReclutamientoInvalidoError('Fuera de tu residencia solo puedes reponer un escuadrón que ya tienes aquí, no reclutar uno nuevo.');
@@ -136,7 +141,11 @@ export function reclutarTropa(
   // escasez, se cierra antes de que reclutar termine de romper nada — ver
   // `issues/granjas_no_escalan_con_poblacion.md` y `Consideraciones/NPC_Gobernanza_Facciones_Controladas.md`
   // §"Abierto" para el diagnóstico completo (colapso masivo medido en batch con el throttle viejo).
-  const reservaTrigoRequerida = reservaDeTrigo(asentamiento, cantidad * MILITAR.racionPorSoldadoPorMinuto);
+  const reservaTrigoRequerida = reservaDeTrigo(
+    asentamiento,
+    consumoRacionDeEscuadrones(campamentoDe(asentamiento, heroes)),
+    cantidad * MILITAR.racionPorSoldadoPorMinuto
+  );
   const trigoDisponible = asentamiento.almacen['trigo']?.cantidad ?? 0;
   if (trigoDisponible < reservaTrigoRequerida) {
     throw new ReclutamientoInvalidoError(
@@ -144,32 +153,34 @@ export function reclutarTropa(
     );
   }
 
-  const escuadrones = existente
-    ? asentamiento.escuadrones.map((e) => (e.id === existente.id ? { ...e, cantidad: e.cantidad + cantidad } : e))
-    : [
-        ...asentamiento.escuadrones,
-        {
-          id: `escuadron-${asentamiento.id}-${contador}`,
-          nombre: `${tropa.nombre} de ${heroeId}`,
-          heroeId,
-          origen,
-          cantidad,
-          veterania: 0,
-          moral: 100,
-          tropaId,
-        } satisfies Escuadron,
-      ];
+  const escuadron: Escuadron = existente
+    ? { ...existente, cantidad: existente.cantidad + cantidad }
+    : {
+        id: `escuadron-${asentamiento.id}-${contador}`,
+        nombre: `${tropa.nombre} de ${heroeId}`,
+        heroeId,
+        origen,
+        cantidad,
+        ...PROGRESION_INICIAL,
+        moral: 100,
+        tropaId,
+        contenedor: { tipo: 'campamento' },
+        enGuarnicion: false,
+      };
 
   return {
-    ...asentamiento,
-    poblacion: { ...asentamiento.poblacion, [origen]: asentamiento.poblacion[origen] - cantidad },
-    almacen: descontarRecursos(asentamiento.almacen, costoTotal),
-    escuadrones,
+    asentamiento: {
+      ...asentamiento,
+      poblacion: { ...asentamiento.poblacion, [origen]: asentamiento.poblacion[origen] - cantidad },
+      almacen: descontarRecursos(asentamiento.almacen, costoTotal),
+    },
+    heroes: conEscuadrones(heroes, [escuadron]),
   };
 }
 
-/** Ración de trigo/tick que exige un conjunto de escuadrones, mire quien lo mire (Doc 5.4). El
- * `factorConsumo` lo usa un ejército ESTACIONADO, que consume reducido pero nunca 0 (Doc 5.12.3). */
+/** Ración de trigo/tick que exige un conjunto de escuadrones, mire quien lo mire (Doc 5.4) — la guarnición de
+ * una plaza es su campamento (`campamentoDe`). El `factorConsumo` lo usa un ejército ESTACIONADO, que consume
+ * reducido pero nunca 0 (Doc 5.12.3). */
 export function consumoRacionDeEscuadrones(escuadrones: readonly Escuadron[], factorConsumo = 1): number {
   const totalSoldados = escuadrones.reduce((acc, e) => acc + e.cantidad, 0);
   return totalSoldados * MILITAR.racionPorSoldadoPorMinuto * factorConsumo;
@@ -181,16 +192,6 @@ function consumoRacionDeColumna(escuadrones: readonly Escuadron[], participantes
   return consumoRacionDeEscuadrones(escuadrones, factorConsumo) + participantes * MOVIMIENTO.consumoPorParticipante * factorConsumo;
 }
 
-/** Ración total de trigo/tick que exigen los escuadrones de la GUARNICIÓN (Doc 5.4) — usada tanto para
- * descontarla como para el "apartado de trigo" mostrado en Mantenimiento (ver `gameStore.mantenimientoInfo`).
- *
- * No hace falta tocarla cuando existan los ejércitos: al salir a campaña los escuadrones se van DE VERDAD de
- * `asentamiento.escuadrones` (Doc 5.4), así que esto ya cuenta solo lo que se quedó en casa, que es
- * exactamente lo que la regla pide. */
-export function consumoRacionTropas(asentamiento: Asentamiento): number {
-  return consumoRacionDeEscuadrones(asentamiento.escuadrones);
-}
-
 /**
  * Trigo que un asentamiento NO puede tocar: lo que su gente —población y guarnición— come durante
  * `RESERVA_CONSTRUCCION.horizonteMinutosComida` minutos de mundo.
@@ -200,11 +201,12 @@ export function consumoRacionTropas(asentamiento: Asentamiento): number {
  * del carro de un ejército que sale de campaña (`engine/ejercitos.ts`, Doc 5.13). Antes la fórmula estaba
  * copiada en las dos primeras, y la tercera habría sido la copia número tres.
  *
- * `consumoExtraPorMinuto` proyecta bocas que TODAVÍA no existen — la tropa que se está a punto de reclutar —,
- * que es lo que distingue "¿me queda margen?" de "¿me quedará margen después de esto?".
+ * `consumoTropasPorMinuto` es la ración de su campamento (`consumoRacionDeEscuadrones(campamentoDe(...))`): las
+ * escuadras viven en sus héroes, no en la plaza. `consumoExtraPorMinuto` proyecta bocas que TODAVÍA no existen
+ * —la tropa que se está a punto de reclutar—, que es lo que distingue "¿me queda margen?" de "¿me quedará?".
  */
-export function reservaDeTrigo(asentamiento: Asentamiento, consumoExtraPorMinuto = 0): number {
-  const porMinuto = consumoComidaPoblacion(asentamiento) + consumoRacionTropas(asentamiento) + consumoExtraPorMinuto;
+export function reservaDeTrigo(asentamiento: Asentamiento, consumoTropasPorMinuto: number, consumoExtraPorMinuto = 0): number {
+  const porMinuto = consumoComidaPoblacion(asentamiento) + consumoTropasPorMinuto + consumoExtraPorMinuto;
   return porMinuto * RESERVA_CONSTRUCCION.horizonteMinutosComida;
 }
 
@@ -236,7 +238,7 @@ export function avanzarRacion(
   const factorSuministro = racionNecesaria > 0 ? Math.min(1, trigoDisponible / racionNecesaria) : 1;
   const trigoConsumido = Math.min(trigoDisponible, racionNecesaria);
 
-  // El squad (nombre, veteranía) persiste aunque `cantidad` llegue a 0 (Doc 5.4) — se puede rellenar reclutando.
+  // El squad (nombre, experiencia) persiste aunque `cantidad` llegue a 0 (Doc 5.4) — se puede rellenar reclutando.
   const actualizados = escuadrones.map((e) => {
     let moral = e.moral;
     if (factorSuministro >= 1) {
@@ -262,14 +264,17 @@ export function avanzarRacion(
   return { escuadrones: actualizados, trigoConsumido, eventos };
 }
 
-/** Mantenimiento de la GUARNICIÓN (Doc 5.4): envoltorio de `avanzarRacion` sobre el almacén del asentamiento.
- * El ejército en campaña usará la misma función con su carro (Doc 5.13). */
-export function avanzarMantenimientoTropas(asentamiento: Asentamiento): { asentamiento: Asentamiento; eventos: EventoCrudo[] } {
-  if (asentamiento.escuadrones.length === 0) return { asentamiento, eventos: [] };
+/** Mantenimiento de la GUARNICIÓN (Doc 5.4): el campamento de la plaza come de su almacén. El ejército en campaña
+ * usa la misma `avanzarRacion` con su carro (Doc 5.13). */
+export function avanzarMantenimientoTropas(
+  asentamiento: Asentamiento,
+  campamento: readonly Escuadron[]
+): { asentamiento: Asentamiento; campamento: Escuadron[]; eventos: EventoCrudo[] } {
+  if (campamento.length === 0) return { asentamiento, campamento: [], eventos: [] };
 
   const trigoDisponible = asentamiento.almacen['trigo']?.cantidad ?? 0;
-  const { escuadrones, trigoConsumido, eventos } = avanzarRacion(asentamiento.escuadrones, trigoDisponible);
+  const { escuadrones, trigoConsumido, eventos } = avanzarRacion(campamento, trigoDisponible);
   const almacen = descontarRecursos(asentamiento.almacen, { trigo: trigoConsumido });
 
-  return { asentamiento: { ...asentamiento, almacen, escuadrones }, eventos };
+  return { asentamiento: { ...asentamiento, almacen }, campamento: escuadrones, eventos };
 }

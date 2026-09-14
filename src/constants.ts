@@ -35,8 +35,11 @@
  * v9 (2026-09-13): BA-005 — huellas a la mitad (`EDIFICIO_TAMANO`, `PUESTO_MERCADO_FORMA`, `granja.niveles`),
  *   `TRAZADO` de escala de edificio a la mitad y nueva `LAYOUT_VERSION` en `geometriaUrbana`. Esta sí
  *   invalida partidas guardadas, pero por `LAYOUT_VERSION`, no por este número.
+ * v10 (2026-09-14): modelo de Héroe, fase 2 — `MILITAR.bonusVeteraniaPorPunto`/`veteraniaGanada*` pasan a
+ *   `bonusExperienciaPorPunto`/`experienciaGanada*` (mismos valores), y salen `duracionHeridoMinutos` y
+ *   `penalizacionHerido`: los escuadrones ya no quedan heridos.
  */
-export const BALANCE_VERSION = 9;
+export const BALANCE_VERSION = 10;
 
 /**
  * Modelo temporal (Fase D, Docs/Arquitectura/10_Modelo_Temporal.md). **Decisión del usuario (2026-08-29):
@@ -1517,13 +1520,13 @@ export const MILITAR = {
   degradacionMoralSinRacion: 20,
   // Fracción de la cantidad del escuadrón que deserta por minuto mientras la moral está a 0 (Doc 5.4).
   desercionFraccionPorMinutoSinMoral: 0.05,
-  bonusVeteraniaPorPunto: 0.05,
-  veteraniaGanadaPorVictoria: 1,
-  veteraniaGanadaPorDerrota: 0.5,
+  bonusExperienciaPorPunto: 0.05,
+  // Experiencia de escuadra en el combate numérico: los valores de la antigua veteranía, hasta que Conquest
+  // publique su curva de XP (CQ-001; decisión del usuario 2026-09-14).
+  experienciaGanadaPorVictoria: 1,
+  experienciaGanadaPorDerrota: 0.5,
   // Cohesión entre escuadrones defendiendo juntos (Doc 5.3), abstraída como bonus de poder (sin formaciones renderizadas).
   bonusCohesionPorEscuadronExtra: 0.1,
-  duracionHeridoMinutos: 30,
-  penalizacionHerido: 0.5,
   varianzaCombate: 0.15,
   // Combate de caravanas (Doc 3.10): umbral de captura del 50% y defensa base de una escolta no modelada en detalle.
   umbralCapturaCaravana: 0.5,

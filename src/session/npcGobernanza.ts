@@ -23,14 +23,15 @@
 //
 // Diseño, decisiones y limitaciones: `Consideraciones/NPC_Gobernanza_Facciones_Controladas.md`.
 
-import type { AcuerdoTrueque, Asentamiento, Caravana, CampamentoBandido, EdificioTipo, Ejercito, Escuadron, Faccion, Heroe, OrdenMercado, Point, RecursoTipo, RelacionPolitica } from '../domain/types';
+import type { AcuerdoTrueque, Asentamiento, Caravana, CampamentoBandido, EdificioTipo, Ejercito, Escuadron, Faccion, Heroe, OrdenMercado, Point, RecursoTipo, RelacionPolitica, UbicacionHeroe } from '../domain/types';
 import { RECURSOS_TIPO } from '../domain/types';
 import { colocarOrdenMercado } from '../engine/market';
 import type { Mapa } from '../world/mapa';
 import type { RandomFn } from '../worldgen';
 import type { ContextoSimulacion, EstadoSimulacion } from '../engine/simulation';
 import { avanzarAutoComercioSimulado } from '../engine/simulacionAutoComercio';
-import { reclutarTropa, ReclutamientoInvalidoError, type MundoEscuadras } from '../engine/tropas';
+import { reclutarTropa, ReclutamientoInvalidoError } from '../engine/tropas';
+import { campamentoDe, conEscuadrones, indiceTropa, sinTropa, type IndiceTropa } from '../engine/tropa';
 import { atacarCampamentoBandidos, CombateInvalidoError } from '../engine/combate';
 import { lanzarCaravanaFundacion, costoCaravanaFundacion, ExpansionInvalidaError } from '../engine/expansion';
 import {
@@ -60,7 +61,7 @@ import { evaluarViabilidadFundacion, fundarAsentamiento, FundacionInvalidaError 
 import { CAMPAMENTOS_BANDIDOS, LIDERAZGO, LOGISTICA, MILITAR, TROPAS_RECLUTABLES, VISION } from '../constants';
 import { situarHeroes } from '../engine/ubicacion';
 import { enTregua, movilizarEjercito, replegarEjercito, MovilizacionInvalidaError } from '../engine/ejercitos';
-import { reservaDeTrigo } from '../engine/tropas';
+import { consumoRacionDeEscuadrones, reservaDeTrigo } from '../engine/tropas';
 import { estanAliadas } from '../engine/pertenencia';
 import { distancia } from '../world/geometria';
 import { minutos, sumar, type Instante } from '../domain/tiempo';
@@ -114,13 +115,13 @@ const RESERVA_MADERA_ANTES_DE_RECLUTAR = 150;
 const UMBRAL_NUTRICION_ANTES_DE_ATACAR = 50;
 const SALUD_ESCUADRONES_ANTES_DE_ATACAR = 0.6;
 
-/** Tamaño actual de los escuadrones del asentamiento como fracción de su tamaño nominal combinado — 1 si no
- * hay ninguno (nada que proteger, el chequeo de `escuadrones.length === 0` de arriba ya filtra ese caso antes
- * de llegar aquí). */
-function saludEscuadrones(asentamiento: Asentamiento): number {
+/** Tamaño actual de los escuadrones de un campamento como fracción de su tamaño nominal combinado — 1 si no
+ * hay ninguno (nada que proteger, el chequeo de campamento vacío de arriba ya filtra ese caso antes de llegar
+ * aquí). */
+function saludEscuadrones(campamento: readonly Escuadron[]): number {
   let cantidadTotal = 0;
   let nominalTotal = 0;
-  for (const escuadron of asentamiento.escuadrones) {
+  for (const escuadron of campamento) {
     const tropa = TROPAS_RECLUTABLES.find((t) => t.id === escuadron.tropaId);
     if (!tropa) continue;
     cantidadTotal += escuadron.cantidad;
@@ -628,37 +629,33 @@ function truequeDeSupervivencia(
  */
 function reclutarParaTodos(
   asentamiento: Asentamiento,
-  mundo: MundoEscuadras,
+  heroes: Heroe[],
+  ejercitos: readonly Ejercito[],
   contadorInicial: number,
   tropaId: string,
   origen: 'pesants' | 'artesanos'
-): { asentamiento: Asentamiento; reclutamientosExitosos: number; contador: number } {
+): { asentamiento: Asentamiento; heroes: Heroe[]; reclutamientosExitosos: number; contador: number } {
   if ((asentamiento.almacen['madera']?.cantidad ?? 0) < RESERVA_MADERA_ANTES_DE_RECLUTAR) {
-    return { asentamiento, reclutamientosExitosos: 0, contador: contadorInicial };
+    return { asentamiento, heroes, reclutamientosExitosos: 0, contador: contadorInicial };
   }
 
-  // Residentes (reclutan escuadrón nuevo) + dueños de escuadrones YA posados aquí que no residen (solo
-  // reponen — el caso de una guarnición instalada al conquistar una plaza sin residentes propios). Todos son
-  // ciudadanos de la Facción del asentamiento en el mundo NPC, así que `asentamiento.faccionId` es su Facción.
-  const heroes = [
-    ...new Set([
-      ...residentesDe(asentamiento),
-      ...asentamiento.escuadrones.filter((e) => e.cantidad > 0).map((e) => e.heroeId),
-    ]),
-  ];
-
+  // Solo los residentes: el campamento de cada uno está aquí (Doc 5.15.2). Todos son ciudadanos de la Facción
+  // del asentamiento en el mundo NPC, así que `asentamiento.faccionId` es su Facción.
   let actual = asentamiento;
+  let heroesActuales = heroes;
   let contador = contadorInicial;
   let exitosos = 0;
-  for (const heroeId of heroes) {
+  for (const heroeId of residentesDe(asentamiento)) {
     try {
-      actual = reclutarTropa(actual, mundo, heroeId, asentamiento.faccionId, tropaId, origen, contador++);
+      const r = reclutarTropa(actual, heroesActuales, ejercitos, heroeId, asentamiento.faccionId, tropaId, origen, contador++);
+      actual = r.asentamiento;
+      heroesActuales = r.heroes;
       exitosos++;
     } catch (err) {
       if (!(err instanceof ReclutamientoInvalidoError)) throw err;
     }
   }
-  return { asentamiento: actual, reclutamientosExitosos: exitosos, contador };
+  return { asentamiento: actual, heroes: heroesActuales, reclutamientosExitosos: exitosos, contador };
 }
 
 /**
@@ -682,6 +679,7 @@ function reclutarParaTodos(
  */
 function atacarCampamentosCercanos(
   asentamientos: Asentamiento[],
+  heroes: Heroe[],
   campamentos: CampamentoBandido[],
   facciones: Faccion[],
   instante: Instante,
@@ -689,6 +687,7 @@ function atacarCampamentosCercanos(
   rng: RandomFn
 ): {
   asentamientos: Asentamiento[];
+  heroes: Heroe[];
   facciones: Faccion[];
   campamentos: CampamentoBandido[];
   bandidosProximoSpawnEn: Instante | undefined;
@@ -697,6 +696,7 @@ function atacarCampamentosCercanos(
   fallidos: number;
 } {
   let asentamientosActuales = asentamientos;
+  let heroesActuales = heroes;
   let faccionesActuales = facciones;
   let campamentosActuales = campamentos;
   const eventos: string[] = [];
@@ -706,25 +706,27 @@ function atacarCampamentosCercanos(
 
   for (const campamento of campamentos) {
     const asentamiento = asentamientosActuales.find((a) => a.id === campamento.asentamientoId);
+    const tropa = asentamiento ? campamentoDe(asentamiento, heroesActuales) : [];
     if (
       !asentamiento ||
       !esNpc(asentamiento.faccionId) ||
-      asentamiento.escuadrones.length === 0 ||
+      tropa.length === 0 ||
       nutricionPoblacionDe(asentamiento) < UMBRAL_NUTRICION_ANTES_DE_ATACAR ||
-      saludEscuadrones(asentamiento) < SALUD_ESCUADRONES_ANTES_DE_ATACAR
+      saludEscuadrones(tropa) < SALUD_ESCUADRONES_ANTES_DE_ATACAR
     )
       continue;
 
     try {
       const resultado = atacarCampamentoBandidos(
         asentamiento,
-        asentamiento.escuadrones.map((e) => e.id),
+        tropa,
+        tropa.map((e) => e.id),
         campamento,
-        instante,
         faccionesActuales,
         rng
       );
       asentamientosActuales = asentamientosActuales.map((a) => (a.id === resultado.atacante.id ? resultado.atacante : a));
+      heroesActuales = conEscuadrones(heroesActuales, resultado.tropa);
       faccionesActuales = resultado.facciones;
       // `engine/combate.ts` ya emite eventos estructurados, pero el NPC lleva su propio flujo en texto plano:
       // migrarlo es una pasada aparte (este módulo NO es un comando, es el NPC jugando como jugaría alguien),
@@ -743,7 +745,16 @@ function atacarCampamentosCercanos(
     }
   }
 
-  return { asentamientos: asentamientosActuales, facciones: faccionesActuales, campamentos: campamentosActuales, bandidosProximoSpawnEn, eventos, destruidos, fallidos };
+  return {
+    asentamientos: asentamientosActuales,
+    heroes: heroesActuales,
+    facciones: faccionesActuales,
+    campamentos: campamentosActuales,
+    bandidosProximoSpawnEn,
+    eventos,
+    destruidos,
+    fallidos,
+  };
 }
 
 /**
@@ -882,8 +893,11 @@ function fijarPersecucionesNpc(
   asentamientos: Asentamiento[],
   relaciones: RelacionPolitica[],
   esNpc: (faccionId: string) => boolean,
-  instante: Instante
+  instante: Instante,
+  /** Las escuadras de todos: solo caza, y solo es presa, una columna con soldados en pie. */
+  tropa: IndiceTropa
 ): { ejercitos: Ejercito[]; persecucionesNuevas: number } {
+  const conSoldados = (e: Ejercito) => e.escuadronIds.some((id) => (tropa.get(id)?.cantidad ?? 0) > 0);
   const faccionDePlaza = new Map(asentamientos.map((a) => [a.id, a.faccionId]));
   const adjuntas = new Set(ejercitos.flatMap((e) => e.caravanasAdjuntasIds));
   const enemiga = (a: string, b: string) => a !== b && !estanAliadas(relaciones, a, b);
@@ -891,13 +905,13 @@ function fijarPersecucionesNpc(
 
   const ejercitosActualizados = ejercitos.map((cazador) => {
     if (!esNpc(cazador.faccionId) || cazador.persiguiendo || enTregua(cazador, instante)) return cazador;
-    if (cazador.escuadrones.every((e) => e.cantidad <= 0)) return cazador;
+    if (!conSoldados(cazador)) return cazador;
 
     // Orden canonico por id: la eleccion de presa no consume RNG, pero SI decide que combates ocurren, y con
     // ellos toda la secuencia aleatoria del tick siguiente.
     const columna = [...ejercitos]
       .filter((o) => o.id !== cazador.id && enemiga(cazador.faccionId, o.faccionId) && !enTregua(o, instante))
-      .filter((o) => o.escuadrones.some((e) => e.cantidad > 0))
+      .filter(conSoldados)
       .filter((o) => distancia(o.posicionActual, cazador.posicionActual) <= VISION.ejercito)
       .sort((x, y) => (x.id < y.id ? -1 : 1))[0];
     if (columna) {
@@ -998,11 +1012,12 @@ function lanzarCampanas(
   esNpc: (faccionId: string) => boolean,
   contador: number,
   instante: Instante
-): { asentamientos: Asentamiento[]; ejercitos: Ejercito[]; eventos: string[]; campanasLanzadas: number; contador: number } {
+): { asentamientos: Asentamiento[]; ejercitos: Ejercito[]; heroes: Heroe[]; eventos: string[]; campanasLanzadas: number; contador: number } {
   const eventos: string[] = [];
   let campanasLanzadas = 0;
   const porId = new Map(asentamientos.map((a) => [a.id, a]));
   const nuevos: Ejercito[] = [];
+  let heroesActuales = heroes;
   const conCampanaEnCurso = new Set(ejercitos.map((e) => e.origenAsentamientoId));
 
   for (const origen of [...asentamientos].sort((a, b) => (a.id < b.id ? -1 : 1))) {
@@ -1013,7 +1028,8 @@ function lanzarCampanas(
     if (estaOcupado(origen, instante)) continue;
     if (nivelActualDe(origen) < NIVEL_MINIMO_PARA_CAMPANA) continue;
 
-    const vivos = origen.escuadrones.filter((e) => e.cantidad > 0);
+    const campamento = campamentoDe(origen, heroesActuales);
+    const vivos = campamento.filter((e) => e.cantidad > 0);
     if (vivos.length < ESCUADRONES_MINIMOS_PARA_CAMPANA) continue;
 
     // Se lleva como mucho la mitad, y todos del MISMO jugador: el Liderazgo se valida por jugador (Doc 5.11),
@@ -1032,7 +1048,7 @@ function lanzarCampanas(
     // existe el carro): `movilizarEjercito` cargará hasta ahí respetando la reserva de comida.
     const trigoDisponible = Math.max(
       0,
-      (origen.almacen['trigo']?.cantidad ?? 0) - reservaDeTrigo({ ...origen, escuadrones: origen.escuadrones.filter((e) => !expedicion.includes(e)) })
+      (origen.almacen['trigo']?.cantidad ?? 0) - reservaDeTrigo(origen, consumoRacionDeEscuadrones(campamento.filter((e) => !expedicion.includes(e))))
     );
     const carro = Math.min(trigoDisponible, LOGISTICA.capacidadCarroPorJugador);
     const alcance = alcanceDeIdaYVuelta(expedicion, carro);
@@ -1051,7 +1067,8 @@ function lanzarCampanas(
     try {
       const r = movilizarEjercito(
         porId.get(origen.id)!,
-        heroes.find((j) => j.id === heroeId),
+        campamento,
+        heroesActuales.find((j) => j.id === heroeId),
         heroeId,
         expedicion.map((e) => e.id),
         { tipo: 'asentamiento', id: objetivo.id },
@@ -1061,7 +1078,9 @@ function lanzarCampanas(
         instante
       );
       porId.set(origen.id, r.asentamiento);
-      nuevos.push(r.ejercito);
+      const salida = sinTropa(r.ejercito);
+      nuevos.push(salida.ejercito);
+      heroesActuales = conEscuadrones(heroesActuales, salida.tropa);
       conCampanaEnCurso.add(origen.id);
       campanasLanzadas++;
       eventos.push(`${origen.id}: lanza una campaña contra ${objetivo.id} con ${expedicion.length} escuadrón(es).`);
@@ -1072,7 +1091,7 @@ function lanzarCampanas(
     }
   }
 
-  return { asentamientos: [...porId.values()], ejercitos: [...ejercitos, ...nuevos], eventos, campanasLanzadas, contador };
+  return { asentamientos: [...porId.values()], ejercitos: [...ejercitos, ...nuevos], heroes: heroesActuales, eventos, campanasLanzadas, contador };
 }
 
 /**
@@ -1093,7 +1112,9 @@ function replegarLosQueYaTerminaron(
   ejercitos: Ejercito[],
   asentamientos: Asentamiento[],
   mapa: Mapa,
-  esNpc: (faccionId: string) => boolean
+  esNpc: (faccionId: string) => boolean,
+  /** Las escuadras de todos: una columna sin soldados en pie ya no tiene campaña que terminar. */
+  tropa: IndiceTropa
 ): { ejercitos: Ejercito[]; eventos: string[]; repliegues: number } {
   const eventos: string[] = [];
   let repliegues = 0;
@@ -1101,7 +1122,7 @@ function replegarLosQueYaTerminaron(
 
   const actualizados = ejercitos.map((ejercito) => {
     if (!esNpc(ejercito.faccionId) || ejercito.estado !== 'estacionado') return ejercito;
-    if (ejercito.escuadrones.every((e) => e.cantidad <= 0)) return ejercito; // ya es un fantasma: lo disuelve el motor
+    if (ejercito.escuadronIds.every((id) => (tropa.get(id)?.cantidad ?? 0) <= 0)) return ejercito; // ya es un fantasma: lo disuelve el motor
 
     try {
       const vuelta = replegarEjercito(ejercito, porId.get(ejercito.origenAsentamientoId), mapa);
@@ -1320,22 +1341,7 @@ export function fundarAsentamientosIniciales(
       heroesActuales =
         suyos.length > 0
           ? situarHeroes(heroesActuales, heroesIds, ubicacion)
-          : [
-              ...heroesActuales,
-              ...heroesIds.map(
-                (id, i): Heroe => ({
-                  id,
-                  jugadorId: null,
-                  controlador: 'bot',
-                  displayName: `${faccion.nombre} ${i + 1}`,
-                  classDefinitionId: CLASE_HEROE_BOT,
-                  genero: 'masculino',
-                  avatar: { cabezaId: '', peloId: '', barbaId: '', cejasId: '' },
-                  liderazgoBase: LIDERAZGO.base,
-                  ubicacion,
-                })
-              ),
-            ];
+          : [...heroesActuales, ...heroesIds.map((id, i) => heroeBot(id, `${faccion.nombre} ${i + 1}`, ubicacion))];
       eventos.push(`${faccion.nombre} funda su asentamiento inicial ${resultado.asentamiento.id}.`);
     } catch (err) {
       if (!(err instanceof FundacionInvalidaError)) throw err;
@@ -1349,6 +1355,23 @@ export function fundarAsentamientosIniciales(
 export const HEROES_POR_FUNDACION_NPC = 5;
 /** Clase de los héroes bot que crea la gobernanza NPC: la única que tiene hoy Conquest. */
 const CLASE_HEROE_BOT = 'Spear';
+
+/** Un héroe bot (Doc 5.15.6): lo maneja la IA, sin jugador detrás. También los fundadores de los escenarios de
+ * batch, que son NPC de principio a fin. */
+export function heroeBot(id: string, displayName: string, ubicacion: UbicacionHeroe): Heroe {
+  return {
+    id,
+    jugadorId: null,
+    controlador: 'bot',
+    displayName,
+    classDefinitionId: CLASE_HEROE_BOT,
+    genero: 'masculino',
+    avatar: { cabezaId: '', peloId: '', barbaId: '', cejasId: '' },
+    liderazgoBase: LIDERAZGO.base,
+    ubicacion,
+    escuadrones: [],
+  };
+}
 
 /**
  * Un tick completo de decisiones del NPC de gobernanza: gobernanza+reserva base → **Granjas mínimas
@@ -1480,16 +1503,18 @@ export function avanzarNpcGobernanza(
   for (let i = 0; i < asentamientos.length; i++) {
     const a = asentamientos[i]!;
     if (!esNpc(a.faccionId)) continue;
-    const resultado = reclutarParaTodos(a, { ...trasComercio, asentamientos }, contador, tropaId, origenReclutamiento);
+    const resultado = reclutarParaTodos(a, heroes, trasComercio.ejercitos, contador, tropaId, origenReclutamiento);
     contador = resultado.contador;
     reclutamientosExitosos += resultado.reclutamientosExitosos;
     asentamientos[i] = resultado.asentamiento;
+    heroes = resultado.heroes;
   }
 
   const trasBandidos =
     config.atacarCampamentos === false
       ? {
           asentamientos,
+          heroes,
           facciones: trasComercio.facciones,
           campamentos: trasComercio.campamentosBandidos,
           bandidosProximoSpawnEn: undefined,
@@ -1497,8 +1522,9 @@ export function avanzarNpcGobernanza(
           destruidos: 0,
           fallidos: 0,
         }
-      : atacarCampamentosCercanos(asentamientos, trasComercio.campamentosBandidos, trasComercio.facciones, instante, esNpc, rng);
+      : atacarCampamentosCercanos(asentamientos, heroes, trasComercio.campamentosBandidos, trasComercio.facciones, instante, esNpc, rng);
   eventos.push(...trasBandidos.eventos);
+  heroes = trasBandidos.heroes;
 
   // Punto 7c: las campañas (Paso 12). Van DESPUÉS de reclutar y de los bandidos, y antes de expandir: se
   // decide con la guarnición ya repuesta de este tick, y sacar tropa no debe competir con fundar.
@@ -1507,7 +1533,7 @@ export function avanzarNpcGobernanza(
   const defensiva = config.postura === 'defensiva';
   const trasCampanas =
     defensiva || config.lanzarCampanas === false
-      ? { asentamientos: trasBandidos.asentamientos, ejercitos: trasComercio.ejercitos, eventos: [] as string[], campanasLanzadas: 0, contador }
+      ? { asentamientos: trasBandidos.asentamientos, ejercitos: trasComercio.ejercitos, heroes, eventos: [] as string[], campanasLanzadas: 0, contador }
       : lanzarCampanas(
           trasBandidos.asentamientos,
           trasComercio.ejercitos,
@@ -1522,6 +1548,8 @@ export function avanzarNpcGobernanza(
         );
   contador = trasCampanas.contador;
   eventos.push(...trasCampanas.eventos);
+  heroes = trasCampanas.heroes;
+  const tropa = indiceTropa(heroes);
 
   // Punto 7e: publicar en el mercado. Va DESPUES del comercio automatico y antes de lo militar, con el
   // almacen de este tick ya movido: publicar sobre cifras viejas pondria a la venta un excedente que ya se
@@ -1535,7 +1563,7 @@ export function avanzarNpcGobernanza(
 
   // Y saber volver: una columna que ya acampó terminó su campaña y se manda a casa. Va después de lanzar para
   // que una recién salida no se replegue en el mismo tick.
-  const trasRepliegues = replegarLosQueYaTerminaron(trasCampanas.ejercitos, trasCampanas.asentamientos, mapa, esNpc);
+  const trasRepliegues = replegarLosQueYaTerminaron(trasCampanas.ejercitos, trasCampanas.asentamientos, mapa, esNpc, tropa);
   eventos.push(...trasRepliegues.eventos);
 
   // Punto 7d: a por quien tienen delante (paso 8e). Va al FINAL de lo militar y antes de expandir: se decide
@@ -1553,7 +1581,8 @@ export function avanzarNpcGobernanza(
         trasCampanas.asentamientos,
         trasComercio.relaciones,
         esNpc,
-        instante
+        instante,
+        tropa
       );
 
   const trasExpansion = expandirSiPuede(

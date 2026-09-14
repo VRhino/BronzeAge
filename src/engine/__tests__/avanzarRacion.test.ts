@@ -10,17 +10,9 @@ import { describe, expect, it } from 'vitest';
 import type { Escuadron } from '../../domain/types';
 import { MILITAR } from '../../constants';
 import { avanzarRacion, consumoRacionDeEscuadrones } from '../tropas';
+import { escuadronDePrueba } from './fixtures';
 
-const escuadron = (cantidad: number, moral: number): Escuadron => ({
-  id: 'e1',
-  nombre: 'Milicia de prueba',
-  heroeId: 'jugador-1',
-  origen: 'pesants',
-  cantidad,
-  veterania: 0,
-  moral,
-  tropaId: 'milicia_lanceros',
-});
+const escuadron = (cantidad: number, moral: number): Escuadron => escuadronDePrueba('e1', 'jugador-1', 'milicia_lanceros', cantidad, { moral, nombre: 'Milicia de prueba' });
 
 describe('avanzarRacion — el contrato de la despensa', () => {
   it('con trigo de sobra sube la moral y no consume más de lo que necesita', () => {

@@ -4,7 +4,8 @@
 import { describe, expect, it } from 'vitest';
 import { instante } from '../../../domain/tiempo';
 import { GameSession } from '../../gameSession';
-import { instanteDeTest } from '../../../engine/__tests__/fixtures';
+import { escuadronDePrueba, heroesCon, instanteDeTest } from '../../../engine/__tests__/fixtures';
+import { conEscuadrones, sinTropa, type EjercitoConTropa } from '../../../engine/tropa';
 import { conHeroe, enPie, partidaConAsentamiento, MOMENTO, OPC } from '../../__tests__/fixtures';
 import { crearFaccion } from '../../comandos/crearFaccion';
 import { fundarAsentamiento } from '../../comandos/fundarAsentamiento';
@@ -219,7 +220,7 @@ describe('asentamientosAvistados: la FICHA de lo ajeno, solo si se ve', () => {
     const { sesion, faccionId, fundador, asentamientoRivalId } = conPlazaRivalEn({ x: 900, y: 900 });
     // A 100 de la plaza rival, muy lejos de la propia: la unica vision posible es la de la columna.
     const explorador = ejercito('e-explorador', faccionId, { x: 1000, y: 900 }, [escuadron('s1', fundador)]);
-    const estado = { ...sesion.getState(), ejercitos: [explorador] };
+    const estado = conColumnas(sesion.getState(), explorador);
 
     const proyeccion = proyectarParaJugador(estado, fundador, SIN_GEOMETRIA);
     expect(proyeccion.asentamientosAvistados.map((a) => a.id)).toEqual([asentamientoRivalId]);
@@ -293,7 +294,7 @@ describe('caravanas, acuerdos y ordenes: solo los que tocan un asentamiento prop
       liderId: fundador,
       tipo: 'personal',
       participantes: [{ heroeId: fundador, unidoEn: instanteDeTest(0) }],
-      escuadrones: [],
+      escuadronIds: [],
       suministro: {},
       caravanasAdjuntasIds: [],
       posicionActual: plazaAjena.posicion,
@@ -402,18 +403,9 @@ describe('mapaId, relaciones y titulos: públicos, sin filtrar', () => {
 // Ejercitos (Doc 5.12.7): la UNICA cosa de una Faccion rival que sale de esta proyeccion, y sale redactada.
 // ---------------------------------------------------------------------------------------------------------
 
-const escuadron = (id: string, heroeId: string): Escuadron => ({
-  id,
-  nombre: 'milicia',
-  heroeId,
-  origen: 'pesants',
-  cantidad: 10,
-  veterania: 0,
-  moral: 100,
-  tropaId: 'milicia_lanceros',
-});
+const escuadron = (id: string, heroeId: string): Escuadron => escuadronDePrueba(id, heroeId, 'milicia_lanceros', 10, { nombre: 'milicia' });
 
-function ejercito(id: string, faccionId: string, posicion: Point, escuadrones: Escuadron[]): Ejercito {
+function ejercito(id: string, faccionId: string, posicion: Point, escuadrones: Escuadron[]): EjercitoConTropa {
   return {
     id,
     faccionId,
@@ -422,6 +414,7 @@ function ejercito(id: string, faccionId: string, posicion: Point, escuadrones: E
     tipo: 'ejercito',
     politicaDeUnion: 'rechazar',
     liderId: escuadrones[0]?.heroeId ?? 'j1',
+    escuadronIds: escuadrones.map((e) => e.id),
     escuadrones,
     suministro: { trigo: 500 },
     caravanasAdjuntasIds: [],
@@ -431,6 +424,15 @@ function ejercito(id: string, faccionId: string, posicion: Point, escuadrones: E
     posicionActual: posicion,
     estado: 'marchando',
   };
+}
+
+/** El estado con estas columnas en el mundo. Su tropa vive en sus héroes (`engine/tropa.ts`): a quien no tenga
+ * registro en la partida —un rival de mentira— se le da uno. */
+function conColumnas(estado: GameSessionState, ...columnas: EjercitoConTropa[]): GameSessionState {
+  const deshechas = columnas.map(sinTropa);
+  const tropa = deshechas.flatMap((d) => d.tropa);
+  const nuevos = heroesCon([], [...new Set(tropa.map((e) => e.heroeId))].filter((id) => !estado.heroes.some((h) => h.id === id)));
+  return { ...estado, ejercitos: deshechas.map((d) => d.ejercito), heroes: conEscuadrones([...estado.heroes, ...nuevos], tropa) };
 }
 
 /** Cuadrado de zona de influencia alrededor de un punto — basta para `pointInPolygon`, y evita construir
@@ -457,10 +459,10 @@ describe('ejercitos: los propios, completos', () => {
   it('el ejercito de la Faccion propia viaja entero, con sus escuadrones', () => {
     const { sesion, faccionId, fundador } = partidaConAsentamiento();
     const propio = ejercito('e-propio', faccionId, { x: 1500, y: 1500 }, [escuadron('s1', fundador)]);
-    const estado = { ...sesion.getState(), ejercitos: [propio] };
+    const estado = conColumnas(sesion.getState(), propio);
 
     const proyeccion = proyectarParaJugador(estado, fundador, SIN_GEOMETRIA);
-    expect(proyeccion.ejercitos).toEqual([propio]);
+    expect(proyeccion.ejercitos).toEqual([sinTropa(propio).ejercito]);
     expect(proyeccion.ejercitosAvistados).toEqual([]);
   });
 
@@ -468,7 +470,7 @@ describe('ejercitos: los propios, completos', () => {
     const { sesion, faccionId, fundador } = partidaConAsentamiento();
     // Al otro extremo del mundo, sin zona de influencia ni ningun otro ejercito cerca.
     const propio = ejercito('e-propio', faccionId, { x: 1990, y: 1990 }, [escuadron('s1', fundador)]);
-    const estado = { ...sesion.getState(), ejercitos: [propio] };
+    const estado = conColumnas(sesion.getState(), propio);
 
     expect(proyectarParaJugador(estado, fundador, SIN_GEOMETRIA).ejercitos).toHaveLength(1);
   });
@@ -476,7 +478,7 @@ describe('ejercitos: los propios, completos', () => {
   it('un jugador HUERFANO (sin Faccion) sigue viendo la columna en la que va su propia tropa (Doc 5.4)', () => {
     const { sesion } = partidaConAsentamiento();
     const suyo = ejercito('e-huerfano', 'faccion-que-ya-no-es-suya', { x: 1000, y: 1000 }, [escuadron('s1', 'forastero')]);
-    const estado = { ...sesion.getState(), ejercitos: [suyo] };
+    const estado = conColumnas(sesion.getState(), suyo);
 
     const proyeccion = proyectarParaJugador(estado, 'forastero', SIN_GEOMETRIA);
     expect(proyeccion.faccionId).toBeNull();
@@ -488,7 +490,7 @@ describe('ejercitosAvistados: lo ajeno, solo si se ve y siempre redactado', () =
   it('un ejercito rival LEJOS de todo lo propio no aparece por ningun lado', () => {
     const { sesion, fundador } = partidaConAsentamiento();
     const rival = ejercito('e-rival', 'faccion-rival', { x: 1900, y: 1900 }, [escuadron('s1', 'otro')]);
-    const estado = { ...sesion.getState(), ejercitos: [rival] };
+    const estado = conColumnas(sesion.getState(), rival);
 
     const proyeccion = proyectarParaJugador(estado, fundador, SIN_GEOMETRIA);
     expect(proyeccion.ejercitos).toEqual([]);
@@ -498,7 +500,7 @@ describe('ejercitosAvistados: lo ajeno, solo si se ve y siempre redactado', () =
   it('un ejercito rival dentro de lo que vigila una plaza propia se avista', () => {
     const { sesion, fundador } = partidaConAsentamiento();
     const rival = ejercito('e-rival', 'faccion-rival', { x: 410, y: 410 }, [escuadron('s1', 'otro')]);
-    const estado = { ...sesion.getState(), ejercitos: [rival] };
+    const estado = conColumnas(sesion.getState(), rival);
 
     const proyeccion = proyectarParaJugador(estado, fundador, SIN_GEOMETRIA);
     expect(proyeccion.ejercitosAvistados.map((e) => e.id)).toEqual(['e-rival']);
@@ -511,7 +513,7 @@ describe('ejercitosAvistados: lo ajeno, solo si se ve y siempre redactado', () =
     const alcance = propio.radioPotencial + VISION.margenAsentamiento;
     const dentro = ejercito('e-dentro', 'faccion-rival', { x: 400 + alcance - 1, y: 400 }, [escuadron('s1', 'otro')]);
     const fuera = ejercito('e-fuera', 'faccion-rival', { x: 400 + alcance + 1, y: 400 }, [escuadron('s2', 'otro')]);
-    const estado = { ...sesion.getState(), ejercitos: [dentro, fuera] };
+    const estado = conColumnas(sesion.getState(), dentro, fuera);
 
     const proyeccion = proyectarParaJugador(estado, fundador, SIN_GEOMETRIA);
     expect(proyeccion.ejercitosAvistados.map((e) => e.id)).toEqual(['e-dentro']);
@@ -523,7 +525,7 @@ describe('ejercitosAvistados: lo ajeno, solo si se ve y siempre redactado', () =
     // contra el disco de la propia plaza, asi que un poligono inyectado —propio o ajeno— no cambia nada.
     const { sesion, asentamientoId, fundador } = partidaConAsentamiento();
     const lejos = ejercito('e-lejos', 'faccion-rival', { x: 910, y: 910 }, [escuadron('s1', 'otro')]);
-    const estado = { ...sesion.getState(), ejercitos: [lejos] };
+    const estado = conColumnas(sesion.getState(), lejos);
 
     // Un cuadrado enorme que lo cubre, atribuido a la plaza PROPIA: sigue sin verse.
     const conZonaPropia = proyectarParaJugador(estado, fundador, zonaCuadrada(asentamientoId, { x: 900, y: 900 }, 30));
@@ -538,7 +540,7 @@ describe('ejercitosAvistados: lo ajeno, solo si se ve y siempre redactado', () =
     const propio = ejercito('e-propio', faccionId, { x: 1000, y: 1000 }, [escuadron('s1', fundador)]);
     const dentro = ejercito('e-dentro', 'faccion-rival', { x: 1000 + VISION.ejercito - 1, y: 1000 }, [escuadron('s2', 'otro')]);
     const fuera = ejercito('e-fuera', 'faccion-rival', { x: 1000 + VISION.ejercito + 1, y: 1000 }, [escuadron('s3', 'otro')]);
-    const estado = { ...sesion.getState(), ejercitos: [propio, dentro, fuera] };
+    const estado = conColumnas(sesion.getState(), propio, dentro, fuera);
 
     const proyeccion = proyectarParaJugador(estado, fundador, SIN_GEOMETRIA);
     expect(proyeccion.ejercitosAvistados.map((e) => e.id)).toEqual(['e-dentro']);
@@ -553,7 +555,7 @@ describe('ejercitosAvistados: lo ajeno, solo si se ve y siempre redactado', () =
       escuadron('s3', 'rival-a'),
       escuadron('s4', 'rival-b'),
     ]);
-    const estado = { ...sesion.getState(), ejercitos: [propio, rival] };
+    const estado = conColumnas(sesion.getState(), propio, rival);
 
     const avistado = proyectarParaJugador(estado, fundador, SIN_GEOMETRIA).ejercitosAvistados[0]!;
     expect(avistado).toEqual({
@@ -583,10 +585,7 @@ describe('vision compartida por alianza y vasallaje (Paso 4)', () => {
     const columnaAliada = ejercito('e-aliado', espartaId, { x: 1700, y: 1700 }, [escuadron('sa', 'espartano')]);
     const rivalCerca = ejercito('e-rival', 'faccion-rival', { x: 1700, y: 1700 + VISION.ejercito - 1 }, [escuadron('sr', 'otro')]);
     const rivalLejos = ejercito('e-lejos', 'faccion-rival', { x: 1700, y: 300 }, [escuadron('sl', 'otro')]);
-    const estado: GameSessionState = {
-      ...base.sesion.getState(),
-      ejercitos: [columnaAliada, rivalCerca, rivalLejos],
-    };
+    const estado = conColumnas(base.sesion.getState(), columnaAliada, rivalCerca, rivalLejos);
     return { estado, fundador: base.fundador, faccionId: base.faccionId, espartaId };
   }
 
@@ -987,8 +986,7 @@ describe('campamentosBandidos: solo los que se ven AHORA', () => {
     const { sesion, faccionId, fundador } = partidaConAsentamiento();
     const estado = sesion.getState();
     const conEjercito: GameSessionState = {
-      ...estado,
-      ejercitos: [ejercito('e-propio', faccionId, { x: 1200, y: 1200 }, [escuadron('esc-1', 'jugador-test')])],
+      ...conColumnas(estado, ejercito('e-propio', faccionId, { x: 1200, y: 1200 }, [escuadron('esc-1', 'jugador-test')])),
       campamentosBandidos: [campamentoEn({ x: 1200 + VISION.ejercito - 1, y: 1200 }), campamentoEn(LEJOS)],
     };
 

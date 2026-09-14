@@ -17,7 +17,8 @@
 import { columnaDe } from '../../engine/ejercitos';
 import { fundirExploraciones } from '../../engine/exploracion';
 import { MEMORIA_VACIA } from '../../engine/memoria';
-import type { AcuerdoTrueque, Asentamiento, CampamentoBandido, Caravana, Faccion, Ejercito, Heroe } from '../../domain/types';
+import type { AcuerdoTrueque, Asentamiento, CampamentoBandido, Caravana, Escuadron, Faccion, Ejercito, Heroe } from '../../domain/types';
+import { campamentoDe, conEscuadrones, conTropa, indiceTropa, sinTropa, type EjercitoConTropa } from '../../engine/tropa';
 import type { GameSessionState } from '../estado';
 import { CODIGOS_ERROR, type CodigoError } from './codigosDeError';
 import { rechazo, rechazoDesdeError, type ManejadorComando } from './tipos';
@@ -137,6 +138,38 @@ export function conAsentamientos(estado: GameSessionState, actualizados: Asentam
 /** Sustituye una Facción por su versión actualizada. */
 export function conFaccion(estado: GameSessionState, actualizada: Faccion): GameSessionState {
   return { ...estado, facciones: estado.facciones.map((f) => (f.id === actualizada.id ? actualizada : f)) };
+}
+
+// --- Tropa: las escuadras viven en sus héroes (`engine/tropa.ts`) ---
+
+/** La columna con su tropa puesta, para pasársela al motor militar. */
+export function conTropaDe(estado: GameSessionState, ejercito: Ejercito): EjercitoConTropa {
+  return conTropa(ejercito, indiceTropa(estado.heroes));
+}
+
+/** El campamento de una plaza: su guarnición, en este estado. */
+export function campamentoEn(estado: GameSessionState, asentamiento: Asentamiento): Escuadron[] {
+  return campamentoDe(asentamiento, estado.heroes);
+}
+
+/**
+ * Guarda columnas que vuelven del motor con la tropa puesta: sustituye cada una por id (o la añade si es nueva)
+ * y devuelve sus escuadras a los héroes, marcadas dentro de ella. `tropaSuelta` son escuadras que cambiaron
+ * fuera de una columna (un campamento que combatió, una escolta perdida).
+ */
+export function conColumnas(
+  estado: GameSessionState,
+  vistas: readonly EjercitoConTropa[],
+  tropaSuelta: readonly Escuadron[] = []
+): GameSessionState {
+  const deshechas = vistas.map(sinTropa);
+  const porId = new Map(deshechas.map((d) => [d.ejercito.id, d.ejercito]));
+  const existentes = new Set(estado.ejercitos.map((e) => e.id));
+  return {
+    ...estado,
+    ejercitos: [...estado.ejercitos.map((e) => porId.get(e.id) ?? e), ...deshechas.map((d) => d.ejercito).filter((e) => !existentes.has(e.id))],
+    heroes: conEscuadrones(estado.heroes, [...deshechas.flatMap((d) => d.tropa), ...tropaSuelta]),
+  };
 }
 
 /**

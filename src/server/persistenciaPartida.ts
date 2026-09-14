@@ -49,8 +49,12 @@ import { leerEventos } from './eventosDePartida';
  * v14 (2026-09-14): modelo de Héroe, fase 1 — `state.jugadores` pasa a ser `state.heroes` (con identidad:
  *   `jugadorId`, `controlador`, nombre, clase, género, avatar) y todo dueño pasa a ser un `heroeId`. Sin
  *   migración (decisión del usuario): una partida v13 se rechaza.
+ *
+ * v15 (2026-09-14): modelo de Héroe, fase 2 — las escuadras viven en `Heroe.escuadrones` (con `contenedor`,
+ *   `enGuarnicion`, nivel y experiencia en vez de veteranía, sin `heridoHasta`), y `Asentamiento.escuadrones`,
+ *   `Ejercito.escuadrones` y `Caravana.escolta` pasan a ser ids (`escuadronIds`, `escoltaIds`). Sin migración.
  */
-export const FORMATO_SNAPSHOT_VERSION = 14;
+export const FORMATO_SNAPSHOT_VERSION = 15;
 
 export interface SnapshotPartida {
   formatoVersion: number;

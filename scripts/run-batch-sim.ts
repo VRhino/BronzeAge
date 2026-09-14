@@ -9,10 +9,11 @@ import { calcularNivelAsentamiento, type PayloadAsentamientoRuinas } from '../sr
 import type { PayloadAsentamientoFundado } from '../src/engine/expansion';
 import { computeZonaInfluencia, computeTodasLasZonas, pointInPolygon } from '../src/engine/zones';
 
-import { reservaDeTrigo } from '../src/engine/tropas';
+import { consumoRacionDeEscuadrones, reservaDeTrigo } from '../src/engine/tropas';
+import { campamentoDe } from '../src/engine/tropa';
 import { NECESIDADES } from '../src/constants';
 const NECESIDADES_UMBRAL_AMPLIACION = NECESIDADES.umbralAlmacenAmpliacion;
-import { avanzarNpcGobernanza, type ConfigNpcGobernanza, MINERALES_BONUS_FUNDACION } from '../src/session/npcGobernanza';
+import { avanzarNpcGobernanza, heroeBot, type ConfigNpcGobernanza, MINERALES_BONUS_FUNDACION } from '../src/session/npcGobernanza';
 import {
   CATEGORIA_POR_TIPO,
   celdaMinimaDeEdificio,
@@ -675,9 +676,10 @@ function construirFotoResumen(
     palaciosActivos += edificiosPorTipoYEstado(a, 'palacio').length;
     if (tieneMercadoActivo(a)) conMercado++;
     if (calcularNivelAsentamiento(a) >= 2) conGateNivel2Cumplido++;
-    tropasVivas += a.escuadrones.reduce((acc, e) => acc + e.cantidad, 0);
+    const campamento = campamentoDe(a, estado.heroes);
+    tropasVivas += campamento.reduce((acc, e) => acc + e.cantidad, 0);
     // Lo que este asentamiento podría cargar en un carro sin comprometer su despensa (Doc 5.13).
-    const sobrante = Math.max(0, (a.almacen['trigo']?.cantidad ?? 0) - reservaDeTrigo(a));
+    const sobrante = Math.max(0, (a.almacen['trigo']?.cantidad ?? 0) - reservaDeTrigo(a, consumoRacionDeEscuadrones(campamento)));
     sobranteParaCarroSuma += sobrante;
     if (sobrante < LOGISTICA.capacidadCarroPorJugador) sinCarroCompleto++;
     if (sobrante <= 0) sinNadaQueCargar++;
@@ -932,7 +934,10 @@ async function main() {
     caminos: [],
     campamentosBandidos: [],
     bandidosProximoSpawnEn: instanteDeTick(0),
-    heroes: [],
+    // Los fundadores son héroes bot: sin registro no tendrían dónde guardar las escuadras que recluten.
+    heroes: asentamientos.flatMap((a) =>
+      a.heroesFundadoresIds.map((id) => heroeBot(id, id, { tipo: 'asentamiento', asentamientoId: a.id }))
+    ),
   };
 
   // Palancas de EXPERIMENTO, ninguna cambia el comportamiento por defecto:

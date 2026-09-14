@@ -23,9 +23,12 @@ import {
   crearEstadoDeTest,
   crearFacciones,
   crearMapaDeterminista,
+  escuadronDePrueba,
   fundarAsentamientoDeTest,
+  heroesCon,
   instanteDeTest,
 } from '../../engine/__tests__/fixtures';
+import { campamentoDe } from '../../engine/tropa';
 
 const mapaDeterminista = crearMapaDeterminista(42);
 import { evaluarViabilidadFundacion } from '../../engine/settlement';
@@ -89,7 +92,7 @@ describe('Facción controlada por NPC', () => {
     expect(manual.cargos.gobernadorId).toBeNull();
     expect(manual.cargos.tesoreroId).toBeNull();
     expect(manual.reservaManual?.madera ?? 0).toBe(0);
-    expect(manual.escuadrones).toHaveLength(0);
+    expect(campamentoDe(manual, sesion.getState().heroes)).toHaveLength(0);
     expect(sesion.getState().caravanas.some((c) => c.origenAsentamientoId === manual.id)).toBe(false);
 
     // Ningún trueque del NPC puede comprometer recursos de la Facción del jugador (a petición del usuario:
@@ -198,16 +201,8 @@ function dosColumnasNpc() {
   const uno = fundarAsentamientoDeTest(mapaDeterminista, facciones, 'faccion-1', []);
   const dos = fundarAsentamientoDeTest(mapaDeterminista, uno.facciones, 'faccion-2', [uno.asentamiento]);
   const punto = { x: 1000, y: 1000 };
-  const tropa = (id: string, heroeId: string) => ({
-    id,
-    nombre: 'milicia_lanceros',
-    heroeId,
-    origen: 'pesants' as const,
-    cantidad: 30,
-    veterania: 0,
-    moral: 100,
-    tropaId: 'milicia_lanceros',
-  });
+  const tropa = (id: string) =>
+    escuadronDePrueba(`esc-${id}`, `j-${id}`, 'milicia_lanceros', 30, { contenedor: { tipo: 'ejercito', ejercitoId: id } });
   const columna = (id: string, faccionId: string, origenId: string, x: number): Ejercito => ({
     id,
     faccionId,
@@ -216,7 +211,7 @@ function dosColumnasNpc() {
     tipo: 'ejercito',
     liderId: `j-${id}`,
     politicaDeUnion: 'rechazar',
-    escuadrones: [tropa(`esc-${id}`, `j-${id}`)],
+    escuadronIds: [`esc-${id}`],
     suministro: { trigo: 500 },
     caravanasAdjuntasIds: [],
     objetivo: { tipo: 'punto', punto },
@@ -228,6 +223,7 @@ function dosColumnasNpc() {
   const estado = crearEstadoDeTest([uno.asentamiento, dos.asentamiento], dos.facciones, {
     // A 10 una de otra: dentro del radio de encuentro, asi que la persecucion se cierra en el mismo tick.
     ejercitos: [columna('col-a', 'faccion-1', uno.asentamiento.id, punto.x), columna('col-b', 'faccion-2', dos.asentamiento.id, punto.x + 10)],
+    heroes: heroesCon([tropa('col-a'), tropa('col-b')]),
   });
   return { estado, mapa: mapaDeterminista };
 }

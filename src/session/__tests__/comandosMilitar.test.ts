@@ -10,6 +10,9 @@ import { atacarCampamentoBandidos, reclutarTropa } from '../comandos/militar';
 import { movilizarEjercito } from '../comandos/ejercitos';
 import { CODIGOS_ERROR } from '../comandos/codigosDeError';
 import { OPC, partidaConAsentamiento } from './fixtures';
+import { campamentoDe } from '../../engine/tropa';
+
+const campamento = (sesion: GameSession) => campamentoDe(sesion.getState().asentamientos[0]!, sesion.getState().heroes);
 
 /**
  * Asentamiento en condiciones de reclutar. Un recién fundado NO puede, y por dos reglas REALES del motor —no
@@ -54,7 +57,7 @@ describe('reclutarTropa', () => {
 
     expect(resultado.ok).toBe(true);
     expect(resultado.datos!.reclutados).toBeGreaterThan(0);
-    expect(sesion.getState().asentamientos[0]!.escuadrones).toHaveLength(1);
+    expect(campamento(sesion)).toHaveLength(1);
     expect(sesion.getState().historialHeroes[fundador]!.some((e) => e.mensaje.includes('Recluta'))).toBe(true);
   });
 
@@ -62,7 +65,7 @@ describe('reclutarTropa', () => {
     const { sesion, asentamientoId, fundador, vecino } = partidaAbastecida();
     const params = (heroeId: string) => ({ asentamientoId, heroeId, tropaId: 'milicia_lanceros', origen: 'pesants' as const });
     expect(sesion.ejecutar(reclutarTropa, params(fundador), OPC).ok).toBe(true);
-    const escuadronIds = sesion.getState().asentamientos[0]!.escuadrones.map((e) => e.id);
+    const escuadronIds = campamento(sesion).map((e) => e.id);
     const objetivo = { tipo: 'punto', punto: { x: 900, y: 900 } } as const;
     expect(sesion.ejecutar(movilizarEjercito, { asentamientoId, heroeId: fundador, escuadronIds, objetivo }, OPC).ok).toBe(true);
     // El carro del ejército se lleva trigo del almacén hasta la reserva: se rellena para que lo único que
@@ -94,7 +97,7 @@ describe('combate y reproducibilidad', () => {
         },
       });
 
-      const escuadronIds = conCampamento.getState().asentamientos[0]!.escuadrones.map((e) => e.id);
+      const escuadronIds = campamento(conCampamento).map((e) => e.id);
       const resultado = conCampamento.ejecutar(atacarCampamentoBandidos, { atacanteId: asentamientoId, escuadronIds, campamentoId: 'camp-1' }, OPC);
       return { ok: resultado.ok, destruido: resultado.datos?.destruido, estado: conCampamento.getState() };
     }

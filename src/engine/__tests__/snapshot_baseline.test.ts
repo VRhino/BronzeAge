@@ -20,8 +20,9 @@
 // referencia, exactamente donde estaba antes de la Etapa 6. Cambia cómo se ORDENA la ciudad, no cuánto
 // construye ni a qué ritmo.
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { Asentamiento, Faccion } from '../../domain/types';
+import type { Asentamiento, Faccion, Heroe } from '../../domain/types';
 import { avanzarSimulacion } from '../simulation';
+import { campamentoDe } from '../tropa';
 import { createRng, type RandomFn } from '../../worldgen';
 import {
   contextoDeTest,
@@ -37,7 +38,7 @@ const TICKS_DE_CORTE = [1, 10, 25, 50, 100];
 
 // Resumen curado en vez del estado crudo completo: más legible en el diff del snapshot cuando algo cambia
 // de verdad, y no se rompe por ruido incidental (ids, orden de propiedades) que no aporta a la comparación.
-function resumirAsentamiento(a: Asentamiento) {
+function resumirAsentamiento(a: Asentamiento, heroes: readonly Heroe[]) {
   const porTipoEstado: Record<string, number> = {};
   for (const edificio of a.edificios) {
     const clave = `${edificio.tipo}:${edificio.estado}`;
@@ -51,7 +52,8 @@ function resumirAsentamiento(a: Asentamiento) {
     nivel: a.nivel,
     poblacion: a.poblacion,
     medidorMantenimiento: Math.round(a.medidorMantenimiento * 100) / 100,
-    escuadrones: a.escuadrones.length,
+    // La guarnición es el campamento de sus residentes (fase 2 del Héroe): el mismo número que antes vivía aquí.
+    escuadrones: campamentoDe(a, heroes).length,
     edificios: porTipoEstado,
     recursosClave,
   };
@@ -81,7 +83,7 @@ describe('snapshot de regresión general', () => {
       estado = avanzarSimulacion(estado, mapa, contextoDeTest(tick, rng));
       if (TICKS_DE_CORTE.includes(tick)) {
         cortes[tick] = {
-          asentamientos: estado.asentamientos.map(resumirAsentamiento),
+          asentamientos: estado.asentamientos.map((a) => resumirAsentamiento(a, estado.heroes)),
           facciones: estado.facciones.map(resumirFaccion),
         };
       }

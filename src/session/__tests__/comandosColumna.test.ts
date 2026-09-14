@@ -14,6 +14,8 @@ import { movilizarEjercito, replegarEjercito } from '../comandos/ejercitos';
 import { inspeccionar } from '../comandos/interaccion';
 import { OPC, partidaConAsentamiento } from './fixtures';
 import { LOGISTICA, MOVIMIENTO, SIMULACION, VISION } from '../../constants';
+import { conEscuadrones } from '../../engine/tropa';
+import { escuadronDePrueba } from '../../engine/__tests__/fixtures';
 
 const opcDe = (heroeId: string) => ({ ...OPC, actor: heroeId });
 const PUNTO_LEJOS = { tipo: 'punto', punto: { x: 430, y: 430 } } as const;
@@ -23,28 +25,12 @@ function partidaConDos() {
   const base = partidaConAsentamiento();
   const payload = base.sesion.exportar();
   const a = payload.state.asentamientos[0]!;
-  const escuadron = (id: string, heroeId: string) => ({
-    id,
-    nombre: 'milicia_lanceros',
-    heroeId,
-    origen: 'pesants' as const,
-    cantidad: 10,
-    veterania: 0,
-    moral: 100,
-    tropaId: 'milicia_lanceros',
-  });
   const sesion = GameSession.importar({
     ...payload,
     state: {
       ...payload.state,
-      asentamientos: [
-        {
-          ...a,
-          almacen: { ...a.almacen, trigo: { capacidad: 100000, cantidad: 5000 } },
-          escuadrones: [escuadron('esc-lider', base.fundador), escuadron('esc-vecino', base.vecino)],
-        },
-        ...payload.state.asentamientos.slice(1),
-      ],
+      asentamientos: [{ ...a, almacen: { ...a.almacen, trigo: { capacidad: 100000, cantidad: 5000 } } }, ...payload.state.asentamientos.slice(1)],
+      heroes: conEscuadrones(payload.state.heroes, [escuadronDePrueba('esc-lider', base.fundador), escuadronDePrueba('esc-vecino', base.vecino)]),
     },
   });
   return { ...base, sesion };
@@ -92,7 +78,7 @@ describe('unirseEnCampo — el precio es la libertad de movimiento (Doc 5.14.1)'
     expect(sesion.getState().ejercitos, 'la columna personal deja de existir').toHaveLength(1);
     const ejercito = sesion.getState().ejercitos[0]!;
     expect(ejercito.participantes).toHaveLength(2);
-    expect(ejercito.escuadrones.map((e) => e.id).sort()).toEqual(['esc-lider', 'esc-vecino']);
+    expect([...ejercito.escuadronIds].sort()).toEqual(['esc-lider', 'esc-vecino']);
     expect(ejercito.suministro['trigo'], 'y su carro entra en el común').toBeGreaterThan(60);
     expect(sesion.getState().heroes.find((j) => j.id === vecino)!.ubicacion).toEqual({ tipo: 'columna', ejercitoId });
   });
@@ -223,7 +209,7 @@ describe('separarseDelEjercito — devuelve la libertad (Doc 5.14.2)', () => {
     expect(r.ok).toBe(true);
     const columna = sesion.getState().ejercitos.find((e) => e.id === r.datos!.columnaId)!;
     expect(columna.tipo).toBe('personal');
-    expect(columna.escuadrones.map((e) => e.id)).toEqual(['esc-vecino']);
+    expect(columna.escuadronIds).toEqual(['esc-vecino']);
     expect(sesion.getState().heroes.find((j) => j.id === vecino)!.ubicacion).toEqual({ tipo: 'columna', ejercitoId: columna.id });
     // Y ya puede volver a girar.
     expect(sesion.ejecutar(marcharA, { heroeId: vecino, objetivo: { tipo: 'punto', punto: { x: 420, y: 420 } } }, opcDe(vecino)).ok).toBe(true);

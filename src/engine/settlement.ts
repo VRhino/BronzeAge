@@ -250,7 +250,6 @@ export function fundarAsentamiento(
     cargos: { gobernadorId: null, tesoreroId: null, generalId: null, maestroObrasId: null, sacerdoteId: null },
     casasCompradas: [...heroesFundadoresIds],
     politicasActivas: [],
-    escuadrones: [],
     medidorMantenimiento: MANTENIMIENTO.medidorInicial,
   };
 

@@ -16,6 +16,7 @@ import type { Asentamiento, Ejercito, Faccion, Point } from '../domain/types';
 import type { Instante } from '../domain/tiempo';
 import { VISION } from '../constants';
 import { alcanceDeVista } from './ejercitos';
+import type { IndiceTropa } from './tropa';
 import { distancia } from '../world/geometria';
 import { marcarVisto, rejillaDe, SIN_EXPLORAR, type Exploracion } from './exploracion';
 
@@ -64,7 +65,7 @@ interface Ojo {
   alcance: number;
 }
 
-function ojosDe(faccionId: string, asentamientos: readonly Asentamiento[], ejercitos: readonly Ejercito[]): Ojo[] {
+function ojosDe(faccionId: string, asentamientos: readonly Asentamiento[], ejercitos: readonly Ejercito[], tropa: IndiceTropa): Ojo[] {
   const ojos: Ojo[] = [];
   for (const a of asentamientos) {
     if (a.faccionId !== faccionId) continue;
@@ -73,7 +74,7 @@ function ojosDe(faccionId: string, asentamientos: readonly Asentamiento[], ejerc
   }
   for (const e of ejercitos) {
     if (e.faccionId !== faccionId) continue;
-    ojos.push({ posicion: e.posicionActual, alcance: alcanceDeVista(e) });
+    ojos.push({ posicion: e.posicionActual, alcance: alcanceDeVista(e, tropa) });
   }
   return ojos;
 }
@@ -81,6 +82,8 @@ function ojosDe(faccionId: string, asentamientos: readonly Asentamiento[], ejerc
 export interface ContextoMemoria {
   asentamientos: readonly Asentamiento[];
   ejercitos: readonly Ejercito[];
+  /** Las escuadras de todos (`indiceTropa`): una columna con soldados en pie ve más lejos (`alcanceDeVista`). */
+  tropa: IndiceTropa;
   facciones: readonly Faccion[];
   limites: { ancho: number; alto: number };
   instante: Instante;
@@ -105,7 +108,7 @@ export function grabarLoVisto(
   const salida: Record<string, MemoriaFaccion> = { ...memoria };
 
   for (const faccion of contexto.facciones) {
-    const ojos = ojosDe(faccion.id, contexto.asentamientos, contexto.ejercitos);
+    const ojos = ojosDe(faccion.id, contexto.asentamientos, contexto.ejercitos, contexto.tropa);
     if (ojos.length === 0) continue;
 
     const previa = salida[faccion.id] ?? MEMORIA_VACIA;

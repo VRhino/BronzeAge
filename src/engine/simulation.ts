@@ -8,14 +8,14 @@ import { avanzarConstruccion, reclamosDeFuentes } from './construction';
 import { avanzarNutricionPoblacion, crecerPoblacion, recaudacionOro } from './population';
 import { agregarRecurso } from './almacen';
 import { avanzarComercio } from './trade';
-import { devolverEscoltaAGuarnicion } from './caravanas';
 import { avanzarCaravanasFundacion } from './expansion';
+import { alCampamentoPorIds, campamentoDe, conEscolta, conEscuadrones, conTropa, indiceTropa, sinEscolta } from './tropa';
 import { caducarOrdenes } from './market';
 import { avanzarPoliticas } from './politicas';
 import { avanzarTributos } from './diplomacia';
 import { avanzarNivelesFaccion, aplicarAjustesExperiencia, calcularCupoNivel, type AjusteExperiencia } from './faccion';
 import { NIVEL_FACCION } from '../constants';
-import { avanzarMantenimientoTropas } from './tropas';
+import { avanzarMantenimientoTropas, consumoRacionDeEscuadrones } from './tropas';
 import { avanzarNivelAsentamiento, avanzarMantenimiento, encontrarCapital } from './mantenimiento';
 import { nivelActualDe } from './asentamientoQuery';
 import { avanzarReputacion } from './reputacion';
@@ -48,8 +48,9 @@ export interface EstadoSimulacion {
    * Una Facción ausente no ha visto nada todavía, así que las partidas guardadas antes de la mecánica no
    * necesitan migración. */
   memoriaPorFaccion: Record<string, MemoriaFaccion>;
-  /** Quien juega (Doc 1.10). El tick solo lo toca para grabar `exploracionPersonal` de quien aun no tiene
-   * bandera (`grabarExploracionPersonal`) — todo lo demas de un `Jugador` lo escribe un comando, no el tick. */
+  /** Quien juega (Doc 1.10), con sus escuadras (`engine/tropa.ts`). El tick les cambia la tropa —hambre,
+   * combate, vuelta al campamento—, dónde quedan al volver a casa y la `exploracionPersonal` de quien aún no
+   * tiene bandera; todo lo demás de un héroe lo escribe un comando. */
   heroes: Heroe[];
 }
 
@@ -152,13 +153,16 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
 
   const procesados = crecidos.map((asentamiento) => {
     const zona = zonas.find((z) => z.asentamientoId === asentamiento.id);
+    // La guarnición es el campamento de sus residentes (`engine/tropa.ts`): las escuadras viven en sus héroes.
+    const campamento = campamentoDe(asentamiento, estado.heroes);
     const { asentamiento: trasConstruccion, eventos: eventosConstruccion, edificiosCompletados } = avanzarConstruccion(
       asentamiento,
       zona?.poligono ?? [],
       mapa,
       capitalesPorFaccion.get(asentamiento.faccionId),
       reclamos,
-      instante
+      instante,
+      consumoRacionDeEscuadrones(campamento)
     );
     if (edificiosCompletados > 0) {
       ajustesExperiencia.push({
@@ -203,7 +207,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     // que ya habría vaciado el ejército. El shock lo absorbe la parte del sistema que no es productiva antes
     // de tocar la que sí lo es. Ver `Consideraciones/NPC_Gobernanza_Facciones_Controladas.md` §"Abierto".
     const { asentamiento: trasNutricion, eventos: eventosNutricion } = avanzarNutricionPoblacion(trasNivel);
-    const { asentamiento: trasTropas, eventos: eventosTropas } = avanzarMantenimientoTropas(trasNutricion);
+    const { asentamiento: trasTropas, campamento: campamentoTrasTropas, eventos: eventosTropas } = avanzarMantenimientoTropas(trasNutricion, campamento);
     const { poblacion, eventos: eventosPoblacion } = crecerPoblacion(trasTropas, rng, instante);
     // Recaudación de oro por población (Doc 4.1, bloque "economía del oro"): se suma DESPUÉS de crecer (recauda
     // sobre la población de este tick) y ANTES de `avanzarMantenimiento` (que el oro recién recaudado pueda
@@ -237,14 +241,17 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     ];
     eventosDominio.push(...comoEventosDominio(eventosAsentamiento, contexto, asentamiento.id));
 
-    return { asentamiento: asentamientoFinal, destruido };
+    return { asentamiento: asentamientoFinal, destruido, campamento: campamentoTrasTropas };
   });
 
-  // Ruinas por abandono/mal mantenimiento (Doc 4.5): el asentamiento se elimina, su zona queda libre.
+  // Ruinas por abandono/mal mantenimiento (Doc 4.5): el asentamiento se elimina, su zona queda libre. Sus
+  // residentes quedan huérfanos, con sus escuadras (Doc 5.15.2).
   const actualizados = procesados.filter((p) => !p.destruido).map((p) => p.asentamiento);
+  let heroes = conEscuadrones(estado.heroes, procesados.flatMap((p) => p.campamento));
 
   const trasComercio = avanzarComercio(actualizados, estado.facciones, estado.caravanas, estado.acuerdos, mapa, estado.caminos, instante);
   eventosDominio.push(...comoEventosDominio(trasComercio.eventos, contexto));
+  heroes = alCampamentoPorIds(heroes, trasComercio.escoltasLiberadas);
 
   // Caravanas de Fundación (Doc 1.8): expanden una Facción más allá de su primer asentamiento — se avanzan
   // aparte de las comerciales (destino es un punto del mapa, no un asentamiento existente).
@@ -264,26 +271,18 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   eventosDominio.push(...comoEventosDominio(trasSpawnBandidos.eventos, contexto));
   // Los ejércitos entran aquí solo como ESCOLTA: una caravana enganchada se defiende con el poder de su
   // columna y no con la defensa base fija (Doc 5.13.3). El movimiento de los ejércitos sigue después.
+  // Con la tropa puesta (`engine/tropa.ts`): la escolta sin héroe y la columna que escolta defienden con su poder.
+  const tropaTrasComercio = indiceTropa(heroes);
   const trasAtaquesBandidos = avanzarAtaquesBandidos(
     trasSpawnBandidos.campamentos,
-    trasExpansion.caravanas,
+    trasExpansion.caravanas.map((c) => conEscolta(c, tropaTrasComercio)),
     rng,
-    estado.ejercitos,
-    instante
+    estado.ejercitos.map((e) => conTropa(e, tropaTrasComercio))
   );
   eventosDominio.push(...comoEventosDominio(trasAtaquesBandidos.eventos, contexto));
-
-  // Escolta sin héroe que vuelve a casa tras perder contra los bandidos (Doc 3.13.4): se funde con la
-  // guarnición de su origen. `trasExpansion.asentamientos` es la lista con la que sigue el tick.
-  let asentamientosTrasEscolta = trasExpansion.asentamientos;
-  if (trasAtaquesBandidos.escoltasDevueltas.length > 0) {
-    asentamientosTrasEscolta = asentamientosTrasEscolta.map((a) => {
-      const devueltas = trasAtaquesBandidos.escoltasDevueltas.filter((d) => d.asentamientoId === a.id);
-      if (devueltas.length === 0) return a;
-      const escuadrones = devueltas.reduce((esc, d) => devolverEscoltaAGuarnicion(esc, d.escuadrones), a.escuadrones);
-      return { ...a, escuadrones };
-    });
-  }
+  // La escolta vuelve a su héroe; la de una caravana destruida, a 0 y al campamento (Doc 5.15.4).
+  const caravanasTrasBandidos = trasAtaquesBandidos.caravanas.map(sinEscolta);
+  heroes = conEscuadrones(heroes, [...caravanasTrasBandidos.flatMap((r) => r.tropa), ...trasAtaquesBandidos.escoltasPerdidas]);
 
   // Ejércitos (Doc 5.12): comer del carro, moverse, repostar, llegar. Va DESPUÉS de los bandidos, al final de
   // la cadena. Solo consume aleatoriedad cuando un asedio llega a resolverse contra una plaza defendida
@@ -293,15 +292,17 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   // Recibe `trasAtaquesBandidos.caravanas` y NO `trasExpansion.caravanas`: los bandidos ya han podido
   // destruir alguna este tick, y partir de la lista anterior las habría resucitado al devolver la suya.
   const trasEjercitos = avanzarEjercitos(estado.ejercitos, {
-    asentamientos: asentamientosTrasEscolta,
-    caravanas: trasAtaquesBandidos.caravanas,
+    asentamientos: trasExpansion.asentamientos,
+    caravanas: caravanasTrasBandidos.map((r) => r.caravana),
     facciones: trasExpansion.facciones,
     relaciones: estado.relaciones,
     mapa,
     instante,
     rng,
+    heroes,
   });
   eventosDominio.push(...comoEventosDominio(trasEjercitos.eventos, contexto));
+  heroes = trasEjercitos.heroes;
 
   // El mercado ya no LIQUIDA nada en el tick: una orden es una oferta en pie en una plaza y se cumple en el
   // mostrador, con alguien que ha ido hasta alli (`comerciarEnPlaza`, `Comercio_Fisico_Definicion.md`). Lo
@@ -322,7 +323,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
 
   const faccionesFinal = avanzarReputacion(trasNivelFaccion.facciones, estado.relaciones);
 
-  const titulosActuales = calcularTitulos(faccionesFinal, trasTributos.asentamientos, estado.relaciones, trasEjercitos.ejercitos);
+  const titulosActuales = calcularTitulos(faccionesFinal, trasTributos.asentamientos, estado.relaciones, heroes);
   const eventosTitulos = narrarCambiosDeTitulo(estado.titulos, titulosActuales, faccionesFinal);
   eventosDominio.push(...comoEventosDominio(eventosTitulos, contexto));
 
@@ -343,11 +344,12 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     memoriaPorFaccion: grabarLoVisto(estado.memoriaPorFaccion, {
       asentamientos: trasTributos.asentamientos,
       ejercitos: trasEjercitos.ejercitos,
+      tropa: indiceTropa(heroes),
       facciones: faccionesFinal,
       limites: mapa.limites,
       instante,
     }),
-    heroes: grabarExploracionPersonal(estado.heroes, trasEjercitos.ejercitos, mapa.limites),
+    heroes: grabarExploracionPersonal(heroes, trasEjercitos.ejercitos, mapa.limites),
     estadoMapa: mapa.estadoActual(),
     eventosDominio,
   };

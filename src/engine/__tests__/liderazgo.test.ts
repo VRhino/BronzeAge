@@ -12,18 +12,9 @@ import { describe, expect, it } from 'vitest';
 import type { Escuadron, Heroe } from '../../domain/types';
 import { LIDERAZGO, TROPAS_RECLUTABLES } from '../../constants';
 import { costeLiderazgo, liderazgoComprometido, liderazgoDisponible, liderazgoDe, puedeLlevar } from '../liderazgo';
-import { heroeDePrueba } from './fixtures';
+import { escuadronDePrueba, heroeDePrueba } from './fixtures';
 
-const escuadron = (tropaId: string, heroeId = 'jugador-1'): Escuadron => ({
-  id: `e-${tropaId}-${heroeId}`,
-  nombre: tropaId,
-  heroeId,
-  origen: 'pesants',
-  cantidad: 10,
-  veterania: 0,
-  moral: 100,
-  tropaId,
-});
+const escuadron = (tropaId: string, heroeId = 'jugador-1'): Escuadron => escuadronDePrueba(`e-${tropaId}-${heroeId}`, heroeId, tropaId);
 
 /** Una tropa cualquiera de ese escalón — los tests hablan de escalones, no de nombres propios. */
 const deEscalon = (escalon: number): string => TROPAS_RECLUTABLES.find((t) => t.escalon === escalon)!.id;

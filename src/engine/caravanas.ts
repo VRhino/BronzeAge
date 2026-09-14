@@ -7,14 +7,7 @@
 // catálogos. La validación de residencia / propiedad de escuadrones para la escolta vive en `session/`.
 
 import { ANIMAL_CATALOGO, CARRO_CATALOGO } from '../constants';
-import type { Caravana, Escuadron } from '../domain/types';
-
-/** Escolta sin héroe (Doc 3.13.4) que vuelve a la guarnición de su origen tras un combate — el llamador
- * (`simulation.ts` / `avanzarEjercitos`) la funde con la guarnición vía `devolverEscoltaAGuarnicion`. */
-export interface EscoltaDevuelta {
-  asentamientoId: string;
-  escuadrones: Escuadron[];
-}
+import type { Caravana } from '../domain/types';
 
 /** Los carros que llevan animal — los únicos que viajan y cuentan capacidad (Doc 3.13.1). */
 function carrosConTraccion(caravana: Caravana) {
@@ -59,26 +52,4 @@ export function costoCaravanaPorDefecto(): Record<string, number> {
     for (const [recurso, cantidad] of Object.entries(costo)) total[recurso] = (total[recurso] ?? 0) + cantidad;
   }
   return total;
-}
-
-/**
- * Devuelve escuadrones-escolta (Doc 3.13.4) a la guarnición de un asentamiento, fundiéndolos con el escuadrón
- * del mismo jugador y tropa si ya existe — invariante "un jugador tiene UN escuadrón por tropa" (types.ts).
- * Lo usan la vuelta normal de la caravana (`avanzarCaravanas`), la cancelación de preparación y el regreso de
- * la escolta tras un combate perdido (`avanzarAtaquesBandidos` / `resolverEncuentros`).
- */
-export function devolverEscoltaAGuarnicion(guarnicion: readonly Escuadron[], escolta: readonly Escuadron[]): Escuadron[] {
-  const resultado = guarnicion.map((e) => ({ ...e }));
-  for (const s of escolta) {
-    const existente = resultado.find((e) => e.heroeId === s.heroeId && e.tropaId === s.tropaId);
-    if (existente) {
-      existente.cantidad += s.cantidad;
-      existente.veterania = Math.max(existente.veterania, s.veterania);
-      existente.moral = Math.min(existente.moral, s.moral);
-      if (s.heridoHasta !== undefined) existente.heridoHasta = s.heridoHasta;
-    } else {
-      resultado.push({ ...s });
-    }
-  }
-  return resultado;
 }

@@ -18,7 +18,7 @@ function columnaHuerfana(posicionActual = { x: 400, y: 400 }): Ejercito {
     tipo: 'personal',
     liderId: 'jugador-1',
     politicaDeUnion: 'rechazar',
-    escuadrones: [],
+    escuadronIds: [],
     suministro: {},
     caravanasAdjuntasIds: [],
     objetivo: { tipo: 'punto', punto: posicionActual },

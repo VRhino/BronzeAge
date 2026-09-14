@@ -12,11 +12,11 @@ import {
   moverCargaCarroAparcada as moverCargaCarroAparcadaEngine,
   enviarCaravanaAlOrigen as enviarCaravanaAlOrigenEngine,
   seleccionarEscoltaCaravana,
-  escoltaDeJugador,
   proponerTrueque as proponerTruequeEngine,
   rechazarTrueque as rechazarTruequeEngine,
 } from '../../engine/trade';
 import { puedeLlevar } from '../../engine/liderazgo';
+import { alCampamentoPorIds, conEscuadrones } from '../../engine/tropa';
 import { colocarOrdenMercado as colocarOrdenMercadoEngine, comerciarEnPlaza as comerciarEnPlazaEngine } from '../../engine/market';
 import { capacidadCargaDe } from '../../engine/ejercitos';
 import { asegurarCaminoComercial } from '../../engine/caminos';
@@ -408,38 +408,31 @@ export const prepararCaravana = comando<ParamsPrepararCaravana, { caravanaId: st
     const origen = exigirAsentamiento(estado, caravana.origenAsentamientoId);
     const destino = exigirAsentamiento(estado, params.destinoAsentamientoId);
 
-    const escoltaIds = params.escoltaEscuadronIds ?? [];
-    const seleccion = seleccionarEscoltaCaravana(origen, params.heroeId, escoltaIds);
-    if (seleccion.escolta.length > 0) {
-      // La escolta cuenta contra el Liderazgo del jugador mientras viaja (Doc 3.13.4), sumada a lo que ya
-      // tenga cedido en otras caravanas. (Gap conocido: no cruza con lo que ese jugador lleve en un ejército.)
-      const jugador = estado.heroes.find((j) => j.id === params.heroeId);
-      const yaCedido = escoltaDeJugador(estado.caravanas, params.heroeId);
-      if (!puedeLlevar(jugador, [...yaCedido, ...seleccion.escolta])) {
+    const jugador = estado.heroes.find((j) => j.id === params.heroeId);
+    const escolta = seleccionarEscoltaCaravana(origen, jugador, params.escoltaEscuadronIds ?? []);
+    if (escolta.length > 0) {
+      // La escolta cuenta contra el Liderazgo del héroe mientras viaja (Doc 3.13.4), sumada a todo lo que ya
+      // tenga fuera del campamento: en otras escoltas o en su columna.
+      const yaFuera = (jugador?.escuadrones ?? []).filter((e) => e.contenedor.tipo !== 'campamento');
+      if (!puedeLlevar(jugador, [...yaFuera, ...escolta])) {
         rechazar(CODIGOS_ERROR.comercioCaravanaInvalida);
       }
     }
 
-    const r = prepararCaravanaManualEngine(
-      caravana,
-      seleccion.asentamiento,
-      destino,
-      params.carga,
-      seleccion.escolta,
-      mapa,
-      estado.caminos,
-      ctx.instante
-    );
-    const siguiente: GameSessionState = { ...conAsentamiento(conCaravana(estado, r.caravana), r.asentamiento) };
+    const r = prepararCaravanaManualEngine(caravana, origen, destino, params.carga, escolta, mapa, estado.caminos, ctx.instante);
+    const siguiente: GameSessionState = {
+      ...conAsentamiento(conCaravana(estado, r.caravana), r.asentamiento),
+      heroes: conEscuadrones(estado.heroes, r.tropa),
+    };
     return exito(
       siguiente,
       [
         evento(ctx, {
           codigo: 'comercio.caravana_preparando',
           mensaje: `La caravana ${caravana.id} carga para ${destino.id}${
-            seleccion.escolta.length > 0 ? ` con ${seleccion.escolta.length} escuadrón(es) de escolta` : ''
+            escolta.length > 0 ? ` con ${escolta.length} escuadrón(es) de escolta` : ''
           } y ${r.caravana.estado === 'preparando' ? 'se prepara' : 'sale ya'}.`,
-          payload: { caravanaId: caravana.id, destinoId: destino.id, estado: r.caravana.estado, escolta: seleccion.escolta.length },
+          payload: { caravanaId: caravana.id, destinoId: destino.id, estado: r.caravana.estado, escolta: escolta.length },
           asentamientoId: origen.id,
         }),
       ],
@@ -457,7 +450,10 @@ export const cancelarCaravana = comando<ParamsCancelarCaravana, { caravanaId: st
   const caravana = exigirCaravana(estado, params.caravanaId);
   const origen = exigirAsentamiento(estado, caravana.origenAsentamientoId);
   const r = cancelarPreparacionEngine(caravana, origen);
-  const siguiente: GameSessionState = { ...conAsentamiento(conCaravana(estado, r.caravana), r.asentamiento) };
+  const siguiente: GameSessionState = {
+    ...conAsentamiento(conCaravana(estado, r.caravana), r.asentamiento),
+    heroes: alCampamentoPorIds(estado.heroes, r.escoltaLiberada),
+  };
   return exito(
     siguiente,
     [

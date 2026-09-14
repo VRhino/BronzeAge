@@ -1,12 +1,14 @@
 // `guarnecer` (Ocupacion_Post_Conquista_Definicion.md §2.3): un ejército marcha a una plaza de su Facción y
-// vuelca la tropa en su guarnición. Las caravanas adjuntas quedan 'aparcadas' allí (§2.3d): no las usa la
-// anfitriona, intercambian con su almacén, y salen solo enganchadas a un ejército o enviadas a su origen.
+// vuelca la tropa en el campamento de sus héroes — solo si todos residen allí (decisión del usuario, 2026-09-14).
+// Las caravanas adjuntas quedan 'aparcadas' (§2.3d): no las usa la anfitriona, intercambian con su almacén, y
+// salen solo enganchadas a un ejército o enviadas a su origen.
 import { describe, expect, it } from 'vitest';
 import type { Asentamiento, Caravana, Ejercito, Escuadron, Point } from '../../domain/types';
 import { guarnecer, MovilizacionInvalidaError, adjuntarCaravana } from '../ejercitos';
 import { moverCargaCarroAparcada, enviarCaravanaAlOrigen, CaravanaInvalidaError, avanzarComercio } from '../trade';
 import { instante } from '../../domain/tiempo';
-import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, posicionRecomendable } from './fixtures';
+import type { EjercitoConTropa } from '../tropa';
+import { crearFacciones, crearMapaDeterminista, escuadronDePrueba, fundarAsentamientoDeTest, posicionRecomendable } from './fixtures';
 
 const mapa = crearMapaDeterminista(42);
 
@@ -15,23 +17,15 @@ function plaza(faccionId: string, existentes: Asentamiento[] = []): Asentamiento
   return { ...asentamiento, poblacion: { pesants: 300, artesanos: 0, nobleza: 0 } };
 }
 
-const esc = (heroeId: string): Escuadron => ({
-  id: `esc-${heroeId}`,
-  nombre: `Milicia de ${heroeId}`,
-  heroeId,
-  origen: 'pesants',
-  cantidad: 20,
-  veterania: 0,
-  moral: 100,
-  tropaId: 'milicia_lanceros',
-});
+const esc = (heroeId: string): Escuadron =>
+  escuadronDePrueba(`esc-${heroeId}`, heroeId, 'milicia_lanceros', 20, { contenedor: { tipo: 'ejercito', ejercitoId: 'ej-1' } });
 
 function ejercitoDe(
   faccionId: string,
   posicion: Point,
   escuadrones: Escuadron[],
   extra: Partial<Ejercito> = {}
-): Ejercito {
+): EjercitoConTropa {
   return {
     id: 'ej-1',
     faccionId,
@@ -40,6 +34,7 @@ function ejercitoDe(
     tipo: 'ejercito',
     politicaDeUnion: 'rechazar',
     liderId: escuadrones[0]?.heroeId ?? 'j1',
+    escuadronIds: escuadrones.map((e) => e.id),
     escuadrones,
     suministro: { trigo: 300 },
     caravanasAdjuntasIds: [],
@@ -65,15 +60,22 @@ function caravanaAdjunta(id: string, origenId: string, posicion: Point): Caravan
   };
 }
 
-describe('guarnecer — la tropa a la guarnición, el ejército se consume', () => {
-  const b = plaza('faccion-1');
+describe('guarnecer — la tropa al campamento, el ejército se consume', () => {
+  // j1 y j2 residen en b: es lo que les deja volcar la tropa aquí.
+  const b: Asentamiento = { ...plaza('faccion-1'), casasCompradas: ['j1', 'j2'] };
 
-  it('un ejército de la Facción en la puerta vuelca sus escuadrones y su carro', () => {
+  it('un ejército de residentes en la puerta vuelca sus escuadrones al campamento y su carro al almacén', () => {
     const ej = ejercitoDe('faccion-1', b.posicion, [esc('j1'), esc('j2')]);
     const r = guarnecer(b, ej, []);
-    expect(r.asentamiento.escuadrones.map((e) => e.id).sort()).toEqual(['esc-j1', 'esc-j2']);
+    expect(r.tropa.map((e) => e.id).sort()).toEqual(['esc-j1', 'esc-j2']);
+    expect(r.tropa.every((e) => e.contenedor.tipo === 'campamento')).toBe(true);
     expect(r.asentamiento.almacen['trigo']?.cantidad).toBeGreaterThan(b.almacen['trigo']?.cantidad ?? 0);
     expect(r.caravanasAparcadas).toEqual([]);
+  });
+
+  it('si alguno de dentro NO reside ahí, no guarnece: su campamento está en otra plaza', () => {
+    const ej = ejercitoDe('faccion-1', b.posicion, [esc('j1'), esc('forastero')]);
+    expect(() => guarnecer(b, ej, [])).toThrow(/residen todos/);
   });
 
   it('una columna PERSONAL no guarnece', () => {

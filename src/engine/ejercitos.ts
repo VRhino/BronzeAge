@@ -4,23 +4,36 @@
 // movimiento: eso es `avanzarEjercitos` en el tick. La ruta sí se calcula aquí, igual que una caravana
 // calcula la suya al despacharse (`engine/trade.ts`), porque es parte de "salir", no de "avanzar".
 //
-// La regla que sostiene todo lo demás: los escuadrones se van DE VERDAD del asentamiento. No es una
-// referencia ni una proyección — salen de `Asentamiento.escuadrones` y entran en `Ejercito.escuadrones`. Por
-// eso la guarnición es lo único que defiende (Doc 5.12.4) sin necesidad de ningún predicado extra, y por eso
-// `consumoRacionTropas` ya cuenta solo lo que se quedó en casa sin tocar una línea.
-import type { AcuerdoTrueque, Asentamiento, Caravana, Ejercito, Escuadron, Faccion, Heroe, Point, RelacionPolitica } from '../domain/types';
+// La regla que sostiene todo lo demás: los escuadrones se van DE VERDAD del campamento. Cambian de contenedor
+// —de `campamento` a `ejercito`, doc 01 §13— y por eso la guarnición es lo único que defiende (Doc 5.12.4) y lo
+// único que come de la plaza. Aquí se trabaja sobre vistas con la tropa puesta (`EjercitoConTropa`, ver
+// `engine/tropa.ts`); quien llama las monta y las deshace.
+import type { AcuerdoTrueque, Asentamiento, Caravana, Ejercito, Escuadron, Faccion, Heroe, Point, RelacionPolitica, UbicacionHeroe } from '../domain/types';
 import type { Mapa } from '../world/mapa';
 import { calcularRuta } from '../world/rutas';
 import { distancia } from '../world/geometria';
 import { LOGISTICA, MOVIMIENTO, TROPAS_RECLUTABLES, VISION } from '../constants';
-import { capacidadCaravana, devolverEscoltaAGuarnicion, velocidadCaravana, type EscoltaDevuelta } from './caravanas';
+import { capacidadCaravana, velocidadCaravana } from './caravanas';
+import {
+  alCampamento,
+  campamentoDe,
+  conEscolta,
+  conEscuadrones,
+  conTropa,
+  indiceTropa,
+  sinEscolta,
+  sinTropa,
+  type CaravanaConEscolta,
+  type EjercitoConTropa,
+  type IndiceTropa,
+} from './tropa';
 import { atribuir, type EventoCrudo } from '../domain/eventos';
 import { minutos, sumar, type Instante } from '../domain/tiempo';
 import type { RandomFn } from '../worldgen';
-import { asediarConEjercito, encuentroEntreEjercitos, interceptarCaravanaConEjercito } from './combate';
+import { asediarConEjercito, desalojarResidentes, encuentroEntreEjercitos, interceptarCaravanaConEjercito } from './combate';
 import { avanzarPosicionEnRuta } from './movimiento';
 import { agregarRecurso, cantidadDisponible, descontarRecursos } from './almacen';
-import { avanzarRacion, reservaDeTrigo } from './tropas';
+import { avanzarRacion, consumoRacionDeEscuadrones, reservaDeTrigo } from './tropas';
 import { puedeLlevar } from './liderazgo';
 import { esResidente, estanAliadas } from './pertenencia';
 
@@ -72,7 +85,8 @@ function puntoDeObjetivo(objetivo: ObjetivoEjercito, asentamientos: readonly Ase
  * tragárselo dejaría al jugador saliendo con menos tropa de la que creía.
  */
 function seleccionarParaCampana(
-  asentamiento: Asentamiento,
+  /** El campamento de la plaza de la que se sale (`campamentoDe`). */
+  campamento: readonly Escuadron[],
   heroeId: string,
   escuadronIds: readonly string[],
   /** `salirAlMundo` sí admite salir con las manos vacías (Doc 1.10.2): el viajero sin tropas es una forma de
@@ -82,10 +96,12 @@ function seleccionarParaCampana(
   if (escuadronIds.length === 0 && !permitirVacio) throw new MovilizacionInvalidaError('Hay que llevarse al menos un escuadrón.');
   const elegidos: Escuadron[] = [];
   for (const id of escuadronIds) {
-    const escuadron = asentamiento.escuadrones.find((e) => e.id === id);
+    const escuadron = campamento.find((e) => e.id === id);
     if (!escuadron) throw new MovilizacionInvalidaError(`El escuadrón ${id} no está en este asentamiento.`);
     if (escuadron.heroeId !== heroeId) throw new MovilizacionInvalidaError(`El escuadrón ${id} es de otro jugador.`);
     if (escuadron.cantidad <= 0) throw new MovilizacionInvalidaError(`El escuadrón ${id} está aniquilado.`);
+    // En guarnición la maneja la IA y el héroe no puede usarla mientras siga asignada (Doc 5.15.3).
+    if (escuadron.enGuarnicion) throw new MovilizacionInvalidaError(`El escuadrón ${id} está en la guarnición.`);
     elegidos.push(escuadron);
   }
   return elegidos;
@@ -175,6 +191,8 @@ function adjuntasDe(ejercito: Ejercito, caravanas: readonly Caravana[]): Caravan
  */
 function cargarCarroElegido(
   asentamiento: Asentamiento,
+  /** Ración de lo que se queda en el campamento: es lo que protege la reserva de trigo. */
+  consumoTropas: number,
   carga: Readonly<Record<string, number>>,
   capacidad: number
 ): { asentamiento: Asentamiento; suministro: Record<string, number> } {
@@ -187,7 +205,7 @@ function cargarCarroElegido(
     throw new MovilizacionInvalidaError(`El carro admite ${capacidad} y se piden ${total}.`);
   }
   for (const [recurso, cantidad] of pedido) {
-    const reservado = recurso === 'trigo' ? reservaDeTrigo(asentamiento) : 0;
+    const reservado = recurso === 'trigo' ? reservaDeTrigo(asentamiento, consumoTropas) : 0;
     if (cantidad > cantidadDisponible(asentamiento.almacen, recurso) - reservado) {
       throw new MovilizacionInvalidaError(`El almacén no tiene ${cantidad} de ${recurso} de sobra.`);
     }
@@ -198,11 +216,13 @@ function cargarCarroElegido(
 
 function cargarCarro(
   asentamiento: Asentamiento,
+  /** Ración de lo que se queda en el campamento de la plaza. */
+  consumoTropas: number,
   yaEnElCarro: number,
   capacidad: number
 ): { asentamiento: Asentamiento; cargado: number } {
   const espacio = Math.max(0, capacidad - yaEnElCarro);
-  const disponible = Math.max(0, cantidadDisponible(asentamiento.almacen, 'trigo') - reservaDeTrigo(asentamiento));
+  const disponible = Math.max(0, cantidadDisponible(asentamiento.almacen, 'trigo') - reservaDeTrigo(asentamiento, consumoTropas));
   const cargado = Math.min(espacio, disponible);
   if (cargado <= 0) return { asentamiento, cargado: 0 };
   return { asentamiento: { ...asentamiento, almacen: descontarRecursos(asentamiento.almacen, { trigo: cargado }) }, cargado };
@@ -241,7 +261,9 @@ function repostarSiPuede(
   ejercito: Ejercito,
   porId: Map<string, Asentamiento>,
   relaciones: readonly RelacionPolitica[],
-  caravanas: readonly Caravana[]
+  caravanas: readonly Caravana[],
+  /** La ración del campamento de cada plaza, que protege su reserva de trigo. */
+  consumoTropasDe: (plaza: Asentamiento) => number
 ): { ejercito: Ejercito; plaza: Asentamiento | undefined; repuesto: number } {
   const alcance = [...porId.values()]
     .filter(
@@ -259,7 +281,7 @@ function repostarSiPuede(
   if (!plaza) return { ejercito, plaza: undefined, repuesto: 0 };
 
   const enElCarro = ejercito.suministro['trigo'] ?? 0;
-  const carga = cargarCarro(plaza, enElCarro, capacidadCargaDe(ejercito, caravanas));
+  const carga = cargarCarro(plaza, consumoTropasDe(plaza), enElCarro, capacidadCargaDe(ejercito, caravanas));
   if (carga.cargado <= 0) return { ejercito, plaza: undefined, repuesto: 0 };
 
   return {
@@ -269,10 +291,14 @@ function repostarSiPuede(
   };
 }
 
-/** Tope de Liderazgo del jugador sobre lo que ESE jugador aporta (Doc 5.11): en un ejército de varios no hay
- * tope agregado, cada uno se valida contra el suyo. */
+/** Tope de Liderazgo del héroe sobre lo que ESE héroe aporta (Doc 5.11): en un ejército de varios no hay tope
+ * agregado, cada uno se valida contra el suyo. Cuenta también lo que ya tiene fuera del campamento —en una
+ * columna o de escolta—, porque el Liderazgo que ocupa una escolta sin héroe se suma a lo que lleva consigo
+ * (Doc 3.13.4). */
 function exigirLiderazgo(jugador: Heroe | undefined, escuadrones: readonly Escuadron[]): void {
-  if (!puedeLlevar(jugador, escuadrones)) {
+  const nuevos = new Set(escuadrones.map((e) => e.id));
+  const yaFuera = (jugador?.escuadrones ?? []).filter((e) => e.contenedor.tipo !== 'campamento' && !nuevos.has(e.id));
+  if (!puedeLlevar(jugador, [...yaFuera, ...escuadrones])) {
     throw new MovilizacionInvalidaError('Estos escuadrones exceden el Liderazgo del jugador.');
   }
 }
@@ -287,6 +313,8 @@ function exigirLiderazgo(jugador: Heroe | undefined, escuadrones: readonly Escua
  */
 export function movilizarEjercito(
   asentamiento: Asentamiento,
+  /** El campamento de la plaza (`campamentoDe`): de ahí salen los escuadrones, y lo que queda protege el trigo. */
+  campamento: readonly Escuadron[],
   jugador: Heroe | undefined,
   heroeId: string,
   escuadronIds: readonly string[],
@@ -299,20 +327,16 @@ export function movilizarEjercito(
   /** Qué hacer con quien pida unirse por el camino (Doc 5.14.1). Se fija aquí y no cambia. Por defecto
    * `rechazar`: lo prudente es que la columna salga con quien salió salvo que su Líder diga otra cosa. */
   politicaDeUnion: Ejercito['politicaDeUnion'] = 'rechazar'
-): { asentamiento: Asentamiento; ejercito: Ejercito; trigoCargado: number } {
-  // Mueves tu propia tropa esté donde esté (revisión 2026-09-08): residir aquí, O tener ya escuadrones vivos
-  // propios posados aquí (guarnición tras conquistar/guarnecer). Reclutar/cambiar roster sigue atado a residir.
-  if (
-    !esResidente(asentamiento, heroeId) &&
-    !asentamiento.escuadrones.some((e) => e.heroeId === heroeId && e.cantidad > 0)
-  ) {
-    throw new MovilizacionInvalidaError('Solo puedes sacar de aquí tropas propias: residiendo, o escuadrones tuyos ya posados aquí.');
+): { asentamiento: Asentamiento; ejercito: EjercitoConTropa; trigoCargado: number } {
+  // Tu tropa está en tu campamento, y el campamento es tu residencia (Doc 5.15.2).
+  if (!esResidente(asentamiento, heroeId)) {
+    throw new MovilizacionInvalidaError('Solo se sale de campaña desde tu residencia: ahí está tu campamento.');
   }
   if (objetivo.tipo === 'asentamiento' && objetivo.id === asentamiento.id) {
     throw new MovilizacionInvalidaError('El destino no puede ser el propio asentamiento de origen.');
   }
 
-  const escuadrones = seleccionarParaCampana(asentamiento, heroeId, escuadronIds);
+  const escuadrones = seleccionarParaCampana(campamento, heroeId, escuadronIds);
   exigirLiderazgo(jugador, escuadrones);
 
   const destino = puntoDeObjetivo(objetivo, asentamientos);
@@ -321,8 +345,7 @@ export function movilizarEjercito(
   const ruta = calcularRuta(mapa, asentamiento.posicion, destino);
   if (!ruta) throw new MovilizacionInvalidaError('No hay ruta por tierra hasta ese destino.');
   const idsFuera = new Set(escuadrones.map((e) => e.id));
-  const sinLosQueSalen = { ...asentamiento, escuadrones: asentamiento.escuadrones.filter((e) => !idsFuera.has(e.id)) };
-  const carga = cargarCarro(sinLosQueSalen, 0, capacidadCarrosDe(1));
+  const carga = cargarCarro(asentamiento, consumoRacionDeEscuadrones(campamento.filter((e) => !idsFuera.has(e.id))), 0, capacidadCarrosDe(1));
 
   return {
     asentamiento: carga.asentamiento,
@@ -336,6 +359,7 @@ export function movilizarEjercito(
       tipo: 'ejercito',
       liderId: heroeId,
       politicaDeUnion,
+      escuadronIds: [...idsFuera],
       escuadrones,
       suministro: { trigo: carga.cargado },
       caravanasAdjuntasIds: [],
@@ -378,6 +402,8 @@ export function movilizarEjercito(
  */
 export function salirAlMundo(
   asentamiento: Asentamiento,
+  /** El campamento de la plaza (`campamentoDe`). */
+  campamento: readonly Escuadron[],
   jugador: Heroe | undefined,
   heroeId: string,
   escuadronIds: readonly string[],
@@ -386,7 +412,7 @@ export function salirAlMundo(
   ejercitos: readonly Ejercito[],
   id: string,
   instante: Instante
-): { asentamiento: Asentamiento; ejercito: Ejercito } {
+): { asentamiento: Asentamiento; ejercito: EjercitoConTropa } {
   if (!esResidente(asentamiento, heroeId)) {
     throw new MovilizacionInvalidaError('Solo se sale al mundo desde la propia residencia.');
   }
@@ -394,12 +420,16 @@ export function salirAlMundo(
     throw new MovilizacionInvalidaError('Ya estás fuera: no se puede salir dos veces.');
   }
 
-  const escuadrones = seleccionarParaCampana(asentamiento, heroeId, escuadronIds, true);
+  const escuadrones = seleccionarParaCampana(campamento, heroeId, escuadronIds, true);
   exigirLiderazgo(jugador, escuadrones);
 
   const idsFuera = new Set(escuadrones.map((e) => e.id));
-  const sinLosQueSalen = { ...asentamiento, escuadrones: asentamiento.escuadrones.filter((e) => !idsFuera.has(e.id)) };
-  const cargado = cargarCarroElegido(sinLosQueSalen, carga, capacidadCarrosDe(1));
+  const cargado = cargarCarroElegido(
+    asentamiento,
+    consumoRacionDeEscuadrones(campamento.filter((e) => !idsFuera.has(e.id))),
+    carga,
+    capacidadCarrosDe(1)
+  );
 
   return {
     asentamiento: cargado.asentamiento,
@@ -413,6 +443,7 @@ export function salirAlMundo(
       // A una columna personal no se une nadie (Doc 5.12.1), así que su política no significa nada. Se pone
       // la prudente para que, si alguna vez se leyera por descuido, no abra una puerta que no existe.
       politicaDeUnion: 'rechazar',
+      escuadronIds: [...idsFuera],
       escuadrones,
       suministro: cargado.suministro,
       caravanasAdjuntasIds: [],
@@ -427,18 +458,23 @@ export function salirAlMundo(
 }
 
 /**
- * Mete una columna entera dentro de un asentamiento: los escuadrones a la guarnición y el carro al almacén
- * (Doc 1.10.3).
+ * Mete una columna entera dentro de un asentamiento: los escuadrones al campamento de sus héroes y el carro al
+ * almacén (Doc 1.10.3). Solo tiene sentido para quien reside ahí, que es donde está su campamento: el llamador
+ * se ocupa de los demás.
  *
  * Es la MISMA operación que hace un ejército al llegar a casa replegado, y por eso vive aquí y no duplicada
  * en los dos sitios: si divergieran, volver a casa andando y volver a casa entrando por la puerta dejarían
  * la plaza en estados distintos.
  */
-export function absorberColumna(asentamiento: Asentamiento, ejercito: Ejercito, devolverSuministro: boolean): Asentamiento {
+export function absorberColumna(
+  asentamiento: Asentamiento,
+  ejercito: EjercitoConTropa,
+  devolverSuministro: boolean
+): { asentamiento: Asentamiento; tropa: Escuadron[] } {
   const almacen = devolverSuministro
     ? Object.entries(ejercito.suministro).reduce((acc, [recurso, cantidad]) => agregarRecurso(acc, recurso, cantidad), asentamiento.almacen)
     : asentamiento.almacen;
-  return { ...asentamiento, escuadrones: [...asentamiento.escuadrones, ...ejercito.escuadrones], almacen };
+  return { asentamiento: { ...asentamiento, almacen }, tropa: alCampamento(ejercito.escuadrones) };
 }
 
 /** ¿Está la columna en la PUERTA de esta plaza (Doc 1.10.3)? Entrar es una acción que se ofrece al estar
@@ -448,10 +484,12 @@ export function enLaPuertaDe(ejercito: Ejercito, asentamiento: Asentamiento): bo
 }
 
 /**
- * `guarnecer` (Ocupacion §2.3): un EJÉRCITO en la puerta de una plaza de su Facción vuelca la tropa en su
- * guarnición y se consume. Es `absorberColumna` con destino ≠ hogar — la misma operación que hace la
- * conquista sola (§2.2), pero pedida por el jugador para reforzar una plaza propia o aliada sin mudar su
- * residencia. Cierra el hueco de Doc 5.12.4 ("hoy un ejército aparcado no ayuda a defender").
+ * `guarnecer` (Ocupacion §2.3): un EJÉRCITO en la puerta de una plaza de su Facción entra y se deshace: su
+ * tropa vuelve al campamento y su carro al almacén (`absorberColumna`).
+ *
+ * **Solo si todos los que van dentro residen ahí** (decisión del usuario, 2026-09-14): el campamento de un
+ * héroe está en su residencia (Doc 5.15.2), así que volcar la tropa en una plaza ajena ya no tiene dónde
+ * dejarla. Reforzar otra plaza es entrar y defenderla en persona.
  *
  * Las **caravanas adjuntas** (§2.3d) NO se pierden: pasan a `'aparcada'` en la plaza anfitriona — siguen
  * siendo de su origen, no las usa la anfitriona, y salen luego enganchadas a un ejército o enviadas a casa.
@@ -460,14 +498,17 @@ export function enLaPuertaDe(ejercito: Ejercito, asentamiento: Asentamiento): bo
  */
 export function guarnecer(
   asentamiento: Asentamiento,
-  ejercito: Ejercito,
+  ejercito: EjercitoConTropa,
   caravanas: readonly Caravana[]
-): { asentamiento: Asentamiento; caravanasAparcadas: Caravana[] } {
+): { asentamiento: Asentamiento; tropa: Escuadron[]; caravanasAparcadas: Caravana[] } {
   if (ejercito.tipo !== 'ejercito') {
     throw new MovilizacionInvalidaError('Solo un ejército guarnece: una columna personal no trae tropa que volcar en la guarnición.');
   }
   if (ejercito.faccionId !== asentamiento.faccionId) {
     throw new MovilizacionInvalidaError('Solo se guarnece una plaza de tu propia Facción.');
+  }
+  if (!ejercito.participantes.every((p) => esResidente(asentamiento, p.heroeId))) {
+    throw new MovilizacionInvalidaError('Solo se guarnece la plaza donde residen todos los que van en el ejército: ahí está su campamento.');
   }
   if (!enLaPuertaDe(ejercito, asentamiento)) {
     throw new MovilizacionInvalidaError(`Hay que estar a menos de ${MOVIMIENTO.radioPuerta} de la plaza para guarnecerla.`);
@@ -479,15 +520,14 @@ export function guarnecer(
     posicionActual: asentamiento.posicion,
   }));
 
-  return {
-    asentamiento: absorberColumna(asentamiento, ejercito, true),
-    caravanasAparcadas,
-  };
+  return { ...absorberColumna(asentamiento, ejercito, true), caravanasAparcadas };
 }
 
 export function unirseAEjercito(
-  ejercito: Ejercito,
+  ejercito: EjercitoConTropa,
   asentamiento: Asentamiento,
+  /** El campamento de la plaza (`campamentoDe`). */
+  campamento: readonly Escuadron[],
   jugador: Heroe | undefined,
   heroeId: string,
   escuadronIds: readonly string[],
@@ -495,7 +535,7 @@ export function unirseAEjercito(
   instante: Instante,
   /** Las del mundo: el que se une llena hasta la capacidad TOTAL de la columna, adjuntas incluidas. */
   caravanas: readonly Caravana[] = []
-): { asentamiento: Asentamiento; ejercito: Ejercito; trigoCargado: number } {
+): { asentamiento: Asentamiento; ejercito: EjercitoConTropa; trigoCargado: number } {
   if (!esResidente(asentamiento, heroeId)) {
     throw new MovilizacionInvalidaError('Solo un residente puede sacar tropas de este asentamiento.');
   }
@@ -506,20 +546,23 @@ export function unirseAEjercito(
     throw new MovilizacionInvalidaError('El ejército está demasiado lejos del asentamiento para recoger tropas.');
   }
 
-  const escuadrones = seleccionarParaCampana(asentamiento, heroeId, escuadronIds);
-  // Solo lo que aporta ESTE jugador cuenta contra SU liderazgo, incluido lo que ya tuviera dentro.
-  const suyosYaDentro = ejercito.escuadrones.filter((e) => e.heroeId === heroeId);
-  exigirLiderazgo(jugador, [...suyosYaDentro, ...escuadrones]);
+  const escuadrones = seleccionarParaCampana(campamento, heroeId, escuadronIds);
+  // Solo lo que aporta ESTE héroe cuenta contra SU liderazgo, incluido lo que ya lleve fuera (`exigirLiderazgo`).
+  exigirLiderazgo(jugador, escuadrones);
 
   const idsFuera = new Set(escuadrones.map((e) => e.id));
-  const sinLosQueSalen = { ...asentamiento, escuadrones: asentamiento.escuadrones.filter((e) => !idsFuera.has(e.id)) };
   const escuadronesTotales = [...ejercito.escuadrones, ...escuadrones];
   // Sumar más tropas a un ejército en el que YA vas es legítimo y no te convierte en dos participantes — ni
   // aporta un carro nuevo, que es lo que el tope de carga de abajo mide.
   const yaDentro = ejercito.participantes.some((p) => p.heroeId === heroeId);
   const participantes = yaDentro ? ejercito.participantes : [...ejercito.participantes, { heroeId, unidoEn: instante }];
   const enElCarro = ejercito.suministro['trigo'] ?? 0;
-  const carga = cargarCarro(sinLosQueSalen, enElCarro, capacidadCargaDe({ ...ejercito, participantes, escuadrones: escuadronesTotales }, caravanas));
+  const carga = cargarCarro(
+    asentamiento,
+    consumoRacionDeEscuadrones(campamento.filter((e) => !idsFuera.has(e.id))),
+    enElCarro,
+    capacidadCargaDe({ ...ejercito, participantes }, caravanas)
+  );
 
   return {
     asentamiento: carga.asentamiento,
@@ -772,7 +815,26 @@ export function marcharA(
  * Y el precio está en la última línea: **adopta el destino del ejército**, que ya no puede rectificar. Es lo
  * que hace que marchar acompañado cueste algo, sin ninguna regla extra que lo imponga (Doc 5.12.1).
  */
-export function unirseEnCampo(ejercito: Ejercito, columna: Ejercito, instante: Instante): Ejercito {
+export function unirseEnCampo(ejercito: EjercitoConTropa, columna: EjercitoConTropa, instante: Instante): EjercitoConTropa {
+  validarUnionEnCampo(ejercito, columna);
+
+  const suministro = { ...ejercito.suministro };
+  for (const [recurso, cantidad] of Object.entries(columna.suministro)) {
+    suministro[recurso] = (suministro[recurso] ?? 0) + cantidad;
+  }
+
+  return {
+    ...ejercito,
+    participantes: [...ejercito.participantes, ...columna.participantes.map((p) => ({ ...p, unidoEn: instante }))],
+    escuadrones: [...ejercito.escuadrones, ...columna.escuadrones],
+    suministro,
+    // La petición atendida se retira: ya no hay nada que contestar.
+    peticionesDeUnion: ejercito.peticionesDeUnion?.filter((p) => !columna.participantes.some((q) => q.heroeId === p.heroeId)),
+  };
+}
+
+/** Las condiciones de unirse en campo (Doc 5.14.1), aparte porque también las comprueba quien solo pide unirse. */
+function validarUnionEnCampo(ejercito: Ejercito, columna: Ejercito): void {
   if (ejercito.id === columna.id) throw new MovilizacionInvalidaError('Ya vas en esa columna.');
   if (ejercito.politicaDeUnion === 'rechazar') {
     throw new MovilizacionInvalidaError('Esa columna no admite a nadie más.');
@@ -789,20 +851,6 @@ export function unirseEnCampo(ejercito: Ejercito, columna: Ejercito, instante: I
   if (distancia(ejercito.posicionActual, columna.posicionActual) > LOGISTICA.radioEncuentro) {
     throw new MovilizacionInvalidaError('Hay que estar uno junto al otro para unirse en campo.');
   }
-
-  const suministro = { ...ejercito.suministro };
-  for (const [recurso, cantidad] of Object.entries(columna.suministro)) {
-    suministro[recurso] = (suministro[recurso] ?? 0) + cantidad;
-  }
-
-  return {
-    ...ejercito,
-    participantes: [...ejercito.participantes, ...columna.participantes.map((p) => ({ ...p, unidoEn: instante }))],
-    escuadrones: [...ejercito.escuadrones, ...columna.escuadrones],
-    suministro,
-    // La petición atendida se retira: ya no hay nada que contestar.
-    peticionesDeUnion: ejercito.peticionesDeUnion?.filter((p) => !columna.participantes.some((q) => q.heroeId === p.heroeId)),
-  };
 }
 
 /**
@@ -820,10 +868,10 @@ export function unirseEnCampo(ejercito: Ejercito, columna: Ejercito, instante: I
  * donde se replegará.
  */
 export function separarseDelEjercito(
-  ejercito: Ejercito,
+  ejercito: EjercitoConTropa,
   heroeId: string,
   id: string
-): { ejercito: Ejercito; columna: Ejercito } {
+): { ejercito: EjercitoConTropa; columna: EjercitoConTropa } {
   const dentro = ejercito.participantes.find((p) => p.heroeId === heroeId);
   if (!dentro) throw new MovilizacionInvalidaError('No vas en ese ejército.');
   if (ejercito.tipo !== 'ejercito') {
@@ -835,7 +883,16 @@ export function separarseDelEjercito(
   if (ejercito.participantes.length <= 1) {
     throw new MovilizacionInvalidaError('Eres el último: hay que cancelar la marcha, no vaciar la columna.');
   }
+  return desgajar(ejercito, heroeId, id);
+}
 
+/**
+ * Saca a un héroe de una columna con lo suyo y, como mucho, un carro, como columna personal donde estaba.
+ * Sin validar: separarse (arriba) y volver a una casa en la que no se reside (`avanzarEjercitos`) ponen cada
+ * uno sus condiciones.
+ */
+function desgajar(ejercito: EjercitoConTropa, heroeId: string, id: string): { ejercito: EjercitoConTropa; columna: EjercitoConTropa } {
+  const dentro = ejercito.participantes.find((p) => p.heroeId === heroeId)!;
   const suyos = ejercito.escuadrones.filter((e) => e.heroeId === heroeId);
   // Se lleva COMO MUCHO un carro, que es lo que aportó (Doc 5.13). Se reparte a prorrata sobre lo que haya:
   // el carro es común mientras se marcha junto, así que no hay "su" trigo que devolver, solo una parte.
@@ -867,6 +924,7 @@ export function separarseDelEjercito(
       tipo: 'personal',
       liderId: heroeId,
       politicaDeUnion: 'rechazar',
+      escuadronIds: suyos.map((e) => e.id),
       escuadrones: suyos,
       suministro: suministroColumna,
       caravanasAdjuntasIds: [],
@@ -903,7 +961,7 @@ function peticionViva(peticion: { expiraEn: Instante }, ahora: Instante): boolea
  * igualmente es hacerle perder los diez segundos que tiene.
  */
 export function anotarPeticionDeUnion(ejercito: Ejercito, columna: Ejercito, ahora: Instante, expiraEn: Instante): Ejercito {
-  unirseEnCampo(ejercito, columna, ahora);
+  validarUnionEnCampo(ejercito, columna);
   const heroeId = columna.liderId;
   const vivas = (ejercito.peticionesDeUnion ?? []).filter((p) => peticionViva(p, ahora) && p.heroeId !== heroeId);
   return { ...ejercito, peticionesDeUnion: [...vivas, { heroeId, pedidoEn: ahora, expiraEn }] };
@@ -934,7 +992,7 @@ export function retirarPeticionDeUnion(ejercito: Ejercito, liderId: string, soli
  * que meterse dentro del anillo de inspeccion (40), y el observado recibe aviso. Obtener informacion deja de
  * ser gratis y pasa a ser una jugada con riesgo.
  */
-export function inspeccionarColumna(observador: Ejercito, objetivo: Ejercito): ComposicionColumna {
+export function inspeccionarColumna(observador: Ejercito, objetivo: EjercitoConTropa): ComposicionColumna {
   if (observador.id === objetivo.id) throw new MovilizacionInvalidaError('Esa columna es la tuya.');
   if (distancia(observador.posicionActual, objetivo.posicionActual) > MOVIMIENTO.radioInspeccion) {
     throw new MovilizacionInvalidaError(`Hay que acercarse a menos de ${MOVIMIENTO.radioInspeccion} para inspeccionar.`);
@@ -985,7 +1043,7 @@ function exigirSinTregua(atacante: Ejercito, defensor: Ejercito, ahora: Instante
  * Perder la mitad y no todo es deliberado: dejarle algo es lo que hace que valga la pena seguir el viaje en
  * vez de reiniciarlo, y lo que distingue un robo de una ruina. Con el carro vacio solo queda la tregua.
  */
-function trasDerrota(perdedor: Ejercito, ahora: Instante): { perdedor: Ejercito; botin: Record<string, number> } {
+function trasDerrota<E extends Ejercito>(perdedor: E, ahora: Instante): { perdedor: E; botin: Record<string, number> } {
   const enTreguaHasta = sumar(ahora, minutos(MOVIMIENTO.treguaTrasDerrotaMinutos));
   const botin: Record<string, number> = {};
   const queda: Record<string, number> = {};
@@ -1000,7 +1058,7 @@ function trasDerrota(perdedor: Ejercito, ahora: Instante): { perdedor: Ejercito;
 }
 
 /** El ganador carga el botin de `trasDerrota` hasta su `capacidad`: un ladron sin sitio deja lo que no le cabe. */
-function cargarBotin(ganador: Ejercito, botin: Record<string, number>, capacidad: number): Ejercito {
+function cargarBotin<E extends Ejercito>(ganador: E, botin: Record<string, number>, capacidad: number): E {
   const suministro = { ...ganador.suministro };
   let yaLleva = Object.values(suministro).reduce((suma, c) => suma + c, 0);
   for (const [recurso, cantidad] of Object.entries(botin)) {
@@ -1021,15 +1079,15 @@ function cargarBotin(ganador: Ejercito, botin: Record<string, number>, capacidad
  * botin va limitado por la capacidad del que lo coge: un ladron sin sitio deja lo que no le cabe.
  */
 export function atacarColumna(
-  atacante: Ejercito,
-  defensor: Ejercito,
+  atacante: EjercitoConTropa,
+  defensor: EjercitoConTropa,
   facciones: Faccion[],
   relaciones: readonly RelacionPolitica[],
   /** Las del mundo: de aquí salen las adjuntas del que gane, sea quien sea, para saber cuánto botín le cabe. */
   caravanas: readonly Caravana[],
   instante: Instante,
   rng: RandomFn
-): { atacante: Ejercito; defensor: Ejercito; facciones: Faccion[]; eventos: EventoCrudo[] } {
+): { atacante: EjercitoConTropa; defensor: EjercitoConTropa; facciones: Faccion[]; eventos: EventoCrudo[] } {
   if (atacante.id === defensor.id) throw new MovilizacionInvalidaError('Esa columna es la tuya.');
   if (atacante.faccionId === defensor.faccionId || estanAliadas(relaciones, atacante.faccionId, defensor.faccionId)) {
     throw new MovilizacionInvalidaError('No se ataca a los tuyos ni a un aliado.');
@@ -1039,7 +1097,7 @@ export function atacarColumna(
   }
   exigirSinTregua(atacante, defensor, instante);
 
-  const choque = encuentroEntreEjercitos(atacante, defensor, facciones, instante, rng);
+  const choque = encuentroEntreEjercitos(atacante, defensor, facciones, rng);
   const gano = choque.a.escuadrones.some((e) => e.cantidad > 0) && !choque.b.escuadrones.some((e) => e.cantidad > 0);
   // Quien pierde es quien se queda sin nadie en pie; si los dos siguen enteros no hay derrota que castigar.
   const perdedor = gano ? choque.b : choque.a;
@@ -1059,8 +1117,8 @@ export function atacarColumna(
 /** Interceptar una caravana que tienes delante (Doc 5.12.3). Mismo cambio que `atacarColumna`: lo que antes
  * disparaba la geometria ahora lo pide el jugador. */
 export function interceptar(
-  ejercito: Ejercito,
-  caravana: Caravana,
+  ejercito: EjercitoConTropa,
+  caravana: CaravanaConEscolta,
   capacidadCarga: number,
   instante: Instante,
   rng: RandomFn
@@ -1069,7 +1127,7 @@ export function interceptar(
   if (distancia(ejercito.posicionActual, caravana.posicionActual) > LOGISTICA.radioEncuentro) {
     throw new MovilizacionInvalidaError(`Hay que estar a menos de ${LOGISTICA.radioEncuentro} para interceptar.`);
   }
-  return interceptarCaravanaConEjercito(ejercito, caravana, capacidadCarga, instante, rng);
+  return interceptarCaravanaConEjercito(ejercito, caravana, capacidadCarga, rng);
 }
 
 /**
@@ -1101,8 +1159,8 @@ export function dejarDePerseguir(ejercito: Ejercito): Ejercito {
  * sino si lleva soldados en pie. Un escuadron aniquilado no ve mas que un hombre solo, igual que no frena
  * mas que un hombre solo.
  */
-export function alcanceDeVista(ejercito: Ejercito): number {
-  return ejercito.escuadrones.some((e) => e.cantidad > 0) ? VISION.ejercito : VISION.jugadorSolo;
+export function alcanceDeVista(ejercito: Ejercito, tropa: IndiceTropa): number {
+  return ejercito.escuadronIds.some((id) => (tropa.get(id)?.cantidad ?? 0) > 0) ? VISION.ejercito : VISION.jugadorSolo;
 }
 
 export function estacionarEjercito(ejercito: Ejercito): Ejercito {
@@ -1124,7 +1182,7 @@ export function estacionarEjercito(ejercito: Ejercito): Ejercito {
  * `MOVIMIENTO.velocidadJugador` — más rápido que cualquier tropa, porque no arrastra impedimenta. Antes esto
  * devolvía 0, o sea que se quedaba clavado en el sitio.
  */
-export function velocidadDeEjercito(ejercito: Ejercito, caravanas: readonly Caravana[] = []): number {
+export function velocidadDeEjercito(ejercito: EjercitoConTropa, caravanas: readonly Caravana[] = []): number {
   const velocidades = ejercito.escuadrones
     // Un escuadrón aniquilado persiste como IDENTIDAD (Doc 5.4), pero no como gente que camine: no frena a
     // nadie. Sin este filtro, perder hasta el último hombre de la tropa pesada seguiría lastrando la columna.
@@ -1146,7 +1204,7 @@ export function velocidadDeEjercito(ejercito: Ejercito, caravanas: readonly Cara
 /** ¿No le queda un solo soldado en pie? Un escuadrón persiste como identidad con `cantidad: 0` (Doc 5.4), así
  * que "sin soldados" es que NINGUNO tenga hombres, no que la lista esté vacía. Es lo que decide si puede
  * combatir, no si sigue existiendo: para eso está `sinNadieDentro`. */
-function sinSoldados(ejercito: Ejercito): boolean {
+function sinSoldados(ejercito: EjercitoConTropa): boolean {
   return ejercito.escuadrones.every((e) => e.cantidad <= 0);
 }
 
@@ -1172,6 +1230,8 @@ export interface ContextoAvanceEjercitos {
   mapa: Mapa;
   instante: Instante;
   rng: RandomFn;
+  /** Dueños de las escuadras (`engine/tropa.ts`), y dónde queda cada uno al volver a casa. */
+  heroes: readonly Heroe[];
 }
 
 export interface ResultadoAvanceEjercitos {
@@ -1182,6 +1242,8 @@ export interface ResultadoAvanceEjercitos {
   /** Las Facciones, que un asedio puede tocar: XP de combate y conquista, y la penalización de reputación por
    * atacar a un Aliado. Vuelven tal cual si en el tick no hubo ningún asedio. */
   facciones: Faccion[];
+  /** Con sus escuadras al día —bajas, hambre, vuelta al campamento— y situados quienes volvieron a casa. */
+  heroes: Heroe[];
   eventos: EventoCrudo[];
 }
 
@@ -1215,26 +1277,57 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
       asentamientos: [...asentamientos],
       caravanas: [...caravanas],
       facciones: [...facciones],
+      heroes: [...contexto.heroes],
       eventos: [],
     };
   }
 
   const eventos: EventoCrudo[] = [];
   const porId = new Map(asentamientos.map((a) => [a.id, a]));
-  const supervivientes: Ejercito[] = [];
+  const supervivientes: EjercitoConTropa[] = [];
   let faccionesActuales = [...facciones];
-  let caravanasActuales = [...caravanas];
+  // Las escuadras viven en sus héroes (`engine/tropa.ts`): las columnas y caravanas se recorren con la tropa
+  // puesta y se deshacen al final. Lo que cambia FUERA de una columna —el campamento que defiende un asedio, la
+  // tropa que vuelve a casa— se aplica en el momento, porque el siguiente asedio o reposte tiene que verlo.
+  let heroes = [...contexto.heroes];
+  const indice = indiceTropa(heroes);
+  let caravanasActuales: CaravanaConEscolta[] = caravanas.map((c) => conEscolta(c, indice));
+  const consumoTropasDe = (plaza: Asentamiento): number => consumoRacionDeEscuadrones(campamentoDe(plaza, heroes));
+  const situar = (ids: readonly string[], ubicacion: UbicacionHeroe): void => {
+    const aSituar = new Set(ids);
+    heroes = heroes.map((h) => (aSituar.has(h.id) ? { ...h, ubicacion } : h));
+  };
 
-  /** Devuelve escuadrones (y opcionalmente suministro) al asentamiento de origen. Si ya no existe, se pierden
-   * con él: sus jugadores quedan huérfanos (Doc 5.4) y no hay dónde reintegrar. */
-  const reintegrar = (ejercito: Ejercito, devolverSuministro: boolean): boolean => {
+  /**
+   * Vuelve a casa (Doc 5.12.6). Quien reside en el origen entra: su tropa al campamento y el carro al almacén.
+   * Quien no, se queda a la puerta en su propia columna, con lo suyo y un carro, porque su campamento está en
+   * otra plaza. Sin origen (cayó) no hay adónde volver: la tropa vuelve a los campamentos de sus héroes.
+   */
+  const reintegrar = (ejercito: EjercitoConTropa): boolean => {
     const origen = porId.get(ejercito.origenAsentamientoId);
-    if (!origen) return false;
-    porId.set(origen.id, absorberColumna(origen, ejercito, devolverSuministro));
+    if (!origen) {
+      heroes = conEscuadrones(heroes, alCampamento(ejercito.escuadrones));
+      return false;
+    }
+    let resto = ejercito;
+    for (const p of ejercito.participantes) {
+      if (esResidente(origen, p.heroeId)) continue;
+      const separado = desgajar(resto, p.heroeId, `${ejercito.id}-${p.heroeId}`);
+      resto = separado.ejercito;
+      supervivientes.push({ ...separado.columna, estado: 'estacionado' });
+      situar([p.heroeId], { tipo: 'columna', ejercitoId: separado.columna.id });
+    }
+    const absorbida = absorberColumna(origen, resto, true);
+    porId.set(origen.id, absorbida.asentamiento);
+    heroes = conEscuadrones(heroes, absorbida.tropa);
+    situar(
+      resto.participantes.map((p) => p.heroeId),
+      { tipo: 'asentamiento', asentamientoId: origen.id }
+    );
     return true;
   };
 
-  for (const original of [...ejercitos].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) {
+  for (const original of [...ejercitos].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)).map((e) => conTropa(e, indice))) {
     // 1. Comer. La MISMA regla del hambre que la guarnición, solo que de otra despensa (Doc 5.13).
     const factorConsumo = original.estado === 'estacionado' ? LOGISTICA.factorConsumoEstacionado : 1;
     const trigoEnCarro = original.suministro['trigo'] ?? 0;
@@ -1244,7 +1337,7 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
     // rival se le están desertando los hombres (Doc 5.12.7).
     eventos.push(...racion.eventos.map((e) => atribuir(e, original.origenAsentamientoId)));
 
-    let ejercito: Ejercito = {
+    let ejercito: EjercitoConTropa = {
       ...original,
       escuadrones: racion.escuadrones,
       suministro: { ...original.suministro, trigo: trigoEnCarro - racion.trigoConsumido },
@@ -1253,7 +1346,10 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
     // 2. ¿Se quedó sin nadie DENTRO? Se disuelve y las identidades vacías vuelven a casa a poder rellenarse.
     // Perder todos los soldados ya no basta: los jugadores siguen ahí y ahora viajan a pie (Doc 5.12.1).
     if (sinNadieDentro(ejercito)) {
-      const volvieron = reintegrar(ejercito, true);
+      const origen = porId.get(ejercito.origenAsentamientoId);
+      if (origen) porId.set(origen.id, absorberColumna(origen, ejercito, true).asentamiento);
+      heroes = conEscuadrones(heroes, alCampamento(ejercito.escuadrones));
+      const volvieron = origen !== undefined;
       // Las caravanas adjuntas se pierden con él (Doc 5.13.2). El canon lo dice de un ejército DERROTADO, y
       // aquí se aplica también al que se deshace por hambre: en los dos casos deja de existir en campo
       // abierto, y lo que vuelve a casa son las IDENTIDADES de sus escuadrones (Doc 5.13.4), no bienes
@@ -1289,9 +1385,9 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
     // 3b. Repostar al pasar (Doc 5.13). Va DESPUÉS de moverse —se repone donde uno acaba, no donde estaba— y
     // ANTES de resolver la llegada, para que un ejército que se planta en una plaza propia entre en el asedio
     // o acampe ya con el carro lleno.
-    const reposte = repostarSiPuede(ejercito, porId, relaciones, caravanas);
+    const reposte = repostarSiPuede(ejercito, porId, relaciones, caravanas, consumoTropasDe);
     if (reposte.plaza) {
-      ejercito = reposte.ejercito;
+      ejercito = { ...ejercito, suministro: reposte.ejercito.suministro };
       porId.set(reposte.plaza.id, reposte.plaza);
       eventos.push({
         codigo: 'ejercito.reabastecido',
@@ -1315,7 +1411,7 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
     // 4. Llegar.
     if (ejercito.estado !== 'estacionado' && ejercito.progreso >= 1) {
       if (ejercito.estado === 'regresando') {
-        const volvieron = reintegrar(ejercito, true);
+        const volvieron = reintegrar(ejercito);
         eventos.push({
           codigo: 'ejercito.regresa',
           asentamientoId: ejercito.origenAsentamientoId,
@@ -1333,32 +1429,17 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
       // enemiga es el Paso 10 (encuentros por proximidad).
       const objetivo = ejercito.objetivo.tipo === 'asentamiento' ? porId.get(ejercito.objetivo.id) : undefined;
       if (objetivo && objetivo.faccionId !== ejercito.faccionId) {
-        const asedio = asediarConEjercito(ejercito, objetivo, faccionesActuales, [...relaciones], instante, rng);
+        const asedio = asediarConEjercito(ejercito, objetivo, campamentoDe(objetivo, heroes), faccionesActuales, [...relaciones], instante, rng);
         ejercito = asedio.ejercito;
         porId.set(objetivo.id, asedio.defensor);
+        heroes = conEscuadrones(heroes, asedio.tropaDefensora);
         faccionesActuales = asedio.facciones;
-        if (asedio.ejercitoConsumido) {
-          // El ejército conquistador SE VUELVE la guarnición de la plaza tomada (Ocupacion §2.2): ya no es
-          // una columna en campo. Las adjuntas se pierden con él, igual que un ejército deshecho por hambre.
-          const perdidas = adjuntasDe(ejercito, caravanasActuales);
-          if (perdidas.length > 0) {
-            const ids = new Set(perdidas.map((c) => c.id));
-            caravanasActuales = caravanasActuales.filter((c) => !ids.has(c.id));
-            eventos.push({
-              codigo: 'ejercito.caravanas_perdidas',
-              asentamientoId: ejercito.origenAsentamientoId,
-              mensaje: `Con el ejército ${ejercito.id} se pierden ${perdidas.length} caravana(s) adjunta(s) al guarnecer ${objetivo.id}.`,
-              payload: { ejercitoId: ejercito.id, caravanaIds: perdidas.map((c) => c.id) } satisfies PayloadCaravanasPerdidas,
-            });
-          }
-          for (const e of asedio.eventos) eventos.push(atribuir(e, ejercito.origenAsentamientoId));
-          eventos.push({
-            codigo: 'ejercito.guarnece_conquista',
-            asentamientoId: objetivo.id,
-            mensaje: `El ejército ${ejercito.id} se instala como guarnición de ${objetivo.id} tras conquistarlo.`,
-            payload: { ejercitoId: ejercito.id, asentamientoId: objetivo.id },
-          });
-          continue;
+        // Conquistar no convierte al ejército en guarnición (Doc 5.15.5): acampa a la puerta, y los residentes
+        // derrotados se van con su campamento a 0 a la plaza más cercana de su Facción.
+        if (asedio.conquistado) {
+          const desalojo = desalojarResidentes(objetivo, [...porId.values()], heroes);
+          for (const a of desalojo.asentamientos) porId.set(a.id, a);
+          heroes = desalojo.heroes;
         }
         // A quién se le cuenta. Un evento se atribuye a UN asentamiento y lo ve la Facción que lo posee, así
         // que un choque entre dos hay que narrarlo dos veces o alguien se queda sin enterarse:
@@ -1399,23 +1480,26 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
   const conEncuentros = resolverEncuentros(supervivientes, caravanasActuales, faccionesActuales, relaciones, porId, instante, rng);
   eventos.push(...conEncuentros.eventos);
 
-  // Escolta sin héroe (Doc 3.13.4) que vuelve a la guarnición de su origen tras perder su caravana ante un
-  // ejército: se funde con la guarnición antes de que el asentamiento salga del tick.
-  let asentamientosFinal = [...porId.values()];
-  if (conEncuentros.escoltasDevueltas.length > 0) {
-    asentamientosFinal = asentamientosFinal.map((a) => {
-      const devueltas = conEncuentros.escoltasDevueltas.filter((d) => d.asentamientoId === a.id);
-      if (devueltas.length === 0) return a;
-      const escuadrones = devueltas.reduce((esc, d) => devolverEscoltaAGuarnicion(esc, d.escuadrones), a.escuadrones);
-      return { ...a, escuadrones };
-    });
-  }
+  // Se deshacen las vistas: cada escuadra vuelve a su héroe, marcada donde acabó. La escolta de una caravana
+  // capturada ya viene a 0 y al campamento (Doc 5.15.4).
+  const tropaFinal: Escuadron[] = [...conEncuentros.escoltasPerdidas];
+  const ejercitosFinal = conEncuentros.ejercitos.map((vista) => {
+    const { ejercito, tropa } = sinTropa(vista);
+    tropaFinal.push(...tropa);
+    return ejercito;
+  });
+  const caravanasFinal = conEncuentros.caravanas.map((vista) => {
+    const { caravana, tropa } = sinEscolta(vista);
+    tropaFinal.push(...tropa);
+    return caravana;
+  });
 
   return {
-    ejercitos: conEncuentros.ejercitos,
-    asentamientos: asentamientosFinal,
-    caravanas: conEncuentros.caravanas,
+    ejercitos: ejercitosFinal,
+    asentamientos: [...porId.values()],
+    caravanas: caravanasFinal,
     facciones: conEncuentros.facciones,
+    heroes: conEscuadrones(heroes, tropaFinal),
     eventos,
   };
 }
@@ -1444,22 +1528,28 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
  *    a igual distancia decide el id, para que no lo decida el orden de la lista.
  */
 function resolverEncuentros(
-  ejercitos: readonly Ejercito[],
-  caravanas: readonly Caravana[],
+  ejercitos: readonly EjercitoConTropa[],
+  caravanas: readonly CaravanaConEscolta[],
   facciones: readonly Faccion[],
   relaciones: readonly RelacionPolitica[],
   /** `asentamientoId -> Asentamiento` del tick ya avanzado: de aquí sale de qué Facción es cada caravana. */
   asentamientosPorId: ReadonlyMap<string, Asentamiento>,
   instante: Instante,
   rng: RandomFn
-): { ejercitos: Ejercito[]; caravanas: Caravana[]; facciones: Faccion[]; eventos: EventoCrudo[]; escoltasDevueltas: EscoltaDevuelta[] } {
+): {
+  ejercitos: EjercitoConTropa[];
+  caravanas: CaravanaConEscolta[];
+  facciones: Faccion[];
+  eventos: EventoCrudo[];
+  escoltasPerdidas: Escuadron[];
+} {
   const eventos: EventoCrudo[] = [];
   if (ejercitos.length === 0) {
-    return { ejercitos: [...ejercitos], caravanas: [...caravanas], facciones: [...facciones], eventos, escoltasDevueltas: [] };
+    return { ejercitos: [...ejercitos], caravanas: [...caravanas], facciones: [...facciones], eventos, escoltasPerdidas: [] };
   }
 
   const porId = new Map(ejercitos.map((e) => [e.id, e]));
-  const escoltasDevueltas: EscoltaDevuelta[] = [];
+  const escoltasPerdidas: Escuadron[] = [];
   let caravanasVivas = [...caravanas];
   let faccionesActuales = [...facciones];
   const yaChocaron = new Set<string>();
@@ -1507,7 +1597,7 @@ function resolverEncuentros(
 
     const rival = masCerca(rivales);
     if (rival) {
-      const choque = encuentroEntreEjercitos(ejercito, rival, faccionesActuales, instante, rng);
+      const choque = encuentroEntreEjercitos(ejercito, rival, faccionesActuales, rng);
       // Alcanzada la presa, la persecución termina: se persigue para pelear, y ya se peleo. Al que cae le
       // toca lo mismo que en un ataque (`trasDerrota`): la TREGUA, que impide rematarlo en cadena el minuto
       // siguiente, y la mitad del carro para el otro.
@@ -1538,26 +1628,18 @@ function resolverEncuentros(
 
     const presa = masCerca(presas);
     if (presa) {
-      const emboscada = interceptarCaravanaConEjercito(
-        ejercito,
-        presa,
-        capacidadCargaDe(ejercito, caravanasVivas),
-        instante,
-        rng
-      );
+      const emboscada = interceptarCaravanaConEjercito(ejercito, presa, capacidadCargaDe(ejercito, caravanasVivas), rng);
       porId.set(ejercito.id, { ...emboscada.ejercito, persiguiendo: undefined });
       caravanasVivas = emboscada.caravana
         ? caravanasVivas.map((c) => (c.id === presa.id ? emboscada.caravana! : c))
         : caravanasVivas.filter((c) => c.id !== presa.id);
-      // Escolta sin héroe (Doc 3.13.4) que vuelve a casa tras perder la caravana.
-      if (emboscada.escoltaDevuelta.length > 0) {
-        escoltasDevueltas.push({ asentamientoId: presa.origenAsentamientoId, escuadrones: emboscada.escoltaDevuelta });
-      }
+      // Escolta sin héroe (Doc 3.13.4) que vuelve a 0 al campamento tras perder la caravana (Doc 5.15.4).
+      escoltasPerdidas.push(...emboscada.escoltaPerdida);
       for (const e of emboscada.eventos) eventos.push(atribuir(e, ejercito.origenAsentamientoId));
       yaChocaron.add(ejercito.id);
     }
   }
 
-  return { ejercitos: [...porId.values()], caravanas: caravanasVivas, facciones: faccionesActuales, eventos, escoltasDevueltas };
+  return { ejercitos: [...porId.values()], caravanas: caravanasVivas, facciones: faccionesActuales, eventos, escoltasPerdidas };
 }
 

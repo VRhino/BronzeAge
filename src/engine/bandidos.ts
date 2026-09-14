@@ -4,7 +4,8 @@
 // cada tick dentro de `avanzarSimulacion`); el ataque MANUAL de un jugador contra un campamento vive en
 // `engine/combate.ts` (`atacarCampamentoBandidos`), junto al resto de resolución de combate.
 
-import type { Asentamiento, Caravana, CampamentoBandido, Ejercito, Point, ZonaBosque, ZonaInfluencia } from '../domain/types';
+import type { Asentamiento, CampamentoBandido, Escuadron, Point, ZonaBosque, ZonaInfluencia } from '../domain/types';
+import { alCampamento, type CaravanaConEscolta, type EjercitoConTropa } from './tropa';
 import type { EventoCrudo } from '../domain/eventos';
 
 /** Fase A5 — payloads de los eventos de este subsistema (ver `avanzarSpawnBandidos`/`avanzarAtaquesBandidos`). */
@@ -25,7 +26,6 @@ import { CAMPAMENTOS_BANDIDOS, MILITAR } from '../constants';
 import type { Instante } from '../domain/tiempo';
 import { pointInPolygon } from './zones';
 import { aplicarBajas, poderTotal } from './combate';
-import type { EscoltaDevuelta } from './caravanas';
 
 function distancia(a: Point, b: Point): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
@@ -114,22 +114,22 @@ export function avanzarSpawnBandidos(
  */
 export function avanzarAtaquesBandidos(
   campamentos: CampamentoBandido[],
-  caravanas: Caravana[],
+  /** Con la escolta puesta (`engine/tropa.ts`): la escolta sin héroe defiende con su poder. */
+  caravanas: CaravanaConEscolta[],
   rng: RandomFn,
   /** Ejércitos en campaña: una caravana que va enganchada a uno se defiende con el poder de la COLUMNA, no
    * con su defensa base (Doc 5.13.3, decisión del usuario 2026-09-04). Sin esto, escoltar no protegía de lo
    * único que hoy ataca caravanas en el mundo. */
-  ejercitos: readonly Ejercito[] = [],
-  instante?: Instante
-): { caravanas: Caravana[]; eventos: EventoCrudo[]; escoltasDevueltas: EscoltaDevuelta[] } {
-  if (campamentos.length === 0) return { caravanas, eventos: [], escoltasDevueltas: [] };
+  ejercitos: readonly EjercitoConTropa[] = []
+): { caravanas: CaravanaConEscolta[]; eventos: EventoCrudo[]; escoltasPerdidas: Escuadron[] } {
+  if (campamentos.length === 0) return { caravanas, eventos: [], escoltasPerdidas: [] };
   const eventos: EventoCrudo[] = [];
-  const escoltasDevueltas: EscoltaDevuelta[] = [];
+  const escoltasPerdidas: Escuadron[] = [];
 
-  const escoltaEjercitoDe = (caravanaId: string): Ejercito | undefined =>
+  const escoltaEjercitoDe = (caravanaId: string): EjercitoConTropa | undefined =>
     ejercitos.find((e) => e.caravanasAdjuntasIds.includes(caravanaId));
 
-  const resultado: Caravana[] = [];
+  const resultado: CaravanaConEscolta[] = [];
   for (const caravana of caravanas) {
     // Parada en una plaza (disponible en su origen; preparándose para un envío manual, Doc 3.13.3; o
     // 'aparcada' en una plaza anfitriona tras guarnecer, Ocupacion §2.3d) — nada que interceptar.
@@ -145,26 +145,25 @@ export function avanzarAtaquesBandidos(
       continue;
     }
 
-    const conEscoltaSinHeroe = (caravana.escolta?.length ?? 0) > 0 && instante !== undefined;
+    const conEscoltaSinHeroe = (caravana.escolta?.length ?? 0) > 0;
 
     // Contra qué defensa tira el bandido, de más a menos protegida:
     //  - escoltada por un EJÉRCITO (Doc 5.13.3): el bandido choca con la columna, `poderTotal` de sus escuadrones.
     //  - escolta SIN HÉROE (Doc 3.13.4): `poderTotal` de los escuadrones cedidos a la caravana.
     //  - sin nada: la defensa base fija (Doc 3.10) — frena a un jugador solo y nada más.
     const escoltaEjercito = escoltaEjercitoDe(caravana.id);
-    const defensa =
-      escoltaEjercito && instante !== undefined
-        ? poderTotal(escoltaEjercito.escuadrones, instante, true)
-        : conEscoltaSinHeroe
-          ? poderTotal(caravana.escolta!, instante!, true)
-          : MILITAR.defensaBaseCaravana;
+    const defensa = escoltaEjercito
+      ? poderTotal(escoltaEjercito.escuadrones, true)
+      : conEscoltaSinHeroe
+        ? poderTotal(caravana.escolta!, true)
+        : MILITAR.defensaBaseCaravana;
 
     const jitter = 1 + (rng() * 2 - 1) * MILITAR.varianzaCombate;
     const gana = campamentoCercano.poder * jitter > defensa;
 
-    // La escolta sin héroe sufre bajas en los dos casos (ligeras si aguanta, fuertes si cae) y vuelve a casa
-    // con el debuff de derrota — lo que se pierde son la carga y los carros, no la tropa (Doc 3.13.6).
-    const escoltaTrasCombate = conEscoltaSinHeroe ? aplicarBajas(caravana.escolta!, gana ? 0.25 : 0.05, !gana, instante!) : undefined;
+    // La escolta sin héroe sufre bajas en los dos casos (ligeras si aguanta, fuertes si cae) — lo que se pierde
+    // son la carga y los carros, no la tropa (Doc 3.13.6).
+    const escoltaTrasCombate = conEscoltaSinHeroe ? aplicarBajas(caravana.escolta!, gana ? 0.25 : 0.05, !gana) : undefined;
 
     if (gana) {
       eventos.push({
@@ -172,9 +171,9 @@ export function avanzarAtaquesBandidos(
         mensaje: `Un campamento de bandidos (${campamentoCercano.id}) intercepta y destruye la caravana ${caravana.id}.`,
         payload: { campamentoId: campamentoCercano.id, caravanaId: caravana.id } satisfies PayloadCaravanaInterceptada,
       });
-      // La caravana se elimina (Doc 3.10). Si llevaba escolta sin héroe, los supervivientes vuelven a la
-      // guarnición del origen (`simulation.ts` los mete); la tropa no se pierde con el carro.
-      if (escoltaTrasCombate) escoltasDevueltas.push({ asentamientoId: caravana.origenAsentamientoId, escuadrones: escoltaTrasCombate });
+      // La caravana se elimina (Doc 3.10), y su escolta sin héroe queda a 0 y vuelve al campamento de su héroe
+      // (Doc 5.15.4): la escuadra no desaparece, conserva su nivel y su experiencia.
+      if (escoltaTrasCombate) escoltasPerdidas.push(...alCampamento(escoltaTrasCombate.map((e) => ({ ...e, cantidad: 0 }))));
       continue;
     }
 
@@ -186,5 +185,5 @@ export function avanzarAtaquesBandidos(
     resultado.push(escoltaTrasCombate ? { ...caravana, escolta: escoltaTrasCombate } : caravana);
   }
 
-  return { caravanas: resultado, eventos, escoltasDevueltas };
+  return { caravanas: resultado, eventos, escoltasPerdidas };
 }

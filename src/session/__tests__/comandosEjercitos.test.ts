@@ -11,10 +11,12 @@ import { alternarReabastecerAliados, estacionarEjercito, movilizarEjercito, repl
 import { OPC, partidaConAsentamiento } from './fixtures';
 import { CODIGOS_ERROR } from '../comandos/codigosDeError';
 import { LOGISTICA } from '../../constants';
-import { reservaDeTrigo } from '../../engine/tropas';
+import { consumoRacionDeEscuadrones, reservaDeTrigo } from '../../engine/tropas';
+import { campamentoDe, conEscuadrones } from '../../engine/tropa';
+import { escuadronDePrueba } from '../../engine/__tests__/fixtures';
 
 /**
- * Partida con escuadrones YA puestos en el asentamiento, inyectados vía `importar` en vez de reclutados.
+ * Partida con escuadrones YA puestos en el campamento de sus héroes, inyectados vía `importar` en vez de reclutados.
  *
  * Reclutar de verdad exigiría Barracón y Galería de tiro construidos y con nivel interno, más el equipo en
  * almacén — obstáculos reales del motor (`reclutarTropa`) pero ajenos a lo que se prueba aquí, que es la
@@ -26,41 +28,28 @@ import { reservaDeTrigo } from '../../engine/tropas';
 function partidaConTropas(liderazgoBase?: number) {
   const base = partidaConAsentamiento();
   const payload = base.sesion.exportar();
-  const asentamiento = payload.state.asentamientos[0]!;
-  const escuadron = (id: string, tropaId: string, heroeId: string) => ({
-    id,
-    nombre: tropaId,
-    heroeId,
-    origen: 'pesants' as const,
-    cantidad: 10,
-    veterania: 0,
-    moral: 100,
-    tropaId,
-  });
+  const heroes = conEscuadrones(payload.state.heroes, [
+    escuadronDePrueba('esc-milicia', base.fundador, 'milicia_lanceros'),
+    escuadronDePrueba('esc-mimbre', base.fundador, 'lanceros_mimbre'),
+    escuadronDePrueba('esc-honderos', base.fundador, 'honderos'),
+    escuadronDePrueba('esc-vecino', base.vecino, 'milicia_lanceros'),
+  ]);
   const sesion = GameSession.importar({
     ...payload,
     state: {
       ...payload.state,
-      asentamientos: [
-        {
-          ...asentamiento,
-          escuadrones: [
-            escuadron('esc-milicia', 'milicia_lanceros', base.fundador),
-            escuadron('esc-mimbre', 'lanceros_mimbre', base.fundador),
-            escuadron('esc-honderos', 'honderos', base.fundador),
-            escuadron('esc-vecino', 'milicia_lanceros', base.vecino),
-          ],
-        },
-        ...payload.state.asentamientos.slice(1),
-      ],
-      heroes:
-        liderazgoBase === undefined
-          ? payload.state.heroes
-          : payload.state.heroes.map((h) => (h.id === base.fundador ? { ...h, liderazgoBase } : h)),
+      heroes: liderazgoBase === undefined ? heroes : heroes.map((h) => (h.id === base.fundador ? { ...h, liderazgoBase } : h)),
     },
   });
   return { ...base, sesion };
 }
+
+/** Lo que queda en el campamento de la plaza de la fixture. */
+const campamento = (estado: ReturnType<GameSession['getState']>) => campamentoDe(estado.asentamientos[0]!, estado.heroes);
+
+/** La reserva de trigo de la plaza, con lo que come su campamento. */
+const reservaDe = (estado: ReturnType<GameSession['getState']>) =>
+  reservaDeTrigo(estado.asentamientos[0]!, consumoRacionDeEscuadrones(campamento(estado)));
 
 const PUNTO_LEJOS = { tipo: 'punto', punto: { x: 900, y: 900 } } as const;
 
@@ -98,10 +87,10 @@ describe('movilizarEjercito', () => {
     const estado = sesion.getState();
     // La guarnición se quedó sin ese escuadrón: es lo que hace que "tu ciudad queda desnuda" se cumpla por
     // construcción, sin ningún predicado extra (Doc 5.12.4).
-    expect(estado.asentamientos[0]!.escuadrones.map((e) => e.id)).not.toContain(escuadronId);
+    expect(campamento(estado).map((e) => e.id)).not.toContain(escuadronId);
     expect(estado.ejercitos).toHaveLength(1);
     const ejercito = estado.ejercitos[0]!;
-    expect(ejercito.escuadrones.map((e) => e.id)).toEqual([escuadronId]);
+    expect(ejercito.escuadronIds).toEqual([escuadronId]);
     expect(ejercito.estado).toBe('marchando');
     expect(ejercito.origenAsentamientoId).toBe(asentamientoId);
     // La ruta se calcula al salir, como una caravana al despacharse.
@@ -134,7 +123,7 @@ describe('movilizarEjercito', () => {
     expect(noCabe.ok).toBe(false);
     expect(noCabe.ok === false && noCabe.codigoError).toBe(CODIGOS_ERROR.movilizacionInvalida);
     // Y el rechazo no deja rastro: el escuadrón sigue en casa y no hay un segundo ejército.
-    expect(sesion.getState().asentamientos[0]!.escuadrones.map((e) => e.id)).toContain(honderos);
+    expect(campamento(sesion.getState()).map((e) => e.id)).toContain(honderos);
     expect(sesion.getState().ejercitos).toHaveLength(1);
   });
 
@@ -248,8 +237,8 @@ describe('unirseAEjercito', () => {
     expect(r.ok).toBe(true);
 
     const estado = sesion.getState();
-    expect(estado.ejercitos[0]!.escuadrones.map((e) => e.id).sort()).toEqual([primero, segundo].sort());
-    expect(estado.asentamientos[0]!.escuadrones.map((e) => e.id)).not.toContain(segundo);
+    expect([...estado.ejercitos[0]!.escuadronIds].sort()).toEqual([primero, segundo].sort());
+    expect(campamento(estado).map((e) => e.id)).not.toContain(segundo);
   });
 
   it('el refuerzo también cuenta contra el Liderazgo, sumando lo que ese jugador YA lleva dentro', () => {
@@ -303,7 +292,7 @@ describe('carga del carro desde el almacén', () => {
   it('NUNCA baja de la reserva: con la despensa justa, se lleva solo el sobrante', () => {
     const base = partidaConTropas();
     // Reserva + 30: hay margen, pero muchísimo menos que un carro entero.
-    const reserva = reservaDeTrigo(base.sesion.getState().asentamientos[0]!);
+    const reserva = reservaDe(base.sesion.getState());
     const { sesion, asentamientoId, fundador } = conTrigo(base, reserva + 30);
 
     sesion.ejecutar(movilizarEjercito, { asentamientoId, heroeId: fundador, escuadronIds: ['esc-milicia'], objetivo: PUNTO_LEJOS }, OPC);
@@ -313,7 +302,7 @@ describe('carga del carro desde el almacén', () => {
     expect(cargado).toBeGreaterThan(0);
     expect(cargado).toBeLessThan(LOGISTICA.capacidadCarroPorJugador);
     // Lo que queda no baja de la reserva del asentamiento YA SIN esos escuadrones (que dejaron de comer aquí).
-    expect(trigoDe(estado.asentamientos[0]!)).toBeGreaterThanOrEqual(reservaDeTrigo(estado.asentamientos[0]!) - 1e-9);
+    expect(trigoDe(estado.asentamientos[0]!)).toBeGreaterThanOrEqual(reservaDe(estado) - 1e-9);
   });
 
   it('con el almacén por debajo de la reserva sale IGUAL, con el carro vacío — no se bloquea la salida', () => {
@@ -350,7 +339,7 @@ describe('carga del carro desde el almacén', () => {
     sesion.ejecutar(unirseAEjercito, { ejercitoId, asentamientoId, heroeId: fundador, escuadronIds: ['esc-honderos'] }, OPC);
 
     const ejercito = sesion.getState().ejercitos[0]!;
-    expect(new Set(ejercito.escuadrones.map((e) => e.heroeId)).size).toBe(1);
+    expect(ejercito.participantes).toHaveLength(1);
     expect(ejercito.suministro['trigo']).toBe(LOGISTICA.capacidadCarroPorJugador);
   });
 

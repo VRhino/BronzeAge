@@ -4,7 +4,9 @@ import { describe, expect, it } from 'vitest';
 import type { Asentamiento } from '../../domain/types';
 import { RECLUTAMIENTO_ORO_POR_ESCALON, TROPAS_RECLUTABLES } from '../../constants';
 import { reclutarTropa, ReclutamientoInvalidoError } from '../tropas';
-import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, SIN_MUNDO } from './fixtures';
+import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, heroesCon } from './fixtures';
+
+const HEROES = heroesCon([], ['jugador-faccion-1-1']);
 
 function base(oro: number): Asentamiento {
   const mapa = crearMapaDeterminista(42);
@@ -29,20 +31,20 @@ const lancerosMimbre = TROPAS_RECLUTABLES.find((t) => t.id === 'lanceros_mimbre'
 
 describe('reclutamiento en oro', () => {
   it('la milicia del Centro Urbano NO cuesta oro', () => {
-    const tras = reclutarTropa(base(0), SIN_MUNDO, 'jugador-faccion-1-1', 'faccion-1', 'milicia_lanceros', 'pesants', 0);
-    expect(tras.almacen['oro']!.cantidad).toBe(0);
-    expect(tras.escuadrones).toHaveLength(1);
+    const tras = reclutarTropa(base(0), HEROES, [], 'jugador-faccion-1-1', 'faccion-1', 'milicia_lanceros', 'pesants', 0);
+    expect(tras.asentamiento.almacen['oro']!.cantidad).toBe(0);
+    expect(tras.heroes[0]!.escuadrones).toHaveLength(1);
   });
 
   it('una tropa de Barracón descuenta oro = escalón × nº de soldados', () => {
     const a = base(500);
-    const tras = reclutarTropa(a, SIN_MUNDO, 'jugador-faccion-1-1', 'faccion-1', 'lanceros_mimbre', 'pesants', 0);
+    const tras = reclutarTropa(a, HEROES, [], 'jugador-faccion-1-1', 'faccion-1', 'lanceros_mimbre', 'pesants', 0);
     const esperado = RECLUTAMIENTO_ORO_POR_ESCALON[lancerosMimbre.escalon]! * lancerosMimbre.unidadesPorDefecto;
-    expect(a.almacen['oro']!.cantidad - tras.almacen['oro']!.cantidad).toBeCloseTo(esperado);
+    expect(a.almacen['oro']!.cantidad - tras.asentamiento.almacen['oro']!.cantidad).toBeCloseTo(esperado);
   });
 
   it('sin oro suficiente, reclutar una tropa de Barracón lanza', () => {
-    expect(() => reclutarTropa(base(1), SIN_MUNDO, 'jugador-faccion-1-1', 'faccion-1', 'lanceros_mimbre', 'pesants', 0)).toThrow(ReclutamientoInvalidoError);
+    expect(() => reclutarTropa(base(1), HEROES, [], 'jugador-faccion-1-1', 'faccion-1', 'lanceros_mimbre', 'pesants', 0)).toThrow(ReclutamientoInvalidoError);
   });
 
   it('el coste de oro por escalón es creciente y positivo desde el escalón 1', () => {

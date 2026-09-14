@@ -12,13 +12,15 @@ import { reclutarTropa as reclutarTropaEngine } from '../../engine/tropas';
 import { esCiudadano } from '../../engine/faccion';
 import {
   atacarCampamentoBandidos as atacarCampamentoBandidosEngine,
+  desalojarResidentes,
   iniciarAsedio as iniciarAsedioEngine,
 } from '../../engine/combate';
+import { conEscuadrones } from '../../engine/tropa';
 import { CAMPAMENTOS_BANDIDOS } from '../../constants';
 import { minutos, sumar } from '../../domain/tiempo';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito } from './tipos';
-import { comando, conAsentamiento, conAsentamientos, exigirAsentamiento, exigirCampamento } from './ayudas';
+import { campamentoEn, comando, conAsentamiento, exigirAsentamiento, exigirCampamento } from './ayudas';
 import { desdeCrudos, evento } from './eventos';
 
 /** Reclutamiento: lo narra esta capa (el motor devuelve el asentamiento actualizado, sin eventos). */
@@ -40,24 +42,25 @@ export interface ParamsReclutarTropa {
 export const reclutarTropa = comando<ParamsReclutarTropa, { reclutados: number }>((estado, _mapa, ctx, params) => {
   const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
 
-  const cantidadDe = (a: typeof asentamiento): number =>
-    a.escuadrones.find((e) => e.heroeId === params.heroeId && e.tropaId === params.tropaId)?.cantidad ?? 0;
+  const cantidadDe = (heroes: GameSessionState['heroes']): number =>
+    heroes.find((h) => h.id === params.heroeId)?.escuadrones.find((e) => e.tropaId === params.tropaId)?.cantidad ?? 0;
 
-  const antes = cantidadDe(asentamiento);
+  const antes = cantidadDe(estado.heroes);
   const faccionDelJugador = estado.facciones.find((f) => esCiudadano(f, params.heroeId));
-  const actualizado = reclutarTropaEngine(
+  const r = reclutarTropaEngine(
     asentamiento,
-    estado,
+    estado.heroes,
+    estado.ejercitos,
     params.heroeId,
     faccionDelJugador?.id ?? '',
     params.tropaId,
     params.origen,
     ctx.ids.siguiente()
   );
-  const reclutados = cantidadDe(actualizado) - antes;
+  const reclutados = cantidadDe(r.heroes) - antes;
 
   const siguiente = conHistorialDeJugador(
-    conAsentamiento(estado, actualizado),
+    { ...conAsentamiento(estado, r.asentamiento), heroes: r.heroes },
     params.heroeId,
     `Recluta ${reclutados} de "${params.tropaId}" en ${asentamiento.id}.`
   );
@@ -85,11 +88,25 @@ export const iniciarAsedio = comando<ParamsIniciarAsedio, { conquistado: boolean
   const atacante = exigirAsentamiento(estado, params.atacanteId);
   const defensor = exigirAsentamiento(estado, params.defensorId);
 
-  const resultado = iniciarAsedioEngine(atacante, defensor, params.escuadronIds, estado.facciones, estado.relaciones, ctx.instante, ctx.rng);
-  const siguiente: GameSessionState = {
-    ...conAsentamientos(estado, [resultado.atacante, resultado.defensor]),
+  const resultado = iniciarAsedioEngine(
+    atacante,
+    campamentoEn(estado, atacante),
+    defensor,
+    campamentoEn(estado, defensor),
+    params.escuadronIds,
+    estado.facciones,
+    estado.relaciones,
+    ctx.instante,
+    ctx.rng
+  );
+  const tras: GameSessionState = {
+    ...conAsentamiento(estado, resultado.defensor),
     facciones: resultado.facciones,
+    heroes: conEscuadrones(estado.heroes, resultado.tropa),
   };
+  // Los residentes derrotados se van con su campamento a 0 a la plaza más cercana de su Facción (Doc 5.15.5).
+  const desalojo = resultado.conquistado ? desalojarResidentes(defensor, tras.asentamientos, tras.heroes) : undefined;
+  const siguiente: GameSessionState = desalojo ? { ...tras, asentamientos: desalojo.asentamientos, heroes: desalojo.heroes } : tras;
   return exito(siguiente, desdeCrudos(ctx, resultado.eventos, atacante.id), { conquistado: resultado.conquistado });
 });
 
@@ -112,10 +129,11 @@ export const atacarCampamentoBandidos = comando<ParamsAtacarCampamentoBandidos, 
   const atacante = exigirAsentamiento(estado, params.atacanteId);
   const campamento = exigirCampamento(estado, params.campamentoId);
 
-  const resultado = atacarCampamentoBandidosEngine(atacante, params.escuadronIds, campamento, ctx.instante, estado.facciones, ctx.rng);
+  const resultado = atacarCampamentoBandidosEngine(atacante, campamentoEn(estado, atacante), params.escuadronIds, campamento, estado.facciones, ctx.rng);
   const siguiente: GameSessionState = {
     ...conAsentamiento(estado, resultado.atacante),
     facciones: resultado.facciones,
+    heroes: conEscuadrones(estado.heroes, resultado.tropa),
     // Al destruirlo se agenda su reaparición; el spawn en sí lo evalúa el tick (`avanzarSpawnBandidos`).
     campamentosBandidos: resultado.campamentoDestruido
       ? estado.campamentosBandidos.filter((c) => c.id !== campamento.id)

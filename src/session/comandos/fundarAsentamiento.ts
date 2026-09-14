@@ -2,9 +2,10 @@ import type { Point } from '../../domain/types';
 import { exigirPuertaDeFundacion, fundarAsentamiento as fundarAsentamientoEngine } from '../../engine/settlement';
 import { esCiudadano } from '../../engine/faccion';
 import { cruzarLaPuerta, puntoDeFundacionDe, situarHeroes } from '../../engine/ubicacion';
+import { conEscuadrones } from '../../engine/tropa';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito } from './tipos';
-import { comando, conExploracionFundida, exigirJugador } from './ayudas';
+import { comando, conExploracionFundida, conTropaDe, exigirJugador } from './ayudas';
 import { evento } from './eventos';
 
 export interface PayloadAsentamientoFundado {
@@ -75,10 +76,10 @@ export const fundarAsentamiento = comando<ParamsFundarAsentamiento, { asentamien
 
   // Fundar es ENTRAR en lo que se acaba de levantar (Doc 1.10): el fundador ya es residente
   // (`fundarAsentamientoEngine` lo puso en `heroesFundadoresIds`), así que la columna con la que llegó se
-  // deshace dentro — sus tropas a la guarnición, su carro al almacén — igual que al cruzar la puerta de
+  // deshace dentro — sus tropas al campamento, su carro al almacén — igual que al cruzar la puerta de
   // cualquier otra residencia. Reutiliza `cruzarLaPuerta` en vez de repetir la regla: es la MISMA entrada,
   // solo que a una plaza que nace en este mismo instante.
-  const cruce = cruzarLaPuerta(columna, resultado.asentamiento, ctx.actor, estado.relaciones);
+  const cruce = cruzarLaPuerta(conTropaDe(estado, columna), resultado.asentamiento, ctx.actor, estado.relaciones);
 
   let siguiente: GameSessionState = {
     ...estado,
@@ -87,7 +88,7 @@ export const fundarAsentamiento = comando<ParamsFundarAsentamiento, { asentamien
     ejercitos: cruce.disuelveColumna ? estado.ejercitos.filter((e) => e.id !== columna.id) : estado.ejercitos,
     // Única colocación que hace este comando, y hace falta porque `cruzarLaPuerta` no toca `Jugador.ubicacion`
     // — solo fusiona tropas y carga en el asentamiento.
-    heroes: situarHeroes(estado.heroes, heroesIds, { tipo: 'asentamiento', asentamientoId: resultado.asentamiento.id }),
+    heroes: situarHeroes(conEscuadrones(estado.heroes, cruce.tropa), heroesIds, { tipo: 'asentamiento', asentamientoId: resultado.asentamiento.id }),
   };
 
   const nombreFaccion = resultado.facciones.find((f) => f.id === params.faccionId)?.nombre ?? params.faccionId;

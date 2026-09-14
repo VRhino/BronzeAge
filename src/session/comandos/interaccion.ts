@@ -24,10 +24,10 @@ import {
   type ComposicionColumna,
   type ContenidoCaravana,
 } from '../../engine/ejercitos';
-import { devolverEscoltaAGuarnicion } from '../../engine/caravanas';
+import { conEscolta, indiceTropa, sinEscolta } from '../../engine/tropa';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito } from './tipos';
-import { comando, exigirCaravana, exigirColumnaDe, exigirEjercito } from './ayudas';
+import { comando, conColumnas, conTropaDe, exigirCaravana, exigirColumnaDe, exigirEjercito } from './ayudas';
 import { desdeCrudos, evento } from './eventos';
 
 /** A qué se puede apuntar desde el menú de interacción: una columna o una caravana. Es la misma forma que usa
@@ -61,7 +61,7 @@ export const inspeccionar = comando<ParamsInspeccionar, ComposicionColumna | Con
 
   if (params.objetivo.tipo === 'ejercito') {
     const objetivo = exigirEjercito(estado, params.objetivo.id);
-    const composicion = inspeccionarColumna(observador, objetivo);
+    const composicion = inspeccionarColumna(observador, conTropaDe(estado, objetivo));
 
     return exito(
       conHistorialDeJugador(estado, params.heroeId, `Inspecciona la columna ${objetivo.id}.`),
@@ -81,7 +81,7 @@ export const inspeccionar = comando<ParamsInspeccionar, ComposicionColumna | Con
   const caravana = exigirCaravana(estado, params.objetivo.id);
   // Escoltada = por un ejército (Doc 5.13.3) o por escuadrones cedidos sin héroe (Doc 3.13.4).
   const escoltada =
-    estado.ejercitos.some((e) => e.caravanasAdjuntasIds.includes(caravana.id)) || (caravana.escolta?.length ?? 0) > 0;
+    estado.ejercitos.some((e) => e.caravanasAdjuntasIds.includes(caravana.id)) || (caravana.escoltaIds?.length ?? 0) > 0;
   const contenido = inspeccionarCaravanaEngine(observador, caravana, escoltada);
 
   return exito(
@@ -131,8 +131,8 @@ export const atacar = comando<ParamsAtacar, void>((estado, _mapa, ctx, params) =
   if (params.objetivo.tipo === 'ejercito') {
     const defensor = exigirEjercito(estado, params.objetivo.id);
     const choque = atacarColumna(
-      atacante,
-      defensor,
+      conTropaDe(estado, atacante),
+      conTropaDe(estado, defensor),
       [...estado.facciones],
       estado.relaciones,
       estado.caravanas,
@@ -140,15 +140,7 @@ export const atacar = comando<ParamsAtacar, void>((estado, _mapa, ctx, params) =
       ctx.rng
     );
 
-    const porId = new Map([
-      [choque.atacante.id, choque.atacante],
-      [choque.defensor.id, choque.defensor],
-    ]);
-    const siguiente: GameSessionState = {
-      ...estado,
-      ejercitos: estado.ejercitos.map((e) => porId.get(e.id) ?? e),
-      facciones: choque.facciones,
-    };
+    const siguiente: GameSessionState = { ...conColumnas(estado, [choque.atacante, choque.defensor]), facciones: choque.facciones };
 
     return exito(
       conHistorialDeJugador(siguiente, params.heroeId, `Ataca a la columna ${defensor.id}.`),
@@ -162,23 +154,21 @@ export const atacar = comando<ParamsAtacar, void>((estado, _mapa, ctx, params) =
   }
 
   const caravana = exigirCaravana(estado, params.objetivo.id);
-  const emboscada = interceptar(atacante, caravana, capacidadCargaDe(atacante, estado.caravanas), ctx.instante, ctx.rng);
-  // Escolta sin héroe (Doc 3.13.4) que vuelve a la guarnición del origen tras perder la caravana.
-  const asentamientos =
-    emboscada.escoltaDevuelta.length > 0
-      ? estado.asentamientos.map((a) =>
-          a.id === caravana.origenAsentamientoId
-            ? { ...a, escuadrones: devolverEscoltaAGuarnicion(a.escuadrones, emboscada.escoltaDevuelta) }
-            : a
-        )
-      : estado.asentamientos;
+  const emboscada = interceptar(
+    conTropaDe(estado, atacante),
+    conEscolta(caravana, indiceTropa(estado.heroes)),
+    capacidadCargaDe(atacante, estado.caravanas),
+    ctx.instante,
+    ctx.rng
+  );
+  // La escolta vuelve a su héroe: la de una caravana capturada, a 0 y al campamento (Doc 5.15.4).
+  const queda = emboscada.caravana ? sinEscolta(emboscada.caravana) : undefined;
+  const conAtacante = conColumnas(estado, [emboscada.ejercito], [...emboscada.escoltaPerdida, ...(queda?.tropa ?? [])]);
   const siguiente: GameSessionState = {
-    ...estado,
-    asentamientos,
-    ejercitos: estado.ejercitos.map((e) => (e.id === emboscada.ejercito.id ? emboscada.ejercito : e)),
-    caravanas: emboscada.caravana
-      ? estado.caravanas.map((c) => (c.id === caravana.id ? emboscada.caravana! : c))
-      : estado.caravanas.filter((c) => c.id !== caravana.id),
+    ...conAtacante,
+    caravanas: queda
+      ? conAtacante.caravanas.map((c) => (c.id === caravana.id ? queda.caravana : c))
+      : conAtacante.caravanas.filter((c) => c.id !== caravana.id),
   };
 
   return exito(

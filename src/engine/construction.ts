@@ -51,7 +51,6 @@ import { avanzarObraDeRecintos } from './muralla';
 import { reservaDinamicaConstruccion } from './mantenimiento';
 import { factorProduccionTrigo, factorTiempoConstruccion, lineasProduccionPriorizadas, perfilTrazadoDePolitica } from './politicas';
 import { consumoComidaPoblacion } from './population';
-import { consumoRacionTropas } from './tropas';
 
 /**
  * Recurso propio de cada tipo de edificio "de supervivencia": Granja no respeta la reserva mínima de
@@ -568,7 +567,9 @@ function evaluarNecesidades(
   zonaPoligono: Point[],
   mapa: Mapa,
   reserva: Partial<Record<RecursoTipo, number>>,
-  reclamos: ReclamosFuentes
+  reclamos: ReclamosFuentes,
+  /** Ración de la guarnición: cuenta en el consumo de trigo que decide si hace falta otra Granja. */
+  consumoTropasPorMinuto: number
 ): {
   nuevos: Edificio[];
   almacen: Record<string, RecursoAlmacenado>;
@@ -649,7 +650,7 @@ function evaluarNecesidades(
     (acc, g) => acc + produccionTrigoDeGranja(g.nivelInterno) * fertilidadZona * ratioManoActual * factorTrigoActual,
     0
   );
-  const consumoTrigoActual = consumoComidaPoblacion(asentamiento) + consumoRacionTropas(asentamiento);
+  const consumoTrigoActual = consumoComidaPoblacion(asentamiento) + consumoTropasPorMinuto;
   const enDeficitTrigo = produccionTrigoActual < consumoTrigoActual;
   // Objetivo PROACTIVO (a petición del usuario, issues/granjas_no_escalan_con_poblacion.md): además del
   // déficit reactivo de arriba (población YA asentada), un segundo umbral más generoso mide contra la
@@ -667,7 +668,7 @@ function evaluarNecesidades(
     pesants: Math.max(asentamiento.poblacion.pesants, capacidadViviendaPesants(asentamiento)),
     artesanos: Math.max(asentamiento.poblacion.artesanos, capacidadViviendaArtesanos(asentamiento)),
   };
-  const consumoTrigoObjetivo = consumoComidaPoblacion({ ...asentamiento, poblacion: poblacionObjetivo }) + consumoRacionTropas(asentamiento);
+  const consumoTrigoObjetivo = consumoComidaPoblacion({ ...asentamiento, poblacion: poblacionObjetivo }) + consumoTropasPorMinuto;
   const enDeficitProyectado = produccionTrigoActual < consumoTrigoObjetivo;
   // Prioridad real a MEJORAR sobre CONSTRUIR (a petición del usuario) — no el orden accidental de que
   // `avanzarMejoras` corra antes en el mismo tick, que el costo geométrico de la mejora (×2 por nivel) podía
@@ -1212,7 +1213,10 @@ export function avanzarConstruccion(
   mapa: Mapa,
   capital: Asentamiento | undefined,
   reclamos: ReclamosFuentes,
-  instante: Instante
+  instante: Instante,
+  /** Ración de la guarnición (`consumoRacionDeEscuadrones(campamentoDe(...))`), para la reserva de trigo y la
+   * decisión de Granjas: las escuadras viven en sus héroes, no en la plaza. */
+  consumoTropasPorMinuto: number
 ): { asentamiento: Asentamiento; eventos: EventoCrudo[]; edificiosCompletados: number } {
   const eventos: EventoCrudo[] = [];
   let almacen = asentamiento.almacen;
@@ -1367,7 +1371,7 @@ export function avanzarConstruccion(
     return pausado !== !!e.pausadoPorAlmacenLleno ? { ...e, pausadoPorAlmacenLleno: pausado } : e;
   });
 
-  const reserva = reservaDinamicaConstruccion({ ...asentamiento, edificios: edificiosActualizados, almacen }, capital);
+  const reserva = reservaDinamicaConstruccion({ ...asentamiento, edificios: edificiosActualizados, almacen }, capital, consumoTropasPorMinuto);
   // Reserva manual del Tesorero (a petición del usuario, ver `Asentamiento.reservaManual`): se SUMA a la
   // dinámica y solo aplica a este camino AUTOMÁTICO (avanzarMejoras + evaluarNecesidades más abajo) —
   // `anadirEdificioManualmente` calcula su propia reserva sin esta suma, exenta a propósito.
@@ -1399,7 +1403,7 @@ export function avanzarConstruccion(
   // ningún candidato (`asegurarAnclaPara`); esos cambios viven en `edificiosBase`, no en `nuevosProyectos`.
   let edificiosBase = asentamientoConProgreso.edificios;
   if (!asentamiento.autoConstruccionPausada) {
-    const trasNecesidades = evaluarNecesidades(asentamientoConProgreso, zonaPoligono, mapa, reserva, reclamos);
+    const trasNecesidades = evaluarNecesidades(asentamientoConProgreso, zonaPoligono, mapa, reserva, reclamos, consumoTropasPorMinuto);
     nuevosProyectos = trasNecesidades.nuevos;
     almacenFinal = trasNecesidades.almacen;
     extractoresTicksSinCupo = trasNecesidades.extractoresTicksSinCupo;
@@ -1551,7 +1555,9 @@ export function anadirEdificioManualmente(
   mapa: Mapa,
   capital: Asentamiento | undefined,
   reclamos: ReclamosFuentes,
-  contador = 0
+  contador = 0,
+  /** Ración de la guarnición, para la reserva de trigo (ver `reservaDinamicaConstruccion`). */
+  consumoTropasPorMinuto = 0
 ): Asentamiento {
   if (!cargoOcupado(asentamiento, cargo)) {
     throw new ConstruccionManualInvalidaError(`Se necesita un ${cargo} asignado para añadir edificios a la cola.`);
@@ -1605,7 +1611,7 @@ export function anadirEdificioManualmente(
   if (!sitio) throw new ConstruccionManualInvalidaError('No hay sitio disponible dentro de la zona de influencia.');
 
   const costo = EDIFICIO_CATALOGO[tipo].costo as Partial<Record<string, number>>;
-  const reserva = reservaDinamicaConstruccion(asentamiento, capital);
+  const reserva = reservaDinamicaConstruccion(asentamiento, capital, consumoTropasPorMinuto);
   if (!puedeIniciarConstruccion(asentamiento.almacen, costo, tipo, reserva)) {
     throw new ConstruccionManualInvalidaError('No hay fondos suficientes (respetando la reserva de mantenimiento) para pagarla ahora.');
   }
@@ -1691,11 +1697,13 @@ export interface EstadoMejoraEdificio {
 export function estadoMejoraEdificio(
   asentamiento: Asentamiento,
   edificio: Edificio,
-  capital: Asentamiento | undefined
+  capital: Asentamiento | undefined,
+  /** Ración de la guarnición, para la reserva de trigo (ver `reservaDinamicaConstruccion`). */
+  consumoTropasPorMinuto = 0
 ): EstadoMejoraEdificio | null {
   const info = elegibleParaMejora(asentamiento, edificio);
   if (!info) return null;
-  const reserva = reservaDinamicaConstruccion(asentamiento, capital);
+  const reserva = reservaDinamicaConstruccion(asentamiento, capital, consumoTropasPorMinuto);
   const elegible = puedeIniciarConstruccion(asentamiento.almacen, info.costo, edificio.tipo, reserva);
   return {
     ...info,
@@ -1715,7 +1723,8 @@ export function mejorarEdificioManualmente(
   asentamiento: Asentamiento,
   cargo: 'gobernador' | 'maestroObras',
   edificioId: string,
-  capital: Asentamiento | undefined
+  capital: Asentamiento | undefined,
+  consumoTropasPorMinuto = 0
 ): Asentamiento {
   if (!cargoOcupado(asentamiento, cargo)) {
     throw new ConstruccionManualInvalidaError(`Se necesita un ${cargo} asignado para forzar una mejora.`);
@@ -1725,7 +1734,7 @@ export function mejorarEdificioManualmente(
   if (edificio.estado !== 'activo') {
     throw new ConstruccionManualInvalidaError('Solo se puede forzar la mejora de un edificio activo.');
   }
-  const estado = estadoMejoraEdificio(asentamiento, edificio, capital);
+  const estado = estadoMejoraEdificio(asentamiento, edificio, capital, consumoTropasPorMinuto);
   if (!estado) throw new ConstruccionManualInvalidaError('Ya está en su nivel máximo (o no tiene mejoras disponibles).');
   if (!estado.elegible) throw new ConstruccionManualInvalidaError(estado.motivoBloqueo!);
 

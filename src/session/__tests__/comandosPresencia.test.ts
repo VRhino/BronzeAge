@@ -13,6 +13,8 @@ import { FUNDACION, LOGISTICA, MOVIMIENTO, VISION } from '../../constants';
 import { exigirPuertaDeFundacion } from '../../engine/settlement';
 import { proyectarParaJugador } from '../proyecciones/jugador';
 import type { GeometriaAsentamientos } from '../estado';
+import { campamentoDe, conEscuadrones } from '../../engine/tropa';
+import { escuadronDePrueba } from '../../engine/__tests__/fixtures';
 
 /** Sin geometria calculada: la proyeccion no la necesita para lo que se prueba aqui. */
 const SIN_GEOMETRIA: GeometriaAsentamientos = { zonas: [], zonasFusionadas: [], trazadoPorAsentamiento: {} };
@@ -30,25 +32,17 @@ function partidaLista() {
         {
           ...a,
           almacen: { ...a.almacen, trigo: { capacidad: 100000, cantidad: 5000 }, madera: { capacidad: 100000, cantidad: 5000 } },
-          escuadrones: [
-            {
-              id: 'esc-1',
-              nombre: 'milicia_lanceros',
-              heroeId: base.fundador,
-              origen: 'pesants' as const,
-              cantidad: 10,
-              veterania: 0,
-              moral: 100,
-              tropaId: 'milicia_lanceros',
-            },
-          ],
         },
         ...payload.state.asentamientos.slice(1),
       ],
+      heroes: conEscuadrones(payload.state.heroes, [escuadronDePrueba('esc-1', base.fundador)]),
     },
   });
   return { ...base, sesion };
 }
+
+/** El campamento de la plaza de la fixture: lo que la defiende (Doc 5.15.2). */
+const campamento = (sesion: GameSession) => campamentoDe(sesion.getState().asentamientos[0]!, sesion.getState().heroes);
 
 const opcDe = (heroeId: string) => ({ ...OPC, actor: heroeId });
 
@@ -76,7 +70,7 @@ describe('salirAlMundo — desde la residencia, eligiendo (Doc 1.10.2)', () => {
     expect(columna.suministro).toEqual({ trigo: 100, madera: 50 });
     expect(ubicacionDe(sesion, fundador)).toEqual({ tipo: 'columna', ejercitoId: columna.id });
     // Los escuadrones se van DE VERDAD: la guarnición es lo único que defiende (Doc 5.12.4).
-    expect(sesion.getState().asentamientos[0]!.escuadrones).toHaveLength(0);
+    expect(campamento(sesion)).toHaveLength(0);
   });
 
   it('se puede salir SIN tropas: el viajero solo es una forma de jugar, no un error', () => {
@@ -86,7 +80,7 @@ describe('salirAlMundo — desde la residencia, eligiendo (Doc 1.10.2)', () => {
 
     expect(r.ok).toBe(true);
     const columna = sesion.getState().ejercitos[0]!;
-    expect(columna.escuadrones).toEqual([]);
+    expect(columna.escuadronIds).toEqual([]);
     expect(columna.participantes.map((p) => p.heroeId), 'sin tropas, pero va alguien dentro').toEqual([fundador]);
   });
 
@@ -154,7 +148,7 @@ describe('entrarEnAsentamiento — la puerta (Doc 1.10.3)', () => {
 
     expect(r.ok).toBe(true);
     expect(sesion.getState().ejercitos, 'la columna deja de existir').toHaveLength(0);
-    expect(sesion.getState().asentamientos[0]!.escuadrones.map((e) => e.id)).toEqual(['esc-1']);
+    expect(campamento(sesion).map((e) => e.id)).toEqual(['esc-1']);
     expect(sesion.getState().asentamientos[0]!.almacen['trigo']!.cantidad).toBe(trigoAntes);
     expect(ubicacionDe(sesion, fundador)).toEqual({ tipo: 'asentamiento', asentamientoId });
   });
@@ -187,7 +181,7 @@ describe('entrarEnAsentamiento — la puerta (Doc 1.10.3)', () => {
     expect(r.ok).toBe(true);
     const columna = ajena.getState().ejercitos[0];
     expect(columna, 'la columna sigue ahí fuera, esperando').toBeDefined();
-    expect(columna!.escuadrones.map((e) => e.id)).toEqual(['esc-1']);
+    expect(columna!.escuadronIds).toEqual(['esc-1']);
     expect(columna!.suministro['trigo']).toBe(100);
     expect(ubicacionDe(ajena, fundador)).toEqual({ tipo: 'asentamiento', asentamientoId });
     // Y sigue contándolo como participante: `participantes` dice a quién PERTENECE la columna, no dónde está
@@ -311,7 +305,7 @@ describe('guarnecer — un ejército marcha a una plaza propia y vuelca la tropa
 
     expect(r.ok).toBe(true);
     expect(sesion.getState().ejercitos, 'el ejército se consume').toHaveLength(0);
-    expect(sesion.getState().asentamientos[0]!.escuadrones.map((e) => e.id)).toEqual(['esc-1']);
+    expect(campamento(sesion).map((e) => e.id)).toEqual(['esc-1']);
     expect(ubicacionDe(sesion, fundador)).toEqual({ tipo: 'asentamiento', asentamientoId });
   });
 

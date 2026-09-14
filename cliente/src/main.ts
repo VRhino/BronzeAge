@@ -931,14 +931,15 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
       : '<p class="legend-note">Sin coste de mantenimiento.</p>';
 
   const poderMilitar = gameStore.poderMilitarInfo(a);
-  const escuadronesHtml = a.escuadrones.length
+  const guarnicion = gameStore.guarnicionDe(a);
+  const escuadronesHtml = guarnicion.length
     ? `<table class="mini-table">
-        <thead><tr><th>Escuadrón</th><th>Jugador</th><th>Origen</th><th>Nivel</th><th>Cantidad</th><th>Veteranía</th><th>Moral</th></tr></thead>
+        <thead><tr><th>Escuadrón</th><th>Jugador</th><th>Origen</th><th>Nivel</th><th>Cantidad</th><th>Experiencia</th><th>Moral</th></tr></thead>
         <tbody>
-          ${a.escuadrones
+          ${guarnicion
             .map(
               (e) =>
-                `<tr><td>${e.nombre}${e.heridoHasta ? ' (herido)' : ''}</td><td>${e.heroeId}</td><td>${e.origen}</td><td>${nivelTropaTxt(e.tropaId)}</td><td>${e.cantidad}</td><td>${e.veterania.toFixed(1)}</td><td>${e.moral.toFixed(0)}</td></tr>`
+                `<tr><td>${e.nombre}</td><td>${e.heroeId}</td><td>${e.origen}</td><td>${nivelTropaTxt(e.tropaId)}</td><td>${e.cantidad}</td><td>${e.experiencia.toFixed(1)}</td><td>${e.moral.toFixed(0)}</td></tr>`
             )
             .join('')}
         </tbody>
@@ -1016,7 +1017,7 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
         ${cupoBloqueoHtml}
         ${
           ocupacion
-            ? `<div class="fundacion-viabilidad aviso" style="margin-top:6px">⚔ Bajo ocupación militar (Doc 5.12.9) — ${ocupacion.minutosRestantes} min restantes. Inmune a un nuevo asedio; recaudación ×${ocupacion.factorRecaudacion} y crecimiento ×${ocupacion.factorCrecimiento}; mantenimiento congelado. La guarnición son escuadrones del conquistador (ver pestaña Militar).</div>`
+            ? `<div class="fundacion-viabilidad aviso" style="margin-top:6px">⚔ Bajo ocupación militar (Doc 5.12.9) — ${ocupacion.minutosRestantes} min restantes. Inmune a un nuevo asedio; recaudación ×${ocupacion.factorRecaudacion} y crecimiento ×${ocupacion.factorCrecimiento}; mantenimiento congelado. Sin guarnición hasta que alguien pase a residir aquí (Doc 5.15.5).</div>`
             : ''
         }
         <div class="kv-row" style="margin-top:6px"><span>Mantenimiento</span><span>${a.medidorMantenimiento.toFixed(0)}/100</span></div>
@@ -1136,7 +1137,7 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
         <h3>Escuadrones</h3>
         ${
           ocupacion
-            ? `<p class="legend-note">Ocupación reciente (Doc 5.12.9): esta guarnición son los escuadrones del ejército conquistador, propiedad de jugadores que NO residen aquí. Defienden y su dueño los repone/re-moviliza. Inmune a un nuevo asedio ${ocupacion.minutosRestantes} min más.</p>`
+            ? `<p class="legend-note">Ocupación reciente (Doc 5.12.9): la plaza conquistada queda sin guarnición hasta que alguien pase a residir en ella (Doc 5.15.5). Inmune a un nuevo asedio ${ocupacion.minutosRestantes} min más.</p>`
             : ''
         }
         ${escuadronesHtml}
@@ -1417,20 +1418,19 @@ function renderDetalleJugador(heroeId: string, state: GameState): string {
     ? `<div class="log-panel">${historial.map((e) => `<div>[${fmtTiempoMundo(e.momento)}] ${e.mensaje}</div>`).join('')}</div>`
     : '<p class="legend-note">Sin actividad registrada todavía.</p>';
 
-  // Escuadrones reclutados por este jugador (Doc 2.5): cada uno vive en el `asentamiento.escuadrones` donde
-  // fue reclutado, así que hay que recorrer TODOS los asentamientos y filtrar por `heroeId` — un jugador
-  // puede tener escuadrones en más de una residencia.
-  const escuadronesJugador = state.asentamientos.flatMap((a) =>
-    a.escuadrones.filter((e) => e.heroeId === heroeId).map((e) => ({ asentamientoId: a.id, escuadron: e }))
-  );
+  // Escuadrones del héroe (Doc 5.16.2): viven en él, y `contenedor` dice dónde están.
+  const escuadronesJugador = (state.heroes.find((h) => h.id === heroeId)?.escuadrones ?? []).map((e) => ({
+    donde: e.contenedor.tipo === 'campamento' ? 'campamento' : e.contenedor.tipo === 'ejercito' ? e.contenedor.ejercitoId : `escolta ${e.contenedor.caravanaId}`,
+    escuadron: e,
+  }));
   const escuadronesJugadorHtml = escuadronesJugador.length
     ? `<table class="mini-table">
-        <thead><tr><th>Escuadrón</th><th>Asentamiento</th><th>Origen</th><th>Nivel</th><th>Cantidad</th><th>Veteranía</th><th>Moral</th></tr></thead>
+        <thead><tr><th>Escuadrón</th><th>Dónde</th><th>Origen</th><th>Nivel</th><th>Cantidad</th><th>Experiencia</th><th>Moral</th></tr></thead>
         <tbody>
           ${escuadronesJugador
             .map(
-              ({ asentamientoId, escuadron: e }) =>
-                `<tr><td>${e.nombre}${e.heridoHasta ? ' (herido)' : ''}</td><td>${asentamientoId}</td><td>${e.origen}</td><td>${nivelTropaTxt(e.tropaId)}</td><td>${e.cantidad}</td><td>${e.veterania.toFixed(1)}</td><td>${e.moral.toFixed(0)}</td></tr>`
+              ({ donde, escuadron: e }) =>
+                `<tr><td>${e.nombre}</td><td>${donde}</td><td>${e.origen}</td><td>${nivelTropaTxt(e.tropaId)}</td><td>${e.cantidad}</td><td>${e.experiencia.toFixed(1)}</td><td>${e.moral.toFixed(0)}</td></tr>`
             )
             .join('')}
         </tbody>
@@ -1593,10 +1593,11 @@ function renderPanelMilitar(state: GameState): void {
       const tieneGranFundicion = a.edificios.some((e) => e.tipo === 'granFundicion' && e.estado === 'activo');
       const poder = gameStore.poderMilitarInfo(a);
       const escuadronesHtml =
-        a.escuadrones
+        gameStore
+          .guarnicionDe(a)
           .map(
             (e) =>
-              `<div class="registro-squad"><div><strong>${e.nombre}</strong><small>${e.id} · ${e.heroeId}</small></div><span>${e.cantidad} soldados</span><span>${nivelTropaTxt(e.tropaId)}</span><span>Moral ${e.moral.toFixed(0)}</span>${e.heridoHasta ? `<em>Herido hasta ${fmtTiempoMundo(e.heridoHasta)}</em>` : ''}</div>`
+              `<div class="registro-squad"><div><strong>${e.nombre}</strong><small>${e.id} · ${e.heroeId}</small></div><span>${e.cantidad} soldados</span><span>${nivelTropaTxt(e.tropaId)}</span><span>Moral ${e.moral.toFixed(0)}</span></div>`
           )
           .join('') || '<div>Sin escuadrones.</div>';
       return `<article class="registro-militar-settlement"><header><div><h3>${a.nombre ?? a.id}</h3><p>${state.facciones.find((f) => f.id === a.faccionId)?.nombre ?? a.faccionId}</p></div><div class="registro-military-power"><strong>${poder.soldados}</strong><small>soldados · poder ${poder.poder.toFixed(1)}</small></div></header><div class="registro-military-buildings"><span class="${tieneFundicion ? 'is-active' : ''}">Fundición ${tieneFundicion ? 'activa' : 'inactiva'}</span><span class="${tieneGranFundicion ? 'is-active' : ''}">Gran Fundición ${tieneGranFundicion ? 'activa' : 'inactiva'}</span></div><div class="registro-squad-list">${escuadronesHtml}</div></article>`;

@@ -6,9 +6,10 @@ import { describe, expect, it } from 'vitest';
 import type { Asentamiento, Caravana, CaminoComercial, Faccion, Point } from '../../domain/types';
 import type { Escuadron } from '../../domain/types';
 import { CARAVANA_COOLDOWN, CARAVANA_ESCOLTA, CARAVANA_PREPARACION } from '../../constants';
-import { capacidadCaravana, devolverEscoltaAGuarnicion, velocidadCaravana } from '../caravanas';
+import { capacidadCaravana, velocidadCaravana } from '../caravanas';
 import { cupoEscolta } from '../asentamientoQuery';
 import { avanzarAtaquesBandidos } from '../bandidos';
+import type { CaravanaConEscolta } from '../tropa';
 import { createRng } from '../../worldgen';
 import {
   aceptarTrueque,
@@ -25,7 +26,7 @@ import {
 } from '../trade';
 import { lanzarCaravanaFundacion, ExpansionInvalidaError } from '../expansion';
 import { almacenSintetico, caravanaComercialCasiLlegando, mapaSintetico } from './tradeFixtures';
-import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instanteDeTest, posicionRecomendable } from './fixtures';
+import { crearFacciones, crearMapaDeterminista, escuadronDePrueba, fundarAsentamientoDeTest, instanteDeTest, posicionRecomendable } from './fixtures';
 
 // ---------------------------------------------------------------------------------------------------------
 // Orientación de la ruta al reutilizar un Camino Comercial existente
@@ -501,17 +502,17 @@ describe('composición de caravana por piezas (Doc 3.13.2)', () => {
 describe('lanzamiento manual de una caravana (Doc 3.13.3)', () => {
   const origen = {
     id: 'origen', faccionId: 'f-1', posicion: { x: 0, y: 0 }, almacen: almacenSintetico({ madera: 1000, piedra: 300 }),
-    politicasActivas: [], escuadrones: [],
+    politicasActivas: [],
     edificios: [{ id: 'm', tipo: 'mercado', posicion: { x: 1, y: 1 }, estado: 'activo', ambito: 'asentamiento' }],
   } as unknown as Asentamiento;
-  const destino = { id: 'destino', faccionId: 'f-1', posicion: { x: 200, y: 0 }, almacen: almacenSintetico({ oro: 0 }), politicasActivas: [], escuadrones: [], edificios: [] } as unknown as Asentamiento;
+  const destino = { id: 'destino', faccionId: 'f-1', posicion: { x: 200, y: 0 }, almacen: almacenSintetico({ oro: 0 }), politicasActivas: [], edificios: [] } as unknown as Asentamiento;
 
   const caravanaDe = (carros: Caravana['carros']): Caravana => ({
     id: 'c1', tipo: 'comercial', origenAsentamientoId: 'origen', contenido: {}, posicionActual: origen.posicion, progreso: 0, estado: 'disponible', carros,
   });
 
-  function preparar(caravana: Caravana, carga: Record<string, number>, escolta: Caravana['escolta'] = []) {
-    return prepararCaravanaManual(caravana, origen, destino, carga, escolta ?? [], mapaSintetico(), [], instanteDeTest(0));
+  function preparar(caravana: Caravana, carga: Record<string, number>) {
+    return prepararCaravanaManual(caravana, origen, destino, carga, [], mapaSintetico(), [], instanteDeTest(0));
   }
 
   it('una caravana de 1 carro sale al instante (prepTicks 0): pasa directo a en_transito', () => {
@@ -577,18 +578,16 @@ describe('lanzamiento manual de una caravana (Doc 3.13.3)', () => {
 // Revamp de caravanas (Doc 3.13.4) — Paso 4: escolta sin héroe.
 // ---------------------------------------------------------------------------------------------------------
 describe('escolta sin héroe (Doc 3.13.4)', () => {
-  const esc = (id: string, cantidad = 20): Escuadron => ({
-    id, nombre: 'lanceros', heroeId: 'j1', origen: 'pesants', cantidad, veterania: 0, moral: 100, tropaId: 'milicia_lanceros',
-  });
+  const esc = (id: string, cantidad = 20): Escuadron => escuadronDePrueba(id, 'j1', 'milicia_lanceros', cantidad);
 
-  function origenConMercado(nivelMercado = 1, escuadrones: Escuadron[] = []): Asentamiento {
+  function origenConMercado(nivelMercado = 1): Asentamiento {
     return {
       id: 'origen', faccionId: 'f-1', posicion: { x: 0, y: 0 }, almacen: almacenSintetico({ piedra: 1000 }),
-      politicasActivas: [], escuadrones,
+      politicasActivas: [],
       edificios: [{ id: 'm', tipo: 'mercado', posicion: { x: 1, y: 1 }, estado: 'activo', ambito: 'asentamiento', nivelInterno: nivelMercado }],
     } as unknown as Asentamiento;
   }
-  const destino = { id: 'destino', faccionId: 'f-2', posicion: { x: 200, y: 0 }, almacen: almacenSintetico({}), politicasActivas: [], escuadrones: [], edificios: [] } as unknown as Asentamiento;
+  const destino = { id: 'destino', faccionId: 'f-2', posicion: { x: 200, y: 0 }, almacen: almacenSintetico({}), politicasActivas: [], edificios: [] } as unknown as Asentamiento;
   const caravana1Carro = (): Caravana => ({
     id: 'c1', tipo: 'comercial', origenAsentamientoId: 'origen', contenido: {}, posicionActual: { x: 0, y: 0 }, progreso: 0, estado: 'disponible',
     carros: [{ tipoCarro: 'basico', animal: 'buey' }],
@@ -602,48 +601,39 @@ describe('escolta sin héroe (Doc 3.13.4)', () => {
   it('prepararCaravanaManual engancha la escolta y rechaza por encima del cupo', () => {
     const origen = origenConMercado(1);
     const r = prepararCaravanaManual(caravana1Carro(), origen, destino, { piedra: 100 }, [esc('e1')], mapaSintetico(), [], instanteDeTest(0));
-    expect(r.caravana.escolta).toHaveLength(1);
+    expect(r.caravana.escoltaIds).toEqual(['e1']);
+    expect(r.tropa[0]!.contenedor, 'la escuadra sale del campamento a la escolta').toEqual({ tipo: 'escolta', caravanaId: 'c1' });
 
     expect(() =>
       prepararCaravanaManual(caravana1Carro(), origen, destino, { piedra: 100 }, [esc('e1'), esc('e2')], mapaSintetico(), [], instanteDeTest(0))
     ).toThrow(CaravanaInvalidaError); // cupo nivel 1 = 1
   });
 
-  it('cancelar devuelve la escolta a la guarnición del origen', () => {
-    const origen = origenConMercado(2, []);
+  it('cancelar libera la escolta: sus ids vuelven para ir al campamento', () => {
+    const origen = origenConMercado(2);
     const r = prepararCaravanaManual(caravana1Carro(), origen, destino, { piedra: 100 }, [esc('e1')], mapaSintetico(), [], instanteDeTest(0));
     const cancelada = cancelarPreparacionCaravana({ ...r.caravana, estado: 'preparando' }, r.asentamiento);
-    expect(cancelada.caravana.escolta).toBeUndefined();
-    expect(cancelada.asentamiento.escuadrones.map((e) => e.id)).toContain('e1');
+    expect(cancelada.caravana.escoltaIds).toBeUndefined();
+    expect(cancelada.escoltaLiberada).toEqual(['e1']);
   });
 
   it('un bandido tira contra el poder de la escolta, no contra la defensa base', () => {
-    const conEscoltaFuerte: Caravana = { ...caravana1Carro(), estado: 'en_transito', posicionActual: { x: 500, y: 500 }, escolta: [esc('e1', 40), esc('e2', 40)] };
+    const conEscoltaFuerte: CaravanaConEscolta = { ...caravana1Carro(), estado: 'en_transito', posicionActual: { x: 500, y: 500 }, escolta: [esc('e1', 40), esc('e2', 40)] };
     const campamento = { id: 'camp', posicion: { x: 500, y: 500 }, poder: 20, bosqueId: 'b', proximoSpawnEn: instanteDeTest(999) } as any;
-    const r = avanzarAtaquesBandidos([campamento], [conEscoltaFuerte], createRng(1), [], instanteDeTest(1));
+    const r = avanzarAtaquesBandidos([campamento], [conEscoltaFuerte], createRng(1), []);
     // Escolta de 80 lanceros aguanta a un campamento de poder 20: la caravana escapa y la tropa sufre bajas leves.
     expect(r.caravanas).toHaveLength(1);
     expect(r.caravanas[0]!.escolta![0]!.cantidad).toBeLessThan(40);
-    expect(r.escoltasDevueltas).toHaveLength(0);
+    expect(r.escoltasPerdidas).toHaveLength(0);
   });
 
-  it('si el bandido gana, la caravana se pierde pero la escolta vuelve a casa derrotada', () => {
-    const conEscoltaDebil: Caravana = { ...caravana1Carro(), estado: 'en_transito', posicionActual: { x: 500, y: 500 }, escolta: [esc('e1', 1)] };
+  it('si el bandido gana, la caravana se pierde y su escolta vuelve al campamento a 0, con su experiencia (Doc 5.15.4)', () => {
+    const conEscoltaDebil: CaravanaConEscolta = { ...caravana1Carro(), estado: 'en_transito', posicionActual: { x: 500, y: 500 }, escolta: [esc('e1', 1)] };
     const campamento = { id: 'camp', posicion: { x: 500, y: 500 }, poder: 9999, bosqueId: 'b', proximoSpawnEn: instanteDeTest(999) } as any;
-    const r = avanzarAtaquesBandidos([campamento], [conEscoltaDebil], createRng(1), [], instanteDeTest(1));
+    const r = avanzarAtaquesBandidos([campamento], [conEscoltaDebil], createRng(1), []);
     expect(r.caravanas).toHaveLength(0); // caravana destruida
-    expect(r.escoltasDevueltas).toEqual([{ asentamientoId: 'origen', escuadrones: expect.any(Array) }]);
-    expect(r.escoltasDevueltas[0]!.escuadrones[0]!.heridoHasta).toBeDefined(); // debuff de derrota
-  });
-
-  it('devolverEscoltaAGuarnicion funde por jugador+tropa; crea el escuadrón si no existía', () => {
-    const guarnicion = [esc('g1', 10)];
-    const fundido = devolverEscoltaAGuarnicion(guarnicion, [{ ...esc('e1', 5), veterania: 3 }]);
-    expect(fundido).toHaveLength(1);
-    expect(fundido[0]!.cantidad).toBe(15);
-    expect(fundido[0]!.veterania).toBe(3);
-
-    const nuevo = devolverEscoltaAGuarnicion([], [esc('e1', 5)]);
-    expect(nuevo).toHaveLength(1);
+    expect(r.escoltasPerdidas).toHaveLength(1);
+    // La escuadra no desaparece: queda a 0 en el campamento de su héroe, con la experiencia de la derrota.
+    expect(r.escoltasPerdidas[0]).toMatchObject({ id: 'e1', cantidad: 0, contenedor: { tipo: 'campamento' }, experiencia: 0.5 });
   });
 });

@@ -386,6 +386,9 @@ export interface Heroe {
    * aporta de verdad.
    */
   exploracionPersonal?: Exploracion;
+  /** TODAS sus escuadras, estén donde estén (Doc 5.16.2, doc 01 §13); `contenedor` dice dónde. Las del campamento
+   * están en la plaza donde reside, y si no reside en ninguna (huérfano) siguen siendo suyas. */
+  escuadrones: Escuadron[];
 }
 
 /**
@@ -418,32 +421,46 @@ export type Exploracion = string;
 
 export type OrigenTropa = 'pesants' | 'artesanos' | 'nobleza';
 
+/** Dónde está FÍSICAMENTE un escuadrón (doc 01 §13). `campamento` = en la plaza donde reside su héroe, o en
+ * ninguna si es huérfano (Doc 5.15.2). */
+export type ContenedorEscuadron =
+  | { tipo: 'campamento' }
+  | { tipo: 'ejercito'; ejercitoId: string }
+  | { tipo: 'escolta'; caravanaId: string };
+
 /**
- * Escuadrón (Doc 5.1/5.4): el jugador lidera una tropa de unidades NPC, nunca combate individualmente.
- * Escuadrón de UN jugador (Doc 2.5, a petición del usuario — corrige el bug donde dos jugadores reclutando la
- * misma tropa en el mismo asentamiento se fundían en un solo escuadrón): `heroeId` + `tropaId` identifican de
- * forma única al escuadrón dentro de `Asentamiento.escuadrones` — un jugador solo puede tener UNO por tropa,
- * porque solo pertenece a un asentamiento (Doc 2.1) y ahí solo puede tener sus propias tropas.
- * El SQUAD (nombre, veteranía) persiste aunque `cantidad` llegue a 0 (aniquilado) — se puede rellenar reclutando
- * más del mismo origen en el asentamiento. PERMADEATH: las bajas reducen `cantidad` de forma permanente.
+ * Escuadrón (Doc 5.16.2, `Docs/Coordinacion/01_Modelo_de_datos_compartido.md` §13): una tropa de unidades NPC
+ * que lidera un héroe. Como mucho UNO por (`heroeId`, `tropaId`) en toda la partida. Persiste aunque `cantidad`
+ * llegue a 0 (aniquilado) y se repone reclutando. Las bajas son PERMANENTES: no hay estado de herido.
  */
 export interface Escuadron {
   id: string;
   nombre: string;
-  /** Dueño del escuadrón (Doc 2.5) — reclutar ya no depende del cargo de General, cualquier jugador residente
-   * del asentamiento (fundador o con casa comprada) recluta y amplía SU PROPIO escuadrón. */
+  /** Dueño del escuadrón (Doc 2.5/5.16.2): cualquier héroe residente recluta y amplía SU PROPIO escuadrón. */
   heroeId: string;
   origen: OrigenTropa;
   cantidad: number;
-  /** Sube combatiendo (carril combate real, Doc 4.1/5.5): da un bonus de poder continuo al MISMO escuadrón
-   * (`poderEscuadron`, engine/combate.ts) — NUNCA cambia `tropaId` (Doc 5.8, a petición del usuario: una tropa
-   * jamás cambia de identidad al ganar veteranía). Nobleza no la usa (progresión plana). */
-  veterania: number;
+  /**
+   * Nivel y experiencia ACUMULADA (Doc 5.16.3). La experiencia da un bonus de poder continuo al MISMO escuadrón
+   * (`poderEscuadron`, engine/combate.ts) sin cambiar nunca `tropaId` (Doc 5.8).
+   *
+   * `ponytail:` hoy solo la da el combate numérico, con los valores que daba la veteranía, y el nivel se queda en
+   * 1 hasta que Conquest publique su curva de XP (CQ-001; decisión del usuario 2026-09-14).
+   */
+  nivel: number;
+  experiencia: number;
   /** Moral 0-100 por suministro de raciones (Doc 5.4); a 0 hay deserción permanente continua. */
   moral: number;
-  /** Debuff temporal tras perder en mundo abierto (Doc 5.2.2): penaliza el poder de combate hasta este
-   * instante de mundo (Fase D). Ausente = sano. */
-  heridoHasta?: Instante;
+  /** Progresión táctica de Conquest (`SquadInstanceData`): habilidades por id y formaciones como índices en la
+   * definición de escuadra. BronzeAge la guarda y la sirve, no la interpreta. */
+  habilidadesDesbloqueadas: string[];
+  formacionesDesbloqueadas: number[];
+  formacionSeleccionada: number;
+  contenedor: ContenedorEscuadron;
+  /** Asignado a la guarnición de la plaza donde reside su héroe (Doc 5.15.3); solo con `contenedor: campamento`,
+   * y mientras lo esté el héroe no puede sacarlo. `ponytail:` todavía no hay comando que lo active
+   * (`asignarGuarnicion`, fase 3), así que hoy es siempre `false` y defiende el campamento entero. */
+  enGuarnicion: boolean;
   /** Tropa reclutada vía Centro Urbano/Barracón/Galería de tiro (Doc 5.7/5.8, ver TROPAS_RECLUTABLES en
    * constants.ts) — determina el poderBase (`poderEscuadron`, engine/combate.ts). Único origen de escuadrones
    * en el motor (`reclutarTropa`, engine/tropas.ts), por eso es obligatorio: "mejorar" una tropa siempre es
@@ -509,7 +526,6 @@ export interface Asentamiento {
    * concreto aunque la plaza esté abierta de par en par. Ausente = nadie. */
   vetadosIds?: string[];
   politicasActivas: PoliticaActiva[];
-  escuadrones: Escuadron[];
   /**
    * Ocupación militar tras una conquista (Doc 5.4, `Consideraciones/Ocupacion_Post_Conquista_Definicion.md`):
    * instante de mundo en que TERMINA. Mientras `instante < ocupacionHasta` el asentamiento es INMUNE a un
@@ -737,11 +753,11 @@ export interface Caravana {
    * carros con animal, ambas son 0. Opcional en el tipo solo porque las categorías militar/construccion/
    * contrabando no lo llevan. */
   carros?: CarroCaravana[];
-  /** Revamp (Doc 3.13.4). Escuadrones que un residente del origen cede como escolta sin héroe, POR VIAJE. Son
-   * los escuadrones EN SÍ (no ids): salen de `Asentamiento.escuadrones` del origen al preparar la caravana y
-   * vuelven a la guarnición cuando la caravana regresa (`avanzarCaravanas`). Mientras viajan, la caravana se
-   * defiende con su poder (`poderTotal`) en vez de con la defensa base fija (Doc 3.10). Presente solo en viaje. */
-  escolta?: Escuadron[];
+  /** Revamp (Doc 3.13.4). Los escuadrones que un residente del origen cede como escolta sin héroe, POR VIAJE:
+   * solo sus ids, porque las escuadras viven en su héroe (`contenedor: 'escolta'`, doc 01 §13). Vuelven al
+   * campamento cuando la caravana regresa (`avanzarCaravanas`), o a 0 si la destruyen (Doc 5.15.4). Mientras
+   * viajan, la caravana se defiende con su poder (`poderTotal`) en vez de con la defensa base (Doc 3.10). */
+  escoltaIds?: string[];
   /** Revamp (Doc 3.13.5). `true` = fuera del reparto automático (`asignarCaravanasATrueque`), decisión
    * explícita del jugador, sea cual sea el tamaño de la caravana. */
   reservadaManual?: boolean;
@@ -802,9 +818,10 @@ export interface Ejercito {
    * comando con el que el Líder responde y la proyección del que pidió—. Ausente = ninguna viva.
    */
   peticionesDeUnion?: { heroeId: string; pedidoEn: Instante; expiraEn: Instante }[];
-  /** Escuadrones MOVIDOS aquí desde `Asentamiento.escuadrones` — se van de verdad, por eso la guarnición es
-   * lo único que defiende (Doc 5.12.4) y por eso `consumoRacionTropas` ya cuenta solo lo que quedó en casa. */
-  escuadrones: Escuadron[];
+  /** Los escuadrones que lleva: solo sus ids, porque las escuadras viven en su héroe (`contenedor: 'ejercito'`,
+   * doc 01 §13). Salir de campaña los saca del campamento, y por eso la guarnición es lo único que defiende
+   * (Doc 5.12.4). */
+  escuadronIds: string[];
   /** El carro: los de todos sus jugadores, ya sumados. Solo trigo en Fase 0. En marcha se come de AQUÍ, no
    * del almacén (Doc 5.13) — misma regla del hambre vía `avanzarRacion`, distinta despensa. */
   suministro: Record<string, number>;

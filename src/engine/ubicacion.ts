@@ -5,7 +5,8 @@
 // jugador actúa por primera vez y cuando se carga una partida anterior a esta mecánica— y en los dos hay que
 // DEDUCIRLA de lo que el mundo ya sabe. Una sola función para los dos casos, o la partida migrada acabaría
 // colocando a la gente en un sitio distinto del que la coloca el juego en marcha.
-import type { Asentamiento, Ejercito, InteriorRecordado, Heroe, Point, RelacionPolitica, UbicacionHeroe } from '../domain/types';
+import type { Asentamiento, Ejercito, Escuadron, InteriorRecordado, Heroe, Point, RelacionPolitica, UbicacionHeroe } from '../domain/types';
+import { campamentoDe, indiceTropa, type EjercitoConTropa } from './tropa';
 import type { Instante } from '../domain/tiempo';
 import { FUNDACION, MOVIMIENTO } from '../constants';
 import { calcularRuta } from '../world/rutas';
@@ -72,7 +73,7 @@ export function columnaDeAparicion(
     tipo: 'personal',
     liderId: heroeId,
     politicaDeUnion: 'rechazar',
-    escuadrones: [],
+    escuadronIds: [],
     suministro: {},
     caravanasAdjuntasIds: [],
     objetivo: { tipo: 'punto', punto },
@@ -105,11 +106,11 @@ export function situarHeroes(heroes: readonly Heroe[], ids: readonly string[], u
  *  4. Y entonces, **residencia o no**, que es lo que decide si la columna se deshace o espera fuera.
  */
 export function cruzarLaPuerta(
-  columna: Ejercito,
+  columna: EjercitoConTropa,
   asentamiento: Asentamiento,
   heroeId: string,
   relaciones: readonly RelacionPolitica[]
-): { asentamiento: Asentamiento; disuelveColumna: boolean } {
+): { asentamiento: Asentamiento; tropa: Escuadron[]; disuelveColumna: boolean } {
   if (columna.tipo === 'ejercito') {
     throw new MovilizacionInvalidaError('Vas en un ejército: hay que separarse antes de entrar en una plaza.');
   }
@@ -120,11 +121,11 @@ export function cruzarLaPuerta(
     throw new MovilizacionInvalidaError('Esa plaza no te deja entrar.');
   }
 
-  // En tu residencia la columna se DESHACE —tropas a la guarnición, carro al almacén— porque ahí tienes
-  // todo delante y volver a salir vuelve a elegir. En cualquier otra se queda esperando intacta.
+  // En tu residencia la columna se DESHACE —tropas al campamento, carro al almacén— porque ahí tienes todo
+  // delante y volver a salir vuelve a elegir. En cualquier otra se queda esperando intacta.
   return esResidente(asentamiento, heroeId)
-    ? { asentamiento: absorberColumna(asentamiento, columna, true), disuelveColumna: true }
-    : { asentamiento, disuelveColumna: false };
+    ? { ...absorberColumna(asentamiento, columna, true), disuelveColumna: true }
+    : { asentamiento, tropa: [], disuelveColumna: false };
 }
 
 /**
@@ -146,12 +147,12 @@ export function retomarColumna(asentamiento: Asentamiento, heroeId: string): voi
  * Guarda solo la cola —`en_cola` y `en_construccion`—, el almacen y la guarnicion. Lo `activo` no entra: es
  * publico y viaja vivo en la ficha, asi que recordarlo seria guardar dos veces el mismo hecho.
  */
-export function conFotoDelInterior(jugador: Heroe, asentamiento: Asentamiento, vistoEn: Instante): Heroe {
+export function conFotoDelInterior(jugador: Heroe, asentamiento: Asentamiento, guarnicion: Escuadron[], vistoEn: Instante): Heroe {
   const foto: InteriorRecordado = {
     vistoEn,
     almacen: asentamiento.almacen,
     cola: asentamiento.edificios.filter((e) => e.estado !== 'activo'),
-    guarnicion: asentamiento.escuadrones,
+    guarnicion,
   };
   return { ...jugador, plazasRecordadas: { ...jugador.plazasRecordadas, [asentamiento.id]: foto } };
 }
@@ -164,7 +165,8 @@ export function conFotoTomadaPor(
   asentamiento: Asentamiento,
   vistoEn: Instante
 ): Heroe[] {
-  return heroes.map((j) => (j.id === heroeId ? conFotoDelInterior(j, asentamiento, vistoEn) : j));
+  const guarnicion = campamentoDe(asentamiento, heroes);
+  return heroes.map((j) => (j.id === heroeId ? conFotoDelInterior(j, asentamiento, guarnicion, vistoEn) : j));
 }
 
 /**
@@ -270,6 +272,7 @@ export function grabarExploracionPersonal(
   limites: { ancho: number; alto: number }
 ): Heroe[] {
   const rejilla = rejillaDe(limites);
+  const tropa = indiceTropa(heroes);
   let salida: Heroe[] = heroes as Heroe[];
 
   heroes.forEach((jugador, indice) => {
@@ -278,7 +281,7 @@ export function grabarExploracionPersonal(
     const columna = ejercitos.find((e) => e.id === ubicacion.ejercitoId);
     if (!columna || columna.faccionId !== '') return;
 
-    const explorado = marcarVisto(jugador.exploracionPersonal ?? SIN_EXPLORAR, rejilla, columna.posicionActual, alcanceDeVista(columna));
+    const explorado = marcarVisto(jugador.exploracionPersonal ?? SIN_EXPLORAR, rejilla, columna.posicionActual, alcanceDeVista(columna, tropa));
     if (explorado === (jugador.exploracionPersonal ?? SIN_EXPLORAR)) return;
 
     if (salida === heroes) salida = [...heroes];

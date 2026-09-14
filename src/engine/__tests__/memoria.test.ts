@@ -2,15 +2,18 @@
 // Los asentamientos salen del motor real (`fundarAsentamientoDeTest`), no de objetos a mano, para que el
 // `radioPotencial` con el que se calcula la vigilancia sea el de verdad.
 import { describe, expect, it } from 'vitest';
-import type { Ejercito, Escuadron } from '../../domain/types';
+import type { Ejercito } from '../../domain/types';
 import { VISION } from '../../constants';
 import { instante } from '../../domain/tiempo';
-import { crearMapaDeterminista, crearFacciones, fundarAsentamientoDeTest, instanteDeTest } from './fixtures';
+import { crearMapaDeterminista, crearFacciones, escuadronDePrueba, fundarAsentamientoDeTest, heroesCon, instanteDeTest } from './fixtures';
 import { celdasExploradas, estaExplorado, rejillaDe } from '../exploracion';
 import { grabarLoVisto, MEMORIA_VACIA } from '../memoria';
+import { indiceTropa } from '../tropa';
 
 const mapa = crearMapaDeterminista(42);
 const REJILLA = rejillaDe(mapa.limites);
+/** La escuadra que llevan todas las columnas de estos tests: con soldados en pie, ven como un ejército. */
+const TROPA = indiceTropa(heroesCon([escuadronDePrueba('s1', 'j1')]));
 
 /** Dos plazas de Facciones distintas, lo bastante lejos como para no verse: 900 separa de sobra. */
 function dosPlazasLejanas() {
@@ -21,16 +24,6 @@ function dosPlazasLejanas() {
 }
 
 function ejercito(faccionId: string, x: number, y: number): Ejercito {
-  const escuadron: Escuadron = {
-    id: 's1',
-    heroeId: 'j1',
-    tropaId: 'milicia_lanceros',
-    nombre: 'Lanceros',
-    origen: 'pesants',
-    cantidad: 10,
-    veterania: 0,
-    moral: 100,
-  };
   return {
     id: `e-${faccionId}`,
     faccionId,
@@ -39,7 +32,7 @@ function ejercito(faccionId: string, x: number, y: number): Ejercito {
     tipo: 'ejercito',
     politicaDeUnion: 'rechazar',
     liderId: 'j1',
-    escuadrones: [escuadron],
+    escuadronIds: ['s1'],
     suministro: { trigo: 500 },
     caravanasAdjuntasIds: [],
     objetivo: { tipo: 'punto', punto: { x, y } },
@@ -52,13 +45,13 @@ function ejercito(faccionId: string, x: number, y: number): Ejercito {
 
 function contexto(over: Partial<Parameters<typeof grabarLoVisto>[1]> = {}) {
   const { facciones, mia, suya } = dosPlazasLejanas();
-  return { asentamientos: [mia, suya], ejercitos: [], facciones, limites: mapa.limites, instante: instanteDeTest(1), ...over };
+  return { asentamientos: [mia, suya], ejercitos: [], facciones, limites: mapa.limites, instante: instanteDeTest(1), tropa: TROPA, ...over };
 }
 
 describe('grabarLoVisto: la exploracion', () => {
   it('una plaza explora lo que vigila — su radio MAS el margen', () => {
     const { facciones, mia, suya } = dosPlazasLejanas();
-    const memoria = grabarLoVisto({}, { asentamientos: [mia, suya], ejercitos: [], facciones, limites: mapa.limites, instante: instanteDeTest(1) });
+    const memoria = grabarLoVisto({}, { asentamientos: [mia, suya], ejercitos: [], facciones, limites: mapa.limites, instante: instanteDeTest(1), tropa: TROPA });
     const alcance = mia.radioPotencial + VISION.margenAsentamiento;
 
     expect(estaExplorado(memoria['faccion-1']!.exploracion, REJILLA, mia.posicion)).toBe(true);
@@ -70,7 +63,7 @@ describe('grabarLoVisto: la exploracion', () => {
 
   it('un ejercito explora por donde pasa, y lo explorado se ACUMULA tick a tick', () => {
     const { facciones, mia, suya } = dosPlazasLejanas();
-    const base = { asentamientos: [mia, suya], facciones, limites: mapa.limites };
+    const base = { asentamientos: [mia, suya], facciones, limites: mapa.limites, tropa: TROPA };
 
     const tick1 = grabarLoVisto({}, { ...base, ejercitos: [ejercito('faccion-1', 700, 700)], instante: instanteDeTest(1) });
     const tick2 = grabarLoVisto(tick1, { ...base, ejercitos: [ejercito('faccion-1', 1000, 1000)], instante: instanteDeTest(2) });
@@ -106,6 +99,7 @@ describe('grabarLoVisto: la ficha de lo ajeno', () => {
       facciones,
       limites: mapa.limites,
       instante: instanteDeTest(7),
+      tropa: TROPA,
     });
 
     expect(memoria['faccion-1']!.asentamientos[suya.id]).toEqual({
@@ -134,7 +128,7 @@ describe('grabarLoVisto: la ficha de lo ajeno', () => {
 
   it('la ficha se queda CONGELADA cuando el ejercito se va, y se refresca si vuelve', () => {
     const { facciones, mia, suya } = dosPlazasLejanas();
-    const base = { asentamientos: [mia, suya], facciones, limites: mapa.limites };
+    const base = { asentamientos: [mia, suya], facciones, limites: mapa.limites, tropa: TROPA };
     const encima = ejercito('faccion-1', suya.posicion.x, suya.posicion.y);
 
     const visto = grabarLoVisto({}, { ...base, ejercitos: [encima], instante: instanteDeTest(1) });

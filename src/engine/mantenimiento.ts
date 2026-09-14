@@ -177,14 +177,18 @@ export function calcularCostoMantenimiento(asentamiento: Asentamiento, capital: 
  */
 export function reservaDinamicaConstruccion(
   asentamiento: Asentamiento,
-  capital: Asentamiento | undefined
+  capital: Asentamiento | undefined,
+  /** Ración de la guarnición (`consumoRacionDeEscuadrones(campamentoDe(...))`): las escuadras viven en sus
+   * héroes. `ponytail:` 0 por defecto para el laboratorio y los tests de construcción, que no tienen héroes; el
+   * tick y los comandos la pasan siempre. */
+  consumoTropasPorMinuto = 0
 ): Partial<Record<RecursoTipo, number>> {
   const costoMantenimiento = calcularCostoMantenimiento(asentamiento, capital);
   const reserva: Partial<Record<RecursoTipo, number>> = {};
   for (const [recurso, cantidad] of Object.entries(costoMantenimiento)) {
     reserva[recurso as RecursoTipo] = (cantidad ?? 0) * RESERVA_CONSTRUCCION.horizonteMinutosMantenimiento;
   }
-  reserva.trigo = reservaDeTrigo(asentamiento);
+  reserva.trigo = reservaDeTrigo(asentamiento, consumoTropasPorMinuto);
   return reserva;
 }
 

@@ -19,6 +19,7 @@ import type { RolTecnico } from '../../acceso/tipos';
 import { esCiudadano } from '../../engine/faccion';
 import { esResidente, esReyDe, esReyOEmbajadorDe, puedeReclutarEn, tieneCargoLocal } from '../../engine/pertenencia';
 import { estaEnAsentamiento } from '../../engine/ubicacion';
+import { indiceTropa } from '../../engine/tropa';
 import type { GameSessionState } from '../estado';
 import type { ParamsDe, TipoComando } from './registro';
 
@@ -158,16 +159,12 @@ function puedeReclutarEnPlaza(estado: GameSessionState, heroeId: string, asentam
     presente(estado, heroeId, asentamientoId)
   );
 }
-/** Sacar tropa a campaña (revisión 2026-09-08): residir aquí, O tener escuadrones vivos propios ya posados
- * aquí (guarnición tras conquistar/guarnecer) — estando presente. Mismo criterio que el gate del motor en
- * `movilizarEjercito`. */
+/** Sacar tropa a campaña: residir aquí —ahí está tu campamento, Doc 5.15.2— y estar presente. Mismo criterio
+ * que el gate del motor en `movilizarEjercito`. */
 function puedeMoverTropaDe(estado: GameSessionState, heroeId: string, asentamientoId: string): boolean {
   const asentamiento = buscarAsentamiento(estado, asentamientoId);
   if (!asentamiento) return true;
-  const tieneTropaAqui =
-    esResidente(asentamiento, heroeId) ||
-    asentamiento.escuadrones.some((e) => e.heroeId === heroeId && e.cantidad > 0);
-  return tieneTropaAqui && presente(estado, heroeId, asentamientoId);
+  return esResidente(asentamiento, heroeId) && presente(estado, heroeId, asentamientoId);
 }
 
 /**
@@ -186,9 +183,9 @@ function presente(estado: GameSessionState, heroeId: string, asentamientoId: str
 }
 
 /**
- * Todos los escuadrones indicados que EXISTEN en ese asentamiento pertenecen al actor (Doc 5, fila de
- * combate: "escuadrones propios del jugador"). `Escuadron.heroeId` es la única fuente de verdad del dueño
- * (`domain/types.ts`), la mutó el motor al reclutar y el cliente no puede falsearla.
+ * Todos los escuadrones indicados que EXISTEN pertenecen al actor (Doc 5, fila de combate: "escuadrones
+ * propios del jugador"). Viven en su héroe (`Heroe.escuadrones`), así que el dueño es quien los guarda: lo
+ * decidió el motor al reclutar y el cliente no puede falsearlo.
  *
  * Un `escuadronId` que no existe se deja pasar — lo rechaza el propio comando de combate, mismo criterio
  * fail-open que el resto de resolutores de este archivo. Lo que se corta es comprometer el escuadrón de OTRO
@@ -196,11 +193,10 @@ function presente(estado: GameSessionState, heroeId: string, asentamientoId: str
  * mecanismo de mando (un General al que se le ceden tropas) que la Fase 0 no tiene, así que hoy cada jugador
  * solo manda lo suyo.
  */
-function comandaEscuadrones(estado: GameSessionState, heroeId: string, asentamientoId: string, escuadronIds: string[]): boolean {
-  const asentamiento = buscarAsentamiento(estado, asentamientoId);
-  if (asentamiento === undefined) return true; // no existe: lo rechaza el comando
+function comandaEscuadrones(estado: GameSessionState, heroeId: string, escuadronIds: string[]): boolean {
+  const tropa = indiceTropa(estado.heroes);
   return escuadronIds.every((id) => {
-    const escuadron = asentamiento.escuadrones.find((e) => e.id === id);
+    const escuadron = tropa.get(id);
     return escuadron === undefined || escuadron.heroeId === heroeId;
   });
 }
@@ -208,9 +204,9 @@ function comandaEscuadrones(estado: GameSessionState, heroeId: string, asentamie
 /** ¿El jugador tiene algún escuadrón dentro de ese ejército? Un ejército inexistente se deja pasar — lo
  * rechaza el propio comando, mismo criterio fail-open que el resto de resolutores de este archivo. */
 function participaEnEjercito(estado: GameSessionState, heroeId: string, ejercitoId: string): boolean {
-  const ejercito = estado.ejercitos.find((e) => e.id === ejercitoId);
-  if (ejercito === undefined) return true;
-  return ejercito.escuadrones.some((e) => e.heroeId === heroeId);
+  if (!estado.ejercitos.some((e) => e.id === ejercitoId)) return true;
+  const heroe = estado.heroes.find((h) => h.id === heroeId);
+  return (heroe?.escuadrones ?? []).some((e) => e.contenedor.tipo === 'ejercito' && e.contenedor.ejercitoId === ejercitoId);
 }
 
 /** Reside en el asentamiento, está DENTRO, y ostenta ahí el cargo indicado. */
@@ -516,12 +512,12 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
   iniciarAsedio: {
     rolesPermitidos: ['jugador'],
     condicionJugador: (estado, heroeId, params) =>
-      reside(estado, heroeId, params.atacanteId) && comandaEscuadrones(estado, heroeId, params.atacanteId, params.escuadronIds),
+      reside(estado, heroeId, params.atacanteId) && comandaEscuadrones(estado, heroeId, params.escuadronIds),
   },
   atacarCampamentoBandidos: {
     rolesPermitidos: ['jugador'],
     condicionJugador: (estado, heroeId, params) =>
-      reside(estado, heroeId, params.atacanteId) && comandaEscuadrones(estado, heroeId, params.atacanteId, params.escuadronIds),
+      reside(estado, heroeId, params.atacanteId) && comandaEscuadrones(estado, heroeId, params.escuadronIds),
   },
   // --- Presencia (Doc 1.10). Nadie sale, entra ni vuelve a salir a nombre de otro, así que la condición
   // común es `heroeId === actor`. Salir al mundo añade lo mismo que movilizar (residencia + mando de los
@@ -532,7 +528,7 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
     condicionJugador: (estado, heroeId, params) =>
       heroeId === params.heroeId &&
       reside(estado, heroeId, params.asentamientoId) &&
-      comandaEscuadrones(estado, heroeId, params.asentamientoId, params.escuadronIds),
+      comandaEscuadrones(estado, heroeId, params.escuadronIds),
   },
   entrarEnAsentamiento: {
     rolesPermitidos: ['jugador'],
@@ -608,14 +604,14 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
     condicionJugador: (estado, heroeId, params) =>
       heroeId === params.heroeId &&
       puedeMoverTropaDe(estado, heroeId, params.asentamientoId) &&
-      comandaEscuadrones(estado, heroeId, params.asentamientoId, params.escuadronIds),
+      comandaEscuadrones(estado, heroeId, params.escuadronIds),
   },
   unirseAEjercito: {
     rolesPermitidos: ['jugador'],
     condicionJugador: (estado, heroeId, params) =>
       heroeId === params.heroeId &&
       reside(estado, heroeId, params.asentamientoId) &&
-      comandaEscuadrones(estado, heroeId, params.asentamientoId, params.escuadronIds),
+      comandaEscuadrones(estado, heroeId, params.escuadronIds),
   },
   // Replegar y estacionar mandan sobre el ejército entero, no sobre escuadrones sueltos: basta con tener
   // tropa dentro. El mando compartido de una coalición (quién decide cuando hay varios jugadores) necesita

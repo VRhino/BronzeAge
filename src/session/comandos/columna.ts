@@ -18,7 +18,7 @@ import {
 } from '../../engine/ejercitos';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito } from './tipos';
-import { comando, exigirColumnaDe, exigirEjercito } from './ayudas';
+import { comando, conColumnas, conTropaDe, exigirColumnaDe, exigirEjercito } from './ayudas';
 import { evento } from './eventos';
 
 export interface ParamsUnirseEnCampo {
@@ -104,11 +104,11 @@ export const unirseEnCampo = comando<ParamsUnirseEnCampo, { unido: boolean }>((e
     );
   }
 
-  const fundido = unirseEnCampoEngine(ejercito, columna, ctx.instante);
+  const fundido = unirseEnCampoEngine(conTropaDe(estado, ejercito), conTropaDe(estado, columna), ctx.instante);
+  const conFundido = conColumnas({ ...estado, ejercitos: estado.ejercitos.filter((e) => e.id !== columna.id) }, [fundido]);
   const siguiente: GameSessionState = {
-    ...conEjercitos(estado, [fundido]),
-    ejercitos: conEjercitos(estado, [fundido]).ejercitos.filter((e) => e.id !== columna.id),
-    heroes: estado.heroes.map((j) =>
+    ...conFundido,
+    heroes: conFundido.heroes.map((j) =>
       j.id === params.heroeId ? { ...j, ubicacion: { tipo: 'columna' as const, ejercitoId: fundido.id } } : j
     ),
   };
@@ -152,12 +152,12 @@ export const responderPeticionDeUnion = comando<ParamsResponderPeticion, { unido
   }
 
   const columna = exigirColumnaDe(estado, params.solicitanteId);
-  const fundido = unirseEnCampoEngine(sinLaPeticion, columna, ctx.instante);
+  const fundido = unirseEnCampoEngine(conTropaDe(estado, sinLaPeticion), conTropaDe(estado, columna), ctx.instante);
 
+  const conFundido = conColumnas({ ...estado, ejercitos: estado.ejercitos.filter((e) => e.id !== columna.id) }, [fundido]);
   const siguiente: GameSessionState = {
-    ...conEjercitos(estado, [fundido]),
-    ejercitos: conEjercitos(estado, [fundido]).ejercitos.filter((e) => e.id !== columna.id),
-    heroes: estado.heroes.map((j) =>
+    ...conFundido,
+    heroes: conFundido.heroes.map((j) =>
       j.id === params.solicitanteId ? { ...j, ubicacion: { tipo: 'columna' as const, ejercitoId: fundido.id } } : j
     ),
   };
@@ -187,12 +187,12 @@ export const separarseDelEjercito = comando<ParamsSepararse, { columnaId: string
   const ejercito = exigirColumnaDe(estado, params.heroeId);
 
   const columnaId = `ejercito-${ctx.ids.siguiente()}`;
-  const separado = separarseEngine(ejercito, params.heroeId, columnaId);
+  const separado = separarseEngine(conTropaDe(estado, ejercito), params.heroeId, columnaId);
 
+  const conSeparados = conColumnas(estado, [separado.ejercito, separado.columna]);
   const siguiente: GameSessionState = {
-    ...conEjercitos(estado, [separado.ejercito]),
-    ejercitos: [...conEjercitos(estado, [separado.ejercito]).ejercitos, separado.columna],
-    heroes: estado.heroes.map((j) =>
+    ...conSeparados,
+    heroes: conSeparados.heroes.map((j) =>
       j.id === params.heroeId ? { ...j, ubicacion: { tipo: 'columna' as const, ejercitoId: separado.columna.id } } : j
     ),
   };

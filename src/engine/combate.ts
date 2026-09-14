@@ -1,4 +1,6 @@
-import type { Asentamiento, CampamentoBandido, Caravana, Ejercito, Escuadron, Faccion, RelacionPolitica } from '../domain/types';
+import type { Asentamiento, CampamentoBandido, Escuadron, Faccion, Heroe, RelacionPolitica } from '../domain/types';
+import { alCampamento, conEscuadrones, type CaravanaConEscolta, type EjercitoConTropa } from './tropa';
+import { distancia } from '../world/geometria';
 import type { EventoCrudo } from '../domain/eventos';
 import { minutos, sumar, type Instante } from '../domain/tiempo';
 import type { RandomFn } from '../worldgen';
@@ -7,36 +9,32 @@ import { agregarRecurso } from './almacen';
 import { aplicarAjustesReputacion } from './reputacion';
 import { aplicarAjustesExperiencia, type AjusteExperiencia } from './faccion';
 import { multiplicadorDefensivoDeRecintos } from './muralla';
-import { CAMPO_CARGO, estanAliadas } from './pertenencia';
+import { CAMPO_CARGO, esResidente, estanAliadas } from './pertenencia';
 import { estaOcupado } from './asentamientoQuery';
 
 export class CombateInvalidoError extends Error {}
 
 /** Poder de combate (Doc 5.1: héroe-comandante liderando tropa; el resultado es CÁLCULO, no combate visual, Doc 5.10).
  * `poderBase` sale siempre del catálogo `TROPAS_RECLUTABLES` vía `tropaId` (Doc 5.7/5.8) — toda tropa lo tiene,
- * nunca cambia de identidad al ganar veteranía (Doc 5.8, a petición del usuario). */
-export function poderEscuadron(e: Escuadron, instante: Instante): number {
+ * y la experiencia la mejora sin cambiarla nunca de identidad (Doc 5.8, a petición del usuario). */
+export function poderEscuadron(e: Escuadron): number {
   const poderBase = TROPAS_RECLUTABLES.find((t) => t.id === e.tropaId)!.poderBase;
-  const base = poderBase * e.cantidad;
-  const conVeterania = base * (1 + e.veterania * MILITAR.bonusVeteraniaPorPunto);
-  const herido = e.heridoHasta !== undefined && instante < e.heridoHasta;
-  return herido ? conVeterania * MILITAR.penalizacionHerido : conVeterania;
+  return poderBase * e.cantidad * (1 + e.experiencia * MILITAR.bonusExperienciaPorPunto);
 }
 
-export function poderTotal(escuadrones: readonly Escuadron[], instante: Instante, bonusCohesion: boolean): number {
-  const suma = escuadrones.reduce((acc, e) => acc + poderEscuadron(e, instante), 0);
+export function poderTotal(escuadrones: readonly Escuadron[], bonusCohesion: boolean): number {
+  const suma = escuadrones.reduce((acc, e) => acc + poderEscuadron(e), 0);
   if (!bonusCohesion || escuadrones.length <= 1) return suma;
   // Cohesión entre escuadrones defendiendo juntos (Doc 5.3), abstraída sin formaciones renderizadas (Fase 0).
   return suma * (1 + MILITAR.bonusCohesionPorEscuadronExtra * (escuadrones.length - 1));
 }
 
-export function aplicarBajas(escuadrones: readonly Escuadron[], fraccionBajas: number, victoria: boolean, instante: Instante): Escuadron[] {
+/** Bajas PERMANENTES (Doc 5.16.2) y la experiencia que deja el combate numérico. */
+export function aplicarBajas(escuadrones: readonly Escuadron[], fraccionBajas: number, victoria: boolean): Escuadron[] {
   return escuadrones.map((e) => {
     const bajas = Math.round(e.cantidad * fraccionBajas);
-    const cantidad = Math.max(0, e.cantidad - bajas);
-    const veterania = e.veterania + (victoria ? MILITAR.veteraniaGanadaPorVictoria : MILITAR.veteraniaGanadaPorDerrota);
-    const heridoHasta = victoria ? e.heridoHasta : sumar(instante, minutos(MILITAR.duracionHeridoMinutos));
-    return { ...e, cantidad, veterania, heridoHasta };
+    const experiencia = e.experiencia + (victoria ? MILITAR.experienciaGanadaPorVictoria : MILITAR.experienciaGanadaPorDerrota);
+    return { ...e, cantidad: Math.max(0, e.cantidad - bajas), experiencia };
   });
 }
 
@@ -77,7 +75,6 @@ export interface ResultadoCombate {
 export function resolverCombate(
   atacantes: Escuadron[],
   defensores: Escuadron[],
-  instante: Instante,
   rng: RandomFn,
   multiplicadorDefensor = 1
 ): ResultadoCombate {
@@ -86,11 +83,11 @@ export function resolverCombate(
 
   const jitterA = 1 + (rng() * 2 - 1) * MILITAR.varianzaCombate;
   const jitterD = 1 + (rng() * 2 - 1) * MILITAR.varianzaCombate;
-  const poderA = poderTotal(atacantes, instante, false) * jitterA;
+  const poderA = poderTotal(atacantes, false) * jitterA;
   // El multiplicador de muralla (Paso 3b, `multiplicadorDefensivoDeRecintos`) SOLO llega aquí desde
   // `iniciarAsedio` — un encuentro en mundo abierto no lo pasa nunca (1 por defecto): ahí no hay ningún
   // recinto que atravesar, así que aplicarlo ahí sería un bono de la nada.
-  const poderD = poderTotal(defensores, instante, true) * jitterD * multiplicadorDefensor;
+  const poderD = poderTotal(defensores, true) * jitterD * multiplicadorDefensor;
 
   const ganador: 'atacante' | 'defensor' = poderA > poderD ? 'atacante' : 'defensor';
   const ratio = Math.min(poderA, poderD) / Math.max(poderA, poderD, 1);
@@ -98,8 +95,8 @@ export function resolverCombate(
   const bajasGanador = 0.05 + 0.15 * ratio;
   const bajasPerdedor = 0.3 + 0.4 * (1 - ratio);
 
-  const atacantesResultado = aplicarBajas(atacantes, ganador === 'atacante' ? bajasGanador : bajasPerdedor, ganador === 'atacante', instante);
-  const defensoresResultado = aplicarBajas(defensores, ganador === 'defensor' ? bajasGanador : bajasPerdedor, ganador === 'defensor', instante);
+  const atacantesResultado = aplicarBajas(atacantes, ganador === 'atacante' ? bajasGanador : bajasPerdedor, ganador === 'atacante');
+  const defensoresResultado = aplicarBajas(defensores, ganador === 'defensor' ? bajasGanador : bajasPerdedor, ganador === 'defensor');
 
   return {
     ganador,
@@ -115,15 +112,10 @@ export function resolverCombate(
   };
 }
 
-function seleccionarEscuadrones(asentamiento: Asentamiento, ids: string[]): Escuadron[] {
-  const seleccionados = asentamiento.escuadrones.filter((e) => ids.includes(e.id) && e.cantidad > 0);
+function seleccionarEscuadrones(tropa: readonly Escuadron[], ids: readonly string[]): Escuadron[] {
+  const seleccionados = tropa.filter((e) => ids.includes(e.id) && e.cantidad > 0);
   if (seleccionados.length === 0) throw new CombateInvalidoError('No hay escuadrones válidos seleccionados.');
   return seleccionados;
-}
-
-function reemplazarEscuadrones(asentamiento: Asentamiento, actualizados: Escuadron[]): Escuadron[] {
-  const porId = new Map(actualizados.map((e) => [e.id, e]));
-  return asentamiento.escuadrones.map((e) => porId.get(e.id) ?? e);
 }
 
 /**
@@ -145,16 +137,10 @@ function jugadoresParticipantes(escuadrones: Escuadron[]): number {
  * Lo que le pasa a un asentamiento AL SER CONQUISTADO (Doc 5.4 /
  * `Consideraciones/Ocupacion_Post_Conquista_Definicion.md`). La ciudad cambia de dueño entera:
  *
- * - **La guarnición del conquistado la forman los escuadrones del CONQUISTADOR** (`guarnicionEntrante`): el
- *   ejército conquistador —o los escuadrones seleccionados del asentamiento atacante— se vuelca dentro y su
- *   carro al almacén (`suministroEntrante`, capado por capacidad como cualquier depósito). NUNCA queda a 0:
- *   es el arreglo del ping-pong (antes caía sin un defensor cada vez que pasaba un ejército). Los escuadrones
- *   siguen siendo de sus jugadores, que NO residen aquí — guarnición de no-residentes (§2.3b): defienden,
- *   comen del trigo del asentamiento, su dueño los repone y re-moviliza.
- * - **Los cascarones congelados de los desalojados NO se quedan**: salen (huérfanos, Doc 5.4). El llamador ya
- *   no los pasa — antes se quedaban a 0 y dejaban la plaza indefensa.
- * - **Los antiguos residentes dejan de serlo**, y con ellos caen los cargos locales (HUÉRFANO, Doc 5.4 — no
- *   se guarda: es no residir en ningún sitio, se deriva de `esResidente`).
+ * - **Queda SIN guarnición** (Doc 5.15.5): nadie la guarnece solo por haberla ganado. Los conquistadores
+ *   siguen fuera con su columna; si quieren defenderla, tienen que pasar a residir en ella.
+ * - **Los antiguos residentes dejan de serlo**, y con ellos caen los cargos locales. Adónde van —y que su
+ *   campamento quede a 0— lo decide `desalojarResidentes`, que el llamador aplica con el mundo delante.
  * - **Saqueo determinista** (sin `RandomFn` — esta función es pura): `pesants`/`artesanos` pierden
  *   `OCUPACION.fraccionSaqueoPoblacion` (nobleza intacta, huye/negocia); `OCUPACION.fraccionEdificiosDanados`
  *   de los edificios `activo` —por orden de id, exentos Centro Urbano + la 1ª Granja y la 1ª Leñera activas—
@@ -164,13 +150,7 @@ function jugadoresParticipantes(escuadrones: Escuadron[]): number {
  * - **`medidorMantenimiento: 100`** y **`ocupacionHasta`** — abre la ventana de ocupación (§2.4): inmune a un
  *   nuevo asedio, recaudación y crecimiento reducidos, mantenimiento congelado, tiempo fijo.
  */
-export function aplicarConquista(
-  defensor: Asentamiento,
-  faccionConquistadoraId: string,
-  guarnicionEntrante: readonly Escuadron[],
-  suministroEntrante: Record<string, number>,
-  instante: Instante
-): Asentamiento {
+export function aplicarConquista(defensor: Asentamiento, faccionConquistadoraId: string, instante: Instante): Asentamiento {
   const cargos = { ...defensor.cargos };
   for (const campo of Object.values(CAMPO_CARGO)) cargos[campo] = null;
 
@@ -206,24 +186,47 @@ export function aplicarConquista(
     return { ...r, avance: Math.max(-1, r.avance - perdida) };
   });
 
-  const almacen = Object.entries(suministroEntrante).reduce(
-    (acc, [recurso, cantidad]) => agregarRecurso(acc, recurso, cantidad),
-    defensor.almacen
-  );
-
   return {
     ...defensor,
     faccionId: faccionConquistadoraId,
-    escuadrones: [...guarnicionEntrante],
     heroesFundadoresIds: [],
     casasCompradas: [],
     cargos,
     poblacion,
     edificios,
     recintos,
-    almacen,
     medidorMantenimiento: 100,
     ocupacionHasta: sumar(instante, minutos(OCUPACION.duracionMinutos)),
+  };
+}
+
+/**
+ * Los residentes de una plaza recién conquistada (Doc 5.15.5): su campamento —guarnición incluida— queda a 0 y
+ * se va con ellos al asentamiento más cercano de su Facción, donde pasan a residir. Si la Facción no tiene
+ * ninguno, quedan huérfanos, con sus escuadras a 0 pero suyas, con su nivel y experiencia. Lo que cada uno
+ * llevaba fuera, en su columna o de escolta, no se toca.
+ *
+ * `conquistado` es la plaza ANTES de la conquista: de ella salen quiénes residían y de qué Facción eran.
+ * `ponytail:` el traslado no mira el cupo de viviendas del destino; sin él, un desalojado se quedaría sin casa
+ * por un número. Si hace falta tope, el sitio es este.
+ */
+export function desalojarResidentes(
+  conquistado: Asentamiento,
+  asentamientos: readonly Asentamiento[],
+  heroes: readonly Heroe[]
+): { asentamientos: Asentamiento[]; heroes: Heroe[] } {
+  const residentes = heroes.filter((h) => esResidente(conquistado, h.id));
+  const refugio = asentamientos
+    .filter((a) => a.id !== conquistado.id && a.faccionId === conquistado.faccionId)
+    .sort((a, b) => distancia(a.posicion, conquistado.posicion) - distancia(b.posicion, conquistado.posicion) || (a.id < b.id ? -1 : 1))[0];
+  const sinCampamento = residentes.flatMap((h) =>
+    h.escuadrones.filter((e) => e.contenedor.tipo === 'campamento').map((e) => ({ ...e, cantidad: 0, enGuarnicion: false }))
+  );
+  return {
+    asentamientos: refugio
+      ? asentamientos.map((a) => (a.id === refugio.id ? { ...a, casasCompradas: [...a.casasCompradas, ...residentes.map((h) => h.id)] } : a))
+      : [...asentamientos],
+    heroes: conEscuadrones(heroes, sinCampamento),
   };
 }
 
@@ -234,13 +237,17 @@ export function aplicarConquista(
  */
 export function iniciarAsedio(
   atacante: Asentamiento,
+  /** El campamento del atacante (`campamentoDe`): de ahí salen los escuadrones elegidos. */
+  tropaAtacante: readonly Escuadron[],
   defensor: Asentamiento,
+  /** El campamento del defensor: su guarnición entera, hoy (`enGuarnicion` llega en la fase 3). */
+  tropaDefensora: readonly Escuadron[],
   escuadronIdsAtacantes: string[],
   facciones: Faccion[],
   relaciones: RelacionPolitica[],
   instante: Instante,
   rng: RandomFn
-): { atacante: Asentamiento; defensor: Asentamiento; facciones: Faccion[]; eventos: EventoCrudo[]; conquistado: boolean } {
+): { defensor: Asentamiento; facciones: Faccion[]; eventos: EventoCrudo[]; conquistado: boolean; tropa: Escuadron[] } {
   if (atacante.faccionId === defensor.faccionId) {
     throw new CombateInvalidoError('No se puede asediar un asentamiento de la propia Facción.');
   }
@@ -250,9 +257,9 @@ export function iniciarAsedio(
   // el reloj vence. Rebota sin combate y sin tocar el RNG — la guarnición instalada sana y se repone en paz.
   if (estaOcupado(defensor, instante)) {
     return {
-      atacante,
       defensor,
       facciones,
+      tropa: [],
       eventos: [
         {
           codigo: 'combate.asedio_resistido',
@@ -269,13 +276,13 @@ export function iniciarAsedio(
     };
   }
 
-  const escuadronesAtacantes = seleccionarEscuadrones(atacante, escuadronIdsAtacantes);
-  const escuadronesDefensores = seleccionarEscuadrones(defensor, defensor.escuadrones.map((e) => e.id));
+  const escuadronesAtacantes = seleccionarEscuadrones(tropaAtacante, escuadronIdsAtacantes);
+  const escuadronesDefensores = seleccionarEscuadrones(tropaDefensora, tropaDefensora.map((e) => e.id));
 
   // Paso 3b (§16 del doc de murallas): la razón de ser de toda la mecánica — un asedio contra un recinto
   // cerrado es mucho más caro para el atacante, y tanto más cuantas menos puertas tenga el defensor.
   const multiplicadorMuralla = multiplicadorDefensivoDeRecintos(defensor.recintos ?? []);
-  const resultado = resolverCombate(escuadronesAtacantes, escuadronesDefensores, instante, rng, multiplicadorMuralla);
+  const resultado = resolverCombate(escuadronesAtacantes, escuadronesDefensores, rng, multiplicadorMuralla);
 
   const conquistado = resultado.ganador === 'atacante';
   const payloadAsedio: PayloadAsedio = {
@@ -317,22 +324,14 @@ export function iniciarAsedio(
   if (conquistado) ajustesXp.push({ faccionId: atacante.faccionId, delta: NIVEL_FACCION.xp.conquista, razon: 'conquista' });
   const faccionesFinal = aplicarAjustesExperiencia(faccionesConReputacion, ajustesXp);
 
-  // Al conquistar, los escuadrones seleccionados MARCHAN a guarnecer la plaza tomada y salen de la del
-  // atacante (Ocupacion §2.2: mismo principio que un ejército absorbido, sin ejército de por medio).
-  const idsSeleccionados = new Set(escuadronesAtacantes.map((e) => e.id));
+  // Conquistar no mueve a nadie (Doc 5.15.5): los atacantes siguen en su campamento con sus bajas y la plaza
+  // queda sin guarnición. A los residentes derrotados los desaloja el llamador (`desalojarResidentes`).
   return {
-    atacante: {
-      ...atacante,
-      escuadrones: conquistado
-        ? atacante.escuadrones.filter((e) => !idsSeleccionados.has(e.id))
-        : reemplazarEscuadrones(atacante, resultado.atacantes),
-    },
-    defensor: conquistado
-      ? aplicarConquista(defensor, atacante.faccionId, resultado.atacantes, {}, instante)
-      : { ...defensor, escuadrones: reemplazarEscuadrones(defensor, resultado.defensores) },
+    defensor: conquistado ? aplicarConquista(defensor, atacante.faccionId, instante) : defensor,
     facciones: faccionesFinal,
     eventos,
     conquistado,
+    tropa: [...resultado.atacantes, ...resultado.defensores],
   };
 }
 
@@ -361,19 +360,20 @@ export function iniciarAsedio(
  */
 export function atacarCampamentoBandidos(
   atacante: Asentamiento,
+  /** El campamento del atacante (`campamentoDe`): de ahí salen los escuadrones elegidos. */
+  tropa: readonly Escuadron[],
   escuadronIdsAtacantes: string[],
   campamento: CampamentoBandido,
-  instante: Instante,
   facciones: Faccion[],
   rng: RandomFn
-): { atacante: Asentamiento; facciones: Faccion[]; eventos: EventoCrudo[]; campamentoDestruido: boolean } {
-  const escuadrones = seleccionarEscuadrones(atacante, escuadronIdsAtacantes);
+): { atacante: Asentamiento; facciones: Faccion[]; eventos: EventoCrudo[]; campamentoDestruido: boolean; tropa: Escuadron[] } {
+  const escuadrones = seleccionarEscuadrones(tropa, escuadronIdsAtacantes);
   const jitter = 1 + (rng() * 2 - 1) * MILITAR.varianzaCombate;
-  const poderAtacante = poderTotal(escuadrones, instante, false) * jitter;
+  const poderAtacante = poderTotal(escuadrones, false) * jitter;
   const gana = poderAtacante > campamento.poder;
 
   const fraccionBajas = gana ? 0.05 : 0.25;
-  const escuadronesActualizados = aplicarBajas(escuadrones, fraccionBajas, gana, instante);
+  const escuadronesActualizados = aplicarBajas(escuadrones, fraccionBajas, gana);
 
   let almacen = atacante.almacen;
   const eventos: EventoCrudo[] = [];
@@ -406,10 +406,11 @@ export function atacarCampamentoBandidos(
   ]);
 
   return {
-    atacante: { ...atacante, almacen, escuadrones: reemplazarEscuadrones(atacante, escuadronesActualizados) },
+    atacante: { ...atacante, almacen },
     facciones: faccionesFinal,
     eventos,
     campamentoDestruido: gana,
+    tropa: escuadronesActualizados,
   };
 }
 
@@ -425,27 +426,28 @@ export function atacarCampamentoBandidos(
  *     partida donde nadie asedia una plaza defendida hace exactamente las mismas llamadas al RNG que antes de
  *     existir el Paso 7, y el guardián de determinismo sigue verde sin tocarlo.
  *
- * Al CONQUISTAR, el ejército SE VUELVE la guarnición de la plaza tomada (Ocupacion §2.2): sus escuadrones y
- * su carro se vuelcan dentro vía `aplicarConquista` y `ejercitoConsumido: true` le dice a `avanzarEjercitos`
- * que lo suelte sin evento `disuelto`. Si resiste, el ejército sigue en campo y acampa (`estacionado`).
+ * Gane o no, el ejército sigue en campo y acampa (`estacionado`): conquistar no lo convierte en guarnición
+ * (Doc 5.15.5). A los residentes derrotados los desaloja el llamador (`desalojarResidentes`).
  */
 export function asediarConEjercito(
-  ejercito: Ejercito,
+  ejercito: EjercitoConTropa,
   defensor: Asentamiento,
+  /** El campamento del defensor: su guarnición entera, hoy (`enGuarnicion` llega en la fase 3). */
+  tropaDefensora: readonly Escuadron[],
   facciones: Faccion[],
   relaciones: RelacionPolitica[],
   instante: Instante,
   rng: RandomFn
 ): {
-  ejercito: Ejercito;
+  ejercito: EjercitoConTropa;
   defensor: Asentamiento;
   facciones: Faccion[];
   eventos: EventoCrudo[];
   conquistado: boolean;
-  /** El ejército se volcó en la guarnición del conquistado — `avanzarEjercitos` no debe conservarlo. */
-  ejercitoConsumido: boolean;
+  /** El campamento del defensor tras el combate. */
+  tropaDefensora: Escuadron[];
 } {
-  const defensores = defensor.escuadrones.filter((e) => e.cantidad > 0);
+  const defensores = tropaDefensora.filter((e) => e.cantidad > 0);
   const atacantes = ejercito.escuadrones.filter((e) => e.cantidad > 0);
 
   const payload: PayloadAsedio = {
@@ -470,7 +472,7 @@ export function asediarConEjercito(
         },
       ],
       conquistado: false,
-      ejercitoConsumido: false,
+      tropaDefensora: [],
     };
   }
 
@@ -492,9 +494,7 @@ export function asediarConEjercito(
     ];
     return {
       ejercito,
-      defensor: cae
-        ? aplicarConquista(defensor, ejercito.faccionId, ejercito.escuadrones, ejercito.suministro, instante)
-        : defensor,
+      defensor: cae ? aplicarConquista(defensor, ejercito.faccionId, instante) : defensor,
       facciones: cae
         ? aplicarAjustesExperiencia(facciones, [
             { faccionId: ejercito.faccionId, delta: NIVEL_FACCION.xp.conquista, razon: 'conquista' },
@@ -502,17 +502,11 @@ export function asediarConEjercito(
         : facciones,
       eventos,
       conquistado: cae,
-      ejercitoConsumido: cae,
+      tropaDefensora: [],
     };
   }
 
-  const resultado = resolverCombate(
-    atacantes,
-    defensores,
-    instante,
-    rng,
-    multiplicadorDefensivoDeRecintos(defensor.recintos ?? [])
-  );
+  const resultado = resolverCombate(atacantes, defensores, rng, multiplicadorDefensivoDeRecintos(defensor.recintos ?? []));
   const conquistado = resultado.ganador === 'atacante';
 
   const eventos: EventoCrudo[] = [
@@ -537,19 +531,17 @@ export function asediarConEjercito(
   if (conquistado) ajustesXp.push({ faccionId: ejercito.faccionId, delta: NIVEL_FACCION.xp.conquista, razon: 'conquista' });
 
   const idsAtacantes = new Map(resultado.atacantes.map((e) => [e.id, e]));
-  const ejercitoTrasCombate: Ejercito = {
+  const ejercitoTrasCombate: EjercitoConTropa = {
     ...ejercito,
     escuadrones: ejercito.escuadrones.map((e) => idsAtacantes.get(e.id) ?? e),
   };
   return {
     ejercito: ejercitoTrasCombate,
-    defensor: conquistado
-      ? aplicarConquista(defensor, ejercito.faccionId, ejercitoTrasCombate.escuadrones, ejercito.suministro, instante)
-      : { ...defensor, escuadrones: reemplazarEscuadrones(defensor, resultado.defensores) },
+    defensor: conquistado ? aplicarConquista(defensor, ejercito.faccionId, instante) : defensor,
     facciones: aplicarAjustesExperiencia(conReputacion, ajustesXp),
     eventos,
     conquistado,
-    ejercitoConsumido: conquistado,
+    tropaDefensora: resultado.defensores,
   };
 }
 
@@ -564,15 +556,14 @@ export function asediarConEjercito(
  * masacrarían solas cada tick, que es lo contrario de lo que una alianza significa.
  */
 export function encuentroEntreEjercitos(
-  a: Ejercito,
-  b: Ejercito,
+  a: EjercitoConTropa,
+  b: EjercitoConTropa,
   facciones: Faccion[],
-  instante: Instante,
   rng: RandomFn
-): { a: Ejercito; b: Ejercito; facciones: Faccion[]; eventos: EventoCrudo[] } {
+): { a: EjercitoConTropa; b: EjercitoConTropa; facciones: Faccion[]; eventos: EventoCrudo[] } {
   const vivosA = a.escuadrones.filter((e) => e.cantidad > 0);
   const vivosB = b.escuadrones.filter((e) => e.cantidad > 0);
-  const resultado = resolverCombate(vivosA, vivosB, instante, rng);
+  const resultado = resolverCombate(vivosA, vivosB, rng);
 
   const porId = <T extends { id: string }>(lista: T[]) => new Map(lista.map((x) => [x.id, x]));
   const actualizadosA = porId(resultado.atacantes);
@@ -638,33 +629,31 @@ export interface PayloadInterceptacionEjercito {
  * transporte de mercancías: para eso están las caravanas adjuntas.
  */
 export function interceptarCaravanaConEjercito(
-  ejercito: Ejercito,
-  caravana: Caravana,
+  ejercito: EjercitoConTropa,
+  caravana: CaravanaConEscolta,
   capacidadCarga: number,
-  instante: Instante,
   rng: RandomFn
 ): {
-  ejercito: Ejercito;
+  ejercito: EjercitoConTropa;
   capturada: boolean;
   eventos: EventoCrudo[];
   /** La caravana tras el combate: `null` si fue capturada (se elimina), o con la escolta actualizada si aguantó. */
-  caravana: Caravana | null;
-  /** Escolta sin héroe (Doc 3.13.4) que vuelve a la guarnición del origen — solo si fue capturada. */
-  escoltaDevuelta: Escuadron[];
+  caravana: CaravanaConEscolta | null;
+  /** La escolta sin héroe de una caravana capturada: a 0 y de vuelta al campamento de su héroe (Doc 5.15.4). */
+  escoltaPerdida: Escuadron[];
 } {
   const vivos = ejercito.escuadrones.filter((e) => e.cantidad > 0);
   const conEscolta = (caravana.escolta?.length ?? 0) > 0;
-  const defensa = conEscolta ? poderTotal(caravana.escolta!, instante, true) : MILITAR.defensaBaseCaravana;
+  const defensa = conEscolta ? poderTotal(caravana.escolta!, true) : MILITAR.defensaBaseCaravana;
   const jitter = 1 + (rng() * 2 - 1) * MILITAR.varianzaCombate;
-  const gana = poderTotal(vivos, instante, false) * jitter > defensa;
+  const gana = poderTotal(vivos, false) * jitter > defensa;
 
   const fraccionBajas = gana ? 0.05 : 0.25;
-  const conBajas = aplicarBajas(vivos, fraccionBajas, gana, instante);
+  const conBajas = aplicarBajas(vivos, fraccionBajas, gana);
   const porId = new Map(conBajas.map((e) => [e.id, e]));
 
-  // La escolta sin héroe sufre bajas y vuelve a casa con el debuff de derrota (Doc 3.13.6) — lo que se pierde
-  // son la carga y los carros, no la tropa.
-  const escoltaTrasCombate = conEscolta ? aplicarBajas(caravana.escolta!, gana ? 0.25 : 0.05, !gana, instante) : undefined;
+  // La escolta sin héroe sufre bajas (Doc 3.13.6), y si la caravana cae queda a 0 (Doc 5.15.4).
+  const escoltaTrasCombate = conEscolta ? aplicarBajas(caravana.escolta!, gana ? 0.25 : 0.05, !gana) : undefined;
 
   let suministro = ejercito.suministro;
   const botin: Record<string, number> = {};
@@ -700,6 +689,6 @@ export function interceptarCaravanaConEjercito(
     capturada: gana,
     eventos,
     caravana: gana ? null : escoltaTrasCombate ? { ...caravana, escolta: escoltaTrasCombate } : caravana,
-    escoltaDevuelta: gana && escoltaTrasCombate ? escoltaTrasCombate : [],
+    escoltaPerdida: gana && escoltaTrasCombate ? alCampamento(escoltaTrasCombate.map((e) => ({ ...e, cantidad: 0 }))) : [],
   };
 }

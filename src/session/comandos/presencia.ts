@@ -17,9 +17,10 @@ import { guarnecer as guarnecerEngine, marcharA as marcharAEngine, salirAlMundo 
 import { conVeto } from '../../engine/pertenencia';
 import { conFotoTomadaPor, cruzarLaPuerta, retomarColumna, situarHeroes } from '../../engine/ubicacion';
 import { liderazgoComprometido } from '../../engine/liderazgo';
+import { conEscuadrones } from '../../engine/tropa';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito } from './tipos';
-import { comando, exigirAsentamiento, exigirColumnaDe, exigirJugador, conAsentamiento } from './ayudas';
+import { campamentoEn, comando, conColumnas, conTropaDe, exigirAsentamiento, exigirColumnaDe, exigirJugador, conAsentamiento } from './ayudas';
 import { evento } from './eventos';
 
 export interface ParamsSalirAlMundo {
@@ -78,6 +79,7 @@ export const salirAlMundo = comando<ParamsSalirAlMundo, { ejercitoId: string }>(
   const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
   const { asentamiento: origen, ejercito } = salirAlMundoEngine(
     asentamiento,
+    campamentoEn(estado, asentamiento),
     estado.heroes.find((j) => j.id === params.heroeId),
     params.heroeId,
     params.escuadronIds,
@@ -88,14 +90,14 @@ export const salirAlMundo = comando<ParamsSalirAlMundo, { ejercitoId: string }>(
   );
 
   const cargaTotal = Object.values(ejercito.suministro).reduce((suma, cantidad) => suma + cantidad, 0);
+  const conColumna = conColumnas(conAsentamiento(estado, origen), [ejercito]);
   const siguiente: GameSessionState = {
-    ...conAsentamiento(estado, origen),
-    ejercitos: [...estado.ejercitos, ejercito],
+    ...conColumna,
     // Al cruzar la puerta hacia fuera se congela lo que estaba viendo de dentro (Doc 1.10.1). La foto se toma
     // del asentamiento YA sin las tropas ni la carga que se lleva: es lo que deja atrás, no lo que había
     // antes de hacer la maleta.
     heroes: conFotoTomadaPor(
-      situarHeroes(estado.heroes, [params.heroeId], { tipo: 'columna', ejercitoId: ejercito.id }),
+      situarHeroes(conColumna.heroes, [params.heroeId], { tipo: 'columna', ejercitoId: ejercito.id }),
       params.heroeId,
       origen,
       ctx.instante
@@ -138,11 +140,15 @@ export const salirAlMundo = comando<ParamsSalirAlMundo, { ejercitoId: string }>(
 export const entrarEnAsentamiento = comando<ParamsEntrarEnAsentamiento, void>((estado, _mapa, ctx, params) => {
   const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
   const columna = exigirColumnaDe(estado, params.heroeId);
-  const cruce = cruzarLaPuerta(columna, asentamiento, params.heroeId, estado.relaciones);
+  const cruce = cruzarLaPuerta(conTropaDe(estado, columna), asentamiento, params.heroeId, estado.relaciones);
 
   const esSuResidencia = cruce.disuelveColumna;
   const siguiente: GameSessionState = esSuResidencia
-    ? { ...conAsentamiento(estado, cruce.asentamiento), ejercitos: estado.ejercitos.filter((e) => e.id !== columna.id) }
+    ? {
+        ...conAsentamiento(estado, cruce.asentamiento),
+        ejercitos: estado.ejercitos.filter((e) => e.id !== columna.id),
+        heroes: conEscuadrones(estado.heroes, cruce.tropa),
+      }
     : estado;
 
   return exito(
@@ -174,19 +180,18 @@ export const entrarEnAsentamiento = comando<ParamsEntrarEnAsentamiento, void>((e
 });
 
 /**
- * `guarnecer` (Ocupacion §2.3): marchar un EJÉRCITO a una plaza de tu Facción y volcar la tropa en su
- * guarnición. El ejército se consume; los jugadores quedan DENTRO de la plaza que acaban de reforzar (17.1) —
- * salen luego con `movilizarEjercito` (el gate ya lo permite: "escuadrones tuyos ya posados aquí").
+ * `guarnecer` (Ocupacion §2.3): un EJÉRCITO entra en la plaza de su Facción donde residen todos los que van en
+ * él y se deshace: la tropa vuelve a sus campamentos y el carro al almacén (decisión del usuario 2026-09-14,
+ * ver `guarnecer` en el motor). Los jugadores quedan DENTRO.
  *
  * Las caravanas adjuntas no se pierden: pasan a `'aparcada'` en la plaza (§2.3d). No es `entrarEnAsentamiento`
- * —ese exige columna personal y aparca la columna intacta— sino la vía de un ejército para acabar en una
- * plaza propia sin conquistarla.
+ * —ese exige columna personal— sino la vía de un ejército para volver a casa sin replegarse.
  */
 export const guarnecer = comando<ParamsGuarnecer, void>((estado, _mapa, ctx, params) => {
   const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
   const columna = exigirColumnaDe(estado, params.heroeId);
 
-  const r = guarnecerEngine(asentamiento, columna, estado.caravanas);
+  const r = guarnecerEngine(asentamiento, conTropaDe(estado, columna), estado.caravanas);
   const aparcadasPorId = new Map(r.caravanasAparcadas.map((c) => [c.id, c]));
   const heroesDeLaColumna = columna.participantes.map((p) => p.heroeId);
 
@@ -194,7 +199,7 @@ export const guarnecer = comando<ParamsGuarnecer, void>((estado, _mapa, ctx, par
     ...conAsentamiento(estado, r.asentamiento),
     ejercitos: estado.ejercitos.filter((e) => e.id !== columna.id),
     caravanas: estado.caravanas.map((c) => aparcadasPorId.get(c.id) ?? c),
-    heroes: situarHeroes(estado.heroes, heroesDeLaColumna, { tipo: 'asentamiento', asentamientoId: asentamiento.id }),
+    heroes: situarHeroes(conEscuadrones(estado.heroes, r.tropa), heroesDeLaColumna, { tipo: 'asentamiento', asentamientoId: asentamiento.id }),
   };
 
   const conCaravanas = r.caravanasAparcadas.length > 0 ? ` y ${r.caravanasAparcadas.length} caravana(s) quedan aparcadas` : '';
@@ -202,16 +207,16 @@ export const guarnecer = comando<ParamsGuarnecer, void>((estado, _mapa, ctx, par
     conHistorialDeJugador(
       siguiente,
       params.heroeId,
-      `Guarnece ${asentamiento.id}: ${columna.escuadrones.length} escuadrón(es) a la guarnición${conCaravanas}.`
+      `Guarnece ${asentamiento.id}: ${columna.escuadronIds.length} escuadrón(es) vuelven a su campamento${conCaravanas}.`
     ),
     [
       evento(ctx, {
         codigo: 'ejercito.guarnece',
-        mensaje: `El ejército ${columna.id} guarnece ${asentamiento.id}: ${columna.escuadrones.length} escuadrón(es) se suman a su guarnición.`,
+        mensaje: `El ejército ${columna.id} guarnece ${asentamiento.id}: ${columna.escuadronIds.length} escuadrón(es) vuelven a su campamento.`,
         payload: {
           asentamientoId: asentamiento.id,
           ejercitoId: columna.id,
-          escuadrones: columna.escuadrones.length,
+          escuadrones: columna.escuadronIds.length,
           caravanasAparcadas: r.caravanasAparcadas.map((c) => c.id),
         } satisfies PayloadGuarnecer,
         asentamientoId: asentamiento.id,

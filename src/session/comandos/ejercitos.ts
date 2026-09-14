@@ -25,7 +25,7 @@ import {
 import { liderazgoComprometido } from '../../engine/liderazgo';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito, sinCambios } from './tipos';
-import { comando, exigirAsentamiento, exigirCaravana, exigirEjercito, conAsentamiento } from './ayudas';
+import { campamentoEn, comando, conColumnas, conTropaDe, exigirAsentamiento, exigirCaravana, exigirEjercito, conAsentamiento } from './ayudas';
 import { evento, eventos } from './eventos';
 
 function conEjercito(estado: GameSessionState, actualizado: GameSessionState['ejercitos'][number]): GameSessionState {
@@ -68,6 +68,7 @@ export const movilizarEjercito = comando<ParamsMovilizarEjercito, { ejercitoId: 
 
   const { asentamiento: origen, ejercito, trigoCargado } = movilizarEngine(
     asentamiento,
+    campamentoEn(estado, asentamiento),
     jugadorDe(estado, params.heroeId),
     params.heroeId,
     params.escuadronIds,
@@ -84,10 +85,7 @@ export const movilizarEjercito = comando<ParamsMovilizarEjercito, { ejercitoId: 
   // deshace por hambre a los pocos ticks, así que se dice en el propio mensaje y no solo en el payload.
   const conElCarro =
     trigoCargado > 0 ? `con ${Math.floor(trigoCargado)} de trigo en el carro` : 'CON EL CARRO VACÍO (el almacén no da más sin dejar la ciudad en riesgo)';
-  const siguiente: GameSessionState = {
-    ...conAsentamiento(estado, origen),
-    ejercitos: [...estado.ejercitos, ejercito],
-  };
+  const siguiente = conColumnas(conAsentamiento(estado, origen), [ejercito]);
 
   return exito(
     conHistorialDeJugador(siguiente, params.heroeId, `Sale de campaña desde ${asentamiento.id} hacia ${destino}.`),
@@ -132,8 +130,9 @@ export const unirseAEjercito = comando<ParamsUnirseAEjercito, void>((estado, _ma
   const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
 
   const { asentamiento: origen, ejercito, trigoCargado } = unirseEngine(
-    ejercitoActual,
+    conTropaDe(estado, ejercitoActual),
     asentamiento,
+    campamentoEn(estado, asentamiento),
     jugadorDe(estado, params.heroeId),
     params.heroeId,
     params.escuadronIds,
@@ -141,7 +140,7 @@ export const unirseAEjercito = comando<ParamsUnirseAEjercito, void>((estado, _ma
     estado.caravanas
   );
 
-  const siguiente = conEjercito(conAsentamiento(estado, origen), ejercito);
+  const siguiente = conColumnas(conAsentamiento(estado, origen), [ejercito]);
   return exito(
     conHistorialDeJugador(siguiente, params.heroeId, `Se une al ejército ${ejercito.id} desde ${asentamiento.id}.`),
     [

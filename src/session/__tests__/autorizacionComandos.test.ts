@@ -6,6 +6,7 @@
 // Un test que quiera un actor con Facción tiene que fundarla y ganarse la ciudadanía como en el juego real,
 // así que estas pruebas fallan si cambia el significado de ciudadanía, residencia o cargo en `engine/`.
 import { describe, expect, it } from 'vitest';
+import { escuadronDePrueba } from '../../engine/__tests__/fixtures';
 import { instanteDeTick } from '../estado';
 import { GameSession } from '../gameSession';
 import { conHeroe, partidaConAsentamiento, ACTOR, OPC } from './fixtures';
@@ -280,22 +281,13 @@ describe('residencia en el asentamiento objetivo', () => {
 });
 
 describe('combate: residente del atacante Y dueño de los escuadrones comprometidos', () => {
-  /** Estado con dos escuadrones en el asentamiento de la fixture: uno del fundador, otro del vecino. */
+  /** Estado con dos escuadrones en el campamento de la fixture: uno del fundador, otro del vecino. */
   function conEscuadrones(sesion: ReturnType<typeof partidaConAsentamiento>['sesion'], fundador: string, vecino: string) {
     const estado = sesion.getState();
-    const asentamiento = estado.asentamientos[0]!;
+    const suyas: Record<string, string> = { [fundador]: 'esc-fundador', [vecino]: 'esc-vecino' };
     return {
       ...estado,
-      asentamientos: [
-        {
-          ...asentamiento,
-          escuadrones: [
-            { id: 'esc-fundador', nombre: 'A', heroeId: fundador, origen: 'pesants' as const, cantidad: 10, veterania: 0, moral: 100, tropaId: 't1' },
-            { id: 'esc-vecino', nombre: 'B', heroeId: vecino, origen: 'pesants' as const, cantidad: 10, veterania: 0, moral: 100, tropaId: 't1' },
-          ],
-        },
-        ...estado.asentamientos.slice(1),
-      ],
+      heroes: estado.heroes.map((h) => (suyas[h.id] ? { ...h, escuadrones: [escuadronDePrueba(suyas[h.id]!, h.id, 't1')] } : h)),
     };
   }
 
