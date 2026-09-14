@@ -389,6 +389,58 @@ export interface Heroe {
   /** TODAS sus escuadras, estén donde estén (Doc 5.16.2, doc 01 §13); `contenedor` dice dónde. Las del campamento
    * están en la plaza donde reside, y si no reside en ninguna (huérfano) siguen siendo suyas. */
   escuadrones: Escuadron[];
+  /**
+   * Progresión de personaje traída de Conquest (Doc 5.16.1, doc 01 §12): nivel, experiencia hacia el siguiente
+   * nivel (no acumulada), dos bolsas de puntos y los perks. `atributosBase` son los puntos que ha repartido el
+   * héroe; la base de su clase la suma Conquest, que es quien tiene el catálogo de clases.
+   */
+  nivel: number;
+  experienciaHaciaSiguienteNivel: number;
+  puntosDeAtributoSinGastar: number;
+  puntosDePerkSinGastar: number;
+  atributosBase: AtributosHeroe;
+  perksDesbloqueados: number[];
+  /** Selecciones de escuadras guardadas para salir (Doc 5.16.5). El Liderazgo que suman se deriva al servir. */
+  loadouts: Loadout[];
+  /** Lo que lleva sin ponérselo y lo que tiene puesto (doc 01 §12.1). `ponytail:` no hay `equipar` hasta que
+   * Conquest publique su catálogo de objetos (CQ-004; decisión del usuario 2026-09-14). */
+  inventario: ItemInstancia[];
+  equipamiento: Equipamiento;
+  /** Economía propia del héroe, sin relación con el oro recurso (Doc 5.16.1). */
+  monedasHeroe: { bronce: number; plata: number; oro: number };
+}
+
+export const ATRIBUTOS_HEROE = ['fuerza', 'destreza', 'armadura', 'vitalidad'] as const;
+export type AtributoHeroe = (typeof ATRIBUTOS_HEROE)[number];
+export type AtributosHeroe = Record<AtributoHeroe, number>;
+
+export type SlotEquipo = 'arma' | 'casco' | 'torso' | 'guantes' | 'pantalones' | 'botas';
+
+/** Objeto del inventario o del equipo, con la forma de `InventoryItem` de Conquest (doc 01 §12.1). */
+export interface ItemInstancia {
+  itemDefinitionId: string;
+  tipo: 'arma' | 'armadura' | 'consumible' | 'visual';
+  /** Lo no apilable lleva 1. */
+  cantidad: number;
+  /** Solo el equipo único; ausente = apilable. */
+  itemInstanceId?: string;
+  /** Solo el equipo único: se generan al crear el objeto, son datos suyos. */
+  estadisticas?: { nombre: string; valor: number }[];
+  /** Por unidad si es apilable. */
+  precio: number;
+  /** -1 si no ocupa casilla. */
+  casillaInventario: number;
+}
+
+export type Equipamiento = Record<SlotEquipo, ItemInstancia | null>;
+
+/** Una selección de escuadras guardada (Doc 5.16.5, `LoadoutSaveData` de Conquest). */
+export interface Loadout {
+  id: string;
+  displayName: string;
+  squadIds: string[];
+  perksSeleccionados: number[];
+  activo: boolean;
 }
 
 /**

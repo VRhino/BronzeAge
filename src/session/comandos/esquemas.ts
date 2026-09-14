@@ -14,7 +14,7 @@
 // conocido en compilación) — nunca EXISTENCIA de una entidad (`faccionId` real, `asentamientoId` real): eso
 // sigue siendo del comando (`*.no_existe`, `ayudas.ts`), que ya lo hace bien y no debe duplicarse aquí. La
 // frontera es la misma que ya traza el doc 2: forma en el borde, reglas de dominio en el motor.
-import { CARGOS_TIPO, EDIFICIOS_TIPO, RECURSOS_TIPO } from '../../domain/types';
+import { ATRIBUTOS_HEROE, CARGOS_TIPO, EDIFICIOS_TIPO, RECURSOS_TIPO } from '../../domain/types';
 import { CARGOS_CONSTRUCTOR } from './construccion';
 import type { TipoComando } from './registro';
 
@@ -89,6 +89,20 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
     },
     ['displayName', 'classDefinitionId', 'genero', 'avatar']
   ),
+  // Solo atributos: los perks esperan al catálogo de Conquest (CQ-004). Sin `minimum`, mismo motivo que `NUMERO`.
+  repartirPuntos: objeto({ atributos: objeto(Object.fromEntries(ATRIBUTOS_HEROE.map((a) => [a, { type: 'integer' }])), []) }, ['atributos']),
+  // Sin `minLength` en `displayName`: nombre vacío es un rechazo de dominio (`heroe.invalido`).
+  guardarLoadout: objeto(
+    {
+      loadoutId: IDENTIFICADOR,
+      displayName: { type: 'string' },
+      squadIds: LISTA_DE_IDENTIFICADORES,
+      perksSeleccionados: { type: 'array', items: { type: 'integer' } },
+      activo: { type: 'boolean' },
+    },
+    ['displayName', 'squadIds', 'perksSeleccionados']
+  ),
+  borrarLoadout: objeto({ loadoutId: IDENTIFICADOR }, ['loadoutId']),
   // Admin. Sin `posicion`, la gobernanza NPC busca el sitio (`buscarPosicionFundacionInicialPorDefecto`).
   crearFaccionNpc: objeto({ nombre: { type: 'string' }, posicion: PUNTO }, ['nombre']),
   unirseAFaccion: objeto({ faccionId: IDENTIFICADOR }, ['faccionId']),

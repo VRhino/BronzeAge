@@ -1595,6 +1595,13 @@ export const LIDERAZGO = {
   costePorEscalon: { 1: 7, 2: 14, 3: 22, 4: 32, 5: 45 } as Record<number, number>,
 };
 
+/** El Héroe como personaje (Doc 5.16), con los valores de Conquest (`HeroDataService`, `HeroAttributeValidator`;
+ * decisión del usuario 2026-09-14). */
+export const HEROE = {
+  bronceInicial: 500,
+  topeAtributo: 100,
+};
+
 /**
  * Oro por soldado al reclutar (Doc 5.8, bloque "economía del oro" — `Consideraciones/Economia_Del_Oro_Definicion.md`
  * Paso 4): además del equipo (`costoEquipo`), reclutar cuesta oro según el escalón de la tropa. Curva que sube

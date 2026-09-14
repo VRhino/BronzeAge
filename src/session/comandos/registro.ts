@@ -13,6 +13,7 @@ import { crearFaccion } from './crearFaccion';
 import { unirseAFaccion } from './unirseAFaccion';
 import { dejarFaccion } from './dejarFaccion';
 import { crearHeroe } from './crearHeroe';
+import { borrarLoadout, guardarLoadout, repartirPuntos } from './heroe';
 import { crearFaccionNpc } from './crearFaccionNpc';
 import { activarPolitica, asignarCargoLocal, asignarEmbajador, asignarRey, cambiarResidencia, comprarCasa } from './cargos';
 import { anexionar, fusionar, proponerRelacion, rebelionVasallo, romperRelacion } from './diplomacia';
@@ -69,6 +70,9 @@ export const REGISTRO_COMANDOS = {
   unirseAFaccion,
   dejarFaccion,
   crearHeroe,
+  repartirPuntos,
+  guardarLoadout,
+  borrarLoadout,
   crearFaccionNpc,
   activarPolitica,
   asignarCargoLocal,

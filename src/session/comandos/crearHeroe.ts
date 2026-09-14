@@ -1,6 +1,7 @@
 import { LIDERAZGO } from '../../constants';
 import type { Heroe } from '../../domain/types';
 import { columnaDeAparicion } from '../../engine/ubicacion';
+import { progresionInicial } from '../../engine/heroe';
 import { exito } from './tipos';
 import { comando, rechazar } from './ayudas';
 import { CODIGOS_ERROR } from './codigosDeError';
@@ -38,6 +39,7 @@ export const crearHeroe = comando<ParamsCrearHeroe, { heroeId: string }>((estado
     liderazgoBase: LIDERAZGO.base,
     ubicacion: { tipo: 'columna', ejercitoId: columna.id },
     escuadrones: [],
+    ...progresionInicial(heroeId),
   };
   return exito(
     { ...estado, heroes: [...estado.heroes, heroe], ejercitos: [...estado.ejercitos, columna] },

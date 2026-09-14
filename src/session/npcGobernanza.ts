@@ -32,6 +32,7 @@ import type { ContextoSimulacion, EstadoSimulacion } from '../engine/simulation'
 import { avanzarAutoComercioSimulado } from '../engine/simulacionAutoComercio';
 import { reclutarTropa, ReclutamientoInvalidoError } from '../engine/tropas';
 import { campamentoDe, conEscuadrones, indiceTropa, sinTropa, type IndiceTropa } from '../engine/tropa';
+import { progresionInicial } from '../engine/heroe';
 import { atacarCampamentoBandidos, CombateInvalidoError } from '../engine/combate';
 import { lanzarCaravanaFundacion, costoCaravanaFundacion, ExpansionInvalidaError } from '../engine/expansion';
 import {
@@ -1370,6 +1371,7 @@ export function heroeBot(id: string, displayName: string, ubicacion: UbicacionHe
     liderazgoBase: LIDERAZGO.base,
     ubicacion,
     escuadrones: [],
+    ...progresionInicial(id),
   };
 }
 

@@ -53,8 +53,11 @@ import { leerEventos } from './eventosDePartida';
  * v15 (2026-09-14): modelo de Héroe, fase 2 — las escuadras viven en `Heroe.escuadrones` (con `contenedor`,
  *   `enGuarnicion`, nivel y experiencia en vez de veteranía, sin `heridoHasta`), y `Asentamiento.escuadrones`,
  *   `Ejercito.escuadrones` y `Caravana.escolta` pasan a ser ids (`escuadronIds`, `escoltaIds`). Sin migración.
+ *
+ * v16 (2026-09-14): modelo de Héroe, fase 3 — el héroe gana su progresión de personaje (nivel, experiencia,
+ *   puntos, atributos, perks, loadouts, inventario, equipamiento y monedas). Sin migración.
  */
-export const FORMATO_SNAPSHOT_VERSION = 15;
+export const FORMATO_SNAPSHOT_VERSION = 16;
 
 export interface SnapshotPartida {
   formatoVersion: number;

@@ -905,7 +905,8 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       // dos operaciones de la caravana que queda 'aparcada' allí — `moverCargaCaravanaAparcada` y
       // `enviarCaravanaAlOrigen` (§2.3d).
       // +1 con el modelo de Héroe: entran `crearHeroe` y `crearFaccionNpc`, sale `alternarFaccionNpc`.
-      expect(cuerpo.oneOf.length).toBe(70);
+      // +3 con la fase 3 del Héroe: `repartirPuntos`, `guardarLoadout` y `borrarLoadout`.
+      expect(cuerpo.oneOf.length).toBe(73);
       const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
       expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
     });

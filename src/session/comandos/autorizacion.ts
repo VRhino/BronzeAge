@@ -269,6 +269,10 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
   // --- Cargos de Facción ---
   // Crear el propio héroe es lo único que puede hacer un jugador que todavía no tiene (`verificarAutorizacion`).
   crearHeroe: { rolesPermitidos: ['jugador'] },
+  // Los comandos del héroe sobre sí mismo no reciben un `heroeId`: actúan siempre sobre el del actor.
+  repartirPuntos: { rolesPermitidos: ['jugador'] },
+  guardarLoadout: { rolesPermitidos: ['jugador'] },
+  borrarLoadout: { rolesPermitidos: ['jugador'] },
   // Las Facciones NPC las crea el admin, ya asentadas; ninguna Facción de jugador pasa a la IA.
   crearFaccionNpc: { rolesPermitidos: ['administrador_partida', 'administrador_global'] },
   asignarRey: {
