@@ -47,6 +47,13 @@ const OBJETIVO_DE_INTERACCION = {
     { type: 'object', properties: { tipo: { type: 'string', enum: ['caravana'] }, id: IDENTIFICADOR }, required: ['tipo', 'id'], additionalProperties: false },
   ],
 } as const;
+// `atacar` apunta además a un campamento de bandidos (Doc 1.9): se ataca con la columna, no se mira ni se persigue.
+const OBJETIVO_DE_ATAQUE = {
+  oneOf: [
+    ...OBJETIVO_DE_INTERACCION.oneOf,
+    { type: 'object', properties: { tipo: { type: 'string', enum: ['campamento'] }, id: IDENTIFICADOR }, required: ['tipo', 'id'], additionalProperties: false },
+  ],
+} as const;
 const OBJETIVO_EJERCITO = {
   oneOf: [
     { type: 'object', properties: { tipo: { type: 'string', enum: ['asentamiento'] }, id: IDENTIFICADOR }, required: ['tipo', 'id'], additionalProperties: false },
@@ -325,7 +332,7 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   // El menú de interacción (Doc 5.12.3). `objetivo` distingue columna de caravana: son entidades distintas
   // con anillos y consecuencias distintas, y mezclarlas en un id suelto obligaría al motor a adivinar.
   inspeccionar: objeto({ heroeId: IDENTIFICADOR, objetivo: OBJETIVO_DE_INTERACCION }, ['heroeId', 'objetivo']),
-  atacar: objeto({ heroeId: IDENTIFICADOR, objetivo: OBJETIVO_DE_INTERACCION }, ['heroeId', 'objetivo']),
+  atacar: objeto({ heroeId: IDENTIFICADOR, objetivo: OBJETIVO_DE_ATAQUE }, ['heroeId', 'objetivo']),
   perseguir: objeto({ heroeId: IDENTIFICADOR, objetivo: OBJETIVO_DE_INTERACCION }, ['heroeId', 'objetivo']),
   dejarDePerseguir: objeto({ heroeId: IDENTIFICADOR }, ['heroeId']),
   cederLiderazgo: objeto({ ejercitoId: IDENTIFICADOR, heroeId: IDENTIFICADOR, sucesorId: IDENTIFICADOR }, ['ejercitoId', 'heroeId', 'sucesorId']),
@@ -364,8 +371,4 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   ),
   replegarEjercito: objeto({ ejercitoId: IDENTIFICADOR }, ['ejercitoId']),
   estacionarEjercito: objeto({ ejercitoId: IDENTIFICADOR }, ['ejercitoId']),
-  atacarCampamentoBandidos: objeto(
-    { atacanteId: IDENTIFICADOR, escuadronIds: LISTA_DE_IDENTIFICADORES, campamentoId: IDENTIFICADOR },
-    ['atacanteId', 'escuadronIds', 'campamentoId']
-  ),
 };

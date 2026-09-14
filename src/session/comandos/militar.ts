@@ -11,7 +11,6 @@
 import { reclutarTropa as reclutarTropaEngine } from '../../engine/tropas';
 import { esCiudadano } from '../../engine/faccion';
 import {
-  atacarCampamentoBandidos as atacarCampamentoBandidosEngine,
   CombateInvalidoError,
   desalojarResidentes,
   iniciarAsedio as iniciarAsedioEngine,
@@ -29,11 +28,9 @@ function combatientes(tropa: readonly Escuadron[], ids: readonly string[], herid
 
 /** Los héroes que llevan a la batalla las escuadras elegidas: si pierden, quedan heridos (Doc 5.16.4). */
 const duenosDe = (tropa: readonly Escuadron[], ids: readonly string[]): string[] => [...new Set(tropa.filter((e) => ids.includes(e.id)).map((e) => e.heroeId))];
-import { CAMPAMENTOS_BANDIDOS } from '../../constants';
-import { minutos, sumar } from '../../domain/tiempo';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito } from './tipos';
-import { campamentoEn, comando, conAsentamiento, exigirAsentamiento, exigirCampamento } from './ayudas';
+import { campamentoEn, comando, conAsentamiento, exigirAsentamiento } from './ayudas';
 import { desdeCrudos, evento } from './eventos';
 
 /** Reclutamiento: lo narra esta capa (el motor devuelve el asentamiento actualizado, sin eventos). */
@@ -149,30 +146,6 @@ export const iniciarAsedio = comando<ParamsIniciarAsedio, { conquistado: boolean
 // exactamente lo que la escolta (Doc 5.13.3) sustituyó — mantener los dos habría dejado dos reglas distintas
 // para el mismo hecho según por dónde se entrara.
 
-export interface ParamsAtacarCampamentoBandidos {
-  atacanteId: string;
-  escuadronIds: string[];
-  campamentoId: string;
-}
-
-export const atacarCampamentoBandidos = comando<ParamsAtacarCampamentoBandidos, { destruido: boolean }>((estado, _mapa, ctx, params) => {
-  const atacante = exigirAsentamiento(estado, params.atacanteId);
-  const campamento = exigirCampamento(estado, params.campamentoId);
-
-  const tropa = combatientes(campamentoEn(estado, atacante), params.escuadronIds, heridosEn(estado.heroes, ctx.instante));
-  const resultado = atacarCampamentoBandidosEngine(atacante, tropa, params.escuadronIds, campamento, estado.facciones, ctx.rng);
-  const siguiente: GameSessionState = {
-    ...conAsentamiento(estado, resultado.atacante),
-    facciones: resultado.facciones,
-    // Si el campamento aguanta, perdieron los héroes que mandaron la tropa (Doc 5.16.4).
-    heroes: herir(conEscuadrones(estado.heroes, resultado.tropa), resultado.campamentoDestruido ? [] : duenosDe(tropa, params.escuadronIds), ctx.instante),
-    // Al destruirlo se agenda su reaparición; el spawn en sí lo evalúa el tick (`avanzarSpawnBandidos`).
-    campamentosBandidos: resultado.campamentoDestruido
-      ? estado.campamentosBandidos.filter((c) => c.id !== campamento.id)
-      : estado.campamentosBandidos,
-    bandidosProximoSpawnEn: resultado.campamentoDestruido
-      ? sumar(ctx.instante, minutos(CAMPAMENTOS_BANDIDOS.respawnMinutos))
-      : estado.bandidosProximoSpawnEn,
-  };
-  return exito(siguiente, desdeCrudos(ctx, resultado.eventos, atacante.id), { destruido: resultado.campamentoDestruido });
-});
+// `atacarCampamentoBandidos` (atacar un campamento desde una plaza, con escuadras del campamento) se retiró el
+// 2026-09-15: un campamento se ataca con una columna que llegue a él (Doc 1.9), con `atacar` (`interaccion.ts`). El
+// motor conserva el ataque desde una plaza para los NPC (`npcGobernanza.ts`).

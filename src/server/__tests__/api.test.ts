@@ -907,7 +907,8 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       // +1 con el modelo de Héroe: entran `crearHeroe` y `crearFaccionNpc`, sale `alternarFaccionNpc`.
       // +5 con la fase 3 del Héroe: `repartirPuntos`, `guardarLoadout`, `borrarLoadout`, `asignarGuarnicion` y
       // `retirarGuarnicion`.
-      expect(cuerpo.oneOf.length).toBe(75);
+      // -1 con los bandidos atacados con columna (Doc 1.9): sale `atacarCampamentoBandidos`, lo cubre `atacar`.
+      expect(cuerpo.oneOf.length).toBe(74);
       const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
       expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
     });

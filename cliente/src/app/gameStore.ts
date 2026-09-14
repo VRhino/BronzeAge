@@ -830,16 +830,6 @@ export class GameStore {
     await this.despachar('iniciarAsedio', { atacanteId, defensorId, escuadronIds: idsNoVacios(escuadronesCsv) }, 'Asedio rechazado');
   }
 
-
-
-  async atacarCampamentoBandidos(atacanteId: string, escuadronesCsv: string, campamentoId: string): Promise<void> {
-    await this.despachar(
-      'atacarCampamentoBandidos',
-      { atacanteId, escuadronIds: idsNoVacios(escuadronesCsv), campamentoId },
-      'Ataque a campamento rechazado'
-    );
-  }
-
   /** Re-pide el estado completo al servidor. El mundo avanza SOLO en el servidor (reloj de mundo, Fase D /
    * D5: un tick por minuto real, con catch-up tras reinicio) — la interfaz no lo empuja, solo vuelve a leer.
    * Lo llama el botón "Refrescar" y el auto-refresco de `main.ts`. */

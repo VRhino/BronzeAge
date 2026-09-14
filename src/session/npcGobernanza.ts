@@ -32,7 +32,7 @@ import type { ContextoSimulacion, EstadoSimulacion } from '../engine/simulation'
 import { avanzarAutoComercioSimulado } from '../engine/simulacionAutoComercio';
 import { reclutarTropa, ReclutamientoInvalidoError } from '../engine/tropas';
 import { campamentoDe, conEscuadrones, indiceTropa, sinTropa, type IndiceTropa } from '../engine/tropa';
-import { guardarLoadout, heridosEn, progresionInicial } from '../engine/heroe';
+import { guardarLoadout, heridosEn, herir, progresionInicial } from '../engine/heroe';
 import { puedeLlevar } from '../engine/liderazgo';
 import { atacarCampamentoBandidos, CombateInvalidoError, poderEscuadron } from '../engine/combate';
 import { lanzarCaravanaFundacion, costoCaravanaFundacion, ExpansionInvalidaError } from '../engine/expansion';
@@ -732,8 +732,10 @@ function atacarCampamentosCercanos(
 
   for (const campamento of campamentos) {
     const asentamiento = asentamientosActuales.find((a) => a.id === campamento.asentamientoId);
-    // La guarnición la maneja la IA de la plaza: no sale a por bandidos (Doc 5.15.3).
-    const tropa = asentamiento ? campamentoDe(asentamiento, heroesActuales).filter((e) => !e.enGuarnicion) : [];
+    // La guarnición la maneja la IA de la plaza: no sale a por bandidos (Doc 5.15.3). Y las escuadras de un héroe
+    // herido no combaten (Doc 5.16.4).
+    const heridos = heridosEn(heroesActuales, instante);
+    const tropa = asentamiento ? campamentoDe(asentamiento, heroesActuales).filter((e) => !e.enGuarnicion && !heridos.has(e.heroeId)) : [];
     if (
       !asentamiento ||
       !esNpc(asentamiento.faccionId) ||
@@ -753,7 +755,12 @@ function atacarCampamentosCercanos(
         rng
       );
       asentamientosActuales = asentamientosActuales.map((a) => (a.id === resultado.atacante.id ? resultado.atacante : a));
-      heroesActuales = conEscuadrones(heroesActuales, resultado.tropa);
+      // Si el campamento aguanta, los héroes que mandaron la tropa pierden y quedan heridos (Doc 5.16.4).
+      heroesActuales = herir(
+        conEscuadrones(heroesActuales, resultado.tropa),
+        resultado.campamentoDestruido ? [] : new Set(tropa.map((e) => e.heroeId)),
+        instante
+      );
       faccionesActuales = resultado.facciones;
       // `engine/combate.ts` ya emite eventos estructurados, pero el NPC lleva su propio flujo en texto plano:
       // migrarlo es una pasada aparte (este módulo NO es un comando, es el NPC jugando como jugaría alguien),

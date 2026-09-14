@@ -8,7 +8,7 @@
 // —de `campamento` a `ejercito`, doc 01 §13— y por eso la guarnición es lo único que defiende (Doc 5.12.4) y lo
 // único que come de la plaza. Aquí se trabaja sobre vistas con la tropa puesta (`EjercitoConTropa`, ver
 // `engine/tropa.ts`); quien llama las monta y las deshace.
-import type { AcuerdoTrueque, Asentamiento, Caravana, Ejercito, Escuadron, Faccion, Heroe, Point, RelacionPolitica, UbicacionHeroe } from '../domain/types';
+import type { AcuerdoTrueque, Asentamiento, CampamentoBandido, Caravana, Ejercito, Escuadron, Faccion, Heroe, Point, RelacionPolitica, UbicacionHeroe } from '../domain/types';
 import type { Mapa } from '../world/mapa';
 import { calcularRuta } from '../world/rutas';
 import { distancia } from '../world/geometria';
@@ -32,7 +32,7 @@ import {
 import { atribuir, type EventoCrudo } from '../domain/eventos';
 import type { Instante } from '../domain/tiempo';
 import type { RandomFn } from '../worldgen';
-import { asediarConEjercito, desalojarResidentes, encuentroEntreEjercitos, interceptarCaravanaConEjercito } from './combate';
+import { asediarConEjercito, atacarCampamentoConColumna, desalojarResidentes, encuentroEntreEjercitos, interceptarCaravanaConEjercito } from './combate';
 import { avanzarPosicionEnRuta } from './movimiento';
 import { agregarRecurso, cantidadDisponible, descontarRecursos } from './almacen';
 import { avanzarRacion, consumoRacionDeEscuadrones, reservaDeTrigo } from './tropas';
@@ -1154,6 +1154,30 @@ export function interceptar(
   }
   const r = interceptarCaravanaConEjercito(sinHeridos(ejercito, heridos), caravana, capacidadCarga, rng);
   return { ...r, ejercito: conApartadas(r.ejercito, ejercito), vencidos: r.capturada ? [] : ejercito.participantes.map((p) => p.heroeId) };
+}
+
+/**
+ * Atacar un campamento de bandidos con la columna en la que vas, a distancia de choque (Doc 1.9). Si aguanta,
+ * pierdes: tus héroes quedan heridos y la columna pierde la mitad del carro, como toda derrota en mundo abierto
+ * (Doc 5.16.4, 5.16.6). El bandido no tiene almacén: esa mitad no se la lleva nadie.
+ */
+export function atacarCampamento(
+  ejercito: EjercitoConTropa,
+  campamento: CampamentoBandido,
+  facciones: Faccion[],
+  capacidadCarga: number,
+  heridos: ReadonlySet<string>,
+  rng: RandomFn
+): { ejercito: EjercitoConTropa; destruido: boolean; facciones: Faccion[]; eventos: EventoCrudo[]; vencidos: string[] } {
+  if (!tieneHeroeSano(ejercito, heridos)) throw new MovilizacionInvalidaError('Todos los héroes de tu columna están heridos: no pueden entrar en batalla.');
+  if (distancia(ejercito.posicionActual, campamento.posicion) > LOGISTICA.radioEncuentro) {
+    throw new MovilizacionInvalidaError(`Hay que estar a menos de ${LOGISTICA.radioEncuentro} para atacar.`);
+  }
+  const r = atacarCampamentoConColumna(sinHeridos(ejercito, heridos), campamento, facciones, capacidadCarga, rng);
+  const tras = conApartadas(r.ejercito, ejercito);
+  if (r.destruido) return { ...r, ejercito: tras, vencidos: [] };
+  const secuela = trasDerrota(tras);
+  return { ...r, ejercito: secuela.perdedor, vencidos: secuela.vencidos };
 }
 
 /**

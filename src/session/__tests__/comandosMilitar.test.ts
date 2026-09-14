@@ -6,8 +6,10 @@
 // lo que mantiene la partida reproducible.
 import { describe, expect, it } from 'vitest';
 import { GameSession } from '../gameSession';
-import { atacarCampamentoBandidos, reclutarTropa } from '../comandos/militar';
+import { reclutarTropa } from '../comandos/militar';
 import { movilizarEjercito } from '../comandos/ejercitos';
+import { salirAlMundo } from '../comandos/presencia';
+import { atacar } from '../comandos/interaccion';
 import { CODIGOS_ERROR } from '../comandos/codigosDeError';
 import { OPC, partidaConAsentamiento } from './fixtures';
 import { campamentoDe } from '../../engine/tropa';
@@ -80,32 +82,69 @@ describe('reclutarTropa', () => {
   });
 });
 
-describe('combate y reproducibilidad', () => {
-  it('atacar un campamento consume el rng del contexto: dos partidas iguales dan el mismo resultado', () => {
-    function correr() {
-      const { sesion, asentamientoId, fundador } = partidaAbastecida();
-      const reclutado = sesion.ejecutar(reclutarTropa, { asentamientoId, heroeId: fundador, tropaId: 'milicia_lanceros', origen: 'pesants' }, OPC);
-      if (!reclutado.ok) throw new Error('setup del test: no se pudo reclutar');
+/**
+ * El fundador sale al mundo con su milicia y 60 de trigo, y se le planta delante (a `distancia`) un campamento de
+ * bandidos de ese `poder`. Se inyecta a mano: el spawn natural depende del tick y aquí solo interesa el combate.
+ */
+function columnaFrenteACampamento(poder: number, distancia = 0) {
+  const { sesion, asentamientoId, fundador } = partidaAbastecida();
+  const reclutado = sesion.ejecutar(reclutarTropa, { asentamientoId, heroeId: fundador, tropaId: 'milicia_lanceros', origen: 'pesants' }, OPC);
+  if (!reclutado.ok) throw new Error('setup del test: no se pudo reclutar');
+  const salida = sesion.ejecutar(salirAlMundo, { asentamientoId, heroeId: fundador, escuadronIds: campamento(sesion).map((e) => e.id), carga: { trigo: 60 } }, OPC);
+  if (!salida.ok) throw new Error(`setup del test: no se pudo salir (${salida.codigoError})`);
 
-      // Se inyecta un campamento a mano: el spawn natural depende del tick y aquí solo interesa el combate.
-      const payload = sesion.exportar();
-      const conCampamento = GameSession.importar({
-        ...payload,
-        state: {
-          ...payload.state,
-          campamentosBandidos: [{ id: 'camp-1', posicion: { x: 520, y: 520 }, bosqueId: 'b1', asentamientoId, poder: 50 }],
-        },
-      });
+  const payload = sesion.exportar();
+  const columna = payload.state.ejercitos.find((e) => e.participantes.some((p) => p.heroeId === fundador))!;
+  const posicion = { x: columna.posicionActual.x + distancia, y: columna.posicionActual.y };
+  const conCampamento = GameSession.importar({
+    ...payload,
+    state: { ...payload.state, campamentosBandidos: [{ id: 'camp-1', posicion, bosqueId: 'b1', asentamientoId, poder }] },
+  });
+  return { sesion: conCampamento, fundador, columnaId: columna.id };
+}
 
-      const escuadronIds = campamento(conCampamento).map((e) => e.id);
-      const resultado = conCampamento.ejecutar(atacarCampamentoBandidos, { atacanteId: asentamientoId, escuadronIds, campamentoId: 'camp-1' }, OPC);
-      return { ok: resultado.ok, destruido: resultado.datos?.destruido, estado: conCampamento.getState() };
-    }
+const atacarElCampamento = (sesion: GameSession, heroeId: string) =>
+  sesion.ejecutar(atacar, { heroeId, objetivo: { tipo: 'campamento', id: 'camp-1' } }, OPC);
+
+describe('atacar un campamento de bandidos con la columna (Doc 1.9)', () => {
+  it('consume el rng del contexto: dos partidas iguales dan el mismo resultado', () => {
+    const correr = () => {
+      const { sesion, fundador } = columnaFrenteACampamento(50);
+      return { ok: atacarElCampamento(sesion, fundador).ok, estado: sesion.getState() };
+    };
 
     const a = correr();
-    const b = correr();
-
     expect(a.ok).toBe(true);
-    expect(b).toEqual(a);
+    expect(correr()).toEqual(a);
+  });
+
+  it('si cae, la recompensa va al carro y se agenda su reaparición', () => {
+    const { sesion, fundador, columnaId } = columnaFrenteACampamento(1);
+
+    expect(atacarElCampamento(sesion, fundador).ok).toBe(true);
+
+    const estado = sesion.getState();
+    expect(estado.campamentosBandidos).toEqual([]);
+    expect(estado.bandidosProximoSpawnEn).toBeDefined();
+    expect(estado.ejercitos.find((e) => e.id === columnaId)!.suministro['madera'], 'la madera del botín, en el carro').toBeGreaterThan(0);
+  });
+
+  it('si aguanta, sus héroes quedan heridos y la columna pierde la mitad del carro (Doc 5.16.4, 5.16.6)', () => {
+    const { sesion, fundador, columnaId } = columnaFrenteACampamento(1_000_000);
+    const trigoAntes = sesion.getState().ejercitos.find((e) => e.id === columnaId)!.suministro['trigo']!;
+
+    expect(atacarElCampamento(sesion, fundador).ok).toBe(true);
+
+    const estado = sesion.getState();
+    expect(estado.campamentosBandidos).toHaveLength(1);
+    expect(estado.heroes.find((h) => h.id === fundador)!.heridoHasta).toBeDefined();
+    expect(estado.ejercitos.find((e) => e.id === columnaId)!.suministro['trigo']).toBe(trigoAntes / 2);
+    // Y herido ya no puede volver a intentarlo.
+    expect(atacarElCampamento(sesion, fundador).codigoError).toBe(CODIGOS_ERROR.movilizacionInvalida);
+  });
+
+  it('hay que llegar hasta él: a distancia no se ataca', () => {
+    const { sesion, fundador } = columnaFrenteACampamento(1, 200);
+    expect(atacarElCampamento(sesion, fundador).codigoError).toBe(CODIGOS_ERROR.movilizacionInvalida);
   });
 });

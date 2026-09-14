@@ -407,6 +407,10 @@ export function iniciarAsedio(
  * `interceptarCaravana`): un campamento bandido es una amenaza NPC de mundo abierto, no una acción de
  * guerra entre Facciones que necesite coordinación de mando. Cualquier escuadrón propio elegido (de
  * cualquier jugador residente, Doc 2.5) puede atacarlo — basta con vencerlo en combate.
+ *
+ * Es el ataque DESDE UNA PLAZA y hoy solo lo usan los NPC (`npcGobernanza.ts`), hasta que se defina su
+ * comportamiento en el mundo (Mecánicas §36). El jugador ataca con una columna que llegue (Doc 1.9,
+ * `atacarCampamentoConColumna`).
  */
 export function atacarCampamentoBandidos(
   atacante: Asentamiento,
@@ -418,12 +422,7 @@ export function atacarCampamentoBandidos(
   rng: RandomFn
 ): { atacante: Asentamiento; facciones: Faccion[]; eventos: EventoCrudo[]; campamentoDestruido: boolean; tropa: Escuadron[] } {
   const escuadrones = seleccionarEscuadrones(tropa, escuadronIdsAtacantes);
-  const jitter = 1 + (rng() * 2 - 1) * MILITAR.varianzaCombate;
-  const poderAtacante = poderTotal(escuadrones, false) * jitter;
-  const gana = poderAtacante > campamento.poder;
-
-  const fraccionBajas = gana ? 0.05 : 0.25;
-  const escuadronesActualizados = aplicarBajas(escuadrones, fraccionBajas, gana);
+  const { gana, escuadrones: escuadronesActualizados } = choqueContraCampamento(escuadrones, campamento, rng);
 
   let almacen = atacante.almacen;
   const eventos: EventoCrudo[] = [];
@@ -461,6 +460,58 @@ export function atacarCampamentoBandidos(
     eventos,
     campamentoDestruido: gana,
     tropa: escuadronesActualizados,
+  };
+}
+
+/** El choque contra un campamento de bandidos (Doc 1.9): poder con jitter contra su `poder` fijo, con las bajas de
+ * siempre. Lo comparten el ataque desde una plaza (NPC) y el de una columna. */
+function choqueContraCampamento(escuadrones: Escuadron[], campamento: CampamentoBandido, rng: RandomFn): { gana: boolean; escuadrones: Escuadron[] } {
+  const jitter = 1 + (rng() * 2 - 1) * MILITAR.varianzaCombate;
+  const gana = poderTotal(escuadrones, false) * jitter > campamento.poder;
+  return { gana, escuadrones: aplicarBajas(escuadrones, gana ? 0.05 : 0.25, gana) };
+}
+
+/**
+ * Una columna ataca el campamento de bandidos que tiene delante (Doc 1.9). Con números hasta que exista la batalla de
+ * Unity (Doc 5.15.6): los soldados que lleva contra el `poder` fijo del campamento. Si gana, el campamento cae y su
+ * recompensa va al carro, hasta donde quepa; lo que no cabe se pierde, como el botín de una caravana. Recibe solo lo
+ * que combate: sin las escuadras de los heridos, que aparta quien llama.
+ */
+export function atacarCampamentoConColumna(
+  ejercito: EjercitoConTropa,
+  campamento: CampamentoBandido,
+  facciones: Faccion[],
+  capacidadCarga: number,
+  rng: RandomFn
+): { ejercito: EjercitoConTropa; destruido: boolean; facciones: Faccion[]; eventos: EventoCrudo[] } {
+  const vivos = ejercito.escuadrones.filter((e) => e.cantidad > 0);
+  if (vivos.length === 0) throw new CombateInvalidoError('La columna no lleva soldados con los que atacar.');
+  const choque = choqueContraCampamento(vivos, campamento, rng);
+  const porId = new Map(choque.escuadrones.map((e) => [e.id, e]));
+
+  let suministro = ejercito.suministro;
+  if (choque.gana) {
+    let libre = Math.max(0, capacidadCarga - Object.values(suministro).reduce((x, y) => x + y, 0));
+    for (const [recurso, cantidad] of Object.entries(CAMPAMENTOS_BANDIDOS.recompensa)) {
+      const cabe = Math.min(cantidad ?? 0, libre);
+      if (cabe <= 0) continue;
+      suministro = { ...suministro, [recurso]: (suministro[recurso] ?? 0) + cabe };
+      libre -= cabe;
+    }
+  }
+
+  const payload: PayloadAtaqueCampamento = { atacanteId: ejercito.id, campamentoId: campamento.id };
+  return {
+    ejercito: { ...ejercito, escuadrones: ejercito.escuadrones.map((e) => porId.get(e.id) ?? e), suministro },
+    destruido: choque.gana,
+    facciones: aplicarAjustesExperiencia(facciones, [
+      { faccionId: ejercito.faccionId, delta: NIVEL_FACCION.xp.combate * jugadoresParticipantes(vivos), razon: 'combate (campamento de bandidos)' },
+    ]),
+    eventos: [
+      choque.gana
+        ? { codigo: 'combate.campamento_destruido', mensaje: `La columna ${ejercito.id} destruye el campamento de bandidos ${campamento.id}.`, payload }
+        : { codigo: 'combate.ataque_campamento_fallido', mensaje: `La columna ${ejercito.id} falla el ataque al campamento de bandidos ${campamento.id}.`, payload },
+    ],
   };
 }
 

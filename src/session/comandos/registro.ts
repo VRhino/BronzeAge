@@ -33,11 +33,7 @@ import {
   rechazarTrueque,
   reservarCaravana,
 } from './comercio';
-import {
-  atacarCampamentoBandidos,
-  iniciarAsedio,
-  reclutarTropa,
-} from './militar';
+import { iniciarAsedio, reclutarTropa } from './militar';
 import {
   alternarAutoConstruccion,
   anadirEdificioManualmente,
@@ -125,7 +121,6 @@ export const REGISTRO_COMANDOS = {
   soltarCaravana,
   cargarCaravana,
   entregarDeCaravana,
-  atacarCampamentoBandidos,
   iniciarAsedio,
   reclutarTropa,
   alternarAutoConstruccion,

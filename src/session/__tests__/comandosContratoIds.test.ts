@@ -21,7 +21,7 @@ import {
   renombrarAsentamiento,
 } from '../comandos/construccion';
 import { anexionar, fusionar, rebelionVasallo, romperRelacion } from '../comandos/diplomacia';
-import { atacarCampamentoBandidos, iniciarAsedio, reclutarTropa } from '../comandos/militar';
+import { iniciarAsedio, reclutarTropa } from '../comandos/militar';
 import { colocarOrdenMercado, crearCaravana, proponerTrueque } from '../comandos/comercio';
 import { desarmarCaravanaFundacion, lanzarCaravanaFundacion } from '../comandos/expansion';
 import { OPC, partidaConAsentamiento } from './fixtures';
@@ -141,12 +141,6 @@ const CASOS: CasoIdInexistente[] = [
     etiqueta: 'desarmarCaravanaFundacion: caravanaId',
     codigoEsperado: 'caravana.no_existe',
     ejecutar: ({ sesion }) => sesion.ejecutar(desarmarCaravanaFundacion, { caravanaId: 'no-existe' }, OPC),
-  },
-  {
-    etiqueta: 'atacarCampamentoBandidos: campamentoId',
-    codigoEsperado: 'campamento.no_existe',
-    ejecutar: ({ sesion, asentamientoId }) =>
-      sesion.ejecutar(atacarCampamentoBandidos, { atacanteId: asentamientoId, escuadronIds: [], campamentoId: 'no-existe' }, OPC),
   },
   {
     etiqueta: 'crearCaravana: asentamientoId',

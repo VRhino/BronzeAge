@@ -14,6 +14,7 @@
 // El de 40 es el que hace de esto un juego de dos: la telemetría que la proyección niega a distancia se
 // consigue acercándose, y acercarse te delata. Nadie audita al rival desde el sofá.
 import {
+  atacarCampamento,
   atacarColumna,
   capacidadCargaDe,
   dejarDePerseguir as dejarDePerseguirEngine,
@@ -28,10 +29,11 @@ import {
 import { heridosEn, herir } from '../../engine/heroe';
 import { conEscolta, indiceTropa, sinEscolta } from '../../engine/tropa';
 import type { Ejercito } from '../../domain/types';
-import type { Instante } from '../../domain/tiempo';
+import { minutos, sumar, type Instante } from '../../domain/tiempo';
+import { CAMPAMENTOS_BANDIDOS } from '../../constants';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito } from './tipos';
-import { comando, conColumnas, conTropaDe, exigirCaravana, exigirColumnaDe, exigirEjercito } from './ayudas';
+import { comando, conColumnas, conTropaDe, exigirCampamento, exigirCaravana, exigirColumnaDe, exigirEjercito } from './ayudas';
 import { desdeCrudos, evento } from './eventos';
 
 /** A qué se puede apuntar desde el menú de interacción: una columna o una caravana. Es la misma forma que usa
@@ -102,9 +104,12 @@ export const inspeccionar = comando<ParamsInspeccionar, ComposicionColumna | Con
   );
 });
 
+/** `atacar` apunta además a un campamento de bandidos (Doc 1.9): se ataca con la columna, no se mira ni se persigue. */
+export type ObjetivoDeAtaque = ObjetivoDeInteraccion | { tipo: 'campamento'; id: string };
+
 export interface ParamsAtacar {
   heroeId: string;
-  objetivo: ObjetivoDeInteraccion;
+  objetivo: ObjetivoDeAtaque;
 }
 
 export interface ParamsPerseguir {
@@ -135,10 +140,31 @@ function exigirSano(estado: GameSessionState, heroeId: string, ahora: Instante):
  *
  * Los héroes del bando derrotado quedan **heridos** (Doc 5.16.4) y pierde la mitad de su carro, sea viajero o
  * Ejército. Un herido no ataca, sus escuadras no combaten, y a una columna de solo heridos no se la puede tocar.
+ *
+ * Un campamento de bandidos también se ataca así, con la columna que llega a él (Doc 1.9): si cae, su recompensa
+ * va al carro y se agenda su reaparición.
  */
 export const atacar = comando<ParamsAtacar, void>((estado, _mapa, ctx, params) => {
   const heridos = exigirSano(estado, params.heroeId, ctx.instante);
   const atacante = exigirColumnaDe(estado, params.heroeId);
+
+  if (params.objetivo.tipo === 'campamento') {
+    const campamento = exigirCampamento(estado, params.objetivo.id);
+    const asalto = atacarCampamento(conTropaDe(estado, atacante), campamento, [...estado.facciones], capacidadCargaDe(atacante, estado.caravanas), heridos, ctx.rng);
+    const trasAsalto = conColumnas(estado, [asalto.ejercito]);
+    const siguiente: GameSessionState = {
+      ...trasAsalto,
+      facciones: asalto.facciones,
+      heroes: herir(trasAsalto.heroes, asalto.vencidos, ctx.instante),
+      // Al destruirlo se agenda su reaparición; el spawn en sí lo evalúa el tick (`avanzarSpawnBandidos`).
+      campamentosBandidos: asalto.destruido ? estado.campamentosBandidos.filter((c) => c.id !== campamento.id) : estado.campamentosBandidos,
+      bandidosProximoSpawnEn: asalto.destruido ? sumar(ctx.instante, minutos(CAMPAMENTOS_BANDIDOS.respawnMinutos)) : estado.bandidosProximoSpawnEn,
+    };
+    return exito(
+      conHistorialDeJugador(siguiente, params.heroeId, `Ataca el campamento de bandidos ${campamento.id}.`),
+      desdeCrudos(ctx, asalto.eventos, atacante.origenAsentamientoId)
+    );
+  }
 
   if (params.objetivo.tipo === 'ejercito') {
     const defensor = exigirEjercito(estado, params.objetivo.id);

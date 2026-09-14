@@ -311,14 +311,6 @@ describe('combate: residente del atacante Y dueño de los escuadrones comprometi
     ).toEqual(POR_DOMINIO);
   });
 
-  it('un escuadronId inexistente se deja pasar: lo rechaza el comando, no la autorización', () => {
-    const { sesion, asentamientoId, fundador, vecino } = partidaConAsentamiento();
-    const estado = conEscuadrones(sesion, fundador, vecino);
-    expect(
-      verificarAutorizacion('atacarCampamentoBandidos', { atacanteId: asentamientoId, campamentoId: 'c', escuadronIds: ['no-existe'] }, estado, jugador(fundador))
-    ).toEqual(AUTORIZADO);
-  });
-
   // El caso de `combateCampoAbierto` ("solo se exige propiedad en el lado donde el actor reside") se fue con
   // el comando en el Paso 11. La regla que probaba —que un jugador solo dispone de SUS escuadrones— no se ha
   // perdido: vive en `movilizarEjercito`, que rechaza sacar un escuadrón de otro (`seleccionarParaCampana`,

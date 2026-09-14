@@ -521,11 +521,6 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
     condicionJugador: (estado, heroeId, params) =>
       reside(estado, heroeId, params.atacanteId) && comandaEscuadrones(estado, heroeId, params.escuadronIds),
   },
-  atacarCampamentoBandidos: {
-    rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, heroeId, params) =>
-      reside(estado, heroeId, params.atacanteId) && comandaEscuadrones(estado, heroeId, params.escuadronIds),
-  },
   // --- Presencia (Doc 1.10). Nadie sale, entra ni vuelve a salir a nombre de otro, así que la condición
   // común es `heroeId === actor`. Salir al mundo añade lo mismo que movilizar (residencia + mando de los
   // propios escuadrones); entrar y salir de una plaza NO exigen residencia — justamente el caso interesante
