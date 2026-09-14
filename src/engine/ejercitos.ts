@@ -1471,7 +1471,10 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
       }
       if (objetivo && objetivo.faccionId !== ejercito.faccionId) {
         const defensores = heroesQueDefienden(objetivo, heroes, heridos);
-        const asedio = asediarConEjercito(sinHeridos(ejercito, heridos), objetivo, defensaDe(objetivo, heroes, heridos), faccionesActuales, [...relaciones], instante, rng);
+        const defensa = defensaDe(objetivo, heroes, heridos);
+        // Las que defienden en persona: si la plaza cae, salen con su héroe (Doc 5.15.5). La guarnición no.
+        const lucharon = new Set(defensa.filter((e) => !e.enGuarnicion).map((e) => e.id));
+        const asedio = asediarConEjercito(sinHeridos(ejercito, heridos), objetivo, defensa, faccionesActuales, [...relaciones], instante, rng);
         ejercito = conApartadas(asedio.ejercito, ejercito);
         porId.set(objetivo.id, asedio.defensor);
         heroes = conEscuadrones(heroes, asedio.tropaDefensora);
@@ -1483,9 +1486,11 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
         // Conquistar no convierte al ejército en guarnición (Doc 5.15.5): acampa a la puerta, y los residentes
         // derrotados se van con su campamento a 0 a la plaza más cercana de su Facción.
         if (asedio.conquistado) {
-          const desalojo = desalojarResidentes(objetivo, [...porId.values()], heroes);
+          const desalojo = desalojarResidentes(objetivo, [...porId.values()], heroes, ejercitos, lucharon, instante);
           for (const a of desalojo.asentamientos) porId.set(a.id, a);
           heroes = desalojo.heroes;
+          // Los que estaban dentro quedan fuera, junto a la plaza, en su propia columna.
+          supervivientes.push(...desalojo.columnas);
         }
         // A quién se le cuenta. Un evento se atribuye a UN asentamiento y lo ve la Facción que lo posee, así
         // que un choque entre dos hay que narrarlo dos veces o alguien se queda sin enterarse:

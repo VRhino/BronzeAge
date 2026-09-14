@@ -1,5 +1,5 @@
-import type { Asentamiento, CampamentoBandido, Escuadron, Faccion, Heroe, RelacionPolitica } from '../domain/types';
-import { alCampamento, conEscuadrones, type CaravanaConEscolta, type EjercitoConTropa } from './tropa';
+import type { Asentamiento, CampamentoBandido, Ejercito, Escuadron, Faccion, Heroe, RelacionPolitica, UbicacionHeroe } from '../domain/types';
+import { alCampamento, conEscuadrones, sinTropa, type CaravanaConEscolta, type EjercitoConTropa } from './tropa';
 import { distancia } from '../world/geometria';
 import type { EventoCrudo } from '../domain/eventos';
 import { minutos, sumar, type Instante } from '../domain/tiempo';
@@ -201,32 +201,82 @@ export function aplicarConquista(defensor: Asentamiento, faccionConquistadoraId:
 }
 
 /**
- * Los residentes de una plaza recién conquistada (Doc 5.15.5): su campamento —guarnición incluida— queda a 0 y
- * se va con ellos al asentamiento más cercano de su Facción, donde pasan a residir. Si la Facción no tiene
- * ninguno, quedan huérfanos, con sus escuadras a 0 pero suyas, con su nivel y experiencia. Lo que cada uno
- * llevaba fuera, en su columna o de escolta, no se toca.
+ * Lo que pasa cuando cae una plaza (Doc 5.15.5), con `conquistado` tal como era ANTES de la conquista:
  *
- * `conquistado` es la plaza ANTES de la conquista: de ella salen quiénes residían y de qué Facción eran.
- * `ponytail:` el traslado no mira el cupo de viviendas del destino; sin él, un desalojado se quedaría sin casa
- * por un número. Si hace falta tope, el sitio es este.
+ *  - **Nadie se queda dentro de una plaza enemiga** (decisión del usuario, 2026-09-14). Quien estaba dentro sale junto
+ *    a ella: el visitante, a la columna que dejó aparcada; el resto, a una columna propia, estacionada en la plaza y
+ *    con el carro vacío, que lleva las escuadras con las que defendió y sobrevivieron (`lucharon`). Un residente
+ *    herido no defendió, así que sale solo.
+ *  - Todo lo demás del campamento de los residentes —guarnición incluida— queda a 0 y se va con ellos al asentamiento
+ *    más cercano de su Facción, donde pasan a residir. Sin ninguno, quedan huérfanos, con sus escuadras a 0 pero
+ *    suyas, con su nivel y experiencia. Lo que cada uno llevaba fuera, en su columna o de escolta, no se toca.
+ *
+ * Las columnas nuevas vuelven como vistas con la tropa puesta, y los héroes ya con esa tropa en su columna.
+ * `ponytail:` el traslado no mira el cupo de viviendas del destino; sin él, un desalojado se quedaría sin casa por un
+ * número. Si hace falta tope, el sitio es este.
  */
 export function desalojarResidentes(
   conquistado: Asentamiento,
   asentamientos: readonly Asentamiento[],
-  heroes: readonly Heroe[]
-): { asentamientos: Asentamiento[]; heroes: Heroe[] } {
+  heroes: readonly Heroe[],
+  /** Las columnas del mundo: la aparcada de un visitante es donde vuelve. */
+  ejercitos: readonly Ejercito[],
+  /** Las escuadras que defendieron en persona (los loadouts de los que estaban dentro), sin la guarnición. */
+  lucharon: ReadonlySet<string>,
+  instante: Instante
+): { asentamientos: Asentamiento[]; heroes: Heroe[]; columnas: EjercitoConTropa[] } {
   const residentes = heroes.filter((h) => esResidente(conquistado, h.id));
   const refugio = asentamientos
     .filter((a) => a.id !== conquistado.id && a.faccionId === conquistado.faccionId)
     .sort((a, b) => distancia(a.posicion, conquistado.posicion) - distancia(b.posicion, conquistado.posicion) || (a.id < b.id ? -1 : 1))[0];
+
+  const columnas: EjercitoConTropa[] = [];
+  const ubicaciones = new Map<string, UbicacionHeroe>();
+  for (const h of heroes.filter((h) => h.ubicacion.tipo === 'asentamiento' && h.ubicacion.asentamientoId === conquistado.id)) {
+    const aparcada = ejercitos.find((e) => e.participantes.some((p) => p.heroeId === h.id));
+    if (aparcada) {
+      ubicaciones.set(h.id, { tipo: 'columna', ejercitoId: aparcada.id });
+      continue;
+    }
+    const escuadrones = h.escuadrones.filter((e) => lucharon.has(e.id) && e.contenedor.tipo === 'campamento' && e.cantidad > 0);
+    const id = `${conquistado.id}-salida-${h.id}-${instante}`;
+    columnas.push({
+      id,
+      faccionId: esResidente(conquistado, h.id) ? conquistado.faccionId : '',
+      origenAsentamientoId: refugio?.id ?? '',
+      participantes: [{ heroeId: h.id, unidoEn: instante }],
+      tipo: 'personal',
+      liderId: h.id,
+      politicaDeUnion: 'rechazar',
+      escuadronIds: escuadrones.map((e) => e.id),
+      escuadrones,
+      suministro: {},
+      caravanasAdjuntasIds: [],
+      objetivo: { tipo: 'punto', punto: conquistado.posicion },
+      ruta: [],
+      progreso: 0,
+      posicionActual: conquistado.posicion,
+      estado: 'estacionado',
+    });
+    ubicaciones.set(h.id, { tipo: 'columna', ejercitoId: id });
+  }
+
+  const fuera = columnas.flatMap((c) => sinTropa(c).tropa);
+  const salen = new Set(fuera.map((e) => e.id));
   const sinCampamento = residentes.flatMap((h) =>
-    h.escuadrones.filter((e) => e.contenedor.tipo === 'campamento').map((e) => ({ ...e, cantidad: 0, enGuarnicion: false }))
+    h.escuadrones
+      .filter((e) => e.contenedor.tipo === 'campamento' && !salen.has(e.id))
+      .map((e) => ({ ...e, cantidad: 0, enGuarnicion: false }))
   );
   return {
     asentamientos: refugio
       ? asentamientos.map((a) => (a.id === refugio.id ? { ...a, casasCompradas: [...a.casasCompradas, ...residentes.map((h) => h.id)] } : a))
       : [...asentamientos],
-    heroes: conEscuadrones(heroes, sinCampamento),
+    heroes: conEscuadrones(heroes, [...sinCampamento, ...fuera]).map((h) => {
+      const ubicacion = ubicaciones.get(h.id);
+      return ubicacion ? { ...h, ubicacion } : h;
+    }),
+    columnas,
   };
 }
 

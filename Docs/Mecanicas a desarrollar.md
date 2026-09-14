@@ -327,8 +327,7 @@ defiende. Los héroes bot no usan la guarnición, defienden con su loadout.
 
 Sigue distinto del canon: el asedio se resuelve con números (`iniciarAsedio`, `engine/combate.ts`), no como
 batalla de Unity; el campamento de bandidos se ataca con un comando
-desde un asentamiento (`atacarCampamentoBandidos`) en vez de con una columna que llegue a él (Doc 1.9); quien
-está DENTRO de una plaza cuando cae conserva esa ubicación, cuando el canon lo deja fuera; y el desalojo no mira
+desde un asentamiento (`atacarCampamentoBandidos`) en vez de con una columna que llegue a él (Doc 1.9); y el desalojo no mira
 el cupo de viviendas de la plaza que recibe a los vencidos (`desalojarResidentes`). Depende del ciclo de
 `Batalla` con Unity (BA-001; CQ-002 en Conquest para la IA de escuadras sin héroe y de héroes bot).
 

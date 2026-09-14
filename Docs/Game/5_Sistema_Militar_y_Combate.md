@@ -629,7 +629,8 @@ Una escuadra cedida como escolta sigue con la caravana hasta que esta termina el
 
 Si los atacantes conquistan un asentamiento:
 
-- **Cada héroe defensor queda fuera**, en el mundo, junto al asentamiento, con las escuadras que usó en la batalla (las que sobrevivieron).
+- **Cada héroe defensor queda fuera**, en el mundo, junto al asentamiento, con las escuadras que usó en la batalla (las que sobrevivieron), en su propia columna y **con el carro vacío**.
+- **Nadie se queda dentro de un asentamiento enemigo** (decisión del usuario, 2026-09-14): los que estaban dentro sin defender también salen. Un visitante vuelve a la columna que dejó aparcada; un residente herido sale solo, y sus escuadras, que no combatieron, corren la suerte del resto del campamento.
 - **El resto de las escuadras de sus residentes, guarnición incluida, quedan a 0 unidades** y se van con el campamento de su héroe al asentamiento más cercano de su Facción, **donde el héroe pasa a residir**. Si la Facción no tiene ninguno, quedan a 0 unidades y sin asentamiento (huérfanas), pero siguen siendo de su héroe, con su experiencia y su nivel, hasta que el héroe traslade su campamento a otro asentamiento (ciudadanía, Doc 2.5).
 - **No hay captura**: la guarnición no pasa al conquistador. Cae a 0 y sigue siendo de su héroe.
 - **El asentamiento conquistado queda sin guarnición**. Nadie lo guarnece solo por haberlo ganado: los héroes conquistadores pueden trasladar allí su campamento (pasar a residir) y asignar guarnición dentro del cupo que dé el asentamiento. **Si se quiere defender algo, hay que defenderlo activamente.** La ventana de ocupación (5.12.9) sigue dándole inmunidad durante un tiempo fijo; después, sin guarnición ni defensores presentes, un asedio se juega sin defensores.

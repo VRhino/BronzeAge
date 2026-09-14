@@ -1,9 +1,10 @@
 // La guarnición (Doc 5.15.3): el cupo que da cada plaza a sus residentes, y quién defiende en un asedio que se
 // resuelve con números (5.12.4): la guarnición y el loadout activo de los residentes que están dentro.
 import { describe, expect, it } from 'vitest';
-import type { Asentamiento, Edificio, Recinto } from '../../domain/types';
+import type { Asentamiento, Edificio, Ejercito, Recinto } from '../../domain/types';
 import { GUARNICION } from '../../constants';
 import { cupoGuarnicion } from '../asentamientoQuery';
+import { desalojarResidentes } from '../combate';
 import { defensaDe, guarnicionDe } from '../tropa';
 import { crearFacciones, crearMapaDeterminista, escuadronDePrueba, fundarAsentamientoDeTest, heroeDePrueba, instanteDeTest } from './fixtures';
 
@@ -77,5 +78,52 @@ describe('defensaDe', () => {
     const a = plaza();
     const heroes = [conLoadout({ tipo: 'asentamiento', asentamientoId: a.id })];
     expect(defensaDe(a, heroes, new Set([RESIDENTE])).map((e) => e.id)).toEqual(['en-guarnicion']);
+  });
+
+  describe('cuando cae la plaza (Doc 5.15.5)', () => {
+    it('el defensor sale junto a ella, con las escuadras con las que defendió y el carro vacío; lo demás, a 0', () => {
+      const a = plaza();
+      const r = desalojarResidentes(a, [a], [conLoadout({ tipo: 'asentamiento', asentamientoId: a.id })], [], new Set(['en-loadout']), instanteDeTest(5));
+
+      const columna = r.columnas[0]!;
+      expect(r.columnas).toHaveLength(1);
+      expect(columna.posicionActual).toEqual(a.posicion);
+      expect(columna.suministro, 'carro vacío').toEqual({});
+      expect(columna.escuadrones.map((e) => e.id)).toEqual(['en-loadout']);
+      const tras = r.heroes[0]!;
+      expect(tras.ubicacion).toEqual({ tipo: 'columna', ejercitoId: columna.id });
+      expect(tras.escuadrones.find((e) => e.id === 'en-loadout')!.contenedor).toEqual({ tipo: 'ejercito', ejercitoId: columna.id });
+      expect(
+        tras.escuadrones.filter((e) => e.id !== 'en-loadout').every((e) => e.cantidad === 0 && !e.enGuarnicion),
+        'guarnición y resto del campamento a 0'
+      ).toBe(true);
+    });
+
+    it('un visitante vuelve a la columna que dejó aparcada, sin columna nueva', () => {
+      const a = plaza();
+      const visitante = heroeDePrueba('visitante', { tipo: 'asentamiento', asentamientoId: a.id });
+      const aparcada: Ejercito = {
+        id: 'aparcada',
+        faccionId: 'faccion-2',
+        origenAsentamientoId: 'otra',
+        participantes: [{ heroeId: 'visitante', unidoEn: instanteDeTest(0) }],
+        tipo: 'personal',
+        liderId: 'visitante',
+        politicaDeUnion: 'rechazar',
+        escuadronIds: [],
+        suministro: {},
+        caravanasAdjuntasIds: [],
+        objetivo: { tipo: 'punto', punto: a.posicion },
+        ruta: [],
+        progreso: 0,
+        posicionActual: a.posicion,
+        estado: 'estacionado',
+      };
+
+      const r = desalojarResidentes(a, [a], [visitante], [aparcada], new Set(), instanteDeTest(5));
+
+      expect(r.columnas).toEqual([]);
+      expect(r.heroes[0]!.ubicacion).toEqual({ tipo: 'columna', ejercitoId: 'aparcada' });
+    });
   });
 });
