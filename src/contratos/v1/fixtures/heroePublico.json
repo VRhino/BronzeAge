@@ -1,0 +1,22 @@
+{
+  "heroeId": "heroe-bot-1",
+  "displayName": "Capitán de Tirinto",
+  "classDefinitionId": "guerrero",
+  "nivel": 3,
+  "heridoHasta": 1789410720000,
+  "escuadrasQueLleva": [
+    {
+      "tropaId": "lanceros_mimbre",
+      "cantidad": 6,
+      "nivel": 2
+    }
+  ],
+  "equipamiento": {
+    "arma": "lanza_bronce",
+    "casco": null,
+    "torso": null,
+    "guantes": null,
+    "pantalones": null,
+    "botas": null
+  }
+}

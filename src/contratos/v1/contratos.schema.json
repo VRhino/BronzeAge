@@ -1,0 +1,647 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Contrato BronzeAge - Conquest v1",
+  "description": "Mensajes y proyecciones del contrato v1 (BronzeAgeFase0/Docs/Coordinacion/01 y 02). Cada entidad es una entrada de definitions; los fixtures de fixtures/ validan contra ellas.",
+  "definitions": {
+    "SchemaVersion": { "const": 1 },
+    "Id": { "type": "string", "minLength": 1 },
+    "Uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "Entero": { "type": "integer", "minimum": 0 },
+    "EnteroPositivo": { "type": "integer", "minimum": 1 },
+    "Instante": {
+      "description": "Tiempo de MUNDO, ms desde epoca (doc 01 §0). No comparable con IsoUtc.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "IsoUtc": {
+      "description": "Tiempo REAL UTC en ISO 8601 (doc 01 §0).",
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+    },
+    "Punto": {
+      "type": "object",
+      "properties": { "x": { "type": "number" }, "y": { "type": "number" } },
+      "required": ["x", "y"],
+      "additionalProperties": false
+    },
+    "LadoId": { "enum": ["atacante", "defensor"] },
+    "Controlador": { "enum": ["humano", "bot"] },
+    "Genero": { "enum": ["masculino", "femenino"] },
+    "Moral": { "type": "number", "minimum": 0, "maximum": 100 },
+    "Avatar": {
+      "description": "Ids de piezas del catalogo visual de Conquest (AvatarParts). Cosmetico.",
+      "type": "object",
+      "properties": {
+        "cabezaId": { "type": "string" },
+        "peloId": { "type": "string" },
+        "barbaId": { "type": "string" },
+        "cejasId": { "type": "string" }
+      },
+      "required": ["cabezaId", "peloId", "barbaId", "cejasId"],
+      "additionalProperties": false
+    },
+    "Atributos": {
+      "type": "object",
+      "properties": {
+        "fuerza": { "$ref": "#/definitions/Entero" },
+        "destreza": { "$ref": "#/definitions/Entero" },
+        "armadura": { "$ref": "#/definitions/Entero" },
+        "vitalidad": { "$ref": "#/definitions/Entero" }
+      },
+      "required": ["fuerza", "destreza", "armadura", "vitalidad"],
+      "additionalProperties": false
+    },
+    "Monedas": {
+      "type": "object",
+      "properties": {
+        "bronce": { "$ref": "#/definitions/Entero" },
+        "plata": { "$ref": "#/definitions/Entero" },
+        "oro": { "$ref": "#/definitions/Entero" }
+      },
+      "required": ["bronce", "plata", "oro"],
+      "additionalProperties": false
+    },
+    "Estadisticas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": { "nombre": { "$ref": "#/definitions/Id" }, "valor": { "type": "number" } },
+        "required": ["nombre", "valor"],
+        "additionalProperties": false
+      }
+    },
+    "IdsDePerk": { "type": "array", "items": { "type": "integer" } },
+    "ItemInstancia": {
+      "description": "Objeto del inventario o del equipo (doc 01 §12.1), forma de InventoryItem de Conquest. El equipo unico lleva itemInstanceId, cantidad 1 y puede llevar estadisticas; lo apilable, ninguna de las dos.",
+      "type": "object",
+      "properties": {
+        "itemDefinitionId": { "$ref": "#/definitions/Id" },
+        "tipo": { "enum": ["arma", "armadura", "consumible", "visual"] },
+        "cantidad": { "$ref": "#/definitions/EnteroPositivo" },
+        "itemInstanceId": { "$ref": "#/definitions/Id" },
+        "estadisticas": { "$ref": "#/definitions/Estadisticas" },
+        "precio": { "$ref": "#/definitions/Entero" },
+        "casillaInventario": { "type": "integer", "minimum": -1 }
+      },
+      "required": ["itemDefinitionId", "tipo", "cantidad", "precio", "casillaInventario"],
+      "additionalProperties": false,
+      "if": { "required": ["itemInstanceId"] },
+      "then": { "properties": { "cantidad": { "const": 1 } } },
+      "else": { "not": { "required": ["estadisticas"] } }
+    },
+    "HuecoEquipo": { "anyOf": [{ "$ref": "#/definitions/ItemInstancia" }, { "type": "null" }] },
+    "Equipamiento": {
+      "type": "object",
+      "properties": {
+        "arma": { "$ref": "#/definitions/HuecoEquipo" },
+        "casco": { "$ref": "#/definitions/HuecoEquipo" },
+        "torso": { "$ref": "#/definitions/HuecoEquipo" },
+        "guantes": { "$ref": "#/definitions/HuecoEquipo" },
+        "pantalones": { "$ref": "#/definitions/HuecoEquipo" },
+        "botas": { "$ref": "#/definitions/HuecoEquipo" }
+      },
+      "required": ["arma", "casco", "torso", "guantes", "pantalones", "botas"],
+      "additionalProperties": false
+    },
+    "Escuadron": {
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "#/definitions/Id" },
+        "heroeId": { "$ref": "#/definitions/Id" },
+        "tropaId": { "$ref": "#/definitions/Id" },
+        "nombre": { "type": "string" },
+        "cantidad": { "$ref": "#/definitions/Entero" },
+        "nivel": { "$ref": "#/definitions/EnteroPositivo" },
+        "experiencia": { "$ref": "#/definitions/Entero" },
+        "moral": { "$ref": "#/definitions/Moral" },
+        "habilidadesDesbloqueadas": { "type": "array", "items": { "$ref": "#/definitions/Id" } },
+        "formacionesDesbloqueadas": { "type": "array", "items": { "$ref": "#/definitions/Entero" } },
+        "formacionSeleccionada": { "$ref": "#/definitions/Entero" },
+        "contenedor": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": { "tipo": { "const": "campamento" } },
+              "required": ["tipo"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": { "tipo": { "const": "ejercito" }, "ejercitoId": { "$ref": "#/definitions/Id" } },
+              "required": ["tipo", "ejercitoId"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": { "tipo": { "const": "escolta" }, "caravanaId": { "$ref": "#/definitions/Id" } },
+              "required": ["tipo", "caravanaId"],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "enGuarnicion": { "type": "boolean" },
+        "reservaBatalla": {
+          "type": "object",
+          "properties": { "battleId": { "$ref": "#/definitions/Uuid" } },
+          "required": ["battleId"],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "id", "heroeId", "tropaId", "nombre", "cantidad", "nivel", "experiencia", "moral",
+        "habilidadesDesbloqueadas", "formacionesDesbloqueadas", "formacionSeleccionada", "contenedor", "enGuarnicion"
+      ],
+      "additionalProperties": false
+    },
+    "Loadout": {
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "#/definitions/Id" },
+        "heroeId": { "$ref": "#/definitions/Id" },
+        "displayName": { "type": "string" },
+        "squadIds": { "type": "array", "items": { "$ref": "#/definitions/Id" } },
+        "perksSeleccionados": { "$ref": "#/definitions/IdsDePerk" },
+        "activo": { "type": "boolean" },
+        "liderazgoTotal": { "$ref": "#/definitions/Entero" }
+      },
+      "required": ["id", "heroeId", "displayName", "squadIds", "perksSeleccionados", "activo", "liderazgoTotal"],
+      "additionalProperties": false
+    },
+    "Heroe": {
+      "description": "El heroe propio, completo (doc 01 §12, doc 02 §4.1).",
+      "type": "object",
+      "properties": {
+        "schemaVersion": { "$ref": "#/definitions/SchemaVersion" },
+        "id": { "$ref": "#/definitions/Id" },
+        "jugadorId": { "type": ["string", "null"], "minLength": 1 },
+        "controlador": { "$ref": "#/definitions/Controlador" },
+        "displayName": { "type": "string" },
+        "classDefinitionId": { "$ref": "#/definitions/Id" },
+        "genero": { "$ref": "#/definitions/Genero" },
+        "avatar": { "$ref": "#/definitions/Avatar" },
+        "nivel": { "$ref": "#/definitions/EnteroPositivo" },
+        "experienciaHaciaSiguienteNivel": { "$ref": "#/definitions/Entero" },
+        "puntosDeAtributoSinGastar": { "$ref": "#/definitions/Entero" },
+        "puntosDePerkSinGastar": { "$ref": "#/definitions/Entero" },
+        "atributosBase": { "$ref": "#/definitions/Atributos" },
+        "perksDesbloqueados": { "$ref": "#/definitions/IdsDePerk" },
+        "liderazgoBase": { "$ref": "#/definitions/Entero" },
+        "ubicacion": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": { "tipo": { "const": "asentamiento" }, "asentamientoId": { "$ref": "#/definitions/Id" } },
+              "required": ["tipo", "asentamientoId"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": { "tipo": { "const": "columna" }, "ejercitoId": { "$ref": "#/definitions/Id" } },
+              "required": ["tipo", "ejercitoId"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": { "tipo": { "const": "desconectado" }, "punto": { "$ref": "#/definitions/Punto" } },
+              "required": ["tipo", "punto"],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "heridoHasta": { "$ref": "#/definitions/Instante" },
+        "escuadrones": { "type": "array", "items": { "$ref": "#/definitions/Escuadron" } },
+        "loadouts": { "type": "array", "items": { "$ref": "#/definitions/Loadout" } },
+        "inventario": { "type": "array", "items": { "$ref": "#/definitions/ItemInstancia" } },
+        "equipamiento": { "$ref": "#/definitions/Equipamiento" },
+        "monedasHeroe": { "$ref": "#/definitions/Monedas" },
+        "cupoGuarnicion": { "$ref": "#/definitions/Entero" }
+      },
+      "required": [
+        "schemaVersion", "id", "jugadorId", "controlador", "displayName", "classDefinitionId", "genero", "avatar",
+        "nivel", "experienciaHaciaSiguienteNivel", "puntosDeAtributoSinGastar", "puntosDePerkSinGastar",
+        "atributosBase", "perksDesbloqueados", "liderazgoBase", "ubicacion", "escuadrones", "loadouts", "inventario",
+        "equipamiento", "monedasHeroe", "cupoGuarnicion"
+      ],
+      "additionalProperties": false
+    },
+    "HeroePublico": {
+      "description": "Lo que un jugador ve de un heroe ajeno (doc 02 §4.1).",
+      "type": "object",
+      "properties": {
+        "heroeId": { "$ref": "#/definitions/Id" },
+        "displayName": { "type": "string" },
+        "classDefinitionId": { "$ref": "#/definitions/Id" },
+        "nivel": { "$ref": "#/definitions/EnteroPositivo" },
+        "heridoHasta": { "$ref": "#/definitions/Instante" },
+        "escuadrasQueLleva": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "tropaId": { "$ref": "#/definitions/Id" },
+              "cantidad": { "$ref": "#/definitions/Entero" },
+              "nivel": { "$ref": "#/definitions/EnteroPositivo" }
+            },
+            "required": ["tropaId", "cantidad", "nivel"],
+            "additionalProperties": false
+          }
+        },
+        "equipamiento": {
+          "description": "Por hueco, el itemDefinitionId de lo que lleva puesto.",
+          "type": "object",
+          "properties": {
+            "arma": { "type": ["string", "null"] },
+            "casco": { "type": ["string", "null"] },
+            "torso": { "type": ["string", "null"] },
+            "guantes": { "type": ["string", "null"] },
+            "pantalones": { "type": ["string", "null"] },
+            "botas": { "type": ["string", "null"] }
+          },
+          "required": ["arma", "casco", "torso", "guantes", "pantalones", "botas"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["heroeId", "displayName", "classDefinitionId", "nivel", "escuadrasQueLleva", "equipamiento"],
+      "additionalProperties": false
+    },
+    "ContextoEstrategico": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": { "tipo": { "const": "asedio" }, "asentamientoId": { "$ref": "#/definitions/Id" } },
+          "required": ["tipo", "asentamientoId"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "tipo": { "const": "campo_abierto" }, "punto": { "$ref": "#/definitions/Punto" } },
+          "required": ["tipo", "punto"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "tipo": { "const": "caravana" },
+            "caravanaId": { "$ref": "#/definitions/Id" },
+            "punto": { "$ref": "#/definitions/Punto" }
+          },
+          "required": ["tipo", "caravanaId", "punto"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "tipo": { "const": "campamento_bandidos" },
+            "campamentoId": { "$ref": "#/definitions/Id" },
+            "punto": { "$ref": "#/definitions/Punto" }
+          },
+          "required": ["tipo", "campamentoId", "punto"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "HeroSnapshot": {
+      "description": "El heroe al congelar el ticket; atributos ya con el equipo aplicado, calculados por BronzeAge.",
+      "type": "object",
+      "properties": {
+        "displayName": { "type": "string" },
+        "classDefinitionId": { "$ref": "#/definitions/Id" },
+        "nivel": { "$ref": "#/definitions/EnteroPositivo" },
+        "genero": { "$ref": "#/definitions/Genero" },
+        "avatar": { "$ref": "#/definitions/Avatar" },
+        "atributosEfectivos": { "$ref": "#/definitions/Atributos" },
+        "perksDesbloqueados": { "$ref": "#/definitions/IdsDePerk" },
+        "equipamiento": { "$ref": "#/definitions/Equipamiento" },
+        "casillasInventarioLibres": { "$ref": "#/definitions/Entero" }
+      },
+      "required": [
+        "displayName", "classDefinitionId", "nivel", "genero", "avatar", "atributosEfectivos", "perksDesbloqueados",
+        "equipamiento", "casillasInventarioLibres"
+      ],
+      "additionalProperties": false
+    },
+    "SquadSnapshot": {
+      "type": "object",
+      "properties": {
+        "squadId": { "$ref": "#/definitions/Id" },
+        "heroeId": {
+          "description": "Dueno. null en tropas sin dueno (bandidos, carreteros).",
+          "type": ["string", "null"],
+          "minLength": 1
+        },
+        "tropaId": { "$ref": "#/definitions/Id" },
+        "efectivosAutorizados": { "$ref": "#/definitions/Entero" },
+        "nivel": { "$ref": "#/definitions/EnteroPositivo" },
+        "experiencia": { "$ref": "#/definitions/Entero" },
+        "moral": { "$ref": "#/definitions/Moral" },
+        "habilidadesDesbloqueadas": { "type": "array", "items": { "$ref": "#/definitions/Id" } },
+        "formacionesDesbloqueadas": { "type": "array", "items": { "$ref": "#/definitions/Entero" } },
+        "formacionSeleccionada": { "$ref": "#/definitions/Entero" }
+      },
+      "required": [
+        "squadId", "heroeId", "tropaId", "efectivosAutorizados", "nivel", "experiencia", "moral",
+        "habilidadesDesbloqueadas", "formacionesDesbloqueadas", "formacionSeleccionada"
+      ],
+      "additionalProperties": false
+    },
+    "BattleParticipantSnapshot": {
+      "type": "object",
+      "properties": {
+        "heroeId": { "$ref": "#/definitions/Id" },
+        "controlador": { "$ref": "#/definitions/Controlador" },
+        "heroe": { "$ref": "#/definitions/HeroSnapshot" },
+        "escuadras": { "type": "array", "items": { "$ref": "#/definitions/SquadSnapshot" } }
+      },
+      "required": ["heroeId", "controlador", "heroe", "escuadras"],
+      "additionalProperties": false
+    },
+    "BattleSide": {
+      "type": "object",
+      "properties": {
+        "faccionId": { "type": ["string", "null"], "minLength": 1 },
+        "capacidadMaxima": { "$ref": "#/definitions/Entero" },
+        "participantes": { "type": "array", "items": { "$ref": "#/definitions/BattleParticipantSnapshot" } },
+        "escuadrasSinHeroe": { "type": "array", "items": { "$ref": "#/definitions/SquadSnapshot" } }
+      },
+      "required": ["faccionId", "capacidadMaxima", "participantes", "escuadrasSinHeroe"],
+      "additionalProperties": false
+    },
+    "BattleMapReference": {
+      "type": "object",
+      "properties": {
+        "tipo": { "const": "mapa" },
+        "mapaId": { "$ref": "#/definitions/Id" },
+        "centro": { "$ref": "#/definitions/Punto" }
+      },
+      "required": ["tipo", "mapaId", "centro"],
+      "additionalProperties": false
+    },
+    "SettlementBattleSnapshot": {
+      "description": "Asentamiento congelado al abrir la batalla (doc 01 §17). Coordenadas locales: origen en el centro del Centro Urbano, y hacia abajo. La celda (col, row) ocupa de (col, row) a (col + 1, row + 1), por unidadesPorCelda.",
+      "type": "object",
+      "properties": {
+        "tipo": { "const": "asentamiento" },
+        "settlementId": { "$ref": "#/definitions/Id" },
+        "layoutVersion": { "$ref": "#/definitions/EnteroPositivo" },
+        "unidadesPorCelda": { "type": "number", "exclusiveMinimum": 0 },
+        "edificios": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "edificioId": { "$ref": "#/definitions/Id" },
+              "tipo": { "$ref": "#/definitions/Id" },
+              "posicion": { "$ref": "#/definitions/Punto" },
+              "ancho": { "$ref": "#/definitions/EnteroPositivo" },
+              "alto": { "$ref": "#/definitions/EnteroPositivo" },
+              "nivelInterno": { "$ref": "#/definitions/EnteroPositivo" },
+              "estado": { "enum": ["en_cola", "en_construccion", "activo"] },
+              "danado": { "type": "boolean" }
+            },
+            "required": ["edificioId", "tipo", "posicion", "ancho", "alto", "estado"],
+            "additionalProperties": false
+          }
+        },
+        "recintos": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "recintoId": { "$ref": "#/definitions/Id" },
+              "nivel": { "type": "integer", "minimum": 1, "maximum": 3 },
+              "celdas": {
+                "description": "Solo las celdas en pie, en orden de recorrido desde la puerta principal.",
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "col": { "type": "integer" },
+                    "row": { "type": "integer" },
+                    "clase": { "enum": ["muro", "puerta", "torre"] }
+                  },
+                  "required": ["col", "row", "clase"],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": ["recintoId", "nivel", "celdas"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["tipo", "settlementId", "layoutVersion", "unidadesPorCelda", "edificios", "recintos"],
+      "additionalProperties": false
+    },
+    "BattleRules": {
+      "type": "object",
+      "properties": {
+        "duracionMaximaSegundos": { "$ref": "#/definitions/EnteroPositivo" },
+        "ganadorPorTiempo": { "$ref": "#/definitions/LadoId" },
+        "versionBalance": { "$ref": "#/definitions/EnteroPositivo" },
+        "versionCatalogoTropas": { "$ref": "#/definitions/EnteroPositivo" },
+        "versionCatalogoHeroe": { "$ref": "#/definitions/Id" },
+        "versionCatalogoObjetos": { "$ref": "#/definitions/Id" }
+      },
+      "required": [
+        "duracionMaximaSegundos", "ganadorPorTiempo", "versionBalance", "versionCatalogoTropas",
+        "versionCatalogoHeroe", "versionCatalogoObjetos"
+      ],
+      "additionalProperties": false
+    },
+    "BattleTicket": {
+      "description": "GET /v1/batallas/:battleId/ticket (doc 02 §3.2).",
+      "type": "object",
+      "properties": {
+        "schemaVersion": { "$ref": "#/definitions/SchemaVersion" },
+        "battleId": { "$ref": "#/definitions/Uuid" },
+        "gameId": { "$ref": "#/definitions/Id" },
+        "ticketRevision": { "$ref": "#/definitions/Entero" },
+        "contextoEstrategico": { "$ref": "#/definitions/ContextoEstrategico" },
+        "bandos": {
+          "type": "object",
+          "properties": {
+            "atacante": { "$ref": "#/definitions/BattleSide" },
+            "defensor": { "$ref": "#/definitions/BattleSide" }
+          },
+          "required": ["atacante", "defensor"],
+          "additionalProperties": false
+        },
+        "mapa": {
+          "oneOf": [
+            { "$ref": "#/definitions/BattleMapReference" },
+            { "$ref": "#/definitions/SettlementBattleSnapshot" }
+          ]
+        },
+        "reglas": { "$ref": "#/definitions/BattleRules" }
+      },
+      "required": ["schemaVersion", "battleId", "gameId", "ticketRevision", "contextoEstrategico", "bandos", "mapa", "reglas"],
+      "additionalProperties": false
+    },
+    "BattleServerAssignment": {
+      "description": "POST /v1/batallas/:battleId/asignacion (doc 02 §3.3).",
+      "type": "object",
+      "properties": {
+        "schemaVersion": { "$ref": "#/definitions/SchemaVersion" },
+        "battleId": { "$ref": "#/definitions/Uuid" },
+        "ticketRevision": { "$ref": "#/definitions/Entero" },
+        "intentoAsignacionId": { "$ref": "#/definitions/Id" },
+        "instancia": {
+          "type": "object",
+          "properties": {
+            "host": { "$ref": "#/definitions/Id" },
+            "puerto": { "type": "integer", "minimum": 1, "maximum": 65535 },
+            "protocolo": { "$ref": "#/definitions/Id" }
+          },
+          "required": ["host", "puerto", "protocolo"],
+          "additionalProperties": false
+        },
+        "tokensParticipante": {
+          "description": "Solo heroes humanos: los bot no se conectan.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "heroeId": { "$ref": "#/definitions/Id" },
+              "token": { "$ref": "#/definitions/Id" },
+              "expiraEn": { "$ref": "#/definitions/IsoUtc" }
+            },
+            "required": ["heroeId", "token", "expiraEn"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["schemaVersion", "battleId", "ticketRevision", "intentoAsignacionId", "instancia", "tokensParticipante"],
+      "additionalProperties": false
+    },
+    "InicioBatalla": {
+      "description": "POST /v1/batallas/:battleId/inicio (doc 02 §3.3).",
+      "type": "object",
+      "properties": {
+        "schemaVersion": { "$ref": "#/definitions/SchemaVersion" },
+        "battleId": { "$ref": "#/definitions/Uuid" },
+        "ticketRevision": { "$ref": "#/definitions/Entero" },
+        "intentoAsignacionId": { "$ref": "#/definitions/Id" }
+      },
+      "required": ["schemaVersion", "battleId", "ticketRevision", "intentoAsignacionId"],
+      "additionalProperties": false
+    },
+    "Botin": {
+      "type": "object",
+      "properties": {
+        "objetos": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "itemDefinitionId": { "$ref": "#/definitions/Id" },
+              "cantidad": { "$ref": "#/definitions/EnteroPositivo" },
+              "itemInstanceId": { "$ref": "#/definitions/Id" },
+              "estadisticas": { "$ref": "#/definitions/Estadisticas" }
+            },
+            "required": ["itemDefinitionId", "cantidad"],
+            "additionalProperties": false,
+            "if": { "required": ["itemInstanceId"] },
+            "then": { "properties": { "cantidad": { "const": 1 } } },
+            "else": { "not": { "required": ["estadisticas"] } }
+          }
+        },
+        "monedas": { "$ref": "#/definitions/Monedas" }
+      },
+      "required": ["objetos", "monedas"],
+      "additionalProperties": false
+    },
+    "BattleResult": {
+      "description": "POST /v1/batallas/:battleId/resultado (doc 02 §3.3). La forma no basta: BronzeAge ademas pasa el checklist semantico de doc 02 §3.3.",
+      "type": "object",
+      "properties": {
+        "schemaVersion": { "$ref": "#/definitions/SchemaVersion" },
+        "battleId": { "$ref": "#/definitions/Uuid" },
+        "resultId": { "$ref": "#/definitions/Id" },
+        "ticketRevision": { "$ref": "#/definitions/Entero" },
+        "intentoAsignacionId": { "$ref": "#/definitions/Id" },
+        "inicio": { "$ref": "#/definitions/IsoUtc" },
+        "fin": { "$ref": "#/definitions/IsoUtc" },
+        "ganador": { "$ref": "#/definitions/LadoId" },
+        "razon": { "enum": ["objetivos_capturados", "aniquilacion", "tiempo_agotado"] },
+        "objetivos": {
+          "description": "Informativo: BronzeAge no aplica nada a partir de los objetivos.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "objetivoId": { "$ref": "#/definitions/Id" },
+              "capturadoPor": { "enum": ["atacante", "defensor", null] }
+            },
+            "required": ["objetivoId", "capturadoPor"],
+            "additionalProperties": false
+          }
+        },
+        "porEscuadra": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "squadId": { "$ref": "#/definitions/Id" },
+              "desplegados": { "$ref": "#/definitions/Entero" },
+              "supervivientesAlCierre": { "$ref": "#/definitions/Entero" },
+              "muertos": { "$ref": "#/definitions/Entero" },
+              "xpGanada": { "$ref": "#/definitions/Entero" }
+            },
+            "required": ["squadId", "desplegados", "supervivientesAlCierre", "muertos", "xpGanada"],
+            "additionalProperties": false
+          }
+        },
+        "porHeroe": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "heroeId": { "$ref": "#/definitions/Id" },
+              "participo": { "type": "boolean" },
+              "sobrevivioAlCierre": { "type": "boolean" },
+              "xpGanada": { "$ref": "#/definitions/Entero" },
+              "botin": { "$ref": "#/definitions/Botin" }
+            },
+            "required": ["heroeId", "participo", "sobrevivioAlCierre", "xpGanada"],
+            "additionalProperties": false
+          }
+        },
+        "versionServidor": { "$ref": "#/definitions/Id" }
+      },
+      "required": [
+        "schemaVersion", "battleId", "resultId", "ticketRevision", "intentoAsignacionId", "inicio", "fin", "ganador",
+        "razon", "objetivos", "porEscuadra", "porHeroe", "versionServidor"
+      ],
+      "additionalProperties": false
+    },
+    "CatalogoTropas": {
+      "description": "Catalogo puente de tropas (doc 01 §13, CQ-003). Unidades y coste de Liderazgo los decide BronzeAge.",
+      "type": "object",
+      "properties": {
+        "schemaVersion": { "$ref": "#/definitions/SchemaVersion" },
+        "version": { "$ref": "#/definitions/EnteroPositivo" },
+        "tropas": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "tropaId": { "$ref": "#/definitions/Id" },
+              "nombre": { "type": "string" },
+              "escalon": { "type": "integer", "minimum": 1, "maximum": 5 },
+              "unidades": { "$ref": "#/definitions/EnteroPositivo" },
+              "costeLiderazgo": { "$ref": "#/definitions/EnteroPositivo" },
+              "tipo": { "enum": ["cuerpo_a_cuerpo", "a_distancia"] }
+            },
+            "required": ["tropaId", "nombre", "escalon", "unidades", "costeLiderazgo", "tipo"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["schemaVersion", "version", "tropas"],
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,108 @@
+{
+  "schemaVersion": 1,
+  "battleId": "9d4e6b2a-1c3f-4a5b-8e7d-6f0a2b4c8d1e",
+  "gameId": "partida-demo",
+  "ticketRevision": 0,
+  "contextoEstrategico": {
+    "tipo": "campamento_bandidos",
+    "campamentoId": "bandidos-3",
+    "punto": {
+      "x": 812,
+      "y": 1340
+    }
+  },
+  "bandos": {
+    "atacante": {
+      "faccionId": "faccion-1",
+      "capacidadMaxima": 5,
+      "participantes": [
+        {
+          "heroeId": "heroe-bruno",
+          "controlador": "humano",
+          "heroe": {
+            "displayName": "Bruno",
+            "classDefinitionId": "arquero",
+            "nivel": 2,
+            "genero": "masculino",
+            "avatar": {
+              "cabezaId": "cabeza_05",
+              "peloId": "pelo_01",
+              "barbaId": "barba_02",
+              "cejasId": "cejas_03"
+            },
+            "atributosEfectivos": {
+              "fuerza": 9,
+              "destreza": 14,
+              "armadura": 6,
+              "vitalidad": 10
+            },
+            "perksDesbloqueados": [],
+            "equipamiento": {
+              "arma": null,
+              "casco": null,
+              "torso": null,
+              "guantes": null,
+              "pantalones": null,
+              "botas": null
+            },
+            "casillasInventarioLibres": 30
+          },
+          "escuadras": [
+            {
+              "squadId": "escuadron-20",
+              "heroeId": "heroe-bruno",
+              "tropaId": "lanceros_mimbre",
+              "efectivosAutorizados": 25,
+              "nivel": 1,
+              "experiencia": 40,
+              "moral": 100,
+              "habilidadesDesbloqueadas": [],
+              "formacionesDesbloqueadas": [
+                0
+              ],
+              "formacionSeleccionada": 0
+            }
+          ]
+        }
+      ],
+      "escuadrasSinHeroe": []
+    },
+    "defensor": {
+      "faccionId": null,
+      "capacidadMaxima": 5,
+      "participantes": [],
+      "escuadrasSinHeroe": [
+        {
+          "squadId": "bandidos-3-tropa",
+          "heroeId": null,
+          "tropaId": "milicia_lanceros",
+          "efectivosAutorizados": 15,
+          "nivel": 1,
+          "experiencia": 0,
+          "moral": 100,
+          "habilidadesDesbloqueadas": [],
+          "formacionesDesbloqueadas": [
+            0
+          ],
+          "formacionSeleccionada": 0
+        }
+      ]
+    }
+  },
+  "mapa": {
+    "tipo": "mapa",
+    "mapaId": "mapa-principal",
+    "centro": {
+      "x": 812,
+      "y": 1340
+    }
+  },
+  "reglas": {
+    "duracionMaximaSegundos": 900,
+    "ganadorPorTiempo": "defensor",
+    "versionBalance": 9,
+    "versionCatalogoTropas": 1,
+    "versionCatalogoHeroe": "conquest-heroes-1",
+    "versionCatalogoObjetos": "conquest-items-1"
+  }
+}

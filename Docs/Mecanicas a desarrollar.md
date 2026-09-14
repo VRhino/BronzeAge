@@ -332,14 +332,18 @@ Sin resolver:
 
 - La XP de las escuadras en batallas que se resuelven con números: se fija cuando Conquest publique su curva
   de XP (CQ-001).
+- Quién gana una batalla que agota su tiempo fuera de un asedio (campo abierto, caravana, campamento de
+  bandidos). En un asedio gana el defensor (Doc 5.15.1). El ticket lo lleva en `BattleRules.ganadorPorTiempo`
+  (`src/contratos/v1/`), y hoy el fixture de bandidos pone `defensor` solo como ejemplo.
 
 ## 31. Modelo de Héroe
 
 **Estado: reglas principales cerradas (canon Doc 5.16 y glosario, 2026-09-11 y 2026-09-13), `código: ✘`.**
 Hoy el motor usa `Jugador` para todo lo que el canon atribuye al Héroe, y sigue con la veteranía y el
 estado herido de los escuadrones. Datos y orden de
-implementación en `Docs/Coordinacion/01_Modelo_de_datos_compartido.md` §12-§14 y BA-004: primero el
-contrato de identidad, los schemas y los fixtures, y solo después renombrar `jugadorId`.
+implementación en `Docs/Coordinacion/01_Modelo_de_datos_compartido.md` §12-§14 y BA-004. Los schemas, tipos y
+fixtures del contrato ya están en `src/contratos/v1/`; falta llevar el Héroe al dominio y renombrar
+`jugadorId`.
 
 Sin resolver:
 

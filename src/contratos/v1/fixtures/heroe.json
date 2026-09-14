@@ -1,0 +1,183 @@
+{
+  "schemaVersion": 1,
+  "id": "heroe-ana",
+  "jugadorId": "jugador-1",
+  "controlador": "humano",
+  "displayName": "Ana de Micenas",
+  "classDefinitionId": "guerrero",
+  "genero": "femenino",
+  "avatar": {
+    "cabezaId": "cabeza_03",
+    "peloId": "pelo_07",
+    "barbaId": "",
+    "cejasId": "cejas_02"
+  },
+  "nivel": 4,
+  "experienciaHaciaSiguienteNivel": 120,
+  "puntosDeAtributoSinGastar": 2,
+  "puntosDePerkSinGastar": 1,
+  "atributosBase": {
+    "fuerza": 14,
+    "destreza": 11,
+    "armadura": 9,
+    "vitalidad": 12
+  },
+  "perksDesbloqueados": [
+    101,
+    104
+  ],
+  "liderazgoBase": 100,
+  "ubicacion": {
+    "tipo": "columna",
+    "ejercitoId": "ejercito-7"
+  },
+  "escuadrones": [
+    {
+      "id": "escuadron-11",
+      "heroeId": "heroe-ana",
+      "tropaId": "espadachines_cobre",
+      "nombre": "Espadas de Ana",
+      "cantidad": 20,
+      "nivel": 3,
+      "experiencia": 640,
+      "moral": 92,
+      "habilidadesDesbloqueadas": [
+        "carga"
+      ],
+      "formacionesDesbloqueadas": [
+        0,
+        1
+      ],
+      "formacionSeleccionada": 1,
+      "contenedor": {
+        "tipo": "ejercito",
+        "ejercitoId": "ejercito-7"
+      },
+      "enGuarnicion": false,
+      "reservaBatalla": {
+        "battleId": "3f2a9c1e-7b4d-4e8a-9f6c-2d1b0a5e8c73"
+      }
+    },
+    {
+      "id": "escuadron-12",
+      "heroeId": "heroe-ana",
+      "tropaId": "honderos",
+      "nombre": "Honderos",
+      "cantidad": 20,
+      "nivel": 2,
+      "experiencia": 210,
+      "moral": 100,
+      "habilidadesDesbloqueadas": [],
+      "formacionesDesbloqueadas": [
+        0
+      ],
+      "formacionSeleccionada": 0,
+      "contenedor": {
+        "tipo": "ejercito",
+        "ejercitoId": "ejercito-7"
+      },
+      "enGuarnicion": false,
+      "reservaBatalla": {
+        "battleId": "3f2a9c1e-7b4d-4e8a-9f6c-2d1b0a5e8c73"
+      }
+    },
+    {
+      "id": "escuadron-13",
+      "heroeId": "heroe-ana",
+      "tropaId": "milicia_lanceros",
+      "nombre": "Milicia",
+      "cantidad": 25,
+      "nivel": 1,
+      "experiencia": 0,
+      "moral": 100,
+      "habilidadesDesbloqueadas": [],
+      "formacionesDesbloqueadas": [
+        0
+      ],
+      "formacionSeleccionada": 0,
+      "contenedor": {
+        "tipo": "campamento"
+      },
+      "enGuarnicion": true
+    }
+  ],
+  "loadouts": [
+    {
+      "id": "loadout-1",
+      "heroeId": "heroe-ana",
+      "displayName": "Asalto",
+      "squadIds": [
+        "escuadron-11",
+        "escuadron-12"
+      ],
+      "perksSeleccionados": [
+        101
+      ],
+      "activo": true,
+      "liderazgoTotal": 28
+    }
+  ],
+  "inventario": [
+    {
+      "itemDefinitionId": "pocion_curacion",
+      "tipo": "consumible",
+      "cantidad": 3,
+      "precio": 5,
+      "casillaInventario": 0
+    },
+    {
+      "itemDefinitionId": "casco_cuero",
+      "tipo": "armadura",
+      "cantidad": 1,
+      "itemInstanceId": "item-0003",
+      "estadisticas": [
+        {
+          "nombre": "armadura",
+          "valor": 3
+        }
+      ],
+      "precio": 12,
+      "casillaInventario": 1
+    }
+  ],
+  "equipamiento": {
+    "arma": {
+      "itemDefinitionId": "espada_bronce",
+      "tipo": "arma",
+      "cantidad": 1,
+      "itemInstanceId": "item-0001",
+      "estadisticas": [
+        {
+          "nombre": "dano",
+          "valor": 12.5
+        }
+      ],
+      "precio": 40,
+      "casillaInventario": -1
+    },
+    "casco": null,
+    "torso": {
+      "itemDefinitionId": "coraza_bronce",
+      "tipo": "armadura",
+      "cantidad": 1,
+      "itemInstanceId": "item-0002",
+      "estadisticas": [
+        {
+          "nombre": "armadura",
+          "valor": 8
+        }
+      ],
+      "precio": 55,
+      "casillaInventario": -1
+    },
+    "guantes": null,
+    "pantalones": null,
+    "botas": null
+  },
+  "monedasHeroe": {
+    "bronce": 340,
+    "plata": 12,
+    "oro": 1
+  },
+  "cupoGuarnicion": 36
+}

@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "version": 1,
+  "tropas": [
+    {
+      "tropaId": "milicia_lanceros",
+      "nombre": "Milicia de lanceros",
+      "escalon": 1,
+      "unidades": 25,
+      "costeLiderazgo": 7,
+      "tipo": "cuerpo_a_cuerpo"
+    },
+    {
+      "tropaId": "lanceros_mimbre",
+      "nombre": "Lanceros con escudo de mimbre",
+      "escalon": 1,
+      "unidades": 25,
+      "costeLiderazgo": 7,
+      "tipo": "cuerpo_a_cuerpo"
+    },
+    {
+      "tropaId": "espadachines_cobre",
+      "nombre": "Espadachines de espada corta de cobre",
+      "escalon": 2,
+      "unidades": 20,
+      "costeLiderazgo": 14,
+      "tipo": "cuerpo_a_cuerpo"
+    },
+    {
+      "tropaId": "hacheros_ligeros",
+      "nombre": "Hacheros ligeros",
+      "escalon": 3,
+      "unidades": 18,
+      "costeLiderazgo": 22,
+      "tipo": "cuerpo_a_cuerpo"
+    },
+    {
+      "tropaId": "espadachines_bronce",
+      "nombre": "Espadachines con espadas y escudos de bronce",
+      "escalon": 3,
+      "unidades": 18,
+      "costeLiderazgo": 22,
+      "tipo": "cuerpo_a_cuerpo"
+    },
+    {
+      "tropaId": "lanceros_pesados",
+      "nombre": "Lanceros pesados micénicos",
+      "escalon": 4,
+      "unidades": 15,
+      "costeLiderazgo": 32,
+      "tipo": "cuerpo_a_cuerpo"
+    },
+    {
+      "tropaId": "hacheros_armados",
+      "nombre": "Hacheros armados",
+      "escalon": 4,
+      "unidades": 15,
+      "costeLiderazgo": 32,
+      "tipo": "cuerpo_a_cuerpo"
+    },
+    {
+      "tropaId": "honderos",
+      "nombre": "Honderos",
+      "escalon": 2,
+      "unidades": 20,
+      "costeLiderazgo": 14,
+      "tipo": "a_distancia"
+    },
+    {
+      "tropaId": "escaramuzadores_jabalina",
+      "nombre": "Escaramuzadores con jabalina",
+      "escalon": 3,
+      "unidades": 18,
+      "costeLiderazgo": 22,
+      "tipo": "a_distancia"
+    },
+    {
+      "tropaId": "arqueros",
+      "nombre": "Arqueros",
+      "escalon": 3,
+      "unidades": 18,
+      "costeLiderazgo": 22,
+      "tipo": "a_distancia"
+    },
+    {
+      "tropaId": "arqueros_compuesto",
+      "nombre": "Arqueros con arco compuesto",
+      "escalon": 5,
+      "unidades": 12,
+      "costeLiderazgo": 45,
+      "tipo": "a_distancia"
+    }
+  ]
+}

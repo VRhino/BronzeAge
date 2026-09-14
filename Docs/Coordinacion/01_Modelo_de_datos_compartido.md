@@ -4,8 +4,9 @@
 contrato implementable e interoperable**. `Docs/Coordinacion/propuestas/REVISION_CONTRATOS_CODEX_2026-09-11.md`
 encontró transiciones sin mensaje que las dispare, huecos de completitud y afirmaciones que no coincidían
 con el código real; las secciones §12/§13/§15/§17/§19 llevan las correcciones de esa revisión inline,
-marcadas donde siguen abiertas (`PENDIENTE`). Nada de lo nuevo (`Heroe`, `Batalla`, campos 3D) existe
-todavía en `src/`. Todo lo demás SÍ existe hoy en `src/domain/types.ts` — se transcribe completo aquí
+marcadas donde siguen abiertas (`PENDIENTE`). Lo nuevo (`Heroe`, `Batalla`, campos 3D) todavía no existe en
+el dominio; su forma en el cable sí: schema, tipos y fixtures en `src/contratos/v1/` (§15). Todo lo demás SÍ
+existe hoy en `src/domain/types.ts` — se transcribe completo aquí
 porque es lo que Unity necesita conocer para proyectar mundo, facción y asentamiento, no solo lo
 relacionado con batalla.  
 **Fecha:** 2026-09-11 (dos revisiones: se completó el inventario tras observación de que la primera versión
@@ -569,7 +570,10 @@ Escuadron
                         diferente — nuevo. La XP ganada en batalla la calcula Unity y llega en el
                         `BattleResult` (§15); BronzeAge la suma y aplica la curva de nivel.
   moral                   existente
-  habilidadesDesbloqueadas[], formacionesDesbloqueadas[], formacionSeleccionada   nuevo
+  habilidadesDesbloqueadas[], formacionesDesbloqueadas[], formacionSeleccionada   nuevo — como las persiste
+                        Conquest (`SquadInstanceData`): habilidades por id de texto; formaciones como índices
+                        en la lista de la definición de escuadra (`permittedFormationIndexes`,
+                        `selectedFormationIndex`)
   contenedor: { tipo: 'campamento' } | { tipo: 'ejercito'; ejercitoId } | { tipo: 'escolta'; caravanaId }
                         nuevo — dónde está FÍSICAMENTE. `'campamento'` = en el campamento del héroe (su
                         residencia, §12), o en ninguna parte si el héroe es huérfano.
@@ -648,8 +652,8 @@ migración.
 | `arqueros_compuesto` | Arqueros con arco compuesto | 5 | 12 | 45 | a distancia | `arc01` Levy Archers |
 
 Fuente: `TROPAS_RECLUTABLES`, `UNIDADES_POR_ESCALON` y `LIDERAZGO.costePorEscalon` (`src/constants.ts`), al
-2026-09-13. Al publicar `src/contratos/v1/`, esta tabla se genera desde esas constantes en vez de copiarse a
-mano. Falta acordar con Conquest cómo corresponde el escalón (1 leva … 5 élite) con su `SquadRarity`.
+2026-09-13. Publicada, generada desde esas constantes, en `src/contratos/v1/catalogoTropas.json`: su `version`
+(`VERSION_CATALOGO_TROPAS`) es la que cita `BattleRules.versionCatalogoTropas`. Falta acordar con Conquest cómo corresponde el escalón (1 leva … 5 élite) con su `SquadRarity`.
 
 ## 14. `Loadout`
 
@@ -762,22 +766,32 @@ Los plazos (de asignación, de inicio y el margen) son constantes de configuraci
 ```text
 BattleTicket
   schemaVersion, battleId, gameId, ticketRevision
-  vigencia (emitidoEn, expiraEn)
-  contextoEstrategico        qué se está disputando (asentamiento/campo abierto/caravana)
-  bandos: [{ ladoId, capacidadMinima, capacidadMaxima, participantes: BattleParticipantSnapshot[],
-             escuadrasSinHeroe: SquadSnapshot[] }]
-  mapa: BattleMapReference | SettlementBattleSnapshot   ver §17 para la forma de SettlementBattleSnapshot
+  contextoEstrategico        asedio { asentamientoId } | campo_abierto { punto } | caravana { caravanaId, punto }
+                             | campamento_bandidos { campamentoId, punto }
+  bandos: { atacante: BattleSide, defensor: BattleSide }
+  mapa: BattleMapReference | SettlementBattleSnapshot   BattleMapReference = { mapaId, centro }: Unity monta el
+                             terreno desde GET .../mapa/:mapaId. SettlementBattleSnapshot, en §17
   reglas: BattleRules         ver abajo
-  autorizacion                limitada a esta battleId + ticketRevision, ver doc 02 §3
+
+BattleSide
+  faccionId                  null si el bando no es de nadie (campamento de bandidos)
+  capacidadMaxima            en héroes, ver abajo
+  participantes: BattleParticipantSnapshot[]
+  escuadrasSinHeroe: SquadSnapshot[]
 ```
+
+**Forma exacta:** `src/contratos/v1/contratos.schema.json` (JSON Schema draft-07, una entrada de `definitions`
+por entidad), con su espejo en TypeScript (`dto.ts`) y un fixture de cada mensaje en `fixtures/`. Los lados
+son siempre `atacante` y `defensor` (Doc 5.2: dos bandos, sin empates).
 
 **Corrección R03 — revisión del ticket:** BA-001 permite sustituir un participante antes de empezar
 (desconexión, etc.); eso sube `ticketRevision` y cambia `huellaTicket`. Una `BattleServerAssignment` o
 `BattleResult` que referencie una `ticketRevision` distinta de la vigente en `Batalla` se **rechaza** — así
 una asignación vieja no puede cerrar una revisión nueva.
 
-**`BattleParticipantSnapshot`:** `heroeId`, `ladoId`, `controlador` (`'humano'` | `'bot'`),
-`HeroSnapshot`, `SquadSnapshot[]` (solo las escuadras que lleva ese héroe, limitadas por su liderazgo).
+**`BattleParticipantSnapshot`:** `heroeId`, `controlador` (`'humano'` | `'bot'`), `heroe: HeroSnapshot`,
+`escuadras: SquadSnapshot[]` (solo las que lleva ese héroe, limitadas por su liderazgo). El lado lo da el
+bando en el que va.
 
 **Composición de un bando (decisión del usuario, 2026-09-13, Doc 5.15):** héroes (humanos o bot) con sus
 escuadras, más `escuadrasSinHeroe` (la guarnición del asentamiento, la escolta de la caravana o las tropas de un campamento de bandidos), que maneja
@@ -786,28 +800,38 @@ Doc 5.15.1): las escuadras sin
 héroe no ocupan plaza y entran directamente. Los héroes que superan la capacidad esperan en cola y entran a
 medida que caen otros.
 
-**`HeroSnapshot` — forma mínima (R04, antes indefinida):** `heroeId`, `displayName`, `classDefinitionId`,
-`nivel`, `atributosEfectivos` (post-equipo, recalculados por BronzeAge contra el catálogo vigente — nunca
-copiados de un cálculo del cliente), `perksDesbloqueados[]`, `equipamiento` (igual forma que
-`Heroe.equipamiento`, §12.1: cada objeto entero, con sus estadísticas), `casillasInventarioLibres` (cuánto
-botín le cabe, ver `BattleResult`), `versionCatalogoHeroe`, `versionCatalogoObjetos`.
+**`HeroSnapshot` — forma mínima (R04, antes indefinida):** `displayName`, `classDefinitionId`, `nivel`,
+`genero` y `avatar` (para dibujarlo en la batalla), `atributosEfectivos` (post-equipo, recalculados por
+BronzeAge contra el catálogo vigente — nunca copiados de un cálculo del cliente), `perksDesbloqueados[]`,
+`equipamiento` (igual forma que `Heroe.equipamiento`, §12.1: cada objeto entero, con sus estadísticas) y
+`casillasInventarioLibres` (cuánto botín le cabe, ver `BattleResult`). El `heroeId` va en el participante, y
+las versiones de catálogo, una sola vez por ticket en `BattleRules`.
 
 **`SquadSnapshot` — forma mínima (R04, antes solo tenía `squadId`+cantidad+`tropaId`):** `squadId`,
-`tropaId`, `efectivosAutorizados` (renombrado desde "desplegados" — es la fuerza RESERVADA/autorizada, no
-necesariamente la que Unity ponga en juego de una vez, ver `BattleResult` abajo), `nivel`, `experiencia`,
-`moral`, `habilidadesDesbloqueadas[]`, `formacionesDesbloqueadas[]`, `formacionSeleccionada`,
-`versionCatalogoTropas`. Sin esto, dos escuadras del mismo `tropaId` con progresión distinta serían
+`heroeId` (su dueño; `null` en las tropas sin dueño), `tropaId`, `efectivosAutorizados` (renombrado desde
+"desplegados" — es la fuerza RESERVADA/autorizada, no necesariamente la que Unity ponga en juego de una vez,
+ver `BattleResult` abajo), `nivel`, `experiencia`, `moral`, `habilidadesDesbloqueadas[]`,
+`formacionesDesbloqueadas[]` y `formacionSeleccionada` (§13). Sin esto, dos escuadras del mismo `tropaId` con progresión distinta serían
 indistinguibles para inicializar sus capacidades de combate — el catálogo del tipo de tropa por sí solo no
 basta (Conquest ya conserva esta progresión en `SquadInstance.Data.cs`, no hay que reinventarla, solo
 transportarla).
 
-**`BattleRules` — forma mínima (R04, antes indefinida):** `schemaVersionBalance`, duración máxima de
-partida, condiciones de victoria permitidas por este contexto, `versionCatalogoTropas`,
-`versionCatalogoHeroe`, `versionCatalogoObjetos` y, si los hay, los topes de XP y de monedas por batalla.
-Valores v1 (2026-09-14): duración máxima 30 minutos en un asedio y 15 en el resto; sin tope de XP ni de
-monedas hasta que Conquest publique su curva de XP (CQ-001).
-Las capacidades asimétricas por bando ya viven en `bandos[].capacidadMinima/Maxima`
-(BA-001), no se duplican aquí.
+**`BattleRules` — forma mínima (R04, antes indefinida):**
+
+```text
+BattleRules
+  duracionMaximaSegundos     1800 en un asedio, 900 en el resto (Doc 5.15.1)
+  ganadorPorTiempo           'atacante' | 'defensor': quién gana si se agota el tiempo. En un asedio, el
+                             defensor (Doc 5.15.1). Fuera del asedio está PENDIENTE (Mecánicas §30)
+  versionBalance             BALANCE_VERSION de BronzeAge
+  versionCatalogoTropas      version de catalogoTropas.json (§13)
+  versionCatalogoHeroe, versionCatalogoObjetos   versiones de los catálogos de Conquest (texto)
+```
+
+`ganadorPorTiempo` es la única regla de victoria que fija BronzeAge; el resto (capturar objetivos, aniquilar) es
+táctico de Conquest. En v1 no hay tope de XP ni de monedas por batalla (hasta que Conquest publique su curva de XP,
+CQ-001); cuando lo haya se añadirá como campo opcional. Las capacidades asimétricas por bando ya viven en
+`bandos.*.capacidadMaxima` (BA-001), no se duplican aquí.
 
 **Escuadras sin héroe (escolta y guarnición):** combaten sin su héroe, manejadas por la IA de juego, y van
 en `escuadrasSinHeroe` del bando. El `SquadSnapshot` lleva su `heroeId` como dueño, pero ese héroe no es
@@ -831,12 +855,19 @@ resolver numérico actual (`engine/combate.ts`) y nunca llega a Unity.
 ```text
 BattleResult
   schemaVersion, battleId, resultId, ticketRevision
-  inicio, fin, ganador, razon
-  objetivos: ObjectiveResult[]
+  intentoAsignacionId        el de la asignación activa (doc 02 §3.3, punto 10)
+  inicio, fin                tiempo REAL UTC, ISO 8601 (§0): el servidor de batalla no conoce el reloj de mundo
+  ganador                    'atacante' | 'defensor' — sin empates (Doc 5.2)
+  razon                      'objetivos_capturados' | 'aniquilacion' | 'tiempo_agotado'
+  objetivos: [{ objetivoId, capturadoPor: lado | null }]   informativo: BronzeAge no aplica nada a partir de
+                             ellos, y sus ids son del mapa táctico de Conquest
   porEscuadra: [{ squadId, desplegados, supervivientesAlCierre, muertos, xpGanada }]
   porHeroe: [{ heroeId, participo, sobrevivioAlCierre, xpGanada, botin? }]
-  versionServidor, autenticidad
+  versionServidor            build del servidor de batalla
 ```
+
+Sin campo `autenticidad`: el resultado lo autentica la credencial de la cabecera más `intentoAsignacionId`
+(doc 02 §3.3).
 
 **Corrección R05 — completitud obligatoria:** `porEscuadra` debe traer una entrada por CADA `squadId` que
 figure en las reservas del ticket, incluso si nunca se desplegó (entrada con `desplegados: 0`,
@@ -925,11 +956,15 @@ BattleServerAssignment
   intentoAsignacionId            identifica esta asignación concreta; solo el productor que la recibió
                                 puede luego confirmar inicio/resultado con este mismo id — corrección R03
   instancia (host, puerto, protocolo)
-  credencialServidorAServidor    registra la asignación, confirma inicio y firma el BattleResult — NUNCA
-                                visible a un cliente
   tokensParticipante: [{ heroeId, token, expiraEn: string (ISO 8601, tiempo REAL, no Instante — ver §0) }]
-                                alcance limitado a esta battleId+ticketRevision
+                                solo héroes humanos (los bot no se conectan); alcance limitado a esta
+                                battleId+ticketRevision
 ```
+
+La credencial servidor-a-servidor no viaja en el cuerpo: el servidor de batalla la presenta en la cabecera
+(`Authorization: batalla-servidor <token>`, doc 02 §3.3). BronzeAge anota qué servidor registró la asignación,
+y solo ese puede confirmar el inicio y mandar el resultado. `POST .../inicio` lleva `battleId`,
+`ticketRevision` e `intentoAsignacionId` (`InicioBatalla` en el schema).
 
 Dos clases de autorización, nunca la misma credencial para las dos — ver doc 02 §3. Si `ticketRevision`
 sube, toda asignación/token de la revisión anterior queda invalidado automáticamente — no hace falta un
@@ -972,21 +1007,26 @@ del `BattleTicket.mapa`:
 
 ```text
 SettlementBattleSnapshot
-  settlementId, ticketRevision
-  sistemaCoordenadas          origen, ejes, escala — el factor de conversión de arriba, explícito aquí
-  edificios: [{ edificioId, tipo, posicion, footprint, nivelInterno, estado, visualSeed }]
-                              geometría EFECTIVA en el instante de abrir — copia congelada, no una
-                              referencia viva al Asentamiento (que puede seguir cambiando mientras la
-                              batalla está en curso)
-  recintos: [{ recintoId, nivel, celdas, nivelEfectivo }]
-                              `nivelEfectivo` resuelve la ambigüedad de §3 (avance=-1 durante una mejora
-                              de un recinto ya completo): congela el nivel FÍSICO real de cada recinto en
-                              ese instante, sin que el lector tenga que reinterpretar `avance`/`mejorandoA`
-  puertasYObstaculos            derivado de `celdas` (clase 'puerta'), más cualquier obstáculo táctico
-                                añadido para el escenario (spawns, límites navegables — no altera edificio/
-                                muralla de origen)
-  layoutVersion, visualCatalogVersion   versiones usadas al congelar, para reproducibilidad TS/C#
+  settlementId
+  layoutVersion               revisión geométrica usada al congelar (LAYOUT_VERSION)
+  unidadesPorCelda            3 (REJILLA_ASENTAMIENTO.tamanoCelda). Coordenadas locales: origen en el centro
+                              del Centro Urbano, `y` hacia abajo, las mismas del fixture de BA-005
+  edificios: [{ edificioId, tipo, posicion, ancho, alto, nivelInterno?, estado, danado? }]
+                              solo los internos. `posicion` es el centro de la huella, en unidades; `ancho` y
+                              `alto`, la huella en celdas con la rotación ya aplicada. Geometría EFECTIVA en
+                              el instante de abrir — copia congelada, no una referencia viva al Asentamiento
+                              (que puede seguir cambiando mientras la batalla está en curso)
+  recintos: [{ recintoId, nivel, celdas }]
+                              `nivel` es el nivel FÍSICO en pie y `celdas` solo las que están en pie, en su
+                              orden de recorrido (el índice coincide con el del `Recinto`). Resuelve la
+                              ambigüedad de §3: si hay `mejorandoA`, en pie está el anillo entero al nivel
+                              anterior; si no, las celdas hasta `avance`. El lector no reinterpreta nada. La
+                              celda (col, row) ocupa de (col, row) a (col + 1, row + 1), por unidadesPorCelda
 ```
+
+Las puertas se leen de `celdas` (clase `'puerta'`). Queda fuera de v1, y se añadirá cuando exista: los
+obstáculos tácticos del escenario (spawns, límites navegables), `visualSeed`/`visualCatalogVersion` (todavía
+no están en el dominio) y las calles, que hoy Unity toma de `trazadoPorAsentamiento` de la proyección.
 
 **Política explícita (R10):** cambios estratégicos en el `Asentamiento` real mientras la `Batalla` está en
 curso (nueva construcción, mejora de muralla) NO tocan este snapshot ya congelado — se aplican al
@@ -1013,7 +1053,7 @@ solo que la generación C# reproduce la TypeScript — hay que elegir entre serv
 explícitos (mismo seed+worldgenVersion, mismo resultado exacto de terreno/ríos/biomas comparado byte a
 byte entre ambos lados) antes de aceptar la generación determinista C# como válida. Sin uno de los dos, el
 worldgen híbrido sigue aceptado como decisión de producto, pero no es todavía un contrato verificable —
-pendiente de resolver junto con `src/contratos/v1/`.
+pendiente: `src/contratos/v1/` todavía no lo cubre.
 
 ## 19. Visibilidad — qué ve Unity de todo esto
 

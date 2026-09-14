@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "battleId": "3f2a9c1e-7b4d-4e8a-9f6c-2d1b0a5e8c73",
+  "resultId": "resultado-8c2f",
+  "ticketRevision": 0,
+  "intentoAsignacionId": "intento-5b1e",
+  "inicio": "2026-09-14T18:05:00Z",
+  "fin": "2026-09-14T18:26:40Z",
+  "ganador": "atacante",
+  "razon": "objetivos_capturados",
+  "objetivos": [
+    {
+      "objetivoId": "bandera-puerta",
+      "capturadoPor": "atacante"
+    },
+    {
+      "objetivoId": "bandera-plaza",
+      "capturadoPor": "atacante"
+    }
+  ],
+  "porEscuadra": [
+    {
+      "squadId": "escuadron-11",
+      "desplegados": 20,
+      "supervivientesAlCierre": 13,
+      "muertos": 7,
+      "xpGanada": 180
+    },
+    {
+      "squadId": "escuadron-12",
+      "desplegados": 20,
+      "supervivientesAlCierre": 18,
+      "muertos": 2,
+      "xpGanada": 95
+    },
+    {
+      "squadId": "escuadron-40",
+      "desplegados": 25,
+      "supervivientesAlCierre": 6,
+      "muertos": 19,
+      "xpGanada": 60
+    },
+    {
+      "squadId": "escuadron-41",
+      "desplegados": 25,
+      "supervivientesAlCierre": 0,
+      "muertos": 25,
+      "xpGanada": 20
+    }
+  ],
+  "porHeroe": [
+    {
+      "heroeId": "heroe-ana",
+      "participo": true,
+      "sobrevivioAlCierre": true,
+      "xpGanada": 340,
+      "botin": {
+        "objetos": [
+          {
+            "itemDefinitionId": "botas_cuero",
+            "cantidad": 1,
+            "itemInstanceId": "item-0107",
+            "estadisticas": [
+              {
+                "nombre": "armadura",
+                "valor": 2
+              }
+            ]
+          },
+          {
+            "itemDefinitionId": "pocion_curacion",
+            "cantidad": 2
+          }
+        ],
+        "monedas": {
+          "bronce": 85,
+          "plata": 3,
+          "oro": 0
+        }
+      }
+    },
+    {
+      "heroeId": "heroe-bot-1",
+      "participo": true,
+      "sobrevivioAlCierre": false,
+      "xpGanada": 40
+    }
+  ],
+  "versionServidor": "conquest-server-0.9.3"
+}

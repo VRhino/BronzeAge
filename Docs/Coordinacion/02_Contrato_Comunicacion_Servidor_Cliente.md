@@ -136,17 +136,19 @@ resultado ya aplicado; mismo `resultId` con hash distinto → `409` (auditado). 
 aplicar, valida en orden (checklist ampliado — corrección R03/R04/R05):
 
 1. `ticketRevision` del payload coincide con la vigente;
-2. todos los `heroeId`/`squadId`/objetivos pertenecen al `BattleTicket` congelado de esa revisión;
+2. todos los `heroeId`/`squadId` pertenecen al `BattleTicket` congelado de esa revisión (los `objetivos` son
+   informativos y no se validan, doc 01 §15);
 3. sin IDs duplicados ni entidades nuevas;
 4. **completitud:** hay una entrada en `porEscuadra` por CADA `squadId` de las reservas del ticket, incluso
    las nunca desplegadas (doc 01 §15, corrección R05) — faltar una es rechazo, no omisión tolerada;
 5. `supervivientesAlCierre + muertos == efectivosAutorizados` por escuadra (doc 01 §15) — cerrado sobre lo
    AUTORIZADO, no sobre `desplegados` (que es solo informativo);
 6. ninguna cifra negativa ni por encima de lo autorizado;
-7. ganador/razón compatibles con `BattleRules` del ticket;
-8. fechas/duración coherentes;
+7. si `razon` es `tiempo_agotado`, `ganador` es `reglas.ganadorPorTiempo` del ticket;
+8. `fin` posterior a `inicio`, y la duración no pasa de `reglas.duracionMaximaSegundos`;
 9. `schemaVersion`/versión de build/balance autorizada;
-10. la credencial que firma pertenece al `intentoAsignacionId` activo de esta `Batalla`;
+10. la credencial de la cabecera es la del servidor que registró la asignación, y el `intentoAsignacionId`
+    del cuerpo es el activo de esta `Batalla`;
 11. `xpGanada` de cada héroe y escuadra es un entero ≥ 0 y no supera el tope por batalla de `BattleRules`
     si lo hay (la XP la calcula Unity desde 2026-09-13, doc 01 §15);
 12. `botin` de cada héroe (doc 01 §15): solo en héroes con `participo: true`; cada `itemDefinitionId` existe
@@ -302,14 +304,26 @@ C# vive en código, ubicación acordada en BA-004:
 
 ```text
 src/contratos/v1/
-  *.schema.json       JSON Schema versionado (heroe, escuadron, loadout, battleTicket, battleResult,
-                       battleServerAssignment)
-  fixtures/*.json      fixtures dorados, uno por entidad de contrato
-  dto.ts                tipos TS derivados, consumidos por server/ al serializar
+  contratos.schema.json   JSON Schema draft-07, una entrada de `definitions` por entidad: Heroe (con
+                          Escuadron, Loadout, ItemInstancia), HeroePublico, BattleTicket, BattleServerAssignment,
+                          InicioBatalla, BattleResult y CatalogoTropas
+  catalogoTropas.json     el catálogo de tropas de BronzeAge (doc 01 §13), generado desde constants.ts
+  fixtures/*.json         un fixture de cada mensaje: heroe (humano), heroe.bot (herido tras perder el
+                          asedio), heroePublico, battleTicket.asedio, battleTicket.bandidos,
+                          battleServerAssignment, inicioBatalla, battleResult
+  dto.ts                  los mismos tipos en TypeScript, para server/
+  fixtures.ts             la fuente de fixtures/*.json
 ```
 
-Cada schema publicado necesita al menos un fixture válido y una prueba que lo lea en ambos lados (regla §5.8
-del modelo de cooperación) — pendiente de escribir junto con el código, no en este documento.
+Un solo archivo de schema en vez de uno por entidad: los tipos compartidos (`ItemInstancia`, `SquadSnapshot`...)
+se referencian dentro del mismo archivo, sin `$ref` entre archivos, que los generadores de C# resuelven peor.
+
+El lado de BronzeAge está probado en `src/contratos/v1/__tests__/contratos.test.ts`: cada fixture cumple su
+definición y es idéntico a lo que genera `fixtures.ts` (tipado con `dto.ts`, así que `tsc` lo comprueba contra
+los tipos TS), y el resultado de ejemplo cuadra con su ticket. Si cambia un fixture o el catálogo, se
+regeneran con `ACTUALIZAR_CONTRATOS=1 npx vitest run src/contratos`; el catálogo no se deja regenerar sin
+subir `VERSION_CATALOGO_TROPAS`. Falta el lado de Conquest: deserializar
+cada fixture en C# (regla §5.8 del modelo de cooperación).
 
 ## 7. Pendiente de definir al implementar
 

@@ -1,0 +1,291 @@
+{
+  "schemaVersion": 1,
+  "battleId": "3f2a9c1e-7b4d-4e8a-9f6c-2d1b0a5e8c73",
+  "gameId": "partida-demo",
+  "ticketRevision": 0,
+  "contextoEstrategico": {
+    "tipo": "asedio",
+    "asentamientoId": "asentamiento-9"
+  },
+  "bandos": {
+    "atacante": {
+      "faccionId": "faccion-1",
+      "capacidadMaxima": 15,
+      "participantes": [
+        {
+          "heroeId": "heroe-ana",
+          "controlador": "humano",
+          "heroe": {
+            "displayName": "Ana de Micenas",
+            "classDefinitionId": "guerrero",
+            "nivel": 4,
+            "genero": "femenino",
+            "avatar": {
+              "cabezaId": "cabeza_03",
+              "peloId": "pelo_07",
+              "barbaId": "",
+              "cejasId": "cejas_02"
+            },
+            "atributosEfectivos": {
+              "fuerza": 16,
+              "destreza": 11,
+              "armadura": 17,
+              "vitalidad": 12
+            },
+            "perksDesbloqueados": [
+              101,
+              104
+            ],
+            "equipamiento": {
+              "arma": {
+                "itemDefinitionId": "espada_bronce",
+                "tipo": "arma",
+                "cantidad": 1,
+                "itemInstanceId": "item-0001",
+                "estadisticas": [
+                  {
+                    "nombre": "dano",
+                    "valor": 12.5
+                  }
+                ],
+                "precio": 40,
+                "casillaInventario": -1
+              },
+              "casco": null,
+              "torso": {
+                "itemDefinitionId": "coraza_bronce",
+                "tipo": "armadura",
+                "cantidad": 1,
+                "itemInstanceId": "item-0002",
+                "estadisticas": [
+                  {
+                    "nombre": "armadura",
+                    "valor": 8
+                  }
+                ],
+                "precio": 55,
+                "casillaInventario": -1
+              },
+              "guantes": null,
+              "pantalones": null,
+              "botas": null
+            },
+            "casillasInventarioLibres": 22
+          },
+          "escuadras": [
+            {
+              "squadId": "escuadron-11",
+              "heroeId": "heroe-ana",
+              "tropaId": "espadachines_cobre",
+              "efectivosAutorizados": 20,
+              "nivel": 3,
+              "experiencia": 640,
+              "moral": 92,
+              "habilidadesDesbloqueadas": [
+                "carga"
+              ],
+              "formacionesDesbloqueadas": [
+                0,
+                1
+              ],
+              "formacionSeleccionada": 1
+            },
+            {
+              "squadId": "escuadron-12",
+              "heroeId": "heroe-ana",
+              "tropaId": "honderos",
+              "efectivosAutorizados": 20,
+              "nivel": 2,
+              "experiencia": 210,
+              "moral": 100,
+              "habilidadesDesbloqueadas": [],
+              "formacionesDesbloqueadas": [
+                0
+              ],
+              "formacionSeleccionada": 0
+            }
+          ]
+        }
+      ],
+      "escuadrasSinHeroe": []
+    },
+    "defensor": {
+      "faccionId": "faccion-npc-2",
+      "capacidadMaxima": 15,
+      "participantes": [
+        {
+          "heroeId": "heroe-bot-1",
+          "controlador": "bot",
+          "heroe": {
+            "displayName": "Capitán de Tirinto",
+            "classDefinitionId": "guerrero",
+            "nivel": 3,
+            "genero": "masculino",
+            "avatar": {
+              "cabezaId": "cabeza_01",
+              "peloId": "pelo_02",
+              "barbaId": "barba_04",
+              "cejasId": "cejas_01"
+            },
+            "atributosEfectivos": {
+              "fuerza": 13,
+              "destreza": 10,
+              "armadura": 12,
+              "vitalidad": 11
+            },
+            "perksDesbloqueados": [],
+            "equipamiento": {
+              "arma": {
+                "itemDefinitionId": "lanza_bronce",
+                "tipo": "arma",
+                "cantidad": 1,
+                "itemInstanceId": "item-0200",
+                "estadisticas": [
+                  {
+                    "nombre": "dano",
+                    "valor": 9
+                  }
+                ],
+                "precio": 30,
+                "casillaInventario": -1
+              },
+              "casco": null,
+              "torso": null,
+              "guantes": null,
+              "pantalones": null,
+              "botas": null
+            },
+            "casillasInventarioLibres": 24
+          },
+          "escuadras": [
+            {
+              "squadId": "escuadron-40",
+              "heroeId": "heroe-bot-1",
+              "tropaId": "lanceros_mimbre",
+              "efectivosAutorizados": 25,
+              "nivel": 2,
+              "experiencia": 150,
+              "moral": 100,
+              "habilidadesDesbloqueadas": [],
+              "formacionesDesbloqueadas": [
+                0
+              ],
+              "formacionSeleccionada": 0
+            }
+          ]
+        }
+      ],
+      "escuadrasSinHeroe": [
+        {
+          "squadId": "escuadron-41",
+          "heroeId": "heroe-bot-2",
+          "tropaId": "milicia_lanceros",
+          "efectivosAutorizados": 25,
+          "nivel": 1,
+          "experiencia": 0,
+          "moral": 100,
+          "habilidadesDesbloqueadas": [],
+          "formacionesDesbloqueadas": [
+            0
+          ],
+          "formacionSeleccionada": 0
+        }
+      ]
+    }
+  },
+  "mapa": {
+    "tipo": "asentamiento",
+    "settlementId": "asentamiento-9",
+    "layoutVersion": 2,
+    "unidadesPorCelda": 3,
+    "edificios": [
+      {
+        "edificioId": "edificio-1",
+        "tipo": "centroUrbano",
+        "posicion": {
+          "x": 0,
+          "y": 0
+        },
+        "ancho": 4,
+        "alto": 4,
+        "estado": "activo"
+      },
+      {
+        "edificioId": "edificio-2",
+        "tipo": "vivienda",
+        "posicion": {
+          "x": 10.5,
+          "y": -1.5
+        },
+        "ancho": 1,
+        "alto": 1,
+        "estado": "activo"
+      },
+      {
+        "edificioId": "edificio-3",
+        "tipo": "vivienda",
+        "posicion": {
+          "x": 10.5,
+          "y": 1.5
+        },
+        "ancho": 1,
+        "alto": 1,
+        "estado": "en_cola",
+        "danado": true
+      },
+      {
+        "edificioId": "edificio-4",
+        "tipo": "barracon",
+        "posicion": {
+          "x": -12,
+          "y": 0
+        },
+        "ancho": 2,
+        "alto": 2,
+        "nivelInterno": 2,
+        "estado": "activo"
+      }
+    ],
+    "recintos": [
+      {
+        "recintoId": "recinto-1",
+        "nivel": 1,
+        "celdas": [
+          {
+            "col": -1,
+            "row": -5,
+            "clase": "puerta"
+          },
+          {
+            "col": 0,
+            "row": -5,
+            "clase": "muro"
+          },
+          {
+            "col": 1,
+            "row": -5,
+            "clase": "muro"
+          },
+          {
+            "col": 2,
+            "row": -5,
+            "clase": "torre"
+          },
+          {
+            "col": 3,
+            "row": -5,
+            "clase": "muro"
+          }
+        ]
+      }
+    ]
+  },
+  "reglas": {
+    "duracionMaximaSegundos": 1800,
+    "ganadorPorTiempo": "defensor",
+    "versionBalance": 9,
+    "versionCatalogoTropas": 1,
+    "versionCatalogoHeroe": "conquest-heroes-1",
+    "versionCatalogoObjetos": "conquest-items-1"
+  }
+}

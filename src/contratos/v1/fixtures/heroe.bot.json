@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "id": "heroe-bot-1",
+  "jugadorId": null,
+  "controlador": "bot",
+  "displayName": "Capitán de Tirinto",
+  "classDefinitionId": "guerrero",
+  "genero": "masculino",
+  "avatar": {
+    "cabezaId": "cabeza_01",
+    "peloId": "pelo_02",
+    "barbaId": "barba_04",
+    "cejasId": "cejas_01"
+  },
+  "nivel": 3,
+  "experienciaHaciaSiguienteNivel": 40,
+  "puntosDeAtributoSinGastar": 0,
+  "puntosDePerkSinGastar": 0,
+  "atributosBase": {
+    "fuerza": 13,
+    "destreza": 10,
+    "armadura": 12,
+    "vitalidad": 11
+  },
+  "perksDesbloqueados": [],
+  "liderazgoBase": 100,
+  "ubicacion": {
+    "tipo": "columna",
+    "ejercitoId": "ejercito-15"
+  },
+  "heridoHasta": 1789410720000,
+  "escuadrones": [
+    {
+      "id": "escuadron-40",
+      "heroeId": "heroe-bot-1",
+      "tropaId": "lanceros_mimbre",
+      "nombre": "Lanceros de Tirinto",
+      "cantidad": 6,
+      "nivel": 2,
+      "experiencia": 210,
+      "moral": 100,
+      "habilidadesDesbloqueadas": [],
+      "formacionesDesbloqueadas": [
+        0
+      ],
+      "formacionSeleccionada": 0,
+      "contenedor": {
+        "tipo": "ejercito",
+        "ejercitoId": "ejercito-15"
+      },
+      "enGuarnicion": false
+    }
+  ],
+  "loadouts": [],
+  "inventario": [],
+  "equipamiento": {
+    "arma": {
+      "itemDefinitionId": "lanza_bronce",
+      "tipo": "arma",
+      "cantidad": 1,
+      "itemInstanceId": "item-0200",
+      "estadisticas": [
+        {
+          "nombre": "dano",
+          "valor": 9
+        }
+      ],
+      "precio": 30,
+      "casillaInventario": -1
+    },
+    "casco": null,
+    "torso": null,
+    "guantes": null,
+    "pantalones": null,
+    "botas": null
+  },
+  "monedasHeroe": {
+    "bronce": 0,
+    "plata": 0,
+    "oro": 0
+  },
+  "cupoGuarnicion": 0
+}
