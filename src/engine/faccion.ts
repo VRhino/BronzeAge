@@ -78,13 +78,13 @@ export function avanzarNivelesFaccion(facciones: Faccion[]): { facciones: Faccio
   return { facciones: actualizadas, eventos };
 }
 
-export function esCiudadano(faccion: Faccion, jugadorId: string): boolean {
-  return faccion.ciudadanosIds.includes(jugadorId);
+export function esCiudadano(faccion: Faccion, heroeId: string): boolean {
+  return faccion.ciudadanosIds.includes(heroeId);
 }
 
-export function otorgarCiudadania(faccion: Faccion, jugadorId: string): Faccion {
-  if (esCiudadano(faccion, jugadorId)) return faccion;
-  return { ...faccion, ciudadanosIds: [...faccion.ciudadanosIds, jugadorId] };
+export function otorgarCiudadania(faccion: Faccion, heroeId: string): Faccion {
+  if (esCiudadano(faccion, heroeId)) return faccion;
+  return { ...faccion, ciudadanosIds: [...faccion.ciudadanosIds, heroeId] };
 }
 
 /**
@@ -95,19 +95,19 @@ export function otorgarCiudadania(faccion: Faccion, jugadorId: string): Faccion 
  * el fundador primero). Solo queda `reyId: null` si la Facción se queda sin nadie. Si el heredero ocupaba la
  * embajada, esta se vacía (la re-designa el nuevo Rey). El Embajador que se va también libera su cargo.
  *
- * NO toca residencia (`Asentamiento.casasCompradas`/`jugadoresFundadoresIds`) ni cargos LOCALES (Gobernador,
+ * NO toca residencia (`Asentamiento.casasCompradas`/`heroesFundadoresIds`) ni cargos LOCALES (Gobernador,
  * etc.): Doc 2.5 no define qué pasa con la vivienda al abandonar la Facción, y no existe todavía un comando
  * "dejar residencia"/"vender casa" que lo resuelva — limitación documentada, no un olvido (ver `dejarFaccion.ts`).
  */
-export function quitarCiudadania(faccion: Faccion, jugadorId: string): Faccion {
-  if (!esCiudadano(faccion, jugadorId)) return faccion;
-  const ciudadanosIds = faccion.ciudadanosIds.filter((id) => id !== jugadorId);
-  const reyId = faccion.reyId === jugadorId ? (ciudadanosIds[0] ?? null) : faccion.reyId;
+export function quitarCiudadania(faccion: Faccion, heroeId: string): Faccion {
+  if (!esCiudadano(faccion, heroeId)) return faccion;
+  const ciudadanosIds = faccion.ciudadanosIds.filter((id) => id !== heroeId);
+  const reyId = faccion.reyId === heroeId ? (ciudadanosIds[0] ?? null) : faccion.reyId;
   return {
     ...faccion,
     ciudadanosIds,
     reyId,
-    embajadorId: faccion.embajadorId === jugadorId || faccion.embajadorId === reyId ? null : faccion.embajadorId,
+    embajadorId: faccion.embajadorId === heroeId || faccion.embajadorId === reyId ? null : faccion.embajadorId,
   };
 }
 
@@ -121,28 +121,28 @@ export function capacidadCasas(asentamiento: Asentamiento): number {
  * de ciudadanos, así que la única validación de "un jugador, una Facción" es no estar ya en OTRA lista.
  *
  * Un jugador reside en UN solo asentamiento (Doc 2.1, a petición del usuario: es lo que le permite tener como
- * mucho un escuadrón de cada tropa — ver `Escuadron.jugadorId`, domain/types.ts) — por eso necesita la lista
+ * mucho un escuadrón de cada tropa — ver `Escuadron.heroeId`, domain/types.ts) — por eso necesita la lista
  * COMPLETA de asentamientos, no solo el de destino, para comprobar que el jugador no reside ya en otro.
  */
 export function comprarCasa(
   facciones: Faccion[],
   asentamientos: Asentamiento[],
   asentamientoId: string,
-  jugadorId: string
+  heroeId: string
 ): { facciones: Faccion[]; asentamiento: Asentamiento } {
   const asentamiento = asentamientos.find((a) => a.id === asentamientoId);
   if (!asentamiento) throw new FaccionInvalidaError('El asentamiento no existe.');
   const faccion = facciones.find((f) => f.id === asentamiento.faccionId);
   if (!faccion) throw new FaccionInvalidaError('La Facción del asentamiento no existe.');
 
-  const yaCiudadanoDeOtra = facciones.some((f) => f.id !== faccion.id && esCiudadano(f, jugadorId));
+  const yaCiudadanoDeOtra = facciones.some((f) => f.id !== faccion.id && esCiudadano(f, heroeId));
   if (yaCiudadanoDeOtra) {
     throw new FaccionInvalidaError('El jugador ya es ciudadano de otra Facción (Doc 0: 1 y solo 1 Facción).');
   }
-  if (asentamiento.casasCompradas.includes(jugadorId)) {
+  if (asentamiento.casasCompradas.includes(heroeId)) {
     throw new FaccionInvalidaError('El jugador ya tiene casa en este asentamiento.');
   }
-  if (resideEnOtroAsentamiento(asentamientos, asentamiento.id, jugadorId)) {
+  if (resideEnOtroAsentamiento(asentamientos, asentamiento.id, heroeId)) {
     throw new FaccionInvalidaError('El jugador ya reside en otro asentamiento (Doc 2.1: 1 jugador, 1 asentamiento).');
   }
   if (asentamiento.casasCompradas.length >= capacidadCasas(asentamiento)) {
@@ -150,8 +150,8 @@ export function comprarCasa(
   }
 
   return {
-    facciones: facciones.map((f) => (f.id === faccion.id ? otorgarCiudadania(f, jugadorId) : f)),
-    asentamiento: { ...asentamiento, casasCompradas: [...asentamiento.casasCompradas, jugadorId] },
+    facciones: facciones.map((f) => (f.id === faccion.id ? otorgarCiudadania(f, heroeId) : f)),
+    asentamiento: { ...asentamiento, casasCompradas: [...asentamiento.casasCompradas, heroeId] },
   };
 }
 
@@ -159,7 +159,7 @@ export function comprarCasa(
  * Cambiar de residencia (Doc 2.5/2.6, comando nuevo 2026-09-08 — cierra la limitación conocida "no hay comando
  * vender casa / dejar residencia"): atómico, deja la residencia actual y toma otra plaza de la MISMA Facción.
  *
- * Deja la vieja: fuera de `casasCompradas` Y `jugadoresFundadoresIds` (ya no reside por ninguna vía), y sus
+ * Deja la vieja: fuera de `casasCompradas` Y `heroesFundadoresIds` (ya no reside por ninguna vía), y sus
  * cargos LOCALES ahí se vacían (no se gobierna donde no se vive — misma regla que la conquista). Los
  * escuadrones que tuviera POSADOS en la guarnición vieja NO se tocan — pasan a ser guarnición de no-residente
  * (Doc 5.4, revisión 2026-09-08): defiende, la repone y la re-moviliza igual.
@@ -175,39 +175,39 @@ export function cambiarResidencia(
   facciones: Faccion[],
   asentamientos: Asentamiento[],
   destinoId: string,
-  jugadorId: string
+  heroeId: string
 ): { origen: Asentamiento; destino: Asentamiento } {
   const destino = asentamientos.find((a) => a.id === destinoId);
   if (!destino) throw new FaccionInvalidaError('El asentamiento de destino no existe.');
   const faccion = facciones.find((f) => f.id === destino.faccionId);
-  if (!faccion || !esCiudadano(faccion, jugadorId)) {
+  if (!faccion || !esCiudadano(faccion, heroeId)) {
     throw new FaccionInvalidaError('Solo se reside en un asentamiento de la propia Facción.');
   }
-  const origen = asentamientos.find((a) => a.id !== destinoId && esResidente(a, jugadorId));
+  const origen = asentamientos.find((a) => a.id !== destinoId && esResidente(a, heroeId));
   if (!origen) {
     throw new FaccionInvalidaError('El jugador no reside en ningún asentamiento: usa comprarCasa, no cambiarResidencia.');
   }
-  if (destino.casasCompradas.includes(jugadorId) || destino.jugadoresFundadoresIds.includes(jugadorId)) {
+  if (destino.casasCompradas.includes(heroeId) || destino.heroesFundadoresIds.includes(heroeId)) {
     throw new FaccionInvalidaError('El jugador ya reside en el destino.');
   }
-  if (destino.vetadosIds?.includes(jugadorId) || destino.politicaDeAcceso === 'cerrado') {
+  if (destino.vetadosIds?.includes(heroeId) || destino.politicaDeAcceso === 'cerrado') {
     throw new FaccionInvalidaError('El asentamiento de destino no admite nuevos residentes ahora mismo.');
   }
-  if (destino.casasCompradas.length + destino.jugadoresFundadoresIds.length >= capacidadCasas(destino)) {
+  if (destino.casasCompradas.length + destino.heroesFundadoresIds.length >= capacidadCasas(destino)) {
     throw new FaccionInvalidaError('No quedan espacios de vivienda en el destino.');
   }
 
   const cargosOrigen = { ...origen.cargos };
   for (const campo of Object.values(CAMPO_CARGO)) {
-    if (cargosOrigen[campo] === jugadorId) cargosOrigen[campo] = null;
+    if (cargosOrigen[campo] === heroeId) cargosOrigen[campo] = null;
   }
   return {
     origen: {
       ...origen,
-      jugadoresFundadoresIds: origen.jugadoresFundadoresIds.filter((id) => id !== jugadorId),
-      casasCompradas: origen.casasCompradas.filter((id) => id !== jugadorId),
+      heroesFundadoresIds: origen.heroesFundadoresIds.filter((id) => id !== heroeId),
+      casasCompradas: origen.casasCompradas.filter((id) => id !== heroeId),
       cargos: cargosOrigen,
     },
-    destino: { ...destino, casasCompradas: [...destino.casasCompradas, jugadorId] },
+    destino: { ...destino, casasCompradas: [...destino.casasCompradas, heroeId] },
   };
 }

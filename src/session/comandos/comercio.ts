@@ -201,7 +201,7 @@ export const colocarOrdenMercado = comando<ParamsColocarOrdenMercado, { ordenId:
 });
 
 export interface ParamsComerciarEnPlaza {
-  jugadorId: string;
+  heroeId: string;
   asentamientoId: string;
   ordenId: string;
   /** Cuanto se quiere mover. Se sirve lo que se pueda: el tope real sale de la orden, del almacen de la plaza,
@@ -210,7 +210,7 @@ export interface ParamsComerciarEnPlaza {
 }
 
 export interface PayloadComercioEnPlaza {
-  jugadorId: string;
+  heroeId: string;
   asentamientoId: string;
   ordenId: string;
   recurso: RecursoTipo;
@@ -228,14 +228,14 @@ export interface PayloadComercioEnPlaza {
  */
 export const comerciarEnPlaza = comando<ParamsComerciarEnPlaza, { cantidad: number; valor: number; comision: number }>(
   (estado, _mapa, ctx, params) => {
-    const columna = exigirColumnaDe(estado, params.jugadorId);
+    const columna = exigirColumnaDe(estado, params.heroeId);
     const plaza = exigirAsentamiento(estado, params.asentamientoId);
     const orden = estado.ordenes.find((o) => o.id === params.ordenId);
     if (!orden) rechazar(CODIGOS_ERROR.ordenNoExiste);
 
     const resultado = comerciarEnPlazaEngine(
       columna,
-      params.jugadorId,
+      params.heroeId,
       plaza,
       orden,
       params.cantidad,
@@ -257,7 +257,7 @@ export const comerciarEnPlaza = comando<ParamsComerciarEnPlaza, { cantidad: numb
           codigo: 'mercado.comercio_en_plaza',
           mensaje: `Un jugador ${sentido} ${resultado.cantidad.toFixed(1)} ${orden.recurso} en el mercado de ${plaza.id} por ${resultado.valor.toFixed(1)} oro (comisión ${resultado.comision.toFixed(1)}).`,
           payload: {
-            jugadorId: params.jugadorId,
+            heroeId: params.heroeId,
             asentamientoId: plaza.id,
             ordenId: orden.id,
             recurso: orden.recurso as RecursoTipo,
@@ -389,7 +389,7 @@ export const reservarCaravana = comando<ParamsReservarCaravana, { reservada: boo
 
 export interface ParamsPrepararCaravana {
   caravanaId: string;
-  jugadorId: string;
+  heroeId: string;
   destinoAsentamientoId: string;
   /** Mapa recurso -> cantidad: qué se carga del almacén del origen, hasta la capacidad de la caravana. */
   carga: Record<string, number>;
@@ -409,12 +409,12 @@ export const prepararCaravana = comando<ParamsPrepararCaravana, { caravanaId: st
     const destino = exigirAsentamiento(estado, params.destinoAsentamientoId);
 
     const escoltaIds = params.escoltaEscuadronIds ?? [];
-    const seleccion = seleccionarEscoltaCaravana(origen, params.jugadorId, escoltaIds);
+    const seleccion = seleccionarEscoltaCaravana(origen, params.heroeId, escoltaIds);
     if (seleccion.escolta.length > 0) {
       // La escolta cuenta contra el Liderazgo del jugador mientras viaja (Doc 3.13.4), sumada a lo que ya
       // tenga cedido en otras caravanas. (Gap conocido: no cruza con lo que ese jugador lleve en un ejército.)
-      const jugador = estado.jugadores.find((j) => j.id === params.jugadorId);
-      const yaCedido = escoltaDeJugador(estado.caravanas, params.jugadorId);
+      const jugador = estado.heroes.find((j) => j.id === params.heroeId);
+      const yaCedido = escoltaDeJugador(estado.caravanas, params.heroeId);
       if (!puedeLlevar(jugador, [...yaCedido, ...seleccion.escolta])) {
         rechazar(CODIGOS_ERROR.comercioCaravanaInvalida);
       }
@@ -479,7 +479,7 @@ export interface ParamsMoverCarro {
 }
 
 export interface ParamsMoverCargaCaravanaAparcada {
-  jugadorId: string;
+  heroeId: string;
   caravanaId: string;
   /** La plaza que hospeda la caravana aparcada (donde está su carro). */
   asentamientoId: string;
@@ -519,7 +519,7 @@ export const moverCargaCaravanaAparcada = comando<ParamsMoverCargaCaravanaAparca
 );
 
 export interface ParamsEnviarCaravanaAlOrigen {
-  jugadorId: string;
+  heroeId: string;
   caravanaId: string;
   /** La plaza que hospeda la caravana aparcada. */
   asentamientoId: string;

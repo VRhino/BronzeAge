@@ -45,8 +45,12 @@ import { leerEventos } from './eventosDePartida';
  *     pura de la seed; el rechazo por `worldgenVersion` ya garantizaba que se puede). Eran ~130 KB constantes.
  *   - `state.eventosDominio` se va a `<gameId>.eventos.jsonl` (append-only, ver `eventosDePartida.ts`). Eran
  *     ~300 KB y creciendo, reescritos en cada comando.
+ *
+ * v14 (2026-09-14): modelo de Héroe, fase 1 — `state.jugadores` pasa a ser `state.heroes` (con identidad:
+ *   `jugadorId`, `controlador`, nombre, clase, género, avatar) y todo dueño pasa a ser un `heroeId`. Sin
+ *   migración (decisión del usuario): una partida v13 se rechaza.
  */
-export const FORMATO_SNAPSHOT_VERSION = 13;
+export const FORMATO_SNAPSHOT_VERSION = 14;
 
 export interface SnapshotPartida {
   formatoVersion: number;

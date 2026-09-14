@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { crearFaccion } from '../../session/comandos/crearFaccion';
 import { fundarAsentamiento } from '../../session/comandos/fundarAsentamiento';
-import { alternarFaccionNpc } from '../../session/comandos/alternarFaccionNpc';
+import { crearFaccionNpc } from '../../session/comandos/crearFaccionNpc';
+import { crearHeroe } from '../../session/comandos/crearHeroe';
 import { crearAlmacenEnDisco } from '../almacen/enDisco';
 import { RunnerDePartida } from '../runnerDePartida';
 import { cargarPartida, type SnapshotPartida } from '../persistenciaPartida';
@@ -27,6 +28,13 @@ afterEach(async () => {
 
 function runner(gameId = 'partida-runner', seed = 7): RunnerDePartida {
   return RunnerDePartida.crear(gameId, { seed }, { almacen, ahora: () => MOMENTO });
+}
+
+/** Crea el héroe del jugador y devuelve su id, que es con el que actúa a partir de ahí (como hace la ruta). */
+async function heroeEn(r: RunnerDePartida, jugadorId: string): Promise<string> {
+  const avatar = { cabezaId: '', peloId: '', barbaId: '', cejasId: '' };
+  const creado = await r.ejecutar(crearHeroe, { displayName: jugadorId, classDefinitionId: 'Spear', genero: 'femenino', avatar }, jugadorId);
+  return creado.datos!.heroeId;
 }
 
 describe('RunnerDePartida — cola serial', () => {
@@ -117,10 +125,7 @@ describe('RunnerDePartida — aplicar -> persistir -> confirmar', () => {
 describe('RunnerDePartida.avanzarTick — bundlea auto-comercio y turno NPC', () => {
   it('el turno del NPC de gobernanza ocurre DENTRO de avanzarTick, sin un comando aparte', async () => {
     const r = runner('g-npc');
-    const creada = await r.ejecutar(crearFaccion, { nombre: 'Micenas' }, 'jugador-1');
-    const faccionId = creada.datos!.faccionId;
-    await r.ejecutar(fundarAsentamiento, { faccionId, posicion: { x: 500, y: 500 } }, 'jugador-1');
-    await r.ejecutar(alternarFaccionNpc, { faccionId, activo: true });
+    await r.ejecutar(crearFaccionNpc, { nombre: 'Micenas' });
 
     // Antes de este fix, `avanzarTick()` del runner solo aplicaba el tick puro — la primera decisión de
     // gobernanza del NPC (asignar Gobernador, determinista, no depende de ticks previos) no llegaba a
@@ -397,8 +402,9 @@ describe('RunnerDePartida — preciosReferencia (doc 9: entrada privilegiada, so
 
   it('pasado el minuto de TTL, la siguiente lectura recalcula', async () => {
     const { r, avanzarMs } = runnerConReloj(MOMENTO);
-    const creada = await r.ejecutar(crearFaccion, { nombre: 'Micenas' }, 'jugador-1');
-    const rf = await r.ejecutar(fundarAsentamiento, { faccionId: creada.datos!.faccionId, posicion: { x: 500, y: 500 } }, 'jugador-1');
+    const heroe = await heroeEn(r, 'jugador-1');
+    const creada = await r.ejecutar(crearFaccion, { nombre: 'Micenas' }, heroe);
+    const rf = await r.ejecutar(fundarAsentamiento, { faccionId: creada.datos!.faccionId }, heroe);
     expect(rf.ok).toBe(true);
 
     const primera = r.preciosReferencia(); // con un asentamiento recién fundado (stock inicial > 0)
@@ -413,8 +419,9 @@ describe('RunnerDePartida — preciosReferencia (doc 9: entrada privilegiada, so
     const sinAsentamientos = runnerConReloj(MOMENTO).r.preciosReferencia().madera!;
 
     const { r } = runnerConReloj(MOMENTO);
-    const creada = await r.ejecutar(crearFaccion, { nombre: 'Micenas' }, 'jugador-1');
-    await r.ejecutar(fundarAsentamiento, { faccionId: creada.datos!.faccionId, posicion: { x: 500, y: 500 } }, 'jugador-1');
+    const heroe = await heroeEn(r, 'jugador-1');
+    const creada = await r.ejecutar(crearFaccion, { nombre: 'Micenas' }, heroe);
+    await r.ejecutar(fundarAsentamiento, { faccionId: creada.datos!.faccionId }, heroe);
 
     expect(r.preciosReferencia().madera).toBeLessThanOrEqual(sinAsentamientos);
   });
@@ -436,8 +443,9 @@ describe('RunnerDePartida — geometriaAsentamientos (Fase C10: zonas/trazado po
     const r = runner();
     const antes = r.geometriaAsentamientos();
 
-    const creada = await r.ejecutar(crearFaccion, { nombre: 'Micenas' }, 'jugador-1');
-    const fundada = await r.ejecutar(fundarAsentamiento, { faccionId: creada.datos!.faccionId, posicion: { x: 500, y: 500 } }, 'jugador-1');
+    const heroe = await heroeEn(r, 'jugador-1');
+    const creada = await r.ejecutar(crearFaccion, { nombre: 'Micenas' }, heroe);
+    const fundada = await r.ejecutar(fundarAsentamiento, { faccionId: creada.datos!.faccionId }, heroe);
     expect(fundada.ok).toBe(true);
     const asentamientoId = fundada.datos!.asentamientoId;
 

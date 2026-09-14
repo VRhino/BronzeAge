@@ -16,7 +16,7 @@ import type {
   RelacionPolitica,
   Titulo,
   ZonaFaccion,
-  ZonaInfluencia, Ejercito, Jugador } from '../domain/types';
+  ZonaInfluencia, Ejercito, Heroe } from '../domain/types';
 import type { TrazadoAsentamiento } from '../engine/trazado';
 import type { MemoriaFaccion } from '../engine/memoria';
 import type { EventoDominio } from '../domain/eventos';
@@ -45,7 +45,7 @@ const EPOCA_MS = new Date(SIMULACION.epocaInicial).getTime();
 /**
  * Entrada de log en texto. Ya no hay un log global en el estado (la consola de administración se derivaba de
  * `eventosDominio`, y esa consola vive ahora en el repo de cliente); este tipo se queda como el de
- * `historialJugadores` y el de `ProyeccionJugador.historial`.
+ * `historialHeroes` y el de `ProyeccionJugador.historial`.
  *
  * Administración: nunca viaja a un jugador tal cual (Docs/Arquitectura/7_Diseno_GameSession.md §7.1 — el log
  * global narra lo que pasa en TODO el mundo, así que incluirlo en una proyección de jugador sería una fuga de
@@ -72,7 +72,7 @@ export interface GameSessionState {
   /** Jugadores con estado propio de partida (Doc 5.11) — hoy solo su Liderazgo. NO es el registro de
    * identidad (eso vive en `session/identidad`): es estado de juego. Un jugador que no aparezca aquí usa
    * `LIDERAZGO.base`, así que la lista solo necesita crecer cuando alguien se desvíe del valor por defecto. */
-  jugadores: Jugador[];
+  heroes: Heroe[];
   /** Ejércitos en campaña (Doc 5.12) — los mueve `avanzarEjercitos` al final de la cadena del tick. */
   ejercitos: Ejercito[];
   acuerdos: AcuerdoTrueque[];
@@ -94,14 +94,14 @@ export interface GameSessionState {
   /** Sube en cada mutación aceptada. Un comando rechazado NUNCA la incrementa — base del control de
    * concurrencia optimista de Fase B3. */
   version: number;
-  historialJugadores: Record<string, EventoLogAdmin[]>;
+  historialHeroes: Record<string, EventoLogAdmin[]>;
   /**
-   * `jugadorId` -> momento (ISO 8601) en que abandonó su última Facción (`dejarFaccion`, a petición del
+   * `heroeId` -> momento (ISO 8601) en que abandonó su última Facción (`dejarFaccion`, a petición del
    * usuario 2026-08-27). Única razón de ser: `crearFaccion` lo consulta para el cooldown de
    * `CIUDADANIA.cooldownCreacionFaccionDias` — anti-abuso contra "crear, abandonar, crear" en bucle. No es
    * historial (no guarda TODAS las salidas, solo la última) ni afecta a `unirseAFaccion`, que no tiene cooldown.
    */
-  salidasFaccionPorJugador: Record<string, Instante>;
+  salidasFaccionPorHeroe: Record<string, Instante>;
   /**
    * Todo lo que ha ocurrido en la partida, en forma estructurada: la ÚNICA representación de los hechos, en
    * texto estructurado y no plano (antes se persistía además un `log: EventoLogAdmin[]` en paralelo, el mismo
@@ -139,7 +139,7 @@ export function estadoSimulacionDe(estado: GameSessionState): EstadoSimulacion {
     campamentosBandidos: estado.campamentosBandidos,
     bandidosProximoSpawnEn: estado.bandidosProximoSpawnEn,
     memoriaPorFaccion: estado.memoriaPorFaccion,
-    jugadores: estado.jugadores,
+    heroes: estado.heroes,
   };
 }
 
@@ -160,7 +160,7 @@ export function conResultadoDeSimulacion(estado: GameSessionState, simulacion: E
     campamentosBandidos: simulacion.campamentosBandidos,
     bandidosProximoSpawnEn: simulacion.bandidosProximoSpawnEn,
     memoriaPorFaccion: simulacion.memoriaPorFaccion,
-    jugadores: simulacion.jugadores,
+    heroes: simulacion.heroes,
   };
 }
 
@@ -283,14 +283,14 @@ export function vistaAdminDeEstado(estado: GameSessionState): Omit<EstadoAdmin, 
 }
 
 /** Añade una entrada al historial de un jugador concreto (administración, igual que el log). */
-export function conHistorialDeJugador(estado: GameSessionState, jugadorId: string, mensaje: string): GameSessionState {
-  if (!jugadorId) return estado;
-  const previo = estado.historialJugadores[jugadorId] ?? [];
+export function conHistorialDeJugador(estado: GameSessionState, heroeId: string, mensaje: string): GameSessionState {
+  if (!heroeId) return estado;
+  const previo = estado.historialHeroes[heroeId] ?? [];
   return {
     ...estado,
-    historialJugadores: {
-      ...estado.historialJugadores,
-      [jugadorId]: [{ momento: isoDeInstante(instanteDeTick(estado.tick)), mensaje }, ...previo],
+    historialHeroes: {
+      ...estado.historialHeroes,
+      [heroeId]: [{ momento: isoDeInstante(instanteDeTick(estado.tick)), mensaje }, ...previo],
     },
   };
 }

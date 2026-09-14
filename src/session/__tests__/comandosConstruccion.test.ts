@@ -21,7 +21,7 @@ describe('anadirEdificioManualmente', () => {
 
   it('éxito: con Gobernador asignado, el edificio entra en la cola', () => {
     const { sesion, asentamientoId, fundador } = partidaConAsentamiento();
-    sesion.ejecutar(asignarCargoLocal, { asentamientoId, cargo: 'gobernador', jugadorId: fundador }, OPC);
+    sesion.ejecutar(asignarCargoLocal, { asentamientoId, cargo: 'gobernador', heroeId: fundador }, OPC);
     const edificiosAntes = sesion.getState().asentamientos[0]!.edificios.length;
 
     const r = sesion.ejecutar(anadirEdificioManualmente, { asentamientoId, cargo: 'gobernador', tipo: 'vivienda' }, OPC);
@@ -68,8 +68,8 @@ describe('calibrarReservaManual', () => {
   it('éxito con Tesorero: guarda el valor y acota el rango a 0..999', () => {
     const { sesion, asentamientoId, fundador } = partidaConAsentamiento();
     // El motor exige Gobernador antes de cualquier otro cargo local (`engine/cargos.ts`).
-    sesion.ejecutar(asignarCargoLocal, { asentamientoId, cargo: 'gobernador', jugadorId: fundador }, OPC);
-    sesion.ejecutar(asignarCargoLocal, { asentamientoId, cargo: 'tesorero', jugadorId: fundador }, OPC);
+    sesion.ejecutar(asignarCargoLocal, { asentamientoId, cargo: 'gobernador', heroeId: fundador }, OPC);
+    sesion.ejecutar(asignarCargoLocal, { asentamientoId, cargo: 'tesorero', heroeId: fundador }, OPC);
 
     sesion.ejecutar(calibrarReservaManual, { asentamientoId, recurso: 'madera', valor: 150 }, OPC);
     expect(sesion.getState().asentamientos[0]!.reservaManual?.madera).toBe(150);
@@ -84,8 +84,8 @@ describe('calibrarReservaManual', () => {
   it('no ensucia el log administrativo: es un ajuste de slider, no un hecho narrable', () => {
     const { sesion, asentamientoId, fundador } = partidaConAsentamiento();
     // El motor exige Gobernador antes de cualquier otro cargo local (`engine/cargos.ts`).
-    sesion.ejecutar(asignarCargoLocal, { asentamientoId, cargo: 'gobernador', jugadorId: fundador }, OPC);
-    sesion.ejecutar(asignarCargoLocal, { asentamientoId, cargo: 'tesorero', jugadorId: fundador }, OPC);
+    sesion.ejecutar(asignarCargoLocal, { asentamientoId, cargo: 'gobernador', heroeId: fundador }, OPC);
+    sesion.ejecutar(asignarCargoLocal, { asentamientoId, cargo: 'tesorero', heroeId: fundador }, OPC);
     const eventosAntes = sesion.getState().eventosDominio.length;
 
     const r = sesion.ejecutar(calibrarReservaManual, { asentamientoId, recurso: 'madera', valor: 50 }, OPC);

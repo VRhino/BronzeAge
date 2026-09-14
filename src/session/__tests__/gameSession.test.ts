@@ -9,6 +9,7 @@ import { crearFaccion } from '../comandos/crearFaccion';
 import { fundarAsentamiento } from '../comandos/fundarAsentamiento';
 import { instanteDeTick, isoDeInstante } from '../estado';
 import { exito, type ManejadorComando } from '../comandos/tipos';
+import { conHeroe } from './fixtures';
 
 const SEED = 42;
 const ACTOR = 'jugador-test';
@@ -19,7 +20,7 @@ function partidaNueva(): GameSession {
 
 /** Partida con una Facción ya creada: el motor exige que exista antes de fundar (`engine/settlement.ts`). */
 function partidaConFaccion(): { sesion: GameSession; faccionId: string } {
-  const sesion = partidaNueva();
+  const sesion = conHeroe(partidaNueva(), ACTOR);
   const r = sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, { actor: ACTOR });
   if (!r.ok) throw new Error('setup del test: no se pudo crear la Facción');
   return { sesion, faccionId: r.datos!.faccionId };
@@ -75,7 +76,7 @@ describe('comando fundarAsentamiento', () => {
     const { sesion, faccionId } = partidaConFaccion();
     sesion.ejecutar(fundarAsentamiento, { faccionId }, { actor: ACTOR });
 
-    const historial = sesion.getState().historialJugadores;
+    const historial = sesion.getState().historialHeroes;
     expect(Object.keys(historial)).toEqual([ACTOR]);
     expect(historial[ACTOR]![0]!.mensaje).toContain('Funda');
   });
@@ -294,21 +295,14 @@ describe('GameSession — exportar / importar', () => {
 });
 
 // ---------------------------------------------------------------------------------------------------------
-// Alta perezosa del Jugador (Doc 1.10): quien actúa, existe y está en algún sitio.
+// El héroe se crea explícitamente (`crearHeroe`, doc 02 §4.2): actuar no da de alta a nadie.
 // ---------------------------------------------------------------------------------------------------------
 
-describe('GameSession — el jugador que actúa entra en la partida', () => {
-  it('da de alta al actor la primera vez que ejecuta un comando con éxito', () => {
+describe('GameSession — el héroe que actúa', () => {
+  it('actuar no crea héroe: eso es cosa de `crearHeroe`', () => {
     const sesion = partidaNueva();
-    expect(sesion.getState().jugadores).toEqual([]);
-
-    sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, { actor: ACTOR });
-
-    const jugador = sesion.getState().jugadores.find((j) => j.id === ACTOR);
-    expect(jugador, 'quien actúa tiene registro').toBeDefined();
-    // Aparece CON COLUMNA (Doc 1.3): crear una Facción no da residencia, pero sí es la primera vez que actúa,
-    // así que ya está en el mundo — en el campo, no en ninguna plaza.
-    expect(jugador!.ubicacion.tipo).toBe('columna');
+    expect(sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, { actor: ACTOR }).ok).toBe(true);
+    expect(sesion.getState().heroes).toEqual([]);
   });
 
   it('al fundar queda situado DENTRO de su asentamiento', () => {
@@ -317,15 +311,8 @@ describe('GameSession — el jugador que actúa entra en la partida', () => {
     const r = sesion.ejecutar(fundarAsentamiento, { faccionId }, { actor: ACTOR });
     expect(r.ok, 'setup del test: la fundación tiene que salir').toBe(true);
 
-    const jugador = sesion.getState().jugadores.find((j) => j.id === ACTOR)!;
+    const jugador = sesion.getState().heroes.find((j) => j.id === ACTOR)!;
     expect(jugador.ubicacion).toEqual({ tipo: 'asentamiento', asentamientoId: sesion.getState().asentamientos[0]!.id });
-  });
-
-  it('es idempotente: actuar dos veces no duplica el registro', () => {
-    const { sesion } = partidaConFaccion();
-    sesion.ejecutar(crearFaccion, { nombre: 'Tirinto' }, { actor: ACTOR });
-
-    expect(sesion.getState().jugadores.filter((j) => j.id === ACTOR)).toHaveLength(1);
   });
 
   it('un comando RECHAZADO no da de alta a nadie', () => {
@@ -336,7 +323,7 @@ describe('GameSession — el jugador que actúa entra en la partida', () => {
     const r = sesion.ejecutar(fundarAsentamiento, { faccionId: 'no-existe' }, { actor: 'fantasma' });
 
     expect(r.ok).toBe(false);
-    expect(sesion.getState().jugadores).toEqual([]);
+    expect(sesion.getState().heroes).toEqual([]);
   });
 
   it('el SISTEMA no es un jugador: el tick no le da registro', () => {
@@ -344,6 +331,6 @@ describe('GameSession — el jugador que actúa entra en la partida', () => {
 
     sesion.avanzarTick();
 
-    expect(sesion.getState().jugadores).toEqual([]);
+    expect(sesion.getState().heroes).toEqual([]);
   });
 });

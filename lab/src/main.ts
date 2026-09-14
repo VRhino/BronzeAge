@@ -208,7 +208,7 @@ function fundar(seed: number): void {
     caminos: [],
     campamentosBandidos: [],
     bandidosProximoSpawnEn: instanteDeTick(0),
-    jugadores: [],
+    heroes: [],
   };
   tick = 0;
   contadorManual = 0;
@@ -310,7 +310,7 @@ function publicarEnConsola(): void {
  *
  * Lo que NO es: una respuesta HTTP capturada. El laboratorio no tiene servidor ni partida (cabecera de este
  * archivo) — no hay `gameId` real, ni `Membresia`, ni niebla de guerra, ni rivales que redactar. Los campos
- * de "contexto" (`gameId`, `mapaId`, `jugadorId`, `version`) son deliberadamente sintéticos y están
+ * de "contexto" (`gameId`, `mapaId`, `heroeId`, `version`) son deliberadamente sintéticos y están
  * marcados como tales; no pretenden ser los que devolvería `/v1/jugador/partidas/:gameId`.
  */
 function construirProyeccionLab(asentamiento: Asentamiento, trazado: TrazadoAsentamiento) {
@@ -321,7 +321,7 @@ function construirProyeccionLab(asentamiento: Asentamiento, trazado: TrazadoAsen
     layoutVersion: LAYOUT_VERSION,
     instante: instanteDeTick(tick),
     version: tick,
-    jugadorId: 'jugador-lab',
+    heroeId: 'jugador-lab',
     faccionId: faccionLab.id,
     facciones: [faccionLab],
     asentamientos: [asentamiento],

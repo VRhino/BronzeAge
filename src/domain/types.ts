@@ -317,32 +317,37 @@ export interface CargosAsentamiento {
 }
 
 /**
- * Jugador (Doc 0/Glosario, Doc 5.11) — entidad NUEVA en el motor, creada por el Liderazgo.
- *
- * Hasta ahora el jugador era solo un `jugadorId: string` repartido por `Escuadron`, `jugadoresFundadoresIds`,
- * `casasCompradas`, `cargos`, `historialJugadores` y `salidasFaccionPorJugador` — `engine/combate.ts` lo
- * dejaba anotado como pendiente "si llega a necesitar un propósito propio". El Liderazgo es ese propósito.
- *
- * Deliberadamente mínima: solo lo que el motor necesita HOY. La identidad (usuario, sesión, permisos) vive en
- * `session/`, no aquí; esto es estado de partida.
- */
-/**
- * Dónde está un Jugador (Doc 1.10). Son los TRES únicos sitios donde puede estar, y la unión cerrada es lo
+ * Dónde está un Héroe (Doc 1.10). Son los TRES únicos sitios donde puede estar, y la unión cerrada es lo
  * que impide el cuarto estado que el motor tenía de facto: en ninguna parte, viendo el mundo entero.
  *
  * `desconectado` guarda un punto y no una columna a propósito: al salir del mundo la columna de un viajero
  * solo deja de existir como entidad —no consume, no ve, no la ven— y al volver se reconstruye ahí mismo.
  */
-export type UbicacionJugador =
+export type UbicacionHeroe =
   | { tipo: 'asentamiento'; asentamientoId: string }
   | { tipo: 'columna'; ejercitoId: string }
   | { tipo: 'desconectado'; punto: Point };
 
-export interface Jugador {
+/**
+ * El Héroe (Doc 5.16, `Docs/Coordinacion/01_Modelo_de_datos_compartido.md` §12): el personaje con el que se
+ * juega, uno por jugador y partida. Es el dueño de todo lo que antes se atribuía al jugador (escuadrones,
+ * cargos, residencia, ciudadanía). La identidad (usuario, sesión, membresía) vive en `acceso/`: aquí solo el
+ * vínculo `jugadorId`.
+ */
+export interface Heroe {
   id: string;
+  /** `Membresia.jugadorId` del jugador que lo maneja, único por partida. `null` en los héroes bot. */
+  jugadorId: string | null;
+  controlador: 'humano' | 'bot';
+  displayName: string;
+  /** Catálogo de clases de Conquest. BronzeAge lo guarda y lo sirve, no lo interpreta. */
+  classDefinitionId: string;
+  genero: 'masculino' | 'femenino';
+  /** Piezas del catálogo visual de Conquest. Cosmético. */
+  avatar: { cabezaId: string; peloId: string; barbaId: string; cejasId: string };
   /** Liderazgo BASE (Doc 5.11). El efectivo es base + progresión, pero la progresión todavía no está
-   * diseñada (`Docs/Mecanicas a desarrollar.md` §11), así que hoy coinciden. Un jugador SIN registro en
-   * `GameSessionState.jugadores` usa `LIDERAZGO.base`. */
+   * diseñada (`Docs/Mecanicas a desarrollar.md` §11), así que hoy coinciden. Un id sin registro en
+   * `GameSessionState.heroes` (los fundadores de los escenarios de batch) usa `LIDERAZGO.base`. */
   liderazgoBase: number;
   /**
    * Dónde está (Doc 1.10). Es lo que convierte al jugador en una entidad SITUADA: solo ve el interior del
@@ -352,7 +357,7 @@ export interface Jugador {
    * para el Liderazgo, pero "ausente = está en ninguna parte" no significa nada. Por eso el registro deja de
    * ser opcional y las partidas guardadas sí necesitan migración.
    */
-  ubicacion: UbicacionJugador;
+  ubicacion: UbicacionHeroe;
   /**
    * Lo ultimo que vio del interior de cada plaza que ha pisado (Doc 1.10.1), por `asentamientoId`.
    *
@@ -416,7 +421,7 @@ export type OrigenTropa = 'pesants' | 'artesanos' | 'nobleza';
 /**
  * Escuadrón (Doc 5.1/5.4): el jugador lidera una tropa de unidades NPC, nunca combate individualmente.
  * Escuadrón de UN jugador (Doc 2.5, a petición del usuario — corrige el bug donde dos jugadores reclutando la
- * misma tropa en el mismo asentamiento se fundían en un solo escuadrón): `jugadorId` + `tropaId` identifican de
+ * misma tropa en el mismo asentamiento se fundían en un solo escuadrón): `heroeId` + `tropaId` identifican de
  * forma única al escuadrón dentro de `Asentamiento.escuadrones` — un jugador solo puede tener UNO por tropa,
  * porque solo pertenece a un asentamiento (Doc 2.1) y ahí solo puede tener sus propias tropas.
  * El SQUAD (nombre, veteranía) persiste aunque `cantidad` llegue a 0 (aniquilado) — se puede rellenar reclutando
@@ -427,7 +432,7 @@ export interface Escuadron {
   nombre: string;
   /** Dueño del escuadrón (Doc 2.5) — reclutar ya no depende del cargo de General, cualquier jugador residente
    * del asentamiento (fundador o con casa comprada) recluta y amplía SU PROPIO escuadrón. */
-  jugadorId: string;
+  heroeId: string;
   origen: OrigenTropa;
   cantidad: number;
   /** Sube combatiendo (carril combate real, Doc 4.1/5.5): da un bonus de poder continuo al MISMO escuadrón
@@ -456,7 +461,7 @@ export interface Asentamiento {
    * (asentamientos ya existentes de partidas guardadas antes de esta función). */
   nombre?: string;
   faccionId: string;
-  jugadoresFundadoresIds: string[];
+  heroesFundadoresIds: string[];
   posicion: Point;
   /** NIVEL ALCANZADO (Doc Fase_0_5 §6.2): histórico, MONÓTONO, nunca baja — sube por gates de
    * población+edificios (`calcularNivelAsentamiento`/`avanzarNivelAsentamiento`, engine/mantenimiento.ts).
@@ -699,7 +704,7 @@ export interface Caravana {
    * de un asentamiento ya existente — ver `engine/expansion.ts`. */
   destinoPosicion?: Point;
   /** Caravana de Fundación: ciudadanos ya existentes de la Facción que fundarán el nuevo asentamiento al llegar. */
-  jugadoresFundadoresIds?: string[];
+  heroesFundadoresIds?: string[];
   /** Flota de caravanas propias (ampliación de comercio, a petición del usuario): solo para `tipo: 'comercial'`
    * construidas vía Mercado (ver `construirCaravanaComercial`, engine/trade.ts) — un activo persistente y con
    * costo, no un objeto efímero. 'disponible' = construida, parada en `origenAsentamientoId`, sin asignar.
@@ -750,7 +755,7 @@ export interface Caravana {
  * sola entidad, con la misma maquinaria de rutas que las caravanas (`calcularRuta` + `avanzarPosicionEnRuta`).
  *
  * Salir SOLO y salir en ejército no son dos casos: salir solo es un ejército de un participante. Por eso no
- * hay dos tipos ni una lista de participantes guardada — los participantes se DERIVAN de los `jugadorId`
+ * hay dos tipos ni una lista de participantes guardada — los participantes se DERIVAN de los `heroeId`
  * distintos de sus escuadrones, y ese mismo número es el de rombos a dibujar en el mapa (Doc 5.12.2).
  *
  * Tampoco se guardan: la Facción y el color (salen de `origenAsentamientoId`), el poder (`poderTotal`), la
@@ -771,7 +776,7 @@ export interface Ejercito {
    * No es una lista de ids sino de entradas: la sucesión del líder va por ANTIGÜEDAD, y eso no se lee de un
    * array de strings sin depender del orden de inserción, que separarse y volver a unirse reordena.
    */
-  participantes: { jugadorId: string; unidoEn: Instante }[];
+  participantes: { heroeId: string; unidoEn: Instante }[];
   /**
    * Qué NACIÓ esta columna, fijado al crearla y jamás modificado (Doc 5.12.1). Lo decide EL COMANDO que la
    * pare: `salirAlMundo` —sin destino— hace una columna `personal`; `movilizarEjercito` —contra un
@@ -796,7 +801,7 @@ export interface Ejercito {
    * dispara a los 10 s, lo comprueban contra el instante actual los dos únicos sitios que las miran —el
    * comando con el que el Líder responde y la proyección del que pidió—. Ausente = ninguna viva.
    */
-  peticionesDeUnion?: { jugadorId: string; pedidoEn: Instante; expiraEn: Instante }[];
+  peticionesDeUnion?: { heroeId: string; pedidoEn: Instante; expiraEn: Instante }[];
   /** Escuadrones MOVIDOS aquí desde `Asentamiento.escuadrones` — se van de verdad, por eso la guarnición es
    * lo único que defiende (Doc 5.12.4) y por eso `consumoRacionTropas` ya cuenta solo lo que quedó en casa. */
   escuadrones: Escuadron[];

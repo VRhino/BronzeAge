@@ -99,7 +99,6 @@
   },
   "reglas": {
     "duracionMaximaSegundos": 900,
-    "ganadorPorTiempo": "defensor",
     "versionBalance": 9,
     "versionCatalogoTropas": 1,
     "versionCatalogoHeroe": "conquest-heroes-1",

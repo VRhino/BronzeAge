@@ -1,4 +1,4 @@
-// Cesión de una Facción al NPC de gobernanza (`session/npcGobernanza.ts`) desde la pestaña Facción.
+// Facciones NPC (`session/npcGobernanza.ts`): las crea el admin ya asentadas (`crearFaccionNpc`).
 //
 // Portado desde `app/__tests__/faccionNpc.test.ts` (Docs/Arquitectura/4_Plan_Evolucion_Tareas.md, Fase B3 —
 // migración de `main.ts`): ese archivo probaba esto contra el `GameStore` local y SÍNCRONO de antes de la
@@ -9,9 +9,9 @@
 // resto de `session/__tests__/` — mismo lugar donde ya vivía la cobertura básica de `avanzarFaccionesNpc`
 // (`gameSession.test.ts`).
 //
-// Lo que se blinda: el NPC juega SOLO las Facciones que se le han cedido (`faccionesNpcIds`) y no toca las que
-// el jugador sigue jugando a mano — ni asignándoles cargos, ni reservando su almacén, ni reclutando con sus
-// residentes, ni pactando trueques que comprometan sus recursos.
+// Lo que se blinda: el NPC juega SOLO las Facciones NPC (`faccionesNpcIds`) y no toca las que juega un
+// jugador — ni asignándoles cargos, ni reservando su almacén, ni reclutando con sus residentes, ni pactando
+// trueques que comprometan sus recursos.
 import { describe, expect, it } from 'vitest';
 import type { Asentamiento, Ejercito, RecursoTipo } from '../../domain/types';
 import { createRng } from '../../worldgen';
@@ -30,34 +30,30 @@ import {
 const mapaDeterminista = crearMapaDeterminista(42);
 import { evaluarViabilidadFundacion } from '../../engine/settlement';
 import { GameSession } from '../gameSession';
-import { alternarFaccionNpc } from '../comandos/alternarFaccionNpc';
 import { crearFaccion } from '../comandos/crearFaccion';
+import { crearFaccionNpc } from '../comandos/crearFaccionNpc';
 import { fundarAsentamiento } from '../comandos/fundarAsentamiento';
+import { conHeroe } from './fixtures';
 
 // Misma seed que usaba `new GameStore()` (constructor local de antes de la migración, `GameSession.crear
 // ('local', { seed: 1 })`): varios tests de abajo dependen de que este mundo concreto tenga minerales extra
 // alcanzables cerca de sitios con madera+piedra.
 const SEED = 1;
-const ACTOR = 'jugador-test';
 
 function partidaConDosFacciones(): { sesion: GameSession; faccionNpcId: string; faccionManualId: string } {
-  const sesion = GameSession.crear('test-npc', { seed: SEED });
-  // Dos actores distintos: un jugador solo puede crear una Facción (Doc 2 "Entidades"), y desde que se funda
-  // donde se está (Doc 1.3) el fundador tiene que ser quien ya tiene columna en el mundo — que es quien
-  // acaba de crearla, no un tercero (`ACTOR`) que nunca ha actuado.
-  const r1 = sesion.ejecutar(crearFaccion, { nombre: 'Facción NPC' }, { actor: 'jugador-npc' });
-  const r2 = sesion.ejecutar(crearFaccion, { nombre: 'Facción Manual' }, { actor: 'jugador-manual' });
-  if (!r1.ok || !r2.ok) throw new Error('setup del test: no se pudieron crear las Facciones');
-  const faccionNpcId = r1.datos!.faccionId;
-  const faccionManualId = r2.datos!.faccionId;
-
-  // Sin barrido de grilla ni punto elegido a mano: se funda donde se está (Doc 1.3), en el punto aleatorio
-  // donde cada fundador apareció al crear su Facción (misma SEED, así que es reproducible).
-  sesion.ejecutar(fundarAsentamiento, { faccionId: faccionNpcId }, { actor: 'jugador-npc' });
+  // La manual la juega una persona: crea su Facción y funda donde apareció (Doc 1.3). La NPC la crea después el
+  // admin, ya asentada, así que su búsqueda de sitio ve la plaza manual y no se le echa encima.
+  const sesion = conHeroe(GameSession.crear('test-npc', { seed: SEED }), 'jugador-manual');
+  const manual = sesion.ejecutar(crearFaccion, { nombre: 'Facción Manual' }, { actor: 'jugador-manual' });
+  if (!manual.ok) throw new Error('setup del test: no se pudo crear la Facción manual');
+  const faccionManualId = manual.datos!.faccionId;
   sesion.ejecutar(fundarAsentamiento, { faccionId: faccionManualId }, { actor: 'jugador-manual' });
+
+  const npc = sesion.ejecutar(crearFaccionNpc, { nombre: 'Facción NPC' });
+  if (!npc.ok) throw new Error('setup del test: no se pudo crear la Facción NPC');
   expect(sesion.getState().asentamientos).toHaveLength(2);
 
-  return { sesion, faccionNpcId, faccionManualId };
+  return { sesion, faccionNpcId: npc.datos!.faccionId, faccionManualId };
 }
 
 function asentamientoDe(sesion: GameSession, faccionId: string): Asentamiento {
@@ -77,9 +73,8 @@ function avanzar(sesion: GameSession, n: number): void {
 }
 
 describe('Facción controlada por NPC', () => {
-  it('gobierna la Facción cedida y no toca la que juega el jugador', () => {
+  it('gobierna la Facción NPC y no toca la que juega el jugador', () => {
     const { sesion, faccionNpcId, faccionManualId } = partidaConDosFacciones();
-    sesion.ejecutar(alternarFaccionNpc, { faccionId: faccionNpcId, activo: true }, { actor: ACTOR });
     avanzar(sesion, 40);
 
     const npc = asentamientoDe(sesion, faccionNpcId);
@@ -106,30 +101,8 @@ describe('Facción controlada por NPC', () => {
     }
   });
 
-  it('se cede y se retoma en caliente a mitad de partida', () => {
-    const { sesion, faccionNpcId } = partidaConDosFacciones();
-
-    avanzar(sesion, 20);
-    expect(asentamientoDe(sesion, faccionNpcId).cargos.gobernadorId).toBeNull();
-
-    sesion.ejecutar(alternarFaccionNpc, { faccionId: faccionNpcId, activo: true }, { actor: ACTOR });
-    expect(sesion.getState().faccionesNpcIds).toContain(faccionNpcId);
-    avanzar(sesion, 5);
-    expect(asentamientoDe(sesion, faccionNpcId).cargos.gobernadorId).toBeTruthy();
-
-    // Retomar el control no deshace lo que el NPC ya hizo (es estado normal del juego): solo deja de decidir.
-    sesion.ejecutar(alternarFaccionNpc, { faccionId: faccionNpcId, activo: false }, { actor: ACTOR });
-    expect(sesion.getState().faccionesNpcIds).not.toContain(faccionNpcId);
-    const antes = asentamientoDe(sesion, faccionNpcId);
-    avanzar(sesion, 5);
-    const despues = asentamientoDe(sesion, faccionNpcId);
-    expect(despues.cargos.gobernadorId).toBe(antes.cargos.gobernadorId);
-    expect(despues.escuadrones.length).toBe(antes.escuadrones.length);
-  });
-
   it('la marca de NPC sobrevive a exportar/importar la partida', () => {
     const { sesion, faccionNpcId } = partidaConDosFacciones();
-    sesion.ejecutar(alternarFaccionNpc, { faccionId: faccionNpcId, activo: true }, { actor: ACTOR });
     avanzar(sesion, 5);
 
     // `exportar()`/`GameSession.importar()`, no el formato de archivo de descarga del navegador — es la vía
@@ -138,32 +111,28 @@ describe('Facción controlada por NPC', () => {
     expect(otra.getState().faccionesNpcIds).toEqual([faccionNpcId]);
   });
 
-  it('se funda a sí misma si se cede sin ningún asentamiento (reportado por el usuario: quedaba inerte)', () => {
-    const sesion = GameSession.crear('test-npc-inerte', { seed: SEED });
-    const creada = sesion.ejecutar(crearFaccion, { nombre: 'Facción NPC' }, { actor: ACTOR });
-    if (!creada.ok) throw new Error('setup del test: no se pudo crear la Facción');
-    const faccionId = creada.datos!.faccionId;
+  it('si se queda sin asentamientos, vuelve a fundar con sus propios héroes bot, sin crear otros', () => {
+    const creada = GameSession.crear('test-npc-refunda', { seed: SEED });
+    const r = creada.ejecutar(crearFaccionNpc, { nombre: 'Facción NPC' });
+    if (!r.ok) throw new Error('setup del test: no se pudo crear la Facción NPC');
+    const faccionId = r.datos!.faccionId;
+    const bots = creada.getState().asentamientos[0]!.heroesFundadoresIds;
 
-    // A diferencia de `partidaConDosFacciones`, aquí NO se funda nada a mano: el jugador crea la Facción, la
-    // marca NPC y avanza tick — el punto de partida real que reportó el fallo.
-    sesion.ejecutar(alternarFaccionNpc, { faccionId, activo: true }, { actor: ACTOR });
-    expect(sesion.getState().asentamientos).toHaveLength(0);
-
-    avanzar(sesion, 10);
+    const payload = creada.exportar();
+    const sesion = GameSession.importar({ ...payload, state: { ...payload.state, asentamientos: [] } });
+    avanzar(sesion, 1);
 
     const propios = sesion.getState().asentamientos.filter((a) => a.faccionId === faccionId);
     expect(propios).toHaveLength(1);
-    expect(propios[0]!.cargos.gobernadorId).toBeTruthy();
+    expect(propios[0]!.heroesFundadoresIds).toEqual(bots);
+    expect(sesion.getState().heroes).toHaveLength(bots.length);
   });
 
   it('funda su asentamiento inicial en un sitio con madera Y piedra alcanzables (a petición del usuario)', () => {
     const sesion = GameSession.crear('test-npc-piedra', { seed: SEED });
-    const creada = sesion.ejecutar(crearFaccion, { nombre: 'Facción NPC Piedra' }, { actor: ACTOR });
+    const creada = sesion.ejecutar(crearFaccionNpc, { nombre: 'Facción NPC Piedra' });
     if (!creada.ok) throw new Error('setup del test: no se pudo crear la Facción');
     const faccionId = creada.datos!.faccionId;
-
-    sesion.ejecutar(alternarFaccionNpc, { faccionId, activo: true }, { actor: ACTOR });
-    for (let i = 0; i < 5 && sesion.getState().asentamientos.length === 0; i++) avanzar(sesion, 1);
 
     const asentamiento = sesion.getState().asentamientos.find((a) => a.faccionId === faccionId);
     expect(asentamiento).toBeDefined();
@@ -205,11 +174,9 @@ describe('Facción controlada por NPC', () => {
     }
     expect(candidatosConBonus).toBeGreaterThan(0);
 
-    const creada = sesion.ejecutar(crearFaccion, { nombre: 'Facción NPC Rica' }, { actor: ACTOR });
+    const creada = sesion.ejecutar(crearFaccionNpc, { nombre: 'Facción NPC Rica' });
     if (!creada.ok) throw new Error('setup del test: no se pudo crear la Facción');
     const faccionId = creada.datos!.faccionId;
-    sesion.ejecutar(alternarFaccionNpc, { faccionId, activo: true }, { actor: ACTOR });
-    for (let i = 0; i < 5 && sesion.getState().asentamientos.length === 0; i++) avanzar(sesion, 1);
 
     const asentamiento = sesion.getState().asentamientos.find((a) => a.faccionId === faccionId)!;
     const bonusEncontrado = otrosMinerales.filter((tipo) =>
@@ -231,10 +198,10 @@ function dosColumnasNpc() {
   const uno = fundarAsentamientoDeTest(mapaDeterminista, facciones, 'faccion-1', []);
   const dos = fundarAsentamientoDeTest(mapaDeterminista, uno.facciones, 'faccion-2', [uno.asentamiento]);
   const punto = { x: 1000, y: 1000 };
-  const tropa = (id: string, jugadorId: string) => ({
+  const tropa = (id: string, heroeId: string) => ({
     id,
     nombre: 'milicia_lanceros',
-    jugadorId,
+    heroeId,
     origen: 'pesants' as const,
     cantidad: 30,
     veterania: 0,
@@ -245,7 +212,7 @@ function dosColumnasNpc() {
     id,
     faccionId,
     origenAsentamientoId: origenId,
-    participantes: [{ jugadorId: `j-${id}`, unidoEn: instanteDeTest(0) }],
+    participantes: [{ heroeId: `j-${id}`, unidoEn: instanteDeTest(0) }],
     tipo: 'ejercito',
     liderId: `j-${id}`,
     politicaDeUnion: 'rechazar',
@@ -437,7 +404,7 @@ describe('un jugador puede comerciar con una plaza NPC', () => {
       faccionId: 'faccion-2',
       liderId: 'jugador-humano',
       tipo: 'personal',
-      participantes: [{ jugadorId: 'jugador-humano', unidoEn: instanteDeTest(0) }],
+      participantes: [{ heroeId: 'jugador-humano', unidoEn: instanteDeTest(0) }],
       escuadrones: [],
       suministro: { oro: 400 },
       caravanasAdjuntasIds: [],

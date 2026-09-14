@@ -332,18 +332,17 @@ Sin resolver:
 
 - La XP de las escuadras en batallas que se resuelven con números: se fija cuando Conquest publique su curva
   de XP (CQ-001).
-- Quién gana una batalla que agota su tiempo fuera de un asedio (campo abierto, caravana, campamento de
-  bandidos). En un asedio gana el defensor (Doc 5.15.1). El ticket lo lleva en `BattleRules.ganadorPorTiempo`
-  (`src/contratos/v1/`), y hoy el fixture de bandidos pone `defensor` solo como ejemplo.
-
 ## 31. Modelo de Héroe
 
 **Estado: reglas principales cerradas (canon Doc 5.16 y glosario, 2026-09-11 y 2026-09-13), `código: ✘`.**
 Hoy el motor usa `Jugador` para todo lo que el canon atribuye al Héroe, y sigue con la veteranía y el
 estado herido de los escuadrones. Datos y orden de
-implementación en `Docs/Coordinacion/01_Modelo_de_datos_compartido.md` §12-§14 y BA-004. Los schemas, tipos y
-fixtures del contrato ya están en `src/contratos/v1/`; falta llevar el Héroe al dominio y renombrar
-`jugadorId`.
+implementación en `Docs/Coordinacion/01_Modelo_de_datos_compartido.md` §12-§14 y BA-004. Hecho: el contrato
+(`src/contratos/v1/`) y la fase 1 en la rama `heroe-dominio` (2026-09-14): `Heroe` en el dominio con su
+identidad, `heroeId` como dueño en todo el motor, `crearHeroe`, y Facciones NPC creadas por el admin con héroes
+bot. Falta: las escuadras en el héroe (contenedor, nivel/XP, sin `heridoHasta`), los comandos de puntos,
+equipo, loadouts y guarnición, la proyección del héroe y de `HeroePublico`, y la pantalla de crear héroe en el
+cliente de jugador (`BronzeAgeClient`).
 
 Sin resolver:
 
@@ -410,9 +409,11 @@ producción de la Granja (Doc 4.2.1); falta volver a medir. Cifras, causa y las 
 
 ## 36. Comportamiento de los héroes bot en el mundo
 
-**Estado: sin diseñar, `código: ✘`.** Los héroes bot los crea el admin y viven en la partida como cualquier
-otro héroe (Doc 0, Doc 5.15.6; comando `crearHeroeBot`, `Docs/Coordinacion/02` §4.2). Falta decidir qué hacen
-en el mundo de BronzeAge: si salen con columnas, defienden sus plazas en persona, reclutan y reponen
-escuadrones, se unen a ejércitos, ocupan cargos...
+**Estado: sin diseñar, `código: ◐`.** Los héroes bot nacen como fundadores de su Facción NPC cuando el admin la
+crea (`crearFaccionNpc`, Doc 5.15.6, `Docs/Coordinacion/02` §4.2) y viven en la partida como cualquier otro
+héroe. Hoy la gobernanza NPC ya los usa como a sus residentes de siempre: ocupan cargos, reclutan y salen de
+campaña con sus escuadras, pero una campaña no los sitúa en la columna (su `ubicacion` se queda en el
+asentamiento). Falta decidir qué hacen en el mundo de BronzeAge: si salen con columnas en persona, defienden
+sus plazas, se unen a ejércitos...
 
 Su comportamiento EN batalla no es de BronzeAge: lo maneja la IA de Conquest (CQ-002).

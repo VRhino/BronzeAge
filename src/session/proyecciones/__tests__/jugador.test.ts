@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { instante } from '../../../domain/tiempo';
 import { GameSession } from '../../gameSession';
 import { instanteDeTest } from '../../../engine/__tests__/fixtures';
-import { enPie, partidaConAsentamiento, MOMENTO, OPC } from '../../__tests__/fixtures';
+import { conHeroe, enPie, partidaConAsentamiento, MOMENTO, OPC } from '../../__tests__/fixtures';
 import { crearFaccion } from '../../comandos/crearFaccion';
 import { fundarAsentamiento } from '../../comandos/fundarAsentamiento';
 import { entrarEnAsentamiento, salirAlMundo } from '../../comandos/presencia';
@@ -52,6 +52,7 @@ describe('asentamientos: SOLO el interior de la plaza que se pisa (Doc 1.10.1)',
   it('el asentamiento de una Facción rival nunca entra en `asentamientos`, se vea o no', () => {
     const base = partidaConAsentamiento();
     const opcRival = { ...OPC, actor: 'rival' };
+    base.sesion = conHeroe(base.sesion, 'rival');
     const rf = base.sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, opcRival);
     base.sesion.ejecutar(fundarAsentamiento, { faccionId: rf.datos!.faccionId, posicion: { x: 900, y: 900 } }, opcRival);
 
@@ -63,7 +64,7 @@ describe('asentamientos: SOLO el interior de la plaza que se pisa (Doc 1.10.1)',
     // Es el corazón de Doc 13b: la ciudadanía habilita, la presencia ejerce. Un Gobernador de campaña no ve
     // su almacén desde el camino.
     const { sesion, asentamientoId, fundador } = partidaConAsentamiento();
-    sesion.ejecutar(salirAlMundo, { asentamientoId, jugadorId: fundador, escuadronIds: [], carga: {} }, { ...OPC, actor: fundador });
+    sesion.ejecutar(salirAlMundo, { asentamientoId, heroeId: fundador, escuadronIds: [], carga: {} }, { ...OPC, actor: fundador });
 
     const proyeccion = proyectarParaJugador(sesion.getState(), fundador, SIN_GEOMETRIA);
 
@@ -74,8 +75,8 @@ describe('asentamientos: SOLO el interior de la plaza que se pisa (Doc 1.10.1)',
   it('y al volver a entrar lo recupera', () => {
     const { sesion, asentamientoId, fundador } = partidaConAsentamiento();
     const opc = { ...OPC, actor: fundador };
-    sesion.ejecutar(salirAlMundo, { asentamientoId, jugadorId: fundador, escuadronIds: [], carga: {} }, opc);
-    sesion.ejecutar(entrarEnAsentamiento, { asentamientoId, jugadorId: fundador }, opc);
+    sesion.ejecutar(salirAlMundo, { asentamientoId, heroeId: fundador, escuadronIds: [], carga: {} }, opc);
+    sesion.ejecutar(entrarEnAsentamiento, { asentamientoId, heroeId: fundador }, opc);
 
     const proyeccion = proyectarParaJugador(sesion.getState(), fundador, SIN_GEOMETRIA);
 
@@ -96,7 +97,7 @@ describe('asentamientos: SOLO el interior de la plaza que se pisa (Doc 1.10.1)',
       ...payload,
       state: {
         ...payload.state,
-        asentamientos: [primera, { ...primera, id: 'segunda-plaza', posicion: { x: 900, y: 900 }, jugadoresFundadoresIds: ['colono'], casasCompradas: [] }],
+        asentamientos: [primera, { ...primera, id: 'segunda-plaza', posicion: { x: 900, y: 900 }, heroesFundadoresIds: ['colono'], casasCompradas: [] }],
       },
     });
 
@@ -117,6 +118,7 @@ describe('asentamientosAvistados: la FICHA de lo ajeno, solo si se ve', () => {
   function conPlazaRivalEn(posicion: Point) {
     const base = partidaConAsentamiento();
     const opcRival = { ...OPC, actor: 'rival' };
+    base.sesion = conHeroe(base.sesion, 'rival');
     const rf = base.sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, opcRival);
     // Se funda donde se está (Doc 1.3): se lleva al rival al punto elegido antes de fundar.
     base.sesion = enPie(base.sesion, 'rival', posicion);
@@ -203,7 +205,7 @@ describe('asentamientosAvistados: la FICHA de lo ajeno, solo si se ve', () => {
       ...payload,
       state: {
         ...payload.state,
-        asentamientos: [primera, { ...primera, id: 'segunda-plaza', posicion: { x: 900, y: 900 }, jugadoresFundadoresIds: ['colono'], casasCompradas: [] }],
+        asentamientos: [primera, { ...primera, id: 'segunda-plaza', posicion: { x: 900, y: 900 }, heroesFundadoresIds: ['colono'], casasCompradas: [] }],
       },
     });
 
@@ -234,6 +236,7 @@ describe('facciones: metadatos públicos de TODAS, sin filtrar', () => {
   it('incluye la Facción rival aunque sus asentamientos no aparezcan', () => {
     const base = partidaConAsentamiento();
     const opcRival = { ...OPC, actor: 'rival' };
+    base.sesion = conHeroe(base.sesion, 'rival');
     const rf = base.sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, opcRival);
 
     const proyeccion = proyectarParaJugador(base.sesion.getState(), base.fundador, SIN_GEOMETRIA);
@@ -269,7 +272,7 @@ describe('caravanas, acuerdos y ordenes: solo los que tocan un asentamiento prop
       id: 'plaza-ajena',
       faccionId: 'faccion-ajena',
       posicion: { x: 1200, y: 1200 },
-      jugadoresFundadoresIds: [],
+      heroesFundadoresIds: [],
     };
     const orden = (id: string, aId: string, estado: 'activa' | 'cumplida') => ({
       id,
@@ -289,7 +292,7 @@ describe('caravanas, acuerdos y ordenes: solo los que tocan un asentamiento prop
       faccionId: base.asentamientos.find((a) => a.id === asentamientoId)!.faccionId,
       liderId: fundador,
       tipo: 'personal',
-      participantes: [{ jugadorId: fundador, unidoEn: instanteDeTest(0) }],
+      participantes: [{ heroeId: fundador, unidoEn: instanteDeTest(0) }],
       escuadrones: [],
       suministro: {},
       caravanasAdjuntasIds: [],
@@ -344,6 +347,7 @@ describe('eventosDominioParaJugador: sin asentamientoId (globales) o con uno pro
   it('un evento de asentamiento AJENO no le llega a un jugador sin ese asentamiento', () => {
     const base = partidaConAsentamiento();
     const opcRival = { ...OPC, actor: 'rival' };
+    base.sesion = conHeroe(base.sesion, 'rival');
     const rf = base.sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, opcRival);
     const ra = base.sesion.ejecutar(fundarAsentamiento, { faccionId: rf.datos!.faccionId, posicion: { x: 900, y: 900 } }, opcRival);
 
@@ -364,7 +368,7 @@ describe('historial: el propio, nunca el de otro jugador', () => {
     const { sesion, fundador } = partidaConAsentamiento();
     const proyeccion = proyectarParaJugador(sesion.getState(), fundador, SIN_GEOMETRIA);
     expect(proyeccion.historial.length).toBeGreaterThan(0);
-    expect(proyeccion.historial).toEqual(sesion.getState().historialJugadores[fundador]);
+    expect(proyeccion.historial).toEqual(sesion.getState().historialHeroes[fundador]);
   });
 
   it('un jugador sin historial recibe un array vacío, no undefined', () => {
@@ -398,10 +402,10 @@ describe('mapaId, relaciones y titulos: públicos, sin filtrar', () => {
 // Ejercitos (Doc 5.12.7): la UNICA cosa de una Faccion rival que sale de esta proyeccion, y sale redactada.
 // ---------------------------------------------------------------------------------------------------------
 
-const escuadron = (id: string, jugadorId: string): Escuadron => ({
+const escuadron = (id: string, heroeId: string): Escuadron => ({
   id,
   nombre: 'milicia',
-  jugadorId,
+  heroeId,
   origen: 'pesants',
   cantidad: 10,
   veterania: 0,
@@ -414,10 +418,10 @@ function ejercito(id: string, faccionId: string, posicion: Point, escuadrones: E
     id,
     faccionId,
     origenAsentamientoId: `origen-de-${id}`,
-    participantes: [...new Set(escuadrones.map((e) => e.jugadorId))].map((jugadorId) => ({ jugadorId, unidoEn: instante(0) })),
+    participantes: [...new Set(escuadrones.map((e) => e.heroeId))].map((heroeId) => ({ heroeId, unidoEn: instante(0) })),
     tipo: 'ejercito',
     politicaDeUnion: 'rechazar',
-    liderId: escuadrones[0]?.jugadorId ?? 'j1',
+    liderId: escuadrones[0]?.heroeId ?? 'j1',
     escuadrones,
     suministro: { trigo: 500 },
     caravanasAdjuntasIds: [],
@@ -572,6 +576,7 @@ describe('vision compartida por alianza y vasallaje (Paso 4)', () => {
    */
   function conAliadoLejano() {
     const base = partidaConAsentamiento();
+    base.sesion = conHeroe(base.sesion, 'espartano');
     const rf = base.sesion.ejecutar(crearFaccion, { nombre: 'Esparta' }, { ...OPC, actor: 'espartano' });
     const espartaId = rf.datos!.faccionId as string;
     // Lejos de la plaza propia (400,400) — su alcance es ~90 — y dentro del mapa de 2000x2000.
@@ -652,6 +657,7 @@ describe('territorioPorEjercito: de quien es el suelo que pisas', () => {
   function dosPlazasVecinas() {
     const base = partidaConAsentamiento();
     const opcRival = { ...OPC, actor: 'rival' };
+    base.sesion = conHeroe(base.sesion, 'rival');
     const rf = base.sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, opcRival);
     // Se funda donde se está (Doc 1.3): se lleva al rival al punto elegido antes de fundar.
     base.sesion = enPie(base.sesion, 'rival', { x: 400, y: 470 });
@@ -694,6 +700,7 @@ describe('territorioPorEjercito: de quien es el suelo que pisas', () => {
     // lejos de todo lo propio — dentro de su zona, pero fuera de lo que la columna alcanza a ver.
     const base = partidaConAsentamiento();
     const opcRival = { ...OPC, actor: 'rival' };
+    base.sesion = conHeroe(base.sesion, 'rival');
     const rf = base.sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, opcRival);
     // Se funda donde se está (Doc 1.3): se lleva al rival al punto elegido antes de fundar.
     base.sesion = enPie(base.sesion, 'rival', { x: 1500, y: 1500 });
@@ -761,6 +768,7 @@ describe('la memoria proyectada: lo que se vio y ya no se ve', () => {
     // con una foto vieja que dice nivel 2. Debe ganar la de en vivo.
     const base = partidaConAsentamiento();
     const opcRival = { ...OPC, actor: 'rival' };
+    base.sesion = conHeroe(base.sesion, 'rival');
     const rf = base.sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, opcRival);
     // Se funda donde se está (Doc 1.3): se lleva al rival al punto elegido antes de fundar.
     base.sesion = enPie(base.sesion, 'rival', { x: 400, y: 470 });
@@ -787,6 +795,7 @@ describe('la memoria proyectada: lo que se vio y ya no se ve', () => {
   it('lo recordado NO se refresca solo: la foto es de cuando se tomo, aunque la plaza real haya cambiado', () => {
     const base = partidaConAsentamiento();
     const opcRival = { ...OPC, actor: 'rival' };
+    base.sesion = conHeroe(base.sesion, 'rival');
     const rf = base.sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, opcRival);
     const ra = base.sesion.ejecutar(fundarAsentamiento, { faccionId: rf.datos!.faccionId, posicion: { x: 1500, y: 1500 } }, opcRival);
     const rivalId = ra.datos!.asentamientoId;
@@ -1029,7 +1038,7 @@ describe('interiorRecordado: la foto minima de lo que dejaste atras', () => {
     const { sesion, asentamientoId, fundador } = partidaConAsentamiento();
     const trigoAlSalir = sesion.getState().asentamientos[0]!.almacen['trigo']?.cantidad ?? 0;
 
-    sesion.ejecutar(salirAlMundo, { asentamientoId, jugadorId: fundador, escuadronIds: [], carga: {} }, { ...OPC, actor: fundador });
+    sesion.ejecutar(salirAlMundo, { asentamientoId, heroeId: fundador, escuadronIds: [], carga: {} }, { ...OPC, actor: fundador });
 
     const ficha = proyectarParaJugador(sesion.getState(), fundador, SIN_GEOMETRIA).asentamientosAvistados[0]!;
     expect(ficha.interiorRecordado, 'de donde has estado, recuerdas').toBeDefined();
@@ -1039,7 +1048,7 @@ describe('interiorRecordado: la foto minima de lo que dejaste atras', () => {
 
   it('y la foto NO se refresca sola: la ciudad sigue viviendo y el recuerdo se queda quieto', () => {
     const { sesion, asentamientoId, fundador } = partidaConAsentamiento();
-    sesion.ejecutar(salirAlMundo, { asentamientoId, jugadorId: fundador, escuadronIds: [], carga: {} }, { ...OPC, actor: fundador });
+    sesion.ejecutar(salirAlMundo, { asentamientoId, heroeId: fundador, escuadronIds: [], carga: {} }, { ...OPC, actor: fundador });
     const recordadoAlSalir = proyectarParaJugador(sesion.getState(), fundador, SIN_GEOMETRIA).asentamientosAvistados[0]!.interiorRecordado!;
 
     for (let i = 0; i < 5; i++) sesion.avanzarTick();
@@ -1059,7 +1068,7 @@ describe('interiorRecordado: la foto minima de lo que dejaste atras', () => {
       ...payload,
       state: {
         ...payload.state,
-        asentamientos: [primera, { ...primera, id: 'nunca-pisada', posicion: { x: 900, y: 900 }, jugadoresFundadoresIds: ['colono'], casasCompradas: [] }],
+        asentamientos: [primera, { ...primera, id: 'nunca-pisada', posicion: { x: 900, y: 900 }, heroesFundadoresIds: ['colono'], casasCompradas: [] }],
       },
     });
 
@@ -1074,7 +1083,7 @@ describe('interiorRecordado: la foto minima de lo que dejaste atras', () => {
     // Es lo que sostiene la mecanica entera. Si fuera de la Faccion, bastaria dejar a uno sentado en casa
     // para que todos vieran el almacen en vivo desde cualquier parte del mapa.
     const { sesion, asentamientoId, fundador, vecino } = partidaConAsentamiento();
-    sesion.ejecutar(salirAlMundo, { asentamientoId, jugadorId: fundador, escuadronIds: [], carga: {} }, { ...OPC, actor: fundador });
+    sesion.ejecutar(salirAlMundo, { asentamientoId, heroeId: fundador, escuadronIds: [], carga: {} }, { ...OPC, actor: fundador });
 
     // El vecino sigue dentro y ve el interior vivo; el fundador, fuera, solo su foto.
     const dentro = proyectarParaJugador(sesion.getState(), vecino, SIN_GEOMETRIA);

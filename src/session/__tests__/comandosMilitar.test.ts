@@ -48,23 +48,23 @@ describe('reclutarTropa', () => {
     const { sesion, asentamientoId, fundador } = partidaAbastecida();
     const resultado = sesion.ejecutar(
       reclutarTropa,
-      { asentamientoId, jugadorId: fundador, tropaId: 'milicia_lanceros', origen: 'pesants' },
+      { asentamientoId, heroeId: fundador, tropaId: 'milicia_lanceros', origen: 'pesants' },
       OPC
     );
 
     expect(resultado.ok).toBe(true);
     expect(resultado.datos!.reclutados).toBeGreaterThan(0);
     expect(sesion.getState().asentamientos[0]!.escuadrones).toHaveLength(1);
-    expect(sesion.getState().historialJugadores[fundador]!.some((e) => e.mensaje.includes('Recluta'))).toBe(true);
+    expect(sesion.getState().historialHeroes[fundador]!.some((e) => e.mensaje.includes('Recluta'))).toBe(true);
   });
 
   it('con su escuadra dentro de un ejército, el jugador no recluta otra de ese tipo en casa (Doc 2.5)', () => {
     const { sesion, asentamientoId, fundador, vecino } = partidaAbastecida();
-    const params = (jugadorId: string) => ({ asentamientoId, jugadorId, tropaId: 'milicia_lanceros', origen: 'pesants' as const });
+    const params = (heroeId: string) => ({ asentamientoId, heroeId, tropaId: 'milicia_lanceros', origen: 'pesants' as const });
     expect(sesion.ejecutar(reclutarTropa, params(fundador), OPC).ok).toBe(true);
     const escuadronIds = sesion.getState().asentamientos[0]!.escuadrones.map((e) => e.id);
     const objetivo = { tipo: 'punto', punto: { x: 900, y: 900 } } as const;
-    expect(sesion.ejecutar(movilizarEjercito, { asentamientoId, jugadorId: fundador, escuadronIds, objetivo }, OPC).ok).toBe(true);
+    expect(sesion.ejecutar(movilizarEjercito, { asentamientoId, heroeId: fundador, escuadronIds, objetivo }, OPC).ok).toBe(true);
     // El carro del ejército se lleva trigo del almacén hasta la reserva: se rellena para que lo único que
     // pueda rechazar sea la unicidad.
     const enCampana = abastecer(sesion);
@@ -81,7 +81,7 @@ describe('combate y reproducibilidad', () => {
   it('atacar un campamento consume el rng del contexto: dos partidas iguales dan el mismo resultado', () => {
     function correr() {
       const { sesion, asentamientoId, fundador } = partidaAbastecida();
-      const reclutado = sesion.ejecutar(reclutarTropa, { asentamientoId, jugadorId: fundador, tropaId: 'milicia_lanceros', origen: 'pesants' }, OPC);
+      const reclutado = sesion.ejecutar(reclutarTropa, { asentamientoId, heroeId: fundador, tropaId: 'milicia_lanceros', origen: 'pesants' }, OPC);
       if (!reclutado.ok) throw new Error('setup del test: no se pudo reclutar');
 
       // Se inyecta un campamento a mano: el spawn natural depende del tick y aquí solo interesa el combate.

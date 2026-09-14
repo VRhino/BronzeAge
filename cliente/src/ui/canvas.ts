@@ -575,7 +575,7 @@ export function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, s
   //
   // El número de rombos es `ejercito.participantes.length` (Doc 5.12.1): quién va DENTRO, aporte tropas o no
   // — un ciudadano que sale solo a explorar es un ejército de un participante y SIN escuadrones. Derivarlo de
-  // los `jugadorId` de los escuadrones (como se hacía antes) lo dejaba invisible en el mapa. Así, de un
+  // los `heroeId` de los escuadrones (como se hacía antes) lo dejaba invisible en el mapa. Así, de un
   // vistazo, el tamaño del racimo dice cuánta gente va en esa columna.
   //
   // Rombo y no triángulo (caravana) ni círculo (asentamiento) ni diamante rojo (campamento bandido): las

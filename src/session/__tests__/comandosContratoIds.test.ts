@@ -12,7 +12,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ResultadoComando } from '../comandos/tipos';
 import { activarPolitica, asignarCargoLocal, asignarRey, comprarCasa } from '../comandos/cargos';
-import { alternarFaccionNpc } from '../comandos/alternarFaccionNpc';
 import {
   alternarAutoConstruccion,
   anadirEdificioManualmente,
@@ -37,13 +36,13 @@ const CASOS: CasoIdInexistente[] = [
   {
     etiqueta: 'asignarRey: faccionId',
     codigoEsperado: 'faccion.no_existe',
-    ejecutar: ({ sesion, fundador }) => sesion.ejecutar(asignarRey, { faccionId: 'no-existe', jugadorId: fundador }, OPC),
+    ejecutar: ({ sesion, fundador }) => sesion.ejecutar(asignarRey, { faccionId: 'no-existe', heroeId: fundador }, OPC),
   },
   {
     etiqueta: 'asignarCargoLocal: asentamientoId',
     codigoEsperado: 'asentamiento.no_existe',
     ejecutar: ({ sesion, fundador }) =>
-      sesion.ejecutar(asignarCargoLocal, { asentamientoId: 'no-existe', cargo: 'gobernador', jugadorId: fundador }, OPC),
+      sesion.ejecutar(asignarCargoLocal, { asentamientoId: 'no-existe', cargo: 'gobernador', heroeId: fundador }, OPC),
   },
   {
     // Caso real: comprarCasa resuelve la Facción a partir del asentamiento, así que un asentamiento
@@ -51,18 +50,13 @@ const CASOS: CasoIdInexistente[] = [
     // la tabla, es el código que de verdad devuelve el comando.
     etiqueta: 'comprarCasa: asentamientoId',
     codigoEsperado: 'faccion.invalida',
-    ejecutar: ({ sesion }) => sesion.ejecutar(comprarCasa, { asentamientoId: 'no-existe', jugadorId: 'nuevo' }, OPC),
+    ejecutar: ({ sesion }) => sesion.ejecutar(comprarCasa, { asentamientoId: 'no-existe', heroeId: 'nuevo' }, OPC),
   },
   {
     etiqueta: 'activarPolitica: asentamientoId',
     codigoEsperado: 'asentamiento.no_existe',
     ejecutar: ({ sesion }) =>
       sesion.ejecutar(activarPolitica, { asentamientoId: 'no-existe', cargo: 'gobernador', politicaId: 'lineas_produccion' }, OPC),
-  },
-  {
-    etiqueta: 'alternarFaccionNpc: faccionId',
-    codigoEsperado: 'faccion.no_existe',
-    ejecutar: ({ sesion }) => sesion.ejecutar(alternarFaccionNpc, { faccionId: 'no-existe', activo: true }, OPC),
   },
   {
     etiqueta: 'anadirEdificioManualmente: asentamientoId',
@@ -122,7 +116,7 @@ const CASOS: CasoIdInexistente[] = [
     etiqueta: 'reclutarTropa: asentamientoId',
     codigoEsperado: 'asentamiento.no_existe',
     ejecutar: ({ sesion, fundador }) =>
-      sesion.ejecutar(reclutarTropa, { asentamientoId: 'no-existe', jugadorId: fundador, tropaId: 'milicia_lanceros', origen: 'pesants' }, OPC),
+      sesion.ejecutar(reclutarTropa, { asentamientoId: 'no-existe', heroeId: fundador, tropaId: 'milicia_lanceros', origen: 'pesants' }, OPC),
   },
   {
     // No es un id de ENTIDAD de la partida sino de CATÁLOGO (la tropa no existe en `TROPAS`), pero la forma
@@ -130,7 +124,7 @@ const CASOS: CasoIdInexistente[] = [
     etiqueta: 'reclutarTropa: tropaId (catálogo)',
     codigoEsperado: 'tropas.reclutamiento_invalido',
     ejecutar: ({ sesion, asentamientoId, fundador }) =>
-      sesion.ejecutar(reclutarTropa, { asentamientoId, jugadorId: fundador, tropaId: 'no-existe', origen: 'pesants' }, OPC),
+      sesion.ejecutar(reclutarTropa, { asentamientoId, heroeId: fundador, tropaId: 'no-existe', origen: 'pesants' }, OPC),
   },
   {
     etiqueta: 'iniciarAsedio: defensorId',

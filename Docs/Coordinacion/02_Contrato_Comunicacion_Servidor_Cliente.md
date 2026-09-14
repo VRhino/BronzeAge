@@ -144,7 +144,7 @@ aplicar, valida en orden (checklist ampliado — corrección R03/R04/R05):
 5. `supervivientesAlCierre + muertos == efectivosAutorizados` por escuadra (doc 01 §15) — cerrado sobre lo
    AUTORIZADO, no sobre `desplegados` (que es solo informativo);
 6. ninguna cifra negativa ni por encima de lo autorizado;
-7. si `razon` es `tiempo_agotado`, `ganador` es `reglas.ganadorPorTiempo` del ticket;
+7. si `razon` es `tiempo_agotado`, `ganador` es `defensor` (Doc 5.15.1);
 8. `fin` posterior a `inicio`, y la duración no pasa de `reglas.duracionMaximaSegundos`;
 9. `schemaVersion`/versión de build/balance autorizada;
 10. la credencial de la cabecera es la del servidor que registró la asignación, y el `intentoAsignacionId`
@@ -210,8 +210,9 @@ un cierre) y pide `GET .../eventos?desde=<ese version>` para recuperar lo que se
 grande, le basta con pedir la proyección entera otra vez. El WebSocket solo avisa: nunca es la única copia de
 un dato.
 
-Estas rutas NO cambian de forma para dar soporte a `Heroe` — solo su contenido crece (`jugadorId` sigue
-existiendo en la respuesta; `heroeId` se añade cuando el modelo de héroe esté implementado). Unity debe
+Estas rutas NO cambian de forma para dar soporte a `Heroe` — solo su contenido crece. La proyección identifica
+al jugador por su héroe (`heroeId`, que sustituye al antiguo `jugadorId`); el `jugadorId` de la membresía
+sigue disponible en `GET /sesiones/actual`. Unity debe
 implementar este flujo completo (membresía → proyección → mapa → eventos con cursor de reconexión), no solo
 los endpoints de batalla, antes de poder sustituir a Vite en cualquier partida real.
 
@@ -271,11 +272,17 @@ si es humano o bot.
 
 - Una `Membresia` sin héroe no puede hacer nada más en la partida hasta crearlo. Crear el héroe es un
   comando aparte de `POST .../membresia` porque necesita datos del jugador (nombre, clase, aspecto).
-- **Los héroes bot los crea el admin** con el comando `crearHeroeBot` (`faccionId`, `residenciaId`,
-  `displayName`, `classDefinitionId`, `genero`, `avatar`), por la vía de comandos de admin que ya existe
-  (`POST /admin/partidas/:gameId/comandos`). Nacen con `controlador: 'bot'` y `jugadorId: null`, y viven en
-  la partida como cualquier otro héroe. Rechazos: Facción inexistente o no NPC; residencia que no es de esa
-  Facción; clase inexistente.
+- Sin héroe, `GET /jugador/partidas/:gameId` responde `{ ...resumen, sinHeroe: true }` en vez de la proyección,
+  y cualquier comando que no sea `crearHeroe` responde 403. La auditoría sigue registrando al jugador de la
+  membresía, no al héroe.
+- **Las Facciones NPC y sus héroes bot los crea el admin** (`POST /admin/partidas/:gameId/comandos`, o el
+  formulario del cliente de administración). `crearFaccionNpc` (`nombre`, `posicion?`) crea la Facción ya
+  asentada: funda su primer asentamiento (en `posicion`, o donde la gobernanza NPC ve el mejor sitio) con 5
+  héroes bot (`controlador: 'bot'`, `jugadorId: null`) como fundadores, y el primero queda como Rey. La
+  Facción la gobierna el NPC hasta que se destruya: una Facción de jugador ya no se puede ceder a la IA. Si
+  se queda sin asentamientos, la gobernanza NPC vuelve a fundar con esos mismos bots. Rechazos: nombre vacío
+  o repetido; ningún sitio donde fundar. Añadir bots a una Facción NPC existente (`crearHeroeBot`) queda para
+  cuando haga falta.
 - `equipar` saca el objeto del inventario y lo pone en el hueco; lo que ocupaba el hueco vuelve a una casilla
   libre (doc 01 §12.1). Qué va en cada hueco lo dice el catálogo de objetos de Conquest.
 - Trasladar el campamento es el `cambiarResidencia` que ya existe (Doc 2.5): no hace falta un comando nuevo.

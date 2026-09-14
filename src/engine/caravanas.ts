@@ -70,7 +70,7 @@ export function costoCaravanaPorDefecto(): Record<string, number> {
 export function devolverEscoltaAGuarnicion(guarnicion: readonly Escuadron[], escolta: readonly Escuadron[]): Escuadron[] {
   const resultado = guarnicion.map((e) => ({ ...e }));
   for (const s of escolta) {
-    const existente = resultado.find((e) => e.jugadorId === s.jugadorId && e.tropaId === s.tropaId);
+    const existente = resultado.find((e) => e.heroeId === s.heroeId && e.tropaId === s.tropaId);
     if (existente) {
       existente.cantidad += s.cantidad;
       existente.veterania = Math.max(existente.veterania, s.veterania);

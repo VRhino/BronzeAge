@@ -5,7 +5,7 @@
 // jugador actúa por primera vez y cuando se carga una partida anterior a esta mecánica— y en los dos hay que
 // DEDUCIRLA de lo que el mundo ya sabe. Una sola función para los dos casos, o la partida migrada acabaría
 // colocando a la gente en un sitio distinto del que la coloca el juego en marcha.
-import type { Asentamiento, Ejercito, InteriorRecordado, Jugador, Point, RelacionPolitica, UbicacionJugador } from '../domain/types';
+import type { Asentamiento, Ejercito, InteriorRecordado, Heroe, Point, RelacionPolitica, UbicacionHeroe } from '../domain/types';
 import type { Instante } from '../domain/tiempo';
 import { FUNDACION, MOVIMIENTO } from '../constants';
 import { calcularRuta } from '../world/rutas';
@@ -29,67 +29,24 @@ import { marcarVisto, rejillaDe, SIN_EXPLORAR } from './exploracion';
  * pondrá uno de verdad.
  */
 export function ubicacionDeducida(
-  jugadorId: string,
+  heroeId: string,
   asentamientos: readonly Asentamiento[],
   ejercitos: readonly Ejercito[]
-): UbicacionJugador {
-  const columna = ejercitos.find((e) => e.participantes.some((p) => p.jugadorId === jugadorId));
+): UbicacionHeroe {
+  const columna = ejercitos.find((e) => e.participantes.some((p) => p.heroeId === heroeId));
   if (columna) return { tipo: 'columna', ejercitoId: columna.id };
 
-  const residencia = asentamientos.find((a) => esResidente(a, jugadorId));
+  const residencia = asentamientos.find((a) => esResidente(a, heroeId));
   if (residencia) return { tipo: 'asentamiento', asentamientoId: residencia.id };
 
   return { tipo: 'desconectado', punto: { x: 0, y: 0 } };
 }
 
 /**
- * Devuelve la lista de jugadores con la garantía de que `jugadorId` tiene registro, deduciendo su ubicación
- * si hay que crearlo. Idempotente: si ya está, devuelve la MISMA lista, y por eso se puede llamar en el
- * camino de todos los comandos sin copiar el array en cada uno.
- *
- * No toca al que ya existe. Mover a alguien es cosa de los comandos de movimiento, no de aparecer.
- */
-export function conJugadorAsegurado(
-  jugadores: readonly Jugador[],
-  jugadorId: string,
-  liderazgoBase: number,
-  asentamientos: readonly Asentamiento[],
-  ejercitos: readonly Ejercito[],
-  /** Para APARECER en el mundo a quien el estado no conoce de nada (Doc 1.3). Omitirlo deja el comportamiento
-   * de antes del spawn: se deduce, y quien no encaja en ningun sitio queda fuera del mundo.
-   *
-   * `generarId` es una FUNCION y no un id ya calculado: quien llama (`GameSession.conActorEnPartida`) corre
-   * en CADA comando de CADA jugador ya registrado, que es el caso normal — pedirlo por adelantado gastaria
-   * un id de la secuencia en cada uno de esos comandos, para nada, cuando el 99% de las veces nadie aparece. */
-  aparicion?: { mapa: Mapa; rng: RandomFn; generarId: () => string; instante: Instante }
-): { jugadores: Jugador[]; ejercitos: Ejercito[] } {
-  if (jugadores.some((j) => j.id === jugadorId)) {
-    return { jugadores: jugadores as Jugador[], ejercitos: ejercitos as Ejercito[] };
-  }
-
-  const deducida = ubicacionDeducida(jugadorId, asentamientos, ejercitos);
-  // A quien el mundo NO conoce de nada —ni residencia ni columna— no se le deduce nada: se le hace APARECER
-  // (Doc 1.3). `ubicacionDeducida` devolvia para el un punto de relleno, que era un marcador de que esto
-  // faltaba.
-  if (deducida.tipo !== 'desconectado' || !aparicion) {
-    return {
-      jugadores: [...jugadores, { id: jugadorId, liderazgoBase, ubicacion: deducida }],
-      ejercitos: ejercitos as Ejercito[],
-    };
-  }
-
-  // Y aparecer es nacer CON COLUMNA, no en un punto suelto: los tres sitios donde un jugador puede estar son
-  // dentro de una plaza, dentro de una columna, o fuera del mundo (Doc 1.10). Un recien llegado que camina
-  // por el campo esta en la segunda, y sin ella no podria ni moverse ni fundar donde se para (Doc 1.3).
-  const columna = columnaDeAparicion(aparicion.generarId(), jugadorId, puntoDeAparicion(aparicion.mapa, asentamientos, aparicion.rng), aparicion.instante);
-  return {
-    jugadores: [...jugadores, { id: jugadorId, liderazgoBase, ubicacion: { tipo: 'columna', ejercitoId: columna.id } }],
-    ejercitos: [...ejercitos, columna],
-  };
-}
-
-/**
- * La columna con la que nace un jugador (Doc 1.3): sin tropas, sin carga y **SIN CASA**.
+ * La columna con la que APARECE en el mundo un héroe recién creado (Doc 1.3), en un punto de aparición: sin
+ * tropas, sin carga y **SIN CASA**. Aparecer es nacer CON COLUMNA, no en un punto suelto: los tres sitios
+ * donde un héroe puede estar son dentro de una plaza, dentro de una columna o fuera del mundo (Doc 1.10), y
+ * sin ella no podría ni moverse ni fundar donde se para.
  *
  * `origenAsentamientoId` va vacio a proposito y no es un hueco mal tapado: un recien llegado no tiene a donde
  * replegarse, que es exactamente la condicion de HUERFANO que el motor ya sabe manejar (Doc 5.4 — si el
@@ -98,14 +55,22 @@ export function conJugadorAsegurado(
  * `politicaDeUnion: 'rechazar'` no es prudencia: una columna sin bandera no tiene Faccion a la que sumar a
  * quien se una, asi que aceptar compañia no significaria nada todavia.
  */
-function columnaDeAparicion(id: string, jugadorId: string, punto: Point, instante: Instante): Ejercito {
+export function columnaDeAparicion(
+  id: string,
+  heroeId: string,
+  mapa: Mapa,
+  asentamientos: readonly Asentamiento[],
+  rng: RandomFn,
+  instante: Instante
+): Ejercito {
+  const punto = puntoDeAparicion(mapa, asentamientos, rng);
   return {
     id,
     faccionId: '',
     origenAsentamientoId: '',
-    participantes: [{ jugadorId, unidoEn: instante }],
+    participantes: [{ heroeId, unidoEn: instante }],
     tipo: 'personal',
-    liderId: jugadorId,
+    liderId: heroeId,
     politicaDeUnion: 'rechazar',
     escuadrones: [],
     suministro: {},
@@ -118,13 +83,12 @@ function columnaDeAparicion(id: string, jugadorId: string, punto: Point, instant
   };
 }
 
-/** Coloca a varios jugadores en el mismo sitio, dejando intacto a quien no esté en la lista. Se usa al fundar
+/** Coloca a varios héroes en el mismo sitio, dejando intacto a quien no esté en la lista. Se usa al fundar
  * — la única operación de hoy que sitúa a alguien sin moverlo, porque construir donde estás parado no es un
- * viaje. Al que no tenga registro no lo inventa: de eso se encarga el alta de `GameSession`, que corre
- * después en el mismo comando. */
-export function situarJugadores(jugadores: readonly Jugador[], ids: readonly string[], ubicacion: UbicacionJugador): Jugador[] {
+ * viaje. */
+export function situarHeroes(heroes: readonly Heroe[], ids: readonly string[], ubicacion: UbicacionHeroe): Heroe[] {
   const aSituar = new Set(ids);
-  return jugadores.map((j) => (aSituar.has(j.id) ? { ...j, ubicacion } : j));
+  return heroes.map((j) => (aSituar.has(j.id) ? { ...j, ubicacion } : j));
 }
 
 /**
@@ -143,7 +107,7 @@ export function situarJugadores(jugadores: readonly Jugador[], ids: readonly str
 export function cruzarLaPuerta(
   columna: Ejercito,
   asentamiento: Asentamiento,
-  jugadorId: string,
+  heroeId: string,
   relaciones: readonly RelacionPolitica[]
 ): { asentamiento: Asentamiento; disuelveColumna: boolean } {
   if (columna.tipo === 'ejercito') {
@@ -152,13 +116,13 @@ export function cruzarLaPuerta(
   if (!enLaPuertaDe(columna, asentamiento)) {
     throw new MovilizacionInvalidaError(`Hay que estar a menos de ${MOVIMIENTO.radioPuerta} de la plaza para entrar.`);
   }
-  if (!puedeEntrarEn(asentamiento, jugadorId, columna.faccionId, relaciones)) {
+  if (!puedeEntrarEn(asentamiento, heroeId, columna.faccionId, relaciones)) {
     throw new MovilizacionInvalidaError('Esa plaza no te deja entrar.');
   }
 
   // En tu residencia la columna se DESHACE —tropas a la guarnición, carro al almacén— porque ahí tienes
   // todo delante y volver a salir vuelve a elegir. En cualquier otra se queda esperando intacta.
-  return esResidente(asentamiento, jugadorId)
+  return esResidente(asentamiento, heroeId)
     ? { asentamiento: absorberColumna(asentamiento, columna, true), disuelveColumna: true }
     : { asentamiento, disuelveColumna: false };
 }
@@ -169,8 +133,8 @@ export function cruzarLaPuerta(
  * Desde tu residencia se rechaza a propósito en vez de hacer lo mismo en silencio: allí hay un roster entero
  * y un almacén que elegir, y eso es `salirAlMundo`.
  */
-export function retomarColumna(asentamiento: Asentamiento, jugadorId: string): void {
-  if (esResidente(asentamiento, jugadorId)) {
+export function retomarColumna(asentamiento: Asentamiento, heroeId: string): void {
+  if (esResidente(asentamiento, heroeId)) {
     throw new MovilizacionInvalidaError('De tu propia residencia se sale eligiendo tropas y carga, con `salirAlMundo`.');
   }
 }
@@ -182,7 +146,7 @@ export function retomarColumna(asentamiento: Asentamiento, jugadorId: string): v
  * Guarda solo la cola —`en_cola` y `en_construccion`—, el almacen y la guarnicion. Lo `activo` no entra: es
  * publico y viaja vivo en la ficha, asi que recordarlo seria guardar dos veces el mismo hecho.
  */
-export function conFotoDelInterior(jugador: Jugador, asentamiento: Asentamiento, vistoEn: Instante): Jugador {
+export function conFotoDelInterior(jugador: Heroe, asentamiento: Asentamiento, vistoEn: Instante): Heroe {
   const foto: InteriorRecordado = {
     vistoEn,
     almacen: asentamiento.almacen,
@@ -195,12 +159,12 @@ export function conFotoDelInterior(jugador: Jugador, asentamiento: Asentamiento,
 /** Aplica la foto al jugador indicado, dejando intactos los demas. Envoltorio sobre `conFotoDelInterior` para
  * que el comando no tenga que buscar y reemplazar a mano. */
 export function conFotoTomadaPor(
-  jugadores: readonly Jugador[],
-  jugadorId: string,
+  heroes: readonly Heroe[],
+  heroeId: string,
   asentamiento: Asentamiento,
   vistoEn: Instante
-): Jugador[] {
-  return jugadores.map((j) => (j.id === jugadorId ? conFotoDelInterior(j, asentamiento, vistoEn) : j));
+): Heroe[] {
+  return heroes.map((j) => (j.id === heroeId ? conFotoDelInterior(j, asentamiento, vistoEn) : j));
 }
 
 /**
@@ -211,14 +175,14 @@ export function conFotoTomadaPor(
  * podría hacer nada en su propia ciudad hasta haber hecho algo antes — que es imposible.
  */
 export function estaEnAsentamiento(
-  jugadores: readonly Jugador[],
-  jugadorId: string,
+  heroes: readonly Heroe[],
+  heroeId: string,
   asentamientoId: string,
   asentamientos: readonly Asentamiento[],
   ejercitos: readonly Ejercito[]
 ): boolean {
-  const registrada = jugadores.find((j) => j.id === jugadorId)?.ubicacion;
-  const ubicacion = registrada ?? ubicacionDeducida(jugadorId, asentamientos, ejercitos);
+  const registrada = heroes.find((j) => j.id === heroeId)?.ubicacion;
+  const ubicacion = registrada ?? ubicacionDeducida(heroeId, asentamientos, ejercitos);
   return ubicacion.tipo === 'asentamiento' && ubicacion.asentamientoId === asentamientoId;
 }
 
@@ -277,7 +241,7 @@ export function puntoDeAparicion(
  * plaza nueva para su propia Faccion en marcha), pasan a la guarnicion y al almacen igual que en cualquier
  * otra entrada.
  */
-export function puntoDeFundacionDe(jugador: Jugador, ejercitos: readonly Ejercito[]): { posicion: Point; columna: Ejercito } {
+export function puntoDeFundacionDe(jugador: Heroe, ejercitos: readonly Ejercito[]): { posicion: Point; columna: Ejercito } {
   if (jugador.ubicacion.tipo === 'asentamiento') {
     throw new MovilizacionInvalidaError('Se funda en campo abierto: hay que salir de la plaza primero.');
   }
@@ -301,14 +265,14 @@ export function puntoDeFundacionDe(jugador: Jugador, ejercitos: readonly Ejercit
  * graba es donde acabo la columna, no de donde salio.
  */
 export function grabarExploracionPersonal(
-  jugadores: readonly Jugador[],
+  heroes: readonly Heroe[],
   ejercitos: readonly Ejercito[],
   limites: { ancho: number; alto: number }
-): Jugador[] {
+): Heroe[] {
   const rejilla = rejillaDe(limites);
-  let salida: Jugador[] = jugadores as Jugador[];
+  let salida: Heroe[] = heroes as Heroe[];
 
-  jugadores.forEach((jugador, indice) => {
+  heroes.forEach((jugador, indice) => {
     const ubicacion = jugador.ubicacion;
     if (ubicacion.tipo !== 'columna') return;
     const columna = ejercitos.find((e) => e.id === ubicacion.ejercitoId);
@@ -317,7 +281,7 @@ export function grabarExploracionPersonal(
     const explorado = marcarVisto(jugador.exploracionPersonal ?? SIN_EXPLORAR, rejilla, columna.posicionActual, alcanceDeVista(columna));
     if (explorado === (jugador.exploracionPersonal ?? SIN_EXPLORAR)) return;
 
-    if (salida === jugadores) salida = [...jugadores];
+    if (salida === heroes) salida = [...heroes];
     salida[indice] = { ...jugador, exploracionPersonal: explorado };
   });
 

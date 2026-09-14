@@ -128,7 +128,7 @@ console.log(`\n  Escalado ajustado: O(n^${exponente.toFixed(2)})   (en agosto: O
 
 const cien = medidas.find((m) => m.n === 100);
 if (cien) {
-  console.log(`\n  A 100 asentamientos (~500-700 jugadores): ${cien.msPorTick.toFixed(0)} ms/tick.`);
+  console.log(`\n  A 100 asentamientos (~500-700 heroes): ${cien.msPorTick.toFixed(0)} ms/tick.`);
   console.log(`  El tick dura 60 000 ms, asi que el motor ocupa el ${((cien.msPorTick / 60_000) * 100).toFixed(2)}% del intervalo.`);
   console.log('  Lo que importa para la cola serial NO es ese porcentaje sino la LATENCIA que un tick');
   console.log('  inyecta en los comandos que esperan detras de el.');

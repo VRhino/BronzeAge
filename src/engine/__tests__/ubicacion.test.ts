@@ -2,9 +2,10 @@
 // bandera, grabado en su propio registro porque no hay `MemoriaFaccion` en la que anotarlo.
 import { describe, expect, it } from 'vitest';
 import { instante } from '../../domain/tiempo';
-import type { Ejercito, Jugador } from '../../domain/types';
+import type { Ejercito, Heroe } from '../../domain/types';
 import { estaExplorado, rejillaDe } from '../exploracion';
 import { grabarExploracionPersonal } from '../ubicacion';
+import { heroeDePrueba } from './fixtures';
 
 const LIMITES = { ancho: 2000, alto: 2000 };
 
@@ -13,7 +14,7 @@ function columnaHuerfana(posicionActual = { x: 400, y: 400 }): Ejercito {
     id: 'columna-1',
     faccionId: '',
     origenAsentamientoId: '',
-    participantes: [{ jugadorId: 'jugador-1', unidoEn: instante(0) }],
+    participantes: [{ heroeId: 'jugador-1', unidoEn: instante(0) }],
     tipo: 'personal',
     liderId: 'jugador-1',
     politicaDeUnion: 'rechazar',
@@ -28,16 +29,16 @@ function columnaHuerfana(posicionActual = { x: 400, y: 400 }): Ejercito {
   };
 }
 
-function jugadorEnColumna(id: string, ejercitoId: string, exploracionPersonal?: string): Jugador {
-  return { id, liderazgoBase: 0, ubicacion: { tipo: 'columna', ejercitoId }, exploracionPersonal };
+function jugadorEnColumna(id: string, ejercitoId: string, exploracionPersonal?: string): Heroe {
+  return heroeDePrueba(id, { tipo: 'columna', ejercitoId }, { exploracionPersonal });
 }
 
 describe('grabarExploracionPersonal', () => {
   it('graba lo que ve la columna de quien no tiene bandera', () => {
     const columna = columnaHuerfana();
-    const jugadores = [jugadorEnColumna('jugador-1', columna.id)];
+    const heroes = [jugadorEnColumna('jugador-1', columna.id)];
 
-    const resultado = grabarExploracionPersonal(jugadores, [columna], LIMITES);
+    const resultado = grabarExploracionPersonal(heroes, [columna], LIMITES);
     const rejilla = rejillaDe(LIMITES);
 
     expect(resultado[0]!.exploracionPersonal).toBeTruthy();
@@ -47,17 +48,17 @@ describe('grabarExploracionPersonal', () => {
 
   it('no toca a quien ya tiene bandera: eso lo graba `memoriaPorFaccion`, no aquí', () => {
     const columnaDeFaccion: Ejercito = { ...columnaHuerfana(), faccionId: 'faccion-1' };
-    const jugadores = [jugadorEnColumna('jugador-1', columnaDeFaccion.id)];
+    const heroes = [jugadorEnColumna('jugador-1', columnaDeFaccion.id)];
 
-    const resultado = grabarExploracionPersonal(jugadores, [columnaDeFaccion], LIMITES);
+    const resultado = grabarExploracionPersonal(heroes, [columnaDeFaccion], LIMITES);
 
-    expect(resultado).toBe(jugadores); // ni copia el array: nada cambió
+    expect(resultado).toBe(heroes); // ni copia el array: nada cambió
     expect(resultado[0]!.exploracionPersonal).toBeUndefined();
   });
 
   it('no toca a quien no está en una columna (dentro de una plaza, o desconectado)', () => {
-    const jugadores: Jugador[] = [{ id: 'jugador-1', liderazgoBase: 0, ubicacion: { tipo: 'asentamiento', asentamientoId: 'a1' } }];
+    const heroes: Heroe[] = [heroeDePrueba('jugador-1', { tipo: 'asentamiento', asentamientoId: 'a1' })];
 
-    expect(grabarExploracionPersonal(jugadores, [], LIMITES)).toBe(jugadores);
+    expect(grabarExploracionPersonal(heroes, [], LIMITES)).toBe(heroes);
   });
 });

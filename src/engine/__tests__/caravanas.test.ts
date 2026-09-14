@@ -578,7 +578,7 @@ describe('lanzamiento manual de una caravana (Doc 3.13.3)', () => {
 // ---------------------------------------------------------------------------------------------------------
 describe('escolta sin héroe (Doc 3.13.4)', () => {
   const esc = (id: string, cantidad = 20): Escuadron => ({
-    id, nombre: 'lanceros', jugadorId: 'j1', origen: 'pesants', cantidad, veterania: 0, moral: 100, tropaId: 'milicia_lanceros',
+    id, nombre: 'lanceros', heroeId: 'j1', origen: 'pesants', cantidad, veterania: 0, moral: 100, tropaId: 'milicia_lanceros',
   });
 
   function origenConMercado(nivelMercado = 1, escuadrones: Escuadron[] = []): Asentamiento {

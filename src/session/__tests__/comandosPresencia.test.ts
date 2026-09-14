@@ -34,7 +34,7 @@ function partidaLista() {
             {
               id: 'esc-1',
               nombre: 'milicia_lanceros',
-              jugadorId: base.fundador,
+              heroeId: base.fundador,
               origen: 'pesants' as const,
               cantidad: 10,
               veterania: 0,
@@ -50,14 +50,14 @@ function partidaLista() {
   return { ...base, sesion };
 }
 
-const opcDe = (jugadorId: string) => ({ ...OPC, actor: jugadorId });
+const opcDe = (heroeId: string) => ({ ...OPC, actor: heroeId });
 
 // La plaza del fixture está en (400,400), en llano. (500,500) es AGUA en la seed 42 — el mismo dato que
 // obliga a `partidaConAsentamiento` a fundar en (400,400) y no ahí.
 const TIERRA_FIRME = { x: 430, y: 430 };
 const AGUA = { x: 500, y: 500 };
 
-const ubicacionDe = (sesion: GameSession, jugadorId: string) => sesion.getState().jugadores.find((j) => j.id === jugadorId)!.ubicacion;
+const ubicacionDe = (sesion: GameSession, heroeId: string) => sesion.getState().heroes.find((j) => j.id === heroeId)!.ubicacion;
 
 describe('salirAlMundo — desde la residencia, eligiendo (Doc 1.10.2)', () => {
   it('saca al jugador con las tropas y la carga que elige, y lo sitúa en su columna', () => {
@@ -65,7 +65,7 @@ describe('salirAlMundo — desde la residencia, eligiendo (Doc 1.10.2)', () => {
 
     const r = sesion.ejecutar(
       salirAlMundo,
-      { asentamientoId, jugadorId: fundador, escuadronIds: ['esc-1'], carga: { trigo: 100, madera: 50 } },
+      { asentamientoId, heroeId: fundador, escuadronIds: ['esc-1'], carga: { trigo: 100, madera: 50 } },
       opcDe(fundador)
     );
 
@@ -82,12 +82,12 @@ describe('salirAlMundo — desde la residencia, eligiendo (Doc 1.10.2)', () => {
   it('se puede salir SIN tropas: el viajero solo es una forma de jugar, no un error', () => {
     const { sesion, asentamientoId, fundador } = partidaLista();
 
-    const r = sesion.ejecutar(salirAlMundo, { asentamientoId, jugadorId: fundador, escuadronIds: [], carga: {} }, opcDe(fundador));
+    const r = sesion.ejecutar(salirAlMundo, { asentamientoId, heroeId: fundador, escuadronIds: [], carga: {} }, opcDe(fundador));
 
     expect(r.ok).toBe(true);
     const columna = sesion.getState().ejercitos[0]!;
     expect(columna.escuadrones).toEqual([]);
-    expect(columna.participantes.map((p) => p.jugadorId), 'sin tropas, pero va alguien dentro').toEqual([fundador]);
+    expect(columna.participantes.map((p) => p.heroeId), 'sin tropas, pero va alguien dentro').toEqual([fundador]);
   });
 
   it('rechaza una carga que no cabe en el carro', () => {
@@ -95,7 +95,7 @@ describe('salirAlMundo — desde la residencia, eligiendo (Doc 1.10.2)', () => {
 
     const r = sesion.ejecutar(
       salirAlMundo,
-      { asentamientoId, jugadorId: fundador, escuadronIds: [], carga: { trigo: LOGISTICA.capacidadCarroPorJugador + 1 } },
+      { asentamientoId, heroeId: fundador, escuadronIds: [], carga: { trigo: LOGISTICA.capacidadCarroPorJugador + 1 } },
       opcDe(fundador)
     );
 
@@ -109,7 +109,7 @@ describe('salirAlMundo — desde la residencia, eligiendo (Doc 1.10.2)', () => {
 
     const r = sesion.ejecutar(
       salirAlMundo,
-      { asentamientoId, jugadorId: fundador, escuadronIds: [], carga: { trigo: mitad + 1, madera: mitad + 1 } },
+      { asentamientoId, heroeId: fundador, escuadronIds: [], carga: { trigo: mitad + 1, madera: mitad + 1 } },
       opcDe(fundador)
     );
 
@@ -122,7 +122,7 @@ describe('salirAlMundo — desde la residencia, eligiendo (Doc 1.10.2)', () => {
 
     const r = sesion.ejecutar(
       salirAlMundo,
-      { asentamientoId, jugadorId: fundador, escuadronIds: [], carga: { trigo: disponible } },
+      { asentamientoId, heroeId: fundador, escuadronIds: [], carga: { trigo: disponible } },
       opcDe(fundador)
     );
 
@@ -131,9 +131,9 @@ describe('salirAlMundo — desde la residencia, eligiendo (Doc 1.10.2)', () => {
 
   it('no se sale dos veces', () => {
     const { sesion, asentamientoId, fundador } = partidaLista();
-    sesion.ejecutar(salirAlMundo, { asentamientoId, jugadorId: fundador, escuadronIds: [], carga: {} }, opcDe(fundador));
+    sesion.ejecutar(salirAlMundo, { asentamientoId, heroeId: fundador, escuadronIds: [], carga: {} }, opcDe(fundador));
 
-    const r = sesion.ejecutar(salirAlMundo, { asentamientoId, jugadorId: fundador, escuadronIds: [], carga: {} }, opcDe(fundador));
+    const r = sesion.ejecutar(salirAlMundo, { asentamientoId, heroeId: fundador, escuadronIds: [], carga: {} }, opcDe(fundador));
 
     expect(r.ok).toBe(false);
     expect(sesion.getState().ejercitos).toHaveLength(1);
@@ -146,11 +146,11 @@ describe('entrarEnAsentamiento — la puerta (Doc 1.10.3)', () => {
     const trigoAntes = sesion.getState().asentamientos[0]!.almacen['trigo']!.cantidad;
     sesion.ejecutar(
       salirAlMundo,
-      { asentamientoId, jugadorId: fundador, escuadronIds: ['esc-1'], carga: { trigo: 100 } },
+      { asentamientoId, heroeId: fundador, escuadronIds: ['esc-1'], carga: { trigo: 100 } },
       opcDe(fundador)
     );
 
-    const r = sesion.ejecutar(entrarEnAsentamiento, { asentamientoId, jugadorId: fundador }, opcDe(fundador));
+    const r = sesion.ejecutar(entrarEnAsentamiento, { asentamientoId, heroeId: fundador }, opcDe(fundador));
 
     expect(r.ok).toBe(true);
     expect(sesion.getState().ejercitos, 'la columna deja de existir').toHaveLength(0);
@@ -166,7 +166,7 @@ describe('entrarEnAsentamiento — la puerta (Doc 1.10.3)', () => {
     const { sesion, asentamientoId, fundador } = partidaLista();
     sesion.ejecutar(
       salirAlMundo,
-      { asentamientoId, jugadorId: fundador, escuadronIds: ['esc-1'], carga: { trigo: 100 } },
+      { asentamientoId, heroeId: fundador, escuadronIds: ['esc-1'], carga: { trigo: 100 } },
       opcDe(fundador)
     );
     const payload = sesion.exportar();
@@ -176,13 +176,13 @@ describe('entrarEnAsentamiento — la puerta (Doc 1.10.3)', () => {
       state: {
         ...payload.state,
         asentamientos: [
-          { ...a, jugadoresFundadoresIds: a.jugadoresFundadoresIds.filter((id) => id !== fundador), casasCompradas: a.casasCompradas.filter((id) => id !== fundador) },
+          { ...a, heroesFundadoresIds: a.heroesFundadoresIds.filter((id) => id !== fundador), casasCompradas: a.casasCompradas.filter((id) => id !== fundador) },
           ...payload.state.asentamientos.slice(1),
         ],
       },
     });
 
-    const r = ajena.ejecutar(entrarEnAsentamiento, { asentamientoId, jugadorId: fundador }, opcDe(fundador));
+    const r = ajena.ejecutar(entrarEnAsentamiento, { asentamientoId, heroeId: fundador }, opcDe(fundador));
 
     expect(r.ok).toBe(true);
     const columna = ajena.getState().ejercitos[0];
@@ -192,14 +192,14 @@ describe('entrarEnAsentamiento — la puerta (Doc 1.10.3)', () => {
     expect(ubicacionDe(ajena, fundador)).toEqual({ tipo: 'asentamiento', asentamientoId });
     // Y sigue contándolo como participante: `participantes` dice a quién PERTENECE la columna, no dónde está
     // su cuerpo. Sin esto la columna se quedaría sin nadie dentro y se disolvería sola (Doc 5.13.4).
-    expect(columna!.participantes.map((p) => p.jugadorId)).toEqual([fundador]);
+    expect(columna!.participantes.map((p) => p.heroeId)).toEqual([fundador]);
   });
 
   it('no se entra desde lejos: hay que estar en la puerta', () => {
     const { sesion, asentamientoId, fundador } = partidaLista();
     sesion.ejecutar(
       movilizarEjercito,
-      { asentamientoId, jugadorId: fundador, escuadronIds: ['esc-1'], objetivo: { tipo: 'punto', punto: { x: 900, y: 900 } } },
+      { asentamientoId, heroeId: fundador, escuadronIds: ['esc-1'], objetivo: { tipo: 'punto', punto: { x: 900, y: 900 } } },
       opcDe(fundador)
     );
     const payload = sesion.exportar();
@@ -211,7 +211,7 @@ describe('entrarEnAsentamiento — la puerta (Doc 1.10.3)', () => {
       },
     });
 
-    const r = lejos.ejecutar(entrarEnAsentamiento, { asentamientoId, jugadorId: fundador }, opcDe(fundador));
+    const r = lejos.ejecutar(entrarEnAsentamiento, { asentamientoId, heroeId: fundador }, opcDe(fundador));
 
     expect(r.ok).toBe(false);
   });
@@ -222,11 +222,11 @@ describe('entrarEnAsentamiento — la puerta (Doc 1.10.3)', () => {
     const { sesion, asentamientoId, fundador } = partidaLista();
     sesion.ejecutar(
       movilizarEjercito,
-      { asentamientoId, jugadorId: fundador, escuadronIds: ['esc-1'], objetivo: { tipo: 'punto', punto: { x: 900, y: 900 } } },
+      { asentamientoId, heroeId: fundador, escuadronIds: ['esc-1'], objetivo: { tipo: 'punto', punto: { x: 900, y: 900 } } },
       opcDe(fundador)
     );
 
-    const r = sesion.ejecutar(entrarEnAsentamiento, { asentamientoId, jugadorId: fundador }, opcDe(fundador));
+    const r = sesion.ejecutar(entrarEnAsentamiento, { asentamientoId, heroeId: fundador }, opcDe(fundador));
 
     expect(r.ok).toBe(false);
     expect(sesion.getState().ejercitos, 'el ejército sigue entero').toHaveLength(1);
@@ -235,7 +235,7 @@ describe('entrarEnAsentamiento — la puerta (Doc 1.10.3)', () => {
   it('quien no está en el mundo no tiene puerta que cruzar', () => {
     const { sesion, asentamientoId, fundador } = partidaLista();
 
-    const r = sesion.ejecutar(entrarEnAsentamiento, { asentamientoId, jugadorId: fundador }, opcDe(fundador));
+    const r = sesion.ejecutar(entrarEnAsentamiento, { asentamientoId, heroeId: fundador }, opcDe(fundador));
 
     expect(r.ok).toBe(false);
   });
@@ -246,7 +246,7 @@ describe('salirDeAsentamiento — retomar lo aparcado (Doc 1.10.3)', () => {
     const { sesion, asentamientoId, fundador } = partidaLista();
     sesion.ejecutar(
       salirAlMundo,
-      { asentamientoId, jugadorId: fundador, escuadronIds: ['esc-1'], carga: { trigo: 100 } },
+      { asentamientoId, heroeId: fundador, escuadronIds: ['esc-1'], carga: { trigo: 100 } },
       opcDe(fundador)
     );
     const payload = sesion.exportar();
@@ -256,14 +256,14 @@ describe('salirDeAsentamiento — retomar lo aparcado (Doc 1.10.3)', () => {
       state: {
         ...payload.state,
         asentamientos: [
-          { ...a, jugadoresFundadoresIds: a.jugadoresFundadoresIds.filter((id) => id !== fundador), casasCompradas: a.casasCompradas.filter((id) => id !== fundador) },
+          { ...a, heroesFundadoresIds: a.heroesFundadoresIds.filter((id) => id !== fundador), casasCompradas: a.casasCompradas.filter((id) => id !== fundador) },
           ...payload.state.asentamientos.slice(1),
         ],
       },
     });
-    ajena.ejecutar(entrarEnAsentamiento, { asentamientoId, jugadorId: fundador }, opcDe(fundador));
+    ajena.ejecutar(entrarEnAsentamiento, { asentamientoId, heroeId: fundador }, opcDe(fundador));
 
-    const r = ajena.ejecutar(salirDeAsentamiento, { asentamientoId, jugadorId: fundador }, opcDe(fundador));
+    const r = ajena.ejecutar(salirDeAsentamiento, { asentamientoId, heroeId: fundador }, opcDe(fundador));
 
     expect(r.ok).toBe(true);
     const columna = ajena.getState().ejercitos[0]!;
@@ -274,7 +274,7 @@ describe('salirDeAsentamiento — retomar lo aparcado (Doc 1.10.3)', () => {
   it('desde tu propia residencia se rechaza, y manda a `salirAlMundo`', () => {
     const { sesion, asentamientoId, fundador } = partidaLista();
 
-    const r = sesion.ejecutar(salirDeAsentamiento, { asentamientoId, jugadorId: fundador }, opcDe(fundador));
+    const r = sesion.ejecutar(salirDeAsentamiento, { asentamientoId, heroeId: fundador }, opcDe(fundador));
 
     expect(r.ok, 'en tu casa hay un roster y un almacén que elegir; eso es otra operación').toBe(false);
   });
@@ -286,7 +286,7 @@ describe('guarnecer — un ejército marcha a una plaza propia y vuelca la tropa
     const { sesion, asentamientoId, fundador } = partidaLista();
     sesion.ejecutar(
       movilizarEjercito,
-      { asentamientoId, jugadorId: fundador, escuadronIds: ['esc-1'], objetivo: { tipo: 'punto', punto: { x: 900, y: 900 } } },
+      { asentamientoId, heroeId: fundador, escuadronIds: ['esc-1'], objetivo: { tipo: 'punto', punto: { x: 900, y: 900 } } },
       opcDe(fundador)
     );
     const payload = sesion.exportar();
@@ -307,7 +307,7 @@ describe('guarnecer — un ejército marcha a una plaza propia y vuelca la tropa
   it('vuelca los escuadrones en la guarnición, consume el ejército y deja al jugador dentro', () => {
     const { sesion, asentamientoId, fundador } = ejercitoEnLaPuerta();
 
-    const r = sesion.ejecutar(guarnecer, { asentamientoId, jugadorId: fundador }, opcDe(fundador));
+    const r = sesion.ejecutar(guarnecer, { asentamientoId, heroeId: fundador }, opcDe(fundador));
 
     expect(r.ok).toBe(true);
     expect(sesion.getState().ejercitos, 'el ejército se consume').toHaveLength(0);
@@ -317,9 +317,9 @@ describe('guarnecer — un ejército marcha a una plaza propia y vuelca la tropa
 
   it('una columna PERSONAL no guarnece: hay que separarse antes', () => {
     const { sesion, asentamientoId, fundador } = partidaLista();
-    sesion.ejecutar(salirAlMundo, { asentamientoId, jugadorId: fundador, escuadronIds: [], carga: {} }, opcDe(fundador));
+    sesion.ejecutar(salirAlMundo, { asentamientoId, heroeId: fundador, escuadronIds: [], carga: {} }, opcDe(fundador));
 
-    const r = sesion.ejecutar(guarnecer, { asentamientoId, jugadorId: fundador }, opcDe(fundador));
+    const r = sesion.ejecutar(guarnecer, { asentamientoId, heroeId: fundador }, opcDe(fundador));
 
     expect(r.ok).toBe(false);
   });
@@ -331,7 +331,7 @@ describe('marcharA — el destino de un viajero se rectifica (Doc 5.12.1)', () =
     const base = partidaLista();
     base.sesion.ejecutar(
       salirAlMundo,
-      { asentamientoId: base.asentamientoId, jugadorId: base.fundador, escuadronIds: ['esc-1'], carga: { trigo: 100 } },
+      { asentamientoId: base.asentamientoId, heroeId: base.fundador, escuadronIds: ['esc-1'], carga: { trigo: 100 } },
       opcDe(base.fundador)
     );
     return base;
@@ -341,7 +341,7 @@ describe('marcharA — el destino de un viajero se rectifica (Doc 5.12.1)', () =
     const { sesion, fundador } = fuera();
     expect(sesion.getState().ejercitos[0]!.estado).toBe('estacionado');
 
-    const r = sesion.ejecutar(marcharA, { jugadorId: fundador, objetivo: { tipo: 'punto', punto: TIERRA_FIRME } }, opcDe(fundador));
+    const r = sesion.ejecutar(marcharA, { heroeId: fundador, objetivo: { tipo: 'punto', punto: TIERRA_FIRME } }, opcDe(fundador));
 
     expect(r.ok).toBe(true);
     const columna = sesion.getState().ejercitos[0]!;
@@ -352,7 +352,7 @@ describe('marcharA — el destino de un viajero se rectifica (Doc 5.12.1)', () =
 
   it('se rectifica en marcha, desde donde esté y cuantas veces quiera', () => {
     const { sesion, fundador } = fuera();
-    sesion.ejecutar(marcharA, { jugadorId: fundador, objetivo: { tipo: 'punto', punto: TIERRA_FIRME } }, opcDe(fundador));
+    sesion.ejecutar(marcharA, { heroeId: fundador, objetivo: { tipo: 'punto', punto: TIERRA_FIRME } }, opcDe(fundador));
     // Se le mueve a mitad de camino para comprobar que la ruta nueva sale de AHÍ y no del origen.
     const payload = sesion.exportar();
     const aMitad = GameSession.importar({
@@ -360,7 +360,7 @@ describe('marcharA — el destino de un viajero se rectifica (Doc 5.12.1)', () =
       state: { ...payload.state, ejercitos: [{ ...payload.state.ejercitos[0]!, posicionActual: { x: 450, y: 450 }, progreso: 0.5 }] },
     });
 
-    const r = aMitad.ejecutar(marcharA, { jugadorId: fundador, objetivo: { tipo: 'punto', punto: { x: 380, y: 460 } } }, opcDe(fundador));
+    const r = aMitad.ejecutar(marcharA, { heroeId: fundador, objetivo: { tipo: 'punto', punto: { x: 380, y: 460 } } }, opcDe(fundador));
 
     expect(r.ok).toBe(true);
     const columna = aMitad.getState().ejercitos[0]!;
@@ -373,12 +373,12 @@ describe('marcharA — el destino de un viajero se rectifica (Doc 5.12.1)', () =
     const { sesion, asentamientoId, fundador } = partidaLista();
     sesion.ejecutar(
       movilizarEjercito,
-      { asentamientoId, jugadorId: fundador, escuadronIds: ['esc-1'], objetivo: { tipo: 'punto', punto: { x: 900, y: 900 } } },
+      { asentamientoId, heroeId: fundador, escuadronIds: ['esc-1'], objetivo: { tipo: 'punto', punto: { x: 900, y: 900 } } },
       opcDe(fundador)
     );
     expect(sesion.getState().ejercitos[0]!.participantes).toHaveLength(1);
 
-    const r = sesion.ejecutar(marcharA, { jugadorId: fundador, objetivo: { tipo: 'punto', punto: TIERRA_FIRME } }, opcDe(fundador));
+    const r = sesion.ejecutar(marcharA, { heroeId: fundador, objetivo: { tipo: 'punto', punto: TIERRA_FIRME } }, opcDe(fundador));
 
     expect(r.ok, 'el rumbo se acordó al salir: su salida es cancelar y volver').toBe(false);
     expect(sesion.getState().ejercitos[0]!.objetivo).toEqual({ tipo: 'punto', punto: { x: 900, y: 900 } });
@@ -386,9 +386,9 @@ describe('marcharA — el destino de un viajero se rectifica (Doc 5.12.1)', () =
 
   it('no se marcha desde dentro de una plaza: hay que salir antes', () => {
     const { sesion, asentamientoId, fundador } = fuera();
-    sesion.ejecutar(entrarEnAsentamiento, { asentamientoId, jugadorId: fundador }, opcDe(fundador));
+    sesion.ejecutar(entrarEnAsentamiento, { asentamientoId, heroeId: fundador }, opcDe(fundador));
 
-    const r = sesion.ejecutar(marcharA, { jugadorId: fundador, objetivo: { tipo: 'punto', punto: TIERRA_FIRME } }, opcDe(fundador));
+    const r = sesion.ejecutar(marcharA, { heroeId: fundador, objetivo: { tipo: 'punto', punto: TIERRA_FIRME } }, opcDe(fundador));
 
     expect(r.ok).toBe(false);
   });
@@ -396,7 +396,7 @@ describe('marcharA — el destino de un viajero se rectifica (Doc 5.12.1)', () =
   it('no hay marcha por mar', () => {
     const { sesion, fundador } = fuera();
 
-    const r = sesion.ejecutar(marcharA, { jugadorId: fundador, objetivo: { tipo: 'punto', punto: AGUA } }, opcDe(fundador));
+    const r = sesion.ejecutar(marcharA, { heroeId: fundador, objetivo: { tipo: 'punto', punto: AGUA } }, opcDe(fundador));
 
     expect(r.ok).toBe(false);
   });
@@ -408,7 +408,7 @@ describe('la puerta la controla el Gobernador (Doc 1.10.5)', () => {
     const base = partidaLista();
     base.sesion.ejecutar(
       salirAlMundo,
-      { asentamientoId: base.asentamientoId, jugadorId: base.fundador, escuadronIds: [], carga: {} },
+      { asentamientoId: base.asentamientoId, heroeId: base.fundador, escuadronIds: [], carga: {} },
       opcDe(base.fundador)
     );
     const payload = base.sesion.exportar();
@@ -420,7 +420,7 @@ describe('la puerta la controla el Gobernador (Doc 1.10.5)', () => {
         asentamientos: [
           {
             ...a,
-            jugadoresFundadoresIds: a.jugadoresFundadoresIds.filter((id) => id !== base.fundador),
+            heroesFundadoresIds: a.heroesFundadoresIds.filter((id) => id !== base.fundador),
             casasCompradas: a.casasCompradas.filter((id) => id !== base.fundador),
             // El vecino se queda de Gobernador: alguien tiene que poder tocar la puerta.
             cargos: { ...a.cargos, gobernadorId: base.vecino },
@@ -436,37 +436,37 @@ describe('la puerta la controla el Gobernador (Doc 1.10.5)', () => {
     const { sesion, asentamientoId, fundador } = forasteroEnLaPuerta();
     expect(sesion.getState().asentamientos[0]!.politicaDeAcceso, 'sin decidir nada').toBeUndefined();
 
-    expect(sesion.ejecutar(entrarEnAsentamiento, { asentamientoId, jugadorId: fundador }, opcDe(fundador)).ok).toBe(true);
+    expect(sesion.ejecutar(entrarEnAsentamiento, { asentamientoId, heroeId: fundador }, opcDe(fundador)).ok).toBe(true);
   });
 
   it('cerrada, no entra ni uno de la propia Facción', () => {
     const { sesion, asentamientoId, fundador, vecino } = forasteroEnLaPuerta();
-    sesion.ejecutar(fijarPoliticaDeAcceso, { asentamientoId, jugadorId: vecino, politica: 'cerrado' }, opcDe(vecino));
+    sesion.ejecutar(fijarPoliticaDeAcceso, { asentamientoId, heroeId: vecino, politica: 'cerrado' }, opcDe(vecino));
 
-    expect(sesion.ejecutar(entrarEnAsentamiento, { asentamientoId, jugadorId: fundador }, opcDe(fundador)).ok).toBe(false);
+    expect(sesion.ejecutar(entrarEnAsentamiento, { asentamientoId, heroeId: fundador }, opcDe(fundador)).ok).toBe(false);
   });
 
   it('el veto pesa MÁS que la política: abierta a todos menos a ti', () => {
     const { sesion, asentamientoId, fundador, vecino } = forasteroEnLaPuerta();
-    sesion.ejecutar(fijarPoliticaDeAcceso, { asentamientoId, jugadorId: vecino, politica: 'abierto' }, opcDe(vecino));
-    sesion.ejecutar(vetarJugador, { asentamientoId, jugadorId: vecino, vetadoId: fundador, vetar: true }, opcDe(vecino));
+    sesion.ejecutar(fijarPoliticaDeAcceso, { asentamientoId, heroeId: vecino, politica: 'abierto' }, opcDe(vecino));
+    sesion.ejecutar(vetarJugador, { asentamientoId, heroeId: vecino, vetadoId: fundador, vetar: true }, opcDe(vecino));
 
-    expect(sesion.ejecutar(entrarEnAsentamiento, { asentamientoId, jugadorId: fundador }, opcDe(fundador)).ok).toBe(false);
+    expect(sesion.ejecutar(entrarEnAsentamiento, { asentamientoId, heroeId: fundador }, opcDe(fundador)).ok).toBe(false);
   });
 
   it('y se levanta con el mismo comando', () => {
     const { sesion, asentamientoId, fundador, vecino } = forasteroEnLaPuerta();
-    sesion.ejecutar(fijarPoliticaDeAcceso, { asentamientoId, jugadorId: vecino, politica: 'abierto' }, opcDe(vecino));
-    sesion.ejecutar(vetarJugador, { asentamientoId, jugadorId: vecino, vetadoId: fundador, vetar: true }, opcDe(vecino));
+    sesion.ejecutar(fijarPoliticaDeAcceso, { asentamientoId, heroeId: vecino, politica: 'abierto' }, opcDe(vecino));
+    sesion.ejecutar(vetarJugador, { asentamientoId, heroeId: vecino, vetadoId: fundador, vetar: true }, opcDe(vecino));
 
-    sesion.ejecutar(vetarJugador, { asentamientoId, jugadorId: vecino, vetadoId: fundador, vetar: false }, opcDe(vecino));
+    sesion.ejecutar(vetarJugador, { asentamientoId, heroeId: vecino, vetadoId: fundador, vetar: false }, opcDe(vecino));
 
-    expect(sesion.ejecutar(entrarEnAsentamiento, { asentamientoId, jugadorId: fundador }, opcDe(fundador)).ok).toBe(true);
+    expect(sesion.ejecutar(entrarEnAsentamiento, { asentamientoId, heroeId: fundador }, opcDe(fundador)).ok).toBe(true);
   });
 
   it('un RESIDENTE entra aunque la plaza esté cerrada: nadie se queda fuera de su casa', () => {
     const { sesion, asentamientoId, fundador, vecino } = partidaLista();
-    sesion.ejecutar(salirAlMundo, { asentamientoId, jugadorId: fundador, escuadronIds: [], carga: {} }, opcDe(fundador));
+    sesion.ejecutar(salirAlMundo, { asentamientoId, heroeId: fundador, escuadronIds: [], carga: {} }, opcDe(fundador));
     const payload = sesion.exportar();
     const a = payload.state.asentamientos[0]!;
     const cerrada = GameSession.importar({
@@ -477,7 +477,7 @@ describe('la puerta la controla el Gobernador (Doc 1.10.5)', () => {
       },
     });
 
-    expect(cerrada.ejecutar(entrarEnAsentamiento, { asentamientoId, jugadorId: fundador }, opcDe(fundador)).ok).toBe(true);
+    expect(cerrada.ejecutar(entrarEnAsentamiento, { asentamientoId, heroeId: fundador }, opcDe(fundador)).ok).toBe(true);
   });
 
   it('y a un residente no se le veta: eso sería expulsarlo sin pasar por el exilio', () => {
@@ -489,7 +489,7 @@ describe('la puerta la controla el Gobernador (Doc 1.10.5)', () => {
       state: { ...payload.state, asentamientos: [{ ...a, cargos: { ...a.cargos, gobernadorId: vecino } }, ...payload.state.asentamientos.slice(1)] },
     });
 
-    const r = conGobernador.ejecutar(vetarJugador, { asentamientoId, jugadorId: vecino, vetadoId: fundador, vetar: true }, opcDe(vecino));
+    const r = conGobernador.ejecutar(vetarJugador, { asentamientoId, heroeId: vecino, vetadoId: fundador, vetar: true }, opcDe(vecino));
 
     expect(r.ok).toBe(false);
   });
@@ -529,7 +529,7 @@ describe('la puerta de fundacion: el freno a la ola', () => {
 describe('un jugador sin Faccion ve el mundo desde su columna', () => {
   it('ve su PROPIA columna, que es lo minimo para poder jugar', () => {
     const { sesion, asentamientoId, fundador } = partidaLista();
-    sesion.ejecutar(salirAlMundo, { asentamientoId, jugadorId: fundador, escuadronIds: [], carga: {} }, opcDe(fundador));
+    sesion.ejecutar(salirAlMundo, { asentamientoId, heroeId: fundador, escuadronIds: [], carga: {} }, opcDe(fundador));
     // Se le quita la Faccion: es el estado de un recien llegado, que no tiene ninguna.
     const payload = sesion.exportar();
     const sinBandera = GameSession.importar({

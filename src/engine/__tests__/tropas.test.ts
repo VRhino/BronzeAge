@@ -31,15 +31,15 @@ function asentamientoDeTest(): Asentamiento {
 }
 
 describe('reclutarTropa — escuadrones por jugador (Doc 2.5)', () => {
-  it('dos jugadores reclutando la misma tropa en el mismo asentamiento crean DOS escuadrones separados', () => {
+  it('dos heroes reclutando la misma tropa en el mismo asentamiento crean DOS escuadrones separados', () => {
     const asentamiento = asentamientoDeTest();
 
     const trasA = reclutarTropa(asentamiento, SIN_MUNDO, 'jugador-a', 'faccion-1', 'milicia_lanceros', 'pesants', 0);
     const trasB = reclutarTropa(trasA, SIN_MUNDO, 'jugador-b', 'faccion-1', 'milicia_lanceros', 'pesants', 1);
 
     expect(trasB.escuadrones).toHaveLength(2);
-    const deA = trasB.escuadrones.find((e) => e.jugadorId === 'jugador-a');
-    const deB = trasB.escuadrones.find((e) => e.jugadorId === 'jugador-b');
+    const deA = trasB.escuadrones.find((e) => e.heroeId === 'jugador-a');
+    const deB = trasB.escuadrones.find((e) => e.heroeId === 'jugador-b');
     expect(deA?.cantidad).toBe(25);
     expect(deB?.cantidad).toBe(25);
     expect(deA?.id).not.toBe(deB?.id);
@@ -92,7 +92,7 @@ describe('reclutarTropa — escuadrones por jugador (Doc 2.5)', () => {
         {
           id: 'esc-c',
           nombre: 'Milicia de jugador-c',
-          jugadorId: 'jugador-c-de-faccion-1',
+          heroeId: 'jugador-c-de-faccion-1',
           origen: 'pesants',
           cantidad: 10,
           veterania: 0,

@@ -98,7 +98,8 @@ export function registrarRutaDeTiempoReal(app: FastifyInstance, deps: Dependenci
           // La partida pudo cerrarse entre la conexión y este mensaje (`forzar` la reemplaza) — sin estado
           // que consultar, no hay nada que autorizar.
           const runner = deps.partidas.obtener(gameId);
-          if (!runner || !puedeSuscribirseA(runner.getState(), jugadorId, mensaje.canal)) {
+          const heroe = runner?.getState().heroes.find((h) => h.jugadorId === jugadorId);
+          if (!runner || !heroe || !puedeSuscribirseA(runner.getState(), heroe.id, mensaje.canal)) {
             socket.send(JSON.stringify({ tipo: 'error', canal: mensaje.canal, error: 'no autorizado' }));
             return;
           }

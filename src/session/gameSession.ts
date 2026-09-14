@@ -12,8 +12,7 @@
 //   - HTTP, WebSocket, persistencia en disco: del runner y de la capa de transporte.
 //   - Notificar a una UI o llevar historial de depuración: del cliente.
 import type { RegionId } from '../domain/types';
-import { BALANCE_VERSION, LAYOUT_VERSION, LIDERAZGO } from '../constants';
-import { conJugadorAsegurado } from '../engine/ubicacion';
+import { BALANCE_VERSION, LAYOUT_VERSION } from '../constants';
 import { createRng, generarMapa, MAPA_DEFAULT, restaurarRng, WORLDGEN_VERSION, type RandomFn } from '../worldgen';
 import { crearEstadoMapa, crearMapa, type EstadoMapa, type Mapa } from '../world/mapa';
 import { GeneradorIds } from './idGenerator';
@@ -80,7 +79,7 @@ export class GameSession {
       asentamientos: [],
       facciones: [],
       caravanas: [],
-      jugadores: [],
+      heroes: [],
       ejercitos: [],
       acuerdos: [],
       ordenes: [],
@@ -93,9 +92,9 @@ export class GameSession {
       faccionesNpcIds: [],
       tick: 0,
       version: 0,
-      historialJugadores: {},
+      historialHeroes: {},
       eventosDominio: [],
-      salidasFaccionPorJugador: {},
+      salidasFaccionPorHeroe: {},
     };
     return new GameSession(estado, new GeneradorIds(), createRng(config.seed));
   }
@@ -182,32 +181,6 @@ export class GameSession {
    * estado (`eventosDominio[].momento`), haciendo que el mismo comando con la misma seed produjera snapshots
    * distintos. El tiempo de mundo es función del tick y de nada más.
    */
-  /**
-   * Alta perezosa del Jugador que actúa (Doc 1.10): la primera vez que alguien ejecuta un comando con éxito,
-   * la partida le da registro y lo SITÚA. Va aquí, en el embudo, y no en cada comando — son dos docenas, y
-   * repartir el alta por todos ellos garantizaba olvidarla en alguno.
-   *
-   * La ubicación se deduce de lo que el mundo ya sabe (`ubicacionDeducida`), que es la MISMA función que usa
-   * la migración de snapshots: entrar por primera vez y cargar una partida vieja tienen que colocar a la
-   * gente en el mismo sitio.
-   *
-   * El sistema no es un jugador: el tick y el turno del NPC no crean registro.
-   */
-  private conActorEnPartida(estado: GameSessionState, actor: ActorId, mapa: Mapa, ctx: ContextoComando): GameSessionState {
-    if (actor === ACTOR_SISTEMA) return estado;
-    const alta = conJugadorAsegurado(estado.jugadores, actor, LIDERAZGO.base, estado.asentamientos, estado.ejercitos, {
-      mapa,
-      rng: this.rng,
-      // Mismo prefijo que usan `salirAlMundo`/`unirseEnCampo` para columnas nuevas — no es cosmético, es el
-      // mismo espacio de ids de ejército, y no debe poder chocar con uno que ya exista. Perezoso a propósito
-      // (ver el comentario de `aparicion` en `conJugadorAsegurado`): solo se consume si de verdad aparece.
-      generarId: () => `ejercito-${ctx.ids.siguiente()}`,
-      instante: ctx.instante,
-    });
-    if (alta.jugadores === estado.jugadores) return estado;
-    return { ...estado, jugadores: alta.jugadores, ejercitos: alta.ejercitos };
-  }
-
   ejecutar<P, R>(manejador: ManejadorComando<P, R>, params: P, opciones: { actor?: ActorId } = {}): ResultadoComando<R> {
     const instante = instanteDeTick(this.estado.tick);
     const ctx: ContextoComando = {
@@ -229,7 +202,7 @@ export class GameSession {
       throw new Error('Un comando modificó el mapa pero no devolvió `estadoMapa` en su estado resultante.');
     }
 
-    this.estado = transicion.resultado.ok ? this.conActorEnPartida(transicion.estado, ctx.actor, mapa, ctx) : transicion.estado;
+    this.estado = transicion.estado;
     return transicion.resultado;
   }
 

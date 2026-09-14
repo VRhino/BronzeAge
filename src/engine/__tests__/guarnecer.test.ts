@@ -15,10 +15,10 @@ function plaza(faccionId: string, existentes: Asentamiento[] = []): Asentamiento
   return { ...asentamiento, poblacion: { pesants: 300, artesanos: 0, nobleza: 0 } };
 }
 
-const esc = (jugadorId: string): Escuadron => ({
-  id: `esc-${jugadorId}`,
-  nombre: `Milicia de ${jugadorId}`,
-  jugadorId,
+const esc = (heroeId: string): Escuadron => ({
+  id: `esc-${heroeId}`,
+  nombre: `Milicia de ${heroeId}`,
+  heroeId,
   origen: 'pesants',
   cantidad: 20,
   veterania: 0,
@@ -36,10 +36,10 @@ function ejercitoDe(
     id: 'ej-1',
     faccionId,
     origenAsentamientoId: 'origen',
-    participantes: [...new Set(escuadrones.map((e) => e.jugadorId))].map((jugadorId) => ({ jugadorId, unidoEn: instante(0) })),
+    participantes: [...new Set(escuadrones.map((e) => e.heroeId))].map((heroeId) => ({ heroeId, unidoEn: instante(0) })),
     tipo: 'ejercito',
     politicaDeUnion: 'rechazar',
-    liderId: escuadrones[0]?.jugadorId ?? 'j1',
+    liderId: escuadrones[0]?.heroeId ?? 'j1',
     escuadrones,
     suministro: { trigo: 300 },
     caravanasAdjuntasIds: [],

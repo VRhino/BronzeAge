@@ -45,10 +45,20 @@ async function partidaCreada(gameId = 'g1', seed = 42) {
   return { admin, res };
 }
 
-/** Usuario corriente unido a la partida como jugador. */
+function heroeDe(nombre: string) {
+  return { displayName: nombre, classDefinitionId: 'Spear', genero: 'femenino', avatar: { cabezaId: '', peloId: '', barbaId: '', cejasId: '' } };
+}
+
+/** Usuario corriente unido a la partida como jugador, ya con su héroe: sin él no puede hacer nada más. */
 async function jugadorEn(gameId: string, sujetoId = 'ana') {
   const auth = await sesionDe(sujetoId);
   await app.inject({ method: 'POST', url: `/v1/jugador/partidas/${gameId}/membresia`, headers: auth });
+  await app.inject({
+    method: 'POST',
+    url: `/v1/jugador/partidas/${gameId}/comandos`,
+    headers: auth,
+    payload: { tipo: 'crearHeroe', params: heroeDe(sujetoId) },
+  });
   return auth;
 }
 
@@ -414,7 +424,7 @@ describe('GET /jugador/partidas/:gameId (proyeccion, Fase C4 Slice 1)', () => {
 
     expect(res.statusCode).toBe(200);
     const cuerpo = res.json();
-    expect(cuerpo.jugadorId).toBeTruthy();
+    expect(cuerpo.heroeId).toBeTruthy();
     expect(cuerpo.asentamientos).toEqual([]); // sin Facción todavía
     expect(cuerpo.facciones).toEqual([]);
   });
@@ -547,12 +557,13 @@ describe('GET .../eventos?desde= (Fase C13: cursor incremental)', () => {
       payload: { tipo: 'crearFaccion', params: { nombre: 'Micenas' } },
     });
 
+    // Dos: el alta del héroe (versión 1, dentro de `jugadorEn`) y la Facción (versión 2). Vienen de más nuevo a
+    // más viejo, como los guarda `exito()`.
     const desdeCero = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/eventos?desde=0', headers: admin });
     expect(desdeCero.statusCode).toBe(200);
-    expect(desdeCero.json().eventos).toHaveLength(1);
-    expect(desdeCero.json().eventos[0].version).toBe(1);
+    expect(desdeCero.json().eventos.map((e: { version: number }) => e.version).sort()).toEqual([1, 2]);
 
-    const desdeActual = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/eventos?desde=1', headers: admin });
+    const desdeActual = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/eventos?desde=2', headers: admin });
     expect(desdeActual.json().eventos).toEqual([]);
   });
 
@@ -567,7 +578,7 @@ describe('GET .../eventos?desde= (Fase C13: cursor incremental)', () => {
     });
 
     const res = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/eventos', headers: admin });
-    expect(res.json().eventos).toHaveLength(1);
+    expect(res.json().eventos).toHaveLength(2); // el alta del héroe y la Facción
   });
 
   it('400 si `desde` no es un entero no negativo', async () => {
@@ -636,7 +647,7 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
     });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json().version).toBe(1);
+    expect(res.json().version).toBe(2); // la 1 es el alta del héroe
     expect(res.json().resultado.ok).toBe(true);
   });
 
@@ -675,41 +686,48 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       method: 'POST',
       url: '/v1/admin/partidas/g1/comandos',
       headers: admin,
-      payload: { tipo: 'alternarFaccionNpc', params: { faccionId: 'no-existe', activo: true } },
+      payload: { tipo: 'crearFaccionNpc', params: { nombre: ' ' } },
     });
 
     // 200, no 403: quien crea la partida recibe Membresia `administrador_partida` (`otorgarAdministracion`),
-    // así que SÍ pasa la matriz de autorización — lo que rechaza esta petición es que la Facción no existe,
-    // no el rol. Antes del fix de C8 (`rolEnPartida`, 2026-08-26) esto daba 403 en todos los casos, y esta
-    // aserción no lo distinguía: un cuerpo `{error}` de un 403 también carece de `proyeccion`.
+    // así que SÍ pasa la matriz de autorización — lo que rechaza esta petición es el nombre vacío, no el rol.
+    // Un cuerpo `{error}` de un 403 también carecería de `proyeccion`: por eso se mira el 200 primero.
     expect(res.statusCode).toBe(200);
     expect(res.json().resultado.ok).toBe(false);
     expect(res.json().proyeccion).toBeUndefined();
   });
 
-  it('alternarFaccionNpc: el administrador que crea la partida SÍ puede (doc 5, fix C8 2026-08-26)', async () => {
+  it('crearFaccionNpc: el administrador que crea la partida la crea ya asentada, con sus héroes bot', async () => {
     const { admin } = await partidaCreada('g1');
-    const auth = await jugadorEn('g1');
-    const crear = await app.inject({
-      method: 'POST',
-      url: '/v1/jugador/partidas/g1/comandos',
-      headers: auth,
-      payload: { tipo: 'crearFaccion', params: { nombre: 'Micenas' } },
-    });
-    const faccionId = crear.json().resultado.datos.faccionId;
-
     const res = await app.inject({
       method: 'POST',
       url: '/v1/admin/partidas/g1/comandos',
       headers: admin,
-      payload: { tipo: 'alternarFaccionNpc', params: { faccionId, activo: true } },
+      payload: { tipo: 'crearFaccionNpc', params: { nombre: 'Tirinto' } },
     });
 
     expect(res.statusCode).toBe(200);
     expect(res.json().resultado.ok).toBe(true);
 
-    const estado = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1', headers: admin });
-    expect(estado.json().faccionesNpcIds).toContain(faccionId);
+    const estado = (await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1', headers: admin })).json();
+    expect(estado.faccionesNpcIds).toEqual([res.json().resultado.datos.faccionId]);
+    expect(estado.heroes.filter((h: { controlador: string }) => h.controlador === 'bot')).toHaveLength(5);
+  });
+
+  it('sin héroe, la proyección lo dice y solo se acepta crearHeroe (doc 02 §4.2)', async () => {
+    await partidaCreada('g1');
+    const auth = await sesionDe('bruno');
+    await app.inject({ method: 'POST', url: '/v1/jugador/partidas/g1/membresia', headers: auth });
+    const comando = (tipo: string, params: unknown) =>
+      app.inject({ method: 'POST', url: '/v1/jugador/partidas/g1/comandos', headers: auth, payload: { tipo, params } });
+
+    expect((await app.inject({ method: 'GET', url: '/v1/jugador/partidas/g1', headers: auth })).json().sinHeroe).toBe(true);
+    expect((await comando('crearFaccion', { nombre: 'Troya' })).statusCode).toBe(403);
+
+    const creado = await comando('crearHeroe', heroeDe('Bruno'));
+    expect(creado.json().resultado.ok).toBe(true);
+    expect(creado.json().proyeccion.heroeId).toBe(creado.json().resultado.datos.heroeId);
+    expect((await comando('crearFaccion', { nombre: 'Troya' })).json().resultado.ok).toBe(true);
   });
 
   it('idempotencyKey (Fase C5): repetir la misma peticion no vuelve a aplicar el comando', async () => {
@@ -721,7 +739,7 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
     const segundo = await app.inject({ method: 'POST', url: '/v1/jugador/partidas/g1/comandos', headers: auth, payload });
 
     expect(primero.json().resultado).toEqual(segundo.json().resultado);
-    expect(segundo.json().version).toBe(1); // no subió a 2: el segundo POST no se aplicó de verdad
+    expect(segundo.json().version).toBe(2); // no subió a 3: el segundo POST no se aplicó de verdad
   });
 
   it('401 sin sesion, 403 con sesion pero sin membresia de jugador', async () => {
@@ -886,7 +904,8 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       // +3 con `guarnecer` (Ocupacion §2.3): marchar un ejército a una plaza propia y volcar la tropa; y las
       // dos operaciones de la caravana que queda 'aparcada' allí — `moverCargaCaravanaAparcada` y
       // `enviarCaravanaAlOrigen` (§2.3d).
-      expect(cuerpo.oneOf.length).toBe(69);
+      // +1 con el modelo de Héroe: entran `crearHeroe` y `crearFaccionNpc`, sale `alternarFaccionNpc`.
+      expect(cuerpo.oneOf.length).toBe(70);
       const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
       expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
     });
@@ -962,7 +981,7 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json().resultado.ok).toBe(false);
-    expect(res.json().version).toBe(0); // un rechazo no versiona
+    expect(res.json().version).toBe(1); // un rechazo no versiona: sigue en la del alta del héroe
   });
 });
 
@@ -1159,6 +1178,9 @@ describe('auditoría de comandos (E2)', () => {
     return (await leerAuditoria(crearAlmacenEnDisco(directorio), gameId)).entradas;
   }
 
+  /** Sin la línea del alta del héroe, que `jugadorEn` ya ha dejado y de la que no trata ningún test de aquí. */
+  const trasElAlta = <T extends { comando: string }>(entradas: T[]) => entradas.filter((e) => e.comando !== 'crearHeroe');
+
   it('un comando ACEPTADO deja linea con actor, version e instante de mundo', async () => {
     await partidaCreada('g1');
     const ana = await jugadorEn('g1');
@@ -1170,7 +1192,7 @@ describe('auditoría de comandos (E2)', () => {
     });
     expect(res.statusCode).toBe(200);
 
-    const entradas = await auditoriaDe('g1');
+    const entradas = trasElAlta(await auditoriaDe('g1'));
     expect(entradas).toHaveLength(1);
     expect(entradas[0]).toMatchObject({ gameId: 'g1', comando: 'crearFaccion', resultado: 'aceptado' });
     // El actor lo resuelve el servidor de la sesión, nunca del cuerpo (doc 2, principio 3). Es el
@@ -1221,7 +1243,7 @@ describe('auditoría de comandos (E2)', () => {
     expect(res.statusCode).toBe(200); // 200 con `resultado.ok: false`: el dominio rechaza, no la ruta
     expect(res.json().resultado.ok).toBe(false);
 
-    const entradas = await auditoriaDe('g1');
+    const entradas = trasElAlta(await auditoriaDe('g1'));
     expect(entradas.map((e) => e.resultado)).toEqual(['aceptado', 'rechazado']);
     expect(entradas[1]).toMatchObject({ causa: 'dominio' });
     expect(entradas[1]!.detalle).toBe(res.json().resultado.codigoError);
@@ -1238,7 +1260,7 @@ describe('auditoría de comandos (E2)', () => {
     });
     expect(res.statusCode).toBe(400);
 
-    const entradas = await auditoriaDe('g1');
+    const entradas = trasElAlta(await auditoriaDe('g1'));
     expect(entradas).toHaveLength(1);
     expect(entradas[0]).toMatchObject({ comando: 'crearFaccion', resultado: 'rechazado', causa: 'esquema' });
     // Se identifica al actor pese a que la petición no pasó validación: la sesión se resuelve de la cabecera,
@@ -1255,7 +1277,7 @@ describe('auditoría de comandos (E2)', () => {
 
     const todo = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/auditoria', headers: admin });
     expect(todo.statusCode).toBe(200);
-    expect(todo.json().entradas).toHaveLength(2);
+    expect(todo.json().entradas).toHaveLength(3); // el alta del héroe, la Facción y el 403
     // `corruptas` viaja siempre, no solo cuando es > 0: quien lee tiene que poder distinguir un registro
     // completo de uno con agujeros.
     expect(todo.json().corruptas).toBe(0);
@@ -1289,7 +1311,7 @@ describe('auditoría de comandos (E2)', () => {
 
     await app.close();
     const { leerAuditoria } = await import('../auditoria');
-    expect((await leerAuditoria(crearAlmacenEnDisco(directorio), 'g1')).entradas.map((e) => e.gameId)).toEqual(['g1']);
-    expect((await leerAuditoria(crearAlmacenEnDisco(directorio), 'g2')).entradas.map((e) => e.gameId)).toEqual(['g2']);
+    expect(trasElAlta((await leerAuditoria(crearAlmacenEnDisco(directorio), 'g1')).entradas).map((e) => e.gameId)).toEqual(['g1']);
+    expect(trasElAlta((await leerAuditoria(crearAlmacenEnDisco(directorio), 'g2')).entradas).map((e) => e.gameId)).toEqual(['g2']);
   });
 });

@@ -1,15 +1,31 @@
 // Fixtures compartidas para los tests de regresión del motor: construyen mapa/facción/asentamiento
 // usando las funciones REALES del motor (generarMapa/crearFaccion/fundarAsentamiento), nunca objetos
 // inventados a mano — así un test que pasa hoy sigue significando "el motor real produce esto".
-import type { Asentamiento, Faccion } from '../../domain/types';
+import type { Asentamiento, Faccion, Heroe, UbicacionHeroe } from '../../domain/types';
 import { instante, type Instante } from '../../domain/tiempo';
 import { generarMapa, MAPA_DEFAULT, type RandomFn } from '../../worldgen';
 import { crearMapa, type Mapa } from '../../world/mapa';
-import { SIMULACION } from '../../constants';
+import { LIDERAZGO, SIMULACION } from '../../constants';
 import { crearFaccion } from '../faccion';
 import { evaluarViabilidadFundacion, fundarAsentamiento } from '../settlement';
 import type { ContextoSimulacion, EstadoSimulacion } from '../simulation';
 import type { MundoEscuadras } from '../tropas';
+
+/** Un héroe humano de prueba. Su `jugadorId` es su propio id, así que un test actúa con `{ actor: id }`. */
+export function heroeDePrueba(id: string, ubicacion: UbicacionHeroe, extra: Partial<Heroe> = {}): Heroe {
+  return {
+    id,
+    jugadorId: id,
+    controlador: 'humano',
+    displayName: id,
+    classDefinitionId: 'Spear',
+    genero: 'masculino',
+    avatar: { cabezaId: '', peloId: '', barbaId: '', cejasId: '' },
+    liderazgoBase: LIDERAZGO.base,
+    ubicacion,
+    ...extra,
+  };
+}
 
 export function crearMapaDeterminista(seed: number): Mapa {
   return crearMapa(generarMapa({ ancho: MAPA_DEFAULT.ancho, alto: MAPA_DEFAULT.alto, seed }));
@@ -98,7 +114,7 @@ export function crearEstadoDeTest(
     caminos: [],
     campamentosBandidos: [],
     bandidosProximoSpawnEn: instanteDeTest(0),
-    jugadores: [],
+    heroes: [],
     ...overrides,
   };
 }

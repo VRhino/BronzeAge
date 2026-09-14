@@ -172,10 +172,10 @@ export function evaluarViabilidadFundacion(
  * `yaFueCiudadano` lo resuelve el llamador: aqui no se sabe la historia de un jugador, y preguntarselo al
  * estado entero convertiria una regla en una consulta.
  */
-export function exigirPuertaDeFundacion(jugadoresFundadoresIds: readonly string[], yaFueCiudadano: boolean): void {
-  if (jugadoresFundadoresIds.length < FUNDACION.minFundadoresParaFaccionNueva) {
+export function exigirPuertaDeFundacion(heroesFundadoresIds: readonly string[], yaFueCiudadano: boolean): void {
+  if (heroesFundadoresIds.length < FUNDACION.minFundadoresParaFaccionNueva) {
     throw new FundacionInvalidaError(
-      `Fundar exige ${FUNDACION.minFundadoresParaFaccionNueva} fundadores y solo hay ${jugadoresFundadoresIds.length}.`
+      `Fundar exige ${FUNDACION.minFundadoresParaFaccionNueva} fundadores y solo hay ${heroesFundadoresIds.length}.`
     );
   }
   if (FUNDACION.exigeCiudadaniaPrevia && !yaFueCiudadano) {
@@ -188,13 +188,13 @@ export function fundarAsentamiento(
   facciones: Faccion[],
   faccionId: string,
   posicion: Point,
-  jugadoresFundadoresIds: string[],
+  heroesFundadoresIds: string[],
   asentamientosExistentes: Asentamiento[],
   fundadoEn: Instante
 ): { asentamiento: Asentamiento; facciones: Faccion[] } {
-  if (jugadoresFundadoresIds.length < 1 || jugadoresFundadoresIds.length > FUNDACION.maxJugadoresFundacionGrupal) {
+  if (heroesFundadoresIds.length < 1 || heroesFundadoresIds.length > FUNDACION.maxJugadoresFundacionGrupal) {
     throw new FundacionInvalidaError(
-      `La fundación grupal admite entre 1 y ${FUNDACION.maxJugadoresFundacionGrupal} jugadores.`
+      `La fundación grupal admite entre 1 y ${FUNDACION.maxJugadoresFundacionGrupal} héroes.`
     );
   }
   if (!mapa.dentroDelMapa(posicion)) {
@@ -237,7 +237,7 @@ export function fundarAsentamiento(
   const asentamiento: Asentamiento = {
     id,
     faccionId,
-    jugadoresFundadoresIds,
+    heroesFundadoresIds,
     posicion,
     nivel: 1,
     nivelActual: 1,
@@ -248,15 +248,15 @@ export function fundarAsentamiento(
     almacen: almacenInicial,
     edificios: edificiosIniciales(id),
     cargos: { gobernadorId: null, tesoreroId: null, generalId: null, maestroObrasId: null, sacerdoteId: null },
-    casasCompradas: [...jugadoresFundadoresIds],
+    casasCompradas: [...heroesFundadoresIds],
     politicasActivas: [],
     escuadrones: [],
     medidorMantenimiento: MANTENIMIENTO.medidorInicial,
   };
 
   let faccionActualizada = faccion;
-  for (const jugadorId of jugadoresFundadoresIds) {
-    faccionActualizada = otorgarCiudadania(faccionActualizada, jugadorId);
+  for (const heroeId of heroesFundadoresIds) {
+    faccionActualizada = otorgarCiudadania(faccionActualizada, heroeId);
   }
 
   return {

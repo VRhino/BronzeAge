@@ -39,9 +39,16 @@ async function partidaCreada(gameId = 'g1') {
   await app.inject({ method: 'POST', url: '/v1/admin/partidas', headers: admin, payload: { gameId, seed: 42 } });
 }
 
+/** Unido a la partida y ya con su héroe, que es quien actúa y quien se suscribe. */
 async function jugadorEn(gameId: string, sujetoId: string) {
   const auth = await sesionDe(sujetoId);
   const res = await app.inject({ method: 'POST', url: `/v1/jugador/partidas/${gameId}/membresia`, headers: auth });
+  await ejecutar(gameId, auth, 'crearHeroe', {
+    displayName: sujetoId,
+    classDefinitionId: 'Spear',
+    genero: 'femenino',
+    avatar: { cabezaId: '', peloId: '', barbaId: '', cejasId: '' },
+  });
   return { auth, jugadorId: res.json().jugadorId as string };
 }
 

@@ -296,6 +296,14 @@ app.innerHTML = `
     </div>
 
     <div class="tab-panel" id="tab-facciones" hidden>
+      <form id="faccion-npc-form" class="detail-section">
+        <h3>Nueva Facción NPC</h3>
+        <input name="nombre" placeholder="Nombre" required />
+        <input name="x" type="number" placeholder="x (opcional)" />
+        <input name="y" type="number" placeholder="y (opcional)" />
+        <button type="submit">Crear</button>
+        <p class="legend-note">Nace ya asentada, con 5 héroes bot (el primero, Rey), y la gobierna el NPC hasta que se destruya. Sin x/y se funda en el mejor sitio libre.</p>
+      </form>
       <div id="facciones-tab"></div>
     </div>
 
@@ -621,7 +629,7 @@ function renderPanelAsentamientos(state: GameState): void {
       const activos = a.edificios.filter((e) => e.estado === 'activo').length;
       const enCurso = a.edificios.length - activos;
       const mantenimiento = Math.max(0, Math.min(100, a.medidorMantenimiento));
-      const otrasCasas = a.casasCompradas.filter((id) => !a.jugadoresFundadoresIds.includes(id));
+      const otrasCasas = a.casasCompradas.filter((id) => !a.heroesFundadoresIds.includes(id));
       const recursosHtml = recursosClave
         .map((r) => {
           const recurso = a.almacen[r];
@@ -654,7 +662,7 @@ function renderPanelAsentamientos(state: GameState): void {
           <section><h4>Almacén</h4><div class="registro-resource-grid">${recursosHtml}</div></section>
           <section><h4>Cargos</h4><div class="registro-role-list">${cargosHtml}</div></section>
         </div>
-        <footer class="registro-asentamiento-footer"><span>Políticas activas: <strong>${a.politicasActivas.length}</strong></span><span>Fundadores: <strong>${a.jugadoresFundadoresIds.length}</strong></span></footer>
+        <footer class="registro-asentamiento-footer"><span>Políticas activas: <strong>${a.politicasActivas.length}</strong></span><span>Fundadores: <strong>${a.heroesFundadoresIds.length}</strong></span></footer>
       </article>`;
     })
     .join('') || '<p class="legend-note registro-empty">Aún no hay asentamientos fundados.</p>';
@@ -664,7 +672,7 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
   const faccion = state.facciones.find((f) => f.id === a.faccionId);
   const { pesants, artesanos, nobleza } = a.poblacion;
   const totalPoblacion = pesants + artesanos + nobleza;
-  const otrasCasas = a.casasCompradas.filter((id) => !a.jugadoresFundadoresIds.includes(id));
+  const otrasCasas = a.casasCompradas.filter((id) => !a.heroesFundadoresIds.includes(id));
 
   // Muestra TODOS los recursos presentes en el almacén (incluidos los intermedios de crafting del rediseño
   // de progreso, Doc 4.2.1) — no solo los tradeables de CATALOGOS.recursosTrueque, que se quedan cortos aquí
@@ -930,7 +938,7 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
           ${a.escuadrones
             .map(
               (e) =>
-                `<tr><td>${e.nombre}${e.heridoHasta ? ' (herido)' : ''}</td><td>${e.jugadorId}</td><td>${e.origen}</td><td>${nivelTropaTxt(e.tropaId)}</td><td>${e.cantidad}</td><td>${e.veterania.toFixed(1)}</td><td>${e.moral.toFixed(0)}</td></tr>`
+                `<tr><td>${e.nombre}${e.heridoHasta ? ' (herido)' : ''}</td><td>${e.heroeId}</td><td>${e.origen}</td><td>${nivelTropaTxt(e.tropaId)}</td><td>${e.cantidad}</td><td>${e.veterania.toFixed(1)}</td><td>${e.moral.toFixed(0)}</td></tr>`
             )
             .join('')}
         </tbody>
@@ -1025,7 +1033,7 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
 
       <div class="detail-section">
         <h3>Fundadores y ciudadanía</h3>
-        <div class="kv-row"><span>Fundadores (con casa)</span><span>${a.jugadoresFundadoresIds.join(', ') || '—'}</span></div>
+        <div class="kv-row"><span>Fundadores (con casa)</span><span>${a.heroesFundadoresIds.join(', ') || '—'}</span></div>
         <div class="kv-row"><span>Otras casas compradas</span><span>${otrasCasas.join(', ') || '—'}</span></div>
         <div class="kv-row"><span>Cupo de vivienda</span><span>${a.casasCompradas.length}/${gameStore.cupoVivienda(a)}</span></div>
       </div>
@@ -1289,29 +1297,11 @@ function renderDetalleFaccion(faccion: Faccion, state: GameState): string {
     ? `<div class="chip-row">${titulosDeLaFaccion.map((t) => `<span class="chip">${t.nombre}</span>`).join('')}</div>`
     : '<p class="legend-note">Sin títulos.</p>';
 
-  // Ceder la Facción al NPC de gobernanza (`session/npcGobernanza.ts`).
+  // Las Facciones NPC las crea el admin (formulario de arriba de la pestaña) y así siguen hasta destruirse.
   const esNpc = state.faccionesNpcIds.includes(faccion.id);
-  const controlHtml = `
-      <div class="detail-section">
-        <h3>Control</h3>
-        <label class="npc-toggle">
-          <input type="checkbox" id="faccion-npc-toggle" data-faccion="${faccion.id}" ${esNpc ? 'checked' : ''} />
-          Controlada por NPC (juega sola)
-        </label>
-        <p class="legend-note">
-          El NPC asume el papel de Gobernador/Tesorero/Rey de esta Facción en el próximo avance del mundo: si todavía
-          no tiene ningún asentamiento se funda uno solo (5 fundadores propios); luego cargos y reserva de
-          madera, Mercado y caravana propia, trueques de supervivencia (solo con otras Facciones NPC),
-          reclutamiento, ataque a campamentos de bandidos y expansión con Caravanas de Fundación. Se puede
-          retomar el control manual en cualquier momento. El trueque de especialización entre asentamientos
-          propios requiere además <code>SIMULACION_AUTO_COMERCIO.activo = 1</code> en la pestaña "Valores de
-          simulación".
-        </p>
-      </div>`;
 
   return `
     <div class="settlement-detail">
-      ${controlHtml}
       <div class="detail-section">
         <h3>${faccion.nombre}${esNpc ? ' <span class="chip">NPC</span>' : ''}</h3>
         <div class="kv-grid">
@@ -1388,17 +1378,12 @@ function renderFaccionesTab(state: GameState): void {
       render();
     });
   });
-
-  const npcToggle = cont.querySelector('#faccion-npc-toggle') as HTMLInputElement | null;
-  npcToggle?.addEventListener('change', async () => {
-    await gameStore.alternarFaccionNpc(npcToggle.dataset.faccion!, npcToggle.checked);
-  });
 }
 
-function renderDetalleJugador(jugadorId: string, state: GameState): string {
-  const faccion = state.facciones.find((f) => f.ciudadanosIds.includes(jugadorId));
-  const esRey = faccion?.reyId === jugadorId;
-  const esEmbajador = faccion?.embajadorId === jugadorId;
+function renderDetalleJugador(heroeId: string, state: GameState): string {
+  const faccion = state.facciones.find((f) => f.ciudadanosIds.includes(heroeId));
+  const esRey = faccion?.reyId === heroeId;
+  const esEmbajador = faccion?.embajadorId === heroeId;
 
   const cargosFaccionHtml =
     esRey || esEmbajador
@@ -1408,7 +1393,7 @@ function renderDetalleJugador(jugadorId: string, state: GameState): string {
   const cargosLocales: { asentamientoId: string; cargo: CargoTipo }[] = [];
   for (const a of state.asentamientos) {
     for (const c of CATALOGOS.cargos) {
-      if (a.cargos[`${c}Id` as keyof typeof a.cargos] === jugadorId) {
+      if (a.cargos[`${c}Id` as keyof typeof a.cargos] === heroeId) {
         cargosLocales.push({ asentamientoId: a.id, cargo: c });
       }
     }
@@ -1420,23 +1405,23 @@ function renderDetalleJugador(jugadorId: string, state: GameState): string {
       </table>`
     : '<p class="legend-note">Sin cargos locales.</p>';
 
-  const residencias = state.asentamientos.filter((a) => a.casasCompradas.includes(jugadorId));
+  const residencias = state.asentamientos.filter((a) => a.casasCompradas.includes(heroeId));
   const residenciasHtml = residencias.length
     ? `<div class="chip-row">${residencias
-        .map((a) => `<span class="chip">${a.id}${a.jugadoresFundadoresIds.includes(jugadorId) ? ' (fundador)' : ''}</span>`)
+        .map((a) => `<span class="chip">${a.id}${a.heroesFundadoresIds.includes(heroeId) ? ' (fundador)' : ''}</span>`)
         .join('')}</div>`
     : '<p class="legend-note">Sin residencias.</p>';
 
-  const historial = state.historialJugadores[jugadorId] ?? [];
+  const historial = state.historialHeroes[heroeId] ?? [];
   const historialHtml = historial.length
     ? `<div class="log-panel">${historial.map((e) => `<div>[${fmtTiempoMundo(e.momento)}] ${e.mensaje}</div>`).join('')}</div>`
     : '<p class="legend-note">Sin actividad registrada todavía.</p>';
 
   // Escuadrones reclutados por este jugador (Doc 2.5): cada uno vive en el `asentamiento.escuadrones` donde
-  // fue reclutado, así que hay que recorrer TODOS los asentamientos y filtrar por `jugadorId` — un jugador
+  // fue reclutado, así que hay que recorrer TODOS los asentamientos y filtrar por `heroeId` — un jugador
   // puede tener escuadrones en más de una residencia.
   const escuadronesJugador = state.asentamientos.flatMap((a) =>
-    a.escuadrones.filter((e) => e.jugadorId === jugadorId).map((e) => ({ asentamientoId: a.id, escuadron: e }))
+    a.escuadrones.filter((e) => e.heroeId === heroeId).map((e) => ({ asentamientoId: a.id, escuadron: e }))
   );
   const escuadronesJugadorHtml = escuadronesJugador.length
     ? `<table class="mini-table">
@@ -1455,7 +1440,7 @@ function renderDetalleJugador(jugadorId: string, state: GameState): string {
   return `
     <div class="settlement-detail">
       <div class="detail-section">
-        <h3>${jugadorId}</h3>
+        <h3>${heroeId}</h3>
         <div class="kv-row"><span>Facción</span><span>${faccion?.nombre ?? '—'}</span></div>
       </div>
 
@@ -1611,7 +1596,7 @@ function renderPanelMilitar(state: GameState): void {
         a.escuadrones
           .map(
             (e) =>
-              `<div class="registro-squad"><div><strong>${e.nombre}</strong><small>${e.id} · ${e.jugadorId}</small></div><span>${e.cantidad} soldados</span><span>${nivelTropaTxt(e.tropaId)}</span><span>Moral ${e.moral.toFixed(0)}</span>${e.heridoHasta ? `<em>Herido hasta ${fmtTiempoMundo(e.heridoHasta)}</em>` : ''}</div>`
+              `<div class="registro-squad"><div><strong>${e.nombre}</strong><small>${e.id} · ${e.heroeId}</small></div><span>${e.cantidad} soldados</span><span>${nivelTropaTxt(e.tropaId)}</span><span>Moral ${e.moral.toFixed(0)}</span>${e.heridoHasta ? `<em>Herido hasta ${fmtTiempoMundo(e.heridoHasta)}</em>` : ''}</div>`
           )
           .join('') || '<div>Sin escuadrones.</div>';
       return `<article class="registro-militar-settlement"><header><div><h3>${a.nombre ?? a.id}</h3><p>${state.facciones.find((f) => f.id === a.faccionId)?.nombre ?? a.faccionId}</p></div><div class="registro-military-power"><strong>${poder.soldados}</strong><small>soldados · poder ${poder.poder.toFixed(1)}</small></div></header><div class="registro-military-buildings"><span class="${tieneFundicion ? 'is-active' : ''}">Fundición ${tieneFundicion ? 'activa' : 'inactiva'}</span><span class="${tieneGranFundicion ? 'is-active' : ''}">Gran Fundición ${tieneGranFundicion ? 'activa' : 'inactiva'}</span></div><div class="registro-squad-list">${escuadronesHtml}</div></article>`;
@@ -2091,6 +2076,17 @@ document.getElementById('exportar-btn')!.addEventListener('click', () => {
   enlace.download = `bronze-age-sim-${new Date(gameStore.getState().instante).toISOString().slice(0, 16).replace(/[:T]/g, '-')}.json`;
   enlace.click();
   URL.revokeObjectURL(url);
+});
+
+// Crear una Facción NPC (admin). El formulario vive fuera de `#facciones-tab`, que se repinta en cada refresco
+// y borraría lo que se está escribiendo.
+const faccionNpcForm = document.getElementById('faccion-npc-form') as HTMLFormElement;
+faccionNpcForm.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const datos = new FormData(faccionNpcForm);
+  const x = String(datos.get('x') ?? '');
+  const y = String(datos.get('y') ?? '');
+  await gameStore.crearFaccionNpc(String(datos.get('nombre')), x && y ? { x: Number(x), y: Number(y) } : undefined);
 });
 
 render();

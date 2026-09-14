@@ -147,7 +147,7 @@ export function comerciarEnPlaza(
   ejercito: Ejercito,
   /** Quien opera. Tiene que ser el Lider de la columna: el carro es COMUN (Doc 5.13.2), y sin esta condicion
    * cualquiera que se uniera en campo podria gastarse el oro de todos. */
-  jugadorId: string,
+  heroeId: string,
   plaza: Asentamiento,
   orden: OrdenMercado,
   cantidadPedida: number,
@@ -156,7 +156,7 @@ export function comerciarEnPlaza(
   capacidadCarga: number,
   instante: Instante
 ): { ejercito: Ejercito; plaza: Asentamiento; orden: OrdenMercado; cantidad: number; valor: number; comision: number; eventos: EventoCrudo[] } {
-  if (ejercito.liderId !== jugadorId) throw new OrdenInvalidaError('Solo el Lider de la columna comercia con su carro.');
+  if (ejercito.liderId !== heroeId) throw new OrdenInvalidaError('Solo el Lider de la columna comercia con su carro.');
   if (orden.asentamientoId !== plaza.id) throw new OrdenInvalidaError('Esa orden no es de esta plaza.');
   if (orden.estado !== 'activa') throw new OrdenInvalidaError('Esa orden ya no esta en pie.');
   if (instante >= orden.expiraEn) throw new OrdenInvalidaError('Esa orden ha caducado.');

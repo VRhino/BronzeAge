@@ -24,7 +24,7 @@ import { desdeCrudos, evento } from './eventos';
 /** Reclutamiento: lo narra esta capa (el motor devuelve el asentamiento actualizado, sin eventos). */
 export interface PayloadReclutamiento {
   asentamientoId: string;
-  jugadorId: string;
+  heroeId: string;
   tropaId: string;
   origen: 'pesants' | 'artesanos';
   reclutados: number;
@@ -32,7 +32,7 @@ export interface PayloadReclutamiento {
 
 export interface ParamsReclutarTropa {
   asentamientoId: string;
-  jugadorId: string;
+  heroeId: string;
   tropaId: string;
   origen: 'pesants' | 'artesanos';
 }
@@ -41,14 +41,14 @@ export const reclutarTropa = comando<ParamsReclutarTropa, { reclutados: number }
   const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
 
   const cantidadDe = (a: typeof asentamiento): number =>
-    a.escuadrones.find((e) => e.jugadorId === params.jugadorId && e.tropaId === params.tropaId)?.cantidad ?? 0;
+    a.escuadrones.find((e) => e.heroeId === params.heroeId && e.tropaId === params.tropaId)?.cantidad ?? 0;
 
   const antes = cantidadDe(asentamiento);
-  const faccionDelJugador = estado.facciones.find((f) => esCiudadano(f, params.jugadorId));
+  const faccionDelJugador = estado.facciones.find((f) => esCiudadano(f, params.heroeId));
   const actualizado = reclutarTropaEngine(
     asentamiento,
     estado,
-    params.jugadorId,
+    params.heroeId,
     faccionDelJugador?.id ?? '',
     params.tropaId,
     params.origen,
@@ -58,7 +58,7 @@ export const reclutarTropa = comando<ParamsReclutarTropa, { reclutados: number }
 
   const siguiente = conHistorialDeJugador(
     conAsentamiento(estado, actualizado),
-    params.jugadorId,
+    params.heroeId,
     `Recluta ${reclutados} de "${params.tropaId}" en ${asentamiento.id}.`
   );
   return exito(
@@ -66,7 +66,7 @@ export const reclutarTropa = comando<ParamsReclutarTropa, { reclutados: number }
     [
       evento(ctx, {
         codigo: 'tropas.reclutadas',
-        mensaje: `${params.jugadorId} recluta ${reclutados} de la tropa "${params.tropaId}" (${params.origen}).`,
+        mensaje: `${params.heroeId} recluta ${reclutados} de la tropa "${params.tropaId}" (${params.origen}).`,
         payload: { ...params, reclutados } satisfies PayloadReclutamiento,
         asentamientoId: asentamiento.id,
       }),

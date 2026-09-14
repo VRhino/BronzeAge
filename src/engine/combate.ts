@@ -129,7 +129,7 @@ function reemplazarEscuadrones(asentamiento: Asentamiento, actualizados: Escuadr
 /**
  * XP de Facción por JUGADOR, versión mínima (Doc Fase_0_5 §8, a petición del usuario): si 3 jugadores atacan
  * juntos, la Facción recibe 3× la XP de ese evento, no un monto plano por combate. Se calcula al vuelo
- * contando `jugadorId` DISTINTOS entre los escuadrones que participaron en un bando — NO se guarda XP de
+ * contando `heroeId` DISTINTOS entre los escuadrones que participaron en un bando — NO se guarda XP de
  * jugador por separado (eso exigiría una entidad `Jugador` que hoy no existe en el motor; queda pendiente si
  * llega a necesitar un propósito propio más allá de alimentar la XP de Facción).
  *
@@ -138,7 +138,7 @@ function reemplazarEscuadrones(asentamiento: Asentamiento, actualizados: Escuadr
  * escolta no está modelada con escuadrones/jugadores reales todavía, es una defensa fija placeholder.
  */
 function jugadoresParticipantes(escuadrones: Escuadron[]): number {
-  return new Set(escuadrones.map((e) => e.jugadorId)).size;
+  return new Set(escuadrones.map((e) => e.heroeId)).size;
 }
 
 /**
@@ -215,7 +215,7 @@ export function aplicarConquista(
     ...defensor,
     faccionId: faccionConquistadoraId,
     escuadrones: [...guarnicionEntrante],
-    jugadoresFundadoresIds: [],
+    heroesFundadoresIds: [],
     casasCompradas: [],
     cargos,
     poblacion,

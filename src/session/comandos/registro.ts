@@ -12,7 +12,8 @@ import { fundarAsentamiento } from './fundarAsentamiento';
 import { crearFaccion } from './crearFaccion';
 import { unirseAFaccion } from './unirseAFaccion';
 import { dejarFaccion } from './dejarFaccion';
-import { alternarFaccionNpc } from './alternarFaccionNpc';
+import { crearHeroe } from './crearHeroe';
+import { crearFaccionNpc } from './crearFaccionNpc';
 import { activarPolitica, asignarCargoLocal, asignarEmbajador, asignarRey, cambiarResidencia, comprarCasa } from './cargos';
 import { anexionar, fusionar, proponerRelacion, rebelionVasallo, romperRelacion } from './diplomacia';
 import {
@@ -67,7 +68,8 @@ export const REGISTRO_COMANDOS = {
   crearFaccion,
   unirseAFaccion,
   dejarFaccion,
-  alternarFaccionNpc,
+  crearHeroe,
+  crearFaccionNpc,
   activarPolitica,
   asignarCargoLocal,
   asignarEmbajador,

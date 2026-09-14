@@ -8,20 +8,20 @@ export class CargoInvalidoError extends Error {}
  * Rey (Doc 2.2): por defecto en Liga-por-vasallaje, electo por voto en Liga-por-alianza. Fase 0 no simula
  * una votación real (sin jugadores interactivos) — se modela como designación directa entre ciudadanos.
  */
-export function asignarRey(faccion: Faccion, jugadorId: string): Faccion {
-  if (!esCiudadano(faccion, jugadorId)) {
+export function asignarRey(faccion: Faccion, heroeId: string): Faccion {
+  if (!esCiudadano(faccion, heroeId)) {
     throw new CargoInvalidoError('Solo un ciudadano de la Facción puede ser Rey.');
   }
-  return { ...faccion, reyId: jugadorId };
+  return { ...faccion, reyId: heroeId };
 }
 
 /** Embajador (Doc 2.2): designado DIRECTAMENTE por el Rey — requiere que exista un Rey. */
-export function asignarEmbajador(faccion: Faccion, jugadorId: string): Faccion {
+export function asignarEmbajador(faccion: Faccion, heroeId: string): Faccion {
   if (!faccion.reyId) throw new CargoInvalidoError('La Facción necesita un Rey antes de designar Embajador.');
-  if (!esCiudadano(faccion, jugadorId)) {
+  if (!esCiudadano(faccion, heroeId)) {
     throw new CargoInvalidoError('Solo un ciudadano de la Facción puede ser Embajador.');
   }
-  return { ...faccion, embajadorId: jugadorId };
+  return { ...faccion, embajadorId: heroeId };
 }
 
 /**
@@ -32,17 +32,17 @@ export function asignarCargoLocal(
   asentamiento: Asentamiento,
   faccion: Faccion,
   cargo: CargoTipo,
-  jugadorId: string
+  heroeId: string
 ): Asentamiento {
   if (asentamiento.faccionId !== faccion.id) {
     throw new CargoInvalidoError('El asentamiento no pertenece a esta Facción.');
   }
-  if (!esCiudadano(faccion, jugadorId)) {
+  if (!esCiudadano(faccion, heroeId)) {
     throw new CargoInvalidoError('Solo un ciudadano de la Facción puede ejercer un cargo local.');
   }
   if (cargo !== 'gobernador' && !cargoOcupado(asentamiento, 'gobernador')) {
     throw new CargoInvalidoError('El asentamiento necesita un Gobernador antes de designar el resto de cargos.');
   }
 
-  return conCargoLocal(asentamiento, cargo, jugadorId);
+  return conCargoLocal(asentamiento, cargo, heroeId);
 }

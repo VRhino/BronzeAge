@@ -24,7 +24,7 @@ import type { ParamsDe, TipoComando } from './registro';
 
 /**
  * Identidad del actor resuelta para esta partida — lo que aporta la `Membresia` (doc 5), nunca un id que el
- * cliente afirme tener (doc 2, principio 3). `jugadorId` es `null` para roles que no requieren `Jugador`
+ * cliente afirme tener (doc 2, principio 3). `heroeId` es `null` para roles que no requieren `Jugador`
  * (ej. `administrador_partida` puro).
  *
  * Sin `faccionId`: la Facción del actor se DERIVA de `Faccion.ciudadanosIds`, única fuente de verdad del
@@ -32,12 +32,12 @@ import type { ParamsDe, TipoComando } from './registro';
  */
 export interface ActorDeComando {
   rol: RolTecnico;
-  jugadorId: string | null;
+  heroeId: string | null;
 }
 
 export type CondicionDominio<T extends TipoComando> = (
   estado: GameSessionState,
-  jugadorId: string,
+  heroeId: string,
   params: ParamsDe<T>
 ) => boolean;
 
@@ -72,13 +72,13 @@ function buscarCaravana(estado: GameSessionState, id: string): Caravana | undefi
 }
 
 /** Ciudadano de esa Facción — la pertenencia real del juego, no una copia en la capa de acceso. */
-function esFaccionPropia(estado: GameSessionState, jugadorId: string, faccionId: string): boolean {
+function esFaccionPropia(estado: GameSessionState, heroeId: string, faccionId: string): boolean {
   const faccion = buscarFaccion(estado, faccionId);
-  return faccion === undefined || esCiudadano(faccion, jugadorId);
+  return faccion === undefined || esCiudadano(faccion, heroeId);
 }
 
-function sinFaccionTodavia(estado: GameSessionState, jugadorId: string): boolean {
-  return !estado.facciones.some((f) => esCiudadano(f, jugadorId));
+function sinFaccionTodavia(estado: GameSessionState, heroeId: string): boolean {
+  return !estado.facciones.some((f) => esCiudadano(f, heroeId));
 }
 
 /**
@@ -87,8 +87,8 @@ function sinFaccionTodavia(estado: GameSessionState, jugadorId: string): boolean
  * ciudadano de otra, y el cupo de vivienda la limita—, así que exigir ciudadanía previa la volvería
  * inalcanzable.
  */
-function esFaccionPropiaOSinFaccion(estado: GameSessionState, jugadorId: string, faccionId: string): boolean {
-  return sinFaccionTodavia(estado, jugadorId) || esFaccionPropia(estado, jugadorId, faccionId);
+function esFaccionPropiaOSinFaccion(estado: GameSessionState, heroeId: string, faccionId: string): boolean {
+  return sinFaccionTodavia(estado, heroeId) || esFaccionPropia(estado, heroeId, faccionId);
 }
 
 /**
@@ -102,17 +102,17 @@ function esFaccionPropiaOSinFaccion(estado: GameSessionState, jugadorId: string,
  * desconocido funde en una Facción ajena sería regalarle una vía para agotarle el cupo. Comprar casa, que sí
  * está abierta, no consume nada de eso.
  */
-function puedeFundarEn(estado: GameSessionState, jugadorId: string, faccionId: string): boolean {
+function puedeFundarEn(estado: GameSessionState, heroeId: string, faccionId: string): boolean {
   const faccion = buscarFaccion(estado, faccionId);
   if (faccion === undefined) return true; // no existe: lo rechaza el comando, no la autorización
-  if (esCiudadano(faccion, jugadorId)) return true;
-  return faccion.ciudadanosIds.length === 0 && sinFaccionTodavia(estado, jugadorId);
+  if (esCiudadano(faccion, heroeId)) return true;
+  return faccion.ciudadanosIds.length === 0 && sinFaccionTodavia(estado, heroeId);
 }
 
 /** Ciudadano de la Facción dueña de ese asentamiento. */
-function esFaccionDelAsentamiento(estado: GameSessionState, jugadorId: string, asentamientoId: string): boolean {
+function esFaccionDelAsentamiento(estado: GameSessionState, heroeId: string, asentamientoId: string): boolean {
   const asentamiento = buscarAsentamiento(estado, asentamientoId);
-  return asentamiento === undefined || esFaccionPropia(estado, jugadorId, asentamiento.faccionId);
+  return asentamiento === undefined || esFaccionPropia(estado, heroeId, asentamiento.faccionId);
 }
 
 /**
@@ -121,53 +121,53 @@ function esFaccionDelAsentamiento(estado: GameSessionState, jugadorId: string, a
  * Un acuerdo inexistente se deja pasar, mismo criterio fail-open que el resto de resolutores de este archivo:
  * lo rechaza el propio comando con `acuerdo.no_existe`, que dice mucho mas que un "no autorizado".
  */
-function resideEnElLadoQueContesta(estado: GameSessionState, jugadorId: string, acuerdoId: string): boolean {
+function resideEnElLadoQueContesta(estado: GameSessionState, heroeId: string, acuerdoId: string): boolean {
   const acuerdo = estado.acuerdos.find((a) => a.id === acuerdoId);
-  return acuerdo === undefined || reside(estado, jugadorId, acuerdo.asentamientoBId);
+  return acuerdo === undefined || reside(estado, heroeId, acuerdo.asentamientoBId);
 }
 
 /** Residente del asentamiento de origen de la caravana (revamp, Doc 3.13): componerla y reservarla es cosa de casa. */
-function resideEnOrigenDeCaravana(estado: GameSessionState, jugadorId: string, caravanaId: string): boolean {
+function resideEnOrigenDeCaravana(estado: GameSessionState, heroeId: string, caravanaId: string): boolean {
   const caravana = buscarCaravana(estado, caravanaId);
-  return caravana === undefined || reside(estado, jugadorId, caravana.origenAsentamientoId);
+  return caravana === undefined || reside(estado, heroeId, caravana.origenAsentamientoId);
 }
 
 /**
  * Operar una caravana `'aparcada'` en una plaza anfitriona (Ocupacion §2.3d): ser residente de SU ORIGEN
  * —sigue siendo tuya— y estar PRESENTE en la plaza donde está aparcada (no en el origen, del que marchaste).
  */
-function puedeOperarCaravanaAparcada(estado: GameSessionState, jugadorId: string, caravanaId: string, asentamientoId: string): boolean {
+function puedeOperarCaravanaAparcada(estado: GameSessionState, heroeId: string, caravanaId: string, asentamientoId: string): boolean {
   const caravana = buscarCaravana(estado, caravanaId);
   const origen = caravana && buscarAsentamiento(estado, caravana.origenAsentamientoId);
   if (!caravana || !origen) return true; // lo rechaza el comando con un código que dice más
-  return esResidente(origen, jugadorId) && presente(estado, jugadorId, asentamientoId);
+  return esResidente(origen, heroeId) && presente(estado, heroeId, asentamientoId);
 }
 
-function reside(estado: GameSessionState, jugadorId: string, asentamientoId: string): boolean {
+function reside(estado: GameSessionState, heroeId: string, asentamientoId: string): boolean {
   const asentamiento = buscarAsentamiento(estado, asentamientoId);
-  return asentamiento === undefined || (esResidente(asentamiento, jugadorId) && presente(estado, jugadorId, asentamientoId));
+  return asentamiento === undefined || (esResidente(asentamiento, heroeId) && presente(estado, heroeId, asentamientoId));
 }
 /** Reclutar (revisión 2026-09-08): residir aquí, O ser ciudadano de la Facción del asentamiento y que este lo
  * permita — en ambos casos, estando presente. El detalle "solo reponer si no resides" lo hace el motor. */
-function puedeReclutarEnPlaza(estado: GameSessionState, jugadorId: string, asentamientoId: string): boolean {
+function puedeReclutarEnPlaza(estado: GameSessionState, heroeId: string, asentamientoId: string): boolean {
   const asentamiento = buscarAsentamiento(estado, asentamientoId);
   if (!asentamiento) return true;
-  const faccionJugador = estado.facciones.find((f) => f.ciudadanosIds.includes(jugadorId));
+  const faccionJugador = estado.facciones.find((f) => f.ciudadanosIds.includes(heroeId));
   return (
-    puedeReclutarEn(asentamiento, jugadorId, faccionJugador?.id ?? '') !== 'no' &&
-    presente(estado, jugadorId, asentamientoId)
+    puedeReclutarEn(asentamiento, heroeId, faccionJugador?.id ?? '') !== 'no' &&
+    presente(estado, heroeId, asentamientoId)
   );
 }
 /** Sacar tropa a campaña (revisión 2026-09-08): residir aquí, O tener escuadrones vivos propios ya posados
  * aquí (guarnición tras conquistar/guarnecer) — estando presente. Mismo criterio que el gate del motor en
  * `movilizarEjercito`. */
-function puedeMoverTropaDe(estado: GameSessionState, jugadorId: string, asentamientoId: string): boolean {
+function puedeMoverTropaDe(estado: GameSessionState, heroeId: string, asentamientoId: string): boolean {
   const asentamiento = buscarAsentamiento(estado, asentamientoId);
   if (!asentamiento) return true;
   const tieneTropaAqui =
-    esResidente(asentamiento, jugadorId) ||
-    asentamiento.escuadrones.some((e) => e.jugadorId === jugadorId && e.cantidad > 0);
-  return tieneTropaAqui && presente(estado, jugadorId, asentamientoId);
+    esResidente(asentamiento, heroeId) ||
+    asentamiento.escuadrones.some((e) => e.heroeId === heroeId && e.cantidad > 0);
+  return tieneTropaAqui && presente(estado, heroeId, asentamientoId);
 }
 
 /**
@@ -181,13 +181,13 @@ function puedeMoverTropaDe(estado: GameSessionState, jugadorId: string, asentami
  *
  * Y por eso la delegación pasa a importar, que era el punto (Doc 2.5).
  */
-function presente(estado: GameSessionState, jugadorId: string, asentamientoId: string): boolean {
-  return estaEnAsentamiento(estado.jugadores, jugadorId, asentamientoId, estado.asentamientos, estado.ejercitos);
+function presente(estado: GameSessionState, heroeId: string, asentamientoId: string): boolean {
+  return estaEnAsentamiento(estado.heroes, heroeId, asentamientoId, estado.asentamientos, estado.ejercitos);
 }
 
 /**
  * Todos los escuadrones indicados que EXISTEN en ese asentamiento pertenecen al actor (Doc 5, fila de
- * combate: "escuadrones propios del jugador"). `Escuadron.jugadorId` es la única fuente de verdad del dueño
+ * combate: "escuadrones propios del jugador"). `Escuadron.heroeId` es la única fuente de verdad del dueño
  * (`domain/types.ts`), la mutó el motor al reclutar y el cliente no puede falsearla.
  *
  * Un `escuadronId` que no existe se deja pasar — lo rechaza el propio comando de combate, mismo criterio
@@ -196,46 +196,46 @@ function presente(estado: GameSessionState, jugadorId: string, asentamientoId: s
  * mecanismo de mando (un General al que se le ceden tropas) que la Fase 0 no tiene, así que hoy cada jugador
  * solo manda lo suyo.
  */
-function comandaEscuadrones(estado: GameSessionState, jugadorId: string, asentamientoId: string, escuadronIds: string[]): boolean {
+function comandaEscuadrones(estado: GameSessionState, heroeId: string, asentamientoId: string, escuadronIds: string[]): boolean {
   const asentamiento = buscarAsentamiento(estado, asentamientoId);
   if (asentamiento === undefined) return true; // no existe: lo rechaza el comando
   return escuadronIds.every((id) => {
     const escuadron = asentamiento.escuadrones.find((e) => e.id === id);
-    return escuadron === undefined || escuadron.jugadorId === jugadorId;
+    return escuadron === undefined || escuadron.heroeId === heroeId;
   });
 }
 
 /** ¿El jugador tiene algún escuadrón dentro de ese ejército? Un ejército inexistente se deja pasar — lo
  * rechaza el propio comando, mismo criterio fail-open que el resto de resolutores de este archivo. */
-function participaEnEjercito(estado: GameSessionState, jugadorId: string, ejercitoId: string): boolean {
+function participaEnEjercito(estado: GameSessionState, heroeId: string, ejercitoId: string): boolean {
   const ejercito = estado.ejercitos.find((e) => e.id === ejercitoId);
   if (ejercito === undefined) return true;
-  return ejercito.escuadrones.some((e) => e.jugadorId === jugadorId);
+  return ejercito.escuadrones.some((e) => e.heroeId === heroeId);
 }
 
 /** Reside en el asentamiento, está DENTRO, y ostenta ahí el cargo indicado. */
-function residenteConCargo(estado: GameSessionState, jugadorId: string, asentamientoId: string, cargo: Parameters<typeof tieneCargoLocal>[1]): boolean {
+function residenteConCargo(estado: GameSessionState, heroeId: string, asentamientoId: string, cargo: Parameters<typeof tieneCargoLocal>[1]): boolean {
   const asentamiento = buscarAsentamiento(estado, asentamientoId);
   if (!asentamiento) return true;
-  return esResidente(asentamiento, jugadorId) && presente(estado, jugadorId, asentamientoId) && tieneCargoLocal(asentamiento, cargo, jugadorId);
+  return esResidente(asentamiento, heroeId) && presente(estado, heroeId, asentamientoId) && tieneCargoLocal(asentamiento, cargo, heroeId);
 }
 
 /** Ciudadano de esa Facción y además Rey o Embajador suyo — autoridad diplomática (Doc 2.2). */
-function conAutoridadDiplomatica(estado: GameSessionState, jugadorId: string, faccionId: string): boolean {
+function conAutoridadDiplomatica(estado: GameSessionState, heroeId: string, faccionId: string): boolean {
   const faccion = buscarFaccion(estado, faccionId);
   if (!faccion) return true;
-  return esCiudadano(faccion, jugadorId) && esReyOEmbajadorDe(faccion, jugadorId);
+  return esCiudadano(faccion, heroeId) && esReyOEmbajadorDe(faccion, heroeId);
 }
 
 /** Rey de la Facción dueña de ese asentamiento (Doc 2.2: designar Gobernador es potestad exclusiva del Rey,
  * a petición del usuario 2026-09-10). Es un acto de nivel Facción, como designar Embajador: NO exige que el
  * Rey resida ni esté presente en la plaza. */
-function esReyDelAsentamiento(estado: GameSessionState, jugadorId: string, asentamientoId: string): boolean {
+function esReyDelAsentamiento(estado: GameSessionState, heroeId: string, asentamientoId: string): boolean {
   const asentamiento = buscarAsentamiento(estado, asentamientoId);
   if (!asentamiento) return true;
   const faccion = buscarFaccion(estado, asentamiento.faccionId);
   if (!faccion) return true;
-  return esCiudadano(faccion, jugadorId) && esReyDe(faccion, jugadorId);
+  return esCiudadano(faccion, heroeId) && esReyDe(faccion, heroeId);
 }
 
 export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
@@ -244,17 +244,17 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
   // `fundarAsentamiento.ts`), así que fundar otorga ciudadanía a quien ejecuta, y a nadie más.
   fundarAsentamiento: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => puedeFundarEn(estado, jugadorId, params.faccionId),
+    condicionJugador: (estado, heroeId, params) => puedeFundarEn(estado, heroeId, params.faccionId),
   },
   lanzarCaravanaFundacion: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => esFaccionDelAsentamiento(estado, jugadorId, params.origenAsentamientoId),
+    condicionJugador: (estado, heroeId, params) => esFaccionDelAsentamiento(estado, heroeId, params.origenAsentamientoId),
   },
   desarmarCaravanaFundacion: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => {
+    condicionJugador: (estado, heroeId, params) => {
       const caravana = buscarCaravana(estado, params.caravanaId);
-      return caravana === undefined || esFaccionDelAsentamiento(estado, jugadorId, caravana.origenAsentamientoId);
+      return caravana === undefined || esFaccionDelAsentamiento(estado, heroeId, caravana.origenAsentamientoId);
     },
   },
 
@@ -264,35 +264,32 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
   // intentar los tres, y el propio comando rechaza con su código si no toca (`faccion.ya_pertenece`,
   // `faccion.cooldown_creacion`, `faccion.no_pertenece`) — mismo criterio que nombre vacío/duplicado en
   // `crearFaccion.ts`. Resuelve la pregunta que este archivo dejaba abierta (doc 5, "Preguntas abiertas").
-  // Ninguno de los tres acepta un `jugadorId`/`faccionId` de OTRO en `params` con el que suplantar: el actor
+  // Ninguno de los tres acepta un `heroeId`/`faccionId` de OTRO en `params` con el que suplantar: el actor
   // siempre es `ctx.actor`, nunca algo que el cliente pueda mandar.
   crearFaccion: { rolesPermitidos: ['jugador'] },
   unirseAFaccion: { rolesPermitidos: ['jugador'] },
   dejarFaccion: { rolesPermitidos: ['jugador'] },
 
   // --- Cargos de Facción ---
-  alternarFaccionNpc: {
-    rolesPermitidos: ['jugador', 'administrador_partida'],
-    condicionJugador: (estado, jugadorId, params) => {
-      const faccion = buscarFaccion(estado, params.faccionId);
-      return faccion === undefined || (esCiudadano(faccion, jugadorId) && esReyDe(faccion, jugadorId));
-    },
-  },
+  // Crear el propio héroe es lo único que puede hacer un jugador que todavía no tiene (`verificarAutorizacion`).
+  crearHeroe: { rolesPermitidos: ['jugador'] },
+  // Las Facciones NPC las crea el admin, ya asentadas; ninguna Facción de jugador pasa a la IA.
+  crearFaccionNpc: { rolesPermitidos: ['administrador_partida', 'administrador_global'] },
   asignarRey: {
     rolesPermitidos: ['jugador'],
     // Primera asignación abierta a cualquier ciudadano (el motor ya exige que el designado lo sea); una vez
     // hay Rey, solo él puede traspasar el cargo.
-    condicionJugador: (estado, jugadorId, params) => {
+    condicionJugador: (estado, heroeId, params) => {
       const faccion = buscarFaccion(estado, params.faccionId);
       if (!faccion) return true;
-      return esCiudadano(faccion, jugadorId) && (faccion.reyId === null || esReyDe(faccion, jugadorId));
+      return esCiudadano(faccion, heroeId) && (faccion.reyId === null || esReyDe(faccion, heroeId));
     },
   },
   asignarEmbajador: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => {
+    condicionJugador: (estado, heroeId, params) => {
       const faccion = buscarFaccion(estado, params.faccionId);
-      return faccion === undefined || (esCiudadano(faccion, jugadorId) && esReyDe(faccion, jugadorId));
+      return faccion === undefined || (esCiudadano(faccion, heroeId) && esReyDe(faccion, heroeId));
     },
   },
 
@@ -301,10 +298,10 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
   // vigente, residente y presente. ---
   asignarCargoLocal: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) =>
+    condicionJugador: (estado, heroeId, params) =>
       params.cargo === 'gobernador'
-        ? esReyDelAsentamiento(estado, jugadorId, params.asentamientoId)
-        : residenteConCargo(estado, jugadorId, params.asentamientoId, 'gobernador'),
+        ? esReyDelAsentamiento(estado, heroeId, params.asentamientoId)
+        : residenteConCargo(estado, heroeId, params.asentamientoId, 'gobernador'),
   },
 
   // --- comprarCasa: nadie compra en nombre de otro. La Facción del asentamiento debe ser la propia, O el
@@ -312,10 +309,10 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
   // (junto a fundar), y `engine/faccion.ts` solo bloquea ser ciudadano de OTRA distinta. ---
   comprarCasa: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => {
-      if (jugadorId !== params.jugadorId) return false;
+    condicionJugador: (estado, heroeId, params) => {
+      if (heroeId !== params.heroeId) return false;
       const asentamiento = buscarAsentamiento(estado, params.asentamientoId);
-      return asentamiento === undefined || esFaccionPropiaOSinFaccion(estado, jugadorId, asentamiento.faccionId);
+      return asentamiento === undefined || esFaccionPropiaOSinFaccion(estado, heroeId, asentamiento.faccionId);
     },
   },
   // Cambiar de residencia: nadie a nombre de otro; y el destino tiene que ser de la propia Facción (a
@@ -323,187 +320,187 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
   // condiciones (hueco de vivienda, permiso, no residir ya ahí) las valida `cambiarResidencia`.
   cambiarResidencia: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => {
-      if (jugadorId !== params.jugadorId) return false;
+    condicionJugador: (estado, heroeId, params) => {
+      if (heroeId !== params.heroeId) return false;
       const destino = buscarAsentamiento(estado, params.destinoId);
-      return destino === undefined || estado.facciones.some((f) => f.id === destino.faccionId && f.ciudadanosIds.includes(jugadorId));
+      return destino === undefined || estado.facciones.some((f) => f.id === destino.faccionId && f.ciudadanosIds.includes(heroeId));
     },
   },
 
   // --- Construcción y gestión local: residente + el cargo que exige cada comando ---
   activarPolitica: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => residenteConCargo(estado, jugadorId, params.asentamientoId, params.cargo),
+    condicionJugador: (estado, heroeId, params) => residenteConCargo(estado, heroeId, params.asentamientoId, params.cargo),
   },
   anadirEdificioManualmente: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => residenteConCargo(estado, jugadorId, params.asentamientoId, params.cargo),
+    condicionJugador: (estado, heroeId, params) => residenteConCargo(estado, heroeId, params.asentamientoId, params.cargo),
   },
   quitarDeCola: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => residenteConCargo(estado, jugadorId, params.asentamientoId, params.cargo),
+    condicionJugador: (estado, heroeId, params) => residenteConCargo(estado, heroeId, params.asentamientoId, params.cargo),
   },
   moverEnCola: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => residenteConCargo(estado, jugadorId, params.asentamientoId, params.cargo),
+    condicionJugador: (estado, heroeId, params) => residenteConCargo(estado, heroeId, params.asentamientoId, params.cargo),
   },
   mejorarEdificioAhora: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => residenteConCargo(estado, jugadorId, params.asentamientoId, params.cargo),
+    condicionJugador: (estado, heroeId, params) => residenteConCargo(estado, heroeId, params.asentamientoId, params.cargo),
   },
   comprometerRecinto: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => residenteConCargo(estado, jugadorId, params.asentamientoId, params.cargo),
+    condicionJugador: (estado, heroeId, params) => residenteConCargo(estado, heroeId, params.asentamientoId, params.cargo),
   },
   // Sin `cargo` en `params`: abandonar un recinto es SOLO del Gobernador (§8 del doc de murallas), a
   // diferencia de comprometer, que también admite al Maestro de Obras.
   abandonarRecinto: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => residenteConCargo(estado, jugadorId, params.asentamientoId, 'gobernador'),
+    condicionJugador: (estado, heroeId, params) => residenteConCargo(estado, heroeId, params.asentamientoId, 'gobernador'),
   },
   mejorarRecinto: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => residenteConCargo(estado, jugadorId, params.asentamientoId, params.cargo),
+    condicionJugador: (estado, heroeId, params) => residenteConCargo(estado, heroeId, params.asentamientoId, params.cargo),
   },
   // Sin `cargo` en `params`, a diferencia de los de arriba: autoridad sobre la cola de construcción es del
   // Gobernador o del Maestro de Obras (`CargoConstructor`, ver `construccion.ts`).
   /** Enganchar o soltar el tren de suministros lo decide quien va en la columna, igual que replegarla. */
   adjuntarCaravana: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => participaEnEjercito(estado, jugadorId, params.ejercitoId),
+    condicionJugador: (estado, heroeId, params) => participaEnEjercito(estado, heroeId, params.ejercitoId),
   },
   soltarCaravana: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => participaEnEjercito(estado, jugadorId, params.ejercitoId),
+    condicionJugador: (estado, heroeId, params) => participaEnEjercito(estado, heroeId, params.ejercitoId),
   },
   /** Cargar y entregar las decide quien va en la columna: es SU viaje (Doc 5.13.3). */
   cargarCaravana: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => participaEnEjercito(estado, jugadorId, params.ejercitoId),
+    condicionJugador: (estado, heroeId, params) => participaEnEjercito(estado, heroeId, params.ejercitoId),
   },
   entregarDeCaravana: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => participaEnEjercito(estado, jugadorId, params.ejercitoId),
+    condicionJugador: (estado, heroeId, params) => participaEnEjercito(estado, heroeId, params.ejercitoId),
   },
   /** Abrir el almacén a un aliado es política de la plaza: Gobernador (manda) o Tesorero (custodia el stock). */
   alternarReabastecerAliados: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) =>
-      residenteConCargo(estado, jugadorId, params.asentamientoId, 'gobernador') ||
-      residenteConCargo(estado, jugadorId, params.asentamientoId, 'tesorero'),
+    condicionJugador: (estado, heroeId, params) =>
+      residenteConCargo(estado, heroeId, params.asentamientoId, 'gobernador') ||
+      residenteConCargo(estado, heroeId, params.asentamientoId, 'tesorero'),
   },
   alternarAutoConstruccion: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) =>
-      residenteConCargo(estado, jugadorId, params.asentamientoId, 'gobernador') ||
-      residenteConCargo(estado, jugadorId, params.asentamientoId, 'maestroObras'),
+    condicionJugador: (estado, heroeId, params) =>
+      residenteConCargo(estado, heroeId, params.asentamientoId, 'gobernador') ||
+      residenteConCargo(estado, heroeId, params.asentamientoId, 'maestroObras'),
   },
   // La reserva manual es del Tesorero (el comando ya rechaza si el cargo está vacante).
   calibrarReservaManual: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => residenteConCargo(estado, jugadorId, params.asentamientoId, 'tesorero'),
+    condicionJugador: (estado, heroeId, params) => residenteConCargo(estado, heroeId, params.asentamientoId, 'tesorero'),
   },
   // Doc 5 deja abierto si debería exigir un cargo concreto; hoy basta con residir.
   renombrarAsentamiento: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => reside(estado, jugadorId, params.asentamientoId),
+    condicionJugador: (estado, heroeId, params) => reside(estado, heroeId, params.asentamientoId),
   },
 
   // --- Diplomacia: Facción propia + autoridad de Rey/Embajador ---
   proponerRelacion: {
     rolesPermitidos: ['jugador'],
     // `faccionAId` es quien propone, por la misma convención que `romperRelacion.iniciadorFaccionId`.
-    condicionJugador: (estado, jugadorId, params) => conAutoridadDiplomatica(estado, jugadorId, params.faccionAId),
+    condicionJugador: (estado, heroeId, params) => conAutoridadDiplomatica(estado, heroeId, params.faccionAId),
   },
   romperRelacion: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => conAutoridadDiplomatica(estado, jugadorId, params.iniciadorFaccionId),
+    condicionJugador: (estado, heroeId, params) => conAutoridadDiplomatica(estado, heroeId, params.iniciadorFaccionId),
   },
   rebelionVasallo: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => {
+    condicionJugador: (estado, heroeId, params) => {
       const relacion = estado.relaciones.find((r) => r.id === params.relacionId);
       // Quien se rebela es el VASALLO (`faccionBId`, ver `engine/diplomacia.ts`), no el señor.
-      return relacion === undefined || conAutoridadDiplomatica(estado, jugadorId, relacion.faccionBId);
+      return relacion === undefined || conAutoridadDiplomatica(estado, heroeId, relacion.faccionBId);
     },
   },
   anexionar: {
     rolesPermitidos: ['jugador'],
     // La absorbente es `faccionAId` (`engine/fusion.ts`) — quien inicia la anexión.
-    condicionJugador: (estado, jugadorId, params) => conAutoridadDiplomatica(estado, jugadorId, params.faccionAId),
+    condicionJugador: (estado, heroeId, params) => conAutoridadDiplomatica(estado, heroeId, params.faccionAId),
   },
   fusionar: {
     rolesPermitidos: ['jugador'],
     // Fusión consentida por ambos lados: basta tener autoridad en cualquiera de las dos Facciones.
-    condicionJugador: (estado, jugadorId, params) =>
-      conAutoridadDiplomatica(estado, jugadorId, params.faccionAId) || conAutoridadDiplomatica(estado, jugadorId, params.faccionBId),
+    condicionJugador: (estado, heroeId, params) =>
+      conAutoridadDiplomatica(estado, heroeId, params.faccionAId) || conAutoridadDiplomatica(estado, heroeId, params.faccionBId),
   },
 
   // --- Comercio: residente del asentamiento objetivo ---
   proponerTrueque: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => reside(estado, jugadorId, params.asentamientoAId),
+    condicionJugador: (estado, heroeId, params) => reside(estado, heroeId, params.asentamientoAId),
   },
   // Contestar es cosa del lado RECEPTOR (B): quien propuso ya dijo lo suyo, y dejarle aceptar su propia
   // propuesta devolveria el pacto unilateral que este comando existe para quitar.
   aceptarTrueque: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => resideEnElLadoQueContesta(estado, jugadorId, params.acuerdoId),
+    condicionJugador: (estado, heroeId, params) => resideEnElLadoQueContesta(estado, heroeId, params.acuerdoId),
   },
   rechazarTrueque: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => resideEnElLadoQueContesta(estado, jugadorId, params.acuerdoId),
+    condicionJugador: (estado, heroeId, params) => resideEnElLadoQueContesta(estado, heroeId, params.acuerdoId),
   },
   colocarOrdenMercado: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => reside(estado, jugadorId, params.asentamientoId),
+    condicionJugador: (estado, heroeId, params) => reside(estado, heroeId, params.asentamientoId),
   },
   crearCaravana: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => reside(estado, jugadorId, params.asentamientoId),
+    condicionJugador: (estado, heroeId, params) => reside(estado, heroeId, params.asentamientoId),
   },
   agregarCarroCaravana: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => resideEnOrigenDeCaravana(estado, jugadorId, params.caravanaId),
+    condicionJugador: (estado, heroeId, params) => resideEnOrigenDeCaravana(estado, heroeId, params.caravanaId),
   },
   comprarAnimalCaravana: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => resideEnOrigenDeCaravana(estado, jugadorId, params.caravanaId),
+    condicionJugador: (estado, heroeId, params) => resideEnOrigenDeCaravana(estado, heroeId, params.caravanaId),
   },
   reservarCaravana: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => resideEnOrigenDeCaravana(estado, jugadorId, params.caravanaId),
+    condicionJugador: (estado, heroeId, params) => resideEnOrigenDeCaravana(estado, heroeId, params.caravanaId),
   },
   prepararCaravana: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) =>
-      jugadorId === params.jugadorId && resideEnOrigenDeCaravana(estado, jugadorId, params.caravanaId),
+    condicionJugador: (estado, heroeId, params) =>
+      heroeId === params.heroeId && resideEnOrigenDeCaravana(estado, heroeId, params.caravanaId),
   },
   cancelarCaravana: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => resideEnOrigenDeCaravana(estado, jugadorId, params.caravanaId),
+    condicionJugador: (estado, heroeId, params) => resideEnOrigenDeCaravana(estado, heroeId, params.caravanaId),
   },
   moverCarroCaravana: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => resideEnOrigenDeCaravana(estado, jugadorId, params.desdeCaravanaId),
+    condicionJugador: (estado, heroeId, params) => resideEnOrigenDeCaravana(estado, heroeId, params.desdeCaravanaId),
   },
   // Caravana 'aparcada' (Ocupacion §2.3d): residente de SU ORIGEN, presente en la plaza que la hospeda.
   moverCargaCaravanaAparcada: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) =>
-      jugadorId === params.jugadorId && puedeOperarCaravanaAparcada(estado, jugadorId, params.caravanaId, params.asentamientoId),
+    condicionJugador: (estado, heroeId, params) =>
+      heroeId === params.heroeId && puedeOperarCaravanaAparcada(estado, heroeId, params.caravanaId, params.asentamientoId),
   },
   enviarCaravanaAlOrigen: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) =>
-      jugadorId === params.jugadorId && puedeOperarCaravanaAparcada(estado, jugadorId, params.caravanaId, params.asentamientoId),
+    condicionJugador: (estado, heroeId, params) =>
+      heroeId === params.heroeId && puedeOperarCaravanaAparcada(estado, heroeId, params.caravanaId, params.asentamientoId),
   },
   // Comerciar en el mostrador de OTRO no exige residencia ni presencia dentro: exige estar alli con la
   // columna, y eso lo comprueba el motor (`comerciarEnPlaza`), que es donde vive la regla. Aqui solo se corta
   // que nadie opere en nombre de otro.
   comerciarEnPlaza: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (_estado, jugadorId, params) => jugadorId === params.jugadorId,
+    condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
   },
 
   // --- Militar: residente del asentamiento atacante + solo puede comprometer SUS PROPIOS escuadrones
@@ -511,114 +508,114 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
   // asentamiento sigue fuera: necesita un mecanismo de cesión de tropas que la Fase 0 no tiene. ---
   reclutarTropa: {
     rolesPermitidos: ['jugador'],
-    // Nadie recluta a nombre de otro: `Escuadron.jugadorId` sería el del actor, no el que mande el cliente.
+    // Nadie recluta a nombre de otro: `Escuadron.heroeId` sería el del actor, no el que mande el cliente.
     // Residir → escuadrón nuevo; plaza de tu Facción con permiso, estando presente → solo reponer (lo acota
     // el motor). Ver `puedeReclutarEn`, Doc 5.4/5.8.
-    condicionJugador: (estado, jugadorId, params) => jugadorId === params.jugadorId && puedeReclutarEnPlaza(estado, jugadorId, params.asentamientoId),
+    condicionJugador: (estado, heroeId, params) => heroeId === params.heroeId && puedeReclutarEnPlaza(estado, heroeId, params.asentamientoId),
   },
   iniciarAsedio: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) =>
-      reside(estado, jugadorId, params.atacanteId) && comandaEscuadrones(estado, jugadorId, params.atacanteId, params.escuadronIds),
+    condicionJugador: (estado, heroeId, params) =>
+      reside(estado, heroeId, params.atacanteId) && comandaEscuadrones(estado, heroeId, params.atacanteId, params.escuadronIds),
   },
   atacarCampamentoBandidos: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) =>
-      reside(estado, jugadorId, params.atacanteId) && comandaEscuadrones(estado, jugadorId, params.atacanteId, params.escuadronIds),
+    condicionJugador: (estado, heroeId, params) =>
+      reside(estado, heroeId, params.atacanteId) && comandaEscuadrones(estado, heroeId, params.atacanteId, params.escuadronIds),
   },
   // --- Presencia (Doc 1.10). Nadie sale, entra ni vuelve a salir a nombre de otro, así que la condición
-  // común es `jugadorId === actor`. Salir al mundo añade lo mismo que movilizar (residencia + mando de los
+  // común es `heroeId === actor`. Salir al mundo añade lo mismo que movilizar (residencia + mando de los
   // propios escuadrones); entrar y salir de una plaza NO exigen residencia — justamente el caso interesante
   // es la plaza ajena— y su geometría la comprueba el motor, que es quien sabe dónde está la columna. ---
   salirAlMundo: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) =>
-      jugadorId === params.jugadorId &&
-      reside(estado, jugadorId, params.asentamientoId) &&
-      comandaEscuadrones(estado, jugadorId, params.asentamientoId, params.escuadronIds),
+    condicionJugador: (estado, heroeId, params) =>
+      heroeId === params.heroeId &&
+      reside(estado, heroeId, params.asentamientoId) &&
+      comandaEscuadrones(estado, heroeId, params.asentamientoId, params.escuadronIds),
   },
   entrarEnAsentamiento: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (_estado, jugadorId, params) => jugadorId === params.jugadorId,
+    condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
   },
   salirDeAsentamiento: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (_estado, jugadorId, params) => jugadorId === params.jugadorId,
+    condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
   },
   // `guarnecer` (Ocupacion §2.3): como `entrarEnAsentamiento` — la geometría (ejército en la puerta de una
   // plaza de su Facción) la valida el motor, que sabe dónde está la columna. Aquí solo que no actúe por otro.
   guarnecer: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (_estado, jugadorId, params) => jugadorId === params.jugadorId,
+    condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
   },
   marcharA: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (_estado, jugadorId, params) => jugadorId === params.jugadorId,
+    condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
   },
   // La puerta es del Gobernador (Doc 1.10.5), igual que designar cargos: mismo cargo, misma condición.
   fijarPoliticaDeAcceso: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) =>
-      jugadorId === params.jugadorId && residenteConCargo(estado, jugadorId, params.asentamientoId, 'gobernador'),
+    condicionJugador: (estado, heroeId, params) =>
+      heroeId === params.heroeId && residenteConCargo(estado, heroeId, params.asentamientoId, 'gobernador'),
   },
   vetarJugador: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) =>
-      jugadorId === params.jugadorId && residenteConCargo(estado, jugadorId, params.asentamientoId, 'gobernador'),
+    condicionJugador: (estado, heroeId, params) =>
+      heroeId === params.heroeId && residenteConCargo(estado, heroeId, params.asentamientoId, 'gobernador'),
   },
   // El menú de interacción (Doc 5.12.3). La geometría —estar en el anillo— la comprueba el motor, que es
   // quien sabe dónde está cada cosa; aquí solo que nadie mira a nombre de otro.
   inspeccionar: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (_estado, jugadorId, params) => jugadorId === params.jugadorId,
+    condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
   },
   atacar: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (_estado, jugadorId, params) => jugadorId === params.jugadorId,
+    condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
   },
   perseguir: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (_estado, jugadorId, params) => jugadorId === params.jugadorId,
+    condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
   },
   dejarDePerseguir: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (_estado, jugadorId, params) => jugadorId === params.jugadorId,
+    condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
   },
   // --- Composición de una columna compartida (Doc 5.14). Nadie se une, se separa ni cede el mando a nombre
   // de otro. Lo demás —ir dentro, ser el Líder, la distancia— lo comprueba el motor, que es quien sabe
   // dónde está cada columna y quién la manda. ---
   unirseEnCampo: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (_estado, jugadorId, params) => jugadorId === params.jugadorId,
+    condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
   },
   responderPeticionDeUnion: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (_estado, jugadorId, params) => jugadorId === params.jugadorId,
+    condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
   },
   separarseDelEjercito: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (_estado, jugadorId, params) => jugadorId === params.jugadorId,
+    condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
   },
   cederLiderazgo: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (_estado, jugadorId, params) => jugadorId === params.jugadorId,
+    condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
   },
   // --- Ejércitos (Doc 5.12): salir de campaña es sacar TUS escuadrones de TU asentamiento, así que la
   // condición es la misma pareja que el resto de lo militar (residencia + mando de los propios escuadrones).
-  // Nadie moviliza a nombre de otro: `jugadorId` tiene que ser el actor, igual que en `reclutarTropa`. ---
+  // Nadie moviliza a nombre de otro: `heroeId` tiene que ser el actor, igual que en `reclutarTropa`. ---
   movilizarEjercito: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) =>
-      jugadorId === params.jugadorId &&
-      puedeMoverTropaDe(estado, jugadorId, params.asentamientoId) &&
-      comandaEscuadrones(estado, jugadorId, params.asentamientoId, params.escuadronIds),
+    condicionJugador: (estado, heroeId, params) =>
+      heroeId === params.heroeId &&
+      puedeMoverTropaDe(estado, heroeId, params.asentamientoId) &&
+      comandaEscuadrones(estado, heroeId, params.asentamientoId, params.escuadronIds),
   },
   unirseAEjercito: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) =>
-      jugadorId === params.jugadorId &&
-      reside(estado, jugadorId, params.asentamientoId) &&
-      comandaEscuadrones(estado, jugadorId, params.asentamientoId, params.escuadronIds),
+    condicionJugador: (estado, heroeId, params) =>
+      heroeId === params.heroeId &&
+      reside(estado, heroeId, params.asentamientoId) &&
+      comandaEscuadrones(estado, heroeId, params.asentamientoId, params.escuadronIds),
   },
   // Replegar y estacionar mandan sobre el ejército entero, no sobre escuadrones sueltos: basta con tener
   // tropa dentro. El mando compartido de una coalición (quién decide cuando hay varios jugadores) necesita
@@ -627,11 +624,11 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
   // barata; que además seas el Líder lo comprueba el motor, que es quien sabe quién manda esa columna.
   replegarEjercito: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => participaEnEjercito(estado, jugadorId, params.ejercitoId),
+    condicionJugador: (estado, heroeId, params) => participaEnEjercito(estado, heroeId, params.ejercitoId),
   },
   estacionarEjercito: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, jugadorId, params) => participaEnEjercito(estado, jugadorId, params.ejercitoId),
+    condicionJugador: (estado, heroeId, params) => participaEnEjercito(estado, heroeId, params.ejercitoId),
   },
 
   // Entre dos asentamientos: el actor debe residir en al menos uno de los lados, y comandar sus propios
@@ -656,8 +653,9 @@ export function verificarAutorizacion<T extends TipoComando>(
   if (actor.rol === 'jugador') {
     // El rol `'jugador'` sin `Jugador` asociado es un estado imposible por construcción (`Membresia` de ese
     // rol siempre lo trae); si llegara, denegar es lo correcto: no hay a quién atribuir la acción.
-    if (actor.jugadorId === null) return { autorizado: false, motivo: 'condicion_dominio' };
-    if (entrada.condicionJugador && !entrada.condicionJugador(estado, actor.jugadorId, params)) {
+    // Sin héroe todavía, lo único que puede hacer es crearlo (doc 02 §4.2).
+    if (actor.heroeId === null) return tipo === 'crearHeroe' ? { autorizado: true } : { autorizado: false, motivo: 'condicion_dominio' };
+    if (entrada.condicionJugador && !entrada.condicionJugador(estado, actor.heroeId, params)) {
       return { autorizado: false, motivo: 'condicion_dominio' };
     }
   }

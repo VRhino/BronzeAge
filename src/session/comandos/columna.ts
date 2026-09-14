@@ -23,34 +23,34 @@ import { evento } from './eventos';
 
 export interface ParamsUnirseEnCampo {
   ejercitoId: string;
-  jugadorId: string;
+  heroeId: string;
 }
 
 export interface ParamsResponderPeticion {
   ejercitoId: string;
-  jugadorId: string;
+  heroeId: string;
   solicitanteId: string;
   aceptar: boolean;
 }
 
 export interface ParamsSepararse {
-  jugadorId: string;
+  heroeId: string;
 }
 
 export interface ParamsCederLiderazgo {
   ejercitoId: string;
-  jugadorId: string;
+  heroeId: string;
   sucesorId: string;
 }
 
 export interface PayloadComposicionColumna {
   ejercitoId: string;
-  jugadorId: string;
+  heroeId: string;
 }
 
 export interface PayloadPeticionDeUnion {
   ejercitoId: string;
-  jugadorId: string;
+  heroeId: string;
   /** Hasta cuándo sirve. Va en el payload para que el cliente pueda mostrar la cuenta atrás sin inventársela. */
   expiraEn: number;
 }
@@ -58,7 +58,7 @@ export interface PayloadPeticionDeUnion {
 export interface PayloadSeparacion {
   ejercitoId: string;
   columnaId: string;
-  jugadorId: string;
+  heroeId: string;
 }
 
 export interface PayloadLiderazgoCedido {
@@ -84,19 +84,19 @@ function conEjercitos(estado: GameSessionState, cambiados: GameSessionState['eje
  */
 export const unirseEnCampo = comando<ParamsUnirseEnCampo, { unido: boolean }>((estado, _mapa, ctx, params) => {
   const ejercito = exigirEjercito(estado, params.ejercitoId);
-  const columna = exigirColumnaDe(estado, params.jugadorId);
+  const columna = exigirColumnaDe(estado, params.heroeId);
 
   if (ejercito.politicaDeUnion === 'preguntar') {
     const expiraEn = sumar(ctx.instante, segundos(MOVIMIENTO.vidaPeticionUnionSegundos));
     const conPeticion = anotarPeticionDeUnion(ejercito, columna, ctx.instante, expiraEn);
 
     return exito(
-      conHistorialDeJugador(conEjercitos(estado, [conPeticion]), params.jugadorId, `Pide unirse al ejército ${ejercito.id}.`),
+      conHistorialDeJugador(conEjercitos(estado, [conPeticion]), params.heroeId, `Pide unirse al ejército ${ejercito.id}.`),
       [
         evento(ctx, {
           codigo: 'columna.union_pedida',
           mensaje: `Un jugador pide unirse al ejército ${ejercito.id}.`,
-          payload: { ejercitoId: ejercito.id, jugadorId: params.jugadorId, expiraEn } satisfies PayloadPeticionDeUnion,
+          payload: { ejercitoId: ejercito.id, heroeId: params.heroeId, expiraEn } satisfies PayloadPeticionDeUnion,
           asentamientoId: ejercito.origenAsentamientoId,
         }),
       ],
@@ -108,18 +108,18 @@ export const unirseEnCampo = comando<ParamsUnirseEnCampo, { unido: boolean }>((e
   const siguiente: GameSessionState = {
     ...conEjercitos(estado, [fundido]),
     ejercitos: conEjercitos(estado, [fundido]).ejercitos.filter((e) => e.id !== columna.id),
-    jugadores: estado.jugadores.map((j) =>
-      j.id === params.jugadorId ? { ...j, ubicacion: { tipo: 'columna' as const, ejercitoId: fundido.id } } : j
+    heroes: estado.heroes.map((j) =>
+      j.id === params.heroeId ? { ...j, ubicacion: { tipo: 'columna' as const, ejercitoId: fundido.id } } : j
     ),
   };
 
   return exito(
-    conHistorialDeJugador(siguiente, params.jugadorId, `Se une en campo al ejército ${ejercito.id} y adopta su destino.`),
+    conHistorialDeJugador(siguiente, params.heroeId, `Se une en campo al ejército ${ejercito.id} y adopta su destino.`),
     [
       evento(ctx, {
         codigo: 'columna.union_en_campo',
         mensaje: `Un jugador se une en campo al ejército ${ejercito.id}.`,
-        payload: { ejercitoId: ejercito.id, jugadorId: params.jugadorId } satisfies PayloadComposicionColumna,
+        payload: { ejercitoId: ejercito.id, heroeId: params.heroeId } satisfies PayloadComposicionColumna,
         asentamientoId: ejercito.origenAsentamientoId,
       }),
     ],
@@ -134,16 +134,16 @@ export const unirseEnCampo = comando<ParamsUnirseEnCampo, { unido: boolean }>((e
  */
 export const responderPeticionDeUnion = comando<ParamsResponderPeticion, { unido: boolean }>((estado, _mapa, ctx, params) => {
   const ejercito = exigirEjercito(estado, params.ejercitoId);
-  const sinLaPeticion = retirarPeticionDeUnion(ejercito, params.jugadorId, params.solicitanteId, ctx.instante);
+  const sinLaPeticion = retirarPeticionDeUnion(ejercito, params.heroeId, params.solicitanteId, ctx.instante);
 
   if (!params.aceptar) {
     return exito(
-      conHistorialDeJugador(conEjercitos(estado, [sinLaPeticion]), params.jugadorId, `Rechaza a un jugador en ${ejercito.id}.`),
+      conHistorialDeJugador(conEjercitos(estado, [sinLaPeticion]), params.heroeId, `Rechaza a un jugador en ${ejercito.id}.`),
       [
         evento(ctx, {
           codigo: 'columna.union_rechazada',
           mensaje: `El Líder de ${ejercito.id} rechaza a un jugador.`,
-          payload: { ejercitoId: ejercito.id, jugadorId: params.solicitanteId } satisfies PayloadComposicionColumna,
+          payload: { ejercitoId: ejercito.id, heroeId: params.solicitanteId } satisfies PayloadComposicionColumna,
           asentamientoId: ejercito.origenAsentamientoId,
         }),
       ],
@@ -157,7 +157,7 @@ export const responderPeticionDeUnion = comando<ParamsResponderPeticion, { unido
   const siguiente: GameSessionState = {
     ...conEjercitos(estado, [fundido]),
     ejercitos: conEjercitos(estado, [fundido]).ejercitos.filter((e) => e.id !== columna.id),
-    jugadores: estado.jugadores.map((j) =>
+    heroes: estado.heroes.map((j) =>
       j.id === params.solicitanteId ? { ...j, ubicacion: { tipo: 'columna' as const, ejercitoId: fundido.id } } : j
     ),
   };
@@ -168,7 +168,7 @@ export const responderPeticionDeUnion = comando<ParamsResponderPeticion, { unido
       evento(ctx, {
         codigo: 'columna.union_en_campo',
         mensaje: `El Líder de ${ejercito.id} acepta a un jugador.`,
-        payload: { ejercitoId: ejercito.id, jugadorId: params.solicitanteId } satisfies PayloadComposicionColumna,
+        payload: { ejercitoId: ejercito.id, heroeId: params.solicitanteId } satisfies PayloadComposicionColumna,
         asentamientoId: ejercito.origenAsentamientoId,
       }),
     ],
@@ -184,21 +184,21 @@ export const responderPeticionDeUnion = comando<ParamsResponderPeticion, { unido
  * columna nunca se queda vacía en campo abierto— y por eso el motor las comprueba por separado.
  */
 export const separarseDelEjercito = comando<ParamsSepararse, { columnaId: string }>((estado, _mapa, ctx, params) => {
-  const ejercito = exigirColumnaDe(estado, params.jugadorId);
+  const ejercito = exigirColumnaDe(estado, params.heroeId);
 
   const columnaId = `ejercito-${ctx.ids.siguiente()}`;
-  const separado = separarseEngine(ejercito, params.jugadorId, columnaId);
+  const separado = separarseEngine(ejercito, params.heroeId, columnaId);
 
   const siguiente: GameSessionState = {
     ...conEjercitos(estado, [separado.ejercito]),
     ejercitos: [...conEjercitos(estado, [separado.ejercito]).ejercitos, separado.columna],
-    jugadores: estado.jugadores.map((j) =>
-      j.id === params.jugadorId ? { ...j, ubicacion: { tipo: 'columna' as const, ejercitoId: separado.columna.id } } : j
+    heroes: estado.heroes.map((j) =>
+      j.id === params.heroeId ? { ...j, ubicacion: { tipo: 'columna' as const, ejercitoId: separado.columna.id } } : j
     ),
   };
 
   return exito(
-    conHistorialDeJugador(siguiente, params.jugadorId, `Se separa del ejército ${ejercito.id} y sigue por libre.`),
+    conHistorialDeJugador(siguiente, params.heroeId, `Se separa del ejército ${ejercito.id} y sigue por libre.`),
     [
       evento(ctx, {
         codigo: 'columna.separacion',
@@ -206,7 +206,7 @@ export const separarseDelEjercito = comando<ParamsSepararse, { columnaId: string
         payload: {
           ejercitoId: ejercito.id,
           columnaId: separado.columna.id,
-          jugadorId: params.jugadorId,
+          heroeId: params.heroeId,
         } satisfies PayloadSeparacion,
         asentamientoId: ejercito.origenAsentamientoId,
       }),
@@ -221,17 +221,17 @@ export const separarseDelEjercito = comando<ParamsSepararse, { columnaId: string
  */
 export const cederLiderazgo = comando<ParamsCederLiderazgo, void>((estado, _mapa, ctx, params) => {
   const ejercito = exigirEjercito(estado, params.ejercitoId);
-  const cedido = cederEngine(ejercito, params.jugadorId, params.sucesorId);
+  const cedido = cederEngine(ejercito, params.heroeId, params.sucesorId);
 
   return exito(
-    conHistorialDeJugador(conEjercitos(estado, [cedido]), params.jugadorId, `Cede el mando de ${ejercito.id}.`),
+    conHistorialDeJugador(conEjercitos(estado, [cedido]), params.heroeId, `Cede el mando de ${ejercito.id}.`),
     [
       evento(ctx, {
         codigo: 'columna.liderazgo_cedido',
         mensaje: `El mando del ejército ${ejercito.id} cambia de manos.`,
         payload: {
           ejercitoId: ejercito.id,
-          anteriorId: params.jugadorId,
+          anteriorId: params.heroeId,
           sucesorId: params.sucesorId,
         } satisfies PayloadLiderazgoCedido,
         asentamientoId: ejercito.origenAsentamientoId,

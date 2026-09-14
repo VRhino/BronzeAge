@@ -34,7 +34,7 @@ function columna(faccionId: string, suministro: Record<string, number>, opciones
     faccionId,
     liderId: 'jugador-1',
     tipo: 'personal',
-    participantes: [{ jugadorId: 'jugador-1', unidoEn: instanteDeTest(0) }],
+    participantes: [{ heroeId: 'jugador-1', unidoEn: instanteDeTest(0) }],
     escuadrones: [],
     suministro,
     caravanasAdjuntasIds: [],

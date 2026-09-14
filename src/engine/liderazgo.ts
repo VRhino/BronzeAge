@@ -8,7 +8,7 @@
 // La distinción que sostiene toda la mecánica: **es un límite de SALIDA, no de posesión**. La guarnición no
 // tiene tope de liderazgo; se puede poseer mucha más tropa de la que se puede sacar de una vez, y lo que se
 // queda es lo único que defiende el asentamiento (Doc 5.12.4).
-import type { Escuadron, Jugador } from '../domain/types';
+import type { Escuadron, Heroe } from '../domain/types';
 import { LIDERAZGO, TROPAS_RECLUTABLES } from '../constants';
 
 /**
@@ -37,7 +37,7 @@ export function costeLiderazgo(tropaId: string): number {
 
 /** Liderazgo efectivo de un jugador. Un jugador sin registro en el estado usa el base — así una partida
  * guardada de antes de esta mecánica no necesita migración ni deja a nadie a 0 (ver `Jugador`). */
-export function liderazgoDe(jugador: Jugador | undefined): number {
+export function liderazgoDe(jugador: Heroe | undefined): number {
   return jugador?.liderazgoBase ?? LIDERAZGO.base;
 }
 
@@ -49,12 +49,12 @@ export function liderazgoComprometido(escuadrones: readonly Escuadron[]): number
 }
 
 /** ¿Caben estos escuadrones en el liderazgo de este jugador? */
-export function puedeLlevar(jugador: Jugador | undefined, escuadrones: readonly Escuadron[]): boolean {
+export function puedeLlevar(jugador: Heroe | undefined, escuadrones: readonly Escuadron[]): boolean {
   return liderazgoComprometido(escuadrones) <= liderazgoDe(jugador);
 }
 
 /** Lo que le queda libre a un jugador que ya lleva `escuadrones` comprometidos — para que la interfaz pueda
  * mostrar "38/50" y decidir qué apagar sin reimplementar la resta. */
-export function liderazgoDisponible(jugador: Jugador | undefined, escuadrones: readonly Escuadron[]): number {
+export function liderazgoDisponible(jugador: Heroe | undefined, escuadrones: readonly Escuadron[]): number {
   return Math.max(0, liderazgoDe(jugador) - liderazgoComprometido(escuadrones));
 }

@@ -76,20 +76,34 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   // Sin `minLength` en `nombre`: vacío/solo-espacios ya es un rechazo de dominio con su propio código
   // (`faccion.nombre_vacio`, `crearFaccion.ts`) — mismo motivo que `NUMERO` más arriba.
   crearFaccion: objeto({ nombre: { type: 'string' } }, ['nombre']),
+  // Sin `minLength` en `displayName`, mismo motivo que `nombre` de arriba (`heroe.nombre_vacio`).
+  crearHeroe: objeto(
+    {
+      displayName: { type: 'string' },
+      classDefinitionId: IDENTIFICADOR,
+      genero: { type: 'string', enum: ['masculino', 'femenino'] },
+      avatar: objeto(
+        { cabezaId: { type: 'string' }, peloId: { type: 'string' }, barbaId: { type: 'string' }, cejasId: { type: 'string' } },
+        ['cabezaId', 'peloId', 'barbaId', 'cejasId']
+      ),
+    },
+    ['displayName', 'classDefinitionId', 'genero', 'avatar']
+  ),
+  // Admin. Sin `posicion`, la gobernanza NPC busca el sitio (`buscarPosicionFundacionInicialPorDefecto`).
+  crearFaccionNpc: objeto({ nombre: { type: 'string' }, posicion: PUNTO }, ['nombre']),
   unirseAFaccion: objeto({ faccionId: IDENTIFICADOR }, ['faccionId']),
   // Sin parámetros: el actor solo puede dejar SU PROPIA Facción — `objeto({}, [])` solo admite `{}`.
   dejarFaccion: objeto({}, []),
 
   // --- Cargos ---
-  alternarFaccionNpc: objeto({ faccionId: IDENTIFICADOR, activo: { type: 'boolean' } }, ['faccionId', 'activo']),
-  asignarRey: objeto({ faccionId: IDENTIFICADOR, jugadorId: IDENTIFICADOR }, ['faccionId', 'jugadorId']),
-  asignarEmbajador: objeto({ faccionId: IDENTIFICADOR, jugadorId: IDENTIFICADOR }, ['faccionId', 'jugadorId']),
+  asignarRey: objeto({ faccionId: IDENTIFICADOR, heroeId: IDENTIFICADOR }, ['faccionId', 'heroeId']),
+  asignarEmbajador: objeto({ faccionId: IDENTIFICADOR, heroeId: IDENTIFICADOR }, ['faccionId', 'heroeId']),
   asignarCargoLocal: objeto(
-    { asentamientoId: IDENTIFICADOR, cargo: CARGO_FACCION, jugadorId: IDENTIFICADOR },
-    ['asentamientoId', 'cargo', 'jugadorId']
+    { asentamientoId: IDENTIFICADOR, cargo: CARGO_FACCION, heroeId: IDENTIFICADOR },
+    ['asentamientoId', 'cargo', 'heroeId']
   ),
-  comprarCasa: objeto({ asentamientoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR }, ['asentamientoId', 'jugadorId']),
-  cambiarResidencia: objeto({ destinoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR }, ['destinoId', 'jugadorId']),
+  comprarCasa: objeto({ asentamientoId: IDENTIFICADOR, heroeId: IDENTIFICADOR }, ['asentamientoId', 'heroeId']),
+  cambiarResidencia: objeto({ destinoId: IDENTIFICADOR, heroeId: IDENTIFICADOR }, ['destinoId', 'heroeId']),
 
   // --- Construcción y gestión local ---
   activarPolitica: objeto(
@@ -119,15 +133,15 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   ),
   alternarAutoConstruccion: objeto({ asentamientoId: IDENTIFICADOR, pausada: { type: 'boolean' } }, ['asentamientoId', 'pausada']),
   alternarReabastecerAliados: objeto({ asentamientoId: IDENTIFICADOR, permitido: { type: 'boolean' } }, ['asentamientoId', 'permitido']),
-  adjuntarCaravana: objeto({ ejercitoId: IDENTIFICADOR, caravanaId: IDENTIFICADOR, jugadorId: IDENTIFICADOR }, [
+  adjuntarCaravana: objeto({ ejercitoId: IDENTIFICADOR, caravanaId: IDENTIFICADOR, heroeId: IDENTIFICADOR }, [
     'ejercitoId',
     'caravanaId',
-    'jugadorId',
+    'heroeId',
   ]),
-  soltarCaravana: objeto({ ejercitoId: IDENTIFICADOR, caravanaId: IDENTIFICADOR, jugadorId: IDENTIFICADOR }, [
+  soltarCaravana: objeto({ ejercitoId: IDENTIFICADOR, caravanaId: IDENTIFICADOR, heroeId: IDENTIFICADOR }, [
     'ejercitoId',
     'caravanaId',
-    'jugadorId',
+    'heroeId',
   ]),
   cargarCaravana: objeto(
     { ejercitoId: IDENTIFICADOR, caravanaId: IDENTIFICADOR, asentamientoId: IDENTIFICADOR, recurso: RECURSO, cantidad: NUMERO },
@@ -200,8 +214,8 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   aceptarTrueque: objeto({ acuerdoId: IDENTIFICADOR }, ['acuerdoId']),
   rechazarTrueque: objeto({ acuerdoId: IDENTIFICADOR }, ['acuerdoId']),
   comerciarEnPlaza: objeto(
-    { jugadorId: IDENTIFICADOR, asentamientoId: IDENTIFICADOR, ordenId: IDENTIFICADOR, cantidad: NUMERO },
-    ['jugadorId', 'asentamientoId', 'ordenId', 'cantidad']
+    { heroeId: IDENTIFICADOR, asentamientoId: IDENTIFICADOR, ordenId: IDENTIFICADOR, cantidad: NUMERO },
+    ['heroeId', 'asentamientoId', 'ordenId', 'cantidad']
   ),
   colocarOrdenMercado: {
     type: 'object',
@@ -228,12 +242,12 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   prepararCaravana: objeto(
     {
       caravanaId: IDENTIFICADOR,
-      jugadorId: IDENTIFICADOR,
+      heroeId: IDENTIFICADOR,
       destinoAsentamientoId: IDENTIFICADOR,
       carga: { type: 'object', additionalProperties: NUMERO },
       escoltaEscuadronIds: { type: 'array', items: IDENTIFICADOR },
     },
-    ['caravanaId', 'jugadorId', 'destinoAsentamientoId', 'carga']
+    ['caravanaId', 'heroeId', 'destinoAsentamientoId', 'carga']
   ),
   cancelarCaravana: objeto({ caravanaId: IDENTIFICADOR }, ['caravanaId']),
   moverCarroCaravana: objeto(
@@ -243,29 +257,29 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   // Caravanas 'aparcadas' tras guarnecer (Ocupacion §2.3d).
   moverCargaCaravanaAparcada: objeto(
     {
-      jugadorId: IDENTIFICADOR,
+      heroeId: IDENTIFICADOR,
       caravanaId: IDENTIFICADOR,
       asentamientoId: IDENTIFICADOR,
       recurso: RECURSO,
       cantidad: NUMERO,
       sentido: { type: 'string', enum: ['cargar', 'descargar'] },
     },
-    ['jugadorId', 'caravanaId', 'asentamientoId', 'recurso', 'cantidad', 'sentido']
+    ['heroeId', 'caravanaId', 'asentamientoId', 'recurso', 'cantidad', 'sentido']
   ),
   enviarCaravanaAlOrigen: objeto(
-    { jugadorId: IDENTIFICADOR, caravanaId: IDENTIFICADOR, asentamientoId: IDENTIFICADOR },
-    ['jugadorId', 'caravanaId', 'asentamientoId']
+    { heroeId: IDENTIFICADOR, caravanaId: IDENTIFICADOR, asentamientoId: IDENTIFICADOR },
+    ['heroeId', 'caravanaId', 'asentamientoId']
   ),
 
   // --- Militar ---
   reclutarTropa: objeto(
     {
       asentamientoId: IDENTIFICADOR,
-      jugadorId: IDENTIFICADOR,
+      heroeId: IDENTIFICADOR,
       tropaId: IDENTIFICADOR,
       origen: { type: 'string', enum: ['pesants', 'artesanos'] },
     },
-    ['asentamientoId', 'jugadorId', 'tropaId', 'origen']
+    ['asentamientoId', 'heroeId', 'tropaId', 'origen']
   ),
   iniciarAsedio: objeto(
     { atacanteId: IDENTIFICADOR, defensorId: IDENTIFICADOR, escuadronIds: LISTA_DE_IDENTIFICADORES },
@@ -277,60 +291,60 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   salirAlMundo: objeto(
     {
       asentamientoId: IDENTIFICADOR,
-      jugadorId: IDENTIFICADOR,
+      heroeId: IDENTIFICADOR,
       escuadronIds: LISTA_DE_IDENTIFICADORES,
       carga: { type: 'object', additionalProperties: NUMERO },
     },
-    ['asentamientoId', 'jugadorId', 'escuadronIds', 'carga']
+    ['asentamientoId', 'heroeId', 'escuadronIds', 'carga']
   ),
-  marcharA: objeto({ jugadorId: IDENTIFICADOR, objetivo: OBJETIVO_EJERCITO }, ['jugadorId', 'objetivo']),
+  marcharA: objeto({ heroeId: IDENTIFICADOR, objetivo: OBJETIVO_EJERCITO }, ['heroeId', 'objetivo']),
   // Composición de una columna compartida (Doc 5.14). Separarse no lleva `ejercitoId`: se sale de la columna
   // en la que vas, y solo puedes ir en una.
-  unirseEnCampo: objeto({ ejercitoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR }, ['ejercitoId', 'jugadorId']),
+  unirseEnCampo: objeto({ ejercitoId: IDENTIFICADOR, heroeId: IDENTIFICADOR }, ['ejercitoId', 'heroeId']),
   responderPeticionDeUnion: objeto(
-    { ejercitoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR, solicitanteId: IDENTIFICADOR, aceptar: { type: 'boolean' } },
-    ['ejercitoId', 'jugadorId', 'solicitanteId', 'aceptar']
+    { ejercitoId: IDENTIFICADOR, heroeId: IDENTIFICADOR, solicitanteId: IDENTIFICADOR, aceptar: { type: 'boolean' } },
+    ['ejercitoId', 'heroeId', 'solicitanteId', 'aceptar']
   ),
-  separarseDelEjercito: objeto({ jugadorId: IDENTIFICADOR }, ['jugadorId']),
+  separarseDelEjercito: objeto({ heroeId: IDENTIFICADOR }, ['heroeId']),
   // El menú de interacción (Doc 5.12.3). `objetivo` distingue columna de caravana: son entidades distintas
   // con anillos y consecuencias distintas, y mezclarlas en un id suelto obligaría al motor a adivinar.
-  inspeccionar: objeto({ jugadorId: IDENTIFICADOR, objetivo: OBJETIVO_DE_INTERACCION }, ['jugadorId', 'objetivo']),
-  atacar: objeto({ jugadorId: IDENTIFICADOR, objetivo: OBJETIVO_DE_INTERACCION }, ['jugadorId', 'objetivo']),
-  perseguir: objeto({ jugadorId: IDENTIFICADOR, objetivo: OBJETIVO_DE_INTERACCION }, ['jugadorId', 'objetivo']),
-  dejarDePerseguir: objeto({ jugadorId: IDENTIFICADOR }, ['jugadorId']),
-  cederLiderazgo: objeto({ ejercitoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR, sucesorId: IDENTIFICADOR }, ['ejercitoId', 'jugadorId', 'sucesorId']),
-  entrarEnAsentamiento: objeto({ asentamientoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR }, ['asentamientoId', 'jugadorId']),
+  inspeccionar: objeto({ heroeId: IDENTIFICADOR, objetivo: OBJETIVO_DE_INTERACCION }, ['heroeId', 'objetivo']),
+  atacar: objeto({ heroeId: IDENTIFICADOR, objetivo: OBJETIVO_DE_INTERACCION }, ['heroeId', 'objetivo']),
+  perseguir: objeto({ heroeId: IDENTIFICADOR, objetivo: OBJETIVO_DE_INTERACCION }, ['heroeId', 'objetivo']),
+  dejarDePerseguir: objeto({ heroeId: IDENTIFICADOR }, ['heroeId']),
+  cederLiderazgo: objeto({ ejercitoId: IDENTIFICADOR, heroeId: IDENTIFICADOR, sucesorId: IDENTIFICADOR }, ['ejercitoId', 'heroeId', 'sucesorId']),
+  entrarEnAsentamiento: objeto({ asentamientoId: IDENTIFICADOR, heroeId: IDENTIFICADOR }, ['asentamientoId', 'heroeId']),
   // La puerta (Doc 1.10.5). No va en `politicasActivas` porque no expira: una puerta que se abre sola a las
   // dos horas y media no es una puerta.
   fijarPoliticaDeAcceso: objeto(
     {
       asentamientoId: IDENTIFICADOR,
-      jugadorId: IDENTIFICADOR,
+      heroeId: IDENTIFICADOR,
       politica: { type: 'string', enum: ['abierto', 'faccion_y_aliados', 'solo_faccion', 'cerrado'] },
     },
-    ['asentamientoId', 'jugadorId', 'politica']
+    ['asentamientoId', 'heroeId', 'politica']
   ),
   vetarJugador: objeto(
-    { asentamientoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR, vetadoId: IDENTIFICADOR, vetar: { type: 'boolean' } },
-    ['asentamientoId', 'jugadorId', 'vetadoId', 'vetar']
+    { asentamientoId: IDENTIFICADOR, heroeId: IDENTIFICADOR, vetadoId: IDENTIFICADOR, vetar: { type: 'boolean' } },
+    ['asentamientoId', 'heroeId', 'vetadoId', 'vetar']
   ),
-  salirDeAsentamiento: objeto({ asentamientoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR }, ['asentamientoId', 'jugadorId']),
+  salirDeAsentamiento: objeto({ asentamientoId: IDENTIFICADOR, heroeId: IDENTIFICADOR }, ['asentamientoId', 'heroeId']),
   // `guarnecer` (Ocupacion §2.3): marchar un ejército a una plaza propia y volcar la tropa en su guarnición.
-  guarnecer: objeto({ asentamientoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR }, ['asentamientoId', 'jugadorId']),
+  guarnecer: objeto({ asentamientoId: IDENTIFICADOR, heroeId: IDENTIFICADOR }, ['asentamientoId', 'heroeId']),
   // Ejércitos (Doc 5.12).
   movilizarEjercito: objeto(
     {
       asentamientoId: IDENTIFICADOR,
-      jugadorId: IDENTIFICADOR,
+      heroeId: IDENTIFICADOR,
       escuadronIds: LISTA_DE_IDENTIFICADORES,
       objetivo: OBJETIVO_EJERCITO,
       politicaDeUnion: { type: 'string', enum: ['rechazar', 'aceptar', 'preguntar'] },
     },
-    ['asentamientoId', 'jugadorId', 'escuadronIds', 'objetivo']
+    ['asentamientoId', 'heroeId', 'escuadronIds', 'objetivo']
   ),
   unirseAEjercito: objeto(
-    { ejercitoId: IDENTIFICADOR, asentamientoId: IDENTIFICADOR, jugadorId: IDENTIFICADOR, escuadronIds: LISTA_DE_IDENTIFICADORES },
-    ['ejercitoId', 'asentamientoId', 'jugadorId', 'escuadronIds']
+    { ejercitoId: IDENTIFICADOR, asentamientoId: IDENTIFICADOR, heroeId: IDENTIFICADOR, escuadronIds: LISTA_DE_IDENTIFICADORES },
+    ['ejercitoId', 'asentamientoId', 'heroeId', 'escuadronIds']
   ),
   replegarEjercito: objeto({ ejercitoId: IDENTIFICADOR }, ['ejercitoId']),
   estacionarEjercito: objeto({ ejercitoId: IDENTIFICADOR }, ['ejercitoId']),

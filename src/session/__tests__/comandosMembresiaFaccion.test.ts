@@ -108,7 +108,7 @@ describe('unirseAFaccion', () => {
 
     const e = r.eventos[0]!;
     expect(e.codigo).toBe('faccion.ciudadania_union');
-    expect(e.payload as PayloadFaccionUnion).toEqual({ faccionId, jugadorId: 'jugador-b' });
+    expect(e.payload as PayloadFaccionUnion).toEqual({ faccionId, heroeId: 'jugador-b' });
   });
 
   it('rechaza unirse si ya es ciudadano de OTRA Facción', () => {
@@ -152,7 +152,7 @@ describe('dejarFaccion', () => {
 
     const e = r.eventos[0]!;
     expect(e.codigo).toBe('faccion.abandonada');
-    expect(e.payload as PayloadFaccionAbandonada).toEqual({ faccionId, jugadorId: OPC.actor });
+    expect(e.payload as PayloadFaccionAbandonada).toEqual({ faccionId, heroeId: OPC.actor });
 
     const otraId = sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, { ...OPC, actor: 'jugador-b' }).datos!.faccionId;
     const union = sesion.ejecutar(unirseAFaccion, { faccionId: otraId }, OPC); // sin cooldown: unirse no lo tiene

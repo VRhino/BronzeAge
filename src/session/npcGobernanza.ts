@@ -23,7 +23,7 @@
 //
 // Diseño, decisiones y limitaciones: `Consideraciones/NPC_Gobernanza_Facciones_Controladas.md`.
 
-import type { AcuerdoTrueque, Asentamiento, Caravana, CampamentoBandido, EdificioTipo, Ejercito, Escuadron, Faccion, Jugador, OrdenMercado, Point, RecursoTipo, RelacionPolitica } from '../domain/types';
+import type { AcuerdoTrueque, Asentamiento, Caravana, CampamentoBandido, EdificioTipo, Ejercito, Escuadron, Faccion, Heroe, OrdenMercado, Point, RecursoTipo, RelacionPolitica } from '../domain/types';
 import { RECURSOS_TIPO } from '../domain/types';
 import { colocarOrdenMercado } from '../engine/market';
 import type { Mapa } from '../world/mapa';
@@ -57,7 +57,8 @@ import {
 import { computeTodasLasZonas } from '../engine/zones';
 import { calcularCostoMantenimiento, encontrarCapital } from '../engine/mantenimiento';
 import { evaluarViabilidadFundacion, fundarAsentamiento, FundacionInvalidaError } from '../engine/settlement';
-import { CAMPAMENTOS_BANDIDOS, LOGISTICA, MILITAR, TROPAS_RECLUTABLES, VISION } from '../constants';
+import { CAMPAMENTOS_BANDIDOS, LIDERAZGO, LOGISTICA, MILITAR, TROPAS_RECLUTABLES, VISION } from '../constants';
+import { situarHeroes } from '../engine/ubicacion';
 import { enTregua, movilizarEjercito, replegarEjercito, MovilizacionInvalidaError } from '../engine/ejercitos';
 import { reservaDeTrigo } from '../engine/tropas';
 import { estanAliadas } from '../engine/pertenencia';
@@ -193,7 +194,7 @@ export interface ResultadoNpcGobernanza {
 
 /** Residentes de un asentamiento (Doc 2.5): fundadores + quien compró casa — cualquiera puede reclutar. */
 function residentesDe(asentamiento: Asentamiento): string[] {
-  return [...new Set([...asentamiento.jugadoresFundadoresIds, ...asentamiento.casasCompradas])];
+  return [...new Set([...asentamiento.heroesFundadoresIds, ...asentamiento.casasCompradas])];
 }
 
 /**
@@ -228,7 +229,7 @@ function asegurarGobernanzaBase(asentamiento: Asentamiento, facciones: Faccion[]
   const faccion = facciones.find((f) => f.id === asentamiento.faccionId);
   if (!faccion) return asentamiento;
   let actual = asentamiento;
-  const fundador = actual.jugadoresFundadoresIds[0];
+  const fundador = actual.heroesFundadoresIds[0];
 
   if (!actual.cargos.gobernadorId && fundador) {
     try {
@@ -639,19 +640,19 @@ function reclutarParaTodos(
   // Residentes (reclutan escuadrón nuevo) + dueños de escuadrones YA posados aquí que no residen (solo
   // reponen — el caso de una guarnición instalada al conquistar una plaza sin residentes propios). Todos son
   // ciudadanos de la Facción del asentamiento en el mundo NPC, así que `asentamiento.faccionId` es su Facción.
-  const jugadores = [
+  const heroes = [
     ...new Set([
       ...residentesDe(asentamiento),
-      ...asentamiento.escuadrones.filter((e) => e.cantidad > 0).map((e) => e.jugadorId),
+      ...asentamiento.escuadrones.filter((e) => e.cantidad > 0).map((e) => e.heroeId),
     ]),
   ];
 
   let actual = asentamiento;
   let contador = contadorInicial;
   let exitosos = 0;
-  for (const jugadorId of jugadores) {
+  for (const heroeId of heroes) {
     try {
-      actual = reclutarTropa(actual, mundo, jugadorId, asentamiento.faccionId, tropaId, origen, contador++);
+      actual = reclutarTropa(actual, mundo, heroeId, asentamiento.faccionId, tropaId, origen, contador++);
       exitosos++;
     } catch (err) {
       if (!(err instanceof ReclutamientoInvalidoError)) throw err;
@@ -991,7 +992,7 @@ function publicarOrdenesNpc(
 function lanzarCampanas(
   asentamientos: Asentamiento[],
   ejercitos: Ejercito[],
-  jugadores: Jugador[],
+  heroes: Heroe[],
   relaciones: RelacionPolitica[],
   mapa: Mapa,
   esNpc: (faccionId: string) => boolean,
@@ -1018,13 +1019,13 @@ function lanzarCampanas(
     // Se lleva como mucho la mitad, y todos del MISMO jugador: el Liderazgo se valida por jugador (Doc 5.11),
     // así que mezclar dueños solo complicaría la selección sin aportar nada al NPC.
     const porJugador = new Map<string, Escuadron[]>();
-    for (const e of vivos) porJugador.set(e.jugadorId, [...(porJugador.get(e.jugadorId) ?? []), e]);
+    for (const e of vivos) porJugador.set(e.heroeId, [...(porJugador.get(e.heroeId) ?? []), e]);
     const tope = Math.floor(vivos.length * FRACCION_MAXIMA_EN_CAMPANA);
     if (tope < 1) continue;
 
     const candidato = [...porJugador.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).find(([, lista]) => lista.length >= 1);
     if (!candidato) continue;
-    const [jugadorId, suyos] = candidato;
+    const [heroeId, suyos] = candidato;
     const expedicion = suyos.slice(0, Math.min(tope, suyos.length));
 
     // ¿Hasta dónde llega? Se estima con lo que el almacén podría darle, no con lo que ya lleva (todavía no
@@ -1050,8 +1051,8 @@ function lanzarCampanas(
     try {
       const r = movilizarEjercito(
         porId.get(origen.id)!,
-        jugadores.find((j) => j.id === jugadorId),
-        jugadorId,
+        heroes.find((j) => j.id === heroeId),
+        heroeId,
         expedicion.map((e) => e.id),
         { tipo: 'asentamiento', id: objetivo.id },
         asentamientos,
@@ -1284,17 +1285,19 @@ export function buscarPosicionFundacionInicialPorDefecto(mapa: Mapa, asentamient
  * su propia estrategia de posicionamiento (piedra/minerales, separación mínima) — auto-fundar aquí también
  * cambiaría el resultado de simulaciones ya corridas y documentadas en los diarios de batch.
  */
-function fundarAsentamientosIniciales(
+export function fundarAsentamientosIniciales(
   asentamientos: Asentamiento[],
   facciones: Faccion[],
+  heroes: Heroe[],
   faccionesIds: string[],
   mapa: Mapa,
   instante: Instante,
-  jugadoresPorFundacion: number,
+  heroesPorFundacion: number,
   buscarPosicion: (mapa: Mapa, asentamientos: Asentamiento[]) => Point | undefined
-): { asentamientos: Asentamiento[]; facciones: Faccion[]; eventos: string[] } {
+): { asentamientos: Asentamiento[]; facciones: Faccion[]; heroes: Heroe[]; eventos: string[] } {
   let asentamientosActuales = asentamientos;
   let faccionesActuales = facciones;
+  let heroesActuales = heroes;
   const eventos: string[] = [];
 
   for (const faccionId of faccionesIds) {
@@ -1305,19 +1308,47 @@ function fundarAsentamientosIniciales(
     const posicion = buscarPosicion(mapa, asentamientosActuales);
     if (!posicion) continue;
 
-    const jugadoresIds = Array.from({ length: jugadoresPorFundacion }, (_, i) => `npc-${faccionId}-${i + 1}`);
+    // Los fundadores son sus héroes bot: los que ya tenga (se quedó sin asentamientos) o, si no tiene ninguno,
+    // los que nacen aquí. Ids deterministas: el id de la Facción ya es único.
+    const suyos = heroesActuales.filter((h) => h.controlador === 'bot' && faccion.ciudadanosIds.includes(h.id)).slice(0, heroesPorFundacion);
+    const heroesIds = suyos.length > 0 ? suyos.map((h) => h.id) : Array.from({ length: heroesPorFundacion }, (_, i) => `heroe-${faccionId}-${i + 1}`);
     try {
-      const resultado = fundarAsentamiento(mapa, faccionesActuales, faccionId, posicion, jugadoresIds, asentamientosActuales, instante);
+      const resultado = fundarAsentamiento(mapa, faccionesActuales, faccionId, posicion, heroesIds, asentamientosActuales, instante);
       asentamientosActuales = [...asentamientosActuales, resultado.asentamiento];
       faccionesActuales = resultado.facciones;
+      const ubicacion = { tipo: 'asentamiento', asentamientoId: resultado.asentamiento.id } as const;
+      heroesActuales =
+        suyos.length > 0
+          ? situarHeroes(heroesActuales, heroesIds, ubicacion)
+          : [
+              ...heroesActuales,
+              ...heroesIds.map(
+                (id, i): Heroe => ({
+                  id,
+                  jugadorId: null,
+                  controlador: 'bot',
+                  displayName: `${faccion.nombre} ${i + 1}`,
+                  classDefinitionId: CLASE_HEROE_BOT,
+                  genero: 'masculino',
+                  avatar: { cabezaId: '', peloId: '', barbaId: '', cejasId: '' },
+                  liderazgoBase: LIDERAZGO.base,
+                  ubicacion,
+                })
+              ),
+            ];
       eventos.push(`${faccion.nombre} funda su asentamiento inicial ${resultado.asentamiento.id}.`);
     } catch (err) {
       if (!(err instanceof FundacionInvalidaError)) throw err;
     }
   }
 
-  return { asentamientos: asentamientosActuales, facciones: faccionesActuales, eventos };
+  return { asentamientos: asentamientosActuales, facciones: faccionesActuales, heroes: heroesActuales, eventos };
 }
+
+/** Héroes bot con los que se funda el primer asentamiento de una Facción NPC. */
+export const HEROES_POR_FUNDACION_NPC = 5;
+/** Clase de los héroes bot que crea la gobernanza NPC: la única que tiene hoy Conquest. */
+const CLASE_HEROE_BOT = 'Spear';
 
 /**
  * Un tick completo de decisiones del NPC de gobernanza: gobernanza+reserva base → **Granjas mínimas
@@ -1349,20 +1380,23 @@ export function avanzarNpcGobernanza(
   // asentamiento, solo gobernar uno existente). Gateado a `faccionesIds` a propósito (ver
   // `fundarAsentamientosIniciales`): el batch sigue fundando sus asentamientos iniciales fuera de este archivo.
   let facciones = estado.facciones;
+  let heroes = estado.heroes;
   let eventosIniciales: string[] = [];
   let asentamientosBase = estado.asentamientos;
   if (config.faccionesIds) {
     const inicial = fundarAsentamientosIniciales(
       asentamientosBase,
       facciones,
+      heroes,
       config.faccionesIds,
       mapa,
       instante,
-      config.jugadoresPorFundacionInicial ?? 5,
+      config.jugadoresPorFundacionInicial ?? HEROES_POR_FUNDACION_NPC,
       config.buscarPosicionFundacionInicial ?? buscarPosicionFundacionInicialPorDefecto
     );
     asentamientosBase = inicial.asentamientos;
     facciones = inicial.facciones;
+    heroes = inicial.heroes;
     eventosIniciales = inicial.eventos;
   }
   eventos.push(...eventosIniciales);
@@ -1477,10 +1511,9 @@ export function avanzarNpcGobernanza(
       : lanzarCampanas(
           trasBandidos.asentamientos,
           trasComercio.ejercitos,
-          // Los fundadores NPC (`npc-<faccionId>-<n>`) son ids ficticios sin `Jugador` detrás, y un jugador
-          // ausente usa `LIDERAZGO.base` por diseño (Doc 5.11). No se desvían de la base, así que no hay
-          // nada que consultar.
-          [],
+          // El Liderazgo de quien sale es el de su héroe bot (Doc 5.11). Un id sin héroe —los fundadores de
+          // los escenarios de batch— usa `LIDERAZGO.base`.
+          heroes,
           trasComercio.relaciones,
           mapa,
           esNpc,
@@ -1538,6 +1571,7 @@ export function avanzarNpcGobernanza(
   return {
     estado: {
       ...trasComercio,
+      heroes,
       asentamientos: trasExpansion.asentamientos,
       facciones: trasBandidos.facciones,
       caravanas: trasExpansion.caravanas,

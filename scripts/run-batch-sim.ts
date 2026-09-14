@@ -882,8 +882,8 @@ async function main() {
   for (let i = 0; i < candidatos.length; i++) {
     const faccion = facciones[i]!;
     const posicion = candidatos[i]!.posicion;
-    const jugadores = Array.from({ length: JUGADORES_POR_ASENTAMIENTO }, (_, j) => `jugador-${faccion.id}-${j + 1}`);
-    const resultado = fundarAsentamiento(mapa, facciones, faccion.id, posicion, jugadores, asentamientos, instanteDeTick(0));
+    const heroes = Array.from({ length: JUGADORES_POR_ASENTAMIENTO }, (_, j) => `jugador-${faccion.id}-${j + 1}`);
+    const resultado = fundarAsentamiento(mapa, facciones, faccion.id, posicion, heroes, asentamientos, instanteDeTick(0));
     asentamientos.push(resultado.asentamiento);
     idsFundados.push(resultado.asentamiento.id);
     facciones = resultado.facciones;
@@ -932,7 +932,7 @@ async function main() {
     caminos: [],
     campamentosBandidos: [],
     bandidosProximoSpawnEn: instanteDeTick(0),
-    jugadores: [],
+    heroes: [],
   };
 
   // Palancas de EXPERIMENTO, ninguna cambia el comportamiento por defecto:

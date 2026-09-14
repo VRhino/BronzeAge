@@ -93,17 +93,14 @@ Las prudencias de los pasos 1, 5 y 7 salieron de batches reales, no de teoría �
 
 ## 2. Cómo se usa
 
-Pestaña **Facción** → sección **Control** → casilla *"Controlada por NPC (juega sola)"*.
+**Las Facciones NPC las crea el admin** (decisión del usuario, 2026-09-14): pestaña **Facción** del cliente de
+administración → *"Nueva Facción NPC"*, o el comando `crearFaccionNpc` (`nombre`, `posicion?`). Antes una
+Facción NPC era la de un jugador cedida a la IA con una casilla; eso ya no existe.
 
-- Se puede encender y apagar **en caliente**, a mitad de partida, tantas veces como se quiera: es solo un id
-  dentro o fuera de una lista que se lee al principio de cada tick.
-- **El primer asentamiento se funda solo** si la Facción no tiene ninguno al cederla (paso 0). El jugador
-  también puede fundarlo él mismo antes de ceder la Facción (Facción activa + clic en el mapa) si quiere
-  elegir el emplazamiento a mano — el paso 0 solo actúa cuando la Facción llega a cero asentamientos.
-- Retomar el control manual no deshace nada: cargos, reservas, Mercado y tropas son estado normal del juego,
-  creado con las mismas funciones que usa el jugador. El NPC simplemente deja de decidir.
-- Viendo el pasado (slider de línea de tiempo) la casilla aparece deshabilitada: sobre una foto no hay nada
-  que ceder.
+- La Facción nace **ya asentada**: su primer asentamiento se funda en el acto (en `posicion`, o donde lo
+  elige el paso 0) con 5 **héroes bot** como fundadores, y el primero queda como Rey.
+- Es NPC **hasta que se destruye**: no hay retoma manual ni cesión de una Facción de jugador.
+- Si se queda sin asentamientos, el paso 0 vuelve a fundar con sus propios bots.
 
 ## 3. Dónde vive cada pieza
 
@@ -112,9 +109,9 @@ Pestaña **Facción** → sección **Control** → casilla *"Controlada por NPC 
 | Comportamiento del NPC | `src/app/npcGobernanza.ts` | aplicación |
 | Fundación inicial + heurística de posición | `fundarAsentamientosIniciales` / `buscarPosicionFundacionInicialPorDefecto` (`src/app/npcGobernanza.ts`) | aplicación |
 | Qué Facciones son NPC | `GameState.faccionesNpcIds` (`src/app/gameStore.ts`) | aplicación |
-| Cesión/retoma | `GameStore.alternarFaccionNpc` / `esFaccionNpc` | aplicación |
+| Creación de la Facción NPC | `crearFaccionNpc` (`src/session/comandos/`), que reutiliza el paso 0 | aplicación |
 | Turno del NPC | `GameStore.avanzarFaccionesNpc`, tras `avanzarSimulacion` | aplicación |
-| Casilla y distintivos | `renderDetalleFaccion` / `renderFaccionesTab` (`src/main.ts`) | interfaz |
+| Formulario y distintivos | `#faccion-npc-form` / `renderFaccionesTab` (`cliente/src/main.ts`) | interfaz |
 
 `src/engine/*` y `src/domain/types.ts` no participan. El comportamiento vivía antes en
 `simulaciones-batch/npcGobernanza.ts`, fuera de `src/`, y se movió al mudarse de "solo scripts de batch" a
@@ -254,9 +251,9 @@ el NPC efectivamente eligió uno de ellos y no uno con bonus 0.
 ## 10. Cómo eliminar el mecanismo por completo
 
 Mismo patrón que documenta `SIMULACION_AUTO_COMERCIO` en `constants.ts`: borrar `src/app/npcGobernanza.ts` y
-su test, quitar `faccionesNpcIds` de `GameState`/`SimulacionExportada` junto con `alternarFaccionNpc`,
-`esFaccionNpc`, `avanzarFaccionesNpc` y `sincronizarFaccionesNpc` en `gameStore.ts`, y la sección "Control" de
-`main.ts`. El motor no hay que tocarlo, porque nunca se tocó.
+su test, quitar `faccionesNpcIds` del estado junto con `crearFaccionNpc`, `avanzarFaccionesNpc` y
+`sincronizarFaccionesNpc`, y el formulario "Nueva Facción NPC" del cliente. El motor no hay que tocarlo, porque
+nunca se tocó.
 
 ## Abierto
 

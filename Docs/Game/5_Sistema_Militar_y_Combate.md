@@ -597,7 +597,7 @@ Las escuadras de un héroe que no está en la batalla no combaten, estén donde 
 
 Los topes de una batalla cuentan **héroes**: **15 por bando en un asedio**, y **5** en mundo abierto, contra una caravana o contra un campamento de bandidos. Los héroes que sobran esperan en cola y entran a medida que caen otros. Las escuadras sin héroe no ocupan plaza.
 
-Una partida dura como mucho **30 minutos en un asedio** y **15 en el resto**. Si un asedio agota su tiempo, gana el defensor (5.2).
+Una partida dura como mucho **30 minutos en un asedio** y **15 en el resto**. Si agota su tiempo, **gana el defensor**, en cualquier batalla; el atacante es siempre quien inicia el combate. En un asedio gana la plaza (5.2); en campo abierto, el atacado; contra una caravana, la caravana; y contra un campamento de bandidos, los bandidos: los héroes que lo atacaron pierden.
 
 ### 5.15.2 El campamento del héroe
 
@@ -635,7 +635,7 @@ Si los atacantes conquistan un asentamiento:
 
 ### 5.15.6 Facciones NPC
 
-Las Facciones NPC tienen **héroes bot**, manejados por la IA del juego. Los crea el admin y viven en el servidor como un héroe más. Un humano que ataca a una Facción NPC combate contra sus héroes bot y su guarnición. NPC contra NPC se resuelve con números, sin partida en Unity.
+Las Facciones NPC las crea el admin, ya asentadas, y así siguen hasta que se destruyen: una Facción de jugador nunca pasa a la IA. Tienen **héroes bot**, manejados por la IA del juego: nacen como los fundadores de su primer asentamiento (5, el primero como Rey) y viven en el servidor como un héroe más. Un humano que ataca a una Facción NPC combate contra sus héroes bot y su guarnición. NPC contra NPC se resuelve con números, sin partida en Unity.
 
 **Un héroe que ataca un campamento de bandidos también combate en Unity**: su columna contra las tropas del campamento, manejadas por la IA del juego (Doc 1.9).
 

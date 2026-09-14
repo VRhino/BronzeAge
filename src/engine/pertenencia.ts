@@ -23,13 +23,13 @@ export const CAMPO_CARGO: Record<CargoTipo, keyof Asentamiento['cargos']> = {
 
 /** Residencia (Doc 2.5): fundar el asentamiento o comprar casa en él son las dos vías, equivalentes a
  * efectos de qué puede hacer el jugador ahí. */
-export function esResidente(asentamiento: Asentamiento, jugadorId: string): boolean {
-  return asentamiento.jugadoresFundadoresIds.includes(jugadorId) || asentamiento.casasCompradas.includes(jugadorId);
+export function esResidente(asentamiento: Asentamiento, heroeId: string): boolean {
+  return asentamiento.heroesFundadoresIds.includes(heroeId) || asentamiento.casasCompradas.includes(heroeId);
 }
 
 /** Reside en ALGÚN asentamiento distinto del indicado — un jugador solo puede residir en uno (Doc 2.1). */
-export function resideEnOtroAsentamiento(asentamientos: Asentamiento[], asentamientoId: string, jugadorId: string): boolean {
-  return asentamientos.some((a) => a.id !== asentamientoId && esResidente(a, jugadorId));
+export function resideEnOtroAsentamiento(asentamientos: Asentamiento[], asentamientoId: string, heroeId: string): boolean {
+  return asentamientos.some((a) => a.id !== asentamientoId && esResidente(a, heroeId));
 }
 
 /**
@@ -48,12 +48,12 @@ export function resideEnOtroAsentamiento(asentamientos: Asentamiento[], asentami
  */
 export function puedeReclutarEn(
   asentamiento: Asentamiento,
-  jugadorId: string,
+  heroeId: string,
   faccionDelJugadorId: string
 ): 'todo' | 'solo_reponer' | 'no' {
-  if (esResidente(asentamiento, jugadorId)) return 'todo';
+  if (esResidente(asentamiento, heroeId)) return 'todo';
   if (faccionDelJugadorId !== asentamiento.faccionId) return 'no';
-  if (asentamiento.vetadosIds?.includes(jugadorId)) return 'no';
+  if (asentamiento.vetadosIds?.includes(heroeId)) return 'no';
   if (asentamiento.politicaDeAcceso === 'cerrado') return 'no';
   return 'solo_reponer';
 }
@@ -72,23 +72,23 @@ export function cargoOcupado(asentamiento: Asentamiento, cargo: CargoTipo): bool
  * autorización pregunta si el actor es quien lo ocupa (¿puedes TÚ hacer esto?). Son preguntas distintas y
  * ambas hacen falta; confundirlas dejaría que cualquier residente actuara en nombre del Gobernador.
  */
-export function tieneCargoLocal(asentamiento: Asentamiento, cargo: CargoTipo, jugadorId: string): boolean {
-  return asentamiento.cargos[CAMPO_CARGO[cargo]] === jugadorId;
+export function tieneCargoLocal(asentamiento: Asentamiento, cargo: CargoTipo, heroeId: string): boolean {
+  return asentamiento.cargos[CAMPO_CARGO[cargo]] === heroeId;
 }
 
 /** Asigna (o libera, con `null`) el titular de un cargo local. Sin validación: las reglas de quién puede
  * hacerlo viven en `cargos.ts`; esto es solo la escritura del campo correcto. */
-export function conCargoLocal(asentamiento: Asentamiento, cargo: CargoTipo, jugadorId: string | null): Asentamiento {
-  return { ...asentamiento, cargos: { ...asentamiento.cargos, [CAMPO_CARGO[cargo]]: jugadorId } };
+export function conCargoLocal(asentamiento: Asentamiento, cargo: CargoTipo, heroeId: string | null): Asentamiento {
+  return { ...asentamiento, cargos: { ...asentamiento.cargos, [CAMPO_CARGO[cargo]]: heroeId } };
 }
 
-export function esReyDe(faccion: Faccion, jugadorId: string): boolean {
-  return faccion.reyId === jugadorId;
+export function esReyDe(faccion: Faccion, heroeId: string): boolean {
+  return faccion.reyId === heroeId;
 }
 
 /** Cargos de Facción con autoridad diplomática (Doc 2.2): el Rey, y el Embajador que él designa. */
-export function esReyOEmbajadorDe(faccion: Faccion, jugadorId: string): boolean {
-  return faccion.reyId === jugadorId || faccion.embajadorId === jugadorId;
+export function esReyOEmbajadorDe(faccion: Faccion, heroeId: string): boolean {
+  return faccion.reyId === heroeId || faccion.embajadorId === heroeId;
 }
 
 /**
@@ -142,12 +142,12 @@ export function compartenVision(relaciones: readonly RelacionPolitica[], aId: st
  */
 export function puedeEntrarEn(
   asentamiento: Asentamiento,
-  jugadorId: string,
+  heroeId: string,
   faccionDelJugadorId: string,
   relaciones: readonly RelacionPolitica[]
 ): boolean {
-  if (esResidente(asentamiento, jugadorId)) return true;
-  if (asentamiento.vetadosIds?.includes(jugadorId)) return false;
+  if (esResidente(asentamiento, heroeId)) return true;
+  if (asentamiento.vetadosIds?.includes(heroeId)) return false;
 
   switch (asentamiento.politicaDeAcceso ?? 'faccion_y_aliados') {
     case 'abierto':

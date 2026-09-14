@@ -347,14 +347,14 @@ export function prepararCaravanaManual(
  */
 export function seleccionarEscoltaCaravana(
   asentamiento: Asentamiento,
-  jugadorId: string,
+  heroeId: string,
   escuadronIds: readonly string[]
 ): { escolta: Escuadron[]; asentamiento: Asentamiento } {
   const escolta: Escuadron[] = [];
   for (const id of escuadronIds) {
     const e = asentamiento.escuadrones.find((s) => s.id === id);
     if (!e) throw new CaravanaInvalidaError(`El escuadrón ${id} no está en ${asentamiento.id}.`);
-    if (e.jugadorId !== jugadorId) throw new CaravanaInvalidaError(`El escuadrón ${id} es de otro jugador.`);
+    if (e.heroeId !== heroeId) throw new CaravanaInvalidaError(`El escuadrón ${id} es de otro jugador.`);
     if (e.cantidad <= 0) throw new CaravanaInvalidaError(`El escuadrón ${id} está aniquilado.`);
     escolta.push(e);
   }
@@ -364,8 +364,8 @@ export function seleccionarEscoltaCaravana(
 
 /** Escuadrones que un jugador tiene YA cedidos como escolta, sumando todas las caravanas (Doc 3.13.4) — para
  * el tope de Liderazgo al ceder más. */
-export function escoltaDeJugador(caravanas: readonly Caravana[], jugadorId: string): Escuadron[] {
-  return caravanas.flatMap((c) => c.escolta ?? []).filter((e) => e.jugadorId === jugadorId);
+export function escoltaDeJugador(caravanas: readonly Caravana[], heroeId: string): Escuadron[] {
+  return caravanas.flatMap((c) => c.escolta ?? []).filter((e) => e.heroeId === heroeId);
 }
 
 /** Cancela la preparación de una caravana: devuelve la carga al almacén y la escolta a la guarnición (Doc 3.13.3). */

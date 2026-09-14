@@ -33,7 +33,7 @@ export interface ParamsCrearFaccion {
  *    pregunta que este mismo archivo dejaba abierta hasta ahora)
  *  - si abandonó una Facción hace menos de `CIUDADANIA.cooldownCreacionFaccionDias`, no puede crear otra
  *    todavía (anti-abuso "crear, abandonar, crear"; ver `dejarFaccion.ts`, que es quien estampa
- *    `salidasFaccionPorJugador`)
+ *    `salidasFaccionPorHeroe`)
  */
 export const crearFaccion = comando<ParamsCrearFaccion, { faccionId: string }>((estado, _mapa, ctx, params) => {
   const nombre = params.nombre.trim();
@@ -44,7 +44,7 @@ export const crearFaccion = comando<ParamsCrearFaccion, { faccionId: string }>((
   if (estado.facciones.some((f) => esCiudadano(f, ctx.actor))) {
     rechazar(CODIGOS_ERROR.faccionYaPerteneces);
   }
-  const salida = estado.salidasFaccionPorJugador[ctx.actor];
+  const salida = estado.salidasFaccionPorHeroe[ctx.actor];
   if (salida !== undefined && transcurrido(salida, ctx.instante) < dias(CIUDADANIA.cooldownCreacionFaccionDias)) {
     rechazar(CODIGOS_ERROR.faccionCooldownCreacion);
   }

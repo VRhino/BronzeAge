@@ -21,7 +21,7 @@ import type { PayloadRelacionPropuesta } from '../comandos/diplomacia';
 describe('eventos de comando (códigos estables)', () => {
   it('ningún comando aceptado emite ya `codigo: "legado"`', () => {
     const { sesion, faccionId, asentamientoId, fundador } = partidaConAsentamiento();
-    sesion.ejecutar(asignarCargoLocal, { asentamientoId, cargo: 'gobernador', jugadorId: fundador }, OPC);
+    sesion.ejecutar(asignarCargoLocal, { asentamientoId, cargo: 'gobernador', heroeId: fundador }, OPC);
     sesion.ejecutar(renombrarAsentamiento, { asentamientoId, nombre: 'Tirinto' }, OPC);
     // Actor distinto del fundador (ya tiene Facción): si no, `crearFaccion` rechazaría con
     // `faccion.ya_pertenece` y este comando dejaría de aportar un evento a la muestra que el test recorre.

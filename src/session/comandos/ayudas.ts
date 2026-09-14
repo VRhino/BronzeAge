@@ -17,7 +17,7 @@
 import { columnaDe } from '../../engine/ejercitos';
 import { fundirExploraciones } from '../../engine/exploracion';
 import { MEMORIA_VACIA } from '../../engine/memoria';
-import type { AcuerdoTrueque, Asentamiento, CampamentoBandido, Caravana, Faccion, Ejercito, Jugador } from '../../domain/types';
+import type { AcuerdoTrueque, Asentamiento, CampamentoBandido, Caravana, Faccion, Ejercito, Heroe } from '../../domain/types';
 import type { GameSessionState } from '../estado';
 import { CODIGOS_ERROR, type CodigoError } from './codigosDeError';
 import { rechazo, rechazoDesdeError, type ManejadorComando } from './tipos';
@@ -106,16 +106,16 @@ export function exigirEjercito(estado: GameSessionState, ejercitoId: string): Ej
 
 /** El registro del jugador (Doc 1.10). Existe siempre para quien ha actuado alguna vez — el alta la hace
  * `GameSession.ejecutar` —, así que faltar aquí es que ese id no ha jugado nunca. */
-export function exigirJugador(estado: GameSessionState, jugadorId: string): Jugador {
-  const jugador = estado.jugadores.find((j) => j.id === jugadorId);
+export function exigirJugador(estado: GameSessionState, heroeId: string): Heroe {
+  const jugador = estado.heroes.find((j) => j.id === heroeId);
   if (!jugador) rechazar(CODIGOS_ERROR.jugadorNoExiste);
   return jugador;
 }
 
 /** La columna en la que va este jugador (Doc 1.10). No estar en ninguna es "no estás en el mundo": no es una
  * regla que romper, es que la entidad sobre la que actuar no existe — misma clase que las de arriba. */
-export function exigirColumnaDe(estado: GameSessionState, jugadorId: string): Ejercito {
-  const columna = columnaDe(estado.ejercitos, jugadorId);
+export function exigirColumnaDe(estado: GameSessionState, heroeId: string): Ejercito {
+  const columna = columnaDe(estado.ejercitos, heroeId);
   if (!columna) rechazar(CODIGOS_ERROR.sinColumna);
   return columna;
 }
@@ -146,14 +146,14 @@ export function conFaccion(estado: GameSessionState, actualizada: Faccion): Game
  *
  * Sin nada que fundir (nunca anduvo solo, o ya se fundió antes) devuelve el estado tal cual.
  */
-export function conExploracionFundida(estado: GameSessionState, jugadorId: string, faccionId: string): GameSessionState {
-  const jugador = estado.jugadores.find((j) => j.id === jugadorId);
+export function conExploracionFundida(estado: GameSessionState, heroeId: string, faccionId: string): GameSessionState {
+  const jugador = estado.heroes.find((j) => j.id === heroeId);
   if (!jugador?.exploracionPersonal) return estado;
 
   const memoriaPrevia = estado.memoriaPorFaccion[faccionId] ?? MEMORIA_VACIA;
   return {
     ...estado,
-    jugadores: estado.jugadores.map((j) => (j.id === jugadorId ? { ...j, exploracionPersonal: undefined } : j)),
+    heroes: estado.heroes.map((j) => (j.id === heroeId ? { ...j, exploracionPersonal: undefined } : j)),
     memoriaPorFaccion: {
       ...estado.memoriaPorFaccion,
       [faccionId]: { ...memoriaPrevia, exploracion: fundirExploraciones(memoriaPrevia.exploracion, jugador.exploracionPersonal) },

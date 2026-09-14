@@ -148,7 +148,7 @@ export interface ParamsAlternarAutoConstruccion {
 
 /**
  * Unifica los dos métodos separados de `GameStore` (`pausarAutoConstruccion`/`reanudarAutoConstruccion`) en
- * un solo comando con bandera, igual que `alternarFaccionNpc`. Es la misma intención con dos valores, y
+ * un solo comando con bandera. Es la misma intención con dos valores, y
  * mantener dos handlers idénticos salvo un booleano sería duplicación. El adaptador mapea ambos métodos aquí.
  *
  * Idempotente: pedir el estado en el que ya está no muta ni versiona.

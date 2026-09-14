@@ -103,8 +103,8 @@ export function lanzarCaravanaFundacion(
   }
 
   const n = Math.min(FUNDACION.maxJugadoresFundacionGrupal, Math.max(1, numJugadores || 1));
-  const jugadoresFundadoresIds = faccion.ciudadanosIds.slice(0, n);
-  if (jugadoresFundadoresIds.length === 0) {
+  const heroesFundadoresIds = faccion.ciudadanosIds.slice(0, n);
+  if (heroesFundadoresIds.length === 0) {
     throw new ExpansionInvalidaError('La Facción no tiene ciudadanos disponibles para fundar el nuevo asentamiento.');
   }
 
@@ -125,7 +125,7 @@ export function lanzarCaravanaFundacion(
     posicionActual: origen.posicion,
     progreso: 0,
     destinoPosicion: destino,
-    jugadoresFundadoresIds,
+    heroesFundadoresIds,
     // Ruta calculada al lanzar (Fase 0.3, ver `world/rutas.ts`): rodea terreno costoso y el agua en vez de
     // ir en línea recta hacia el punto de fundación elegido.
     ruta,
@@ -209,7 +209,7 @@ export function avanzarCaravanasFundacion(
         faccionesActuales,
         origen.faccionId,
         caravana.destinoPosicion,
-        caravana.jugadoresFundadoresIds ?? [],
+        caravana.heroesFundadoresIds ?? [],
         asentamientosActuales,
         instante
       );

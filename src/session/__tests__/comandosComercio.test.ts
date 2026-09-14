@@ -7,13 +7,13 @@ import { GameSession } from '../gameSession';
 import { crearFaccion } from '../comandos/crearFaccion';
 import { fundarAsentamiento } from '../comandos/fundarAsentamiento';
 import { aceptarTrueque, colocarOrdenMercado, crearCaravana, proponerTrueque, rechazarTrueque } from '../comandos/comercio';
-import { enPie } from './fixtures';
+import { conHeroe, enPie } from './fixtures';
 
 const OPC = { actor: 'jugador-test' };
 
 /** Dos asentamientos de Facciones distintas, lo bastante separados para que ambos sean fundables. */
 function partidaConDosAsentamientos() {
-  let sesion = GameSession.crear('comercio-test', { seed: 42 });
+  let sesion = conHeroe(conHeroe(GameSession.crear('comercio-test', { seed: 42 }), 'jugador-a'), 'jugador-b');
   // Dos actores distintos al CREAR: un jugador solo puede crear una Facción (Doc 2 "Entidades"). Cada uno
   // funda la suya: ya tiene columna en el mundo desde que la creó (Doc 1.3, se funda donde se está), así que
   // ninguno de los dos necesita un alta aparte — se le lleva al punto elegido antes de fundar.

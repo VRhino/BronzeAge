@@ -36,7 +36,7 @@ describe('comando(): traducción uniforme de fallos a rechazo', () => {
     const { sesion, asentamientoId, fundador } = partidaConAsentamiento();
     // El motor exige Gobernador antes que cualquier otro cargo local (`engine/cargos.ts`): pedir Tesorero
     // primero lanza `CargoInvalidoError`, que `comando()` traduce vía `rechazoDesdeError`.
-    const r = sesion.ejecutar(asignarCargoLocal, { asentamientoId, cargo: 'tesorero', jugadorId: fundador }, OPC);
+    const r = sesion.ejecutar(asignarCargoLocal, { asentamientoId, cargo: 'tesorero', heroeId: fundador }, OPC);
 
     expect(r.ok).toBe(false);
     expect(r.codigoError).toBe('cargo.invalido');

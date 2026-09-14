@@ -359,7 +359,7 @@ export const TICKET_ASEDIO: BattleTicket = {
       },
     ],
   },
-  reglas: { duracionMaximaSegundos: 1800, ganadorPorTiempo: 'defensor', ...VERSIONES },
+  reglas: { duracionMaximaSegundos: 1800, ...VERSIONES },
 };
 
 /** Héroe humano contra un campamento de bandidos: el bando defensor no es de nadie y lo maneja la IA (Doc 1.9). */
@@ -401,8 +401,7 @@ export const TICKET_BANDIDOS: BattleTicket = {
     },
   },
   mapa: { tipo: 'mapa', mapaId: 'mapa-principal', centro: { x: 812, y: 1340 } },
-  // `ganadorPorTiempo` fuera del asedio está pendiente de decidir (Mecánicas a desarrollar): valor de ejemplo.
-  reglas: { duracionMaximaSegundos: 900, ganadorPorTiempo: 'defensor', ...VERSIONES },
+  reglas: { duracionMaximaSegundos: 900, ...VERSIONES },
 };
 
 export const ASIGNACION: BattleServerAssignment = {

@@ -13,10 +13,10 @@ function plaza(faccionId: string, existentes: Asentamiento[] = []): Asentamiento
   return { ...asentamiento, poblacion: { pesants: 300, artesanos: 0, nobleza: 0 } };
 }
 
-const escuadronDe = (jugadorId: string): Escuadron => ({
-  id: `esc-${jugadorId}`,
-  nombre: `Milicia de ${jugadorId}`,
-  jugadorId,
+const escuadronDe = (heroeId: string): Escuadron => ({
+  id: `esc-${heroeId}`,
+  nombre: `Milicia de ${heroeId}`,
+  heroeId,
   origen: 'pesants',
   cantidad: 20,
   veterania: 0,

@@ -214,7 +214,7 @@ export interface ProyeccionJugador {
    * atrás localmente (`completaEn - instante`, `expiraEn - instante`). El `tick` interno del motor no viaja. */
   instante: Instante;
   version: number;
-  jugadorId: string;
+  heroeId: string;
   /** Derivado de `Faccion.ciudadanosIds` en el momento de proyectar — nunca almacenado (ver `Membresia` en
    * `acceso/tipos.ts`: es la misma razón por la que se retiró de ahí). `null` antes de unirse a una. */
   faccionId: string | null;
@@ -328,8 +328,8 @@ export interface ProyeccionJugador {
   produccionDeAsentamiento?: ProduccionItem[];
 }
 
-function faccionDe(estado: GameSessionState, jugadorId: string): string | null {
-  return estado.facciones.find((f) => esCiudadano(f, jugadorId))?.id ?? null;
+function faccionDe(estado: GameSessionState, heroeId: string): string | null {
+  return estado.facciones.find((f) => esCiudadano(f, heroeId))?.id ?? null;
 }
 
 /**
@@ -357,8 +357,8 @@ function faccionDe(estado: GameSessionState, jugadorId: string): string | null {
 /** Lo que "propio" significa para un jugador (Slice 1: su Facción, nada de rivales) — factorizado para que
  * `proyectarParaJugador` y `eventosDominioParaJugador` (cursor, Fase C13) usen exactamente el mismo criterio,
  * en vez de que cada uno recalcule su propia versión y puedan divergir. */
-function propioDeJugador(estado: GameSessionState, jugadorId: string) {
-  const faccionId = faccionDe(estado, jugadorId);
+function propioDeJugador(estado: GameSessionState, heroeId: string) {
+  const faccionId = faccionDe(estado, heroeId);
   const asentamientosPropios = estado.asentamientos.filter((a) => a.faccionId === faccionId);
   const idsPropios = new Set(asentamientosPropios.map((a) => a.id));
   return { faccionId, asentamientosPropios, esPropio: (asentamientoId: string) => idsPropios.has(asentamientoId) };
@@ -536,21 +536,21 @@ function caravanasAvistadas(
 
 export function proyectarParaJugador(
   estado: GameSessionState,
-  jugadorId: string,
+  heroeId: string,
   geometria: GeometriaAsentamientos
 ): Omit<ProyeccionJugador, 'preciosReferencia' | 'produccionDeAsentamiento'> {
-  const { faccionId, asentamientosPropios, esPropio } = propioDeJugador(estado, jugadorId);
+  const { faccionId, asentamientosPropios, esPropio } = propioDeJugador(estado, heroeId);
 
   // La plaza que el jugador PISA, que es la única cuyo interior viaja (Doc 1.10.1). Se exige además que sea
   // de su Facción: dentro de una plaza ajena solo se ve la capa pública (Doc 1.10.4), y qué lleva esa capa
   // es una decisión que el diseño todavía no ha tomado — hasta que la tome, no enseñamos de más.
-  const jugador = estado.jugadores.find((j) => j.id === jugadorId);
+  const jugador = estado.heroes.find((j) => j.id === heroeId);
   const recordadas = jugador?.plazasRecordadas ?? {};
   // Sin registro se DEDUCE, con la misma función que usa el alta: proyectar es LEER, y una lectura no puede
   // escribir en el estado para darse de alta a sí misma. Y pasa de verdad — un jugador que entra en la
   // partida y pide su pantalla antes de dar ninguna orden todavía no tiene registro; sin esto vería un mundo
   // vacío desde dentro de su propia ciudad.
-  const ubicacion = jugador?.ubicacion ?? ubicacionDeducida(jugadorId, estado.asentamientos, estado.ejercitos);
+  const ubicacion = jugador?.ubicacion ?? ubicacionDeducida(heroeId, estado.asentamientos, estado.ejercitos);
   const dentroDe =
     ubicacion.tipo === 'asentamiento'
       ? asentamientosPropios.find((a) => a.id === ubicacion.asentamientoId)
@@ -569,8 +569,8 @@ export function proyectarParaJugador(
   const ejercitosPropios = estado.ejercitos.filter(
     (e) =>
       (faccionId !== null && e.faccionId === faccionId) ||
-      e.participantes.some((p) => p.jugadorId === jugadorId) ||
-      e.escuadrones.some((esc) => esc.jugadorId === jugadorId)
+      e.participantes.some((p) => p.heroeId === heroeId) ||
+      e.escuadrones.some((esc) => esc.heroeId === heroeId)
   );
   // Las plazas en cuya PUERTA hay una columna de este jugador. Un mercado enseña sus ofertas a quien esta
   // dentro, y solo a ese: sin esto el mostrador (`comerciarEnPlaza`) seria inusable —habria que comprar a
@@ -636,7 +636,7 @@ export function proyectarParaJugador(
     gameId: estado.gameId,
     instante: instanteDeTick(estado.tick),
     version: estado.version,
-    jugadorId,
+    heroeId,
     faccionId,
     mapaId: idDeMapa(estado.mapa),
     estadoMapa: estado.estadoMapa,
@@ -665,7 +665,7 @@ export function proyectarParaJugador(
     titulos: estado.titulos,
     caminos: caminosConocidos(estado.caminos, exploracion),
     campamentosBandidos: campamentosAvistados(estado.campamentosBandidos, ojosAsent, ojosEjercito),
-    historial: estado.historialJugadores[jugadorId] ?? [],
+    historial: estado.historialHeroes[heroeId] ?? [],
     zonas: zonasPropias,
     zonasFusionadas: geometria.zonasFusionadas.filter((zf) => zf.faccionId === faccionId),
     trazadoPorAsentamiento: Object.fromEntries(Object.entries(geometria.trazadoPorAsentamiento).filter(([id]) => esPropio(id))),
@@ -678,7 +678,7 @@ export function proyectarParaJugador(
  * permite a un cliente que ya tiene la proyección inicial ponerse al día tras un aviso por WebSocket sin
  * volver a pedir la proyección entera — solo los eventos nuevos.
  */
-export function eventosDominioParaJugador(estado: GameSessionState, jugadorId: string, desde: number): EventoDominioConVersion[] {
-  const { esPropio } = propioDeJugador(estado, jugadorId);
+export function eventosDominioParaJugador(estado: GameSessionState, heroeId: string, desde: number): EventoDominioConVersion[] {
+  const { esPropio } = propioDeJugador(estado, heroeId);
   return eventosDesde(estado, desde).filter((e) => e.asentamientoId === undefined || esPropio(e.asentamientoId));
 }

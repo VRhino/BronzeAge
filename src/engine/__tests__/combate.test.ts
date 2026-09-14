@@ -14,8 +14,8 @@ import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instan
  * deterministas sobre la comparación que quieren probar (el efecto del muro), no sobre el azar del combate. */
 const rngSinVarianza: RandomFn = Object.assign(() => 0.5, { estado: () => 0 });
 
-function escuadron(id: string, jugadorId: string, cantidad: number): Escuadron {
-  return { id, nombre: id, jugadorId, origen: 'pesants', tropaId: 'milicia_lanceros', cantidad, veterania: 0, moral: 100 };
+function escuadron(id: string, heroeId: string, cantidad: number): Escuadron {
+  return { id, nombre: id, heroeId, origen: 'pesants', tropaId: 'milicia_lanceros', cantidad, veterania: 0, moral: 100 };
 }
 
 // `milicia_lanceros`: poderBase 2. Con un solo escuadrón por bando no entra la cohesión (exige length > 1),
@@ -80,12 +80,12 @@ describe('iniciarAsedio — la muralla del DEFENSOR decide, no la del atacante',
     expect(resultado.defensor.faccionId).toBe(atacante.faccionId);
     // La guarnición es AHORA el escuadrón del conquistador (con sus bajas de asedio), no un cascarón del vencido.
     expect(resultado.defensor.escuadrones.map((e) => e.id)).toEqual(['e-atacante']);
-    expect(resultado.defensor.escuadrones[0]!.jugadorId).toBe('jugador-atacante');
+    expect(resultado.defensor.escuadrones[0]!.heroeId).toBe('jugador-atacante');
     expect(resultado.defensor.escuadrones[0]!.cantidad).toBeGreaterThan(0);
     // Y ha salido de la guarnición del atacante: marchó a la plaza tomada.
     expect(resultado.atacante.escuadrones).toEqual([]);
     // Residencia y cargos del vencido: vacíos.
-    expect(resultado.defensor.jugadoresFundadoresIds).toEqual([]);
+    expect(resultado.defensor.heroesFundadoresIds).toEqual([]);
     expect(resultado.defensor.casasCompradas).toEqual([]);
     expect(Object.values(resultado.defensor.cargos).every((v) => v === null)).toBe(true);
     // Abre la ventana de ocupación.
@@ -137,7 +137,7 @@ describe('iniciarAsedio — la muralla del DEFENSOR decide, no la del atacante',
 
     expect(resultado.conquistado).toBe(false);
     expect(resultado.defensor.faccionId).toBe(defensor.faccionId);
-    expect(resultado.defensor.jugadoresFundadoresIds).toEqual(defensor.jugadoresFundadoresIds);
+    expect(resultado.defensor.heroesFundadoresIds).toEqual(defensor.heroesFundadoresIds);
     expect(resultado.defensor.escuadrones.length).toBe(defensor.escuadrones.length);
   });
 

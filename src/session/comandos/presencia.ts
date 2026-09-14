@@ -15,7 +15,7 @@
 import type { Asentamiento } from '../../domain/types';
 import { guarnecer as guarnecerEngine, marcharA as marcharAEngine, salirAlMundo as salirAlMundoEngine, type ObjetivoEjercito } from '../../engine/ejercitos';
 import { conVeto } from '../../engine/pertenencia';
-import { conFotoTomadaPor, cruzarLaPuerta, retomarColumna, situarJugadores } from '../../engine/ubicacion';
+import { conFotoTomadaPor, cruzarLaPuerta, retomarColumna, situarHeroes } from '../../engine/ubicacion';
 import { liderazgoComprometido } from '../../engine/liderazgo';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito } from './tipos';
@@ -24,7 +24,7 @@ import { evento } from './eventos';
 
 export interface ParamsSalirAlMundo {
   asentamientoId: string;
-  jugadorId: string;
+  heroeId: string;
   escuadronIds: string[];
   /** Lo que se lleva del almacén, por recurso. Puede ir vacío: salir con el carro seco es legítimo. */
   carga: Record<string, number>;
@@ -33,7 +33,7 @@ export interface ParamsSalirAlMundo {
 export interface PayloadSalidaAlMundo {
   ejercitoId: string;
   asentamientoId: string;
-  jugadorId: string;
+  heroeId: string;
   escuadronIds: string[];
   liderazgoUsado: number;
   /** Total cargado en el carro, sumando recursos. Es la cifra que decide cuánto aguanta fuera. */
@@ -42,23 +42,23 @@ export interface PayloadSalidaAlMundo {
 
 export interface ParamsEntrarEnAsentamiento {
   asentamientoId: string;
-  jugadorId: string;
+  heroeId: string;
 }
 
 export interface PayloadPresencia {
   asentamientoId: string;
-  jugadorId: string;
+  heroeId: string;
   ejercitoId: string;
 }
 
 export interface ParamsSalirDeAsentamiento {
   asentamientoId: string;
-  jugadorId: string;
+  heroeId: string;
 }
 
 export interface ParamsGuarnecer {
   asentamientoId: string;
-  jugadorId: string;
+  heroeId: string;
 }
 
 export interface PayloadGuarnecer {
@@ -78,8 +78,8 @@ export const salirAlMundo = comando<ParamsSalirAlMundo, { ejercitoId: string }>(
   const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
   const { asentamiento: origen, ejercito } = salirAlMundoEngine(
     asentamiento,
-    estado.jugadores.find((j) => j.id === params.jugadorId),
-    params.jugadorId,
+    estado.heroes.find((j) => j.id === params.heroeId),
+    params.heroeId,
     params.escuadronIds,
     params.carga,
     estado.ejercitos,
@@ -94,9 +94,9 @@ export const salirAlMundo = comando<ParamsSalirAlMundo, { ejercitoId: string }>(
     // Al cruzar la puerta hacia fuera se congela lo que estaba viendo de dentro (Doc 1.10.1). La foto se toma
     // del asentamiento YA sin las tropas ni la carga que se lleva: es lo que deja atrás, no lo que había
     // antes de hacer la maleta.
-    jugadores: conFotoTomadaPor(
-      situarJugadores(estado.jugadores, [params.jugadorId], { tipo: 'columna', ejercitoId: ejercito.id }),
-      params.jugadorId,
+    heroes: conFotoTomadaPor(
+      situarHeroes(estado.heroes, [params.heroeId], { tipo: 'columna', ejercitoId: ejercito.id }),
+      params.heroeId,
       origen,
       ctx.instante
     ),
@@ -104,7 +104,7 @@ export const salirAlMundo = comando<ParamsSalirAlMundo, { ejercitoId: string }>(
 
   const conQue = ejercito.escuadrones.length === 0 ? 'sin tropas' : `con ${ejercito.escuadrones.length} escuadrón(es)`;
   return exito(
-    conHistorialDeJugador(siguiente, params.jugadorId, `Sale al mundo desde ${asentamiento.id} ${conQue}.`),
+    conHistorialDeJugador(siguiente, params.heroeId, `Sale al mundo desde ${asentamiento.id} ${conQue}.`),
     [
       evento(ctx, {
         codigo: 'jugador.sale_al_mundo',
@@ -112,7 +112,7 @@ export const salirAlMundo = comando<ParamsSalirAlMundo, { ejercitoId: string }>(
         payload: {
           ejercitoId: ejercito.id,
           asentamientoId: asentamiento.id,
-          jugadorId: params.jugadorId,
+          heroeId: params.heroeId,
           escuadronIds: ejercito.escuadrones.map((e) => e.id),
           liderazgoUsado: liderazgoComprometido(ejercito.escuadrones),
           cargaTotal,
@@ -137,8 +137,8 @@ export const salirAlMundo = comando<ParamsSalirAlMundo, { ejercitoId: string }>(
  */
 export const entrarEnAsentamiento = comando<ParamsEntrarEnAsentamiento, void>((estado, _mapa, ctx, params) => {
   const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
-  const columna = exigirColumnaDe(estado, params.jugadorId);
-  const cruce = cruzarLaPuerta(columna, asentamiento, params.jugadorId, estado.relaciones);
+  const columna = exigirColumnaDe(estado, params.heroeId);
+  const cruce = cruzarLaPuerta(columna, asentamiento, params.heroeId, estado.relaciones);
 
   const esSuResidencia = cruce.disuelveColumna;
   const siguiente: GameSessionState = esSuResidencia
@@ -149,9 +149,9 @@ export const entrarEnAsentamiento = comando<ParamsEntrarEnAsentamiento, void>((e
     conHistorialDeJugador(
       {
         ...siguiente,
-        jugadores: situarJugadores(siguiente.jugadores, [params.jugadorId], { tipo: 'asentamiento', asentamientoId: asentamiento.id }),
+        heroes: situarHeroes(siguiente.heroes, [params.heroeId], { tipo: 'asentamiento', asentamientoId: asentamiento.id }),
       },
-      params.jugadorId,
+      params.heroeId,
       esSuResidencia
         ? `Vuelve a casa en ${asentamiento.id} y su columna se deshace.`
         : `Entra en ${asentamiento.id}; su columna queda a la puerta.`
@@ -164,7 +164,7 @@ export const entrarEnAsentamiento = comando<ParamsEntrarEnAsentamiento, void>((e
           : `Un jugador entra en ${asentamiento.id} dejando su columna a la puerta.`,
         payload: {
           asentamientoId: asentamiento.id,
-          jugadorId: params.jugadorId,
+          heroeId: params.heroeId,
           ejercitoId: columna.id,
         } satisfies PayloadPresencia,
         asentamientoId: asentamiento.id,
@@ -184,24 +184,24 @@ export const entrarEnAsentamiento = comando<ParamsEntrarEnAsentamiento, void>((e
  */
 export const guarnecer = comando<ParamsGuarnecer, void>((estado, _mapa, ctx, params) => {
   const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
-  const columna = exigirColumnaDe(estado, params.jugadorId);
+  const columna = exigirColumnaDe(estado, params.heroeId);
 
   const r = guarnecerEngine(asentamiento, columna, estado.caravanas);
   const aparcadasPorId = new Map(r.caravanasAparcadas.map((c) => [c.id, c]));
-  const jugadoresDeLaColumna = columna.participantes.map((p) => p.jugadorId);
+  const heroesDeLaColumna = columna.participantes.map((p) => p.heroeId);
 
   const siguiente: GameSessionState = {
     ...conAsentamiento(estado, r.asentamiento),
     ejercitos: estado.ejercitos.filter((e) => e.id !== columna.id),
     caravanas: estado.caravanas.map((c) => aparcadasPorId.get(c.id) ?? c),
-    jugadores: situarJugadores(estado.jugadores, jugadoresDeLaColumna, { tipo: 'asentamiento', asentamientoId: asentamiento.id }),
+    heroes: situarHeroes(estado.heroes, heroesDeLaColumna, { tipo: 'asentamiento', asentamientoId: asentamiento.id }),
   };
 
   const conCaravanas = r.caravanasAparcadas.length > 0 ? ` y ${r.caravanasAparcadas.length} caravana(s) quedan aparcadas` : '';
   return exito(
     conHistorialDeJugador(
       siguiente,
-      params.jugadorId,
+      params.heroeId,
       `Guarnece ${asentamiento.id}: ${columna.escuadrones.length} escuadrón(es) a la guarnición${conCaravanas}.`
     ),
     [
@@ -229,13 +229,13 @@ export const guarnecer = comando<ParamsGuarnecer, void>((estado, _mapa, ctx, par
  */
 export const salirDeAsentamiento = comando<ParamsSalirDeAsentamiento, { ejercitoId: string }>((estado, _mapa, ctx, params) => {
   const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
-  retomarColumna(asentamiento, params.jugadorId);
-  const columna = exigirColumnaDe(estado, params.jugadorId);
+  retomarColumna(asentamiento, params.heroeId);
+  const columna = exigirColumnaDe(estado, params.heroeId);
 
   return exito(
     conHistorialDeJugador(
-      { ...estado, jugadores: situarJugadores(estado.jugadores, [params.jugadorId], { tipo: 'columna', ejercitoId: columna.id }) },
-      params.jugadorId,
+      { ...estado, heroes: situarHeroes(estado.heroes, [params.heroeId], { tipo: 'columna', ejercitoId: columna.id }) },
+      params.heroeId,
       `Sale de ${asentamiento.id} y retoma su columna.`
     ),
     [
@@ -244,7 +244,7 @@ export const salirDeAsentamiento = comando<ParamsSalirDeAsentamiento, { ejercito
         mensaje: `Un jugador sale de ${asentamiento.id} y retoma su columna.`,
         payload: {
           asentamientoId: asentamiento.id,
-          jugadorId: params.jugadorId,
+          heroeId: params.heroeId,
           ejercitoId: columna.id,
         } satisfies PayloadPresencia,
         asentamientoId: asentamiento.id,
@@ -255,13 +255,13 @@ export const salirDeAsentamiento = comando<ParamsSalirDeAsentamiento, { ejercito
 });
 
 export interface ParamsMarcharA {
-  jugadorId: string;
+  heroeId: string;
   objetivo: ObjetivoEjercito;
 }
 
 export interface PayloadMarchaFijada {
   ejercitoId: string;
-  jugadorId: string;
+  heroeId: string;
   objetivo: ObjetivoEjercito;
   /** `true` si la columna ya iba a algún sitio: es un cambio de rumbo, no una salida. Lo distingue el
    * cliente para narrarlo, y el log para que "clic, clic, clic" no parezca tres campañas. */
@@ -277,8 +277,8 @@ export interface PayloadMarchaFijada {
  * al salir y su única salida es cancelar (Doc 5.12.6).
  */
 export const marcharA = comando<ParamsMarcharA, { ejercitoId: string }>((estado, mapa, ctx, params) => {
-  const columna = exigirColumnaDe(estado, params.jugadorId);
-  const jugador = exigirJugador(estado, params.jugadorId);
+  const columna = exigirColumnaDe(estado, params.heroeId);
+  const jugador = exigirJugador(estado, params.heroeId);
 
   const rectifica = columna.estado === 'marchando';
   const enMarcha = marcharAEngine(columna, jugador, params.objetivo, estado.asentamientos, mapa);
@@ -287,14 +287,14 @@ export const marcharA = comando<ParamsMarcharA, { ejercitoId: string }>((estado,
   return exito(
     conHistorialDeJugador(
       { ...estado, ejercitos: estado.ejercitos.map((e) => (e.id === enMarcha.id ? enMarcha : e)) },
-      params.jugadorId,
+      params.heroeId,
       rectifica ? `Cambia de rumbo hacia ${aDonde}.` : `Se pone en marcha hacia ${aDonde}.`
     ),
     [
       evento(ctx, {
         codigo: 'jugador.marcha_fijada',
         mensaje: rectifica ? `Una columna cambia de rumbo hacia ${aDonde}.` : `Una columna se pone en marcha hacia ${aDonde}.`,
-        payload: { ejercitoId: enMarcha.id, jugadorId: params.jugadorId, objetivo: params.objetivo, rectifica } satisfies PayloadMarchaFijada,
+        payload: { ejercitoId: enMarcha.id, heroeId: params.heroeId, objetivo: params.objetivo, rectifica } satisfies PayloadMarchaFijada,
         asentamientoId: enMarcha.origenAsentamientoId,
       }),
     ],
@@ -304,13 +304,13 @@ export const marcharA = comando<ParamsMarcharA, { ejercitoId: string }>((estado,
 
 export interface ParamsFijarPoliticaDeAcceso {
   asentamientoId: string;
-  jugadorId: string;
+  heroeId: string;
   politica: NonNullable<Asentamiento['politicaDeAcceso']>;
 }
 
 export interface ParamsVetarJugador {
   asentamientoId: string;
-  jugadorId: string;
+  heroeId: string;
   vetadoId: string;
   /** `false` para levantar el veto. Un comando y no dos: vetar y perdonar son el mismo interruptor. */
   vetar: boolean;
@@ -339,7 +339,7 @@ export const fijarPoliticaDeAcceso = comando<ParamsFijarPoliticaDeAcceso, void>(
   return exito(
     conHistorialDeJugador(
       conAsentamiento(estado, { ...asentamiento, politicaDeAcceso: params.politica }),
-      params.jugadorId,
+      params.heroeId,
       `Fija la puerta de ${asentamiento.id} en ${params.politica}.`
     ),
     [
@@ -366,7 +366,7 @@ export const vetarJugador = comando<ParamsVetarJugador, void>((estado, _mapa, ct
   return exito(
     conHistorialDeJugador(
       conAsentamiento(estado, conVeto(asentamiento, params.vetadoId, params.vetar)),
-      params.jugadorId,
+      params.heroeId,
       params.vetar ? `Veta a un jugador en ${asentamiento.id}.` : `Levanta un veto en ${asentamiento.id}.`
     ),
     [

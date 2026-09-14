@@ -1,6 +1,6 @@
 // Regresión del rediseño "escuadrón por jugador" (Doc 2.1/2.5, a petición del usuario): un jugador reside
 // en UN solo asentamiento — es lo que le permite tener como mucho un escuadrón de cada tropa (ver
-// `Escuadron.jugadorId`, domain/types.ts, y `reclutarTropa`, engine/tropas.ts). Antes de este cambio,
+// `Escuadron.heroeId`, domain/types.ts, y `reclutarTropa`, engine/tropas.ts). Antes de este cambio,
 // `comprarCasa` solo impedía ciudadanía cruzada entre Facciones, no residencia cruzada entre asentamientos
 // de la MISMA Facción.
 import { describe, expect, it } from 'vitest';
@@ -63,7 +63,7 @@ describe('cambiarResidencia (Doc 2.5/2.6, comando nuevo)', () => {
 
     const { origen, destino } = cambiarResidencia(facciones, [conCargo, asentamientoB], asentamientoB.id, 'jugador-a');
 
-    expect(origen.jugadoresFundadoresIds).not.toContain('jugador-a');
+    expect(origen.heroesFundadoresIds).not.toContain('jugador-a');
     expect(origen.casasCompradas).not.toContain('jugador-a');
     expect(origen.cargos.gobernadorId).toBeNull(); // cargo local vacío al mudarse
     expect(destino.casasCompradas).toContain('jugador-a');
@@ -74,12 +74,12 @@ describe('cambiarResidencia (Doc 2.5/2.6, comando nuevo)', () => {
     const conGuarnicion: Asentamiento = {
       ...asentamientoA,
       escuadrones: [
-        { id: 'e1', nombre: 'x', jugadorId: 'jugador-a', origen: 'pesants', cantidad: 20, veterania: 0, moral: 100, tropaId: 'milicia_lanceros' },
+        { id: 'e1', nombre: 'x', heroeId: 'jugador-a', origen: 'pesants', cantidad: 20, veterania: 0, moral: 100, tropaId: 'milicia_lanceros' },
       ],
     };
     const { origen } = cambiarResidencia(facciones, [conGuarnicion, asentamientoB], asentamientoB.id, 'jugador-a');
     expect(origen.escuadrones).toHaveLength(1);
-    expect(origen.escuadrones[0]!.jugadorId).toBe('jugador-a');
+    expect(origen.escuadrones[0]!.heroeId).toBe('jugador-a');
   });
 
   it('un huérfano (sin residencia de la que salir) es rechazado', () => {

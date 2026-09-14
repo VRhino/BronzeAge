@@ -90,9 +90,10 @@ export function auditarRechazoDeEsquema(deps: DependenciasDeRutas) {
  * Valida el tipo, pasa la matriz de autorización y despacha. El actor llega YA resuelto desde la sesión y la
  * membresía — nunca de un id que el cuerpo de la petición afirme tener (doc 2, principio 3).
  *
- * `actorId` es lo que el motor registra como autor: el `jugadorId` de la membresía, o un id derivado del
- * usuario cuando actúa como administrador sin personaje en la partida (así una acción administrativa queda
- * distinguible en el log de una de jugador).
+ * `actorId` es quien actúa en el motor: el héroe (o, sin héroe todavía, el `jugadorId` que va a crearlo).
+ * `actorAuditado` es quien queda en la auditoría: la PERSONA —el `jugadorId` de la membresía—, o un id
+ * derivado del usuario cuando actúa como administrador sin personaje en la partida (así una acción
+ * administrativa queda distinguible en el log de una de jugador).
  *
  * Tras un comando ACEPTADO, difunde sus eventos por WebSocket (`hub.difundir`, Fase C5) a quien esté
  * suscrito al canal que le corresponda a cada uno. Un comando rechazado no genera eventos que difundir
@@ -111,6 +112,7 @@ export async function ejecutarComandoHttp(
   cuerpo: EjecutarComandoBody,
   actor: ActorDeComando,
   actorId: string,
+  actorAuditado: string,
   hub: HubDeDifusion,
   auditoria: RegistroDeAuditoria,
   camposExtra?: (runner: RunnerDePartida) => Record<string, unknown>
@@ -120,7 +122,7 @@ export async function ejecutarComandoHttp(
   // ejecutado (aceptado o rechazado por el dominio) y fallo de persistencia. Registrar en cada `return` en
   // vez de en un `finally` es a propósito — el `finally` tendría que reconstruir por qué se salió, que es
   // justo el dato que aquí se conoce de primera mano.
-  const comun = { gameId: runner.gameId, actor: actorId, comando: tipo };
+  const comun = { gameId: runner.gameId, actor: actorAuditado, comando: tipo };
 
   if (!esTipoComandoValido(tipo)) {
     auditoria.registrar({ ...comun, resultado: 'rechazado', causa: 'esquema', detalle: 'tipo de comando desconocido' });

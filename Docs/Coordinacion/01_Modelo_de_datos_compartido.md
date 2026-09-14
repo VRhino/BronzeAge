@@ -4,9 +4,9 @@
 contrato implementable e interoperable**. `Docs/Coordinacion/propuestas/REVISION_CONTRATOS_CODEX_2026-09-11.md`
 encontró transiciones sin mensaje que las dispare, huecos de completitud y afirmaciones que no coincidían
 con el código real; las secciones §12/§13/§15/§17/§19 llevan las correcciones de esa revisión inline,
-marcadas donde siguen abiertas (`PENDIENTE`). Lo nuevo (`Heroe`, `Batalla`, campos 3D) todavía no existe en
-el dominio; su forma en el cable sí: schema, tipos y fixtures en `src/contratos/v1/` (§15). Todo lo demás SÍ
-existe hoy en `src/domain/types.ts` — se transcribe completo aquí
+marcadas donde siguen abiertas (`PENDIENTE`). De lo nuevo, `Heroe` ya existe en el dominio con sus campos de
+identidad (§12) y es el dueño de todo; el resto de sus campos, `Batalla` y los campos 3D todavía no. La forma
+en el cable de todo ello está en `src/contratos/v1/` (§15). Todo lo demás SÍ existe hoy en `src/domain/types.ts` — se transcribe completo aquí
 porque es lo que Unity necesita conocer para proyectar mundo, facción y asentamiento, no solo lo
 relacionado con batalla.  
 **Fecha:** 2026-09-11 (dos revisiones: se completó el inventario tras observación de que la primera versión
@@ -88,8 +88,8 @@ juego reciben `heroeId`; auditoría y autorización conservan también `usuarioI
 la IA de juego. Se llaman "héroes bot" para no confundirlos con los humanos. Un héroe bot es un `Heroe` con
 `controlador: 'bot'`: no tiene `Usuario` ni `Membresia` (su `jugadorId` es `null`) y su dueño es la Facción
 NPC, que ya actúa como `servicio_npc`. La unicidad "un héroe por jugador y mundo" solo aplica a los humanos.
-Los crea el admin (comando `crearHeroeBot`, doc 02 §4.2) y viven en la partida como cualquier otro héroe, con
-`controlador: 'bot'`. Su comportamiento en el mundo de BronzeAge está pendiente (`Docs/Mecanicas a
+Los crea el admin al crear una Facción NPC (`crearFaccionNpc`, doc 02 §4.2): nacen como los fundadores de su
+primer asentamiento y viven en la partida como cualquier otro héroe, con `controlador: 'bot'`. Su comportamiento en el mundo de BronzeAge está pendiente (`Docs/Mecanicas a
 desarrollar.md` §36); en batalla los maneja la IA de Conquest (CQ-002).
 
 ### Tabla de identidad y ámbito
@@ -821,15 +821,14 @@ transportarla).
 ```text
 BattleRules
   duracionMaximaSegundos     1800 en un asedio, 900 en el resto (Doc 5.15.1)
-  ganadorPorTiempo           'atacante' | 'defensor': quién gana si se agota el tiempo. En un asedio, el
-                             defensor (Doc 5.15.1). Fuera del asedio está PENDIENTE (Mecánicas §30)
   versionBalance             BALANCE_VERSION de BronzeAge
   versionCatalogoTropas      version de catalogoTropas.json (§13)
   versionCatalogoHeroe, versionCatalogoObjetos   versiones de los catálogos de Conquest (texto)
 ```
 
-`ganadorPorTiempo` es la única regla de victoria que fija BronzeAge; el resto (capturar objetivos, aniquilar) es
-táctico de Conquest. En v1 no hay tope de XP ni de monedas por batalla (hasta que Conquest publique su curva de XP,
+La única regla de victoria que fija BronzeAge es fija y no viaja en el ticket: si se agota el tiempo, gana el
+defensor, en cualquier batalla; el atacante es siempre quien inicia el combate (Doc 5.15.1). El resto (capturar
+objetivos, aniquilar) es táctico de Conquest. En v1 no hay tope de XP ni de monedas por batalla (hasta que Conquest publique su curva de XP,
 CQ-001); cuando lo haya se añadirá como campo opcional. Las capacidades asimétricas por bando ya viven en
 `bandos.*.capacidadMaxima` (BA-001), no se duplican aquí.
 

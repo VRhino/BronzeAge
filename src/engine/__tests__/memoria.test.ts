@@ -23,7 +23,7 @@ function dosPlazasLejanas() {
 function ejercito(faccionId: string, x: number, y: number): Ejercito {
   const escuadron: Escuadron = {
     id: 's1',
-    jugadorId: 'j1',
+    heroeId: 'j1',
     tropaId: 'milicia_lanceros',
     nombre: 'Lanceros',
     origen: 'pesants',
@@ -35,7 +35,7 @@ function ejercito(faccionId: string, x: number, y: number): Ejercito {
     id: `e-${faccionId}`,
     faccionId,
     origenAsentamientoId: 'origen',
-    participantes: [{ jugadorId: 'j1', unidoEn: instante(0) }],
+    participantes: [{ heroeId: 'j1', unidoEn: instante(0) }],
     tipo: 'ejercito',
     politicaDeUnion: 'rechazar',
     liderId: 'j1',

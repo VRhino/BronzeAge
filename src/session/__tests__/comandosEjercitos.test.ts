@@ -27,10 +27,10 @@ function partidaConTropas(liderazgoBase?: number) {
   const base = partidaConAsentamiento();
   const payload = base.sesion.exportar();
   const asentamiento = payload.state.asentamientos[0]!;
-  const escuadron = (id: string, tropaId: string, jugadorId: string) => ({
+  const escuadron = (id: string, tropaId: string, heroeId: string) => ({
     id,
     nombre: tropaId,
-    jugadorId,
+    heroeId,
     origen: 'pesants' as const,
     cantidad: 10,
     veterania: 0,
@@ -53,10 +53,10 @@ function partidaConTropas(liderazgoBase?: number) {
         },
         ...payload.state.asentamientos.slice(1),
       ],
-      jugadores:
+      heroes:
         liderazgoBase === undefined
-          ? []
-          : [{ id: base.fundador, liderazgoBase, ubicacion: { tipo: 'asentamiento' as const, asentamientoId: payload.state.asentamientos[0]!.id } }],
+          ? payload.state.heroes
+          : payload.state.heroes.map((h) => (h.id === base.fundador ? { ...h, liderazgoBase } : h)),
     },
   });
   return { ...base, sesion };
@@ -90,7 +90,7 @@ describe('movilizarEjercito', () => {
 
     const r = sesion.ejecutar(
       movilizarEjercito,
-      { asentamientoId, jugadorId: fundador, escuadronIds: [escuadronId], objetivo: PUNTO_LEJOS },
+      { asentamientoId, heroeId: fundador, escuadronIds: [escuadronId], objetivo: PUNTO_LEJOS },
       OPC
     );
 
@@ -121,14 +121,14 @@ describe('movilizarEjercito', () => {
 
     const cabe = sesion.ejecutar(
       movilizarEjercito,
-      { asentamientoId, jugadorId: fundador, escuadronIds: [milicia], objetivo: PUNTO_LEJOS },
+      { asentamientoId, heroeId: fundador, escuadronIds: [milicia], objetivo: PUNTO_LEJOS },
       OPC
     );
     expect(cabe.ok).toBe(true);
 
     const noCabe = sesion.ejecutar(
       movilizarEjercito,
-      { asentamientoId, jugadorId: fundador, escuadronIds: [honderos], objetivo: PUNTO_LEJOS },
+      { asentamientoId, heroeId: fundador, escuadronIds: [honderos], objetivo: PUNTO_LEJOS },
       OPC
     );
     expect(noCabe.ok).toBe(false);
@@ -144,7 +144,7 @@ describe('movilizarEjercito', () => {
 
     const r = sesion.ejecutar(
       movilizarEjercito,
-      { asentamientoId, jugadorId: 'jugador-intruso', escuadronIds: [escuadronId], objetivo: PUNTO_LEJOS },
+      { asentamientoId, heroeId: 'jugador-intruso', escuadronIds: [escuadronId], objetivo: PUNTO_LEJOS },
       OPC
     );
     expect(r.ok).toBe(false);
@@ -156,7 +156,7 @@ describe('movilizarEjercito', () => {
 
     const r = sesion.ejecutar(
       movilizarEjercito,
-      { asentamientoId, jugadorId: fundador, escuadronIds: [escuadronId], objetivo: { tipo: 'asentamiento', id: asentamientoId } },
+      { asentamientoId, heroeId: fundador, escuadronIds: [escuadronId], objetivo: { tipo: 'asentamiento', id: asentamientoId } },
       OPC
     );
     expect(r.ok).toBe(false);
@@ -166,7 +166,7 @@ describe('movilizarEjercito', () => {
     const { sesion, asentamientoId, fundador } = partidaConTropas();
     const r = sesion.ejecutar(
       movilizarEjercito,
-      { asentamientoId, jugadorId: fundador, escuadronIds: [], objetivo: PUNTO_LEJOS },
+      { asentamientoId, heroeId: fundador, escuadronIds: [], objetivo: PUNTO_LEJOS },
       OPC
     );
     expect(r.ok).toBe(false);
@@ -179,7 +179,7 @@ describe('replegarEjercito — cancelar la marcha (Doc 5.12.6)', () => {
     const escuadronId = 'esc-milicia';
     sesion.ejecutar(
       movilizarEjercito,
-      { asentamientoId, jugadorId: fundador, escuadronIds: [escuadronId], objetivo: PUNTO_LEJOS },
+      { asentamientoId, heroeId: fundador, escuadronIds: [escuadronId], objetivo: PUNTO_LEJOS },
       OPC
     );
 
@@ -201,7 +201,7 @@ describe('replegarEjercito — cancelar la marcha (Doc 5.12.6)', () => {
     const escuadronId = 'esc-milicia';
     sesion.ejecutar(
       movilizarEjercito,
-      { asentamientoId, jugadorId: fundador, escuadronIds: [escuadronId], objetivo: PUNTO_LEJOS },
+      { asentamientoId, heroeId: fundador, escuadronIds: [escuadronId], objetivo: PUNTO_LEJOS },
       OPC
     );
     const ejercitoId = sesion.getState().ejercitos[0]!.id;
@@ -220,7 +220,7 @@ describe('replegarEjercito — cancelar la marcha (Doc 5.12.6)', () => {
     const escuadronId = 'esc-milicia';
     sesion.ejecutar(
       movilizarEjercito,
-      { asentamientoId, jugadorId: fundador, escuadronIds: [escuadronId], objetivo: PUNTO_LEJOS },
+      { asentamientoId, heroeId: fundador, escuadronIds: [escuadronId], objetivo: PUNTO_LEJOS },
       OPC
     );
     const ejercitoId = sesion.getState().ejercitos[0]!.id;
@@ -238,13 +238,13 @@ describe('unirseAEjercito', () => {
 
     sesion.ejecutar(
       movilizarEjercito,
-      { asentamientoId, jugadorId: fundador, escuadronIds: [primero], objetivo: PUNTO_LEJOS },
+      { asentamientoId, heroeId: fundador, escuadronIds: [primero], objetivo: PUNTO_LEJOS },
       OPC
     );
     const ejercitoId = sesion.getState().ejercitos[0]!.id;
 
     // Todavía no se ha movido: sigue en la posición del asentamiento, así que está dentro del radio.
-    const r = sesion.ejecutar(unirseAEjercito, { ejercitoId, asentamientoId, jugadorId: fundador, escuadronIds: [segundo] }, OPC);
+    const r = sesion.ejecutar(unirseAEjercito, { ejercitoId, asentamientoId, heroeId: fundador, escuadronIds: [segundo] }, OPC);
     expect(r.ok).toBe(true);
 
     const estado = sesion.getState();
@@ -261,12 +261,12 @@ describe('unirseAEjercito', () => {
 
     sesion.ejecutar(
       movilizarEjercito,
-      { asentamientoId, jugadorId: fundador, escuadronIds: [primero], objetivo: PUNTO_LEJOS },
+      { asentamientoId, heroeId: fundador, escuadronIds: [primero], objetivo: PUNTO_LEJOS },
       OPC
     );
     const ejercitoId = sesion.getState().ejercitos[0]!.id;
 
-    const r = sesion.ejecutar(unirseAEjercito, { ejercitoId, asentamientoId, jugadorId: fundador, escuadronIds: [segundo] }, OPC);
+    const r = sesion.ejecutar(unirseAEjercito, { ejercitoId, asentamientoId, heroeId: fundador, escuadronIds: [segundo] }, OPC);
     expect(r.ok).toBe(false);
     expect(r.ok === false && r.codigoError).toBe(CODIGOS_ERROR.movilizacionInvalida);
   });
@@ -276,7 +276,7 @@ describe('unirseAEjercito', () => {
     const escuadronId = 'esc-milicia';
     const r = sesion.ejecutar(
       unirseAEjercito,
-      { ejercitoId: 'ejercito-fantasma', asentamientoId, jugadorId: fundador, escuadronIds: [escuadronId] },
+      { ejercitoId: 'ejercito-fantasma', asentamientoId, heroeId: fundador, escuadronIds: [escuadronId] },
       OPC
     );
     expect(r.ok).toBe(false);
@@ -293,7 +293,7 @@ describe('carga del carro desde el almacén', () => {
   it('se lleva un carro entero si el almacén va sobrado', () => {
     const { sesion, asentamientoId, fundador } = conTrigo(partidaConTropas(), 100000);
 
-    sesion.ejecutar(movilizarEjercito, { asentamientoId, jugadorId: fundador, escuadronIds: ['esc-milicia'], objetivo: PUNTO_LEJOS }, OPC);
+    sesion.ejecutar(movilizarEjercito, { asentamientoId, heroeId: fundador, escuadronIds: ['esc-milicia'], objetivo: PUNTO_LEJOS }, OPC);
 
     const estado = sesion.getState();
     expect(estado.ejercitos[0]!.suministro['trigo']).toBe(LOGISTICA.capacidadCarroPorJugador);
@@ -306,7 +306,7 @@ describe('carga del carro desde el almacén', () => {
     const reserva = reservaDeTrigo(base.sesion.getState().asentamientos[0]!);
     const { sesion, asentamientoId, fundador } = conTrigo(base, reserva + 30);
 
-    sesion.ejecutar(movilizarEjercito, { asentamientoId, jugadorId: fundador, escuadronIds: ['esc-milicia'], objetivo: PUNTO_LEJOS }, OPC);
+    sesion.ejecutar(movilizarEjercito, { asentamientoId, heroeId: fundador, escuadronIds: ['esc-milicia'], objetivo: PUNTO_LEJOS }, OPC);
 
     const estado = sesion.getState();
     const cargado = estado.ejercitos[0]!.suministro['trigo']!;
@@ -320,7 +320,7 @@ describe('carga del carro desde el almacén', () => {
     const base = partidaConTropas();
     const { sesion, asentamientoId, fundador } = conTrigo(base, 1);
 
-    const r = sesion.ejecutar(movilizarEjercito, { asentamientoId, jugadorId: fundador, escuadronIds: ['esc-milicia'], objetivo: PUNTO_LEJOS }, OPC);
+    const r = sesion.ejecutar(movilizarEjercito, { asentamientoId, heroeId: fundador, escuadronIds: ['esc-milicia'], objetivo: PUNTO_LEJOS }, OPC);
 
     expect(r.ok).toBe(true);
     const estado = sesion.getState();
@@ -330,10 +330,10 @@ describe('carga del carro desde el almacén', () => {
 
   it('el que se une trae SU carro y lo carga de SU asentamiento', () => {
     const { sesion, asentamientoId, fundador, vecino } = conTrigo(partidaConTropas(), 100000);
-    sesion.ejecutar(movilizarEjercito, { asentamientoId, jugadorId: fundador, escuadronIds: ['esc-milicia'], objetivo: PUNTO_LEJOS }, OPC);
+    sesion.ejecutar(movilizarEjercito, { asentamientoId, heroeId: fundador, escuadronIds: ['esc-milicia'], objetivo: PUNTO_LEJOS }, OPC);
     const ejercitoId = sesion.getState().ejercitos[0]!.id;
 
-    const r = sesion.ejecutar(unirseAEjercito, { ejercitoId, asentamientoId, jugadorId: vecino, escuadronIds: ['esc-vecino'] }, { actor: vecino });
+    const r = sesion.ejecutar(unirseAEjercito, { ejercitoId, asentamientoId, heroeId: vecino, escuadronIds: ['esc-vecino'] }, { actor: vecino });
 
     expect(r.ok).toBe(true);
     // Dos participantes, dos carros: el suministro dobla.
@@ -342,15 +342,15 @@ describe('carga del carro desde el almacén', () => {
 
   it('unirse DOS veces no duplica el carro: el tope va contra los participantes, no contra las veces', () => {
     const { sesion, asentamientoId, fundador } = conTrigo(partidaConTropas(), 100000);
-    sesion.ejecutar(movilizarEjercito, { asentamientoId, jugadorId: fundador, escuadronIds: ['esc-milicia'], objetivo: PUNTO_LEJOS }, OPC);
+    sesion.ejecutar(movilizarEjercito, { asentamientoId, heroeId: fundador, escuadronIds: ['esc-milicia'], objetivo: PUNTO_LEJOS }, OPC);
     const ejercitoId = sesion.getState().ejercitos[0]!.id;
 
     // El MISMO jugador suma más escuadrones suyos: sigue siendo un participante, así que sigue siendo un carro.
-    sesion.ejecutar(unirseAEjercito, { ejercitoId, asentamientoId, jugadorId: fundador, escuadronIds: ['esc-mimbre'] }, OPC);
-    sesion.ejecutar(unirseAEjercito, { ejercitoId, asentamientoId, jugadorId: fundador, escuadronIds: ['esc-honderos'] }, OPC);
+    sesion.ejecutar(unirseAEjercito, { ejercitoId, asentamientoId, heroeId: fundador, escuadronIds: ['esc-mimbre'] }, OPC);
+    sesion.ejecutar(unirseAEjercito, { ejercitoId, asentamientoId, heroeId: fundador, escuadronIds: ['esc-honderos'] }, OPC);
 
     const ejercito = sesion.getState().ejercitos[0]!;
-    expect(new Set(ejercito.escuadrones.map((e) => e.jugadorId)).size).toBe(1);
+    expect(new Set(ejercito.escuadrones.map((e) => e.heroeId)).size).toBe(1);
     expect(ejercito.suministro['trigo']).toBe(LOGISTICA.capacidadCarroPorJugador);
   });
 
@@ -358,7 +358,7 @@ describe('carga del carro desde el almacén', () => {
     const { sesion, asentamientoId, fundador } = conTrigo(partidaConTropas(), 700);
     const antes = trigoDe(sesion.getState().asentamientos[0]!);
 
-    sesion.ejecutar(movilizarEjercito, { asentamientoId, jugadorId: fundador, escuadronIds: ['esc-milicia'], objetivo: PUNTO_LEJOS }, OPC);
+    sesion.ejecutar(movilizarEjercito, { asentamientoId, heroeId: fundador, escuadronIds: ['esc-milicia'], objetivo: PUNTO_LEJOS }, OPC);
 
     const estado = sesion.getState();
     expect(trigoDe(estado.asentamientos[0]!) + estado.ejercitos[0]!.suministro['trigo']!).toBeCloseTo(antes);

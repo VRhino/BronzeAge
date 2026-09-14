@@ -20,6 +20,7 @@ import { ERROR_RESPUESTA, PARAMS_GAME_ID, QUERY_DESDE } from './esquemas';
 import {
   partidaNoAbierta,
   resolverActor,
+  resumenDe,
   sinPermiso,
   sinSesion,
   type DependenciasDeRutas,
@@ -34,14 +35,25 @@ const SEGURIDAD_JUGADOR = [{ [ESQUEMA_SESION_AUTH]: [] }];
  * `session/proyecciones/jugador.ts`. `produccionDeAsentamiento` solo viaja cuando el jugador está DENTRO de
  * una plaza (`asentamientos[0]`), que es la única cuya producción tiene sentido enseñar.
  */
-function conImpuros(runner: RunnerDePartida, jugadorId: string): Record<string, unknown> {
-  const proyeccion = proyectarParaJugador(runner.getState(), jugadorId, runner.geometriaAsentamientos());
+function conImpuros(runner: RunnerDePartida, heroeId: string): Record<string, unknown> {
+  const proyeccion = proyectarParaJugador(runner.getState(), heroeId, runner.geometriaAsentamientos());
   const dentro = proyeccion.asentamientos[0];
   return {
     ...proyeccion,
     preciosReferencia: runner.preciosReferencia(),
     ...(dentro ? { produccionDeAsentamiento: runner.produccionDeAsentamiento(dentro.id) } : {}),
   };
+}
+
+/** El héroe de esta membresía, si ya lo creó. Todo lo que hay por debajo de esta superficie trabaja con él. */
+function heroeDe(runner: RunnerDePartida, jugadorId: string) {
+  return runner.getState().heroes.find((h) => h.jugadorId === jugadorId);
+}
+
+/** Sin héroe no hay a quién proyectar: el cliente ofrece crearlo (comando `crearHeroe`, doc 02 §4.2). */
+function proyeccionDe(runner: RunnerDePartida, jugadorId: string): Record<string, unknown> {
+  const heroe = heroeDe(runner, jugadorId);
+  return heroe ? conImpuros(runner, heroe.id) : { ...resumenDe(runner), sinHeroe: true };
 }
 
 const ESQUEMA_MEMBRESIA = {
@@ -140,8 +152,7 @@ export function registrarRutasDeJugador(app: FastifyInstance, deps: Dependencias
     const runner = deps.partidas.obtener(gameId);
     if (!runner) return partidaNoAbierta(reply, gameId);
 
-    const jugadorId = resuelto.actor.membresia!.jugadorId!;
-    return reply.send(conImpuros(runner, jugadorId));
+    return reply.send(proyeccionDe(runner, resuelto.actor.membresia!.jugadorId!));
   });
 
   /** Cursor de eventos (Fase C13) — ver `ESQUEMA_EVENTOS`. */
@@ -160,8 +171,8 @@ export function registrarRutasDeJugador(app: FastifyInstance, deps: Dependencias
       const desde = Number(request.query.desde ?? '0');
       if (!Number.isInteger(desde) || desde < 0) return reply.code(400).send({ error: '`desde` debe ser un entero no negativo.' });
 
-      const jugadorId = resuelto.actor.membresia!.jugadorId!;
-      return reply.send({ eventos: eventosDominioParaJugador(runner.getState(), jugadorId, desde) });
+      const heroe = heroeDe(runner, resuelto.actor.membresia!.jugadorId!);
+      return reply.send({ eventos: heroe ? eventosDominioParaJugador(runner.getState(), heroe.id, desde) : [] });
     }
   );
 
@@ -190,10 +201,12 @@ export function registrarRutasDeJugador(app: FastifyInstance, deps: Dependencias
       const runner = deps.partidas.obtener(gameId);
       if (!runner) return partidaNoAbierta(reply, gameId);
 
+      // Sin héroe, el actor es el jugador de la membresía y solo puede crearlo (`verificarAutorizacion`).
       const jugadorId = resuelto.actor.membresia!.jugadorId!;
-      const actor: ActorDeComando = { rol: 'jugador', jugadorId };
-      return ejecutarComandoHttp(reply, runner, request.body, actor, jugadorId, deps.hub, deps.auditoria, (r) => ({
-        proyeccion: conImpuros(r, jugadorId),
+      const heroe = heroeDe(runner, jugadorId);
+      const actor: ActorDeComando = { rol: 'jugador', heroeId: heroe?.id ?? null };
+      return ejecutarComandoHttp(reply, runner, request.body, actor, heroe?.id ?? jugadorId, jugadorId, deps.hub, deps.auditoria, (r) => ({
+        proyeccion: proyeccionDe(r, jugadorId),
       }));
     }
   );

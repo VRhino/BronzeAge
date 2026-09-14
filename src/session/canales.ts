@@ -32,13 +32,13 @@ export function canalDeEvento(evento: EventoDominio): string {
 }
 
 /**
- * Puede suscribirse `jugadorId` al `canal` indicado, con el estado ACTUAL de la partida.
+ * Puede suscribirse `heroeId` al `canal` indicado, con el estado ACTUAL de la partida.
  *
  * Se evalúa en el momento de suscribirse, no en cada mensaje difundido — si una anexión o fusión cambiara la
  * Facción dueña de un asentamiento después, una suscripción ya activa no se re-valida sola (simplificación
  * conocida, igual que en la proyección: casos raros, y el cliente vuelve a suscribirse en cada reconexión).
  */
-export function puedeSuscribirseA(estado: GameSessionState, jugadorId: string, canal: string): boolean {
+export function puedeSuscribirseA(estado: GameSessionState, heroeId: string, canal: string): boolean {
   if (canal === CANAL_GENERAL) return true;
   const asentamientoId = canal.startsWith('asentamiento/') ? canal.slice('asentamiento/'.length) : undefined;
   if (asentamientoId === undefined) return false; // canal con forma desconocida: no autorizado, no un error
@@ -47,5 +47,5 @@ export function puedeSuscribirseA(estado: GameSessionState, jugadorId: string, c
   if (!asentamiento) return false; // no existe: nada que suscribir, no se distingue de "no autorizado"
 
   const faccion = estado.facciones.find((f) => f.id === asentamiento.faccionId);
-  return faccion !== undefined && esCiudadano(faccion, jugadorId);
+  return faccion !== undefined && esCiudadano(faccion, heroeId);
 }

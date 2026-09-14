@@ -40,7 +40,7 @@ function base() {
 const escuadron = (id: string, tropaId: string, cantidad = 10, moral = 100): Escuadron => ({
   id,
   nombre: tropaId,
-  jugadorId: 'jugador-1',
+  heroeId: 'jugador-1',
   origen: 'pesants',
   cantidad,
   veterania: 0,
@@ -65,10 +65,10 @@ function ejercitoDe(origen: Asentamiento, escuadrones: Escuadron[], trigo: numbe
     id: 'ejercito-1',
     faccionId: origen.faccionId,
     origenAsentamientoId: origen.id,
-    participantes: [...new Set(escuadrones.map((e) => e.jugadorId))].map((jugadorId) => ({ jugadorId, unidoEn: instante(0) })),
+    participantes: [...new Set(escuadrones.map((e) => e.heroeId))].map((heroeId) => ({ heroeId, unidoEn: instante(0) })),
     tipo: 'ejercito',
     politicaDeUnion: 'rechazar',
-    liderId: escuadrones[0]?.jugadorId ?? 'jugador-1',
+    liderId: escuadrones[0]?.heroeId ?? 'jugador-1',
     escuadrones,
     suministro: { trigo },
     caravanasAdjuntasIds: [],
@@ -162,7 +162,7 @@ describe('avanzarEjercitos — comer y moverse', () => {
 describe('avanzarEjercitos — el ejército fantasma (Doc 5.13.4)', () => {
   // Lo que retira una columna es quedarse SIN NADIE DENTRO, no sin soldados. La versión anterior de estos
   // tests congelaba lo segundo, y con ello borraba del mapa a un jugador que seguía ahí.
-  it('sin un solo soldado en pie NO se disuelve: sus jugadores siguen dentro, ahora a pie', () => {
+  it('sin un solo soldado en pie NO se disuelve: sus heroes siguen dentro, ahora a pie', () => {
     const { asentamiento } = base();
     // Escuadrón aniquilado pero vivo como identidad: es lo que Doc 5.4 preserva para poder rellenarlo.
     const ejercito = ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros', 0)], 0);
@@ -372,7 +372,7 @@ describe('llegada a un asentamiento ajeno = asedio (Paso 7)', () => {
   });
 
   it('la guarnición del conquistado la forman los escuadrones del ejército conquistador (Ocupacion §2.2)', () => {
-    const veterano: Escuadron = { ...escuadron('d1', 'milicia_lanceros', 1), jugadorId: 'rival-a', veterania: 3 };
+    const veterano: Escuadron = { ...escuadron('d1', 'milicia_lanceros', 1), heroeId: 'rival-a', veterania: 3 };
     const { facciones, propio, enemigo, ejercito } = frenteDeGuerra([veterano]);
 
     const r = avanzar([ejercito], [propio, enemigo], { facciones });
@@ -387,12 +387,12 @@ describe('llegada a un asentamiento ajeno = asedio (Paso 7)', () => {
 
   it('conquistar deja HUÉRFANOS a los residentes y saquea la plaza (Doc 5.4 / Ocupacion §2.2)', () => {
     const { facciones, propio, enemigo, ejercito } = frenteDeGuerra([]);
-    expect(enemigo.jugadoresFundadoresIds.length, 'la plaza arranca con residentes').toBeGreaterThan(0);
+    expect(enemigo.heroesFundadoresIds.length, 'la plaza arranca con residentes').toBeGreaterThan(0);
 
     const r = avanzar([ejercito], [propio, enemigo], { facciones });
     const despues = r.asentamientos.find((a) => a.id === enemigo.id)!;
 
-    expect(despues.jugadoresFundadoresIds).toEqual([]);
+    expect(despues.heroesFundadoresIds).toEqual([]);
     expect(despues.casasCompradas).toEqual([]);
     expect(Object.values(despues.cargos).every((v) => v === null)).toBe(true);
     // Los edificios no se BORRAN (siguen en el array, dañados en la cola), pero la población se saquea.
@@ -494,9 +494,9 @@ describe('llegada a un asentamiento ajeno = asedio (Paso 7)', () => {
     // guardar "huérfano" en ninguna parte — es no residir en ningún asentamiento, y sale solo de que la
     // conquista vacíe las listas de residencia.
     const { facciones, propio, enemigo } = frenteDeGuerra([]);
-    const suDueno = propio.jugadoresFundadoresIds[0]!;
+    const suDueno = propio.heroesFundadoresIds[0]!;
     const enCampana: Ejercito = {
-      ...ejercitoDe(propio, [{ ...escuadron('a1', 'milicia_lanceros', 40), jugadorId: suDueno }], 5000),
+      ...ejercitoDe(propio, [{ ...escuadron('a1', 'milicia_lanceros', 40), heroeId: suDueno }], 5000),
       id: 'ejercito-suyo',
       objetivo: { tipo: 'asentamiento', id: enemigo.id },
       ruta: [propio.posicion, enemigo.posicion],
@@ -686,7 +686,7 @@ const caravanaDe = (id: string, origenId: string, posicion: { x: number; y: numb
 });
 
 describe('caravanas adjuntas', () => {
-  it('la capacidad de una caravana NO es menor que el carro de un Jugador (Doc 5.13.2)', () => {
+  it('la capacidad de una caravana NO es menor que el carro de un Heroe (Doc 5.13.2)', () => {
     // El invariante que justifica el rebalance del Paso 9: si cargara menos, engancharla no tendría sentido.
     expect(capacidadCaravana(caravanaDe('c', 'o', { x: 0, y: 0 }))).toBeGreaterThanOrEqual(LOGISTICA.capacidadCarroPorJugador);
   });

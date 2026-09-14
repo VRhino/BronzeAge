@@ -51,6 +51,9 @@ export const CODIGOS_ERROR = {
   faccionYaPerteneces: 'faccion.ya_pertenece',
   faccionCooldownCreacion: 'faccion.cooldown_creacion',
   faccionNoPerteneces: 'faccion.no_pertenece',
+  // `crearHeroe` (doc 02 §4.2): un héroe por jugador y partida, con nombre.
+  heroeYaExiste: 'heroe.ya_existe',
+  heroeNombreVacio: 'heroe.nombre_vacio',
 } as const;
 
 export type CodigoError = (typeof CODIGOS_ERROR)[keyof typeof CODIGOS_ERROR];

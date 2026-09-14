@@ -36,14 +36,14 @@ function conCaravana(estado: GameSessionState, actualizada: GameSessionState['ca
   return { ...estado, caravanas: estado.caravanas.map((c) => (c.id === actualizada.id ? actualizada : c)) };
 }
 
-function jugadorDe(estado: GameSessionState, jugadorId: string) {
-  return estado.jugadores.find((j) => j.id === jugadorId);
+function jugadorDe(estado: GameSessionState, heroeId: string) {
+  return estado.heroes.find((j) => j.id === heroeId);
 }
 
 export interface PayloadEjercitoMovilizado {
   ejercitoId: string;
   origenAsentamientoId: string;
-  jugadorId: string;
+  heroeId: string;
   escuadronIds: string[];
   liderazgoUsado: number;
   objetivo: ObjetivoEjercito;
@@ -54,7 +54,7 @@ export interface PayloadEjercitoMovilizado {
 
 export interface ParamsMovilizarEjercito {
   asentamientoId: string;
-  jugadorId: string;
+  heroeId: string;
   escuadronIds: string[];
   objetivo: ObjetivoEjercito;
   /** Qué hacer con quien pida unirse por el camino (Doc 5.14.1). Se fija AQUÍ, al parir la columna, y no
@@ -68,8 +68,8 @@ export const movilizarEjercito = comando<ParamsMovilizarEjercito, { ejercitoId: 
 
   const { asentamiento: origen, ejercito, trigoCargado } = movilizarEngine(
     asentamiento,
-    jugadorDe(estado, params.jugadorId),
-    params.jugadorId,
+    jugadorDe(estado, params.heroeId),
+    params.heroeId,
     params.escuadronIds,
     params.objetivo,
     estado.asentamientos,
@@ -90,15 +90,15 @@ export const movilizarEjercito = comando<ParamsMovilizarEjercito, { ejercitoId: 
   };
 
   return exito(
-    conHistorialDeJugador(siguiente, params.jugadorId, `Sale de campaña desde ${asentamiento.id} hacia ${destino}.`),
+    conHistorialDeJugador(siguiente, params.heroeId, `Sale de campaña desde ${asentamiento.id} hacia ${destino}.`),
     [
       evento(ctx, {
         codigo: 'ejercito.movilizado',
-        mensaje: `${params.jugadorId} sale de ${asentamiento.id} con ${ejercito.escuadrones.length} escuadrón(es) hacia ${destino}, ${conElCarro}.`,
+        mensaje: `${params.heroeId} sale de ${asentamiento.id} con ${ejercito.escuadrones.length} escuadrón(es) hacia ${destino}, ${conElCarro}.`,
         payload: {
           ejercitoId: ejercito.id,
           origenAsentamientoId: asentamiento.id,
-          jugadorId: params.jugadorId,
+          heroeId: params.heroeId,
           escuadronIds: [...params.escuadronIds],
           liderazgoUsado: liderazgoComprometido(ejercito.escuadrones),
           objetivo: params.objetivo,
@@ -114,7 +114,7 @@ export const movilizarEjercito = comando<ParamsMovilizarEjercito, { ejercitoId: 
 export interface PayloadEjercitoRefuerzo {
   ejercitoId: string;
   asentamientoId: string;
-  jugadorId: string;
+  heroeId: string;
   escuadronIds: string[];
   /** Trigo que el que se une aporta al carro común, tomado de SU asentamiento (Doc 5.13). */
   trigoCargado: number;
@@ -123,7 +123,7 @@ export interface PayloadEjercitoRefuerzo {
 export interface ParamsUnirseAEjercito {
   ejercitoId: string;
   asentamientoId: string;
-  jugadorId: string;
+  heroeId: string;
   escuadronIds: string[];
 }
 
@@ -134,8 +134,8 @@ export const unirseAEjercito = comando<ParamsUnirseAEjercito, void>((estado, _ma
   const { asentamiento: origen, ejercito, trigoCargado } = unirseEngine(
     ejercitoActual,
     asentamiento,
-    jugadorDe(estado, params.jugadorId),
-    params.jugadorId,
+    jugadorDe(estado, params.heroeId),
+    params.heroeId,
     params.escuadronIds,
     ctx.instante,
     estado.caravanas
@@ -143,15 +143,15 @@ export const unirseAEjercito = comando<ParamsUnirseAEjercito, void>((estado, _ma
 
   const siguiente = conEjercito(conAsentamiento(estado, origen), ejercito);
   return exito(
-    conHistorialDeJugador(siguiente, params.jugadorId, `Se une al ejército ${ejercito.id} desde ${asentamiento.id}.`),
+    conHistorialDeJugador(siguiente, params.heroeId, `Se une al ejército ${ejercito.id} desde ${asentamiento.id}.`),
     [
       evento(ctx, {
         codigo: 'ejercito.refuerzo',
-        mensaje: `${params.jugadorId} refuerza el ejército ${ejercito.id} con ${params.escuadronIds.length} escuadrón(es) y ${Math.floor(trigoCargado)} de trigo.`,
+        mensaje: `${params.heroeId} refuerza el ejército ${ejercito.id} con ${params.escuadronIds.length} escuadrón(es) y ${Math.floor(trigoCargado)} de trigo.`,
         payload: {
           ejercitoId: ejercito.id,
           asentamientoId: asentamiento.id,
-          jugadorId: params.jugadorId,
+          heroeId: params.heroeId,
           escuadronIds: [...params.escuadronIds],
           trigoCargado,
         } satisfies PayloadEjercitoRefuerzo,
@@ -249,13 +249,13 @@ export const alternarReabastecerAliados = comando<ParamsAlternarReabastecerAliad
 export interface PayloadCaravanaAdjunta {
   ejercitoId: string;
   caravanaId: string;
-  jugadorId: string;
+  heroeId: string;
 }
 
 export interface ParamsAdjuntarCaravana {
   ejercitoId: string;
   caravanaId: string;
-  jugadorId: string;
+  heroeId: string;
 }
 
 /** Engancha una caravana propia al ejército como tren de suministros (Doc 5.13.2). Las condiciones —misma
@@ -270,7 +270,7 @@ export const adjuntarCaravana = comando<ParamsAdjuntarCaravana, void>((estado, _
     evento(ctx, {
       codigo: 'ejercito.caravana_adjuntada',
       mensaje: `La caravana ${caravana.id} se engancha al ejército ${ejercito.id}.`,
-      payload: { ejercitoId: ejercito.id, caravanaId: caravana.id, jugadorId: params.jugadorId } satisfies PayloadCaravanaAdjunta,
+      payload: { ejercitoId: ejercito.id, caravanaId: caravana.id, heroeId: params.heroeId } satisfies PayloadCaravanaAdjunta,
       asentamientoId: ejercito.origenAsentamientoId,
     }),
   ]);
@@ -279,7 +279,7 @@ export const adjuntarCaravana = comando<ParamsAdjuntarCaravana, void>((estado, _
 export interface ParamsSoltarCaravana {
   ejercitoId: string;
   caravanaId: string;
-  jugadorId: string;
+  heroeId: string;
 }
 
 /** Suelta una caravana del ejército; se queda donde esté la columna (Doc 5.13.2). */
@@ -292,7 +292,7 @@ export const soltarCaravana = comando<ParamsSoltarCaravana, void>((estado, _mapa
     evento(ctx, {
       codigo: 'ejercito.caravana_soltada',
       mensaje: `La caravana ${params.caravanaId} se desengancha del ejército ${ejercito.id}.`,
-      payload: { ejercitoId: ejercito.id, caravanaId: params.caravanaId, jugadorId: params.jugadorId } satisfies PayloadCaravanaAdjunta,
+      payload: { ejercitoId: ejercito.id, caravanaId: params.caravanaId, heroeId: params.heroeId } satisfies PayloadCaravanaAdjunta,
       asentamientoId: ejercito.origenAsentamientoId,
     }),
   ]);

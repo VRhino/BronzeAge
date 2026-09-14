@@ -9,14 +9,15 @@
 // poder por punto salía idéntico para las once tropas y elegir composición no era una decisión sino
 // aritmética. Este archivo cambió entero con ese rediseño.
 import { describe, expect, it } from 'vitest';
-import type { Escuadron, Jugador } from '../../domain/types';
+import type { Escuadron, Heroe } from '../../domain/types';
 import { LIDERAZGO, TROPAS_RECLUTABLES } from '../../constants';
 import { costeLiderazgo, liderazgoComprometido, liderazgoDisponible, liderazgoDe, puedeLlevar } from '../liderazgo';
+import { heroeDePrueba } from './fixtures';
 
-const escuadron = (tropaId: string, jugadorId = 'jugador-1'): Escuadron => ({
-  id: `e-${tropaId}-${jugadorId}`,
+const escuadron = (tropaId: string, heroeId = 'jugador-1'): Escuadron => ({
+  id: `e-${tropaId}-${heroeId}`,
   nombre: tropaId,
-  jugadorId,
+  heroeId,
   origen: 'pesants',
   cantidad: 10,
   veterania: 0,
@@ -116,7 +117,7 @@ describe('liderazgoDe / liderazgoDisponible', () => {
 
   it('un jugador con más liderazgo saca más', () => {
     // El techo por progresión todavía no existe como mecánica, pero el motor ya lo admite por jugador.
-    const veterano: Jugador = { id: 'jugador-1', liderazgoBase: LIDERAZGO.base * 1.5, ubicacion: { tipo: 'asentamiento', asentamientoId: 'a' } };
+    const veterano: Heroe = heroeDePrueba('jugador-1', { tipo: 'asentamiento', asentamientoId: 'a' }, { liderazgoBase: LIDERAZGO.base * 1.5 });
     const tres = [escuadron(deEscalon(5), 'a'), escuadron(deEscalon(4), 'a'), escuadron(deEscalon(3), 'a')];
     expect(puedeLlevar(veterano, [...tres, escuadron(deEscalon(2), 'a')])).toBe(true);
     expect(puedeLlevar(undefined, [...tres, escuadron(deEscalon(2), 'a')])).toBe(false);

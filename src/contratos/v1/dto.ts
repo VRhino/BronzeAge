@@ -242,10 +242,8 @@ export interface SettlementBattleSnapshot {
 }
 
 export interface BattleRules {
-  /** Doc 5.15.1: 1800 en un asedio, 900 en el resto. */
+  /** Doc 5.15.1: 1800 en un asedio, 900 en el resto. Si se agota, gana el defensor, en cualquier batalla. */
   duracionMaximaSegundos: number;
-  /** Quién gana si se agota el tiempo. En un asedio, el defensor (Doc 5.15.1). */
-  ganadorPorTiempo: LadoId;
   versionBalance: number;
   versionCatalogoTropas: number;
   versionCatalogoHeroe: string;

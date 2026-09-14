@@ -15,7 +15,7 @@ import { inspeccionar } from '../comandos/interaccion';
 import { OPC, partidaConAsentamiento } from './fixtures';
 import { LOGISTICA, MOVIMIENTO, SIMULACION, VISION } from '../../constants';
 
-const opcDe = (jugadorId: string) => ({ ...OPC, actor: jugadorId });
+const opcDe = (heroeId: string) => ({ ...OPC, actor: heroeId });
 const PUNTO_LEJOS = { tipo: 'punto', punto: { x: 430, y: 430 } } as const;
 
 /** Partida con un escuadrón por jugador y almacén holgado. */
@@ -23,10 +23,10 @@ function partidaConDos() {
   const base = partidaConAsentamiento();
   const payload = base.sesion.exportar();
   const a = payload.state.asentamientos[0]!;
-  const escuadron = (id: string, jugadorId: string) => ({
+  const escuadron = (id: string, heroeId: string) => ({
     id,
     nombre: 'milicia_lanceros',
-    jugadorId,
+    heroeId,
     origen: 'pesants' as const,
     cantidad: 10,
     veterania: 0,
@@ -60,12 +60,12 @@ function ejercitoYViajero(politica: 'rechazar' | 'aceptar' | 'preguntar') {
   const base = partidaConDos();
   base.sesion.ejecutar(
     movilizarEjercito,
-    { asentamientoId: base.asentamientoId, jugadorId: base.fundador, escuadronIds: ['esc-lider'], objetivo: PUNTO_LEJOS, politicaDeUnion: politica },
+    { asentamientoId: base.asentamientoId, heroeId: base.fundador, escuadronIds: ['esc-lider'], objetivo: PUNTO_LEJOS, politicaDeUnion: politica },
     opcDe(base.fundador)
   );
   base.sesion.ejecutar(
     salirAlMundo,
-    { asentamientoId: base.asentamientoId, jugadorId: base.vecino, escuadronIds: ['esc-vecino'], carga: { trigo: 60 } },
+    { asentamientoId: base.asentamientoId, heroeId: base.vecino, escuadronIds: ['esc-vecino'], carga: { trigo: 60 } },
     opcDe(base.vecino)
   );
   const payload = base.sesion.exportar();
@@ -86,7 +86,7 @@ describe('unirseEnCampo — el precio es la libertad de movimiento (Doc 5.14.1)'
   it('con política `aceptar` funde la columna en el ejército y le pasa su destino', () => {
     const { sesion, ejercitoId, vecino } = ejercitoYViajero('aceptar');
 
-    const r = sesion.ejecutar(unirseEnCampo, { ejercitoId, jugadorId: vecino }, opcDe(vecino));
+    const r = sesion.ejecutar(unirseEnCampo, { ejercitoId, heroeId: vecino }, opcDe(vecino));
 
     expect(r.ok).toBe(true);
     expect(sesion.getState().ejercitos, 'la columna personal deja de existir').toHaveLength(1);
@@ -94,14 +94,14 @@ describe('unirseEnCampo — el precio es la libertad de movimiento (Doc 5.14.1)'
     expect(ejercito.participantes).toHaveLength(2);
     expect(ejercito.escuadrones.map((e) => e.id).sort()).toEqual(['esc-lider', 'esc-vecino']);
     expect(ejercito.suministro['trigo'], 'y su carro entra en el común').toBeGreaterThan(60);
-    expect(sesion.getState().jugadores.find((j) => j.id === vecino)!.ubicacion).toEqual({ tipo: 'columna', ejercitoId });
+    expect(sesion.getState().heroes.find((j) => j.id === vecino)!.ubicacion).toEqual({ tipo: 'columna', ejercitoId });
   });
 
   it('y a partir de ahí ya no puede rectificar el rumbo: ese es el precio', () => {
     const { sesion, ejercitoId, vecino } = ejercitoYViajero('aceptar');
-    sesion.ejecutar(unirseEnCampo, { ejercitoId, jugadorId: vecino }, opcDe(vecino));
+    sesion.ejecutar(unirseEnCampo, { ejercitoId, heroeId: vecino }, opcDe(vecino));
 
-    const r = sesion.ejecutar(marcharA, { jugadorId: vecino, objetivo: { tipo: 'punto', punto: { x: 420, y: 420 } } }, opcDe(vecino));
+    const r = sesion.ejecutar(marcharA, { heroeId: vecino, objetivo: { tipo: 'punto', punto: { x: 420, y: 420 } } }, opcDe(vecino));
 
     expect(r.ok, 'marchar acompañado cuesta la libertad de movimiento').toBe(false);
   });
@@ -109,7 +109,7 @@ describe('unirseEnCampo — el precio es la libertad de movimiento (Doc 5.14.1)'
   it('con política `rechazar` no entra nadie', () => {
     const { sesion, ejercitoId, vecino } = ejercitoYViajero('rechazar');
 
-    const r = sesion.ejecutar(unirseEnCampo, { ejercitoId, jugadorId: vecino }, opcDe(vecino));
+    const r = sesion.ejecutar(unirseEnCampo, { ejercitoId, heroeId: vecino }, opcDe(vecino));
 
     expect(r.ok).toBe(false);
     expect(sesion.getState().ejercitos).toHaveLength(2);
@@ -128,7 +128,7 @@ describe('unirseEnCampo — el precio es la libertad de movimiento (Doc 5.14.1)'
       },
     });
 
-    const r = lejos.ejecutar(unirseEnCampo, { ejercitoId, jugadorId: vecino }, opcDe(vecino));
+    const r = lejos.ejecutar(unirseEnCampo, { ejercitoId, heroeId: vecino }, opcDe(vecino));
 
     expect(r.ok).toBe(false);
   });
@@ -142,7 +142,7 @@ describe('unirseEnCampo — el precio es la libertad de movimiento (Doc 5.14.1)'
       state: { ...payload.state, ejercitos: payload.state.ejercitos.map((e) => (e.id === columnaId ? { ...e, tipo: 'ejercito' as const } : e)) },
     });
 
-    const r = dosEjercitos.ejecutar(unirseEnCampo, { ejercitoId, jugadorId: vecino }, opcDe(vecino));
+    const r = dosEjercitos.ejecutar(unirseEnCampo, { ejercitoId, heroeId: vecino }, opcDe(vecino));
 
     expect(r.ok, 'un ejército solo se origina en un asentamiento, no fundiendo dos en el camino').toBe(false);
   });
@@ -152,7 +152,7 @@ describe('unirseEnCampo con `preguntar` — el silencio es un no (Doc 5.14.1)', 
   it('deja una petición viva en vez de meter a nadie', () => {
     const { sesion, ejercitoId, vecino } = ejercitoYViajero('preguntar');
 
-    const r = sesion.ejecutar(unirseEnCampo, { ejercitoId, jugadorId: vecino }, opcDe(vecino));
+    const r = sesion.ejecutar(unirseEnCampo, { ejercitoId, heroeId: vecino }, opcDe(vecino));
 
     expect(r.ok).toBe(true);
     expect(r.datos!.unido, 'pedir no es entrar').toBe(false);
@@ -162,11 +162,11 @@ describe('unirseEnCampo con `preguntar` — el silencio es un no (Doc 5.14.1)', 
 
   it('el Líder acepta y entra', () => {
     const { sesion, ejercitoId, fundador, vecino } = ejercitoYViajero('preguntar');
-    sesion.ejecutar(unirseEnCampo, { ejercitoId, jugadorId: vecino }, opcDe(vecino));
+    sesion.ejecutar(unirseEnCampo, { ejercitoId, heroeId: vecino }, opcDe(vecino));
 
     const r = sesion.ejecutar(
       responderPeticionDeUnion,
-      { ejercitoId, jugadorId: fundador, solicitanteId: vecino, aceptar: true },
+      { ejercitoId, heroeId: fundador, solicitanteId: vecino, aceptar: true },
       opcDe(fundador)
     );
 
@@ -177,11 +177,11 @@ describe('unirseEnCampo con `preguntar` — el silencio es un no (Doc 5.14.1)', 
 
   it('solo el Líder contesta', () => {
     const { sesion, ejercitoId, vecino } = ejercitoYViajero('preguntar');
-    sesion.ejecutar(unirseEnCampo, { ejercitoId, jugadorId: vecino }, opcDe(vecino));
+    sesion.ejecutar(unirseEnCampo, { ejercitoId, heroeId: vecino }, opcDe(vecino));
 
     const r = sesion.ejecutar(
       responderPeticionDeUnion,
-      { ejercitoId, jugadorId: vecino, solicitanteId: vecino, aceptar: true },
+      { ejercitoId, heroeId: vecino, solicitanteId: vecino, aceptar: true },
       opcDe(vecino)
     );
 
@@ -190,7 +190,7 @@ describe('unirseEnCampo con `preguntar` — el silencio es un no (Doc 5.14.1)', 
 
   it('la petición caduca a los 10 s SIN que nada la barra: se comprueba al leer', () => {
     const { sesion, ejercitoId, fundador, vecino } = ejercitoYViajero('preguntar');
-    sesion.ejecutar(unirseEnCampo, { ejercitoId, jugadorId: vecino }, opcDe(vecino));
+    sesion.ejecutar(unirseEnCampo, { ejercitoId, heroeId: vecino }, opcDe(vecino));
     // Se avanza el reloj sin ejecutar ningún barrido: un tick es 60 s, de sobra para pasarse de los 10.
     expect(MOVIMIENTO.vidaPeticionUnionSegundos * 1000).toBeLessThan(SIMULACION.duracionTickMs);
     sesion.avanzarTick();
@@ -199,7 +199,7 @@ describe('unirseEnCampo con `preguntar` — el silencio es un no (Doc 5.14.1)', 
 
     const r = sesion.ejecutar(
       responderPeticionDeUnion,
-      { ejercitoId, jugadorId: fundador, solicitanteId: vecino, aceptar: true },
+      { ejercitoId, heroeId: fundador, solicitanteId: vecino, aceptar: true },
       opcDe(fundador)
     );
 
@@ -211,28 +211,28 @@ describe('separarseDelEjercito — devuelve la libertad (Doc 5.14.2)', () => {
   /** Ejército de dos: el fundador es el Líder, el vecino se unió por el camino. */
   function ejercitoDeDos() {
     const base = ejercitoYViajero('aceptar');
-    base.sesion.ejecutar(unirseEnCampo, { ejercitoId: base.ejercitoId, jugadorId: base.vecino }, opcDe(base.vecino));
+    base.sesion.ejecutar(unirseEnCampo, { ejercitoId: base.ejercitoId, heroeId: base.vecino }, opcDe(base.vecino));
     return base;
   }
 
   it('el que se separa sale con lo suyo y recupera el rumbo libre', () => {
     const { sesion, vecino } = ejercitoDeDos();
 
-    const r = sesion.ejecutar(separarseDelEjercito, { jugadorId: vecino }, opcDe(vecino));
+    const r = sesion.ejecutar(separarseDelEjercito, { heroeId: vecino }, opcDe(vecino));
 
     expect(r.ok).toBe(true);
     const columna = sesion.getState().ejercitos.find((e) => e.id === r.datos!.columnaId)!;
     expect(columna.tipo).toBe('personal');
     expect(columna.escuadrones.map((e) => e.id)).toEqual(['esc-vecino']);
-    expect(sesion.getState().jugadores.find((j) => j.id === vecino)!.ubicacion).toEqual({ tipo: 'columna', ejercitoId: columna.id });
+    expect(sesion.getState().heroes.find((j) => j.id === vecino)!.ubicacion).toEqual({ tipo: 'columna', ejercitoId: columna.id });
     // Y ya puede volver a girar.
-    expect(sesion.ejecutar(marcharA, { jugadorId: vecino, objetivo: { tipo: 'punto', punto: { x: 420, y: 420 } } }, opcDe(vecino)).ok).toBe(true);
+    expect(sesion.ejecutar(marcharA, { heroeId: vecino, objetivo: { tipo: 'punto', punto: { x: 420, y: 420 } } }, opcDe(vecino)).ok).toBe(true);
   });
 
   it('el origen NO cambia: hereda el del ejército, no el suyo', () => {
     const { sesion, vecino, asentamientoId } = ejercitoDeDos();
 
-    const r = sesion.ejecutar(separarseDelEjercito, { jugadorId: vecino }, opcDe(vecino));
+    const r = sesion.ejecutar(separarseDelEjercito, { heroeId: vecino }, opcDe(vecino));
 
     const columna = sesion.getState().ejercitos.find((e) => e.id === r.datos!.columnaId)!;
     expect(columna.origenAsentamientoId).toBe(asentamientoId);
@@ -241,19 +241,19 @@ describe('separarseDelEjercito — devuelve la libertad (Doc 5.14.2)', () => {
   it('el LÍDER no se separa', () => {
     const { sesion, fundador } = ejercitoDeDos();
 
-    const r = sesion.ejecutar(separarseDelEjercito, { jugadorId: fundador }, opcDe(fundador));
+    const r = sesion.ejecutar(separarseDelEjercito, { heroeId: fundador }, opcDe(fundador));
 
     expect(r.ok, 'para irse tiene que ceder antes el liderazgo').toBe(false);
   });
 
   it('el ÚLTIMO tampoco, aunque sea el Líder: la columna no se vacía en campo abierto', () => {
     const { sesion, fundador, vecino } = ejercitoDeDos();
-    sesion.ejecutar(cederLiderazgo, { ejercitoId: sesion.getState().ejercitos[0]!.id, jugadorId: fundador, sucesorId: vecino }, opcDe(fundador));
-    sesion.ejecutar(separarseDelEjercito, { jugadorId: fundador }, opcDe(fundador));
+    sesion.ejecutar(cederLiderazgo, { ejercitoId: sesion.getState().ejercitos[0]!.id, heroeId: fundador, sucesorId: vecino }, opcDe(fundador));
+    sesion.ejecutar(separarseDelEjercito, { heroeId: fundador }, opcDe(fundador));
     const ejercito = sesion.getState().ejercitos.find((e) => e.tipo === 'ejercito')!;
     expect(ejercito.participantes).toHaveLength(1);
 
-    const r = sesion.ejecutar(separarseDelEjercito, { jugadorId: vecino }, opcDe(vecino));
+    const r = sesion.ejecutar(separarseDelEjercito, { heroeId: vecino }, opcDe(vecino));
 
     expect(r.ok, 'su salida es cancelar y volver, no irse dejando la columna tirada').toBe(false);
   });
@@ -262,24 +262,24 @@ describe('separarseDelEjercito — devuelve la libertad (Doc 5.14.2)', () => {
 describe('cederLiderazgo — el único camino para que el Líder se vaya (Doc 5.14.3)', () => {
   function ejercitoDeDos() {
     const base = ejercitoYViajero('aceptar');
-    base.sesion.ejecutar(unirseEnCampo, { ejercitoId: base.ejercitoId, jugadorId: base.vecino }, opcDe(base.vecino));
+    base.sesion.ejecutar(unirseEnCampo, { ejercitoId: base.ejercitoId, heroeId: base.vecino }, opcDe(base.vecino));
     return base;
   }
 
   it('cede, y entonces el anterior Líder ya puede separarse', () => {
     const { sesion, ejercitoId, fundador, vecino } = ejercitoDeDos();
 
-    const cesion = sesion.ejecutar(cederLiderazgo, { ejercitoId, jugadorId: fundador, sucesorId: vecino }, opcDe(fundador));
+    const cesion = sesion.ejecutar(cederLiderazgo, { ejercitoId, heroeId: fundador, sucesorId: vecino }, opcDe(fundador));
 
     expect(cesion.ok).toBe(true);
     expect(sesion.getState().ejercitos.find((e) => e.id === ejercitoId)!.liderId).toBe(vecino);
-    expect(sesion.ejecutar(separarseDelEjercito, { jugadorId: fundador }, opcDe(fundador)).ok).toBe(true);
+    expect(sesion.ejecutar(separarseDelEjercito, { heroeId: fundador }, opcDe(fundador)).ok).toBe(true);
   });
 
   it('no lo cede quien no es Líder', () => {
     const { sesion, ejercitoId, fundador, vecino } = ejercitoDeDos();
 
-    const r = sesion.ejecutar(cederLiderazgo, { ejercitoId, jugadorId: vecino, sucesorId: fundador }, opcDe(vecino));
+    const r = sesion.ejecutar(cederLiderazgo, { ejercitoId, heroeId: vecino, sucesorId: fundador }, opcDe(vecino));
 
     expect(r.ok).toBe(false);
   });
@@ -287,7 +287,7 @@ describe('cederLiderazgo — el único camino para que el Líder se vaya (Doc 5.
   it('el sucesor tiene que ir dentro de la columna', () => {
     const { sesion, ejercitoId, fundador } = ejercitoDeDos();
 
-    const r = sesion.ejecutar(cederLiderazgo, { ejercitoId, jugadorId: fundador, sucesorId: 'alguien-de-fuera' }, opcDe(fundador));
+    const r = sesion.ejecutar(cederLiderazgo, { ejercitoId, heroeId: fundador, sucesorId: 'alguien-de-fuera' }, opcDe(fundador));
 
     expect(r.ok).toBe(false);
   });
@@ -296,7 +296,7 @@ describe('cederLiderazgo — el único camino para que el Líder se vaya (Doc 5.
 describe('replegarEjercito — cancelar es del Líder (Doc 5.14.3)', () => {
   it('un integrante que no manda no puede hacer volver a todos', () => {
     const base = ejercitoYViajero('aceptar');
-    base.sesion.ejecutar(unirseEnCampo, { ejercitoId: base.ejercitoId, jugadorId: base.vecino }, opcDe(base.vecino));
+    base.sesion.ejecutar(unirseEnCampo, { ejercitoId: base.ejercitoId, heroeId: base.vecino }, opcDe(base.vecino));
 
     const r = base.sesion.ejecutar(replegarEjercito, { ejercitoId: base.ejercitoId }, opcDe(base.vecino));
 
@@ -306,7 +306,7 @@ describe('replegarEjercito — cancelar es del Líder (Doc 5.14.3)', () => {
 
   it('y el Líder sí', () => {
     const base = ejercitoYViajero('aceptar');
-    base.sesion.ejecutar(unirseEnCampo, { ejercitoId: base.ejercitoId, jugadorId: base.vecino }, opcDe(base.vecino));
+    base.sesion.ejecutar(unirseEnCampo, { ejercitoId: base.ejercitoId, heroeId: base.vecino }, opcDe(base.vecino));
 
     const r = base.sesion.ejecutar(replegarEjercito, { ejercitoId: base.ejercitoId }, opcDe(base.fundador));
 
@@ -321,18 +321,18 @@ describe('inspeccionar — la informacion se compra acercandose', () => {
   it('desde el anillo de 40 devuelve la composicion de la columna ajena', () => {
     const { sesion, ejercitoId, vecino, fundador } = ejercitoYViajero('rechazar');
 
-    const r = sesion.ejecutar(inspeccionar, { jugadorId: vecino, objetivo: { tipo: 'ejercito', id: ejercitoId } }, opcDe(vecino));
+    const r = sesion.ejecutar(inspeccionar, { heroeId: vecino, objetivo: { tipo: 'ejercito', id: ejercitoId } }, opcDe(vecino));
 
     expect(r.ok).toBe(true);
-    const composicion = r.datos as { jugadoresIds: string[]; escuadrones: { tropaId: string; jugadorId: string }[] };
-    expect(composicion.jugadoresIds, 'se ve de quien es').toEqual([fundador]);
+    const composicion = r.datos as { heroesIds: string[]; escuadrones: { tropaId: string; heroeId: string }[] };
+    expect(composicion.heroesIds, 'se ve de quien es').toEqual([fundador]);
     expect(composicion.escuadrones.map((e) => e.tropaId), 'y con que tropas va').toEqual(['milicia_lanceros']);
   });
 
   it('y el observado RECIBE AVISO: mirar te delata', () => {
     const { sesion, ejercitoId, vecino } = ejercitoYViajero('rechazar');
 
-    const r = sesion.ejecutar(inspeccionar, { jugadorId: vecino, objetivo: { tipo: 'ejercito', id: ejercitoId } }, opcDe(vecino));
+    const r = sesion.ejecutar(inspeccionar, { heroeId: vecino, objetivo: { tipo: 'ejercito', id: ejercitoId } }, opcDe(vecino));
 
     const aviso = r.eventos!.find((e) => e.codigo === 'columna.observada');
     expect(aviso, 'sin aviso, inspeccionar seria telemetria gratis').toBeDefined();
@@ -352,7 +352,7 @@ describe('inspeccionar — la informacion se compra acercandose', () => {
       },
     });
 
-    const r = lejos.ejecutar(inspeccionar, { jugadorId: vecino, objetivo: { tipo: 'ejercito', id: ejercitoId } }, opcDe(vecino));
+    const r = lejos.ejecutar(inspeccionar, { heroeId: vecino, objetivo: { tipo: 'ejercito', id: ejercitoId } }, opcDe(vecino));
 
     expect(r.ok).toBe(false);
   });

@@ -9,7 +9,7 @@ function conEscuadronSinMoral(asentamiento: Asentamiento): Asentamiento {
   const escuadron: Escuadron = {
     id: `escuadron-${asentamiento.id}-0`,
     nombre: 'Lanceros de jugador-1',
-    jugadorId: 'jugador-1',
+    heroeId: 'jugador-1',
     origen: 'pesants',
     cantidad: 10,
     veterania: 0,

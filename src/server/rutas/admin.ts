@@ -377,7 +377,7 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
    *
    * Al crearla, otorga a quien la crea `Membresia` de `administrador_partida` sobre ella. Sin eso, un
    * administrador global no podría ejecutar ni siquiera los comandos que la matriz le reserva
-   * (`alternarFaccionNpc`), porque esa matriz razona sobre roles DE PARTIDA.
+   * (`crearFaccionNpc`), porque esa matriz razona sobre roles DE PARTIDA.
    */
   app.post<{ Body: CrearPartidaBody }>('/admin/partidas', { schema: ESQUEMA_CREAR_PARTIDA }, async (request, reply) => {
     const { gameId, seed, region, forzar, intervaloTickMs } = request.body;
@@ -470,7 +470,7 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
   /**
    * Comandos ejecutados como administrador. La matriz sigue mandando: casi todos los comandos son de rol
    * `jugador` y aquí se rechazarán con `rol_insuficiente`, que es lo correcto — tener acceso técnico no
-   * concede autoridad dentro del juego (doc 5). Hoy solo `alternarFaccionNpc` admite administración.
+   * concede autoridad dentro del juego (doc 5). Hoy solo `crearFaccionNpc` admite administración.
    */
   app.post<{ Params: ParametrosGameId; Body: EjecutarComandoBody }>(
     '/admin/partidas/:gameId/comandos',
@@ -480,11 +480,13 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
       if (!acceso.ok) return acceso.respuesta;
 
       const rol = rolEnPartida(acceso.actorInstancia) as RolTecnico;
-      const actor: ActorDeComando = { rol, jugadorId: acceso.actorInstancia.membresia?.jugadorId ?? null };
+      const jugadorId = acceso.actorInstancia.membresia?.jugadorId;
+      const heroe = jugadorId ? acceso.runner.getState().heroes.find((h) => h.jugadorId === jugadorId) : undefined;
+      const actor: ActorDeComando = { rol, heroeId: heroe?.id ?? null };
       // Un administrador sin personaje en la partida queda registrado como `admin:<usuarioId>`, para que su
       // huella en el log no se confunda con la de un jugador.
-      const actorId = acceso.actorInstancia.membresia?.jugadorId ?? `admin:${acceso.actorInstancia.usuarioId}`;
-      return ejecutarComandoHttp(reply, acceso.runner, request.body, actor, actorId, deps.hub, deps.auditoria);
+      const auditado = jugadorId ?? `admin:${acceso.actorInstancia.usuarioId}`;
+      return ejecutarComandoHttp(reply, acceso.runner, request.body, actor, heroe?.id ?? auditado, auditado, deps.hub, deps.auditoria);
     }
   );
 

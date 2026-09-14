@@ -15,20 +15,20 @@ import { evento } from './eventos';
 
 export interface PayloadCargoFaccion {
   faccionId: string;
-  jugadorId: string;
+  heroeId: string;
   cargo: 'rey' | 'embajador';
 }
 export interface PayloadCargoLocal {
   asentamientoId: string;
-  jugadorId: string;
+  heroeId: string;
   cargo: CargoTipo;
 }
 export interface PayloadCasaComprada {
   asentamientoId: string;
-  jugadorId: string;
+  heroeId: string;
 }
 export interface PayloadResidenciaCambiada {
-  jugadorId: string;
+  heroeId: string;
   origenId: string;
   destinoId: string;
 }
@@ -40,7 +40,7 @@ export interface PayloadPoliticaActivada {
 
 export interface ParamsAsignarCargoFaccion {
   faccionId: string;
-  jugadorId: string;
+  heroeId: string;
 }
 
 /** Rey y Embajador comparten todo salvo la función del motor y el nombre del cargo. */
@@ -50,21 +50,21 @@ function asignarCargoDeFaccion(
   params: ParamsAsignarCargoFaccion,
   cargo: 'rey' | 'embajador',
   nombreCargo: string,
-  aplicar: (faccion: Parameters<typeof asignarReyEngine>[0], jugadorId: string) => ReturnType<typeof asignarReyEngine>
+  aplicar: (faccion: Parameters<typeof asignarReyEngine>[0], heroeId: string) => ReturnType<typeof asignarReyEngine>
 ): TransicionComando<void> {
   const faccion = exigirFaccion(estado, params.faccionId);
-  const actualizada = aplicar(faccion, params.jugadorId);
+  const actualizada = aplicar(faccion, params.heroeId);
 
   const siguiente = conHistorialDeJugador(
     conFaccion(estado, actualizada),
-    params.jugadorId,
+    params.heroeId,
     `Nombrado ${nombreCargo} de ${faccion.nombre}.`
   );
   return exito(siguiente, [
     evento(ctx, {
       codigo: `cargo.${cargo}_asignado`,
-      mensaje: `${faccion.nombre}: ${params.jugadorId} es el nuevo ${nombreCargo}.`,
-      payload: { faccionId: faccion.id, jugadorId: params.jugadorId, cargo } satisfies PayloadCargoFaccion,
+      mensaje: `${faccion.nombre}: ${params.heroeId} es el nuevo ${nombreCargo}.`,
+      payload: { faccionId: faccion.id, heroeId: params.heroeId, cargo } satisfies PayloadCargoFaccion,
     }),
   ]);
 }
@@ -80,24 +80,24 @@ export const asignarEmbajador = comando<ParamsAsignarCargoFaccion, void>((estado
 export interface ParamsAsignarCargoLocal {
   asentamientoId: string;
   cargo: CargoTipo;
-  jugadorId: string;
+  heroeId: string;
 }
 
 export const asignarCargoLocal = comando<ParamsAsignarCargoLocal, void>((estado, _mapa, ctx, params) => {
   const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
   const faccion = exigirFaccionDe(estado, asentamiento);
 
-  const actualizado = asignarCargoLocalEngine(asentamiento, faccion, params.cargo, params.jugadorId);
+  const actualizado = asignarCargoLocalEngine(asentamiento, faccion, params.cargo, params.heroeId);
   const siguiente = conHistorialDeJugador(
     conAsentamiento(estado, actualizado),
-    params.jugadorId,
+    params.heroeId,
     `Asignado como ${params.cargo} en ${asentamiento.id}.`
   );
   return exito(siguiente, [
     evento(ctx, {
       codigo: 'cargo.local_asignado',
-      mensaje: `${params.jugadorId} asignado como ${params.cargo}.`,
-      payload: { asentamientoId: asentamiento.id, jugadorId: params.jugadorId, cargo: params.cargo } satisfies PayloadCargoLocal,
+      mensaje: `${params.heroeId} asignado como ${params.cargo}.`,
+      payload: { asentamientoId: asentamiento.id, heroeId: params.heroeId, cargo: params.cargo } satisfies PayloadCargoLocal,
       asentamientoId: asentamiento.id,
     }),
   ]);
@@ -105,23 +105,23 @@ export const asignarCargoLocal = comando<ParamsAsignarCargoLocal, void>((estado,
 
 export interface ParamsComprarCasa {
   asentamientoId: string;
-  jugadorId: string;
+  heroeId: string;
 }
 
 export const comprarCasa = comando<ParamsComprarCasa, void>((estado, _mapa, ctx, params) => {
   // A diferencia del resto, este comando del motor resuelve el asentamiento por su cuenta y lanza
   // `FaccionInvalidaError` si no existe — no hace falta comprobarlo antes.
-  const resultado = comprarCasaEngine(estado.facciones, estado.asentamientos, params.asentamientoId, params.jugadorId);
+  const resultado = comprarCasaEngine(estado.facciones, estado.asentamientos, params.asentamientoId, params.heroeId);
   const siguiente = conHistorialDeJugador(
     { ...conAsentamiento(estado, resultado.asentamiento), facciones: resultado.facciones },
-    params.jugadorId,
+    params.heroeId,
     `Compra casa en ${params.asentamientoId} y obtiene ciudadanía.`
   );
   return exito(siguiente, [
     evento(ctx, {
       codigo: 'ciudadania.casa_comprada',
-      mensaje: `${params.jugadorId} compra casa en ${params.asentamientoId} y obtiene ciudadanía.`,
-      payload: { asentamientoId: resultado.asentamiento.id, jugadorId: params.jugadorId } satisfies PayloadCasaComprada,
+      mensaje: `${params.heroeId} compra casa en ${params.asentamientoId} y obtiene ciudadanía.`,
+      payload: { asentamientoId: resultado.asentamiento.id, heroeId: params.heroeId } satisfies PayloadCasaComprada,
       asentamientoId: resultado.asentamiento.id,
     }),
   ]);
@@ -129,21 +129,21 @@ export const comprarCasa = comando<ParamsComprarCasa, void>((estado, _mapa, ctx,
 
 export interface ParamsCambiarResidencia {
   destinoId: string;
-  jugadorId: string;
+  heroeId: string;
 }
 
 export const cambiarResidencia = comando<ParamsCambiarResidencia, void>((estado, _mapa, ctx, params) => {
-  const { origen, destino } = cambiarResidenciaEngine(estado.facciones, estado.asentamientos, params.destinoId, params.jugadorId);
+  const { origen, destino } = cambiarResidenciaEngine(estado.facciones, estado.asentamientos, params.destinoId, params.heroeId);
   const siguiente = conHistorialDeJugador(
     conAsentamientos(estado, [origen, destino]),
-    params.jugadorId,
+    params.heroeId,
     `Cambia su residencia de ${origen.id} a ${destino.id}.`
   );
   return exito(siguiente, [
     evento(ctx, {
       codigo: 'ciudadania.residencia_cambiada',
-      mensaje: `${params.jugadorId} deja de residir en ${origen.id} y se muda a ${destino.id}.`,
-      payload: { jugadorId: params.jugadorId, origenId: origen.id, destinoId: destino.id } satisfies PayloadResidenciaCambiada,
+      mensaje: `${params.heroeId} deja de residir en ${origen.id} y se muda a ${destino.id}.`,
+      payload: { heroeId: params.heroeId, origenId: origen.id, destinoId: destino.id } satisfies PayloadResidenciaCambiada,
       asentamientoId: destino.id,
     }),
   ]);

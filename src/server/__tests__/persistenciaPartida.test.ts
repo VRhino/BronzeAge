@@ -11,6 +11,7 @@ import { GameSession } from '../../session/gameSession';
 import { instanteDeTick } from '../../session/estado';
 import { crearFaccion } from '../../session/comandos/crearFaccion';
 import { fundarAsentamiento } from '../../session/comandos/fundarAsentamiento';
+import { conHeroe } from '../../session/__tests__/fixtures';
 import {
   cargarPartida,
   ConflictoDeVersionError,
@@ -28,7 +29,7 @@ const MOMENTO = '2026-01-01T00:00:00.000Z';
 const ACTOR = 'jugador-test';
 
 function partidaEnMarcha(seed = 42): GameSession {
-  const sesion = GameSession.crear('partida-test', { seed });
+  const sesion = conHeroe(GameSession.crear('partida-test', { seed }), ACTOR);
   // Con actor real, no de sistema: se funda donde se está (Doc 1.3), y el sistema no está en ningún sitio
   // del mundo — `{}` (actor implícito = sistema) fundaba igual antes de esta regla, porque la posición la
   // traía el parámetro y no la columna de nadie.

@@ -99,7 +99,7 @@ function asegurarInfraestructuraComercial(
   contador: number
 ): { asentamiento: Asentamiento; caravanaNueva?: Caravana } {
   let actual = asentamiento;
-  const fundador = actual.jugadoresFundadoresIds[0];
+  const fundador = actual.heroesFundadoresIds[0];
 
   if (!actual.cargos.gobernadorId && fundador) {
     try {

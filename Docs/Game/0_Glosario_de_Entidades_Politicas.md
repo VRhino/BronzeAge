@@ -14,7 +14,7 @@ Es el dueño de sus escuadrones: **los escuadrones son del Héroe, no del asenta
 **Combate por sí mismo**, como un personaje de Conquest: clase, nivel y experiencia, atributos, perks, equipo e inventario (Doc 5.1 y 5.16). No muere: al perder una batalla queda **Herido** (abajo) y, si fue en mundo abierto, entrega la mitad de su carro.
 
 ## Héroe bot
-Héroe de una Facción NPC, manejado por la IA del juego. Lo crea el admin y vive en el servidor como un héroe más. Combate contra los héroes humanos en las partidas de Unity; NPC contra NPC se resuelve con números (Doc 5.15.6).
+Héroe de una Facción NPC, manejado por la IA del juego. Nace como fundador del primer asentamiento de su Facción cuando el admin la crea (Doc 5.15.6), y vive en el servidor como un héroe más. Combate contra los héroes humanos en las partidas de Unity; NPC contra NPC se resuelve con números (Doc 5.15.6).
 
 ## Columna personal
 Un Héroe solo, moviéndose por el mapa. Nace cuando sale de su residencia por su cuenta (Doc 1.10), lleve tropas o no. Es la misma ENTIDAD que un Ejército en el motor, pero **no es un Ejército** a efectos de reglas: elige destino libremente y lo rectifica cuando quiera, no puede llevar caravanas adjuntas, y nadie puede unirse a ella — dos viajeros que se cruzan no forman un ejército (Doc 5.12.1).

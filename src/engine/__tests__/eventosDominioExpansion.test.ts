@@ -14,7 +14,7 @@ function caravanaFundacionLlegando(origenId: string, destino: { x: number; y: nu
     posicionActual: destino,
     progreso: 0.9999999,
     destinoPosicion: destino,
-    jugadoresFundadoresIds: ['jugador-faccion-1-1'],
+    heroesFundadoresIds: ['jugador-faccion-1-1'],
     ruta: [{ x: 0, y: 0 }, destino],
     ...overrides,
   };

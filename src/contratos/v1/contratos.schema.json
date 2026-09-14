@@ -439,14 +439,13 @@
       "type": "object",
       "properties": {
         "duracionMaximaSegundos": { "$ref": "#/definitions/EnteroPositivo" },
-        "ganadorPorTiempo": { "$ref": "#/definitions/LadoId" },
         "versionBalance": { "$ref": "#/definitions/EnteroPositivo" },
         "versionCatalogoTropas": { "$ref": "#/definitions/EnteroPositivo" },
         "versionCatalogoHeroe": { "$ref": "#/definitions/Id" },
         "versionCatalogoObjetos": { "$ref": "#/definitions/Id" }
       },
       "required": [
-        "duracionMaximaSegundos", "ganadorPorTiempo", "versionBalance", "versionCatalogoTropas",
+        "duracionMaximaSegundos", "versionBalance", "versionCatalogoTropas",
         "versionCatalogoHeroe", "versionCatalogoObjetos"
       ],
       "additionalProperties": false

@@ -25,8 +25,8 @@ export interface MundoEscuadras {
 }
 
 /** Dónde tiene el jugador su escuadra de `tropaId` FUERA de `asentamientoId`, o `undefined` si no la tiene. */
-function escuadraFuera(mundo: MundoEscuadras, asentamientoId: string, jugadorId: string, tropaId: string): string | undefined {
-  const esSuya = (e: Escuadron) => e.jugadorId === jugadorId && e.tropaId === tropaId;
+function escuadraFuera(mundo: MundoEscuadras, asentamientoId: string, heroeId: string, tropaId: string): string | undefined {
+  const esSuya = (e: Escuadron) => e.heroeId === heroeId && e.tropaId === tropaId;
   const plaza = mundo.asentamientos.find((a) => a.id !== asentamientoId && a.escuadrones.some(esSuya));
   if (plaza) return `la guarnición de ${plaza.nombre ?? plaza.id}`;
   const ejercito = mundo.ejercitos.find((e) => e.escuadrones.some(esSuya));
@@ -48,7 +48,7 @@ function escuadraFuera(mundo: MundoEscuadras, asentamientoId: string, jugadorId:
  *
  * Escuadrón de UN jugador, no del asentamiento (Doc 2.5, a petición del usuario — corrige el bug donde dos
  * jugadores reclutando la misma tropa en el mismo asentamiento se fundían en un solo escuadrón compartido):
- * cada jugador residente (fundador o con casa comprada, ver `Asentamiento.jugadoresFundadoresIds`/
+ * cada jugador residente (fundador o con casa comprada, ver `Asentamiento.heroesFundadoresIds`/
  * `casasCompradas`) tiene como mucho UN escuadrón por `tropaId` en TODA la partida (no por asentamiento: se
  * busca también en `mundo` — otras guarniciones, ejércitos y escoltas), tope `tropa.unidadesPorDefecto`. Reclutar ya
  * no es un gate del cargo de General (Doc 2.2 vs 2.5 — 2.5 ganó la ambigüedad: reclutar es beneficio de
@@ -61,7 +61,7 @@ export function reclutarTropa(
   asentamiento: Asentamiento,
   /** El resto de la partida, para la unicidad global por `tropaId` (Doc 2.5). */
   mundo: MundoEscuadras,
-  jugadorId: string,
+  heroeId: string,
   /** Facción del jugador — para `puedeReclutarEn` (Doc 5.4/5.8, revisión 2026-09-08). Para el NPC siempre es
    * `asentamiento.faccionId`; para un comando, la Facción del actor. */
   faccionDelJugadorId: string,
@@ -69,16 +69,16 @@ export function reclutarTropa(
   origen: 'pesants' | 'artesanos',
   contador = 0
 ): Asentamiento {
-  const permiso = puedeReclutarEn(asentamiento, jugadorId, faccionDelJugadorId);
+  const permiso = puedeReclutarEn(asentamiento, heroeId, faccionDelJugadorId);
   if (permiso === 'no') {
     throw new ReclutamientoInvalidoError('No puedes reclutar aquí: ni resides ni es una plaza de tu Facción que lo permita.');
   }
   const tropa = TROPAS_RECLUTABLES.find((t) => t.id === tropaId);
   if (!tropa) throw new ReclutamientoInvalidoError('La tropa no existe en el catálogo.');
 
-  const existente = asentamiento.escuadrones.find((e) => e.jugadorId === jugadorId && e.tropaId === tropaId);
+  const existente = asentamiento.escuadrones.find((e) => e.heroeId === heroeId && e.tropaId === tropaId);
   // La escuadra es una sola en toda la partida: si está fuera, ni se crea otra ni se repone a distancia.
-  const fuera = existente ? undefined : escuadraFuera(mundo, asentamiento.id, jugadorId, tropaId);
+  const fuera = existente ? undefined : escuadraFuera(mundo, asentamiento.id, heroeId, tropaId);
   if (fuera) {
     throw new ReclutamientoInvalidoError(`Ya tienes una escuadra de ${tropa.nombre}: está en ${fuera}. Solo puedes reponerla donde está.`);
   }
@@ -150,8 +150,8 @@ export function reclutarTropa(
         ...asentamiento.escuadrones,
         {
           id: `escuadron-${asentamiento.id}-${contador}`,
-          nombre: `${tropa.nombre} de ${jugadorId}`,
-          jugadorId,
+          nombre: `${tropa.nombre} de ${heroeId}`,
+          heroeId,
           origen,
           cantidad,
           veterania: 0,

@@ -213,7 +213,7 @@ function correrSeed(seed: number): ResultadoSeed {
     caminos: [],
     campamentosBandidos: [],
     bandidosProximoSpawnEn: instanteDeTick(0),
-    jugadores: [],
+    heroes: [],
   };
   let tick = 0;
   let contador = 0;

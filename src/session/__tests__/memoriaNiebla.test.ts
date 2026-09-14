@@ -6,6 +6,7 @@ import { GameSession } from '../gameSession';
 import { ACTOR, OPC, partidaConAsentamiento } from './fixtures';
 import { celdasExploradas, estaExplorado, rejillaDe } from '../../engine/exploracion';
 import { crearFaccion } from '../comandos/crearFaccion';
+import { heroeDePrueba } from '../../engine/__tests__/fixtures';
 
 describe('memoriaPorFaccion en la partida', () => {
   it('una partida recién creada no recuerda nada', () => {
@@ -61,8 +62,8 @@ describe('exploracionPersonal se funde al conseguir bandera', () => {
       ...payload,
       state: {
         ...payload.state,
-        jugadores: [
-          { id: ACTOR, liderazgoBase: 0, ubicacion: { tipo: 'desconectado' as const, punto: { x: 400, y: 400 } }, exploracionPersonal: 'ff' },
+        heroes: [
+          heroeDePrueba(ACTOR, { tipo: 'desconectado', punto: { x: 400, y: 400 } }, { exploracionPersonal: 'ff' }),
         ],
       },
     });
@@ -71,6 +72,6 @@ describe('exploracionPersonal se funde al conseguir bandera', () => {
     const estado = sesion.getState();
 
     expect(estado.memoriaPorFaccion[r.datos!.faccionId]!.exploracion).toBe('ff');
-    expect(estado.jugadores.find((j) => j.id === ACTOR)!.exploracionPersonal).toBeUndefined();
+    expect(estado.heroes.find((j) => j.id === ACTOR)!.exploracionPersonal).toBeUndefined();
   });
 });

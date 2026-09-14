@@ -14,7 +14,7 @@ import { avanzarRacion, consumoRacionDeEscuadrones } from '../tropas';
 const escuadron = (cantidad: number, moral: number): Escuadron => ({
   id: 'e1',
   nombre: 'Milicia de prueba',
-  jugadorId: 'jugador-1',
+  heroeId: 'jugador-1',
   origen: 'pesants',
   cantidad,
   veterania: 0,

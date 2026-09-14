@@ -154,7 +154,7 @@ export interface SimulacionExportada {
   bandidosProximoSpawnEn?: number;
   faccionesNpcIds?: string[];
   log: EventoLog[];
-  historialJugadores: Record<string, EventoLog[]>;
+  historialHeroes: Record<string, EventoLog[]>;
 }
 
 /** Catálogos de referencia (listas fijas, sin comportamiento) que la interfaz necesita para construir formularios. */
@@ -654,29 +654,26 @@ export class GameStore {
     await this.despachar('crearFaccion', { nombre }, 'Facción rechazada');
   }
 
-  async alternarFaccionNpc(faccionId: string, activo: boolean): Promise<void> {
-    await this.despachar('alternarFaccionNpc', { faccionId, activo }, 'Cesión al NPC rechazada');
+  /** Facción NPC ya asentada, con sus héroes bot (comando de admin). Sin `posicion`, el sitio lo busca la
+   * gobernanza NPC. */
+  async crearFaccionNpc(nombre: string, posicion?: { x: number; y: number }): Promise<void> {
+    await this.despachar('crearFaccionNpc', posicion ? { nombre, posicion } : { nombre }, 'Facción NPC rechazada');
   }
 
-  /** ¿Esta Facción la juega el NPC? (`GameSessionState.faccionesNpcIds`, para la pestaña Facción). */
-  esFaccionNpc(faccionId: string): boolean {
-    return this.state.faccionesNpcIds.includes(faccionId);
+  async asignarRey(faccionId: string, heroeId: string): Promise<void> {
+    await this.despachar('asignarRey', { faccionId, heroeId }, 'Rey rechazado');
   }
 
-  async asignarRey(faccionId: string, jugadorId: string): Promise<void> {
-    await this.despachar('asignarRey', { faccionId, jugadorId }, 'Rey rechazado');
+  async asignarEmbajador(faccionId: string, heroeId: string): Promise<void> {
+    await this.despachar('asignarEmbajador', { faccionId, heroeId }, 'Embajador rechazado');
   }
 
-  async asignarEmbajador(faccionId: string, jugadorId: string): Promise<void> {
-    await this.despachar('asignarEmbajador', { faccionId, jugadorId }, 'Embajador rechazado');
+  async asignarCargoLocal(asentamientoId: string, cargo: CargoTipo, heroeId: string): Promise<void> {
+    await this.despachar('asignarCargoLocal', { asentamientoId, cargo, heroeId }, 'Cargo rechazado');
   }
 
-  async asignarCargoLocal(asentamientoId: string, cargo: CargoTipo, jugadorId: string): Promise<void> {
-    await this.despachar('asignarCargoLocal', { asentamientoId, cargo, jugadorId }, 'Cargo rechazado');
-  }
-
-  async comprarCasa(asentamientoId: string, jugadorId: string): Promise<void> {
-    await this.despachar('comprarCasa', { asentamientoId, jugadorId }, 'Compra de casa rechazada');
+  async comprarCasa(asentamientoId: string, heroeId: string): Promise<void> {
+    await this.despachar('comprarCasa', { asentamientoId, heroeId }, 'Compra de casa rechazada');
   }
 
   async activarPolitica(asentamientoId: string, cargo: CargoTipo, politicaId: string): Promise<void> {
@@ -769,15 +766,15 @@ export class GameStore {
     };
   }
 
-  async reclutarTropa(asentamientoId: string, jugadorId: string, tropaId: string, origen: 'pesants' | 'artesanos'): Promise<void> {
-    await this.despachar('reclutarTropa', { asentamientoId, jugadorId, tropaId, origen }, 'Reclutamiento rechazado');
+  async reclutarTropa(asentamientoId: string, heroeId: string, tropaId: string, origen: 'pesants' | 'artesanos'): Promise<void> {
+    await this.despachar('reclutarTropa', { asentamientoId, heroeId, tropaId, origen }, 'Reclutamiento rechazado');
   }
 
   /** Residentes de un asentamiento (Doc 2.5): fundadores + casas compradas, deduplicado. */
   jugadoresDeAsentamiento(asentamientoId: string): string[] {
     const asentamiento = this.state.asentamientos.find((a) => a.id === asentamientoId);
     if (!asentamiento) return [];
-    return [...new Set([...asentamiento.jugadoresFundadoresIds, ...asentamiento.casasCompradas])];
+    return [...new Set([...asentamiento.heroesFundadoresIds, ...asentamiento.casasCompradas])];
   }
 
   async anadirEdificioManualmente(asentamientoId: string, cargo: 'gobernador' | 'maestroObras', tipo: EdificioTipo): Promise<void> {
@@ -900,7 +897,7 @@ export class GameStore {
       // El formato de archivo v2 guarda el log en texto (es anterior a `eventosDominio`): se proyecta al
       // exportar en vez de arrastrarlo en el estado.
       log: proyectarLog(this.eventos),
-      historialJugadores: this.state.historialJugadores,
+      historialHeroes: this.state.historialHeroes,
     };
     return JSON.stringify(payload, null, 2);
   }

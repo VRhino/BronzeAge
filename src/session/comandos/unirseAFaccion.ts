@@ -9,7 +9,7 @@ import { evento } from './eventos';
 
 export interface PayloadFaccionUnion {
   faccionId: string;
-  jugadorId: string;
+  heroeId: string;
 }
 
 export interface ParamsUnirseAFaccion {
@@ -19,8 +19,8 @@ export interface ParamsUnirseAFaccion {
 export const unirseAFaccion = comando<ParamsUnirseAFaccion, void>((estado, _mapa, ctx, params) => {
   const faccion = exigirFaccion(estado, params.faccionId);
 
-  // Ya es ciudadano de ESTA: idempotente, no un rechazo (mismo criterio que `alternarFaccionNpc` — pedir el
-  // estado en el que ya se está es seguro ante un reintento por reconexión, doc 2 punto 10).
+  // Ya es ciudadano de ESTA: idempotente, no un rechazo (pedir el estado en el que ya se está es seguro ante un
+  // reintento por reconexión, doc 2 punto 10).
   if (esCiudadano(faccion, ctx.actor)) return sinCambios(estado);
 
   if (estado.facciones.some((f) => f.id !== faccion.id && esCiudadano(f, ctx.actor))) {
@@ -34,7 +34,7 @@ export const unirseAFaccion = comando<ParamsUnirseAFaccion, void>((estado, _mapa
     evento(ctx, {
       codigo: 'faccion.ciudadania_union',
       mensaje: `${ctx.actor} se une a ${faccion.nombre}.`,
-      payload: { faccionId: faccion.id, jugadorId: ctx.actor } satisfies PayloadFaccionUnion,
+      payload: { faccionId: faccion.id, heroeId: ctx.actor } satisfies PayloadFaccionUnion,
     }),
   ]);
 });
