@@ -250,11 +250,11 @@ Una columna se acerca a algo y el juego le ofrece lo que puede hacer con ello; e
 |---|---|
 | Ejército o columna ajena | **Inspeccionar** · **Perseguir** |
 | Caravana ajena o neutral | **Inspeccionar** · **Interceptar** |
-| Asentamiento, en su puerta | **Entrar** · **Asediar** · **Consultar** · **Comerciar** (Doc 3.3) |
+| Asentamiento | En su puerta (10): **Entrar** · **Consultar** · **Comerciar** (Doc 3.3). A distancia de ataque (15), si es de otra Facción: **Atacar**, que es asediarla (5.12.4) |
 | Campamento de bandidos | **Atacar** |
 | Batalla en curso de tu Facción | **Unirse**, mientras quede sitio en su bando (5.15.1) |
 
-*Los bandidos son la excepción, y por el motivo obvio: un campamento no tiene a nadie que pulse. Los NPC siguen atacando caravanas por su cuenta — su intención es su política.*
+*Los bandidos son la excepción, y por el motivo obvio: un campamento no tiene a nadie que pulse. Los NPC siguen atacando caravanas por su cuenta — su intención es su política. Por lo mismo, una columna de héroes bot asedia al llegar a la plaza enemiga que tenía por destino y ataca al alcanzar a quien persigue: para el NPC, marchar contra una plaza o perseguir ya es la orden.*
 
 #### Los tres anillos
 
@@ -308,7 +308,7 @@ La cifra es lo que hace que estacionar signifique algo: a una décima parte, un 
 
 Un asentamiento lo defienden **los héroes que están dentro cuando lo atacan**, cada uno con las escuadras de su loadout activo (5.16.5) que tenga en el campamento, que ya caben en su Liderazgo, y **su guarnición**, que maneja la IA del juego (5.15). Los escuadrones que se quedaron en el campamento sin estar en guarnición no defienden. **Un asentamiento sin defensores presentes ni guarnición se asedia igual, sin defensores.** Esta es la tensión central de la mecánica: atacar cuesta dejar la casa descubierta, salvo lo que se deje en guarnición.
 
-**Llegar no es asediar.** Un ejército que llega **acampa delante**, y asediar es una acción que se elige en la puerta (5.12.3).
+**Llegar no es asediar.** Un ejército que llega **acampa delante**. Asediar es una decisión consciente: a distancia de ataque (15) de una plaza de otra Facción, entre lo que se ofrece al interactuar con ella aparece **Atacar**, y pulsarlo empieza la batalla (5.12.3; decisión del usuario, 2026-09-15).
 
 Eso permite **plantarse frente a una ciudad enemiga sin atacarla.** Bloquear, sitiar sin asaltar, esperar refuerzos o negociar con el ejército a la vista son jugadas legítimas.
 

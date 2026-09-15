@@ -327,8 +327,9 @@ defiende. Los héroes bot no usan la guarnición, defienden con su loadout.
 
 **Ciclo de `Batalla` con Unity (BA-001), fase 1 de 3 hecha en la rama `heroe-dominio` (2026-09-15).** Con
 servidores de batalla declarados (`SERVIDORES_BATALLA`; sin ellos todo sigue con números, decisión del usuario),
-un combate con algún héroe humano abre una `Batalla` en vez de resolverse: `atacar`, el ejército que llega a una
-plaza enemiga y la persecución que alcanza a su presa (`session/batallas.ts`). El ticket se congela con la forma
+un combate con algún héroe humano abre una `Batalla` en vez de resolverse: `atacar` (también contra una plaza, que es
+asediarla) y, contra un humano, el ejército bot que llega a su plaza o la columna bot que alcanza a su presa
+(`session/batallas.ts`). El ticket se congela con la forma
 del contrato, las escuadras quedan reservadas, y lo que interviene se bloquea sin parar el mundo (Doc 5.15.1: la
 plaza asediada no abre puertas ni da órdenes, las columnas y la caravana no se mueven ni se pueden atacar, y la
 batalla se ve en el mapa en su lugar). Se unen compañeros de Facción mientras quede sitio (`unirseABatalla`),
@@ -344,12 +345,9 @@ Sigue distinto del canon, mientras no haya servidores de batalla: el asedio se r
 (`iniciarAsedio`, `engine/combate.ts`); lo mismo el ataque a un campamento de bandidos, que ya se hace con la
 columna que llega a él (`atacar`, Doc 1.9, 2026-09-15), aunque los bots aún lo atacan desde su plaza (motor
 `atacarCampamentoBandidos`, hasta §36). El desalojo no mira el cupo de viviendas de la plaza que recibe a los
-vencidos (`desalojarResidentes`). Y dos atajos del código frente a Doc 5.12.3-5.12.4, encontrados en la pasada de
-documentación del 2026-09-15: un ejército cuyo destino es una plaza enemiga la asedia al llegar
-(`avanzarEjercitos`), cuando el canon dice que llegar es acampar y que asediar es una acción de la puerta; y una
-persecución que alcanza a su presa combate en el acto (`resolverEncuentros`), cuando el canon dice que a 15 se ofrece
-atacar. Con servidores de batalla, los dos abren una batalla en vez de resolverla. CQ-002 en Conquest para la IA de escuadras sin héroe y de héroes bot; CQ-005 para
-las incorporaciones a una batalla en curso.
+vencidos (`desalojarResidentes`). La persecución no recalcula la ruta hacia la presa, aunque Doc 5.12.3 dice que
+sí: hoy solo marca a quién se ataca (bot) o de quién avisar (humano) si se cruzan a 15. CQ-002 en Conquest para la
+IA de escuadras sin héroe y de héroes bot; CQ-005 para las incorporaciones a una batalla en curso.
 
 Sin resolver:
 

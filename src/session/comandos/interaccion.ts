@@ -14,6 +14,7 @@
 // El de 40 es el que hace de esto un juego de dos: la telemetría que la proyección niega a distancia se
 // consigue acercándose, y acercarse te delata. Nadie audita al rival desde el sofá.
 import {
+  asediarPlaza,
   atacarCampamento,
   atacarColumna,
   capacidadCargaDe,
@@ -24,6 +25,7 @@ import {
   MovilizacionInvalidaError,
   perseguir as perseguirEngine,
   validarAlcance,
+  validarAsedio,
   validarAtaqueAColumna,
   type ComposicionColumna,
   type ContenidoCaravana,
@@ -33,6 +35,8 @@ import {
   aperturaContraCampamento,
   aperturaContraCaravana,
   aperturaContraColumna,
+  aperturaDeAsedio,
+  bloqueosDe,
   eventosDeBatalla,
   hayHumano,
   idDeBatalla,
@@ -40,12 +44,12 @@ import {
 } from '../batallas';
 import { heridosEn, herir } from '../../engine/heroe';
 import { conEscolta, indiceTropa, sinEscolta } from '../../engine/tropa';
-import type { Ejercito } from '../../domain/types';
+import type { Asentamiento, Ejercito } from '../../domain/types';
 import { minutos, sumar, type Instante } from '../../domain/tiempo';
 import { CAMPAMENTOS_BANDIDOS } from '../../constants';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito } from './tipos';
-import { comando, conColumnas, conTropaDe, exigirCampamento, exigirCaravana, exigirColumnaDe, exigirEjercito } from './ayudas';
+import { comando, conColumnas, conTropaDe, exigirAsentamiento, exigirCampamento, exigirCaravana, exigirColumnaDe, exigirEjercito } from './ayudas';
 import { desdeCrudos, evento } from './eventos';
 
 /** A qué se puede apuntar desde el menú de interacción: una columna o una caravana. Es la misma forma que usa
@@ -116,8 +120,9 @@ export const inspeccionar = comando<ParamsInspeccionar, ComposicionColumna | Con
   );
 });
 
-/** `atacar` apunta además a un campamento de bandidos (Doc 1.9): se ataca con la columna, no se mira ni se persigue. */
-export type ObjetivoDeAtaque = ObjetivoDeInteraccion | { tipo: 'campamento'; id: string };
+/** `atacar` apunta además a un campamento de bandidos (Doc 1.9) y a una plaza, que se asedia (Doc 5.12.4): no se
+ * miran ni se persiguen. */
+export type ObjetivoDeAtaque = ObjetivoDeInteraccion | { tipo: 'campamento'; id: string } | { tipo: 'asentamiento'; id: string };
 
 export interface ParamsAtacar {
   heroeId: string;
@@ -154,7 +159,8 @@ function exigirSano(estado: GameSessionState, heroeId: string, ahora: Instante):
  * Ejército. Un herido no ataca, sus escuadras no combaten, y a una columna de solo heridos no se la puede tocar.
  *
  * Un campamento de bandidos también se ataca así, con la columna que llega a él (Doc 1.9): si cae, su recompensa
- * va al carro y se agenda su reaparición.
+ * va al carro y se agenda su reaparición. Y una plaza de otra Facción: atacarla es asediarla, una sola batalla
+ * cuando se ordena, porque llegar a ella solo es acampar (Doc 5.12.4).
  *
  * Con servidores de batalla y algún héroe humano, el combate no se resuelve aquí: se abre una batalla de Unity y se
  * devuelve su `battleId` (Doc 5.10, doc 02 §3.1).
@@ -164,7 +170,7 @@ export const atacar = comando<ParamsAtacar, { battleId: string } | undefined>((e
   const atacante = exigirColumnaDe(estado, params.heroeId);
 
   if (ctx.batallasEnUnity) {
-    const apertura = aperturaDeAtaque(estado, atacante, params, heridos);
+    const apertura = aperturaDeAtaque(estado, atacante, params, heridos, ctx.instante);
     if (hayHumano(apertura)) {
       const { estado: conBatalla, batalla } = abrirBatalla(estado, apertura, ctx.instante, idDeBatalla(estado.gameId, ctx.ids.siguiente()));
       return exito(
@@ -173,6 +179,26 @@ export const atacar = comando<ParamsAtacar, { battleId: string } | undefined>((e
         { battleId: batalla.id }
       );
     }
+  }
+
+  if (params.objetivo.tipo === 'asentamiento') {
+    const plaza = plazaAsediable(estado, atacante, params.objetivo.id, heridos, ctx.instante);
+    const asedio = asediarPlaza(
+      conTropaDe(estado, atacante),
+      plaza,
+      { asentamientos: estado.asentamientos, ejercitos: estado.ejercitos, heroes: estado.heroes, facciones: [...estado.facciones], relaciones: estado.relaciones },
+      heridos,
+      ctx.instante,
+      ctx.rng
+    );
+    const siguiente = conColumnas(
+      { ...estado, asentamientos: asedio.asentamientos, heroes: asedio.heroes, facciones: asedio.facciones },
+      [asedio.ejercito, ...asedio.columnas]
+    );
+    return exito(
+      conHistorialDeJugador(siguiente, params.heroeId, `Asedia ${plaza.id}.`),
+      asedio.eventos.map((e) => evento(ctx, typeof e === 'string' ? { codigo: 'legado', mensaje: e } : e))
+    );
   }
 
   if (params.objetivo.tipo === 'campamento') {
@@ -248,8 +274,11 @@ export const atacar = comando<ParamsAtacar, { battleId: string } | undefined>((e
 });
 
 /** La batalla que abriría este ataque, validado igual que el combate con números. */
-function aperturaDeAtaque(estado: GameSessionState, atacante: Ejercito, params: ParamsAtacar, heridos: ReadonlySet<string>): Apertura {
+function aperturaDeAtaque(estado: GameSessionState, atacante: Ejercito, params: ParamsAtacar, heridos: ReadonlySet<string>, ahora: Instante): Apertura {
   const { objetivo } = params;
+  if (objetivo.tipo === 'asentamiento') {
+    return aperturaDeAsedio(estado, atacante, plazaAsediable(estado, atacante, objetivo.id, heridos, ahora), params.heroeId, heridos);
+  }
   if (objetivo.tipo === 'campamento') {
     const campamento = exigirCampamento(estado, objetivo.id);
     validarAlcance(atacante, campamento.posicion, heridos, 'atacar');
@@ -265,9 +294,20 @@ function aperturaDeAtaque(estado: GameSessionState, atacante: Ejercito, params: 
   return aperturaContraCaravana(estado, atacante, caravana, params.heroeId, heridos);
 }
 
+/** La plaza que se va a asediar, si se puede. Una que ya está en una batalla no se asedia otra vez: se espera a la
+ * puerta, o se une uno a esa batalla (Doc 5.15.1). */
+function plazaAsediable(estado: GameSessionState, atacante: Ejercito, plazaId: string, heridos: ReadonlySet<string>, ahora: Instante): Asentamiento {
+  const plaza = exigirAsentamiento(estado, plazaId);
+  if (bloqueosDe(estado, ahora).asentamientos.has(plaza.id)) {
+    throw new MovilizacionInvalidaError('Esa plaza ya está en una batalla: se espera a la puerta, o se une uno a ella.');
+  }
+  validarAsedio(atacante, plaza, heridos, ahora);
+  return plaza;
+}
+
 /**
  * Ir a por alguien (Doc 5.12.3). No es un destino sino un objetivo que se mueve: la ruta se recalcula cada
- * tick hacia donde esté, y al alcanzarlo hay combate — porque perseguir ES elegir el combate.
+ * tick hacia donde esté, y al alcanzarlo, a 15, se ofrece atacar (`columna.presa_alcanzada`).
  *
  * Termina de tres formas: alcanzándolo, rectificando el rumbo con `marcharA` o soltándolo. Un herido no persigue,
  * y a una columna de solo heridos no se la puede perseguir (Doc 5.16.4).

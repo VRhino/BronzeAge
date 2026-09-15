@@ -368,7 +368,9 @@ Codex (protocolo y propuestas BA-*/CQ-* en `Docs/Coordinacion/`). De ahí salen 
   humano no se resuelve en el tick: se abre una `Batalla` con su ticket congelado, se juega en Unity y vuelve un
   resultado.
   - `engine/` no sabe de batallas: con `ContextoSimulacion.batallas` devuelve en `combatesPorAbrir` los combates
-    con humanos que no resuelve, y hace esperar a la puerta a quien llega a una plaza en batalla.
+    con humanos que no resuelve, y hace esperar a la puerta a quien llega a una plaza en batalla. Solo los inicia
+    el tick para columnas de héroes bot (asediar al llegar, atacar al alcanzar a su presa): un héroe humano
+    acampa al llegar y recibe aviso al alcanzar, y combate con `atacar`, también contra una plaza (Doc 5.12.3-5.12.4).
   - `session/batallas.ts` es el ciclo: abrir (ticket, reservas en `Escuadron.reservaBatalla`, bloqueo), unirse
     (incorporaciones), cancelar, vencer plazos, y lo que manda Conquest (asignación, inicio, tokens).
     `GameSessionState.batallas` lo persiste. Lo bloqueado se hace cumplir en dos sitios: el candado del registro

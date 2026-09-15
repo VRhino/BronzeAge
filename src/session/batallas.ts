@@ -311,7 +311,7 @@ export function aperturaContraCampamento(estado: GameSessionState, atacante: Eje
 
 /** En un asedio defienden los residentes sanos que están dentro, con su loadout activo, y la guarnición sin héroe
  * (Doc 5.15.1, 5.15.3). Sin nadie, se juega igual, sin defensores. */
-export function aperturaDeAsedio(estado: GameSessionState, ejercito: Ejercito, plaza: Asentamiento, heridos: ReadonlySet<string>): Apertura {
+export function aperturaDeAsedio(estado: GameSessionState, ejercito: Ejercito, plaza: Asentamiento, iniciadaPor: string, heridos: ReadonlySet<string>): Apertura {
   const defensores = heroesQueDefienden(plaza, estado.heroes, heridos).map((h) => {
     const loadout = new Set(h.loadouts.find((l) => l.activo)?.squadIds ?? []);
     return enBatalla(h, h.escuadrones.filter((e) => e.contenedor.tipo === 'campamento' && !e.enGuarnicion && loadout.has(e.id)));
@@ -319,7 +319,7 @@ export function aperturaDeAsedio(estado: GameSessionState, ejercito: Ejercito, p
   return {
     contexto: { tipo: 'asedio', asentamientoId: plaza.id },
     punto: plaza.posicion,
-    iniciadaPor: ejercito.liderId,
+    iniciadaPor,
     atacante: bandoDeColumna(estado, ejercito, heridos),
     defensor: {
       faccionId: plaza.faccionId,
@@ -424,7 +424,7 @@ function aperturaDelTick(estado: GameSessionState, c: CombatePorAbrir, heridos: 
   if (!ejercito) return undefined;
   if (c.tipo === 'asedio') {
     const plaza = estado.asentamientos.find((a) => a.id === c.asentamientoId);
-    return plaza && aperturaDeAsedio(estado, ejercito, plaza, heridos);
+    return plaza && aperturaDeAsedio(estado, ejercito, plaza, ejercito.liderId, heridos);
   }
   if (c.tipo === 'columna') {
     const rival = estado.ejercitos.find((e) => e.id === c.rivalId);

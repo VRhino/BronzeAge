@@ -111,13 +111,26 @@ function avanzar(
     heridos?: string[];
     /** Batallas de Unity (doc 01 §15). Sin ellas, todo con números. */
     batallas?: ContextoAvanceEjercitos['batallas'];
+    /** Los héroes humanos, y dónde está dentro cada uno si no está en su columna. El resto son bot: solo una columna de
+     * héroes bot asedia al llegar y combate al alcanzar a su presa (Doc 5.12.3), que es lo que mide casi todo este archivo. */
+    humanos?: string[];
+    dentro?: Record<string, string>;
   } = {}
 ) {
   // Una vista que pasó por `adjuntarCaravana` sigue llevando su tropa aunque el tipo la pierda.
   const enColumnas = ejercitos.flatMap((e) => ('escuadrones' in e ? sinTropa(e as EjercitoConTropa).tropa : []));
-  const heroes = (
-    opciones.heroes ?? heroesCon([...enColumnas, ...(opciones.campamento ?? [])], [...new Set(asentamientos.flatMap((a) => a.heroesFundadoresIds))])
-  ).map((h) => (opciones.heridos?.includes(h.id) ? { ...h, heridoHasta: instanteDeTest(9999) } : h));
+  const nuevos = () =>
+    heroesCon([...enColumnas, ...(opciones.campamento ?? [])], [...new Set(asentamientos.flatMap((a) => a.heroesFundadoresIds))]).map(
+      (h): Heroe => {
+        const plaza = opciones.dentro?.[h.id];
+        return {
+          ...h,
+          controlador: opciones.humanos?.includes(h.id) ? 'humano' : 'bot',
+          ...(plaza ? { ubicacion: { tipo: 'asentamiento', asentamientoId: plaza } } : {}),
+        };
+      }
+    );
+  const heroes = (opciones.heroes ?? nuevos()).map((h) => (opciones.heridos?.includes(h.id) ? { ...h, heridoHasta: instanteDeTest(9999) } : h));
   const r = avanzarEjercitos(ejercitos, {
     asentamientos,
     caravanas: opciones.caravanas ?? [],
@@ -419,12 +432,25 @@ describe('llegada a un asentamiento ajeno = asedio (Paso 7)', () => {
     expect(r.ejercitos[0]!.estado, 'no acampa: la llegada se vuelve a mirar el tick siguiente').toBe('marchando');
   });
 
-  it('con batallas de Unity, un asedio con algún humano no se resuelve aquí: acampa y se devuelve para abrirlo (Doc 5.10)', () => {
+  it('un ejército de héroes HUMANOS que llega a una plaza enemiga solo acampa: asediar se ordena (Doc 5.12.4)', () => {
+    const { facciones, propio, enemigo, ejercito, campamento } = frenteDeGuerra([escuadron('d1', 'milicia_lanceros', 1)]);
+
+    const r = avanzar([ejercito], [propio, enemigo], { facciones, campamento, humanos: [RESIDENTE] });
+
+    expect(r.asentamientos.find((a) => a.id === enemigo.id)!.faccionId).toBe(enemigo.faccionId);
+    expect(r.ejercitos[0]!.estado).toBe('estacionado');
+    expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo === 'ejercito.llega')).toBe(true);
+    expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo.startsWith('combate.'))).toBe(false);
+  });
+
+  it('con batallas de Unity, un ejército bot contra una plaza con algún humano dentro no la asedia aquí: acampa y se devuelve para abrirlo (Doc 5.10)', () => {
     const { facciones, propio, enemigo, ejercito, campamento } = frenteDeGuerra([escuadron('d1', 'milicia_lanceros', 1)]);
 
     const r = avanzar([ejercito], [propio, enemigo], {
       facciones,
       campamento,
+      humanos: [RIVAL],
+      dentro: { [RIVAL]: enemigo.id },
       batallas: { abrirEnUnity: true, asentamientosEnBatalla: new Set() },
     });
 
@@ -1032,6 +1058,18 @@ describe('encuentros: solo se resuelve lo que se persigue', () => {
     expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo === 'combate.encuentro')).toBe(true);
     const totalDespues = r.ejercitos.reduce((n, e) => n + e.escuadrones.reduce((m, x) => m + x.cantidad, 0), 0);
     expect(totalDespues, 'los dos bandos sufren bajas').toBeLessThan(60);
+  });
+
+  it('un héroe HUMANO que alcanza a su presa no combate: la persecución termina y se le ofrece atacar (Doc 5.12.3)', () => {
+    const { facciones, asentamientos, a, b } = dosColumnas(LOGISTICA.radioEncuentro - 1);
+    const cazador: Ejercito = { ...a, persiguiendo: { tipo: 'ejercito', id: b.id } };
+
+    const r = avanzar([cazador, b], asentamientos, { facciones, humanos: [RESIDENTE] });
+
+    expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo.startsWith('combate.'))).toBe(false);
+    expect(r.ejercitos.find((e) => e.id === a.id)!.persiguiendo).toBeUndefined();
+    const avisos = r.eventos.filter((e) => typeof e !== 'string' && e.codigo === 'columna.presa_alcanzada');
+    expect(avisos.map((e) => (typeof e !== 'string' ? e.asentamientoId : '')).sort(), 'se enteran los dos').toEqual([a.origenAsentamientoId, b.origenAsentamientoId].sort());
   });
 
   it('y al alcanzarla suelta la presa: se persigue para pelear, y ya se peleo', () => {

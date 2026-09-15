@@ -66,9 +66,11 @@ entregar un secreto por destinatario. Corregido abajo.
 
 ### 3.1 Comandos de jugador (mismo mecanismo del §2)
 
-No hay un comando para abrir una batalla. La abren los mismos hechos que hoy abren un combate —`atacar`, la
-llegada de un ejército a una plaza enemiga y una persecución que alcanza a su presa— cuando interviene algún
-héroe humano y el proceso tiene servidores de batalla (§3.3). `atacar` devuelve entonces `{ battleId }` en
+No hay un comando para abrir una batalla. La abren los mismos hechos que hoy abren un combate —`atacar` (contra
+una columna, una caravana, un campamento de bandidos o una plaza, que es asediarla) y, del lado NPC, el ejército
+bot que llega a su plaza de destino o la columna bot que alcanza a su presa— cuando interviene algún héroe humano
+y el proceso tiene servidores de batalla (§3.3). Un héroe humano no abre ninguna solo por llegar o alcanzar (Doc
+5.12.3-5.12.4). `atacar` devuelve entonces `{ battleId }` en
 `resultado.datos`. El lobby previo no pasa por aquí (vive en `Ejercito`, sin persistencia nueva — doc 01 §15).
 
 | Comando | Parámetros | Rechazos de dominio |

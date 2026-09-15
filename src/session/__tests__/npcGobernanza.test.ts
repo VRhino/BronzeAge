@@ -223,7 +223,8 @@ function dosColumnasNpc() {
   const estado = crearEstadoDeTest([uno.asentamiento, dos.asentamiento], dos.facciones, {
     // A 10 una de otra: dentro del radio de encuentro, asi que la persecucion se cierra en el mismo tick.
     ejercitos: [columna('col-a', 'faccion-1', uno.asentamiento.id, punto.x), columna('col-b', 'faccion-2', dos.asentamiento.id, punto.x + 10)],
-    heroes: heroesCon([tropa('col-a'), tropa('col-b')]),
+    // Héroes bot: para el NPC perseguir ya es su orden de ataque (Doc 5.12.3).
+    heroes: heroesCon([tropa('col-a'), tropa('col-b')]).map((h) => ({ ...h, controlador: 'bot' as const })),
   });
   return { estado, mapa: mapaDeterminista };
 }

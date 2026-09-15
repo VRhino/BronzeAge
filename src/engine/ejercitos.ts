@@ -1192,12 +1192,74 @@ export function atacarCampamento(
   return { ...r, ejercito: secuela.perdedor, vencidos: secuela.vencidos };
 }
 
+/** Lo que exige asediar una plaza (Doc 5.12.4): que sea de otra Facción, estar a distancia de choque con algún héroe
+ * sano y que no esté bajo ocupación reciente (Doc 5.12.9). Lo comparten el asedio con números y la batalla de Unity. */
+export function validarAsedio(ejercito: Ejercito, plaza: Asentamiento, heridos: ReadonlySet<string>, instante: Instante): void {
+  if (plaza.faccionId === ejercito.faccionId) throw new MovilizacionInvalidaError('No se asedia una plaza de tu Facción.');
+  validarAlcance(ejercito, plaza.posicion, heridos, 'atacar');
+  if (estaOcupado(plaza, instante)) throw new MovilizacionInvalidaError('Esa plaza está bajo ocupación reciente: todavía no se la puede asediar.');
+}
+
+/**
+ * Asediar la plaza que la columna tiene delante, con números (Doc 5.12.4): una sola batalla, cuando se ordena. La
+ * defienden su guarnición y el loadout de los residentes sanos que están dentro. Los héroes del bando que pierde
+ * quedan heridos (Doc 5.16.4); sin combate —plaza vacía u ocupada— no pierde nadie. Si cae, se desaloja a quien
+ * estaba dentro (Doc 5.15.5) y el ejército sigue fuera, acampado: conquistar no lo convierte en guarnición.
+ *
+ * Los eventos salen ya atribuidos: siempre al hogar del atacante, y a la plaza solo si resistió. Si cae pasa a manos
+ * del atacante, y contárselo también a ella se lo enseñaría dos veces al mismo jugador. Queda un hueco conocido: al
+ * vencido no le llega su derrota, porque pierde la plaza por la que la vería; taparlo pide una audiencia por Facción.
+ */
+export function asediarPlaza(
+  ejercito: EjercitoConTropa,
+  plaza: Asentamiento,
+  mundo: {
+    asentamientos: readonly Asentamiento[];
+    /** Las columnas del mundo: la aparcada de un visitante es donde vuelve si la plaza cae. */
+    ejercitos: readonly Ejercito[];
+    heroes: readonly Heroe[];
+    facciones: Faccion[];
+    relaciones: readonly RelacionPolitica[];
+  },
+  heridos: ReadonlySet<string>,
+  instante: Instante,
+  rng: RandomFn
+): { ejercito: EjercitoConTropa; asentamientos: Asentamiento[]; heroes: Heroe[]; facciones: Faccion[]; columnas: EjercitoConTropa[]; eventos: EventoCrudo[] } {
+  const defensores = heroesQueDefienden(plaza, mundo.heroes, heridos);
+  const defensa = defensaDe(plaza, mundo.heroes, heridos);
+  // Las que defienden en persona: si la plaza cae, salen con su héroe (Doc 5.15.5). La guarnición no.
+  const lucharon = new Set(defensa.filter((e) => !e.enGuarnicion).map((e) => e.id));
+  const asedio = asediarConEjercito(sinHeridos(ejercito, heridos), plaza, defensa, mundo.facciones, [...mundo.relaciones], instante, rng);
+  let heroes = conEscuadrones(mundo.heroes, asedio.tropaDefensora);
+  if (asedio.tropaDefensora.length > 0) {
+    heroes = herir(heroes, asedio.conquistado ? defensores.map((h) => h.id) : ejercito.participantes.map((p) => p.heroeId), instante);
+  }
+  let asentamientos = mundo.asentamientos.map((a) => (a.id === plaza.id ? asedio.defensor : a));
+  let columnas: EjercitoConTropa[] = [];
+  if (asedio.conquistado) ({ asentamientos, heroes, columnas } = desalojarResidentes(plaza, asentamientos, heroes, mundo.ejercitos, lucharon, instante));
+  return {
+    ejercito: conApartadas(asedio.ejercito, ejercito),
+    asentamientos,
+    heroes,
+    facciones: asedio.facciones,
+    columnas,
+    eventos: asedio.eventos.flatMap((e) => [atribuir(e, ejercito.origenAsentamientoId), ...(asedio.conquistado ? [] : [atribuir(e, plaza.id)])]),
+  };
+}
+
+/** Payload de `columna.presa_alcanzada`: la persecución de un héroe humano terminó a 15 (Doc 5.12.3). */
+export interface PayloadPresaAlcanzada {
+  ejercitoId: string;
+  objetivo: { tipo: 'ejercito' | 'caravana'; id: string };
+}
+
 /**
  * Fijar a quien persigues (Doc 5.12.3). No es un destino: es un objetivo que se mueve, y la ruta se
  * recalcula cada tick hacia donde este.
  *
- * Termina de tres formas: al alcanzarlo (15, y entonces hay combate porque ya lo elegiste), al rectificar el
- * rumbo con `marcharA` y al soltarlo. Mientras la presa solo lleve héroes heridos no hay combate (Doc 5.16.4).
+ * Termina de tres formas: al alcanzarlo (15, y entonces se ofrece atacar; una columna de héroes bot ataca sin más,
+ * porque su intención es su política), al rectificar el rumbo con `marcharA` y al soltarlo. Mientras la presa solo
+ * lleve héroes heridos no hay combate (Doc 5.16.4).
  */
 export function perseguir(
   ejercito: Ejercito,
@@ -1346,8 +1408,7 @@ export interface ResultadoAvanceEjercitos {
  *  2. **Disolver si se quedó sin nadie** (Doc 5.13.4), antes de moverlo: si no, marcharía como fantasma.
  *  3. **Mover**, salvo estacionado (que acampa pero sigue comiendo, a `factorConsumoEstacionado`).
  *  4. **Llegar**: `regresando` reintegra la tropa y el sobrante en casa; cualquier otro destino deja el
- *     ejército acampado donde llegó. Que la llegada a un asentamiento enemigo dispare un asedio es el Paso 7:
- *     hasta entonces, plantarse es la conducta neutra y no rompe nada.
+ *     ejército acampado donde llegó. Solo una columna de héroes bot asedia al llegar a una plaza enemiga.
  */
 export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: ContextoAvanceEjercitos): ResultadoAvanceEjercitos {
   const { asentamientos, caravanas, facciones, relaciones, mapa, instante, rng } = contexto;
@@ -1378,6 +1439,7 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
   // para que la partida abra la batalla. `enCombate` es lo que ya va a una batalla este tick.
   const abrirEnUnity = contexto.batallas?.abrirEnUnity ?? false;
   const humanos = new Set(heroes.filter((h) => h.controlador === 'humano').map((h) => h.id));
+  const conHumano = (e: Ejercito) => e.participantes.some((p) => humanos.has(p.heroeId));
   const combatesPorAbrir: CombatePorAbrir[] = [];
   const enCombate = new Set<string>();
   let caravanasActuales: CaravanaConEscolta[] = caravanas.map((c) => conEscolta(c, indice));
@@ -1511,13 +1573,11 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
         });
         continue;
       }
-      // Llegó a su destino. Si ese destino es un asentamiento de otra Facción, la llegada ES el asedio
-      // (Doc 5.12.4) — y se resuelve UNA vez, al cruzar el final de la ruta. No se repite mientras el
-      // ejército siga acampado ahí: un asedio por tick convertiría cualquier plaza en una picadora de carne
-      // sin que nadie hubiera decidido nada. Lo que pase después con un ejército parado junto a una ciudad
-      // enemiga es el Paso 10 (encuentros por proximidad).
+      // Llegó a su destino y acampa: llegar no es asediar, asediar se ordena (Doc 5.12.4, `atacar`). Solo una columna de
+      // héroes bot asedia al llegar a la plaza enemiga que tenía por destino: su intención es su política (Doc 5.12.3).
+      // Y lo hace UNA vez, al cruzar el final de la ruta: acampada ahí ya no vuelve a asaltar.
       const objetivo = ejercito.objetivo.tipo === 'asentamiento' ? porId.get(ejercito.objetivo.id) : undefined;
-      const enemiga = objetivo && objetivo.faccionId !== ejercito.faccionId ? objetivo : undefined;
+      const enemiga = objetivo && objetivo.faccionId !== ejercito.faccionId && !conHumano(ejercito) ? objetivo : undefined;
       if (enemiga && (contexto.batallas?.asentamientosEnBatalla.has(enemiga.id) || !tieneHeroeSano(ejercito, heridos))) {
         // Espera a la puerta: la plaza ya está en una batalla (Doc 5.15.1), o todos sus héroes están heridos y asedia
         // cuando alguno sane (Doc 5.16.4; decisión del usuario, 2026-09-14). Sigue `marchando` con la ruta acabada,
@@ -1525,54 +1585,21 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
         supervivientes.push(ejercito);
         continue;
       }
-      const conHumano = [...ejercito.participantes.map((p) => p.heroeId), ...(enemiga ? heroesQueDefienden(enemiga, heroes, heridos).map((h) => h.id) : [])];
-      if (enemiga && abrirEnUnity && !estaOcupado(enemiga, instante) && conHumano.some((id) => humanos.has(id) && !heridos.has(id))) {
-        // Con algún humano el asedio se juega en Unity (Doc 5.10): acampa a la puerta y la partida abre la batalla.
+      if (enemiga && abrirEnUnity && !estaOcupado(enemiga, instante) && heroesQueDefienden(enemiga, heroes, heridos).some((h) => humanos.has(h.id))) {
+        // Con algún humano dentro el asedio se juega en Unity (Doc 5.10): acampa a la puerta y la partida abre la batalla.
         combatesPorAbrir.push({ tipo: 'asedio', ejercitoId: ejercito.id, asentamientoId: enemiga.id });
         enCombate.add(ejercito.id);
         supervivientes.push({ ...ejercito, estado: 'estacionado' });
         continue;
       }
-      if (objetivo && objetivo.faccionId !== ejercito.faccionId) {
-        const defensores = heroesQueDefienden(objetivo, heroes, heridos);
-        const defensa = defensaDe(objetivo, heroes, heridos);
-        // Las que defienden en persona: si la plaza cae, salen con su héroe (Doc 5.15.5). La guarnición no.
-        const lucharon = new Set(defensa.filter((e) => !e.enGuarnicion).map((e) => e.id));
-        const asedio = asediarConEjercito(sinHeridos(ejercito, heridos), objetivo, defensa, faccionesActuales, [...relaciones], instante, rng);
-        ejercito = conApartadas(asedio.ejercito, ejercito);
-        porId.set(objetivo.id, asedio.defensor);
-        heroes = conEscuadrones(heroes, asedio.tropaDefensora);
+      if (enemiga) {
+        const asedio = asediarPlaza(ejercito, enemiga, { asentamientos: [...porId.values()], ejercitos, heroes, facciones: faccionesActuales, relaciones }, heridos, instante, rng);
+        ejercito = asedio.ejercito;
+        for (const a of asedio.asentamientos) porId.set(a.id, a);
+        heroes = asedio.heroes;
         faccionesActuales = asedio.facciones;
-        // Los héroes del bando que pierde quedan heridos (Doc 5.16.4). Sin combate —plaza vacía u ocupada— no pierde nadie.
-        if (asedio.tropaDefensora.length > 0) {
-          heroes = herir(heroes, asedio.conquistado ? defensores.map((h) => h.id) : ejercito.participantes.map((p) => p.heroeId), instante);
-        }
-        // Conquistar no convierte al ejército en guarnición (Doc 5.15.5): acampa a la puerta, y los residentes
-        // derrotados se van con su campamento a 0 a la plaza más cercana de su Facción.
-        if (asedio.conquistado) {
-          const desalojo = desalojarResidentes(objetivo, [...porId.values()], heroes, ejercitos, lucharon, instante);
-          for (const a of desalojo.asentamientos) porId.set(a.id, a);
-          heroes = desalojo.heroes;
-          // Los que estaban dentro quedan fuera, junto a la plaza, en su propia columna.
-          supervivientes.push(...desalojo.columnas);
-        }
-        // A quién se le cuenta. Un evento se atribuye a UN asentamiento y lo ve la Facción que lo posee, así
-        // que un choque entre dos hay que narrarlo dos veces o alguien se queda sin enterarse:
-        //
-        //  - Siempre al **hogar del atacante**: es lo único que la Facción atacante posee con seguridad
-        //    (no reside en la plaza que ataca), y es quien tiene que saber cómo le fue a su columna.
-        //  - Y a la **plaza asediada**, SOLO si resistió. Si cae, pasa a manos del atacante, y atribuirle
-        //    también el evento se lo enseñaría dos veces al mismo jugador — duplicado en el log, medido en
-        //    vivo antes de esta condición.
-        //
-        // Queda un hueco conocido: al vencido no le llega la noticia de su propia derrota, porque pierde el
-        // asentamiento por el que la vería. Taparlo pide una audiencia por FACCIÓN que el modelo de eventos
-        // no tiene. Sigue abierto: el Paso 11 retiró `combateCampoAbierto`, que tenía el mismo problema,
-        // pero retirar el comando no resolvió la falta de audiencia por Facción — solo dejó de duplicarla.
-        for (const e of asedio.eventos) {
-          eventos.push(atribuir(e, ejercito.origenAsentamientoId));
-          if (!asedio.conquistado) eventos.push(atribuir(e, objetivo.id));
-        }
+        supervivientes.push(...asedio.columnas);
+        eventos.push(...asedio.eventos);
       } else {
         eventos.push({
           codigo: 'ejercito.llega',
@@ -1601,7 +1628,8 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
     porId,
     heridosEn(heroes, instante),
     rng,
-    abrirEnUnity ? { humanos, enCombate } : undefined
+    humanos,
+    abrirEnUnity ? { enCombate } : undefined
   );
   eventos.push(...conEncuentros.eventos);
 
@@ -1634,10 +1662,9 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
  * Los encuentros de un tick (Doc 5.12.3) — **y ya no salen de la geometría**.
  *
  * Antes, dos columnas enemigas que pasaban a menos de 15 se masacraban solas dentro del tick. Ahora un
- * encuentro exige que alguien lo haya PEDIDO: o con `atacar`/`interceptar` desde el menú, que se resuelven
- * en su comando y no aquí, o **persiguiendo** — y esta funcion es la que cierra las persecuciones cuando el
- * perseguidor alcanza a su presa. Elegir ir detrás de alguien ES elegir el combate; lo que desaparece es
- * pelear por haber pasado cerca.
+ * encuentro exige que alguien lo haya PEDIDO con `atacar`, que se resuelve en su comando y no aquí. Esta función
+ * cierra las persecuciones cuando el perseguidor alcanza a su presa: a un héroe humano se le ofrece atacar (Doc
+ * 5.12.3), y una columna de héroes bot combate, porque para el NPC perseguir ya es su orden de ataque.
  *
  * Las reglas que lo acotan siguen siendo las mismas, y siguen haciendo falta:
  *
@@ -1663,8 +1690,10 @@ function resolverEncuentros(
   /** Los héroes heridos ahora: ni persiguen, ni se les alcanza, ni sus escuadras combaten (Doc 5.16.4). */
   heridos: ReadonlySet<string>,
   rng: RandomFn,
-  /** Con batallas de Unity: quiénes son humanos, y lo que ya va a una batalla este tick. */
-  unity?: { humanos: ReadonlySet<string>; enCombate: ReadonlySet<string> }
+  /** Los héroes humanos: su persecución no combate sola, y con Unity un combate donde entran se juega allí. */
+  humanos: ReadonlySet<string>,
+  /** Con batallas de Unity: lo que ya va a una batalla este tick. */
+  unity?: { enCombate: ReadonlySet<string> }
 ): {
   ejercitos: EjercitoConTropa[];
   caravanas: CaravanaConEscolta[];
@@ -1682,7 +1711,7 @@ function resolverEncuentros(
     return { ejercitos: [...ejercitos], caravanas: [...caravanas], facciones: [...facciones], eventos, escoltasPerdidas: [], vencidos: [], combatesPorAbrir };
   }
   const conHumanoSano = (participantes: readonly { heroeId: string }[]) =>
-    unity !== undefined && participantes.some((p) => unity.humanos.has(p.heroeId) && !heridos.has(p.heroeId));
+    unity !== undefined && participantes.some((p) => humanos.has(p.heroeId) && !heridos.has(p.heroeId));
 
   const porId = new Map(ejercitos.map((e) => [e.id, e]));
   const escoltasPerdidas: Escuadron[] = [];
@@ -1733,6 +1762,18 @@ function resolverEncuentros(
       })[0];
 
     const rival = masCerca(rivales);
+    const alcanzada = rival ?? masCerca(presas);
+    if (alcanzada && ejercito.participantes.some((p) => humanos.has(p.heroeId))) {
+      // Un héroe humano no combate por alcanzar a su presa: la persecución termina a 15 y se le ofrece atacar (Doc
+      // 5.12.3). Se enteran los dos, como en todo el anillo de 15.
+      porId.set(ejercito.id, { ...ejercito, persiguiendo: undefined });
+      const payload: PayloadPresaAlcanzada = { ejercitoId: ejercito.id, objetivo: presaFijada };
+      const mensaje = `La columna ${ejercito.id} alcanza a ${alcanzada.id}: puede atacarla.`;
+      for (const asentamientoId of new Set([ejercito.origenAsentamientoId, alcanzada.origenAsentamientoId])) {
+        eventos.push({ codigo: 'columna.presa_alcanzada', mensaje, payload, asentamientoId });
+      }
+      continue;
+    }
     if (rival && conHumanoSano([...ejercito.participantes, ...rival.participantes])) {
       // Con algún humano se juega en Unity (Doc 5.10): la persecución acaba aquí y la partida abre la batalla.
       combatesPorAbrir.push({ tipo: 'columna', ejercitoId: ejercito.id, rivalId: rival.id });

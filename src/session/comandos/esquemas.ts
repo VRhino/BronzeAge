@@ -51,7 +51,7 @@ const OBJETIVO_DE_INTERACCION = {
 const OBJETIVO_DE_ATAQUE = {
   oneOf: [
     ...OBJETIVO_DE_INTERACCION.oneOf,
-    { type: 'object', properties: { tipo: { type: 'string', enum: ['campamento'] }, id: IDENTIFICADOR }, required: ['tipo', 'id'], additionalProperties: false },
+    { type: 'object', properties: { tipo: { type: 'string', enum: ['campamento', 'asentamiento'] }, id: IDENTIFICADOR }, required: ['tipo', 'id'], additionalProperties: false },
   ],
 } as const;
 const OBJETIVO_EJERCITO = {

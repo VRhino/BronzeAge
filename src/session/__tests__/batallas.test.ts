@@ -63,6 +63,39 @@ describe('abrir una batalla de Unity (doc 01 §15)', () => {
   });
 });
 
+describe('asediar es una orden, no una llegada (Doc 5.12.4)', () => {
+  const asediar = (sesion: GameSession, heroeId: string, plazaId: string) =>
+    sesion.ejecutar(REGISTRO_COMANDOS.atacar, { heroeId, objetivo: { tipo: 'asentamiento', id: plazaId } }, { actor: heroeId });
+
+  it('sin servidores de batalla, atacar una plaza enemiga a 15 la asedia con números', () => {
+    const { sesion, fundador, plazaId, faccionPropia } = frenteAPlaza(false);
+
+    const r = asediar(sesion, fundador, plazaId);
+
+    expect(r.ok).toBe(true);
+    expect(sesion.getState().asentamientos.find((a) => a.id === plazaId)!.faccionId, 'sin defensores cae').toBe(faccionPropia);
+  });
+
+  it('con servidores, abre la batalla de asedio a nombre de quien la ordena, y un segundo asedio a la misma plaza espera', () => {
+    const { sesion, fundador, vecino, plazaId } = frenteAPlaza();
+
+    const r = asediar(sesion, fundador, plazaId);
+
+    const batalla = sesion.getState().batallas[0]!;
+    expect(batalla.id).toBe(r.datos!.battleId);
+    expect(batalla.iniciadaPor).toBe(fundador);
+    expect(batalla.ticket.contextoEstrategico).toEqual({ tipo: 'asedio', asentamientoId: plazaId });
+    expect(batalla.bloqueo.asentamientoId).toBe(plazaId);
+    expect(asediar(sesion, vecino, plazaId).ok, 'la plaza ya está en una batalla').toBe(false);
+  });
+
+  it('una plaza propia no se asedia', () => {
+    const { sesion, fundador } = frenteAPlaza(false);
+
+    expect(asediar(sesion, fundador, sesion.getState().asentamientos[0]!.id).ok).toBe(false);
+  });
+});
+
 describe('mientras se juega (Doc 5.15.1)', () => {
   it('lo que combate no recibe órdenes ni se mueve, y nadie más ataca el campamento', () => {
     const { sesion, fundador, vecino, columna } = frenteACampamento();
@@ -147,6 +180,28 @@ describe('la batalla en el mapa (doc 02 §4.1)', () => {
     expect(ajena[0]!.ladoPropio).toBeUndefined();
   });
 });
+
+/** `frenteACampamento` con una plaza de otra Facción, sin nadie dentro, justo donde están las dos columnas. */
+function frenteAPlaza(unity = true) {
+  const frente = frenteACampamento(unity);
+  const payload = frente.sesion.exportar();
+  const { state } = payload;
+  const propia = state.asentamientos[0]!;
+  const rival = { ...state.facciones[0]!, id: 'faccion-rival', nombre: 'Troya', ciudadanosIds: [] };
+  const plaza = {
+    ...propia,
+    id: 'plaza-rival',
+    faccionId: rival.id,
+    heroesFundadoresIds: [],
+    casasCompradas: [],
+    posicion: state.ejercitos.find((e) => e.id === frente.columna)!.posicionActual,
+  };
+  const sesion = GameSession.importar(
+    { ...payload, state: { ...state, facciones: [...state.facciones, rival], asentamientos: [...state.asentamientos, plaza] } },
+    { batallasEnUnity: unity }
+  );
+  return { ...frente, sesion, plazaId: plaza.id, faccionPropia: propia.faccionId };
+}
 
 /** La misma partida con el bando atacante de su batalla limitado a `capacidadMaxima` héroes. */
 function conCapacidad(sesion: GameSession, capacidadMaxima: number): GameSession {
