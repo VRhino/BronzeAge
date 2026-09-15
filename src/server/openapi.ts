@@ -12,6 +12,7 @@ import type { FastifyDynamicSwaggerOptions } from '@fastify/swagger';
 
 export const ESQUEMA_SESION_AUTH = 'sesionAuth';
 export const ESQUEMA_CREDENCIAL_PROVEEDOR = 'credencialProveedor';
+export const ESQUEMA_SERVIDOR_BATALLA_AUTH = 'servidorBatallaAuth';
 
 export const opcionesOpenApi: FastifyDynamicSwaggerOptions = {
   openapi: {
@@ -40,6 +41,14 @@ export const opcionesOpenApi: FastifyDynamicSwaggerOptions = {
           description:
             "Credencial de un proveedor de identidad dado de alta (ver acceso/registroProveedores.ts). " +
             "Formato: '<esquema-de-proveedor> <credencial>' — en desarrollo, 'dev <sujetoId>'.",
+        },
+        [ESQUEMA_SERVIDOR_BATALLA_AUTH]: {
+          type: 'apiKey',
+          in: 'header',
+          name: 'Authorization',
+          description:
+            "Credencial de un servidor de batalla de Conquest declarado en SERVIDORES_BATALLA (doc 02 §3.3), nunca la de " +
+            "un jugador. Formato: 'batalla-servidor <token>'.",
         },
       },
     },

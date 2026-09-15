@@ -17,7 +17,7 @@
 // red de seguridad que detecta el síntoma de un bug real (dos procesos escribiendo el mismo `gameId`) y se
 // niega a perder datos en silencio en vez de prevenirlo por diseño.
 import type { AlmacenDeObjetos } from './almacen/almacenDeObjetos';
-import { GameSession, type PartidaExportada } from '../session/gameSession';
+import { GameSession, type OpcionesSesion, type PartidaExportada } from '../session/gameSession';
 import { idDeMapa, instanteDeTick } from '../session/estado';
 import type { Instante } from '../domain/tiempo';
 import { generarMapa, WORLDGEN_VERSION, type MapaGenerado } from '../worldgen';
@@ -199,7 +199,7 @@ export interface PartidaCargada {
  * Reconstruye la `GameSession` guardada bajo la clave `<gameId>.json`.
  * `null` si no existe ningún snapshot para ese `gameId` — no es un error, es el caso "partida nueva".
  */
-export async function cargarPartida(almacen: AlmacenDeObjetos, gameId: string): Promise<PartidaCargada | null> {
+export async function cargarPartida(almacen: AlmacenDeObjetos, gameId: string, opciones: OpcionesSesion = {}): Promise<PartidaCargada | null> {
   const snapshot = await leerSnapshotSiExiste(almacen, gameId);
   if (!snapshot) return null;
 
@@ -221,7 +221,7 @@ export async function cargarPartida(almacen: AlmacenDeObjetos, gameId: string): 
   //    delante de un snapshot revertido).
   partida.state.mapa = generarMapa(partida.state.mapa.config);
   partida.state.eventosDominio = await leerEventos(almacen, gameId, partida.state.version);
-  return { sesion: GameSession.importar(partida) };
+  return { sesion: GameSession.importar(partida, opciones) };
 }
 
 export interface ResumenPartidaEnDisco {

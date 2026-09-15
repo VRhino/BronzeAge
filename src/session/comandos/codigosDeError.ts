@@ -60,6 +60,7 @@ export const CODIGOS_ERROR = {
   batallaNoExiste: 'batalla.no_existe',
   batallaBloqueo: 'batalla.bloqueado',
   batallaInvalida: 'batalla.invalida',
+  batallaYaAsignada: 'batalla.ya_asignada',
 } as const;
 
 export type CodigoError = (typeof CODIGOS_ERROR)[keyof typeof CODIGOS_ERROR];

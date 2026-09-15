@@ -9,6 +9,7 @@
 import type { RegionId } from '../domain/types';
 import type { AlmacenDeObjetos } from './almacen/almacenDeObjetos';
 import { RunnerDePartida } from './runnerDePartida';
+import type { OpcionesSesion } from '../session/gameSession';
 import { listarPartidas, type ResumenPartidaEnDisco } from './persistenciaPartida';
 
 export interface ConfiguracionPartida {
@@ -45,7 +46,9 @@ export class RegistroDePartidas {
   constructor(
     private readonly almacen: AlmacenDeObjetos,
     private readonly intervaloTickMs?: number,
-    private readonly ahora: () => string = () => new Date().toISOString()
+    private readonly ahora: () => string = () => new Date().toISOString(),
+    /** Cómo corren las partidas de este proceso (`OpcionesSesion`): hoy, si las batallas con humanos van a Unity. */
+    private readonly opcionesSesion: OpcionesSesion = {}
   ) {}
 
   obtener(gameId: string): RunnerDePartida | undefined {
@@ -76,7 +79,7 @@ export class RegistroDePartidas {
    */
   async abrir(gameId: string, config: ConfiguracionPartida): Promise<RunnerDePartida> {
     if (this.runners.has(gameId)) throw new PartidaYaAbiertaError(gameId);
-    const runner = await RunnerDePartida.cargarOCrear(gameId, config, { almacen: this.almacen, ahora: this.ahora });
+    const runner = await RunnerDePartida.cargarOCrear(gameId, config, { almacen: this.almacen, ahora: this.ahora, sesion: this.opcionesSesion });
     this.runners.set(gameId, runner);
     this.arrancarRelojSiConfigurado(runner);
     return runner;
@@ -102,7 +105,12 @@ export class RegistroDePartidas {
     // `forzar: true`: la partida descartada puede seguir en disco con una version > 0 — este reemplazo,
     // que empieza en 0, es deliberado, no el conflicto de concurrencia que `guardarPartida` normalmente
     // detecta (ver su comentario).
-    const runner = await RunnerDePartida.crearYPersistir(gameId, config, { almacen: this.almacen, ahora: this.ahora }, { forzar: true });
+    const runner = await RunnerDePartida.crearYPersistir(
+      gameId,
+      config,
+      { almacen: this.almacen, ahora: this.ahora, sesion: this.opcionesSesion },
+      { forzar: true }
+    );
     this.runners.set(gameId, runner);
     this.arrancarRelojSiConfigurado(runner, intervaloTickMs);
     return runner;

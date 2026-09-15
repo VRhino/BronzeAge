@@ -11,6 +11,7 @@ import { esVigente, type ActorDeInstancia } from '../../acceso/rolesDePartida';
 import type { Usuario } from '../../acceso/tipos';
 import { credencialOpcionalDesdeCabecera } from '../identidad/cabeceraAutorizacion';
 import type { DirectorioDeAdministradores } from '../identidad/administradoresGlobales';
+import type { ServidorDeBatalla } from '../identidad/servidoresDeBatalla';
 import type { RegistroDePartidas } from '../registroDePartidas';
 import type { RunnerDePartida } from '../runnerDePartida';
 import type { HubDeDifusion } from '../difusion/hub';
@@ -31,6 +32,8 @@ export interface DependenciasDeRutas {
   auditoria: RegistroDeAuditoria;
   /** Código de invitación exigido en `POST /v1/registro`. `undefined` = registro abierto. */
   codigoRegistro?: string;
+  /** Servidores de batalla de Conquest que pueden hablar por `/v1/batallas/*` (doc 02 §3.3). Vacío = ninguno. */
+  servidoresBatalla: readonly ServidorDeBatalla[];
 }
 
 export interface ParametrosGameId {

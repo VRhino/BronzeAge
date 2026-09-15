@@ -14,9 +14,12 @@ import {
   type BattleTicket,
   type ContextoEstrategico,
   type IncorporacionBatalla,
+  type InicioBatalla,
   type LadoId,
   type SettlementBattleSnapshot,
   type SquadSnapshot,
+  type TokenParticipante,
+  type TokensBatalla,
 } from '../contratos/v1/dto';
 import { VERSION_CATALOGO_TROPAS } from '../contratos/v1/catalogoTropas';
 import { BALANCE_VERSION, BATALLA, LAYOUT_VERSION, LOGISTICA, REJILLA_ASENTAMIENTO } from '../constants';
@@ -53,8 +56,12 @@ export interface Batalla {
   asignacion?: BattleServerAssignment & { servidorId: string };
 }
 
-/** Unirse o cancelar no se puede (Doc 5.15.1). Lo traduce `erroresDeDominio.ts` a `batalla.invalida`. */
+/** Unirse, cancelar o un mensaje de Conquest que no vale (Doc 5.15.1, doc 02 §3.3). Lo traduce `erroresDeDominio.ts` a
+ * `batalla.invalida`. */
 export class BatallaInvalidaError extends Error {}
+
+/** Otro servidor de batalla ya tiene esta batalla (doc 02 §3.3). Lo traduce `erroresDeDominio.ts` a `batalla.ya_asignada`. */
+export class BatallaYaAsignadaError extends Error {}
 
 const ACTIVAS: ReadonlySet<EstadoBatalla> = new Set(['convocando', 'asignada', 'en_curso']);
 
@@ -493,6 +500,72 @@ export function cancelarBatalla(estado: GameSessionState, batalla: Batalla): Gam
 export function vencerBatallas(estado: GameSessionState, ahora: Instante): { estado: GameSessionState; vencidas: Batalla[] } {
   const vencidas = estado.batallas.filter((b) => ACTIVAS.has(b.estado) && ahora >= b.expiraEn);
   return { estado: vencidas.reduce((e, b) => cerrarSinResultado(e, b, 'fallida'), estado), vencidas };
+}
+
+// --- Lo que manda Conquest (doc 02 §3.3) ---
+
+function conBatalla(estado: GameSessionState, batalla: Batalla): GameSessionState {
+  return { ...estado, batallas: estado.batallas.map((b) => (b.id === batalla.id ? batalla : b)) };
+}
+
+/** Los tokens son solo para los héroes humanos de la batalla: los bot no se conectan (doc 01 §15). */
+function exigirTokensDeHumanos(batalla: Batalla, tokens: readonly TokenParticipante[]): void {
+  const humanos = new Set(participacionesDe(batalla).filter((p) => p.participante.controlador === 'humano').map((p) => p.participante.heroeId));
+  if (tokens.some((t) => !humanos.has(t.heroeId))) throw new BatallaInvalidaError('Hay un token para quien no es un héroe humano de esta batalla.');
+}
+
+function exigirRevisionVigente(batalla: Batalla, ticketRevision: number): void {
+  if (ticketRevision !== batalla.ticket.ticketRevision) throw new BatallaInvalidaError('Esa revisión del ticket ya no vale.');
+}
+
+/** Solo el servidor que registró la asignación, con ese mismo intento, sigue hablando por ella (doc 01 §15, R03). */
+function exigirAsignacionActiva(batalla: Batalla, intentoAsignacionId: string, servidorId: string): NonNullable<Batalla['asignacion']> {
+  const asignacion = batalla.asignacion;
+  if (!asignacion || asignacion.intentoAsignacionId !== intentoAsignacionId || asignacion.servidorId !== servidorId) {
+    throw new BatallaInvalidaError('Esa no es la asignación activa de esta batalla.');
+  }
+  return asignacion;
+}
+
+/**
+ * Conquest dice dónde se juega (doc 02 §3.3). Gana la primera asignación válida: repetirla con el mismo intento no
+ * cambia nada, y otra distinta se rechaza. Desde aquí corre el plazo para que empiece.
+ */
+export function registrarAsignacion(
+  estado: GameSessionState,
+  batalla: Batalla,
+  asignacion: BattleServerAssignment,
+  servidorId: string,
+  ahora: Instante
+): GameSessionState {
+  if (batalla.asignacion?.intentoAsignacionId === asignacion.intentoAsignacionId && batalla.asignacion.servidorId === servidorId) return estado;
+  if (batalla.estado !== 'convocando') throw new BatallaYaAsignadaError('La batalla ya tiene servidor.');
+  exigirRevisionVigente(batalla, asignacion.ticketRevision);
+  exigirTokensDeHumanos(batalla, asignacion.tokensParticipante);
+  return conBatalla(estado, {
+    ...batalla,
+    estado: 'asignada',
+    asignacion: { ...asignacion, servidorId },
+    expiraEn: sumar(ahora, minutos(BATALLA.plazoInicioMinutos)),
+  });
+}
+
+/** La partida empezó de verdad (doc 02 §3.3). Desde aquí el plazo es su duración más el margen. */
+export function confirmarInicio(estado: GameSessionState, batalla: Batalla, inicio: InicioBatalla, servidorId: string, ahora: Instante): GameSessionState {
+  exigirAsignacionActiva(batalla, inicio.intentoAsignacionId, servidorId);
+  exigirRevisionVigente(batalla, inicio.ticketRevision);
+  if (batalla.estado === 'en_curso') return estado;
+  const plazo = batalla.ticket.reglas.duracionMaximaSegundos / 60 + BATALLA.margenMinutos;
+  return conBatalla(estado, { ...batalla, estado: 'en_curso', iniciadaEn: ahora, expiraEn: sumar(ahora, minutos(plazo)) });
+}
+
+/** Los tokens de quienes se unieron después de la asignación (doc 02 §3.3). Uno nuevo para el mismo héroe sustituye al
+ * anterior. */
+export function registrarTokens(estado: GameSessionState, batalla: Batalla, tokens: TokensBatalla, servidorId: string): GameSessionState {
+  const asignacion = exigirAsignacionActiva(batalla, tokens.intentoAsignacionId, servidorId);
+  exigirTokensDeHumanos(batalla, tokens.tokensParticipante);
+  const porHeroe = new Map([...asignacion.tokensParticipante, ...tokens.tokensParticipante].map((t) => [t.heroeId, t]));
+  return conBatalla(estado, { ...batalla, asignacion: { ...asignacion, tokensParticipante: [...porHeroe.values()] } });
 }
 
 // --- Lo que se cuenta ---

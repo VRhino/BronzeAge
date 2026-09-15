@@ -1,6 +1,8 @@
 # 02 — Contrato de comunicación servidor-cliente (v1)
 
-**Estado:** ACEPTADO como diseño — los endpoints nuevos de batalla no existen todavía en `src/server/`.
+**Estado:** ACEPTADO. Las rutas de batalla existen en `src/server/rutas/batallas.ts` (rama `heroe-dominio`,
+2026-09-15): pendientes, ticket, incorporaciones, asignación, inicio, tokens y la asignación de cada jugador. Faltan
+`POST .../resultado` (fase 2) y el canal `batalla/<battleId>` (fase 3).
 Revisado y corregido tras `Docs/Coordinacion/propuestas/REVISION_CONTRATOS_CODEX_2026-09-11.md` (R01, R02,
 R03, R06, R07, R08 y las correcciones menores de esa revisión).  
 **Fecha:** 2026-09-11  
@@ -85,7 +87,8 @@ reiniciar):
 
 ```text
 GET /v1/batallas/pendientes        lista batallas en 'convocando' sin BattleServerAssignment todavía —
-                                   el orquestador de Conquest hace polling; idempotente, sin efectos
+                                   el orquestador de Conquest hace polling; idempotente, sin efectos.
+                                   Responde { batallas: [{ battleId, gameId, ticketRevision }] }
 GET /v1/batallas/:battleId/ticket    el BattleTicket vigente (huellaTicket/ticketRevision actuales) —
                                      recuperable en cualquier momento por el orquestador, no solo la
                                      primera vez
@@ -362,9 +365,8 @@ cada fixture en C# (regla §5.8 del modelo de cooperación).
 - Formato exacto del token de entrada por participante (JWT firmado vs credencial opaca resuelta contra
   BronzeAge) — decisión de infraestructura, no bloquea el contrato de dominio de este documento. Su
   `expiraEn` sí está decidido: tiempo real UTC, nunca `Instante` de mundo (doc 01 §0/§15, corrección R07).
-- Prefijo de ruta exacto de `/v1/batallas/*` — aquí propuesto sin prefijo `/admin`/`/jugador` porque no es
-  ninguno de los dos roles (es servidor-a-servidor), análogo a cómo `/sesiones` tampoco lleva prefijo de
-  superficie.
+- ~~Prefijo de ruta~~ — decidido al implementarlo (2026-09-15): `/v1/batallas/*`, sin `/admin` ni `/jugador`,
+  porque no es ninguno de los dos roles (es servidor-a-servidor), como `/sesiones`.
 - Rotación/revocación de la credencial servidor-a-servidor si una instancia de Conquest se compromete —
   fuera de alcance de este documento, es política operativa.
 - Verificabilidad del worldgen híbrido (fixtures de paridad TS/C# vs. datos canónicos servidos) — doc 01

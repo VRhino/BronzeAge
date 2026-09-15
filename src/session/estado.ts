@@ -283,7 +283,9 @@ const CAMPOS_IMPUROS = ['preciosReferencia', 'zonas', 'zonasFusionadas', 'trazad
  * runner.intervaloRelojDeMundoMs(), ...runner.geometriaAsentamientos() }` completa un `EstadoAdmin`. */
 export function vistaAdminDeEstado(estado: GameSessionState): Omit<EstadoAdmin, (typeof CAMPOS_IMPUROS)[number]> {
   const { mapa, eventosDominio, ...resto } = estado;
-  return { ...resto, mapaId: idDeMapa(mapa), instante: instanteDeTick(estado.tick) };
+  // El token de entrada a una batalla es de cada jugador (doc 02 §3.4): ni el admin lo ve.
+  const batallas = resto.batallas.map((b) => (b.asignacion ? { ...b, asignacion: { ...b.asignacion, tokensParticipante: [] } } : b));
+  return { ...resto, batallas, mapaId: idDeMapa(mapa), instante: instanteDeTick(estado.tick) };
 }
 
 /** Añade una entrada al historial de un jugador concreto (administración, igual que el log). */

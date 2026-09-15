@@ -32,7 +32,7 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 27 | AMBIENTACIÓN | Identidad visual y de audio | ✘ nada |
 | 28 | MILITAR | Declaración formal de guerra | ✘ nada |
 | 29 | ONBOARDING | Curva de progresión inicial gradual | ✘ nada |
-| 30 | MILITAR | Batallas con héroes: guarnición, campamento y héroes bot | ◐ canon de campamento, guarnición y conquista; ciclo de `Batalla` fase 1 (sin rutas ni resultado) |
+| 30 | MILITAR | Batallas con héroes: guarnición, campamento y héroes bot | ◐ canon de campamento, guarnición y conquista; ciclo de `Batalla` fase 1 (falta aplicar el resultado) |
 | 31 | HÉROE | Modelo de Héroe: uno por jugador y mundo, dueño de los escuadrones | ◐ fases 1-3 y Herido en la rama `heroe-dominio`; faltan perks y equipo |
 | 32 | POLÍTICA | Cabos sueltos de diseño político | ✘ sin decidir |
 | 33 | COMERCIO | Cabos sueltos de diseño comercial | ✘ sin decidir |
@@ -333,9 +333,11 @@ del contrato, las escuadras quedan reservadas, y lo que interviene se bloquea si
 plaza asediada no abre puertas ni da órdenes, las columnas y la caravana no se mueven ni se pueden atacar, y la
 batalla se ve en el mapa en su lugar). Se unen compañeros de Facción mientras quede sitio (`unirseABatalla`),
 quien la inició la cancela antes de empezar (`cancelarBatalla`), y si vence un plazo queda `fallida` sin castigo.
-Una Facción NPC con algo en batalla no gobierna mientras dura (`ponytail:`, por plaza si se nota). Falta: las rutas
-de Conquest (`/v1/batallas/*`) y la del token del jugador (fase 1, parte 2); aplicar el resultado (fase 2); el canal
-de tiempo real (fase 3); y sustituir un participante con una revisión nueva del ticket, que no tiene aún quién la
+Una Facción NPC con algo en batalla no gobierna mientras dura (`ponytail:`, por plaza si se nota). Conquest habla por
+`/v1/batallas/*` con su propia credencial (`server/rutas/batallas.ts`: pendientes, ticket, incorporaciones,
+asignación, inicio y tokens, validados contra `contratos.schema.json`), y cada jugador recoge su token por
+`GET /v1/jugador/partidas/:gameId/batallas/:battleId/asignacion`. Falta: aplicar el resultado (fase 2); el canal de
+tiempo real (fase 3); y sustituir un participante con una revisión nueva del ticket, que no tiene aún quién la
 dispare.
 
 Sigue distinto del canon, mientras no haya servidores de batalla: el asedio se resuelve con números

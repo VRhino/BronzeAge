@@ -36,6 +36,8 @@ import { registrarRutasDeAdmin } from './rutas/admin';
 import { registrarRutasDeJugador } from './rutas/jugador';
 import { registrarRutaDeTiempoReal } from './rutas/tiempoReal';
 import { registrarRutaDeBalance } from './rutas/balance';
+import { registrarRutasDeBatalla } from './rutas/batallas';
+import type { ServidorDeBatalla } from './identidad/servidoresDeBatalla';
 import { opcionesOpenApi } from './openapi';
 import type { DependenciasDeRutas } from './rutas/contexto';
 
@@ -94,6 +96,11 @@ export interface OpcionesServidor {
   /** Código de invitación exigido en `POST /v1/registro` (alta de cuenta local). `undefined` = registro
    * abierto. */
   codigoRegistro?: string;
+  /**
+   * Servidores de batalla de Conquest (doc 02 §3.3). **Vacío por defecto**, y es también el interruptor: sin ninguno,
+   * ninguna batalla llega a Unity y todas se resuelven con números (decisión del usuario, 2026-09-15).
+   */
+  servidoresBatalla?: readonly ServidorDeBatalla[];
 }
 
 export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
@@ -121,12 +128,13 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
   const almacen = opciones.almacen ?? crearAlmacenEnDisco(opciones.directorio);
 
   const ahora = opciones.ahora ?? (() => new Date().toISOString());
+  const servidoresBatalla = opciones.servidoresBatalla ?? [];
   const deps: DependenciasDeRutas = {
     identidad,
     administradores: crearDirectorioDeAdministradores(opciones.administradoresGlobales ?? [], identidad.repositorio),
     // Mismo reloj de pared que el resto del servidor: así el reloj de mundo de cada partida y su catch-up
     // (D5, `RunnerDePartida.iniciarRelojDeMundo`) son inyectables en tests, no solo el reloj del sistema.
-    partidas: new RegistroDePartidas(almacen, opciones.intervaloTickMs, ahora),
+    partidas: new RegistroDePartidas(almacen, opciones.intervaloTickMs, ahora, { batallasEnUnity: servidoresBatalla.length > 0 }),
     ahora,
     hub: opciones.hub ?? new HubDeDifusion(),
     // Fase E2. Mismo almacén que los snapshots —una partida y su auditoría se archivan y podan juntas— y el
@@ -134,6 +142,7 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
     // forma determinista en vez de depender de la hora del sistema.
     auditoria: new RegistroDeAuditoria(almacen, ahora),
     codigoRegistro: opciones.codigoRegistro,
+    servidoresBatalla,
   };
 
   // Apagado limpio: al cerrar la instancia, parar el reloj de mundo de cada partida abierta y dejar drenar
@@ -165,6 +174,8 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
       registrarRutasDeAdmin(v1, deps);
       registrarRutasDeJugador(v1, deps);
       registrarRutaDeTiempoReal(v1, deps);
+      // El servidor de batalla de Conquest (doc 02 §3.2-§3.4): su propia credencial, ni de admin ni de jugador.
+      registrarRutasDeBatalla(v1, deps);
       // El balance (Fase C7) es regla pública, no estado de partida — sin autenticar, mismo criterio que
       // `/openapi.json` justo debajo.
       registrarRutaDeBalance(v1);

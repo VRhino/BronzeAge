@@ -6,6 +6,8 @@ import { GameSession } from '../gameSession';
 import { crearFaccion } from '../comandos/crearFaccion';
 import { fundarAsentamiento } from '../comandos/fundarAsentamiento';
 import { comprarCasa } from '../comandos/cargos';
+import { REGISTRO_COMANDOS } from '../comandos/registro';
+import { campamentoDe } from '../../engine/tropa';
 import { instanteDeTick, isoDeInstante } from '../estado';
 import { columnaDeAparicion, ubicacionDeducida } from '../../engine/ubicacion';
 import { heroeDePrueba } from '../../engine/__tests__/fixtures';
@@ -121,4 +123,36 @@ export function abastecer(original: GameSession): GameSession {
       asentamientos: [{ ...asentamiento, almacen, poblacion: { ...asentamiento.poblacion, pesants: 200 } }],
     },
   });
+}
+
+/**
+ * Fundador y vecino, compañeros de Facción, cada uno en su columna con su milicia, junto a un campamento de bandidos
+ * (`camp-1`). Con `unity`, la partida corre como en un servidor con servidores de batalla declarados (doc 01 §15).
+ */
+export function frenteACampamento(unity = true) {
+  const base = partidaConAsentamiento();
+  const { asentamientoId, fundador, vecino } = base;
+  let sesion = base.sesion;
+  for (const heroeId of [fundador, vecino]) {
+    sesion = abastecer(sesion);
+    const reclutado = sesion.ejecutar(REGISTRO_COMANDOS.reclutarTropa, { asentamientoId, heroeId, tropaId: 'milicia_lanceros', origen: 'pesants' }, { actor: heroeId });
+    if (!reclutado.ok) throw new Error(`setup: ${heroeId} no recluta (${reclutado.codigoError})`);
+    sesion = abastecer(sesion);
+    const suyas = campamentoDe(sesion.getState().asentamientos[0]!, sesion.getState().heroes).filter((e) => e.heroeId === heroeId);
+    const salida = sesion.ejecutar(
+      REGISTRO_COMANDOS.salirAlMundo,
+      { asentamientoId, heroeId, escuadronIds: suyas.map((e) => e.id), carga: { trigo: 60 } },
+      { actor: heroeId }
+    );
+    if (!salida.ok) throw new Error(`setup: ${heroeId} no sale (${salida.codigoError})`);
+  }
+
+  const payload = sesion.exportar();
+  const columnaDe = (heroeId: string) => payload.state.ejercitos.find((e) => e.participantes.some((p) => p.heroeId === heroeId))!;
+  const posicion = columnaDe(fundador).posicionActual;
+  const conCampamento = GameSession.importar(
+    { ...payload, state: { ...payload.state, campamentosBandidos: [{ id: 'camp-1', posicion, bosqueId: 'b1', asentamientoId, poder: 30 }] } },
+    { batallasEnUnity: unity }
+  );
+  return { sesion: conCampamento, fundador, vecino, columna: columnaDe(fundador).id, columnaVecino: columnaDe(vecino).id };
 }

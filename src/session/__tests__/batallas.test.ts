@@ -13,8 +13,7 @@ import { CODIGOS_ERROR } from '../comandos/codigosDeError';
 import { proyectarParaJugador } from '../proyecciones/jugador';
 import { faccionesEnBatalla } from '../batallas';
 import { instanteDeTick, type GeometriaAsentamientos } from '../estado';
-import { abastecer, conHeroe, enPie, partidaConAsentamiento } from './fixtures';
-import { campamentoDe } from '../../engine/tropa';
+import { conHeroe, enPie, frenteACampamento } from './fixtures';
 import { BATALLA } from '../../constants';
 
 const SCHEMA = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../contratos/v1/contratos.schema.json'), 'utf8'));
@@ -26,38 +25,6 @@ function erroresDe(definicion: string, dato: unknown) {
 }
 
 const SIN_GEOMETRIA: GeometriaAsentamientos = { zonas: [], zonasFusionadas: [], trazadoPorAsentamiento: {} };
-
-/**
- * Fundador y vecino, compañeros de Facción, cada uno en su columna con su milicia, junto a un campamento de bandidos.
- * Con `unity`, la partida corre como en un servidor con servidores de batalla declarados.
- */
-function frenteACampamento(unity = true) {
-  const base = partidaConAsentamiento();
-  const { asentamientoId, fundador, vecino } = base;
-  let sesion = base.sesion;
-  for (const heroeId of [fundador, vecino]) {
-    sesion = abastecer(sesion);
-    const reclutado = sesion.ejecutar(REGISTRO_COMANDOS.reclutarTropa, { asentamientoId, heroeId, tropaId: 'milicia_lanceros', origen: 'pesants' }, { actor: heroeId });
-    if (!reclutado.ok) throw new Error(`setup: ${heroeId} no recluta (${reclutado.codigoError})`);
-    sesion = abastecer(sesion);
-    const suyas = campamentoDe(sesion.getState().asentamientos[0]!, sesion.getState().heroes).filter((e) => e.heroeId === heroeId);
-    const salida = sesion.ejecutar(
-      REGISTRO_COMANDOS.salirAlMundo,
-      { asentamientoId, heroeId, escuadronIds: suyas.map((e) => e.id), carga: { trigo: 60 } },
-      { actor: heroeId }
-    );
-    if (!salida.ok) throw new Error(`setup: ${heroeId} no sale (${salida.codigoError})`);
-  }
-
-  const payload = sesion.exportar();
-  const columnaDe = (heroeId: string) => payload.state.ejercitos.find((e) => e.participantes.some((p) => p.heroeId === heroeId))!;
-  const posicion = columnaDe(fundador).posicionActual;
-  const conCampamento = GameSession.importar(
-    { ...payload, state: { ...payload.state, campamentosBandidos: [{ id: 'camp-1', posicion, bosqueId: 'b1', asentamientoId, poder: 30 }] } },
-    { batallasEnUnity: unity }
-  );
-  return { sesion: conCampamento, fundador, vecino, columna: columnaDe(fundador).id, columnaVecino: columnaDe(vecino).id };
-}
 
 const atacarCampamento = (sesion: GameSession, heroeId: string) =>
   sesion.ejecutar(REGISTRO_COMANDOS.atacar, { heroeId, objetivo: { tipo: 'campamento', id: 'camp-1' } }, { actor: heroeId });

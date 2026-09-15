@@ -20,13 +20,14 @@ import { RecintoInvalidoError } from '../engine/muralla';
 import { MovilizacionInvalidaError } from '../engine/ejercitos';
 import { PuertaInvalidaError } from '../engine/pertenencia';
 import { HeroeInvalidoError } from '../engine/heroe';
-import { BatallaInvalidaError } from './batallas';
+import { BatallaInvalidaError, BatallaYaAsignadaError } from './batallas';
 import { CODIGOS_ERROR, type CodigoError } from './comandos/codigosDeError';
 
 /** Los 17 tipos de error de dominio que el motor puede lanzar, y su código estable. Orden alfabético por
  * código, no por módulo — así un código nuevo se ubica por lo que significa, no por dónde vive en `engine/`. */
 const CODIGOS_DE_ERROR = new Map<Function, CodigoError>([
   [BatallaInvalidaError, CODIGOS_ERROR.batallaInvalida],
+  [BatallaYaAsignadaError, CODIGOS_ERROR.batallaYaAsignada],
   [CargoInvalidoError, CODIGOS_ERROR.cargoInvalido],
   [CombateInvalidoError, CODIGOS_ERROR.combateInvalido],
   [MovilizacionInvalidaError, CODIGOS_ERROR.movilizacionInvalida],

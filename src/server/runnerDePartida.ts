@@ -15,7 +15,7 @@
 // escritura a disco: migrar a cesión cooperativa del event loop o a un worker (si algún día hiciera falta,
 // ver doc 7 §8.3) es, por diseño, un cambio DENTRO de este archivo — invisible para quien lo llama.
 import type { Asentamiento, RegionId } from '../domain/types';
-import { GameSession, type PartidaExportada, type ResultadoComando } from '../session/gameSession';
+import { GameSession, type OpcionesSesion, type PartidaExportada, type ResultadoComando } from '../session/gameSession';
 import type { ActorId, ManejadorComando } from '../session/comandos/tipos';
 import { eventosDesde, type GeometriaAsentamientos } from '../session/estado';
 import { calcularPrecioReferencia } from '../engine/market';
@@ -63,12 +63,15 @@ export interface OpcionesRunner {
   /** Reloj inyectado — igual que en toda `session/`, nunca se lee `Date.now()` sin pasar por aquí. Los tests
    * inyectan uno controlado; por defecto, el reloj real. */
   ahora?: () => string;
+  /** Configuración del proceso con que corre la partida (`OpcionesSesion`). Se mantiene al reconstruirla. */
+  sesion?: OpcionesSesion;
 }
 
 export class RunnerDePartida {
   private sesion: GameSession;
   private readonly almacen: AlmacenDeObjetos;
   private readonly ahora: () => string;
+  private readonly opcionesSesion: OpcionesSesion;
 
   /**
    * Reloj de mundo (Fase D / D5, doc 10 §2–3), `null` si no está en marcha. `referenciaMs` es el instante de
@@ -181,11 +184,12 @@ export class RunnerDePartida {
     this.sesion = sesion;
     this.almacen = opciones.almacen;
     this.ahora = opciones.ahora ?? (() => new Date().toISOString());
+    this.opcionesSesion = opciones.sesion ?? {};
     this.versionEventosAnexados = sesion.getState().version;
   }
 
   static crear(gameId: string, config: { seed: number; region?: RegionId }, opciones: OpcionesRunner): RunnerDePartida {
-    return new RunnerDePartida(GameSession.crear(gameId, config), opciones);
+    return new RunnerDePartida(GameSession.crear(gameId, config, opciones.sesion), opciones);
   }
 
   /** Como `crear`, pero persiste la partida antes de devolverla (Fase C12, doc 4: "un cliente externo no
@@ -210,7 +214,7 @@ export class RunnerDePartida {
    * con `config` (y la persiste, ver `crearYPersistir`). `config` se ignora si se carga un snapshot
    * existente. */
   static async cargarOCrear(gameId: string, config: { seed: number; region?: RegionId }, opciones: OpcionesRunner): Promise<RunnerDePartida> {
-    const existente = await cargarPartida(opciones.almacen, gameId);
+    const existente = await cargarPartida(opciones.almacen, gameId, opciones.sesion);
     return existente
       ? new RunnerDePartida(existente.sesion, opciones)
       : RunnerDePartida.crearYPersistir(gameId, config, opciones);
@@ -490,7 +494,7 @@ export class RunnerDePartida {
     try {
       await guardarPartida(this.almacen, this.sesion, this.ahora());
     } catch (err) {
-      this.sesion = GameSession.importar(previo);
+      this.sesion = GameSession.importar(previo, this.opcionesSesion);
       throw err;
     }
 

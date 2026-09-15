@@ -20,6 +20,10 @@
 // comentario de `RegistroDePartidas`). Con "mundo = tiempo real" (doc 10 §2) el valor es 60000 (=
 // `SIMULACION.duracionTickMs`): un minuto real por tick.
 //
+// `SERVIDORES_BATALLA` (doc 02 §3.3) declara los servidores de batalla de Conquest que pueden hablar con esta
+// instancia, como `servidorId:token` separados por comas. Es también el interruptor: sin ella, ninguna batalla llega a
+// Unity y todas se resuelven con números, como antes de existir el ciclo de batalla.
+//
 // `ALMACEN_URL` elige el backend de persistencia (`server/almacen/`): sin declararlo, disco local bajo
 // `DIRECTORIO_PARTIDAS`; con una URL de libSQL (`libsql://…`, `file:…`) usa esa base — es lo que hace falta
 // para desplegar donde el disco es efímero. `ALMACEN_TOKEN` es el authToken si el proveedor lo pide (Turso).
@@ -29,6 +33,7 @@ import type { AlmacenDeObjetos } from './almacen/almacenDeObjetos';
 import { crearAlmacenEnDisco } from './almacen/enDisco';
 import { crearAlmacenEnLibsql } from './almacen/enLibsql';
 import { parsearAdministradores } from './identidad/administradoresGlobales';
+import { parsearServidoresDeBatalla } from './identidad/servidoresDeBatalla';
 import { proveedoresDeProceso } from './identidad/proveedoresActivos';
 import { crearRepositorioIdentidadPersistente } from './identidad/repositorioPersistente';
 
@@ -46,6 +51,7 @@ const ORIGENES_PERMITIDOS = (process.env.ORIGENES_PERMITIDOS ?? '')
   .map((o) => o.trim())
   .filter((o) => o !== '');
 const INTERVALO_TICK_MS = process.env.INTERVALO_TICK_MS ? Number(process.env.INTERVALO_TICK_MS) : undefined;
+const SERVIDORES_BATALLA = parsearServidoresDeBatalla(process.env.SERVIDORES_BATALLA);
 // Mantenimiento (Fase E2): respaldos y poda automaticos. Opt-in, como los ticks y los administradores: sin
 // `MANTENIMIENTO_INTERVALO_MS` no se respalda ni se borra nada por su cuenta. Los otros dos solo tienen
 // efecto si ese esta puesto, asi que no hace falta un flag aparte para encenderlo.
@@ -80,6 +86,7 @@ async function arrancar(): Promise<void> {
       repositorio: identidad.repositorio,
     },
     codigoRegistro: CODIGO_REGISTRO,
+    servidoresBatalla: SERVIDORES_BATALLA,
     // Cerrar el servidor drena las escrituras de identidad pendientes (ver `alCerrar` en `api.ts`).
     alCerrar: () => identidad.esperarEscrituras(),
   });
@@ -120,6 +127,11 @@ async function arrancar(): Promise<void> {
     console.warn('AVISO: sin ORIGENES_PERMITIDOS configurados — CORS desactivado, ningún origen cruzado puede llamar a esta API.');
   } else {
     console.log(`origenes CORS permitidos: ${ORIGENES_PERMITIDOS.join(', ')}`);
+  }
+  if (SERVIDORES_BATALLA.length === 0) {
+    console.log('batallas: sin SERVIDORES_BATALLA — todas se resuelven con números, sin Unity.');
+  } else {
+    console.log(`batallas en Unity: servidores ${SERVIDORES_BATALLA.map((s) => s.id).join(', ')}`);
   }
   if (INTERVALO_TICK_MS === undefined) {
     console.warn('AVISO: sin INTERVALO_TICK_MS configurado — ninguna partida avanza sola, solo con POST .../tick a mano.');
