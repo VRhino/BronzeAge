@@ -261,6 +261,22 @@ export interface BattleTicket {
   reglas: BattleRules;
 }
 
+/** Un héroe que se une a un bando después del ticket (Doc 5.15.1). El ticket no cambia; la lista solo crece. */
+export interface IncorporacionBatalla {
+  schemaVersion: typeof SCHEMA_VERSION;
+  battleId: string;
+  /** 1, 2, 3… en el orden en que se unieron. */
+  secuencia: number;
+  lado: LadoId;
+  participante: BattleParticipantSnapshot;
+}
+
+export interface TokenParticipante {
+  heroeId: string;
+  token: string;
+  expiraEn: IsoUtc;
+}
+
 /** `POST /v1/batallas/:battleId/asignacion` (Conquest → BronzeAge). */
 export interface BattleServerAssignment {
   schemaVersion: typeof SCHEMA_VERSION;
@@ -269,7 +285,15 @@ export interface BattleServerAssignment {
   intentoAsignacionId: string;
   instancia: { host: string; puerto: number; protocolo: string };
   /** Solo héroes humanos: los bot no se conectan. */
-  tokensParticipante: { heroeId: string; token: string; expiraEn: IsoUtc }[];
+  tokensParticipante: TokenParticipante[];
+}
+
+/** `POST /v1/batallas/:battleId/tokens` (Conquest → BronzeAge): los humanos que se unen después de la asignación. */
+export interface TokensBatalla {
+  schemaVersion: typeof SCHEMA_VERSION;
+  battleId: string;
+  intentoAsignacionId: string;
+  tokensParticipante: TokenParticipante[];
 }
 
 /** `POST /v1/batallas/:battleId/inicio` (Conquest → BronzeAge). */

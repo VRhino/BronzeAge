@@ -4,8 +4,9 @@
 contrato implementable e interoperable**. `Docs/Coordinacion/propuestas/REVISION_CONTRATOS_CODEX_2026-09-11.md`
 encontró transiciones sin mensaje que las dispare, huecos de completitud y afirmaciones que no coincidían
 con el código real; las secciones §12/§13/§15/§17/§19 llevan las correcciones de esa revisión inline,
-marcadas donde siguen abiertas (`PENDIENTE`). De lo nuevo, `Heroe` ya existe en el dominio con sus campos de
-identidad (§12) y es el dueño de todo; el resto de sus campos, `Batalla` y los campos 3D todavía no. La forma
+marcadas donde siguen abiertas (`PENDIENTE`). De lo nuevo, `Heroe`, `Escuadron` y `Loadout` ya existen en el
+dominio con todos sus campos (§12-§14) y el héroe es el dueño de todo; `Batalla` (con `Escuadron.reservaBatalla`)
+y los campos 3D (§17) todavía no. La forma
 en el cable de todo ello está en `src/contratos/v1/` (§15). Todo lo demás SÍ existe hoy en `src/domain/types.ts` — se transcribe completo aquí
 porque es lo que Unity necesita conocer para proyectar mundo, facción y asentamiento, no solo lo
 relacionado con batalla.  
@@ -694,13 +695,18 @@ Batalla
   ticketRevision: number    empieza en 0; sube si hace falta una revisión nueva del ticket (§ABAJO)
   huellaTicket             hash del BattleTicket vigente para la ticketRevision actual
   intentoAsignacionId?      del BattleServerAssignment activo — ver abajo
-  expiraEn: Instante        fijado al crear/reasignar — timeout de infraestructura (5 minutos), tiempo de MUNDO
-                          (ver nota de reloj en §0/§12: no confundir con expiración de credenciales)
+  expiraEn: Instante        plazo del estado actual, en tiempo de MUNDO (ver nota de reloj en §0/§12: no confundir
+                          con la expiración de credenciales): que la asignen (5 minutos), que empiece (5 minutos)
+                          o, en curso, la duración máxima de `BattleRules` más un margen (5 minutos)
   iniciadaEn?: Instante      al pasar a `en_curso`
-  limiteEnCurso?: Instante   iniciadaEn + duración máxima de `BattleRules` + margen (5 minutos) — tiempo de MUNDO
-  bandos: BatallaBando[]     capacidad independiente por bando (asimétrico permitido)
-  participantes: BatallaParticipante[]   por heroeId (humanos y bot), nunca jugadorId directo
-  reservas: BatallaReserva    escuadras/suministro inmovilizados, liberables
+  iniciadaPor: heroeId       quien comprometió el combate; puede cancelarla antes del inicio
+  punto: Punto               dónde se ve en el mapa (en un asedio, la plaza)
+  ticket: BattleTicket       congelado al abrir: bandos con capacidad independiente (asimétrico permitido),
+                             participantes por heroeId (humanos y bot, nunca jugadorId) y escuadras reservadas
+  incorporaciones: IncorporacionBatalla[]   los héroes que se unen después, en orden (ver abajo)
+  bloqueo: { ejercitoIds, caravanaIds, asentamientoId? }   lo que se queda quieto mientras dura (Doc 5.15.1)
+  asignacion?                la BattleServerAssignment aceptada, con el servidor que la registró y los tokens
+                             que se van sumando
   appliedResultId?          idempotencia — ver §16
   huellaPayloadAplicado?    hash del BattleResult ya aplicado
   instanteAplicado?, versionAplicada?
@@ -712,12 +718,13 @@ Batalla
 |---|---|---|---|---|
 | — | `convocando` | BronzeAge, al comprometer el combate (comando de ataque o de asedio) | participantes y escuadras válidos y sin otro candado | la `Batalla`, los candados `reservaBatalla`, el `BattleTicket` (revisión 0) y `expiraEn` = ahora + plazo de asignación |
 | `convocando` | `asignada` | Conquest, `POST /v1/batallas/:battleId/asignacion` | `ticketRevision` vigente y ninguna asignación aceptada antes | `BattleServerAssignment`, `intentoAsignacionId`; `expiraEn` = ahora + plazo de inicio |
-| `asignada` | `en_curso` | Conquest, `POST .../inicio` | mismo `intentoAsignacionId` y revisión vigente | `iniciadaEn` y `limiteEnCurso` |
+| `asignada` | `en_curso` | Conquest, `POST .../inicio` | mismo `intentoAsignacionId` y revisión vigente | `iniciadaEn`, y `expiraEn` = inicio + duración máxima + margen |
 | `en_curso` | `aplicada` | Conquest, `POST .../resultado` | checklist de doc 02 §3.3 | consecuencias, XP, liberación de candados e idempotencia (§16), todo en una sola mutación |
 | `convocando` o `asignada` | `convocando` (revisión + 1) | BronzeAge, al sustituir a un participante antes del inicio | antes de `en_curso` | ticket nuevo y `huellaTicket`; la asignación y los tokens anteriores dejan de valer |
-| `convocando` o `asignada` | `cancelada` | BronzeAge, comando `cancelarBatalla` | antes de `en_curso` | libera los candados y deja un evento |
+| `convocando`, `asignada` o `en_curso` | la misma | BronzeAge, comando `unirseABatalla` | héroe sano de la Facción del bando, con su columna a 15 del punto, y el bando sin llenar (Doc 5.15.1) | una incorporación, los candados de sus escuadras y su columna en el bloqueo |
+| `convocando` o `asignada` | `cancelada` | BronzeAge, comando `cancelarBatalla` (quien la inició, o el admin) | antes de `en_curso` | libera los candados y deja un evento |
 | `convocando` o `asignada` | `fallida` | BronzeAge, al vencer `expiraEn` | nadie asignó o nadie inició a tiempo | libera los candados sin penalizar a nadie y deja un evento auditable |
-| `en_curso` | `fallida` | BronzeAge, al vencer `limiteEnCurso` | el servidor de batalla no mandó resultado | igual que la fila anterior |
+| `en_curso` | `fallida` | BronzeAge, al vencer `expiraEn` | el servidor de batalla no mandó resultado | igual que la fila anterior |
 
 `aplicada`, `cancelada` y `fallida` son estados finales. Un `POST .../resultado` repetido sobre una batalla
 `aplicada` responde con el resultado ya aplicado (§16); sobre una `cancelada` o `fallida` se rechaza y no
@@ -729,15 +736,15 @@ Así una batalla vencida nunca deja una escuadra bloqueada solo porque nadie hay
 paso a `fallida` deja un evento persistente y auditable.
 
 **Si se cae BronzeAge durante una batalla (R07):** mientras está caído, el tiempo de mundo no avanza
-(`Docs/Arquitectura/10_Modelo_Temporal.md`, "una caída no consume tiempo de mundo"), así que `expiraEn` y
-`limiteEnCurso` tampoco: al volver, la batalla sigue `en_curso`. La partida en Unity no depende de BronzeAge
+(`Docs/Arquitectura/10_Modelo_Temporal.md`, "una caída no consume tiempo de mundo"), así que `expiraEn`
+tampoco: al volver, la batalla sigue `en_curso`. La partida en Unity no depende de BronzeAge
 y se sigue jugando. Conquest reintenta el `POST .../resultado`, espaciando cada vez más los intentos, hasta
 recibir una respuesta definitiva (2xx, o un 409 que no sea transitorio), y BronzeAge lo acepta al volver. Los
 tokens de entrada caducan en tiempo real (§0): una caída larga solo impide entrar tarde a la partida, no
 afecta a quien ya está jugando. Tras una caída corta, el motor recupera de golpe los ticks pendientes; el
-margen de `limiteEnCurso` existe para que esa recuperación no dé por fallida una batalla que ya terminó.
+margen que lleva `expiraEn` en curso existe para que esa recuperación no dé por fallida una batalla que ya terminó.
 
-**Si se cae el servidor de batalla:** si el resultado no llega nunca, al vencer `limiteEnCurso` la batalla
+**Si se cae el servidor de batalla:** si el resultado no llega nunca, al vencer `expiraEn` la batalla
 pasa a `fallida`, sin penalizar a nadie.
 
 Los plazos (de asignación, de inicio y el margen) son constantes de configuración; no se fijan aquí.
@@ -787,6 +794,24 @@ son siempre `atacante` y `defensor` (Doc 5.2: dos bandos, sin empates).
 (desconexión, etc.); eso sube `ticketRevision` y cambia `huellaTicket`. Una `BattleServerAssignment` o
 `BattleResult` que referencie una `ticketRevision` distinta de la vigente en `Batalla` se **rechaza** — así
 una asignación vieja no puede cerrar una revisión nueva.
+
+**Incorporaciones (decisión del usuario, 2026-09-15).** Mientras la batalla no termina, un héroe de la Facción
+de un bando puede unirse a él si ese bando no está lleno (Doc 5.15.1), también con la partida ya en marcha. El
+ticket no cambia por eso: sigue siendo la foto del momento de abrir. Cada héroe que se une es una
+`IncorporacionBatalla` que se añade al final de una lista y nunca se modifica:
+
+```text
+IncorporacionBatalla
+  schemaVersion, battleId
+  secuencia                  1, 2, 3… en el orden en que se unieron
+  lado                       'atacante' | 'defensor'
+  participante: BattleParticipantSnapshot   igual que los del ticket, congelado al unirse
+```
+
+Conquest las lee con `GET /v1/batallas/:battleId/incorporaciones` (doc 02 §3.2). Si el que se une es humano y
+la batalla ya tiene asignación, Conquest entrega su token con `POST .../tokens` y el jugador lo recoge por la
+misma ruta de siempre (doc 02 §3.4). El resultado tiene que cubrir a los del ticket y a los incorporados (doc 02
+§3.3, puntos 2 y 4). No sube `ticketRevision`: una incorporación no invalida la asignación ni los tokens de nadie.
 
 **`BattleParticipantSnapshot`:** `heroeId`, `controlador` (`'humano'` | `'bot'`), `heroe: HeroSnapshot`,
 `escuadras: SquadSnapshot[]` (solo las que lleva ese héroe, limitadas por su liderazgo). El lado lo da el
@@ -846,7 +871,9 @@ batalla. Un bando puede no tener ninguno: solo héroes bot, solo escuadras sin h
 defensores presentes, una caravana con escolta) o incluso nadie (un asentamiento sin guarnición ni
 defensores: la batalla se juega igual, sin defensores). La versión anterior exigía un humano por bando, lo que
 dejaba fuera la escolta y la guarnición. Sin ningún humano (NPC contra NPC) se sigue resolviendo con el
-resolver numérico actual (`engine/combate.ts`) y nunca llega a Unity.
+resolver numérico actual (`engine/combate.ts`) y nunca llega a Unity. Tampoco llega mientras el proceso no
+declare servidores de batalla (`SERVIDORES_BATALLA`, doc 02 §3.3): hasta entonces todas se resuelven con
+números, como antes de existir este ciclo (decisión del usuario, 2026-09-15).
 
 ### `BattleResult` (DTO, producido por el servidor de batalla Unity) — completitud corregida
 

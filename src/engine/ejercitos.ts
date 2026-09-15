@@ -39,6 +39,7 @@ import { avanzarRacion, consumoRacionDeEscuadrones, reservaDeTrigo } from './tro
 import { puedeLlevar } from './liderazgo';
 import { esResidente, estanAliadas } from './pertenencia';
 import { heridosEn, herir } from './heroe';
+import { estaOcupado } from './asentamientoQuery';
 
 export class MovilizacionInvalidaError extends Error {}
 
@@ -1047,9 +1048,29 @@ function conApartadas(trasCombate: EjercitoConTropa, antes: EjercitoConTropa): E
   return { ...trasCombate, escuadrones: antes.escuadrones.map((e) => peleadas.get(e.id) ?? e) };
 }
 
-function exigirTocables(atacante: Ejercito, defensor: Ejercito, heridos: ReadonlySet<string>): void {
-  if (!tieneHeroeSano(atacante, heridos)) throw new MovilizacionInvalidaError('Todos los héroes de tu columna están heridos: no pueden entrar en batalla.');
+/** Lo que exige atacar a una columna (Doc 5.12.3, 5.16.4): que sea enemiga, esté a distancia de choque y las dos
+ * lleven algún héroe sano. Lo comparten el combate con números y la batalla de Unity (`session/batallas.ts`). */
+export function validarAtaqueAColumna(
+  atacante: Ejercito,
+  defensor: Ejercito,
+  relaciones: readonly RelacionPolitica[],
+  heridos: ReadonlySet<string>
+): void {
+  if (atacante.id === defensor.id) throw new MovilizacionInvalidaError('Esa columna es la tuya.');
+  if (atacante.faccionId === defensor.faccionId || estanAliadas(relaciones, atacante.faccionId, defensor.faccionId)) {
+    throw new MovilizacionInvalidaError('No se ataca a los tuyos ni a un aliado.');
+  }
+  validarAlcance(atacante, defensor.posicionActual, heridos, 'atacar');
   if (!tieneHeroeSano(defensor, heridos)) throw new MovilizacionInvalidaError('Esa columna solo lleva héroes heridos: no se la puede tocar.');
+}
+
+/** Lo que exige atacar lo que hay en `punto` (Doc 5.12.3, 5.16.4): algún héroe sano en la columna y estar a distancia
+ * de choque. Lo comparten el combate con números y la batalla de Unity. */
+export function validarAlcance(ejercito: Ejercito, punto: Point, heridos: ReadonlySet<string>, verbo: 'atacar' | 'interceptar'): void {
+  if (!tieneHeroeSano(ejercito, heridos)) throw new MovilizacionInvalidaError('Todos los héroes de tu columna están heridos: no pueden entrar en batalla.');
+  if (distancia(ejercito.posicionActual, punto) > LOGISTICA.radioEncuentro) {
+    throw new MovilizacionInvalidaError(`Hay que estar a menos de ${LOGISTICA.radioEncuentro} para ${verbo}.`);
+  }
 }
 
 /**
@@ -1115,10 +1136,7 @@ export function atacarColumna(
   if (atacante.faccionId === defensor.faccionId || estanAliadas(relaciones, atacante.faccionId, defensor.faccionId)) {
     throw new MovilizacionInvalidaError('No se ataca a los tuyos ni a un aliado.');
   }
-  if (distancia(atacante.posicionActual, defensor.posicionActual) > LOGISTICA.radioEncuentro) {
-    throw new MovilizacionInvalidaError(`Hay que estar a menos de ${LOGISTICA.radioEncuentro} para atacar.`);
-  }
-  exigirTocables(atacante, defensor, heridos);
+  validarAtaqueAColumna(atacante, defensor, relaciones, heridos);
 
   const choque = encuentroEntreEjercitos(sinHeridos(atacante, heridos), sinHeridos(defensor, heridos), facciones, rng);
   const gano = choque.a.escuadrones.some((e) => e.cantidad > 0) && !choque.b.escuadrones.some((e) => e.cantidad > 0);
@@ -1148,10 +1166,7 @@ export function interceptar(
   heridos: ReadonlySet<string>,
   rng: RandomFn
 ): ReturnType<typeof interceptarCaravanaConEjercito> & { vencidos: string[] } {
-  if (!tieneHeroeSano(ejercito, heridos)) throw new MovilizacionInvalidaError('Todos los héroes de tu columna están heridos: no pueden entrar en batalla.');
-  if (distancia(ejercito.posicionActual, caravana.posicionActual) > LOGISTICA.radioEncuentro) {
-    throw new MovilizacionInvalidaError(`Hay que estar a menos de ${LOGISTICA.radioEncuentro} para interceptar.`);
-  }
+  validarAlcance(ejercito, caravana.posicionActual, heridos, 'interceptar');
   const r = interceptarCaravanaConEjercito(sinHeridos(ejercito, heridos), caravana, capacidadCarga, rng);
   return { ...r, ejercito: conApartadas(r.ejercito, ejercito), vencidos: r.capturada ? [] : ejercito.participantes.map((p) => p.heroeId) };
 }
@@ -1169,10 +1184,7 @@ export function atacarCampamento(
   heridos: ReadonlySet<string>,
   rng: RandomFn
 ): { ejercito: EjercitoConTropa; destruido: boolean; facciones: Faccion[]; eventos: EventoCrudo[]; vencidos: string[] } {
-  if (!tieneHeroeSano(ejercito, heridos)) throw new MovilizacionInvalidaError('Todos los héroes de tu columna están heridos: no pueden entrar en batalla.');
-  if (distancia(ejercito.posicionActual, campamento.posicion) > LOGISTICA.radioEncuentro) {
-    throw new MovilizacionInvalidaError(`Hay que estar a menos de ${LOGISTICA.radioEncuentro} para atacar.`);
-  }
+  validarAlcance(ejercito, campamento.posicion, heridos, 'atacar');
   const r = atacarCampamentoConColumna(sinHeridos(ejercito, heridos), campamento, facciones, capacidadCarga, rng);
   const tras = conApartadas(r.ejercito, ejercito);
   if (r.destruido) return { ...r, ejercito: tras, vencidos: [] };
@@ -1289,7 +1301,17 @@ export interface ContextoAvanceEjercitos {
   rng: RandomFn;
   /** Dueños de las escuadras (`engine/tropa.ts`), y dónde queda cada uno al volver a casa. */
   heroes: readonly Heroe[];
+  /** Batallas de Unity (doc 01 §15). Con `abrirEnUnity`, un combate donde entra algún héroe humano sano no se resuelve
+   * aquí: se devuelve en `combatesPorAbrir` para que la partida abra la batalla. A una plaza de
+   * `asentamientosEnBatalla` no se la asedia: se espera a la puerta (Doc 5.15.1). Ausente = todo con números. */
+  batallas?: { abrirEnUnity: boolean; asentamientosEnBatalla: ReadonlySet<string> };
 }
+
+/** Un combate que el tick no resuelve porque se juega en Unity: lo abre la partida (`session/batallas.ts`). */
+export type CombatePorAbrir =
+  | { tipo: 'asedio'; ejercitoId: string; asentamientoId: string }
+  | { tipo: 'columna'; ejercitoId: string; rivalId: string }
+  | { tipo: 'caravana'; ejercitoId: string; caravanaId: string };
 
 export interface ResultadoAvanceEjercitos {
   ejercitos: Ejercito[];
@@ -1302,6 +1324,7 @@ export interface ResultadoAvanceEjercitos {
   /** Con sus escuadras al día —bajas, hambre, vuelta al campamento— y situados quienes volvieron a casa. */
   heroes: Heroe[];
   eventos: EventoCrudo[];
+  combatesPorAbrir: CombatePorAbrir[];
 }
 
 /**
@@ -1336,6 +1359,7 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
       facciones: [...facciones],
       heroes: [...contexto.heroes],
       eventos: [],
+      combatesPorAbrir: [],
     };
   }
 
@@ -1350,6 +1374,12 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
   /** Heridos al empezar el tick (Doc 5.16.4): sus escuadras no asedian, y un ejército de solo heridos espera. */
   const heridos = heridosEn(heroes, instante);
   const indice = indiceTropa(heroes);
+  // Batallas de Unity (doc 01 §15): un combate donde entra algún héroe humano sano no se resuelve aquí, se devuelve
+  // para que la partida abra la batalla. `enCombate` es lo que ya va a una batalla este tick.
+  const abrirEnUnity = contexto.batallas?.abrirEnUnity ?? false;
+  const humanos = new Set(heroes.filter((h) => h.controlador === 'humano').map((h) => h.id));
+  const combatesPorAbrir: CombatePorAbrir[] = [];
+  const enCombate = new Set<string>();
   let caravanasActuales: CaravanaConEscolta[] = caravanas.map((c) => conEscolta(c, indice));
   const consumoTropasDe = (plaza: Asentamiento): number => consumoRacionDeEscuadrones(campamentoDe(plaza, heroes));
   const situar = (ids: readonly string[], ubicacion: UbicacionHeroe): void => {
@@ -1487,10 +1517,20 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
       // sin que nadie hubiera decidido nada. Lo que pase después con un ejército parado junto a una ciudad
       // enemiga es el Paso 10 (encuentros por proximidad).
       const objetivo = ejercito.objetivo.tipo === 'asentamiento' ? porId.get(ejercito.objetivo.id) : undefined;
-      if (objetivo && objetivo.faccionId !== ejercito.faccionId && !tieneHeroeSano(ejercito, heridos)) {
-        // Todos sus héroes están heridos: espera a la puerta y asedia cuando alguno sane (Doc 5.16.4; decisión del
-        // usuario, 2026-09-14). Sigue `marchando` con la ruta acabada, así la llegada se vuelve a mirar cada tick.
+      const enemiga = objetivo && objetivo.faccionId !== ejercito.faccionId ? objetivo : undefined;
+      if (enemiga && (contexto.batallas?.asentamientosEnBatalla.has(enemiga.id) || !tieneHeroeSano(ejercito, heridos))) {
+        // Espera a la puerta: la plaza ya está en una batalla (Doc 5.15.1), o todos sus héroes están heridos y asedia
+        // cuando alguno sane (Doc 5.16.4; decisión del usuario, 2026-09-14). Sigue `marchando` con la ruta acabada,
+        // así la llegada se vuelve a mirar cada tick.
         supervivientes.push(ejercito);
+        continue;
+      }
+      const conHumano = [...ejercito.participantes.map((p) => p.heroeId), ...(enemiga ? heroesQueDefienden(enemiga, heroes, heridos).map((h) => h.id) : [])];
+      if (enemiga && abrirEnUnity && !estaOcupado(enemiga, instante) && conHumano.some((id) => humanos.has(id) && !heridos.has(id))) {
+        // Con algún humano el asedio se juega en Unity (Doc 5.10): acampa a la puerta y la partida abre la batalla.
+        combatesPorAbrir.push({ tipo: 'asedio', ejercitoId: ejercito.id, asentamientoId: enemiga.id });
+        enCombate.add(ejercito.id);
+        supervivientes.push({ ...ejercito, estado: 'estacionado' });
         continue;
       }
       if (objetivo && objetivo.faccionId !== ejercito.faccionId) {
@@ -1553,7 +1593,16 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
   // TODOS: resolverlo mientras la mitad de las columnas aún no se ha movido daría choques con posiciones de
   // dos momentos distintos, y el resultado dependería del orden del array.
   // Los heridos de nuevo, no los del principio: quien perdió un asedio en este tick ya no persigue a nadie.
-  const conEncuentros = resolverEncuentros(supervivientes, caravanasActuales, faccionesActuales, relaciones, porId, heridosEn(heroes, instante), rng);
+  const conEncuentros = resolverEncuentros(
+    supervivientes,
+    caravanasActuales,
+    faccionesActuales,
+    relaciones,
+    porId,
+    heridosEn(heroes, instante),
+    rng,
+    abrirEnUnity ? { humanos, enCombate } : undefined
+  );
   eventos.push(...conEncuentros.eventos);
 
   // Se deshacen las vistas: cada escuadra vuelve a su héroe, marcada donde acabó. La escolta de una caravana
@@ -1577,6 +1626,7 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
     facciones: conEncuentros.facciones,
     heroes: herir(conEscuadrones(heroes, tropaFinal), conEncuentros.vencidos, instante),
     eventos,
+    combatesPorAbrir: [...combatesPorAbrir, ...conEncuentros.combatesPorAbrir],
   };
 }
 
@@ -1612,7 +1662,9 @@ function resolverEncuentros(
   asentamientosPorId: ReadonlyMap<string, Asentamiento>,
   /** Los héroes heridos ahora: ni persiguen, ni se les alcanza, ni sus escuadras combaten (Doc 5.16.4). */
   heridos: ReadonlySet<string>,
-  rng: RandomFn
+  rng: RandomFn,
+  /** Con batallas de Unity: quiénes son humanos, y lo que ya va a una batalla este tick. */
+  unity?: { humanos: ReadonlySet<string>; enCombate: ReadonlySet<string> }
 ): {
   ejercitos: EjercitoConTropa[];
   caravanas: CaravanaConEscolta[];
@@ -1621,11 +1673,16 @@ function resolverEncuentros(
   escoltasPerdidas: Escuadron[];
   /** Los héroes de los bandos que perdieron: los hiere quien tiene los héroes. */
   vencidos: string[];
+  /** Los que alcanzaron a su presa con algún humano sano dentro: se juegan en Unity, no aquí. */
+  combatesPorAbrir: CombatePorAbrir[];
 } {
   const eventos: EventoCrudo[] = [];
+  const combatesPorAbrir: CombatePorAbrir[] = [];
   if (ejercitos.length === 0) {
-    return { ejercitos: [...ejercitos], caravanas: [...caravanas], facciones: [...facciones], eventos, escoltasPerdidas: [], vencidos: [] };
+    return { ejercitos: [...ejercitos], caravanas: [...caravanas], facciones: [...facciones], eventos, escoltasPerdidas: [], vencidos: [], combatesPorAbrir };
   }
+  const conHumanoSano = (participantes: readonly { heroeId: string }[]) =>
+    unity !== undefined && participantes.some((p) => unity.humanos.has(p.heroeId) && !heridos.has(p.heroeId));
 
   const porId = new Map(ejercitos.map((e) => [e.id, e]));
   const escoltasPerdidas: Escuadron[] = [];
@@ -1638,7 +1695,7 @@ function resolverEncuentros(
   const porIdAsc = (a: { id: string }, b: { id: string }) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
   for (const id of [...porId.keys()].sort()) {
-    if (yaChocaron.has(id)) continue;
+    if (yaChocaron.has(id) || unity?.enCombate.has(id)) continue;
     const ejercito = porId.get(id)!;
     // Pelea lo que no está herido (Doc 5.16.4): sin héroe sano no se persigue, y sin soldados sanos no se choca.
     if (!tieneHeroeSano(ejercito, heridos) || sinSoldados(sinHeridos(ejercito, heridos))) continue;
@@ -1651,7 +1708,7 @@ function resolverEncuentros(
       presaFijada.tipo === 'ejercito'
         ? [...porId.values()]
             .filter((o) => o.id === presaFijada.id)
-            .filter((o) => !yaChocaron.has(o.id) && !sinSoldados(sinHeridos(o, heridos)) && enemiga(ejercito.faccionId, o.faccionId))
+            .filter((o) => !yaChocaron.has(o.id) && !unity?.enCombate.has(o.id) && !sinSoldados(sinHeridos(o, heridos)) && enemiga(ejercito.faccionId, o.faccionId))
             .filter((o) => tieneHeroeSano(o, heridos))
             .filter((o) => distancia(o.posicionActual, ejercito.posicionActual) <= LOGISTICA.radioEncuentro)
         : [];
@@ -1676,6 +1733,14 @@ function resolverEncuentros(
       })[0];
 
     const rival = masCerca(rivales);
+    if (rival && conHumanoSano([...ejercito.participantes, ...rival.participantes])) {
+      // Con algún humano se juega en Unity (Doc 5.10): la persecución acaba aquí y la partida abre la batalla.
+      combatesPorAbrir.push({ tipo: 'columna', ejercitoId: ejercito.id, rivalId: rival.id });
+      porId.set(ejercito.id, { ...ejercito, persiguiendo: undefined });
+      yaChocaron.add(ejercito.id);
+      yaChocaron.add(rival.id);
+      continue;
+    }
     if (rival) {
       const choque = encuentroEntreEjercitos(sinHeridos(ejercito, heridos), sinHeridos(rival, heridos), faccionesActuales, rng);
       // Alcanzada la presa, la persecución termina: se persigue para pelear, y ya se peleo. Al que cae le
@@ -1709,6 +1774,12 @@ function resolverEncuentros(
     }
 
     const presa = masCerca(presas);
+    if (presa && conHumanoSano(ejercito.participantes)) {
+      combatesPorAbrir.push({ tipo: 'caravana', ejercitoId: ejercito.id, caravanaId: presa.id });
+      porId.set(ejercito.id, { ...ejercito, persiguiendo: undefined });
+      yaChocaron.add(ejercito.id);
+      continue;
+    }
     if (presa) {
       const emboscada = interceptarCaravanaConEjercito(sinHeridos(ejercito, heridos), presa, capacidadCargaDe(ejercito, caravanasVivas), rng);
       porId.set(ejercito.id, { ...conApartadas(emboscada.ejercito, ejercito), persiguiendo: undefined });
@@ -1724,6 +1795,6 @@ function resolverEncuentros(
     }
   }
 
-  return { ejercitos: [...porId.values()], caravanas: caravanasVivas, facciones: faccionesActuales, eventos, escoltasPerdidas, vencidos };
+  return { ejercitos: [...porId.values()], caravanas: caravanasVivas, facciones: faccionesActuales, eventos, escoltasPerdidas, vencidos, combatesPorAbrir };
 }
 

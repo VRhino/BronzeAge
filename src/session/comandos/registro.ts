@@ -59,8 +59,9 @@ import {
 import { entrarEnAsentamiento, fijarPoliticaDeAcceso, guarnecer, marcharA, salirAlMundo, salirDeAsentamiento, vetarJugador } from './presencia';
 import { cederLiderazgo, responderPeticionDeUnion, separarseDelEjercito, unirseEnCampo } from './columna';
 import { atacar, dejarDePerseguir, inspeccionar, perseguir } from './interaccion';
+import { cancelarBatalla, conCandadoDeBatalla, unirseABatalla } from './batalla';
 
-export const REGISTRO_COMANDOS = {
+const MANEJADORES = {
   fundarAsentamiento,
   crearFaccion,
   unirseAFaccion,
@@ -135,7 +136,12 @@ export const REGISTRO_COMANDOS = {
   comprometerRecinto,
   abandonarRecinto,
   mejorarRecinto,
+  unirseABatalla,
+  cancelarBatalla,
 } satisfies Record<string, ManejadorComando<any, any>>;
+
+/** Todos llevan el candado de batalla (Doc 5.15.1) salvo los dos que actúan sobre la propia batalla. */
+export const REGISTRO_COMANDOS = conCandadoDeBatalla(MANEJADORES, ['unirseABatalla', 'cancelarBatalla']);
 
 export type TipoComando = keyof typeof REGISTRO_COMANDOS;
 

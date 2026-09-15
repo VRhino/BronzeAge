@@ -59,8 +59,11 @@ import { leerEventos } from './eventosDePartida';
  *
  * v17 (2026-09-14): el estado Herido del héroe (`Heroe.heridoHasta`, Doc 5.16.4) sustituye a la Tregua de la
  *   columna (`Ejercito.enTreguaHasta`, retirado). Sin migración.
+ *
+ * v18 (2026-09-15): las batallas de Unity (`state.batallas`, doc 01 §15) y el candado `Escuadron.reservaBatalla`.
+ *   Sin migración.
  */
-export const FORMATO_SNAPSHOT_VERSION = 17;
+export const FORMATO_SNAPSHOT_VERSION = 18;
 
 export interface SnapshotPartida {
   formatoVersion: number;

@@ -101,3 +101,24 @@ export function partidaConAsentamiento(gameId = 'test'): {
   sesion.ejecutar(comprarCasa, { asentamientoId, heroeId: VECINO }, OPC);
   return { sesion: conHeroe(sesion, VECINO), faccionId, asentamientoId, fundador, vecino: VECINO };
 }
+
+/**
+ * Almacén lleno y 200 pesants en el (único) asentamiento, para poder reclutar. Un recién fundado no puede, por dos
+ * reglas reales del motor: la milicia recluta 25 de golpe y la plaza arranca con 20 pesants, y reclutar exige
+ * reserva de trigo y equipo que el almacén inicial no cubre. No hay comandos para rellenar almacén ni población,
+ * así que se construye el estado de una partida ya en marcha (vía `importar()`).
+ */
+export function abastecer(original: GameSession): GameSession {
+  const payload = original.exportar();
+  const asentamiento = payload.state.asentamientos[0]!;
+  const almacen = Object.fromEntries(
+    Object.entries(asentamiento.almacen).map(([recurso, item]) => [recurso, { ...item, cantidad: item.capacidad }])
+  );
+  return GameSession.importar({
+    ...payload,
+    state: {
+      ...payload.state,
+      asentamientos: [{ ...asentamiento, almacen, poblacion: { ...asentamiento.poblacion, pesants: 200 } }],
+    },
+  });
+}

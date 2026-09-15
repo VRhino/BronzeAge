@@ -335,6 +335,9 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   atacar: objeto({ heroeId: IDENTIFICADOR, objetivo: OBJETIVO_DE_ATAQUE }, ['heroeId', 'objetivo']),
   perseguir: objeto({ heroeId: IDENTIFICADOR, objetivo: OBJETIVO_DE_INTERACCION }, ['heroeId', 'objetivo']),
   dejarDePerseguir: objeto({ heroeId: IDENTIFICADOR }, ['heroeId']),
+  // Batallas de Unity (doc 02 §3.1).
+  unirseABatalla: objeto({ heroeId: IDENTIFICADOR, battleId: IDENTIFICADOR }, ['heroeId', 'battleId']),
+  cancelarBatalla: objeto({ battleId: IDENTIFICADOR }, ['battleId']),
   cederLiderazgo: objeto({ ejercitoId: IDENTIFICADOR, heroeId: IDENTIFICADOR, sucesorId: IDENTIFICADOR }, ['ejercitoId', 'heroeId', 'sucesorId']),
   entrarEnAsentamiento: objeto({ asentamientoId: IDENTIFICADOR, heroeId: IDENTIFICADOR }, ['asentamientoId', 'heroeId']),
   // La puerta (Doc 1.10.5). No va en `politicasActivas` porque no expira: una puerta que se abre sola a las

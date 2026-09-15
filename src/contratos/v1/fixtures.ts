@@ -13,9 +13,11 @@ import {
   type EscuadronDto,
   type HeroeDto,
   type HeroePublicoDto,
+  type IncorporacionBatalla,
   type InicioBatalla,
   type ProgresionEscuadra,
   type SquadSnapshot,
+  type TokensBatalla,
 } from './dto';
 
 const GAME_ID = 'partida-demo';
@@ -420,7 +422,39 @@ export const INICIO: InicioBatalla = {
   intentoAsignacionId: INTENTO,
 };
 
-/** Resultado de `TICKET_ASEDIO`: cierra la conservación de cada escuadra y trae botín para quien participó. */
+/** Una compañera de Facción de Ana llega con sus honderos cuando el asedio ya está en marcha (Doc 5.15.1). */
+export const INCORPORACION: IncorporacionBatalla = {
+  schemaVersion: SCHEMA_VERSION,
+  battleId: BATALLA_ASEDIO,
+  secuencia: 1,
+  lado: 'atacante',
+  participante: {
+    heroeId: 'heroe-carla',
+    controlador: 'humano',
+    heroe: {
+      displayName: 'Carla',
+      classDefinitionId: 'arquero',
+      nivel: 1,
+      genero: 'femenino',
+      avatar: { cabezaId: 'cabeza_02', peloId: 'pelo_04', barbaId: '', cejasId: 'cejas_01' },
+      atributosEfectivos: { fuerza: 10, destreza: 12, armadura: 8, vitalidad: 10 },
+      perksDesbloqueados: [],
+      equipamiento: { arma: null, casco: null, torso: null, guantes: null, pantalones: null, botas: null },
+      casillasInventarioLibres: 72,
+    },
+    escuadras: [escuadra('escuadron-30', 'heroe-carla', 'honderos', 20)],
+  },
+};
+
+/** Su token, que Conquest entrega porque se unió después de la asignación. */
+export const TOKENS: TokensBatalla = {
+  schemaVersion: SCHEMA_VERSION,
+  battleId: BATALLA_ASEDIO,
+  intentoAsignacionId: INTENTO,
+  tokensParticipante: [{ heroeId: 'heroe-carla', token: 'token-de-carla', expiraEn: '2026-09-14T18:40:00Z' }],
+};
+
+/** Resultado de `TICKET_ASEDIO` y su `INCORPORACION`: cierra la conservación de cada escuadra y trae botín para quien participó. */
 export const RESULTADO_ASEDIO: BattleResult = {
   schemaVersion: SCHEMA_VERSION,
   battleId: BATALLA_ASEDIO,
@@ -440,6 +474,7 @@ export const RESULTADO_ASEDIO: BattleResult = {
     { squadId: 'escuadron-12', desplegados: 20, supervivientesAlCierre: 18, muertos: 2, xpGanada: 95 },
     { squadId: 'escuadron-40', desplegados: 25, supervivientesAlCierre: 6, muertos: 19, xpGanada: 60 },
     { squadId: 'escuadron-41', desplegados: 25, supervivientesAlCierre: 0, muertos: 25, xpGanada: 20 },
+    { squadId: 'escuadron-30', desplegados: 20, supervivientesAlCierre: 17, muertos: 3, xpGanada: 70 },
   ],
   porHeroe: [
     {
@@ -456,6 +491,7 @@ export const RESULTADO_ASEDIO: BattleResult = {
       },
     },
     { heroeId: 'heroe-bot-1', participo: true, sobrevivioAlCierre: false, xpGanada: 40 },
+    { heroeId: 'heroe-carla', participo: true, sobrevivioAlCierre: true, xpGanada: 120 },
   ],
   versionServidor: 'conquest-server-0.9.3',
 };

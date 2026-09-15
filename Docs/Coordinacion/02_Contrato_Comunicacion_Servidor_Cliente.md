@@ -64,10 +64,18 @@ entregar un secreto por destinatario. Corregido abajo.
 
 ### 3.1 Comandos de jugador (mismo mecanismo del §2)
 
-`abrirBatalla`, `cancelarBatalla` — comandos normales de `POST /jugador/partidas/:gameId/comandos` (o
-`/admin/...`), autorizados por la matriz existente. Equivalen a lo que hoy hacen
-`iniciarAsedio`/`combateCampoAbierto`/`interceptarCaravana`: el lobby/convocatoria previo no pasa por aquí
-(vive en `Ejercito`, sin persistencia nueva — doc 01 §15).
+No hay un comando para abrir una batalla. La abren los mismos hechos que hoy abren un combate —`atacar`, la
+llegada de un ejército a una plaza enemiga y una persecución que alcanza a su presa— cuando interviene algún
+héroe humano y el proceso tiene servidores de batalla (§3.3). `atacar` devuelve entonces `{ battleId }` en
+`resultado.datos`. El lobby previo no pasa por aquí (vive en `Ejercito`, sin persistencia nueva — doc 01 §15).
+
+| Comando | Parámetros | Rechazos de dominio |
+|---|---|---|
+| `unirseABatalla` | `heroeId`, `battleId` | la batalla no existe o ya terminó; herido; sin columna a 15 del punto; su Facción no es la de ningún bando; el bando está lleno |
+| `cancelarBatalla` | `battleId` | ya empezó la partida. Solo quien la inició, o el admin (`/admin/...`) |
+
+Mientras dura, un héroe que combate no puede ejecutar ningún otro comando, y ninguno puede apuntar a una
+columna, una caravana o una plaza bloqueadas (Doc 5.15.1): se rechazan con `batalla.bloqueado`.
 
 ### 3.2 Entrega y recuperación del `BattleTicket` (Conquest ← BronzeAge) — corrección R02
 
@@ -81,6 +89,9 @@ GET /v1/batallas/pendientes        lista batallas en 'convocando' sin BattleServ
 GET /v1/batallas/:battleId/ticket    el BattleTicket vigente (huellaTicket/ticketRevision actuales) —
                                      recuperable en cualquier momento por el orquestador, no solo la
                                      primera vez
+GET /v1/batallas/:battleId/incorporaciones
+                                     los héroes que se han unido después del ticket, en orden
+                                     (`IncorporacionBatalla[]`, doc 01 §15). El ticket no cambia
 ```
 
 Ambos con la credencial servidor-a-servidor del §3.3 — nunca la de un jugador. Si BronzeAge reinicia entre
@@ -93,6 +104,8 @@ ningún aviso en memoria que se pierda al reiniciar.
 POST /v1/batallas/:battleId/asignacion    Conquest reporta BattleServerAssignment
 POST /v1/batallas/:battleId/inicio        Conquest confirma que la partida real EMPEZÓ — nuevo (R01)
 POST /v1/batallas/:battleId/resultado     Conquest reporta BattleResult
+POST /v1/batallas/:battleId/tokens        Conquest entrega el token de los humanos que se unieron después
+                                          de la asignación (`TokensBatalla`, mismo intentoAsignacionId)
 ```
 
 **`/inicio` es la transición que faltaba (R01):** recibir una asignación no significa que la partida ya
@@ -104,7 +117,9 @@ confirmar que arrancó. Sin este mensaje, un `BattleResult` llegaría exigiendo 
 Ninguno de los tres acepta la credencial de sesión de un jugador. Autenticación con un esquema nuevo,
 `Authorization: batalla-servidor <token>`, verificado contra una lista de servidores autorizados en la
 configuración del proceso — mismo patrón que `ADMINISTRADORES`/`ORIGENES_PERMITIDOS` en `server/index.ts`
-(opt-in explícito: sin declarar la lista, ningún servidor de batalla puede reportar nada). Esta es la
+(opt-in explícito: sin declarar la lista, ningún servidor de batalla puede reportar nada). La lista es
+`SERVIDORES_BATALLA=servidorId:token,...`, y es también el interruptor del ciclo entero: sin ella, ninguna
+batalla llega a Unity y todas se resuelven con números, como antes (decisión del usuario, 2026-09-15). Esta es la
 separación de credenciales que exige la corrección de Codex (doc 01 §15): la credencial servidor-a-servidor
 **nunca** es la misma que el token de entrada por participante del §3.4 — un token de jugador jamás puede
 registrar una asignación, confirmar inicio ni firmar un resultado, y la credencial de servidor jamás se
@@ -136,11 +151,12 @@ resultado ya aplicado; mismo `resultId` con hash distinto → `409` (auditado). 
 aplicar, valida en orden (checklist ampliado — corrección R03/R04/R05):
 
 1. `ticketRevision` del payload coincide con la vigente;
-2. todos los `heroeId`/`squadId` pertenecen al `BattleTicket` congelado de esa revisión (los `objetivos` son
-   informativos y no se validan, doc 01 §15);
+2. todos los `heroeId`/`squadId` pertenecen al `BattleTicket` congelado de esa revisión o a sus
+   incorporaciones (los `objetivos` son informativos y no se validan, doc 01 §15);
 3. sin IDs duplicados ni entidades nuevas;
-4. **completitud:** hay una entrada en `porEscuadra` por CADA `squadId` de las reservas del ticket, incluso
-   las nunca desplegadas (doc 01 §15, corrección R05) — faltar una es rechazo, no omisión tolerada;
+4. **completitud:** hay una entrada en `porEscuadra` por CADA `squadId` reservado en el ticket o en sus
+   incorporaciones, incluso los nunca desplegados (doc 01 §15, corrección R05) — faltar una es rechazo, no
+   omisión tolerada;
 5. `supervivientesAlCierre + muertos == efectivosAutorizados` por escuadra (doc 01 §15) — cerrado sobre lo
    AUTORIZADO, no sobre `desplegados` (que es solo informativo);
 6. ninguna cifra negativa ni por encima de lo autorizado;
@@ -238,7 +254,10 @@ heroe                  el héroe propio completo (doc 01 §12), con:
   loadouts[]           cada uno con su liderazgoTotal, DERIVADO
   cupoGuarnicion       DERIVADO: cupo en el asentamiento donde reside (0 si es huérfano)
   guarnicionOcupada    DERIVADO: Liderazgo de sus escuadras en guarnición
-batallas[]             batallas en las que participa, solo estado público (el token va por §3.4)
+batallas[]             las que se ven en el mapa (en su punto, bajo la niebla) y aquellas en las que participa:
+                       { battleId, estado, contexto, punto, bandos: { atacante, defensor } con faccionId,
+                       heroes y capacidadMaxima, ladoPropio? }. Solo estado público: el token va por §3.4. Las
+                       columnas y la caravana bloqueadas no se pintan aparte (Doc 5.15.1)
 ```
 
 De los héroes ajenos que el jugador puede ver (en columnas y ejércitos avistados, o en su mismo
@@ -318,12 +337,12 @@ C# vive en código, ubicación acordada en BA-004:
 ```text
 src/contratos/v1/
   contratos.schema.json   JSON Schema draft-07, una entrada de `definitions` por entidad: Heroe (con
-                          Escuadron, Loadout, ItemInstancia), HeroePublico, BattleTicket, BattleServerAssignment,
-                          InicioBatalla, BattleResult y CatalogoTropas
+                          Escuadron, Loadout, ItemInstancia), HeroePublico, BattleTicket, IncorporacionBatalla,
+                          BattleServerAssignment, TokensBatalla, InicioBatalla, BattleResult y CatalogoTropas
   catalogoTropas.json     el catálogo de tropas de BronzeAge (doc 01 §13), generado desde constants.ts
   fixtures/*.json         un fixture de cada mensaje: heroe (humano), heroe.bot (herido tras perder el
                           asedio), heroePublico, battleTicket.asedio, battleTicket.bandidos,
-                          battleServerAssignment, inicioBatalla, battleResult
+                          incorporacionBatalla, battleServerAssignment, tokensBatalla, inicioBatalla, battleResult
   dto.ts                  los mismos tipos en TypeScript, para server/
   fixtures.ts             la fuente de fixtures/*.json
 ```

@@ -500,19 +500,45 @@
         "tokensParticipante": {
           "description": "Solo heroes humanos: los bot no se conectan.",
           "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "heroeId": { "$ref": "#/definitions/Id" },
-              "token": { "$ref": "#/definitions/Id" },
-              "expiraEn": { "$ref": "#/definitions/IsoUtc" }
-            },
-            "required": ["heroeId", "token", "expiraEn"],
-            "additionalProperties": false
-          }
+          "items": { "$ref": "#/definitions/TokenParticipante" }
         }
       },
       "required": ["schemaVersion", "battleId", "ticketRevision", "intentoAsignacionId", "instancia", "tokensParticipante"],
+      "additionalProperties": false
+    },
+    "TokenParticipante": {
+      "type": "object",
+      "properties": {
+        "heroeId": { "$ref": "#/definitions/Id" },
+        "token": { "$ref": "#/definitions/Id" },
+        "expiraEn": { "$ref": "#/definitions/IsoUtc" }
+      },
+      "required": ["heroeId", "token", "expiraEn"],
+      "additionalProperties": false
+    },
+    "IncorporacionBatalla": {
+      "description": "GET /v1/batallas/:battleId/incorporaciones (doc 02 §3.2): un heroe que se une a un bando despues del ticket (Doc 5.15.1). El ticket no cambia.",
+      "type": "object",
+      "properties": {
+        "schemaVersion": { "$ref": "#/definitions/SchemaVersion" },
+        "battleId": { "$ref": "#/definitions/Uuid" },
+        "secuencia": { "$ref": "#/definitions/EnteroPositivo" },
+        "lado": { "$ref": "#/definitions/LadoId" },
+        "participante": { "$ref": "#/definitions/BattleParticipantSnapshot" }
+      },
+      "required": ["schemaVersion", "battleId", "secuencia", "lado", "participante"],
+      "additionalProperties": false
+    },
+    "TokensBatalla": {
+      "description": "POST /v1/batallas/:battleId/tokens (doc 02 §3.3): el token de los humanos que se unen despues de la asignacion.",
+      "type": "object",
+      "properties": {
+        "schemaVersion": { "$ref": "#/definitions/SchemaVersion" },
+        "battleId": { "$ref": "#/definitions/Uuid" },
+        "intentoAsignacionId": { "$ref": "#/definitions/Id" },
+        "tokensParticipante": { "type": "array", "items": { "$ref": "#/definitions/TokenParticipante" } }
+      },
+      "required": ["schemaVersion", "battleId", "intentoAsignacionId", "tokensParticipante"],
       "additionalProperties": false
     },
     "InicioBatalla": {

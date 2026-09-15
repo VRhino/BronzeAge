@@ -39,16 +39,20 @@ const CAPAS_PERMITIDAS: Record<string, string[]> = {
   // identidad o la base de datos, y esos adaptadores viven en `server/`. Sin dependencias a propósito: no
   // conoce el juego (un `Usuario` existe fuera de cualquier partida) ni el transporte.
   acceso: [],
+  // `contratos` es la forma del cable con Conquest (Docs/Coordinacion/02 §6): tipos, schema y fixtures, sin reglas.
+  // Solo mira el dominio (los catálogos cerrados) y las constantes (el catálogo de tropas se genera de ahí).
+  contratos: ['domain', 'constants'],
   // `session` es la capa de aplicación DE PARTIDA (Docs/Arquitectura/7_Diseno_GameSession.md): la partida
   // como estado + reglas, síncrona y sin E/S. No conoce HTTP ni disco — de eso se encarga `server`. Ve
   // `acceso` porque la autorización de comandos (`comandos/autorizacion.ts`) cruza ambos dominios: qué rol
-  // técnico tiene el actor Y qué relación de juego guarda con la entidad objetivo.
-  session: ['domain', 'worldgen', 'world', 'engine', 'constants', 'acceso'],
+  // técnico tiene el actor Y qué relación de juego guarda con la entidad objetivo. Ve `contratos` porque una
+  // batalla de Unity congela y guarda su ticket con la forma del contrato (`session/batallas.ts`).
+  session: ['domain', 'worldgen', 'world', 'engine', 'constants', 'acceso', 'contratos'],
   // `server` es la capa de aplicación DE PROCESO backend (Node — `fs`, HTTP, futuro WebSocket): todo lo que
   // `session` no puede tener porque es deliberadamente síncrona y sin E/S (doc 7 §2). Persistencia de
   // partida, `RunnerDePartida`, la API y los ADAPTADORES de los puertos de `acceso` (proveedor de identidad,
   // repositorio, parseo de cabeceras).
-  server: ['domain', 'worldgen', 'world', 'engine', 'session', 'constants', 'acceso'],
+  server: ['domain', 'worldgen', 'world', 'engine', 'session', 'constants', 'acceso', 'contratos'],
 };
 
 /** Capa de una ruta absoluta-desde-raíz (`/src/engine/population.ts` -> `'engine'`, `/src/constants.ts` ->

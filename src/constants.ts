@@ -1607,6 +1607,28 @@ export const HEROE = {
   heridoMinutos: 2,
 };
 
+/** Una batalla jugada en Unity (Doc 5.15.1; doc 01 §15). */
+export const BATALLA = {
+  /** Héroes por bando. Las escuadras sin héroe (guarnición, escolta, bandidos) no ocupan plaza. */
+  capacidad: { asedio: 15, resto: 5 },
+  /** Lo que dura como mucho la partida, en minutos: si se agota, gana el defensor. */
+  duracionMinutos: { asedio: 30, resto: 15 },
+  /** Plazos de infraestructura, en minutos de mundo: si nadie la asigna o la empieza a tiempo, `fallida` sin
+   * castigo. El margen se suma a la duración para no dar por perdido un resultado que llega tras una caída corta. */
+  plazoAsignacionMinutos: 5,
+  plazoInicioMinutos: 5,
+  margenMinutos: 5,
+  /** Tropa sin dueño: la de un campamento (su poder 30 de hoy, Doc 1.9) y los carreteros de una caravana sin escolta
+   * (Doc 3.10). No persisten entre batallas. */
+  tropaBandidos: { tropaId: 'milicia_lanceros', unidades: 15 },
+  tropaCarreteros: { tropaId: 'milicia_lanceros', unidades: 13 },
+  /** Casillas del inventario de Conquest (`InventoryStorageService.InventoryLimit`): lo que cabe de botín. */
+  casillasInventario: 72,
+  /** `ponytail:` versiones de los catálogos de Conquest, fijas hasta que los publique (CQ-004). */
+  versionCatalogoHeroe: 'conquest-heroes-1',
+  versionCatalogoObjetos: 'conquest-items-1',
+};
+
 /** Cupo de guarnición de cada héroe residente (Doc 5.15.3), en la escala del coste de Liderazgo (5.11.1). La
  * política "Levas de guarnición" suma lo suyo desde `POLITICA_CATALOGO` (`cupoGuarnicionExtra`). */
 export const GUARNICION = {

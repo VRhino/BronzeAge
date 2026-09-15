@@ -35,6 +35,7 @@ export interface EventoDominioConVersion extends EventoDominio {
 import type { MapaGenerado } from '../worldgen';
 import type { EstadoMapa } from '../world/mapa';
 import type { EstadoSimulacion } from '../engine/simulation';
+import type { Batalla } from './batallas';
 import { SIMULACION } from '../constants';
 import { instante, type Instante } from '../domain/tiempo';
 
@@ -75,6 +76,9 @@ export interface GameSessionState {
   heroes: Heroe[];
   /** Ejércitos en campaña (Doc 5.12) — los mueve `avanzarEjercitos` al final de la cadena del tick. */
   ejercitos: Ejercito[];
+  /** Batallas jugadas en Unity (doc 01 §15, `session/batallas.ts`), abiertas o ya cerradas. No es estado del motor:
+   * lo que está en una batalla activa ni siquiera entra en el tick. */
+  batallas: Batalla[];
   acuerdos: AcuerdoTrueque[];
   ordenes: OrdenMercado[];
   relaciones: RelacionPolitica[];

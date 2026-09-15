@@ -908,7 +908,8 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       // +5 con la fase 3 del Héroe: `repartirPuntos`, `guardarLoadout`, `borrarLoadout`, `asignarGuarnicion` y
       // `retirarGuarnicion`.
       // -1 con los bandidos atacados con columna (Doc 1.9): sale `atacarCampamentoBandidos`, lo cubre `atacar`.
-      expect(cuerpo.oneOf.length).toBe(74);
+      // +2 con las batallas de Unity (doc 02 §3.1): `unirseABatalla` y `cancelarBatalla`.
+      expect(cuerpo.oneOf.length).toBe(76);
       const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
       expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
     });

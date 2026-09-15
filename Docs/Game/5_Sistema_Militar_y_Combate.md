@@ -152,7 +152,7 @@ Consolidar una plaza —reclutar escuadrones nuevos ahí, asignar guarnición, e
 El Gobernador puede decretar exilio de jugadores enemigos de su territorio; coste de reubicación (pérdida parcial de materiales, desplazamiento físico para recuperarlos).
 
 ## 5.10 Dónde se resuelve el combate
-Las batallas con algún héroe humano se juegan como partidas reales en Unity (5.15). Las que no tienen ninguno —NPC contra NPC, bandidos contra una caravana— se resuelven con números (5.2.5, 5.15.6). En los dos casos la batalla nace en el mapa de BronzeAge: los ejércitos se mueven por el mundo (5.12), y el combate empieza donde se encuentran.
+Las batallas con algún héroe humano se juegan como partidas reales en Unity (5.15). Las que no tienen ninguno —NPC contra NPC, bandidos contra una caravana— se resuelven con números (5.2.5, 5.15.6). En los dos casos la batalla nace en el mapa de BronzeAge: los ejércitos se mueven por el mundo (5.12), y el combate empieza donde se encuentran. La abre quien ataca (`atacar`), el ejército que llega a una plaza enemiga o la persecución que alcanza a su presa; qué queda bloqueado mientras se juega y quién puede unirse, en 5.15.1.
 
 ## 5.11 Liderazgo
 
@@ -598,6 +598,13 @@ Las escuadras de un héroe que no está en la batalla no combaten, estén donde 
 Los topes de una batalla cuentan **héroes**: **15 por bando en un asedio**, y **5** en mundo abierto, contra una caravana o contra un campamento de bandidos. Los héroes que sobran esperan en cola y entran a medida que caen otros. Las escuadras sin héroe no ocupan plaza.
 
 Una partida dura como mucho **30 minutos en un asedio** y **15 en el resto**. Si agota su tiempo, **gana el defensor**, en cualquier batalla; el atacante es siempre quien inicia el combate. En un asedio gana la plaza (5.2); en campo abierto, el atacado; contra una caravana, la caravana; y contra un campamento de bandidos, los bandidos: los héroes que lo atacaron pierden.
+
+**Mientras se juega, el mundo sigue** (decisión del usuario, 2026-09-15). La batalla es una instancia aparte y solo se bloquea lo que interviene en ella:
+
+- **En un asedio, el asentamiento.** Nadie entra ni sale, y dentro no se dan órdenes (construir, reclutar, guarnición, residencia, mercado, caravanas). Su economía sigue produciendo. Un ejército que llega a una plaza asediada espera a la puerta.
+- **En mundo abierto** (contra una columna, una caravana o un campamento de bandidos), las columnas y la caravana que combaten se quedan quietas y sin órdenes, y nadie más puede atacarlas ni perseguirlas. En el mapa se ve la batalla en su punto, bajo la niebla de guerra, en lugar de ellas.
+- **Los héroes que combaten** no pueden hacer nada más hasta que acaba. Quien la inició puede cancelarla antes de que empiece la partida, sin que nadie pierda nada.
+- **Unirse.** Mientras no haya terminado, un héroe sano de la Facción de un bando puede unirse a él con su columna si está a distancia de ataque (15) del punto de la batalla o de la plaza asediada y ese bando no está lleno. Si está lleno, no entra: la cola de arriba es solo para los que ya estaban al empezar. Sus escuadras quedan bloqueadas como las demás.
 
 ### 5.15.2 El campamento del héroe
 

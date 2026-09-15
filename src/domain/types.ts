@@ -514,9 +514,11 @@ export interface Escuadron {
   formacionSeleccionada: number;
   contenedor: ContenedorEscuadron;
   /** Asignado a la guarnición de la plaza donde reside su héroe (Doc 5.15.3); solo con `contenedor: campamento`,
-   * y mientras lo esté el héroe no puede sacarlo. `ponytail:` todavía no hay comando que lo active
-   * (`asignarGuarnicion`, fase 3), así que hoy es siempre `false` y defiende el campamento entero. */
+   * y mientras lo esté el héroe no puede sacarlo. Lo cambian `asignarGuarnicion`/`retirarGuarnicion`. */
   enGuarnicion: boolean;
+  /** Candado: presente solo mientras está reservada para una batalla de Unity (doc 01 §13, `session/batallas.ts`).
+   * Una batalla nunca cambia de sitio una escuadra, así que no hace falta recordar a dónde vuelve. */
+  reservaBatalla?: { battleId: string };
   /** Tropa reclutada vía Centro Urbano/Barracón/Galería de tiro (Doc 5.7/5.8, ver TROPAS_RECLUTABLES en
    * constants.ts) — determina el poderBase (`poderEscuadron`, engine/combate.ts). Único origen de escuadrones
    * en el motor (`reclutarTropa`, engine/tropas.ts), por eso es obligatorio: "mejorar" una tropa siempre es

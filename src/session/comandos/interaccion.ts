@@ -23,9 +23,21 @@ import {
   interceptar,
   MovilizacionInvalidaError,
   perseguir as perseguirEngine,
+  validarAlcance,
+  validarAtaqueAColumna,
   type ComposicionColumna,
   type ContenidoCaravana,
 } from '../../engine/ejercitos';
+import {
+  abrirBatalla,
+  aperturaContraCampamento,
+  aperturaContraCaravana,
+  aperturaContraColumna,
+  eventosDeBatalla,
+  hayHumano,
+  idDeBatalla,
+  type Apertura,
+} from '../batallas';
 import { heridosEn, herir } from '../../engine/heroe';
 import { conEscolta, indiceTropa, sinEscolta } from '../../engine/tropa';
 import type { Ejercito } from '../../domain/types';
@@ -143,10 +155,25 @@ function exigirSano(estado: GameSessionState, heroeId: string, ahora: Instante):
  *
  * Un campamento de bandidos también se ataca así, con la columna que llega a él (Doc 1.9): si cae, su recompensa
  * va al carro y se agenda su reaparición.
+ *
+ * Con servidores de batalla y algún héroe humano, el combate no se resuelve aquí: se abre una batalla de Unity y se
+ * devuelve su `battleId` (Doc 5.10, doc 02 §3.1).
  */
-export const atacar = comando<ParamsAtacar, void>((estado, _mapa, ctx, params) => {
+export const atacar = comando<ParamsAtacar, { battleId: string } | undefined>((estado, _mapa, ctx, params) => {
   const heridos = exigirSano(estado, params.heroeId, ctx.instante);
   const atacante = exigirColumnaDe(estado, params.heroeId);
+
+  if (ctx.batallasEnUnity) {
+    const apertura = aperturaDeAtaque(estado, atacante, params, heridos);
+    if (hayHumano(apertura)) {
+      const { estado: conBatalla, batalla } = abrirBatalla(estado, apertura, ctx.instante, idDeBatalla(estado.gameId, ctx.ids.siguiente()));
+      return exito(
+        conHistorialDeJugador(conBatalla, params.heroeId, `Abre la batalla ${batalla.id}.`),
+        eventosDeBatalla(conBatalla, batalla, 'batalla.abierta', 'Empieza una batalla.').map((e) => evento(ctx, e)),
+        { battleId: batalla.id }
+      );
+    }
+  }
 
   if (params.objetivo.tipo === 'campamento') {
     const campamento = exigirCampamento(estado, params.objetivo.id);
@@ -219,6 +246,24 @@ export const atacar = comando<ParamsAtacar, void>((estado, _mapa, ctx, params) =
     ]
   );
 });
+
+/** La batalla que abriría este ataque, validado igual que el combate con números. */
+function aperturaDeAtaque(estado: GameSessionState, atacante: Ejercito, params: ParamsAtacar, heridos: ReadonlySet<string>): Apertura {
+  const { objetivo } = params;
+  if (objetivo.tipo === 'campamento') {
+    const campamento = exigirCampamento(estado, objetivo.id);
+    validarAlcance(atacante, campamento.posicion, heridos, 'atacar');
+    return aperturaContraCampamento(estado, atacante, campamento, params.heroeId, heridos);
+  }
+  if (objetivo.tipo === 'ejercito') {
+    const defensor = exigirEjercito(estado, objetivo.id);
+    validarAtaqueAColumna(atacante, defensor, estado.relaciones, heridos);
+    return aperturaContraColumna(estado, atacante, defensor, params.heroeId, heridos);
+  }
+  const caravana = exigirCaravana(estado, objetivo.id);
+  validarAlcance(atacante, caravana.posicionActual, heridos, 'interceptar');
+  return aperturaContraCaravana(estado, atacante, caravana, params.heroeId, heridos);
+}
 
 /**
  * Ir a por alguien (Doc 5.12.3). No es un destino sino un objetivo que se mueve: la ruta se recalcula cada

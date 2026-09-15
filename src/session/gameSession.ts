@@ -57,21 +57,30 @@ export interface PartidaExportada {
   estadoRng?: number;
 }
 
+/** Configuración del PROCESO que cambia cómo corre la partida, sin ser estado suyo. */
+export interface OpcionesSesion {
+  /** Con servidores de batalla declarados (`SERVIDORES_BATALLA`, doc 02 §3.3), un combate donde interviene un héroe
+   * humano abre una batalla de Unity en vez de resolverse con números (doc 01 §15). Apagado por defecto. */
+  batallasEnUnity?: boolean;
+}
+
 export class GameSession {
   private estado: GameSessionState;
   private rng: RandomFn;
   private ids: GeneradorIds;
+  private readonly opciones: OpcionesSesion;
   /** Fachada de consulta del estado ACTUAL, cacheada para no reconstruirla en cada lectura. Se invalida
    * sola comparando referencias: en cuanto un comando cambia el mapa, `estado.estadoMapa` es otro objeto. */
   private mapaDeConsulta: { sobre: EstadoMapa; mapa: Mapa } | null = null;
 
-  private constructor(estado: GameSessionState, ids: GeneradorIds, rng: RandomFn) {
+  private constructor(estado: GameSessionState, ids: GeneradorIds, rng: RandomFn, opciones: OpcionesSesion) {
     this.estado = estado;
     this.ids = ids;
     this.rng = rng;
+    this.opciones = opciones;
   }
 
-  static crear(gameId: string, config: { seed: number; region?: RegionId }): GameSession {
+  static crear(gameId: string, config: { seed: number; region?: RegionId }, opciones: OpcionesSesion = {}): GameSession {
     const estado: GameSessionState = {
       gameId,
       mapa: generarMapa({ ...MAPA_DEFAULT, seed: config.seed, region: config.region }),
@@ -81,6 +90,7 @@ export class GameSession {
       caravanas: [],
       heroes: [],
       ejercitos: [],
+      batallas: [],
       acuerdos: [],
       ordenes: [],
       relaciones: [],
@@ -96,16 +106,16 @@ export class GameSession {
       eventosDominio: [],
       salidasFaccionPorHeroe: {},
     };
-    return new GameSession(estado, new GeneradorIds(), createRng(config.seed));
+    return new GameSession(estado, new GeneradorIds(), createRng(config.seed), opciones);
   }
 
-  static importar(payload: PartidaExportada): GameSession {
+  static importar(payload: PartidaExportada, opciones: OpcionesSesion = {}): GameSession {
     const ids = new GeneradorIds();
     ids.fijar(payload.siguienteId);
     // Continúa la secuencia exacta si el payload trae `estadoRng` (Fase B3). Sin él —formato de archivo v2,
     // que es anterior a esto— se reinicia desde la seed del mundo, con la pérdida de continuidad ya conocida.
     const rng = payload.estadoRng !== undefined ? restaurarRng(payload.estadoRng) : createRng(payload.state.mapa.config.seed);
-    return new GameSession(payload.state, ids, rng);
+    return new GameSession(payload.state, ids, rng, opciones);
   }
 
   get gameId(): string {
@@ -189,6 +199,7 @@ export class GameSession {
       actor: opciones.actor ?? ACTOR_SISTEMA,
       rng: this.rng,
       ids: this.ids,
+      batallasEnUnity: this.opciones.batallasEnUnity ?? false,
     };
     const anterior = this.estado;
     const mapa = crearMapa(anterior.mapa, anterior.estadoMapa);

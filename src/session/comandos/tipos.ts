@@ -43,6 +43,9 @@ export interface ContextoComando {
   /** Generador de ids de la partida. Es un servicio con estado propio (avanza al consumirlo), a diferencia
    * del resto del contexto, que son datos. */
   ids: GeneradorIds;
+  /** Si un combate con algún héroe humano abre una batalla de Unity en vez de resolverse con números
+   * (`GameSession`, `OpcionesSesion`). Ausente = no. */
+  batallasEnUnity?: boolean;
 }
 
 /** Lo que un comando devuelve al llamador. Nunca texto de log: el mensaje localizado es presentación, y el

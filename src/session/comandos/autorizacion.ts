@@ -579,6 +579,19 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
     rolesPermitidos: ['jugador'],
     condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
   },
+  // --- Batallas de Unity (doc 02 §3.1). Nadie se une a nombre de otro; cancelar es de quien la inició, y el admin
+  // puede siempre. Una batalla inexistente se deja pasar: la rechaza el comando con `batalla.no_existe`. ---
+  unirseABatalla: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
+  },
+  cancelarBatalla: {
+    rolesPermitidos: ['jugador', 'administrador_partida', 'administrador_global'],
+    condicionJugador: (estado, heroeId, params) => {
+      const batalla = estado.batallas.find((b) => b.id === params.battleId);
+      return batalla === undefined || batalla.iniciadaPor === heroeId;
+    },
+  },
   // --- Composición de una columna compartida (Doc 5.14). Nadie se une, se separa ni cede el mando a nombre
   // de otro. Lo demás —ir dentro, ser el Líder, la distancia— lo comprueba el motor, que es quien sabe
   // dónde está cada columna y quién la manda. ---

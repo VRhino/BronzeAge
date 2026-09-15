@@ -46,6 +46,13 @@
       "supervivientesAlCierre": 0,
       "muertos": 25,
       "xpGanada": 20
+    },
+    {
+      "squadId": "escuadron-30",
+      "desplegados": 20,
+      "supervivientesAlCierre": 17,
+      "muertos": 3,
+      "xpGanada": 70
     }
   ],
   "porHeroe": [
@@ -84,6 +91,12 @@
       "participo": true,
       "sobrevivioAlCierre": false,
       "xpGanada": 40
+    },
+    {
+      "heroeId": "heroe-carla",
+      "participo": true,
+      "sobrevivioAlCierre": true,
+      "xpGanada": 120
     }
   ],
   "versionServidor": "conquest-server-0.9.3"

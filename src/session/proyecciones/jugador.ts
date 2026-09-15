@@ -100,6 +100,7 @@ import {
   type GameSessionState,
   type GeometriaAsentamientos,
 } from '../estado';
+import { batallasActivas, batallaVisible, bloqueosDe, type BatallaVisible } from '../batallas';
 
 /**
  * Un ejército AJENO tal como se ve desde fuera (Doc 5.12.7): dónde está, de qué Facción es y cuántos
@@ -351,6 +352,10 @@ export interface ProyeccionJugador {
    * Van en un array aparte y no mezclados con `ejercitos` a propósito: la diferencia entre "lo veo entero"
    * y "solo lo avisto" es de tipo, no de un campo opcional que el cliente pueda olvidarse de mirar. */
   ejercitosAvistados: EjercitoAvistado[];
+  /** Las batallas de Unity que se ven en el mapa y aquellas en las que combate el jugador (doc 02 §4.1). Las columnas y
+   * caravanas que están en una no viajan en `ejercitosAvistados`/`caravanasAvistadas`: la batalla las sustituye
+   * (Doc 5.15.1). */
+  batallas: BatallaVisible[];
   /** El héroe propio, completo (doc 02 §4.1). `null` si el id no tiene héroe: la ruta HTTP, sin héroe, responde
    * `sinHeroe` en vez de proyectar. */
   heroe: HeroeProyectado | null;
@@ -715,7 +720,14 @@ export function proyectarParaJugador(
   // máscara que tapa el terreno decide qué calzadas existen para este jugador.
   const exploracion = nieblaDe(exploradoDelJugador, estado, asentamientosPropios, ejercitosPropios, asentamientosAliados, ejercitosAliados);
 
-  const ejercitosAvistados = estado.ejercitos.filter((e) => !propios.has(e.id) && seVeAhora(e.posicionActual, ojosAsent, ojosEjercito, tropa));
+  const ahora = instanteDeTick(estado.tick);
+  const bloqueos = bloqueosDe(estado, ahora);
+  const batallas = batallasActivas(estado, ahora)
+    .map((b) => batallaVisible(b, heroeId))
+    .filter((b) => b.ladoPropio !== undefined || seVeAhora(b.punto, ojosAsent, ojosEjercito, tropa));
+  const ejercitosAvistados = estado.ejercitos.filter(
+    (e) => !propios.has(e.id) && !bloqueos.ejercitos.has(e.id) && seVeAhora(e.posicionActual, ojosAsent, ojosEjercito, tropa)
+  );
   // Los héroes ajenos que se ven (doc 02 §4.1): los que van en una columna propia o avistada, y los que están dentro
   // de la plaza que se pisa. De ellos solo viaja su parte pública.
   const idsVisibles = new Set([
@@ -743,7 +755,7 @@ export function proyectarParaJugador(
     territorioPorEjercito: territorioDeCadaEjercito(ejercitosPropios, geometria.zonas, estado.asentamientos),
     exploracion,
     caravanas: estado.caravanas.filter((c) => esPropio(c.origenAsentamientoId) || (c.destinoAsentamientoId !== undefined && esPropio(c.destinoAsentamientoId))),
-    caravanasAvistadas: caravanasAvistadas(estado, esPropio, ojosAsent, ojosEjercito, tropa),
+    caravanasAvistadas: caravanasAvistadas(estado, esPropio, ojosAsent, ojosEjercito, tropa).filter((c) => !bloqueos.caravanas.has(c.id)),
     ejercitos: ejercitosPropios,
     ejercitosAvistados: ejercitosAvistados.map((e) => ({
       id: e.id,
@@ -752,6 +764,7 @@ export function proyectarParaJugador(
       participantes: participantesDe(e),
       heroeIds: e.participantes.map((p) => p.heroeId),
     })),
+    batallas,
     heroe: jugador ? heroeProyectado(jugador, estado.asentamientos) : null,
     heroesVisibles: estado.heroes.filter((h) => idsVisibles.has(h.id)).map((h) => heroePublico(h, instanteDeTick(estado.tick))),
     nombresDeCompaneros: Object.fromEntries(

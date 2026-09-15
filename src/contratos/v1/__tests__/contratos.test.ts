@@ -10,10 +10,12 @@ import {
   HEROE,
   HEROE_BOT,
   HEROE_PUBLICO,
+  INCORPORACION,
   INICIO,
   RESULTADO_ASEDIO,
   TICKET_ASEDIO,
   TICKET_BANDIDOS,
+  TOKENS,
 } from '../fixtures';
 
 const DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -39,7 +41,9 @@ const PUBLICADOS: [archivo: string, definicion: string, dato: unknown][] = [
   ['fixtures/heroePublico.json', 'HeroePublico', HEROE_PUBLICO],
   ['fixtures/battleTicket.asedio.json', 'BattleTicket', TICKET_ASEDIO],
   ['fixtures/battleTicket.bandidos.json', 'BattleTicket', TICKET_BANDIDOS],
+  ['fixtures/incorporacionBatalla.json', 'IncorporacionBatalla', INCORPORACION],
   ['fixtures/battleServerAssignment.json', 'BattleServerAssignment', ASIGNACION],
+  ['fixtures/tokensBatalla.json', 'TokensBatalla', TOKENS],
   ['fixtures/inicioBatalla.json', 'InicioBatalla', INICIO],
   ['fixtures/battleResult.json', 'BattleResult', RESULTADO_ASEDIO],
 ];
@@ -87,9 +91,12 @@ describe('el schema rechaza', () => {
   });
 });
 
-it('el resultado de ejemplo cuadra con su ticket (doc 02 §3.3, puntos 1, 4 y 5)', () => {
+it('el resultado de ejemplo cuadra con su ticket y su incorporación (doc 02 §3.3, puntos 1, 4 y 5)', () => {
   const bandos = [TICKET_ASEDIO.bandos.atacante, TICKET_ASEDIO.bandos.defensor];
-  const escuadras = bandos.flatMap((b) => [...b.participantes.flatMap((p) => p.escuadras), ...b.escuadrasSinHeroe]);
+  const escuadras = [
+    ...bandos.flatMap((b) => [...b.participantes.flatMap((p) => p.escuadras), ...b.escuadrasSinHeroe]),
+    ...INCORPORACION.participante.escuadras,
+  ];
   expect(RESULTADO_ASEDIO.battleId).toBe(TICKET_ASEDIO.battleId);
   expect(RESULTADO_ASEDIO.ticketRevision).toBe(TICKET_ASEDIO.ticketRevision);
   expect(RESULTADO_ASEDIO.porEscuadra.map((e) => e.squadId).sort()).toEqual(escuadras.map((e) => e.squadId).sort());

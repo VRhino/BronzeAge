@@ -11,41 +11,15 @@ import { movilizarEjercito } from '../comandos/ejercitos';
 import { salirAlMundo } from '../comandos/presencia';
 import { atacar } from '../comandos/interaccion';
 import { CODIGOS_ERROR } from '../comandos/codigosDeError';
-import { OPC, partidaConAsentamiento } from './fixtures';
+import { abastecer, OPC, partidaConAsentamiento } from './fixtures';
 import { campamentoDe } from '../../engine/tropa';
 
 const campamento = (sesion: GameSession) => campamentoDe(sesion.getState().asentamientos[0]!, sesion.getState().heroes);
 
-/**
- * Asentamiento en condiciones de reclutar. Un recién fundado NO puede, y por dos reglas REALES del motor —no
- * son obstáculos del test, así que en vez de sortearlas se construye el estado que tendría una partida ya en
- * marcha (vía `importar()`, porque no hay comandos para rellenar almacén ni población):
- *
- *  1. `milicia_lanceros` recluta 25 unidades de golpe (`unidadesPorDefecto`) y un asentamiento nuevo arranca
- *     con 20 pesants (`POBLACION.pesants.inicial`) — de los que además hay que descontar la mano de obra que
- *     sostiene la producción (`poblacionDisponibleParaReclutar`).
- *  2. Reclutar exige reserva de trigo proyectada y equipo (25 × 2 = 50 madera), que el almacén inicial no
- *     cubre.
- */
+/** Asentamiento en condiciones de reclutar (ver `abastecer`): un recién fundado no puede, por reglas reales del motor. */
 function partidaAbastecida() {
   const base = partidaConAsentamiento();
   return { ...base, sesion: abastecer(base.sesion) };
-}
-
-/** Almacén lleno y 200 pesants en el (único) asentamiento — ver `partidaAbastecida`. */
-function abastecer(original: GameSession): GameSession {
-  const payload = original.exportar();
-  const asentamiento = payload.state.asentamientos[0]!;
-  const almacen = Object.fromEntries(
-    Object.entries(asentamiento.almacen).map(([recurso, item]) => [recurso, { ...item, cantidad: item.capacidad }])
-  );
-  return GameSession.importar({
-    ...payload,
-    state: {
-      ...payload.state,
-      asentamientos: [{ ...asentamiento, almacen, poblacion: { ...asentamiento.poblacion, pesants: 200 } }],
-    },
-  });
 }
 
 describe('reclutarTropa', () => {

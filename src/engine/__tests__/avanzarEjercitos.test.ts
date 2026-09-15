@@ -23,6 +23,7 @@ import {
   MovilizacionInvalidaError,
   soltarCaravana,
   velocidadDeEjercito,
+  type ContextoAvanceEjercitos,
 } from '../ejercitos';
 import { esResidente, resideEnOtroAsentamiento } from '../pertenencia';
 import { reservaDeTrigo } from '../tropas';
@@ -108,6 +109,8 @@ function avanzar(
     heroes?: Heroe[];
     /** Héroes heridos durante todo el tick (Doc 5.16.4). */
     heridos?: string[];
+    /** Batallas de Unity (doc 01 §15). Sin ellas, todo con números. */
+    batallas?: ContextoAvanceEjercitos['batallas'];
   } = {}
 ) {
   // Una vista que pasó por `adjuntarCaravana` sigue llevando su tropa aunque el tipo la pierda.
@@ -124,6 +127,7 @@ function avanzar(
     instante: instanteDeTest(1),
     rng: opciones.rng ?? createRng(1),
     heroes,
+    batallas: opciones.batallas,
   });
   const indice = indiceTropa(r.heroes);
   return {
@@ -413,6 +417,35 @@ describe('llegada a un asentamiento ajeno = asedio (Paso 7)', () => {
 
     expect(r.asentamientos.find((a) => a.id === enemigo.id)!.faccionId, 'la plaza no cae').toBe(enemigo.faccionId);
     expect(r.ejercitos[0]!.estado, 'no acampa: la llegada se vuelve a mirar el tick siguiente').toBe('marchando');
+  });
+
+  it('con batallas de Unity, un asedio con algún humano no se resuelve aquí: acampa y se devuelve para abrirlo (Doc 5.10)', () => {
+    const { facciones, propio, enemigo, ejercito, campamento } = frenteDeGuerra([escuadron('d1', 'milicia_lanceros', 1)]);
+
+    const r = avanzar([ejercito], [propio, enemigo], {
+      facciones,
+      campamento,
+      batallas: { abrirEnUnity: true, asentamientosEnBatalla: new Set() },
+    });
+
+    expect(r.combatesPorAbrir).toEqual([{ tipo: 'asedio', ejercitoId: ejercito.id, asentamientoId: enemigo.id }]);
+    expect(r.asentamientos.find((a) => a.id === enemigo.id)!.faccionId, 'la plaza no cae con números').toBe(enemigo.faccionId);
+    expect(r.ejercitos[0]!.estado).toBe('estacionado');
+    expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo.startsWith('combate.'))).toBe(false);
+  });
+
+  it('a una plaza que ya está en una batalla no se la asedia: se espera a la puerta (Doc 5.15.1)', () => {
+    const { facciones, propio, enemigo, ejercito, campamento } = frenteDeGuerra([escuadron('d1', 'milicia_lanceros', 1)]);
+
+    const r = avanzar([ejercito], [propio, enemigo], {
+      facciones,
+      campamento,
+      batallas: { abrirEnUnity: true, asentamientosEnBatalla: new Set([enemigo.id]) },
+    });
+
+    expect(r.combatesPorAbrir).toEqual([]);
+    expect(r.asentamientos.find((a) => a.id === enemigo.id)!.faccionId).toBe(enemigo.faccionId);
+    expect(r.ejercitos[0]!.estado, 'sigue a la puerta, y la llegada se vuelve a mirar cada tick').toBe('marchando');
   });
 
   it('conquistar deja la plaza SIN guarnición y al vencido con su campamento a 0, pero suyo (Doc 5.15.5)', () => {

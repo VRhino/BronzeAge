@@ -1,6 +1,7 @@
 import type { Mapa } from '../../world/mapa';
 import type { ContextoSimulacion } from '../../engine/simulation';
 import { avanzarNpcGobernanza, type ConfigNpcGobernanza } from '../npcGobernanza';
+import { faccionesEnBatalla } from '../batallas';
 import { conResultadoDeSimulacion, estadoSimulacionDe, type GameSessionState } from '../estado';
 import { eventos as construirEventos } from './eventos';
 import { exito, sinCambios, type ContextoComando, type TransicionComando } from './tipos';
@@ -20,12 +21,16 @@ export function avanzarFaccionesNpc(
   ctx: ContextoComando,
   _params: void
 ): TransicionComando<void> {
-  if (estado.faccionesNpcIds.length === 0) {
+  // Una Facción NPC con algo en una batalla activa no gobierna mientras dure: así no saca tropa de una plaza asediada ni
+  // toca escuadras reservadas (Doc 5.15.1). `ponytail:` pausa la Facción entera; por plaza, si se nota en el juego.
+  const enBatalla = faccionesEnBatalla(estado, ctx.instante);
+  const faccionesIds = estado.faccionesNpcIds.filter((f) => !enBatalla.has(f));
+  if (faccionesIds.length === 0) {
     return sinCambios(estado);
   }
 
   const contexto: ContextoSimulacion = { instante: ctx.instante, momento: ctx.momento, rng: ctx.rng };
-  const config: ConfigNpcGobernanza = { faccionesIds: estado.faccionesNpcIds, contadorInicial: ctx.ids.actual() };
+  const config: ConfigNpcGobernanza = { faccionesIds, contadorInicial: ctx.ids.actual() };
   const resultado = avanzarNpcGobernanza(estadoSimulacionDe(estado), mapa, contexto, config);
 
   // Los ids que el motor generó dentro del NPC salieron de este mismo contador: se adelanta para que la

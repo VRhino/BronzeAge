@@ -55,6 +55,11 @@ export const CODIGOS_ERROR = {
   // `crearHeroe` (doc 02 §4.2): un héroe por jugador y partida, con nombre.
   heroeYaExiste: 'heroe.ya_existe',
   heroeNombreVacio: 'heroe.nombre_vacio',
+  // Batallas de Unity (doc 02 §3.1): lo que está en una batalla activa no se toca (Doc 5.15.1), y unirse o cancelar
+  // tienen sus propias reglas.
+  batallaNoExiste: 'batalla.no_existe',
+  batallaBloqueo: 'batalla.bloqueado',
+  batallaInvalida: 'batalla.invalida',
 } as const;
 
 export type CodigoError = (typeof CODIGOS_ERROR)[keyof typeof CODIGOS_ERROR];

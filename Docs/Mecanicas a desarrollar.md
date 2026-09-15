@@ -32,7 +32,7 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 27 | AMBIENTACIÓN | Identidad visual y de audio | ✘ nada |
 | 28 | MILITAR | Declaración formal de guerra | ✘ nada |
 | 29 | ONBOARDING | Curva de progresión inicial gradual | ✘ nada |
-| 30 | MILITAR | Batallas con héroes: guarnición, campamento y héroes bot | ◐ campamento, guarnición y conquista del canon; el asedio aún con números |
+| 30 | MILITAR | Batallas con héroes: guarnición, campamento y héroes bot | ◐ canon de campamento, guarnición y conquista; ciclo de `Batalla` fase 1 (sin rutas ni resultado) |
 | 31 | HÉROE | Modelo de Héroe: uno por jugador y mundo, dueño de los escuadrones | ◐ fases 1-3 y Herido en la rama `heroe-dominio`; faltan perks y equipo |
 | 32 | POLÍTICA | Cabos sueltos de diseño político | ✘ sin decidir |
 | 33 | COMERCIO | Cabos sueltos de diseño comercial | ✘ sin decidir |
@@ -325,12 +325,25 @@ también la guarnición: cada residente asigna escuadras a la de su residencia d
 defienden la guarnición y el loadout activo de los residentes que están dentro; el resto del campamento no
 defiende. Los héroes bot no usan la guarnición, defienden con su loadout.
 
-Sigue distinto del canon: el asedio se resuelve con números (`iniciarAsedio`, `engine/combate.ts`), no como
-batalla de Unity; lo mismo el ataque a un campamento de bandidos, que ya se hace con la columna que llega a él
-(`atacar`, Doc 1.9, 2026-09-15), aunque los bots aún lo atacan desde su plaza (motor `atacarCampamentoBandidos`,
-hasta §36); y el desalojo no mira
-el cupo de viviendas de la plaza que recibe a los vencidos (`desalojarResidentes`). Depende del ciclo de
-`Batalla` con Unity (BA-001; CQ-002 en Conquest para la IA de escuadras sin héroe y de héroes bot).
+**Ciclo de `Batalla` con Unity (BA-001), fase 1 de 3 hecha en la rama `heroe-dominio` (2026-09-15).** Con
+servidores de batalla declarados (`SERVIDORES_BATALLA`; sin ellos todo sigue con números, decisión del usuario),
+un combate con algún héroe humano abre una `Batalla` en vez de resolverse: `atacar`, el ejército que llega a una
+plaza enemiga y la persecución que alcanza a su presa (`session/batallas.ts`). El ticket se congela con la forma
+del contrato, las escuadras quedan reservadas, y lo que interviene se bloquea sin parar el mundo (Doc 5.15.1: la
+plaza asediada no abre puertas ni da órdenes, las columnas y la caravana no se mueven ni se pueden atacar, y la
+batalla se ve en el mapa en su lugar). Se unen compañeros de Facción mientras quede sitio (`unirseABatalla`),
+quien la inició la cancela antes de empezar (`cancelarBatalla`), y si vence un plazo queda `fallida` sin castigo.
+Una Facción NPC con algo en batalla no gobierna mientras dura (`ponytail:`, por plaza si se nota). Falta: las rutas
+de Conquest (`/v1/batallas/*`) y la del token del jugador (fase 1, parte 2); aplicar el resultado (fase 2); el canal
+de tiempo real (fase 3); y sustituir un participante con una revisión nueva del ticket, que no tiene aún quién la
+dispare.
+
+Sigue distinto del canon, mientras no haya servidores de batalla: el asedio se resuelve con números
+(`iniciarAsedio`, `engine/combate.ts`); lo mismo el ataque a un campamento de bandidos, que ya se hace con la
+columna que llega a él (`atacar`, Doc 1.9, 2026-09-15), aunque los bots aún lo atacan desde su plaza (motor
+`atacarCampamentoBandidos`, hasta §36). El desalojo no mira el cupo de viviendas de la plaza que recibe a los
+vencidos (`desalojarResidentes`). CQ-002 en Conquest para la IA de escuadras sin héroe y de héroes bot; CQ-005 para
+las incorporaciones a una batalla en curso.
 
 Sin resolver:
 
@@ -354,8 +367,8 @@ columna: 2 minutos para todos los héroes del bando que pierde cualquier batalla
 les persigue ni entran en batallas, y sus escuadras no combaten. Falta: los perks y `equipar`, que esperan a los
 catálogos de Conquest (CQ-004; decisión del usuario 2026-09-14); de dónde salen los puntos de atributo (en Conquest
 ningún nivel los da) y la subida de nivel (CQ-001); y en el cliente de jugador (`BronzeAgeClient`, que ya tiene el
-panel del héroe) la pantalla de crear héroe definitiva, el equipo, la ficha de los héroes ajenos y enseñar el
-Herido (su `docs/Features_Pendientes.md` §0).
+panel del héroe y enseña el Herido) la pantalla de crear héroe definitiva, el equipo y la ficha de los héroes
+ajenos (su `docs/Features_Pendientes.md` §0).
 
 Sin resolver:
 
