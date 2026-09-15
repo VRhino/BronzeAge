@@ -707,9 +707,8 @@ Batalla
   bloqueo: { ejercitoIds, caravanaIds, asentamientoId? }   lo que se queda quieto mientras dura (Doc 5.15.1)
   asignacion?                la BattleServerAssignment aceptada, con el servidor que la registró y los tokens
                              que se van sumando
-  appliedResultId?          idempotencia — ver §16
-  huellaPayloadAplicado?    hash del BattleResult ya aplicado
-  instanteAplicado?, versionAplicada?
+  resultado?                el BattleResult aplicado, entero — idempotencia, ver §16
+  aplicadaEn?: Instante      cuándo se aplicó
 ```
 
 **Ciclo y transiciones (R01; tabla añadida el 2026-09-13):**
@@ -997,10 +996,11 @@ mensaje de revocación aparte.
 
 ## 16. Idempotencia de `BattleResult`
 
-`Batalla.appliedResultId` + `huellaPayloadAplicado` (hash) + `instanteAplicado` + `versionAplicada` viven en
-la propia `Batalla`, persistidos — **no** en la caché en memoria de `RunnerDePartida.idempotencia` (máx.
-500 entradas, se pierde al reiniciar). Mismo `resultId`+hash → éxito previo sin mutar, respondiendo el
-resultado ya aplicado. Mismo `resultId` con hash distinto → se rechaza y se audita. Aplicar consecuencias y
+`Batalla.resultado` (el `BattleResult` aplicado, entero) + `aplicadaEn` viven en la propia `Batalla`, persistidos
+— **no** en la caché en memoria de `RunnerDePartida.idempotencia` (máx. 500 entradas, se pierde al reiniciar). Se
+guarda el resultado entero y no una huella: compararlo con el que llega es la misma comprobación, sin depender de
+cómo se calcule el hash (implementado el 2026-09-15). El mismo resultado otra vez → éxito sin mutar. Otro distinto
+sobre una batalla ya aplicada → `409`. Aplicar consecuencias y
 pasar a `aplicada` quedan en la MISMA mutación persistida (§15, ciclo corregido) — no existe un estado
 `finalizada` intermedio que recuperar por separado.
 

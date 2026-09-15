@@ -1082,7 +1082,7 @@ export function validarAlcance(ejercito: Ejercito, punto: Point, heridos: Readon
  * Perder la mitad y no todo es deliberado: dejarle algo es lo que hace que valga la pena seguir el viaje en
  * vez de reiniciarlo, y lo que distingue un robo de una ruina.
  */
-function trasDerrota<E extends Ejercito>(perdedor: E): { perdedor: E; botin: Record<string, number>; vencidos: string[] } {
+export function trasDerrota<E extends Ejercito>(perdedor: E): { perdedor: E; botin: Record<string, number>; vencidos: string[] } {
   const botin: Record<string, number> = {};
   const queda: Record<string, number> = {};
   for (const [recurso, cantidad] of Object.entries(perdedor.suministro)) {
@@ -1100,7 +1100,7 @@ function trasDerrota<E extends Ejercito>(perdedor: E): { perdedor: E; botin: Rec
 }
 
 /** El ganador carga el botin de `trasDerrota` hasta su `capacidad`: un ladron sin sitio deja lo que no le cabe. */
-function cargarBotin<E extends Ejercito>(ganador: E, botin: Record<string, number>, capacidad: number): E {
+export function cargarBotin<E extends Ejercito>(ganador: E, botin: Record<string, number>, capacidad: number): E {
   const suministro = { ...ganador.suministro };
   let yaLleva = Object.values(suministro).reduce((suma, c) => suma + c, 0);
   for (const [recurso, cantidad] of Object.entries(botin)) {

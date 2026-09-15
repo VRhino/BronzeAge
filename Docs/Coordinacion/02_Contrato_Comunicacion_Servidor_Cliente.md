@@ -1,8 +1,8 @@
 # 02 — Contrato de comunicación servidor-cliente (v1)
 
 **Estado:** ACEPTADO. Las rutas de batalla existen en `src/server/rutas/batallas.ts` (rama `heroe-dominio`,
-2026-09-15): pendientes, ticket, incorporaciones, asignación, inicio, tokens y la asignación de cada jugador. Faltan
-`POST .../resultado` (fase 2) y el canal `batalla/<battleId>` (fase 3).
+2026-09-15): pendientes, ticket, incorporaciones, asignación, inicio, tokens, resultado y la asignación de cada
+jugador. Falta el canal `batalla/<battleId>` (fase 3).
 Revisado y corregido tras `Docs/Coordinacion/propuestas/REVISION_CONTRATOS_CODEX_2026-09-11.md` (R01, R02,
 R03, R06, R07, R08 y las correcciones menores de esa revisión).  
 **Fecha:** 2026-09-11  

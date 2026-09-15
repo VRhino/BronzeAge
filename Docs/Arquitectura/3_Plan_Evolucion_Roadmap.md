@@ -218,7 +218,7 @@ propuestas BA-*/CQ-*), pero deja piezas de infraestructura que conviene ver desd
 
 - [x] Contrato v1 publicado — `src/contratos/v1/` (schema, DTO, fixtures y catálogo de tropas), capa propia en `arquitectura.test.ts` (2026-09-14/15)
 - [x] Modelo de Héroe en el dominio (BA-002/BA-004) — `Heroe` dueño de todo en el juego, `heroes` en el estado, `crearHeroe`, estado Herido; snapshot v14-v17 (rama `heroe-dominio`, 2026-09-14). La `Membresia` sigue siendo la frontera con `acceso/`
-- [~] Ciclo de `Batalla` (BA-001) — fase 1 hecha el 2026-09-15: abrir, bloquear, unirse, cancelar y vencer (`session/batallas.ts`); rutas `/v1/batallas/*` con credencial de servidor (`server/rutas/batallas.ts`); opt-in con `SERVIDORES_BATALLA`; snapshot v18. Falta aplicar el resultado (fase 2) y el canal de tiempo real (fase 3)
+- [~] Ciclo de `Batalla` (BA-001) — fases 1 y 2 hechas el 2026-09-15: abrir, bloquear, unirse, cancelar y vencer (`session/batallas.ts`); aplicar el resultado con su checklist e idempotencia (`session/resultadoBatalla.ts`); rutas `/v1/batallas/*` con credencial de servidor (`server/rutas/batallas.ts`); opt-in con `SERVIDORES_BATALLA`; snapshot v18. Falta el canal de tiempo real (fase 3)
 
 ---
 

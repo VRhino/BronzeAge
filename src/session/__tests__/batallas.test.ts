@@ -11,10 +11,13 @@ import { REGISTRO_COMANDOS } from '../comandos/registro';
 import { verificarAutorizacion } from '../comandos/autorizacion';
 import { CODIGOS_ERROR } from '../comandos/codigosDeError';
 import { proyectarParaJugador } from '../proyecciones/jugador';
-import { faccionesEnBatalla } from '../batallas';
+import { escuadrasDe, faccionesEnBatalla, participacionesDe, type Batalla } from '../batallas';
+import { aplicarResultado, confirmarInicio, registrarAsignacion } from '../comandos/batalla';
 import { instanteDeTick, type GeometriaAsentamientos } from '../estado';
 import { conHeroe, enPie, frenteACampamento } from './fixtures';
-import { BATALLA } from '../../constants';
+import { heridosEn } from '../../engine/heroe';
+import { SCHEMA_VERSION, type BattleResult } from '../../contratos/v1/dto';
+import { BATALLA, MOVIMIENTO } from '../../constants';
 
 const SCHEMA = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../contratos/v1/contratos.schema.json'), 'utf8'));
 const ajv = new Ajv({ allErrors: true, strict: true, strictRequired: false, allowUnionTypes: true });
@@ -28,6 +31,9 @@ const SIN_GEOMETRIA: GeometriaAsentamientos = { zonas: [], zonasFusionadas: [], 
 
 const atacarCampamento = (sesion: GameSession, heroeId: string) =>
   sesion.ejecutar(REGISTRO_COMANDOS.atacar, { heroeId, objetivo: { tipo: 'campamento', id: 'camp-1' } }, { actor: heroeId });
+
+const asediar = (sesion: GameSession, heroeId: string, plazaId: string) =>
+  sesion.ejecutar(REGISTRO_COMANDOS.atacar, { heroeId, objetivo: { tipo: 'asentamiento', id: plazaId } }, { actor: heroeId });
 
 const dejarDePerseguir = (sesion: GameSession, heroeId: string) =>
   sesion.ejecutar(REGISTRO_COMANDOS.dejarDePerseguir, { heroeId }, { actor: heroeId });
@@ -64,9 +70,6 @@ describe('abrir una batalla de Unity (doc 01 §15)', () => {
 });
 
 describe('asediar es una orden, no una llegada (Doc 5.12.4)', () => {
-  const asediar = (sesion: GameSession, heroeId: string, plazaId: string) =>
-    sesion.ejecutar(REGISTRO_COMANDOS.atacar, { heroeId, objetivo: { tipo: 'asentamiento', id: plazaId } }, { actor: heroeId });
-
   it('sin servidores de batalla, atacar una plaza enemiga a 15 la asedia con números', () => {
     const { sesion, fundador, plazaId, faccionPropia } = frenteAPlaza(false);
 
@@ -180,6 +183,123 @@ describe('la batalla en el mapa (doc 02 §4.1)', () => {
     expect(ajena[0]!.ladoPropio).toBeUndefined();
   });
 });
+
+describe('aplicar el resultado (doc 02 §3.3, doc 01 §15-§16)', () => {
+  it('gana el atacante: el campamento cae, cada escuadra queda con lo que le dejó Unity, y el héroe suma su XP y su botín', () => {
+    const { sesion, fundador } = frenteACampamento();
+    const batalla = empezar(sesion, atacarCampamento(sesion, fundador).datos!.battleId);
+    const antes = sesion.getState().heroes.find((h) => h.id === fundador)!;
+    const escuadra = batalla().ticket.bandos.atacante.participantes[0]!.escuadras[0]!;
+    const botin = { objetos: [{ itemDefinitionId: 'botas_cuero', cantidad: 1, itemInstanceId: 'item-1' }], monedas: { bronce: 85, plata: 3, oro: 0 } };
+    const r = resultado(batalla(), { porHeroe: [{ heroeId: fundador, participo: true, sobrevivioAlCierre: true, xpGanada: 50, botin }] });
+
+    expect(aplicar(sesion, r).ok).toBe(true);
+
+    const estado = sesion.getState();
+    const heroe = estado.heroes.find((h) => h.id === fundador)!;
+    const suya = heroe.escuadrones.find((e) => e.id === escuadra.squadId)!;
+    expect(batalla().estado).toBe('aplicada');
+    expect(estado.campamentosBandidos).toEqual([]);
+    expect(suya).toMatchObject({ cantidad: escuadra.efectivosAutorizados - 1, experiencia: escuadra.experiencia + 10 });
+    expect(suya.reservaBatalla, 'sin candado').toBeUndefined();
+    expect(heroe.experienciaHaciaSiguienteNivel).toBe(antes.experienciaHaciaSiguienteNivel + 50);
+    expect(heroe.nivel, 'sin la curva de Conquest el nivel no cambia').toBe(antes.nivel);
+    expect(heroe.monedasHeroe).toEqual({ bronce: antes.monedasHeroe.bronce + 85, plata: antes.monedasHeroe.plata + 3, oro: antes.monedasHeroe.oro });
+    expect(heroe.inventario).toMatchObject([{ itemDefinitionId: 'botas_cuero', itemInstanceId: 'item-1', casillaInventario: 0 }]);
+    expect(heridosEn(estado.heroes, instanteDeTick(estado.tick)).has(fundador)).toBe(false);
+  });
+
+  it('ganan los bandidos: quien atacó queda herido y pierde la mitad del carro', () => {
+    const { sesion, fundador, columna } = frenteACampamento();
+    const batalla = empezar(sesion, atacarCampamento(sesion, fundador).datos!.battleId);
+    const carro = sesion.getState().ejercitos.find((e) => e.id === columna)!.suministro['trigo']!;
+
+    expect(aplicar(sesion, resultado(batalla(), { ganador: 'defensor', razon: 'tiempo_agotado' })).ok).toBe(true);
+
+    const estado = sesion.getState();
+    expect(heridosEn(estado.heroes, instanteDeTick(estado.tick)).has(fundador)).toBe(true);
+    expect(estado.ejercitos.find((e) => e.id === columna)!.suministro['trigo']).toBeCloseTo(carro * (1 - MOVIMIENTO.fraccionRobada));
+    expect(estado.campamentosBandidos).toHaveLength(1);
+  });
+
+  it('un asedio que gana el atacante conquista la plaza, con el saqueo de siempre', () => {
+    const { sesion, fundador, plazaId, faccionPropia } = frenteAPlaza();
+    const batalla = empezar(sesion, asediar(sesion, fundador, plazaId).datos!.battleId);
+
+    expect(aplicar(sesion, resultado(batalla())).ok).toBe(true);
+
+    const plaza = sesion.getState().asentamientos.find((a) => a.id === plazaId)!;
+    expect(plaza.faccionId).toBe(faccionPropia);
+    expect(plaza.ocupacionHasta, 'abre la ventana de ocupación').toBeDefined();
+  });
+
+  it('repetir el mismo resultado no cambia nada; otro distinto sobre la batalla ya aplicada se rechaza', () => {
+    const { sesion, fundador } = frenteACampamento();
+    const batalla = empezar(sesion, atacarCampamento(sesion, fundador).datos!.battleId);
+    const r = resultado(batalla());
+    aplicar(sesion, r);
+    const tras = sesion.getState();
+
+    expect(aplicar(sesion, r).ok).toBe(true);
+    expect(sesion.getState()).toEqual(tras);
+    expect(aplicar(sesion, { ...r, ganador: 'defensor' }).codigoError).toBe(CODIGOS_ERROR.batallaInvalida);
+  });
+
+  it('el checklist rechaza el resultado entero: la batalla sigue en curso y las escuadras reservadas', () => {
+    const { sesion, fundador } = frenteACampamento();
+    const batalla = empezar(sesion, atacarCampamento(sesion, fundador).datos!.battleId);
+    const r = resultado(batalla());
+    const casos: [string, BattleResult][] = [
+      ['falta una escuadra', { ...r, porEscuadra: r.porEscuadra.slice(1) }],
+      ['no cierra sobre lo autorizado', { ...r, porEscuadra: r.porEscuadra.map((e) => ({ ...e, muertos: e.muertos + 1 })) }],
+      ['gana el atacante por tiempo', { ...r, razon: 'tiempo_agotado' }],
+      ['dura más que las reglas', { ...r, fin: '2026-09-15T11:00:00Z' }],
+      ['botín a quien no participó', { ...r, porHeroe: r.porHeroe.map((h) => ({ ...h, participo: false, botin: { objetos: [], monedas: { bronce: 1, plata: 0, oro: 0 } } })) }],
+      ['otra revisión del ticket', { ...r, ticketRevision: 1 }],
+      ['otro intento de asignación', { ...r, intentoAsignacionId: 'intento-2' }],
+    ];
+
+    for (const [caso, malo] of casos) expect(aplicar(sesion, malo).codigoError, caso).toBe(CODIGOS_ERROR.batallaInvalida);
+    expect(aplicar(sesion, r, 's2').codigoError, 'otro servidor').toBe(CODIGOS_ERROR.batallaInvalida);
+    expect(batalla().estado).toBe('en_curso');
+    expect(reservadas(sesion, fundador)).not.toEqual([]);
+  });
+});
+
+/** Conquest la asigna y la empieza (doc 02 §3.3). Devuelve cómo leerla después. */
+function empezar(sesion: GameSession, battleId: string): () => Batalla {
+  const comoS1 = { actor: 'batalla-servidor:s1' };
+  const base = { schemaVersion: SCHEMA_VERSION, battleId, ticketRevision: 0, intentoAsignacionId: 'intento-1' } as const;
+  const instancia = { host: 'batalla-1.example', puerto: 7777, protocolo: 'udp' };
+  sesion.ejecutar(registrarAsignacion, { servidorId: 's1', mensaje: { ...base, instancia, tokensParticipante: [] } }, comoS1);
+  sesion.ejecutar(confirmarInicio, { servidorId: 's1', mensaje: base }, comoS1);
+  const batalla = () => sesion.getState().batallas.find((b) => b.id === battleId)!;
+  if (batalla().estado !== 'en_curso') throw new Error(`setup: la batalla no empezó (${batalla().estado})`);
+  return batalla;
+}
+
+/** Un resultado completo y válido para la batalla: gana el atacante, cada escuadra pierde un efectivo. */
+function resultado(b: Batalla, cambios: Partial<BattleResult> = {}): BattleResult {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    battleId: b.id,
+    resultId: 'resultado-1',
+    ticketRevision: 0,
+    intentoAsignacionId: 'intento-1',
+    inicio: '2026-09-15T10:00:00Z',
+    fin: '2026-09-15T10:05:00Z',
+    ganador: 'atacante',
+    razon: 'aniquilacion',
+    objetivos: [],
+    porEscuadra: escuadrasDe(b).map((s) => ({ squadId: s.squadId, desplegados: s.efectivosAutorizados, supervivientesAlCierre: s.efectivosAutorizados - 1, muertos: 1, xpGanada: 10 })),
+    porHeroe: participacionesDe(b).map((p) => ({ heroeId: p.participante.heroeId, participo: true, sobrevivioAlCierre: true, xpGanada: 50 })),
+    versionServidor: 'conquest-test',
+    ...cambios,
+  };
+}
+
+const aplicar = (sesion: GameSession, r: BattleResult, servidorId = 's1') =>
+  sesion.ejecutar(aplicarResultado, { servidorId, mensaje: r }, { actor: `batalla-servidor:${servidorId}` });
 
 /** `frenteACampamento` con una plaza de otra Facción, sin nadie dentro, justo donde están las dos columnas. */
 function frenteAPlaza(unity = true) {

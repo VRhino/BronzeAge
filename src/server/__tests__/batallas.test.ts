@@ -12,7 +12,7 @@ import type { ServidorDeBatalla } from '../identidad/servidoresDeBatalla';
 import { GameSession } from '../../session/gameSession';
 import { REGISTRO_COMANDOS } from '../../session/comandos/registro';
 import { frenteACampamento } from '../../session/__tests__/fixtures';
-import { SCHEMA_VERSION } from '../../contratos/v1/dto';
+import { SCHEMA_VERSION, type BattleTicket } from '../../contratos/v1/dto';
 
 const ADMINS = [{ proveedor: 'dev', sujetoId: 'jefa' }];
 const S1: ServidorDeBatalla = { id: 's1', token: 'secreto-1' };
@@ -132,6 +132,36 @@ describe('recoger, asignar y empezar (doc 02 §3.2-§3.3)', () => {
     expect(ajeno.statusCode).toBe(409);
     expect(propio.statusCode).toBe(200);
     expect(propio.json().estado).toBe('en_curso');
+  });
+});
+
+describe('el resultado (doc 02 §3.3)', () => {
+  it('se aplica una vez: repetir el mismo es 200 sin cambios, y otro distinto es 409', async () => {
+    const { servidor, battleId, fundador } = await conBatallaAbierta();
+    const base = { schemaVersion: SCHEMA_VERSION, battleId, ticketRevision: 0, intentoAsignacionId: 'intento-1' };
+    await servidor.inject({ method: 'POST', url: `/v1/batallas/${battleId}/asignacion`, headers: COMO_S1, payload: asignacion(battleId, fundador) });
+    await servidor.inject({ method: 'POST', url: `/v1/batallas/${battleId}/inicio`, headers: COMO_S1, payload: base });
+    const ticket = (await servidor.inject({ method: 'GET', url: `/v1/batallas/${battleId}/ticket`, headers: COMO_S1 })).json() as BattleTicket;
+    const escuadras = [...ticket.bandos.atacante.participantes.flatMap((p) => p.escuadras), ...ticket.bandos.defensor.escuadrasSinHeroe];
+    const resultado = {
+      ...base,
+      resultId: 'resultado-1',
+      inicio: '2026-09-15T10:00:00Z',
+      fin: '2026-09-15T10:05:00Z',
+      ganador: 'atacante',
+      razon: 'aniquilacion',
+      objetivos: [],
+      porEscuadra: escuadras.map((s) => ({ squadId: s.squadId, desplegados: s.efectivosAutorizados, supervivientesAlCierre: s.efectivosAutorizados, muertos: 0, xpGanada: 0 })),
+      porHeroe: [{ heroeId: fundador, participo: true, sobrevivioAlCierre: true, xpGanada: 0 }],
+      versionServidor: 'conquest-test',
+    };
+    const enviar = (payload: object) => servidor.inject({ method: 'POST', url: `/v1/batallas/${battleId}/resultado`, headers: COMO_S1, payload });
+
+    const primero = await enviar(resultado);
+    expect(primero.statusCode).toBe(200);
+    expect(primero.json()).toEqual({ battleId, estado: 'aplicada' });
+    expect((await enviar(resultado)).statusCode, 'reintentar lo mismo es idempotente').toBe(200);
+    expect((await enviar({ ...resultado, ganador: 'defensor' })).statusCode).toBe(409);
   });
 });
 

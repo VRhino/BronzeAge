@@ -1,4 +1,4 @@
-// Los dos comandos que actúan SOBRE una batalla de Unity (doc 02 §3.1), las tres operaciones que manda Conquest
+// Los dos comandos que actúan SOBRE una batalla de Unity (doc 02 §3.1), las cuatro operaciones que manda Conquest
 // (§3.3), y el candado que lleva puesto el resto del registro (Doc 5.15.1). Las reglas viven en `session/batallas.ts`;
 // aquí, resolver la batalla y narrar.
 import {
@@ -12,7 +12,8 @@ import {
   unirseABatalla as unirse,
   type Batalla,
 } from '../batallas';
-import type { BattleServerAssignment, InicioBatalla, TokensBatalla } from '../../contratos/v1/dto';
+import { aplicarResultado as aplicar } from '../resultadoBatalla';
+import type { BattleResult, BattleServerAssignment, InicioBatalla, TokensBatalla } from '../../contratos/v1/dto';
 import type { Instante } from '../../domain/tiempo';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { CODIGOS_ERROR } from './codigosDeError';
@@ -92,6 +93,22 @@ export const confirmarInicio = deServidor<InicioBatalla>((e, b, p, ahora) => ini
 
 /** Sin evento: que alguien tenga ya su token no es noticia para nadie más. */
 export const registrarTokens = deServidor<TokensBatalla>((e, b, p) => sumarTokens(e, b, p.mensaje, p.servidorId));
+
+/** El resultado de la partida (doc 02 §3.3). Busca también entre las ya cerradas: repetir el de una `aplicada` responde
+ * bien sin cambiar nada, y lo narra a cada hogar implicado tal como estaban al empezar. */
+export const aplicarResultado = comando<ParamsDeServidor<BattleResult>, void>((estado, _mapa, ctx, params) => {
+  const batalla = estado.batallas.find((b) => b.id === params.mensaje.battleId);
+  if (!batalla) rechazar(CODIGOS_ERROR.batallaNoExiste);
+  const siguiente = aplicar(estado, batalla, params.mensaje, params.servidorId, ctx.instante);
+  if (siguiente === estado) return sinCambios(estado);
+  const { ganador } = params.mensaje;
+  return exito(
+    siguiente,
+    eventosDeBatalla(estado, batalla, 'batalla.aplicada', `Termina la batalla ${batalla.id}: gana el ${ganador}.`).map((e) =>
+      evento(ctx, { ...e, payload: { ...e.payload, ganador } })
+    )
+  );
+});
 
 /** Pone el candado de batalla (Doc 5.15.1) a todos los comandos salvo `libres`, que actúan sobre la propia batalla. */
 export function conCandadoDeBatalla<T extends Record<string, ManejadorComando<any, any>>>(manejadores: T, libres: readonly (keyof T)[]): T {

@@ -221,7 +221,7 @@ soporte de `region` todavía (limitación documentada, ver `src/terreno/README.m
 
 Un combate en el que interviene algún héroe humano no lo resuelve este motor: se juega en el servidor de batalla
 de Conquest (desde 2026-09-15, con `SERVIDORES_BATALLA` declarados). BronzeAge congela la ENTRADA —el `BattleTicket`,
-`session/batallas.ts`— y aplicará el RESULTADO (`BattleResult`, fase 2). Es una tercera autoridad, autenticada como
+`session/batallas.ts`— y aplica el RESULTADO (`BattleResult`, `session/resultadoBatalla.ts`). Es una tercera autoridad, autenticada como
 servidor y no como cliente: lo que manda se valida contra el contrato (`src/contratos/v1/`) antes de tocar el
 estado. El ticket es entrada privilegiada —escuadras, atributos y equipo de todos los participantes—, así que viaja
 solo al servidor de batalla; a los jugadores les llega la vista pública de la batalla (`ProyeccionJugador.batallas`)

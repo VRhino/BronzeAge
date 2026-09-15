@@ -1,5 +1,5 @@
-// Superficie del SERVIDOR DE BATALLA de Conquest (doc 02 §3.2-§3.3): recoger los tickets y reportar asignación, inicio
-// y tokens. No es `/admin` ni `/jugador`: entra con la credencial de un servidor declarado en `SERVIDORES_BATALLA`,
+// Superficie del SERVIDOR DE BATALLA de Conquest (doc 02 §3.2-§3.3): recoger los tickets y reportar asignación, inicio,
+// tokens y resultado. No es `/admin` ni `/jugador`: entra con la credencial de un servidor declarado en `SERVIDORES_BATALLA`,
 // nunca con la sesión de una persona. La ruta con la que cada jugador recoge SU token (§3.4) vive aquí también, porque
 // es la otra mitad del mismo reparto: el secreto de cada uno nunca viaja por el canal colectivo.
 //
@@ -9,9 +9,9 @@ import { readFileSync } from 'node:fs';
 import Ajv from 'ajv';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { puedeJugar } from '../../acceso/rolesDePartida';
-import { SCHEMA_VERSION, type BattleServerAssignment, type InicioBatalla, type TokensBatalla } from '../../contratos/v1/dto';
+import { SCHEMA_VERSION, type BattleResult, type BattleServerAssignment, type InicioBatalla, type TokensBatalla } from '../../contratos/v1/dto';
 import { batallasActivas, participacionesDe, type Batalla } from '../../session/batallas';
-import { confirmarInicio, registrarAsignacion, registrarTokens, type ParamsDeServidor } from '../../session/comandos/batalla';
+import { aplicarResultado, confirmarInicio, registrarAsignacion, registrarTokens, type ParamsDeServidor } from '../../session/comandos/batalla';
 import { CODIGOS_ERROR } from '../../session/comandos/codigosDeError';
 import type { ManejadorComando } from '../../session/comandos/tipos';
 import { instanteDeTick } from '../../session/estado';
@@ -179,6 +179,11 @@ export function registrarRutasDeBatalla(app: FastifyInstance, deps: Dependencias
     '/batallas/:battleId/tokens',
     { schema: esquemaDeServidor('Tokens de los humanos que se unieron después de la asignación (TokensBatalla, doc 02 §3.3).') },
     recibir<TokensBatalla>('TokensBatalla', registrarTokens)
+  );
+  app.post(
+    '/batallas/:battleId/resultado',
+    { schema: esquemaDeServidor('Conquest reporta el BattleResult (doc 02 §3.3): el checklist entero o nada. Repetir el mismo es idempotente.') },
+    recibir<BattleResult>('BattleResult', aplicarResultado)
   );
 
   app.get<{ Params: { gameId: string; battleId: string } }>(

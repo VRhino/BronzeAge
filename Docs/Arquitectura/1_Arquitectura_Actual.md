@@ -234,7 +234,7 @@ que se lo pasen por parámetro) — así es fácil de probar y la async vive en 
 El único punto async del backend, ~4.240 líneas (12 archivos de raíz + 10 de `rutas/` + 8 de `identidad/` + el
 hub). `api.ts` es la raíz de composición: monta
 Fastify, CORS, WebSocket, OpenAPI, y registra las superficies bajo `/v1` (Fase C6 — versionado por prefijo de
-ruta, sin alias sin versión). En total 29 rutas HTTP:
+ruta, sin alias sin versión). En total 30 rutas HTTP:
 
 - **`/v1/sesiones`** — `POST /sesiones` (login: `Authorization: <esquema> <credencial>` — hoy `clave
   <nick>:<contraseña>` para jugadores, `dev <sujeto>` para el cliente de administración en local),
@@ -252,8 +252,8 @@ ruta, sin alias sin versión). En total 29 rutas HTTP:
   `sinHeroe: true` y el único comando posible es `crearHeroe`. `GET .../:id/batallas/:battleId/asignacion`
   (`rutas/batallas.ts`) entrega a cada jugador su token para entrar en una batalla, y solo el suyo.
 - **`/v1/batallas/*`** (`rutas/batallas.ts`) — la superficie del servidor de batalla de Conquest:
-  `GET /batallas/pendientes`, `.../:battleId/ticket` y `.../incorporaciones`; `POST .../asignacion`, `.../inicio` y
-  `.../tokens`. Ni admin ni jugador: entra con `Authorization: batalla-servidor <token>` de un servidor declarado
+  `GET /batallas/pendientes`, `.../:battleId/ticket` y `.../incorporaciones`; `POST .../asignacion`, `.../inicio`,
+  `.../tokens` y `.../resultado`. Ni admin ni jugador: entra con `Authorization: batalla-servidor <token>` de un servidor declarado
   en `SERVIDORES_BATALLA`, y cada mensaje se valida contra `contratos.schema.json`. Sin esa variable no entra nadie.
 - **`/v1/.../tiempo-real`** (`rutas/tiempoReal.ts`, Fase C5) — WebSocket con canales suscribibles, autorizados
   por `session/canales.ts`; difunde eventos de dominio en bruto, nunca ejecuta comandos por este canal.
@@ -383,8 +383,12 @@ Codex (protocolo y propuestas BA-*/CQ-* en `Docs/Coordinacion/`). De ahí salen 
   - El `battleId` es un UUID determinista (el `gameId` resumido más el contador de ids), porque `session` no puede
     usar aleatoriedad global (`autoridadTemporal.test.ts`).
 
-  Estado: fase 1 hecha (abrir, bloquear, unirse, cancelar, vencer y las rutas). Falta aplicar el `BattleResult`
-  (fase 2) y el canal WS `batalla/<battleId>` (fase 3). Detalle vivo en `Docs/Mecanicas a desarrollar.md` §30.
+  - `session/resultadoBatalla.ts` aplica el `BattleResult`: el checklist de doc 02 §3.3 entero o nada, y en la
+    misma mutación bajas, XP, botín, heridos, carro, conquista, caravana o campamento, XP de Facción y la
+    liberación de candados. Guarda el resultado entero en la `Batalla`: repetirlo igual no cambia nada (doc 01 §16).
+
+  Estado: fases 1 y 2 hechas. Falta el canal WS `batalla/<battleId>` (fase 3). Detalle vivo en
+  `Docs/Mecanicas a desarrollar.md` §30.
 
 ## Estado de partida y ciclo de un tick
 
@@ -557,8 +561,8 @@ descubre qué partidas existen en disco, incluidas las que nadie ha reabierto to
   alcance de este repo, que es solo servidor. Aquí solo queda `cliente/`, la herramienta de admin/dev, que
   todavía importa el motor por `@motor/*` (30 imports sobre 20 módulos, 11 de ellos de `engine/`) y por eso
   sigue sin cerrar el criterio de la Fase C.
-- Batallas de Unity a medias: sin `POST .../resultado` una batalla abierta solo puede cancelarse o vencer (fase 2),
-  y las cerradas no se podan de `GameSessionState.batallas`. La IA de una Facción NPC con algo en batalla se pausa
+- Batallas de Unity sin canal de tiempo real (fase 3): el jugador ve su estado en la proyección, no por un canal
+  propio. Las cerradas no se podan de `GameSessionState.batallas`. La IA de una Facción NPC con algo en batalla se pausa
   entera, no por plaza (`ponytail:`), y una batalla se busca recorriendo las partidas abiertas del proceso, sin
   índice `battleId → gameId`.
 - El modelo de Héroe, el contrato con Conquest y las batallas viven en la rama `heroe-dominio`: `main` sigue en el

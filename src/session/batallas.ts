@@ -1,6 +1,6 @@
 // Las batallas que se juegan en Unity (doc 01 §15, Doc 5.15.1), del lado de BronzeAge: abrirlas con su ticket
 // congelado, bloquear lo que interviene, dejar que se una quien llega y cerrarlas sin castigo si vence un plazo o se
-// cancelan. Aplicar el resultado es la fase 2.
+// cancelan. Aplicar el resultado vive en `resultadoBatalla.ts`.
 //
 // No es estado del motor: el motor solo devuelve los combates que no resuelve (`CombatePorAbrir`), y lo que está en
 // una batalla activa ni siquiera entra en el tick. Todo lo que viaja a Conquest tiene la forma del contrato
@@ -9,6 +9,7 @@ import type { Asentamiento, CampamentoBandido, Caravana, Ejercito, Escuadron, He
 import {
   SCHEMA_VERSION,
   type BattleParticipantSnapshot,
+  type BattleResult,
   type BattleServerAssignment,
   type BattleSide,
   type BattleTicket,
@@ -54,6 +55,9 @@ export interface Batalla {
   iniciadaEn?: Instante;
   /** La asignación aceptada, con quién la registró y los tokens de los que se unen después. */
   asignacion?: BattleServerAssignment & { servidorId: string };
+  /** El resultado aplicado, entero: repetirlo igual no cambia nada, y otro distinto se rechaza (doc 01 §16). */
+  resultado?: BattleResult;
+  aplicadaEn?: Instante;
 }
 
 /** Unirse, cancelar o un mensaje de Conquest que no vale (Doc 5.15.1, doc 02 §3.3). Lo traduce `erroresDeDominio.ts` a
@@ -81,10 +85,15 @@ export function participacionesDe(b: Batalla): Participacion[] {
   return [...del('atacante'), ...del('defensor'), ...b.incorporaciones.map(({ lado, participante }) => ({ lado, participante }))];
 }
 
-/** Las escuadras reservadas que tienen dueño. La tropa sin dueño (bandidos, carreteros) solo existe en el ticket. */
-function escuadrasConDueno(b: Batalla): string[] {
+/** Todas las escuadras de la batalla: las de sus héroes, las que se unieron y las que combaten sin héroe. */
+export function escuadrasDe(b: Batalla): SquadSnapshot[] {
   const { atacante, defensor } = b.ticket.bandos;
-  return [...participacionesDe(b).flatMap((p) => p.participante.escuadras), ...atacante.escuadrasSinHeroe, ...defensor.escuadrasSinHeroe]
+  return [...participacionesDe(b).flatMap((p) => p.participante.escuadras), ...atacante.escuadrasSinHeroe, ...defensor.escuadrasSinHeroe];
+}
+
+/** Las escuadras reservadas que tienen dueño. La tropa sin dueño (bandidos, carreteros) solo existe en el ticket. */
+export function escuadrasConDueno(b: Batalla): string[] {
+  return escuadrasDe(b)
     .filter((e) => e.heroeId !== null)
     .map((e) => e.squadId);
 }
@@ -339,7 +348,7 @@ export function hayHumano(apertura: Apertura): boolean {
 // --- El ciclo ---
 
 /** Pone o quita el candado `reservaBatalla` a las escuadras indicadas. */
-function conReserva(heroes: readonly Heroe[], ids: readonly string[], battleId: string | undefined): Heroe[] {
+export function conReserva(heroes: readonly Heroe[], ids: readonly string[], battleId: string | undefined): Heroe[] {
   const marcar = new Set(ids);
   const conCandado = ({ reservaBatalla: _, ...libre }: Escuadron): Escuadron => (battleId ? { ...libre, reservaBatalla: { battleId } } : libre);
   return heroes.map((h) =>
@@ -504,7 +513,7 @@ export function vencerBatallas(estado: GameSessionState, ahora: Instante): { est
 
 // --- Lo que manda Conquest (doc 02 §3.3) ---
 
-function conBatalla(estado: GameSessionState, batalla: Batalla): GameSessionState {
+export function conBatalla(estado: GameSessionState, batalla: Batalla): GameSessionState {
   return { ...estado, batallas: estado.batallas.map((b) => (b.id === batalla.id ? batalla : b)) };
 }
 
@@ -514,12 +523,12 @@ function exigirTokensDeHumanos(batalla: Batalla, tokens: readonly TokenParticipa
   if (tokens.some((t) => !humanos.has(t.heroeId))) throw new BatallaInvalidaError('Hay un token para quien no es un héroe humano de esta batalla.');
 }
 
-function exigirRevisionVigente(batalla: Batalla, ticketRevision: number): void {
+export function exigirRevisionVigente(batalla: Batalla, ticketRevision: number): void {
   if (ticketRevision !== batalla.ticket.ticketRevision) throw new BatallaInvalidaError('Esa revisión del ticket ya no vale.');
 }
 
 /** Solo el servidor que registró la asignación, con ese mismo intento, sigue hablando por ella (doc 01 §15, R03). */
-function exigirAsignacionActiva(batalla: Batalla, intentoAsignacionId: string, servidorId: string): NonNullable<Batalla['asignacion']> {
+export function exigirAsignacionActiva(batalla: Batalla, intentoAsignacionId: string, servidorId: string): NonNullable<Batalla['asignacion']> {
   const asignacion = batalla.asignacion;
   if (!asignacion || asignacion.intentoAsignacionId !== intentoAsignacionId || asignacion.servidorId !== servidorId) {
     throw new BatallaInvalidaError('Esa no es la asignación activa de esta batalla.');
@@ -573,6 +582,8 @@ export function registrarTokens(estado: GameSessionState, batalla: Batalla, toke
 export interface PayloadBatalla {
   battleId: string;
   contexto: ContextoEstrategico;
+  /** Solo en `batalla.aplicada`. */
+  ganador?: LadoId;
 }
 
 /** Un evento por cada plaza implicada (la de cada columna y caravana, y la asediada): se entera cada hogar, no el mundo. */

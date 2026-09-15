@@ -32,7 +32,7 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 27 | AMBIENTACIÓN | Identidad visual y de audio | ✘ nada |
 | 28 | MILITAR | Declaración formal de guerra | ✘ nada |
 | 29 | ONBOARDING | Curva de progresión inicial gradual | ✘ nada |
-| 30 | MILITAR | Batallas con héroes: guarnición, campamento y héroes bot | ◐ canon de campamento, guarnición y conquista; ciclo de `Batalla` fase 1 (falta aplicar el resultado) |
+| 30 | MILITAR | Batallas con héroes: guarnición, campamento y héroes bot | ◐ canon de campamento, guarnición y conquista; ciclo de `Batalla` fases 1 y 2 (falta el canal de tiempo real) |
 | 31 | HÉROE | Modelo de Héroe: uno por jugador y mundo, dueño de los escuadrones | ◐ fases 1-3 y Herido en la rama `heroe-dominio`; faltan perks y equipo |
 | 32 | POLÍTICA | Cabos sueltos de diseño político | ✘ sin decidir |
 | 33 | COMERCIO | Cabos sueltos de diseño comercial | ✘ sin decidir |
@@ -337,9 +337,15 @@ quien la inició la cancela antes de empezar (`cancelarBatalla`), y si vence un 
 Una Facción NPC con algo en batalla no gobierna mientras dura (`ponytail:`, por plaza si se nota). Conquest habla por
 `/v1/batallas/*` con su propia credencial (`server/rutas/batallas.ts`: pendientes, ticket, incorporaciones,
 asignación, inicio y tokens, validados contra `contratos.schema.json`), y cada jugador recoge su token por
-`GET /v1/jugador/partidas/:gameId/batallas/:battleId/asignacion`. Falta: aplicar el resultado (fase 2); el canal de
-tiempo real (fase 3); y sustituir un participante con una revisión nueva del ticket, que no tiene aún quién la
-dispare.
+`GET /v1/jugador/partidas/:gameId/batallas/:battleId/asignacion`. Fase 2 hecha el mismo día
+(`session/resultadoBatalla.ts`, `POST /v1/batallas/:battleId/resultado`): el checklist de doc 02 §3.3 entero o nada;
+cada escuadra queda con sus supervivientes y suma su XP, cada héroe suma su XP y su botín, y el nivel no cambia
+hasta que Conquest publique su curva (CQ-001); el bando que pierde queda herido; en mundo abierto pierde la mitad
+del carro, que va a la primera columna del que gana; y según el contexto cae la plaza (con el saqueo de siempre),
+la caravana o el campamento. Repetir el mismo resultado no cambia nada. Los objetos del botín se aceptan sin
+catálogo, como `visual` y a precio 0 (decisión del usuario, 2026-09-15; CQ-004). Falta: el canal de tiempo real
+(fase 3); sustituir un participante con una revisión nueva del ticket, que no tiene aún quién la dispare; y el
+botín para los que se unieron al bando ganador, que hoy va entero a la primera columna.
 
 Sigue distinto del canon, mientras no haya servidores de batalla: el asedio se resuelve con números
 (`iniciarAsedio`, `engine/combate.ts`); lo mismo el ataque a un campamento de bandidos, que ya se hace con la
