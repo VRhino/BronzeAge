@@ -8,6 +8,9 @@
 > [1_Arquitectura_Actual.md](1_Arquitectura_Actual.md): al tocar este documento, anotar contra qué commit se
 > verificó — un roadmap sin marca de verificación no se distingue de uno correcto hasta que alguien se apoya
 > en él y falla.
+>
+> **Revisado el 2026-09-15 contra `eef7fe6`** (rama `heroe-dominio`): las casillas de las cinco fases no cambian;
+> se añade la sección "Integración con Conquest", que recoge la infraestructura que ha dejado ese trabajo.
 
 Este documento es el mapa de alto nivel. Se marca un hito `[x]` solo cuando está
 verificado (código, tests o documentación correspondiente), no cuando está "casi
@@ -205,6 +208,17 @@ aquí para que dejen de depender de que alguien relea el párrafo correcto.
 - [ ] **Comandos programados a un `instante`** (de D5) — aplazados a conciencia: sus consumidores (asedios
   formales, caravanas planificadas) son Fase 1+. Aterriza con la primera mecánica que lo pida, no antes;
   construirlo ahora sería infraestructura especulativa sin consumidor.
+
+---
+
+## Integración con Conquest (fuera de las fases)
+
+No es una fase de este roadmap sino trabajo de coordinación con el cliente Unity de Codex (`Docs/Coordinacion/`,
+propuestas BA-*/CQ-*), pero deja piezas de infraestructura que conviene ver desde aquí:
+
+- [x] Contrato v1 publicado — `src/contratos/v1/` (schema, DTO, fixtures y catálogo de tropas), capa propia en `arquitectura.test.ts` (2026-09-14/15)
+- [x] Modelo de Héroe en el dominio (BA-002/BA-004) — `Heroe` dueño de todo en el juego, `heroes` en el estado, `crearHeroe`, estado Herido; snapshot v14-v17 (rama `heroe-dominio`, 2026-09-14). La `Membresia` sigue siendo la frontera con `acceso/`
+- [~] Ciclo de `Batalla` (BA-001) — fase 1 hecha el 2026-09-15: abrir, bloquear, unirse, cancelar y vencer (`session/batallas.ts`); rutas `/v1/batallas/*` con credencial de servidor (`server/rutas/batallas.ts`); opt-in con `SERVIDORES_BATALLA`; snapshot v18. Falta aplicar el resultado (fase 2) y el canal de tiempo real (fase 3)
 
 ---
 

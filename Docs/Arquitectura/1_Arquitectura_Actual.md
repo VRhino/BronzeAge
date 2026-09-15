@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Versión** | 2.4 |
-| **Actualizado** | 2026-09-10 |
-| **Verificado contra** | árbol de trabajo sobre `3047c46` — 1222 tests en 112 archivos, todos en verde |
+| **Versión** | 2.5 |
+| **Actualizado** | 2026-09-15 |
+| **Verificado contra** | `eef7fe6`, rama `heroe-dominio` (sin mergear a `main`) — 1309 tests en 118 archivos, todos en verde |
 
 > **Por qué existe este campo.** La v1.0 se escribió el 2026-08-26 y para el 2026-09-05 había derivado en
 > ocho puntos concretos (número de comandos, número de tests, tamaño de `constants.ts`, estado de la niebla
@@ -19,6 +19,7 @@
 
 | Versión | Fecha | Cambio |
 |---|---|---|
+| 2.5 | 2026-09-15 | Reconciliación con la rama `heroe-dominio`: modelo de **Héroe** (dueño de todo en el juego, `heroes` en el estado, `crearHeroe`, `sinHeroe`) y estado Herido; **contrato con Conquest** (`src/contratos/v1/`, capa nueva en `arquitectura.test.ts`); **batallas de Unity**, fase 1 (`session/batallas.ts`, `server/rutas/batallas.ts`, opt-in `SERVIDORES_BATALLA`, candado de batalla en el registro de comandos). Snapshot v13 → **v18** sin migración. Comandos 69 → 76, rutas HTTP ~22 → 29, tests 1222/112 → 1309/118, `constants.ts` 60/2004 → 63/1955, `engine/` 34 → 36 módulos. `ajv` pasa a dependencia de producción. |
 | 2.4 | 2026-09-10 | Reconciliación de documentación operativa con el árbol de trabajo: `npm run typecheck` limpio y 1222 tests en 112 archivos en verde. Se corrigen las referencias obsoletas de arranque (`INTERVALO_TICK_MS`, `POST .../tick`) y del cliente de administración (la niebla de guerra ya no es pendiente). |
 | 2.3 | 2026-09-09 | Puerto **`AlmacenDeObjetos`** (`server/almacen/`): toda la persistencia salvo respaldos —snapshots, eventos, auditoría, identidad— pasa por `leer`/`escribir`/`anexar`/`listar` por clave, con un adaptador de disco (`enDisco.ts`) como único hoy. `persistenciaPartida`/`eventosDePartida`/`auditoria`/`persistenciaIdentidad` dejan de tocar `node:fs`; `crearServidor` acepta un `almacen` inyectado (disco por defecto). Prepara el cambio limpio de proveedor (object storage, SQLite/HTTP, Postgres) para desplegar en un free tier con disco efímero. `repositorioEnDisco.ts` → `repositorioPersistente.ts`. Tests 1203/110 → 1211/111. |
 | 2.2 | 2026-09-09 | Identidad de jugador con contraseña para el playtest: proveedor `clave` (nick + contraseña, hash scrypt de stdlib, secreto en `identidad.json` — sin subir `FORMATO_IDENTIDAD_VERSION`, el archivo v1 se lee con `credencialesLocales: []`), endpoint `POST /v1/registro` con `CODIGO_REGISTRO` opcional. El proceso real monta `clave` + `dev` (`proveedoresDeProceso`); `dev` queda solo para el cliente de administración en local. Tests 1189/108 → 1203/110. |
@@ -49,7 +50,8 @@ pérdida. Cualquier referencia a un directorio `cliente-jugador/` dentro de este
 Cuánto de esta superficie tiene hoy consumidor está medido en `docs/Analisis_Brecha_Backend.md` de ese
 repositorio (2026-09-06, cifra pendiente de re-medir): consumía entonces 5 de los 9 endpoints y una fracción
 de los comandos, y no usaba todavía el WebSocket, el cursor de eventos ni `GET /v1/balance`. Es brecha de
-interfaz, no de backend — la matriz de `autorizacion.ts` ya admite al rol `jugador` en los **69** comandos.
+interfaz, no de backend — la matriz de `autorizacion.ts` ya admite al rol `jugador` en **75 de los 76** comandos
+(el que falta, `crearFaccionNpc`, es del admin).
 
 Por el lado del BACKEND, la Fase C está **completa** (C0–C13) y la Fase D **estructuralmente completa**
 (reloj de mundo + catch-up, contrato en `instante`/`momento`, `tick` retirado del contrato — solo queda como
@@ -82,6 +84,9 @@ NEGOCIO — qué debe pasar (estable aunque cambie todo lo de arriba)
           v
   src/domain/types.ts         Tipos de datos del dominio de juego
   src/constants.ts            Catálogos y parámetros de balance
+
+  src/contratos/v1/           Contrato con Conquest/Unity: schema JSON, DTO y fixtures.
+                              Solo mira domain y constants; lo leen session y server
 ```
 
 La dirección de dependencias la congela `src/__tests__/arquitectura.test.ts`, que falla si algún import
@@ -95,9 +100,9 @@ apunta "hacia arriba". Dos invariantes tienen además su propio test en lenguaje
 `session/` es el único punto que ve los dos dominios —juego y acceso— porque la autorización de comandos lo
 exige: qué rol técnico tiene el actor Y qué relación de juego guarda con la entidad objetivo.
 
-**1222 tests en 112 archivos** cubren las seis capas (medido 2026-09-10, `npm run test:run`). Reparto por
-capa: `engine/` 56 archivos, `session/` 23, `server/` 21, `world/` 5, `acceso/` 3, `__tests__/` 2 (los de
-frontera), `worldgen/` 1. Ese último número es el punto más fino de la red: `worldgen/` es la capa con la
+**1309 tests en 118 archivos** cubren todas las capas con código (medido 2026-09-15, `npm run test:run`). Reparto
+por capa: `engine/` 58 archivos, `session/` 25, `server/` 23, `world/` 5, `acceso/` 3, `__tests__/` 2 (los de
+frontera), `worldgen/` 1, `contratos/` 1. Ese último número es el punto más fino de la red: `worldgen/` es la capa con la
 promesa más fuerte —semilla + `WORLDGEN_VERSION` (hoy **15**) reproducen el mapa exactamente— y la que menos
 test tiene.
 
@@ -105,23 +110,25 @@ test tiene.
 
 ### Dominio: `src/domain/`
 
-Tres archivos, ~1.130 líneas (`types.ts` 986), y es el punto de mayor fan-in de todo el repo: **cientos de
+Tres archivos, ~1.130 líneas (`types.ts` 998), y es el punto de mayor fan-in de todo el repo: **cientos de
 aristas de import entran aquí** desde el resto de capas (413 medidas sobre el grafo del código el 2026-09-05).
 
 - `types.ts` — contratos de datos centrales: facciones, asentamientos, edificios, población, escuadrones,
-  caravanas, mercado, relaciones políticas, recursos, nodos de mapa, ejércitos y geometría básica. También
+  caravanas, mercado, relaciones políticas, recursos, nodos de mapa, ejércitos, héroes (con sus escuadrones, loadouts, inventario y equipo) y geometría básica. También
   vive aquí `WorldConfig`, porque es entidad de dominio y `worldgen/` depende de `domain/`, nunca al revés.
 - `tiempo.ts` — `Instante`, `Duracion` y las conversiones del modelo temporal (ver
   [10_Modelo_Temporal.md](10_Modelo_Temporal.md)).
 - `eventos.ts` — la forma de los eventos de dominio (código estable + payload tipado, hito A5).
 
-Las entidades se identifican por cadenas (`id`, `faccionId`, `asentamientoId`, `jugadorId`) — son identidades
-del dominio de *juego*, distintas del `Usuario` autenticado que vive en `acceso/` (un mismo `Usuario` puede
-tener un `Jugador` por partida).
+Las entidades se identifican por cadenas (`id`, `faccionId`, `asentamientoId`, `heroeId`) — son identidades
+del dominio de *juego*, distintas del `Usuario` autenticado que vive en `acceso/`. Desde el modelo de Héroe
+(2026-09-14) el dueño de todo en el juego es un `Heroe` —residencia, cargos, ciudadanía, escuadrones, mando de
+columnas—, uno por jugador y partida: `Heroe.jugadorId` es el `jugadorId` de la `Membresia`, y `null` en los
+héroes bot de las Facciones NPC. La cadena completa es `Sesion → Usuario → Membresia → jugadorId → Heroe`.
 
 ### Configuración: `src/constants.ts`
 
-60 tablas exportadas, 2004 líneas (medido 2026-09-09; `BALANCE_VERSION` va por 9 desde BA-005, 2026-09-13): recursos, edificios,
+63 tablas exportadas, 1955 líneas (medido 2026-09-15; `BALANCE_VERSION` va por 11 y `LAYOUT_VERSION` por 2): recursos, edificios,
 economía, población, construcción, combate, política, mundo, murallas, visión y balance. **Servida completa y sin autenticar en `GET /v1/balance`** desde el hito **C7** (2026-08-26), con
 `BALANCE_VERSION` estampada en cada partida al crearla. Sigue siendo **global al proceso** — la parte
 "versionado por partida/temporada, con overrides reales" del hito queda deliberadamente sin construir, sin un
@@ -162,16 +169,20 @@ lastrando la suite.)
 
 ### Motor: `src/engine/`
 
-**34 módulos, 13.392 líneas** — el mayor bloque de código de producción del repo. Reglas por subsistema: fundación,
-expansión, zonas, construcción, trazado urbano, murallas, población, mantenimiento, almacenamiento, mercado,
-comercio, caravanas, caminos, movimiento, facciones, pertenencia, cargos, liderazgo, diplomacia, ligas, fusión,
-combate, tropas, ejércitos, bandidos, reputación, títulos, y —desde 2026-09-04— exploración y memoria (las dos
-mitades de la niebla de guerra). Libre de dependencias de `session/`, `server/` o de cualquier capa de
+**36 módulos, 12.988 líneas** (sin tests, medido 2026-09-15) — el mayor bloque de código de producción del repo.
+Reglas por subsistema: fundación, expansión, zonas, construcción, trazado urbano, murallas, población,
+mantenimiento, almacenamiento, mercado, comercio, caravanas, caminos, movimiento, facciones, pertenencia, cargos,
+liderazgo, diplomacia, ligas, fusión, combate, tropas, ejércitos, bandidos, reputación, títulos, exploración y
+memoria (las dos mitades de la niebla de guerra) y —desde 2026-09-14— el héroe (`heroe.ts`: progresión, loadouts,
+Herido) y la tropa (`tropa.ts`: las escuadras viven en su héroe, y el motor militar trabaja sobre vistas de
+columna y de escolta con la tropa puesta). Libre de dependencias de `session/`, `server/` o de cualquier capa de
 presentación.
 
-`avanzarSimulacion(estado, mapa, tickActual)` (`engine/simulation.ts`) es el orquestador del tick: lo procesa
+`avanzarSimulacion(estado, mapa, contexto)` (`engine/simulation.ts`) es el orquestador del tick: lo procesa
 de forma ordenada y devuelve el nuevo estado de los subsistemas junto con eventos de dominio estructurados
-(código + payload tipado, no texto — hito A5). Hay aleatoriedad de simulación en población, combate y
+(código + payload tipado, no texto — hito A5). Con batallas de Unity activas no resuelve los combates donde entra
+algún héroe humano: los devuelve en `combatesPorAbrir` para que la partida los abra (ver "Contrato con Conquest y
+batallas de Unity"). Hay aleatoriedad de simulación en población, combate y
 bandidos vía un RNG inyectado (no `Math.random()` suelto — A3); su estado forma parte del snapshot persistido
 (ver "Persistencia" más abajo).
 
@@ -180,8 +191,9 @@ entrada privilegiada (solo servidor): [9_Reglas_vs_Simulacion.md](9_Reglas_vs_Si
 
 ### Dominio de acceso: `src/acceso/`
 
-Entidades externas al motor, sin ninguna dependencia (ni siquiera de `domain/`): `Usuario`, `Sesion`, `Rol`,
-`Jugador`, `Partida`, `Membresia` (`acceso/tipos.ts`), el servicio de autenticación por sesión
+Entidades externas al motor, sin ninguna dependencia (ni siquiera de `domain/`): `Usuario`, `Sesion`,
+`RolTecnico`, `IdentidadVinculada`, `CredencialLocal` y `Membresia` (`acceso/tipos.ts`; el `Jugador` del diseño no
+existe como entidad: su papel lo cubren la `Membresia` y el `Heroe` del juego), el servicio de autenticación por sesión
 (`servicioAutenticacion.ts`), el registro de proveedores de identidad intercambiable
 (`proveedorIdentidad.ts`) y la política de qué puede hacer cada rol técnico (`rolesDePartida.ts`:
 `rolEnPartida`, `puedeAdministrar`, `puedeJugar`, `puedeCrearPartida`, `puedeDescartarPartida`).
@@ -197,26 +209,32 @@ juego").
 `GameState` de una partida, deliberadamente **síncrona y sin E/S** (ninguna llamada a disco, red o reloj sin
 que se lo pasen por parámetro) — así es fácil de probar y la async vive en la capa de encima (`server/`).
 
-- `session/comandos/` — los **42** comandos de juego (`registro.ts`, contados el 2026-09-05), y `autorizacion.ts`: una matriz con una fila
+- `session/comandos/` — los **76** comandos de juego (`registro.ts`, contados el 2026-09-15), y `autorizacion.ts`: una matriz con una fila
   por comando (rol técnico mínimo + condición de dominio), exhaustividad garantizada en compilación. El actor
-  manda una intención `{tipo, params}`; nunca ejecuta motor directamente.
+  manda una intención `{tipo, params}`; nunca ejecuta motor directamente. El actor es el héroe de la membresía,
+  y todos los comandos pasan por el candado de batalla (`comandos/batalla.ts`) salvo los dos que actúan sobre la
+  propia batalla.
+- `session/batallas.ts` — el ciclo de las batallas de Unity (ver "Contrato con Conquest y batallas de Unity").
 - `session/proyecciones/jugador.ts` — compone lo que un jugador puede ver de la partida (Fase C4: su Facción
-  completa, las demás solo metadatos públicos). Es la frontera de seguridad — un jugador nunca recibe el
+  completa, las demás solo metadatos públicos). Desde el modelo de Héroe trae además el héroe propio completo,
+  la parte pública de los héroes ajenos (`heroesVisibles`), el nombre de los compañeros de Facción y las
+  batallas que se ven (`batallas`). Es la frontera de seguridad — un jugador nunca recibe el
   estado completo. Aquí es donde se aplica además la **niebla de guerra** (ver sección propia más abajo):
   lo ajeno viaja redactado (`asentamientosAvistados`, `ejercitosAvistados`), lo del mundo se filtra por lo
   visto ahora (`campamentosAvistados`) o por lo explorado (`caminosConocidos`), y `seVeAhora` se **deriva**
   en cada proyección en vez de guardarse.
 - `session/canales.ts` — qué canal de WebSocket puede suscribir cada actor.
 - `session/__tests__/memoriaNiebla.test.ts` — cubre los tres estados de visibilidad sobre la proyección.
-- `session/npcGobernanza.ts` — automatización de facciones NPC tras el tick, separada del motor puro.
+- `session/npcGobernanza.ts` — automatización de facciones NPC tras el tick, separada del motor puro. Una Facción
+  NPC con algo en una batalla activa no gobierna mientras dura (`comandos/avanzarFaccionesNpc.ts`).
 - `session/estado.ts` — las vistas de estado completo (`vistaAdminDeEstado`) que consume la superficie admin.
 
 ### Servidor: `src/server/`
 
-El único punto async del backend, ~3.800 líneas (12 archivos de raíz + 9 de `rutas/` + 6 adaptadores de
-identidad + el hub). `api.ts` es la raíz de composición: monta
+El único punto async del backend, ~4.240 líneas (12 archivos de raíz + 10 de `rutas/` + 8 de `identidad/` + el
+hub). `api.ts` es la raíz de composición: monta
 Fastify, CORS, WebSocket, OpenAPI, y registra las superficies bajo `/v1` (Fase C6 — versionado por prefijo de
-ruta, sin alias sin versión). En total ~22 endpoints:
+ruta, sin alias sin versión). En total 29 rutas HTTP:
 
 - **`/v1/sesiones`** — `POST /sesiones` (login: `Authorization: <esquema> <credencial>` — hoy `clave
   <nick>:<contraseña>` para jugadores, `dev <sujeto>` para el cliente de administración en local),
@@ -230,7 +248,13 @@ ruta, sin alias sin versión). En total ~22 endpoints:
   en `acceso/rolesDePartida.ts`.
 - **`/v1/jugador/*`** (`rutas/jugador.ts`) — `POST .../:id/membresia` (unirse), `GET .../:id` (proyección
   propia + niebla), `.../eventos?desde=`, `.../mapa/:mapaId`, `POST .../:id/comandos`. Un administrador **no**
-  pasa este filtro: tener acceso técnico no da autoridad de jugador (doc 5).
+  pasa este filtro: tener acceso técnico no da autoridad de jugador (doc 5). Sin héroe, `GET .../:id` responde
+  `sinHeroe: true` y el único comando posible es `crearHeroe`. `GET .../:id/batallas/:battleId/asignacion`
+  (`rutas/batallas.ts`) entrega a cada jugador su token para entrar en una batalla, y solo el suyo.
+- **`/v1/batallas/*`** (`rutas/batallas.ts`) — la superficie del servidor de batalla de Conquest:
+  `GET /batallas/pendientes`, `.../:battleId/ticket` y `.../incorporaciones`; `POST .../asignacion`, `.../inicio` y
+  `.../tokens`. Ni admin ni jugador: entra con `Authorization: batalla-servidor <token>` de un servidor declarado
+  en `SERVIDORES_BATALLA`, y cada mensaje se valida contra `contratos.schema.json`. Sin esa variable no entra nadie.
 - **`/v1/.../tiempo-real`** (`rutas/tiempoReal.ts`, Fase C5) — WebSocket con canales suscribibles, autorizados
   por `session/canales.ts`; difunde eventos de dominio en bruto, nunca ejecuta comandos por este canal.
 - **`GET /v1/balance`** (C7) y **`GET /v1/openapi.json`** — reglas públicas y el contrato publicado, sin
@@ -248,7 +272,7 @@ Piezas de soporte:
   del mundo y **el estado del RNG**; comprobación de versión como red de seguridad contra dos procesos
   escribiendo el mismo `gameId`. Desde el formato **v13** NO guarda el terreno (se regenera de la seed al
   cargar) ni el historial de eventos (vive en `eventosDePartida.ts`) — ver "Persistencia" más abajo.
-  `FORMATO_SNAPSHOT_VERSION` (hoy **13**) rechaza cualquier otro formato; ya no hay cadena de migraciones.
+  `FORMATO_SNAPSHOT_VERSION` (hoy **18**) rechaza cualquier otro formato; ya no hay cadena de migraciones.
   También rechaza un `worldgenVersion` o un `layoutVersion` distintos de los de la build (ver "Persistencia").
 - `server/eventosDePartida.ts` — el historial de `EventoDominio` de una partida en un JSONL append-only
   hermano del snapshot (`<gameId>.eventos.jsonl`), mismo patrón que `auditoria.ts`. `anexarEventos` añade una
@@ -263,7 +287,9 @@ Piezas de soporte:
   comandos por `actor:idempotencyKey` (reconexión sin duplicar acciones, Fase C5), el anexado del historial de
   eventos al JSONL tras cada guardado (`eventosDePartida.ts`), caché con TTL de un minuto real de
   `preciosReferencia()` (regla de entrada privilegiada, C10), caché de geometría por frame (C10), el **reloj
-  de mundo** con catch-up (Fase D5) e instrumentación por partida (E3).
+  de mundo** con catch-up (Fase D5) e instrumentación por partida (E3). Recibe las `OpcionesSesion` del proceso
+  (hoy, si las batallas con humanos van a Unity) y las conserva al reconstruir la sesión tras un fallo de
+  escritura.
 - `server/registroDePartidas.ts` — qué partidas están abiertas en este proceso (un `Map`; `abrir` lanza si ya
   lo está). Un proceso = una partida activa de facto: nada shardea ni coordina varios procesos sobre el mismo
   directorio.
@@ -283,7 +309,9 @@ Piezas de soporte:
   cuentas locales nick + contraseña, hash scrypt de stdlib, secreto en el propio repositorio de identidad; y
   `proveedorDesarrollo` — sin verificar nada, solo para el cliente de administración en local), repositorios
   en memoria y en disco, parseo de cabecera `Authorization`, y el directorio de administradores globales
-  (`ADMINISTRADORES=proveedor:sujetoId` por variable de entorno — vacío por defecto, sin él nadie administra).
+  (`ADMINISTRADORES=proveedor:sujetoId` por variable de entorno — vacío por defecto, sin él nadie administra), y
+  los servidores de batalla (`servidoresDeBatalla.ts`, `SERVIDORES_BATALLA=servidorId:token`, comparados en tiempo
+  constante).
   `proveedoresDeProceso` monta la lista real; `proveedoresPorDefecto` (solo `dev`) es el default de
   `crearServidor` para los tests.
 - `server/openapi.ts` — configuración de `@fastify/swagger` para el contrato publicado.
@@ -326,6 +354,36 @@ El **Paso 4** (visión compartida por alianza y vasallaje, en vivo y solo mientr
 está **hecho** (`f20d64e`). **Pendiente:** solo el Paso 6 (calibración de márgenes contra la vista de
 ejército).
 
+## Contrato con Conquest y batallas de Unity
+
+Desde el 2026-09-10 este backend coopera con `Conquest_prototype`, el cliente y servidor de batalla en Unity de
+Codex (protocolo y propuestas BA-*/CQ-* en `Docs/Coordinacion/`). De ahí salen dos piezas de arquitectura:
+
+- **`src/contratos/v1/`** — la forma del cable con Conquest: `contratos.schema.json` (draft-07, una definición por
+  mensaje), `dto.ts` (su espejo en TypeScript), `fixtures.ts` → `fixtures/*.json` y el catálogo de tropas generado
+  de `constants.ts`. `contratos.test.ts` comprueba que cada fixture cumple su definición y es idéntico al
+  publicado. Es una capa propia en `arquitectura.test.ts`: solo mira `domain` y `constants`, y la leen `session`
+  (el ticket de una batalla se congela con esta forma) y `server` (valida lo que entra).
+- **El ciclo de `Batalla`** (BA-001; doc 01 §15 y doc 02 §3 de `Docs/Coordinacion/`). Un combate con algún héroe
+  humano no se resuelve en el tick: se abre una `Batalla` con su ticket congelado, se juega en Unity y vuelve un
+  resultado.
+  - `engine/` no sabe de batallas: con `ContextoSimulacion.batallas` devuelve en `combatesPorAbrir` los combates
+    con humanos que no resuelve, y hace esperar a la puerta a quien llega a una plaza en batalla.
+  - `session/batallas.ts` es el ciclo: abrir (ticket, reservas en `Escuadron.reservaBatalla`, bloqueo), unirse
+    (incorporaciones), cancelar, vencer plazos, y lo que manda Conquest (asignación, inicio, tokens).
+    `GameSessionState.batallas` lo persiste. Lo bloqueado se hace cumplir en dos sitios: el candado del registro
+    de comandos, que mira los parámetros por su nombre, y el tick, que aparta de la simulación las columnas y
+    caravanas en batalla.
+  - `server/rutas/batallas.ts` es la superficie de Conquest y la del token del jugador (arriba).
+  - **Opt-in.** Sin `SERVIDORES_BATALLA`, `OpcionesSesion.batallasEnUnity` queda apagado y todo se resuelve con
+    números, como antes. Es configuración del proceso, no estado de partida: viaja de `RegistroDePartidas` a
+    `RunnerDePartida` y `GameSession`, y de ahí a `ContextoComando`.
+  - El `battleId` es un UUID determinista (el `gameId` resumido más el contador de ids), porque `session` no puede
+    usar aleatoriedad global (`autoridadTemporal.test.ts`).
+
+  Estado: fase 1 hecha (abrir, bloquear, unirse, cancelar, vencer y las rutas). Falta aplicar el `BattleResult`
+  (fase 2) y el canal WS `batalla/<battleId>` (fase 3). Detalle vivo en `Docs/Mecanicas a desarrollar.md` §30.
+
 ## Estado de partida y ciclo de un tick
 
 ```text
@@ -339,6 +397,8 @@ Comando de jugador o admin (HTTP)
 POST /admin/.../tick  (o el scheduler opcional de RunnerDePartida)
   -> RunnerDePartida.avanzarTick()
   -> misma cola serial: GameSession.avanzarTick() -> avanzarAutoComercio() -> avanzarFaccionesNpc()
+     (avanzarTick cierra las batallas vencidas, aparta lo que está en una activa, simula, y abre como
+      batallas los combates con humanos que el motor dejó sin resolver)
   -> UN solo persist para las tres (un fallo a mitad no deja tick aplicado sin NPC resuelto)
 ```
 
@@ -377,8 +437,10 @@ descubre qué partidas existen en disco, incluidas las que nadie ha reabierto to
   estado completo (`EstadoAdmin`/`ProyeccionJugador`) ya no traían `eventosDominio` desde el follow-up de C13
   (2026-09-05).
 - El snapshot incluye estado, tick, RNG, IDs y `config`/semilla del mundo — no el terreno, no el historial.
-- **`FORMATO_SNAPSHOT_VERSION` es 13 y no hay cadena de migraciones.** La hubo (v1→v12) mientras había
-  partidas de builds anteriores que arrastrar; se retiró el 2026-09-09 al no quedar ninguna. `cargarPartida`
+- **`FORMATO_SNAPSHOT_VERSION` es 18 y no hay cadena de migraciones.** La hubo (v1→v12) mientras había
+  partidas de builds anteriores que arrastrar; se retiró el 2026-09-09 al no quedar ninguna. De v14 a v18
+  (2026-09-14/15: modelo de Héroe, Herido, batallas de Unity) subió sin migración, por decisión del usuario: una
+  partida de un formato anterior se descarta. `cargarPartida`
   acepta solo el formato vigente y rechaza el resto con `FormatoSnapshotNoSoportadoError` — mismo criterio que
   `persistenciaIdentidad.ts` desde el principio. La próxima mecánica que cambie la forma del snapshot sube el
   número y, si en ese momento existen partidas que preservar, vuelve a añadir su función de migración puntual.
@@ -409,27 +471,34 @@ descubre qué partidas existen en disco, incluidas las que nadie ha reabierto to
 
 - HTTP versionado (`/v1`) + WebSocket, con tres superficies separadas por rol (arriba). CORS desactivado por
   defecto (`ORIGENES_PERMITIDOS`, vacío = ningún origen cruzado pasa).
-- `Usuario`, `Sesion`, `Jugador`, `Membresia` están implementados (C1), con la autenticación tras un puerto
+- `Usuario`, `Sesion` y `Membresia` están implementados (C1), con la autenticación tras un puerto
   intercambiable: sustituir el proveedor de desarrollo por uno real es un adaptador nuevo, sin tocar lo que se
-  apoya en él.
+  apoya en él. El `Jugador` del diseño lo cubren la `Membresia` y el `Heroe` del juego (2026-09-14): una
+  membresía sin héroe solo puede crearlo (`crearHeroe`).
+- Una tercera credencial, de servidor a servidor: `batalla-servidor <token>` para Conquest (`/v1/batallas/*`),
+  que nunca entra por las superficies de persona. El token con que cada jugador entra en una batalla solo lo
+  recoge él; ni el estado que ve el admin lo lleva (`vistaAdminDeEstado` los vacía).
 - Autorización de comandos por actor/facción/asentamiento/cargo, vía la matriz de `session/comandos/autorizacion.ts`
   (C2) — exhaustiva en compilación, no una lista que se pueda olvidar actualizar.
 - **Defecto corregido (hito C8, 2026-08-26):** `rolEnPartida` cortocircuitaba a `administrador_global` para
   cualquier actor con `esAdministradorGlobal`, sin comprobar si además tenía una `Membresia` real en esa
   partida — así que `alternarFaccionNpc` (la única acción que la matriz permite a un admin,
   `['jugador', 'administrador_partida']`) devolvía 403 siempre. Se invirtió el orden: la `Membresia` manda
-  sobre `esAdministradorGlobal`, no al revés. Ver doc 5 y doc 3 hito C8.
+  sobre `esAdministradorGlobal`, no al revés. Ver doc 5 y doc 3 hito C8. (`alternarFaccionNpc` se retiró el
+  2026-09-14: las Facciones NPC las crea el admin con `crearFaccionNpc`, y ninguna Facción de jugador pasa a la IA.)
 - **Resuelto (hito C9, 2026-08-26):** `ESQUEMA_EJECUTAR_COMANDO` tiene ahora un esquema por comando
   (`session/comandos/esquemas.ts`, `oneOf` discriminado por `tipo`) — un `params` malformado responde 400
   antes de tocar el manejador, en vez de 409 tras un `TypeError` sin capturar.
 - La proyección de jugador (C4) da la Facción propia completa y del resto solo metadatos públicos, y sobre
-  esa misma frontera se aplica la niebla de guerra (Pasos 1-3 y 5 hechos; ver sección propia).
+  esa misma frontera se aplica la niebla de guerra (implementada salvo el Paso 6; ver sección propia).
 
 ## Fortalezas para una futura evolución
 
 - Dirección de dependencias congelada por test (`arquitectura.test.ts`); `acceso/` sin dependencias y
   `session/` síncrona y sin E/S, lo que hace ambas capas triviales de probar con dobles.
-- 1222 tests en 112 archivos cubren motor, sesión, acceso y servidor (medido 2026-09-10).
+- 1309 tests en 118 archivos cubren motor, sesión, acceso, servidor y contrato (medido 2026-09-15).
+- El contrato con Conquest es verificable y no solo declarado: cada mensaje tiene su fixture, validado contra el
+  schema en la suite, y lo que llega por `/v1/batallas/*` se valida contra ese mismo schema.
 - El mundo generado tiene semilla y versión, y se sirve como asset inmutable cacheado (C11a) en vez de viajar
   en cada respuesta.
 - El snapshot de partida persiste el estado del RNG: una partida recargada continúa siendo determinista, no
@@ -486,6 +555,12 @@ descubre qué partidas existen en disco, incluidas las que nadie ha reabierto to
   alcance de este repo, que es solo servidor. Aquí solo queda `cliente/`, la herramienta de admin/dev, que
   todavía importa el motor por `@motor/*` (30 imports sobre 20 módulos, 11 de ellos de `engine/`) y por eso
   sigue sin cerrar el criterio de la Fase C.
+- Batallas de Unity a medias: sin `POST .../resultado` una batalla abierta solo puede cancelarse o vencer (fase 2),
+  y las cerradas no se podan de `GameSessionState.batallas`. La IA de una Facción NPC con algo en batalla se pausa
+  entera, no por plaza (`ponytail:`), y una batalla se busca recorriendo las partidas abiertas del proceso, sin
+  índice `battleId → gameId`.
+- El modelo de Héroe, el contrato con Conquest y las batallas viven en la rama `heroe-dominio`: `main` sigue en el
+  modelo anterior hasta que se mergee.
 
 ## Decisión de evolución adoptada
 

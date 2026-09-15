@@ -16,6 +16,16 @@ comandos que `GameStore` ya expone hoy. Contexto y motivación: [2_Estudio_Evolu
 > `administrador_global`, así que el comando devolvía 403 siempre para un admin. Se invirtió el orden: la
 > `Membresia` manda. Ver hito **C8** del roadmap.
 
+> **Modelo de Héroe (2026-09-14) y estado de la matriz.** La entidad `Jugador` de abajo no llegó a existir en
+> `acceso/`: la `Membresia` lleva el `jugadorId`, y todo lo que el juego atribuía a un jugador —residencia,
+> cargos, ciudadanía, escuadrones, mando— es ahora de su `Heroe` (`domain/types.ts`), uno por jugador y partida
+> (`Docs/Coordinacion/01` §1). Donde este documento dice `jugadorId` como dueño en el juego, hoy es `heroeId`. La
+> matriz viva es `session/comandos/autorizacion.ts` (76 comandos, exhaustiva en compilación); la tabla de abajo
+> es la de diseño, sobre `GameStore`. Cambios que la tabla no recoge: `alternarFaccionNpc` se retiró (las
+> Facciones NPC las crea el admin con `crearFaccionNpc`); los combates se dan desde la columna (`atacar`,
+> `perseguir`), no desde una plaza; `cancelarBatalla` lo puede el héroe que la inició o el admin; y los
+> servidores de batalla de Conquest tienen su propia credencial, fuera de esta matriz (`SERVIDORES_BATALLA`).
+
 ## Punto de partida: qué existe hoy
 
 Hoy no hay ninguna de estas entidades. Lo que existe es:
@@ -151,7 +161,7 @@ cumplirse. "Facción propia" significa `Jugador.faccionId` del actor debe coinci
 | `crearFaccion` | jugador | **RESUELTO 2026-08-27** (antes "abierto"): no ser ya ciudadano de ninguna Facción, y no haber abandonado una hace menos de `CIUDADANIA.cooldownCreacionFaccionDias` (7 días) — ambas son rechazo de DOMINIO dentro del propio comando (`faccion.ya_pertenece`/`faccion.cooldown_creacion`), no de esta matriz: cualquier `jugador` puede intentarlo, igual que nombre vacío/duplicado. Otorga ciudadanía inmediata a quien la crea |
 | `unirseAFaccion` | jugador | no ser ya ciudadano de OTRA Facción (`faccion.ya_pertenece`); ya ciudadano de la misma es idempotente. Sin cooldown — solo `crearFaccion` lo tiene |
 | `dejarFaccion` | jugador | ser ciudadano de alguna (`faccion.no_pertenece` si no); sin parámetros, solo puede dejar la PROPIA. Si era Rey, el trono pasa al siguiente ciudadano (queda vacío solo si era el último — Doc 2.2); si era Embajador, libera la embajada. NO libera residencia ni cargos locales (limitación documentada en Doc 2.5) |
-| `alternarFaccionNpc` | jugador (rey) o administrador_partida | Facción propia si es jugador; sin restricción si es admin |
+| ~~`alternarFaccionNpc`~~ (retirado 2026-09-14) | — | Sustituido por `crearFaccionNpc`, solo del admin |
 | `asignarRey` | jugador | ciudadano de la Facción y (trono vacío **o** ser el Rey vigente). Nota: `crearFaccion` ya deja Rey, así que "trono vacío" solo se da tras una conquista/fusión |
 | `asignarEmbajador` | jugador | ciudadano de la Facción y ser su Rey |
 | `asignarCargoLocal` (Gobernador) | jugador | **ser el REY de la Facción dueña del asentamiento** (2026-09-10 — antes: cualquier residente). Acto de nivel Facción: no exige residir ni estar presente |
@@ -163,7 +173,7 @@ cumplirse. "Facción propia" significa `Jugador.faccionId` del actor debe coinci
 | `proponerRelacion` | jugador | Facción propia de `faccionAId` (quien propone), cargo de rey/embajador — **fila añadida 2026-08-25**: no estaba en la versión original de esta tabla, aunque el comando ya existía; implementada en `server/autorizacion/matriz.ts` por analogía con `romperRelacion` |
 | `proponerTrueque` | jugador | residente de `asentamientoAId` (quien propone) — **fila añadida 2026-08-25**, mismo motivo que `proponerRelacion` |
 | `colocarOrdenMercado`, `crearCaravana`, `reclutarTropa` | jugador | residente del asentamiento objetivo |
-| `iniciarAsedio`, `combateCampoAbierto`, `interceptarCaravana`, `atacarCampamentoBandidos` | jugador | residente del asentamiento atacante, escuadrones propios del jugador o de otros residentes autorizados |
+| `iniciarAsedio`, `combateCampoAbierto`, `interceptarCaravana`, `atacarCampamentoBandidos` | jugador | residente del asentamiento atacante, escuadrones propios del jugador o de otros residentes autorizados. Hoy solo queda `iniciarAsedio`; el resto es `atacar`/`perseguir` desde la columna (nota de arriba) |
 | `avanzarTick` | administrador_partida (etapa provisional) o scheduler del servidor | — (Doc 2: "el servidor sigue siendo quien avance y resuelva los ticks"; en producción no es un comando de cliente) |
 | `regenerarMundo`, `importarSimulacion`, `exportarSimulacion`, `exportarMapaUnity` | administrador_partida | — |
 | `getBalance`, `actualizarBalance`, `restaurarBalance` | administrador_partida | — (Doc 2, punto 8: balance debe pasar a versionado por partida/temporada, auditado) |

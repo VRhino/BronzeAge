@@ -63,7 +63,7 @@ migración.
 >   asentamiento ajeno, así que no hay `info` que proyectar
 > - **→ Administración (3)**: **las tres resueltas**. `getBalance` → `GET /v1/balance` (C7).
 >   `exportarSimulacion` → `GET /admin/partidas/:gameId/exportar` (C12). `exportarMapaUnity` →
->   `GET /admin/partidas/:gameId/exportar-unity` (C12)
+>   `GET /admin/partidas/:gameId/exportar-unity` (C12), retirada después junto con `world/exportUnity.ts`
 > - **→ Cliente (4)**: sin cambios, correcto que sigan ahí — `subscribe`/`getSnapshot`/`getTickRange` son
 >   estado de sesión de navegador, `esFaccionNpc` es lectura trivial del estado que el cliente ya recibe
 

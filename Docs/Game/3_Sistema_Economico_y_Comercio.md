@@ -178,7 +178,7 @@ Distinta de la escolta por ejército (Doc 5.13.3), que exige a un héroe marchan
 
 - Un héroe **residente del asentamiento de origen** cede escuadrones de su campamento a la caravana **al
   lanzarla** (`prepararCaravana` con `escoltaEscuadronIds`). No necesita estar presente ni acompañar el viaje;
-  lo que viaja son sus escuadrones (`Caravana.escolta`).
+  lo que viaja son sus escuadrones (`Caravana.escoltaIds`).
 - **Siguen con la caravana hasta que termina el viaje o es destruida** — cesión **por viaje**, no enganche
   permanente. Al terminar vuelven al campamento de su héroe. Si la caravana es destruida o capturada, por el
   motivo que sea, quedan a 0 unidades y vuelven igualmente al campamento de su héroe (Doc 5.15.4).

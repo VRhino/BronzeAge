@@ -24,6 +24,12 @@ y [doc 4](4_Plan_Evolucion_Tareas.md)). El criterio de "qué es regla y qué es 
 >   primera mecánica de Fase 1+, no antes.
 > - **El log de comandos** (§5): queda para Fase E (auditoría); `PartidaExportada.estadoRng` se mantiene sin
 >   más inversión hasta que un incidente real lo pida.
+>
+> **Al día 2026-09-15.** Snapshot en **v18**, sin cadena de migraciones (se retiró el 2026-09-09; las subidas
+> posteriores no migran). `ContextoComando` lleva además `batallasEnUnity`, y `ContextoSimulacion` las
+> `batallas`. Las batallas de Unity usan dos relojes a propósito: sus plazos (`Batalla.expiraEn`) son tiempo de
+> mundo, y los tokens de entrada caducan en tiempo real UTC (`Docs/Coordinacion/01` §0), porque una credencial no
+> debe seguir valiendo durante una caída del proceso.
 
 ---
 
@@ -133,10 +139,10 @@ abierta sin rediseñar nada.
 
 > **El tiempo y la aleatoriedad ENTRAN como parámetro. El núcleo puro nunca los lee.**
 
-- El motor recibe `ContextoSimulacion { tick, momento, rng }` — nunca llama a `Date.now()` ni a
+- El motor recibe `ContextoSimulacion { instante, momento, rng, batallas? }` — nunca llama a `Date.now()` ni a
   `Math.random()`.
-- Cada comando recibe `ContextoComando { momento, actor, rng, ids }` — el `momento` lo pasa `session/`,
-  derivado de `instante`, no del reloj de pared.
+- Cada comando recibe `ContextoComando { instante, momento, actor, rng, ids, batallasEnUnity? }` — el `momento`
+  lo pasa `session/`, derivado de `instante`, no del reloj de pared.
 - `server/` es la única capa que lee el reloj de pared, y lo hace para cosas que **no son estado de partida**.
 
 Esto lo congela un test permanente: **[`src/__tests__/autoridadTemporal.test.ts`](../../src/__tests__/autoridadTemporal.test.ts)**.
@@ -153,6 +159,10 @@ hueco, `ctx.momento` se pobló con `new Date()` desde `server/` y viajó al esta
 que ningún test lo viera — el de determinismo del motor usa un `momento` derivado del tick, no el del servidor
 real. Misma clase de fallo que el hito C8 (una regla codificada en la capa equivocada, invisible al contrato
 que solo miraba imports).
+
+El guard ya ha cambiado un diseño (2026-09-15): el id de una batalla tiene que ser único entre partidas, y en
+`session` no puede salir de `crypto.randomUUID()`. Se deriva del `gameId` y del contador de ids de la partida
+(`idDeBatalla`, `session/batallas.ts`).
 
 ---
 

@@ -55,7 +55,8 @@ consulta servida, tendrá que respetar la visibilidad del jugador.
 
 ## T1 · Regla-dato — `src/constants.ts`
 
-39 tablas, 1243 líneas. **Se sirven completas y sin autenticar en `GET /v1/balance`** desde el 2026-08-26
+63 tablas, 1955 líneas (medido 2026-09-15; eran 39 al escribir este documento). **Se sirven completas y sin
+autenticar en `GET /v1/balance`** desde el 2026-08-26
 (hito C7, decisión del usuario: publicarlas todas, sin lista de exclusión). Sigue sin resolverse la parte
 "por partida/temporada" del hito — hoy es un único valor de proceso, sin overrides — pero eso no bloquea a un
 cliente sin motor: ya puede dejar de importar los 8 módulos de `constants` que usa hoy
@@ -171,12 +172,12 @@ Todo lo que empieza por `avanzar*`, más `engine/simulation.ts` como orquestador
 `avanzarAutoComercioSimulado` · `Mapa.avanzarRegeneracion`
 
 Cuatro de ellos consumen RNG (`engine/simulation`, `engine/combate`, `engine/population`, `engine/bandidos`) —
-lo que hace su reproducción en el cliente imposible sin compartir también el estado del RNG, que hoy ni
-siquiera es serializable (A3, diferido a B3).
+lo que hace su reproducción en el cliente imposible sin compartir también el estado del RNG, que es estado
+privado de la partida: se persiste desde B3 (`PartidaExportada.estadoRng`) y nunca viaja.
 
 ### T3b · Los comandos
 
-Los 30 de `session/comandos/registro.ts`. El cliente manda la **intención** (`{tipo, params}`) y recibe el
+Los 76 de `session/comandos/registro.ts` (eran 30 al escribir esto). El cliente manda la **intención** (`{tipo, params}`) y recibe el
 resultado; nunca los ejecuta. Sus implementaciones de motor:
 
 `fundarAsentamiento` · `crearFaccion` · `otorgarCiudadania` · `comprarCasa` · `asignarRey` ·
@@ -187,6 +188,10 @@ resultado; nunca los ejecuta. Sus implementaciones de motor:
 `desarmarCaravanaFundacion` · `reclutarTropa` · `resolverCombate` · `iniciarAsedio` · `combateCampoAbierto` ·
 `interceptarCaravana` · `atacarCampamentoBandidos` · `descontarRecursos` / `agregarRecurso` ·
 `Mapa.extraer` · `ajustarReputacion` · `asegurarCaminoComercial`
+
+> Lista de agosto. Desde entonces el combate es `atacarColumna`/`interceptar`/`atacarCampamento`/`perseguir`
+> (`engine/ejercitos.ts`), `combateCampoAbierto`/`interceptarCaravana`/`atacarCampamentoBandidos` ya no son
+> comandos, y han entrado los del héroe (`engine/heroe.ts`) y los de las batallas (`session/batallas.ts`).
 
 ### T3c · `worldgen/` — el caso especial que resuelve C11
 
@@ -211,6 +216,16 @@ rasterizara nada: `cliente-jugador/` —hoy el repositorio `BronzeAgeClient`, si
 propia copia de `evaluarElevacion`/`evaluarFertilidad`/`evaluarBioma` y recalcula el terreno él mismo desde
 los parámetros públicos de C11a — verificado en vivo que reproduce la misma geografía que el motor real, sin
 soporte de `region` todavía (limitación documentada, ver `src/terreno/README.md` en `BronzeAgeClient`).
+
+### T3d · Las batallas con héroes humanos las simula Unity
+
+Un combate en el que interviene algún héroe humano no lo resuelve este motor: se juega en el servidor de batalla
+de Conquest (desde 2026-09-15, con `SERVIDORES_BATALLA` declarados). BronzeAge congela la ENTRADA —el `BattleTicket`,
+`session/batallas.ts`— y aplicará el RESULTADO (`BattleResult`, fase 2). Es una tercera autoridad, autenticada como
+servidor y no como cliente: lo que manda se valida contra el contrato (`src/contratos/v1/`) antes de tocar el
+estado. El ticket es entrada privilegiada —escuadras, atributos y equipo de todos los participantes—, así que viaja
+solo al servidor de batalla; a los jugadores les llega la vista pública de la batalla (`ProyeccionJugador.batallas`)
+y su propio token.
 
 ---
 

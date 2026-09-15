@@ -3,6 +3,11 @@
 > **Verificado contra el commit `652a0aa` (2026-09-05)**, en la misma pasada que
 > [3_Plan_Evolucion_Roadmap.md](3_Plan_Evolucion_Roadmap.md). Lo único que cambió aquí fue la Fase E, que
 > era una lista plana de seis viñetas sin nadie que dijera cuál iba primero.
+>
+> **Histórico desde el 2026-09-10.** Las tareas de las fases A–E no se han movido desde entonces. El trabajo
+> posterior (modelo de Héroe, contrato con Conquest, batallas de Unity) se sigue en `Docs/Coordinacion/` y en
+> `Docs/Mecanicas a desarrollar.md`, y el estado de la arquitectura en [1_Arquitectura_Actual.md](1_Arquitectura_Actual.md).
+> Donde este archivo dice `jugadorId` como actor o dueño, hoy es `heroeId`: el héroe de la membresía.
 
 Este es el archivo de trabajo día a día. Cada tarea se marca `[x]` al completarse;
 si se aborda parcialmente, anotar entre paréntesis el estado y seguir marcada
@@ -1417,7 +1422,7 @@ se modera lo que no se ha registrado.
 Marcar cuando la mitigación correspondiente esté implementada y verificada, no
 solo diseñada.
 
-- [x] IDs resueltos exclusivamente en servidor, nunca confiados desde el cliente — el actor de cada comando es `Membresia.jugadorId`, resuelto de la sesión; los ids de entidad los genera `ContextoComando.ids` en el servidor (C2)
+- [x] IDs resueltos exclusivamente en servidor, nunca confiados desde el cliente — el actor de cada comando es el héroe de la `Membresia` (antes del modelo de Héroe, `Membresia.jugadorId`), resuelto de la sesión; los ids de entidad los genera `ContextoComando.ids` en el servidor (C2)
 - [x] Cola serial o control de versión por partida para comandos concurrentes — `RunnerDePartida` (cola serial por `gameId`, encadenando promesas) + `PartidaExportada.state.version` de concurrencia en `persistenciaPartida.ts` (Fase B)
 - [~] RNG determinista con estado persistido — `PartidaExportada.estadoRng` existe (2026‑08‑25), pero **la reproducibilidad a nivel de sesión estaba rota**: `ctx.momento` era reloj de pared y se persistía en el estado (doc 10 §7). El guard de autoridad temporal (2026‑08‑29) lo congela y **D1 lo reparó de raíz** (2026‑08‑29): `ctx.momento` se deriva del tick, no del reloj de pared. El motor puro (`avanzarSimulacion`) sí es reproducible con seed y **eso es lo que se conserva** (lo consume el laboratorio batch) — `estadoRng` en snapshot queda sin consumidor real hasta que exista un replay de incidentes (doc 10 §5)
 - [x] DTOs/proyecciones por audiencia (nunca enviar `GameState` completo a un cliente no-admin) — `proyectarParaJugador` (C4): un jugador nunca recibe `GameSessionState` completo; solo su Facción + metadatos públicos. La niebla de guerra fina ("último conocido" de rivales) es una mecánica de juego, no una mitigación de riesgo — `Mecanicas a desarrollar.md` §12

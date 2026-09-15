@@ -1,7 +1,12 @@
 # Diseño de `GameSession` (Fase B, tarea 1)
 
 Diseño acordado antes de escribir código, según la tarea "Definir la forma de `GameSession`" de
-[4_Plan_Evolucion_Tareas.md](4_Plan_Evolucion_Tareas.md). Nada de esto está implementado todavía.
+[4_Plan_Evolucion_Tareas.md](4_Plan_Evolucion_Tareas.md). Se implementó entre el 2026-08-24 y el 2026-08-25
+(`src/session/`) y se conserva como registro del diseño. Lo que ha cambiado desde entonces y sigue vivo:
+`ContextoComando` es hoy `{ instante, momento, actor, rng, ids, batallasEnUnity? }` (el `momento` lo deriva
+`GameSession` del tick, doc 10, y `batallasEnUnity` sale de las `OpcionesSesion` del proceso); el estado lleva
+`heroes` y `batallas`; el actor de un comando es el héroe de la membresía; y el registro (76 comandos) pone a todos
+un candado de batalla (`comandos/batalla.ts`).
 
 `GameSession` es la pieza que sustituye a `GameStore` como dueña de una partida. El doc 2 la describe en una
 línea ("Crear una capa de aplicación de servidor... que reciba una partida concreta y ejecute comandos"); este
@@ -246,7 +251,8 @@ app:     [...permitidasActuales, 'session'],                        // app pasa 
 ```
 
 Con eso, un import accidental de `session → app` (o peor, `session → ui`) falla en la suite, igual que ya
-falla `engine → app`.
+falla `engine → app`. (Hoy `session` ve además `acceso` y `contratos`; la lista vigente está en
+`arquitectura.test.ts`.)
 
 ## 6. Plan de migración sin romper la interfaz
 
@@ -318,6 +324,10 @@ declara IA lo es hasta que se destruye. Es configuración efectivamente inmutabl
 partida — lo que simplifica el diseño: no hace falta prever recálculos ni invalidación de cachés al
 cambiarla, y el comando administrativo que la modifica puede ser de uso excepcional (corrección/moderación),
 no una palanca de juego.
+
+> **Actualizado 2026-09-14:** ese comando (`alternarFaccionNpc`) se retiró. Las Facciones NPC las crea el admin
+> ya asentadas (`crearFaccionNpc`) y siguen siéndolo hasta que se destruyen; ninguna Facción de jugador pasa a
+> la IA. `faccionesNpcIds` sigue en `GameSessionState` por el mismo criterio de arriba.
 
 ### 7.3 Mutación de `Mapa`: resuelta (2026-08-25)
 

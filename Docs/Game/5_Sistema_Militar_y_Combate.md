@@ -24,9 +24,9 @@ Un héroe vale **menos de un tercio de la peor leva**. Frente a una columna no d
 ## 5.2 Modalidades de batalla instanciadas (heredado de Iberia)
 El combate ocurre en INSTANCIAS separadas del mapa global (aunque se desencadenen en él), límites simétricos fijos, 2 bandos (Atacante/Defensor), sin empates.
 
-1. **Asedio de asentamientos**: atacante captura banderas/áreas vitales antes de que expire el tiempo; defensor gana resistiendo. Solo defienden miembros de la Facción soberana del nodo o Facciones aliadas/vasallas confirmadas. Mortalidad severa (permadeath). Los héroes en cola rellenan la instancia a medida que caen otros; el tope de la batalla cuenta héroes (5.15.1).
+1. **Asedio de asentamientos**: atacante captura banderas/áreas vitales antes de que expire el tiempo; defensor gana resistiendo. Defienden los héroes que están dentro y la guarnición (5.12.4), más los héroes de la Facción de la plaza que se unan mientras quede sitio (5.15.1). Mortalidad severa (permadeath). Los héroes en cola rellenan la instancia a medida que caen otros; el tope de la batalla cuenta héroes (5.15.1).
 2. **Mundo abierto**: choque de patrullas/ejércitos. Bandera/campamento transitorio; quien la pierde se retira, entrega la mitad de su carro y sus héroes quedan heridos (5.16.4). **Se declara, pero solo estando delante**: la proximidad ofrece atacar y el jugador decide; nadie es arrastrado a un combate por pasar cerca (5.12.3). Alcanzar a quien huye es lo que hace la persecución.
-3. **Defensa/intercepción de caravanas**: combate asimétrico móvil (ver Doc 3, sección 3.10). Igual que el anterior, se dispara por proximidad de un ejército a una caravana (5.12).
+3. **Defensa/intercepción de caravanas**: combate asimétrico móvil (ver Doc 3, sección 3.10). Igual que el anterior, la proximidad de una columna a una caravana ofrece interceptarla, y el jugador decide (5.12.3).
 4. **Entrenamiento/matchmaking** (pospuesto a una fase posterior a Fase 0/1): 15v15 puro, sin permadeath, para probar tácticas. Requiere lo mismo que el Attack Timer (5.6).
 ### 5.2.5 Resolución numérica y varianza de combate
 
@@ -152,7 +152,7 @@ Consolidar una plaza —reclutar escuadrones nuevos ahí, asignar guarnición, e
 El Gobernador puede decretar exilio de jugadores enemigos de su territorio; coste de reubicación (pérdida parcial de materiales, desplazamiento físico para recuperarlos).
 
 ## 5.10 Dónde se resuelve el combate
-Las batallas con algún héroe humano se juegan como partidas reales en Unity (5.15). Las que no tienen ninguno —NPC contra NPC, bandidos contra una caravana— se resuelven con números (5.2.5, 5.15.6). En los dos casos la batalla nace en el mapa de BronzeAge: los ejércitos se mueven por el mundo (5.12), y el combate empieza donde se encuentran. La abre quien ataca (`atacar`), el ejército que llega a una plaza enemiga o la persecución que alcanza a su presa; qué queda bloqueado mientras se juega y quién puede unirse, en 5.15.1.
+Las batallas con algún héroe humano se juegan como partidas reales en Unity (5.15). Las que no tienen ninguno —NPC contra NPC, bandidos contra una caravana— se resuelven con números (5.2.5, 5.15.6). En los dos casos la batalla nace en el mapa de BronzeAge: los ejércitos se mueven por el mundo (5.12), y el combate empieza donde se encuentran. La abre quien decide atacar (5.12.3): a una columna, a una caravana, a un campamento de bandidos o a una plaza. Qué queda bloqueado mientras se juega y quién puede unirse, en 5.15.1.
 
 ## 5.11 Liderazgo
 
@@ -252,6 +252,7 @@ Una columna se acerca a algo y el juego le ofrece lo que puede hacer con ello; e
 | Caravana ajena o neutral | **Inspeccionar** · **Interceptar** |
 | Asentamiento, en su puerta | **Entrar** · **Asediar** · **Consultar** · **Comerciar** (Doc 3.3) |
 | Campamento de bandidos | **Atacar** |
+| Batalla en curso de tu Facción | **Unirse**, mientras quede sitio en su bando (5.15.1) |
 
 *Los bandidos son la excepción, y por el motivo obvio: un campamento no tiene a nadie que pulse. Los NPC siguen atacando caravanas por su cuenta — su intención es su política.*
 
@@ -495,7 +496,7 @@ En la práctica son tres actos del jugador:
 
 La regla de velocidad lo equilibra sola: escoltar baja el ejército a la velocidad de la caravana, así que **no se puede escoltar y depredar a la vez**.
 
-**Escolta SIN héroe (Doc 3.13.4).** Una tercera vía: un héroe residente del origen **cede escuadrones** a la caravana por viaje (`Caravana.escolta`), sin marchar con ella. Salen de su campamento, cuentan Liderazgo, no comen ración y combaten manejados por la IA del juego. Siguen con la caravana hasta que termina el viaje o es destruida; si se destruye, quedan a 0 unidades y vuelven al campamento de su héroe (5.15.4). Es distinto de esta escolta por ejército (que exige un héroe en columna) y de la defensa base fija (Doc 3.10): tres capas de defensa.
+**Escolta SIN héroe (Doc 3.13.4).** Una tercera vía: un héroe residente del origen **cede escuadrones** a la caravana por viaje (`Caravana.escoltaIds`), sin marchar con ella. Salen de su campamento, cuentan Liderazgo, no comen ración y combaten manejados por la IA del juego. Siguen con la caravana hasta que termina el viaje o es destruida; si se destruye, quedan a 0 unidades y vuelven al campamento de su héroe (5.15.4). Es distinto de esta escolta por ejército (que exige un héroe en columna) y de la defensa base fija (Doc 3.10): tres capas de defensa.
 
 ### 5.13.4 Una columna se disuelve cuando no queda NADIE dentro
 

@@ -1,5 +1,10 @@
 # Estudio de evolución: backend autoritativo, múltiples frontends y conversión temporal
 
+> **Documento de estudio (agosto de 2026).** Su plan se ejecutó en las fases A–E ([doc 3](3_Plan_Evolucion_Roadmap.md))
+> y el estado vive en [1_Arquitectura_Actual.md](1_Arquitectura_Actual.md). Dos cosas de aquí ya no valen: la
+> «independencia del tamaño del paso» (retirada, [doc 10](10_Modelo_Temporal.md) §1) y la entidad `Jugador` del
+> punto 1, sustituida por la `Membresia` más el `Heroe` del juego (2026-09-14).
+
 ## Objetivo
 
 Transformar el motor de simulación en un servicio de servidor autoritativo que mantenga partidas persistentes y permita conectar varios frontends simultáneamente:

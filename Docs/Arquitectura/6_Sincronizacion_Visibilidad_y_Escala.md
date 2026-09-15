@@ -363,9 +363,9 @@ Tareas derivadas de este documento, reflejadas en
 - [x] Protocolo de suscripciones sobre conexión única — hecho en **C5** (no C3, como decía esta línea):
   `server/difusion/hub.ts` multiplexa canales sobre una única conexión y serializa el mensaje una vez por
   evento, no una por conexión.
-- [~] Ver §6: el mapa deja de ser estado y pasa a ser asset cacheable (**C11a, hecho** — 125,4 KB que ya no
-  viajan en cada acción), y `eventosDominio` deja de viajar entero (**C13, a medias**: el cursor incremental
-  `?desde=<version>` existe, pero `EstadoAdmin`/`ProyeccionJugador` siguen trayendo la lista completa).
+- [x] Ver §6: el mapa deja de ser estado y pasa a ser asset cacheable (**C11a, hecho** — 125,4 KB que ya no
+  viajan en cada acción), y `eventosDominio` deja de viajar entero (**C13, hecho**: cursor incremental
+  `?desde=<version>`, y desde el 2026-09-05 las lecturas de estado ya no traen `eventosDominio`).
 
 ## 6. Modelo de sincronización: reglas al cliente, simulación en el servidor
 
