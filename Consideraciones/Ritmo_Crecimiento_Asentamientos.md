@@ -606,3 +606,28 @@ arreglo del bosque y el NPC nuevo. Tardó 3 minutos.
   nivel 2), así que no hay cupo ni otras tropas. Es lo esperable en la semana 1.
 - **8 plazas sin ninguna defensa** al final: son las conquistadas, que se quedan sin residentes (pendiente de §4.9 del
   documento del NPC). Con menos conquistas pesa menos, pero sigue ahí.
+
+### 11.3 Era I completa (2026-09-26)
+
+Cinco semanas (`BATCH_SEED=7 BATCH_FACCIONES=12 BATCH_TICKS=50400`, checkpoint cada semana) con todo lo anterior
+más las cuadrillas (§11.1) y el arreglo de la capacidad del Almacén (la conquista la inflaba sin límite).
+
+| Semana | Vivos | Colapsos acum. | Nivel 1 / 2 / 3 | Conquistas acum. | Guarnición (escuadras) | Plazas sin defensa |
+|---|---|---|---|---|---|---|
+| 1 | 25 | 0 | 18 / 7 / 0 | 40 | 0 | 11 |
+| 2 | 29 | 2 | 20 / 9 / 0 | 276 | 61 | 11 |
+| 3 | 33 | 6 | 22 / 11 / 0 | 394 | 86 | 12 |
+| 4 | 33 | 9 | 22 / 11 / 0 | 587 | 96 | 12 |
+| 5 | 34 | 10 | 22 / 12 / 0 | 732 | 111 | 12 |
+
+- **Nivel 2**: el 52 % de los nacidos llega; mediana al pedirlo 2,8 días y al llegar **5,8 días** (mínimo 5,5). Por
+  debajo de la semana que pidió el usuario.
+- **Nivel 3: nadie lo pide.** De las 13 plazas de nivel 2 al final: las 3 que tienen los cinco edificios del gate no
+  tienen bronce (ni estaño); las 2 que tienen bronce (2 800, almacén lleno, con mina de estaño propia) no tienen
+  Curtiduría. Hacen falta cobre, estaño y ganado en la misma plaza, y el NPC no compra estaño ni bronce en el mercado.
+  Además, 8 son insolventes en oro al nivel 3 y 2 en piedra. D49 pide "pocos en 3" en la Era I: hoy son cero.
+- **Almacén**: madera y piedra medias estables en ~1 900 (antes subían sin límite hasta ~17 900).
+- **Guerra**: 732 conquistas y 2 826 campañas en 5 semanas, con 34 plazas vivas; 6 de 12 Facciones en nivel 10 desde
+  la semana 2. La guarnición se usa (111 escuadras), pero 12 plazas siguen sin defensa: las conquistadas sin
+  residentes. Ninguna muralla.
+- Tropas al final: milicia 189, honderos 110, lanceros de mimbre 110, espadachines de cobre 5.
