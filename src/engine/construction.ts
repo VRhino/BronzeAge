@@ -46,7 +46,15 @@ import {
   ratioManoObra,
   ratioManoObraArtesanos,
 } from './asentamientoQuery';
-import { agregarRecurso, agregarRecursoConSobrante, ampliarCapacidad, descontarRecursos, tieneRecursos } from './almacen';
+import {
+  agregarRecurso,
+  agregarRecursoConSobrante,
+  ampliarCapacidad,
+  aplicarCapacidadDeEdificio,
+  capacidadTrigoDeGranero,
+  descontarRecursos,
+  tieneRecursos,
+} from './almacen';
 import { avanzarObraDeRecintos } from './muralla';
 import { reservaDinamicaConstruccion } from './mantenimiento';
 import { factorProduccionTrigo, factorTiempoConstruccion, perfilTrazadoDePolitica } from './politicas';
@@ -935,13 +943,6 @@ function nivelesDe(tipo: EdificioTipo): Record<number, { trabajadoresRequeridos:
   return (EDIFICIO_CATALOGO[tipo] as { niveles?: Record<number, any> }).niveles;
 }
 
-/** Capacidad de trigo que aporta un Granero en `nivelInterno` — TOTAL, no incremental (ver
- * `EDIFICIO_CATALOGO.granero`). Un nivel inexistente da 0, que es lo que hace que el delta de una mejora
- * salga bien sin casos especiales. */
-function capacidadTrigoDeGranero(nivelInterno: number | undefined): number {
-  return EDIFICIO_CATALOGO.granero.niveles[nivelInterno ?? 1]?.capacidadTrigo ?? 0;
-}
-
 /** Resultado de evaluar SOLO los gates de la siguiente mejora (nivel de asentamiento + edificio previo, si
  * aplica) — no comprueba fondos. `null` si el edificio no puede evaluarse (inactivo, tipo sin niveles) o si ya
  * está en su nivel máximo, o si no cumple algún gate del siguiente nivel. Extraído de `avanzarMejoras` para que
@@ -1267,15 +1268,10 @@ export function avanzarConstruccion(
         payload: { edificioId: edificio.id, edificioTipo: edificio.tipo } satisfies PayloadEdificioCompletado,
       });
       edificiosCompletadosEsteTick += 1;
-      if (edificio.tipo === 'almacen') {
-        const bonus = EDIFICIO_CATALOGO.almacen.capacidadPorRecursoAdicional;
-        for (const recurso of Object.keys(almacen)) almacen = ampliarCapacidad(almacen, recurso, bonus);
-      }
-      // El Granero nace en su nivel 1 y solo toca el trigo. Las ampliaciones por mejora las aplica
-      // `avanzarMejoras`, con el delta contra el nivel anterior.
-      if (edificio.tipo === 'granero') {
-        almacen = ampliarCapacidad(almacen, 'trigo', capacidadTrigoDeGranero(1));
-      }
+      // Almacén y Granero aportan su capacidad al entrar en servicio: obra nueva (el Granero nace en su nivel 1)
+      // o reconstrucción, con el nivel que conserva (la quitó el saqueo, ver `aplicarConquista`). Las
+      // ampliaciones por mejora las aplica `avanzarMejoras`, con el delta contra el nivel anterior.
+      almacen = aplicarCapacidadDeEdificio(almacen, edificio, 1);
       // El Mercado no nace solo: al terminarse aparece con los puestos de su nivel 1 (a petición del
       // usuario, es una ZONA). Los de niveles 2 y 3 los añade `avanzarMejoras` al subir de nivel interno.
       if (edificio.tipo === 'mercado') {

@@ -5,7 +5,7 @@ import type { EventoCrudo } from '../domain/eventos';
 import { minutos, sumar, type Instante } from '../domain/tiempo';
 import type { RandomFn } from '../worldgen';
 import { CAMPAMENTOS_BANDIDOS, MILITAR, NIVEL_FACCION, OCUPACION, REPUTACION, TROPAS_RECLUTABLES } from '../constants';
-import { agregarRecurso } from './almacen';
+import { agregarRecurso, aplicarCapacidadDeEdificio } from './almacen';
 import { aplicarAjustesReputacion } from './reputacion';
 import { aplicarAjustesExperiencia, type AjusteExperiencia } from './faccion';
 import { multiplicadorDefensivoDeRecintos } from './muralla';
@@ -146,7 +146,8 @@ function jugadoresParticipantes(escuadrones: Escuadron[]): number {
  *   de los edificios `activo` —por orden de id, exentos Centro Urbano + la 1ª Granja y la 1ª Leñera activas—
  *   pasan a `en_cola` marcados `danado` (§3: sin comida ni madera el saqueo es una sentencia); cada recinto
  *   completo pierde `floor(OCUPACION.fraccionDanoMuralla × celdas.length)` de `avance` (la muralla no cae,
- *   deja de dar el multiplicador pleno hasta repararse por la vía normal de obra).
+ *   deja de dar el multiplicador pleno hasta repararse por la vía normal de obra). Un Almacén o Granero dañado
+ *   deja de aportar capacidad hasta reconstruirse, y lo guardado que ya no cabe se pierde.
  * - **`medidorMantenimiento: 100`** y **`ocupacionHasta`** — abre la ventana de ocupación (§2.4): inmune a un
  *   nuevo asedio, recaudación y crecimiento reducidos, mantenimiento congelado, tiempo fijo.
  * - **La obra de ascenso en curso se pierde**, sin devolución (Doc 4.5, decisión del usuario 2026-09-26): la
@@ -180,6 +181,9 @@ export function aplicarConquista(defensor: Asentamiento, faccionConquistadoraId:
   const edificios = defensor.edificios.map((e) =>
     aDanar.has(e.id) ? { ...e, estado: 'en_cola' as const, danado: true, completaEn: undefined, mejora: undefined } : e
   );
+  // Un Almacén o Granero dañado deja de guardar: su capacidad vuelve al reconstruirse.
+  let almacen = defensor.almacen;
+  for (const e of defensor.edificios) if (aDanar.has(e.id)) almacen = aplicarCapacidadDeEdificio(almacen, e, -1);
 
   // Saqueo de murallas: cada recinto completo pierde integridad; la reparación es la obra normal de recintos.
   const recintos = defensor.recintos?.map((r) => {
@@ -197,6 +201,7 @@ export function aplicarConquista(defensor: Asentamiento, faccionConquistadoraId:
     cargos,
     poblacion,
     edificios,
+    almacen,
     recintos,
     medidorMantenimiento: 100,
     ocupacionHasta: sumar(instante, minutos(OCUPACION.duracionMinutos)),
