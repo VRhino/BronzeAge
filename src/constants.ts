@@ -279,6 +279,14 @@ interface NivelEdificioTransformacion {
  */
 const RECETA_ARMA_MADERA = { produce: 'armaMadera', produccionBase: 2, consumePorUnidad: { madera: 2 } };
 
+/**
+ * Tiempos de obra (2026-09-26, decisión del usuario — `Consideraciones/Ritmo_Crecimiento_Asentamientos.md` §11):
+ * pasaron de minutos a horas para encajar con las Eras (D44) y con qué nivel le toca a cada Era (D49). Por grupos:
+ * supervivencia 1-2 h (Leñera, Granja), base de nivel 1 4-8 h, transformación y militar 12 h, Gran Fundición 2
+ * días, Palacio 5 días, Maravilla 4 semanas. Las MEJORAS de nivel interno tardan la obra base multiplicada por
+ * `MEJORA_EDIFICIO.multiplicadorPorNivel` elevado a (nivel − 1): el doble para el 2, cuatro veces para el 3, ocho
+ * para el 4. PLACEHOLDER, a calibrar con el batch.
+ */
 export const EDIFICIO_CATALOGO = {
   // Único edificio que NO pasa por la cola de construcción (ni automática ni manual, Doc 1.3): nace
   // ya activo al fundar. costo/tiempoConstruccionMinutos quedan en 0 solo por consistencia de forma con
@@ -287,7 +295,7 @@ export const EDIFICIO_CATALOGO = {
   // Cupos SEPARADOS por clase (a petición del usuario, ver Correcciones): antes un único pool compartido
   // entre Pesants y Artesanos hacía que Pesants (crece ~2.4x más rápido) acaparara todo el cupo y dejara a
   // Artesanos varado — cada Vivienda ahora aporta 15 espacios de Pesants Y, por separado, 5 de Artesanos.
-  vivienda: { costo: { madera: 10 }, tiempoConstruccionMinutos: 4, capacidadPesants: 15, capacidadArtesanos: 5 },
+  vivienda: { costo: { madera: 10 }, tiempoConstruccionMinutos: 240, capacidadPesants: 15, capacidadArtesanos: 5 },
   /**
    * Granja: 4 niveles internos (a petición del usuario, trazado urbano dinámico). El costo en materiales
    * DUPLICA en cada salto, tomando como base su `costo` de construcción (madera 30 → 60, 120, 240).
@@ -308,7 +316,7 @@ export const EDIFICIO_CATALOGO = {
    */
   granja: {
     costo: { madera: 30 },
-    tiempoConstruccionMinutos: 6,
+    tiempoConstruccionMinutos: 120,
     produccionBaseTrigo: 60,
     trabajadoresRequeridos: 4,
     niveles: {
@@ -320,11 +328,11 @@ export const EDIFICIO_CATALOGO = {
       4: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 180, tamano: { ancho: 6, alto: 6 }, costoMejora: { madera: 240, piedra: 80 } },
     } as Record<number, NivelEdificioTransformacion>,
   },
-  cantera: { costo: { madera: 20 }, tiempoConstruccionMinutos: 5, produccionBasePiedra: 5, trabajadoresRequeridos: 4 },
-  lenera: { costo: { madera: 10 }, tiempoConstruccionMinutos: 3, produccionBaseMadera: 5, trabajadoresRequeridos: 4 },
+  cantera: { costo: { madera: 20 }, tiempoConstruccionMinutos: 240, produccionBasePiedra: 5, trabajadoresRequeridos: 4 },
+  lenera: { costo: { madera: 10 }, tiempoConstruccionMinutos: 60, produccionBaseMadera: 5, trabajadoresRequeridos: 4 },
   // Sin piedra en la construcción BASE (Doc Fase_0_6, a petición del usuario): nivel 1 completo se paga solo
   // en madera — la piedra recién se introduce en nivel 2 (ver EDIFICIO_CATALOGO.fundicion/curtiduria/armeria).
-  almacen: { costo: { madera: 50 }, tiempoConstruccionMinutos: 6, capacidadPorRecursoAdicional: 300 },
+  almacen: { costo: { madera: 50 }, tiempoConstruccionMinutos: 360, capacidadPorRecursoAdicional: 300 },
   /**
    * Granero (a petición del usuario, 2026-09-04): almacén ESPECIALIZADO en grano. A diferencia del Almacén
    * —que amplía la capacidad de todos los recursos por igual, 300 cada uno— este solo guarda trigo, y a
@@ -346,7 +354,7 @@ export const EDIFICIO_CATALOGO = {
    */
   granero: {
     costo: { madera: 50 },
-    tiempoConstruccionMinutos: 6,
+    tiempoConstruccionMinutos: 360,
     niveles: {
       1: { trabajadoresRequeridos: 0, recetas: [], capacidadTrigo: 2000 },
       2: { trabajadoresRequeridos: 0, recetas: [], capacidadTrigo: 3000, requisitoNivelAsentamiento: 2, costoMejora: { madera: 100, piedra: 30 } },
@@ -363,21 +371,21 @@ export const EDIFICIO_CATALOGO = {
   // Sin piedra en la construcción BASE (Doc Fase_0_6): las 3 minas son extractores de nivel 1, tienen que ser
   // alcanzables sin piedra — es justo lo que hace falta construir para cumplir el gate de subir a nivel 2
   // (NIVEL_ASENTAMIENTO.requisitos[2], ≥3 edificios de extracción).
-  mina: { costo: { madera: 40 }, tiempoConstruccionMinutos: 6, produccionBaseOro: 4, trabajadoresRequeridos: 6 },
+  mina: { costo: { madera: 40 }, tiempoConstruccionMinutos: 480, produccionBaseOro: 4, trabajadoresRequeridos: 6 },
   // Cobre (Doc 1.1/5.7): "relativamente abundante" — igual patrón que cantera/mina pero sobre nodos de cobre.
-  minaCobre: { costo: { madera: 30 }, tiempoConstruccionMinutos: 4, produccionBaseCobre: 5, trabajadoresRequeridos: 8 },
+  minaCobre: { costo: { madera: 30 }, tiempoConstruccionMinutos: 360, produccionBaseCobre: 5, trabajadoresRequeridos: 8 },
   // Estaño (Doc 1.1/5.7): raro y concentrado (menos nodos que cobre/oro, ver RECURSO_RAREZA.raro) — costo más
   // alto y producción base más baja que el resto de minas, coherente con ser el cuello de botella del bronce.
   // produccionBaseEstano subido de 1.5 a 3 (pruebas del usuario) — el estaño era el cuello de botella más
   // duro de la cadena de bronce, más de lo que el diseño original pretendía.
-  minaEstano: { costo: { madera: 50 }, tiempoConstruccionMinutos: 7, produccionBaseEstano: 3, trabajadoresRequeridos: 8 },
+  minaEstano: { costo: { madera: 50 }, tiempoConstruccionMinutos: 480, produccionBaseEstano: 3, trabajadoresRequeridos: 8 },
   // Corral (Doc 4.2.1, rediseño de progreso Fase 0): extractor de livestock, mismo patrón que cantera/minas —
   // liga a un nodo finito de livestock (Doc 1.4), con reemplazo automático al agotarse (ver EXTRACCION_MAXIMOS).
-  corral: { costo: { madera: 30 }, tiempoConstruccionMinutos: 6, produccionBaseLivestock: 3, trabajadoresRequeridos: 4 },
+  corral: { costo: { madera: 30 }, tiempoConstruccionMinutos: 240, produccionBaseLivestock: 3, trabajadoresRequeridos: 4 },
   // "Único edificio de tier élite, exclusivo de asentamientos/Facciones de mayor nivel" — gate por nivel de Facción.
   // Se mantiene sin cambios (Doc 4.2, rediseño de progreso): queda para iteraciones posteriores la integración
   // con la nueva Fundición.
-  granFundicion: { costo: { madera: 150, piedra: 100, oro: 50 }, tiempoConstruccionMinutos: 20, nivelFaccionMinimo: 3 },
+  granFundicion: { costo: { madera: 150, piedra: 100, oro: 50 }, tiempoConstruccionMinutos: 2880, nivelFaccionMinimo: 3 },
 
   // --- Edificios de transformación (Doc 4.2.1, rediseño de progreso Fase 0): auto-construcción (sin gate de
   // nivel para la construcción BASE — solo las mejoras de nivel interno lo exigen), disparan Artesanos (Doc
@@ -386,7 +394,7 @@ export const EDIFICIO_CATALOGO = {
 
   fundicion: {
     costo: { madera: 80, piedra: 40 },
-    tiempoConstruccionMinutos: 6,
+    tiempoConstruccionMinutos: 720,
     // Doc Fase_0_6 (a petición del usuario): construcción BASE gateada a nivel 2 — antes era construible
     // desde nivel 1. Con esto la responsabilidad de "producir transformación" queda exclusivamente en manos
     // de los edificios de nivel 2.
@@ -411,7 +419,7 @@ export const EDIFICIO_CATALOGO = {
 
   curtiduria: {
     costo: { madera: 80, piedra: 30 },
-    tiempoConstruccionMinutos: 8,
+    tiempoConstruccionMinutos: 720,
     // Doc Fase_0_6: construcción BASE gateada a nivel 2 (ver nota en `fundicion`).
     requisitoNivelAsentamientoConstruccion: 2,
     niveles: {
@@ -446,7 +454,7 @@ export const EDIFICIO_CATALOGO = {
   // que fabrique — confirmado con el usuario que era un error de tipeo por "Arma de Cobre" (AC).
   armeria: {
     costo: { madera: 80, piedra: 30 },
-    tiempoConstruccionMinutos: 6,
+    tiempoConstruccionMinutos: 720,
     // Doc Fase_0_6: construcción BASE gateada a nivel 2 (ver nota en `fundicion`).
     requisitoNivelAsentamientoConstruccion: 2,
     niveles: {
@@ -497,7 +505,7 @@ export const EDIFICIO_CATALOGO = {
   // que antes, pero ahora llega un escalón más tarde — se desbloquea junto con Murallas en nivel 3.
   carpinteria: {
     costo: { madera: 60, piedra: 20 },
-    tiempoConstruccionMinutos: 6,
+    tiempoConstruccionMinutos: 720,
     requisitoNivelAsentamientoConstruccion: 3,
     niveles: {
       1: { trabajadoresRequeridos: 0, recetas: [] },
@@ -514,7 +522,7 @@ export const EDIFICIO_CATALOGO = {
 
   barracon: {
     costo: { madera: 30 },
-    tiempoConstruccionMinutos: 6,
+    tiempoConstruccionMinutos: 720,
     // Construcción BASE gateada a nivel 2 (trazado de anclas, ver Vista_Asentamiento_Trazado_Urbano.md §5.7.1):
     // el primer edificio militar arrastra tras de sí la Plaza de Armas, y al fundar (disco urbano de 5 celdas)
     // no existe ningún hueco que respete la separación mínima entre anclas — el núcleo militar nacía pegado al
@@ -547,7 +555,7 @@ export const EDIFICIO_CATALOGO = {
   // Galería de tiro sigue su propio camino de progresión, confirmado con el usuario que no se uniforma.
   galeriaDeTiro: {
     costo: { madera: 50 },
-    tiempoConstruccionMinutos: 6,
+    tiempoConstruccionMinutos: 720,
     // Mismo gate y mismo motivo que Barracón (ver arriba): es el otro tipo capaz de abrir el grupo militar y
     // arrastrar la Plaza de Armas consigo.
     requisitoNivelAsentamientoConstruccion: 2,
@@ -576,7 +584,7 @@ export const EDIFICIO_CATALOGO = {
   // Gate subido de nivel 3 a nivel 4 (Doc Fase_0_6): construirlo pasa a ser requisito para subir a nivel 5.
   palacio: {
     costo: { madera: 1500, piedra: 1000 },
-    tiempoConstruccionMinutos: 20,
+    tiempoConstruccionMinutos: 7200,
     requisitoNivelAsentamientoConstruccion: 4,
     capacidadNobles: 200,
   },
@@ -598,7 +606,7 @@ export const EDIFICIO_CATALOGO = {
     // piedra sin cambios — para entonces el asentamiento ya tuvo tiempo de conseguirla, por extracción propia
     // o por el propio comercio que el Mercado nivel 1 acaba de destrabar.
     costo: { madera: 100 },
-    tiempoConstruccionMinutos: 8,
+    tiempoConstruccionMinutos: 480,
     niveles: {
       1: { trabajadoresRequeridos: 0, recetas: [], cupoCaravanas: 2 },
       2: {
@@ -645,7 +653,7 @@ export const EDIFICIO_CATALOGO = {
   // es un trofeo, no un edificio productivo.
   maravilla: {
     costo: { madera: 5000, piedra: 5000, oro: 500, cobre: 300, estano: 200, livestock: 200 },
-    tiempoConstruccionMinutos: 200,
+    tiempoConstruccionMinutos: 40320,
     requisitoNivelAsentamientoConstruccion: 5,
   },
 } as const;
@@ -705,7 +713,15 @@ export const NECESIDADES = {
   // reservar slots por categoría (`slotsReservadosSupervivencia`/`slotsReservadosExtractores`, retirados):
   // el orden por score (ver `SCORE_BANDAS`) ya garantiza que supervivencia gana el reparto cuando escasea.
   maximoEnCola: 4,
+  // Desde el 2026-09-26 las MEJORAS de nivel interno también ocupan una de estas cuadrillas mientras duran
+  // (decisión del usuario): construir y mejorar compiten por las mismas manos.
   maximoEnConstruccionSimultanea: 2,
+};
+
+/** Duración de una mejora de nivel interno: la obra base del edificio × `multiplicadorPorNivel`^(nivel − 1). Una
+ * sola regla: las mejoras tardan más que la obra, y más cuanto más alto el nivel (decisión del usuario 2026-09-26). */
+export const MEJORA_EDIFICIO = {
+  multiplicadorPorNivel: 2,
 };
 
 /**
@@ -1103,9 +1119,10 @@ export const MURALLA = {
   pasoTorres: { 2: 8, 3: 5 } as Record<number, number>,
   /** Edificios extramuros necesarios para poder AMPLIAR el recinto (§10). Sin un mínimo, ampliar sería spam. */
   arrabalMinimo: 6,
-  /** Ritmo de obra: celdas levantadas por minuto (= por tick) mientras haya materiales. Es lo que hace que el
-   * anillo se vea cerrarse poco a poco en vez de aparecer de golpe. */
-  celdasPorMinuto: 1,
+  /** Ritmo de obra: minutos que tarda cada celda, por el nivel que se está pagando (1 empalizada, 2 muro de piedra,
+   * 3 adarve) — antes era una celda por minuto (2026-09-26, `Ritmo_Crecimiento_Asentamientos.md` §11). Es lo que hace
+   * que el anillo se vea cerrarse poco a poco en vez de aparecer de golpe. */
+  minutosPorCelda: { 1: 15, 2: 30, 3: 60 } as Record<number, number>,
   /** Multiplicadores de tarifa sobre la celda de muro llana. Una puerta es una casa-puerta, no un hueco. */
   factorPuerta: 4,
   factorTorre: 3,
@@ -1383,8 +1400,8 @@ export const POLITICA_CATALOGO = [
   // edificio al elegir entre huecos igual de válidos, no imponen ninguna plantilla — la forma sigue emergiendo
   // (ver `ORDEN_POR_PERFIL`, engine/trazado.ts). Son EXCLUYENTES ENTRE SÍ sin necesidad de ninguna regla nueva:
   // `maestroObras` tiene un único slot (`POLITICAS.slotsPorCargo`), así que activar una obliga a esperar a que
-  // expire la anterior. Compiten en ese mismo slot con Vía Rápida y Líneas de Producción, que es la tensión
-  // interesante: forma contra velocidad contra logística.
+  // expire la anterior. Compiten en ese mismo slot con Vía Rápida, que es la tensión interesante: forma contra
+  // velocidad.
   //
   // Como una política dura `duracionMinutosPorDefecto` (150 ticks) y nada mueve lo ya construido, cada una
   // deja un ESTRATO en la ciudad en vez de reformarla entera — la ciudad acaba registrando su historia
@@ -1398,12 +1415,6 @@ export const POLITICA_CATALOGO = [
   { id: 'arterias_comerciales', cargo: 'maestroObras', nombre: 'Arterias Comerciales', perfilTrazado: 'caminera' },
   { id: 'barrios_gremiales', cargo: 'maestroObras', nombre: 'Barrios Gremiales', perfilTrazado: 'gremial' },
   { id: 'plazas_mayores', cargo: 'maestroObras', nombre: 'Plazas Mayores', perfilTrazado: 'nucleos' },
-  // A petición del usuario, líneas de producción (Doc 4.2.1): mientras esté activa, la auto-construcción sitúa
-  // los edificios de transformación nuevos (Fundición/Curtiduría/Armería) en el hueco de su zona que minimiza
-  // la penalización de distancia a la fuente de sus insumos (`sitioConcentricoLineaProduccion`,
-  // engine/construction.ts) en vez del primer hueco libre del barrido de anillos de siempre. Compite por el
-  // único slot de Maestro de Obras con Vía Rápida de Construcción — no se pueden tener las dos a la vez.
-  { id: 'lineas_produccion', cargo: 'maestroObras', nombre: 'Líneas de Producción', lineasProduccionPriorizadas: true },
   { id: 'comercio_abierto', cargo: 'tesorero', nombre: 'Comercio Abierto', factorComisionExterna: 0.6 },
   { id: 'aranceles', cargo: 'tesorero', nombre: 'Aranceles Proteccionistas', factorComisionExterna: 1.5 },
   { id: 'leva_forzosa', cargo: 'general', nombre: 'Leva Forzosa', factorCostoReclutamiento: 0.7 },
@@ -1927,6 +1938,33 @@ export const NIVEL_ASENTAMIENTO = {
 };
 
 /**
+ * Subida de nivel de asentamiento MANUAL y con coste (2026-09-26, decisión del usuario —
+ * `Consideraciones/Ritmo_Crecimiento_Asentamientos.md` §10, engine/ascenso.ts). Los gates de
+ * `NIVEL_ASENTAMIENTO.requisitos` dejan de subir el nivel solos: son el requisito para que el Gobernador pueda
+ * PEDIR la subida, que además exige pagar este coste, esperar esta obra y ser solvente en el nivel objetivo.
+ *
+ * Criterio de las cifras: el coste pide lo que el nivel siguiente va a cobrar (piedra y oro, que el
+ * mantenimiento empieza a cobrar en el nivel 2) y, desde el nivel 3, un bien elaborado de la cadena del nivel
+ * que se deja; cada coste cabe en el almacén máximo del nivel de partida (400 + 300 × `maximoAlmacenesPorNivel`:
+ * 1600 / 2800 / 5200 / 7600 por recurso). La obra es la palanca de ritmo que no depende de la economía: pone
+ * más o menos la mitad del tiempo objetivo de cada nivel de D49 (el resto lo tiene que poner la calibración).
+ *
+ * El 4 → 5 pedirá además bienes de lujo si se aprueban los talleres de lujo (pendiente, revisión de BA-006).
+ * PLACEHOLDER: punto de partida para calibrar con el batch.
+ */
+export const ASCENSO_ASENTAMIENTO = {
+  porNivelObjetivo: {
+    2: { costo: { madera: 600, piedra: 400, oro: 150 }, obraMinutos: 4_320 }, // 3 días
+    // Lingotes de bronce (D54, techo por Era derivado): la aleación pide estaño, que casi siempre llega por comercio,
+    // así que el nivel 3 es raro en la Era I y la meseta llega en la Era II.
+    3: { costo: { madera: 1200, piedra: 1000, oro: 400, lingoteBronce: 100 }, obraMinutos: 10_080 }, // 1 semana
+    // Provisional hasta que exista `instituciones_civicas` (Era III), que es quien debe desbloquear esta subida (D54).
+    4: { costo: { madera: 2500, piedra: 2500, oro: 1000, lingoteBronce: 150 }, obraMinutos: 20_160 }, // 2 semanas
+    5: { costo: { madera: 5000, piedra: 5000, oro: 2500 }, obraMinutos: 30_240 }, // 3 semanas
+  } as Record<number, { costo: Partial<Record<string, number>>; obraMinutos: number }>,
+};
+
+/**
  * Mantenimiento (Doc 4.5): coste periódico que escala por nivel (sumando materiales, no reemplazando) y por
  * distancia al centro de poder de la Facción (aquí: su asentamiento más antiguo vivo, como proxy de "capital").
  * Cantidades y velocidad de degradación son PLACEHOLDER (Preguntas_Abiertas no fija cifras exactas).
@@ -1960,12 +1998,14 @@ export const MANTENIMIENTO = {
   // calibración por simulación (ver Preguntas_Abiertas.md).
   nivelParaPiedra: 2,
   piedraBase: 3,
-  // Bajado de 3 a 2 (bloque "economía del oro", Doc 4.5 — `Consideraciones/Economia_Del_Oro_Definicion.md`
-  // Paso 3): con el oro cobrándose solo a nivel 3 —que el NPC casi nunca alcanza— el mantenimiento-oro era
-  // letra muerta. A nivel 2 se convierte en un drenaje involuntario real para ~la mitad de los asentamientos
-  // y da a la calibración un sink de oro contra el que medir. Riesgo medido en la campaña: si sube demasiado
-  // la tasa de colapso, se recalibra `oroBase` a la baja para el nuevo escalón. PLACEHOLDER.
-  nivelParaOro: 2,
+  // Vuelve a 3 (2026-09-26, decisión del usuario — `Consideraciones/Ritmo_Crecimiento_Asentamientos.md` §10.2).
+  // Se había bajado a 2 porque el NPC casi nunca llegaba a nivel 3 y el oro era letra muerta; eso eran bugs ya
+  // arreglados. Medido con la subida manual: en nivel 2 el oro es estructuralmente negativo — 200 pesants
+  // recaudan 0,84/min contra 2,84/min de mantenimiento — y era la causa del 97 % de los colapsos (antes) y de que
+  // nadie pudiera pedir la subida (después, por la prueba de solvencia). En el gate del nivel 3 ya hay 200
+  // artesanos: 500 × 0,004 + 200 × 0,015 = 5/min de recaudación contra ~4,8/min junto a la capital; lejos, el
+  // factor de distancia exige mina o comercio. PLACEHOLDER.
+  nivelParaOro: 3,
   oroBase: 2,
   // Escala por POBLACIÓN real, no por nivel (Doc Fase_0_5 §3.2, reemplaza `factorCrecimientoPorNivel`, a
   // petición del usuario: "más allá de al tamaño del asentamiento y a la cantidad de edificios" — un nivel 3
@@ -1986,7 +2026,9 @@ export const MANTENIMIENTO = {
   // Protección temporal a asentamientos recién fundados (Doc 1.3, pendiente en el diseño): sin esto, todo
   // asentamiento nuevo entra en déficit desde el tick 1 (antes de que la Granja llegue a construirse) y cae
   // en ruinas pase lo que pase. La gracia cubre el tiempo típico de estabilizar la economía base.
-  graciaMinutos: 60,
+  // 1 día desde el 2026-09-26 (decisión del usuario): con los tiempos de obra pasando de minutos a horas
+  // (`Ritmo_Crecimiento_Asentamientos.md` §11), la Leñera ya no está en pie en la primera hora.
+  graciaMinutos: 1440,
   // nivelActual (Doc Fase_0_5 §6.2, rediseño a petición del usuario): al tocar 0 el medidor, `nivelActual`
   // baja un escalón (nivel 3→2→1→ruinas, solo cae en ruinas ya en nivelActual 1) EN VEZ de destruirse
   // directamente, y el medidor se reinicia a `medidorInicial` — el asentamiento sigue vivo y produciendo,

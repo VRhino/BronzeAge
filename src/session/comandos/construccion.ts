@@ -136,12 +136,13 @@ export const mejorarEdificioAhora = comando<ParamsMejorarEdificio, void>((estado
     params.cargo,
     params.edificioId,
     capital,
+    ctx.instante,
     consumoRacionDeEscuadrones(campamentoEn(estado, asentamiento))
   );
   return exito(conAsentamiento(estado, actualizado), [
     evento(ctx, {
       codigo: 'construccion.mejora_forzada',
-      mensaje: `${params.cargo} fuerza la mejora de un edificio.`,
+      mensaje: `${params.cargo} manda empezar la mejora de un edificio.`,
       payload: { asentamientoId: asentamiento.id, cargo: params.cargo, edificioId: params.edificioId } satisfies PayloadColaConstruccion,
       asentamientoId: asentamiento.id,
     }),

@@ -1,11 +1,16 @@
 import type { Asentamiento, Edificio, Faccion, Point } from '../src/domain/types';
-import { createRng, generarMapa, MAPA_DEFAULT } from '../src/worldgen';
-import { crearMapa, type Mapa } from '../src/world/mapa';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { createRng, generarMapa, MAPA_DEFAULT, restaurarRng, WORLDGEN_VERSION } from '../src/worldgen';
+import { crearMapa, type EstadoMapa, type Mapa } from '../src/world/mapa';
 import { avanzarSimulacion, type EstadoSimulacion } from '../src/engine/simulation';
 import { crearFaccion } from '../src/engine/faccion';
 import { evaluarViabilidadFundacion, fundarAsentamiento } from '../src/engine/settlement';
 import { nivelActualDe, tieneMercadoActivo, edificiosPorTipoYEstado, nutricionPoblacionDe } from '../src/engine/asentamientoQuery';
-import { calcularNivelAsentamiento, type PayloadAsentamientoRuinas } from '../src/engine/mantenimiento';
+import { alcanzoTopeDeViviendas, reclamosDeFuentes } from '../src/engine/construction';
+import { esResidente } from '../src/engine/pertenencia';
+import { calcularNivelAsentamiento, evaluarGatesDeNivel, type PayloadAsentamientoRuinas } from '../src/engine/mantenimiento';
+import { evaluarAscenso } from '../src/engine/ascenso';
 import type { PayloadAsentamientoFundado } from '../src/engine/expansion';
 import { computeZonaInfluencia, computeTodasLasZonas, pointInPolygon } from '../src/engine/zones';
 
@@ -25,7 +30,7 @@ import {
   integridadDeRecinto,
 } from '../src/engine/trazado';
 import { costoDeTrazo, areaEncerradaDeRecinto, edificiosExtramurosDe } from '../src/engine/muralla';
-import { EDIFICIO_CATALOGO, LOGISTICA, PERFILES_TRAZADO, SIMULACION, TRAZADO, ZONA_INFLUENCIA, type PerfilTrazado } from '../src/constants';
+import { EDIFICIO_CATALOGO, LAYOUT_VERSION, LOGISTICA, NIVEL_ASENTAMIENTO, PERFILES_TRAZADO, SIMULACION, TRAZADO, ZONA_INFLUENCIA, type PerfilTrazado } from '../src/constants';
 import { instanteDeTick, isoDeInstante } from '../src/session/estado';
 
 /** Overrides por entorno para poder hacer pasadas cortas de humo sin esperar la corrida completa
@@ -37,11 +42,47 @@ const num = (nombre: string, porDefecto: number) => {
   return Number.isFinite(valor) && valor > 0 ? Math.floor(valor) : porDefecto;
 };
 
-const SEED = num('BATCH_SEED', 7);
-const NUM_FACCIONES = num('BATCH_FACCIONES', 100);
+/**
+ * `BATCH_DESDE=<checkpoint.json>`: REANUDA una corrida desde un punto de control guardado por otra
+ * (`BATCH_CHECKPOINT_TICKS`), en vez de fundar un mundo nuevo. Es lo que hace sostenible medir las Eras
+ * posteriores: la Era I entera tarda horas, así que la Era II se mide arrancando del final de la Era I en vez de
+ * repetirla cada vez. Semilla, número de Facciones, perfil forzado y multiplicador de trigo vienen del checkpoint
+ * (el mundo evolucionó con ellos); `BATCH_TICKS` son los ticks que se corren A PARTIR del checkpoint.
+ *
+ * Solo se acepta un checkpoint COMPATIBLE con el motor actual — mismo criterio que las partidas guardadas del
+ * servidor (`server/persistenciaPartida.ts`): la misma `WORLDGEN_VERSION` (el mapa se regenera igual desde la
+ * semilla, y el estado del mapa apunta a sus nodos) y la misma `LAYOUT_VERSION` (los edificios guardados encajan
+ * en las huellas actuales). Un cambio de balance NO rompe la compatibilidad: probar una cifra nueva desde un punto
+ * avanzado es justo para lo que sirve.
+ *
+ * Verificado el 2026-09-26: 300 ticks + checkpoint + 300 reanudados dan el MISMO mundo que 600 seguidos (fotos
+ * idénticas). Lo único que no continúa son los contadores del propio batch (`*Acumulados` y `colapsados` de las
+ * fotos, y el bloque de ritmo): cuentan desde el arranque de ESTA corrida, así que al reanudar son los de la Era
+ * que se mide, no los de toda la partida (parte 1 + parte 2 = corrida seguida, al tick).
+ */
+const DESDE = process.env['BATCH_DESDE'] ? leerCheckpointCompatible(process.env['BATCH_DESDE']) : undefined;
+if (DESDE && (process.env['BATCH_SEED'] || process.env['BATCH_FACCIONES'] || process.env['BATCH_PERFIL'] || process.env['BATCH_TRIGO_X'])) {
+  throw new Error('Con BATCH_DESDE, semilla, Facciones, perfil y trigo vienen del checkpoint: quita BATCH_SEED/BATCH_FACCIONES/BATCH_PERFIL/BATCH_TRIGO_X.');
+}
+const SEED = DESDE?.seed ?? num('BATCH_SEED', 7);
+const NUM_FACCIONES = DESDE?.facciones ?? num('BATCH_FACCIONES', 100);
 const JUGADORES_POR_ASENTAMIENTO = 5;
 const TICKS = num('BATCH_TICKS', 3000);
+/** Primer y último tick ABSOLUTOS de esta corrida: al reanudar, el reloj sigue donde lo dejó el checkpoint. */
+const TICK_INICIAL = DESDE?.tick ?? 0;
+const TICK_FINAL = TICK_INICIAL + TICKS;
 const FOTO_CADA = num('BATCH_FOTO_CADA', 100);
+// Puntos de control optativos para perfilar tramos maduros sin repetir toda la corrida.
+const CHECKPOINT_TICKS = new Set(
+  (process.env['BATCH_CHECKPOINT_TICKS'] ?? '')
+    .split(',')
+    .map((s) => Number(s.trim()))
+    .filter((n) => Number.isSafeInteger(n) && n > 0)
+);
+const CHECKPOINT_DIR = process.env['BATCH_CHECKPOINT_DIR'];
+if (CHECKPOINT_TICKS.size > 0 && !CHECKPOINT_DIR) {
+  throw new Error('BATCH_CHECKPOINT_DIR es obligatorio si se usa BATCH_CHECKPOINT_TICKS.');
+}
 const MIN_SEPARACION = 100;
 
 /**
@@ -51,7 +92,7 @@ const MIN_SEPARACION = 100;
  * Sin la variable no se toca nada y cada asentamiento usa el suyo (tradición local por id), que es lo que
  * corre en una partida real. Es la misma palanca que el selector del laboratorio — `TRAZADO.perfilForzado`.
  */
-const PERFIL_FORZADO = process.env['BATCH_PERFIL'];
+const PERFIL_FORZADO = DESDE ? (DESDE.perfilForzado ?? undefined) : process.env['BATCH_PERFIL'];
 if (PERFIL_FORZADO !== undefined) {
   if (!(PERFILES_TRAZADO as readonly string[]).includes(PERFIL_FORZADO)) {
     throw new Error(`BATCH_PERFIL="${PERFIL_FORZADO}" no es un perfil válido (${PERFILES_TRAZADO.join(', ')}).`);
@@ -71,13 +112,52 @@ if (PERFIL_FORZADO !== undefined) {
  * Muta el catálogo, que es el punto ÚNICO de lectura (`produccionTrigoDeGranja`, constants.ts). Sin la
  * variable no se toca nada y la corrida es idéntica a las de siempre.
  */
-const TRIGO_X = Number(process.env['BATCH_TRIGO_X'] ?? 1);
+const TRIGO_X = DESDE ? DESDE.trigoX : Number(process.env['BATCH_TRIGO_X'] ?? 1);
 if (Number.isFinite(TRIGO_X) && TRIGO_X > 0 && TRIGO_X !== 1) {
   const granja = EDIFICIO_CATALOGO.granja as { produccionBaseTrigo?: number; niveles?: Record<number, { produccionBaseTrigo?: number }> };
   if (granja.produccionBaseTrigo !== undefined) granja.produccionBaseTrigo *= TRIGO_X;
   for (const nivel of Object.values(granja.niveles ?? {})) {
     if (nivel.produccionBaseTrigo !== undefined) nivel.produccionBaseTrigo *= TRIGO_X;
   }
+}
+
+/** Lo que guarda un punto de control (ver `BATCH_CHECKPOINT_TICKS`). `worldgenVersion`/`layoutVersion` se
+ * añadieron el 2026-09-26 para poder reanudar: sin ellas no hay forma de saber si el checkpoint es de este motor.
+ * `version` sigue en 1 porque el cambio es solo aditivo (`scripts/bench-batch-checkpoint.ts` los ignora). */
+interface CheckpointBatch {
+  version: number;
+  worldgenVersion?: number;
+  layoutVersion?: number;
+  seed: number;
+  facciones: number;
+  tick: number;
+  estado: EstadoSimulacion;
+  estadoMapa: EstadoMapa;
+  estadoRng: number;
+  contadorNpc: number;
+  configNpc: ConfigNpcGobernanza;
+  perfilForzado: string | null;
+  trigoX: number;
+}
+
+function leerCheckpointCompatible(ruta: string): CheckpointBatch {
+  const cp = JSON.parse(readFileSync(ruta, 'utf8')) as CheckpointBatch;
+  if (cp.version !== 1) throw new Error(`${ruta}: formato de checkpoint ${cp.version}, este script lee el 1.`);
+  if (cp.worldgenVersion === undefined || cp.layoutVersion === undefined) {
+    throw new Error(`${ruta}: checkpoint sin versión de mundo (anterior a la reanudación): no se puede comprobar que sea de este motor. Vuelve a generarlo.`);
+  }
+  if (cp.worldgenVersion !== WORLDGEN_VERSION) {
+    throw new Error(`${ruta}: generado con WORLDGEN_VERSION ${cp.worldgenVersion} y este motor usa la ${WORLDGEN_VERSION} — el mapa no se reconstruye igual desde la semilla.`);
+  }
+  if (cp.layoutVersion !== LAYOUT_VERSION) {
+    throw new Error(`${ruta}: generado con LAYOUT_VERSION ${cp.layoutVersion} y este motor usa la ${LAYOUT_VERSION} — los edificios guardados no encajan en las huellas actuales.`);
+  }
+  return cp;
+}
+
+/** Tick de mundo de un instante (inverso de `instanteDeTick`). */
+function tickDeInstante(instante: number): number {
+  return Math.round((instante - instanteDeTick(0)) / SIMULACION.duracionTickMs);
 }
 
 const TIPOS_EXTRACTOR = ['cantera', 'lenera', 'mina', 'minaCobre', 'minaEstano', 'corral'] as const;
@@ -555,6 +635,39 @@ interface Foto {
   /** Nutrición media (0-100). Entra como factor multiplicativo directo del crecimiento
    * (`comidaFactor`, engine/population.ts), así que una nutrición baja frena el pool aunque sobre capacidad. */
   nutricionMedia: number;
+  // --- Ritmo de crecimiento (`Consideraciones/Ritmo_Crecimiento_Asentamientos.md` §7) ---
+  // Estos campos contestan a la pregunta que ninguna otra métrica contesta: de los cuatro relojes que corren en
+  // paralelo (población, cupo, gates, obra), CUÁL es el que está frenando en cada momento. Sin esto, calibrar
+  // es mover una cifra y rezar.
+  /** Artesanos por asentamiento. `artesanosTotal` no distingue diez plazas con 400 de cien con 40. */
+  artesanosMedia: number;
+  /** % de asentamientos que ya agotaron su tope de Viviendas para su nivel (`alcanzoTopeDeViviendas`).
+   * Alto = el freno es el CUPO (§7.2); bajo con población estancada = el freno es la obra o la economía. */
+  enTopeDeViviendasPct: number;
+  /** De los que NO han llegado al nivel siguiente, cuál de las dos mitades del gate les falta (§7.3). Los tres
+   * suman el total de asentamientos que aún no han subido: dice si el cuello es demográfico o de construcción. */
+  faltaSoloPoblacion: number;
+  faltaSoloEdificios: number;
+  faltaPoblacionYEdificios: number;
+  /** Asentamientos con una obra de ascenso en marcha (subida manual, engine/ascenso.ts). Si esto es 0 con gente
+   * cumpliendo gates, el freno es el coste, la solvencia o el cupo, no la población ni los edificios. */
+  enObraDeAscenso: number;
+  // --- Defensa (rework del NPC, 2026-09-26): la Era I medida tenía 2 172 conquistas de milicia contra plazas vacías ---
+  /** Escuadrones en guarnición en todo el mundo. Antes del rework, 0. */
+  escuadronesEnGuarnicion: number;
+  /** Plazas sin nada que las defienda: ni guarnición ni un héroe dentro. Caen sin combate (Doc 5.12.4). */
+  plazasSinDefensa: number;
+  /** Escuadrones por tropa en todo el mundo: si todo es `milicia_lanceros`, el NPC no está usando su roster. */
+  escuadronesPorTropa: Record<string, number>;
+  /** Obra (§7.4): proyectos en curso y pagados a la espera, por asentamiento. Si `enConstruccionMedia` se pega
+   * a `NECESIDADES.maximoEnConstruccionSimultanea` (2) y la cola no baja, el freno son las cuadrillas. */
+  enConstruccionMedia: number;
+  enColaMedia: number;
+  /** Edificios activos por asentamiento: el tamaño real de la ciudad, que es lo que la obra va produciendo. */
+  edificiosActivosMedia: number;
+  /** Economía (§7.5): stock medio de los dos materiales de obra. Si están a cero, el freno es extracción. */
+  maderaMedia: number;
+  piedraMedia: number;
   // --- Murallas (Paso 2c): invariantes 4/6/9 en batch + guardián de que el gate de nivel 4 sea alcanzable ---
   /** Asentamientos con al menos un recinto (en obra o terminado). Si esto se queda en 0 con el batch corrido
    * lo bastante, `asegurarMuralla` no está disparando — mismo diagnóstico que
@@ -651,6 +764,19 @@ function construirFotoResumen(
   let ocupacionNucleoSuma = 0;
   let ocupacionNucleoN = 0;
   let viviendasSuma = 0;
+  // Ritmo de crecimiento (§7): acumuladores de qué reloj frena en cada momento.
+  let artesanosSuma = 0;
+  let enTopeDeViviendas = 0;
+  let faltaSoloPoblacion = 0;
+  let faltaSoloEdificios = 0;
+  let faltaPoblacionYEdificios = 0;
+  let enObraDeAscenso = 0;
+  let plazasSinDefensa = 0;
+  let enConstruccionSuma = 0;
+  let enColaSuma = 0;
+  let edificiosActivosSuma = 0;
+  let maderaSuma = 0;
+  let piedraSuma = 0;
   let pesantsSuma = 0;
   let pesantsMaximo = 0;
   let nutricionSuma = 0;
@@ -701,6 +827,26 @@ function construirFotoResumen(
     viviendasSuma += edificiosPorTipoYEstado(a, 'vivienda').length;
     pesantsSuma += a.poblacion.pesants;
     if (a.poblacion.pesants > pesantsMaximo) pesantsMaximo = a.poblacion.pesants;
+
+    // --- Ritmo de crecimiento (`Ritmo_Crecimiento_Asentamientos.md` §7): qué reloj frena ---
+    artesanosSuma += a.poblacion.artesanos;
+    if (alcanzoTopeDeViviendas(a)) enTopeDeViviendas++;
+    maderaSuma += a.almacen['madera']?.cantidad ?? 0;
+    piedraSuma += a.almacen['piedra']?.cantidad ?? 0;
+    enConstruccionSuma += a.edificios.filter((e) => e.estado === 'en_construccion').length;
+    enColaSuma += a.edificios.filter((e) => e.estado === 'en_cola').length;
+    edificiosActivosSuma += a.edificios.filter((e) => e.estado === 'activo').length;
+    // Desglose del gate del nivel siguiente, con la misma función que usa el motor para la subida.
+    const gates = evaluarGatesDeNivel(a, a.nivel + 1);
+    if (gates) {
+      if (!gates.poblacion && !gates.edificios) faltaPoblacionYEdificios++;
+      else if (!gates.poblacion) faltaSoloPoblacion++;
+      else if (!gates.edificios) faltaSoloEdificios++;
+    }
+    if (a.ascenso) enObraDeAscenso++;
+    const conGuarnicion = estado.heroes.some((h) => esResidente(a, h.id) && h.escuadrones.some((e) => e.enGuarnicion && e.cantidad > 0));
+    const conHeroeDentro = estado.heroes.some((h) => h.ubicacion.tipo === 'asentamiento' && h.ubicacion.asentamientoId === a.id);
+    if (!conGuarnicion && !conHeroeDentro) plazasSinDefensa++;
 
     const granjasActivas = edificiosPorTipoYEstado(a, 'granja');
     granjasActivasSuma += granjasActivas.length;
@@ -852,6 +998,22 @@ function construirFotoResumen(
     pesantsMedia: vivos === 0 ? 0 : redondear(pesantsSuma / vivos),
     pesantsMaximo,
     nutricionMedia: vivos === 0 ? 0 : redondear(nutricionSuma / vivos),
+    artesanosMedia: vivos === 0 ? 0 : redondear(artesanosSuma / vivos),
+    enTopeDeViviendasPct: vivos === 0 ? 0 : redondear((enTopeDeViviendas / vivos) * 100),
+    faltaSoloPoblacion,
+    faltaSoloEdificios,
+    faltaPoblacionYEdificios,
+    enObraDeAscenso,
+    escuadronesEnGuarnicion: estado.heroes.reduce((n, h) => n + h.escuadrones.filter((e) => e.enGuarnicion && e.cantidad > 0).length, 0),
+    plazasSinDefensa,
+    escuadronesPorTropa: estado.heroes
+      .flatMap((h) => h.escuadrones.filter((e) => e.cantidad > 0))
+      .reduce<Record<string, number>>((m, e) => ({ ...m, [e.tropaId]: (m[e.tropaId] ?? 0) + 1 }), {}),
+    enConstruccionMedia: vivos === 0 ? 0 : redondear(enConstruccionSuma / vivos),
+    enColaMedia: vivos === 0 ? 0 : redondear(enColaSuma / vivos),
+    edificiosActivosMedia: vivos === 0 ? 0 : redondear(edificiosActivosSuma / vivos),
+    maderaMedia: vivos === 0 ? 0 : redondear(maderaSuma / vivos),
+    piedraMedia: vivos === 0 ? 0 : redondear(piedraSuma / vivos),
     asentamientosConRecinto,
     asentamientosConRecintoCompleto,
     integridadRecintoMedia: media(integridadRecintoSuma, integridadRecintoN),
@@ -861,23 +1023,31 @@ function construirFotoResumen(
 }
 
 async function main() {
-  const rng = createRng(SEED);
+  const rng = DESDE ? restaurarRng(DESDE.estadoRng) : createRng(SEED);
 
   const mapaGenerado = generarMapa({ ancho: MAPA_DEFAULT.ancho, alto: MAPA_DEFAULT.alto, seed: SEED });
   // Una sola fachada para toda la corrida: es dueña de su propio estado de partida del mapa, así que los
   // yacimientos que se agotan y regeneran se acumulan tick a tick igual que en una partida real.
-  const mapa = crearMapa(mapaGenerado);
+  const mapa = crearMapa(mapaGenerado, DESDE?.estadoMapa);
 
+  // Reanudando no se funda nada: el mundo entero viene del checkpoint (`candidatos` vacío deja los bucles de
+  // fundación y su diagnóstico sin nada que hacer).
   let facciones: Faccion[] = [];
-  for (let i = 0; i < NUM_FACCIONES; i++) {
-    facciones.push(crearFaccion(`faccion-${i + 1}`, `Faccion ${i + 1}`));
+  if (!DESDE) {
+    for (let i = 0; i < NUM_FACCIONES; i++) {
+      facciones.push(crearFaccion(`faccion-${i + 1}`, `Faccion ${i + 1}`));
+    }
+  } else {
+    console.log(`[reanudado] ${process.env['BATCH_DESDE']} · seed ${SEED} · ${NUM_FACCIONES} Facciones · ticks ${TICK_INICIAL + 1}-${TICK_FINAL}`);
   }
 
-  const candidatos = elegirPosicionesFundacion(mapa, NUM_FACCIONES);
-  const conPiedra = candidatos.filter((c) => c.tienePiedra).length;
-  const conOtroMineral = candidatos.filter((c) => c.tieneOtroMineral).length;
-  console.log(`Posiciones con piedra alcanzable: ${conPiedra}/${candidatos.length}`);
-  console.log(`Posiciones con algún otro mineral alcanzable: ${conOtroMineral}/${candidatos.length}`);
+  const candidatos = DESDE ? [] : elegirPosicionesFundacion(mapa, NUM_FACCIONES);
+  if (!DESDE) {
+    const conPiedra = candidatos.filter((c) => c.tienePiedra).length;
+    const conOtroMineral = candidatos.filter((c) => c.tieneOtroMineral).length;
+    console.log(`Posiciones con piedra alcanzable: ${conPiedra}/${candidatos.length}`);
+    console.log(`Posiciones con algún otro mineral alcanzable: ${conOtroMineral}/${candidatos.length}`);
+  }
 
   let asentamientos: Asentamiento[] = [];
   const idsFundados: string[] = [];
@@ -906,7 +1076,7 @@ async function main() {
       hijo,
     });
   };
-  if (diagFundacion) {
+  if (diagFundacion && candidatos.length > 0) {
     for (let i = 0; i < candidatos.length; i++) registrarBosquesAlFundar(idsFundados[i]!, candidatos[i]!.posicion, false);
     // ¿Los 40 iniciales están pegados? Caja envolvente como % del mapa + distancia media al vecino más cercano.
     const ps = candidatos.map((c) => c.posicion);
@@ -921,7 +1091,7 @@ async function main() {
     );
   }
 
-  let estado: EstadoSimulacion = {
+  let estado: EstadoSimulacion = DESDE ? DESDE.estado : {
     asentamientos,
     facciones,
     caravanas: [],
@@ -949,14 +1119,14 @@ async function main() {
   // sube sin que `tropasVivas` crezca): ¿deserción por hambre (moral colapsada, `avanzarMantenimientoTropas`)
   // o reposición de bajas de combate (`atacarCampamentosCercanos`, permadeath real)? Con las dos activas a la
   // vez se aísla cada mecanismo por separado — ver `issues/granjas_no_escalan_con_poblacion.md`.
-  const config: ConfigNpcGobernanza = {
+  const config: ConfigNpcGobernanza = DESDE ? DESDE.configNpc : {
     ...(process.env['BATCH_SIN_RECLUTAMIENTO'] === '1' ? { tropaId: '__experimento_sin_reclutamiento__' } : {}),
     ...(process.env['BATCH_SIN_ATAQUES'] === '1' ? { atacarCampamentos: false } : {}),
   };
 
   const fotos: Foto[] = [];
   let excepcionesAcumuladas = 0;
-  let idsVivosAntes = new Set(idsFundados);
+  let idsVivosAntes = new Set(estado.asentamientos.map((a) => a.id));
   const idsColapsadosVistos = new Set<string>();
   let reclutamientosAcumulados = 0;
   let campamentosDestruidosAcumulados = 0;
@@ -1000,15 +1170,30 @@ async function main() {
   // Asentamientos que en algún tick tuvieron al menos una Leñera en cualquier estado (cola/construcción/activa).
   const tuvoLeneraAlgunaVez = new Set<string>();
 
+  // --- Ritmo de crecimiento (`Consideraciones/Ritmo_Crecimiento_Asentamientos.md`) ---
+  // El reparto por foto (`nivelesAsentamiento`) dice cuántos hay AHORA en cada nivel, no cuánto tardó nadie en
+  // llegar: mezcla asentamientos fundados en el tick 100 con otros del 5000, así que no sirve para calibrar
+  // D49. Esto mide la EDAD (ticks desde su primera aparición) a la que cada asentamiento alcanza cada nivel.
+  // Se lee `a.nivel` (nivelAlcanzado, monótono) y no `nivelActualDe`, para que una degradación temporal no
+  // borre el dato de cuándo llegó. Siempre encendido: son dos Maps, no cuesta nada.
+  const nacimientoAsentamiento = new Map<string, number>();
+  const nivelMaximoVisto = new Map<string, number>();
+  /** nivel -> edades en ticks de todos los que lo alcanzaron (incluidos los que luego murieron). */
+  const edadAlSubirNivel = new Map<number, number[]>();
+  /** nivel objetivo -> edades a las que se PIDIÓ la subida (arranca la obra). La diferencia con la de arriba es lo
+   * que pone la obra; esta sola es lo que tarda en cumplir gates, coste, solvencia y cupo. */
+  const edadAlPedirNivel = new Map<number, number[]>();
+  const obraVista = new Set<string>();
+
   // Contador de ids del NPC, hilado tick a tick igual que `session/comandos/avanzarFaccionesNpc.ts`: sin esto
   // arranca en 0 cada tick y `anadirEdificioManualmente` genera ids `edificio-<asent>-manual-<n>` que chocan
   // entre ticks. `avanzarConstruccion` indexa su `Map` de resultados por id, así que dos edificios con el
   // mismo id se pisan — el Barracón/Galería que el NPC re-encola cada tick corrompía la cola y ni él ni la
   // Curtiduría auto llegaban nunca a construirse (edificios de transformación a 0 en ~la mitad de las seeds).
-  let contadorNpc = 0;
+  let contadorNpc = DESDE?.contadorNpc ?? 0;
 
   const arranqueMs = Date.now();
-  for (let tick = 1; tick <= TICKS; tick++) {
+  for (let tick = TICK_INICIAL + 1; tick <= TICK_FINAL; tick++) {
     try {
       // `instante`/`momento` derivados del tick con la misma fórmula que el backend (`instanteDeTick`,
       // Fase D / doc 10): una corrida de batch tiene que ser reproducible (mismo SEED -> mismo resultado),
@@ -1115,6 +1300,58 @@ async function main() {
       if (!idsVivosAhora.has(id)) idsColapsadosVistos.add(id);
     }
     idsVivosAntes = idsVivosAhora;
+
+    // Ritmo de crecimiento: primera vez que se ve un asentamiento = su nacimiento; cada nivel nuevo se anota
+    // con la edad a la que llegó. El bucle interior cubre saltos de más de un nivel en el mismo tick.
+    for (const a of estado.asentamientos) {
+      let nacimiento = nacimientoAsentamiento.get(a.id);
+      if (nacimiento === undefined) {
+        // Desde su fundación real y no desde que este bucle lo vio por primera vez: al reanudar, los
+        // asentamientos del checkpoint ya tienen edad.
+        nacimiento = tickDeInstante(a.fundadoEn);
+        nacimientoAsentamiento.set(a.id, nacimiento);
+        nivelMaximoVisto.set(a.id, a.nivel);
+        continue;
+      }
+      if (a.ascenso) {
+        const clave = `${a.id}:${a.ascenso.nivelObjetivo}`;
+        if (!obraVista.has(clave)) {
+          obraVista.add(clave);
+          const edades = edadAlPedirNivel.get(a.ascenso.nivelObjetivo) ?? [];
+          edades.push(tick - nacimiento);
+          edadAlPedirNivel.set(a.ascenso.nivelObjetivo, edades);
+        }
+      }
+      const previo = nivelMaximoVisto.get(a.id) ?? 1;
+      if (a.nivel <= previo) continue;
+      for (let nv = previo + 1; nv <= a.nivel; nv++) {
+        const edades = edadAlSubirNivel.get(nv) ?? [];
+        edades.push(tick - nacimiento);
+        edadAlSubirNivel.set(nv, edades);
+      }
+      nivelMaximoVisto.set(a.id, a.nivel);
+    }
+
+    if (CHECKPOINT_TICKS.has(tick)) {
+      const destino = resolve(CHECKPOINT_DIR!, `batch-seed${SEED}-f${NUM_FACCIONES}-tick${tick}.json`);
+      mkdirSync(dirname(destino), { recursive: true });
+      writeFileSync(destino, JSON.stringify({
+        version: 1,
+        worldgenVersion: WORLDGEN_VERSION,
+        layoutVersion: LAYOUT_VERSION,
+        seed: SEED,
+        facciones: NUM_FACCIONES,
+        tick,
+        estado,
+        estadoMapa: mapa.estadoActual(),
+        estadoRng: rng.estado(),
+        contadorNpc,
+        configNpc: config,
+        perfilForzado: PERFIL_FORZADO ?? null,
+        trigoX: TRIGO_X,
+      }));
+      process.stderr.write(`[checkpoint] ${destino}\n`);
+    }
 
     if (diagOcupacion && tick % FOTO_CADA === 0) {
       const t = ((Date.now() - arranqueMs) / 1000).toFixed(1);
@@ -1246,6 +1483,114 @@ async function main() {
     console.log(`madera en almacén al morir: media ${avg(maderaDeathMaderaEnAlmacen).toFixed(1)}, max ${Math.max(0, ...maderaDeathMaderaEnAlmacen).toFixed(1)}`);
     console.log(`tenían una Leñera EN COLA (no activa) al morir: ${maderaDeathConLeneraEnCola}`);
     console.log(`nº de edificios que tenían al morir: media ${avg(maderaDeathEdificiosCount).toFixed(1)}`);
+  }
+
+  // --- Diagnóstico del gate de extracción (`issues/extractores_minerales_nunca_se_construyen.md`) ---
+  // La corrida de una Era I entera (2026-09-26) acabó con la mayoría de asentamientos clavados en nivel 1
+  // por la mitad de EDIFICIOS del gate (3 tipos de extracción), obra a cero y miles de madera sin gastar.
+  // Con madera de sobra, lo único que puede impedir una Cantera es `sitioCercaDeNodo` (engine/construction.ts)
+  // no encontrando nodo. Esto clasifica a cada asentamiento vivo SIN Cantera por el PRIMER filtro de esa
+  // búsqueda que le falla, en el mismo orden en que el motor los aplica, para no tener que adivinar.
+  {
+    const reclamos = reclamosDeFuentes(estado.asentamientos);
+    const motivos = new Map<string, number>();
+    let sinCantera = 0;
+    let conTresTipos = 0;
+    const iniciales = { sin: 0, total: 0 };
+    for (const a of estado.asentamientos) {
+      const tipos = new Set(
+        a.edificios
+          .filter((e) => e.estado === 'activo' && (NIVEL_ASENTAMIENTO.requisitos[2]!.edificios as string[]).includes(e.tipo))
+          .map((e) => e.tipo)
+      );
+      if (tipos.size >= 3) conTresTipos++;
+      const esInicial = nacimientoAsentamiento.get(a.id) === 0;
+      if (esInicial) iniciales.total++;
+      if (a.edificios.some((e) => e.tipo === 'cantera')) continue;
+      sinCantera++;
+      if (esInicial) iniciales.sin++;
+      const radioMax = ZONA_INFLUENCIA.radioMaximoPorNivel[a.nivel] ?? a.radioPotencial;
+      const poligono = computeZonaInfluencia(a, estado.asentamientos).poligono;
+      const enRadioMax = mapa.nodosEnRadio(a.posicion, radioMax, { tipo: 'piedra' }).length;
+      const enRadioActual = mapa.nodosEnRadio(a.posicion, a.radioPotencial, { tipo: 'piedra' }).length;
+      const enZona = mapa.nodosEnPoligono(poligono, { tipo: 'piedra' }).length;
+      const enZonaConStock = mapa.nodosEnPoligono(poligono, { tipo: 'piedra', conStock: true }).length;
+      const enZonaLibre = mapa.nodosEnPoligono(poligono, { tipo: 'piedra', conStock: true, excluir: reclamos.nodos }).length;
+      const motivo =
+        enRadioMax === 0
+          ? `1 sin piedra ni al radio máximo de su nivel (${radioMax})`
+          : enRadioActual === 0
+            ? '2 hay piedra al radio máximo, pero su zona aún no ha crecido hasta ella'
+            : enZona === 0
+              ? '3 piedra en su radio, pero el recorte por vecinos la deja fuera'
+              : enZonaConStock === 0
+                ? '4 piedra en su zona, pero agotada'
+                : enZonaLibre === 0
+                  ? '5 piedra en su zona con stock, pero reclamada por otro'
+                  : '6 hay nodo libre en su zona y aun así no hay Cantera';
+      motivos.set(motivo, (motivos.get(motivo) ?? 0) + 1);
+    }
+    console.log(`\n=== DIAGNÓSTICO GATE DE EXTRACCIÓN (tick ${TICK_FINAL}, ${estado.asentamientos.length} vivos) ===`);
+    console.log(`con ≥3 tipos de extracción activos (gate del nivel 2): ${conTresTipos}`);
+    console.log(`sin ninguna Cantera: ${sinCantera}  (de ellos, fundaciones iniciales: ${iniciales.sin}/${iniciales.total})`);
+    console.log(`primer filtro de \`sitioCercaDeNodo\` que falla:`);
+    for (const [m, n] of [...motivos.entries()].sort()) console.log(`  ${m.padEnd(72)} ${n}`);
+  }
+
+  // --- Por qué no suben (subida manual, engine/ascenso.ts) ---
+  // Con la subida manual, "cumple los gates y no sube" deja de ser un misterio: `evaluarAscenso` dice exactamente
+  // qué lo bloquea. Para la solvencia, además, qué recurso no llega y por cuánto (medianas de ingreso y coste por
+  // minuto), que es el dato con el que se calibra la economía del nivel siguiente.
+  {
+    const instanteFinal = instanteDeTick(TICK_FINAL);
+    const bloqueos = new Map<string, number>();
+    const insolvencia = new Map<string, { ingreso: number[]; costo: number[] }>();
+    for (const a of estado.asentamientos) {
+      const e = evaluarAscenso(a, estado.asentamientos, estado.facciones, mapa, instanteFinal);
+      for (const b of e.puede ? ['(puede)'] : e.bloqueos) bloqueos.set(b, (bloqueos.get(b) ?? 0) + 1);
+      for (const s of e.solvencia) {
+        if (s.ingresoPorMinuto >= s.costoPorMinuto) continue;
+        const r = insolvencia.get(s.recurso) ?? { ingreso: [], costo: [] };
+        r.ingreso.push(s.ingresoPorMinuto);
+        r.costo.push(s.costoPorMinuto);
+        insolvencia.set(s.recurso, r);
+      }
+    }
+    const mediana = (xs: number[]) => [...xs].sort((x, y) => x - y)[Math.floor(xs.length / 2)] ?? 0;
+    console.log(`\n=== BLOQUEOS DE LA SUBIDA DE NIVEL (tick ${TICK_FINAL}, ${estado.asentamientos.length} vivos) ===`);
+    for (const [b, n] of [...bloqueos.entries()].sort((x, y) => y[1] - x[1])) console.log(`  ${b.padEnd(26)} ${n}`);
+    for (const [recurso, r] of insolvencia) {
+      console.log(
+        `  insolvente en ${recurso.padEnd(8)} ${String(r.ingreso.length).padStart(3)} asentamientos · ` +
+          `ingreso mediano ${mediana(r.ingreso).toFixed(2)}/min contra coste mediano ${mediana(r.costo).toFixed(2)}/min`
+      );
+    }
+  }
+
+  // Ritmo de crecimiento: la tabla que hace falta para calibrar D49. "Nacidos" es cuántos asentamientos
+  // llegaron a existir en toda la corrida (vivos + colapsados), que es el denominador honesto: un nivel al que
+  // solo llega el 3% no es una etapa de la partida, es una excepción.
+  const nacidos = nacimientoAsentamiento.size;
+  console.log(`\n=== RITMO DE CRECIMIENTO (${nacidos} asentamientos nacidos, ${TICKS} ticks) ===`);
+  console.log(`1 tick = 1 minuto de mundo. Semana = 10 080 ticks. Era I (D44, 5 semanas) = 50 400 ticks.`);
+  console.log(`nivel  hito      cuántos         edad (ticks desde su fundación)`);
+  const lineaDeEdades = (nv: number, hito: string, lista: number[] | undefined) => {
+    const edades = [...(lista ?? [])].sort((a, b) => a - b);
+    if (edades.length === 0) {
+      console.log(`  ${nv}    ${hito}    0 (0%)          —`);
+      return;
+    }
+    const p = (q: number) => edades[Math.min(edades.length - 1, Math.floor(edades.length * q))]!;
+    const pct = ((edades.length / Math.max(1, nacidos)) * 100).toFixed(0);
+    console.log(
+      `  ${nv}    ${hito}  ${String(edades.length).padStart(4)} (${pct.padStart(3)}%)     ` +
+        `min ${String(edades[0]).padStart(6)}  mediana ${String(p(0.5)).padStart(6)}  p90 ${String(p(0.9)).padStart(6)}  max ${String(edades[edades.length - 1]).padStart(6)}` +
+        `   (mediana = ${(p(0.5) / 10080).toFixed(2)} semanas)`
+    );
+  };
+  for (let nv = 2; nv <= 5; nv++) {
+    lineaDeEdades(nv, 'pidió ', edadAlPedirNivel.get(nv));
+    lineaDeEdades(nv, 'llegó ', edadAlSubirNivel.get(nv));
   }
 
   console.log(JSON.stringify({ fotos, excepciones: excepcionesAcumuladas }, null, 2));

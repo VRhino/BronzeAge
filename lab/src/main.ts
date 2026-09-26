@@ -445,10 +445,11 @@ function forzarMejora(edificioId: string): void {
   const asentamiento = estado.asentamientos[0];
   if (!asentamiento) return;
   try {
-    const actualizado = mejorarEdificioManualmente(asentamiento, 'gobernador', edificioId, undefined);
+    // Desde el 2026-09-26 la mejora tarda: esto la ARRANCA y el tick la termina.
+    const actualizado = mejorarEdificioManualmente(asentamiento, 'gobernador', edificioId, undefined, instanteDeTick(tick));
     estado = { ...estado, asentamientos: [actualizado] };
     for (const e of actualizado.edificios) if (!nacimientos.has(e.id)) nacimientos.set(e.id, tick);
-    manualStatusEl.textContent = 'Mejora forzada.';
+    manualStatusEl.textContent = 'Mejora en marcha.';
     computar();
   } catch (err) {
     manualStatusEl.textContent = err instanceof ConstruccionManualInvalidaError ? err.message : String(err);

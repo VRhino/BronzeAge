@@ -12,7 +12,7 @@
 // un casco convexo encerraría los huecos entre brazos. La dilatación morfológica sigue la forma real, que es
 // lo único coherente con un trazado emergente.
 import type { Asentamiento, CeldaMuro, Edificio, Recinto, RecursoAlmacenado, RecursoTipo } from '../domain/types';
-import type { Instante } from '../domain/tiempo';
+import { minutos, sumar, type Instante } from '../domain/tiempo';
 import { MURALLA } from '../constants';
 import { descontarRecursos, tieneRecursos } from './almacen';
 import { nivelActualDe } from './asentamientoQuery';
@@ -753,7 +753,7 @@ function costoDeCelda(celda: CeldaMuro, nivel: number): Partial<Record<string, n
 }
 
 /**
- * Avanza la obra de los recintos incompletos: hasta `celdasPorMinuto` celdas por tick, EN EL ORDEN DEL
+ * Avanza la obra de los recintos incompletos: una celda cada `MURALLA.minutosPorCelda` del nivel que se paga, EN EL ORDEN DEL
  * RECORRIDO, pagando cada una al levantarla. Sirve para las DOS obras progresivas del recinto —construir y
  * mejorar (§7)— porque son la MISMA obra: un recinto con `mejorandoA` definido paga la tarifa de mejora en
  * vez de la de construcción, pero recorre el anillo exactamente igual.
@@ -781,16 +781,14 @@ export function avanzarObraDeRecintos(
   const resultado = recintos.map((recinto) => {
     if (recinto.avance >= recinto.celdas.length - 1) return recinto;
     const nivelDePago = recinto.mejorandoA ?? recinto.nivel;
-    let avance = recinto.avance;
-    for (let i = 0; i < MURALLA.celdasPorMinuto && avance < recinto.celdas.length - 1; i++) {
-      const costo = costoDeCelda(recinto.celdas[avance + 1]!, nivelDePago);
-      if (!tieneRecursos(almacenActual, costo) || !respetaReserva(almacenActual, costo, reserva)) break;
-      almacenActual = descontarRecursos(almacenActual, costo);
-      avance += 1;
-    }
-    if (avance === recinto.avance) return recinto;
+    if (recinto.siguienteCeldaEn !== undefined && instante < recinto.siguienteCeldaEn) return recinto;
+    const costo = costoDeCelda(recinto.celdas[recinto.avance + 1]!, nivelDePago);
+    if (!tieneRecursos(almacenActual, costo) || !respetaReserva(almacenActual, costo, reserva)) return recinto;
+    almacenActual = descontarRecursos(almacenActual, costo);
+    const avance = recinto.avance + 1;
+    const siguienteCeldaEn = sumar(instante, minutos(MURALLA.minutosPorCelda[nivelDePago] ?? 1));
     const completo = avance >= recinto.celdas.length - 1;
-    if (!completo) return { ...recinto, avance };
+    if (!completo) return { ...recinto, avance, siguienteCeldaEn };
 
     if (recinto.mejorandoA !== undefined) {
       // Mejora terminada: sube de nivel y reclasifica torres SOBRE EL MISMO ANILLO (§6: "no se retraza

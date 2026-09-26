@@ -17,11 +17,12 @@
 import type { Asentamiento, RegionId } from '../domain/types';
 import { GameSession, type OpcionesSesion, type PartidaExportada, type ResultadoComando } from '../session/gameSession';
 import type { ActorId, ManejadorComando } from '../session/comandos/tipos';
-import { eventosDesde, type GeometriaAsentamientos } from '../session/estado';
+import { eventosDesde, instanteDeTick, type GeometriaAsentamientos } from '../session/estado';
 import { calcularPrecioReferencia } from '../engine/market';
 import { computeTodasLasZonas, computeZonasFusionadasPorFaccion } from '../engine/zones';
 import { trazadoParaAsentamiento } from '../engine/trazado';
 import { produccionPorMinuto, type ProduccionItem } from '../engine/asentamientoQuery';
+import { evaluarAscenso, type EvaluacionAscenso } from '../engine/ascenso';
 import { PRECIO_BASE } from '../constants';
 import type { AlmacenDeObjetos } from './almacen/almacenDeObjetos';
 import { cargarPartida, guardarPartida } from './persistenciaPartida';
@@ -276,6 +277,17 @@ export class RunnerDePartida {
     if (!asentamiento) return [];
     const zona = this.geometriaAsentamientos().zonas.find((z) => z.asentamientoId === asentamientoId)?.poligono ?? [];
     return produccionPorMinuto(asentamiento, this.sesion.getMapa(), zona);
+  }
+
+  /** Evaluación de la subida de nivel de un asentamiento (`evaluarAscenso`, engine/ascenso.ts) — la muestra el
+   * cliente de jugador en la pantalla de asentamiento. Mismo motivo que `produccionDeAsentamiento` para calcularla
+   * aquí: la solvencia lee producción, y la producción necesita la fachada `Mapa`. Solo lectura, sin caché: se pide
+   * como mucho una vez por proyección y solo para la plaza que el jugador pisa. */
+  ascensoDeAsentamiento(asentamientoId: string): EvaluacionAscenso | undefined {
+    const estado = this.sesion.getState();
+    const asentamiento = estado.asentamientos.find((a) => a.id === asentamientoId);
+    if (!asentamiento) return undefined;
+    return evaluarAscenso(asentamiento, estado.asentamientos, estado.facciones, this.sesion.getMapa(), instanteDeTick(estado.tick));
   }
 
   /**

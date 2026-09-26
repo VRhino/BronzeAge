@@ -2,7 +2,7 @@ import type { Asentamiento, Edificio, Faccion, Point, RecursoAlmacenado } from '
 import type { Instante } from '../domain/tiempo';
 import { ALMACEN, FUNDACION, MANTENIMIENTO, POBLACION, ZONA_INFLUENCIA } from '../constants';
 import type { Mapa } from '../world/mapa';
-import { posicionLibreParaFundar } from './zones';
+import { posicionLibreParaFundar, zonaInicialDeFundacion } from './zones';
 import { sitioEnBarrio } from './construction';
 import { calcularCapFundacion, otorgarCiudadania } from './faccion';
 
@@ -67,17 +67,18 @@ export interface ViabilidadFundacion {
   posicionLibre: boolean;
   /** Hay al menos un bosque cuyo borde entra en el radio inicial (geometría pura, para la previsualización). */
   bosqueAlcanzable: boolean;
-  /** Además de alcanzable, ese bosque tiene capacidad de Leñera SIN reclamar por asentamientos vecinos —
-   * condición crítica que alimenta `recomendable`. Un bosque ya lleno de Leñeras ajenas no da madera. */
+  /** Se podría poner una Leñera: hay un bosque con capacidad libre DENTRO DE LA ZONA REAL con la que nacería (el
+   * círculo inicial recortado contra los rivales, `zonaInicialDeFundacion`) — condición crítica de `recomendable`. */
   bosqueLibreAlcanzable: boolean;
-  /** Nodos de recurso que caen dentro del radio inicial, agrupados por tipo. */
+  /** Nodos de recurso sin explotar por nadie dentro de la zona real con la que nacería, agrupados por tipo. */
   recursosEnRadio: { tipo: string; nodos: number }[];
   /** `false` si el terreno es 'cima' (banda de elevación más alta) o 'agua' — inhabitables. */
   terrenoValido: boolean;
   /** Se puede fundar aquí (lo que valida `fundarAsentamiento`): dentro del mapa, sin solapar otra zona y en
    * terreno habitable (ni 'cima' ni 'agua'). */
   fundable: boolean;
-  /** Además de fundable, el emplazamiento es SOSTENIBLE (tiene madera al alcance). */
+  /** Además de fundable, el emplazamiento es SOSTENIBLE: madera al alcance (bosque LIBRE) y al menos un nodo de
+   * piedra en el radio inicial. Es un aviso, no una prohibición: se puede fundar donde no es recomendable. */
   recomendable: boolean;
 }
 
@@ -103,7 +104,10 @@ export interface ViabilidadFundacion {
 export function evaluarViabilidadFundacion(
   mapa: Mapa,
   posicion: Point,
-  asentamientosExistentes: Asentamiento[]
+  asentamientosExistentes: Asentamiento[],
+  /** Quién fundaría. Sus propios asentamientos no le recortan la zona (Doc 1.2); sin ella se asume que todos los
+   * vecinos son rivales, que es el caso prudente. */
+  faccionId?: string
 ): ViabilidadFundacion {
   const enMapa = mapa.dentroDelMapa(posicion);
   const libre = posicionLibreParaFundar(posicion, asentamientosExistentes);
@@ -133,12 +137,30 @@ export function evaluarViabilidadFundacion(
       }
     }
   }
-  const bosqueLibreAlcanzable = mapa.hayBosqueLibreEnRadio(posicion, radio, lenerasPorBosque);
+  // Madera y minerales se miran en la zona REAL con la que nacería (el círculo recortado contra los vecinos), no en
+  // el círculo crudo (2026-09-26): con vecinos, el bosque del círculo quedaba fuera del recorte y el asentamiento
+  // nacía sin poder poner una Leñera — 26 de 28 muertes por madera del batch. La Leñera se decide con la misma
+  // función que usa la construcción para plantarla (`bosqueParaLenera`), y los minerales, sin contar los nodos que
+  // ya explota algún vecino.
+  const zona = zonaInicialDeFundacion(posicion, faccionId, asentamientosExistentes);
+  const bosqueLibreAlcanzable = mapa.bosqueParaLenera(zona, lenerasPorBosque, posicion) !== null;
 
+  const reclamados = new Set<string>();
+  for (const otro of asentamientosExistentes) {
+    for (const edificio of otro.edificios) if (edificio.fuenteId) reclamados.add(edificio.fuenteId);
+  }
   const porTipo = new Map<string, number>();
-  for (const nodo of mapa.nodosEnRadio(posicion, radio)) {
+  for (const nodo of mapa.nodosEnPoligono(zona, { excluir: reclamados })) {
     porTipo.set(nodo.tipo, (porTipo.get(nodo.tipo) ?? 0) + 1);
   }
+
+  // Piedra obligatoria para recomendar (2026-09-26, decisión del usuario, opción B de
+  // `issues/extractores_minerales_nunca_se_construyen.md`): sin un nodo de piedra en el radio no habrá
+  // Cantera, sin Cantera no hay tercer tipo de extracción para el gate del nivel 2, y sin nivel 2 la zona no
+  // crece hasta la piedra — bloqueo estructural desde el nacimiento. Medido: 34 de 34 asentamientos hijos sin
+  // Cantera en el batch no tenían piedra ni al radio máximo de su nivel. Vivía como filtro aparte en la
+  // fundación inicial del NPC y faltaba en la expansión; aquí lo ven todos los que preguntan.
+  const piedraAlcanzable = (porTipo.get('piedra') ?? 0) > 0;
 
   const fundable = enMapa && libre && terrenoValido;
   return {
@@ -150,7 +172,7 @@ export function evaluarViabilidadFundacion(
     recursosEnRadio: [...porTipo.entries()].map(([tipo, nodos]) => ({ tipo, nodos })),
     terrenoValido,
     fundable,
-    recomendable: fundable && bosqueLibreAlcanzable,
+    recomendable: fundable && bosqueLibreAlcanzable && piedraAlcanzable,
   };
 }
 

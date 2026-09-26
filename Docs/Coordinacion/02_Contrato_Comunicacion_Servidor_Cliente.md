@@ -321,6 +321,34 @@ si es humano o bot.
 - Como el resto de comandos de `/jugador/*`, todos devuelven en la misma respuesta la proyección propia
   actualizada, y los rechazos de dominio salen como `resultado.ok: false` con su `codigoError`.
 
+### 4.3 Subida de nivel del asentamiento (añadido 2026-09-26)
+
+El nivel de un asentamiento ya no sube solo: lo pide el Gobernador y se hace con una obra de ascenso (canon Doc
+4.5). Para el cliente son tres piezas:
+
+```text
+asentamientos[].ascenso?        la obra en marcha, si la hay (doc 01): { nivelObjetivo, iniciadoEn, completaEn }
+
+ascensoDeAsentamiento?          SOLO cuando el jugador está dentro de una plaza propia (asentamientos[0]);
+                                lo calcula el servidor porque la solvencia necesita el mapa:
+  nivel                         nivel alcanzado hoy
+  nivelObjetivo                 nivel + 1, o null en el máximo
+  costo                         recurso -> cantidad que cobra la obra al empezar
+  obraMinutos                   duración de la obra, en minutos de mundo
+  solvencia[]                   { recurso, ingresoPorMinuto, costoPorMinuto } — ingreso de hoy contra el
+                                mantenimiento que pagaría en el nivel objetivo
+  bloqueos[]                    todos los motivos a la vez: 'nivel_maximo' | 'ascenso_en_curso' |
+                                'falta_poblacion' | 'faltan_edificios' | 'sin_cupo_de_faccion' |
+                                'recursos_insuficientes' | 'insolvente'
+  puede                         bloqueos vacío
+
+solicitarAscenso                comando, params { asentamientoId }. Solo el Gobernador residente
+                                (si no, 403). Rechazo de dominio: codigoError 'ascenso.invalido'.
+```
+
+El cliente no necesita reimplementar ninguna regla para pintar el botón: `ascensoDeAsentamiento` ya dice si se
+puede y por qué no, y `ascenso` dice cuánto le queda a la obra.
+
 ## 5. Formato de error y versión
 
 - Todo DTO de contrato (`BattleTicket`, `BattleResult`, proyecciones de `Heroe`/`Escuadron`) lleva

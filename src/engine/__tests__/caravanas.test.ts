@@ -175,6 +175,14 @@ describe('cooldown de creación de caravanas', () => {
       return { mapa, asentamiento: abundante, faccion, destino };
     }
 
+    it('quien lanza puede decidir quién funda; sin decirlo, los primeros ciudadanos de la Facción', () => {
+      const { mapa, asentamiento, faccion, destino } = contextoNivel2();
+      const porDefecto = lanzarCaravanaFundacion(mapa, asentamiento, faccion, destino, [asentamiento], [], 1, instanteDeTest(0), 0);
+      expect(porDefecto.caravana.heroesFundadoresIds).toEqual(faccion.ciudadanosIds.slice(0, 1));
+      const elegidos = lanzarCaravanaFundacion(mapa, asentamiento, faccion, destino, [asentamiento], [], 2, instanteDeTest(0), 0, ['a', 'b', 'c']);
+      expect(elegidos.caravana.heroesFundadoresIds).toEqual(['a', 'b']);
+    });
+
     it('rechaza lanzar una segunda Caravana de Fundación antes de que pase el cooldown', () => {
       const { mapa, asentamiento, faccion, destino } = contextoNivel2();
       const r1 = lanzarCaravanaFundacion(mapa, asentamiento, faccion, destino, [asentamiento], [], 1, instanteDeTest(0), 0);

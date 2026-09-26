@@ -4,7 +4,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { avanzarSimulacion } from '../simulation';
 import { createRng, type RandomFn } from '../../worldgen';
-import { EDIFICIO_CATALOGO } from '../../constants';
+import { EDIFICIO_CATALOGO, MANTENIMIENTO, MEJORA_EDIFICIO } from '../../constants';
 import {
   contextoDeTest,
   crearEstadoDeTest,
@@ -47,7 +47,9 @@ describe('regresiones históricas (Correcciones_Durante_Desarrollo.md)', () => {
     // si la gracia no protegiera, este sería justo el caso que colapsaría en ~9 ticks.
     const { mapa, estado: estadoInicial } = estadoInicialConUnAsentamiento({ x: 500, y: 500 });
     let estado = estadoInicial;
-    const graciaMinutos = 60;
+    // De la constante y no a mano: con la cifra escrita aquí, subir la gracia a un día (2026-09-26) dejaba el test
+    // comprobando solo la primera hora.
+    const graciaMinutos = MANTENIMIENTO.graciaMinutos;
 
     for (let tick = 1; tick < graciaMinutos; tick++) {
       estado = avanzarSimulacion(estado, mapa, contextoDeTest(tick, rng));
@@ -65,14 +67,17 @@ describe('regresiones históricas (Correcciones_Durante_Desarrollo.md)', () => {
     const { mapa, estado: estadoInicial } = estadoInicialConUnAsentamiento(posicionRecomendable(crearMapaDeterminista(SEED)));
     let estado = estadoInicial;
 
+    // Plazo derivado de la obra de la Leñera más el margen de siempre para proponerla y arrancarla (40 ticks): la
+    // regla es "no se congela", no "tarda X minutos", y la cifra de obra se recalibra (2026-09-26).
+    const plazo = EDIFICIO_CATALOGO.lenera.tiempoConstruccionMinutos + 40;
     let leneraActiva = false;
-    for (let tick = 1; tick <= 40 && !leneraActiva; tick++) {
+    for (let tick = 1; tick <= plazo && !leneraActiva; tick++) {
       estado = avanzarSimulacion(estado, mapa, contextoDeTest(tick, rng));
       const asentamiento = estado.asentamientos[0];
       leneraActiva = !!asentamiento && asentamiento.edificios.some((e) => e.tipo === 'lenera' && e.estado === 'activo');
     }
 
-    expect(leneraActiva, 'una Leñera se activó dentro de los primeros 40 ticks').toBe(true);
+    expect(leneraActiva, `una Leñera se activó dentro de los primeros ${plazo} ticks`).toBe(true);
   });
 
   // Bug #2: "hambruna silenciosa" — la producción de trigo se quedaba clavada en la Granja inicial aunque la
@@ -98,7 +103,12 @@ describe('regresiones históricas (Correcciones_Durante_Desarrollo.md)', () => {
 
     let maxProduccion = 0;
     let trigoMinimo = Infinity;
-    for (let tick = 1; tick <= 300; tick++) {
+    // 300 ticks de crecimiento más lo que tarda la respuesta más lenta de las dos (mejorar la Granja al nivel 2):
+    // desde el 2026-09-26 las mejoras tardan, y la regla es "hay respuesta", no "es instantánea". Y como una mejora
+    // automática deja siempre una cuadrilla libre, antes de arrancar puede esperar a que acabe una obra de la base.
+    const obraDeBaseMasLarga = Math.max(...(['vivienda', 'cantera', 'corral'] as const).map((t) => EDIFICIO_CATALOGO[t].tiempoConstruccionMinutos));
+    const plazo = 300 + obraDeBaseMasLarga + EDIFICIO_CATALOGO.granja.tiempoConstruccionMinutos * MEJORA_EDIFICIO.multiplicadorPorNivel;
+    for (let tick = 1; tick <= plazo; tick++) {
       estado = avanzarSimulacion(estado, mapa, contextoDeTest(tick, rng));
       if (estado.asentamientos.length === 0) break; // se arruinó — no es lo que este test evalúa.
       const a = estado.asentamientos[0]!;

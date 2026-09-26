@@ -313,9 +313,9 @@ export class GameStore {
    * (otra pestaña, u otra carga anterior, ya la abrió). El jugador no necesita "crearla" de nuevo, solo
    * conectarse a la que ya hay — se ignora el 409 y se sigue directo a pedir su estado (y su mapa, Fase C11:
    * primera y única vez que se pide sin pasar por `sincronizarMapa`, porque el constructor aún no existe). */
-  static async crear(gameId: string, seed: number): Promise<GameStore> {
+  static async crear(gameId: string, seed: number, descartar = false): Promise<GameStore> {
     try {
-      await crearOResumirPartida(gameId, seed);
+      await crearOResumirPartida(gameId, seed, undefined, descartar);
     } catch (err) {
       if (!(err instanceof ApiError && err.status === 409)) throw err;
     }
@@ -908,7 +908,8 @@ export class GameStore {
  * recompilar. */
 export function crearGameStore(
   gameId = import.meta.env.VITE_GAME_ID ?? 'local',
-  seed = Number(import.meta.env.VITE_SEED ?? 1)
+  seed = Number(import.meta.env.VITE_SEED ?? 1),
+  descartar = false
 ): Promise<GameStore> {
-  return GameStore.crear(gameId, seed);
+  return GameStore.crear(gameId, seed, descartar);
 }

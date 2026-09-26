@@ -2,15 +2,24 @@
 // de `avanzarMejoras` que sigue corriendo cada tick, el jugador puede forzar la de un edificio concreto vía
 // Gobernador/Maestro de Obras. Comparte gates y costo con la ruta automática (`elegibleParaMejora`), así que
 // estos tests se centran en las validaciones propias de la acción MANUAL: cargo, existencia/estado del
-// edificio, fondos y — en el caso de éxito — que pague y mude exactamente igual que el camino automático.
+// edificio, fondos y cuadrillas. Desde el 2026-09-26 la mejora TARDA: la acción manual la arranca y el tick la
+// termina, con la misma mudanza que el camino automático.
 import { describe, expect, it } from 'vitest';
 import type { Asentamiento, Edificio } from '../../domain/types';
-import { EDIFICIO_CATALOGO } from '../../constants';
-import { ConstruccionManualInvalidaError, estadoMejoraEdificio, mejorarEdificioManualmente } from '../construction';
+import { EDIFICIO_CATALOGO, MEJORA_EDIFICIO } from '../../constants';
+import { minutos, sumar } from '../../domain/tiempo';
+import {
+  avanzarConstruccion,
+  ConstruccionManualInvalidaError,
+  estadoMejoraEdificio,
+  mejorarEdificioManualmente,
+  reclamosDeFuentes,
+} from '../construction';
 import { celdaMinimaDeEdificio, tamanoDeEdificio } from '../trazado';
-import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
+import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instanteDeTest } from './fixtures';
 
 const SEED = 7;
+const AHORA = instanteDeTest(0);
 
 function base() {
   const mapa = crearMapaDeterminista(SEED);
@@ -32,14 +41,14 @@ describe('mejorarEdificioManualmente — validaciones', () => {
   it('rechaza sin Gobernador ni Maestro de Obras asignado', () => {
     const asentamiento = base();
     const granja = granjaDe(asentamiento);
-    expect(() => mejorarEdificioManualmente(asentamiento, 'gobernador', granja.id, undefined)).toThrow(
+    expect(() => mejorarEdificioManualmente(asentamiento, 'gobernador', granja.id, undefined, AHORA)).toThrow(
       ConstruccionManualInvalidaError
     );
   });
 
   it('rechaza un id de edificio que no existe en el asentamiento', () => {
     const asentamiento = conGobernador(base());
-    expect(() => mejorarEdificioManualmente(asentamiento, 'gobernador', 'edificio-inexistente', undefined)).toThrow(
+    expect(() => mejorarEdificioManualmente(asentamiento, 'gobernador', 'edificio-inexistente', undefined, AHORA)).toThrow(
       ConstruccionManualInvalidaError
     );
   });
@@ -54,7 +63,7 @@ describe('mejorarEdificioManualmente — validaciones', () => {
       ambito: 'asentamiento',
     };
     const conProyecto = { ...asentamiento, edificios: [...asentamiento.edificios, enCola] };
-    expect(() => mejorarEdificioManualmente(conProyecto, 'gobernador', enCola.id, undefined)).toThrow(
+    expect(() => mejorarEdificioManualmente(conProyecto, 'gobernador', enCola.id, undefined, AHORA)).toThrow(
       ConstruccionManualInvalidaError
     );
   });
@@ -66,7 +75,7 @@ describe('mejorarEdificioManualmente — validaciones', () => {
       ...asentamiento,
       edificios: asentamiento.edificios.map((e) => (e.id === granja.id ? { ...e, nivelInterno: 4 } : e)),
     };
-    expect(() => mejorarEdificioManualmente(enMaximo, 'gobernador', granja.id, undefined)).toThrow(
+    expect(() => mejorarEdificioManualmente(enMaximo, 'gobernador', granja.id, undefined, AHORA)).toThrow(
       ConstruccionManualInvalidaError
     );
   });
@@ -95,7 +104,7 @@ describe('mejorarEdificioManualmente — validaciones', () => {
         piedra: { ...asentamiento.almacen.piedra!, cantidad: 500 },
       },
     };
-    expect(() => mejorarEdificioManualmente(conFundicion, 'gobernador', fundicion.id, undefined)).toThrow(
+    expect(() => mejorarEdificioManualmente(conFundicion, 'gobernador', fundicion.id, undefined, AHORA)).toThrow(
       ConstruccionManualInvalidaError
     );
   });
@@ -111,16 +120,16 @@ describe('mejorarEdificioManualmente — validaciones', () => {
         piedra: { ...asentamiento.almacen.piedra!, cantidad: 0 },
       },
     };
-    expect(() => mejorarEdificioManualmente(sinFondos, 'gobernador', granja.id, undefined)).toThrow(
+    expect(() => mejorarEdificioManualmente(sinFondos, 'gobernador', granja.id, undefined, AHORA)).toThrow(
       ConstruccionManualInvalidaError
     );
   });
 });
 
 describe('mejorarEdificioManualmente — éxito', () => {
-  it('paga el costoMejora exacto, sube nivelInterno y reubica si cambia de tamaño (Granja 1 -> 2)', () => {
+  function conFondos(): Asentamiento {
     const asentamiento = conGobernador(base());
-    const conFondos: Asentamiento = {
+    return {
       ...asentamiento,
       almacen: {
         ...asentamiento.almacen,
@@ -128,26 +137,60 @@ describe('mejorarEdificioManualmente — éxito', () => {
         piedra: { cantidad: 1000, capacidad: 99999 },
       },
     };
-    const granja = granjaDe(conFondos);
-    const costoMejora = (EDIFICIO_CATALOGO.granja.niveles as Record<number, { costoMejora?: Record<string, number> }>)[2]!
-      .costoMejora!;
+  }
+  const minutosGranja2 = EDIFICIO_CATALOGO.granja.tiempoConstruccionMinutos * MEJORA_EDIFICIO.multiplicadorPorNivel;
 
-    const resultado = mejorarEdificioManualmente(conFondos, 'gobernador', granja.id, undefined);
+  it('arranca la mejora: paga el costoMejora exacto, fija cuándo termina y el nivel NO sube todavía', () => {
+    const a = conFondos();
+    const granja = granjaDe(a);
+    const costoMejora = (EDIFICIO_CATALOGO.granja.niveles as Record<number, { costoMejora?: Record<string, number> }>)[2]!.costoMejora!;
 
-    const granjaMejorada = resultado.edificios.find((e) => e.id === granja.id)!;
-    expect(granjaMejorada.nivelInterno).toBe(2);
+    const resultado = mejorarEdificioManualmente(a, 'gobernador', granja.id, undefined, AHORA);
+
+    const enMejora = resultado.edificios.find((e) => e.id === granja.id)!;
+    expect(enMejora.nivelInterno ?? 1).toBe(1);
+    expect(enMejora.estado).toBe('activo'); // sigue produciendo mientras se mejora
+    expect(enMejora.mejora).toEqual({ nivelObjetivo: 2, completaEn: sumar(AHORA, minutos(minutosGranja2)) });
     expect(resultado.almacen.madera!.cantidad).toBe(1000 - costoMejora.madera!);
     expect(resultado.almacen.piedra!.cantidad).toBe(1000 - costoMejora.piedra!);
-    // Nivel 2 es más alto que nivel 1 (EDIFICIO_CATALOGO.granja.niveles) — obliga a mudarla.
-    //
-    // Se compara la HUELLA (celda mínima + tamaño), no `posicion`. Hasta el Paso 1 de la Etapa 6 bastaba con
-    // `posicion` porque con la rejilla original una huella de alto par y otra de alto impar no podían
-    // compartir centro (habría exigido media celda); al doblar la resolución (§E6.11) sí pueden, y la Granja
-    // se muda una celda hacia arriba conservando exactamente el mismo centro. El edificio SÍ se movió — lo que
-    // dejó de ser cierto es que moverse implique cambiar de `posicion`.
-    const antes = celdaMinimaDeEdificio(granja);
-    const despues = celdaMinimaDeEdificio(granjaMejorada);
-    expect({ ...despues, ...tamanoDeEdificio(granjaMejorada) }).not.toEqual({ ...antes, ...tamanoDeEdificio(granja) });
+  });
+
+  it('al pasar su tiempo la termina el tick: sube nivelInterno y muda la Granja, que crece de huella', () => {
+    const mapa = crearMapaDeterminista(SEED);
+    const a = conFondos();
+    const granja = granjaDe(a);
+    const enMejora = mejorarEdificioManualmente(a, 'gobernador', granja.id, undefined, AHORA);
+    const fin = sumar(AHORA, minutos(minutosGranja2));
+
+    const antes = avanzarConstruccion(enMejora, [], mapa, undefined, reclamosDeFuentes([enMejora]), sumar(fin, minutos(-1)), 0);
+    expect(antes.asentamiento.edificios.find((e) => e.id === granja.id)!.nivelInterno ?? 1).toBe(1);
+
+    const tras = avanzarConstruccion(enMejora, [], mapa, undefined, reclamosDeFuentes([enMejora]), fin, 0);
+    const mejorada = tras.asentamiento.edificios.find((e) => e.id === granja.id)!;
+    expect(mejorada.nivelInterno).toBe(2);
+    // La del 2 ya no está en curso. Con fondos de sobra, la ruta automática puede haber arrancado ya la del 3 en
+    // este mismo tick: es lo esperado (las mejoras se encadenan), no un resto de la anterior.
+    expect(mejorada.mejora?.nivelObjetivo).not.toBe(2);
+    // Se compara la HUELLA (celda mínima + tamaño), no `posicion`: con la rejilla doble (§E6.11) dos huellas de
+    // alto par e impar pueden compartir centro, así que moverse no implica cambiar de `posicion`.
+    expect({ ...celdaMinimaDeEdificio(mejorada), ...tamanoDeEdificio(mejorada) }).not.toEqual({
+      ...celdaMinimaDeEdificio(granja),
+      ...tamanoDeEdificio(granja),
+    });
+  });
+
+  it('con las dos cuadrillas ocupadas, espera: se rechaza', () => {
+    const a = conFondos();
+    const granja = granjaDe(a);
+    const ocupadas = {
+      ...a,
+      edificios: [
+        ...a.edificios,
+        { id: 'obra-1', tipo: 'vivienda' as const, posicion: { x: 90, y: 0 }, estado: 'en_construccion' as const, ambito: 'asentamiento' as const },
+        { id: 'obra-2', tipo: 'vivienda' as const, posicion: { x: 95, y: 0 }, estado: 'en_construccion' as const, ambito: 'asentamiento' as const },
+      ],
+    };
+    expect(() => mejorarEdificioManualmente(ocupadas, 'gobernador', granja.id, undefined, AHORA)).toThrow(ConstruccionManualInvalidaError);
   });
 });
 

@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { avanzarSimulacion } from '../simulation';
 import { createRng } from '../../worldgen';
+import { EDIFICIO_CATALOGO } from '../../constants';
 import { contextoDeTest, crearEstadoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instanteDeTest } from './fixtures';
 import type { PayloadConstruccionIniciada, PayloadNecesidadDetectada } from '../construction';
 
@@ -45,7 +46,10 @@ describe('eventos de dominio — construction.ts', () => {
     const rng = createRng(SEED);
 
     let completados: string[] = [];
-    for (let tick = 1; tick <= 60 && completados.length === 0; tick++) {
+    // La obra más corta (la Leñera, que además va primero por supervivencia) más margen para proponerla y arrancarla:
+    // del catálogo y no a mano, porque los tiempos de obra se recalibran (2026-09-26).
+    const plazo = EDIFICIO_CATALOGO.lenera.tiempoConstruccionMinutos + 60;
+    for (let tick = 1; tick <= plazo && completados.length === 0; tick++) {
       const resultado = avanzarSimulacion(estado, mapa, contextoDeTest(tick, rng));
       estado = resultado;
       completados = resultado.eventosDominio.filter((e) => e.codigo === 'construccion.edificio_completado').map((e) => e.mensaje);
@@ -55,6 +59,8 @@ describe('eventos de dominio — construction.ts', () => {
   });
 
   it('ocupación (Pasos 7-8): un edificio dañado se reconstruye barato y la ventana se cierra sola', () => {
+    // A tiempo real: desde el 2026-09-26 la reconstrucción no ocupa cuadrilla ni espera turno (antes, con obras de
+    // horas, no llegaba a arrancar nunca detrás de la cola).
     const mapa = crearMapaDeterminista(SEED);
     const facciones = crearFacciones();
     const { asentamiento, facciones: faccionesTrasFundar } = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', []);
@@ -88,11 +94,21 @@ describe('eventos de dominio — construction.ts', () => {
 
     let vioReconstruccion = false;
     let vioFinOcupacion = false;
-    for (let tick = 81; tick <= 140; tick++) {
+    // El dañado espera en la cola a que quede una cuadrilla libre, y una obra en curso puede ser la más larga de nivel
+    // 1; luego tarda su propia reconstrucción. Plazo derivado de esas dos cosas (2026-09-26: las obras tardan horas).
+    const obraMasLargaNivel1 = Math.max(
+      ...(['vivienda', 'lenera', 'cantera', 'granja', 'almacen', 'granero', 'mina', 'minaCobre', 'minaEstano', 'corral', 'mercado'] as const).map(
+        (t) => EDIFICIO_CATALOGO[t].tiempoConstruccionMinutos
+      )
+    );
+    const plazo = 81 + 2 * obraMasLargaNivel1 + EDIFICIO_CATALOGO[victima.tipo].tiempoConstruccionMinutos;
+    for (let tick = 81; tick <= plazo; tick++) {
       const r = avanzarSimulacion(estado, mapa, contextoDeTest(tick, rng));
       estado = r;
       if (r.eventosDominio.some((e) => e.codigo === 'construccion.iniciada' && e.mensaje.includes('reconstrucción'))) vioReconstruccion = true;
       if (r.eventosDominio.some((e) => e.codigo === 'asentamiento.ocupacion_terminada')) vioFinOcupacion = true;
+      const rehecho = r.asentamientos[0]?.edificios.find((e) => e.id === victima.id);
+      if (vioReconstruccion && vioFinOcupacion && rehecho?.estado === 'activo') break;
     }
 
     expect(vioReconstruccion, 'el edificio dañado arrancó como reconstrucción').toBe(true);

@@ -491,8 +491,8 @@ describe('Regla de afinidad (2026-08-31) — desempate por vecindad con edificio
       return false;
     };
 
-    const sinAfinidad = sitiosPorAtraccionDura(mercado, puestoTam, ocupadas, red, false, false);
-    const conAfinidad = sitiosPorAtraccionDura(mercado, puestoTam, ocupadas, red, false, false, celdasAfines);
+    const sinAfinidad = sitiosPorAtraccionDura(mercado, puestoTam, ocupadas, red, false);
+    const conAfinidad = sitiosPorAtraccionDura(mercado, puestoTam, ocupadas, red, false, celdasAfines);
 
     // Hay elección real: muchos huecos igual de válidos alrededor del Mercado.
     expect(sinAfinidad.length).toBeGreaterThan(6);

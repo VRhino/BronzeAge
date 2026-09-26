@@ -365,6 +365,12 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
     rolesPermitidos: ['jugador'],
     condicionJugador: (estado, heroeId, params) => residenteConCargo(estado, heroeId, params.asentamientoId, params.cargo),
   },
+  // Sin `cargo` en `params`: pedir la subida de nivel es SOLO del Gobernador (Doc 4.5, decisión del usuario
+  // 2026-09-26) — es una decisión de gobierno que compromete el almacén del asentamiento, no de obra.
+  solicitarAscenso: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, heroeId, params) => residenteConCargo(estado, heroeId, params.asentamientoId, 'gobernador'),
+  },
   // Sin `cargo` en `params`, a diferencia de los de arriba: autoridad sobre la cola de construcción es del
   // Gobernador o del Maestro de Obras (`CargoConstructor`, ver `construccion.ts`).
   /** Enganchar o soltar el tren de suministros lo decide quien va en la columna, igual que replegarla. */

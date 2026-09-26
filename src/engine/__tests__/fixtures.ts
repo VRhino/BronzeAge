@@ -1,11 +1,11 @@
 // Fixtures compartidas para los tests de regresión del motor: construyen mapa/facción/asentamiento
 // usando las funciones REALES del motor (generarMapa/crearFaccion/fundarAsentamiento), nunca objetos
 // inventados a mano — así un test que pasa hoy sigue significando "el motor real produce esto".
-import type { Asentamiento, Escuadron, Faccion, Heroe, UbicacionHeroe } from '../../domain/types';
+import type { Asentamiento, Edificio, EdificioTipo, Escuadron, Faccion, Heroe, UbicacionHeroe } from '../../domain/types';
 import { instante, type Instante } from '../../domain/tiempo';
 import { generarMapa, MAPA_DEFAULT, type RandomFn } from '../../worldgen';
 import { crearMapa, type Mapa } from '../../world/mapa';
-import { LIDERAZGO, SIMULACION } from '../../constants';
+import { EDIFICIO_CATALOGO, LIDERAZGO, MURALLA, SIMULACION } from '../../constants';
 import { crearFaccion } from '../faccion';
 import { evaluarViabilidadFundacion, fundarAsentamiento } from '../settlement';
 import type { ContextoSimulacion, EstadoSimulacion } from '../simulation';
@@ -85,8 +85,8 @@ export function contextoDeTest(tick: number, rng: RandomFn): ContextoSimulacion 
 }
 
 /**
- * Barre una grilla regular buscando una posición "recomendable" (fundable + bosque alcanzable, ver
- * `evaluarViabilidadFundacion`) — evita que los tests dependan de que el seed elegido a mano tenga
+ * Barre una grilla regular buscando una posición "recomendable" (fundable + bosque libre + piedra en el radio,
+ * ver `evaluarViabilidadFundacion`) — evita que los tests dependan de que el seed elegido a mano tenga
  * un bosque cerca del origen (0,0).
  */
 export function posicionRecomendable(
@@ -146,5 +146,60 @@ export function crearEstadoDeTest(
     bandidosProximoSpawnEn: instanteDeTest(0),
     heroes: [],
     ...overrides,
+  };
+}
+
+/**
+ * `asentamiento` con todo lo que pide subir a nivel 2 (engine/ascenso.ts): 200 pesants y 3 tipos de extracción
+ * (gate), almacén que cubre la obra, y producción de sobra para el mantenimiento del nivel 2 — 2 Canteras, 2 Minas y 2
+ * Leñeras sobre fuentes REALES de `mapa`, porque la solvencia se calcula con `produccionPorMinuto`, que lee el mapa.
+ */
+export function prepararParaSubirANivel2(asentamiento: Asentamiento, mapa: Mapa): Asentamiento {
+  const piedra = mapa.listarNodos().filter((n) => n.tipo === 'piedra');
+  const oro = mapa.listarNodos().filter((n) => n.tipo === 'oro');
+  const bosques = mapa.listarBosques();
+  const extractor = (id: string, tipo: EdificioTipo, fuenteId: string): Edificio => ({
+    id,
+    tipo,
+    posicion: { x: 0, y: 0 },
+    estado: 'activo',
+    ambito: 'mapa',
+    fuenteId,
+  });
+  const almacen = { ...asentamiento.almacen };
+  for (const recurso of ['madera', 'piedra', 'oro']) almacen[recurso] = { cantidad: 5000, capacidad: 10000 };
+  return {
+    ...asentamiento,
+    poblacion: { ...asentamiento.poblacion, pesants: 200 },
+    almacen,
+    edificios: [
+      ...asentamiento.edificios,
+      extractor(`${asentamiento.id}-c1`, 'cantera', piedra[0]!.id),
+      extractor(`${asentamiento.id}-c2`, 'cantera', piedra[1]!.id),
+      extractor(`${asentamiento.id}-m1`, 'mina', oro[0]!.id),
+      extractor(`${asentamiento.id}-m2`, 'mina', oro[1]!.id),
+      extractor(`${asentamiento.id}-l1`, 'lenera', bosques[0]!.id),
+      extractor(`${asentamiento.id}-l2`, 'lenera', bosques[1]!.id),
+    ],
+  };
+}
+
+/**
+ * Divide por `factor` los tiempos de obra del catálogo y de la muralla, y devuelve cómo restaurarlos. Para tests que
+ * necesitan una ciudad CRECIDA y miran QUÉ se construye y DÓNDE, no CUÁNDO (trazado, murallas, perfiles, gates de
+ * construcción): desde el 2026-09-26 las obras tardan horas (`Ritmo_Crecimiento_Asentamientos.md` §11), y crecer una
+ * ciudad a tiempo real haría la suite inasumible. Con el 60 por defecto los tiempos vuelven a rondar los de antes.
+ * **Los tests de ritmo no deben usarlo.** Uso: `beforeAll(() => { restaurar = acelerarObras(); })` y
+ * `afterAll(() => restaurar())`, o envolviendo un solo test con try/finally.
+ */
+export function acelerarObras(factor = 60): () => void {
+  const catalogo = EDIFICIO_CATALOGO as Record<string, { tiempoConstruccionMinutos: number }>;
+  const obras = Object.entries(catalogo).map(([tipo, def]) => [tipo, def.tiempoConstruccionMinutos] as const);
+  const celdas = { ...MURALLA.minutosPorCelda };
+  for (const [tipo, minutos] of obras) catalogo[tipo]!.tiempoConstruccionMinutos = Math.max(1, Math.round(minutos / factor));
+  for (const [nivel, minutos] of Object.entries(celdas)) MURALLA.minutosPorCelda[Number(nivel)] = Math.max(1, Math.round(minutos / factor));
+  return () => {
+    for (const [tipo, minutos] of obras) catalogo[tipo]!.tiempoConstruccionMinutos = minutos;
+    Object.assign(MURALLA.minutosPorCelda, celdas);
   };
 }

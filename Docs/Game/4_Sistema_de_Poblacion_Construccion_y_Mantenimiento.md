@@ -50,7 +50,9 @@ Los HÉROES son una categoría SEPARADA de estas 3 clases.
 - Cargo MAESTRO DE OBRAS gestiona las prioridades de auto-construcción, da bonus a tiempos de construcción.
 - Patrón de crecimiento: las ciudades agregan edificios desde el CENTRO hacia afuera (concéntrico).
 - LAYOUT DINÁMICO según política activa: ej. política DEFENSIVA prioriza edificios defensivos y layout fácil de defender (con coste real: pierde eficiencia económica, genera "pasillos" hacia puntos de captura). Elimina la repetición visual entre asentamientos.
-- **Pago al encolar y tope de cola**: el coste se paga al ENCOLAR, no al empezar a construir. Dos cupos con significado físico separado: `NECESIDADES.maximoEnCola = 4` (cuántos proyectos pueden estar pagados y a la espera de un hueco de obra, `en_cola`) y `NECESIDADES.maximoEnConstruccionSimultanea = 2` (cuántos pueden estar construyéndose a la vez: las cuadrillas de obra son limitadas). No hay cupos reservados por tipo de edificio.
+- **Pago al encolar y tope de cola**: el coste se paga al ENCOLAR, no al empezar a construir. Dos cupos con significado físico separado: `NECESIDADES.maximoEnCola = 4` (cuántos proyectos pueden estar pagados y a la espera de un hueco de obra, `en_cola`) y `NECESIDADES.maximoEnConstruccionSimultanea = 2` (cuántos pueden estar construyéndose a la vez: las cuadrillas de obra son limitadas). No hay cupos reservados por tipo de edificio. **Una reconstrucción tras un saqueo no ocupa cuadrilla ni espera turno** (decidido el 2026-09-26): el edificio dañado arranca su obra en cuanto puede pagarse, aunque las dos cuadrillas estén ocupadas, y no le quita el hueco a ninguna obra nueva.
+- **Tiempos de obra** (decidido el 2026-09-26): las obras duran horas, no minutos, para encajar con las Eras (Doc 6) y con qué nivel de asentamiento le toca a cada una. Supervivencia: Leñera 1 h, Granja 2 h. Base de nivel 1: Vivienda, Cantera y Corral 4 h; Almacén, Granero y Mina de cobre 6 h; Minas de oro y de estaño y Mercado 8 h. Transformación y militar: 12 h. Gran Fundición 2 días, Palacio 5 días, Maravilla 4 semanas. Muralla: una celda cada 15 min (empalizada), 30 (muro de piedra) o 60 (adarve). Cifras placeholder (`EDIFICIO_CATALOGO`, `MURALLA.minutosPorCelda`).
+- **Mejoras de nivel interno**: tardan más que la obra y más cuanto más alto el nivel — la obra base del edificio × 2 para el nivel 2, × 4 para el 3 y × 8 para el 4 (`MEJORA_EDIFICIO`). Se pagan al empezar; **el edificio sigue funcionando con su nivel actual** mientras se mejora, y **ocupa una de las cuadrillas de obra** mientras dura. **Las mejoras automáticas dejan siempre una cuadrilla libre** (decidido el 2026-09-26): solo arrancan si después queda al menos una para construir, así que nunca paran la construcción. Una mejora pedida a mano por el Gobernador o el Maestro de Obras sí puede tomar la última, y se rechaza solo si las dos están ocupadas. Mientras mejorar la Granja no pueda arrancar, la respuesta a un déficit de trigo es construir otra.
 - **Prioridad por SCORE**: un proyecto que no puede pagarse no llega a encolarse, y los de supervivencia no pueden quedarse sin hueco — si Vivienda/Granja/Cantera coparan la cola, la Leñera (única fuente de madera) no entraría nunca. Cada candidato recibe la base de su **banda** (`SCORE_BANDAS`) + una urgencia 0-100: `supervivencia` (Granja/Leñera) = 10000, `extractorBase` (Cantera/minas/Corral) = 5000, `crecimiento` (Vivienda/Almacén) = 1000, `manual` (adiciones del Gobernador/Maestro de Obras) = 900, `transformacion` (Curtiduría/Armería/Fundición/Carpintería) = 500. La diferencia de 500+ entre bandas garantiza que la supervivencia siempre gane, sin importar cuán urgente sea lo demás. El mismo score decide qué proyecto `en_cola` pasa antes a `en_construccion` cuando las cuadrillas están ocupadas.
 - **Reserva mínima de construcción, proyectada**: un proyecto solo se puede COMPROMETER (pagar al encolar) si no deja ningún recurso de Mantenimiento por debajo de una reserva mínima. Esa reserva es el coste de Mantenimiento ACTUAL del asentamiento (que ya escala con la población y la distancia a la capital, 4.5) multiplicado por un horizonte (`RESERVA_CONSTRUCCION.horizonteTicksMantenimiento = 8` minutos), más una reserva de trigo calculada igual a partir del consumo real de comida de población+tropas × `RESERVA_CONSTRUCCION.horizonteTicksComida = 8`. Excepción: la Granja no respeta la reserva de trigo, ni la Leñera la de madera, porque son la única vía real de recuperar esos recursos.
 - **Pausa de auto-construcción** (control del jugador, `Asentamiento.autoConstruccionPausada`): Gobernador/Maestro de Obras pueden pausar/reanudar la DETECCIÓN de nuevas necesidades desde el panel del asentamiento — mientras está pausada, no se evalúan ni comprometen proyectos nuevos, pero lo ya pagado (`en_cola`/`en_construccion`) sigue avanzando con normalidad. No afecta a la adición manual de edificios, que sigue disponible durante la pausa.
@@ -65,10 +67,10 @@ Ningún edificio exige "Planos de X" (vía Aedas, Doc 6.5) para construirse ni p
 
 **Palacio** — desbloquea la aparición de Nobleza. Adición MANUAL de Gobernador/Maestro de Obras a la cola (ver 4.2), no auto-construcción. Es requisito para subir a nivel 5 (4.5).
 - Requisito: Asentamiento nivel 4.
-- Capacidad: 200 nobles. Coste: 1500 madera + 1000 piedra. Tiempo: 20 minutos.
+- Capacidad: 200 nobles. Coste: 1500 madera + 1000 piedra. Obra: 5 días.
 
 **Vivienda** — auto-construcción. CUPO DIVIDIDO POR CLASE: cada Vivienda aporta cupos SEPARADOS, no un pool compartido — 15 espacios para Pesants + 5 espacios para Artesanos por unidad (escala linealmente: 2 Viviendas = 30+10, etc.). La Nobleza no usa Vivienda (cupo propio en el Palacio).
-- Coste: 10 madera. Tiempo: 4 minutos.
+- Coste: 10 madera. Obra: 4 horas.
 - **Tope por nivel de asentamiento** (`maximoViviendasPorNivel`): el máximo útil de Viviendas en un nivel se deriva de la población (pesants Y artesanos, se toma el mayor de los dos cupos) que exige alcanzar el SIGUIENTE nivel — construir más de las que ese cupo necesita no sirve para nada hasta subir de nivel. Cifras en `Consideraciones/Fase_0_6_Definicion_Expansion_Niveles_Asentamiento.md` §7.
 
 ### Extracción de recursos
@@ -91,11 +93,11 @@ Los extractores de nivel 1 se pagan solo con madera: son justo lo que hay que co
 
 **Centro urbano** — edificio inicial, se construye automáticamente al fundar (Doc 1.3), no por ninguna otra vía.
 
-**Almacén** — auto-construcción. +300 de capacidad para cada recurso. Coste: 50 madera. Tiempo: 6 minutos.
+**Almacén** — auto-construcción. +300 de capacidad para cada recurso. Coste: 50 madera. Obra: 6 horas.
 
 **Granero** — almacén ESPECIALIZADO en grano: solo guarda trigo, y a cambio guarda mucho más que el Almacén general. **Uno por asentamiento**: no crece por número sino por **nivel interno**, cuatro escalones que llevan su capacidad de **2.000 a 6.000** de trigo (×1 / ×1,5 / ×2 / ×3 sobre el nivel 1, la misma forma que el rinde de la Granja).
 
-- **Coste**: 50 madera. Tiempo: 6 minutos. Mejoras que duplican sobre la base, con piedra a partir del nivel 2: 100+30, 200+60, 400+120.
+- **Coste**: 50 madera. Obra: 6 horas. Mejoras que duplican sobre la base, con piedra a partir del nivel 2: 100+30, 200+60, 400+120; tardan 12 horas, 1 día y 2 días.
 - **Requisitos de mejora**: los niveles 2 y 3 exigen asentamiento de nivel 2; el nivel 4 exige nivel 3. Se miden contra el nivel OPERATIVO, así que un asentamiento degradado deja de poder ampliar su granero hasta recuperarse.
 - **Auto-construcción**: se encola cuando el trigo pasa el mismo umbral de ocupación que dispara la ampliación de Almacén, mirando SOLO el trigo. Cuando lo que desborda es el grano, 300 de capacidad general es mucho peor negocio que 2.000 de grano.
 
@@ -111,7 +113,7 @@ Van por AUTO-CONSTRUCCIÓN (igual que Granja/Cantera), disparadas en cuanto se c
 - Construcción: Asentamiento nivel 2. Nivel interno 2: Asentamiento nivel 2.
 - Recetas nivel 1: 2 cobre → 1 Lingote de Cobre.
 - Recetas nivel 2 (añade): 5 estaño → 1 Lingote de Estaño; 8 Lingote de Cobre + 2 Lingote de Estaño → 5 Lingote de Bronce.
-- Coste: construcción 80 madera + 40 piedra; mejora a nivel 2: 150 madera + 100 piedra. Tiempo de construcción: 6 minutos.
+- Coste: construcción 80 madera + 40 piedra; mejora a nivel 2: 150 madera + 100 piedra. Obra: 12 horas; mejora a nivel 2: 1 día.
 - Trabajadores: nivel 1 → 4 artesanos; nivel 2 → 8 artesanos.
 - Producción base: nivel 1 → 5 Lingote de Cobre; nivel 2 → 5 Lingote de Cobre + 3 Lingote de Estaño + 1 Lingote de Bronce.
 
@@ -120,7 +122,7 @@ Van por AUTO-CONSTRUCCIÓN (igual que Granja/Cantera), disparadas en cuanto se c
 - Recetas nivel 1: 1 livestock → 2 Cuero.
 - Recetas nivel 2: 1 livestock → 3 Cuero; 3 Cuero → 1 Cuero Curtido.
 - Recetas nivel 3: 1 livestock → 4 Cuero; 3 Cuero → 1 Cuero Curtido; 2 Cuero Curtido + 1 Cuero → 1 Cuero de Calidad.
-- Coste: construcción 80 madera + 30 piedra; mejora 1: 150 madera + 100 piedra; mejora 2: 450 madera + 200 piedra. Tiempo de construcción: 8 minutos.
+- Coste: construcción 80 madera + 30 piedra; mejora 1: 150 madera + 100 piedra; mejora 2: 450 madera + 200 piedra. Obra: 12 horas; mejoras: 1 día y 2 días.
 - Trabajadores: nivel 1 → 4; nivel 2 → 6; nivel 3 → 8 artesanos.
 - Producción base: nivel 1 → 8 Cuero; nivel 2 → 12 Cuero + 2 Cuero Curtido; nivel 3 → 6 Cuero + 3 Cuero Curtido + 1 Cuero de Calidad.
 
@@ -130,7 +132,7 @@ Van por AUTO-CONSTRUCCIÓN (igual que Granja/Cantera), disparadas en cuanto se c
 - Recetas nivel 2 (añade, sobre las de nivel 1): 1 Lingote de Bronce + 2 madera → 1 Arma de Bronce; 1 Lingote de Cobre + 5 Cuero Curtido → 1 Armadura Intermedia.
 - Recetas nivel 3 (añade, sobre las de nivel 2): 5 Lingote de Bronce + 5 madera → 1 Arma de Bronce de Calidad; 1 Lingote de Bronce + 5 Cuero de Calidad → 1 Armadura de Bronce.
 - **Arma de Madera**: escalón de entrada sin metalurgia, disponible en LOS 3 NIVELES. Las recetas se REEMPLAZAN al mejorar el edificio, no se acumulan solas, así que esta se repite explícitamente en cada nivel: sin ella, mejorar la Armería quitaría la capacidad de armar la tropa de entrada. Cifras deliberadamente modestas (producción base 2, a 2 madera por unidad): la producción de recetas no respeta la reserva mínima de Mantenimiento, y una tasa alta la convertiría en una vía de colapso por falta de madera.
-- Coste: construcción 80 madera + 30 piedra; mejora 1: 150 madera + 100 piedra; mejora 2: 450 madera + 200 piedra. Tiempo de construcción: 6 minutos.
+- Coste: construcción 80 madera + 30 piedra; mejora 1: 150 madera + 100 piedra; mejora 2: 450 madera + 200 piedra. Obra: 12 horas; mejoras: 1 día y 2 días.
 - Trabajadores: nivel 1 → 4; nivel 2 → 8; nivel 3 → 20 artesanos.
 - Producción base: nivel 1 → 3 Arma de Cobre + 3 Armadura Básica + 2 Arma de Madera; nivel 2 → + 2 Arma de Bronce + 2 Armadura Intermedia (Arma de Madera se mantiene); nivel 3 → + 1 Arma de Bronce de Calidad + 1 Armadura de Bronce (acumulativo sobre el nivel anterior, Arma de Madera se mantiene).
 
@@ -138,16 +140,16 @@ Van por AUTO-CONSTRUCCIÓN (igual que Granja/Cantera), disparadas en cuanto se c
 
 **Carpintería** — su existencia habilita mejorar otros edificios (Armería, Barracón y Galería de tiro de nivel 2). Auto-construcción (ver arriba). Está pensada para fabricar armas de asedio (ariete en nivel 1, torre de asedio en nivel 2), que Fase 0 no tiene.
 - Construcción: Asentamiento nivel 3. Nivel interno 2: Asentamiento nivel 3.
-- Coste: construcción 60 madera + 20 piedra; mejora: 120 madera + 60 piedra. Tiempo de construcción: 6 minutos. Sin trabajadores.
+- Coste: construcción 60 madera + 20 piedra; mejora: 120 madera + 60 piedra. Obra: 12 horas; mejora: 1 día. Sin trabajadores.
 
 **Barracón** — reclutamiento de tropas cuerpo a cuerpo (unidades y coste en equipo: ver Doc 5.8). Adición MANUAL de Gobernador/Maestro de Obras a la cola (ver 4.2), no auto-construcción.
 - Construcción: Asentamiento nivel 2 (ver nota del requisito militar abajo). Nivel interno 2: Asentamiento nivel 2 + poseer Carpintería. Nivel interno 3: Asentamiento nivel 3 + poseer Palacio.
-- Coste: construcción 30 madera; mejora 1: 100 madera + 60 piedra; mejora 2: 300 madera + 200 piedra. Tiempo de construcción: 6 minutos.
+- Coste: construcción 30 madera; mejora 1: 100 madera + 60 piedra; mejora 2: 300 madera + 200 piedra. Obra: 12 horas; mejoras: 1 día y 2 días.
 - Cupo de guarnición de cada héroe residente (Doc 5.15.3): 7 / 14 / 22 según su nivel interno.
 
 **Galería de tiro** — reclutamiento de tropas a distancia (unidades y coste en equipo: ver Doc 5.8). Adición MANUAL de Gobernador/Maestro de Obras a la cola (ver 4.2), no auto-construcción.
 - Construcción: Asentamiento nivel 2 (ver nota del requisito militar abajo). Nivel interno 2: Asentamiento nivel 2 + poseer Carpintería. Nivel interno 3: Asentamiento nivel 3 + Carpintería nivel 2 (asimetría INTENCIONAL respecto a Armería/Barracón, que piden Palacio — la Galería de tiro sigue su propio camino de progresión).
-- Coste: construcción 50 madera; mejora 1: 140 madera + 20 piedra; mejora 2: 400 madera + 100 piedra. Tiempo de construcción: 6 minutos.
+- Coste: construcción 50 madera; mejora 1: 140 madera + 20 piedra; mejora 2: 400 madera + 100 piedra. Obra: 12 horas; mejoras: 1 día y 2 días.
 - Cupo de guarnición de cada héroe residente (Doc 5.15.3): 7 / 14 / 22 según su nivel interno.
 
 > **Requisito militar de nivel 2 — por qué existe.** Barracón y Galería de tiro son los dos únicos tipos capaces de abrir el grupo militar en el trazado urbano, y el primero que se construye arrastra consigo la Plaza de Armas (ver `Consideraciones/Vista_Asentamiento_Trazado_Urbano.md` §5.7.1). Al fundar, el disco urbano mide 5 celdas y no existe ningún hueco que respete la separación mínima entre anclas: el núcleo militar nacería pegado al Centro Urbano y se quedaría ahí el resto de la partida, porque **ningún ancla se muda nunca**.
@@ -156,13 +158,13 @@ Van por AUTO-CONSTRUCCIÓN (igual que Granja/Cantera), disparadas en cuanto se c
 >
 > **El requisito va en la CONSTRUCCIÓN, nunca en el reclutamiento.** Reclutar no comprueba el nivel del asentamiento: uno que sube a nivel 2, construye Armería y Barracón y después se **degrada** a nivel 1 sigue pudiendo reclutar mientras tenga materiales. Los edificios y el equipo ya están físicamente ahí; perder nivel no borra lo que ya levantaste.
 
-**Gran Fundición** — edificio de élite. Requiere nivel de Facción 3. Coste: 150 madera + 100 piedra + 50 oro. Tiempo: 20 minutos.
+**Gran Fundición** — edificio de élite. Requiere nivel de Facción 3. Coste: 150 madera + 100 piedra + 50 oro. Obra: 2 días.
 
 ### Comercio
 
 **Mercado** (Doc 3.12) — gatea colocar órdenes de mercado y crear caravanas comerciales propias. Sin recetas: no fabrica nada, sus niveles internos administran cupos, no producción. Adición MANUAL de Gobernador/Maestro de Obras a la cola (ver 4.2), no auto-construcción. Al alcanzar cada nivel interno crea solo sus puestos de mercado, gratis.
 - Sin requisito de nivel de asentamiento para la construcción. Nivel interno 2: Asentamiento nivel 2. Nivel interno 3: Asentamiento nivel 3.
-- **Coste: construcción 100 madera, SIN piedra.** Un asentamiento sin mineral alcanzable en su zona nunca junta más de los 20 de piedra de la reserva inicial (Doc 1.3), y sin Mercado no hay caravana propia con la que entregar su lado de ningún trueque: el comercio no puede depender de tener ya el recurso que el comercio existe para resolver. Mejora 1: 150 madera + 100 piedra; mejora 2: 450 madera + 200 piedra (para entonces el asentamiento ya tuvo tiempo de conseguir piedra, por extracción propia o por el comercio que el Mercado nivel 1 acaba de destrabar). Tiempo de construcción: 8 minutos.
+- **Coste: construcción 100 madera, SIN piedra.** Un asentamiento sin mineral alcanzable en su zona nunca junta más de los 20 de piedra de la reserva inicial (Doc 1.3), y sin Mercado no hay caravana propia con la que entregar su lado de ningún trueque: el comercio no puede depender de tener ya el recurso que el comercio existe para resolver. Mejora 1: 150 madera + 100 piedra; mejora 2: 450 madera + 200 piedra (para entonces el asentamiento ya tuvo tiempo de conseguir piedra, por extracción propia o por el comercio que el Mercado nivel 1 acaba de destrabar). Obra: 8 horas; mejoras: 16 y 32 horas.
 - Por nivel interno (1 / 2 / 3): **cupo de flota** 2 / 4 / 6 caravanas (más el +1 de la política "Ampliación de Flota", ver 4.4) y **cupo de escolta** 1 / 2 / 3 escuadrones por caravana (Doc 3.13.4).
 - El Mercado no regala ninguna caravana al completarse (Doc 3.13.2).
 
@@ -170,7 +172,7 @@ Van por AUTO-CONSTRUCCIÓN (igual que Granja/Cantera), disparadas en cuanto se c
 
 **Maravilla** (`Roadmap_Escalado.md` Eje 4) — edificio único de coste extremo, sin recetas ni producción: es un trofeo, no un edificio productivo. Disponible vía control manual de cola (Gobernador/Maestro de Obras, ver 4.2), no auto-construcción. Completarla cierra el ciclo del servidor (Doc 2.9).
 - Requisito: Asentamiento en nivel MÁXIMO (nivel 5).
-- Coste: 5000 madera + 5000 piedra + 500 oro + 300 cobre + 200 estaño + 200 livestock (todos los recursos EN BRUTO del catálogo, varias veces el coste del Palacio). Tiempo: 200 minutos.
+- Coste: 5000 madera + 5000 piedra + 500 oro + 300 cobre + 200 estaño + 200 livestock (todos los recursos EN BRUTO del catálogo, varias veces el coste del Palacio). Obra: 4 semanas.
 
 ## 4.3 Almacenamiento
 Límites de almacenaje por recurso, ampliables construyendo más capacidad. El superávit que excede el límite dispara construcción automática de más almacenamiento.
@@ -192,25 +194,40 @@ Dos edificios lo amplían, y no compiten: el **Almacén** sube la capacidad de T
 - **"Edicto de Cosecha"** (Gobernador): multiplica ×1.5 la producción de trigo de todas las Granjas activas del asentamiento. No afecta a madera ni piedra. Ver 4.2.1 (Granja).
 - **"Presión Fiscal"** (Tesorero): sube la recaudación de oro (`factorRecaudacion` ×1.6, ver 4.1) **a cambio de** frenar el crecimiento de las 3 clases de población (`factorCrecimientoPoblacion` ×0.8). Sin política activa = baseline (factor 1). Es el mando de "más oro ahora ↔ menos gente mañana" — no hace falta un sistema de felicidad para que tenga un coste real. El Gobernador, con pool completa, también puede activarla.
 - **"Racionamiento"** (Sacerdote): reduce el consumo de trigo de la población (×0.8). No afecta a la ración de tropas (Doc 5.4). Ver 4.1.
-- **"Vía Rápida de Construcción"** (Maestro de Obras): multiplica ×0.75 el tiempo de construcción de cualquier edificio que arranque obra mientras esté activa (25% más rápido) — no afecta al coste en recursos, solo a los minutos de obra.
-- **"Líneas de Producción"** (Maestro de Obras): mientras esté activa, un edificio de transformación NUEVO (Curtiduría/Armería/Fundición) no se sitúa en el primer hueco libre del crecimiento concéntrico — evalúa TODOS los huecos disponibles en la zona y elige el que minimiza la penalización de distancia a la fuente de sus insumos (4.2, "el eslabón más débil manda"), para que produzca a mejor ritmo desde el primer minuto. Compite por el ÚNICO slot de Maestro de Obras con "Vía Rápida de Construcción": con una activa no queda hueco para la otra hasta que expire. Si el edificio no tiene recetas (Carpintería) o ya existe una fuente igual de cerca en cualquier hueco, el resultado no cambia respecto a tenerla desactivada.
+- **"Vía Rápida de Construcción"** (Maestro de Obras): multiplica ×0.75 el tiempo de cualquier obra o mejora que arranque mientras esté activa (25% más rápido) — no afecta al coste en recursos, solo al tiempo.
 - **Políticas de flota de caravanas** (Tesorero, ver Doc 3.12): "Ampliación de Flota" suma +1 al cupo de caravanas propias (aditivo, no multiplicativo — a diferencia del resto de políticas de este catálogo); "Carga Ampliada" multiplica ×1.5 la capacidad de carga de las caravanas propias; "Rutas Rápidas" multiplica ×1.5 su velocidad.
 - **"Levas de guarnición"** (General): mientras esté activa, suma +14 al cupo de guarnición de cada héroe residente (Doc 5.15.3).
 
 ## 4.5 Mantenimiento de asentamientos (sistema unificado, incluye ex-"Coste de Gobernanza")
-- **NIVEL DE ASENTAMIENTO — por requisitos**: sube cuando cumple A LA VEZ los de población y los de edificios, no por una fórmula continua. Nivel máximo: 5.
+- **NIVEL DE ASENTAMIENTO — por requisitos y a petición del Gobernador**: el nivel NO sube solo. Cumplir A LA VEZ los requisitos de población y de edificios es lo que permite PEDIR la subida al nivel siguiente (ver "Subida de nivel" abajo). Nivel máximo: 5.
   - Nivel 2: 200 pesants + 3 de los 7 tipos de extracción (Cantera, Leñera, Granja, Mina de oro, Mina de cobre, Mina de estaño, Corral). No pide artesanos: sin nivel 2 no hay edificios de transformación, y sin ellos no aparecen artesanos.
   - Nivel 3: 500 pesants + 200 artesanos + Armería, Curtiduría, Fundición, Barracón y Galería de tiro.
   - Nivel 4: 1.000 pesants + 400 artesanos + un recinto de muralla completo, de cualquier nivel (4.2.1).
   - Nivel 5: 2.000 pesants + 800 artesanos + Palacio.
 
   Poblaciones placeholder (`NIVEL_ASENTAMIENTO`). El nivel alimenta: el techo de zona de influencia (Doc 1.2), qué materiales cobra el Mantenimiento (abajo) y el **techo de población total** — 300 / 1.500 / 6.000 / 12.000 / 20.000 habitantes para los niveles 1-5: por encima, la Vivienda y el Palacio dejan de dar cupo aunque tengan espacio. Es el nivel de ASENTAMIENTO — distinto del nivel de FACCIÓN (Doc 2.2.1), que sube por experiencia.
-- **Subir de nivel exige además CUPO libre en la Facción** (Doc 2.2.1, `CUPO_NIVEL_ASENTAMIENTO`): un asentamiento con los requisitos cumplidos puede quedarse "elegible, esperando cupo". Nunca se bloquea ni se degrada por esto, y la interfaz avisa de que ese es el motivo.
+- **Subida de nivel** (decidido el 2026-09-26): la pide el **Gobernador** del asentamiento, se sube de uno en uno y se hace con una **obra de ascenso**. Para pedirla hacen falta cuatro cosas a la vez:
+  1. **Los requisitos** de población y edificios del nivel siguiente (arriba).
+  2. **Cupo libre en la Facción** para ese nivel (Doc 2.2.1, `CUPO_NIVEL_ASENTAMIENTO`). Se reserva al pedir.
+  3. **El coste de la obra en el almacén del asentamiento.** Se paga entero al empezar, del almacén común — el Gobernador decide el gasto, no lo pone de su bolsillo (los héroes no tienen almacén de recursos; sus monedas no son el oro recurso, Doc 5.16.1).
+  4. **Solvencia en el nivel objetivo**: lo que el asentamiento produce y recauda hoy por minuto tiene que cubrir, recurso a recurso, el mantenimiento que pagaría en el nivel nuevo (abajo). Un almacén lleno no basta: un stock no arregla un ingreso que no llega.
+
+  | Subida | Coste de la obra | Duración |
+  |---|---|---|
+  | 1 → 2 | 600 madera, 400 piedra, 150 oro | 3 días |
+  | 2 → 3 | 1.200 madera, 1.000 piedra, 400 oro, 100 lingotes de bronce | 1 semana |
+  | 3 → 4 | 2.500 madera, 2.500 piedra, 1.000 oro, 150 lingotes de bronce | 2 semanas |
+  | 4 → 5 | 5.000 madera, 5.000 piedra, 2.500 oro (más bienes de lujo si se aprueban los talleres de lujo) | 3 semanas |
+
+  El coste pide lo que el nivel nuevo va a cobrar (piedra y oro) y, desde el nivel 3, un bien elaborado que solo existe a partir de cierta Era: así el ritmo de niveles sigue a las Eras sin ninguna regla que lo prohíba (el lingote de bronce del 2 → 3 pide estaño, que casi siempre llega por comercio). Cada coste cabe en el almacén máximo del nivel de partida. La duración de la obra es parte del ritmo de la partida (Doc 6, Eras) y no depende de la economía. Cifras placeholder (`ASCENSO_ASENTAMIENTO`).
+  - Mientras dura la obra el asentamiento funciona con normalidad. **Si lo conquistan a mitad de obra, la obra se pierde** sin devolución, y con ella la reserva de cupo.
+  - La interfaz enseña, dentro de la plaza, si se puede pedir la subida y, si no, todos los motivos a la vez: requisitos que faltan, cupo, coste y la solvencia recurso a recurso.
 - MEDIDOR 0-100 por asentamiento, empieza en 100.
-- **Período de gracia al fundar** (Doc 1.3): durante un número de minutos tras la fundación, NO se cobra mantenimiento. Sin esto, todo asentamiento nuevo caería en ruinas antes de tener su economía en marcha.
+- **Período de gracia al fundar** (Doc 1.3): durante **el primer día** tras la fundación NO se cobra mantenimiento. Sin esto, todo asentamiento nuevo caería en ruinas antes de tener su economía en marcha (las primeras obras tardan horas, 4.2.1).
 - COSTE PERIÓDICO en recursos + oro. Qué materiales se cobran depende del NIVEL; la cantidad escala con la población y con la DISTANCIA al centro de poder de la Facción (más lejos = más caro; mecanismo anti-snowball):
   - Nivel 1: madera.
-  - Nivel 2 en adelante: madera + piedra + **oro**. Cobrar oro desde el nivel 2 lo convierte en un drenaje real para buena parte de los asentamientos.
+  - Nivel 2: madera + piedra.
+  - Nivel 3 en adelante: madera + piedra + **oro**. El oro se cobra desde el nivel en que aparece quien lo paga: los artesanos, que tributan casi cuatro veces más que un pesant (decidido 2026-09-26; en nivel 2 la recaudación no llegaba a un tercio del coste y era la primera causa de ruina).
 - **El trigo no forma parte del coste periódico.** El "apartado de trigo" del panel de Mantenimiento es el consumo real de comida de la población (4.1) + la ración de tropas (Doc 5.4), y se descuenta UNA sola vez, donde se consume. Un déficit de trigo NUNCA degrada este medidor —que depende solo de madera, piedra y oro—, pero no es inofensivo: tiene su propio medidor de nutrición (4.1), que primero frena el crecimiento y, sostenido, cuesta población real.
 - Si NO se cumple algún pago (madera/piedra/oro), el medidor BAJA de 100 a 0 de forma PROPORCIONAL al déficit (degradación gradual, no corte binario); con el pago íntegro, se regenera.
 - Al llegar a 0: el asentamiento se DESTRUYE y cae en RUINAS → se limpia la zona → queda disponible para otro jugador/grupo. Esta es la MISMA ruta mecánica que el caso de abandono total (sea el asentamiento literalmente abandonado o simplemente mal gestionado mientras sigue activo).

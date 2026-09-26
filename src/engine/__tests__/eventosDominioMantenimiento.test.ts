@@ -1,23 +1,18 @@
-// Fase A5 (Docs/Arquitectura/4_Plan_Evolucion_Tareas.md): `mantenimiento.ts` migrado. Ambas funciones son
+// Fase A5 (Docs/Arquitectura/4_Plan_Evolucion_Tareas.md): `mantenimiento.ts` migrado (el evento de subida de
+// nivel se fue con la subida manual a `ascenso.test.ts`). Las funciones son
 // puras y directamente testeables — se construye el `Asentamiento` en el estado exacto que dispara cada
 // código y se llama a mano, sin correr un tick completo ni encadenar muchos.
 import { describe, expect, it } from 'vitest';
-import type { Asentamiento, Edificio } from '../../domain/types';
+import type { Asentamiento } from '../../domain/types';
 import { MANTENIMIENTO } from '../../constants';
 import {
   avanzarMantenimiento,
-  avanzarNivelAsentamiento,
   type PayloadAsentamientoRuinas,
   type PayloadMantenimientoColapsado,
   type PayloadMantenimientoDeficit,
   type PayloadMantenimientoRecuperado,
-  type PayloadNivelSubio,
 } from '../mantenimiento';
 import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instanteDeTest } from './fixtures';
-
-function edificioActivo(id: string, tipo: Edificio['tipo']): Edificio {
-  return { id, tipo, posicion: { x: 0, y: 0 }, estado: 'activo', ambito: 'asentamiento' };
-}
 
 function base(): Asentamiento {
   const mapa = crearMapaDeterminista(7);
@@ -25,24 +20,6 @@ function base(): Asentamiento {
 }
 
 describe('eventos de dominio — mantenimiento.ts', () => {
-  it('avanzarNivelAsentamiento: gates de nivel 2 cumplidos produce asentamiento.nivel_subio', () => {
-    const asentamiento: Asentamiento = {
-      ...base(),
-      poblacion: { pesants: 200, artesanos: 0, nobleza: 0 },
-      edificios: [edificioActivo('e1', 'cantera'), edificioActivo('e2', 'lenera'), edificioActivo('e3', 'granja')],
-    };
-
-    const resultado = avanzarNivelAsentamiento(asentamiento);
-
-    expect(resultado.eventos).toHaveLength(1);
-    const evento = resultado.eventos[0]!;
-    if (typeof evento === 'string') throw new Error('esperaba evento migrado');
-    expect(evento.codigo).toBe('asentamiento.nivel_subio');
-    const p = evento.payload as PayloadNivelSubio;
-    expect(p.asentamientoId).toBe(asentamiento.id);
-    expect(p.nivelNuevo).toBe(2);
-  });
-
   it('avanzarMantenimiento: bajo ocupación reciente NO degrada aunque haya déficit (Ocupacion §2.4)', () => {
     const asentamiento: Asentamiento = {
       ...base(),

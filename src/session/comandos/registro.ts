@@ -45,6 +45,7 @@ import {
 } from './construccion';
 import { desarmarCaravanaFundacion, lanzarCaravanaFundacion } from './expansion';
 import { abandonarRecinto, comprometerRecinto, mejorarRecinto } from './murallas';
+import { solicitarAscenso } from './ascenso';
 import {
   adjuntarCaravana,
   alternarReabastecerAliados,
@@ -135,6 +136,7 @@ const MANEJADORES = {
   lanzarCaravanaFundacion,
   comprometerRecinto,
   abandonarRecinto,
+  solicitarAscenso,
   mejorarRecinto,
   unirseABatalla,
   cancelarBatalla,

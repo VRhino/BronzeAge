@@ -56,9 +56,8 @@ function conMaterialesInfinitos(a: Asentamiento): Asentamiento {
 }
 
 /** Idéntico a `lab/src/main.ts::posicionRecomendable` — barrido en rejilla de paso 40 devolviendo el primer
- * punto `recomendable` (fundable + bosque LIBRE alcanzable). Deliberadamente NO exige piedra — a diferencia de
- * `buscarPosicionFundacionInicialPorDefecto` (session/npcGobernanza.ts) y de `elegirPosicionesFundacion`
- * (run-batch-sim.ts), que sí la exigen. Esa es justo la divergencia que reporta la nota extra del usuario. */
+ * punto `recomendable` (fundable + bosque LIBRE alcanzable + piedra en el radio: desde 2026-09-26 la piedra
+ * forma parte de `recomendable`, así que la antigua divergencia con la fundación del NPC ya no existe). */
 function posicionRecomendable(mapa: Mapa): Point {
   const paso = 40;
   for (let x = paso; x < mapa.limites.ancho; x += paso) {

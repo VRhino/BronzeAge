@@ -14,6 +14,7 @@ import { esVigente, puedeAdministrar, puedeCrearPartida, puedeDescartarPartida, 
 import type { RolTecnico } from '../../acceso/tipos';
 import type { ActorDeComando } from '../../session/comandos/autorizacion';
 import { PartidaYaAbiertaError } from '../registroDePartidas';
+import { FormatoSnapshotNoSoportadoError, LayoutVersionNoCoincideError, WorldgenVersionNoCoincideError } from '../persistenciaPartida';
 import { recogerMetricas } from '../metricas';
 import { eventosDesde, vistaAdminDeEstado } from '../../session/estado';
 import { ESQUEMA_SESION_AUTH } from '../openapi';
@@ -106,6 +107,7 @@ const ESQUEMA_CREAR_PARTIDA = {
     401: ERROR_RESPUESTA,
     403: ERROR_RESPUESTA,
     409: ERROR_RESPUESTA,
+    422: ERROR_RESPUESTA,
   },
 } as const;
 
@@ -394,8 +396,13 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
       ? await deps.partidas.descartarYCrear(gameId, { seed, region }, intervaloTickMs)
       : await deps.partidas.abrir(gameId, { seed, region }).catch((err: unknown) => {
           if (err instanceof PartidaYaAbiertaError) return undefined;
+          // Guardado de otra versión de la build: no se migra. 422 (no 500) para que el cliente ofrezca `forzar`.
+          if (err instanceof FormatoSnapshotNoSoportadoError || err instanceof WorldgenVersionNoCoincideError || err instanceof LayoutVersionNoCoincideError) {
+            return err;
+          }
           throw err;
         });
+    if (runner instanceof Error) return reply.code(422).send({ error: runner.message });
     if (!runner) return reply.code(409).send({ error: `la partida '${gameId}' ya está abierta en este proceso.` });
 
     otorgarAdministracion(deps, resuelto.actor.usuarioId, gameId);

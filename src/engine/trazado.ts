@@ -1069,12 +1069,11 @@ function claveDeSitios(
   ocupados: readonly Edificio[],
   tipo: EdificioTipo,
   nivelInterno: number | undefined,
-  ampliado: boolean,
   perfil: PerfilTrazado
 ): string {
   const recintos = asentamiento.recintos ?? [];
   const obra = recintos.map((r) => `${r.id}:${r.nivel}:${r.avance}:${r.mejorandoA ?? ''}`).join('/');
-  return `${claveDeTrazado(asentamiento.id, ocupados, recintos)}||${obra}|${asentamiento.radioPotencial}|${tipo}|${nivelInterno ?? ''}|${ampliado ? 1 : 0}|${perfil}`;
+  return `${claveDeTrazado(asentamiento.id, ocupados, recintos)}||${obra}|${asentamiento.radioPotencial}|${tipo}|${nivelInterno ?? ''}|${perfil}`;
 }
 
 /** Vacía LAS DOS cachés de este archivo. Para tests que quieran medir el cálculo real, o comprobar que cachear
@@ -1778,10 +1777,6 @@ export function resolverPerfil(asentamientoId: string, porPolitica: PerfilTrazad
  * `bordeAfin` (lado pegado a los suyos)— con `semillaCandidato` siempre de último. Nunca filtra por dirección,
  * y ningún perfil ignora un criterio: solo lo posterga.
  *
- * `ampliado` (política "Líneas de Producción", `sitioEnBarrioLineaProduccion`): devuelve TODOS los candidatos
- * de la banda sin ordenar por vecindad — la política de logística elige entre ellos por distancia a sus
- * insumos.
- *
  * Devuelve `[]` solo si la banda está geométricamente llena. Quien llama (`sitiosParaTipo`) no tiene fallback:
  * un ancla usable debe garantizarse ANTES de pedir sitio (`asegurarAnclaPara`, construction.ts).
  */
@@ -1791,7 +1786,6 @@ export function sitiosPorAtraccionDura(
   ocupadas: Set<string>,
   red: RedDeCalles,
   permitirRotacion = false,
-  ampliado = false,
   /** Celdas ocupadas por edificios AFINES al que se coloca (`celdasDeTiposAfines`) — uno de los cuatro
    * términos de desempate: entre dos huecos igual de buenos gana el que más lado comparte con los suyos
    * (viviendas con viviendas, industria junta…). Vacío = sin preferencia de agrupación. */
@@ -1834,10 +1828,6 @@ export function sitiosPorAtraccionDura(
 
   const enLaBanda = candidatosConHueco.filter((c) => c.hueco <= radioMaximoNucleoCeldas);
   if (enLaBanda.length === 0) return []; // banda geométricamente llena: el ancla NO admite más satélites.
-
-  if (ampliado) {
-    return enLaBanda.map((c) => ({ punto: c.punto, rotado: c.rotado }));
-  }
 
   // Decorar-ordenar-desdecorar, mismo motivo que en `porDistanciaAlOrigen`: `bordeCompartido`, `bordeAfin` y
   // `semillaCandidato` son constantes por candidato y el comparador se ejecuta `O(n log n)` veces.
@@ -1904,7 +1894,7 @@ export function anclaActivaParaCategoria(
   for (const candidato of candidatos) {
     // El perfil no cambia SI hay hueco (eso es la banda, geométrica) pero sí CUÁL se elegiría, y esta consulta
     // debe hacer exactamente lo que hará la colocación real — por eso se le pasa igual.
-    if (sitiosPorAtraccionDura(candidato, tamano, ocupadas, red, permitirRotacion, false, new Set(), perfil).length > 0) {
+    if (sitiosPorAtraccionDura(candidato, tamano, ocupadas, red, permitirRotacion, new Set(), perfil).length > 0) {
       return { instancia: candidato, anclasRecienLlenas };
     }
     anclasRecienLlenas.push(candidato.id);
@@ -1926,9 +1916,6 @@ export function anclaActivaParaCategoria(
  *   ALCANZABLE Y CON HUECO más cercana al origen (`anclaMasCercana`, filtrada por `!anclaLlena` — Lógica 2).
  *   Si no hay ninguna, devuelve `[]` — quien llama (`asegurarAnclaPara`, construction.ts) debe haber
  *   garantizado una instancia usable (`anclaActivaParaCategoria`) ANTES de pedir sitio.
- *
- * `ampliado` (política "Líneas de Producción", `sitioEnBarrioLineaProduccion` en construction.ts): pide TODOS
- * los candidatos dentro del núcleo del ancla, no solo el mejor — ver `sitiosPorAtraccionDura`.
  *
  * Solo necesita `id` + `radioPotencial` de `asentamiento` (narrowing deliberado) para poder reutilizarse en
  * `engine/settlement.ts` durante la FUNDACIÓN, antes de que exista un `Asentamiento` completo.
@@ -2042,12 +2029,11 @@ export function sitiosParaTipo(
   ocupados: Edificio[],
   tipo: EdificioTipo,
   nivelInterno?: number,
-  ampliado = false,
   /** Perfil de trazado (§E6.23). Por defecto el que le toca al asentamiento (`resolverPerfil`: override del
    * laboratorio > tradición local); `construction.ts` pasa el de la política activa cuando hay una. */
   perfil: PerfilTrazado = resolverPerfil(asentamiento.id)
 ): readonly SitioCandidato[] {
-  const clave = claveDeSitios(asentamiento, ocupados, tipo, nivelInterno, ampliado, perfil);
+  const clave = claveDeSitios(asentamiento, ocupados, tipo, nivelInterno, perfil);
   const guardada = cacheSitios.get(clave);
   if (guardada !== undefined) {
     cacheSitios.delete(clave); // reinsertar = marcarla como la más reciente (LRU sobre el orden del `Map`)
@@ -2055,7 +2041,7 @@ export function sitiosParaTipo(
     return guardada;
   }
 
-  const sitios = calcularSitiosParaTipo(asentamiento, ocupados, tipo, nivelInterno, ampliado, perfil);
+  const sitios = calcularSitiosParaTipo(asentamiento, ocupados, tipo, nivelInterno, perfil);
   cacheSitios.set(clave, sitios);
   if (cacheSitios.size > LIMITE_CACHE_SITIOS) {
     const masVieja = cacheSitios.keys().next().value;
@@ -2069,7 +2055,6 @@ function calcularSitiosParaTipo(
   ocupados: Edificio[],
   tipo: EdificioTipo,
   nivelInterno: number | undefined,
-  ampliado: boolean,
   perfil: PerfilTrazado
 ): readonly SitioCandidato[] {
   const tamano = tamanoEdificio(tipo, nivelInterno);
@@ -2125,10 +2110,9 @@ function calcularSitiosParaTipo(
   );
   if (!anclaInstancia) return [];
   // Desempate por agrupación (2026-08-31): entre huecos igual de pegados al ancla, el que más lado comparte
-  // con edificios afines ya construidos. `ampliado` (Líneas de Producción) lo ignora — esa política reordena
-  // los candidatos por distancia a sus insumos, no por vecindad.
-  const celdasAfines = ampliado ? new Set<string>() : celdasDeTiposAfines(ocupados, tipo, anclaInstancia.id);
-  const sitios = sitiosPorAtraccionDura(anclaInstancia, tamano, ocupadas, red, permitirRotacion, ampliado, celdasAfines, perfil);
+  // con edificios afines ya construidos.
+  const celdasAfines = celdasDeTiposAfines(ocupados, tipo, anclaInstancia.id);
+  const sitios = sitiosPorAtraccionDura(anclaInstancia, tamano, ocupadas, red, permitirRotacion, celdasAfines, perfil);
   return conPreferenciaIntramuros(sitios, tipo, nivelInterno, ocupados, asentamiento.recintos ?? []);
 }
 
@@ -2341,7 +2325,7 @@ export function sitioParaTipo(
   nivelInterno?: number,
   perfil?: PerfilTrazado
 ): { punto: Point; rotado: boolean } | null {
-  return sitiosParaTipo(asentamiento, ocupados, tipo, nivelInterno, false, perfil ?? resolverPerfil(asentamiento.id))[0] ?? null;
+  return sitiosParaTipo(asentamiento, ocupados, tipo, nivelInterno, perfil ?? resolverPerfil(asentamiento.id))[0] ?? null;
 }
 
 /**

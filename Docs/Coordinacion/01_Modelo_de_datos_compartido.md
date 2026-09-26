@@ -140,7 +140,8 @@ Asentamiento
   jugadoresFundadoresIds[]     existente. Tras este modelo, heroesFundadoresIds — quién fundó, base de
                                ciudadanía/residencia
   posicion: Point               en el MAPA GENERAL — existente
-  nivel                        NIVEL ALCANZADO — histórico, monótono, nunca baja — existente
+  nivel                        NIVEL ALCANZADO — histórico, monótono, nunca baja. Desde 2026-09-26 sube
+                               SOLO al terminar una obra de ascenso (`ascenso`, abajo) — existente
   nivelActual                  NIVEL OPERATIVO — puede bajar por mal mantenimiento, nunca > nivel —
                                existente. Determina qué se puede construir/mejorar/reclutar AHORA
   rachaMantenimientoSano?       ticks consecutivos de mantenimiento sano, sube nivelActual al umbral —
@@ -165,6 +166,11 @@ Asentamiento
                                    guarnición de cada héroe también es derivado (edificios y políticas de
                                    este asentamiento, Doc 5.15); no se persiste.
   ocupacionHasta?: Instante          ocupación militar tras conquista — existente
+  ascenso?: AscensoEnCurso          obra de ascenso de nivel en marcha, pedida por el Gobernador (Doc 4.5).
+                                   Ausente = no hay obra. La borra una conquista — nuevo 2026-09-26:
+    nivelObjetivo                  siempre nivel + 1
+    iniciadoEn: Instante
+    completaEn: Instante           al llegar, nivel sube a nivelObjetivo
   medidorMantenimiento             0-100, empieza en 100; a 0 cae en ruinas — existente
   nutricionPoblacion?              0-100, hambruna por déficit de trigo — existente
   autoConstruccionPausada?          si true, el motor deja de comprometer necesidades NUEVAS — existente
@@ -219,6 +225,9 @@ Edificio
   ambito?: 'asentamiento' | 'mapa'   ausente = 'asentamiento' — existente
   fuenteId?                 nodo de recurso o zona de bosque que explota — existente
   nivelInterno?              solo edificios de transformación con tiers — existente
+  mejora?                    mejora de nivel interno en marcha: { nivelObjetivo, completaEn: Instante }. El
+                             edificio sigue 'activo' y produciendo con su nivel actual; nivelInterno sube al
+                             llegar completaEn — nuevo 2026-09-26 (antes las mejoras eran instantáneas)
   rotado?                    orientación intercambiable ancho↔alto — existente
   semillaSaturada?            agotó sus 8 direcciones de crecimiento como semilla de anclas — existente
   anclaLlena?                 sin hueco para el próximo satélite de su categoría — existente
@@ -281,6 +290,8 @@ Recinto
                           Solo cuando `mejorandoA` está ausente Y `avance === -1` significa "trazo
                           comprometido, nada levantado todavía"
   mejorandoA?              nivel al que se mejora ahora, si hay mejora en curso — existente
+  siguienteCeldaEn?: Instante   no se levanta otra celda antes de este instante (una celda cada 15/30/60 min según
+                           el nivel que se paga) — nuevo 2026-09-26
   comprometidoEn: Instante   existente
   completadoEn?: Instante     existente
 

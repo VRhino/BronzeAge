@@ -191,6 +191,7 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   ),
   // Sin `cargo`: abandonar es solo del Gobernador (§8 del doc), no un `CargoConstructor` cualquiera.
   abandonarRecinto: objeto({ asentamientoId: IDENTIFICADOR, recintoId: IDENTIFICADOR }, ['asentamientoId', 'recintoId']),
+  solicitarAscenso: objeto({ asentamientoId: IDENTIFICADOR }, ['asentamientoId']),
   mejorarRecinto: objeto(
     { asentamientoId: IDENTIFICADOR, cargo: CARGO_CONSTRUCTOR, recintoId: IDENTIFICADOR },
     ['asentamientoId', 'cargo', 'recintoId']

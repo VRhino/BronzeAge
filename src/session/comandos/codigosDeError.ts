@@ -23,6 +23,7 @@ export const CODIGOS_ERROR = {
   comercioCaravanaInvalida: 'comercio.caravana_invalida',
   comercioTruequeInvalido: 'comercio.trueque_invalido',
   recintoInvalido: 'recinto.invalido',
+  ascensoInvalido: 'ascenso.invalido',
   movilizacionInvalida: 'movilizacion.invalida',
   heroeInvalido: 'heroe.invalido',
 

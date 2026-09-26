@@ -4,6 +4,7 @@
 // archivo); este módulo solo resuelve QUÉ código le corresponde a cada CLASE de error del motor. Añadir un
 // error nuevo del motor sin añadirlo a esta tabla hace que `codigoDeErrorDominio` devuelva `undefined` — el
 // llamador lo relanza como bug en vez de fallar en silencio (ver `rechazoDesdeError`, `comandos/tipos.ts`).
+import { AscensoInvalidoError } from '../engine/ascenso';
 import { CargoInvalidoError } from '../engine/cargos';
 import { CombateInvalidoError } from '../engine/combate';
 import { ConstruccionManualInvalidaError } from '../engine/construction';
@@ -23,9 +24,10 @@ import { HeroeInvalidoError } from '../engine/heroe';
 import { BatallaInvalidaError, BatallaYaAsignadaError } from './batallas';
 import { CODIGOS_ERROR, type CodigoError } from './comandos/codigosDeError';
 
-/** Los 17 tipos de error de dominio que el motor puede lanzar, y su código estable. Orden alfabético por
+/** Los 20 tipos de error de dominio que el motor puede lanzar, y su código estable. Orden alfabético por
  * código, no por módulo — así un código nuevo se ubica por lo que significa, no por dónde vive en `engine/`. */
 const CODIGOS_DE_ERROR = new Map<Function, CodigoError>([
+  [AscensoInvalidoError, CODIGOS_ERROR.ascensoInvalido],
   [BatallaInvalidaError, CODIGOS_ERROR.batallaInvalida],
   [BatallaYaAsignadaError, CODIGOS_ERROR.batallaYaAsignada],
   [CargoInvalidoError, CODIGOS_ERROR.cargoInvalido],

@@ -74,6 +74,7 @@ geometría, control por zona de influencia, peaje en oro, tipo de dominio y rend
 - ✅ Cap de fundación por Facción, escala con el nivel de Facción (1→7) — `código: ✔` (`CAP_FUNDACION_POR_NIVEL`)
 - ✅ Período de gracia sin cobro de Mantenimiento al fundar — `código: ✔` (`MANTENIMIENTO.graciaMinutos = 60`)
 - ✅ Radio inicial de zona de influencia 30, techo por nivel de asentamiento — `código: ✔` (`ZONA_INFLUENCIA.radioMaximoPorNivel`, ampliado a 5 niveles: 60/90/120/150/180)
+- ✅ **Fundar solo es `recomendable` con piedra en el radio inicial** (2026-09-26), además de bosque libre; lo aplican la fundación y la expansión del NPC — `código: ✔` (`evaluarViabilidadFundacion`, `engine/settlement.ts`; `issues/extractores_minerales_nunca_se_construyen.md`)
 - ✅ **Nivel de Facción por EXPERIENCIA** — reemplaza la fórmula por población; sube por combate, construcción, conquista y defensa/ataque de caravana, y es monótono — `código: ✔` (`NIVEL_FACCION`, `engine/faccion.ts` `aplicarAjustesExperiencia`). *Cierra el 🔶 que este documento arrastraba sobre "qué hace subir el nivel de Facción".* La curva `xpParaNivel` sigue siendo placeholder.
 - ✅ Caravana de Fundación: coste, gates de nivel 2 + poder pagar, manual, interceptable, desarmable con recuperación completa — `código: ✔` (`engine/expansion.ts`, comandos `lanzarCaravanaFundacion` / `desarmarCaravanaFundacion`)
 - ✅ Cooldown compartido de creación de caravanas (Fundación y comercial) — `código: ✔` (`CARAVANA_COOLDOWN`)
@@ -154,10 +155,13 @@ geometría, control por zona de influencia, peaje en oro, tipo de dominio y rend
 
 ## Mantenimiento
 - ✅ Medidor 0-100, coste periódico escalonado por nivel y por distancia al centro de poder — `código: ✔` (`engine/mantenimiento.ts`, `MANTENIMIENTO`)
-- ✅ Nivel de asentamiento por GATES (población + edificios específicos) — `código: ✔`
+- ✅ Nivel de asentamiento por GATES (población + edificios específicos) — `código: ✔`. **Desde 2026-09-26 los gates ya no suben el nivel**: son el requisito para pedirlo.
+- ✅ **Subida de nivel MANUAL** (2026-09-26): la pide el Gobernador; exige gates + cupo de Facción (reservado al pedir) + coste de la obra en el almacén + solvencia en el nivel objetivo; obra de 3 días / 1 / 2 / 3 semanas; la conquista la borra; el NPC la pide solo — `código: ✔` (`engine/ascenso.ts`, `ASCENSO_ASENTAMIENTO`, comando `solicitarAscenso`, proyección `ascensoDeAsentamiento`). Cifras placeholder; calibración en `Consideraciones/Ritmo_Crecimiento_Asentamientos.md`.
 - ✅ **Expansión de niveles 3 → 5 (Fase 0.6)**: nivel 2 = 200 pesants + 3 de 7 extractores; nivel 3 = 500 pesants + 200 artesanos + armería/curtiduría/fundición/barracón/galería; nivel 4 = 1000/400 + recinto terminado; nivel 5 = 2000/800 + palacio — `código: ✔` (`NIVEL_ASENTAMIENTO.requisitos`). *Este documento decía "tope de Fase 0 = nivel 3"; ya no es cierto.*
 - ✅ Tope de Almacenes por nivel (`NECESIDADES.maximoAlmacenesPorNivel`, cuenta activos + en obra + en cola, y aplica igual a la adición manual) y tope de Viviendas derivado del gate del nivel siguiente y del techo de población, no de una constante propia (`alcanzoTopeDeViviendas`, `engine/construction.ts`) — `código: ✔`
-- ✅ Período de gracia al fundar — `código: ✔`
+- ✅ Período de gracia al fundar — `código: ✔` (1 día desde el 2026-09-26, antes 60 min)
+- ✅ **Tiempos de obra en horas y mejoras con duración** (2026-09-26): obras de 1 h a 4 semanas; mejora = obra × 2^(nivel−1); ocupa cuadrilla; el edificio sigue produciendo; las mejoras automáticas dejan siempre una cuadrilla libre; la reconstrucción no ocupa cuadrilla — `código: ✔` (`EDIFICIO_CATALOGO`, `MEJORA_EDIFICIO`, `Edificio.mejora`, `MURALLA.minutosPorCelda`, `cuadrillasOcupadas`). Decisiones en `Consideraciones/Ritmo_Crecimiento_Asentamientos.md` §11.1.
+- ❌ **Política "Líneas de Producción" eliminada** (2026-09-26, decisión del usuario): no podía afectar a la Fundición (insumos del mapa general, otro espacio de coordenadas). Queda la penalización por distancia a los insumos (`LINEAS_PRODUCCION`).
 - ✅ Degradación proporcional del medidor; a 0 el asentamiento colapsa, con razón auditable de qué recurso faltó y cuánto duró el déficit — `código: ✔`
 - ✅ El trigo NO es coste fijo de Mantenimiento: se descuenta una sola vez como consumo real de población + raciones de tropa — `código: ✔`
 - ✅ Mantenimiento base en madera reducido a la mitad (3 → 1.5) porque inflaba la reserva de construcción hasta bloquear todo gasto discrecional — `código: ✔`
@@ -228,9 +232,9 @@ geometría, control por zona de influencia, peaje en oro, tipo de dominio y rend
 ## Políticas
 - ✅ Duración, renovación, múltiples activas, no cancelables; conexión con auto-construcción — `código: ✔` (`engine/politicas.ts`, `POLITICAS`)
 - ✅ Slots por cargo (Gobernador 2→5 con el nivel de Facción, Tesorero 2, resto 1) — `código: ✔`
-- ✅ **Catálogo concreto**, 15 políticas: `racionamiento`, `culto_fertilidad`, `via_rapida`, `postura_defensiva`, `arterias_comerciales`, `barrios_gremiales`, `plazas_mayores`, `lineas_produccion`, `comercio_abierto`, `aranceles`, `leva_forzosa`, `cupo_caravana_extra`, `carga_ampliada`, `rutas_rapidas`, `edicto_cosecha` — `código: ✔` (`POLITICA_CATALOGO`). *Cierra en gran parte el 🔶 de "catálogo concreto de políticas".*
+- ✅ **Catálogo concreto**, 14 políticas: `racionamiento`, `culto_fertilidad`, `via_rapida`, `postura_defensiva`, `arterias_comerciales`, `barrios_gremiales`, `plazas_mayores`, `comercio_abierto`, `aranceles`, `leva_forzosa`, `cupo_caravana_extra`, `carga_ampliada`, `rutas_rapidas`, `edicto_cosecha` — `código: ✔` (`POLITICA_CATALOGO`). *Cierra en gran parte el 🔶 de "catálogo concreto de políticas".*
 - ✅ Las 4 políticas "Construir Barracón / Galería / Palacio / Mercado" se retiraron: eso pasó al control manual de cola — `código: ✔`
-- ✅ **Exclusión dentro de un slot, resuelta sin regla nueva**: las 4 ordenanzas de trazado + Vía Rápida + Líneas de Producción comparten el único slot de Maestro de Obras, así que ya son mutuamente excluyentes. Como una política dura 150 ticks y nada mueve lo ya construido, cada una deja un ESTRATO en la ciudad — `código: ✔`
+- ✅ **Exclusión dentro de un slot, resuelta sin regla nueva**: las 4 ordenanzas de trazado + Vía Rápida comparten el único slot de Maestro de Obras, así que ya son mutuamente excluyentes. Como una política dura 150 ticks y nada mueve lo ya construido, cada una deja un ESTRATO en la ciudad — `código: ✔`
 - ❌ **"Protección de Riesgos" (Maestro de Obras) ya NO existe** — este documento la daba por viva ("ampliada a 2 Leñeras + 3 Granjas"); no está en `POLITICA_CATALOGO` ni en el cliente. Su función la cubren hoy el tope por tipo de extractor (`EXTRACCION_MAXIMOS.porTipo`) y el disparador de Granja por déficit real — `código: ✘`
 - 🔶 Las ordenanzas de trazado no tienen todavía coste/beneficio mecánico propio, así que compiten en desventaja contra Vía Rápida (−25% de tiempo de obra) — `código: ◐` (anotado como pendiente en el propio `constants.ts`; `Docs/Mecanicas a desarrollar.md` §25)
 

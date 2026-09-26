@@ -5,13 +5,14 @@
 // Lo que congela este archivo es la propiedad que da sentido a toda la mecánica: **perfiles distintos producen
 // ciudades distintas, y ninguno rompe los invariantes del trazado.** Sin lo primero la política es cosmética;
 // sin lo segundo es un bug con nombre bonito.
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 import type { Asentamiento } from '../../domain/types';
 import { PERFILES_TRAZADO, POLITICAS, TRAZADO, ZONA_INFLUENCIA, type PerfilTrazado } from '../../constants';
 import { activarPolitica, perfilTrazadoDePolitica } from '../politicas';
 import { avanzarSimulacion } from '../simulation';
 import { createRng } from '../../worldgen';
 import {
+  ANCLA_SATURACION_POR_CATEGORIA,
   celdaMinimaDeEdificio,
   celdasDeEdificio,
   edificiosInternos,
@@ -19,7 +20,13 @@ import {
   resolverPerfil,
   sueloOcupado,
 } from '../trazado';
-import { contextoDeTest, crearEstadoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instanteDeTest } from './fixtures';
+import { acelerarObras, contextoDeTest, crearEstadoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instanteDeTest } from './fixtures';
+
+// Geometría: crecen ciudades y miran QUÉ se construye y DÓNDE, no CUÁNDO — obras aceleradas (ver `acelerarObras`).
+// Al cargar el módulo y no en `beforeAll`: parte de las ciudades se crecen al DECLARAR los bloques (colección), antes
+// de que corra ningún hook. Vitest aísla cada archivo, así que no se filtra a otros tests.
+const restaurarObras = acelerarObras();
+afterAll(() => restaurarObras());
 
 const SEED = 42;
 
@@ -62,9 +69,11 @@ describe('perfiles de trazado — la permutación del desempate cambia la ciudad
     // Es la propiedad que justifica la mecánica entera. Si dos perfiles coinciden, ese perfil es decorativo:
     // pasó con "palatina" (dominaba `bordeCompartido`, que solo tiene señal a hueco 0) y por eso se descartó
     // antes de llegar al catálogo — este test es lo que impide que vuelva a colarse uno así.
+    // 180 ticks y no 120: desde que las mejoras ocupan cuadrilla (2026-09-26) la ciudad de 120 ticks es tan pequeña que
+    // dos perfiles no llegaban a tener desempates que permutar. Comprobado que a 180 y a 240 los cuatro divergen.
     const firmas = new Map<string, PerfilTrazado[]>();
     for (const perfil of PERFILES_TRAZADO) {
-      const f = firma(ciudadCon(perfil, 120));
+      const f = firma(ciudadCon(perfil, 180));
       firmas.set(f, [...(firmas.get(f) ?? []), perfil]);
     }
     const duplicados = [...firmas.values()].filter((ps) => ps.length > 1);
@@ -92,8 +101,19 @@ describe('perfiles de trazado — la permutación del desempate cambia la ciudad
   it('el perfil no altera QUÉ se construye, solo DÓNDE', () => {
     // La forma no puede ser una ventaja económica encubierta: dos ciudades con el mismo material y los mismos
     // ticks deben levantar el mismo censo de edificios, esté el que esté al mando del desempate.
+    //
+    // Las anclas de SATURACIÓN (plaza, pozo, parque, plaza de armas, patio de gremios) quedan fuera: se crean
+    // cuando una categoría se queda sin hueco, así que dependen de la geometría por definición — son parte del
+    // DÓNDE. No cuestan nada ni producen nada, así que no pueden ser una ventaja económica. Salió al mover el
+    // sitio de fundación de los tests (2026-09-26, `recomendable` exige piedra): en el sitio nuevo el perfil
+    // compacto satura antes el barrio residencial y abre una plaza de más, con las mismas 16 Viviendas.
+    const anclasDeSaturacion = new Set<string>(Object.values(ANCLA_SATURACION_POR_CATEGORIA).flat());
     const censo = (a: Asentamiento): string =>
-      [...a.edificios.reduce((m, e) => m.set(e.tipo, (m.get(e.tipo) ?? 0) + 1), new Map<string, number>())]
+      [
+        ...a.edificios
+          .filter((e) => !anclasDeSaturacion.has(e.tipo))
+          .reduce((m, e) => m.set(e.tipo, (m.get(e.tipo) ?? 0) + 1), new Map<string, number>()),
+      ]
         .sort(([x], [y]) => x.localeCompare(y))
         .map(([t, n]) => `${t}:${n}`)
         .join(',');

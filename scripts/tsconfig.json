@@ -4,5 +4,5 @@
   "compilerOptions": {
     "lib": ["ES2022", "DOM"]
   },
-  "include": ["run-batch-sim.ts", "lab.ts", "catalogo-edificios.ts", "lab-batch-trazado.ts"]
+  "include": ["run-batch-sim.ts", "bench-batch-checkpoint.ts", "bench-fundacion-zonas.ts", "lab.ts", "catalogo-edificios.ts", "lab-batch-trazado.ts"]
 }

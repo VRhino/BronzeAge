@@ -91,6 +91,7 @@ import {
 } from '../../engine/exploracion';
 import { MEMORIA_VACIA, type FichaConocida } from '../../engine/memoria';
 import type { ProduccionItem } from '../../engine/asentamientoQuery';
+import type { EvaluacionAscenso } from '../../engine/ascenso';
 import {
   eventosDesde,
   idDeMapa,
@@ -408,6 +409,12 @@ export interface ProyeccionJugador {
    * así que el cliente de jugador —sin motor— no puede calcularlo. Lo rellena `RunnerDePartida` y lo fusiona
    * la ruta HTTP, igual que `preciosReferencia`. */
   produccionDeAsentamiento?: ProduccionItem[];
+  /** Si la plaza que el jugador PISA (`asentamientos[0]`) puede pedir ya la subida de nivel y, si no, por qué: los
+   * bloqueos, el coste, la duración de la obra y la solvencia recurso a recurso (`evaluarAscenso`,
+   * `engine/ascenso.ts`, Doc 4.5). La obra en curso, si la hay, ya viaja en el propio asentamiento (`ascenso`).
+   * Mismo caso que `produccionDeAsentamiento`: la solvencia necesita el mapa (entrada privilegiada), así que la
+   * rellena `RunnerDePartida` y la fusiona la ruta HTTP. `undefined` si está en el mundo. */
+  ascensoDeAsentamiento?: EvaluacionAscenso;
 }
 
 function faccionDe(estado: GameSessionState, heroeId: string): string | null {
@@ -625,7 +632,7 @@ export function proyectarParaJugador(
   estado: GameSessionState,
   heroeId: string,
   geometria: GeometriaAsentamientos
-): Omit<ProyeccionJugador, 'preciosReferencia' | 'produccionDeAsentamiento'> {
+): Omit<ProyeccionJugador, 'preciosReferencia' | 'produccionDeAsentamiento' | 'ascensoDeAsentamiento'> {
   const { faccionId, asentamientosPropios, esPropio } = propioDeJugador(estado, heroeId);
 
   // La plaza que el jugador PISA, que es la única cuyo interior viaja (Doc 1.10.1). Se exige además que sea
