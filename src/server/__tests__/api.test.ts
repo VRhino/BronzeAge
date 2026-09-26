@@ -454,6 +454,35 @@ describe('GET /jugador/partidas/:gameId (proyeccion, Fase C4 Slice 1)', () => {
     expect(Array.isArray(dentro.json().produccionDeAsentamiento)).toBe(true);
   });
 
+  it('subida de nivel (Doc 4.5): la evaluación viaja dentro de la plaza, y el comando es solo del Gobernador', async () => {
+    await partidaCreada('g1');
+    const ana = await jugadorEn('g1', 'ana');
+    const comando = (tipo: string, params: Record<string, unknown>) =>
+      app.inject({ method: 'POST', url: '/v1/jugador/partidas/g1/comandos', headers: ana, payload: { tipo, params } });
+
+    const fuera = await app.inject({ method: 'GET', url: '/v1/jugador/partidas/g1', headers: ana });
+    expect(fuera.json().ascensoDeAsentamiento).toBeUndefined();
+
+    const f = await comando('crearFaccion', { nombre: 'Micenas' });
+    const a = await comando('fundarAsentamiento', { faccionId: f.json().resultado.datos.faccionId, posicion: { x: 500, y: 500 } });
+    const asentamientoId = a.json().resultado.datos.asentamientoId;
+
+    // Recién fundada: se ve a dónde subiría y todo lo que le falta, sin tener que intentarlo.
+    const dentro = (await app.inject({ method: 'GET', url: '/v1/jugador/partidas/g1', headers: ana })).json();
+    expect(dentro.ascensoDeAsentamiento).toMatchObject({ nivel: 1, nivelObjetivo: 2, puede: false });
+    expect(dentro.ascensoDeAsentamiento.bloqueos).toContain('falta_poblacion');
+
+    // Sin cargo, la autorización lo para antes del motor.
+    expect((await comando('solicitarAscenso', { asentamientoId })).statusCode).toBe(403);
+
+    // Ya de Gobernador, llega al motor, que lo rechaza con su código estable.
+    const heroeId = dentro.heroe.id;
+    await comando('asignarCargoLocal', { asentamientoId, cargo: 'gobernador', heroeId });
+    const pedida = await comando('solicitarAscenso', { asentamientoId });
+    expect(pedida.statusCode).toBe(200);
+    expect(pedida.json().resultado).toMatchObject({ ok: false, codigoError: 'ascenso.invalido' });
+  });
+
   it('no incluye asentamientos de una Faccion rival, aunque el admin sí los vea', async () => {
     await partidaCreada('g1');
     const ana = await jugadorEn('g1', 'ana');
@@ -909,7 +938,8 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       // `retirarGuarnicion`.
       // -1 con los bandidos atacados con columna (Doc 1.9): sale `atacarCampamentoBandidos`, lo cubre `atacar`.
       // +2 con las batallas de Unity (doc 02 §3.1): `unirseABatalla` y `cancelarBatalla`.
-      expect(cuerpo.oneOf.length).toBe(76);
+      // +1 con la subida de nivel manual (Doc 4.5): `solicitarAscenso`, solo el Gobernador.
+      expect(cuerpo.oneOf.length).toBe(77);
       const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
       expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
     });

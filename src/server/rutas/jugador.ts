@@ -31,9 +31,9 @@ const SEGURIDAD_JUGADOR = [{ [ESQUEMA_SESION_AUTH]: [] }];
 
 /**
  * Proyección de wire completa: `proyectarParaJugador` + los campos IMPUROS que el `RunnerDePartida` calcula y
- * la capa pura no puede (`preciosReferencia`, `produccionDeAsentamiento`) — ver la nota de cabecera de
- * `session/proyecciones/jugador.ts`. `produccionDeAsentamiento` solo viaja cuando el jugador está DENTRO de
- * una plaza (`asentamientos[0]`), que es la única cuya producción tiene sentido enseñar.
+ * la capa pura no puede (`preciosReferencia`, `produccionDeAsentamiento`, `ascensoDeAsentamiento`) — ver la nota
+ * de cabecera de `session/proyecciones/jugador.ts`. Los dos últimos solo viajan cuando el jugador está DENTRO de
+ * una plaza (`asentamientos[0]`), que es la única cuya producción y subida de nivel tiene sentido enseñar.
  */
 function conImpuros(runner: RunnerDePartida, heroeId: string): Record<string, unknown> {
   const proyeccion = proyectarParaJugador(runner.getState(), heroeId, runner.geometriaAsentamientos());
@@ -41,7 +41,12 @@ function conImpuros(runner: RunnerDePartida, heroeId: string): Record<string, un
   return {
     ...proyeccion,
     preciosReferencia: runner.preciosReferencia(),
-    ...(dentro ? { produccionDeAsentamiento: runner.produccionDeAsentamiento(dentro.id) } : {}),
+    ...(dentro
+      ? {
+          produccionDeAsentamiento: runner.produccionDeAsentamiento(dentro.id),
+          ascensoDeAsentamiento: runner.ascensoDeAsentamiento(dentro.id),
+        }
+      : {}),
   };
 }
 

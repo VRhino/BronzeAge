@@ -227,6 +227,8 @@ export interface Recinto {
    * presente, `avance` mide el progreso de la MEJORA (reiniciado a -1 al empezarla), no el de la construcción
    * original — solo se puede mejorar un recinto ya completo. Se borra al terminar, cuando `nivel` sube. */
   mejorandoA?: number;
+  /** No se levanta otra celda antes de este instante (`MURALLA.minutosPorCelda`). Ausente = se puede ya. */
+  siguienteCeldaEn?: Instante;
   comprometidoEn: Instante;
   completadoEn?: Instante;
 }
@@ -264,6 +266,10 @@ export interface Edificio {
   /** Nivel interno de mejora (Doc 4.2.1): solo edificios de transformación con tiers (Fundición, Curtiduría,
    * Armería, Carpintería, Barracón, Galería de tiro). Ausente/1 para el resto. */
   nivelInterno?: number;
+  /** Mejora de nivel interno en marcha (Doc 4.2.1, desde 2026-09-26 las mejoras tardan): el edificio sigue
+   * `activo` y produciendo con su nivel actual, ocupa una cuadrilla de obra, y `nivelInterno` sube al llegar
+   * `completaEn`. Ausente = no se está mejorando. */
+  mejora?: { nivelObjetivo: number; completaEn: Instante };
   /** Orientación intercambiable ancho↔alto (Etapa 4, a petición del usuario: variedad de silueta entre
    * ciudades, ej. un Mercado 3x2 puede nacer como 3x2 o 2x3). Decidida una vez al colocarse
    * (`sitiosParaTipo`/`crearAnclaNueva`, engine/trazado.ts) y fija después — solo tiene efecto si el tipo
@@ -527,6 +533,14 @@ export interface Escuadron {
   tropaId: string;
 }
 
+/** Una obra de ascenso de nivel de asentamiento en marcha (ver `Asentamiento.ascenso`). */
+export interface AscensoEnCurso {
+  /** Siempre `nivel + 1`: se sube de uno en uno. */
+  nivelObjetivo: number;
+  iniciadoEn: Instante;
+  completaEn: Instante;
+}
+
 export interface Asentamiento {
   id: string;
   /** Nombre editable por el jugador (a petición del usuario) — puramente de presentación, igual que
@@ -538,8 +552,9 @@ export interface Asentamiento {
   faccionId: string;
   heroesFundadoresIds: string[];
   posicion: Point;
-  /** NIVEL ALCANZADO (Doc Fase_0_5 §6.2): histórico, MONÓTONO, nunca baja — sube por gates de
-   * población+edificios (`calcularNivelAsentamiento`/`avanzarNivelAsentamiento`, engine/mantenimiento.ts).
+  /** NIVEL ALCANZADO (Doc Fase_0_5 §6.2): histórico, MONÓTONO, nunca baja. Sube SOLO al terminar una obra de
+   * ascenso que pidió el Gobernador (`ascenso`, abajo; engine/ascenso.ts) — desde 2026-09-26 ya no sube solo
+   * al cumplir los gates de población+edificios, que pasan a ser el requisito para poder pedirla.
    * De aquí salen el techo de POBLACIÓN (`NIVEL_ASENTAMIENTO.techoPoblacion`) y el techo de RADIO de zona de
    * influencia (`ZONA_INFLUENCIA.radioMaximoPorNivel`) — ninguno de los dos se purga por una crisis de
    * mantenimiento temporal. Distinto de `nivelActual` (abajo), que sí puede bajar. */
@@ -593,6 +608,10 @@ export interface Asentamiento {
    * expiración, que `avanzarSimulacion` limpia. Ausente = no ocupado (caso normal).
    */
   ocupacionHasta?: Instante;
+  /** Obra de ascenso de nivel en curso (Doc 4.5, subida manual): ausente = no hay obra. La pide el Gobernador y
+   * se paga entera al empezar; al llegar `completaEn`, `nivel` sube a `nivelObjetivo`. Una conquista la borra
+   * sin devolución (`aplicarConquista`, engine/combate.ts). */
+  ascenso?: AscensoEnCurso;
   /** Mantenimiento (Doc 4.5): medidor 0-100, empieza en 100; a 0 el asentamiento cae en ruinas (se elimina). */
   medidorMantenimiento: number;
   /** Nutrición de la población (Doc 4.1, hambruna — a petición del usuario, espejo de la moral de tropas por

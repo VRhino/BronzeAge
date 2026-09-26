@@ -11,10 +11,20 @@ export function descontarRecursos(
   const nuevo = { ...almacen };
   for (const [recurso, cantidad] of Object.entries(costo)) {
     const actual = nuevo[recurso];
-    if (actual) nuevo[recurso] = { ...actual, cantidad: actual.cantidad - (cantidad ?? 0) };
+    if (!actual) continue;
+    const resto = actual.cantidad - (cantidad ?? 0);
+    // Residuo de coma flotante, no un gasto de más: las recetas consumen `porUnidad × (disponible / porUnidad)`,
+    // que puede pasarse de `disponible` en un ulp y dejar el almacén en -4.4e-16 (lo cazó el test de
+    // invariantes al mover el sitio de fundación de los tests, 2026-09-26). Solo se absorbe lo que cabe en
+    // `EPSILON_ALMACEN`: un descuento de verdad excesivo sigue saliendo negativo, y los invariantes lo ven.
+    nuevo[recurso] = { ...actual, cantidad: resto < 0 && resto > -EPSILON_ALMACEN ? 0 : resto };
   }
   return nuevo;
 }
+
+/** Por debajo de esto, un negativo en el almacén es ruido de coma flotante. Las cantidades del juego son de
+ * unidades a miles; el error relativo de un double ronda 1e-16, así que 1e-9 deja nueve órdenes de margen. */
+const EPSILON_ALMACEN = 1e-9;
 
 export function agregarRecurso(
   almacen: Record<string, RecursoAlmacenado>,

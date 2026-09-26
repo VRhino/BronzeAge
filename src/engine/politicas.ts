@@ -144,20 +144,6 @@ export const factorRecaudacion = (a: Asentamiento): number => productoFactor(a, 
  * impuestos, aplicado en `crecerPoblacion` (engine/population.ts) mientras no exista un medidor de felicidad. */
 export const factorCrecimientoPoblacion = (a: Asentamiento): number => productoFactor(a, 'factorCrecimientoPoblacion');
 
-/** Campos FLAG (a diferencia de `productoFactor`/`sumaFactorPolitica`/`valorMaximoPolitica`): true si CUALQUIER
- * política activa lo declara `true`, sin escalar ni sumar nada — sirve para políticas de tipo interruptor. */
-function algunaPoliticaActiva(asentamiento: Asentamiento, campo: string): boolean {
-  return asentamiento.politicasActivas.some((activa) => {
-    const def = POLITICA_CATALOGO.find((p) => p.id === activa.politicaId);
-    return def ? (def as Record<string, unknown>)[campo] === true : false;
-  });
-}
-
-/** True si el Maestro de Obras activó "Líneas de Producción": los edificios de transformación nuevos se
- * sitúan cerca de la fuente de sus insumos en vez del primer hueco libre (ver `sitioConcentricoLineaProduccion`,
- * engine/construction.ts). */
-export const lineasProduccionPriorizadas = (a: Asentamiento): boolean => algunaPoliticaActiva(a, 'lineasProduccionPriorizadas');
-
 /**
  * Perfil de trazado impuesto por una ordenanza activa del Maestro de Obras (doc trazado §E6.23), o `null` si
  * no hay ninguna — en cuyo caso el asentamiento usa su tradición local (`resolverPerfil`, engine/trazado.ts).

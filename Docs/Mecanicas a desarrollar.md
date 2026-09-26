@@ -265,9 +265,9 @@ Roadmap.
 
 ## 25. Coste/beneficio mecánico de las ordenanzas de trazado
 
-**Estado: las cinco ordenanzas existen y funcionan (`código: ◐`), pero no tienen coste/beneficio propio.** Las
+**Estado: las cuatro ordenanzas existen y funcionan (`código: ◐`), pero no tienen coste/beneficio propio.** Las
 cuatro ordenanzas de perfil de trazado del Maestro de Obras (`postura_defensiva` / `arterias_comerciales` /
-`barrios_gremiales` / `plazas_mayores`) más `lineas_produccion` orientan *cómo* se distribuye la ciudad, y ya
+`barrios_gremiales` / `plazas_mayores`) orientan *cómo* se distribuye la ciudad, y ya
 compiten por el único slot de Maestro de Obras. Pero compiten en desventaja contra Vía Rápida (−25 % de tiempo
 de obra), que sí da un beneficio medible.
 

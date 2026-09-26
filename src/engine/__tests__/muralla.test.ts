@@ -7,7 +7,7 @@
 // Dos ciudades de fixture, no una: la suite ya demostró (§E6.16) que un solo escenario no ve los bugs de esta
 // capa — la seed 99 de `trazado.test.ts` no reproducía el edificio construido encima de una calle que el
 // laboratorio encontró a la primera con otra ciudad.
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 import type { Asentamiento, CeldaMuro, Recinto, RecursoAlmacenado } from '../../domain/types';
 import { MURALLA, REJILLA_ASENTAMIENTO, ZONA_INFLUENCIA } from '../../constants';
 import { avanzarSimulacion } from '../simulation';
@@ -41,14 +41,13 @@ import {
 } from '../muralla';
 import { calcularCostoMantenimiento, calcularNivelAsentamiento } from '../mantenimiento';
 import { progresoNivelAsentamiento } from '../asentamientoQuery';
-import {
-  contextoDeTest,
-  crearEstadoDeTest,
-  crearFacciones,
-  crearMapaDeterminista,
-  fundarAsentamientoDeTest,
-  instanteDeTest,
-} from './fixtures';
+import { acelerarObras, contextoDeTest, crearEstadoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instanteDeTest } from './fixtures';
+
+// Geometría: crecen ciudades y miran QUÉ se construye y DÓNDE, no CUÁNDO — obras aceleradas (ver `acelerarObras`).
+// Al cargar el módulo y no en `beforeAll`: parte de las ciudades se crecen al DECLARAR los bloques (colección), antes
+// de que corra ningún hook. Vitest aísla cada archivo, así que no se filtra a otros tests.
+const restaurarObras = acelerarObras();
+afterAll(() => restaurarObras());
 
 const RECURSOS_HARNESS = ['madera', 'piedra', 'trigo', 'cobre', 'estano', 'oro', 'livestock'] as const;
 
@@ -421,14 +420,20 @@ describe('murallas — la obra', () => {
     expect(con.almacen).toEqual(a.almacen);
   });
 
-  it('levanta `celdasPorMinuto` celdas por tick y cobra cada una', () => {
+  it('levanta una celda, la cobra, y no levanta la siguiente hasta pasados `minutosPorCelda`', () => {
     const tarifa = MURALLA.tarifaPorCelda[1]!;
+    const espera = MURALLA.minutosPorCelda[1]!;
     const almacen = almacenCon(9999, 9999);
     const paso = avanzarObraDeRecintos([recintoDe(anillo(10))], almacen, {}, instanteDeTest(1));
-    expect(paso.recintos[0]!.avance).toBe(MURALLA.celdasPorMinuto - 1);
+    expect(paso.recintos[0]!.avance).toBe(0);
     // La primera celda del recorrido es la puerta: cuesta su tarifa × factorPuerta.
     const gastado = 9999 - (paso.almacen['madera']?.cantidad ?? 0);
-    expect(gastado).toBe((tarifa['madera'] ?? 0) * MURALLA.factorPuerta * MURALLA.celdasPorMinuto);
+    expect(gastado).toBe((tarifa['madera'] ?? 0) * MURALLA.factorPuerta);
+
+    const antesDeTiempo = avanzarObraDeRecintos(paso.recintos, paso.almacen, {}, instanteDeTest(espera));
+    expect(antesDeTiempo.recintos[0]!.avance).toBe(0);
+    const aTiempo = avanzarObraDeRecintos(paso.recintos, paso.almacen, {}, instanteDeTest(1 + espera));
+    expect(aTiempo.recintos[0]!.avance).toBe(1);
   });
 
   it('sin materiales la obra NO avanza, pero tampoco se cancela ni acumula deuda', () => {

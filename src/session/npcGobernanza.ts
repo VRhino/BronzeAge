@@ -32,7 +32,7 @@ import type { ContextoSimulacion, EstadoSimulacion } from '../engine/simulation'
 import { avanzarAutoComercioSimulado } from '../engine/simulacionAutoComercio';
 import { reclutarTropa, ReclutamientoInvalidoError } from '../engine/tropas';
 import { campamentoDe, conEscuadrones, indiceTropa, sinTropa, type IndiceTropa } from '../engine/tropa';
-import { guardarLoadout, heridosEn, herir, progresionInicial } from '../engine/heroe';
+import { asignarGuarnicion, guardarLoadout, HeroeInvalidoError, heridosEn, herir, progresionInicial } from '../engine/heroe';
 import { puedeLlevar } from '../engine/liderazgo';
 import { atacarCampamentoBandidos, CombateInvalidoError, poderEscuadron } from '../engine/combate';
 import { lanzarCaravanaFundacion, costoCaravanaFundacion, ExpansionInvalidaError } from '../engine/expansion';
@@ -58,7 +58,8 @@ import {
   TruequeInvalidoError,
 } from '../engine/trade';
 import { computeTodasLasZonas } from '../engine/zones';
-import { calcularCostoMantenimiento, encontrarCapital } from '../engine/mantenimiento';
+import { calcularCostoMantenimiento, calcularNivelAsentamiento, encontrarCapital } from '../engine/mantenimiento';
+import { evaluarAscenso, iniciarAscenso } from '../engine/ascenso';
 import { evaluarViabilidadFundacion, fundarAsentamiento, FundacionInvalidaError } from '../engine/settlement';
 import { CAMPAMENTOS_BANDIDOS, LIDERAZGO, LOGISTICA, MILITAR, TROPAS_RECLUTABLES, VISION } from '../constants';
 import { situarHeroes } from '../engine/ubicacion';
@@ -613,10 +614,21 @@ function truequeDeSupervivencia(
 }
 
 /**
- * Reclutamiento (punto 7a): cada residente intenta reclutar/reponer su propio escuadrón de la tropa
- * indicada — por defecto `milicia_lanceros` (`centroUrbano`, ya activo desde la fundación, sin depender de
- * construir Barracón, ver `TROPAS_RECLUTABLES` en `src/constants.ts`). Silencioso si un residente no puede
- * pagar/no tiene pesants disponibles todavía (`ReclutamientoInvalidoError`) — se reintenta en el próximo tick.
+ * Tropas en el orden en que las prefiere el NPC: la de escalón más alto primero y, a igual escalón, la de más poder.
+ * La milicia (escalón 1) queda la última: es lo que se recluta cuando no se puede otra cosa.
+ */
+const TROPAS_POR_PREFERENCIA_NPC = [...TROPAS_RECLUTABLES].sort((a, b) => b.escalon - a.escalon || b.poderBase - a.poderBase);
+
+/**
+ * Reclutamiento (punto 7a): cada residente recluta o repone UNA escuadra por tick — **la mejor que pueda**
+ * (`TROPAS_POR_PREFERENCIA_NPC`), no siempre la misma (2026-09-26, decisión del usuario: la guerra tiene que ser
+ * más que milicia contra plazas vacías). Prueba de la mejor a la peor y se queda con la primera que el motor
+ * acepta: si su mejor escuadra está al tope, pasa a la siguiente tropa y abre una escuadra nueva, así que con el
+ * tiempo cada héroe junta una por tipo de tropa que su plaza sepa hacer. Lo que no puede reclutar (edificio,
+ * equipo, población o comida) lo rechaza el motor (`ReclutamientoInvalidoError`) y se prueba la siguiente.
+ *
+ * `tropaId` fijo solo para experimentos (`ConfigNpcGobernanza.tropaId`, p. ej. `BATCH_SIN_RECLUTAMIENTO`): con él
+ * se comporta como antes, una sola tropa.
  *
  * Un solo gate de prudencia propio del NPC: no se intenta NINGÚN reclutamiento este tick si el almacén de
  * madera no llega a `RESERVA_MADERA_ANTES_DE_RECLUTAR`, para no competir con lo que Mantenimiento necesita.
@@ -634,7 +646,7 @@ function reclutarParaTodos(
   heroes: Heroe[],
   ejercitos: readonly Ejercito[],
   contadorInicial: number,
-  tropaId: string,
+  tropaId: string | undefined,
   origen: 'pesants' | 'artesanos'
 ): { asentamiento: Asentamiento; heroes: Heroe[]; reclutamientosExitosos: number; contador: number } {
   if ((asentamiento.almacen['madera']?.cantidad ?? 0) < RESERVA_MADERA_ANTES_DE_RECLUTAR) {
@@ -647,24 +659,56 @@ function reclutarParaTodos(
   let heroesActuales = heroes;
   let contador = contadorInicial;
   let exitosos = 0;
+  const candidatas = tropaId ? [tropaId] : TROPAS_POR_PREFERENCIA_NPC.map((t) => t.id);
   for (const heroeId of residentesDe(asentamiento)) {
-    try {
-      const r = reclutarTropa(actual, heroesActuales, ejercitos, heroeId, asentamiento.faccionId, tropaId, origen, contador++);
-      actual = r.asentamiento;
-      heroesActuales = r.heroes;
-      exitosos++;
-    } catch (err) {
-      if (!(err instanceof ReclutamientoInvalidoError)) throw err;
+    for (const candidata of candidatas) {
+      try {
+        const r = reclutarTropa(actual, heroesActuales, ejercitos, heroeId, asentamiento.faccionId, candidata, origen, contador++);
+        actual = r.asentamiento;
+        heroesActuales = r.heroes;
+        exitosos++;
+        break;
+      } catch (err) {
+        if (!(err instanceof ReclutamientoInvalidoError)) throw err;
+      }
     }
   }
   return { asentamiento: actual, heroes: heroesActuales, reclutamientosExitosos: exitosos, contador };
 }
 
 /**
- * La defensa de una plaza NPC (Doc 5.12.4): cada héroe bot residente deja como loadout activo las escuadras de su
- * campamento que le caben en el Liderazgo, las más fuertes primero, y defiende con ellas mientras está en casa.
- * Los bots no usan la guarnición (decisión del usuario 2026-09-14): con una escuadra por bot, llenarla les dejaba
- * sin nada con lo que salir de campaña. El que sale se lleva sus escuadras y deja de defender.
+ * La guarnición de una plaza NPC (Doc 5.15.3; decisión del usuario 2026-09-26, que revoca la del 2026-09-14 de que
+ * los bots no la usaran). Entonces cada bot tenía una sola escuadra y guarnecerla le dejaba sin nada con lo que
+ * salir; ahora recluta una por tipo de tropa (`reclutarParaTodos`), así que puede dejar parte en casa.
+ *
+ * Cada bot residente mete en la guarnición sus escuadras más fuertes hasta llenar el cupo que la plaza le da
+ * (`asignarGuarnicion` lo comprueba: sin Barracón ni Galería el cupo es 0), pero **nunca la última que le queda
+ * fuera**: con esa sale de campaña o defiende en persona. La guarnición defiende aunque el héroe esté fuera, que es
+ * justo lo que faltaba — con los bots de campaña, las plazas se quedaban vacías y caían sin combate (Doc 5.12.4).
+ */
+function guarnecerNpc(asentamiento: Asentamiento, heroes: Heroe[]): Heroe[] {
+  const residentes = new Set(residentesDe(asentamiento));
+  return heroes.map((heroe) => {
+    if (heroe.controlador !== 'bot' || !residentes.has(heroe.id)) return heroe;
+    const libres = heroe.escuadrones
+      .filter((e) => e.contenedor.tipo === 'campamento' && e.cantidad > 0 && !e.enGuarnicion)
+      .sort((a, b) => poderEscuadron(b) - poderEscuadron(a) || (a.id < b.id ? -1 : 1));
+    let actual = heroe;
+    for (const escuadra of libres.slice(0, -1)) {
+      try {
+        actual = asignarGuarnicion(actual, asentamiento, escuadra.id);
+      } catch (err) {
+        if (!(err instanceof HeroeInvalidoError)) throw err;
+      }
+    }
+    return actual;
+  });
+}
+
+/**
+ * La defensa en persona de una plaza NPC (Doc 5.12.4): cada héroe bot residente deja como loadout activo las
+ * escuadras de su campamento que no están en la guarnición y le caben en el Liderazgo, las más fuertes primero, y
+ * defiende con ellas mientras está en casa. El que sale se las lleva y deja de defender; la guarnición se queda.
  */
 function prepararDefensaNpc(asentamiento: Asentamiento, heroes: Heroe[]): Heroe[] {
   const residentes = new Set(residentesDe(asentamiento));
@@ -826,6 +870,12 @@ function expandirSiPuede(
     const destino = buscarDestino(asentamiento, mapa, asentamientosActuales);
     if (!destino) continue;
 
+    // Héroes NUEVOS, no los mismos de siempre (2026-09-26, decisión del usuario): hasta ahora los fundadores eran
+    // los primeros ciudadanos de la Facción, que ya vivían en otra plaza y no se movían, así que cada hija nacía
+    // vacía y caía sin combate. Aquí solo se reservan los ids; los héroes se crean cuando la plaza existe de verdad
+    // (`materializarFundadoresNpc`), para que una caravana interceptada no deje héroes sin casa.
+    const lanzamiento = contador++;
+    const fundadores = Array.from({ length: jugadoresPorCaravana }, (_, k) => `${faccion.id}-bot-${lanzamiento}-${k + 1}`);
     try {
       const resultado = lanzarCaravanaFundacion(
         mapa,
@@ -836,7 +886,8 @@ function expandirSiPuede(
         caravanasActuales,
         jugadoresPorCaravana,
         instante,
-        contador++
+        lanzamiento,
+        fundadores
       );
       asentamientosActuales = asentamientosActuales.map((a) => (a.id === resultado.origenActualizado.id ? resultado.origenActualizado : a));
       caravanasActuales = [...caravanasActuales, resultado.caravana];
@@ -1248,11 +1299,37 @@ export interface ConfigNpcGobernanza {
 }
 
 /**
+ * Crea los héroes bot de una fundación NPC en cuanto la plaza existe (ver `expandirSiPuede`): cada fundador de una
+ * plaza NPC que todavía no tenga registro de héroe nace ahí, residente y dentro. Fundar ya los hizo ciudadanos y
+ * residentes (`fundarAsentamiento`); solo faltaba el héroe, que es quien recluta, guarnece y defiende.
+ */
+function materializarFundadoresNpc(
+  asentamientos: readonly Asentamiento[],
+  heroes: Heroe[],
+  esNpc: (faccionId: string) => boolean
+): { heroes: Heroe[]; creados: string[] } {
+  const existentes = new Set(heroes.map((h) => h.id));
+  const nuevos: Heroe[] = [];
+  for (const a of asentamientos) {
+    if (!esNpc(a.faccionId)) continue;
+    for (const id of a.heroesFundadoresIds) {
+      if (existentes.has(id)) continue;
+      existentes.add(id);
+      nuevos.push(heroeBot(id, id, { tipo: 'asentamiento', asentamientoId: a.id }));
+    }
+  }
+  return { heroes: nuevos.length > 0 ? [...heroes, ...nuevos] : heroes, creados: nuevos.map((h) => h.id) };
+}
+
+/**
  * Destino por defecto de una Caravana de Fundación: barrido radial alrededor del origen (anillos de 150 en
  * 150 hasta 600, un punto cada 20°), quedándose con el primer punto que el MOTOR considere viable
  * (`evaluarViabilidadFundacion`, `engine/settlement.ts` — solo lectura, decide él, no este archivo). Mismo
  * criterio que usaba `scripts/run-batch-sim.ts`, movido aquí para que la partida real no tenga que traer su
  * propia heurística de posicionamiento.
+ *
+ * Hasta 2026-09-26 este barrido no miraba la piedra y fundaba hijos que no podían llegar nunca al nivel 2
+ * (`issues/extractores_minerales_nunca_se_construyen.md`); ahora `recomendable` la exige.
  */
 export function buscarDestinoFundacionPorDefecto(origen: Asentamiento, mapa: Mapa, asentamientos: Asentamiento[]): Point | undefined {
   for (let radio = 150; radio <= 600; radio += 150) {
@@ -1260,7 +1337,7 @@ export function buscarDestinoFundacionPorDefecto(origen: Asentamiento, mapa: Map
       const rad = (angulo * Math.PI) / 180;
       const posicion = { x: origen.posicion.x + Math.cos(rad) * radio, y: origen.posicion.y + Math.sin(rad) * radio };
       if (posicion.x < 0 || posicion.y < 0 || posicion.x >= mapa.limites.ancho || posicion.y >= mapa.limites.alto) continue;
-      if (evaluarViabilidadFundacion(mapa, posicion, asentamientos).recomendable) return posicion;
+      if (evaluarViabilidadFundacion(mapa, posicion, asentamientos, origen.faccionId).recomendable) return posicion;
     }
   }
   return undefined;
@@ -1293,9 +1370,9 @@ const PASO_BUSQUEDA_FUNDACION_INICIAL = 25;
  * el mapa (ver `PASO_BUSQUEDA_FUNDACION_INICIAL`), evaluando cada punto con el motor
  * (`evaluarViabilidadFundacion` — solo lectura, decide él, no este archivo).
  *
- * Madera y piedra son OBLIGATORIAS: un punto sin madera alcanzable (`recomendable` ya lo exige) o sin ningún
- * nodo de piedra en el radio se descarta sin más — a petición del usuario, porque sin Cantera un asentamiento
- * nunca puede cumplir el gate de nivel 2 (Doc Fase_0_6: 3 de los 6 extractores, y Cantera es el único que da
+ * Madera y piedra son OBLIGATORIAS, y las dos las exige ya `recomendable` (engine/settlement.ts): un punto
+ * sin madera libre o sin ningún nodo de piedra en el radio se descarta sin más — a petición del usuario,
+ * porque sin Cantera un asentamiento nunca puede cumplir el gate de nivel 2 (Doc Fase_0_6: 3 de los 6 extractores, y Cantera es el único que da
  * piedra). Entre los que cumplen ambas, gana el que además tenga más minerales de `MINERALES_BONUS_FUNDACION`
  * en el radio — se recorre el mapa entero y se compara CADA candidato válido contra el mejor visto hasta el
  * momento, no solo los del primer grupo que aparezca, así que un candidato con 3 recursos a 400px del origen
@@ -1312,9 +1389,8 @@ export function buscarPosicionFundacionInicialPorDefecto(mapa: Mapa, asentamient
     for (let y = PASO_BUSQUEDA_FUNDACION_INICIAL; y < mapa.limites.alto; y += PASO_BUSQUEDA_FUNDACION_INICIAL) {
       const posicion = { x, y };
       const viabilidad = evaluarViabilidadFundacion(mapa, posicion, asentamientos);
+      // `recomendable` ya exige madera libre Y piedra (engine/settlement.ts).
       if (!viabilidad.recomendable) continue;
-      const tienePiedra = viabilidad.recursosEnRadio.some((r) => r.tipo === 'piedra' && r.nodos > 0);
-      if (!tienePiedra) continue;
 
       const bonusMinerales = MINERALES_BONUS_FUNDACION.filter((tipo) =>
         viabilidad.recursosEnRadio.some((r) => r.tipo === tipo && r.nodos > 0)
@@ -1464,6 +1540,10 @@ export function avanzarNpcGobernanza(
   let asentamientos = asentamientosBase.map((a) => (esNpc(a.faccionId) ? asegurarGobernanzaBase(a, facciones) : a));
   let caravanas = [...estado.caravanas];
 
+  const fundadores = materializarFundadoresNpc(asentamientos, heroes, esNpc);
+  heroes = fundadores.heroes;
+  if (fundadores.creados.length > 0) eventos.push(`Llegan ${fundadores.creados.length} héroes nuevos a sus plazas recién fundadas.`);
+
   const zonas = computeTodasLasZonas(asentamientos);
   const reclamos = reclamosDeFuentes(asentamientos);
   const capitalesPorFaccion = new Map(facciones.map((f) => [f.id, encontrarCapital(f.id, asentamientos)]));
@@ -1496,6 +1576,20 @@ export function avanzarNpcGobernanza(
     const conNucleoMilitar = asegurarNucleoMilitar(resultado.asentamiento, faccion, zonaPoligono, mapa, capital, reclamos, contador++);
     return asegurarMuralla(conNucleoMilitar, instante);
   });
+
+  // Subida de nivel (Doc 4.5, engine/ascenso.ts): desde 2026-09-26 el nivel ya no sube solo, así que el NPC la pide
+  // en cuanto el motor dice que puede — gates, coste, solvencia y cupo de su Facción. Bucle secuencial y no `map`:
+  // el cupo se reserva al pedir, y dos asentamientos de la misma Facción no pueden quedarse la misma última plaza en
+  // el mismo tick. El filtro de gates va delante porque es barato y descarta a casi todos; la evaluación completa
+  // calcula zona, producción y mantenimiento proyectado.
+  for (const asentamiento of asentamientos) {
+    if (!esNpc(asentamiento.faccionId) || asentamiento.ascenso) continue;
+    if (calcularNivelAsentamiento(asentamiento) <= asentamiento.nivel) continue;
+    if (!evaluarAscenso(asentamiento, asentamientos, facciones, mapa, instante).puede) continue;
+    const { asentamiento: enObra } = iniciarAscenso(asentamiento, asentamientos, facciones, mapa, instante);
+    asentamientos = asentamientos.map((a) => (a.id === enObra.id ? enObra : a));
+    eventos.push(`${asentamiento.id} empieza la obra de ascenso a nivel ${enObra.ascenso!.nivelObjetivo}.`);
+  }
 
   const trueque = truequeDeSupervivencia(asentamientos, capitalesPorFaccion, estado.acuerdos, instante, contador, esNpc);
   contador = trueque.contador;
@@ -1532,7 +1626,7 @@ export function avanzarNpcGobernanza(
 
   asentamientos = trasComercio.asentamientos;
   let reclutamientosExitosos = 0;
-  const tropaId = config.tropaId ?? 'milicia_lanceros';
+  const tropaId = config.tropaId;
   const origenReclutamiento = config.origenReclutamiento ?? 'pesants';
   // Bucle y no `map`: la unicidad por `tropaId` es de toda la partida, así que cada plaza tiene que ver lo que
   // las anteriores ya reclutaron este mismo tick (un NPC puede residir en dos).
@@ -1546,7 +1640,11 @@ export function avanzarNpcGobernanza(
     asentamientos[i] = resultado.asentamiento;
     heroes = resultado.heroes;
   }
-  for (const a of asentamientos) if (esNpc(a.faccionId)) heroes = prepararDefensaNpc(a, heroes);
+  for (const a of asentamientos) {
+    if (!esNpc(a.faccionId)) continue;
+    heroes = guarnecerNpc(a, heroes);
+    heroes = prepararDefensaNpc(a, heroes);
+  }
 
   const trasBandidos =
     config.atacarCampamentos === false

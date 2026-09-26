@@ -72,7 +72,10 @@ export function lanzarCaravanaFundacion(
   caravanasExistentes: Caravana[],
   numJugadores: number,
   instante: Instante,
-  contador = 0
+  contador = 0,
+  /** Quién funda: lo decide quien lanza (2026-09-26 — el NPC manda héroes nuevos, ver `session/npcGobernanza.ts`).
+   * Sin lista, los primeros ciudadanos de la Facción, como siempre. Se recorta igual a `numJugadores`. */
+  fundadores?: readonly string[]
 ): { origenActualizado: Asentamiento; caravana: Caravana } {
   if (origen.faccionId !== faccion.id) {
     throw new ExpansionInvalidaError('El asentamiento de origen no pertenece a esta Facción.');
@@ -103,7 +106,7 @@ export function lanzarCaravanaFundacion(
   }
 
   const n = Math.min(FUNDACION.maxJugadoresFundacionGrupal, Math.max(1, numJugadores || 1));
-  const heroesFundadoresIds = faccion.ciudadanosIds.slice(0, n);
+  const heroesFundadoresIds = (fundadores ?? faccion.ciudadanosIds).slice(0, n);
   if (heroesFundadoresIds.length === 0) {
     throw new ExpansionInvalidaError('La Facción no tiene ciudadanos disponibles para fundar el nuevo asentamiento.');
   }

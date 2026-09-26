@@ -149,6 +149,8 @@ function jugadoresParticipantes(escuadrones: Escuadron[]): number {
  *   deja de dar el multiplicador pleno hasta repararse por la vía normal de obra).
  * - **`medidorMantenimiento: 100`** y **`ocupacionHasta`** — abre la ventana de ocupación (§2.4): inmune a un
  *   nuevo asedio, recaudación y crecimiento reducidos, mantenimiento congelado, tiempo fijo.
+ * - **La obra de ascenso en curso se pierde**, sin devolución (Doc 4.5, decisión del usuario 2026-09-26): la
+ *   pagó el Gobernador del perdedor, y con ella cae su reserva de cupo de nivel.
  */
 export function aplicarConquista(defensor: Asentamiento, faccionConquistadoraId: string, instante: Instante): Asentamiento {
   const cargos = { ...defensor.cargos };
@@ -176,7 +178,7 @@ export function aplicarConquista(defensor: Asentamiento, faccionConquistadoraId:
     danables.slice(0, Math.ceil(OCUPACION.fraccionEdificiosDanados * danables.length)).map((e) => e.id)
   );
   const edificios = defensor.edificios.map((e) =>
-    aDanar.has(e.id) ? { ...e, estado: 'en_cola' as const, danado: true, completaEn: undefined } : e
+    aDanar.has(e.id) ? { ...e, estado: 'en_cola' as const, danado: true, completaEn: undefined, mejora: undefined } : e
   );
 
   // Saqueo de murallas: cada recinto completo pierde integridad; la reparación es la obra normal de recintos.
@@ -186,8 +188,9 @@ export function aplicarConquista(defensor: Asentamiento, faccionConquistadoraId:
     return { ...r, avance: Math.max(-1, r.avance - perdida) };
   });
 
+  const { ascenso: _obraPerdida, ...sinObraDeAscenso } = defensor;
   return {
-    ...defensor,
+    ...sinObraDeAscenso,
     faccionId: faccionConquistadoraId,
     heroesFundadoresIds: [],
     casasCompradas: [],

@@ -6,6 +6,7 @@ import {
   EXTRACCION_MAXIMOS,
   EXTRACTOR_DESEMPATE,
   LINEAS_PRODUCCION,
+  MEJORA_EDIFICIO,
   MERCADO_PUESTOS_POR_NIVEL,
   NECESIDADES,
   NIVEL_ASENTAMIENTO,
@@ -30,7 +31,6 @@ import {
   resolverPerfil,
   reubicarPorTamano,
   sitioParaTipo as sitioEnTrazado,
-  sitiosParaTipo,
   sitiosPorAtraccionDura,
   sueloOcupado,
   tamanoEdificio,
@@ -49,7 +49,7 @@ import {
 import { agregarRecurso, agregarRecursoConSobrante, ampliarCapacidad, descontarRecursos, tieneRecursos } from './almacen';
 import { avanzarObraDeRecintos } from './muralla';
 import { reservaDinamicaConstruccion } from './mantenimiento';
-import { factorProduccionTrigo, factorTiempoConstruccion, lineasProduccionPriorizadas, perfilTrazadoDePolitica } from './politicas';
+import { factorProduccionTrigo, factorTiempoConstruccion, perfilTrazadoDePolitica } from './politicas';
 import { consumoComidaPoblacion } from './population';
 
 /**
@@ -184,46 +184,6 @@ export function sitioEnBarrio(
   tipo: EdificioTipo
 ): { punto: Point; rotado: boolean } | null {
   return sitioEnTrazado(asentamiento, ocupados, tipo, undefined, perfilDe(asentamiento));
-}
-
-/**
- * "Líneas de Producción" (política de Maestro de Obras, a petición del usuario): entre los huecos que
- * `sitiosParaTipo` considera BUENOS —el mejor nivel de preferencia disponible, ver `sitiosParaTipo` en
- * engine/trazado.ts— elige el que minimiza la penalización de distancia (`factorLineaProduccion`, mismo
- * criterio del eslabón más débil que ya usa la producción en marcha) contra las recetas del NIVEL 1 de `tipo`:
- * un edificio de transformación colocado ahí producirá a mejor ritmo desde el primer tick.
- *
- * La optimización se hace DENTRO de ese conjunto, no sobre todos los huecos libres del barrio: el trazado
- * manda sobre la logística, porque saltarse la preferencia de frente de calle rompería las manzanas para ganar
- * unos puntos de factor. Si `tipo` no tiene recetas (Carpintería) cualquier hueco es igual de bueno y se
- * comporta como `sitioEnBarrio`.
- */
-export function sitioEnBarrioLineaProduccion(
-  asentamiento: Asentamiento,
-  ocupados: Edificio[],
-  tipo: EdificioTipo
-): { punto: Point; rotado: boolean } | null {
-  const categoria = CATEGORIA_POR_TIPO[tipo];
-  if (!categoria) return sitioEnBarrio(asentamiento, ocupados, tipo);
-
-  const recetas = nivelesDe(tipo)?.[1]?.recetas ?? [];
-  const candidatos = sitiosParaTipo(asentamiento, ocupados, tipo, undefined, true, perfilDe(asentamiento));
-  if (recetas.length === 0) return candidatos[0] ?? null;
-
-  let mejor: { punto: Point; rotado: boolean; score: number } | null = null;
-  for (const candidato of candidatos) {
-    const edificioSimulado: Edificio = {
-      id: '',
-      tipo,
-      posicion: candidato.punto,
-      estado: 'activo',
-      ambito: 'asentamiento',
-      rotado: candidato.rotado,
-    };
-    const score = Math.min(...recetas.map((r) => factorLineaProduccion(edificioSimulado, r, asentamiento)));
-    if (!mejor || score > mejor.score) mejor = { ...candidato, score };
-  }
-  return mejor ? { punto: mejor.punto, rotado: mejor.rotado } : null;
 }
 
 /** Cantera/edificio de extracción: junto al nodo de recurso más cercano SIN reclamar ya (Doc 4.2, ej. herrería cerca de mina). */
@@ -543,7 +503,7 @@ function asegurarAnclaPara(asentamiento: Asentamiento, edificios: Edificio[], ti
   const tamanoSat = tamanoEdificio(tipo);
   const { ocupadas, red: redConAncla } = sueloOcupado(asentamiento.id, conAncla, undefined, asentamiento.recintos ?? []);
   const haySitioSatelite =
-    sitiosPorAtraccionDura(resultado.nuevaAncla, tamanoSat, ocupadas, redConAncla, permiteRotacion(tipo, tamanoSat), false, new Set(), perfil).length > 0;
+    sitiosPorAtraccionDura(resultado.nuevaAncla, tamanoSat, ocupadas, redConAncla, permiteRotacion(tipo, tamanoSat), new Set(), perfil).length > 0;
   return haySitioSatelite ? conAncla : conSaturadasMarcadas;
 }
 
@@ -677,11 +637,20 @@ function evaluarNecesidades(
   // al denominador compartido de `ratioManoObra` (`trabajadoresRequeridos` fijo en los 4 niveles) — construir
   // una Granja nueva encima solo diluiría la mano de obra de las que ya existen. Con 0 Granjas activas esto es
   // trivialmente falso (nada que mejorar todavía): el arranque nunca se bloquea.
+  //
+  // "Disponible" es que pueda ARRANCAR ya, no solo pagarse (2026-09-26): desde que las mejoras automáticas dejan una
+  // cuadrilla libre, una mejora pagable podía no arrancar nunca mientras hubiera una obra en curso — y como se prefería,
+  // tampoco se construía otra Granja: punto muerto justo en déficit de trigo. Una Granja que ya se está mejorando no
+  // cuenta: en déficit se puede construir otra mientras tanto.
   const nivelesGranja = nivelesDe('granja');
-  const hayMejoraGranjaDisponible = granjasActivasEdificios.some((g) => {
-    const siguiente = nivelesGranja?.[(g.nivelInterno ?? 1) + 1];
-    return !!siguiente && puedeIniciarConstruccion(asentamiento.almacen, siguiente.costoMejora ?? {}, 'granja', reserva);
-  });
+  const cuadrillaParaMejorar = cuadrillasOcupadas(asentamiento.edificios) < NECESIDADES.maximoEnConstruccionSimultanea - 1;
+  const hayMejoraGranjaDisponible =
+    cuadrillaParaMejorar &&
+    granjasActivasEdificios.some((g) => {
+      if (g.mejora) return false;
+      const siguiente = nivelesGranja?.[(g.nivelInterno ?? 1) + 1];
+      return !!siguiente && puedeIniciarConstruccion(asentamiento.almacen, siguiente.costoMejora ?? {}, 'granja', reserva);
+    });
   // En déficit REACTIVO (no el proyectado) se permite tener varias Granjas en camino a la vez (hasta el
   // tope), no solo una: sin esto, un déficit severo ya ocurrido solo podía corregirse construyendo Granjas en
   // SERIE, quedándose muy por detrás.
@@ -832,9 +801,7 @@ function evaluarNecesidades(
   // en simulación: sin este límite, varias podían acumularse atascadas esperando piedra en un punto de
   // fundación pobre en ese recurso). Además, cada una exige tener ya el insumo de arranque en almacén (ver
   // `tieneInsumoDeArranque`) — si Curtiduría no lo tiene, el bucle sigue probando Armería/Fundición en el
-  // mismo tick en vez de detenerse ahí. Política "Líneas de Producción" del Maestro de Obras: sitúa el
-  // edificio nuevo cerca de la fuente de sus insumos en vez del primer hueco libre de siempre (ver
-  // `sitioEnBarrioLineaProduccion`).
+  // mismo tick en vez de detenerse ahí.
   const transformacionEnCurso = (['curtiduria', 'armeria', 'fundicion'] as const).some(
     (tipo) => hayProyectoPendiente(asentamiento, tipo)
   );
@@ -844,9 +811,7 @@ function evaluarNecesidades(
       if (!tieneInsumoDeArranque(asentamiento, tipo)) continue;
       if (!puedePagar(tipo)) continue;
       edificiosBase = asegurarAnclaPara(asentamiento, edificiosBase, tipo, nextId);
-      const sitio = lineasProduccionPriorizadas(asentamiento)
-        ? sitioEnBarrioLineaProduccion(asentamiento, ocupados(), tipo)
-        : sitioEnBarrio(asentamiento, ocupados(), tipo);
+      const sitio = sitioEnBarrio(asentamiento, ocupados(), tipo);
       if (sitio) {
         proponer(crearEdificioEnCola(tipo, sitio.punto, nextId(), undefined, sitio.rotado), SCORE_BANDAS.transformacion);
         break;
@@ -982,11 +947,26 @@ function capacidadTrigoDeGranero(nivelInterno: number | undefined): number {
  * está en su nivel máximo, o si no cumple algún gate del siguiente nivel. Extraído de `avanzarMejoras` para que
  * `estadoMejoraEdificio`/`mejorarEdificioManualmente` (mejora manual, a petición del usuario) compartan el
  * mismo criterio de elegibilidad que el camino automático. */
+/** Cuadrillas de obra en uso: edificios en construcción más edificios mejorándose (desde 2026-09-26 una mejora
+ * ocupa cuadrilla mientras dura). Las RECONSTRUCCIONES tras un saqueo (`danado`) no cuentan: no ocupan cuadrilla
+ * (decisión del usuario 2026-09-26). El tope es `NECESIDADES.maximoEnConstruccionSimultanea`. */
+function cuadrillasOcupadas(edificios: readonly Edificio[]): number {
+  return edificios.filter((e) => (e.estado === 'en_construccion' && !e.danado) || e.mejora !== undefined).length;
+}
+
+/** Minutos que tarda la mejora al nivel interno `nivelSiguiente` (ver `MEJORA_EDIFICIO`), con la misma Vía Rápida
+ * del Maestro de Obras que acelera las obras. */
+function minutosDeMejora(asentamiento: Asentamiento, tipo: EdificioTipo, nivelSiguiente: number): number {
+  const base = EDIFICIO_CATALOGO[tipo].tiempoConstruccionMinutos;
+  return Math.max(1, Math.round(base * MEJORA_EDIFICIO.multiplicadorPorNivel ** (nivelSiguiente - 1) * factorTiempoConstruccion(asentamiento)));
+}
+
 function elegibleParaMejora(
   asentamiento: Asentamiento,
   edificio: Edificio
 ): { nivelActual: number; nivelSiguiente: number; costo: Partial<Record<string, number>> } | null {
   if (edificio.estado !== 'activo' || !(EDIFICIOS_CON_NIVELES as readonly string[]).includes(edificio.tipo)) return null;
+  if (edificio.mejora) return null;
   const niveles = nivelesDe(edificio.tipo);
   if (!niveles) return null;
   const nivelActual = edificio.nivelInterno ?? 1;
@@ -1004,12 +984,6 @@ function elegibleParaMejora(
   return { nivelActual, nivelSiguiente, costo: siguiente.costoMejora ?? {} };
 }
 
-/**
- * Mejora de nivel interno de un edificio de transformación activo (Doc 4.2.1, rediseño de progreso Fase 0):
- * instantánea — si se cumple el gate del siguiente nivel (nivel de asentamiento + edificio previo, si aplica)
- * y hay fondos para `costoMejora` (respetando la misma reserva mínima que protege el inicio de construcción),
- * se paga y sube `nivelInterno` en el mismo tick. No hay tiempo de mejora especificado en el diseño original.
- */
 /** Fase A5 (Docs/Arquitectura/4_Plan_Evolucion_Tareas.md) — payloads estructurados de los eventos de este
  * subsistema, exportados para que un futuro consumidor que filtre por `codigo` sepa con qué forma castear. */
 export interface PayloadMejoraCompletada {
@@ -1036,57 +1010,98 @@ export interface PayloadNecesidadDetectada {
   edificioTipo: EdificioTipo;
 }
 
-function avanzarMejoras(
+/**
+ * Aplica una mejora que ha terminado: sube `nivelInterno` y dispara lo que depende del nivel nuevo. Es el ÚNICO sitio
+ * donde pasa, lo termine la ruta automática o la manual — antes vivía repetido y la manual se olvidaba del Granero.
+ * - Mudanza por crecimiento de huella (hoy solo Granja, §7 del trazado urbano): se muda al hueco de afueras más cercano
+ *   posible. Si NO hay hueco en ningún sitio, la mejora espera terminada y se reintenta el tick siguiente — mudarla
+ *   encima de otro edificio es lo único que no se negocia.
+ * - Mercado: aparecen los puestos del nivel nuevo, en la MISMA lista, para que lo que se evalúe después vea sus celdas.
+ * - Granero: amplía la capacidad de trigo con el DELTA entre niveles (`capacidadTrigo` es el total de cada nivel).
+ * Devuelve `null` si no se pudo aplicar (sin hueco para mudarse).
+ */
+function aplicarMejoraTerminada(
   asentamiento: Asentamiento,
-  almacen: Record<string, RecursoAlmacenado>,
-  reserva: Partial<Record<RecursoTipo, number>>
-): { asentamiento: Asentamiento; almacen: Record<string, RecursoAlmacenado>; eventos: EventoCrudo[] } {
-  const eventos: EventoCrudo[] = [];
+  edificios: Edificio[],
+  indice: number,
+  almacen: Record<string, RecursoAlmacenado>
+): { almacen: Record<string, RecursoAlmacenado>; evento: EventoCrudo } | null {
+  const edificio = edificios[indice]!;
+  const nivelActual = edificio.nivelInterno ?? 1;
+  const nivelSiguiente = edificio.mejora?.nivelObjetivo ?? nivelActual + 1;
+  const tamanoActual = tamanoEdificio(edificio.tipo, nivelActual);
+  const tamanoNuevo = tamanoEdificio(edificio.tipo, nivelSiguiente);
+  let posicion = edificio.posicion;
+  if (tamanoNuevo.ancho !== tamanoActual.ancho || tamanoNuevo.alto !== tamanoActual.alto) {
+    const destino = reubicarPorTamano(asentamiento, edificio, edificios, nivelSiguiente);
+    if (!destino) return null;
+    posicion = destino;
+  }
+  const { mejora: _terminada, ...sinMejora } = edificio;
+  edificios[indice] = { ...sinMejora, nivelInterno: nivelSiguiente, posicion };
+  if (edificio.tipo === 'mercado') edificios.push(...crearPuestosDeMercado(asentamiento, nivelSiguiente, edificios));
   let almacenActual = almacen;
-  // Bucle sobre una copia mutable, no `map`: una mejora puede MUDAR el edificio (ver abajo), y la siguiente
-  // tiene que ver esa posición nueva para no elegir un hueco que ya se acaba de ocupar.
-  const edificios = [...asentamiento.edificios];
-  for (let indice = 0; indice < edificios.length; indice++) {
-    const edificio = edificios[indice]!;
-    const info = elegibleParaMejora(asentamiento, edificio);
-    if (!info) continue;
-    const { nivelActual, nivelSiguiente, costo } = info;
-    if (!puedeIniciarConstruccion(almacenActual, costo, edificio.tipo, reserva)) continue;
-
-    // Mudanza por crecimiento de huella (hoy solo Granja, §7 del trazado urbano): al subir de nivel ocupa más
-    // celdas, así que se muda al hueco de afueras más cercano posible en vez de exigir que quepa donde está.
-    // La mejora manda sobre la cercanía: si el único hueco está en el extremo opuesto del mapa, se muda igual.
-    // Solo se frena si NO hay hueco para la huella nueva en ningún sitio — mudarla encima de otro edificio es
-    // lo único que no se negocia.
-    const tamanoActual = tamanoEdificio(edificio.tipo, nivelActual);
-    const tamanoNuevo = tamanoEdificio(edificio.tipo, nivelSiguiente);
-    let posicion = edificio.posicion;
-    if (tamanoNuevo.ancho !== tamanoActual.ancho || tamanoNuevo.alto !== tamanoActual.alto) {
-      const destino = reubicarPorTamano(asentamiento, edificio, edificios, nivelSiguiente);
-      if (!destino) continue;
-      posicion = destino;
-    }
-
-    almacenActual = descontarRecursos(almacenActual, costo);
-    eventos.push({
+  if (edificio.tipo === 'granero') {
+    almacenActual = ampliarCapacidad(almacenActual, 'trigo', capacidadTrigoDeGranero(nivelSiguiente) - capacidadTrigoDeGranero(nivelActual));
+  }
+  return {
+    almacen: almacenActual,
+    evento: {
       codigo: 'construccion.mejora_completada',
       mensaje: `${edificio.tipo} mejora a nivel interno ${nivelSiguiente}.`,
       payload: { edificioId: edificio.id, edificioTipo: edificio.tipo, nivelNuevo: nivelSiguiente } satisfies PayloadMejoraCompletada,
-    });
-    edificios[indice] = { ...edificio, nivelInterno: nivelSiguiente, posicion };
+    },
+  };
+}
 
-    // La zona de Mercado se puebla al subir de nivel: los puestos se añaden a ESTA misma lista, no a una
-    // aparte, para que las mejoras que queden por evaluar en este mismo tick vean sus celdas ya ocupadas.
-    if (edificio.tipo === 'mercado') edificios.push(...crearPuestosDeMercado(asentamiento, nivelSiguiente, edificios));
-    // El Granero amplía la capacidad de trigo con el DELTA entre los dos niveles: `capacidadTrigo` es el
-    // total de cada nivel, así que sumar el total otra vez lo contaría dos veces.
-    if (edificio.tipo === 'granero') {
-      almacenActual = ampliarCapacidad(
-        almacenActual,
-        'trigo',
-        capacidadTrigoDeGranero(nivelSiguiente) - capacidadTrigoDeGranero(nivelActual)
-      );
-    }
+/**
+ * Mejoras de nivel interno (Doc 4.2.1). Desde el 2026-09-26 **tardan** (decisión del usuario): se pagan al empezar,
+ * el edificio sigue activo y produciendo con su nivel actual, ocupa una cuadrilla de obra mientras dura, y el nivel
+ * sube al terminar (`aplicarMejoraTerminada`). Dos pasos por tick:
+ * 1. Terminar las que ya han llegado a `completaEn`.
+ * 2. Empezar las elegibles (gate de nivel + edificio previo, fondos respetando la reserva) mientras quede cuadrilla
+ *    libre, dejando siempre UNA para construir — las obras ya arrancadas este tick (Paso 2 de `avanzarConstruccion`)
+ *    van primero.
+ */
+function avanzarMejoras(
+  asentamiento: Asentamiento,
+  almacen: Record<string, RecursoAlmacenado>,
+  reserva: Partial<Record<RecursoTipo, number>>,
+  instante: Instante
+): { asentamiento: Asentamiento; almacen: Record<string, RecursoAlmacenado>; eventos: EventoCrudo[] } {
+  const eventos: EventoCrudo[] = [];
+  let almacenActual = almacen;
+  // Copia mutable y no `map`: terminar una mejora puede MUDAR un edificio o añadir puestos, y lo siguiente tiene que
+  // ver esas celdas ya ocupadas.
+  const edificios = [...asentamiento.edificios];
+
+  for (let indice = 0; indice < edificios.length; indice++) {
+    const mejora = edificios[indice]!.mejora;
+    if (!mejora || instante < mejora.completaEn) continue;
+    const aplicada = aplicarMejoraTerminada(asentamiento, edificios, indice, almacenActual);
+    if (!aplicada) continue;
+    almacenActual = aplicada.almacen;
+    eventos.push(aplicada.evento);
+  }
+
+  // Las mejoras AUTOMÁTICAS dejan siempre una cuadrilla libre para construir (decisión del usuario 2026-09-26): si no,
+  // una cadena de mejoras (la Granja 2 → 3 → 4 son 28 horas) podía parar la construcción durante días. La manual
+  // (`mejorarEdificioManualmente`) sí puede ocupar la última.
+  let cuadrillasLibres = NECESIDADES.maximoEnConstruccionSimultanea - cuadrillasOcupadas(edificios) - 1;
+  for (let indice = 0; indice < edificios.length && cuadrillasLibres > 0; indice++) {
+    const edificio = edificios[indice]!;
+    const info = elegibleParaMejora(asentamiento, edificio);
+    if (!info) continue;
+    if (!puedeIniciarConstruccion(almacenActual, info.costo, edificio.tipo, reserva)) continue;
+    almacenActual = descontarRecursos(almacenActual, info.costo);
+    const completaEn = sumar(instante, minutos(minutosDeMejora(asentamiento, edificio.tipo, info.nivelSiguiente)));
+    edificios[indice] = { ...edificio, mejora: { nivelObjetivo: info.nivelSiguiente, completaEn } };
+    cuadrillasLibres -= 1;
+    eventos.push({
+      codigo: 'construccion.mejora_iniciada',
+      mensaje: `${edificio.tipo} empieza a mejorar a nivel interno ${info.nivelSiguiente}.`,
+      payload: { edificioId: edificio.id, edificioTipo: edificio.tipo, nivelNuevo: info.nivelSiguiente } satisfies PayloadMejoraCompletada,
+    });
   }
   return { asentamiento: { ...asentamiento, edificios }, almacen: almacenActual, eventos };
 }
@@ -1319,14 +1334,17 @@ export function avanzarConstruccion(
   // que limita el arranque es el cupo de obras activas simultáneas (`maximoEnConstruccionSimultanea`,
   // cuadrillas limitadas: evita que un tick con el almacén lleno dispare media docena de construcciones en
   // paralelo), repartido por `prioridad` (score capturado al comprometerse, mayor primero).
-  const enConstruccionActual = asentamiento.edificios.filter((e) => e.estado === 'en_construccion').length;
-  let cupoObraDisponible = Math.max(0, NECESIDADES.maximoEnConstruccionSimultanea - enConstruccionActual);
+  // Las mejoras en curso también ocupan cuadrilla (ver `cuadrillasOcupadas`).
+  let cupoObraDisponible = Math.max(0, NECESIDADES.maximoEnConstruccionSimultanea - cuadrillasOcupadas(asentamiento.edificios));
   const enColaPorPrioridad = asentamiento.edificios
     .filter((e) => e.estado === 'en_cola')
     .sort((a, b) => (b.prioridad ?? 0) - (a.prioridad ?? 0));
 
   for (const edificio of enColaPorPrioridad) {
-    if (cupoObraDisponible <= 0) {
+    // Una reconstrucción tras un saqueo no ocupa cuadrilla ni espera turno (decisión del usuario 2026-09-26):
+    // arranca en cuanto se puede pagar la reparación. Antes iba detrás de toda la cola por prioridad, y con obras de
+    // horas una plaza saqueada podía no reconstruirse nunca (1 300 ticks sin arrancar en un rastreo).
+    if (cupoObraDisponible <= 0 && !edificio.danado) {
       resultados.set(edificio.id, edificio);
       continue;
     }
@@ -1358,7 +1376,7 @@ export function avanzarConstruccion(
       Math.round(EDIFICIO_CATALOGO[edificio.tipo].tiempoConstruccionMinutos * factorTiempoConstruccion(asentamiento) * factorDanado)
     );
     resultados.set(edificio.id, { ...edificio, estado: 'en_construccion', completaEn: sumar(instante, minutos(ticks)) });
-    cupoObraDisponible -= 1;
+    if (!edificio.danado) cupoObraDisponible -= 1;
   }
 
   let edificiosActualizados = [...asentamiento.edificios.map((e) => resultados.get(e.id)!), ...puestosNuevos];
@@ -1380,7 +1398,7 @@ export function avanzarConstruccion(
   }
 
   // Mejora de nivel interno (Doc 4.2.1): evalúa después de las recetas, con el almacén ya actualizado por ellas.
-  const trasMejoras = avanzarMejoras({ ...asentamiento, edificios: edificiosActualizados }, almacen, reserva);
+  const trasMejoras = avanzarMejoras({ ...asentamiento, edificios: edificiosActualizados }, almacen, reserva, instante);
   almacen = trasMejoras.almacen;
   eventos.push(...trasMejoras.eventos);
 
@@ -1716,14 +1734,18 @@ export function estadoMejoraEdificio(
  * Fuerza la mejora de UN edificio concreto por decisión MANUAL de Gobernador o Maestro de Obras (Doc 4.2, a
  * petición del usuario — la mejora automática de `avanzarMejoras` sigue corriendo cada tick igual que antes;
  * esto solo permite adelantar la de un edificio elegido en vez de esperar a que el bucle automático llegue a
- * él). Mismos gates y costo que la ruta automática (`elegibleParaMejora`/`estadoMejoraEdificio`), incluida la
- * mudanza por crecimiento de huella (hoy solo Granja).
+ * él). Mismos gates y costo que la ruta automática (`elegibleParaMejora`/`estadoMejoraEdificio`).
+ *
+ * Desde el 2026-09-26 ARRANCA la mejora, no la termina: se paga ya, ocupa una cuadrilla —si están las dos ocupadas,
+ * se rechaza— y el nivel sube cuando pasa su tiempo (`avanzarMejoras`). Si el edificio crece de huella (Granja), se
+ * comprueba ya que haya hueco para avisar al jugador en el momento; la mudanza se hace al terminar.
  */
 export function mejorarEdificioManualmente(
   asentamiento: Asentamiento,
   cargo: 'gobernador' | 'maestroObras',
   edificioId: string,
   capital: Asentamiento | undefined,
+  instante: Instante,
   consumoTropasPorMinuto = 0
 ): Asentamiento {
   if (!cargoOcupado(asentamiento, cargo)) {
@@ -1739,18 +1761,20 @@ export function mejorarEdificioManualmente(
   if (!estado.elegible) throw new ConstruccionManualInvalidaError(estado.motivoBloqueo!);
 
   const { nivelActual, nivelSiguiente, costo } = estado;
+  if (cuadrillasOcupadas(asentamiento.edificios) >= NECESIDADES.maximoEnConstruccionSimultanea) {
+    throw new ConstruccionManualInvalidaError('Las cuadrillas de obra están ocupadas: la mejora tendrá que esperar a que acabe una.');
+  }
   const tamanoActual = tamanoEdificio(edificio.tipo, nivelActual);
   const tamanoNuevo = tamanoEdificio(edificio.tipo, nivelSiguiente);
-  let posicion = edificio.posicion;
-  if (tamanoNuevo.ancho !== tamanoActual.ancho || tamanoNuevo.alto !== tamanoActual.alto) {
-    const destino = reubicarPorTamano(asentamiento, edificio, asentamiento.edificios, nivelSiguiente);
-    if (!destino) throw new ConstruccionManualInvalidaError('No hay espacio para reubicar el edificio en su nuevo tamaño.');
-    posicion = destino;
+  if (
+    (tamanoNuevo.ancho !== tamanoActual.ancho || tamanoNuevo.alto !== tamanoActual.alto) &&
+    !reubicarPorTamano(asentamiento, edificio, asentamiento.edificios, nivelSiguiente)
+  ) {
+    throw new ConstruccionManualInvalidaError('No hay espacio para reubicar el edificio en su nuevo tamaño.');
   }
 
   const almacen = descontarRecursos(asentamiento.almacen, costo);
-  let edificios = asentamiento.edificios.map((e) => (e.id === edificioId ? { ...e, nivelInterno: nivelSiguiente, posicion } : e));
-  if (edificio.tipo === 'mercado') edificios = [...edificios, ...crearPuestosDeMercado(asentamiento, nivelSiguiente, edificios)];
-
+  const completaEn = sumar(instante, minutos(minutosDeMejora(asentamiento, edificio.tipo, nivelSiguiente)));
+  const edificios = asentamiento.edificios.map((e) => (e.id === edificioId ? { ...e, mejora: { nivelObjetivo: nivelSiguiente, completaEn } } : e));
   return { ...asentamiento, almacen, edificios };
 }

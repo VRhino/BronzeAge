@@ -5,7 +5,7 @@
 //  - El rinde de trigo de la Granja sube MUCHO más despacio que su costo: ×1 / ×1.5 / ×2 / ×3 sobre el nivel
 //    1, no duplicando en cada salto.
 //  - La capacidad de almacenamiento tiene techo: un tope de Almacenes por nivel de asentamiento.
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { Asentamiento, Edificio } from '../../domain/types';
 import { EDIFICIO_CATALOGO, NECESIDADES, NIVEL_ASENTAMIENTO, produccionTrigoDeGranja } from '../../constants';
 import {
@@ -17,7 +17,7 @@ import {
 } from '../construction';
 import { avanzarSimulacion } from '../simulation';
 import { createRng, type RandomFn } from '../../worldgen';
-import { contextoDeTest, crearEstadoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, posicionRecomendable } from './fixtures';
+import { acelerarObras, contextoDeTest, crearEstadoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, posicionRecomendable } from './fixtures';
 
 const SEED = 99;
 
@@ -43,6 +43,13 @@ describe('Granja: progresión del rinde de trigo', () => {
 });
 
 describe('Almacén: tope por nivel de asentamiento', () => {
+  // Regla de construcción, no de ritmo: obras aceleradas para crecer la ciudad (ver `acelerarObras`).
+  let restaurarObras: () => void;
+  beforeAll(() => {
+    restaurarObras = acelerarObras();
+  });
+  afterAll(() => restaurarObras());
+
   let rng: RandomFn;
 
   beforeEach(() => {

@@ -56,7 +56,7 @@ const CASOS: CasoIdInexistente[] = [
     etiqueta: 'activarPolitica: asentamientoId',
     codigoEsperado: 'asentamiento.no_existe',
     ejecutar: ({ sesion }) =>
-      sesion.ejecutar(activarPolitica, { asentamientoId: 'no-existe', cargo: 'gobernador', politicaId: 'lineas_produccion' }, OPC),
+      sesion.ejecutar(activarPolitica, { asentamientoId: 'no-existe', cargo: 'gobernador', politicaId: 'postura_defensiva' }, OPC),
   },
   {
     etiqueta: 'anadirEdificioManualmente: asentamientoId',

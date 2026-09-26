@@ -5,7 +5,8 @@ import { minutos, transcurrido, type Duracion, type Instante } from '../domain/t
 import { upkeepDeRecintos } from './muralla';
 import { integridadDeRecinto } from './trazado';
 
-/** Fase A5 — payloads de los eventos de este subsistema (ver `avanzarNivelAsentamiento`/`avanzarMantenimiento`). */
+/** Fase A5 — payloads de los eventos de este subsistema (`asentamiento.nivel_subio` lo emite `avanzarAscenso`,
+ * engine/ascenso.ts; el resto, `avanzarMantenimiento`). */
 export interface PayloadNivelSubio {
   asentamientoId: string;
   nivelNuevo: number;
@@ -41,30 +42,41 @@ function distancia(a: { x: number; y: number }, b: { x: number; y: number }): nu
 }
 
 /**
- * Nivel de asentamiento — rediseño de progreso (Fase 0, Doc 4.5): reemplaza la fórmula de puntos anterior por
- * un modelo de GATES (población + edificios activos requeridos, ver NIVEL_ASENTAMIENTO.requisitos). Sube de
- * forma MONÓTONA: nunca baja aunque la población caiga después, evalúa gate por gate desde el nivel actual.
+ * Qué mitad del gate de `nivelObjetivo` se cumple (Doc 4.5, `NIVEL_ASENTAMIENTO.requisitos`). `null` si ese
+ * nivel no tiene gate (por encima del máximo). Separa POBLACIÓN de EDIFICIOS porque a quien pregunta le
+ * importa cuál falta: al Gobernador para saber qué hacer, al batch para saber qué reloj frena.
  *
- * `edificiosMinimo` (Doc Fase_0_6, a petición del usuario): por defecto el gate exige TODOS los tipos de
- * `edificios` (mismo comportamiento que antes) — pero si se especifica, basta con tener construidos AL MENOS
- * esa cantidad de tipos DISTINTOS del conjunto (nunca instancias repetidas del mismo tipo: dos Canteras no
- * cuentan como 2). Lo usa el gate de nivel 2 ("≥3 de 6 edificios de extracción"); el de nivel 3 (transformación
- * + militar) no lo necesita porque ambos subconjuntos exigen "todos los suyos" — concatenar la lista completa
- * ya representa esa condición sin hacer falta un contador aparte.
+ * `edificiosMinimo` (Doc Fase_0_6): por defecto el gate exige TODOS los tipos de `edificios`, pero si se
+ * especifica basta con AL MENOS esa cantidad de tipos DISTINTOS (dos Canteras no cuentan como 2) — lo usa el
+ * gate de nivel 2 ("3 tipos de extracción"). El recinto terminado del nivel 4 cuenta como parte de edificios.
+ */
+export function evaluarGatesDeNivel(
+  asentamiento: Asentamiento,
+  nivelObjetivo: number
+): { poblacion: boolean; edificios: boolean } | null {
+  const requisito = NIVEL_ASENTAMIENTO.requisitos[nivelObjetivo];
+  if (!requisito) return null;
+  const poblacion =
+    asentamiento.poblacion.pesants >= requisito.pesants && asentamiento.poblacion.artesanos >= requisito.artesanos;
+  const tiposConstruidos = requisito.edificios.filter(
+    (tipo) => edificiosPorTipoYEstado(asentamiento, tipo as EdificioTipo).length > 0
+  ).length;
+  const cumpleRecinto =
+    requisito.recintoCompletoNivelMinimo === undefined ||
+    tieneRecintoCompletoDeNivelMinimo(asentamiento, requisito.recintoCompletoNivelMinimo);
+  const edificios = tiposConstruidos >= (requisito.edificiosMinimo ?? requisito.edificios.length) && cumpleRecinto;
+  return { poblacion, edificios };
+}
+
+/**
+ * Hasta qué nivel llegan los gates encadenados desde el `nivel` actual. Desde 2026-09-26 esto NO sube el nivel
+ * (la subida es manual, engine/ascenso.ts): solo dice hasta dónde se cumplirían los requisitos.
  */
 export function calcularNivelAsentamiento(asentamiento: Asentamiento): number {
   let nivel = asentamiento.nivel;
   while (nivel < NIVEL_ASENTAMIENTO.nivelMaximo) {
-    const requisito = NIVEL_ASENTAMIENTO.requisitos[nivel + 1];
-    if (!requisito) break;
-    const cumplePoblacion = asentamiento.poblacion.pesants >= requisito.pesants && asentamiento.poblacion.artesanos >= requisito.artesanos;
-    const tiposConstruidos = requisito.edificios.filter(
-      (tipo) => edificiosPorTipoYEstado(asentamiento, tipo as EdificioTipo).length > 0
-    ).length;
-    const cumpleEdificios = tiposConstruidos >= (requisito.edificiosMinimo ?? requisito.edificios.length);
-    const cumpleRecinto =
-      requisito.recintoCompletoNivelMinimo === undefined || tieneRecintoCompletoDeNivelMinimo(asentamiento, requisito.recintoCompletoNivelMinimo);
-    if (!cumplePoblacion || !cumpleEdificios || !cumpleRecinto) break;
+    const gates = evaluarGatesDeNivel(asentamiento, nivel + 1);
+    if (!gates || !gates.poblacion || !gates.edificios) break;
     nivel += 1;
   }
   return nivel;
@@ -77,44 +89,6 @@ export function calcularNivelAsentamiento(asentamiento: Asentamiento): number {
  */
 function tieneRecintoCompletoDeNivelMinimo(asentamiento: Asentamiento, nivelMinimo: number): boolean {
   return (asentamiento.recintos ?? []).some((r) => r.nivel >= nivelMinimo && integridadDeRecinto(r) >= 1);
-}
-
-/**
- * Sube `nivel` (nivelAlcanzado) mientras se cumplan los gates de `calcularNivelAsentamiento` Y (Doc
- * Fase_0_5 §5, a petición del usuario) haya CUPO libre en el nivel objetivo — un asentamiento puede cumplir
- * los gates de sobra y quedarse "elegible, esperando cupo" varios ticks, sin caer nunca de nivel por eso.
- * `tieneCupoParaNivel` es opcional (tests que no verifican cupo pueden omitirlo, tratado como "cupo
- * ilimitado") y, si se da, se llama UNA vez por cada escalón que se intenta subir — quien la implementa
- * decide si consume el cupo al devolver `true` (ver `simulation.ts`, que también libera el cupo del nivel
- * que se abandona al subir, p. ej. subir de 2 a 3 libera el cupo de 2).
- */
-export function avanzarNivelAsentamiento(
-  asentamiento: Asentamiento,
-  tieneCupoParaNivel?: (nivelObjetivo: number) => boolean
-): { asentamiento: Asentamiento; eventos: EventoCrudo[] } {
-  const nivelElegible = calcularNivelAsentamiento(asentamiento);
-  let nuevoNivel = asentamiento.nivel;
-  while (nuevoNivel < nivelElegible && (!tieneCupoParaNivel || tieneCupoParaNivel(nuevoNivel + 1))) {
-    nuevoNivel += 1;
-  }
-  if (nuevoNivel === asentamiento.nivel) return { asentamiento, eventos: [] };
-
-  // Doc Fase_0_5 §6.2: una promoción de nivelAlcanzado legítima (gates + cupo cumplidos) sube `nivelActual`
-  // junto con `nivel` de inmediato, SIN esperar racha — la racha de recuperación solo aplica tras una
-  // degradación (`avanzarMantenimiento`). Excepción: si el asentamiento ya estaba degradado (nivelActual <
-  // nivel antes de esta subida), la nueva promoción no "cura" esa degradación de golpe.
-  const yaEstabaAlDia = nivelActualDe(asentamiento) === asentamiento.nivel;
-  const siguiente = { ...asentamiento, nivel: nuevoNivel, ...(yaEstabaAlDia ? { nivelActual: nuevoNivel } : {}) };
-  return {
-    asentamiento: siguiente,
-    eventos: [
-      {
-        codigo: 'asentamiento.nivel_subio',
-        mensaje: `${asentamiento.id} sube a nivel ${nuevoNivel}.`,
-        payload: { asentamientoId: asentamiento.id, nivelNuevo: nuevoNivel } satisfies PayloadNivelSubio,
-      },
-    ],
-  };
 }
 
 /** "Centro de poder de la Facción" (Doc 4.5): placeholder = su asentamiento vivo más antiguo (proxy de capital). */

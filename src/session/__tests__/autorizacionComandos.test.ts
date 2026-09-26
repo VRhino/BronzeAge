@@ -186,6 +186,19 @@ describe('la puerta (Doc 1.10.5)', () => {
   });
 });
 
+describe('subida de nivel del asentamiento (Doc 4.5)', () => {
+  it('solicitarAscenso es solo del Gobernador: ni el fundador sin cargo ni otro residente', () => {
+    const { sesion, asentamientoId, fundador, vecino } = partidaConAsentamiento();
+    const params = { asentamientoId };
+
+    expect(verificarAutorizacion('solicitarAscenso', params, sesion.getState(), jugador(fundador))).toEqual(POR_DOMINIO);
+
+    sesion.ejecutar(asignarCargoLocal, { asentamientoId, cargo: 'gobernador', heroeId: fundador }, OPC);
+    expect(verificarAutorizacion('solicitarAscenso', params, sesion.getState(), jugador(fundador))).toEqual(AUTORIZADO);
+    expect(verificarAutorizacion('solicitarAscenso', params, sesion.getState(), jugador(vecino))).toEqual(POR_DOMINIO);
+  });
+});
+
 describe('asignarCargoLocal', () => {
   it('designar Gobernador es directo para un residente', () => {
     const { sesion, asentamientoId, fundador } = partidaConAsentamiento();

@@ -4,6 +4,7 @@
 // de dominio: eso es responsabilidad exclusiva de `gameStore`. Los tipos de `./domain/types` se
 // importan solo como `type` para tipar lo que se lee — no acoplan a ninguna lógica.
 import type { Asentamiento, BiomaTipo, CargoTipo, Edificio, Faccion, RegionId } from '@motor/domain/types';
+import { ApiError } from './app/apiCliente';
 import { CATALOGOS, crearGameStore, fmtTiempoMundo, type GameState, type GameStore, type EstadoMejoraEdificio } from './app/gameStore';
 import { draw, drawAsentamiento, drawFiltroFertilidad, drawTerreno, faccionColor, BIOMA_COLOR, BIOMA_COLOR_SIMPLE, RECURSO_COLOR, RECURSOS_EN_MAPA, EDIFICIO_COLOR, FACCION_COLORES, type DrawState } from './ui/canvas';
 
@@ -169,9 +170,6 @@ const FACTOR_LABEL: Record<string, string> = {
 function efectoPolitica(politica: (typeof CATALOGOS.politicas)[number]): string {
   const registro = politica as unknown as Record<string, unknown>;
   const efectos: string[] = [];
-  if (typeof registro.lineasProduccionPriorizadas === 'boolean' && registro.lineasProduccionPriorizadas) {
-    efectos.push('Sitúa Fundición/Curtiduría/Armería nuevas cerca de la fuente de sus insumos, no en el primer hueco libre');
-  }
   if (typeof registro.cupoCaravanaExtra === 'number') {
     efectos.push(`+${registro.cupoCaravanaExtra} cupo de caravanas`);
   }
@@ -475,8 +473,21 @@ let gameStore: GameStore;
 try {
   gameStore = await crearGameStore();
 } catch (err) {
-  logEl.textContent =
-    err instanceof Error ? `No se pudo conectar con el servidor: ${err.message}` : 'No se pudo conectar con el servidor.';
+  if (err instanceof ApiError && err.status === 422) {
+    // Guardado de otra versión de la build (no se migra): el admin decide si lo descarta y empieza de cero.
+    logEl.innerHTML = `<p>No se pudo abrir la partida: ${err.message}</p><button id="descartar-partida">Descartar y crear una nueva</button>`;
+    document.getElementById('descartar-partida')!.addEventListener('click', async () => {
+      try {
+        await crearGameStore(undefined, undefined, true);
+        location.reload();
+      } catch (e) {
+        logEl.textContent = `No se pudo crear la partida: ${e instanceof Error ? e.message : e}`;
+      }
+    });
+  } else {
+    logEl.textContent =
+      err instanceof Error ? `No se pudo conectar con el servidor: ${err.message}` : 'No se pudo conectar con el servidor.';
+  }
   throw err;
 }
 

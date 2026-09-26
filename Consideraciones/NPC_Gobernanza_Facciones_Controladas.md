@@ -171,10 +171,42 @@ Cada paso captura la excepción de dominio que le corresponde (`CargoInvalidoErr
 este tick no es un fallo: lo reintenta al siguiente. Cualquier otra excepción se propaga — un error de
 programación no debe quedar enterrado bajo un `catch` silencioso.
 
+### 4.9 La guerra de verdad: héroes, tropa variada y guarnición (2026-09-26, decisión del usuario)
+
+Medido en la Era I del batch: **2 172 conquistas en cinco semanas**, y ninguna era una batalla. Cero escuadrones en
+guarnición, 29 de 36 plazas sin un héroe dentro, y los 60 escuadrones del mundo eran milicia de nivel 1. Eran
+columnas de milicia entrando en plazas vacías, que caen sin combate (Doc 5.12.4). Tres causas, tres cambios:
+
+1. **Las plazas hijas nacían vacías.** Los fundadores de una Caravana de Fundación eran siempre los primeros
+   ciudadanos de la Facción, que ya vivían en otra plaza y no se movían: la Facción tenía cinco héroes para siempre,
+   repartidos entre todas sus plazas. Ahora **cada fundación NPC trae 5 héroes nuevos**: el NPC reserva ids nuevos al
+   lanzar la caravana (`lanzarCaravanaFundacion` acepta `fundadores`, engine/expansion.ts) y los crea como bots
+   cuando la plaza existe de verdad (`materializarFundadoresNpc`), así que una caravana interceptada no deja héroes
+   sin casa. Fundar ya los hace ciudadanos y residentes. **Es comportamiento SOLO del NPC** (aclaración del usuario,
+   2026-09-26): cuando funda un jugador, el comando no pasa `fundadores` y se usan sus ciudadanos de siempre; y la
+   creación de héroes solo recorre Facciones NPC. Lo fija el test `guerraNpc.test.ts` ("a un jugador real NO le nacen
+   héroes del aire").
+2. **Solo reclutaba milicia.** `tropaId` era fijo (`milicia_lanceros`). Ahora cada residente recluta o repone UNA
+   escuadra por tick, **la mejor que su plaza sepa hacer** (escalón más alto, y a igualdad más poder); si esa ya está
+   al tope, abre una de la siguiente tropa. Con el tiempo cada héroe junta una escuadra por tipo de tropa. El
+   `tropaId` fijo queda solo como palanca de experimento.
+3. **No usaba la guarnición.** Se decidió el 2026-09-14 que los bots no la usaran, porque con una sola escuadra por
+   bot guarnecerla les dejaba sin nada con lo que salir. **Esa decisión queda revocada**: con tropa variada, cada
+   bot mete sus escuadras más fuertes en la guarnición hasta llenar su cupo (Barracón/Galería, Doc 5.15.3), pero
+   nunca la última que le queda fuera, con la que sale o defiende en persona (`guarnecerNpc`).
+
+**Medido** (una semana, `BATCH_SEED=7 BATCH_FACCIONES=12 BATCH_TICKS=10080`, contra la misma semana de la corrida
+anterior): **25 conquistas contra 252** (−90 %), 261 campañas contra 620, **115 escuadrones en guarnición contra 0**,
+12 de 34 plazas sin ninguna defensa. Tropa al final: 186 milicia, 115 honderos, 115 lanceros con escudo de mimbre, 10
+espadachines de cobre — hay variedad, pero solo de la gama baja de la Era I: nada que pida bronce.
+
+**Pendiente:** una plaza conquistada se queda sin residentes (`aplicarConquista` vacía fundadores y casas) y el
+conquistador no mete a nadie, así que sigue siendo presa fácil. Se decide con la medición en la mano.
+
 ## 5. Lo que el NPC NO hace
 
-- No hace diplomacia: ni alianzas, ni vasallajes, ni tributos, ni guerra contra otras Facciones. Solo pelea
-  contra campamentos de bandidos.
+- No hace diplomacia: ni alianzas, ni vasallajes, ni tributos. (Sí hace la guerra: campañas contra otras
+  Facciones desde el Paso 12 del movimiento de ejércitos, y guarnición desde §4.9.)
 - No usa el Mercado (órdenes de compra/venta); solo trueque.
 - No activa políticas, ni nombra General/Maestro de Obras/Sacerdote.
 - No gestiona la cola de construcción a mano: se apoya en la auto-construcción del motor, salvo Mercado,

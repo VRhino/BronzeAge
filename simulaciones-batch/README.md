@@ -3,6 +3,29 @@
 Carpeta fuera de `src/` para escenarios de batch desechables — ver `Consideraciones/Diarios_Simulaciones_Batch/*.md`
 para los resultados que este tipo de script produce. El script estable vive en `scripts/run-batch-sim.ts`.
 
+## Puntos de control: medir una Era sin repetir las anteriores
+
+Una Era I entera tarda horas, así que las Eras siguientes se miden **reanudando** desde el final de la anterior.
+`checkpoints/` (fuera de git) es donde se guardan.
+
+```bash
+# 1. Corrida que guarda su estado al final de la Era I (tick 50 400):
+BATCH_SEED=7 BATCH_FACCIONES=12 BATCH_TICKS=50400 BATCH_CHECKPOINT_TICKS=50400 BATCH_CHECKPOINT_DIR=simulaciones-batch/checkpoints npx tsx scripts/run-batch-sim.ts
+
+# 2. La Era II (6 semanas = 60 480 ticks) arrancando de ahí:
+BATCH_DESDE=simulaciones-batch/checkpoints/batch-seed7-f12-tick50400.json BATCH_TICKS=60480 npx tsx scripts/run-batch-sim.ts
+```
+
+- `BATCH_CHECKPOINT_TICKS` acepta varios ticks separados por comas; cada uno deja un archivo
+  `batch-seed<S>-f<F>-tick<T>.json`.
+- Con `BATCH_DESDE`, semilla, Facciones, perfil forzado y multiplicador de trigo salen del checkpoint (el mundo
+  evolucionó con ellos), y `BATCH_TICKS` son los ticks que se corren **a partir** de él.
+- **Solo se reanuda un checkpoint compatible con el motor actual**: misma `WORLDGEN_VERSION` y misma
+  `LAYOUT_VERSION`, el mismo criterio que las partidas guardadas del servidor. Si no, el script se niega y dice por
+  qué. Un cambio de **balance** sí se puede probar desde un checkpoint viejo: para eso sirve.
+- El mundo reanudado es idéntico al de no haber parado (verificado al tick). Los contadores `*Acumulados` de las
+  fotos y el bloque de ritmo cuentan desde el arranque de **esa** corrida: al reanudar, son los de la Era medida.
+
 ## El NPC de gobernanza vive ahora en `src/app/npcGobernanza.ts`
 
 **Se movió** fuera de esta carpeta: el mismo comportamiento lo usa ahora también la

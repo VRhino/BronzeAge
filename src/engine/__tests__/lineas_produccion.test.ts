@@ -7,16 +7,14 @@
 // 2) Líneas de producción (ver `factorPorDistancia`/`factorLineaProduccion`): la distancia dentro del
 //    asentamiento entre un transformador y la fuente más cercana de cada insumo penaliza cuánto produce ese
 //    tick, nunca cuánto consume por unidad.
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Asentamiento, Edificio, RecursoAlmacenado } from '../../domain/types';
 import type { RecetaProduccion } from '../../constants';
-import { LINEAS_PRODUCCION, REJILLA_ASENTAMIENTO, ZONA_INFLUENCIA } from '../../constants';
+import { LINEAS_PRODUCCION } from '../../constants';
 import { avanzarSimulacion } from '../simulation';
 import { createRng } from '../../worldgen';
-import { factorLineaProduccion, factorPorDistancia, sitioEnBarrio, sitioEnBarrioLineaProduccion, tieneInsumoDeArranque } from '../construction';
-import { celdaMinimaDeEdificio, crearAnclaNueva } from '../trazado';
-import { activarPolitica, lineasProduccionPriorizadas } from '../politicas';
-import { contextoDeTest, crearEstadoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instanteDeTest } from './fixtures';
+import { factorLineaProduccion, factorPorDistancia, tieneInsumoDeArranque } from '../construction';
+import { acelerarObras, contextoDeTest, crearEstadoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
 
 const SEED = 42;
 
@@ -33,6 +31,13 @@ function edificio(tipo: Edificio['tipo'], posicion: { x: number; y: number }, ov
 }
 
 describe('gate de materia prima para auto-construcción de transformación', () => {
+  // Regla de construcción, no de ritmo: obras aceleradas para crecer la ciudad (ver `acelerarObras`).
+  let restaurarObras: () => void;
+  beforeAll(() => {
+    restaurarObras = acelerarObras();
+  });
+  afterAll(() => restaurarObras());
+
   it('Fundición no pasa el gate sin cobre ni estaño en almacén', () => {
     const { asentamiento } = fundarAsentamientoDeTest(crearMapaDeterminista(SEED), crearFacciones(), 'faccion-1', []);
     const sinMinerales = conAlmacen(asentamiento, { cobre: 0, estano: 0 });
@@ -152,121 +157,5 @@ describe('factor de distancia de líneas de producción', () => {
     const leneraLejos = edificio('lenera', { x: 1000, y: 0 }); // madera: factor mínimo (el eslabón débil)
     const con = { ...asentamiento, edificios: [fundicionCerca, leneraLejos] };
     expect(factorLineaProduccion(armeria, receta, con)).toBeCloseTo(LINEAS_PRODUCCION.factorMinimo);
-  });
-});
-
-function dist(a: { x: number; y: number }, b: { x: number; y: number }): number {
-  return Math.hypot(a.x - b.x, a.y - b.y);
-}
-
-describe('política "Líneas de Producción" del Maestro de Obras', () => {
-  it('lineasProduccionPriorizadas es false por defecto y true tras activar la política', () => {
-    const { asentamiento: base, facciones } = fundarAsentamientoDeTest(crearMapaDeterminista(SEED), crearFacciones(), 'faccion-1', []);
-    expect(lineasProduccionPriorizadas(base)).toBe(false);
-
-    const conCargo = { ...base, cargos: { ...base.cargos, maestroObrasId: 'jugador-test' } };
-    const faccion = facciones.find((f) => f.id === 'faccion-1')!;
-    const conPolitica = activarPolitica(conCargo, faccion, 'maestroObras', 'lineas_produccion', instanteDeTest(1));
-    expect(lineasProduccionPriorizadas(conPolitica)).toBe(true);
-  });
-
-  it('sitioEnBarrioLineaProduccion nunca elige un hueco peor que el que elegiría sitioEnBarrio', () => {
-    const mapa = crearMapaDeterminista(SEED);
-    const { asentamiento: fundado } = fundarAsentamientoDeTest(mapa, crearFacciones(), 'faccion-1', []);
-    // Etapa 5: Curtiduría (industria) ya no cae por una cuña de barrio — se atrae a un Patio de Gremios
-    // alcanzable. Nivel 2 y radio de sobra para que el árbol de anclas tenga sitio real donde nacer.
-    const base: Asentamiento = {
-      ...fundado,
-      nivel: 2,
-      nivelActual: 2,
-      radioPotencial: ZONA_INFLUENCIA.radioMaximoPorNivel[2] ?? fundado.radioPotencial,
-    };
-    const resultadoAncla = crearAnclaNueva(base.id, base.edificios, 'patioDeGremios', 'patio-de-gremios-test');
-    expect(resultadoAncla).not.toBeNull();
-    const patio = resultadoAncla!.nuevaAncla;
-    const conPatio = { ...base, edificios: [...base.edificios, patio] };
-
-    // Corral (fuente de livestock) pegado a un lado del Patio de Gremios, dentro de su anillo de atracción —
-    // no en el hueco "por defecto" que elegiría `sitioEnBarrio` (el más pegado sin mirar la fuente), para que
-    // la política de logística tenga margen real para mejorarlo.
-    const patioMin = celdaMinimaDeEdificio(patio);
-    const T = REJILLA_ASENTAMIENTO.tamanoCelda;
-    const corral: Edificio = {
-      id: 'corral-test',
-      tipo: 'corral',
-      posicion: { x: (patioMin.col - 5) * T, y: (patioMin.row + 1) * T },
-      estado: 'activo',
-      ambito: 'asentamiento',
-      fuenteId: 'nodo-livestock-inexistente', // basta el tipo/estado para `fuentesDeRecurso`; no se extrae aquí
-    };
-    const conCorral = { ...conPatio, edificios: [...conPatio.edificios, corral] };
-
-    const plano = sitioEnBarrio(conCorral, conCorral.edificios, 'curtiduria');
-    const optimizado = sitioEnBarrioLineaProduccion(conCorral, conCorral.edificios, 'curtiduria');
-    expect(plano).not.toBeNull();
-    expect(optimizado).not.toBeNull();
-
-    const distPlano = dist(plano!.punto, corral.posicion);
-    const distOptimizado = dist(optimizado!.punto, corral.posicion);
-    expect(distOptimizado).toBeLessThanOrEqual(distPlano);
-    expect(factorPorDistancia(distOptimizado)).toBeGreaterThanOrEqual(factorPorDistancia(distPlano));
-  });
-
-  it('con la política activa, la auto-construcción sitúa Fundición cerca de la mina; sin ella, en el hueco genérico', () => {
-    // RNG con seed fija como el resto de tests "en simulación real" de este archivo (ver arriba): sin esto, la
-    // varianza del crecimiento de población (`population.ts`) puede retrasar lo suficiente la disponibilidad
-    // de mano de obra como para que Fundición no se proponga dentro del presupuesto de ticks — el test no
-    // verifica timing de población, solo DÓNDE se sitúa Fundición.
-    const rng = createRng(SEED);
-    {
-      const mapa = crearMapaDeterminista(SEED);
-      const facciones = crearFacciones();
-      const { asentamiento: base, facciones: facs } = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', []);
-      const minaCobre: Edificio = {
-        id: 'mina-test',
-        tipo: 'minaCobre',
-        posicion: { x: base.posicion.x + base.radioPotencial * 0.95, y: base.posicion.y },
-        estado: 'activo',
-      };
-
-      function fundicionPropuesta(conPolitica: boolean): { x: number; y: number } {
-        // nivel: 2 forzado (Doc Fase_0_6): Fundición exige nivel de asentamiento 2 para construcción BASE —
-        // este test prueba DÓNDE se coloca, no el gate de nivel, así que arranca ya en nivel 2.
-        let asentamiento: Asentamiento = {
-          ...base,
-          nivel: 2,
-          nivelActual: 2,
-          edificios: [...base.edificios, minaCobre],
-          almacen: { ...base.almacen, cobre: { cantidad: 10, capacidad: 200 }, piedra: { cantidad: 200, capacidad: 200 } },
-        };
-        if (conPolitica) {
-          asentamiento = { ...asentamiento, cargos: { ...asentamiento.cargos, maestroObrasId: 'jugador-test' } };
-          const faccion = facs.find((f) => f.id === 'faccion-1')!;
-          asentamiento = activarPolitica(asentamiento, faccion, 'maestroObras', 'lineas_produccion', instanteDeTest(1));
-        }
-        let estado = crearEstadoDeTest([asentamiento], facs);
-        // 150, no 40: con el sitio de fundación real de esta seed, ambas ramas tardan ~76-77 ticks en
-        // encontrarle sitio a Fundición detrás de Armería (solo una transformación en vuelo a la vez, ver
-        // comentario en `construction.ts`) — margen para que no dependa del filo exacto del fixture. Subido
-        // de 100 a 150 (Etapa 3, anclas y satélites): la separación mínima al sembrar un ancla nueva (§5.4)
-        // añade algún tick más a esa espera.
-        for (let tick = 1; tick <= 150; tick++) {
-          estado = avanzarSimulacion(estado, mapa, contextoDeTest(tick, rng));
-          const fundicion = estado.asentamientos[0]!.edificios.find((e) => e.tipo === 'fundicion');
-          if (fundicion) return fundicion.posicion;
-        }
-        throw new Error('Fundición nunca se propuso en 100 ticks — revisa el fixture del test.');
-      }
-
-      const posicionConPolitica = fundicionPropuesta(true);
-      const posicionSinPolitica = fundicionPropuesta(false);
-
-      // Margen pequeño (Etapa 3, anclas y satélites): sin política, Fundición ya no cae siempre en el hueco
-      // genérico de barrio — puede atraerse al Patio de Gremios que nace con el primer edificio de industria
-      // (aquí, Armería), que por pura coincidencia geométrica a veces queda casi tan cerca de la mina como el
-      // hueco que la política elige a propósito por distancia. El margen cubre esa coincidencia sin dejar de
-      // proteger que la política nunca eligiera algo bastante peor.
-      expect(dist(posicionConPolitica, minaCobre.posicion)).toBeLessThanOrEqual(dist(posicionSinPolitica, minaCobre.posicion) + 1);
-    }
   });
 });

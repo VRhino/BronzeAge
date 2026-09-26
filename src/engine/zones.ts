@@ -44,7 +44,10 @@ function clipByHalfPlane(polygon: Point[], planePoint: Point, insideNormal: Poin
  * Frontera "viva": el punto de corte entre dos zonas se reparte proporcionalmente al radio potencial
  * actual de cada asentamiento (poder relativo), no queda fijo tras el primer contacto — ver Doc 1.2.
  */
-function computeBorderClip(propio: Asentamiento, rival: Asentamiento): { planePoint: Point; insideNormal: Point } {
+/** Solo mira posición y radio: así sirve igual para un asentamiento que todavía no existe (`zonaInicialDeFundacion`). */
+type Circulo = Pick<Asentamiento, 'posicion' | 'radioPotencial'>;
+
+function computeBorderClip(propio: Circulo, rival: Circulo): { planePoint: Point; insideNormal: Point } {
   const dx = rival.posicion.x - propio.posicion.x;
   const dy = rival.posicion.y - propio.posicion.y;
   const dist = Math.hypot(dx, dy) || 1e-6;
@@ -82,6 +85,26 @@ export function computeZonaInfluencia(
   }
 
   return { asentamientoId: asentamiento.id, poligono };
+}
+
+/**
+ * La zona con la que NACERÍA un asentamiento de `faccionId` fundado hoy en `posicion`: el círculo del radio inicial
+ * recortado contra los asentamientos de OTRAS Facciones, exactamente como lo hará `computeZonaInfluencia` en cuanto
+ * exista. Es lo que hay que mirar para saber si podrá sacar madera o piedra: el círculo crudo engaña cuando hay
+ * vecinos (2026-09-26 — 26 de 28 muertes por madera del batch tenían bosque en el círculo y ninguno en su zona real).
+ *
+ * Sin `faccionId` recorta contra TODOS: si no se sabe quién funda, cualquier vecino puede ser rival.
+ */
+export function zonaInicialDeFundacion(posicion: Point, faccionId: string | undefined, existentes: readonly Asentamiento[]): Point[] {
+  const nuevo: Circulo = { posicion, radioPotencial: ZONA_INFLUENCIA.radioInicial };
+  let poligono = circlePolygon(posicion, nuevo.radioPotencial, ZONA_INFLUENCIA.segmentosPoligono);
+  for (const otro of existentes) {
+    if (faccionId !== undefined && otro.faccionId === faccionId) continue;
+    const { planePoint, insideNormal } = computeBorderClip(nuevo, otro);
+    poligono = clipByHalfPlane(poligono, planePoint, insideNormal);
+    if (poligono.length === 0) break;
+  }
+  return poligono;
 }
 
 export function computeTodasLasZonas(asentamientos: Asentamiento[]): ZonaInfluencia[] {
@@ -128,10 +151,44 @@ export function computeZonasFusionadasPorFaccion(
   }));
 }
 
+type GeometriaFundacion = {
+  id: string;
+  faccionId: string;
+  x: number;
+  y: number;
+  radio: number;
+};
+
+// El barrido NPC consulta muchos puntos sobre la misma geometría. Guardamos solo la última,
+// con valores copiados: el motor reconstruye arrays entre ticks y algunos llamadores los mutan.
+// El orden también cuenta, porque determina el orden de los recortes y su aritmética.
+// Una sola entrada acota la memoria y los polígonos nunca salen de esta consulta booleana.
+let cacheFundacion: {
+  segmentos: number;
+  geometria: GeometriaFundacion[];
+  zonas: ZonaInfluencia[];
+} | undefined;
+
 /** Un punto está libre para fundar si no cae dentro de la zona de influencia ya recortada de ningún asentamiento existente. */
 export function posicionLibreParaFundar(p: Point, asentamientos: Asentamiento[]): boolean {
-  const zonas = computeTodasLasZonas(asentamientos);
-  return zonas.every((z) => !pointInPolygon(p, z.poligono));
+  const coincide = cacheFundacion !== undefined
+    && cacheFundacion.segmentos === ZONA_INFLUENCIA.segmentosPoligono
+    && cacheFundacion.geometria.length === asentamientos.length
+    && cacheFundacion.geometria.every((g, i) => {
+      const a = asentamientos[i]!;
+      return g.id === a.id && g.faccionId === a.faccionId
+        && g.x === a.posicion.x && g.y === a.posicion.y && g.radio === a.radioPotencial;
+    });
+  if (!coincide) {
+    cacheFundacion = {
+      segmentos: ZONA_INFLUENCIA.segmentosPoligono,
+      geometria: asentamientos.map((a) => ({
+        id: a.id, faccionId: a.faccionId, x: a.posicion.x, y: a.posicion.y, radio: a.radioPotencial,
+      })),
+      zonas: computeTodasLasZonas(asentamientos),
+    };
+  }
+  return cacheFundacion!.zonas.every((z) => !pointInPolygon(p, z.poligono));
 }
 
 /**

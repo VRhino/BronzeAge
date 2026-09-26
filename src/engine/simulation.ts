@@ -13,11 +13,11 @@ import { alCampamentoPorIds, campamentoDe, conEscolta, conEscuadrones, conTropa,
 import { caducarOrdenes } from './market';
 import { avanzarPoliticas } from './politicas';
 import { avanzarTributos } from './diplomacia';
-import { avanzarNivelesFaccion, aplicarAjustesExperiencia, calcularCupoNivel, type AjusteExperiencia } from './faccion';
+import { avanzarNivelesFaccion, aplicarAjustesExperiencia, type AjusteExperiencia } from './faccion';
 import { NIVEL_FACCION } from '../constants';
 import { avanzarMantenimientoTropas, consumoRacionDeEscuadrones } from './tropas';
-import { avanzarNivelAsentamiento, avanzarMantenimiento, encontrarCapital } from './mantenimiento';
-import { nivelActualDe } from './asentamientoQuery';
+import { avanzarMantenimiento, encontrarCapital } from './mantenimiento';
+import { avanzarAscenso } from './ascenso';
 import { avanzarReputacion } from './reputacion';
 import { calcularTitulos, narrarCambiosDeTitulo } from './titulos';
 import { avanzarAtaquesBandidos, avanzarSpawnBandidos } from './bandidos';
@@ -148,13 +148,6 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   // `CUPO_NIVEL_ASENTAMIENTO` en constants.ts ya prometía esta liberación, el código no la cumplía). Se va
   // consumiendo/liberando según se conceden promociones dentro de este mismo tick (subir de 2 a 3 libera el
   // cupo de 2 que se abandona, disponible para otro asentamiento propio en la misma pasada).
-  const cupoRestante = new Map<string, number>();
-  for (const faccion of estado.facciones) {
-    const propios = crecidos.filter((a) => a.faccionId === faccion.id);
-    cupoRestante.set(`${faccion.id}:2`, calcularCupoNivel(faccion.nivel, 2) - propios.filter((a) => nivelActualDe(a) === 2).length);
-    cupoRestante.set(`${faccion.id}:3`, calcularCupoNivel(faccion.nivel, 3) - propios.filter((a) => nivelActualDe(a) === 3).length);
-  }
-
   const procesados = crecidos.map((asentamiento) => {
     const zona = zonas.find((z) => z.asentamientoId === asentamiento.id);
     // La guarnición es el campamento de sus residentes (`engine/tropa.ts`): las escuadras viven en sus héroes.
@@ -177,30 +170,10 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     }
 
     const { asentamiento: trasPoliticas, eventos: eventosPoliticas } = avanzarPoliticas(trasConstruccion, instante);
-    // `avanzarNivelAsentamiento` sube de a un escalón por llamada, en orden creciente — para llegar a pedir
-    // cupo de nivel 3, el asentamiento tuvo que pasar por (y consumir) el cupo de nivel 2 primero, sea porque
-    // ya estaba ahí desde antes de este tick, o porque acaba de conseguirlo en la llamada anterior de este
-    // mismo bucle. En ambos casos toca liberar ese cupo de 2 al conceder el de 3 — nunca hace falta mirar de
-    // dónde venía, el orden de las llamadas ya lo garantiza (Doc Fase_0_5 §5).
-    const tieneCupoParaNivel = (nivelObjetivo: number): boolean => {
-      // CUPO_NIVEL_ASENTAMIENTO (Doc Fase_0_5 §5) solo tiene curva definida para nivel 2 y 3 de asentamiento
-      // — Doc Fase_0_6 sube el tope de nivel a 5 pero deliberadamente NO extiende esta curva todavía (queda
-      // pendiente de que el usuario defina cupos para 4/5 en una pasada aparte). Sin este `> 3` los niveles
-      // 4/5 leerían `cupoRestante.get(...)` como `undefined ?? 0` y NUNCA podrían subir — bloqueo silencioso
-      // detectado por el consejo LLM antes de implementar. Niveles 4/5 quedan sin cupo (ilimitados) mientras
-      // tanto, igual que nivel 1.
-      if (nivelObjetivo < 2 || nivelObjetivo > 3) return true;
-      const clave = `${asentamiento.faccionId}:${nivelObjetivo}`;
-      const libre = cupoRestante.get(clave) ?? 0;
-      if (libre <= 0) return false;
-      cupoRestante.set(clave, libre - 1);
-      if (nivelObjetivo === 3) {
-        const claveN2 = `${asentamiento.faccionId}:2`;
-        cupoRestante.set(claveN2, (cupoRestante.get(claveN2) ?? 0) + 1);
-      }
-      return true;
-    };
-    const { asentamiento: trasNivel, eventos: eventosNivel } = avanzarNivelAsentamiento(trasPoliticas, tieneCupoParaNivel);
+    // Subida de nivel MANUAL desde 2026-09-26 (engine/ascenso.ts): el tick ya no sube el nivel al cumplir los
+    // gates, solo termina la obra de ascenso que pidió el Gobernador. Gates, coste, solvencia y cupo de la
+    // Facción se comprobaron al pedirla, y el cupo quedó reservado desde entonces.
+    const { asentamiento: trasNivel, eventos: eventosNivel } = avanzarAscenso(trasPoliticas, instante);
     // Población COME ANTES que Tropas (a petición del usuario — mano de obra/reclutamiento a futuro con
     // jugadores reales): antes el orden era al revés y las Tropas se llevaban su ración aseguradas mientras
     // la Población civil se quedaba con lo que sobrara. Los civiles son quienes producen (trabajan Granja/

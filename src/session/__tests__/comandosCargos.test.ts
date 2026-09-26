@@ -55,7 +55,7 @@ describe('asignarCargoLocal', () => {
 describe('activarPolitica', () => {
   it('rechazo: sin el cargo correspondiente, el motor la rechaza', () => {
     const { sesion, asentamientoId } = partidaConAsentamiento();
-    const resultado = sesion.ejecutar(activarPolitica, { asentamientoId, cargo: 'gobernador', politicaId: 'lineas_produccion' }, OPC);
+    const resultado = sesion.ejecutar(activarPolitica, { asentamientoId, cargo: 'gobernador', politicaId: 'postura_defensiva' }, OPC);
 
     expect(resultado.ok).toBe(false);
     expect(resultado.codigoError).toBe('politica.invalida');
