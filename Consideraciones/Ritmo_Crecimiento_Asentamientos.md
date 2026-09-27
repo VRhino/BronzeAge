@@ -665,3 +665,19 @@ lo que puede ganar y se queda en lo que conquista.
   siguen destruyendo (5 025), pero ninguno es un combate digno. 9 de 12 Facciones siguen en nivel 1 al final de la
   Era, y el cap de fundación del nivel 1 es un asentamiento (`CAP_FUNDACION_POR_NIVEL`).
 - Solo 8 plazas vivas al final (5 colapsos) y 1 en nivel 3.
+
+### 11.6 Era I con experiencia por crecer en paz (2026-09-27)
+
+Ascenso 30 × nivel, fundación 20, trueque cumplido 2 por lado, bandidos 1 por campamento dividido por el nivel de la
+Facción (decisión del usuario).
+
+- **Vuelve la expansión**: 47 plazas nacidas y 53 caravanas de fundación (antes 13 y 1); 33 vivas al final. Nivel 2
+  a 6,2 días de mediana, nivel 3 en 5 plazas (11 %) a las 3,6 semanas.
+- **Niveles de Facción repartidos**: nivel 2 entre los días 0,7 y 6,9; al final hay Facciones en 2, 4, 5, 6, 7, 9 y
+  10 (una sola, al día 34). Experiencia de las 5 semanas: construcción 5 400, crecer 3 300, conquista 4 900,
+  combate y bandidos 700.
+- **Pero vuelve el ping-pong**: 485 conquistas, el 88 % de plazas vacías; las Facciones 7 y 12 se pasan las mismas
+  plazas (205 y 197 veces). Causa: con la expansión, las plazas quedan con 1-2 residentes y el héroe de una casa
+  con uno solo no puede mudarse a lo que conquista sin vaciarla. Arreglado en el NPC: no sale de campaña quien no
+  podría quedarse (documento del NPC §4.9). Hay ~75 héroes huérfanos, casi todos de Facciones que ya no tienen
+  plazas.

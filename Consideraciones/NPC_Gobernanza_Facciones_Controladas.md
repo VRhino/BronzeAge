@@ -215,6 +215,10 @@ espadachines de cobre — hay variedad, pero solo de la gama baja de la Era I: n
   residentes —la que acaba de conquistar— se muda a ella (`cambiarResidencia`) y entra (`guarnecer`). Es lo que ya
   pide la regla (Doc 5.15.5: para defenderla hay que pasar a residir en ella). Solo si deja al menos otro residente
   en su casa de origen.
+- **No conquista lo que no puede ocupar**: una casa con un solo residente no sale de campaña. Con la experiencia de
+  crecer en paz vuelve la expansión y las plazas quedan con 1-2 residentes; sin esta regla, esas casas conquistaban,
+  volvían a casa y dejaban la plaza vacía: 485 conquistas en la Era I, el 88 % de plazas sin defensor, y dos
+  Facciones pasándose las mismas plazas cada ~2 h.
 
 ## 5. Lo que el NPC NO hace
 

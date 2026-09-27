@@ -22,12 +22,13 @@ function conAlmacen(a: Asentamiento, cantidades: Record<string, number>): Asenta
   return { ...a, almacen };
 }
 
-/** Una plaza NPC de nivel 2 lista para salir de campaña, y una plaza rival cerca con `guarnicion` soldados de guardia. */
-function campanaContra(guarnicion: number) {
+/** Una plaza NPC de nivel 2 lista para salir de campaña —con un segundo residente, para que quien sale pueda
+ * quedarse en lo que conquiste—, y una plaza rival cerca con `guarnicion` soldados de guardia. */
+function campanaContra(guarnicion: number, otrosResidentes: string[] = ['vecino']) {
   const mapa = crearMapaDeterminista(7);
   const uno = fundarAsentamientoDeTest(mapa, crearFacciones(), 'faccion-1', []);
   const dos = fundarAsentamientoDeTest(mapa, uno.facciones, 'faccion-2', [uno.asentamiento]);
-  const origen = conAlmacen({ ...uno.asentamiento, nivel: 2, nivelActual: 2 }, { madera: 2000, trigo: 5000 });
+  const origen = conAlmacen({ ...uno.asentamiento, nivel: 2, nivelActual: 2, casasCompradas: otrosResidentes }, { madera: 2000, trigo: 5000 });
   // El fixture la funda lejos (a 960); se acerca a una jornada corta para que quede al alcance del carro.
   const rival = { ...dos.asentamiento, posicion: { x: origen.posicion.x + 120, y: origen.posicion.y } };
   const atacanteId = origen.heroesFundadoresIds[0]!;
@@ -56,6 +57,10 @@ describe('campañas del NPC', () => {
 
   it('no sale contra una guarnición que no puede vencer', () => {
     expect(campanaContra(1000)).toBe(0);
+  });
+
+  it('no sale de una casa con un solo residente: no podría quedarse en lo que conquistara', () => {
+    expect(campanaContra(0, [])).toBe(0);
   });
 });
 

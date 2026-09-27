@@ -1198,6 +1198,10 @@ function lanzarCampanas(
     // que la ventana vence y está repuesta.
     if (estaOcupado(origen, instante)) continue;
     if (nivelActualDe(origen) < NIVEL_MINIMO_PARA_CAMPANA) continue;
+    // No conquista lo que no puede ocupar (§4.9, 2026-09-27): quien sale tiene que poder quedarse en la plaza que
+    // gane sin vaciar su casa (`ocuparConquistas`). Sin esto, en la Era I medida, las casas de un solo residente
+    // conquistaban, volvían a casa y dejaban la plaza vacía para el siguiente: 485 conquistas, el 88 % sin defensor.
+    if (residentesDe(origen).length < 2) continue;
 
     const campamento = campamentoDe(origen, heroesActuales);
     const vivos = campamento.filter((e) => e.cantidad > 0 && !e.enGuarnicion);
