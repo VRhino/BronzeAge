@@ -40,6 +40,7 @@ import { puedeLlevar } from './liderazgo';
 import { esResidente, estanAliadas } from './pertenencia';
 import { heridosEn, herir } from './heroe';
 import { estaOcupado } from './asentamientoQuery';
+import { registrarDerrota } from './faccion';
 
 export class MovilizacionInvalidaError extends Error {}
 
@@ -1236,12 +1237,16 @@ export function asediarPlaza(
   }
   let asentamientos = mundo.asentamientos.map((a) => (a.id === plaza.id ? asedio.defensor : a));
   let columnas: EjercitoConTropa[] = [];
-  if (asedio.conquistado) ({ asentamientos, heroes, columnas } = desalojarResidentes(plaza, asentamientos, heroes, mundo.ejercitos, lucharon, instante));
+  let facciones = asedio.facciones;
+  if (asedio.conquistado) {
+    ({ asentamientos, heroes, columnas } = desalojarResidentes(plaza, asentamientos, heroes, mundo.ejercitos, lucharon, instante));
+    facciones = registrarDerrota(facciones, asentamientos, plaza.faccionId, ejercito.faccionId);
+  }
   return {
     ejercito: conApartadas(asedio.ejercito, ejercito),
     asentamientos,
     heroes,
-    facciones: asedio.facciones,
+    facciones,
     columnas,
     eventos: asedio.eventos.flatMap((e) => [atribuir(e, ejercito.origenAsentamientoId), ...(asedio.conquistado ? [] : [atribuir(e, plaza.id)])]),
   };

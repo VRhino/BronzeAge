@@ -1642,7 +1642,8 @@ export function anadirEdificioManualmente(
  * Quita un proyecto `en_cola` de la cola (Doc 4.2, a petición del usuario) — SOLO antes de que arranque la
  * obra (`en_construccion` ya no se puede quitar; qué pasa con los recursos comprometidos a mitad de obra
  * queda PENDIENTE, ver Preguntas_Abiertas.md #14b). Devuelve el costo COMPLETO pagado al comprometerse
- * (overhaul de auto-construcción: el pago ocurrió al encolar, no al empezar a construir).
+ * (overhaul de auto-construcción: el pago ocurrió al encolar, no al empezar a construir); si es un edificio dañado
+ * en un saqueo, más sus mejoras.
  */
 export function quitarDeCola(asentamiento: Asentamiento, cargo: 'gobernador' | 'maestroObras', edificioId: string): Asentamiento {
   if (!cargoOcupado(asentamiento, cargo)) {
@@ -1653,10 +1654,15 @@ export function quitarDeCola(asentamiento: Asentamiento, cargo: 'gobernador' | '
   if (edificio.estado !== 'en_cola') {
     throw new ConstruccionManualInvalidaError('Solo se puede quitar un proyecto que aún no empezó a construirse.');
   }
-  const costo = EDIFICIO_CATALOGO[edificio.tipo].costo as Partial<Record<string, number>>;
+  // Devuelve lo que se pagó en su día (decisión del usuario, 2026-09-27): la obra y, si es un edificio dañado que se
+  // iba a reconstruir, también las mejoras que lo llevaron a su nivel interno.
+  const pagado: Partial<Record<string, number>>[] = [EDIFICIO_CATALOGO[edificio.tipo].costo as Partial<Record<string, number>>];
+  for (let nivel = 2; nivel <= (edificio.nivelInterno ?? 1); nivel++) pagado.push(nivelesDe(edificio.tipo)?.[nivel]?.costoMejora ?? {});
   let almacen = asentamiento.almacen;
-  for (const [recurso, cantidad] of Object.entries(costo)) {
-    if (cantidad) almacen = agregarRecurso(almacen, recurso, cantidad);
+  for (const costo of pagado) {
+    for (const [recurso, cantidad] of Object.entries(costo)) {
+      if (cantidad) almacen = agregarRecurso(almacen, recurso, cantidad);
+    }
   }
   return { ...asentamiento, almacen, edificios: asentamiento.edificios.filter((e) => e.id !== edificioId) };
 }

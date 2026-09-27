@@ -275,7 +275,9 @@ export function fundarAsentamiento(
     medidorMantenimiento: MANTENIMIENTO.medidorInicial,
   };
 
-  let faccionActualizada = faccion;
+  // Quien vuelve a tener un asentamiento ya no está derrotado (`Faccion.derrotadaPor`).
+  const { derrotadaPor: _derrota, ...faccionEnPie } = faccion;
+  let faccionActualizada: Faccion = faccionEnPie;
   for (const heroeId of heroesFundadoresIds) {
     faccionActualizada = otorgarCiudadania(faccionActualizada, heroeId);
   }

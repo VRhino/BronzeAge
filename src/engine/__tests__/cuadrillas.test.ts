@@ -4,8 +4,8 @@
 // cadena de mejoras de la Granja retenía una cuadrilla durante más de mil ticks.
 import { describe, expect, it } from 'vitest';
 import type { Asentamiento, Edificio } from '../../domain/types';
-import { NECESIDADES } from '../../constants';
-import { avanzarConstruccion, reclamosDeFuentes } from '../construction';
+import { EDIFICIO_CATALOGO, NECESIDADES } from '../../constants';
+import { avanzarConstruccion, quitarDeCola, reclamosDeFuentes } from '../construction';
 import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instanteDeTest } from './fixtures';
 
 const AHORA = instanteDeTest(10);
@@ -54,5 +54,23 @@ describe('cuadrillas de obra', () => {
     const ocupadas = Array.from({ length: NECESIDADES.maximoEnConstruccionSimultanea - 1 }, (_, i) => obra(`obra-${i}`));
     const tras = tick(mapa, { ...plaza, edificios: [...plaza.edificios, ...ocupadas] });
     expect(tras.edificios.some((e) => e.mejora !== undefined)).toBe(false);
+  });
+
+  it('quitar de la cola una reconstrucción devuelve lo que se pagó en su día: la obra y sus mejoras', () => {
+    const { plaza } = plazaConFondos();
+    const granja = plaza.edificios.find((e) => e.tipo === 'granja')!;
+    const a: Asentamiento = {
+      ...plaza,
+      cargos: { ...plaza.cargos, gobernadorId: 'gobernador' },
+      edificios: plaza.edificios.map((e) => (e.id === granja.id ? { ...e, estado: 'en_cola' as const, danado: true, nivelInterno: 3 } : e)),
+    };
+    const niveles = EDIFICIO_CATALOGO.granja.niveles as Record<number, { costoMejora?: Record<string, number> }>;
+    const madera = (EDIFICIO_CATALOGO.granja.costo as Record<string, number>)['madera'] ?? 0;
+    const esperada = madera + (niveles[2]!.costoMejora!['madera'] ?? 0) + (niveles[3]!.costoMejora!['madera'] ?? 0);
+
+    const tras = quitarDeCola(a, 'gobernador', granja.id);
+
+    expect(tras.almacen['madera']!.cantidad - a.almacen['madera']!.cantidad).toBe(esperada);
+    expect(tras.edificios.some((e) => e.id === granja.id)).toBe(false);
   });
 });

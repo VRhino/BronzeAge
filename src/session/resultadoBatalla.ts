@@ -8,7 +8,7 @@ import { BATALLA, CAMPAMENTOS_BANDIDOS, MILITAR, NIVEL_FACCION, REPUTACION } fro
 import { minutos, sumar, type Instante } from '../domain/tiempo';
 import { aplicarConquista, desalojarResidentes } from '../engine/combate';
 import { capacidadCargaDe, cargarBotin, trasDerrota } from '../engine/ejercitos';
-import { aplicarAjustesExperiencia, type AjusteExperiencia } from '../engine/faccion';
+import { aplicarAjustesExperiencia, registrarDerrota, type AjusteExperiencia } from '../engine/faccion';
 import { herir } from '../engine/heroe';
 import { estanAliadas } from '../engine/pertenencia';
 import { aplicarAjustesReputacion } from '../engine/reputacion';
@@ -226,6 +226,7 @@ function conquistar(estado: GameSessionState, b: Batalla, ahora: Instante): Game
   const fuera = desalojo.columnas.map(sinTropa);
   return {
     ...estado,
+    facciones: registrarDerrota(estado.facciones, desalojo.asentamientos, plaza.faccionId, faccionId),
     asentamientos: desalojo.asentamientos,
     ejercitos: [...estado.ejercitos, ...fuera.map((f) => f.ejercito)],
     heroes: conEscuadrones(desalojo.heroes, fuera.flatMap((f) => f.tropa)),

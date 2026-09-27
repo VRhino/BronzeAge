@@ -90,6 +90,9 @@ export interface Faccion {
   ciudadanosIds: string[];
   /** Score de confiabilidad PÚBLICO -100..+100 (Doc 2.7), decae hacia 0 sin eventos nuevos. */
   reputacion: number;
+  /** La Facción que conquistó su último asentamiento (Doc 5.15.5): presente solo mientras no tiene ninguno. Con ella
+   * el NPC sabe a quién se unen sus héroes bot antes de que la Facción desaparezca (`registrarDerrota`). */
+  derrotadaPor?: string;
 }
 
 /** 3 clases de población NPC — Doc 4.1. Los Jugadores son una categoría separada. */

@@ -111,6 +111,21 @@ export function quitarCiudadania(faccion: Faccion, heroeId: string): Faccion {
   };
 }
 
+/**
+ * Si al caer una plaza su Facción se queda sin ningún asentamiento, anota quién la derrotó (`Faccion.derrotadaPor`,
+ * Doc 5.15.5). Lo llaman los dos caminos de la conquista (asedio con números y batalla de Unity) con el mundo ya
+ * conquistado; qué pasa después con sus héroes lo decide quien los gobierna.
+ */
+export function registrarDerrota(
+  facciones: readonly Faccion[],
+  asentamientos: readonly Asentamiento[],
+  perdedoraId: string,
+  ganadoraId: string
+): Faccion[] {
+  if (asentamientos.some((a) => a.faccionId === perdedoraId)) return [...facciones];
+  return facciones.map((f) => (f.id === perdedoraId ? { ...f, derrotadaPor: ganadoraId } : f));
+}
+
 export function capacidadCasas(asentamiento: Asentamiento): number {
   return CIUDADANIA.casasBasePorAsentamiento + (asentamiento.nivel - 1) * CIUDADANIA.casasPorNivelAdicional;
 }

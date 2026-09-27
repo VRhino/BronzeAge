@@ -120,10 +120,12 @@ Faccion
   reyId: string | null   vasallaje/políticas superiores — existente. Tras este modelo referencia heroeId
   embajadorId: string | null   designado por el Rey — existente. Referencia heroeId
   nivel                 derivado de experiencia, sube cupo de asentamientos/fundación — existente
-  experiencia            MONÓTONA, nunca baja (combate/construcción/conquista/caravanas) — existente
+  experiencia            MONÓTONA, nunca baja (combate digno/conquista/construcción/crecer en paz/bandidos) — existente
   ciudadanosIds[]         quién tiene ciudadanía en ESTA facción, no toda la Liga — existente. Tras este
                          modelo, lista de heroeId
   reputacion              score público -100..+100, decae hacia 0 — existente
+  derrotadaPor?: string   faccionId que conquistó su último asentamiento; solo mientras no tiene ninguno.
+                         Una Facción NPC derrotada por otra NPC se le une y desaparece — nuevo (2026-09-27)
 ```
 
 La "Liga" (Doc 0) no es una entidad persistida: se deriva de la red de `RelacionPolitica` activas (§8).

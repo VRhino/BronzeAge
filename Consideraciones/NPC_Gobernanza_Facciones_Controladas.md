@@ -215,6 +215,11 @@ espadachines de cobre — hay variedad, pero solo de la gama baja de la Era I: n
   residentes —la que acaba de conquistar— se muda a ella (`cambiarResidencia`) y entra (`guarnecer`). Es lo que ya
   pide la regla (Doc 5.15.5: para defenderla hay que pasar a residir en ella). Solo si deja al menos otro residente
   en su casa de origen.
+- **Los héroes bot nunca se quedan sin casa** (`acogerHeroesNpc`, 2026-09-27, decisión del usuario): una Facción NPC
+  que pierde su último asentamiento ante otra Facción NPC se une a ella (`anexionar`, con quién la derrotó anotado
+  en `Faccion.derrotadaPor`) y desaparece; y un héroe bot sin residencia se muda a la plaza más cercana de su
+  Facción. Si la ganadora es de un jugador, la derrotada no se le une: el Paso 0 la refunda como siempre. En la Era I
+  había ~75 héroes huérfanos, casi todos de Facciones sin plazas.
 - **No conquista lo que no puede ocupar**: una casa con un solo residente no sale de campaña. Con la experiencia de
   crecer en paz vuelve la expansión y las plazas quedan con 1-2 residentes; sin esta regla, esas casas conquistaban,
   volvían a casa y dejaban la plaza vacía: 485 conquistas en la Era I, el 88 % de plazas sin defensor, y dos
