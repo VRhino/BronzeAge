@@ -1,6 +1,6 @@
 import type { Asentamiento, Edificio, Faccion, Point, RecursoAlmacenado } from '../domain/types';
 import type { Instante } from '../domain/tiempo';
-import { ALMACEN, FUNDACION, MANTENIMIENTO, POBLACION, ZONA_INFLUENCIA } from '../constants';
+import { ALMACEN, FUNDACION, MANTENIMIENTO, NIVEL_FACCION, POBLACION, ZONA_INFLUENCIA } from '../constants';
 import type { Mapa } from '../world/mapa';
 import { posicionLibreParaFundar, zonaInicialDeFundacion } from './zones';
 import { sitioEnBarrio } from './construction';
@@ -278,6 +278,11 @@ export function fundarAsentamiento(
   let faccionActualizada = faccion;
   for (const heroeId of heroesFundadoresIds) {
     faccionActualizada = otorgarCiudadania(faccionActualizada, heroeId);
+  }
+  // Fundar un asentamiento NUEVO da experiencia de Facción (decisión del usuario, 2026-09-27); el primero, no: es
+  // nacer, no crecer.
+  if (asentamientosDeFaccion > 0) {
+    faccionActualizada = { ...faccionActualizada, experiencia: faccionActualizada.experiencia + NIVEL_FACCION.xp.fundacion };
   }
 
   return {

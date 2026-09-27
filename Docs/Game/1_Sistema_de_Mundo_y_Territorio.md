@@ -112,7 +112,7 @@ Puertos de montaña detectados como PUNTOS DE SILLA del campo de elevación (mí
 - ESCALA con el NIVEL DE FACCIÓN: progresión fácil de 1 a 3, luego se complica progresivamente hasta un MÁXIMO DE 7 en etapa tardía. Curva (`CAP_FUNDACION_POR_NIVEL`, placeholder): `[1, 2, 3, 3, 4, 5, 5, 6, 6, 7]` para niveles de Facción 1 a 10.
 - Complementa (no sustituye) al sistema de Mantenimiento/Coste de Gobernanza (ver Doc 4).
 - Da incentivo mecánico a preferir vasallaje/conquista sobre fundación directa una vez alcanzado el cap.
-- **Qué hace subir el nivel de Facción**: la experiencia acumulada (combate digno, edificio completado, conquista). Ver Doc 2.2.1 para el criterio completo, la curva de umbrales y el cupo de asentamientos nivel 2/3 que también depende de este nivel.
+- **Qué hace subir el nivel de Facción**: la experiencia acumulada (combate digno, conquista, edificio completado, subir de nivel un asentamiento, fundar, cerrar trueques y, mientras la Facción es joven, destruir campamentos de bandidos). Ver Doc 2.2.1 para el criterio completo, la curva de umbrales y el cupo de asentamientos nivel 2/3 que también depende de este nivel.
 
 ## 1.8 Caravana de Fundación (mecanismo de expansión más allá del primer asentamiento)
 

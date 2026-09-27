@@ -34,7 +34,8 @@ export interface PayloadCaravanaSale {
   cantidad: number;
   recurso: string;
 }
-import { ANIMAL_CATALOGO, ASIGNACION_CARAVANA, CARAVANA_PREPARACION, CARRO_CATALOGO, COMISION, REPUTACION, TRUEQUE } from '../constants';
+import { ANIMAL_CATALOGO, ASIGNACION_CARAVANA, CARAVANA_PREPARACION, CARRO_CATALOGO, COMISION, NIVEL_FACCION, REPUTACION, TRUEQUE } from '../constants';
+import { aplicarAjustesExperiencia, type AjusteExperiencia } from './faccion';
 import type { AnimalTipo, CarroTipo } from '../domain/types';
 import { capacidadCaravana, velocidadCaravana } from './caravanas';
 import { esResidente } from './pertenencia';
@@ -513,6 +514,7 @@ function avanzarCaravanas(
   instante: Instante,
   eventos: EventoCrudo[],
   ajustesReputacion: AjusteReputacion[],
+  ajustesExperiencia: AjusteExperiencia[],
   /** Ids de las escoltas que vuelven al campamento con su caravana (Doc 3.13.4). */
   escoltasLiberadas: string[]
 ): Caravana[] {
@@ -654,6 +656,7 @@ function avanzarCaravanas(
         const actualizado = aplicado.acuerdo;
         eventos.push(...aplicado.eventos);
         ajustesReputacion.push(...aplicado.ajustesReputacion);
+        ajustesExperiencia.push(...aplicado.ajustesExperiencia);
         acuerdosPorId.set(acuerdo.id, actualizado);
       }
     }
@@ -746,9 +749,10 @@ export function aplicarEntregaATrueque(
   lado: 'A' | 'B',
   cantidad: number,
   asentamientosPorId: Map<string, Asentamiento>
-): { acuerdo: AcuerdoTrueque; eventos: EventoCrudo[]; ajustesReputacion: AjusteReputacion[] } {
+): { acuerdo: AcuerdoTrueque; eventos: EventoCrudo[]; ajustesReputacion: AjusteReputacion[]; ajustesExperiencia: AjusteExperiencia[] } {
   const eventos: EventoCrudo[] = [];
   const ajustesReputacion: AjusteReputacion[] = [];
+  const ajustesExperiencia: AjusteExperiencia[] = [];
   const actualizado: AcuerdoTrueque =
     lado === 'A'
       ? { ...acuerdo, cantidadEntregadaA: acuerdo.cantidadEntregadaA + cantidad }
@@ -767,10 +771,14 @@ export function aplicarEntregaATrueque(
     });
     const faccionA = asentamientosPorId.get(acuerdo.asentamientoAId)?.faccionId;
     const faccionB = asentamientosPorId.get(acuerdo.asentamientoBId)?.faccionId;
-    if (faccionA) ajustesReputacion.push({ faccionId: faccionA, delta: REPUTACION.bonusTruequeCumplido, razon: 'trueque cumplido' });
-    if (faccionB) ajustesReputacion.push({ faccionId: faccionB, delta: REPUTACION.bonusTruequeCumplido, razon: 'trueque cumplido' });
+    // Y experiencia de Facción a los dos lados (crecer en paz, decisión del usuario 2026-09-27).
+    for (const faccionId of [faccionA, faccionB]) {
+      if (!faccionId) continue;
+      ajustesReputacion.push({ faccionId, delta: REPUTACION.bonusTruequeCumplido, razon: 'trueque cumplido' });
+      ajustesExperiencia.push({ faccionId, delta: NIVEL_FACCION.xp.truequeCumplido, razon: 'trueque cumplido' });
+    }
   }
-  return { acuerdo: actualizado, eventos, ajustesReputacion };
+  return { acuerdo: actualizado, eventos, ajustesReputacion, ajustesExperiencia };
 }
 
 export class EntregaInvalidaError extends Error {}
@@ -809,6 +817,7 @@ export function entregarDesdeCaravanaAdjunta(
   comision: number;
   eventos: EventoCrudo[];
   ajustesReputacion: AjusteReputacion[];
+  ajustesExperiencia: AjusteExperiencia[];
 } {
   const cargado = caravana.contenido[recurso] ?? 0;
   if (cargado <= 0) throw new EntregaInvalidaError(`La caravana ${caravana.id} no lleva ${recurso}.`);
@@ -846,6 +855,7 @@ export function entregarDesdeCaravanaAdjunta(
     comision,
     eventos,
     ajustesReputacion: aplicado.ajustesReputacion,
+    ajustesExperiencia: aplicado.ajustesExperiencia,
   };
 }
 
@@ -1010,6 +1020,7 @@ export function avanzarComercio(
 } {
   const eventos: EventoCrudo[] = [];
   const ajustesReputacion: AjusteReputacion[] = [];
+  const ajustesExperiencia: AjusteExperiencia[] = [];
   const escoltasLiberadas: string[] = [];
   const asentamientosPorId = new Map(asentamientos.map((a) => [a.id, { ...a }]));
   const acuerdosPorId = new Map(acuerdos.map((a) => [a.id, a]));
@@ -1024,13 +1035,14 @@ export function avanzarComercio(
     instante,
     eventos,
     ajustesReputacion,
+    ajustesExperiencia,
     escoltasLiberadas
   );
   const trasAsignacion = asignarCaravanasATrueque(mapa, caminos, acuerdosPorId, asentamientosPorId, trasMovimiento, instante, eventos, ajustesReputacion);
 
   return {
     asentamientos: asentamientos.map((a) => asentamientosPorId.get(a.id)!),
-    facciones: aplicarAjustesReputacion(facciones, ajustesReputacion),
+    facciones: aplicarAjustesExperiencia(aplicarAjustesReputacion(facciones, ajustesReputacion), ajustesExperiencia),
     caravanas: trasAsignacion,
     acuerdos: [...acuerdosPorId.values()],
     eventos,

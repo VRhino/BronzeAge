@@ -174,6 +174,9 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     // gates, solo termina la obra de ascenso que pidió el Gobernador. Gates, coste, solvencia y cupo de la
     // Facción se comprobaron al pedirla, y el cupo quedó reservado desde entonces.
     const { asentamiento: trasNivel, eventos: eventosNivel } = avanzarAscenso(trasPoliticas, instante);
+    if (trasNivel.nivel > trasPoliticas.nivel) {
+      ajustesExperiencia.push({ faccionId: trasNivel.faccionId, delta: NIVEL_FACCION.xp.ascensoPorNivel * trasNivel.nivel, razon: 'ascenso de asentamiento' });
+    }
     // Población COME ANTES que Tropas (a petición del usuario — mano de obra/reclutamiento a futuro con
     // jugadores reales): antes el orden era al revés y las Tropas se llevaban su ración aseguradas mientras
     // la Población civil se quedaba con lo que sobrara. Los civiles son quienes producen (trabajan Granja/

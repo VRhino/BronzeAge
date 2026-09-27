@@ -1317,11 +1317,24 @@ export const NIVEL_FACCION = {
   // La guerra da la mitad desde el 2026-09-27 (combate 5 → 2,5, conquista 20 → 10, decisión del usuario), y el
   // combate solo da experiencia si es DIGNO (`ratioCombateDigno`). `ataqueCaravana` y `defensaCaravana` se quitaron:
   // nada los usaba (interceptar una caravana no da experiencia).
+  //
+  // Crecer en paz da experiencia desde el 2026-09-27 (decisión del usuario): con la guerra frenada, la experiencia
+  // salía casi solo de construir y 9 de 12 Facciones acababan la Era I en nivel 1, sin poder fundar un segundo
+  // asentamiento (ficha de ritmo §11.5). `ascensoPorNivel` es por nivel alcanzado (subir a 3 da 3×), `fundacion`
+  // no cuenta el primer asentamiento de la Facción, y `truequeCumplido` va a cada uno de los dos lados.
+  //
+  // `bandidos` es por campamento destruido, NO por jugador participante, y se divide por el nivel de la Facción,
+  // hasta 0 desde `nivelSinXpBandidos`: da experiencia aunque no sea un combate digno, pero cada vez menos.
   xp: {
     combate: 2.5,
     edificioCompletado: 1,
     conquista: 10,
+    ascensoPorNivel: 30,
+    fundacion: 20,
+    truequeCumplido: 2,
+    bandidos: 1,
   },
+  nivelSinXpBandidos: 5,
   /**
    * Un combate es DIGNO si el bando más débil tiene al menos esta fracción del poder del más fuerte (con el jitter y la
    * muralla del propio combate). Solo el combate digno da experiencia de Facción: aplastar a quien no puede

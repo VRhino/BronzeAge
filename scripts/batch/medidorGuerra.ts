@@ -4,12 +4,15 @@
 // Limitaciones conocidas, a propósito:
 //  - Las bajas son la caída de soldados durante el paso del MOTOR (combates, deserción por moral); las de un ataque
 //    del NPC a un campamento de bandidos caen en el paso del NPC y no se cuentan aquí.
-//  - La experiencia de construcción y de conquista se atribuye exacta (eventos × tarifa); el resto del delta de
-//    experiencia de la Facción es "combate y caravanas".
+//  - La experiencia de construcción, conquista y crecer en paz (ascenso, fundación, trueque cumplido) se atribuye
+//    exacta (eventos × tarifa); el resto del delta de experiencia de la Facción es combate y bandidos.
 import type { EventoDominio } from '../../src/domain/eventos';
 import type { Heroe } from '../../src/domain/types';
 import type { EstadoSimulacion } from '../../src/engine/simulation';
 import type { PayloadAsedio, PayloadCombateResuelto } from '../../src/engine/combate';
+import type { PayloadAsentamientoFundado } from '../../src/engine/expansion';
+import type { PayloadNivelSubio } from '../../src/engine/mantenimiento';
+import type { PayloadTruequeCumplido } from '../../src/engine/trade';
 import type { StatsNpcGobernanza } from '../../src/session/npcGobernanza';
 import { NIVEL_FACCION } from '../../src/constants';
 
@@ -25,6 +28,7 @@ interface Semana {
   bajas: number;
   bajasEnTicksDeCombate: number;
   xpConstruccion: number;
+  xpCrecer: number;
   xpConquista: number;
   xpCombate: number;
 }
@@ -37,6 +41,7 @@ const semanaVacia = (): Semana => ({
   bajas: 0,
   bajasEnTicksDeCombate: 0,
   xpConstruccion: 0,
+  xpCrecer: 0,
   xpConquista: 0,
   xpCombate: 0,
 });
@@ -109,6 +114,11 @@ export class MedidorGuerra {
     const faccionDePlaza = new Map(trasMotor.asentamientos.map((a) => [a.id, a.faccionId]));
     const eventos = trasMotor.eventosDominio;
     const construccionPorFaccion = new Map<string, number>();
+    const crecerPorFaccion = new Map<string, number>();
+    const sumarCrecer = (asentamientoId: string | undefined, xp: number) => {
+      const f = asentamientoId && faccionDePlaza.get(asentamientoId);
+      if (f) crecerPorFaccion.set(f, (crecerPorFaccion.get(f) ?? 0) + xp);
+    };
     const conquistasPorFaccion = new Map<string, number>();
     let huboCombate = false;
 
@@ -123,6 +133,21 @@ export class MedidorGuerra {
       if (ev.codigo === 'construccion.edificio_completado' && ev.asentamientoId) {
         const f = faccionDePlaza.get(ev.asentamientoId);
         if (f) construccionPorFaccion.set(f, (construccionPorFaccion.get(f) ?? 0) + 1);
+        continue;
+      }
+      if (ev.codigo === 'asentamiento.nivel_subio') {
+        const p = ev.payload as PayloadNivelSubio;
+        sumarCrecer(p.asentamientoId, NIVEL_FACCION.xp.ascensoPorNivel * p.nivelNuevo);
+        continue;
+      }
+      if (ev.codigo === 'expansion.asentamiento_fundado') {
+        sumarCrecer((ev.payload as PayloadAsentamientoFundado).asentamientoId, NIVEL_FACCION.xp.fundacion);
+        continue;
+      }
+      if (ev.codigo === 'comercio.trueque_cumplido') {
+        const p = ev.payload as PayloadTruequeCumplido;
+        sumarCrecer(p.asentamientoAId, NIVEL_FACCION.xp.truequeCumplido);
+        sumarCrecer(p.asentamientoBId, NIVEL_FACCION.xp.truequeCumplido);
         continue;
       }
       if (ev.codigo !== 'combate.asedio_conquista' && ev.codigo !== 'combate.asedio_resistido') continue;
@@ -186,9 +211,11 @@ export class MedidorGuerra {
       if (delta > 0) {
         const xpConstruccion = (construccionPorFaccion.get(f.id) ?? 0) * NIVEL_FACCION.xp.edificioCompletado;
         const xpConquista = (conquistasPorFaccion.get(f.id) ?? 0) * NIVEL_FACCION.xp.conquista;
+        const xpCrecer = crecerPorFaccion.get(f.id) ?? 0;
         s.xpConstruccion += xpConstruccion;
+        s.xpCrecer += xpCrecer;
         s.xpConquista += xpConquista;
-        s.xpCombate += Math.max(0, delta - xpConstruccion - xpConquista);
+        s.xpCombate += Math.max(0, delta - xpConstruccion - xpCrecer - xpConquista);
       }
       let niveles = this.tickDeNivel.get(f.id);
       if (!niveles) this.tickDeNivel.set(f.id, (niveles = new Map()));
@@ -199,7 +226,7 @@ export class MedidorGuerra {
   informe(): string[] {
     const l: string[] = [];
     l.push('', '=== GUERRA ===');
-    l.push('semana  campañas  repliegues  asedios  conq.combate  conq.sin-def  resist.combate  rebote-ocup  reclutam.   bajas (en ticks de combate)   XP constr/conq/combate');
+    l.push('semana  campañas  repliegues  asedios  conq.combate  conq.sin-def  resist.combate  rebote-ocup  reclutam.   bajas (en ticks de combate)   XP constr/crecer/conq/combate+bandidos');
     for (const [n, s] of [...this.semanas.entries()].sort((a, b) => a[0] - b[0])) {
       const asedios = Object.values(s.asedios).reduce((a, b) => a + b, 0);
       l.push(
@@ -207,7 +234,7 @@ export class MedidorGuerra {
           `${String(s.asedios['conquista en combate']).padStart(12)}  ${String(s.asedios['conquista sin defensores']).padStart(12)}  ` +
           `${String(s.asedios['resistido en combate']).padStart(14)}  ${String(s.asedios['rebote por ocupación']).padStart(11)}  ` +
           `${String(s.reclutamientos).padStart(9)}  ${String(Math.round(s.bajas)).padStart(8)} (${pct(s.bajasEnTicksDeCombate, s.bajas)})` +
-          `   ${Math.round(s.xpConstruccion)}/${Math.round(s.xpConquista)}/${Math.round(s.xpCombate)}`
+          `   ${Math.round(s.xpConstruccion)}/${Math.round(s.xpCrecer)}/${Math.round(s.xpConquista)}/${Math.round(s.xpCombate)}`
       );
     }
 
