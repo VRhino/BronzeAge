@@ -650,3 +650,18 @@ bloque GUERRA del batch (`scripts/batch/medidorGuerra.ts`).
   (5 024 destruidos, uno cada 10 ticks) llevan a una Facción a nivel 8 en 10 horas y a nivel 10 en 1,2 días; cada
   asedio suicida contra una plaza defendida también da experiencia a los dos bandos. 6 Facciones llegan a nivel 10;
   5 no pasan del nivel 2 y no conquistan nada.
+
+### 11.5 Era I con la experiencia nueva y el NPC que ocupa lo que conquista (2026-09-27)
+
+Umbrales de nivel de Facción ×2, guerra a la mitad, solo combate digno (`ratioCombateDigno` 0,5), el NPC solo ataca
+lo que puede ganar y se queda en lo que conquista.
+
+- **La guerra cambió de naturaleza**: 11 conquistas en 5 semanas (antes 615), el 73 % en combate; el atacante gana
+  el 89 % de sus asedios (poder mediano 1,75 veces el del defensor). Ninguna plaza cae más de 3 veces, ninguna la
+  recupera un dueño anterior, cada dueño aguanta 5,8 días de mediana, y no queda ninguna plaza sin defensa. Toda la
+  guerra ocurre en las semanas 1-2; en las 3-5, ni una campaña.
+- **Pero la expansión se paró**: 13 plazas nacidas (antes 47) y 1 caravana de fundación. La experiencia de Facción
+  ya casi solo sale de construir (~30 en la primera semana, mediana 92 al final): los campamentos de bandidos se
+  siguen destruyendo (5 025), pero ninguno es un combate digno. 9 de 12 Facciones siguen en nivel 1 al final de la
+  Era, y el cap de fundación del nivel 1 es un asentamiento (`CAP_FUNDACION_POR_NIVEL`).
+- Solo 8 plazas vivas al final (5 colapsos) y 1 en nivel 3.
