@@ -4,7 +4,7 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { crearAlmacenEnDisco } from '../almacen/enDisco';
 import { RegistroDePartidas } from '../registroDePartidas';
 
@@ -75,9 +75,10 @@ describe('RegistroDePartidas — fuente de ticks (Fase C12)', () => {
     const registro = new RegistroDePartidas(almacen, 10);
     const anterior = await registro.abrir('g1', { seed: 1 });
 
-    await esperar(200);
+    // Sondeo, no una espera fija: bajo la carga de la suite completa el `setInterval` real se retrasa (y un
+    // hueco > MAX_TICKS_POR_PASADA intervalos se descarta), así que 200 ms no garantizaban 5 ticks.
+    await vi.waitFor(() => expect(anterior.getState().tick).toBeGreaterThan(4), { timeout: 10_000 });
     const tickAlDescartar = anterior.getState().tick;
-    expect(tickAlDescartar).toBeGreaterThan(4);
 
     const nuevo = await registro.descartarYCrear('g1', { seed: 2 });
     await esperar(50);

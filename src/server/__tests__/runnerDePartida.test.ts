@@ -3,7 +3,7 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { crearFaccion } from '../../session/comandos/crearFaccion';
 import { fundarAsentamiento } from '../../session/comandos/fundarAsentamiento';
 import { crearFaccionNpc } from '../../session/comandos/crearFaccionNpc';
@@ -209,9 +209,12 @@ describe('RunnerDePartida — reloj de mundo (D5)', () => {
     const { r, avanzar } = runnerConReloj('g-resto');
     r.iniciarRelojDeMundo(50);
     avanzar(2 * 50 + 30); // 2 intervalos + un resto, con el reloj EN MARCHA
-    await esperar(150);
-    r.detenerRelojDeMundo();
+    // Sondeo hasta que la ráfaga termine, no una espera fija: parar el reloj a mitad de ráfaga la aborta
+    // (ver el test de deriva), y bajo carga 150 ms no bastaban para que el `setInterval` real disparase y
+    // persistiera los dos ticks. El reloj de pared inyectado no se mueve, así que no puede haber un tercero.
+    await vi.waitFor(() => expect(r.getState().tick).toBe(2), { timeout: 10_000 });
     await r.esperarColaVacia();
+    r.detenerRelojDeMundo();
     expect(r.getState().tick).toBe(2);
 
     // Con el reloj parado el tiempo no cuenta, y al reanudar la referencia vuelve a ser "ahora": el resto
