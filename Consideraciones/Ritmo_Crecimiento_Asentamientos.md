@@ -693,3 +693,20 @@ Facción (decisión del usuario).
 - **Facciones**: la más rápida llega a nivel 8 el día 21,5 y ninguna a 10; las que expanden llegan a nivel 2 entre
   los días 0,7 y 6,9. Experiencia en 5 semanas: construcción 2 100, crecer 5 200, conquista 300, combate y
   bandidos 490.
+
+### 11.8 Era I con protección de un día y reparto de héroes (2026-09-27)
+
+Reglas nuevas desde §11.7: protección del nuevo dueño de un día (Doc 5.12.9), reparto de héroes NPC entre plazas,
+no atacar la última plaza de una Facción, artesanos ×1,5 y la nobleza sin inmunidad.
+
+- **Guerra**: 65 conquistas (22 + 35 en las semanas 1-2, luego 3, 2 y 3), el 55 % en plazas vacías. Ningún
+  conquistador pierde su plaza antes de un día (mediana 1,3 días); los fundadores, el 86 % en menos de un día: la
+  fundación nace con 5 héroes bot nuevos y sin tropa, y una campaña vecina la toma a los ~50 ticks.
+- **Expansión**: 49 plazas nacidas, 32 vivas (17 colapsos). Tres Facciones (8, 10, 12) pierden su última plaza por
+  colapso, sin ganador: sus 35 héroes se quedan en una plaza que ya no existe.
+- **Ritmo**: nivel 2 a 5,9 días de mediana (57 %), nivel 3 en 5 plazas (10 %) a las 3,55 semanas. Bloqueo principal al
+  final: insolvencia en piedra (18 de 32).
+- **Facciones**: la más rápida llega a nivel 7; ninguna a 8. 79 escuadras en guarnición y 0 plazas sin defensa.
+- **Reparto**: iguala las Facciones con sitio (1: 2/2/2/2/2/1/1/1/1), pero no las que tienen más héroes que casas
+  (4: 24 y 10 residentes con 12 casas; 6: 20 y 5). La acogida y la anexión no respetan el tope de casas.
+- **Trueques para crecer**: 867 peticiones de ganado caducadas contra 3 cumplidas.
