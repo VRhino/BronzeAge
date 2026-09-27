@@ -664,7 +664,7 @@ migración.
 | `arqueros` | Arqueros | 3 | 18 | 22 | a distancia | `arc01` Levy Archers |
 | `arqueros_compuesto` | Arqueros con arco compuesto | 5 | 12 | 45 | a distancia | `arc01` Levy Archers |
 
-Fuente: `TROPAS_RECLUTABLES`, `UNIDADES_POR_ESCALON` y `LIDERAZGO.costePorEscalon` (`src/constants.ts`), al
+Fuente: `TROPAS_RECLUTABLES` (con su `unidadesPorDefecto`, propio de cada tropa desde el 2026-09-27) y `LIDERAZGO.costePorEscalon` (`src/constants.ts`), al
 2026-09-13. Publicada, generada desde esas constantes, en `src/contratos/v1/catalogoTropas.json`: su `version`
 (`VERSION_CATALOGO_TROPAS`) es la que cita `BattleRules.versionCatalogoTropas`. Falta acordar con Conquest cómo corresponde el escalón (1 leva … 5 élite) con su `SquadRarity`.
 

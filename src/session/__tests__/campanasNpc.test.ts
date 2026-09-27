@@ -23,8 +23,9 @@ function conAlmacen(a: Asentamiento, cantidades: Record<string, number>): Asenta
 }
 
 /** Una plaza NPC de nivel 2 lista para salir de campaña —con un segundo residente, para que quien sale pueda
- * quedarse en lo que conquiste—, y una plaza rival cerca con `guarnicion` soldados de guardia. */
-function campanaContra(guarnicion: number, otrosResidentes: string[] = ['vecino']) {
+ * quedarse en lo que conquiste—, y una plaza rival cerca con `guarnicion` soldados de guardia. La Facción rival
+ * tiene otra plaza lejos, salvo con `rivalConUnaSolaPlaza`. */
+function campanaContra(guarnicion: number, otrosResidentes: string[] = ['vecino'], rivalConUnaSolaPlaza = false) {
   const mapa = crearMapaDeterminista(7);
   const uno = fundarAsentamientoDeTest(mapa, crearFacciones(), 'faccion-1', []);
   const dos = fundarAsentamientoDeTest(mapa, uno.facciones, 'faccion-2', [uno.asentamiento]);
@@ -44,7 +45,9 @@ function campanaContra(guarnicion: number, otrosResidentes: string[] = ['vecino'
     }),
   ];
   // Solo la Facción atacante es NPC: la defensora no toca su guarnición.
-  const r = avanzarNpcGobernanza(crearEstadoDeTest([origen, rival], dos.facciones, { heroes }), mapa, contextoDeTest(1, createRng(5)), {
+  const otraDelRival = { ...dos.asentamiento, id: `${dos.asentamiento.id}-b`, heroesFundadoresIds: [] };
+  const plazas = rivalConUnaSolaPlaza ? [origen, rival] : [origen, rival, otraDelRival];
+  const r = avanzarNpcGobernanza(crearEstadoDeTest(plazas, dos.facciones, { heroes }), mapa, contextoDeTest(1, createRng(5)), {
     faccionesIds: ['faccion-1'],
   });
   return r.stats.campanasLanzadas;
@@ -57,6 +60,10 @@ describe('campañas del NPC', () => {
 
   it('no sale contra una guarnición que no puede vencer', () => {
     expect(campanaContra(1000)).toBe(0);
+  });
+
+  it('no sale contra la última plaza de una Facción: la haría desaparecer', () => {
+    expect(campanaContra(0, ['vecino'], true)).toBe(0);
   });
 
   it('no sale de una casa con un solo residente: no podría quedarse en lo que conquistara', () => {
@@ -110,5 +117,50 @@ describe('quien conquista se queda', () => {
     const despues = r.estado.heroes.find((h) => h.id === lider)!;
     expect(despues.ubicacion).toEqual({ tipo: 'asentamiento', asentamientoId: conquistada.id });
     expect(despues.escuadrones.find((e) => e.id === 'a1')!.contenedor).toEqual({ tipo: 'campamento' });
+  });
+});
+
+describe('las columnas personales de los bots vuelven a casa', () => {
+  function columnaDe(heroeId: string, casa: Asentamiento, posicion: { x: number; y: number }): Ejercito {
+    return {
+      id: 'salida-1',
+      faccionId: casa.faccionId,
+      origenAsentamientoId: casa.id,
+      participantes: [{ heroeId, unidoEn: instanteDeTest(0) }],
+      tipo: 'personal',
+      politicaDeUnion: 'rechazar',
+      liderId: heroeId,
+      escuadronIds: [],
+      suministro: {},
+      caravanasAdjuntasIds: [],
+      objetivo: { tipo: 'punto', punto: posicion },
+      ruta: [],
+      progreso: 0,
+      posicionActual: posicion,
+      estado: 'estacionado',
+    };
+  }
+  function tras(posicion: (casa: Asentamiento) => { x: number; y: number }) {
+    const mapa = crearMapaDeterminista(7);
+    const { asentamiento, facciones } = fundarAsentamientoDeTest(mapa, crearFacciones(), 'faccion-1', []);
+    const id = asentamiento.heroesFundadoresIds[0]!;
+    const heroe = heroeDePrueba(id, { tipo: 'columna', ejercitoId: 'salida-1' }, { controlador: 'bot' });
+    return avanzarNpcGobernanza(
+      crearEstadoDeTest([asentamiento], facciones, { heroes: [heroe], ejercitos: [columnaDe(id, asentamiento, posicion(asentamiento))] }),
+      mapa,
+      contextoDeTest(1, createRng(5)),
+      { lanzarCampanas: false }
+    ).estado;
+  }
+
+  it('a la puerta de su residencia, entra y la columna se deshace', () => {
+    const e = tras((casa) => casa.posicion);
+    expect(e.ejercitos).toEqual([]);
+    expect(e.heroes[0]!.ubicacion).toEqual({ tipo: 'asentamiento', asentamientoId: e.asentamientos[0]!.id });
+  });
+
+  it('lejos de ella, se pone en marcha hacia casa', () => {
+    const e = tras((casa) => ({ x: casa.posicion.x + 150, y: casa.posicion.y }));
+    expect(e.ejercitos[0]!.estado).toBe('regresando');
   });
 });

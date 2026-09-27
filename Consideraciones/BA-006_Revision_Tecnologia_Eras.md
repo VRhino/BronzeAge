@@ -616,15 +616,26 @@ Criterio: D49 (concentrada en el nivel 3, primeras cosas de nivel 4). 7 semanas 
 nivel 4 al acabar la Era, con el batch delante). Detectado para la Era IV: todo lo que lleve arma de hierro de
 calidad pasa a nivel 4 con P2 (Epílektoi, Peltastas de Ifícrates, Falangitas, Agrianos, Caballería tesalia).
 
-## Nobleza y reclutamiento — EN ESTUDIO (desde el 2026-09-27)
+## Nobleza, reclutamiento y escalones (2026-09-27)
 
-**Afirmación del usuario:** las unidades de escalón alto solo se reclutan con población de **Nobleza**. Contradice
-el canon actual (Doc 5.8: "la Nobleza no se recluta"), que se cambiará al cerrar el estudio.
-
-**Idea a estudiar (usuario):** adelantar el **Palacio** a etapas tempranas y hacerlo mejorable, para que la Nobleza
-aparezca antes. Hoy pide asentamiento nivel 4, da cupo a 200 nobles, y la nobleza crece a 0,01 (pesants 0,12) solo
-con 3+ héroes residentes. Motivo: muchas tropas tempranas eran históricamente nobles (carros, guardias palaciales)
-y la Nobleza llega demasiado tarde en las Eras.
+**Decidido por el usuario:**
+- **Población por escalón**: escalones 1-2 se reclutan con **pesants**, el 3 con **artesanos**, y los "altos",
+  **4 y 5, solo con Nobleza**. Contradice el canon actual (Doc 5.8: "la Nobleza no se recluta"), que cambia al
+  bajar esto a código.
+- **Palacio mejorable desde el nivel 2**, con el cupo de nobles duplicado sobre la propuesta: **Palacio 1** en
+  asentamiento nivel 2, cupo 80; **Palacio 2** en nivel 3, cupo 240; **Palacio 3** en nivel 4, cupo 400 (sigue
+  siendo requisito del nivel 5). Motivo: la élite de las Eras I-II (carros, lanceros pesados, Hequetai, arco
+  compuesto) está en nivel 3 y necesita Nobleza.
+- **La Nobleza deja de ser intocable** (hoy no pasa hambre y la conquista no la saquea): cómo, pendiente.
+- **Las unidades por escuadra son un valor propio de cada tropa**, no del escalón (ya en el código, con los valores
+  que daba el escalón).
+- **Roster:**
+  - Las tropas de leva pasan a **ligeras**: milicia de lanceros y lanceros con escudo de mimbre suben a escalón 2.
+  - **Dos tropas nuevas de escalón 1**, reclutables desde el principio como la milicia, muy malas en combate y muy
+    desorganizadas: **leñadores** y **granjeros**.
+  - **Honderos de escalón 3**: una escuadra nueva (nombre, Era y equipo pendientes).
+  - **Falangitas: escalón 4** como mínimo (estaban en 3).
+  - **Arqueros escitas: escalón 5**, no peores que su contraparte de la Era II (el arco compuesto, 5).
 
 ## Qué cambia en el canon (al cerrar)
 

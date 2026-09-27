@@ -105,4 +105,16 @@ describe('crecer en paz', () => {
       ['faccion-2', NIVEL_FACCION.xp.truequeCumplido],
     ]);
   });
+
+  it('un trueque entre plazas de la misma Facción no da experiencia', () => {
+    const mapa = crearMapaDeterminista(7);
+    const facciones = crearFacciones().map((f) => (f.id === 'faccion-1' ? { ...f, nivel: 2 } : f));
+    const uno = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', []);
+    const dos = fundarAsentamientoDeTest(mapa, uno.facciones, 'faccion-1', [uno.asentamiento]);
+    const plazas = [uno.asentamiento, dos.asentamiento];
+    const porId = new Map(plazas.map((a) => [a.id, a]));
+    const acuerdo = proponerTrueque(plazas, uno.asentamiento.id, dos.asentamiento.id, 'madera', 'piedra', 10, 10, instanteDeTest(0), 0);
+    const mitad = aplicarEntregaATrueque(acuerdo, 'A', 10, porId);
+    expect(aplicarEntregaATrueque(mitad.acuerdo, 'B', 10, porId).ajustesExperiencia).toEqual([]);
+  });
 });

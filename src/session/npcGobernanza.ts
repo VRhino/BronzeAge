@@ -73,6 +73,7 @@ import {
 } from '../constants';
 import { situarHeroes } from '../engine/ubicacion';
 import { enLaPuertaDe, guarnecer, movilizarEjercito, replegarEjercito, tieneHeroeSano, MovilizacionInvalidaError } from '../engine/ejercitos';
+import { cruzarLaPuerta } from '../engine/ubicacion';
 import { cambiarResidencia, FaccionInvalidaError } from '../engine/faccion';
 import { anexionar } from '../engine/fusion';
 import { consumoRacionDeEscuadrones, reservaDeTrigo } from '../engine/tropas';
@@ -1236,8 +1237,12 @@ function lanzarCampanas(
     const heridos = heridosEn(heroesActuales, instante);
     const puedeGanar = (plaza: Asentamiento) =>
       poderPropio > poderTotal(defensaDe(plaza, heroesActuales, heridos), true) * multiplicadorDefensivoDeRecintos(plaza.recintos ?? []);
+    // Ni contra la última plaza de una Facción (2026-09-27, decisión del usuario): conquistarla la haría desaparecer
+    // (`acogerHeroesNpc`), y en la Era II medida una sola Facción se comió a diez en dos semanas.
+    const plazasDe = (faccionId: string) => asentamientos.filter((a) => a.faccionId === faccionId).length;
     const objetivo = asentamientos
       .filter((a) => a.faccionId !== origen.faccionId && !estanAliadas(relaciones, origen.faccionId, a.faccionId))
+      .filter((a) => plazasDe(a.faccionId) > 1)
       .filter((a) => distancia(a.posicion, origen.posicion) <= alcance)
       .filter(puedeGanar)
       .sort((a, b) => {
@@ -1393,6 +1398,52 @@ function ocuparConquistas(
     } catch (err) {
       if (!(err instanceof FaccionInvalidaError) && !(err instanceof MovilizacionInvalidaError)) throw err;
       quedan.push(ejercito);
+    }
+  }
+
+  return { asentamientos: actuales, ejercitos: quedan, heroes: heroesActuales, eventos };
+}
+
+/**
+ * Las columnas personales de héroes bot acampadas vuelven a casa y entran (2026-09-27, decisión del usuario).
+ * Son las que salen de una plaza al caer (`desalojarResidentes`), a menudo sin tropa: el NPC no les daba ninguna
+ * orden, así que se quedaban plantadas para siempre (en la Era II medida, 15 héroes, 10 de ellos a la puerta de la
+ * plaza donde ya residían). A la puerta de su residencia cruzan y la columna se deshace (`cruzarLaPuerta`); si no,
+ * se repliegan hacia ella y el motor la absorbe al llegar.
+ */
+function volverACasaNpc(
+  asentamientos: Asentamiento[],
+  ejercitos: Ejercito[],
+  heroes: Heroe[],
+  relaciones: readonly RelacionPolitica[],
+  mapa: Mapa,
+  esNpc: (faccionId: string) => boolean
+): { asentamientos: Asentamiento[]; ejercitos: Ejercito[]; heroes: Heroe[]; eventos: string[] } {
+  const eventos: string[] = [];
+  let actuales = asentamientos;
+  let heroesActuales = heroes;
+  const quedan: Ejercito[] = [];
+
+  for (const columna of ejercitos) {
+    const lider = heroesActuales.find((h) => h.id === columna.liderId);
+    const casa = actuales.find((a) => esResidente(a, columna.liderId));
+    if (columna.tipo !== 'personal' || columna.estado !== 'estacionado' || !esNpc(columna.faccionId) || lider?.controlador !== 'bot' || !casa) {
+      quedan.push(columna);
+      continue;
+    }
+    try {
+      if (enLaPuertaDe(columna, casa)) {
+        const entrada = cruzarLaPuerta(conTropa(columna, indiceTropa(heroesActuales)), casa, columna.liderId, relaciones);
+        actuales = actuales.map((a) => (a.id === casa.id ? entrada.asentamiento : a));
+        heroesActuales = situarHeroes(conEscuadrones(heroesActuales, entrada.tropa), [columna.liderId], { tipo: 'asentamiento', asentamientoId: casa.id });
+        eventos.push(`${columna.liderId} entra en ${casa.id}, donde reside.`);
+        continue;
+      }
+      quedan.push(replegarEjercito({ ...columna, origenAsentamientoId: casa.id }, casa, mapa));
+      eventos.push(`${columna.liderId} vuelve a ${casa.id}, donde reside.`);
+    } catch (err) {
+      if (!(err instanceof MovilizacionInvalidaError)) throw err;
+      quedan.push(columna);
     }
   }
 
@@ -1908,7 +1959,9 @@ export function avanzarNpcGobernanza(
   // Quien conquista se queda (§4.9): antes de replegar, que es lo que haría con esa misma columna.
   const trasOcupar = ocuparConquistas(trasCampanas.asentamientos, trasCampanas.ejercitos, heroes, trasBandidos.facciones, esNpc);
   eventos.push(...trasOcupar.eventos);
-  heroes = trasOcupar.heroes;
+  const trasVolver = volverACasaNpc(trasOcupar.asentamientos, trasOcupar.ejercitos, trasOcupar.heroes, trasComercio.relaciones, mapa, esNpc);
+  eventos.push(...trasVolver.eventos);
+  heroes = trasVolver.heroes;
   const tropa = indiceTropa(heroes);
 
   // Punto 7e: publicar en el mercado. Va DESPUES del comercio automatico y antes de lo militar, con el
@@ -1923,7 +1976,7 @@ export function avanzarNpcGobernanza(
 
   // Y saber volver: una columna que ya acampó terminó su campaña y se manda a casa. Va después de lanzar para
   // que una recién salida no se replegue en el mismo tick.
-  const trasRepliegues = replegarLosQueYaTerminaron(trasOcupar.ejercitos, trasOcupar.asentamientos, mapa, esNpc, tropa);
+  const trasRepliegues = replegarLosQueYaTerminaron(trasVolver.ejercitos, trasVolver.asentamientos, mapa, esNpc, tropa);
   eventos.push(...trasRepliegues.eventos);
 
   // Punto 7d: a por quien tienen delante (paso 8e). Va al FINAL de lo militar y antes de expandir: se decide
@@ -1938,7 +1991,7 @@ export function avanzarNpcGobernanza(
     : fijarPersecucionesNpc(
         trasRepliegues.ejercitos,
         trasComercio.caravanas,
-        trasOcupar.asentamientos,
+        trasVolver.asentamientos,
         trasComercio.relaciones,
         esNpc,
         heridosEn(estado.heroes, instante),
@@ -1946,7 +1999,7 @@ export function avanzarNpcGobernanza(
       );
 
   const trasExpansion = expandirSiPuede(
-    trasOcupar.asentamientos,
+    trasVolver.asentamientos,
     trasBandidos.facciones,
     trasComercio.caravanas,
     mapa,

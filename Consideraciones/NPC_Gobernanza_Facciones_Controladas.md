@@ -220,6 +220,12 @@ espadachines de cobre — hay variedad, pero solo de la gama baja de la Era I: n
   en `Faccion.derrotadaPor`) y desaparece; y un héroe bot sin residencia se muda a la plaza más cercana de su
   Facción. Si la ganadora es de un jugador, la derrotada no se le une: el Paso 0 la refunda como siempre. En la Era I
   había ~75 héroes huérfanos, casi todos de Facciones sin plazas.
+- **No ataca la última plaza de una Facción** (2026-09-27, decisión del usuario): conquistarla la haría desaparecer.
+  En la Era II medida, una Facción se comió a diez en dos semanas y el mundo se congeló. Solo frena al NPC: un
+  jugador sí puede.
+- **Las columnas personales de sus héroes vuelven a casa** (`volverACasaNpc`): las que salen de una plaza al caer,
+  a menudo sin tropa, se quedaban plantadas para siempre. A la puerta de su residencia entran; si no, se repliegan
+  hacia ella.
 - **No conquista lo que no puede ocupar**: una casa con un solo residente no sale de campaña. Con la experiencia de
   crecer en paz vuelve la expansión y las plazas quedan con 1-2 residentes; sin esta regla, esas casas conquistaban,
   volvían a casa y dejaban la plaza vacía: 485 conquistas en la Era I, el 88 % de plazas sin defensor, y dos

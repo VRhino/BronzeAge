@@ -771,11 +771,14 @@ export function aplicarEntregaATrueque(
     });
     const faccionA = asentamientosPorId.get(acuerdo.asentamientoAId)?.faccionId;
     const faccionB = asentamientosPorId.get(acuerdo.asentamientoBId)?.faccionId;
-    // Y experiencia de Facción a los dos lados (crecer en paz, decisión del usuario 2026-09-27).
+    // Y experiencia de Facción a los dos lados (crecer en paz, decisión del usuario 2026-09-27), solo si son
+    // Facciones distintas: comerciar entre tus propias plazas no es crecer (en la Era II medida, 2 910 de 2 919
+    // trueques eran de la misma Facción y la llevaron sola a nivel 10).
+    const entreFacciones = faccionA !== faccionB;
     for (const faccionId of [faccionA, faccionB]) {
       if (!faccionId) continue;
       ajustesReputacion.push({ faccionId, delta: REPUTACION.bonusTruequeCumplido, razon: 'trueque cumplido' });
-      ajustesExperiencia.push({ faccionId, delta: NIVEL_FACCION.xp.truequeCumplido, razon: 'trueque cumplido' });
+      if (entreFacciones) ajustesExperiencia.push({ faccionId, delta: NIVEL_FACCION.xp.truequeCumplido, razon: 'trueque cumplido' });
     }
   }
   return { acuerdo: actualizado, eventos, ajustesReputacion, ajustesExperiencia };

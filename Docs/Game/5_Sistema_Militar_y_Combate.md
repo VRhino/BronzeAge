@@ -125,7 +125,7 @@ El roster no se organiza por Tier abstracto (inspiración Total War Troy, foco E
 | 2 | Arqueros | 1 Arma de Bronce + 1 Armadura Intermedia | 9 | 18 |
 | 3 | Arqueros con arco compuesto | 3 Arma de Bronce + 2 Armadura Intermedia | 15 | 12 |
 
-`poderBase` es placeholder. Las unidades de cada escuadrón las fija el escalón de su tropa (5.11.1).
+`poderBase` es placeholder. Las unidades de cada escuadrón son un valor propio de cada tropa (decidido el 2026-09-27); de partida, las que daba su escalón (5.11.1).
 
 **Unidades por defecto** (`unidadesPorDefecto`): es el TOPE del escuadrón, el jugador nunca elige cuántos soldados reclutar. `costoEquipo` sigue siendo por soldado. Reclutar desde cero cuesta "Costo (por soldado)" × "Unidades" de la tabla — ej. Milicia de lanceros cuesta 2 Madera/soldado × 25 = 50 Madera. Si el escuadrón ya existe y está por debajo del tope (bajas de combate, Doc 5.4), reclutar de nuevo REPONE solo las unidades que faltan hasta el tope, al mismo costo por soldado — no es un bloque nuevo completo (ver el párrafo "Escuadrón por héroe" más abajo). Antes de confirmar, la interfaz muestra el coste de ESTE reclutamiento, que puede ser parcial.
 
@@ -177,9 +177,10 @@ En un ejército de varios héroes, **cada uno se valida contra SU propio Lideraz
 
 Liderazgo base **100**.
 
-**El tamaño del escuadrón también va por escalón**: cuanto más de élite, menos cuerpos. No es decorativo — es
-lo que hace que subir de escalón sea *calidad* y no *cantidad*, y lo que ordena el rendimiento por punto de
-Liderazgo de mayor (leva) a menor (élite).
+**El tamaño del escuadrón es propio de cada tropa** (decidido el 2026-09-27; antes lo fijaba el escalón). De
+partida es el de la tabla —cuanto más de élite, menos cuerpos—, y al fijarlo hay que conservar ese orden: es lo que
+hace que subir de escalón sea *calidad* y no *cantidad*, y lo que ordena el rendimiento por punto de Liderazgo de
+mayor (leva) a menor (élite).
 
 **Por qué no se deriva del poder.** Un coste proporcional al poder nominal daría **el mismo poder por punto de
 Liderazgo a las once tropas**: cinco milicias rendirían lo mismo que un lancero pesado, y la élite no sería
