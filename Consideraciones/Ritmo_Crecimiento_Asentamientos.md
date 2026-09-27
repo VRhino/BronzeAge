@@ -681,3 +681,15 @@ Facción (decisión del usuario).
   con uno solo no puede mudarse a lo que conquista sin vaciarla. Arreglado en el NPC: no sale de campaña quien no
   podría quedarse (documento del NPC §4.9). Hay ~75 héroes huérfanos, casi todos de Facciones que ya no tienen
   plazas.
+
+### 11.7 Era I con "no conquista lo que no puede ocupar" (2026-09-27)
+
+- **Guerra**: 30 conquistas en 5 semanas (antes 485), el 47 % en plazas vacías; el atacante gana el 80 % de sus
+  asedios con combate (poder mediano 1,07 veces el del defensor, combates parejos). Ninguna plaza cae más de 5 veces
+  y solo el 13 % la recupera un dueño anterior. 0 plazas sin defensa al final, 93 escuadras en guarnición.
+- **Expansión**: 41 plazas nacidas, 35 caravanas de fundación, 31 vivas (10 colapsos).
+- **Ritmo**: nivel 2 a 6,0 días de mediana (46 % de las nacidas), nivel 3 en 5 plazas (12 %) a las 3,6 semanas, y 4
+  plazas piden el nivel 4 a las 4,6 semanas (pendiente de atarlo a `instituciones_civicas`, D54).
+- **Facciones**: la más rápida llega a nivel 8 el día 21,5 y ninguna a 10; las que expanden llegan a nivel 2 entre
+  los días 0,7 y 6,9. Experiencia en 5 semanas: construcción 2 100, crecer 5 200, conquista 300, combate y
+  bandidos 490.
