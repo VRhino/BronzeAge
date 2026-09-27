@@ -5,9 +5,9 @@ Los HÉROES son una categoría SEPARADA de estas 3 clases.
 
 | Clase | Rol | Aparición | Crecimiento |
 |---|---|---|---|
-| Pesants | Trabajan recursos genéricos (granjas, canteras, bosques); se reclutan como tropa | Desde la fundación, sin condición | Rápido (tasa 0.12) |
-| Artesanos | Operan edificios de producción especializada (Fundición, Curtiduría, Armería, Carpintería — ver catálogo en 4.2.1); se reclutan como tropa igual que los Pesants — Barracón y Galería de tiro reclutan de los dos pools | En cuanto hay un edificio de transformación activo (Curtiduría/Armería/Fundición/Carpintería) aparece el primero | Medio (tasa 0.05), limitado por su cupo de Vivienda |
-| Nobleza | Clase rica: la que más oro recauda (abajo). No se recluta (Doc 5.8) | Palacio construido + cantidad MÍNIMA de ciudadanos (héroes) en el asentamiento | Muy lento (tasa 0.01); acelerado por el Sacerdote (no requisito) |
+| Pesants | Trabajan recursos genéricos (granjas, canteras, bosques); reclutan la tropa de escalón 1 y 2 (Doc 5.8) | Desde la fundación, sin condición | Rápido (tasa 0.12) |
+| Artesanos | Operan edificios de producción especializada (Fundición, Curtiduría, Armería, Carpintería — ver catálogo en 4.2.1); reclutan la tropa de escalón 3 y los Falangitas (Doc 5.8) | En cuanto hay un edificio de transformación activo (Curtiduría/Armería/Fundición/Carpintería) aparece el primero | Medio (tasa 0.15), limitado por su cupo de Vivienda |
+| Nobleza | Clase rica: la que más oro recauda (abajo). Recluta la tropa de escalón 4 y 5 (Doc 5.8) | Palacio construido + cantidad MÍNIMA de ciudadanos (héroes) en el asentamiento | Muy lento (tasa 0.01); acelerado por el Sacerdote (no requisito) |
 
 **Las 3 clases crecen con la MISMA fórmula**: `comida disponible × cupo libre de la clase × tasa propia`, y difieren solo en la tasa. Estabilidad y felicidad valen 1 (placeholder). Cada clase tiene su propio cupo: los Pesants y los Artesanos, en la Vivienda (cupos SEPARADOS por clase, 4.2.1), para que los Pesants, que crecen más deprisa, no dejen sin sitio a los Artesanos; la Nobleza, en el Palacio. Por encima de todo, el nivel del asentamiento fija un techo de población total (4.5).
 
@@ -16,7 +16,7 @@ Los HÉROES son una categoría SEPARADA de estas 3 clases.
 **Hambruna — el coste de no sostener el consumo de trigo** (espejo deliberado de la deserción de tropas por falta de ración, Doc 5.4). Cada asentamiento lleva un medidor **`nutricionPoblacion` (0-100, empieza en 100)**, separado del medidor de Mantenimiento (4.5) y de la felicidad — la nutrición es solo comida, no bienestar general:
 - Cada minuto, si el trigo disponible cubre el consumo completo, la nutrición sube +5 (tope 100); si no lo cubre, baja `20 × (1 − fracción cubierta)` — con déficit total (trigo en 0), la nutrición colapsa de 100 a 0 en **5 minutos**, el mismo ritmo que la moral militar sin ración (Doc 5.4).
 - El factor de crecimiento de las 3 clases escala LINEALMENTE entre 0.2 (nutrición 0) y 1 (nutrición 100): una hambruna que se resuelve rápido apenas frena el crecimiento; una sostenida lo frena casi del todo.
-- Mientras la nutrición se MANTIENE en 0 (hambre sostenida, no solo un bache puntual), cada minuto cuesta una fracción real de población — **5% de pesants+artesanos**, el mismo valor que la deserción de tropas sin moral. **La Nobleza queda protegida** ("los nobles comen primero") — nunca se purga por hambre.
+- Mientras la nutrición se MANTIENE en 0 (hambre sostenida, no solo un bache puntual), cada minuto cuesta una fracción real de población — **5% de pesants+artesanos**, el mismo valor que la deserción de tropas sin moral, y **1% de la Nobleza**, la más resistente.
 - Cifras placeholder (`POBLACION.hambre`).
 
 **Recaudación de oro por clase** (`Consideraciones/Economia_Del_Oro_Definicion.md`):
@@ -65,11 +65,11 @@ Ningún edificio exige "Planos de X" (vía Aedas, Doc 6.5) para construirse ni p
 
 ### Alojamiento
 
-**Palacio** — desbloquea la aparición de Nobleza. Adición MANUAL de Gobernador/Maestro de Obras a la cola (ver 4.2), no auto-construcción. Es requisito para subir a nivel 5 (4.5).
+**Palacio** — desbloquea la aparición de Nobleza. Adición MANUAL de Gobernador/Maestro de Obras a la cola (ver 4.2), no auto-construcción. Es requisito para subir a nivel 5 (4.5). Se construye desde el nivel 2 y se mejora: **Palacio 1** (asentamiento nivel 2) da cupo a 80 nobles, **Palacio 2** (nivel 3) a 240 y **Palacio 3** (nivel 4) a 400; el requisito del nivel 5 es el Palacio 3. Motivo: la tropa de escalón 4-5 se recluta con Nobleza, y la de las Eras I-II está en nivel 3.
 - Requisito: Asentamiento nivel 4.
 - Capacidad: 200 nobles. Coste: 1500 madera + 1000 piedra. Obra: 5 días.
 
-**Vivienda** — auto-construcción. CUPO DIVIDIDO POR CLASE: cada Vivienda aporta cupos SEPARADOS, no un pool compartido — 15 espacios para Pesants + 5 espacios para Artesanos por unidad (escala linealmente: 2 Viviendas = 30+10, etc.). La Nobleza no usa Vivienda (cupo propio en el Palacio).
+**Vivienda** — auto-construcción. CUPO DIVIDIDO POR CLASE: cada Vivienda aporta cupos SEPARADOS, no un pool compartido — 15 espacios para Pesants + 10 espacios para Artesanos por unidad (escala linealmente: 2 Viviendas = 30+20, etc.). La Nobleza no usa Vivienda (cupo propio en el Palacio).
 - Coste: 10 madera. Obra: 4 horas.
 - **Tope por nivel de asentamiento** (`maximoViviendasPorNivel`): el máximo útil de Viviendas en un nivel se deriva de la población (pesants Y artesanos, se toma el mayor de los dos cupos) que exige alcanzar el SIGUIENTE nivel — construir más de las que ese cupo necesita no sirve para nada hasta subir de nivel. Cifras en `Consideraciones/Fase_0_6_Definicion_Expansion_Niveles_Asentamiento.md` §7.
 
@@ -201,9 +201,9 @@ Dos edificios lo amplían, y no compiten: el **Almacén** sube la capacidad de T
 ## 4.5 Mantenimiento de asentamientos (sistema unificado, incluye ex-"Coste de Gobernanza")
 - **NIVEL DE ASENTAMIENTO — por requisitos y a petición del Gobernador**: el nivel NO sube solo. Cumplir A LA VEZ los requisitos de población y de edificios es lo que permite PEDIR la subida al nivel siguiente (ver "Subida de nivel" abajo). Nivel máximo: 5.
   - Nivel 2: 200 pesants + 3 de los 7 tipos de extracción (Cantera, Leñera, Granja, Mina de oro, Mina de cobre, Mina de estaño, Corral). No pide artesanos: sin nivel 2 no hay edificios de transformación, y sin ellos no aparecen artesanos.
-  - Nivel 3: 500 pesants + 200 artesanos + Armería, Curtiduría, Fundición, Barracón y Galería de tiro.
-  - Nivel 4: 1.000 pesants + 400 artesanos + un recinto de muralla completo, de cualquier nivel (4.2.1).
-  - Nivel 5: 2.000 pesants + 800 artesanos + Palacio.
+  - Nivel 3: 500 pesants + 400 artesanos + Armería, Curtiduría, Fundición, Barracón y Galería de tiro.
+  - Nivel 4: 1.000 pesants + 800 artesanos + un recinto de muralla completo, de cualquier nivel (4.2.1).
+  - Nivel 5: 2.000 pesants + 1.600 artesanos + Palacio.
 
   Poblaciones placeholder (`NIVEL_ASENTAMIENTO`). El nivel alimenta: el techo de zona de influencia (Doc 1.2), qué materiales cobra el Mantenimiento (abajo) y el **techo de población total** — 300 / 1.500 / 6.000 / 12.000 / 20.000 habitantes para los niveles 1-5: por encima, la Vivienda y el Palacio dejan de dar cupo aunque tengan espacio. Es el nivel de ASENTAMIENTO — distinto del nivel de FACCIÓN (Doc 2.2.1), que sube por experiencia.
 - **Subida de nivel** (decidido el 2026-09-26): la pide el **Gobernador** del asentamiento, se sube de uno en uno y se hace con una **obra de ascenso**. Para pedirla hacen falta cuatro cosas a la vez:

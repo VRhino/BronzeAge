@@ -10,6 +10,7 @@ export interface PayloadHambrunaMuerte {
   muertes: number;
   muertesPesants: number;
   muertesArtesanos: number;
+  muertesNobleza: number;
 }
 import type { RandomFn } from '../worldgen';
 import {
@@ -172,8 +173,8 @@ export function recaudacionOro(asentamiento: Asentamiento, instante?: Instante):
  * del tick (nunca negativo) y actualiza `nutricionPoblacion` según la fracción cubierta — sube si el pago fue
  * íntegro, baja proporcional al déficit si no. Mientras la nutrición se mantiene en
  * `POBLACION.hambre.umbralMuertePorHambre` (0), cada tick cuesta una fracción de pesants+artesanos
- * (`fraccionMuertePorMinutoHambre`) — la nobleza queda protegida ("los nobles comen primero"), igual que
- * `nivel`/población ya asentada nunca se purga por un solo bache de Mantenimiento (Doc §6.2).
+ * (`fraccionMuertePorMinutoHambre`) y otra, mucho menor, de nobleza (`fraccionMuertePorMinutoHambreNobleza`: es la
+ * más resistente, pero desde el 2026-09-27 ya no es intocable).
  */
 export function avanzarNutricionPoblacion(asentamiento: Asentamiento): { asentamiento: Asentamiento; eventos: EventoCrudo[] } {
   const eventos: EventoCrudo[] = [];
@@ -197,19 +198,22 @@ export function avanzarNutricionPoblacion(asentamiento: Asentamiento): { asentam
   let poblacion = asentamiento.poblacion;
   if (nutricionPoblacion <= hambre.umbralMuertePorHambre) {
     const afectados = poblacion.pesants + poblacion.artesanos;
-    if (afectados > 0) {
-      const muertes = Math.min(afectados, Math.ceil(afectados * hambre.fraccionMuertePorMinutoHambre));
-      const muertesPesants = Math.round(muertes * (poblacion.pesants / afectados));
-      const muertesArtesanos = muertes - muertesPesants;
+    const comunes = afectados > 0 ? Math.min(afectados, Math.ceil(afectados * hambre.fraccionMuertePorMinutoHambre)) : 0;
+    const muertesPesants = afectados > 0 ? Math.round(comunes * (poblacion.pesants / afectados)) : 0;
+    const muertesArtesanos = comunes - muertesPesants;
+    const muertesNobleza = poblacion.nobleza > 0 ? Math.ceil(poblacion.nobleza * hambre.fraccionMuertePorMinutoHambreNobleza) : 0;
+    const muertes = comunes + muertesNobleza;
+    if (muertes > 0) {
       poblacion = {
         ...poblacion,
         pesants: poblacion.pesants - muertesPesants,
         artesanos: poblacion.artesanos - muertesArtesanos,
+        nobleza: poblacion.nobleza - muertesNobleza,
       };
       eventos.push({
         codigo: 'poblacion.hambruna_muerte',
         mensaje: `${muertes} habitantes mueren de hambre por falta sostenida de trigo.`,
-        payload: { muertes, muertesPesants, muertesArtesanos } satisfies PayloadHambrunaMuerte,
+        payload: { muertes, muertesPesants, muertesArtesanos, muertesNobleza } satisfies PayloadHambrunaMuerte,
       });
     }
   }

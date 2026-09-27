@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { OCUPACION, POBLACION } from '../../constants';
 import { crecerPoblacion, avanzarNutricionPoblacion } from '../population';
+import { aplicarConquista } from '../combate';
 import { createRng } from '../../worldgen';
 import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instanteDeTest, posicionRecomendable } from './fixtures';
 
@@ -45,7 +46,7 @@ describe('Hambruna: nutrición de la población', () => {
     expect(asentamiento.nutricionPoblacion).toBe(0);
   });
 
-  it('hambre sostenida (nutrición en 0) cuesta pesants/artesanos por tick, nunca nobleza', () => {
+  it('hambre sostenida (nutrición en 0) cuesta población por tick; la nobleza pierde mucho menos, pero ya no es intocable', () => {
     let asentamiento = asentamientoDeTest();
     asentamiento = {
       ...asentamiento,
@@ -56,9 +57,9 @@ describe('Hambruna: nutrición de la población', () => {
 
     const { asentamiento: siguiente, eventos } = avanzarNutricionPoblacion(asentamiento);
 
-    expect(siguiente.poblacion.nobleza).toBe(5);
+    expect(siguiente.poblacion.nobleza).toBe(5 - Math.ceil(5 * POBLACION.hambre.fraccionMuertePorMinutoHambreNobleza));
     const perdidos = asentamiento.poblacion.pesants + asentamiento.poblacion.artesanos - (siguiente.poblacion.pesants + siguiente.poblacion.artesanos);
-    expect(perdidos).toBeGreaterThan(0);
+    expect(perdidos).toBe(Math.ceil(120 * POBLACION.hambre.fraccionMuertePorMinutoHambre));
     expect(eventos.some((e) => typeof e !== 'string' && e.codigo === 'poblacion.hambruna_muerte')).toBe(true);
   });
 
@@ -97,5 +98,15 @@ describe('Hambruna: nutrición de la población', () => {
     };
     expect(OCUPACION.factorCrecimiento).toBeLessThan(1);
     expect(crecer40Ticks(true)).toBeLessThan(crecer40Ticks(false));
+  });
+});
+
+describe('la nobleza ya no es intocable', () => {
+  it('el saqueo de una conquista se lleva la misma fracción de nobles que de pesants y artesanos', () => {
+    const mapa = crearMapaDeterminista(7);
+    const { asentamiento } = fundarAsentamientoDeTest(mapa, crearFacciones(), 'faccion-1', []);
+    const plaza = { ...asentamiento, poblacion: { pesants: 100, artesanos: 40, nobleza: 20 } };
+    const tras = aplicarConquista(plaza, 'faccion-2', instanteDeTest(1));
+    expect(tras.poblacion.nobleza).toBe(Math.floor(20 * (1 - OCUPACION.fraccionSaqueoPoblacion)));
   });
 });

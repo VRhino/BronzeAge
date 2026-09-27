@@ -167,7 +167,9 @@ export const POBLACION = {
   // retirada); esos edificios ahora solo GATILLAN la primera aparición, no limitan cuánto puede crecer después.
   // Subida de 0.05 a 0.1 (pruebas del usuario) — con 0.05 los Artesanos tardaban demasiado en poblar la
   // capacidad de Vivienda que ya tenían disponible frente al resto de ritmos del juego.
-  artesanos: { tasaCrecimientoBase: 0.1 },
+  // ×1,5 el 2026-09-27 (decisión del usuario): la tropa de línea (escalón 3) se recluta con artesanos (BA-006), así
+  // que tienen que aparecer más deprisa.
+  artesanos: { tasaCrecimientoBase: 0.15 },
   // "Cantidad mínima de ciudadanos" sin número fijado en el diseño (ver Preguntas_Abiertas) — placeholder.
   // Rediseño de progreso (Fase 0): además de este mínimo, ahora también requiere Palacio construido
   // (Doc 4.2.1 — "desbloquea la aparición de la población noble"), ver engine/population.ts.
@@ -190,9 +192,11 @@ export const POBLACION = {
     factorCrecimientoMinimo: 0.2,
     // Nutrición <= este umbral empieza a costar población real, no solo crecimiento.
     umbralMuertePorHambre: 0,
-    // Fracción de pesants+artesanos (nobleza protegida) perdida por minuto mientras la nutrición sigue en el
-    // umbral — mismo valor que la deserción de tropas sin moral, por coherencia entre ambos sistemas.
+    // Fracción de pesants+artesanos perdida por minuto mientras la nutrición sigue en el umbral — mismo valor que
+    // la deserción de tropas sin moral, por coherencia entre ambos sistemas.
     fraccionMuertePorMinutoHambre: 0.05,
+    // La nobleza ya no está protegida (2026-09-27, decisión del usuario), pero es la más resistente: 1 % por minuto.
+    fraccionMuertePorMinutoHambreNobleza: 0.01,
   },
 };
 
@@ -295,7 +299,8 @@ export const EDIFICIO_CATALOGO = {
   // Cupos SEPARADOS por clase (a petición del usuario, ver Correcciones): antes un único pool compartido
   // entre Pesants y Artesanos hacía que Pesants (crece ~2.4x más rápido) acaparara todo el cupo y dejara a
   // Artesanos varado — cada Vivienda ahora aporta 15 espacios de Pesants Y, por separado, 5 de Artesanos.
-  vivienda: { costo: { madera: 10 }, tiempoConstruccionMinutos: 240, capacidadPesants: 15, capacidadArtesanos: 5 },
+  // `capacidadArtesanos` ×2 el 2026-09-27 (decisión del usuario), con el mismo motivo que su tasa de crecimiento.
+  vivienda: { costo: { madera: 10 }, tiempoConstruccionMinutos: 240, capacidadPesants: 15, capacidadArtesanos: 10 },
   /**
    * Granja: 4 niveles internos (a petición del usuario, trazado urbano dinámico). El costo en materiales
    * DUPLICA en cada salto, tomando como base su `costo` de construcción (madera 30 → 60, 120, 240).
@@ -1920,15 +1925,16 @@ export const NIVEL_ASENTAMIENTO = {
       edificios: ['cantera', 'lenera', 'granja', 'mina', 'minaCobre', 'minaEstano', 'corral'],
       edificiosMinimo: 3,
     },
-    3: { pesants: 500, artesanos: 200, edificios: ['armeria', 'curtiduria', 'fundicion', 'barracon', 'galeriaDeTiro'] },
+    // Artesanos ×2 el 2026-09-27 (decisión del usuario), al doblar su sitio en las Viviendas.
+    3: { pesants: 500, artesanos: 400, edificios: ['armeria', 'curtiduria', 'fundicion', 'barracon', 'galeriaDeTiro'] },
     // Sustituye al viejo `edificios: ['muralla']` (Paso 5, `Consideraciones/Murallas_Definicion.md` §13): el
     // recinto ya no es un `EdificioTipo`, así que el gate deja de poder contarlo como edificio y pasa a
     // `recintoCompletoNivelMinimo` — cualquier recinto TERMINADO (integridad 1) de nivel 1 en adelante basta,
     // la empalizada barata cuenta igual que la muralla de piedra. `edificios: []` es intencional, no un
     // descuido: sin ningún tipo en la lista, `cumpleEdificios` es trivialmente cierto y el gate real es el
     // del recinto.
-    4: { pesants: 1000, artesanos: 400, edificios: [], recintoCompletoNivelMinimo: 1 },
-    5: { pesants: 2000, artesanos: 800, edificios: ['palacio'] },
+    4: { pesants: 1000, artesanos: 800, edificios: [], recintoCompletoNivelMinimo: 1 },
+    5: { pesants: 2000, artesanos: 1600, edificios: ['palacio'] },
   } as Record<
     number,
     { pesants: number; artesanos: number; edificios: string[]; edificiosMinimo?: number; recintoCompletoNivelMinimo?: number }

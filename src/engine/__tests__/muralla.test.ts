@@ -9,7 +9,7 @@
 // laboratorio encontró a la primera con otra ciudad.
 import { afterAll, describe, expect, it } from 'vitest';
 import type { Asentamiento, CeldaMuro, Recinto, RecursoAlmacenado } from '../../domain/types';
-import { MURALLA, REJILLA_ASENTAMIENTO, ZONA_INFLUENCIA } from '../../constants';
+import { MURALLA, NIVEL_ASENTAMIENTO, REJILLA_ASENTAMIENTO, ZONA_INFLUENCIA } from '../../constants';
 import { avanzarSimulacion } from '../simulation';
 import { createRng } from '../../worldgen';
 import {
@@ -927,7 +927,8 @@ describe('murallas — preferencia intramuros (Paso 4, §9)', () => {
 describe('murallas — el gate de nivel 4 (Paso 5, §13)', () => {
   function conNivel3YPoblacionDeNivel4(seed: number, ticks: number): Asentamiento {
     const a = ciudad(seed, ticks);
-    return { ...a, nivel: 3, nivelActual: 3, poblacion: { ...a.poblacion, pesants: 1000, artesanos: 400 } };
+    const requisito = NIVEL_ASENTAMIENTO.requisitos[4]!;
+    return { ...a, nivel: 3, nivelActual: 3, poblacion: { ...a.poblacion, pesants: requisito.pesants, artesanos: requisito.artesanos } };
   }
 
   it('sin ningún recinto, no sube a nivel 4 aunque la población lo permita', () => {

@@ -453,3 +453,17 @@ asentamiento). Falta decidir qué hacen en el mundo de BronzeAge: si salen con c
 sus plazas, se unen a ejércitos...
 
 Su comportamiento EN batalla no es de BronzeAge: lo maneja la IA de Conquest (CQ-002).
+
+## 37. Reclutamiento por clase de población y Palacio mejorable
+
+**Estado: decidido (canon Doc 5.8 y Doc 4.2.1), `código: ✗`.** Hoy el código deja reclutar cualquier tropa con
+Pesants o Artesanos, a elección, y la Nobleza no se recluta; el Palacio pide asentamiento de nivel 4 y da cupo a 200
+nobles, sin niveles. Falta:
+
+- `reclutarTropa` elige la clase por el escalón de la tropa (1-2 Pesants, 3 Artesanos, 4-5 Nobleza; Falangitas con
+  Artesanos) en vez de recibirla como parámetro, y el NPC deja de pasarla.
+- Palacio con niveles internos (1 / 2 / 3 en asentamiento nivel 2 / 3 / 4, cupo 80 / 240 / 400); el requisito del
+  nivel 5 pasa a ser el Palacio 3.
+- El resto del roster de la revisión BA-006 (leñadores, granjeros, honderos rodios, escalones nuevos) llega con el
+  cierre de su Era: el código tiene todavía las 11 tropas de antes.
+

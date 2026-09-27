@@ -161,8 +161,8 @@ function jugadoresParticipantes(escuadrones: Escuadron[]): number {
  *   siguen fuera con su columna; si quieren defenderla, tienen que pasar a residir en ella.
  * - **Los antiguos residentes dejan de serlo**, y con ellos caen los cargos locales. Adónde van —y que su
  *   campamento quede a 0— lo decide `desalojarResidentes`, que el llamador aplica con el mundo delante.
- * - **Saqueo determinista** (sin `RandomFn` — esta función es pura): `pesants`/`artesanos` pierden
- *   `OCUPACION.fraccionSaqueoPoblacion` (nobleza intacta, huye/negocia); `OCUPACION.fraccionEdificiosDanados`
+ * - **Saqueo determinista** (sin `RandomFn` — esta función es pura): `pesants`, `artesanos` y `nobleza` pierden
+ *   `OCUPACION.fraccionSaqueoPoblacion`; `OCUPACION.fraccionEdificiosDanados`
  *   de los edificios `activo` —por orden de id, exentos Centro Urbano + la 1ª Granja y la 1ª Leñera activas—
  *   pasan a `en_cola` marcados `danado` (§3: sin comida ni madera el saqueo es una sentencia); cada recinto
  *   completo pierde `floor(OCUPACION.fraccionDanoMuralla × celdas.length)` de `avance` (la muralla no cae,
@@ -177,11 +177,12 @@ export function aplicarConquista(defensor: Asentamiento, faccionConquistadoraId:
   const cargos = { ...defensor.cargos };
   for (const campo of Object.values(CAMPO_CARGO)) cargos[campo] = null;
 
+  // Las tres clases por igual desde el 2026-09-27 (decisión del usuario): la nobleza ya no queda intacta.
   const queda = 1 - OCUPACION.fraccionSaqueoPoblacion;
   const poblacion = {
     pesants: Math.floor(defensor.poblacion.pesants * queda),
     artesanos: Math.floor(defensor.poblacion.artesanos * queda),
-    nobleza: defensor.poblacion.nobleza,
+    nobleza: Math.floor(defensor.poblacion.nobleza * queda),
   };
 
   // Saqueo de edificios: orden por id (determinista), exentos Centro Urbano y la primera Granja/Leñera activas.

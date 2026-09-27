@@ -626,15 +626,23 @@ calidad pasa a nivel 4 con P2 (Epílektoi, Peltastas de Ifícrates, Falangitas, 
   asentamiento nivel 2, cupo 80; **Palacio 2** en nivel 3, cupo 240; **Palacio 3** en nivel 4, cupo 400 (sigue
   siendo requisito del nivel 5). Motivo: la élite de las Eras I-II (carros, lanceros pesados, Hequetai, arco
   compuesto) está en nivel 3 y necesita Nobleza.
-- **La Nobleza deja de ser intocable** (hoy no pasa hambre y la conquista no la saquea): cómo, pendiente.
+- **La Nobleza deja de ser intocable**: con hambre sostenida pierde el **1 % por minuto** (pesants y artesanos, el 5 %:
+  es la más resistente); el saqueo de una conquista le quita la misma fracción que a las otras clases; y reclutarla
+  la saca de la población. Hambre y saqueo, ya en el código y el canon.
+- **Artesanos**: aparecen **1,5 veces más rápido** (tasa 0,15), tienen **el doble de sitio** en cada Vivienda (10) y
+  los requisitos de nivel piden **el doble** (400 / 800 / 1.600 en los niveles 3 / 4 / 5). Ya en el código y el canon.
 - **Las unidades por escuadra son un valor propio de cada tropa**, no del escalón (ya en el código, con los valores
   que daba el escalón).
 - **Roster:**
   - Las tropas de leva pasan a **ligeras**: milicia de lanceros y lanceros con escudo de mimbre suben a escalón 2.
   - **Dos tropas nuevas de escalón 1**, reclutables desde el principio como la milicia, muy malas en combate y muy
-    desorganizadas: **leñadores** y **granjeros**.
-  - **Honderos de escalón 3**: una escuadra nueva (nombre, Era y equipo pendientes).
-  - **Falangitas: escalón 4** como mínimo (estaban en 3).
+    desorganizadas: **leñadores** y **granjeros**. `leva_comunal`, Centro Urbano, cultura neutra, poder 1 (la
+    milicia tiene 2), 30 hombres por escuadra, velocidad 20; los leñadores pagan 1 madera (su hacha) y los
+    granjeros nada (sus herramientas). Lo de "desorganizados" es comportamiento en Conquest (sin formaciones).
+  - **Honderos rodios** (helénica), escalón 3: Era III, `pantalla_escaramuzadores` (con los peltastas), Galería 2,
+    arma de hierro + armadura básica, nivel 2. Referente: en la Anábasis alcanzaban más que los arqueros persas.
+  - **Falangitas: escalón 4**, pero se reclutan con **artesanos**, no con nobleza (excepción a la regla por escalón:
+    históricamente eran los "compañeros de a pie", no nobles).
   - **Arqueros escitas: escalón 5**, no peores que su contraparte de la Era II (el arco compuesto, 5).
 
 ## Qué cambia en el canon (al cerrar)

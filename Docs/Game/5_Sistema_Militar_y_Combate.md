@@ -59,7 +59,7 @@ Ciclo de vida propiamente dicho:
 - **El pool de reclutamiento es la población MENOS la ya ocupada en producción**, no la población total: reclutar no puede sacar pesants que cubren los trabajadores de Granja/Cantera/Leñera/minas/Corral, ni artesanos que cubren los de Fundición/Curtiduría/Armería/Carpintería. Es simétrico entre pesants y artesanos, y aplica igual al reclutamiento de un jugador y al de la gobernanza NPC.
 
 ## 5.5 Progresión de las tropas (ver también Doc 4.1)
-Solo se reclutan Pesants y Artesanos, pagando equipo (5.8). Sus escuadrones suben de **nivel y experiencia** combatiendo de verdad, según su desempeño en la batalla (5.16.3). La Nobleza no se convierte en tropa.
+Se recluta pagando equipo (5.8), y cada tropa sale de una clase de población según su escalón (5.8). Sus escuadrones suben de **nivel y experiencia** combatiendo de verdad, según su desempeño en la batalla (5.16.3).
 
 ## 5.6 Attack Timer (heredado de Iberia, pospuesto a fase posterior a Fase 0)
 Asedios FORMALES en ventanas limitadas (ej. 2 veces/semana, horario fijo, ~1h de duración). Ataques logísticos (mundo abierto, caravanas) libres 24/7. Pospuesto a Fase 1+: requiere instanciado multijugador programado y un sistema de colas y horarios.
@@ -131,7 +131,7 @@ El roster no se organiza por Tier abstracto (inspiración Total War Troy, foco E
 
 **Milicia de lanceros y Arma de Madera.** La Milicia de lanceros se recluta en el Centro Urbano y se paga con madera en bruto, sin pasar por la Armería: es deliberadamente la más débil del roster (poderBase 2) y existe para que el bucle de juego arranque pronto, no para ganar batallas. Para reclutarla basta con residir en el asentamiento (Doc 2.5) y tener los 25 soldados de población y los 50 de madera del escuadrón. "Lanceros con escudo de mimbre" y "Honderos" se pagan con Arma de Madera: si la cadena metalúrgica o del cuero completa fuera el único camino, casi ningún asentamiento tendría tropa pronto, porque muy pocos nacen con cobre o livestock en su zona.
 
-**La Nobleza no se recluta.** Sigue existiendo como clase de población (crecimiento, requisito de Palacio, ciudadanos mínimos), pero no se convierte en tropa. El único carril de reclutamiento es el de equipo (Centro Urbano/Barracón/Galería de tiro), abierto a Pesants y Artesanos.
+**Población que recluta cada escalón.** Los escalones 1 y 2 se reclutan con **Pesants**, el 3 con **Artesanos**, y el 4 y el 5 solo con **Nobleza**, con una excepción: los Falangitas (escalón 4) se reclutan con Artesanos. Muchas tropas de élite tempranas eran históricamente nobles (carros, guardias palaciales), y por eso el Palacio se adelanta al nivel 2 (Doc 4.2.1). Reclutar saca a los soldados de su clase de población, también a los nobles.
 
 **Relación entre tropas ya reclutadas y el edificio que las produjo**: NO existe ninguna relación posterior al reclutamiento. Una vez una tropa está reclutada y en el mundo, es independiente del edificio (Barracón/Galería de tiro) que la originó. Si el edificio sube de nivel después, los escuadrones ya existentes NO se ven afectados de ninguna forma — ni mejoran ni empeoran. "Mejorar" solo significa poder reclutar tropas nuevas de mayor nivel a partir de ese momento.
 
@@ -429,7 +429,7 @@ Diseño en `Consideraciones/Ocupacion_Post_Conquista_Definicion.md`. Cifras plac
 **Al conquistar**:
 
 1. **La plaza queda sin guarnición** (5.15.5): los escuadrones de los antiguos residentes, guarnición incluida, quedan a 0 unidades y se van con el campamento de su héroe; no hay captura. El ejército conquistador sigue siendo una columna fuera.
-2. **Saqueo determinista** (sin azar): `pesants` y `artesanos` pierden `OCUPACION.fraccionSaqueoPoblacion` (nobleza intacta, huye/negocia); una fracción `OCUPACION.fraccionEdificiosDanados` de los edificios activos —por orden de id, **exentos Centro Urbano y al menos una Granja y una Leñera**— pasan a la cola marcados `danado` (un Almacén o Granero dañado deja de aportar capacidad hasta reconstruirse, y lo guardado que ya no cabe se pierde); cada recinto de muralla completo pierde `OCUPACION.fraccionDanoMuralla` de su `avance` (la muralla no cae, deja de dar el multiplicador defensivo pleno hasta repararse por la vía normal de obra).
+2. **Saqueo determinista** (sin azar): `pesants`, `artesanos` y `nobleza` pierden `OCUPACION.fraccionSaqueoPoblacion`; una fracción `OCUPACION.fraccionEdificiosDanados` de los edificios activos —por orden de id, **exentos Centro Urbano y al menos una Granja y una Leñera**— pasan a la cola marcados `danado` (un Almacén o Granero dañado deja de aportar capacidad hasta reconstruirse, y lo guardado que ya no cabe se pierde); cada recinto de muralla completo pierde `OCUPACION.fraccionDanoMuralla` de su `avance` (la muralla no cae, deja de dar el multiplicador defensivo pleno hasta repararse por la vía normal de obra).
 3. `medidorMantenimiento` a 100 y se abre la **ventana de ocupación** (`Asentamiento.ocupacionHasta`, `OCUPACION.duracionMinutos`, mismo orden que el período de gracia de fundación).
 
 **Un edificio `danado`** se reconstruye por la auto-construcción normal, pero al arrancar la obra cuesta solo `OCUPACION.fraccionCosteReconstruccion` del costo de catálogo y tarda esa misma fracción — se repara, no se levanta de cero. El flag se limpia al volver a activo.
