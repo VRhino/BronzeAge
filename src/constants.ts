@@ -1305,21 +1305,31 @@ export const COMISION = {
  */
 export const NIVEL_FACCION = {
   nivelMaximo: 10,
-  xpParaNivel: [50, 90, 150, 240, 380, 600, 950, 1500, 2400],
-  // Experiencia otorgada por evento (placeholder). `combate` cubre asedio/campo abierto/interceptar caravana/
-  // atacar campamento de bandidos por igual (participación, no solo victoria) — ver `engine/combate.ts`. Los
-  // valores de abajo son POR JUGADOR PARTICIPANTE (a petición del usuario, Doc Fase_0_5 §8): si 3 jugadores
-  // atacan juntos un campamento, la Facción recibe 3×`combate`, no un monto plano — ver
-  // `jugadoresParticipantes` en `engine/combate.ts`. Excepción: `defensaCaravana` no se multiplica todavía
-  // (la escolta de una caravana no tiene escuadrones/jugadores reales, Doc 3.10), y `edificioCompletado`
-  // tampoco (un edificio no tiene "jugadores que lo completaron" en el modelo actual).
+  // ×2 el 2026-09-27 (decisión del usuario): en la Era I medida, 6 de 12 Facciones llegaban a nivel 10 y una en 1,2
+  // días (`Consideraciones/Ritmo_Crecimiento_Asentamientos.md` §11.4).
+  xpParaNivel: [100, 180, 300, 480, 760, 1200, 1900, 3000, 4800],
+  // Experiencia otorgada por evento (placeholder). `combate` cubre asedio/campo abierto/atacar campamento de
+  // bandidos por igual (participación, no solo victoria) — ver `engine/combate.ts`. Es POR JUGADOR PARTICIPANTE (a
+  // petición del usuario, Doc Fase_0_5 §8): si 3 jugadores atacan juntos un campamento, la Facción recibe
+  // 3×`combate`, no un monto plano — ver `jugadoresParticipantes` en `engine/combate.ts`. `edificioCompletado` no se
+  // multiplica (un edificio no tiene "jugadores que lo completaron" en el modelo actual).
+  //
+  // La guerra da la mitad desde el 2026-09-27 (combate 5 → 2,5, conquista 20 → 10, decisión del usuario), y el
+  // combate solo da experiencia si es DIGNO (`ratioCombateDigno`). `ataqueCaravana` y `defensaCaravana` se quitaron:
+  // nada los usaba (interceptar una caravana no da experiencia).
   xp: {
-    combate: 5,
+    combate: 2.5,
     edificioCompletado: 1,
-    conquista: 20,
-    defensaCaravana: 3,
-    ataqueCaravana: 3,
+    conquista: 10,
   },
+  /**
+   * Un combate es DIGNO si el bando más débil tiene al menos esta fracción del poder del más fuerte (con el jitter y la
+   * muralla del propio combate). Solo el combate digno da experiencia de Facción: aplastar a quien no puede
+   * defenderse, o estrellarse contra quien no se puede vencer, no enseña nada (decisión del usuario, 2026-09-27; en
+   * la Era I medida, el atacante tenía de mediana 0,2 veces el poder del defensor y los dos bandos cobraban igual).
+   * Cifra placeholder.
+   */
+  ratioCombateDigno: 0.5,
 };
 
 // Cap de fundación (Doc 1.7): "progresión fácil de 1 a 3, luego se complica hasta un máximo de 7" — curva placeholder.

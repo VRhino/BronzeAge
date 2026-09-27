@@ -206,8 +206,15 @@ anterior): **25 conquistas contra 252** (−90 %), 261 campañas contra 620, **1
 12 de 34 plazas sin ninguna defensa. Tropa al final: 186 milicia, 115 honderos, 115 lanceros con escudo de mimbre, 10
 espadachines de cobre — hay variedad, pero solo de la gama baja de la Era I: nada que pida bronce.
 
-**Pendiente:** una plaza conquistada se queda sin residentes (`aplicarConquista` vacía fundadores y casas) y el
-conquistador no mete a nadie, así que sigue siendo presa fácil. Se decide con la medición en la mano.
+**Resuelto el 2026-09-27 (decisión del usuario), con la Era I medida** (`Consideraciones/Ritmo_Crecimiento_Asentamientos.md`
+§11.4: 615 conquistas, el 98 % de plazas vacías; en 2 256 asedios contra plazas defendidas el atacante ganó el 0,4 %):
+
+- **Solo sale contra lo que puede ganar**: antes de lanzar una campaña compara el poder de su expedición con la
+  defensa que encontraría hoy (`defensaDe`, con la cohesión defensiva y la muralla del propio combate).
+- **Quien conquista se queda** (`ocuparConquistas`): una columna acampada a la puerta de una plaza de su Facción sin
+  residentes —la que acaba de conquistar— se muda a ella (`cambiarResidencia`) y entra (`guarnecer`). Es lo que ya
+  pide la regla (Doc 5.15.5: para defenderla hay que pasar a residir en ella). Solo si deja al menos otro residente
+  en su casa de origen.
 
 ## 5. Lo que el NPC NO hace
 

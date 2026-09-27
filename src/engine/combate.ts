@@ -66,6 +66,18 @@ export interface ResultadoCombate {
   atacantes: Escuadron[];
   defensores: Escuadron[];
   eventos: EventoCrudo[];
+  /** Si el combate fue digno (`esCombateDigno`): solo entonces da experiencia de Facción. */
+  digno: boolean;
+}
+
+/** ¿Combate DIGNO? El bando más débil tiene al menos `NIVEL_FACCION.ratioCombateDigno` del poder del más fuerte. */
+export function esCombateDigno(poderA: number, poderB: number): boolean {
+  return Math.min(poderA, poderB) >= NIVEL_FACCION.ratioCombateDigno * Math.max(poderA, poderB);
+}
+
+/** Experiencia de Facción por combatir: por jugador participante, y solo si el combate fue digno. */
+function xpDeCombate(escuadrones: readonly Escuadron[], digno: boolean): number {
+  return digno ? NIVEL_FACCION.xp.combate * jugadoresParticipantes([...escuadrones]) : 0;
 }
 
 /**
@@ -102,6 +114,7 @@ export function resolverCombate(
     ganador,
     atacantes: atacantesResultado,
     defensores: defensoresResultado,
+    digno: esCombateDigno(poderA, poderD),
     eventos: [
       {
         codigo: 'combate.resuelto',
@@ -370,12 +383,12 @@ export function iniciarAsedio(
   const ajustesXp: AjusteExperiencia[] = [
     {
       faccionId: atacante.faccionId,
-      delta: NIVEL_FACCION.xp.combate * jugadoresParticipantes(escuadronesAtacantes),
+      delta: xpDeCombate(escuadronesAtacantes, resultado.digno),
       razon: 'combate (asedio)',
     },
     {
       faccionId: defensor.faccionId,
-      delta: NIVEL_FACCION.xp.combate * jugadoresParticipantes(escuadronesDefensores),
+      delta: xpDeCombate(escuadronesDefensores, resultado.digno),
       razon: 'combate (asedio)',
     },
   ];
@@ -430,7 +443,7 @@ export function atacarCampamentoBandidos(
   rng: RandomFn
 ): { atacante: Asentamiento; facciones: Faccion[]; eventos: EventoCrudo[]; campamentoDestruido: boolean; tropa: Escuadron[] } {
   const escuadrones = seleccionarEscuadrones(tropa, escuadronIdsAtacantes);
-  const { gana, escuadrones: escuadronesActualizados } = choqueContraCampamento(escuadrones, campamento, rng);
+  const { gana, digno, escuadrones: escuadronesActualizados } = choqueContraCampamento(escuadrones, campamento, rng);
 
   let almacen = atacante.almacen;
   const eventos: EventoCrudo[] = [];
@@ -455,11 +468,7 @@ export function atacarCampamentoBandidos(
   // Doc Fase_0_5 §8: combate contra un campamento NPC otorga XP igual que contra otra Facción — no hay
   // defensor de Facción rival al que dar XP (el campamento no es una Facción).
   const faccionesFinal = aplicarAjustesExperiencia(facciones, [
-    {
-      faccionId: atacante.faccionId,
-      delta: NIVEL_FACCION.xp.combate * jugadoresParticipantes(escuadrones),
-      razon: 'combate (campamento de bandidos)',
-    },
+    { faccionId: atacante.faccionId, delta: xpDeCombate(escuadrones, digno), razon: 'combate (campamento de bandidos)' },
   ]);
 
   return {
@@ -473,10 +482,15 @@ export function atacarCampamentoBandidos(
 
 /** El choque contra un campamento de bandidos (Doc 1.9): poder con jitter contra su `poder` fijo, con las bajas de
  * siempre. Lo comparten el ataque desde una plaza (NPC) y el de una columna. */
-function choqueContraCampamento(escuadrones: Escuadron[], campamento: CampamentoBandido, rng: RandomFn): { gana: boolean; escuadrones: Escuadron[] } {
+function choqueContraCampamento(
+  escuadrones: Escuadron[],
+  campamento: CampamentoBandido,
+  rng: RandomFn
+): { gana: boolean; digno: boolean; escuadrones: Escuadron[] } {
   const jitter = 1 + (rng() * 2 - 1) * MILITAR.varianzaCombate;
-  const gana = poderTotal(escuadrones, false) * jitter > campamento.poder;
-  return { gana, escuadrones: aplicarBajas(escuadrones, gana ? 0.05 : 0.25, gana) };
+  const poder = poderTotal(escuadrones, false) * jitter;
+  const gana = poder > campamento.poder;
+  return { gana, digno: esCombateDigno(poder, campamento.poder), escuadrones: aplicarBajas(escuadrones, gana ? 0.05 : 0.25, gana) };
 }
 
 /**
@@ -513,7 +527,7 @@ export function atacarCampamentoConColumna(
     ejercito: { ...ejercito, escuadrones: ejercito.escuadrones.map((e) => porId.get(e.id) ?? e), suministro },
     destruido: choque.gana,
     facciones: aplicarAjustesExperiencia(facciones, [
-      { faccionId: ejercito.faccionId, delta: NIVEL_FACCION.xp.combate * jugadoresParticipantes(vivos), razon: 'combate (campamento de bandidos)' },
+      { faccionId: ejercito.faccionId, delta: xpDeCombate(vivos, choque.digno), razon: 'combate (campamento de bandidos)' },
     ]),
     eventos: [
       choque.gana
@@ -634,8 +648,8 @@ export function asediarConEjercito(
     : facciones;
 
   const ajustesXp: AjusteExperiencia[] = [
-    { faccionId: ejercito.faccionId, delta: NIVEL_FACCION.xp.combate * jugadoresParticipantes(atacantes), razon: 'combate (asedio)' },
-    { faccionId: defensor.faccionId, delta: NIVEL_FACCION.xp.combate * jugadoresParticipantes(defensores), razon: 'combate (asedio)' },
+    { faccionId: ejercito.faccionId, delta: xpDeCombate(atacantes, resultado.digno), razon: 'combate (asedio)' },
+    { faccionId: defensor.faccionId, delta: xpDeCombate(defensores, resultado.digno), razon: 'combate (asedio)' },
   ];
   if (conquistado) ajustesXp.push({ faccionId: ejercito.faccionId, delta: NIVEL_FACCION.xp.conquista, razon: 'conquista' });
 
@@ -694,8 +708,8 @@ export function encuentroEntreEjercitos(
   ];
 
   const faccionesFinal = aplicarAjustesExperiencia(facciones, [
-    { faccionId: a.faccionId, delta: NIVEL_FACCION.xp.combate * jugadoresParticipantes(vivosA), razon: 'combate (encuentro)' },
-    { faccionId: b.faccionId, delta: NIVEL_FACCION.xp.combate * jugadoresParticipantes(vivosB), razon: 'combate (encuentro)' },
+    { faccionId: a.faccionId, delta: xpDeCombate(vivosA, resultado.digno), razon: 'combate (encuentro)' },
+    { faccionId: b.faccionId, delta: xpDeCombate(vivosB, resultado.digno), razon: 'combate (encuentro)' },
   ]);
 
   return {

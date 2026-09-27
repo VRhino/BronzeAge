@@ -31,10 +31,10 @@ import type { RandomFn } from '../worldgen';
 import type { ContextoSimulacion, EstadoSimulacion } from '../engine/simulation';
 import { avanzarAutoComercioSimulado } from '../engine/simulacionAutoComercio';
 import { reclutarTropa, ReclutamientoInvalidoError } from '../engine/tropas';
-import { campamentoDe, conEscuadrones, indiceTropa, sinTropa, type IndiceTropa } from '../engine/tropa';
+import { campamentoDe, conEscuadrones, conTropa, defensaDe, indiceTropa, sinGuarnicion, sinTropa, type IndiceTropa } from '../engine/tropa';
 import { asignarGuarnicion, guardarLoadout, HeroeInvalidoError, heridosEn, herir, progresionInicial } from '../engine/heroe';
 import { puedeLlevar } from '../engine/liderazgo';
-import { atacarCampamentoBandidos, CombateInvalidoError, poderEscuadron } from '../engine/combate';
+import { atacarCampamentoBandidos, CombateInvalidoError, poderEscuadron, poderTotal } from '../engine/combate';
 import { lanzarCaravanaFundacion, costoCaravanaFundacion, ExpansionInvalidaError } from '../engine/expansion';
 import {
   nivelActualDe,
@@ -48,7 +48,7 @@ import {
 import { cantidadDisponible, tieneRecursos } from '../engine/almacen';
 import { asignarCargoLocal, CargoInvalidoError } from '../engine/cargos';
 import { anadirEdificioManualmente, reclamosDeFuentes, ConstruccionManualInvalidaError, tieneInsumoDeArranque } from '../engine/construction';
-import { comprometerRecintoManualmente, RecintoInvalidoError } from '../engine/muralla';
+import { comprometerRecintoManualmente, multiplicadorDefensivoDeRecintos, RecintoInvalidoError } from '../engine/muralla';
 import {
   aceptarTrueque,
   construirCaravanaComercial,
@@ -73,9 +73,10 @@ import {
   VISION,
 } from '../constants';
 import { situarHeroes } from '../engine/ubicacion';
-import { movilizarEjercito, replegarEjercito, tieneHeroeSano, MovilizacionInvalidaError } from '../engine/ejercitos';
+import { enLaPuertaDe, guarnecer, movilizarEjercito, replegarEjercito, tieneHeroeSano, MovilizacionInvalidaError } from '../engine/ejercitos';
+import { cambiarResidencia, FaccionInvalidaError } from '../engine/faccion';
 import { consumoRacionDeEscuadrones, reservaDeTrigo } from '../engine/tropas';
-import { estanAliadas } from '../engine/pertenencia';
+import { esResidente, estanAliadas } from '../engine/pertenencia';
 import { distancia } from '../world/geometria';
 import { minutos, sumar, type Instante } from '../domain/tiempo';
 
@@ -1224,9 +1225,17 @@ function lanzarCampanas(
     const alcance = alcanceDeIdaYVuelta(expedicion, carro);
     if (alcance <= 0) continue;
 
+    // Solo contra una plaza que pueda ganar (2026-09-27, decisión del usuario): su poder contra la defensa que
+    // encontraría hoy, con la cohesión defensiva y la muralla del propio combate (`asediarConEjercito`). En la Era I
+    // medida, el NPC se estrellaba una y otra vez contra guarniciones cinco veces más fuertes (gana el 0,4 %).
+    const poderPropio = poderTotal(expedicion, false);
+    const heridos = heridosEn(heroesActuales, instante);
+    const puedeGanar = (plaza: Asentamiento) =>
+      poderPropio > poderTotal(defensaDe(plaza, heroesActuales, heridos), true) * multiplicadorDefensivoDeRecintos(plaza.recintos ?? []);
     const objetivo = asentamientos
       .filter((a) => a.faccionId !== origen.faccionId && !estanAliadas(relaciones, origen.faccionId, a.faccionId))
       .filter((a) => distancia(a.posicion, origen.posicion) <= alcance)
+      .filter(puedeGanar)
       .sort((a, b) => {
         const da = distancia(a.posicion, origen.posicion);
         const db = distancia(b.posicion, origen.posicion);
@@ -1278,6 +1287,64 @@ function lanzarCampanas(
  * no llega nunca, y el gate correcto resultó ser inútil por medir lo que no era. Lo que dejaba a las columnas
  * fuera no era el hambre: era no tener motivo para volver.
  */
+/**
+ * Quien conquista se queda a defender (2026-09-27, decisión del usuario): una columna NPC acampada a la puerta de
+ * una plaza de su Facción que se ha quedado sin residentes —la acaba de conquistar— se muda a ella y entra. Su
+ * héroe pasa a residir ahí (`cambiarResidencia`) y la tropa entra al campamento (`guarnecer`); desde el tick
+ * siguiente la defiende en persona y con guarnición como cualquier otra plaza NPC.
+ *
+ * Es lo que la regla ya pide (Doc 5.15.5: conquistar no convierte a nadie en guarnición; para defenderla hay que
+ * pasar a residir en ella), hecho por el NPC. Sin esto, en la Era I medida, dos Facciones se pasaban las mismas
+ * plazas vacías cada ~2 h: 615 conquistas, el 98 % sin un defensor, y una plaza que cambió de manos 204 veces.
+ *
+ * No vacía la casa de nadie: solo se muda un héroe que deja al menos otro residente en su plaza de origen. Solo
+ * columnas de un único participante y sin caravanas adjuntas, que son las que lanza el NPC.
+ */
+function ocuparConquistas(
+  asentamientos: Asentamiento[],
+  ejercitos: Ejercito[],
+  heroes: Heroe[],
+  facciones: readonly Faccion[],
+  esNpc: (faccionId: string) => boolean
+): { asentamientos: Asentamiento[]; ejercitos: Ejercito[]; heroes: Heroe[]; eventos: string[] } {
+  const eventos: string[] = [];
+  let actuales = asentamientos;
+  let heroesActuales = heroes;
+  const quedan: Ejercito[] = [];
+
+  for (const ejercito of ejercitos) {
+    const conquistada =
+      esNpc(ejercito.faccionId) &&
+      ejercito.estado === 'estacionado' &&
+      ejercito.participantes.length === 1 &&
+      ejercito.caravanasAdjuntasIds.length === 0
+        ? actuales.find((a) => a.faccionId === ejercito.faccionId && residentesDe(a).length === 0 && enLaPuertaDe(ejercito, a))
+        : undefined;
+    const casa = conquistada && actuales.find((a) => esResidente(a, ejercito.liderId));
+    if (!conquistada || !casa || residentesDe(casa).length < 2) {
+      quedan.push(ejercito);
+      continue;
+    }
+
+    try {
+      const mudanza = cambiarResidencia([...facciones], actuales, conquistada.id, ejercito.liderId);
+      heroesActuales = sinGuarnicion(heroesActuales, ejercito.liderId);
+      const entrada = guarnecer(mudanza.destino, conTropa(ejercito, indiceTropa(heroesActuales)), []);
+      heroesActuales = situarHeroes(conEscuadrones(heroesActuales, entrada.tropa), [ejercito.liderId], {
+        tipo: 'asentamiento',
+        asentamientoId: conquistada.id,
+      });
+      actuales = actuales.map((a) => (a.id === mudanza.origen.id ? mudanza.origen : a.id === conquistada.id ? entrada.asentamiento : a));
+      eventos.push(`${ejercito.liderId} se queda a vivir en ${conquistada.id}, que acaba de conquistar, y entra con su columna.`);
+    } catch (err) {
+      if (!(err instanceof FaccionInvalidaError) && !(err instanceof MovilizacionInvalidaError)) throw err;
+      quedan.push(ejercito);
+    }
+  }
+
+  return { asentamientos: actuales, ejercitos: quedan, heroes: heroesActuales, eventos };
+}
+
 function replegarLosQueYaTerminaron(
   ejercitos: Ejercito[],
   asentamientos: Asentamiento[],
@@ -1776,6 +1843,11 @@ export function avanzarNpcGobernanza(
   contador = trasCampanas.contador;
   eventos.push(...trasCampanas.eventos);
   heroes = trasCampanas.heroes;
+
+  // Quien conquista se queda (§4.9): antes de replegar, que es lo que haría con esa misma columna.
+  const trasOcupar = ocuparConquistas(trasCampanas.asentamientos, trasCampanas.ejercitos, heroes, trasBandidos.facciones, esNpc);
+  eventos.push(...trasOcupar.eventos);
+  heroes = trasOcupar.heroes;
   const tropa = indiceTropa(heroes);
 
   // Punto 7e: publicar en el mercado. Va DESPUES del comercio automatico y antes de lo militar, con el
@@ -1790,7 +1862,7 @@ export function avanzarNpcGobernanza(
 
   // Y saber volver: una columna que ya acampó terminó su campaña y se manda a casa. Va después de lanzar para
   // que una recién salida no se replegue en el mismo tick.
-  const trasRepliegues = replegarLosQueYaTerminaron(trasCampanas.ejercitos, trasCampanas.asentamientos, mapa, esNpc, tropa);
+  const trasRepliegues = replegarLosQueYaTerminaron(trasOcupar.ejercitos, trasOcupar.asentamientos, mapa, esNpc, tropa);
   eventos.push(...trasRepliegues.eventos);
 
   // Punto 7d: a por quien tienen delante (paso 8e). Va al FINAL de lo militar y antes de expandir: se decide
@@ -1805,7 +1877,7 @@ export function avanzarNpcGobernanza(
     : fijarPersecucionesNpc(
         trasRepliegues.ejercitos,
         trasComercio.caravanas,
-        trasCampanas.asentamientos,
+        trasOcupar.asentamientos,
         trasComercio.relaciones,
         esNpc,
         heridosEn(estado.heroes, instante),
@@ -1813,7 +1885,7 @@ export function avanzarNpcGobernanza(
       );
 
   const trasExpansion = expandirSiPuede(
-    trasCampanas.asentamientos,
+    trasOcupar.asentamientos,
     trasBandidos.facciones,
     trasComercio.caravanas,
     mapa,
