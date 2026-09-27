@@ -72,9 +72,10 @@ export class MedidorGuerra {
   private readonly hechasPorFaccion = new Map<string, number>();
   private readonly sufridasPorFaccion = new Map<string, number>();
   private readonly caidasPorPlaza = new Map<string, number>();
-  /** Dueño actual de cada plaza, desde qué tick, y todos los que ha tenido. */
-  private readonly dueno = new Map<string, { faccionId: string; desde: number; historial: Set<string> }>();
-  private readonly tenencias: number[] = [];
+  /** Dueño actual de cada plaza, desde qué tick, si la ganó conquistándola, y todos los que ha tenido. */
+  private readonly dueno = new Map<string, { faccionId: string; desde: number; porConquista: boolean; historial: Set<string> }>();
+  /** Cuánto la conservó cada dueño que la perdió, según la hubiera fundado (o tenido de inicio) o conquistado. */
+  private readonly tenencias = { fundador: [] as number[], conquistador: [] as number[] };
   private recuperadas = 0;
   private readonly distanciasAlObjetivo: number[] = [];
   private readonly nivelesAlCaer = new Map<number, number>();
@@ -88,7 +89,7 @@ export class MedidorGuerra {
     for (const f of inicial.facciones) {
       this.tickDeNivel.set(f.id, new Map(Array.from({ length: Math.max(0, f.nivel - 1) }, (_, i) => [i + 2, -1] as [number, number])));
     }
-    for (const a of inicial.asentamientos) this.dueno.set(a.id, { faccionId: a.faccionId, desde: tickInicial, historial: new Set([a.faccionId]) });
+    for (const a of inicial.asentamientos) this.dueno.set(a.id, { faccionId: a.faccionId, desde: tickInicial, porConquista: false, historial: new Set([a.faccionId]) });
   }
 
   private semana(tick: number): Semana {
@@ -151,6 +152,9 @@ export class MedidorGuerra {
         continue;
       }
       if (ev.codigo !== 'combate.asedio_conquista' && ev.codigo !== 'combate.asedio_resistido') continue;
+      // Un asedio resistido llega dos veces, atribuido al hogar del atacante y a la plaza (`asediarPlaza`).
+      const previo = eventos[i - 1];
+      if (previo?.codigo === ev.codigo && previo.mensaje === ev.mensaje) continue;
 
       s.asedios[clasificar(eventos, i)]++;
       if (ev.codigo !== 'combate.asedio_conquista') continue;
@@ -173,11 +177,12 @@ export class MedidorGuerra {
       }
       const d = this.dueno.get(p.defensorId);
       if (d) {
-        this.tenencias.push(tick - d.desde);
+        this.tenencias[d.porConquista ? 'conquistador' : 'fundador'].push(tick - d.desde);
         if (d.historial.has(p.faccionAtacanteId)) this.recuperadas++;
         d.historial.add(p.faccionAtacanteId);
         d.faccionId = p.faccionAtacanteId;
         d.desde = tick;
+        d.porConquista = true;
       }
     }
 
@@ -185,7 +190,7 @@ export class MedidorGuerra {
     // semana, cuentan como colapso tras conquista.
     const vivas = new Set(trasNpc.asentamientos.map((a) => a.id));
     for (const a of trasNpc.asentamientos) {
-      if (!this.dueno.has(a.id)) this.dueno.set(a.id, { faccionId: a.faccionId, desde: tick, historial: new Set([a.faccionId]) });
+      if (!this.dueno.has(a.id)) this.dueno.set(a.id, { faccionId: a.faccionId, desde: tick, porConquista: false, historial: new Set([a.faccionId]) });
     }
     for (const a of antes.asentamientos) {
       if (vivas.has(a.id)) continue;
@@ -258,10 +263,11 @@ export class MedidorGuerra {
         tramos.map(([nombre, f]) => `${nombre}: ${caidas.filter(f).length}`).join(', ') +
         ` (máximo ${Math.max(0, ...caidas)})`
     );
+    const tenencia = (lista: number[]) =>
+      `${lista.length} (mediana ${dias(mediana(lista))} días, menos de 1 día el ${pct(lista.filter((t) => t < 1440).length, lista.length)})`;
     l.push(
-      `Cuánto aguanta un dueño antes de perderla: mediana ${dias(mediana(this.tenencias))} días; ` +
-        `menos de 1 día el ${pct(this.tenencias.filter((t) => t < 1440).length, this.tenencias.length)}. ` +
-        `Recuperada por alguien que ya la tuvo: ${pct(this.recuperadas, conquistas)}`
+      `Cuánto aguanta un dueño antes de perderla: quien la fundó o la tenía de inicio ${tenencia(this.tenencias.fundador)}; ` +
+        `quien la conquistó ${tenencia(this.tenencias.conquistador)}. Recuperada por alguien que ya la tuvo: ${pct(this.recuperadas, conquistas)}`
     );
     l.push(
       `Nivel de la plaza al caer: ${[...this.nivelesAlCaer.entries()].sort().map(([n, c]) => `nivel ${n}: ${c}`).join(', ')} · ` +
