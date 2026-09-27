@@ -41,7 +41,8 @@
  * v11: bump sin entrada aquí.
  * v12 (2026-09-27): ritmo de crecimiento y guerra de la Era I — nivel de escuadra (`MILITAR.bonusPoderPorNivelEscuadra`,
  *   `nivelMaximoEscuadra`, `experienciaParaSubirEscuadra` en lugar de `bonusExperienciaPorPunto`), `ventajaDefensor`,
- *   `OCUPACION.proteccionMinutos`, `BATALLA.capacidad.asedio` a 5, fuera `CIUDADANIA.casas*`, y los cambios de
+ *   `OCUPACION.proteccionMinutos`, `BATALLA.capacidad.asedio` a 5, fuera `CIUDADANIA.casas*`,
+ *   `MANTENIMIENTO.edificiosReferencia` en lugar de `poblacionReferencia`, y los cambios de
  *   población, experiencia de Facción y ascenso de la rama `ritmo-crecimiento`.
  */
 export const BALANCE_VERSION = 12;
@@ -2041,18 +2042,11 @@ export const MANTENIMIENTO = {
   // factor de distancia exige mina o comercio. PLACEHOLDER.
   nivelParaOro: 3,
   oroBase: 2,
-  // Escala por POBLACIÓN real, no por nivel (Doc Fase_0_5 §3.2, reemplaza `factorCrecimientoPorNivel`, a
-  // petición del usuario: "más allá de al tamaño del asentamiento y a la cantidad de edificios" — un nivel 3
-  // con 6000 habitantes paga mucho más que un nivel 1 con 250, con o sin ascender de nivel; el nivel en sí ya
-  // NO multiplica el coste directamente, ver §6.2: `nivelActual` degradado no reduce el mantenimiento porque
-  // la misma gente sigue comiendo/gastando lo mismo). `factorPoblacion = 1 + poblacionTotal/poblacionReferencia`.
-  // Se retira la idea (descartada) de sumar coste por Nº DE EDIFICIOS: chocaba con el factor de distancia de
-  // abajo, que ya es el mecanismo real de "imperio disperso cuesta más" — sumar ambos habría castigado DOBLE
-  // al imperio distribuido que el diseño quiere fomentar (ver Fase_0_5_Definicion...md §5.1). Placeholder sin
-  // calibrar: a poblacionReferencia=500, nivel 1 en su techo (300 hab) paga factor 1.6; nivel 3 en su techo
-  // (6000 hab) paga factor 13 — frente a un techo de extracción propia de ~50 madera/minuto, el mantenimiento
-  // solo ya se come casi toda la producción bruta de una ciudad llena, antes de sumar comida/ejército/mejoras.
-  poblacionReferencia: 500,
+  // El mantenimiento es de los EDIFICIOS (2026-09-27, decisión del usuario): escala con los activos, no con la
+  // población, que ya paga lo suyo comiendo. `factorEdificios = 1 + edificiosActivos / edificiosReferencia`.
+  // PLACEHOLDER: a 50, una plaza de nivel 2 con ~90 edificios paga casi lo mismo que pagaba por población (factor
+  // 2,8 frente a 3 con 1.000 habitantes) y una de nivel 1 con ~36, algo más (1,7 frente a 1,4).
+  edificiosReferencia: 50,
   escalaDistancia: 400,
   factorDistanciaMax: 2,
   degradacionPorDeficitTotal: 10,

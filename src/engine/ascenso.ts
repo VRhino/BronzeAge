@@ -98,7 +98,7 @@ function solvenciaEnNivel(
   instante: Instante
 ): SolvenciaRecurso[] {
   const capital = encontrarCapital(asentamiento.faccionId, [...asentamientos]);
-  const costo = calcularCostoMantenimiento({ ...asentamiento, nivel: nivelObjetivo }, capital);
+  const costo = calcularCostoMantenimiento({ ...asentamiento, nivel: nivelObjetivo, nivelActual: nivelObjetivo }, capital);
   const zona = computeZonaInfluencia(asentamiento, [...asentamientos]).poligono;
   const ingresos = new Map<string, number>();
   for (const item of produccionPorMinuto(asentamiento, mapa, zona)) {

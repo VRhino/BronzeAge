@@ -235,6 +235,10 @@ espadachines de cobre — hay variedad, pero solo de la gama baja de la Era I: n
   primera —dentro, sano y sin cargo— se muda a la segunda (`cambiarResidencia`) y sale a pie hacia ella. En la semana
   1 medida, las capitales tenían de 9 a 22 residentes y cada fundación nueva uno: eran el objetivo de casi todas las
   campañas.
+- **El trueque de supervivencia pide a tiempo y lo que hace falta** (2026-09-27): salta cuando la reserva de un recurso
+  de Mantenimiento no cubre 4 horas de coste (antes 20 minutos) y pide lo que cuestan esas 4 horas (antes 30), hasta
+  donde le sobre al socio y al que paga. En la Era I medida, cuatro capitales de nivel 2 caían en ruinas por piedra con
+  el almacén lleno de oro y madera.
 - **No sale contra una plaza protegida** (Doc 5.12.9), recién conquistada o recién fundada: el asedio rebotaría sin
   combate.
 - **Una Facción NPC cuya última plaza colapsa, sin ganador, se disuelve** (`acogerHeroesNpc`, 2026-09-27, decisión del

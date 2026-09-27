@@ -168,8 +168,8 @@ const RECURSOS_MONEDA_SUPERVIVENCIA: RecursoTipo[] = ['madera', 'piedra', 'trigo
  * su capacidad — mismo concepto que `SIMULACION_AUTO_COMERCIO.colchonExcedente` (motor), para que ni quien
  * pide ni quien da se queden sin su propio margen de seguridad. */
 const COLCHON_EXCEDENTE_SUPERVIVENCIA = 0.3;
-/** Cantidad pactada por lado en cada trueque de supervivencia propuesto — mismo orden de magnitud que
- * `SIMULACION_AUTO_COMERCIO.cantidadPorTrueque` (30) en el motor. */
+/** Lo mínimo que pide un trueque de supervivencia. Lo normal es más: lo que cuesta el Mantenimiento de ese recurso
+ * durante `TICKS_ANTICIPACION_SUPERVIVENCIA`, hasta donde le sobre al socio y al que paga (`pedirAyuda`). */
 const CANTIDAD_TRUEQUE_SUPERVIVENCIA = 30;
 /**
  * A partir de que fraccion del almacen una plaza NPC considera que le SOBRA un recurso y lo pone a la venta
@@ -187,8 +187,11 @@ const UMBRAL_ESCASEZ_MERCADO = 0.2;
 const FRACCION_EXCEDENTE_A_VENDER = 0.25;
 /** Cuántos ticks de costo de Mantenimiento por delante hace falta tener cubiertos para NO considerarse en
  * riesgo — un trueque tarda en construirse (Mercado/caravana) y viajar, así que hay que pedir ayuda ANTES de
- * quedarse en 0 (para entonces ya sería tarde: el medidor empezaría a degradar sin nada que pagar). */
-const TICKS_ANTICIPACION_SUPERVIVENCIA = 20;
+ * quedarse en 0 (para entonces ya sería tarde: el medidor empezaría a degradar sin nada que pagar).
+ *
+ * **240, cuatro horas** (2026-09-27): con 20, en la Era I medida, cuatro capitales de nivel 2 pedían 30 de piedra
+ * cuando les quedaba media hora, y caían en ruinas unas tres horas después con el almacén lleno de oro y madera. */
+const TICKS_ANTICIPACION_SUPERVIVENCIA = 240;
 
 export interface StatsNpcGobernanza {
   reclutamientosExitosos: number;
@@ -582,11 +585,13 @@ function truequeDeSupervivencia(
     const capital = capitalesPorFaccion.get(necesitado.faccionId);
     const enRiesgo = recursosMantenimientoEnRiesgo(necesitado, capital);
     if (enRiesgo.length === 0) continue;
+    const costo = calcularCostoMantenimiento(necesitado, capital);
 
     for (const recurso of enRiesgo) {
       if (yaTieneAyudaEnCaminoPara([...acuerdosExistentes, ...acuerdosNuevos], necesitado.id, recurso)) continue;
 
-      const acuerdo = pedirAyuda(asentamientos, necesitado, recurso, CANTIDAD_TRUEQUE_SUPERVIVENCIA, enRiesgo, instante, contador++, esNpc);
+      const cantidad = Math.max(CANTIDAD_TRUEQUE_SUPERVIVENCIA, Math.round((costo[recurso] ?? 0) * TICKS_ANTICIPACION_SUPERVIVENCIA));
+      const acuerdo = pedirAyuda(asentamientos, necesitado, recurso, cantidad, enRiesgo, instante, contador++, esNpc);
       if (!acuerdo) continue;
       acuerdosNuevos.push(acuerdo);
       propuestos++;
@@ -624,8 +629,13 @@ function pedirAyuda(
   if (!socio) return undefined;
   const pago = mejorRecursoDePagoSupervivencia(necesitado, recurso, noPagarCon);
   if (!pago) return undefined;
+  // Ni el socio ni el que paga se quedan por debajo de su colchón.
+  const sobra = (plaza: Asentamiento, r: RecursoTipo) =>
+    Math.floor((plaza.almacen[r]?.cantidad ?? 0) - COLCHON_EXCEDENTE_SUPERVIVENCIA * (plaza.almacen[r]?.capacidad ?? 0));
+  const pactada = Math.min(cantidad, sobra(socio, recurso), sobra(necesitado, pago));
+  if (pactada <= 0) return undefined;
   try {
-    return proponerTrueque(asentamientos, necesitado.id, socio.id, pago, recurso, cantidad, cantidad, instante, contador);
+    return proponerTrueque(asentamientos, necesitado.id, socio.id, pago, recurso, pactada, pactada, instante, contador);
   } catch (err) {
     if (!(err instanceof TruequeInvalidoError)) throw err;
     return undefined;

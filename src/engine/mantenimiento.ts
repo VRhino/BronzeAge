@@ -33,7 +33,7 @@ export interface PayloadAsentamientoRuinas {
 export interface PayloadMantenimientoDeficit {
   medidor: number;
 }
-import { edificiosPorTipoYEstado, estaOcupado, nivelActualDe, poblacionTotal } from './asentamientoQuery';
+import { edificiosPorTipoYEstado, estaOcupado, nivelActualDe } from './asentamientoQuery';
 import { descontarRecursos } from './almacen';
 import { reservaDeTrigo } from './tropas';
 
@@ -118,16 +118,18 @@ export function encontrarCapital(faccionId: string, asentamientos: Asentamiento[
  * que dejaría a la ciudad a salvo de su propia elección de amurallarse. Consecuencia deliberada: un
  * asentamiento de una sola Facción sin comercio, viviendo solo de su propia extracción, ya vive con el margen
  * de piedra/oro muy ajustado en cuanto se acerca a su tope de población (ver el comentario de
- * `poblacionReferencia` más abajo) — sumarle el upkeep de un recinto de nivel 2 o 3 es justo lo que lo empuja
+ * `edificiosReferencia` en constants.ts) — sumarle el upkeep de un recinto de nivel 2 o 3 es justo lo que lo empuja
  * a déficit si no tiene de sobra. El nivel 1 (empalizada, upkeep en madera) se queda deliberadamente barato:
  * es el escalón que cualquier asentamiento pobre puede seguir sosteniendo (§0, "fortaleza temprana").
  */
 export function calcularCostoMantenimiento(asentamiento: Asentamiento, capital: Asentamiento | undefined): Partial<Record<string, number>> {
-  const nivel = asentamiento.nivel;
-  const factorPoblacion = 1 + poblacionTotal(asentamiento) / MANTENIMIENTO.poblacionReferencia;
+  // Qué se cobra lo decide el nivel EFECTIVO (2026-09-27, decisión del usuario): una plaza que cae de nivel deja de
+  // pagar lo del nivel perdido y puede recuperarse en vez de acabar en ruinas.
+  const nivel = nivelActualDe(asentamiento);
+  const factorEdificios = 1 + asentamiento.edificios.filter((e) => e.estado === 'activo').length / MANTENIMIENTO.edificiosReferencia;
   const dist = capital ? distancia(asentamiento.posicion, capital.posicion) : 0;
   const factorDistancia = 1 + Math.min(1, dist / MANTENIMIENTO.escalaDistancia) * (MANTENIMIENTO.factorDistanciaMax - 1);
-  const escala = factorPoblacion * factorDistancia;
+  const escala = factorEdificios * factorDistancia;
 
   const costo: Partial<Record<string, number>> = {
     madera: MANTENIMIENTO.costoBase.madera * escala,
