@@ -59,10 +59,9 @@ import {
 } from '../engine/trade';
 import { computeTodasLasZonas } from '../engine/zones';
 import { calcularCostoMantenimiento, calcularNivelAsentamiento, encontrarCapital } from '../engine/mantenimiento';
-import { cupoLibreParaNivel, evaluarAscenso, iniciarAscenso } from '../engine/ascenso';
+import { cupoLibreParaNivel, evaluarAscenso, iniciarAscenso, tarifaDeAscenso } from '../engine/ascenso';
 import { evaluarViabilidadFundacion, fundarAsentamiento, FundacionInvalidaError } from '../engine/settlement';
 import {
-  ASCENSO_ASENTAMIENTO,
   CAMPAMENTOS_BANDIDOS,
   EDIFICIO_CATALOGO,
   LIDERAZGO,
@@ -645,7 +644,7 @@ function necesidadesParaCrecer(
   faccion: Faccion | undefined
 ): { recurso: RecursoTipo; cantidad: number }[] {
   const nivelObjetivo = plaza.nivel + 1;
-  const tarifa = ASCENSO_ASENTAMIENTO.porNivelObjetivo[nivelObjetivo];
+  const tarifa = tarifaDeAscenso(nivelObjetivo);
   const requisito = NIVEL_ASENTAMIENTO.requisitos[nivelObjetivo];
   if (!tarifa || !requisito || !cupoLibreParaNivel(faccion, asentamientos, nivelObjetivo)) return [];
 

@@ -207,6 +207,7 @@ Dos edificios lo amplían, y no compiten: el **Almacén** sube la capacidad de T
 
   Poblaciones placeholder (`NIVEL_ASENTAMIENTO`). El nivel alimenta: el techo de zona de influencia (Doc 1.2), qué materiales cobra el Mantenimiento (abajo) y el **techo de población total** — 300 / 1.500 / 6.000 / 12.000 / 20.000 habitantes para los niveles 1-5: por encima, la Vivienda y el Palacio dejan de dar cupo aunque tengan espacio. Es el nivel de ASENTAMIENTO — distinto del nivel de FACCIÓN (Doc 2.2.1), que sube por experiencia.
 - **Subida de nivel** (decidido el 2026-09-26): la pide el **Gobernador** del asentamiento, se sube de uno en uno y se hace con una **obra de ascenso**. Para pedirla hacen falta cuatro cosas a la vez:
+- **Techo provisional en el nivel 3** (decidido el 2026-09-27): por ahora ningún asentamiento pasa del nivel 3. Cuando exista la tecnología que desbloquea la subida a 4 (`instituciones_civicas`, Era III), el techo pasa a ser el que marquen las Eras (`ASCENSO_ASENTAMIENTO.nivelTechoProvisional`).
   1. **Los requisitos** de población y edificios del nivel siguiente (arriba).
   2. **Cupo libre en la Facción** para ese nivel (Doc 2.2.1, `CUPO_NIVEL_ASENTAMIENTO`). Se reserva al pedir.
   3. **El coste de la obra en el almacén del asentamiento.** Se paga entero al empezar, del almacén común — el Gobernador decide el gasto, no lo pone de su bolsillo (los héroes no tienen almacén de recursos; sus monedas no son el oro recurso, Doc 5.16.1).

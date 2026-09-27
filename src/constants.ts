@@ -1985,6 +1985,12 @@ export const ASCENSO_ASENTAMIENTO = {
     4: { costo: { madera: 2500, piedra: 2500, oro: 1000, lingoteBronce: 150 }, obraMinutos: 20_160 }, // 2 semanas
     5: { costo: { madera: 5000, piedra: 5000, oro: 2500 }, obraMinutos: 30_240 }, // 3 semanas
   } as Record<number, { costo: Partial<Record<string, number>>; obraMinutos: number }>,
+  /**
+   * Techo PROVISIONAL (decisión del usuario, 2026-09-27): por ahora ningún asentamiento pasa del nivel 3. Lo sustituye
+   * el techo derivado de D54 cuando exista la tecnología que desbloquea el 3 → 4 (`instituciones_civicas`, Era III);
+   * hasta entonces las tarifas de 4 y 5 existen pero no se pueden pedir (`tarifaDeAscenso`).
+   */
+  nivelTechoProvisional: 3,
 };
 
 /**

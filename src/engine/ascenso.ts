@@ -112,6 +112,13 @@ function solvenciaEnNivel(
   }));
 }
 
+/** Coste y obra de la subida a `nivelObjetivo`, o `undefined` si no se puede pedir: por encima del nivel máximo o del
+ * techo provisional (`ASCENSO_ASENTAMIENTO.nivelTechoProvisional`). */
+export function tarifaDeAscenso(nivelObjetivo: number): { costo: Partial<Record<string, number>>; obraMinutos: number } | undefined {
+  if (nivelObjetivo > ASCENSO_ASENTAMIENTO.nivelTechoProvisional) return undefined;
+  return ASCENSO_ASENTAMIENTO.porNivelObjetivo[nivelObjetivo];
+}
+
 /**
  * Si este asentamiento puede pedir ya la subida al nivel siguiente y, si no, por qué. Solo lectura: la usan el
  * comando del Gobernador (para validar), el NPC (para decidir) y el servidor (para enseñárselo al jugador).
@@ -125,7 +132,7 @@ export function evaluarAscenso(
 ): EvaluacionAscenso {
   const nivel = asentamiento.nivel;
   const nivelObjetivo = nivel < NIVEL_ASENTAMIENTO.nivelMaximo ? nivel + 1 : null;
-  const tarifa = nivelObjetivo === null ? undefined : ASCENSO_ASENTAMIENTO.porNivelObjetivo[nivelObjetivo];
+  const tarifa = nivelObjetivo === null ? undefined : tarifaDeAscenso(nivelObjetivo);
   if (nivelObjetivo === null || !tarifa) {
     return { nivel, nivelObjetivo: null, costo: {}, obraMinutos: 0, solvencia: [], bloqueos: ['nivel_maximo'], puede: false };
   }

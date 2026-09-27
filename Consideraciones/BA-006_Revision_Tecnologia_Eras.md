@@ -545,6 +545,46 @@ Diez tropas en los niveles 1-2 y una sola en el 3 (los carros), como pide D49. *
 asentamiento sino el orden de adopción**: arranque → `metalurgia_cobre` → `escudos_ligeros` /
 `armamento_palacial` → `aleacion_bronce` → `arqueria_palacial` → `cria_caballar` → `carros_guerra`.
 
+## Era II — EN CURSO (desde el 2026-09-27)
+
+Criterio de reparto: D49 (**meseta en el nivel 3**, con cosas sueltas de niveles menores). Con P2 aprobada, el
+Barracón 3, la Galería 3 y las Caballerizas 3 piden nivel 3 + Carpintería 2, y la Armería 3 nivel 3 + Fundición 2
+(D43): la tabla del roster de arriba, que pone nivel 4 a los lanceros pesados y a los Hequetai, es anterior a P2.
+
+**Catálogo de la Era II (7 tecnologías, logros e hitos en borrador):**
+
+| Tecnología | Desbloquea | Logro del servidor (borrador) | Hito de la Facción (borrador) |
+|---|---|---|---|
+| `bronce_calidad_militar` | arma de bronce de calidad y armadura de bronce (Armería 3) | X piezas de equipo de bronce fabricadas (Dendra) | Armería 3 |
+| `forja_hierro_temprana` | mina de hierro, lingote de hierro (Fundición 2), arma de hierro (Armería 2) | X caravanas destruidas o capturadas (colapso del estaño) | Fundición 2 + yacimiento de hierro en su territorio |
+| `panoplia_bronce` | lanceros pesados micénicos, Hequetai | X escuadrones reclutados (Vaso de los Guerreros) | `bronce_calidad_militar` adoptada + Barracón 2 |
+| `disciplina_formacion` | formaciones cerradas (táctico, Conquest) | primer asedio resistido del servidor (Batalla del Delta) | Barracón 2 |
+| `arco_compuesto` | arqueros con arco compuesto | X arqueros reclutados | Carpintería 2 + Galería 3 |
+| `equitacion_militar` | jinetes asirios | X carros de guerra reclutados (Assurnasirpal) | Caballerizas activas |
+| `carpinteria_militar` | escalas y defensas de campaña (equipo) | primera conquista del servidor (Dapur) | Carpintería 2 |
+
+**Roster de la Era II (4 tropas) con P2:**
+
+| Tropa | Tecnología | Edificio | Equipo | Escalón | Nivel |
+|---|---|---|---|---|---|
+| Jinetes asirios | `equitacion_militar` | Caballerizas 1 | arma de hierro + caballo | 2 | 2 |
+| Lanceros pesados micénicos | `panoplia_bronce` | Barracón 3 | 2 armas de bronce + armadura de bronce | 4 | 3 |
+| Hequetai | `panoplia_bronce` | Barracón 3 | arma de bronce de calidad + armadura de bronce | 5 | 3 |
+| Arqueros con arco compuesto | `arco_compuesto` | Galería 3 | 3 armas de bronce + 2 intermedias | 5 | 3 |
+
+**Decidido el 2026-09-27:**
+- **EII-1 — (a)**: los jinetes asirios se quedan con arma de hierro aunque la dé `forja_hierro_temprana`, como los
+  escaramuzadores de la Era I (D53).
+- **EII-2 — nivel 3** para lanceros pesados, Hequetai y arqueros con arco compuesto (la tabla de arriba).
+- **EII-4 — los nodos de hierro son 1,5 veces más frecuentes que los de cobre** (D36).
+- **EII-5 — ningún asentamiento por encima del nivel 3 por ahora**: techo provisional en el código
+  (`ASCENSO_ASENTAMIENTO.nivelTechoProvisional`) hasta que exista `instituciones_civicas` (D54).
+
+**Pendiente (EII):**
+- **EII-3 — Logros e hitos** del catálogo de arriba: el usuario los decide con las tablas de la Era II delante.
+  `carpinteria_militar` (primera conquista) y `disciplina_formacion` (primer asedio resistido) se cumplirían en la
+  primera semana de la Era.
+
 ## Qué cambia en el canon (al cerrar)
 
 - **Doc 6** pasa a ser el documento de tecnología: Eras y su calendario (D34), logro del servidor + hito de

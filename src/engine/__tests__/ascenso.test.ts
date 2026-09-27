@@ -101,6 +101,12 @@ describe('cupo de Facción — se reserva al pedir', () => {
     expect(evaluarAscenso(a, [a, otro], facciones, mapa, AHORA).bloqueos).toContain('sin_cupo_de_faccion');
   });
 
+  it('por ahora nadie pasa del nivel 3: desde ahí no hay a dónde subir (techo provisional)', () => {
+    const mapa = crearMapaDeterminista(7);
+    const a = { ...listoParaSubir(mapa), nivel: 3, nivelActual: 3 };
+    expect(evaluarAscenso(a, [a], crearFacciones(), mapa, AHORA).bloqueos).toEqual(['nivel_maximo']);
+  });
+
   it('los niveles 4 y 5 no tienen cupo', () => {
     expect(cupoLibreParaNivel(crearFacciones()[0], [], 4)).toBe(true);
   });
