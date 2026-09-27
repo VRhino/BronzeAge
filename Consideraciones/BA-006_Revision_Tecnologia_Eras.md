@@ -551,17 +551,17 @@ Criterio de reparto: D49 (**meseta en el nivel 3**, con cosas sueltas de niveles
 Barracón 3, la Galería 3 y las Caballerizas 3 piden nivel 3 + Carpintería 2, y la Armería 3 nivel 3 + Fundición 2
 (D43): la tabla del roster de arriba, que pone nivel 4 a los lanceros pesados y a los Hequetai, es anterior a P2.
 
-**Catálogo de la Era II (7 tecnologías, logros e hitos en borrador):**
+**Catálogo de la Era II (7 tecnologías; logros e hitos aprobados el 2026-09-27, EII-3):**
 
-| Tecnología | Desbloquea | Logro del servidor (borrador) | Hito de la Facción (borrador) |
+| Tecnología | Desbloquea | Logro del servidor | Hito de la Facción |
 |---|---|---|---|
 | `bronce_calidad_militar` | arma de bronce de calidad y armadura de bronce (Armería 3) | X piezas de equipo de bronce fabricadas (Dendra) | Armería 3 |
 | `forja_hierro_temprana` | mina de hierro, lingote de hierro (Fundición 2), arma de hierro (Armería 2) | X caravanas destruidas o capturadas (colapso del estaño) | Fundición 2 + yacimiento de hierro en su territorio |
-| `panoplia_bronce` | lanceros pesados micénicos, Hequetai | X escuadrones reclutados (Vaso de los Guerreros) | `bronce_calidad_militar` adoptada + Barracón 2 |
-| `disciplina_formacion` | formaciones cerradas (táctico, Conquest) | primer asedio resistido del servidor (Batalla del Delta) | Barracón 2 |
+| `panoplia_bronce` | lanceros pesados micénicos, Hequetai | X escuadrones reclutados (Vaso de los Guerreros) | `bronce_calidad_militar` adoptada + **Barracón 3** |
+| `disciplina_formacion` | formaciones cerradas (táctico, Conquest) | **X asedios resistidos en combate** en el servidor (Batalla del Delta); no cuentan los rebotes por ocupación | Barracón 2 |
 | `arco_compuesto` | arqueros con arco compuesto | X arqueros reclutados | Carpintería 2 + Galería 3 |
 | `equitacion_militar` | jinetes asirios | X carros de guerra reclutados (Assurnasirpal) | Caballerizas activas |
-| `carpinteria_militar` | escalas y defensas de campaña (equipo) | primera conquista del servidor (Dapur) | Carpintería 2 |
+| `carpinteria_militar` | escalas y defensas de campaña (equipo) | **primera conquista de una plaza con muralla completa** (Dapur) | Carpintería 2 |
 
 **Roster de la Era II (4 tropas) con P2:**
 
@@ -580,10 +580,14 @@ Barracón 3, la Galería 3 y las Caballerizas 3 piden nivel 3 + Carpintería 2, 
 - **EII-5 — ningún asentamiento por encima del nivel 3 por ahora**: techo provisional en el código
   (`ASCENSO_ASENTAMIENTO.nivelTechoProvisional`) hasta que exista `instituciones_civicas` (D54).
 
-**Pendiente (EII):**
-- **EII-3 — Logros e hitos** del catálogo de arriba: el usuario los decide con las tablas de la Era II delante.
-  `carpinteria_militar` (primera conquista) y `disciplina_formacion` (primer asedio resistido) se cumplirían en la
-  primera semana de la Era.
+- **EII-3 — logros e hitos aprobados** (la tabla de arriba). Cambios sobre el borrador: `carpinteria_militar` pasa
+  a "primera conquista de una plaza con muralla completa" y `disciplina_formacion` a "X asedios resistidos en
+  combate" (los dos originales ya se habrían cumplido en la Era I); el hito de `panoplia_bronce` pasa a Barracón 3,
+  el edificio donde nacen sus tropas, como en la Era I. Las X quedan como placeholder hasta el playtest (D53).
+- Los jinetes asirios se quedan en nivel 2 (Caballerizas 1).
+
+**Pendiente (EII):** EII-5, cuánta meseta en el nivel 3 al acabar la Era, con el batch de la Era II delante. Al
+bajar la Era II a código, P1/P2 (Barracón 3 y Armería 3 dejan de pedir Palacio).
 
 ## Qué cambia en el canon (al cerrar)
 
