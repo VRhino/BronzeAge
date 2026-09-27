@@ -16,7 +16,7 @@ import {
   iniciarAsedio as iniciarAsedioEngine,
 } from '../../engine/combate';
 import { heridosEn, herir } from '../../engine/heroe';
-import { conEscuadrones, defensaDe, heroesQueDefienden, sinTropa } from '../../engine/tropa';
+import { conEscuadrones, defensaDe, heroesQueEntranADefender, sinTropa } from '../../engine/tropa';
 import type { Escuadron } from '../../domain/types';
 
 /** Lo que se puede sacar del campamento a combatir: la guarnición la maneja la IA de la plaza (Doc 5.15.3), y las
@@ -99,7 +99,7 @@ export const iniciarAsedio = comando<ParamsIniciarAsedio, { conquistado: boolean
   const defensor = exigirAsentamiento(estado, params.defensorId);
   const heridos = heridosEn(estado.heroes, ctx.instante);
   const tropa = combatientes(campamentoEn(estado, atacante), params.escuadronIds, heridos);
-  const defensores = heroesQueDefienden(defensor, estado.heroes, heridos);
+  const defensores = heroesQueEntranADefender(defensor, estado.heroes, heridos);
   const defensa = defensaDe(defensor, estado.heroes, heridos);
 
   const resultado = iniciarAsedioEngine(

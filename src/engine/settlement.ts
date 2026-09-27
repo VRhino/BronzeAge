@@ -1,6 +1,6 @@
 import type { Asentamiento, Edificio, Faccion, Point, RecursoAlmacenado } from '../domain/types';
-import type { Instante } from '../domain/tiempo';
-import { ALMACEN, FUNDACION, MANTENIMIENTO, NIVEL_FACCION, POBLACION, ZONA_INFLUENCIA } from '../constants';
+import { minutos, sumar, type Instante } from '../domain/tiempo';
+import { ALMACEN, FUNDACION, MANTENIMIENTO, NIVEL_FACCION, OCUPACION, POBLACION, ZONA_INFLUENCIA } from '../constants';
 import type { Mapa } from '../world/mapa';
 import { posicionLibreParaFundar, zonaInicialDeFundacion } from './zones';
 import { sitioEnBarrio } from './construction';
@@ -273,6 +273,9 @@ export function fundarAsentamiento(
     casasCompradas: [...heroesFundadoresIds],
     politicasActivas: [],
     medidorMantenimiento: MANTENIMIENTO.medidorInicial,
+    // Nace protegida un día, como una plaza recién conquistada (Doc 1.2, 5.12.9; decisión del usuario 2026-09-27):
+    // sin esto, el 86 % de las fundaciones de la Era I medida caía a los ~50 ticks, antes de reclutar a nadie.
+    protegidaHasta: sumar(fundadoEn, minutos(OCUPACION.proteccionMinutos)),
   };
 
   // Quien vuelve a tener un asentamiento ya no está derrotado (`Faccion.derrotadaPor`).

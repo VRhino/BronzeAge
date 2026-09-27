@@ -1388,11 +1388,6 @@ export const CUPO_NIVEL_ASENTAMIENTO = {
 };
 
 export const CIUDADANIA = {
-  // Espacios de "casas" por asentamiento (Doc 2.5): el cupo base coincide con el máximo de jugadores que
-  // pueden fundar juntos (FUNDACION.maxJugadoresFundacionGrupal) — así el asentamiento siempre nace con
-  // sitio para todos sus fundadores, y el resto queda libre para compras posteriores.
-  casasBasePorAsentamiento: FUNDACION.maxJugadoresFundacionGrupal,
-  casasPorNivelAdicional: 2,
   // Resuelve la pregunta abierta que dejaba `crearFaccion.ts` (a petición del usuario, 2026-08-27): tras
   // abandonar una Facción (`dejarFaccion`), cuánto hay que esperar para poder crear otra — anti-abuso contra
   // "crear, abandonar, crear" en bucle. Solo aplica a CREAR: unirse a una Facción existente (`unirseAFaccion`)
@@ -1639,8 +1634,10 @@ export const HEROE = {
 
 /** Una batalla jugada en Unity (Doc 5.15.1; doc 01 §15). */
 export const BATALLA = {
-  /** Héroes por bando. Las escuadras sin héroe (guarnición, escolta, bandidos) no ocupan plaza. */
-  capacidad: { asedio: 15, resto: 5 },
+  /** Héroes por bando. Las escuadras sin héroe (guarnición, escolta, bandidos) no ocupan plaza. El asedio va a 5
+   * mientras se prueba con NPC (decisión del usuario 2026-09-27); vuelve a 15 cuando entren jugadores
+   * (`Docs/Mecanicas a desarrollar.md`). */
+  capacidad: { asedio: 5, resto: 5 },
   /** Lo que dura como mucho la partida, en minutos: si se agota, gana el defensor. */
   duracionMinutos: { asedio: 30, resto: 15 },
   /** Plazos de infraestructura, en minutos de mundo: si nadie la asigna o la empieza a tiempo, `fallida` sin

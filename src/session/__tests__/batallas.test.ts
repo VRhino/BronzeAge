@@ -315,6 +315,8 @@ function frenteAPlaza(unity = true) {
     heroesFundadoresIds: [],
     casasCompradas: [],
     posicion: state.ejercitos.find((e) => e.id === frente.columna)!.posicionActual,
+    // Copia de una plaza recién fundada: sin la protección con la que nació (Doc 5.12.9).
+    protegidaHasta: undefined,
   };
   const sesion = GameSession.importar(
     { ...payload, state: { ...state, facciones: [...state.facciones, rival], asentamientos: [...state.asentamientos, plaza] } },

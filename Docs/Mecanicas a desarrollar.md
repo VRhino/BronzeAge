@@ -467,3 +467,8 @@ nobles, sin niveles. Falta:
 - El resto del roster de la revisión BA-006 (leñadores, granjeros, honderos rodios, escalones nuevos) llega con el
   cierre de su Era: el código tiene todavía las 11 tropas de antes.
 
+## 38. Tope de héroes en asedio: volver a 15 cuando entren jugadores
+
+Mientras se prueba con NPC, el asedio admite 5 héroes por bando como el resto de batallas (decisión del usuario,
+2026-09-27; `BATALLA.capacidad.asedio`, Doc 5.15.1). Cuando entren jugadores vuelve a **15 contra 15**: cambiar la
+constante y el canon, y avisar a Conquest, que abre la instancia con esa capacidad (`BattleSide.capacidadMaxima`).

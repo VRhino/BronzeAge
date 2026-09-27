@@ -87,7 +87,7 @@ El comercio por mar está fuera de alcance (Doc 3.11): sin barcos, dos costas en
 - EDIFICIOS INICIALES: todo asentamiento nace con un Centro Urbano (marcador único, no construible por ningún otro medio), una Granja y 3 Viviendas, ya ACTIVOS sin pasar por la cola de construcción.
 - FUNDACIÓN GRUPAL: hasta 5 jugadores pueden organizarse para aparecer juntos en el mismo punto, compartiendo una caravana, fundando el asentamiento entre los 5. Los 5 reciben Ciudadanía de inmediato.
 - MATERIALES INICIALES: la caravana de fundación entrega una reserva inicial de recursos al fundar, suficiente para arrancar la primera construcción. Sin ella el asentamiento quedaría bloqueado para siempre: el edificio que produce madera también cuesta madera. Cifras (`FUNDACION.materialesIniciales`/`POBLACION.pesants.inicial`, placeholder): 50 madera + 20 piedra + 100 trigo + 100 oro, y población inicial de 20 pesants.
-- PROTECCIÓN TEMPORAL: tras la fundación hay un período de gracia durante el cual NO se cobra Mantenimiento (ver Doc 4.5), para que la economía pueda arrancar antes de pagarlo. Duración placeholder.
+- PROTECCIÓN TEMPORAL: tras la fundación hay un período de gracia durante el cual NO se cobra Mantenimiento (ver Doc 4.5), para que la economía pueda arrancar antes de pagarlo. Duración placeholder. Y durante **un día** nadie puede asediarlo: la misma protección que tiene una plaza recién conquistada (Doc 5.12.9), para que reclute con qué defenderse.
 
 ## 1.4 Fuentes de recursos por tipo
 - CULTIVOS (trigo): NO son un nodo recolectable directo. Dependen de la FERTILIDAD DEL SUELO de la zona (atributo de terreno); requieren construir una Granja para aprovecharse.

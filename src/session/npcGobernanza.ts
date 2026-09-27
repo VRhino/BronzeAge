@@ -1307,7 +1307,10 @@ function lanzarCampanas(
  *     asentamiento y todos sus ciudadanos pasan a la ganadora (`Faccion.derrotadaPor`). Sus columnas cambian de
  *     bandera y sus relaciones se disuelven. Si la ganadora es de un jugador, no: la derrotada sigue y el Paso 0 la
  *     refunda, como siempre.
- *  2. **Un héroe bot sin residencia se muda a la plaza más cercana de su Facción** (la desalojada ya lo hace al
+ *  2. **Una Facción NPC cuya última plaza colapsa, sin ganador (`derrotadaPor: null`), se disuelve** y sus héroes
+ *     bot desaparecen con ella (2026-09-27, decisión del usuario). En la Era I medida, tres Facciones se quedaban así
+ *     con 35 héroes dentro de una plaza que ya no existía.
+ *  3. **Un héroe bot sin residencia se muda a la plaza más cercana de su Facción** (la desalojada ya lo hace al
  *     caer su plaza; esto recoge a los que quedaban fuera, incluidos los recién absorbidos). Su columna, si la
  *     tiene, pasa a volver ahí.
  *
@@ -1315,7 +1318,7 @@ function lanzarCampanas(
  */
 function acogerHeroesNpc(estado: EstadoSimulacion, esNpc: (faccionId: string) => boolean): { estado: EstadoSimulacion; eventos: string[] } {
   const eventos: string[] = [];
-  let { facciones, asentamientos, ejercitos, relaciones } = estado;
+  let { facciones, asentamientos, ejercitos, relaciones, heroes } = estado;
 
   for (const perdedora of estado.facciones) {
     const ganadoraId = perdedora.derrotadaPor;
@@ -1327,13 +1330,23 @@ function acogerHeroesNpc(estado: EstadoSimulacion, esNpc: (faccionId: string) =>
     eventos.push(`${perdedora.id} pierde su último asentamiento ante ${ganadoraId}: sus héroes se unen a ella y la Facción desaparece.`);
   }
 
+  for (const colapsada of estado.facciones) {
+    if (colapsada.derrotadaPor !== null || !esNpc(colapsada.id) || asentamientos.some((a) => a.faccionId === colapsada.id)) continue;
+    const bots = new Set(heroes.filter((h) => h.controlador === 'bot' && colapsada.ciudadanosIds.includes(h.id)).map((h) => h.id));
+    facciones = facciones.filter((f) => f.id !== colapsada.id);
+    heroes = heroes.filter((h) => !bots.has(h.id));
+    ejercitos = ejercitos.filter((e) => e.faccionId !== colapsada.id);
+    relaciones = relaciones.filter((r) => r.faccionAId !== colapsada.id && r.faccionBId !== colapsada.id);
+    eventos.push(`${colapsada.id} pierde su último asentamiento por colapso: la Facción se disuelve y sus ${bots.size} héroes bot desaparecen.`);
+  }
+
   const posicionDe = (h: Heroe): Point | undefined => {
     const u = h.ubicacion;
     if (u.tipo === 'asentamiento') return asentamientos.find((a) => a.id === u.asentamientoId)?.posicion;
     if (u.tipo === 'columna') return ejercitos.find((e) => e.id === u.ejercitoId)?.posicionActual;
     return u.punto;
   };
-  for (const heroe of estado.heroes) {
+  for (const heroe of heroes) {
     if (heroe.controlador !== 'bot' || asentamientos.some((a) => esResidente(a, heroe.id))) continue;
     const faccion = facciones.find((f) => f.ciudadanosIds.includes(heroe.id));
     const donde = posicionDe(heroe);
@@ -1347,7 +1360,7 @@ function acogerHeroesNpc(estado: EstadoSimulacion, esNpc: (faccionId: string) =>
     eventos.push(`${heroe.id}, sin casa, pasa a residir en ${casa.id}.`);
   }
 
-  return { estado: { ...estado, facciones, asentamientos, ejercitos, relaciones }, eventos };
+  return { estado: { ...estado, facciones, asentamientos, ejercitos, relaciones, heroes }, eventos };
 }
 
 /**

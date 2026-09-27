@@ -113,7 +113,10 @@ export function fundarAsentamientoDeTest(
   posicion?: { x: number; y: number }
 ): { asentamiento: Asentamiento; facciones: Faccion[] } {
   const pos = posicion ?? posicionRecomendable(mapa, asentamientosExistentes);
-  return fundarAsentamiento(mapa, facciones, faccionId, pos, [`jugador-${faccionId}-1`], asentamientosExistentes, instanteDeTest(tickActual));
+  const fundado = fundarAsentamiento(mapa, facciones, faccionId, pos, [`jugador-${faccionId}-1`], asentamientosExistentes, instanteDeTest(tickActual));
+  // Sin la protección con la que nace (Doc 5.12.9): la suite asedia plazas recién fundadas; quien la prueba, la pone.
+  const { protegidaHasta: _proteccion, ...sinProteccion } = fundado.asentamiento;
+  return { ...fundado, asentamiento: sinProteccion };
 }
 
 export function crearFacciones(): Faccion[] {

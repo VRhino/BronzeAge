@@ -1,10 +1,10 @@
 import type { Asentamiento, CampamentoBandido, Ejercito, Escuadron, Faccion, Heroe, RelacionPolitica, UbicacionHeroe } from '../domain/types';
-import { alCampamento, conEscuadrones, sinTropa, type CaravanaConEscolta, type EjercitoConTropa } from './tropa';
+import { alCampamento, conEscuadrones, poderEscuadron, sinTropa, type CaravanaConEscolta, type EjercitoConTropa } from './tropa';
 import { distancia } from '../world/geometria';
 import type { EventoCrudo } from '../domain/eventos';
 import { minutos, sumar, type Instante } from '../domain/tiempo';
 import type { RandomFn } from '../worldgen';
-import { CAMPAMENTOS_BANDIDOS, MILITAR, NIVEL_FACCION, OCUPACION, REPUTACION, TROPAS_RECLUTABLES } from '../constants';
+import { CAMPAMENTOS_BANDIDOS, MILITAR, NIVEL_FACCION, OCUPACION, REPUTACION } from '../constants';
 import { agregarRecurso, aplicarCapacidadDeEdificio } from './almacen';
 import { aplicarAjustesReputacion } from './reputacion';
 import { aplicarAjustesExperiencia, type AjusteExperiencia } from './faccion';
@@ -14,13 +14,8 @@ import { estaProtegida } from './asentamientoQuery';
 
 export class CombateInvalidoError extends Error {}
 
-/** Poder de combate (Doc 5.1: héroe-comandante liderando tropa; el resultado es CÁLCULO, no combate visual, Doc 5.10).
- * `poderBase` sale siempre del catálogo `TROPAS_RECLUTABLES` vía `tropaId` (Doc 5.7/5.8) — toda tropa lo tiene,
- * y la experiencia la mejora sin cambiarla nunca de identidad (Doc 5.8, a petición del usuario). */
-export function poderEscuadron(e: Escuadron): number {
-  const poderBase = TROPAS_RECLUTABLES.find((t) => t.id === e.tropaId)!.poderBase;
-  return poderBase * e.cantidad * (1 + e.experiencia * MILITAR.bonusExperienciaPorPunto);
-}
+// Vive en `tropa` (lo usa el tope de héroes por batalla); se reexporta para los que ya lo tomaban de aquí.
+export { poderEscuadron };
 
 export function poderTotal(escuadrones: readonly Escuadron[], bonusCohesion: boolean): number {
   const suma = escuadrones.reduce((acc, e) => acc + poderEscuadron(e), 0);

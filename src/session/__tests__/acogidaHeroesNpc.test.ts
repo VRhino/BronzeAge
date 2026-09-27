@@ -44,6 +44,18 @@ describe('acogida de los héroes bot', () => {
     expect(r.estado.asentamientos.find((a) => a.id === plaza.id)!.casasCompradas).toContain(BOT);
   });
 
+  it('una Facción NPC que pierde su última plaza por colapso se disuelve y sus héroes bot desaparecen', () => {
+    const mapa = crearMapaDeterminista(7);
+    const uno = fundarAsentamientoDeTest(mapa, crearFacciones(), 'faccion-1', []);
+    const facciones: Faccion[] = uno.facciones.map((f) => (f.id === 'faccion-2' ? { ...f, ciudadanosIds: [BOT], derrotadaPor: null } : f));
+    const bot = heroeDePrueba(BOT, { tipo: 'desconectado', punto: uno.asentamiento.posicion }, { controlador: 'bot' });
+    const r = avanzarNpcGobernanza(crearEstadoDeTest([uno.asentamiento], facciones, { heroes: [bot] }), mapa, contextoDeTest(1, createRng(5)), {
+      lanzarCampanas: false,
+    });
+    expect(r.estado.facciones.some((f) => f.id === 'faccion-2')).toBe(false);
+    expect(r.estado.heroes.some((h) => h.id === BOT)).toBe(false);
+  });
+
   it('si la ganadora es de un jugador, la derrotada no se le une', () => {
     const { r } = escenario(['faccion-2']);
     expect(r.estado.facciones.find((f) => f.id === 'faccion-2')!.ciudadanosIds).toContain(BOT);

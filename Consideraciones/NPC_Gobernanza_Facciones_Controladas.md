@@ -235,7 +235,11 @@ espadachines de cobre — hay variedad, pero solo de la gama baja de la Era I: n
   primera —dentro, sano y sin cargo— se muda a la segunda (`cambiarResidencia`) y sale a pie hacia ella. En la semana
   1 medida, las capitales tenían de 9 a 22 residentes y cada fundación nueva uno: eran el objetivo de casi todas las
   campañas.
-- **No sale contra una plaza protegida tras su conquista** (Doc 5.12.9): el asedio rebotaría sin combate.
+- **No sale contra una plaza protegida** (Doc 5.12.9), recién conquistada o recién fundada: el asedio rebotaría sin
+  combate.
+- **Una Facción NPC cuya última plaza colapsa, sin ganador, se disuelve** (`acogerHeroesNpc`, 2026-09-27, decisión del
+  usuario) y sus héroes bot desaparecen con ella; si tuviera humanos, se quedan huérfanos. En la Era I medida, tres
+  Facciones se quedaban así con 35 héroes dentro de una plaza que ya no existía.
 
 ## 5. Lo que el NPC NO hace
 

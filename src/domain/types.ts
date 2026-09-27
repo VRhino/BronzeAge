@@ -92,7 +92,7 @@ export interface Faccion {
   reputacion: number;
   /** La Facción que conquistó su último asentamiento (Doc 5.15.5): presente solo mientras no tiene ninguno. Con ella
    * el NPC sabe a quién se unen sus héroes bot antes de que la Facción desaparezca (`registrarDerrota`). */
-  derrotadaPor?: string;
+  derrotadaPor?: string | null;
 }
 
 /** 3 clases de población NPC — Doc 4.1. Los Jugadores son una categoría separada. */

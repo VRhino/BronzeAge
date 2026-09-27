@@ -13,7 +13,7 @@ import { alCampamentoPorIds, campamentoDe, conEscolta, conEscuadrones, conTropa,
 import { caducarOrdenes } from './market';
 import { avanzarPoliticas } from './politicas';
 import { avanzarTributos } from './diplomacia';
-import { avanzarNivelesFaccion, aplicarAjustesExperiencia, type AjusteExperiencia } from './faccion';
+import { avanzarNivelesFaccion, aplicarAjustesExperiencia, registrarDerrota, type AjusteExperiencia } from './faccion';
 import { NIVEL_FACCION } from '../constants';
 import { avanzarMantenimientoTropas, consumoRacionDeEscuadrones } from './tropas';
 import { avanzarMantenimiento, encontrarCapital } from './mantenimiento';
@@ -238,8 +238,11 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   // residentes quedan huérfanos, con sus escuadras (Doc 5.15.2).
   const actualizados = procesados.filter((p) => !p.destruido).map((p) => p.asentamiento);
   let heroes = conEscuadrones(estado.heroes, procesados.flatMap((p) => p.campamento));
+  // Si era la última de su Facción, queda derrotada sin ganador (`Faccion.derrotadaPor = null`).
+  let facciones = estado.facciones;
+  for (const p of procesados) if (p.destruido) facciones = registrarDerrota(facciones, actualizados, p.asentamiento.faccionId, null);
 
-  const trasComercio = avanzarComercio(actualizados, estado.facciones, estado.caravanas, estado.acuerdos, mapa, estado.caminos, instante);
+  const trasComercio = avanzarComercio(actualizados, facciones, estado.caravanas, estado.acuerdos, mapa, estado.caminos, instante);
   eventosDominio.push(...comoEventosDominio(trasComercio.eventos, contexto));
   heroes = alCampamentoPorIds(heroes, trasComercio.escoltasLiberadas);
 

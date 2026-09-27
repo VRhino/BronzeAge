@@ -124,7 +124,8 @@ Faccion
   ciudadanosIds[]         quién tiene ciudadanía en ESTA facción, no toda la Liga — existente. Tras este
                          modelo, lista de heroeId
   reputacion              score público -100..+100, decae hacia 0 — existente
-  derrotadaPor?: string   faccionId que conquistó su último asentamiento; solo mientras no tiene ninguno.
+  derrotadaPor?: string | null   faccionId que conquistó su último asentamiento, o null si colapsó sin
+                                 ganador; solo mientras no tiene ninguno.
                          Una Facción NPC derrotada por otra NPC se le une y desaparece — nuevo (2026-09-27)
 ```
 
@@ -168,7 +169,7 @@ Asentamiento
                                    guarnición de cada héroe también es derivado (edificios y políticas de
                                    este asentamiento, Doc 5.15); no se persiste.
   ocupacionHasta?: Instante          ocupación militar tras conquista — existente
-  protegidaHasta?: Instante          protección del nuevo dueño tras conquista (Doc 5.12.9): nadie la asedia
+  protegidaHasta?: Instante          protección tras conquista o fundación (Doc 5.12.9): nadie la asedia
                                    hasta entonces — nuevo 2026-09-27
   ascenso?: AscensoEnCurso          obra de ascenso de nivel en marcha, pedida por el Gobernador (Doc 4.5).
                                    Ausente = no hay obra. La borra una conquista — nuevo 2026-09-26:
@@ -833,7 +834,7 @@ bando en el que va.
 
 **Composición de un bando (decisión del usuario, 2026-09-13, Doc 5.15):** héroes (humanos o bot) con sus
 escuadras, más `escuadrasSinHeroe` (la guarnición del asentamiento, la escolta de la caravana o las tropas de un campamento de bandidos), que maneja
-la IA de juego. `capacidadMaxima` cuenta HÉROES (15 por bando en un asedio; 5 en mundo abierto, contra una caravana o contra un campamento de bandidos —
+la IA de juego. `capacidadMaxima` cuenta HÉROES (5 por bando en cualquier batalla mientras se prueba con NPC; el asedio vuelve a 15 cuando entren jugadores —
 Doc 5.15.1): las escuadras sin
 héroe no ocupan plaza y entran directamente. Los héroes que superan la capacidad esperan en cola y entran a
 medida que caen otros.

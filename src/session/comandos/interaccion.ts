@@ -203,7 +203,7 @@ export const atacar = comando<ParamsAtacar, { battleId: string } | undefined>((e
 
   if (params.objetivo.tipo === 'campamento') {
     const campamento = exigirCampamento(estado, params.objetivo.id);
-    const asalto = atacarCampamento(conTropaDe(estado, atacante), campamento, [...estado.facciones], capacidadCargaDe(atacante, estado.caravanas), heridos, ctx.rng);
+    const asalto = atacarCampamento(conTropaDe(estado, atacante), campamento, [...estado.facciones], capacidadCargaDe(atacante, estado.caravanas), heridos, ctx.rng, estado.heroes);
     const trasAsalto = conColumnas(estado, [asalto.ejercito]);
     const siguiente: GameSessionState = {
       ...trasAsalto,
@@ -228,7 +228,8 @@ export const atacar = comando<ParamsAtacar, { battleId: string } | undefined>((e
       estado.relaciones,
       estado.caravanas,
       heridos,
-      ctx.rng
+      ctx.rng,
+      estado.heroes
     );
 
     const trasChoque = conColumnas(estado, [choque.atacante, choque.defensor]);
@@ -251,7 +252,8 @@ export const atacar = comando<ParamsAtacar, { battleId: string } | undefined>((e
     conEscolta(caravana, indiceTropa(estado.heroes)),
     capacidadCargaDe(atacante, estado.caravanas),
     heridos,
-    ctx.rng
+    ctx.rng,
+    estado.heroes
   );
   // La escolta vuelve a su héroe: la de una caravana capturada, a 0 y al campamento (Doc 5.15.4).
   const queda = emboscada.caravana ? sinEscolta(emboscada.caravana) : undefined;

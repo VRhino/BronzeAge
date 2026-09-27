@@ -424,7 +424,7 @@ De una frontera que solo **recuerdas** queda hasta dónde llegaba, no su trazo e
 
 **Para qué sirve:** una plaza recién conquistada queda sin guarnición (5.15.5). Al cambiar de dueño arrancan dos relojes distintos:
 
-- **La protección del nuevo dueño**, un día de mundo: nadie puede asediarla mientras se recupera y recluta con qué defenderse, para que no cambie de manos cada vez que pasa un ejército. Pasado ese día, quien quiera conservarla tiene que defenderla: trasladar allí su campamento y asignar guarnición, o estar dentro cuando la ataquen.
+- **La protección del nuevo dueño**, un día de mundo: nadie puede asediarla mientras se recupera y recluta con qué defenderse, para que no cambie de manos cada vez que pasa un ejército. Un asentamiento recién fundado nace con la misma protección (Doc 1.2). Pasado ese día, quien quiera conservarla tiene que defenderla: trasladar allí su campamento y asignar guarnición, o estar dentro cuando la ataquen.
 - **La ventana de ocupación**, más corta: el coste de haberla tomado.
 
 Diseño en `Consideraciones/Ocupacion_Post_Conquista_Definicion.md`. Cifras placeholder en `OCUPACION`.
@@ -601,7 +601,7 @@ Las batallas no son automáticas, salvo NPC contra NPC, que se resuelve con núm
 
 Las escuadras de un héroe que no está en la batalla no combaten, estén donde estén. Solo hay dos excepciones, en las que una escuadra combate sin su héroe, manejada por la IA del juego: la **guarnición** de un asentamiento (5.15.3) y la **escolta** de una caravana (5.15.4).
 
-Los topes de una batalla cuentan **héroes**: **15 por bando en un asedio**, y **5** en mundo abierto, contra una caravana o contra un campamento de bandidos. Los héroes que sobran esperan en cola y entran a medida que caen otros. Las escuadras sin héroe no ocupan plaza.
+Los topes de una batalla cuentan **héroes**: **5 por bando** en cualquier batalla —asedio, mundo abierto, contra una caravana o contra un campamento de bandidos—. En una partida de Unity los que sobran esperan en cola y entran a medida que caen otros; en una que se resuelve con números (5.15.6) entran los de **más nivel** y, a igual nivel, los de **escuadras más fuertes**, y el resto no combate. Las escuadras sin héroe no ocupan plaza.
 
 Una partida dura como mucho **30 minutos en un asedio** y **15 en el resto**. Si agota su tiempo, **gana el defensor**, en cualquier batalla; el atacante es siempre quien inicia el combate. En un asedio gana la plaza (5.2); en campo abierto, el atacado; contra una caravana, la caravana; y contra un campamento de bandidos, los bandidos: los héroes que lo atacaron pierden.
 

@@ -7,6 +7,7 @@
 // y se deshacen al salir, devolviendo al héroe las escuadras que cambiaron (`conEscuadrones`).
 import type { Asentamiento, Caravana, Ejercito, Escuadron, Heroe } from '../domain/types';
 import { esResidente } from './pertenencia';
+import { BATALLA, MILITAR, TROPAS_RECLUTABLES } from '../constants';
 
 export type EjercitoConTropa = Ejercito & { escuadrones: Escuadron[] };
 export type CaravanaConEscolta = Caravana & { escolta?: Escuadron[] };
@@ -62,8 +63,24 @@ export function guarnicionDe(asentamiento: Asentamiento, heroes: readonly Heroe[
   return campamentoDe(asentamiento, heroes).filter((e) => e.enGuarnicion);
 }
 
-/** Los héroes que defienden una plaza en persona: residentes que están DENTRO y sanos (Doc 5.12.4, 5.16.4). Son el
- * bando que pierde si la plaza cae. */
+/** Poder de combate (Doc 5.1: héroe-comandante liderando tropa; el resultado es CÁLCULO, no combate visual, Doc 5.10).
+ * `poderBase` sale siempre del catálogo `TROPAS_RECLUTABLES` vía `tropaId` (Doc 5.7/5.8) — toda tropa lo tiene,
+ * y la experiencia la mejora sin cambiarla nunca de identidad (Doc 5.8, a petición del usuario). */
+export function poderEscuadron(e: Escuadron): number {
+  const poderBase = TROPAS_RECLUTABLES.find((t) => t.id === e.tropaId)!.poderBase;
+  return poderBase * e.cantidad * (1 + e.experiencia * MILITAR.bonusExperienciaPorPunto);
+}
+
+/**
+ * Los que entran en una batalla que se resuelve con números, con el tope de héroes por bando (Doc 5.15.1): los de
+ * más nivel y, a igual nivel, los de escuadras más fuertes. Los demás no combaten.
+ */
+export function alTopeDeBatalla<H extends { id: string; nivel: number }>(heroes: readonly H[], escuadrasDe: (heroe: H) => readonly Escuadron[], tope: number): H[] {
+  const poderDe = (h: H) => escuadrasDe(h).reduce((suma, e) => suma + poderEscuadron(e), 0);
+  return [...heroes].sort((a, b) => b.nivel - a.nivel || poderDe(b) - poderDe(a) || (a.id < b.id ? -1 : 1)).slice(0, tope);
+}
+
+/** Los héroes que defienden una plaza en persona: residentes que están DENTRO y sanos (Doc 5.12.4, 5.16.4). */
 export function heroesQueDefienden(asentamiento: Asentamiento, heroes: readonly Heroe[], heridos: ReadonlySet<string>): Heroe[] {
   return heroes.filter(
     (h) =>
@@ -74,14 +91,25 @@ export function heroesQueDefienden(asentamiento: Asentamiento, heroes: readonly 
   );
 }
 
+/** Los que de verdad defienden cuando el asedio se resuelve con números: los que defienden en persona, con el tope
+ * de héroes por bando (`alTopeDeBatalla`). Son el bando que pierde si la plaza cae. */
+export function heroesQueEntranADefender(asentamiento: Asentamiento, heroes: readonly Heroe[], heridos: ReadonlySet<string>): Heroe[] {
+  return alTopeDeBatalla(heroesQueDefienden(asentamiento, heroes, heridos), loadoutEnCampamento, BATALLA.capacidad.asedio);
+}
+
+function loadoutEnCampamento(h: Heroe): Escuadron[] {
+  const ids = new Set(h.loadouts.find((l) => l.activo)?.squadIds ?? []);
+  return h.escuadrones.filter((e) => ids.has(e.id) && e.contenedor.tipo === 'campamento');
+}
+
 /**
- * Quién defiende una plaza en un asedio que se resuelve con números (Doc 5.12.4): su guarnición, y cada residente
- * que está DENTRO y sano con las escuadras de su loadout activo que tenga en el campamento (decisión del usuario
- * 2026-09-14). El loadout de un herido no defiende; la guarnición sí, porque no tiene héroe (Doc 5.16.4). El resto
- * del campamento no defiende. El Liderazgo del loadout ya se comprobó al guardarlo.
+ * Quién defiende una plaza en un asedio que se resuelve con números (Doc 5.12.4): su guarnición, y los residentes que
+ * entran a defender (`heroesQueEntranADefender`) con las escuadras de su loadout activo que tengan en el campamento
+ * (decisión del usuario 2026-09-14). El loadout de un herido no defiende; la guarnición sí, porque no tiene héroe
+ * (Doc 5.16.4). El resto del campamento no defiende. El Liderazgo del loadout ya se comprobó al guardarlo.
  */
 export function defensaDe(asentamiento: Asentamiento, heroes: readonly Heroe[], heridos: ReadonlySet<string>): Escuadron[] {
-  const enPersona = new Set(heroesQueDefienden(asentamiento, heroes, heridos).flatMap((h) => h.loadouts.find((l) => l.activo)?.squadIds ?? []));
+  const enPersona = new Set(heroesQueEntranADefender(asentamiento, heroes, heridos).flatMap((h) => h.loadouts.find((l) => l.activo)?.squadIds ?? []));
   return heroes
     .filter((h) => esResidente(asentamiento, h.id))
     .flatMap((h) => h.escuadrones.filter((e) => e.contenedor.tipo === 'campamento' && (e.enGuarnicion || enPersona.has(e.id))));

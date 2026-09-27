@@ -1,6 +1,6 @@
 import type { Asentamiento, Faccion } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
-import { CAP_FUNDACION_POR_NIVEL, CIUDADANIA, CUPO_NIVEL_ASENTAMIENTO, NIVEL_FACCION } from '../constants';
+import { CAP_FUNDACION_POR_NIVEL, CUPO_NIVEL_ASENTAMIENTO, NIVEL_FACCION } from '../constants';
 import { CAMPO_CARGO, esResidente, resideEnOtroAsentamiento } from './pertenencia';
 
 /** Fase A5 — payload de `faccion.nivel_subio` (ver `avanzarNivelesFaccion`). */
@@ -120,14 +120,11 @@ export function registrarDerrota(
   facciones: readonly Faccion[],
   asentamientos: readonly Asentamiento[],
   perdedoraId: string,
-  ganadoraId: string
+  /** `null` si nadie la derrotó: su última plaza colapsó (Doc 4.5). */
+  ganadoraId: string | null
 ): Faccion[] {
   if (asentamientos.some((a) => a.faccionId === perdedoraId)) return [...facciones];
   return facciones.map((f) => (f.id === perdedoraId ? { ...f, derrotadaPor: ganadoraId } : f));
-}
-
-export function capacidadCasas(asentamiento: Asentamiento): number {
-  return CIUDADANIA.casasBasePorAsentamiento + (asentamiento.nivel - 1) * CIUDADANIA.casasPorNivelAdicional;
 }
 
 /**
@@ -159,9 +156,6 @@ export function comprarCasa(
   }
   if (resideEnOtroAsentamiento(asentamientos, asentamiento.id, heroeId)) {
     throw new FaccionInvalidaError('El jugador ya reside en otro asentamiento (Doc 2.1: 1 jugador, 1 asentamiento).');
-  }
-  if (asentamiento.casasCompradas.length >= capacidadCasas(asentamiento)) {
-    throw new FaccionInvalidaError('No quedan espacios de vivienda para ciudadanos en este asentamiento.');
   }
 
   return {
@@ -207,9 +201,6 @@ export function cambiarResidencia(
   }
   if (destino.vetadosIds?.includes(heroeId) || destino.politicaDeAcceso === 'cerrado') {
     throw new FaccionInvalidaError('El asentamiento de destino no admite nuevos residentes ahora mismo.');
-  }
-  if (destino.casasCompradas.length + destino.heroesFundadoresIds.length >= capacidadCasas(destino)) {
-    throw new FaccionInvalidaError('No quedan espacios de vivienda en el destino.');
   }
 
   const cargosOrigen = { ...origen.cargos };
