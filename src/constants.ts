@@ -1563,15 +1563,15 @@ export const MILITAR = {
 };
 
 /**
- * Ocupación post-conquista (Doc 5.4, `Consideraciones/Ocupacion_Post_Conquista_Definicion.md`). Al conquistar,
- * el ejército conquistador SE VUELVE la guarnición (`absorberColumna`), el asentamiento se saquea y entra en
- * una ventana de ocupación de tiempo fijo: inmune a nuevo asedio, recaudación y crecimiento reducidos,
- * mantenimiento congelado. Corta el ping-pong de conquistas — reconquistar exige ganar un asedio real contra
- * la guarnición instalada. TODO PLACEHOLDER, a calibrar en batch (Paso 10 del plan).
+ * Ocupación post-conquista (Doc 5.12.9, `Consideraciones/Ocupacion_Post_Conquista_Definicion.md`). Al conquistar,
+ * el asentamiento se saquea y entra en una ventana de ocupación de tiempo fijo: inmune a nuevo asedio, recaudación
+ * y crecimiento reducidos, mantenimiento congelado. Corta el ping-pong de conquistas.
  */
 export const OCUPACION = {
-  duracionMinutos: 90,
-  /** Fracción de pesants+artesanos que se pierde en el saqueo (nobleza intacta, huye/negocia). */
+  // Un día de mundo (2026-09-27, decisión del usuario): lo que tarda la plaza en recuperarse y reclutar con qué
+  // defenderse. Con 90 min, en la Era I medida, una plaza conquistada duraba 0,1 días de mediana en manos de su dueño.
+  duracionMinutos: 1440,
+  /** Fracción de pesants, artesanos y nobleza que se pierde en el saqueo. */
   fraccionSaqueoPoblacion: 0.25,
   /** Fracción de los edificios `activo` que el saqueo baja a `en_cola` marcados `danado` — excluidos Centro
    * Urbano y al menos una Granja y una Leñera activas. */
