@@ -32,6 +32,7 @@ import {
 import { costoDeTrazo, areaEncerradaDeRecinto, edificiosExtramurosDe } from '../src/engine/muralla';
 import { EDIFICIO_CATALOGO, LAYOUT_VERSION, LOGISTICA, NIVEL_ASENTAMIENTO, PERFILES_TRAZADO, SIMULACION, TRAZADO, ZONA_INFLUENCIA, type PerfilTrazado } from '../src/constants';
 import { instanteDeTick, isoDeInstante } from '../src/session/estado';
+import { MedidorGuerra } from './batch/medidorGuerra';
 
 /** Overrides por entorno para poder hacer pasadas cortas de humo sin esperar la corrida completa
  * (`BATCH_TICKS=200 BATCH_FACCIONES=10 node ...`). Sin variables, los valores son los de siempre — ninguna
@@ -1192,6 +1193,7 @@ async function main() {
   // Curtiduría auto llegaban nunca a construirse (edificios de transformación a 0 en ~la mitad de las seeds).
   let contadorNpc = DESDE?.contadorNpc ?? 0;
 
+  const guerra = new MedidorGuerra(estado, TICK_INICIAL);
   const arranqueMs = Date.now();
   for (let tick = TICK_INICIAL + 1; tick <= TICK_FINAL; tick++) {
     try {
@@ -1269,6 +1271,7 @@ async function main() {
         }
       }
       const trasNpc = avanzarNpcGobernanza(trasMotor, mapa, contexto, { ...config, contadorInicial: contadorNpc });
+      guerra.registrarTick(tick, estado, trasMotor, trasNpc.estado, trasNpc.stats);
       contadorNpc = trasNpc.contadorFinal;
       estado = trasNpc.estado;
       reclutamientosAcumulados += trasNpc.stats.reclutamientosExitosos;
@@ -1591,6 +1594,22 @@ async function main() {
   for (let nv = 2; nv <= 5; nv++) {
     lineaDeEdades(nv, 'pidió ', edadAlPedirNivel.get(nv));
     lineaDeEdades(nv, 'llegó ', edadAlSubirNivel.get(nv));
+  }
+
+  for (const linea of guerra.informe()) console.log(linea);
+
+  // Trueques para crecer (npcGobernanza, 2026-09-27): los que piden algo que no es de Mantenimiento.
+  const paraCrecer = new Map<string, Map<string, number>>();
+  for (const ac of estado.acuerdos) {
+    if (['madera', 'piedra', 'oro'].includes(ac.recursoB)) continue;
+    const porEstado = paraCrecer.get(ac.recursoB) ?? new Map<string, number>();
+    porEstado.set(ac.estado, (porEstado.get(ac.estado) ?? 0) + 1);
+    paraCrecer.set(ac.recursoB, porEstado);
+  }
+  console.log(`
+=== TRUEQUES PARA CRECER (acuerdos al final, por recurso pedido y estado) ===`);
+  for (const [recurso, porEstado] of paraCrecer) {
+    console.log(`  ${recurso.padEnd(14)} ${[...porEstado.entries()].map(([e, n]) => `${e} ${n}`).join(', ')}`);
   }
 
   console.log(JSON.stringify({ fotos, excepciones: excepcionesAcumuladas }, null, 2));

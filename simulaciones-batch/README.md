@@ -23,6 +23,10 @@ BATCH_DESDE=simulaciones-batch/checkpoints/batch-seed7-f12-tick50400.json BATCH_
 - **Solo se reanuda un checkpoint compatible con el motor actual**: misma `WORLDGEN_VERSION` y misma
   `LAYOUT_VERSION`, el mismo criterio que las partidas guardadas del servidor. Si no, el script se niega y dice por
   qué. Un cambio de **balance** sí se puede probar desde un checkpoint viejo: para eso sirve.
+- Al final, además de las fotos, el script imprime varios bloques de diagnóstico: extracción, bloqueos de la subida
+  de nivel, ritmo de crecimiento, **GUERRA** (`scripts/batch/medidorGuerra.ts`: campañas, asedios por tipo,
+  conquistas y quién a quién, cuánto aguanta cada dueño, bajas por tropa, experiencia de Facción por origen y día en
+  que cada Facción alcanza su nivel) y los trueques para crecer.
 - El mundo reanudado es idéntico al de no haber parado (verificado al tick). Los contadores `*Acumulados` de las
   fotos y el bloque de ritmo cuentan desde el arranque de **esa** corrida: al reanudar, son los de la Era medida.
 

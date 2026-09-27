@@ -47,7 +47,7 @@ import {
 } from '../engine/asentamientoQuery';
 import { cantidadDisponible, tieneRecursos } from '../engine/almacen';
 import { asignarCargoLocal, CargoInvalidoError } from '../engine/cargos';
-import { anadirEdificioManualmente, reclamosDeFuentes, ConstruccionManualInvalidaError } from '../engine/construction';
+import { anadirEdificioManualmente, reclamosDeFuentes, ConstruccionManualInvalidaError, tieneInsumoDeArranque } from '../engine/construction';
 import { comprometerRecintoManualmente, RecintoInvalidoError } from '../engine/muralla';
 import {
   aceptarTrueque,
@@ -59,9 +59,19 @@ import {
 } from '../engine/trade';
 import { computeTodasLasZonas } from '../engine/zones';
 import { calcularCostoMantenimiento, calcularNivelAsentamiento, encontrarCapital } from '../engine/mantenimiento';
-import { evaluarAscenso, iniciarAscenso } from '../engine/ascenso';
+import { cupoLibreParaNivel, evaluarAscenso, iniciarAscenso } from '../engine/ascenso';
 import { evaluarViabilidadFundacion, fundarAsentamiento, FundacionInvalidaError } from '../engine/settlement';
-import { CAMPAMENTOS_BANDIDOS, LIDERAZGO, LOGISTICA, MILITAR, TROPAS_RECLUTABLES, VISION } from '../constants';
+import {
+  ASCENSO_ASENTAMIENTO,
+  CAMPAMENTOS_BANDIDOS,
+  EDIFICIO_CATALOGO,
+  LIDERAZGO,
+  LOGISTICA,
+  MILITAR,
+  NIVEL_ASENTAMIENTO,
+  TROPAS_RECLUTABLES,
+  VISION,
+} from '../constants';
 import { situarHeroes } from '../engine/ubicacion';
 import { movilizarEjercito, replegarEjercito, tieneHeroeSano, MovilizacionInvalidaError } from '../engine/ejercitos';
 import { consumoRacionDeEscuadrones, reservaDeTrigo } from '../engine/tropas';
@@ -572,45 +582,118 @@ function truequeDeSupervivencia(
     for (const recurso of enRiesgo) {
       if (yaTieneAyudaEnCaminoPara([...acuerdosExistentes, ...acuerdosNuevos], necesitado.id, recurso)) continue;
 
-      // El SOCIO también tiene que ser NPC, y **el motivo cambió** el 2026-09-07: ya no es el consentimiento
-      // —`proponerTrueque` solo propone, y `responderPropuestasNpc` contesta—, sino que esto es un SALVAVIDAS.
-      // Una plaza a la que le falta un recurso de Mantenimiento no puede quedarse esperando a que un humano
-      // se conecte y conteste; el NPC de al lado responde en el mismo tick. Un jugador que quiera comerciar
-      // con el NPC tiene los dos caminos abiertos: proponerle un trueque él (y el NPC contesta), o comprarle
-      // en el mostrador (`publicarOrdenesNpc`).
-      // En batch, donde no hay humano, `esNpc` es siempre true y el comportamiento es el de siempre.
-      const socio = asentamientos.find(
-        (s) => s.id !== necesitado.id && esNpc(s.faccionId) && fraccionDisponible(s, recurso) > COLCHON_EXCEDENTE_SUPERVIVENCIA
-      );
-      if (!socio) continue;
-
-      const pago = mejorRecursoDePagoSupervivencia(necesitado, recurso, enRiesgo);
-      if (!pago) continue;
-
-      try {
-        const acuerdo = proponerTrueque(
-          asentamientos,
-          necesitado.id,
-          socio.id,
-          pago,
-          recurso,
-          CANTIDAD_TRUEQUE_SUPERVIVENCIA,
-          CANTIDAD_TRUEQUE_SUPERVIVENCIA,
-          instante,
-          contador++
-        );
-        acuerdosNuevos.push(acuerdo);
-        propuestos++;
-        eventos.push(
-          `${necesitado.id} propone trueque de supervivencia: ${CANTIDAD_TRUEQUE_SUPERVIVENCIA} ${pago} por ${CANTIDAD_TRUEQUE_SUPERVIVENCIA} ${recurso} con ${socio.id} (Facción ${socio.faccionId}).`
-        );
-      } catch (err) {
-        if (!(err instanceof TruequeInvalidoError)) throw err;
-      }
+      const acuerdo = pedirAyuda(asentamientos, necesitado, recurso, CANTIDAD_TRUEQUE_SUPERVIVENCIA, enRiesgo, instante, contador++, esNpc);
+      if (!acuerdo) continue;
+      acuerdosNuevos.push(acuerdo);
+      propuestos++;
+      eventos.push(`${necesitado.id} propone trueque de supervivencia: ${acuerdo.cantidadTotalA} ${acuerdo.recursoA} por ${acuerdo.cantidadTotalB} ${recurso} con ${acuerdo.asentamientoBId}.`);
     }
   }
 
   return { acuerdosNuevos, eventos, contador, propuestos };
+}
+
+/**
+ * Propone a otra plaza NPC con excedente real de `recurso` un trueque de `cantidad` por `cantidad`, pagando con el
+ * mejor recurso propio de sobra (`mejorRecursoDePagoSupervivencia`, sin tocar los de `noPagarCon`). `undefined` si
+ * no hay socio, no hay con qué pagar o el motor lo rechaza.
+ *
+ * El SOCIO tiene que ser NPC, y **el motivo cambió** el 2026-09-07: ya no es el consentimiento —`proponerTrueque`
+ * solo propone, y `responderPropuestasNpc` contesta—, sino que la plaza no puede quedarse esperando a que un humano
+ * se conecte y conteste; el NPC de al lado responde en el mismo tick. Un jugador que quiera comerciar con el NPC
+ * tiene los dos caminos abiertos: proponerle un trueque él (y el NPC contesta), o comprarle en el mostrador
+ * (`publicarOrdenesNpc`). En batch, donde no hay humano, `esNpc` es siempre true.
+ */
+function pedirAyuda(
+  asentamientos: Asentamiento[],
+  necesitado: Asentamiento,
+  recurso: RecursoTipo,
+  cantidad: number,
+  noPagarCon: RecursoTipo[],
+  instante: Instante,
+  contador: number,
+  esNpc: (faccionId: string) => boolean
+): AcuerdoTrueque | undefined {
+  const socio = asentamientos.find(
+    (s) => s.id !== necesitado.id && esNpc(s.faccionId) && fraccionDisponible(s, recurso) > COLCHON_EXCEDENTE_SUPERVIVENCIA
+  );
+  if (!socio) return undefined;
+  const pago = mejorRecursoDePagoSupervivencia(necesitado, recurso, noPagarCon);
+  if (!pago) return undefined;
+  try {
+    return proponerTrueque(asentamientos, necesitado.id, socio.id, pago, recurso, cantidad, cantidad, instante, contador);
+  } catch (err) {
+    if (!(err instanceof TruequeInvalidoError)) throw err;
+    return undefined;
+  }
+}
+
+/**
+ * Lo que a una plaza le falta para su siguiente nivel y no puede hacer ella misma (decisión del usuario,
+ * 2026-09-27): los recursos del coste de la subida que no son de Mantenimiento (el bronce del nivel 3), y el insumo
+ * de arranque de los edificios del requisito que no tiene (ganado para la Curtiduría, cobre para la Fundición: sin
+ * él no se proponen, `tieneInsumoDeArranque`). Madera, piedra y oro quedan fuera: los produce o los pide el trueque
+ * de supervivencia.
+ *
+ * Solo si su Facción tiene cupo para ese nivel: pedir bronce para una subida que no puede hacer es acapararlo.
+ */
+function necesidadesParaCrecer(
+  plaza: Asentamiento,
+  asentamientos: readonly Asentamiento[],
+  faccion: Faccion | undefined
+): { recurso: RecursoTipo; cantidad: number }[] {
+  const nivelObjetivo = plaza.nivel + 1;
+  const tarifa = ASCENSO_ASENTAMIENTO.porNivelObjetivo[nivelObjetivo];
+  const requisito = NIVEL_ASENTAMIENTO.requisitos[nivelObjetivo];
+  if (!tarifa || !requisito || !cupoLibreParaNivel(faccion, asentamientos, nivelObjetivo)) return [];
+
+  const necesidades: { recurso: RecursoTipo; cantidad: number }[] = [];
+  for (const [recurso, cantidad] of Object.entries(tarifa.costo)) {
+    if (RECURSOS_MANTENIMIENTO.includes(recurso as RecursoTipo)) continue;
+    const falta = (cantidad ?? 0) - cantidadDisponible(plaza.almacen, recurso);
+    if (falta > 0) necesidades.push({ recurso: recurso as RecursoTipo, cantidad: Math.ceil(falta) });
+  }
+  for (const tipo of requisito.edificios as EdificioTipo[]) {
+    if (plaza.edificios.some((e) => e.tipo === tipo) || tieneInsumoDeArranque(plaza, tipo)) continue;
+    const niveles = (EDIFICIO_CATALOGO[tipo] as { niveles?: Record<number, { recetas: { consumePorUnidad: Partial<Record<string, number>> }[] }> }).niveles;
+    const insumo = Object.keys(niveles?.[1]?.recetas[0]?.consumePorUnidad ?? {})[0];
+    if (insumo) necesidades.push({ recurso: insumo as RecursoTipo, cantidad: CANTIDAD_TRUEQUE_SUPERVIVENCIA });
+  }
+  return necesidades;
+}
+
+/**
+ * Trueque para CRECER: cada plaza NPC pide por trueque lo que le falta para su siguiente nivel y no produce
+ * (`necesidadesParaCrecer`), a la primera plaza NPC que le sobre. Es el camino del bronce en la Era I (D54): la
+ * aleación pide estaño, casi siempre de fuera, y sin esto ninguna plaza NPC llegaba al nivel 3 (batch de la Era I,
+ * 2026-09-26: las que tenían bronce no tenían Curtiduría, y las que tenían los edificios no tenían bronce). Mismo
+ * mecanismo que el de supervivencia, y como él no repite petición mientras haya una en curso.
+ */
+function truequeParaCrecer(
+  asentamientos: Asentamiento[],
+  facciones: readonly Faccion[],
+  acuerdosExistentes: AcuerdoTrueque[],
+  instante: Instante,
+  contadorInicial: number,
+  esNpc: (faccionId: string) => boolean
+): { acuerdosNuevos: AcuerdoTrueque[]; eventos: string[]; contador: number } {
+  const acuerdosNuevos: AcuerdoTrueque[] = [];
+  const eventos: string[] = [];
+  let contador = contadorInicial;
+
+  for (const plaza of asentamientos) {
+    if (!esNpc(plaza.faccionId) || plaza.ascenso) continue;
+    const faccion = facciones.find((f) => f.id === plaza.faccionId);
+    for (const { recurso, cantidad } of necesidadesParaCrecer(plaza, asentamientos, faccion)) {
+      if (yaTieneAyudaEnCaminoPara([...acuerdosExistentes, ...acuerdosNuevos], plaza.id, recurso)) continue;
+      const acuerdo = pedirAyuda(asentamientos, plaza, recurso, cantidad, [], instante, contador++, esNpc);
+      if (!acuerdo) continue;
+      acuerdosNuevos.push(acuerdo);
+      eventos.push(`${plaza.id} propone trueque para crecer: ${cantidad} ${acuerdo.recursoA} por ${cantidad} ${recurso} con ${acuerdo.asentamientoBId}.`);
+    }
+  }
+
+  return { acuerdosNuevos, eventos, contador };
 }
 
 /**
@@ -1594,11 +1677,19 @@ export function avanzarNpcGobernanza(
   const trueque = truequeDeSupervivencia(asentamientos, capitalesPorFaccion, estado.acuerdos, instante, contador, esNpc);
   contador = trueque.contador;
   eventos.push(...trueque.eventos);
+  const paraCrecer = truequeParaCrecer(asentamientos, facciones, [...estado.acuerdos, ...trueque.acuerdosNuevos], instante, contador, esNpc);
+  contador = paraCrecer.contador;
+  eventos.push(...paraCrecer.eventos);
 
   // Contestar va DESPUES de proponer y en el mismo tick: asi un trueque entre dos NPC nace y se acepta de
   // una pasada, igual que antes de que la aceptacion existiera. Tambien recoge aqui las propuestas que un
   // JUGADOR haya dejado pendientes desde su turno.
-  const respuestas = responderPropuestasNpc(asentamientos, [...estado.acuerdos, ...trueque.acuerdosNuevos], esNpc, instante);
+  const respuestas = responderPropuestasNpc(
+    asentamientos,
+    [...estado.acuerdos, ...trueque.acuerdosNuevos, ...paraCrecer.acuerdosNuevos],
+    esNpc,
+    instante
+  );
   eventos.push(...respuestas.eventos);
 
   const estadoConGobernanzaBase: EstadoSimulacion = {

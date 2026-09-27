@@ -631,3 +631,22 @@ más las cuadrillas (§11.1) y el arreglo de la capacidad del Almacén (la conqu
   la semana 2. La guarnición se usa (111 escuadras), pero 12 plazas siguen sin defensa: las conquistadas sin
   residentes. Ninguna muralla.
 - Tropas al final: milicia 189, honderos 110, lanceros de mimbre 110, espadachines de cobre 5.
+
+### 11.4 Era I con trueque para crecer y bloque de guerra (2026-09-27)
+
+Misma corrida que §11.3 más el trueque para crecer del NPC (decisión del usuario: el bronce llega comerciando) y el
+bloque GUERRA del batch (`scripts/batch/medidorGuerra.ts`).
+
+- **Nivel 3: 4 plazas (9 % de las nacidas)**, pedido a las 2,4 semanas y alcanzado a las 3,4 de mediana. Cuadra con
+  D49 ("pocos en 3" en la Era I). 21 trueques de bronce cumplidos. Tres plazas ya piden el nivel 4 a las 4,4 semanas y
+  levantan su empalizada, porque el 3→4 aún no está atado a `instituciones_civicas` (D54, pendiente).
+- Los trueques de ganado y cobre se proponen mucho y casi todos caducan (639 y 390 caducados contra 6 y 10 cumplidos).
+- **Guerra** (5 semanas): 615 conquistas, el 98 % de plazas sin un solo defensor. Solo 13 plazas cambian de dueño, y
+  10 de ellas más de 20 veces (una, 204): dos Facciones se pasan las mismas plazas vacías cada ~2 h, y el 96 % de las
+  conquistas las recupera un dueño anterior. En los 2 256 asedios contra una plaza defendida, el atacante gana el
+  0,4 %: poder mediano del atacante 0,2 veces el del defensor. Mueren ~80 000 soldados (milicia 42 700, lanceros de
+  mimbre 22 800, honderos 14 000).
+- **Experiencia de Facción**: combate ~182 000, conquista ~12 300, construcción ~7 800. Los campamentos de bandidos
+  (5 024 destruidos, uno cada 10 ticks) llevan a una Facción a nivel 8 en 10 horas y a nivel 10 en 1,2 días; cada
+  asedio suicida contra una plaza defendida también da experiencia a los dos bandos. 6 Facciones llegan a nivel 10;
+  5 no pasan del nivel 2 y no conquistan nada.

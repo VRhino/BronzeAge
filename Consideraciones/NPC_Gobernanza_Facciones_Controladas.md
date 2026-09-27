@@ -65,6 +65,12 @@ tick dado si el paso 2 (Granjas mínimas) no queda satisfecho — el resto de la
    desde nivel 2, +oro desde nivel 3), busca un socio con excedente real y le propone un trueque, pagando con
    su mejor recurso de sobra; oro como último recurso. No pacta de nuevo si ya tiene ayuda en camino para ese
    recurso, venga del socio que venga.
+   **Trueque para crecer** (2026-09-27, decisión del usuario): con el mismo mecanismo, pide lo que le falta para su
+   siguiente nivel y no produce — los recursos del coste de la subida que no son de Mantenimiento (el bronce del
+   nivel 3) y el insumo de arranque de los edificios del requisito que no tiene (ganado para la Curtiduría, cobre
+   para la Fundición). Solo si su Facción tiene cupo para ese nivel, para no acaparar. Salió del batch de la Era I:
+   las órdenes de mercado del NPC solo se cumplen en el mostrador, ningún NPC las toma, y el bronce no se movía
+   nunca entre plazas NPC.
 6. **Trueque de especialización** — se delega en `avanzarAutoComercioSimulado` (motor), que equilibra
    minerales/livestock dentro de una misma Facción con 2+ asentamientos. Ver §6.
 7. **Reclutamiento** — cada residente repone su escuadrón. Un solo gate propio del NPC: no recluta si el
