@@ -30,7 +30,7 @@ El combate ocurre en INSTANCIAS separadas del mapa global (aunque se desencadene
 4. **Entrenamiento/matchmaking** (pospuesto a una fase posterior a Fase 0/1): 15v15 puro, sin permadeath, para probar tácticas. Requiere lo mismo que el Attack Timer (5.6).
 ### 5.2.5 Resolución numérica y varianza de combate
 
-Las batallas que se resuelven con números (5.15.6) suman el poder de cada bando y **multiplican cada uno por un factor aleatorio de ±15%** (`MILITAR.varianzaCombate`). Gana quien saque el producto más alto. Cuanto más ajustado el resultado, más bajas sufre también el ganador; el perdedor siempre pierde más. El azar entra **una sola vez por bando y por combate** — no hay tiradas por unidad ni por ronda. El poder de cada escuadrón sube un **5% por cada nivel** que tenga (5.16.3).
+Las batallas que se resuelven con números (5.15.6) suman el poder de cada bando y **multiplican cada uno por un factor aleatorio de ±15%** (`MILITAR.varianzaCombate`). Gana quien saque el producto más alto. **El defensor tiene una pequeña ventaja**: su poder se multiplica además por `MILITAR.ventajaDefensor` (×1,05), y en un empate exacto gana él. Cuanto más ajustado el resultado, más bajas sufre también el ganador; el perdedor siempre pierde más. El azar entra **una sola vez por bando y por combate** — no hay tiradas por unidad ni por ronda. El poder de cada escuadrón sube un **1% por cada nivel** que tenga, hasta el nivel 10 (5.16.3).
 
 **Qué implica ese ±15%**: los multiplicadores van de 0.85 a 1.15, así que el cociente entre ambos bandos va de 0.74 a 1.35. Es decir, **un atacante necesita un 35% más de poder para tener la victoria garantizada**; por debajo de eso siempre puede perder. Ese margen no es un detalle de implementación: es lo que decide cuándo merece la pena atacar, sabiendo que marchar cuesta tiempo real, deja la ciudad descubierta, vacía el almacén y las bajas son permanentes.
 
@@ -677,6 +677,7 @@ El detalle de datos del héroe está en `Docs/Coordinacion/01_Modelo_de_datos_co
 ### 5.16.3 Progresión
 
 - Héroe y escuadrones progresan con **nivel y experiencia**, al estilo de Conquest.
+- **El nivel de un escuadrón va del 1 al 10** y cada nivel le da **+1% de poder**: el nivel 1 tiene +1% y el 10, el máximo, +10%. Cada nivel pide una cantidad de experiencia; al llenarla, sube al siguiente. Los primeros piden poca y cada uno pide el doble que el anterior hasta el nivel 5; desde ahí todos piden lo mismo (`MILITAR.experienciaParaSubirEscuadra`: 5, 10, 20, 40 y luego 40 por nivel). En el combate con números, un escuadrón gana 1 de experiencia si su bando vence y 0,5 si pierde.
 - **La experiencia del Héroe depende de su desempeño en la batalla**: unidades y héroes abatidos, capturas de bandera, daño hecho y recibido, si fue el mejor de la partida, en qué puesto de la tabla de su bando terminó, entre otros factores. La calcula la propia partida (Unity), que es la única que ve esos datos. **La de los escuadrones también**: la calcula la partida con toda la información de la batalla.
 - **El botín también lo decide la partida**: qué objetos y cuántas monedas gana cada héroe en una batalla lo calcula Unity, igual que la experiencia, y el héroe lo guarda en su inventario y sus monedas.
 

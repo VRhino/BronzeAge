@@ -38,8 +38,13 @@
  * v10 (2026-09-14): modelo de Héroe, fase 2 — `MILITAR.bonusVeteraniaPorPunto`/`veteraniaGanada*` pasan a
  *   `bonusExperienciaPorPunto`/`experienciaGanada*` (mismos valores), y salen `duracionHeridoMinutos` y
  *   `penalizacionHerido`: los escuadrones ya no quedan heridos.
+ * v11: bump sin entrada aquí.
+ * v12 (2026-09-27): ritmo de crecimiento y guerra de la Era I — nivel de escuadra (`MILITAR.bonusPoderPorNivelEscuadra`,
+ *   `nivelMaximoEscuadra`, `experienciaParaSubirEscuadra` en lugar de `bonusExperienciaPorPunto`), `ventajaDefensor`,
+ *   `OCUPACION.proteccionMinutos`, `BATALLA.capacidad.asedio` a 5, fuera `CIUDADANIA.casas*`, y los cambios de
+ *   población, experiencia de Facción y ascenso de la rama `ritmo-crecimiento`.
  */
-export const BALANCE_VERSION = 11;
+export const BALANCE_VERSION = 12;
 
 /**
  * Modelo temporal (Fase D, Docs/Arquitectura/10_Modelo_Temporal.md). **Decisión del usuario (2026-08-29):
@@ -1544,11 +1549,17 @@ export const MILITAR = {
   degradacionMoralSinRacion: 20,
   // Fracción de la cantidad del escuadrón que deserta por minuto mientras la moral está a 0 (Doc 5.4).
   desercionFraccionPorMinutoSinMoral: 0.05,
-  bonusExperienciaPorPunto: 0.05,
-  // Experiencia de escuadra en el combate numérico: los valores de la antigua veteranía, hasta que Conquest
-  // publique su curva de XP (CQ-001; decisión del usuario 2026-09-14).
+  // Nivel de escuadra (Doc 5.16.3, decisión del usuario 2026-09-27): +1 % de poder por nivel, hasta el 10. Cada nivel
+  // pide su experiencia: poca al principio, el doble cada vez hasta el nivel 5, y desde ahí todos lo mismo. Índice i =
+  // la que pide pasar del nivel i+1 al i+2.
+  bonusPoderPorNivelEscuadra: 0.01,
+  nivelMaximoEscuadra: 10,
+  experienciaParaSubirEscuadra: [5, 10, 20, 40, 40, 40, 40, 40, 40],
+  // Experiencia de escuadra en el combate numérico (decisión del usuario 2026-09-14).
   experienciaGanadaPorVictoria: 1,
   experienciaGanadaPorDerrota: 0.5,
+  // Ventaja del defensor en el combate numérico (decisión del usuario 2026-09-27): su poder se multiplica por esto.
+  ventajaDefensor: 1.05,
   // Cohesión entre escuadrones defendiendo juntos (Doc 5.3), abstraída como bonus de poder (sin formaciones renderizadas).
   bonusCohesionPorEscuadronExtra: 0.1,
   varianzaCombate: 0.15,

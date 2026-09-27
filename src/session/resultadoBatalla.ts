@@ -12,7 +12,7 @@ import { aplicarAjustesExperiencia, registrarDerrota, type AjusteExperiencia } f
 import { herir } from '../engine/heroe';
 import { estanAliadas } from '../engine/pertenencia';
 import { aplicarAjustesReputacion } from '../engine/reputacion';
-import { alCampamento, conEscuadrones, sinTropa } from '../engine/tropa';
+import { alCampamento, conEscuadrones, conExperiencia, sinTropa } from '../engine/tropa';
 import {
   BatallaInvalidaError,
   conBatalla,
@@ -99,7 +99,7 @@ function conLoQueTrajo(heroes: readonly Heroe[], b: Batalla, r: BattleResult): H
   const tras = heroes.map((h) => {
     const escuadrones = h.escuadrones.map((e) => {
       const suya = porEscuadra.get(e.id);
-      return suya ? { ...e, cantidad: suya.supervivientesAlCierre, experiencia: e.experiencia + suya.xpGanada } : e;
+      return suya ? { ...conExperiencia(e, suya.xpGanada), cantidad: suya.supervivientesAlCierre } : e;
     });
     const suyo = porHeroe.get(h.id);
     if (!suyo) return { ...h, escuadrones };

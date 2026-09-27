@@ -506,11 +506,9 @@ export interface Escuadron {
   origen: OrigenTropa;
   cantidad: number;
   /**
-   * Nivel y experiencia ACUMULADA (Doc 5.16.3). La experiencia da un bonus de poder continuo al MISMO escuadrón
-   * (`poderEscuadron`, engine/combate.ts) sin cambiar nunca `tropaId` (Doc 5.8).
-   *
-   * `ponytail:` hoy solo la da el combate numérico, con los valores que daba la veteranía, y el nivel se queda en
-   * 1 hasta que Conquest publique su curva de XP (CQ-001; decisión del usuario 2026-09-14).
+   * Nivel y experiencia ACUMULADA (Doc 5.16.3). Cada nivel da +1 % de poder al MISMO escuadrón (`poderEscuadron`,
+   * engine/tropa.ts), hasta el 10, sin cambiar nunca `tropaId` (Doc 5.8). El nivel sale de la experiencia con la
+   * curva de `MILITAR.experienciaParaSubirEscuadra` (`conExperiencia`).
    */
   nivel: number;
   experiencia: number;

@@ -68,7 +68,26 @@ export function guarnicionDe(asentamiento: Asentamiento, heroes: readonly Heroe[
  * y la experiencia la mejora sin cambiarla nunca de identidad (Doc 5.8, a petición del usuario). */
 export function poderEscuadron(e: Escuadron): number {
   const poderBase = TROPAS_RECLUTABLES.find((t) => t.id === e.tropaId)!.poderBase;
-  return poderBase * e.cantidad * (1 + e.experiencia * MILITAR.bonusExperienciaPorPunto);
+  return poderBase * e.cantidad * (1 + e.nivel * MILITAR.bonusPoderPorNivelEscuadra);
+}
+
+/** Nivel de una escuadra con esta experiencia acumulada (Doc 5.16.3): sube cada vez que llena lo que pide su nivel,
+ * hasta `MILITAR.nivelMaximoEscuadra`. */
+export function nivelDeEscuadra(experiencia: number): number {
+  let nivel = 1;
+  let resto = experiencia;
+  for (const pide of MILITAR.experienciaParaSubirEscuadra) {
+    if (nivel >= MILITAR.nivelMaximoEscuadra || resto < pide) break;
+    resto -= pide;
+    nivel++;
+  }
+  return nivel;
+}
+
+/** La escuadra con experiencia ganada, y su nivel al día. */
+export function conExperiencia(e: Escuadron, ganada: number): Escuadron {
+  const experiencia = e.experiencia + ganada;
+  return { ...e, experiencia, nivel: nivelDeEscuadra(experiencia) };
 }
 
 /**

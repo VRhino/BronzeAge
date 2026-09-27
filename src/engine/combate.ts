@@ -1,5 +1,5 @@
 import type { Asentamiento, CampamentoBandido, Ejercito, Escuadron, Faccion, Heroe, RelacionPolitica, UbicacionHeroe } from '../domain/types';
-import { alCampamento, conEscuadrones, poderEscuadron, sinTropa, type CaravanaConEscolta, type EjercitoConTropa } from './tropa';
+import { alCampamento, conEscuadrones, conExperiencia, poderEscuadron, sinTropa, type CaravanaConEscolta, type EjercitoConTropa } from './tropa';
 import { distancia } from '../world/geometria';
 import type { EventoCrudo } from '../domain/eventos';
 import { minutos, sumar, type Instante } from '../domain/tiempo';
@@ -28,8 +28,8 @@ export function poderTotal(escuadrones: readonly Escuadron[], bonusCohesion: boo
 export function aplicarBajas(escuadrones: readonly Escuadron[], fraccionBajas: number, victoria: boolean): Escuadron[] {
   return escuadrones.map((e) => {
     const bajas = Math.round(e.cantidad * fraccionBajas);
-    const experiencia = e.experiencia + (victoria ? MILITAR.experienciaGanadaPorVictoria : MILITAR.experienciaGanadaPorDerrota);
-    return { ...e, cantidad: Math.max(0, e.cantidad - bajas), experiencia };
+    const ganada = victoria ? MILITAR.experienciaGanadaPorVictoria : MILITAR.experienciaGanadaPorDerrota;
+    return { ...conExperiencia(e, ganada), cantidad: Math.max(0, e.cantidad - bajas) };
   });
 }
 
@@ -101,7 +101,9 @@ export function resolverCombate(
   // El multiplicador de muralla (Paso 3b, `multiplicadorDefensivoDeRecintos`) SOLO llega aquí desde
   // `iniciarAsedio` — un encuentro en mundo abierto no lo pasa nunca (1 por defecto): ahí no hay ningún
   // recinto que atravesar, así que aplicarlo ahí sería un bono de la nada.
-  const poderD = poderTotal(defensores, true) * jitterD * multiplicadorDefensor;
+  // Y el defensor, por serlo, tiene una pequeña ventaja (`MILITAR.ventajaDefensor`); el azar de arriba decide los
+  // combates parejos, y en un empate exacto gana él.
+  const poderD = poderTotal(defensores, true) * jitterD * multiplicadorDefensor * MILITAR.ventajaDefensor;
 
   const ganador: 'atacante' | 'defensor' = poderA > poderD ? 'atacante' : 'defensor';
   const ratio = Math.min(poderA, poderD) / Math.max(poderA, poderD, 1);
