@@ -168,6 +168,8 @@ Asentamiento
                                    guarnición de cada héroe también es derivado (edificios y políticas de
                                    este asentamiento, Doc 5.15); no se persiste.
   ocupacionHasta?: Instante          ocupación militar tras conquista — existente
+  protegidaHasta?: Instante          protección del nuevo dueño tras conquista (Doc 5.12.9): nadie la asedia
+                                   hasta entonces — nuevo 2026-09-27
   ascenso?: AscensoEnCurso          obra de ascenso de nivel en marcha, pedida por el Gobernador (Doc 4.5).
                                    Ausente = no hay obra. La borra una conquista — nuevo 2026-09-26:
     nivelObjetivo                  siempre nivel + 1

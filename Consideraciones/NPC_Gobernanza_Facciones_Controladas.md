@@ -230,6 +230,12 @@ espadachines de cobre — hay variedad, pero solo de la gama baja de la Era I: n
   crecer en paz vuelve la expansión y las plazas quedan con 1-2 residentes; sin esta regla, esas casas conquistaban,
   volvían a casa y dejaban la plaza vacía: 485 conquistas en la Era I, el 88 % de plazas sin defensor, y dos
   Facciones pasándose las mismas plazas cada ~2 h.
+- **Reparte sus héroes entre sus plazas** (`repartirHeroesNpc`, 2026-09-27, decisión del usuario): cada tick y por
+  Facción, si entre su plaza con más residentes y la que menos tiene hay 2 o más de diferencia, un héroe de la
+  primera —dentro, sano y sin cargo— se muda a la segunda (`cambiarResidencia`) y sale a pie hacia ella. En la semana
+  1 medida, las capitales tenían de 9 a 22 residentes y cada fundación nueva uno: eran el objetivo de casi todas las
+  campañas.
+- **No sale contra una plaza protegida tras su conquista** (Doc 5.12.9): el asedio rebotaría sin combate.
 
 ## 5. Lo que el NPC NO hace
 

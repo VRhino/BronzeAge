@@ -603,14 +603,17 @@ export interface Asentamiento {
   vetadosIds?: string[];
   politicasActivas: PoliticaActiva[];
   /**
-   * Ocupación militar tras una conquista (Doc 5.4, `Consideraciones/Ocupacion_Post_Conquista_Definicion.md`):
-   * instante de mundo en que TERMINA. Mientras `instante < ocupacionHasta` el asentamiento es INMUNE a un
-   * nuevo asedio, recauda oro reducido (`OCUPACION.factorRecaudacion`), crece más lento
-   * (`OCUPACION.factorCrecimiento`) y su medidor de mantenimiento no degrada. La ventana es puro tiempo —
-   * no se acorta ni se cancela. Se comprueba AL LEER (`estaOcupado`, engine/asentamientoQuery.ts) salvo su
-   * expiración, que `avanzarSimulacion` limpia. Ausente = no ocupado (caso normal).
+   * Ocupación militar tras una conquista (Doc 5.12.9, `Consideraciones/Ocupacion_Post_Conquista_Definicion.md`):
+   * instante de mundo en que TERMINA. Mientras `instante < ocupacionHasta` recauda oro reducido
+   * (`OCUPACION.factorRecaudacion`), crece más lento (`OCUPACION.factorCrecimiento`) y su medidor de mantenimiento
+   * no degrada. La ventana es puro tiempo — no se acorta ni se cancela. Se comprueba AL LEER (`estaOcupado`,
+   * engine/asentamientoQuery.ts) salvo su expiración, que `avanzarSimulacion` limpia. Ausente = no ocupado.
    */
   ocupacionHasta?: Instante;
+  /** Protección del nuevo dueño tras una conquista (Doc 5.12.9): instante en que TERMINA. Mientras
+   * `instante < protegidaHasta` nadie puede asediarla (`estaProtegida`). Puro tiempo, como la ocupación, y
+   * `avanzarSimulacion` la limpia al vencer. Ausente = sin protección. */
+  protegidaHasta?: Instante;
   /** Obra de ascenso de nivel en curso (Doc 4.5, subida manual): ausente = no hay obra. La pide el Gobernador y
    * se paga entera al empezar; al llegar `completaEn`, `nivel` sube a `nivelObjetivo`. Una conquista la borra
    * sin devolución (`aplicarConquista`, engine/combate.ts). */

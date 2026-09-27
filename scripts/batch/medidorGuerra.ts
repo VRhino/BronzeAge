@@ -18,7 +18,7 @@ import { NIVEL_FACCION } from '../../src/constants';
 
 const TICKS_POR_SEMANA = 10_080;
 
-type TipoAsedio = 'conquista en combate' | 'conquista sin defensores' | 'resistido en combate' | 'rebote por ocupación' | 'sin atacantes';
+type TipoAsedio = 'conquista en combate' | 'conquista sin defensores' | 'resistido en combate' | 'rebote por protección' | 'sin atacantes';
 
 interface Semana {
   campanas: number;
@@ -37,7 +37,7 @@ const semanaVacia = (): Semana => ({
   campanas: 0,
   repliegues: 0,
   reclutamientos: 0,
-  asedios: { 'conquista en combate': 0, 'conquista sin defensores': 0, 'resistido en combate': 0, 'rebote por ocupación': 0, 'sin atacantes': 0 },
+  asedios: { 'conquista en combate': 0, 'conquista sin defensores': 0, 'resistido en combate': 0, 'rebote por protección': 0, 'sin atacantes': 0 },
   bajas: 0,
   bajasEnTicksDeCombate: 0,
   xpConstruccion: 0,
@@ -57,7 +57,7 @@ function clasificar(eventos: readonly EventoDominio[], i: number): TipoAsedio {
   const trasCombate = eventos[i - 1]?.codigo === 'combate.resuelto';
   if (ev.codigo === 'combate.asedio_conquista') return trasCombate ? 'conquista en combate' : 'conquista sin defensores';
   if (trasCombate) return 'resistido en combate';
-  return ev.mensaje.includes('ocupación') ? 'rebote por ocupación' : 'sin atacantes';
+  return ev.mensaje.includes('protegida') ? 'rebote por protección' : 'sin atacantes';
 }
 
 const mediana = (xs: number[]) => (xs.length === 0 ? 0 : [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)]!);
@@ -226,13 +226,13 @@ export class MedidorGuerra {
   informe(): string[] {
     const l: string[] = [];
     l.push('', '=== GUERRA ===');
-    l.push('semana  campañas  repliegues  asedios  conq.combate  conq.sin-def  resist.combate  rebote-ocup  reclutam.   bajas (en ticks de combate)   XP constr/crecer/conq/combate+bandidos');
+    l.push('semana  campañas  repliegues  asedios  conq.combate  conq.sin-def  resist.combate  rebote-prot  reclutam.   bajas (en ticks de combate)   XP constr/crecer/conq/combate+bandidos');
     for (const [n, s] of [...this.semanas.entries()].sort((a, b) => a[0] - b[0])) {
       const asedios = Object.values(s.asedios).reduce((a, b) => a + b, 0);
       l.push(
         `  ${String(n).padStart(2)}    ${String(s.campanas).padStart(6)}  ${String(s.repliegues).padStart(10)}  ${String(asedios).padStart(7)}  ` +
           `${String(s.asedios['conquista en combate']).padStart(12)}  ${String(s.asedios['conquista sin defensores']).padStart(12)}  ` +
-          `${String(s.asedios['resistido en combate']).padStart(14)}  ${String(s.asedios['rebote por ocupación']).padStart(11)}  ` +
+          `${String(s.asedios['resistido en combate']).padStart(14)}  ${String(s.asedios['rebote por protección']).padStart(11)}  ` +
           `${String(s.reclutamientos).padStart(9)}  ${String(Math.round(s.bajas)).padStart(8)} (${pct(s.bajasEnTicksDeCombate, s.bajas)})` +
           `   ${Math.round(s.xpConstruccion)}/${Math.round(s.xpCrecer)}/${Math.round(s.xpConquista)}/${Math.round(s.xpCombate)}`
       );

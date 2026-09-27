@@ -28,6 +28,11 @@ export function estaOcupado(asentamiento: Pick<Asentamiento, 'ocupacionHasta'>, 
   return asentamiento.ocupacionHasta !== undefined && instante < asentamiento.ocupacionHasta;
 }
 
+/** ¿Está bajo la protección del nuevo dueño tras una conquista (Doc 5.12.9)? Mientras lo esté, nadie la asedia. */
+export function estaProtegida(asentamiento: Pick<Asentamiento, 'protegidaHasta'>, instante: Instante): boolean {
+  return asentamiento.protegidaHasta !== undefined && instante < asentamiento.protegidaHasta;
+}
+
 export function edificiosPorTipoYEstado(
   asentamiento: Asentamiento,
   tipo: EdificioTipo,

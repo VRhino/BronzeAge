@@ -4,7 +4,8 @@
 // cambia quién gana un asedio, no solo que el número sale bien.
 import { describe, expect, it } from 'vitest';
 import type { Asentamiento, CeldaMuro, Escuadron, Recinto } from '../../domain/types';
-import { MURALLA } from '../../constants';
+import { MURALLA, OCUPACION } from '../../constants';
+import { minutos, sumar } from '../../domain/tiempo';
 import type { RandomFn } from '../../worldgen';
 import { iniciarAsedio, resolverCombate } from '../combate';
 import { crearFacciones, crearMapaDeterminista, escuadronDePrueba, fundarAsentamientoDeTest, instanteDeTest } from './fixtures';
@@ -83,8 +84,9 @@ describe('iniciarAsedio — la muralla del DEFENSOR decide, no la del atacante',
     expect(resultado.defensor.heroesFundadoresIds).toEqual([]);
     expect(resultado.defensor.casasCompradas).toEqual([]);
     expect(Object.values(resultado.defensor.cargos).every((v) => v === null)).toBe(true);
-    // Abre la ventana de ocupación.
-    expect(resultado.defensor.ocupacionHasta).toBeDefined();
+    // Arranca la protección del nuevo dueño, un día, y la ventana de ocupación, más corta.
+    expect(resultado.defensor.protegidaHasta).toEqual(sumar(instanteDeTest(0), minutos(OCUPACION.proteccionMinutos)));
+    expect(resultado.defensor.ocupacionHasta).toEqual(sumar(instanteDeTest(0), minutos(OCUPACION.duracionMinutos)));
   });
 
   it('conquistar saquea: población baja, edificios dañados salvo Centro Urbano + 1 Granja/1 Leñera', () => {
@@ -115,9 +117,9 @@ describe('iniciarAsedio — la muralla del DEFENSOR decide, no la del atacante',
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
   });
 
-  it('una plaza bajo ocupación reciente es INMUNE: rebota sin combate ni conquista (Ocupacion §2.4)', () => {
+  it('una plaza protegida tras su conquista es INMUNE: rebota sin combate ni conquista (Doc 5.12.9)', () => {
     const { atacante, defensor } = ciudades();
-    const ocupado: Asentamiento = { ...defensor, ocupacionHasta: instanteDeTest(100) };
+    const ocupado: Asentamiento = { ...defensor, protegidaHasta: instanteDeTest(100) };
     const r = iniciarAsedio(atacante, ATACANTE, ocupado, DEFENSOR, ['e-atacante'], crearFacciones(), [], instanteDeTest(10), rngSinVarianza);
     expect(r.conquistado).toBe(false);
     expect(r.defensor.faccionId).toBe(defensor.faccionId);

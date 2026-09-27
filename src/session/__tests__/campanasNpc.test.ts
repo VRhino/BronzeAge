@@ -164,3 +164,46 @@ describe('las columnas personales de los bots vuelven a casa', () => {
     expect(e.ejercitos[0]!.estado).toBe('regresando');
   });
 });
+
+describe('los héroes bot se reparten entre las plazas de su Facción', () => {
+  /** Dos plazas de la Facción 1: la primera con `vecinos` residentes además de su fundador, la segunda solo con el suyo. */
+  function repartir(vecinos: number) {
+    const mapa = crearMapaDeterminista(7);
+    const facciones = crearFacciones().map((f) => (f.id === 'faccion-1' ? { ...f, nivel: 2 } : f));
+    const uno = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', []);
+    const dos = fundarAsentamientoDeTest(mapa, uno.facciones, 'faccion-1', [uno.asentamiento]);
+    const ids = Array.from({ length: vecinos }, (_, i) => `vecino-${i + 1}`);
+    const llena: Asentamiento = { ...uno.asentamiento, casasCompradas: ids };
+    // El fixture le pone a las dos plazas el mismo fundador.
+    const vacia: Asentamiento = { ...dos.asentamiento, heroesFundadoresIds: ['solo'], casasCompradas: [] };
+    const dentro = (id: string, plaza: Asentamiento) =>
+      heroeDePrueba(id, { tipo: 'asentamiento', asentamientoId: plaza.id }, {
+        controlador: 'bot',
+        escuadrones: [escuadronDePrueba(`e-${id}`, id, 'milicia_lanceros', 25)],
+      });
+    const heroes = [...llena.heroesFundadoresIds, ...ids].map((id) => dentro(id, llena)).concat([dentro('solo', vacia)]);
+    const conSolo = dos.facciones.map((f) => (f.id === 'faccion-1' ? { ...f, ciudadanosIds: [...f.ciudadanosIds, ...ids, 'solo'] } : f));
+    const r = avanzarNpcGobernanza(crearEstadoDeTest([llena, vacia], conSolo, { heroes }), mapa, contextoDeTest(1, createRng(5)), {
+      lanzarCampanas: false,
+    });
+    return { r, llena, vacia };
+  }
+
+  it('un héroe de la plaza con más residentes se muda a la que menos tiene y sale a pie hacia ella', () => {
+    const { r, llena, vacia } = repartir(3);
+    const destino = r.estado.asentamientos.find((a) => a.id === vacia.id)!;
+    expect(destino.casasCompradas).toHaveLength(1);
+    const mudado = destino.casasCompradas[0]!;
+    expect(r.estado.asentamientos.find((a) => a.id === llena.id)!.casasCompradas).not.toContain(mudado);
+    const columna = r.estado.ejercitos.find((e) => e.liderId === mudado)!;
+    expect(columna.estado).toBe('regresando');
+    expect(columna.objetivo).toEqual({ tipo: 'asentamiento', id: vacia.id });
+    expect(r.estado.heroes.find((h) => h.id === mudado)!.ubicacion).toEqual({ tipo: 'columna', ejercitoId: columna.id });
+  });
+
+  it('con un solo residente de diferencia nadie se muda', () => {
+    const { r, vacia } = repartir(0);
+    expect(r.estado.asentamientos.find((a) => a.id === vacia.id)!.casasCompradas).toEqual([]);
+    expect(r.estado.ejercitos).toEqual([]);
+  });
+});

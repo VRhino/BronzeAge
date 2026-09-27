@@ -10,7 +10,7 @@ import { aplicarAjustesReputacion } from './reputacion';
 import { aplicarAjustesExperiencia, type AjusteExperiencia } from './faccion';
 import { multiplicadorDefensivoDeRecintos } from './muralla';
 import { CAMPO_CARGO, esResidente, estanAliadas } from './pertenencia';
-import { estaOcupado } from './asentamientoQuery';
+import { estaProtegida } from './asentamientoQuery';
 
 export class CombateInvalidoError extends Error {}
 
@@ -168,8 +168,9 @@ function jugadoresParticipantes(escuadrones: Escuadron[]): number {
  *   completo pierde `floor(OCUPACION.fraccionDanoMuralla × celdas.length)` de `avance` (la muralla no cae,
  *   deja de dar el multiplicador pleno hasta repararse por la vía normal de obra). Un Almacén o Granero dañado
  *   deja de aportar capacidad hasta reconstruirse, y lo guardado que ya no cabe se pierde.
- * - **`medidorMantenimiento: 100`** y **`ocupacionHasta`** — abre la ventana de ocupación (§2.4): inmune a un
- *   nuevo asedio, recaudación y crecimiento reducidos, mantenimiento congelado, tiempo fijo.
+ * - **`medidorMantenimiento: 100`**, **`protegidaHasta`** —la protección del nuevo dueño: inmune a un nuevo asedio
+ *   un día— y **`ocupacionHasta`** —la ventana de ocupación (§2.4): recaudación y crecimiento reducidos,
+ *   mantenimiento congelado—. Las dos, tiempo fijo.
  * - **La obra de ascenso en curso se pierde**, sin devolución (Doc 4.5, decisión del usuario 2026-09-26): la
  *   pagó el Gobernador del perdedor, y con ella cae su reserva de cupo de nivel.
  */
@@ -226,6 +227,7 @@ export function aplicarConquista(defensor: Asentamiento, faccionConquistadoraId:
     recintos,
     medidorMantenimiento: 100,
     ocupacionHasta: sumar(instante, minutos(OCUPACION.duracionMinutos)),
+    protegidaHasta: sumar(instante, minutos(OCUPACION.proteccionMinutos)),
   };
 }
 
@@ -332,9 +334,9 @@ export function iniciarAsedio(
   }
   if (!atacante.cargos.generalId) throw new CombateInvalidoError('El atacante necesita un General para asediar.');
 
-  // Ventana de ocupación (Ocupacion §2.4): una plaza recién conquistada es INMUNE a un nuevo asedio hasta que
-  // el reloj vence. Rebota sin combate y sin tocar el RNG — la guarnición instalada sana y se repone en paz.
-  if (estaOcupado(defensor, instante)) {
+  // Protección tras la conquista (Doc 5.12.9): una plaza recién conquistada es INMUNE a un nuevo asedio hasta que
+  // el reloj vence. Rebota sin combate y sin tocar el RNG.
+  if (estaProtegida(defensor, instante)) {
     return {
       defensor,
       facciones,
@@ -342,7 +344,7 @@ export function iniciarAsedio(
       eventos: [
         {
           codigo: 'combate.asedio_resistido',
-          mensaje: `${defensor.id} está bajo ocupación reciente y rechaza el asedio de ${atacante.id} sin combatir.`,
+          mensaje: `${defensor.id} está protegida tras su conquista y rechaza el asedio de ${atacante.id} sin combatir.`,
           payload: {
             atacanteId: atacante.id,
             defensorId: defensor.id,
@@ -585,9 +587,9 @@ export function asediarConEjercito(
     faccionDefensoraId: defensor.faccionId,
   };
 
-  // Ventana de ocupación (Ocupacion §2.4): inmune a un nuevo asedio. Rebota sin combate ni RNG; el ejército
+  // Protección tras la conquista (Doc 5.12.9): inmune a un nuevo asedio. Rebota sin combate ni RNG; el ejército
   // acampa (`avanzarEjercitos` lo pasa a `estacionado`) y el Paso 10 decide qué hace un rival ahí plantado.
-  if (estaOcupado(defensor, instante)) {
+  if (estaProtegida(defensor, instante)) {
     return {
       ejercito,
       defensor,
@@ -595,7 +597,7 @@ export function asediarConEjercito(
       eventos: [
         {
           codigo: 'combate.asedio_resistido',
-          mensaje: `${defensor.id} está bajo ocupación reciente: el ejército ${ejercito.id} no puede asediarla todavía.`,
+          mensaje: `${defensor.id} está protegida tras su conquista: el ejército ${ejercito.id} no puede asediarla todavía.`,
           payload,
         },
       ],

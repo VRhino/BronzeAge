@@ -42,6 +42,7 @@ import {
   cupoCaravanas,
   edificiosPorTipoYEstado,
   estaOcupado,
+  estaProtegida,
   hayProyectoPendiente,
   nutricionPoblacionDe,
 } from '../engine/asentamientoQuery';
@@ -72,7 +73,8 @@ import {
   VISION,
 } from '../constants';
 import { situarHeroes } from '../engine/ubicacion';
-import { enLaPuertaDe, guarnecer, movilizarEjercito, replegarEjercito, tieneHeroeSano, MovilizacionInvalidaError } from '../engine/ejercitos';
+import { columnaDe, enLaPuertaDe, guarnecer, movilizarEjercito, replegarEjercito, salirAlMundo, tieneHeroeSano, MovilizacionInvalidaError } from '../engine/ejercitos';
+import { calcularRuta } from '../world/rutas';
 import { cruzarLaPuerta } from '../engine/ubicacion';
 import { cambiarResidencia, FaccionInvalidaError } from '../engine/faccion';
 import { anexionar } from '../engine/fusion';
@@ -1243,6 +1245,8 @@ function lanzarCampanas(
     const objetivo = asentamientos
       .filter((a) => a.faccionId !== origen.faccionId && !estanAliadas(relaciones, origen.faccionId, a.faccionId))
       .filter((a) => plazasDe(a.faccionId) > 1)
+      // Ni contra una recién conquistada: está protegida (Doc 5.12.9) y el asedio rebotaría sin combate.
+      .filter((a) => !estaProtegida(a, instante))
       .filter((a) => distancia(a.posicion, origen.posicion) <= alcance)
       .filter(puedeGanar)
       .sort((a, b) => {
@@ -1402,6 +1406,77 @@ function ocuparConquistas(
   }
 
   return { asentamientos: actuales, ejercitos: quedan, heroes: heroesActuales, eventos };
+}
+
+/**
+ * Los héroes bot se reparten entre las plazas de su Facción (2026-09-27, decisión del usuario), para que ninguna quede
+ * defendida por uno solo mientras otra acumula veinte. En la semana 1 medida, las capitales tenían de 9 a 22
+ * residentes y cada fundación nueva uno: eran el objetivo de casi todas las campañas.
+ *
+ * Cada tick y por Facción, si entre su plaza con más residentes y la que menos tiene hay 2 o más de diferencia, un
+ * héroe de la primera se muda a la segunda: cambia de residencia (`cambiarResidencia`, que traslada su campamento,
+ * Doc 2.5) y sale a pie hacia ella (`salirAlMundo` sin tropa); `volverACasaNpc` lo encamina y el motor lo mete al
+ * llegar. Solo se muda un héroe que está dentro, sano y sin cargo en su plaza: el Gobernador y el General se quedan.
+ */
+function repartirHeroesNpc(
+  asentamientos: Asentamiento[],
+  ejercitos: Ejercito[],
+  heroes: Heroe[],
+  facciones: readonly Faccion[],
+  mapa: Mapa,
+  esNpc: (faccionId: string) => boolean,
+  contador: number,
+  instante: Instante
+): { asentamientos: Asentamiento[]; ejercitos: Ejercito[]; heroes: Heroe[]; eventos: string[]; contador: number } {
+  const eventos: string[] = [];
+  let actuales = asentamientos;
+  let heroesActuales = heroes;
+  let columnas = ejercitos;
+  const heridos = heridosEn(heroes, instante);
+
+  for (const faccion of facciones) {
+    if (!esNpc(faccion.id)) continue;
+    const plazas = actuales
+      .filter((a) => a.faccionId === faccion.id)
+      .sort((a, b) => residentesDe(a).length - residentesDe(b).length || (a.id < b.id ? -1 : 1));
+    const menos = plazas[0];
+    const mas = plazas[plazas.length - 1];
+    if (!menos || !mas || residentesDe(mas).length - residentesDe(menos).length < 2) continue;
+
+    const conCargo = new Set(Object.values(mas.cargos));
+    const heroe = heroesActuales.find(
+      (h) =>
+        h.controlador === 'bot' &&
+        esResidente(mas, h.id) &&
+        h.ubicacion.tipo === 'asentamiento' &&
+        h.ubicacion.asentamientoId === mas.id &&
+        !heridos.has(h.id) &&
+        !conCargo.has(h.id) &&
+        !columnaDe(columnas, h.id)
+    );
+    // ponytail: la ruta se busca cada tick mientras la plaza siga sin conexión por tierra; guardar las
+    // inalcanzables si alguna vez pesa en el batch.
+    if (!heroe || !calcularRuta(mapa, mas.posicion, menos.posicion)) continue;
+
+    try {
+      const salida = salirAlMundo(mas, campamentoDe(mas, heroesActuales), heroe, heroe.id, [], {}, columnas, `ejercito-npc-${contador}`, instante);
+      const mudanza = cambiarResidencia(
+        [...facciones],
+        actuales.map((a) => (a.id === mas.id ? salida.asentamiento : a)),
+        menos.id,
+        heroe.id
+      );
+      contador++;
+      heroesActuales = situarHeroes(sinGuarnicion(heroesActuales, heroe.id), [heroe.id], { tipo: 'columna', ejercitoId: salida.ejercito.id });
+      actuales = actuales.map((a) => (a.id === mudanza.origen.id ? mudanza.origen : a.id === mudanza.destino.id ? mudanza.destino : a));
+      columnas = [...columnas, sinTropa(salida.ejercito).ejercito];
+      eventos.push(`${heroe.id} se muda de ${mas.id} a ${menos.id} para repartir la defensa de ${faccion.id}.`);
+    } catch (err) {
+      if (!(err instanceof FaccionInvalidaError) && !(err instanceof MovilizacionInvalidaError)) throw err;
+    }
+  }
+
+  return { asentamientos: actuales, ejercitos: columnas, heroes: heroesActuales, eventos, contador };
 }
 
 /**
@@ -1959,7 +2034,10 @@ export function avanzarNpcGobernanza(
   // Quien conquista se queda (§4.9): antes de replegar, que es lo que haría con esa misma columna.
   const trasOcupar = ocuparConquistas(trasCampanas.asentamientos, trasCampanas.ejercitos, heroes, trasBandidos.facciones, esNpc);
   eventos.push(...trasOcupar.eventos);
-  const trasVolver = volverACasaNpc(trasOcupar.asentamientos, trasOcupar.ejercitos, trasOcupar.heroes, trasComercio.relaciones, mapa, esNpc);
+  const trasReparto = repartirHeroesNpc(trasOcupar.asentamientos, trasOcupar.ejercitos, trasOcupar.heroes, trasBandidos.facciones, mapa, esNpc, contador, instante);
+  contador = trasReparto.contador;
+  eventos.push(...trasReparto.eventos);
+  const trasVolver = volverACasaNpc(trasReparto.asentamientos, trasReparto.ejercitos, trasReparto.heroes, trasComercio.relaciones, mapa, esNpc);
   eventos.push(...trasVolver.eventos);
   heroes = trasVolver.heroes;
   const tropa = indiceTropa(heroes);

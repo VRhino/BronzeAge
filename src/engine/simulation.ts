@@ -203,9 +203,19 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
 
     // Fin de la ventana de ocupación (Ocupacion §2.5): tiempo fijo, sin nada que la acorte. Al vencer se
     // limpia el `Instante` y la plaza vuelve a las reglas normales — la guarnición instalada SE QUEDA.
+    // Igual con la protección del nuevo dueño.
     const venceOcupacion =
       trasMantenimiento.ocupacionHasta !== undefined && instante >= trasMantenimiento.ocupacionHasta;
-    const asentamientoFinal = venceOcupacion ? { ...trasMantenimiento, ocupacionHasta: undefined } : trasMantenimiento;
+    const venceProteccion =
+      trasMantenimiento.protegidaHasta !== undefined && instante >= trasMantenimiento.protegidaHasta;
+    const asentamientoFinal =
+      venceOcupacion || venceProteccion
+        ? {
+            ...trasMantenimiento,
+            ...(venceOcupacion ? { ocupacionHasta: undefined } : {}),
+            ...(venceProteccion ? { protegidaHasta: undefined } : {}),
+          }
+        : trasMantenimiento;
 
     const eventosAsentamiento = [
       ...eventosConstruccion,

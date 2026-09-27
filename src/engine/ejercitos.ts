@@ -39,7 +39,7 @@ import { avanzarRacion, consumoRacionDeEscuadrones, reservaDeTrigo } from './tro
 import { puedeLlevar } from './liderazgo';
 import { esResidente, estanAliadas } from './pertenencia';
 import { heridosEn, herir } from './heroe';
-import { estaOcupado } from './asentamientoQuery';
+import { estaProtegida } from './asentamientoQuery';
 import { registrarDerrota } from './faccion';
 
 export class MovilizacionInvalidaError extends Error {}
@@ -1194,11 +1194,11 @@ export function atacarCampamento(
 }
 
 /** Lo que exige asediar una plaza (Doc 5.12.4): que sea de otra Facción, estar a distancia de choque con algún héroe
- * sano y que no esté bajo ocupación reciente (Doc 5.12.9). Lo comparten el asedio con números y la batalla de Unity. */
+ * sano y que no esté protegida tras su conquista (Doc 5.12.9). Lo comparten el asedio con números y la batalla de Unity. */
 export function validarAsedio(ejercito: Ejercito, plaza: Asentamiento, heridos: ReadonlySet<string>, instante: Instante): void {
   if (plaza.faccionId === ejercito.faccionId) throw new MovilizacionInvalidaError('No se asedia una plaza de tu Facción.');
   validarAlcance(ejercito, plaza.posicion, heridos, 'atacar');
-  if (estaOcupado(plaza, instante)) throw new MovilizacionInvalidaError('Esa plaza está bajo ocupación reciente: todavía no se la puede asediar.');
+  if (estaProtegida(plaza, instante)) throw new MovilizacionInvalidaError('Esa plaza está protegida tras su conquista: todavía no se la puede asediar.');
 }
 
 /**
@@ -1590,7 +1590,7 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
         supervivientes.push(ejercito);
         continue;
       }
-      if (enemiga && abrirEnUnity && !estaOcupado(enemiga, instante) && heroesQueDefienden(enemiga, heroes, heridos).some((h) => humanos.has(h.id))) {
+      if (enemiga && abrirEnUnity && !estaProtegida(enemiga, instante) && heroesQueDefienden(enemiga, heroes, heridos).some((h) => humanos.has(h.id))) {
         // Con algún humano dentro el asedio se juega en Unity (Doc 5.10): acampa a la puerta y la partida abre la batalla.
         combatesPorAbrir.push({ tipo: 'asedio', ejercitoId: ejercito.id, asentamientoId: enemiga.id });
         enCombate.add(ejercito.id);

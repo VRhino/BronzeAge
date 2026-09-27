@@ -45,7 +45,7 @@ Las batallas que se resuelven con números (5.15.6) suman el poder de cada bando
 
 - Al **conquistar** un asentamiento se aplica 5.15.5: cada héroe defensor queda fuera con los escuadrones que usó en la batalla; el resto de escuadrones de sus residentes, guarnición incluida, quedan a 0 unidades y se van con el campamento de su héroe al asentamiento más cercano de su Facción, donde pasa a residir. No hay captura de guarnición, y el asentamiento conquistado queda sin guarnición.
 - **Los antiguos residentes pierden la residencia y con ella los cargos locales**: la ciudad cambia de dueño entera, valga para los que estaban de campaña como para los que estaban en casa (Doc 2.5).
-- La ciudad **no se entrega intacta**: la conquista la saquea (población, edificios, murallas) y abre una **ventana de ocupación** de tiempo fijo — inmune a un nuevo asedio, recaudación y crecimiento a la mitad, mantenimiento congelado. El premio sigue siendo "un asentamiento en funcionamiento" (5.12.4), pero **es una inversión que tarda en rendir**, no un subidón inmediato. Detalle en 5.12.9.
+- La ciudad **no se entrega intacta**: la conquista la saquea (población, edificios, murallas), la **protege un día** contra nuevos asedios y abre una **ventana de ocupación** de tiempo fijo — recaudación y crecimiento a la mitad, mantenimiento congelado. El premio sigue siendo "un asentamiento en funcionamiento" (5.12.4), pero **es una inversión que tarda en rendir**, no un subidón inmediato. Detalle en 5.12.9.
 - Llevarse escuadrones a campaña los saca del campamento de verdad: dejan de comer del almacén (5.13). Los que se quedan en el campamento sin estar en guarnición no defienden (5.12.4).
 - **Un héroe cuya Facción se queda sin asentamientos queda HUÉRFANO** (Doc 0): conserva sus escuadrones, pero sin residencia — sin sitio donde guardarlos, reabastecer ni reclutar. Deja de serlo al volver a residir en algún asentamiento (ciudadanía, Doc 2.5).
 
@@ -422,7 +422,10 @@ De una frontera que solo **recuerdas** queda hasta dónde llegaba, no su trazo e
 
 ### 5.12.9 Ocupación tras la conquista
 
-**Para qué sirve:** una plaza recién conquistada queda sin guarnición (5.15.5). La ventana de ocupación la protege **un día de mundo**, lo que tarda en recuperarse y reclutar con qué defenderse, para que no cambie de manos cada vez que pasa un ejército; pasado ese tiempo, quien quiera conservarla tiene que defenderla: trasladar allí su campamento y asignar guarnición, o estar dentro cuando la ataquen.
+**Para qué sirve:** una plaza recién conquistada queda sin guarnición (5.15.5). Al cambiar de dueño arrancan dos relojes distintos:
+
+- **La protección del nuevo dueño**, un día de mundo: nadie puede asediarla mientras se recupera y recluta con qué defenderse, para que no cambie de manos cada vez que pasa un ejército. Pasado ese día, quien quiera conservarla tiene que defenderla: trasladar allí su campamento y asignar guarnición, o estar dentro cuando la ataquen.
+- **La ventana de ocupación**, más corta: el coste de haberla tomado.
 
 Diseño en `Consideraciones/Ocupacion_Post_Conquista_Definicion.md`. Cifras placeholder en `OCUPACION`.
 
@@ -430,20 +433,21 @@ Diseño en `Consideraciones/Ocupacion_Post_Conquista_Definicion.md`. Cifras plac
 
 1. **La plaza queda sin guarnición** (5.15.5): los escuadrones de los antiguos residentes, guarnición incluida, quedan a 0 unidades y se van con el campamento de su héroe; no hay captura. El ejército conquistador sigue siendo una columna fuera.
 2. **Saqueo determinista** (sin azar): `pesants`, `artesanos` y `nobleza` pierden `OCUPACION.fraccionSaqueoPoblacion`; una fracción `OCUPACION.fraccionEdificiosDanados` de los edificios activos —por orden de id, **exentos Centro Urbano y al menos una Granja y una Leñera**— pasan a la cola marcados `danado` (un Almacén o Granero dañado deja de aportar capacidad hasta reconstruirse, y lo guardado que ya no cabe se pierde); cada recinto de muralla completo pierde `OCUPACION.fraccionDanoMuralla` de su `avance` (la muralla no cae, deja de dar el multiplicador defensivo pleno hasta repararse por la vía normal de obra).
-3. `medidorMantenimiento` a 100 y se abre la **ventana de ocupación** (`Asentamiento.ocupacionHasta`, `OCUPACION.duracionMinutos`: un día de mundo).
+3. `medidorMantenimiento` a 100 y arrancan la **protección** (`Asentamiento.protegidaHasta`, `OCUPACION.proteccionMinutos`: un día de mundo) y la **ventana de ocupación** (`Asentamiento.ocupacionHasta`, `OCUPACION.duracionMinutos`, mismo orden que el período de gracia de fundación).
 
 **Un edificio `danado`** se reconstruye por la auto-construcción normal, pero al arrancar la obra cuesta solo `OCUPACION.fraccionCosteReconstruccion` del costo de catálogo y tarda esa misma fracción — se repara, no se levanta de cero. El flag se limpia al volver a activo.
 
-**Durante la ventana** (mientras `instante < ocupacionHasta`):
+**Durante la protección** (mientras `instante < protegidaHasta`) un asedio rebota sin combate ni azar, y el atacante acampa.
+
+**Durante la ventana de ocupación** (mientras `instante < ocupacionHasta`):
 
 | Efecto | Valor |
 |---|---|
-| Inmune a un nuevo asedio | rebota sin combate ni azar; el atacante acampa |
 | Recaudación de oro | `× OCUPACION.factorRecaudacion` |
 | Crecimiento de población | el factor de felicidad `× OCUPACION.factorCrecimiento` |
 | Mantenimiento | no degrada (misma rama que el período de gracia) |
 
-**Al vencer** (tiempo fijo, nada la acorta): se limpia `ocupacionHasta` y la plaza vuelve a las reglas normales. La defiende quien se haya instalado: los héroes conquistadores que trasladaron allí su campamento, con su guarnición y en persona. Sin nadie, un asedio se juega sin defensores (5.12.4). Consolidar la conquista —reclutar escuadrones nuevos ahí, asignar guarnición, ejercer cargos, recaudación al 100%— exige residir en la plaza tomada (`cambiarResidencia`, Doc 2.5).
+**Al vencer** cada reloj (tiempo fijo, nada los acorta) se limpia su campo y la plaza vuelve a las reglas normales. Pasada la protección, la defiende quien se haya instalado: los héroes conquistadores que trasladaron allí su campamento, con su guarnición y en persona. Sin nadie, un asedio se juega sin defensores (5.12.4). Consolidar la conquista —reclutar escuadrones nuevos ahí, asignar guarnición, ejercer cargos, recaudación al 100%— exige residir en la plaza tomada (`cambiarResidencia`, Doc 2.5).
 
 **Supervivencia:** el saqueo nunca toca el Centro Urbano ni deja al asentamiento sin una Granja y una Leñera activas, el mantenimiento queda suspendido toda la ventana y la reconstrucción es barata — para que un asentamiento pequeño saqueado no colapse por la penalización.
 
@@ -642,7 +646,7 @@ Si los atacantes conquistan un asentamiento:
 - **Nadie se queda dentro de un asentamiento enemigo** (decisión del usuario, 2026-09-14): los que estaban dentro sin defender también salen. Un visitante vuelve a la columna que dejó aparcada; un residente herido sale solo, y sus escuadras, que no combatieron, corren la suerte del resto del campamento.
 - **El resto de las escuadras de sus residentes, guarnición incluida, quedan a 0 unidades** y se van con el campamento de su héroe al asentamiento más cercano de su Facción, **donde el héroe pasa a residir**. Si la Facción no tiene ninguno, quedan a 0 unidades y sin asentamiento (huérfanas), pero siguen siendo de su héroe, con su experiencia y su nivel, hasta que el héroe traslade su campamento a otro asentamiento (ciudadanía, Doc 2.5).
 - **No hay captura**: la guarnición no pasa al conquistador. Cae a 0 y sigue siendo de su héroe.
-- **El asentamiento conquistado queda sin guarnición**. Nadie lo guarnece solo por haberlo ganado: los héroes conquistadores pueden trasladar allí su campamento (pasar a residir) y asignar guarnición dentro del cupo que dé el asentamiento. **Si se quiere defender algo, hay que defenderlo activamente.** La ventana de ocupación (5.12.9) sigue dándole inmunidad durante un tiempo fijo; después, sin guarnición ni defensores presentes, un asedio se juega sin defensores.
+- **El asentamiento conquistado queda sin guarnición**. Nadie lo guarnece solo por haberlo ganado: los héroes conquistadores pueden trasladar allí su campamento (pasar a residir) y asignar guarnición dentro del cupo que dé el asentamiento. **Si se quiere defender algo, hay que defenderlo activamente.** La protección tras la conquista (5.12.9) le da un día de inmunidad; después, sin guarnición ni defensores presentes, un asedio se juega sin defensores.
 
 ### 5.15.6 Facciones NPC
 

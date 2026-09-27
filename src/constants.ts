@@ -1563,14 +1563,17 @@ export const MILITAR = {
 };
 
 /**
- * Ocupación post-conquista (Doc 5.12.9, `Consideraciones/Ocupacion_Post_Conquista_Definicion.md`). Al conquistar,
- * el asentamiento se saquea y entra en una ventana de ocupación de tiempo fijo: inmune a nuevo asedio, recaudación
- * y crecimiento reducidos, mantenimiento congelado. Corta el ping-pong de conquistas.
+ * Tras la conquista (Doc 5.12.9, `Consideraciones/Ocupacion_Post_Conquista_Definicion.md`) el asentamiento se
+ * saquea y arrancan dos relojes: la protección (inmune a un nuevo asedio) y la ventana de ocupación (recaudación y
+ * crecimiento reducidos, mantenimiento congelado).
  */
 export const OCUPACION = {
-  // Un día de mundo (2026-09-27, decisión del usuario): lo que tarda la plaza en recuperarse y reclutar con qué
-  // defenderse. Con 90 min, en la Era I medida, una plaza conquistada duraba 0,1 días de mediana en manos de su dueño.
-  duracionMinutos: 1440,
+  /** Protección del nuevo dueño (2026-09-27, decisión del usuario): un día de mundo, lo que tarda la plaza en
+   * recuperarse y reclutar con qué defenderse. Cuando la daba la ventana de ocupación, de 90 min, en la semana 1
+   * medida un dueño conservaba la plaza 0,1 días de mediana. */
+  proteccionMinutos: 1440,
+  /** Ventana de ocupación: el coste de haberla tomado. */
+  duracionMinutos: 90,
   /** Fracción de pesants, artesanos y nobleza que se pierde en el saqueo. */
   fraccionSaqueoPoblacion: 0.25,
   /** Fracción de los edificios `activo` que el saqueo baja a `en_cola` marcados `danado` — excluidos Centro
