@@ -589,6 +589,43 @@ Barracón 3, la Galería 3 y las Caballerizas 3 piden nivel 3 + Carpintería 2, 
 **Pendiente (EII):** EII-5, cuánta meseta en el nivel 3 al acabar la Era, con el batch de la Era II delante. Al
 bajar la Era II a código, P1/P2 (Barracón 3 y Armería 3 dejan de pedir Palacio).
 
+## Era III — EN CURSO (desde el 2026-09-27)
+
+Criterio: D49 (concentrada en el nivel 3, primeras cosas de nivel 4). 7 semanas (11-18).
+
+| Tecnología | Desbloquea | Logro del servidor | Hito de la Facción |
+|---|---|---|---|
+| `instituciones_civicas` | la subida 3 → 4 (D54; **con qué, pendiente: EIII-1**) | X asentamientos del servidor en nivel 3 (nacimiento de la polis) | capital en nivel 3 con Mercado activo |
+| `ciudadania_militar` | hoplitas ciudadanos | X asedios resistidos con los residentes dentro (reforma hoplita) | `instituciones_civicas` adoptada + Barracón 2 |
+| `falange_hoplita` | Espartiatas | **X batallas libradas usando hoplitas** | `ciudadania_militar` adoptada + Barracón 3 |
+| `pantalla_escaramuzadores` | peltastas | X escaramuzadores con jabalina reclutados | Galería 2 + Armería 2 |
+| `arqueria_especializada` | arqueros escitas | X arqueros con arco compuesto reclutados | Galería 3 |
+| `forja_hierro_estandarizada` | arma de hierro de calidad, Fundición 3 (D11) | X de hierro extraído (acero templado) | Fundición 2 + mina de hierro activa |
+| `bronce_laminado` | armadura de bronce de calidad (Armería 3) | X armaduras de bronce fabricadas (coraza musculada) | Armería 3 |
+| `caballeria_organizada` | jinetes escitas, caballería asiria | X jinetes asirios reclutados (Tiglat-Pileser III) | Caballerizas 2 |
+| `trabajos_asedio` | equipo de asedio de Carpintería 2 | X asedios contra plazas con muralla completa (Laquis) | Carpintería 2 |
+
+**Decidido el 2026-09-27:**
+- **EIII-2 — (b)**: la caballería asiria lleva armadura de bronce (Armería 3) y pasa a nivel 3; peltastas y jinetes
+  escitas se quedan en nivel 2 como piezas sueltas.
+- **EIII-3**: logros e hitos de la tabla, con `falange_hoplita` = X batallas libradas usando hoplitas.
+- **EIII-4 — (b)**: las "cuadrillas de asedio" de `trabajos_asedio` son equipo de asedio de Carpintería 2, como las
+  escalas de la Era II (coherente con D7).
+
+**Pendiente (EIII):** EIII-1 (qué desbloquea `instituciones_civicas` para el 3 → 4); EIII-5 (cuántas plazas en
+nivel 4 al acabar la Era, con el batch delante). Detectado para la Era IV: todo lo que lleve arma de hierro de
+calidad pasa a nivel 4 con P2 (Epílektoi, Peltastas de Ifícrates, Falangitas, Agrianos, Caballería tesalia).
+
+## Nobleza y reclutamiento — EN ESTUDIO (desde el 2026-09-27)
+
+**Afirmación del usuario:** las unidades de escalón alto solo se reclutan con población de **Nobleza**. Contradice
+el canon actual (Doc 5.8: "la Nobleza no se recluta"), que se cambiará al cerrar el estudio.
+
+**Idea a estudiar (usuario):** adelantar el **Palacio** a etapas tempranas y hacerlo mejorable, para que la Nobleza
+aparezca antes. Hoy pide asentamiento nivel 4, da cupo a 200 nobles, y la nobleza crece a 0,01 (pesants 0,12) solo
+con 3+ héroes residentes. Motivo: muchas tropas tempranas eran históricamente nobles (carros, guardias palaciales)
+y la Nobleza llega demasiado tarde en las Eras.
+
 ## Qué cambia en el canon (al cerrar)
 
 - **Doc 6** pasa a ser el documento de tecnología: Eras y su calendario (D34), logro del servidor + hito de
