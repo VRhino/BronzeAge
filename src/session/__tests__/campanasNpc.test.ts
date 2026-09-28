@@ -25,7 +25,7 @@ function conAlmacen(a: Asentamiento, cantidades: Record<string, number>): Asenta
 /** Una plaza NPC de nivel 2 lista para salir de campaña —sale un residente sin cargo; el fundador, Gobernador, se
  * queda—, y una plaza rival cerca con `guarnicion` soldados de guardia. La Facción rival tiene otra plaza lejos, salvo
  * con `rivalConUnaSolaPlaza`. */
-function campanaContra(guarnicion: number, otrosResidentes: string[] = ['vecino'], rivalConUnaSolaPlaza = false) {
+function campanaContra(guarnicion: number, otrosResidentes: string[] = ['vecino'], rivalConUnaSolaPlaza = false, defensorFueraCon = 0) {
   const mapa = crearMapaDeterminista(7);
   const uno = fundarAsentamientoDeTest(mapa, crearFacciones(), 'faccion-1', []);
   const dos = fundarAsentamientoDeTest(mapa, uno.facciones, 'faccion-2', [uno.asentamiento]);
@@ -41,10 +41,15 @@ function campanaContra(guarnicion: number, otrosResidentes: string[] = ['vecino'
         escuadrones: [1, 2, 3, 4].map((n) => escuadronDePrueba(`${id}-a${n}`, id, 'milicia_lanceros', 25)),
       })
     ),
-    heroeDePrueba(defensorId, { tipo: 'asentamiento', asentamientoId: rival.id }, {
-      controlador: 'bot',
-      escuadrones: guarnicion > 0 ? [escuadronDePrueba('d1', defensorId, 'milicia_lanceros', guarnicion, { enGuarnicion: true })] : [],
-    }),
+    defensorFueraCon > 0
+      ? heroeDePrueba(defensorId, { tipo: 'columna', ejercitoId: 'caza-rival' }, {
+          controlador: 'bot',
+          escuadrones: [escuadronDePrueba('d1', defensorId, 'milicia_lanceros', defensorFueraCon, { contenedor: { tipo: 'ejercito', ejercitoId: 'caza-rival' } })],
+        })
+      : heroeDePrueba(defensorId, { tipo: 'asentamiento', asentamientoId: rival.id }, {
+          controlador: 'bot',
+          escuadrones: guarnicion > 0 ? [escuadronDePrueba('d1', defensorId, 'milicia_lanceros', guarnicion, { enGuarnicion: true })] : [],
+        }),
   ];
   // Solo la Facción atacante es NPC: la defensora no toca su guarnición.
   const otraDelRival = { ...dos.asentamiento, id: `${dos.asentamiento.id}-b`, heroesFundadoresIds: [] };
@@ -62,6 +67,10 @@ describe('campañas del NPC', () => {
 
   it('no sale contra una guarnición que no puede vencer', () => {
     expect(campanaContra(1000).lanzadas).toBe(0);
+  });
+
+  it('cuenta a los residentes que están fuera: volverán antes de que llegue', () => {
+    expect(campanaContra(0, ['vecino'], false, 1000).lanzadas).toBe(0);
   });
 
   it('no sale contra la última plaza de una Facción: la haría desaparecer', () => {

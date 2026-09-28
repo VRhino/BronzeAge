@@ -1236,6 +1236,25 @@ function loQueLeCabe(heroe: Heroe, vivas: readonly Escuadron[]): Escuadron[] {
   return elegidas;
 }
 
+/**
+ * La defensa que encontrará una campaña al llegar, no la de ahora (2026-09-28): los residentes que están fuera —cazando
+ * bandidos o de campaña— cuentan como si estuvieran dentro con todo lo que llevan, porque para cuando la columna
+ * llegue habrán vuelto. Medido en la Era I: con la defensa de ahora, el NPC salía contra plazas a medio vaciar por la
+ * caza y perdía el 64 % de los asedios (20.697 bajas en una semana).
+ */
+function defensaPrevista(plaza: Asentamiento, heroes: Heroe[], heridos: ReadonlySet<string>): Escuadron[] {
+  const residentes = new Set(residentesDe(plaza));
+  const dentro = { tipo: 'asentamiento', asentamientoId: plaza.id } as const;
+  const vueltos = heroes.map((h) => {
+    if (!residentes.has(h.id) || (h.ubicacion.tipo === 'asentamiento' && h.ubicacion.asentamientoId === plaza.id)) return h;
+    const escuadrones = h.escuadrones.map((e) => (e.cantidad > 0 && e.contenedor.tipo !== 'campamento' ? { ...e, contenedor: { tipo: 'campamento' as const } } : e));
+    const enCasa: Heroe = { ...h, escuadrones, ubicacion: dentro };
+    const loadout = loQueLeCabe(enCasa, escuadrones.filter((e) => e.cantidad > 0 && !e.enGuarnicion)).map((e) => e.id);
+    return { ...enCasa, loadouts: [{ id: `${h.id}-previsto`, displayName: 'Previsto', squadIds: loadout, perksSeleccionados: [], activo: true }] };
+  });
+  return defensaDe(plaza, vueltos, heridos);
+}
+
 function lanzarCampanas(
   asentamientos: Asentamiento[],
   ejercitos: Ejercito[],
@@ -1306,7 +1325,7 @@ function lanzarCampanas(
     // medida, el NPC se estrellaba una y otra vez contra guarniciones cinco veces más fuertes (gana el 0,4 %).
     const poderPropio = poderTotal(expedicion, false);
     const puedeGanar = (plaza: Asentamiento) =>
-      poderPropio > poderTotal(defensaDe(plaza, heroesActuales, heridos), true) * multiplicadorDefensivoDeRecintos(plaza.recintos ?? []);
+      poderPropio > poderTotal(defensaPrevista(plaza, heroesActuales, heridos), true) * multiplicadorDefensivoDeRecintos(plaza.recintos ?? []);
     // Ni contra la última plaza de una Facción (2026-09-27, decisión del usuario): conquistarla la haría desaparecer
     // (`acogerHeroesNpc`), y en la Era II medida una sola Facción se comió a diez en dos semanas.
     const plazasDe = (faccionId: string) => asentamientos.filter((a) => a.faccionId === faccionId).length;

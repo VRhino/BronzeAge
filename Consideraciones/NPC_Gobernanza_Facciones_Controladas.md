@@ -210,7 +210,9 @@ espadachines de cobre — hay variedad, pero solo de la gama baja de la Era I: n
 §11.4: 615 conquistas, el 98 % de plazas vacías; en 2 256 asedios contra plazas defendidas el atacante ganó el 0,4 %):
 
 - **Solo sale contra lo que puede ganar**: antes de lanzar una campaña compara el poder de su expedición con la
-  defensa que encontraría hoy (`defensaDe`, con la cohesión defensiva y la muralla del propio combate).
+  defensa que encontrará al llegar (`defensaPrevista`, con la cohesión defensiva y la muralla del propio combate):
+  los residentes que están fuera, cazando o de campaña, cuentan como si estuvieran dentro, porque habrán vuelto
+  (2026-09-28; con la defensa del momento perdía el 64 % de los asedios).
 - **Quien conquista se queda** (`ocuparConquistas`): una columna acampada a la puerta de una plaza de su Facción sin
   residentes —la que acaba de conquistar— se muda a ella (`cambiarResidencia`) y entra (`guarnecer`). Es lo que ya
   pide la regla (Doc 5.15.5: para defenderla hay que pasar a residir en ella). Solo si deja al menos otro residente
