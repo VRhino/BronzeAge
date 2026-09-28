@@ -77,7 +77,7 @@ Ningún edificio exige "Planos de X" (vía Aedas, Doc 6.5) para construirse ni p
 
 | Edificio | Recurso | Coste | Trabajadores | Tiempo | Producción base |
 |---|---|---|---|---|---|
-| Cantera | Piedra | 20 madera | 4 | 5 min | 5 piedra |
+| Cantera | Piedra | 20 madera | 4 | 5 min | 10 piedra |
 | Leñera | Madera | 10 madera | 4 | 3 min | 5 madera |
 | Granja | Trigo | 30 madera | 4 | 6 min | **60 trigo** (nivel 1) |
 | Corral | Livestock | 30 madera | 4 | 6 min | 3 livestock |
@@ -225,7 +225,7 @@ Dos edificios lo amplían, y no compiten: el **Almacén** sube la capacidad de T
   - La interfaz enseña, dentro de la plaza, si se puede pedir la subida y, si no, todos los motivos a la vez: requisitos que faltan, cupo, coste y la solvencia recurso a recurso.
 - MEDIDOR 0-100 por asentamiento, empieza en 100.
 - **Período de gracia al fundar** (Doc 1.3): durante **el primer día** tras la fundación NO se cobra mantenimiento. Sin esto, todo asentamiento nuevo caería en ruinas antes de tener su economía en marcha (las primeras obras tardan horas, 4.2.1).
-- COSTE PERIÓDICO en recursos + oro. **El mantenimiento es de los edificios**: la cantidad escala con los **edificios activos** —no con la población, que ya paga lo suyo comiendo (4.1)— y con la DISTANCIA al centro de poder de la Facción (más lejos = más caro; mecanismo anti-snowball). Qué materiales se cobran depende del **nivel efectivo** (`nivelActual`): una plaza que cae de nivel por mantenimiento deja de pagar lo del nivel perdido y puede recuperarse, en vez de acabar en ruinas:
+- COSTE PERIÓDICO en recursos + oro. **El mantenimiento es de los edificios**: la cantidad escala con los **edificios activos** —cada Vivienda cuenta la mitad; no con la población, que ya paga lo suyo comiendo (4.1)— y con la DISTANCIA al centro de poder de la Facción (más lejos = más caro; mecanismo anti-snowball). Qué materiales se cobran depende del **nivel efectivo** (`nivelActual`): una plaza que cae de nivel por mantenimiento deja de pagar lo del nivel perdido y puede recuperarse, en vez de acabar en ruinas:
   - Nivel 1: madera.
   - Nivel 2: madera + piedra.
   - Nivel 3 en adelante: madera + piedra + **oro**. El oro se cobra desde el nivel en que aparece quien lo paga: los artesanos, que tributan casi cuatro veces más que un pesant (decidido 2026-09-26; en nivel 2 la recaudación no llegaba a un tercio del coste y era la primera causa de ruina).

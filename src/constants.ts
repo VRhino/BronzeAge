@@ -339,7 +339,9 @@ export const EDIFICIO_CATALOGO = {
       4: { trabajadoresRequeridos: 4, recetas: [], produccionBaseTrigo: 180, tamano: { ancho: 6, alto: 6 }, costoMejora: { madera: 240, piedra: 80 } },
     } as Record<number, NivelEdificioTransformacion>,
   },
-  cantera: { costo: { madera: 20 }, tiempoConstruccionMinutos: 240, produccionBasePiedra: 5, trabajadoresRequeridos: 4 },
+  // Piedra ×2 (5 → 10) el 2026-09-28, decisión del usuario: con el mantenimiento por edificios, una sola Cantera no
+  // sostenía el nivel 2 y el 95 % de las plazas no pasaba la prueba de solvencia para subir.
+  cantera: { costo: { madera: 20 }, tiempoConstruccionMinutos: 240, produccionBasePiedra: 10, trabajadoresRequeridos: 4 },
   lenera: { costo: { madera: 10 }, tiempoConstruccionMinutos: 60, produccionBaseMadera: 5, trabajadoresRequeridos: 4 },
   // Sin piedra en la construcción BASE (Doc Fase_0_6, a petición del usuario): nivel 1 completo se paga solo
   // en madera — la piedra recién se introduce en nivel 2 (ver EDIFICIO_CATALOGO.fundicion/curtiduria/armeria).
@@ -2047,6 +2049,9 @@ export const MANTENIMIENTO = {
   // PLACEHOLDER: a 50, una plaza de nivel 2 con ~90 edificios paga casi lo mismo que pagaba por población (factor
   // 2,8 frente a 3 con 1.000 habitantes) y una de nivel 1 con ~36, algo más (1,7 frente a 1,4).
   edificiosReferencia: 50,
+  /** Una Vivienda cuenta la mitad que otro edificio (2026-09-28, decisión del usuario): son la mayoría de los de una
+   * plaza, unos 40 de los ~90 de un nivel 2. */
+  pesoVivienda: 0.5,
   escalaDistancia: 400,
   factorDistanciaMax: 2,
   degradacionPorDeficitTotal: 10,
