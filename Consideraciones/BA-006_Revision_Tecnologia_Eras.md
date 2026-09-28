@@ -249,6 +249,11 @@ Fenicia/Levantina, Helénica (incluye Macedonia y **Tracia**, decidido 2026-09-1
 
 ## Campamentos de mercenarios
 
+> **Ampliada el 2026-09-28** por la entrada 40 de `Docs/Mecanicas a desarrollar.md`, que manda sobre lo de
+> abajo: sin roster mercenario propio (se recluta el roster general que el campamento ya desbloqueó), sin
+> cultura (el origen solo elige la variante de layout), aparición por aglomeración de Facciones, y residencia,
+> almacén personal y mercado propios. Lo de abajo queda como historia de la decisión.
+
 **D26 — Campamentos de mercenarios en mundo abierto**, como los de bandidos, pero **no se pueden atacar**: son
 el único sitio donde se reclutan ciertas unidades específicas.
 - **Son escuadrones normales del héroe** (cuentan Liderazgo, uno por tropa), pero **solo se rellenan en esos
