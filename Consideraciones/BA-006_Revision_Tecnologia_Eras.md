@@ -141,9 +141,11 @@ D49 se cumple porque ese algo no existe antes de su Era.
   `aleacion_bronce` (Era I), cuyo logro exige traer estaño por comercio: pocos niveles 3 en la Era I, meseta en la
   Era II.
 - **3 → 4:** lo desbloquea **`instituciones_civicas`** (Era III), que así recibe el efecto propio que D40 dejó
-  pendiente. **Falta decidir qué desbloquea exactamente** (un edificio o un bien necesario para la obra).
+  pendiente: el edificio **Ágora**, requisito del nivel 4 (EIII-1, 2026-09-28).
 - **4 → 5:** necesita una tecnología de la Era V, y **no hay ninguna cívica en la Era V** (todas son militares
   macedónicas). Pendiente: crear una o atar el Palacio a una tecnología de la Era V.
+
+**Coste del 1 → 2 confirmado el 2026-09-28**: 600 madera, 400 piedra y **150 de oro** (Doc 4.5), tal cual.
 
 **D3 — La Maravilla exige que el servidor haya recorrido todas las Eras** (Era V alcanzada), además del
 requisito actual de asentamiento en nivel 5 (Doc 4.2.1). **La season termina por tiempo** (12 meses) aunque
@@ -594,13 +596,13 @@ Barracón 3, la Galería 3 y las Caballerizas 3 piden nivel 3 + Carpintería 2, 
 **Pendiente (EII):** EII-5, cuánta meseta en el nivel 3 al acabar la Era, con el batch de la Era II delante. Al
 bajar la Era II a código, P1/P2 (Barracón 3 y Armería 3 dejan de pedir Palacio).
 
-## Era III — EN CURSO (desde el 2026-09-27)
+## Era III — decisiones completas (2026-09-28)
 
 Criterio: D49 (concentrada en el nivel 3, primeras cosas de nivel 4). 7 semanas (11-18).
 
 | Tecnología | Desbloquea | Logro del servidor | Hito de la Facción |
 |---|---|---|---|
-| `instituciones_civicas` | la subida 3 → 4 (D54; **con qué, pendiente: EIII-1**) | X asentamientos del servidor en nivel 3 (nacimiento de la polis) | capital en nivel 3 con Mercado activo |
+| `instituciones_civicas` | **Ágora** (EIII-1), requisito del nivel 4 | X asentamientos del servidor en nivel 3 (nacimiento de la polis) | capital en nivel 3 con Mercado activo |
 | `ciudadania_militar` | hoplitas ciudadanos | X asedios resistidos con los residentes dentro (reforma hoplita) | `instituciones_civicas` adoptada + Barracón 2 |
 | `falange_hoplita` | Espartiatas | **X batallas libradas usando hoplitas** | `ciudadania_militar` adoptada + Barracón 3 |
 | `pantalla_escaramuzadores` | peltastas | X escaramuzadores con jabalina reclutados | Galería 2 + Armería 2 |
@@ -617,9 +619,106 @@ Criterio: D49 (concentrada en el nivel 3, primeras cosas de nivel 4). 7 semanas 
 - **EIII-4 — (b)**: las "cuadrillas de asedio" de `trabajos_asedio` son equipo de asedio de Carpintería 2, como las
   escalas de la Era II (coherente con D7).
 
-**Pendiente (EIII):** EIII-1 (qué desbloquea `instituciones_civicas` para el 3 → 4); EIII-5 (cuántas plazas en
-nivel 4 al acabar la Era, con el batch delante). Detectado para la Era IV: todo lo que lleve arma de hierro de
-calidad pasa a nivel 4 con P2 (Epílektoi, Peltastas de Ifícrates, Falangitas, Agrianos, Caballería tesalia).
+**Decidido el 2026-09-28:**
+- **EIII-1 — Ágora con +1 ranura de política**: `instituciones_civicas` desbloquea el **Ágora**, edificio nuevo
+  (uno por asentamiento, desde el nivel 3). El nivel 4 pide **Ágora + recinto de muralla completo DE PIEDRA** (muro
+  de piedra o muralla con adarve; la empalizada ya no basta). El Ágora da **+1 ranura de política al Gobernador**
+  (Doc 4.4: 2, que escalan hasta 5 con el nivel de Facción, +1). El recinto de piedra ya está en el canon (Doc 4.5,
+  4.2.1) y en `Docs/Mecanicas a desarrollar.md` §41; el Ágora baja al canon al cerrar la Era III. Al existir, el
+  techo provisional del nivel 3 (EII-5) desaparece.
+- **Era IV, confirmado**: todo lo que lleve arma de hierro de calidad pasa a nivel 4 con P2 (Epílektoi, Peltastas de
+  Ifícrates, Falangitas, Agrianos, Caballería tesalia): el arma pide Fundición 3, que pide nivel 4.
+
+**Subida 3 → 4 con EIII-1:**
+
+| Requisito | Valor |
+|---|---|
+| Población | 1.000 pesants + 800 artesanos |
+| Edificios | recinto de muralla completo de piedra + **Ágora** |
+| Obra de ascenso | 2.500 madera, 2.500 piedra, 1.000 oro, 150 lingotes de bronce; 2 semanas |
+| Tecnología | `instituciones_civicas` adoptada (la pide el Ágora) |
+
+**Edificios de la Era III:**
+
+| Edificio | Tecnología | Nivel de asentamiento | Qué hace |
+|---|---|---|---|
+| **Ágora** (nuevo) | `instituciones_civicas` | 3 | requisito del nivel 4; +1 ranura de política del Gobernador. **Coste, obra y huella: EIII-6** |
+| Fundición 3 (D11, P2) | `forja_hierro_estandarizada` | 4 | más rinde de lingotes; la pide el arma de hierro de calidad |
+| Armería 3: arma de hierro de calidad | `forja_hierro_estandarizada` | 4 (por la Fundición 3) | 2 lingotes de hierro + 3 madera |
+| Armería 3: armadura de bronce de calidad | `bronce_laminado` | 3 | 2 lingotes de bronce + 5 cuero de calidad |
+| Carpintería 2: equipo de asedio (EIII-4) | `trabajos_asedio` | 2 | cuadrillas de asedio como equipo, igual que las escalas de la Era II |
+| Palacio 2 / Palacio 3 | — | 3 / 4 | cupo de 240 / 400 nobles (tropas de escalón 4-5) |
+
+**Roster de la Era III (7 tropas) con P2, EIII-2 y la regla de nobleza.** Unidades por escuadra: valor propio de
+cada tropa; de partida el que daba su escalón (placeholder).
+
+| Tropa | Cultura | Tecnología | Edificio | Equipo | Escalón | Población | Unidades | Nivel |
+|---|---|---|---|---|---|---|---|---|
+| Honderos rodios | helénica | `pantalla_escaramuzadores` | Galería 2 | arma de hierro + básica | 3 | artesanos | 18 | 2 |
+| Peltastas | helénica | `pantalla_escaramuzadores` | Galería 2 | 2 armas de hierro, sin armadura | 3 | artesanos | 18 | 2 |
+| Jinetes escitas | neutra | `caballeria_organizada` | Caballerizas 2 | arma de bronce + básica + caballo | 3 | artesanos | 18 | 2 |
+| Hoplitas ciudadanos | helénica | `ciudadania_militar` | Barracón 2 | arma de hierro + armadura de bronce | 3 | artesanos | 18 | 3 |
+| Caballería asiria | mesopotámica | `caballeria_organizada` | Caballerizas 2 | arma de hierro + armadura de bronce + caballo | 3 | artesanos | 18 | 3 |
+| Arqueros escitas | neutra | `arqueria_especializada` | Galería 3 | arma de hierro + básica | 5 | nobleza | 12 | 3 |
+| Espartiatas | helénica | `falange_hoplita` | Barracón 3 | arma de hierro de calidad + armadura de bronce de calidad | 4 | nobleza | 15 | 4 |
+
+Tres tropas en nivel 2, tres en el 3 y una en el 4 (los Espartiatas): concentrada en el 3 con lo primero del 4, como
+pide D49.
+
+- **EIII-5 — sin batch**: `instituciones_civicas` aparece al principio de la Era III (su logro es "X plazas en nivel
+  3", que la meseta de la Era II ya da), así que el nivel 4 se alcanza dentro de la Era; la **meseta de nivel 4 es la
+  Era IV** (D49).
+- **EIII-6 — Ágora**: 800 madera + 1.200 piedra + 300 oro, obra de 2 días, huella 3×3 (placeholder, como todo coste).
+
+Todas las decisiones de la Era III están tomadas; se baja al canon y al código con el cierre de las Eras.
+
+## Era IV — EN CURSO (desde el 2026-09-28)
+
+Criterio: D49 (cosas de nivel 3, **meseta en el nivel 4**). 8 semanas (18-26). Borrador para decidir; nada aprobado.
+
+**Catálogo de la Era IV (8 tecnologías; logros e hitos en borrador salvo `logistica_campana`, D30):**
+
+| Tecnología | Desbloquea | Logro del servidor | Hito de la Facción |
+|---|---|---|---|
+| `ejercito_permanente` | +10 % de experiencia a las escuadras de los héroes de la Facción (EIV-1) | X escuadrones en nivel de escuadra ≥ 5 (veteranos) | Barracón 3 + 10 escuadrones propios vivos a la vez |
+| `cuerpo_oficiales` | efecto propio (EIV-1) | X héroes del servidor en nivel de héroe ≥ Y | 5 héroes en la Facción |
+| `logistica_campana` | efecto propio (EIV-1) | camino compartido por ≥ 3 Facciones y ≥ 10 rutas (D30) | plaza de nivel 4 + nivel de Facción X + ≥ 3 columnas en marcha a la vez (D30) |
+| `infanteria_profesional` | Epílektoi, Batallón Sagrado, Inmortales | X batallas ganadas por el bando con menos soldados (Leuctra) | `ejercito_permanente` + Barracón 3 en una plaza de nivel 4 |
+| `hostigadores_profesionales` | Peltastas de Ifícrates | X escuadrones de escalón 4-5 destruidos en batalla (Lequeo) | `pantalla_escaramuzadores` + Galería 3 |
+| `carga_caballeria` | caballería tesalia, caballería noble persa | X batallas a campo abierto ganadas por un ejército con caballería | `caballeria_organizada` + Caballerizas 3 |
+| `maestria_asedio` | máquinas avanzadas (EIV-3); "asalto coordinado" es táctico (Conquest) | X conquistas de plazas con recinto de piedra (Motia) | `trabajos_asedio` + Carpintería 2 |
+| `maestros_obras_militares` | −25 % de coste en el equipo de asedio (EIV-4) | X piezas de equipo de asedio fabricadas | `maestria_asedio` adoptada + Carpintería 2 |
+
+**Roster de la Era IV (6 tropas) con P2 y la regla de nobleza.** Todo lo que lleva arma de hierro de calidad está
+en nivel 4 (confirmado el 2026-09-28: el arma pide Fundición 3).
+
+| Tropa | Cultura | Tecnología | Edificio | Equipo | Escalón | Población | Unidades | Nivel |
+|---|---|---|---|---|---|---|---|---|
+| Caballería noble persa | persa | `carga_caballeria` | Caballerizas 3 | 2 armas de hierro + armadura de bronce + caballo | 4 | nobleza | 15 | 3 |
+| Epílektoi | helénica | `infanteria_profesional` | Barracón 2 | arma de hierro de calidad + armadura de bronce | 3 | artesanos | 18 | 4 |
+| Batallón Sagrado | helénica | `infanteria_profesional` | Barracón 3 | arma de hierro de calidad + armadura de bronce de calidad | 5 | nobleza | 12 | 4 |
+| Inmortales | persa | `infanteria_profesional` | Barracón 3 | arma de hierro de calidad + arma de bronce (arco) + intermedia | 5 | nobleza | 12 | 4 |
+| Peltastas de Ifícrates | helénica | `hostigadores_profesionales` | Galería 3 | 2 armas de hierro de calidad + básica | 4 | nobleza | 15 | 4 |
+| Caballería tesalia | helénica | `carga_caballeria` | Caballerizas 3 | arma de hierro de calidad + intermedia + caballo | 4 | nobleza | 15 | 4 |
+
+**Decidido el 2026-09-28:**
+- **EIV-1 (en parte)**: una institucional da **+10 % de experiencia a las escuadras de los héroes** de la Facción
+  (curva de Doc 5.16.3). Asignada a `ejercito_permanente` (la instrucción profesional que absorbió, D40), **a
+  confirmar**; faltan los efectos de `cuerpo_oficiales` y `logistica_campana`.
+- **EIV-4**: `maestros_obras_militares` rebaja un 25 % el coste del equipo de asedio.
+- **EIV-5**: basta con la caballería noble persa como tropa de nivel 3; las institucionales valen en cualquier nivel.
+
+**Por decidir:**
+- **EIV-1 (resto)**: efectos de `cuerpo_oficiales` (propuesta: +10 % de Liderazgo a los héroes) y
+  `logistica_campana` (propuesta: carro de suministros ×1,5, Doc 5.13).
+- **EIV-2 — logros e hitos** del catálogo de arriba.
+- **EIV-3 — "máquinas avanzadas" de `maestria_asedio`.** Historia: la primera catapulta es de ~399 a. C., de los
+  ingenieros de Dionisio I de Siracusa (Diodoro XIV), usada en el asedio de Motia (397): **lanzadardos sin torsión**
+  (gastraphetes, oxíbeles), junto con grandes torres de asedio con ruedas. Las **de torsión que lanzan piedras**
+  (litóbolos) son de Filipo II (Perinto, 340) y Alejandro (Tiro, 332): **Era V**. Propuesta: Carpintería nivel
+  interno 3 (asentamiento nivel 4) con el **oxíbeles** en la Era IV; el litóbolo en la Era V. La torre de asedio ya
+  está en la Carpintería 2 (Doc 4.2.1).
+- A vigilar con batch: 5 de las 6 tropas se reclutan con nobleza (Palacio 3, cupo 400).
 
 ## Nobleza, reclutamiento y escalones (2026-09-27)
 
@@ -636,8 +735,10 @@ calidad pasa a nivel 4 con P2 (Epílektoi, Peltastas de Ifícrates, Falangitas, 
   la saca de la población. Hambre y saqueo, ya en el código y el canon.
 - **Artesanos**: aparecen **1,5 veces más rápido** (tasa 0,15), tienen **el doble de sitio** en cada Vivienda (10) y
   los requisitos de nivel piden **el doble** (400 / 800 / 1.600 en los niveles 3 / 4 / 5). Ya en el código y el canon.
-- **Las unidades por escuadra son un valor propio de cada tropa**, no del escalón (ya en el código, con los valores
-  que daba el escalón).
+- **Las unidades por escuadra son un valor propio de cada tropa**, no del escalón (ya en el código,
+  `TROPAS_RECLUTABLES[].unidadesPorDefecto`, y en el canon, Doc 5.8), con los valores que daba el escalón
+  (25 / 20 / 18 / 15 / 12). Confirmado el 2026-09-28: se quedan esos valores y se balancean tropa a tropa más
+  adelante. Cada tropa nueva del roster entra con el valor de su escalón.
 - **Roster:**
   - Las tropas de leva pasan a **ligeras**: milicia de lanceros y lanceros con escudo de mimbre suben a escalón 2.
   - **Dos tropas nuevas de escalón 1**, reclutables desde el principio como la milicia, muy malas en combate y muy
@@ -669,6 +770,8 @@ calidad pasa a nivel 4 con P2 (Epílektoi, Peltastas de Ifícrates, Falangitas, 
 - **Documento nuevo de culturas** (D12-D23, D27).
 - **Glosario (Doc 0)**: entradas Era, Tecnología, Logro del servidor, Cultura, Capital y Campamento de
   mercenarios; cronología 1300–323 a. C. (D4).
+- **Doc 4.2.1, 4.4 y 4.5** (al cerrar la Era III): Ágora (edificio, `instituciones_civicas`), +1 ranura de
+  política del Gobernador, y el nivel 4 pide el Ágora (EIII-1). El recinto de piedra ya está.
 - **Roadmap_Escalado Eje 4**: la Maravilla depende de las Eras y la season acaba por tiempo (D3, D34).
 
 ## Pendiente

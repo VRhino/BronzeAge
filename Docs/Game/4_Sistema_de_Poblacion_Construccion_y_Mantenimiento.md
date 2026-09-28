@@ -66,8 +66,8 @@ Ningún edificio exige "Planos de X" (vía Aedas, Doc 6.5) para construirse ni p
 ### Alojamiento
 
 **Palacio** — desbloquea la aparición de Nobleza. Adición MANUAL de Gobernador/Maestro de Obras a la cola (ver 4.2), no auto-construcción. Es requisito para subir a nivel 5 (4.5). Se construye desde el nivel 2 y se mejora: **Palacio 1** (asentamiento nivel 2) da cupo a 80 nobles, **Palacio 2** (nivel 3) a 240 y **Palacio 3** (nivel 4) a 400; el requisito del nivel 5 es el Palacio 3. Motivo: la tropa de escalón 4-5 se recluta con Nobleza, y la de las Eras I-II está en nivel 3.
-- Requisito: Asentamiento nivel 4.
-- Capacidad: 200 nobles. Coste: 1500 madera + 1000 piedra. Obra: 5 días.
+- Requisito: asentamiento nivel 2 (Palacio 1); la mejora a Palacio 2 pide nivel 3 y la mejora a Palacio 3, nivel 4.
+- Capacidad: 80 / 240 / 400 nobles (Palacio 1 / 2 / 3). Coste de construcción: 1500 madera + 1000 piedra. Obra: 5 días. Coste y obra de las mejoras: placeholder por definir.
 
 **Vivienda** — auto-construcción. CUPO DIVIDIDO POR CLASE: cada Vivienda aporta cupos SEPARADOS, no un pool compartido — 15 espacios para Pesants + 10 espacios para Artesanos por unidad (escala linealmente: 2 Viviendas = 30+20, etc.). La Nobleza no usa Vivienda (cupo propio en el Palacio).
 - Coste: 10 madera. Obra: 4 horas.
@@ -103,7 +103,7 @@ Los extractores de nivel 1 se pagan solo con madera: son justo lo que hay que co
 
 Para dimensionarlo: la reserva de comida de una ciudad de nivel 1 a tope ronda los 330, y el carro de suministros de un ejército son 500 (Doc 5.13). Un Granero de nivel 4 permite acumular una docena de campañas — es la pieza que convierte el excedente de trigo en capacidad militar en vez de perderlo contra el techo del almacén.
 
-**Murallas** — no son un edificio del catálogo sino un **recinto** que rodea la ciudad y se levanta por obra, desde la empalizada barata hasta la muralla de piedra (`Consideraciones/Murallas_Definicion.md`). Tener un recinto completo es requisito del nivel 4 (4.5) y suma +14 al cupo de guarnición de cada héroe residente (Doc 5.15.3).
+**Murallas** — no son un edificio del catálogo sino un **recinto** que rodea la ciudad y se levanta por obra, desde la empalizada barata hasta la muralla de piedra (`Consideraciones/Murallas_Definicion.md`). Tener un recinto completo **de piedra** (muro de piedra o muralla con adarve; la empalizada no basta) es requisito del nivel 4 (4.5) y suma +14 al cupo de guarnición de cada héroe residente (Doc 5.15.3).
 
 ### Transformación de recursos
 
@@ -202,7 +202,7 @@ Dos edificios lo amplían, y no compiten: el **Almacén** sube la capacidad de T
 - **NIVEL DE ASENTAMIENTO — por requisitos y a petición del Gobernador**: el nivel NO sube solo. Cumplir A LA VEZ los requisitos de población y de edificios es lo que permite PEDIR la subida al nivel siguiente (ver "Subida de nivel" abajo). Nivel máximo: 5.
   - Nivel 2: 200 pesants + 3 de los 7 tipos de extracción (Cantera, Leñera, Granja, Mina de oro, Mina de cobre, Mina de estaño, Corral). No pide artesanos: sin nivel 2 no hay edificios de transformación, y sin ellos no aparecen artesanos.
   - Nivel 3: 500 pesants + 400 artesanos + Armería, Curtiduría, Fundición, Barracón y Galería de tiro.
-  - Nivel 4: 1.000 pesants + 800 artesanos + un recinto de muralla completo, de cualquier nivel (4.2.1).
+  - Nivel 4: 1.000 pesants + 800 artesanos + un recinto de muralla completo **de piedra**: muro de piedra o muralla con adarve, no empalizada (4.2.1).
   - Nivel 5: 2.000 pesants + 1.600 artesanos + Palacio.
 
   Poblaciones placeholder (`NIVEL_ASENTAMIENTO`). El nivel alimenta: el techo de zona de influencia (Doc 1.2), qué materiales cobra el Mantenimiento (abajo) y el **techo de población total** — 300 / 1.500 / 6.000 / 12.000 / 20.000 habitantes para los niveles 1-5: por encima, la Vivienda y el Palacio dejan de dar cupo aunque tengan espacio. Es el nivel de ASENTAMIENTO — distinto del nivel de FACCIÓN (Doc 2.2.1), que sube por experiencia.
