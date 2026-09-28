@@ -11,7 +11,7 @@ import type { Heroe } from '../../src/domain/types';
 import type { EstadoSimulacion } from '../../src/engine/simulation';
 import type { PayloadAsedio, PayloadCombateResuelto } from '../../src/engine/combate';
 import type { PayloadAsentamientoFundado } from '../../src/engine/expansion';
-import type { PayloadNivelSubio } from '../../src/engine/mantenimiento';
+import type { PayloadAsentamientoRuinas, PayloadNivelSubio } from '../../src/engine/mantenimiento';
 import type { PayloadTruequeCumplido } from '../../src/engine/trade';
 import type { StatsNpcGobernanza } from '../../src/session/npcGobernanza';
 import { NIVEL_FACCION } from '../../src/constants';
@@ -82,6 +82,8 @@ export class MedidorGuerra {
   private ascensosPerdidos = 0;
   private readonly conquistadaEn = new Map<string, number>();
   private colapsosTrasConquista = 0;
+  /** Cada plaza que cae en ruinas: cuándo, por qué y cuánto hacía que la habían conquistado (si la conquistaron). */
+  private readonly ruinas: string[] = [];
   private readonly tickDeNivel = new Map<string, Map<number, number>>();
 
   constructor(inicial: Pick<EstadoSimulacion, 'asentamientos' | 'facciones'>, tickInicial: number) {
@@ -129,6 +131,16 @@ export class MedidorGuerra {
         huboCombate = true;
         const p = ev.payload as PayloadCombateResuelto;
         this.ratiosDePoder.push(p.poderAtacante / Math.max(p.poderDefensor, 1));
+        continue;
+      }
+      if (ev.codigo === 'asentamiento.ruinas') {
+        const p = ev.payload as PayloadAsentamientoRuinas;
+        const plaza = antes.asentamientos.find((a) => a.id === ev.asentamientoId);
+        const cayo = ev.asentamientoId ? this.conquistadaEn.get(ev.asentamientoId) : undefined;
+        this.ruinas.push(
+          `día ${(tick / 1440).toFixed(1)} ${ev.asentamientoId} (${plaza?.faccionId}, nivel ${plaza?.nivel}/${plaza?.nivelActual}): ${p.razon}` +
+            (cayo !== undefined ? ` · conquistada hace ${((tick - cayo) / 1440).toFixed(1)} días` : '')
+        );
         continue;
       }
       if (ev.codigo === 'construccion.edificio_completado' && ev.asentamientoId) {
@@ -273,6 +285,7 @@ export class MedidorGuerra {
       `Nivel de la plaza al caer: ${[...this.nivelesAlCaer.entries()].sort().map(([n, c]) => `nivel ${n}: ${c}`).join(', ')} · ` +
         `ascensos perdidos: ${this.ascensosPerdidos} · colapsadas en la semana siguiente a caer: ${this.colapsosTrasConquista}`
     );
+    if (this.ruinas.length > 0) l.push(`Ruinas (${this.ruinas.length}):`, ...this.ruinas.map((r) => `  ${r}`));
     l.push(`Distancia del origen de la columna a la plaza conquistada: mediana ${mediana(this.distanciasAlObjetivo).toFixed(0)}, p90 ${[...this.distanciasAlObjetivo].sort((a, b) => a - b)[Math.floor(this.distanciasAlObjetivo.length * 0.9)]?.toFixed(0) ?? '—'}`);
 
     const pares = [...this.conquistasPorPar.entries()].sort((a, b) => b[1] - a[1]);

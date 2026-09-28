@@ -1276,8 +1276,9 @@ export const MERCADO = {
 };
 
 export const TRUEQUE = {
-  // "expirar un plazo" sin número fijado en el diseño (ver Preguntas_Abiertas) — placeholder.
-  plazoMinutosPorDefecto: 200,
+  // Un día de mundo (2026-09-28, decisión del usuario): con 200 min, en la Era I medida, 2.633 de 2.720 trueques
+  // caducaban sin que ninguna caravana llegara a salir.
+  plazoMinutosPorDefecto: 1440,
 };
 
 // Precio de referencia por defecto, según escasez/abundancia GLOBAL (Doc 3.4, sin componente de distancia).

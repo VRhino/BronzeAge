@@ -64,7 +64,9 @@ import { calcularCostoMantenimiento, calcularNivelAsentamiento, encontrarCapital
 import { cupoLibreParaNivel, evaluarAscenso, iniciarAscenso, tarifaDeAscenso } from '../engine/ascenso';
 import { evaluarViabilidadFundacion, fundarAsentamiento, FundacionInvalidaError } from '../engine/settlement';
 import {
+  ANIMAL_CATALOGO,
   BATALLA,
+  CARRO_CATALOGO,
   EDIFICIO_CATALOGO,
   LIDERAZGO,
   LOGISTICA,
@@ -184,6 +186,8 @@ const COLCHON_EXCEDENTE_SUPERVIVENCIA = 0.3;
 /** Lo mínimo que pide un trueque de supervivencia. Lo normal es más: lo que cuesta el Mantenimiento de ese recurso
  * durante `TICKS_ANTICIPACION_SUPERVIVENCIA`, hasta donde le sobre al socio y al que paga (`pedirAyuda`). */
 const CANTIDAD_TRUEQUE_SUPERVIVENCIA = 30;
+/** Lo que carga una caravana comercial del NPC, que siempre es un carro básico con buey (`construirCaravanaComercial`). */
+const CARGA_CARAVANA_NPC = CARRO_CATALOGO.basico.capacidadBase * ANIMAL_CATALOGO.buey.factorCarga;
 /**
  * A partir de que fraccion del almacen una plaza NPC considera que le SOBRA un recurso y lo pone a la venta
  * (`Consideraciones/Entrada_Al_Mundo_Definicion.md` §3). **0,7**: por encima de eso el silo esta camino de
@@ -263,7 +267,10 @@ function asegurarGobernanzaBase(asentamiento: Asentamiento, facciones: Faccion[]
   const faccion = facciones.find((f) => f.id === asentamiento.faccionId);
   if (!faccion) return asentamiento;
   let actual = asentamiento;
-  const fundador = actual.heroesFundadoresIds[0];
+  // El primer fundador y, si no queda ninguno, el primer residente (2026-09-28): una plaza conquistada o de la que se
+  // mudó su fundador se quedaba sin Gobernador para siempre, y sin él el NPC no construye caravanas ni edificios
+  // manuales ni pide subidas. En la Era I medida, 25 de 39 plazas (casi todas las capitales) estaban así.
+  const fundador = actual.heroesFundadoresIds[0] ?? residentesDe(actual)[0];
 
   if (!actual.cargos.gobernadorId && fundador) {
     try {
@@ -376,30 +383,37 @@ function asegurarInfraestructuraComercial(
   reclamos: ReturnType<typeof reclamosDeFuentes>,
   instante: Instante,
   contador: number
-): { asentamiento: Asentamiento; caravanaNueva?: Caravana } {
-  if (!asentamiento.cargos.gobernadorId) return { asentamiento };
+): { asentamiento: Asentamiento; caravanasNuevas: Caravana[]; contador: number } {
+  if (!asentamiento.cargos.gobernadorId) return { asentamiento, caravanasNuevas: [], contador };
 
   if (!tieneMercadoActivo(asentamiento)) {
     try {
       const actual = anadirEdificioManualmente(asentamiento, faccion, 'gobernador', 'mercado', zonaPoligono, mapa, capital, reclamos, contador);
-      return { asentamiento: actual };
+      return { asentamiento: actual, caravanasNuevas: [], contador: contador + 1 };
     } catch (err) {
       if (!(err instanceof ConstruccionManualInvalidaError)) throw err;
-      return { asentamiento };
+      return { asentamiento, caravanasNuevas: [], contador: contador + 1 };
     }
   }
 
+  // Todas las que le quepan de una vez (2026-09-28, decisión del usuario): cuantas más haya disponibles, más trueques
+  // salen a la vez en lugar de esperar turno.
+  let actual = asentamiento;
+  let siguiente = contador;
+  const caravanasNuevas: Caravana[] = [];
   const propias = caravanas.filter((c) => c.tipo === 'comercial' && c.origenAsentamientoId === asentamiento.id).length;
-  if (propias < cupoCaravanas(asentamiento)) {
+  for (let n = propias; n < cupoCaravanas(actual); n++) {
     try {
-      const resultado = construirCaravanaComercial(asentamiento, caravanas, instante, contador);
-      return { asentamiento: resultado.asentamiento, caravanaNueva: resultado.caravana };
+      const resultado = construirCaravanaComercial(actual, [...caravanas, ...caravanasNuevas], instante, siguiente++);
+      actual = resultado.asentamiento;
+      caravanasNuevas.push(resultado.caravana);
     } catch (err) {
       if (!(err instanceof CaravanaInvalidaError)) throw err;
+      break;
     }
   }
 
-  return { asentamiento };
+  return { asentamiento: actual, caravanasNuevas, contador: siguiente };
 }
 
 /** Devuelve `true` si `tipo` ya está activo, en construcción o en cola — evita reintentar
@@ -603,7 +617,12 @@ function truequeDeSupervivencia(
     for (const recurso of enRiesgo) {
       if (yaTieneAyudaEnCaminoPara([...acuerdosExistentes, ...acuerdosNuevos], necesitado.id, recurso)) continue;
 
-      const cantidad = Math.max(CANTIDAD_TRUEQUE_SUPERVIVENCIA, Math.round((costo[recurso] ?? 0) * TICKS_ANTICIPACION_SUPERVIVENCIA));
+      // Como mucho lo que lleva una caravana del NPC (carro básico con buey): un pedido de varios viajes no llega antes
+      // de que caduque el trueque.
+      const cantidad = Math.min(
+        CARGA_CARAVANA_NPC,
+        Math.max(CANTIDAD_TRUEQUE_SUPERVIVENCIA, Math.round((costo[recurso] ?? 0) * TICKS_ANTICIPACION_SUPERVIVENCIA))
+      );
       const acuerdo = pedirAyuda(asentamientos, necesitado, recurso, cantidad, enRiesgo, instante, contador++, esNpc);
       if (!acuerdo) continue;
       acuerdosNuevos.push(acuerdo);
@@ -2015,9 +2034,10 @@ export function avanzarNpcGobernanza(
       capital,
       reclamos,
       instante,
-      contador++
+      contador
     );
-    if (resultado.caravanaNueva) caravanas = [...caravanas, resultado.caravanaNueva];
+    contador = resultado.contador;
+    caravanas = [...caravanas, ...resultado.caravanasNuevas];
     const conNucleoMilitar = asegurarNucleoMilitar(resultado.asentamiento, faccion, zonaPoligono, mapa, capital, reclamos, contador++);
     return asegurarMuralla(conNucleoMilitar, instante);
   });

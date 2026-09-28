@@ -247,9 +247,14 @@ espadachines de cobre — hay variedad, pero solo de la gama baja de la Era I: n
   primera —dentro, sano y sin cargo— se muda a la segunda (`cambiarResidencia`) y sale a pie hacia ella. En la semana
   1 medida, las capitales tenían de 9 a 22 residentes y cada fundación nueva uno: eran el objetivo de casi todas las
   campañas.
+- **Toda plaza tiene Gobernador** (2026-09-28): el primer fundador o, si no queda ninguno, el primer residente. Una
+  plaza conquistada o de la que se mudó su fundador se quedaba sin él para siempre, y sin Gobernador el NPC no
+  construye caravanas ni edificios manuales ni pide subidas: en la Era I medida, 25 de 39 plazas.
+- **Construye todas las caravanas comerciales que le caben** (2026-09-28, decisión del usuario), para tener
+  disponibles las que pidan los trueques.
 - **El trueque de supervivencia pide a tiempo y lo que hace falta** (2026-09-27): salta cuando la reserva de un recurso
-  de Mantenimiento no cubre 4 horas de coste (antes 20 minutos) y pide lo que cuestan esas 4 horas (antes 30), hasta
-  donde le sobre al socio y al que paga. En la Era I medida, cuatro capitales de nivel 2 caían en ruinas por piedra con
+  de Mantenimiento no cubre 4 horas de coste (antes 20 minutos) y pide lo que cuestan esas 4 horas (antes 30), sin pasar
+  de lo que carga una caravana y hasta donde le sobre al socio y al que paga. En la Era I medida, cuatro capitales de nivel 2 caían en ruinas por piedra con
   el almacén lleno de oro y madera.
 - **No sale contra una plaza protegida** (Doc 5.12.9), recién conquistada o recién fundada: el asedio rebotaría sin
   combate.

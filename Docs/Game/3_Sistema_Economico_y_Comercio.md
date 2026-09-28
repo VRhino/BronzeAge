@@ -8,7 +8,7 @@
 - ENTRE JUGADORES: recurso más de trueque, sin restricción especial.
 
 ## 3.2 Trueque de materiales (acuerdos entre Facciones)
-- Contrato MARCO abierto en el tiempo: `proponerTrueque` crea el acuerdo (cantidad total pactada por lado, plazo por defecto 200 minutos).
+- Contrato MARCO abierto en el tiempo: `proponerTrueque` crea el acuerdo (cantidad total pactada por lado, plazo por defecto de **un día de mundo**: lo que hace falta para que las caravanas vayan y vuelvan).
 - **PROPUESTA → ACEPTACIÓN**: el acuerdo nace `'propuesto'` y **no obliga a nadie** hasta que el lado receptor (B) contesta con `aceptarTrueque` o `rechazarTrueque`. Ninguna caravana lo mira mientras siga propuesto.
   - **El plazo se cuenta desde el sí**: una propuesta contestada al filo no puede nacer ya sin tiempo material de cumplirse, porque entonces el que acepta de buena fe se comería la penalización por incumplir (Doc 2.7).
   - Una propuesta **sin contestar caduca sin penalizar a nadie** (no hubo promesa que romper); una **rechazada** queda como `'rechazado'` y no se borra: una respuesta es información, y es distinta de un silencio.
@@ -29,7 +29,7 @@
   - **El oro pesa y ocupa carro** (3.1: es metal precioso pesado, no moneda acuñada). Eso pone un techo físico a cuánto se mueve de una tacada: comprar barato lejos y vender caro en casa cuesta viajes, no un clic.
   - **Manda el Líder de la columna**: el carro es común (Doc 5.13.2), y sin esa condición cualquiera que se uniera en campo podría gastarse el oro de todos.
   - **Sirve lo que puede** en vez de fallar cuando se pide de más —el tope sale a la vez de la orden, del almacén de la plaza, de su oro, del carro y de lo que se lleve encima—, pero **falla si no puede servir nada**.
-  - **Las órdenes CADUCAN** (`MERCADO.plazoOrdenMinutos`, 200 minutos, el mismo plazo que un trueque): sin emparejamiento automático nada las cerraría nunca, y una plaza acumularía ofertas eternas a precios viejos.
+  - **Las órdenes CADUCAN** (`MERCADO.plazoOrdenMinutos`, 200 minutos): sin emparejamiento automático nada las cerraría nunca, y una plaza acumularía ofertas eternas a precios viejos.
   - **Visibilidad**: el escaparate de una plaza ajena se ve **al estar en su puerta**, y solo lo que sigue en pie. Un mercado enseña sus ofertas a quien está dentro; una lista global dejaría leer los precios del mundo entero sin moverse.
 
 ## 3.4 Precios dinámicos

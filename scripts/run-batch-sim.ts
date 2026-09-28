@@ -84,7 +84,10 @@ const CHECKPOINT_DIR = process.env['BATCH_CHECKPOINT_DIR'];
 if (CHECKPOINT_TICKS.size > 0 && !CHECKPOINT_DIR) {
   throw new Error('BATCH_CHECKPOINT_DIR es obligatorio si se usa BATCH_CHECKPOINT_TICKS.');
 }
-const MIN_SEPARACION = 100;
+// Separación mínima entre las capitales iniciales. 400 (2026-09-28, decisión del usuario; antes 100): en un mapa de
+// 2000×2000, 12 Facciones a 100 nacían apiñadas (vecino más cercano entre 175 y 280 para la mitad) y a las dos
+// semanas no les quedaba sitio donde fundar.
+const MIN_SEPARACION = 400;
 
 /**
  * `BATCH_PERFIL=<nucleos|caminera|compacta|gremial>`: fuerza el perfil de trazado (doc trazado §E6.23) en
