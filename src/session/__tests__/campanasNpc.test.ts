@@ -22,9 +22,9 @@ function conAlmacen(a: Asentamiento, cantidades: Record<string, number>): Asenta
   return { ...a, almacen };
 }
 
-/** Una plaza NPC de nivel 2 lista para salir de campaña —con un segundo residente, para que quien sale pueda
- * quedarse en lo que conquiste—, y una plaza rival cerca con `guarnicion` soldados de guardia. La Facción rival
- * tiene otra plaza lejos, salvo con `rivalConUnaSolaPlaza`. */
+/** Una plaza NPC de nivel 2 lista para salir de campaña —sale un residente sin cargo; el fundador, Gobernador, se
+ * queda—, y una plaza rival cerca con `guarnicion` soldados de guardia. La Facción rival tiene otra plaza lejos, salvo
+ * con `rivalConUnaSolaPlaza`. */
 function campanaContra(guarnicion: number, otrosResidentes: string[] = ['vecino'], rivalConUnaSolaPlaza = false) {
   const mapa = crearMapaDeterminista(7);
   const uno = fundarAsentamientoDeTest(mapa, crearFacciones(), 'faccion-1', []);
@@ -32,13 +32,15 @@ function campanaContra(guarnicion: number, otrosResidentes: string[] = ['vecino'
   const origen = conAlmacen({ ...uno.asentamiento, nivel: 2, nivelActual: 2, casasCompradas: otrosResidentes }, { madera: 2000, trigo: 5000 });
   // El fixture la funda lejos (a 960); se acerca a una jornada corta para que quede al alcance del carro.
   const rival = { ...dos.asentamiento, posicion: { x: origen.posicion.x + 120, y: origen.posicion.y } };
-  const atacanteId = origen.heroesFundadoresIds[0]!;
+  const atacantes = otrosResidentes.length > 0 ? otrosResidentes : [origen.heroesFundadoresIds[0]!];
   const defensorId = dos.asentamiento.heroesFundadoresIds[0]!;
   const heroes: Heroe[] = [
-    heroeDePrueba(atacanteId, { tipo: 'asentamiento', asentamientoId: origen.id }, {
-      controlador: 'bot',
-      escuadrones: [1, 2, 3, 4].map((n) => escuadronDePrueba(`a${n}`, atacanteId, 'milicia_lanceros', 25)),
-    }),
+    ...atacantes.map((id) =>
+      heroeDePrueba(id, { tipo: 'asentamiento', asentamientoId: origen.id }, {
+        controlador: 'bot',
+        escuadrones: [1, 2, 3, 4].map((n) => escuadronDePrueba(`${id}-a${n}`, id, 'milicia_lanceros', 25)),
+      })
+    ),
     heroeDePrueba(defensorId, { tipo: 'asentamiento', asentamientoId: rival.id }, {
       controlador: 'bot',
       escuadrones: guarnicion > 0 ? [escuadronDePrueba('d1', defensorId, 'milicia_lanceros', guarnicion, { enGuarnicion: true })] : [],
@@ -50,24 +52,30 @@ function campanaContra(guarnicion: number, otrosResidentes: string[] = ['vecino'
   const r = avanzarNpcGobernanza(crearEstadoDeTest(plazas, dos.facciones, { heroes }), mapa, contextoDeTest(1, createRng(5)), {
     faccionesIds: ['faccion-1'],
   });
-  return r.stats.campanasLanzadas;
+  return { lanzadas: r.stats.campanasLanzadas, columnas: r.estado.ejercitos };
 }
 
 describe('campañas del NPC', () => {
   it('sale contra una plaza rival que puede ganar', () => {
-    expect(campanaContra(0)).toBe(1);
+    expect(campanaContra(0).lanzadas).toBe(1);
   });
 
   it('no sale contra una guarnición que no puede vencer', () => {
-    expect(campanaContra(1000)).toBe(0);
+    expect(campanaContra(1000).lanzadas).toBe(0);
   });
 
   it('no sale contra la última plaza de una Facción: la haría desaparecer', () => {
-    expect(campanaContra(0, ['vecino'], true)).toBe(0);
+    expect(campanaContra(0, ['vecino'], true).lanzadas).toBe(0);
+  });
+
+  it('salen juntos varios héroes; el Gobernador se queda en casa', () => {
+    const { columnas } = campanaContra(0, ['v1', 'v2', 'v3']);
+    expect(columnas).toHaveLength(1);
+    expect(columnas[0]!.participantes.map((p) => p.heroeId).sort()).toEqual(['v1', 'v2', 'v3']);
   });
 
   it('no sale de una casa con un solo residente: no podría quedarse en lo que conquistara', () => {
-    expect(campanaContra(0, [])).toBe(0);
+    expect(campanaContra(0, []).lanzadas).toBe(0);
   });
 });
 

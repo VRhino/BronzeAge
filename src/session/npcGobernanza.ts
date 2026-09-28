@@ -63,6 +63,7 @@ import { calcularCostoMantenimiento, calcularNivelAsentamiento, encontrarCapital
 import { cupoLibreParaNivel, evaluarAscenso, iniciarAscenso, tarifaDeAscenso } from '../engine/ascenso';
 import { evaluarViabilidadFundacion, fundarAsentamiento, FundacionInvalidaError } from '../engine/settlement';
 import {
+  BATALLA,
   CAMPAMENTOS_BANDIDOS,
   EDIFICIO_CATALOGO,
   LIDERAZGO,
@@ -73,7 +74,7 @@ import {
   VISION,
 } from '../constants';
 import { situarHeroes } from '../engine/ubicacion';
-import { columnaDe, enLaPuertaDe, guarnecer, movilizarEjercito, replegarEjercito, salirAlMundo, tieneHeroeSano, MovilizacionInvalidaError } from '../engine/ejercitos';
+import { columnaDe, enLaPuertaDe, guarnecer, movilizarEjercito, replegarEjercito, salirAlMundo, tieneHeroeSano, unirseAEjercito, MovilizacionInvalidaError } from '../engine/ejercitos';
 import { calcularRuta } from '../world/rutas';
 import { cruzarLaPuerta } from '../engine/ubicacion';
 import { cambiarResidencia, FaccionInvalidaError } from '../engine/faccion';
@@ -1010,15 +1011,15 @@ function expandirSiPuede(
  *
  * - `NIVEL_MINIMO_PARA_CAMPANA` — el gate de madurez que aquel análisis pedía. Un asentamiento recién fundado
  *   no manda expediciones: primero se sostiene.
- * - `ESCUADRONES_MINIMOS_PARA_CAMPANA` y `FRACCION_MAXIMA_EN_CAMPANA` — nunca se va todo. La guarnición es lo
- *   ÚNICO que defiende (Doc 5.12.4), así que un NPC que vaciara su plaza para atacar se estaría regalando a sí
- *   mismo. Se lleva como mucho la mitad, y solo si le sobra con qué.
+ * - `ESCUADRONES_MINIMOS_PARA_CAMPANA` y quién se queda — nunca se va todo: la guarnición no sale, y se queda en
+ *   casa al menos un héroe, el que tiene cargo (Gobernador). Salen hasta `BATALLA.capacidad.asedio` héroes juntos,
+ *   cada uno con lo que le cabe en su Liderazgo (2026-09-28, decisión del usuario): con cinco héroes por plaza, uno
+ *   solo nunca encontraba nada que pudiera ganar, y en tres semanas de la Era I medida no hubo ni una campaña.
  * - `AUTONOMIA_MINIMA_TICKS` — no se sale sin comida para el viaje. Una columna que no llega es peor que no
  *   salir: pierde la tropa Y deja la casa desguarnecida mientras tanto.
  */
 const NIVEL_MINIMO_PARA_CAMPANA = 2;
 const ESCUADRONES_MINIMOS_PARA_CAMPANA = 2;
-const FRACCION_MAXIMA_EN_CAMPANA = 0.5;
 const AUTONOMIA_MINIMA_TICKS = 20;
 
 /**
@@ -1187,6 +1188,14 @@ function publicarOrdenesNpc(
   return { ordenes: [...ordenes, ...nuevas], eventos, contador, publicadas: nuevas.length };
 }
 
+/** Las escuadras de `vivas` de este héroe que le caben en su Liderazgo (Doc 5.11), las más fuertes primero. */
+function loQueLeCabe(heroe: Heroe, vivas: readonly Escuadron[]): Escuadron[] {
+  const suyas = vivas.filter((e) => e.heroeId === heroe.id).sort((a, b) => poderEscuadron(b) - poderEscuadron(a) || (a.id < b.id ? -1 : 1));
+  const elegidas: Escuadron[] = [];
+  for (const e of suyas) if (puedeLlevar(heroe, [...elegidas, e])) elegidas.push(e);
+  return elegidas;
+}
+
 function lanzarCampanas(
   asentamientos: Asentamiento[],
   ejercitos: Ejercito[],
@@ -1220,17 +1229,26 @@ function lanzarCampanas(
     const vivos = campamento.filter((e) => e.cantidad > 0 && !e.enGuarnicion);
     if (vivos.length < ESCUADRONES_MINIMOS_PARA_CAMPANA) continue;
 
-    // Se lleva como mucho la mitad, y todos del MISMO jugador: el Liderazgo se valida por jugador (Doc 5.11),
-    // así que mezclar dueños solo complicaría la selección sin aportar nada al NPC.
-    const porJugador = new Map<string, Escuadron[]>();
-    for (const e of vivos) porJugador.set(e.heroeId, [...(porJugador.get(e.heroeId) ?? []), e]);
-    const tope = Math.floor(vivos.length * FRACCION_MAXIMA_EN_CAMPANA);
-    if (tope < 1) continue;
-
-    const candidato = [...porJugador.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).find(([, lista]) => lista.length >= 1);
-    if (!candidato) continue;
-    const [heroeId, suyos] = candidato;
-    const expedicion = suyos.slice(0, Math.min(tope, suyos.length));
+    // Salen juntos hasta `BATALLA.capacidad.asedio` héroes bot que están dentro, sanos y sin cargo —el Gobernador se
+    // queda—, los más fuertes primero, cada uno con lo que le cabe en su Liderazgo (Doc 5.11). Nunca todos.
+    const heridos = heridosEn(heroesActuales, instante);
+    const conCargo = new Set(Object.values(origen.cargos));
+    const salen = heroesActuales
+      .filter(
+        (h) =>
+          h.controlador === 'bot' &&
+          esResidente(origen, h.id) &&
+          h.ubicacion.tipo === 'asentamiento' &&
+          h.ubicacion.asentamientoId === origen.id &&
+          !heridos.has(h.id) &&
+          !conCargo.has(h.id)
+      )
+      .map((h) => ({ heroe: h, escuadras: loQueLeCabe(h, vivos) }))
+      .filter((c) => c.escuadras.length > 0)
+      .sort((a, b) => poderTotal(b.escuadras, false) - poderTotal(a.escuadras, false) || (a.heroe.id < b.heroe.id ? -1 : 1))
+      .slice(0, Math.min(BATALLA.capacidad.asedio, residentesDe(origen).length - 1));
+    if (salen.length === 0) continue;
+    const expedicion = salen.flatMap((c) => c.escuadras);
 
     // ¿Hasta dónde llega? Se estima con lo que el almacén podría darle, no con lo que ya lleva (todavía no
     // existe el carro): `movilizarEjercito` cargará hasta ahí respetando la reserva de comida.
@@ -1238,7 +1256,7 @@ function lanzarCampanas(
       0,
       (origen.almacen['trigo']?.cantidad ?? 0) - reservaDeTrigo(origen, consumoRacionDeEscuadrones(campamento.filter((e) => !expedicion.includes(e))))
     );
-    const carro = Math.min(trigoDisponible, LOGISTICA.capacidadCarroPorJugador);
+    const carro = Math.min(trigoDisponible, LOGISTICA.capacidadCarroPorJugador * salen.length);
     const alcance = alcanceDeIdaYVuelta(expedicion, carro);
     if (alcance <= 0) continue;
 
@@ -1246,7 +1264,6 @@ function lanzarCampanas(
     // encontraría hoy, con la cohesión defensiva y la muralla del propio combate (`asediarConEjercito`). En la Era I
     // medida, el NPC se estrellaba una y otra vez contra guarniciones cinco veces más fuertes (gana el 0,4 %).
     const poderPropio = poderTotal(expedicion, false);
-    const heridos = heridosEn(heroesActuales, instante);
     const puedeGanar = (plaza: Asentamiento) =>
       poderPropio > poderTotal(defensaDe(plaza, heroesActuales, heridos), true) * multiplicadorDefensivoDeRecintos(plaza.recintos ?? []);
     // Ni contra la última plaza de una Facción (2026-09-27, decisión del usuario): conquistarla la haría desaparecer
@@ -1267,25 +1284,30 @@ function lanzarCampanas(
     if (!objetivo) continue;
 
     try {
-      const r = movilizarEjercito(
+      const [lider, ...resto] = salen;
+      let r = movilizarEjercito(
         porId.get(origen.id)!,
         campamento,
-        heroesActuales.find((j) => j.id === heroeId),
-        heroeId,
-        expedicion.map((e) => e.id),
+        lider!.heroe,
+        lider!.heroe.id,
+        lider!.escuadras.map((e) => e.id),
         { tipo: 'asentamiento', id: objetivo.id },
         asentamientos,
         mapa,
         `ejercito-npc-${contador++}`,
         instante
       );
+      // Los demás se suman en la puerta, cada uno con su carro (`unirseAEjercito`).
+      for (const c of resto) {
+        r = { ...unirseAEjercito(r.ejercito, r.asentamiento, campamento, c.heroe, c.heroe.id, c.escuadras.map((e) => e.id), instante) };
+      }
       porId.set(origen.id, r.asentamiento);
       const salida = sinTropa(r.ejercito);
       nuevos.push(salida.ejercito);
-      heroesActuales = conEscuadrones(heroesActuales, salida.tropa);
+      heroesActuales = situarHeroes(conEscuadrones(heroesActuales, salida.tropa), salen.map((c) => c.heroe.id), { tipo: 'columna', ejercitoId: salida.ejercito.id });
       conCampanaEnCurso.add(origen.id);
       campanasLanzadas++;
-      eventos.push(`${origen.id}: lanza una campaña contra ${objetivo.id} con ${expedicion.length} escuadrón(es).`);
+      eventos.push(`${origen.id}: lanza una campaña contra ${objetivo.id} con ${salen.length} héroe(s) y ${expedicion.length} escuadrón(es).`);
     } catch (err) {
       // Sin ruta por tierra, sin Liderazgo o sin escuadrones válidos: el NPC simplemente no sale este tick.
       // Igual que con `atacarCampamentosCercanos`, un rechazo del motor no es un fallo del guion.
@@ -1383,8 +1405,9 @@ function acogerHeroesNpc(estado: EstadoSimulacion, esNpc: (faccionId: string) =>
  * pasar a residir en ella), hecho por el NPC. Sin esto, en la Era I medida, dos Facciones se pasaban las mismas
  * plazas vacías cada ~2 h: 615 conquistas, el 98 % sin un defensor, y una plaza que cambió de manos 204 veces.
  *
- * No vacía la casa de nadie: solo se muda un héroe que deja al menos otro residente en su plaza de origen. Solo
- * columnas de un único participante y sin caravanas adjuntas, que son las que lanza el NPC.
+ * Se mudan todos los que iban en la columna (2026-09-28: el NPC sale con varios héroes), pero sin vaciar la casa de
+ * nadie: si alguno dejaría su plaza de origen sin residentes, no se muda ninguno y la columna vuelve a casa. Solo
+ * columnas sin caravanas adjuntas, que son las que lanza el NPC.
  */
 function ocuparConquistas(
   asentamientos: Asentamiento[],
@@ -1402,26 +1425,28 @@ function ocuparConquistas(
     const conquistada =
       esNpc(ejercito.faccionId) &&
       ejercito.estado === 'estacionado' &&
-      ejercito.participantes.length === 1 &&
       ejercito.caravanasAdjuntasIds.length === 0
         ? actuales.find((a) => a.faccionId === ejercito.faccionId && residentesDe(a).length === 0 && enLaPuertaDe(ejercito, a))
         : undefined;
-    const casa = conquistada && actuales.find((a) => esResidente(a, ejercito.liderId));
-    if (!conquistada || !casa || residentesDe(casa).length < 2) {
+    if (!conquistada) {
       quedan.push(ejercito);
       continue;
     }
 
     try {
-      const mudanza = cambiarResidencia([...facciones], actuales, conquistada.id, ejercito.liderId);
-      heroesActuales = sinGuarnicion(heroesActuales, ejercito.liderId);
-      const entrada = guarnecer(mudanza.destino, conTropa(ejercito, indiceTropa(heroesActuales)), []);
-      heroesActuales = situarHeroes(conEscuadrones(heroesActuales, entrada.tropa), [ejercito.liderId], {
-        tipo: 'asentamiento',
-        asentamientoId: conquistada.id,
-      });
-      actuales = actuales.map((a) => (a.id === mudanza.origen.id ? mudanza.origen : a.id === conquistada.id ? entrada.asentamiento : a));
-      eventos.push(`${ejercito.liderId} se queda a vivir en ${conquistada.id}, que acaba de conquistar, y entra con su columna.`);
+      let tras = actuales;
+      const ids = ejercito.participantes.map((p) => p.heroeId);
+      for (const heroeId of ids) {
+        const casa = tras.find((a) => esResidente(a, heroeId));
+        if (!casa || residentesDe(casa).length < 2) throw new FaccionInvalidaError('Mudarse dejaría su casa sin residentes.');
+        const mudanza = cambiarResidencia([...facciones], tras, conquistada.id, heroeId);
+        tras = tras.map((a) => (a.id === mudanza.origen.id ? mudanza.origen : a.id === mudanza.destino.id ? mudanza.destino : a));
+      }
+      for (const heroeId of ids) heroesActuales = sinGuarnicion(heroesActuales, heroeId);
+      const entrada = guarnecer(tras.find((a) => a.id === conquistada.id)!, conTropa(ejercito, indiceTropa(heroesActuales)), []);
+      heroesActuales = situarHeroes(conEscuadrones(heroesActuales, entrada.tropa), ids, { tipo: 'asentamiento', asentamientoId: conquistada.id });
+      actuales = tras.map((a) => (a.id === conquistada.id ? entrada.asentamiento : a));
+      eventos.push(`${ids.join(', ')} se quedan a vivir en ${conquistada.id}, que acaban de conquistar, y entran con su columna.`);
     } catch (err) {
       if (!(err instanceof FaccionInvalidaError) && !(err instanceof MovilizacionInvalidaError)) throw err;
       quedan.push(ejercito);
