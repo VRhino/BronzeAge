@@ -3,7 +3,6 @@
 // Facción del batch sin jugador humano llegaría jamás a tener un recinto, y el gate de nivel 4 que lo exige
 // (Paso 5) quedaría muerto para siempre.
 import { describe, expect, it } from 'vitest';
-import { instanteDeTest } from '../../engine/__tests__/fixtures';
 import type { Asentamiento } from '../../domain/types';
 import type { EstadoSimulacion } from '../../engine/simulation';
 import { avanzarNpcGobernanza } from '../npcGobernanza';
@@ -42,7 +41,6 @@ function estadoBase(nivel: number): { estado: EstadoSimulacion; mapa: ReturnType
       titulos: [],
       caminos: [],
       campamentosBandidos: [],
-      bandidosProximoSpawnEn: instanteDeTest(0),
       memoriaPorFaccion: {},
       heroes: [],
     },

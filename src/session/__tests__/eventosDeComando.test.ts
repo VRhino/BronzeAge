@@ -6,7 +6,7 @@
 // Este test protege el CONTRATO transversal —ningún comando aceptado emite ya `'legado'`, y el `momento` sale
 // del contexto inyectado— más los códigos concretos de una muestra representativa: uno narrado por la capa de
 // comandos (`crearFaccion`), uno de alcance local con `asentamientoId` (`renombrarAsentamiento`) y uno
-// narrado por el MOTOR y adaptado aquí (`atacarCampamentoBandidos`, vía `desdeCrudos`).
+// narrado por el MOTOR y adaptado aquí (`atacarCampamentoConColumna`, vía `desdeCrudos`).
 import { describe, expect, it } from 'vitest';
 import { GameSession } from '../gameSession';
 import { crearFaccion } from '../comandos/crearFaccion';

@@ -90,8 +90,8 @@ la IA de juego. Se llaman "héroes bot" para no confundirlos con los humanos. Un
 `controlador: 'bot'`: no tiene `Usuario` ni `Membresia` (su `jugadorId` es `null`) y su dueño es la Facción
 NPC, que ya actúa como `servicio_npc`. La unicidad "un héroe por jugador y mundo" solo aplica a los humanos.
 Los crea el admin al crear una Facción NPC (`crearFaccionNpc`, doc 02 §4.2): nacen como los fundadores de su
-primer asentamiento y viven en la partida como cualquier otro héroe, con `controlador: 'bot'`. Su comportamiento en el mundo de BronzeAge está pendiente (`Docs/Mecanicas a
-desarrollar.md` §36); en batalla los maneja la IA de Conquest (CQ-002).
+primer asentamiento y viven en la partida como cualquier otro héroe, con `controlador: 'bot'`. En el mundo de BronzeAge los mueve la gobernanza NPC
+(`Consideraciones/NPC_Gobernanza_Facciones_Controladas.md` §4.9); en batalla los maneja la IA de Conquest (CQ-002).
 
 ### Tabla de identidad y ámbito
 

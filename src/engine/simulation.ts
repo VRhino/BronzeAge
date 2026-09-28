@@ -41,9 +41,6 @@ export interface EstadoSimulacion {
   caminos: CaminoComercial[];
   /** Campamentos de bandidos activos (Doc 1.9) — ver `engine/bandidos.ts`. */
   campamentosBandidos: CampamentoBandido[];
-  /** Instante de mundo a partir del cual puede aparecer un campamento nuevo si hay menos de
-   * `maximoSimultaneos` activos (Doc 1.9) — se adelanta cada vez que un jugador destruye uno. */
-  bandidosProximoSpawnEn: Instante;
   /** Lo que cada Facción RECUERDA del mundo (niebla de guerra — ver `engine/memoria.ts`), por `faccionId`.
    * Una Facción ausente no ha visto nada todavía, así que las partidas guardadas antes de la mecánica no
    * necesitan migración. */
@@ -260,7 +257,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   // Campamentos de bandidos (Doc 1.9): spawn/respawn primero, después atacan cualquier caravana ya movida
   // este tick (comercial o de fundación) que pase cerca — mismo orden que el resto del tick, sobre posiciones
   // ya actualizadas.
-  const trasSpawnBandidos = avanzarSpawnBandidos(estado.campamentosBandidos, estado.bandidosProximoSpawnEn, zonas, trasExpansion.asentamientos, mapa, instante);
+  const trasSpawnBandidos = avanzarSpawnBandidos(estado.campamentosBandidos, zonas, trasExpansion.asentamientos, mapa, instante);
   eventosDominio.push(...comoEventosDominio(trasSpawnBandidos.eventos, contexto));
   // Los ejércitos entran aquí solo como ESCOLTA: una caravana enganchada se defiende con el poder de su
   // columna y no con la defensa base fija (Doc 5.13.3). El movimiento de los ejércitos sigue después.
@@ -332,7 +329,6 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     titulos: titulosActuales,
     caminos: estado.caminos,
     campamentosBandidos: trasSpawnBandidos.campamentos,
-    bandidosProximoSpawnEn: estado.bandidosProximoSpawnEn,
     // Al FINAL, y con lo que ya se movió: lo que se graba es dónde acabaron las columnas este minuto, no de
     // dónde salieron. No emite eventos ni cambia nada más — la memoria solo mira.
     memoriaPorFaccion: grabarLoVisto(estado.memoriaPorFaccion, {

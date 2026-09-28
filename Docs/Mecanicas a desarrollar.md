@@ -348,10 +348,8 @@ catálogo, como `visual` y a precio 0 (decisión del usuario, 2026-09-15; CQ-004
 botín para los que se unieron al bando ganador, que hoy va entero a la primera columna.
 
 Sigue distinto del canon, mientras no haya servidores de batalla: el asedio se resuelve con números
-(`iniciarAsedio`, `engine/combate.ts`); lo mismo el ataque a un campamento de bandidos, que ya se hace con la
-columna que llega a él (`atacar`, Doc 1.9, 2026-09-15), aunque los bots aún lo atacan desde su plaza (motor
-`atacarCampamentoBandidos`, hasta §36). El desalojo no mira el cupo de viviendas de la plaza que recibe a los
-vencidos (`desalojarResidentes`). La persecución no recalcula la ruta hacia la presa, aunque Doc 5.12.3 dice que
+(`iniciarAsedio`, `engine/combate.ts`); lo mismo el ataque a un campamento de bandidos, que se hace con la columna
+que llega a él (`atacar`, Doc 1.9; los bots, con `cazarBandidos`). La persecución no recalcula la ruta hacia la presa, aunque Doc 5.12.3 dice que
 sí: hoy solo marca a quién se ataca (bot) o de quién avisar (humano) si se cruzan a 15. CQ-002 en Conquest para la
 IA de escuadras sin héroe y de héroes bot; CQ-005 para las incorporaciones a una batalla en curso.
 
@@ -442,17 +440,6 @@ producción de la Granja (Doc 4.2.1); falta volver a medir. Cifras, causa y las 
   la Nobleza dejó de reclutarse; falta decidir su papel junto a la Fundición.
 - **Armas de asedio** (Doc 4.2.1): la Carpintería está pensada para arietes y torres de asedio, que Fase 0 no
   tiene.
-
-## 36. Comportamiento de los héroes bot en el mundo
-
-**Estado: sin diseñar, `código: ◐`.** Los héroes bot nacen como fundadores de su Facción NPC cuando el admin la
-crea (`crearFaccionNpc`, Doc 5.15.6, `Docs/Coordinacion/02` §4.2) y viven en la partida como cualquier otro
-héroe. Hoy la gobernanza NPC ya los usa como a sus residentes de siempre: ocupan cargos, reclutan y salen de
-campaña con sus escuadras, pero una campaña no los sitúa en la columna (su `ubicacion` se queda en el
-asentamiento). Falta decidir qué hacen en el mundo de BronzeAge: si salen con columnas en persona, defienden
-sus plazas, se unen a ejércitos...
-
-Su comportamiento EN batalla no es de BronzeAge: lo maneja la IA de Conquest (CQ-002).
 
 ## 37. Reclutamiento por clase de población y Palacio mejorable
 

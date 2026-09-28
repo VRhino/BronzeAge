@@ -146,7 +146,6 @@ export function crearEstadoDeTest(
     titulos: [],
     caminos: [],
     campamentosBandidos: [],
-    bandidosProximoSpawnEn: instanteDeTest(0),
     heroes: [],
     ...overrides,
   };

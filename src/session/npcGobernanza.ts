@@ -34,7 +34,8 @@ import { reclutarTropa, ReclutamientoInvalidoError } from '../engine/tropas';
 import { campamentoDe, conEscuadrones, conTropa, defensaDe, indiceTropa, sinGuarnicion, sinTropa, type IndiceTropa } from '../engine/tropa';
 import { asignarGuarnicion, guardarLoadout, HeroeInvalidoError, heridosEn, herir, progresionInicial } from '../engine/heroe';
 import { puedeLlevar } from '../engine/liderazgo';
-import { atacarCampamentoBandidos, CombateInvalidoError, poderEscuadron, poderTotal } from '../engine/combate';
+import { CombateInvalidoError, poderEscuadron, poderTotal } from '../engine/combate';
+import { agendarReaparicionBandidos } from '../engine/bandidos';
 import { lanzarCaravanaFundacion, costoCaravanaFundacion, ExpansionInvalidaError } from '../engine/expansion';
 import {
   nivelActualDe,
@@ -64,7 +65,6 @@ import { cupoLibreParaNivel, evaluarAscenso, iniciarAscenso, tarifaDeAscenso } f
 import { evaluarViabilidadFundacion, fundarAsentamiento, FundacionInvalidaError } from '../engine/settlement';
 import {
   BATALLA,
-  CAMPAMENTOS_BANDIDOS,
   EDIFICIO_CATALOGO,
   LIDERAZGO,
   LOGISTICA,
@@ -74,7 +74,19 @@ import {
   VISION,
 } from '../constants';
 import { situarHeroes } from '../engine/ubicacion';
-import { columnaDe, enLaPuertaDe, guarnecer, movilizarEjercito, replegarEjercito, salirAlMundo, tieneHeroeSano, unirseAEjercito, MovilizacionInvalidaError } from '../engine/ejercitos';
+import {
+  atacarCampamento,
+  capacidadCargaDe,
+  columnaDe,
+  enLaPuertaDe,
+  guarnecer,
+  movilizarEjercito,
+  replegarEjercito,
+  salirAlMundo,
+  tieneHeroeSano,
+  unirseAEjercito,
+  MovilizacionInvalidaError,
+} from '../engine/ejercitos';
 import { calcularRuta } from '../world/rutas';
 import { cruzarLaPuerta } from '../engine/ubicacion';
 import { cambiarResidencia, FaccionInvalidaError } from '../engine/faccion';
@@ -82,7 +94,7 @@ import { anexionar } from '../engine/fusion';
 import { consumoRacionDeEscuadrones, reservaDeTrigo } from '../engine/tropas';
 import { esResidente, estanAliadas } from '../engine/pertenencia';
 import { distancia } from '../world/geometria';
-import { minutos, sumar, type Instante } from '../domain/tiempo';
+import type { Instante } from '../domain/tiempo';
 
 /**
  * Reserva mínima de madera antes de reclutar (a petición del usuario, tras diagnosticar el colapso masivo de
@@ -827,109 +839,137 @@ function prepararDefensaNpc(asentamiento: Asentamiento, heroes: Heroe[]): Heroe[
 }
 
 /**
- * Ataque a campamentos de bandidos (punto 7b): si el asentamiento asignado a un campamento sigue vivo, tiene
- * AL MENOS UN escuadrón (de cualquier residente), su nutrición no está por debajo de
- * `UMBRAL_NUTRICION_ANTES_DE_ATACAR` y sus escuadrones no están ya heridos por debajo de
- * `SALUD_ESCUADRONES_ANTES_DE_ATACAR`, ataca con TODOS sus escuadrones juntos a la vez — a propósito, no uno a
- * la vez: la XP de Facción por combate se multiplica por `jugadoresParticipantes` (jugadores DISTINTOS entre
- * los escuadrones atacantes, ver `engine/combate.ts`), así que juntar los escuadrones de varios residentes en
- * un solo ataque maximiza la XP obtenida por evento en vez de repartirla en varios ataques de 1 jugador cada
- * uno. El spawn/respawn de campamentos ya lo resuelve solo `avanzarSpawnBandidos` dentro de
- * `avanzarSimulacion` — este NPC solo decide atacar los que YA existen.
+ * Los bandidos se cazan con una columna, como un jugador (Doc 1.9; decisión del usuario 2026-09-28): cada plaza NPC
+ * manda a por SU campamento a un héroe bot que está dentro, sano y sin cargo, con lo que le cabe en su Liderazgo; la
+ * columna marcha hasta él, lo ataca al llegar (`atacarCampamento`) y el repliegue la trae a casa. Antes la plaza lo
+ * atacaba sin moverse, al instante y a cualquier distancia: en la Era I medida, la Facción 1 despachaba uno cada 10
+ * minutos y se quedaba con la experiencia de todos los bandidos del mapa.
  *
- * El gate de nutrición es NUEVO (a petición del usuario, tras confirmar en batch que el combate sin ningún
- * freno era la causa dominante de que ninguna Facción llegara nunca a una segunda Granja —
- * `issues/granjas_no_escalan_con_poblacion.md`, y que seguía causando colapso masivo incluso después de
- * frenar el reclutamiento — `Consideraciones/NPC_Gobernanza_Facciones_Controladas.md` §"Abierto"): un
- * asentamiento que ya está mal alimentado no arriesga MÁS tropas que no podría reponer (la reserva de trigo
- * de `reclutarTropa` se lo impediría), así que atacar en ese estado solo cava más hondo. Un asentamiento sano
- * sigue atacando exactamente igual que siempre.
+ * Solo sale si la plaza come bien (`UMBRAL_NUTRICION_ANTES_DE_ATACAR`), si sus escuadras no están ya mermadas
+ * (`SALUD_ESCUADRONES_ANTES_DE_ATACAR`), si su poder supera al del campamento y si le alcanza el carro para ir y
+ * volver. Una columna que llega y ya no encuentra el campamento vuelve igual.
  */
-function atacarCampamentosCercanos(
+function cazarBandidos(
   asentamientos: Asentamiento[],
+  ejercitos: Ejercito[],
   heroes: Heroe[],
   campamentos: CampamentoBandido[],
   facciones: Faccion[],
+  caravanas: readonly Caravana[],
+  mapa: Mapa,
   instante: Instante,
+  contadorInicial: number,
   esNpc: (faccionId: string) => boolean,
   rng: RandomFn
 ): {
   asentamientos: Asentamiento[];
+  ejercitos: Ejercito[];
   heroes: Heroe[];
   facciones: Faccion[];
   campamentos: CampamentoBandido[];
-  bandidosProximoSpawnEn: Instante | undefined;
   eventos: string[];
   destruidos: number;
   fallidos: number;
+  contador: number;
 } {
-  let asentamientosActuales = asentamientos;
+  const eventos: string[] = [];
+  let actuales = asentamientos;
   let heroesActuales = heroes;
   let faccionesActuales = facciones;
   let campamentosActuales = campamentos;
-  const eventos: string[] = [];
+  let contador = contadorInicial;
   let destruidos = 0;
   let fallidos = 0;
-  let bandidosProximoSpawnEn: Instante | undefined;
+  const heridos = heridosEn(heroes, instante);
+  const vaA = (e: Ejercito, c: CampamentoBandido) => e.objetivo.tipo === 'punto' && e.objetivo.punto.x === c.posicion.x && e.objetivo.punto.y === c.posicion.y;
 
-  for (const campamento of campamentos) {
-    const asentamiento = asentamientosActuales.find((a) => a.id === campamento.asentamientoId);
-    // La guarnición la maneja la IA de la plaza: no sale a por bandidos (Doc 5.15.3). Y las escuadras de un héroe
-    // herido no combaten (Doc 5.16.4).
-    const heridos = heridosEn(heroesActuales, instante);
-    const tropa = asentamiento ? campamentoDe(asentamiento, heroesActuales).filter((e) => !e.enGuarnicion && !heridos.has(e.heroeId)) : [];
-    if (
-      !asentamiento ||
-      !esNpc(asentamiento.faccionId) ||
-      tropa.length === 0 ||
-      nutricionPoblacionDe(asentamiento) < UMBRAL_NUTRICION_ANTES_DE_ATACAR ||
-      saludEscuadrones(tropa) < SALUD_ESCUADRONES_ANTES_DE_ATACAR
-    )
-      continue;
-
+  // 1. Las que ya llegaron, atacan.
+  const columnas = ejercitos.map((ejercito) => {
+    const campamento = ejercito.estado === 'estacionado' && esNpc(ejercito.faccionId) ? campamentosActuales.find((c) => vaA(ejercito, c)) : undefined;
+    if (!campamento) return ejercito;
     try {
-      const resultado = atacarCampamentoBandidos(
-        asentamiento,
-        tropa,
-        tropa.map((e) => e.id),
-        campamento,
-        faccionesActuales,
-        rng
-      );
-      asentamientosActuales = asentamientosActuales.map((a) => (a.id === resultado.atacante.id ? resultado.atacante : a));
-      // Si el campamento aguanta, los héroes que mandaron la tropa pierden y quedan heridos (Doc 5.16.4).
-      heroesActuales = herir(
-        conEscuadrones(heroesActuales, resultado.tropa),
-        resultado.campamentoDestruido ? [] : new Set(tropa.map((e) => e.heroeId)),
-        instante
-      );
-      faccionesActuales = resultado.facciones;
-      // `engine/combate.ts` ya emite eventos estructurados, pero el NPC lleva su propio flujo en texto plano:
-      // migrarlo es una pasada aparte (este módulo NO es un comando, es el NPC jugando como jugaría alguien),
-      // así que aquí se toma solo el mensaje. Sus eventos salen como `codigo: 'npc.accion'`, ver
-      // `comandos/avanzarFaccionesNpc.ts`.
-      eventos.push(...resultado.eventos.map((e) => (typeof e === 'string' ? e : e.mensaje)));
-      if (resultado.campamentoDestruido) {
+      const r = atacarCampamento(conTropa(ejercito, indiceTropa(heroesActuales)), campamento, faccionesActuales, capacidadCargaDe(ejercito, caravanas), heridos, rng, heroesActuales);
+      const trasAtaque = sinTropa(r.ejercito);
+      heroesActuales = herir(conEscuadrones(heroesActuales, trasAtaque.tropa), r.vencidos, instante);
+      faccionesActuales = r.facciones;
+      eventos.push(...r.eventos.map((e) => (typeof e === 'string' ? e : e.mensaje)));
+      if (r.destruido) {
         campamentosActuales = campamentosActuales.filter((c) => c.id !== campamento.id);
-        bandidosProximoSpawnEn = sumar(instante, minutos(CAMPAMENTOS_BANDIDOS.respawnMinutos));
+        actuales = agendarReaparicionBandidos(actuales, campamento, instante);
         destruidos++;
       } else {
         fallidos++;
       }
+      return trasAtaque.ejercito;
     } catch (err) {
-      if (!(err instanceof CombateInvalidoError)) throw err;
+      if (!(err instanceof MovilizacionInvalidaError) && !(err instanceof CombateInvalidoError)) throw err;
+      return ejercito;
+    }
+  });
+
+  // 2. Cada plaza manda a por el suyo, si nadie va ya.
+  const nuevas: Ejercito[] = [];
+  for (const campamento of campamentosActuales) {
+    const plaza = actuales.find((a) => a.id === campamento.asentamientoId);
+    if (!plaza || !esNpc(plaza.faccionId) || [...columnas, ...nuevas].some((e) => vaA(e, campamento))) continue;
+    if (nutricionPoblacionDe(plaza) < UMBRAL_NUTRICION_ANTES_DE_ATACAR) continue;
+    const campamento_ = campamentoDe(plaza, heroesActuales);
+    const vivas = campamento_.filter((e) => e.cantidad > 0 && !e.enGuarnicion && !heridos.has(e.heroeId));
+    if (vivas.length === 0 || saludEscuadrones(vivas) < SALUD_ESCUADRONES_ANTES_DE_ATACAR) continue;
+    const conCargo = new Set(Object.values(plaza.cargos));
+    const cazador = heroesActuales
+      .filter(
+        (h) =>
+          h.controlador === 'bot' &&
+          esResidente(plaza, h.id) &&
+          h.ubicacion.tipo === 'asentamiento' &&
+          h.ubicacion.asentamientoId === plaza.id &&
+          !heridos.has(h.id) &&
+          !conCargo.has(h.id) &&
+          !columnaDe([...columnas, ...nuevas], h.id)
+      )
+      .map((h) => ({ heroe: h, escuadras: loQueLeCabe(h, vivas) }))
+      .filter((c) => c.escuadras.length > 0 && poderTotal(c.escuadras, false) > campamento.poder)
+      .sort((a, b) => poderTotal(b.escuadras, false) - poderTotal(a.escuadras, false) || (a.heroe.id < b.heroe.id ? -1 : 1))[0];
+    if (!cazador) continue;
+    const trigoDisponible = Math.max(
+      0,
+      (plaza.almacen['trigo']?.cantidad ?? 0) - reservaDeTrigo(plaza, consumoRacionDeEscuadrones(campamento_.filter((e) => !cazador.escuadras.includes(e))))
+    );
+    if (distancia(plaza.posicion, campamento.posicion) > alcanceDeIdaYVuelta(cazador.escuadras, Math.min(trigoDisponible, LOGISTICA.capacidadCarroPorJugador))) continue;
+    try {
+      const r = movilizarEjercito(
+        plaza,
+        campamento_,
+        cazador.heroe,
+        cazador.heroe.id,
+        cazador.escuadras.map((e) => e.id),
+        { tipo: 'punto', punto: campamento.posicion },
+        actuales,
+        mapa,
+        `ejercito-npc-${contador++}`,
+        instante
+      );
+      actuales = actuales.map((a) => (a.id === plaza.id ? r.asentamiento : a));
+      const salida = sinTropa(r.ejercito);
+      nuevas.push(salida.ejercito);
+      heroesActuales = situarHeroes(conEscuadrones(heroesActuales, salida.tropa), [cazador.heroe.id], { tipo: 'columna', ejercitoId: salida.ejercito.id });
+      eventos.push(`${plaza.id}: ${cazador.heroe.id} sale a por el campamento de bandidos ${campamento.id}.`);
+    } catch (err) {
+      if (!(err instanceof MovilizacionInvalidaError)) throw err;
     }
   }
 
   return {
-    asentamientos: asentamientosActuales,
+    asentamientos: actuales,
+    ejercitos: [...columnas, ...nuevas],
     heroes: heroesActuales,
     facciones: faccionesActuales,
     campamentos: campamentosActuales,
-    bandidosProximoSpawnEn,
     eventos,
     destruidos,
     fallidos,
+    contador,
   };
 }
 
@@ -1211,7 +1251,8 @@ function lanzarCampanas(
   const porId = new Map(asentamientos.map((a) => [a.id, a]));
   const nuevos: Ejercito[] = [];
   let heroesActuales = heroes;
-  const conCampanaEnCurso = new Set(ejercitos.map((e) => e.origenAsentamientoId));
+  // Una cacería de bandidos (`cazarBandidos`, objetivo en un punto) no cuenta como campaña en curso.
+  const conCampanaEnCurso = new Set(ejercitos.filter((e) => e.objetivo.tipo === 'asentamiento').map((e) => e.origenAsentamientoId));
 
   for (const origen of [...asentamientos].sort((a, b) => (a.id < b.id ? -1 : 1))) {
     if (!esNpc(origen.faccionId)) continue;
@@ -2043,17 +2084,31 @@ export function avanzarNpcGobernanza(
     config.atacarCampamentos === false
       ? {
           asentamientos,
+          ejercitos: trasComercio.ejercitos,
           heroes,
           facciones: trasComercio.facciones,
           campamentos: trasComercio.campamentosBandidos,
-          bandidosProximoSpawnEn: undefined,
           eventos: [] as string[],
           destruidos: 0,
           fallidos: 0,
+          contador,
         }
-      : atacarCampamentosCercanos(asentamientos, heroes, trasComercio.campamentosBandidos, trasComercio.facciones, instante, esNpc, rng);
+      : cazarBandidos(
+          asentamientos,
+          trasComercio.ejercitos,
+          heroes,
+          trasComercio.campamentosBandidos,
+          trasComercio.facciones,
+          trasComercio.caravanas,
+          mapa,
+          instante,
+          contador,
+          esNpc,
+          rng
+        );
   eventos.push(...trasBandidos.eventos);
   heroes = trasBandidos.heroes;
+  contador = trasBandidos.contador;
 
   // Punto 7c: las campañas (Paso 12). Van DESPUÉS de reclutar y de los bandidos, y antes de expandir: se
   // decide con la guarnición ya repuesta de este tick, y sacar tropa no debe competir con fundar.
@@ -2062,10 +2117,10 @@ export function avanzarNpcGobernanza(
   const defensiva = config.postura === 'defensiva';
   const trasCampanas =
     defensiva || config.lanzarCampanas === false
-      ? { asentamientos: trasBandidos.asentamientos, ejercitos: trasComercio.ejercitos, heroes, eventos: [] as string[], campanasLanzadas: 0, contador }
+      ? { asentamientos: trasBandidos.asentamientos, ejercitos: trasBandidos.ejercitos, heroes, eventos: [] as string[], campanasLanzadas: 0, contador }
       : lanzarCampanas(
           trasBandidos.asentamientos,
-          trasComercio.ejercitos,
+          trasBandidos.ejercitos,
           // El Liderazgo de quien sale es el de su héroe bot (Doc 5.11). Un id sin héroe —los fundadores de
           // los escenarios de batch— usa `LIDERAZGO.base`.
           heroes,
@@ -2146,7 +2201,6 @@ export function avanzarNpcGobernanza(
       ordenes: trasOrdenes.ordenes,
       ejercitos: trasPersecuciones.ejercitos,
       campamentosBandidos: trasBandidos.campamentos,
-      bandidosProximoSpawnEn: trasBandidos.bandidosProximoSpawnEn ?? trasComercio.bandidosProximoSpawnEn,
     },
     eventos,
     stats: {

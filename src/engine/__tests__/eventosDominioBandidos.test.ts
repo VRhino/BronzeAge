@@ -29,7 +29,7 @@ describe('eventos de dominio — bandidos.ts', () => {
     const mapa = crearMapaDeterminista(7);
     const { asentamiento } = fundarAsentamientoDeTest(mapa, crearFacciones(), 'faccion-1', []);
 
-    const resultado = avanzarSpawnBandidos([], instanteDeTest(0), [], [asentamiento], mapa, instanteDeTest(1), 1);
+    const resultado = avanzarSpawnBandidos([], [], [asentamiento], mapa, instanteDeTest(1));
 
     expect(resultado.campamentos).toHaveLength(1);
     expect(resultado.eventos).toHaveLength(1);

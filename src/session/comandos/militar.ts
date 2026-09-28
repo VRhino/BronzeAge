@@ -146,6 +146,5 @@ export const iniciarAsedio = comando<ParamsIniciarAsedio, { conquistado: boolean
 // exactamente lo que la escolta (Doc 5.13.3) sustituyó — mantener los dos habría dejado dos reglas distintas
 // para el mismo hecho según por dónde se entrara.
 
-// `atacarCampamentoBandidos` (atacar un campamento desde una plaza, con escuadras del campamento) se retiró el
-// 2026-09-15: un campamento se ataca con una columna que llegue a él (Doc 1.9), con `atacar` (`interaccion.ts`). El
-// motor conserva el ataque desde una plaza para los NPC (`npcGobernanza.ts`).
+// Un campamento de bandidos se ataca con una columna que llegue a él (Doc 1.9), con `atacar` (`interaccion.ts`); el
+// NPC hace lo mismo (`cazarBandidos`, `npcGobernanza.ts`).

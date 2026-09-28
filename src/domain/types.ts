@@ -608,6 +608,9 @@ export interface Asentamiento {
    * engine/asentamientoQuery.ts) salvo su expiración, que `avanzarSimulacion` limpia. Ausente = no ocupado.
    */
   ocupacionHasta?: Instante;
+  /** Cuándo reaparece el campamento de bandidos de este asentamiento tras destruirse (Doc 1.9): cada uno lleva su
+   * plazo (`agendarReaparicionBandidos`). Ausente = lo recibe en cuanto no tenga uno. */
+  bandidosReaparecenEn?: Instante;
   /** Protección del nuevo dueño tras una conquista (Doc 5.12.9): instante en que TERMINA. Mientras
    * `instante < protegidaHasta` nadie puede asediarla (`estaProtegida`). Puro tiempo, como la ocupación, y
    * `avanzarSimulacion` la limpia al vencer. Ausente = sin protección. */
@@ -933,7 +936,7 @@ export interface Ejercito {
  * Campamento de bandidos (Doc 1.9, a petición del usuario — inspirado en análisis comparativo con Travian):
  * aparece en un bosque sin ninguna zona de influencia encima (territorio no reclamado por ninguna Facción).
  * Ataca caravanas que pasen cerca mientras sigue en pie (`engine/bandidos.ts`); un jugador puede destruirlo
- * con sus escuadrones para obtener recompensa (`atacarCampamentoBandidos`, engine/combate.ts).
+ * con una columna que llegue a él para obtener recompensa (`atacarCampamentoConColumna`, engine/combate.ts).
  */
 export interface CampamentoBandido {
   id: string;

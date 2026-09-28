@@ -3,7 +3,7 @@
 // bug/revisión real que motivó su prueba.
 import { describe, expect, it } from 'vitest';
 import { computeTodasLasZonas } from '../zones';
-import { avanzarSpawnBandidos } from '../bandidos';
+import { agendarReaparicionBandidos, avanzarSpawnBandidos } from '../bandidos';
 import { evaluarViabilidadFundacion } from '../settlement';
 import { CAMPAMENTOS_BANDIDOS } from '../../constants';
 import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instanteDeTest } from './fixtures';
@@ -11,40 +11,25 @@ import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instan
 const SEED = 42;
 
 // ---------------------------------------------------------------------------------------------------------
-// Cooldown de reaparición (antes `bandidos_cooldown_respawn.test.ts`)
-//
-// Revisión pedida por el usuario: cada cuánto reaparecen los campamentos de bandidos tras ser destruidos.
-// El diseño (Doc 1.9: "REAPARICIÓN: tras destruirse, aparece un campamento nuevo pasados N ticks") ya vive
-// en `CAMPAMENTOS_BANDIDOS.respawnMinutos` + `bandidosProximoSpawnTick` (agendado por
-// `GameStore.atacarCampamentoBandidos`, ver `app/gameStore.ts`) — este test fija que el gate por tick
-// realmente bloquea/permite el respawn en el momento correcto, y que la cifra es la de `CAMPAMENTOS_BANDIDOS`
-// (parametrizable en caliente desde el panel de balance, `app/balanceConfig.ts`).
+// Reaparición por asentamiento (Doc 1.9; decisión del usuario 2026-09-28): cada uno lleva su plazo, y el suyo
+// reaparece junto a él. Con un plazo único para todo el mundo, el campamento nuevo iba siempre al primer asentamiento
+// de la lista, y en la Era I medida la Facción 1 se quedaba con la experiencia de todos los bandidos del mapa.
 // ---------------------------------------------------------------------------------------------------------
-describe('cooldown de reaparición de campamentos de bandidos', () => {
-  it('no repone un campamento destruido antes de respawnMinutos, y lo repone justo al cumplirse', () => {
+describe('reaparición de campamentos de bandidos', () => {
+  it('no repone el de un asentamiento antes de su plazo, y lo repone justo al cumplirse', () => {
     const mapa = crearMapaDeterminista(SEED);
-    const facciones = crearFacciones();
-    const { asentamiento } = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', [], 0);
-    const asentamientos = [asentamiento];
-    const zonas = computeTodasLasZonas(asentamientos);
+    const { asentamiento } = fundarAsentamientoDeTest(mapa, crearFacciones(), 'faccion-1', [], 0);
+    const zonas = computeTodasLasZonas([asentamiento]);
 
-    // Primer spawn: cubre al único asentamiento.
-    let resultado = avanzarSpawnBandidos([], instanteDeTest(0), zonas, asentamientos, mapa, instanteDeTest(1), 1);
-    expect(resultado.campamentos).toHaveLength(1);
+    expect(avanzarSpawnBandidos([], zonas, [asentamiento], mapa, instanteDeTest(1)).campamentos, 'sin plazo, lo recibe ya').toHaveLength(1);
 
-    // Se "destruye" (mismo efecto que `GameStore.atacarCampamentoBandidos`): se quita de la lista y se
-    // agenda el próximo tick de spawn permitido.
-    const tickDestruccion = 10;
-    const proximoSpawnEnTick = tickDestruccion + CAMPAMENTOS_BANDIDOS.respawnMinutos;
-
-    for (let tick = tickDestruccion + 1; tick < proximoSpawnEnTick; tick++) {
-      resultado = avanzarSpawnBandidos([], instanteDeTest(proximoSpawnEnTick), zonas, asentamientos, mapa, instanteDeTest(tick), tick);
-      expect(resultado.campamentos).toHaveLength(0);
-    }
-
-    resultado = avanzarSpawnBandidos([], instanteDeTest(proximoSpawnEnTick), zonas, asentamientos, mapa, instanteDeTest(proximoSpawnEnTick), proximoSpawnEnTick);
-    expect(resultado.campamentos).toHaveLength(1);
-    expect(resultado.campamentos[0]?.asentamientoId).toBe(asentamiento.id);
+    const destruido = avanzarSpawnBandidos([], zonas, [asentamiento], mapa, instanteDeTest(1)).campamentos[0]!;
+    const conPlazo = agendarReaparicionBandidos([asentamiento], destruido, instanteDeTest(10));
+    const plazo = 10 + CAMPAMENTOS_BANDIDOS.respawnMinutos;
+    expect(avanzarSpawnBandidos([], zonas, conPlazo, mapa, instanteDeTest(plazo - 1)).campamentos).toHaveLength(0);
+    const repuesto = avanzarSpawnBandidos([], zonas, conPlazo, mapa, instanteDeTest(plazo)).campamentos;
+    expect(repuesto).toHaveLength(1);
+    expect(repuesto[0]?.asentamientoId).toBe(asentamiento.id);
   });
 });
 
@@ -97,7 +82,7 @@ describe('spawn de campamentos de bandidos: uno por asentamiento, siempre', () =
     let campamentos: ReturnType<typeof avanzarSpawnBandidos>['campamentos'] = [];
     for (let tick = 1; tick <= TICKS_MAXIMOS && campamentos.length < asentamientos.length; tick++) {
       const zonas = computeTodasLasZonas(asentamientos);
-      const resultado = avanzarSpawnBandidos(campamentos, instanteDeTest(0), zonas, asentamientos, mapa, instanteDeTest(tick), tick);
+      const resultado = avanzarSpawnBandidos(campamentos, zonas, asentamientos, mapa, instanteDeTest(tick));
       campamentos = resultado.campamentos;
     }
 

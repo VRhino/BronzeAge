@@ -85,7 +85,6 @@ export interface GameSessionState {
   titulos: Titulo[];
   caminos: CaminoComercial[];
   campamentosBandidos: CampamentoBandido[];
-  bandidosProximoSpawnEn: Instante;
   /** Facciones que gobierna el NPC en vez de un jugador humano. Vive en la partida y no en el runner
    * (doc 7 §7.2): cambia el resultado del tick, así que un reinicio con otra configuración divergiría de lo
    * que el snapshot dice haber pasado. En partida real no cambia en caliente una vez elegida. */
@@ -141,7 +140,6 @@ export function estadoSimulacionDe(estado: GameSessionState): EstadoSimulacion {
     titulos: estado.titulos,
     caminos: estado.caminos,
     campamentosBandidos: estado.campamentosBandidos,
-    bandidosProximoSpawnEn: estado.bandidosProximoSpawnEn,
     memoriaPorFaccion: estado.memoriaPorFaccion,
     heroes: estado.heroes,
   };
@@ -162,7 +160,6 @@ export function conResultadoDeSimulacion(estado: GameSessionState, simulacion: E
     titulos: simulacion.titulos,
     caminos: simulacion.caminos,
     campamentosBandidos: simulacion.campamentosBandidos,
-    bandidosProximoSpawnEn: simulacion.bandidosProximoSpawnEn,
     memoriaPorFaccion: simulacion.memoriaPorFaccion,
     heroes: simulacion.heroes,
   };

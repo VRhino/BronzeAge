@@ -97,7 +97,6 @@ export class GameSession {
       titulos: [],
       caminos: [],
       campamentosBandidos: [],
-      bandidosProximoSpawnEn: instanteDeTick(0),
       memoriaPorFaccion: {},
       faccionesNpcIds: [],
       tick: 0,

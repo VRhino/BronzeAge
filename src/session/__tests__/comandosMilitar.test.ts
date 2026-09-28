@@ -99,7 +99,7 @@ describe('atacar un campamento de bandidos con la columna (Doc 1.9)', () => {
 
     const estado = sesion.getState();
     expect(estado.campamentosBandidos).toEqual([]);
-    expect(estado.bandidosProximoSpawnEn).toBeDefined();
+    expect(estado.asentamientos.some((a) => a.bandidosReaparecenEn !== undefined), 'su plaza agenda la reaparición').toBe(true);
     expect(estado.ejercitos.find((e) => e.id === columnaId)!.suministro['madera'], 'la madera del botín, en el carro').toBeGreaterThan(0);
   });
 

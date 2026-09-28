@@ -5,7 +5,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Asentamiento, CampamentoBandido, Faccion } from '../../domain/types';
 import { NIVEL_FACCION } from '../../constants';
-import { atacarCampamentoBandidos, esCombateDigno, poderTotal, resolverCombate } from '../combate';
+import { atacarCampamentoConColumna, esCombateDigno, poderTotal, resolverCombate } from '../combate';
+import type { EjercitoConTropa } from '../tropa';
 import { avanzarSimulacion } from '../simulation';
 import { aplicarEntregaATrueque, proponerTrueque } from '../trade';
 import { createRng } from '../../worldgen';
@@ -49,7 +50,8 @@ describe('campamentos de bandidos', () => {
       asentamientoId: creado.asentamiento.id,
       poder: poderTotal(tropa, false) * poderRelativoDelCampamento,
     } as CampamentoBandido;
-    const r = atacarCampamentoBandidos(creado.asentamiento, tropa, ['e1'], campamento, facciones, createRng(1));
+    const columna = { id: 'col-1', faccionId: 'faccion-1', escuadrones: tropa, suministro: {} } as unknown as EjercitoConTropa;
+    const r = atacarCampamentoConColumna(columna, campamento, facciones, 500, createRng(1));
     return xpDe(r.facciones) - xpDe(facciones);
   }
 

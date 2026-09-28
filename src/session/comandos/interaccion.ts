@@ -45,8 +45,8 @@ import {
 import { heridosEn, herir } from '../../engine/heroe';
 import { conEscolta, indiceTropa, sinEscolta } from '../../engine/tropa';
 import type { Asentamiento, Ejercito } from '../../domain/types';
-import { minutos, sumar, type Instante } from '../../domain/tiempo';
-import { CAMPAMENTOS_BANDIDOS } from '../../constants';
+import type { Instante } from '../../domain/tiempo';
+import { agendarReaparicionBandidos } from '../../engine/bandidos';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito } from './tipos';
 import { comando, conColumnas, conTropaDe, exigirAsentamiento, exigirCampamento, exigirCaravana, exigirColumnaDe, exigirEjercito } from './ayudas';
@@ -209,9 +209,13 @@ export const atacar = comando<ParamsAtacar, { battleId: string } | undefined>((e
       ...trasAsalto,
       facciones: asalto.facciones,
       heroes: herir(trasAsalto.heroes, asalto.vencidos, ctx.instante),
-      // Al destruirlo se agenda su reaparición; el spawn en sí lo evalúa el tick (`avanzarSpawnBandidos`).
-      campamentosBandidos: asalto.destruido ? estado.campamentosBandidos.filter((c) => c.id !== campamento.id) : estado.campamentosBandidos,
-      bandidosProximoSpawnEn: asalto.destruido ? sumar(ctx.instante, minutos(CAMPAMENTOS_BANDIDOS.respawnMinutos)) : estado.bandidosProximoSpawnEn,
+      // Al destruirlo, su asentamiento agenda la reaparición; el spawn en sí lo evalúa el tick (`avanzarSpawnBandidos`).
+      ...(asalto.destruido
+        ? {
+            campamentosBandidos: estado.campamentosBandidos.filter((c) => c.id !== campamento.id),
+            asentamientos: agendarReaparicionBandidos(trasAsalto.asentamientos, campamento, ctx.instante),
+          }
+        : {}),
     };
     return exito(
       conHistorialDeJugador(siguiente, params.heroeId, `Ataca el campamento de bandidos ${campamento.id}.`),

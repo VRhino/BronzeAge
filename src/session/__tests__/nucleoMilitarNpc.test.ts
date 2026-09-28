@@ -4,7 +4,6 @@
 // (`NIVEL_ASENTAMIENTO.requisitos[3]`), porque la política de auto-construcción que antes los gateaba se
 // retiró sin sustituto.
 import { describe, expect, it } from 'vitest';
-import { instanteDeTest } from '../../engine/__tests__/fixtures';
 import type { Asentamiento } from '../../domain/types';
 import type { EstadoSimulacion } from '../../engine/simulation';
 import { avanzarNpcGobernanza } from '../npcGobernanza';
@@ -50,7 +49,6 @@ function estadoBase(): { estado: EstadoSimulacion; mapa: ReturnType<typeof crear
       titulos: [],
       caminos: [],
       campamentosBandidos: [],
-      bandidosProximoSpawnEn: instanteDeTest(0),
       memoriaPorFaccion: {},
       heroes: [],
     },

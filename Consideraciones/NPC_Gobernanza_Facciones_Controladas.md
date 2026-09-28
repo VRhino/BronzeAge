@@ -230,6 +230,11 @@ espadachines de cobre — hay variedad, pero solo de la gama baja de la Era I: n
   crecer en paz vuelve la expansión y las plazas quedan con 1-2 residentes; sin esta regla, esas casas conquistaban,
   volvían a casa y dejaban la plaza vacía: 485 conquistas en la Era I, el 88 % de plazas sin defensor, y dos
   Facciones pasándose las mismas plazas cada ~2 h.
+- **Caza sus bandidos con una columna, como un jugador** (`cazarBandidos`, 2026-09-28, decisión del usuario): cada
+  plaza manda a un héroe bot sin cargo, con lo que le cabe en su Liderazgo, a por SU campamento; ataca al llegar y el
+  repliegue lo trae a casa. Antes la plaza lo atacaba sin moverse, al instante y a cualquier distancia, y con el plazo
+  de reaparición global la Facción 1 se quedaba con todos los bandidos del mapa (Doc 1.9 ahora da un plazo a cada
+  asentamiento).
 - **Sale de campaña con varios héroes juntos** (2026-09-28, decisión del usuario): hasta `BATALLA.capacidad.asedio`
   héroes bot que están dentro, sanos y sin cargo —el Gobernador se queda—, los más fuertes primero y cada uno con lo que
   le cabe en su Liderazgo. Sustituye a "un héroe con la mitad de las escuadras": con cinco héroes por plaza, uno solo

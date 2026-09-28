@@ -1856,11 +1856,9 @@ export const CAMPAMENTOS_BANDIDOS = {
   poder: 30,
   // Radio (unidades del mapa) dentro del cual un campamento ataca a una caravana que pase cerca.
   radioAtaqueCaravana: 40,
-  // Ticks tras destruirse un campamento antes de que pueda aparecer uno nuevo ("N días" del diseño, Doc 1.9,
-  // expresado en ticks — Fase 0 no tiene mapeo tick-a-tiempo-real todavía). Bajado de 60 a 10 (pruebas del
-  // usuario) — a 60 ticks el farming de XP de Facción vía campamentos era demasiado lento frente al resto
-  // de fuentes de experiencia.
-  respawnMinutos: 10,
+  // Minutos de mundo tras destruirse un campamento hasta que reaparece el de ese asentamiento (Doc 1.9). Vuelve a 60
+  // (2026-09-28, decisión del usuario): se bajó a 10 cuando los tiempos del servidor eran más cortos.
+  respawnMinutos: 60,
   // Recompensa fija al destruirlo (botín).
   recompensa: { madera: 40, piedra: 20, oro: 15 } as Partial<Record<string, number>>,
 };

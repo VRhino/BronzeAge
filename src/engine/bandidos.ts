@@ -1,8 +1,8 @@
 // Campamentos de bandidos (Doc 1.9, a petición del usuario — inspirado en análisis comparativo con Travian):
 // amenaza NPC ambiental, distinta del combate entre Facciones (Doc 5, engine/combate.ts). Este módulo cubre
 // las dos partes AUTOMÁTICAS de la mecánica (spawn/respawn y ataque a caravanas cercanas, ambas evaluadas
-// cada tick dentro de `avanzarSimulacion`); el ataque MANUAL de un jugador contra un campamento vive en
-// `engine/combate.ts` (`atacarCampamentoBandidos`), junto al resto de resolución de combate.
+// cada tick dentro de `avanzarSimulacion`); el ataque contra un campamento, con una columna que llegue a él, vive en
+// `engine/combate.ts` (`atacarCampamentoConColumna`), junto al resto de resolución de combate.
 
 import type { Asentamiento, CampamentoBandido, Escuadron, Point, ZonaBosque, ZonaInfluencia } from '../domain/types';
 import { alCampamento, type CaravanaConEscolta, type EjercitoConTropa } from './tropa';
@@ -23,24 +23,12 @@ export interface PayloadCaravanaEscapa {
 import type { Mapa } from '../world/mapa';
 import type { RandomFn } from '../worldgen';
 import { CAMPAMENTOS_BANDIDOS, MILITAR } from '../constants';
-import type { Instante } from '../domain/tiempo';
+import { minutos, sumar, type Instante } from '../domain/tiempo';
 import { pointInPolygon } from './zones';
 import { aplicarBajas, poderTotal } from './combate';
 
 function distancia(a: Point, b: Point): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
-}
-
-/**
- * Asentamiento vivo sin campamento ASIGNADO todavía (Doc 1.9, a petición del usuario) — por `asentamientoId`,
- * no por distancia: un criterio anterior basado en radio dejaba asentamientos vecinos (a menos de la
- * distancia de cobertura de otro) sin campamento propio para siempre, porque el primero que aparecía
- * "cubría" a los demás sin que ninguno tuviera el suyo (bug real detectado con 3 asentamientos cercanos,
- * donde solo llegaba a aparecer 1). Devuelve el PRIMERO sin cubrir (orden estable) — cuál exactamente no
- * importa, el respawn ya reparte uno por tick.
- */
-function asentamientoSinCampamento(asentamientos: Asentamiento[], campamentos: CampamentoBandido[]): Asentamiento | undefined {
-  return asentamientos.find((a) => !campamentos.some((c) => c.asentamientoId === a.id));
 }
 
 /**
@@ -57,52 +45,53 @@ function bosqueNoReclamadoMasCercano(mapa: Mapa, zonas: ZonaInfluencia[], ocupad
 }
 
 /**
- * Spawn/respawn de campamentos de bandidos (Doc 1.9, a petición del usuario) — UNO por asentamiento, tomando
- * como referencia SU bosque no reclamado más cercano: ni en la otra punta del mapa sin nadie cerca para
- * atacarlo, ni dentro de una zona de influencia (ya excluido por `bosqueNoReclamadoMasCercano`). El tope deja
- * de ser un número fijo — es el número de asentamientos vivos, cada uno con SU PROPIO campamento asignado
- * (`asentamientoId`), sin importar lo cerca que esté de otro asentamiento ya atendido (bug corregido: un
- * criterio anterior por radio dejaba asentamientos vecinos sin campamento propio para siempre). Mientras se
- * haya cumplido el plazo de reaparición, cada tick se cubre COMO MUCHO un asentamiento sin campamento (mismo
- * ritmo que antes) — si no queda ningún bosque libre para él ese tick, simplemente no aparece nada y se
- * reintenta el siguiente (sin bloquear la simulación ni lanzar error).
+ * Spawn/respawn de campamentos de bandidos (Doc 1.9) — UNO por asentamiento, en SU bosque no reclamado más cercano:
+ * ni en la otra punta del mapa sin nadie cerca para atacarlo, ni dentro de una zona de influencia (ya excluido por
+ * `bosqueNoReclamadoMasCercano`).
+ *
+ * **Cada asentamiento lleva su propio plazo** (`Asentamiento.bandidosReaparecenEn`, 2026-09-28, decisión del usuario):
+ * el suyo reaparece junto a él cuando vence, y uno sin plazo lo recibe ya. Antes el plazo era uno para todo el mundo
+ * y el campamento nuevo iba al PRIMER asentamiento de la lista sin cubrir: en la Era I medida era siempre la capital
+ * de la Facción 1, que lo destruía al minuto y se quedaba con la experiencia de todos los bandidos del mapa.
+ *
+ * Si no queda un bosque libre para alguno, ese no recibe nada y se reintenta el tick siguiente.
  */
 export function avanzarSpawnBandidos(
   campamentos: CampamentoBandido[],
-  proximoSpawnEn: Instante,
   zonas: ZonaInfluencia[],
   asentamientos: Asentamiento[],
   mapa: Mapa,
-  instante: Instante,
-  contador = 0
+  instante: Instante
 ): { campamentos: CampamentoBandido[]; eventos: EventoCrudo[] } {
-  if (campamentos.length >= asentamientos.length || instante < proximoSpawnEn) {
-    return { campamentos, eventos: [] };
+  const eventos: EventoCrudo[] = [];
+  const actuales = [...campamentos];
+  for (const asentamiento of asentamientos) {
+    if (actuales.some((c) => c.asentamientoId === asentamiento.id)) continue;
+    if (asentamiento.bandidosReaparecenEn !== undefined && instante < asentamiento.bandidosReaparecenEn) continue;
+    const bosque = bosqueNoReclamadoMasCercano(mapa, zonas, new Set(actuales.map((c) => c.bosqueId)), asentamiento.posicion);
+    if (!bosque) continue;
+    // Uno por asentamiento a la vez: su id basta para que no se repita.
+    const nuevo: CampamentoBandido = {
+      id: `campamento-${asentamiento.id}`,
+      posicion: bosque.centro,
+      bosqueId: bosque.id,
+      asentamientoId: asentamiento.id,
+      poder: CAMPAMENTOS_BANDIDOS.poder,
+    };
+    actuales.push(nuevo);
+    eventos.push({
+      codigo: 'bandidos.campamento_aparece',
+      mensaje: `Aparece un campamento de bandidos cerca de ${asentamiento.id}, en su bosque no reclamado más cercano (${nuevo.id}).`,
+      payload: { campamentoId: nuevo.id, asentamientoObjetivoId: asentamiento.id } satisfies PayloadCampamentoAparece,
+    });
   }
-  const asentamientoObjetivo = asentamientoSinCampamento(asentamientos, campamentos);
-  if (!asentamientoObjetivo) return { campamentos, eventos: [] };
+  return { campamentos: actuales, eventos };
+}
 
-  const ocupados = new Set(campamentos.map((c) => c.bosqueId));
-  const bosque = bosqueNoReclamadoMasCercano(mapa, zonas, ocupados, asentamientoObjetivo.posicion);
-  if (!bosque) return { campamentos, eventos: [] };
-
-  const nuevo: CampamentoBandido = {
-    id: `campamento-${contador}`,
-    posicion: bosque.centro,
-    bosqueId: bosque.id,
-    asentamientoId: asentamientoObjetivo.id,
-    poder: CAMPAMENTOS_BANDIDOS.poder,
-  };
-  return {
-    campamentos: [...campamentos, nuevo],
-    eventos: [
-      {
-        codigo: 'bandidos.campamento_aparece',
-        mensaje: `Aparece un campamento de bandidos cerca de ${asentamientoObjetivo.id}, en su bosque no reclamado más cercano (${nuevo.id}).`,
-        payload: { campamentoId: nuevo.id, asentamientoObjetivoId: asentamientoObjetivo.id } satisfies PayloadCampamentoAparece,
-      },
-    ],
-  };
+/** Destruido un campamento, su asentamiento agenda la reaparición del suyo (Doc 1.9). */
+export function agendarReaparicionBandidos(asentamientos: readonly Asentamiento[], campamento: CampamentoBandido, instante: Instante): Asentamiento[] {
+  const cuando = sumar(instante, minutos(CAMPAMENTOS_BANDIDOS.respawnMinutos));
+  return asentamientos.map((a) => (a.id === campamento.asentamientoId ? { ...a, bandidosReaparecenEn: cuando } : a));
 }
 
 /**

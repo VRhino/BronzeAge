@@ -211,7 +211,6 @@ function correrSeed(seed: number): ResultadoSeed {
     titulos: [],
     caminos: [],
     campamentosBandidos: [],
-    bandidosProximoSpawnEn: instanteDeTick(0),
     heroes: [],
   };
   let tick = 0;

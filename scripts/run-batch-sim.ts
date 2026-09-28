@@ -1104,7 +1104,6 @@ async function main() {
     titulos: [],
     caminos: [],
     campamentosBandidos: [],
-    bandidosProximoSpawnEn: instanteDeTick(0),
     // Los fundadores son héroes bot: sin registro no tendrían dónde guardar las escuadras que recluten.
     heroes: asentamientos.flatMap((a) =>
       a.heroesFundadoresIds.map((id) => heroeBot(id, id, { tipo: 'asentamiento', asentamientoId: a.id }))

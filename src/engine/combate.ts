@@ -5,7 +5,7 @@ import type { EventoCrudo } from '../domain/eventos';
 import { minutos, sumar, type Instante } from '../domain/tiempo';
 import type { RandomFn } from '../worldgen';
 import { CAMPAMENTOS_BANDIDOS, MILITAR, NIVEL_FACCION, OCUPACION, REPUTACION } from '../constants';
-import { agregarRecurso, aplicarCapacidadDeEdificio } from './almacen';
+import { aplicarCapacidadDeEdificio } from './almacen';
 import { aplicarAjustesReputacion } from './reputacion';
 import { aplicarAjustesExperiencia, type AjusteExperiencia } from './faccion';
 import { multiplicadorDefensivoDeRecintos } from './muralla';
@@ -422,68 +422,6 @@ export function iniciarAsedio(
 // Retirarlos no era solo limpieza: `interceptarCaravana` resolvía contra una defensa base FIJA, que es
 // exactamente lo que la escolta sustituyó (Doc 5.13.3). Mantener los dos habría dejado dos reglas distintas
 // para el mismo hecho según por dónde se entrara.
-
-/**
- * Ataque de un jugador a un campamento de bandidos (Doc 1.9, a petición del usuario) — mismo patrón que el
- * resto del combate (Doc 5.2/5.10): poder de los escuadrones elegidos, con jitter, contra el `poder` fijo
- * del campamento (placeholder, ver `CAMPAMENTOS_BANDIDOS`, constants.ts). Si gana, el campamento se destruye
- * (el llamador debe quitarlo del estado, ver `campamentoDestruido`) y entrega una recompensa fija en
- * recursos; si pierde, los escuadrones sufren bajas (mismo `aplicarBajas` que el resto del combate) y el
- * campamento sigue en pie.
- *
- * SIN gate de General (corrección — a diferencia de asediar/interceptar, ver `iniciarAsedio`/
- * `interceptarCaravana`): un campamento bandido es una amenaza NPC de mundo abierto, no una acción de
- * guerra entre Facciones que necesite coordinación de mando. Cualquier escuadrón propio elegido (de
- * cualquier jugador residente, Doc 2.5) puede atacarlo — basta con vencerlo en combate.
- *
- * Es el ataque DESDE UNA PLAZA y hoy solo lo usan los NPC (`npcGobernanza.ts`), hasta que se defina su
- * comportamiento en el mundo (Mecánicas §36). El jugador ataca con una columna que llegue (Doc 1.9,
- * `atacarCampamentoConColumna`).
- */
-export function atacarCampamentoBandidos(
-  atacante: Asentamiento,
-  /** El campamento del atacante (`campamentoDe`): de ahí salen los escuadrones elegidos. */
-  tropa: readonly Escuadron[],
-  escuadronIdsAtacantes: string[],
-  campamento: CampamentoBandido,
-  facciones: Faccion[],
-  rng: RandomFn
-): { atacante: Asentamiento; facciones: Faccion[]; eventos: EventoCrudo[]; campamentoDestruido: boolean; tropa: Escuadron[] } {
-  const escuadrones = seleccionarEscuadrones(tropa, escuadronIdsAtacantes);
-  const { gana, escuadrones: escuadronesActualizados } = choqueContraCampamento(escuadrones, campamento, rng);
-
-  let almacen = atacante.almacen;
-  const eventos: EventoCrudo[] = [];
-  const payloadCampamento: PayloadAtaqueCampamento = { atacanteId: atacante.id, campamentoId: campamento.id };
-  if (gana) {
-    for (const [recurso, cantidad] of Object.entries(CAMPAMENTOS_BANDIDOS.recompensa)) {
-      if (cantidad) almacen = agregarRecurso(almacen, recurso, cantidad);
-    }
-    eventos.push({
-      codigo: 'combate.campamento_destruido',
-      mensaje: `${atacante.id} destruye el campamento de bandidos ${campamento.id} y obtiene botín.`,
-      payload: payloadCampamento,
-    });
-  } else {
-    eventos.push({
-      codigo: 'combate.ataque_campamento_fallido',
-      mensaje: `${atacante.id} falla el ataque al campamento de bandidos ${campamento.id} y sufre bajas.`,
-      payload: payloadCampamento,
-    });
-  }
-
-  const faccionesFinal = aplicarAjustesExperiencia(facciones, [
-    { faccionId: atacante.faccionId, delta: xpDeBandidos(facciones, atacante.faccionId, gana), razon: 'campamento de bandidos' },
-  ]);
-
-  return {
-    atacante: { ...atacante, almacen },
-    facciones: faccionesFinal,
-    eventos,
-    campamentoDestruido: gana,
-    tropa: escuadronesActualizados,
-  };
-}
 
 /** El choque contra un campamento de bandidos (Doc 1.9): poder con jitter contra su `poder` fijo, con las bajas de
  * siempre. Lo comparten el ataque desde una plaza (NPC) y el de una columna. */
