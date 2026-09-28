@@ -177,6 +177,38 @@ export const alternarAutoConstruccion = comando<ParamsAlternarAutoConstruccion, 
   ]);
 });
 
+export interface ParamsAlternarReceta {
+  asentamientoId: string;
+  /** El recurso que produce la receta (Doc 4.2.1). */
+  recurso: RecursoTipo;
+  /** `true` la para en todos los talleres de la plaza; `false` la reanuda. */
+  pausada: boolean;
+}
+
+/** Para o reanuda una receta concreta en los talleres de la plaza (Doc 4.2.1). Idempotente, como la pausa de la
+ * auto-construcción. */
+export const alternarReceta = comando<ParamsAlternarReceta, void>((estado, _mapa, ctx, params) => {
+  const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
+  const pausadas = asentamiento.recetasPausadas ?? [];
+  if (pausadas.includes(params.recurso) === params.pausada) return sinCambios(estado);
+
+  const recetasPausadas = params.pausada ? [...pausadas, params.recurso] : pausadas.filter((r) => r !== params.recurso);
+  return exito(conAsentamiento(estado, { ...asentamiento, recetasPausadas }), [
+    evento(ctx, {
+      codigo: 'construccion.receta_alternada',
+      mensaje: `Receta de ${params.recurso} ${params.pausada ? 'parada' : 'reanudada'}.`,
+      payload: { asentamientoId: asentamiento.id, recurso: params.recurso, pausada: params.pausada } satisfies PayloadRecetaAlternada,
+      asentamientoId: asentamiento.id,
+    }),
+  ]);
+});
+
+export interface PayloadRecetaAlternada {
+  asentamientoId: string;
+  recurso: RecursoTipo;
+  pausada: boolean;
+}
+
 export interface ParamsCalibrarReservaManual {
   asentamientoId: string;
   recurso: RecursoTipo;

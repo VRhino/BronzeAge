@@ -1183,8 +1183,13 @@ export function factorLineaProduccion(edificio: Edificio, receta: RecetaProducci
  */
 function avanzarRecetas(
   asentamiento: Asentamiento,
-  almacen: Record<string, RecursoAlmacenado>
+  almacen: Record<string, RecursoAlmacenado>,
+  /** Lo que un taller no puede tocar: la misma reserva que respeta la auto-construcción (mantenimiento, comida y la
+   * reserva manual del Tesorero, 2026-09-28, decisión del usuario). Sin ella, en la Era I medida, una Armería
+   * vaciaba la madera de su plaza en medio día y la dejaba caer en ruinas por no pagar el mantenimiento. */
+  reserva: Partial<Record<RecursoTipo, number>>
 ): { almacen: Record<string, RecursoAlmacenado>; pausados: Set<string> } {
+  const pausadas = new Set(asentamiento.recetasPausadas ?? []);
   const ratioArtesano = ratioManoObraArtesanos(asentamiento);
   let almacenActual = almacen;
   const pausados = new Set<string>();
@@ -1195,10 +1200,11 @@ function avanzarRecetas(
     const nivel = niveles[edificio.nivelInterno ?? 1];
     if (!nivel) continue;
     for (const receta of nivel.recetas) {
+      if (pausadas.has(receta.produce as RecursoTipo)) continue;
       let cantidad = receta.produccionBase * ratioArtesano * factorLineaProduccion(edificio, receta, asentamiento);
       for (const [insumo, porUnidad] of Object.entries(receta.consumePorUnidad)) {
         if (!porUnidad) continue;
-        const disponible = almacenActual[insumo]?.cantidad ?? 0;
+        const disponible = Math.max(0, (almacenActual[insumo]?.cantidad ?? 0) - (reserva[insumo as RecursoTipo] ?? 0));
         cantidad = Math.min(cantidad, disponible / porUnidad);
       }
       if (cantidad <= 0) continue;
@@ -1377,21 +1383,22 @@ export function avanzarConstruccion(
 
   let edificiosActualizados = [...asentamiento.edificios.map((e) => resultados.get(e.id)!), ...puestosNuevos];
 
-  // Rediseño de progreso (Fase 0, Doc 4.2.1): recetas de crafting de los edificios de transformación activos.
-  const recetasResultado = avanzarRecetas({ ...asentamiento, edificios: edificiosActualizados }, almacen);
+  const reserva = reservaDinamicaConstruccion({ ...asentamiento, edificios: edificiosActualizados, almacen }, capital, consumoTropasPorMinuto);
+  // Reserva manual del Tesorero (a petición del usuario, ver `Asentamiento.reservaManual`): se SUMA a la
+  // dinámica y solo aplica a este camino AUTOMÁTICO (recetas, avanzarMejoras y evaluarNecesidades más abajo) —
+  // `anadirEdificioManualmente` calcula su propia reserva sin esta suma, exenta a propósito.
+  for (const [recurso, valor] of Object.entries(asentamiento.reservaManual ?? {})) {
+    if (valor) reserva[recurso as RecursoTipo] = (reserva[recurso as RecursoTipo] ?? 0) + valor;
+  }
+
+  // Rediseño de progreso (Fase 0, Doc 4.2.1): recetas de crafting de los edificios de transformación activos, sin
+  // bajar de esa misma reserva.
+  const recetasResultado = avanzarRecetas({ ...asentamiento, edificios: edificiosActualizados }, almacen, reserva);
   almacen = recetasResultado.almacen;
   edificiosActualizados = edificiosActualizados.map((e) => {
     const pausado = recetasResultado.pausados.has(e.id);
     return pausado !== !!e.pausadoPorAlmacenLleno ? { ...e, pausadoPorAlmacenLleno: pausado } : e;
   });
-
-  const reserva = reservaDinamicaConstruccion({ ...asentamiento, edificios: edificiosActualizados, almacen }, capital, consumoTropasPorMinuto);
-  // Reserva manual del Tesorero (a petición del usuario, ver `Asentamiento.reservaManual`): se SUMA a la
-  // dinámica y solo aplica a este camino AUTOMÁTICO (avanzarMejoras + evaluarNecesidades más abajo) —
-  // `anadirEdificioManualmente` calcula su propia reserva sin esta suma, exenta a propósito.
-  for (const [recurso, valor] of Object.entries(asentamiento.reservaManual ?? {})) {
-    if (valor) reserva[recurso as RecursoTipo] = (reserva[recurso as RecursoTipo] ?? 0) + valor;
-  }
 
   // Mejora de nivel interno (Doc 4.2.1): evalúa después de las recetas, con el almacén ya actualizado por ellas.
   const trasMejoras = avanzarMejoras({ ...asentamiento, edificios: edificiosActualizados }, almacen, reserva, instante);

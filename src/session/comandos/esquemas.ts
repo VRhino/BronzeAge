@@ -155,6 +155,7 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
     ['asentamientoId', 'cargo', 'edificioId']
   ),
   alternarAutoConstruccion: objeto({ asentamientoId: IDENTIFICADOR, pausada: { type: 'boolean' } }, ['asentamientoId', 'pausada']),
+  alternarReceta: objeto({ asentamientoId: IDENTIFICADOR, recurso: RECURSO, pausada: { type: 'boolean' } }, ['asentamientoId', 'recurso', 'pausada']),
   alternarReabastecerAliados: objeto({ asentamientoId: IDENTIFICADOR, permitido: { type: 'boolean' } }, ['asentamientoId', 'permitido']),
   adjuntarCaravana: objeto({ ejercitoId: IDENTIFICADOR, caravanaId: IDENTIFICADOR, heroeId: IDENTIFICADOR }, [
     'ejercitoId',

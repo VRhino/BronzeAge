@@ -635,6 +635,9 @@ export interface Asentamiento {
    * La adición MANUAL de edificios (`anadirEdificioManualmente`, Gobernador/Maestro de Obras) no se ve
    * afectada. Ausente/`false` = activa. */
   autoConstruccionPausada?: boolean;
+  /** Recetas paradas por el Gobernador o el Maestro de Obras (Doc 4.2.1), por el recurso que producen: ningún taller
+   * de la plaza las produce mientras estén aquí (`alternarReceta`). Ausente = todas en marcha. */
+  recetasPausadas?: RecursoTipo[];
   /**
    * ¿Este asentamiento deja repostar a los ejércitos de sus ALIADOS? (Doc 5.13, Paso 8). Ausente = `false`:
    * abrir tu almacén a la columna de otro es una decisión explícita, no el estado por defecto — te cuesta

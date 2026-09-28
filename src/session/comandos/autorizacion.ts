@@ -404,6 +404,13 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
       residenteConCargo(estado, heroeId, params.asentamientoId, 'gobernador') ||
       residenteConCargo(estado, heroeId, params.asentamientoId, 'maestroObras'),
   },
+  // Qué producen los talleres lo deciden los mismos que la auto-construcción.
+  alternarReceta: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, heroeId, params) =>
+      residenteConCargo(estado, heroeId, params.asentamientoId, 'gobernador') ||
+      residenteConCargo(estado, heroeId, params.asentamientoId, 'maestroObras'),
+  },
   // La reserva manual es del Tesorero (el comando ya rechaza si el cargo está vacante).
   calibrarReservaManual: {
     rolesPermitidos: ['jugador'],

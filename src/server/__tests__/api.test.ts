@@ -939,7 +939,8 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       // -1 con los bandidos atacados con columna (Doc 1.9): sale `atacarCampamentoBandidos`, lo cubre `atacar`.
       // +2 con las batallas de Unity (doc 02 §3.1): `unirseABatalla` y `cancelarBatalla`.
       // +1 con la subida de nivel manual (Doc 4.5): `solicitarAscenso`, solo el Gobernador.
-      expect(cuerpo.oneOf.length).toBe(77);
+      // +1 con `alternarReceta` (Doc 4.2.1): parar o reanudar una receta de los talleres.
+      expect(cuerpo.oneOf.length).toBe(78);
       const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
       expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
     });

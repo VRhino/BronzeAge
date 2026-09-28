@@ -36,6 +36,7 @@ import {
 import { iniciarAsedio, reclutarTropa } from './militar';
 import {
   alternarAutoConstruccion,
+  alternarReceta,
   anadirEdificioManualmente,
   calibrarReservaManual,
   mejorarEdificioAhora,
@@ -126,6 +127,7 @@ const MANEJADORES = {
   iniciarAsedio,
   reclutarTropa,
   alternarAutoConstruccion,
+  alternarReceta,
   anadirEdificioManualmente,
   calibrarReservaManual,
   mejorarEdificioAhora,

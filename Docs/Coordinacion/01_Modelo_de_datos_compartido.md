@@ -179,6 +179,8 @@ Asentamiento
   medidorMantenimiento             0-100, empieza en 100; a 0 cae en ruinas — existente
   nutricionPoblacion?              0-100, hambruna por déficit de trigo — existente
   autoConstruccionPausada?          si true, el motor deja de comprometer necesidades NUEVAS — existente
+  recetasPausadas?: RecursoTipo[]   recetas paradas por el Gobernador/Maestro de Obras, por lo que producen
+                                   (Doc 4.2.1, comando `alternarReceta`) — nuevo 2026-09-28
   permiteReabastecerAliados?        ejércitos aliados pueden repostar aquí — existente
   reservaManual?: Partial<Record<RecursoTipo, number>>   calibrada por el Tesorero — existente
   extractoresTicksSinCupo?: Partial<Record<EdificioTipo, number>>   desempate anti-inanición — existente
