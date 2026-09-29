@@ -371,6 +371,14 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
     rolesPermitidos: ['jugador'],
     condicionJugador: (estado, heroeId, params) => residenteConCargo(estado, heroeId, params.asentamientoId, 'gobernador'),
   },
+  // Adoptar tecnología es del Rey (Doc 6.5). Que esté en la capital y pueda pagar lo comprueba el motor.
+  adoptarTecnologia: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, heroeId, params) => {
+      const faccion = buscarFaccion(estado, params.faccionId);
+      return faccion === undefined || esReyDe(faccion, heroeId);
+    },
+  },
   // Sin `cargo` en `params`, a diferencia de los de arriba: autoridad sobre la cola de construcción es del
   // Gobernador o del Maestro de Obras (`CargoConstructor`, ver `construccion.ts`).
   /** Enganchar o soltar el tren de suministros lo decide quien va en la columna, igual que replegarla. */

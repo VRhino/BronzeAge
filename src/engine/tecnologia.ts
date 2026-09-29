@@ -2,9 +2,11 @@ import type {
   Asentamiento,
   ContadorLogro,
   EdificioTipo,
+  Ejercito,
   EraId,
   EstadoTecnologia,
   Faccion,
+  Heroe,
   RecursoTipo,
   TecnologiaId,
   TecnologiasFaccion,
@@ -13,7 +15,9 @@ import type {
 import type { EventoCrudo } from '../domain/eventos';
 import { minutos, type Instante } from '../domain/tiempo';
 import type { Mapa } from '../world/mapa';
-import { ERAS, TECNOLOGIAS, type CondicionHito } from '../constants';
+import { ERAS, TARIFA_ADOPCION, TECNOLOGIAS, type CondicionHito } from '../constants';
+import { descontarRecursos, tieneRecursos } from './almacen';
+import { estaEnAsentamiento } from './ubicacion';
 import { nivelActualDe } from './asentamientoQuery';
 import { encontrarCapital } from './mantenimiento';
 import type { PayloadAsedio, PayloadCombateResuelto, PayloadInterceptacionEjercito } from './combate';
@@ -285,4 +289,53 @@ export function avanzarTecnologia(estado: EstadoTecnologia, ctx: ContextoTecnolo
   }
 
   return { tecnologia: { era, eraDesde, contadores, logros, primeros, porFaccion }, eventos };
+}
+
+export class AdopcionInvalidaError extends Error {}
+
+/** Payload de `tecnologia.adoptada` (privado de la Facción). */
+export interface PayloadTecnologiaAdoptada {
+  faccionId: string;
+  tecnologiaId: TecnologiaId;
+  capitalId: string;
+}
+
+/**
+ * El Rey adopta una tecnología estando en la capital, y la paga el almacén de la capital (Doc 6.5). Tiene que
+ * haberle aparecido a su Facción y no estar ya adoptada. La adopción es instantánea.
+ */
+export function adoptarTecnologia(
+  estado: EstadoTecnologia,
+  faccion: Faccion,
+  id: TecnologiaId,
+  mundo: { asentamientos: readonly Asentamiento[]; heroes: readonly Heroe[]; ejercitos: readonly Ejercito[] }
+): { tecnologia: EstadoTecnologia; capital: Asentamiento; eventos: EventoCrudo[] } {
+  const definicion = TECNOLOGIAS[id];
+  if (!definicion) throw new AdopcionInvalidaError('Esa tecnología no existe.');
+  if (!faccion.reyId) throw new AdopcionInvalidaError('La Facción no tiene Rey: solo él adopta tecnología.');
+  const capital = encontrarCapital(faccion.id, [...mundo.asentamientos]);
+  if (!capital) throw new AdopcionInvalidaError('La Facción no tiene capital.');
+  if (!estaEnAsentamiento(mundo.heroes, faccion.reyId, capital.id, mundo.asentamientos, mundo.ejercitos)) {
+    throw new AdopcionInvalidaError(`El Rey tiene que estar en la capital (${capital.nombre}) para adoptar una tecnología.`);
+  }
+  const tecnologias = tecnologiasDe(estado, faccion.id);
+  if (tecnologias.adoptadas.includes(id)) throw new AdopcionInvalidaError(`${definicion.nombre} ya está adoptada.`);
+  if (!tecnologias.aparecidas.includes(id)) throw new AdopcionInvalidaError(`${definicion.nombre} no le ha aparecido a la Facción.`);
+  const tarifa = TARIFA_ADOPCION[definicion.era];
+  if (!tieneRecursos(capital.almacen, tarifa)) {
+    const pide = Object.entries(tarifa).map(([r, n]) => `${n} ${r}`).join(', ');
+    throw new AdopcionInvalidaError(`La capital no tiene con qué pagar ${definicion.nombre}: pide ${pide}.`);
+  }
+  return {
+    tecnologia: { ...estado, porFaccion: { ...estado.porFaccion, [faccion.id]: { ...tecnologias, adoptadas: [...tecnologias.adoptadas, id] } } },
+    capital: { ...capital, almacen: descontarRecursos(capital.almacen, tarifa) },
+    eventos: [
+      {
+        codigo: 'tecnologia.adoptada',
+        mensaje: `${faccion.nombre} adopta ${definicion.nombre}.`,
+        payload: { faccionId: faccion.id, tecnologiaId: id, capitalId: capital.id } satisfies PayloadTecnologiaAdoptada,
+        asentamientoId: capital.id,
+      },
+    ],
+  };
 }

@@ -940,7 +940,8 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       // +2 con las batallas de Unity (doc 02 §3.1): `unirseABatalla` y `cancelarBatalla`.
       // +1 con la subida de nivel manual (Doc 4.5): `solicitarAscenso`, solo el Gobernador.
       // +1 con `alternarReceta` (Doc 4.2.1): parar o reanudar una receta de los talleres.
-      expect(cuerpo.oneOf.length).toBe(78);
+      // +1 con `adoptarTecnologia` (Doc 6.5): el Rey adopta en la capital.
+      expect(cuerpo.oneOf.length).toBe(79);
       const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
       expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
     });

@@ -68,7 +68,9 @@ import type {
   ZonaFaccion,
   ZonaInfluencia,
 } from '../../domain/types';
-import { VISION } from '../../constants';
+import { TECNOLOGIAS, VISION } from '../../constants';
+import type { ContadorLogro, EraId, TecnologiaId, TecnologiasFaccion } from '../../domain/types';
+import { tecnologiasDe } from '../../engine/tecnologia';
 import { distancia, pointInPolygon } from '../../world/geometria';
 import type { EstadoMapa } from '../../world/mapa';
 import type { TrazadoAsentamiento } from '../../engine/trazado';
@@ -276,6 +278,24 @@ export interface CaravanaAvistada {
   recursos: string[];
 }
 
+export interface TecnologiaJugador {
+  era: EraId;
+  eraDesde: Instante;
+  /** Logros cumplidos, por orden: qué ha pasado en el mundo (`contador` llegó a `umbral`) y cuándo. */
+  logros: { contador: ContadorLogro; umbral: number; en: Instante }[];
+  /** `null` sin Facción. */
+  propias: TecnologiasFaccion | null;
+}
+
+/** Lo que un jugador sabe de la tecnología del mundo (Doc 6.3-6.4). */
+function tecnologiaParaJugador(estado: GameSessionState, faccionId: string | null): TecnologiaJugador {
+  const t = estado.tecnologia;
+  const logros = (Object.entries(t.logros) as [TecnologiaId, Instante][])
+    .map(([id, en]) => ({ contador: TECNOLOGIAS[id].logro!.contador, umbral: TECNOLOGIAS[id].logro!.umbral, en }))
+    .sort((a, b) => a.en - b.en);
+  return { era: t.era, eraDesde: t.eraDesde, logros, propias: faccionId ? tecnologiasDe(t, faccionId) : null };
+}
+
 export interface ProyeccionJugador {
   gameId: string;
   /** Instante de MUNDO "ahora" de la partida (doc 10) — `instanteDeTick(estado.tick)`, derivado, no
@@ -397,6 +417,9 @@ export interface ProyeccionJugador {
   /** Trazado urbano de cada asentamiento propio, por id — de los rivales no hay ni metadatos (Slice 1: no se
    * ven en absoluto), así que tampoco hay trazado que filtrar para ellos. */
   trazadoPorAsentamiento: Record<string, TrazadoAsentamiento>;
+  /** Tecnología (Doc 6): la Era, los logros del servidor —públicos, sin decir qué tecnología abren— y las tecnologías de
+   * la Facción propia. Las de un rival no viajan nunca (Doc 6.4). */
+  tecnologia: TecnologiaJugador;
   /** Precio de referencia por recurso — auditoría de doc 9 (2026-08-26): `calcularPrecioReferencia` necesita
    * el almacén de TODOS los asentamientos del mundo (entrada privilegiada), así que el jugador nunca podría
    * calcularlo aunque quisiera. Lo calcula `RunnerDePartida.preciosReferencia()` (caché de un minuto real,
@@ -791,6 +814,7 @@ export function proyectarParaJugador(
     zonas: zonasPropias,
     zonasFusionadas: geometria.zonasFusionadas.filter((zf) => zf.faccionId === faccionId),
     trazadoPorAsentamiento: Object.fromEntries(Object.entries(geometria.trazadoPorAsentamiento).filter(([id]) => esPropio(id))),
+    tecnologia: tecnologiaParaJugador(estado, faccionId),
   };
 }
 

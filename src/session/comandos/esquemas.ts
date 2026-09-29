@@ -16,6 +16,7 @@
 // frontera es la misma que ya traza el doc 2: forma en el borde, reglas de dominio en el motor.
 import { ATRIBUTOS_HEROE, CARGOS_TIPO, EDIFICIOS_TIPO, RECURSOS_TIPO } from '../../domain/types';
 import { CARGOS_CONSTRUCTOR } from './construccion';
+import { TECNOLOGIAS } from '../../constants';
 import type { TipoComando } from './registro';
 
 /** JSON Schema de un `params`, tal y como lo consume Fastify/ajv. Sin tipo más estricto que `object` a
@@ -61,6 +62,7 @@ const OBJETIVO_EJERCITO = {
   ],
 } as const;
 const CARGO_FACCION = { type: 'string', enum: CARGOS_TIPO } as const;
+const TECNOLOGIA = { type: 'string', enum: Object.keys(TECNOLOGIAS) } as const;
 const CARGO_CONSTRUCTOR = { type: 'string', enum: CARGOS_CONSTRUCTOR } as const;
 
 /** Fábrica de `{type:'object', properties, required, additionalProperties:false}` — evita repetir las tres
@@ -193,6 +195,7 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   // Sin `cargo`: abandonar es solo del Gobernador (§8 del doc), no un `CargoConstructor` cualquiera.
   abandonarRecinto: objeto({ asentamientoId: IDENTIFICADOR, recintoId: IDENTIFICADOR }, ['asentamientoId', 'recintoId']),
   solicitarAscenso: objeto({ asentamientoId: IDENTIFICADOR }, ['asentamientoId']),
+  adoptarTecnologia: objeto({ faccionId: IDENTIFICADOR, tecnologiaId: TECNOLOGIA }, ['faccionId', 'tecnologiaId']),
   mejorarRecinto: objeto(
     { asentamientoId: IDENTIFICADOR, cargo: CARGO_CONSTRUCTOR, recintoId: IDENTIFICADOR },
     ['asentamientoId', 'cargo', 'recintoId']

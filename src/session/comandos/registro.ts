@@ -47,6 +47,7 @@ import {
 import { desarmarCaravanaFundacion, lanzarCaravanaFundacion } from './expansion';
 import { abandonarRecinto, comprometerRecinto, mejorarRecinto } from './murallas';
 import { solicitarAscenso } from './ascenso';
+import { adoptarTecnologia } from './tecnologia';
 import {
   adjuntarCaravana,
   alternarReabastecerAliados,
@@ -139,6 +140,7 @@ const MANEJADORES = {
   comprometerRecinto,
   abandonarRecinto,
   solicitarAscenso,
+  adoptarTecnologia,
   mejorarRecinto,
   unirseABatalla,
   cancelarBatalla,

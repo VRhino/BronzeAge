@@ -5,6 +5,7 @@
 // error nuevo del motor sin añadirlo a esta tabla hace que `codigoDeErrorDominio` devuelva `undefined` — el
 // llamador lo relanza como bug en vez de fallar en silencio (ver `rechazoDesdeError`, `comandos/tipos.ts`).
 import { AscensoInvalidoError } from '../engine/ascenso';
+import { AdopcionInvalidaError } from '../engine/tecnologia';
 import { CargoInvalidoError } from '../engine/cargos';
 import { CombateInvalidoError } from '../engine/combate';
 import { ConstruccionManualInvalidaError } from '../engine/construction';
@@ -28,6 +29,7 @@ import { CODIGOS_ERROR, type CodigoError } from './comandos/codigosDeError';
  * código, no por módulo — así un código nuevo se ubica por lo que significa, no por dónde vive en `engine/`. */
 const CODIGOS_DE_ERROR = new Map<Function, CodigoError>([
   [AscensoInvalidoError, CODIGOS_ERROR.ascensoInvalido],
+  [AdopcionInvalidaError, CODIGOS_ERROR.tecnologiaAdopcionInvalida],
   [BatallaInvalidaError, CODIGOS_ERROR.batallaInvalida],
   [BatallaYaAsignadaError, CODIGOS_ERROR.batallaYaAsignada],
   [CargoInvalidoError, CODIGOS_ERROR.cargoInvalido],

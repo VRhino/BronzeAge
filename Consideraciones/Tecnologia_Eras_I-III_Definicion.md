@@ -130,12 +130,12 @@ Cada paso deja los tests en verde y se puede fusionar por separado.
   `PayloadCombateResuelto`, `tropaIds`. `tecnologia.aparece` va atribuido a la capital: solo lo ve su Facción.
 
 ### Paso 3 — Adopción
-- [ ] Comando `adoptarTecnologia` (`src/session/comandos/`): solo el Rey (`faccion.reyId`), estando en la capital
+- [x] Comando `adoptarTecnologia` (`src/session/comandos/`): solo el Rey (`faccion.reyId`), estando en la capital
   (`encontrarCapital`, proxy de §13); la tecnología tiene que estar aparecida y no adoptada; paga
   `TARIFA_ADOPCION[era]` del almacén de la capital (D32). Códigos de error propios.
-- [ ] Proyección del jugador: sus tecnologías aparecidas y adoptadas, los logros públicos y la Era; nunca las
+- [x] Proyección del jugador: sus tecnologías aparecidas y adoptadas, los logros públicos y la Era; nunca las
   tecnologías ocultas (D55). Administración: todo.
-- [ ] Tests del comando: no Rey, fuera de la capital, no aparecida, ya adoptada, sin recursos.
+- [x] Tests del comando: no Rey, fuera de la capital, no aparecida, ya adoptada, sin recursos.
 
 ### Paso 4 — Las cuatro puertas
 - [ ] `reclutarTropa`, `anadirEdificioManualmente`, `mejorarEdificioManualmente` y la selección de recetas de
