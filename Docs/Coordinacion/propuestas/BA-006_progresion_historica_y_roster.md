@@ -326,7 +326,7 @@ siguen en diseño. Respuesta a las decisiones pendientes de arriba:
    caballos pagados en oro.
 5. **Primer lote**: el roster de las Eras I-III tiene 26 tropas (15 nuevas).
 
-**Lo que necesita Conquest (propuesta de ticket CQ):**
+**Lo que necesita Conquest** (abierto como `Conquest_prototype/Docs/Coordinacion/propuestas/CQ-006_tropas_y_edificios_de_las_eras_I_a_III.md`):
 - Una definición de escuadra, con el mismo `id`, para cada una de las 15 tropas nuevas del catálogo `version` 4
   (`src/contratos/v1/catalogoTropas.json`). Mientras no exista, una batalla de Unity con una de ellas no tiene prefab.
 - Acordar un `tipo` para la caballería (hoy sale `cuerpo_a_cuerpo`; los jinetes escitas son arqueros a caballo).

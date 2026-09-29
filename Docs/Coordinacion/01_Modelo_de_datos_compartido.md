@@ -661,8 +661,8 @@ decide BronzeAge: Conquest recibe las unidades en `SquadSnapshot.efectivosAutori
 `leadershipCost` para nada que tenga autoridad (el Liderazgo lo valida BronzeAge).
 
 Hoy Conquest tiene 3 definiciones (`spm01` Spearmen, `arc01` Levy Archers, `sqd01` Squires) y BronzeAge 26
-tropas (catálogo `version` 4, 2026-09-29: roster de las Eras I-III). Las 15 nuevas no tienen todavía base provisional
-en Conquest: ver la revisión de Claude en BA-006. La última columna es la propuesta de qué definición actual sirve de base provisional a cada una
+tropas (catálogo `version` 4, 2026-09-29: roster de las Eras I-III). Las 15 nuevas, sus familias sugeridas y los edificios nuevos
+están pedidos a Conquest en CQ-006. La última columna es la propuesta de qué definición actual sirve de base provisional a cada una
 hasta que Conquest haga la suya (pedido en CQ-003). Esos tres `id` actuales quedan como alias durante la
 migración.
 

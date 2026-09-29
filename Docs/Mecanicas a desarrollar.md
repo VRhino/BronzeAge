@@ -246,7 +246,7 @@ bitácora: `Consideraciones/Tecnologia_Eras_I-III_Definicion.md`. Falta:
 - **Capital elegida** (§13): hoy el Rey adopta en el asentamiento vivo más antiguo.
 - **Equipo de asedio**: `carpinteria_militar` y `trabajos_asedio` se adoptan, pero su equipo no tiene efecto en combate.
 - **Clientes**: panel de tecnología en el cliente de administración (no compila desde antes de este trabajo) y en
-  BronzeAgeClient; definiciones de escuadra de las 15 tropas nuevas en Conquest (revisión de Claude en BA-006).
+  BronzeAgeClient; definiciones de escuadra de las 15 tropas nuevas y modelos de los edificios nuevos en Conquest (CQ-006).
 
 ## 21. Los 4 gremios escasos a nivel de servidor
 
