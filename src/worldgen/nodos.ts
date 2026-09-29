@@ -37,16 +37,18 @@ export function generarNodosDeRareza(
   bosques: ZonaBosque[],
   elevacion: CampoElevacion,
   fertilidad: CampoFertilidad,
-  rios: readonly RioZona[]
+  rios: readonly RioZona[],
+  /** Tipos a generar con su factor de cantidad; por defecto, los de la rareza tal cual. */
+  tiposPedidos?: readonly { tipo: string; factor: number }[]
 ): NodoRecurso[] {
-  const { cantidadBase, espacioMinimo } = RECURSO_RAREZA[rareza];
-  const tipos = RECURSO_TIPOS_POR_RAREZA[rareza];
+  const { espacioMinimo } = RECURSO_RAREZA[rareza];
+  const tipos = tiposPedidos ?? RECURSO_TIPOS_POR_RAREZA[rareza].map((tipo) => ({ tipo, factor: 1 }));
   const nodos: NodoRecurso[] = [];
-  for (const tipo of tipos) {
+  for (const { tipo, factor } of tipos) {
     const posiciones = colocarConEspaciado(
       rng,
       limites,
-      cantidadBase,
+      Math.round(RECURSO_RAREZA[rareza].cantidadBase * factor),
       espacioMinimo,
       colocadosGlobal,
       bosques,

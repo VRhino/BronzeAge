@@ -48,6 +48,13 @@ export const RECURSO_RAREZA = congelar({
   raro: { cantidadBase: 24, espacioMinimo: 120 },
 } as const);
 
+/**
+ * Mineral de hierro (Doc 1.4, EII-4): 1,5 veces más yacimientos que el cobre, mismo terreno y misma rareza. Se genera
+ * el ÚLTIMO del pipeline, después de la fauna, para no desplazar el consumo de PRNG de nada anterior: con la misma
+ * seed, el resto del mundo sale igual que en v15.
+ */
+export const HIERRO = congelar({ rareza: 'intermedio', factorCantidad: 1.5 } as const);
+
 export const RECURSO_TIPOS_POR_RAREZA: Record<keyof typeof RECURSO_RAREZA, string[]> = congelar({
   comun: ['piedra'],
   intermedio: ['cobre'],
@@ -68,6 +75,7 @@ export const RECURSO_TIPOS_POR_RAREZA: Record<keyof typeof RECURSO_RAREZA, strin
 export const RECURSO_CANTIDAD_NODO = congelar({
   piedra: { min: 600, max: 1200 },
   cobre: { min: 100, max: 300 },
+  hierro: { min: 100, max: 300 },
   estano: { min: 50, max: 150 },
   oro: { min: 150, max: 400 },
 } as const);
@@ -242,6 +250,7 @@ export const BIOMA = congelar({
 export const RECURSO_BIOMA_PERMITIDO: Record<string, BiomaTipo[]> = congelar({
   piedra: ['colina', 'montana', 'llanuraFertil', 'estepa'],
   cobre: ['colina', 'montana'],
+  hierro: ['colina', 'montana'],
   estano: ['colina', 'montana'],
   oro: ['montana'],
   livestock: ['llanuraFertil', 'estepa'],

@@ -179,12 +179,16 @@ Cada paso deja los tests en verde y se puede fusionar por separado.
   va más rápida que él. Catálogo de tropas para Conquest, versión 2.
 
 ### Paso 8 — Era II
-- [ ] Hierro: recursos `hierro`, `lingoteHierro`, `armaHierro`; nodos de hierro 1,5 veces más frecuentes que los de
+- [x] Hierro: recursos `hierro`, `lingoteHierro`, `armaHierro`; nodos de hierro 1,5 veces más frecuentes que los de
   cobre, mismo terreno (EII-4) → `WORLDGEN_VERSION` 15 → 16; Mina de hierro (`forja_hierro_temprana`); receta del
   lingote en Fundición 2 y del arma en Armería 2.
-- [ ] Armería 3: `armaBronceCalidad` y `armaduraBronce` con `bronce_calidad_militar`.
-- [ ] Tropas: jinetes asirios, Hequetai, Shardana, guerreros filisteos (Peleset); lanceros pesados y arco compuesto
+- [x] Armería 3: `armaBronceCalidad` y `armaduraBronce` con `bronce_calidad_militar`.
+- [x] Tropas: jinetes asirios, Hequetai, Shardana, guerreros filisteos (Peleset); lanceros pesados y arco compuesto
   reciben su tecnología (`panoplia_bronce`, `arco_compuesto`).
+- [x] Hecho así: el hierro se genera el ÚLTIMO del pipeline, así que el resto del mundo sale bit a bit igual que en v15
+  para la misma seed (comprobado en el snapshot: solo se añaden líneas de hierro). Arreglado de paso: el almacén
+  inicial sembraba una lista fija de recursos y los nuevos (carro de guerra, hierro…) nacían sin capacidad; ahora
+  siembra `RECURSOS_TIPO`. Lanceros pesados con armadura de bronce (Doc 5.8). Catálogo para Conquest, versión 3.
 
 ### Paso 9 — Era III
 - [ ] **Sala del Consejo** (`instituciones_civicas`): una por plaza, desde el nivel 3; 800 madera + 1.200 piedra +

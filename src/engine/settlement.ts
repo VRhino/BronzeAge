@@ -1,4 +1,5 @@
 import type { Asentamiento, Edificio, Faccion, Point, RecursoAlmacenado } from '../domain/types';
+import { RECURSOS_TIPO } from '../domain/types';
 import { minutos, sumar, type Instante } from '../domain/tiempo';
 import { ALMACEN, FUNDACION, MANTENIMIENTO, NIVEL_FACCION, OCUPACION, POBLACION, ZONA_INFLUENCIA } from '../constants';
 import type { Mapa } from '../world/mapa';
@@ -238,16 +239,11 @@ export function fundarAsentamiento(
   }
 
   const almacenInicial: Record<string, RecursoAlmacenado> = {};
-  for (const tipo of [
-    'madera', 'piedra', 'trigo', 'cobre', 'estano', 'oro', 'livestock',
-    // Rediseño de progreso (Fase 0, Doc 4.2.1): tipos intermedios de las cadenas de crafting — sembrados en
-    // 0 desde el principio para que ya tengan `capacidad` asignada (si no, `agregarRecurso` los crearía con
-    // capacidad 0 la primera vez que algo intente producirlos, capando la producción en silencio para siempre).
-    'lingoteCobre', 'lingoteEstano', 'lingoteBronce',
-    'cuero', 'cueroCurtido', 'cueroCalidad',
-    'armaMadera', 'armaCobre', 'armaBronce', 'armaBronceCalidad',
-    'armaduraBasica', 'armaduraIntermedia', 'armaduraBronce',
-  ]) {
+  // TODOS los tipos de recurso, también los intermedios de las cadenas de crafting — sembrados en 0 desde el principio
+  // para que ya tengan `capacidad` asignada (si no, `agregarRecurso` los crearía con capacidad 0 la primera vez que algo
+  // intente producirlos, capando la producción en silencio para siempre). De `RECURSOS_TIPO` y no de una lista a mano:
+  // un recurso nuevo (el hierro de la Era II, el carro de guerra) entra solo.
+  for (const tipo of RECURSOS_TIPO) {
     almacenInicial[tipo] = {
       cantidad: FUNDACION.materialesIniciales[tipo] ?? 0,
       capacidad: ALMACEN.capacidadInicialPorRecurso,

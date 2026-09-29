@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": 2,
+  "version": 3,
   "tropas": [
     {
       "tropaId": "milicia_lanceros",
@@ -120,6 +120,38 @@
       "escalon": 4,
       "unidades": 15,
       "costeLiderazgo": 32,
+      "tipo": "cuerpo_a_cuerpo"
+    },
+    {
+      "tropaId": "jinetes_asirios",
+      "nombre": "Jinetes asirios",
+      "escalon": 2,
+      "unidades": 20,
+      "costeLiderazgo": 14,
+      "tipo": "cuerpo_a_cuerpo"
+    },
+    {
+      "tropaId": "guerreros_filisteos",
+      "nombre": "Guerreros filisteos (Peleset)",
+      "escalon": 3,
+      "unidades": 18,
+      "costeLiderazgo": 22,
+      "tipo": "cuerpo_a_cuerpo"
+    },
+    {
+      "tropaId": "shardana",
+      "nombre": "Shardana",
+      "escalon": 4,
+      "unidades": 15,
+      "costeLiderazgo": 32,
+      "tipo": "cuerpo_a_cuerpo"
+    },
+    {
+      "tropaId": "hequetai",
+      "nombre": "Hequetai",
+      "escalon": 5,
+      "unidades": 12,
+      "costeLiderazgo": 45,
       "tipo": "cuerpo_a_cuerpo"
     }
   ]

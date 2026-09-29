@@ -135,7 +135,7 @@ export function puedeCrearCaravana(asentamiento: Pick<Asentamiento, 'ultimaCarav
   return cooldownCaravanaRestante(asentamiento, instante) === 0;
 }
 
-const EDIFICIOS_PRODUCTORES: EdificioTipo[] = ['granja', 'cantera', 'lenera', 'mina', 'minaCobre', 'minaEstano', 'corral'];
+const EDIFICIOS_PRODUCTORES: EdificioTipo[] = ['granja', 'cantera', 'lenera', 'mina', 'minaCobre', 'minaEstano', 'minaHierro', 'corral'];
 
 /** Edificios de transformación con tiers (Doc 4.2.1, rediseño de progreso Fase 0): consumen mano de obra de
  * Artesanos (no Pesants), disparan su aparición (ver `engine/population.ts`), y cuentan para los gates de
@@ -383,10 +383,11 @@ export function produccionPorMinuto(
     items.push({ tipo: 'lenera', recurso: 'madera', activos: leneras.length, cantidadPorMinuto: total });
   }
 
-  const minado: { tipo: 'cantera' | 'mina' | 'minaCobre' | 'minaEstano' | 'corral'; recurso: string; base: number }[] = [
+  const minado: { tipo: 'cantera' | 'mina' | 'minaCobre' | 'minaEstano' | 'minaHierro' | 'corral'; recurso: string; base: number }[] = [
     { tipo: 'cantera', recurso: 'piedra', base: EDIFICIO_CATALOGO.cantera.produccionBasePiedra },
     { tipo: 'mina', recurso: 'oro', base: EDIFICIO_CATALOGO.mina.produccionBaseOro },
     { tipo: 'minaCobre', recurso: 'cobre', base: EDIFICIO_CATALOGO.minaCobre.produccionBaseCobre },
+    { tipo: 'minaHierro', recurso: 'hierro', base: EDIFICIO_CATALOGO.minaHierro.produccionBaseHierro },
     { tipo: 'minaEstano', recurso: 'estano', base: EDIFICIO_CATALOGO.minaEstano.produccionBaseEstano },
     { tipo: 'corral', recurso: 'livestock', base: EDIFICIO_CATALOGO.corral.produccionBaseLivestock },
   ];

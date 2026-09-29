@@ -437,6 +437,7 @@ export const EDIFICIO_CATALOGO = {
           { produce: 'lingoteCobre', produccionBase: 5, consumePorUnidad: { cobre: 2 } },
           { produce: 'lingoteEstano', produccionBase: 3, consumePorUnidad: { estano: 5 }, requiereTecnologia: 'aleacion_bronce' },
           { produce: 'lingoteBronce', produccionBase: 1, consumePorUnidad: { lingoteCobre: 1.6, lingoteEstano: 0.4 }, requiereTecnologia: 'aleacion_bronce' },
+          { produce: 'lingoteHierro', produccionBase: 5, consumePorUnidad: { hierro: 2, madera: 1 }, requiereTecnologia: 'forja_hierro_temprana' },
         ],
       },
     } as Record<number, NivelEdificioTransformacion>,
@@ -502,6 +503,7 @@ export const EDIFICIO_CATALOGO = {
           { produce: 'armaCobre', produccionBase: 3, consumePorUnidad: { lingoteCobre: 1, madera: 1 }, requiereTecnologia: 'metalurgia_cobre' },
           { produce: 'armaduraBasica', produccionBase: 3, consumePorUnidad: { cuero: 5 } },
           { produce: 'armaBronce', produccionBase: 2, consumePorUnidad: { lingoteBronce: 1, madera: 2 }, requiereTecnologia: 'aleacion_bronce' },
+          { produce: 'armaHierro', produccionBase: 2, consumePorUnidad: { lingoteHierro: 1, madera: 2 }, requiereTecnologia: 'forja_hierro_temprana' },
           { produce: 'armaduraIntermedia', produccionBase: 2, consumePorUnidad: { lingoteCobre: 1, cueroCurtido: 5 } },
           RECETA_ARMA_MADERA,
         ],
@@ -516,6 +518,7 @@ export const EDIFICIO_CATALOGO = {
           { produce: 'armaCobre', produccionBase: 3, consumePorUnidad: { lingoteCobre: 1, madera: 1 }, requiereTecnologia: 'metalurgia_cobre' },
           { produce: 'armaduraBasica', produccionBase: 3, consumePorUnidad: { cuero: 5 } },
           { produce: 'armaBronce', produccionBase: 2, consumePorUnidad: { lingoteBronce: 1, madera: 2 }, requiereTecnologia: 'aleacion_bronce' },
+          { produce: 'armaHierro', produccionBase: 2, consumePorUnidad: { lingoteHierro: 1, madera: 2 }, requiereTecnologia: 'forja_hierro_temprana' },
           { produce: 'armaduraIntermedia', produccionBase: 2, consumePorUnidad: { lingoteCobre: 1, cueroCurtido: 5 } },
           { produce: 'armaBronceCalidad', produccionBase: 1, consumePorUnidad: { lingoteBronce: 5, madera: 5 }, requiereTecnologia: 'bronce_calidad_militar' },
           { produce: 'armaduraBronce', produccionBase: 1, consumePorUnidad: { lingoteBronce: 1, cueroCalidad: 5 }, requiereTecnologia: 'bronce_calidad_militar' },
@@ -1628,7 +1631,7 @@ export const TROPAS_RECLUTABLES: {
   { id: 'espadachines_cobre', tecnologia: 'armamento_palacial', nombre: 'Espadachines de espada corta de cobre', edificio: 'barracon', nivelRequerido: 1, costoEquipo: { armaCobre: 1, armaduraBasica: 1 }, poderBase: 4, velocidad: 16, escalon: 2, unidadesPorDefecto: 20 },
   { id: 'hacheros_ligeros', tecnologia: 'armamento_palacial', nombre: 'Hacheros ligeros', edificio: 'barracon', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraBasica: 1 }, poderBase: 7, velocidad: 16, escalon: 3, unidadesPorDefecto: 18 },
   { id: 'espadachines_bronce', tecnologia: 'aleacion_bronce', nombre: 'Espadachines con espadas y escudos de bronce', edificio: 'barracon', nivelRequerido: 2, costoEquipo: { armaBronce: 2, armaduraIntermedia: 1 }, poderBase: 9, velocidad: 16, escalon: 3, unidadesPorDefecto: 18 },
-  { id: 'lanceros_pesados', tecnologia: 'panoplia_bronce', nombre: 'Lanceros pesados micénicos', edificio: 'barracon', nivelRequerido: 3, costoEquipo: { armaBronce: 2, armaduraIntermedia: 2 }, poderBase: 14, velocidad: 12, escalon: 4, unidadesPorDefecto: 15 },
+  { id: 'lanceros_pesados', tecnologia: 'panoplia_bronce', nombre: 'Lanceros pesados micénicos', edificio: 'barracon', nivelRequerido: 3, costoEquipo: { armaBronce: 2, armaduraBronce: 1 }, poderBase: 14, velocidad: 12, escalon: 4, unidadesPorDefecto: 15 },
   { id: 'hacheros_armados', tecnologia: 'aleacion_bronce', nombre: 'Hacheros armados', edificio: 'barracon', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraIntermedia: 1 }, poderBase: 12, velocidad: 12, escalon: 3, unidadesPorDefecto: 15 },
   { id: 'honderos', tecnologia: 'hostigamiento_tribal', nombre: 'Honderos', edificio: 'galeriaDeTiro', nivelRequerido: 1, costoEquipo: { armaMadera: 1 }, poderBase: 5, velocidad: 20, escalon: 2, unidadesPorDefecto: 20 },
   { id: 'escaramuzadores_jabalina', tecnologia: 'hostigamiento_tribal', nombre: 'Escaramuzadores con jabalina', edificio: 'galeriaDeTiro', nivelRequerido: 2, costoEquipo: { armaCobre: 1, armaduraBasica: 1 }, poderBase: 8, velocidad: 20, escalon: 3, unidadesPorDefecto: 18 },
@@ -1638,6 +1641,11 @@ export const TROPAS_RECLUTABLES: {
   // carros, a 20. Cada caballo se paga en oro (D5).
   { id: 'exploradores_caballo', tecnologia: 'cria_caballar', nombre: 'Exploradores a caballo', edificio: 'caballerizas', nivelRequerido: 1, costoEquipo: { armaCobre: 1 }, caballos: 1, poderBase: 3, velocidad: 28, escalon: 2, unidadesPorDefecto: 20 },
   { id: 'carros_guerra', tecnologia: 'carros_guerra', nombre: 'Carros de guerra', edificio: 'caballerizas', nivelRequerido: 2, costoEquipo: { carroGuerra: 1, armaBronce: 1 }, caballos: 2, poderBase: 13, velocidad: 20, escalon: 4, unidadesPorDefecto: 15 },
+  // Era II — Crisis y adaptación (Doc 5.8).
+  { id: 'jinetes_asirios', tecnologia: 'equitacion_militar', nombre: 'Jinetes asirios', edificio: 'caballerizas', nivelRequerido: 1, costoEquipo: { armaHierro: 1 }, caballos: 1, poderBase: 5, velocidad: 28, escalon: 2, unidadesPorDefecto: 20 },
+  { id: 'guerreros_filisteos', tecnologia: 'forja_hierro_temprana', nombre: 'Guerreros filisteos (Peleset)', edificio: 'barracon', nivelRequerido: 2, costoEquipo: { armaHierro: 1, armaduraIntermedia: 1 }, poderBase: 9, velocidad: 16, escalon: 3, unidadesPorDefecto: 18 },
+  { id: 'shardana', tecnologia: 'bronce_calidad_militar', nombre: 'Shardana', edificio: 'barracon', nivelRequerido: 2, costoEquipo: { armaBronceCalidad: 1, armaduraBasica: 1 }, poderBase: 15, velocidad: 16, escalon: 4, unidadesPorDefecto: 15 },
+  { id: 'hequetai', tecnologia: 'panoplia_bronce', nombre: 'Hequetai', edificio: 'barracon', nivelRequerido: 3, costoEquipo: { armaBronceCalidad: 1, armaduraBronce: 1 }, poderBase: 17, velocidad: 12, escalon: 5, unidadesPorDefecto: 12 },
   ] as const
 );
 

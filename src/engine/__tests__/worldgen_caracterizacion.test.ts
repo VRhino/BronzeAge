@@ -14,6 +14,7 @@ import type { RegionId } from '../../domain/types';
 import { evaluarBioma, evaluarElevacion, evaluarFertilidad, evaluarTerreno, generarMapa, REGIONES, type MapaGenerado } from '../../worldgen';
 import {
   BOSQUE,
+  HIERRO,
   LIVESTOCK,
   MAPA_DEFAULT,
   RECURSO_BIOMA_PERMITIDO,
@@ -154,6 +155,9 @@ describe('invariantes de la generación de mundo', () => {
         }
       }
       expect(world.nodos.filter((n) => n.tipo === 'livestock')).toHaveLength(LIVESTOCK.cantidadBase);
+      // Hierro (EII-4): 1,5 veces los yacimientos de cobre.
+      const cobre = world.nodos.filter((n) => n.tipo === 'cobre').length;
+      expect(world.nodos.filter((n) => n.tipo === 'hierro')).toHaveLength(Math.round(cobre * HIERRO.factorCantidad));
     }
   });
 

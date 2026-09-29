@@ -6,7 +6,7 @@ import { SCHEMA_VERSION, type CatalogoTropas } from './dto';
  * dato de una tropa: el test no deja regenerar `catalogoTropas.json` sin subirla, porque es como sabe Conquest
  * que cambió.
  */
-export const VERSION_CATALOGO_TROPAS = 2;
+export const VERSION_CATALOGO_TROPAS = 3;
 
 /** El catálogo de tropas que publica BronzeAge para Conquest (doc 01 §13, CQ-003): unidades y Liderazgo son suyos. */
 export function catalogoTropas(): CatalogoTropas {

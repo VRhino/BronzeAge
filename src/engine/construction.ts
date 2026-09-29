@@ -76,7 +76,7 @@ const RECURSO_PROPIO: Partial<Record<EdificioTipo, string>> = { granja: 'trigo',
  * mapa (fertilidad/bosque/livestock) dentro de la zona de influencia — el vínculo con el mapa lo lleva su
  * `fuenteId` (Leñera/Corral) o la fertilidad de zona (Granja), no su posición.
  */
-const EDIFICIOS_EN_MAPA = new Set<EdificioTipo>(['mina', 'minaCobre', 'minaEstano', 'cantera']);
+const EDIFICIOS_EN_MAPA = new Set<EdificioTipo>(['mina', 'minaCobre', 'minaEstano', 'minaHierro', 'cantera']);
 
 /** Espacio lógico en el que vive un tipo de edificio (ver `EDIFICIOS_EN_MAPA`). */
 function ambitoDe(tipo: EdificioTipo): 'asentamiento' | 'mapa' {
@@ -111,6 +111,11 @@ const EXTRACTORES: Partial<Record<EdificioTipo, { recurso: RecursoTipo; producci
     recurso: 'estano',
     produccionBase: () => EDIFICIO_CATALOGO.minaEstano.produccionBaseEstano,
     mensajeAgotado: 'El yacimiento de estaño se ha agotado.',
+  },
+  minaHierro: {
+    recurso: 'hierro',
+    produccionBase: () => EDIFICIO_CATALOGO.minaHierro.produccionBaseHierro,
+    mensajeAgotado: 'El yacimiento de hierro se ha agotado.',
   },
   corral: {
     recurso: 'livestock',
@@ -227,6 +232,7 @@ export const RECURSO_A_EXTRACTOR: Partial<Record<string, EdificioTipo>> = {
   piedra: 'cantera',
   oro: 'mina',
   cobre: 'minaCobre',
+  hierro: 'minaHierro',
   estano: 'minaEstano',
   livestock: 'corral',
   madera: 'lenera',
@@ -708,6 +714,8 @@ function evaluarNecesidades(
     { tipo: 'minaCobre', recurso: 'cobre' },
     { tipo: 'mina', recurso: 'oro' },
     { tipo: 'minaEstano', recurso: 'estano' },
+    // Pide `forja_hierro_temprana` (Era II): `puedePagar`/`proponer` no la proponen sin ella.
+    { tipo: 'minaHierro', recurso: 'hierro' },
   ];
   // Ids de los candidatos de extractor propuestos este tick, por tipo (a lo sumo uno por tipo, ver
   // `proyectoEnCurso`) — tras el commit final se usa para saber cuáles consiguieron cupo y actualizar

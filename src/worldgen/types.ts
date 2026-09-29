@@ -129,4 +129,8 @@ export interface MapaGenerado {
  * a v14 para la misma seed, el pipeline simplemente termina un paso antes y no consume el RNG que los
  * candidatos de chokepoint gastaban. `MapaGenerado.chokepoints` desaparece del tipo.
  */
-export const WORLDGEN_VERSION = 15;
+/*
+ * v16 (2026-09-29): yacimientos de mineral de hierro (Doc 1.4, EII-4), 1,5 veces los de cobre, en colina y montaña.
+ * Se generan los últimos, así que todo lo anterior sale bit a bit igual que en v15 para la misma seed.
+ */
+export const WORLDGEN_VERSION = 16;

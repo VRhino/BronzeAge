@@ -12,7 +12,7 @@ import { computeTodasLasZonas, mejorFertilidadEnZona } from '../zones';
 import { contextoDeTest, crearEstadoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
 
 const SEED = 42;
-const EXTERNOS = new Set(['mina', 'minaCobre', 'minaEstano', 'cantera']);
+const EXTERNOS = new Set(['mina', 'minaCobre', 'minaEstano', 'minaHierro', 'cantera']);
 const modulo = (p: { x: number; y: number }) => Math.hypot(p.x, p.y);
 
 /**
