@@ -257,6 +257,10 @@ export interface NivelEdificioTransformacion {
   requiereEdificioNivel?: number;
   /** La tecnología que la Facción tiene que haber adoptado para mejorar a este nivel (Doc 6). */
   requiereTecnologia?: TecnologiaId;
+  /** Duración de la mejora a este nivel, si no sigue la regla general (`MEJORA_EDIFICIO`). */
+  obraMinutos?: number;
+  /** Solo Palacio: cupo de nobles de este nivel (Doc 4.2.1). */
+  capacidadNobles?: number;
   /** Solo Mercado (ampliación de comercio, a petición del usuario): cupo de caravanas propias que administra
    * este nivel — ver `cupoCaravanas`, engine/asentamientoQuery.ts. Mercado no fabrica nada (recetas: []),
    * así que este campo reemplaza al de producción como "qué desbloquea" cada nivel para ese edificio. */
@@ -652,10 +656,30 @@ export const EDIFICIO_CATALOGO = {
   // engine/population.ts). requisitoNivelAsentamientoConstruccion gatea la construcción BASE (no hay mejoras).
   // Gate subido de nivel 3 a nivel 4 (Doc Fase_0_6): construirlo pasa a ser requisito para subir a nivel 5.
   palacio: {
-    costo: { madera: 1500, piedra: 1000 },
-    tiempoConstruccionMinutos: 7200,
-    requisitoNivelAsentamientoConstruccion: 4,
-    capacidadNobles: 200,
+    // Doc 4.2.1 (2026-09-29): se construye desde el nivel 2 y se mejora hasta el 3, que es el requisito del nivel 5. Cada
+    // nivel cuesta lo que la subida al nivel de asentamiento en que se construye, con oro: es el recurso de la nobleza.
+    costo: { madera: 600, piedra: 400, oro: 100 },
+    tiempoConstruccionMinutos: 4_320, // 3 días
+    requisitoNivelAsentamientoConstruccion: 2,
+    niveles: {
+      1: { trabajadoresRequeridos: 0, recetas: [], capacidadNobles: 80 },
+      2: {
+        requisitoNivelAsentamiento: 3,
+        costoMejora: { madera: 1200, piedra: 1000, oro: 300 },
+        obraMinutos: 7_200, // 5 días
+        trabajadoresRequeridos: 0,
+        recetas: [],
+        capacidadNobles: 240,
+      },
+      3: {
+        requisitoNivelAsentamiento: 4,
+        costoMejora: { madera: 2500, piedra: 2500, oro: 800 },
+        obraMinutos: 10_080, // 1 semana
+        trabajadoresRequeridos: 0,
+        recetas: [],
+        capacidadNobles: 400,
+      },
+    } as Record<number, NivelEdificioTransformacion>,
   },
 
   // Ampliación de comercio (a petición del usuario, Doc 3.3): adición MANUAL de Gobernador/Maestro de Obras,
@@ -2010,10 +2034,18 @@ export const NIVEL_ASENTAMIENTO = {
     // descuido: sin ningún tipo en la lista, `cumpleEdificios` es trivialmente cierto y el gate real es el
     // del recinto.
     4: { pesants: 1000, artesanos: 800, edificios: [], recintoCompletoNivelMinimo: 1 },
-    5: { pesants: 2000, artesanos: 1600, edificios: ['palacio'] },
+    5: { pesants: 2000, artesanos: 1600, edificios: ['palacio'], nivelInternoMinimo: { palacio: 3 } },
   } as Record<
     number,
-    { pesants: number; artesanos: number; edificios: string[]; edificiosMinimo?: number; recintoCompletoNivelMinimo?: number }
+    {
+      pesants: number;
+      artesanos: number;
+      edificios: string[];
+      edificiosMinimo?: number;
+      recintoCompletoNivelMinimo?: number;
+      /** Nivel interno mínimo que tiene que tener un edificio de la lista (el Palacio 3 del nivel 5, Doc 4.5). */
+      nivelInternoMinimo?: Partial<Record<string, number>>;
+    }
   >,
   /**
    * Techo de POBLACIÓN TOTAL (pesants+artesanos+nobleza) por nivel (Doc Fase_0_5 §3.1, a petición del

@@ -157,12 +157,15 @@ Cada paso deja los tests en verde y se puede fusionar por separado.
 - [x] Tipo de edificio de las tropas: `+ 'caballerizas'`.
 
 ### Paso 6 — Población por escalón y Palacio (§37)
-- [ ] `reclutarTropa` deja de recibir `origen`: escalones 1-2 → pesants, 3 → artesanos, 4-5 → nobleza (las
+- [x] `reclutarTropa` deja de recibir `origen`: escalones 1-2 → pesants, 3 → artesanos, 4-5 → nobleza (las
   Falangitas, escalón 4 con artesanos, llegan en la Era V). `poblacionDisponibleParaReclutar` admite nobleza.
-- [ ] Palacio con niveles internos (Doc 4.2.1, aprobado el 2026-09-29): 1 en asentamiento nivel 2, cupo 80, 600 madera +
+- [x] Palacio con niveles internos (Doc 4.2.1, aprobado el 2026-09-29): 1 en asentamiento nivel 2, cupo 80, 600 madera +
   400 piedra + 100 oro, 3 días; 2 en nivel 3, cupo 240, 1.200 + 1.000 + 300, 5 días; 3 en nivel 4, cupo 400, 2.500 +
   2.500 + 800, 1 semana. El nivel 5 pide Palacio 3.
-- [ ] NPC y comando de reclutar sin `origen`. Borrar §37 de `Mecanicas a desarrollar`.
+- [x] NPC y comando de reclutar sin `origen`. Borrar §37 de `Mecanicas a desarrollar`.
+- [x] Hecho así: `poblacionDeTropa` (motor) decide la clase; el comando admite `origen` y lo ignora, para no romper a
+  los clientes que aún lo mandan. El Palacio es un edificio con niveles (`capacidadNobles` y `obraMinutos` por
+  nivel) y el requisito del nivel 5 usa `nivelInternoMinimo`. El NPC levanta el Palacio al llegar al nivel 3.
 
 ### Paso 7 — Roster de la Era I
 - [ ] Tropas nuevas: leñadores, granjeros (Centro Urbano, sin oro), exploradores a caballo (Caballerizas 1), carros

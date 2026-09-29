@@ -58,8 +58,8 @@ export function evaluarGatesDeNivel(
   if (!requisito) return null;
   const poblacion =
     asentamiento.poblacion.pesants >= requisito.pesants && asentamiento.poblacion.artesanos >= requisito.artesanos;
-  const tiposConstruidos = requisito.edificios.filter(
-    (tipo) => edificiosPorTipoYEstado(asentamiento, tipo as EdificioTipo).length > 0
+  const tiposConstruidos = requisito.edificios.filter((tipo) =>
+    edificiosPorTipoYEstado(asentamiento, tipo as EdificioTipo).some((e) => (e.nivelInterno ?? 1) >= (requisito.nivelInternoMinimo?.[tipo] ?? 1))
   ).length;
   const cumpleRecinto =
     requisito.recintoCompletoNivelMinimo === undefined ||

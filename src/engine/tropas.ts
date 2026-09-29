@@ -1,4 +1,4 @@
-import type { Asentamiento, Ejercito, Escuadron, Heroe, TecnologiaId } from '../domain/types';
+import type { Asentamiento, Ejercito, Escuadron, Heroe, OrigenTropa, TecnologiaId } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
 import { MILITAR, MOVIMIENTO, RECLUTAMIENTO_ORO_POR_ESCALON, RESERVA_CONSTRUCCION, TECNOLOGIAS, TROPAS_RECLUTABLES } from '../constants';
 
@@ -61,6 +61,11 @@ function reponibleAqui(e: Escuadron, asentamiento: Asentamiento, ejercitos: read
  * hasta el tope—, y solo donde está: en su campamento o en su columna a la puerta (`reponibleAqui`). Reclutar no
  * es un gate del cargo de General (Doc 2.2 vs 2.5 — 2.5 ganó la ambigüedad: es beneficio de residencia).
  */
+/** De qué clase de población sale una tropa (Doc 5.8): escalones 1-2, pesants; 3, artesanos; 4-5, nobleza. */
+export function poblacionDeTropa(tropa: { escalon: number }): OrigenTropa {
+  return tropa.escalon <= 2 ? 'pesants' : tropa.escalon === 3 ? 'artesanos' : 'nobleza';
+}
+
 export function reclutarTropa(
   asentamiento: Asentamiento,
   heroes: readonly Heroe[],
@@ -71,7 +76,6 @@ export function reclutarTropa(
    * `asentamiento.faccionId`; para un comando, la Facción del actor. */
   faccionDelJugadorId: string,
   tropaId: string,
-  origen: 'pesants' | 'artesanos',
   /** Tecnologías adoptadas por la Facción de la plaza (las cuatro puertas, Doc 6.1). */
   adoptadas: readonly TecnologiaId[],
   contador = 0
@@ -98,6 +102,7 @@ export function reclutarTropa(
     throw new ReclutamientoInvalidoError('Fuera de tu residencia solo puedes reponer un escuadrón que ya tienes aquí, no reclutar uno nuevo.');
   }
   const cantidad = tropa.unidadesPorDefecto - (existente?.cantidad ?? 0);
+  const origen = poblacionDeTropa(tropa);
   if (cantidad <= 0) {
     throw new ReclutamientoInvalidoError('Este escuadrón ya está al tope de unidades.');
   }

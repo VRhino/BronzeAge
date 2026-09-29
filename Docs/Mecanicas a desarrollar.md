@@ -39,7 +39,6 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 34 | SUMINISTRO | La economía no llena el carro de un ejército | ✘ sin decidir |
 | 35 | VARIOS | Cabos sueltos de mundo, población y militar | ✘ sin decidir |
 | 36 | HÉROE | Comportamiento de los héroes bot en el mundo | ✘ nada |
-| 37 | MILITAR | Reclutamiento por clase de población y Palacio mejorable | ✘ decidido, sin código |
 | 38 | MILITAR | Tope de héroes en asedio: volver a 15 cuando entren jugadores | ◐ 5 mientras se prueba con NPC |
 | 39 | MILITAR | Escala de la experiencia de escuadra de Unity | ✘ espera a CQ-001 |
 | 40 | MUNDO | Campamentos de mercenarios: enclave neutral, residencia, reclutamiento y mercado | ✘ nada |
@@ -457,20 +456,6 @@ producción de la Granja (Doc 4.2.1); falta volver a medir. Cifras, causa y las 
   la Nobleza dejó de reclutarse; falta decidir su papel junto a la Fundición.
 - **Armas de asedio** (Doc 4.2.1): la Carpintería está pensada para arietes y torres de asedio, que Fase 0 no
   tiene.
-
-## 37. Reclutamiento por clase de población y Palacio mejorable
-
-**Estado: decidido (canon Doc 5.8 y Doc 4.2.1), `código: ✗`.** Hoy el código deja reclutar cualquier tropa con
-Pesants o Artesanos, a elección, y la Nobleza no se recluta; el Palacio pide asentamiento de nivel 4 y da cupo a 200
-nobles, sin niveles. Falta:
-
-- `reclutarTropa` elige la clase por el escalón de la tropa (1-2 Pesants, 3 Artesanos, 4-5 Nobleza; Falangitas con
-  Artesanos) en vez de recibirla como parámetro, y el NPC deja de pasarla.
-- Palacio con niveles internos (1 / 2 / 3 en asentamiento nivel 2 / 3 / 4, cupo 80 / 240 / 400; coste 600 madera +
-  400 piedra + 100 oro / 1.200 + 1.000 + 300 / 2.500 + 2.500 + 800; obra 3 días / 5 días / 1 semana); el requisito
-  del nivel 5 pasa a ser el Palacio 3.
-- El resto del roster de la revisión BA-006 (leñadores, granjeros, honderos rodios, escalones nuevos) llega con el
-  cierre de su Era: el código tiene todavía las 11 tropas de antes.
 
 ## 38. Tope de héroes en asedio: volver a 15 cuando entren jugadores
 

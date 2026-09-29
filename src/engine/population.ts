@@ -103,8 +103,10 @@ export function crecerPoblacion(
   // los fundadores, Doc 2.5) y Palacio construido. A partir de ahí, misma fórmula proporcional a la tasa más
   // lenta de las 3, con su propio cupo (`capacidadNobles` del Palacio) en vez del de Vivienda. Sacerdote
   // puede acelerar el crecimiento vía política.
-  const palaciosActivos = edificiosPorTipoYEstado(asentamiento, 'palacio').length;
-  const capacidadNobleza = palaciosActivos * EDIFICIO_CATALOGO.palacio.capacidadNobles;
+  // Uno por plaza; su cupo, el de su nivel interno (Doc 4.2.1: 80 / 240 / 400).
+  const palacio = edificiosPorTipoYEstado(asentamiento, 'palacio')[0];
+  const palaciosActivos = palacio ? 1 : 0;
+  const capacidadNobleza = palacio ? (EDIFICIO_CATALOGO.palacio.niveles[palacio.nivelInterno ?? 1]?.capacidadNobles ?? 0) : 0;
   const espacioPalacioFactor = capacidadNobleza <= 0 ? 0 : Math.max(0, Math.min(1, 1 - asentamiento.poblacion.nobleza / capacidadNobleza));
   const ciudadanosEnAsentamiento = asentamiento.casasCompradas.length;
   const cumpleRequisitoNobleza = ciudadanosEnAsentamiento >= POBLACION.nobleza.minCiudadanos && palaciosActivos > 0;

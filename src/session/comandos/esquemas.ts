@@ -307,7 +307,7 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
       tropaId: IDENTIFICADOR,
       origen: { type: 'string', enum: ['pesants', 'artesanos'] },
     },
-    ['asentamientoId', 'heroeId', 'tropaId', 'origen']
+    ['asentamientoId', 'heroeId', 'tropaId']
   ),
   iniciarAsedio: objeto(
     { atacanteId: IDENTIFICADOR, defensorId: IDENTIFICADOR, escuadronIds: LISTA_DE_IDENTIFICADORES },

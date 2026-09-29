@@ -502,7 +502,10 @@ function asegurarNucleoMilitar(
       ? 'galeriaDeTiro'
       : !tieneOEnCurso(asentamiento, 'caballerizas') && adoptadas.includes('cria_caballar')
         ? 'caballerizas'
-        : undefined;
+        : // La tropa de escalón 4-5 se recluta con nobleza (Doc 5.8), y la primera está en el nivel 3.
+          !tieneOEnCurso(asentamiento, 'palacio') && nivelActualDe(asentamiento) >= 3
+          ? 'palacio'
+          : undefined;
   if (!faltante) return asentamiento;
 
   try {
@@ -830,7 +833,6 @@ function reclutarParaTodos(
   ejercitos: readonly Ejercito[],
   contadorInicial: number,
   tropaId: string | undefined,
-  origen: 'pesants' | 'artesanos',
   adoptadas: readonly TecnologiaId[]
 ): { asentamiento: Asentamiento; heroes: Heroe[]; reclutamientosExitosos: number; contador: number; contadores: DeltaContadores } {
   if ((asentamiento.almacen['madera']?.cantidad ?? 0) < RESERVA_MADERA_ANTES_DE_RECLUTAR) {
@@ -848,7 +850,7 @@ function reclutarParaTodos(
   for (const heroeId of residentesDe(asentamiento)) {
     for (const candidata of candidatas) {
       try {
-        const r = reclutarTropa(actual, heroesActuales, ejercitos, heroeId, asentamiento.faccionId, candidata, origen, adoptadas, contador++);
+        const r = reclutarTropa(actual, heroesActuales, ejercitos, heroeId, asentamiento.faccionId, candidata, adoptadas, contador++);
         const antes = cantidadDeTropa(heroesActuales, heroeId, candidata);
         contadores = sumarDeltas(contadores, contadoresDeReclutamiento(candidata, cantidadDeTropa(r.heroes, heroeId, candidata) - antes, antes === 0));
         actual = r.asentamiento;
@@ -1765,7 +1767,6 @@ export interface ConfigNpcGobernanza {
   faccionesIds?: string[];
   /** Tropa a reclutar por defecto — 'milicia_lanceros' (edificio centroUrbano, sin depender de Barracón). */
   tropaId?: string;
-  origenReclutamiento?: 'pesants' | 'artesanos';
   /** Jugadores que viajan en cada Caravana de Fundación lanzada (tope real: FUNDACION.maxJugadoresFundacionGrupal). */
   jugadoresPorCaravanaFundacion?: number;
   /** Jugadores fundadores del PRIMER asentamiento de una Facción NPC sin ninguno todavía (ver
@@ -2189,14 +2190,13 @@ export function avanzarNpcGobernanza(
   let reclutamientosExitosos = 0;
   let contadoresReclutamiento: DeltaContadores = {};
   const tropaId = config.tropaId;
-  const origenReclutamiento = config.origenReclutamiento ?? 'pesants';
   // Bucle y no `map`: la unicidad por `tropaId` es de toda la partida, así que cada plaza tiene que ver lo que
   // las anteriores ya reclutaron este mismo tick (un NPC puede residir en dos).
   asentamientos = [...asentamientos];
   for (let i = 0; i < asentamientos.length; i++) {
     const a = asentamientos[i]!;
     if (!esNpc(a.faccionId)) continue;
-    const resultado = reclutarParaTodos(a, heroes, trasComercio.ejercitos, contador, tropaId, origenReclutamiento, tecnologiasDe(adopcion.tecnologia, a.faccionId).adoptadas);
+    const resultado = reclutarParaTodos(a, heroes, trasComercio.ejercitos, contador, tropaId, tecnologiasDe(adopcion.tecnologia, a.faccionId).adoptadas);
     contador = resultado.contador;
     reclutamientosExitosos += resultado.reclutamientosExitosos;
     contadoresReclutamiento = sumarDeltas(contadoresReclutamiento, resultado.contadores);

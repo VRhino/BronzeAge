@@ -8,7 +8,8 @@
 // Sus eventos son los MÁS sensibles a visibilidad de toda la capa de comandos —quién atacó a quién— así que
 // son los que más ganan con `codigo`/`payload` estructurados: las proyecciones por audiencia de Fase C
 // filtran sobre eso. Los payloads de combate los declara `engine/combate.ts`, que es quien resuelve.
-import { reclutarTropa as reclutarTropaEngine } from '../../engine/tropas';
+import { poblacionDeTropa, reclutarTropa as reclutarTropaEngine } from '../../engine/tropas';
+import { TROPAS_RECLUTABLES } from '../../constants';
 import { contadoresDeReclutamiento, sumarContadores, tecnologiasDe } from '../../engine/tecnologia';
 import { esCiudadano } from '../../engine/faccion';
 import {
@@ -18,7 +19,7 @@ import {
 } from '../../engine/combate';
 import { heridosEn, herir } from '../../engine/heroe';
 import { conEscuadrones, defensaDe, heroesQueEntranADefender, sinTropa } from '../../engine/tropa';
-import type { Escuadron } from '../../domain/types';
+import type { Escuadron, OrigenTropa } from '../../domain/types';
 
 /** Lo que se puede sacar del campamento a combatir: la guarnición la maneja la IA de la plaza (Doc 5.15.3), y las
  * escuadras de un héroe herido no combaten (Doc 5.16.4). */
@@ -39,7 +40,8 @@ export interface PayloadReclutamiento {
   asentamientoId: string;
   heroeId: string;
   tropaId: string;
-  origen: 'pesants' | 'artesanos';
+  /** De qué clase salieron: la decide el escalón de la tropa (Doc 5.8). */
+  origen: OrigenTropa;
   reclutados: number;
 }
 
@@ -47,7 +49,9 @@ export interface ParamsReclutarTropa {
   asentamientoId: string;
   heroeId: string;
   tropaId: string;
-  origen: 'pesants' | 'artesanos';
+  /** Ya no decide nada: la clase de población la pone el escalón de la tropa (Doc 5.8). Se admite para no romper a
+   * los clientes que todavía la mandan. */
+  origen?: 'pesants' | 'artesanos';
 }
 
 export const reclutarTropa = comando<ParamsReclutarTropa, { reclutados: number }>((estado, _mapa, ctx, params) => {
@@ -65,8 +69,6 @@ export const reclutarTropa = comando<ParamsReclutarTropa, { reclutados: number }
     params.heroeId,
     faccionDelJugador?.id ?? '',
     params.tropaId,
-    params.origen,
-    
     tecnologiasDe(estado.tecnologia, asentamiento.faccionId).adoptadas,
     ctx.ids.siguiente()
   );
@@ -81,13 +83,15 @@ export const reclutarTropa = comando<ParamsReclutarTropa, { reclutados: number }
     params.heroeId,
     `Recluta ${reclutados} de "${params.tropaId}" en ${asentamiento.id}.`
   );
+  const tropa = TROPAS_RECLUTABLES.find((t) => t.id === params.tropaId)!;
+  const origen = poblacionDeTropa(tropa);
   return exito(
     siguiente,
     [
       evento(ctx, {
         codigo: 'tropas.reclutadas',
-        mensaje: `${params.heroeId} recluta ${reclutados} de la tropa "${params.tropaId}" (${params.origen}).`,
-        payload: { ...params, reclutados } satisfies PayloadReclutamiento,
+        mensaje: `${params.heroeId} recluta ${reclutados} de la tropa "${params.tropaId}" (${origen}).`,
+        payload: { asentamientoId: params.asentamientoId, heroeId: params.heroeId, tropaId: params.tropaId, origen, reclutados } satisfies PayloadReclutamiento,
         asentamientoId: asentamiento.id,
       }),
     ],

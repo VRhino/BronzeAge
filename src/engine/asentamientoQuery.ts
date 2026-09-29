@@ -1,4 +1,4 @@
-import type { Asentamiento, Edificio, EdificioTipo, Point, TecnologiaId } from '../domain/types';
+import type { Asentamiento, Edificio, EdificioTipo, OrigenTropa, Point, TecnologiaId } from '../domain/types';
 import { minutos, duracion, type Duracion, type Instante } from '../domain/tiempo';
 import type { Mapa } from '../world/mapa';
 import {
@@ -203,7 +203,7 @@ export function progresoNivelAsentamiento(asentamiento: Asentamiento): ProgresoN
   const requisito = NIVEL_ASENTAMIENTO.requisitos[nivelObjetivo];
   if (!requisito) return { nivel: asentamiento.nivel, esMaximo: true };
   const edificiosFaltantes = requisito.edificios.filter(
-    (tipo) => edificiosPorTipoYEstado(asentamiento, tipo as EdificioTipo).length === 0
+    (tipo) => !edificiosPorTipoYEstado(asentamiento, tipo as EdificioTipo).some((e) => (e.nivelInterno ?? 1) >= (requisito.nivelInternoMinimo?.[tipo] ?? 1))
   );
   const nivelMinimoRequerido = requisito.recintoCompletoNivelMinimo;
   return {
@@ -284,7 +284,9 @@ export function manoObraInfo(asentamiento: Asentamiento): ManoObraInfo {
  * Regla del MOTOR, no del NPC (`engine/tropas.ts`, `reclutarTropa`): aplica igual al reclutamiento manual y al
  * de la gobernanza NPC — mismo criterio que la reserva de trigo antes de reclutar.
  */
-export function poblacionDisponibleParaReclutar(asentamiento: Asentamiento, origen: 'pesants' | 'artesanos'): number {
+export function poblacionDisponibleParaReclutar(asentamiento: Asentamiento, origen: OrigenTropa): number {
+  // Los nobles no trabajan: todos están disponibles.
+  if (origen === 'nobleza') return asentamiento.poblacion.nobleza;
   if (origen === 'artesanos') {
     return Math.max(0, asentamiento.poblacion.artesanos - trabajadoresRequeridosTransformacion(asentamiento));
   }
