@@ -14,6 +14,8 @@ import { herir } from '../engine/heroe';
 import { estanAliadas } from '../engine/pertenencia';
 import { aplicarAjustesReputacion } from '../engine/reputacion';
 import { alCampamento, conEscuadrones, conExperiencia, sinTropa } from '../engine/tropa';
+import { sumarContadores, type DeltaContadores } from '../engine/tecnologia';
+import { integridadDeRecinto } from '../engine/trazado';
 import {
   BatallaInvalidaError,
   conBatalla,
@@ -44,6 +46,7 @@ export function aplicarResultado(estado: GameSessionState, b: Batalla, r: Battle
     .map((p) => p.participante.heroeId);
   // Todos los héroes del bando que pierde quedan heridos (Doc 5.16.4).
   let siguiente: GameSessionState = { ...estado, heroes: herir(conLoQueTrajo(estado.heroes, b, r), perdedores, ahora) };
+  siguiente = { ...siguiente, tecnologia: sumarContadores(siguiente.tecnologia, contadoresDeBatalla(estado, b, r.ganador)) };
   siguiente = consecuencias(siguiente, b, r.ganador, ahora);
   siguiente = conXpDeFaccion(siguiente, b, r);
   return conBatalla(siguiente, { ...b, estado: 'aplicada', resultado: r, aplicadaEn: ahora });
@@ -136,6 +139,28 @@ function consecuencias(estado: GameSessionState, b: Batalla, ganador: LadoId, ah
   if (contexto.tipo === 'caravana') return capturarCaravana(trasDerrotas, b, contexto.caravanaId);
   if (contexto.tipo === 'campamento_bandidos') return destruirCampamento(trasDerrotas, b, contexto.campamentoId, ahora);
   return trasDerrotas;
+}
+
+/** Lo que una batalla de Unity suma a los logros del servidor (Doc 6.3): lo mismo que un combate con números. */
+function contadoresDeBatalla(estado: GameSessionState, b: Batalla, ganador: LadoId): DeltaContadores {
+  const delta: DeltaContadores = { 'batallas.libradas': 1 };
+  if (escuadrasDe(b).some((e) => e.tropaId === 'hoplitas_ciudadanos')) delta['batallas.conHoplitas'] = 1;
+  const contexto = b.ticket.contextoEstrategico;
+  if (contexto.tipo === 'campo_abierto') delta['batallas.campoAbierto'] = 1;
+  if (contexto.tipo === 'caravana' && ganador === 'atacante') delta['caravanas.destruidasOCapturadas'] = 1;
+  if (contexto.tipo === 'campamento_bandidos' && ganador === 'atacante') delta['bandidos.campamentosDestruidos'] = 1;
+  if (contexto.tipo === 'asedio') {
+    const plaza = estado.asentamientos.find((a) => a.id === b.bloqueo.asentamientoId);
+    const muralla = (plaza?.recintos ?? []).some((r) => integridadDeRecinto(r) >= 1);
+    if (muralla) delta['asedios.contraMurallaCompleta'] = 1;
+    if (ganador === 'defensor') {
+      delta['asedios.resistidosEnCombate'] = 1;
+      if (participacionesDe(b).some((p) => p.lado === 'defensor')) delta['asedios.resistidosConResidentes'] = 1;
+    } else if (muralla) {
+      delta['conquistas.conMurallaCompleta'] = 1;
+    }
+  }
+  return delta;
 }
 
 /** Las columnas de un bando, en el orden del bloqueo: la primera es la que abrió o recibió el combate. */

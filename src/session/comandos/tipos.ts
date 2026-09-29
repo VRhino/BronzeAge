@@ -13,6 +13,7 @@ import type { RandomFn } from '../../worldgen';
 import type { EventoDominioConVersion, GameSessionState } from '../estado';
 import type { GeneradorIds } from '../idGenerator';
 import { codigoDeErrorDominio } from '../erroresDeDominio';
+import { contadoresDeEventos, sumarContadores } from '../../engine/tecnologia';
 import type { CodigoError } from './codigosDeError';
 
 /** Quién ejecuta el comando. Hoy es una cadena libre; en la Fase C pasa a ser el `Jugador` resuelto desde la
@@ -97,6 +98,9 @@ export function exito<T>(estado: GameSessionState, eventos: EventoDominio[], dat
     ...estado,
     version,
     eventosDominio: [...eventosConVersion, ...estado.eventosDominio],
+    // Los logros del servidor (Doc 6.3) se cuentan aquí, por donde pasa TODO hecho de la partida: el tick, los
+    // comandos y el NPC. Lo que no deja evento (extracción, talleres) lo cuenta el propio tick.
+    tecnologia: sumarContadores(estado.tecnologia, contadoresDeEventos(eventos)),
   };
   return { estado: estadoFinal, resultado: { ok: true, datos, eventos: eventosConVersion, version } };
 }

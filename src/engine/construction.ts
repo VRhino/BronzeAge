@@ -1188,8 +1188,9 @@ function avanzarRecetas(
    * reserva manual del Tesorero, 2026-09-28, decisión del usuario). Sin ella, en la Era I medida, una Armería
    * vaciaba la madera de su plaza en medio día y la dejaba caer en ruinas por no pagar el mantenimiento. */
   reserva: Partial<Record<RecursoTipo, number>>
-): { almacen: Record<string, RecursoAlmacenado>; pausados: Set<string> } {
+): { almacen: Record<string, RecursoAlmacenado>; pausados: Set<string>; fabricado: Partial<Record<RecursoTipo, number>> } {
   const pausadas = new Set(asentamiento.recetasPausadas ?? []);
+  const fabricado: Partial<Record<RecursoTipo, number>> = {};
   const ratioArtesano = ratioManoObraArtesanos(asentamiento);
   let almacenActual = almacen;
   const pausados = new Set<string>();
@@ -1216,9 +1217,11 @@ function avanzarRecetas(
       const resultado = agregarRecursoConSobrante(almacenActual, receta.produce, cantidad);
       almacenActual = resultado.almacen;
       if (resultado.sobrante > 0) pausados.add(edificio.id);
+      const producido = receta.produce as RecursoTipo;
+      fabricado[producido] = (fabricado[producido] ?? 0) + cantidad - resultado.sobrante;
     }
   }
-  return { almacen: almacenActual, pausados };
+  return { almacen: almacenActual, pausados, fabricado };
 }
 
 /**
@@ -1239,8 +1242,16 @@ export function avanzarConstruccion(
   /** Ración de la guarnición (`consumoRacionDeEscuadrones(campamentoDe(...))`), para la reserva de trigo y la
    * decisión de Granjas: las escuadras viven en sus héroes, no en la plaza. */
   consumoTropasPorMinuto: number
-): { asentamiento: Asentamiento; eventos: EventoCrudo[]; edificiosCompletados: number } {
+): {
+  asentamiento: Asentamiento;
+  eventos: EventoCrudo[];
+  edificiosCompletados: number;
+  /** Lo extraído de yacimientos y lo fabricado en talleres este tick (logros del servidor, Doc 6.3). */
+  extraido: Partial<Record<RecursoTipo, number>>;
+  fabricado: Partial<Record<RecursoTipo, number>>;
+} {
   const eventos: EventoCrudo[] = [];
+  const extraido: Partial<Record<RecursoTipo, number>> = {};
   let almacen = asentamiento.almacen;
   const resultados = new Map<string, Edificio>();
   // Puestos de la zona de Mercado creados en este tick (ver `crearPuestosDeMercado`) — se añaden al final,
@@ -1310,8 +1321,9 @@ export function avanzarConstruccion(
     } else {
       const extraccion = EXTRACTORES[edificio.tipo];
       if (extraccion && mapa.nodoProductivo(edificio.fuenteId)) {
-        const extraido = mapa.extraer(edificio.fuenteId, extraccion.produccionBase() * ratioMano);
-        const resultado = agregarRecursoConSobrante(almacen, extraccion.recurso, extraido);
+        const cantidadExtraida = mapa.extraer(edificio.fuenteId, extraccion.produccionBase() * ratioMano);
+        extraido[extraccion.recurso] = (extraido[extraccion.recurso] ?? 0) + cantidadExtraida;
+        const resultado = agregarRecursoConSobrante(almacen, extraccion.recurso, cantidadExtraida);
         almacen = resultado.almacen;
         pausadoPorAlmacenLleno = resultado.sobrante > 0;
         if (!mapa.nodoProductivo(edificio.fuenteId)) {
@@ -1475,6 +1487,8 @@ export function avanzarConstruccion(
     // Doc Fase_0_5 §8: cuántos edificios completó ESTE asentamiento este tick — el llamador (simulation.ts)
     // lo usa para otorgar experiencia de Facción (`NIVEL_FACCION.xp.edificioCompletado`).
     edificiosCompletados: edificiosCompletadosEsteTick,
+    extraido,
+    fabricado: recetasResultado.fabricado,
   };
 }
 

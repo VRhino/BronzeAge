@@ -353,6 +353,7 @@ export const comprarAnimalCaravana = comando<ParamsComprarAnimal, { caravanaId: 
   return exito(
     siguiente,
     [
+      // Cuenta para el logro de `cria_caballar` (Doc 6.6): lo suma `exito` desde el evento.
       evento(ctx, {
         codigo: 'comercio.caravana_animal_comprado',
         mensaje: `Compra un ${params.tipoAnimal} para el carro ${params.carroIndice} de la caravana ${caravana.id}.`,

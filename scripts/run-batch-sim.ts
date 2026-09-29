@@ -5,7 +5,7 @@ import { createRng, generarMapa, MAPA_DEFAULT, restaurarRng, WORLDGEN_VERSION } 
 import { crearMapa, type EstadoMapa, type Mapa } from '../src/world/mapa';
 import { avanzarSimulacion, type EstadoSimulacion } from '../src/engine/simulation';
 import { crearFaccion } from '../src/engine/faccion';
-import { estadoTecnologiaInicial } from '../src/engine/tecnologia';
+import { contadoresDeEventos, estadoTecnologiaInicial, sumarContadores } from '../src/engine/tecnologia';
 import { evaluarViabilidadFundacion, fundarAsentamiento } from '../src/engine/settlement';
 import { nivelActualDe, tieneMercadoActivo, edificiosPorTipoYEstado, nutricionPoblacionDe } from '../src/engine/asentamientoQuery';
 import { alcanzoTopeDeViviendas, reclamosDeFuentes } from '../src/engine/construction';
@@ -1226,7 +1226,9 @@ async function main() {
             })
           )
         : new Map();
-      const trasMotor = avanzarSimulacion(estado, mapa, contexto);
+      const trasMotorCrudo = avanzarSimulacion(estado, mapa, contexto);
+      // Los logros que salen de eventos los cuenta `exito` en la partida real; aquí no hay comandos, así que se cuentan a mano.
+      const trasMotor = { ...trasMotorCrudo, tecnologia: sumarContadores(trasMotorCrudo.tecnologia, contadoresDeEventos(trasMotorCrudo.eventosDominio)) };
       if (diagFundacion) {
         for (const ev of trasMotor.eventosDominio) {
           if (ev.codigo === 'expansion.asentamiento_fundado') {

@@ -31,6 +31,7 @@ import type { RandomFn } from '../worldgen';
 import type { ContextoSimulacion, EstadoSimulacion } from '../engine/simulation';
 import { avanzarAutoComercioSimulado } from '../engine/simulacionAutoComercio';
 import { reclutarTropa, ReclutamientoInvalidoError } from '../engine/tropas';
+import { contadoresDeEventos, contadoresDeReclutamiento, sumarContadores, sumarDeltas, type DeltaContadores } from '../engine/tecnologia';
 import { campamentoDe, conEscuadrones, conTropa, defensaDe, indiceTropa, sinGuarnicion, sinTropa, type IndiceTropa } from '../engine/tropa';
 import { asignarGuarnicion, guardarLoadout, HeroeInvalidoError, heridosEn, herir, progresionInicial } from '../engine/heroe';
 import { puedeLlevar } from '../engine/liderazgo';
@@ -777,9 +778,9 @@ function reclutarParaTodos(
   contadorInicial: number,
   tropaId: string | undefined,
   origen: 'pesants' | 'artesanos'
-): { asentamiento: Asentamiento; heroes: Heroe[]; reclutamientosExitosos: number; contador: number } {
+): { asentamiento: Asentamiento; heroes: Heroe[]; reclutamientosExitosos: number; contador: number; contadores: DeltaContadores } {
   if ((asentamiento.almacen['madera']?.cantidad ?? 0) < RESERVA_MADERA_ANTES_DE_RECLUTAR) {
-    return { asentamiento, heroes, reclutamientosExitosos: 0, contador: contadorInicial };
+    return { asentamiento, heroes, reclutamientosExitosos: 0, contador: contadorInicial, contadores: {} };
   }
 
   // Solo los residentes: el campamento de cada uno está aquí (Doc 5.15.2). Todos son ciudadanos de la Facción
@@ -788,11 +789,14 @@ function reclutarParaTodos(
   let heroesActuales = heroes;
   let contador = contadorInicial;
   let exitosos = 0;
+  let contadores: DeltaContadores = {};
   const candidatas = tropaId ? [tropaId] : TROPAS_POR_PREFERENCIA_NPC.map((t) => t.id);
   for (const heroeId of residentesDe(asentamiento)) {
     for (const candidata of candidatas) {
       try {
         const r = reclutarTropa(actual, heroesActuales, ejercitos, heroeId, asentamiento.faccionId, candidata, origen, contador++);
+        const antes = cantidadDeTropa(heroesActuales, heroeId, candidata);
+        contadores = sumarDeltas(contadores, contadoresDeReclutamiento(candidata, cantidadDeTropa(r.heroes, heroeId, candidata) - antes, antes === 0));
         actual = r.asentamiento;
         heroesActuales = r.heroes;
         exitosos++;
@@ -802,7 +806,11 @@ function reclutarParaTodos(
       }
     }
   }
-  return { asentamiento: actual, heroes: heroesActuales, reclutamientosExitosos: exitosos, contador };
+  return { asentamiento: actual, heroes: heroesActuales, reclutamientosExitosos: exitosos, contador, contadores };
+}
+
+function cantidadDeTropa(heroes: readonly Heroe[], heroeId: string, tropaId: string): number {
+  return heroes.find((h) => h.id === heroeId)?.escuadrones.find((e) => e.tropaId === tropaId)?.cantidad ?? 0;
 }
 
 /**
@@ -890,8 +898,11 @@ function cazarBandidos(
   destruidos: number;
   fallidos: number;
   contador: number;
+  /** Logros del servidor (Doc 6.3): el NPC resuelve aquí sus ataques, fuera del tick. */
+  contadores: DeltaContadores;
 } {
   const eventos: string[] = [];
+  let contadores: DeltaContadores = {};
   let actuales = asentamientos;
   let heroesActuales = heroes;
   let faccionesActuales = facciones;
@@ -911,6 +922,7 @@ function cazarBandidos(
       const trasAtaque = sinTropa(r.ejercito);
       heroesActuales = herir(conEscuadrones(heroesActuales, trasAtaque.tropa), r.vencidos, instante);
       faccionesActuales = r.facciones;
+      contadores = sumarDeltas(contadores, contadoresDeEventos(r.eventos));
       eventos.push(...r.eventos.map((e) => (typeof e === 'string' ? e : e.mensaje)));
       if (r.destruido) {
         campamentosActuales = campamentosActuales.filter((c) => c.id !== campamento.id);
@@ -989,6 +1001,7 @@ function cazarBandidos(
     destruidos,
     fallidos,
     contador,
+    contadores,
   };
 }
 
@@ -2003,6 +2016,7 @@ export function avanzarNpcGobernanza(
 
   let asentamientos = asentamientosBase.map((a) => (esNpc(a.faccionId) ? asegurarGobernanzaBase(a, facciones) : a));
   let caravanas = [...estado.caravanas];
+  let animalesComprados = 0;
 
   const fundadores = materializarFundadoresNpc(asentamientos, heroes, esNpc);
   heroes = fundadores.heroes;
@@ -2038,6 +2052,8 @@ export function avanzarNpcGobernanza(
     );
     contador = resultado.contador;
     caravanas = [...caravanas, ...resultado.caravanasNuevas];
+    // Cada caravana comercial nueva compra su buey (`construirCaravanaComercial`).
+    animalesComprados += resultado.caravanasNuevas.length;
     const conNucleoMilitar = asegurarNucleoMilitar(resultado.asentamiento, faccion, zonaPoligono, mapa, capital, reclamos, contador++);
     return asegurarMuralla(conNucleoMilitar, instante);
   });
@@ -2099,6 +2115,7 @@ export function avanzarNpcGobernanza(
 
   asentamientos = trasComercio.asentamientos;
   let reclutamientosExitosos = 0;
+  let contadoresReclutamiento: DeltaContadores = {};
   const tropaId = config.tropaId;
   const origenReclutamiento = config.origenReclutamiento ?? 'pesants';
   // Bucle y no `map`: la unicidad por `tropaId` es de toda la partida, así que cada plaza tiene que ver lo que
@@ -2110,6 +2127,7 @@ export function avanzarNpcGobernanza(
     const resultado = reclutarParaTodos(a, heroes, trasComercio.ejercitos, contador, tropaId, origenReclutamiento);
     contador = resultado.contador;
     reclutamientosExitosos += resultado.reclutamientosExitosos;
+    contadoresReclutamiento = sumarDeltas(contadoresReclutamiento, resultado.contadores);
     asentamientos[i] = resultado.asentamiento;
     heroes = resultado.heroes;
   }
@@ -2131,6 +2149,7 @@ export function avanzarNpcGobernanza(
           destruidos: 0,
           fallidos: 0,
           contador,
+          contadores: {},
         }
       : cazarBandidos(
           asentamientos,
@@ -2233,6 +2252,10 @@ export function avanzarNpcGobernanza(
   return {
     estado: {
       ...trasComercio,
+      tecnologia: sumarContadores(
+        trasComercio.tecnologia,
+        sumarDeltas(sumarDeltas(contadoresReclutamiento, trasBandidos.contadores), { 'animales.comprados': animalesComprados })
+      ),
       heroes,
       asentamientos: trasExpansion.asentamientos,
       facciones: trasBandidos.facciones,

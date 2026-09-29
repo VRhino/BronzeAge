@@ -9,6 +9,7 @@ import { aplicarCapacidadDeEdificio } from './almacen';
 import { aplicarAjustesReputacion } from './reputacion';
 import { aplicarAjustesExperiencia, type AjusteExperiencia } from './faccion';
 import { multiplicadorDefensivoDeRecintos } from './muralla';
+import { integridadDeRecinto } from './trazado';
 import { CAMPO_CARGO, esResidente, estanAliadas } from './pertenencia';
 import { estaProtegida } from './asentamientoQuery';
 
@@ -44,12 +45,30 @@ export interface PayloadCombateResuelto {
   ganador: 'atacante' | 'defensor';
   poderAtacante: number;
   poderDefensor: number;
+  /** Tropas que combatieron, de los dos bandos (logros del servidor, Doc 6.3). */
+  tropaIds: string[];
 }
 export interface PayloadAsedio {
   atacanteId: string;
   defensorId: string;
   faccionAtacanteId: string;
   faccionDefensoraId: string;
+  /** Hubo combate: no es un rebote por protección ni una plaza que cae sin defensores (Doc 6.6, "asedios resistidos en
+   * combate"). */
+  enCombate: boolean;
+  /** La plaza tenía un recinto de muralla completo. */
+  murallaCompleta: boolean;
+  /** Algún defensor combatió en persona, no solo la guarnición (proxy de "con los residentes dentro"). */
+  conResidentes: boolean;
+}
+
+/** Los datos del asedio que salen de la plaza y de quién la defendió (ver `PayloadAsedio`). */
+function datosDeAsedio(defensor: Asentamiento, defensores: readonly Escuadron[], enCombate: boolean): Pick<PayloadAsedio, 'enCombate' | 'murallaCompleta' | 'conResidentes'> {
+  return {
+    enCombate,
+    murallaCompleta: (defensor.recintos ?? []).some((r) => integridadDeRecinto(r) >= 1),
+    conResidentes: enCombate && defensores.some((e) => !e.enGuarnicion),
+  };
 }
 export interface PayloadAtaqueCampamento {
   atacanteId: string;
@@ -123,7 +142,12 @@ export function resolverCombate(
       {
         codigo: 'combate.resuelto',
         mensaje: `Combate resuelto: gana el ${ganador} (poder ${poderA.toFixed(0)} vs ${poderD.toFixed(0)}).`,
-        payload: { ganador, poderAtacante: poderA, poderDefensor: poderD } satisfies PayloadCombateResuelto,
+        payload: {
+          ganador,
+          poderAtacante: poderA,
+          poderDefensor: poderD,
+          tropaIds: [...new Set([...atacantes, ...defensores].map((e) => e.tropaId))],
+        } satisfies PayloadCombateResuelto,
       },
     ],
   };
@@ -347,6 +371,7 @@ export function iniciarAsedio(
             defensorId: defensor.id,
             faccionAtacanteId: atacante.faccionId,
             faccionDefensoraId: defensor.faccionId,
+            ...datosDeAsedio(defensor, [], false),
           } satisfies PayloadAsedio,
         },
       ],
@@ -368,6 +393,7 @@ export function iniciarAsedio(
     defensorId: defensor.id,
     faccionAtacanteId: atacante.faccionId,
     faccionDefensoraId: defensor.faccionId,
+    ...datosDeAsedio(defensor, escuadronesDefensores, true),
   };
   const eventos: EventoCrudo[] = [
     ...resultado.eventos,
@@ -520,6 +546,7 @@ export function asediarConEjercito(
     defensorId: defensor.id,
     faccionAtacanteId: ejercito.faccionId,
     faccionDefensoraId: defensor.faccionId,
+    ...datosDeAsedio(defensor, defensores, false),
   };
 
   // Protección tras la conquista (Doc 5.12.9): inmune a un nuevo asedio. Rebota sin combate ni RNG; el ejército
@@ -573,12 +600,13 @@ export function asediarConEjercito(
 
   const resultado = resolverCombate(atacantes, defensores, rng, multiplicadorDefensivoDeRecintos(defensor.recintos ?? []));
   const conquistado = resultado.ganador === 'atacante';
+  const payloadCombate: PayloadAsedio = { ...payload, ...datosDeAsedio(defensor, defensores, true) };
 
   const eventos: EventoCrudo[] = [
     ...resultado.eventos,
     conquistado
-      ? { codigo: 'combate.asedio_conquista', mensaje: `El ejército ${ejercito.id} conquista ${defensor.id}.`, payload }
-      : { codigo: 'combate.asedio_resistido', mensaje: `${defensor.id} resiste el asedio del ejército ${ejercito.id}.`, payload },
+      ? { codigo: 'combate.asedio_conquista', mensaje: `El ejército ${ejercito.id} conquista ${defensor.id}.`, payload: payloadCombate }
+      : { codigo: 'combate.asedio_resistido', mensaje: `${defensor.id} resiste el asedio del ejército ${ejercito.id}.`, payload: payloadCombate },
   ];
 
   // Atacar a un Aliado sin romper la relación antes es la penalización MÁS SEVERA de reputación (Doc 2.7) —

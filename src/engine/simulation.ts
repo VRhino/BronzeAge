@@ -24,6 +24,7 @@ import { avanzarAtaquesBandidos, avanzarSpawnBandidos } from './bandidos';
 import { avanzarEjercitos, type CombatePorAbrir, type ContextoAvanceEjercitos } from './ejercitos';
 import { grabarLoVisto, type MemoriaFaccion } from './memoria';
 import { grabarExploracionPersonal } from './ubicacion';
+import { avanzarTecnologia, contadoresDeProduccion, sumarContadores, sumarDeltas, type DeltaContadores } from './tecnologia';
 
 export interface EstadoSimulacion {
   asentamientos: Asentamiento[];
@@ -138,6 +139,8 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   // Doc Fase_0_5 §8: experiencia de Facción por construcción — se acumula aquí (un asentamiento por vez, sabe
   // su propia `faccionId`) y se aplica junto al resto de ajustes de experiencia más abajo en el tick.
   const ajustesExperiencia: AjusteExperiencia[] = [];
+  // Lo extraído y fabricado en todo el mundo este tick: alimenta los logros del servidor (Doc 6.3).
+  let contadoresProduccion: DeltaContadores = {};
 
   // Doc Fase_0_5 §5: cupo de asentamientos en nivel 2/3 por Facción, derivado de su nivel actual (el de
   // INICIO de este tick — se recalcula al final vía XP, ver más abajo). Se parte de cuántos asentamientos YA
@@ -151,7 +154,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     const zona = zonas.find((z) => z.asentamientoId === asentamiento.id);
     // La guarnición es el campamento de sus residentes (`engine/tropa.ts`): las escuadras viven en sus héroes.
     const campamento = campamentoDe(asentamiento, estado.heroes);
-    const { asentamiento: trasConstruccion, eventos: eventosConstruccion, edificiosCompletados } = avanzarConstruccion(
+    const { asentamiento: trasConstruccion, eventos: eventosConstruccion, edificiosCompletados, extraido, fabricado } = avanzarConstruccion(
       asentamiento,
       zona?.poligono ?? [],
       mapa,
@@ -160,6 +163,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
       instante,
       consumoRacionDeEscuadrones(campamento)
     );
+    contadoresProduccion = sumarDeltas(contadoresProduccion, contadoresDeProduccion(extraido, fabricado));
     if (edificiosCompletados > 0) {
       ajustesExperiencia.push({
         faccionId: asentamiento.faccionId,
@@ -320,6 +324,20 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   const eventosTitulos = narrarCambiosDeTitulo(estado.titulos, titulosActuales, faccionesFinal);
   eventosDominio.push(...comoEventosDominio(eventosTitulos, contexto));
 
+  // Tecnología (Doc 6): lo extraído y fabricado este tick y, con eso, logros, Era y apariciones. Los contadores que
+  // salen de eventos (combates, caravanas…) no se suman aquí sino donde se estampan los eventos de la partida
+  // (`exito`, `session/comandos/tipos.ts`), para contar igual los del tick que los de un comando.
+  const conContadores = sumarContadores(estado.tecnologia, contadoresProduccion);
+  const trasTecnologia = avanzarTecnologia(conContadores, {
+    asentamientos: trasTributos.asentamientos,
+    facciones: faccionesFinal,
+    // Las del principio del tick: recalcularlas cuesta y un tick de retraso no cambia ningún hito.
+    zonas,
+    mapa,
+    instante,
+  });
+  eventosDominio.push(...comoEventosDominio(trasTecnologia.eventos, contexto));
+
   return {
     asentamientos: trasTributos.asentamientos,
     facciones: faccionesFinal,
@@ -342,7 +360,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
       instante,
     }),
     heroes: grabarExploracionPersonal(heroes, trasEjercitos.ejercitos, mapa.limites),
-    tecnologia: estado.tecnologia,
+    tecnologia: trasTecnologia.tecnologia,
     estadoMapa: mapa.estadoActual(),
     combatesPorAbrir: trasEjercitos.combatesPorAbrir,
     eventosDominio,

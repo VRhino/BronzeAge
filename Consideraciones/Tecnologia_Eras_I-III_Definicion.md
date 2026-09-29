@@ -109,18 +109,25 @@ Cada paso deja los tests en verde y se puede fusionar por separado.
   con `requiereTecnologia` apunta a una tecnología real de una Era implementada).
 
 ### Paso 2 — Contadores, logros, Eras y aparición
-- [ ] Contadores (apéndice B). Las fuentes que ya emiten evento (`tropas.reclutadas`, `combate.resuelto`) se
+- [x] Contadores (apéndice B). Las fuentes que ya emiten evento (`tropas.reclutadas`, `combate.resuelto`) se
   cuentan desde el evento; producción y extracción se suman en el tick sin evento por unidad (serían miles).
   Las batallas de Unity (`session/resultadoBatalla.ts`) cuentan igual que las del motor.
-- [ ] `avanzarTecnologia(estado, contadoresDelTick, instante)` al final de `avanzarSimulacion`:
+- [x] `avanzarTecnologia(estado, contadoresDelTick, instante)` al final de `avanzarSimulacion`:
   1. suma contadores; fija los logros que cruzan su umbral (evento público `tecnologia.logro`, sin nombre de
      tecnología);
   2. avance de Era (D48): todos los logros de la Era o el plazo, lo que llegue antes; evento `era.comienza`;
   3. aparición (D55): para cada Facción y cada tecnología de una Era ya abierta con el logro cumplido y el hito
      cumplido, se añade a `tecnologiasAparecidas` (evento privado `tecnologia.aparece`); el primero se anota en
      `primeros`. Los hitos se evalúan solo para tecnologías con logro cumplido y aún no aparecidas.
-- [ ] Tests: logro fijado para siempre; la Era no avanza antes de completar logros ni después del plazo; una
+- [x] Tests: logro fijado para siempre; la Era no avanza antes de completar logros ni después del plazo; una
   tecnología no aparece sin logro, sin hito o con su Era cerrada; aparece a una Facción y no a otra.
+- [x] Hecho así: los contadores que salen de **eventos** se suman en `exito()` (`session/comandos/tipos.ts`), por donde
+  pasa todo hecho de la partida (tick, comandos, NPC); el tick solo suma lo que no deja evento (extracción y talleres,
+  que `avanzarConstruccion` devuelve como `extraido`/`fabricado`). El NPC cuenta aparte lo que resuelve fuera del tick
+  (reclutamiento, ataques a bandidos, bueyes de sus caravanas) y las batallas de Unity se cuentan en
+  `aplicarResultado`. El batch, que no pasa por `exito`, cuenta los eventos del tick a mano. `PayloadAsedio` gana
+  `enCombate`, `murallaCompleta` y `conResidentes` (proxy: algún defensor combatió en persona), y
+  `PayloadCombateResuelto`, `tropaIds`. `tecnologia.aparece` va atribuido a la capital: solo lo ve su Facción.
 
 ### Paso 3 — Adopción
 - [ ] Comando `adoptarTecnologia` (`src/session/comandos/`): solo el Rey (`faccion.reyId`), estando en la capital
