@@ -53,3 +53,24 @@ describe('talleres y tecnología (Doc 6.1)', () => {
     expect(armasDeCobre(['leva_comunal', 'hostigamiento_tribal', 'metalurgia_cobre'])).toBeGreaterThan(0);
   });
 });
+
+describe('arma de hierro de calidad (Doc 4.2.1)', () => {
+  it('la Armería 3 solo la hace con una Fundición 3 en la plaza', () => {
+    const conArmeria3 = (fundicion: number): Asentamiento => {
+      const a = conArmeria(1000);
+      const edificios = a.edificios.map((e) => (e.tipo === 'armeria' ? { ...e, nivelInterno: 3 } : e));
+      const fundi = { ...a.edificios[0]!, id: 'fundicion-t', tipo: 'fundicion' as const, estado: 'activo' as const, nivelInterno: fundicion };
+      return {
+        ...a,
+        poblacion: { pesants: 100, artesanos: 200, nobleza: 0 },
+        edificios: [...edificios, fundi],
+        almacen: { ...a.almacen, lingoteHierro: { cantidad: 100, capacidad: 10_000 } },
+      };
+    };
+    const hechas = (a: Asentamiento) =>
+      avanzarConstruccion(a, [], crearMapaDeterminista(7), undefined, reclamosDeFuentes([]), instanteDeTest(1), 0, TODAS_LAS_TECNOLOGIAS).asentamiento
+        .almacen['armaHierroCalidad']?.cantidad ?? 0;
+    expect(hechas(conArmeria3(2))).toBe(0);
+    expect(hechas(conArmeria3(3))).toBeGreaterThan(0);
+  });
+});

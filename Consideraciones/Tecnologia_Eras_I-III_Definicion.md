@@ -191,14 +191,18 @@ Cada paso deja los tests en verde y se puede fusionar por separado.
   siembra `RECURSOS_TIPO`. Lanceros pesados con armadura de bronce (Doc 5.8). Catálogo para Conquest, versión 3.
 
 ### Paso 9 — Era III
-- [ ] **Sala del Consejo** (`instituciones_civicas`): una por plaza, desde el nivel 3; 800 madera + 1.200 piedra +
+- [x] **Sala del Consejo** (`instituciones_civicas`): una por plaza, desde el nivel 3; 800 madera + 1.200 piedra +
   300 oro, 2 días, 3×3; +1 ranura de política del Gobernador (`POLITICAS.slotsPorCargo`).
-- [ ] Nivel 4: + Sala del Consejo; `recintoCompletoNivelMinimo` 1 → 2 (§41). Fuera `nivelTechoProvisional`.
+- [x] Nivel 4: + Sala del Consejo; `recintoCompletoNivelMinimo` 1 → 2 (§41). Fuera `nivelTechoProvisional`.
   Borrar §41.
-- [ ] Fundición 3 (`forja_hierro_estandarizada`): +50 % de lingotes. Armería 3: `armaHierroCalidad` (misma
+- [x] Fundición 3 (`forja_hierro_estandarizada`): +50 % de lingotes. Armería 3: `armaHierroCalidad` (misma
   tecnología, pide Fundición 3) y `armaduraBronceCalidad` (`bronce_laminado`).
-- [ ] Tropas: honderos rodios, peltastas, jinetes escitas, hoplitas ciudadanos, caballería asiria, arqueros escitas,
+- [x] Tropas: honderos rodios, peltastas, jinetes escitas, hoplitas ciudadanos, caballería asiria, arqueros escitas,
   Espartiatas.
+- [x] Hecho así: el techo provisional no se quita, se sube a 4 — el 4 → 5 sigue esperando a la tecnología de la Era V
+  (D54, EV-2). La receta del Arma de Hierro de Calidad lleva `requiereEdificio: fundicion 3`. El NPC levanta la Sala
+  del Consejo con `instituciones_civicas` y mejora su empalizada a piedra en el nivel 3. Catálogo para Conquest,
+  versión 4.
 
 ### Paso 10 — NPC
 - [x] Adopta en cuanto le aparece una tecnología, en orden de aparición, mientras la capital guarde el doble de la
@@ -206,8 +210,8 @@ Cada paso deja los tests en verde y se puede fusionar por separado.
   no sale de su capital (se le trata como a quien tiene cargo en campañas, cacerías y repartos). En el batch, el Rey
   de cada Facción es su primer fundador, como en `crearFaccionNpc`. Adelantado tras el Paso 4 para que el batch no
   se quede sin tecnología.
-- [ ] Construye Caballerizas (hecho en el Paso 5, con `cria_caballar`), Mina de hierro, Sala del Consejo y pide la
-  subida a 4 cuando le toca.
+- [x] Construye Caballerizas (Paso 5), Mina de hierro (auto-construcción con la tecnología), Palacio (Paso 6), Sala
+  del Consejo y recinto de piedra (Paso 9); la subida a 4 la pide la regla general de ascenso.
 - [ ] `TROPAS_POR_PREFERENCIA_NPC` filtra por tecnología adoptada y recluta con la clase que toca.
 - [ ] Actualizar `Consideraciones/NPC_Gobernanza_Facciones_Controladas.md` §4.9.
 

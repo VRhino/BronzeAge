@@ -941,23 +941,27 @@ describe('murallas — el gate de nivel 4 (Paso 5, §13)', () => {
     expect(calcularNivelAsentamiento(conMuro)).toBe(3);
   });
 
-  it('con un recinto COMPLETO de nivel 1 (la empalizada, la más barata) ya basta para subir a nivel 4', () => {
-    const conMuro = comprometerRecinto(conNivel3YPoblacionDeNivel4(99, 200), 1, instanteDeTest(200));
+  /** La plaza con su recinto del nivel dado completo y, si se pide, la Sala del Consejo. */
+  function conRecintoCompleto(nivelRecinto: number, conSala: boolean): Asentamiento {
+    const conMuro = comprometerRecinto(conNivel3YPoblacionDeNivel4(99, 200), nivelRecinto, instanteDeTest(200));
     const recinto = conMuro.recintos![0]!;
-    const completo: Asentamiento = { ...conMuro, recintos: [{ ...recinto, avance: recinto.celdas.length - 1 }] };
-    expect(calcularNivelAsentamiento(completo)).toBe(4);
+    const sala = { ...conMuro.edificios[0]!, id: 'sala-t', tipo: 'salaConsejo' as const, estado: 'activo' as const };
+    return { ...conMuro, recintos: [{ ...recinto, avance: recinto.celdas.length - 1 }], edificios: conSala ? [...conMuro.edificios, sala] : conMuro.edificios };
+  }
+
+  it('el nivel 4 pide recinto completo DE PIEDRA y la Sala del Consejo (Doc 4.5): la empalizada no basta', () => {
+    expect(calcularNivelAsentamiento(conRecintoCompleto(1, true))).toBe(3);
+    expect(calcularNivelAsentamiento(conRecintoCompleto(2, false))).toBe(3);
+    expect(calcularNivelAsentamiento(conRecintoCompleto(2, true))).toBe(4);
   });
 
-  it('progresoNivelAsentamiento informa el gate del recinto aparte de `edificiosFaltantes` (que ya no lo incluye)', () => {
+  it('progresoNivelAsentamiento informa el gate del recinto aparte de `edificiosFaltantes` (la Sala del Consejo)', () => {
     const a = conNivel3YPoblacionDeNivel4(99, 200);
     const progreso = progresoNivelAsentamiento(a);
     expect(progreso.siguiente?.nivelObjetivo).toBe(4);
-    expect(progreso.siguiente?.edificiosFaltantes).toEqual([]); // ya no hay ningún EdificioTipo que exigir
-    expect(progreso.siguiente?.recinto).toEqual({ cumplido: false, nivelMinimoRequerido: 1 });
-
-    const conMuro = comprometerRecinto(a, 1, instanteDeTest(200));
-    const recinto = conMuro.recintos![0]!;
-    const completo: Asentamiento = { ...conMuro, recintos: [{ ...recinto, avance: recinto.celdas.length - 1 }] };
-    expect(progresoNivelAsentamiento(completo).siguiente?.recinto).toEqual({ cumplido: true, nivelMinimoRequerido: 1 });
+    expect(progreso.siguiente?.edificiosFaltantes).toEqual(['salaConsejo']);
+    expect(progreso.siguiente?.recinto).toEqual({ cumplido: false, nivelMinimoRequerido: 2 });
+    expect(progresoNivelAsentamiento(conRecintoCompleto(1, true)).siguiente?.recinto).toEqual({ cumplido: false, nivelMinimoRequerido: 2 });
+    expect(progresoNivelAsentamiento(conRecintoCompleto(2, true)).siguiente?.recinto).toEqual({ cumplido: true, nivelMinimoRequerido: 2 });
   });
 });

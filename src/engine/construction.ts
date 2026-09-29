@@ -959,6 +959,11 @@ export function tecnologiaDeEdificio(tipo: EdificioTipo): TecnologiaId | undefin
   return (EDIFICIO_CATALOGO[tipo] as { requiereTecnologia?: TecnologiaId }).requiereTecnologia;
 }
 
+/** ¿Hay en la plaza un edificio activo de ese tipo con al menos ese nivel interno? */
+function tieneEdificioDeNivel(asentamiento: Asentamiento, tipo: EdificioTipo, nivel: number): boolean {
+  return edificiosPorTipoYEstado(asentamiento, tipo).some((e) => (e.nivelInterno ?? 1) >= nivel);
+}
+
 /** ¿La Facción tiene lo que pide `requiere`? (las cuatro puertas, Doc 6.1). */
 function permite(adoptadas: readonly TecnologiaId[], requiere: TecnologiaId | undefined): boolean {
   return requiere === undefined || adoptadas.includes(requiere);
@@ -1229,6 +1234,7 @@ function avanzarRecetas(
     if (!nivel) continue;
     for (const receta of nivel.recetas) {
       if (pausadas.has(receta.produce as RecursoTipo) || !permite(adoptadas, receta.requiereTecnologia)) continue;
+      if (receta.requiereEdificio && !tieneEdificioDeNivel(asentamiento, receta.requiereEdificio.tipo, receta.requiereEdificio.nivel)) continue;
       let cantidad = receta.produccionBase * ratioArtesano * factorLineaProduccion(edificio, receta, asentamiento);
       for (const [insumo, porUnidad] of Object.entries(receta.consumePorUnidad)) {
         if (!porUnidad) continue;

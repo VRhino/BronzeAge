@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": 3,
+  "version": 4,
   "tropas": [
     {
       "tropaId": "milicia_lanceros",
@@ -152,6 +152,62 @@
       "escalon": 5,
       "unidades": 12,
       "costeLiderazgo": 45,
+      "tipo": "cuerpo_a_cuerpo"
+    },
+    {
+      "tropaId": "honderos_rodios",
+      "nombre": "Honderos rodios",
+      "escalon": 3,
+      "unidades": 18,
+      "costeLiderazgo": 22,
+      "tipo": "a_distancia"
+    },
+    {
+      "tropaId": "peltastas",
+      "nombre": "Peltastas",
+      "escalon": 3,
+      "unidades": 18,
+      "costeLiderazgo": 22,
+      "tipo": "a_distancia"
+    },
+    {
+      "tropaId": "jinetes_escitas",
+      "nombre": "Jinetes escitas",
+      "escalon": 3,
+      "unidades": 18,
+      "costeLiderazgo": 22,
+      "tipo": "cuerpo_a_cuerpo"
+    },
+    {
+      "tropaId": "hoplitas_ciudadanos",
+      "nombre": "Hoplitas ciudadanos",
+      "escalon": 3,
+      "unidades": 18,
+      "costeLiderazgo": 22,
+      "tipo": "cuerpo_a_cuerpo"
+    },
+    {
+      "tropaId": "caballeria_asiria",
+      "nombre": "Caballería asiria",
+      "escalon": 3,
+      "unidades": 18,
+      "costeLiderazgo": 22,
+      "tipo": "cuerpo_a_cuerpo"
+    },
+    {
+      "tropaId": "arqueros_escitas",
+      "nombre": "Arqueros escitas",
+      "escalon": 5,
+      "unidades": 12,
+      "costeLiderazgo": 45,
+      "tipo": "a_distancia"
+    },
+    {
+      "tropaId": "espartiatas",
+      "nombre": "Espartiatas",
+      "escalon": 4,
+      "unidades": 15,
+      "costeLiderazgo": 32,
       "tipo": "cuerpo_a_cuerpo"
     }
   ]

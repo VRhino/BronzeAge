@@ -42,7 +42,6 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 38 | MILITAR | Tope de héroes en asedio: volver a 15 cuando entren jugadores | ◐ 5 mientras se prueba con NPC |
 | 39 | MILITAR | Escala de la experiencia de escuadra de Unity | ✘ espera a CQ-001 |
 | 40 | MUNDO | Campamentos de mercenarios: enclave neutral, residencia, reclutamiento y mercado | ✘ nada |
-| 41 | POBLACIÓN | El nivel 4 pide recinto de piedra | ✘ decidido, sin código |
 | 42 | TECNOLOGÍA | Aedas: difusión y venta de tecnología, residentes y lore | ◐ diseño parcial, sin código |
 
 **Pospuesto explícitamente, fuera de esta lista:** el **Attack Timer** (Doc 5.6, decidido y aplazado a
@@ -243,6 +242,11 @@ El árbol lo decide la revisión de tecnología por Eras (`Consideraciones/BA-00
 estructurado con logro del servidor + hito de Facción). Los Aedas van aparte, en §42.
 
 **Plan de implementación de las Eras I-III:** `Consideraciones/Tecnologia_Eras_I-III_Definicion.md` (2026-09-29).
+
+**Pendiente de la Era V** (revisión BA-006, EV-1 a EV-7): la subida 4 → 5 la tiene que desbloquear una tecnología de la
+Era V (D54). Hasta que exista, el código mantiene un techo provisional en el nivel 4
+(`ASCENSO_ASENTAMIENTO.nivelTechoProvisional`); se quita al implementarla. Las Eras IV y V, su catálogo y su roster
+siguen en la revisión.
 
 ## 21. Los 4 gremios escasos a nivel de servidor
 
@@ -546,13 +550,6 @@ barracón, galería de tiro y caballeriza. Sin extractores, fabricación ni zona
   menciones a 5.15.5 (el párrafo "Al conquistar" del principio del Doc 5, 5.12.4 y 5.12.9).
 - **BA-006 (Consideraciones):** D26 queda superada; en su lista de canon, "Doc 1.9 (o sección nueva)" y la
   entrada de glosario *Campamento de mercenarios* pasan a apuntar a esta entrada.
-
-## 41. El nivel 4 pide recinto de piedra
-
-**Estado: decidido el 2026-09-28 (canon Doc 4.5 y 4.2.1), `código: ✘`.** El requisito de muralla del nivel 4 es un
-recinto completo de **muro de piedra o muralla con adarve**; la empalizada ya no basta. En el código es
-`NIVEL_ASENTAMIENTO` → `4.recintoCompletoNivelMinimo`, que hoy vale 1 y pasa a 2 (`src/constants.ts`). No corre
-prisa: el techo provisional en el nivel 3 (`ASCENSO_ASENTAMIENTO.nivelTechoProvisional`) impide hoy pedir la subida.
 
 ## 42. Aedas: difusión y venta de tecnología, residentes y lore
 

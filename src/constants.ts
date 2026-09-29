@@ -244,6 +244,9 @@ export interface RecetaProduccion {
   consumePorUnidad: Partial<Record<string, number>>;
   /** La tecnología que la Facción tiene que haber adoptado para producirla (Doc 4.2.1, Doc 6). */
   requiereTecnologia?: TecnologiaId;
+  /** Un edificio que tiene que haber en la plaza, con este nivel interno mínimo (el Arma de Hierro de Calidad pide la
+   * Fundición 3, Doc 4.2.1). */
+  requiereEdificio?: { tipo: EdificioTipo; nivel: number };
 }
 
 /** Un nivel interno de un edificio de transformación con tiers (Fundición/Curtiduría/Armería/Carpintería/
@@ -440,6 +443,20 @@ export const EDIFICIO_CATALOGO = {
           { produce: 'lingoteHierro', produccionBase: 5, consumePorUnidad: { hierro: 2, madera: 1 }, requiereTecnologia: 'forja_hierro_temprana' },
         ],
       },
+      // Doc 4.2.1 (D11, P2): nivel 4 y `forja_hierro_estandarizada`; las mismas recetas con +50 % de lingotes. Es lo
+      // que pide el Arma de Hierro de Calidad, así que la élite de hierro llega en el nivel 4.
+      3: {
+        requisitoNivelAsentamiento: 4,
+        requiereTecnologia: 'forja_hierro_estandarizada',
+        costoMejora: { madera: 300, piedra: 200 },
+        trabajadoresRequeridos: 12,
+        recetas: [
+          { produce: 'lingoteCobre', produccionBase: 7.5, consumePorUnidad: { cobre: 2 } },
+          { produce: 'lingoteEstano', produccionBase: 4.5, consumePorUnidad: { estano: 5 }, requiereTecnologia: 'aleacion_bronce' },
+          { produce: 'lingoteBronce', produccionBase: 1.5, consumePorUnidad: { lingoteCobre: 1.6, lingoteEstano: 0.4 }, requiereTecnologia: 'aleacion_bronce' },
+          { produce: 'lingoteHierro', produccionBase: 7.5, consumePorUnidad: { hierro: 2, madera: 1 }, requiereTecnologia: 'forja_hierro_temprana' },
+        ],
+      },
     } as Record<number, NivelEdificioTransformacion>,
   },
 
@@ -522,6 +539,14 @@ export const EDIFICIO_CATALOGO = {
           { produce: 'armaduraIntermedia', produccionBase: 2, consumePorUnidad: { lingoteCobre: 1, cueroCurtido: 5 } },
           { produce: 'armaBronceCalidad', produccionBase: 1, consumePorUnidad: { lingoteBronce: 5, madera: 5 }, requiereTecnologia: 'bronce_calidad_militar' },
           { produce: 'armaduraBronce', produccionBase: 1, consumePorUnidad: { lingoteBronce: 1, cueroCalidad: 5 }, requiereTecnologia: 'bronce_calidad_militar' },
+          {
+            produce: 'armaHierroCalidad',
+            produccionBase: 1,
+            consumePorUnidad: { lingoteHierro: 2, madera: 3 },
+            requiereTecnologia: 'forja_hierro_estandarizada',
+            requiereEdificio: { tipo: 'fundicion', nivel: 3 },
+          },
+          { produce: 'armaduraBronceCalidad', produccionBase: 1, consumePorUnidad: { lingoteBronce: 2, cueroCalidad: 5 }, requiereTecnologia: 'bronce_laminado' },
           RECETA_ARMA_MADERA,
         ],
       },
@@ -1500,6 +1525,8 @@ export const POLITICAS = {
     sacerdote: { base: 1, maximo: 1 },
   } as const,
   nivelFaccionPorSlotExtraGobernador: 3,
+  /** Ranura extra del Gobernador con la Sala del Consejo activa (Doc 4.4), por encima del máximo. */
+  slotSalaConsejo: 1,
   duracionMinutosPorDefecto: 150,
 };
 
@@ -1646,6 +1673,14 @@ export const TROPAS_RECLUTABLES: {
   { id: 'guerreros_filisteos', tecnologia: 'forja_hierro_temprana', nombre: 'Guerreros filisteos (Peleset)', edificio: 'barracon', nivelRequerido: 2, costoEquipo: { armaHierro: 1, armaduraIntermedia: 1 }, poderBase: 9, velocidad: 16, escalon: 3, unidadesPorDefecto: 18 },
   { id: 'shardana', tecnologia: 'bronce_calidad_militar', nombre: 'Shardana', edificio: 'barracon', nivelRequerido: 2, costoEquipo: { armaBronceCalidad: 1, armaduraBasica: 1 }, poderBase: 15, velocidad: 16, escalon: 4, unidadesPorDefecto: 15 },
   { id: 'hequetai', tecnologia: 'panoplia_bronce', nombre: 'Hequetai', edificio: 'barracon', nivelRequerido: 3, costoEquipo: { armaBronceCalidad: 1, armaduraBronce: 1 }, poderBase: 17, velocidad: 12, escalon: 5, unidadesPorDefecto: 12 },
+  // Era III — Polis e imperios (Doc 5.8).
+  { id: 'honderos_rodios', tecnologia: 'pantalla_escaramuzadores', nombre: 'Honderos rodios', edificio: 'galeriaDeTiro', nivelRequerido: 2, costoEquipo: { armaHierro: 1, armaduraBasica: 1 }, poderBase: 9, velocidad: 20, escalon: 3, unidadesPorDefecto: 18 },
+  { id: 'peltastas', tecnologia: 'pantalla_escaramuzadores', nombre: 'Peltastas', edificio: 'galeriaDeTiro', nivelRequerido: 2, costoEquipo: { armaHierro: 2 }, poderBase: 9, velocidad: 20, escalon: 3, unidadesPorDefecto: 18 },
+  { id: 'jinetes_escitas', tecnologia: 'caballeria_organizada', nombre: 'Jinetes escitas', edificio: 'caballerizas', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraBasica: 1 }, caballos: 1, poderBase: 8, velocidad: 28, escalon: 3, unidadesPorDefecto: 18 },
+  { id: 'hoplitas_ciudadanos', tecnologia: 'ciudadania_militar', nombre: 'Hoplitas ciudadanos', edificio: 'barracon', nivelRequerido: 2, costoEquipo: { armaHierro: 1, armaduraBronce: 1 }, poderBase: 10, velocidad: 16, escalon: 3, unidadesPorDefecto: 18 },
+  { id: 'caballeria_asiria', tecnologia: 'caballeria_organizada', nombre: 'Caballería asiria', edificio: 'caballerizas', nivelRequerido: 2, costoEquipo: { armaHierro: 1, armaduraBronce: 1 }, caballos: 1, poderBase: 10, velocidad: 28, escalon: 3, unidadesPorDefecto: 18 },
+  { id: 'arqueros_escitas', tecnologia: 'arqueria_especializada', nombre: 'Arqueros escitas', edificio: 'galeriaDeTiro', nivelRequerido: 3, costoEquipo: { armaHierro: 1, armaduraBasica: 1 }, poderBase: 17, velocidad: 16, escalon: 5, unidadesPorDefecto: 12 },
+  { id: 'espartiatas', tecnologia: 'falange_hoplita', nombre: 'Espartiatas', edificio: 'barracon', nivelRequerido: 3, costoEquipo: { armaHierroCalidad: 1, armaduraBronceCalidad: 1 }, poderBase: 17, velocidad: 12, escalon: 4, unidadesPorDefecto: 15 },
   ] as const
 );
 
@@ -2053,7 +2088,8 @@ export const NIVEL_ASENTAMIENTO = {
     // la empalizada barata cuenta igual que la muralla de piedra. `edificios: []` es intencional, no un
     // descuido: sin ningún tipo en la lista, `cumpleEdificios` es trivialmente cierto y el gate real es el
     // del recinto.
-    4: { pesants: 1000, artesanos: 800, edificios: [], recintoCompletoNivelMinimo: 1 },
+    // Doc 4.5: recinto completo DE PIEDRA (nivel ≥ 2: muro de piedra o muralla con adarve) y la Sala del Consejo.
+    4: { pesants: 1000, artesanos: 800, edificios: ['salaConsejo'], recintoCompletoNivelMinimo: 2 },
     5: { pesants: 2000, artesanos: 1600, edificios: ['palacio'], nivelInternoMinimo: { palacio: 3 } },
   } as Record<
     number,
@@ -2103,16 +2139,15 @@ export const ASCENSO_ASENTAMIENTO = {
     // Lingotes de bronce (D54, techo por Era derivado): la aleación pide estaño, que casi siempre llega por comercio,
     // así que el nivel 3 es raro en la Era I y la meseta llega en la Era II.
     3: { costo: { madera: 1200, piedra: 1000, oro: 400, lingoteBronce: 100 }, obraMinutos: 10_080 }, // 1 semana
-    // Provisional hasta que exista `instituciones_civicas` (Era III), que es quien debe desbloquear esta subida (D54).
+    // Además pide la Sala del Consejo (`NIVEL_ASENTAMIENTO`), que pide `instituciones_civicas` (Era III, D54).
     4: { costo: { madera: 2500, piedra: 2500, oro: 1000, lingoteBronce: 150 }, obraMinutos: 20_160 }, // 2 semanas
     5: { costo: { madera: 5000, piedra: 5000, oro: 2500 }, obraMinutos: 30_240 }, // 3 semanas
   } as Record<number, { costo: Partial<Record<string, number>>; obraMinutos: number }>,
   /**
-   * Techo PROVISIONAL (decisión del usuario, 2026-09-27): por ahora ningún asentamiento pasa del nivel 3. Lo sustituye
-   * el techo derivado de D54 cuando exista la tecnología que desbloquea el 3 → 4 (`instituciones_civicas`, Era III);
-   * hasta entonces las tarifas de 4 y 5 existen pero no se pueden pedir (`tarifaDeAscenso`).
+   * Techo PROVISIONAL en el nivel 4: el 4 → 5 lo tiene que desbloquear una tecnología de la Era V (D54), que aún no
+   * existe. El 3 → 4 ya lo derivan la Sala del Consejo y `instituciones_civicas`. Se quita al implementar la Era V.
    */
-  nivelTechoProvisional: 3,
+  nivelTechoProvisional: 4,
 };
 
 /**

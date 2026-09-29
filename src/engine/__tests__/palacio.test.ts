@@ -1,6 +1,7 @@
 // Palacio con niveles (Doc 4.2.1): se construye en el nivel 2 y el nivel 5 pide el Palacio 3 (Doc 4.5).
 import { describe, expect, it } from 'vitest';
-import { EDIFICIO_CATALOGO } from '../../constants';
+import { EDIFICIO_CATALOGO, POLITICAS } from '../../constants';
+import { slotsDisponibles } from '../politicas';
 import type { Asentamiento } from '../../domain/types';
 import { evaluarGatesDeNivel } from '../mantenimiento';
 import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
@@ -20,5 +21,15 @@ describe('Palacio', () => {
   it('el nivel 5 pide el Palacio de nivel 3', () => {
     expect(evaluarGatesDeNivel(conPalacio(2), 5)!.edificios).toBe(false);
     expect(evaluarGatesDeNivel(conPalacio(3), 5)!.edificios).toBe(true);
+  });
+});
+
+describe('Sala del Consejo (Doc 4.4)', () => {
+  it('da una ranura de política más al Gobernador, por encima del máximo', () => {
+    const { base, maximo } = POLITICAS.slotsPorCargo.gobernador;
+    expect(slotsDisponibles('gobernador', 1)).toBe(base);
+    expect(slotsDisponibles('gobernador', 1, true)).toBe(base + POLITICAS.slotSalaConsejo);
+    expect(slotsDisponibles('gobernador', 99, true)).toBe(maximo + POLITICAS.slotSalaConsejo);
+    expect(slotsDisponibles('tesorero', 1, true)).toBe(POLITICAS.slotsPorCargo.tesorero.base);
   });
 });

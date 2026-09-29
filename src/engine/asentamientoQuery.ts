@@ -323,6 +323,8 @@ function produccionRecetas(asentamiento: Asentamiento, adoptadas: readonly Tecno
 
     for (const receta of nivel.recetas) {
       if (adoptadas && receta.requiereTecnologia && !adoptadas.includes(receta.requiereTecnologia)) continue;
+      const pide = receta.requiereEdificio;
+      if (pide && !edificiosPorTipoYEstado(asentamiento, pide.tipo).some((e) => (e.nivelInterno ?? 1) >= pide.nivel)) continue;
       let cantidad = receta.produccionBase * ratioArtesano;
       for (const [insumo, porUnidad] of Object.entries(receta.consumePorUnidad)) {
         if (!porUnidad) continue;

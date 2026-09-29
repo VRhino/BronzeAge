@@ -60,7 +60,7 @@ import {
 import { cantidadDisponible, tieneRecursos } from '../engine/almacen';
 import { asignarCargoLocal, CargoInvalidoError } from '../engine/cargos';
 import { anadirEdificioManualmente, reclamosDeFuentes, ConstruccionManualInvalidaError, tieneInsumoDeArranque } from '../engine/construction';
-import { comprometerRecintoManualmente, multiplicadorDefensivoDeRecintos, RecintoInvalidoError } from '../engine/muralla';
+import { comprometerRecintoManualmente, iniciarMejoraDeRecintoManualmente, multiplicadorDefensivoDeRecintos, RecintoInvalidoError } from '../engine/muralla';
 import {
   aceptarTrueque,
   construirCaravanaComercial,
@@ -505,7 +505,10 @@ function asegurarNucleoMilitar(
         : // La tropa de escalón 4-5 se recluta con nobleza (Doc 5.8), y la primera está en el nivel 3.
           !tieneOEnCurso(asentamiento, 'palacio') && nivelActualDe(asentamiento) >= 3
           ? 'palacio'
-          : undefined;
+          : // Requisito del nivel 4 (Doc 4.5).
+            !tieneOEnCurso(asentamiento, 'salaConsejo') && nivelActualDe(asentamiento) >= 3 && adoptadas.includes('instituciones_civicas')
+            ? 'salaConsejo'
+            : undefined;
   if (!faltante) return asentamiento;
 
   try {
@@ -527,9 +530,22 @@ function asegurarNucleoMilitar(
  * de este. Nivel 1 (empalizada) a propósito: es el más barato, y subir de nivel un recinto ya trazado es la
  * mejora del Paso 3, no algo que decidir al comprometer.
  */
-function asegurarMuralla(asentamiento: Asentamiento, instante: Instante): Asentamiento {
+function asegurarMuralla(asentamiento: Asentamiento, instante: Instante, adoptadas: readonly TecnologiaId[]): Asentamiento {
   if (!asentamiento.cargos.gobernadorId) return asentamiento;
-  if ((asentamiento.recintos ?? []).length > 0) return asentamiento;
+  const recinto = (asentamiento.recintos ?? [])[0];
+  if (recinto) {
+    // El nivel 4 pide recinto de piedra (Doc 4.5): la empalizada se mejora cuando la subida ya es posible.
+    const listaParaPiedra =
+      recinto.nivel === 1 && recinto.mejorandoA === undefined && recinto.avance >= recinto.celdas.length - 1 &&
+      nivelActualDe(asentamiento) >= 3 && adoptadas.includes('instituciones_civicas');
+    if (!listaParaPiedra) return asentamiento;
+    try {
+      return iniciarMejoraDeRecintoManualmente(asentamiento, 'gobernador', recinto.id);
+    } catch (err) {
+      if (!(err instanceof RecintoInvalidoError)) throw err;
+      return asentamiento;
+    }
+  }
 
   try {
     return comprometerRecintoManualmente(asentamiento, 'gobernador', 1, instante);
@@ -2125,7 +2141,7 @@ export function avanzarNpcGobernanza(
       contador++,
       tecnologiasDe(estado.tecnologia, faccion.id).adoptadas
     );
-    return asegurarMuralla(conNucleoMilitar, instante);
+    return asegurarMuralla(conNucleoMilitar, instante, tecnologiasDe(estado.tecnologia, faccion.id).adoptadas);
   });
 
   // Subida de nivel (Doc 4.5, engine/ascenso.ts): desde 2026-09-26 el nivel ya no sube solo, así que el NPC la pide

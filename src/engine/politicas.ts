@@ -21,12 +21,13 @@ function definicion(politicaId: string): PoliticaDef {
   return def;
 }
 
-/** Gobernador escala de 2 a 5 slots según nivel de Facción (Doc 4.4); el resto de cargos tienen slots fijos. */
-export function slotsDisponibles(cargo: CargoTipo, nivelFaccion: number): number {
+/** Gobernador escala de 2 a 5 slots según nivel de Facción, +1 con la Sala del Consejo (Doc 4.4); el resto de cargos
+ * tienen slots fijos. */
+export function slotsDisponibles(cargo: CargoTipo, nivelFaccion: number, conSalaConsejo = false): number {
   const cfg = POLITICAS.slotsPorCargo[cargo];
   if (cargo !== 'gobernador') return cfg.base;
   const extra = Math.floor(nivelFaccion / POLITICAS.nivelFaccionPorSlotExtraGobernador);
-  return Math.min(cfg.maximo, cfg.base + extra);
+  return Math.min(cfg.maximo, cfg.base + extra) + (conSalaConsejo ? POLITICAS.slotSalaConsejo : 0);
 }
 
 function activasPorCargo(asentamiento: Asentamiento, cargo: CargoTipo): PoliticaActiva[] {
@@ -55,7 +56,7 @@ export function activarPolitica(
   if (activasPorCargo(asentamiento, cargo).some((p) => p.politicaId === politicaId)) {
     throw new PoliticaInvalidaError('Esa política ya está activa para este cargo.');
   }
-  const limite = slotsDisponibles(cargo, faccion.nivel);
+  const limite = slotsDisponibles(cargo, faccion.nivel, asentamiento.edificios.some((e) => e.tipo === 'salaConsejo' && e.estado === 'activo'));
   if (activasPorCargo(asentamiento, cargo).length >= limite) {
     throw new PoliticaInvalidaError(`Sin slots libres para ${cargo} (${limite} máximo con el nivel actual de Facción).`);
   }
