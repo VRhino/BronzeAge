@@ -131,7 +131,8 @@ export function reclutarTropa(
     Object.entries(tropa.costoEquipo).map(([recurso, cantidadUnitaria]) => [recurso, (cantidadUnitaria ?? 0) * cantidad * factorCosto])
   );
   // Oro por soldado según escalón (Doc 5.8, bloque "economía del oro"): se suma al coste de equipo, SALVO la
-  // milicia del Centro Urbano. `factorCostoReclutamiento` ("Leva Forzosa") no lo toca — solo el equipo.
+  // tropa del Centro Urbano. Los caballos también se pagan en oro. `factorCostoReclutamiento` ("Leva Forzosa") no lo
+  // toca — solo el equipo.
   if (tropa.edificio !== 'centroUrbano') {
     const oroPorSoldado = (RECLUTAMIENTO_ORO_POR_ESCALON[tropa.escalon] ?? 0) + (tropa.caballos ?? 0) * ORO_POR_CABALLO;
     if (oroPorSoldado > 0) costoTotal['oro'] = (costoTotal['oro'] ?? 0) + oroPorSoldado * cantidad;

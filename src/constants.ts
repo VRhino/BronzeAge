@@ -1744,7 +1744,7 @@ export const OCUPACION = {
  * **El coste va por ESCALÓN, no derivado del poder (rediseño 2026-09-04, decisión del usuario).** Antes era
  * `poderBase × unidades × factor`, y esa fórmula tenía un defecto de fondo que el consejo ya había señalado:
  * al ser el coste exactamente proporcional al poder nominal, **el poder por punto de Liderazgo salía idéntico
- * para las once tropas**. La élite no era mejor por punto, solo venía en envase más pequeño — así que elegir
+ * para todas las tropas**. La élite no era mejor por punto, solo venía en envase más pequeño — así que elegir
  * no era una decisión, era aritmética.
  *
  * Con coste por escalón el coste crece MÁS DEPRISA que el poder, y eso es lo que se busca: la élite es
@@ -1824,9 +1824,9 @@ export const GUARNICION = {
  * más deprisa que el poder, igual criterio que `LIDERAZGO.costePorEscalon`. El coste total de oro es este
  * valor × nº de soldados reclutados/repuestos.
  *
- * **Única excepción: la Milicia de lanceros del Centro Urbano** (`tropa.edificio === 'centroUrbano'`), que
- * sigue costando solo madera — la defensa mínima no depende del tesoro. Todo lo del Barracón/Galería cuesta
- * oro, escalón 1 incluido. `factorCostoReclutamiento` ("Leva Forzosa") NO toca esta línea, solo el equipo.
+ * **Única excepción: las tropas del Centro Urbano** (`tropa.edificio === 'centroUrbano'`: milicia, leñadores y
+ * granjeros), que no pagan oro — la defensa mínima no depende del tesoro. Todo lo demás cuesta oro, más
+ * `ORO_POR_CABALLO` por cada caballo. `factorCostoReclutamiento` ("Leva Forzosa") NO toca esta línea, solo el equipo.
  * Regla de motor uniforme (NPC + jugador). Todo PLACEHOLDER, a calibrar en la campaña conjunta del bloque.
  */
 export const RECLUTAMIENTO_ORO_POR_ESCALON: Record<number, number> = { 1: 1, 2: 2, 3: 4, 4: 7, 5: 11 };

@@ -35,6 +35,7 @@ import { costoDeTrazo, areaEncerradaDeRecinto, edificiosExtramurosDe } from '../
 import { EDIFICIO_CATALOGO, LAYOUT_VERSION, LOGISTICA, NIVEL_ASENTAMIENTO, PERFILES_TRAZADO, SIMULACION, TRAZADO, ZONA_INFLUENCIA, type PerfilTrazado } from '../src/constants';
 import { instanteDeTick, isoDeInstante } from '../src/session/estado';
 import { MedidorGuerra } from './batch/medidorGuerra';
+import { MedidorTecnologia } from './batch/medidorTecnologia';
 
 /** Overrides por entorno para poder hacer pasadas cortas de humo sin esperar la corrida completa
  * (`BATCH_TICKS=200 BATCH_FACCIONES=10 node ...`). Sin variables, los valores son los de siempre — ninguna
@@ -1201,6 +1202,7 @@ async function main() {
   let contadorNpc = DESDE?.contadorNpc ?? 0;
 
   const guerra = new MedidorGuerra(estado, TICK_INICIAL);
+  const tecnologia = new MedidorTecnologia(estado.tecnologia, TICK_INICIAL);
   const arranqueMs = Date.now();
   for (let tick = TICK_INICIAL + 1; tick <= TICK_FINAL; tick++) {
     try {
@@ -1281,6 +1283,7 @@ async function main() {
       }
       const trasNpc = avanzarNpcGobernanza(trasMotor, mapa, contexto, { ...config, contadorInicial: contadorNpc });
       guerra.registrarTick(tick, estado, trasMotor, trasNpc.estado, trasNpc.stats);
+      tecnologia.registrarTick(tick, trasNpc.estado.tecnologia);
       contadorNpc = trasNpc.contadorFinal;
       estado = trasNpc.estado;
       reclutamientosAcumulados += trasNpc.stats.reclutamientosExitosos;
@@ -1606,6 +1609,7 @@ async function main() {
   }
 
   for (const linea of guerra.informe()) console.log(linea);
+  for (const linea of tecnologia.informe(estado.tecnologia, tickDeInstante)) console.log(linea);
 
   // Trueques para crecer (npcGobernanza, 2026-09-27): los que piden algo que no es de Mantenimiento.
   const paraCrecer = new Map<string, Map<string, number>>();

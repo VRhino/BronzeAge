@@ -226,14 +226,17 @@ Cada paso deja los tests en verde y se puede fusionar por separado.
   BronzeAgeClient: su propio trabajo sobre `ProyeccionJugador.tecnologia` y el comando.
 
 ### Paso 12 — Calibrar los logros con batch (lo corre la sesión de balance)
-- [ ] `scripts/batch`: medidor de contadores por semana y del día en que cada Facción adopta cada tecnología.
+- [x] `scripts/batch/medidorTecnologia.ts`, enganchado a `run-batch-sim.ts`: Eras, logros (umbral y día en que se
+  cumplen), contadores al cerrar cada semana y el día en que cada Facción adopta cada tecnología. Compila; no se ha
+  ejecutado (los batches los corre la otra sesión).
 - [ ] Fijar cada `umbral` en lo que marque su contador en la semana objetivo (BA-006, tabla de logros).
 - [ ] Comprobar D49 con las Eras I-III: niveles de asentamiento y tropas reclutadas por Era.
 
 ### Paso 13 — Limpieza
-- [ ] Código muerto (techo provisional, `origen` de reclutamiento, comentarios que citan el Palacio en Barracón 3).
-- [ ] `Mecanicas a desarrollar`: §20 se reduce a lo que falte (Eras IV-V, vías de conquista y comercio); §37 y §41
-  fuera.
+- [x] Comentarios de reglas viejas (Palacio en Barracón 3 y Armería 3, milicia como única excepción de oro, "once
+  tropas"). El `origen` del comando de reclutar se conserva a propósito (compatibilidad de clientes); el techo
+  provisional sigue, en el nivel 4, hasta la Era V.
+- [x] `Mecanicas a desarrollar`: §37 y §41 fuera; §20 reescrita con lo que falta.
 
 ## 4. Riesgos
 

@@ -22,7 +22,7 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 16 | JUGADOR | Qué hace un huésped: vida dentro de una Facción NPC | ✘ nada |
 | 18 | INTEL | Taberna + intel como asset con revelado temporal | ✘ nada |
 | 19 | POLÍTICA | El mapa político como entidad | ✘ nada |
-| 20 | TECNOLOGÍA | Tecnología: árbol de desarrollo propio, 3 vías, Aedas | ✘ nada |
+| 20 | TECNOLOGÍA | Tecnología por Eras: lo que falta tras las Eras I-III | ◐ Eras I-III hechas |
 | 21 | POLÍTICA | Los 4 gremios escasos a nivel de servidor | ✘ nada |
 | 22 | POLÍTICA | Exilio como política de soberanía | ✘ nada |
 | 23 | RECURSOS | Materiales exóticos | ✘ nada |
@@ -231,22 +231,22 @@ asentamiento** se puede comprar como asset, para preparar asedios a futuro.
 algo que se recalcula al vuelo. Hoy las zonas de influencia y las fronteras ajenas se derivan
 (`engine/zones.ts`, fronteras ajenas 2026-09-05); no existe un "mapa político" consultable como objeto.
 
-## 20. Tecnología: árbol de desarrollo propio, 3 vías, Aedas
+## 20. Tecnología por Eras: lo que falta tras las Eras I-III
 
-**Estado: diseño en el canon (`Docs/Game/6_Sistema_de_Tecnologia_y_Aedas.md`), `código: ✘` — nada.** Ni
-árbol, ni las tres vías de acceso (comercio / desarrollo propio / Aedas), ni la compra de tecnología con oro,
-ni el sistema de Aedas. Lo único con el nombre "Aeda" en el código es la narración de cambios de título de
-servidor (`engine/titulos.ts`), que no tiene relación con esto.
+**Estado: Eras I-III en el canon (Doc 6) y en el código (2026-09-29, vía del desarrollo), `código: ◐`.** Plan y
+bitácora: `Consideraciones/Tecnologia_Eras_I-III_Definicion.md`. Falta:
 
-El árbol lo decide la revisión de tecnología por Eras (`Consideraciones/BA-006_Revision_Tecnologia_Eras.md`, D1: catálogo
-estructurado con logro del servidor + hito de Facción). Los Aedas van aparte, en §42.
-
-**Plan de implementación de las Eras I-III:** `Consideraciones/Tecnologia_Eras_I-III_Definicion.md` (2026-09-29).
-
-**Pendiente de la Era V** (revisión BA-006, EV-1 a EV-7): la subida 4 → 5 la tiene que desbloquear una tecnología de la
-Era V (D54). Hasta que exista, el código mantiene un techo provisional en el nivel 4
-(`ASCENSO_ASENTAMIENTO.nivelTechoProvisional`); se quita al implementarla. Las Eras IV y V, su catálogo y su roster
-siguen en la revisión.
+- **Eras IV y V**: catálogo, roster y logros siguen en la revisión (`Consideraciones/BA-006_Revision_Tecnologia_Eras.md`,
+  EV-1 a EV-7). La subida 4 → 5 la tiene que desbloquear una tecnología de la Era V (D54): hasta entonces el código
+  mantiene un techo provisional en el nivel 4 (`ASCENSO_ASENTAMIENTO.nivelTechoProvisional`).
+- **Calibrar la X de cada logro** con el batch (`scripts/batch/medidorTecnologia.ts`): cada umbral, en lo que marque su
+  contador en su semana objetivo (Doc 6.3).
+- **Otras vías** (Doc 6.1): conquista (aparece al conquistar una plaza que reclutaba con ella) y comercio (pago a
+  otra Facción; ¿la vendedora acepta y fija el precio?). La de los Aedas va en §42.
+- **Capital elegida** (§13): hoy el Rey adopta en el asentamiento vivo más antiguo.
+- **Equipo de asedio**: `carpinteria_militar` y `trabajos_asedio` se adoptan, pero su equipo no tiene efecto en combate.
+- **Clientes**: panel de tecnología en el cliente de administración (no compila desde antes de este trabajo) y en
+  BronzeAgeClient; definiciones de escuadra de las 15 tropas nuevas en Conquest (revisión de Claude en BA-006).
 
 ## 21. Los 4 gremios escasos a nivel de servidor
 
