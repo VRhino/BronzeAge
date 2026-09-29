@@ -18,6 +18,7 @@ import { EDIFICIO_CATALOGO } from '../../constants';
 import { anadirEdificioManualmente, ConstruccionManualInvalidaError } from '../construction';
 import { reclutarTropa } from '../tropas';
 import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, heroesCon } from './fixtures';
+import { TODAS_LAS_TECNOLOGIAS } from '../tecnologia';
 
 const SEED = 42;
 const RECLAMOS_VACIOS = { nodos: new Set<string>(), lenerasPorBosque: new Map<string, number>() };
@@ -52,7 +53,7 @@ describe('Barracón / Galería de tiro — gate de construcción a nivel 2', () 
     for (const tipo of TIPOS_MILITARES) {
       const { asentamiento, faccion, mapa } = base(1);
       expect(() =>
-        anadirEdificioManualmente(asentamiento, faccion, 'gobernador', tipo, [], mapa, undefined, RECLAMOS_VACIOS)
+        anadirEdificioManualmente(asentamiento, faccion, 'gobernador', tipo, [], mapa, undefined, RECLAMOS_VACIOS, TODAS_LAS_TECNOLOGIAS)
       ).toThrow(ConstruccionManualInvalidaError);
     }
   });
@@ -60,7 +61,7 @@ describe('Barracón / Galería de tiro — gate de construcción a nivel 2', () 
   it('en nivel 2 sí entran en la cola', () => {
     for (const tipo of TIPOS_MILITARES) {
       const { asentamiento, faccion, mapa } = base(2);
-      const resultado = anadirEdificioManualmente(asentamiento, faccion, 'gobernador', tipo, [], mapa, undefined, RECLAMOS_VACIOS);
+      const resultado = anadirEdificioManualmente(asentamiento, faccion, 'gobernador', tipo, [], mapa, undefined, RECLAMOS_VACIOS, TODAS_LAS_TECNOLOGIAS);
       expect(resultado.edificios.some((e) => e.tipo === tipo && e.estado === 'en_cola')).toBe(true);
     }
   });
@@ -92,7 +93,7 @@ describe('Barracón / Galería de tiro — gate de construcción a nivel 2', () 
 
     // `lanceros_mimbre`: Barracón, nivelRequerido 1, cuesta armaMadera — la tropa más barata de la vía militar.
     const heroes = heroesCon([], ['jugador-faccion-1-1']);
-    const trasReclutar = reclutarTropa(degradado, heroes, [], 'jugador-faccion-1-1', 'faccion-1', 'lanceros_mimbre', 'pesants', 0);
+    const trasReclutar = reclutarTropa(degradado, heroes, [], 'jugador-faccion-1-1', 'faccion-1', 'lanceros_mimbre', 'pesants', TODAS_LAS_TECNOLOGIAS, 0);
     expect(trasReclutar.heroes[0]!.escuadrones.some((e) => e.tropaId === 'lanceros_mimbre')).toBe(true);
   });
 });

@@ -24,7 +24,7 @@ import { avanzarAtaquesBandidos, avanzarSpawnBandidos } from './bandidos';
 import { avanzarEjercitos, type CombatePorAbrir, type ContextoAvanceEjercitos } from './ejercitos';
 import { grabarLoVisto, type MemoriaFaccion } from './memoria';
 import { grabarExploracionPersonal } from './ubicacion';
-import { avanzarTecnologia, contadoresDeProduccion, sumarContadores, sumarDeltas, type DeltaContadores } from './tecnologia';
+import { avanzarTecnologia, contadoresDeProduccion, sumarContadores, sumarDeltas, tecnologiasDe, type DeltaContadores } from './tecnologia';
 
 export interface EstadoSimulacion {
   asentamientos: Asentamiento[];
@@ -162,7 +162,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
       reclamos,
       instante,
       consumoRacionDeEscuadrones(campamento)
-    );
+    , tecnologiasDe(estado.tecnologia, asentamiento.faccionId).adoptadas);
     contadoresProduccion = sumarDeltas(contadoresProduccion, contadoresDeProduccion(extraido, fabricado));
     if (edificiosCompletados > 0) {
       ajustesExperiencia.push({

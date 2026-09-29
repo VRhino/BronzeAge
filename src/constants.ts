@@ -242,17 +242,21 @@ export interface RecetaProduccion {
   produce: string;
   produccionBase: number;
   consumePorUnidad: Partial<Record<string, number>>;
+  /** La tecnología que la Facción tiene que haber adoptado para producirla (Doc 4.2.1, Doc 6). */
+  requiereTecnologia?: TecnologiaId;
 }
 
 /** Un nivel interno de un edificio de transformación con tiers (Fundición/Curtiduría/Armería/Carpintería/
  * Barracón/Galería de tiro, Doc 4.2.1). El nivel 1 no lleva `costoMejora`/gates (ya se pagaron al construir). */
-interface NivelEdificioTransformacion {
+export interface NivelEdificioTransformacion {
   trabajadoresRequeridos: number;
   recetas: RecetaProduccion[];
   costoMejora?: Partial<Record<string, number>>;
   requisitoNivelAsentamiento?: number;
   requiereEdificio?: string;
   requiereEdificioNivel?: number;
+  /** La tecnología que la Facción tiene que haber adoptado para mejorar a este nivel (Doc 6). */
+  requiereTecnologia?: TecnologiaId;
   /** Solo Mercado (ampliación de comercio, a petición del usuario): cupo de caravanas propias que administra
    * este nivel — ver `cupoCaravanas`, engine/asentamientoQuery.ts. Mercado no fabrica nada (recetas: []),
    * así que este campo reemplaza al de producción como "qué desbloquea" cada nivel para ese edificio. */
@@ -395,7 +399,7 @@ export const EDIFICIO_CATALOGO = {
   // duro de la cadena de bronce, más de lo que el diseño original pretendía.
   minaEstano: { costo: { madera: 50 }, tiempoConstruccionMinutos: 480, produccionBaseEstano: 3, trabajadoresRequeridos: 8 },
   // Hierro (Doc 1.4/4.2.1, pide `forja_hierro_temprana`): mineral abundante, mismo patrón y cifras que la de cobre.
-  minaHierro: { costo: { madera: 30 }, tiempoConstruccionMinutos: 360, produccionBaseHierro: 5, trabajadoresRequeridos: 8 },
+  minaHierro: { costo: { madera: 30 }, tiempoConstruccionMinutos: 360, produccionBaseHierro: 5, trabajadoresRequeridos: 8, requiereTecnologia: 'forja_hierro_temprana' },
   // Corral (Doc 4.2.1, rediseño de progreso Fase 0): extractor de livestock, mismo patrón que cantera/minas —
   // liga a un nodo finito de livestock (Doc 1.4), con reemplazo automático al agotarse (ver EXTRACCION_MAXIMOS).
   corral: { costo: { madera: 30 }, tiempoConstruccionMinutos: 240, produccionBaseLivestock: 3, trabajadoresRequeridos: 4 },
@@ -427,8 +431,8 @@ export const EDIFICIO_CATALOGO = {
         trabajadoresRequeridos: 8,
         recetas: [
           { produce: 'lingoteCobre', produccionBase: 5, consumePorUnidad: { cobre: 2 } },
-          { produce: 'lingoteEstano', produccionBase: 3, consumePorUnidad: { estano: 5 } },
-          { produce: 'lingoteBronce', produccionBase: 1, consumePorUnidad: { lingoteCobre: 1.6, lingoteEstano: 0.4 } },
+          { produce: 'lingoteEstano', produccionBase: 3, consumePorUnidad: { estano: 5 }, requiereTecnologia: 'aleacion_bronce' },
+          { produce: 'lingoteBronce', produccionBase: 1, consumePorUnidad: { lingoteCobre: 1.6, lingoteEstano: 0.4 }, requiereTecnologia: 'aleacion_bronce' },
         ],
       },
     } as Record<number, NivelEdificioTransformacion>,
@@ -478,7 +482,7 @@ export const EDIFICIO_CATALOGO = {
       1: {
         trabajadoresRequeridos: 4,
         recetas: [
-          { produce: 'armaCobre', produccionBase: 3, consumePorUnidad: { lingoteCobre: 1, madera: 1 } },
+          { produce: 'armaCobre', produccionBase: 3, consumePorUnidad: { lingoteCobre: 1, madera: 1 }, requiereTecnologia: 'metalurgia_cobre' },
           { produce: 'armaduraBasica', produccionBase: 3, consumePorUnidad: { cuero: 5 } },
           RECETA_ARMA_MADERA,
         ],
@@ -489,9 +493,9 @@ export const EDIFICIO_CATALOGO = {
         costoMejora: { madera: 150, piedra: 100 },
         trabajadoresRequeridos: 8,
         recetas: [
-          { produce: 'armaCobre', produccionBase: 3, consumePorUnidad: { lingoteCobre: 1, madera: 1 } },
+          { produce: 'armaCobre', produccionBase: 3, consumePorUnidad: { lingoteCobre: 1, madera: 1 }, requiereTecnologia: 'metalurgia_cobre' },
           { produce: 'armaduraBasica', produccionBase: 3, consumePorUnidad: { cuero: 5 } },
-          { produce: 'armaBronce', produccionBase: 2, consumePorUnidad: { lingoteBronce: 1, madera: 2 } },
+          { produce: 'armaBronce', produccionBase: 2, consumePorUnidad: { lingoteBronce: 1, madera: 2 }, requiereTecnologia: 'aleacion_bronce' },
           { produce: 'armaduraIntermedia', produccionBase: 2, consumePorUnidad: { lingoteCobre: 1, cueroCurtido: 5 } },
           RECETA_ARMA_MADERA,
         ],
@@ -502,12 +506,12 @@ export const EDIFICIO_CATALOGO = {
         costoMejora: { madera: 450, piedra: 200 },
         trabajadoresRequeridos: 20,
         recetas: [
-          { produce: 'armaCobre', produccionBase: 3, consumePorUnidad: { lingoteCobre: 1, madera: 1 } },
+          { produce: 'armaCobre', produccionBase: 3, consumePorUnidad: { lingoteCobre: 1, madera: 1 }, requiereTecnologia: 'metalurgia_cobre' },
           { produce: 'armaduraBasica', produccionBase: 3, consumePorUnidad: { cuero: 5 } },
-          { produce: 'armaBronce', produccionBase: 2, consumePorUnidad: { lingoteBronce: 1, madera: 2 } },
+          { produce: 'armaBronce', produccionBase: 2, consumePorUnidad: { lingoteBronce: 1, madera: 2 }, requiereTecnologia: 'aleacion_bronce' },
           { produce: 'armaduraIntermedia', produccionBase: 2, consumePorUnidad: { lingoteCobre: 1, cueroCurtido: 5 } },
-          { produce: 'armaBronceCalidad', produccionBase: 1, consumePorUnidad: { lingoteBronce: 5, madera: 5 } },
-          { produce: 'armaduraBronce', produccionBase: 1, consumePorUnidad: { lingoteBronce: 1, cueroCalidad: 5 } },
+          { produce: 'armaBronceCalidad', produccionBase: 1, consumePorUnidad: { lingoteBronce: 5, madera: 5 }, requiereTecnologia: 'bronce_calidad_militar' },
+          { produce: 'armaduraBronce', produccionBase: 1, consumePorUnidad: { lingoteBronce: 1, cueroCalidad: 5 }, requiereTecnologia: 'bronce_calidad_militar' },
           RECETA_ARMA_MADERA,
         ],
       },
@@ -600,6 +604,7 @@ export const EDIFICIO_CATALOGO = {
   caballerizas: {
     costo: { madera: 30 },
     tiempoConstruccionMinutos: 720,
+    requiereTecnologia: 'cria_caballar',
     requisitoNivelAsentamientoConstruccion: 2,
     niveles: {
       1: { trabajadoresRequeridos: 0, recetas: [] },
@@ -624,6 +629,7 @@ export const EDIFICIO_CATALOGO = {
   // Sala del Consejo (Doc 4.2.1, pide `instituciones_civicas`): requisito del nivel 4 y +1 ranura del Gobernador.
   salaConsejo: {
     costo: { madera: 800, piedra: 1200, oro: 300 },
+    requiereTecnologia: 'instituciones_civicas',
     tiempoConstruccionMinutos: 2_880,
     requisitoNivelAsentamientoConstruccion: 3,
   },
@@ -1542,6 +1548,8 @@ export const POLITICA_CATALOGO = [
  */
 export const TROPAS_RECLUTABLES: {
   id: string;
+  /** La tecnología que la Facción tiene que haber adoptado para reclutarla (las cuatro puertas, Doc 6.1). */
+  tecnologia: TecnologiaId;
   nombre: string;
   edificio: 'centroUrbano' | 'barracon' | 'galeriaDeTiro';
   nivelRequerido: number;
@@ -1568,21 +1576,21 @@ export const TROPAS_RECLUTABLES: {
   // pasar por Armería. Débil a propósito (poderBase 2, por debajo de todo lo demás): existe para que el bucle
   // de juego arranque y las primeras escaramuzas ocurran pronto, no para ganar batallas. Sigue exigiendo un
   // General asignado (`reclutarTropa` en engine/tropas.ts) — eso no cambia, solo el edificio.
-  { id: 'milicia_lanceros', nombre: 'Milicia de lanceros', edificio: 'centroUrbano', nivelRequerido: 1, costoEquipo: { madera: 2 }, poderBase: 2, velocidad: 20, escalon: 1, unidadesPorDefecto: 25 },
+  { id: 'milicia_lanceros', tecnologia: 'leva_comunal', nombre: 'Milicia de lanceros', edificio: 'centroUrbano', nivelRequerido: 1, costoEquipo: { madera: 2 }, poderBase: 2, velocidad: 20, escalon: 1, unidadesPorDefecto: 25 },
   // Recosteadas a `armaMadera` (ver RECETA_ARMA_MADERA): antes exigían la cadena del cobre/cuero entera, lo
   // que era además temáticamente incoherente — un escudo de MIMBRE pagado con un arma de cobre, y unos
   // Honderos (una honda y una piedra) pagados con armadura de cuero. El cobre pasa a ser la MEJORA
   // (`espadachines_cobre`, que sí lo conserva), no el ticket de entrada.
-  { id: 'lanceros_mimbre', nombre: 'Lanceros con escudo de mimbre', edificio: 'barracon', nivelRequerido: 1, costoEquipo: { armaMadera: 1 }, poderBase: 3, velocidad: 20, escalon: 1, unidadesPorDefecto: 25 },
-  { id: 'espadachines_cobre', nombre: 'Espadachines de espada corta de cobre', edificio: 'barracon', nivelRequerido: 1, costoEquipo: { armaCobre: 1, armaduraBasica: 1 }, poderBase: 4, velocidad: 16, escalon: 2, unidadesPorDefecto: 20 },
-  { id: 'hacheros_ligeros', nombre: 'Hacheros ligeros', edificio: 'barracon', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraBasica: 1 }, poderBase: 7, velocidad: 16, escalon: 3, unidadesPorDefecto: 18 },
-  { id: 'espadachines_bronce', nombre: 'Espadachines con espadas y escudos de bronce', edificio: 'barracon', nivelRequerido: 2, costoEquipo: { armaBronce: 2, armaduraIntermedia: 1 }, poderBase: 9, velocidad: 16, escalon: 3, unidadesPorDefecto: 18 },
-  { id: 'lanceros_pesados', nombre: 'Lanceros pesados micénicos', edificio: 'barracon', nivelRequerido: 3, costoEquipo: { armaBronce: 2, armaduraIntermedia: 2 }, poderBase: 14, velocidad: 12, escalon: 4, unidadesPorDefecto: 15 },
-  { id: 'hacheros_armados', nombre: 'Hacheros armados', edificio: 'barracon', nivelRequerido: 3, costoEquipo: { armaBronce: 1, armaduraIntermedia: 1 }, poderBase: 12, velocidad: 12, escalon: 4, unidadesPorDefecto: 15 },
-  { id: 'honderos', nombre: 'Honderos', edificio: 'galeriaDeTiro', nivelRequerido: 1, costoEquipo: { armaMadera: 1 }, poderBase: 5, velocidad: 20, escalon: 2, unidadesPorDefecto: 20 },
-  { id: 'escaramuzadores_jabalina', nombre: 'Escaramuzadores con jabalina', edificio: 'galeriaDeTiro', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraBasica: 1 }, poderBase: 8, velocidad: 20, escalon: 3, unidadesPorDefecto: 18 },
-  { id: 'arqueros', nombre: 'Arqueros', edificio: 'galeriaDeTiro', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraIntermedia: 1 }, poderBase: 9, velocidad: 16, escalon: 3, unidadesPorDefecto: 18 },
-  { id: 'arqueros_compuesto', nombre: 'Arqueros con arco compuesto', edificio: 'galeriaDeTiro', nivelRequerido: 3, costoEquipo: { armaBronce: 3, armaduraIntermedia: 2 }, poderBase: 15, velocidad: 12, escalon: 5, unidadesPorDefecto: 12 },
+  { id: 'lanceros_mimbre', tecnologia: 'escudos_ligeros', nombre: 'Lanceros con escudo de mimbre', edificio: 'barracon', nivelRequerido: 1, costoEquipo: { armaMadera: 1 }, poderBase: 3, velocidad: 20, escalon: 1, unidadesPorDefecto: 25 },
+  { id: 'espadachines_cobre', tecnologia: 'armamento_palacial', nombre: 'Espadachines de espada corta de cobre', edificio: 'barracon', nivelRequerido: 1, costoEquipo: { armaCobre: 1, armaduraBasica: 1 }, poderBase: 4, velocidad: 16, escalon: 2, unidadesPorDefecto: 20 },
+  { id: 'hacheros_ligeros', tecnologia: 'armamento_palacial', nombre: 'Hacheros ligeros', edificio: 'barracon', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraBasica: 1 }, poderBase: 7, velocidad: 16, escalon: 3, unidadesPorDefecto: 18 },
+  { id: 'espadachines_bronce', tecnologia: 'aleacion_bronce', nombre: 'Espadachines con espadas y escudos de bronce', edificio: 'barracon', nivelRequerido: 2, costoEquipo: { armaBronce: 2, armaduraIntermedia: 1 }, poderBase: 9, velocidad: 16, escalon: 3, unidadesPorDefecto: 18 },
+  { id: 'lanceros_pesados', tecnologia: 'panoplia_bronce', nombre: 'Lanceros pesados micénicos', edificio: 'barracon', nivelRequerido: 3, costoEquipo: { armaBronce: 2, armaduraIntermedia: 2 }, poderBase: 14, velocidad: 12, escalon: 4, unidadesPorDefecto: 15 },
+  { id: 'hacheros_armados', tecnologia: 'aleacion_bronce', nombre: 'Hacheros armados', edificio: 'barracon', nivelRequerido: 3, costoEquipo: { armaBronce: 1, armaduraIntermedia: 1 }, poderBase: 12, velocidad: 12, escalon: 4, unidadesPorDefecto: 15 },
+  { id: 'honderos', tecnologia: 'hostigamiento_tribal', nombre: 'Honderos', edificio: 'galeriaDeTiro', nivelRequerido: 1, costoEquipo: { armaMadera: 1 }, poderBase: 5, velocidad: 20, escalon: 2, unidadesPorDefecto: 20 },
+  { id: 'escaramuzadores_jabalina', tecnologia: 'hostigamiento_tribal', nombre: 'Escaramuzadores con jabalina', edificio: 'galeriaDeTiro', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraBasica: 1 }, poderBase: 8, velocidad: 20, escalon: 3, unidadesPorDefecto: 18 },
+  { id: 'arqueros', tecnologia: 'arqueria_palacial', nombre: 'Arqueros', edificio: 'galeriaDeTiro', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraIntermedia: 1 }, poderBase: 9, velocidad: 16, escalon: 3, unidadesPorDefecto: 18 },
+  { id: 'arqueros_compuesto', tecnologia: 'arco_compuesto', nombre: 'Arqueros con arco compuesto', edificio: 'galeriaDeTiro', nivelRequerido: 3, costoEquipo: { armaBronce: 3, armaduraIntermedia: 2 }, poderBase: 15, velocidad: 12, escalon: 5, unidadesPorDefecto: 12 },
   ] as const
 );
 

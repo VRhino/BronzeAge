@@ -18,6 +18,7 @@ import { exito, sinCambios } from './tipos';
 import { campamentoEn, comando, conAsentamiento, exigirAsentamiento, exigirFaccionDe, rechazar } from './ayudas';
 import { CODIGOS_ERROR } from './codigosDeError';
 import { evento } from './eventos';
+import { tecnologiasDe } from '../../engine/tecnologia';
 
 /** Cargos con autoridad sobre la cola de construcción (Doc 4.2). */
 export type CargoConstructor = 'gobernador' | 'maestroObras';
@@ -67,6 +68,8 @@ export const anadirEdificioManualmente = comando<ParamsAnadirEdificio, void>((es
     mapa,
     capital,
     reclamos,
+    
+    tecnologiasDe(estado.tecnologia, asentamiento.faccionId).adoptadas,
     ctx.ids.siguiente(),
     consumoRacionDeEscuadrones(campamentoEn(estado, asentamiento))
   );
@@ -137,6 +140,8 @@ export const mejorarEdificioAhora = comando<ParamsMejorarEdificio, void>((estado
     params.edificioId,
     capital,
     ctx.instante,
+    
+    tecnologiasDe(estado.tecnologia, asentamiento.faccionId).adoptadas,
     consumoRacionDeEscuadrones(campamentoEn(estado, asentamiento))
   );
   return exito(conAsentamiento(estado, actualizado), [

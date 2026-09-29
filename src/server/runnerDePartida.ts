@@ -27,6 +27,7 @@ import { PRECIO_BASE } from '../constants';
 import type { AlmacenDeObjetos } from './almacen/almacenDeObjetos';
 import { cargarPartida, guardarPartida } from './persistenciaPartida';
 import { anexarEventos } from './eventosDePartida';
+import { tecnologiasDe } from '../engine/tecnologia';
 
 /**
  * Instrumentación de UNA partida (Fase E3). Números crudos, sin interpretar: quien los lee decide si 400 ms
@@ -276,7 +277,8 @@ export class RunnerDePartida {
     const asentamiento = this.sesion.getState().asentamientos.find((a) => a.id === asentamientoId);
     if (!asentamiento) return [];
     const zona = this.geometriaAsentamientos().zonas.find((z) => z.asentamientoId === asentamientoId)?.poligono ?? [];
-    return produccionPorMinuto(asentamiento, this.sesion.getMapa(), zona);
+    const adoptadas = tecnologiasDe(this.sesion.getState().tecnologia, asentamiento.faccionId).adoptadas;
+    return produccionPorMinuto(asentamiento, this.sesion.getMapa(), zona, adoptadas);
   }
 
   /** Evaluación de la subida de nivel de un asentamiento (`evaluarAscenso`, engine/ascenso.ts) — la muestra el

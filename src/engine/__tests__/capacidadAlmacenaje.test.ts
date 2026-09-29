@@ -8,6 +8,7 @@ import { EDIFICIO_CATALOGO } from '../../constants';
 import { aplicarConquista } from '../combate';
 import { avanzarConstruccion, reclamosDeFuentes } from '../construction';
 import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instanteDeTest } from './fixtures';
+import { TODAS_LAS_TECNOLOGIAS } from '../tecnologia';
 
 const BASE = 10_000;
 const BONUS = EDIFICIO_CATALOGO.almacen.capacidadPorRecursoAdicional;
@@ -27,7 +28,7 @@ describe('capacidad de almacenaje', () => {
         ...asentamiento.edificios,
       ],
     };
-    const tick = (a: Asentamiento, t: number) => avanzarConstruccion(a, [], mapa, undefined, reclamosDeFuentes([a]), instanteDeTest(t), 0).asentamiento;
+    const tick = (a: Asentamiento, t: number) => avanzarConstruccion(a, [], mapa, undefined, reclamosDeFuentes([a]), instanteDeTest(t), 0, TODAS_LAS_TECNOLOGIAS).asentamiento;
     const capacidadMadera = (a: Asentamiento) => a.almacen['madera']!.capacidad;
 
     plaza = tick(plaza, 1);

@@ -26,6 +26,7 @@ import {
   tipoAnclaParaCategoria,
 } from '../trazado';
 import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
+import { TODAS_LAS_TECNOLOGIAS } from '../tecnologia';
 
 const SEED = 42;
 const RECLAMOS_VACIOS = { nodos: new Set<string>(), lenerasPorBosque: new Map<string, number>() };
@@ -111,21 +112,21 @@ function rellenar(
 describe('Etapa 5 — construir un edificio de una categoría con ancla garantiza el ancla primero', () => {
   it('el primer Barracón hace que exista una Plaza de Armas alcanzable', () => {
     const { asentamiento, faccion, mapa } = base(2);
-    const conBarracon = anadirEdificioManualmente(asentamiento, faccion, 'gobernador', 'barracon', [], mapa, undefined, RECLAMOS_VACIOS);
+    const conBarracon = anadirEdificioManualmente(asentamiento, faccion, 'gobernador', 'barracon', [], mapa, undefined, RECLAMOS_VACIOS, TODAS_LAS_TECNOLOGIAS);
     expect(porTipo(conBarracon, 'plazaDeArmas')).toHaveLength(1);
     expect(porTipo(conBarracon, 'barracon')).toHaveLength(1);
   });
 
   it('el primer edificio de industria (Fundición) hace que exista un Patio de Gremios', () => {
     const { asentamiento, faccion, mapa } = base(2);
-    const conFundicion = anadirEdificioManualmente(asentamiento, faccion, 'gobernador', 'fundicion', [], mapa, undefined, RECLAMOS_VACIOS);
+    const conFundicion = anadirEdificioManualmente(asentamiento, faccion, 'gobernador', 'fundicion', [], mapa, undefined, RECLAMOS_VACIOS, TODAS_LAS_TECNOLOGIAS);
     expect(porTipo(conFundicion, 'patioDeGremios')).toHaveLength(1);
     expect(porTipo(conFundicion, 'fundicion')).toHaveLength(1);
   });
 
   it('Mercado nace como su propia ancla; nunca genera plaza/plazaDeArmas/patioDeGremios', () => {
     const { asentamiento, faccion, mapa } = base(3);
-    const conMercado = anadirEdificioManualmente(asentamiento, faccion, 'gobernador', 'mercado', [], mapa, undefined, RECLAMOS_VACIOS);
+    const conMercado = anadirEdificioManualmente(asentamiento, faccion, 'gobernador', 'mercado', [], mapa, undefined, RECLAMOS_VACIOS, TODAS_LAS_TECNOLOGIAS);
     expect(porTipo(conMercado, 'mercado')).toHaveLength(1);
     expect(porTipo(conMercado, 'plaza')).toHaveLength(0);
     expect(porTipo(conMercado, 'plazaDeArmas')).toHaveLength(0);
@@ -134,7 +135,7 @@ describe('Etapa 5 — construir un edificio de una categoría con ancla garantiz
 
   it('Carpintería (categoría militar) también hace que exista una Plaza de Armas si no había ninguna', () => {
     const { asentamiento, faccion, mapa } = base(3);
-    const conCarpinteria = anadirEdificioManualmente(asentamiento, faccion, 'gobernador', 'carpinteria', [], mapa, undefined, RECLAMOS_VACIOS);
+    const conCarpinteria = anadirEdificioManualmente(asentamiento, faccion, 'gobernador', 'carpinteria', [], mapa, undefined, RECLAMOS_VACIOS, TODAS_LAS_TECNOLOGIAS);
     const carpinteria = porTipo(conCarpinteria, 'carpinteria')[0]!;
     expect(carpinteria.estado).toBe('en_cola');
     expect(porTipo(conCarpinteria, 'plazaDeArmas')).toHaveLength(1);
@@ -144,10 +145,10 @@ describe('Etapa 5 — construir un edificio de una categoría con ancla garantiz
 describe('Etapa 5 — atracción a un ancla ya existente (Lógica 2, no crea una segunda)', () => {
   it('un segundo edificio militar se pega a la Plaza de Armas existente, no genera otra', () => {
     const { asentamiento, faccion, mapa } = base(2);
-    const conBarracon = anadirEdificioManualmente(asentamiento, faccion, 'gobernador', 'barracon', [], mapa, undefined, RECLAMOS_VACIOS);
+    const conBarracon = anadirEdificioManualmente(asentamiento, faccion, 'gobernador', 'barracon', [], mapa, undefined, RECLAMOS_VACIOS, TODAS_LAS_TECNOLOGIAS);
     expect(porTipo(conBarracon, 'plazaDeArmas')).toHaveLength(1);
 
-    const conGaleria = anadirEdificioManualmente(conBarracon, faccion, 'gobernador', 'galeriaDeTiro', [], mapa, undefined, RECLAMOS_VACIOS);
+    const conGaleria = anadirEdificioManualmente(conBarracon, faccion, 'gobernador', 'galeriaDeTiro', [], mapa, undefined, RECLAMOS_VACIOS, TODAS_LAS_TECNOLOGIAS);
     // Sigue habiendo UNA sola Plaza de Armas — la Galería se atrajo a la ya existente en vez de sembrar otra.
     expect(porTipo(conGaleria, 'plazaDeArmas')).toHaveLength(1);
     expect(porTipo(conGaleria, 'galeriaDeTiro')).toHaveLength(1);
@@ -287,7 +288,7 @@ describe('Etapa 4 (sin cambios) — variedad de anclas residenciales, ahora aisl
 describe('Etapa 4 (sin cambios) — desempate por máximo borde compartido', () => {
   it('la atracción dura prefiere compartir todo un lado del ancla, no solo una esquina', () => {
     const { asentamiento, faccion, mapa } = base(2);
-    const conMercado = anadirEdificioManualmente(asentamiento, faccion, 'gobernador', 'mercado', [], mapa, undefined, RECLAMOS_VACIOS);
+    const conMercado = anadirEdificioManualmente(asentamiento, faccion, 'gobernador', 'mercado', [], mapa, undefined, RECLAMOS_VACIOS, TODAS_LAS_TECNOLOGIAS);
     const mercado = porTipo(conMercado, 'mercado')[0]!;
     const mercadoMin = celdaMinimaDeEdificio(mercado);
     const mercadoTamano = tamanoDeEdificio(mercado);

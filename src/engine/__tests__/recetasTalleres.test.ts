@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import type { Asentamiento } from '../../domain/types';
 import { avanzarConstruccion, reclamosDeFuentes } from '../construction';
 import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instanteDeTest } from './fixtures';
+import { TODAS_LAS_TECNOLOGIAS } from '../tecnologia';
 
 function conArmeria(madera: number, extra: Partial<Asentamiento> = {}): Asentamiento {
   const mapa = crearMapaDeterminista(7);
@@ -22,7 +23,7 @@ function conArmeria(madera: number, extra: Partial<Asentamiento> = {}): Asentami
 
 function trasUnTick(a: Asentamiento) {
   const mapa = crearMapaDeterminista(7);
-  return avanzarConstruccion(a, [], mapa, undefined, reclamosDeFuentes([a]), instanteDeTest(1), 0).asentamiento;
+  return avanzarConstruccion(a, [], mapa, undefined, reclamosDeFuentes([a]), instanteDeTest(1), 0, TODAS_LAS_TECNOLOGIAS).asentamiento;
 }
 
 describe('talleres', () => {
@@ -38,5 +39,17 @@ describe('talleres', () => {
 
   it('una receta parada no se produce', () => {
     expect(trasUnTick(conArmeria(1000, { recetasPausadas: ['armaMadera'] })).almacen['armaMadera']?.cantidad ?? 0).toBe(0);
+  });
+});
+
+describe('talleres y tecnología (Doc 6.1)', () => {
+  const conCobre = (a: Asentamiento): Asentamiento => ({ ...a, almacen: { ...a.almacen, lingoteCobre: { cantidad: 100, capacidad: 10_000 } } });
+  const armasDeCobre = (adoptadas: Parameters<typeof avanzarConstruccion>[7]) =>
+    avanzarConstruccion(conCobre(conArmeria(1000)), [], crearMapaDeterminista(7), undefined, reclamosDeFuentes([]), instanteDeTest(1), 0, adoptadas).asentamiento
+      .almacen['armaCobre']?.cantidad ?? 0;
+
+  it('sin `metalurgia_cobre` la Armería no hace armas de cobre; con ella, sí', () => {
+    expect(armasDeCobre(['leva_comunal', 'hostigamiento_tribal'])).toBe(0);
+    expect(armasDeCobre(['leva_comunal', 'hostigamiento_tribal', 'metalurgia_cobre'])).toBeGreaterThan(0);
   });
 });

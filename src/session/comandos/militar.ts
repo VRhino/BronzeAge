@@ -9,7 +9,7 @@
 // son los que más ganan con `codigo`/`payload` estructurados: las proyecciones por audiencia de Fase C
 // filtran sobre eso. Los payloads de combate los declara `engine/combate.ts`, que es quien resuelve.
 import { reclutarTropa as reclutarTropaEngine } from '../../engine/tropas';
-import { contadoresDeReclutamiento, sumarContadores } from '../../engine/tecnologia';
+import { contadoresDeReclutamiento, sumarContadores, tecnologiasDe } from '../../engine/tecnologia';
 import { esCiudadano } from '../../engine/faccion';
 import {
   CombateInvalidoError,
@@ -66,6 +66,8 @@ export const reclutarTropa = comando<ParamsReclutarTropa, { reclutados: number }
     faccionDelJugador?.id ?? '',
     params.tropaId,
     params.origen,
+    
+    tecnologiasDe(estado.tecnologia, asentamiento.faccionId).adoptadas,
     ctx.ids.siguiente()
   );
   const reclutados = cantidadDe(r.heroes) - antes;

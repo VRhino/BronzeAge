@@ -1,6 +1,6 @@
-import type { Asentamiento, Edificio, EdificioTipo, Faccion, Point, Recinto, RecursoAlmacenado, RecursoTipo } from '../domain/types';
+import type { Asentamiento, Edificio, EdificioTipo, Faccion, Point, Recinto, RecursoAlmacenado, RecursoTipo, TecnologiaId } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
-import type { RecetaProduccion } from '../constants';
+import { TECNOLOGIAS, type NivelEdificioTransformacion, type RecetaProduccion } from '../constants';
 import {
   EDIFICIO_CATALOGO,
   EXTRACCION_MAXIMOS,
@@ -537,7 +537,9 @@ function evaluarNecesidades(
   reserva: Partial<Record<RecursoTipo, number>>,
   reclamos: ReclamosFuentes,
   /** Ración de la guarnición: cuenta en el consumo de trigo que decide si hace falta otra Granja. */
-  consumoTropasPorMinuto: number
+  consumoTropasPorMinuto: number,
+  /** Tecnologías de la Facción: lo que pide una que no tiene no se propone. */
+  adoptadas: readonly TecnologiaId[]
 ): {
   nuevos: Edificio[];
   almacen: Record<string, RecursoAlmacenado>;
@@ -586,9 +588,10 @@ function evaluarNecesidades(
    * y de qué se comprometa antes, así que solo el commit puede decidirlos.
    */
   const puedePagar = (tipo: EdificioTipo): boolean =>
+    permite(adoptadas, tecnologiaDeEdificio(tipo)) &&
     puedeIniciarConstruccion(asentamiento.almacen, EDIFICIO_CATALOGO[tipo].costo as Partial<Record<string, number>>, tipo, reserva);
   const proponer = (edificio: Edificio | null, score: number): void => {
-    if (edificio) candidatos.push({ edificio, score });
+    if (edificio && permite(adoptadas, tecnologiaDeEdificio(edificio.tipo))) candidatos.push({ edificio, score });
   };
   /**
    * ¿Hay ya un proyecto de este tipo en el asentamiento, O propuesto en esta misma pasada?
@@ -939,8 +942,18 @@ function pisaCalleComprometida(
  * (`produccionTrigoDeGranja`) y AGRANDA su huella, lo que obliga a mudarla (ver `avanzarMejoras`). */
 const EDIFICIOS_CON_NIVELES = ['fundicion', 'curtiduria', 'armeria', 'carpinteria', 'barracon', 'galeriaDeTiro', 'mercado', 'granja', 'granero'] as const;
 
-function nivelesDe(tipo: EdificioTipo): Record<number, { trabajadoresRequeridos: number; recetas: { produce: string; produccionBase: number; consumePorUnidad: Partial<Record<string, number>> }[]; costoMejora?: Partial<Record<string, number>>; requisitoNivelAsentamiento?: number; requiereEdificio?: string; requiereEdificioNivel?: number }> | undefined {
-  return (EDIFICIO_CATALOGO[tipo] as { niveles?: Record<number, any> }).niveles;
+function nivelesDe(tipo: EdificioTipo): Record<number, NivelEdificioTransformacion> | undefined {
+  return (EDIFICIO_CATALOGO[tipo] as { niveles?: Record<number, NivelEdificioTransformacion> }).niveles;
+}
+
+/** La tecnología que pide construir un tipo de edificio (Doc 4.2.1, Doc 6), si pide alguna. */
+export function tecnologiaDeEdificio(tipo: EdificioTipo): TecnologiaId | undefined {
+  return (EDIFICIO_CATALOGO[tipo] as { requiereTecnologia?: TecnologiaId }).requiereTecnologia;
+}
+
+/** ¿La Facción tiene lo que pide `requiere`? (las cuatro puertas, Doc 6.1). */
+function permite(adoptadas: readonly TecnologiaId[], requiere: TecnologiaId | undefined): boolean {
+  return requiere === undefined || adoptadas.includes(requiere);
 }
 
 /** Resultado de evaluar SOLO los gates de la siguiente mejora (nivel de asentamiento + edificio previo, si
@@ -964,7 +977,8 @@ function minutosDeMejora(asentamiento: Asentamiento, tipo: EdificioTipo, nivelSi
 
 function elegibleParaMejora(
   asentamiento: Asentamiento,
-  edificio: Edificio
+  edificio: Edificio,
+  adoptadas: readonly TecnologiaId[]
 ): { nivelActual: number; nivelSiguiente: number; costo: Partial<Record<string, number>> } | null {
   if (edificio.estado !== 'activo' || !(EDIFICIOS_CON_NIVELES as readonly string[]).includes(edificio.tipo)) return null;
   if (edificio.mejora) return null;
@@ -977,6 +991,7 @@ function elegibleParaMejora(
   // nivelActual del ASENTAMIENTO (Doc Fase_0_5 §6.2) — no confundir con `nivelActual` de arriba (nivel
   // INTERNO del edificio): un asentamiento degradado no puede seguir mejorando edificios de nivel alto.
   if (siguiente.requisitoNivelAsentamiento && nivelActualDe(asentamiento) < siguiente.requisitoNivelAsentamiento) return null;
+  if (!permite(adoptadas, siguiente.requiereTecnologia)) return null;
   if (siguiente.requiereEdificio) {
     const previo = edificiosPorTipoYEstado(asentamiento, siguiente.requiereEdificio as EdificioTipo);
     if (previo.length === 0) return null;
@@ -1068,7 +1083,8 @@ function avanzarMejoras(
   asentamiento: Asentamiento,
   almacen: Record<string, RecursoAlmacenado>,
   reserva: Partial<Record<RecursoTipo, number>>,
-  instante: Instante
+  instante: Instante,
+  adoptadas: readonly TecnologiaId[]
 ): { asentamiento: Asentamiento; almacen: Record<string, RecursoAlmacenado>; eventos: EventoCrudo[] } {
   const eventos: EventoCrudo[] = [];
   let almacenActual = almacen;
@@ -1091,7 +1107,7 @@ function avanzarMejoras(
   let cuadrillasLibres = NECESIDADES.maximoEnConstruccionSimultanea - cuadrillasOcupadas(edificios) - 1;
   for (let indice = 0; indice < edificios.length && cuadrillasLibres > 0; indice++) {
     const edificio = edificios[indice]!;
-    const info = elegibleParaMejora(asentamiento, edificio);
+    const info = elegibleParaMejora(asentamiento, edificio, adoptadas);
     if (!info) continue;
     if (!puedeIniciarConstruccion(almacenActual, info.costo, edificio.tipo, reserva)) continue;
     almacenActual = descontarRecursos(almacenActual, info.costo);
@@ -1187,7 +1203,8 @@ function avanzarRecetas(
   /** Lo que un taller no puede tocar: la misma reserva que respeta la auto-construcción (mantenimiento, comida y la
    * reserva manual del Tesorero, 2026-09-28, decisión del usuario). Sin ella, en la Era I medida, una Armería
    * vaciaba la madera de su plaza en medio día y la dejaba caer en ruinas por no pagar el mantenimiento. */
-  reserva: Partial<Record<RecursoTipo, number>>
+  reserva: Partial<Record<RecursoTipo, number>>,
+  adoptadas: readonly TecnologiaId[]
 ): { almacen: Record<string, RecursoAlmacenado>; pausados: Set<string>; fabricado: Partial<Record<RecursoTipo, number>> } {
   const pausadas = new Set(asentamiento.recetasPausadas ?? []);
   const fabricado: Partial<Record<RecursoTipo, number>> = {};
@@ -1201,7 +1218,7 @@ function avanzarRecetas(
     const nivel = niveles[edificio.nivelInterno ?? 1];
     if (!nivel) continue;
     for (const receta of nivel.recetas) {
-      if (pausadas.has(receta.produce as RecursoTipo)) continue;
+      if (pausadas.has(receta.produce as RecursoTipo) || !permite(adoptadas, receta.requiereTecnologia)) continue;
       let cantidad = receta.produccionBase * ratioArtesano * factorLineaProduccion(edificio, receta, asentamiento);
       for (const [insumo, porUnidad] of Object.entries(receta.consumePorUnidad)) {
         if (!porUnidad) continue;
@@ -1241,7 +1258,9 @@ export function avanzarConstruccion(
   instante: Instante,
   /** Ración de la guarnición (`consumoRacionDeEscuadrones(campamentoDe(...))`), para la reserva de trigo y la
    * decisión de Granjas: las escuadras viven en sus héroes, no en la plaza. */
-  consumoTropasPorMinuto: number
+  consumoTropasPorMinuto: number,
+  /** Tecnologías adoptadas por la Facción dueña (Doc 6): gatean recetas, mejoras y lo que se auto-construye. */
+  adoptadas: readonly TecnologiaId[]
 ): {
   asentamiento: Asentamiento;
   eventos: EventoCrudo[];
@@ -1405,7 +1424,7 @@ export function avanzarConstruccion(
 
   // Rediseño de progreso (Fase 0, Doc 4.2.1): recetas de crafting de los edificios de transformación activos, sin
   // bajar de esa misma reserva.
-  const recetasResultado = avanzarRecetas({ ...asentamiento, edificios: edificiosActualizados }, almacen, reserva);
+  const recetasResultado = avanzarRecetas({ ...asentamiento, edificios: edificiosActualizados }, almacen, reserva, adoptadas);
   almacen = recetasResultado.almacen;
   edificiosActualizados = edificiosActualizados.map((e) => {
     const pausado = recetasResultado.pausados.has(e.id);
@@ -1413,7 +1432,7 @@ export function avanzarConstruccion(
   });
 
   // Mejora de nivel interno (Doc 4.2.1): evalúa después de las recetas, con el almacén ya actualizado por ellas.
-  const trasMejoras = avanzarMejoras({ ...asentamiento, edificios: edificiosActualizados }, almacen, reserva, instante);
+  const trasMejoras = avanzarMejoras({ ...asentamiento, edificios: edificiosActualizados }, almacen, reserva, instante, adoptadas);
   almacen = trasMejoras.almacen;
   eventos.push(...trasMejoras.eventos);
 
@@ -1436,7 +1455,7 @@ export function avanzarConstruccion(
   // ningún candidato (`asegurarAnclaPara`); esos cambios viven en `edificiosBase`, no en `nuevosProyectos`.
   let edificiosBase = asentamientoConProgreso.edificios;
   if (!asentamiento.autoConstruccionPausada) {
-    const trasNecesidades = evaluarNecesidades(asentamientoConProgreso, zonaPoligono, mapa, reserva, reclamos, consumoTropasPorMinuto);
+    const trasNecesidades = evaluarNecesidades(asentamientoConProgreso, zonaPoligono, mapa, reserva, reclamos, consumoTropasPorMinuto, adoptadas);
     nuevosProyectos = trasNecesidades.nuevos;
     almacenFinal = trasNecesidades.almacen;
     extractoresTicksSinCupo = trasNecesidades.extractoresTicksSinCupo;
@@ -1590,12 +1609,18 @@ export function anadirEdificioManualmente(
   mapa: Mapa,
   capital: Asentamiento | undefined,
   reclamos: ReclamosFuentes,
+  /** Tecnologías adoptadas por la Facción (Doc 6): un edificio que pide otra no se puede añadir. */
+  adoptadas: readonly TecnologiaId[],
   contador = 0,
   /** Ración de la guarnición, para la reserva de trigo (ver `reservaDinamicaConstruccion`). */
   consumoTropasPorMinuto = 0
 ): Asentamiento {
   if (!cargoOcupado(asentamiento, cargo)) {
     throw new ConstruccionManualInvalidaError(`Se necesita un ${cargo} asignado para añadir edificios a la cola.`);
+  }
+  const tecnologia = tecnologiaDeEdificio(tipo);
+  if (!permite(adoptadas, tecnologia)) {
+    throw new ConstruccionManualInvalidaError(`Hace falta adoptar ${TECNOLOGIAS[tecnologia!].nombre} para construir ${tipo}.`);
   }
   if (tipo === 'centroUrbano') {
     throw new ConstruccionManualInvalidaError('El Centro Urbano nunca pasa por la cola de construcción.');
@@ -1739,10 +1764,11 @@ export function estadoMejoraEdificio(
   asentamiento: Asentamiento,
   edificio: Edificio,
   capital: Asentamiento | undefined,
+  adoptadas: readonly TecnologiaId[],
   /** Ración de la guarnición, para la reserva de trigo (ver `reservaDinamicaConstruccion`). */
   consumoTropasPorMinuto = 0
 ): EstadoMejoraEdificio | null {
-  const info = elegibleParaMejora(asentamiento, edificio);
+  const info = elegibleParaMejora(asentamiento, edificio, adoptadas);
   if (!info) return null;
   const reserva = reservaDinamicaConstruccion(asentamiento, capital, consumoTropasPorMinuto);
   const elegible = puedeIniciarConstruccion(asentamiento.almacen, info.costo, edificio.tipo, reserva);
@@ -1769,6 +1795,7 @@ export function mejorarEdificioManualmente(
   edificioId: string,
   capital: Asentamiento | undefined,
   instante: Instante,
+  adoptadas: readonly TecnologiaId[],
   consumoTropasPorMinuto = 0
 ): Asentamiento {
   if (!cargoOcupado(asentamiento, cargo)) {
@@ -1779,7 +1806,11 @@ export function mejorarEdificioManualmente(
   if (edificio.estado !== 'activo') {
     throw new ConstruccionManualInvalidaError('Solo se puede forzar la mejora de un edificio activo.');
   }
-  const estado = estadoMejoraEdificio(asentamiento, edificio, capital, consumoTropasPorMinuto);
+  const pide = nivelesDe(edificio.tipo)?.[(edificio.nivelInterno ?? 1) + 1]?.requiereTecnologia;
+  if (!permite(adoptadas, pide)) {
+    throw new ConstruccionManualInvalidaError(`Hace falta adoptar ${TECNOLOGIAS[pide!].nombre} para esta mejora.`);
+  }
+  const estado = estadoMejoraEdificio(asentamiento, edificio, capital, adoptadas, consumoTropasPorMinuto);
   if (!estado) throw new ConstruccionManualInvalidaError('Ya está en su nivel máximo (o no tiene mejoras disponibles).');
   if (!estado.elegible) throw new ConstruccionManualInvalidaError(estado.motivoBloqueo!);
 

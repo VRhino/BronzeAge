@@ -7,6 +7,7 @@ import type { Asentamiento, Edificio } from '../../domain/types';
 import { EDIFICIO_CATALOGO, NECESIDADES } from '../../constants';
 import { avanzarConstruccion, quitarDeCola, reclamosDeFuentes } from '../construction';
 import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instanteDeTest } from './fixtures';
+import { TODAS_LAS_TECNOLOGIAS } from '../tecnologia';
 
 const AHORA = instanteDeTest(10);
 const LEJOS = instanteDeTest(100_000);
@@ -23,7 +24,7 @@ function obra(id: string): Edificio {
 }
 
 const tick = (mapa: ReturnType<typeof crearMapaDeterminista>, a: Asentamiento) =>
-  avanzarConstruccion(a, [], mapa, undefined, reclamosDeFuentes([a]), AHORA, 0).asentamiento;
+  avanzarConstruccion(a, [], mapa, undefined, reclamosDeFuentes([a]), AHORA, 0, TODAS_LAS_TECNOLOGIAS).asentamiento;
 
 describe('cuadrillas de obra', () => {
   it('una reconstrucción arranca aunque las cuadrillas estén todas ocupadas, y no ocupa ninguna', () => {

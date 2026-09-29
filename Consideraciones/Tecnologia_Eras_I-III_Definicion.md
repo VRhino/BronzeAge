@@ -138,11 +138,15 @@ Cada paso deja los tests en verde y se puede fusionar por separado.
 - [x] Tests del comando: no Rey, fuera de la capital, no aparecida, ya adoptada, sin recursos.
 
 ### Paso 4 — Las cuatro puertas
-- [ ] `reclutarTropa`, `anadirEdificioManualmente`, `mejorarEdificioManualmente` y la selección de recetas de
+- [x] `reclutarTropa`, `anadirEdificioManualmente`, `mejorarEdificioManualmente` y la selección de recetas de
   `avanzarConstruccion` reciben las tecnologías adoptadas de la Facción dueña y comprueban `requiereTecnologia`.
   La auto-construcción no encola lo que la Facción no tiene.
-- [ ] `requiereTecnologia` en el roster y las recetas actuales (apéndice C).
-- [ ] Tests: sin la tecnología se rechaza con un motivo claro; con ella, igual que hoy.
+- [x] `requiereTecnologia` en el roster y las recetas actuales (apéndice C).
+- [x] Tests: sin la tecnología se rechaza con un motivo claro; con ella, igual que hoy.
+- [x] Hecho así: `adoptadas` es un parámetro obligatorio de `reclutarTropa`, `avanzarConstruccion`, `anadirEdificioManualmente`,
+  `mejorarEdificioManualmente` y `estadoMejoraEdificio` (la Facción de la plaza). `produccionPorMinuto` lo recibe
+  opcional (vista informativa). Los tests del motor que no prueban tecnología usan `TODAS_LAS_TECNOLOGIAS`, y
+  `crearEstadoDeTest` adopta todo el catálogo.
 
 ### Paso 5 — Edificios de la Era I (P1, P2, D37)
 - [ ] Carpintería: se construye desde el nivel 2; Carpintería 2 fabrica la pieza `carroGuerra` (`carros_guerra`).

@@ -23,7 +23,7 @@
 //
 // Diseño, decisiones y limitaciones: `Consideraciones/NPC_Gobernanza_Facciones_Controladas.md`.
 
-import type { AcuerdoTrueque, Asentamiento, Caravana, CampamentoBandido, EdificioTipo, Ejercito, Escuadron, Faccion, Heroe, OrdenMercado, Point, RecursoTipo, RelacionPolitica, UbicacionHeroe } from '../domain/types';
+import type { AcuerdoTrueque, Asentamiento, Caravana, CampamentoBandido, EdificioTipo, Ejercito, Escuadron, Faccion, Heroe, OrdenMercado, Point, RecursoTipo, RelacionPolitica, UbicacionHeroe, TecnologiaId } from '../domain/types';
 import { RECURSOS_TIPO } from '../domain/types';
 import { colocarOrdenMercado } from '../engine/market';
 import type { Mapa } from '../world/mapa';
@@ -31,7 +31,7 @@ import type { RandomFn } from '../worldgen';
 import type { ContextoSimulacion, EstadoSimulacion } from '../engine/simulation';
 import { avanzarAutoComercioSimulado } from '../engine/simulacionAutoComercio';
 import { reclutarTropa, ReclutamientoInvalidoError } from '../engine/tropas';
-import { contadoresDeEventos, contadoresDeReclutamiento, sumarContadores, sumarDeltas, type DeltaContadores } from '../engine/tecnologia';
+import { contadoresDeEventos, contadoresDeReclutamiento, sumarContadores, sumarDeltas, tecnologiasDe, type DeltaContadores } from '../engine/tecnologia';
 import { campamentoDe, conEscuadrones, conTropa, defensaDe, indiceTropa, sinGuarnicion, sinTropa, type IndiceTropa } from '../engine/tropa';
 import { asignarGuarnicion, guardarLoadout, HeroeInvalidoError, heridosEn, herir, progresionInicial } from '../engine/heroe';
 import { puedeLlevar } from '../engine/liderazgo';
@@ -349,7 +349,7 @@ function asegurarGranjasMinimas(
   if (totalGranjas >= GRANJAS_MINIMAS_ANTES_DE_COMERCIO) return { asentamiento, aseguradas: true };
 
   try {
-    const actual = anadirEdificioManualmente(asentamiento, faccion, 'gobernador', 'granja', zonaPoligono, mapa, capital, reclamos, contador);
+    const actual = anadirEdificioManualmente(asentamiento, faccion, 'gobernador', 'granja', zonaPoligono, mapa, capital, reclamos, [] /* Granja y Mercado no piden tecnología */, contador);
     // +1 aquí, no releer `actual.edificios`: es exactamente lo que acabamos de añadir, y evita otra pasada
     // de filtro solo para confirmar lo que ya sabemos.
     return { asentamiento: actual, aseguradas: totalGranjas + 1 >= GRANJAS_MINIMAS_ANTES_DE_COMERCIO };
@@ -389,7 +389,7 @@ function asegurarInfraestructuraComercial(
 
   if (!tieneMercadoActivo(asentamiento)) {
     try {
-      const actual = anadirEdificioManualmente(asentamiento, faccion, 'gobernador', 'mercado', zonaPoligono, mapa, capital, reclamos, contador);
+      const actual = anadirEdificioManualmente(asentamiento, faccion, 'gobernador', 'mercado', zonaPoligono, mapa, capital, reclamos, [] /* Granja y Mercado no piden tecnología */, contador);
       return { asentamiento: actual, caravanasNuevas: [], contador: contador + 1 };
     } catch (err) {
       if (!(err instanceof ConstruccionManualInvalidaError)) throw err;
@@ -441,7 +441,8 @@ function asegurarNucleoMilitar(
   mapa: Mapa,
   capital: Asentamiento | undefined,
   reclamos: ReturnType<typeof reclamosDeFuentes>,
-  contador: number
+  contador: number,
+  adoptadas: readonly TecnologiaId[]
 ): Asentamiento {
   if (!asentamiento.cargos.gobernadorId) return asentamiento;
 
@@ -453,7 +454,7 @@ function asegurarNucleoMilitar(
   if (!faltante) return asentamiento;
 
   try {
-    return anadirEdificioManualmente(asentamiento, faccion, 'gobernador', faltante, zonaPoligono, mapa, capital, reclamos, contador);
+    return anadirEdificioManualmente(asentamiento, faccion, 'gobernador', faltante, zonaPoligono, mapa, capital, reclamos, adoptadas, contador);
   } catch (err) {
     if (!(err instanceof ConstruccionManualInvalidaError)) throw err;
     return asentamiento;
@@ -777,7 +778,8 @@ function reclutarParaTodos(
   ejercitos: readonly Ejercito[],
   contadorInicial: number,
   tropaId: string | undefined,
-  origen: 'pesants' | 'artesanos'
+  origen: 'pesants' | 'artesanos',
+  adoptadas: readonly TecnologiaId[]
 ): { asentamiento: Asentamiento; heroes: Heroe[]; reclutamientosExitosos: number; contador: number; contadores: DeltaContadores } {
   if ((asentamiento.almacen['madera']?.cantidad ?? 0) < RESERVA_MADERA_ANTES_DE_RECLUTAR) {
     return { asentamiento, heroes, reclutamientosExitosos: 0, contador: contadorInicial, contadores: {} };
@@ -794,7 +796,7 @@ function reclutarParaTodos(
   for (const heroeId of residentesDe(asentamiento)) {
     for (const candidata of candidatas) {
       try {
-        const r = reclutarTropa(actual, heroesActuales, ejercitos, heroeId, asentamiento.faccionId, candidata, origen, contador++);
+        const r = reclutarTropa(actual, heroesActuales, ejercitos, heroeId, asentamiento.faccionId, candidata, origen, adoptadas, contador++);
         const antes = cantidadDeTropa(heroesActuales, heroeId, candidata);
         contadores = sumarDeltas(contadores, contadoresDeReclutamiento(candidata, cantidadDeTropa(r.heroes, heroeId, candidata) - antes, antes === 0));
         actual = r.asentamiento;
@@ -2054,7 +2056,16 @@ export function avanzarNpcGobernanza(
     caravanas = [...caravanas, ...resultado.caravanasNuevas];
     // Cada caravana comercial nueva compra su buey (`construirCaravanaComercial`).
     animalesComprados += resultado.caravanasNuevas.length;
-    const conNucleoMilitar = asegurarNucleoMilitar(resultado.asentamiento, faccion, zonaPoligono, mapa, capital, reclamos, contador++);
+    const conNucleoMilitar = asegurarNucleoMilitar(
+      resultado.asentamiento,
+      faccion,
+      zonaPoligono,
+      mapa,
+      capital,
+      reclamos,
+      contador++,
+      tecnologiasDe(estado.tecnologia, faccion.id).adoptadas
+    );
     return asegurarMuralla(conNucleoMilitar, instante);
   });
 
@@ -2124,7 +2135,7 @@ export function avanzarNpcGobernanza(
   for (let i = 0; i < asentamientos.length; i++) {
     const a = asentamientos[i]!;
     if (!esNpc(a.faccionId)) continue;
-    const resultado = reclutarParaTodos(a, heroes, trasComercio.ejercitos, contador, tropaId, origenReclutamiento);
+    const resultado = reclutarParaTodos(a, heroes, trasComercio.ejercitos, contador, tropaId, origenReclutamiento, tecnologiasDe(trasComercio.tecnologia, a.faccionId).adoptadas);
     contador = resultado.contador;
     reclutamientosExitosos += resultado.reclutamientosExitosos;
     contadoresReclutamiento = sumarDeltas(contadoresReclutamiento, resultado.contadores);

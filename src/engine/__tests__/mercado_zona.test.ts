@@ -13,6 +13,7 @@ import { anadirEdificioManualmente, ConstruccionManualInvalidaError } from '../c
 import { avanzarSimulacion } from '../simulation';
 import { createRng } from '../../worldgen';
 import { contextoDeTest, crearEstadoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instanteDeTest } from './fixtures';
+import { TODAS_LAS_TECNOLOGIAS } from '../tecnologia';
 
 const SEED = 42;
 
@@ -151,7 +152,7 @@ describe('Mercado como zona de varias piezas', () => {
       anadirEdificioManualmente(conGobernador, facs[0]!, 'gobernador', 'puestoMercado', [], mapa, undefined, {
         nodos: new Set(),
         lenerasPorBosque: new Map(),
-      })
+      }, TODAS_LAS_TECNOLOGIAS)
     ).toThrow(ConstruccionManualInvalidaError);
   });
 });

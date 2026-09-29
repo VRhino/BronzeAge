@@ -28,6 +28,9 @@ export const TECNOLOGIAS_DE_ARRANQUE: readonly TecnologiaId[] = (Object.keys(TEC
 );
 
 const IDS_TECNOLOGIA = Object.keys(TECNOLOGIAS) as TecnologiaId[];
+
+/** Todo el catálogo: para herramientas que no juegan por Eras (laboratorio de trazado, tests que no prueban tecnología). */
+export const TODAS_LAS_TECNOLOGIAS: readonly TecnologiaId[] = IDS_TECNOLOGIA;
 const ERAS_EN_ORDEN = (Object.keys(ERAS) as EraId[]).sort((a, b) => ERAS[a].orden - ERAS[b].orden);
 const MINUTOS_POR_SEMANA = 7 * 24 * 60;
 

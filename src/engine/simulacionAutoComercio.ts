@@ -125,7 +125,7 @@ function asegurarInfraestructuraComercial(
 
   if (!tieneMercadoActivo(actual)) {
     try {
-      actual = anadirEdificioManualmente(actual, faccion, 'gobernador', 'mercado', zonaPoligono, mapa, capital, reclamos, contador);
+      actual = anadirEdificioManualmente(actual, faccion, 'gobernador', 'mercado', zonaPoligono, mapa, capital, reclamos, [] /* el Mercado no pide tecnología */, contador);
     } catch (err) {
       if (!(err instanceof ConstruccionManualInvalidaError)) throw err;
     }

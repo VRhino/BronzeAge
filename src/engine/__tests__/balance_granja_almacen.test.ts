@@ -18,6 +18,7 @@ import {
 import { avanzarSimulacion } from '../simulation';
 import { createRng, type RandomFn } from '../../worldgen';
 import { acelerarObras, contextoDeTest, crearEstadoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, posicionRecomendable } from './fixtures';
+import { TODAS_LAS_TECNOLOGIAS } from '../tecnologia';
 
 const SEED = 99;
 
@@ -101,7 +102,7 @@ describe('Almacén: tope por nivel de asentamiento', () => {
       anadirEdificioManualmente(lleno, facs[0]!, 'gobernador', 'almacen', [], mapa, undefined, {
         nodos: new Set(),
         lenerasPorBosque: new Map(),
-      })
+      }, TODAS_LAS_TECNOLOGIAS)
     ).toThrow(ConstruccionManualInvalidaError);
   });
 
@@ -223,7 +224,7 @@ describe('Vivienda: tope por nivel de asentamiento', () => {
       anadirEdificioManualmente(lleno, facs[0]!, 'gobernador', 'vivienda', [], mapa, undefined, {
         nodos: new Set(),
         lenerasPorBosque: new Map(),
-      })
+      }, TODAS_LAS_TECNOLOGIAS)
     ).toThrow(ConstruccionManualInvalidaError);
   });
 

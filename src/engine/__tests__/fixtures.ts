@@ -11,7 +11,14 @@ import { evaluarViabilidadFundacion, fundarAsentamiento } from '../settlement';
 import type { ContextoSimulacion, EstadoSimulacion } from '../simulation';
 import { PROGRESION_INICIAL } from '../tropas';
 import { progresionInicial } from '../heroe';
-import { estadoTecnologiaInicial } from '../tecnologia';
+import { estadoTecnologiaInicial, TODAS_LAS_TECNOLOGIAS } from '../tecnologia';
+import type { EstadoTecnologia } from '../../domain/types';
+
+/** Estado de tecnología con todo el catálogo adoptado por esas Facciones. */
+export function conTodoAdoptado(estado: EstadoTecnologia, facciones: readonly Faccion[]): EstadoTecnologia {
+  const todas = [...TODAS_LAS_TECNOLOGIAS];
+  return { ...estado, porFaccion: Object.fromEntries(facciones.map((f) => [f.id, { aparecidas: todas, adoptadas: todas }])) };
+}
 
 /** Un héroe humano de prueba. Su `jugadorId` es su propio id, así que un test actúa con `{ actor: id }`. */
 export function heroeDePrueba(id: string, ubicacion: UbicacionHeroe, extra: Partial<Heroe> = {}): Heroe {
@@ -141,7 +148,8 @@ export function crearEstadoDeTest(
     caravanas: [],
     ejercitos: [],
     memoriaPorFaccion: {},
-    tecnologia: estadoTecnologiaInicial(instante(0)),
+    // Todas adoptadas: la suite del motor prueba cada regla por separado; la tecnología, en `tecnologia.test.ts`.
+    tecnologia: conTodoAdoptado(estadoTecnologiaInicial(instante(0)), facciones),
     acuerdos: [],
     ordenes: [],
     relaciones: [],

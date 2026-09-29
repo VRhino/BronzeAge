@@ -17,6 +17,7 @@ import {
 } from '../construction';
 import { celdaMinimaDeEdificio, tamanoDeEdificio } from '../trazado';
 import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instanteDeTest } from './fixtures';
+import { TODAS_LAS_TECNOLOGIAS } from '../tecnologia';
 
 const SEED = 7;
 const AHORA = instanteDeTest(0);
@@ -41,14 +42,14 @@ describe('mejorarEdificioManualmente — validaciones', () => {
   it('rechaza sin Gobernador ni Maestro de Obras asignado', () => {
     const asentamiento = base();
     const granja = granjaDe(asentamiento);
-    expect(() => mejorarEdificioManualmente(asentamiento, 'gobernador', granja.id, undefined, AHORA)).toThrow(
+    expect(() => mejorarEdificioManualmente(asentamiento, 'gobernador', granja.id, undefined, AHORA, TODAS_LAS_TECNOLOGIAS)).toThrow(
       ConstruccionManualInvalidaError
     );
   });
 
   it('rechaza un id de edificio que no existe en el asentamiento', () => {
     const asentamiento = conGobernador(base());
-    expect(() => mejorarEdificioManualmente(asentamiento, 'gobernador', 'edificio-inexistente', undefined, AHORA)).toThrow(
+    expect(() => mejorarEdificioManualmente(asentamiento, 'gobernador', 'edificio-inexistente', undefined, AHORA, TODAS_LAS_TECNOLOGIAS)).toThrow(
       ConstruccionManualInvalidaError
     );
   });
@@ -63,7 +64,7 @@ describe('mejorarEdificioManualmente — validaciones', () => {
       ambito: 'asentamiento',
     };
     const conProyecto = { ...asentamiento, edificios: [...asentamiento.edificios, enCola] };
-    expect(() => mejorarEdificioManualmente(conProyecto, 'gobernador', enCola.id, undefined, AHORA)).toThrow(
+    expect(() => mejorarEdificioManualmente(conProyecto, 'gobernador', enCola.id, undefined, AHORA, TODAS_LAS_TECNOLOGIAS)).toThrow(
       ConstruccionManualInvalidaError
     );
   });
@@ -75,7 +76,7 @@ describe('mejorarEdificioManualmente — validaciones', () => {
       ...asentamiento,
       edificios: asentamiento.edificios.map((e) => (e.id === granja.id ? { ...e, nivelInterno: 4 } : e)),
     };
-    expect(() => mejorarEdificioManualmente(enMaximo, 'gobernador', granja.id, undefined, AHORA)).toThrow(
+    expect(() => mejorarEdificioManualmente(enMaximo, 'gobernador', granja.id, undefined, AHORA, TODAS_LAS_TECNOLOGIAS)).toThrow(
       ConstruccionManualInvalidaError
     );
   });
@@ -104,7 +105,7 @@ describe('mejorarEdificioManualmente — validaciones', () => {
         piedra: { ...asentamiento.almacen.piedra!, cantidad: 500 },
       },
     };
-    expect(() => mejorarEdificioManualmente(conFundicion, 'gobernador', fundicion.id, undefined, AHORA)).toThrow(
+    expect(() => mejorarEdificioManualmente(conFundicion, 'gobernador', fundicion.id, undefined, AHORA, TODAS_LAS_TECNOLOGIAS)).toThrow(
       ConstruccionManualInvalidaError
     );
   });
@@ -120,7 +121,7 @@ describe('mejorarEdificioManualmente — validaciones', () => {
         piedra: { ...asentamiento.almacen.piedra!, cantidad: 0 },
       },
     };
-    expect(() => mejorarEdificioManualmente(sinFondos, 'gobernador', granja.id, undefined, AHORA)).toThrow(
+    expect(() => mejorarEdificioManualmente(sinFondos, 'gobernador', granja.id, undefined, AHORA, TODAS_LAS_TECNOLOGIAS)).toThrow(
       ConstruccionManualInvalidaError
     );
   });
@@ -145,7 +146,7 @@ describe('mejorarEdificioManualmente — éxito', () => {
     const granja = granjaDe(a);
     const costoMejora = (EDIFICIO_CATALOGO.granja.niveles as Record<number, { costoMejora?: Record<string, number> }>)[2]!.costoMejora!;
 
-    const resultado = mejorarEdificioManualmente(a, 'gobernador', granja.id, undefined, AHORA);
+    const resultado = mejorarEdificioManualmente(a, 'gobernador', granja.id, undefined, AHORA, TODAS_LAS_TECNOLOGIAS);
 
     const enMejora = resultado.edificios.find((e) => e.id === granja.id)!;
     expect(enMejora.nivelInterno ?? 1).toBe(1);
@@ -159,13 +160,13 @@ describe('mejorarEdificioManualmente — éxito', () => {
     const mapa = crearMapaDeterminista(SEED);
     const a = conFondos();
     const granja = granjaDe(a);
-    const enMejora = mejorarEdificioManualmente(a, 'gobernador', granja.id, undefined, AHORA);
+    const enMejora = mejorarEdificioManualmente(a, 'gobernador', granja.id, undefined, AHORA, TODAS_LAS_TECNOLOGIAS);
     const fin = sumar(AHORA, minutos(minutosGranja2));
 
-    const antes = avanzarConstruccion(enMejora, [], mapa, undefined, reclamosDeFuentes([enMejora]), sumar(fin, minutos(-1)), 0);
+    const antes = avanzarConstruccion(enMejora, [], mapa, undefined, reclamosDeFuentes([enMejora]), sumar(fin, minutos(-1)), 0, TODAS_LAS_TECNOLOGIAS);
     expect(antes.asentamiento.edificios.find((e) => e.id === granja.id)!.nivelInterno ?? 1).toBe(1);
 
-    const tras = avanzarConstruccion(enMejora, [], mapa, undefined, reclamosDeFuentes([enMejora]), fin, 0);
+    const tras = avanzarConstruccion(enMejora, [], mapa, undefined, reclamosDeFuentes([enMejora]), fin, 0, TODAS_LAS_TECNOLOGIAS);
     const mejorada = tras.asentamiento.edificios.find((e) => e.id === granja.id)!;
     expect(mejorada.nivelInterno).toBe(2);
     // La del 2 ya no está en curso. Con fondos de sobra, la ruta automática puede haber arrancado ya la del 3 en
@@ -190,7 +191,7 @@ describe('mejorarEdificioManualmente — éxito', () => {
         { id: 'obra-2', tipo: 'vivienda' as const, posicion: { x: 95, y: 0 }, estado: 'en_construccion' as const, ambito: 'asentamiento' as const },
       ],
     };
-    expect(() => mejorarEdificioManualmente(ocupadas, 'gobernador', granja.id, undefined, AHORA)).toThrow(ConstruccionManualInvalidaError);
+    expect(() => mejorarEdificioManualmente(ocupadas, 'gobernador', granja.id, undefined, AHORA, TODAS_LAS_TECNOLOGIAS)).toThrow(ConstruccionManualInvalidaError);
   });
 });
 
@@ -202,7 +203,7 @@ describe('estadoMejoraEdificio — selector de solo lectura (usado por gameStore
       ...asentamiento,
       edificios: asentamiento.edificios.map((e) => (e.id === granja.id ? { ...e, nivelInterno: 4 } : e)),
     };
-    expect(estadoMejoraEdificio(enMaximo, { ...granja, nivelInterno: 4 }, undefined)).toBeNull();
+    expect(estadoMejoraEdificio(enMaximo, { ...granja, nivelInterno: 4 }, undefined, TODAS_LAS_TECNOLOGIAS)).toBeNull();
   });
 
   it('reporta elegible:false con motivo cuando faltan fondos, y elegible:true cuando los hay', () => {
@@ -213,7 +214,7 @@ describe('estadoMejoraEdificio — selector de solo lectura (usado por gameStore
       ...asentamiento,
       almacen: { ...asentamiento.almacen, piedra: { ...asentamiento.almacen.piedra!, cantidad: 0 } },
     };
-    const estadoSinFondos = estadoMejoraEdificio(sinFondos, granja, undefined)!;
+    const estadoSinFondos = estadoMejoraEdificio(sinFondos, granja, undefined, TODAS_LAS_TECNOLOGIAS)!;
     expect(estadoSinFondos.elegible).toBe(false);
     expect(estadoSinFondos.motivoBloqueo).toBeTruthy();
 
@@ -225,7 +226,7 @@ describe('estadoMejoraEdificio — selector de solo lectura (usado por gameStore
         piedra: { cantidad: 1000, capacidad: 99999 },
       },
     };
-    const estadoConFondos = estadoMejoraEdificio(conFondos, granja, undefined)!;
+    const estadoConFondos = estadoMejoraEdificio(conFondos, granja, undefined, TODAS_LAS_TECNOLOGIAS)!;
     expect(estadoConFondos.elegible).toBe(true);
     expect(estadoConFondos.nivelActual).toBe(1);
     expect(estadoConFondos.nivelSiguiente).toBe(2);

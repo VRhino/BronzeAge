@@ -1,4 +1,4 @@
-import type { Asentamiento, Edificio, EdificioTipo, Point } from '../domain/types';
+import type { Asentamiento, Edificio, EdificioTipo, Point, TecnologiaId } from '../domain/types';
 import { minutos, duracion, type Duracion, type Instante } from '../domain/tiempo';
 import type { Mapa } from '../world/mapa';
 import {
@@ -303,7 +303,7 @@ export interface ProduccionItem {
  * una receta puede consumir el output de otra calculada antes en este mismo tick (ej. Lingote de
  * Bronce sobre Lingote de Cobre/Estaño). Solo lectura: no toca `asentamiento.almacen`.
  */
-function produccionRecetas(asentamiento: Asentamiento): ProduccionItem[] {
+function produccionRecetas(asentamiento: Asentamiento, adoptadas: readonly TecnologiaId[] | undefined): ProduccionItem[] {
   const ratioArtesano = ratioManoObraArtesanos(asentamiento);
   const disponible = new Map<string, number>();
   for (const [recurso, r] of Object.entries(asentamiento.almacen)) disponible.set(recurso, r.cantidad);
@@ -317,6 +317,7 @@ function produccionRecetas(asentamiento: Asentamiento): ProduccionItem[] {
     if (!nivel) continue;
 
     for (const receta of nivel.recetas) {
+      if (adoptadas && receta.requiereTecnologia && !adoptadas.includes(receta.requiereTecnologia)) continue;
       let cantidad = receta.produccionBase * ratioArtesano;
       for (const [insumo, porUnidad] of Object.entries(receta.consumePorUnidad)) {
         if (!porUnidad) continue;
@@ -343,7 +344,13 @@ function produccionRecetas(asentamiento: Asentamiento): ProduccionItem[] {
  * descuenta nodos de recurso ni almacén (a diferencia de `avanzarConstruccion`/`avanzarRecetas`, que
  * sí aplican la producción real).
  */
-export function produccionPorMinuto(asentamiento: Asentamiento, mapa: Mapa, zonaPoligono: Point[] = []): ProduccionItem[] {
+export function produccionPorMinuto(
+  asentamiento: Asentamiento,
+  mapa: Mapa,
+  zonaPoligono: Point[] = [],
+  /** Tecnologías de la Facción: sin ellas se muestran todas las recetas del nivel (Doc 6). */
+  adoptadas?: readonly TecnologiaId[]
+): ProduccionItem[] {
   const ratioMano = ratioManoObra(asentamiento);
   const items: ProduccionItem[] = [];
 
@@ -391,5 +398,5 @@ export function produccionPorMinuto(asentamiento: Asentamiento, mapa: Mapa, zona
     items.push({ tipo, recurso, activos: edificios.length, cantidadPorMinuto: total });
   }
 
-  return [...items, ...produccionRecetas(asentamiento)];
+  return [...items, ...produccionRecetas(asentamiento, adoptadas)];
 }

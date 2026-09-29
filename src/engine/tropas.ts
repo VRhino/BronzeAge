@@ -1,6 +1,6 @@
-import type { Asentamiento, Ejercito, Escuadron, Heroe } from '../domain/types';
+import type { Asentamiento, Ejercito, Escuadron, Heroe, TecnologiaId } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
-import { MILITAR, MOVIMIENTO, RECLUTAMIENTO_ORO_POR_ESCALON, RESERVA_CONSTRUCCION, TROPAS_RECLUTABLES } from '../constants';
+import { MILITAR, MOVIMIENTO, RECLUTAMIENTO_ORO_POR_ESCALON, RESERVA_CONSTRUCCION, TECNOLOGIAS, TROPAS_RECLUTABLES } from '../constants';
 
 /** Fase A5 — payload de `tropas.desercion` (ver `avanzarMantenimientoTropas`). */
 export interface PayloadTropasDesercion {
@@ -72,6 +72,8 @@ export function reclutarTropa(
   faccionDelJugadorId: string,
   tropaId: string,
   origen: 'pesants' | 'artesanos',
+  /** Tecnologías adoptadas por la Facción de la plaza (las cuatro puertas, Doc 6.1). */
+  adoptadas: readonly TecnologiaId[],
   contador = 0
 ): { asentamiento: Asentamiento; heroes: Heroe[] } {
   const permiso = puedeReclutarEn(asentamiento, heroeId, faccionDelJugadorId);
@@ -80,6 +82,9 @@ export function reclutarTropa(
   }
   const tropa = TROPAS_RECLUTABLES.find((t) => t.id === tropaId);
   if (!tropa) throw new ReclutamientoInvalidoError('La tropa no existe en el catálogo.');
+  if (!adoptadas.includes(tropa.tecnologia)) {
+    throw new ReclutamientoInvalidoError(`Hace falta adoptar ${TECNOLOGIAS[tropa.tecnologia].nombre} para reclutar "${tropa.nombre}".`);
+  }
   const heroe = heroes.find((h) => h.id === heroeId);
   if (!heroe) throw new ReclutamientoInvalidoError('Ese héroe no existe.');
 

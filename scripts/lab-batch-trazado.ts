@@ -12,7 +12,7 @@ import type { Asentamiento, Faccion, Point, RecursoTipo } from '../src/domain/ty
 import { createRng, generarMapa, MAPA_DEFAULT, type RandomFn } from '../src/worldgen';
 import { crearMapa, type Mapa } from '../src/world/mapa';
 import { crearFaccion } from '../src/engine/faccion';
-import { estadoTecnologiaInicial } from '../src/engine/tecnologia';
+import { estadoTecnologiaInicial, TODAS_LAS_TECNOLOGIAS } from '../src/engine/tecnologia';
 import { asignarCargoLocal } from '../src/engine/cargos';
 import { evaluarViabilidadFundacion, fundarAsentamiento } from '../src/engine/settlement';
 import { avanzarSimulacion, type EstadoSimulacion } from '../src/engine/simulation';
@@ -175,7 +175,7 @@ function encolar(
   contador: number
 ): { asentamiento: Asentamiento; resultado: Rechazo } {
   try {
-    const actualizado = anadirEdificioManualmente(asentamiento, faccion, 'gobernador', tipo, [], mapa, undefined, reclamosDeFuentes(todos), contador);
+    const actualizado = anadirEdificioManualmente(asentamiento, faccion, 'gobernador', tipo, [], mapa, undefined, reclamosDeFuentes(todos), TODAS_LAS_TECNOLOGIAS, contador);
     return { asentamiento: actualizado, resultado: { aceptado: true } };
   } catch (err) {
     const motivo = err instanceof ConstruccionManualInvalidaError ? err.message : String(err);
