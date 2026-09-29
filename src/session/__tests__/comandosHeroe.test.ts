@@ -28,7 +28,7 @@ function heroeCon(cambios: (heroeId: string) => Partial<Heroe>) {
 }
 
 /** Dos escuadras de leva (7 de Liderazgo cada una, Doc 5.11.1). */
-const dosDeLeva = (heroeId: string) => [escuadronDePrueba('esc-1', heroeId, 'milicia_lanceros'), escuadronDePrueba('esc-2', heroeId, 'lanceros_mimbre')];
+const dosDeLeva = (heroeId: string) => [escuadronDePrueba('esc-1', heroeId, 'lenadores'), escuadronDePrueba('esc-2', heroeId, 'granjeros')];
 
 describe('crearHeroe', () => {
   it('crea el héroe del jugador, lo hace aparecer con su columna, y solo uno por partida', () => {

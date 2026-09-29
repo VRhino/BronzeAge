@@ -1,21 +1,37 @@
 {
   "schemaVersion": 1,
-  "version": 1,
+  "version": 2,
   "tropas": [
     {
       "tropaId": "milicia_lanceros",
       "nombre": "Milicia de lanceros",
-      "escalon": 1,
+      "escalon": 2,
       "unidades": 25,
+      "costeLiderazgo": 14,
+      "tipo": "cuerpo_a_cuerpo"
+    },
+    {
+      "tropaId": "lenadores",
+      "nombre": "Leñadores",
+      "escalon": 1,
+      "unidades": 30,
+      "costeLiderazgo": 7,
+      "tipo": "cuerpo_a_cuerpo"
+    },
+    {
+      "tropaId": "granjeros",
+      "nombre": "Granjeros",
+      "escalon": 1,
+      "unidades": 30,
       "costeLiderazgo": 7,
       "tipo": "cuerpo_a_cuerpo"
     },
     {
       "tropaId": "lanceros_mimbre",
       "nombre": "Lanceros con escudo de mimbre",
-      "escalon": 1,
+      "escalon": 2,
       "unidades": 25,
-      "costeLiderazgo": 7,
+      "costeLiderazgo": 14,
       "tipo": "cuerpo_a_cuerpo"
     },
     {
@@ -53,9 +69,9 @@
     {
       "tropaId": "hacheros_armados",
       "nombre": "Hacheros armados",
-      "escalon": 4,
+      "escalon": 3,
       "unidades": 15,
-      "costeLiderazgo": 32,
+      "costeLiderazgo": 22,
       "tipo": "cuerpo_a_cuerpo"
     },
     {
@@ -89,6 +105,22 @@
       "unidades": 12,
       "costeLiderazgo": 45,
       "tipo": "a_distancia"
+    },
+    {
+      "tropaId": "exploradores_caballo",
+      "nombre": "Exploradores a caballo",
+      "escalon": 2,
+      "unidades": 20,
+      "costeLiderazgo": 14,
+      "tipo": "cuerpo_a_cuerpo"
+    },
+    {
+      "tropaId": "carros_guerra",
+      "nombre": "Carros de guerra",
+      "escalon": 4,
+      "unidades": 15,
+      "costeLiderazgo": 32,
+      "tipo": "cuerpo_a_cuerpo"
     }
   ]
 }

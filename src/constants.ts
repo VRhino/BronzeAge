@@ -1602,6 +1602,8 @@ export const TROPAS_RECLUTABLES: {
   velocidad: number;
   /** Escalón de élite, 1 (leva) a 5 (élite). Decide su coste de Liderazgo — ver `LIDERAZGO.costePorEscalon`. */
   escalon: 1 | 2 | 3 | 4 | 5;
+  /** Caballos por soldado (caballería 1, carros 2): se pagan en oro al reclutar y al reponer (`ORO_POR_CABALLO`, Doc 5.8). */
+  caballos?: number;
 }[] = (
   [
   // Escalón de entrada (a petición del usuario: la defensa mínima no debe depender de Barracón — que exige
@@ -1614,21 +1616,28 @@ export const TROPAS_RECLUTABLES: {
   // pasar por Armería. Débil a propósito (poderBase 2, por debajo de todo lo demás): existe para que el bucle
   // de juego arranque y las primeras escaramuzas ocurran pronto, no para ganar batallas. Sigue exigiendo un
   // General asignado (`reclutarTropa` en engine/tropas.ts) — eso no cambia, solo el edificio.
-  { id: 'milicia_lanceros', tecnologia: 'leva_comunal', nombre: 'Milicia de lanceros', edificio: 'centroUrbano', nivelRequerido: 1, costoEquipo: { madera: 2 }, poderBase: 2, velocidad: 20, escalon: 1, unidadesPorDefecto: 25 },
+  { id: 'milicia_lanceros', tecnologia: 'leva_comunal', nombre: 'Milicia de lanceros', edificio: 'centroUrbano', nivelRequerido: 1, costoEquipo: { madera: 2 }, poderBase: 2, velocidad: 20, escalon: 2, unidadesPorDefecto: 25 },
+  // Leva desorganizada (Doc 5.8): muy mala en combate y sin formación en la batalla. Del Centro Urbano, sin oro.
+  { id: 'lenadores', tecnologia: 'leva_comunal', nombre: 'Leñadores', edificio: 'centroUrbano', nivelRequerido: 1, costoEquipo: { madera: 1 }, poderBase: 1, velocidad: 20, escalon: 1, unidadesPorDefecto: 30 },
+  { id: 'granjeros', tecnologia: 'leva_comunal', nombre: 'Granjeros', edificio: 'centroUrbano', nivelRequerido: 1, costoEquipo: {}, poderBase: 1, velocidad: 20, escalon: 1, unidadesPorDefecto: 30 },
   // Recosteadas a `armaMadera` (ver RECETA_ARMA_MADERA): antes exigían la cadena del cobre/cuero entera, lo
   // que era además temáticamente incoherente — un escudo de MIMBRE pagado con un arma de cobre, y unos
   // Honderos (una honda y una piedra) pagados con armadura de cuero. El cobre pasa a ser la MEJORA
   // (`espadachines_cobre`, que sí lo conserva), no el ticket de entrada.
-  { id: 'lanceros_mimbre', tecnologia: 'escudos_ligeros', nombre: 'Lanceros con escudo de mimbre', edificio: 'barracon', nivelRequerido: 1, costoEquipo: { armaMadera: 1 }, poderBase: 3, velocidad: 20, escalon: 1, unidadesPorDefecto: 25 },
+  { id: 'lanceros_mimbre', tecnologia: 'escudos_ligeros', nombre: 'Lanceros con escudo de mimbre', edificio: 'barracon', nivelRequerido: 1, costoEquipo: { armaMadera: 1 }, poderBase: 3, velocidad: 20, escalon: 2, unidadesPorDefecto: 25 },
   { id: 'espadachines_cobre', tecnologia: 'armamento_palacial', nombre: 'Espadachines de espada corta de cobre', edificio: 'barracon', nivelRequerido: 1, costoEquipo: { armaCobre: 1, armaduraBasica: 1 }, poderBase: 4, velocidad: 16, escalon: 2, unidadesPorDefecto: 20 },
   { id: 'hacheros_ligeros', tecnologia: 'armamento_palacial', nombre: 'Hacheros ligeros', edificio: 'barracon', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraBasica: 1 }, poderBase: 7, velocidad: 16, escalon: 3, unidadesPorDefecto: 18 },
   { id: 'espadachines_bronce', tecnologia: 'aleacion_bronce', nombre: 'Espadachines con espadas y escudos de bronce', edificio: 'barracon', nivelRequerido: 2, costoEquipo: { armaBronce: 2, armaduraIntermedia: 1 }, poderBase: 9, velocidad: 16, escalon: 3, unidadesPorDefecto: 18 },
   { id: 'lanceros_pesados', tecnologia: 'panoplia_bronce', nombre: 'Lanceros pesados micénicos', edificio: 'barracon', nivelRequerido: 3, costoEquipo: { armaBronce: 2, armaduraIntermedia: 2 }, poderBase: 14, velocidad: 12, escalon: 4, unidadesPorDefecto: 15 },
-  { id: 'hacheros_armados', tecnologia: 'aleacion_bronce', nombre: 'Hacheros armados', edificio: 'barracon', nivelRequerido: 3, costoEquipo: { armaBronce: 1, armaduraIntermedia: 1 }, poderBase: 12, velocidad: 12, escalon: 4, unidadesPorDefecto: 15 },
+  { id: 'hacheros_armados', tecnologia: 'aleacion_bronce', nombre: 'Hacheros armados', edificio: 'barracon', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraIntermedia: 1 }, poderBase: 12, velocidad: 12, escalon: 3, unidadesPorDefecto: 15 },
   { id: 'honderos', tecnologia: 'hostigamiento_tribal', nombre: 'Honderos', edificio: 'galeriaDeTiro', nivelRequerido: 1, costoEquipo: { armaMadera: 1 }, poderBase: 5, velocidad: 20, escalon: 2, unidadesPorDefecto: 20 },
-  { id: 'escaramuzadores_jabalina', tecnologia: 'hostigamiento_tribal', nombre: 'Escaramuzadores con jabalina', edificio: 'galeriaDeTiro', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraBasica: 1 }, poderBase: 8, velocidad: 20, escalon: 3, unidadesPorDefecto: 18 },
+  { id: 'escaramuzadores_jabalina', tecnologia: 'hostigamiento_tribal', nombre: 'Escaramuzadores con jabalina', edificio: 'galeriaDeTiro', nivelRequerido: 2, costoEquipo: { armaCobre: 1, armaduraBasica: 1 }, poderBase: 8, velocidad: 20, escalon: 3, unidadesPorDefecto: 18 },
   { id: 'arqueros', tecnologia: 'arqueria_palacial', nombre: 'Arqueros', edificio: 'galeriaDeTiro', nivelRequerido: 2, costoEquipo: { armaBronce: 1, armaduraIntermedia: 1 }, poderBase: 9, velocidad: 16, escalon: 3, unidadesPorDefecto: 18 },
   { id: 'arqueros_compuesto', tecnologia: 'arco_compuesto', nombre: 'Arqueros con arco compuesto', edificio: 'galeriaDeTiro', nivelRequerido: 3, costoEquipo: { armaBronce: 3, armaduraIntermedia: 2 }, poderBase: 15, velocidad: 12, escalon: 5, unidadesPorDefecto: 12 },
+  // Caballerizas (Doc 5.8): la caballería va a 28, la única clase que alcanza a las caravanas rápidas (24, D8); los
+  // carros, a 20. Cada caballo se paga en oro (D5).
+  { id: 'exploradores_caballo', tecnologia: 'cria_caballar', nombre: 'Exploradores a caballo', edificio: 'caballerizas', nivelRequerido: 1, costoEquipo: { armaCobre: 1 }, caballos: 1, poderBase: 3, velocidad: 28, escalon: 2, unidadesPorDefecto: 20 },
+  { id: 'carros_guerra', tecnologia: 'carros_guerra', nombre: 'Carros de guerra', edificio: 'caballerizas', nivelRequerido: 2, costoEquipo: { carroGuerra: 1, armaBronce: 1 }, caballos: 2, poderBase: 13, velocidad: 20, escalon: 4, unidadesPorDefecto: 15 },
   ] as const
 );
 
@@ -1778,6 +1787,9 @@ export const GUARNICION = {
  * Regla de motor uniforme (NPC + jugador). Todo PLACEHOLDER, a calibrar en la campaña conjunta del bloque.
  */
 export const RECLUTAMIENTO_ORO_POR_ESCALON: Record<number, number> = { 1: 1, 2: 2, 3: 4, 4: 7, 5: 11 };
+
+/** Oro por caballo al reclutar o reponer caballería y carros (D5, Doc 5.8): los caballos se compran. Placeholder. */
+export const ORO_POR_CABALLO = 5;
 
 /**
  * Logística de campaña (Doc 5.13). Todo PLACEHOLDER a calibrar.

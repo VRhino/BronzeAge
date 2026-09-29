@@ -2,7 +2,7 @@
 // oro por soldado según el escalón de la tropa. Única excepción: la milicia del Centro Urbano.
 import { describe, expect, it } from 'vitest';
 import type { Asentamiento } from '../../domain/types';
-import { RECLUTAMIENTO_ORO_POR_ESCALON, TROPAS_RECLUTABLES } from '../../constants';
+import { ORO_POR_CABALLO, RECLUTAMIENTO_ORO_POR_ESCALON, TROPAS_RECLUTABLES } from '../../constants';
 import { reclutarTropa, ReclutamientoInvalidoError } from '../tropas';
 import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, heroesCon } from './fixtures';
 import { TODAS_LAS_TECNOLOGIAS } from '../tecnologia';
@@ -28,7 +28,7 @@ function base(oro: number): Asentamiento {
   };
 }
 
-const lancerosMimbre = TROPAS_RECLUTABLES.find((t) => t.id === 'lanceros_mimbre')!; // Barracón, escalón 1
+const lancerosMimbre = TROPAS_RECLUTABLES.find((t) => t.id === 'lanceros_mimbre')!; // Barracón, escalón 2
 
 describe('reclutamiento en oro', () => {
   it('la milicia del Centro Urbano NO cuesta oro', () => {
@@ -53,5 +53,20 @@ describe('reclutamiento en oro', () => {
     const serie = [c[1]!, c[2]!, c[3]!, c[4]!, c[5]!];
     expect(serie).toEqual([...serie].sort((x, y) => x - y));
     expect(c[1]).toBeGreaterThan(0);
+  });
+});
+
+describe('caballos en oro (D5, Doc 5.8)', () => {
+  it('la caballería paga además 5 de oro por caballo y soldado', () => {
+    const a = base(500);
+    const conCaballerizas: Asentamiento = {
+      ...a,
+      edificios: [...a.edificios, { id: 'c1', tipo: 'caballerizas', estado: 'activo', nivelInterno: 1, posicion: { x: 0, y: 0 }, ambito: 'interno' } as never],
+      almacen: { ...a.almacen, armaCobre: { ...a.almacen['armaCobre']!, cantidad: 100 } },
+    };
+    const exploradores = TROPAS_RECLUTABLES.find((t) => t.id === 'exploradores_caballo')!;
+    const tras = reclutarTropa(conCaballerizas, HEROES, [], 'jugador-faccion-1-1', 'faccion-1', 'exploradores_caballo', TODAS_LAS_TECNOLOGIAS, 0);
+    const esperado = (RECLUTAMIENTO_ORO_POR_ESCALON[exploradores.escalon]! + ORO_POR_CABALLO) * exploradores.unidadesPorDefecto;
+    expect(conCaballerizas.almacen['oro']!.cantidad - tras.asentamiento.almacen['oro']!.cantidad).toBeCloseTo(esperado);
   });
 });

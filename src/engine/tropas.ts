@@ -1,6 +1,6 @@
 import type { Asentamiento, Ejercito, Escuadron, Heroe, OrigenTropa, TecnologiaId } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
-import { MILITAR, MOVIMIENTO, RECLUTAMIENTO_ORO_POR_ESCALON, RESERVA_CONSTRUCCION, TECNOLOGIAS, TROPAS_RECLUTABLES } from '../constants';
+import { MILITAR, MOVIMIENTO, ORO_POR_CABALLO, RECLUTAMIENTO_ORO_POR_ESCALON, RESERVA_CONSTRUCCION, TECNOLOGIAS, TROPAS_RECLUTABLES } from '../constants';
 
 /** Fase A5 — payload de `tropas.desercion` (ver `avanzarMantenimientoTropas`). */
 export interface PayloadTropasDesercion {
@@ -133,7 +133,7 @@ export function reclutarTropa(
   // Oro por soldado según escalón (Doc 5.8, bloque "economía del oro"): se suma al coste de equipo, SALVO la
   // milicia del Centro Urbano. `factorCostoReclutamiento` ("Leva Forzosa") no lo toca — solo el equipo.
   if (tropa.edificio !== 'centroUrbano') {
-    const oroPorSoldado = RECLUTAMIENTO_ORO_POR_ESCALON[tropa.escalon] ?? 0;
+    const oroPorSoldado = (RECLUTAMIENTO_ORO_POR_ESCALON[tropa.escalon] ?? 0) + (tropa.caballos ?? 0) * ORO_POR_CABALLO;
     if (oroPorSoldado > 0) costoTotal['oro'] = (costoTotal['oro'] ?? 0) + oroPorSoldado * cantidad;
   }
   if (!tieneRecursos(asentamiento.almacen, costoTotal)) {

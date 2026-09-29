@@ -168,12 +168,15 @@ Cada paso deja los tests en verde y se puede fusionar por separado.
   nivel) y el requisito del nivel 5 usa `nivelInternoMinimo`. El NPC levanta el Palacio al llegar al nivel 3.
 
 ### Paso 7 — Roster de la Era I
-- [ ] Tropas nuevas: leñadores, granjeros (Centro Urbano, sin oro), exploradores a caballo (Caballerizas 1), carros
+- [x] Tropas nuevas: leñadores, granjeros (Centro Urbano, sin oro), exploradores a caballo (Caballerizas 1), carros
   de guerra (Caballerizas 2). Cifras en BA-006, "Cifras para implementar".
-- [ ] Cambios: milicia y lanceros de mimbre a escalón 2; hacheros armados a escalón 3 y Barracón 2; hacheros ligeros
+- [x] Cambios: milicia y lanceros de mimbre a escalón 2; hacheros armados a escalón 3 y Barracón 2; hacheros ligeros
   con `armamento_palacial`; escaramuzadores con arma de cobre + básica.
-- [ ] Caballería: velocidad 28; caballo a 5 de oro por animal al reclutar y al reponer (carros: 2). Comprobar que la
+- [x] Caballería: velocidad 28; caballo a 5 de oro por animal al reclutar y al reponer (carros: 2). Comprobar que la
   persecución de caravanas va por velocidad y que solo la caballería alcanza a las de 24 (D8).
+- [x] Hecho así: `caballos` por soldado y `ORO_POR_CABALLO` (5). El NPC no recluta la leva desorganizada de
+  escalón 1 (leñadores, granjeros). El héroe solo (22) sigue por encima de toda tropa a pie, pero la caballería (28)
+  va más rápida que él. Catálogo de tropas para Conquest, versión 2.
 
 ### Paso 8 — Era II
 - [ ] Hierro: recursos `hierro`, `lingoteHierro`, `armaHierro`; nodos de hierro 1,5 veces más frecuentes que los de

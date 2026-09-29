@@ -803,7 +803,8 @@ function truequeParaCrecer(
  * Tropas en el orden en que las prefiere el NPC: la de escalón más alto primero y, a igual escalón, la de más poder.
  * La milicia (escalón 1) queda la última: es lo que se recluta cuando no se puede otra cosa.
  */
-const TROPAS_POR_PREFERENCIA_NPC = [...TROPAS_RECLUTABLES].sort((a, b) => b.escalon - a.escalon || b.poderBase - a.poderBase);
+// Sin la leva desorganizada de escalón 1 (leñadores, granjeros): ocuparía a 30 pesants por escuadra para casi nada.
+const TROPAS_POR_PREFERENCIA_NPC = TROPAS_RECLUTABLES.filter((t) => t.escalon > 1).sort((a, b) => b.escalon - a.escalon || b.poderBase - a.poderBase);
 
 /**
  * Reclutamiento (punto 7a): cada residente recluta o repone UNA escuadra por tick — **la mejor que pueda**

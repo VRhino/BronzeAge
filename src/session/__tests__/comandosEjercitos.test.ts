@@ -29,8 +29,9 @@ function partidaConTropas(liderazgoBase?: number) {
   const base = partidaConAsentamiento();
   const payload = base.sesion.exportar();
   const heroes = conEscuadrones(payload.state.heroes, [
-    escuadronDePrueba('esc-milicia', base.fundador, 'milicia_lanceros'),
-    escuadronDePrueba('esc-mimbre', base.fundador, 'lanceros_mimbre'),
+    // Las dos de leva (escalón 1, Liderazgo 7): leñadores y granjeros.
+    escuadronDePrueba('esc-milicia', base.fundador, 'lenadores'),
+    escuadronDePrueba('esc-mimbre', base.fundador, 'granjeros'),
     escuadronDePrueba('esc-honderos', base.fundador, 'honderos'),
     escuadronDePrueba('esc-vecino', base.vecino, 'milicia_lanceros'),
   ]);

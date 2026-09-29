@@ -227,8 +227,10 @@ describe('avanzarEjercitos — el ejército fantasma (Doc 5.13.4)', () => {
     const ejercito = ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros', 0)], 100);
 
     expect(velocidadDeEjercito(ejercito)).toBe(MOVIMIENTO.velocidadJugador);
-    // Por encima de CUALQUIER tropa: un hombre solo no arrastra impedimenta.
-    expect(velocidadDeEjercito(ejercito)).toBeGreaterThan(Math.max(...TROPAS_RECLUTABLES.map((t) => t.velocidad)));
+    // Por encima de cualquier tropa A PIE: un hombre solo no arrastra impedimenta. La caballería (28) va más rápida que él:
+    // es la única que alcanza a las caravanas rápidas (24, Doc 5.12.5), y un héroe solo no debe alcanzarlas.
+    const aPie = TROPAS_RECLUTABLES.filter((t) => !t.caballos).map((t) => t.velocidad);
+    expect(velocidadDeEjercito(ejercito)).toBeGreaterThan(Math.max(...aPie));
   });
 
   it('come aunque no le quede un solo soldado: viajar nunca es gratis', () => {
