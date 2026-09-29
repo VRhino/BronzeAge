@@ -65,6 +65,7 @@ campo distinto y explícitamente no comparable con ningún `Instante` de mundo �
 18. Frontera cosmético/autoritativo de mundo
 19. Visibilidad — qué ve Unity de todo esto
 20. Invariantes generales
+21. Tecnología por Eras (nuevo)
 
 ## 1. Cadena de identidad
 
@@ -208,15 +209,19 @@ RecursoAlmacenado
   capacidad: number
 ```
 
-### `RecursoTipo` (20 valores, catálogo cerrado — existente, `constants.ts`)
+### `RecursoTipo` (26 valores, catálogo cerrado — existente, `constants.ts`)
 
 ```text
-madera · piedra · trigo · cobre · estano · oro · livestock
-lingoteCobre · lingoteEstano · lingoteBronce
+madera · piedra · trigo · cobre · estano · oro · livestock · hierro
+lingoteCobre · lingoteEstano · lingoteBronce · lingoteHierro
 cuero · cueroCurtido · cueroCalidad
-armaMadera · armaCobre · armaBronce · armaBronceCalidad
-armaduraBasica · armaduraIntermedia · armaduraBronce
+armaMadera · armaCobre · armaBronce · armaBronceCalidad · armaHierro · armaHierroCalidad
+armaduraBasica · armaduraIntermedia · armaduraBronce · armaduraBronceCalidad
+carroGuerra
 ```
+
+`hierro` (mineral) y lo fabricado con él, la armadura de bronce de calidad y la pieza del carro de guerra entran con
+las Eras I-III (2026-09-29, §21).
 
 ### `Edificio`
 
@@ -244,7 +249,7 @@ Edificio
   visualSeed?                NUEVO — ver §17
 ```
 
-### `EdificioTipo` (28 valores, catálogo cerrado — existente, `constants.ts`)
+### `EdificioTipo` (30 valores, catálogo cerrado — existente, `constants.ts`)
 
 Generar este catálogo desde `EDIFICIOS_TIPO` (la fuente de verdad ya exhaustiva en tiempo de compilación) en
 vez de retranscribirlo a mano evita que este documento se desincronice del código — la lista de abajo es
@@ -254,11 +259,16 @@ solo para lectura humana.
 centroUrbano · vivienda · granja · cantera · lenera · almacen · granero
 mina · minaCobre · minaEstano · fundicion · granFundicion
 corral · armeria · curtiduria · carpinteria
-palacio · barracon · galeriaDeTiro
+palacio · barracon · galeriaDeTiro · caballerizas
+minaHierro · salaConsejo
 mercado · puestoMercado · maravilla
 plaza · plazaDeArmas · patioDeGremios
 pozo · parque
 ```
+
+Nuevos con las Eras I-III (2026-09-29): `caballerizas` (3×2, militar, caballería y carros), `minaHierro` (extractor en el
+mapa general, como las otras minas) y `salaConsejo` (3×3, requisito del nivel 4). El `palacio` pasa a tener niveles
+internos 1-3 (misma huella 4×4).
 
 Footprint (ancho×alto en celdas) por tipo/nivel: `EDIFICIO_TAMANO` / `EDIFICIO_CATALOGO[tipo].niveles[n].tamano`
 — fijo por tipo salvo Granja, la única cuya huella crece con `nivelInterno` (2×2→6×6). Tabla completa y escala
@@ -650,8 +660,9 @@ una definición de escuadra con ese mismo `id` para cada una. Las unidades y el 
 decide BronzeAge: Conquest recibe las unidades en `SquadSnapshot.efectivosAutorizados` y no usa su propio
 `leadershipCost` para nada que tenga autoridad (el Liderazgo lo valida BronzeAge).
 
-Hoy Conquest tiene 3 definiciones (`spm01` Spearmen, `arc01` Levy Archers, `sqd01` Squires) y BronzeAge 11
-tropas. La última columna es la propuesta de qué definición actual sirve de base provisional a cada una
+Hoy Conquest tiene 3 definiciones (`spm01` Spearmen, `arc01` Levy Archers, `sqd01` Squires) y BronzeAge 26
+tropas (catálogo `version` 4, 2026-09-29: roster de las Eras I-III). Las 15 nuevas no tienen todavía base provisional
+en Conquest: ver la revisión de Claude en BA-006. La última columna es la propuesta de qué definición actual sirve de base provisional a cada una
 hasta que Conquest haga la suya (pedido en CQ-003). Esos tres `id` actuales quedan como alias durante la
 migración.
 
@@ -668,6 +679,12 @@ migración.
 | `escaramuzadores_jabalina` | Escaramuzadores con jabalina | 3 | 18 | 22 | a distancia | `arc01` Levy Archers |
 | `arqueros` | Arqueros | 3 | 18 | 22 | a distancia | `arc01` Levy Archers |
 | `arqueros_compuesto` | Arqueros con arco compuesto | 5 | 12 | 45 | a distancia | `arc01` Levy Archers |
+
+La tabla de arriba es la de 2026-09-13; desde el 2026-09-29 la milicia y los lanceros de mimbre son escalón 2 (14 de
+Liderazgo) y los hacheros armados escalón 3 (22). Las 15 tropas nuevas (leñadores, granjeros, exploradores a caballo,
+carros de guerra, jinetes asirios, guerreros filisteos, Shardana, Hequetai, honderos rodios, peltastas, jinetes
+escitas, hoplitas ciudadanos, caballería asiria, arqueros escitas, Espartiatas) están en el JSON publicado; la
+fuente de las reglas es Doc 5.8. Las de Caballerizas salen con `tipo: cuerpo_a_cuerpo` hasta acordar un tipo montado.
 
 Fuente: `TROPAS_RECLUTABLES` (con su `unidadesPorDefecto`, propio de cada tropa desde el 2026-09-27) y `LIDERAZGO.costePorEscalon` (`src/constants.ts`), al
 2026-09-13. Publicada, generada desde esas constantes, en `src/contratos/v1/catalogoTropas.json`: su `version`
@@ -1143,3 +1160,25 @@ es también un asunto de PERMISO, y hay que ser preciso con la diferencia:
 - Los modelos ECS son internos de Conquest y nunca forman parte del contrato de red.
 - Sin migración de partidas existentes: si un snapshot viejo no carga con este modelo, se descarta y se crea
   uno nuevo desde cero.
+
+## 21. Tecnología por Eras (nuevo, 2026-09-29)
+
+Reglas en Doc 6. Estado del SERVIDOR, no de una entidad que viaje a Unity:
+
+```text
+EstadoTecnologia                (GameSessionState.tecnologia)
+  era: EraId                      'reinos_palaciales' | 'crisis_adaptacion' | 'polis_imperios' (IV y V, por venir)
+  eraDesde: Instante              su plazo cuenta desde aquí
+  contadores: {ContadorLogro: n}  lo que cuenta el servidor para los logros; solo crece
+  logros: {TecnologiaId: Instante}  logro cumplido de cada tecnología, fijado para siempre
+  primeros: {TecnologiaId: {faccionId, en}}  la primera Facción que la desbloqueó
+  porFaccion: {faccionId: {aparecidas: TecnologiaId[], adoptadas: TecnologiaId[]}}
+```
+
+- Vive fuera de `Faccion` a propósito: `Faccion` viaja entera a todos los jugadores y las tecnologías de un rival
+  están ocultas. Una Facción sin entrada tiene solo las de arranque (`leva_comunal`, `hostigamiento_tribal`).
+- Un jugador recibe la Era, los logros públicos (qué pasó, no qué tecnología abren) y las tecnologías de su propia
+  Facción (`ProyeccionJugador.tecnologia`).
+- Unity no la necesita: lo que una Facción puede reclutar ya lo decide BronzeAge antes de que exista la escuadra, y
+  el `BattleTicket` lleva escuadras, no tecnologías.
+

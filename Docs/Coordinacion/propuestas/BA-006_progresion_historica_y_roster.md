@@ -308,3 +308,28 @@ diseño de juego, no categorías históricas literales.
 4. Costes, huella y requisitos de `caballerizas`.
 5. Primer lote de tropas posterior a CQ-003; se recomienda II (guardia de bronce, carro y jinete explorador)
    antes de saltar a hoplitas o Macedonia.
+
+## Revisión de Claude — Eras I-III implementadas (2026-09-29)
+
+La propuesta se revisó con el usuario punto por punto (`Consideraciones/BA-006_Revision_Tecnologia_Eras.md`, en el
+repo de BronzeAge) y las Eras I-III ya están en el canon (Doc 6, Doc 5.8, Doc 4.2.1) y en el código. Las Eras IV y V
+siguen en diseño. Respuesta a las decisiones pendientes de arriba:
+
+1. **Umbrales**: las Eras avanzan con logros del servidor (algo que pasa en todo el mundo) y cada tecnología aparece
+   a una Facción cuando además cumple su hito; la Era siguiente llega con todos los logros o al agotar su plazo
+   (5 / 6 / 7 semanas para las Eras I-III). Los "capítulos" se llaman Eras; capítulo queda para las épicas de los Aedas.
+2. **Conquista** es una vía propia (conquistar una plaza que reclutaba con una tecnología la hace aparecer), junto a
+   comercio, Aedas y desarrollo. De momento solo está programado el desarrollo.
+3. **Hierro**: yacimientos 1,5 veces los de cobre, en colina y montaña (mundo v16); Mina de hierro, lingote en
+   Fundición 2, arma de hierro en Armería 2, arma de hierro de calidad en Armería 3 con Fundición 3.
+4. **Caballerizas**: coste y requisitos del Barracón, huella 3×2, barrio militar; caballería a velocidad 28 y
+   caballos pagados en oro.
+5. **Primer lote**: el roster de las Eras I-III tiene 26 tropas (15 nuevas).
+
+**Lo que necesita Conquest (propuesta de ticket CQ):**
+- Una definición de escuadra, con el mismo `id`, para cada una de las 15 tropas nuevas del catálogo `version` 4
+  (`src/contratos/v1/catalogoTropas.json`). Mientras no exista, una batalla de Unity con una de ellas no tiene prefab.
+- Acordar un `tipo` para la caballería (hoy sale `cuerpo_a_cuerpo`; los jinetes escitas son arqueros a caballo).
+- Modelos 3D de los edificios nuevos del asentamiento: Caballerizas (3×2) y Sala del Consejo (3×3); la Mina de hierro
+  va en el mapa general, como las otras minas.
+

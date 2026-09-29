@@ -216,11 +216,14 @@ Cada paso deja los tests en verde y se puede fusionar por separado.
 - [ ] Actualizar `Consideraciones/NPC_Gobernanza_Facciones_Controladas.md` §4.9.
 
 ### Paso 11 — Contrato y clientes
-- [ ] `contratos/v1`: catálogo de tropas con las nuevas (unidades, velocidad, clase montada); DTO de tecnología del
-  jugador (Era, logros públicos, aparecidas, adoptadas, tarifa); comando de adopción en OpenAPI.
-- [ ] Ticket BA para Conquest: definiciones de escuadra de las 15 tropas nuevas (lote CQ).
-- [ ] Cliente de administración (`cliente/`): panel de tecnología y Eras. BronzeAgeClient: su propio trabajo sobre
-  el DTO.
+- [x] `contratos/v1`: catálogo de tropas con las nuevas (versión 4); `ProyeccionJugador.tecnologia` (Era, logros
+  públicos, aparecidas, adoptadas); comando `adoptarTecnologia` en el OpenAPI (sale de `esquemas.ts`).
+- [x] Modelo de datos compartido (doc 01): recursos, edificios, tabla de tropas y §21 Tecnología. Respuesta a BA-006
+  con lo que necesita Conquest (15 escuadras nuevas, tipo montado, modelos de Caballerizas y Sala del Consejo): el
+  ticket CQ lo abre Codex desde ahí.
+- [ ] Cliente de administración (`cliente/`): panel de tecnología y Eras. **Aplazado**: el cliente y `lab/` no
+  compilan desde antes de este plan (`capacidadCasas`, `bandidosProximoSpawnEn`); primero hay que ponerlos al día.
+  BronzeAgeClient: su propio trabajo sobre `ProyeccionJugador.tecnologia` y el comando.
 
 ### Paso 12 — Calibrar los logros con batch (lo corre la sesión de balance)
 - [ ] `scripts/batch`: medidor de contadores por semana y del día en que cada Facción adopta cada tecnología.
