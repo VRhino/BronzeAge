@@ -77,7 +77,7 @@ No hay un sistema que detecte explícitamente "cortar una ruta" como evento de g
 
 **LAS CARAVANAS NO CRUZAN EL AGUA** (Doc 1.0b): si no hay ruta por tierra entre origen y destino, la caravana **no sale** y la carga se queda en el almacén; el camino comercial tampoco se traza. Aplica igual a las Caravanas de Fundación, que además no pueden fundar en un punto inalcanzable. Comerciar entre dos costas enfrentadas exigiría comercio marítimo, fuera de alcance (3.11).
 
-**LA INTERCEPCIÓN ES EMBOSCADA, NO PERSECUCIÓN**: con las velocidades de tropa de Doc 5.12.5, solo un ejército de infantería **ligera** (20) supera a una caravana comercial tirada por bueyes (16) y puede darle caza. Un ejército medio (16) la iguala y uno pesado (12) no la alcanza jamás; el contrabando (24) y la caravana tirada por caballos (24, 3.13.2) escapan de todo. Interceptar con tropa pesada solo es posible **estando ya apostado en la ruta**, no persiguiendo.
+**LA INTERCEPCIÓN ES EMBOSCADA, NO PERSECUCIÓN**: con las velocidades de tropa de Doc 5.12.5, solo un ejército de infantería **ligera** (20) supera a una caravana comercial tirada por bueyes (16) y puede darle caza. Un ejército medio (16) la iguala y uno pesado (12) no la alcanza jamás; el contrabando (24) y la caravana tirada por caballos (24, 3.13.2) escapan de todo lo que va a pie: **solo la caballería (28) las alcanza**. Interceptar con tropa pesada solo es posible **estando ya apostado en la ruta**, no persiguiendo.
 
 ## 3.11 Comercio marítimo — fuera de alcance de Fase 0
 Requiere tecnología de barcos + puertos. Fase 0 es 100% terrestre (eje naval pospuesto a fase completa).
@@ -138,7 +138,7 @@ está en las piezas, que se construyen y compran **sobre una caravana concreta**
 | Animal | `factorCarga` | Velocidad | Coste | Nota |
 |---|---|---|---|---|
 | Buey | 1.0 | 16 | **~12 oro** | El ancla |
-| Caballo | 0.5 | 24 | 60 oro | A esta velocidad **escapa de casi toda intercepción** (3.10, "emboscada, no persecución") |
+| Caballo | 0.5 | 24 | 60 oro | A esta velocidad **escapa de todo lo que va a pie**; solo la caballería la alcanza (3.10, "emboscada, no persecución") |
 | Camello | 0.75 | ~19 | 40 oro | Opción intermedia |
 
 **El buey se paga en ORO, no en madera.** La fundación entrega 100 oro (`FUNDACION.materialesIniciales`) y la

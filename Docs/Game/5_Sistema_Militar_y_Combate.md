@@ -65,7 +65,7 @@ Se recluta pagando equipo (5.8), y cada tropa sale de una clase de población se
 Asedios FORMALES en ventanas limitadas (ej. 2 veces/semana, horario fijo, ~1h de duración). Ataques logísticos (mundo abierto, caravanas) libres 24/7. Pospuesto a Fase 1+: requiere instanciado multijugador programado y un sistema de colas y horarios.
 
 ## 5.7 Reclutamiento por infraestructura física (adaptado a la Edad de Bronce)
-No hay árbol tecnológico abstracto — el tipo de unidad reclutable depende de la infraestructura física y NPCs residentes del asentamiento.
+El tipo de unidad reclutable depende de las **cuatro puertas** (Doc 6.1): la Era del servidor, la tecnología adoptada por la Facción, la infraestructura física del asentamiento (edificio y nivel interno) y la población, el equipo y los recursos disponibles.
 
 **Oficios/NPCs especialistas:**
 - Broncista/Fundidor: funde cobre+estaño → bronce; fabrica armas.
@@ -77,65 +77,91 @@ No hay árbol tecnológico abstracto — el tipo de unidad reclutable depende de
 
 **Edificios** (catálogo completo con costos/recetas en Doc 4.2.1, rediseño Fase 0):
 - Centro Urbano: reclutamiento de la defensa mínima (Milicia de lanceros, ver roster 5.8). La tropa de entrada no depende del Barracón, que exige nivel 2 (Doc 4.2.1), sino del único edificio que nace `activo` con el asentamiento, sin cola de construcción ni requisito: todo asentamiento puede defenderse desde el primer minuto, aunque sea con la unidad más débil del roster.
-- Fundición: fabricación de lingotes de cobre/estaño/bronce — auto-construcción (ver Doc 4.2).
+- Fundición: fabricación de lingotes de cobre, estaño, bronce y hierro — auto-construcción (ver Doc 4.2).
 - Curtiduría: tratamiento de cuero (livestock → cuero → cuero curtido → cuero de calidad).
 - Armería: fabricación de armas y armaduras a partir de lingotes y cuero — insumo directo del reclutamiento de Barracón/Galería de tiro.
-- Carpintería: recluta armas de asedio (ariete, torre de asedio) y habilita construir/mejorar Palacio, Armería, Barracón y Galería de tiro de nivel 2+.
+- Carpintería: fabrica equipo (ariete, torre de asedio y la pieza de Carro de Guerra), no recluta. Habilita el nivel 2 de Barracón y Galería de tiro, y su nivel 2 el nivel 3 de Barracón, Galería de tiro y Caballerizas.
 - Barracón: reclutamiento de tropas cuerpo a cuerpo (ver roster 5.8). Adición MANUAL de Gobernador/Maestro de Obras a la cola (Doc 4.2).
 - Galería de tiro: reclutamiento de tropas a distancia (ver roster 5.8). Adición MANUAL de Gobernador/Maestro de Obras a la cola (Doc 4.2).
-- Mina de cobre: extractor de cobre (Doc 1.4/4.2.1) — único extractor de cobre del juego, insumo obligatorio de Fundición para todo equipo de bronce. Extractores finitos con reemplazo automático al agotarse (mecanismo completo en Doc 4.2, incluye número fijo por tipo — NO ligado al nivel de asentamiento).
+- Caballerizas: reclutamiento de caballería y carros de guerra (ver roster 5.8); pide `cria_caballar`. Adición MANUAL de Gobernador/Maestro de Obras a la cola (Doc 4.2).
+- Mina de cobre y Mina de hierro: extractores de cobre y de mineral de hierro (Doc 1.4/4.2.1), insumos de la Fundición. Extractores finitos con reemplazo automático al agotarse (mecanismo completo en Doc 4.2, incluye número fijo por tipo — NO ligado al nivel de asentamiento).
 - Gran Fundición: edificio de élite; requiere nivel de Facción 3 (Doc 4.2.1).
-- **No hay carros de guerra en Fase 0**: se posponen a Fase 1, y con ellos los Establos.
 
 **Materiales limitantes (clave anti-"ejército meta universal"):**
 - COBRE: relativamente abundante.
 - ESTAÑO: raro, concentrado en pocas ubicaciones (base histórica real: la disrupción de rutas de estaño es una teoría real del colapso de la Edad de Bronce). El bronce de calidad — y por tanto las tropas de tier alto — depende del acceso a estaño.
+- HIERRO: el mineral es mucho más abundante que el estaño. El hierro temprano es blando, abundante y barato, no mejor que el bronce; el de calidad llega con `forja_hierro_estandarizada`. **Solo hay armas de hierro**: las armaduras son de bronce en todas las Eras, así que el estaño nunca deja de importar.
+- CABALLOS: se compran con oro al reclutar (y al reponer): **5 de oro por caballo**, uno por jinete y dos por carro.
 
 ## 5.8 Roster de tropas (reclutamiento por edificio + nivel interno, ver Doc 4.2.1)
 
 Catálogo en `TROPAS_RECLUTABLES`. Terminología (Doc 0): son tres conceptos y la jerarquía de entidades es **Héroe → Escuadrón → Unidad**. Una **tropa** es el TIPO (ej. "Lanceros con escudo de mimbre") y las tablas de abajo son su catálogo; un **escuadrón** es la instancia que un héroe posee y comanda; una **unidad** es cada soldado individual dentro de él. El número de unidades **NO lo elige el jugador** (ver "Unidades por defecto" más abajo) — cada escuadrón reclutado añade siempre el mismo tamaño fijo.
 
-El roster no se organiza por Tier abstracto (inspiración Total War Troy, foco Egeo/Grecia) — cada tropa se recluta en Centro Urbano, Barracón o Galería de tiro, según el NIVEL INTERNO del edificio (1-3, ver Doc 4.2.1; Centro Urbano no tiene niveles), pagando el equipo correspondiente fabricado en Armería (ver catálogo completo de recetas en Doc 4.2.1). "Costo" en las tablas de abajo es POR SOLDADO — el costo real de reclutar es ese valor × "Unidades". Cada tropa tiene además un `poderBase` (placeholder) que usan las batallas que se resuelven con números (5.2.5).
+El roster no se organiza por Tier abstracto: cada tropa se recluta en Centro Urbano, Barracón, Galería de tiro o Caballerizas, según el NIVEL INTERNO del edificio (1-3, ver Doc 4.2.1; Centro Urbano no tiene niveles), con la tecnología adoptada por la Facción (Doc 6) y pagando el equipo correspondiente, fabricado en Armería, Carpintería o comprado (caballos). "Costo" en las tablas de abajo es POR SOLDADO — el costo real de reclutar es ese valor × "Unidades". Cada tropa tiene además un `poderBase` (placeholder) que usan las batallas que se resuelven con números (5.2.5). "Asent." es el nivel de asentamiento que hace falta de verdad: el mayor entre el del edificio y el del equipo.
 
-**Coste de oro por reclutar** (`Consideraciones/Economia_Del_Oro_Definicion.md`): además del equipo, reclutar cuesta **oro por soldado según el escalón de la tropa** (`RECLUTAMIENTO_ORO_POR_ESCALON` en `constants.ts`, PLACEHOLDER 1/2/4/7/11 para escalones 1-5 — curva que sube más deprisa que el poder, igual criterio que `LIDERAZGO.costePorEscalon`). **Única excepción: la Milicia de lanceros del Centro Urbano** (`tropa.edificio === 'centroUrbano'`), que cuesta solo madera: la defensa mínima no depende del tesoro. Todo lo del Barracón/Galería de tiro cuesta oro, escalón 1 incluido: sin oro solo tienes la milicia. Reponer bajas vuelve a pagar oro por los soldados repuestos. `factorCostoReclutamiento` ("Leva Forzosa", Doc 4.4) toca **solo el equipo, no el oro** — no se conscribe moneda. Regla de motor uniforme: se cobra igual a NPC y jugador.
+**Coste de oro por reclutar** (`Consideraciones/Economia_Del_Oro_Definicion.md`): además del equipo, reclutar cuesta **oro por soldado según el escalón de la tropa** (`RECLUTAMIENTO_ORO_POR_ESCALON` en `constants.ts`, PLACEHOLDER 1/2/4/7/11 para escalones 1-5 — curva que sube más deprisa que el poder, igual criterio que `LIDERAZGO.costePorEscalon`), más **5 de oro por caballo** en la caballería y los carros. **Única excepción: las tropas del Centro Urbano** (milicia de lanceros, leñadores y granjeros), que no pagan oro: la defensa mínima no depende del tesoro. Todo lo demás cuesta oro, escalón 1 incluido. Reponer bajas vuelve a pagar oro por los soldados repuestos. `factorCostoReclutamiento` ("Leva Forzosa", Doc 4.4) toca **solo el equipo, no el oro** — no se conscribe moneda. Regla de motor uniforme: se cobra igual a NPC y jugador.
 
-**Centro Urbano (defensa mínima, sin edificio dedicado) — carril Pesants + Artesanos:**
+**Centro Urbano (defensa mínima, sin edificio dedicado):**
 
-| Tropa | Costo (por soldado) | poderBase | Unidades |
-|---|---|---|---|
-| Milicia de lanceros | 2 Madera (en bruto, sin pasar por Armería) | 2 | 25 |
+| Tropa | Tecnología (Era) | Costo (por soldado) | Escalón | poderBase | Unidades | Velocidad | Asent. |
+|---|---|---|---|---|---|---|---|
+| Milicia de lanceros | `leva_comunal` (I) | 2 Madera (en bruto, sin pasar por Armería) | 2 | 2 | 25 | 20 | 1 |
+| Leñadores | `leva_comunal` (I) | 1 Madera (su hacha) | 1 | 1 | 30 | 20 | 1 |
+| Granjeros | `leva_comunal` (I) | nada (sus herramientas) | 1 | 1 | 30 | 20 | 1 |
 
-**Barracón (cuerpo a cuerpo) — carril Pesants + Artesanos, combate real (Doc 4.1/5.5):**
+Leñadores y granjeros son muy malos en combate y muy desorganizados: en la batalla no forman (Conquest).
 
-| Nivel | Tropa | Costo (por soldado) | poderBase | Unidades |
-|---|---|---|---|---|
-| 1 | Lanceros con escudo de mimbre | 1 Arma de Madera | 3 | 25 |
-| 1 | Espadachines de espada corta de cobre | 1 Arma de Cobre + 1 Armadura Básica | 4 | 20 |
-| 2 | Hacheros ligeros | 1 Arma de Bronce + 1 Armadura Básica | 7 | 18 |
-| 2 | Espadachines con espadas y escudos de bronce | 2 Arma de Bronce + 1 Armadura Intermedia | 9 | 18 |
-| 3 | Lanceros pesados micénicos (escudos grandes) | 2 Arma de Bronce + 2 Armadura Intermedia | 14 | 15 |
-| 3 | Hacheros armados (armadura media) | 1 Arma de Bronce + 1 Armadura Intermedia | 12 | 15 |
+**Barracón (cuerpo a cuerpo):**
 
-**Galería de tiro (a distancia) — carril Pesants + Artesanos, combate real:**
+| Nivel | Tropa | Tecnología (Era) | Costo (por soldado) | Escalón | poderBase | Unidades | Velocidad | Asent. |
+|---|---|---|---|---|---|---|---|---|
+| 1 | Lanceros con escudo de mimbre | `escudos_ligeros` (I) | 1 Arma de Madera | 2 | 3 | 25 | 20 | 2 |
+| 1 | Espadachines de espada corta de cobre | `armamento_palacial` (I) | 1 Arma de Cobre + 1 Armadura Básica | 2 | 4 | 20 | 16 | 2 |
+| 2 | Hacheros ligeros | `armamento_palacial` (I) | 1 Arma de Bronce + 1 Armadura Básica | 3 | 7 | 18 | 16 | 2 |
+| 2 | Espadachines con espadas y escudos de bronce | `aleacion_bronce` (I) | 2 Arma de Bronce + 1 Armadura Intermedia | 3 | 9 | 18 | 16 | 2 |
+| 2 | Hacheros armados (armadura media) | `aleacion_bronce` (I) | 1 Arma de Bronce + 1 Armadura Intermedia | 3 | 12 | 15 | 12 | 2 |
+| 2 | Guerreros filisteos (Peleset) | `forja_hierro_temprana` (II) | 1 Arma de Hierro + 1 Armadura Intermedia | 3 | 9 | 18 | 16 | 2 |
+| 2 | Shardana | `bronce_calidad_militar` (II) | 1 Arma de Bronce de Calidad + 1 Armadura Básica | 4 | 15 | 15 | 16 | 3 |
+| 2 | Hoplitas ciudadanos | `ciudadania_militar` (III) | 1 Arma de Hierro + 1 Armadura de Bronce | 3 | 10 | 18 | 16 | 3 |
+| 3 | Lanceros pesados micénicos (escudos grandes) | `panoplia_bronce` (II) | 2 Arma de Bronce + 1 Armadura de Bronce | 4 | 14 | 15 | 12 | 3 |
+| 3 | Hequetai (guardia de bronce) | `panoplia_bronce` (II) | 1 Arma de Bronce de Calidad + 1 Armadura de Bronce | 5 | 17 | 12 | 12 | 3 |
+| 3 | Espartiatas | `falange_hoplita` (III) | 1 Arma de Hierro de Calidad + 1 Armadura de Bronce de Calidad | 4 | 17 | 15 | 12 | 4 |
 
-| Nivel | Tropa | Costo (por soldado) | poderBase | Unidades |
-|---|---|---|---|---|
-| 1 | Honderos (escaramuzadores) | 1 Arma de Madera | 5 | 20 |
-| 2 | Escaramuzadores con jabalina | 1 Arma de Bronce + 1 Armadura Básica | 8 | 18 |
-| 2 | Arqueros | 1 Arma de Bronce + 1 Armadura Intermedia | 9 | 18 |
-| 3 | Arqueros con arco compuesto | 3 Arma de Bronce + 2 Armadura Intermedia | 15 | 12 |
+**Galería de tiro (a distancia):**
+
+| Nivel | Tropa | Tecnología (Era) | Costo (por soldado) | Escalón | poderBase | Unidades | Velocidad | Asent. |
+|---|---|---|---|---|---|---|---|---|
+| 1 | Honderos (escaramuzadores) | `hostigamiento_tribal` (I) | 1 Arma de Madera | 2 | 5 | 20 | 20 | 2 |
+| 2 | Escaramuzadores con jabalina | `hostigamiento_tribal` (I) | 1 Arma de Cobre + 1 Armadura Básica | 3 | 8 | 18 | 20 | 2 |
+| 2 | Arqueros | `arqueria_palacial` (I) | 1 Arma de Bronce + 1 Armadura Intermedia | 3 | 9 | 18 | 16 | 2 |
+| 2 | Peltastas | `pantalla_escaramuzadores` (III) | 2 Arma de Hierro (jabalinas), sin armadura | 3 | 9 | 18 | 20 | 2 |
+| 2 | Honderos rodios | `pantalla_escaramuzadores` (III) | 1 Arma de Hierro + 1 Armadura Básica | 3 | 9 | 18 | 20 | 2 |
+| 3 | Arqueros con arco compuesto | `arco_compuesto` (II) | 3 Arma de Bronce + 2 Armadura Intermedia | 5 | 15 | 12 | 12 | 3 |
+| 3 | Arqueros escitas | `arqueria_especializada` (III) | 1 Arma de Hierro + 1 Armadura Básica | 5 | 17 | 12 | 16 | 3 |
+
+**Caballerizas (caballería y carros):**
+
+| Nivel | Tropa | Tecnología (Era) | Costo (por soldado) | Escalón | poderBase | Unidades | Velocidad | Asent. |
+|---|---|---|---|---|---|---|---|---|
+| 1 | Exploradores a caballo | `cria_caballar` (I) | 1 Arma de Cobre + 1 caballo | 2 | 3 | 20 | 28 | 2 |
+| 1 | Jinetes asirios | `equitacion_militar` (II) | 1 Arma de Hierro + 1 caballo | 2 | 5 | 20 | 28 | 2 |
+| 2 | Carros de guerra | `carros_guerra` (I) | 1 Carro de Guerra + 2 caballos + 1 Arma de Bronce | 4 | 13 | 15 | 20 | 3 |
+| 2 | Jinetes escitas | `caballeria_organizada` (III) | 1 Arma de Bronce + 1 Armadura Básica + 1 caballo | 3 | 8 | 18 | 28 | 2 |
+| 2 | Caballería asiria | `caballeria_organizada` (III) | 1 Arma de Hierro + 1 Armadura de Bronce + 1 caballo | 3 | 10 | 18 | 28 | 3 |
+
+Los exploradores a caballo son caballería de exploración, floja en combate. Una tropa puede depender de una tecnología y su arma de otra (los escaramuzadores esperan al Arma de Cobre de `metalurgia_cobre`, los jinetes asirios al Arma de Hierro de `forja_hierro_temprana`): es el patrón normal de las cuatro puertas.
 
 `poderBase` es placeholder. Las unidades de cada escuadrón son un valor propio de cada tropa (decidido el 2026-09-27); de partida, las que daba su escalón (5.11.1).
 
 **Unidades por defecto** (`unidadesPorDefecto`): es el TOPE del escuadrón, el jugador nunca elige cuántos soldados reclutar. `costoEquipo` sigue siendo por soldado. Reclutar desde cero cuesta "Costo (por soldado)" × "Unidades" de la tabla — ej. Milicia de lanceros cuesta 2 Madera/soldado × 25 = 50 Madera. Si el escuadrón ya existe y está por debajo del tope (bajas de combate, Doc 5.4), reclutar de nuevo REPONE solo las unidades que faltan hasta el tope, al mismo costo por soldado — no es un bloque nuevo completo (ver el párrafo "Escuadrón por héroe" más abajo). Antes de confirmar, la interfaz muestra el coste de ESTE reclutamiento, que puede ser parcial.
 
-**Milicia de lanceros y Arma de Madera.** La Milicia de lanceros se recluta en el Centro Urbano y se paga con madera en bruto, sin pasar por la Armería: es deliberadamente la más débil del roster (poderBase 2) y existe para que el bucle de juego arranque pronto, no para ganar batallas. Para reclutarla basta con residir en el asentamiento (Doc 2.5) y tener los 25 soldados de población y los 50 de madera del escuadrón. "Lanceros con escudo de mimbre" y "Honderos" se pagan con Arma de Madera: si la cadena metalúrgica o del cuero completa fuera el único camino, casi ningún asentamiento tendría tropa pronto, porque muy pocos nacen con cobre o livestock en su zona.
+**Milicia de lanceros y Arma de Madera.** La Milicia de lanceros se recluta en el Centro Urbano y se paga con madera en bruto, sin pasar por la Armería: es de las más débiles del roster (poderBase 2) y existe para que el bucle de juego arranque pronto, no para ganar batallas. Para reclutarla basta con residir en el asentamiento (Doc 2.5) y tener los 25 soldados de población y los 50 de madera del escuadrón. "Lanceros con escudo de mimbre" y "Honderos" se pagan con Arma de Madera: si la cadena metalúrgica o del cuero completa fuera el único camino, casi ningún asentamiento tendría tropa pronto, porque muy pocos nacen con cobre o livestock en su zona.
 
 **Población que recluta cada escalón.** Los escalones 1 y 2 se reclutan con **Pesants**, el 3 con **Artesanos**, y el 4 y el 5 solo con **Nobleza**, con una excepción: los Falangitas (escalón 4) se reclutan con Artesanos. Muchas tropas de élite tempranas eran históricamente nobles (carros, guardias palaciales), y por eso el Palacio se adelanta al nivel 2 (Doc 4.2.1). Reclutar saca a los soldados de su clase de población, también a los nobles.
 
 **Relación entre tropas ya reclutadas y el edificio que las produjo**: NO existe ninguna relación posterior al reclutamiento. Una vez una tropa está reclutada y en el mundo, es independiente del edificio (Barracón/Galería de tiro) que la originó. Si el edificio sube de nivel después, los escuadrones ya existentes NO se ven afectados de ninguna forma — ni mejoran ni empeoran. "Mejorar" solo significa poder reclutar tropas nuevas de mayor nivel a partir de ese momento.
 
-**Una tropa reclutada JAMÁS cambia de identidad/tipo al ganar experiencia.** "Milicia de lanceros" que sube de nivel se queda siendo "Milicia de lanceros" con más poder — nunca pasa a ser "Hacheros" ni ningún otro `tropaId`. El pool de origen (Pesants/Artesanos) tampoco cambia. Subir de nivel hace más fuerte al MISMO escuadrón (5.16.3); "mejorar" de tropa solo ocurre reclutando una tropa DISTINTA y mejor cuando Barracón/Galería de tiro suba de nivel interno, y eso crea un escuadrón nuevo, no transforma el existente.
+**Una tropa reclutada JAMÁS cambia de identidad/tipo al ganar experiencia.** "Milicia de lanceros" que sube de nivel se queda siendo "Milicia de lanceros" con más poder — nunca pasa a ser "Hacheros" ni ningún otro `tropaId`. La clase de población de la que salió tampoco cambia. Subir de nivel hace más fuerte al MISMO escuadrón (5.16.3); "mejorar" de tropa solo ocurre reclutando una tropa DISTINTA y mejor cuando Barracón/Galería de tiro suba de nivel interno, y eso crea un escuadrón nuevo, no transforma el existente.
 **Escuadrón por héroe, no por asentamiento.** Cada héroe tiene como mucho **un escuadrón de cada tropa en toda la partida**, esté donde esté (en su campamento, en su columna o de escolta), con tope `unidadesPorDefecto`. Reclutar de nuevo una tropa que ya tiene repone el faltante si hay bajas (ver "Unidades por defecto" arriba); nunca crea un segundo escuadrón. Si ese escuadrón está fuera, no se puede reclutar otro de su tropa: solo reponerlo allí donde está. Reclutar no exige un General asignado: solo que el héroe resida en el asentamiento (fundador o casa comprada, Doc 2.5), y un héroe reside en un solo asentamiento a la vez.
 
 **Reclutar y mover tropa:**
@@ -167,13 +193,13 @@ En un ejército de varios héroes, **cada uno se valida contra SU propio Lideraz
 **A mayor calidad de la tropa, mayor coste de Liderazgo.** Las tropas se agrupan en
 **cinco escalones**, de leva a élite, y el coste es el de su escalón — no una fórmula sobre su poder.
 
-| Escalón | Coste | Soldados por escuadrón | Caben con 100 | Tropas |
+| Escalón | Coste | Soldados por escuadrón (de partida) | Caben con 100 | Tropas |
 |---|---|---|---|---|
-| 1 — leva | 7 | 25 | 14 | Milicia de lanceros, Lanceros con escudo de mimbre |
-| 2 — tropa de línea | 14 | 20 | 7 | Espadachines de cobre, Honderos |
-| 3 — veterana | 22 | 18 | 4 | Hacheros ligeros, Escaramuzadores, Espadachines de bronce, Arqueros |
-| 4 — pesada | 32 | 15 | 3 | Hacheros armados, Lanceros pesados |
-| 5 — élite | 45 | 12 | 2 | Arqueros con arco compuesto |
+| 1 — leva | 7 | 25 | 14 | Leñadores, Granjeros |
+| 2 — ligera / de línea | 14 | 20 | 7 | Milicia de lanceros, Lanceros con escudo de mimbre, Espadachines de cobre, Honderos, Exploradores a caballo, Jinetes asirios |
+| 3 — veterana | 22 | 18 | 4 | Hacheros ligeros, Hacheros armados, Espadachines de bronce, Escaramuzadores, Arqueros, Guerreros filisteos, Hoplitas ciudadanos, Peltastas, Honderos rodios, Jinetes escitas, Caballería asiria |
+| 4 — pesada | 32 | 15 | 3 | Carros de guerra, Lanceros pesados, Shardana, Espartiatas |
+| 5 — élite | 45 | 12 | 2 | Arqueros con arco compuesto, Hequetai, Arqueros escitas |
 
 Liderazgo base **100**.
 
@@ -183,7 +209,7 @@ hace que subir de escalón sea *calidad* y no *cantidad*, y lo que ordena el ren
 mayor (leva) a menor (élite).
 
 **Por qué no se deriva del poder.** Un coste proporcional al poder nominal daría **el mismo poder por punto de
-Liderazgo a las once tropas**: cinco milicias rendirían lo mismo que un lancero pesado, y la élite no sería
+Liderazgo a todas las tropas**: cinco milicias rendirían lo mismo que un lancero pesado, y la élite no sería
 mejor por punto, solo vendría en envase más pequeño. Elegir composición no sería una decisión, sería aritmética.
 
 Con coste por escalón el precio crece **más deprisa que el poder**, y eso es lo buscado: la élite es
@@ -327,13 +353,14 @@ Si el asedio **resiste**, el ejército se queda acampado fuera con sus escuadron
 
 **Y el agua no se cruza** (Doc 1.0b): un ejército la rodea, y si no hay camino por tierra hasta el destino, sencillamente **no se puede movilizar**. Tampoco replegarse, si el regreso quedara cortado. No hay embarque.
 
-**Cada tropa tiene velocidad propia.** Tres clases:
+**Cada tropa tiene velocidad propia.** Cuatro clases:
 
 | Clase | Tropas | Velocidad |
 |---|---|---|
-| **Ligera** | Milicia de lanceros, Honderos, Lanceros con escudo de mimbre, Escaramuzadores con jabalina | **20** |
-| **Media** | Espadachines de cobre, Espadachines de bronce, Hacheros ligeros, Arqueros | **16** |
-| **Pesada** | Hacheros armados, Lanceros pesados micénicos, Arqueros con arco compuesto | **12** |
+| **Montada** | Exploradores a caballo, Jinetes asirios, Jinetes escitas, Caballería asiria | **28** |
+| **Ligera** | Milicia de lanceros, Leñadores, Granjeros, Honderos, Lanceros con escudo de mimbre, Escaramuzadores con jabalina, Peltastas, Honderos rodios, Carros de guerra | **20** |
+| **Media** | Espadachines de cobre, Espadachines de bronce, Hacheros ligeros, Arqueros, Guerreros filisteos, Shardana, Hoplitas ciudadanos, Arqueros escitas | **16** |
+| **Pesada** | Hacheros armados, Lanceros pesados micénicos, Arqueros con arco compuesto, Hequetai, Espartiatas | **12** |
 
 Dos reglas fijan esta tabla:
 
@@ -344,7 +371,7 @@ Consecuencias que salen del `min` sin escribir ninguna regla más:
 
 - Un ejército **pesado (12) no alcanza a ninguna caravana**, y eso es correcto: un ejército de asedio no persigue mercaderes. La intercepción es cosa de tropa ligera.
 - **Meter un solo escuadrón pesado en una partida de incursión la frena a 12** y le quita la capacidad de cazar. Incursión y asedio pasan a ser composiciones distintas, no la misma fuerza con otra orden.
-- La caravana de **contrabando (24) sigue escapando de todo**, lo cual es deliberado: el contrabandista evade por diseño, y no es una caravana "inicial".
+- La caravana de **contrabando y la de caballo (24) escapan de todo lo que va a pie**, lo cual es deliberado: el contrabandista evade por diseño, y no es una caravana "inicial". **Solo la caballería (28) las alcanza**; los carros de guerra van a 20.
 
 ### 5.12.6 Cancelar la marcha
 
@@ -625,10 +652,11 @@ El campamento es donde un héroe guarda las escuadras que no lleva consigo, y es
   |---|---|
   | Barracón, nivel 1 / 2 / 3 | 7 / 14 / 22 |
   | Galería de tiro, nivel 1 / 2 / 3 | 7 / 14 / 22 |
+  | Caballerizas, nivel 1 / 2 / 3 | 0 / 14 / 32 |
   | Recinto de muralla completo | +14 |
   | Política "Levas de guarnición" (General, Doc 4.4) | +14 |
 
-  Sin Barracón ni Galería de tiro no hay guarnición. Con todo al máximo son 72 —unas dos escuadras pesadas y una de leva—, por debajo de los 100 de Liderazgo que el héroe se lleva consigo. Como el cupo es por héroe, cuantos más residentes tenga una plaza, más guarnición puede tener.
+  Sin Barracón, Galería de tiro ni Caballerizas de nivel 2 no hay guarnición. Con Barracón, Galería, muralla y política al máximo son 72 —unas dos escuadras pesadas y una de leva—, por debajo de los 100 de Liderazgo que el héroe se lleva consigo. Como el cupo es por héroe, cuantos más residentes tenga una plaza, más guarnición puede tener.
 - Una escuadra en guarnición se **entrega a la IA**: la maneja la IA y el héroe no puede usarla mientras siga asignada, aunque esté presente en la batalla.
 - En un asedio entra directamente, sin ocupar plaza de héroe.
 - Si el cupo baja por debajo de lo que ya tiene asignado (expira la política, se daña un edificio), lo asignado se queda; solo se impide asignar más.

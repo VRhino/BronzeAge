@@ -42,7 +42,7 @@ Los HÉROES son una categoría SEPARADA de estas 3 clases.
 - **Objetivo PROACTIVO además del reactivo, y prioridad a mejorar sobre construir**: el disparador de arriba mide contra la población que YA llegó, así que va un paso por detrás por diseño. Un segundo umbral, más generoso, mide contra la capacidad de Vivienda construida o en camino (el mismo criterio proactivo que la Vivienda usa con su umbral del 85%). Este umbral NO activa la ráfaga de 3 Granjas —la capacidad de Vivienda casi siempre va por delante de la población real, y tratar ese margen como emergencia sobre-construiría—: solo adelanta la siguiente Granja, de una en una. Además, si una Granja activa por debajo de su nivel máximo puede pagar YA su siguiente mejora, se prefiere mejorarla a construir otra: mejorar no pide más trabajadores (`trabajadoresRequeridos` fijo en los 4 niveles internos, solo sube el rinde), mientras que una Granja nueva diluye el `ratioManoObra`, que es un pool de mano de obra compartido por todos los edificios productores (Cantera, Leñera, minas, Corral).
 - **Reemplazo de fuentes agotadas**: los extractores de recursos finitos (cantera, mina de oro, mina de cobre, mina de estaño, Corral, y la Leñera, porque los bosques también se agotan) pueden agotar su nodo fuente. Se cuentan los extractores con FUENTE VIVA, no los que existen: si un yacimiento se agota, se encola automáticamente un extractor de reemplazo (buscando un nuevo nodo del mismo recurso), hasta un MÁXIMO fijo por tipo de extractor, independiente del nivel del asentamiento (`EXTRACCION_MAXIMOS`, placeholder). Sin esto, agotar el único yacimiento condenaría al asentamiento a un déficit permanente.
 - **Corral**: extractor de livestock, mismo patrón que cantera/minas — liga a un nodo finito de livestock (Doc 1.4), con reemplazo automático al agotarse.
-- **Curtiduría / Armería / Fundición / Carpintería** van por AUTO-CONSTRUCCIÓN, igual que Granja/Cantera: se disparan en cuanto se cumple su requisito de nivel de asentamiento/edificio previo (4.2.1), sin exigir Planos/Aedas (Doc 6.5).
+- **Curtiduría / Armería / Fundición / Carpintería** van por AUTO-CONSTRUCCIÓN, igual que Granja/Cantera: se disparan en cuanto se cumple su requisito de nivel de asentamiento/edificio previo (4.2.1). Lo que pide una tecnología (Doc 6) espera a que la Facción la adopte.
 - **Materia prima de arranque**: Curtiduría y Fundición solo se AUTO-proponen si el asentamiento ya tiene en almacén al menos uno de los insumos directos de su receta de NIVEL 1 — livestock para Curtiduría, cobre para Fundición —, llegue por extracción propia o por trueque. Sin él producirían 0: la mayoría de asentamientos no tiene cobre ni livestock en su zona. La Armería queda exenta en la práctica, porque su receta de nivel 1 incluye el Arma de Madera (solo pide madera). Este requisito solo aplica a la vía AUTOMÁTICA: la adición MANUAL de Gobernador/Maestro de Obras no lo respeta a propósito, es una decisión informada del jugador. Si la Curtiduría no lo pasa, la misma pasada sigue evaluando Armería y Fundición.
 - **Líneas de producción**: la distancia dentro del asentamiento entre un edificio de transformación y la fuente más cercana de CADA insumo de su receta penaliza cuánto produce ese minuto — nunca cuánto consume por unidad, el coste de la receta no cambia. La "fuente" de un insumo crudo (cobre, estaño, livestock, madera...) es el extractor correspondiente (mina de cobre, mina de estaño, Corral, Leñera); la de un insumo INTERMEDIO (Lingote de Cobre, Cuero...) es el propio edificio que lo fabrica (ej. Armería mide su distancia a la Fundición más cercana para el insumo Lingote de Cobre, no a ninguna mina). Si un insumo no tiene ninguna fuente propia en el asentamiento (llega solo por trueque), se usa una distancia estándar en su lugar. Con varias fuentes candidatas se usa la más cercana; con varios insumos en la misma receta, manda el más penalizado (el eslabón más débil de la cadena), no un promedio. Umbrales (sin penalización por debajo de cierta distancia, suelo de producción a partir de otra, distancia sin fuente) placeholder, editables en el panel de balance (`LINEAS_PRODUCCION`).
 - **El comercio no se construye solo**: las caravanas se crean y se lanzan por decisión del jugador (Doc 3.12-3.13), y las órdenes de mercado se cumplen en persona (Doc 3.3). Lo único automático es el reparto de las caravanas disponibles entre los envíos de un trueque (Doc 3.2).
@@ -63,13 +63,17 @@ Los HÉROES son una categoría SEPARADA de estas 3 clases.
 
 ## 4.2.1 Catálogo completo de edificios
 
-Ningún edificio exige "Planos de X" (vía Aedas, Doc 6.5) para construirse ni para mejorar de nivel interno. Los requisitos de NIVEL DE ASENTAMIENTO sí aplican (4.5); el nivel máximo es 5. Todas las cifras son placeholder.
+Algunos edificios, niveles internos y recetas piden además una **tecnología adoptada por la Facción** (Doc 6); se indica en cada uno como "pide `tecnologia`". Los requisitos de NIVEL DE ASENTAMIENTO también aplican (4.5); el nivel máximo es 5. Todas las cifras son placeholder.
 
 ### Alojamiento
 
-**Palacio** — desbloquea la aparición de Nobleza. Adición MANUAL de Gobernador/Maestro de Obras a la cola (ver 4.2), no auto-construcción. Es requisito para subir a nivel 5 (4.5). Se construye desde el nivel 2 y se mejora: **Palacio 1** (asentamiento nivel 2) da cupo a 80 nobles, **Palacio 2** (nivel 3) a 240 y **Palacio 3** (nivel 4) a 400; el requisito del nivel 5 es el Palacio 3. Motivo: la tropa de escalón 4-5 se recluta con Nobleza, y la de las Eras I-II está en nivel 3.
-- Requisito: asentamiento nivel 2 (Palacio 1); la mejora a Palacio 2 pide nivel 3 y la mejora a Palacio 3, nivel 4.
-- Capacidad: 80 / 240 / 400 nobles (Palacio 1 / 2 / 3). Coste de construcción: 1500 madera + 1000 piedra. Obra: 5 días. Coste y obra de las mejoras: placeholder por definir.
+**Palacio** — desbloquea la aparición de Nobleza. Adición MANUAL de Gobernador/Maestro de Obras a la cola (ver 4.2), no auto-construcción. Se construye desde el nivel 2 y se mejora hasta el nivel interno 3, que es requisito para subir a nivel 5 (4.5). Motivo: la tropa de escalón 4-5 se recluta con Nobleza (Doc 5.8), y la de las Eras I-II está en nivel 3. Cada nivel cuesta más o menos lo mismo que la subida al nivel de asentamiento en que se construye, con oro, que es el recurso de la nobleza.
+
+| Palacio | Asentamiento | Cupo de nobles | Coste | Obra |
+|---|---|---|---|---|
+| 1 (construcción) | nivel 2 | 80 | 600 madera + 400 piedra + 100 oro | 3 días |
+| 2 (mejora) | nivel 3 | 240 | 1.200 madera + 1.000 piedra + 300 oro | 5 días |
+| 3 (mejora) | nivel 4 | 400 | 2.500 madera + 2.500 piedra + 800 oro | 1 semana |
 
 **Vivienda** — auto-construcción. CUPO DIVIDIDO POR CLASE: cada Vivienda aporta cupos SEPARADOS, no un pool compartido — 15 espacios para Pesants + 10 espacios para Artesanos por unidad (escala linealmente: 2 Viviendas = 30+20, etc.). La Nobleza no usa Vivienda (cupo propio en el Palacio).
 - Coste: 10 madera. Obra: 4 horas.
@@ -82,10 +86,11 @@ Ningún edificio exige "Planos de X" (vía Aedas, Doc 6.5) para construirse ni p
 | Cantera | Piedra | 20 madera | 4 | 5 min | 10 piedra |
 | Leñera | Madera | 10 madera | 4 | 3 min | 5 madera |
 | Granja | Trigo | 30 madera | 4 | 6 min | **60 trigo** (nivel 1) |
-| Corral | Livestock | 30 madera | 4 | 6 min | 3 livestock |
+| Corral | Livestock (ganado vacuno) | 30 madera | 4 | 6 min | 3 livestock |
 | Mina de oro | Oro | 40 madera | 6 | 6 min | 4 oro |
 | Mina de cobre | Cobre | 30 madera | 8 | 4 min | 5 cobre |
 | Mina de estaño | Estaño | 50 madera | 8 | 7 min | 3 estaño |
+| Mina de hierro (pide `forja_hierro_temprana`) | Mineral de hierro | 30 madera | 8 | 4 min | 5 mineral de hierro |
 
 Los extractores de nivel 1 se pagan solo con madera: son justo lo que hay que construir para subir a nivel 2 (4.5). Cantera, minas y Corral ligan a un nodo finito (Doc 1.4), con reemplazo automático al agotarse (4.2).
 
@@ -105,6 +110,11 @@ Los extractores de nivel 1 se pagan solo con madera: son justo lo que hay que co
 
 Para dimensionarlo: la reserva de comida de una ciudad de nivel 1 a tope ronda los 330, y el carro de suministros de un ejército son 500 (Doc 5.13). Un Granero de nivel 4 permite acumular una docena de campañas — es la pieza que convierte el excedente de trigo en capacidad militar en vez de perderlo contra el techo del almacén.
 
+**Sala del Consejo** — pide `instituciones_civicas`. Donde se reúne el consejo de la ciudad; su aspecto es el de la cultura dominante (Doc 6), su nombre es neutro. Adición MANUAL de Gobernador/Maestro de Obras a la cola. **Una por asentamiento.**
+- Requisito: asentamiento nivel 3. Es requisito del nivel 4 (4.5).
+- Da **+1 ranura de política al Gobernador** (4.4).
+- Coste: 800 madera + 1.200 piedra + 300 oro. Obra: 2 días. Huella 3×3.
+
 **Murallas** — no son un edificio del catálogo sino un **recinto** que rodea la ciudad y se levanta por obra, desde la empalizada barata hasta la muralla de piedra (`Consideraciones/Murallas_Definicion.md`). Tener un recinto completo **de piedra** (muro de piedra o muralla con adarve; la empalizada no basta) es requisito del nivel 4 (4.5) y suma +14 al cupo de guarnición de cada héroe residente (Doc 5.15.3).
 
 ### Transformación de recursos
@@ -112,12 +122,13 @@ Para dimensionarlo: la reserva de comida de una ciudad de nivel 1 a tope ronda l
 Van por AUTO-CONSTRUCCIÓN (igual que Granja/Cantera), disparadas en cuanto se cumple el requisito de nivel de asentamiento/edificio previo. Las cadenas de producción son lógica interna invisible de cara al jugador (solo ve inputs/outputs netos, ver 4.2). El primer edificio de este grupo que se construye dispara la aparición de Artesanos (ver 4.1). Curtiduría/Fundición además exigen la materia prima de arranque descrita en 4.2 (Armería exenta en la práctica). Las "producciones base" son el TECHO ideal por minuto — la producción real se multiplica además por el factor de líneas de producción (distancia a la fuente de cada insumo, ver 4.2), así que un edificio mal ubicado respecto a su cadena de suministro rinde menos de lo que dice esta tabla.
 
 **Fundición** — fabricación de lingotes de metal.
-- Construcción: Asentamiento nivel 2. Nivel interno 2: Asentamiento nivel 2.
+- Construcción: Asentamiento nivel 2. Nivel interno 2: Asentamiento nivel 2. Nivel interno 3: Asentamiento nivel 4 y pide `forja_hierro_estandarizada`.
 - Recetas nivel 1: 2 cobre → 1 Lingote de Cobre.
-- Recetas nivel 2 (añade): 5 estaño → 1 Lingote de Estaño; 8 Lingote de Cobre + 2 Lingote de Estaño → 5 Lingote de Bronce.
-- Coste: construcción 80 madera + 40 piedra; mejora a nivel 2: 150 madera + 100 piedra. Obra: 12 horas; mejora a nivel 2: 1 día.
-- Trabajadores: nivel 1 → 4 artesanos; nivel 2 → 8 artesanos.
-- Producción base: nivel 1 → 5 Lingote de Cobre; nivel 2 → 5 Lingote de Cobre + 3 Lingote de Estaño + 1 Lingote de Bronce.
+- Recetas nivel 2 (añade): 5 estaño → 1 Lingote de Estaño y 8 Lingote de Cobre + 2 Lingote de Estaño → 5 Lingote de Bronce (las dos piden `aleacion_bronce`); 2 mineral de hierro + 1 madera → 1 Lingote de Hierro (pide `forja_hierro_temprana`).
+- Nivel 3: las mismas recetas, con **+50 %** de producción de lingotes. Es el requisito del Arma de Hierro de Calidad (Armería).
+- Coste: construcción 80 madera + 40 piedra; mejora a nivel 2: 150 madera + 100 piedra; mejora a nivel 3: 300 madera + 200 piedra. Obra: 12 horas; mejoras: 1 día y 2 días.
+- Trabajadores: nivel 1 → 4 artesanos; nivel 2 → 8 artesanos; nivel 3 → 12 artesanos.
+- Producción base: nivel 1 → 5 Lingote de Cobre; nivel 2 → 5 Lingote de Cobre + 3 Lingote de Estaño + 1 Lingote de Bronce + 5 Lingote de Hierro; nivel 3 → ×1,5.
 
 **Curtiduría** — tratamiento de cuero a partir de livestock (vacas).
 - Construcción: Asentamiento nivel 2. Nivel interno 2: Asentamiento nivel 2. Nivel interno 3: Asentamiento nivel 3.
@@ -129,34 +140,40 @@ Van por AUTO-CONSTRUCCIÓN (igual que Granja/Cantera), disparadas en cuanto se c
 - Producción base: nivel 1 → 8 Cuero; nivel 2 → 12 Cuero + 2 Cuero Curtido; nivel 3 → 6 Cuero + 3 Cuero Curtido + 1 Cuero de Calidad.
 
 **Armería** — fabricación de armas y armaduras.
-- Construcción: Asentamiento nivel 2. Nivel interno 2: Asentamiento nivel 2 + poseer Carpintería. Nivel interno 3: Asentamiento nivel 3 + poseer Palacio.
-- Recetas nivel 1: 1 Lingote de Cobre + 1 madera → 1 Arma de Cobre; 5 Cuero → 1 Armadura Básica; 2 madera → 1 Arma de Madera.
-- Recetas nivel 2 (añade, sobre las de nivel 1): 1 Lingote de Bronce + 2 madera → 1 Arma de Bronce; 1 Lingote de Cobre + 5 Cuero Curtido → 1 Armadura Intermedia.
-- Recetas nivel 3 (añade, sobre las de nivel 2): 5 Lingote de Bronce + 5 madera → 1 Arma de Bronce de Calidad; 1 Lingote de Bronce + 5 Cuero de Calidad → 1 Armadura de Bronce.
+- Construcción: Asentamiento nivel 2. Nivel interno 2: Asentamiento nivel 2 + Fundición nivel 2. Nivel interno 3: Asentamiento nivel 3 + Fundición nivel 2 (el arma sale de la fundición; con el Palacio, el equipo de las Eras II-III llegaría en la IV).
+- Recetas nivel 1: 1 Lingote de Cobre + 1 madera → 1 Arma de Cobre (pide `metalurgia_cobre`); 5 Cuero → 1 Armadura Básica; 2 madera → 1 Arma de Madera.
+- Recetas nivel 2 (añade, sobre las de nivel 1): 1 Lingote de Bronce + 2 madera → 1 Arma de Bronce (pide `aleacion_bronce`); 1 Lingote de Cobre + 5 Cuero Curtido → 1 Armadura Intermedia; 1 Lingote de Hierro + 2 madera → 1 Arma de Hierro (pide `forja_hierro_temprana`).
+- Recetas nivel 3 (añade, sobre las de nivel 2): 5 Lingote de Bronce + 5 madera → 1 Arma de Bronce de Calidad y 1 Lingote de Bronce + 5 Cuero de Calidad → 1 Armadura de Bronce (las dos piden `bronce_calidad_militar`); 2 Lingote de Hierro + 3 madera → 1 Arma de Hierro de Calidad (pide `forja_hierro_estandarizada` y una Fundición de nivel 3 en el asentamiento, así que llega en el nivel 4); 2 Lingote de Bronce + 5 Cuero de Calidad → 1 Armadura de Bronce de Calidad (pide `bronce_laminado`).
+- **El hierro temprano no es mejor que el bronce**: es abundante y barato. El equipo no tiene poder propio; la diferencia la pone el poder de cada tropa (Doc 5.8).
 - **Arma de Madera**: escalón de entrada sin metalurgia, disponible en LOS 3 NIVELES. Las recetas se REEMPLAZAN al mejorar el edificio, no se acumulan solas, así que esta se repite explícitamente en cada nivel: sin ella, mejorar la Armería quitaría la capacidad de armar la tropa de entrada. Cifras deliberadamente modestas (producción base 2, a 2 madera por unidad): la producción de recetas no respeta la reserva mínima de Mantenimiento, y una tasa alta la convertiría en una vía de colapso por falta de madera.
 - Coste: construcción 80 madera + 30 piedra; mejora 1: 150 madera + 100 piedra; mejora 2: 450 madera + 200 piedra. Obra: 12 horas; mejoras: 1 día y 2 días.
 - Trabajadores: nivel 1 → 4; nivel 2 → 8; nivel 3 → 20 artesanos.
-- Producción base: nivel 1 → 3 Arma de Cobre + 3 Armadura Básica + 2 Arma de Madera; nivel 2 → + 2 Arma de Bronce + 2 Armadura Intermedia (Arma de Madera se mantiene); nivel 3 → + 1 Arma de Bronce de Calidad + 1 Armadura de Bronce (acumulativo sobre el nivel anterior, Arma de Madera se mantiene).
+- Producción base: nivel 1 → 3 Arma de Cobre + 3 Armadura Básica + 2 Arma de Madera; nivel 2 → + 2 Arma de Bronce + 2 Armadura Intermedia + 2 Arma de Hierro (Arma de Madera se mantiene); nivel 3 → + 1 Arma de Bronce de Calidad + 1 Armadura de Bronce + 1 Arma de Hierro de Calidad + 1 Armadura de Bronce de Calidad (acumulativo sobre el nivel anterior, Arma de Madera se mantiene).
 
 ### Militares
 
-**Carpintería** — su existencia habilita mejorar otros edificios (Armería, Barracón y Galería de tiro de nivel 2). Auto-construcción (ver arriba). Está pensada para fabricar armas de asedio (ariete en nivel 1, torre de asedio en nivel 2), que Fase 0 no tiene.
-- Construcción: Asentamiento nivel 3. Nivel interno 2: Asentamiento nivel 3.
-- Coste: construcción 60 madera + 20 piedra; mejora: 120 madera + 60 piedra. Obra: 12 horas; mejora: 1 día. Sin trabajadores.
+**Carpintería** — su existencia habilita el nivel 2 de Barracón y Galería de tiro, y su nivel 2 el nivel 3 de Barracón, Galería de tiro y Caballerizas. Auto-construcción (ver arriba). Fabrica equipo, no recluta: el ariete en nivel 1 y la torre de asedio en nivel 2, que todavía no tienen efecto en combate, y la pieza de **Carro de Guerra** en nivel 2.
+- Construcción: Asentamiento nivel 2. Nivel interno 2: Asentamiento nivel 3.
+- Receta nivel 2: 20 madera + 2 Cuero Curtido + 1 Lingote de Bronce → 1 Carro de Guerra (pide `carros_guerra`). Producción base 1.
+- Coste: construcción 60 madera + 20 piedra; mejora: 120 madera + 60 piedra. Obra: 12 horas; mejora: 1 día. Trabajadores: nivel 1 → ninguno; nivel 2 → 4 artesanos.
 
 **Barracón** — reclutamiento de tropas cuerpo a cuerpo (unidades y coste en equipo: ver Doc 5.8). Adición MANUAL de Gobernador/Maestro de Obras a la cola (ver 4.2), no auto-construcción.
-- Construcción: Asentamiento nivel 2 (ver nota del requisito militar abajo). Nivel interno 2: Asentamiento nivel 2 + poseer Carpintería. Nivel interno 3: Asentamiento nivel 3 + poseer Palacio.
+- Construcción: Asentamiento nivel 2 (ver nota del requisito militar abajo). Nivel interno 2: Asentamiento nivel 2 + poseer Carpintería. Nivel interno 3: Asentamiento nivel 3 + Carpintería nivel 2.
 - Coste: construcción 30 madera; mejora 1: 100 madera + 60 piedra; mejora 2: 300 madera + 200 piedra. Obra: 12 horas; mejoras: 1 día y 2 días.
 - Cupo de guarnición de cada héroe residente (Doc 5.15.3): 7 / 14 / 22 según su nivel interno.
 
 **Galería de tiro** — reclutamiento de tropas a distancia (unidades y coste en equipo: ver Doc 5.8). Adición MANUAL de Gobernador/Maestro de Obras a la cola (ver 4.2), no auto-construcción.
-- Construcción: Asentamiento nivel 2 (ver nota del requisito militar abajo). Nivel interno 2: Asentamiento nivel 2 + poseer Carpintería. Nivel interno 3: Asentamiento nivel 3 + Carpintería nivel 2 (asimetría INTENCIONAL respecto a Armería/Barracón, que piden Palacio — la Galería de tiro sigue su propio camino de progresión).
+- Construcción: Asentamiento nivel 2 (ver nota del requisito militar abajo). Nivel interno 2: Asentamiento nivel 2 + poseer Carpintería. Nivel interno 3: Asentamiento nivel 3 + Carpintería nivel 2.
 - Coste: construcción 50 madera; mejora 1: 140 madera + 20 piedra; mejora 2: 400 madera + 100 piedra. Obra: 12 horas; mejoras: 1 día y 2 días.
 - Cupo de guarnición de cada héroe residente (Doc 5.15.3): 7 / 14 / 22 según su nivel interno.
 
-> **Requisito militar de nivel 2 — por qué existe.** Barracón y Galería de tiro son los dos únicos tipos capaces de abrir el grupo militar en el trazado urbano, y el primero que se construye arrastra consigo la Plaza de Armas (ver `Consideraciones/Vista_Asentamiento_Trazado_Urbano.md` §5.7.1). Al fundar, el disco urbano mide 5 celdas y no existe ningún hueco que respete la separación mínima entre anclas: el núcleo militar nacería pegado al Centro Urbano y se quedaría ahí el resto de la partida, porque **ningún ancla se muda nunca**.
+**Caballerizas** — pide `cria_caballar`. Reclutamiento de caballería y carros de guerra (Doc 5.8). No se llaman Establos porque el ganado vacuno ya vive en el Corral. Adición MANUAL de Gobernador/Maestro de Obras a la cola, no auto-construcción.
+- Mismos requisitos y coste que el Barracón: construcción en asentamiento nivel 2; nivel interno 2: nivel 2 + poseer Carpintería; nivel interno 3: nivel 3 + Carpintería nivel 2. Huella 3×2.
+- Cupo de guarnición de cada héroe residente (Doc 5.15.3): 0 / 14 / 32 según su nivel interno — nada en el nivel 1, el coste de Liderazgo de la caballería más barata en el 2 y el de la caballería más cara del roster en el 3.
+
+> **Requisito militar de nivel 2 — por qué existe.** Barracón, Galería de tiro y Caballerizas son los únicos tipos capaces de abrir el grupo militar en el trazado urbano, y el primero que se construye arrastra consigo la Plaza de Armas (ver `Consideraciones/Vista_Asentamiento_Trazado_Urbano.md` §5.7.1). Al fundar, el disco urbano mide 5 celdas y no existe ningún hueco que respete la separación mínima entre anclas: el núcleo militar nacería pegado al Centro Urbano y se quedaría ahí el resto de la partida, porque **ningún ancla se muda nunca**.
 >
-> **No retrasa nada al jugador**: las tres tropas de nivel 1 de estos edificios piden Arma de Madera, Arma de Cobre o Armadura Básica, y las tres las fabrica **solo la Armería**, que también exige nivel 2.
+> **No retrasa nada al jugador**: las tropas de nivel 1 de Barracón y Galería de tiro piden Arma de Madera, Arma de Cobre o Armadura Básica, y las tres las fabrica **solo la Armería**, que también exige nivel 2.
 >
 > **El requisito va en la CONSTRUCCIÓN, nunca en el reclutamiento.** Reclutar no comprueba el nivel del asentamiento: uno que sube a nivel 2, construye Armería y Barracón y después se **degrada** a nivel 1 sigue pudiendo reclutar mientras tenga materiales. Los edificios y el equipo ya están físicamente ahí; perder nivel no borra lo que ya levantaste.
 
@@ -173,7 +190,7 @@ Van por AUTO-CONSTRUCCIÓN (igual que Granja/Cantera), disparadas en cuanto se c
 ### Trofeo
 
 **Maravilla** (`Roadmap_Escalado.md` Eje 4) — edificio único de coste extremo, sin recetas ni producción: es un trofeo, no un edificio productivo. Disponible vía control manual de cola (Gobernador/Maestro de Obras, ver 4.2), no auto-construcción. Completarla cierra el ciclo del servidor (Doc 2.9).
-- Requisito: Asentamiento en nivel MÁXIMO (nivel 5).
+- Requisito: Asentamiento en nivel MÁXIMO (nivel 5) y el servidor en la Era V (Doc 6.2).
 - Coste: 5000 madera + 5000 piedra + 500 oro + 300 cobre + 200 estaño + 200 livestock (todos los recursos EN BRUTO del catálogo, varias veces el coste del Palacio). Obra: 4 semanas.
 
 ## 4.3 Almacenamiento
@@ -186,7 +203,7 @@ Dos edificios lo amplían, y no compiten: el **Almacén** sube la capacidad de T
 ## 4.4 Políticas (mecanismo de influencia del jugador)
 - Interfaz: decisiones DISCRETAS tipo menú (no sliders continuos).
 - SLOTS Y POOLS POR CARGO:
-  - Gobernador: 2 slots (escala hasta 5 según nivel de Facción), pool COMPLETA (todas las políticas).
+  - Gobernador: 2 slots (escala hasta 5 según nivel de Facción), +1 con la Sala del Consejo (4.2.1), pool COMPLETA (todas las políticas).
   - Tesorero: 2 slots, pool de economía/comercio/mercados/precios/comisiones/caravanas/acuerdos.
   - Maestro de Obras: 1 slot, pool de auto-construcción/edificios.
   - General: 1 slot, pool de defensa/reclutamiento/fabricación de armas y armaduras.
@@ -204,12 +221,11 @@ Dos edificios lo amplían, y no compiten: el **Almacén** sube la capacidad de T
 - **NIVEL DE ASENTAMIENTO — por requisitos y a petición del Gobernador**: el nivel NO sube solo. Cumplir A LA VEZ los requisitos de población y de edificios es lo que permite PEDIR la subida al nivel siguiente (ver "Subida de nivel" abajo). Nivel máximo: 5.
   - Nivel 2: 200 pesants + 3 de los 7 tipos de extracción (Cantera, Leñera, Granja, Mina de oro, Mina de cobre, Mina de estaño, Corral). No pide artesanos: sin nivel 2 no hay edificios de transformación, y sin ellos no aparecen artesanos.
   - Nivel 3: 500 pesants + 400 artesanos + Armería, Curtiduría, Fundición, Barracón y Galería de tiro.
-  - Nivel 4: 1.000 pesants + 800 artesanos + un recinto de muralla completo **de piedra**: muro de piedra o muralla con adarve, no empalizada (4.2.1).
-  - Nivel 5: 2.000 pesants + 1.600 artesanos + Palacio.
+  - Nivel 4: 1.000 pesants + 800 artesanos + un recinto de muralla completo **de piedra** (muro de piedra o muralla con adarve, no empalizada) + Sala del Consejo (4.2.1).
+  - Nivel 5: 2.000 pesants + 1.600 artesanos + Palacio de nivel 3.
 
   Poblaciones placeholder (`NIVEL_ASENTAMIENTO`). El nivel alimenta: el techo de zona de influencia (Doc 1.2), qué materiales cobra el Mantenimiento (abajo) y el **techo de población total** — 300 / 1.500 / 6.000 / 12.000 / 20.000 habitantes para los niveles 1-5: por encima, la Vivienda y el Palacio dejan de dar cupo aunque tengan espacio. Es el nivel de ASENTAMIENTO — distinto del nivel de FACCIÓN (Doc 2.2.1), que sube por experiencia.
 - **Subida de nivel** (decidido el 2026-09-26): la pide el **Gobernador** del asentamiento, se sube de uno en uno y se hace con una **obra de ascenso**. Para pedirla hacen falta cuatro cosas a la vez:
-- **Techo provisional en el nivel 3** (decidido el 2026-09-27): por ahora ningún asentamiento pasa del nivel 3. Cuando exista la tecnología que desbloquea la subida a 4 (`instituciones_civicas`, Era III), el techo pasa a ser el que marquen las Eras (`ASCENSO_ASENTAMIENTO.nivelTechoProvisional`).
   1. **Los requisitos** de población y edificios del nivel siguiente (arriba).
   2. **Cupo libre en la Facción** para ese nivel (Doc 2.2.1, `CUPO_NIVEL_ASENTAMIENTO`). Se reserva al pedir.
   3. **El coste de la obra en el almacén del asentamiento.** Se paga entero al empezar, del almacén común — el Gobernador decide el gasto, no lo pone de su bolsillo (los héroes no tienen almacén de recursos; sus monedas no son el oro recurso, Doc 5.16.1).
@@ -222,7 +238,7 @@ Dos edificios lo amplían, y no compiten: el **Almacén** sube la capacidad de T
   | 3 → 4 | 2.500 madera, 2.500 piedra, 1.000 oro, 150 lingotes de bronce | 2 semanas |
   | 4 → 5 | 5.000 madera, 5.000 piedra, 2.500 oro (más bienes de lujo si se aprueban los talleres de lujo) | 3 semanas |
 
-  El coste pide lo que el nivel nuevo va a cobrar (piedra y oro) y, desde el nivel 3, un bien elaborado que solo existe a partir de cierta Era: así el ritmo de niveles sigue a las Eras sin ninguna regla que lo prohíba (el lingote de bronce del 2 → 3 pide estaño, que casi siempre llega por comercio). Cada coste cabe en el almacén máximo del nivel de partida. La duración de la obra es parte del ritmo de la partida (Doc 6, Eras) y no depende de la economía. Cifras placeholder (`ASCENSO_ASENTAMIENTO`).
+  El coste pide lo que el nivel nuevo va a cobrar (piedra y oro) y, desde el nivel 3, algo que solo existe a partir de cierta Era: así el ritmo de niveles sigue a las Eras sin ninguna regla que lo prohíba (Doc 6). El lingote de bronce del 2 → 3 pide `aleacion_bronce` (Era I) y estaño, que casi siempre llega por comercio; la Sala del Consejo del 3 → 4 pide `instituciones_civicas` (Era III). Cada coste cabe en el almacén máximo del nivel de partida. La duración de la obra es parte del ritmo de la partida (Doc 6, Eras) y no depende de la economía. Cifras placeholder (`ASCENSO_ASENTAMIENTO`).
   - Mientras dura la obra el asentamiento funciona con normalidad. **Si lo conquistan a mitad de obra, la obra se pierde** sin devolución, y con ella la reserva de cupo.
   - La interfaz enseña, dentro de la plaza, si se puede pedir la subida y, si no, todos los motivos a la vez: requisitos que faltan, cupo, coste y la solvencia recurso a recurso.
 - MEDIDOR 0-100 por asentamiento, empieza en 100.

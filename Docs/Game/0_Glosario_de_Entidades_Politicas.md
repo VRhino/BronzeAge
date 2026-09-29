@@ -116,12 +116,24 @@ Título dinámico de PRESTIGIO (no cargo mecánico nuevo) otorgado al Rey de la 
 
 ## Población NPC: Pesants / Artesanos / Nobleza
 Las 3 clases de población NPC de un asentamiento (distintas de los Héroes).
-- **Pesants:** base, crecimiento rápido; trabajan los recursos genéricos y se reclutan como tropa.
-- **Artesanos:** operan los edificios de transformación y también se reclutan como tropa.
-- **Nobleza:** crecimiento lento; aparece con Palacio y un mínimo de ciudadanos (Héroes) en el asentamiento. Es la clase que más oro recauda. No se recluta (Doc 5.8).
+- **Pesants:** base, crecimiento rápido; trabajan los recursos genéricos y se reclutan como tropa de escalón 1-2.
+- **Artesanos:** operan los edificios de transformación y se reclutan como tropa de escalón 3.
+- **Nobleza:** crecimiento lento; aparece con Palacio y un mínimo de ciudadanos (Héroes) en el asentamiento. Es la clase que más oro recauda y se recluta como tropa de escalón 4-5 (Doc 5.8).
 
 ## Aedas / Poetas
-Mismo rol: los NPCs viajantes que dan acceso a tecnología (itinerantes o residentes si hay nobleza) Y narran el lore/histórico del servidor (títulos de prestigio, hazañas).
+Mismo rol: los NPCs viajantes que esparcen y venden tecnología (itinerantes, o residentes si hay nobleza) Y narran el lore/histórico del servidor (títulos de prestigio, hazañas, logros del servidor). Ver Doc 6.7.
+
+## Era
+Cada uno de los cinco tramos de la season (Reinos palaciales, Crisis y adaptación, Polis e imperios, Profesionalización, Hegemonía macedónica; de ~1300 a 323 a. C.). Una Era termina al cumplirse todos sus logros del servidor o al agotarse su plazo (Doc 6.2).
+
+## Tecnología
+Lo que adopta una Facción para desbloquear tropas, edificios, niveles internos o recetas. Es de una Era, está oculta hasta que aparece y la adopta el Rey en la capital (Doc 6).
+
+## Logro del servidor / Hito de la Facción
+Las dos condiciones de aparición de una tecnología: algo que ha pasado en todo el mundo (público, fijado para siempre, no dice qué tecnología abre) y algo que ha conseguido la propia Facción (Doc 6.3).
+
+## Capital
+El asentamiento de la Facción donde el Rey adopta tecnología y que paga su adopción; también es el centro de poder del mantenimiento por distancia (Doc 4.5). Mientras no se elige, es el asentamiento vivo más antiguo de la Facción.
 
 ## Oro
 Recurso/medio de intercambio: metal precioso en bruto pesado (no moneda acuñada), origen en minas ubicadas en el mapa. Se usa para servicios/NPCs (sueldos, mercenarios, tecnología) y también como recurso más de trueque entre Facciones. Es un recurso del **almacén del asentamiento**: no confundir con las monedas propias del héroe (bronce/plata/oro, Doc 5.16.1), que no tienen relación con él.
