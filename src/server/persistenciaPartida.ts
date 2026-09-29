@@ -62,8 +62,10 @@ import { leerEventos } from './eventosDePartida';
  *
  * v18 (2026-09-15): las batallas de Unity (`state.batallas`, doc 01 §15) y el candado `Escuadron.reservaBatalla`.
  *   Sin migración.
+ *
+ * v19 (2026-09-29): tecnología por Eras (`state.tecnologia`, Doc 6). Sin migración: el playtest arranca de cero.
  */
-export const FORMATO_SNAPSHOT_VERSION = 18;
+export const FORMATO_SNAPSHOT_VERSION = 19;
 
 export interface SnapshotPartida {
   formatoVersion: number;

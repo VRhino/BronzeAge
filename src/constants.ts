@@ -1,3 +1,5 @@
+import type { ContadorLogro, EdificioTipo, EraId, RecursoTipo, TecnologiaId } from './domain/types';
+
 // Valores numéricos PLACEHOLDER — ver Consideraciones/Preguntas_Abiertas.md.
 // Centralizados aquí para poder re-balancear sin tocar la lógica del motor.
 //
@@ -392,6 +394,8 @@ export const EDIFICIO_CATALOGO = {
   // produccionBaseEstano subido de 1.5 a 3 (pruebas del usuario) — el estaño era el cuello de botella más
   // duro de la cadena de bronce, más de lo que el diseño original pretendía.
   minaEstano: { costo: { madera: 50 }, tiempoConstruccionMinutos: 480, produccionBaseEstano: 3, trabajadoresRequeridos: 8 },
+  // Hierro (Doc 1.4/4.2.1, pide `forja_hierro_temprana`): mineral abundante, mismo patrón y cifras que la de cobre.
+  minaHierro: { costo: { madera: 30 }, tiempoConstruccionMinutos: 360, produccionBaseHierro: 5, trabajadoresRequeridos: 8 },
   // Corral (Doc 4.2.1, rediseño de progreso Fase 0): extractor de livestock, mismo patrón que cantera/minas —
   // liga a un nodo finito de livestock (Doc 1.4), con reemplazo automático al agotarse (ver EXTRACCION_MAXIMOS).
   corral: { costo: { madera: 30 }, tiempoConstruccionMinutos: 240, produccionBaseLivestock: 3, trabajadoresRequeridos: 4 },
@@ -590,6 +594,38 @@ export const EDIFICIO_CATALOGO = {
         recetas: [],
       },
     } as Record<number, NivelEdificioTransformacion>,
+  },
+
+  // Caballería y carros (Doc 4.2.1, pide `cria_caballar`): mismos requisitos y coste que el Barracón.
+  caballerizas: {
+    costo: { madera: 30 },
+    tiempoConstruccionMinutos: 720,
+    requisitoNivelAsentamientoConstruccion: 2,
+    niveles: {
+      1: { trabajadoresRequeridos: 0, recetas: [] },
+      2: {
+        requisitoNivelAsentamiento: 2,
+        requiereEdificio: 'carpinteria',
+        costoMejora: { madera: 100, piedra: 60 },
+        trabajadoresRequeridos: 0,
+        recetas: [],
+      },
+      3: {
+        requisitoNivelAsentamiento: 3,
+        requiereEdificio: 'carpinteria',
+        requiereEdificioNivel: 2,
+        costoMejora: { madera: 300, piedra: 200 },
+        trabajadoresRequeridos: 0,
+        recetas: [],
+      },
+    } as Record<number, NivelEdificioTransformacion>,
+  },
+
+  // Sala del Consejo (Doc 4.2.1, pide `instituciones_civicas`): requisito del nivel 4 y +1 ranura del Gobernador.
+  salaConsejo: {
+    costo: { madera: 800, piedra: 1200, oro: 300 },
+    tiempoConstruccionMinutos: 2_880,
+    requisitoNivelAsentamientoConstruccion: 3,
   },
 
   // Único tier — desbloquea la aparición de Nobleza (además del mínimo de ciudadanos ya existente, ver
@@ -938,6 +974,9 @@ export const EDIFICIO_TAMANO: Record<string, { ancho: number; alto: number }> = 
   armeria: { ancho: 2, alto: 3 },
   barracon: { ancho: 2, alto: 2 },
   galeriaDeTiro: { ancho: 2, alto: 4 },
+  // Eras I-III (Doc 4.2.1): tipos nuevos, no cambian ninguna huella existente.
+  caballerizas: { ancho: 3, alto: 2 },
+  salaConsejo: { ancho: 3, alto: 3 },
   mercado: { ancho: 3, alto: 2 },
   palacio: { ancho: 4, alto: 4 },
   corral: { ancho: 4, alto: 3 },
@@ -2112,4 +2151,189 @@ export const REPUTACION = {
   // Términos de comercio asimétricos (Doc 2.7, uso 1): score bajo encarece la comisión que paga esa Facción.
   umbralBajoParaComision: -40,
   factorComisionPorReputacionBaja: 1.5,
+};
+
+// --- Tecnología por Eras (Doc 6) ---
+
+/** Eras con contenido (Doc 6.2). El plazo es un TECHO: la Era siguiente llega antes si se cumplen todos sus logros. */
+export const ERAS: Record<EraId, { orden: number; nombre: string; plazoSemanas: number }> = {
+  reinos_palaciales: { orden: 1, nombre: 'Reinos palaciales', plazoSemanas: 5 },
+  crisis_adaptacion: { orden: 2, nombre: 'Crisis y adaptación', plazoSemanas: 6 },
+  polis_imperios: { orden: 3, nombre: 'Polis e imperios', plazoSemanas: 7 },
+};
+
+/** Lo que cuesta adoptar una tecnología según su Era (Doc 6.5); lo paga el almacén de la capital. Placeholder. */
+export const TARIFA_ADOPCION: Record<EraId, Partial<Record<RecursoTipo, number>>> = {
+  reinos_palaciales: { oro: 100, madera: 200 },
+  crisis_adaptacion: { oro: 300, lingoteBronce: 30 },
+  polis_imperios: { oro: 600, lingoteHierro: 30 },
+};
+
+/** Una condición del hito de la Facción (Doc 6.3). "Edificio" = activo en cualquier asentamiento de la Facción;
+ * `nivelInterno` es un mínimo. */
+export type CondicionHito =
+  | { tipo: 'edificio'; edificio: EdificioTipo; nivelInterno?: number }
+  | { tipo: 'tecnologia'; id: TecnologiaId }
+  | { tipo: 'recursoEnCapital'; recurso: RecursoTipo }
+  | { tipo: 'capitalEnNivel'; nivel: number; conEdificio: EdificioTipo }
+  | { tipo: 'yacimientoEnTerritorio'; recurso: RecursoTipo };
+
+export interface DefinicionTecnologia {
+  nombre: string;
+  era: EraId;
+  /** Las de arranque (Doc 6.2) las tiene adoptadas toda Facción desde que nace: sin logro ni hito. */
+  deArranque?: true;
+  /** `umbral` es la X del logro: PLACEHOLDER hasta calibrarlo con batch en su semana objetivo (Doc 6.3). */
+  logro?: { contador: ContadorLogro; umbral: number };
+  hito: CondicionHito[];
+}
+
+const hitoEdificio = (e: EdificioTipo, nivelInterno?: number): CondicionHito => ({ tipo: 'edificio', edificio: e, nivelInterno });
+const hitoTecnologia = (id: TecnologiaId): CondicionHito => ({ tipo: 'tecnologia', id });
+
+/** Catálogo de las Eras I-III (Doc 6.6). */
+export const TECNOLOGIAS: Record<TecnologiaId, DefinicionTecnologia> = {
+  // Era I — Reinos palaciales
+  leva_comunal: { nombre: 'Leva comunal', era: 'reinos_palaciales', deArranque: true, hito: [] },
+  hostigamiento_tribal: { nombre: 'Hostigamiento tribal', era: 'reinos_palaciales', deArranque: true, hito: [] },
+  metalurgia_cobre: {
+    nombre: 'Metalurgia del cobre',
+    era: 'reinos_palaciales',
+    logro: { contador: 'extraido.cobre', umbral: 50_000 },
+    hito: [hitoEdificio('fundicion')],
+  },
+  aleacion_bronce: {
+    nombre: 'Aleación del bronce',
+    era: 'reinos_palaciales',
+    logro: { contador: 'caravanas.llegadasConEstano', umbral: 20 },
+    hito: [hitoEdificio('fundicion', 2), { tipo: 'recursoEnCapital', recurso: 'estano' }],
+  },
+  escudos_ligeros: {
+    nombre: 'Escudos ligeros',
+    era: 'reinos_palaciales',
+    logro: { contador: 'bandidos.campamentosDestruidos', umbral: 10 },
+    hito: [hitoEdificio('barracon')],
+  },
+  armamento_palacial: {
+    nombre: 'Armamento palacial',
+    era: 'reinos_palaciales',
+    logro: { contador: 'plazasEnNivel.2', umbral: 5 },
+    hito: [hitoEdificio('armeria'), hitoTecnologia('metalurgia_cobre')],
+  },
+  arqueria_palacial: {
+    nombre: 'Arquería palacial',
+    era: 'reinos_palaciales',
+    logro: { contador: 'batallas.libradas', umbral: 30 },
+    hito: [hitoEdificio('galeriaDeTiro')],
+  },
+  cria_caballar: {
+    nombre: 'Cría caballar',
+    era: 'reinos_palaciales',
+    logro: { contador: 'animales.comprados', umbral: 30 },
+    hito: [hitoEdificio('corral')],
+  },
+  carros_guerra: {
+    nombre: 'Carros de guerra',
+    era: 'reinos_palaciales',
+    logro: { contador: 'batallas.campoAbierto', umbral: 20 },
+    hito: [hitoTecnologia('cria_caballar'), hitoEdificio('caballerizas', 2), hitoEdificio('carpinteria', 2)],
+  },
+  // Era II — Crisis y adaptación
+  bronce_calidad_militar: {
+    nombre: 'Bronce de calidad militar',
+    era: 'crisis_adaptacion',
+    logro: { contador: 'fabricado.equipoBronce', umbral: 500 },
+    hito: [hitoEdificio('armeria', 3)],
+  },
+  forja_hierro_temprana: {
+    nombre: 'Forja del hierro temprana',
+    era: 'crisis_adaptacion',
+    logro: { contador: 'caravanas.destruidasOCapturadas', umbral: 10 },
+    hito: [hitoEdificio('fundicion', 2), { tipo: 'yacimientoEnTerritorio', recurso: 'hierro' }],
+  },
+  panoplia_bronce: {
+    nombre: 'Panoplia de bronce',
+    era: 'crisis_adaptacion',
+    logro: { contador: 'reclutados.escuadrones', umbral: 150 },
+    hito: [hitoTecnologia('bronce_calidad_militar'), hitoEdificio('barracon', 3)],
+  },
+  disciplina_formacion: {
+    nombre: 'Disciplina de formación',
+    era: 'crisis_adaptacion',
+    logro: { contador: 'asedios.resistidosEnCombate', umbral: 10 },
+    hito: [hitoEdificio('barracon', 2)],
+  },
+  arco_compuesto: {
+    nombre: 'Arco compuesto',
+    era: 'crisis_adaptacion',
+    logro: { contador: 'reclutados.arqueros', umbral: 360 },
+    hito: [hitoEdificio('carpinteria', 2), hitoEdificio('galeriaDeTiro', 3)],
+  },
+  equitacion_militar: {
+    nombre: 'Equitación militar',
+    era: 'crisis_adaptacion',
+    logro: { contador: 'reclutados.carros_guerra', umbral: 75 },
+    hito: [hitoEdificio('caballerizas')],
+  },
+  carpinteria_militar: {
+    nombre: 'Carpintería militar',
+    era: 'crisis_adaptacion',
+    logro: { contador: 'conquistas.conMurallaCompleta', umbral: 1 },
+    hito: [hitoEdificio('carpinteria', 2)],
+  },
+  // Era III — Polis e imperios
+  instituciones_civicas: {
+    nombre: 'Instituciones cívicas',
+    era: 'polis_imperios',
+    logro: { contador: 'plazasEnNivel.3', umbral: 10 },
+    hito: [{ tipo: 'capitalEnNivel', nivel: 3, conEdificio: 'mercado' }],
+  },
+  ciudadania_militar: {
+    nombre: 'Ciudadanía militar',
+    era: 'polis_imperios',
+    logro: { contador: 'asedios.resistidosConResidentes', umbral: 10 },
+    hito: [hitoTecnologia('instituciones_civicas'), hitoEdificio('barracon', 2)],
+  },
+  falange_hoplita: {
+    nombre: 'Falange hoplita',
+    era: 'polis_imperios',
+    logro: { contador: 'batallas.conHoplitas', umbral: 10 },
+    hito: [hitoTecnologia('ciudadania_militar'), hitoEdificio('barracon', 3)],
+  },
+  pantalla_escaramuzadores: {
+    nombre: 'Pantalla de escaramuzadores',
+    era: 'polis_imperios',
+    logro: { contador: 'reclutados.escaramuzadores_jabalina', umbral: 360 },
+    hito: [hitoEdificio('galeriaDeTiro', 2), hitoEdificio('armeria', 2)],
+  },
+  arqueria_especializada: {
+    nombre: 'Arquería especializada',
+    era: 'polis_imperios',
+    logro: { contador: 'reclutados.arqueros_compuesto', umbral: 120 },
+    hito: [hitoEdificio('galeriaDeTiro', 3)],
+  },
+  forja_hierro_estandarizada: {
+    nombre: 'Forja del hierro estandarizada',
+    era: 'polis_imperios',
+    logro: { contador: 'extraido.hierro', umbral: 50_000 },
+    hito: [hitoEdificio('fundicion', 2), hitoEdificio('minaHierro')],
+  },
+  bronce_laminado: {
+    nombre: 'Bronce laminado',
+    era: 'polis_imperios',
+    logro: { contador: 'fabricado.armaduraBronce', umbral: 200 },
+    hito: [hitoEdificio('armeria', 3)],
+  },
+  caballeria_organizada: {
+    nombre: 'Caballería organizada',
+    era: 'polis_imperios',
+    logro: { contador: 'reclutados.jinetes_asirios', umbral: 200 },
+    hito: [hitoEdificio('caballerizas', 2)],
+  },
+  trabajos_asedio: {
+    nombre: 'Trabajos de asedio',
+    era: 'polis_imperios',
+    logro: { contador: 'asedios.contraMurallaCompleta', umbral: 10 },
+    hito: [hitoEdificio('carpinteria', 2)],
+  },
 };

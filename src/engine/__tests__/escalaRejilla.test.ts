@@ -2,7 +2,7 @@
 //
 // Qué congela:
 //  - La tabla de huellas de `Docs/Coordinacion/propuestas/BA-005_huellas_y_escala_asentamiento.md`: los 27 tipos
-//    y sus 32 combinaciones de tipo/nivel/forma, en orientación base. Si un tipo cambia de tamaño, esta tabla
+//    y sus 32 combinaciones, más Caballerizas, Mina de hierro y Sala del Consejo (Doc 4.2.1) de tipo/nivel/forma, en orientación base. Si un tipo cambia de tamaño, esta tabla
 //    cambia a la vez que `LAYOUT_VERSION` (constants.ts): un tamaño nuevo reinterpreta las partidas guardadas.
 //  - El Centro Urbano, que nace en `(0,0)`, queda CENTRADO en el origen (por eso mide 4×4 y no 3×3).
 //  - `posicion` y celda mínima son inversas exactas para todo tipo, rotación y celda, también negativas.
@@ -34,6 +34,9 @@ const HUELLAS_BA005: Record<string, [number, number]> = {
   palacio: [4, 4],
   barracon: [2, 2],
   galeriaDeTiro: [2, 4],
+  caballerizas: [3, 2],
+  minaHierro: [1, 1],
+  salaConsejo: [3, 3],
   mercado: [3, 2],
   maravilla: [1, 1],
   plaza: [2, 2],
@@ -55,7 +58,7 @@ function nivelesDe(tipo: string): (number | undefined)[] {
 }
 
 describe('rejilla del asentamiento (BA-005)', () => {
-  it('las huellas de los 27 tipos (32 combinaciones) son las de la tabla BA-005', () => {
+  it('las huellas de los 30 tipos (35 combinaciones) son las de la tabla BA-005 más las de las Eras I-III', () => {
     const obtenidas: Record<string, [number, number]> = {};
     for (const tipo of EDIFICIOS_TIPO) {
       for (const nivel of nivelesDe(tipo)) {

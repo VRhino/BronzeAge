@@ -34,7 +34,14 @@ export type RecursoTipo =
   | 'armaBronceCalidad'
   | 'armaduraBasica'
   | 'armaduraIntermedia'
-  | 'armaduraBronce';
+  | 'armaduraBronce'
+  // --- Eras II-III (Doc 4.2.1): hierro, equipo de calidad y la pieza del carro de guerra ---
+  | 'hierro'
+  | 'lingoteHierro'
+  | 'armaHierro'
+  | 'armaHierroCalidad'
+  | 'armaduraBronceCalidad'
+  | 'carroGuerra';
 
 /**
  * Los valores de `RecursoTipo`, en runtime — para validar por HTTP que un `recurso` recibido de un cliente es
@@ -66,6 +73,12 @@ const TODOS_LOS_RECURSOS: Record<RecursoTipo, true> = {
   armaduraBasica: true,
   armaduraIntermedia: true,
   armaduraBronce: true,
+  hierro: true,
+  lingoteHierro: true,
+  armaHierro: true,
+  armaHierroCalidad: true,
+  armaduraBronceCalidad: true,
+  carroGuerra: true,
 };
 export const RECURSOS_TIPO = Object.keys(TODOS_LOS_RECURSOS) as RecursoTipo[];
 
@@ -130,6 +143,12 @@ export type EdificioTipo =
   | 'palacio'
   | 'barracon'
   | 'galeriaDeTiro'
+  // Caballería y carros (Doc 4.2.1, pide `cria_caballar`).
+  | 'caballerizas'
+  // Extractor de mineral de hierro (pide `forja_hierro_temprana`).
+  | 'minaHierro'
+  // Requisito del nivel 4 y +1 ranura del Gobernador (pide `instituciones_civicas`).
+  | 'salaConsejo'
   // Ampliación de comercio (a petición del usuario): gatea las órdenes de Mercado (Doc 3.3) y aloja el cupo
   // de la flota de caravanas propias (`cupoCaravanas`, engine/asentamientoQuery.ts). Vía política del
   // Tesorero, mismo patrón que Barracón/Galería de tiro/Palacio — no auto-construcción.
@@ -182,6 +201,9 @@ const TODOS_LOS_EDIFICIOS: Record<EdificioTipo, true> = {
   palacio: true,
   barracon: true,
   galeriaDeTiro: true,
+  caballerizas: true,
+  minaHierro: true,
+  salaConsejo: true,
   mercado: true,
   puestoMercado: true,
   maravilla: true,
@@ -1080,4 +1102,89 @@ export interface Titulo {
   /** Facción (o, según el título, jugador) que lo ostenta actualmente. */
   poseedorId: string;
   valorMetrica: number;
+}
+
+// --- Tecnología por Eras (Doc 6; plan en Consideraciones/Tecnologia_Eras_I-III_Definicion.md) ---
+
+/** Eras del servidor (Doc 6.2). Solo las que ya tienen contenido: la IV y la V entran al cerrar su diseño. */
+export type EraId = 'reinos_palaciales' | 'crisis_adaptacion' | 'polis_imperios';
+
+/** Catálogo de tecnologías (Doc 6.6), Eras I-III. */
+export type TecnologiaId =
+  // Era I
+  | 'leva_comunal'
+  | 'hostigamiento_tribal'
+  | 'metalurgia_cobre'
+  | 'aleacion_bronce'
+  | 'escudos_ligeros'
+  | 'armamento_palacial'
+  | 'arqueria_palacial'
+  | 'cria_caballar'
+  | 'carros_guerra'
+  // Era II
+  | 'bronce_calidad_militar'
+  | 'forja_hierro_temprana'
+  | 'panoplia_bronce'
+  | 'disciplina_formacion'
+  | 'arco_compuesto'
+  | 'equitacion_militar'
+  | 'carpinteria_militar'
+  // Era III
+  | 'instituciones_civicas'
+  | 'ciudadania_militar'
+  | 'falange_hoplita'
+  | 'pantalla_escaramuzadores'
+  | 'arqueria_especializada'
+  | 'forja_hierro_estandarizada'
+  | 'bronce_laminado'
+  | 'caballeria_organizada'
+  | 'trabajos_asedio';
+
+/** Lo que cuenta el servidor para los logros (Doc 6.3). Solo crece. */
+export type ContadorLogro =
+  | 'extraido.cobre'
+  | 'extraido.hierro'
+  | 'fabricado.equipoBronce'
+  | 'fabricado.armaduraBronce'
+  | 'caravanas.llegadasConEstano'
+  | 'caravanas.destruidasOCapturadas'
+  | 'bandidos.campamentosDestruidos'
+  | 'animales.comprados'
+  | 'batallas.libradas'
+  | 'batallas.campoAbierto'
+  | 'batallas.conHoplitas'
+  | 'asedios.resistidosEnCombate'
+  | 'asedios.resistidosConResidentes'
+  | 'asedios.contraMurallaCompleta'
+  | 'conquistas.conMurallaCompleta'
+  | 'reclutados.escuadrones'
+  | 'reclutados.arqueros'
+  | 'reclutados.carros_guerra'
+  | 'reclutados.escaramuzadores_jabalina'
+  | 'reclutados.arqueros_compuesto'
+  | 'reclutados.jinetes_asirios'
+  | 'plazasEnNivel.2'
+  | 'plazasEnNivel.3';
+
+/** Tecnologías de UNA Facción (Doc 6.1, 6.4). `adoptadas` está siempre contenida en `aparecidas`. */
+export interface TecnologiasFaccion {
+  aparecidas: TecnologiaId[];
+  adoptadas: TecnologiaId[];
+}
+
+/**
+ * Estado de tecnología del servidor (Doc 6). Vive fuera de `Faccion` a propósito: `Faccion` viaja entera a todos los
+ * jugadores (`proyectarParaJugador`), y las tecnologías de un rival están ocultas (D55).
+ */
+export interface EstadoTecnologia {
+  era: EraId;
+  /** Cuándo empezó la Era vigente: su plazo cuenta desde aquí (Doc 6.2). */
+  eraDesde: Instante;
+  contadores: Partial<Record<ContadorLogro, number>>;
+  /** Logro de cada tecnología → cuándo se cumplió. Fijado para siempre (Doc 6.3). */
+  logros: Partial<Record<TecnologiaId, Instante>>;
+  /** Primera Facción que desbloqueó cada tecnología (crónica; el retraso de los Aedas parte de aquí, Doc 6.4). */
+  primeros: Partial<Record<TecnologiaId, { faccionId: string; en: Instante }>>;
+  /** Por `faccionId`. Una Facción ausente solo tiene las tecnologías de arranque (`tecnologiasDe`). */
+  porFaccion: Record<string, TecnologiasFaccion>;
 }

@@ -29,6 +29,12 @@ export const RECURSO_COLOR: Record<RecursoTipo, string> = {
   armaduraBasica: '#a9a9a9',
   armaduraIntermedia: '#8d8d8d',
   armaduraBronce: '#6b6b6b',
+  hierro: '#5a5a66',
+  lingoteHierro: '#6e6e7a',
+  armaHierro: '#7a7a86',
+  armaHierroCalidad: '#4a4a56',
+  armaduraBronceCalidad: '#5a4a2e',
+  carroGuerra: '#7a5a2e',
 };
 
 /** Tipos de recurso que SÍ se dibujan como punto en el mapa (para la leyenda) — trigo y madera no lo son. */
@@ -251,6 +257,9 @@ export const EDIFICIO_ETIQUETA: Record<EdificioTipo, string> = {
   palacio: 'Palacio',
   barracon: 'Barracón',
   galeriaDeTiro: 'Galería de tiro',
+  caballerizas: 'Caballerizas',
+  minaHierro: 'Mina (hierro)',
+  salaConsejo: 'Sala del Consejo',
   mercado: 'Mercado',
   puestoMercado: 'Puesto de mercado',
   maravilla: 'Maravilla',
@@ -283,6 +292,9 @@ export const EDIFICIO_COLOR: Record<EdificioTipo, string> = {
   carpinteria: '#6b4226',
   barracon: '#8b3a3a',
   galeriaDeTiro: '#4a7a4a',
+  caballerizas: '#8a6a3a',
+  minaHierro: '#5a5a66',
+  salaConsejo: '#b89a5a',
   palacio: '#c9a227',
   mercado: '#2d9c8f',
   // Tono más claro del Mercado a propósito: los puestos son piezas de SU zona, y con la etiqueta de texto

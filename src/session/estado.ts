@@ -16,7 +16,7 @@ import type {
   RelacionPolitica,
   Titulo,
   ZonaFaccion,
-  ZonaInfluencia, Ejercito, Heroe } from '../domain/types';
+  ZonaInfluencia, Ejercito, EstadoTecnologia, Heroe } from '../domain/types';
 import type { TrazadoAsentamiento } from '../engine/trazado';
 import type { MemoriaFaccion } from '../engine/memoria';
 import type { EventoDominio } from '../domain/eventos';
@@ -124,6 +124,9 @@ export interface GameSessionState {
    * deriva al proyectar. Una Facción ausente no ha visto nada, así que un snapshot viejo no necesita
    * migración — solo empieza a recordar a partir del primer tick que corra con la mecánica. */
   memoriaPorFaccion: Record<string, MemoriaFaccion>;
+  /** Eras, logros y tecnologías de cada Facción (Doc 6). NO viaja entero a un jugador: las tecnologías de un rival
+   * están ocultas (Doc 6.4). */
+  tecnologia: EstadoTecnologia;
 }
 
 /** Proyecta el estado de partida al subconjunto que consume el motor. El motor no conoce `gameId`, `version`,
@@ -142,6 +145,7 @@ export function estadoSimulacionDe(estado: GameSessionState): EstadoSimulacion {
     campamentosBandidos: estado.campamentosBandidos,
     memoriaPorFaccion: estado.memoriaPorFaccion,
     heroes: estado.heroes,
+    tecnologia: estado.tecnologia,
   };
 }
 
@@ -162,6 +166,7 @@ export function conResultadoDeSimulacion(estado: GameSessionState, simulacion: E
     campamentosBandidos: simulacion.campamentosBandidos,
     memoriaPorFaccion: simulacion.memoriaPorFaccion,
     heroes: simulacion.heroes,
+    tecnologia: simulacion.tecnologia,
   };
 }
 

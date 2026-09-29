@@ -5,6 +5,7 @@ import { createRng, generarMapa, MAPA_DEFAULT, restaurarRng, WORLDGEN_VERSION } 
 import { crearMapa, type EstadoMapa, type Mapa } from '../src/world/mapa';
 import { avanzarSimulacion, type EstadoSimulacion } from '../src/engine/simulation';
 import { crearFaccion } from '../src/engine/faccion';
+import { estadoTecnologiaInicial } from '../src/engine/tecnologia';
 import { evaluarViabilidadFundacion, fundarAsentamiento } from '../src/engine/settlement';
 import { nivelActualDe, tieneMercadoActivo, edificiosPorTipoYEstado, nutricionPoblacionDe } from '../src/engine/asentamientoQuery';
 import { alcanzoTopeDeViviendas, reclamosDeFuentes } from '../src/engine/construction';
@@ -1095,12 +1096,14 @@ async function main() {
     );
   }
 
-  let estado: EstadoSimulacion = DESDE ? DESDE.estado : {
+  // Un checkpoint anterior a la tecnología (Doc 6) arranca la Era I en su propio instante.
+  let estado: EstadoSimulacion = DESDE ? { ...DESDE.estado, tecnologia: DESDE.estado.tecnologia ?? estadoTecnologiaInicial(instanteDeTick(DESDE.tick)) } : {
     asentamientos,
     facciones,
     caravanas: [],
     ejercitos: [],
     memoriaPorFaccion: {},
+    tecnologia: estadoTecnologiaInicial(instanteDeTick(0)),
     acuerdos: [],
     ordenes: [],
     relaciones: [],

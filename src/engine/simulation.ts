@@ -1,4 +1,4 @@
-import type { AcuerdoTrueque, Asentamiento, CaminoComercial, CampamentoBandido, Caravana, Ejercito, Faccion, Heroe, OrdenMercado, RelacionPolitica, Titulo } from '../domain/types';
+import type { AcuerdoTrueque, Asentamiento, CaminoComercial, CampamentoBandido, Caravana, Ejercito, EstadoTecnologia, Faccion, Heroe, OrdenMercado, RelacionPolitica, Titulo } from '../domain/types';
 import type { EventoCrudo, EventoDominio } from '../domain/eventos';
 import type { Instante } from '../domain/tiempo';
 import type { EstadoMapa, Mapa } from '../world/mapa';
@@ -49,6 +49,8 @@ export interface EstadoSimulacion {
    * combate, vuelta al campamento—, dónde quedan al volver a casa y la `exploracionPersonal` de quien aún no
    * tiene bandera; todo lo demás de un héroe lo escribe un comando. */
   heroes: Heroe[];
+  /** Eras, logros y tecnologías de cada Facción (Doc 6, `engine/tecnologia.ts`). */
+  tecnologia: EstadoTecnologia;
 }
 
 /**
@@ -340,6 +342,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
       instante,
     }),
     heroes: grabarExploracionPersonal(heroes, trasEjercitos.ejercitos, mapa.limites),
+    tecnologia: estado.tecnologia,
     estadoMapa: mapa.estadoActual(),
     combatesPorAbrir: trasEjercitos.combatesPorAbrir,
     eventosDominio,

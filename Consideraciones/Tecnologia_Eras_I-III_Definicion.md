@@ -98,10 +98,14 @@ Cada paso deja los tests en verde y se puede fusionar por separado.
 - [x] BA-006: las Eras I-III quedan marcadas como bajadas al canon; sus tablas se sustituyen por un puntero.
 
 ### Paso 1 — Modelo y catálogo, sin efecto
-- [ ] Tipos del §2, `ERAS`, `TARIFA_ADOPCION`, `TECNOLOGIAS` (Eras I-III, con hitos del apéndice A).
-- [ ] Toda Facción nace con `leva_comunal` y `hostigamiento_tribal` adoptadas (D10, D48); el servidor, en la Era I.
-- [ ] `FORMATO_SNAPSHOT_VERSION` 18 → 19. Proyecciones y fixtures del contrato con los campos nuevos.
-- [ ] Test: el catálogo es coherente (toda tecnología citada en un hito existe; toda tropa, edificio, nivel y receta
+- [x] Tipos del §2, `ERAS`, `TARIFA_ADOPCION`, `TECNOLOGIAS` (Eras I-III, con hitos del apéndice A).
+- [x] Toda Facción nace con `leva_comunal` y `hostigamiento_tribal` adoptadas (D10, D48); el servidor, en la Era I.
+- [x] Hecho de otra forma: las tecnologías de cada Facción viven en `EstadoTecnologia.porFaccion` y no en `Faccion`,
+  que viaja entera a todos los jugadores (D55). Los tipos de recurso y edificio nuevos (hierro, equipo de calidad,
+  carro, Caballerizas, Mina de hierro, Sala del Consejo) entran ya aquí con su ficha de catálogo y su huella, pero sin
+  uso: nadie los construye hasta los Pasos 5, 8 y 9.
+- [x] `FORMATO_SNAPSHOT_VERSION` 18 → 19. Proyecciones y fixtures del contrato con los campos nuevos.
+- [x] Test: el catálogo es coherente (toda tecnología citada en un hito existe; toda tropa, edificio, nivel y receta
   con `requiereTecnologia` apunta a una tecnología real de una Era implementada).
 
 ### Paso 2 — Contadores, logros, Eras y aparición

@@ -27,6 +27,7 @@ import {
   type ManejadorComando,
   type ResultadoComando,
 } from './comandos/tipos';
+import { estadoTecnologiaInicial } from '../engine/tecnologia';
 
 export type { GameSessionState } from './estado';
 export type { ResultadoComando } from './comandos/tipos';
@@ -98,6 +99,7 @@ export class GameSession {
       caminos: [],
       campamentosBandidos: [],
       memoriaPorFaccion: {},
+      tecnologia: estadoTecnologiaInicial(instanteDeTick(0)),
       faccionesNpcIds: [],
       tick: 0,
       version: 0,

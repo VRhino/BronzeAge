@@ -11,6 +11,7 @@ import { evaluarViabilidadFundacion, fundarAsentamiento } from '../settlement';
 import type { ContextoSimulacion, EstadoSimulacion } from '../simulation';
 import { PROGRESION_INICIAL } from '../tropas';
 import { progresionInicial } from '../heroe';
+import { estadoTecnologiaInicial } from '../tecnologia';
 
 /** Un héroe humano de prueba. Su `jugadorId` es su propio id, así que un test actúa con `{ actor: id }`. */
 export function heroeDePrueba(id: string, ubicacion: UbicacionHeroe, extra: Partial<Heroe> = {}): Heroe {
@@ -140,6 +141,7 @@ export function crearEstadoDeTest(
     caravanas: [],
     ejercitos: [],
     memoriaPorFaccion: {},
+    tecnologia: estadoTecnologiaInicial(instante(0)),
     acuerdos: [],
     ordenes: [],
     relaciones: [],

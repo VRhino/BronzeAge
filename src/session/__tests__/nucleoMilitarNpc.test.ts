@@ -10,6 +10,8 @@ import { avanzarNpcGobernanza } from '../npcGobernanza';
 import { contextoDeTest, crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from '../../engine/__tests__/fixtures';
 import { createRng } from '../../worldgen';
 import { ZONA_INFLUENCIA } from '../../constants';
+import { estadoTecnologiaInicial } from '../../engine/tecnologia';
+import { instante } from '../../domain/tiempo';
 
 const SEED = 42;
 
@@ -51,6 +53,7 @@ function estadoBase(): { estado: EstadoSimulacion; mapa: ReturnType<typeof crear
       campamentosBandidos: [],
       memoriaPorFaccion: {},
       heroes: [],
+      tecnologia: estadoTecnologiaInicial(instante(0)),
     },
     mapa,
     faccionId: 'faccion-1',
