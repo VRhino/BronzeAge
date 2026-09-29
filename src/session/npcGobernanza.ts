@@ -500,7 +500,9 @@ function asegurarNucleoMilitar(
     ? 'barracon'
     : !tieneOEnCurso(asentamiento, 'galeriaDeTiro')
       ? 'galeriaDeTiro'
-      : undefined;
+      : !tieneOEnCurso(asentamiento, 'caballerizas') && adoptadas.includes('cria_caballar')
+        ? 'caballerizas'
+        : undefined;
   if (!faltante) return asentamiento;
 
   try {

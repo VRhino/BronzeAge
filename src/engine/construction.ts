@@ -940,7 +940,7 @@ function pisaCalleComprometida(
  * están vacías, el nivel interno solo cambia `cupoCaravanas` (ver `cupoCaravanas`, asentamientoQuery.ts).
  * Granja también, y con dos particularidades propias: su nivel sube el rinde de trigo
  * (`produccionTrigoDeGranja`) y AGRANDA su huella, lo que obliga a mudarla (ver `avanzarMejoras`). */
-const EDIFICIOS_CON_NIVELES = ['fundicion', 'curtiduria', 'armeria', 'carpinteria', 'barracon', 'galeriaDeTiro', 'mercado', 'granja', 'granero'] as const;
+const EDIFICIOS_CON_NIVELES = ['fundicion', 'curtiduria', 'armeria', 'carpinteria', 'barracon', 'galeriaDeTiro', 'caballerizas', 'mercado', 'granja', 'granero'] as const;
 
 function nivelesDe(tipo: EdificioTipo): Record<number, NivelEdificioTransformacion> | undefined {
   return (EDIFICIO_CATALOGO[tipo] as { niveles?: Record<number, NivelEdificioTransformacion> }).niveles;
@@ -1520,7 +1520,9 @@ const EDIFICIOS_UNICOS = new Set<EdificioTipo>([
   'granero',
   'barracon',
   'galeriaDeTiro',
+  'caballerizas',
   'palacio',
+  'salaConsejo',
   'mercado',
   'granFundicion',
   'maravilla',

@@ -149,12 +149,12 @@ Cada paso deja los tests en verde y se puede fusionar por separado.
   `crearEstadoDeTest` adopta todo el catálogo.
 
 ### Paso 5 — Edificios de la Era I (P1, P2, D37)
-- [ ] Carpintería: se construye desde el nivel 2; Carpintería 2 fabrica la pieza `carroGuerra` (`carros_guerra`).
-- [ ] Barracón 3 y Galería 3: nivel 3 + Carpintería 2 (fuera el Palacio). Armería 2 y 3: + Fundición 2 (G3, D43).
+- [x] Carpintería: se construye desde el nivel 2; Carpintería 2 fabrica la pieza `carroGuerra` (`carros_guerra`).
+- [x] Barracón 3 y Galería 3: nivel 3 + Carpintería 2 (fuera el Palacio). Armería 2 y 3: + Fundición 2 (G3, D43).
   Fundición 3: nivel 4 (su contenido llega en el Paso 9).
-- [ ] **Caballerizas** (edificio nuevo, `cria_caballar`): coste y requisitos del Barracón, huella 3×2, niveles 1-3
+- [x] **Caballerizas** (edificio nuevo, `cria_caballar`): coste y requisitos del Barracón, huella 3×2, niveles 1-3
   (el 3 = nivel 3 + Carpintería 2); cupo de guarnición derivado del catálogo (D37) en `cupoGuarnicion`.
-- [ ] Tipo de edificio de las tropas: `+ 'caballerizas'`.
+- [x] Tipo de edificio de las tropas: `+ 'caballerizas'`.
 
 ### Paso 6 — Población por escalón y Palacio (§37)
 - [ ] `reclutarTropa` deja de recibir `origen`: escalones 1-2 → pesants, 3 → artesanos, 4-5 → nobleza (las
@@ -196,7 +196,8 @@ Cada paso deja los tests en verde y se puede fusionar por separado.
   no sale de su capital (se le trata como a quien tiene cargo en campañas, cacerías y repartos). En el batch, el Rey
   de cada Facción es su primer fundador, como en `crearFaccionNpc`. Adelantado tras el Paso 4 para que el batch no
   se quede sin tecnología.
-- [ ] Construye Caballerizas, Mina de hierro, Sala del Consejo y pide la subida a 4 cuando le toca.
+- [ ] Construye Caballerizas (hecho en el Paso 5, con `cria_caballar`), Mina de hierro, Sala del Consejo y pide la
+  subida a 4 cuando le toca.
 - [ ] `TROPAS_POR_PREFERENCIA_NPC` filtra por tecnología adoptada y recluta con la clase que toca.
 - [ ] Actualizar `Consideraciones/NPC_Gobernanza_Facciones_Controladas.md` §4.9.
 

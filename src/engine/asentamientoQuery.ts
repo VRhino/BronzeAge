@@ -108,8 +108,11 @@ export function cupoEscolta(asentamiento: Asentamiento): number {
  */
 export function cupoGuarnicion(asentamiento: Asentamiento): number {
   const edificios = (['barracon', 'galeriaDeTiro'] as const).flatMap((tipo) => edificiosPorTipoYEstado(asentamiento, tipo).slice(0, 1));
-  if (edificios.length === 0) return 0;
-  const porEdificios = edificios.reduce((suma, e) => suma + (GUARNICION.cupoPorNivelEdificio[nivelInternoActual(e) - 1] ?? 0), 0);
+  const caballerizas = edificiosPorTipoYEstado(asentamiento, 'caballerizas')[0];
+  const porEdificios =
+    edificios.reduce((suma, e) => suma + (GUARNICION.cupoPorNivelEdificio[nivelInternoActual(e) - 1] ?? 0), 0) +
+    (caballerizas ? (GUARNICION.cupoPorNivelCaballerizas[nivelInternoActual(caballerizas) - 1] ?? 0) : 0);
+  if (porEdificios === 0) return 0;
   const muralla = (asentamiento.recintos ?? []).some((r) => integridadDeRecinto(r) >= 1) ? GUARNICION.recintoCompleto : 0;
   return porEdificios + muralla + cupoGuarnicionExtra(asentamiento);
 }

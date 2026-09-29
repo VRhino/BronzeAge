@@ -487,9 +487,11 @@ export const EDIFICIO_CATALOGO = {
           RECETA_ARMA_MADERA,
         ],
       },
+      // P1 (Doc 4.2.1): el arma sale de la fundición, así que la Armería 2 y la 3 piden Fundición 2.
       2: {
         requisitoNivelAsentamiento: 2,
-        requiereEdificio: 'carpinteria',
+        requiereEdificio: 'fundicion',
+        requiereEdificioNivel: 2,
         costoMejora: { madera: 150, piedra: 100 },
         trabajadoresRequeridos: 8,
         recetas: [
@@ -502,7 +504,8 @@ export const EDIFICIO_CATALOGO = {
       },
       3: {
         requisitoNivelAsentamiento: 3,
-        requiereEdificio: 'palacio',
+        requiereEdificio: 'fundicion',
+        requiereEdificioNivel: 2,
         costoMejora: { madera: 450, piedra: 200 },
         trabajadoresRequeridos: 20,
         recetas: [
@@ -524,13 +527,22 @@ export const EDIFICIO_CATALOGO = {
   // asedio no se modelan en Fase 0 (combate resuelto como cálculo/log, Doc 5.10). Gate subido de nivel 2 a
   // nivel 3 (Doc Fase_0_6, a petición del usuario): habilita Armería/Barracón/Galería de tiro nivel 2 igual
   // que antes, pero ahora llega un escalón más tarde — se desbloquea junto con Murallas en nivel 3.
+  // P2 (Era I, Doc 4.2.1): se construye desde el nivel 2 — abre Barracón 2 y Galería 2 —, y su nivel 2 (asentamiento
+  // nivel 3) abre el nivel 3 de Barracón, Galería de tiro y Caballerizas y fabrica la pieza del carro de guerra.
   carpinteria: {
     costo: { madera: 60, piedra: 20 },
     tiempoConstruccionMinutos: 720,
-    requisitoNivelAsentamientoConstruccion: 3,
+    requisitoNivelAsentamientoConstruccion: 2,
     niveles: {
       1: { trabajadoresRequeridos: 0, recetas: [] },
-      2: { requisitoNivelAsentamiento: 3, costoMejora: { madera: 120, piedra: 60 }, trabajadoresRequeridos: 0, recetas: [] },
+      2: {
+        requisitoNivelAsentamiento: 3,
+        costoMejora: { madera: 120, piedra: 60 },
+        trabajadoresRequeridos: 4,
+        recetas: [
+          { produce: 'carroGuerra', produccionBase: 1, consumePorUnidad: { madera: 20, cueroCurtido: 2, lingoteBronce: 1 }, requiereTecnologia: 'carros_guerra' },
+        ],
+      },
     } as Record<number, NivelEdificioTransformacion>,
   },
 
@@ -562,9 +574,11 @@ export const EDIFICIO_CATALOGO = {
         trabajadoresRequeridos: 0,
         recetas: [],
       },
+      // P2 (Doc 4.2.1): la infantería pesada va en la meseta de nivel 3 de la Era II, no tras el Palacio.
       3: {
         requisitoNivelAsentamiento: 3,
-        requiereEdificio: 'palacio',
+        requiereEdificio: 'carpinteria',
+        requiereEdificioNivel: 2,
         costoMejora: { madera: 300, piedra: 200 },
         trabajadoresRequeridos: 0,
         recetas: [],
@@ -1551,7 +1565,7 @@ export const TROPAS_RECLUTABLES: {
   /** La tecnología que la Facción tiene que haber adoptado para reclutarla (las cuatro puertas, Doc 6.1). */
   tecnologia: TecnologiaId;
   nombre: string;
-  edificio: 'centroUrbano' | 'barracon' | 'galeriaDeTiro';
+  edificio: 'centroUrbano' | 'barracon' | 'galeriaDeTiro' | 'caballerizas';
   nivelRequerido: number;
   costoEquipo: Partial<Record<string, number>>;
   poderBase: number;
@@ -1721,8 +1735,10 @@ export const BATALLA = {
 /** Cupo de guarnición de cada héroe residente (Doc 5.15.3), en la escala del coste de Liderazgo (5.11.1). La
  * política "Levas de guarnición" suma lo suyo desde `POLITICA_CATALOGO` (`cupoGuarnicionExtra`). */
 export const GUARNICION = {
-  /** Barracón y Galería de tiro, cada uno por su nivel interno 1/2/3. Sin ninguno de los dos, no hay guarnición. */
+  /** Barracón y Galería de tiro, cada uno por su nivel interno 1/2/3. */
   cupoPorNivelEdificio: [7, 14, 22],
+  /** Caballerizas por nivel interno 1/2/3 (D37): nada, la caballería más barata (14) y la más cara del roster (32). */
+  cupoPorNivelCaballerizas: [0, 14, 32],
   recintoCompleto: 14,
 };
 

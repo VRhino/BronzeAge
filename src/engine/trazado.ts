@@ -623,6 +623,7 @@ export const CATEGORIA_POR_TIPO: Partial<Record<EdificioTipo, CategoriaAsentamie
   maravilla: 'industria',
   barracon: 'militar',
   galeriaDeTiro: 'militar',
+  caballerizas: 'militar',
   carpinteria: 'militar',
   mercado: 'mercado',
   // Los puestos comparten el barrio del Mercado: así la acreción que ya existe (`distanciaAlBarrio`) los

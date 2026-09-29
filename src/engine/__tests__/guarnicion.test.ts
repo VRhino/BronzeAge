@@ -12,7 +12,7 @@ const mapa = crearMapaDeterminista(42);
 const plaza = () => fundarAsentamientoDeTest(mapa, crearFacciones(), 'faccion-1', []).asentamiento;
 const RESIDENTE = 'jugador-faccion-1-1';
 
-const edificio = (tipo: 'barracon' | 'galeriaDeTiro', nivelInterno: number): Edificio => ({
+const edificio = (tipo: 'barracon' | 'galeriaDeTiro' | 'caballerizas', nivelInterno: number): Edificio => ({
   id: `${tipo}-test`,
   tipo,
   posicion: { x: 18, y: 0 },
@@ -30,6 +30,13 @@ const recinto = (levantado: boolean): Recinto => ({
 });
 
 describe('cupoGuarnicion', () => {
+  it('las Caballerizas no dan cupo en su nivel 1; en el 2 y el 3, lo de su tabla (D37)', () => {
+    const con = (nivel: number) => cupoGuarnicion({ ...plaza(), edificios: [...plaza().edificios, edificio('caballerizas', nivel)] });
+    expect(con(1)).toBe(0);
+    expect(con(2)).toBe(GUARNICION.cupoPorNivelCaballerizas[1]);
+    expect(con(3)).toBe(GUARNICION.cupoPorNivelCaballerizas[2]);
+  });
+
   it('sin Barracón ni Galería de tiro no hay guarnición, aunque haya muralla', () => {
     expect(cupoGuarnicion({ ...plaza(), recintos: [recinto(true)] })).toBe(0);
   });
