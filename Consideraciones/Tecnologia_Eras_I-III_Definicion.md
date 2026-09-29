@@ -191,9 +191,11 @@ Cada paso deja los tests en verde y se puede fusionar por separado.
   Espartiatas.
 
 ### Paso 10 — NPC
-- [ ] Adopta en cuanto le aparece una tecnología y puede pagarla (orden: la que abre tropa o subida de nivel
-  primero). **Adopta como un jugador: con su Rey en la capital** (decidido el 2026-09-29, R3). Si el Rey está fuera
-  y hay algo que adoptar, lo lleva a casa antes de mandarlo de campaña.
+- [x] Adopta en cuanto le aparece una tecnología, en orden de aparición, mientras la capital guarde el doble de la
+  tarifa. **Adopta como un jugador: con su Rey en la capital** (decidido el 2026-09-29, R3). Hecho así: el Rey NPC
+  no sale de su capital (se le trata como a quien tiene cargo en campañas, cacerías y repartos). En el batch, el Rey
+  de cada Facción es su primer fundador, como en `crearFaccionNpc`. Adelantado tras el Paso 4 para que el batch no
+  se quede sin tecnología.
 - [ ] Construye Caballerizas, Mina de hierro, Sala del Consejo y pide la subida a 4 cuando le toca.
 - [ ] `TROPAS_POR_PREFERENCIA_NPC` filtra por tecnología adoptada y recluta con la clase que toca.
 - [ ] Actualizar `Consideraciones/NPC_Gobernanza_Facciones_Controladas.md` §4.9.

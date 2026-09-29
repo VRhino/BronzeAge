@@ -5,6 +5,7 @@ import { createRng, generarMapa, MAPA_DEFAULT, restaurarRng, WORLDGEN_VERSION } 
 import { crearMapa, type EstadoMapa, type Mapa } from '../src/world/mapa';
 import { avanzarSimulacion, type EstadoSimulacion } from '../src/engine/simulation';
 import { crearFaccion } from '../src/engine/faccion';
+import { asignarRey } from '../src/engine/cargos';
 import { contadoresDeEventos, estadoTecnologiaInicial, sumarContadores } from '../src/engine/tecnologia';
 import { evaluarViabilidadFundacion, fundarAsentamiento } from '../src/engine/settlement';
 import { nivelActualDe, tieneMercadoActivo, edificiosPorTipoYEstado, nutricionPoblacionDe } from '../src/engine/asentamientoQuery';
@@ -1063,7 +1064,8 @@ async function main() {
     const resultado = fundarAsentamiento(mapa, facciones, faccion.id, posicion, heroes, asentamientos, instanteDeTick(0));
     asentamientos.push(resultado.asentamiento);
     idsFundados.push(resultado.asentamiento.id);
-    facciones = resultado.facciones;
+    // Toda Facción tiene Rey (Doc 2.2): el primer fundador, como en `crearFaccionNpc`. Adopta la tecnología (Doc 6.5).
+    facciones = resultado.facciones.map((f) => (f.id === faccion.id ? asignarRey(f, heroes[0]!) : f));
   }
 
   // `BATCH_RUINAS_DIAG=1`: bosques alcanzables al fundar, medidos al RADIO INICIAL (30) y al techo de nivel 1

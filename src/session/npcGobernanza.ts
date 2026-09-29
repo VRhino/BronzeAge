@@ -23,7 +23,7 @@
 //
 // Diseño, decisiones y limitaciones: `Consideraciones/NPC_Gobernanza_Facciones_Controladas.md`.
 
-import type { AcuerdoTrueque, Asentamiento, Caravana, CampamentoBandido, EdificioTipo, Ejercito, Escuadron, Faccion, Heroe, OrdenMercado, Point, RecursoTipo, RelacionPolitica, UbicacionHeroe, TecnologiaId } from '../domain/types';
+import type { AcuerdoTrueque, Asentamiento, Caravana, CampamentoBandido, EdificioTipo, Ejercito, Escuadron, Faccion, Heroe, OrdenMercado, Point, RecursoTipo, RelacionPolitica, UbicacionHeroe, TecnologiaId, EstadoTecnologia } from '../domain/types';
 import { RECURSOS_TIPO } from '../domain/types';
 import { colocarOrdenMercado } from '../engine/market';
 import type { Mapa } from '../world/mapa';
@@ -31,7 +31,16 @@ import type { RandomFn } from '../worldgen';
 import type { ContextoSimulacion, EstadoSimulacion } from '../engine/simulation';
 import { avanzarAutoComercioSimulado } from '../engine/simulacionAutoComercio';
 import { reclutarTropa, ReclutamientoInvalidoError } from '../engine/tropas';
-import { contadoresDeEventos, contadoresDeReclutamiento, sumarContadores, sumarDeltas, tecnologiasDe, type DeltaContadores } from '../engine/tecnologia';
+import {
+  AdopcionInvalidaError,
+  adoptarTecnologia,
+  contadoresDeEventos,
+  contadoresDeReclutamiento,
+  sumarContadores,
+  sumarDeltas,
+  tecnologiasDe,
+  type DeltaContadores,
+} from '../engine/tecnologia';
 import { campamentoDe, conEscuadrones, conTropa, defensaDe, indiceTropa, sinGuarnicion, sinTropa, type IndiceTropa } from '../engine/tropa';
 import { asignarGuarnicion, guardarLoadout, HeroeInvalidoError, heridosEn, herir, progresionInicial } from '../engine/heroe';
 import { puedeLlevar } from '../engine/liderazgo';
@@ -75,6 +84,8 @@ import {
   NIVEL_ASENTAMIENTO,
   TROPAS_RECLUTABLES,
   VISION,
+  TARIFA_ADOPCION,
+  TECNOLOGIAS,
 } from '../constants';
 import { situarHeroes } from '../engine/ubicacion';
 import {
@@ -415,6 +426,45 @@ function asegurarInfraestructuraComercial(
   }
 
   return { asentamiento: actual, caravanasNuevas, contador: siguiente };
+}
+
+/**
+ * El NPC adopta lo que le aparece, como un jugador: su Rey en la capital y la capital paga (Doc 6.5). Por orden de
+ * aparición, mientras la capital guarde el doble de la tarifa: la otra mitad es margen para el mantenimiento.
+ * ponytail: el Rey vive en la capital porque es el primer fundador y el NPC no lo saca de ella; si la capital cambia
+ * (se pierde la plaza más antigua), no adopta hasta que el Rey vuelva — llevarlo a casa si pasa en el batch.
+ */
+function adoptarTecnologiasNpc(
+  tecnologia: EstadoTecnologia,
+  facciones: readonly Faccion[],
+  asentamientos: Asentamiento[],
+  heroes: readonly Heroe[],
+  ejercitos: readonly Ejercito[],
+  esNpc: (faccionId: string) => boolean
+): { tecnologia: EstadoTecnologia; asentamientos: Asentamiento[]; eventos: string[] } {
+  let actual = tecnologia;
+  let plazas = asentamientos;
+  const eventos: string[] = [];
+  for (const faccion of facciones) {
+    if (!esNpc(faccion.id)) continue;
+    const { aparecidas, adoptadas } = tecnologiasDe(actual, faccion.id);
+    for (const id of aparecidas.filter((t) => !adoptadas.includes(t))) {
+      const capital = encontrarCapital(faccion.id, plazas);
+      const tarifa = TARIFA_ADOPCION[TECNOLOGIAS[id].era];
+      const doble = Object.fromEntries(Object.entries(tarifa).map(([r, n]) => [r, 2 * (n ?? 0)]));
+      if (!capital || !tieneRecursos(capital.almacen, doble)) break;
+      try {
+        const r = adoptarTecnologia(actual, faccion, id, { asentamientos: plazas, heroes, ejercitos });
+        actual = r.tecnologia;
+        plazas = plazas.map((a) => (a.id === r.capital.id ? r.capital : a));
+        eventos.push(...r.eventos.map((e) => (typeof e === 'string' ? e : e.mensaje)));
+      } catch (err) {
+        if (!(err instanceof AdopcionInvalidaError)) throw err;
+        break;
+      }
+    }
+  }
+  return { tecnologia: actual, asentamientos: plazas, eventos };
 }
 
 /** Devuelve `true` si `tipo` ya está activo, en construcción o en cola — evita reintentar
@@ -889,7 +939,9 @@ function cazarBandidos(
   instante: Instante,
   contadorInicial: number,
   esNpc: (faccionId: string) => boolean,
-  rng: RandomFn
+  rng: RandomFn,
+  /** Reyes NPC: no salen de su capital, donde adoptan tecnología (Doc 6.5). */
+  reyes: ReadonlySet<string>
 ): {
   asentamientos: Asentamiento[];
   ejercitos: Ejercito[];
@@ -949,7 +1001,7 @@ function cazarBandidos(
     const campamento_ = campamentoDe(plaza, heroesActuales);
     const vivas = campamento_.filter((e) => e.cantidad > 0 && !e.enGuarnicion && !heridos.has(e.heroeId));
     if (vivas.length === 0 || saludEscuadrones(vivas) < SALUD_ESCUADRONES_ANTES_DE_ATACAR) continue;
-    const conCargo = new Set(Object.values(plaza.cargos));
+    const conCargo = new Set([...Object.values(plaza.cargos), ...reyes]);
     const cazador = heroesActuales
       .filter(
         (h) =>
@@ -1297,7 +1349,8 @@ function lanzarCampanas(
   mapa: Mapa,
   esNpc: (faccionId: string) => boolean,
   contador: number,
-  instante: Instante
+  instante: Instante,
+  reyes: ReadonlySet<string>
 ): { asentamientos: Asentamiento[]; ejercitos: Ejercito[]; heroes: Heroe[]; eventos: string[]; campanasLanzadas: number; contador: number } {
   const eventos: string[] = [];
   let campanasLanzadas = 0;
@@ -1326,7 +1379,7 @@ function lanzarCampanas(
     // Salen juntos hasta `BATALLA.capacidad.asedio` héroes bot que están dentro, sanos y sin cargo —el Gobernador se
     // queda—, los más fuertes primero, cada uno con lo que le cabe en su Liderazgo (Doc 5.11). Nunca todos.
     const heridos = heridosEn(heroesActuales, instante);
-    const conCargo = new Set(Object.values(origen.cargos));
+    const conCargo = new Set([...Object.values(origen.cargos), ...reyes]);
     const salen = heroesActuales
       .filter(
         (h) =>
@@ -1568,7 +1621,8 @@ function repartirHeroesNpc(
   mapa: Mapa,
   esNpc: (faccionId: string) => boolean,
   contador: number,
-  instante: Instante
+  instante: Instante,
+  reyes: ReadonlySet<string>
 ): { asentamientos: Asentamiento[]; ejercitos: Ejercito[]; heroes: Heroe[]; eventos: string[]; contador: number } {
   const eventos: string[] = [];
   let actuales = asentamientos;
@@ -1585,7 +1639,7 @@ function repartirHeroesNpc(
     const mas = plazas[plazas.length - 1];
     if (!menos || !mas || residentesDe(mas).length - residentesDe(menos).length < 2) continue;
 
-    const conCargo = new Set(Object.values(mas.cargos));
+    const conCargo = new Set([...Object.values(mas.cargos), ...reyes]);
     const heroe = heroesActuales.find(
       (h) =>
         h.controlador === 'bot' &&
@@ -2019,6 +2073,7 @@ export function avanzarNpcGobernanza(
   let asentamientos = asentamientosBase.map((a) => (esNpc(a.faccionId) ? asegurarGobernanzaBase(a, facciones) : a));
   let caravanas = [...estado.caravanas];
   let animalesComprados = 0;
+  const reyes = new Set(estado.facciones.filter((f) => esNpc(f.id) && f.reyId).map((f) => f.reyId!));
 
   const fundadores = materializarFundadoresNpc(asentamientos, heroes, esNpc);
   heroes = fundadores.heroes;
@@ -2125,6 +2180,10 @@ export function avanzarNpcGobernanza(
   const trasComercio: EstadoSimulacion = { ...trasComercioParcial, facciones };
 
   asentamientos = trasComercio.asentamientos;
+  // Antes de reclutar, para reclutar ya con lo que adopte (Doc 6.5).
+  const adopcion = adoptarTecnologiasNpc(trasComercio.tecnologia, trasComercio.facciones, asentamientos, heroes, trasComercio.ejercitos, esNpc);
+  asentamientos = adopcion.asentamientos;
+  eventos.push(...adopcion.eventos);
   let reclutamientosExitosos = 0;
   let contadoresReclutamiento: DeltaContadores = {};
   const tropaId = config.tropaId;
@@ -2135,7 +2194,7 @@ export function avanzarNpcGobernanza(
   for (let i = 0; i < asentamientos.length; i++) {
     const a = asentamientos[i]!;
     if (!esNpc(a.faccionId)) continue;
-    const resultado = reclutarParaTodos(a, heroes, trasComercio.ejercitos, contador, tropaId, origenReclutamiento, tecnologiasDe(trasComercio.tecnologia, a.faccionId).adoptadas);
+    const resultado = reclutarParaTodos(a, heroes, trasComercio.ejercitos, contador, tropaId, origenReclutamiento, tecnologiasDe(adopcion.tecnologia, a.faccionId).adoptadas);
     contador = resultado.contador;
     reclutamientosExitosos += resultado.reclutamientosExitosos;
     contadoresReclutamiento = sumarDeltas(contadoresReclutamiento, resultado.contadores);
@@ -2173,7 +2232,8 @@ export function avanzarNpcGobernanza(
           instante,
           contador,
           esNpc,
-          rng
+          rng,
+          reyes
         );
   eventos.push(...trasBandidos.eventos);
   heroes = trasBandidos.heroes;
@@ -2197,7 +2257,8 @@ export function avanzarNpcGobernanza(
           mapa,
           esNpc,
           contador,
-          instante
+          instante,
+          reyes
         );
   contador = trasCampanas.contador;
   eventos.push(...trasCampanas.eventos);
@@ -2206,7 +2267,7 @@ export function avanzarNpcGobernanza(
   // Quien conquista se queda (§4.9): antes de replegar, que es lo que haría con esa misma columna.
   const trasOcupar = ocuparConquistas(trasCampanas.asentamientos, trasCampanas.ejercitos, heroes, trasBandidos.facciones, esNpc);
   eventos.push(...trasOcupar.eventos);
-  const trasReparto = repartirHeroesNpc(trasOcupar.asentamientos, trasOcupar.ejercitos, trasOcupar.heroes, trasBandidos.facciones, mapa, esNpc, contador, instante);
+  const trasReparto = repartirHeroesNpc(trasOcupar.asentamientos, trasOcupar.ejercitos, trasOcupar.heroes, trasBandidos.facciones, mapa, esNpc, contador, instante, reyes);
   contador = trasReparto.contador;
   eventos.push(...trasReparto.eventos);
   const trasVolver = volverACasaNpc(trasReparto.asentamientos, trasReparto.ejercitos, trasReparto.heroes, trasComercio.relaciones, mapa, esNpc);
@@ -2264,7 +2325,7 @@ export function avanzarNpcGobernanza(
     estado: {
       ...trasComercio,
       tecnologia: sumarContadores(
-        trasComercio.tecnologia,
+        adopcion.tecnologia,
         sumarDeltas(sumarDeltas(contadoresReclutamiento, trasBandidos.contadores), { 'animales.comprados': animalesComprados })
       ),
       heroes,
