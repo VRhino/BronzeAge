@@ -64,7 +64,8 @@ import { slotsDisponibles } from '@motor/engine/politicas';
 // `apiCliente.ejecutarComando` (por nombre, ver `session/comandos/registro.ts`). Lo que queda son las
 // funciones que alimentan las consultas de solo lectura de la interfaz.
 import { computeTodasLasZonas, computeZonasFusionadasPorFaccion } from '@motor/engine/zones';
-import { calcularCapFundacion, calcularCupoNivel, capacidadCasas } from '@motor/engine/faccion';
+import { calcularCapFundacion, calcularCupoNivel } from '@motor/engine/faccion';
+import { tecnologiasDe } from '@motor/engine/tecnologia';
 import { computeLigas, type LigaInfo } from '@motor/engine/liga';
 import { consumoRacionDeEscuadrones } from '@motor/engine/tropas';
 import { campamentoDe, defensaDe } from '@motor/engine/tropa';
@@ -153,7 +154,6 @@ export interface SimulacionExportada {
   titulos: Titulo[];
   caminos?: CaminoComercial[];
   campamentosBandidos?: CampamentoBandido[];
-  bandidosProximoSpawnEn?: number;
   faccionesNpcIds?: string[];
   log: EventoLog[];
   historialHeroes: Record<string, EventoLog[]>;
@@ -477,10 +477,6 @@ export class GameStore {
     };
   }
 
-  cupoVivienda(asentamiento: Asentamiento): number {
-    return capacidadCasas(asentamiento);
-  }
-
   /** Precio de referencia calculado en el SERVIDOR (doc 9, 2026-08-26): necesita el almacén de todos los
    * asentamientos del mundo, no solo los propios — entrada privilegiada que este cliente no debe recalcular
    * aunque hoy tenga los datos para hacerlo (ve la partida entera por ser administración). Cacheado en el
@@ -630,11 +626,12 @@ export class GameStore {
     artesanos: { actual: number; limite: number };
     nobleza: { actual: number; limite: number };
   } {
-    const palaciosActivos = edificiosPorTipoYEstado(asentamiento, 'palacio').length;
+    // Uno por plaza; su cupo, el de su nivel interno (igual que `population.ts`).
+    const palacio = edificiosPorTipoYEstado(asentamiento, 'palacio')[0];
     return {
       pesants: { actual: asentamiento.poblacion.pesants, limite: capacidadViviendaPesants(asentamiento) },
       artesanos: { actual: asentamiento.poblacion.artesanos, limite: capacidadViviendaArtesanos(asentamiento) },
-      nobleza: { actual: asentamiento.poblacion.nobleza, limite: palaciosActivos * EDIFICIO_CATALOGO.palacio.capacidadNobles },
+      nobleza: { actual: asentamiento.poblacion.nobleza, limite: palacio ? (EDIFICIO_CATALOGO.palacio.niveles[palacio.nivelInterno ?? 1]?.capacidadNobles ?? 0) : 0 },
     };
   }
 
@@ -807,7 +804,8 @@ export class GameStore {
     const edificio = asentamiento.edificios.find((e) => e.id === edificioId);
     if (!edificio) return null;
     const capital = encontrarCapital(asentamiento.faccionId, this.state.asentamientos);
-    return estadoMejoraEdificioEngine(asentamiento, edificio, capital);
+    const { adoptadas } = tecnologiasDe(this.state.tecnologia, asentamiento.faccionId);
+    return estadoMejoraEdificioEngine(asentamiento, edificio, capital, adoptadas);
   }
 
   async pausarAutoConstruccion(asentamientoId: string): Promise<void> {
@@ -890,7 +888,6 @@ export class GameStore {
       titulos: this.state.titulos,
       caminos: this.state.caminos,
       campamentosBandidos: this.state.campamentosBandidos,
-      bandidosProximoSpawnEn: this.state.bandidosProximoSpawnEn,
       faccionesNpcIds: this.state.faccionesNpcIds,
       // El formato de archivo v2 guarda el log en texto (es anterior a `eventosDominio`): se proyecta al
       // exportar en vez de arrastrarlo en el estado.

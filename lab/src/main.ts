@@ -14,6 +14,7 @@ import { celdasDeEdificio, redDeCalles, resolverPerfil, trazadoParaAsentamiento,
 import { abandonarRecinto, comprometerRecinto, RecintoInvalidoError, trazadoDeRecinto, trazarRecinto, type TrazoRecinto } from '../../src/engine/muralla';
 import type { TrazadoMuralla } from '../../src/engine/trazado';
 import { anadirEdificioManualmente, mejorarEdificioManualmente, reclamosDeFuentes, ConstruccionManualInvalidaError } from '../../src/engine/construction';
+import { estadoTecnologiaInicial, TODAS_LAS_TECNOLOGIAS } from '../../src/engine/tecnologia';
 import {
   REJILLA_ASENTAMIENTO,
   TRAZADO,
@@ -207,7 +208,11 @@ function fundar(seed: number): void {
     titulos: [],
     caminos: [],
     campamentosBandidos: [],
-    bandidosProximoSpawnEn: instanteDeTick(0),
+    // El laboratorio prueba trazado, no progresión: la Facción nace con todo el catálogo adoptado.
+    tecnologia: {
+      ...estadoTecnologiaInicial(instanteDeTick(0)),
+      porFaccion: { [faccionLab.id]: { aparecidas: [...TODAS_LAS_TECNOLOGIAS], adoptadas: [...TODAS_LAS_TECNOLOGIAS] } },
+    },
     heroes: [],
   };
   tick = 0;
@@ -446,7 +451,7 @@ function forzarMejora(edificioId: string): void {
   if (!asentamiento) return;
   try {
     // Desde el 2026-09-26 la mejora tarda: esto la ARRANCA y el tick la termina.
-    const actualizado = mejorarEdificioManualmente(asentamiento, 'gobernador', edificioId, undefined, instanteDeTick(tick));
+    const actualizado = mejorarEdificioManualmente(asentamiento, 'gobernador', edificioId, undefined, instanteDeTick(tick), TODAS_LAS_TECNOLOGIAS);
     estado = { ...estado, asentamientos: [actualizado] };
     for (const e of actualizado.edificios) if (!nacimientos.has(e.id)) nacimientos.set(e.id, tick);
     manualStatusEl.textContent = 'Mejora en marcha.';
@@ -580,6 +585,7 @@ manualEncolarBtn.addEventListener('click', () => {
       mapa,
       undefined,
       reclamos,
+      TODAS_LAS_TECNOLOGIAS,
       contadorManual++
     );
     estado = { ...estado, asentamientos: [actualizado] };

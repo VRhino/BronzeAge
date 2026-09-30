@@ -6,6 +6,7 @@
 // dato que gobierna el botón de mejora manual de la pestaña de construcción.
 import type { Asentamiento, Edificio } from '../../src/domain/types';
 import { estadoMejoraEdificio } from '../../src/engine/construction';
+import { TODAS_LAS_TECNOLOGIAS } from '../../src/engine/tecnologia';
 import { celdaMinimaDeEdificio, tamanoDeEdificio } from '../../src/engine/trazado';
 import { costoDeTrazo, type CeldaMuro } from '../../src/engine/muralla';
 import { EDIFICIO_ETIQUETA } from './render';
@@ -60,7 +61,7 @@ function ficha(asentamiento: Asentamiento, edificio: Edificio, codigoAncla: stri
   }
 
   if (edificio.estado === 'activo') {
-    const mejora = estadoMejoraEdificio(asentamiento, edificio, undefined);
+    const mejora = estadoMejoraEdificio(asentamiento, edificio, undefined, TODAS_LAS_TECNOLOGIAS);
     if (mejora) {
       const costo = Object.entries(mejora.costo)
         .map(([r, c]) => `${c} ${r}`)

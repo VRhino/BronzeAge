@@ -1047,7 +1047,6 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
         <h3>Fundadores y ciudadanía</h3>
         <div class="kv-row"><span>Fundadores (con casa)</span><span>${a.heroesFundadoresIds.join(', ') || '—'}</span></div>
         <div class="kv-row"><span>Otras casas compradas</span><span>${otrasCasas.join(', ') || '—'}</span></div>
-        <div class="kv-row"><span>Cupo de vivienda</span><span>${a.casasCompradas.length}/${gameStore.cupoVivienda(a)}</span></div>
       </div>
 
       <div class="detail-section">

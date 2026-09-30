@@ -12,6 +12,7 @@ import {
   TRAZADO,
 } from '../../src/constants';
 import { estadoMejoraEdificio } from '../../src/engine/construction';
+import { TODAS_LAS_TECNOLOGIAS } from '../../src/engine/tecnologia';
 import {
   ANCLA_PRIMARIA_POR_CATEGORIA,
   ANCLA_SATURACION_POR_CATEGORIA,
@@ -70,7 +71,7 @@ export function renderPanelMejoras(
 ): void {
   const mejorables = edificiosInternos(asentamiento.edificios)
     .filter((e) => e.estado === 'activo')
-    .map((e) => ({ e, mejora: estadoMejoraEdificio(asentamiento, e, undefined) }))
+    .map((e) => ({ e, mejora: estadoMejoraEdificio(asentamiento, e, undefined, TODAS_LAS_TECNOLOGIAS) }))
     .filter((x): x is { e: Edificio; mejora: NonNullable<typeof x.mejora> } => x.mejora !== null);
 
   if (mejorables.length === 0) {
