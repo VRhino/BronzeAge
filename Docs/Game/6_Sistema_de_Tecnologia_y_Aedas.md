@@ -62,7 +62,7 @@ La season (12 meses) se divide en cinco Eras, de ~1300 a 323 a. C. (hasta Alejan
 Para que una tecnología aparezca por desarrollo propio hacen falta dos cosas:
 
 - **El logro del servidor**: algo que ha pasado en todo el mundo entre todas las Facciones, NPC incluidas (por
-  ejemplo, "X caravanas han llegado a destino cargadas de estaño"). **Se fija para siempre** en cuanto se cumple.
+  ejemplo, "X de estaño extraído en el mundo"). **Se fija para siempre** en cuanto se cumple.
   **Es público**: lo canta un Aeda en la crónica, **sin decir qué tecnología desbloquea**.
 - **El hito de la Facción**: condiciones de la propia Facción (edificios, niveles, otras tecnologías adoptadas…).
 
@@ -109,7 +109,7 @@ extractores): hoy solo `canteria`, que se pensó para la piedra del nivel 3 (Doc
 | `leva_comunal` | milicia de lanceros, leñadores, granjeros | — (de arranque) | — |
 | `hostigamiento_tribal` | honderos, escaramuzadores con jabalina | — (de arranque) | — |
 | `metalurgia_cobre` | Arma de Cobre (Armería 1) | X de cobre extraído | Fundición activa |
-| `aleacion_bronce` | Lingote de Estaño y de Bronce (Fundición 2), Arma de Bronce (Armería 2); espadachines de bronce, hacheros armados | X caravanas llegadas con estaño (Uluburun) | Fundición 2 + estaño en el almacén de la capital |
+| `aleacion_bronce` | Lingote de Estaño y de Bronce (Fundición 2), Arma de Bronce (Armería 2); espadachines de bronce, hacheros armados | X de estaño extraído en el mundo (Uluburun) | Fundición 2 + estaño en el almacén de la capital |
 | `escudos_ligeros` | lanceros con escudo de mimbre | X campamentos de bandidos destruidos | Barracón activo |
 | `armamento_palacial` | espadachines de cobre, hacheros ligeros | X asentamientos en nivel 2 (lineal B) | Armería activa + `metalurgia_cobre` adoptada |
 | `arqueria_palacial` | arqueros | X batallas libradas | Galería de tiro activa |

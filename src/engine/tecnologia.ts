@@ -40,9 +40,9 @@ const LOGRO_CANTADO: Record<ContadorLogro, string> = {
   'extraido.cobre': 'el cobre extraído en el mundo',
   'extraido.hierro': 'el hierro extraído en el mundo',
   'extraido.piedra': 'la piedra extraída en el mundo',
+  'extraido.estano': 'el estaño extraído en el mundo',
   'fabricado.equipoBronce': 'las piezas de equipo de bronce forjadas',
   'fabricado.armaduraBronce': 'las armaduras de bronce forjadas',
-  'caravanas.llegadasConEstano': 'las caravanas que han llegado cargadas de estaño',
   'caravanas.destruidasOCapturadas': 'las caravanas destruidas o capturadas',
   'bandidos.campamentosDestruidos': 'los campamentos de bandidos arrasados',
   'animales.comprados': 'los animales comprados',
@@ -150,11 +150,6 @@ export function contadoresDeEventos(eventos: readonly EventoCrudo[]): DeltaConta
       case 'bandidos.caravana_interceptada':
         sumar(delta, 'caravanas.destruidasOCapturadas');
         break;
-      case 'comercio.caravana_llega': {
-        const contenido = (e.payload as { contenido?: Record<string, number> }).contenido ?? {};
-        if ((contenido['estano'] ?? 0) > 0 || (contenido['lingoteEstano'] ?? 0) > 0) sumar(delta, 'caravanas.llegadasConEstano');
-        break;
-      }
     }
   }
   return delta;
@@ -169,6 +164,7 @@ export function contadoresDeProduccion(
   if (extraido.cobre) sumar(delta, 'extraido.cobre', extraido.cobre);
   if (extraido.hierro) sumar(delta, 'extraido.hierro', extraido.hierro);
   if (extraido.piedra) sumar(delta, 'extraido.piedra', extraido.piedra);
+  if (extraido.estano) sumar(delta, 'extraido.estano', extraido.estano);
   const bronce = (fabricado.armaBronce ?? 0) + (fabricado.armaBronceCalidad ?? 0) + (fabricado.armaduraBronce ?? 0) + (fabricado.armaduraBronceCalidad ?? 0);
   if (bronce) sumar(delta, 'fabricado.equipoBronce', bronce);
   if (fabricado.armaduraBronce) sumar(delta, 'fabricado.armaduraBronce', fabricado.armaduraBronce);

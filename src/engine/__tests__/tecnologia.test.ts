@@ -126,14 +126,12 @@ describe('contadores por eventos (Doc 6.3)', () => {
     expect(contadoresDeEventos([asedio('combate.asedio_conquista', false, true, false)])).toEqual({ 'conquistas.conMurallaCompleta': 1 });
   });
 
-  it('batallas, hoplitas, caravanas con estaño y animales', () => {
+  it('batallas, hoplitas y animales', () => {
     const delta = contadoresDeEventos([
       { codigo: 'combate.resuelto', mensaje: '', payload: { ganador: 'atacante', poderAtacante: 1, poderDefensor: 1, tropaIds: ['hoplitas_ciudadanos'] } },
-      { codigo: 'comercio.caravana_llega', mensaje: '', payload: { contenido: { estano: 10 } } },
-      { codigo: 'comercio.caravana_llega', mensaje: '', payload: { contenido: { madera: 10 } } },
       { codigo: 'comercio.caravana_animal_comprado', mensaje: '' },
     ]);
-    expect(delta).toEqual({ 'batallas.libradas': 1, 'batallas.conHoplitas': 1, 'caravanas.llegadasConEstano': 1, 'animales.comprados': 1 });
+    expect(delta).toEqual({ 'batallas.libradas': 1, 'batallas.conHoplitas': 1, 'animales.comprados': 1 });
   });
 
   it('reclutar cuenta soldados de las tropas con logro y escuadrones nuevos', () => {

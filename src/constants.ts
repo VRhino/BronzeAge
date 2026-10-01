@@ -2318,7 +2318,9 @@ export const TECNOLOGIAS: Record<TecnologiaId, DefinicionTecnologia> = {
   aleacion_bronce: {
     nombre: 'Aleación del bronce',
     era: 'reinos_palaciales',
-    logro: { contador: 'caravanas.llegadasConEstano', umbral: 20 },
+    // Estaño extraído en el mundo y no caravanas con estaño (2026-10-01, decisión del usuario): ese contador solo decía que
+    // se comerciaba, y con estaño en casa casi nadie lo compra. X PLACEHOLDER hasta fijarla con el batch (día 21-24).
+    logro: { contador: 'extraido.estano', umbral: 500_000 },
     hito: [hitoEdificio('fundicion', 2), { tipo: 'recursoEnCapital', recurso: 'estano' }],
   },
   escudos_ligeros: {
