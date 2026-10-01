@@ -97,7 +97,7 @@ Las Facciones NPC siguen la misma regla.
 
 ## 6.6 Catálogo
 
-Logros con cifra X placeholder (6.3). "Edificio" en un hito = activo en cualquier asentamiento de la Facción. Las
+Cada X se fijó con el batch en la semana objetivo de su logro (6.3); siguen en placeholder `equitacion_militar`, `carpinteria_militar`, `falange_hoplita`, `arqueria_especializada`, `bronce_laminado`, `caballeria_organizada` y `trabajos_asedio`, cuyo contador casi no se mueve con jugadores NPC. "Edificio" en un hito = activo en cualquier asentamiento de la Facción. Las
 tropas de cada tecnología, con su edificio, equipo y escalón, en Doc 5.8. **Una tecnología también puede dar un
 bonus de producción** en vez de abrir contenido (`bonusProduccion`: un recurso y un factor sobre lo que sacan sus
 extractores): hoy solo `canteria`, que se pensó para la piedra del nivel 3 (Doc 4.5).

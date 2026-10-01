@@ -2312,53 +2312,53 @@ export const TECNOLOGIAS: Record<TecnologiaId, DefinicionTecnologia> = {
   metalurgia_cobre: {
     nombre: 'Metalurgia del cobre',
     era: 'reinos_palaciales',
-    logro: { contador: 'extraido.cobre', umbral: 50_000 },
+    logro: { contador: 'extraido.cobre', umbral: 41_000 },
     hito: [hitoEdificio('fundicion')],
   },
   aleacion_bronce: {
     nombre: 'Aleación del bronce',
     era: 'reinos_palaciales',
     // Estaño extraído en el mundo y no caravanas con estaño (2026-10-01, decisión del usuario): ese contador solo decía que
-    // se comerciaba, y con estaño en casa casi nadie lo compra. X PLACEHOLDER hasta fijarla con el batch (día 21-24).
-    logro: { contador: 'extraido.estano', umbral: 500_000 },
+    // se comerciaba, y con estaño en casa casi nadie lo compra.
+    logro: { contador: 'extraido.estano', umbral: 245_000 },
     hito: [hitoEdificio('fundicion', 2), { tipo: 'recursoEnCapital', recurso: 'estano' }],
   },
   escudos_ligeros: {
     nombre: 'Escudos ligeros',
     era: 'reinos_palaciales',
-    logro: { contador: 'bandidos.campamentosDestruidos', umbral: 10 },
+    logro: { contador: 'bandidos.campamentosDestruidos', umbral: 2_250 },
     hito: [hitoEdificio('barracon')],
   },
   armamento_palacial: {
     nombre: 'Armamento palacial',
     era: 'reinos_palaciales',
-    logro: { contador: 'plazasEnNivel.2', umbral: 5 },
+    logro: { contador: 'plazasEnNivel.2', umbral: 12 },
     hito: [hitoEdificio('armeria'), hitoTecnologia('metalurgia_cobre')],
   },
   arqueria_palacial: {
     nombre: 'Arquería palacial',
     era: 'reinos_palaciales',
-    logro: { contador: 'batallas.libradas', umbral: 30 },
+    logro: { contador: 'batallas.libradas', umbral: 100 },
     hito: [hitoEdificio('galeriaDeTiro')],
   },
   cria_caballar: {
     nombre: 'Cría caballar',
     era: 'reinos_palaciales',
-    logro: { contador: 'animales.comprados', umbral: 30 },
+    logro: { contador: 'animales.comprados', umbral: 700 },
     hito: [hitoEdificio('corral')],
   },
   carros_guerra: {
     nombre: 'Carros de guerra',
     era: 'reinos_palaciales',
-    logro: { contador: 'batallas.campoAbierto', umbral: 20 },
+    logro: { contador: 'batallas.campoAbierto', umbral: 69 },
     hito: [hitoTecnologia('cria_caballar'), hitoEdificio('caballerizas', 2), hitoEdificio('carpinteria', 2)],
   },
   // Sin tropa ni receta detrás: la piedra es lo que frena el nivel 3 en la Era I medida (2026-09-30, decisión del
-  // usuario). X PLACEHOLDER hasta verla en el batch.
+  // usuario). Sin semana en la tabla de BA-006: se puso en la semana 2, antes de que la piedra apriete.
   canteria: {
     nombre: 'Cantería',
     era: 'reinos_palaciales',
-    logro: { contador: 'extraido.piedra', umbral: 1_000_000 },
+    logro: { contador: 'extraido.piedra', umbral: 11_000_000 },
     hito: [hitoEdificio('cantera')],
     bonusProduccion: { recurso: 'piedra', factor: 1.5 },
   },
@@ -2366,25 +2366,25 @@ export const TECNOLOGIAS: Record<TecnologiaId, DefinicionTecnologia> = {
   bronce_calidad_militar: {
     nombre: 'Bronce de calidad militar',
     era: 'crisis_adaptacion',
-    logro: { contador: 'fabricado.equipoBronce', umbral: 500 },
+    logro: { contador: 'fabricado.equipoBronce', umbral: 15_000 },
     hito: [hitoEdificio('armeria', 3)],
   },
   forja_hierro_temprana: {
     nombre: 'Forja del hierro temprana',
     era: 'crisis_adaptacion',
-    logro: { contador: 'caravanas.destruidasOCapturadas', umbral: 10 },
+    logro: { contador: 'caravanas.destruidasOCapturadas', umbral: 6_500 },
     hito: [hitoEdificio('fundicion', 2), { tipo: 'yacimientoEnTerritorio', recurso: 'hierro' }],
   },
   panoplia_bronce: {
     nombre: 'Panoplia de bronce',
     era: 'crisis_adaptacion',
-    logro: { contador: 'reclutados.escuadrones', umbral: 150 },
+    logro: { contador: 'reclutados.escuadrones', umbral: 1_100 },
     hito: [hitoTecnologia('bronce_calidad_militar'), hitoEdificio('barracon', 3)],
   },
   disciplina_formacion: {
     nombre: 'Disciplina de formación',
     era: 'crisis_adaptacion',
-    logro: { contador: 'asedios.resistidosEnCombate', umbral: 10 },
+    logro: { contador: 'asedios.resistidosEnCombate', umbral: 54 },
     hito: [hitoEdificio('barracon', 2)],
   },
   arco_compuesto: {
@@ -2409,13 +2409,13 @@ export const TECNOLOGIAS: Record<TecnologiaId, DefinicionTecnologia> = {
   instituciones_civicas: {
     nombre: 'Instituciones cívicas',
     era: 'polis_imperios',
-    logro: { contador: 'plazasEnNivel.3', umbral: 10 },
+    logro: { contador: 'plazasEnNivel.3', umbral: 11 },
     hito: [{ tipo: 'capitalEnNivel', nivel: 3, conEdificio: 'mercado' }],
   },
   ciudadania_militar: {
     nombre: 'Ciudadanía militar',
     era: 'polis_imperios',
-    logro: { contador: 'asedios.resistidosConResidentes', umbral: 10 },
+    logro: { contador: 'asedios.resistidosConResidentes', umbral: 58 },
     hito: [hitoTecnologia('instituciones_civicas'), hitoEdificio('barracon', 2)],
   },
   falange_hoplita: {
@@ -2427,7 +2427,7 @@ export const TECNOLOGIAS: Record<TecnologiaId, DefinicionTecnologia> = {
   pantalla_escaramuzadores: {
     nombre: 'Pantalla de escaramuzadores',
     era: 'polis_imperios',
-    logro: { contador: 'reclutados.escaramuzadores_jabalina', umbral: 360 },
+    logro: { contador: 'reclutados.escaramuzadores_jabalina', umbral: 970 },
     hito: [hitoEdificio('galeriaDeTiro', 2), hitoEdificio('armeria', 2)],
   },
   arqueria_especializada: {
@@ -2439,7 +2439,7 @@ export const TECNOLOGIAS: Record<TecnologiaId, DefinicionTecnologia> = {
   forja_hierro_estandarizada: {
     nombre: 'Forja del hierro estandarizada',
     era: 'polis_imperios',
-    logro: { contador: 'extraido.hierro', umbral: 50_000 },
+    logro: { contador: 'extraido.hierro', umbral: 2_300_000 },
     hito: [hitoEdificio('fundicion', 2), hitoEdificio('minaHierro')],
   },
   bronce_laminado: {

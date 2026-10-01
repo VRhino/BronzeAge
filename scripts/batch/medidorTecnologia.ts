@@ -3,10 +3,11 @@
 import type { ContadorLogro, EstadoTecnologia, TecnologiaId } from '../../src/domain/types';
 import { ERAS, TECNOLOGIAS } from '../../src/constants';
 
-const MINUTOS_SEMANA = 7 * 24 * 60;
+// Cada media semana: la tabla de semanas objetivo de los logros (BA-006, D53) va de medio en medio.
+const MINUTOS_MEDIA_SEMANA = 3.5 * 24 * 60;
 
 export class MedidorTecnologia {
-  /** Contadores al cerrar cada semana de mundo (desde el tick 0 de la partida, no de la corrida). */
+  /** Contadores al cerrar cada media semana de mundo (desde el tick 0 de la partida, no de la corrida). */
   private readonly porSemana: { semana: number; contadores: EstadoTecnologia['contadores'] }[] = [];
   /** Primer tick en que cada Facción tiene cada tecnología adoptada. */
   private readonly adopciones = new Map<string, Map<TecnologiaId, number>>();
@@ -17,7 +18,7 @@ export class MedidorTecnologia {
   }
 
   registrarTick(tick: number, t: EstadoTecnologia): void {
-    if (tick % MINUTOS_SEMANA === 0) this.porSemana.push({ semana: tick / MINUTOS_SEMANA, contadores: { ...t.contadores } });
+    if (tick % MINUTOS_MEDIA_SEMANA === 0) this.porSemana.push({ semana: tick / (2 * MINUTOS_MEDIA_SEMANA), contadores: { ...t.contadores } });
     if (this.eras[this.eras.length - 1]!.era !== t.era) this.eras.push({ era: t.era, tick });
     for (const [faccionId, { adoptadas }] of Object.entries(t.porFaccion)) {
       const suyas = this.adopciones.get(faccionId) ?? new Map<TecnologiaId, number>();
@@ -41,7 +42,7 @@ export class MedidorTecnologia {
       lineas.push(`  ${id.padEnd(28)} ${logro.contador.padEnd(36)} ${String(logro.umbral).padStart(7)} → ${en === undefined ? `sin cumplir (va por ${Math.round(valor)})` : `día ${dia(tickDe(en))}`}`);
     }
 
-    lineas.push('[TECNOLOGÍA] Contadores al cerrar cada semana (para fijar la X de cada logro en su semana objetivo):');
+    lineas.push('[TECNOLOGÍA] Contadores al cerrar cada media semana (para fijar la X de cada logro en su semana objetivo):');
     const claves = [...new Set(this.porSemana.flatMap((s) => Object.keys(s.contadores)))].sort() as ContadorLogro[];
     for (const clave of claves) {
       lineas.push(`  ${clave.padEnd(36)} ${this.porSemana.map((s) => `s${s.semana}:${Math.round(s.contadores[clave] ?? 0)}`).join('  ')}`);
