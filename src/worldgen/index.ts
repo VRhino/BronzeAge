@@ -16,7 +16,7 @@ import { generarBosques } from './bosques';
 import { generarCampoElevacion } from './elevacion';
 import { generarCampoFertilidad } from './fertilidad';
 import { generarLivestock, generarNodosDeRareza } from './nodos';
-import { HIERRO } from './config';
+import { ESTANO_EXTRA, HIERRO } from './config';
 import { generarRios } from './rios';
 import { createRng } from './rng';
 import { WORLDGEN_VERSION, type MapaGenerado } from './types';
@@ -61,6 +61,10 @@ export function generarMapa(config: WorldConfig): MapaGenerado {
     ...generarLivestock(rng, limites, colocadosGlobal, bosques, elevacion, fertilidad, rios),
     // El último: ver `HIERRO`.
     ...generarNodosDeRareza(rng, limites, HIERRO.rareza, colocadosGlobal, bosques, elevacion, fertilidad, rios, [{ tipo: 'hierro', factor: HIERRO.factorCantidad }]),
+    // Después del hierro: ver `ESTANO_EXTRA`.
+    ...generarNodosDeRareza(rng, limites, ESTANO_EXTRA.rareza, colocadosGlobal, bosques, elevacion, fertilidad, rios, [
+      { tipo: 'estano', factor: ESTANO_EXTRA.factorCantidad },
+    ]),
   ];
 
   return { version: WORLDGEN_VERSION, config, bosques, nodos, fertilidad, elevacion, rios };

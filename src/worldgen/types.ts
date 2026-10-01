@@ -133,4 +133,8 @@ export interface MapaGenerado {
  * v16 (2026-09-29): yacimientos de mineral de hierro (Doc 1.4, EII-4), 1,5 veces los de cobre, en colina y montaña.
  * Se generan los últimos, así que todo lo anterior sale bit a bit igual que en v15 para la misma seed.
  */
-export const WORLDGEN_VERSION = 16;
+/*
+ * v17 (2026-10-01): estaño de más (`ESTANO_EXTRA`), 40 yacimientos con el espaciado de la rareza intermedia, generados
+ * después del hierro: todo lo anterior sale bit a bit igual que en v16 para la misma seed.
+ */
+export const WORLDGEN_VERSION = 17;

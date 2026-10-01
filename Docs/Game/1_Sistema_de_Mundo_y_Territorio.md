@@ -52,6 +52,7 @@ El comercio por mar está fuera de alcance (Doc 3.11): sin barcos, dos costas en
   - Común (alta frecuencia, disperso): Madera (bosques, ver 1.4), Piedra, Trigo (vía fertilidad, ver 1.4).
   - Intermedio (frecuencia media, varios clusters): Cobre.
   - Raro (baja frecuencia, pocos clusters, espaciado mínimo forzado entre ellos): Estaño, Oro.
+  - El estaño tiene además **yacimientos de frecuencia intermedia, la mitad que el cobre**, que se suman a los raros: sin ellos casi nadie fabricaba bronce y el nivel 3, que lo pide, no llegaba (`ESTANO_EXTRA`, `worldgen/config.ts`).
 - Spawn de jugadores nuevos: posición aleatoria uniforme, INDEPENDIENTE de la ubicación de recursos.
 - Fases avanzadas (fuera de alcance de Fase 0): mar navegable; posible mapa fijo diseñado a mano en vez de procedural; puntos de interés fijos (ruinas, maravillas); clima.
 

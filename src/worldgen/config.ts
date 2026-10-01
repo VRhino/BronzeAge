@@ -55,6 +55,14 @@ export const RECURSO_RAREZA = congelar({
  */
 export const HIERRO = congelar({ rareza: 'intermedio', factorCantidad: 1.5 } as const);
 
+/**
+ * Estaño de más (2026-10-01, decisión del usuario): con solo sus 24 yacimientos raros, la Era I medida tenía 5 Minas de
+ * estaño en todo el mapa, nadie fabricaba bronce y ninguna plaza llegaba al nivel 3 (`Ritmo_Crecimiento_Asentamientos.md`
+ * §11.10). Estos se suman a los raros, con el espaciado y la cantidad base de la rareza intermedia (la mitad que el
+ * cobre), y se generan después del hierro: con la misma seed, el resto del mundo sale igual que en v16.
+ */
+export const ESTANO_EXTRA = congelar({ rareza: 'intermedio', factorCantidad: 0.5 } as const);
+
 export const RECURSO_TIPOS_POR_RAREZA: Record<keyof typeof RECURSO_RAREZA, string[]> = congelar({
   comun: ['piedra'],
   intermedio: ['cobre'],

@@ -14,6 +14,7 @@ import type { RegionId } from '../../domain/types';
 import { evaluarBioma, evaluarElevacion, evaluarFertilidad, evaluarTerreno, generarMapa, REGIONES, type MapaGenerado } from '../../worldgen';
 import {
   BOSQUE,
+  ESTANO_EXTRA,
   HIERRO,
   LIVESTOCK,
   MAPA_DEFAULT,
@@ -151,7 +152,9 @@ describe('invariantes de la generación de mundo', () => {
       for (const [rareza, tipos] of Object.entries(RECURSO_TIPOS_POR_RAREZA)) {
         const esperados = RECURSO_RAREZA[rareza as keyof typeof RECURSO_RAREZA].cantidadBase;
         for (const tipo of tipos) {
-          expect(world.nodos.filter((n) => n.tipo === tipo)).toHaveLength(esperados);
+          // El estaño suma sus yacimientos de rareza intermedia (`ESTANO_EXTRA`).
+          const extra = tipo === 'estano' ? Math.round(RECURSO_RAREZA[ESTANO_EXTRA.rareza].cantidadBase * ESTANO_EXTRA.factorCantidad) : 0;
+          expect(world.nodos.filter((n) => n.tipo === tipo)).toHaveLength(esperados + extra);
         }
       }
       expect(world.nodos.filter((n) => n.tipo === 'livestock')).toHaveLength(LIVESTOCK.cantidadBase);
