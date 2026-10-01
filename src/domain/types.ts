@@ -1161,7 +1161,7 @@ export type ContadorLogro =
   | 'conquistas.conMurallaCompleta'
   | 'reclutados.escuadrones'
   | 'reclutados.arqueros'
-  | 'reclutados.carros_guerra'
+  | 'reclutados.caballeria'
   | 'reclutados.escaramuzadores_jabalina'
   | 'reclutados.arqueros_compuesto'
   | 'reclutados.jinetes_asirios'

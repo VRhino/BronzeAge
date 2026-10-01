@@ -2366,37 +2366,39 @@ export const TECNOLOGIAS: Record<TecnologiaId, DefinicionTecnologia> = {
   bronce_calidad_militar: {
     nombre: 'Bronce de calidad militar',
     era: 'crisis_adaptacion',
-    logro: { contador: 'fabricado.equipoBronce', umbral: 15_000 },
+    logro: { contador: 'fabricado.equipoBronce', umbral: 5_900 },
     hito: [hitoEdificio('armeria', 3)],
   },
   forja_hierro_temprana: {
     nombre: 'Forja del hierro temprana',
     era: 'crisis_adaptacion',
-    logro: { contador: 'caravanas.destruidasOCapturadas', umbral: 6_500 },
+    logro: { contador: 'caravanas.destruidasOCapturadas', umbral: 11_000 },
     hito: [hitoEdificio('fundicion', 2), { tipo: 'yacimientoEnTerritorio', recurso: 'hierro' }],
   },
   panoplia_bronce: {
     nombre: 'Panoplia de bronce',
     era: 'crisis_adaptacion',
-    logro: { contador: 'reclutados.escuadrones', umbral: 1_100 },
+    logro: { contador: 'reclutados.escuadrones', umbral: 1_200 },
     hito: [hitoTecnologia('bronce_calidad_militar'), hitoEdificio('barracon', 3)],
   },
   disciplina_formacion: {
     nombre: 'Disciplina de formación',
     era: 'crisis_adaptacion',
-    logro: { contador: 'asedios.resistidosEnCombate', umbral: 54 },
+    logro: { contador: 'asedios.resistidosEnCombate', umbral: 140 },
     hito: [hitoEdificio('barracon', 2)],
   },
   arco_compuesto: {
     nombre: 'Arco compuesto',
     era: 'crisis_adaptacion',
-    logro: { contador: 'reclutados.arqueros', umbral: 360 },
+    logro: { contador: 'reclutados.arqueros', umbral: 350 },
     hito: [hitoEdificio('carpinteria', 2), hitoEdificio('galeriaDeTiro', 3)],
   },
   equitacion_militar: {
     nombre: 'Equitación militar',
     era: 'crisis_adaptacion',
-    logro: { contador: 'reclutados.carros_guerra', umbral: 75 },
+    // Soldados de caballería reclutados, el de un carro de guerra por cinco de jinete (2026-10-01, decisión del usuario): el
+    // logro por carros solos casi no se movía, porque son de escalón 4 (Nobleza) y piden Carpintería 2.
+    logro: { contador: 'reclutados.caballeria', umbral: 1_800 },
     hito: [hitoEdificio('caballerizas')],
   },
   carpinteria_militar: {
@@ -2409,13 +2411,13 @@ export const TECNOLOGIAS: Record<TecnologiaId, DefinicionTecnologia> = {
   instituciones_civicas: {
     nombre: 'Instituciones cívicas',
     era: 'polis_imperios',
-    logro: { contador: 'plazasEnNivel.3', umbral: 11 },
+    logro: { contador: 'plazasEnNivel.3', umbral: 12 },
     hito: [{ tipo: 'capitalEnNivel', nivel: 3, conEdificio: 'mercado' }],
   },
   ciudadania_militar: {
     nombre: 'Ciudadanía militar',
     era: 'polis_imperios',
-    logro: { contador: 'asedios.resistidosConResidentes', umbral: 58 },
+    logro: { contador: 'asedios.resistidosConResidentes', umbral: 158 },
     hito: [hitoTecnologia('instituciones_civicas'), hitoEdificio('barracon', 2)],
   },
   falange_hoplita: {
@@ -2427,7 +2429,7 @@ export const TECNOLOGIAS: Record<TecnologiaId, DefinicionTecnologia> = {
   pantalla_escaramuzadores: {
     nombre: 'Pantalla de escaramuzadores',
     era: 'polis_imperios',
-    logro: { contador: 'reclutados.escaramuzadores_jabalina', umbral: 970 },
+    logro: { contador: 'reclutados.escaramuzadores_jabalina', umbral: 1_240 },
     hito: [hitoEdificio('galeriaDeTiro', 2), hitoEdificio('armeria', 2)],
   },
   arqueria_especializada: {
@@ -2439,7 +2441,7 @@ export const TECNOLOGIAS: Record<TecnologiaId, DefinicionTecnologia> = {
   forja_hierro_estandarizada: {
     nombre: 'Forja del hierro estandarizada',
     era: 'polis_imperios',
-    logro: { contador: 'extraido.hierro', umbral: 2_300_000 },
+    logro: { contador: 'extraido.hierro', umbral: 1_380_000 },
     hito: [hitoEdificio('fundicion', 2), hitoEdificio('minaHierro')],
   },
   bronce_laminado: {
@@ -2451,7 +2453,7 @@ export const TECNOLOGIAS: Record<TecnologiaId, DefinicionTecnologia> = {
   caballeria_organizada: {
     nombre: 'Caballería organizada',
     era: 'polis_imperios',
-    logro: { contador: 'reclutados.jinetes_asirios', umbral: 200 },
+    logro: { contador: 'reclutados.jinetes_asirios', umbral: 1_700 },
     hito: [hitoEdificio('caballerizas', 2)],
   },
   trabajos_asedio: {

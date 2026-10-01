@@ -15,7 +15,7 @@ import type {
 import type { EventoCrudo } from '../domain/eventos';
 import { minutos, type Instante } from '../domain/tiempo';
 import type { Mapa } from '../world/mapa';
-import { ERAS, TARIFA_ADOPCION, TECNOLOGIAS, type CondicionHito } from '../constants';
+import { ERAS, TARIFA_ADOPCION, TECNOLOGIAS, TROPAS_RECLUTABLES, type CondicionHito } from '../constants';
 import { descontarRecursos, tieneRecursos } from './almacen';
 import { estaEnAsentamiento } from './ubicacion';
 import { nivelActualDe } from './asentamientoQuery';
@@ -55,7 +55,7 @@ const LOGRO_CANTADO: Record<ContadorLogro, string> = {
   'conquistas.conMurallaCompleta': 'la conquista de una ciudad amurallada',
   'reclutados.escuadrones': 'los escuadrones reclutados',
   'reclutados.arqueros': 'los arqueros reclutados',
-  'reclutados.carros_guerra': 'los carros de guerra reclutados',
+  'reclutados.caballeria': 'la caballería y los carros reclutados',
   'reclutados.escaramuzadores_jabalina': 'los escaramuzadores reclutados',
   'reclutados.arqueros_compuesto': 'los arqueros de arco compuesto reclutados',
   'reclutados.jinetes_asirios': 'los jinetes reclutados',
@@ -172,9 +172,16 @@ export function contadoresDeProduccion(
 }
 
 /** Contadores de un reclutamiento: soldados de la tropa (si tiene logro propio) y escuadrón nuevo. */
+/** Lo que cuenta cada soldado de Caballeriza en `reclutados.caballeria` (2026-10-01, decisión del usuario): uno de carro
+ * de guerra vale por 5 de jinete; el resto de la caballería, uno. */
+const PESO_EN_CABALLERIA: Record<string, number> = { carros_guerra: 5 };
+
 export function contadoresDeReclutamiento(tropaId: string, soldados: number, escuadronNuevo: boolean): DeltaContadores {
   const delta: DeltaContadores = {};
   if (escuadronNuevo) sumar(delta, 'reclutados.escuadrones');
+  if (soldados > 0 && TROPAS_RECLUTABLES.find((t) => t.id === tropaId)?.edificio === 'caballerizas') {
+    sumar(delta, 'reclutados.caballeria', soldados * (PESO_EN_CABALLERIA[tropaId] ?? 1));
+  }
   const clave = `reclutados.${tropaId}` as ContadorLogro;
   if (clave in LOGRO_CANTADO && soldados > 0) sumar(delta, clave, soldados);
   return delta;
