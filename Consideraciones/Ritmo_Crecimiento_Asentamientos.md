@@ -710,3 +710,36 @@ no atacar la última plaza de una Facción, artesanos ×1,5 y la nobleza sin inm
 - **Reparto**: iguala las Facciones con sitio (1: 2/2/2/2/2/1/1/1/1), pero no las que tienen más héroes que casas
   (4: 24 y 10 residentes con 12 casas; 6: 20 y 5). La acogida y la anexión no respetan el tope de casas.
 - **Trueques para crecer**: 867 peticiones de ganado caducadas contra 3 cumplidas.
+
+### 11.9 Era I con todas las reglas de la tanda y el código de las Eras (2026-09-30)
+
+Reglas nuevas desde §11.8: nivel de escuadra 1-10 (+1 %/nivel) y ventaja del defensor ×1,05, mantenimiento por edificios
+activos y nivel efectivo (Vivienda cuenta la mitad), Cantera 10 de piedra, campañas con varios héroes, bandidos con plazo de
+reaparición de 60 min por plaza y cazados con columna, trueques de 1 día con todas las caravanas del cupo, capitales
+separadas 400 y talleres que respetan la reserva de construcción. Semilla 7, 12 Facciones, una corrida por semana
+encadenando checkpoints, con la tecnología por Eras (BA-006) ya en el motor.
+
+| semana | plazas vivas | campañas | conquistas | atacante gana | poder atacante / defensor | resistidos | ruinas |
+|---|---|---|---|---|---|---|---|
+| 1 | 34 | 0 | 0 | — | — | 0 | 0 |
+| 2 | 39 | 55 | 33 | 80 % | 1,08 | 8 | 0 |
+| 3 | 43 | 27 | 17 | 68 % | 0,95 | 8 | 0 |
+| 4 | 48 | 37 | 8 | 24 % | 0,15 | 25 | 0 |
+| 5 | 49 | 4 | 3 | 75 % | 1,18 | 1 | 0 |
+
+- **Ruinas**: ninguna en toda la Era I (en §11.8 eran 6-7 por semana en las semanas 3-4, todas por madera). La reserva de los
+  talleres lo arregla.
+- **Guerra**: se apaga sola. Semana 2 explosiva (26 de 39 plazas cambian de dueño), semana 3 la mitad, semana 4 el atacante
+  pierde el 76 % de los asedios (poder mediano 0,15: defensa con protección, ventaja ×1,05 y guarniciones) y en la 5 casi
+  no hay campañas. Los dueños aguantan una mediana de 1-2 días hasta la semana 3 y 5,4 días en la 4.
+- **Expansión**: 49 plazas nacidas, todas vivas, 0 colapsos. 10 de 12 Facciones con más de una plaza.
+- **Ritmo**: nivel 2 en 35 de 49 plazas; **nivel 3 en ninguna**. Las plazas fundadas tarde llegan a nivel 2 cada vez más
+  despacio (medianas de 0,84 a 3,75 semanas desde la fundación). Bloqueo al final: recursos insuficientes (36 de 49),
+  insolvencia (24: oro 17, piedra 14) y falta de cupo de Facción (14). Ingreso mediano contra coste por minuto: piedra
+  10,0 frente a 13,4 (una sola Cantera), oro 8,4 frente a 9,8.
+- **Facciones**: la más rápida llega a nivel 8 el día 28 (la 1); las demás, a 6-7.
+- **Trueques para crecer**: 53 cumplidos (34 de cobre, 19 de ganado) y 3 caducados.
+- **Tecnología**: la Era II ("Crisis y adaptación") arranca el día 18,4, a las 2,6 semanas, cuando la Era I debe durar 5:
+  `aleacion_bronce` (20 caravanas con estaño) lleva 102 al cerrar la semana 5. Otros logros se cumplen muy pronto
+  (`escudos_ligeros` el día 0,1 con 26.945 campamentos destruidos; `metalurgia_cobre` el día 4,0). Las Facciones 4 y 7 son
+  las que menos tecnologías adoptan. Calibrar las X es trabajo de BA-006.
