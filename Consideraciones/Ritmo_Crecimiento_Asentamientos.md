@@ -767,3 +767,21 @@ levanta el Palacio en cuanto la plaza está en nivel 2 (antes esperaba al 3). Mi
 - **Era II**: empieza el día 24,4 (en §11.9, el 18,4).
 - **Duración**: la Era I entera en 45 minutos (semana 1 con el código anterior, 13 min; semanas 2-5 entre 6 y 9 min),
   frente a ~17 horas antes de las optimizaciones del batch (commit `d9bed5c`).
+
+### 11.11 Era I con estaño de más (2026-10-01)
+
+Regla nueva desde §11.10: 40 yacimientos de estaño de frecuencia intermedia, además de los 24 raros (`ESTANO_EXTRA`, mapa
+v17). Misma semilla y mismas reglas; una corrida por semana.
+
+- **Minas de estaño**: 8, 9, 10, 10 y 13 al cerrar cada semana (en §11.10, 5 en toda la Era).
+- **El freno pasa al logro de `aleacion_bronce`** (20 caravanas llegadas con estaño): con estaño en casa casi nadie lo
+  compra por trueque, y al cerrar la semana 2 iba por 1. Se cumple el día 22,9 (en §11.9, el 18,4) y lo adoptan las
+  Facciones 1 y 3. Como era el último logro de la Era I, la Era II empieza ese mismo día.
+- **Primer nivel 3**: la capital `asentamiento-0` pide la subida el día 23,4 con sus 100 lingotes de bronce y llega el
+  día 30,4, tras la semana de obra. Es la única: al final no queda bronce en ningún almacén, aunque hay 5.300 lingotes
+  de estaño y 23.219 de estaño en bruto.
+- **Bloqueos al final**: recursos insuficientes (31 de 48, el bronce), sin cupo de Facción (17), insolvencia (11: piedra 7,
+  oro 3, madera 1).
+- **Expansión**: 48 plazas vivas, 30 en nivel 2 y 1 en nivel 3, sin ruinas; 30 Palacios.
+- **Guerra**: 28, 17, 9 y 5 conquistas en las semanas 2-5.
+- **Duración**: 25 minutos la Era entera (51 s la semana 1, 8 min 29 s la 5).
