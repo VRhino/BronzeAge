@@ -785,3 +785,22 @@ v17). Misma semilla y mismas reglas; una corrida por semana.
 - **Expansión**: 48 plazas vivas, 30 en nivel 2 y 1 en nivel 3, sin ruinas; 30 Palacios.
 - **Guerra**: 28, 17, 9 y 5 conquistas en las semanas 2-5.
 - **Duración**: 25 minutos la Era entera (51 s la semana 1, 8 min 29 s la 5).
+
+### 11.12 Era I con el logro de estaño extraído (2026-10-01)
+
+Regla nueva desde §11.11: `aleacion_bronce` pasa de "20 caravanas con estaño" a **500.000 de estaño extraído en el mundo**
+(`extraido.estano`). Medida de la curva: 45.534, 245.433, 462.670, 688.299 y 946.508 de estaño acumulado al cierre de las
+semanas 1-5; extraer no depende de cuándo se adopte el bronce (462.670 en la semana 3 con X de 100.000 y de 500.000).
+
+- **El logro cae el día 22,1** y la Era II empieza ese día (en §11.11, el 22,9; en §11.9, el 18,4). Lo adoptan las
+  Facciones 1 y 6 el mismo día.
+- **Nivel 3**: 6 plazas al cierre (en §11.11, 1). 7 lo piden entre los días 20 y 28 y 6 llegan entre el 29 y el 31 (tras la
+  semana de obra), a 4,0-4,5 semanas desde su fundación. Quedan 26 plazas en nivel 2 y 16 en nivel 1.
+- **Bronce**: los trueques de lingotes de bronce pasan a existir: 39 cumplidos y 18 caducados. Es lo que mueve el bronce
+  entre plazas que lo fabrican y plazas que lo necesitan para el nivel 3.
+- **Bloqueos al final**: recursos insuficientes (32 de 48), sin cupo de Facción (21), insolvencia (10: piedra 5, oro 4,
+  madera 1).
+- **Facciones**: la 1 y la 12 llegan a nivel 8 los días 31,8 y 31,9; el resto, a 6-7.
+- **Expansión**: 48 plazas vivas, 11 Facciones con más de una plaza, sin ruinas; 29 Palacios; 13 Minas de estaño.
+- **Guerra**: 9 conquistas en la semana 4 y 5 en la 5.
+- **Duración**: 36 minutos la Era entera.
