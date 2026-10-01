@@ -97,7 +97,7 @@ Las Facciones NPC siguen la misma regla.
 
 ## 6.6 Catálogo
 
-Cada X se fijó con el batch en la semana objetivo de su logro (6.3); siguen en placeholder `carpinteria_militar`, `falange_hoplita`, `arqueria_especializada`, `bronce_laminado` y `trabajos_asedio`, cuyo contador no se mueve con jugadores NPC. "Edificio" en un hito = activo en cualquier asentamiento de la Facción. Las
+Las X de la Era I se fijaron con el batch en la semana objetivo de su logro (6.3) y caen donde toca. Las de las Eras II y III son provisionales: sus contadores dependen de qué tecnologías adopta cada Facción, y con jugadores NPC se adoptan pocas, así que cada cambio mueve el mundo entero. Siguen sin medida `carpinteria_militar`, `falange_hoplita`, `arqueria_especializada`, `bronce_laminado` y `trabajos_asedio`, cuyo contador no se mueve. "Edificio" en un hito = activo en cualquier asentamiento de la Facción. Las
 tropas de cada tecnología, con su edificio, equipo y escalón, en Doc 5.8. **Una tecnología también puede dar un
 bonus de producción** en vez de abrir contenido (`bonusProduccion`: un recurso y un factor sobre lo que sacan sus
 extractores): hoy solo `canteria`, que se pensó para la piedra del nivel 3 (Doc 4.5).
