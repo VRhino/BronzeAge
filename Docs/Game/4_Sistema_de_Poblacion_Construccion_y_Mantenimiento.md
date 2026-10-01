@@ -92,7 +92,7 @@ Algunos edificios, niveles internos y recetas piden además una **tecnología ad
 | Mina de estaño | Estaño | 50 madera | 8 | 7 min | 3 estaño |
 | Mina de hierro (pide `forja_hierro_temprana`) | Mineral de hierro | 30 madera | 8 | 4 min | 5 mineral de hierro |
 
-Los extractores de nivel 1 se pagan solo con madera: son justo lo que hay que construir para subir a nivel 2 (4.5). Cantera, minas y Corral ligan a un nodo finito (Doc 1.4), con reemplazo automático al agotarse (4.2).
+Los extractores de nivel 1 se pagan solo con madera: son justo lo que hay que construir para subir a nivel 2 (4.5). La tecnología `canteria` (Doc 6.6) multiplica por 1,5 lo que sacan las Canteras de la Facción. Cantera, minas y Corral ligan a un nodo finito (Doc 1.4), con reemplazo automático al agotarse (4.2).
 
 **Granja: cuatro niveles internos**, que suben el rinde sin pedir más trabajadores: **60 / 90 / 120 / 180** trigo por minuto. Mejoras: 60 madera + 20 piedra, 120+40, 240+80, sin requisito de nivel de asentamiento. Un asentamiento de nivel 1 a tope de población (300 habitantes) come 30 trigo por minuto, así que una sola Granja de nivel 1 lo sostiene con margen para alimentar tropa.
 

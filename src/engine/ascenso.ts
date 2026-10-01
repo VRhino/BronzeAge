@@ -10,7 +10,7 @@
 //
 // Este archivo es motor puro: quién puede pedirla (el Gobernador) lo decide la capa de sesión
 // (`session/comandos/ascenso.ts`), y cuándo la pide un NPC, `session/npcGobernanza.ts`.
-import type { Asentamiento, Faccion } from '../domain/types';
+import type { Asentamiento, Faccion, TecnologiaId } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
 import { ASCENSO_ASENTAMIENTO, NIVEL_ASENTAMIENTO } from '../constants';
 import { minutos, sumar, type Instante } from '../domain/tiempo';
@@ -95,13 +95,14 @@ function solvenciaEnNivel(
   nivelObjetivo: number,
   asentamientos: readonly Asentamiento[],
   mapa: Mapa,
-  instante: Instante
+  instante: Instante,
+  adoptadas?: readonly TecnologiaId[]
 ): SolvenciaRecurso[] {
   const capital = encontrarCapital(asentamiento.faccionId, [...asentamientos]);
   const costo = calcularCostoMantenimiento({ ...asentamiento, nivel: nivelObjetivo, nivelActual: nivelObjetivo }, capital);
   const zona = computeZonaInfluencia(asentamiento, [...asentamientos]).poligono;
   const ingresos = new Map<string, number>();
-  for (const item of produccionPorMinuto(asentamiento, mapa, zona)) {
+  for (const item of produccionPorMinuto(asentamiento, mapa, zona, adoptadas)) {
     ingresos.set(item.recurso, (ingresos.get(item.recurso) ?? 0) + item.cantidadPorMinuto);
   }
   ingresos.set('oro', (ingresos.get('oro') ?? 0) + recaudacionOro(asentamiento, instante));
@@ -128,7 +129,9 @@ export function evaluarAscenso(
   asentamientos: readonly Asentamiento[],
   facciones: readonly Faccion[],
   mapa: Mapa,
-  instante: Instante
+  instante: Instante,
+  /** Tecnologías de la Facción: cuentan en lo que producen sus extractores (Doc 6.6). */
+  adoptadas?: readonly TecnologiaId[]
 ): EvaluacionAscenso {
   const nivel = asentamiento.nivel;
   const nivelObjetivo = nivel < NIVEL_ASENTAMIENTO.nivelMaximo ? nivel + 1 : null;
@@ -145,7 +148,7 @@ export function evaluarAscenso(
   const faccion = facciones.find((f) => f.id === asentamiento.faccionId);
   if (!cupoLibreParaNivel(faccion, asentamientos, nivelObjetivo)) bloqueos.push('sin_cupo_de_faccion');
   if (!tieneRecursos(asentamiento.almacen, tarifa.costo)) bloqueos.push('recursos_insuficientes');
-  const solvencia = solvenciaEnNivel(asentamiento, nivelObjetivo, asentamientos, mapa, instante);
+  const solvencia = solvenciaEnNivel(asentamiento, nivelObjetivo, asentamientos, mapa, instante, adoptadas);
   if (solvencia.some((s) => s.ingresoPorMinuto < s.costoPorMinuto)) bloqueos.push('insolvente');
 
   return { nivel, nivelObjetivo, costo: tarifa.costo, obraMinutos: tarifa.obraMinutos, solvencia, bloqueos, puede: bloqueos.length === 0 };
@@ -160,9 +163,10 @@ export function iniciarAscenso(
   asentamientos: readonly Asentamiento[],
   facciones: readonly Faccion[],
   mapa: Mapa,
-  instante: Instante
+  instante: Instante,
+  adoptadas?: readonly TecnologiaId[]
 ): { asentamiento: Asentamiento; eventos: EventoCrudo[] } {
-  const evaluacion = evaluarAscenso(asentamiento, asentamientos, facciones, mapa, instante);
+  const evaluacion = evaluarAscenso(asentamiento, asentamientos, facciones, mapa, instante, adoptadas);
   if (!evaluacion.puede || evaluacion.nivelObjetivo === null) {
     throw new AscensoInvalidoError(`No se puede subir de nivel: ${evaluacion.bloqueos.join(', ')}.`);
   }

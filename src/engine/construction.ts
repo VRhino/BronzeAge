@@ -41,6 +41,7 @@ import {
   capacidadViviendaArtesanos,
   capacidadViviendaPesants,
   edificiosPorTipoYEstado,
+  factorProduccionTecnologica,
   hayProyectoPendiente,
   nivelActualDe,
   ratioManoObra,
@@ -1356,7 +1357,10 @@ export function avanzarConstruccion(
     } else {
       const extraccion = EXTRACTORES[edificio.tipo];
       if (extraccion && mapa.nodoProductivo(edificio.fuenteId)) {
-        const cantidadExtraida = mapa.extraer(edificio.fuenteId, extraccion.produccionBase() * ratioMano);
+        const cantidadExtraida = mapa.extraer(
+          edificio.fuenteId,
+          extraccion.produccionBase() * ratioMano * factorProduccionTecnologica(adoptadas, extraccion.recurso)
+        );
         extraido[extraccion.recurso] = (extraido[extraccion.recurso] ?? 0) + cantidadExtraida;
         const resultado = agregarRecursoConSobrante(almacen, extraccion.recurso, cantidadExtraida);
         almacen = resultado.almacen;

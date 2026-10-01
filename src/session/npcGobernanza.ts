@@ -502,8 +502,9 @@ function asegurarNucleoMilitar(
       ? 'galeriaDeTiro'
       : !tieneOEnCurso(asentamiento, 'caballerizas') && adoptadas.includes('cria_caballar')
         ? 'caballerizas'
-        : // La tropa de escalón 4-5 se recluta con nobleza (Doc 5.8), y la primera está en el nivel 3.
-          !tieneOEnCurso(asentamiento, 'palacio') && nivelActualDe(asentamiento) >= 3
+        : // Se construye desde el nivel 2 (Doc 4.2.1): da cupo a la nobleza, que es la que más oro tributa (4.1), y de
+          // ella sale la tropa de escalón 4-5 (Doc 5.8).
+          !tieneOEnCurso(asentamiento, 'palacio') && nivelActualDe(asentamiento) >= 2
           ? 'palacio'
           : // Requisito del nivel 4 (Doc 4.5).
             !tieneOEnCurso(asentamiento, 'salaConsejo') && nivelActualDe(asentamiento) >= 3 && adoptadas.includes('instituciones_civicas')
@@ -2152,8 +2153,9 @@ export function avanzarNpcGobernanza(
   for (const asentamiento of asentamientos) {
     if (!esNpc(asentamiento.faccionId) || asentamiento.ascenso) continue;
     if (calcularNivelAsentamiento(asentamiento) <= asentamiento.nivel) continue;
-    if (!evaluarAscenso(asentamiento, asentamientos, facciones, mapa, instante).puede) continue;
-    const { asentamiento: enObra } = iniciarAscenso(asentamiento, asentamientos, facciones, mapa, instante);
+    const adoptadas = tecnologiasDe(estado.tecnologia, asentamiento.faccionId).adoptadas;
+    if (!evaluarAscenso(asentamiento, asentamientos, facciones, mapa, instante, adoptadas).puede) continue;
+    const { asentamiento: enObra } = iniciarAscenso(asentamiento, asentamientos, facciones, mapa, instante, adoptadas);
     asentamientos = asentamientos.map((a) => (a.id === enObra.id ? enObra : a));
     eventos.push(`${asentamiento.id} empieza la obra de ascenso a nivel ${enObra.ascenso!.nivelObjetivo}.`);
   }

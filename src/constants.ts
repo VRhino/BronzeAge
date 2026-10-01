@@ -2297,6 +2297,8 @@ export interface DefinicionTecnologia {
   /** `umbral` es la X del logro: PLACEHOLDER hasta calibrarlo con batch en su semana objetivo (Doc 6.3). */
   logro?: { contador: ContadorLogro; umbral: number };
   hito: CondicionHito[];
+  /** Multiplica lo que sacan los extractores de la Facción de ese recurso (Doc 6.6, Cantería). */
+  bonusProduccion?: { recurso: RecursoTipo; factor: number };
 }
 
 const hitoEdificio = (e: EdificioTipo, nivelInterno?: number): CondicionHito => ({ tipo: 'edificio', edificio: e, nivelInterno });
@@ -2348,6 +2350,15 @@ export const TECNOLOGIAS: Record<TecnologiaId, DefinicionTecnologia> = {
     era: 'reinos_palaciales',
     logro: { contador: 'batallas.campoAbierto', umbral: 20 },
     hito: [hitoTecnologia('cria_caballar'), hitoEdificio('caballerizas', 2), hitoEdificio('carpinteria', 2)],
+  },
+  // Sin tropa ni receta detrás: la piedra es lo que frena el nivel 3 en la Era I medida (2026-09-30, decisión del
+  // usuario). X PLACEHOLDER hasta verla en el batch.
+  canteria: {
+    nombre: 'Cantería',
+    era: 'reinos_palaciales',
+    logro: { contador: 'extraido.piedra', umbral: 1_000_000 },
+    hito: [hitoEdificio('cantera')],
+    bonusProduccion: { recurso: 'piedra', factor: 1.5 },
   },
   // Era II — Crisis y adaptación
   bronce_calidad_militar: {

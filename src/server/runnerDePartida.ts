@@ -289,7 +289,14 @@ export class RunnerDePartida {
     const estado = this.sesion.getState();
     const asentamiento = estado.asentamientos.find((a) => a.id === asentamientoId);
     if (!asentamiento) return undefined;
-    return evaluarAscenso(asentamiento, estado.asentamientos, estado.facciones, this.sesion.getMapa(), instanteDeTick(estado.tick));
+    return evaluarAscenso(
+      asentamiento,
+      estado.asentamientos,
+      estado.facciones,
+      this.sesion.getMapa(),
+      instanteDeTick(estado.tick),
+      tecnologiasDe(estado.tecnologia, asentamiento.faccionId).adoptadas
+    );
   }
 
   /**

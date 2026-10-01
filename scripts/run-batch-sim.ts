@@ -6,7 +6,7 @@ import { crearMapa, type EstadoMapa, type Mapa } from '../src/world/mapa';
 import { avanzarSimulacion, type EstadoSimulacion } from '../src/engine/simulation';
 import { crearFaccion } from '../src/engine/faccion';
 import { asignarRey } from '../src/engine/cargos';
-import { contadoresDeEventos, estadoTecnologiaInicial, sumarContadores } from '../src/engine/tecnologia';
+import { contadoresDeEventos, estadoTecnologiaInicial, sumarContadores, tecnologiasDe } from '../src/engine/tecnologia';
 import { evaluarViabilidadFundacion, fundarAsentamiento } from '../src/engine/settlement';
 import { nivelActualDe, tieneMercadoActivo, edificiosPorTipoYEstado, nutricionPoblacionDe } from '../src/engine/asentamientoQuery';
 import { alcanzoTopeDeViviendas, reclamosDeFuentes } from '../src/engine/construction';
@@ -1561,7 +1561,7 @@ async function main() {
     const bloqueos = new Map<string, number>();
     const insolvencia = new Map<string, { ingreso: number[]; costo: number[] }>();
     for (const a of estado.asentamientos) {
-      const e = evaluarAscenso(a, estado.asentamientos, estado.facciones, mapa, instanteFinal);
+      const e = evaluarAscenso(a, estado.asentamientos, estado.facciones, mapa, instanteFinal, tecnologiasDe(estado.tecnologia, a.faccionId).adoptadas);
       for (const b of e.puede ? ['(puede)'] : e.bloqueos) bloqueos.set(b, (bloqueos.get(b) ?? 0) + 1);
       for (const s of e.solvencia) {
         if (s.ingresoPorMinuto >= s.costoPorMinuto) continue;

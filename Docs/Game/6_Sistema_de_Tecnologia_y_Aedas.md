@@ -98,7 +98,9 @@ Las Facciones NPC siguen la misma regla.
 ## 6.6 Catálogo
 
 Logros con cifra X placeholder (6.3). "Edificio" en un hito = activo en cualquier asentamiento de la Facción. Las
-tropas de cada tecnología, con su edificio, equipo y escalón, en Doc 5.8.
+tropas de cada tecnología, con su edificio, equipo y escalón, en Doc 5.8. **Una tecnología también puede dar un
+bonus de producción** en vez de abrir contenido (`bonusProduccion`: un recurso y un factor sobre lo que sacan sus
+extractores): hoy solo `canteria`, que se pensó para la piedra del nivel 3 (Doc 4.5).
 
 **Era I — Reinos palaciales**
 
@@ -113,6 +115,7 @@ tropas de cada tecnología, con su edificio, equipo y escalón, en Doc 5.8.
 | `arqueria_palacial` | arqueros | X batallas libradas | Galería de tiro activa |
 | `cria_caballar` | Caballerizas; exploradores a caballo | X animales comprados (caravanas incluidas) | Corral activo |
 | `carros_guerra` | Carro de Guerra (Carpintería 2); carros de guerra | X batallas a campo abierto (Qadesh) | `cria_caballar` + Caballerizas 2 + Carpintería 2 |
+| `canteria` | las Canteras de la Facción sacan **1,5×** la piedra (en todos sus asentamientos) | X de piedra extraída en el mundo | Cantera activa |
 
 **Era II — Crisis y adaptación**
 

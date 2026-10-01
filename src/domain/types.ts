@@ -1121,6 +1121,7 @@ export type TecnologiaId =
   | 'arqueria_palacial'
   | 'cria_caballar'
   | 'carros_guerra'
+  | 'canteria'
   // Era II
   | 'bronce_calidad_militar'
   | 'forja_hierro_temprana'
@@ -1144,6 +1145,7 @@ export type TecnologiaId =
 export type ContadorLogro =
   | 'extraido.cobre'
   | 'extraido.hierro'
+  | 'extraido.piedra'
   | 'fabricado.equipoBronce'
   | 'fabricado.armaduraBronce'
   | 'caravanas.llegadasConEstano'

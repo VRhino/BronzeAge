@@ -9,6 +9,7 @@ import {
   produccionTrigoDeGranja,
   NIVEL_ASENTAMIENTO,
   POBLACION,
+  TECNOLOGIAS,
   type RecetaProduccion,
 } from '../constants';
 import { cupoCaravanaExtra, cupoGuarnicionExtra, factorProduccionTrigo } from './politicas';
@@ -351,6 +352,14 @@ function produccionRecetas(asentamiento: Asentamiento, adoptadas: readonly Tecno
  * descuenta nodos de recurso ni almacén (a diferencia de `avanzarConstruccion`/`avanzarRecetas`, que
  * sí aplican la producción real).
  */
+/** Cuánto multiplican las tecnologías adoptadas lo que sacan los extractores de `recurso` (Doc 6.6). */
+export function factorProduccionTecnologica(adoptadas: readonly TecnologiaId[] | undefined, recurso: string): number {
+  return (adoptadas ?? []).reduce((f, id) => {
+    const bonus = TECNOLOGIAS[id].bonusProduccion;
+    return bonus?.recurso === recurso ? f * bonus.factor : f;
+  }, 1);
+}
+
 export function produccionPorMinuto(
   asentamiento: Asentamiento,
   mapa: Mapa,
@@ -396,12 +405,13 @@ export function produccionPorMinuto(
   for (const { tipo, recurso, base } of minado) {
     const edificios = edificiosPorTipoYEstado(asentamiento, tipo);
     if (!edificios.length) continue;
+    const factorTecnologia = factorProduccionTecnologica(adoptadas, recurso);
     const total = edificios.reduce((acc, e) => {
       // Lo que queda en el yacimiento, no lo que tenía al generarse: un nodo casi agotado rinde ese resto
       // y no su tasa nominal — mismo tope que aplica la producción real (`mapa.extraer`).
       const restante = mapa.stock(e.fuenteId);
       if (restante <= 0) return acc;
-      return acc + Math.min(base * ratioMano, restante);
+      return acc + Math.min(base * ratioMano * factorTecnologia, restante);
     }, 0);
     items.push({ tipo, recurso, activos: edificios.length, cantidadPorMinuto: total });
   }

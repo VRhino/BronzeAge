@@ -38,6 +38,7 @@ const MINUTOS_POR_SEMANA = 7 * 24 * 60;
 const LOGRO_CANTADO: Record<ContadorLogro, string> = {
   'extraido.cobre': 'el cobre extraído en el mundo',
   'extraido.hierro': 'el hierro extraído en el mundo',
+  'extraido.piedra': 'la piedra extraída en el mundo',
   'fabricado.equipoBronce': 'las piezas de equipo de bronce forjadas',
   'fabricado.armaduraBronce': 'las armaduras de bronce forjadas',
   'caravanas.llegadasConEstano': 'las caravanas que han llegado cargadas de estaño',
@@ -166,6 +167,7 @@ export function contadoresDeProduccion(
   const delta: DeltaContadores = {};
   if (extraido.cobre) sumar(delta, 'extraido.cobre', extraido.cobre);
   if (extraido.hierro) sumar(delta, 'extraido.hierro', extraido.hierro);
+  if (extraido.piedra) sumar(delta, 'extraido.piedra', extraido.piedra);
   const bronce = (fabricado.armaBronce ?? 0) + (fabricado.armaBronceCalidad ?? 0) + (fabricado.armaduraBronce ?? 0) + (fabricado.armaduraBronceCalidad ?? 0);
   if (bronce) sumar(delta, 'fabricado.equipoBronce', bronce);
   if (fabricado.armaduraBronce) sumar(delta, 'fabricado.armaduraBronce', fabricado.armaduraBronce);

@@ -4,6 +4,7 @@
 // Archivo propio y no una función más en `construccion.ts`: la obra de ascenso no es un `Edificio`, no pasa por la
 // cola de construcción.
 import { iniciarAscenso } from '../../engine/ascenso';
+import { tecnologiasDe } from '../../engine/tecnologia';
 import { exito } from './tipos';
 import { comando, conAsentamiento, exigirAsentamiento } from './ayudas';
 import { desdeCrudos } from './eventos';
@@ -20,6 +21,13 @@ export interface ParamsSolicitarAscenso {
  */
 export const solicitarAscenso = comando<ParamsSolicitarAscenso, void>((estado, mapa, ctx, params) => {
   const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
-  const resultado = iniciarAscenso(asentamiento, estado.asentamientos, estado.facciones, mapa, ctx.instante);
+  const resultado = iniciarAscenso(
+    asentamiento,
+    estado.asentamientos,
+    estado.facciones,
+    mapa,
+    ctx.instante,
+    tecnologiasDe(estado.tecnologia, asentamiento.faccionId).adoptadas
+  );
   return exito(conAsentamiento(estado, resultado.asentamiento), desdeCrudos(ctx, resultado.eventos, asentamiento.id));
 });
