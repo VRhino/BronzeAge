@@ -743,3 +743,27 @@ encadenando checkpoints, con la tecnología por Eras (BA-006) ya en el motor.
   `aleacion_bronce` (20 caravanas con estaño) lleva 102 al cerrar la semana 5. Otros logros se cumplen muy pronto
   (`escudos_ligeros` el día 0,1 con 26.945 campamentos destruidos; `metalurgia_cobre` el día 4,0). Las Facciones 4 y 7 son
   las que menos tecnologías adoptan. Calibrar las X es trabajo de BA-006.
+
+### 11.10 Era I con Cantería y el Palacio desde el nivel 2 (2026-10-01)
+
+Reglas nuevas desde §11.9: tecnología `canteria` (Era I, Canteras ×1,5; logro de 1.000.000 de piedra extraída) y el NPC
+levanta el Palacio en cuanto la plaza está en nivel 2 (antes esperaba al 3). Misma semilla, una corrida por semana.
+
+| semana | conquistas | insolventes | en piedra | en oro | Palacios |
+|---|---|---|---|---|---|
+| 2 | 29 | — | 3 | 1 | 12 |
+| 3 | 18 | 14 (antes 20) | 7 (antes 10) | 7 (antes 14) | 20 |
+| 4 | 18 | 6 (antes 18) | 4 (antes 9) | 3 (antes 15) | 27 |
+| 5 | 1 | 7 (antes 24) | 3 (antes 14) | 2 (antes 17) | 32 |
+
+- **Cantería**: el logro se cumple el día 4,6 y las 12 Facciones la adoptan al empezar la semana 2.
+- **Insolvencia**: casi desaparece. Piedra y oro dejan de frenar el nivel 3.
+- **Nivel 3: ninguna plaza**, y ninguna lo pide. Ahora lo frena el **lingote de bronce** del coste (100): las 31 plazas
+  de nivel 2 tienen 0 al final de la semana 4. `aleacion_bronce` solo la adoptan 2 Facciones y nadie produce bronce:
+  la receta pide estaño y hay 5 Minas de estaño en el mapa. Es el techo derivado de D54 (Doc 6.2: "pocos en el 3"
+  en la Era I), que aquí se queda en cero.
+- **Expansión**: 48 plazas vivas al final, 33 en nivel 2, ninguna en ruinas.
+- **Guerra**: 29, 18, 18 y 1 conquistas en las semanas 2-5; se apaga igual que en §11.9.
+- **Era II**: empieza el día 24,4 (en §11.9, el 18,4).
+- **Duración**: la Era I entera en 45 minutos (semana 1 con el código anterior, 13 min; semanas 2-5 entre 6 y 9 min),
+  frente a ~17 horas antes de las optimizaciones del batch (commit `d9bed5c`).
