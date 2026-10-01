@@ -10,6 +10,7 @@
 // `politicas.ts`, una más en la capa de autorización), y la regla de residencia TRES (`tropas.ts`,
 // `faccion.ts`, autorización). Añadir un cargo nuevo obligaba a acertar en los cuatro sitios.
 import type { Asentamiento, CargoTipo, Faccion, RelacionPolitica } from '../domain/types';
+import { ReglaInvalidaError } from './errores';
 
 /** Único mapa `CargoTipo -> campo de `Asentamiento.cargos``. Si se añade un cargo, el tipo `CargoTipo`
  * (domain/types.ts) obliga a completarlo aquí, y todo lo demás lo hereda. */
@@ -161,7 +162,7 @@ export function puedeEntrarEn(
   }
 }
 
-export class PuertaInvalidaError extends Error {}
+export class PuertaInvalidaError extends ReglaInvalidaError {}
 
 /**
  * Veta (o perdona) a un jugador en una plaza (Doc 1.10.5).

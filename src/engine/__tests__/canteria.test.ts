@@ -4,7 +4,7 @@ import { TECNOLOGIAS } from '../../constants';
 import { factorProduccionTecnologica, produccionPorMinuto } from '../asentamientoQuery';
 import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, prepararParaSubirANivel2 } from './fixtures';
 
-const mapa = crearMapaDeterminista();
+const mapa = crearMapaDeterminista(7);
 const plaza = prepararParaSubirANivel2(fundarAsentamientoDeTest(mapa, crearFacciones(), 'faccion-1', []).asentamiento, mapa);
 const piedraPorMinuto = (adoptadas: Parameters<typeof produccionPorMinuto>[3]) =>
   produccionPorMinuto(plaza, mapa, [], adoptadas).find((i) => i.tipo === 'cantera')!.cantidadPorMinuto;

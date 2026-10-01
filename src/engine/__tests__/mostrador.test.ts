@@ -189,7 +189,8 @@ describe('las ofertas que nadie toma se retiran solas', () => {
     expect(antes.eventos).toHaveLength(0);
 
     const despues = caducarOrdenes([activa], instanteDeTest(MERCADO.plazoOrdenMinutos));
-    expect(despues.ordenes[0]!.estado).toBe('expirada');
+    expect(despues.ordenes).toHaveLength(0);
+    expect(despues.cerradas[0]!.estado).toBe('expirada');
     const expirada = despues.eventos[0]!;
     if (typeof expirada === 'string') throw new Error('esperaba un evento migrado, no una cadena');
     expect(expirada.codigo).toBe('mercado.orden_expirada');
@@ -201,10 +202,11 @@ describe('las ofertas que nadie toma se retiran solas', () => {
     ).toThrow(OrdenInvalidaError);
   });
 
-  it('una orden ya cumplida no se vuelve a caducar ni genera evento', () => {
+  it('una orden ya cumplida sale de las que están en pie sin caducar ni generar evento', () => {
     const cumplida: OrdenMercado = { ...orden('venta', 'madera', 50, 2), estado: 'cumplida' };
     const r = caducarOrdenes([cumplida], instanteDeTest(MERCADO.plazoOrdenMinutos * 10));
-    expect(r.ordenes[0]!.estado).toBe('cumplida');
+    expect(r.ordenes).toHaveLength(0);
+    expect(r.cerradas[0]!.estado).toBe('cumplida');
     expect(r.eventos).toHaveLength(0);
   });
 });

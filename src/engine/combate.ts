@@ -12,8 +12,9 @@ import { multiplicadorDefensivoDeRecintos } from './muralla';
 import { integridadDeRecinto } from './trazado';
 import { CAMPO_CARGO, esResidente, estanAliadas } from './pertenencia';
 import { estaProtegida } from './asentamientoQuery';
+import { ReglaInvalidaError } from './errores';
 
-export class CombateInvalidoError extends Error {}
+export class CombateInvalidoError extends ReglaInvalidaError {}
 
 // Vive en `tropa` (lo usa el tope de héroes por batalla); se reexporta para los que ya lo tomaban de aquí.
 export { poderEscuadron };

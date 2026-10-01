@@ -27,8 +27,9 @@ import { agregarRecurso, cantidadDisponible, descontarRecursos } from './almacen
 import { factorComisionExterna } from './politicas';
 import { tieneMercadoActivo } from './asentamientoQuery';
 import { enLaPuertaDe } from './ejercitos';
+import { ReglaInvalidaError } from './errores';
 
-export class OrdenInvalidaError extends Error {}
+export class OrdenInvalidaError extends ReglaInvalidaError {}
 
 /** Precio de referencia por defecto según escasez/abundancia GLOBAL del recurso (Doc 3.4, sin componente de distancia). */
 export function calcularPrecioReferencia(recurso: string, asentamientos: Asentamiento[]): number {
@@ -86,18 +87,30 @@ export function colocarOrdenMercado(
  * cien ticks — y en particular una plaza NPC, que solo republica cuando la anterior ya no está activa, se
  * quedaría congelada para siempre en su primer precio.
  */
-export function caducarOrdenes(ordenes: readonly OrdenMercado[], instante: Instante): { ordenes: OrdenMercado[]; eventos: EventoCrudo[] } {
+export function caducarOrdenes(
+  ordenes: readonly OrdenMercado[],
+  instante: Instante
+): { ordenes: OrdenMercado[]; cerradas: OrdenMercado[]; eventos: EventoCrudo[] } {
   const eventos: EventoCrudo[] = [];
-  const resultantes = ordenes.map((orden) => {
-    if (orden.estado !== 'activa' || instante < orden.expiraEn) return orden;
-    eventos.push({
-      codigo: 'mercado.orden_expirada',
-      mensaje: `${orden.asentamientoId} retira su orden de ${orden.tipo} de ${orden.recurso}: nadie la tomó.`,
-      payload: { ordenId: orden.id, asentamientoId: orden.asentamientoId } satisfies PayloadOrdenExpirada,
-    });
-    return { ...orden, estado: 'expirada' as const };
-  });
-  return { ordenes: resultantes, eventos };
+  const enPie: OrdenMercado[] = [];
+  // Las que ya no están en pie salen de la lista viva (`historialOrdenes`): nadie más tiene que recorrerlas. Una
+  // cumplida o expirada que siga aquí (partida guardada antes del 2026-10-01) sale en el primer tick.
+  const cerradas: OrdenMercado[] = [];
+  for (const orden of ordenes) {
+    if (orden.estado !== 'activa') {
+      cerradas.push(orden);
+    } else if (instante < orden.expiraEn) {
+      enPie.push(orden);
+    } else {
+      eventos.push({
+        codigo: 'mercado.orden_expirada',
+        mensaje: `${orden.asentamientoId} retira su orden de ${orden.tipo} de ${orden.recurso}: nadie la tomó.`,
+        payload: { ordenId: orden.id, asentamientoId: orden.asentamientoId } satisfies PayloadOrdenExpirada,
+      });
+      cerradas.push({ ...orden, estado: 'expirada' as const });
+    }
+  }
+  return { ordenes: enPie, cerradas, eventos };
 }
 
 /** Espacio libre para un recurso en un almacen. Un recurso sin entrada todavia no cabe: la capacidad la dan

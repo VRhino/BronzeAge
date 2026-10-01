@@ -50,9 +50,10 @@ import { cupoCaravanas, cupoEscolta, puedeCrearCaravana, cooldownCaravanaRestant
 import { avanzarPosicionEnRuta } from './movimiento';
 import { factorCapacidadCaravana, factorComisionExterna, factorVelocidadCaravana } from './politicas';
 import { aplicarAjustesReputacion, factorComisionPorReputacion, type AjusteReputacion } from './reputacion';
+import { ReglaInvalidaError } from './errores';
 
-export class TruequeInvalidoError extends Error {}
-export class CaravanaInvalidaError extends Error {}
+export class TruequeInvalidoError extends ReglaInvalidaError {}
+export class CaravanaInvalidaError extends ReglaInvalidaError {}
 
 function distancia(a: Point, b: Point): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
@@ -784,7 +785,7 @@ export function aplicarEntregaATrueque(
   return { acuerdo: actualizado, eventos, ajustesReputacion, ajustesExperiencia };
 }
 
-export class EntregaInvalidaError extends Error {}
+export class EntregaInvalidaError extends ReglaInvalidaError {}
 
 /**
  * Entrega MANUAL desde una caravana escoltada a un trueque activo (Doc 5.13.3, decisión del usuario 2026-09-04).

@@ -60,6 +60,7 @@ import { avanzarObraDeRecintos } from './muralla';
 import { reservaDinamicaConstruccion } from './mantenimiento';
 import { factorProduccionTrigo, factorTiempoConstruccion, perfilTrazadoDePolitica } from './politicas';
 import { consumoComidaPoblacion } from './population';
+import { ReglaInvalidaError } from './errores';
 
 /**
  * Recurso propio de cada tipo de edificio "de supervivencia": Granja no respeta la reserva mínima de
@@ -1531,7 +1532,7 @@ export function avanzarConstruccion(
   };
 }
 
-export class ConstruccionManualInvalidaError extends Error {}
+export class ConstruccionManualInvalidaError extends ReglaInvalidaError {}
 
 /** Tipos que solo admiten UNA instancia por asentamiento (progresan por `nivelInterno` en vez de repetirse) —
  * añadir una segunda no tiene sentido estructural, sea cual sea el mecanismo (auto o manual). */

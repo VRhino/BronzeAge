@@ -1,8 +1,9 @@
 import type { Asentamiento, CargoTipo, Faccion } from '../domain/types';
 import { esCiudadano } from './faccion';
 import { cargoOcupado, conCargoLocal } from './pertenencia';
+import { ReglaInvalidaError } from './errores';
 
-export class CargoInvalidoError extends Error {}
+export class CargoInvalidoError extends ReglaInvalidaError {}
 
 /**
  * Rey (Doc 2.2): por defecto en Liga-por-vasallaje, electo por voto en Liga-por-alianza. Fase 0 no simula

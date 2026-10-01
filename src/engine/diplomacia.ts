@@ -12,6 +12,7 @@ export interface PayloadTributoPagado {
 import { REPUTACION } from '../constants';
 import { agregarRecurso, cantidadDisponible, descontarRecursos } from './almacen';
 import { aplicarAjustesReputacion, puedeProponerAlianza } from './reputacion';
+import { ReglaInvalidaError } from './errores';
 
 /** Payload de `rebelionVasallo` — comando de jugador, no tick (ver `session/comandos/diplomacia.ts`). */
 export interface PayloadRebelionVasallo {
@@ -20,7 +21,7 @@ export interface PayloadRebelionVasallo {
   faccionVasallaId: string;
 }
 
-export class DiplomaciaInvalidaError extends Error {}
+export class DiplomaciaInvalidaError extends ReglaInvalidaError {}
 
 function existeRelacionActiva(relaciones: RelacionPolitica[], aId: string, bId: string): boolean {
   return relaciones.some(

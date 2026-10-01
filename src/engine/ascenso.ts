@@ -21,8 +21,9 @@ import { calcularCupoNivel } from './faccion';
 import { calcularCostoMantenimiento, encontrarCapital, evaluarGatesDeNivel, type PayloadNivelSubio } from './mantenimiento';
 import { recaudacionOro } from './population';
 import { computeZonaInfluencia } from './zones';
+import { ReglaInvalidaError } from './errores';
 
-export class AscensoInvalidoError extends Error {}
+export class AscensoInvalidoError extends ReglaInvalidaError {}
 
 /** Por qué no se puede pedir la subida. Puede haber varios a la vez; el cliente los enseña todos. */
 export type BloqueoAscenso =

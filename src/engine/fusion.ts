@@ -1,7 +1,8 @@
 import type { Asentamiento, Faccion } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
+import { ReglaInvalidaError } from './errores';
 
-export class FusionInvalidaError extends Error {}
+export class FusionInvalidaError extends ReglaInvalidaError {}
 
 /** Fase A5 — payloads de este subsistema. Ambos eventos hacen DESAPARECER una Facción, así que un consumidor
  * necesita los ids para actualizar lo que tuviera cacheado, no solo el texto. */

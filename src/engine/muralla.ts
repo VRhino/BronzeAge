@@ -27,6 +27,7 @@ import {
   type RedDeCalles,
   type TrazadoMuralla,
 } from './trazado';
+import { ReglaInvalidaError } from './errores';
 
 // `CeldaMuro` y `Recinto` viven en `domain/types.ts`: son estado PERSISTIDO (se pagan), no geometría derivada.
 export type { CeldaMuro, Recinto };
@@ -562,7 +563,7 @@ export function trazadoDeRecinto(trazo: TrazoRecinto, nivel: number, integridad 
 // tiene que respetar, y es la diferencia entre un dibujo y una muralla: sin esto, la colocación de edificios
 // sigue siendo ciega al anillo y planta casas encima de él (observado por el usuario en el laboratorio).
 
-export class RecintoInvalidoError extends Error {}
+export class RecintoInvalidoError extends ReglaInvalidaError {}
 
 /**
  * Compromete un recinto: congela el trazo y lo mete en el estado del asentamiento. A partir de aquí sus celdas

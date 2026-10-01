@@ -15,8 +15,9 @@ import { factorCostoReclutamiento } from './politicas';
 import { esResidente, puedeReclutarEn } from './pertenencia';
 import { campamentoDe, conEscuadrones } from './tropa';
 import { distancia } from '../world/geometria';
+import { ReglaInvalidaError } from './errores';
 
-export class ReclutamientoInvalidoError extends Error {}
+export class ReclutamientoInvalidoError extends ReglaInvalidaError {}
 
 /** Con qué nace un escuadrón: nivel 1, sin experiencia y sin progresión táctica de Conquest. */
 export const PROGRESION_INICIAL: Pick<

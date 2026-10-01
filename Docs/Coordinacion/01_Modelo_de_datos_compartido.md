@@ -420,6 +420,8 @@ OrdenMercado
   recurso, cantidad, cantidadCumplida, precioUnitario
   creadoEn: Instante, expiraEn: Instante
   estado: 'activa' | 'cumplida' | 'expirada'
+                        en el estado de partida, `ordenes` guarda solo las activas y las cerradas pasan a
+                        `historialOrdenes`; la proyección del jugador sigue mandando las dos en `ordenes` — 2026-10-01
 
 CaminoComercial
   id

@@ -43,8 +43,9 @@ import { esResidente, estanAliadas } from './pertenencia';
 import { heridosEn, herir } from './heroe';
 import { estaProtegida } from './asentamientoQuery';
 import { registrarDerrota } from './faccion';
+import { ReglaInvalidaError } from './errores';
 
-export class MovilizacionInvalidaError extends Error {}
+export class MovilizacionInvalidaError extends ReglaInvalidaError {}
 
 /** Lo que se saca de mirar de cerca una columna (Doc 5.12.3). Cantidades SI —es lo que se cuenta al verla— y
  * nombre del jugador dueno de cada escuadron: saber a quien te enfrentas es la mitad del valor. */

@@ -6,8 +6,9 @@ import type { Mapa } from '../world/mapa';
 import { posicionLibreParaFundar, zonaInicialDeFundacion } from './zones';
 import { sitioEnBarrio } from './construction';
 import { calcularCapFundacion, otorgarCiudadania } from './faccion';
+import { ReglaInvalidaError } from './errores';
 
-export class FundacionInvalidaError extends Error {}
+export class FundacionInvalidaError extends ReglaInvalidaError {}
 
 /**
  * Edificios con los que nace todo asentamiento nuevo (Doc 1.3): ya "activo", sin pasar por la cola.
@@ -130,14 +131,7 @@ export function evaluarViabilidadFundacion(
   // otra (`LENERA_POR_BOSQUE` topa 1-3 según el tamaño), así que el asentamiento nace sin forma de sacar
   // madera y muere de déficit ~18 min tras la gracia. Medido: era el 96% de las muertes por madera del batch
   // NPC (ver `Consideraciones/Economia_Del_Oro_Definicion.md` §10). `recomendable` pasa a exigir bosque LIBRE.
-  const lenerasPorBosque = new Map<string, number>();
-  for (const otro of asentamientosExistentes) {
-    for (const edificio of otro.edificios) {
-      if (edificio.tipo === 'lenera' && edificio.fuenteId) {
-        lenerasPorBosque.set(edificio.fuenteId, (lenerasPorBosque.get(edificio.fuenteId) ?? 0) + 1);
-      }
-    }
-  }
+  const { lenerasPorBosque, reclamados } = fuentesOcupadas(asentamientosExistentes);
   // Madera y minerales se miran en la zona REAL con la que nacería (el círculo recortado contra los vecinos), no en
   // el círculo crudo (2026-09-26): con vecinos, el bosque del círculo quedaba fuera del recorte y el asentamiento
   // nacía sin poder poner una Leñera — 26 de 28 muertes por madera del batch. La Leñera se decide con la misma
@@ -146,10 +140,6 @@ export function evaluarViabilidadFundacion(
   const zona = zonaInicialDeFundacion(posicion, faccionId, asentamientosExistentes);
   const bosqueLibreAlcanzable = mapa.bosqueParaLenera(zona, lenerasPorBosque, posicion) !== null;
 
-  const reclamados = new Set<string>();
-  for (const otro of asentamientosExistentes) {
-    for (const edificio of otro.edificios) if (edificio.fuenteId) reclamados.add(edificio.fuenteId);
-  }
   const porTipo = new Map<string, number>();
   for (const nodo of mapa.nodosEnPoligono(zona, { excluir: reclamados })) {
     porTipo.set(nodo.tipo, (porTipo.get(nodo.tipo) ?? 0) + 1);
@@ -175,6 +165,43 @@ export function evaluarViabilidadFundacion(
     fundable,
     recomendable: fundable && bosqueLibreAlcanzable && piedraAlcanzable,
   };
+}
+
+/** Las Leñeras que ya hay en cada bosque y las fuentes que ya explota alguien: lo que `evaluarViabilidadFundacion`
+ * descuenta. Un barrido de muchos puntos lo calcula una vez (`esRecomendableParaFundar`). */
+export function fuentesOcupadas(asentamientos: readonly Asentamiento[]): { lenerasPorBosque: Map<string, number>; reclamados: Set<string> } {
+  const lenerasPorBosque = new Map<string, number>();
+  const reclamados = new Set<string>();
+  for (const otro of asentamientos) {
+    for (const edificio of otro.edificios) {
+      if (!edificio.fuenteId) continue;
+      reclamados.add(edificio.fuenteId);
+      if (edificio.tipo === 'lenera') lenerasPorBosque.set(edificio.fuenteId, (lenerasPorBosque.get(edificio.fuenteId) ?? 0) + 1);
+    }
+  }
+  return { lenerasPorBosque, reclamados };
+}
+
+/**
+ * Lo mismo que `evaluarViabilidadFundacion(...).recomendable`, sin calcular lo que no hace falta para decidirlo: para
+ * barridos de muchos puntos (`buscarDestinoFundacionPorDefecto`), que solo preguntan eso. Descarta primero con lo
+ * barato (mapa, solape, terreno) y solo después recorta la zona.
+ */
+export function esRecomendableParaFundar(
+  mapa: Mapa,
+  posicion: Point,
+  asentamientosExistentes: Asentamiento[],
+  faccionId: string | undefined,
+  ocupadas: ReturnType<typeof fuentesOcupadas>
+): boolean {
+  if (!mapa.dentroDelMapa(posicion) || !posicionLibreParaFundar(posicion, asentamientosExistentes)) return false;
+  const terreno = mapa.terrenoEn(posicion);
+  if (terreno === 'cima' || terreno === 'agua') return false;
+  const zona = zonaInicialDeFundacion(posicion, faccionId, asentamientosExistentes);
+  return (
+    mapa.bosqueParaLenera(zona, ocupadas.lenerasPorBosque, posicion) !== null &&
+    mapa.nodosEnPoligono(zona, { excluir: ocupadas.reclamados }).some((n) => n.tipo === 'piedra')
+  );
 }
 
 /**

@@ -33,7 +33,11 @@ export interface EstadoSimulacion {
   /** Ejércitos en campaña (Doc 5.12) — los mueve `avanzarEjercitos`, al final de la cadena del tick. */
   ejercitos: Ejercito[];
   acuerdos: AcuerdoTrueque[];
+  /** Las órdenes de mercado EN PIE. Las cumplidas o expiradas pasan a `historialOrdenes`. */
   ordenes: OrdenMercado[];
+  /** Las órdenes ya cerradas (cumplidas o expiradas): el historial del mercado de cada plaza. Nada del tick las lee.
+   * Ausente = vacío. */
+  historialOrdenes?: OrdenMercado[];
   relaciones: RelacionPolitica[];
   titulos: Titulo[];
   /** Caminos comerciales (Fase 0.3, Doc 1.6) — se crean fuera del tick, al proponer trueque (ver
@@ -345,6 +349,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     ejercitos: trasEjercitos.ejercitos,
     acuerdos: trasComercio.acuerdos,
     ordenes: trasMercado.ordenes,
+    historialOrdenes: trasMercado.cerradas.length > 0 ? [...(estado.historialOrdenes ?? []), ...trasMercado.cerradas] : estado.historialOrdenes,
     relaciones: estado.relaciones,
     titulos: titulosActuales,
     caminos: estado.caminos,

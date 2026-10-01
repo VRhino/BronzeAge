@@ -21,6 +21,7 @@ import { estaEnAsentamiento } from './ubicacion';
 import { nivelActualDe } from './asentamientoQuery';
 import { encontrarCapital } from './mantenimiento';
 import type { PayloadAsedio, PayloadCombateResuelto, PayloadInterceptacionEjercito } from './combate';
+import { ReglaInvalidaError } from './errores';
 
 /** Las tecnologías con las que nace toda Facción (Doc 6.2). */
 export const TECNOLOGIAS_DE_ARRANQUE: readonly TecnologiaId[] = (Object.keys(TECNOLOGIAS) as TecnologiaId[]).filter(
@@ -296,7 +297,7 @@ export function avanzarTecnologia(estado: EstadoTecnologia, ctx: ContextoTecnolo
   return { tecnologia: { era, eraDesde, contadores, logros, primeros, porFaccion }, eventos };
 }
 
-export class AdopcionInvalidaError extends Error {}
+export class AdopcionInvalidaError extends ReglaInvalidaError {}
 
 /** Payload de `tecnologia.adoptada` (privado de la Facción). */
 export interface PayloadTecnologiaAdoptada {

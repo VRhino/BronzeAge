@@ -67,6 +67,17 @@ function computeBorderClip(propio: Circulo, rival: Circulo): { planePoint: Point
 }
 
 /**
+ * Dos círculos que no se tocan no se recortan: la frontera cae fuera del propio círculo y `clipByHalfPlane` devolvería
+ * el mismo polígono. Saltárselos ahorra recorrer todo el mapa por cada zona. El margen (una millonésima) deja fuera los
+ * casos rozando, donde el redondeo podría mover un vértice: esos se siguen recortando.
+ */
+function lejosParaRecortar(propio: Circulo, rival: Circulo): boolean {
+  const dx = rival.posicion.x - propio.posicion.x;
+  const dy = rival.posicion.y - propio.posicion.y;
+  return Math.hypot(dx, dy) > (propio.radioPotencial + rival.radioPotencial) * (1 + 1e-6);
+}
+
+/**
  * Zona de influencia resultante = círculo de radio potencial recortado contra las fronteras duras
  * con TODOS los asentamientos de OTRA facción (mismo bando se permite solapar/fusionar, no se recorta).
  */
@@ -79,6 +90,7 @@ export function computeZonaInfluencia(
   for (const otro of todos) {
     if (otro.id === asentamiento.id) continue;
     if (otro.faccionId === asentamiento.faccionId) continue;
+    if (lejosParaRecortar(asentamiento, otro)) continue;
     const { planePoint, insideNormal } = computeBorderClip(asentamiento, otro);
     poligono = clipByHalfPlane(poligono, planePoint, insideNormal);
     if (poligono.length === 0) break;
@@ -100,6 +112,7 @@ export function zonaInicialDeFundacion(posicion: Point, faccionId: string | unde
   let poligono = circlePolygon(posicion, nuevo.radioPotencial, ZONA_INFLUENCIA.segmentosPoligono);
   for (const otro of existentes) {
     if (faccionId !== undefined && otro.faccionId === faccionId) continue;
+    if (lejosParaRecortar(nuevo, otro)) continue;
     const { planePoint, insideNormal } = computeBorderClip(nuevo, otro);
     poligono = clipByHalfPlane(poligono, planePoint, insideNormal);
     if (poligono.length === 0) break;

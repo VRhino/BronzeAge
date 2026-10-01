@@ -72,7 +72,7 @@ import {
 import { computeTodasLasZonas } from '../engine/zones';
 import { calcularCostoMantenimiento, calcularNivelAsentamiento, encontrarCapital } from '../engine/mantenimiento';
 import { cupoLibreParaNivel, evaluarAscenso, iniciarAscenso, tarifaDeAscenso } from '../engine/ascenso';
-import { evaluarViabilidadFundacion, fundarAsentamiento, FundacionInvalidaError } from '../engine/settlement';
+import { esRecomendableParaFundar, evaluarViabilidadFundacion, fuentesOcupadas, fundarAsentamiento, FundacionInvalidaError } from '../engine/settlement';
 import {
   ANIMAL_CATALOGO,
   BATALLA,
@@ -865,8 +865,15 @@ function reclutarParaTodos(
   let exitosos = 0;
   let contadores: DeltaContadores = {};
   const candidatas = tropaId ? [tropaId] : TROPAS_POR_PREFERENCIA_NPC.map((t) => t.id);
+  // Las que la Facción no ha adoptado las rechazaría el motor de todas formas (Doc 6.1): se saltan sin preguntarle, que
+  // era la mayor parte de los intentos de cada tick. El contador avanza igual que si se hubieran intentado.
+  const sinTecnologia = new Set(TROPAS_RECLUTABLES.filter((t) => !adoptadas.includes(t.tecnologia)).map((t) => t.id));
   for (const heroeId of residentesDe(asentamiento)) {
     for (const candidata of candidatas) {
+      if (sinTecnologia.has(candidata)) {
+        contador++;
+        continue;
+      }
       try {
         const r = reclutarTropa(actual, heroesActuales, ejercitos, heroeId, asentamiento.faccionId, candidata, adoptadas, contador++);
         const antes = cantidadDeTropa(heroesActuales, heroeId, candidata);
@@ -1297,8 +1304,8 @@ function publicarOrdenesNpc(
   const nuevas: OrdenMercado[] = [];
   let contador = contadorInicial;
 
-  const yaTiene = (asentamientoId: string, recurso: string): boolean =>
-    [...ordenes, ...nuevas].some((o) => o.asentamientoId === asentamientoId && o.recurso === recurso && o.estado === 'activa');
+  const enPie = new Set(ordenes.filter((o) => o.estado === 'activa').map((o) => `${o.asentamientoId}|${o.recurso}`));
+  const yaTiene = (asentamientoId: string, recurso: string): boolean => enPie.has(`${asentamientoId}|${recurso}`);
 
   // Orden canonico por id: publicar no consume aleatoriedad, pero SI decide que se empareja despues, y con
   // ello el resto del tick.
@@ -1328,6 +1335,7 @@ function publicarOrdenesNpc(
 
       if (orden) {
         nuevas.push(orden);
+        enPie.add(`${orden.asentamientoId}|${orden.recurso}`);
         eventos.push(`${plaza.id}: publica ${orden.tipo} de ${orden.cantidad} ${recurso}.`);
       }
     }
@@ -1879,12 +1887,13 @@ function materializarFundadoresNpc(
  * (`issues/extractores_minerales_nunca_se_construyen.md`); ahora `recomendable` la exige.
  */
 export function buscarDestinoFundacionPorDefecto(origen: Asentamiento, mapa: Mapa, asentamientos: Asentamiento[]): Point | undefined {
+  const ocupadas = fuentesOcupadas(asentamientos);
   for (let radio = 150; radio <= 600; radio += 150) {
     for (let angulo = 0; angulo < 360; angulo += 20) {
       const rad = (angulo * Math.PI) / 180;
       const posicion = { x: origen.posicion.x + Math.cos(rad) * radio, y: origen.posicion.y + Math.sin(rad) * radio };
       if (posicion.x < 0 || posicion.y < 0 || posicion.x >= mapa.limites.ancho || posicion.y >= mapa.limites.alto) continue;
-      if (evaluarViabilidadFundacion(mapa, posicion, asentamientos, origen.faccionId).recomendable) return posicion;
+      if (esRecomendableParaFundar(mapa, posicion, asentamientos, origen.faccionId, ocupadas)) return posicion;
     }
   }
   return undefined;

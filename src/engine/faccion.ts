@@ -2,6 +2,7 @@ import type { Asentamiento, Faccion } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
 import { CAP_FUNDACION_POR_NIVEL, CUPO_NIVEL_ASENTAMIENTO, NIVEL_FACCION } from '../constants';
 import { CAMPO_CARGO, esResidente, resideEnOtroAsentamiento } from './pertenencia';
+import { ReglaInvalidaError } from './errores';
 
 /** Fase A5 — payload de `faccion.nivel_subio` (ver `avanzarNivelesFaccion`). */
 export interface PayloadFaccionNivelSubio {
@@ -9,7 +10,7 @@ export interface PayloadFaccionNivelSubio {
   nivelNuevo: number;
 }
 
-export class FaccionInvalidaError extends Error {}
+export class FaccionInvalidaError extends ReglaInvalidaError {}
 
 export function crearFaccion(id: string, nombre: string): Faccion {
   const nombreLimpio = nombre.trim();

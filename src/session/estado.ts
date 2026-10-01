@@ -80,7 +80,9 @@ export interface GameSessionState {
    * lo que está en una batalla activa ni siquiera entra en el tick. */
   batallas: Batalla[];
   acuerdos: AcuerdoTrueque[];
+  /** Las órdenes de mercado en pie; las cerradas, en `historialOrdenes` (ausente = vacío). */
   ordenes: OrdenMercado[];
+  historialOrdenes?: OrdenMercado[];
   relaciones: RelacionPolitica[];
   titulos: Titulo[];
   caminos: CaminoComercial[];
@@ -139,6 +141,7 @@ export function estadoSimulacionDe(estado: GameSessionState): EstadoSimulacion {
     ejercitos: estado.ejercitos,
     acuerdos: estado.acuerdos,
     ordenes: estado.ordenes,
+    historialOrdenes: estado.historialOrdenes,
     relaciones: estado.relaciones,
     titulos: estado.titulos,
     caminos: estado.caminos,
@@ -160,6 +163,7 @@ export function conResultadoDeSimulacion(estado: GameSessionState, simulacion: E
     ejercitos: simulacion.ejercitos,
     acuerdos: simulacion.acuerdos,
     ordenes: simulacion.ordenes,
+    historialOrdenes: simulacion.historialOrdenes,
     relaciones: simulacion.relaciones,
     titulos: simulacion.titulos,
     caminos: simulacion.caminos,

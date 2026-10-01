@@ -3,6 +3,7 @@ import type { EventoCrudo } from '../domain/eventos';
 import { minutos, sumar, type Instante } from '../domain/tiempo';
 import { POLITICAS, POLITICA_CATALOGO, type PerfilTrazado } from '../constants';
 import { cargoOcupado } from './pertenencia';
+import { ReglaInvalidaError } from './errores';
 
 /** Fase A5 — payload de `politica.expirada` (ver `avanzarPoliticas`). */
 export interface PayloadPoliticaExpirada {
@@ -11,7 +12,7 @@ export interface PayloadPoliticaExpirada {
   cargo: CargoTipo;
 }
 
-export class PoliticaInvalidaError extends Error {}
+export class PoliticaInvalidaError extends ReglaInvalidaError {}
 
 type PoliticaDef = (typeof POLITICA_CATALOGO)[number];
 

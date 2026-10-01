@@ -803,9 +803,10 @@ export function proyectarParaJugador(
     acuerdos: estado.acuerdos.filter((a) => esPropio(a.asentamientoAId) || esPropio(a.asentamientoBId)),
     // De las propias, todas —incluidas las cumplidas, que son el historial de tu mercado—. De una plaza ajena
     // en cuya puerta estas, solo las que siguen EN PIE: es el escaparate, no su contabilidad.
-    ordenes: estado.ordenes.filter(
-      (o) => esPropio(o.asentamientoId) || (o.estado === 'activa' && enElMostradorDe.has(o.asentamientoId))
-    ),
+    ordenes: [
+      ...estado.ordenes.filter((o) => esPropio(o.asentamientoId) || (o.estado === 'activa' && enElMostradorDe.has(o.asentamientoId))),
+      ...(estado.historialOrdenes ?? []).filter((o) => esPropio(o.asentamientoId)),
+    ],
     relaciones: estado.relaciones,
     titulos: estado.titulos,
     caminos: caminosConocidos(estado.caminos, exploracion),

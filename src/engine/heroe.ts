@@ -5,8 +5,9 @@ import { minutos, sumar, type Instante } from '../domain/tiempo';
 import { HEROE } from '../constants';
 import { costeLiderazgo, liderazgoComprometido, puedeLlevar } from './liderazgo';
 import { cupoGuarnicion } from './asentamientoQuery';
+import { ReglaInvalidaError } from './errores';
 
-export class HeroeInvalidoError extends Error {}
+export class HeroeInvalidoError extends ReglaInvalidaError {}
 
 type Progresion = Pick<
   Heroe,

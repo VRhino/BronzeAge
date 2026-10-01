@@ -230,7 +230,7 @@ export const comerciarEnPlaza = comando<ParamsComerciarEnPlaza, { cantidad: numb
   (estado, _mapa, ctx, params) => {
     const columna = exigirColumnaDe(estado, params.heroeId);
     const plaza = exigirAsentamiento(estado, params.asentamientoId);
-    const orden = estado.ordenes.find((o) => o.id === params.ordenId);
+    const orden = estado.ordenes.find((o) => o.id === params.ordenId) ?? estado.historialOrdenes?.find((o) => o.id === params.ordenId);
     if (!orden) rechazar(CODIGOS_ERROR.ordenNoExiste);
 
     const resultado = comerciarEnPlazaEngine(
@@ -246,7 +246,13 @@ export const comerciarEnPlaza = comando<ParamsComerciarEnPlaza, { cantidad: numb
     const siguiente: GameSessionState = {
       ...conAsentamiento(estado, resultado.plaza),
       ejercitos: estado.ejercitos.map((e) => (e.id === resultado.ejercito.id ? resultado.ejercito : e)),
-      ordenes: estado.ordenes.map((o) => (o.id === resultado.orden.id ? resultado.orden : o)),
+      // La que se acaba de cumplir sale de las que están en pie.
+      ...(resultado.orden.estado === 'activa'
+        ? { ordenes: estado.ordenes.map((o) => (o.id === resultado.orden.id ? resultado.orden : o)) }
+        : {
+            ordenes: estado.ordenes.filter((o) => o.id !== resultado.orden.id),
+            historialOrdenes: [...(estado.historialOrdenes ?? []), resultado.orden],
+          }),
     };
 
     const sentido = orden.tipo === 'venta' ? 'compra' : 'vende';

@@ -23,8 +23,9 @@ import { posicionLibreParaFundar } from './zones';
 import { calcularCapFundacion } from './faccion';
 import { fundarAsentamiento, FundacionInvalidaError } from './settlement';
 import { nivelActualDe, puedeCrearCaravana, cooldownCaravanaRestante } from './asentamientoQuery';
+import { ReglaInvalidaError } from './errores';
 
-export class ExpansionInvalidaError extends Error {}
+export class ExpansionInvalidaError extends ReglaInvalidaError {}
 
 /** Coste total de una Caravana de Fundación (Doc 1.8): materiales iniciales + edificios de arranque
  * (Centro Urbano no cuesta nada) + madera extra por fabricar la caravana en sí. */
