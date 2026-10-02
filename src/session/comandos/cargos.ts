@@ -6,6 +6,7 @@
 // los narra esta capa entera: es la que sabe a quién se nombró y en qué Facción.
 import type { CargoTipo } from '../../domain/types';
 import { designarCapital as designarCapitalEngine } from '../../engine/capital';
+import { residirEnCampamento as residirEnCampamentoEngine, salirDeCampamentos } from '../../engine/mercenarios';
 import { asignarCargoLocal as asignarCargoLocalEngine, asignarEmbajador as asignarEmbajadorEngine, asignarRey as asignarReyEngine } from '../../engine/cargos';
 import {
   comprarCasa as comprarCasaEngine,
@@ -121,7 +122,13 @@ export const comprarCasa = comando<ParamsComprarCasa, void>((estado, _mapa, ctx,
   exigirSinCooldownDeResidencia(estado.cambiosResidenciaPorHeroe?.[params.heroeId], ctx.instante);
   const resultado = comprarCasaEngine(estado.facciones, estado.asentamientos, params.asentamientoId, params.heroeId);
   const siguiente = conHistorialDeJugador(
-    { ...conAsentamiento(estado, resultado.asentamiento), facciones: resultado.facciones },
+    {
+      ...conAsentamiento(estado, resultado.asentamiento),
+      facciones: resultado.facciones,
+      // Quien compra casa deja el campamento de mercenarios donde residiera: se reside en un solo sitio.
+      campamentosMercenarios: salirDeCampamentos(estado.campamentosMercenarios, params.heroeId),
+      cambiosResidenciaPorHeroe: { ...estado.cambiosResidenciaPorHeroe, [params.heroeId]: ctx.instante },
+    },
     params.heroeId,
     `Compra casa en ${params.asentamientoId} y obtiene ciudadanía.`
   );
@@ -172,7 +179,7 @@ export interface PayloadResidenciaDejada {
   asentamientoId: string;
 }
 
-/** Dejar la casa sin dejar la Facción (Doc 2.5): el héroe queda sin residencia, huérfano, hasta que compre casa o se mude. */
+/** Dejar la casa sin dejar la Facción (Doc 2.5): el héroe pasa, en el siguiente tick, al campamento de mercenarios más cercano. */
 export const dejarResidencia = comando<ParamsDejarResidencia, void>((estado, _mapa, ctx, params) => {
   const origen = dejarResidenciaEngine(estado.asentamientos, params.heroeId);
   const siguiente = conHistorialDeJugador(
@@ -190,6 +197,43 @@ export const dejarResidencia = comando<ParamsDejarResidencia, void>((estado, _ma
       mensaje: `${params.heroeId} deja de residir en ${origen.id}.`,
       payload: { heroeId: params.heroeId, asentamientoId: origen.id } satisfies PayloadResidenciaDejada,
       asentamientoId: origen.id,
+    }),
+  ]);
+});
+
+export interface ParamsResidirEnCampamento {
+  heroeId: string;
+  campamentoId: string;
+}
+
+export interface PayloadResidenciaEnCampamento {
+  heroeId: string;
+  campamentoId: string;
+}
+
+/**
+ * Residir en un campamento de mercenarios (Doc 2.5): cualquier héroe, de cualquier Facción, aunque la suya tenga asentamientos.
+ * Deja la casa que tuviera (con sus cargos locales) y suelta la guarnición; cuenta para el cooldown de residencia.
+ */
+export const residirEnCampamento = comando<ParamsResidirEnCampamento, void>((estado, _mapa, ctx, params) => {
+  exigirSinCooldownDeResidencia(estado.cambiosResidenciaPorHeroe?.[params.heroeId], ctx.instante);
+  const r = residirEnCampamentoEngine(estado.campamentosMercenarios, estado.asentamientos, params.heroeId, params.campamentoId);
+  const siguiente = conHistorialDeJugador(
+    {
+      ...estado,
+      campamentosMercenarios: r.campamentos,
+      asentamientos: r.asentamientos,
+      heroes: sinGuarnicion(estado.heroes, params.heroeId),
+      cambiosResidenciaPorHeroe: { ...estado.cambiosResidenciaPorHeroe, [params.heroeId]: ctx.instante },
+    },
+    params.heroeId,
+    `Pasa a residir en el campamento de mercenarios ${params.campamentoId}.`
+  );
+  return exito(siguiente, [
+    evento(ctx, {
+      codigo: 'ciudadania.residencia_en_campamento',
+      mensaje: `${params.heroeId} pasa a residir en el campamento de mercenarios ${params.campamentoId}.`,
+      payload: { heroeId: params.heroeId, campamentoId: params.campamentoId } satisfies PayloadResidenciaEnCampamento,
     }),
   ]);
 });

@@ -10,8 +10,10 @@ import {
   retirarGuarnicion as retirarEnHeroe,
 } from '../../engine/heroe';
 import { esResidente } from '../../engine/pertenencia';
+import { guardarEnAlmacenPersonal as guardarEngine, sacarDelAlmacenPersonal as sacarEngine } from '../../engine/almacenPersonal';
+import { capacidadCargaDe } from '../../engine/ejercitos';
 import { exito } from './tipos';
-import { comando, exigirJugador } from './ayudas';
+import { comando, exigirColumnaDe, exigirJugador } from './ayudas';
 import { evento } from './eventos';
 
 const conHeroe = (estado: GameSessionState, heroe: Heroe): GameSessionState => ({
@@ -66,3 +68,59 @@ export const asignarGuarnicion = comando<{ squadId: string }, undefined>((estado
 export const retirarGuarnicion = comando<{ squadId: string }, undefined>((estado, _mapa, ctx, params) =>
   exito(conHeroe(estado, retirarEnHeroe(exigirJugador(estado, ctx.actor), params.squadId)), [])
 );
+
+export interface ParamsAlmacenPersonal {
+  recurso: string;
+  cantidad: number;
+}
+
+export interface PayloadAlmacenPersonal {
+  heroeId: string;
+  recurso: string;
+  cantidad: number;
+  sentido: 'guarda' | 'saca';
+}
+
+/** Del carro de la columna al almacén personal (Doc 2.5): lo que cabe hasta el tope. Solo el Líder de la columna. */
+export const guardarEnAlmacenPersonal = comando<ParamsAlmacenPersonal, { movido: number }>((estado, _mapa, ctx, params) => {
+  const heroe = exigirJugador(estado, ctx.actor);
+  const columna = exigirColumnaDe(estado, heroe.id);
+  const r = guardarEngine(heroe, columna, params.recurso, params.cantidad);
+  const siguiente: GameSessionState = {
+    ...conHeroe(estado, r.heroe),
+    ejercitos: estado.ejercitos.map((e) => (e.id === r.ejercito.id ? r.ejercito : e)),
+  };
+  return exito(
+    siguiente,
+    [
+      evento(ctx, {
+        codigo: 'heroe.almacen_personal',
+        mensaje: `${heroe.displayName} guarda ${r.movido.toFixed(0)} ${params.recurso} en su almacén personal.`,
+        payload: { heroeId: heroe.id, recurso: params.recurso, cantidad: r.movido, sentido: 'guarda' } satisfies PayloadAlmacenPersonal,
+      }),
+    ],
+    { movido: r.movido }
+  );
+});
+
+/** Del almacén personal al carro de la columna (Doc 2.5): lo que cabe en el carro. Solo el Líder de la columna. */
+export const sacarDelAlmacenPersonal = comando<ParamsAlmacenPersonal, { movido: number }>((estado, _mapa, ctx, params) => {
+  const heroe = exigirJugador(estado, ctx.actor);
+  const columna = exigirColumnaDe(estado, heroe.id);
+  const r = sacarEngine(heroe, columna, params.recurso, params.cantidad, capacidadCargaDe(columna, estado.caravanas));
+  const siguiente: GameSessionState = {
+    ...conHeroe(estado, r.heroe),
+    ejercitos: estado.ejercitos.map((e) => (e.id === r.ejercito.id ? r.ejercito : e)),
+  };
+  return exito(
+    siguiente,
+    [
+      evento(ctx, {
+        codigo: 'heroe.almacen_personal',
+        mensaje: `${heroe.displayName} saca ${r.movido.toFixed(0)} ${params.recurso} de su almacén personal.`,
+        payload: { heroeId: heroe.id, recurso: params.recurso, cantidad: r.movido, sentido: 'saca' } satisfies PayloadAlmacenPersonal,
+      }),
+    ],
+    { movido: r.movido }
+  );
+});

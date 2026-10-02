@@ -1925,6 +1925,9 @@ export const MERCENARIOS = {
   pasoBusqueda: 20,
 } as const;
 
+/** El almacén personal de un héroe (Doc 2.5, decidido el 2026-10-02): unidades en total, de cualquier recurso. PLACEHOLDER. */
+export const ALMACEN_PERSONAL = { capacidad: 1000 } as const;
+
 /** La puerta de los asentamientos (Doc 1.10.5). */
 export const PUERTA = {
   /** Lo que cierra una plaza que nadie ha tocado: deja entrar a los suyos y a los amigos, y a nadie más. */

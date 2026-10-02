@@ -944,7 +944,8 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       // +2 con la guerra (Doc 2.4.1): `declararGuerra` y `proponerPaz`.
       // +1 con `designarCapital` (Doc 2.2): el Rey elige la capital.
       // +1 con `dejarResidencia` (Doc 2.5): dejar la casa sin dejar la Facción.
-      expect(cuerpo.oneOf.length).toBe(83);
+      // +3 con los campamentos de mercenarios (Doc 2.5): `residirEnCampamento` y el almacén personal (guardar y sacar).
+      expect(cuerpo.oneOf.length).toBe(86);
       const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
       expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
     });

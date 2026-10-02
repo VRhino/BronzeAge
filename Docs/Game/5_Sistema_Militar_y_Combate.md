@@ -546,7 +546,7 @@ Son dos cosas distintas y confundirlas costaba las dos mitades:
 
 Al disolverse, las identidades de escuadrón —vacías pero con su nombre, su nivel y su experiencia— **vuelven
 al campamento de su héroe**, que es donde se pueden rellenar reclutando (5.4). No se pierden: lo que murió
-son las unidades, no el squad. Si su héroe no tiene campamento (huérfano, Doc 0), siguen con él hasta que
+son las unidades, no el squad. Si su héroe no reside en ningún sitio (aún sin Facción), siguen con él hasta que
 vuelva a residir en algún asentamiento.
 
 **Quién vacía una columna, entonces:** separarse (5.14.2) y desconectarse (Doc 1.10.6) — y el último que
@@ -641,7 +641,7 @@ Una partida dura como mucho **30 minutos en un asedio** y **15 en el resto**. Si
 
 ### 5.15.2 El campamento del héroe
 
-El campamento es donde un héroe guarda las escuadras que no lleva consigo, y está en el asentamiento donde reside. Si no reside en ninguno, no tiene campamento: es **huérfano**, y sus escuadras siguen siendo suyas, con su experiencia y su nivel, hasta que vuelva a residir en algún asentamiento.
+El campamento es donde un héroe guarda las escuadras que no lleva consigo, y está en el asentamiento donde reside. También puede estar en un campamento de mercenarios (Doc 1.9b), donde se reside sin límite y sin guarnición. Ya no hay huérfanos (2026-10-02): quien se queda sin casa pasa al campamento de mercenarios más cercano, con sus escuadras y su almacén personal (Doc 2.5).
 
 ### 5.15.3 La guarnición
 
@@ -672,7 +672,7 @@ Si los atacantes conquistan un asentamiento:
 
 - **Cada héroe defensor queda fuera**, en el mundo, junto al asentamiento, con las escuadras que usó en la batalla (las que sobrevivieron), en su propia columna y **con el carro vacío**.
 - **Nadie se queda dentro de un asentamiento enemigo** (decisión del usuario, 2026-09-14): los que estaban dentro sin defender también salen. Un visitante vuelve a la columna que dejó aparcada; un residente herido sale solo, y sus escuadras, que no combatieron, corren la suerte del resto del campamento.
-- **El resto de las escuadras de sus residentes, guarnición incluida, quedan a 0 unidades** y se van con el campamento de su héroe al asentamiento más cercano de su Facción, **donde el héroe pasa a residir**. Si la Facción no tiene ninguno, quedan a 0 unidades y sin asentamiento (huérfanas), pero siguen siendo de su héroe, con su experiencia y su nivel, hasta que el héroe traslade su campamento a otro asentamiento (ciudadanía, Doc 2.5).
+- **El resto de las escuadras de sus residentes, guarnición incluida, quedan a 0 unidades** y se van con el campamento de su héroe al asentamiento más cercano de su Facción, **donde el héroe pasa a residir**. Si la Facción no tiene ninguno, quedan a 0 unidades y **se van con su héroe al campamento de mercenarios más cercano a la plaza perdida**, donde pasa a residir (Doc 1.9b, 2.5); siguen siendo suyas, con su experiencia y su nivel. Los héroes de una Facción NPC que se queda sin plazas desaparecerán (pendiente).
 - **No hay captura**: la guarnición no pasa al conquistador. Cae a 0 y sigue siendo de su héroe.
 - **El asentamiento conquistado queda sin guarnición**. Nadie lo guarnece solo por haberlo ganado: los héroes conquistadores pueden trasladar allí su campamento (pasar a residir) y asignar guarnición dentro del cupo que dé el asentamiento. **Si se quiere defender algo, hay que defenderlo activamente.** La protección tras la conquista (5.12.9) le da un día de inmunidad; después, sin guarnición ni defensores presentes, un asedio se juega sin defensores.
 

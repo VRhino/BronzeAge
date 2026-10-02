@@ -11,6 +11,7 @@ export const CODIGOS_ERROR = {
   // `erroresDeDominio.ts`, que importa este catálogo en vez de escribir los literales por su cuenta.
   capitalInvalida: 'faccion.capital_invalida',
   cargoInvalido: 'cargo.invalido',
+  mercenariosInvalido: 'mercenarios.invalido',
   combateInvalido: 'combate.invalido',
   construccionInvalida: 'construccion.invalida',
   diplomaciaInvalida: 'diplomacia.invalida',

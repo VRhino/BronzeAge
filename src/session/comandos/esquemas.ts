@@ -118,6 +118,8 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
     ['displayName', 'squadIds', 'perksSeleccionados']
   ),
   borrarLoadout: objeto({ loadoutId: IDENTIFICADOR }, ['loadoutId']),
+  guardarEnAlmacenPersonal: objeto({ recurso: RECURSO, cantidad: NUMERO }, ['recurso', 'cantidad']),
+  sacarDelAlmacenPersonal: objeto({ recurso: RECURSO, cantidad: NUMERO }, ['recurso', 'cantidad']),
   asignarGuarnicion: objeto({ squadId: IDENTIFICADOR }, ['squadId']),
   retirarGuarnicion: objeto({ squadId: IDENTIFICADOR }, ['squadId']),
   // Admin. Sin `posicion`, la gobernanza NPC busca el sitio (`buscarPosicionFundacionInicialPorDefecto`).
@@ -134,6 +136,7 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
     ['asentamientoId', 'cargo', 'heroeId']
   ),
   comprarCasa: objeto({ asentamientoId: IDENTIFICADOR, heroeId: IDENTIFICADOR }, ['asentamientoId', 'heroeId']),
+  residirEnCampamento: objeto({ heroeId: IDENTIFICADOR, campamentoId: IDENTIFICADOR }, ['heroeId', 'campamentoId']),
   dejarResidencia: objeto({ heroeId: IDENTIFICADOR }, ['heroeId']),
   cambiarResidencia: objeto({ destinoId: IDENTIFICADOR, heroeId: IDENTIFICADOR }, ['destinoId', 'heroeId']),
 

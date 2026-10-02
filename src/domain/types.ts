@@ -378,6 +378,11 @@ export interface Heroe {
   genero: 'masculino' | 'femenino';
   /** Piezas del catálogo visual de Conquest. Cosmético. */
   avatar: { cabezaId: string; peloId: string; barbaId: string; cejasId: string };
+  /**
+   * Almacén personal (Doc 2.5, 2026-10-02): lo que el héroe guarda para sí, hasta `ALMACEN_PERSONAL.capacidad` en total. Viaja con
+   * él en cada cambio de residencia —es lo único que se mueve sin caravana— y lo gasta quien lo tiene. Ausente = vacío.
+   */
+  almacenPersonal?: Record<string, number>;
   /** Liderazgo BASE (Doc 5.11). El efectivo es base + progresión, pero la progresión todavía no está
    * diseñada (`Docs/Mecanicas a desarrollar.md` §11), así que hoy coinciden. Un id sin registro en
    * `GameSessionState.heroes` (los fundadores de los escenarios de batch) usa `LIDERAZGO.base`. */
@@ -1009,6 +1014,11 @@ export interface CampamentoMercenarios {
   origen: number;
   /** Lo que tiene, de layout fijo: los edificios fijos más uno militar elegido al nacer. */
   edificios: EdificioCampamentoTipo[];
+  /**
+   * Héroes que residen aquí (Doc 2.5, 2026-10-02): de CUALQUIER Facción y sin límite, aunque su Facción tenga asentamientos.
+   * Sin guarnición ni cargos. Es la casa de quien se queda sin asentamiento (`acogerHeroesSinCasa`).
+   */
+  residentesIds: string[];
   creadoEn: Instante;
 }
 

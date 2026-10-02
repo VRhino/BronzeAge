@@ -261,8 +261,8 @@ export function aplicarConquista(defensor: Asentamiento, faccionConquistadoraId:
  *    con el carro vacío, que lleva las escuadras con las que defendió y sobrevivieron (`lucharon`). Un residente
  *    herido no defendió, así que sale solo.
  *  - Todo lo demás del campamento de los residentes —guarnición incluida— queda a 0 y se va con ellos al asentamiento
- *    más cercano de su Facción, donde pasan a residir. Sin ninguno, quedan huérfanos, con sus escuadras a 0 pero
- *    suyas, con su nivel y experiencia. Lo que cada uno llevaba fuera, en su columna o de escolta, no se toca.
+ *    más cercano de su Facción, donde pasan a residir. Sin ninguno, el tick los acoge en el campamento de mercenarios más
+ *    cercano (`acogerHeroesSinCasa`), con sus escuadras a 0 pero suyas, con su nivel y experiencia. Lo que cada uno llevaba fuera, en su columna o de escolta, no se toca.
  *
  * Las columnas nuevas vuelven como vistas con la tropa puesta, y los héroes ya con esa tropa en su columna.
  * `ponytail:` el traslado no mira el cupo de viviendas del destino; sin él, un desalojado se quedaría sin casa por un

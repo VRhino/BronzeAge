@@ -3,12 +3,15 @@
 //
 // Un campamento no es un asentamiento: no tiene Facción, ni zona de influencia (ninguna lo absorbe, porque las zonas
 // salen de los asentamientos), ni crece, y no desaparece. Por eso no vive en `asentamientos` sino en su propia lista.
-import type { Asentamiento, CampamentoMercenarios, EdificioCampamentoTipo, Point, ZonaInfluencia } from '../domain/types';
+import type { Asentamiento, CampamentoMercenarios, EdificioCampamentoTipo, Ejercito, Faccion, Heroe, Point, ZonaInfluencia } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
 import { MERCENARIOS } from '../constants';
 import type { Instante } from '../domain/tiempo';
 import type { Mapa } from '../world/mapa';
 import { pointInPolygon } from './zones';
+import { dejarResidencia, esCiudadano } from './faccion';
+import { esResidente } from './pertenencia';
+import { ReglaInvalidaError } from './errores';
 
 export interface PayloadCampamentoMercenariosAparece {
   campamentoId: string;
@@ -66,6 +69,7 @@ function nuevoCampamento(indice: number, posicion: Point, instante: Instante): C
     posicion,
     origen: Math.floor(huella / MERCENARIOS.edificiosMilitares.length) % MERCENARIOS.origenes,
     edificios,
+    residentesIds: [],
     creadoEn: instante,
   };
 }
@@ -150,4 +154,82 @@ export function avanzarAparicionMercenarios(
       },
     ],
   };
+}
+
+export class MercenariosInvalidoError extends ReglaInvalidaError {}
+
+/** El campamento donde reside un héroe, si reside en alguno. */
+export const campamentoDeResidente = (campamentos: readonly CampamentoMercenarios[], heroeId: string): CampamentoMercenarios | undefined =>
+  campamentos.find((c) => c.residentesIds.includes(heroeId));
+
+/** El campamento más cercano a un punto (a igual distancia, el de id menor: determinista). */
+export function campamentoMasCercano(campamentos: readonly CampamentoMercenarios[], desde: Point): CampamentoMercenarios | undefined {
+  return [...campamentos].sort((a, b) => distancia(a.posicion, desde) - distancia(b.posicion, desde) || (a.id < b.id ? -1 : 1))[0];
+}
+
+/** Los campamentos sin ese héroe como residente. */
+function sinResidente(campamentos: readonly CampamentoMercenarios[], heroeId: string): CampamentoMercenarios[] {
+  return campamentos.map((c) => (c.residentesIds.includes(heroeId) ? { ...c, residentesIds: c.residentesIds.filter((id) => id !== heroeId) } : c));
+}
+
+/**
+ * Pasar a residir en un campamento de mercenarios (Doc 2.5): cualquier héroe, de cualquier Facción y aunque la suya tenga
+ * asentamientos. Deja la residencia que tuviera —casa en un asentamiento, con sus cargos locales, u otro campamento—: se reside
+ * en un solo sitio. No cuesta nada y no exige estar allí, como el resto de cambios de residencia.
+ */
+export function residirEnCampamento(
+  campamentos: readonly CampamentoMercenarios[],
+  asentamientos: readonly Asentamiento[],
+  heroeId: string,
+  campamentoId: string
+): { campamentos: CampamentoMercenarios[]; asentamientos: Asentamiento[] } {
+  const destino = campamentos.find((c) => c.id === campamentoId);
+  if (!destino) throw new MercenariosInvalidoError('Ese campamento de mercenarios no existe.');
+  if (destino.residentesIds.includes(heroeId)) throw new MercenariosInvalidoError('El héroe ya reside en ese campamento.');
+
+  const casa = asentamientos.some((a) => esResidente(a, heroeId)) ? dejarResidencia(asentamientos, heroeId) : undefined;
+  return {
+    campamentos: sinResidente(campamentos, heroeId).map((c) => (c.id === destino.id ? { ...c, residentesIds: [...c.residentesIds, heroeId] } : c)),
+    asentamientos: casa ? asentamientos.map((a) => (a.id === casa.id ? casa : a)) : [...asentamientos],
+  };
+}
+
+/** Deja el campamento donde residiera (al comprar casa o mudarse a un asentamiento). */
+export const salirDeCampamentos = sinResidente;
+
+/** Dónde está un héroe en el mapa, si se sabe: su columna o la plaza donde está. */
+function posicionDe(heroe: Heroe, asentamientos: readonly Asentamiento[], ejercitos: readonly Ejercito[]): Point | undefined {
+  const u = heroe.ubicacion;
+  if (u.tipo === 'columna') return ejercitos.find((e) => e.id === u.ejercitoId)?.posicionActual;
+  if (u.tipo === 'asentamiento') return asentamientos.find((a) => a.id === u.asentamientoId)?.posicion;
+  return undefined;
+}
+
+/**
+ * Se acaba el huérfano (Doc 0, 5.15.5, decidido el 2026-10-02): el ciudadano de una Facción que no reside en ningún asentamiento
+ * ni campamento pasa a residir en el campamento de mercenarios más cercano a donde está. Es lo que le pasa a quien pierde su
+ * última plaza —conquista o ruina— y a quien deja su casa. Se mira cada tick, así que cubre todas las vías.
+ *
+ * No toca a quien aún no tiene Facción (un recién llegado), ni a los héroes bot: los de una Facción NPC sin plazas desaparecerán
+ * (pendiente), no se mudan.
+ */
+export function acogerHeroesSinCasa(
+  campamentos: CampamentoMercenarios[],
+  asentamientos: readonly Asentamiento[],
+  heroes: readonly Heroe[],
+  facciones: readonly Faccion[],
+  ejercitos: readonly Ejercito[]
+): CampamentoMercenarios[] {
+  if (campamentos.length === 0) return campamentos;
+  let actuales = campamentos;
+  for (const heroe of heroes) {
+    if (heroe.controlador === 'bot') continue;
+    if (!facciones.some((f) => esCiudadano(f, heroe.id))) continue;
+    if (asentamientos.some((a) => esResidente(a, heroe.id)) || campamentoDeResidente(actuales, heroe.id)) continue;
+    const posicion = posicionDe(heroe, asentamientos, ejercitos);
+    const destino = posicion ? campamentoMasCercano(actuales, posicion) : actuales[0];
+    if (!destino) continue;
+    actuales = actuales.map((c) => (c.id === destino.id ? { ...c, residentesIds: [...c.residentesIds, heroe.id] } : c));
+  }
+  return actuales;
 }

@@ -30,13 +30,13 @@ Son **tres conceptos distintos** y conviene no mezclarlos — la jerarquía de e
 
 > **"Tropa" se usa además en sentido colectivo** en todos los documentos ("las tropas consumen raciones", "mantenimiento de tropas", "reclutar tropas"), igual que en castellano corriente. Eso es deliberado y no choca: en singular y referido a un catálogo es el tipo; en plural y genérico es el colectivo. **La entidad contable es siempre el escuadrón** — y por eso lleva ese nombre, para que "tropa" quede libre para los otros dos usos.
 ## Campamento de mercenarios
-Enclave neutral del mundo abierto (Doc 1.9b): no es de ninguna Facción, no tiene zona de influencia, no se puede atacar y no desaparece. Hoy solo existe como entidad que aparece y se conoce explorándola; residir en él, reclutar y comprar llegan en los siguientes pasos (`Docs/Mecanicas a desarrollar.md` §40). No confundir con el *Campamento* de un héroe (arriba) ni con un campamento de bandidos (Doc 1.9).
+Enclave neutral del mundo abierto (Doc 1.9b): no es de ninguna Facción, no tiene zona de influencia, no se puede atacar y no desaparece. Se puede residir en él, y es la casa de quien se queda sin asentamiento; reclutar y comprar llegan en los siguientes pasos (`Docs/Mecanicas a desarrollar.md` §40). No confundir con el *Campamento* de un héroe (arriba) ni con un campamento de bandidos (Doc 1.9).
 
 ## Guarnición
 Los escuadrones que cada Héroe residente **asigna** a la guarnición de su asentamiento, dentro de un cupo por héroe que dan los edificios y las políticas de ese asentamiento; no gasta su Liderazgo. Los maneja la IA del juego y defienden aunque su héroe no esté. El resto de escuadrones guardados en el asentamiento no combaten sin su héroe. Un asentamiento recién conquistado queda sin guarnición (Doc 5.15.3 y 5.15.5).
 
 ## Campamento
-Donde un Héroe guarda los escuadrones que no lleva consigo; está en el asentamiento donde reside. Un Héroe sin residencia no tiene campamento: es huérfano (Doc 5.15.2).
+Donde un Héroe guarda los escuadrones que no lleva consigo; está en el asentamiento donde reside. Puede estar en un asentamiento o en un campamento de mercenarios (abajo). El estado de huérfano ya no existe (Doc 5.15.2).
 
 ## Ejército
 Una columna nacida de **movilizarse contra un destino** desde un asentamiento, que se mueve por el mapa como **una sola entidad** (Doc 5.12). Lo que la hace un Ejército es cómo salió, no cuántos van dentro: puede empezar con uno solo y crecer según se le suman los demás. Cada uno sigue limitado por su propio Liderazgo, y **todos son de la misma Facción**: ni aliados ni neutrales pueden marchar dentro de una columna ajena (Doc 5.14.1).
@@ -67,7 +67,10 @@ Los escuadrones nunca quedan heridos: sus bajas son siempre permanentes.
 Un combate en el que interviene algún héroe humano se juega como una partida aparte en Unity; NPC contra NPC se resuelve con números (Doc 5.10). Mientras dura, **el mundo sigue**: solo queda bloqueado lo que interviene —la plaza asediada, o las columnas y la caravana que combaten, que en el mapa se ven como la batalla en su punto— y los héroes que combaten. Los héroes de la Facción de un bando pueden **unirse** a él mientras quede sitio. Quien la inició puede cancelarla antes de que empiece la partida (Doc 5.15.1). Los héroes del bando que pierde quedan **Heridos**.
 
 ## Huérfano
-Héroe sin residencia y, por tanto, sin campamento: sin sitio donde guardar escuadrones, reabastecer ni reclutar. Al perder su asentamiento, un héroe pasa a residir en el más cercano de su Facción; solo queda huérfano si su Facción no tiene ninguno (Doc 5.15.5). Sus escuadrones siguen siendo suyos, con su nivel y experiencia, y deja de ser huérfano en cuanto vuelve a residir en algún asentamiento (ciudadanía, Doc 2.5).
+**Ya no existe** (2026-10-02). Era el héroe sin residencia ni campamento. Ahora el ciudadano de una Facción que se queda sin casa —por conquista, ruina o dejándola— pasa a residir en el campamento de mercenarios más cercano a donde está (Doc 1.9b, 5.15.5), con sus escuadrones. Solo quedan sin campamento los héroes aún sin Facción, y los héroes bot de una Facción NPC sin plazas (que desaparecerán: pendiente).
+
+## Almacén personal
+Lo que un Héroe guarda para sí: hasta 1000 unidades en total, de cualquier recurso (`ALMACEN_PERSONAL`, placeholder). Viaja con él en cada cambio de residencia —es lo único que se mueve sin caravana— y lo gasta quien lo tiene. Se llena y se vacía con el carro de su columna (Doc 2.5); nunca toca el almacén de una plaza.
 
 ## Liderazgo
 Valor del Héroe que limita **cuánto puede llevarse consigo a la vez** — no cuánto puede poseer. Cada tropa tiene un coste de Liderazgo según su escalón; la suma de lo que un Héroe se lleva no puede exceder su Liderazgo (Doc 5.11). Lo que se queda en su campamento no defiende: solo la guarnición que asigna, que tiene su propio cupo (ver Guarnición). La selección de qué llevarse se puede guardar como **loadout** (abajo).

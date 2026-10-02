@@ -282,6 +282,9 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
   borrarLoadout: { rolesPermitidos: ['jugador'] },
   // Que resida donde guarnece y el cupo los comprueba el motor, que sabe dónde está su campamento.
   asignarGuarnicion: { rolesPermitidos: ['jugador'] },
+  // El almacén personal es del héroe del actor; que sea Líder de su columna lo comprueba el motor.
+  guardarEnAlmacenPersonal: { rolesPermitidos: ['jugador'] },
+  sacarDelAlmacenPersonal: { rolesPermitidos: ['jugador'] },
   retirarGuarnicion: { rolesPermitidos: ['jugador'] },
   // Las Facciones NPC las crea el admin, ya asentadas; ninguna Facción de jugador pasa a la IA.
   crearFaccionNpc: { rolesPermitidos: ['administrador_partida', 'administrador_global'] },
@@ -336,6 +339,11 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
   // Cambiar de residencia: nadie a nombre de otro; y el destino tiene que ser de la propia Facción (a
   // diferencia de comprarCasa, aquí el jugador YA es ciudadano de una — el motor lo exige). El resto de
   // condiciones (hueco de vivienda, permiso, no residir ya ahí) las valida `cambiarResidencia`.
+  // Residir en un campamento de mercenarios: cualquier héroe, por sí mismo y sin pedir permiso a su Facción (Doc 2.5).
+  residirEnCampamento: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
+  },
   // Dejar la casa: cada uno la suya.
   dejarResidencia: {
     rolesPermitidos: ['jugador'],

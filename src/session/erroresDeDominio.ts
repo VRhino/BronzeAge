@@ -7,6 +7,7 @@
 import { AscensoInvalidoError } from '../engine/ascenso';
 import { AdopcionInvalidaError } from '../engine/tecnologia';
 import { CapitalInvalidaError } from '../engine/capital';
+import { MercenariosInvalidoError } from '../engine/mercenarios';
 import { CargoInvalidoError } from '../engine/cargos';
 import { CombateInvalidoError } from '../engine/combate';
 import { ConstruccionManualInvalidaError } from '../engine/construction';
@@ -26,7 +27,7 @@ import { HeroeInvalidoError } from '../engine/heroe';
 import { BatallaInvalidaError, BatallaYaAsignadaError } from './batallas';
 import { CODIGOS_ERROR, type CodigoError } from './comandos/codigosDeError';
 
-/** Los 22 tipos de error de dominio que el motor puede lanzar, y su código estable. Orden alfabético por
+/** Los 23 tipos de error de dominio que el motor puede lanzar, y su código estable. Orden alfabético por
  * código, no por módulo — así un código nuevo se ubica por lo que significa, no por dónde vive en `engine/`. */
 const CODIGOS_DE_ERROR = new Map<Function, CodigoError>([
   [AscensoInvalidoError, CODIGOS_ERROR.ascensoInvalido],
@@ -35,6 +36,7 @@ const CODIGOS_DE_ERROR = new Map<Function, CodigoError>([
   [BatallaYaAsignadaError, CODIGOS_ERROR.batallaYaAsignada],
   [CapitalInvalidaError, CODIGOS_ERROR.capitalInvalida],
   [CargoInvalidoError, CODIGOS_ERROR.cargoInvalido],
+  [MercenariosInvalidoError, CODIGOS_ERROR.mercenariosInvalido],
   [CombateInvalidoError, CODIGOS_ERROR.combateInvalido],
   [MovilizacionInvalidaError, CODIGOS_ERROR.movilizacionInvalida],
   [ConstruccionManualInvalidaError, CODIGOS_ERROR.construccionInvalida],

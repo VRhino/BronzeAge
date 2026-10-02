@@ -488,6 +488,7 @@ CampamentoMercenarios      enclave neutral (Doc 1.9b) — NUEVO 2026-10-02; en e
   posicion: Point
   origen: number          variante de aspecto, 0..2: solo cambia cómo se ve
   edificios[]             'taberna' | 'vivienda' | 'mercado' | 'barracon' | 'galeriaDeTiro' | 'caballerizas' — layout fijo
+  residentesIds[]         heroeId: héroes que residen aquí, de cualquier Facción y sin límite; sin guarnición ni cargos
   creadoEn: Instante
                         No es de ninguna Facción ni tiene zona. En la proyección del jugador viaja solo si la Facción
                         ha explorado el sitio (como un camino). Conquest: entidad y escena con las 3 variantes de
@@ -573,6 +574,7 @@ Heroe
                          ser perseguido, perseguir ni entrar en batallas. Sustituye a
                          `Ejercito.enTreguaHasta` (la Tregua desaparece, Doc 5.16.4).
   escuadrones: Escuadron[]   TODAS sus escuadras, estén donde estén (§13) — nuevo
+  almacenPersonal?: Record<recurso, number>   lo que guarda para sí, hasta 1000 en total; viaja con él — NUEVO 2026-10-02
   loadouts: Loadout[]     nuevo
   inventario: ItemInstancia[]     lo que lleva y NO tiene puesto (§12.1) — nuevo
   equipamiento: Record<SlotEquipo, ItemInstancia | null>   lo que tiene puesto (§12.1) — nuevo. Equipar SACA
@@ -611,8 +613,9 @@ ItemInstancia
 
 **Campamento del héroe (decisión del usuario, 2026-09-13).** Es donde guarda las escuadras que no lleva
 consigo, y coincide con su residencia: no es un campo nuevo, se deriva de dónde reside (§3). Si el héroe no
-reside en ningún sitio, no tiene campamento (huérfano) y sus escuadras siguen siendo suyas hasta que vuelva a
-residir en algún asentamiento. Las reglas de juego completas (qué pasa al caer su asentamiento, guarnición,
+reside en ningún asentamiento, su campamento está en el campamento de mercenarios donde reside
+(`CampamentoMercenarios.residentesIds`, §10); el huérfano desapareció el 2026-10-02 (Doc 0). Solo queda sin
+campamento el héroe aún sin Facción. Las reglas de juego completas (qué pasa al caer su asentamiento, guarnición,
 escolta) están en `Docs/Game/5_Sistema_Militar_y_Combate.md` §5.15.
 
 ## 13. `Escuadron` — campos v1 (actualizado)
@@ -635,7 +638,7 @@ Escuadron
                         `selectedFormationIndex`)
   contenedor: { tipo: 'campamento' } | { tipo: 'ejercito'; ejercitoId } | { tipo: 'escolta'; caravanaId }
                         nuevo — dónde está FÍSICAMENTE. `'campamento'` = en el campamento del héroe (su
-                        residencia, §12), o en ninguna parte si el héroe es huérfano.
+                        residencia —asentamiento o campamento de mercenarios—, §12), o en ninguna parte si aún no tiene Facción.
   enGuarnicion: boolean   nuevo — solo con contenedor `'campamento'` y héroe residente: asignada a la
                         guarnición de su asentamiento. La maneja la IA de juego y el héroe no puede usarla
                         mientras siga asignada (Doc 5.15).
@@ -650,7 +653,7 @@ Escuadron
 **Almacenamiento (cambia el 2026-09-13).** Todas las escuadras de un héroe viven en `Heroe.escuadrones`;
 `Ejercito` y `Caravana` pasan a guardar solo los `squadId` que llevan. Antes se proponía mantenerlas
 embebidas en su contenedor (`Asentamiento.escuadrones`...), pero en el modelo de héroe una escuadra puede no
-tener asentamiento (héroe huérfano) y el campamento se traslada con el héroe. Guardarlas bajo el héroe hace
+tener asentamiento (héroe en un campamento de mercenarios) y el campamento se traslada con el héroe. Guardarlas bajo el héroe hace
 que trasladar un campamento no mueva nada y que la unicidad por `tropaId` sea una búsqueda en una sola lista.
 
 **Sin `heridoHasta`** — se elimina de `Escuadron` (gana el modelo de BronzeAge). Una baja de escuadra

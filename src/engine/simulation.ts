@@ -24,7 +24,7 @@ import { calcularTitulos, narrarCambiosDeTitulo } from './titulos';
 import { avanzarAtaquesBandidos, avanzarSpawnBandidos } from './bandidos';
 import { avanzarEjercitos, type CombatePorAbrir, type ContextoAvanceEjercitos } from './ejercitos';
 import { grabarLoVisto, type MemoriaFaccion } from './memoria';
-import { avanzarAparicionMercenarios } from './mercenarios';
+import { acogerHeroesSinCasa, avanzarAparicionMercenarios } from './mercenarios';
 import { grabarExploracionPersonal } from './ubicacion';
 import { avanzarTecnologia, contadoresDeProduccion, sumarContadores, sumarDeltas, tecnologiasDe, type DeltaContadores } from './tecnologia';
 
@@ -363,7 +363,8 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     titulos: titulosActuales,
     red: trasComercio.red,
     campamentosBandidos: trasSpawnBandidos.campamentos,
-    campamentosMercenarios: trasMercenarios.campamentos,
+    // Quien se quedó sin casa este tick (conquista, ruina, dejar la residencia) pasa a un campamento de mercenarios.
+    campamentosMercenarios: acogerHeroesSinCasa(trasMercenarios.campamentos, trasTributos.asentamientos, heroes, faccionesFinal, trasEjercitos.ejercitos),
     // Al FINAL, y con lo que ya se movió: lo que se graba es dónde acabaron las columnas este minuto, no de
     // dónde salieron. No emite eventos ni cambia nada más — la memoria solo mira.
     memoriaPorFaccion: grabarLoVisto(estado.memoriaPorFaccion, {

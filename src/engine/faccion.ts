@@ -154,7 +154,8 @@ function sinResidente(asentamiento: Asentamiento, heroeId: string): Asentamiento
 
 /**
  * Dejar la residencia (Doc 2.5, 2026-10-02): libera la vivienda y vacía los cargos locales ahí, sin tomar otra casa. El
- * héroe sigue siendo ciudadano, pero sin residencia es huérfano (Doc 0) hasta que compre casa o se mude. No hay reembolso.
+ * héroe sigue siendo ciudadano, y el tick lo acoge en el campamento de mercenarios más cercano (`acogerHeroesSinCasa`) hasta que
+ * compre casa o se mude. No hay reembolso.
  */
 export function dejarResidencia(asentamientos: readonly Asentamiento[], heroeId: string): Asentamiento {
   const actual = asentamientos.find((a) => esResidente(a, heroeId));

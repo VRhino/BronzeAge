@@ -171,14 +171,15 @@ Cifras, todas PLACEHOLDER (`CAMPAMENTOS_BANDIDOS`):
 
 El campamento no bloquea la explotación del bosque que ocupa: solo amenaza a las caravanas de paso.
 
-## 1.9b Campamentos de mercenarios (decidido el 2026-10-02; paso 1 de 5 implementado)
+## 1.9b Campamentos de mercenarios (decidido el 2026-10-02; pasos 1 y 2 de 5 implementados)
 
 Entidad **neutral** del mundo abierto, con miniatura en el mapa. No es de ninguna Facción, no se puede atacar, no crece y no desaparece. **No es un asentamiento**: no tiene zona de influencia, y ninguna zona lo absorbe (las zonas salen de los asentamientos). Es un enclave.
 
 - **Aparición.** Siempre hay uno **desde el día 1**, en el centro del mapa, en tierra firme y pegado a un bosque si lo hay a menos de `MERCENARIOS.margenBosque`. Los demás aparecen, de uno en uno, en un punto **sin reclamar** (fuera de toda zona) donde haya zonas de al menos **2 Facciones distintas a menos de 150** (`MERCENARIOS.facciones`, `radioZonas`); los candidatos son los puntos medios entre plazas de Facciones distintas, y gana el que tiene más Facciones cerca. Tope de **6 por servidor** y **400 de distancia mínima** entre campamentos. La búsqueda se hace cada hora de mundo.
 - **Forma.** Layout fijo, que no cambia: taberna, dos viviendas y mercado, más **un edificio militar** (barracón, galería de tiro o caballeriza) que se elige al nacer. Hay **3 variantes de aspecto** (el *origen*), sin efecto sobre lo que hace. Aspecto y edificio militar salen de la posición, no del azar de la partida.
 - **Niebla.** Se conoce **como un camino**: si la Facción ha explorado alguna vez el terreno donde está, lo recuerda; no hace falta verlo ahora, porque un campamento no se mueve ni desaparece.
-- **Por llegar** (pasos 2 a 5): residir en él y el almacén personal, reclutar, el mercado y refundar con los almacenes. Detalle y cifras en `Docs/Mecanicas a desarrollar.md` §40.
+- **Residencia** (paso 2): cualquier héroe puede residir en él, y es la casa de quien se queda sin asentamiento; se acaba el huérfano (Doc 2.5, 5.15.5). Almacén personal de cada héroe: Doc 2.5.
+- **Por llegar** (pasos 3 a 5): reclutar, el mercado y refundar con los almacenes. Detalle y cifras en `Docs/Mecanicas a desarrollar.md` §40.
 
 ## 1.10 El héroe está SITUADO en el mundo
 
