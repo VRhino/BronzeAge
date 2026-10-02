@@ -277,7 +277,12 @@ export function fundarAsentamiento(
     };
   }
 
-  const id = `asentamiento-${asentamientosExistentes.length}-${Math.round(posicion.x)}-${Math.round(posicion.y)}`;
+  // El id no puede repetir el de una plaza que ya no existe: todo lo que la nombraba (su campamento de bandidos, un trueque,
+  // el origen de una caravana o de un ejército, una ficha de memoria) se reengancharía en silencio a la nueva
+  // (`Consideraciones/Auditoria_Tick_Eventos.md`, B3). Con solo el número de plazas vivas y la posición, refundar donde cayó
+  // una lo repetía; el minuto de mundo de la fundación lo hace único (decisión del usuario, 2026-10-02). El id es además la
+  // semilla del trazado urbano (`engine/trazado.ts`): el minuto cambia la forma de las ciudades nuevas, no la de las fundadas.
+  const id = `asentamiento-${asentamientosExistentes.length}-${Math.round(posicion.x)}-${Math.round(posicion.y)}-t${Math.floor(fundadoEn / 60_000)}`;
 
   const asentamiento: Asentamiento = {
     id,

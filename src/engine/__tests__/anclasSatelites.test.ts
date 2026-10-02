@@ -196,7 +196,11 @@ describe('Etapa 5 — árbol único de anclas, a nivel de motor (trazado.ts)', (
   });
 
   it('saturación y descarte: si la semilla más cercana no tiene ninguna ranura libre, se descarta y se prueba la siguiente', () => {
-    const { asentamiento } = base(2);
+    // La geometría de este caso (el pasillo, el mercado lejano) está construida a mano sobre las direcciones que siembra el
+    // id del asentamiento. Desde que el id lleva el minuto de fundación (B3, 2026-10-02) se fija aquí el de antes, para que
+    // el caso siga probando el descarte de semillas y no dependa del formato del id.
+    const { asentamiento: fundado } = base(2);
+    const asentamiento = { ...fundado, id: fundado.id.replace(/-t\d+$/, '') };
     const centroUrbano = porTipo(asentamiento, 'centroUrbano')[0]!;
     const cuMin = celdaMinimaDeEdificio(centroUrbano);
     const cuTamano = tamanoDeEdificio(centroUrbano);

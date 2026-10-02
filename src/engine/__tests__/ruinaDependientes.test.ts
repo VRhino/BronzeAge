@@ -131,3 +131,14 @@ describe('ruina: sus dependientes se cierran al caer', () => {
     expect(tras.estado.caravanas.some((x) => x.id === 'caravana-c')).toBe(false);
   });
 });
+
+describe('ids de asentamiento que no renacen (B3)', () => {
+  it('refundar en el mismo sitio de una plaza arruinada da otro id', () => {
+    const { a, b, c, facciones } = mundo(false);
+    const { estado } = correr(arruinar(crearEstadoDeTest([a, b, c], facciones), c.id), 0, 1);
+    expect(estado.asentamientos.some((x) => x.id === c.id)).toBe(false);
+    // Antes, con dos plazas vivas, la refundada en la posición de C recibía exactamente el id de C.
+    const refundada = fundarAsentamientoDeTest(mapa, estado.facciones, 'faccion-3', estado.asentamientos, 1, c.posicion).asentamiento;
+    expect(refundada.id).not.toBe(c.id);
+  });
+});
