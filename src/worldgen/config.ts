@@ -284,11 +284,32 @@ export const COSTE_MOVIMIENTO = congelar({
   montana: 3.5,
   cima: 12,
   agua: 15,
-  /** Multiplicador (<1 = más rápido) mientras la posición está sobre/cerca de un `CaminoComercial` (Doc
-   * 1.6, ver `engine/caminos.ts`) — el camino ya construido compensa el coste del terreno que atraviesa. */
+  /** Multiplicador (<1 = más rápido) al avanzar por una arista de la red de caminos (Doc 1.6, ver
+   * `engine/redCaminos.ts`) — el camino ya hecho compensa el coste del terreno que atraviesa. */
   factorCamino: 0.5,
-  /** Distancia máxima a un tramo de camino comercial para contar como "sobre el camino" (ver
-   * `distanciaASegmento` en `worldgen/colocacion.ts`). */
-  radioCamino: 15,
+  /** Bosque (decisión 2026-09-29): frena, no bloquea. Dentro de un disco el coste se multiplica por
+   * `1 + bosquePorDensidad × densidad` (el disco más denso si se solapan). */
+  bosquePorDensidad: 2,
+});
+
+// Grafo de navegación (`world/grafoNavegacion.ts`, ficha `Consideraciones/Rutas_Caravana_Avanzadas_Definicion.md`):
+// rejilla global precalculada una vez por mundo sobre la que corre el A*. Cifras PLACEHOLDER.
+export const NAVEGACION = congelar({
+  /** Separación mínima entre nodos; la real es `max(espaciadoMin, lado mayor / nodosPorLado)` — 45 en el mapa
+   * de 2000, ~200 en el regional de 32 km. */
+  espaciadoMin: 45,
+  nodosPorLado: 160,
+  /** Muestreo máximo al validar una arista (agua, coste): nunca más de esto entre muestras. */
+  muestreoMax: 30,
+  /** Vados (decisión 2026-09-29): uno cada `max(separacionVadosMin, lado mayor / vadosPorLado)` a lo largo del
+   * cauce, y el primer medio intervalo desde el nacimiento (arroyo) se cruza por cualquier sitio. */
+  separacionVadosMin: 300,
+  vadosPorLado: 16,
+  /** Una ciudad a orillas del río es también paso: cruces a menos de `max(radioPasoCiudadMin, 1,5 × espaciado)`. */
+  radioPasoCiudadMin: 60,
+  /** Atracción de la red (decisión 5): coste de arista × `max(atraccionMin, 1 − atraccionPorPeso × peso)`. Más
+   * débil que el rodeo de un bosque denso. */
+  atraccionPorPeso: 0.1,
+  atraccionMin: 0.5,
 });
 

@@ -49,7 +49,6 @@ function estadoBase(): { estado: EstadoSimulacion; mapa: ReturnType<typeof crear
       ordenes: [],
       relaciones: [],
       titulos: [],
-      caminos: [],
       campamentosBandidos: [],
       memoriaPorFaccion: {},
       heroes: [],

@@ -96,7 +96,6 @@ export class GameSession {
       ordenes: [],
       relaciones: [],
       titulos: [],
-      caminos: [],
       campamentosBandidos: [],
       memoriaPorFaccion: {},
       tecnologia: estadoTecnologiaInicial(instanteDeTick(0)),

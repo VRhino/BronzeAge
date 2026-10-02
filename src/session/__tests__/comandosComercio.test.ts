@@ -51,21 +51,16 @@ describe('proponerTrueque y su respuesta', () => {
     return r.datos!.acuerdoId;
   }
 
-  it('proponer solo OFRECE: el acuerdo nace propuesto y todavía no traza camino', () => {
+  it('proponer solo OFRECE: el acuerdo nace propuesto', () => {
     const { sesion, aId, bId } = partidaConDosAsentamientos();
-    expect(sesion.getState().caminos).toEqual([]);
-
     const acuerdoId = proponer(sesion, aId, bId);
 
     expect(sesion.getState().acuerdos).toHaveLength(1);
     expect(sesion.getState().acuerdos[0]!.id).toBe(acuerdoId);
     expect(sesion.getState().acuerdos[0]!.estado).toBe('propuesto');
-    // Un camino es infraestructura permanente (Doc 1.6): una propuesta que el otro lado no ha contestado no
-    // basta para plantársela.
-    expect(sesion.getState().caminos).toEqual([]);
   });
 
-  it('aceptar activa el acuerdo Y abre el camino comercial del par', () => {
+  it('aceptar activa el acuerdo pero no traza camino: el camino nace con las caravanas (red de caminos, Doc 1.6)', () => {
     const { sesion, aId, bId } = partidaConDosAsentamientos();
     const acuerdoId = proponer(sesion, aId, bId);
 
@@ -73,23 +68,10 @@ describe('proponerTrueque y su respuesta', () => {
 
     expect(resultado.ok).toBe(true);
     expect(sesion.getState().acuerdos[0]!.estado).toBe('activo');
-    expect(sesion.getState().caminos).toHaveLength(1);
-    expect(resultado.eventos.some((e) => e.mensaje.includes('camino comercial'))).toBe(true);
+    expect(sesion.getState().red?.aristas ?? []).toEqual([]);
   });
 
-  it('el camino comercial NO se duplica al aceptar un segundo trueque del mismo par', () => {
-    const { sesion, aId, bId } = partidaConDosAsentamientos();
-    sesion.ejecutar(aceptarTrueque, { acuerdoId: proponer(sesion, aId, bId) }, OPC);
-    const caminosTrasPrimero = sesion.getState().caminos.length;
-
-    const segundo = sesion.ejecutar(aceptarTrueque, { acuerdoId: proponer(sesion, aId, bId, 3) }, OPC);
-
-    expect(segundo.ok).toBe(true);
-    expect(sesion.getState().caminos).toHaveLength(caminosTrasPrimero);
-    expect(segundo.eventos.some((e) => e.mensaje.includes('camino comercial'))).toBe(false);
-  });
-
-  it('rechazar deja constancia y no traza ningún camino', () => {
+  it('rechazar deja constancia', () => {
     const { sesion, aId, bId } = partidaConDosAsentamientos();
     const acuerdoId = proponer(sesion, aId, bId);
 
@@ -97,7 +79,6 @@ describe('proponerTrueque y su respuesta', () => {
 
     expect(resultado.ok).toBe(true);
     expect(sesion.getState().acuerdos[0]!.estado).toBe('rechazado');
-    expect(sesion.getState().caminos).toEqual([]);
   });
 
   it('un acuerdo ya contestado no se vuelve a contestar', () => {

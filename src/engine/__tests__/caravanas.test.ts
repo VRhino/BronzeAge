@@ -3,7 +3,7 @@
 // entre ellos, ver `tradeFixtures.ts`), uno por cada bug/regresión real que motivó su prueba. Cada `describe`
 // documenta su origen tal como lo hacía el archivo del que viene.
 import { describe, expect, it } from 'vitest';
-import type { Asentamiento, Caravana, CaminoComercial, Faccion, Point } from '../../domain/types';
+import type { Asentamiento, Caravana, Faccion, Point } from '../../domain/types';
 import type { Escuadron } from '../../domain/types';
 import { CARAVANA_COOLDOWN, CARAVANA_ESCOLTA, CARAVANA_PREPARACION } from '../../constants';
 import { capacidadCaravana, velocidadCaravana } from '../caravanas';
@@ -27,20 +27,20 @@ import {
 import { lanzarCaravanaFundacion, ExpansionInvalidaError } from '../expansion';
 import { almacenSintetico, caravanaComercialCasiLlegando, mapaSintetico } from './tradeFixtures';
 import { crearFacciones, crearMapaDeterminista, escuadronDePrueba, fundarAsentamientoDeTest, instanteDeTest, posicionRecomendable } from './fixtures';
+import { RED_VACIA } from '../redCaminos';
+
+const SIN_TERRITORIO = { red: RED_VACIA, asentamientos: [], zonas: [] };
 
 // ---------------------------------------------------------------------------------------------------------
-// Orientación de la ruta al reutilizar un Camino Comercial existente
+// Orientación de la ruta en los dos sentidos de un trueque
 // (antes `caravana_camino_direccion.test.ts`)
 //
-// Regresión (bug real detectado con un save del usuario, tick 69): un Camino Comercial ya construido entre
-// dos asentamientos se reutiliza para AMBAS direcciones de trueque (Doc 1.6, `asignarCaravanasATrueque`,
-// engine/trade.ts). `buscarCamino` empareja el par en cualquier orden pero devuelve `puntos` siempre en el
-// orden en que se guardó (`asentamientoAId` -> `asentamientoBId`, ver engine/caminos.ts) — si no se reorienta,
-// una caravana que viaja en sentido CONTRARIO recibe una polilínea invertida: `progreso: 0` cae en el punto
-// del camino más cercano al DESTINO, no al propio origen, y la caravana "salta" hasta allí en su primer paso
-// de movimiento (ver `avanzarPosicionEnRuta`, engine/movimiento.ts, que siempre mide desde `ruta[0]`).
+// Regresión (bug real con un save del usuario, tick 69): cuando el camino era UNO por par y se reutilizaba en
+// los dos sentidos, la caravana que iba en contra del orden guardado recibía la polilínea invertida y "saltaba"
+// al otro extremo en su primer paso. Con la red de caminos cada lanzamiento traza su propia ruta, pero el
+// invariante sigue: toda ruta empieza en el origen de SU caravana (`avanzarPosicionEnRuta` mide desde `ruta[0]`).
 // ---------------------------------------------------------------------------------------------------------
-describe('orientación de la ruta al reutilizar un Camino Comercial existente', () => {
+describe('orientación de la ruta en los dos sentidos de un trueque', () => {
   function asentamientoConMercado(id: string, posicion: Point, recursos: Record<string, number>): Asentamiento {
     return {
       id,
@@ -52,23 +52,18 @@ describe('orientación de la ruta al reutilizar un Camino Comercial existente', 
     } as unknown as Asentamiento;
   }
 
-  it('una caravana que viaja B -> A recibe la polilínea invertida, no la original A -> B', () => {
+  it('una caravana que viaja B -> A sale de B, no del extremo de A', () => {
     const posA: Point = { x: 0, y: 0 };
     const posB: Point = { x: 1000, y: 0 };
     const a = asentamientoConMercado('A', posA, { madera: 50, cobre: 200, oro: 100 });
     const b = asentamientoConMercado('B', posB, { madera: 50, oro: 1000 });
 
-    // Camino ya construido A -> B (mismo patrón que un save real: la infraestructura persiste
-    // independientemente de qué lado la use después) — sus `puntos` están ordenados desde `posA` hacia `posB`.
-    const caminoAB: CaminoComercial = { id: 'camino-A-B', asentamientoAId: 'A', asentamientoBId: 'B', puntos: [posA, { x: 500, y: 0 }, posB] };
-
     // Cada asentamiento construye su propia caravana (mismo patrón que el save real: una por lado).
     const { asentamiento: aTrasConstruir, caravana: caravanaA } = construirCaravanaComercial(a, [], instanteDeTest(0), 0);
     const { asentamiento: bTrasConstruir, caravana: caravanaB } = construirCaravanaComercial(b, [caravanaA], instanteDeTest(0), 1);
 
-    // Trueque A<->B: A entrega cobre a B (caravana de A viaja A->B, a favor del camino), B entrega oro a A
-    // (caravana de B viaja B->A, EN CONTRA del orden guardado del camino) — el mismo patrón de dos trueques
-    // opuestos por el mismo camino que expuso el bug en la partida real.
+    // Trueque A<->B: A entrega cobre a B y B entrega oro a A — dos caravanas en sentidos opuestos, el patrón
+    // que expuso el bug en la partida real.
     // Un trueque nace 'propuesto' y no lo mira ninguna caravana hasta que el otro lado acepta
     // (`Comercio_Fisico_Definicion.md`). Estos tests miden el TRANSPORTE, no la negociación, así que aceptan
     // en el acto y en la misma línea.
@@ -83,7 +78,8 @@ describe('orientación de la ruta al reutilizar un Camino Comercial existente', 
       [caravanaA, caravanaB],
       [acuerdo],
       mapaSintetico(),
-      [caminoAB],
+      RED_VACIA,
+      [],
       instanteDeTest(1)
     );
 
@@ -93,10 +89,7 @@ describe('orientación de la ruta al reutilizar un Camino Comercial existente', 
     expect(cA.estado).toBe('en_transito');
     expect(cB.estado).toBe('en_transito');
 
-    // Caravana de A (viaja A->B, a favor del camino): ruta empieza en su propio origen.
     expect(cA.ruta?.[0]).toEqual(posA);
-    // Caravana de B (viaja B->A, en CONTRA del camino guardado): antes del fix, esto también daba `posA`
-    // (el bug) — corregido, debe empezar en su propio origen, `posB`.
     expect(cB.ruta?.[0]).toEqual(posB);
 
     // Y por tanto, en el primer tick de movimiento, NINGUNA de las dos aparece ya en la posición de la otra.
@@ -224,7 +217,7 @@ describe('retorno real de una caravana comercial tras entregar', () => {
   const destino = { id: 'destino', faccionId: 'faccion-1', posicion: { x: 1000, y: 0 }, almacen: almacenSintetico({ oro: 0 }), politicasActivas: [] } as unknown as Asentamiento;
 
   function avanzar(caravanas: Caravana[]) {
-    return avanzarComercio([origen, destino], [] as Faccion[], caravanas, [], mapaSintetico(), [], instanteDeTest(1));
+    return avanzarComercio([origen, destino], [] as Faccion[], caravanas, [], mapaSintetico(), RED_VACIA, [], instanteDeTest(1));
   }
 
   it('al entregar pasa a "retornando" en destino, NO a "disponible" en origen', () => {
@@ -289,7 +282,7 @@ describe('reuso de caravana propia a través de varios envíos del mismo trueque
   }
 
   it('la MISMA caravana entrega en dos viajes, actualiza el trueque cada vez, y vuelve de verdad entre medias', () => {
-    // Distancia < 45 (ESPACIADO_MALLA, world/rutas.ts): `calcularRuta` devuelve [origen, destino] directo, sin
+    // Distancia < 45 (separación del grafo de navegación en el mapa de 2000, `world/grafoNavegacion.ts`): `calcularRuta` devuelve [origen, destino] directo, sin
     // necesitar una malla de pathfinding real — mismo truco que mantiene el fixture mínimo.
     const origenPos: Point = { x: 0, y: 0 };
     const destinoPos: Point = { x: 30, y: 0 };
@@ -322,7 +315,7 @@ describe('reuso de caravana propia a través de varios envíos del mismo trueque
     const facciones: Faccion[] = [];
 
     function tick(n: number) {
-      const resultado = avanzarComercio(asentamientos, facciones, caravanas, acuerdos, mapa, [], instanteDeTest(n));
+      const resultado = avanzarComercio(asentamientos, facciones, caravanas, acuerdos, mapa, RED_VACIA, [], instanteDeTest(n));
       asentamientos = resultado.asentamientos;
       caravanas = resultado.caravanas;
       acuerdos = resultado.acuerdos;
@@ -520,7 +513,7 @@ describe('lanzamiento manual de una caravana (Doc 3.13.3)', () => {
   });
 
   function preparar(caravana: Caravana, carga: Record<string, number>) {
-    return prepararCaravanaManual(caravana, origen, destino, carga, [], mapaSintetico(), [], instanteDeTest(0));
+    return prepararCaravanaManual(caravana, origen, destino, carga, [], mapaSintetico(), SIN_TERRITORIO, instanteDeTest(0));
   }
 
   it('una caravana de 1 carro sale al instante (prepTicks 0): pasa directo a en_transito', () => {
@@ -540,10 +533,10 @@ describe('lanzamiento manual de una caravana (Doc 3.13.3)', () => {
     expect(r.caravana.estado).toBe('preparando');
     expect(r.caravana.preparaHasta).toBe(instanteDeTest(CARAVANA_PREPARACION.kPorCarro)); // 2 × (2−1) = 2 ticks
 
-    const antes = avanzarComercio([origen, destino], [] as Faccion[], [r.caravana], [], mapaSintetico(), [], instanteDeTest(1));
+    const antes = avanzarComercio([origen, destino], [] as Faccion[], [r.caravana], [], mapaSintetico(), RED_VACIA, [], instanteDeTest(1));
     expect(antes.caravanas[0]!.estado).toBe('preparando'); // todavía no vence
 
-    const despues = avanzarComercio([origen, destino], [] as Faccion[], [r.caravana], [], mapaSintetico(), [], instanteDeTest(CARAVANA_PREPARACION.kPorCarro));
+    const despues = avanzarComercio([origen, destino], [] as Faccion[], [r.caravana], [], mapaSintetico(), RED_VACIA, [], instanteDeTest(CARAVANA_PREPARACION.kPorCarro));
     expect(despues.caravanas[0]!.estado).toBe('en_transito');
   });
 
@@ -608,18 +601,18 @@ describe('escolta sin héroe (Doc 3.13.4)', () => {
 
   it('prepararCaravanaManual engancha la escolta y rechaza por encima del cupo', () => {
     const origen = origenConMercado(1);
-    const r = prepararCaravanaManual(caravana1Carro(), origen, destino, { piedra: 100 }, [esc('e1')], mapaSintetico(), [], instanteDeTest(0));
+    const r = prepararCaravanaManual(caravana1Carro(), origen, destino, { piedra: 100 }, [esc('e1')], mapaSintetico(), SIN_TERRITORIO, instanteDeTest(0));
     expect(r.caravana.escoltaIds).toEqual(['e1']);
     expect(r.tropa[0]!.contenedor, 'la escuadra sale del campamento a la escolta').toEqual({ tipo: 'escolta', caravanaId: 'c1' });
 
     expect(() =>
-      prepararCaravanaManual(caravana1Carro(), origen, destino, { piedra: 100 }, [esc('e1'), esc('e2')], mapaSintetico(), [], instanteDeTest(0))
+      prepararCaravanaManual(caravana1Carro(), origen, destino, { piedra: 100 }, [esc('e1'), esc('e2')], mapaSintetico(), SIN_TERRITORIO, instanteDeTest(0))
     ).toThrow(CaravanaInvalidaError); // cupo nivel 1 = 1
   });
 
   it('cancelar libera la escolta: sus ids vuelven para ir al campamento', () => {
     const origen = origenConMercado(2);
-    const r = prepararCaravanaManual(caravana1Carro(), origen, destino, { piedra: 100 }, [esc('e1')], mapaSintetico(), [], instanteDeTest(0));
+    const r = prepararCaravanaManual(caravana1Carro(), origen, destino, { piedra: 100 }, [esc('e1')], mapaSintetico(), SIN_TERRITORIO, instanteDeTest(0));
     const cancelada = cancelarPreparacionCaravana({ ...r.caravana, estado: 'preparando' }, r.asentamiento);
     expect(cancelada.caravana.escoltaIds).toBeUndefined();
     expect(cancelada.escoltaLiberada).toEqual(['e1']);

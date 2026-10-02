@@ -1417,6 +1417,23 @@ export const COMISION = {
   distanciaParaBonusMax: 600,
 };
 
+// Red de caminos (Doc 1.6, `Consideraciones/Rutas_Caravana_Avanzadas_Definicion.md`). Cifras PLACEHOLDER.
+export const RED_CAMINOS = {
+  /** Una ruta deja de contar (peso) si su par lleva este tiempo sin lanzar una caravana. */
+  caducidadMinutos: 3 * 24 * 60,
+  /** Escalones visuales por peso: sendero por debajo de `camino`, calzada desde `calzada`. */
+  escalonCamino: 2,
+  escalonCalzada: 6,
+  /** Logro `logistica_campana` (BA-006 D30): una arista fuera de toda zona con estas rutas de estas Facciones. */
+  logroRutas: 10,
+  logroFacciones: 3,
+};
+
+/** Paso forzado por una ciudad ajena (decisión 6): parte de cada recurso que lleva la caravana, en especie. */
+export const PEAJE_PASO = {
+  tasa: 0.02,
+};
+
 // --- Sprint 4: Estructura política (Doc 2) ---
 
 /**

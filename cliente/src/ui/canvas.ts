@@ -1,4 +1,5 @@
-import type { Asentamiento, BiomaTipo, CaminoComercial, CampamentoBandido, Caravana, Edificio, EdificioTipo, Ejercito, Faccion, Point, RecursoTipo, ZonaFaccion } from '@motor/domain/types';
+import type { Asentamiento, BiomaTipo, CampamentoBandido, Caravana, Edificio, EdificioTipo, Ejercito, Faccion, Point, RecursoTipo, ZonaFaccion } from '@motor/domain/types';
+import type { TramoDeRed } from '@motor/engine/redCaminos';
 import type { Mapa } from '@motor/world/mapa';
 
 export const FACCION_COLORES = ['#c0392b', '#2980b9', '#27ae60', '#8e44ad', '#d35400', '#16a085'];
@@ -328,9 +329,9 @@ export interface DrawState {
   zonasFusionadas: ZonaFaccion[];
   facciones: Faccion[];
   caravanas: Caravana[];
-  /** Caminos comerciales (Fase 0.3, Doc 1.6) — estado de PARTIDA, a diferencia de los ríos (mundo generado):
-   * se dibujan en `draw()` en vivo, nunca en la capa cacheada `drawTerreno`. */
-  caminos: CaminoComercial[];
+  /** Red de caminos (Doc 1.6) en tramos fusionados (`tramosDeRed`) — estado de PARTIDA, a diferencia de los ríos
+   * (mundo generado): se dibujan en `draw()` en vivo, nunca en la capa cacheada `drawTerreno`. */
+  caminos: TramoDeRed[];
   /** Campamentos de bandidos (Doc 1.9) — estado de partida, se dibujan en vivo igual que las caravanas. */
   campamentosBandidos: CampamentoBandido[];
   /** Ejércitos en campaña (Doc 5.12) — estado de partida, en vivo como las caravanas. */
@@ -490,10 +491,11 @@ export function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, s
   // ríos, se dibujan aquí en vivo. Trazo discontinuo para distinguirlos de ríos (sólido, azul) y fronteras
   // de zona (sólido, color de Facción).
   ctx.strokeStyle = 'rgba(139, 90, 43, 0.9)';
-  ctx.lineWidth = 2.5;
   ctx.setLineDash([6, 4]);
   for (const camino of state.caminos) {
     if (camino.puntos.length < 2) continue;
+    // Grosor por escalón: sendero, camino, calzada.
+    ctx.lineWidth = [1.2, 2.5, 4][camino.escalon]!;
     ctx.beginPath();
     camino.puntos.forEach((p, i) => {
       const x = p.x * scale;

@@ -27,6 +27,7 @@ export interface PayloadYacimientoRegenerado {
   recurso: string;
 }
 import {
+  COSTE_MOVIMIENTO,
   costeEnPunto,
   esTransitable,
   distanciaARioMasCercano,
@@ -124,6 +125,9 @@ interface IndicesMundo {
    * haciendo divergir la simulación. El orden de generación es parte del contrato observable del mapa.
    */
   ordenGeneracion: Map<string, number>;
+  /** Índice espacial de BOSQUES para el coste de movimiento (`costeEnPunto`): clave "col,fila" -> discos
+   * que tocan esa celda. Aparte de `celdas` porque aquí un bosque se apunta en todas las celdas que pisa. */
+  bosquesPorCelda: Map<string, ZonaBosque[]>;
 }
 
 const indicesPorMundo = new WeakMap<MapaGenerado, IndicesMundo>();
@@ -136,8 +140,8 @@ function indicesDe(generado: MapaGenerado): IndicesMundo {
   const cacheado = indicesPorMundo.get(generado);
   if (cacheado) return cacheado;
 
-  // Los bosques NO se indexan espacialmente: son 25 y se consultan por solapamiento de círculos (radio
-  // contra radio), donde una rejilla por punto central no ayudaría — un bosque grande alcanza varias celdas.
+  // Los bosques no entran en `celdas` (rejilla por punto central): se consultan por solapamiento de círculos y
+  // un bosque grande alcanza varias celdas. Para el coste por punto tienen su propio índice, `bosquesPorCelda`.
   const celdas = new Map<string, NodoRecurso[]>();
   for (const nodo of generado.nodos) {
     const clave = claveCelda(nodo.posicion);
@@ -146,11 +150,24 @@ function indicesDe(generado: MapaGenerado): IndicesMundo {
     else celdas.set(clave, [nodo]);
   }
 
+  const bosquesPorCelda = new Map<string, ZonaBosque[]>();
+  for (const b of generado.bosques) {
+    for (let col = Math.floor((b.centro.x - b.radio) / LADO_CELDA); col <= Math.floor((b.centro.x + b.radio) / LADO_CELDA); col++) {
+      for (let fila = Math.floor((b.centro.y - b.radio) / LADO_CELDA); fila <= Math.floor((b.centro.y + b.radio) / LADO_CELDA); fila++) {
+        const clave = `${col},${fila}`;
+        const lista = bosquesPorCelda.get(clave);
+        if (lista) lista.push(b);
+        else bosquesPorCelda.set(clave, [b]);
+      }
+    }
+  }
+
   const indices: IndicesMundo = {
     nodosPorId: new Map(generado.nodos.map((n) => [n.id, n])),
     bosquesPorId: new Map(generado.bosques.map((b) => [b.id, b])),
     celdas,
     ordenGeneracion: new Map(generado.nodos.map((n, i) => [n.id, i])),
+    bosquesPorCelda,
   };
   indicesPorMundo.set(generado, indices);
   return indices;
@@ -174,6 +191,7 @@ export class Mapa {
   private readonly bosquesPorId: Map<string, ZonaBosque>;
   private readonly celdas: Map<string, NodoRecurso[]>;
   private readonly ordenGeneracion: Map<string, number>;
+  private readonly bosquesPorCelda: Map<string, ZonaBosque[]>;
 
   constructor(generado: MapaGenerado, estado: EstadoMapa) {
     this.generado = generado;
@@ -183,6 +201,13 @@ export class Mapa {
     this.bosquesPorId = indices.bosquesPorId;
     this.celdas = indices.celdas;
     this.ordenGeneracion = indices.ordenGeneracion;
+    this.bosquesPorCelda = indices.bosquesPorCelda;
+  }
+
+  /** El mundo generado, como clave de caché de lo que se deriva de él (el grafo de navegación,
+   * `world/grafoNavegacion.ts`): es el mismo objeto para todas las fachadas de una partida. */
+  get mundo(): object {
+    return this.generado;
   }
 
   /**
@@ -274,10 +299,15 @@ export class Mapa {
     return evaluarBioma(this.generado.elevacion, this.generado.fertilidad, this.generado.rios, p);
   }
 
-  /** Multiplicador de coste de movimiento en un punto (Fase 0.3) — ver `costeEnPunto`. Lo consulta el
-   * pathfinding (`world/rutas.ts`) y el avance por tick de las caravanas (`engine/movimiento.ts`). */
+  /** Multiplicador de coste de movimiento en un punto (Fase 0.3) — ver `costeEnPunto` — por el del bosque
+   * más denso que lo cubra (`COSTE_MOVIMIENTO.bosquePorDensidad`). Lo consulta el grafo de navegación
+   * (`world/grafoNavegacion.ts`) y el avance por tick (`engine/movimiento.ts`). */
   costeEnPunto(p: Point): number {
-    return costeEnPunto(this.generado.elevacion, p);
+    let densidad = 0;
+    for (const b of this.bosquesPorCelda.get(claveCelda(p)) ?? []) {
+      if (b.densidad > densidad && distancia(b.centro, p) < b.radio) densidad = b.densidad;
+    }
+    return costeEnPunto(this.generado.elevacion, p) * (1 + COSTE_MOVIMIENTO.bosquePorDensidad * densidad);
   }
 
   /** ¿Se puede pisar este punto? El agua es un OBSTÁCULO, no terreno caro (a petición del usuario) — ver

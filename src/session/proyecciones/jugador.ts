@@ -45,10 +45,11 @@
 import { cupoGuarnicion } from '../../engine/asentamientoQuery';
 import { estaHerido, guarnicionOcupada, liderazgoDeLoadout } from '../../engine/heroe';
 import { costeLiderazgo } from '../../engine/liderazgo';
+import { RED_VACIA, tramosDeRed } from '../../engine/redCaminos';
 import type {
   AcuerdoTrueque,
   Asentamiento,
-  CaminoComercial,
+  RedCaminos,
   CampamentoBandido,
   Caravana,
   CargosAsentamiento,
@@ -397,7 +398,7 @@ export interface ProyeccionJugador {
   titulos: Titulo[];
   /** Infraestructura del mundo (rutas comerciales trazadas). Solo los que la Facción ha PISADO: se filtran
    * como el terreno, por lo explorado, no por Facción como los `acuerdos`/`ordenes` — ver `caminosConocidos`. */
-  caminos: CaminoComercial[];
+  caminos: CaminoProyectado[];
   /** Entidades del MUNDO (bandidos). Solo los que se están VIENDO ahora mismo, sin memoria — ver
    * `campamentosAvistados`. */
   campamentosBandidos: CampamentoBandido[];
@@ -542,26 +543,30 @@ function nieblaDe(
   return proyectarNiebla(celdas, visibles, rejilla);
 }
 
+/** Un tramo de la red de caminos tal como se pinta: una cadena de aristas del mismo escalón (0 sendero, 1 camino,
+ * 2 calzada) fusionada en una polilínea (`tramosDeRed`, `engine/redCaminos.ts`). */
+export interface CaminoProyectado {
+  id: string;
+  escalon: 0 | 1 | 2;
+  puntos: Point[];
+}
+
 /**
- * Los caminos que la Facción CONOCE: los que ha pisado. Un camino es infraestructura estática, así que le
- * toca la misma regla que al terreno —"explorado", no "visible ahora"—: la calzada que recorriste sigue
- * donde estaba aunque hoy no la mires, igual que la colina que hay al lado.
+ * Los caminos que la Facción CONOCE. Un camino es infraestructura estática, así que le toca la misma regla que al
+ * terreno —"explorado", no "visible ahora"—: la calzada que recorriste sigue donde estaba aunque hoy no la mires.
  *
- * Se mide contra la máscara que YA viaja (`NieblaProyectada.celdas`) y no contra `memoria.exploracion` a
- * secas, para que el camino y el suelo que pisa no puedan discrepar: si la máscara destapa terreno por lo
- * que se ve ahora mismo —la ventana de un tick que `nieblaDe` cubre a propósito—, el camino que pase por
- * ahí viaja con él.
+ * Se mide contra la máscara que YA viaja (`NieblaProyectada.celdas`) y no contra `memoria.exploracion` a secas,
+ * para que el camino y el suelo que pisa no puedan discrepar.
  *
- * **Entero o nada**, y a propósito. Recortar el trazado a los tramos explorados no daría "medio camino":
- * daría una polilínea con agujeros que el cliente uniría con rectas falsas, o trozos sin identidad (el
- * `id` y los dos extremos son del camino, no de cada tramo). Lo que se acepta a cambio es que haber andado
- * un tramo revele qué dos plazas une — que es, en la ficción, justo lo que una calzada dice de sí misma.
+ * Por ARISTA: se ve la arista con algún extremo explorado, y lo visible se fusiona en tramos. Un camino a medio
+ * explorar sale como uno o varios tramos sueltos, cada uno una polilínea entera — nunca una con agujeros.
  */
-function caminosConocidos(caminos: readonly CaminoComercial[], niebla: NieblaProyectada): CaminoComercial[] {
+function caminosConocidos(red: RedCaminos, niebla: NieblaProyectada): CaminoProyectado[] {
   // La rejilla sale de la propia máscara y no de `rejillaDe`: son la misma geometría por construcción, y
   // leerla de aquí quita de raíz la posibilidad de descifrar la máscara con una rejilla distinta.
   const rejilla: Rejilla = { columnas: niebla.columnas, filas: niebla.filas, tamanoCelda: niebla.tamanoCelda };
-  return caminos.filter((c) => c.puntos.some((p) => estaExplorado(niebla.celdas, rejilla, p)));
+  const explorado = (p: Point) => estaExplorado(niebla.celdas, rejilla, p);
+  return tramosDeRed(red, (a, b) => explorado(a) || explorado(b)).map((t, i) => ({ id: `tramo-${i}`, ...t }));
 }
 
 /**
@@ -809,7 +814,7 @@ export function proyectarParaJugador(
     ],
     relaciones: estado.relaciones,
     titulos: estado.titulos,
-    caminos: caminosConocidos(estado.caminos, exploracion),
+    caminos: caminosConocidos(estado.red ?? RED_VACIA, exploracion),
     campamentosBandidos: campamentosAvistados(estado.campamentosBandidos, ojosAsent, ojosEjercito, tropa),
     historial: estado.historialHeroes[heroeId] ?? [],
     zonas: zonasPropias,

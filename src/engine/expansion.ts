@@ -116,7 +116,7 @@ export function lanzarCaravanaFundacion(
   // OBLIGATORIO y no una cortesía — `Caravana.ruta` es opcional, así que dejar pasar un `undefined` no daría
   // error de tipos y la caravana caería a la fórmula de línea recta de siempre (`avanzarCaravanas`,
   // engine/trade.ts), es decir, cruzaría el mar en silencio.
-  const ruta = calcularRuta(mapa, origen.posicion, destino);
+  const ruta = calcularRuta(mapa, origen.posicion, destino, { pasosRio: asentamientosExistentes.map((a) => a.posicion) });
   if (!ruta) {
     throw new ExpansionInvalidaError('No hay ruta por tierra hasta ese punto de fundación: el agua no se cruza.');
   }

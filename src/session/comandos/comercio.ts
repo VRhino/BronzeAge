@@ -19,7 +19,8 @@ import { puedeLlevar } from '../../engine/liderazgo';
 import { alCampamentoPorIds, conEscuadrones } from '../../engine/tropa';
 import { colocarOrdenMercado as colocarOrdenMercadoEngine, comerciarEnPlaza as comerciarEnPlazaEngine } from '../../engine/market';
 import { capacidadCargaDe } from '../../engine/ejercitos';
-import { asegurarCaminoComercial } from '../../engine/caminos';
+import { computeTodasLasZonas } from '../../engine/zones';
+import { RED_VACIA } from '../../engine/redCaminos';
 import type { GameSessionState } from '../estado';
 import { exito } from './tipos';
 import { comando, conAsentamiento, exigirAcuerdo, exigirAsentamiento, exigirCaravana, exigirColumnaDe, rechazar } from './ayudas';
@@ -34,10 +35,6 @@ export interface PayloadTruequePropuesto {
   cantidadA: number;
   recursoB: RecursoTipo;
   cantidadB: number;
-}
-export interface PayloadCaminoComercial {
-  asentamientoAId: string;
-  asentamientoBId: string;
 }
 export interface PayloadOrdenColocada {
   ordenId: string;
@@ -104,10 +101,10 @@ export interface ParamsResponderTrueque {
 }
 
 /**
- * El lado receptor acepta (Doc 3.2). Es aqui, y no al proponer, donde el acuerdo empieza a obligar y donde
- * nace el Camino Comercial del par (Doc 1.6): la relacion comercial existe cuando los dos han dicho que si.
+ * El lado receptor acepta (Doc 3.2). Es aqui, y no al proponer, donde el acuerdo empieza a obligar. El camino no
+ * nace aqui sino con las caravanas que lo recorren (red de caminos, Doc 1.6, `engine/redCaminos.ts`).
  */
-export const aceptarTrueque = comando<ParamsResponderTrueque, { acuerdoId: string }>((estado, mapa, ctx, params) => {
+export const aceptarTrueque = comando<ParamsResponderTrueque, { acuerdoId: string }>((estado, _mapa, ctx, params) => {
   const acuerdo = aceptarTruequeEngine(exigirAcuerdo(estado, params.acuerdoId), ctx.instante);
 
   const narrados: EventoDeComando[] = [
@@ -118,21 +115,7 @@ export const aceptarTrueque = comando<ParamsResponderTrueque, { acuerdoId: strin
     },
   ];
 
-  // Los asentamientos existen seguro llegados aqui (el acuerdo los referencia y `proponerTrueque` los
-  // resolvio al crearlo); estos `exigir` estan por no reintroducir un `find` sin guarda.
-  const a = exigirAsentamiento(estado, acuerdo.asentamientoAId);
-  const b = exigirAsentamiento(estado, acuerdo.asentamientoBId);
-  const previos = estado.caminos.length;
-  const caminos = asegurarCaminoComercial(estado.caminos, mapa, a, b);
-  if (caminos.length > previos) {
-    narrados.push({
-      codigo: 'comercio.camino_creado',
-      mensaje: `Nuevo camino comercial entre ${a.id} y ${b.id}.`,
-      payload: { asentamientoAId: a.id, asentamientoBId: b.id } satisfies PayloadCaminoComercial,
-    });
-  }
-
-  const siguiente: GameSessionState = { ...estado, acuerdos: conAcuerdo(estado.acuerdos, acuerdo), caminos };
+  const siguiente: GameSessionState = { ...estado, acuerdos: conAcuerdo(estado.acuerdos, acuerdo) };
   return exito(siguiente, construirEventos(ctx, narrados), { acuerdoId: acuerdo.id });
 });
 
@@ -426,10 +409,12 @@ export const prepararCaravana = comando<ParamsPrepararCaravana, { caravanaId: st
       }
     }
 
-    const r = prepararCaravanaManualEngine(caravana, origen, destino, params.carga, escolta, mapa, estado.caminos, ctx.instante);
+    const territorio = { red: estado.red ?? RED_VACIA, asentamientos: estado.asentamientos, zonas: computeTodasLasZonas(estado.asentamientos) };
+    const r = prepararCaravanaManualEngine(caravana, origen, destino, params.carga, escolta, mapa, territorio, ctx.instante);
     const siguiente: GameSessionState = {
       ...conAsentamiento(conCaravana(estado, r.caravana), r.asentamiento),
       heroes: conEscuadrones(estado.heroes, r.tropa),
+      red: r.red,
     };
     return exito(
       siguiente,

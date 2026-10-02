@@ -125,6 +125,24 @@ export function computeTodasLasZonas(asentamientos: Asentamiento[]): ZonaInfluen
 }
 
 /**
+ * Inmunidad de las caravanas (Doc 1.6, decisión 7): ¿está `p` dentro de la zona de un asentamiento que NO es del
+ * atacante? La zona propia, la neutral y la aliada son refugio; la del que ataca, no. Sin `atacanteFaccionId`
+ * (bandidos) cualquier zona protege.
+ */
+export function enRefugio(
+  p: Point,
+  zonas: readonly ZonaInfluencia[],
+  asentamientos: readonly Asentamiento[],
+  atacanteFaccionId?: string
+): boolean {
+  return zonas.some(
+    (z) =>
+      pointInPolygon(p, z.poligono) &&
+      (atacanteFaccionId === undefined || asentamientos.find((a) => a.id === z.asentamientoId)?.faccionId !== atacanteFaccionId)
+  );
+}
+
+/**
  * Las zonas de una MISMA facción, fusionadas en una sola silueta por facción — para DIBUJAR el mapa general
  * (a petición del usuario), nunca para decidir reglas.
  *

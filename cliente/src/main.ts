@@ -4,6 +4,7 @@
 // de dominio: eso es responsabilidad exclusiva de `gameStore`. Los tipos de `./domain/types` se
 // importan solo como `type` para tipar lo que se lee — no acoplan a ninguna lógica.
 import type { Asentamiento, BiomaTipo, CargoTipo, Edificio, Faccion, RegionId } from '@motor/domain/types';
+import { RED_VACIA, tramosDeRed } from '@motor/engine/redCaminos';
 import { ApiError } from './app/apiCliente';
 import { CATALOGOS, crearGameStore, fmtTiempoMundo, type GameState, type GameStore, type EstadoMejoraEdificio } from './app/gameStore';
 import { draw, drawAsentamiento, drawFiltroFertilidad, drawTerreno, faccionColor, BIOMA_COLOR, BIOMA_COLOR_SIMPLE, RECURSO_COLOR, RECURSOS_EN_MAPA, EDIFICIO_COLOR, FACCION_COLORES, type DrawState } from './ui/canvas';
@@ -1934,7 +1935,7 @@ function render(): void {
       zonasFusionadas: gameStore.getZonasFusionadas(zonas, state.asentamientos),
       facciones: state.facciones,
       caravanas: state.caravanas,
-      caminos: state.caminos,
+      caminos: tramosDeRed(state.red ?? RED_VACIA),
       campamentosBandidos: state.campamentosBandidos,
       ejercitos: state.ejercitos,
     };

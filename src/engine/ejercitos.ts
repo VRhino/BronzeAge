@@ -8,7 +8,7 @@
 // —de `campamento` a `ejercito`, doc 01 §13— y por eso la guarnición es lo único que defiende (Doc 5.12.4) y lo
 // único que come de la plaza. Aquí se trabaja sobre vistas con la tropa puesta (`EjercitoConTropa`, ver
 // `engine/tropa.ts`); quien llama las monta y las deshace.
-import type { AcuerdoTrueque, Asentamiento, CampamentoBandido, Caravana, Ejercito, Escuadron, Faccion, Heroe, Point, RelacionPolitica, UbicacionHeroe } from '../domain/types';
+import type { AcuerdoTrueque, Asentamiento, CampamentoBandido, Caravana, Ejercito, Escuadron, Faccion, Heroe, Point, RedCaminos, RelacionPolitica, UbicacionHeroe, ZonaInfluencia } from '../domain/types';
 import type { Mapa } from '../world/mapa';
 import { calcularRuta } from '../world/rutas';
 import { distancia } from '../world/geometria';
@@ -36,6 +36,8 @@ import type { Instante } from '../domain/tiempo';
 import type { RandomFn } from '../worldgen';
 import { asediarConEjercito, atacarCampamentoConColumna, desalojarResidentes, encuentroEntreEjercitos, interceptarCaravanaConEjercito } from './combate';
 import { avanzarPosicionEnRuta } from './movimiento';
+import { aristasDeRed, RED_VACIA } from './redCaminos';
+import { enRefugio } from './zones';
 import { agregarRecurso, cantidadDisponible, descontarRecursos } from './almacen';
 import { avanzarRacion, consumoRacionDeEscuadrones, reservaDeTrigo } from './tropas';
 import { puedeLlevar } from './liderazgo';
@@ -350,7 +352,7 @@ export function movilizarEjercito(
   const destino = puntoDeObjetivo(objetivo, asentamientos);
   // El agua es infranqueable (`world/rutas.ts`): si no hay camino por tierra, no se sale. Un ejército no se
   // embarca — y una ruta recta de reserva sería precisamente una marcha por el mar.
-  const ruta = calcularRuta(mapa, asentamiento.posicion, destino);
+  const ruta = calcularRuta(mapa, asentamiento.posicion, destino, { pasosRio: asentamientos.map((a) => a.posicion) });
   if (!ruta) throw new MovilizacionInvalidaError('No hay ruta por tierra hasta ese destino.');
   const idsFuera = new Set(escuadrones.map((e) => e.id));
   const carga = cargarCarro(asentamiento, consumoRacionDeEscuadrones(campamento.filter((e) => !idsFuera.has(e.id))), 0, capacidadCarrosDe(1));
@@ -767,7 +769,7 @@ export function replegarEjercito(
     };
   }
 
-  const vuelta = calcularRuta(mapa, ejercito.posicionActual, origen.posicion);
+  const vuelta = calcularRuta(mapa, ejercito.posicionActual, origen.posicion, { pasosRio: [origen.posicion] });
   if (!vuelta) throw new MovilizacionInvalidaError('No hay ruta por tierra de vuelta a casa desde aquí.');
 
   return { ...ejercito, estado: 'regresando', objetivo, ruta: vuelta, progreso: 0 };
@@ -805,7 +807,7 @@ export function marcharA(
 
   const destino = puntoDeObjetivo(objetivo, asentamientos);
   // El agua es infranqueable, igual que al movilizar: un viajero tampoco se embarca.
-  const ruta = calcularRuta(mapa, ejercito.posicionActual, destino);
+  const ruta = calcularRuta(mapa, ejercito.posicionActual, destino, { pasosRio: asentamientos.map((a) => a.posicion) });
   if (!ruta) throw new MovilizacionInvalidaError('No hay ruta por tierra hasta ese destino.');
 
   // Elegir un destino nuevo es dejar de ir detras de alguien (Doc 5.12.3): no hay forma de marchar a un
@@ -1182,9 +1184,14 @@ export function interceptar(
   capacidadCarga: number,
   heridos: ReadonlySet<string>,
   rng: RandomFn,
-  heroes: readonly Heroe[] = []
+  heroes: readonly Heroe[] = [],
+  /** Inmunidad (Doc 1.6): zonas y asentamientos para saber si la caravana está en un refugio. */
+  territorio: { zonas: readonly ZonaInfluencia[]; asentamientos: readonly Asentamiento[] } = { zonas: [], asentamientos: [] }
 ): ReturnType<typeof interceptarCaravanaConEjercito> & { vencidos: string[] } {
   validarAlcance(ejercito, caravana.posicionActual, heridos, 'interceptar');
+  if (enRefugio(caravana.posicionActual, territorio.zonas, territorio.asentamientos, ejercito.faccionId)) {
+    throw new MovilizacionInvalidaError('La caravana está dentro de una zona de influencia que no es tuya: ahí no se la puede atacar.');
+  }
   const r = interceptarCaravanaConEjercito(enBatalla(ejercito, heridos, heroes), caravana, capacidadCarga, rng);
   return { ...r, ejercito: conApartadas(r.ejercito, ejercito), vencidos: r.capturada ? [] : ejercito.participantes.map((p) => p.heroeId) };
 }
@@ -1384,6 +1391,10 @@ export interface ContextoAvanceEjercitos {
   mapa: Mapa;
   instante: Instante;
   rng: RandomFn;
+  /** Zonas de influencia: una caravana dentro de una que no es del atacante no se puede interceptar (Doc 1.6). */
+  zonas?: readonly ZonaInfluencia[];
+  /** Red de caminos: sobre sus aristas se marcha más rápido (Doc 1.6, decisión 9). Ausente = vacía. */
+  red?: RedCaminos;
   /** Dueños de las escuadras (`engine/tropa.ts`), y dónde queda cada uno al volver a casa. */
   heroes: readonly Heroe[];
   /** Batallas de Unity (doc 01 §15). Con `abrirEnUnity`, un combate donde entra algún héroe humano sano no se resuelve
@@ -1435,6 +1446,7 @@ export interface ResultadoAvanceEjercitos {
  */
 export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: ContextoAvanceEjercitos): ResultadoAvanceEjercitos {
   const { asentamientos, caravanas, facciones, relaciones, mapa, instante, rng } = contexto;
+  const caminos = aristasDeRed(contexto.red ?? RED_VACIA);
   if (ejercitos.length === 0) {
     return {
       ejercitos: [...ejercitos],
@@ -1552,7 +1564,7 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
 
     // 3. Mover (estacionado acampa: no avanza, pero ya comió arriba).
     if (ejercito.estado !== 'estacionado') {
-      const avance = avanzarPosicionEnRuta(mapa, ejercito.ruta, ejercito.progreso, velocidadDeEjercito(ejercito));
+      const avance = avanzarPosicionEnRuta(mapa, ejercito.ruta, ejercito.progreso, velocidadDeEjercito(ejercito), caminos);
       ejercito = { ...ejercito, progreso: avance.progreso, posicionActual: avance.posicion };
     }
 
@@ -1653,7 +1665,8 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
     rng,
     humanos,
     abrirEnUnity ? { enCombate } : undefined,
-    heroes
+    heroes,
+    contexto.zonas ?? []
   );
   eventos.push(...conEncuentros.eventos);
 
@@ -1719,7 +1732,9 @@ function resolverEncuentros(
   /** Con batallas de Unity: lo que ya va a una batalla este tick. */
   unity: { enCombate: ReadonlySet<string> } | undefined,
   /** Para el tope de héroes por bando (`enBatalla`). */
-  heroes: readonly Heroe[]
+  heroes: readonly Heroe[],
+  /** Inmunidad (Doc 1.6): dentro de una zona que no es del atacante, una caravana no se intercepta. */
+  zonas: readonly ZonaInfluencia[]
 ): {
   ejercitos: EjercitoConTropa[];
   caravanas: CaravanaConEscolta[];
@@ -1777,6 +1792,7 @@ function resolverEncuentros(
               // Sin dueño identificable no se puede decidir si es enemiga, así que no se toca.
               return duena !== undefined && enemiga(ejercito.faccionId, duena);
             })
+            .filter((c) => !enRefugio(c.posicionActual, zonas, [...asentamientosPorId.values()], ejercito.faccionId))
             .filter((c) => distancia(c.posicionActual, ejercito.posicionActual) <= LOGISTICA.radioEncuentro)
         : [];
 

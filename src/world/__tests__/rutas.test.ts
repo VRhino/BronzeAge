@@ -5,10 +5,11 @@
 //     contra el generador de verdad, mismo criterio que `world/__tests__/mapa.test.ts`.
 
 import { describe, expect, it } from 'vitest';
-import type { Point } from '../../domain/types';
+import type { Point, RioZona } from '../../domain/types';
 import { generarMapa, MAPA_DEFAULT } from '../../worldgen';
 import { crearMapa } from '../mapa';
-import { calcularRuta } from '../rutas';
+import { calcularRuta, factorAtraccion } from '../rutas';
+import { claveArista, grafoDe, hayVado } from '../grafoNavegacion';
 import { distancia } from '../geometria';
 import type { Mapa } from '../mapa';
 
@@ -21,9 +22,13 @@ function mapaSintetico(
   ancho: number,
   alto: number,
   costeEnPunto: (p: Point) => number,
-  esTransitable: (p: Point) => boolean = () => true
+  esTransitable: (p: Point) => boolean = () => true,
+  rios: RioZona[] = []
 ): Mapa {
-  return { limites: { ancho, alto }, costeEnPunto, esTransitable } as unknown as Mapa;
+  const mapa = { limites: { ancho, alto }, costeEnPunto, esTransitable, listarRios: () => rios } as unknown as Mapa & { mundo: object };
+  // Clave de caché del grafo de navegación: cada mapa sintético es su propio mundo.
+  Object.assign(mapa, { mundo: mapa });
+  return mapa;
 }
 
 function longitudRuta(puntos: readonly Point[]): number {
@@ -34,7 +39,7 @@ function longitudRuta(puntos: readonly Point[]): number {
 
 /** Coste total acumulado de recorrer `puntos` (suma de longitud×coste medio de cada tramo) — mismo cálculo
  * que hace `world/rutas.ts` internamente para las aristas de la malla, aplicado aquí a un camino ya hecho.
- * Los tramos de una `ruta` de `calcularRuta` ya son cortos (separados ~`ESPACIADO_MALLA`), así que el
+ * Los tramos de una `ruta` de `calcularRuta` ya son cortos (separados ~la separación del grafo de navegación), así que el
  * promedio de extremos por tramo es una buena aproximación — para una línea recta LARGA de solo 2 puntos
  * (`costeLineaRecta`, abajo) hace falta subdividir primero, o el promedio de extremos ignora el obstáculo
  * que haya en medio. */
@@ -141,7 +146,7 @@ describe('calcularRuta — el agua es un OBSTÁCULO, no terreno caro (2026-09-02
   });
 
   it('un tramo CORTO tampoco cruza una lengua de agua', () => {
-    // Por debajo de `ESPACIADO_MALLA` no se monta la malla, así que el caso corto necesita su propia
+    // Por debajo de la separación del grafo no se busca en él, así que el caso corto necesita su propia
     // comprobación: sin ella, dos puntos casi pegados a ambos lados de un canal se unirían en recta.
     const canal = (p: Point) => !(p.x > 995 && p.x < 1005);
     const mapa = mapaSintetico(2000, 2000, () => 1, canal);
@@ -184,5 +189,73 @@ describe('calcularRuta — mapa real (generarMapa)', () => {
     const origen: Point = { x: 300, y: 1600 };
     const destino: Point = { x: 1700, y: 300 };
     expect(calcularRuta(mapa, origen, destino)).toEqual(calcularRuta(mapa, origen, destino));
+  });
+});
+
+describe('calcularRuta — ríos: se cruzan por un vado o por una ciudad ribereña (decisión 2)', () => {
+  // Río vertical en x=1000 que nace arriba (y=0): el primer medio intervalo es arroyo y luego un vado cada
+  // `separacionVados`. Muestreado cada 8, como los de `worldgen/rios.ts`.
+  const rio: RioZona = {
+    id: 'rio-1',
+    puntos: Array.from({ length: 251 }, (_, i) => ({ x: 1000, y: i * 8 })),
+    terminaEnLago: false,
+    navegable: false,
+  };
+
+  /** Ordenada en la que la ruta cruza x=1000 (la primera vez). */
+  function cruceEnY(ruta: readonly Point[]): number {
+    for (let i = 0; i < ruta.length - 1; i++) {
+      const a = ruta[i]!;
+      const b = ruta[i + 1]!;
+      if ((a.x - 1000) * (b.x - 1000) <= 0 && a.x !== b.x) return a.y + ((1000 - a.x) / (b.x - a.x)) * (b.y - a.y);
+    }
+    throw new Error('la ruta no cruza el río');
+  }
+
+  it('sin ciudad, cruza por un vado aunque la recta pase lejos de él', () => {
+    const mapa = mapaSintetico(2000, 2000, () => 1, () => true, [rio]);
+    const grafo = grafoDe(mapa);
+    const ruta = calcularRuta(mapa, { x: 600, y: 1050 }, { x: 1400, y: 1050 })!;
+    expect(ruta).toBeDefined();
+    expect(hayVado(cruceEnY(ruta), grafo.separacionVados, grafo.espaciado)).toBe(true);
+  });
+
+  it('un tramo corto que cruza el río fuera de vado no se resuelve en recta', () => {
+    const mapa = mapaSintetico(2000, 2000, () => 1, () => true, [rio]);
+    const ruta = calcularRuta(mapa, { x: 990, y: 1050 }, { x: 1010, y: 1050 });
+    expect(ruta).not.toEqual([{ x: 990, y: 1050 }, { x: 1010, y: 1050 }]);
+  });
+
+  it('con una ciudad a la orilla, se cruza por la ciudad', () => {
+    const mapa = mapaSintetico(2000, 2000, () => 1, () => true, [rio]);
+    const ciudad: Point = { x: 1000, y: 1050 };
+    const ruta = calcularRuta(mapa, { x: 600, y: 1050 }, { x: 1400, y: 1050 }, { pasosRio: [ciudad] })!;
+    expect(Math.abs(cruceEnY(ruta) - ciudad.y)).toBeLessThanOrEqual(grafoDe(mapa).radioPasoCiudad);
+  });
+});
+
+describe('calcularRuta — atracción de la red de caminos (decisión 5)', () => {
+  it('se desvía a un camino con peso paralelo a la recta', () => {
+    const mapa = mapaSintetico(2000, 2000, () => 1);
+    const { espaciado } = grafoDe(mapa);
+    const y = espaciado * 26; // una fila de nodos a ~170 de la recta y=1000
+    const pesos = new Map<string, number>();
+    for (let x = espaciado * 3; x < 1900; x += espaciado) pesos.set(claveArista({ x, y }, { x: x + espaciado, y }), 10);
+
+    const ruta = calcularRuta(mapa, { x: 100, y: 1000 }, { x: 1900, y: 1000 }, { pesos })!;
+    let sobreCamino = 0;
+    for (let i = 0; i < ruta.length - 1; i++) if (pesos.has(claveArista(ruta[i]!, ruta[i + 1]!))) sobreCamino++;
+    expect(sobreCamino).toBeGreaterThan(20);
+    expect(factorAtraccion(10)).toBeLessThan(1);
+  });
+});
+
+describe('coste de movimiento — el bosque frena (decisión 1)', () => {
+  it('dentro de un bosque el coste se multiplica por 1 + 2·densidad', () => {
+    const generado = generarMapa({ ancho: MAPA_DEFAULT.ancho, alto: MAPA_DEFAULT.alto, seed: 1 });
+    const mapa = crearMapa(generado);
+    const bosque = generado.bosques.find((b) => !generado.bosques.some((o) => o !== b && distancia(o.centro, b.centro) < o.radio))!;
+    const sinBosque = crearMapa({ ...generado, bosques: [] });
+    expect(mapa.costeEnPunto(bosque.centro) / sinBosque.costeEnPunto(bosque.centro)).toBeCloseTo(1 + 2 * bosque.densidad, 10);
   });
 });

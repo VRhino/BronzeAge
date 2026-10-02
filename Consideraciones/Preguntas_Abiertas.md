@@ -24,8 +24,8 @@ Pendiente (fases posteriores): mapa fijo vs. procedural con relieve; puntos de i
 
 Pendiente (Fase 0.3, nuevo):
 - Bloqueo/escolta militar de chokepoints (Doc 1.5): solo se implementó el peaje — el bloqueo necesita un concepto de "guerra activa" entre Facciones que no existe hoy (el combate es cálculo puntual, no presencia física continua en el mapa).
-- Vados de río como chokepoint: esta pasada solo detecta puertos de montaña (puntos de silla del campo de elevación); un vado necesitaría su propio criterio de detección sobre `RioZona`.
-- Calibración por simulación de `COSTE_MOVIMIENTO` (coste por tipo de terreno, bonus de camino) y `CHOKEPOINTS_PEAJE.oro`: valores placeholder, igual que el resto de cifras nuevas del proyecto.
+- Vados de río como chokepoint: esta pasada solo detecta puertos de montaña (puntos de silla del campo de elevación); un vado necesitaría su propio criterio de detección sobre `RioZona`. Desde 2026-10-02 los vados existen (red de caminos, Doc 1.6: derivados de la longitud del cauce, `hayVado` en `world/grafoNavegacion.ts`), así que el criterio de detección ya está; falta decidir si dan control/peaje como los puertos.
+- Calibración por simulación de `COSTE_MOVIMIENTO` (coste por tipo de terreno, bonus de camino, y desde 2026-10-02 el factor de bosque, que alarga los viajes ~1,63× en el mapa de 2000) y de `NAVEGACION`/`RED_CAMINOS`/`PEAJE_PASO` y `CHOKEPOINTS_PEAJE.oro`: valores placeholder, igual que el resto de cifras nuevas del proyecto.
 
 ## 4. Exploración — sin abordar
 - ¿Niebla de guerra / mapa oculto hasta explorarlo?

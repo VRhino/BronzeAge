@@ -569,7 +569,7 @@ export interface Asentamiento {
   /** Nombre editable por el jugador (a petición del usuario) — puramente de presentación, igual que
    * `Faccion.nombre`. `id` sigue siendo la llave interna estable (lookups, `origenAsentamientoId` /
    * `destinoAsentamientoId` de `Caravana`, `asentamientoId` de `AcuerdoTrueque`/`OrdenMercado`/
-   * `CaminoComercial`/`ZonaInfluencia`, etc.) y NUNCA cambia al renombrar. Ausente = usar `id` como display
+   * `RutaComercial`/`ZonaInfluencia`, etc.) y NUNCA cambia al renombrar. Ausente = usar `id` como display
    * (asentamientos ya existentes de partidas guardadas antes de esta función). */
   nombre?: string;
   faccionId: string;
@@ -822,6 +822,9 @@ export interface Caravana {
    * despacharse. Ausente solo en estado `'disponible'` (flota propia sin asignar todavía, Doc 3.2): ahí no
    * hay trayecto que recorrer hasta la siguiente asignación. */
   ruta?: Point[];
+  /** Pasos forzados por ciudades ajenas que aún no ha cruzado (decisión 6): al llegar al `progreso` de cada uno,
+   * deja en su almacén `PEAJE_PASO.tasa` de cada recurso que lleva. Ausente = ninguno. */
+  peajes?: { asentamientoId: string; progreso: number }[];
   /** Acuerdo de trueque que generó esta caravana (Doc 3.2) — indica a qué lado del acuerdo pertenece. */
   origenAcuerdoId?: string;
   ladoAcuerdo?: 'A' | 'B';
@@ -1012,17 +1015,30 @@ export interface AcuerdoTrueque {
 }
 
 /**
- * Camino comercial (Fase 0.3, Doc 1.6): se genera automáticamente al establecer la primera relación
- * comercial entre dos asentamientos (ver `engine/caminos.ts`, disparado desde `GameStore.proponerTrueque`).
- * Estado de PARTIDA, no de mundo generado — depende de qué relaciones existen, no de la seed. Persiste
- * aunque el `AcuerdoTrueque` que lo originó expire o se cumpla (PENDIENTE en `Preguntas_Abiertas.md`: qué
- * pasa si se rompe la relación — de momento el camino queda como infraestructura física permanente).
+ * Una ruta comercial VIGENTE (Doc 1.6, ficha `Rutas_Caravana_Avanzadas_Definicion.md` decisión 4): el par
+ * origen→destino de una caravana comercial y las aristas de su trazado actual. Se recalcula en cada lanzamiento;
+ * caduca si el par deja de lanzar (`RED_CAMINOS.caducidadMinutos`) o desaparece uno de sus asentamientos.
  */
-export interface CaminoComercial {
+export interface RutaComercial {
+  /** `${origenId}>${destinoId}`. */
   id: string;
-  asentamientoAId: string;
-  asentamientoBId: string;
-  puntos: Point[];
+  origenId: string;
+  destinoId: string;
+  /** Facción del origen al lanzar: el logro de `logistica_campana` cuenta Facciones distintas. */
+  faccionId: string;
+  /** Claves de las aristas (`claveArista`, `world/grafoNavegacion.ts`) del trazado vigente. */
+  aristas: string[];
+  ultimoLanzamiento: Instante;
+}
+
+/**
+ * Red de caminos de la partida (Doc 1.6): estado de PARTIDA, no de mundo. Una arista recorrida por alguna ruta
+ * entra en `aristas` y no sale NUNCA (infraestructura permanente: sin rutas queda como sendero). Su peso son
+ * las rutas vigentes que la recorren, y se deriva (`pesosDeRed`, `engine/redCaminos.ts`).
+ */
+export interface RedCaminos {
+  aristas: string[];
+  rutas: RutaComercial[];
 }
 
 /** Orden de compra/venta en el Mercado de un asentamiento, pagada en oro (Doc 3.3/3.4). */

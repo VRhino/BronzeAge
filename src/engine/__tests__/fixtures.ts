@@ -154,7 +154,6 @@ export function crearEstadoDeTest(
     ordenes: [],
     relaciones: [],
     titulos: [],
-    caminos: [],
     campamentosBandidos: [],
     heroes: [],
     ...overrides,

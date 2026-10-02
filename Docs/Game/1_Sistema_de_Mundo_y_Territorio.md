@@ -103,11 +103,27 @@ El comercio por mar está fuera de alcance (Doc 3.11): sin barcos, dos costas en
 ## 1.5 Chokepoints estratégicos (heredado de Iberia)
 Puertos de montaña detectados como PUNTOS DE SILLA del campo de elevación (mínimo local a lo largo de la cresta, máximo local en la dirección perpendicular — geometría determinista por seed). El asentamiento cuya zona de influencia CUBRE un chokepoint lo controla; las caravanas comerciales de una Facción rival cuya ruta pasa cerca pagan un PEAJE EN ORO al controlador, cobrado al llegar a destino (ver `Consideraciones/Fase_0_3_Definicion.md`). Solo los puertos de montaña son chokepoints; los vados de río no.
 
-## 1.6 Caminos comerciales automáticos
-- Al ACEPTARSE un trueque entre dos asentamientos (Doc 3.2) se genera AUTOMÁTICAMENTE un camino físico — una polilínea calculada con pathfinding (A* sobre coste de terreno) que rodea relieve costoso en vez de ir en línea recta, el mismo algoritmo que usa cualquier caravana para su propia ruta (ver 1.1, Doc 3.6). El jugador no lo construye.
-- El camino AFECTA LA VELOCIDAD de las caravanas que lo siguen (más rápido que campo abierto — ver Doc 3.6).
-- MEJORABLE vía Políticas: la política "Rutas Rápidas" (Tesorero, Doc 3.12).
-- Si se rompe la relación comercial que originó el camino, el camino queda como infraestructura física PERMANENTE (no se elimina).
+## 1.6 Red de caminos
+Los caminos no se construyen: **los hace el uso**. Diseño y decisiones en `Consideraciones/Rutas_Caravana_Avanzadas_Definicion.md`. Cifras placeholder.
+
+**El terreno por el que se viaja** (caravanas, ejércitos y fundación, con el mismo pathfinding):
+- **El agua no se cruza** (1.0b).
+- **Los ríos tampoco, salvo por un vado.** El tramo alto, cerca del nacimiento, es arroyo y se cruza por cualquier sitio; aguas abajo hay un vado cada ~300 u en el mapa de 2000 (~2 km en el regional). Una ciudad a orillas del río es también paso: el río se cruza por la ciudad. Los vados salen de la geometría del río, no del azar.
+- **El bosque frena, no bloquea**: dentro de un bosque el coste de moverse se multiplica por `1 + 2 × densidad`, así que un bosque denso cuesta casi el triple. Las rutas lo rodean cuando el rodeo compensa.
+
+**Los caminos.**
+- Una **ruta** es el par origen → destino de una caravana **comercial** (por trueque o lanzada a mano). Cada lanzamiento traza la ruta y la registra en la red: los tramos que recorre pasan a ser camino. Dos rutas que pisan el mismo tramo lo comparten — los caminos se fusionan solos.
+- El **peso** de un tramo son las rutas vigentes que lo recorren. Una ruta deja de estar vigente si su par pasa 3 días sin lanzar o desaparece uno de sus asentamientos. Un tramo **nunca desaparece**: sin rutas queda como sendero (infraestructura permanente).
+- Se pinta en tres escalones por peso: **sendero** (0-1), **camino** (2-5), **calzada** (6+).
+- **Atracción**: al trazar, un tramo con peso cuesta menos (× `max(0,5, 1 − 0,1 × peso)`). Las rutas nuevas se desvían hacia los caminos principales, y como el trazado de un par se recalcula en cada lanzamiento, las rutas viejas migran solas a ellos.
+- **Velocidad**: sobre cualquier tramo de la red se avanza al doble (`factorCamino` 0,5), tramo a tramo — no el viaje entero. Mejorable con la política "Rutas Rápidas" (Tesorero, Doc 3.12).
+- **Ejércitos: terreno sí, red no.** Marchan más rápido sobre un camino, pero no lo crean ni le suman peso, y no pagan peaje. Las caravanas de fundación tampoco cuentan como ruta.
+
+**Paso por ciudades** (Doc 3.6, 3.10):
+- Si el trazado de una caravana comercial cruza la zona de influencia de un asentamiento **ajeno** (de otra Facción), se fuerza el paso por esa ciudad y la caravana deja allí un **peaje en especie del 2 % de cada recurso que lleve**, sin pararse. Varias ciudades en el camino: se pasa por todas, en orden. A la vuelta va vacía y no paga. Una ciudad propia no fuerza nada.
+- **Inmunidad**: dentro de una zona de influencia que no sea del atacante, una caravana no puede ser atacada — ni por bandidos (que no tienen zona: cualquier zona protege) ni interceptada por una columna. La zona propia del atacante no es refugio.
+
+**Logro de `logistica_campana`** (Doc 6, Era IV; BA-006 D30): existe un tramo **fuera de toda zona de influencia** recorrido por al menos **10 rutas de 3 Facciones distintas**.
 
 ## 1.7 Cap de fundación de asentamientos por Facción (inspirado en Rise of Nations)
 - Límite DURO de asentamientos que una Facción puede FUNDAR (no aplica a conquista/anexión, que no tiene límite). Fundar por encima del cap se rechaza.

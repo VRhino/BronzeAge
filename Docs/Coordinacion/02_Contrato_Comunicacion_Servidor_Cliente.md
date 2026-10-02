@@ -250,7 +250,9 @@ La proyección actual (`proyectarParaJugador`, `session/proyecciones/jugador.ts`
 `asentamientos` (solo el interior del asentamiento propio en el que está), `asentamientosAvistados`,
 `asentamientosConocidos`, caravanas y ejércitos propios y avistados, `acuerdos`, `ordenes`, `relaciones`,
 `titulos`, `caminos`, `campamentosBandidos`, `historial`, `zonas`, `zonasFusionadas` y
-`trazadoPorAsentamiento`. Esa forma se mantiene. El modelo de héroe añade:
+`trazadoPorAsentamiento`. Esa forma se mantiene (salvo `caminos`, que desde 2026-10-02 son tramos fusionados de la
+red de caminos, `{ id, escalon, puntos }` — ver doc 01 §7; `{ id, puntos }` sigue valiendo para pintarlos). El
+modelo de héroe añade:
 
 ```text
 heroe                  el héroe propio completo (doc 01 §12), con:

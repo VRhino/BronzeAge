@@ -1,4 +1,4 @@
-import type { AcuerdoTrueque, Asentamiento, CaminoComercial, CampamentoBandido, Caravana, Ejercito, EstadoTecnologia, Faccion, Heroe, OrdenMercado, RelacionPolitica, Titulo } from '../domain/types';
+import type { AcuerdoTrueque, Asentamiento, CampamentoBandido, Caravana, Ejercito, EstadoTecnologia, Faccion, Heroe, OrdenMercado, RedCaminos, RelacionPolitica, Titulo } from '../domain/types';
 import type { EventoCrudo, EventoDominio } from '../domain/eventos';
 import type { Instante } from '../domain/tiempo';
 import type { EstadoMapa, Mapa } from '../world/mapa';
@@ -8,6 +8,7 @@ import { avanzarConstruccion, reclamosDeFuentes } from './construction';
 import { avanzarNutricionPoblacion, crecerPoblacion, recaudacionOro } from './population';
 import { agregarRecurso } from './almacen';
 import { avanzarComercio } from './trade';
+import { RED_VACIA } from './redCaminos';
 import { avanzarCaravanasFundacion } from './expansion';
 import { alCampamentoPorIds, campamentoDe, conEscolta, conEscuadrones, conTropa, indiceTropa, sinEscolta } from './tropa';
 import { caducarOrdenes } from './market';
@@ -40,10 +41,9 @@ export interface EstadoSimulacion {
   historialOrdenes?: OrdenMercado[];
   relaciones: RelacionPolitica[];
   titulos: Titulo[];
-  /** Caminos comerciales (Fase 0.3, Doc 1.6) — se crean fuera del tick, al proponer trueque (ver
-   * `GameStore.proponerTrueque`/`engine/caminos.ts`); el tick solo los LEE para el bonus de velocidad de
-   * caravana (`engine/trade.ts`), nunca los modifica. */
-  caminos: CaminoComercial[];
+  /** Red de caminos (Doc 1.6, `engine/redCaminos.ts`): crece con cada caravana comercial que se lanza, en el
+   * tick o a mano. Ausente = vacía (partidas guardadas antes de la red). */
+  red?: RedCaminos;
   /** Campamentos de bandidos activos (Doc 1.9) — ver `engine/bandidos.ts`. */
   campamentosBandidos: CampamentoBandido[];
   /** Lo que cada Facción RECUERDA del mundo (niebla de guerra — ver `engine/memoria.ts`), por `faccionId`.
@@ -249,7 +249,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   let facciones = estado.facciones;
   for (const p of procesados) if (p.destruido) facciones = registrarDerrota(facciones, actualizados, p.asentamiento.faccionId, null);
 
-  const trasComercio = avanzarComercio(actualizados, facciones, estado.caravanas, estado.acuerdos, mapa, estado.caminos, instante);
+  const trasComercio = avanzarComercio(actualizados, facciones, estado.caravanas, estado.acuerdos, mapa, estado.red ?? RED_VACIA, zonas, instante);
   eventosDominio.push(...comoEventosDominio(trasComercio.eventos, contexto));
   heroes = alCampamentoPorIds(heroes, trasComercio.escoltasLiberadas);
 
@@ -277,7 +277,8 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     trasSpawnBandidos.campamentos,
     trasExpansion.caravanas.map((c) => conEscolta(c, tropaTrasComercio)),
     rng,
-    estado.ejercitos.map((e) => conTropa(e, tropaTrasComercio))
+    estado.ejercitos.map((e) => conTropa(e, tropaTrasComercio)),
+    zonas
   );
   eventosDominio.push(...comoEventosDominio(trasAtaquesBandidos.eventos, contexto));
   // La escolta vuelve a su héroe; la de una caravana destruida, a 0 y al campamento (Doc 5.15.4).
@@ -298,6 +299,8 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     relaciones: estado.relaciones,
     mapa,
     instante,
+    zonas,
+    red: trasComercio.red,
     rng,
     heroes,
     batallas: contexto.batallas,
@@ -352,7 +355,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     historialOrdenes: trasMercado.cerradas.length > 0 ? [...(estado.historialOrdenes ?? []), ...trasMercado.cerradas] : estado.historialOrdenes,
     relaciones: estado.relaciones,
     titulos: titulosActuales,
-    caminos: estado.caminos,
+    red: trasComercio.red,
     campamentosBandidos: trasSpawnBandidos.campamentos,
     // Al FINAL, y con lo que ya se movió: lo que se graba es dónde acabaron las columnas este minuto, no de
     // dónde salieron. No emite eventos ni cambia nada más — la memoria solo mira.

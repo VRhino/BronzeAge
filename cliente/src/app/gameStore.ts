@@ -18,7 +18,7 @@
 import type {
   AcuerdoTrueque,
   Asentamiento,
-  CaminoComercial,
+  RedCaminos,
   CampamentoBandido,
   CargoTipo,
   Caravana,
@@ -152,7 +152,7 @@ export interface SimulacionExportada {
   ordenes: OrdenMercado[];
   relaciones: RelacionPolitica[];
   titulos: Titulo[];
-  caminos?: CaminoComercial[];
+  red?: RedCaminos;
   campamentosBandidos?: CampamentoBandido[];
   faccionesNpcIds?: string[];
   log: EventoLog[];
@@ -886,7 +886,7 @@ export class GameStore {
       ordenes: this.state.ordenes,
       relaciones: this.state.relaciones,
       titulos: this.state.titulos,
-      caminos: this.state.caminos,
+      red: this.state.red,
       campamentosBandidos: this.state.campamentosBandidos,
       faccionesNpcIds: this.state.faccionesNpcIds,
       // El formato de archivo v2 guarda el log en texto (es anterior a `eventosDominio`): se proyecta al

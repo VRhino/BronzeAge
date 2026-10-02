@@ -9,6 +9,7 @@ import { moverCargaCarroAparcada, enviarCaravanaAlOrigen, CaravanaInvalidaError,
 import { instante } from '../../domain/tiempo';
 import type { EjercitoConTropa } from '../tropa';
 import { crearFacciones, crearMapaDeterminista, escuadronDePrueba, fundarAsentamientoDeTest, posicionRecomendable } from './fixtures';
+import { RED_VACIA } from '../redCaminos';
 
 const mapa = crearMapaDeterminista(42);
 
@@ -171,7 +172,7 @@ describe('la caravana aparcada — intercambio con el almacén y las dos salidas
   it('el reparto automático de comercio NO toca una caravana aparcada', () => {
     // Un tick de comercio con una aparcada en el estado: sigue igual, no la despacha.
     const antes = aparcada();
-    const r = avanzarComercio([anfitriona, origen], [], [antes], [], mapa, [], instante(0));
+    const r = avanzarComercio([anfitriona, origen], [], [antes], [], mapa, RED_VACIA, [], instante(0));
     const despues = r.caravanas.find((c) => c.id === 'car-x')!;
     expect(despues.estado).toBe('aparcada');
     expect(despues.posicionActual).toEqual(anfitriona.posicion);

@@ -51,6 +51,7 @@ import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito } from './tipos';
 import { comando, conColumnas, conTropaDe, exigirAsentamiento, exigirCampamento, exigirCaravana, exigirColumnaDe, exigirEjercito } from './ayudas';
 import { desdeCrudos, evento } from './eventos';
+import { computeTodasLasZonas } from '../../engine/zones';
 
 /** A qué se puede apuntar desde el menú de interacción: una columna o una caravana. Es la misma forma que usa
  * la persecución, y no por casualidad — se persigue lo que se puede mirar. */
@@ -257,7 +258,8 @@ export const atacar = comando<ParamsAtacar, { battleId: string } | undefined>((e
     capacidadCargaDe(atacante, estado.caravanas),
     heridos,
     ctx.rng,
-    estado.heroes
+    estado.heroes,
+    { zonas: computeTodasLasZonas(estado.asentamientos), asentamientos: estado.asentamientos }
   );
   // La escolta vuelve a su héroe: la de una caravana capturada, a 0 y al campamento (Doc 5.15.4).
   const queda = emboscada.caravana ? sinEscolta(emboscada.caravana) : undefined;

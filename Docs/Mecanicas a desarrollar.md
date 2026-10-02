@@ -12,7 +12,6 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 
 | # | Área | Mecánica | Código hoy |
 |---|---|---|---|
-| 3 | CARAVANAS | Rutas de caravana avanzadas | ◐ solo el pathfinder base |
 | 5 | TRUEQUE | Trueque compuesto de varios materiales | ✘ nada |
 | 8 | CARAVANAS | Revamp de caravanas — solo los trozos diferidos (§8.1) | ◐ núcleo hecho; §8.1 no |
 | 9 | ASENTAMIENTO | Eventos de asentamiento | ✘ nada |
@@ -49,33 +48,6 @@ fase posterior a Fase 0) y el **comercio marítimo / unidades navales** (fuera d
 diseño). Los ajustes de calibración de mecánicas ya construidas viven en cada ficha de `Consideraciones/` y en
 `Preguntas_Abiertas.md`, no aquí. Lo ya cerrado (diseño + implementación) se retira de este archivo por
 completo; su estado queda en el checklist.
-
-## 3. Rutas de caravana avanzadas
-
-**Prioridad (2026-09-28, BA-006 EV-6):** la fusión de caminos tiene que estar lista antes de que un servidor llegue a
-la Era V (semana 26): el logro de `logistica_campana` es un camino compartido, y sin esa tecnología no se puede
-adoptar `reforma_macedonica`, que abre toda la Era V.
-
-**Definido 2026-09-29** — decisiones y plan en `Consideraciones/Rutas_Caravana_Avanzadas_Definicion.md`
-(bosque frena, ríos con vados derivados, red de caminos sobre rejilla global con peso = rutas vigentes, paso
-forzado por ciudades ajenas con peaje en especie, inmunidad en zona neutral/aliada). Sin código todavía.
-
-El pathfinder base ya está (`world/rutas.ts`, `engine/caminos.ts`): calcula por coste de terreno, el agua es
-infranqueable, y el camino generado da bonus de velocidad a las caravanas que lo siguen. Falta todo lo demás.
-
-El pathfinder de las rutas debe buscar evitar bosques (rodearlos) o ríos (no los puede atravesar).
-
-Cuando hay muchos caminos que pasan cerca en el mapa general debido a rutas de caravana se deberían juntar
-para formar caminos unificados; y si estos caminos, para ir de A a C, tienen a B justo en el camino o cruzan
-la zona de influencia de B, deben pasar por la ciudad B de camino a C y dejar una pequeña comisión. Cuando una
-caravana está cruzando una ciudad neutral o aliada no puede ser atacada.
-
-Cuando se forma un camino se evalúa la proximidad con otros caminos; cada otra caravana que use ese camino le
-agrega 1 punto. Mientras más puntos, más grande se ve en el mapa real y atrae con más fuerza a otras rutas
-para que se desvíen, aunque sea un poco, de su camino — creando caminos principales.
-
-*Relacionado:* que un río corte el paso necesita vados o puentes para no fragmentar el mapa
-(`Docs/Game/1` §1.6, `worldgen/costeMovimiento.ts`).
 
 ## 5. Trueque compuesto de varios materiales
 
@@ -243,10 +215,14 @@ bitácora: `Consideraciones/Tecnologia_Eras_I-III_Definicion.md`. Falta:
   contador en su semana objetivo (Doc 6.3).
 - **Otras vías** (Doc 6.1): conquista (aparece al conquistar una plaza que reclutaba con ella) y comercio (pago a
   otra Facción; ¿la vendedora acepta y fija el precio?). La de los Aedas va en §42.
+- **Logro de `logistica_campana`** (Era IV, D30): la condición ya existe como consulta pura,
+  `caminoCompartidoAbierto` (`engine/redCaminos.ts`, red de caminos del Doc 1.6); falta engancharla al catálogo al
+  escribir la Era IV. Prioridad: antes de que un servidor llegue a la Era V (semana 26).
 - **Capital elegida** (§13): hoy el Rey adopta en el asentamiento vivo más antiguo.
 - **Equipo de asedio**: `carpinteria_militar` y `trabajos_asedio` se adoptan, pero su equipo no tiene efecto en combate.
-- **Clientes**: panel de tecnología en el cliente de administración (no compila desde antes de este trabajo) y en
-  BronzeAgeClient; definiciones de escuadra de las 15 tropas nuevas y modelos de los edificios nuevos en Conquest (CQ-006).
+- **Clientes**: panel de tecnología en el cliente de administración (`cliente/`): Era, logros y tecnologías por
+  Facción, a partir de `EstadoAdmin.tecnologia`; el cliente vuelve a compilar desde el 2026-09-30, así que ya se puede
+  hacer (Paso 11 del plan). El mismo panel en BronzeAgeClient; definiciones de escuadra de las 15 tropas nuevas y modelos de los edificios nuevos en Conquest (CQ-006).
 
 ## 21. Los 4 gremios escasos a nivel de servidor
 

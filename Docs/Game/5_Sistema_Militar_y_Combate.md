@@ -236,7 +236,7 @@ El Liderazgo puede crecer por encima de la base con la progresión del Héroe (`
 
 ## 5.12 Ejércitos y movimiento por el mapa
 
-Los ejércitos se mueven por el mapa del mundo para atacar, igual que las caravanas: siguen una ruta que rodea el terreno costoso, y tardan en llegar.
+Los ejércitos se mueven por el mapa del mundo para atacar, igual que las caravanas: siguen una ruta que rodea el terreno costoso, y tardan en llegar. El terreno les afecta igual que a las caravanas (Doc 1.6): el bosque los frena y los ríos solo se cruzan por un vado o por una ciudad ribereña. Sobre un camino de la red marchan más rápido, pero no lo crean, no le suman peso ni pagan peaje.
 
 ### 5.12.1 Columna personal y Ejército: la misma entidad, distintas reglas
 
@@ -437,7 +437,7 @@ De ahí salen los tres estados en que el jugador ve el mundo:
 | **Camino comercial** | Lo has **explorado** | Es infraestructura estática, como el terreno: la calzada que recorriste sigue donde estaba aunque hoy no la mires |
 | **Campamento de bandidos** | Lo estás **viendo ahora** | Aparecen y desaparecen, así que no tienen memoria: recordarlos enseñaría el que nació después de que te fueras y el que ya arrasó otro |
 
-Un camino se conoce **entero o no se conoce**: haber recorrido un tramo revela qué dos plazas une, que es en la ficción lo que una calzada dice de sí misma.
+Un camino se conoce **tramo a tramo**: se ve cada tramo con algún extremo en tierra explorada (red de caminos, Doc 1.6), y lo visible llega fusionado en polilíneas enteras, con su escalón (sendero, camino, calzada).
 
 **Con la ciudad se ve su FRONTERA.** Una zona de influencia está marcada sobre el terreno, así que quien pasa por delante la ve — y lo que se ve es la línea de verdad, con su forma real, no un círculo idealizado. Lo que la acota es la misma niebla que acota todo lo demás: **del contorno solo llegas a ver el tramo que cae en tierra que has explorado.** Pasar cerca de una frontera te enseña ese tramo, no el mapa político entero.
 

@@ -8,11 +8,11 @@
 import type {
   AcuerdoTrueque,
   Asentamiento,
-  CaminoComercial,
   CampamentoBandido,
   Caravana,
   Faccion,
   OrdenMercado,
+  RedCaminos,
   RelacionPolitica,
   Titulo,
   ZonaFaccion,
@@ -85,7 +85,9 @@ export interface GameSessionState {
   historialOrdenes?: OrdenMercado[];
   relaciones: RelacionPolitica[];
   titulos: Titulo[];
-  caminos: CaminoComercial[];
+  /** Red de caminos (Doc 1.6, `engine/redCaminos.ts`). Ausente = vacía: las partidas de antes de la red traían
+   * `caminos` (uno por par), que se ignora — la red se rehace sola con las próximas caravanas. */
+  red?: RedCaminos;
   campamentosBandidos: CampamentoBandido[];
   /** Facciones que gobierna el NPC en vez de un jugador humano. Vive en la partida y no en el runner
    * (doc 7 §7.2): cambia el resultado del tick, así que un reinicio con otra configuración divergiría de lo
@@ -144,7 +146,7 @@ export function estadoSimulacionDe(estado: GameSessionState): EstadoSimulacion {
     historialOrdenes: estado.historialOrdenes,
     relaciones: estado.relaciones,
     titulos: estado.titulos,
-    caminos: estado.caminos,
+    red: estado.red,
     campamentosBandidos: estado.campamentosBandidos,
     memoriaPorFaccion: estado.memoriaPorFaccion,
     heroes: estado.heroes,
@@ -166,7 +168,7 @@ export function conResultadoDeSimulacion(estado: GameSessionState, simulacion: E
     historialOrdenes: simulacion.historialOrdenes,
     relaciones: simulacion.relaciones,
     titulos: simulacion.titulos,
-    caminos: simulacion.caminos,
+    red: simulacion.red,
     campamentosBandidos: simulacion.campamentosBandidos,
     memoriaPorFaccion: simulacion.memoriaPorFaccion,
     heroes: simulacion.heroes,

@@ -1111,7 +1111,6 @@ async function main() {
     ordenes: [],
     relaciones: [],
     titulos: [],
-    caminos: [],
     campamentosBandidos: [],
     // Los fundadores son héroes bot: sin registro no tendrían dónde guardar las escuadras que recluten.
     heroes: asentamientos.flatMap((a) =>

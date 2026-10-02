@@ -1,4 +1,4 @@
-import type { AcuerdoTrueque, Asentamiento, CaminoComercial, Caravana, Escuadron, Faccion, Heroe, Point } from '../domain/types';
+import type { AcuerdoTrueque, Asentamiento, Caravana, Escuadron, Faccion, Heroe, Point, RedCaminos, ZonaInfluencia } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
 
 /** Fase A5 — payload de `comercio.entrega_escoltada` (Doc 5.13.3). */
@@ -34,20 +34,25 @@ export interface PayloadCaravanaSale {
   cantidad: number;
   recurso: string;
 }
+/** Payload de `comercio.peaje_paso`: lo que deja una caravana al pasar por una ciudad ajena (Doc 1.6, decisión 6). */
+export interface PayloadPeajePaso {
+  caravanaId: string;
+  asentamientoId: string;
+  peaje: Record<string, number>;
+}
 import { ANIMAL_CATALOGO, ASIGNACION_CARAVANA, CARAVANA_PREPARACION, CARRO_CATALOGO, COMISION, NIVEL_FACCION, REPUTACION, TRUEQUE } from '../constants';
 import { aplicarAjustesExperiencia, type AjusteExperiencia } from './faccion';
 import type { AnimalTipo, CarroTipo } from '../domain/types';
 import { capacidadCaravana, velocidadCaravana } from './caravanas';
 import { esResidente } from './pertenencia';
 import { minutos, sumar, type Instante } from '../domain/tiempo';
-import { COSTE_MOVIMIENTO } from '../worldgen';
 import type { Mapa } from '../world/mapa';
 import { calcularRuta } from '../world/rutas';
 import { agregarRecurso, cantidadDisponible, descontarRecursos, tieneRecursos } from './almacen';
-import { buscarCamino } from './caminos';
 import { calcularPrecioReferencia } from './market';
 import { cupoCaravanas, cupoEscolta, puedeCrearCaravana, cooldownCaravanaRestante, tieneMercadoActivo } from './asentamientoQuery';
 import { avanzarPosicionEnRuta } from './movimiento';
+import { aristasDeRed, peajeDe, podarRutas, registrarRuta, trazarRutaComercial } from './redCaminos';
 import { factorCapacidadCaravana, factorComisionExterna, factorVelocidadCaravana } from './politicas';
 import { aplicarAjustesReputacion, factorComisionPorReputacion, type AjusteReputacion } from './reputacion';
 import { ReglaInvalidaError } from './errores';
@@ -256,26 +261,6 @@ export function construirCaravanaComercial(
 }
 
 /**
- * Ruta que sigue una caravana entre dos asentamientos (Fase 0.3): reusa el Camino Comercial del par si existe
- * —con la polilínea orientada origen→destino— y si no la calcula por pathfinding. `undefined` = no hay ruta
- * por tierra (el agua es infranqueable, Doc 3.10): la caravana no sale.
- */
-function calcularRutaComercial(
-  mapa: Mapa,
-  caminos: readonly CaminoComercial[],
-  origen: Asentamiento,
-  destino: Asentamiento
-): Point[] | undefined {
-  const camino = buscarCamino(caminos, origen.id, destino.id);
-  const orientada = camino
-    ? camino.asentamientoAId === origen.id
-      ? camino.puntos
-      : [...camino.puntos].reverse()
-    : undefined;
-  return orientada ?? calcularRuta(mapa, origen.posicion, destino.posicion) ?? undefined;
-}
-
-/**
  * Lanza una caravana comercial A MANO (Doc 3.13.3): el jugador elige carga, destino y —opcionalmente— una
  * escolta de escuadrones (Doc 3.13.4). La carga se reserva del almacén ya, y la caravana pasa por el estado
  * `'preparando'` en el origen —`kPorCarro × (nº carros − 1)` ticks, 0 para una de un solo carro— antes de
@@ -292,9 +277,10 @@ export function prepararCaravanaManual(
   carga: Record<string, number>,
   escolta: Escuadron[],
   mapa: Mapa,
-  caminos: readonly CaminoComercial[],
+  /** Para trazar (atracción, paso forzado por ciudades ajenas) y registrar la ruta en la red (Doc 1.6). */
+  territorio: { red: RedCaminos; asentamientos: readonly Asentamiento[]; zonas: readonly ZonaInfluencia[] },
   instante: Instante
-): { caravana: Caravana; asentamiento: Asentamiento; tropa: Escuadron[] } {
+): { caravana: Caravana; asentamiento: Asentamiento; tropa: Escuadron[]; red: RedCaminos } {
   if (caravana.tipo !== 'comercial' || caravana.carros === undefined) {
     throw new CaravanaInvalidaError('Solo se lanzan a mano las caravanas comerciales del revamp.');
   }
@@ -323,8 +309,8 @@ export function prepararCaravanaManual(
   if (escolta.length > cupo) {
     throw new CaravanaInvalidaError(`La escolta (${escolta.length}) supera el cupo del Mercado (${cupo}).`);
   }
-  const ruta = calcularRutaComercial(mapa, caminos, origen, destino);
-  if (!ruta) throw new CaravanaInvalidaError('No hay ruta por tierra hasta el destino (el agua es infranqueable).');
+  const trazado = trazarRutaComercial(mapa, territorio.red, origen, destino, territorio.asentamientos, territorio.zonas);
+  if (!trazado) throw new CaravanaInvalidaError('No hay ruta por tierra hasta el destino (el agua y los ríos sin vado no se cruzan).');
 
   const prepTicks = CARAVANA_PREPARACION.kPorCarro * Math.max(0, caravana.carros.length - 1);
   const contenido = Object.fromEntries(Object.entries(carga).filter(([, c]) => c > 0));
@@ -338,11 +324,13 @@ export function prepararCaravanaManual(
       contenido,
       posicionActual: origen.posicion,
       progreso: 0,
-      ruta,
+      ruta: trazado.ruta,
+      peajes: trazado.peajes.length > 0 ? trazado.peajes : undefined,
       preparaHasta: prepTicks > 0 ? sumar(instante, minutos(prepTicks)) : undefined,
       escoltaIds: escolta.length > 0 ? escolta.map((e) => e.id) : undefined,
     },
     tropa: escolta.map((e) => ({ ...e, contenedor: { tipo: 'escolta', caravanaId: caravana.id } })),
+    red: registrarRuta(territorio.red, origen, destino, trazado.ruta, instante),
   };
 }
 
@@ -508,7 +496,8 @@ function bonusPorDistancia(dist: number): number {
 function avanzarCaravanas(
   caravanas: Caravana[],
   mapa: Mapa,
-  caminos: readonly CaminoComercial[],
+  /** Aristas de la red de caminos: sobre ellas se avanza más rápido (Doc 1.6, decisión 10). */
+  caminos: ReadonlySet<string>,
   asentamientosPorId: Map<string, Asentamiento>,
   acuerdosPorId: Map<string, AcuerdoTrueque>,
   facciones: Faccion[],
@@ -521,7 +510,7 @@ function avanzarCaravanas(
 ): Caravana[] {
   const restantes: Caravana[] = [];
 
-  for (const caravana of caravanas) {
+  for (let caravana of caravanas) {
     // Revamp (Doc 3.13.3): una caravana lanzada a mano espera en el origen hasta que se cumple su
     // `preparaHasta`, y entonces sale. Mientras tanto no se mueve ni es interceptable (está en su ciudad).
     if (caravana.estado === 'preparando') {
@@ -580,15 +569,38 @@ function avanzarCaravanas(
 
     // Avance real por coste de terreno, sobre la longitud de la polilínea calculada al lanzar la caravana
     // (ver `asignarCaravanasATrueque`) — toda caravana en movimiento (con `destinoAsentamientoId`) trae `ruta`.
-    // Bonus de Camino Comercial (Doc 1.6): si existe un camino ya construido para este par de asentamientos,
-    // la caravana lo está siguiendo (ver `asignarCaravanasATrueque`, que reusa su polilínea como `ruta`) —
-    // todo el trayecto cuenta como "sobre el camino". Simétrico en ambos sentidos: el mismo camino sirve para
-    // ir y volver.
-    const enCaminoComercial = buscarCamino(caminos, origen.id, destino.id) !== undefined;
-    const factorCosteExtra = enCaminoComercial ? COSTE_MOVIMIENTO.factorCamino : 1;
-    const avance = avanzarPosicionEnRuta(mapa, caravana.ruta!, caravana.progreso, velocidad, factorCosteExtra);
+    // Más rápido en cada tramo que sea arista de la red de caminos (Doc 1.6), a la ida y a la vuelta.
+    const avance = avanzarPosicionEnRuta(mapa, caravana.ruta!, caravana.progreso, velocidad, caminos);
     const progreso = avance.progreso;
     const posicionActual = avance.posicion;
+
+    // Paso forzado por ciudades ajenas (decisión 6): al alcanzar cada una deja su peaje en especie, sin pararse.
+    // Solo a la ida: la vuelta va vacía.
+    const peajes = retornando ? undefined : caravana.peajes;
+    if (peajes) {
+      for (const peaje of peajes.filter((p) => p.progreso <= progreso)) {
+        const ciudad = asentamientosPorId.get(peaje.asentamientoId);
+        const cobrado = peajeDe(caravana.contenido);
+        if (!ciudad || Object.keys(cobrado).length === 0) continue;
+        let almacen = ciudad.almacen;
+        for (const [recurso, cantidad] of Object.entries(cobrado)) almacen = agregarRecurso(almacen, recurso, cantidad);
+        asentamientosPorId.set(ciudad.id, { ...ciudad, almacen });
+        caravana = {
+          ...caravana,
+          contenido: Object.fromEntries(Object.entries(caravana.contenido).map(([r, c]) => [r, c - (cobrado[r] ?? 0)])),
+        };
+        eventos.push({
+          codigo: 'comercio.peaje_paso',
+          asentamientoId: ciudad.id,
+          mensaje: `La caravana ${caravana.id} pasa por ${ciudad.id} y deja ${Object.entries(cobrado)
+            .map(([r, c]) => `${c.toFixed(1)} ${r}`)
+            .join(', ')} de peaje.`,
+          payload: { caravanaId: caravana.id, asentamientoId: ciudad.id, peaje: cobrado } satisfies PayloadPeajePaso,
+        });
+      }
+      const pendientes = peajes.filter((p) => p.progreso > progreso);
+      caravana = { ...caravana, peajes: pendientes.length > 0 ? pendientes : undefined };
+    }
 
     if (progreso < 1) {
       restantes.push({ ...caravana, progreso, posicionActual });
@@ -873,14 +885,16 @@ export function entregarDesdeCaravanaAdjunta(
  */
 function asignarCaravanasATrueque(
   mapa: Mapa,
-  caminos: readonly CaminoComercial[],
+  redInicial: RedCaminos,
+  zonas: readonly ZonaInfluencia[],
   acuerdosPorId: Map<string, AcuerdoTrueque>,
   asentamientosPorId: Map<string, Asentamiento>,
   caravanas: Caravana[],
   instante: Instante,
   eventos: EventoCrudo[],
   ajustesReputacion: AjusteReputacion[]
-): Caravana[] {
+): { caravanas: Caravana[]; red: RedCaminos } {
+  let red = redInicial;
   const pendientesPorOrigen = new Map<string, LadoPendiente[]>();
 
   for (const acuerdo of acuerdosPorId.values()) {
@@ -966,21 +980,13 @@ function asignarCaravanasATrueque(
       if (cantidad <= 0) continue; // sin stock suficiente todavía: la caravana se reintenta el siguiente tick, no consume su turno
 
       idx++;
-      // Ruta calculada al lanzar (Fase 0.3): rodea terreno costoso en vez de ir en línea recta — ver
-      // `world/rutas.ts`. Si ya existe un Camino Comercial para este par (Doc 1.6, ver `engine/caminos.ts`),
-      // reusa su polilínea en vez de recalcular — es literalmente "seguir el camino ya construido", y es lo
-      // que le da el bonus de velocidad en `avanzarCaravanas` (mismo par -> mismo camino encontrado).
-      // `buscarCamino` empareja el par en CUALQUIER orden pero devuelve `puntos` siempre en el orden en que
-      // se guardó (`asentamientoAId` -> `asentamientoBId`) — bug corregido a petición del usuario: cuando el
-      // camino se reutiliza en el sentido CONTRARIO (esta caravana va de B a A), había que invertir la
-      // polilínea; si no, `progreso: 0` caía en el extremo del camino más cercano al DESTINO en vez del
-      // propio origen, y la caravana "saltaba" allí en su primer paso de movimiento (ver `avanzarPosicionEnRuta`,
-      // que siempre mide el progreso desde `ruta[0]` hacia adelante).
-      // El agua es infranqueable: sin camino por tierra la caravana NO sale y la carga se queda en el
-      // almacén. Comprobado ANTES de descontar recursos. Ver `calcularRutaComercial` (reusa el Camino
-      // Comercial del par si existe, orientado origen→destino).
-      const ruta = calcularRutaComercial(mapa, caminos, origen, destino);
-      if (!ruta) continue;
+      // Trazado al lanzar (Doc 1.6): se arrima a los caminos con peso y fuerza el paso por las ciudades ajenas que
+      // cruce (`trazarRutaComercial`). Se recalcula en cada lanzamiento, así que la ruta del par migra sola hacia
+      // los caminos principales, y queda registrada en la red. Sin camino por tierra la caravana NO sale y la
+      // carga se queda en el almacén: se comprueba ANTES de descontar recursos.
+      const trazado = trazarRutaComercial(mapa, red, origen, destino, [...asentamientosPorId.values()], zonas);
+      if (!trazado) continue;
+      red = registrarRuta(red, origen, destino, trazado.ruta, instante);
 
       asentamientosPorId.set(origen.id, { ...origen, almacen: descontarRecursos(origen.almacen, { [l.recurso]: cantidad }) });
       caravanasPorId.set(caravana.id, {
@@ -992,7 +998,8 @@ function asignarCaravanasATrueque(
         ladoAcuerdo: l.lado,
         posicionActual: origen.posicion,
         progreso: 0,
-        ruta,
+        ruta: trazado.ruta,
+        peajes: trazado.peajes.length > 0 ? trazado.peajes : undefined,
       });
       eventos.push({
         codigo: 'comercio.caravana_sale',
@@ -1002,7 +1009,7 @@ function asignarCaravanasATrueque(
     }
   }
 
-  return [...caravanasPorId.values()];
+  return { caravanas: [...caravanasPorId.values()], red };
 }
 
 export function avanzarComercio(
@@ -1011,7 +1018,9 @@ export function avanzarComercio(
   caravanas: Caravana[],
   acuerdos: AcuerdoTrueque[],
   mapa: Mapa,
-  caminos: readonly CaminoComercial[],
+  red: RedCaminos,
+  /** Zonas de influencia del tick: el paso forzado por ciudades ajenas (Doc 1.6). */
+  zonas: readonly ZonaInfluencia[],
   instante: Instante
 ): {
   asentamientos: Asentamiento[];
@@ -1021,6 +1030,8 @@ export function avanzarComercio(
   eventos: EventoCrudo[];
   /** Ids de las escoltas que vuelven al campamento de su héroe: el llamador se las devuelve (`alCampamentoPorIds`). */
   escoltasLiberadas: string[];
+  /** La red de caminos con las rutas de este tick registradas y las caducadas fuera. */
+  red: RedCaminos;
 } {
   const eventos: EventoCrudo[] = [];
   const ajustesReputacion: AjusteReputacion[] = [];
@@ -1032,7 +1043,7 @@ export function avanzarComercio(
   const trasMovimiento = avanzarCaravanas(
     caravanas,
     mapa,
-    caminos,
+    aristasDeRed(red),
     asentamientosPorId,
     acuerdosPorId,
     facciones,
@@ -1042,14 +1053,16 @@ export function avanzarComercio(
     ajustesExperiencia,
     escoltasLiberadas
   );
-  const trasAsignacion = asignarCaravanasATrueque(mapa, caminos, acuerdosPorId, asentamientosPorId, trasMovimiento, instante, eventos, ajustesReputacion);
+  const vigente = podarRutas(red, instante, new Set(asentamientos.map((a) => a.id)));
+  const trasAsignacion = asignarCaravanasATrueque(mapa, vigente, zonas, acuerdosPorId, asentamientosPorId, trasMovimiento, instante, eventos, ajustesReputacion);
 
   return {
     asentamientos: asentamientos.map((a) => asentamientosPorId.get(a.id)!),
     facciones: aplicarAjustesExperiencia(aplicarAjustesReputacion(facciones, ajustesReputacion), ajustesExperiencia),
-    caravanas: trasAsignacion,
+    caravanas: trasAsignacion.caravanas,
     acuerdos: [...acuerdosPorId.values()],
     eventos,
     escoltasLiberadas,
+    red: trasAsignacion.red,
   };
 }

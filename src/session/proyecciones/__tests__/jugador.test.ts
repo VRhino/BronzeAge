@@ -15,7 +15,9 @@ import { computeTodasLasZonas } from '../../../engine/zones';
 import { estaExplorado, marcarVisto, rejillaDe } from '../../../engine/exploracion';
 import { MEMORIA_VACIA, type FichaConocida } from '../../../engine/memoria';
 import { eventosDominioParaJugador, proyectarParaJugador } from '../jugador';
-import type { Asentamiento, CaminoComercial, CampamentoBandido, Ejercito, Escuadron, Point } from '../../../domain/types';
+import type { Asentamiento, CampamentoBandido, Ejercito, Escuadron, Point } from '../../../domain/types';
+import type { RedCaminos } from '../../../domain/types';
+import { aristasDeTrazado } from '../../../engine/redCaminos';
 import { EXPLORACION, VISION, ZONA_INFLUENCIA } from '../../../constants';
 
 // Estas pruebas verifican filtrado por Facción/ciudadanía, no la geometría por frame (Fase C10, cubierta en
@@ -947,8 +949,9 @@ describe('la exploracion proyectada: la mascara que tapa el terreno', () => {
 // justo esa asimetria: mismo rincon recordado, resultados opuestos.
 const LEJOS: Point = { x: 1700, y: 1700 };
 
-function caminoPor(...puntos: Point[]): CaminoComercial {
-  return { id: 'cam-1', asentamientoAId: 'a-1', asentamientoBId: 'a-2', puntos };
+/** Red de caminos con las aristas de una polilínea (sin rutas: todo sendero). */
+function redPor(...puntos: Point[]): RedCaminos {
+  return { aristas: aristasDeTrazado(puntos), rutas: [] };
 }
 
 function campamentoEn(posicion: Point): CampamentoBandido {
@@ -967,27 +970,33 @@ function conRinconRecordado(estado: GameSessionState, faccionId: string): GameSe
 describe('caminos: solo los que la Faccion ha PISADO', () => {
   it('un camino entero en tierra que nadie ha explorado no viaja', () => {
     const { sesion, fundador } = partidaConAsentamiento();
-    const estado = { ...sesion.getState(), caminos: [caminoPor(LEJOS, { x: 1800, y: 1800 })] };
+    const estado = { ...sesion.getState(), red: redPor(LEJOS, { x: 1800, y: 1800 }) };
 
     expect(proyectarParaJugador(estado, fundador, SIN_GEOMETRIA).caminos).toEqual([]);
   });
 
-  it('un camino que pasa por lo que la propia plaza ve viaja, y entero', () => {
-    // Entero a proposito: recortarlo a los tramos explorados daria una polilinea con agujeros que el cliente
-    // uniria con rectas falsas. Lo que se acepta a cambio es que un tramo andado revele los dos extremos.
+  it('una arista con un extremo en lo que la propia plaza ve viaja entera', () => {
     const { sesion, fundador } = partidaConAsentamiento();
-    const camino = caminoPor({ x: 400, y: 400 }, LEJOS);
-    const estado = { ...sesion.getState(), caminos: [camino] };
+    const estado = { ...sesion.getState(), red: redPor({ x: 400, y: 400 }, LEJOS) };
 
     const proyeccion = proyectarParaJugador(estado, fundador, SIN_GEOMETRIA);
     expect(proyeccion.caminos).toHaveLength(1);
-    expect(proyeccion.caminos[0]!.puntos).toEqual(camino.puntos);
+    expect(proyeccion.caminos[0]!.puntos).toEqual(expect.arrayContaining([{ x: 400, y: 400 }, LEJOS]));
+  });
+
+  it('se recorta por ARISTA: de un camino a medio explorar viaja solo lo explorado, como polilinea entera', () => {
+    const { sesion, fundador } = partidaConAsentamiento();
+    const estado = { ...sesion.getState(), red: redPor({ x: 400, y: 400 }, { x: 1000, y: 1000 }, { x: 1800, y: 1800 }) };
+
+    const proyeccion = proyectarParaJugador(estado, fundador, SIN_GEOMETRIA);
+    expect(proyeccion.caminos).toHaveLength(1);
+    expect(proyeccion.caminos[0]!.puntos).toHaveLength(2);
   });
 
   it('vale lo EXPLORADO, no solo lo visible: un camino por un rincon que se vio hace rato sigue viajando', () => {
     const { sesion, faccionId, fundador } = partidaConAsentamiento();
     const estado = conRinconRecordado(sesion.getState(), faccionId);
-    const conCamino = { ...estado, caminos: [caminoPor(LEJOS, { x: 1800, y: 1800 })] };
+    const conCamino = { ...estado, red: redPor(LEJOS, { x: 1800, y: 1800 }) };
 
     expect(proyectarParaJugador(conCamino, fundador, SIN_GEOMETRIA).caminos).toHaveLength(1);
   });
@@ -998,7 +1007,7 @@ describe('caminos: solo los que la Faccion ha PISADO', () => {
     const conEjercito: GameSessionState = {
       ...estado,
       ejercitos: [ejercito('e-propio', faccionId, { x: 1200, y: 1200 }, [escuadron('esc-1', 'jugador-test')])],
-      caminos: [caminoPor({ x: 1200, y: 1250 }, { x: 1800, y: 1800 })],
+      red: redPor({ x: 1200, y: 1250 }, { x: 1800, y: 1800 }),
     };
 
     expect(proyectarParaJugador(conEjercito, fundador, SIN_GEOMETRIA).caminos).toHaveLength(1);
@@ -1006,7 +1015,7 @@ describe('caminos: solo los que la Faccion ha PISADO', () => {
 
   it('sin Faccion no hay caminos: la mascara esta vacia y no se ha pisado nada', () => {
     const { sesion } = partidaConAsentamiento();
-    const estado = { ...sesion.getState(), caminos: [caminoPor({ x: 400, y: 400 }, LEJOS)] };
+    const estado = { ...sesion.getState(), red: redPor({ x: 400, y: 400 }, LEJOS) };
 
     expect(proyectarParaJugador(estado, 'forastero', SIN_GEOMETRIA).caminos).toEqual([]);
   });
@@ -1048,7 +1057,7 @@ describe('campamentosBandidos: solo los que se ven AHORA', () => {
     const estado = conRinconRecordado(sesion.getState(), faccionId);
     const conAmbos: GameSessionState = {
       ...estado,
-      caminos: [caminoPor(LEJOS, { x: 1800, y: 1800 })],
+      red: redPor(LEJOS, { x: 1800, y: 1800 }),
       campamentosBandidos: [campamentoEn(LEJOS)],
     };
 

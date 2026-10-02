@@ -19,12 +19,15 @@ export function almacenSintetico(recursos: Record<string, number>): Record<strin
  * Terreno siempre llano (coste 1).
  */
 export function mapaSintetico(opciones: { limites?: { ancho: number; alto: number } } = {}): Mapa {
-  return {
+  const mapa = {
     costeEnPunto: () => 1,
-    // Todo tierra: estos fixtures miden comercio, no pathfinding sobre agua.
+    // Todo tierra y sin ríos: estos fixtures miden comercio, no pathfinding sobre agua.
     esTransitable: () => true,
+    listarRios: () => [],
     limites: opciones.limites ?? { ancho: 2000, alto: 2000 },
-  } as unknown as Mapa;
+  };
+  // Clave de caché del grafo de navegación (`grafoDe`): cada mapa sintético es su propio mundo.
+  return Object.assign(mapa, { mundo: mapa }) as unknown as Mapa;
 }
 
 /**

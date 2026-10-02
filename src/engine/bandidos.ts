@@ -24,7 +24,7 @@ import type { Mapa } from '../world/mapa';
 import type { RandomFn } from '../worldgen';
 import { CAMPAMENTOS_BANDIDOS, MILITAR } from '../constants';
 import { minutos, sumar, type Instante } from '../domain/tiempo';
-import { pointInPolygon } from './zones';
+import { enRefugio, pointInPolygon } from './zones';
 import { aplicarBajas, poderTotal } from './combate';
 
 function distancia(a: Point, b: Point): number {
@@ -109,7 +109,9 @@ export function avanzarAtaquesBandidos(
   /** Ejércitos en campaña: una caravana que va enganchada a uno se defiende con el poder de la COLUMNA, no
    * con su defensa base (Doc 5.13.3, decisión del usuario 2026-09-04). Sin esto, escoltar no protegía de lo
    * único que hoy ataca caravanas en el mundo. */
-  ejercitos: readonly EjercitoConTropa[] = []
+  ejercitos: readonly EjercitoConTropa[] = [],
+  /** Zonas de influencia: dentro de cualquiera, una caravana no es presa de bandidos (inmunidad, Doc 1.6). */
+  zonas: readonly ZonaInfluencia[] = []
 ): { caravanas: CaravanaConEscolta[]; eventos: EventoCrudo[]; escoltasPerdidas: Escuadron[] } {
   if (campamentos.length === 0) return { caravanas, eventos: [], escoltasPerdidas: [] };
   const eventos: EventoCrudo[] = [];
@@ -129,7 +131,7 @@ export function avanzarAtaquesBandidos(
     const campamentoCercano = campamentos.find(
       (c) => distancia(c.posicion, caravana.posicionActual) <= CAMPAMENTOS_BANDIDOS.radioAtaqueCaravana
     );
-    if (!campamentoCercano) {
+    if (!campamentoCercano || enRefugio(caravana.posicionActual, zonas, [])) {
       resultado.push(caravana);
       continue;
     }

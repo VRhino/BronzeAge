@@ -110,7 +110,7 @@ sin viaje de red.
 | `tieneRecursos`, `cantidadDisponible` | `engine/almacen` | Almacén propio |
 | `estadoMejoraEdificio`, `factorLineaProduccion`, `maximoViviendasPorNivel`, `alcanzoTopeDe*` | `engine/construction` | Asentamiento propio |
 | `computeLigas` | `engine/liga` | Relaciones + Facciones — **ya públicas** en la proyección |
-| `buscarCamino` | `engine/caminos` | Busca en `caminos`, **ya público** en la proyección (no recorre el mapa: es un `find` sobre el array) |
+| `tramosDeRed`, `pesosDeRed`, `escalonDePeso` | `engine/redCaminos` | Derivan de la red de caminos, que viaja ya fusionada en `caminos` (bajo la niebla) |
 | `calcularRuta` | `world/rutas` | Pathfinding sobre el terreno, que lo ven todos |
 | `narrarCambiosDeTitulo` | `engine/titulos` | Títulos + Facciones, ambos públicos. Vive en el servidor porque este posee el log de eventos, **no** por privilegio |
 | `edificiosInternos`, `celdasDeEdificio`, `redDeCalles`, `segmentosDeRed`, `tamanoDeEdificio`, `celdaMinimaDeEdificio` y el resto de `engine/trazado` | `engine/trazado` | Los edificios de **un** asentamiento propio |
@@ -188,7 +188,7 @@ resultado; nunca los ejecuta. Sus implementaciones de motor:
 `proponerTrueque` · `colocarOrdenMercado` · `construirCaravanaComercial` · `lanzarCaravanaFundacion` ·
 `desarmarCaravanaFundacion` · `reclutarTropa` · `resolverCombate` · `iniciarAsedio` · `combateCampoAbierto` ·
 `interceptarCaravana` · `atacarCampamentoBandidos` · `descontarRecursos` / `agregarRecurso` ·
-`Mapa.extraer` · `ajustarReputacion` · `asegurarCaminoComercial`
+`Mapa.extraer` · `ajustarReputacion` · `registrarRuta` (red de caminos, 2026-10-02: sustituye a `asegurarCaminoComercial`)
 
 > Lista de agosto. Desde entonces el combate es `atacarColumna`/`interceptar`/`atacarCampamento`/`perseguir`
 > (`engine/ejercitos.ts`), `combateCampoAbierto`/`interceptarCaravana`/`atacarCampamentoBandidos` ya no son

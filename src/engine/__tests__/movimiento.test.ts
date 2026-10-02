@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Point } from '../../domain/types';
 import type { Mapa } from '../../world/mapa';
+import { claveArista } from '../../world/grafoNavegacion';
 import { avanzarPosicionEnRuta, longitudPolilinea, puntoEnPolilinea } from '../movimiento';
 
 /** `Mapa` mínimo con coste de terreno inventado — ver mismo patrón en `world/__tests__/rutas.test.ts`. */
@@ -60,11 +61,15 @@ describe('avanzarPosicionEnRuta', () => {
     expect(enCaro.posicion.x).toBeCloseTo(5, 10); // 20 / 4
   });
 
-  it('factorCosteExtra < 1 (bonus de Camino Comercial) hace avanzar más rápido', () => {
+  it('sobre una arista de la red de caminos avanza más rápido; fuera de ella, no (bonus por tramo, Doc 1.6)', () => {
     const mapa = mapaSintetico(() => 2);
-    const sinBonus = avanzarPosicionEnRuta(mapa, ruta, 0, 20);
-    const conBonus = avanzarPosicionEnRuta(mapa, ruta, 0, 20, 0.5);
-    expect(conBonus.posicion.x).toBeGreaterThan(sinBonus.posicion.x);
+    const conTramo: Point[] = [{ x: 0, y: 0 }, { x: 45, y: 0 }, { x: 1000, y: 0 }];
+    const sinBonus = avanzarPosicionEnRuta(mapa, conTramo, 0, 20);
+    const enCamino = avanzarPosicionEnRuta(mapa, conTramo, 0, 20, new Set([claveArista(conTramo[0]!, conTramo[1]!)]));
+    expect(enCamino.posicion.x).toBeCloseTo(sinBonus.posicion.x * 2, 10);
+    // El tramo siguiente no es camino: desde x=50 se avanza sin bonus.
+    const pasado = avanzarPosicionEnRuta(mapa, conTramo, 50 / 1000, 20, new Set([claveArista(conTramo[0]!, conTramo[1]!)]));
+    expect(pasado.posicion.x).toBeCloseTo(60, 10);
   });
 
   it('el progreso nunca pasa de 1 ni la posición del final de la ruta', () => {

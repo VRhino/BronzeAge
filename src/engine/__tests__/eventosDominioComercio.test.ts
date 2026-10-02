@@ -11,6 +11,7 @@ import type {
   PayloadTruequeExpirado,
 } from '../trade';
 import { almacenSintetico, caravanaComercialCasiLlegando, mapaSintetico } from './tradeFixtures';
+import { RED_VACIA } from '../redCaminos';
 
 function asentamiento(id: string, faccionId: string, posicion: { x: number; y: number }, oro: number): Asentamiento {
   return { id, faccionId, posicion, almacen: almacenSintetico({ oro }), politicasActivas: [] } as unknown as Asentamiento;
@@ -23,7 +24,7 @@ describe('eventos de dominio — trade.ts', () => {
     const mapa = mapaSintetico();
     const caravana = caravanaComercialCasiLlegando(origen, destino, { contenido: { madera: 10 } });
 
-    const resultado = avanzarComercio([origen, destino], [] as Faccion[], [caravana], [], mapa, [], instanteDeTest(1));
+    const resultado = avanzarComercio([origen, destino], [] as Faccion[], [caravana], [], mapa, RED_VACIA, [], instanteDeTest(1));
 
     const evento = resultado.eventos.find((e) => typeof e !== 'string' && e.codigo === 'comercio.caravana_llega');
     expect(evento).toBeDefined();
@@ -53,7 +54,7 @@ describe('eventos de dominio — trade.ts', () => {
     };
     const mapa = mapaSintetico();
 
-    const resultado = avanzarComercio([origen, destino], [] as Faccion[], [], [acuerdo], mapa, [], instanteDeTest(5));
+    const resultado = avanzarComercio([origen, destino], [] as Faccion[], [], [acuerdo], mapa, RED_VACIA, [], instanteDeTest(5));
 
     const evento = resultado.eventos.find((e) => typeof e !== 'string' && e.codigo === 'comercio.trueque_expirado');
     expect(evento).toBeDefined();
@@ -93,7 +94,7 @@ describe('eventos de dominio — trade.ts', () => {
     };
     const mapa = mapaSintetico();
 
-    const resultado = avanzarComercio([origen, destino], [] as Faccion[], [caravanaDisponible], [acuerdo], mapa, [], instanteDeTest(1));
+    const resultado = avanzarComercio([origen, destino], [] as Faccion[], [caravanaDisponible], [acuerdo], mapa, RED_VACIA, [], instanteDeTest(1));
 
     const evento = resultado.eventos.find((e) => typeof e !== 'string' && e.codigo === 'comercio.caravana_sale');
     expect(evento).toBeDefined();
@@ -129,7 +130,7 @@ describe('eventos de dominio — trade.ts', () => {
       ladoAcuerdo: 'B',
     });
 
-    const resultado = avanzarComercio([origen, destino], [] as Faccion[], [caravana], [acuerdo], mapa, [], instanteDeTest(1));
+    const resultado = avanzarComercio([origen, destino], [] as Faccion[], [caravana], [acuerdo], mapa, RED_VACIA, [], instanteDeTest(1));
 
     const evento = resultado.eventos.find((e) => typeof e !== 'string' && e.codigo === 'comercio.trueque_cumplido');
     expect(evento).toBeDefined();

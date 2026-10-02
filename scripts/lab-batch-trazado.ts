@@ -211,7 +211,6 @@ function correrSeed(seed: number): ResultadoSeed {
     ordenes: [],
     relaciones: [],
     titulos: [],
-    caminos: [],
     campamentosBandidos: [],
     heroes: [],
   };

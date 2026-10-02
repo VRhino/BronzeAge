@@ -51,7 +51,7 @@ campo distinto y explícitamente no comparable con ningún `Instante` de mundo �
 4. Territorio derivado (`ZonaInfluencia`, `ZonaFaccion`)
 5. `Ejercito`
 6. `Caravana` / `CarroCaravana`
-7. Comercio (`AcuerdoTrueque`, `OrdenMercado`, `CaminoComercial`)
+7. Comercio (`AcuerdoTrueque`, `OrdenMercado`, `RedCaminos`)
 8. `RelacionPolitica`
 9. `Titulo`
 10. `CampamentoBandido`
@@ -387,6 +387,8 @@ Caravana
   posicionActual: Point         existente
   progreso: number              0-1 — existente
   ruta?: Point[]                 ausente solo en 'disponible' sin asignar — existente
+  peajes?: { asentamientoId, progreso }[]   ciudades ajenas por las que pasa a la fuerza y aún no ha
+                                cruzado; deja el 2 % de cada recurso al alcanzar `progreso` — 2026-10-02
   origenAcuerdoId?, ladoAcuerdo?: 'A' | 'B'   si nace de un AcuerdoTrueque — existente
   destinoPosicion?              caravana de Fundación: punto donde fundará al llegar — existente
   jugadoresFundadoresIds?        caravana de Fundación — existente. Tras este modelo, heroeId[]
@@ -423,11 +425,23 @@ OrdenMercado
                         en el estado de partida, `ordenes` guarda solo las activas y las cerradas pasan a
                         `historialOrdenes`; la proyección del jugador sigue mandando las dos en `ordenes` — 2026-10-01
 
-CaminoComercial
-  id
-  asentamientoAId, asentamientoBId
-  puntos: Point[]        generado al establecer la primera relación comercial; persiste aunque el
-                        AcuerdoTrueque que lo originó expire
+RedCaminos              estado de partida, `red?` (ausente = vacía) — 2026-10-02, sustituye a
+                        `caminos: CaminoComercial[]` (uno por par); Doc 1.6
+  aristas: string[]      toda arista del grafo de navegación que alguna ruta ha recorrido; NUNCA sale
+                        (sin rutas queda como sendero). Clave `"x,y;x,y"` (`claveArista`)
+  rutas: RutaComercial[] las rutas vigentes
+
+RutaComercial
+  id                     `${origenId}>${destinoId}`
+  origenId, destinoId
+  faccionId              Facción del origen al lanzar (el logro de `logistica_campana` cuenta Facciones)
+  aristas: string[]      las del trazado vigente; se recalcula en cada lanzamiento
+  ultimoLanzamiento: Instante   caduca a los 3 días sin lanzar o si desaparece un extremo
+
+CaminoProyectado        lo que viaja al cliente en `caminos` (no el estado): tramos fusionados
+  id                     `tramo-N`, sin identidad estable entre proyecciones
+  escalon: 0 | 1 | 2     sendero (peso 0-1) / camino (2-5) / calzada (6+); peso = rutas vigentes
+  puntos: Point[]
 ```
 
 ## 8. `RelacionPolitica`
