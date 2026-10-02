@@ -29,10 +29,21 @@ Lo descrito en el resto del documento es el estado **antes** de estos cambios; c
 | **N2b** | `9e25811` | `ejercito.reabastecido` solo se narra si el carro estaba por debajo de `LOGISTICA.umbralNarrarReposte` (50 %). El reposte no cambia. A los 4 500 ticks: 36 928 eventos en memoria frente a 59 240 (−38 %). |
 | **A** | `43f4375` | `aplicarExperiencia` suma la experiencia, recalcula el nivel y emite `faccion.nivel_subio` donde se da: combate (5 sitios), comercio, entrega desde caravana adjunta, fundación y el propio tick. |
 
-**Sin hacer:** **N2a** (el log en memoria se sigue copiando entero en `exito`: con N2b son ~1,6 ms por copia a los 4 500 ticks,
-unos 5 ms por tick; el arreglo de verdad cambia el orden del log, que leen la persistencia JSONL, los cursores y muchos
-tests, así que se decide aparte), reclutamiento NPC, trueques terminales al historial, títulos, idempotencia del NPC y
-**O1** (difusión por WebSocket de los ticks del reloj).
+| **N2a** | `cfb60be` | `eventosDominio` conserva en memoria solo los últimos `MAX_EVENTOS_EN_MEMORIA` (5 000), recortando siempre entre dos versiones (`anteponerEventos`). El historial completo sigue en el JSONL; un cursor anterior a la ventana se completa desde él (`RunnerDePartida.eventosDesde`) y la carga de una partida recorta igual. Copia por mutación a los 4 500 ticks: de 1,6 ms creciente a 0,1–0,3 ms constante. |
+| **O1** | `eb00408` | `OpcionesRunner.alEmitir`: tras persistir cada tick del reloj de mundo, el hub difunde los eventos del tick, el auto-comercio y el NPC por WebSocket. Un tick manual no avisa (lo difunde la ruta que lo pide). |
+| **Reclutamiento NPC** | `49dc315` | `reclutarParaTodos` salta sin intentarlo las tropas sin edificio o con la escuadra completa, avanzando `contador` igual. Estado final bit-idéntico (hash de 800 ticks, 8 Facciones). |
+| **Idempotencia del NPC** | `afa4fb3` | `prepararDefensaNpc` no reescribe el loadout si ya es el que toca. Bit-idéntico. `guarnecerNpc` ya devolvía el mismo héroe sin cambios y cuesta 0,07 ms: no se toca. |
+| **`iniciarAsedio` sin defensores** | `976cb87` | Una plaza sin defensores cae sin combate ni RNG, como cuando la alcanza un ejército (Doc 5.12.4). |
+| **`typecheck:lab`** | `976cb87` | `lab/src/main.ts` al día con `EstadoSimulacion`. |
+| **`historialOrdenes` sin tope** | `52da943` | Cada plaza recuerda sus últimas `MERCADO.historialPorPlaza` (200) órdenes cerradas (`anexarAlHistorialDeOrdenes`). A las 5 semanas de batch había 219 362 órdenes y 65 MB, copiadas enteras en cada tick con órdenes cerradas. El dueño sigue viendo el historial de su mercado. |
+| **`acuerdos` sin tope** | `52da943` | Los trueques cumplidos, expirados o rechazados se podan una semana después de su `expiraEn` (`TRUEQUE.retencionTerminadosMinutos`) si ninguna caravana los cita (`podarAcuerdosTerminados`). Había 1 050 a las 5 semanas. |
+| **Coste del NPC a escala** | `af04374` | `expandirSiPuede` comprueba nivel, cooldown, cap y recursos (`puedeLanzarFundacion`) antes de barrer el mapa buscando sitio; `lanzarCampanas` cachea la defensa prevista por plaza mientras los héroes no cambian (mismo hash de estado). Desde el checkpoint de las 5 semanas: 94 → 56 ms/tick. El precheck no avanza `contador` en los lanzamientos que el motor iba a rechazar, así que los ids de lo que se crea después cambian respecto a antes (el comportamiento, no). |
+
+**Medido y descartado:**
+- **Trueques terminales a un historial aparte.** A los 4 500 ticks eran solo 23 (9 KB), y caravanas, comandos y proyecciones los buscan por id. Se resolvió podándolos (fila de arriba) cuando a las 5 semanas llegaron a 1 050.
+- **Títulos con cadencia o histéresis.** `calcularTitulos` cuesta 0,3 ms por tick con 20 Facciones y 20 plazas. Una cadencia cambiaría cuándo se narra `titulo.cambia_manos`, y la histéresis, quién lo ostenta, para ahorrar casi nada.
+
+**Batch de 5 semanas (12 Facciones, 50 400 ticks), rama contra `main`:** sin excepciones en ninguna de las dos semillas (7 y 11); integridad correcta (sin ids duplicados, huérfanos ni residencia doble); conquistas sin defensor 0 % frente a 0–2 %; ritmo de nivel 2/3, conquistas, ruinas y campañas en el mismo rango. Las campañas se apagan hacia las semanas 4–5 en las dos ramas: comportamiento ya presente en `main`.
 
 > **Alcance.** `9f9a098` ("reubicar a quien pierde la casa en el momento del hecho") **ya está en `main`** y se audita aquí.
 
