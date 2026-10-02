@@ -32,10 +32,8 @@ export interface PayloadTruequePropuesto {
   acuerdoId: string;
   asentamientoAId: string;
   asentamientoBId: string;
-  recursoA: RecursoTipo;
-  cantidadA: number;
-  recursoB: RecursoTipo;
-  cantidadB: number;
+  lineasA: LineaDeTrueque[];
+  lineasB: LineaDeTrueque[];
 }
 export interface PayloadOrdenColocada {
   ordenId: string;
@@ -53,13 +51,19 @@ export interface PayloadCaravanaConstruida {
   asentamientoId: string;
 }
 
+/** Una línea de lo que ofrece un lado de un trueque: un recurso y cuánto. Un lado puede ofrecer varias (Doc 3.2). */
+export interface LineaDeTrueque {
+  recurso: RecursoTipo;
+  cantidad: number;
+}
+
 export interface ParamsProponerTrueque {
   asentamientoAId: string;
-  recursoA: RecursoTipo;
-  cantidadA: number;
+  /** Lo que entrega A. */
+  lineasA: LineaDeTrueque[];
   asentamientoBId: string;
-  recursoB: RecursoTipo;
-  cantidadB: number;
+  /** Lo que entrega B. */
+  lineasB: LineaDeTrueque[];
 }
 
 /**
@@ -75,10 +79,8 @@ export const proponerTrueque = comando<ParamsProponerTrueque, { acuerdoId: strin
     estado.asentamientos,
     params.asentamientoAId,
     params.asentamientoBId,
-    params.recursoA,
-    params.recursoB,
-    params.cantidadA,
-    params.cantidadB,
+    params.lineasA,
+    params.lineasB,
     ctx.instante,
     ctx.ids.siguiente()
   );

@@ -68,7 +68,7 @@ describe('orientación de la ruta en los dos sentidos de un trueque', () => {
     // (`Comercio_Fisico_Definicion.md`). Estos tests miden el TRANSPORTE, no la negociación, así que aceptan
     // en el acto y en la misma línea.
     const acuerdo = aceptarTrueque(
-      proponerTrueque([aTrasConstruir, bTrasConstruir], 'A', 'B', 'cobre', 'oro', 50, 20, instanteDeTest(0), 0),
+      proponerTrueque([aTrasConstruir, bTrasConstruir], 'A', 'B', [{ recurso: 'cobre', cantidad: 50 }], [{ recurso: 'oro', cantidad: 20 }], instanteDeTest(0), 0),
       instanteDeTest(0)
     );
 
@@ -262,7 +262,7 @@ describe('retorno real de una caravana comercial tras entregar', () => {
 // Reuso de caravana propia a través de varios envíos del mismo trueque (antes `caravana_trueque_reuso.test.ts`)
 //
 // Integración: una caravana comercial que hace VARIOS envíos del mismo trueque (a petición del usuario) —
-// verifica que `cantidadEntregadaA` se actualiza correctamente en cada entrega real (Correcciones, punto
+// verifica que `lineasA[0].cantidadEntregada` se actualiza correctamente en cada entrega real (Correcciones, punto
 // "revisar si... se actualiza correctamente en el trueque activo") y que la MISMA caravana (mismo `id`) hace
 // el viaje de vuelta y se reutiliza para el segundo envío en vez de destruirse o multiplicarse (Correcciones,
 // punto "las caravanas no se destruyen al llegar a su destino, son reutilizables").
@@ -305,7 +305,7 @@ describe('reuso de caravana propia a través de varios envíos del mismo trueque
     expect(caravana.estado).toBe('disponible');
 
     const acuerdo = aceptarTrueque(
-      proponerTrueque([origenTrasConstruir, destino0], 'origen', 'destino', 'piedra', 'oro', PACTADAS, 1, instanteDeTest(0), 0),
+      proponerTrueque([origenTrasConstruir, destino0], 'origen', 'destino', [{ recurso: 'piedra', cantidad: PACTADAS }], [{ recurso: 'oro', cantidad: 1 }], instanteDeTest(0), 0),
       instanteDeTest(0)
     );
 
@@ -332,10 +332,10 @@ describe('reuso de caravana propia a través de varios envíos del mismo trueque
     let entregoUna = false;
     for (let t = 2; t < 20 && !entregoUna; t++) {
       tick(t);
-      if (acuerdos[0]!.cantidadEntregadaA > 0) entregoUna = true;
+      if (acuerdos[0]!.lineasA[0]!.cantidadEntregada > 0) entregoUna = true;
     }
     expect(entregoUna).toBe(true);
-    expect(acuerdos[0]!.cantidadEntregadaA).toBe(CAPACIDAD);
+    expect(acuerdos[0]!.lineasA[0]!.cantidadEntregada).toBe(CAPACIDAD);
     expect(acuerdos[0]!.estado).toBe('activo'); // aún falta el segundo envío — no "cumplido" todavía.
 
     // Justo tras entregar: la MISMA caravana (mismo id, no una nueva) está "retornando", no "disponible" — no
@@ -367,10 +367,10 @@ describe('reuso de caravana propia a través de varios envíos del mismo trueque
     let entregoDos = false;
     for (let t = 21; t < 30 && !entregoDos; t++) {
       tick(t);
-      if (acuerdos[0]!.cantidadEntregadaA >= PACTADAS) entregoDos = true;
+      if (acuerdos[0]!.lineasA[0]!.cantidadEntregada >= PACTADAS) entregoDos = true;
     }
     expect(entregoDos).toBe(true);
-    expect(acuerdos[0]!.cantidadEntregadaA).toBe(PACTADAS);
+    expect(acuerdos[0]!.lineasA[0]!.cantidadEntregada).toBe(PACTADAS);
     expect(caravanas).toHaveLength(1);
     expect(caravanas[0]!.id).toBe(caravana.id);
     expect(caravanas[0]!.estado).toBe('retornando'); // vuelve a casa una última vez, ya sin más pendiente.

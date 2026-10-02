@@ -26,6 +26,7 @@ import { aceptarTrueque, construirCaravanaComercial, proponerTrueque, CaravanaIn
 import { cupoCaravanas, tieneMercadoActivo } from './asentamientoQuery';
 import { asignarCargoLocal, CargoInvalidoError } from './cargos';
 import { encontrarCapital } from './mantenimiento';
+import { ofreceRecurso } from './trueque';
 import type { EstadoSimulacion } from './simulation';
 
 /** Recursos crudos cuya escasez local es el foco del rediseño de especialización (Doc Fase_0_5) — minerales
@@ -66,8 +67,8 @@ function existeAcuerdoActivo(acuerdos: AcuerdoTrueque[], aId: string, bId: strin
   return acuerdos.some(
     (ac) =>
       ac.estado === 'activo' &&
-      ((ac.asentamientoAId === aId && ac.asentamientoBId === bId && ac.recursoB === recurso) ||
-        (ac.asentamientoBId === aId && ac.asentamientoAId === bId && ac.recursoA === recurso))
+      ((ac.asentamientoAId === aId && ac.asentamientoBId === bId && ofreceRecurso(ac, 'B', recurso)) ||
+        (ac.asentamientoBId === aId && ac.asentamientoAId === bId && ofreceRecurso(ac, 'A', recurso)))
   );
 }
 
@@ -212,10 +213,8 @@ export function avanzarAutoComercioSimulado(estado: EstadoSimulacion, mapa: Mapa
             asentamientos,
             deficitario.id,
             socio.id,
-            pago,
-            recurso,
-            SIMULACION_AUTO_COMERCIO.cantidadPorTrueque,
-            SIMULACION_AUTO_COMERCIO.cantidadPorTrueque,
+            [{ recurso: pago, cantidad: SIMULACION_AUTO_COMERCIO.cantidadPorTrueque }],
+            [{ recurso, cantidad: SIMULACION_AUTO_COMERCIO.cantidadPorTrueque }],
             instante,
             contador++
           );

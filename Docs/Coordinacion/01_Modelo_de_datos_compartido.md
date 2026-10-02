@@ -414,8 +414,9 @@ CarroCaravana
 AcuerdoTrueque
   id
   asentamientoAId, asentamientoBId
-  recursoA, recursoB
-  cantidadTotalA, cantidadTotalB, cantidadEntregadaA, cantidadEntregadaB
+  lineasA, lineasB: LineaTrueque[]   lo que entrega cada lado, una o varias líneas — 2026-10-02, sustituye a
+                         recursoA/recursoB/cantidadTotal*/cantidadEntregada* (trueque compuesto, Doc 3.2)
+  LineaTrueque: { recurso, cantidadTotal, cantidadEntregada }   un recurso por línea y lado
   creadoEn: Instante, expiraEn: Instante
   estado: 'propuesto' | 'activo' | 'rechazado' | 'cumplido' | 'expirado'
 

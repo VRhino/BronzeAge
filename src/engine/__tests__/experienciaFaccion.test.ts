@@ -97,11 +97,11 @@ describe('crecer en paz', () => {
     const dos = fundarAsentamientoDeTest(mapa, uno.facciones, 'faccion-2', [uno.asentamiento]);
     const plazas = [uno.asentamiento, dos.asentamiento];
     const porId = new Map(plazas.map((a) => [a.id, a]));
-    const acuerdo = proponerTrueque(plazas, uno.asentamiento.id, dos.asentamiento.id, 'madera', 'piedra', 10, 10, instanteDeTest(0), 0);
+    const acuerdo = proponerTrueque(plazas, uno.asentamiento.id, dos.asentamiento.id, [{ recurso: 'madera', cantidad: 10 }], [{ recurso: 'piedra', cantidad: 10 }], instanteDeTest(0), 0);
 
-    const mitad = aplicarEntregaATrueque(acuerdo, 'A', 10, porId);
+    const mitad = aplicarEntregaATrueque(acuerdo, 'A', { madera: 10 }, porId);
     expect(mitad.ajustesExperiencia).toEqual([]);
-    const cerrado = aplicarEntregaATrueque(mitad.acuerdo, 'B', 10, porId);
+    const cerrado = aplicarEntregaATrueque(mitad.acuerdo, 'B', { piedra: 10 }, porId);
     expect(cerrado.ajustesExperiencia.map((a) => [a.faccionId, a.delta])).toEqual([
       ['faccion-1', NIVEL_FACCION.xp.truequeCumplido],
       ['faccion-2', NIVEL_FACCION.xp.truequeCumplido],
@@ -115,8 +115,8 @@ describe('crecer en paz', () => {
     const dos = fundarAsentamientoDeTest(mapa, uno.facciones, 'faccion-1', [uno.asentamiento]);
     const plazas = [uno.asentamiento, dos.asentamiento];
     const porId = new Map(plazas.map((a) => [a.id, a]));
-    const acuerdo = proponerTrueque(plazas, uno.asentamiento.id, dos.asentamiento.id, 'madera', 'piedra', 10, 10, instanteDeTest(0), 0);
-    const mitad = aplicarEntregaATrueque(acuerdo, 'A', 10, porId);
-    expect(aplicarEntregaATrueque(mitad.acuerdo, 'B', 10, porId).ajustesExperiencia).toEqual([]);
+    const acuerdo = proponerTrueque(plazas, uno.asentamiento.id, dos.asentamiento.id, [{ recurso: 'madera', cantidad: 10 }], [{ recurso: 'piedra', cantidad: 10 }], instanteDeTest(0), 0);
+    const mitad = aplicarEntregaATrueque(acuerdo, 'A', { madera: 10 }, porId);
+    expect(aplicarEntregaATrueque(mitad.acuerdo, 'B', { piedra: 10 }, porId).ajustesExperiencia).toEqual([]);
   });
 });

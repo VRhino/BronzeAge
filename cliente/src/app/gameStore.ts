@@ -737,24 +737,17 @@ export class GameStore {
     await this.despachar('fusionar', { faccionAId, faccionBId, nuevoNombre, nuevoReyId }, 'Fusión rechazada');
   }
 
+  /** Cada lado ofrece una o varias líneas `{ recurso, cantidad }` (trueque compuesto, Doc 3.2). */
   async proponerTrueque(
     asentamientoAId: string,
-    recursoA: string,
-    cantidadA: number,
+    lineasA: { recurso: string; cantidad: number }[],
     asentamientoBId: string,
-    recursoB: string,
-    cantidadB: number
+    lineasB: { recurso: string; cantidad: number }[]
   ): Promise<void> {
+    const tipadas = (lineas: { recurso: string; cantidad: number }[]) => lineas.map((l) => ({ recurso: l.recurso as RecursoTipo, cantidad: l.cantidad }));
     await this.despachar(
       'proponerTrueque',
-      {
-        asentamientoAId,
-        recursoA: recursoA as RecursoTipo,
-        cantidadA,
-        asentamientoBId,
-        recursoB: recursoB as RecursoTipo,
-        cantidadB,
-      },
+      { asentamientoAId, lineasA: tipadas(lineasA), asentamientoBId, lineasB: tipadas(lineasB) },
       'Trueque rechazado'
     );
   }

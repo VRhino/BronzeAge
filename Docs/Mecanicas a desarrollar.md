@@ -12,7 +12,6 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 
 | # | Área | Mecánica | Código hoy |
 |---|---|---|---|
-| 5 | TRUEQUE | Trueque compuesto de varios materiales | ✘ nada |
 | 8 | CARAVANAS | Revamp de caravanas — solo los trozos diferidos (§8.1) | ◐ núcleo hecho; §8.1 no |
 | 9 | ASENTAMIENTO | Eventos de asentamiento | ✘ nada |
 | 10 | WORLDGEN | Landmarks reconocibles | ✘ nada |
@@ -43,11 +42,6 @@ fase posterior a Fase 0) y el **comercio marítimo / unidades navales** (fuera d
 diseño). Los ajustes de calibración de mecánicas ya construidas viven en cada ficha de `Consideraciones/` y en
 `Preguntas_Abiertas.md`, no aquí. Lo ya cerrado (diseño + implementación) se retira de este archivo por
 completo; su estado queda en el checklist.
-
-## 5. Trueque compuesto de varios materiales
-
-`AcuerdoTrueque` es hoy un intercambio de **un** recurso por **un** recurso (`recursoA` / `recursoB`). Un
-acuerdo debería poder llevar varios materiales por lado.
 
 ## 8. Revamp de caravanas — trozos diferidos
 

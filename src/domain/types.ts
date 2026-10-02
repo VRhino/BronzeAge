@@ -996,19 +996,22 @@ export interface CampamentoBandido {
 
 /**
  * Contrato marco abierto en el tiempo entre dos asentamientos (Doc 3.2). "Funciona en ambas direcciones":
- * A se compromete a entregar cantidadTotalA de recursoA, B se compromete a entregar cantidadTotalB de recursoB;
- * cada lado despacha sus propias caravanas de forma independiente hasta cumplir su cupo o expirar el plazo.
+ * A se compromete a entregar sus `lineasA` y B sus `lineasB` (cada línea, un recurso y su cantidad); cada lado
+ * despacha sus propias caravanas de forma independiente hasta cumplir todas sus líneas o expirar el plazo.
  */
+export interface LineaTrueque {
+  recurso: string;
+  cantidadTotal: number;
+  cantidadEntregada: number;
+}
+
 export interface AcuerdoTrueque {
   id: string;
   asentamientoAId: string;
   asentamientoBId: string;
-  recursoA: string;
-  recursoB: string;
-  cantidadTotalA: number;
-  cantidadTotalB: number;
-  cantidadEntregadaA: number;
-  cantidadEntregadaB: number;
+  /** Lo que se compromete a entregar cada lado: una o varias líneas (trueque compuesto, Doc 3.2). */
+  lineasA: LineaTrueque[];
+  lineasB: LineaTrueque[];
   /** Instantes de mundo de creación y vencimiento del acuerdo (Fase D). */
   creadoEn: Instante;
   /**

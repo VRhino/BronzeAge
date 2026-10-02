@@ -153,7 +153,7 @@ const CASOS: CasoIdInexistente[] = [
     ejecutar: ({ sesion, asentamientoId }) =>
       sesion.ejecutar(
         proponerTrueque,
-        { asentamientoAId: asentamientoId, recursoA: 'madera', cantidadA: 5, asentamientoBId: 'no-existe', recursoB: 'piedra', cantidadB: 5 },
+        { asentamientoAId: asentamientoId, lineasA: [{ recurso: 'madera', cantidad: 5 }], asentamientoBId: 'no-existe', lineasB: [{ recurso: 'piedra', cantidad: 5 }] },
         OPC
       ),
   },

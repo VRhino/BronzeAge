@@ -39,6 +39,12 @@ const PUNTO = {
   additionalProperties: false,
 } as const;
 const RECURSO = { type: 'string', enum: RECURSOS_TIPO } as const;
+/** Lo que ofrece un lado de un trueque: al menos una línea, cada una con su recurso y su cantidad. */
+const LINEAS_TRUEQUE = {
+  type: 'array',
+  minItems: 1,
+  items: { type: 'object', properties: { recurso: RECURSO, cantidad: NUMERO }, required: ['recurso', 'cantidad'], additionalProperties: false },
+} as const;
 // A dónde va una columna: un asentamiento por id, o un punto del mapa. Se valida con `oneOf` para que un
 // cliente no pueda colar un punto sin coordenadas ni un destino sin id. Lo comparten `movilizarEjercito`
 // (fijarlo al salir) y `marcharA` (rectificarlo cuantas veces quiera un viajero solo).
@@ -232,16 +238,15 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   ),
 
   // --- Comercio ---
+  // Cada lado ofrece una o varias líneas (trueque compuesto, Doc 3.2).
   proponerTrueque: objeto(
     {
       asentamientoAId: IDENTIFICADOR,
-      recursoA: RECURSO,
-      cantidadA: NUMERO,
+      lineasA: LINEAS_TRUEQUE,
       asentamientoBId: IDENTIFICADOR,
-      recursoB: RECURSO,
-      cantidadB: NUMERO,
+      lineasB: LINEAS_TRUEQUE,
     },
-    ['asentamientoAId', 'recursoA', 'cantidadA', 'asentamientoBId', 'recursoB', 'cantidadB']
+    ['asentamientoAId', 'lineasA', 'asentamientoBId', 'lineasB']
   ),
   aceptarTrueque: objeto({ acuerdoId: IDENTIFICADOR }, ['acuerdoId']),
   rechazarTrueque: objeto({ acuerdoId: IDENTIFICADOR }, ['acuerdoId']),

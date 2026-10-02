@@ -3,7 +3,7 @@
 // (dibujo/color, puramente presentacional). Nunca importa nada de `./engine/*` ni captura errores
 // de dominio: eso es responsabilidad exclusiva de `gameStore`. Los tipos de `./domain/types` se
 // importan solo como `type` para tipar lo que se lee — no acoplan a ninguna lógica.
-import type { Asentamiento, BiomaTipo, CargoTipo, Edificio, Faccion, RegionId } from '@motor/domain/types';
+import type { AcuerdoTrueque, Asentamiento, BiomaTipo, CargoTipo, Edificio, Faccion, RegionId } from '@motor/domain/types';
 import { RED_VACIA, tramosDeRed } from '@motor/engine/redCaminos';
 import { ApiError } from './app/apiCliente';
 import { CATALOGOS, crearGameStore, fmtTiempoMundo, type GameState, type GameStore, type EstadoMejoraEdificio } from './app/gameStore';
@@ -35,6 +35,22 @@ const RECURSO_NOMBRE: Record<string, string> = {
   armaduraIntermedia: 'Armadura Intermedia',
   armaduraBronce: 'Armadura de Bronce',
 };
+
+/** Un lado de un trueque en texto: "recurso" por línea, o "entregado/total recurso" con el progreso (Doc 3.2). */
+function lineasTxt(lineas: AcuerdoTrueque['lineasA'], conProgreso: boolean): string {
+  return lineas
+    .map((l) => `${conProgreso ? `${l.cantidadEntregada.toFixed(0)}/${l.cantidadTotal} ` : ''}${RECURSO_NOMBRE[l.recurso] ?? l.recurso}`)
+    .join(' + ');
+}
+
+/** Progreso medio de las dos partes de un trueque, 0-100. */
+function porcentajeDeTrueque(acuerdo: AcuerdoTrueque): number {
+  const progreso = (lineas: AcuerdoTrueque['lineasA']) => {
+    const total = lineas.reduce((a, l) => a + l.cantidadTotal, 0);
+    return total > 0 ? Math.min(1, lineas.reduce((a, l) => a + Math.min(l.cantidadEntregada, l.cantidadTotal), 0) / total) : 1;
+  };
+  return Math.round(((progreso(acuerdo.lineasA) + progreso(acuerdo.lineasB)) / 2) * 100);
+}
 
 /** Regiones geográficas disponibles (Fase 0.2, ver `worldgen/regiones.ts`) — nombre para el selector del
  * mundo. Mantenido a mano, igual que `BIOMA_NOMBRE`/`EDIFICIO_NOMBRE`: es presentación pura, no se deriva de
@@ -976,15 +992,13 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
             .map((acuerdo) => {
               const asentamientoOtroId = acuerdo.asentamientoAId === a.id ? acuerdo.asentamientoBId : acuerdo.asentamientoAId;
               const otro = state.asentamientos.find((asentamiento) => asentamiento.id === asentamientoOtroId);
-              const progresoA = acuerdo.cantidadTotalA > 0 ? Math.min(1, acuerdo.cantidadEntregadaA / acuerdo.cantidadTotalA) : 1;
-              const progresoB = acuerdo.cantidadTotalB > 0 ? Math.min(1, acuerdo.cantidadEntregadaB / acuerdo.cantidadTotalB) : 1;
-              const porcentaje = Math.round(((progresoA + progresoB) / 2) * 100);
+              const porcentaje = porcentajeDeTrueque(acuerdo);
               const caravanasAsignadas = state.caravanas.filter(
                 (caravana) => caravana.tipo === 'comercial' && caravana.origenAcuerdoId === acuerdo.id
               ).length;
               return `<tr>
-                <td>${RECURSO_NOMBRE[acuerdo.recursoA] ?? acuerdo.recursoA} ↔ ${RECURSO_NOMBRE[acuerdo.recursoB] ?? acuerdo.recursoB}<br/><span class="legend-note">con ${otro?.nombre ?? otro?.id ?? asentamientoOtroId}</span></td>
-                <td>${porcentaje}%<br/><span class="legend-note">A: ${acuerdo.cantidadEntregadaA}/${acuerdo.cantidadTotalA} · B: ${acuerdo.cantidadEntregadaB}/${acuerdo.cantidadTotalB}</span></td>
+                <td>${lineasTxt(acuerdo.lineasA, false)} ↔ ${lineasTxt(acuerdo.lineasB, false)}<br/><span class="legend-note">con ${otro?.nombre ?? otro?.id ?? asentamientoOtroId}</span></td>
+                <td>${porcentaje}%<br/><span class="legend-note">A: ${lineasTxt(acuerdo.lineasA, true)} · B: ${lineasTxt(acuerdo.lineasB, true)}</span></td>
                 <td>${caravanasAsignadas}</td>
                 <td>${fmtTiempoMundo(acuerdo.expiraEn)}</td>
               </tr>`;
@@ -1693,9 +1707,7 @@ function renderPanelEconomia(state: GameState): void {
     ? `<div class="trade-active-list">
         ${acuerdosActivos
           .map((t) => {
-            const progresoA = t.cantidadTotalA > 0 ? Math.min(1, t.cantidadEntregadaA / t.cantidadTotalA) : 1;
-            const progresoB = t.cantidadTotalB > 0 ? Math.min(1, t.cantidadEntregadaB / t.cantidadTotalB) : 1;
-            const porcentaje = Math.round(((progresoA + progresoB) / 2) * 100);
+            const porcentaje = porcentajeDeTrueque(t);
             const caravanas = state.caravanas.filter((c) => c.tipo === 'comercial' && c.origenAcuerdoId === t.id);
             const caravanasHtml = caravanas.length
               ? caravanas
@@ -1718,8 +1730,8 @@ function renderPanelEconomia(state: GameState): void {
                 <div class="trade-route-place trade-route-place-right"><small>ORIGEN B</small><strong>${nombreAsentamiento(t.asentamientoBId)}</strong><span>${nombreFaccion(t.asentamientoBId)}</span></div>
               </div>
               <div class="trade-active-metrics">
-                <div class="trade-delivery-card"><span>📦 Entrega de A</span><strong>${t.cantidadEntregadaA.toFixed(0)} <small>/ ${t.cantidadTotalA} ${RECURSO_NOMBRE[t.recursoA] ?? t.recursoA}</small></strong></div>
-                <div class="trade-delivery-card"><span>📦 Entrega de B</span><strong>${t.cantidadEntregadaB.toFixed(0)} <small>/ ${t.cantidadTotalB} ${RECURSO_NOMBRE[t.recursoB] ?? t.recursoB}</small></strong></div>
+                <div class="trade-delivery-card"><span>📦 Entrega de A</span><strong>${lineasTxt(t.lineasA, true)}</strong></div>
+                <div class="trade-delivery-card"><span>📦 Entrega de B</span><strong>${lineasTxt(t.lineasB, true)}</strong></div>
                 <div class="trade-lifetime-card"><span>⏳ Vigencia</span><strong>${fmtTiempoMundo(t.creadoEn)} → ${fmtTiempoMundo(t.expiraEn)}</strong><small>${Math.max(0, Math.round((t.expiraEn - state.instante) / 60000))} min restantes</small></div>
               </div>
               <div class="trade-caravans-block"><div class="trade-subsection-title">🚚 Caravanas asignadas <span>${caravanas.length}</span></div>${caravanasHtml}</div>

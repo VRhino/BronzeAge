@@ -956,12 +956,8 @@ describe('escolta: cargar y entregar a mano', () => {
       id: 'ac1',
       asentamientoAId: asentamiento.id,
       asentamientoBId: otro.id,
-      recursoA: 'piedra',
-      recursoB: 'oro',
-      cantidadTotalA: 100,
-      cantidadTotalB: 50,
-      cantidadEntregadaA: 30,
-      cantidadEntregadaB: 0,
+      lineasA: [{ recurso: 'piedra', cantidadTotal: 100, cantidadEntregada: 30 }],
+      lineasB: [{ recurso: 'oro', cantidadTotal: 50, cantidadEntregada: 0 }],
       creadoEn: instanteDeTest(0),
       expiraEn: instanteDeTest(1000),
       estado: 'activo',
@@ -969,12 +965,11 @@ describe('escolta: cargar y entregar a mano', () => {
 
     const mio = ladoPendienteParaEjercito(e, acuerdo, [asentamiento, otro])!;
     expect(mio.lado).toBe('A');
-    expect(mio.recurso).toBe('piedra');
-    expect(mio.faltante, '100 pactadas menos 30 ya entregadas').toBe(70);
+    expect(mio.pendientes, '100 pactadas menos 30 ya entregadas').toEqual([{ recurso: 'piedra', faltante: 70 }]);
     expect(mio.destinoId, 'se entrega en el OTRO lado').toBe('otro');
 
     // Saldado o cerrado: no hay nada que entregar.
-    expect(ladoPendienteParaEjercito(e, { ...acuerdo, cantidadEntregadaA: 100 }, [asentamiento, otro])).toBeNull();
+    expect(ladoPendienteParaEjercito(e, { ...acuerdo, lineasA: [{ recurso: 'piedra', cantidadTotal: 100, cantidadEntregada: 100 }] }, [asentamiento, otro])).toBeNull();
     expect(ladoPendienteParaEjercito(e, { ...acuerdo, estado: 'cumplido' }, [asentamiento, otro])).toBeNull();
     // Y un ejército de una Facción que no es parte del trueque tampoco.
     expect(ladoPendienteParaEjercito({ ...e, faccionId: 'faccion-3' }, acuerdo, [asentamiento, otro])).toBeNull();
@@ -988,22 +983,18 @@ describe('escolta: cargar y entregar a mano', () => {
       id: 'ac1',
       asentamientoAId: asentamiento.id,
       asentamientoBId: otro.id,
-      recursoA: 'piedra',
-      recursoB: 'oro',
-      cantidadTotalA: 100,
-      cantidadTotalB: 50,
-      cantidadEntregadaA: 0,
-      cantidadEntregadaB: 0,
+      lineasA: [{ recurso: 'piedra', cantidadTotal: 100, cantidadEntregada: 0 }],
+      lineasB: [{ recurso: 'oro', cantidadTotal: 50, cantidadEntregada: 0 }],
       creadoEn: instanteDeTest(0),
       expiraEn: instanteDeTest(1000),
       estado: 'activo',
     };
 
-    const r = entregarDesdeCaravanaAdjunta(c, acuerdo, 'A', 'piedra', 100, otro, asentamiento, [asentamiento, otro], crearFacciones());
+    const r = entregarDesdeCaravanaAdjunta(c, acuerdo, 'A', [{ recurso: 'piedra', faltante: 100 }], otro, asentamiento, [asentamiento, otro], crearFacciones());
 
     expect(r.entregado, 'entrega el FALTANTE, no todo lo que carga').toBe(100);
     expect(r.caravana.contenido['piedra'], 'y conserva el resto').toBe(100);
-    expect(r.acuerdo.cantidadEntregadaA).toBe(100);
+    expect(r.acuerdo.lineasA[0]!.cantidadEntregada).toBe(100);
     expect(r.destino.almacen['piedra']!.cantidad).toBeGreaterThan(asentamiento.almacen['piedra']?.cantidad ?? 0);
     expect(r.comision, 'el destino cobra su comisión, igual que en una entrega automática').toBeGreaterThan(0);
   });

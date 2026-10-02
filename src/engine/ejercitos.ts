@@ -42,6 +42,7 @@ import { agregarRecurso, cantidadDisponible, descontarRecursos } from './almacen
 import { avanzarRacion, consumoRacionDeEscuadrones, reservaDeTrigo } from './tropas';
 import { puedeLlevar } from './liderazgo';
 import { esResidente, estanAliadas } from './pertenencia';
+import { lineasPendientes, type LadoTrueque } from './trueque';
 import { heridosEn, herir } from './heroe';
 import { estaProtegida } from './asentamientoQuery';
 import { registrarDerrota } from './faccion';
@@ -702,30 +703,18 @@ export function ladoPendienteParaEjercito(
   ejercito: Ejercito,
   acuerdo: AcuerdoTrueque,
   asentamientos: readonly Asentamiento[]
-): { lado: 'A' | 'B'; recurso: string; faltante: number; destinoId: string } | null {
+): { lado: LadoTrueque; pendientes: { recurso: string; faltante: number }[]; destinoId: string } | null {
   if (acuerdo.estado !== 'activo') return null;
   const faccionDe = (id: string) => asentamientos.find((a) => a.id === id)?.faccionId;
 
   // El lado que DEBE es el de la Facción del ejército; el destino de la entrega es el otro.
-  const candidatos: { lado: 'A' | 'B'; deudorId: string; destinoId: string; recurso: string; faltante: number }[] = [
-    {
-      lado: 'A',
-      deudorId: acuerdo.asentamientoAId,
-      destinoId: acuerdo.asentamientoBId,
-      recurso: acuerdo.recursoA,
-      faltante: acuerdo.cantidadTotalA - acuerdo.cantidadEntregadaA,
-    },
-    {
-      lado: 'B',
-      deudorId: acuerdo.asentamientoBId,
-      destinoId: acuerdo.asentamientoAId,
-      recurso: acuerdo.recursoB,
-      faltante: acuerdo.cantidadTotalB - acuerdo.cantidadEntregadaB,
-    },
+  const candidatos: { lado: LadoTrueque; deudorId: string; destinoId: string; pendientes: { recurso: string; faltante: number }[] }[] = [
+    { lado: 'A', deudorId: acuerdo.asentamientoAId, destinoId: acuerdo.asentamientoBId, pendientes: lineasPendientes(acuerdo, 'A') },
+    { lado: 'B', deudorId: acuerdo.asentamientoBId, destinoId: acuerdo.asentamientoAId, pendientes: lineasPendientes(acuerdo, 'B') },
   ];
 
-  const mio = candidatos.find((c) => faccionDe(c.deudorId) === ejercito.faccionId && c.faltante > 0);
-  return mio ? { lado: mio.lado, recurso: mio.recurso, faltante: mio.faltante, destinoId: mio.destinoId } : null;
+  const mio = candidatos.find((c) => faccionDe(c.deudorId) === ejercito.faccionId && c.pendientes.length > 0);
+  return mio ? { lado: mio.lado, pendientes: mio.pendientes, destinoId: mio.destinoId } : null;
 }
 
 /**

@@ -44,7 +44,7 @@ describe('proponerTrueque y su respuesta', () => {
   function proponer(sesion: GameSession, aId: string, bId: string, cantidad = 5): string {
     const r = sesion.ejecutar(
       proponerTrueque,
-      { asentamientoAId: aId, recursoA: 'madera', cantidadA: cantidad, asentamientoBId: bId, recursoB: 'piedra', cantidadB: cantidad },
+      { asentamientoAId: aId, lineasA: [{ recurso: 'madera', cantidad }], asentamientoBId: bId, lineasB: [{ recurso: 'piedra', cantidad }] },
       OPC
     );
     if (!r.ok) throw new Error(`setup del test: la propuesta falló (${r.codigoError})`);

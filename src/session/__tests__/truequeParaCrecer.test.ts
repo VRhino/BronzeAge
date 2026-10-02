@@ -28,15 +28,15 @@ function escenario(nivelFaccion: number) {
 describe('trueque para crecer', () => {
   it('una plaza de nivel 2 sin bronce se lo pide a una plaza NPC a la que le sobra, y esta acepta', () => {
     const { r, necesitado, donante } = escenario(3);
-    const bronce = r.estado.acuerdos.find((a) => a.asentamientoAId === necesitado.id && a.recursoB === 'lingoteBronce');
+    const bronce = r.estado.acuerdos.find((a) => a.asentamientoAId === necesitado.id && a.lineasB[0]!.recurso === 'lingoteBronce');
     expect(bronce).toBeDefined();
     expect(bronce!.asentamientoBId).toBe(donante.id);
-    expect(bronce!.cantidadTotalB).toBe(100); // lo que pide el coste del nivel 3
+    expect(bronce!.lineasB[0]!.cantidadTotal).toBe(100); // lo que pide el coste del nivel 3
     expect(bronce!.estado).toBe('activo');
   });
 
   it('sin cupo de nivel 3 en su Facción, no lo pide: no acapara bronce para una subida que no puede hacer', () => {
     const { r, necesitado } = escenario(1);
-    expect(r.estado.acuerdos.some((a) => a.asentamientoAId === necesitado.id && a.recursoB === 'lingoteBronce')).toBe(false);
+    expect(r.estado.acuerdos.some((a) => a.asentamientoAId === necesitado.id && a.lineasB[0]!.recurso === 'lingoteBronce')).toBe(false);
   });
 });

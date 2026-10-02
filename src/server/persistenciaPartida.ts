@@ -64,8 +64,11 @@ import { leerEventos } from './eventosDePartida';
  *   Sin migración.
  *
  * v19 (2026-09-29): tecnología por Eras (`state.tecnologia`, Doc 6). Sin migración: el playtest arranca de cero.
+ *
+ * v20 (2026-10-02): el trueque compuesto (Doc 3.2): `AcuerdoTrueque` guarda `lineasA`/`lineasB` en vez de
+ *   `recursoA`/`cantidadTotalA`/... Sin migración: un acuerdo viejo no se puede leer sin inventar las líneas.
  */
-export const FORMATO_SNAPSHOT_VERSION = 19;
+export const FORMATO_SNAPSHOT_VERSION = 20;
 
 export interface SnapshotPartida {
   formatoVersion: number;

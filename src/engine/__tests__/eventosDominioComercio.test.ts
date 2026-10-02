@@ -42,12 +42,8 @@ describe('eventos de dominio — trade.ts', () => {
       id: 'acuerdo-1',
       asentamientoAId: 'origen',
       asentamientoBId: 'destino',
-      recursoA: 'madera',
-      recursoB: 'piedra',
-      cantidadTotalA: 100,
-      cantidadTotalB: 100,
-      cantidadEntregadaA: 0,
-      cantidadEntregadaB: 0,
+      lineasA: [{ recurso: 'madera', cantidadTotal: 100, cantidadEntregada: 0 }],
+      lineasB: [{ recurso: 'piedra', cantidadTotal: 100, cantidadEntregada: 0 }],
       creadoEn: instanteDeTest(0),
       expiraEn: instanteDeTest(1),
       estado: 'activo',
@@ -71,12 +67,8 @@ describe('eventos de dominio — trade.ts', () => {
       id: 'acuerdo-2',
       asentamientoAId: 'origen',
       asentamientoBId: 'destino',
-      recursoA: 'madera',
-      recursoB: 'piedra',
-      cantidadTotalA: 50,
-      cantidadTotalB: 50,
-      cantidadEntregadaA: 0,
-      cantidadEntregadaB: 0,
+      lineasA: [{ recurso: 'madera', cantidadTotal: 50, cantidadEntregada: 0 }],
+      lineasB: [{ recurso: 'piedra', cantidadTotal: 50, cantidadEntregada: 0 }],
       creadoEn: instanteDeTest(0),
       expiraEn: instanteDeTest(100),
       estado: 'activo',
@@ -101,7 +93,7 @@ describe('eventos de dominio — trade.ts', () => {
     const p = (evento as { payload: unknown }).payload as PayloadCaravanaSale;
     expect(p.origenId).toBe('origen');
     expect(p.destinoId).toBe('destino');
-    expect(p.recurso).toBe('madera');
+    expect(p.contenido).toHaveProperty('madera');
   });
 
   it('entrega que completa un acuerdo por ambos lados produce comercio.trueque_cumplido', () => {
@@ -111,12 +103,8 @@ describe('eventos de dominio — trade.ts', () => {
       id: 'acuerdo-3',
       asentamientoAId: 'origen',
       asentamientoBId: 'destino',
-      recursoA: 'madera',
-      recursoB: 'piedra',
-      cantidadTotalA: 10,
-      cantidadTotalB: 10,
-      cantidadEntregadaA: 10,
-      cantidadEntregadaB: 0,
+      lineasA: [{ recurso: 'madera', cantidadTotal: 10, cantidadEntregada: 10 }],
+      lineasB: [{ recurso: 'piedra', cantidadTotal: 10, cantidadEntregada: 0 }],
       creadoEn: instanteDeTest(0),
       expiraEn: instanteDeTest(100),
       estado: 'activo',

@@ -1,4 +1,5 @@
 import type { AcuerdoTrueque, Asentamiento, Caravana, Escuadron, Faccion, Heroe, Point, RedCaminos, ZonaInfluencia } from '../domain/types';
+import { acuerdoSaldado, conEntrega, fraccionIncumplida, lineasPendientes, totalesDeLado, type LadoTrueque } from './trueque';
 import type { EventoCrudo } from '../domain/eventos';
 
 /** Fase A5 — payload de `comercio.entrega_escoltada` (Doc 5.13.3). */
@@ -6,8 +7,8 @@ export interface PayloadEntregaEscoltada {
   caravanaId: string;
   acuerdoId: string;
   destinoId: string;
-  recurso: string;
-  entregado: number;
+  /** Lo entregado de cada línea del trueque que la caravana llevaba. */
+  entregado: Record<string, number>;
   comision: number;
 }
 
@@ -31,8 +32,7 @@ export interface PayloadTruequeExpirado {
 export interface PayloadCaravanaSale {
   origenId: string;
   destinoId: string;
-  cantidad: number;
-  recurso: string;
+  contenido: Record<string, number>;
 }
 /** Payload de `comercio.peaje_paso`: lo que deja una caravana al pasar por una ciudad ajena (Doc 1.6, decisión 6). */
 export interface PayloadPeajePaso {
@@ -66,7 +66,7 @@ function distancia(a: Point, b: Point): number {
 
 /**
  * Propone un acuerdo de trueque entre dos asentamientos (Doc 3.2). "Funciona en ambas direcciones": cada lado
- * se compromete a entregar su propio recurso.
+ * se compromete a entregar sus propias líneas (uno o varios recursos, cada uno con su cantidad).
  *
  * **Nace `'propuesto'`, y no obliga a nadie hasta que el otro lado acepta** (`aceptarTrueque`,
  * `Consideraciones/Comercio_Fisico_Definicion.md` decision 5). Hasta 2026-09-07 nacia `'activo'` en el mismo
@@ -82,10 +82,8 @@ export function proponerTrueque(
   asentamientos: Asentamiento[],
   asentamientoAId: string,
   asentamientoBId: string,
-  recursoA: string,
-  recursoB: string,
-  cantidadTotalA: number,
-  cantidadTotalB: number,
+  lineasA: readonly { recurso: string; cantidad: number }[],
+  lineasB: readonly { recurso: string; cantidad: number }[],
   instante: Instante,
   contador = 0
 ): AcuerdoTrueque {
@@ -95,20 +93,20 @@ export function proponerTrueque(
   const a = asentamientos.find((s) => s.id === asentamientoAId);
   const b = asentamientos.find((s) => s.id === asentamientoBId);
   if (!a || !b) throw new TruequeInvalidoError('Alguno de los asentamientos no existe.');
-  if (cantidadTotalA <= 0 || cantidadTotalB <= 0) {
-    throw new TruequeInvalidoError('Las cantidades pactadas deben ser mayores que 0.');
+  for (const lineas of [lineasA, lineasB]) {
+    if (lineas.length === 0) throw new TruequeInvalidoError('Cada lado tiene que ofrecer al menos un recurso.');
+    if (lineas.some((l) => !(l.cantidad > 0))) throw new TruequeInvalidoError('Las cantidades pactadas deben ser mayores que 0.');
+    if (new Set(lineas.map((l) => l.recurso)).size !== lineas.length) throw new TruequeInvalidoError('Un lado no puede repetir un recurso: suma sus cantidades en una sola línea.');
   }
+  const aLineas = (lineas: readonly { recurso: string; cantidad: number }[]) =>
+    lineas.map((l) => ({ recurso: l.recurso, cantidadTotal: l.cantidad, cantidadEntregada: 0 }));
 
   return {
     id: `trueque-${asentamientoAId}-${asentamientoBId}-${contador}`,
     asentamientoAId,
     asentamientoBId,
-    recursoA,
-    recursoB,
-    cantidadTotalA,
-    cantidadTotalB,
-    cantidadEntregadaA: 0,
-    cantidadEntregadaB: 0,
+    lineasA: aLineas(lineasA),
+    lineasB: aLineas(lineasB),
     creadoEn: instante,
     // Mientras esta propuesto, el plazo es para CONTESTAR. `aceptarTrueque` lo vuelve a contar desde el si.
     expiraEn: sumar(instante, minutos(TRUEQUE.plazoMinutosPorDefecto)),
@@ -533,8 +531,7 @@ function avanzarCaravanas(
           payload: {
             origenId: caravana.origenAsentamientoId,
             destinoId: caravana.destinoAsentamientoId ?? '',
-            cantidad: Object.values(caravana.contenido).reduce((a, b) => a + b, 0),
-            recurso: Object.keys(caravana.contenido)[0] ?? '',
+            contenido: caravana.contenido,
           } satisfies PayloadCaravanaSale,
         });
       } else {
@@ -674,8 +671,7 @@ function avanzarCaravanas(
     if (caravana.origenAcuerdoId && caravana.ladoAcuerdo) {
       const acuerdo = acuerdosPorId.get(caravana.origenAcuerdoId);
       if (acuerdo) {
-        const entregado = Object.values(caravana.contenido)[0] ?? 0;
-        const aplicado = aplicarEntregaATrueque(acuerdo, caravana.ladoAcuerdo, entregado, asentamientosPorId);
+        const aplicado = aplicarEntregaATrueque(acuerdo, caravana.ladoAcuerdo, caravana.contenido, asentamientosPorId);
         const actualizado = aplicado.acuerdo;
         eventos.push(...aplicado.eventos);
         ajustesReputacion.push(...aplicado.ajustesReputacion);
@@ -710,10 +706,12 @@ function avanzarCaravanas(
 
 interface LadoPendiente {
   acuerdo: AcuerdoTrueque;
-  lado: 'A' | 'B';
+  lado: LadoTrueque;
   origenId: string;
   destinoId: string;
-  recurso: string;
+  /** Las líneas de este lado que faltan, en el orden del acuerdo: una caravana las carga en ese orden hasta llenarse. */
+  lineas: { recurso: string; faltante: number }[];
+  /** Cantidad pactada y entregada de todo el lado, para ponderar el score. */
   total: number;
   entregado: number;
 }
@@ -769,19 +767,18 @@ export function comisionDeEntrega(
  */
 export function aplicarEntregaATrueque(
   acuerdo: AcuerdoTrueque,
-  lado: 'A' | 'B',
-  cantidad: number,
+  lado: LadoTrueque,
+  /** Lo entregado, por recurso: cada uno se abona a su línea. */
+  entregas: Record<string, number>,
   asentamientosPorId: Map<string, Asentamiento>
 ): { acuerdo: AcuerdoTrueque; eventos: EventoCrudo[]; ajustesReputacion: AjusteReputacion[]; ajustesExperiencia: AjusteExperiencia[] } {
   const eventos: EventoCrudo[] = [];
   const ajustesReputacion: AjusteReputacion[] = [];
   const ajustesExperiencia: AjusteExperiencia[] = [];
-  const actualizado: AcuerdoTrueque =
-    lado === 'A'
-      ? { ...acuerdo, cantidadEntregadaA: acuerdo.cantidadEntregadaA + cantidad }
-      : { ...acuerdo, cantidadEntregadaB: acuerdo.cantidadEntregadaB + cantidad };
+  let actualizado: AcuerdoTrueque = acuerdo;
+  for (const [recurso, cantidad] of Object.entries(entregas)) actualizado = conEntrega(actualizado, lado, recurso, cantidad);
 
-  if (actualizado.cantidadEntregadaA >= actualizado.cantidadTotalA && actualizado.cantidadEntregadaB >= actualizado.cantidadTotalB) {
+  if (acuerdoSaldado(actualizado)) {
     actualizado.estado = 'cumplido';
     eventos.push({
       codigo: 'comercio.trueque_cumplido',
@@ -828,9 +825,9 @@ export class EntregaInvalidaError extends ReglaInvalidaError {}
 export function entregarDesdeCaravanaAdjunta(
   caravana: Caravana,
   acuerdo: AcuerdoTrueque,
-  lado: 'A' | 'B',
-  recurso: string,
-  faltante: number,
+  lado: LadoTrueque,
+  /** Las líneas que debe ese lado y lo que falta de cada una (`lineasPendientes`). */
+  pendientes: readonly { recurso: string; faltante: number }[],
   destino: Asentamiento,
   origen: Asentamiento,
   asentamientos: readonly Asentamiento[],
@@ -839,39 +836,48 @@ export function entregarDesdeCaravanaAdjunta(
   caravana: Caravana;
   destino: Asentamiento;
   acuerdo: AcuerdoTrueque;
+  /** Total entregado, de todas las líneas. */
   entregado: number;
   comision: number;
   eventos: EventoCrudo[];
   ajustesReputacion: AjusteReputacion[];
   ajustesExperiencia: AjusteExperiencia[];
 } {
-  const cargado = caravana.contenido[recurso] ?? 0;
-  if (cargado <= 0) throw new EntregaInvalidaError(`La caravana ${caravana.id} no lleva ${recurso}.`);
-
-  const entregado = Math.min(cargado, faltante);
-  if (entregado <= 0) throw new EntregaInvalidaError('Ese lado del trueque ya está saldado.');
+  // De cada línea pendiente, lo que la caravana lleva (hasta lo que falta): sobre-entregar no tendría dónde imputarse.
+  const entregas: Record<string, number> = {};
+  for (const { recurso, faltante } of pendientes) {
+    const cantidad = Math.min(caravana.contenido[recurso] ?? 0, faltante);
+    if (cantidad > 0) entregas[recurso] = cantidad;
+  }
+  const entregado = Object.values(entregas).reduce((a, b) => a + b, 0);
+  if (entregado <= 0) throw new EntregaInvalidaError(`La caravana ${caravana.id} no lleva nada de lo que ese lado del trueque debe.`);
 
   const asentamientosPorId = new Map(asentamientos.map((a) => [a.id, a]));
-  const valorTotal = entregado * calcularPrecioReferencia(recurso, [...asentamientos]);
+  const valorTotal = Object.entries(entregas).reduce((a, [recurso, c]) => a + c * calcularPrecioReferencia(recurso, [...asentamientos]), 0);
   const comision = comisionDeEntrega(valorTotal, Math.max(1, distancia(origen.posicion, destino.posicion)), origen, destino, facciones);
 
-  let almacen = agregarRecurso(destino.almacen, recurso, entregado);
+  let almacen = destino.almacen;
+  for (const [recurso, cantidad] of Object.entries(entregas)) almacen = agregarRecurso(almacen, recurso, cantidad);
   almacen = agregarRecurso(almacen, 'oro', comision);
 
-  const aplicado = aplicarEntregaATrueque(acuerdo, lado, entregado, asentamientosPorId);
+  const aplicado = aplicarEntregaATrueque(acuerdo, lado, entregas, asentamientosPorId);
   const eventos: EventoCrudo[] = [
     {
       codigo: 'comercio.entrega_escoltada',
-      mensaje: `La caravana escoltada ${caravana.id} entrega ${entregado.toFixed(0)} ${recurso} en ${destino.id} (comisión +${comision.toFixed(1)} oro).`,
-      payload: { caravanaId: caravana.id, acuerdoId: acuerdo.id, destinoId: destino.id, recurso, entregado, comision } satisfies PayloadEntregaEscoltada,
+      mensaje: `La caravana escoltada ${caravana.id} entrega ${Object.entries(entregas)
+        .map(([r, c]) => `${c.toFixed(0)} ${r}`)
+        .join(', ')} en ${destino.id} (comisión +${comision.toFixed(1)} oro).`,
+      payload: { caravanaId: caravana.id, acuerdoId: acuerdo.id, destinoId: destino.id, entregado: entregas, comision } satisfies PayloadEntregaEscoltada,
     },
     ...aplicado.eventos,
   ];
 
-  const restante = cargado - entregado;
   const contenido = { ...caravana.contenido };
-  if (restante > 0) contenido[recurso] = restante;
-  else delete contenido[recurso];
+  for (const [recurso, cantidad] of Object.entries(entregas)) {
+    const restante = (contenido[recurso] ?? 0) - cantidad;
+    if (restante > 0) contenido[recurso] = restante;
+    else delete contenido[recurso];
+  }
 
   return {
     caravana: { ...caravana, contenido },
@@ -929,25 +935,26 @@ function asignarCaravanasATrueque(
         mensaje: `Trueque ${acuerdo.id} expiró sin completarse.`,
         payload: { acuerdoId: acuerdo.id } satisfies PayloadTruequeExpirado,
       });
-      // Incumplir un acuerdo aceptado penaliza reputación (Doc 2.7) — solo al lado que no entregó su cupo.
+      // Incumplir un acuerdo aceptado penaliza reputación (Doc 2.7): a cada lado, en proporción a lo que dejó sin
+      // entregar de lo que había pactado (Doc 3.2, decidido el 2026-10-02).
       const faccionA = asentamientosPorId.get(acuerdo.asentamientoAId)?.faccionId;
       const faccionB = asentamientosPorId.get(acuerdo.asentamientoBId)?.faccionId;
-      if (faccionA && acuerdo.cantidadEntregadaA < acuerdo.cantidadTotalA) {
-        ajustesReputacion.push({ faccionId: faccionA, delta: REPUTACION.penalizacionTruequeIncumplido, razon: 'trueque incumplido' });
-      }
-      if (faccionB && acuerdo.cantidadEntregadaB < acuerdo.cantidadTotalB) {
-        ajustesReputacion.push({ faccionId: faccionB, delta: REPUTACION.penalizacionTruequeIncumplido, razon: 'trueque incumplido' });
+      for (const [faccionId, lado] of [[faccionA, 'A'], [faccionB, 'B']] as const) {
+        const incumplido = fraccionIncumplida(acuerdo, lado);
+        if (faccionId && incumplido > 0) {
+          ajustesReputacion.push({ faccionId, delta: REPUTACION.penalizacionTruequeIncumplido * incumplido, razon: 'trueque incumplido' });
+        }
       }
       continue;
     }
 
     const lados: LadoPendiente[] = [
-      { acuerdo, lado: 'A', origenId: acuerdo.asentamientoAId, destinoId: acuerdo.asentamientoBId, recurso: acuerdo.recursoA, total: acuerdo.cantidadTotalA, entregado: acuerdo.cantidadEntregadaA },
-      { acuerdo, lado: 'B', origenId: acuerdo.asentamientoBId, destinoId: acuerdo.asentamientoAId, recurso: acuerdo.recursoB, total: acuerdo.cantidadTotalB, entregado: acuerdo.cantidadEntregadaB },
+      { acuerdo, lado: 'A', origenId: acuerdo.asentamientoAId, destinoId: acuerdo.asentamientoBId, lineas: lineasPendientes(acuerdo, 'A'), ...totalesDeLado(acuerdo, 'A') },
+      { acuerdo, lado: 'B', origenId: acuerdo.asentamientoBId, destinoId: acuerdo.asentamientoAId, lineas: lineasPendientes(acuerdo, 'B'), ...totalesDeLado(acuerdo, 'B') },
     ];
 
     for (const l of lados) {
-      if (l.entregado >= l.total) continue;
+      if (l.lineas.length === 0) continue;
       const yaEnTransito = caravanas.some((c) => c.origenAcuerdoId === acuerdo.id && c.ladoAcuerdo === l.lado && c.estado === 'en_transito');
       if (yaEnTransito) continue;
       const arr = pendientesPorOrigen.get(l.origenId) ?? [];
@@ -981,13 +988,19 @@ function asignarCaravanasATrueque(
       if (idx >= disponibles.length) break;
       const caravana = disponibles[idx]!;
 
-      const disponibleStock = cantidadDisponible(origen.almacen, l.recurso);
-      const pendiente = l.total - l.entregado;
       // Revamp (Doc 3.13): capacidad derivada de los carros de ESTA caravana (tras migración, 1 carro básico
       // + 1 buey = 500, idéntico al fijo anterior). "Carga Ampliada" se aplica encima como siempre.
-      const capacidad = capacidadCaravana(caravana) * factorCapacidadCaravana(origen);
-      const cantidad = Math.min(disponibleStock, pendiente, capacidad);
-      if (cantidad <= 0) continue; // sin stock suficiente todavía: la caravana se reintenta el siguiente tick, no consume su turno
+      // Un trueque compuesto sale en UN cargamento: las líneas se cargan en orden hasta llenar la caravana, y lo que
+      // no quepa va en la siguiente (Doc 3.2).
+      let libre = capacidadCaravana(caravana) * factorCapacidadCaravana(origen);
+      const carga: Record<string, number> = {};
+      for (const { recurso, faltante } of l.lineas) {
+        const cantidad = Math.min(cantidadDisponible(origen.almacen, recurso), faltante, libre);
+        if (cantidad <= 0) continue;
+        carga[recurso] = cantidad;
+        libre -= cantidad;
+      }
+      if (Object.keys(carga).length === 0) continue; // sin stock suficiente todavía: la caravana se reintenta el siguiente tick, no consume su turno
 
       idx++;
       // Trazado al lanzar (Doc 1.6): se arrima a los caminos con peso y fuerza el paso por las ciudades ajenas que
@@ -998,12 +1011,12 @@ function asignarCaravanasATrueque(
       if (!trazado) continue;
       red = registrarRuta(red, origen, destino, trazado.ruta, instante);
 
-      asentamientosPorId.set(origen.id, { ...origen, almacen: descontarRecursos(origen.almacen, { [l.recurso]: cantidad }) });
+      asentamientosPorId.set(origen.id, { ...origen, almacen: descontarRecursos(origen.almacen, carga) });
       caravanasPorId.set(caravana.id, {
         ...caravana,
         estado: 'en_transito',
         destinoAsentamientoId: l.destinoId,
-        contenido: { [l.recurso]: cantidad },
+        contenido: carga,
         origenAcuerdoId: l.acuerdo.id,
         ladoAcuerdo: l.lado,
         posicionActual: origen.posicion,
@@ -1013,8 +1026,10 @@ function asignarCaravanasATrueque(
       });
       eventos.push({
         codigo: 'comercio.caravana_sale',
-        mensaje: `Caravana comercial de ${origenId} sale hacia ${destino.id} con ${cantidad.toFixed(0)} ${l.recurso}.`,
-        payload: { origenId, destinoId: destino.id, cantidad, recurso: l.recurso } satisfies PayloadCaravanaSale,
+        mensaje: `Caravana comercial de ${origenId} sale hacia ${destino.id} con ${Object.entries(carga)
+          .map(([r, c]) => `${c.toFixed(0)} ${r}`)
+          .join(', ')}.`,
+        payload: { origenId, destinoId: destino.id, contenido: carga } satisfies PayloadCaravanaSale,
       });
     }
   }

@@ -107,6 +107,7 @@ import { cambiarResidencia, FaccionInvalidaError } from '../engine/faccion';
 import { anexionar } from '../engine/fusion';
 import { consumoRacionDeEscuadrones, reservaDeTrigo } from '../engine/tropas';
 import { esResidente, estanAliadas } from '../engine/pertenencia';
+import { ofreceRecurso } from '../engine/trueque';
 import { distancia } from '../world/geometria';
 import type { Instante } from '../domain/tiempo';
 
@@ -612,7 +613,7 @@ function yaTieneAyudaEnCaminoPara(acuerdos: AcuerdoTrueque[], necesitadoId: stri
       // (`Comercio_Fisico_Definicion.md`), una peticion sin contestar es ayuda YA pedida. Sin esto, un
       // asentamiento cuyo socio tarda en responder repetiria la peticion cada tick.
       (ac.estado === 'activo' || ac.estado === 'propuesto') &&
-      ((ac.asentamientoAId === necesitadoId && ac.recursoB === recurso) || (ac.asentamientoBId === necesitadoId && ac.recursoA === recurso))
+      ((ac.asentamientoAId === necesitadoId && ofreceRecurso(ac, 'B', recurso)) || (ac.asentamientoBId === necesitadoId && ofreceRecurso(ac, 'A', recurso)))
   );
 }
 
@@ -643,16 +644,17 @@ function responderPropuestasNpc(
     const plaza = asentamientos.find((a) => a.id === acuerdo.asentamientoBId);
     if (!plaza || !esNpc(plaza.faccionId)) return acuerdo;
 
-    const puede =
-      fraccionDisponible(plaza, acuerdo.recursoB as RecursoTipo) > COLCHON_EXCEDENTE_SUPERVIVENCIA &&
-      cantidadDisponible(plaza.almacen, acuerdo.recursoB) > 0;
-    if (puede) {
+    // La plaza entrega las líneas de B: tiene que sobrarle cada una.
+    const faltaAlgo = acuerdo.lineasB.find(
+      (l) => !(fraccionDisponible(plaza, l.recurso as RecursoTipo) > COLCHON_EXCEDENTE_SUPERVIVENCIA && cantidadDisponible(plaza.almacen, l.recurso) > 0)
+    );
+    if (!faltaAlgo) {
       aceptados++;
       eventos.push(`${plaza.id} acepta el trueque ${acuerdo.id}.`);
       return aceptarTrueque(acuerdo, instante);
     }
     rechazados++;
-    eventos.push(`${plaza.id} rechaza el trueque ${acuerdo.id}: no le sobra ${acuerdo.recursoB}.`);
+    eventos.push(`${plaza.id} rechaza el trueque ${acuerdo.id}: no le sobra ${faltaAlgo?.recurso}.`);
     return rechazarTrueque(acuerdo);
   });
 
@@ -701,7 +703,7 @@ function truequeDeSupervivencia(
       if (!acuerdo) continue;
       acuerdosNuevos.push(acuerdo);
       propuestos++;
-      eventos.push(`${necesitado.id} propone trueque de supervivencia: ${acuerdo.cantidadTotalA} ${acuerdo.recursoA} por ${acuerdo.cantidadTotalB} ${recurso} con ${acuerdo.asentamientoBId}.`);
+      eventos.push(`${necesitado.id} propone trueque de supervivencia: ${acuerdo.lineasA[0]!.cantidadTotal} ${acuerdo.lineasA[0]!.recurso} por ${acuerdo.lineasB[0]!.cantidadTotal} ${recurso} con ${acuerdo.asentamientoBId}.`);
     }
   }
 
@@ -741,7 +743,7 @@ function pedirAyuda(
   const pactada = Math.min(cantidad, sobra(socio, recurso), sobra(necesitado, pago));
   if (pactada <= 0) return undefined;
   try {
-    return proponerTrueque(asentamientos, necesitado.id, socio.id, pago, recurso, pactada, pactada, instante, contador);
+    return proponerTrueque(asentamientos, necesitado.id, socio.id, [{ recurso: pago, cantidad: pactada }], [{ recurso, cantidad: pactada }], instante, contador);
   } catch (err) {
     if (!(err instanceof TruequeInvalidoError)) throw err;
     return undefined;
@@ -809,7 +811,7 @@ function truequeParaCrecer(
       const acuerdo = pedirAyuda(asentamientos, plaza, recurso, cantidad, [], instante, contador++, esNpc);
       if (!acuerdo) continue;
       acuerdosNuevos.push(acuerdo);
-      eventos.push(`${plaza.id} propone trueque para crecer: ${cantidad} ${acuerdo.recursoA} por ${cantidad} ${recurso} con ${acuerdo.asentamientoBId}.`);
+      eventos.push(`${plaza.id} propone trueque para crecer: ${cantidad} ${acuerdo.lineasA[0]!.recurso} por ${cantidad} ${recurso} con ${acuerdo.asentamientoBId}.`);
     }
   }
 
