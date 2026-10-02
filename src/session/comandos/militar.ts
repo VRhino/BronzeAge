@@ -135,13 +135,14 @@ export const iniciarAsedio = comando<ParamsIniciarAsedio, { conquistado: boolean
   // queda fuera, junto a ella, con las escuadras con las que defendió (Doc 5.15.5).
   const lucharon = new Set(defensa.filter((e) => !e.enGuarnicion).map((e) => e.id));
   const desalojo = resultado.conquistado
-    ? desalojarResidentes(defensor, tras.asentamientos, tras.heroes, tras.ejercitos, lucharon, ctx.instante)
+    ? desalojarResidentes(defensor, tras.asentamientos, tras.heroes, tras.ejercitos, lucharon, ctx.instante, tras.campamentosMercenarios)
     : undefined;
   const siguiente: GameSessionState = desalojo
     ? {
         ...tras,
         asentamientos: desalojo.asentamientos,
         heroes: desalojo.heroes,
+        campamentosMercenarios: desalojo.campamentosMercenarios,
         ejercitos: [...tras.ejercitos, ...desalojo.columnas.map((c) => sinTropa(c).ejercito)],
       }
     : tras;

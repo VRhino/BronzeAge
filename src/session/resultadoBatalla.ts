@@ -249,12 +249,13 @@ function conquistar(estado: GameSessionState, b: Batalla, ahora: Instante): Game
       .flatMap((p) => p.participante.escuadras.map((e) => e.squadId))
   );
   const conquistada = estado.asentamientos.map((a) => (a.id === plaza.id ? aplicarConquista(plaza, faccionId, ahora) : a));
-  const desalojo = desalojarResidentes(plaza, conquistada, estado.heroes, estado.ejercitos, lucharon, ahora);
+  const desalojo = desalojarResidentes(plaza, conquistada, estado.heroes, estado.ejercitos, lucharon, ahora, estado.campamentosMercenarios);
   const fuera = desalojo.columnas.map(sinTropa);
   return {
     ...estado,
     facciones: registrarDerrota(estado.facciones, desalojo.asentamientos, plaza.faccionId, faccionId),
     asentamientos: desalojo.asentamientos,
+    campamentosMercenarios: desalojo.campamentosMercenarios,
     ejercitos: [...estado.ejercitos, ...fuera.map((f) => f.ejercito)],
     heroes: conEscuadrones(desalojo.heroes, fuera.flatMap((f) => f.tropa)),
   };

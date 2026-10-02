@@ -1,11 +1,19 @@
-// Residencia en campamentos de mercenarios y almacén personal (Doc 2.5, 2026-10-02): se acaba el huérfano, y cada héroe tiene
-// un almacén pequeño que viaja con él. Solo regla pura; los comandos van en `session/__tests__/comandosMercenarios.test.ts`.
+// Residencia en campamentos de mercenarios y almacén personal (Doc 2.5, 2026-10-02): se acaba el huérfano —se reubica en el
+// momento de perder la casa—, y cada héroe tiene un almacén pequeño que viaja con él. Solo regla pura; los comandos van en `session/__tests__/comandosMercenarios.test.ts`.
 import { describe, expect, it } from 'vitest';
-import type { Asentamiento, CampamentoMercenarios, Ejercito, Faccion, Heroe } from '../../domain/types';
+import type { Asentamiento, CampamentoMercenarios, Ejercito, Heroe } from '../../domain/types';
 import { ALMACEN_PERSONAL } from '../../constants';
 import { guardarEnAlmacenPersonal, sacarDelAlmacenPersonal, totalAlmacenPersonal } from '../almacenPersonal';
 import { HeroeInvalidoError } from '../heroe';
-import { acogerHeroesSinCasa, campamentoDeResidente, campamentoMasCercano, MercenariosInvalidoError, residirEnCampamento } from '../mercenarios';
+import {
+  acogerEnCampamentoMasCercano,
+  campamentoDeResidente,
+  campamentoMasCercano,
+  MercenariosInvalidoError,
+  posicionDeHeroe,
+  reubicarResidentesDeRuina,
+  residirEnCampamento,
+} from '../mercenarios';
 import { heroeDePrueba } from './fixtures';
 
 const campamento = (id: string, x: number, y: number, residentesIds: string[] = []): CampamentoMercenarios =>
@@ -14,7 +22,6 @@ const campamento = (id: string, x: number, y: number, residentesIds: string[] = 
 const plaza = (id: string, faccionId: string, extra: Partial<Asentamiento> = {}): Asentamiento =>
   ({ id, faccionId, posicion: { x: 0, y: 0 }, heroesFundadoresIds: [], casasCompradas: [], cargos: {}, ...extra }) as unknown as Asentamiento;
 
-const faccion = (id: string, ciudadanosIds: string[]): Faccion => ({ id, ciudadanosIds }) as unknown as Faccion;
 const columna = (id: string, liderId: string, x: number, y: number, suministro: Record<string, number> = {}): Ejercito =>
   ({ id, liderId, posicionActual: { x, y }, suministro }) as unknown as Ejercito;
 
@@ -47,37 +54,55 @@ describe('residirEnCampamento', () => {
   });
 });
 
-describe('acogerHeroesSinCasa: se acaba el huérfano', () => {
+describe('se acaba el huérfano: se reubica en el momento de perder la casa', () => {
   const campamentos = [campamento('c1', 100, 100), campamento('c2', 1500, 1500)];
-  const fuera = (id: string, ejercitoId: string, extra: Partial<Heroe> = {}) => heroeDePrueba(id, { tipo: 'columna', ejercitoId }, extra);
 
-  it('el ciudadano sin casa pasa al campamento más cercano a donde está', () => {
-    const heroes = [fuera('h1', 'e1'), fuera('h2', 'e2')];
-    const ejercitos = [columna('e1', 'h1', 150, 150), columna('e2', 'h2', 1400, 1400)];
-    const r = acogerHeroesSinCasa(campamentos, [], heroes, [faccion('f', ['h1', 'h2'])], ejercitos);
-
-    expect(campamentoDeResidente(r, 'h1')?.id).toBe('c1');
+  it('acogerEnCampamentoMasCercano lleva a los héroes al campamento más cercano al sitio perdido', () => {
+    const r = acogerEnCampamentoMasCercano(campamentos, ['h1', 'h2'], { x: 1400, y: 1400 });
+    expect(campamentoDeResidente(r, 'h1')?.id).toBe('c2');
     expect(campamentoDeResidente(r, 'h2')?.id).toBe('c2');
   });
 
-  it('no toca a quien ya tiene casa o campamento, a quien no tiene Facción, ni a los bots', () => {
-    const conCasa = plaza('a', 'f', { casasCompradas: ['h1'] });
-    const heroes = [fuera('h1', 'e1'), fuera('h2', 'e1'), fuera('h3', 'e1'), fuera('bot', 'e1', { controlador: 'bot' })];
-    const yaResidente = [campamento('c1', 100, 100, ['h3']), campamentos[1]!];
-    const r = acogerHeroesSinCasa(yaResidente, [conCasa], heroes, [faccion('f', ['h1', 'h3', 'bot'])], [columna('e1', 'h1', 0, 0)]);
-
-    expect(r.flatMap((c) => c.residentesIds)).toEqual(['h3']); // h1 tiene casa, h2 no es ciudadano, h3 ya reside, el bot se queda como está
-  });
-
-  it('sin posición conocida va al primero, y sin campamentos no hace nada', () => {
-    const sinUbicar = heroeDePrueba('h1', { tipo: 'ninguna' } as unknown as Heroe['ubicacion']);
-    expect(acogerHeroesSinCasa(campamentos, [], [sinUbicar], [faccion('f', ['h1'])], [])[0]!.residentesIds).toEqual(['h1']);
-    expect(acogerHeroesSinCasa([], [], [sinUbicar], [faccion('f', ['h1'])], [])).toEqual([]);
+  it('quien ya residía en otro campamento se muda al más cercano; sin campamentos o sin héroes no cambia nada', () => {
+    const yaEnC1 = [campamento('c1', 100, 100, ['h1']), campamentos[1]!];
+    const r = acogerEnCampamentoMasCercano(yaEnC1, ['h1'], { x: 1400, y: 1400 });
+    expect(r[0]!.residentesIds).toEqual([]);
+    expect(r[1]!.residentesIds).toEqual(['h1']);
+    expect(acogerEnCampamentoMasCercano([], ['h1'], { x: 0, y: 0 })).toEqual([]);
+    expect(acogerEnCampamentoMasCercano(campamentos, [], { x: 0, y: 0 })).toEqual(campamentos);
   });
 
   it('campamentoMasCercano desempata por id', () => {
     const gemelos = [campamento('b', 100, 0), campamento('a', -100, 0)];
     expect(campamentoMasCercano(gemelos, { x: 0, y: 0 })?.id).toBe('a');
+  });
+
+  it('posicionDeHeroe: su columna o su plaza, y nada si no está en ninguna', () => {
+    const casa = plaza('a', 'f', { posicion: { x: 7, y: 8 } });
+    expect(posicionDeHeroe(heroeDePrueba('h1', { tipo: 'columna', ejercitoId: 'e1' }), [], [columna('e1', 'h1', 3, 4)])).toEqual({ x: 3, y: 4 });
+    expect(posicionDeHeroe(heroeDePrueba('h1', { tipo: 'asentamiento', asentamientoId: 'a' }), [casa], [])).toEqual({ x: 7, y: 8 });
+    expect(posicionDeHeroe(heroeDePrueba('h1', { tipo: 'ninguna' } as unknown as Heroe['ubicacion']), [casa], [])).toBeUndefined();
+  });
+});
+
+describe('ruina de una plaza: los residentes no se quedan sin casa', () => {
+  const ruina = plaza('ruina', 'f', { heroesFundadoresIds: ['h1'], casasCompradas: ['h2'], posicion: { x: 50, y: 50 } });
+  const campamentos = [campamento('c1', 100, 100)];
+
+  it('van a la plaza más cercana de su Facción si le queda alguna', () => {
+    const lejos = plaza('lejos', 'f', { posicion: { x: 900, y: 900 } });
+    const cerca = plaza('cerca', 'f', { posicion: { x: 60, y: 60 } });
+    const ajena = plaza('ajena', 'g', { posicion: { x: 51, y: 51 } });
+    const r = reubicarResidentesDeRuina(ruina, [lejos, cerca, ajena], campamentos);
+
+    expect(r.asentamientos.find((a) => a.id === 'cerca')!.casasCompradas).toEqual(['h1', 'h2']);
+    expect(r.asentamientos.find((a) => a.id === 'lejos')!.casasCompradas).toEqual([]);
+    expect(r.campamentos[0]!.residentesIds).toEqual([]);
+  });
+
+  it('sin plazas de su Facción, al campamento de mercenarios más cercano', () => {
+    const r = reubicarResidentesDeRuina(ruina, [plaza('ajena', 'g')], campamentos);
+    expect(r.campamentos[0]!.residentesIds).toEqual(['h1', 'h2']);
   });
 });
 

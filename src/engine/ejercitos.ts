@@ -8,7 +8,7 @@
 // —de `campamento` a `ejercito`, doc 01 §13— y por eso la guarnición es lo único que defiende (Doc 5.12.4) y lo
 // único que come de la plaza. Aquí se trabaja sobre vistas con la tropa puesta (`EjercitoConTropa`, ver
 // `engine/tropa.ts`); quien llama las monta y las deshace.
-import type { AcuerdoTrueque, Asentamiento, CampamentoBandido, Caravana, Ejercito, Escuadron, Faccion, Heroe, Point, RedCaminos, RelacionPolitica, UbicacionHeroe, ZonaInfluencia } from '../domain/types';
+import type { AcuerdoTrueque, Asentamiento, CampamentoBandido, CampamentoMercenarios, Caravana, Ejercito, Escuadron, Faccion, Heroe, Point, RedCaminos, RelacionPolitica, UbicacionHeroe, ZonaInfluencia } from '../domain/types';
 import type { Mapa } from '../world/mapa';
 import { calcularRuta } from '../world/rutas';
 import { distancia } from '../world/geometria';
@@ -1235,11 +1235,21 @@ export function asediarPlaza(
     heroes: readonly Heroe[];
     facciones: Faccion[];
     relaciones: readonly RelacionPolitica[];
+    /** Donde van los residentes de la plaza si cae y su Facción se queda sin ninguna (Doc 1.9b). Ausente = ninguno. */
+    campamentosMercenarios?: readonly CampamentoMercenarios[];
   },
   heridos: ReadonlySet<string>,
   instante: Instante,
   rng: RandomFn
-): { ejercito: EjercitoConTropa; asentamientos: Asentamiento[]; heroes: Heroe[]; facciones: Faccion[]; columnas: EjercitoConTropa[]; eventos: EventoCrudo[] } {
+): {
+  ejercito: EjercitoConTropa;
+  asentamientos: Asentamiento[];
+  heroes: Heroe[];
+  facciones: Faccion[];
+  columnas: EjercitoConTropa[];
+  campamentosMercenarios: CampamentoMercenarios[];
+  eventos: EventoCrudo[];
+} {
   const defensores = heroesQueEntranADefender(plaza, mundo.heroes, heridos);
   const defensa = defensaDe(plaza, mundo.heroes, heridos);
   // Las que defienden en persona: si la plaza cae, salen con su héroe (Doc 5.15.5). La guarnición no.
@@ -1251,9 +1261,10 @@ export function asediarPlaza(
   }
   let asentamientos = mundo.asentamientos.map((a) => (a.id === plaza.id ? asedio.defensor : a));
   let columnas: EjercitoConTropa[] = [];
+  let campamentosMercenarios = [...(mundo.campamentosMercenarios ?? [])];
   let facciones = asedio.facciones;
   if (asedio.conquistado) {
-    ({ asentamientos, heroes, columnas } = desalojarResidentes(plaza, asentamientos, heroes, mundo.ejercitos, lucharon, instante));
+    ({ asentamientos, heroes, columnas, campamentosMercenarios } = desalojarResidentes(plaza, asentamientos, heroes, mundo.ejercitos, lucharon, instante, campamentosMercenarios));
     facciones = registrarDerrota(facciones, asentamientos, plaza.faccionId, ejercito.faccionId);
   }
   return {
@@ -1262,6 +1273,7 @@ export function asediarPlaza(
     heroes,
     facciones,
     columnas,
+    campamentosMercenarios,
     eventos: asedio.eventos.flatMap((e) => [atribuir(e, ejercito.origenAsentamientoId), ...(asedio.conquistado ? [] : [atribuir(e, plaza.id)])]),
   };
 }
@@ -1390,6 +1402,8 @@ export interface ContextoAvanceEjercitos {
    * aquí: se devuelve en `combatesPorAbrir` para que la partida abra la batalla. A una plaza de
    * `asentamientosEnBatalla` no se la asedia: se espera a la puerta (Doc 5.15.1). Ausente = todo con números. */
   batallas?: { abrirEnUnity: boolean; asentamientosEnBatalla: ReadonlySet<string> };
+  /** Campamentos de mercenarios (Doc 1.9b): donde van los residentes de una plaza conquistada si su Facción se queda sin ninguna. */
+  campamentosMercenarios?: readonly CampamentoMercenarios[];
 }
 
 /** Un combate que el tick no resuelve porque se juega en Unity: lo abre la partida (`session/batallas.ts`). */
@@ -1408,6 +1422,8 @@ export interface ResultadoAvanceEjercitos {
   facciones: Faccion[];
   /** Con sus escuadras al día —bajas, hambre, vuelta al campamento— y situados quienes volvieron a casa. */
   heroes: Heroe[];
+  /** Los campamentos de mercenarios con los residentes acogidos por una conquista de este tick. */
+  campamentosMercenarios: CampamentoMercenarios[];
   eventos: EventoCrudo[];
   combatesPorAbrir: CombatePorAbrir[];
 }
@@ -1443,6 +1459,7 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
       caravanas: [...caravanas],
       facciones: [...facciones],
       heroes: [...contexto.heroes],
+      campamentosMercenarios: [...(contexto.campamentosMercenarios ?? [])],
       eventos: [],
       combatesPorAbrir: [],
     };
@@ -1456,6 +1473,7 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
   // puesta y se deshacen al final. Lo que cambia FUERA de una columna —el campamento que defiende un asedio, la
   // tropa que vuelve a casa— se aplica en el momento, porque el siguiente asedio o reposte tiene que verlo.
   let heroes = [...contexto.heroes];
+  let campamentosMercenarios: CampamentoMercenarios[] = [...(contexto.campamentosMercenarios ?? [])];
   /** Heridos al empezar el tick (Doc 5.16.4): sus escuadras no asedian, y un ejército de solo heridos espera. */
   const heridos = heridosEn(heroes, instante);
   const indice = indiceTropa(heroes);
@@ -1617,8 +1635,9 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
         continue;
       }
       if (enemiga) {
-        const asedio = asediarPlaza(ejercito, enemiga, { asentamientos: [...porId.values()], ejercitos, heroes, facciones: faccionesActuales, relaciones }, heridos, instante, rng);
+        const asedio = asediarPlaza(ejercito, enemiga, { asentamientos: [...porId.values()], ejercitos, heroes, facciones: faccionesActuales, relaciones, campamentosMercenarios }, heridos, instante, rng);
         ejercito = asedio.ejercito;
+        campamentosMercenarios = asedio.campamentosMercenarios;
         for (const a of asedio.asentamientos) porId.set(a.id, a);
         heroes = asedio.heroes;
         faccionesActuales = asedio.facciones;
@@ -1679,6 +1698,7 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
     caravanas: caravanasFinal,
     facciones: conEncuentros.facciones,
     heroes: herir(conEscuadrones(heroes, tropaFinal), conEncuentros.vencidos, instante),
+    campamentosMercenarios,
     eventos,
     combatesPorAbrir: [...combatesPorAbrir, ...conEncuentros.combatesPorAbrir],
   };

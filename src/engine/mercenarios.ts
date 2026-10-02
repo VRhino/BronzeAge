@@ -3,13 +3,13 @@
 //
 // Un campamento no es un asentamiento: no tiene Facción, ni zona de influencia (ninguna lo absorbe, porque las zonas
 // salen de los asentamientos), ni crece, y no desaparece. Por eso no vive en `asentamientos` sino en su propia lista.
-import type { Asentamiento, CampamentoMercenarios, EdificioCampamentoTipo, Ejercito, Faccion, Heroe, Point, ZonaInfluencia } from '../domain/types';
+import type { Asentamiento, CampamentoMercenarios, EdificioCampamentoTipo, Ejercito, Heroe, Point, ZonaInfluencia } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
 import { MERCENARIOS } from '../constants';
 import type { Instante } from '../domain/tiempo';
 import type { Mapa } from '../world/mapa';
 import { pointInPolygon } from './zones';
-import { dejarResidencia, esCiudadano } from './faccion';
+import { dejarResidencia } from './faccion';
 import { esResidente } from './pertenencia';
 import { ReglaInvalidaError } from './errores';
 
@@ -198,7 +198,7 @@ export function residirEnCampamento(
 export const salirDeCampamentos = sinResidente;
 
 /** Dónde está un héroe en el mapa, si se sabe: su columna o la plaza donde está. */
-function posicionDe(heroe: Heroe, asentamientos: readonly Asentamiento[], ejercitos: readonly Ejercito[]): Point | undefined {
+export function posicionDeHeroe(heroe: Heroe, asentamientos: readonly Asentamiento[], ejercitos: readonly Ejercito[]): Point | undefined {
   const u = heroe.ubicacion;
   if (u.tipo === 'columna') return ejercitos.find((e) => e.id === u.ejercitoId)?.posicionActual;
   if (u.tipo === 'asentamiento') return asentamientos.find((a) => a.id === u.asentamientoId)?.posicion;
@@ -206,30 +206,37 @@ function posicionDe(heroe: Heroe, asentamientos: readonly Asentamiento[], ejerci
 }
 
 /**
- * Se acaba el huérfano (Doc 0, 5.15.5, decidido el 2026-10-02): el ciudadano de una Facción que no reside en ningún asentamiento
- * ni campamento pasa a residir en el campamento de mercenarios más cercano a donde está. Es lo que le pasa a quien pierde su
- * última plaza —conquista o ruina— y a quien deja su casa. Se mira cada tick, así que cubre todas las vías.
- *
- * No toca a quien aún no tiene Facción (un recién llegado), ni a los héroes bot: los de una Facción NPC sin plazas desaparecerán
- * (pendiente), no se mudan.
+ * Se acaba el huérfano (Doc 0, 5.15.5, decidido el 2026-10-02): quien pierde la casa pasa a residir, en el acto, en el campamento
+ * de mercenarios más cercano a `desde` —el sitio que perdió—. Lo llaman los caminos por los que se pierde una casa: la conquista de
+ * su plaza, su ruina y dejar la residencia; sin campamentos devuelve lo mismo. Un héroe que ya reside en uno se muda al más cercano.
  */
-export function acogerHeroesSinCasa(
-  campamentos: CampamentoMercenarios[],
-  asentamientos: readonly Asentamiento[],
-  heroes: readonly Heroe[],
-  facciones: readonly Faccion[],
-  ejercitos: readonly Ejercito[]
-): CampamentoMercenarios[] {
-  if (campamentos.length === 0) return campamentos;
-  let actuales = campamentos;
-  for (const heroe of heroes) {
-    if (heroe.controlador === 'bot') continue;
-    if (!facciones.some((f) => esCiudadano(f, heroe.id))) continue;
-    if (asentamientos.some((a) => esResidente(a, heroe.id)) || campamentoDeResidente(actuales, heroe.id)) continue;
-    const posicion = posicionDe(heroe, asentamientos, ejercitos);
-    const destino = posicion ? campamentoMasCercano(actuales, posicion) : actuales[0];
-    if (!destino) continue;
-    actuales = actuales.map((c) => (c.id === destino.id ? { ...c, residentesIds: [...c.residentesIds, heroe.id] } : c));
+export function acogerEnCampamentoMasCercano(campamentos: readonly CampamentoMercenarios[], heroeIds: readonly string[], desde: Point): CampamentoMercenarios[] {
+  const destino = campamentoMasCercano(campamentos, desde);
+  if (!destino || heroeIds.length === 0) return [...campamentos];
+  let sin = [...campamentos];
+  for (const id of heroeIds) sin = sinResidente(sin, id);
+  return sin.map((c) => (c.id === destino.id ? { ...c, residentesIds: [...c.residentesIds, ...heroeIds] } : c));
+}
+
+/**
+ * Los residentes de una plaza que desaparece (ruina por abandono, Doc 4.5) se reubican: en la plaza más cercana de su Facción si le
+ * queda alguna —donde pasan a residir— y, si no, en el campamento de mercenarios más cercano. Sin esto quedaban sin casa.
+ */
+export function reubicarResidentesDeRuina(
+  ruina: Asentamiento,
+  restantes: readonly Asentamiento[],
+  campamentos: readonly CampamentoMercenarios[]
+): { asentamientos: Asentamiento[]; campamentos: CampamentoMercenarios[] } {
+  const residentes = [...ruina.heroesFundadoresIds, ...ruina.casasCompradas];
+  const refugio = restantes
+    .filter((a) => a.faccionId === ruina.faccionId)
+    .sort((a, b) => distancia(a.posicion, ruina.posicion) - distancia(b.posicion, ruina.posicion) || (a.id < b.id ? -1 : 1))[0];
+  if (residentes.length === 0) return { asentamientos: [...restantes], campamentos: [...campamentos] };
+  if (refugio) {
+    return {
+      asentamientos: restantes.map((a) => (a.id === refugio.id ? { ...a, casasCompradas: [...a.casasCompradas, ...residentes] } : a)),
+      campamentos: [...campamentos],
+    };
   }
-  return actuales;
+  return { asentamientos: [...restantes], campamentos: acogerEnCampamentoMasCercano(campamentos, residentes, ruina.posicion) };
 }

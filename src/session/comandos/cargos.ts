@@ -6,7 +6,7 @@
 // los narra esta capa entera: es la que sabe a quién se nombró y en qué Facción.
 import type { CargoTipo } from '../../domain/types';
 import { designarCapital as designarCapitalEngine } from '../../engine/capital';
-import { residirEnCampamento as residirEnCampamentoEngine, salirDeCampamentos } from '../../engine/mercenarios';
+import { acogerEnCampamentoMasCercano, posicionDeHeroe, residirEnCampamento as residirEnCampamentoEngine, salirDeCampamentos } from '../../engine/mercenarios';
 import { asignarCargoLocal as asignarCargoLocalEngine, asignarEmbajador as asignarEmbajadorEngine, asignarRey as asignarReyEngine } from '../../engine/cargos';
 import {
   comprarCasa as comprarCasaEngine,
@@ -179,12 +179,16 @@ export interface PayloadResidenciaDejada {
   asentamientoId: string;
 }
 
-/** Dejar la casa sin dejar la Facción (Doc 2.5): el héroe pasa, en el siguiente tick, al campamento de mercenarios más cercano. */
+/** Dejar la casa sin dejar la Facción (Doc 2.5): el héroe pasa, en el acto, al campamento de mercenarios más cercano. */
 export const dejarResidencia = comando<ParamsDejarResidencia, void>((estado, _mapa, ctx, params) => {
   const origen = dejarResidenciaEngine(estado.asentamientos, params.heroeId);
+  // Sin casa no se queda: al campamento de mercenarios más cercano a donde está (o a la plaza que deja, si no se sabe dónde).
+  const heroe = estado.heroes.find((h) => h.id === params.heroeId);
+  const desde = (heroe && posicionDeHeroe(heroe, estado.asentamientos, estado.ejercitos)) ?? origen.posicion;
   const siguiente = conHistorialDeJugador(
     {
       ...conAsentamiento(estado, origen),
+      campamentosMercenarios: acogerEnCampamentoMasCercano(estado.campamentosMercenarios, [params.heroeId], desde),
       heroes: sinGuarnicion(estado.heroes, params.heroeId),
       cambiosResidenciaPorHeroe: { ...estado.cambiosResidenciaPorHeroe, [params.heroeId]: ctx.instante },
     },

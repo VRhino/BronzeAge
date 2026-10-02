@@ -187,13 +187,20 @@ export const atacar = comando<ParamsAtacar, { battleId: string } | undefined>((e
     const asedio = asediarPlaza(
       conTropaDe(estado, atacante),
       plaza,
-      { asentamientos: estado.asentamientos, ejercitos: estado.ejercitos, heroes: estado.heroes, facciones: [...estado.facciones], relaciones: estado.relaciones },
+      {
+        asentamientos: estado.asentamientos,
+        ejercitos: estado.ejercitos,
+        heroes: estado.heroes,
+        facciones: [...estado.facciones],
+        relaciones: estado.relaciones,
+        campamentosMercenarios: estado.campamentosMercenarios,
+      },
       heridos,
       ctx.instante,
       ctx.rng
     );
     const siguiente = conColumnas(
-      { ...estado, asentamientos: asedio.asentamientos, heroes: asedio.heroes, facciones: asedio.facciones },
+      { ...estado, asentamientos: asedio.asentamientos, heroes: asedio.heroes, facciones: asedio.facciones, campamentosMercenarios: asedio.campamentosMercenarios },
       [asedio.ejercito, ...asedio.columnas]
     );
     return exito(

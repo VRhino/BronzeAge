@@ -24,7 +24,7 @@ import { calcularTitulos, narrarCambiosDeTitulo } from './titulos';
 import { avanzarAtaquesBandidos, avanzarSpawnBandidos } from './bandidos';
 import { avanzarEjercitos, type CombatePorAbrir, type ContextoAvanceEjercitos } from './ejercitos';
 import { grabarLoVisto, type MemoriaFaccion } from './memoria';
-import { acogerHeroesSinCasa, avanzarAparicionMercenarios } from './mercenarios';
+import { avanzarAparicionMercenarios, reubicarResidentesDeRuina } from './mercenarios';
 import { grabarExploracionPersonal } from './ubicacion';
 import { avanzarTecnologia, contadoresDeProduccion, sumarContadores, sumarDeltas, tecnologiasDe, type DeltaContadores } from './tecnologia';
 
@@ -244,9 +244,16 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     return { asentamiento: asentamientoFinal, destruido, campamento: campamentoTrasTropas };
   });
 
-  // Ruinas por abandono/mal mantenimiento (Doc 4.5): el asentamiento se elimina, su zona queda libre. Sus
-  // residentes quedan huérfanos, con sus escuadras (Doc 5.15.2).
-  const actualizados = procesados.filter((p) => !p.destruido).map((p) => p.asentamiento);
+  // Ruinas por abandono/mal mantenimiento (Doc 4.5): el asentamiento se elimina y su zona queda libre.
+  let actualizados = procesados.filter((p) => !p.destruido).map((p) => p.asentamiento);
+  // Sus residentes no se quedan sin casa: a la plaza más cercana de su Facción o, sin ella, al campamento de mercenarios más cercano.
+  let campamentosActuales = estado.campamentosMercenarios;
+  for (const p of procesados) {
+    if (!p.destruido) continue;
+    const reubicados = reubicarResidentesDeRuina(p.asentamiento, actualizados, campamentosActuales);
+    actualizados = reubicados.asentamientos;
+    campamentosActuales = reubicados.campamentos;
+  }
   let heroes = conEscuadrones(estado.heroes, procesados.flatMap((p) => p.campamento));
   // Si era la última de su Facción, queda derrotada sin ganador (`Faccion.derrotadaPor = null`).
   let facciones = estado.facciones;
@@ -273,7 +280,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   const trasSpawnBandidos = avanzarSpawnBandidos(estado.campamentosBandidos, zonas, trasExpansion.asentamientos, mapa, instante);
   eventosDominio.push(...comoEventosDominio(trasSpawnBandidos.eventos, contexto));
   // Campamentos de mercenarios (Doc 1.9b): el del día 1 y los que aparecen entre Facciones.
-  const trasMercenarios = avanzarAparicionMercenarios(estado.campamentosMercenarios, trasExpansion.asentamientos, zonas, mapa, instante);
+  const trasMercenarios = avanzarAparicionMercenarios(campamentosActuales, trasExpansion.asentamientos, zonas, mapa, instante);
   eventosDominio.push(...comoEventosDominio(trasMercenarios.eventos, contexto));
   // Los ejércitos entran aquí solo como ESCOLTA: una caravana enganchada se defiende con el poder de su
   // columna y no con la defensa base fija (Doc 5.13.3). El movimiento de los ejércitos sigue después.
@@ -310,6 +317,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     rng,
     heroes,
     batallas: contexto.batallas,
+    campamentosMercenarios: trasMercenarios.campamentos,
   });
   eventosDominio.push(...comoEventosDominio(trasEjercitos.eventos, contexto));
   heroes = trasEjercitos.heroes;
@@ -363,8 +371,8 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     titulos: titulosActuales,
     red: trasComercio.red,
     campamentosBandidos: trasSpawnBandidos.campamentos,
-    // Quien se quedó sin casa este tick (conquista, ruina, dejar la residencia) pasa a un campamento de mercenarios.
-    campamentosMercenarios: acogerHeroesSinCasa(trasMercenarios.campamentos, trasTributos.asentamientos, heroes, faccionesFinal, trasEjercitos.ejercitos),
+    // Los que acogieron a los residentes de una plaza conquistada este tick (`desalojarResidentes`).
+    campamentosMercenarios: trasEjercitos.campamentosMercenarios,
     // Al FINAL, y con lo que ya se movió: lo que se graba es dónde acabaron las columnas este minuto, no de
     // dónde salieron. No emite eventos ni cambia nada más — la memoria solo mira.
     memoriaPorFaccion: grabarLoVisto(estado.memoriaPorFaccion, {

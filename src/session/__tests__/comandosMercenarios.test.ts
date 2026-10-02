@@ -66,12 +66,9 @@ describe('residirEnCampamento', () => {
 });
 
 describe('se acaba el huérfano', () => {
-  it('quien deja su casa pasa, en el siguiente tick, al campamento más cercano a donde está', () => {
+  it('quien deja su casa pasa, en el acto, al campamento más cercano a donde está', () => {
     const { sesion, fundador, opc } = conCampamentos();
     sesion.ejecutar(dejarResidencia, { heroeId: fundador }, opc);
-    expect(sesion.getState().campamentosMercenarios.flatMap((c) => c.residentesIds), 'aún no: el tick lo acoge').toEqual([]);
-
-    sesion.avanzarTick();
 
     const donde = sesion.getState().campamentosMercenarios.find((c) => c.residentesIds.includes(fundador));
     expect(donde, 'reside en algún campamento').toBeDefined();

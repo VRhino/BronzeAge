@@ -1,4 +1,4 @@
-import type { Asentamiento, CampamentoBandido, Ejercito, Escuadron, Faccion, Heroe, RelacionPolitica, UbicacionHeroe } from '../domain/types';
+import type { Asentamiento, CampamentoBandido, CampamentoMercenarios, Ejercito, Escuadron, Faccion, Heroe, RelacionPolitica, UbicacionHeroe } from '../domain/types';
 import { alCampamento, conEscuadrones, conExperiencia, poderEscuadron, sinTropa, type CaravanaConEscolta, type EjercitoConTropa } from './tropa';
 import { distancia } from '../world/geometria';
 import type { EventoCrudo } from '../domain/eventos';
@@ -11,6 +11,7 @@ import { aplicarAjustesExperiencia, type AjusteExperiencia } from './faccion';
 import { multiplicadorDefensivoDeRecintos } from './muralla';
 import { integridadDeRecinto } from './trazado';
 import { CAMPO_CARGO, esResidente, estanAliadas } from './pertenencia';
+import { acogerEnCampamentoMasCercano } from './mercenarios';
 import { estaProtegida } from './asentamientoQuery';
 import { ReglaInvalidaError } from './errores';
 
@@ -261,8 +262,8 @@ export function aplicarConquista(defensor: Asentamiento, faccionConquistadoraId:
  *    con el carro vacío, que lleva las escuadras con las que defendió y sobrevivieron (`lucharon`). Un residente
  *    herido no defendió, así que sale solo.
  *  - Todo lo demás del campamento de los residentes —guarnición incluida— queda a 0 y se va con ellos al asentamiento
- *    más cercano de su Facción, donde pasan a residir. Sin ninguno, el tick los acoge en el campamento de mercenarios más
- *    cercano (`acogerHeroesSinCasa`), con sus escuadras a 0 pero suyas, con su nivel y experiencia. Lo que cada uno llevaba fuera, en su columna o de escolta, no se toca.
+ *    más cercano de su Facción, donde pasan a residir. Sin ninguno, pasan a residir en el campamento de mercenarios más cercano
+ *    a la plaza perdida (`acogerEnCampamentoMasCercano`), con sus escuadras a 0 pero suyas, con su nivel y experiencia. Lo que cada uno llevaba fuera, en su columna o de escolta, no se toca.
  *
  * Las columnas nuevas vuelven como vistas con la tropa puesta, y los héroes ya con esa tropa en su columna.
  * `ponytail:` el traslado no mira el cupo de viviendas del destino; sin él, un desalojado se quedaría sin casa por un
@@ -276,8 +277,10 @@ export function desalojarResidentes(
   ejercitos: readonly Ejercito[],
   /** Las escuadras que defendieron en persona (los loadouts de los que estaban dentro), sin la guarnición. */
   lucharon: ReadonlySet<string>,
-  instante: Instante
-): { asentamientos: Asentamiento[]; heroes: Heroe[]; columnas: EjercitoConTropa[] } {
+  instante: Instante,
+  /** Los campamentos de mercenarios (Doc 1.9b): sin plaza a la que irse, los residentes pasan al más cercano a la perdida. */
+  campamentos: readonly CampamentoMercenarios[] = []
+): { asentamientos: Asentamiento[]; heroes: Heroe[]; columnas: EjercitoConTropa[]; campamentosMercenarios: CampamentoMercenarios[] } {
   const residentes = heroes.filter((h) => esResidente(conquistado, h.id));
   const refugio = asentamientos
     .filter((a) => a.id !== conquistado.id && a.faccionId === conquistado.faccionId)
@@ -330,6 +333,8 @@ export function desalojarResidentes(
       return ubicacion ? { ...h, ubicacion } : h;
     }),
     columnas,
+    // Sin refugio propio, a su campamento de mercenarios: nadie queda sin casa (Doc 0, 5.15.5).
+    campamentosMercenarios: refugio ? [...campamentos] : acogerEnCampamentoMasCercano(campamentos, residentes.map((h) => h.id), conquistado.posicion),
   };
 }
 

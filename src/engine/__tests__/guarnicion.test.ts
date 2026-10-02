@@ -1,7 +1,7 @@
 // La guarnición (Doc 5.15.3): el cupo que da cada plaza a sus residentes, y quién defiende en un asedio que se
 // resuelve con números (5.12.4): la guarnición y el loadout activo de los residentes que están dentro.
 import { describe, expect, it } from 'vitest';
-import type { Asentamiento, Edificio, Ejercito, Recinto } from '../../domain/types';
+import type { Asentamiento, CampamentoMercenarios, Edificio, Ejercito, Recinto } from '../../domain/types';
 import { GUARNICION } from '../../constants';
 import { cupoGuarnicion } from '../asentamientoQuery';
 import { desalojarResidentes } from '../combate';
@@ -104,6 +104,29 @@ describe('defensaDe', () => {
         tras.escuadrones.filter((e) => e.id !== 'en-loadout').every((e) => e.cantidad === 0 && !e.enGuarnicion),
         'guarnición y resto del campamento a 0'
       ).toBe(true);
+    });
+
+    it('sin plaza propia a la que irse, los residentes pasan al campamento de mercenarios más cercano a la perdida', () => {
+      const a = plaza();
+      const lejos = { id: 'lejos', posicion: { x: a.posicion.x + 900, y: a.posicion.y }, residentesIds: [] };
+      const cerca = { id: 'cerca', posicion: { x: a.posicion.x + 30, y: a.posicion.y }, residentesIds: [] };
+      const campamentos = [lejos, cerca] as unknown as CampamentoMercenarios[];
+
+      const r = desalojarResidentes(a, [a], [conLoadout({ tipo: 'asentamiento', asentamientoId: a.id })], [], new Set(), instanteDeTest(5), campamentos);
+
+      expect(r.campamentosMercenarios.find((c) => c.id === 'cerca')!.residentesIds).toEqual([RESIDENTE]);
+      expect(r.campamentosMercenarios.find((c) => c.id === 'lejos')!.residentesIds).toEqual([]);
+    });
+
+    it('con una plaza propia a la que irse, no tocan los campamentos', () => {
+      const a = plaza();
+      const refugio = { ...a, id: 'refugio', posicion: { x: a.posicion.x + 100, y: a.posicion.y }, casasCompradas: [], heroesFundadoresIds: [] };
+      const campamentos = [{ id: 'c', posicion: a.posicion, residentesIds: [] }] as unknown as CampamentoMercenarios[];
+
+      const r = desalojarResidentes(a, [a, refugio], [conLoadout({ tipo: 'asentamiento', asentamientoId: a.id })], [], new Set(), instanteDeTest(5), campamentos);
+
+      expect(r.asentamientos.find((x) => x.id === 'refugio')!.casasCompradas).toEqual([RESIDENTE]);
+      expect(r.campamentosMercenarios[0]!.residentesIds).toEqual([]);
     });
 
     it('un visitante vuelve a la columna que dejó aparcada, sin columna nueva', () => {
