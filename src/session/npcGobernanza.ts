@@ -104,7 +104,7 @@ import {
 import { calcularRuta } from '../world/rutas';
 import { cruzarLaPuerta } from '../engine/ubicacion';
 import { cambiarResidencia, FaccionInvalidaError } from '../engine/faccion';
-import { anexionar } from '../engine/fusion';
+import { salirDeCampamentos } from '../engine/mercenarios';
 import { consumoRacionDeEscuadrones, reservaDeTrigo } from '../engine/tropas';
 import { esResidente, estanAliadas } from '../engine/pertenencia';
 import { ofreceRecurso } from '../engine/trueque';
@@ -1446,7 +1446,7 @@ function lanzarCampanas(
     const puedeGanar = (plaza: Asentamiento) =>
       poderPropio > poderTotal(defensaPrevista(plaza, heroesActuales, heridos), true) * multiplicadorDefensivoDeRecintos(plaza.recintos ?? []);
     // Ni contra la última plaza de una Facción (2026-09-27, decisión del usuario): conquistarla la haría desaparecer
-    // (`acogerHeroesNpc`), y en la Era II medida una sola Facción se comió a diez en dos semanas.
+    // (anexión, `session/derrotas.ts`), y en la Era II medida una sola Facción se comió a diez en dos semanas.
     const plazasDe = (faccionId: string) => asentamientos.filter((a) => a.faccionId === faccionId).length;
     const objetivo = asentamientos
       .filter((a) => a.faccionId !== origen.faccionId && !estanAliadas(relaciones, origen.faccionId, a.faccionId))
@@ -1511,69 +1511,6 @@ function lanzarCampanas(
  * no llega nunca, y el gate correcto resultó ser inútil por medir lo que no era. Lo que dejaba a las columnas
  * fuera no era el hambre: era no tener motivo para volver.
  */
-/**
- * Los héroes bot nunca se quedan sin casa (decisión del usuario, 2026-09-27):
- *
- *  1. **Una Facción NPC derrotada por otra Facción NPC se une a ella y desaparece** (`anexionar`): pierde su último
- *     asentamiento y todos sus ciudadanos pasan a la ganadora (`Faccion.derrotadaPor`). Sus columnas cambian de
- *     bandera y sus relaciones se disuelven. Si la ganadora es de un jugador, no: la derrotada sigue y el Paso 0 la
- *     refunda, como siempre.
- *  2. **Una Facción NPC cuya última plaza colapsa, sin ganador (`derrotadaPor: null`), se disuelve** y sus héroes
- *     bot desaparecen con ella (2026-09-27, decisión del usuario). En la Era I medida, tres Facciones se quedaban así
- *     con 35 héroes dentro de una plaza que ya no existía.
- *  3. **Un héroe bot sin residencia se muda a la plaza más cercana de su Facción** (la desalojada ya lo hace al
- *     caer su plaza; esto recoge a los que quedaban fuera, incluidos los recién absorbidos). Su columna, si la
- *     tiene, pasa a volver ahí.
- *
- * Medido en la Era I antes de esto: ~75 héroes huérfanos, casi todos de Facciones sin ninguna plaza.
- */
-function acogerHeroesNpc(estado: EstadoSimulacion, esNpc: (faccionId: string) => boolean): { estado: EstadoSimulacion; eventos: string[] } {
-  const eventos: string[] = [];
-  let { facciones, asentamientos, ejercitos, relaciones, heroes } = estado;
-
-  for (const perdedora of estado.facciones) {
-    const ganadoraId = perdedora.derrotadaPor;
-    if (!ganadoraId || !esNpc(perdedora.id) || !esNpc(ganadoraId) || !facciones.some((f) => f.id === ganadoraId)) continue;
-    if (asentamientos.some((a) => a.faccionId === perdedora.id)) continue;
-    ({ facciones, asentamientos } = anexionar(facciones, asentamientos, ganadoraId, perdedora.id));
-    ejercitos = ejercitos.map((e) => (e.faccionId === perdedora.id ? { ...e, faccionId: ganadoraId } : e));
-    relaciones = relaciones.filter((r) => r.faccionAId !== perdedora.id && r.faccionBId !== perdedora.id);
-    eventos.push(`${perdedora.id} pierde su último asentamiento ante ${ganadoraId}: sus héroes se unen a ella y la Facción desaparece.`);
-  }
-
-  for (const colapsada of estado.facciones) {
-    if (colapsada.derrotadaPor !== null || !esNpc(colapsada.id) || asentamientos.some((a) => a.faccionId === colapsada.id)) continue;
-    const bots = new Set(heroes.filter((h) => h.controlador === 'bot' && colapsada.ciudadanosIds.includes(h.id)).map((h) => h.id));
-    facciones = facciones.filter((f) => f.id !== colapsada.id);
-    heroes = heroes.filter((h) => !bots.has(h.id));
-    ejercitos = ejercitos.filter((e) => e.faccionId !== colapsada.id);
-    relaciones = relaciones.filter((r) => r.faccionAId !== colapsada.id && r.faccionBId !== colapsada.id);
-    eventos.push(`${colapsada.id} pierde su último asentamiento por colapso: la Facción se disuelve y sus ${bots.size} héroes bot desaparecen.`);
-  }
-
-  const posicionDe = (h: Heroe): Point | undefined => {
-    const u = h.ubicacion;
-    if (u.tipo === 'asentamiento') return asentamientos.find((a) => a.id === u.asentamientoId)?.posicion;
-    if (u.tipo === 'columna') return ejercitos.find((e) => e.id === u.ejercitoId)?.posicionActual;
-    return u.punto;
-  };
-  for (const heroe of heroes) {
-    if (heroe.controlador !== 'bot' || asentamientos.some((a) => esResidente(a, heroe.id))) continue;
-    const faccion = facciones.find((f) => f.ciudadanosIds.includes(heroe.id));
-    const donde = posicionDe(heroe);
-    if (!faccion || !esNpc(faccion.id) || !donde) continue;
-    const casa = asentamientos
-      .filter((a) => a.faccionId === faccion.id)
-      .sort((a, b) => distancia(a.posicion, donde) - distancia(b.posicion, donde) || (a.id < b.id ? -1 : 1))[0];
-    if (!casa) continue;
-    asentamientos = asentamientos.map((a) => (a.id === casa.id ? { ...a, casasCompradas: [...a.casasCompradas, heroe.id] } : a));
-    ejercitos = ejercitos.map((e) => (e.liderId === heroe.id && !asentamientos.some((a) => a.id === e.origenAsentamientoId && a.faccionId === e.faccionId) ? { ...e, origenAsentamientoId: casa.id } : e));
-    eventos.push(`${heroe.id}, sin casa, pasa a residir en ${casa.id}.`);
-  }
-
-  return { estado: { ...estado, facciones, asentamientos, ejercitos, relaciones, heroes }, eventos };
-}
-
 /**
  * Quien conquista se queda a defender (2026-09-27, decisión del usuario): una columna NPC acampada a la puerta de
  * una plaza de su Facción que se ha quedado sin residentes —la acaba de conquistar— se muda a ella y entra. Su
@@ -2069,12 +2006,9 @@ export function avanzarNpcGobernanza(
   // sí y el NPC se comporta exactamente como antes de existir este filtro.
   const esNpc = config.faccionesIds ? (faccionId: string) => config.faccionesIds!.includes(faccionId) : () => true;
 
-  // Antes que nada, que nadie se quede sin casa: una Facción NPC derrotada por otra se une a ella, y los héroes bot
-  // sin residencia se mudan a la plaza más cercana de su Facción. Va antes del Paso 0, que refundaría gratis a una
-  // Facción NPC sin asentamientos.
-  const acogida = acogerHeroesNpc(estadoEntrada, esNpc);
-  const estado = acogida.estado;
-  eventos.push(...acogida.eventos);
+  // Qué pasa con una Facción NPC que pierde su último asentamiento —anexión o disolución— ya no se decide aquí: se
+  // resuelve en el momento de la derrota (`session/derrotas.ts`), y quien se queda sin casa la recibe en el acto (`9f9a098`).
+  const estado = estadoEntrada;
 
   // Paso 0: fundar el primer asentamiento de cualquier Facción cedida que todavía no tenga ninguno — sin esto
   // una Facción recién marcada como NPC se queda inerte para siempre (nada más de este archivo sabe crear un
@@ -2084,6 +2018,8 @@ export function avanzarNpcGobernanza(
   let heroes = estado.heroes;
   let eventosIniciales: string[] = [];
   let asentamientosBase = estado.asentamientos;
+  let campamentosMercenarios = estado.campamentosMercenarios;
+  const asentamientosBase0 = new Set(estado.asentamientos.map((a) => a.id));
   if (config.faccionesIds) {
     const inicial = fundarAsentamientosIniciales(
       asentamientosBase,
@@ -2099,6 +2035,10 @@ export function avanzarNpcGobernanza(
     facciones = inicial.facciones;
     heroes = inicial.heroes;
     eventosIniciales = inicial.eventos;
+    // Quien funda pasa a residir en la plaza nueva: deja el campamento de mercenarios donde residiera (igual que al
+    // fundar con una caravana, `engine/simulation.ts`).
+    const fundadores = inicial.asentamientos.filter((a) => !asentamientosBase0.has(a.id)).flatMap((a) => a.heroesFundadoresIds);
+    if (fundadores.length > 0) campamentosMercenarios = salirDeCampamentos(campamentosMercenarios, ...fundadores);
   }
   eventos.push(...eventosIniciales);
 
@@ -2195,6 +2135,7 @@ export function avanzarNpcGobernanza(
     facciones,
     caravanas,
     acuerdos: respuestas.acuerdos,
+    campamentosMercenarios,
   };
   // Trueque de especialización: se DELEGA en el motor (`avanzarAutoComercioSimulado`) sin tocarlo ni una
   // línea. Para acotarlo a las Facciones NPC se le pasa una VISTA del estado con `facciones` ya filtrado —

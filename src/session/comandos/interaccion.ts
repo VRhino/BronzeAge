@@ -48,6 +48,7 @@ import type { Asentamiento, Ejercito } from '../../domain/types';
 import type { Instante } from '../../domain/tiempo';
 import { agendarReaparicionBandidos } from '../../engine/bandidos';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
+import { conDerrotasResueltas } from '../derrotas';
 import { exito } from './tipos';
 import { comando, conColumnas, conTropaDe, exigirAsentamiento, exigirCampamento, exigirCaravana, exigirColumnaDe, exigirEjercito } from './ayudas';
 import { desdeCrudos, evento } from './eventos';
@@ -203,9 +204,11 @@ export const atacar = comando<ParamsAtacar, { battleId: string } | undefined>((e
       { ...estado, asentamientos: asedio.asentamientos, heroes: asedio.heroes, facciones: asedio.facciones, campamentosMercenarios: asedio.campamentosMercenarios },
       [asedio.ejercito, ...asedio.columnas]
     );
+    // Si cayó la última plaza de una Facción NPC, se anexiona o se disuelve en el acto (`session/derrotas.ts`).
+    const trasDerrotas = conDerrotasResueltas(estado, siguiente);
     return exito(
-      conHistorialDeJugador(siguiente, params.heroeId, `Asedia ${plaza.id}.`),
-      asedio.eventos.map((e) => evento(ctx, typeof e === 'string' ? { codigo: 'legado', mensaje: e } : e))
+      conHistorialDeJugador(trasDerrotas.estado, params.heroeId, `Asedia ${plaza.id}.`),
+      [...asedio.eventos, ...trasDerrotas.eventos].map((e) => evento(ctx, typeof e === 'string' ? { codigo: 'legado', mensaje: e } : e))
     );
   }
 

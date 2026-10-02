@@ -13,6 +13,7 @@ import {
   type Batalla,
 } from '../batallas';
 import { aplicarResultado as aplicar } from '../resultadoBatalla';
+import { conDerrotasResueltas } from '../derrotas';
 import type { BattleResult, BattleServerAssignment, InicioBatalla, TokensBatalla } from '../../contratos/v1/dto';
 import type { Instante } from '../../domain/tiempo';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
@@ -99,15 +100,17 @@ export const registrarTokens = deServidor<TokensBatalla>((e, b, p) => sumarToken
 export const aplicarResultado = comando<ParamsDeServidor<BattleResult>, void>((estado, _mapa, ctx, params) => {
   const batalla = estado.batallas.find((b) => b.id === params.mensaje.battleId);
   if (!batalla) rechazar(CODIGOS_ERROR.batallaNoExiste);
-  const siguiente = aplicar(estado, batalla, params.mensaje, params.servidorId, ctx.instante);
-  if (siguiente === estado) return sinCambios(estado);
+  const aplicado = aplicar(estado, batalla, params.mensaje, params.servidorId, ctx.instante);
+  if (aplicado === estado) return sinCambios(estado);
   const { ganador } = params.mensaje;
-  return exito(
-    siguiente,
-    eventosDeBatalla(estado, batalla, 'batalla.aplicada', `Termina la batalla ${batalla.id}: gana el ${ganador}.`).map((e) =>
+  // Un asedio ganado puede dejar a una Facción NPC sin plazas: se anexiona o se disuelve en el acto (`session/derrotas.ts`).
+  const { estado: siguiente, eventos: deDerrotas } = conDerrotasResueltas(estado, aplicado);
+  return exito(siguiente, [
+    ...eventosDeBatalla(estado, batalla, 'batalla.aplicada', `Termina la batalla ${batalla.id}: gana el ${ganador}.`).map((e) =>
       evento(ctx, { ...e, payload: { ...e.payload, ganador } })
-    )
-  );
+    ),
+    ...deDerrotas.map((e) => evento(ctx, typeof e === 'string' ? { codigo: 'legado', mensaje: e } : e)),
+  ]);
 });
 
 /** Pone el candado de batalla (Doc 5.15.1) a todos los comandos salvo `libres`, que actúan sobre la propia batalla. */

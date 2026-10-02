@@ -2,6 +2,7 @@ import type { Mapa } from '../../world/mapa';
 import { avanzarSimulacion, type ContextoSimulacion } from '../../engine/simulation';
 import { abrirCombatesDelTick, bloqueosDe, eventosDeBatalla, vencerBatallas } from '../batallas';
 import { conResultadoDeSimulacion, estadoSimulacionDe, instanteDeTick, isoDeInstante, type GameSessionState } from '../estado';
+import { conDerrotasResueltas } from '../derrotas';
 import { exito, type ContextoComando, type TransicionComando } from './tipos';
 
 /**
@@ -67,10 +68,14 @@ export function avanzarTick(
       caravanas: [...resultado.caravanas, ...apartados.caravanas],
     }
   );
-  const abiertas = abrirCombatesDelTick(trasTick, resultado.combatesPorAbrir, instante, () => ctx.ids.siguiente());
+  // Una Facción NPC que acaba de perder su último asentamiento —por ruina o por el asedio de un ejército— se anexiona o
+  // se disuelve en el acto, no en el turno NPC (`session/derrotas.ts`).
+  const trasDerrotas = conDerrotasResueltas(trasVencer.estado, trasTick);
+  const abiertas = abrirCombatesDelTick(trasDerrotas.estado, resultado.combatesPorAbrir, instante, () => ctx.ids.siguiente());
   const eventosDeBatallas = [
     ...trasVencer.vencidas.flatMap((b) => eventosDeBatalla(abiertas.estado, b, 'batalla.fallida', `La batalla ${b.id} no llegó a jugarse: nadie pierde nada.`)),
     ...abiertas.abiertas.flatMap((b) => eventosDeBatalla(abiertas.estado, b, 'batalla.abierta', 'Empieza una batalla.')),
   ].map((e) => ({ ...e, momento }));
-  return exito(abiertas.estado, [...resultado.eventosDominio, ...eventosDeBatallas]);
+  const eventosDeDerrotas = trasDerrotas.eventos.map((e) => ({ ...(typeof e === 'string' ? { codigo: 'legado', mensaje: e } : e), momento }));
+  return exito(abiertas.estado, [...resultado.eventosDominio, ...eventosDeDerrotas, ...eventosDeBatallas]);
 }

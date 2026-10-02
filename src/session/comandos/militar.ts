@@ -11,7 +11,7 @@
 import { poblacionDeTropa, reclutarTropa as reclutarTropaEngine } from '../../engine/tropas';
 import { TROPAS_RECLUTABLES } from '../../constants';
 import { contadoresDeReclutamiento, sumarContadores, tecnologiasDe } from '../../engine/tecnologia';
-import { esCiudadano } from '../../engine/faccion';
+import { esCiudadano, registrarDerrota } from '../../engine/faccion';
 import {
   CombateInvalidoError,
   desalojarResidentes,
@@ -31,6 +31,7 @@ function combatientes(tropa: readonly Escuadron[], ids: readonly string[], herid
 /** Los héroes que llevan a la batalla las escuadras elegidas: si pierden, quedan heridos (Doc 5.16.4). */
 const duenosDe = (tropa: readonly Escuadron[], ids: readonly string[]): string[] => [...new Set(tropa.filter((e) => ids.includes(e.id)).map((e) => e.heroeId))];
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
+import { conDerrotasResueltas } from '../derrotas';
 import { exito } from './tipos';
 import { campamentoEn, comando, conAsentamiento, exigirAsentamiento } from './ayudas';
 import { desdeCrudos, evento } from './eventos';
@@ -144,9 +145,16 @@ export const iniciarAsedio = comando<ParamsIniciarAsedio, { conquistado: boolean
         heroes: desalojo.heroes,
         campamentosMercenarios: desalojo.campamentosMercenarios,
         ejercitos: [...tras.ejercitos, ...desalojo.columnas.map((c) => sinTropa(c).ejercito)],
+        // Si era la última plaza de su Facción, queda derrotada, igual que por los otros caminos de la conquista.
+        facciones: registrarDerrota(tras.facciones, desalojo.asentamientos, defensor.faccionId, atacante.faccionId),
       }
     : tras;
-  return exito(siguiente, desdeCrudos(ctx, resultado.eventos, atacante.id), { conquistado: resultado.conquistado });
+  const trasDerrotas = conDerrotasResueltas(estado, siguiente);
+  return exito(
+    trasDerrotas.estado,
+    [...desdeCrudos(ctx, resultado.eventos, atacante.id), ...desdeCrudos(ctx, trasDerrotas.eventos)],
+    { conquistado: resultado.conquistado }
+  );
 });
 
 // `combateCampoAbierto` e `interceptarCaravana` VIVÍAN AQUÍ y se retiraron en el Paso 11 del movimiento de
