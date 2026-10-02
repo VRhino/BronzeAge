@@ -1,6 +1,8 @@
 # Auditoría del tick: qué se evalúa cada minuto y qué debería dispararse por hecho
 
-**Abierto el 2026-10-02. Tercera pasada, sobre `70d3f0e`** (`origin/main`, 2026-10-02 12:07, "trueque compuesto").
+**Abierto el 2026-10-02. Cuarta pasada, sobre `b452315`** (`origin/main`, 2026-10-02 13:57, campamentos de mercenarios, paso 5
+de 5). La §0 resume qué cambia respecto a la tercera pasada (`70d3f0e`); el resto del documento ya está al día salvo donde
+la §0 dice lo contrario.
 Las dos primeras se hicieron sobre `8091638` (2026-09-26): una solo leyendo código y otra midiendo. Entre ambos
 commits entraron 62 commits que tocan 136 ficheros de `src/`: tecnología y Eras, red de caminos, guerra declarada,
 capital, protección post-conquista, `dejarResidencia`… Y varios arreglan cosas que señalaba la pasada anterior. Este
@@ -13,10 +15,48 @@ arruina, alguien deja su casa) y debía resolverse en el acto. Aquí se hace la 
 Es un **informe para decidir, no un plan**. No se ha tocado código del repositorio: las medidas y reproducciones son
 scripts aparte que importan `src/` tal cual.
 
-> **Aviso de alcance.** El commit `9f9a098` que la petición menciona **sigue sin estar** en `origin/main` ni en
-> ninguna rama remota. Y en `main` sigue vivo un barrido de exactamente esa forma: **`acogerHeroesNpc`**
-> (`session/npcGobernanza.ts:1530`), que cada turno NPC busca héroes bot sin casa y Facciones NPC sin plazas. Se
-> audita como está en `main` (§6, **R**).
+> **Alcance.** `9f9a098` ("reubicar a quien pierde la casa en el momento del hecho") **ya está en `main`** y se audita aquí.
+
+## 0. Cuarta pasada: qué cambia con `b452315`
+
+Entre `70d3f0e` y `b452315` entran 6 commits: los cinco pasos de los campamentos de mercenarios y `9f9a098`.
+
+**Lo que `9f9a098` resuelve en el hecho, y está bien:**
+- **Ruina:** sus residentes se reubican en el acto (`reubicarResidentesDeRuina`, `simulation.ts:256`; `mercenarios.ts:231`), en
+  la plaza propia más cercana o, si no queda ninguna, en el campamento de mercenarios más cercano.
+- **Conquista:** `desalojarResidentes` lleva a quien se queda sin plaza propia al campamento más cercano en los tres caminos
+  (asedio con ejército, comando `iniciarAsedio`, batalla de Unity).
+- **`dejarResidencia`:** lleva al campamento en el acto.
+- **Fundar con caravana:** saca a los fundadores del campamento en el mismo tick (`simulation.ts:276`).
+- **De paso:** la población de un campamento se calcula al mirar, no cada tick (`poblacionActual`); la reposición del mercado
+  es una fecha (`reponerMercados`); la aparición de campamentos se mira cada `MERCENARIOS.cadaMinutos`. Todo correcto.
+
+**Lo que no resuelve, y lo empeora: el barrido viejo sigue y ahora choca con el nuevo.** `acogerHeroesNpc`
+(`npcGobernanza.ts:1530`, llamado en `2075`) sigue corriendo cada turno NPC y no sabe que existen los campamentos de
+mercenarios: el NPC no toca `campamentosMercenarios` en ningún sitio. Hay así **dos mecanismos para la misma
+consecuencia**, uno en el hecho y otro barriendo, y se pisan. Es el bug **B5**, reproducido con la sesión real:
+
+| Escenario | Tras el tick (mecanismo nuevo) | Tras el turno NPC (barrido viejo) |
+|---|---|---|
+| La última plaza de una Facción NPC cae en ruinas | sus bots residen en `mercenarios-0` ✔ | la Facción se disuelve y **sus héroes se borran**, pero `mercenarios-0` **los sigue listando como residentes** |
+| Una Facción NPC pierde su última plaza contra otra NPC | sus bots residen en `mercenarios-0` ✔ | se anexiona y los bots pasan a residir en una plaza de la ganadora **sin salir del campamento**: **residen en dos sitios** |
+| Una Facción NPC la pierde contra un jugador y el Paso 0 la refunda | sus bots residen en el campamento | `fundarAsentamientosIniciales` los hace fundadores de la plaza nueva sin sacarlos del campamento: **doble residencia** (por lectura, no reproducido) |
+
+Con esto, **R** deja de ser solo "mal asignado" y pasa a ser la causa de un bug. Lo que hay que hacer es terminar el trabajo
+de `9f9a098` en el NPC:
+- La **anexión** y la **disolución** van donde se registra la derrota (`registrarDerrota`), y tienen que sacar o reasignar
+  a los residentes de los campamentos.
+- La rama "dar casa a un bot sin residencia" sobra, porque ya nadie se queda sin casa, y además ignora la residencia en
+  campamento.
+- El Paso 0 tiene que sacar a sus fundadores del campamento, como ya hace la fundación con caravana.
+
+**Sin cambios respecto a la tercera pasada** (vuelto a comprobar sobre `b452315`):
+- **B1** (campamento de bandidos huérfano, heredable con B3), **B2** (penalización por la ruina del socio) y **B3** (id de
+  asentamiento que renace): reproducidos igual.
+- **B4:** `iniciarAsedio` (`comandos/militar.ts:108`) sigue sin `registrarDerrota`. Ahora sí lleva a los residentes al
+  campamento, pero la Facción no queda marcada como derrotada.
+- **(A)** nivel de Facción y **N2** log de eventos: igual. Medido sobre `b452315`, con el mismo método: motor ~9,4 ms, NPC
+  4,2 → 5,9 ms, 59 240 eventos a los 3 días. Los mercenarios no añaden coste apreciable.
 
 ---
 
@@ -219,6 +259,9 @@ Formato de cada ficha: ubicación · hecho · dónde se produce · qué cambia a
 
 ### (R) `acogerHeroesNpc`: el patrón de la residencia, vivo en `main`
 
+> **Actualizado en la cuarta pasada (§0):** con `9f9a098` en `main`, este barrido ya no solo está mal asignado; choca
+> con la residencia en campamentos y produce el bug **B5**. Lo que sigue describe el barrido tal como era antes de `9f9a098`.
+
 - **Ubicación.** `npcGobernanza.ts:1530-1588`, al principio de cada turno NPC (`2075`).
 - **Qué hace cada turno**, con tres consecuencias de hechos distintos:
   1. **Anexionar.** Toda Facción NPC con `derrotadaPor` = otra NPC y sin plazas se une a la ganadora (`anexionar`,
@@ -381,6 +424,12 @@ Se reenganchan en silencio el campamento (B1), los trueques aún activos, las ru
 han podado, el origen de ejércitos y caravanas, la ficha de memoria y el historial. La búsqueda de posición del NPC es
 determinista, así que repetir sitio es probable.
 
+**B5 · Dos mecanismos para la misma consecuencia: `acogerHeroesNpc` pisa la residencia en campamentos de `9f9a098`.**
+*Reproducido* en la sesión real de `b452315` (detalle en §0). Con la ruina de la última plaza de una Facción NPC, sus héroes
+se borran pero quedan como residentes fantasma de un campamento de mercenarios. Con la anexión NPC contra NPC, sus bots
+residen a la vez en una plaza y en un campamento. Por lectura, lo mismo pasa al refundar en el Paso 0. Es el riesgo que
+motivó toda la auditoría, materializado: arreglar una consecuencia en el hecho sin retirar el barrido que la cubría antes.
+
 **B4 · El comando `iniciarAsedio` conquista sin registrar la derrota.** `comandos/militar.ts:108-148` llama a
 `desalojarResidentes` pero no a `registrarDerrota`, a diferencia del asedio con ejército (`ejercitos.ts:1257`) y de la
 batalla de Unity (`resultadoBatalla.ts:256`). Si por ese camino cae la **última** plaza de una Facción, queda sin
@@ -405,6 +454,7 @@ hecho sin su consecuencia.
 
 | # | Qué | Cat. | Impacto | Riesgo | Esfuerzo | Batch byte-idéntico | `snapshot_baseline` / `determinismo` |
 |---|---|---|---|---|---|---|---|
+| **B5 + R** | Terminar `9f9a098` en el NPC: anexión y disolución en el hecho, conscientes de los campamentos; quitar "dar casa"; el Paso 0 saca a sus fundadores del campamento | bug + 2 | **alto** (estado inconsistente: fantasmas y doble residencia) | medio | M | no (orden de eventos del NPC) | no / no |
 | **B4** | `iniciarAsedio` registra la derrota | bug | medio | bajo | S | sí (el batch no usa ese comando) | no / no |
 | **N2b** | No narrar el reabastecimiento cada minuto | 3→2 | **alto** (39 % del log) | bajo | S | no (eventos) | no / **sí** |
 | **N2a** | Log en memoria con cota o sin copia O(n) | 2 | **alto** a medio plazo | bajo-medio | S-M | sí | no / no |
@@ -419,9 +469,10 @@ hecho sin su consecuencia.
 
 **Orden recomendado.**
 
-1. **B4.** Una línea que cierra un camino roto y de paso estrecha C.
+1. **B4 y B5 + R, juntos.** B4 es una línea y hace que los cuatro caminos de conquista escriban la derrota; con eso, la
+   anexión y la disolución pueden colgar de `registrarDerrota` y `acogerHeroesNpc` puede desaparecer. Es terminar `9f9a098`.
 2. **N2b y N2a.** Es lo único que crece sin cota, y la mayor parte es ruido de un proceso continuo narrado por minuto.
-3. **R.** El caso que originó la petición, todavía en `main`. Con B4 cerrado, los tres hechos tienen sitio.
+3. *(antes "R", ahora dentro del punto 1)*
 4. **B1 + B3 y B2**, o directamente **B** si se quiere arreglar de raíz.
 5. **A.** El más limpio del principio y de riesgo bajo; puede ir antes si se quiere un ensayo pequeño.
 6. **El resto** cuando haya hueco. Tecnología, memoria de niebla, red de caminos, regeneración y todo §8: dejar.
