@@ -46,7 +46,7 @@ import { asignarGuarnicion, guardarLoadout, HeroeInvalidoError, heridosEn, herir
 import { puedeLlevar } from '../engine/liderazgo';
 import { CombateInvalidoError, poderEscuadron, poderTotal } from '../engine/combate';
 import { agendarReaparicionBandidos } from '../engine/bandidos';
-import { lanzarCaravanaFundacion, costoCaravanaFundacion, ExpansionInvalidaError } from '../engine/expansion';
+import { lanzarCaravanaFundacion, puedeLanzarFundacion, costoCaravanaFundacion, ExpansionInvalidaError } from '../engine/expansion';
 import {
   nivelActualDe,
   tieneMercadoActivo,
@@ -104,7 +104,7 @@ import {
 import { calcularRuta } from '../world/rutas';
 import { cruzarLaPuerta } from '../engine/ubicacion';
 import { cambiarResidencia, FaccionInvalidaError } from '../engine/faccion';
-import { anexionar } from '../engine/fusion';
+import { salirDeCampamentos } from '../engine/mercenarios';
 import { consumoRacionDeEscuadrones, reservaDeTrigo } from '../engine/tropas';
 import { esResidente, estanAliadas } from '../engine/pertenencia';
 import { ofreceRecurso } from '../engine/trueque';
@@ -870,9 +870,22 @@ function reclutarParaTodos(
   // Las que la Facción no ha adoptado las rechazaría el motor de todas formas (Doc 6.1): se saltan sin preguntarle, que
   // era la mayor parte de los intentos de cada tick. El contador avanza igual que si se hubieran intentado.
   const sinTecnologia = new Set(TROPAS_RECLUTABLES.filter((t) => !adoptadas.includes(t.tecnologia)).map((t) => t.id));
+  // Y las que la plaza no puede reclutar por falta de edificio (activo y del nivel que pide) o por tener ya la escuadra completa:
+  // son los otros dos rechazos que se repetían cada minuto y que el motor da por imposibles sin mirar nada más.
+  const sinEdificio = new Set(
+    TROPAS_RECLUTABLES.filter((t) => {
+      const edificio = edificiosPorTipoYEstado(asentamiento, t.edificio)[0];
+      return !edificio || (edificio.nivelInterno ?? 1) < t.nivelRequerido;
+    }).map((t) => t.id)
+  );
+  const unidadesPorDefecto = new Map(TROPAS_RECLUTABLES.map((t) => [t.id, t.unidadesPorDefecto]));
   for (const heroeId of residentesDe(asentamiento)) {
     for (const candidata of candidatas) {
-      if (sinTecnologia.has(candidata)) {
+      if (
+        sinTecnologia.has(candidata) ||
+        sinEdificio.has(candidata) ||
+        cantidadDeTropa(heroesActuales, heroeId, candidata) >= (unidadesPorDefecto.get(candidata) ?? Infinity)
+      ) {
         contador++;
         continue;
       }
@@ -940,6 +953,10 @@ function prepararDefensaNpc(asentamiento: Asentamiento, heroes: Heroe[]): Heroe[
     const elegidas: Escuadron[] = [];
     for (const e of porFuerza) if (puedeLlevar(heroe, [...elegidas, e])) elegidas.push(e);
     const activo = heroe.loadouts.find((l) => l.activo);
+    // Idempotente: si el loadout activo ya es este, no se reescribe (era lo que ocurría casi siempre, cada minuto).
+    if (activo && activo.perksSeleccionados.length === 0 && activo.squadIds.length === elegidas.length && elegidas.every((e, i) => activo.squadIds[i] === e.id)) {
+      return heroe;
+    }
     return guardarLoadout(
       heroe,
       { id: activo?.id, displayName: activo?.displayName ?? 'Default', squadIds: elegidas.map((e) => e.id), perksSeleccionados: [], activo: true },
@@ -1122,6 +1139,9 @@ function expandirSiPuede(
     if (!tieneRecursos(asentamiento.almacen, costo)) continue;
     const faccion = facciones.find((f) => f.id === asentamiento.faccionId);
     if (!faccion) continue;
+    // Las puertas que no dependen del destino, antes de barrer el mapa: con la Facción en su cap (lo normal) el barrido
+    // costaba ~27 ms por tick a las 5 semanas de batch y el motor rechazaba el lanzamiento igualmente.
+    if (!puedeLanzarFundacion(asentamiento, faccion, asentamientosActuales, caravanasActuales, instante)) continue;
     const destino = buscarDestino(asentamiento, mapa, asentamientosActuales);
     if (!destino) continue;
 
@@ -1391,6 +1411,10 @@ function lanzarCampanas(
   let heroesActuales = heroes;
   // Una cacería de bandidos (`cazarBandidos`, objetivo en un punto) no cuenta como campaña en curso.
   const conCampanaEnCurso = new Set(ejercitos.filter((e) => e.objetivo.tipo === 'asentamiento').map((e) => e.origenAsentamientoId));
+  // La defensa que encontraría una campaña en cada plaza depende solo de la plaza y de los héroes, no de quién ataque: se
+  // calcula una vez por plaza mientras los héroes no cambien (solo cambian al lanzarse una campaña), no por cada origen.
+  let defensaCacheadaSobre = heroesActuales;
+  const defensaCacheada = new Map<string, number>();
 
   for (const origen of [...asentamientos].sort((a, b) => (a.id < b.id ? -1 : 1))) {
     if (!esNpc(origen.faccionId)) continue;
@@ -1443,10 +1467,20 @@ function lanzarCampanas(
     // encontraría hoy, con la cohesión defensiva y la muralla del propio combate (`asediarConEjercito`). En la Era I
     // medida, el NPC se estrellaba una y otra vez contra guarniciones cinco veces más fuertes (gana el 0,4 %).
     const poderPropio = poderTotal(expedicion, false);
-    const puedeGanar = (plaza: Asentamiento) =>
-      poderPropio > poderTotal(defensaPrevista(plaza, heroesActuales, heridos), true) * multiplicadorDefensivoDeRecintos(plaza.recintos ?? []);
+    const puedeGanar = (plaza: Asentamiento) => {
+      if (defensaCacheadaSobre !== heroesActuales) {
+        defensaCacheada.clear();
+        defensaCacheadaSobre = heroesActuales;
+      }
+      let defensa = defensaCacheada.get(plaza.id);
+      if (defensa === undefined) {
+        defensa = poderTotal(defensaPrevista(plaza, heroesActuales, heridos), true) * multiplicadorDefensivoDeRecintos(plaza.recintos ?? []);
+        defensaCacheada.set(plaza.id, defensa);
+      }
+      return poderPropio > defensa;
+    };
     // Ni contra la última plaza de una Facción (2026-09-27, decisión del usuario): conquistarla la haría desaparecer
-    // (`acogerHeroesNpc`), y en la Era II medida una sola Facción se comió a diez en dos semanas.
+    // (anexión, `session/derrotas.ts`), y en la Era II medida una sola Facción se comió a diez en dos semanas.
     const plazasDe = (faccionId: string) => asentamientos.filter((a) => a.faccionId === faccionId).length;
     const objetivo = asentamientos
       .filter((a) => a.faccionId !== origen.faccionId && !estanAliadas(relaciones, origen.faccionId, a.faccionId))
@@ -1511,69 +1545,6 @@ function lanzarCampanas(
  * no llega nunca, y el gate correcto resultó ser inútil por medir lo que no era. Lo que dejaba a las columnas
  * fuera no era el hambre: era no tener motivo para volver.
  */
-/**
- * Los héroes bot nunca se quedan sin casa (decisión del usuario, 2026-09-27):
- *
- *  1. **Una Facción NPC derrotada por otra Facción NPC se une a ella y desaparece** (`anexionar`): pierde su último
- *     asentamiento y todos sus ciudadanos pasan a la ganadora (`Faccion.derrotadaPor`). Sus columnas cambian de
- *     bandera y sus relaciones se disuelven. Si la ganadora es de un jugador, no: la derrotada sigue y el Paso 0 la
- *     refunda, como siempre.
- *  2. **Una Facción NPC cuya última plaza colapsa, sin ganador (`derrotadaPor: null`), se disuelve** y sus héroes
- *     bot desaparecen con ella (2026-09-27, decisión del usuario). En la Era I medida, tres Facciones se quedaban así
- *     con 35 héroes dentro de una plaza que ya no existía.
- *  3. **Un héroe bot sin residencia se muda a la plaza más cercana de su Facción** (la desalojada ya lo hace al
- *     caer su plaza; esto recoge a los que quedaban fuera, incluidos los recién absorbidos). Su columna, si la
- *     tiene, pasa a volver ahí.
- *
- * Medido en la Era I antes de esto: ~75 héroes huérfanos, casi todos de Facciones sin ninguna plaza.
- */
-function acogerHeroesNpc(estado: EstadoSimulacion, esNpc: (faccionId: string) => boolean): { estado: EstadoSimulacion; eventos: string[] } {
-  const eventos: string[] = [];
-  let { facciones, asentamientos, ejercitos, relaciones, heroes } = estado;
-
-  for (const perdedora of estado.facciones) {
-    const ganadoraId = perdedora.derrotadaPor;
-    if (!ganadoraId || !esNpc(perdedora.id) || !esNpc(ganadoraId) || !facciones.some((f) => f.id === ganadoraId)) continue;
-    if (asentamientos.some((a) => a.faccionId === perdedora.id)) continue;
-    ({ facciones, asentamientos } = anexionar(facciones, asentamientos, ganadoraId, perdedora.id));
-    ejercitos = ejercitos.map((e) => (e.faccionId === perdedora.id ? { ...e, faccionId: ganadoraId } : e));
-    relaciones = relaciones.filter((r) => r.faccionAId !== perdedora.id && r.faccionBId !== perdedora.id);
-    eventos.push(`${perdedora.id} pierde su último asentamiento ante ${ganadoraId}: sus héroes se unen a ella y la Facción desaparece.`);
-  }
-
-  for (const colapsada of estado.facciones) {
-    if (colapsada.derrotadaPor !== null || !esNpc(colapsada.id) || asentamientos.some((a) => a.faccionId === colapsada.id)) continue;
-    const bots = new Set(heroes.filter((h) => h.controlador === 'bot' && colapsada.ciudadanosIds.includes(h.id)).map((h) => h.id));
-    facciones = facciones.filter((f) => f.id !== colapsada.id);
-    heroes = heroes.filter((h) => !bots.has(h.id));
-    ejercitos = ejercitos.filter((e) => e.faccionId !== colapsada.id);
-    relaciones = relaciones.filter((r) => r.faccionAId !== colapsada.id && r.faccionBId !== colapsada.id);
-    eventos.push(`${colapsada.id} pierde su último asentamiento por colapso: la Facción se disuelve y sus ${bots.size} héroes bot desaparecen.`);
-  }
-
-  const posicionDe = (h: Heroe): Point | undefined => {
-    const u = h.ubicacion;
-    if (u.tipo === 'asentamiento') return asentamientos.find((a) => a.id === u.asentamientoId)?.posicion;
-    if (u.tipo === 'columna') return ejercitos.find((e) => e.id === u.ejercitoId)?.posicionActual;
-    return u.punto;
-  };
-  for (const heroe of heroes) {
-    if (heroe.controlador !== 'bot' || asentamientos.some((a) => esResidente(a, heroe.id))) continue;
-    const faccion = facciones.find((f) => f.ciudadanosIds.includes(heroe.id));
-    const donde = posicionDe(heroe);
-    if (!faccion || !esNpc(faccion.id) || !donde) continue;
-    const casa = asentamientos
-      .filter((a) => a.faccionId === faccion.id)
-      .sort((a, b) => distancia(a.posicion, donde) - distancia(b.posicion, donde) || (a.id < b.id ? -1 : 1))[0];
-    if (!casa) continue;
-    asentamientos = asentamientos.map((a) => (a.id === casa.id ? { ...a, casasCompradas: [...a.casasCompradas, heroe.id] } : a));
-    ejercitos = ejercitos.map((e) => (e.liderId === heroe.id && !asentamientos.some((a) => a.id === e.origenAsentamientoId && a.faccionId === e.faccionId) ? { ...e, origenAsentamientoId: casa.id } : e));
-    eventos.push(`${heroe.id}, sin casa, pasa a residir en ${casa.id}.`);
-  }
-
-  return { estado: { ...estado, facciones, asentamientos, ejercitos, relaciones, heroes }, eventos };
-}
-
 /**
  * Quien conquista se queda a defender (2026-09-27, decisión del usuario): una columna NPC acampada a la puerta de
  * una plaza de su Facción que se ha quedado sin residentes —la acaba de conquistar— se muda a ella y entra. Su
@@ -2069,12 +2040,9 @@ export function avanzarNpcGobernanza(
   // sí y el NPC se comporta exactamente como antes de existir este filtro.
   const esNpc = config.faccionesIds ? (faccionId: string) => config.faccionesIds!.includes(faccionId) : () => true;
 
-  // Antes que nada, que nadie se quede sin casa: una Facción NPC derrotada por otra se une a ella, y los héroes bot
-  // sin residencia se mudan a la plaza más cercana de su Facción. Va antes del Paso 0, que refundaría gratis a una
-  // Facción NPC sin asentamientos.
-  const acogida = acogerHeroesNpc(estadoEntrada, esNpc);
-  const estado = acogida.estado;
-  eventos.push(...acogida.eventos);
+  // Qué pasa con una Facción NPC que pierde su último asentamiento —anexión o disolución— ya no se decide aquí: se
+  // resuelve en el momento de la derrota (`session/derrotas.ts`), y quien se queda sin casa la recibe en el acto (`9f9a098`).
+  const estado = estadoEntrada;
 
   // Paso 0: fundar el primer asentamiento de cualquier Facción cedida que todavía no tenga ninguno — sin esto
   // una Facción recién marcada como NPC se queda inerte para siempre (nada más de este archivo sabe crear un
@@ -2084,6 +2052,8 @@ export function avanzarNpcGobernanza(
   let heroes = estado.heroes;
   let eventosIniciales: string[] = [];
   let asentamientosBase = estado.asentamientos;
+  let campamentosMercenarios = estado.campamentosMercenarios;
+  const asentamientosBase0 = new Set(estado.asentamientos.map((a) => a.id));
   if (config.faccionesIds) {
     const inicial = fundarAsentamientosIniciales(
       asentamientosBase,
@@ -2099,6 +2069,10 @@ export function avanzarNpcGobernanza(
     facciones = inicial.facciones;
     heroes = inicial.heroes;
     eventosIniciales = inicial.eventos;
+    // Quien funda pasa a residir en la plaza nueva: deja el campamento de mercenarios donde residiera (igual que al
+    // fundar con una caravana, `engine/simulation.ts`).
+    const fundadores = inicial.asentamientos.filter((a) => !asentamientosBase0.has(a.id)).flatMap((a) => a.heroesFundadoresIds);
+    if (fundadores.length > 0) campamentosMercenarios = salirDeCampamentos(campamentosMercenarios, ...fundadores);
   }
   eventos.push(...eventosIniciales);
 
@@ -2195,6 +2169,7 @@ export function avanzarNpcGobernanza(
     facciones,
     caravanas,
     acuerdos: respuestas.acuerdos,
+    campamentosMercenarios,
   };
   // Trueque de especialización: se DELEGA en el motor (`avanzarAutoComercioSimulado`) sin tocarlo ni una
   // línea. Para acotarlo a las Facciones NPC se le pasa una VISTA del estado con `facciones` ya filtrado —

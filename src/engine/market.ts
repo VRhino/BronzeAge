@@ -113,6 +113,24 @@ export function caducarOrdenes(
   return { ordenes: enPie, cerradas, eventos };
 }
 
+/**
+ * Añade órdenes cerradas al historial recordando solo las últimas `MERCADO.historialPorPlaza` de cada plaza (el historial va
+ * del más viejo al más nuevo). Devuelve el MISMO array si no hay nada que añadir.
+ */
+export function anexarAlHistorialDeOrdenes(historial: readonly OrdenMercado[] | undefined, cerradas: readonly OrdenMercado[]): OrdenMercado[] | undefined {
+  if (cerradas.length === 0) return historial as OrdenMercado[] | undefined;
+  const todas = [...(historial ?? []), ...cerradas];
+  const vistas = new Map<string, number>();
+  const conservadas: OrdenMercado[] = [];
+  for (let i = todas.length - 1; i >= 0; i--) {
+    const orden = todas[i]!;
+    const n = (vistas.get(orden.asentamientoId) ?? 0) + 1;
+    vistas.set(orden.asentamientoId, n);
+    if (n <= MERCADO.historialPorPlaza) conservadas.push(orden);
+  }
+  return conservadas.reverse();
+}
+
 /** Espacio libre para un recurso en un almacen. Un recurso sin entrada todavia no cabe: la capacidad la dan
  * los edificios de almacenaje (`ampliarCapacidad`), no aparece sola al recibir mercancia. */
 function huecoPara(plaza: Asentamiento, recurso: string): number {

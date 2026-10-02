@@ -251,6 +251,13 @@ Dos edificios lo amplían, y no compiten: el **Almacén** sube la capacidad de T
 - **El trigo no forma parte del coste periódico.** El "apartado de trigo" del panel de Mantenimiento es el consumo real de comida de la población (4.1) + la ración de tropas (Doc 5.4), y se descuenta UNA sola vez, donde se consume. Un déficit de trigo NUNCA degrada este medidor —que depende solo de madera, piedra y oro—, pero no es inofensivo: tiene su propio medidor de nutrición (4.1), que primero frena el crecimiento y, sostenido, cuesta población real.
 - Si NO se cumple algún pago (madera/piedra/oro), el medidor BAJA de 100 a 0 de forma PROPORCIONAL al déficit (degradación gradual, no corte binario); con el pago íntegro, se regenera.
 - Al llegar a 0 el asentamiento **pierde un nivel efectivo** y el medidor vuelve a empezar; con el pago íntegro sostenido (`MANTENIMIENTO.minutosSanosParaRecuperarNivel`) lo recupera. Solo si ya está en nivel efectivo 1, al llegar a 0 se DESTRUYE y cae en RUINAS → se limpia la zona → queda disponible para otro jugador/grupo. Esta es la MISMA ruta mecánica que el caso de abandono total (sea el asentamiento literalmente abandonado o simplemente mal gestionado mientras sigue activo).
+- **Al caer en ruinas, lo que dependía de él se resuelve en el acto** (decidido el 2026-10-02):
+  - Sus residentes pasan a la plaza más cercana de su Facción o, si no le queda ninguna, al campamento de mercenarios más cercano (Doc 2.5).
+  - Su campamento de bandidos se dispersa (Doc 1.9).
+  - Sus trueques activos o propuestos se cancelan **sin penalizar a nadie** (Doc 2.7): el socio no puede cumplir un pacto con una plaza que ya no existe.
+  - Las caravanas que iban hacia él dan la vuelta y **vuelven a casa con su carga**; las que se preparaban para salir hacia él la devuelven al almacén; las aparcadas en él vuelven a su origen. Sin camino por tierra de vuelta, se pierden.
+  - Las caravanas que salían de él se pierden, y su escolta vuelve al campamento de su héroe.
+  - Si era la última plaza de su Facción, esta queda derrotada. Si es una Facción NPC, se disuelve con sus héroes bot en el acto (si la vence en combate otra Facción NPC, en cambio, se une a ella).
 - Cantidades por nivel, velocidad de degradación/regeneración y duración del período de gracia: placeholder (`MANTENIMIENTO`).
 
 ## 4.6 Entrada tardía y mundo lleno

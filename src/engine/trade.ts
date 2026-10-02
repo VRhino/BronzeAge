@@ -45,7 +45,7 @@ export interface PayloadPeajePaso {
   peaje: Record<string, number>;
 }
 import { ANIMAL_CATALOGO, ASIGNACION_CARAVANA, CARAVANA_PREPARACION, CARRO_CATALOGO, COMISION, NIVEL_FACCION, REPUTACION, TRUEQUE } from '../constants';
-import { aplicarAjustesExperiencia, type AjusteExperiencia } from './faccion';
+import { aplicarExperiencia, type AjusteExperiencia } from './faccion';
 import type { AnimalTipo, CarroTipo } from '../domain/types';
 import { capacidadCaravana, velocidadCaravana } from './caravanas';
 import { esResidente } from './pertenencia';
@@ -552,20 +552,21 @@ function avanzarCaravanas(
     }
     const origen = asentamientosPorId.get(caravana.origenAsentamientoId);
     const destino = asentamientosPorId.get(caravana.destinoAsentamientoId);
-    if (!origen || !destino) {
-      // Asentamiento desaparecido (fuera de alcance de Fase 0 aún): la caravana se pierde, su escolta no.
-      escoltasLiberadas.push(...(caravana.escoltaIds ?? []));
-      continue;
-    }
-
     // Retorno real tras entregar (a petición del usuario: una caravana NUNCA se teletransporta) — recorre la
     // MISMA ruta que la llevó a `destino`, pero en sentido inverso, de vuelta a `origen` (su asentamiento de
     // origen permanente, ver `estado` en domain/types.ts). `origenAsentamientoId`/`destinoAsentamientoId` NO
     // se tocan durante el retorno (siguen siendo origen real / destino real de la entrega ya hecha) — solo se
-    // invierten los puntos de inicio/fin del movimiento de este tick.
+    // invierten los puntos de inicio/fin del movimiento de este tick. De vuelta no hace falta que el destino siga
+    // en pie: si cayó en ruinas, la caravana vuelve igual a casa (`engine/ruina.ts`).
     const retornando = caravana.estado === 'retornando';
-    const puntoInicio = retornando ? destino.posicion : origen.posicion;
-    const puntoFin = retornando ? origen.posicion : destino.posicion;
+    if (!origen || (!destino && !retornando)) {
+      // Asentamiento desaparecido: la caravana se pierde, su escolta no. Una ruina ya lo resuelve al caer
+      // (`engine/ruina.ts`); esto queda para partidas guardadas antes de eso.
+      escoltasLiberadas.push(...(caravana.escoltaIds ?? []));
+      continue;
+    }
+    const puntoInicio = retornando ? (destino?.posicion ?? caravana.posicionActual) : origen.posicion;
+    const puntoFin = retornando || !destino ? origen.posicion : destino.posicion;
 
     // Distancia en línea recta: base de la bonificación por distancia de la comisión (más abajo) — NO de
     // cuántos ticks tarda la caravana, que depende de la longitud real de la polilínea de `ruta` (puede
@@ -646,7 +647,9 @@ function avanzarCaravanas(
       continue;
     }
 
-    // Llegada: entrega el contenido, cobra comisión de comercio con bonificación por distancia.
+    // Llegada: entrega el contenido, cobra comisión de comercio con bonificación por distancia. A la ida el destino
+    // existe siempre (sin él la caravana se perdió arriba); la guarda solo lo dice al compilador.
+    if (!destino) continue;
     let almacenDestino = destino.almacen;
     let valorTotal = 0;
     for (const [recurso, cantidad] of Object.entries(caravana.contenido)) {
@@ -1045,6 +1048,16 @@ function asignarCaravanasATrueque(
   return { caravanas: [...caravanasPorId.values()], red };
 }
 
+/** Quita de `acuerdos` los trueques terminados hace más de `TRUEQUE.retencionTerminadosMinutos` que ninguna caravana cita. Mismo array si no hay ninguno. */
+export function podarAcuerdosTerminados(acuerdos: AcuerdoTrueque[], caravanas: readonly Caravana[], instante: Instante): AcuerdoTrueque[] {
+  const citados = new Set(caravanas.map((c) => c.origenAcuerdoId).filter((id): id is string => id !== undefined));
+  const sobran = (a: AcuerdoTrueque): boolean =>
+    (a.estado === 'cumplido' || a.estado === 'expirado' || a.estado === 'rechazado') &&
+    instante > sumar(a.expiraEn, minutos(TRUEQUE.retencionTerminadosMinutos)) &&
+    !citados.has(a.id);
+  return acuerdos.some(sobran) ? acuerdos.filter((a) => !sobran(a)) : acuerdos;
+}
+
 export function avanzarComercio(
   asentamientos: Asentamiento[],
   facciones: Faccion[],
@@ -1089,9 +1102,11 @@ export function avanzarComercio(
   const vigente = podarRutas(red, instante, new Set(asentamientos.map((a) => a.id)));
   const trasAsignacion = asignarCaravanasATrueque(mapa, vigente, zonas, acuerdosPorId, asentamientosPorId, trasMovimiento, instante, eventos, ajustesReputacion);
 
+  const trasXp = aplicarExperiencia(aplicarAjustesReputacion(facciones, ajustesReputacion), ajustesExperiencia);
+  eventos.push(...trasXp.eventos);
   return {
     asentamientos: asentamientos.map((a) => asentamientosPorId.get(a.id)!),
-    facciones: aplicarAjustesExperiencia(aplicarAjustesReputacion(facciones, ajustesReputacion), ajustesExperiencia),
+    facciones: trasXp.facciones,
     caravanas: trasAsignacion.caravanas,
     acuerdos: [...acuerdosPorId.values()],
     eventos,

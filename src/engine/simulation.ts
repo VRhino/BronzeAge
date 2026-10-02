@@ -7,14 +7,14 @@ import { computeTodasLasZonas } from './zones';
 import { avanzarConstruccion, reclamosDeFuentes } from './construction';
 import { avanzarNutricionPoblacion, crecerPoblacion, recaudacionOro } from './population';
 import { agregarRecurso } from './almacen';
-import { avanzarComercio } from './trade';
+import { avanzarComercio, podarAcuerdosTerminados } from './trade';
 import { RED_VACIA } from './redCaminos';
 import { avanzarCaravanasFundacion } from './expansion';
 import { alCampamentoPorIds, campamentoDe, conEscolta, conEscuadrones, conTropa, indiceTropa, sinEscolta } from './tropa';
-import { caducarOrdenes } from './market';
+import { anexarAlHistorialDeOrdenes, caducarOrdenes } from './market';
 import { avanzarPoliticas } from './politicas';
 import { avanzarTributos } from './diplomacia';
-import { avanzarNivelesFaccion, aplicarAjustesExperiencia, registrarDerrota, type AjusteExperiencia } from './faccion';
+import { aplicarExperiencia, registrarDerrota, type AjusteExperiencia } from './faccion';
 import { NIVEL_FACCION } from '../constants';
 import { avanzarMantenimientoTropas, consumoRacionDeEscuadrones } from './tropas';
 import { avanzarMantenimiento, encontrarCapital } from './mantenimiento';
@@ -27,6 +27,7 @@ import { grabarLoVisto, type MemoriaFaccion } from './memoria';
 import { avanzarAparicionMercenarios, reubicarResidentesDeRuina, salirDeCampamentos } from './mercenarios';
 import { reponerMercados } from './mercadoMercenario';
 import { grabarExploracionPersonal } from './ubicacion';
+import { cerrarDependientesDeRuina } from './ruina';
 import { avanzarTecnologia, contadoresDeProduccion, sumarContadores, sumarDeltas, tecnologiasDe, type DeltaContadores } from './tecnologia';
 
 export interface EstadoSimulacion {
@@ -261,8 +262,19 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   // Si era la última de su Facción, queda derrotada sin ganador (`Faccion.derrotadaPor = null`).
   let facciones = estado.facciones;
   for (const p of procesados) if (p.destruido) facciones = registrarDerrota(facciones, actualizados, p.asentamiento.faccionId, null);
+  // Lo que colgaba de ella se cierra ya, no cuando el tick tropiece con ello (`engine/ruina.ts`): su campamento de bandidos,
+  // sus trueques y las caravanas que iban o venían.
+  let dependientes = { asentamientos: actualizados, caravanas: estado.caravanas, acuerdos: estado.acuerdos, campamentosBandidos: estado.campamentosBandidos };
+  for (const p of procesados) {
+    if (!p.destruido) continue;
+    const cierre = cerrarDependientesDeRuina(p.asentamiento, dependientes, mapa);
+    dependientes = { asentamientos: cierre.asentamientos, caravanas: cierre.caravanas, acuerdos: cierre.acuerdos, campamentosBandidos: cierre.campamentosBandidos };
+    eventosDominio.push(...comoEventosDominio(cierre.eventos, contexto));
+    heroes = alCampamentoPorIds(heroes, cierre.escoltasLiberadas);
+  }
+  actualizados = dependientes.asentamientos;
 
-  const trasComercio = avanzarComercio(actualizados, facciones, estado.caravanas, estado.acuerdos, mapa, estado.red ?? RED_VACIA, zonas, instante);
+  const trasComercio = avanzarComercio(actualizados, facciones, dependientes.caravanas, dependientes.acuerdos, mapa, estado.red ?? RED_VACIA, zonas, instante);
   eventosDominio.push(...comoEventosDominio(trasComercio.eventos, contexto));
   heroes = alCampamentoPorIds(heroes, trasComercio.escoltasLiberadas);
 
@@ -284,7 +296,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   // Campamentos de bandidos (Doc 1.9): spawn/respawn primero, después atacan cualquier caravana ya movida
   // este tick (comercial o de fundación) que pase cerca — mismo orden que el resto del tick, sobre posiciones
   // ya actualizadas.
-  const trasSpawnBandidos = avanzarSpawnBandidos(estado.campamentosBandidos, zonas, trasExpansion.asentamientos, mapa, instante);
+  const trasSpawnBandidos = avanzarSpawnBandidos(dependientes.campamentosBandidos, zonas, trasExpansion.asentamientos, mapa, instante);
   eventosDominio.push(...comoEventosDominio(trasSpawnBandidos.eventos, contexto));
   // Campamentos de mercenarios (Doc 1.9b): el del día 1 y los que aparecen entre Facciones.
   const trasMercenarios = avanzarAparicionMercenarios(campamentosActuales, trasExpansion.asentamientos, zonas, mapa, instante);
@@ -342,8 +354,9 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   // caravanas, aplicadas ya directamente sobre `facciones` en `engine/combate.ts`) antes de recalcular nivel.
   // `trasEjercitos.facciones` y no `trasExpansion.facciones`: un asedio ganado por un ejército otorga XP de
   // combate/conquista y puede penalizar reputación, y ese resultado tiene que entrar en la cadena.
-  const faccionesConXp = aplicarAjustesExperiencia(trasEjercitos.facciones, ajustesExperiencia);
-  const trasNivelFaccion = avanzarNivelesFaccion(faccionesConXp);
+  // El XP que dan los comandos y los combates ya subió el nivel en el momento (`aplicarExperiencia`); este es solo el
+  // del propio tick (construcción, ascensos).
+  const trasNivelFaccion = aplicarExperiencia(trasEjercitos.facciones, ajustesExperiencia);
   eventosDominio.push(...comoEventosDominio(trasNivelFaccion.eventos, contexto));
 
   const faccionesFinal = avanzarReputacion(trasNivelFaccion.facciones, estado.relaciones);
@@ -374,9 +387,9 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     facciones: faccionesFinal,
     caravanas: trasEjercitos.caravanas,
     ejercitos: trasEjercitos.ejercitos,
-    acuerdos: trasComercio.acuerdos,
+    acuerdos: podarAcuerdosTerminados(trasComercio.acuerdos, trasEjercitos.caravanas, instante),
     ordenes: trasMercado.ordenes,
-    historialOrdenes: trasMercado.cerradas.length > 0 ? [...(estado.historialOrdenes ?? []), ...trasMercado.cerradas] : estado.historialOrdenes,
+    historialOrdenes: anexarAlHistorialDeOrdenes(estado.historialOrdenes, trasMercado.cerradas),
     relaciones: estado.relaciones,
     titulos: titulosActuales,
     red: trasComercio.red,

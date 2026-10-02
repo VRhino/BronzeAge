@@ -10,6 +10,7 @@ import { crearFaccionNpc } from '../../session/comandos/crearFaccionNpc';
 import { crearHeroe } from '../../session/comandos/crearHeroe';
 import { crearAlmacenEnDisco } from '../almacen/enDisco';
 import { RunnerDePartida } from '../runnerDePartida';
+import { MAX_EVENTOS_EN_MEMORIA } from '../../session/estado';
 import { cargarPartida, type SnapshotPartida } from '../persistenciaPartida';
 
 const MOMENTO = '2026-01-01T00:00:00.000Z';
@@ -194,6 +195,27 @@ describe('RunnerDePartida — reloj de mundo (D5)', () => {
     r.detenerRelojDeMundo();
 
     expect(r.getState().tick).toBe(0);
+  });
+
+  it('avisa a `alEmitir` tras cada tick del reloj, y solo del reloj (O1)', async () => {
+    let relojMs = Date.parse(MOMENTO);
+    const avisos: Array<{ gameId: string; n: number }> = [];
+    const r = RunnerDePartida.crear('g-aviso', { seed: 7 }, {
+      almacen,
+      ahora: () => new Date(relojMs).toISOString(),
+      alEmitir: (gameId, eventos) => avisos.push({ gameId, n: eventos.length }),
+    });
+    await r.avanzarTick(); // un tick a mano no avisa: lo difunde quien lo pide (ruta de admin)
+    expect(avisos).toHaveLength(0);
+
+    r.iniciarRelojDeMundo(50);
+    relojMs += 2 * 50;
+    await vi.waitFor(() => expect(avisos).toHaveLength(2), { timeout: 10_000 });
+    await r.esperarColaVacia();
+    r.detenerRelojDeMundo();
+
+    expect(avisos.every((a) => a.gameId === 'g-aviso')).toBe(true);
+    expect(r.getState().tick, 'avisa tras persistir, con el estado ya avanzado').toBe(3);
   });
 
   it('parar y reanudar el reloj re-ancla: el tiempo con el reloj parado no cuenta, ni el resto', async () => {
@@ -502,5 +524,31 @@ describe('RunnerDePartida — el reloj de pared NO entra en el estado (Fase D / 
     for (const evento of eventos as Array<{ momento: string }>) {
       expect(evento.momento.startsWith('2026-01-01T00:0')).toBe(true); // época + unos pocos minutos, no 2099
     }
+  });
+});
+
+describe('RunnerDePartida — log de eventos acotado en memoria (N2a)', () => {
+  it('el estado conserva solo los últimos eventos y un cursor antiguo se completa desde el JSONL', async () => {
+    const r = runner('g-log-acotado');
+    const sesion = (r as unknown as { sesion: { registrarEventoAdministrativo(m: string): void } }).sesion;
+    // Ráfagas por debajo del tope entre persistencias, como en la realidad (cada comando anexa lo suyo al terminar).
+    for (let ronda = 0; ronda < 6; ronda++) {
+      for (let i = 0; i < 1000; i++) sesion.registrarEventoAdministrativo(`evento ${ronda}-${i}`);
+      await r.avanzarTick();
+    }
+    const estado = r.getState();
+    expect(estado.eventosDominio.length, 'memoria acotada').toBeLessThanOrEqual(MAX_EVENTOS_EN_MEMORIA);
+    expect(estado.eventosDominio.length, 'y no vacía').toBeGreaterThan(MAX_EVENTOS_EN_MEMORIA - 1000);
+
+    const todos = await r.eventosDesde(0);
+    const versiones = todos.map((e) => e.version);
+    expect(versiones, 'cronológico y sin duplicados').toEqual([...versiones].sort((a, b) => a - b));
+    expect(new Set(todos.map((e) => `${e.version}|${e.mensaje}`)).size).toBe(todos.length);
+    expect(versiones[0], 'llega hasta el primer evento').toBe(1);
+    expect(versiones.at(-1), 'y termina en el último evento (un tick sin eventos sube la versión sin dejar rastro)').toBe(estado.eventosDominio[0]!.version);
+    expect(todos.length, 'no se perdió ninguno').toBeGreaterThanOrEqual(6000);
+
+    const reciente = await r.eventosDesde(estado.version - 3);
+    expect(reciente.every((e) => e.version > estado.version - 3)).toBe(true);
   });
 });

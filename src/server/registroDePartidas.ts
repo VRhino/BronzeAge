@@ -8,7 +8,7 @@
 // invisible para cualquiera que no leyera esa función entera.
 import type { RegionId } from '../domain/types';
 import type { AlmacenDeObjetos } from './almacen/almacenDeObjetos';
-import { RunnerDePartida } from './runnerDePartida';
+import { RunnerDePartida, type OpcionesRunner } from './runnerDePartida';
 import type { OpcionesSesion } from '../session/gameSession';
 import { listarPartidas, type ResumenPartidaEnDisco } from './persistenciaPartida';
 
@@ -48,7 +48,9 @@ export class RegistroDePartidas {
     private readonly intervaloTickMs?: number,
     private readonly ahora: () => string = () => new Date().toISOString(),
     /** Cómo corren las partidas de este proceso (`OpcionesSesion`): hoy, si las batallas con humanos van a Unity. */
-    private readonly opcionesSesion: OpcionesSesion = {}
+    private readonly opcionesSesion: OpcionesSesion = {},
+    /** A quién se avisa de los eventos de cada tick del reloj de mundo (`OpcionesRunner.alEmitir`): el hub de WebSocket. */
+    private readonly alEmitir?: OpcionesRunner['alEmitir']
   ) {}
 
   obtener(gameId: string): RunnerDePartida | undefined {
@@ -79,7 +81,7 @@ export class RegistroDePartidas {
    */
   async abrir(gameId: string, config: ConfiguracionPartida): Promise<RunnerDePartida> {
     if (this.runners.has(gameId)) throw new PartidaYaAbiertaError(gameId);
-    const runner = await RunnerDePartida.cargarOCrear(gameId, config, { almacen: this.almacen, ahora: this.ahora, sesion: this.opcionesSesion });
+    const runner = await RunnerDePartida.cargarOCrear(gameId, config, { almacen: this.almacen, ahora: this.ahora, sesion: this.opcionesSesion, alEmitir: this.alEmitir });
     this.runners.set(gameId, runner);
     this.arrancarRelojSiConfigurado(runner);
     return runner;
@@ -108,7 +110,7 @@ export class RegistroDePartidas {
     const runner = await RunnerDePartida.crearYPersistir(
       gameId,
       config,
-      { almacen: this.almacen, ahora: this.ahora, sesion: this.opcionesSesion },
+      { almacen: this.almacen, ahora: this.ahora, sesion: this.opcionesSesion, alEmitir: this.alEmitir },
       { forzar: true }
     );
     this.runners.set(gameId, runner);

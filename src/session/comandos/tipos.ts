@@ -10,7 +10,7 @@ import type { EventoDominio } from '../../domain/eventos';
 import type { Instante } from '../../domain/tiempo';
 import type { Mapa } from '../../world/mapa';
 import type { RandomFn } from '../../worldgen';
-import type { EventoDominioConVersion, GameSessionState } from '../estado';
+import { anteponerEventos, type EventoDominioConVersion, type GameSessionState } from '../estado';
 import type { GeneradorIds } from '../idGenerator';
 import { codigoDeErrorDominio } from '../erroresDeDominio';
 import { contadoresDeEventos, sumarContadores } from '../../engine/tecnologia';
@@ -98,7 +98,7 @@ export function exito<T>(estado: GameSessionState, eventos: EventoDominio[], dat
   const estadoFinal: GameSessionState = {
     ...estado,
     version,
-    eventosDominio: [...eventosConVersion, ...estado.eventosDominio],
+    eventosDominio: anteponerEventos(eventosConVersion, estado.eventosDominio),
     // Los logros del servidor (Doc 6.3) se cuentan aquí, por donde pasa TODO hecho de la partida: el tick, los
     // comandos y el NPC. Lo que no deja evento (extracción, talleres) lo cuenta el propio tick.
     tecnologia: sumarContadores(estado.tecnologia, contadoresDeEventos(eventos)),

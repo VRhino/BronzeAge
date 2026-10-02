@@ -1,11 +1,12 @@
 import type { Asentamiento, Edificio, Faccion, Point, RecursoAlmacenado } from '../domain/types';
+import type { EventoCrudo } from '../domain/eventos';
 import { RECURSOS_TIPO } from '../domain/types';
 import { minutos, sumar, type Instante } from '../domain/tiempo';
 import { ALMACEN, FUNDACION, MANTENIMIENTO, NIVEL_FACCION, OCUPACION, POBLACION, ZONA_INFLUENCIA } from '../constants';
 import type { Mapa } from '../world/mapa';
 import { posicionLibreParaFundar, zonaInicialDeFundacion } from './zones';
 import { sitioEnBarrio } from './construction';
-import { calcularCapFundacion, otorgarCiudadania } from './faccion';
+import { aplicarExperiencia, calcularCapFundacion, otorgarCiudadania } from './faccion';
 import { ReglaInvalidaError } from './errores';
 
 export class FundacionInvalidaError extends ReglaInvalidaError {}
@@ -241,7 +242,7 @@ export function fundarAsentamiento(
   heroesFundadoresIds: string[],
   asentamientosExistentes: Asentamiento[],
   fundadoEn: Instante
-): { asentamiento: Asentamiento; facciones: Faccion[] } {
+): { asentamiento: Asentamiento; facciones: Faccion[]; eventos: EventoCrudo[] } {
   if (heroesFundadoresIds.length < 1 || heroesFundadoresIds.length > FUNDACION.maxJugadoresFundacionGrupal) {
     throw new FundacionInvalidaError(
       `La fundación grupal admite entre 1 y ${FUNDACION.maxJugadoresFundacionGrupal} héroes.`
@@ -277,7 +278,12 @@ export function fundarAsentamiento(
     };
   }
 
-  const id = `asentamiento-${asentamientosExistentes.length}-${Math.round(posicion.x)}-${Math.round(posicion.y)}`;
+  // El id no puede repetir el de una plaza que ya no existe: todo lo que la nombraba (su campamento de bandidos, un trueque,
+  // el origen de una caravana o de un ejército, una ficha de memoria) se reengancharía en silencio a la nueva
+  // (`Consideraciones/Auditoria_Tick_Eventos.md`, B3). Con solo el número de plazas vivas y la posición, refundar donde cayó
+  // una lo repetía; el minuto de mundo de la fundación lo hace único (decisión del usuario, 2026-10-02). El id es además la
+  // semilla del trazado urbano (`engine/trazado.ts`): el minuto cambia la forma de las ciudades nuevas, no la de las fundadas.
+  const id = `asentamiento-${asentamientosExistentes.length}-${Math.round(posicion.x)}-${Math.round(posicion.y)}-t${Math.floor(fundadoEn / 60_000)}`;
 
   const asentamiento: Asentamiento = {
     id,
@@ -309,12 +315,12 @@ export function fundarAsentamiento(
   }
   // Fundar un asentamiento NUEVO da experiencia de Facción (decisión del usuario, 2026-09-27); el primero, no: es
   // nacer, no crecer.
-  if (asentamientosDeFaccion > 0) {
-    faccionActualizada = { ...faccionActualizada, experiencia: faccionActualizada.experiencia + NIVEL_FACCION.xp.fundacion };
-  }
+  const faccionesTrasFundar = facciones.map((f) => (f.id === faccionId ? faccionActualizada : f));
+  // El nivel sube en el momento si esa experiencia cruza un umbral (`aplicarExperiencia`).
+  const trasXp =
+    asentamientosDeFaccion > 0
+      ? aplicarExperiencia(faccionesTrasFundar, [{ faccionId, delta: NIVEL_FACCION.xp.fundacion, razon: 'fundación' }])
+      : { facciones: faccionesTrasFundar, eventos: [] };
 
-  return {
-    asentamiento,
-    facciones: facciones.map((f) => (f.id === faccionId ? faccionActualizada : f)),
-  };
+  return { asentamiento, facciones: trasXp.facciones, eventos: trasXp.eventos };
 }

@@ -21,6 +21,7 @@ import { campamentoDe } from '../src/engine/tropa';
 import { NECESIDADES } from '../src/constants';
 const NECESIDADES_UMBRAL_AMPLIACION = NECESIDADES.umbralAlmacenAmpliacion;
 import { avanzarNpcGobernanza, heroeBot, type ConfigNpcGobernanza, MINERALES_BONUS_FUNDACION } from '../src/session/npcGobernanza';
+import { derrotasEntre, esNpcSegun, resolverDerrotasNpc } from '../src/session/derrotas';
 import {
   CATEGORIA_POR_TIPO,
   celdaMinimaDeEdificio,
@@ -1233,7 +1234,10 @@ async function main() {
         : new Map();
       const trasMotorCrudo = avanzarSimulacion(estado, mapa, contexto);
       // Los logros que salen de eventos los cuenta `exito` en la partida real; aquí no hay comandos, así que se cuentan a mano.
-      const trasMotor = { ...trasMotorCrudo, tecnologia: sumarContadores(trasMotorCrudo.tecnologia, contadoresDeEventos(trasMotorCrudo.eventosDominio)) };
+      const trasMotorContado = { ...trasMotorCrudo, tecnologia: sumarContadores(trasMotorCrudo.tecnologia, contadoresDeEventos(trasMotorCrudo.eventosDominio)) };
+      // Una Facción que perdió su última plaza en este tick se anexiona o se disuelve en el acto (`session/derrotas.ts`),
+      // como hace `avanzarTick` en la partida real: el NPC ya no lo barre en su turno.
+      const trasMotor = resolverDerrotasNpc(trasMotorContado, derrotasEntre(estado, trasMotorContado), esNpcSegun(config.faccionesIds)).estado;
       if (diagFundacion) {
         for (const ev of trasMotor.eventosDominio) {
           if (ev.codigo === 'expansion.asentamiento_fundado') {
@@ -1614,11 +1618,14 @@ async function main() {
 
   // Trueques para crecer (npcGobernanza, 2026-09-27): los que piden algo que no es de Mantenimiento.
   const paraCrecer = new Map<string, Map<string, number>>();
+  // Trueque compuesto (Doc 3.2): lo pedido son las líneas del lado B; cada recurso pedido cuenta una vez por acuerdo.
   for (const ac of estado.acuerdos) {
-    if (['madera', 'piedra', 'oro'].includes(ac.recursoB)) continue;
-    const porEstado = paraCrecer.get(ac.recursoB) ?? new Map<string, number>();
-    porEstado.set(ac.estado, (porEstado.get(ac.estado) ?? 0) + 1);
-    paraCrecer.set(ac.recursoB, porEstado);
+    for (const recurso of new Set(ac.lineasB.map((l) => l.recurso))) {
+      if (['madera', 'piedra', 'oro'].includes(recurso)) continue;
+      const porEstado = paraCrecer.get(recurso) ?? new Map<string, number>();
+      porEstado.set(ac.estado, (porEstado.get(ac.estado) ?? 0) + 1);
+      paraCrecer.set(recurso, porEstado);
+    }
   }
   console.log(`
 === TRUEQUES PARA CRECER (acuerdos al final, por recurso pedido y estado) ===`);

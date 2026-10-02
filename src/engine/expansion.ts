@@ -65,6 +65,27 @@ function asentamientosEfectivos(faccionId: string, asentamientos: Asentamiento[]
  * el máximo de fundación grupal) para fundar al llegar — decisión confirmada con el usuario, no jugadores
  * nuevos inventados.
  */
+/**
+ * ¿Puede `origen` lanzar ahora una Caravana de Fundación, sin saber todavía a dónde? Son las mismas puertas de
+ * `lanzarCaravanaFundacion` que no dependen del destino (nivel, cooldown, cap de la Facción, recursos), en versión barata
+ * y sin lanzar: lo usa el NPC para no barrer el mapa buscando sitio cuando el motor va a rechazar el lanzamiento igualmente.
+ */
+export function puedeLanzarFundacion(
+  origen: Asentamiento,
+  faccion: Faccion,
+  asentamientosExistentes: Asentamiento[],
+  caravanasExistentes: Caravana[],
+  instante: Instante
+): boolean {
+  return (
+    origen.faccionId === faccion.id &&
+    nivelActualDe(origen) >= 2 &&
+    puedeCrearCaravana(origen, instante) &&
+    asentamientosEfectivos(faccion.id, asentamientosExistentes, caravanasExistentes) < calcularCapFundacion(faccion.nivel) &&
+    tieneRecursos(origen.almacen, costoCaravanaFundacion())
+  );
+}
+
 export function lanzarCaravanaFundacion(
   mapa: Mapa,
   origen: Asentamiento,
@@ -221,6 +242,7 @@ export function avanzarCaravanasFundacion(
       );
       asentamientosActuales = [...asentamientosActuales, resultado.asentamiento];
       faccionesActuales = resultado.facciones;
+      eventos.push(...resultado.eventos);
       eventos.push({
         codigo: 'expansion.asentamiento_fundado',
         mensaje: `La Caravana de Fundación ${caravana.id} llega y funda ${resultado.asentamiento.id}.`,

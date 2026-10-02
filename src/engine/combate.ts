@@ -7,7 +7,7 @@ import type { RandomFn } from '../worldgen';
 import { CAMPAMENTOS_BANDIDOS, MILITAR, NIVEL_FACCION, OCUPACION, REPUTACION } from '../constants';
 import { aplicarCapacidadDeEdificio } from './almacen';
 import { aplicarAjustesReputacion } from './reputacion';
-import { aplicarAjustesExperiencia, type AjusteExperiencia } from './faccion';
+import { aplicarExperiencia, type AjusteExperiencia } from './faccion';
 import { multiplicadorDefensivoDeRecintos } from './muralla';
 import { integridadDeRecinto } from './trazado';
 import { CAMPO_CARGO, esResidente, estanAliadas } from './pertenencia';
@@ -196,6 +196,9 @@ function jugadoresParticipantes(escuadrones: Escuadron[]): number {
  *   mantenimiento congelado—. Las dos, tiempo fijo.
  * - **La obra de ascenso en curso se pierde**, sin devolución (Doc 4.5, decisión del usuario 2026-09-26): la
  *   pagó el Gobernador del perdedor, y con ella cae su reserva de cupo de nivel.
+ * - **Las decisiones del gobierno derrotado caen con él** (decisión del usuario, 2026-10-02): las políticas activas, la
+ *   reserva manual del Tesorero, la pausa de la auto-construcción y las recetas paradas. Antes seguían vigentes hasta
+ *   caducar, ocupando slots de cargos que ya no existían y bloqueando gasto del nuevo dueño.
  */
 export function aplicarConquista(defensor: Asentamiento, faccionConquistadoraId: string, instante: Instante): Asentamiento {
   const cargos = { ...defensor.cargos };
@@ -249,6 +252,10 @@ export function aplicarConquista(defensor: Asentamiento, faccionConquistadoraId:
     almacen,
     recintos,
     medidorMantenimiento: 100,
+    politicasActivas: [],
+    reservaManual: undefined,
+    autoConstruccionPausada: undefined,
+    recetasPausadas: undefined,
     ocupacionHasta: sumar(instante, minutos(OCUPACION.duracionMinutos)),
     protegidaHasta: sumar(instante, minutos(OCUPACION.proteccionMinutos)),
   };
@@ -386,6 +393,29 @@ export function iniciarAsedio(
   }
 
   const escuadronesAtacantes = seleccionarEscuadrones(tropaAtacante, escuadronIdsAtacantes);
+
+  // Plaza desguarnecida: cae sin combate y sin tocar el RNG, igual que cuando la alcanza un ejército (Doc 5.12.4). Antes
+  // este camino rechazaba el asedio con "No hay escuadrones válidos" y la plaza sin defensa era inconquistable por comando.
+  if (!tropaDefensora.some((e) => e.cantidad > 0)) {
+    const payload: PayloadAsedio = {
+      atacanteId: atacante.id,
+      defensorId: defensor.id,
+      faccionAtacanteId: atacante.faccionId,
+      faccionDefensoraId: defensor.faccionId,
+      ...datosDeAsedio(defensor, [], true),
+    };
+    const trasXp = aplicarExperiencia(facciones, [{ faccionId: atacante.faccionId, delta: NIVEL_FACCION.xp.conquista, razon: 'conquista' }]);
+    return {
+      defensor: aplicarConquista(defensor, atacante.faccionId, instante),
+      facciones: trasXp.facciones,
+      eventos: [
+        { codigo: 'combate.asedio_conquista', mensaje: `${defensor.id} cae sin un solo defensor en pie ante ${atacante.id}.`, payload },
+        ...trasXp.eventos,
+      ],
+      conquistado: true,
+      tropa: escuadronesAtacantes,
+    };
+  }
   const escuadronesDefensores = seleccionarEscuadrones(tropaDefensora, tropaDefensora.map((e) => e.id));
 
   // Paso 3b (§16 del doc de murallas): la razón de ser de toda la mecánica — un asedio contra un recinto
@@ -432,7 +462,9 @@ export function iniciarAsedio(
     },
   ];
   if (conquistado) ajustesXp.push({ faccionId: atacante.faccionId, delta: NIVEL_FACCION.xp.conquista, razon: 'conquista' });
-  const faccionesFinal = aplicarAjustesExperiencia(faccionesConReputacion, ajustesXp);
+  const trasXp = aplicarExperiencia(faccionesConReputacion, ajustesXp);
+  const faccionesFinal = trasXp.facciones;
+  eventos.push(...trasXp.eventos);
 
   // Conquistar no mueve a nadie (Doc 5.15.5): los atacantes siguen en su campamento con sus bajas y la plaza
   // queda sin guarnición. A los residentes derrotados los desaloja el llamador (`desalojarResidentes`).
@@ -497,16 +529,18 @@ export function atacarCampamentoConColumna(
   }
 
   const payload: PayloadAtaqueCampamento = { atacanteId: ejercito.id, campamentoId: campamento.id };
+  const trasXp = aplicarExperiencia(facciones, [
+    { faccionId: ejercito.faccionId, delta: xpDeBandidos(facciones, ejercito.faccionId, choque.gana), razon: 'campamento de bandidos' },
+  ]);
   return {
     ejercito: { ...ejercito, escuadrones: ejercito.escuadrones.map((e) => porId.get(e.id) ?? e), suministro },
     destruido: choque.gana,
-    facciones: aplicarAjustesExperiencia(facciones, [
-      { faccionId: ejercito.faccionId, delta: xpDeBandidos(facciones, ejercito.faccionId, choque.gana), razon: 'campamento de bandidos' },
-    ]),
+    facciones: trasXp.facciones,
     eventos: [
       choque.gana
         ? { codigo: 'combate.campamento_destruido', mensaje: `La columna ${ejercito.id} destruye el campamento de bandidos ${campamento.id}.`, payload }
         : { codigo: 'combate.ataque_campamento_fallido', mensaje: `La columna ${ejercito.id} falla el ataque al campamento de bandidos ${campamento.id}.`, payload },
+      ...trasXp.eventos,
     ],
   };
 }
@@ -590,14 +624,14 @@ export function asediarConEjercito(
             payload,
           },
     ];
+    const trasXp = cae
+      ? aplicarExperiencia(facciones, [{ faccionId: ejercito.faccionId, delta: NIVEL_FACCION.xp.conquista, razon: 'conquista' }])
+      : { facciones, eventos: [] };
+    eventos.push(...trasXp.eventos);
     return {
       ejercito,
       defensor: cae ? aplicarConquista(defensor, ejercito.faccionId, instante) : defensor,
-      facciones: cae
-        ? aplicarAjustesExperiencia(facciones, [
-            { faccionId: ejercito.faccionId, delta: NIVEL_FACCION.xp.conquista, razon: 'conquista' },
-          ])
-        : facciones,
+      facciones: trasXp.facciones,
       eventos,
       conquistado: cae,
       tropaDefensora: [],
@@ -634,10 +668,12 @@ export function asediarConEjercito(
     ...ejercito,
     escuadrones: ejercito.escuadrones.map((e) => idsAtacantes.get(e.id) ?? e),
   };
+  const trasXp = aplicarExperiencia(conReputacion, ajustesXp);
+  eventos.push(...trasXp.eventos);
   return {
     ejercito: ejercitoTrasCombate,
     defensor: conquistado ? aplicarConquista(defensor, ejercito.faccionId, instante) : defensor,
-    facciones: aplicarAjustesExperiencia(conReputacion, ajustesXp),
+    facciones: trasXp.facciones,
     eventos,
     conquistado,
     tropaDefensora: resultado.defensores,
@@ -683,10 +719,12 @@ export function encuentroEntreEjercitos(
     },
   ];
 
-  const faccionesFinal = aplicarAjustesExperiencia(facciones, [
+  const trasXp = aplicarExperiencia(facciones, [
     { faccionId: a.faccionId, delta: xpDeCombate(vivosA, resultado.digno), razon: 'combate (encuentro)' },
     { faccionId: b.faccionId, delta: xpDeCombate(vivosB, resultado.digno), razon: 'combate (encuentro)' },
   ]);
+  const faccionesFinal = trasXp.facciones;
+  eventos.push(...trasXp.eventos);
 
   return {
     a: { ...a, escuadrones: a.escuadrones.map((e) => actualizadosA.get(e.id) ?? e) },

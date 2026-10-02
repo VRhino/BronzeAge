@@ -68,6 +68,18 @@ describe('iniciarAsedio — la muralla del DEFENSOR decide, no la del atacante',
     expect(resultado.conquistado).toBe(true);
   });
 
+  it('una plaza sin un solo defensor cae sin combate y sin tocar el RNG (Doc 5.12.4), en vez de rechazar el asedio', () => {
+    const { atacante, defensor } = ciudades();
+    const rngProhibido: RandomFn = Object.assign(() => { throw new Error('no debe tirar el RNG'); }, { estado: () => 0 });
+
+    const resultado = iniciarAsedio(atacante, ATACANTE, defensor, [], ['e-atacante'], crearFacciones(), [], instanteDeTest(0), rngProhibido);
+
+    expect(resultado.conquistado).toBe(true);
+    expect(resultado.defensor.faccionId).toBe(atacante.faccionId);
+    expect(resultado.tropa.find((e) => e.id === 'e-atacante')!.cantidad, 'sin bajas: no hubo combate').toBe(100);
+    expect(resultado.eventos.some((e) => typeof e !== 'string' && e.codigo === 'combate.asedio_conquista')).toBe(true);
+  });
+
   it('conquistar no mueve a nadie: la plaza queda SIN guarnición y sin residencia del vencido (Doc 5.15.5)', () => {
     // Los atacantes siguen en su campamento con sus bajas; a los residentes vencidos los desaloja el llamador
     // (`desalojarResidentes`). La plaza tomada no hereda tropa de nadie.

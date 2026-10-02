@@ -267,6 +267,9 @@ function puedeRepostarEn(ejercito: Ejercito, plaza: Asentamiento, relaciones: re
  * Sin límite de veces: un ejército acampado junto a una plaza amiga repone cada tick, que es precisamente lo
  * que convierte "sostener un paso de montaña" en una posición sostenible (Doc 5.12.3) en vez de una cuenta
  * atrás. Repostar no es gratis para nadie — sale del almacén de quien lo da.
+ *
+ * Reponer cada tick no se narra cada tick (era el 39 % del log a los 3 días): `relevante` es `true` solo cuando el carro
+ * estaba por debajo de `LOGISTICA.umbralNarrarReposte` de su capacidad, es decir, cuando llega con hambre.
  */
 function repostarSiPuede(
   ejercito: Ejercito,
@@ -275,7 +278,7 @@ function repostarSiPuede(
   caravanas: readonly Caravana[],
   /** La ración del campamento de cada plaza, que protege su reserva de trigo. */
   consumoTropasDe: (plaza: Asentamiento) => number
-): { ejercito: Ejercito; plaza: Asentamiento | undefined; repuesto: number } {
+): { ejercito: Ejercito; plaza: Asentamiento | undefined; repuesto: number; relevante: boolean } {
   const alcance = [...porId.values()]
     .filter(
       (a) =>
@@ -289,16 +292,19 @@ function repostarSiPuede(
     });
 
   const plaza = alcance[0];
-  if (!plaza) return { ejercito, plaza: undefined, repuesto: 0 };
+  if (!plaza) return { ejercito, plaza: undefined, repuesto: 0, relevante: false };
 
   const enElCarro = ejercito.suministro['trigo'] ?? 0;
-  const carga = cargarCarro(plaza, consumoTropasDe(plaza), enElCarro, capacidadCargaDe(ejercito, caravanas));
-  if (carga.cargado <= 0) return { ejercito, plaza: undefined, repuesto: 0 };
+  const capacidad = capacidadCargaDe(ejercito, caravanas);
+  const carga = cargarCarro(plaza, consumoTropasDe(plaza), enElCarro, capacidad);
+  if (carga.cargado <= 0) return { ejercito, plaza: undefined, repuesto: 0, relevante: false };
 
   return {
     ejercito: { ...ejercito, suministro: { ...ejercito.suministro, trigo: enElCarro + carga.cargado } },
     plaza: carga.asentamiento,
     repuesto: carga.cargado,
+    // Solo es noticia lo que llena un carro que iba vacío; la ración de cada minuto de uno acampado no lo es.
+    relevante: enElCarro < capacidad * LOGISTICA.umbralNarrarReposte,
   };
 }
 
@@ -1582,16 +1588,18 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
     if (reposte.plaza) {
       ejercito = { ...ejercito, suministro: reposte.ejercito.suministro };
       porId.set(reposte.plaza.id, reposte.plaza);
-      eventos.push({
-        codigo: 'ejercito.reabastecido',
-        asentamientoId: reposte.plaza.id,
-        mensaje: `El ejército ${ejercito.id} repone ${Math.floor(reposte.repuesto)} de trigo en ${reposte.plaza.id}.`,
-        payload: {
-          ejercitoId: ejercito.id,
+      if (reposte.relevante) {
+        eventos.push({
+          codigo: 'ejercito.reabastecido',
           asentamientoId: reposte.plaza.id,
-          trigoRepuesto: reposte.repuesto,
-        } satisfies PayloadEjercitoReabastecido,
-      });
+          mensaje: `El ejército ${ejercito.id} repone ${Math.floor(reposte.repuesto)} de trigo en ${reposte.plaza.id}.`,
+          payload: {
+            ejercitoId: ejercito.id,
+            asentamientoId: reposte.plaza.id,
+            trigoRepuesto: reposte.repuesto,
+          } satisfies PayloadEjercitoReabastecido,
+        });
+      }
     }
 
     // Las adjuntas van enganchadas: su posición es la del ejército, no una ruta propia. Sin esto seguirían

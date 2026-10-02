@@ -17,7 +17,7 @@
 import type { Asentamiento, RegionId } from '../domain/types';
 import { GameSession, type OpcionesSesion, type PartidaExportada, type ResultadoComando } from '../session/gameSession';
 import type { ActorId, ManejadorComando } from '../session/comandos/tipos';
-import { eventosDesde, instanteDeTick, type GeometriaAsentamientos } from '../session/estado';
+import { eventosDesde, eventosRecortados, instanteDeTick, versionMasVieja, type EventoDominioConVersion, type GeometriaAsentamientos } from '../session/estado';
 import { calcularPrecioReferencia } from '../engine/market';
 import { computeTodasLasZonas, computeZonasFusionadasPorFaccion } from '../engine/zones';
 import { trazadoParaAsentamiento } from '../engine/trazado';
@@ -26,7 +26,7 @@ import { evaluarAscenso, type EvaluacionAscenso } from '../engine/ascenso';
 import { PRECIO_BASE } from '../constants';
 import type { AlmacenDeObjetos } from './almacen/almacenDeObjetos';
 import { cargarPartida, guardarPartida } from './persistenciaPartida';
-import { anexarEventos } from './eventosDePartida';
+import { anexarEventos, leerEventos } from './eventosDePartida';
 import { tecnologiasDe } from '../engine/tecnologia';
 
 /**
@@ -67,6 +67,12 @@ export interface OpcionesRunner {
   ahora?: () => string;
   /** Configuración del proceso con que corre la partida (`OpcionesSesion`). Se mantiene al reconstruirla. */
   sesion?: OpcionesSesion;
+  /**
+   * A quién avisar de los eventos de cada tick del RELOJ de mundo, una vez persistido (en `api.ts`, el hub de WebSocket).
+   * Los comandos de jugador ya difunden los suyos desde sus rutas; el reloj no tenía quién lo hiciera y los clientes
+   * conectados solo se enteraban de lo que pasaba en el mundo al volver a preguntar.
+   */
+  alEmitir?: (gameId: string, eventos: readonly EventoDominioConVersion[]) => void;
 }
 
 export class RunnerDePartida {
@@ -74,6 +80,9 @@ export class RunnerDePartida {
   private readonly almacen: AlmacenDeObjetos;
   private readonly ahora: () => string;
   private readonly opcionesSesion: OpcionesSesion;
+  private readonly alEmitir?: OpcionesRunner['alEmitir'];
+  /** Los eventos del último tick completo (tick + auto-comercio + NPC), para difundirlos tras persistir. */
+  private eventosDelUltimoTick: EventoDominioConVersion[] = [];
 
   /**
    * Reloj de mundo (Fase D / D5, doc 10 §2–3), `null` si no está en marcha. `referenciaMs` es el instante de
@@ -187,6 +196,7 @@ export class RunnerDePartida {
     this.almacen = opciones.almacen;
     this.ahora = opciones.ahora ?? (() => new Date().toISOString());
     this.opcionesSesion = opciones.sesion ?? {};
+    this.alEmitir = opciones.alEmitir;
     this.versionEventosAnexados = sesion.getState().version;
   }
 
@@ -224,6 +234,18 @@ export class RunnerDePartida {
 
   get gameId(): string {
     return this.sesion.gameId;
+  }
+
+  /**
+   * Eventos con `version` mayor que `desde`, en orden cronológico. El estado solo guarda los últimos
+   * (`MAX_EVENTOS_EN_MEMORIA`): si el cursor es anterior a lo que hay en memoria, el tramo viejo se lee del JSONL.
+   */
+  async eventosDesde(desde: number): Promise<EventoDominioConVersion[]> {
+    const estado = this.sesion.getState();
+    const masVieja = versionMasVieja(estado);
+    if (!eventosRecortados(estado) || desde >= masVieja) return eventosDesde(estado, desde);
+    const delDisco = (await leerEventos(this.almacen, this.gameId, masVieja - 1)).filter((e) => e.version > desde).reverse();
+    return [...delDisco, ...eventosDesde(estado, desde)];
   }
 
   getState() {
@@ -356,8 +378,9 @@ export class RunnerDePartida {
     const t0 = performance.now();
     const resultado = sesion.avanzarTick();
     if (!resultado.ok) return resultado;
-    sesion.avanzarAutoComercio();
-    sesion.avanzarFaccionesNpc();
+    const trasAuto = sesion.avanzarAutoComercio();
+    const trasNpc = sesion.avanzarFaccionesNpc();
+    this.eventosDelUltimoTick = [...resultado.eventos, ...trasAuto.eventos, ...trasNpc.eventos];
     // Se cronometra el tick COMPLETO (puro + auto-comercio + turno NPC), que es la unidad que ocupa la cola,
     // no el `avanzarSimulacion` puro que mide `scripts/medicion-escala.ts`. Los dos números no son
     // comparables a ciegas, y es correcto: aquí interesa lo que bloquea a un jugador.
@@ -435,7 +458,8 @@ export class RunnerDePartida {
     if (adeudados > this.instrumentos.mayorRafaga) this.instrumentos.mayorRafaga = adeudados;
     return this.encolar(async () => {
       for (let i = 0; i < adeudados && this.relojDeMundo; i++) {
-        await this.aplicarYPersistir((sesion) => this.unTickCompleto(sesion));
+        const r = await this.aplicarYPersistir((sesion) => this.unTickCompleto(sesion));
+        if (r.ok && this.alEmitir) this.alEmitir(this.gameId, this.eventosDelUltimoTick);
       }
     });
   }

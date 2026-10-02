@@ -199,6 +199,37 @@ export function conResultadoDeSimulacion(estado: GameSessionState, simulacion: E
  * devuelven en orden CRONOLÓGICO (más viejo primero) porque es el orden natural para que un cliente los vaya
  * aplicando/anexando a su log.
  */
+/**
+ * Cuántos eventos conserva `estado.eventosDominio` en memoria. El historial completo vive en el JSONL de la partida
+ * (`server/eventosDePartida.ts`); el estado solo guarda los últimos para servir los cursores recientes y para que
+ * `exito()` no copie, en cada comando, un array que crece sin techo (a los 4 500 ticks eran 59 000 eventos y más de
+ * 1,6 ms por copia, tres veces por tick; `Consideraciones/Auditoria_Tick_Eventos.md`, N2a).
+ */
+export const MAX_EVENTOS_EN_MEMORIA = 5_000;
+
+/**
+ * Antepone `nuevos` (más nuevo primero) a `viejos` y recorta a `MAX_EVENTOS_EN_MEMORIA`. El corte cae siempre entre
+ * dos versiones: el evento más viejo que se conserva pertenece a una versión COMPLETA, así que un cursor `desde >=` su
+ * versión se sirve entero desde memoria y uno anterior se completa desde el JSONL (`RunnerDePartida.eventosDesde`).
+ */
+export function anteponerEventos<T extends EventoDominioConVersion>(nuevos: readonly T[], viejos: readonly T[]): T[] {
+  if (nuevos.length + viejos.length <= MAX_EVENTOS_EN_MEMORIA) return [...nuevos, ...viejos];
+  const conservados = [...nuevos, ...viejos.slice(0, Math.max(0, MAX_EVENTOS_EN_MEMORIA - nuevos.length) + 1)];
+  let corte = Math.min(MAX_EVENTOS_EN_MEMORIA, conservados.length);
+  while (corte > 0 && conservados[corte] !== undefined && conservados[corte]!.version === conservados[corte - 1]!.version) corte--;
+  return conservados.slice(0, corte === 0 ? MAX_EVENTOS_EN_MEMORIA : corte); // una sola versión mayor que el tope: se parte, no se vacía
+}
+
+/** `true` si el log en memoria pudo haber perdido eventos viejos (está en su tope): para esos, el JSONL es la fuente. */
+export function eventosRecortados(estado: Pick<GameSessionState, 'eventosDominio'>): boolean {
+  return estado.eventosDominio.length >= MAX_EVENTOS_EN_MEMORIA - 1000;
+}
+
+/** Versión del evento más viejo que se conserva en memoria (`Infinity` si no hay ninguno). */
+export function versionMasVieja(estado: Pick<GameSessionState, 'eventosDominio'>): number {
+  return estado.eventosDominio.at(-1)?.version ?? Infinity;
+}
+
 export function eventosDesde(estado: GameSessionState, desde: number): EventoDominioConVersion[] {
   const nuevos: EventoDominioConVersion[] = [];
   for (const evento of estado.eventosDominio) {

@@ -129,14 +129,17 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
 
   const ahora = opciones.ahora ?? (() => new Date().toISOString());
   const servidoresBatalla = opciones.servidoresBatalla ?? [];
+  const hub = opciones.hub ?? new HubDeDifusion();
   const deps: DependenciasDeRutas = {
     identidad,
     administradores: crearDirectorioDeAdministradores(opciones.administradoresGlobales ?? [], identidad.repositorio),
     // Mismo reloj de pared que el resto del servidor: así el reloj de mundo de cada partida y su catch-up
     // (D5, `RunnerDePartida.iniciarRelojDeMundo`) son inyectables en tests, no solo el reloj del sistema.
-    partidas: new RegistroDePartidas(almacen, opciones.intervaloTickMs, ahora, { batallasEnUnity: servidoresBatalla.length > 0 }),
+    partidas: new RegistroDePartidas(almacen, opciones.intervaloTickMs, ahora, { batallasEnUnity: servidoresBatalla.length > 0 }, (gameId, eventos) =>
+      hub.difundir(gameId, eventos)
+    ),
     ahora,
-    hub: opciones.hub ?? new HubDeDifusion(),
+    hub,
     // Fase E2. Mismo almacén que los snapshots —una partida y su auditoría se archivan y podan juntas— y el
     // mismo reloj de pared inyectado que el resto del servidor, para que un test pueda fechar sus líneas de
     // forma determinista en vez de depender de la hora del sistema.

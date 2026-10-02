@@ -846,6 +846,11 @@ export function proyectarParaJugador(
  * volver a pedir la proyección entera — solo los eventos nuevos.
  */
 export function eventosDominioParaJugador(estado: GameSessionState, heroeId: string, desde: number): EventoDominioConVersion[] {
+  return eventosVisiblesParaJugador(estado, heroeId, eventosDesde(estado, desde));
+}
+
+/** El filtro de audiencia sobre eventos ya elegidos (de memoria o del JSONL): el mismo criterio para los dos orígenes. */
+export function eventosVisiblesParaJugador(estado: GameSessionState, heroeId: string, eventos: readonly EventoDominioConVersion[]): EventoDominioConVersion[] {
   const { esPropio } = propioDeJugador(estado, heroeId);
-  return eventosDesde(estado, desde).filter((e) => e.asentamientoId === undefined || esPropio(e.asentamientoId));
+  return eventos.filter((e) => e.asentamientoId === undefined || esPropio(e.asentamientoId));
 }

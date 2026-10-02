@@ -18,7 +18,7 @@
 // niega a perder datos en silencio en vez de prevenirlo por diseño.
 import type { AlmacenDeObjetos } from './almacen/almacenDeObjetos';
 import { GameSession, type OpcionesSesion, type PartidaExportada } from '../session/gameSession';
-import { idDeMapa, instanteDeTick } from '../session/estado';
+import { anteponerEventos, idDeMapa, instanteDeTick } from '../session/estado';
 import type { Instante } from '../domain/tiempo';
 import { generarMapa, WORLDGEN_VERSION, type MapaGenerado } from '../worldgen';
 import { LAYOUT_VERSION } from '../constants';
@@ -226,7 +226,8 @@ export async function cargarPartida(almacen: AlmacenDeObjetos, gameId: string, o
   //  - el historial de eventos, desde el JSONL hermano (filtrado a `<= version` por si un append quedó por
   //    delante de un snapshot revertido).
   partida.state.mapa = generarMapa(partida.state.mapa.config);
-  partida.state.eventosDominio = await leerEventos(almacen, gameId, partida.state.version);
+  // Solo los últimos en memoria (`MAX_EVENTOS_EN_MEMORIA`); el resto se sigue leyendo del JSONL cuando un cursor los pide.
+  partida.state.eventosDominio = anteponerEventos(await leerEventos(almacen, gameId, partida.state.version), []);
   return { sesion: GameSession.importar(partida, opciones) };
 }
 
