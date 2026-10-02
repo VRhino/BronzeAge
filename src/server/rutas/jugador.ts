@@ -11,7 +11,7 @@
 import type { FastifyInstance } from 'fastify';
 import { puedeJugar } from '../../acceso/rolesDePartida';
 import type { ActorDeComando } from '../../session/comandos/autorizacion';
-import { eventosDominioParaJugador, proyectarParaJugador } from '../../session/proyecciones/jugador';
+import { eventosVisiblesParaJugador, proyectarParaJugador } from '../../session/proyecciones/jugador';
 import type { RunnerDePartida } from '../runnerDePartida';
 import { ESQUEMA_SESION_AUTH } from '../openapi';
 import { auditarRechazoDeEsquema, ejecutarComandoHttp, ESQUEMA_EJECUTAR_COMANDO, type EjecutarComandoBody } from './comandos';
@@ -177,7 +177,7 @@ export function registrarRutasDeJugador(app: FastifyInstance, deps: Dependencias
       if (!Number.isInteger(desde) || desde < 0) return reply.code(400).send({ error: '`desde` debe ser un entero no negativo.' });
 
       const heroe = heroeDe(runner, resuelto.actor.membresia!.jugadorId!);
-      return reply.send({ eventos: heroe ? eventosDominioParaJugador(runner.getState(), heroe.id, desde) : [] });
+      return reply.send({ eventos: heroe ? eventosVisiblesParaJugador(runner.getState(), heroe.id, await runner.eventosDesde(desde)) : [] });
     }
   );
 

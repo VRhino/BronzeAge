@@ -17,7 +17,7 @@
 import type { Asentamiento, RegionId } from '../domain/types';
 import { GameSession, type OpcionesSesion, type PartidaExportada, type ResultadoComando } from '../session/gameSession';
 import type { ActorId, ManejadorComando } from '../session/comandos/tipos';
-import { eventosDesde, instanteDeTick, type EventoDominioConVersion, type GeometriaAsentamientos } from '../session/estado';
+import { eventosDesde, eventosRecortados, instanteDeTick, versionMasVieja, type EventoDominioConVersion, type GeometriaAsentamientos } from '../session/estado';
 import { calcularPrecioReferencia } from '../engine/market';
 import { computeTodasLasZonas, computeZonasFusionadasPorFaccion } from '../engine/zones';
 import { trazadoParaAsentamiento } from '../engine/trazado';
@@ -26,7 +26,7 @@ import { evaluarAscenso, type EvaluacionAscenso } from '../engine/ascenso';
 import { PRECIO_BASE } from '../constants';
 import type { AlmacenDeObjetos } from './almacen/almacenDeObjetos';
 import { cargarPartida, guardarPartida } from './persistenciaPartida';
-import { anexarEventos } from './eventosDePartida';
+import { anexarEventos, leerEventos } from './eventosDePartida';
 import { tecnologiasDe } from '../engine/tecnologia';
 
 /**
@@ -234,6 +234,18 @@ export class RunnerDePartida {
 
   get gameId(): string {
     return this.sesion.gameId;
+  }
+
+  /**
+   * Eventos con `version` mayor que `desde`, en orden cronológico. El estado solo guarda los últimos
+   * (`MAX_EVENTOS_EN_MEMORIA`): si el cursor es anterior a lo que hay en memoria, el tramo viejo se lee del JSONL.
+   */
+  async eventosDesde(desde: number): Promise<EventoDominioConVersion[]> {
+    const estado = this.sesion.getState();
+    const masVieja = versionMasVieja(estado);
+    if (!eventosRecortados(estado) || desde >= masVieja) return eventosDesde(estado, desde);
+    const delDisco = (await leerEventos(this.almacen, this.gameId, masVieja - 1)).filter((e) => e.version > desde).reverse();
+    return [...delDisco, ...eventosDesde(estado, desde)];
   }
 
   getState() {

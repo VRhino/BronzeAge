@@ -16,7 +16,7 @@ import { BALANCE_VERSION, LAYOUT_VERSION } from '../constants';
 import { createRng, generarMapa, MAPA_DEFAULT, restaurarRng, WORLDGEN_VERSION, type RandomFn } from '../worldgen';
 import { crearEstadoMapa, crearMapa, type EstadoMapa, type Mapa } from '../world/mapa';
 import { GeneradorIds } from './idGenerator';
-import { eventoAdministrativo, instanteDeTick, isoDeInstante, type GameSessionState } from './estado';
+import { anteponerEventos, eventoAdministrativo, instanteDeTick, isoDeInstante, type GameSessionState } from './estado';
 import { avanzarAutoComercio } from './comandos/avanzarAutoComercio';
 import { avanzarFaccionesNpc } from './comandos/avanzarFaccionesNpc';
 import { avanzarTick } from './comandos/avanzarTick';
@@ -173,7 +173,7 @@ export class GameSession {
     this.estado = {
       ...this.estado,
       version,
-      eventosDominio: [{ ...eventoAdministrativo(this.estado.tick, mensaje), version }, ...this.estado.eventosDominio],
+      eventosDominio: anteponerEventos([{ ...eventoAdministrativo(this.estado.tick, mensaje), version }], this.estado.eventosDominio),
     };
   }
 

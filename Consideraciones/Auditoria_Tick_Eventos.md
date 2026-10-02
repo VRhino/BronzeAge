@@ -34,9 +34,6 @@ unos 5 ms por tick; el arreglo de verdad cambia el orden del log, que leen la pe
 tests, así que se decide aparte), reclutamiento NPC, trueques terminales al historial, títulos, idempotencia del NPC y
 **O1** (difusión por WebSocket de los ticks del reloj).
 
-**Hallazgos de paso:** `iniciarAsedio` no puede asediar una plaza sin defensores (devuelve "No hay escuadrones válidos
-seleccionados"), y `typecheck:lab` falla en `main` por `lab/src/main.ts:209`.
-
 > **Alcance.** `9f9a098` ("reubicar a quien pierde la casa en el momento del hecho") **ya está en `main`** y se audita aquí.
 
 ## 0. Cuarta pasada: qué cambia con `b452315`
