@@ -1618,11 +1618,14 @@ async function main() {
 
   // Trueques para crecer (npcGobernanza, 2026-09-27): los que piden algo que no es de Mantenimiento.
   const paraCrecer = new Map<string, Map<string, number>>();
+  // Trueque compuesto (Doc 3.2): lo pedido son las líneas del lado B; cada recurso pedido cuenta una vez por acuerdo.
   for (const ac of estado.acuerdos) {
-    if (['madera', 'piedra', 'oro'].includes(ac.recursoB)) continue;
-    const porEstado = paraCrecer.get(ac.recursoB) ?? new Map<string, number>();
-    porEstado.set(ac.estado, (porEstado.get(ac.estado) ?? 0) + 1);
-    paraCrecer.set(ac.recursoB, porEstado);
+    for (const recurso of new Set(ac.lineasB.map((l) => l.recurso))) {
+      if (['madera', 'piedra', 'oro'].includes(recurso)) continue;
+      const porEstado = paraCrecer.get(recurso) ?? new Map<string, number>();
+      porEstado.set(ac.estado, (porEstado.get(ac.estado) ?? 0) + 1);
+      paraCrecer.set(recurso, porEstado);
+    }
   }
   console.log(`
 === TRUEQUES PARA CRECER (acuerdos al final, por recurso pedido y estado) ===`);
