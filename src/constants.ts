@@ -1345,7 +1345,11 @@ export const ANIMAL_CATALOGO = {
  * en el origen durante `kPorCarro × max(0, nº carros − 1)` ticks — una caravana de 1 carro sale al instante,
  * las grandes tardan. Placeholder sin calibrar.
  */
-export const CARAVANA_PREPARACION = { kPorCarro: 2 };
+export const CARAVANA_PREPARACION = {
+  kPorCarro: 2,
+  /** Cuánto en el futuro se puede programar la salida de una caravana (Doc 3.13.3): la carga queda reservada hasta entonces. PLACEHOLDER. */
+  maxProgramacionDias: 3,
+};
 
 /**
  * Escolta sin héroe (Doc 3.13.4): un residente del origen cede escuadrones a una caravana como escolta

@@ -20,8 +20,9 @@ y [doc 4](4_Plan_Evolucion_Tareas.md)). El criterio de "qué es regla y qué es 
 > - **La pasada de rebalanceo en tiempo** (§8, último párrafo). D1–D6 preservaron los valores; con 1 tick =
 >   1 min real varios siguen calibrados para "abstracto" (p. ej. población compuesta ~12 %/min). Es el
 >   siguiente esfuerzo, apoyado en el laboratorio batch.
-> - **El scheduler de comandos programados** (D5): asedios formales y caravanas planificadas. Aterriza con su
->   primera mecánica de Fase 1+, no antes.
+> - **El scheduler de comandos programados** (D5): asedios formales. Aterriza con su primera mecánica que lo pida,
+>   no antes. Las caravanas planificadas ya no lo necesitan (2026-10-02): reservan todo al programar y esperan en
+>   `'preparando'` hasta su hora (`prepararCaravana.salirEn`).
 > - **El log de comandos** (§5): queda para Fase E (auditoría); `PartidaExportada.estadoRng` se mantiene sin
 >   más inversión hasta que un incidente real lo pida.
 >

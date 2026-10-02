@@ -28,7 +28,7 @@ escolta sin héroe— y que haya una vía de preparación manual además del rep
    práctica un par `{tipoCarro, animal?}`.
 3. **Escolta sin héroe = escuadrones cedidos por un jugador**, no una figura de "tropa del asentamiento" nueva.
 4. **Modelo nivel-caravana**, no árbol por carro: la caravana tiene una lista plana de carros.
-5. **Se difieren**: cría de animales (solo compra con oro), planificación horaria, visibilidad por tamaño,
+5. **Se difieren**: cría de animales (solo compra con oro), ~~planificación horaria~~ (hecha el 2026-10-02: `salirEn` en `prepararCaravana`, Doc 3.13.3), visibilidad por tamaño,
    fusión de caminos (eso es §3, no §8).
 
 ### Ronda 2
@@ -301,7 +301,7 @@ Cada paso respeta la separación motor / sesión / infra de arriba y verifica en
 - **Experiencia de Facción por defensa de caravana.** Hoy `NIVEL_FACCION.xp.defensaCaravana` no se multiplica
   por jugadores participantes porque "la escolta no tiene escuadrones/jugadores reales" (comentario en
   `constants.ts`). Con escolta real de escuadrones, decidir si pasa a multiplicarse como el resto de combate.
-- **Visibilidad por tamaño y planificación horaria** (diferidas) condicionan la UI de preparación: construirla
-  sin cerrarles la puerta.
+- **Visibilidad por tamaño** (diferida) condiciona la UI de preparación: construirla sin cerrarle la puerta. La planificación
+  horaria ya está hecha: `salirEn` reserva todo al programar y reutiliza `'preparando'`, sin scheduler ni estado nuevo.
 - **Unificación con `Ejercito.suministro`** (Doc 5.13, nota de 5.13.3): sigue diferida; el carro de columna y
   el carro de caravana son el mismo concepto físico y algún día se unifican.

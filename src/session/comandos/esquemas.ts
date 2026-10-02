@@ -278,6 +278,7 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
       destinoAsentamientoId: IDENTIFICADOR,
       carga: { type: 'object', additionalProperties: NUMERO },
       escoltaEscuadronIds: { type: 'array', items: IDENTIFICADOR },
+      salirEn: NUMERO,
     },
     ['caravanaId', 'heroeId', 'destinoAsentamientoId', 'carga']
   ),

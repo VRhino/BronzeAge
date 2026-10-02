@@ -1,6 +1,7 @@
 // Comandos de comercio: proponer un trueque entre asentamientos, colocar una orden de mercado y componer
 // una caravana comercial (revamp, Doc 3.13: casco vacío + carros + animales).
 import type { AcuerdoTrueque, AnimalTipo, Caravana, CarroTipo, RecursoTipo } from '../../domain/types';
+import type { Instante } from '../../domain/tiempo';
 import {
   aceptarTrueque as aceptarTruequeEngine,
   crearCaravanaVacia as crearCaravanaVaciaEngine,
@@ -385,12 +386,15 @@ export interface ParamsPrepararCaravana {
   carga: Record<string, number>;
   /** Escuadrones del jugador que van de escolta sin héroe (Doc 3.13.4), hasta el cupo del Mercado. */
   escoltaEscuadronIds?: string[];
+  /** Hora de mundo (`Instante`, ms) a la que sale: programada. Con todo reservado desde ya. Ausente = sale al acabar la preparación. */
+  salirEn?: number;
 }
 
 /**
  * Lanza una caravana comercial a mano (Doc 3.13.3): elige carga, destino y una escolta opcional (Doc 3.13.4).
  * La caravana pasa por `'preparando'` en el origen —tanto más tiempo cuantos más carros— y al terminar sale
- * sola en el tick. `cancelarCaravana` la revierte mientras siga preparándose.
+ * sola en el tick. `cancelarCaravana` la revierte mientras siga preparándose. Con `salirEn` queda programada: espera
+ * en el origen, con carga, carros y escolta reservados desde ya, hasta esa hora.
  */
 export const prepararCaravana = comando<ParamsPrepararCaravana, { caravanaId: string; preparaHasta?: number }>(
   (estado, mapa, ctx, params) => {
@@ -410,7 +414,7 @@ export const prepararCaravana = comando<ParamsPrepararCaravana, { caravanaId: st
     }
 
     const territorio = { red: estado.red ?? RED_VACIA, asentamientos: estado.asentamientos, zonas: computeTodasLasZonas(estado.asentamientos) };
-    const r = prepararCaravanaManualEngine(caravana, origen, destino, params.carga, escolta, mapa, territorio, ctx.instante);
+    const r = prepararCaravanaManualEngine(caravana, origen, destino, params.carga, escolta, mapa, territorio, ctx.instante, params.salirEn as Instante | undefined);
     const siguiente: GameSessionState = {
       ...conAsentamiento(conCaravana(estado, r.caravana), r.asentamiento),
       heroes: conEscuadrones(estado.heroes, r.tropa),

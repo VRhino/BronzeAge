@@ -160,6 +160,11 @@ Además del reparto automático (3.13.5), un residente del origen **lanza una ca
 `prepMinutos = CARAVANA_PREPARACION.kPorCarro × (nº carros − 1)` — una caravana de 1 carro sale al instante,
 las grandes tardan. La carga se **reserva del almacén ya** (se descuenta al preparar).
 
+- **Salida programada** (2026-10-02): `prepararCaravana` admite `salirEn`, una hora de mundo futura (hasta
+  `CARAVANA_PREPARACION.maxProgramacionDias` = 3 días, placeholder). La caravana pasa a `'preparando'` y **espera en el
+  origen hasta esa hora**, o hasta acabar la preparación si esta tarda más: nunca sale antes de estar lista. **Carros, animal,
+  carga y escolta se reservan al programar, no al salir**, así que a la hora de salida no puede faltar nada; no hay
+  estado nuevo ni rechazo por falta de recursos en ese momento. `cancelarCaravana` la revierte entera mientras espera.
 - **`cancelarCaravana`** mientras siga `'preparando'` la devuelve a `'disponible'` y **reingresa la carga
   entera** al almacén — igual que quitar una obra `'en_cola'` (Doc 4.2).
 - Al vencer la preparación, pasa a `'en_transito'` sobre la ruta ya calculada (si al preparar no había ruta

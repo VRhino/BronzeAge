@@ -206,7 +206,7 @@ aquí para que dejen de depender de que alguien relea el párrafo correcto.
   1 tick = 1 minuto real, población a ~12 %/minuto compuesto duplica cada ~6 min reales. Esfuerzo dedicado
   apoyado en el laboratorio batch.
 - [ ] **Comandos programados a un `instante`** (de D5) — aplazados a conciencia: sus consumidores (asedios
-  formales, caravanas planificadas) son Fase 1+. Aterriza con la primera mecánica que lo pida, no antes;
+  formales; las caravanas planificadas se resolvieron sin él, 2026-10-02) son Fase 1+. Aterriza con la primera mecánica que lo pida, no antes;
   construirlo ahora sería infraestructura especulativa sin consumidor.
 
 ---

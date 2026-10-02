@@ -540,6 +540,44 @@ describe('lanzamiento manual de una caravana (Doc 3.13.3)', () => {
     expect(despues.caravanas[0]!.estado).toBe('en_transito');
   });
 
+  it('salida programada: reserva la carga ya, espera en el origen hasta la hora, y entonces sale', () => {
+    const una = caravanaDe([{ tipoCarro: 'basico', animal: 'buey' }]);
+    const saleEn = instanteDeTest(60);
+    const r = prepararCaravanaManual(una, origen, destino, { piedra: 100 }, [], mapaSintetico(), SIN_TERRITORIO, instanteDeTest(0), saleEn);
+
+    expect(r.caravana.estado, 'aunque un carro saldría al instante').toBe('preparando');
+    expect(r.caravana.preparaHasta).toBe(saleEn);
+    expect(r.asentamiento.almacen['piedra']!.cantidad, 'la carga se reserva al programar, no al salir').toBe(200);
+
+    const antes = avanzarComercio([origen, destino], [] as Faccion[], [r.caravana], [], mapaSintetico(), RED_VACIA, [], instanteDeTest(59));
+    expect(antes.caravanas[0]!.estado).toBe('preparando');
+    const despues = avanzarComercio([origen, destino], [] as Faccion[], [r.caravana], [], mapaSintetico(), RED_VACIA, [], saleEn);
+    expect(despues.caravanas[0]!.estado).toBe('en_transito');
+  });
+
+  it('programar nunca sale antes de acabar la preparación, y cancelar devuelve todo', () => {
+    const dos = caravanaDe([
+      { tipoCarro: 'basico', animal: 'buey' },
+      { tipoCarro: 'basico', animal: 'buey' },
+    ]);
+    const demasiadoPronto = prepararCaravanaManual(dos, origen, destino, { piedra: 120 }, [], mapaSintetico(), SIN_TERRITORIO, instanteDeTest(0), instanteDeTest(1));
+    expect(demasiadoPronto.caravana.preparaHasta).toBe(instanteDeTest(CARAVANA_PREPARACION.kPorCarro));
+
+    const programada = prepararCaravanaManual(dos, origen, destino, { piedra: 120 }, [], mapaSintetico(), SIN_TERRITORIO, instanteDeTest(0), instanteDeTest(500));
+    const cancelada = cancelarPreparacionCaravana(programada.caravana, programada.asentamiento);
+    expect(cancelada.caravana.estado).toBe('disponible');
+    expect(cancelada.asentamiento.almacen['piedra']!.cantidad).toBe(300);
+  });
+
+  it('rechaza una hora de salida pasada o demasiado lejana', () => {
+    const una = caravanaDe([{ tipoCarro: 'basico', animal: 'buey' }]);
+    const conSalida = (t: number) => () => prepararCaravanaManual(una, origen, destino, { piedra: 10 }, [], mapaSintetico(), SIN_TERRITORIO, instanteDeTest(10), instanteDeTest(t));
+    expect(conSalida(10)).toThrow(CaravanaInvalidaError);
+    expect(conSalida(5)).toThrow(CaravanaInvalidaError);
+    expect(conSalida(10 + CARAVANA_PREPARACION.maxProgramacionDias * 24 * 60 + 1)).toThrow(CaravanaInvalidaError);
+    expect(conSalida(10 + CARAVANA_PREPARACION.maxProgramacionDias * 24 * 60)).not.toThrow();
+  });
+
   it('cancelar mientras se prepara devuelve la carga al almacén', () => {
     const dos = caravanaDe([
       { tipoCarro: 'basico', animal: 'buey' },

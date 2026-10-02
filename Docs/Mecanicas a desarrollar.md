@@ -58,30 +58,23 @@ y escolta sin héroe. Reglas en `Docs/Game/3` §3.13; decisiones, motor y plan e
 
 ### 8.1 Lo diferido — forma diseñada, implementación en un pase posterior
 
-El diseño de 2026-09-08 recortó seis piezas del enunciado original para no inflar el primer pase. Ninguna se
+El diseño de 2026-09-08 recortó seis piezas (la planificación horaria se hizo el 2026-10-02: `prepararCaravana.salirEn`, Doc 3.13.3) del enunciado original para no inflar el primer pase. Ninguna se
 descartó: se decidió su forma y se aparcó. Aquí queda cada una con lo que falta para abordarla.
 
-**a) Planificación horaria de caravanas.** El enunciado pide que una caravana no solo se lance ahora, sino
-que se deje *programada* para salir a cierta hora de mundo. Es un scheduler: una caravana `preparada` con
-carga/destino/escolta fijados y una hora de disparo. El motor ya tiene el gancho — la infra de *scheduled
-commands* está documentada como "aterriza con su primera mecánica de Fase 1" (roadmap D5, Doc 7). Este sería
-ese primer consumidor. Falta: el comando `programarCaravana(id, { …, dispararEn: Instante })`, el estado
-`programada` y su ejecución diferida en el reloj de mundo (`RunnerDePartida`).
-
-**b) Cría de animales de arrastre.** Hoy los animales solo se compran con oro. El enunciado quiere obtenerlos
+**a) Cría de animales de arrastre.** Hoy los animales solo se compran con oro. El enunciado quiere obtenerlos
 también por cría. El Corral (Doc 1.4/4.2.1) produce *livestock*, que es un recurso distinto — la cría de
 bueyes/caballos/camellos necesitaría su propio edificio o una receta que consuma livestock + trigo y tarde
 ticks. Falta: decidir si es un edificio nuevo o una función del Corral, el coste y el ritmo, y si cada tipo
 de animal exige condiciones (el camello, un bioma; el caballo, quizá un nivel de asentamiento).
 
-**c) Visibilidad por tamaño.** Las caravanas pequeñas no deberían aparecer en el mapa general salvo que haya
+**b) Visibilidad por tamaño.** Las caravanas pequeñas no deberían aparecer en el mapa general salvo que haya
 un jugador cerca (regla de niebla actual); las grandes deberían **llamar la atención desde que se preparan**,
 al punto de ser visibles para asentamientos hasta cierta distancia, para que salgan a interceptarlas. Es el
 gancho de conflicto del enunciado. Falta: un umbral de tamaño (nº de carros y/o carga) que decida si la
 caravana entra en la proyección de niebla de otras Facciones y a qué radio, y que eso aplique **durante el
 estado `preparando`**, no solo en ruta. Engancha con Doc 5.12 (niebla de guerra).
 
-**d) Inmunidad del camello al desierto — POSPUESTO a fase posterior a Fase 0** (decisión del usuario,
+**c) Inmunidad del camello al desierto — POSPUESTO a fase posterior a Fase 0** (decisión del usuario,
 2026-09-09). El camello "no se muere en los desiertos"; buey y caballo sí. Pero no existe un bioma `desierto`
 de primera clase (el tipo es `agua|costa|estepa|llanuraFertil|colina|montana|cima`; la aridez del Nilo es
 `estepa` de fertilidad baja). Necesitaría o un `BiomaTipo` nuevo, o anclar el "desierto" a `estepa` bajo un
@@ -89,14 +82,14 @@ umbral de fertilidad + una regla de *attrition* por tick sobre buey/caballo al c
 worldgen que no aporta a Fase 0; se retoma cuando el mapa tenga terreno árido real. Mientras tanto el camello
 es una "opción media" a secas, aceptado.
 
-**e) Catálogo ampliado de carros.** El primer pase trae solo dos carros: el básico (Mercado) y uno
+**d) Catálogo ampliado de carros.** El primer pase trae solo dos carros: el básico (Mercado) y uno
 "reforzado" (Carpintería) que solo da más capacidad. El enunciado habla de "varios tipos" fabricables en la
 Carpintería. Falta: los ejes que diferencian un carro de otro más allá de la capacidad — resistencia a la
 captura (un carro que sobrevive a una derrota), penalización de velocidad (un carro que no frena tanto al
 animal rápido), coste en recursos más caros. Se abre cuando la Carpintería tenga niveles internos que lo
 justifiquen.
 
-**f) Unificación con el carro de columna.** `Ejercito.suministro` (Doc 5.13) y los carros de una caravana son
+**e) Unificación con el carro de columna.** `Ejercito.suministro` (Doc 5.13) y los carros de una caravana son
 el mismo concepto físico: un vehículo con capacidad tirado para llevar carga por el mapa. Doc 5.13.3 ya dejó
 anotado que se unifican "cuando se diseñe el revamp". El revamp los deja **separados a propósito** en este
 pase —una caravana adjunta a un ejército sigue siendo su propia entidad— porque unificar el modelo físico es

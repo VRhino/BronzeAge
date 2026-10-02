@@ -45,7 +45,7 @@ import { aplicarAjustesExperiencia, type AjusteExperiencia } from './faccion';
 import type { AnimalTipo, CarroTipo } from '../domain/types';
 import { capacidadCaravana, velocidadCaravana } from './caravanas';
 import { esResidente } from './pertenencia';
-import { minutos, sumar, type Instante } from '../domain/tiempo';
+import { dias, minutos, sumar, type Instante } from '../domain/tiempo';
 import type { Mapa } from '../world/mapa';
 import { calcularRuta } from '../world/rutas';
 import { agregarRecurso, cantidadDisponible, descontarRecursos, tieneRecursos } from './almacen';
@@ -279,7 +279,9 @@ export function prepararCaravanaManual(
   mapa: Mapa,
   /** Para trazar (atracción, paso forzado por ciudades ajenas) y registrar la ruta en la red (Doc 1.6). */
   territorio: { red: RedCaminos; asentamientos: readonly Asentamiento[]; zonas: readonly ZonaInfluencia[] },
-  instante: Instante
+  instante: Instante,
+  /** Salida programada (Doc 3.13.3): la caravana espera en su origen, con todo reservado, hasta esa hora de mundo. */
+  salirEn?: Instante
 ): { caravana: Caravana; asentamiento: Asentamiento; tropa: Escuadron[]; red: RedCaminos } {
   if (caravana.tipo !== 'comercial' || caravana.carros === undefined) {
     throw new CaravanaInvalidaError('Solo se lanzan a mano las caravanas comerciales del revamp.');
@@ -312,21 +314,29 @@ export function prepararCaravanaManual(
   const trazado = trazarRutaComercial(mapa, territorio.red, origen, destino, territorio.asentamientos, territorio.zonas);
   if (!trazado) throw new CaravanaInvalidaError('No hay ruta por tierra hasta el destino (el agua y los ríos sin vado no se cruzan).');
 
+  if (salirEn !== undefined) {
+    if (salirEn <= instante) throw new CaravanaInvalidaError('La hora de salida programada tiene que ser futura.');
+    if (salirEn > sumar(instante, dias(CARAVANA_PREPARACION.maxProgramacionDias))) {
+      throw new CaravanaInvalidaError(`No se puede programar con más de ${CARAVANA_PREPARACION.maxProgramacionDias} días de antelación.`);
+    }
+  }
   const prepTicks = CARAVANA_PREPARACION.kPorCarro * Math.max(0, caravana.carros.length - 1);
+  // Sale cuando acaba la preparación o a la hora programada, lo que tarde más: nunca antes de tenerla lista.
+  const saleEn = [sumar(instante, minutos(prepTicks)), salirEn].filter((t): t is Instante => t !== undefined).reduce((a, b) => (b > a ? b : a));
   const contenido = Object.fromEntries(Object.entries(carga).filter(([, c]) => c > 0));
 
   return {
     asentamiento: { ...origen, almacen: descontarRecursos(origen.almacen, carga) },
     caravana: {
       ...caravana,
-      estado: prepTicks > 0 ? 'preparando' : 'en_transito',
+      estado: saleEn > instante ? 'preparando' : 'en_transito',
       destinoAsentamientoId: destino.id,
       contenido,
       posicionActual: origen.posicion,
       progreso: 0,
       ruta: trazado.ruta,
       peajes: trazado.peajes.length > 0 ? trazado.peajes : undefined,
-      preparaHasta: prepTicks > 0 ? sumar(instante, minutos(prepTicks)) : undefined,
+      preparaHasta: saleEn > instante ? saleEn : undefined,
       escoltaIds: escolta.length > 0 ? escolta.map((e) => e.id) : undefined,
     },
     tropa: escolta.map((e) => ({ ...e, contenedor: { tipo: 'escolta', caravanaId: caravana.id } })),
