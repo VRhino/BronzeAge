@@ -25,6 +25,7 @@ import {
   type PerfilTrazado,
 } from '../../src/constants';
 import { instanteDeTick, isoDeInstante } from '../../src/session/estado';
+import { mercadoMercenarioInicial } from '../../src/engine/mercadoMercenario';
 import { dibujarAsentamientoLab, EDIFICIO_ETIQUETA, proyeccion, type EstadoDibujoLab } from './render';
 import { crearTooltip } from './tooltip';
 import { montarPanelParametros, renderPanelEdificios, renderPanelMejoras } from './panels';
@@ -206,8 +207,9 @@ function fundar(seed: number): void {
     ordenes: [],
     relaciones: [],
     titulos: [],
-    caminos: [],
     campamentosBandidos: [],
+    campamentosMercenarios: [],
+    mercadoMercenario: mercadoMercenarioInicial(instanteDeTick(0)),
     // El laboratorio prueba trazado, no progresión: la Facción nace con todo el catálogo adoptado.
     tecnologia: {
       ...estadoTecnologiaInicial(instanteDeTick(0)),

@@ -393,6 +393,29 @@ export function iniciarAsedio(
   }
 
   const escuadronesAtacantes = seleccionarEscuadrones(tropaAtacante, escuadronIdsAtacantes);
+
+  // Plaza desguarnecida: cae sin combate y sin tocar el RNG, igual que cuando la alcanza un ejército (Doc 5.12.4). Antes
+  // este camino rechazaba el asedio con "No hay escuadrones válidos" y la plaza sin defensa era inconquistable por comando.
+  if (!tropaDefensora.some((e) => e.cantidad > 0)) {
+    const payload: PayloadAsedio = {
+      atacanteId: atacante.id,
+      defensorId: defensor.id,
+      faccionAtacanteId: atacante.faccionId,
+      faccionDefensoraId: defensor.faccionId,
+      ...datosDeAsedio(defensor, [], true),
+    };
+    const trasXp = aplicarExperiencia(facciones, [{ faccionId: atacante.faccionId, delta: NIVEL_FACCION.xp.conquista, razon: 'conquista' }]);
+    return {
+      defensor: aplicarConquista(defensor, atacante.faccionId, instante),
+      facciones: trasXp.facciones,
+      eventos: [
+        { codigo: 'combate.asedio_conquista', mensaje: `${defensor.id} cae sin un solo defensor en pie ante ${atacante.id}.`, payload },
+        ...trasXp.eventos,
+      ],
+      conquistado: true,
+      tropa: escuadronesAtacantes,
+    };
+  }
   const escuadronesDefensores = seleccionarEscuadrones(tropaDefensora, tropaDefensora.map((e) => e.id));
 
   // Paso 3b (§16 del doc de murallas): la razón de ser de toda la mecánica — un asedio contra un recinto
