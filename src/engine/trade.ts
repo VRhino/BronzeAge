@@ -552,20 +552,21 @@ function avanzarCaravanas(
     }
     const origen = asentamientosPorId.get(caravana.origenAsentamientoId);
     const destino = asentamientosPorId.get(caravana.destinoAsentamientoId);
-    if (!origen || !destino) {
-      // Asentamiento desaparecido (fuera de alcance de Fase 0 aún): la caravana se pierde, su escolta no.
-      escoltasLiberadas.push(...(caravana.escoltaIds ?? []));
-      continue;
-    }
-
     // Retorno real tras entregar (a petición del usuario: una caravana NUNCA se teletransporta) — recorre la
     // MISMA ruta que la llevó a `destino`, pero en sentido inverso, de vuelta a `origen` (su asentamiento de
     // origen permanente, ver `estado` en domain/types.ts). `origenAsentamientoId`/`destinoAsentamientoId` NO
     // se tocan durante el retorno (siguen siendo origen real / destino real de la entrega ya hecha) — solo se
-    // invierten los puntos de inicio/fin del movimiento de este tick.
+    // invierten los puntos de inicio/fin del movimiento de este tick. De vuelta no hace falta que el destino siga
+    // en pie: si cayó en ruinas, la caravana vuelve igual a casa (`engine/ruina.ts`).
     const retornando = caravana.estado === 'retornando';
-    const puntoInicio = retornando ? destino.posicion : origen.posicion;
-    const puntoFin = retornando ? origen.posicion : destino.posicion;
+    if (!origen || (!destino && !retornando)) {
+      // Asentamiento desaparecido: la caravana se pierde, su escolta no. Una ruina ya lo resuelve al caer
+      // (`engine/ruina.ts`); esto queda para partidas guardadas antes de eso.
+      escoltasLiberadas.push(...(caravana.escoltaIds ?? []));
+      continue;
+    }
+    const puntoInicio = retornando ? (destino?.posicion ?? caravana.posicionActual) : origen.posicion;
+    const puntoFin = retornando || !destino ? origen.posicion : destino.posicion;
 
     // Distancia en línea recta: base de la bonificación por distancia de la comisión (más abajo) — NO de
     // cuántos ticks tarda la caravana, que depende de la longitud real de la polilínea de `ruta` (puede
@@ -646,7 +647,9 @@ function avanzarCaravanas(
       continue;
     }
 
-    // Llegada: entrega el contenido, cobra comisión de comercio con bonificación por distancia.
+    // Llegada: entrega el contenido, cobra comisión de comercio con bonificación por distancia. A la ida el destino
+    // existe siempre (sin él la caravana se perdió arriba); la guarda solo lo dice al compilador.
+    if (!destino) continue;
     let almacenDestino = destino.almacen;
     let valorTotal = 0;
     for (const [recurso, cantidad] of Object.entries(caravana.contenido)) {

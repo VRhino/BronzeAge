@@ -27,6 +27,7 @@ import { grabarLoVisto, type MemoriaFaccion } from './memoria';
 import { avanzarAparicionMercenarios, reubicarResidentesDeRuina, salirDeCampamentos } from './mercenarios';
 import { reponerMercados } from './mercadoMercenario';
 import { grabarExploracionPersonal } from './ubicacion';
+import { cerrarDependientesDeRuina } from './ruina';
 import { avanzarTecnologia, contadoresDeProduccion, sumarContadores, sumarDeltas, tecnologiasDe, type DeltaContadores } from './tecnologia';
 
 export interface EstadoSimulacion {
@@ -261,8 +262,19 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   // Si era la última de su Facción, queda derrotada sin ganador (`Faccion.derrotadaPor = null`).
   let facciones = estado.facciones;
   for (const p of procesados) if (p.destruido) facciones = registrarDerrota(facciones, actualizados, p.asentamiento.faccionId, null);
+  // Lo que colgaba de ella se cierra ya, no cuando el tick tropiece con ello (`engine/ruina.ts`): su campamento de bandidos,
+  // sus trueques y las caravanas que iban o venían.
+  let dependientes = { asentamientos: actualizados, caravanas: estado.caravanas, acuerdos: estado.acuerdos, campamentosBandidos: estado.campamentosBandidos };
+  for (const p of procesados) {
+    if (!p.destruido) continue;
+    const cierre = cerrarDependientesDeRuina(p.asentamiento, dependientes, mapa);
+    dependientes = { asentamientos: cierre.asentamientos, caravanas: cierre.caravanas, acuerdos: cierre.acuerdos, campamentosBandidos: cierre.campamentosBandidos };
+    eventosDominio.push(...comoEventosDominio(cierre.eventos, contexto));
+    heroes = alCampamentoPorIds(heroes, cierre.escoltasLiberadas);
+  }
+  actualizados = dependientes.asentamientos;
 
-  const trasComercio = avanzarComercio(actualizados, facciones, estado.caravanas, estado.acuerdos, mapa, estado.red ?? RED_VACIA, zonas, instante);
+  const trasComercio = avanzarComercio(actualizados, facciones, dependientes.caravanas, dependientes.acuerdos, mapa, estado.red ?? RED_VACIA, zonas, instante);
   eventosDominio.push(...comoEventosDominio(trasComercio.eventos, contexto));
   heroes = alCampamentoPorIds(heroes, trasComercio.escoltasLiberadas);
 
@@ -284,7 +296,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   // Campamentos de bandidos (Doc 1.9): spawn/respawn primero, después atacan cualquier caravana ya movida
   // este tick (comercial o de fundación) que pase cerca — mismo orden que el resto del tick, sobre posiciones
   // ya actualizadas.
-  const trasSpawnBandidos = avanzarSpawnBandidos(estado.campamentosBandidos, zonas, trasExpansion.asentamientos, mapa, instante);
+  const trasSpawnBandidos = avanzarSpawnBandidos(dependientes.campamentosBandidos, zonas, trasExpansion.asentamientos, mapa, instante);
   eventosDominio.push(...comoEventosDominio(trasSpawnBandidos.eventos, contexto));
   // Campamentos de mercenarios (Doc 1.9b): el del día 1 y los que aparecen entre Facciones.
   const trasMercenarios = avanzarAparicionMercenarios(campamentosActuales, trasExpansion.asentamientos, zonas, mapa, instante);
