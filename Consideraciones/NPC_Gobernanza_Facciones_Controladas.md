@@ -217,11 +217,13 @@ espadachines de cobre — hay variedad, pero solo de la gama baja de la Era I: n
   residentes —la que acaba de conquistar— se muda a ella (`cambiarResidencia`) y entra (`guarnecer`). Es lo que ya
   pide la regla (Doc 5.15.5: para defenderla hay que pasar a residir en ella). Solo si deja al menos otro residente
   en su casa de origen.
-- **Los héroes bot nunca se quedan sin casa** (`acogerHeroesNpc`, 2026-09-27, decisión del usuario): una Facción NPC
-  que pierde su último asentamiento ante otra Facción NPC se une a ella (`anexionar`, con quién la derrotó anotado
-  en `Faccion.derrotadaPor`) y desaparece; y un héroe bot sin residencia se muda a la plaza más cercana de su
-  Facción. Si la ganadora es de un jugador, la derrotada no se le une: el Paso 0 la refunda como siempre. En la Era I
-  había ~75 héroes huérfanos, casi todos de Facciones sin plazas.
+- **Una Facción NPC que pierde su último asentamiento ante otra Facción NPC se le une** (2026-09-27; desde el
+  2026-10-02 se resuelve en el momento de la derrota, `session/derrotas.ts`, y ya no en el turno NPC): `anexionar`, con
+  quién la derrotó anotado en `Faccion.derrotadaPor`. La ganadora reparte sus héroes bot entre sus plazas, **contando
+  la recién conquistada**: cada uno al que menos residentes tenga. Salen de los campamentos de mercenarios donde los
+  dejara el desalojo. Antes lo hacía `acogerHeroesNpc` barriendo cada turno, y al llegar la residencia en campamentos
+  (`9f9a098`) los dos mecanismos se pisaban (`Consideraciones/Auditoria_Tick_Eventos.md`, B5). Que un héroe bot
+  se quede sin casa ya no ocurre: quien pierde la suya la recibe en el acto, en otra plaza o en un campamento.
 - **No ataca la última plaza de una Facción** (2026-09-27, decisión del usuario): conquistarla la haría desaparecer.
   En la Era II medida, una Facción se comió a diez en dos semanas y el mundo se congeló. Solo frena al NPC: un
   jugador sí puede.
@@ -258,9 +260,10 @@ espadachines de cobre — hay variedad, pero solo de la gama baja de la Era I: n
   el almacén lleno de oro y madera.
 - **No sale contra una plaza protegida** (Doc 5.12.9), recién conquistada o recién fundada: el asedio rebotaría sin
   combate.
-- **Una Facción NPC cuya última plaza colapsa, sin ganador, se disuelve** (`acogerHeroesNpc`, 2026-09-27, decisión del
-  usuario) y sus héroes bot desaparecen con ella; si tuviera humanos, se quedan huérfanos. En la Era I medida, tres
-  Facciones se quedaban así con 35 héroes dentro de una plaza que ya no existía.
+- **Una Facción NPC cuya última plaza colapsa, sin ganador, se disuelve** (2026-09-27) y sus héroes bot desaparecen con
+  ella. **Desde el 2026-10-02, también si la derrota un jugador**: ya no la refunda el Paso 0. Se resuelve en el momento
+  de la derrota (`session/derrotas.ts`), y sus bots salen de los campamentos de mercenarios. En la Era I medida, tres
+  Facciones se quedaban sin plaza con 35 héroes dentro de una plaza que ya no existía.
 
 ## 5. Lo que el NPC NO hace
 

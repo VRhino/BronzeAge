@@ -128,7 +128,8 @@ Faccion
   reputacion              score público -100..+100, decae hacia 0 — existente
   derrotadaPor?: string | null   faccionId que conquistó su último asentamiento, o null si colapsó sin
                                  ganador; solo mientras no tiene ninguno.
-                         Una Facción NPC derrotada por otra NPC se le une y desaparece — nuevo (2026-09-27)
+                         Una Facción NPC derrotada por otra NPC se le une y desaparece — nuevo (2026-09-27);
+                         derrotada por un jugador o por colapso, se disuelve (2026-10-02). Se resuelve al perder la plaza.
 ```
 
 La "Liga" (Doc 0) no es una entidad persistida: se deriva de la red de `RelacionPolitica` activas (§8).

@@ -196,6 +196,9 @@ function jugadoresParticipantes(escuadrones: Escuadron[]): number {
  *   mantenimiento congelado—. Las dos, tiempo fijo.
  * - **La obra de ascenso en curso se pierde**, sin devolución (Doc 4.5, decisión del usuario 2026-09-26): la
  *   pagó el Gobernador del perdedor, y con ella cae su reserva de cupo de nivel.
+ * - **Las decisiones del gobierno derrotado caen con él** (decisión del usuario, 2026-10-02): las políticas activas, la
+ *   reserva manual del Tesorero, la pausa de la auto-construcción y las recetas paradas. Antes seguían vigentes hasta
+ *   caducar, ocupando slots de cargos que ya no existían y bloqueando gasto del nuevo dueño.
  */
 export function aplicarConquista(defensor: Asentamiento, faccionConquistadoraId: string, instante: Instante): Asentamiento {
   const cargos = { ...defensor.cargos };
@@ -249,6 +252,10 @@ export function aplicarConquista(defensor: Asentamiento, faccionConquistadoraId:
     almacen,
     recintos,
     medidorMantenimiento: 100,
+    politicasActivas: [],
+    reservaManual: undefined,
+    autoConstruccionPausada: undefined,
+    recetasPausadas: undefined,
     ocupacionHasta: sumar(instante, minutos(OCUPACION.duracionMinutos)),
     protegidaHasta: sumar(instante, minutos(OCUPACION.proteccionMinutos)),
   };
