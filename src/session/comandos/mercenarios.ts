@@ -2,6 +2,7 @@
 // (`cargos.ts`); aquí, lo que se hace dentro: reclutar.
 import { reclutarEnCampamento as reclutarEngine, tecnologiasDelCampamento, type PagarCon } from '../../engine/reclutamientoMercenario';
 import { esCiudadano } from '../../engine/faccion';
+import { comprarEnCampamento as comprarEngine } from '../../engine/mercadoMercenario';
 import { exito } from './tipos';
 import { comando, exigirJugador } from './ayudas';
 import { evento } from './eventos';
@@ -53,6 +54,40 @@ export const reclutarEnCampamento = comando<ParamsReclutarEnCampamento, { cantid
         codigo: 'mercenarios.reclutado',
         mensaje: `${heroe.displayName} recluta ${r.cantidad} de ${params.tropaId} en ${campamentoId} por ${r.oro} de oro.`,
         payload: { campamentoId, heroeId: heroe.id, tropaId: params.tropaId, cantidad: r.cantidad, oro: r.oro } satisfies PayloadReclutadoEnCampamento,
+      }),
+    ],
+    { cantidad: r.cantidad, oro: r.oro }
+  );
+});
+
+export interface ParamsComprarEnCampamento {
+  recurso: string;
+  cantidad: number;
+}
+
+export interface PayloadCompradoEnCampamento {
+  campamentoId: string;
+  heroeId: string;
+  recurso: string;
+  cantidad: number;
+  oro: number;
+}
+
+/**
+ * Compra en el mercado del campamento donde reside el actor (Doc 1.9b): paga con el oro de su almacén personal y recibe en él. El oro
+ * cobrado se destruye. Sirve lo que puede (stock, oro, sitio) y falla si no puede servir nada.
+ */
+export const comprarEnCampamento = comando<ParamsComprarEnCampamento, { cantidad: number; oro: number }>((estado, _mapa, ctx, params) => {
+  const heroe = exigirJugador(estado, ctx.actor);
+  const r = comprarEngine(estado.campamentosMercenarios, estado.heroes, estado.asentamientos, heroe.id, params.recurso, params.cantidad);
+  const campamentoId = r.campamentos.find((c) => c.residentesIds.includes(heroe.id))!.id;
+  return exito(
+    { ...estado, campamentosMercenarios: r.campamentos, heroes: r.heroes },
+    [
+      evento(ctx, {
+        codigo: 'mercenarios.comprado',
+        mensaje: `${heroe.displayName} compra ${r.cantidad} ${params.recurso} en ${campamentoId} por ${r.oro} de oro.`,
+        payload: { campamentoId, heroeId: heroe.id, recurso: params.recurso, cantidad: r.cantidad, oro: r.oro } satisfies PayloadCompradoEnCampamento,
       }),
     ],
     { cantidad: r.cantidad, oro: r.oro }

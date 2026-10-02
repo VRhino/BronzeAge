@@ -946,7 +946,8 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       // +1 con `dejarResidencia` (Doc 2.5): dejar la casa sin dejar la Facción.
       // +3 con los campamentos de mercenarios (Doc 2.5): `residirEnCampamento` y el almacén personal (guardar y sacar).
       // +1 con `reclutarEnCampamento` (Doc 1.9b): reclutar en un campamento de mercenarios.
-      expect(cuerpo.oneOf.length).toBe(87);
+      // +1 con `comprarEnCampamento` (Doc 1.9b): el mercado del campamento.
+      expect(cuerpo.oneOf.length).toBe(88);
       const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
       expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
     });

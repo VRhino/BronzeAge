@@ -12,6 +12,7 @@ import { pointInPolygon } from './zones';
 import { dejarResidencia } from './faccion';
 import { esResidente } from './pertenencia';
 import { ReglaInvalidaError } from './errores';
+import { mercadoInicial } from './mercadoMercenario';
 
 export interface PayloadCampamentoMercenariosAparece {
   campamentoId: string;
@@ -73,6 +74,7 @@ function nuevoCampamento(indice: number, posicion: Point, instante: Instante): C
     // Nace lleno: el tope son sus viviendas.
     poblacion: edificios.filter((e) => e === 'vivienda').length * MERCENARIOS.poblacionPorVivienda,
     poblacionEn: instante,
+    mercado: mercadoInicial(),
     creadoEn: instante,
   };
 }

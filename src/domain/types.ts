@@ -1025,7 +1025,18 @@ export interface CampamentoMercenarios {
    */
   poblacion: number;
   poblacionEn: Instante;
+  /** Stock en venta de su mercado (Doc 1.9b): bien -> unidades. Solo vende, y se repone con lo que se comercia en el mundo. */
+  mercado: Record<string, number>;
   creadoEn: Instante;
+}
+
+/**
+ * La economía común de los mercados de mercenarios (Doc 1.9b): lo comerciado en el mundo desde la última reposición, por bien, y cuándo
+ * toca la siguiente. Es global, no de un campamento: todos reponen con los mismos contadores.
+ */
+export interface MercadoMercenario {
+  contadores: Record<string, number>;
+  reponeEn: Instante;
 }
 
 /**

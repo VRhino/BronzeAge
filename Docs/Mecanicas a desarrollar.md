@@ -34,7 +34,7 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 36 | HÉROE | Comportamiento de los héroes bot en el mundo | ✘ nada |
 | 38 | MILITAR | Tope de héroes en asedio: volver a 15 cuando entren jugadores | ◐ 5 mientras se prueba con NPC |
 | 39 | MILITAR | Escala de la experiencia de escuadra de Unity | ✘ espera a CQ-001 |
-| 40 | MUNDO | Campamentos de mercenarios: enclave neutral, residencia, reclutamiento y mercado | ◐ pasos 1-3 de 5 (entidad, residencia, reclutamiento) |
+| 40 | MUNDO | Campamentos de mercenarios: enclave neutral, residencia, reclutamiento y mercado | ◐ pasos 1-4 de 5 (entidad, residencia, reclutamiento, mercado) |
 | 42 | TECNOLOGÍA | Aedas: difusión y venta de tecnología, residentes y lore | ◐ diseño parcial, sin código |
 
 **Pospuesto explícitamente, fuera de esta lista:** el **Attack Timer** (Doc 5.6, decidido y aplazado a
@@ -369,10 +369,10 @@ misma curva: cuando Conquest publique su escala (CQ-001), comprobar que encaja o
 
 ## 40. Campamentos de mercenarios
 
-**Estado: diseñado con el usuario el 2026-09-28; implementación en 5 pasos desde el 2026-10-02, `código: ◐` (pasos 1 a 3 hechos:
+**Estado: diseñado con el usuario el 2026-09-28; implementación en 5 pasos desde el 2026-10-02, `código: ◐` (pasos 1 a 4 hechos:
 entidad, aparición y niebla, en `engine/mercenarios.ts`; residencia, fin del huérfano y almacén personal; reclutamiento, en
-`engine/reclutamientoMercenario.ts`). El canon se va pasando con cada paso: Doc 1.9b, 2.5, 5.8, 5.15, 6.5b y glosario ya recogen
-los pasos 1 a 3 (pendiente del paso 2: los héroes bot de una Facción NPC sin plazas desaparecen, hoy siguen como están; y el
+`engine/reclutamientoMercenario.ts`; mercado, en `engine/mercadoMercenario.ts`). El canon se va pasando con cada paso: Doc 1.9b, 2.5, 3.3b, 5.8, 5.15, 6.5b y glosario ya recogen
+los pasos 1 a 4 (pendiente del paso 2: los héroes bot de una Facción NPC sin plazas desaparecen, hoy siguen como están; y el
 almacén personal en el contrato de Conquest); el resto, en "Qué toca del canon", al final.**
 Amplía y sustituye en parte D26 (`Consideraciones/BA-006_Revision_Tecnologia_Eras.md`): desaparece el roster
 mercenario propio y la cultura. Cifras N, R, X, T, K y topes: PLACEHOLDER.

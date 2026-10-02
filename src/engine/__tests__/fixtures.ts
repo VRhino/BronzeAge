@@ -4,6 +4,7 @@
 import type { Asentamiento, Edificio, EdificioTipo, Escuadron, Faccion, Heroe, UbicacionHeroe } from '../../domain/types';
 import { instante, type Instante } from '../../domain/tiempo';
 import { generarMapa, MAPA_DEFAULT, type RandomFn } from '../../worldgen';
+import { mercadoMercenarioInicial } from '../mercadoMercenario';
 import { crearMapa, type Mapa } from '../../world/mapa';
 import { EDIFICIO_CATALOGO, LIDERAZGO, MURALLA, SIMULACION } from '../../constants';
 import { crearFaccion } from '../faccion';
@@ -156,6 +157,7 @@ export function crearEstadoDeTest(
     titulos: [],
     campamentosBandidos: [],
     campamentosMercenarios: [],
+    mercadoMercenario: mercadoMercenarioInicial(instante(0)),
     heroes: [],
     ...overrides,
   };

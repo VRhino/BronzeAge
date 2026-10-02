@@ -10,6 +10,7 @@ import type {
   Asentamiento,
   CampamentoBandido,
   CampamentoMercenarios,
+  MercadoMercenario,
   Caravana,
   Faccion,
   OrdenMercado,
@@ -92,6 +93,8 @@ export interface GameSessionState {
   campamentosBandidos: CampamentoBandido[];
   /** Campamentos de mercenarios (Doc 1.9b): enclaves neutrales. El del día 1 lo crea el primer tick (`engine/mercenarios.ts`). */
   campamentosMercenarios: CampamentoMercenarios[];
+  /** Lo comerciado en el mundo y cuándo se repone el mercado de los campamentos (`engine/mercadoMercenario.ts`). Los contadores los suma `exito`. */
+  mercadoMercenario: MercadoMercenario;
   /** Facciones que gobierna el NPC en vez de un jugador humano. Vive en la partida y no en el runner
    * (doc 7 §7.2): cambia el resultado del tick, así que un reinicio con otra configuración divergiría de lo
    * que el snapshot dice haber pasado. En partida real no cambia en caliente una vez elegida. */
@@ -158,6 +161,7 @@ export function estadoSimulacionDe(estado: GameSessionState): EstadoSimulacion {
     red: estado.red,
     campamentosBandidos: estado.campamentosBandidos,
     campamentosMercenarios: estado.campamentosMercenarios,
+    mercadoMercenario: estado.mercadoMercenario,
     memoriaPorFaccion: estado.memoriaPorFaccion,
     heroes: estado.heroes,
     tecnologia: estado.tecnologia,
@@ -181,6 +185,7 @@ export function conResultadoDeSimulacion(estado: GameSessionState, simulacion: E
     red: simulacion.red,
     campamentosBandidos: simulacion.campamentosBandidos,
     campamentosMercenarios: simulacion.campamentosMercenarios,
+    mercadoMercenario: simulacion.mercadoMercenario,
     memoriaPorFaccion: simulacion.memoriaPorFaccion,
     heroes: simulacion.heroes,
     tecnologia: simulacion.tecnologia,

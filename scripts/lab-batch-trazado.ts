@@ -213,6 +213,7 @@ function correrSeed(seed: number): ResultadoSeed {
     titulos: [],
     campamentosBandidos: [],
     campamentosMercenarios: [],
+    mercadoMercenario: { contadores: {}, reponeEn: 0 as never },
     heroes: [],
   };
   let tick = 0;

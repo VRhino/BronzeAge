@@ -51,6 +51,7 @@ function estadoBase(): { estado: EstadoSimulacion; mapa: ReturnType<typeof crear
       titulos: [],
       campamentosBandidos: [],
       campamentosMercenarios: [],
+      mercadoMercenario: { contadores: {}, reponeEn: 0 as never },
       memoriaPorFaccion: {},
       heroes: [],
       tecnologia: estadoTecnologiaInicial(instante(0)),

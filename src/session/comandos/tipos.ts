@@ -14,6 +14,7 @@ import type { EventoDominioConVersion, GameSessionState } from '../estado';
 import type { GeneradorIds } from '../idGenerator';
 import { codigoDeErrorDominio } from '../erroresDeDominio';
 import { contadoresDeEventos, sumarContadores } from '../../engine/tecnologia';
+import { comerciadoDeEventos, sumarComerciado } from '../../engine/mercadoMercenario';
 import type { CodigoError } from './codigosDeError';
 
 /** Quién ejecuta el comando. Hoy es una cadena libre; en la Fase C pasa a ser el `Jugador` resuelto desde la
@@ -101,6 +102,8 @@ export function exito<T>(estado: GameSessionState, eventos: EventoDominio[], dat
     // Los logros del servidor (Doc 6.3) se cuentan aquí, por donde pasa TODO hecho de la partida: el tick, los
     // comandos y el NPC. Lo que no deja evento (extracción, talleres) lo cuenta el propio tick.
     tecnologia: sumarContadores(estado.tecnologia, contadoresDeEventos(eventos)),
+    // Lo comerciado entre Facciones alimenta la reposición de los mercados de mercenarios (Doc 1.9b).
+    mercadoMercenario: sumarComerciado(estado.mercadoMercenario, comerciadoDeEventos(eventos)),
   };
   return { estado: estadoFinal, resultado: { ok: true, datos, eventos: eventosConVersion, version } };
 }

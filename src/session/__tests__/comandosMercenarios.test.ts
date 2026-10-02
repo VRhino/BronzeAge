@@ -5,7 +5,8 @@ import { CIUDADANIA, SIMULACION } from '../../constants';
 import { GameSession } from '../gameSession';
 import { comprarCasa, dejarResidencia, residirEnCampamento } from '../comandos/cargos';
 import { guardarEnAlmacenPersonal, sacarDelAlmacenPersonal } from '../comandos/heroe';
-import { reclutarEnCampamento } from '../comandos/mercenarios';
+import { comprarEnCampamento, reclutarEnCampamento } from '../comandos/mercenarios';
+import { exito } from '../comandos/tipos';
 import { salirAlMundo } from '../comandos/presencia';
 import { partidaConAsentamiento } from './fixtures';
 
@@ -20,6 +21,7 @@ const campamentoEn = (id: string, x: number, y: number): CampamentoMercenarios =
     residentesIds: [],
     poblacion: 100,
     poblacionEn: 0,
+    mercado: { madera: 100 },
     creadoEn: 0,
   }) as unknown as CampamentoMercenarios;
 
@@ -174,5 +176,46 @@ describe('reclutarEnCampamento', () => {
     expect(r.ok).toBe(false);
     expect(r.codigoError).toBe('mercenarios.invalido');
     expect(sesion.getState()).toBe(antes);
+  });
+});
+
+describe('comprarEnCampamento', () => {
+  it('compra con el oro del almacén personal, que se destruye, y resta stock del campamento', () => {
+    const base = conCampamentos();
+    base.sesion.ejecutar(residirEnCampamento, { heroeId: base.fundador, campamentoId: 'merc-1' }, base.opc);
+    const payload = base.sesion.exportar();
+    const sesion = GameSession.importar({
+      ...payload,
+      state: { ...payload.state, heroes: payload.state.heroes.map((h) => (h.id === base.fundador ? { ...h, almacenPersonal: { oro: 500 } } : h)) },
+    });
+
+    const r = sesion.ejecutar(comprarEnCampamento, { recurso: 'madera', cantidad: 10 }, base.opc);
+
+    expect(r.ok).toBe(true);
+    const heroe = sesion.getState().heroes.find((h) => h.id === base.fundador)!;
+    expect(heroe.almacenPersonal?.['madera']).toBe(10);
+    expect(heroe.almacenPersonal?.['oro']).toBe(500 - r.datos!.oro);
+    expect(campamentoDe(sesion, 'merc-1').mercado['madera']).toBe(90);
+  });
+
+  it('rechazo: sin residir en un campamento, y no versiona', () => {
+    const { sesion, opc } = conCampamentos();
+    const antes = sesion.getState();
+    const r = sesion.ejecutar(comprarEnCampamento, { recurso: 'madera', cantidad: 1 }, opc);
+    expect(r.ok).toBe(false);
+    expect(r.codigoError).toBe('mercenarios.invalido');
+    expect(sesion.getState()).toBe(antes);
+  });
+});
+
+describe('el comercio del mundo alimenta los mercados', () => {
+  it('exito suma a los contadores el trueque cerrado entre Facciones y no el hecho consigo misma', () => {
+    const { sesion } = conCampamentos();
+    const e = (entreFacciones: boolean) => ({ codigo: 'comercio.trueque_cumplido', mensaje: '', payload: { entreFacciones, intercambiado: { madera: 40 } }, momento: '', version: 0 }) as never;
+
+    const entre = exito(sesion.getState(), [e(true)]).estado;
+    expect(entre.mercadoMercenario.contadores).toEqual({ madera: 40 });
+    const consigo = exito(entre, [e(false)]).estado;
+    expect(consigo.mercadoMercenario.contadores).toEqual({ madera: 40 });
   });
 });

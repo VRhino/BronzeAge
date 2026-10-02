@@ -17,6 +17,7 @@ import {
   rechazarTrueque as rechazarTruequeEngine,
 } from '../../engine/trade';
 import { puedeLlevar } from '../../engine/liderazgo';
+import { esCiudadano } from '../../engine/faccion';
 import { alCampamentoPorIds, conEscuadrones } from '../../engine/tropa';
 import { colocarOrdenMercado as colocarOrdenMercadoEngine, comerciarEnPlaza as comerciarEnPlazaEngine } from '../../engine/market';
 import { capacidadCargaDe } from '../../engine/ejercitos';
@@ -203,6 +204,8 @@ export interface PayloadComercioEnPlaza {
   cantidad: number;
   valor: number;
   comision: number;
+  /** El héroe y la plaza son de Facciones distintas: solo ese comercio alimenta los mercados de mercenarios (Doc 1.9b). */
+  entreFacciones: boolean;
 }
 
 /**
@@ -256,6 +259,7 @@ export const comerciarEnPlaza = comando<ParamsComerciarEnPlaza, { cantidad: numb
             cantidad: resultado.cantidad,
             valor: resultado.valor,
             comision: resultado.comision,
+            entreFacciones: estado.facciones.some((f) => esCiudadano(f, params.heroeId)) && !estado.facciones.some((f) => f.id === plaza.faccionId && esCiudadano(f, params.heroeId)),
           } satisfies PayloadComercioEnPlaza,
           asentamientoId: plaza.id,
         }),

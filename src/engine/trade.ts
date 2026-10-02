@@ -25,6 +25,10 @@ export interface PayloadTruequeCumplido {
   acuerdoId: string;
   asentamientoAId: string;
   asentamientoBId: string;
+  /** Entre Facciones distintas (no consigo mismas): solo ese comercio alimenta los mercados de mercenarios (Doc 1.9b). */
+  entreFacciones: boolean;
+  /** Lo pactado por los dos lados, sumado por recurso. */
+  intercambiado: Record<string, number>;
 }
 export interface PayloadTruequeExpirado {
   acuerdoId: string;
@@ -780,6 +784,10 @@ export function aplicarEntregaATrueque(
 
   if (acuerdoSaldado(actualizado)) {
     actualizado.estado = 'cumplido';
+    const faccionA = asentamientosPorId.get(acuerdo.asentamientoAId)?.faccionId;
+    const faccionB = asentamientosPorId.get(acuerdo.asentamientoBId)?.faccionId;
+    const intercambiado: Record<string, number> = {};
+    for (const l of [...actualizado.lineasA, ...actualizado.lineasB]) intercambiado[l.recurso] = (intercambiado[l.recurso] ?? 0) + l.cantidadTotal;
     eventos.push({
       codigo: 'comercio.trueque_cumplido',
       mensaje: `Trueque ${acuerdo.id} cumplido entre ${acuerdo.asentamientoAId} y ${acuerdo.asentamientoBId}.`,
@@ -787,10 +795,10 @@ export function aplicarEntregaATrueque(
         acuerdoId: acuerdo.id,
         asentamientoAId: acuerdo.asentamientoAId,
         asentamientoBId: acuerdo.asentamientoBId,
+        entreFacciones: faccionA !== faccionB,
+        intercambiado,
       } satisfies PayloadTruequeCumplido,
     });
-    const faccionA = asentamientosPorId.get(acuerdo.asentamientoAId)?.faccionId;
-    const faccionB = asentamientosPorId.get(acuerdo.asentamientoBId)?.faccionId;
     // Y experiencia de Facción a los dos lados (crecer en paz, decisión del usuario 2026-09-27), solo si son
     // Facciones distintas: comerciar entre tus propias plazas no es crecer (en la Era II medida, 2 910 de 2 919
     // trueques eran de la misma Facción y la llevaron sola a nivel 10).

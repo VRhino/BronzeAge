@@ -1938,6 +1938,17 @@ export const MERCENARIOS = {
   valorEquipoEnOro: 8,
   /** Desbloquea cada tecnología el último: cuando la tiene este porcentaje de las Facciones humanas vivas o pasan estas horas desde la primera. */
   tecnologia: { porcentajeFacciones: 0.5, horasTrasLaPrimera: 72 },
+  // --- Mercado (paso 4) ---
+  mercado: {
+    /** Cada cuántas horas de mundo repone, y qué fracción de lo comerciado en ese tiempo recibe cada campamento. */
+    cadaHoras: 3,
+    proporcionRepone: 0.03,
+    /** Stock máximo por bien en un campamento, y con el que nace (los bienes con precio de referencia). */
+    topePorBien: 300,
+    stockInicial: 100,
+    /** Se vende a este múltiplo del precio de referencia (+30 %): una válvula, no una competencia. El oro cobrado se destruye. */
+    margen: 1.3,
+  },
 } as const;
 
 /** El almacén personal de un héroe (Doc 2.5, decidido el 2026-10-02): unidades en total, de cualquier recurso. PLACEHOLDER. */

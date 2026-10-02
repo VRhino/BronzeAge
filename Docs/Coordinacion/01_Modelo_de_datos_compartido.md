@@ -489,6 +489,7 @@ CampamentoMercenarios      enclave neutral (Doc 1.9b) — NUEVO 2026-10-02; en e
   origen: number          variante de aspecto, 0..2: solo cambia cómo se ve
   edificios[]             'taberna' | 'vivienda' | 'mercado' | 'barracon' | 'galeriaDeTiro' | 'caballerizas' — layout fijo
   residentesIds[]         heroeId: héroes que residen aquí, de cualquier Facción y sin límite; sin guarnición ni cargos
+  mercado: Record<bien, number>   stock en venta (solo vende, Doc 3.3b); se repone con `GameSessionState.mercadoMercenario`
   poblacion, poblacionEn  reclutas disponibles en ese instante; la cantidad de ahora se calcula (tope = viviendas × 50,
                          recupera 10/h): no se escribe cada tick
   creadoEn: Instante

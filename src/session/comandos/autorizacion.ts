@@ -341,6 +341,8 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
   // condiciones (hueco de vivienda, permiso, no residir ya ahí) las valida `cambiarResidencia`.
   // Reclutar en el campamento donde reside el actor: la residencia y el pago los comprueba el motor.
   reclutarEnCampamento: { rolesPermitidos: ['jugador'] },
+  // Comprar en el mercado del campamento donde reside el actor: la residencia y el pago los comprueba el motor.
+  comprarEnCampamento: { rolesPermitidos: ['jugador'] },
   // Residir en un campamento de mercenarios: cualquier héroe, por sí mismo y sin pedir permiso a su Facción (Doc 2.5).
   residirEnCampamento: {
     rolesPermitidos: ['jugador'],

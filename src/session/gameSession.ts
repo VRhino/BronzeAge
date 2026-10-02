@@ -20,6 +20,7 @@ import { eventoAdministrativo, instanteDeTick, isoDeInstante, type GameSessionSt
 import { avanzarAutoComercio } from './comandos/avanzarAutoComercio';
 import { avanzarFaccionesNpc } from './comandos/avanzarFaccionesNpc';
 import { avanzarTick } from './comandos/avanzarTick';
+import { mercadoMercenarioInicial } from '../engine/mercadoMercenario';
 import {
   ACTOR_SISTEMA,
   type ActorId,
@@ -98,6 +99,7 @@ export class GameSession {
       titulos: [],
       campamentosBandidos: [],
       campamentosMercenarios: [],
+      mercadoMercenario: mercadoMercenarioInicial(instanteDeTick(0)),
       memoriaPorFaccion: {},
       tecnologia: estadoTecnologiaInicial(instanteDeTick(0)),
       faccionesNpcIds: [],

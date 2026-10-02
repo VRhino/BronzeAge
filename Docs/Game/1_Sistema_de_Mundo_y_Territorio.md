@@ -171,7 +171,7 @@ Cifras, todas PLACEHOLDER (`CAMPAMENTOS_BANDIDOS`):
 
 El campamento no bloquea la explotación del bosque que ocupa: solo amenaza a las caravanas de paso.
 
-## 1.9b Campamentos de mercenarios (decidido el 2026-10-02; pasos 1 a 3 de 5 implementados)
+## 1.9b Campamentos de mercenarios (decidido el 2026-10-02; pasos 1 a 4 de 5 implementados)
 
 Entidad **neutral** del mundo abierto, con miniatura en el mapa. No es de ninguna Facción, no se puede atacar, no crece y no desaparece. **No es un asentamiento**: no tiene zona de influencia, y ninguna zona lo absorbe (las zonas salen de los asentamientos). Es un enclave.
 
@@ -180,7 +180,8 @@ Entidad **neutral** del mundo abierto, con miniatura en el mapa. No es de ningun
 - **Niebla.** Se conoce **como un camino**: si la Facción ha explorado alguna vez el terreno donde está, lo recuerda; no hace falta verlo ahora, porque un campamento no se mueve ni desaparece.
 - **Residencia** (paso 2): cualquier héroe puede residir en él, y es la casa de quien se queda sin asentamiento; se acaba el huérfano (Doc 2.5, 5.15.5). Almacén personal de cada héroe: Doc 2.5.
 - **Reclutamiento** (paso 3): reclutar y reponer las tropas de sus edificios, con tecnología propia, pagando oro y gastando la población del campamento (Doc 5.8, 6.5b). Población: viviendas × 50, recupera 10 por hora.
-- **Por llegar** (pasos 4 y 5): el mercado y refundar con los almacenes. Detalle y cifras en `Docs/Mecanicas a desarrollar.md` §40.
+- **Mercado** (paso 4): solo vende, con stock limitado, y el oro cobrado se destruye (Doc 3.3b).
+- **Por llegar** (paso 5): refundar con los almacenes personales. Detalle y cifras en `Docs/Mecanicas a desarrollar.md` §40.
 
 ## 1.10 El héroe está SITUADO en el mundo
 

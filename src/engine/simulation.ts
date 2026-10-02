@@ -1,4 +1,4 @@
-import type { AcuerdoTrueque, Asentamiento, CampamentoBandido, CampamentoMercenarios, Caravana, Ejercito, EstadoTecnologia, Faccion, Heroe, OrdenMercado, RedCaminos, RelacionPolitica, Titulo } from '../domain/types';
+import type { AcuerdoTrueque, Asentamiento, CampamentoBandido, CampamentoMercenarios, MercadoMercenario, Caravana, Ejercito, EstadoTecnologia, Faccion, Heroe, OrdenMercado, RedCaminos, RelacionPolitica, Titulo } from '../domain/types';
 import type { EventoCrudo, EventoDominio } from '../domain/eventos';
 import type { Instante } from '../domain/tiempo';
 import type { EstadoMapa, Mapa } from '../world/mapa';
@@ -25,6 +25,7 @@ import { avanzarAtaquesBandidos, avanzarSpawnBandidos } from './bandidos';
 import { avanzarEjercitos, type CombatePorAbrir, type ContextoAvanceEjercitos } from './ejercitos';
 import { grabarLoVisto, type MemoriaFaccion } from './memoria';
 import { avanzarAparicionMercenarios, reubicarResidentesDeRuina } from './mercenarios';
+import { reponerMercados } from './mercadoMercenario';
 import { grabarExploracionPersonal } from './ubicacion';
 import { avanzarTecnologia, contadoresDeProduccion, sumarContadores, sumarDeltas, tecnologiasDe, type DeltaContadores } from './tecnologia';
 
@@ -49,6 +50,8 @@ export interface EstadoSimulacion {
   campamentosBandidos: CampamentoBandido[];
   /** Campamentos de mercenarios (Doc 1.9b) — enclaves neutrales, ver `engine/mercenarios.ts`. */
   campamentosMercenarios: CampamentoMercenarios[];
+  /** Lo comerciado y la próxima reposición de sus mercados (`engine/mercadoMercenario.ts`). */
+  mercadoMercenario: MercadoMercenario;
   /** Lo que cada Facción RECUERDA del mundo (niebla de guerra — ver `engine/memoria.ts`), por `faccionId`.
    * Una Facción ausente no ha visto nada todavía, así que las partidas guardadas antes de la mecánica no
    * necesitan migración. */
@@ -341,6 +344,9 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
 
   const faccionesFinal = avanzarReputacion(trasNivelFaccion.facciones, estado.relaciones);
 
+  // La reposición de los mercados de mercenarios es una cita agendada: cada tick solo compara un instante (Doc 1.9b).
+  const trasReposicion = reponerMercados(trasEjercitos.campamentosMercenarios, estado.mercadoMercenario, instante);
+
   const titulosActuales = calcularTitulos(faccionesFinal, trasTributos.asentamientos, estado.relaciones, heroes);
   const eventosTitulos = narrarCambiosDeTitulo(estado.titulos, titulosActuales, faccionesFinal);
   eventosDominio.push(...comoEventosDominio(eventosTitulos, contexto));
@@ -372,7 +378,8 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     red: trasComercio.red,
     campamentosBandidos: trasSpawnBandidos.campamentos,
     // Los que acogieron a los residentes de una plaza conquistada este tick (`desalojarResidentes`).
-    campamentosMercenarios: trasEjercitos.campamentosMercenarios,
+    campamentosMercenarios: trasReposicion.campamentos,
+    mercadoMercenario: trasReposicion.mercado,
     // Al FINAL, y con lo que ya se movió: lo que se graba es dónde acabaron las columnas este minuto, no de
     // dónde salieron. No emite eventos ni cambia nada más — la memoria solo mira.
     memoriaPorFaccion: grabarLoVisto(estado.memoriaPorFaccion, {
