@@ -196,6 +196,27 @@ describe('RunnerDePartida — reloj de mundo (D5)', () => {
     expect(r.getState().tick).toBe(0);
   });
 
+  it('avisa a `alEmitir` tras cada tick del reloj, y solo del reloj (O1)', async () => {
+    let relojMs = Date.parse(MOMENTO);
+    const avisos: Array<{ gameId: string; n: number }> = [];
+    const r = RunnerDePartida.crear('g-aviso', { seed: 7 }, {
+      almacen,
+      ahora: () => new Date(relojMs).toISOString(),
+      alEmitir: (gameId, eventos) => avisos.push({ gameId, n: eventos.length }),
+    });
+    await r.avanzarTick(); // un tick a mano no avisa: lo difunde quien lo pide (ruta de admin)
+    expect(avisos).toHaveLength(0);
+
+    r.iniciarRelojDeMundo(50);
+    relojMs += 2 * 50;
+    await vi.waitFor(() => expect(avisos).toHaveLength(2), { timeout: 10_000 });
+    await r.esperarColaVacia();
+    r.detenerRelojDeMundo();
+
+    expect(avisos.every((a) => a.gameId === 'g-aviso')).toBe(true);
+    expect(r.getState().tick, 'avisa tras persistir, con el estado ya avanzado').toBe(3);
+  });
+
   it('parar y reanudar el reloj re-ancla: el tiempo con el reloj parado no cuenta, ni el resto', async () => {
     // Antes de la decisión del 2026-09-05 este test probaba lo CONTRARIO: que un resto sub-intervalo
     // sobrevivía a una parada, para que el catch-up no perdiera fracciones. Con el mundo congelado mientras
