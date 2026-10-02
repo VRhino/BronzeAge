@@ -93,6 +93,8 @@ No cuenta contra el Cap de Fundación (vía "pacífica" de crecimiento).
 ## 2.7 Sistema de reputación/confiabilidad de Facción
 Score PÚBLICO de -100 (nada confiable) a +100 (muy confiable).
 
+**Uso en mercenarios** (2026-10-02): una Facción con reputación baja paga más al reclutar en un campamento de mercenarios (Doc 5.8), con el mismo recargo que en comercio.
+
 **Penalizaciones:** romper Alianza unilateralmente; no defender a un vasallo atacado; rebelión de vasallo por incumplimiento del señor; incumplir acuerdo de trueque/orden de mercado aceptada; atacar a un Aliado sin romper la relación antes (la más severa).
 
 **Bonificaciones:** defender exitosamente a un vasallo; mantener Alianza activa mucho tiempo; cumplir acuerdos de trueque; liberar voluntariamente a un vasallo.

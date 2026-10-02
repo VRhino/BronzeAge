@@ -95,6 +95,10 @@ Las Facciones NPC siguen la misma regla.
 | IV | 1.000 | 50 lingotes de hierro |
 | V | 1.500 | 80 lingotes de hierro |
 
+## 6.5b Tecnología propia de los campamentos de mercenarios (2026-10-02)
+
+Un campamento de mercenarios (Doc 1.9b) no adopta nada: **desbloquea cada tecnología el último**, al instante y gratis, cuando la tiene el **50 %** de las Facciones humanas vivas (las que no gobierna la IA y conservan algún asentamiento) **o** han pasado **72 horas** desde que la primera Facción la desbloqueó, lo que llegue antes. Las de arranque ya están. Así se recluta allí lo que una Facción no alcanza por edificio o materiales (Doc 5.8), y la ventaja del primero dura unos días sin ser eterna. Una tecnología que nadie ha desbloqueado no está en el campamento. Cifras en `MERCENARIOS.tecnologia` (placeholder).
+
 ## 6.6 Catálogo
 
 Las X de la Era I se fijaron con el batch en la semana objetivo de su logro (6.3) y caen donde toca. Las de las Eras II y III son provisionales: sus contadores dependen de qué tecnologías adopta cada Facción, y con jugadores NPC se adoptan pocas, así que cada cambio mueve el mundo entero. Siguen sin medida `carpinteria_militar`, `falange_hoplita`, `arqueria_especializada`, `bronce_laminado` y `trabajos_asedio`, cuyo contador no se mueve. "Edificio" en un hito = activo en cualquier asentamiento de la Facción. Las

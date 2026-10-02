@@ -1923,6 +1923,21 @@ export const MERCENARIOS = {
   /** Búsqueda de un punto válido (tierra firme) alrededor del ancla, en anillos. */
   radioBusqueda: 400,
   pasoBusqueda: 20,
+  // --- Reclutamiento (paso 3) ---
+  /** Reclutas que da cada vivienda: el tope es viviendas × esto, así que añadir viviendas al layout lo sube solo. */
+  poblacionPorVivienda: 50,
+  /** Reclutas que recupera por hora de mundo, hasta el tope. */
+  poblacionPorHora: 10,
+  /** Reclutar aquí cuesta esto veces el precio base (más caro que en casa: no sustituye a las plazas). */
+  recargo: 1.5,
+  /** Sobre el precio ya recargado, para la Facción que no tiene ningún asentamiento: puede recomponerse. */
+  descuentoSinAsentamientos: 0.6,
+  /** Nivel interno de sus edificios militares: todas las tropas de ese edificio, limitadas por la tecnología del campamento. */
+  nivelEdificios: 3,
+  /** El campamento cobra todo en oro: lo que vale una unidad de equipo (no hay precio de mercado de las armas fabricadas). */
+  valorEquipoEnOro: 8,
+  /** Desbloquea cada tecnología el último: cuando la tiene este porcentaje de las Facciones humanas vivas o pasan estas horas desde la primera. */
+  tecnologia: { porcentajeFacciones: 0.5, horasTrasLaPrimera: 72 },
 } as const;
 
 /** El almacén personal de un héroe (Doc 2.5, decidido el 2026-10-02): unidades en total, de cualquier recurso. PLACEHOLDER. */

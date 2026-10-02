@@ -1019,6 +1019,12 @@ export interface CampamentoMercenarios {
    * Sin guarnición ni cargos. Es la casa de quien se queda sin asentamiento (`acogerHeroesSinCasa`).
    */
   residentesIds: string[];
+  /**
+   * Reclutas disponibles en `poblacionEn` (Doc 1.9b). Crece sola hasta el tope de sus viviendas, sin mantenimiento ni comida: lo guardado
+   * es el valor y el instante, y la cantidad de ahora se calcula al mirar (`poblacionActual`), no se escribe cada tick.
+   */
+  poblacion: number;
+  poblacionEn: Instante;
   creadoEn: Instante;
 }
 

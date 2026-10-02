@@ -70,6 +70,9 @@ function nuevoCampamento(indice: number, posicion: Point, instante: Instante): C
     origen: Math.floor(huella / MERCENARIOS.edificiosMilitares.length) % MERCENARIOS.origenes,
     edificios,
     residentesIds: [],
+    // Nace lleno: el tope son sus viviendas.
+    poblacion: edificios.filter((e) => e === 'vivienda').length * MERCENARIOS.poblacionPorVivienda,
+    poblacionEn: instante,
     creadoEn: instante,
   };
 }
