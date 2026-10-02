@@ -120,6 +120,7 @@ Faccion
   nombre                editable — existente
   reyId: string | null   vasallaje/políticas superiores — existente. Tras este modelo referencia heroeId
   embajadorId: string | null   designado por el Rey — existente. Referencia heroeId
+  capitalDesignadaEn?: Instante   cuándo designó el Rey la capital por última vez (cooldown) — NUEVO (2026-10-02)
   nivel                 derivado de experiencia, sube cupo de asentamientos/fundación — existente
   experiencia            MONÓTONA, nunca baja (combate digno/conquista/construcción/crecer en paz/bandidos) — existente
   ciudadanosIds[]         quién tiene ciudadanía en ESTA facción, no toda la Liga — existente. Tras este
@@ -159,6 +160,8 @@ Asentamiento
   cargos: CargosAsentamiento       ver abajo — existente
   casasCompradas[]                 ciudadanía por compra, distinta de fundar — existente. Tras este modelo,
                                    heroeId[]
+  capitalDeFaccionId?: string      si este asentamiento es la capital designada de esa Facción (Doc 2.2). Solo
+                                   vale con Palacio activo — NUEVO (2026-10-02)
   puertaCerradaA?[]                grupos a los que se cierra la puerta: 'neutrales' | 'aliados' | 'enemigos'
                                    (Doc 1.10.5, el exilio). Ausente = ['neutrales', 'enemigos']. La propia
                                    Facción no es un grupo. Sustituye a `politicaDeAcceso` (2026-10-02) — NUEVO

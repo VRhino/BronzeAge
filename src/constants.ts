@@ -215,7 +215,7 @@ export const POBLACION = {
  * `consumoComidaPoblacion`, signo opuesto: `Σ(habitantes_clase × tasa_clase)`, sumado al almacén.
  *
  * Nobleza > Artesanos > Pesants por cabeza (base imponible por riqueza). NO escala por distancia a la capital
- * (ese eje ya es el "impuesto de cohesión" del lado del coste, `MANTENIMIENTO.factorDistanciaMax`) ni por
+ * (ese eje ya es el "impuesto de cohesión" del lado del coste, `MANTENIMIENTO.escalaDistancia`) ni por
  * `nivelActual`. Modulable por la política "Presión Fiscal" del Tesorero (`factorRecaudacion`).
  *
  * Todo PLACEHOLDER, a calibrar en la campaña conjunta del bloque (junto con el oro de reclutamiento, el buey y
@@ -1900,6 +1900,12 @@ export const PUERTA = {
   cerradaAPorDefecto: ['neutrales', 'enemigos'] as readonly GrupoPuerta[],
 } as const;
 
+/** La capital de una Facción (Doc 2.2, decidido el 2026-10-02). */
+export const CAPITAL = {
+  /** Días de mundo entre una designación y la siguiente. PLACEHOLDER. */
+  cooldownDias: 14,
+} as const;
+
 export const MOVIMIENTO = {
   /**
    * Velocidad de una columna SIN escuadrones — un jugador viajando solo. Por encima de la tropa ligera (20)
@@ -2175,7 +2181,7 @@ export const ASCENSO_ASENTAMIENTO = {
 
 /**
  * Mantenimiento (Doc 4.5): coste periódico que escala por nivel (sumando materiales, no reemplazando) y por
- * distancia al centro de poder de la Facción (aquí: su asentamiento más antiguo vivo, como proxy de "capital").
+ * distancia al centro de poder de la Facción (su capital, Doc 2.2).
  * Cantidades y velocidad de degradación son PLACEHOLDER (Preguntas_Abiertas no fija cifras exactas).
  */
 export const MANTENIMIENTO = {
@@ -2224,8 +2230,8 @@ export const MANTENIMIENTO = {
   /** Una Vivienda cuenta la mitad que otro edificio (2026-09-28, decisión del usuario): son la mayoría de los de una
    * plaza, unos 40 de los ~90 de un nivel 2. */
   pesoVivienda: 0.5,
+  /** El coste crece 1 por cada `escalaDistancia` de distancia a la capital, sin tope (decidido el 2026-10-02): ×2 a 400, ×3 a 800... */
   escalaDistancia: 400,
-  factorDistanciaMax: 2,
   degradacionPorDeficitTotal: 10,
   regeneracionSiPagoCompleto: 5,
   // Protección temporal a asentamientos recién fundados (Doc 1.3, pendiente en el diseño): sin esto, todo

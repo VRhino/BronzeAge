@@ -83,8 +83,8 @@ Era se reparten por su tramo en el orden de adopción, y el último cae una sema
 
 ## 6.5 Adopción
 
-**La adopta el Rey, estando en la capital, y la paga el almacén de la capital.** La adopción es instantánea. Mientras
-la capital no se elige (`Docs/Mecanicas a desarrollar.md` §13), es el asentamiento vivo más antiguo de la Facción.
+**La adopta el Rey, estando en la capital, y la paga el almacén de la capital.** La adopción es instantánea. La capital
+la designa el Rey (Doc 2.2); mientras no designe ninguna, es el asentamiento vivo más antiguo de la Facción.
 Las Facciones NPC siguen la misma regla.
 
 | Era de la tecnología | Oro | Bien de la Era |

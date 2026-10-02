@@ -295,6 +295,14 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
       return esCiudadano(faccion, heroeId) && (faccion.reyId === null || esReyDe(faccion, heroeId));
     },
   },
+  // La capital la designa el Rey de la Facción (Doc 2.2).
+  designarCapital: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, heroeId, params) => {
+      const faccion = buscarFaccion(estado, params.faccionId);
+      return !faccion || (esCiudadano(faccion, heroeId) && esReyDe(faccion, heroeId));
+    },
+  },
   asignarEmbajador: {
     rolesPermitidos: ['jugador'],
     condicionJugador: (estado, heroeId, params) => {

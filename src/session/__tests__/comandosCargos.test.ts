@@ -5,7 +5,8 @@
 // del `TypeError` de `.find(...)!` que daba `GameStore`) están unificados en `comandosContratoIds.test.ts`,
 // no repetidos aquí. Lo que queda son las reglas de NEGOCIO propias de cada comando.
 import { describe, expect, it } from 'vitest';
-import { activarPolitica, asignarCargoLocal, asignarEmbajador, asignarRey } from '../comandos/cargos';
+import { activarPolitica, asignarCargoLocal, asignarEmbajador, asignarRey, designarCapital } from '../comandos/cargos';
+import { GameSession } from '../gameSession';
 import { OPC, partidaConAsentamiento } from './fixtures';
 
 
@@ -59,5 +60,30 @@ describe('activarPolitica', () => {
 
     expect(resultado.ok).toBe(false);
     expect(resultado.codigoError).toBe('politica.invalida');
+  });
+});
+
+describe('designarCapital (Doc 2.2)', () => {
+  it('rechazo: un asentamiento sin Palacio no puede ser la capital, y no versiona', () => {
+    const { sesion, faccionId, asentamientoId } = partidaConAsentamiento();
+    const antes = sesion.getState();
+
+    const r = sesion.ejecutar(designarCapital, { faccionId, asentamientoId }, OPC);
+
+    expect(r.ok).toBe(false);
+    expect(sesion.getState()).toBe(antes);
+  });
+
+  it('rechazo: la capital actual no se puede designar otra vez (el traslado feliz se prueba en el motor)', () => {
+    const { sesion, faccionId, asentamientoId } = partidaConAsentamiento();
+    const payload = sesion.exportar();
+    const a = payload.state.asentamientos[0]!;
+    const conPalacio = GameSession.importar({
+      ...payload,
+      state: { ...payload.state, asentamientos: [{ ...a, edificios: [...a.edificios, { ...a.edificios[0]!, id: 'palacio-1', tipo: 'palacio', estado: 'activo' as const }] }] },
+    });
+
+    // Es la única plaza, y por tanto ya es la capital por antigüedad.
+    expect(conPalacio.ejecutar(designarCapital, { faccionId, asentamientoId }, OPC).ok).toBe(false);
   });
 });

@@ -27,8 +27,8 @@ inicial no cabe más cerca—, mientras que la provincia arranca pequeña (radio
 **La regla: una ciudad nunca pasa de una décima de su provincia.** El resto es campo, bosque y minas — lo que
 debe haber entre dos ciudades.
 
-**Un reino mide ~5 provincias**: sale de `MANTENIMIENTO.escalaDistancia` = 400, la distancia a la capital a la
-que el coste de mantenimiento toca su tope (×2). 400 / 76 ≈ 5.
+**Un reino cómodo mide ~5 provincias**: sale de `MANTENIMIENTO.escalaDistancia` = 400, la distancia a la capital a la
+que el coste de mantenimiento se duplica (×2; sigue creciendo, sin tope, Doc 4.5). 400 / 76 ≈ 5.
 
 ## 1.0b El agua es un OBSTÁCULO
 

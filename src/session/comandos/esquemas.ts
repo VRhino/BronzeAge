@@ -218,6 +218,7 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
     additionalProperties: false,
   },
   romperRelacion: objeto({ relacionId: IDENTIFICADOR, iniciadorFaccionId: IDENTIFICADOR }, ['relacionId', 'iniciadorFaccionId']),
+  designarCapital: objeto({ faccionId: IDENTIFICADOR, asentamientoId: IDENTIFICADOR }, ['faccionId', 'asentamientoId']),
   rebelionVasallo: objeto({ relacionId: IDENTIFICADOR }, ['relacionId']),
   declararGuerra: objeto({ faccionAId: IDENTIFICADOR, faccionBId: IDENTIFICADOR }, ['faccionAId', 'faccionBId']),
   proponerPaz: objeto({ relacionId: IDENTIFICADOR, faccionId: IDENTIFICADOR }, ['relacionId', 'faccionId']),

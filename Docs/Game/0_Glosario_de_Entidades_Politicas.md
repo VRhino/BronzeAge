@@ -133,7 +133,7 @@ Lo que adopta una Facción para desbloquear tropas, edificios, niveles internos 
 Las dos condiciones de aparición de una tecnología: algo que ha pasado en todo el mundo (público, fijado para siempre, no dice qué tecnología abre) y algo que ha conseguido la propia Facción (Doc 6.3).
 
 ## Capital
-El asentamiento de la Facción donde el Rey adopta tecnología y que paga su adopción; también es el centro de poder del mantenimiento por distancia (Doc 4.5). Mientras no se elige, es el asentamiento vivo más antiguo de la Facción.
+El asentamiento de la Facción donde el Rey adopta tecnología y que paga su adopción; también es el centro de poder del mantenimiento por distancia (Doc 4.5). La designa el Rey en un asentamiento con Palacio (Doc 2.2); mientras no la designa, o si la pierde, es el asentamiento vivo más antiguo de la Facción.
 
 ## Oro
 Recurso/medio de intercambio: metal precioso en bruto pesado (no moneda acuñada), origen en minas ubicadas en el mapa. Se usa para servicios/NPCs (sueldos, mercenarios, tecnología) y también como recurso más de trueque entre Facciones. Es un recurso del **almacén del asentamiento**: no confundir con las monedas propias del héroe (bronce/plata/oro, Doc 5.16.1), que no tienen relación con él.

@@ -9,7 +9,7 @@ las Eras I, II y III: 25 tecnologías, 26 tropas (15 nuevas), edificios y receta
 escalón y Palacio) y §41 (recinto de piedra). Solo la **vía del desarrollo** (logro + hito + pago).
 
 **Fuera de alcance** (siguen en `Docs/Mecanicas a desarrollar.md`): Aedas y la venta de tecnología (§42), conquista
-(D35) y comercio (D39) de tecnología, capital elegida (§13: se usa el proxy `encontrarCapital`), culturas (solo
+(D35) y comercio (D39) de tecnología, culturas (solo
 aspecto, D18), mercenarios (§40), el efecto del equipo de asedio (las tecnologías `carpinteria_militar` y
 `trabajos_asedio` existen y se adoptan, pero su equipo llega con la mecánica de asedio), Eras IV-V, D47.
 
@@ -131,7 +131,7 @@ Cada paso deja los tests en verde y se puede fusionar por separado.
 
 ### Paso 3 — Adopción
 - [x] Comando `adoptarTecnologia` (`src/session/comandos/`): solo el Rey (`faccion.reyId`), estando en la capital
-  (`encontrarCapital`, proxy de §13); la tecnología tiene que estar aparecida y no adoptada; paga
+  (`encontrarCapital`, la designada por el Rey o la más antigua); la tecnología tiene que estar aparecida y no adoptada; paga
   `TARIFA_ADOPCION[era]` del almacén de la capital (D32). Códigos de error propios.
 - [x] Proyección del jugador: sus tecnologías aparecidas y adoptadas, los logros públicos y la Era; nunca las
   tecnologías ocultas (D55). Administración: todo.

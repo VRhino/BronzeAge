@@ -90,6 +90,8 @@ export interface Faccion {
   nombre: string;
   reyId: string | null;
   embajadorId: string | null;
+  /** Cuándo designó el Rey su capital por última vez: el traslado tiene un cooldown (`CAPITAL`, Doc 2.2). */
+  capitalDesignadaEn?: Instante;
   /** Derivado de `experiencia` vía `calcularNivelFaccion` (Doc 1.7, rediseño Fase 0.5) — nunca se guarda
    * "suelto", se recalcula cada tick a partir de la XP. Sube el cupo de asentamientos por nivel (Doc
    * Fase_0_5_Definicion_Especializacion_y_Cupos.md §5) y el cap de fundación (`CAP_FUNDACION_POR_NIVEL`). */
@@ -623,6 +625,12 @@ export interface Asentamiento {
    * y a los amigos. Un residente entra SIEMPRE, mire lo que mire esto: nadie se queda fuera de su propia casa.
    */
   puertaCerradaA?: GrupoPuerta[];
+  /**
+   * La Facción de la que este asentamiento es capital designada (Doc 2.2). Guarda el id de la Facción y no un
+   * booleano a propósito: si el asentamiento cambia de manos, la marca deja de valer sola para la nueva dueña.
+   * Solo cuenta con un Palacio activo (`capitalDesignada`); sin designar o sin Palacio, vale el más antiguo.
+   */
+  capitalDeFaccionId?: string;
   /** Vetados por el Gobernador, por encima de la política (Doc 1.10.5): un veto cierra la puerta a alguien
    * concreto aunque la plaza esté abierta de par en par. Ausente = nadie. */
   vetadosIds?: string[];

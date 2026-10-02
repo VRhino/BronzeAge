@@ -40,8 +40,7 @@ Diseñado (a veces "cerrado") pero **sin una línea en `src/`**:
 - **Trueque compuesto** de varios materiales — `AcuerdoTrueque` es 1 recurso ↔ 1 recurso.
   (`Mecanicas a desarrollar.md` §5)
 - ~~**Revamp de caravanas**~~ — **NÚCLEO IMPLEMENTADO 2026-09-08** (ver Comercio y economía más abajo). Solo quedan los trozos diferidos (planificación horaria, cría, visibilidad por tamaño, camello/desierto, catálogo de carros, unificación con `Ejercito.suministro`) — `Mecanicas a desarrollar.md` §8.1.
-- **Eventos de asentamiento** y **landmarks del mundo** (`Mecanicas a desarrollar.md` §9, §10); **la capital
-  como decisión** (§13).
+- **Eventos de asentamiento** y **landmarks del mundo** (`Mecanicas a desarrollar.md` §9, §10).
 - **Progresión de Liderazgo del jugador**: `Jugador.liderazgoBase` existe y el propio código anota que el
   efectivo debería ser base + progresión, pero esa progresión no está ni diseñada ni implementada.
   (`Mecanicas a desarrollar.md` §11)
@@ -164,9 +163,7 @@ geometría, control por zona de influencia, peaje en oro, tipo de dominio y rend
 - ✅ El trigo NO es coste fijo de Mantenimiento: se descuenta una sola vez como consumo real de población + raciones de tropa — `código: ✔`
 - ✅ Mantenimiento base en madera reducido a la mitad (3 → 1.5) porque inflaba la reserva de construcción hasta bloquear todo gasto discrecional — `código: ✔`
 - 🔶 Cantidades finales por nivel, en qué nivel entran piedra y oro, velocidad de degradación, tope de extractores por tipo — `código: ◐` (placeholders)
-- 🔶 **La capital como decisión del jugador**: hoy `encontrarCapital` devuelve el asentamiento vivo más antiguo, marcado en el propio código como *placeholder = proxy de capital*. De ahí sale un factor de distancia real (×1 en la capital, hasta ×2 a distancia 400, topado a partir de ahí), así que no es cosmético: es el anti-snowball de cohesión. No se elige, no se traslada, el Palacio no pinta nada, y el tope a 400 desactiva el anti-snowball más allá de ~5 provincias — `código: ✘` como mecánica. Ficha en `Docs/Mecanicas a desarrollar.md` §13.
-
-## Especialización y dependencia entre asentamientos (Fase 0.5) *(no estaba en este documento)*
+- ✅ **La capital como decisión del jugador** (Doc 2.2): la designa el Rey en un asentamiento con Palacio, con cooldown de traslado; sin tope en el mantenimiento por distancia — `código: ✔` (2026-10-02)
 - ✅ Cupo de asentamientos por nivel, ligado al nivel de Facción — `código: ✔` (`CUPO_NIVEL_ASENTAMIENTO`)
 - ✅ El suministro va por trueque o por comercio activo con otra Facción; cortarlo CONGELA capacidad, no reduce mantenimiento ni purga población ya asentada — `código: ✔`
 - ❌ Roles / vocación de asentamiento, costes en materiales procesados, transformación a escala, ejército como vector de demanda, huella urbana contra tierra cultivable — descartados en el propio documento de la fase — `código: —`

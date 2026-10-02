@@ -17,7 +17,6 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 9 | ASENTAMIENTO | Eventos de asentamiento | ✘ nada |
 | 10 | WORLDGEN | Landmarks reconocibles | ✘ nada |
 | 11 | JUGADOR | Progresión de Liderazgo del jugador | ✘ nada |
-| 13 | POLÍTICA | La capital como decisión del jugador | ✘ proxy placeholder |
 | 16 | JUGADOR | Qué hace un huésped: vida dentro de una Facción NPC | ✘ nada |
 | 18 | INTEL | Taberna + intel como asset con revelado temporal | ✘ nada |
 | 19 | POLÍTICA | El mapa político como entidad | ✘ nada |
@@ -134,32 +133,6 @@ Los **escuadrones** progresan por nivel y experiencia (Doc 5.16.3), sin cambiar 
 motor aún usa veteranía (§31). La mecánica de Liderazgo ya admite un efectivo > base sin tocar nada — solo falta la
 fuente.
 
-## 13. La capital como decisión del jugador
-
-La capital tiene que ser una **decisión consciente de los jugadores**, no algo heredado.
-
-Hoy no lo es. `encontrarCapital` (`engine/mantenimiento.ts`) devuelve **el asentamiento vivo más antiguo de la
-Facción** —literalmente `sort((a,b) => a.fundadoEn - b.fundadoEn)[0]`— y el propio código lo marca como
-*"placeholder = proxy de capital"*. De ahí salen tres problemas:
-
-1. **No se elige, se hereda.** El primer asentamiento es capital para siempre, aunque acabe siendo un
-   villorrio y la Facción tenga su verdadero centro de poder en otra parte. No hay forma de trasladarla.
-2. **El Palacio no pinta nada.** Existe el edificio `palacio` (Doc 4.2.1) y la capital lo ignora por completo.
-   Lo natural sería que la capital fuera *donde está el Palacio*, o que designarla lo exigiera.
-3. **Y sí tiene efecto mecánico real**, así que no es cosmético: el mantenimiento de cada asentamiento escala
-   con su distancia a la capital — `factorDistancia = 1 + min(1, dist/400) × (2-1)`, o sea ×1 en la capital y
-   hasta **×2 a distancia 400**, topado a partir de ahí. Es el mecanismo anti-snowball de "cohesión"
-   (Fase_0_5 §5.1).
-
-Dos cosas que hay que decidir con ello:
-
-- **Cómo se designa y qué cuesta trasladarla.** Si mover la capital es gratis, el jugador la reubica cada vez
-  que conquista algo y el factor de distancia deja de morder.
-- **El tope a 400 desactiva el anti-snowball.** Más allá de esa distancia no hay penalización adicional: un
-  imperio de punta a punta del mapa paga lo mismo que uno moderadamente disperso. Con provincias de radio ~76
-  (ver la escala del mundo), 400 son ~5 provincias — o sea que el "radio cómodo" de un reino ya está fijado en
-  el código sin que nadie lo decidiera.
-
 ## 16. Qué hace un huésped: vida dentro de una Facción NPC
 
 **Estado: idea, sin diseñar.** Sale de la entrada al mundo
@@ -216,7 +189,6 @@ bitácora: `Consideraciones/Tecnologia_Eras_I-III_Definicion.md`. Falta:
 - **Logro de `logistica_campana`** (Era IV, D30): la condición ya existe como consulta pura,
   `caminoCompartidoAbierto` (`engine/redCaminos.ts`, red de caminos del Doc 1.6); falta engancharla al catálogo al
   escribir la Era IV. Prioridad: antes de que un servidor llegue a la Era V (semana 26).
-- **Capital elegida** (§13): hoy el Rey adopta en el asentamiento vivo más antiguo.
 - **Equipo de asedio**: `carpinteria_militar` y `trabajos_asedio` se adoptan, pero su equipo no tiene efecto en combate.
 - **Clientes**: el panel de tecnología del cliente de administración está hecho (2026-10-02). Faltan, en BronzeAgeClient,
   el mismo panel, y en Conquest las definiciones de escuadra de las 15 tropas nuevas y los modelos de los edificios nuevos (CQ-006).

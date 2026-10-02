@@ -5,6 +5,7 @@
 // Ninguno de estos comandos produce eventos en el motor (devuelve la entidad actualizada y nada más), así que
 // los narra esta capa entera: es la que sabe a quién se nombró y en qué Facción.
 import type { CargoTipo } from '../../domain/types';
+import { designarCapital as designarCapitalEngine } from '../../engine/capital';
 import { asignarCargoLocal as asignarCargoLocalEngine, asignarEmbajador as asignarEmbajadorEngine, asignarRey as asignarReyEngine } from '../../engine/cargos';
 import { comprarCasa as comprarCasaEngine, cambiarResidencia as cambiarResidenciaEngine } from '../../engine/faccion';
 import { activarPolitica as activarPoliticaEngine } from '../../engine/politicas';
@@ -168,6 +169,31 @@ export const activarPolitica = comando<ParamsActivarPolitica, void>((estado, _ma
       mensaje: `Política "${params.politicaId}" activada por ${params.cargo}.`,
       payload: { asentamientoId: asentamiento.id, politicaId: params.politicaId, cargo: params.cargo } satisfies PayloadPoliticaActivada,
       asentamientoId: asentamiento.id,
+    }),
+  ]);
+});
+
+export interface ParamsDesignarCapital {
+  faccionId: string;
+  asentamientoId: string;
+}
+
+export interface PayloadCapitalDesignada {
+  faccionId: string;
+  asentamientoId: string;
+}
+
+/** El Rey designa la capital de su Facción (Doc 2.2): Palacio activo y cooldown entre traslados. */
+export const designarCapital = comando<ParamsDesignarCapital, void>((estado, _mapa, ctx, params) => {
+  const faccion = exigirFaccion(estado, params.faccionId);
+  const resultado = designarCapitalEngine(faccion, estado.asentamientos, params.asentamientoId, ctx.instante);
+  const siguiente = conAsentamientos(conFaccion(estado, resultado.faccion), resultado.asentamientos);
+  return exito(siguiente, [
+    evento(ctx, {
+      codigo: 'faccion.capital_designada',
+      mensaje: `${faccion.nombre} traslada su capital a ${params.asentamientoId}.`,
+      payload: { faccionId: faccion.id, asentamientoId: params.asentamientoId } satisfies PayloadCapitalDesignada,
+      asentamientoId: params.asentamientoId,
     }),
   ]);
 });

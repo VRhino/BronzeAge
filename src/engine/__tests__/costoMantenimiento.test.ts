@@ -32,4 +32,13 @@ describe('coste de mantenimiento', () => {
     expect(calcularCostoMantenimiento({ ...base, nivel: 2, nivelActual: 2 }, base).piedra).toBeGreaterThan(0);
     expect(calcularCostoMantenimiento({ ...base, nivel: 2, nivelActual: 1 }, base).piedra).toBeUndefined();
   });
+
+  it('la distancia a la capital encarece sin tope: ×2 a una escala, ×3 a dos y más allá', () => {
+    const base = plaza();
+    const aDistancia = (d: number): Asentamiento => ({ ...base, posicion: { x: base.posicion.x + d, y: base.posicion.y } });
+    const madera = (d: number) => calcularCostoMantenimiento(aDistancia(d), base).madera!;
+    expect(madera(MANTENIMIENTO.escalaDistancia) / madera(0)).toBeCloseTo(2);
+    expect(madera(2 * MANTENIMIENTO.escalaDistancia) / madera(0)).toBeCloseTo(3);
+    expect(madera(5 * MANTENIMIENTO.escalaDistancia) / madera(0)).toBeCloseTo(6);
+  });
 });

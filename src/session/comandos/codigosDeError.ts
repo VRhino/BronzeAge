@@ -9,6 +9,7 @@
 export const CODIGOS_ERROR = {
   // Los 14 que el MOTOR (`engine/*.ts`) lanza como excepción — mapeados desde la clase de error concreta en
   // `erroresDeDominio.ts`, que importa este catálogo en vez de escribir los literales por su cuenta.
+  capitalInvalida: 'faccion.capital_invalida',
   cargoInvalido: 'cargo.invalido',
   combateInvalido: 'combate.invalido',
   construccionInvalida: 'construccion.invalida',

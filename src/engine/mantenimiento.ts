@@ -91,11 +91,26 @@ function tieneRecintoCompletoDeNivelMinimo(asentamiento: Asentamiento, nivelMini
   return (asentamiento.recintos ?? []).some((r) => r.nivel >= nivelMinimo && integridadDeRecinto(r) >= 1);
 }
 
-/** "Centro de poder de la Facción" (Doc 4.5): placeholder = su asentamiento vivo más antiguo (proxy de capital). */
+/** La capital que el Rey designó (Doc 2.2), si sigue valiendo: es de esa Facción y conserva un Palacio activo. */
+export function capitalDesignada(faccionId: string, asentamientos: readonly Asentamiento[]): Asentamiento | undefined {
+  return asentamientos.find(
+    (a) =>
+      a.faccionId === faccionId &&
+      a.capitalDeFaccionId === faccionId &&
+      a.edificios.some((e) => e.tipo === 'palacio' && e.estado === 'activo')
+  );
+}
+
+/**
+ * La capital de la Facción (Doc 2.2): donde el Rey adopta tecnología y centro del mantenimiento por distancia
+ * (Doc 4.5). Es la que el Rey designó mientras valga; si no designó ninguna, o la perdió (conquista, Palacio
+ * destruido), el asentamiento vivo más antiguo, hasta que designe otra.
+ */
 export function encontrarCapital(faccionId: string, asentamientos: Asentamiento[]): Asentamiento | undefined {
-  return asentamientos
-    .filter((a) => a.faccionId === faccionId)
-    .sort((a, b) => a.fundadoEn - b.fundadoEn)[0];
+  return (
+    capitalDesignada(faccionId, asentamientos) ??
+    asentamientos.filter((a) => a.faccionId === faccionId).sort((a, b) => a.fundadoEn - b.fundadoEn)[0]
+  );
 }
 
 /**
@@ -129,7 +144,7 @@ export function calcularCostoMantenimiento(asentamiento: Asentamiento, capital: 
   const edificios = asentamiento.edificios.reduce((n, e) => n + (e.estado !== 'activo' ? 0 : e.tipo === 'vivienda' ? MANTENIMIENTO.pesoVivienda : 1), 0);
   const factorEdificios = 1 + edificios / MANTENIMIENTO.edificiosReferencia;
   const dist = capital ? distancia(asentamiento.posicion, capital.posicion) : 0;
-  const factorDistancia = 1 + Math.min(1, dist / MANTENIMIENTO.escalaDistancia) * (MANTENIMIENTO.factorDistanciaMax - 1);
+  const factorDistancia = 1 + dist / MANTENIMIENTO.escalaDistancia;
   const escala = factorEdificios * factorDistancia;
 
   const costo: Partial<Record<string, number>> = {
