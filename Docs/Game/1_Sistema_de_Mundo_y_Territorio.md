@@ -219,9 +219,11 @@ Trazado, edificios visibles y mercado. **Nunca** almacén exacto, guarnición, c
 
 Entrar es reconocimiento legítimo —ves si la ciudad es grande, rica y está amurallada— y por eso cerrar la puerta sigue siendo una defensa real sin que abrirla sea suicida.
 
-### 1.10.5 La puerta la controla el Gobernador
+### 1.10.5 La puerta: el Gobernador y el Rey (el exilio)
 
-El Gobernador fija quién puede entrar en su plaza: **abierta a todos**, **solo a su Facción**, **a su Facción y sus aliados**, o **cerrada**. Puede además vetar a jugadores concretos por encima de esa política.
+Los héroes que llegan a una plaza se agrupan por la relación entre su Facción y la de la plaza: **la propia Facción** (nunca se le cierra la puerta), **aliados** (alianza o vasallaje, en cualquier sentido), **enemigos** (en guerra, Doc 2.4.1) y **neutrales** (el resto). La puerta se cierra **por grupo**, y cada uno es un interruptor independiente: no dejar entrar a neutrales, no dejar entrar a aliados, no dejar entrar a enemigos. Una plaza que nadie ha tocado deja entrar a los suyos y a los aliados, y cierra a neutrales y enemigos.
+
+Lo fija el **Gobernador de la plaza** o **el Rey de su Facción**, plaza por plaza (no hay una puerta de Facción): es un único estado y cualquiera de los dos puede cambiarlo, manda el último. No cuesta nada y no caduca; se levanta dando acceso otra vez al grupo. Es el exilio de la Doc 2.8. Además, el Gobernador puede vetar a jugadores concretos por encima de los grupos (el veto sirve también para uno de la propia Facción).
 
 No es una política de las que expiran (Doc 4.4): una puerta que se abre sola a las dos horas y media no es una puerta.
 

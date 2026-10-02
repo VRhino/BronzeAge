@@ -219,6 +219,8 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   },
   romperRelacion: objeto({ relacionId: IDENTIFICADOR, iniciadorFaccionId: IDENTIFICADOR }, ['relacionId', 'iniciadorFaccionId']),
   rebelionVasallo: objeto({ relacionId: IDENTIFICADOR }, ['relacionId']),
+  declararGuerra: objeto({ faccionAId: IDENTIFICADOR, faccionBId: IDENTIFICADOR }, ['faccionAId', 'faccionBId']),
+  proponerPaz: objeto({ relacionId: IDENTIFICADOR, faccionId: IDENTIFICADOR }, ['relacionId', 'faccionId']),
   anexionar: objeto({ faccionAId: IDENTIFICADOR, faccionBId: IDENTIFICADOR }, ['faccionAId', 'faccionBId']),
   // Sin `minLength` en `nuevoNombre`: vacío cae a un nombre por defecto (`params.nuevoNombre || 'Facción
   // Fusionada'`, `diplomacia.ts`) — uso soportado, no un error de forma.
@@ -347,13 +349,13 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   entrarEnAsentamiento: objeto({ asentamientoId: IDENTIFICADOR, heroeId: IDENTIFICADOR }, ['asentamientoId', 'heroeId']),
   // La puerta (Doc 1.10.5). No va en `politicasActivas` porque no expira: una puerta que se abre sola a las
   // dos horas y media no es una puerta.
-  fijarPoliticaDeAcceso: objeto(
+  fijarPuerta: objeto(
     {
       asentamientoId: IDENTIFICADOR,
       heroeId: IDENTIFICADOR,
-      politica: { type: 'string', enum: ['abierto', 'faccion_y_aliados', 'solo_faccion', 'cerrado'] },
+      cerradaA: { type: 'array', items: { type: 'string', enum: ['neutrales', 'aliados', 'enemigos'] } },
     },
-    ['asentamientoId', 'heroeId', 'politica']
+    ['asentamientoId', 'heroeId', 'cerradaA']
   ),
   vetarJugador: objeto(
     { asentamientoId: IDENTIFICADOR, heroeId: IDENTIFICADOR, vetadoId: IDENTIFICADOR, vetar: { type: 'boolean' } },

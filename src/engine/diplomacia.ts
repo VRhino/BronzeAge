@@ -92,6 +92,50 @@ export function proponerAlianza(
 }
 
 /**
+ * Guerra (Doc 2.4.1): libre, sin condición previa. Se arrastra por vasallaje (Doc 2.4): quien declara guerra a un
+ * vasallo la declara también a su señor, y a un señor, a todos sus vasallos. Las Facciones del bando contrario que
+ * ya tienen alguna relación activa con quien declara (alianza, vasallaje o guerra) no se arrastran; solo falla la
+ * declaración si falla el objetivo directo.
+ */
+export function declararGuerra(
+  facciones: Faccion[],
+  relaciones: RelacionPolitica[],
+  atacanteId: string,
+  objetivoId: string,
+  instante: Instante,
+  contador = 0
+): RelacionPolitica[] {
+  validarPar(facciones, atacanteId, objetivoId, relaciones);
+  const vasallajes = relaciones.filter((r) => r.estado === 'activa' && r.tipo === 'vasallaje');
+  const señorId = vasallajes.find((r) => r.faccionBId === objetivoId)?.faccionAId ?? objetivoId;
+  const bando = new Set([señorId, objetivoId, ...vasallajes.filter((r) => r.faccionAId === señorId).map((r) => r.faccionBId)]);
+  return [...bando]
+    .filter((id) => id !== atacanteId && (id === objetivoId || !existeRelacionActiva(relaciones, atacanteId, id)))
+    .map((id) => ({
+      id: `guerra-${atacanteId}-${id}-${contador}`,
+      tipo: 'guerra' as const,
+      faccionAId: atacanteId,
+      faccionBId: id,
+      creadoEn: instante,
+      estado: 'activa' as const,
+    }));
+}
+
+/**
+ * Paz (Doc 2.4.1): mutua. La primera Facción en ofrecerla deja la propuesta sobre la guerra; cuando la ofrece la
+ * otra, la guerra se acaba. Devuelve si se firmó.
+ */
+export function proponerPaz(relaciones: RelacionPolitica[], relacionId: string, faccionId: string): { relaciones: RelacionPolitica[]; firmada: boolean } {
+  const guerra = relaciones.find((r) => r.id === relacionId);
+  if (!guerra || guerra.tipo !== 'guerra' || guerra.estado !== 'activa') throw new DiplomaciaInvalidaError('No hay una guerra activa con ese id.');
+  if (guerra.faccionAId !== faccionId && guerra.faccionBId !== faccionId) throw new DiplomaciaInvalidaError('Esa Facción no está en esa guerra.');
+  if (guerra.pazPropuestaPor === faccionId) throw new DiplomaciaInvalidaError('Esa Facción ya ofreció la paz; falta que responda la otra.');
+  const firmada = guerra.pazPropuestaPor !== undefined;
+  const nueva: RelacionPolitica = firmada ? { ...guerra, estado: 'rota' } : { ...guerra, pazPropuestaPor: faccionId };
+  return { relaciones: relaciones.map((r) => (r.id === relacionId ? nueva : r)), firmada };
+}
+
+/**
  * Ruptura vía 2 (Doc 2.4): liberación voluntaria por el señor (vasallaje, bonus de reputación para la señora,
  * Doc 2.7) o fin unilateral de una Alianza (penalización de reputación para quien la rompe, `iniciadorFaccionId`).
  */
@@ -103,6 +147,7 @@ export function romperRelacion(
 ): { facciones: Faccion[]; relaciones: RelacionPolitica[] } {
   const relacion = relaciones.find((r) => r.id === relacionId);
   if (!relacion) throw new DiplomaciaInvalidaError('La relación no existe.');
+  if (relacion.tipo === 'guerra') throw new DiplomaciaInvalidaError('Una guerra no se rompe: se acaba con la paz (`proponerPaz`).');
 
   const ajustes =
     relacion.tipo === 'vasallaje'
@@ -123,14 +168,16 @@ export function romperRelacion(
 
 /**
  * Ruptura vía 1 (Doc 2.4): rebelión forzada del vasallo. Cancela de inmediato los acuerdos de trueque vigentes
- * entre asentamientos de ambas Facciones (la declaración de guerra automática es mecánica de combate, Sprint 5).
+ * entre asentamientos de ambas Facciones y declara la guerra del vasallo contra su señor y el resto de sus vasallos (Doc 2.4).
  */
 export function rebelionVasallo(
   facciones: Faccion[],
   relaciones: RelacionPolitica[],
   acuerdos: AcuerdoTrueque[],
   asentamientos: Asentamiento[],
-  relacionId: string
+  relacionId: string,
+  instante: Instante,
+  contador = 0
 ): { facciones: Faccion[]; relaciones: RelacionPolitica[]; acuerdos: AcuerdoTrueque[]; eventos: EventoCrudo[] } {
   const relacion = relaciones.find((r) => r.id === relacionId);
   if (!relacion || relacion.tipo !== 'vasallaje') {
@@ -152,14 +199,17 @@ export function rebelionVasallo(
     { faccionId: relacion.faccionAId, delta: REPUTACION.penalizacionRebelionParaSenora, razon: 'rebelión de vasallo' },
   ]);
 
+  const rotas = relaciones.map((r) => (r.id === relacionId ? { ...r, estado: 'rota' as const } : r));
+  const guerras = declararGuerra(facciones, rotas, relacion.faccionBId, relacion.faccionAId, instante, contador);
+
   return {
     facciones: faccionesActualizadas,
-    relaciones: relaciones.map((r) => (r.id === relacionId ? { ...r, estado: 'rota' as const } : r)),
+    relaciones: [...rotas, ...guerras],
     acuerdos: acuerdosActualizados,
     eventos: [
       {
         codigo: 'diplomacia.rebelion_vasallo',
-        mensaje: `Rebelión: el vasallaje ${relacionId} se rompe y se cancelan sus acuerdos comerciales vigentes.`,
+        mensaje: `Rebelión: el vasallaje ${relacionId} se rompe, se cancelan sus acuerdos comerciales vigentes y empieza la guerra.`,
         payload: {
           relacionId,
           faccionSenoraId: relacion.faccionAId,

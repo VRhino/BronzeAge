@@ -941,7 +941,8 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       // +1 con la subida de nivel manual (Doc 4.5): `solicitarAscenso`, solo el Gobernador.
       // +1 con `alternarReceta` (Doc 4.2.1): parar o reanudar una receta de los talleres.
       // +1 con `adoptarTecnologia` (Doc 6.5): el Rey adopta en la capital.
-      expect(cuerpo.oneOf.length).toBe(79);
+      // +2 con la guerra (Doc 2.4.1): `declararGuerra` y `proponerPaz`.
+      expect(cuerpo.oneOf.length).toBe(81);
       const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
       expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
     });

@@ -23,13 +23,11 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 19 | POLÍTICA | El mapa político como entidad | ✘ nada |
 | 20 | TECNOLOGÍA | Tecnología por Eras: lo que falta tras las Eras I-III | ◐ Eras I-III hechas |
 | 21 | POLÍTICA | Los 4 gremios escasos a nivel de servidor | ✘ nada |
-| 22 | POLÍTICA | Exilio como política de soberanía | ✘ nada |
 | 23 | RECURSOS | Materiales exóticos | ✘ nada |
 | 24 | SERVIDOR | Ciclo de servidor de 12 meses + Maravilla + legado NPC | ◐ solo el edificio |
 | 25 | POLÍTICA | Coste/beneficio mecánico de las ordenanzas de trazado | ◐ existen, sin coste propio |
 | 26 | CIUDADANÍA | Los beneficios de ciudadanía sin implementar | ◐ 2 de 5 |
 | 27 | AMBIENTACIÓN | Identidad visual y de audio | ✘ nada |
-| 28 | MILITAR | Declaración formal de guerra | ✘ nada |
 | 29 | ONBOARDING | Curva de progresión inicial gradual | ✘ nada |
 | 30 | MILITAR | Batallas con héroes: guarnición, campamento y héroes bot | ◐ canon de campamento, guarnición y conquista; ciclo de `Batalla` fases 1 y 2 (falta el canal de tiempo real) |
 | 31 | HÉROE | Modelo de Héroe: uno por jugador y mundo, dueño de los escuadrones | ◐ fases 1-3 y Herido en la rama `heroe-dominio`; faltan perks y equipo |
@@ -220,9 +218,8 @@ bitácora: `Consideraciones/Tecnologia_Eras_I-III_Definicion.md`. Falta:
   escribir la Era IV. Prioridad: antes de que un servidor llegue a la Era V (semana 26).
 - **Capital elegida** (§13): hoy el Rey adopta en el asentamiento vivo más antiguo.
 - **Equipo de asedio**: `carpinteria_militar` y `trabajos_asedio` se adoptan, pero su equipo no tiene efecto en combate.
-- **Clientes**: panel de tecnología en el cliente de administración (`cliente/`): Era, logros y tecnologías por
-  Facción, a partir de `EstadoAdmin.tecnologia`; el cliente vuelve a compilar desde el 2026-09-30, así que ya se puede
-  hacer (Paso 11 del plan). El mismo panel en BronzeAgeClient; definiciones de escuadra de las 15 tropas nuevas y modelos de los edificios nuevos en Conquest (CQ-006).
+- **Clientes**: el panel de tecnología del cliente de administración está hecho (2026-10-02). Faltan, en BronzeAgeClient,
+  el mismo panel, y en Conquest las definiciones de escuadra de las 15 tropas nuevas y los modelos de los edificios nuevos (CQ-006).
 
 ## 21. Los 4 gremios escasos a nivel de servidor
 
@@ -235,11 +232,6 @@ decorativa del trazado urbano, sin relación con esta mecánica.
 Pendiente de decidir (Preguntas_Abiertas §14): valores numéricos de cada requisito por gremio, el título de
 servidor asociado a cada uno, el detalle de beneficios de Comerciantes/Artesanos/Constructores, y si hay
 margen de gracia antes de perder el gremio.
-
-## 22. Exilio como política de soberanía
-
-**Estado: diseño cerrado en el canon (Doc 5.9 / 2.8), `código: ✘` — nada.** El exilio como palanca de
-soberanía de una Facción sobre sus miembros. Sin implementar.
 
 ## 23. Materiales exóticos
 
@@ -290,13 +282,6 @@ También sin cerrar:
 títulos. Sin referencias estéticas concretas decididas (micénica, hitita, mesopotámica…). Preguntas_Abiertas
 §9. Es sobre todo trabajo de un repo de interfaz aparte, pero la *representación* (qué campo lleva el sigilo,
 dónde vive) toca este repo.
-
-## 28. Declaración formal de guerra
-
-**Estado: `código: ✘` — nada.** Hoy el combate es un cálculo puntual entre columnas y plazas; no existe un
-estado de "guerra activa" entre dos Facciones. Falta decidir si declarar la guerra requiere una condición
-previa (frontera compartida, casus belli) o es libre, y qué habilita (Preguntas_Abiertas §1). Bloquea el
-bloqueo/escolta militar de chokepoints que quedó a medias en Fase 0.3 (Preguntas_Abiertas §3).
 
 ## 29. Curva de progresión inicial gradual
 

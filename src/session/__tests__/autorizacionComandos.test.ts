@@ -165,14 +165,23 @@ describe('comprarCasa', () => {
 describe('la puerta (Doc 1.10.5)', () => {
   // Quien puede tocarla es autorización, no regla del comando: la matriz es la única verdad sobre quién
   // puede ejecutar qué, y repetir el chequeo dentro del comando dejaría dos que se desincronizan.
-  it('fijar la política de acceso exige ser el Gobernador', () => {
-    const { sesion, asentamientoId, fundador } = partidaConAsentamiento();
-    const params = { asentamientoId, heroeId: fundador, politica: 'abierto' as const };
+  it('fijar la puerta exige ser el Gobernador de la plaza o el Rey de su Facción', () => {
+    const { sesion, faccionId, asentamientoId, fundador, vecino } = partidaConAsentamiento();
+    const params = (heroeId: string) => ({ asentamientoId, heroeId, cerradaA: [] });
+    const autoriza = (heroeId: string, actor = heroeId) => verificarAutorizacion('fijarPuerta', params(heroeId), sesion.getState(), jugador(actor));
 
-    expect(verificarAutorizacion('fijarPoliticaDeAcceso', params, sesion.getState(), jugador(fundador))).toEqual(POR_DOMINIO);
+    // El fundador es el Rey: puede sin ser Gobernador. Un vecino cualquiera, no.
+    expect(autoriza(fundador)).toEqual(AUTORIZADO);
+    expect(autoriza(vecino)).toEqual(POR_DOMINIO);
 
-    sesion.ejecutar(asignarCargoLocal, { asentamientoId, cargo: 'gobernador', heroeId: fundador }, OPC);
-    expect(verificarAutorizacion('fijarPoliticaDeAcceso', params, sesion.getState(), jugador(fundador))).toEqual(AUTORIZADO);
+    // El Gobernador de la plaza, aunque no sea el Rey.
+    sesion.ejecutar(asignarCargoLocal, { asentamientoId, cargo: 'gobernador', heroeId: vecino }, OPC);
+    expect(autoriza(vecino)).toEqual(AUTORIZADO);
+
+    // Con otro Rey, el fundador deja de poder; y nadie actúa en nombre de otro.
+    sesion.ejecutar(asignarRey, { faccionId, heroeId: vecino }, OPC);
+    expect(autoriza(fundador)).toEqual(POR_DOMINIO);
+    expect(autoriza(vecino, fundador)).toEqual(POR_DOMINIO);
   });
 
   it('vetar también', () => {

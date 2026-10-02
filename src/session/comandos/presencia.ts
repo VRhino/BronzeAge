@@ -12,7 +12,7 @@
 //
 // No hay un cuarto: salir de tu propia residencia SIEMPRE es `salirAlMundo`, porque ahí tienes tu roster
 // entero delante y hay algo que elegir.
-import type { Asentamiento } from '../../domain/types';
+import type { GrupoPuerta } from '../../domain/types';
 import { guarnecer as guarnecerEngine, marcharA as marcharAEngine, salirAlMundo as salirAlMundoEngine, type ObjetivoEjercito } from '../../engine/ejercitos';
 import { conVeto } from '../../engine/pertenencia';
 import { conFotoTomadaPor, cruzarLaPuerta, retomarColumna, situarHeroes } from '../../engine/ubicacion';
@@ -307,10 +307,12 @@ export const marcharA = comando<ParamsMarcharA, { ejercitoId: string }>((estado,
   );
 });
 
-export interface ParamsFijarPoliticaDeAcceso {
+export interface ParamsFijarPuerta {
   asentamientoId: string;
+  /** Quien la fija: el Gobernador de la plaza o el Rey de su Facción. */
   heroeId: string;
-  politica: NonNullable<Asentamiento['politicaDeAcceso']>;
+  /** Grupos a los que se cierra la puerta; los que no figuran, entran. La propia Facción no es un grupo. */
+  cerradaA: GrupoPuerta[];
 }
 
 export interface ParamsVetarJugador {
@@ -323,7 +325,7 @@ export interface ParamsVetarJugador {
 
 export interface PayloadPuerta {
   asentamientoId: string;
-  politica: NonNullable<Asentamiento['politicaDeAcceso']>;
+  cerradaA: GrupoPuerta[];
 }
 
 export interface PayloadVeto {
@@ -333,25 +335,27 @@ export interface PayloadVeto {
 }
 
 /**
- * El Gobernador decide quién cruza su puerta (Doc 1.10.5).
+ * Gobernador o Rey deciden a qué grupos se les cierra la puerta (el exilio, Doc 1.10.5 y 2.8).
  *
  * No expira, a diferencia de las políticas de Doc 4.4: una puerta que se abre sola a las dos horas y media
- * no es una puerta. Por eso vive en el asentamiento y no en `politicasActivas`.
+ * no es una puerta. Por eso vive en el asentamiento y no en `politicasActivas`. Quién puede es autorización
+ * (`autorizacion.ts`); el comando solo fija el estado, que es único: lo que cambie uno lo ve el otro.
  */
-export const fijarPoliticaDeAcceso = comando<ParamsFijarPoliticaDeAcceso, void>((estado, _mapa, ctx, params) => {
+export const fijarPuerta = comando<ParamsFijarPuerta, void>((estado, _mapa, ctx, params) => {
   const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
+  const cerradaA = [...new Set(params.cerradaA)];
 
   return exito(
     conHistorialDeJugador(
-      conAsentamiento(estado, { ...asentamiento, politicaDeAcceso: params.politica }),
+      conAsentamiento(estado, { ...asentamiento, puertaCerradaA: cerradaA }),
       params.heroeId,
-      `Fija la puerta de ${asentamiento.id} en ${params.politica}.`
+      `Fija la puerta de ${asentamiento.id}: cerrada a ${cerradaA.join(', ') || 'nadie'}.`
     ),
     [
       evento(ctx, {
         codigo: 'asentamiento.puerta_fijada',
-        mensaje: `${asentamiento.id} pasa a estar ${params.politica === 'abierto' ? 'abierta a todos' : `en ${params.politica}`}.`,
-        payload: { asentamientoId: asentamiento.id, politica: params.politica } satisfies PayloadPuerta,
+        mensaje: cerradaA.length ? `${asentamiento.id} cierra su puerta a ${cerradaA.join(', ')}.` : `${asentamiento.id} abre su puerta a todos.`,
+        payload: { asentamientoId: asentamiento.id, cerradaA } satisfies PayloadPuerta,
         asentamientoId: asentamiento.id,
       }),
     ]
@@ -359,7 +363,7 @@ export const fijarPoliticaDeAcceso = comando<ParamsFijarPoliticaDeAcceso, void>(
 });
 
 /**
- * Veta (o perdona) a un jugador concreto por encima de la política (Doc 1.10.5).
+ * Veta (o perdona) a un jugador concreto por encima de los grupos (Doc 1.10.5).
  *
  * Es lo que hace útil tener la plaza abierta: se abre a todos MENOS a esos. **A un residente no se le veta**
  * — nadie se queda fuera de su propia casa, y echar a un vecino es el exilio (Doc 2.8), que es otra cosa y

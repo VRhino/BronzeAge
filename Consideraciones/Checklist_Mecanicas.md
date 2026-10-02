@@ -33,7 +33,6 @@ Diseñado (a veces "cerrado") pero **sin una línea en `src/`**:
 - **Gremios** (los 4 gremios escasos a nivel de servidor, con sus 4 requisitos y su tirada periódica):
   `patioDeGremios` en `constants.ts` es solo una parcela decorativa del trazado urbano, nada más.
   (`Mecanicas a desarrollar.md` §21)
-- **Exilio** como política de soberanía (Doc 5.9). (`Mecanicas a desarrollar.md` §22)
 - **Attack Timer** (Doc 5.6) — estaba marcado como pospuesto, sigue pospuesto.
 - **Comercio marítimo / unidades navales** — fuera de alcance de Fase 0, coherente.
 - **Ciclo de servidor de 12 meses + legado NPC de la Facción ganadora** (el edificio Maravilla sí está).
@@ -187,8 +186,8 @@ geometría, control por zona de influencia, peaje en oro, tipo de dominio y rend
 - ✅ `guarnecer` (marchar un ejército a una plaza propia y volcar la tropa en su guarnición) — `código: ✔` (2026-09-09). Comando `guarnecer` (`session/comandos/presencia.ts`), motor `guarnecer` (`engine/ejercitos.ts`). Las caravanas adjuntas quedan en estado `'aparcada'` en la plaza anfitriona (intercambian con su almacén vía `moverCargaCaravanaAparcada`, salen enganchadas a un ejército o con `enviarCaravanaAlOrigen`). Sin migración. Diseño y plan en `Ocupacion_Post_Conquista_Definicion.md` §2.3/§2.3d/§11.
 - ✅ Adaptación temática completa (cobre / estaño) — `código: ✔`
 - ✅ **Attack Timer** — decidido y **pospuesto** a fase posterior a Fase 0 (Doc 5.6) — `código: ✘`
-- ✅ **Exilio** como política de soberanía (Doc 5.9 / 2.8) — diseño cerrado, **`código: ✘`** (`Docs/Mecanicas a desarrollar.md` §22)
-- 🔶 Declaración formal de guerra — `código: ✘` (`Docs/Mecanicas a desarrollar.md` §28); unidades navales — fuera de alcance de Fase 0
+- ✅ **Exilio** (Doc 1.10.5 / 2.8): la puerta de cada asentamiento se cierra por grupo —neutrales, aliados, enemigos—, la fija el Gobernador o el Rey — `código: ✔` (2026-10-02)
+- ✅ Declaración formal de guerra (Doc 2.4.1): estado y paz mutua; atacar sigue libre. Unidades navales — fuera de alcance de Fase 0
 - 🔶 Establos / carros de guerra sin edificio de reclutamiento definido; `poderBase` de las tropas es placeholder — `código: ◐`
 - 🔶 Varianza de combate (abierta en `Movimiento_Ejercitos_Definicion.md` §1.4) — `código: ◐`
 

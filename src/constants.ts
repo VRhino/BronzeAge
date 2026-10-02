@@ -1,4 +1,4 @@
-import type { ContadorLogro, EdificioTipo, EraId, RecursoTipo, TecnologiaId } from './domain/types';
+import type { ContadorLogro, EdificioTipo, EraId, GrupoPuerta, RecursoTipo, TecnologiaId } from './domain/types';
 
 // Valores numéricos PLACEHOLDER — ver Consideraciones/Preguntas_Abiertas.md.
 // Centralizados aquí para poder re-balancear sin tocar la lógica del motor.
@@ -1894,6 +1894,12 @@ export const LOGISTICA = {
  *
  * PLACEHOLDER a calibrar por simulación, como el resto de constantes militares.
  */
+/** La puerta de los asentamientos (Doc 1.10.5). */
+export const PUERTA = {
+  /** Lo que cierra una plaza que nadie ha tocado: deja entrar a los suyos y a los amigos, y a nadie más. */
+  cerradaAPorDefecto: ['neutrales', 'enemigos'] as readonly GrupoPuerta[],
+} as const;
+
 export const MOVIMIENTO = {
   /**
    * Velocidad de una columna SIN escuadrones — un jugador viajando solo. Por encima de la tropa ligera (20)

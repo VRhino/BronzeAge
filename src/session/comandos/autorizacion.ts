@@ -216,6 +216,13 @@ function residenteConCargo(estado: GameSessionState, heroeId: string, asentamien
   return esResidente(asentamiento, heroeId) && presente(estado, heroeId, asentamientoId) && tieneCargoLocal(asentamiento, cargo, heroeId);
 }
 
+/** Rey de la Facción dueña de la plaza (y ciudadano de ella). Una plaza que no existe se deja pasar al dominio. */
+function esReyDeLaPlaza(estado: GameSessionState, heroeId: string, asentamientoId: string): boolean {
+  const asentamiento = buscarAsentamiento(estado, asentamientoId);
+  const faccion = asentamiento && buscarFaccion(estado, asentamiento.faccionId);
+  return !asentamiento || (!!faccion && esCiudadano(faccion, heroeId) && esReyDe(faccion, heroeId));
+}
+
 /** Ciudadano de esa Facción y además Rey o Embajador suyo — autoridad diplomática (Doc 2.2). */
 function conAutoridadDiplomatica(estado: GameSessionState, heroeId: string, faccionId: string): boolean {
   const faccion = buscarFaccion(estado, faccionId);
@@ -440,6 +447,15 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
     rolesPermitidos: ['jugador'],
     condicionJugador: (estado, heroeId, params) => conAutoridadDiplomatica(estado, heroeId, params.iniciadorFaccionId),
   },
+  // Declara Rey o Embajador de `faccionAId` (Doc 2); la paz la ofrece cualquiera de las dos Facciones en guerra.
+  declararGuerra: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, heroeId, params) => conAutoridadDiplomatica(estado, heroeId, params.faccionAId),
+  },
+  proponerPaz: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, heroeId, params) => conAutoridadDiplomatica(estado, heroeId, params.faccionId),
+  },
   rebelionVasallo: {
     rolesPermitidos: ['jugador'],
     condicionJugador: (estado, heroeId, params) => {
@@ -571,11 +587,13 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
     rolesPermitidos: ['jugador'],
     condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
   },
-  // La puerta es del Gobernador (Doc 1.10.5), igual que designar cargos: mismo cargo, misma condición.
-  fijarPoliticaDeAcceso: {
+  // La puerta es del Gobernador de la plaza o del Rey de su Facción (Doc 1.10.5): cualquiera de los dos puede
+  // cambiarla, plaza a plaza, y manda el último. El Rey no tiene que estar presente: es un acto de Facción.
+  fijarPuerta: {
     rolesPermitidos: ['jugador'],
     condicionJugador: (estado, heroeId, params) =>
-      heroeId === params.heroeId && residenteConCargo(estado, heroeId, params.asentamientoId, 'gobernador'),
+      heroeId === params.heroeId &&
+      (residenteConCargo(estado, heroeId, params.asentamientoId, 'gobernador') || esReyDeLaPlaza(estado, heroeId, params.asentamientoId)),
   },
   vetarJugador: {
     rolesPermitidos: ['jugador'],

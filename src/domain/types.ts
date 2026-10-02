@@ -564,6 +564,10 @@ export interface AscensoEnCurso {
   completaEn: Instante;
 }
 
+/** Grupos de héroes a los que se puede cerrar la puerta de un asentamiento (Doc 1.10.5): según la relación entre
+ * su Facción y la del asentamiento. `aliados` incluye a vasallos y señores; `enemigos`, a quien está en guerra (Doc 2.4.1). */
+export type GrupoPuerta = 'neutrales' | 'aliados' | 'enemigos';
+
 export interface Asentamiento {
   id: string;
   /** Nombre editable por el jugador (a petición del usuario) — puramente de presentación, igual que
@@ -611,13 +615,14 @@ export interface Asentamiento {
   /** Jugadores que compraron casa aquí (Doc 2.5), vía de ciudadanía distinta de fundar. */
   casasCompradas: string[];
   /**
-   * Quién puede cruzar la puerta (Doc 1.10.5). La fija el Gobernador y **no expira**: no es una política de
-   * las de Doc 4.4 — una puerta que se abre sola a las dos horas y media no es una puerta.
+   * A qué grupos de héroes se les cierra la puerta (el exilio, Doc 1.10.5 y 2.8). La fijan el Gobernador o el
+   * Rey y **no expira**: no es una política de las de Doc 4.4 — una puerta que se abre sola a las dos horas y
+   * media no es una puerta. La propia Facción no es un grupo bloqueable.
    *
-   * Ausente = `faccion_y_aliados`, que es lo que una ciudad hace por defecto: los suyos y los amigos entran,
-   * el resto no. Un residente entra SIEMPRE, mire lo que mire esto: nadie se queda fuera de su propia casa.
+   * Ausente = `PUERTA.cerradaAPorDefecto`: lo que una ciudad hace por defecto, que es dejar entrar a los suyos
+   * y a los amigos. Un residente entra SIEMPRE, mire lo que mire esto: nadie se queda fuera de su propia casa.
    */
-  politicaDeAcceso?: 'abierto' | 'faccion_y_aliados' | 'solo_faccion' | 'cerrado';
+  puertaCerradaA?: GrupoPuerta[];
   /** Vetados por el Gobernador, por encima de la política (Doc 1.10.5): un veto cierra la puerta a alguien
    * concreto aunque la plaza esté abierta de par en par. Ausente = nadie. */
   vetadosIds?: string[];
@@ -1096,7 +1101,8 @@ export interface PoliticaActiva {
  */
 export interface RelacionPolitica {
   id: string;
-  tipo: 'vasallaje' | 'alianza';
+  tipo: 'vasallaje' | 'alianza' | 'guerra';
+  /** En una guerra, `faccionAId` es quien la declaró. */
   faccionAId: string;
   faccionBId: string;
   /** Tributo periódico del vasallo al señor (Doc 2.4), solo aplica a vasallaje — `cantidadPorMinuto` unidades
@@ -1105,6 +1111,8 @@ export interface RelacionPolitica {
   /** Instante de mundo en que se estableció la relación (Fase D). */
   creadoEn: Instante;
   estado: 'activa' | 'rota';
+  /** Solo guerra: la Facción que ya ofreció la paz. La guerra acaba cuando la acepta la otra (Doc 2.4.1). */
+  pazPropuestaPor?: string;
 }
 
 // --- Sprint 6: Cierre (Doc 2.7/2.9, mantenimiento Doc 4.5) ---

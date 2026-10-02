@@ -200,7 +200,7 @@ export function cambiarResidencia(
   if (destino.casasCompradas.includes(heroeId) || destino.heroesFundadoresIds.includes(heroeId)) {
     throw new FaccionInvalidaError('El jugador ya reside en el destino.');
   }
-  if (destino.vetadosIds?.includes(heroeId) || destino.politicaDeAcceso === 'cerrado') {
+  if (destino.vetadosIds?.includes(heroeId)) {
     throw new FaccionInvalidaError('El asentamiento de destino no admite nuevos residentes ahora mismo.');
   }
 

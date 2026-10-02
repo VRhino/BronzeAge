@@ -2,14 +2,15 @@
 // titularidad de cargos. Son reglas de JUEGO (Doc 2.2/2.5), y por eso viven aquí y no en la capa de servidor:
 // la autorización de comandos (`session/comandos/autorizacion.ts`) las CONSULTA, no las redefine.
 //
-// Módulo hoja a propósito (solo importa `domain/types`): lo consumen `faccion.ts`, `cargos.ts`, `politicas.ts`
+// Módulo hoja a propósito (solo importa `domain/types` y `constants`, que no importan nada del motor): lo consumen `faccion.ts`, `cargos.ts`, `politicas.ts`
 // y `tropas.ts`, y cualquier import hacia otro módulo de `engine/` crearía un ciclo con alguno de ellos.
 //
 // Nace de una duplicación medida (revisión de separación negocio/infraestructura, 2026-08-25): el mapa
 // `CargoTipo -> campo de Asentamiento.cargos` estaba copiado CUATRO veces (dos en `cargos.ts`, una en
 // `politicas.ts`, una más en la capa de autorización), y la regla de residencia TRES (`tropas.ts`,
 // `faccion.ts`, autorización). Añadir un cargo nuevo obligaba a acertar en los cuatro sitios.
-import type { Asentamiento, CargoTipo, Faccion, RelacionPolitica } from '../domain/types';
+import { PUERTA } from '../constants';
+import type { Asentamiento, CargoTipo, Faccion, GrupoPuerta, RelacionPolitica } from '../domain/types';
 import { ReglaInvalidaError } from './errores';
 
 /** Único mapa `CargoTipo -> campo de `Asentamiento.cargos``. Si se añade un cargo, el tipo `CargoTipo`
@@ -38,7 +39,7 @@ export function resideEnOtroAsentamiento(asentamientos: Asentamiento[], asentami
  *
  *  - `'todo'` — RESIDE aquí: escuadrón nuevo, reposición, cualquier tropa que habiliten los edificios.
  *  - `'solo_reponer'` — no reside, pero es ciudadano de la Facción del asentamiento y el asentamiento lo
- *    permite (no vetado, `politicaDeAcceso` ≠ `cerrado`): SOLO reponer un escuadrón que ya tiene aquí —posado
+ *    permite (no vetado): SOLO reponer un escuadrón que ya tiene aquí —posado
  *    en la guarnición o traído en su columna—, nunca uno nuevo ni cambiar de composición. La regla "mueve tu
  *    propia tropa esté donde esté, pero fórjala solo en casa".
  *  - `'no'` — ni reside ni es plaza de su Facción con permiso.
@@ -55,7 +56,6 @@ export function puedeReclutarEn(
   if (esResidente(asentamiento, heroeId)) return 'todo';
   if (faccionDelJugadorId !== asentamiento.faccionId) return 'no';
   if (asentamiento.vetadosIds?.includes(heroeId)) return 'no';
-  if (asentamiento.politicaDeAcceso === 'cerrado') return 'no';
   return 'solo_reponer';
 }
 
@@ -110,6 +110,16 @@ export function estanAliadas(relaciones: readonly RelacionPolitica[], aId: strin
   );
 }
 
+/** ¿Hay una guerra activa entre estas dos Facciones (Doc 2.4.1)? */
+export function estanEnGuerra(relaciones: readonly RelacionPolitica[], aId: string, bId: string): boolean {
+  return relaciones.some(
+    (r) =>
+      r.estado === 'activa' &&
+      r.tipo === 'guerra' &&
+      ((r.faccionAId === aId && r.faccionBId === bId) || (r.faccionAId === bId && r.faccionBId === aId))
+  );
+}
+
 /**
  * ¿Comparten estas dos Facciones VISIÓN de guerra (niebla, Paso 4)? Alianza **o** vasallaje activo, en
  * cualquier dirección.
@@ -130,16 +140,28 @@ export function compartenVision(relaciones: readonly RelacionPolitica[], aId: st
 }
 
 /**
+ * A qué grupo de la puerta pertenece una Facción respecto a la del asentamiento (Doc 1.10.5). `'propia'` no se
+ * puede bloquear. Alianza y vasallaje van juntos en `aliados`; la guerra, en `enemigos`; el resto, `neutrales`.
+ */
+export function grupoDePuerta(relaciones: readonly RelacionPolitica[], faccionDelJugadorId: string, faccionDelAsentamientoId: string): GrupoPuerta | 'propia' {
+  if (faccionDelJugadorId === faccionDelAsentamientoId) return 'propia';
+  if (compartenVision(relaciones, faccionDelJugadorId, faccionDelAsentamientoId)) return 'aliados';
+  if (estanEnGuerra(relaciones, faccionDelJugadorId, faccionDelAsentamientoId)) return 'enemigos';
+  return 'neutrales';
+}
+
+/**
  * ¿Puede este jugador cruzar la puerta de esta plaza (Doc 1.10.5)?
  *
- * El orden de las tres capas es la regla, y no es intercambiable:
+ * El orden de las capas es la regla, y no es intercambiable:
  *
- *  1. **Un residente entra siempre.** Nadie se queda fuera de su propia casa, ni por política ni por veto
+ *  1. **Un residente entra siempre.** Nadie se queda fuera de su propia casa, ni por veto ni por grupo
  *     — un Gobernador que pudiera vetar a un vecino podría expulsarlo del juego sin pasar por el exilio
  *     (Doc 2.8), que es la vía que el diseño sí contempla para eso.
- *  2. **Un veto pesa más que la política.** Vetar a alguien concreto es lo que hace útil tener la plaza
+ *  2. **Un veto pesa más que el grupo.** Vetar a alguien concreto es lo que hace útil tener la plaza
  *     abierta: se abre a todos MENOS a esos.
- *  3. **Y luego la política**, que es lo general.
+ *  3. **Y luego el grupo** (el exilio): la puerta se cierra a neutrales, aliados o enemigos, nunca a la propia
+ *     Facción.
  */
 export function puedeEntrarEn(
   asentamiento: Asentamiento,
@@ -149,17 +171,8 @@ export function puedeEntrarEn(
 ): boolean {
   if (esResidente(asentamiento, heroeId)) return true;
   if (asentamiento.vetadosIds?.includes(heroeId)) return false;
-
-  switch (asentamiento.politicaDeAcceso ?? 'faccion_y_aliados') {
-    case 'abierto':
-      return true;
-    case 'cerrado':
-      return false;
-    case 'solo_faccion':
-      return faccionDelJugadorId === asentamiento.faccionId;
-    case 'faccion_y_aliados':
-      return faccionDelJugadorId === asentamiento.faccionId || estanAliadas(relaciones, faccionDelJugadorId, asentamiento.faccionId);
-  }
+  const grupo = grupoDePuerta(relaciones, faccionDelJugadorId, asentamiento.faccionId);
+  return grupo === 'propia' || !(asentamiento.puertaCerradaA ?? PUERTA.cerradaAPorDefecto).includes(grupo);
 }
 
 export class PuertaInvalidaError extends ReglaInvalidaError {}

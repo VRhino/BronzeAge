@@ -6,7 +6,7 @@
 // columna aparcada sobrevive a lo que le pase a la plaza, y volver a casa la deshace.
 import { describe, expect, it } from 'vitest';
 import { GameSession } from '../gameSession';
-import { entrarEnAsentamiento, fijarPoliticaDeAcceso, guarnecer, marcharA, salirAlMundo, salirDeAsentamiento, vetarJugador } from '../comandos/presencia';
+import { entrarEnAsentamiento, fijarPuerta, guarnecer, marcharA, salirAlMundo, salirDeAsentamiento, vetarJugador } from '../comandos/presencia';
 import { movilizarEjercito } from '../comandos/ejercitos';
 import { OPC, partidaConAsentamiento } from './fixtures';
 import { FUNDACION, LOGISTICA, MOVIMIENTO, VISION } from '../../constants';
@@ -396,7 +396,7 @@ describe('marcharA — el destino de un viajero se rectifica (Doc 5.12.1)', () =
   });
 });
 
-describe('la puerta la controla el Gobernador (Doc 1.10.5)', () => {
+describe('la puerta la controlan el Gobernador y el Rey (Doc 1.10.5)', () => {
   /** El fundador fuera con su columna, y esa misma plaza dejando de ser su residencia: el forastero. */
   function forasteroEnLaPuerta() {
     const base = partidaLista();
@@ -428,21 +428,21 @@ describe('la puerta la controla el Gobernador (Doc 1.10.5)', () => {
 
   it('por defecto una plaza deja entrar a los suyos', () => {
     const { sesion, asentamientoId, fundador } = forasteroEnLaPuerta();
-    expect(sesion.getState().asentamientos[0]!.politicaDeAcceso, 'sin decidir nada').toBeUndefined();
+    expect(sesion.getState().asentamientos[0]!.puertaCerradaA, 'sin decidir nada').toBeUndefined();
 
     expect(sesion.ejecutar(entrarEnAsentamiento, { asentamientoId, heroeId: fundador }, opcDe(fundador)).ok).toBe(true);
   });
 
-  it('cerrada, no entra ni uno de la propia Facción', () => {
+  it('cerrada a todos los grupos, uno de la propia Facción entra igual: no es un grupo bloqueable', () => {
     const { sesion, asentamientoId, fundador, vecino } = forasteroEnLaPuerta();
-    sesion.ejecutar(fijarPoliticaDeAcceso, { asentamientoId, heroeId: vecino, politica: 'cerrado' }, opcDe(vecino));
+    sesion.ejecutar(fijarPuerta, { asentamientoId, heroeId: vecino, cerradaA: ['neutrales', 'aliados', 'enemigos'] }, opcDe(vecino));
 
-    expect(sesion.ejecutar(entrarEnAsentamiento, { asentamientoId, heroeId: fundador }, opcDe(fundador)).ok).toBe(false);
+    expect(sesion.ejecutar(entrarEnAsentamiento, { asentamientoId, heroeId: fundador }, opcDe(fundador)).ok).toBe(true);
   });
 
-  it('el veto pesa MÁS que la política: abierta a todos menos a ti', () => {
+  it('el veto pesa MÁS que el grupo: abierta a todos menos a ti', () => {
     const { sesion, asentamientoId, fundador, vecino } = forasteroEnLaPuerta();
-    sesion.ejecutar(fijarPoliticaDeAcceso, { asentamientoId, heroeId: vecino, politica: 'abierto' }, opcDe(vecino));
+    sesion.ejecutar(fijarPuerta, { asentamientoId, heroeId: vecino, cerradaA: [] }, opcDe(vecino));
     sesion.ejecutar(vetarJugador, { asentamientoId, heroeId: vecino, vetadoId: fundador, vetar: true }, opcDe(vecino));
 
     expect(sesion.ejecutar(entrarEnAsentamiento, { asentamientoId, heroeId: fundador }, opcDe(fundador)).ok).toBe(false);
@@ -450,7 +450,7 @@ describe('la puerta la controla el Gobernador (Doc 1.10.5)', () => {
 
   it('y se levanta con el mismo comando', () => {
     const { sesion, asentamientoId, fundador, vecino } = forasteroEnLaPuerta();
-    sesion.ejecutar(fijarPoliticaDeAcceso, { asentamientoId, heroeId: vecino, politica: 'abierto' }, opcDe(vecino));
+    sesion.ejecutar(fijarPuerta, { asentamientoId, heroeId: vecino, cerradaA: [] }, opcDe(vecino));
     sesion.ejecutar(vetarJugador, { asentamientoId, heroeId: vecino, vetadoId: fundador, vetar: true }, opcDe(vecino));
 
     sesion.ejecutar(vetarJugador, { asentamientoId, heroeId: vecino, vetadoId: fundador, vetar: false }, opcDe(vecino));
@@ -467,7 +467,7 @@ describe('la puerta la controla el Gobernador (Doc 1.10.5)', () => {
       ...payload,
       state: {
         ...payload.state,
-        asentamientos: [{ ...a, politicaDeAcceso: 'cerrado' as const, cargos: { ...a.cargos, gobernadorId: vecino } }, ...payload.state.asentamientos.slice(1)],
+        asentamientos: [{ ...a, puertaCerradaA: ['neutrales', 'aliados', 'enemigos'], cargos: { ...a.cargos, gobernadorId: vecino } }, ...payload.state.asentamientos.slice(1)],
       },
     });
 

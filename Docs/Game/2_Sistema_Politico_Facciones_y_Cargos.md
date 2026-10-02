@@ -56,6 +56,13 @@ Una Facción puede someter a otra Facción entera como vasalla, o federarse con 
 3. Conquista por un tercero → destrucción total O anexión como vasalla del conquistador.
 4. Liberación automática si el señor es destruido o se "desarma".
 
+### 2.4.1 Guerra (decidido el 2026-10-02)
+- **Se declara libre**: sin frontera compartida ni casus belli. La declara el Rey o el Embajador de la Facción (comando `declararGuerra`), contra cualquier Facción con la que no tenga ya una relación activa: para atacar a una aliada o a un señor o vasallo propio hay que romper antes la relación.
+- **Se arrastra por vasallaje** (2.4): la guerra a un vasallo es guerra a su señor y a los demás vasallos de este; la guerra a un señor, a todos sus vasallos. Las Facciones del bando contrario con las que ya hay una relación activa no se arrastran.
+- **La rebelión de un vasallo** (2.4, ruptura 1) la declara: el vasallo queda en guerra con su señor y con el resto de sus vasallos.
+- **Termina por paz mutua**: cualquiera de las dos Facciones la ofrece (`proponerPaz`) y acaba cuando la otra la ofrece también. No hay otra vía; una guerra no se rompe con `romperRelacion`.
+- **Qué cambia hoy**: solo el estado. Marca quiénes son «enemigos» para la puerta de un asentamiento (Doc 1.10.5). Atacar o asediar sigue sin exigir guerra declarada, ni la guerra bloquea nada más; se endurecerá cuando se decida.
+
 ## 2.5 Ciudadanía
 - Se liga a la FACCIÓN del héroe (NO a la Liga completa — los vasallos mantienen ciudadanía separada de su señor).
 - Obtención, TRES vías:
@@ -63,7 +70,7 @@ Una Facción puede someter a otra Facción entera como vasalla, o federarse con 
   2. **Comprar una casa** en un asentamiento de la propia Facción. **No hay tope de residentes** por asentamiento: el tope que cuenta es el de héroes que entran en una batalla (Doc 5.15.1).
   3. **Crear la Facción** — quien la crea queda como su primer ciudadano **y su primer Rey** de inmediato, sin necesidad de fundar ni comprar casa todavía (ver 2.2, "una Facción SIEMPRE tiene Rey"). O **unirse a una ya existente** sin comprar casa ni residir en ningún asentamiento suyo — a diferencia de (2), no da residencia, solo ciudadanía.
 - **Abandonar** (el héroe solo puede dejar SU PROPIA Facción): quita la ciudadanía. Si el que se va era Rey, el trono pasa al siguiente ciudadano (queda vacío solo si era el último); si era Embajador, la embajada se libera. **No** libera la residencia (casa comprada o de fundador) ni los cargos LOCALES (Gobernador, etc.) en asentamientos de la Facción abandonada.
-- **Cambiar de residencia** (`cambiarResidencia`): atómico — deja la residencia actual (se libera su vivienda y se vacían sus cargos locales ahí) y toma una nueva en otro asentamiento **de la misma Facción** que lo permita (`politicaDeAcceso` ≠ `cerrado`, sin veto). **El héroe traslada con ella su campamento**: sus escuadrones pasan a la nueva residencia, y los que tuviera en la guarnición de la vieja dejan de serlo, porque solo se guarnece donde se reside (Doc 5.15.3). Es lo que hace un héroe para consolidar una conquista. Un HUÉRFANO (Doc 0) no tiene residencia de la que salir: usa comprar casa o unirse a una Facción.
+- **Cambiar de residencia** (`cambiarResidencia`): atómico — deja la residencia actual (se libera su vivienda y se vacían sus cargos locales ahí) y toma una nueva en otro asentamiento **de la misma Facción** que lo permita (sin veto). **El héroe traslada con ella su campamento**: sus escuadrones pasan a la nueva residencia, y los que tuviera en la guarnición de la vieja dejan de serlo, porque solo se guarnece donde se reside (Doc 5.15.3). Es lo que hace un héroe para consolidar una conquista. Un HUÉRFANO (Doc 0) no tiene residencia de la que salir: usa comprar casa o unirse a una Facción.
 - **1 héroe, 1 Facción a la vez**: crear una Facción o unirse a una se rechaza si el héroe ya es ciudadano de otra. Anti-abuso "crear, abandonar, crear" en bucle: tras abandonar, no se puede CREAR una Facción nueva hasta pasados 7 días (`CIUDADANIA.cooldownCreacionFaccionDias`) — el cooldown solo afecta a crear, no a unirse a una existente (esa vía sigue libre de inmediato tras abandonar).
 - Beneficios: ejercer cargo, iniciar caravanas en Mercados de la Facción, votar políticas, reclutar tropas (reclutar un escuadrón **nuevo** solo en tu residencia; **reponer** un escuadrón que ya tienes y **mover** escuadrones propios, en cualquier plaza de tu Facción que lo permita, estando presente — ver Doc 5.8), comisiones de comercio más bajas dentro de la misma Facción.
 - La residencia es UN solo asentamiento a la vez, nunca varios: comprar una segunda casa se rechaza mientras el héroe siga residiendo en otro.
@@ -96,7 +103,7 @@ Score PÚBLICO de -100 (nada confiable) a +100 (muy confiable).
 El score es PÚBLICO y total (no hay sistema de rumores/espionaje que lo oculte parcialmente).
 
 ## 2.8 Mecánicas heredadas de Iberia (política local)
-- **Exilio**: el Gobernador puede decretar exilio de jugadores de Facciones rivales de su territorio; el exiliado pierde parte de sus materiales como "tasas de emergencia" y debe desplazarse a recuperarlos.
+- **Exilio**: la puerta de cada asentamiento se puede cerrar por grupo —neutrales, aliados o vasallos, enemigos en guerra (2.4.1)—; nunca a la propia Facción. Lo cambia el Gobernador de ese asentamiento o el Rey, sin coste (decidido e implementado el 2026-10-02, Doc 1.10.5). La pérdida de materiales y tropas al perder la casa es la reubicación por conquista (Doc 5.15.5), no el exilio.
 - **Identidad visual**: cada Facción tiene su propio sigilo/estandarte; una Liga puede tener uno colectivo.
 
 ## 2.9 Progresión sin condición de victoria

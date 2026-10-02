@@ -169,13 +169,13 @@ Los exploradores a caballo son caballería de exploración, floja en combate. Un
 | Acción | Requisito |
 |---|---|
 | Reclutar un escuadrón **NUEVO** | Residir en el asentamiento **y** estar en él, y no tener ya un escuadrón de esa tropa en ninguna parte |
-| **Reponer** un escuadrón que ya tienes | Estar donde está el escuadrón (en tu campamento o en tu columna), dentro de una plaza **de tu Facción** que lo permita (`politicaDeAcceso` ≠ `cerrado`, sin veto). Gasta población y almacén de esa plaza, autolimitado por la reserva de trigo |
+| **Reponer** un escuadrón que ya tienes | Estar donde está el escuadrón (en tu campamento o en tu columna), dentro de una plaza **de tu Facción** que lo permita (sin veto). Gasta población y almacén de esa plaza, autolimitado por la reserva de trigo |
 | **Mover** escuadrones propios | Donde estén |
 
 Consolidar una plaza —reclutar escuadrones nuevos ahí, asignar guarnición, ejercer cargos, recaudación al 100%— exige residir en ella, es decir, trasladar allí el campamento (`cambiarResidencia`, Doc 2.5).
 
 ## 5.9 Exilio como política de soberanía (heredado de Iberia, ver también Doc 2.8)
-El Gobernador puede decretar exilio de jugadores enemigos de su territorio; coste de reubicación (pérdida parcial de materiales, desplazamiento físico para recuperarlos).
+Bloquear la puerta de un asentamiento a neutrales, aliados o enemigos (Doc 2.8), sin coste. No confundir con la reubicación al perder la casa por conquista (5.15.5).
 
 ## 5.10 Dónde se resuelve el combate
 Las batallas con algún héroe humano se juegan como partidas reales en Unity (5.15). Las que no tienen ninguno —NPC contra NPC, bandidos contra una caravana— se resuelven con números (5.2.5, 5.15.6). En los dos casos la batalla nace en el mapa de BronzeAge: los ejércitos se mueven por el mundo (5.12), y el combate empieza donde se encuentran. La abre quien decide atacar (5.12.3): a una columna, a una caravana, a un campamento de bandidos o a una plaza. Qué queda bloqueado mientras se juega y quién puede unirse, en 5.15.1.

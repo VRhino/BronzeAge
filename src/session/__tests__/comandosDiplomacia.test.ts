@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { instanteDeTest } from '../../engine/__tests__/fixtures';
 import { GameSession } from '../gameSession';
 import { crearFaccion } from '../comandos/crearFaccion';
-import { anexionar, proponerRelacion, rebelionVasallo, romperRelacion } from '../comandos/diplomacia';
+import { anexionar, declararGuerra, proponerPaz, proponerRelacion, rebelionVasallo, romperRelacion } from '../comandos/diplomacia';
 
 const OPC = { actor: 'jugador-test' };
 
@@ -118,5 +118,57 @@ describe('anexionar / fusionar', () => {
     const idsVivos = conVasallaje.getState().facciones.map((f) => f.id);
     // Ninguna id de faccionesNpcIds puede referirse a una Facción que ya no existe.
     for (const id of conVasallaje.getState().faccionesNpcIds) expect(idsVivos).toContain(id);
+  });
+});
+
+describe('declararGuerra y proponerPaz (Doc 2.4.1)', () => {
+  it('declarar crea la guerra y arrastra al señor del objetivo y a sus vasallos', () => {
+    const sesion = GameSession.crear('guerra-test', { seed: 42 });
+    const [a, b, c, d] = ['a', 'b', 'c', 'd'].map(
+      (n) => sesion.ejecutar(crearFaccion, { nombre: n }, { actor: `j-${n}` }).datos!.faccionId
+    );
+    // b es vasallo de c; c tiene otro vasallo, d.
+    sesion.ejecutar(proponerRelacion, { tipo: 'vasallaje', faccionAId: c!, faccionBId: b! }, OPC);
+    sesion.ejecutar(proponerRelacion, { tipo: 'vasallaje', faccionAId: c!, faccionBId: d! }, OPC);
+
+    const r = sesion.ejecutar(declararGuerra, { faccionAId: a!, faccionBId: b! }, OPC);
+
+    expect(r.ok).toBe(true);
+    const guerras = sesion.getState().relaciones.filter((x) => x.tipo === 'guerra');
+    expect(guerras.map((g) => g.faccionBId).sort()).toEqual([b, c, d].sort());
+  });
+
+  it('rechazo: no se declara guerra a un aliado', () => {
+    const { sesion, a, b } = partidaConDosFacciones();
+    sesion.ejecutar(proponerRelacion, { tipo: 'alianza', faccionAId: a, faccionBId: b }, OPC);
+    const antes = sesion.getState();
+    expect(sesion.ejecutar(declararGuerra, { faccionAId: a, faccionBId: b }, OPC).ok).toBe(false);
+    expect(sesion.getState()).toBe(antes);
+  });
+
+  it('la paz es mutua: la primera oferta no la acaba, la de la otra Facción sí', () => {
+    const { sesion, a, b } = partidaConDosFacciones();
+    const [guerraId] = sesion.ejecutar(declararGuerra, { faccionAId: a, faccionBId: b }, OPC).datos!.relacionIds;
+
+    expect(sesion.ejecutar(proponerPaz, { relacionId: guerraId!, faccionId: a }, OPC).datos?.firmada).toBe(false);
+    expect(sesion.ejecutar(proponerPaz, { relacionId: guerraId!, faccionId: a }, OPC).ok).toBe(false);
+    expect(sesion.getState().relaciones[0]!.estado).toBe('activa');
+
+    expect(sesion.ejecutar(proponerPaz, { relacionId: guerraId!, faccionId: b }, OPC).datos?.firmada).toBe(true);
+    expect(sesion.getState().relaciones[0]!.estado).toBe('rota');
+  });
+
+  it('una guerra no se rompe con romperRelacion', () => {
+    const { sesion, a, b } = partidaConDosFacciones();
+    const [guerraId] = sesion.ejecutar(declararGuerra, { faccionAId: a, faccionBId: b }, OPC).datos!.relacionIds;
+    expect(sesion.ejecutar(romperRelacion, { relacionId: guerraId!, iniciadorFaccionId: a }, OPC).ok).toBe(false);
+  });
+
+  it('la rebelión del vasallo deja a ambos en guerra', () => {
+    const { sesion, a, b } = partidaConDosFacciones();
+    const vasallajeId = sesion.ejecutar(proponerRelacion, { tipo: 'vasallaje', faccionAId: a, faccionBId: b }, OPC).datos!.relacionId;
+    sesion.ejecutar(rebelionVasallo, { relacionId: vasallajeId }, OPC);
+    const guerra = sesion.getState().relaciones.find((x) => x.tipo === 'guerra');
+    expect(guerra).toMatchObject({ faccionAId: b, faccionBId: a, estado: 'activa' });
   });
 });

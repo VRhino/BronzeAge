@@ -16,7 +16,7 @@ import { crearHeroe } from './crearHeroe';
 import { asignarGuarnicion, borrarLoadout, guardarLoadout, repartirPuntos, retirarGuarnicion } from './heroe';
 import { crearFaccionNpc } from './crearFaccionNpc';
 import { activarPolitica, asignarCargoLocal, asignarEmbajador, asignarRey, cambiarResidencia, comprarCasa } from './cargos';
-import { anexionar, fusionar, proponerRelacion, rebelionVasallo, romperRelacion } from './diplomacia';
+import { anexionar, declararGuerra, fusionar, proponerPaz, proponerRelacion, rebelionVasallo, romperRelacion } from './diplomacia';
 import {
   aceptarTrueque,
   agregarCarroCaravana,
@@ -59,7 +59,7 @@ import {
   soltarCaravana,
   unirseAEjercito,
 } from './ejercitos';
-import { entrarEnAsentamiento, fijarPoliticaDeAcceso, guarnecer, marcharA, salirAlMundo, salirDeAsentamiento, vetarJugador } from './presencia';
+import { entrarEnAsentamiento, fijarPuerta, guarnecer, marcharA, salirAlMundo, salirDeAsentamiento, vetarJugador } from './presencia';
 import { cederLiderazgo, responderPeticionDeUnion, separarseDelEjercito, unirseEnCampo } from './columna';
 import { atacar, dejarDePerseguir, inspeccionar, perseguir } from './interaccion';
 import { cancelarBatalla, conCandadoDeBatalla, unirseABatalla } from './batalla';
@@ -87,6 +87,8 @@ const MANEJADORES = {
   proponerRelacion,
   rebelionVasallo,
   romperRelacion,
+  declararGuerra,
+  proponerPaz,
   colocarOrdenMercado,
   crearCaravana,
   agregarCarroCaravana,
@@ -106,7 +108,7 @@ const MANEJADORES = {
   entrarEnAsentamiento,
   salirDeAsentamiento,
   guarnecer,
-  fijarPoliticaDeAcceso,
+  fijarPuerta,
   vetarJugador,
   inspeccionar,
   atacar,

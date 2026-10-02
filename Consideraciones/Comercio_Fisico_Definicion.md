@@ -164,5 +164,5 @@ Quedan dos palancas menores, sin diseñar:
   `colocarOrdenMercado` exige residencia/ciudadanía, así que solo toma. Abrirlo pediría decidir el cupo, la
   comisión de publicar siendo de fuera, y qué pasa con la orden si el forastero se marcha.
 - **¿Puede el Gobernador cerrar el mercado sin cerrar la puerta?** Es la palanca diplomática obvia —dejar
-  pasar pero no vender, o vender solo a aliados—. Hoy `politicaDeAcceso` (jugador situado, Doc 1.10) controla
+  pasar pero no vender, o vender solo a aliados—. Hoy la puerta por grupos (`puertaCerradaA`, Doc 1.10.5) controla
   la puerta pero no el mostrador. Sería una segunda política de acceso, o un modificador de la misma.

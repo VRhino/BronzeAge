@@ -159,9 +159,10 @@ Asentamiento
   cargos: CargosAsentamiento       ver abajo — existente
   casasCompradas[]                 ciudadanía por compra, distinta de fundar — existente. Tras este modelo,
                                    heroeId[]
-  politicaDeAcceso?               'abierto' | 'faccion_y_aliados' | 'solo_faccion' | 'cerrado'. Ausente =
-                                   'faccion_y_aliados' — existente
-  vetadosIds?[]                    vetados por el Gobernador, por encima de la política — existente. Tras
+  puertaCerradaA?[]                grupos a los que se cierra la puerta: 'neutrales' | 'aliados' | 'enemigos'
+                                   (Doc 1.10.5, el exilio). Ausente = ['neutrales', 'enemigos']. La propia
+                                   Facción no es un grupo. Sustituye a `politicaDeAcceso` (2026-10-02) — NUEVO
+  vetadosIds?[]                    vetados por el Gobernador, por encima de los grupos — existente. Tras
                                    este modelo, heroeId[]
   politicasActivas: PoliticaActiva[]   ver abajo — existente
   escuadrones: Escuadron[]          existente — DESAPARECE en el modelo de héroe: las escuadras pasan a
@@ -1145,7 +1146,7 @@ es también un asunto de PERMISO, y hay que ser preciso con la diferencia:
   residencia/ciudadanía del héroe, no "cualquier asentamiento donde el héroe esté físicamente parado en
   este instante". Estar de pie dentro de un asentamiento AJENO (uno donde no tiene residencia/ciudadanía) no
   concede por sí solo ver su almacén/cola con detalle — eso lo decide la política de acceso del
-  asentamiento (`Asentamiento.politicaDeAcceso`, §3) y la ciudadanía, no la mera presencia. Este modelo NO
+  asentamiento (`Asentamiento.puertaCerradaA`, §3) y la ciudadanía, no la mera presencia. Este modelo NO
   amplía ese permiso: quien tenga acceso hoy en la proyección de Vite tiene el mismo acceso en el DTO de
   Unity, ni más ni menos.
 - **Filtrado por niebla de guerra/memoria (dentro de los asentamientos PROPIOS):** si el héroe no está

@@ -10,6 +10,8 @@ import {
   proponerAlianza as proponerAlianzaEngine,
   romperRelacion as romperRelacionEngine,
   rebelionVasallo as rebelionVasalloEngine,
+  declararGuerra as declararGuerraEngine,
+  proponerPaz as proponerPazEngine,
 } from '../../engine/diplomacia';
 import { anexionar as anexionarEngine, fusionar as fusionarEngine } from '../../engine/fusion';
 import type { GameSessionState } from '../estado';
@@ -108,7 +110,15 @@ export interface ParamsRebelionVasallo {
 export const rebelionVasallo = comando<ParamsRebelionVasallo, void>((estado, _mapa, ctx, params) => {
   if (!params.relacionId) rechazar(CODIGOS_ERROR.diplomaciaRelacionNoIndicada);
 
-  const resultado = rebelionVasalloEngine(estado.facciones, estado.relaciones, estado.acuerdos, estado.asentamientos, params.relacionId);
+  const resultado = rebelionVasalloEngine(
+    estado.facciones,
+    estado.relaciones,
+    estado.acuerdos,
+    estado.asentamientos,
+    params.relacionId,
+    ctx.instante,
+    ctx.ids.siguiente()
+  );
   const siguiente: GameSessionState = {
     ...estado,
     facciones: resultado.facciones,
@@ -116,6 +126,65 @@ export const rebelionVasallo = comando<ParamsRebelionVasallo, void>((estado, _ma
     acuerdos: resultado.acuerdos,
   };
   return exito(siguiente, desdeCrudos(ctx, resultado.eventos));
+});
+
+export interface ParamsDeclararGuerra {
+  /** Quien declara. */
+  faccionAId: string;
+  faccionBId: string;
+}
+
+export interface PayloadGuerraDeclarada {
+  relacionIds: string[];
+  faccionAId: string;
+  /** El objetivo directo y, por vasallaje, su bando (Doc 2.4). */
+  faccionesEnemigasIds: string[];
+}
+
+export const declararGuerra = comando<ParamsDeclararGuerra, { relacionIds: string[] }>((estado, _mapa, ctx, params) => {
+  const guerras = declararGuerraEngine(estado.facciones, estado.relaciones, params.faccionAId, params.faccionBId, ctx.instante, ctx.ids.siguiente());
+  const siguiente: GameSessionState = { ...estado, relaciones: [...estado.relaciones, ...guerras] };
+  const relacionIds = guerras.map((g) => g.id);
+  return exito(
+    siguiente,
+    [
+      evento(ctx, {
+        codigo: 'diplomacia.guerra_declarada',
+        mensaje: `${params.faccionAId} declara la guerra a ${guerras.map((g) => g.faccionBId).join(', ')}.`,
+        payload: { relacionIds, faccionAId: params.faccionAId, faccionesEnemigasIds: guerras.map((g) => g.faccionBId) } satisfies PayloadGuerraDeclarada,
+      }),
+    ],
+    { relacionIds }
+  );
+});
+
+export interface ParamsProponerPaz {
+  relacionId: string;
+  /** Quien ofrece la paz: una de las dos Facciones de la guerra. */
+  faccionId: string;
+}
+
+export interface PayloadPaz {
+  relacionId: string;
+  faccionId: string;
+  firmada: boolean;
+}
+
+export const proponerPaz = comando<ParamsProponerPaz, { firmada: boolean }>((estado, _mapa, ctx, params) => {
+  if (!params.relacionId) rechazar(CODIGOS_ERROR.diplomaciaRelacionNoIndicada);
+
+  const { relaciones, firmada } = proponerPazEngine(estado.relaciones, params.relacionId, params.faccionId);
+  return exito(
+    { ...estado, relaciones },
+    [
+      evento(ctx, {
+        codigo: firmada ? 'diplomacia.paz_firmada' : 'diplomacia.paz_propuesta',
+        mensaje: firmada ? `La guerra ${params.relacionId} termina en paz.` : `${params.faccionId} ofrece la paz en la guerra ${params.relacionId}.`,
+        payload: { relacionId: params.relacionId, faccionId: params.faccionId, firmada } satisfies PayloadPaz,
+      }),
+    ],
+    { firmada }
+  );
 });
 
 export interface ParamsAnexionar {
