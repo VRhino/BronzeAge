@@ -943,7 +943,8 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       // +1 con `adoptarTecnologia` (Doc 6.5): el Rey adopta en la capital.
       // +2 con la guerra (Doc 2.4.1): `declararGuerra` y `proponerPaz`.
       // +1 con `designarCapital` (Doc 2.2): el Rey elige la capital.
-      expect(cuerpo.oneOf.length).toBe(82);
+      // +1 con `dejarResidencia` (Doc 2.5): dejar la casa sin dejar la Facción.
+      expect(cuerpo.oneOf.length).toBe(83);
       const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
       expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
     });

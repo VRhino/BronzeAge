@@ -1,6 +1,7 @@
 import type { Asentamiento, Faccion } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
-import { CAP_FUNDACION_POR_NIVEL, CUPO_NIVEL_ASENTAMIENTO, NIVEL_FACCION } from '../constants';
+import { CAP_FUNDACION_POR_NIVEL, CIUDADANIA, CUPO_NIVEL_ASENTAMIENTO, NIVEL_FACCION } from '../constants';
+import { dias, transcurrido, type Instante } from '../domain/tiempo';
 import { CAMPO_CARGO, esResidente, resideEnOtroAsentamiento } from './pertenencia';
 import { ReglaInvalidaError } from './errores';
 
@@ -96,9 +97,7 @@ export function otorgarCiudadania(faccion: Faccion, heroeId: string): Faccion {
  * el fundador primero). Solo queda `reyId: null` si la Facción se queda sin nadie. Si el heredero ocupaba la
  * embajada, esta se vacía (la re-designa el nuevo Rey). El Embajador que se va también libera su cargo.
  *
- * NO toca residencia (`Asentamiento.casasCompradas`/`heroesFundadoresIds`) ni cargos LOCALES (Gobernador,
- * etc.): Doc 2.5 no define qué pasa con la vivienda al abandonar la Facción, y no existe todavía un comando
- * "dejar residencia"/"vender casa" que lo resuelva — limitación documentada, no un olvido (ver `dejarFaccion.ts`).
+ * NO toca la residencia: eso lo hace el comando con `dejarResidencia`, que también la libera al abandonar la Facción.
  */
 export function quitarCiudadania(faccion: Faccion, heroeId: string): Faccion {
   if (!esCiudadano(faccion, heroeId)) return faccion;
@@ -126,6 +125,41 @@ export function registrarDerrota(
 ): Faccion[] {
   if (asentamientos.some((a) => a.faccionId === perdedoraId)) return [...facciones];
   return facciones.map((f) => (f.id === perdedoraId ? { ...f, derrotadaPor: ganadoraId } : f));
+}
+
+/**
+ * Doc 2.5: no se cambia de residencia ni se compra casa hasta pasado `CIUDADANIA.cooldownCambioResidenciaDias` desde el
+ * último cambio (`cambiarResidencia` o `dejarResidencia`). Quien nunca ha cambiado (`undefined`) está libre, y la
+ * reubicación forzosa por conquista no cuenta. Lo llaman los comandos, que son quienes guardan el instante.
+ */
+export function exigirSinCooldownDeResidencia(ultimoCambioEn: Instante | undefined, instante: Instante): void {
+  if (ultimoCambioEn !== undefined && transcurrido(ultimoCambioEn, instante) < dias(CIUDADANIA.cooldownCambioResidenciaDias)) {
+    throw new FaccionInvalidaError(`Cambiaste de residencia hace poco: espera ${CIUDADANIA.cooldownCambioResidenciaDias} días de mundo entre cambios.`);
+  }
+}
+
+/** El asentamiento sin ese héroe como residente (ni por fundar ni por comprar casa) y sin sus cargos locales: no se gobierna donde no se vive. */
+function sinResidente(asentamiento: Asentamiento, heroeId: string): Asentamiento {
+  const cargos = { ...asentamiento.cargos };
+  for (const campo of Object.values(CAMPO_CARGO)) {
+    if (cargos[campo] === heroeId) cargos[campo] = null;
+  }
+  return {
+    ...asentamiento,
+    heroesFundadoresIds: asentamiento.heroesFundadoresIds.filter((id) => id !== heroeId),
+    casasCompradas: asentamiento.casasCompradas.filter((id) => id !== heroeId),
+    cargos,
+  };
+}
+
+/**
+ * Dejar la residencia (Doc 2.5, 2026-10-02): libera la vivienda y vacía los cargos locales ahí, sin tomar otra casa. El
+ * héroe sigue siendo ciudadano, pero sin residencia es huérfano (Doc 0) hasta que compre casa o se mude. No hay reembolso.
+ */
+export function dejarResidencia(asentamientos: readonly Asentamiento[], heroeId: string): Asentamiento {
+  const actual = asentamientos.find((a) => esResidente(a, heroeId));
+  if (!actual) throw new FaccionInvalidaError('El jugador no reside en ningún asentamiento.');
+  return sinResidente(actual, heroeId);
 }
 
 /**
@@ -177,9 +211,7 @@ export function comprarCasa(
  * La ciudadanía de Facción no cambia (es la misma Facción). Un HUÉRFANO —sin residencia de la que salir— usa
  * `comprarCasa`/`unirseAFaccion`, no este comando.
  *
- * `ponytail:` sin cooldown ni coste todavía — el abuso "mudarse en cada conquista para exprimir el impuesto"
- * necesita un `Jugador.ultimoCambioResidenciaEn` y jugadores reales (§13b, sin implementar). Añadir cuando
- * muerda de verdad — `CIUDADANIA.cooldownCambioResidenciaDias` está reservado en el doc.
+ * Tiene cooldown (`exigirSinCooldownDeResidencia`), que comprueba el comando; sin coste.
  */
 export function cambiarResidencia(
   facciones: Faccion[],
@@ -204,17 +236,8 @@ export function cambiarResidencia(
     throw new FaccionInvalidaError('El asentamiento de destino no admite nuevos residentes ahora mismo.');
   }
 
-  const cargosOrigen = { ...origen.cargos };
-  for (const campo of Object.values(CAMPO_CARGO)) {
-    if (cargosOrigen[campo] === heroeId) cargosOrigen[campo] = null;
-  }
   return {
-    origen: {
-      ...origen,
-      heroesFundadoresIds: origen.heroesFundadoresIds.filter((id) => id !== heroeId),
-      casasCompradas: origen.casasCompradas.filter((id) => id !== heroeId),
-      cargos: cargosOrigen,
-    },
+    origen: sinResidente(origen, heroeId),
     destino: { ...destino, casasCompradas: [...destino.casasCompradas, heroeId] },
   };
 }

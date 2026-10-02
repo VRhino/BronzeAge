@@ -4,14 +4,12 @@
 // Estampa `salidasFaccionPorHeroe` para que `crearFaccion` pueda aplicar el cooldown anti-abuso — es el
 // ÚNICO comando que lo escribe.
 //
-// LIMITACIÓN DOCUMENTADA, no un olvido: no toca residencia (`Asentamiento.casasCompradas`/
-// `heroesFundadoresIds`) ni cargos LOCALES (Gobernador, etc.) en asentamientos de la Facción abandonada —
-// Doc 2.5 no define qué pasa con la vivienda al abandonar, y no existe todavía un comando "dejar
-// residencia"/"vender casa" que lo resuelva. Un jugador puede quedar sin ciudadanía y seguir figurando como
-// residente/cargo local de un asentamiento de la Facción que dejó. `quitarCiudadania` (`engine/faccion.ts`) sí
-// libera Rey/Embajador (cargos de FACCIÓN, no locales) — ver el comentario ahí.
-import { esCiudadano, quitarCiudadania } from '../../engine/faccion';
-import { comando, conFaccion, rechazar } from './ayudas';
+// Al irse también deja su residencia y sus cargos LOCALES (Doc 2.5, 2026-10-02): `dejarResidencia`. `quitarCiudadania`
+// (`engine/faccion.ts`) libera Rey/Embajador, los cargos de FACCIÓN. Abandonar no cuenta para el cooldown de residencia.
+import { dejarResidencia, esCiudadano, quitarCiudadania } from '../../engine/faccion';
+import { esResidente } from '../../engine/pertenencia';
+import { sinGuarnicion } from '../../engine/tropa';
+import { comando, conAsentamiento, conFaccion, rechazar } from './ayudas';
 import { exito } from './tipos';
 import { CODIGOS_ERROR } from './codigosDeError';
 import { evento } from './eventos';
@@ -28,8 +26,11 @@ export const dejarFaccion = comando<ParamsDejarFaccion, void>((estado, _mapa, ct
   if (!faccion) rechazar(CODIGOS_ERROR.faccionNoPerteneces);
 
   const actualizada = quitarCiudadania(faccion, ctx.actor);
+  // Se va con su casa: sin ciudadanía no se reside ni se gobierna (Doc 2.5, 2026-10-02). Sigue siendo suyo lo que lleva.
+  const residencia = estado.asentamientos.some((a) => esResidente(a, ctx.actor)) ? dejarResidencia(estado.asentamientos, ctx.actor) : undefined;
+  const sinCasa = residencia ? { ...conAsentamiento(estado, residencia), heroes: sinGuarnicion(estado.heroes, ctx.actor) } : estado;
   const siguiente = {
-    ...conFaccion(estado, actualizada),
+    ...conFaccion(sinCasa, actualizada),
     salidasFaccionPorHeroe: { ...estado.salidasFaccionPorHeroe, [ctx.actor]: ctx.instante },
   };
   return exito(siguiente, [

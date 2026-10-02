@@ -15,7 +15,7 @@ import { dejarFaccion } from './dejarFaccion';
 import { crearHeroe } from './crearHeroe';
 import { asignarGuarnicion, borrarLoadout, guardarLoadout, repartirPuntos, retirarGuarnicion } from './heroe';
 import { crearFaccionNpc } from './crearFaccionNpc';
-import { activarPolitica, asignarCargoLocal, asignarEmbajador, asignarRey, cambiarResidencia, comprarCasa, designarCapital } from './cargos';
+import { activarPolitica, asignarCargoLocal, asignarEmbajador, asignarRey, cambiarResidencia, comprarCasa, dejarResidencia, designarCapital } from './cargos';
 import { anexionar, declararGuerra, fusionar, proponerPaz, proponerRelacion, rebelionVasallo, romperRelacion } from './diplomacia';
 import {
   aceptarTrueque,
@@ -83,6 +83,7 @@ const MANEJADORES = {
   asignarRey,
   comprarCasa,
   cambiarResidencia,
+  dejarResidencia,
   anexionar,
   fusionar,
   proponerRelacion,

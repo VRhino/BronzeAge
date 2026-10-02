@@ -164,6 +164,9 @@ const FACTOR_LABEL: Record<string, string> = {
   factorProduccionTrigo: 'Producción de trigo',
   factorCapacidadCaravana: 'Capacidad de carga de caravanas',
   factorVelocidadCaravana: 'Velocidad de caravanas',
+  factorTiempoMuralla: 'Tiempo de cada celda de muralla',
+  factorProduccionTalleres: 'Producción de talleres',
+  factorCrecimientoPoblacion: 'Crecimiento de población',
 };
 
 /** Describe en una línea qué mueve una política del catálogo (multiplicador sobre el factor correspondiente,

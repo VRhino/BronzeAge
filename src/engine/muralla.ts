@@ -775,7 +775,9 @@ export function avanzarObraDeRecintos(
   almacen: Record<string, RecursoAlmacenado>,
   reserva: Partial<Record<RecursoTipo, number>>,
   instante: Instante,
-  edificios: Edificio[] = []
+  edificios: Edificio[] = [],
+  /** Multiplica el tiempo de cada celda (Postura Defensiva, `factorTiempoMuralla`). */
+  factorTiempo = 1
 ): { recintos: Recinto[]; almacen: Record<string, RecursoAlmacenado>; eventos: EventoCrudo[] } {
   const eventos: EventoCrudo[] = [];
   let almacenActual = almacen;
@@ -787,7 +789,7 @@ export function avanzarObraDeRecintos(
     if (!tieneRecursos(almacenActual, costo) || !respetaReserva(almacenActual, costo, reserva)) return recinto;
     almacenActual = descontarRecursos(almacenActual, costo);
     const avance = recinto.avance + 1;
-    const siguienteCeldaEn = sumar(instante, minutos(MURALLA.minutosPorCelda[nivelDePago] ?? 1));
+    const siguienteCeldaEn = sumar(instante, minutos((MURALLA.minutosPorCelda[nivelDePago] ?? 1) * factorTiempo));
     const completo = avance >= recinto.celdas.length - 1;
     if (!completo) return { ...recinto, avance, siguienteCeldaEn };
 

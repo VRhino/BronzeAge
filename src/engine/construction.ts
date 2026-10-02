@@ -58,7 +58,7 @@ import {
 } from './almacen';
 import { avanzarObraDeRecintos } from './muralla';
 import { reservaDinamicaConstruccion } from './mantenimiento';
-import { factorProduccionTrigo, factorTiempoConstruccion, perfilTrazadoDePolitica } from './politicas';
+import { factorProduccionTalleres, factorProduccionTrigo, factorTiempoConstruccion, factorTiempoMuralla, perfilTrazadoDePolitica } from './politicas';
 import { consumoComidaPoblacion } from './population';
 import { ReglaInvalidaError } from './errores';
 
@@ -1237,7 +1237,7 @@ function avanzarRecetas(
     for (const receta of nivel.recetas) {
       if (pausadas.has(receta.produce as RecursoTipo) || !permite(adoptadas, receta.requiereTecnologia)) continue;
       if (receta.requiereEdificio && !tieneEdificioDeNivel(asentamiento, receta.requiereEdificio.tipo, receta.requiereEdificio.nivel)) continue;
-      let cantidad = receta.produccionBase * ratioArtesano * factorLineaProduccion(edificio, receta, asentamiento);
+      let cantidad = receta.produccionBase * ratioArtesano * factorLineaProduccion(edificio, receta, asentamiento) * factorProduccionTalleres(asentamiento);
       for (const [insumo, porUnidad] of Object.entries(receta.consumePorUnidad)) {
         if (!porUnidad) continue;
         const disponible = Math.max(0, (almacenActual[insumo]?.cantidad ?? 0) - (reserva[insumo as RecursoTipo] ?? 0));
@@ -1494,7 +1494,14 @@ export function avanzarConstruccion(
   // sujeta a la MISMA reserva de mantenimiento — es lo que impide que una muralla mate de hambre a su ciudad.
   // Va después de `evaluarNecesidades` para que la construcción normal tenga preferencia sobre los materiales:
   // una ciudad que deja de producir por levantar su muro no sobrevive para verlo terminado.
-  const obra = avanzarObraDeRecintos(asentamientoConProgreso.recintos ?? [], almacenFinal, reserva, instante, asentamientoConProgreso.edificios);
+  const obra = avanzarObraDeRecintos(
+    asentamientoConProgreso.recintos ?? [],
+    almacenFinal,
+    reserva,
+    instante,
+    asentamientoConProgreso.edificios,
+    factorTiempoMuralla(asentamientoConProgreso)
+  );
   almacenFinal = obra.almacen;
   eventos.push(...obra.eventos);
 

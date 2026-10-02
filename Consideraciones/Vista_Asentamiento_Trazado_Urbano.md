@@ -1245,11 +1245,10 @@ una ventaja económica encubierta), precedencia, y exclusividad por slot.
 
 #### Pendiente
 
-**Ninguna ordenanza tiene coste/beneficio mecánico propio**, así que hoy compiten en desventaja contra Vía
-Rápida (−25 % de tiempo de obra) y son, en la práctica, una elección estética. Una política de forma que solo
-cambia la forma es cosmética y nadie la elegirá: **la forma tiene que ser la consecuencia de un trade-off, no
-el trade-off**. `barrios_gremiales` es la que más cerca está de tener uno solo — agrupar industria acorta la
-distancia a los insumos, que `factorLineaProduccion` ya mide y ya premia. Sin calibrar ni medir.
+**Resuelto el 2026-10-02**: cada ordenanza lleva un beneficio propio (Postura Defensiva, muralla ×0,75 de tiempo;
+Arterias Comerciales, comisión externa ×0,8; Barrios Gremiales, talleres ×1,1; Plazas Mayores, población ×1,25;
+Doc 4.4), porque una política de forma que solo cambia la forma es cosmética y nadie la elegirá: **la forma tiene
+que ser la consecuencia de un trade-off, no el trade-off**. Las cifras son placeholder, sin calibrar ni medir.
 
 ### E6.24 BA-005: huellas a la mitad, calles igual (2026-09-13)
 

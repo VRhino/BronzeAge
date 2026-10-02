@@ -7,7 +7,12 @@
 import type { CargoTipo } from '../../domain/types';
 import { designarCapital as designarCapitalEngine } from '../../engine/capital';
 import { asignarCargoLocal as asignarCargoLocalEngine, asignarEmbajador as asignarEmbajadorEngine, asignarRey as asignarReyEngine } from '../../engine/cargos';
-import { comprarCasa as comprarCasaEngine, cambiarResidencia as cambiarResidenciaEngine } from '../../engine/faccion';
+import {
+  comprarCasa as comprarCasaEngine,
+  cambiarResidencia as cambiarResidenciaEngine,
+  dejarResidencia as dejarResidenciaEngine,
+  exigirSinCooldownDeResidencia,
+} from '../../engine/faccion';
 import { activarPolitica as activarPoliticaEngine } from '../../engine/politicas';
 import { sinGuarnicion } from '../../engine/tropa';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
@@ -113,6 +118,7 @@ export interface ParamsComprarCasa {
 export const comprarCasa = comando<ParamsComprarCasa, void>((estado, _mapa, ctx, params) => {
   // A diferencia del resto, este comando del motor resuelve el asentamiento por su cuenta y lanza
   // `FaccionInvalidaError` si no existe — no hace falta comprobarlo antes.
+  exigirSinCooldownDeResidencia(estado.cambiosResidenciaPorHeroe?.[params.heroeId], ctx.instante);
   const resultado = comprarCasaEngine(estado.facciones, estado.asentamientos, params.asentamientoId, params.heroeId);
   const siguiente = conHistorialDeJugador(
     { ...conAsentamiento(estado, resultado.asentamiento), facciones: resultado.facciones },
@@ -135,10 +141,15 @@ export interface ParamsCambiarResidencia {
 }
 
 export const cambiarResidencia = comando<ParamsCambiarResidencia, void>((estado, _mapa, ctx, params) => {
+  exigirSinCooldownDeResidencia(estado.cambiosResidenciaPorHeroe?.[params.heroeId], ctx.instante);
   const { origen, destino } = cambiarResidenciaEngine(estado.facciones, estado.asentamientos, params.destinoId, params.heroeId);
   // El campamento se muda con él, pero la guarnición era de la plaza que deja (Doc 5.15.3).
   const siguiente = conHistorialDeJugador(
-    { ...conAsentamientos(estado, [origen, destino]), heroes: sinGuarnicion(estado.heroes, params.heroeId) },
+    {
+      ...conAsentamientos(estado, [origen, destino]),
+      heroes: sinGuarnicion(estado.heroes, params.heroeId),
+      cambiosResidenciaPorHeroe: { ...estado.cambiosResidenciaPorHeroe, [params.heroeId]: ctx.instante },
+    },
     params.heroeId,
     `Cambia su residencia de ${origen.id} a ${destino.id}.`
   );
@@ -148,6 +159,37 @@ export const cambiarResidencia = comando<ParamsCambiarResidencia, void>((estado,
       mensaje: `${params.heroeId} deja de residir en ${origen.id} y se muda a ${destino.id}.`,
       payload: { heroeId: params.heroeId, origenId: origen.id, destinoId: destino.id } satisfies PayloadResidenciaCambiada,
       asentamientoId: destino.id,
+    }),
+  ]);
+});
+
+export interface ParamsDejarResidencia {
+  heroeId: string;
+}
+
+export interface PayloadResidenciaDejada {
+  heroeId: string;
+  asentamientoId: string;
+}
+
+/** Dejar la casa sin dejar la Facción (Doc 2.5): el héroe queda sin residencia, huérfano, hasta que compre casa o se mude. */
+export const dejarResidencia = comando<ParamsDejarResidencia, void>((estado, _mapa, ctx, params) => {
+  const origen = dejarResidenciaEngine(estado.asentamientos, params.heroeId);
+  const siguiente = conHistorialDeJugador(
+    {
+      ...conAsentamiento(estado, origen),
+      heroes: sinGuarnicion(estado.heroes, params.heroeId),
+      cambiosResidenciaPorHeroe: { ...estado.cambiosResidenciaPorHeroe, [params.heroeId]: ctx.instante },
+    },
+    params.heroeId,
+    `Deja su residencia en ${origen.id}.`
+  );
+  return exito(siguiente, [
+    evento(ctx, {
+      codigo: 'ciudadania.residencia_dejada',
+      mensaje: `${params.heroeId} deja de residir en ${origen.id}.`,
+      payload: { heroeId: params.heroeId, asentamientoId: origen.id } satisfies PayloadResidenciaDejada,
+      asentamientoId: origen.id,
     }),
   ]);
 });

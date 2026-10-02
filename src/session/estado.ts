@@ -110,6 +110,12 @@ export interface GameSessionState {
    */
   salidasFaccionPorHeroe: Record<string, Instante>;
   /**
+   * `heroeId` -> cuándo cambió de residencia por última vez (`cambiarResidencia`, `dejarResidencia`). Lo consultan esos dos
+   * comandos y `comprarCasa` para el cooldown `CIUDADANIA.cooldownCambioResidenciaDias` (Doc 2.5). Opcional porque un
+   * snapshot anterior no lo trae; la reubicación por conquista no lo escribe.
+   */
+  cambiosResidenciaPorHeroe?: Record<string, Instante>;
+  /**
    * Todo lo que ha ocurrido en la partida, en forma estructurada: la ÚNICA representación de los hechos, en
    * texto estructurado y no plano (antes se persistía además un `log: EventoLogAdmin[]` en paralelo, el mismo
    * hecho dos veces, y la copia de texto plano no se podía filtrar por audiencia).

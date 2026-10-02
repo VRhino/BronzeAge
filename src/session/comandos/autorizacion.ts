@@ -336,6 +336,11 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
   // Cambiar de residencia: nadie a nombre de otro; y el destino tiene que ser de la propia Facción (a
   // diferencia de comprarCasa, aquí el jugador YA es ciudadano de una — el motor lo exige). El resto de
   // condiciones (hueco de vivienda, permiso, no residir ya ahí) las valida `cambiarResidencia`.
+  // Dejar la casa: cada uno la suya.
+  dejarResidencia: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
+  },
   cambiarResidencia: {
     rolesPermitidos: ['jugador'],
     condicionJugador: (estado, heroeId, params) => {

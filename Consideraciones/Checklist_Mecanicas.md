@@ -144,7 +144,7 @@ geometría, control por zona de influencia, peaje en oro, tipo de dominio y rend
 
 ## Ciudadanía
 - ✅ Ligada a la Facción; obtención por fundación o compra de casa; cupo de casas por nivel; cooldown anti-abuso al crear Facción — `código: ✔` (`CIUDADANIA`, `engine/faccion.ts` `comprarCasa`)
-- 🔶 Los 5 beneficios (residencia en cualquier asentamiento, protección militar, voz en política exterior, nivel intermedio de comisiones…) — `código: ◐`: solo el de comisiones y el de residencia/reclutamiento están en el motor (`Docs/Mecanicas a desarrollar.md` §26)
+- ✅ Cooldown de cambio de residencia (3 días), `dejarResidencia` y abandonar la Facción se lleva la casa y los cargos locales — `código: ✔` (2026-10-02, Doc 2.5). Los beneficios «protección militar explícita» y «voz en política exterior» se retiraron: ver `Docs/Mecanicas a desarrollar.md` §32
 
 ## Cargos
 - ✅ Nivel Facción (Rey, Embajador) y nivel asentamiento (Gobernador, Tesorero, General, Maestro de Obras, Sacerdote) — `código: ✔` (`engine/cargos.ts`)
@@ -231,7 +231,7 @@ geometría, control por zona de influencia, peaje en oro, tipo de dominio y rend
 - ✅ Las 4 políticas "Construir Barracón / Galería / Palacio / Mercado" se retiraron: eso pasó al control manual de cola — `código: ✔`
 - ✅ **Exclusión dentro de un slot, resuelta sin regla nueva**: las 4 ordenanzas de trazado + Vía Rápida comparten el único slot de Maestro de Obras, así que ya son mutuamente excluyentes. Como una política dura 150 ticks y nada mueve lo ya construido, cada una deja un ESTRATO en la ciudad — `código: ✔`
 - ❌ **"Protección de Riesgos" (Maestro de Obras) ya NO existe** — este documento la daba por viva ("ampliada a 2 Leñeras + 3 Granjas"); no está en `POLITICA_CATALOGO` ni en el cliente. Su función la cubren hoy el tope por tipo de extractor (`EXTRACCION_MAXIMOS.porTipo`) y el disparador de Granja por déficit real — `código: ✘`
-- 🔶 Las ordenanzas de trazado no tienen todavía coste/beneficio mecánico propio, así que compiten en desventaja contra Vía Rápida (−25% de tiempo de obra) — `código: ◐` (anotado como pendiente en el propio `constants.ts`; `Docs/Mecanicas a desarrollar.md` §25)
+- ✅ Las ordenanzas de trazado llevan un beneficio propio (muralla, comisión externa, talleres, población) frente a Vía Rápida — `código: ✔` (2026-10-02, Doc 4.4; cifras placeholder)
 
 ## Fusión y crecimiento de Facciones
 - ✅ Menú con 2 opciones (Anexión / Fusión), reglas de Rey y cargos resultantes — `código: ✔` (`engine/fusion.ts`, comandos `anexionar` / `fusionar`)

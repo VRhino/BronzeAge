@@ -1530,6 +1530,9 @@ export const CIUDADANIA = {
   // "crear, abandonar, crear" en bucle. Solo aplica a CREAR: unirse a una Facción existente (`unirseAFaccion`)
   // no tiene cooldown, solo la regla de siempre (no estar ya en otra).
   cooldownCreacionFaccionDias: 7,
+  /** Días de mundo entre un cambio de residencia (`cambiarResidencia`, `dejarResidencia`) y comprar casa o mudarse otra vez
+   * (Doc 2.5, decidido el 2026-10-02). Frena mudarse en cada conquista para exprimir la recaudación. PLACEHOLDER. */
+  cooldownCambioResidenciaDias: 3,
 };
 
 export const POLITICAS = {
@@ -1569,14 +1572,12 @@ export const POLITICA_CATALOGO = [
   // deja un ESTRATO en la ciudad en vez de reformarla entera — la ciudad acaba registrando su historia
   // política en su geometría.
   //
-  // PENDIENTE (a propósito, no olvido): ninguna tiene todavía coste/beneficio mecánico propio, así que hoy
-  // compiten en desventaja contra Vía Rápida (−25% de tiempo de obra). `barrios_gremiales` es la que más cerca
-  // está de tener uno solo: agrupar industria acorta la distancia a los insumos, que `factorLineaProduccion`
-  // (engine/construction.ts) ya mide y ya premia. Sin calibrar.
-  { id: 'postura_defensiva', cargo: 'maestroObras', nombre: 'Postura Defensiva', perfilTrazado: 'compacta' },
-  { id: 'arterias_comerciales', cargo: 'maestroObras', nombre: 'Arterias Comerciales', perfilTrazado: 'caminera' },
-  { id: 'barrios_gremiales', cargo: 'maestroObras', nombre: 'Barrios Gremiales', perfilTrazado: 'gremial' },
-  { id: 'plazas_mayores', cargo: 'maestroObras', nombre: 'Plazas Mayores', perfilTrazado: 'nucleos' },
+  // Cada una lleva además un beneficio propio (decidido el 2026-10-02, Doc 4.4), para que elegir forma compita de
+  // verdad con Vía Rápida (−25% de tiempo de obra). Cifras PLACEHOLDER, sin calibrar.
+  { id: 'postura_defensiva', cargo: 'maestroObras', nombre: 'Postura Defensiva', perfilTrazado: 'compacta', factorTiempoMuralla: 0.75 },
+  { id: 'arterias_comerciales', cargo: 'maestroObras', nombre: 'Arterias Comerciales', perfilTrazado: 'caminera', factorComisionExterna: 0.8 },
+  { id: 'barrios_gremiales', cargo: 'maestroObras', nombre: 'Barrios Gremiales', perfilTrazado: 'gremial', factorProduccionTalleres: 1.1 },
+  { id: 'plazas_mayores', cargo: 'maestroObras', nombre: 'Plazas Mayores', perfilTrazado: 'nucleos', factorCrecimientoPoblacion: 1.25 },
   { id: 'comercio_abierto', cargo: 'tesorero', nombre: 'Comercio Abierto', factorComisionExterna: 0.6 },
   { id: 'aranceles', cargo: 'tesorero', nombre: 'Aranceles Proteccionistas', factorComisionExterna: 1.5 },
   { id: 'leva_forzosa', cargo: 'general', nombre: 'Leva Forzosa', factorCostoReclutamiento: 0.7 },

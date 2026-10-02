@@ -100,7 +100,9 @@ type CampoFactor =
   | 'factorCapacidadCaravana'
   | 'factorVelocidadCaravana'
   | 'factorRecaudacion'
-  | 'factorCrecimientoPoblacion';
+  | 'factorCrecimientoPoblacion'
+  | 'factorTiempoMuralla'
+  | 'factorProduccionTalleres';
 
 function productoFactor(asentamiento: Asentamiento, campo: CampoFactor): number {
   return asentamiento.politicasActivas.reduce((acc, activa) => {
@@ -145,6 +147,11 @@ export const factorRecaudacion = (a: Asentamiento): number => productoFactor(a, 
 /** "Presión Fiscal" (Tesorero): frena el crecimiento de las 3 clases de población — es el downside de subir
  * impuestos, aplicado en `crecerPoblacion` (engine/population.ts) mientras no exista un medidor de felicidad. */
 export const factorCrecimientoPoblacion = (a: Asentamiento): number => productoFactor(a, 'factorCrecimientoPoblacion');
+
+/** "Postura Defensiva" (Maestro de Obras): multiplica el tiempo que tarda cada celda de muralla (`avanzarObraDeRecintos`). */
+export const factorTiempoMuralla = (a: Asentamiento): number => productoFactor(a, 'factorTiempoMuralla');
+/** "Barrios Gremiales" (Maestro de Obras): multiplica lo que fabrican los talleres (`avanzarRecetas`, engine/construction.ts). */
+export const factorProduccionTalleres = (a: Asentamiento): number => productoFactor(a, 'factorProduccionTalleres');
 
 /**
  * Perfil de trazado impuesto por una ordenanza activa del Maestro de Obras (doc trazado §E6.23), o `null` si

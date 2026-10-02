@@ -436,6 +436,14 @@ describe('murallas — la obra', () => {
     expect(aTiempo.recintos[0]!.avance).toBe(1);
   });
 
+  it('un factor de tiempo (Postura Defensiva) acorta la espera hasta la siguiente celda', () => {
+    const espera = MURALLA.minutosPorCelda[1]!;
+    const espacio = (factor?: number) =>
+      avanzarObraDeRecintos([recintoDe(anillo(10))], almacenCon(9999, 9999), {}, instanteDeTest(1), [], factor).recintos[0]!.siguienteCeldaEn!;
+    expect(espacio() - instanteDeTest(1)).toBe(espera * 60_000);
+    expect(espacio(0.5) - instanteDeTest(1)).toBe(espera * 30_000);
+  });
+
   it('sin materiales la obra NO avanza, pero tampoco se cancela ni acumula deuda', () => {
     const recinto = recintoDe(anillo(10));
     const paso = avanzarObraDeRecintos([recinto], almacenCon(0, 0), {}, instanteDeTest(1));

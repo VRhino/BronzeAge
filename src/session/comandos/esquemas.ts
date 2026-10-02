@@ -128,6 +128,7 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
     ['asentamientoId', 'cargo', 'heroeId']
   ),
   comprarCasa: objeto({ asentamientoId: IDENTIFICADOR, heroeId: IDENTIFICADOR }, ['asentamientoId', 'heroeId']),
+  dejarResidencia: objeto({ heroeId: IDENTIFICADOR }, ['heroeId']),
   cambiarResidencia: objeto({ destinoId: IDENTIFICADOR, heroeId: IDENTIFICADOR }, ['destinoId', 'heroeId']),
 
   // --- Construcción y gestión local ---

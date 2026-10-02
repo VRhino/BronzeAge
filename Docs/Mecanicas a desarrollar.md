@@ -24,8 +24,6 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 21 | POLÍTICA | Los 4 gremios escasos a nivel de servidor | ✘ nada |
 | 23 | RECURSOS | Materiales exóticos | ✘ nada |
 | 24 | SERVIDOR | Ciclo de servidor de 12 meses + Maravilla + legado NPC | ◐ solo el edificio |
-| 25 | POLÍTICA | Coste/beneficio mecánico de las ordenanzas de trazado | ◐ existen, sin coste propio |
-| 26 | CIUDADANÍA | Los beneficios de ciudadanía sin implementar | ◐ 2 de 5 |
 | 27 | AMBIENTACIÓN | Identidad visual y de audio | ✘ nada |
 | 29 | ONBOARDING | Curva de progresión inicial gradual | ✘ nada |
 | 30 | MILITAR | Batallas con héroes: guarnición, campamento y héroes bot | ◐ canon de campamento, guarnición y conquista; ciclo de `Batalla` fases 1 y 2 (falta el canal de tiempo real) |
@@ -223,31 +221,6 @@ Requiere infraestructura de servidor / multi-instancia (reset, generación del n
 Facciones no ganadoras, si la legado es atacable). Nada de eso tiene código. Ver la lista completa en el
 Roadmap.
 
-## 25. Coste/beneficio mecánico de las ordenanzas de trazado
-
-**Estado: las cuatro ordenanzas existen y funcionan (`código: ◐`), pero no tienen coste/beneficio propio.** Las
-cuatro ordenanzas de perfil de trazado del Maestro de Obras (`postura_defensiva` / `arterias_comerciales` /
-`barrios_gremiales` / `plazas_mayores`) orientan *cómo* se distribuye la ciudad, y ya
-compiten por el único slot de Maestro de Obras. Pero compiten en desventaja contra Vía Rápida (−25 % de tiempo
-de obra), que sí da un beneficio medible.
-
-Falta: darle a cada ordenanza un coste o un beneficio mecánico propio, de modo que elegir una sobre otra sea
-una decisión con precio. Anotado como pendiente en el propio `constants.ts`. Diseño del trazado en
-`Consideraciones/Vista_Asentamiento_Trazado_Urbano.md`.
-
-## 26. Los beneficios de ciudadanía sin implementar
-
-**Estado: `código: ◐` — 2 de 5.** La ciudadanía da hoy en el motor el nivel intermedio de comisiones y la
-residencia/reclutamiento. Los otros tres beneficios del diseño (residencia en cualquier asentamiento de la
-Facción, protección militar explícita, voz en política exterior) no están cableados. Doc 2 (`CIUDADANIA`).
-
-También sin cerrar:
-
-- **Cooldown de cambio de residencia**: `CIUDADANIA.cooldownCambioResidenciaDias` está reservado, sin valor ni
-  efecto. Frenaría mudarse en cada conquista para exprimir la recaudación.
-- **Dejar una casa sin tomar otra**: abandonar la Facción no libera la residencia ni los cargos locales, y no
-  hay forma de vender una casa a secas.
-
 ## 27. Identidad visual y de audio
 
 **Estado: `código: ✘` — nada.** Sigilo / estandarte de Facción, identidad visual y de audio de imperios y
@@ -353,6 +326,7 @@ mecánica propia:
   qué curva.
 - **Catálogo de políticas** (Doc 4.4): las políticas concretas de cada pool más allá de las que existen, y si
   son excluyentes entre sí dentro de un slot.
+- **Voz en política exterior y protección militar explícita** (Doc 2.5, antes entrada 26): la «voz exterior» se reabrirá con la votación real; la «protección» es lo que ya hacen la guarnición y la defensa de la plaza.
 - **Redistribución de Vivienda** (idea): una política que cambie la proporción fija 15/5 de Pesants/Artesanos
   de cada Vivienda. Falta si desplaza cupo de una clase a otra o añade cupo extra, sus valores y de qué cargo
   es (Maestro de Obras o Sacerdote).
