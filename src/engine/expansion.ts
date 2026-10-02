@@ -44,7 +44,8 @@ export function costoCaravanaFundacion(): Partial<Record<string, number>> {
 /** Facción dueña de la caravana, resuelta a través de su asentamiento de origen (la propia Caravana no
  * guarda faccionId). Undefined si el origen ya no existe (asentamiento colapsado en tránsito). */
 function faccionDeCaravana(caravana: Caravana, asentamientos: Asentamiento[]): string | undefined {
-  return asentamientos.find((a) => a.id === caravana.origenAsentamientoId)?.faccionId;
+  // La comprada en un campamento de mercenarios (Doc 1.9b) no tiene asentamiento de origen: lleva su Facción.
+  return caravana.faccionId ?? asentamientos.find((a) => a.id === caravana.origenAsentamientoId)?.faccionId;
 }
 
 /** Nº de "asentamientos efectivos" de una Facción a efectos del Cap de Fundación (Doc 1.7/1.8): los ya
@@ -185,7 +186,8 @@ export function avanzarCaravanasFundacion(
     }
 
     const origen = asentamientosActuales.find((a) => a.id === caravana.origenAsentamientoId);
-    if (!origen) {
+    const faccionId = caravana.faccionId ?? origen?.faccionId;
+    if (faccionId === undefined) {
       eventos.push({
         codigo: 'expansion.caravana_perdida',
         mensaje: `La Caravana de Fundación ${caravana.id} se pierde: su asentamiento de origen ya no existe.`,
@@ -211,7 +213,7 @@ export function avanzarCaravanasFundacion(
       const resultado = fundarAsentamiento(
         mapa,
         faccionesActuales,
-        origen.faccionId,
+        faccionId,
         caravana.destinoPosicion,
         caravana.heroesFundadoresIds ?? [],
         asentamientosActuales,

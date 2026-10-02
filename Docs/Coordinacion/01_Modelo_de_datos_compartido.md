@@ -394,6 +394,8 @@ Caravana
   peajes?: { asentamientoId, progreso }[]   ciudades ajenas por las que pasa a la fuerza y aún no ha
                                 cruzado; deja el 2 % de cada recurso al alcanzar `progreso` — 2026-10-02
   origenAcuerdoId?, ladoAcuerdo?: 'A' | 'B'   si nace de un AcuerdoTrueque — existente
+  origenCampamentoId?, faccionId?   solo la Caravana de Fundación comprada en un campamento de mercenarios (Doc 1.9b):
+                         no tiene asentamiento de origen, así que lleva su Facción; `origenAsentamientoId` es el id del campamento — NUEVO 2026-10-02
   destinoPosicion?              caravana de Fundación: punto donde fundará al llegar — existente
   jugadoresFundadoresIds?        caravana de Fundación — existente. Tras este modelo, heroeId[]
   estado?: 'disponible' | 'preparando' | 'adjunta' | 'aparcada' | 'en_transito' | 'retornando'   existente
@@ -490,6 +492,8 @@ CampamentoMercenarios      enclave neutral (Doc 1.9b) — NUEVO 2026-10-02; en e
   edificios[]             'taberna' | 'vivienda' | 'mercado' | 'barracon' | 'galeriaDeTiro' | 'caballerizas' — layout fijo
   residentesIds[]         heroeId: héroes que residen aquí, de cualquier Facción y sin límite; sin guarnición ni cargos
   mercado: Record<bien, number>   stock en venta (solo vende, Doc 3.3b); se repone con `GameSessionState.mercadoMercenario`
+  fondos: Record<heroeId, Record<recurso, number>>   lo que cada héroe ha aportado al fondo de refundación de su Facción
+                         (Doc 1.9b); voluntario y retirable
   poblacion, poblacionEn  reclutas disponibles en ese instante; la cantidad de ahora se calcula (tope = viviendas × 50,
                          recupera 10/h): no se escribe cada tick
   creadoEn: Instante

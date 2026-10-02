@@ -1,6 +1,7 @@
 import type { Point } from '../../domain/types';
 import { exigirPuertaDeFundacion, fundarAsentamiento as fundarAsentamientoEngine } from '../../engine/settlement';
 import { esCiudadano } from '../../engine/faccion';
+import { salirDeCampamentos } from '../../engine/mercenarios';
 import { cruzarLaPuerta, puntoDeFundacionDe, situarHeroes } from '../../engine/ubicacion';
 import { conEscuadrones } from '../../engine/tropa';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
@@ -86,6 +87,8 @@ export const fundarAsentamiento = comando<ParamsFundarAsentamiento, { asentamien
     asentamientos: [...estado.asentamientos, cruce.asentamiento],
     facciones: resultado.facciones,
     ejercitos: cruce.disuelveColumna ? estado.ejercitos.filter((e) => e.id !== columna.id) : estado.ejercitos,
+    // Quien funda reside en lo que levanta: deja el campamento de mercenarios donde residiera (Doc 1.9b).
+    campamentosMercenarios: salirDeCampamentos(estado.campamentosMercenarios, ...heroesIds),
     // Única colocación que hace este comando, y hace falta porque `cruzarLaPuerta` no toca `Jugador.ubicacion`
     // — solo fusiona tropas y carga en el asentamiento.
     heroes: situarHeroes(conEscuadrones(estado.heroes, cruce.tropa), heroesIds, { tipo: 'asentamiento', asentamientoId: resultado.asentamiento.id }),

@@ -827,7 +827,13 @@ export interface CarroCaravana {
 export interface Caravana {
   id: string;
   tipo: CaravanaTipo;
+  /** De dónde sale: un asentamiento o, en la Caravana de Fundación que compra una Facción sin plazas, el id del campamento de mercenarios
+   * (`origenCampamentoId`, Doc 1.9b). */
   origenAsentamientoId: string;
+  /** Solo la Caravana de Fundación comprada en un campamento de mercenarios: de dónde sale. */
+  origenCampamentoId?: string;
+  /** Facción dueña cuando no se puede sacar del asentamiento de origen (la de un campamento de mercenarios). Ausente = la del origen. */
+  faccionId?: string;
   /** Ausente en caravanas de fundación (Doc 1.8): el destino todavía no es un asentamiento, ver `destinoPosicion`. */
   destinoAsentamientoId?: string;
   contenido: Record<string, number>;
@@ -1027,6 +1033,11 @@ export interface CampamentoMercenarios {
   poblacionEn: Instante;
   /** Stock en venta de su mercado (Doc 1.9b): bien -> unidades. Solo vende, y se repone con lo que se comercia en el mundo. */
   mercado: Record<string, number>;
+  /**
+   * Fondo de refundación (Doc 1.9b): lo que cada héroe (`heroeId`) ha aportado, por recurso, desde su almacén personal para que su Facción
+   * compre una Caravana de Fundación en este campamento. Voluntario y retirable mientras no se gaste.
+   */
+  fondos: Record<string, Record<string, number>>;
   creadoEn: Instante;
 }
 

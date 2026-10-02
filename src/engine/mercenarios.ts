@@ -75,6 +75,7 @@ function nuevoCampamento(indice: number, posicion: Point, instante: Instante): C
     poblacion: edificios.filter((e) => e === 'vivienda').length * MERCENARIOS.poblacionPorVivienda,
     poblacionEn: instante,
     mercado: mercadoInicial(),
+    fondos: {},
     creadoEn: instante,
   };
 }
@@ -172,9 +173,9 @@ export function campamentoMasCercano(campamentos: readonly CampamentoMercenarios
   return [...campamentos].sort((a, b) => distancia(a.posicion, desde) - distancia(b.posicion, desde) || (a.id < b.id ? -1 : 1))[0];
 }
 
-/** Los campamentos sin ese héroe como residente. */
-function sinResidente(campamentos: readonly CampamentoMercenarios[], heroeId: string): CampamentoMercenarios[] {
-  return campamentos.map((c) => (c.residentesIds.includes(heroeId) ? { ...c, residentesIds: c.residentesIds.filter((id) => id !== heroeId) } : c));
+/** Los campamentos sin esos héroes como residentes. */
+function sinResidente(campamentos: readonly CampamentoMercenarios[], ...heroeIds: string[]): CampamentoMercenarios[] {
+  return campamentos.map((c) => (c.residentesIds.some((id) => heroeIds.includes(id)) ? { ...c, residentesIds: c.residentesIds.filter((id) => !heroeIds.includes(id)) } : c));
 }
 
 /**

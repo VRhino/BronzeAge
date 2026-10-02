@@ -24,7 +24,7 @@ import { calcularTitulos, narrarCambiosDeTitulo } from './titulos';
 import { avanzarAtaquesBandidos, avanzarSpawnBandidos } from './bandidos';
 import { avanzarEjercitos, type CombatePorAbrir, type ContextoAvanceEjercitos } from './ejercitos';
 import { grabarLoVisto, type MemoriaFaccion } from './memoria';
-import { avanzarAparicionMercenarios, reubicarResidentesDeRuina } from './mercenarios';
+import { avanzarAparicionMercenarios, reubicarResidentesDeRuina, salirDeCampamentos } from './mercenarios';
 import { reponerMercados } from './mercadoMercenario';
 import { grabarExploracionPersonal } from './ubicacion';
 import { avanzarTecnologia, contadoresDeProduccion, sumarContadores, sumarDeltas, tecnologiasDe, type DeltaContadores } from './tecnologia';
@@ -270,6 +270,10 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   // aparte de las comerciales (destino es un punto del mapa, no un asentamiento existente).
   const trasExpansion = avanzarCaravanasFundacion(trasComercio.caravanas, mapa, trasComercio.facciones, trasComercio.asentamientos, instante);
   eventosDominio.push(...comoEventosDominio(trasExpansion.eventos, contexto));
+  // Quien funda una plaza pasa a residir en ella: deja el campamento de mercenarios donde residiera (Doc 1.9b, 2.5).
+  const yaExistian = new Set(trasComercio.asentamientos.map((a) => a.id));
+  const fundadores = trasExpansion.asentamientos.filter((a) => !yaExistian.has(a.id)).flatMap((a) => a.heroesFundadoresIds);
+  campamentosActuales = fundadores.length > 0 ? salirDeCampamentos(campamentosActuales, ...fundadores) : campamentosActuales;
 
   // Regeneración de yacimientos agotados (a petición del usuario): escribe en la fachada `mapa`, mismo patrón
   // que `mapa.extraer` dentro de `avanzarConstruccion` más arriba en este mismo tick. La fachada trabaja

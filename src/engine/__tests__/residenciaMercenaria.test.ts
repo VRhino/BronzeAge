@@ -13,6 +13,7 @@ import {
   posicionDeHeroe,
   reubicarResidentesDeRuina,
   residirEnCampamento,
+  salirDeCampamentos,
 } from '../mercenarios';
 import { heroeDePrueba } from './fixtures';
 
@@ -103,6 +104,14 @@ describe('ruina de una plaza: los residentes no se quedan sin casa', () => {
   it('sin plazas de su Facción, al campamento de mercenarios más cercano', () => {
     const r = reubicarResidentesDeRuina(ruina, [plaza('ajena', 'g')], campamentos);
     expect(r.campamentos[0]!.residentesIds).toEqual(['h1', 'h2']);
+  });
+});
+
+describe('salirDeCampamentos', () => {
+  it('saca a varios héroes de una vez de donde residan (los fundadores de una plaza nueva)', () => {
+    const cs = [campamento('c1', 0, 0, ['h1', 'h3']), campamento('c2', 9, 9, ['h2'])];
+    const r = salirDeCampamentos(cs, 'h1', 'h2');
+    expect(r.map((c) => c.residentesIds)).toEqual([['h3'], []]);
   });
 });
 

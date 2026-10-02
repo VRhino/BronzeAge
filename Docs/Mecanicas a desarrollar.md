@@ -34,7 +34,7 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 36 | HÉROE | Comportamiento de los héroes bot en el mundo | ✘ nada |
 | 38 | MILITAR | Tope de héroes en asedio: volver a 15 cuando entren jugadores | ◐ 5 mientras se prueba con NPC |
 | 39 | MILITAR | Escala de la experiencia de escuadra de Unity | ✘ espera a CQ-001 |
-| 40 | MUNDO | Campamentos de mercenarios: enclave neutral, residencia, reclutamiento y mercado | ◐ pasos 1-4 de 5 (entidad, residencia, reclutamiento, mercado) |
+| 40 | MUNDO | Campamentos de mercenarios: enclave neutral, residencia, reclutamiento y mercado | ◐ hecho; quedan cabos (ver entrada) |
 | 42 | TECNOLOGÍA | Aedas: difusión y venta de tecnología, residentes y lore | ◐ diseño parcial, sin código |
 
 **Pospuesto explícitamente, fuera de esta lista:** el **Attack Timer** (Doc 5.6, decidido y aplazado a
@@ -367,96 +367,29 @@ La curva de nivel de escuadra (Doc 5.16.3, `MILITAR.experienciaParaSubirEscuadra
 números, que da 1 de experiencia por victoria. La que trae una batalla de Unity (`xpGanada` por escuadra) entra en la
 misma curva: cuando Conquest publique su escala (CQ-001), comprobar que encaja o convertirla al entrar.
 
-## 40. Campamentos de mercenarios
+## 40. Campamentos de mercenarios — lo que queda
 
-**Estado: diseñado con el usuario el 2026-09-28; implementación en 5 pasos desde el 2026-10-02, `código: ◐` (pasos 1 a 4 hechos:
-entidad, aparición y niebla, en `engine/mercenarios.ts`; residencia, fin del huérfano y almacén personal; reclutamiento, en
-`engine/reclutamientoMercenario.ts`; mercado, en `engine/mercadoMercenario.ts`). El canon se va pasando con cada paso: Doc 1.9b, 2.5, 3.3b, 5.8, 5.15, 6.5b y glosario ya recogen
-los pasos 1 a 4 (pendiente del paso 2: los héroes bot de una Facción NPC sin plazas desaparecen, hoy siguen como están; y el
-almacén personal en el contrato de Conquest); el resto, en "Qué toca del canon", al final.**
-Amplía y sustituye en parte D26 (`Consideraciones/BA-006_Revision_Tecnologia_Eras.md`): desaparece el roster
-mercenario propio y la cultura. Cifras N, R, X, T, K y topes: PLACEHOLDER.
+**Estado: implementados los 5 pasos (2026-10-02), `código: ◐`.** El canon ya recoge todo lo hecho: Doc 0 (glosario), 1.8 y 1.9b
+(entidad, aparición, forma, niebla, refundar), 2.5 (residencia, fin del huérfano, almacén personal), 3.3b (mercado), 5.8
+(reclutamiento) y 6.5b (tecnología propia); el motor, en `engine/mercenarios.ts`, `reclutamientoMercenario.ts`,
+`mercadoMercenario.ts` y `refundacion.ts`. Cifras en `MERCENARIOS` (placeholder, sin calibrar con batch). Falta:
 
-**Qué es.** Entidad neutral del mundo abierto, miniatura en el mapa, en la que se entra como en un asentamiento.
-No es de nadie, no se puede atacar y no desaparece. Lo que está **dentro** es intocable: héroes residentes y
-también columnas y caravanas visitantes, sin límite de tiempo. Lo que está en la puerta o fuera, no.
-
-**Aparición.**
-- Al menos **uno desde el día 1**. Los demás, en puntos sin reclamar con zonas de influencia de al menos **N
-  Facciones distintas** a menos de **R**; tope por servidor y distancia mínima entre campamentos.
-- Pegado a un bosque si lo hay (preferencia, no requisito; los bandidos viven *dentro* del bosque).
-- **Enclave**: ninguna zona de influencia lo absorbe; no tiene zona propia.
-- Niebla: como un camino, visto una vez queda en la memoria.
-
-**Forma.** Empalizada con una sola entrada y layout fijo; no crece. Pocas variantes, elegidas por el **origen**
-del campamento, que solo es aspecto (sin cultura). Taberna, viviendas, mercado y una combinación aleatoria de
-barracón, galería de tiro y caballeriza. Sin extractores, fabricación ni zona de influencia.
-
-**Residencia (adiós al huérfano).**
-- Un asentamiento aloja sin límite a los héroes de su Facción; un campamento, a héroes de **cualquier** Facción,
-  también sin límite. Cualquier héroe puede residir en él aunque su Facción tenga asentamientos. Sin guarnición ni
-  cargos.
-- Si una Facción humana pierde su último asentamiento, sus héroes van con su campamento al campamento mercenario
-  **más cercano** al que perdieron. El estado de huérfano (Doc 0, 5.15.5) desaparece.
-- Los héroes de una Facción NPC que se queda sin asentamientos **desaparecen**.
-- **Almacén personal** para todos los héroes: pequeño, tope fijo, **viaja con su campamento** en cada cambio de
-  residencia (lo único que se mueve sin caravana).
-- La Facción sin asentamientos sigue existiendo y puede **refundar**: fundación "de supervivencia", más barata,
-  pagada juntando los almacenes personales de los héroes residentes en el **mismo** campamento que el fundador
-  (los demás se mudan antes con `cambiarResidencia`); cada héroe decide si aporta y cuánto. Lo reunido sale del
-  campamento como columna con su caravana de fundación.
-
-**Reclutamiento.**
-- Solo las tropas que permiten los edificios de ese campamento.
-- Control de tecnologías propio: desbloquea cada una **el último**, al instante y gratis, cuando la tiene un X %
-  de las Facciones humanas vivas o T horas después de la primera, lo que llegue antes. Así se recluta aquí lo que
-  una Facción no alcanza por edificio o materiales. Hasta que exista el árbol (entrada 20), ofrece lo de la Era.
-- Población propia que crece hasta el tope de sus viviendas; sin mantenimiento ni comida.
-- Cuesta **oro + población del campamento**. Precio: base → recargo del campamento (más caro que en casa) →
-  recargo por reputación (Doc 2.7) → descuento si la Facción no tiene asentamientos.
-- Paga el residente con su almacén personal; con la columna delante, con el carro, y el escuadrón se une al héroe
-  si le cabe en el Liderazgo. Un escuadrón por tropa (Doc 5.8): si ya la tiene, repone.
-- Para quien no tiene asentamientos, el botín de bandidos es una fuente pequeña de oro.
-
-**Mercado.**
-- **Solo vende** recursos básicos y materiales ya desbloqueados en el mundo, con stock limitado. El oro cobrado
-  **se destruye** (sumidero).
-- Entrega como todo el comercio: caravana desde el asentamiento de la Facción, que vuelve a él. El residente
-  compra directo a su almacén personal.
-- Reposición barata para el tick: cada trueque o venta cerrada suma lo intercambiado a un **contador global por
-  bien**; cada **K horas** cada campamento repone en proporción a esos contadores, con tope por bien, y los
-  contadores vuelven a cero. Precio = tabla base + margen.
-
-**Taberna.** Por ahora, lugar neutral de rumores; la versión completa va con la entrada 18.
-
-**Afecta a Conquest:** entidad nueva en `src/contratos/v1/` y escena con las variantes de layout.
-
-**Cifras decididas el 2026-10-02** (siguen siendo placeholder, en `MERCENARIOS` de `constants.ts`):
-- Aparición: N=2 Facciones distintas con zona a menos de R=150; tope 6 por servidor y 400 de distancia mínima entre campamentos. El del día 1, en el centro del mapa, en tierra firme y junto a un bosque si lo hay.
-- Forma: 3 variantes de aspecto (origen); fijos taberna, 2 viviendas y mercado, más 1 edificio militar al azar (barracón, galería de tiro o caballeriza).
-- Población: tope = viviendas × `poblacionPorVivienda` (50: dos viviendas dan 100, y sube sola si se añaden más); recupera 10 por hora, ajustable.
-- Tecnología propia: X=50 % de las Facciones humanas vivas o T=72 horas desde la primera.
-- Precio de reclutar: ×1,5 en el campamento, ×0,6 sobre eso si la Facción no tiene asentamientos.
-- Almacén personal del héroe: 1000 unidades en total. Fundación de supervivencia: 75 % del coste normal.
-- Mercado: reposición cada K=3 h, 3 % de lo comerciado, tope 300 por bien; vende a +30 % sobre el precio de referencia.
-- Implementación en 5 pasos: entidad y niebla; residencia y almacén personal; reclutamiento; mercado; refundar.
-
-**Qué toca del canon al implementarlo:**
-- **Doc 0 (Glosario):** entrada nueva *Campamento de mercenarios*; *Huérfano* se borra (o queda como histórico)
-  y *Campamento* (del héroe) dice que puede estar en un campamento mercenario; entrada *Almacén personal* del héroe.
-- **Doc 1:** sección nueva junto a 1.9 (bandidos) con aparición, enclave y forma; 1.2 (Fundación) añade la
-  fundación de supervivencia pagada con almacenes personales y salida desde el campamento.
-- **Doc 2:** 2.5 (Ciudadanía / `cambiarResidencia`) admite residir en un campamento mercenario sin ser de su
-  Facción, y el almacén personal viaja con el campamento; 2.7 (Reputación) añade el recargo al reclutar allí.
-- **Doc 3:** 3.3 (Órdenes de mercado) añade el vendedor neutral, el sumidero de oro y la reposición por
-  contadores globales; 3.10 (Combate de caravanas) aclara que dentro del campamento no se ataca.
-- **Doc 5:** 5.8 (Roster) añade el reclutamiento en el campamento, su desbloqueo de tecnología y el precio;
-  5.12.3 (qué se puede atacar): lo que está dentro es intocable; 5.12.8 (Memoria): se recuerda como un camino;
-  5.15.2 (Campamento del héroe) y 5.15.5 (Cuando cae el asentamiento): se muda al campamento mercenario más
-  cercano en vez de quedar huérfano; 5.15.6 (Facciones NPC): sus héroes desaparecen. Revisar también las otras
-  menciones a 5.15.5 (el párrafo "Al conquistar" del principio del Doc 5, 5.12.4 y 5.12.9).
-- **BA-006 (Consideraciones):** D26 queda superada; en su lista de canon, "Doc 1.9 (o sección nueva)" y la
-  entrada de glosario *Campamento de mercenarios* pasan a apuntar a esta entrada.
+- **Los héroes bot de una Facción NPC que se queda sin plazas deben desaparecer** (Doc 5.15.6). Hoy siguen sin casa: borrarlos toca
+  ejércitos, historial y la IA, y no se hizo.
+- **Entrega por caravana de lo que vende el mercado**: una Facción pide desde su asentamiento y la caravana vuelve con la compra
+  (Doc 3.3b). Hoy solo compra el héroe residente, directo a su almacén personal.
+- **Escoltar la Caravana de Fundación**: el diseño dice que los héroes de la Facción la escoltan, como a todas; hoy ninguna Caravana
+  de Fundación se puede enganchar a un ejército, y la comprada en un campamento viaja sola. Tampoco se puede desarmar.
+- **«Lo que está dentro es intocable»** y entrar en un campamento como en una plaza (5.12.3): el héroe no tiene ubicación dentro de un
+  campamento, así que no hay nada que proteger todavía. Tampoco hay nada que ataque a una caravana o columna en su puerta.
+- **Fundar encima de un campamento**: nada lo impide (`evaluarViabilidadFundacion` no mira los campamentos).
+- **La taberna** es solo un edificio del layout: sin rumores. La versión completa va con la entrada 18.
+- **El escuadrón recién reclutado no se une a la columna** si hay Liderazgo: siempre nace en el campamento del héroe.
+- **Fundar a pie sigue siendo gratis** para cualquier ciudadano (hasta el cupo), también para expandirse: el coste de la Caravana de
+  Fundación se puede esquivar. Cabo suelto de diseño, fuera de esta entrada.
+- **Contrato con Conquest** (`src/contratos/v1/`): entidad `CampamentoMercenarios` y `Heroe.almacenPersonal`, y la escena con las 3
+  variantes de layout. Descripción en el modelo de datos §10.
+- **Cliente de administración**: no pinta los campamentos.
 
 ## 42. Aedas: difusión y venta de tecnología, residentes y lore
 

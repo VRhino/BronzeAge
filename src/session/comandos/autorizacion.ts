@@ -343,6 +343,10 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
   reclutarEnCampamento: { rolesPermitidos: ['jugador'] },
   // Comprar en el mercado del campamento donde reside el actor: la residencia y el pago los comprueba el motor.
   comprarEnCampamento: { rolesPermitidos: ['jugador'] },
+  // La refundación desde un campamento: la residencia, la Facción sin plazas y el fondo los comprueba el motor.
+  aportarARefundacion: { rolesPermitidos: ['jugador'] },
+  retirarDeRefundacion: { rolesPermitidos: ['jugador'] },
+  comprarCaravanaDeRefundacion: { rolesPermitidos: ['jugador'] },
   // Residir en un campamento de mercenarios: cualquier héroe, por sí mismo y sin pedir permiso a su Facción (Doc 2.5).
   residirEnCampamento: {
     rolesPermitidos: ['jugador'],

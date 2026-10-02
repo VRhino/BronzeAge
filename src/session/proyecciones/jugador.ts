@@ -803,7 +803,7 @@ export function proyectarParaJugador(
     asentamientosConocidos: Object.values(memoria.asentamientos).filter((f) => !seVe.has(f.asentamientoId) && f.asentamientoId !== dentroDe?.id),
     territorioPorEjercito: territorioDeCadaEjercito(ejercitosPropios, geometria.zonas, estado.asentamientos),
     exploracion,
-    caravanas: estado.caravanas.filter((c) => esPropio(c.origenAsentamientoId) || (c.destinoAsentamientoId !== undefined && esPropio(c.destinoAsentamientoId))),
+    caravanas: estado.caravanas.filter((c) => esPropio(c.origenAsentamientoId) || c.faccionId === faccionId || (c.destinoAsentamientoId !== undefined && esPropio(c.destinoAsentamientoId))),
     caravanasAvistadas: caravanasAvistadas(estado, esPropio, ojosAsent, ojosEjercito, tropa).filter((c) => !bloqueos.caravanas.has(c.id)),
     ejercitos: ejercitosPropios,
     ejercitosAvistados: ejercitosAvistados.map((e) => ({

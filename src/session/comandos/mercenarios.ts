@@ -3,8 +3,13 @@
 import { reclutarEnCampamento as reclutarEngine, tecnologiasDelCampamento, type PagarCon } from '../../engine/reclutamientoMercenario';
 import { esCiudadano } from '../../engine/faccion';
 import { comprarEnCampamento as comprarEngine } from '../../engine/mercadoMercenario';
+import { aportarARefundacion as aportarEngine, comprarCaravanaDeRefundacion as comprarCaravanaEngine, retirarDeRefundacion as retirarEngine } from '../../engine/refundacion';
+import { ALMACEN_PERSONAL } from '../../constants';
+import type { Point } from '../../domain/types';
 import { exito } from './tipos';
-import { comando, exigirJugador } from './ayudas';
+import { comando, exigirFaccion, exigirJugador, rechazar } from './ayudas';
+import { CODIGOS_ERROR } from './codigosDeError';
+import type { GameSessionState } from '../estado';
 import { evento } from './eventos';
 
 export interface ParamsReclutarEnCampamento {
@@ -91,5 +96,102 @@ export const comprarEnCampamento = comando<ParamsComprarEnCampamento, { cantidad
       }),
     ],
     { cantidad: r.cantidad, oro: r.oro }
+  );
+});
+
+export interface ParamsFondoRefundacion {
+  recurso: string;
+  cantidad: number;
+}
+
+export interface PayloadFondoRefundacion {
+  campamentoId: string;
+  heroeId: string;
+  faccionId: string;
+  recurso: string;
+  cantidad: number;
+  sentido: 'aporta' | 'retira';
+}
+
+/** La Facción del actor: la de la que es ciudadano. Sin ninguna, no hay refundación posible. */
+function faccionDelActor(estado: GameSessionState, heroeId: string) {
+  const faccion = estado.facciones.find((f) => esCiudadano(f, heroeId));
+  if (!faccion) rechazar(CODIGOS_ERROR.faccionNoPerteneces);
+  return faccion;
+}
+
+/** Aporta del almacén personal al fondo de refundación del campamento donde reside (Doc 1.9b). Solo una Facción sin asentamientos. */
+export const aportarARefundacion = comando<ParamsFondoRefundacion, { movido: number }>((estado, _mapa, ctx, params) => {
+  const heroe = exigirJugador(estado, ctx.actor);
+  const faccion = faccionDelActor(estado, heroe.id);
+  const r = aportarEngine(estado.campamentosMercenarios, estado.heroes, faccion, estado.asentamientos, heroe.id, params.recurso, params.cantidad);
+  const campamentoId = r.campamentos.find((c) => c.residentesIds.includes(heroe.id))!.id;
+  return exito(
+    { ...estado, campamentosMercenarios: r.campamentos, heroes: r.heroes },
+    [
+      evento(ctx, {
+        codigo: 'mercenarios.fondo_refundacion',
+        mensaje: `${heroe.displayName} aporta ${r.movido} ${params.recurso} al fondo de refundación de ${faccion.nombre}.`,
+        payload: { campamentoId, heroeId: heroe.id, faccionId: faccion.id, recurso: params.recurso, cantidad: r.movido, sentido: 'aporta' } satisfies PayloadFondoRefundacion,
+      }),
+    ],
+    { movido: r.movido }
+  );
+});
+
+/** Retira lo aportado por el actor del fondo, de vuelta a su almacén personal. */
+export const retirarDeRefundacion = comando<ParamsFondoRefundacion, { movido: number }>((estado, _mapa, ctx, params) => {
+  const heroe = exigirJugador(estado, ctx.actor);
+  const faccion = faccionDelActor(estado, heroe.id);
+  const r = retirarEngine(estado.campamentosMercenarios, estado.heroes, heroe.id, params.recurso, params.cantidad, ALMACEN_PERSONAL.capacidad);
+  const campamentoId = r.campamentos.find((c) => c.residentesIds.includes(heroe.id))!.id;
+  return exito(
+    { ...estado, campamentosMercenarios: r.campamentos, heroes: r.heroes },
+    [
+      evento(ctx, {
+        codigo: 'mercenarios.fondo_refundacion',
+        mensaje: `${heroe.displayName} retira ${r.movido} ${params.recurso} del fondo de refundación.`,
+        payload: { campamentoId, heroeId: heroe.id, faccionId: faccion.id, recurso: params.recurso, cantidad: r.movido, sentido: 'retira' } satisfies PayloadFondoRefundacion,
+      }),
+    ],
+    { movido: r.movido }
+  );
+});
+
+export interface ParamsComprarCaravanaDeRefundacion {
+  destino: Point;
+}
+
+export interface PayloadCaravanaDeRefundacion {
+  caravanaId: string;
+  campamentoId: string;
+  faccionId: string;
+  destino: Point;
+}
+
+/** Compra la Caravana de Fundación al 75 % con el fondo del campamento (Doc 1.9b): sale de él hacia `destino`, con el actor de fundador. */
+export const comprarCaravanaDeRefundacion = comando<ParamsComprarCaravanaDeRefundacion, { caravanaId: string }>((estado, mapa, ctx, params) => {
+  const heroe = exigirJugador(estado, ctx.actor);
+  const faccion = exigirFaccion(estado, faccionDelActor(estado, heroe.id).id);
+  const r = comprarCaravanaEngine(
+    estado.campamentosMercenarios,
+    faccion,
+    estado.asentamientos,
+    estado.caravanas,
+    mapa,
+    heroe.id,
+    params.destino,
+    ctx.ids.siguiente()
+  );
+  return exito(
+    { ...estado, campamentosMercenarios: r.campamentos, caravanas: [...estado.caravanas, r.caravana] },
+    [
+      evento(ctx, {
+        codigo: 'mercenarios.caravana_refundacion',
+        mensaje: `${faccion.nombre} compra una Caravana de Fundación en ${r.caravana.origenCampamentoId} hacia (${Math.round(params.destino.x)}, ${Math.round(params.destino.y)}).`,
+        payload: { caravanaId: r.caravana.id, campamentoId: r.caravana.origenCampamentoId!, faccionId: faccion.id, destino: params.destino } satisfies PayloadCaravanaDeRefundacion,
+      }),
+    ],
+    { caravanaId: r.caravana.id }
   );
 });

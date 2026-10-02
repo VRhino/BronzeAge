@@ -1949,6 +1949,11 @@ export const MERCENARIOS = {
     /** Se vende a este múltiplo del precio de referencia (+30 %): una válvula, no una competencia. El oro cobrado se destruye. */
     margen: 1.3,
   },
+  // --- Refundar (paso 5) ---
+  refundacion: {
+    /** La Caravana de Fundación comprada en un campamento cuesta esta fracción de una normal (`costoCaravanaFundacion`). */
+    porcentajeCoste: 0.75,
+  },
 } as const;
 
 /** El almacén personal de un héroe (Doc 2.5, decidido el 2026-10-02): unidades en total, de cualquier recurso. PLACEHOLDER. */

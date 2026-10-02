@@ -7,6 +7,8 @@ import { comprarCasa, dejarResidencia, residirEnCampamento } from '../comandos/c
 import { guardarEnAlmacenPersonal, sacarDelAlmacenPersonal } from '../comandos/heroe';
 import { comprarEnCampamento, reclutarEnCampamento } from '../comandos/mercenarios';
 import { exito } from '../comandos/tipos';
+import { aportarARefundacion, comprarCaravanaDeRefundacion } from '../comandos/mercenarios';
+import { costoRefundacion } from '../../engine/refundacion';
 import { salirAlMundo } from '../comandos/presencia';
 import { partidaConAsentamiento } from './fixtures';
 
@@ -22,6 +24,7 @@ const campamentoEn = (id: string, x: number, y: number): CampamentoMercenarios =
     poblacion: 100,
     poblacionEn: 0,
     mercado: { madera: 100 },
+    fondos: {},
     creadoEn: 0,
   }) as unknown as CampamentoMercenarios;
 
@@ -217,5 +220,51 @@ describe('el comercio del mundo alimenta los mercados', () => {
     expect(entre.mercadoMercenario.contadores).toEqual({ madera: 40 });
     const consigo = exito(entre, [e(false)]).estado;
     expect(consigo.mercadoMercenario.contadores).toEqual({ madera: 40 });
+  });
+});
+
+describe('refundar desde el campamento', () => {
+  /** Una Facción sin asentamientos, con su héroe en el campamento y los recursos del coste en su almacén personal. */
+  function sinPlazas() {
+    const base = conCampamentos();
+    const payload = base.sesion.exportar();
+    const costo = costoRefundacion();
+    const sesion = GameSession.importar({
+      ...payload,
+      state: {
+        ...payload.state,
+        asentamientos: [],
+        campamentosMercenarios: payload.state.campamentosMercenarios.map((c) => (c.id === 'merc-1' ? { ...c, residentesIds: [base.fundador] } : c)),
+        heroes: payload.state.heroes.map((h) => (h.id === base.fundador ? { ...h, almacenPersonal: costo } : h)),
+      },
+    });
+    return { ...base, sesion, costo };
+  }
+
+  it('aporta al fondo y compra la caravana, que sale del campamento con su Facción y es visible para ella', () => {
+    const { sesion, faccionId, fundador, opc, costo } = sinPlazas();
+
+    for (const [recurso, cantidad] of Object.entries(costo)) {
+      expect(sesion.ejecutar(aportarARefundacion, { recurso: recurso as never, cantidad }, opc).ok).toBe(true);
+    }
+    expect(campamentoDe(sesion, 'merc-1').fondos[fundador]).toEqual(costo);
+
+    const r = sesion.ejecutar(comprarCaravanaDeRefundacion, { destino: { x: 430, y: 430 } }, opc);
+
+    expect(r.ok).toBe(true);
+    const caravana = sesion.getState().caravanas.find((c) => c.id === r.datos!.caravanaId)!;
+    expect(caravana).toMatchObject({ tipo: 'construccion', faccionId, origenCampamentoId: 'merc-1' });
+    expect(campamentoDe(sesion, 'merc-1').fondos[fundador] ?? {}).toEqual({});
+  });
+
+  it('rechazo: sin fondo suficiente, y no versiona', () => {
+    const { sesion, opc } = sinPlazas();
+    const antes = sesion.getState();
+
+    const r = sesion.ejecutar(comprarCaravanaDeRefundacion, { destino: { x: 430, y: 430 } }, opc);
+
+    expect(r.ok).toBe(false);
+    expect(r.codigoError).toBe('mercenarios.invalido');
+    expect(sesion.getState()).toBe(antes);
   });
 });

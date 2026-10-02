@@ -141,6 +141,8 @@ Mecanismo COMPLEMENTARIO al Cap de Fundación (1.7) — ambos coexisten, no se s
 2. El coste de construcción de los edificios que nacen automáticamente con la fundación (Centro Urbano, Granja, 3 Viviendas — ver Doc 4.2.1).
 3. +50 de madera extra, representando el coste de fabricar la caravana en sí (placeholder).
 
+**Desde un campamento de mercenarios** (2026-10-02, 1.9b): una Facción sin asentamientos, que no tiene origen del que partir, la compra en un campamento al 75 % del coste, con el fondo que aportan sus héroes. Los gates de origen de abajo no aplican; sí el Cap de Fundación y que el destino esté libre.
+
 **GATES DE ORIGEN (todos necesarios simultáneamente):**
 - Solo puede lanzarse desde un asentamiento que PUEDA PAGAR el coste completo.
 - Solo puede lanzarse desde un asentamiento en NIVEL 2 como mínimo — gate estructural independiente del coste, que no depende de números ajustables.
@@ -171,7 +173,7 @@ Cifras, todas PLACEHOLDER (`CAMPAMENTOS_BANDIDOS`):
 
 El campamento no bloquea la explotación del bosque que ocupa: solo amenaza a las caravanas de paso.
 
-## 1.9b Campamentos de mercenarios (decidido el 2026-10-02; pasos 1 a 4 de 5 implementados)
+## 1.9b Campamentos de mercenarios (decidido el 2026-10-02; los 5 pasos implementados)
 
 Entidad **neutral** del mundo abierto, con miniatura en el mapa. No es de ninguna Facción, no se puede atacar, no crece y no desaparece. **No es un asentamiento**: no tiene zona de influencia, y ninguna zona lo absorbe (las zonas salen de los asentamientos). Es un enclave.
 
@@ -181,7 +183,7 @@ Entidad **neutral** del mundo abierto, con miniatura en el mapa. No es de ningun
 - **Residencia** (paso 2): cualquier héroe puede residir en él, y es la casa de quien se queda sin asentamiento; se acaba el huérfano (Doc 2.5, 5.15.5). Almacén personal de cada héroe: Doc 2.5.
 - **Reclutamiento** (paso 3): reclutar y reponer las tropas de sus edificios, con tecnología propia, pagando oro y gastando la población del campamento (Doc 5.8, 6.5b). Población: viviendas × 50, recupera 10 por hora.
 - **Mercado** (paso 4): solo vende, con stock limitado, y el oro cobrado se destruye (Doc 3.3b).
-- **Por llegar** (paso 5): refundar con los almacenes personales. Detalle y cifras en `Docs/Mecanicas a desarrollar.md` §40.
+- **Refundar** (paso 5): una Facción **sin asentamientos** compra en el campamento una **Caravana de Fundación al 75 %** del coste normal (1.8). Cada héroe ciudadano de esa Facción que reside allí aporta voluntariamente lo que quiere a un **fondo** desde su almacén personal (`aportarARefundacion`; lo suyo se retira mientras no se gaste) y, cuando el fondo cubre el coste, uno de ellos la compra (`comprarCaravanaDeRefundacion`). Sale **del campamento** hacia el punto elegido y viaja y funda como cualquier otra Caravana de Fundación, con el que compra de fundador; al fundar, deja el campamento y pasa a residir en la plaza nueva. Fundar a pie en campo abierto no cambia (1.3). *Pendiente:* escoltarla (ninguna Caravana de Fundación se puede escoltar hoy). Detalle y cifras en `Docs/Mecanicas a desarrollar.md` §40.
 
 ## 1.10 El héroe está SITUADO en el mundo
 

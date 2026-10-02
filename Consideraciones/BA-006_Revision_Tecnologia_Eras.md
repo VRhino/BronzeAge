@@ -271,7 +271,7 @@ Fenicia/Levantina, Helénica (incluye Macedonia y **Tracia**, decidido 2026-09-1
 > cultura (el origen solo elige la variante de layout), aparición por aglomeración de Facciones, y residencia,
 > almacén personal y mercado propios. Lo de abajo queda como historia de la decisión.
 
-**D26 — Campamentos de mercenarios en mundo abierto**, como los de bandidos, pero **no se pueden atacar**: son
+**D26 — Campamentos de mercenarios en mundo abierto** *(SUPERADA el 2026-10-02 por `Docs/Mecanicas a desarrollar.md` §40 y el canon: Doc 1.9b, 2.5, 3.3b, 5.8 y 6.5b; sin roster ni cultura propios)*, como los de bandidos, pero **no se pueden atacar**: son
 el único sitio donde se reclutan ciertas unidades específicas.
 - **Son escuadrones normales del héroe** (cuentan Liderazgo, uno por tropa), pero **solo se rellenan en esos
   campamentos**.
@@ -916,7 +916,7 @@ placeholder.
   caballo ya no "escapan de todo": solo de lo que va a pie (D8).
 - **Doc 5.15.3**: cupo de guarnición de las Caballerizas (D37).
 - **Doc 1.4**: livestock = ganado vacuno; los caballos se compran (D5); mineral de hierro abundante (D36).
-- **Doc 1.9 (o sección nueva)**: campamentos de mercenarios (D26).
+- **Doc 1.9b** (hecho el 2026-10-02): campamentos de mercenarios, que sustituyen a D26.
 - **Doc 4.2.1**: la Maravilla pide Era V (D3); Fundición con nivel interno 3 (D11); Mina de hierro (D36);
   Caballerizas (D37); Armería 2 y 3 con sus nuevos requisitos (P1, D43).
 - **Documento nuevo de culturas** (D12-D23, D27).
