@@ -221,6 +221,7 @@ export function avanzarCaravanasFundacion(
       );
       asentamientosActuales = [...asentamientosActuales, resultado.asentamiento];
       faccionesActuales = resultado.facciones;
+      eventos.push(...resultado.eventos);
       eventos.push({
         codigo: 'expansion.asentamiento_fundado',
         mensaje: `La Caravana de Fundación ${caravana.id} llega y funda ${resultado.asentamiento.id}.`,

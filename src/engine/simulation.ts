@@ -14,7 +14,7 @@ import { alCampamentoPorIds, campamentoDe, conEscolta, conEscuadrones, conTropa,
 import { caducarOrdenes } from './market';
 import { avanzarPoliticas } from './politicas';
 import { avanzarTributos } from './diplomacia';
-import { avanzarNivelesFaccion, aplicarAjustesExperiencia, registrarDerrota, type AjusteExperiencia } from './faccion';
+import { aplicarExperiencia, registrarDerrota, type AjusteExperiencia } from './faccion';
 import { NIVEL_FACCION } from '../constants';
 import { avanzarMantenimientoTropas, consumoRacionDeEscuadrones } from './tropas';
 import { avanzarMantenimiento, encontrarCapital } from './mantenimiento';
@@ -354,8 +354,9 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   // caravanas, aplicadas ya directamente sobre `facciones` en `engine/combate.ts`) antes de recalcular nivel.
   // `trasEjercitos.facciones` y no `trasExpansion.facciones`: un asedio ganado por un ejército otorga XP de
   // combate/conquista y puede penalizar reputación, y ese resultado tiene que entrar en la cadena.
-  const faccionesConXp = aplicarAjustesExperiencia(trasEjercitos.facciones, ajustesExperiencia);
-  const trasNivelFaccion = avanzarNivelesFaccion(faccionesConXp);
+  // El XP que dan los comandos y los combates ya subió el nivel en el momento (`aplicarExperiencia`); este es solo el
+  // del propio tick (construcción, ascensos).
+  const trasNivelFaccion = aplicarExperiencia(trasEjercitos.facciones, ajustesExperiencia);
   eventosDominio.push(...comoEventosDominio(trasNivelFaccion.eventos, contexto));
 
   const faccionesFinal = avanzarReputacion(trasNivelFaccion.facciones, estado.relaciones);

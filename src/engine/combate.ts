@@ -7,7 +7,7 @@ import type { RandomFn } from '../worldgen';
 import { CAMPAMENTOS_BANDIDOS, MILITAR, NIVEL_FACCION, OCUPACION, REPUTACION } from '../constants';
 import { aplicarCapacidadDeEdificio } from './almacen';
 import { aplicarAjustesReputacion } from './reputacion';
-import { aplicarAjustesExperiencia, type AjusteExperiencia } from './faccion';
+import { aplicarExperiencia, type AjusteExperiencia } from './faccion';
 import { multiplicadorDefensivoDeRecintos } from './muralla';
 import { integridadDeRecinto } from './trazado';
 import { CAMPO_CARGO, esResidente, estanAliadas } from './pertenencia';
@@ -439,7 +439,9 @@ export function iniciarAsedio(
     },
   ];
   if (conquistado) ajustesXp.push({ faccionId: atacante.faccionId, delta: NIVEL_FACCION.xp.conquista, razon: 'conquista' });
-  const faccionesFinal = aplicarAjustesExperiencia(faccionesConReputacion, ajustesXp);
+  const trasXp = aplicarExperiencia(faccionesConReputacion, ajustesXp);
+  const faccionesFinal = trasXp.facciones;
+  eventos.push(...trasXp.eventos);
 
   // Conquistar no mueve a nadie (Doc 5.15.5): los atacantes siguen en su campamento con sus bajas y la plaza
   // queda sin guarnición. A los residentes derrotados los desaloja el llamador (`desalojarResidentes`).
@@ -504,16 +506,18 @@ export function atacarCampamentoConColumna(
   }
 
   const payload: PayloadAtaqueCampamento = { atacanteId: ejercito.id, campamentoId: campamento.id };
+  const trasXp = aplicarExperiencia(facciones, [
+    { faccionId: ejercito.faccionId, delta: xpDeBandidos(facciones, ejercito.faccionId, choque.gana), razon: 'campamento de bandidos' },
+  ]);
   return {
     ejercito: { ...ejercito, escuadrones: ejercito.escuadrones.map((e) => porId.get(e.id) ?? e), suministro },
     destruido: choque.gana,
-    facciones: aplicarAjustesExperiencia(facciones, [
-      { faccionId: ejercito.faccionId, delta: xpDeBandidos(facciones, ejercito.faccionId, choque.gana), razon: 'campamento de bandidos' },
-    ]),
+    facciones: trasXp.facciones,
     eventos: [
       choque.gana
         ? { codigo: 'combate.campamento_destruido', mensaje: `La columna ${ejercito.id} destruye el campamento de bandidos ${campamento.id}.`, payload }
         : { codigo: 'combate.ataque_campamento_fallido', mensaje: `La columna ${ejercito.id} falla el ataque al campamento de bandidos ${campamento.id}.`, payload },
+      ...trasXp.eventos,
     ],
   };
 }
@@ -597,14 +601,14 @@ export function asediarConEjercito(
             payload,
           },
     ];
+    const trasXp = cae
+      ? aplicarExperiencia(facciones, [{ faccionId: ejercito.faccionId, delta: NIVEL_FACCION.xp.conquista, razon: 'conquista' }])
+      : { facciones, eventos: [] };
+    eventos.push(...trasXp.eventos);
     return {
       ejercito,
       defensor: cae ? aplicarConquista(defensor, ejercito.faccionId, instante) : defensor,
-      facciones: cae
-        ? aplicarAjustesExperiencia(facciones, [
-            { faccionId: ejercito.faccionId, delta: NIVEL_FACCION.xp.conquista, razon: 'conquista' },
-          ])
-        : facciones,
+      facciones: trasXp.facciones,
       eventos,
       conquistado: cae,
       tropaDefensora: [],
@@ -641,10 +645,12 @@ export function asediarConEjercito(
     ...ejercito,
     escuadrones: ejercito.escuadrones.map((e) => idsAtacantes.get(e.id) ?? e),
   };
+  const trasXp = aplicarExperiencia(conReputacion, ajustesXp);
+  eventos.push(...trasXp.eventos);
   return {
     ejercito: ejercitoTrasCombate,
     defensor: conquistado ? aplicarConquista(defensor, ejercito.faccionId, instante) : defensor,
-    facciones: aplicarAjustesExperiencia(conReputacion, ajustesXp),
+    facciones: trasXp.facciones,
     eventos,
     conquistado,
     tropaDefensora: resultado.defensores,
@@ -690,10 +696,12 @@ export function encuentroEntreEjercitos(
     },
   ];
 
-  const faccionesFinal = aplicarAjustesExperiencia(facciones, [
+  const trasXp = aplicarExperiencia(facciones, [
     { faccionId: a.faccionId, delta: xpDeCombate(vivosA, resultado.digno), razon: 'combate (encuentro)' },
     { faccionId: b.faccionId, delta: xpDeCombate(vivosB, resultado.digno), razon: 'combate (encuentro)' },
   ]);
+  const faccionesFinal = trasXp.facciones;
+  eventos.push(...trasXp.eventos);
 
   return {
     a: { ...a, escuadrones: a.escuadrones.map((e) => actualizadosA.get(e.id) ?? e) },

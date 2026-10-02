@@ -9,7 +9,7 @@
 import { LOGISTICA } from '../../constants';
 import { distancia as distanciaEntre } from '../../world/geometria';
 import { aplicarAjustesReputacion } from '../../engine/reputacion';
-import { aplicarAjustesExperiencia } from '../../engine/faccion';
+import { aplicarExperiencia } from '../../engine/faccion';
 import { EntregaInvalidaError, entregarDesdeCaravanaAdjunta } from '../../engine/trade';
 import {
   cargarCaravanaAdjunta as cargarCaravanaEngine,
@@ -388,13 +388,14 @@ export const entregarDeCaravana = comando<ParamsEntregarDeCaravana, { entregado:
       estado.facciones
     );
 
+    const trasXp = aplicarExperiencia(aplicarAjustesReputacion(estado.facciones, r.ajustesReputacion), r.ajustesExperiencia);
     const siguiente: GameSessionState = {
       ...conCaravana(conAsentamiento(estado, r.destino), r.caravana),
       acuerdos: estado.acuerdos.map((a) => (a.id === r.acuerdo.id ? r.acuerdo : a)),
-      facciones: aplicarAjustesExperiencia(aplicarAjustesReputacion(estado.facciones, r.ajustesReputacion), r.ajustesExperiencia),
+      facciones: trasXp.facciones,
     };
 
-    return exito(siguiente, eventos(ctx, r.eventos.map((e) => (typeof e === 'string' ? { codigo: 'legado', mensaje: e } : e))), {
+    return exito(siguiente, eventos(ctx, [...r.eventos, ...trasXp.eventos].map((e) => (typeof e === 'string' ? { codigo: 'legado', mensaje: e } : e))), {
       entregado: r.entregado,
       comision: r.comision,
     });

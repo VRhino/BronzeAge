@@ -45,7 +45,7 @@ export interface PayloadPeajePaso {
   peaje: Record<string, number>;
 }
 import { ANIMAL_CATALOGO, ASIGNACION_CARAVANA, CARAVANA_PREPARACION, CARRO_CATALOGO, COMISION, NIVEL_FACCION, REPUTACION, TRUEQUE } from '../constants';
-import { aplicarAjustesExperiencia, type AjusteExperiencia } from './faccion';
+import { aplicarExperiencia, type AjusteExperiencia } from './faccion';
 import type { AnimalTipo, CarroTipo } from '../domain/types';
 import { capacidadCaravana, velocidadCaravana } from './caravanas';
 import { esResidente } from './pertenencia';
@@ -1092,9 +1092,11 @@ export function avanzarComercio(
   const vigente = podarRutas(red, instante, new Set(asentamientos.map((a) => a.id)));
   const trasAsignacion = asignarCaravanasATrueque(mapa, vigente, zonas, acuerdosPorId, asentamientosPorId, trasMovimiento, instante, eventos, ajustesReputacion);
 
+  const trasXp = aplicarExperiencia(aplicarAjustesReputacion(facciones, ajustesReputacion), ajustesExperiencia);
+  eventos.push(...trasXp.eventos);
   return {
     asentamientos: asentamientos.map((a) => asentamientosPorId.get(a.id)!),
-    facciones: aplicarAjustesExperiencia(aplicarAjustesReputacion(facciones, ajustesReputacion), ajustesExperiencia),
+    facciones: trasXp.facciones,
     caravanas: trasAsignacion.caravanas,
     acuerdos: [...acuerdosPorId.values()],
     eventos,

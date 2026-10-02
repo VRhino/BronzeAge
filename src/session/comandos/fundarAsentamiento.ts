@@ -7,7 +7,7 @@ import { conEscuadrones } from '../../engine/tropa';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito } from './tipos';
 import { comando, conExploracionFundida, conTropaDe, exigirJugador } from './ayudas';
-import { evento } from './eventos';
+import { desdeCrudos, evento } from './eventos';
 
 export interface PayloadAsentamientoFundado {
   asentamientoId: string;
@@ -115,6 +115,7 @@ export const fundarAsentamiento = comando<ParamsFundarAsentamiento, { asentamien
         } satisfies PayloadAsentamientoFundado,
         asentamientoId: resultado.asentamiento.id,
       }),
+      ...desdeCrudos(ctx, resultado.eventos),
     ],
     { asentamientoId: resultado.asentamiento.id }
   );

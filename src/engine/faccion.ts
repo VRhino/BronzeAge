@@ -52,7 +52,18 @@ export interface AjusteExperiencia {
   razon: string;
 }
 
-/** Aplica una lista de ganancias de experiencia (Doc Fase_0_5 §8: combate/construcción/conquista/caravanas). */
+/**
+ * Aplica una lista de ganancias de experiencia (Doc Fase_0_5 §8: combate/construcción/conquista/caravanas) **y sube el nivel
+ * en el mismo momento** si la experiencia cruza un umbral, con su evento `faccion.nivel_subio`. Antes el nivel se
+ * re-derivaba en un barrido de cada tick (`avanzarNivelesFaccion`), y el XP que daba un comando tardaba hasta un minuto en
+ * verse como nivel (`Consideraciones/Auditoria_Tick_Eventos.md`, ficha A). Ahora quien da la experiencia la convierte en nivel.
+ */
+export function aplicarExperiencia(facciones: Faccion[], ajustes: AjusteExperiencia[]): { facciones: Faccion[]; eventos: EventoCrudo[] } {
+  if (ajustes.length === 0) return { facciones, eventos: [] };
+  return avanzarNivelesFaccion(aplicarAjustesExperiencia(facciones, ajustes));
+}
+
+/** Suma la experiencia sin tocar el nivel. Para quien necesita el nivel recalculado: `aplicarExperiencia`. */
 export function aplicarAjustesExperiencia(facciones: Faccion[], ajustes: AjusteExperiencia[]): Faccion[] {
   if (ajustes.length === 0) return facciones;
   const porId = new Map(facciones.map((f) => [f.id, f]));
@@ -63,7 +74,7 @@ export function aplicarAjustesExperiencia(facciones: Faccion[], ajustes: AjusteE
   return facciones.map((f) => porId.get(f.id)!);
 }
 
-/** Recalcula el nivel de todas las Facciones a partir de su experiencia actual; devuelve eventos de subida. */
+/** Recalcula el nivel de las Facciones a partir de su experiencia; devuelve eventos de subida. Devuelve el MISMO array si nada cambió. */
 export function avanzarNivelesFaccion(facciones: Faccion[]): { facciones: Faccion[]; eventos: EventoCrudo[] } {
   const eventos: EventoCrudo[] = [];
   const actualizadas = facciones.map((f) => {
@@ -77,7 +88,7 @@ export function avanzarNivelesFaccion(facciones: Faccion[]): { facciones: Faccio
     }
     return nuevoNivel === f.nivel ? f : { ...f, nivel: nuevoNivel };
   });
-  return { facciones: actualizadas, eventos };
+  return { facciones: eventos.length === 0 ? facciones : actualizadas, eventos };
 }
 
 export function esCiudadano(faccion: Faccion, heroeId: string): boolean {
