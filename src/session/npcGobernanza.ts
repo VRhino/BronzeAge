@@ -870,9 +870,22 @@ function reclutarParaTodos(
   // Las que la Facción no ha adoptado las rechazaría el motor de todas formas (Doc 6.1): se saltan sin preguntarle, que
   // era la mayor parte de los intentos de cada tick. El contador avanza igual que si se hubieran intentado.
   const sinTecnologia = new Set(TROPAS_RECLUTABLES.filter((t) => !adoptadas.includes(t.tecnologia)).map((t) => t.id));
+  // Y las que la plaza no puede reclutar por falta de edificio (activo y del nivel que pide) o por tener ya la escuadra completa:
+  // son los otros dos rechazos que se repetían cada minuto y que el motor da por imposibles sin mirar nada más.
+  const sinEdificio = new Set(
+    TROPAS_RECLUTABLES.filter((t) => {
+      const edificio = edificiosPorTipoYEstado(asentamiento, t.edificio)[0];
+      return !edificio || (edificio.nivelInterno ?? 1) < t.nivelRequerido;
+    }).map((t) => t.id)
+  );
+  const unidadesPorDefecto = new Map(TROPAS_RECLUTABLES.map((t) => [t.id, t.unidadesPorDefecto]));
   for (const heroeId of residentesDe(asentamiento)) {
     for (const candidata of candidatas) {
-      if (sinTecnologia.has(candidata)) {
+      if (
+        sinTecnologia.has(candidata) ||
+        sinEdificio.has(candidata) ||
+        cantidadDeTropa(heroesActuales, heroeId, candidata) >= (unidadesPorDefecto.get(candidata) ?? Infinity)
+      ) {
         contador++;
         continue;
       }
