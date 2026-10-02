@@ -953,6 +953,10 @@ function prepararDefensaNpc(asentamiento: Asentamiento, heroes: Heroe[]): Heroe[
     const elegidas: Escuadron[] = [];
     for (const e of porFuerza) if (puedeLlevar(heroe, [...elegidas, e])) elegidas.push(e);
     const activo = heroe.loadouts.find((l) => l.activo);
+    // Idempotente: si el loadout activo ya es este, no se reescribe (era lo que ocurría casi siempre, cada minuto).
+    if (activo && activo.perksSeleccionados.length === 0 && activo.squadIds.length === elegidas.length && elegidas.every((e, i) => activo.squadIds[i] === e.id)) {
+      return heroe;
+    }
     return guardarLoadout(
       heroe,
       { id: activo?.id, displayName: activo?.displayName ?? 'Default', squadIds: elegidas.map((e) => e.id), perksSeleccionados: [], activo: true },
