@@ -12,8 +12,30 @@ Sale de la corrección de la residencia en campamentos: un barrido que recorría
 reubicar a quien se había quedado sin casa, cuando era la **consecuencia de un hecho puntual** (cae una plaza, se
 arruina, alguien deja su casa) y debía resolverse en el acto. Aquí se hace la misma pregunta sobre el resto del tick.
 
-Es un **informe para decidir, no un plan**. No se ha tocado código del repositorio: las medidas y reproducciones son
-scripts aparte que importan `src/` tal cual.
+Es un **informe para decidir, no un plan**. Las medidas y reproducciones son scripts aparte que importan `src/` tal
+cual. Tras el informe, el usuario decidió implementar parte de lo que recoge; la sección siguiente dice qué.
+
+## Estado de la implementación (2026-10-02)
+
+Lo descrito en el resto del documento es el estado **antes** de estos cambios; cada fila dice dónde se resolvió.
+
+| Qué | Resuelto en | Cómo |
+|---|---|---|
+| **R, B5** | `6b15716` | `acogerHeroesNpc` desaparece. La derrota de la última plaza se resuelve donde ocurre (`session/derrotas.ts`: `derrotasEntre`, `resolverDerrotasNpc`, `conDerrotasResueltas`): el tick, `iniciarAsedio`, el asedio por columna y el resultado de una batalla; el batch la llama entre motor y NPC. Anexión por NPC ganador (los bots pasan a la ganadora, que los reparte por la plaza con menos residentes contando la conquistada); disolución en los demás casos. El Paso 0 saca de los campamentos a los fundadores. |
+| **B4** | `6b15716` | `iniciarAsedio` registra la derrota. Con test que falla si se quita. |
+| **O2** | `1827f06` | `aplicarConquista` limpia `politicasActivas`, `reservaManual`, `autoConstruccionPausada` y `recetasPausadas` del dueño derrotado. |
+| **B1, B2, ficha B** | `d4c1390` | `engine/ruina.ts`, `cerrarDependientesDeRuina`: dispersa el campamento de bandidos, cancela sin penalizar los trueques en pie, y las caravanas vuelven a casa con su carga (o se pierden si su origen es la ruina o no hay camino). |
+| **B3** | `74e76e3` | El id lleva el minuto de fundación (`asentamiento-2-120-1440-t29455201`). Cambia el trazado de las ciudades que se funden desde ahora; las ya fundadas conservan su id. |
+| **N2b** | `9e25811` | `ejercito.reabastecido` solo se narra si el carro estaba por debajo de `LOGISTICA.umbralNarrarReposte` (50 %). El reposte no cambia. A los 4 500 ticks: 36 928 eventos en memoria frente a 59 240 (−38 %). |
+| **A** | `43f4375` | `aplicarExperiencia` suma la experiencia, recalcula el nivel y emite `faccion.nivel_subio` donde se da: combate (5 sitios), comercio, entrega desde caravana adjunta, fundación y el propio tick. |
+
+**Sin hacer:** **N2a** (el log en memoria se sigue copiando entero en `exito`: con N2b son ~1,6 ms por copia a los 4 500 ticks,
+unos 5 ms por tick; el arreglo de verdad cambia el orden del log, que leen la persistencia JSONL, los cursores y muchos
+tests, así que se decide aparte), reclutamiento NPC, trueques terminales al historial, títulos, idempotencia del NPC y
+**O1** (difusión por WebSocket de los ticks del reloj).
+
+**Hallazgos de paso:** `iniciarAsedio` no puede asediar una plaza sin defensores (devuelve "No hay escuadrones válidos
+seleccionados"), y `typecheck:lab` falla en `main` por `lab/src/main.ts:209`.
 
 > **Alcance.** `9f9a098` ("reubicar a quien pierde la casa en el momento del hecho") **ya está en `main`** y se audita aquí.
 
