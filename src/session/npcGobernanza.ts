@@ -46,7 +46,7 @@ import { asignarGuarnicion, guardarLoadout, HeroeInvalidoError, heridosEn, herir
 import { puedeLlevar } from '../engine/liderazgo';
 import { CombateInvalidoError, poderEscuadron, poderTotal } from '../engine/combate';
 import { agendarReaparicionBandidos } from '../engine/bandidos';
-import { lanzarCaravanaFundacion, costoCaravanaFundacion, ExpansionInvalidaError } from '../engine/expansion';
+import { lanzarCaravanaFundacion, puedeLanzarFundacion, costoCaravanaFundacion, ExpansionInvalidaError } from '../engine/expansion';
 import {
   nivelActualDe,
   tieneMercadoActivo,
@@ -1139,6 +1139,9 @@ function expandirSiPuede(
     if (!tieneRecursos(asentamiento.almacen, costo)) continue;
     const faccion = facciones.find((f) => f.id === asentamiento.faccionId);
     if (!faccion) continue;
+    // Las puertas que no dependen del destino, antes de barrer el mapa: con la Facción en su cap (lo normal) el barrido
+    // costaba ~27 ms por tick a las 5 semanas de batch y el motor rechazaba el lanzamiento igualmente.
+    if (!puedeLanzarFundacion(asentamiento, faccion, asentamientosActuales, caravanasActuales, instante)) continue;
     const destino = buscarDestino(asentamiento, mapa, asentamientosActuales);
     if (!destino) continue;
 
@@ -1408,6 +1411,10 @@ function lanzarCampanas(
   let heroesActuales = heroes;
   // Una cacería de bandidos (`cazarBandidos`, objetivo en un punto) no cuenta como campaña en curso.
   const conCampanaEnCurso = new Set(ejercitos.filter((e) => e.objetivo.tipo === 'asentamiento').map((e) => e.origenAsentamientoId));
+  // La defensa que encontraría una campaña en cada plaza depende solo de la plaza y de los héroes, no de quién ataque: se
+  // calcula una vez por plaza mientras los héroes no cambien (solo cambian al lanzarse una campaña), no por cada origen.
+  let defensaCacheadaSobre = heroesActuales;
+  const defensaCacheada = new Map<string, number>();
 
   for (const origen of [...asentamientos].sort((a, b) => (a.id < b.id ? -1 : 1))) {
     if (!esNpc(origen.faccionId)) continue;
@@ -1460,8 +1467,18 @@ function lanzarCampanas(
     // encontraría hoy, con la cohesión defensiva y la muralla del propio combate (`asediarConEjercito`). En la Era I
     // medida, el NPC se estrellaba una y otra vez contra guarniciones cinco veces más fuertes (gana el 0,4 %).
     const poderPropio = poderTotal(expedicion, false);
-    const puedeGanar = (plaza: Asentamiento) =>
-      poderPropio > poderTotal(defensaPrevista(plaza, heroesActuales, heridos), true) * multiplicadorDefensivoDeRecintos(plaza.recintos ?? []);
+    const puedeGanar = (plaza: Asentamiento) => {
+      if (defensaCacheadaSobre !== heroesActuales) {
+        defensaCacheada.clear();
+        defensaCacheadaSobre = heroesActuales;
+      }
+      let defensa = defensaCacheada.get(plaza.id);
+      if (defensa === undefined) {
+        defensa = poderTotal(defensaPrevista(plaza, heroesActuales, heridos), true) * multiplicadorDefensivoDeRecintos(plaza.recintos ?? []);
+        defensaCacheada.set(plaza.id, defensa);
+      }
+      return poderPropio > defensa;
+    };
     // Ni contra la última plaza de una Facción (2026-09-27, decisión del usuario): conquistarla la haría desaparecer
     // (anexión, `session/derrotas.ts`), y en la Era II medida una sola Facción se comió a diez en dos semanas.
     const plazasDe = (faccionId: string) => asentamientos.filter((a) => a.faccionId === faccionId).length;
