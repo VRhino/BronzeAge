@@ -1,38 +1,43 @@
 # Auditoría del tick: qué se evalúa cada minuto y qué debería dispararse por hecho
 
-**Abierto el 2026-10-02**, sobre `8091638` (`origin/main`). Sale de la corrección de la residencia en campamentos:
-`acogerHeroesSinCasa` recorría todos los héroes en cada tick para reubicar a quien se había quedado sin casa, y era
-una **consecuencia de un hecho puntual** (cae una plaza, se arruina, alguien deja su casa) que se resolvía tarde,
-barriendo. Aquí se pregunta lo mismo del resto del tick.
+**Abierto el 2026-10-02**, sobre `8091638` (`origin/main`). **Revisado el mismo día (segunda pasada)** con medidas
+de CPU de una partida real y reproducciones de cada bug; la §10 resume qué cambió respecto a la primera versión,
+que se escribió solo leyendo código.
 
-Es un **informe para decidir, no un plan**. Solo lectura: no se ha tocado código ni se han ejecutado tests (el
-árbol no tiene `node_modules`); todo lo que sigue sale de leer `src/` y de las medidas ya escritas en
-`Docs/Arquitectura/6_Sincronizacion_Visibilidad_y_Escala.md`.
+Sale de la corrección de la residencia en campamentos: `acogerHeroesSinCasa` recorría todos los héroes en cada tick
+para reubicar a quien se había quedado sin casa, y era una **consecuencia de un hecho puntual** (cae una plaza, se
+arruina, alguien deja su casa) que se resolvía tarde, barriendo. Aquí se hace la misma pregunta sobre el resto del
+tick.
 
-> **Aviso de alcance.** El commit `9f9a098` (campamentos de mercenarios, `desalojarResidentes` de ruina,
-> `reubicarResidentesDeRuina`, `dejarResidencia`) **no está en el árbol auditado** — ni en `origin/main` ni en
-> ninguna de las ramas remotas. En este árbol `desalojarResidentes` solo existe para la conquista
-> (`engine/combate.ts:226`) y la ruina (`engine/simulation.ts:224-227`) no reubica a nadie. Lo de residencia se da
-> por resuelto tal como lo describe la petición y no se audita.
+Es un **informe para decidir, no un plan**. No se ha tocado código del repositorio: las medidas y reproducciones
+son scripts aparte que importan `src/` tal cual.
+
+> **Aviso de alcance.** El commit `9f9a098` (campamentos de mercenarios, `reubicarResidentesDeRuina`,
+> `dejarResidencia`) **no está en el árbol auditado**: ni en `origin/main` ni en ninguna rama remota. En este árbol
+> `desalojarResidentes` solo existe para la conquista (`engine/combate.ts:226`) y la ruina
+> (`engine/simulation.ts:224-227`) no reubica a nadie. La residencia se da por resuelta tal como la describe la
+> petición y no se audita.
 
 ---
 
-## 1. Conclusiones en seis líneas
+## 1. Conclusiones
 
-1. **La gran mayoría del tick es legítima.** De las 45 filas del inventario, más de 30 son dinámica continua,
-   caducidades por fecha o hechos ya disparados donde ocurren (§3). El tick ya está bien orientado: casi todo lo que caduca lleva una **fecha absoluta
-   en la entidad** (`completaEn`, `expiraEn`, `preparaHasta`…), que es la forma de "evento" barata de este motor.
-2. **Hay pocas mal asignadas y casi todas son pequeñas**: tres en categoría 2 (§4) y siete en la 3 (§5). La más
-   clara es el **nivel de Facción**, que se recalcula al final de cada tick aunque la XP se gane en un comando.
-3. **El coste no es el argumento.** Un tick a 100 asentamientos son ~62 ms sobre 60 000 ms de intervalo (0,10 %,
-   Doc 6 §1). Lo que justifica mover algo es **corrección** —ventana entre hecho y tick, mezcla de casos, evento
-   que sale en el minuto equivocado—, no ahorrar CPU. Donde sí hay coste oculto probable está en §5 (D) y (G), y
-   se resuelve midiendo y memoizando, no con eventos.
-4. **No conviene mover** las caducidades por fecha, el NPC por umbrales, la memoria de niebla ni los barridos que
-   sostienen un invariante con muchos caminos de ruptura (§6). Mover lo equivocado cambia el orden de evaluación
-   del tick y el batch deja de ser comparable.
-5. **Dos bugs claros** y tres observaciones aparte (§7). Ninguno depende de mover nada: se arreglan solos.
-6. **Orden recomendado** en §8: bugs → nivel de Facción → medir perfil por etapa → cierre de una ruina → resto.
+1. **El motor está bien orientado; el turno del NPC no.** Con 20 Facciones NPC, el tick completo del servidor
+   (`RunnerDePartida.unTickCompleto`) gasta **~7,5 ms en el motor y 22-38 ms en el NPC** (§3). A 50 Facciones, 27 ms
+   contra 54. El NPC corre cada tick, dentro de la misma entrada de la cola serial, y es lo que más pesa.
+2. **El mayor coste del tick entero es una consecuencia mal asignada.** Cada tick el NPC hace **~1 050 intentos de
+   reclutar, de los que fallan el 99,5 %**. El 90 % falla porque la plaza no tiene Barracón o Galería de tiro, algo
+   que solo cambia cuando termina una obra. Son **~20 ms/tick, 2,5 veces el motor entero**, y más de la mitad se va en
+   construir excepciones (§5, **N1**).
+3. **Lo segundo que más pesa es barrer historia que solo crece.** Las órdenes de mercado expiradas nunca salen del
+   estado (de 252 a 5 550 en 3 000 ticks, el 93 % ya expiradas), y `publicarOrdenesNpc` copia y recorre la lista
+   entera por cada plaza y recurso: **de 0,4 a 12,5 ms/tick en esos 3 000 ticks**. Al log de eventos en memoria le
+   pasa lo mismo a menor escala (§5, **N2**). El hecho que debería moverlas fuera es su paso a estado terminal.
+4. **Lo que la primera versión mandaba "medir" no pesa.** Zonas ~1 ms, memoria de niebla ~0,6 ms, títulos ~0,3 ms,
+   spawn de bandidos ~0,1 ms por tick. Siguen siendo dudosos por **corrección** en algún caso, pero no por coste.
+5. **Las caducidades por fecha, el NPC por umbrales y la memoria de niebla deben quedarse como están** (§7).
+6. **Cuatro bugs reproducidos**, uno grave: todos los campamentos de bandidos nacen con el **mismo id**
+   `campamento-0`. Solo se puede atacar el primero, y destruirlo los borra todos (§8, **B0**).
 
 ---
 
@@ -42,414 +47,449 @@ Tres categorías, las de la petición:
 
 - **1 · Legítima del tick.** Dinámica continua o periódica por naturaleza: producción, consumo, crecimiento,
   mantenimiento, movimiento, caducidad por fecha, reposición programada.
-- **2 · Mal asignada.** Es la consecuencia de un hecho discreto (comando, conquista, obra terminada, llegada) y se
-  detecta recalculando o barriendo en vez de dispararse cuando ocurre.
+- **2 · Mal asignada.** Consecuencia de un hecho discreto (comando, conquista, obra terminada, llegada, paso a
+  estado terminal) que se detecta recalculando o barriendo en vez de resolverse cuando ocurre.
 - **3 · Dudosa.** Depende de cuántas veces se mire, de una ventana poco clara, o mezcla un caso real con otros.
 
 Cinco preguntas para decidir si algo de la 2 o la 3 **debe** moverse. Si alguna sale mal, no se mueve:
 
-1. **¿Hay un hecho identificable y enumerable?** Si la consecuencia puede venir de cuatro caminos distintos y mañana
-   de un quinto, el barrido es el invariante; un evento por camino se deja uno atrás.
-2. **¿La consecuencia es escribir estado/evento o solo leer algo derivado?** Si es lectura derivada, la herramienta
-   correcta es la **memoización con clave** (como las tres de Doc 6 E3) o derivarlo al leer (como `estaHerido`,
-   `estaOcupado`, la proyección), no un evento.
-3. **¿Qué ventana abre el barrido?** Hasta un tick (1 min de mundo) es casi siempre aceptable; lo que no lo es es
-   que el *comando* devuelva un estado que contradice su propio efecto.
-4. **¿Qué orden de evaluación cambia?** El pipeline de `avanzarSimulacion` es un orden *load-bearing* (comentado
-   en `simulation.ts:172-199`: población come antes que tropas, recaudación antes que mantenimiento…).
-5. **¿El hecho ya tiene un único sitio de escritura?** Si sí, el coste de mover es bajo; si está repartido por 6
-   funciones, el coste lo pone el sitio, no el principio.
+1. **¿Hay un hecho identificable y enumerable?** Si la consecuencia puede venir de cuatro caminos y mañana de un
+   quinto, el barrido es el invariante; un evento por camino deja uno atrás.
+2. **¿La consecuencia escribe estado/evento o solo lee algo derivado?** Para lecturas, la herramienta es
+   **comprobarlo barato antes** o **memoizar con clave** (como Doc 6 E3), no un evento.
+3. **¿Qué ventana abre el barrido?** Hasta un tick (1 min de mundo) suele ser aceptable; no lo es que un *comando*
+   devuelva un estado que contradice su propio efecto.
+4. **¿Qué orden de evaluación cambia?** El pipeline de `avanzarSimulacion` es *load-bearing* (comentado en
+   `simulation.ts:172-199`).
+5. **¿El hecho tiene un único sitio de escritura?** Si sí, mover es barato; si está repartido, el coste lo pone el
+   sitio, no el principio.
 
-Lo que protegería un cambio (referencia para "qué se rompería" en cada ficha):
+Lo que protegería cada cambio (la referencia para "qué se rompería" en las fichas):
 
 | Guardián | Qué fija | A qué es sensible |
 |---|---|---|
-| `engine/__tests__/snapshot_baseline.test.ts` | 1 Facción, 1 asentamiento, semilla 99, cortes 1/10/25/50/100: nivel, población, medidor, nº de escuadras, edificios por tipo/estado, 7 recursos, nivel y reputación de la Facción | **orden del pipeline de construcción/población/mantenimiento**. No ve NPC, combate, conquista, ruina ni comercio |
-| `engine/__tests__/determinismo.test.ts` | 80 ticks, `toEqual` del estado final **y de los eventos por tick**, misma semilla | cualquier cambio de **qué evento sale en qué tick**, y todo consumo de RNG |
-| `engine/__tests__/invariantes_simulacion_larga.test.ts` | 3 asentamientos, 300 ticks, invariantes por tick | recursos negativos, NaN, medidor fuera de rango |
-| Batch (`scripts/run-batch-sim.ts`, sellos SHA-256 de `bench-batch-checkpoint.ts`) | estado completo idéntico byte a byte | **todo**, y en particular el NPC, que sí corre en batch |
-| RNG | una tirada por asentamiento y tick en `crecerPoblacion`; `avanzarAtaquesBandidos`; asedios y encuentros | mover algo que consume RNG cambia la secuencia de todo lo posterior |
+| `engine/__tests__/snapshot_baseline.test.ts` | 1 Facción, 1 plaza, semilla 99, cortes 1/10/25/50/100: nivel, población, medidor, nº de escuadras, edificios, 7 recursos, nivel y reputación de la Facción | orden del pipeline de construcción/población/mantenimiento. No ve NPC, combate, conquista, ruina ni comercio |
+| `engine/__tests__/determinismo.test.ts` | 80 ticks; `toEqual` del estado final **y de los eventos de cada tick** | qué evento sale en qué tick, y todo consumo de RNG |
+| `engine/__tests__/invariantes_simulacion_larga.test.ts` | 3 plazas, 300 ticks, invariantes tick a tick | recursos negativos, NaN, medidor fuera de rango |
+| Batch (`scripts/run-batch-sim.ts`, sello SHA-256 de `bench-batch-checkpoint.ts`) | estado completo byte a byte | **todo**, incluidos el NPC y los **ids**: el contador de ids del NPC avanza por intento, no por éxito |
+| RNG | una tirada por plaza y tick en `crecerPoblacion`; `avanzarAtaquesBandidos`; asedios y encuentros | mover algo que consume RNG cambia la secuencia de todo lo posterior |
+
+Estado de partida: **la suite completa pasa (1 350 tests) sobre `8091638`**.
 
 ---
 
-## 3. Inventario por responsabilidad
+## 3. Medidas
 
-Orden de `avanzarSimulacion` (`engine/simulation.ts:122`), más lo que corre alrededor. **1** legítima · **2** mal
-asignada · **3** dudosa · ✔ ya está disparada por el hecho.
+**Método.** `GameSession.crear` con semilla 7; 20 Facciones creadas con el comando real `crearFaccionNpc`
+(`postura` por defecto, agresiva); y por cada tick, la misma secuencia que el runner: `avanzarTick` →
+`avanzarAutoComercio` → `avanzarFaccionesNpc`. Se corrieron 4 500 ticks (~3 días de mundo), con perfil de CPU
+(`node --cpu-prof`) en dos ventanas de 300 ticks: desde el tick 1 500 y desde el 4 500. Una tercera corrida, de 50
+Facciones y 400 ticks, mide cómo escala.
 
-### 3.1 Motor (`engine/`)
+**Límites, para no sobreleer los números.** Es la máquina de desarrollo del contenedor. Es un mundo solo de NPC,
+temprano: las 20 plazas siguen en nivel 1 y no ha salido ningún ejército. Sirve para ver **qué pesa y qué crece**;
+no da cifras de una partida madura con jugadores.
 
-| # | Responsabilidad | Ubicación | Cat. | Nota |
-|---|---|---|---|---|
-| 1 | Zonas, capitales y reclamos de fuentes de todo el mundo | `simulation.ts:127,130,137` | 3 | derivado que se recalcula entero; ver **(G)** |
-| 2 | Obra de edificio termina | `construction.ts:1255-1284` | 1 | fecha `completaEn`; los efectos (capacidad, puestos, XP, radio) cuelgan inline del hecho ✔ |
-| 3 | Producción de extractores/granjas/leñeras | `construction.ts:1288-1326` | 1 | tasa continua |
-| 4 | Arranque de obras en cola cuando hay cuadrilla | `construction.ts:1339-1376` | 1 | limitado por cupo y stock, no por un hecho único |
-| 5 | Recetas de transformación | `construction.ts:1184,1381` | 1 | continua; `factorLineaProduccion` ver **(G)** |
-| 6 | Mejoras de nivel interno (terminar / empezar) | `construction.ts:1067-1108` | 1 | fecha + stock |
-| 7 | Crecimiento de `radioPotencial` por edificio completado | `construction.ts:1401-1404` | ✔ | ya va por el hecho, no por tiempo |
-| 8 | Auto-construcción (`evaluarNecesidades`) | `construction.ts:533,1419` | 1 | umbrales de variables continuas; memoizada (Doc 6 E3) |
-| 9 | Obra de recintos celda a celda | `muralla.ts:772-815` | 1 | stock + `siguienteCeldaEn` |
-| 10 | XP de Facción por edificio completado | `simulation.ts:164-170` | ✔ | por el hecho |
-| 11 | Caducidad de políticas | `politicas.ts:74-91` | 1 | `expiraEn` |
-| 12 | Fin de la obra de ascenso | `ascenso.ts:191-209` | 1 | `completaEn`; el cupo y los gates ya se comprobaron **al pedirla** ✔ |
-| 13 | Nutrición, hambruna | `population.ts:178-228` | 1 | tasa |
-| 14 | Ración y deserción de la guarnición | `tropas.ts:269-282` | 1 | tasa |
-| 15 | Crecimiento de población | `population.ts:48-155` | 1 | tasa + RNG |
-| 16 | Recaudación de oro | `simulation.ts:192-196` | 1 | tasa |
-| 17 | Mantenimiento (pago, medidor, degradación, recuperación por racha) | `mantenimiento.ts:184-288` | 1 | racha = acumulador real, no deadline (Doc 10 §6) |
-| 18 | Ruina del asentamiento | `simulation.ts:224-227`, `mantenimiento.ts:260-275` | ✔/2 | el hecho se detecta al ocurrir, pero **sus dependientes se descubren barriendo**: **(B)** |
-| 19 | Fin de la ocupación | `simulation.ts:203-205,215` | 1/3 | la lógica ya es perezosa (`estaOcupado`); el barrido solo limpia el campo y narra |
-| 20 | Movimiento de caravanas, `preparaHasta` | `trade.ts:506-640` | 1 | |
-| 21 | Caducidad de trueques | `trade.ts:876-905` | 1 | `expiraEn` |
-| 22 | Asignación automática de caravanas a trueque | `trade.ts:860-991` | 3 | tres condiciones mezcladas (acuerdo aceptado, caravana libre, stock) y una es continua; **no mover** |
-| 23 | Caravanas de fundación: avanzar y fundar al llegar | `expansion.ts:168-230` | ✔ | la fundación ocurre al cruzar el final de la ruta |
-| 24 | Regeneración de yacimientos | `simulation.ts:241` | 1 | reposición por fecha `regeneraEn` |
-| 25 | Spawn/respawn de bandidos | `bandidos.ts:70-95` | 3 | **(D)** |
-| 26 | Ataques de bandidos a caravanas | `bandidos.ts:115-189` | 1 | proximidad geométrica + RNG |
-| 27 | Ejércitos: comer, mover, repostar, llegar | `ejercitos.ts:1413-1680` | 1 | continuo; la llegada que asedia es **one-shot** al cruzar `progreso>=1` ✔ |
-| 28 | Disolver columna sin nadie dentro | `ejercitos.ts:1499-1530` | 3 | invariante con varios caminos de ruptura; ya está dentro del bucle de ejércitos; **no mover** |
-| 29 | Columna esperando a la puerta (plaza en batalla o héroes heridos) | `ejercitos.ts:1582-1590` | 3 | **(J)** |
-| 30 | Encuentros por persecución | `ejercitos.ts:1683+` | 1 | geometría + orden `atacar` |
-| 31 | Caducidad de órdenes de mercado | `market.ts:89-104` | 1 | `expiraEn` |
-| 32 | Tributo de vasallaje | `diplomacia.ts:173-209` | 1 | tasa por minuto |
-| 33 | **Nivel de Facción a partir de la XP** | `simulation.ts:298-300`, `faccion.ts:65-79` | **2** | **(A)** |
-| 34 | Reputación: decaimiento y bono de alianza | `reputacion.ts:26-43` | 1 | tasa |
-| 35 | **Títulos dinámicos** | `simulation.ts:304-306`, `titulos.ts:26-94` | 3 | **(E)** |
-| 36 | Memoria de niebla (`grabarLoVisto`) y exploración personal | `simulation.ts:322-330`, `memoria.ts:96-142`, `ubicacion.ts:269-292` | 3 | **(H)** |
+**Reparto por tick (ms/tick, tiempo inclusivo):**
 
-### 3.2 Sesión (`session/`) y servidor (`server/`)
-
-| # | Responsabilidad | Ubicación | Cat. | Nota |
-|---|---|---|---|---|
-| 37 | Cerrar batallas vencidas | `comandos/avanzarTick.ts:37`, `batallas.ts:509` | 1 | `expiraEn`; candidata natural del scheduler **si llega** (Doc 10 §8, D5 aplazado) |
-| 38 | Bloqueos de la batalla activa | `avanzarTick.ts:38`, `batallas.ts:110` | 1 | derivado barato del propio estado |
-| 39 | Abrir combates que el tick no resolvió | `avanzarTick.ts:70` | ✔ | sale del hecho (un combate con humano) |
-| 40 | Auto-comercio de simulación | `comandos/avanzarAutoComercio.ts` | — | solo batch, palanca apagada |
-| 41 | Turno del NPC de gobernanza | `comandos/avanzarFaccionesNpc.ts`, `npcGobernanza.ts:1498` | mixto | tabla propia, §3.3 |
-| 42 | Reloj de mundo y catch-up | `runnerDePartida.ts:383-432` | 1 | infra, es la fuente del tick |
-| 43 | Precios de referencia (TTL perezoso) y geometría (`cacheGeometria` por identidad) | `runnerDePartida.ts:240-267` | ✔ | **ya derivan al leer**; es el patrón a copiar |
-| 44 | Proyección por jugador y niebla "viéndolo ahora" | `proyecciones/jugador.ts:457-519` | ✔ | derivada en cada lectura; no se guarda lo derivable |
-| 45 | Mantenimiento de disco (respaldos, poda) | `server/mantenimiento.ts` | 1 | periódico por naturaleza, opt-in, fuera de la partida |
-
-### 3.3 NPC de gobernanza (`npcGobernanza.ts:1498`)
-
-La pregunta de la petición era *¿decide cada tick lo que podría reaccionar a eventos?* **Casi todo lo que decide es
-política por umbrales de variables continuas** (stock, déficit, solvencia): un bot que mira cada minuto lo que un
-jugador miraría de vez en cuando. Eso no es mal asignado; es lo que hace un agente. Los pasos con forma de
-*reacción a un hecho* son pocos:
-
-| Paso | Ubicación | Hecho al que reacciona | Cat. |
+| | desde el tick 1 500 | desde el tick 4 500 | Nota |
 |---|---|---|---|
-| Fundar el asentamiento inicial de una Facción NPC sin ninguno | `1514-1535`; `fundarAsentamientosIniciales` `1421` | crear la Facción NPC (ya lo hace `crearFaccionNpc`) **o perder la última plaza** | **2 → (C)** |
-| `asegurarGobernanzaBase` (cargos + reserva) | `232`, llamada `1540` | plaza fundada o conquistada; cargo vacío; `nivelActual` llega a 2 | 3 — invariante multi-camino |
-| `materializarFundadoresNpc` | `1306`, llamada `1543` | una caravana de fundación fundó una plaza NPC | ✔/no mover (§6) |
-| `responderPropuestasNpc` | `513`, llamada `1601` | llega una propuesta de trueque | 3 → **(I)** |
-| `guarnecerNpc` / `prepararDefensaNpc` | `689`, `713`, llamada `1644-1647` | escuadra nueva, héroe vuelve a casa, cambia la residencia | 3 → **(F)** |
-| `replegarLosQueYaTerminaron` | `1198`, llamada `1702` | una columna acampa (`ejercito.llega`) | 3 — también repliega las que quedan `estacionado` por otros caminos |
-| Granjas mínimas, infraestructura comercial, núcleo militar, muralla | `299-429`, `1551-1575` | umbral de recursos / nivel | 1 |
-| Ascenso | `1580-1592` | stock + solvencia (cambia con la producción) | 1 |
-| Trueque de supervivencia | `553`, `1595` | déficit continuo de un recurso | 1 |
-| Reclutar, atacar campamentos, lanzar campañas, órdenes de mercado, persecuciones, expandir | `644`, `750`, `1093`, `1043`, `976`, `847` | umbrales / geometría | 1 |
+| **Turno NPC (`avanzarFaccionesNpc`)** | **21,6** | **37,8** | crece con el tiempo con el mundo constante |
+| ↳ `reclutarParaTodos` | 19,0 | 20,0 | plano, y aun así el mayor |
+| ↳ `publicarOrdenesNpc` | 0,4 | **12,5** | ×34: recorre todas las órdenes de la historia |
+| ↳ `prepararDefensaNpc` + `guarnecerNpc` | 0,4 | 0,4 | |
+| ↳ `asegurar*` (granjas, comercio, militar, muralla) | 0,6 | 0,4 | |
+| **Motor (`avanzarTick`)** | **8,0** | **7,6** | estable |
+| ↳ `avanzarConstruccion` | 4,7 | 3,7 | el grueso del motor; ya memoizado (Doc 6 E3) |
+| ↳ `computeTodasLasZonas` | 1,1 | 0,7 | |
+| ↳ `grabarLoVisto` | 0,7 | 0,6 | |
+| ↳ `calcularTitulos` | 0,4 | 0,2 | |
+| ↳ `avanzarSpawnBandidos` | 0,2 | 0,1 | |
+| ↳ `caducarOrdenes` | 0,01 | 0,12 | crece, por la misma razón que `publicarOrdenesNpc` |
+| **`exito()` (copia del log de eventos)** | 0,05 | **1,9** | crece con la edad de la partida |
 
-El NPC además cumple el **principio rector** de `NPC_Gobernanza_Facciones_Controladas.md`: decide después del tick,
-con las funciones públicas, como un jugador. Eso es una razón de capa para **no** disparar sus reacciones desde
-dentro de los comandos (§6).
+**Escala:** con 50 Facciones, a los 400 ticks, motor 27,5 ms y NPC 53,7 ms.
+
+**Perfil propio (sin hijos) de toda la corrida 1 500 → 4 500:** el 29 % del tiempo total está **dentro del
+constructor de `ReclutamientoInvalidoError`**, otro 13 % en el propio `reclutarTropa` y el 10,7 % en
+`publicarOrdenesNpc`.
+
+**Qué falla al reclutar** (todos los intentos de un tick sobre el estado del tick 4 500): 1 050 intentos y 5 éxitos.
+
+| Motivo | Intentos |
+|---|---|
+| `Se necesita barracon activo en nivel interno N` | 570 |
+| `Se necesita galeriaDeTiro activo en nivel interno N` | 380 |
+| `Este escuadrón ya está al tope de unidades` | 95 |
+
+**Colecciones que solo crecen** (estado guardado en el tick 1 500 y en el 4 500):
+
+| | tick 1 500 | tick 4 500 |
+|---|---|---|
+| Órdenes de mercado (expiradas / activas) | 252 (156 / 96) | **5 550 (5 150 / 400)** |
+| Eventos en memoria (`eventosDominio`) | ~5 000 | **28 184** (~9 por tick) |
+
+Ni órdenes, ni trueques, ni batallas terminadas se retiran del estado en ningún sitio (no hay `filter` de poda en
+`engine/` ni en `session/`). En este mundo no llegó a cerrarse ningún trueque, así que su crecimiento no se midió,
+pero el patrón de código es el mismo (§5, **N2**).
+
+**Extrapolación, solo orientativa:** con el ritmo medido (~1,8 órdenes y ~9 eventos por tick con 20 plazas), a los
+30 días de mundo (43 200 ticks) habría ~78 000 órdenes y ~390 000 eventos. Como `publicarOrdenesNpc` es
+plazas × recursos × órdenes, y las órdenes crecen con las plazas, esa línea escala con el **cuadrado** de las plazas.
 
 ---
 
-## 4. Categoría 2 — mal asignadas
+## 4. Inventario por responsabilidad
 
-Orden de ficha: ubicación · hecho · dónde se produce hoy · qué cambia al moverlo · riesgo · esfuerzo.
+Orden de `avanzarSimulacion` (`engine/simulation.ts:122`), más lo que corre alrededor en cada tick. **1** legítima ·
+**2** mal asignada · **3** dudosa · ✔ ya está disparada por el hecho. La columna ms es la medida de §3, si la hay.
 
-### (A) El nivel de Facción se recalcula al final de cada tick, aunque la XP se gane en un comando
+### 4.1 Motor (`engine/`)
 
-- **Ubicación.** `engine/simulation.ts:298-300` (`aplicarAjustesExperiencia` + `avanzarNivelesFaccion`),
-  `engine/faccion.ts:54-79`.
-- **Hecho que debería dispararlo.** Ganar experiencia de Facción. El nivel es función pura de `experiencia`
-  (`calcularNivelFaccion`, `faccion.ts:25`); solo puede cambiar cuando la XP sube.
-- **Dónde se produce el hecho.** Seis funciones de `engine/combate.ts` que llaman a `aplicarAjustesExperiencia`
-  directamente: `iniciarAsedio:383`, `atacarCampamentoBandidos:457`, `atacarCampamentoConColumna:515`,
-  `asediarConEjercito:608,650`, `encuentroEntreEjercitos:696` — todas invocadas desde **comandos** (`militar.ts`,
-  `interaccion.ts`, `resultadoBatalla.ts`) o desde el turno del NPC. Y el XP por edificio completado
-  (`simulation.ts:164-170`), que sí nace dentro del tick.
-- **El defecto concreto.** Un comando que concede XP devuelve una Facción con la XP nueva y el **nivel viejo**; el
-  nivel sube en el tick siguiente (≤1 min) y el evento `faccion.nivel_subio` sale entonces, no en el comando que
-  lo causó. Consumidores del nivel en ese hueco: cap de fundación (`settlement.ts:235`, `expansion.ts:97`), slots
-  de política (`politicas.ts:58`) y cupo de nivel de asentamiento (`ascenso.ts:84`). Es la ventana (b) del caso de
-  residencia.
+| # | Responsabilidad | Ubicación | Cat. | ms | Nota |
+|---|---|---|---|---|---|
+| 1 | Zonas, capitales y reclamos de fuentes del mundo | `simulation.ts:127,130,137` | 3 | ~1 | derivado recalculado entero; no merece tocarse por coste |
+| 2 | Obra de edificio termina | `construction.ts:1255-1284` | 1 | | fecha `completaEn`; capacidad, puestos, XP y radio cuelgan del hecho ✔ |
+| 3 | Producción de extractores, granjas y leñeras | `construction.ts:1288-1326` | 1 | | tasa |
+| 4 | Arranque de obras en cola cuando hay cuadrilla | `construction.ts:1339-1376` | 1 | | cupo + stock |
+| 5 | Recetas | `construction.ts:1184,1381` | 1 | | tasa |
+| 6 | Mejoras (terminar y empezar) | `construction.ts:1067-1108` | 1 | | fecha + stock |
+| 7 | `radioPotencial` crece por edificio completado | `construction.ts:1401-1404` | ✔ | | ya por el hecho |
+| 8 | Auto-construcción (`evaluarNecesidades`) | `construction.ts:533,1419` | 1 | parte de 3,7-4,7 | umbrales continuos; memoizada y con guardián de impagables |
+| 9 | Obra de recintos celda a celda | `muralla.ts:772-815` | 1 | | stock + `siguienteCeldaEn` |
+| 10 | XP por edificio completado | `simulation.ts:164-170` | ✔ | | |
+| 11 | Caducidad de políticas | `politicas.ts:74-91` | 1 | | `expiraEn` |
+| 12 | Fin de la obra de ascenso | `ascenso.ts:191-209` | 1 | | `completaEn`; gates y cupo **al pedirla** ✔ |
+| 13 | Nutrición y hambruna | `population.ts:178-228` | 1 | | tasa |
+| 14 | Ración y deserción de la guarnición | `tropas.ts:269-282` | 1 | | tasa |
+| 15 | Crecimiento de población | `population.ts:48-155` | 1 | | tasa + RNG |
+| 16 | Recaudación de oro | `simulation.ts:192-196` | 1 | | tasa |
+| 17 | Mantenimiento | `mantenimiento.ts:184-288` | 1 | | la racha es un acumulador real (Doc 10 §6) |
+| 18 | Ruina del asentamiento | `simulation.ts:224-227` | ✔/2 | | hecho detectado al ocurrir, **dependientes descubiertos barriendo**: **(B)** |
+| 19 | Fin de la ocupación | `simulation.ts:203-205` | 1 | | la lógica ya es perezosa (`estaOcupado`); el barrido solo limpia y narra |
+| 20 | Movimiento de caravanas, `preparaHasta` | `trade.ts:506-640` | 1 | | |
+| 21 | Caducidad de trueques | `trade.ts:876-905` | 1 | | `expiraEn`, pero recorre también los terminales: **N2** |
+| 22 | Asignación automática de caravanas a trueques | `trade.ts:860-991` | 3 | ~0 | mezcla acuerdo aceptado, caravana libre y stock (continuo); no mover |
+| 23 | Caravanas de fundación: avanzar y fundar al llegar | `expansion.ts:168-230` | ✔ | | |
+| 24 | Regeneración de yacimientos | `simulation.ts:241` | 1 | | fecha `regeneraEn` |
+| 25 | Spawn de bandidos | `bandidos.ts:70-95` | 3 | 0,1-0,2 | guarda frágil (**B1**) e id fijo (**B0**) |
+| 26 | Ataques de bandidos | `bandidos.ts:115-189` | 1 | | proximidad + RNG |
+| 27 | Ejércitos: comer, mover, repostar, llegar | `ejercitos.ts:1413-1680` | 1 | | la llegada que asedia es one-shot ✔ |
+| 28 | Disolver columna sin nadie dentro | `ejercitos.ts:1499-1530` | 3 | | invariante multi-camino; no mover |
+| 29 | Columna esperando a la puerta | `ejercitos.ts:1582-1590` | 3 | | **(J)** |
+| 30 | Encuentros por persecución | `ejercitos.ts:1617+` | 1 | | |
+| 31 | Caducidad de órdenes de mercado | `market.ts:89-104` | 1 | 0,01→0,12 | `expiraEn`, pero mapea **todas** las órdenes de la historia: **N2** |
+| 32 | Tributo de vasallaje | `diplomacia.ts:173-209` | 1 | | tasa |
+| 33 | **Nivel de Facción a partir de la XP** | `simulation.ts:298-300` | **2** | ~0 | **(A)** |
+| 34 | Reputación | `reputacion.ts:26-43` | 1 | | tasa |
+| 35 | Títulos | `simulation.ts:304-306`, `titulos.ts:26-94` | 3 | 0,2-0,4 | **(E)** |
+| 36 | Memoria de niebla y exploración personal | `simulation.ts:322-330`, `memoria.ts:103-142` | 3 | ~0,6 | **(H)**, no mover |
+
+### 4.2 Sesión (`session/`) y servidor (`server/`)
+
+| # | Responsabilidad | Ubicación | Cat. | ms | Nota |
+|---|---|---|---|---|---|
+| 37 | Cerrar batallas vencidas | `comandos/avanzarTick.ts:37`, `batallas.ts:509` | 1 | | `expiraEn`; también recorre las terminadas: **N2** |
+| 38 | Bloqueos de la batalla activa | `avanzarTick.ts:38`, `batallas.ts:73,110` | 1 | | derivado |
+| 39 | Abrir combates que el tick no resolvió | `avanzarTick.ts:70` | ✔ | | |
+| 40 | **Anteponer los eventos al log en memoria** | `comandos/tipos.ts:91-102` (`exito`) | **2** | 0,05→1,9 | **N2**: copia el log entero en cada mutación: dos por tick (tick y turno NPC; el auto-comercio apagado no muta) |
+| 41 | Auto-comercio de simulación | `comandos/avanzarAutoComercio.ts` | — | ~0 | solo batch, palanca apagada |
+| 42 | Turno del NPC de gobernanza | `npcGobernanza.ts:1498` | mixto | 22-38 | tabla propia, §4.3 |
+| 43 | Reloj de mundo y catch-up | `runnerDePartida.ts:383-432` | 1 | | infra |
+| 44 | Precios (TTL perezoso) y geometría (por identidad) | `runnerDePartida.ts:240-267` | ✔ | | derivan al leer; el patrón a copiar |
+| 45 | Proyección y niebla "viéndolo ahora" | `proyecciones/jugador.ts:457-519` | ✔ | | derivada en cada lectura |
+| 46 | Mantenimiento de disco | `server/mantenimiento.ts` | 1 | | periódico, opt-in |
+
+### 4.3 NPC de gobernanza (`npcGobernanza.ts:1498`)
+
+La pregunta de la petición era *¿decide cada tick lo que podría reaccionar a eventos?* **La mayoría de lo que
+decide es política por umbrales de variables continuas** (stock, déficit, solvencia): un bot que mira cada minuto lo
+que un jugador miraría de vez en cuando. Eso no está mal asignado. Pero el paso **más caro de todos** es una
+excepción: re-deriva cada tick una condición discreta.
+
+| Paso | Ubicación | Reacciona a | Cat. | ms |
+|---|---|---|---|---|
+| **Reclutar (`reclutarParaTodos`)** | `644-679` | **obra terminada** (Barracón/Galería), escuadra que pierde unidades, población, recursos | **2 → N1** | **19-20** |
+| **Publicar órdenes (`publicarOrdenesNpc`)** | `1043-1090` | umbrales de stock, y "no tengo ya una activa" | 1, pero con **N2** | 0,4→12,5 |
+| Fundar el asentamiento inicial | `1514-1535`, `1421` | crear la Facción NPC (ya lo hace el comando) **o perder la última plaza** | **2 → (C)** | ~0 |
+| `asegurarGobernanzaBase` | `232`, `1540` | plaza fundada o conquistada, cargo vacío, `nivelActual` 2 | 3, invariante multi-camino | ~0 |
+| `materializarFundadoresNpc` | `1306`, `1543` | una caravana fundó una plaza NPC | ✔/no mover (§7) | ~0 |
+| `responderPropuestasNpc` | `513`, `1601` | llega una propuesta | 3 → **(I)** | ~0 |
+| `guarnecerNpc` / `prepararDefensaNpc` | `689`, `713`, `1644-1647` | escuadra nueva, héroe vuelve, cambia la residencia | 3 → **(F)** | 0,4 |
+| `replegarLosQueYaTerminaron` | `1198`, `1702` | una columna acampa | 3: repliega también las que quedan `estacionado` por otros caminos | |
+| Granjas, comercio, núcleo militar, muralla | `299-429`, `1551-1575` | umbrales de recursos o de nivel | 1 | 0,4-0,6 |
+| Ascenso, trueque de supervivencia, atacar campamentos, campañas, persecuciones, expandir | `1580`, `553`, `750`, `1093`, `976`, `847` | umbrales o geometría | 1 | ~0 |
+
+---
+
+## 5. Categoría 2 — mal asignadas
+
+Formato de cada ficha: ubicación · hecho · dónde se produce hoy · qué cambia al moverlo · riesgo · esfuerzo.
+**N1** y **N2** son nuevas de esta segunda pasada y van primero porque son las que pesan.
+
+### (N1) El NPC re-deriva cada tick si tiene Barracón o Galería, y se entera lanzando excepciones
+
+- **Ubicación.** `reclutarParaTodos` (`npcGobernanza.ts:644-679`): para cada residente, prueba las tropas de
+  `TROPAS_POR_PREFERENCIA_NPC` (`620`, todas, de mejor a peor) hasta que una sale, y captura
+  `ReclutamientoInvalidoError` en cada fallo.
+- **Hecho que lo desbloquea.** Que exista el edificio de la tropa en su nivel interno: termina una obra
+  (`construction.ts:1265`) o una mejora (`aplicarMejoraTerminada`, `construction.ts:1024`). Las dos ya emiten
+  `construccion.edificio_completado` y `construccion.mejora_completada` en el **mismo tick que el NPC sigue**.
+  Mucho menos a menudo, perder unidades (combate, hambre) o crecer la población.
+- **Medido.** ~1 050 intentos por tick con 20 plazas; 5 éxitos. 950 fallan por falta de edificio, 95 por "ya al tope".
+  ~20 ms/tick, plano en el tiempo; **29 % del tiempo total en el constructor del error** (traza de pila incluida) y
+  9 % en `poblacionDisponibleParaReclutar`, que `reclutarTropa` calcula **antes** de comprobar el edificio
+  (`tropas.ts:105` frente a `tropas.ts:115`).
 - **Qué se rompería al moverlo.**
-  - *Orden de evaluación:* nada dentro del tick consume `faccion.nivel` después de `avanzarEjercitos`
-    (tributos, reputación y títulos no lo leen), así que subirlo antes no altera el pipeline.
-  - *Eventos:* `faccion.nivel_subio` pasa a salir en el comando (y con su `momento`). Los tests
-    `eventosDominioFaccion.test.ts` llaman a `avanzarNivelesFaccion` directamente y habría que repuntarlos.
-  - *Batch:* **sí cambia** si el NPC gana XP por combate en su turno (corre después del tick): el nivel subiría en
-    ese mismo turno y no en el tick siguiente. Los sellos del batch con combate NPC dejan de coincidir; son
-    equivalentes en distribución, no byte a byte.
-  - *`snapshot_baseline` y `determinismo`:* **no se mueven** — solo hay XP de construcción, que se concede dentro
-    del tick y se recalcula antes de salir, igual que hoy.
-- **Punto único de escritura:** `aplicarAjustesExperiencia` (`faccion.ts:54`) — los seis sitios de combate ya pasan
-  por ahí. Es lo que hace barato el movimiento.
-- **Riesgo:** bajo. **Esfuerzo:** bajo (S). **Impacto:** medio-bajo (ventana de ≤1 min, pero visible al jugador).
+  - *Comportamiento:* nada si se descartan antes solo las tropas que el motor iba a rechazar igualmente (sin edificio,
+    escuadra al tope): mismo resultado, sin excepción.
+  - *Batch:* **no es byte-idéntico**, aunque sí equivalente. El `contador` de ids se consume por intento
+    (`contador++` dentro de la llamada), así que dejar de intentar desplaza los ids de lo que se cree después. Es el
+    mismo matiz que Doc 6 dejó escrito para la búsqueda de colocación ("lo único que no preserva son los ids").
+  - *Reordenar las comprobaciones de `reclutarTropa`* (edificio antes que población) cambia el **mensaje** que ve un
+    jugador humano cuando fallan las dos cosas a la vez; conviene decidirlo aparte.
+  - `snapshot_baseline` y `determinismo` no lo ven: no corren el NPC.
+- **Dos formas de hacerlo**, para que se decida: (a) **comprobar barato antes de intentar**: lee el estado, no
+  necesita evento y no puede perderse uno; (b) que el NPC mantenga sus tropas desbloqueadas reaccionando a los
+  eventos de obra del tick que acaba de correr. La (a) es más simple y robusta (sobrevive a una recarga sin
+  reconstruir nada); la (b) es la versión "por hecho" pura.
+- **Riesgo:** bajo. **Esfuerzo:** bajo (S). **Impacto:** **alto**: el mayor coste del tick completo.
+
+### (N2) Barrer cada tick historia que solo crece
+
+- **Qué.** Colecciones cuyos elementos llegan a un **estado terminal** y nunca salen de la lista viva que el tick y el
+  NPC recorren:
+
+  | Colección | Se vuelve terminal en | La recorren cada tick | Medido |
+  |---|---|---|---|
+  | `ordenes` (expirada, cumplida) | `caducarOrdenes` (`market.ts:89`), el mostrador | `caducarOrdenes`; **`publicarOrdenesNpc` → `yaTiene` (`npcGobernanza.ts:1054`)**, que hace `[...ordenes, ...nuevas].some(...)` por cada plaza y recurso | 0,4 → 12,5 ms en 3 000 ticks; 93 % expiradas |
+  | `eventosDominio` (en memoria) | al emitirse | `exito()` (`tipos.ts:99`) hace `[...nuevos, ...todoElLog]` en cada mutación: el tick y el turno NPC (el auto-comercio apagado no muta) | 0,05 → 1,9 ms |
+  | `acuerdos` (expirado, cumplido, rechazado) | `trade.ts:876-905`, comandos | `avanzarComercio` (copia a un `Map`), `responderPropuestasNpc`, `yaTieneAyudaEnCaminoPara` | no medido: no se cerró ninguno en la corrida |
+  | `batallas` (cerrada, fallida) | `resultadoBatalla.ts`, `vencerBatallas` | `batallasActivas` y `vencerBatallas` filtran todas cada tick | no medido |
+
+- **Hecho que debería resolverlo.** El **paso a estado terminal**: es puntual, tiene pocos sitios de escritura y es
+  justo cuando deja de importarle al tick. Lo que conviene **no** perder: la proyección enseña a propósito el
+  historial de órdenes propias ("las cumplidas son el historial de tu mercado", `jugador.ts:781-785`), y el log de
+  eventos en memoria es el cursor incremental de los clientes (`eventosDesde`). Archivar no es borrar: es dejar de
+  recorrerlo cada tick.
+- **Qué se rompería.** Con un índice de activas, o separando "vivas" de "archivadas", nada de comportamiento. Si se
+  cambia la forma del estado persistido, hay migración de snapshot y `BALANCE`/snapshot sube de versión. Con una
+  cota en el log de memoria, un cliente con un cursor muy viejo tendría que leer del JSONL en vez de la memoria.
+- **Riesgo:** bajo para el índice (que es lo que paga el coste medido); medio si se reestructura el estado.
+  **Esfuerzo:** S para el índice de `publicarOrdenesNpc`; M para archivar de verdad.
+  **Impacto:** **alto a medio plazo**: es el único coste del tick que crece con la edad de la partida y no con el
+  tamaño del mundo.
+
+### (A) El nivel de Facción se recalcula al final del tick, aunque la XP se gane en un comando
+
+- **Ubicación.** `simulation.ts:298-300`; `faccion.ts:54-79`.
+- **Hecho.** Ganar experiencia. El nivel es función pura de `experiencia` (`calcularNivelFaccion`, `faccion.ts:25`).
+- **Dónde se produce.** Seis funciones de `engine/combate.ts` llaman a `aplicarAjustesExperiencia` directamente:
+  `iniciarAsedio:383`, `atacarCampamentoBandidos:457`, `atacarCampamentoConColumna:515`,
+  `asediarConEjercito:608,650` y `encuentroEntreEjercitos:696`. Las invocan comandos (`militar.ts`,
+  `interaccion.ts`, `resultadoBatalla.ts`) o el turno NPC. Ningún comando llama a `avanzarNivelesFaccion`: solo lo
+  hace `simulation.ts`.
+- **El defecto.** El comando devuelve la XP nueva con el **nivel viejo**; el nivel y `faccion.nivel_subio` llegan en
+  el tick siguiente. En ese hueco leen el nivel el cap de fundación (`settlement.ts:235`, `expansion.ts:97`), los
+  slots de política (`politicas.ts:58`) y el cupo de nivel de asentamiento (`ascenso.ts:84`).
+- **Qué se rompería.** Nada del pipeline: después de `avanzarEjercitos` nadie lee `faccion.nivel`.
+  `eventosDominioFaccion.test.ts` llama a `avanzarNivelesFaccion` directamente y habría que repuntarlo. En batch,
+  el nivel subiría en el mismo turno NPC en vez de en el tick siguiente: deja de ser byte-idéntico si hay combate NPC.
+  `snapshot_baseline` y `determinismo` no se mueven, porque solo tienen XP de construcción y esa ya se recalcula en el
+  mismo tick.
+- **Punto único de escritura:** `aplicarAjustesExperiencia`. **Riesgo:** bajo. **Esfuerzo:** S. **Impacto:**
+  medio-bajo (ventana ≤1 min, visible al jugador).
 
 ### (B) Una ruina deja a sus dependientes para que el tick los descubra
 
-- **Ubicación.** El hecho: `simulation.ts:224-227` (`destruido` de `avanzarMantenimiento`,
-  `mantenimiento.ts:260-275`). Los dependientes, repartidos por otros módulos.
-- **Hecho que debería dispararlo.** `asentamiento.ruinas`: hay un único sitio donde se decide que un asentamiento
-  deja de existir.
-- **Qué depende de él y cómo se entera hoy.**
+- **Ubicación.** El hecho: `simulation.ts:224-227` (`destruido`, `mantenimiento.ts:260-275`). Es un único sitio.
+- **Dependientes y cómo se enteran hoy:**
 
-  | Dependiente | Cómo se entera | Resultado hoy |
+  | Dependiente | Cómo se entera | Resultado |
   |---|---|---|
-  | Caravana comercial que sale de o va hacia la plaza | `trade.ts:551-556`, barrido por caravana | se pierde **sin evento**; libera la escolta |
+  | Caravana comercial que sale de o va a la plaza | `trade.ts:551-556`, barrido por caravana | se pierde **sin evento**; libera la escolta |
   | Caravana de fundación que sale de ella | `expansion.ts:187-193` | se pierde con `expansion.caravana_perdida` |
-  | **Campamento de bandidos asignado a ella** | **nunca** | queda huérfano para siempre y bloquea el spawn de otros — ver bug **B1** |
-  | **Trueque `activo` con ella** | solo al llegar `expiraEn` (`trade.ts:887`) | la otra parte no puede cumplir y **cobra la penalización de reputación** por incumplir — ver **B2** |
-  | Ejército con ella de origen | al llegar a casa (`reintegrar`, `ejercitos.ts:1457`) | se resuelve, aunque tarde |
-  | Residentes | en `9f9a098` (fuera de este árbol) | — |
+  | **Campamento de bandidos asignado** | **nunca** | huérfano para siempre: **B1** (reproducido) |
+  | **Trueque activo con ella** | solo al vencer (`trade.ts:887`) | penaliza a la otra parte: **B2** (reproducido) |
+  | Ejército con ella de origen | al volver a casa (`reintegrar`, `ejercitos.ts:1457`) | se resuelve tarde |
+  | **Cualquier referencia por id** | **nunca** | se reengancha si el id vuelve a nacer: **B3** (reproducido) |
+  | Residentes | `9f9a098`, fuera de este árbol | — |
 
-- **Qué se rompería al moverlo.** Cerrar los dependientes en el sitio de la ruina cambia **cuándo** se pierde cada
-  caravana (hoy: en el paso de comercio del mismo tick, que va *después*; `escoltasLiberadas` se aplica ahí,
-  `simulation.ts:231`). El orden es el mismo tick pero distinto punto de la cadena: eventos reordenados (tocan
-  `determinismo`) y las caravanas desaparecen antes de que `avanzarComercio` las mueva. Los trueques pasarían a
-  `expirado` sin penalizar a nadie, lo cual **es el cambio de comportamiento buscado**.
-- **Riesgo:** medio — toca cuatro módulos y el orden del tick, y el batch (donde las ruinas son comunes, son la
-  causa de muerte que miden los diarios) deja de ser byte-idéntico. **Esfuerzo:** medio (M).
-  **Impacto:** medio (arregla B1 y B2 de raíz y deja de narrar tarde).
+- **Qué se rompería.** Cerrar los dependientes en el sitio de la ruina adelanta cosas que hoy ocurren más tarde en el
+  mismo tick (el comercio va después, `simulation.ts:229-231`): eventos reordenados (`determinismo` lo detecta si
+  cubriera ruinas, que no las cubre) y batch no byte-idéntico, porque las ruinas son la causa de muerte que miden los
+  diarios. Los trueques pasarían a `expirado` sin penalizar a nadie, que es justo el cambio buscado.
+- **Riesgo:** medio. **Esfuerzo:** M. **Impacto:** medio (arregla B1-B3 de raíz y deja de narrar tarde).
 
-### (C) El NPC re-funda su asentamiento inicial mirando cada tick si "tiene alguno"
+### (C) El NPC re-funda su asentamiento inicial mirando cada tick si tiene alguno
 
-- **Ubicación.** `npcGobernanza.ts:1514-1535` y `fundarAsentamientosIniciales` (`1421-1465`).
-- **Hecho que debería dispararlo.** Dos casos distintos que hoy comparten el mismo `if`: (1) crear una Facción NPC
-  — **ya resuelto** en `crearFaccionNpc.ts` al crearla — y (2) **perder la última plaza** por conquista
-  (`militar.ts:127`, `resultadoBatalla.ts:225`, `ejercitos.ts:1239`) o ruina (`simulation.ts:226`).
-- **Mezcla de casos.** El caso (2) es una *resurrección inmediata* de una Facción derrotada, que el comentario del
-  propio código admite ("los que ya tenga (se quedó sin asentamientos)") pero no está declarada como regla de
-  juego en ningún `Docs/Game`. Y si no encuentra sitio (`buscarPosicion` devuelve `undefined`) **reintenta cada
-  tick**, con el barrido en rejilla de `buscarPosicionFundacionInicialPorDefecto`.
-- **Qué se rompería.** Poco: Paso 0 solo corre con `config.faccionesIds` (partida real); **en batch no se ejecuta**
-  (`npcGobernanza.ts:1514`), así que ni `snapshot_baseline`, ni `determinismo`, ni los sellos del batch lo ven.
-  Hay que decidir de diseño si la resurrección es inmediata, con retardo, o no existe.
-- **Riesgo:** bajo. **Esfuerzo:** bajo-medio (S/M, el esfuerzo es la decisión de diseño). **Impacto:** bajo.
+- **Ubicación.** `npcGobernanza.ts:1514-1535`; `fundarAsentamientosIniciales` (`1421-1465`).
+- **Hecho.** Dos casos que hoy comparten el mismo `if`: (1) crear la Facción NPC, ya resuelto en `crearFaccionNpc.ts`;
+  (2) **perder la última plaza** por conquista (`militar.ts:127`, `resultadoBatalla.ts:225`, `ejercitos.ts:1239`) o por
+  ruina (`simulation.ts:226`).
+- **Mezcla de casos.** El caso (2) es una **resurrección inmediata** de una Facción derrotada. El código la admite en
+  un comentario ("los que ya tenga (se quedó sin asentamientos)"), pero ningún `Docs/Game` la declara como regla. Si
+  no encuentra sitio, reintenta cada tick. Y su búsqueda de posición es determinista: con **B3**, refundar en el
+  mismo sitio puede devolver el id de la plaza perdida.
+- **Qué se rompería.** Poco: Paso 0 solo corre con `config.faccionesIds` (partida real), **no en batch**. Pide una
+  decisión de diseño: resurrección inmediata, con retardo o ninguna.
+- **Riesgo:** bajo. **Esfuerzo:** S-M (lo caro es la decisión). **Impacto:** bajo.
 
 ---
 
-## 5. Categoría 3 — dudosas
+## 6. Categoría 3 — dudosas
 
-### (D) Spawn de bandidos: reintento perpetuo y guarda que no mide lo que dice
+Las que la primera versión mandaba "medir" (**D**, **G**, **H**) ya están medidas y **no pesan**. Se quedan aquí solo
+por si hay razón de corrección.
 
-- **Ubicación.** `engine/bandidos.ts:69-93`, llamado en `simulation.ts:247`.
-- **Qué hace.** Cada tick: `campamentos.length >= asentamientos.length || instante < proximoSpawnEn` → si no, busca
-  el asentamiento sin campamento y `bosqueNoReclamadoMasCercano`, que recorre **todos los bosques** del mundo
-  contra **todas las zonas** (`bandidos.ts:51-56`). Si no queda bosque libre, no spawnea y **vuelve a hacerlo el
-  tick siguiente, y el siguiente**, mientras el asentamiento siga sin campamento.
-- **Hecho que lo desbloquea.** Un bosque queda libre (se arruina una plaza, se achica una zona), se funda una plaza,
-  se destruye un campamento (`interaccion.ts:214`, `resultadoBatalla.ts:205` ya ponen `bandidosProximoSpawnEn`).
-- **Por qué es dudoso y no 2.** El cooldown de reposición es legítimo (cat. 1); lo dudoso es el **reintento**, cuyo
-  coste crece con zonas × bosques justo en madurez, cuando la mayoría de bosques ya están reclamados. Doc 6 perfiló
-  el tick sobre trazado y colocación y no mide esta rama. La guarda por conteo además es frágil (**B1**).
-- **Qué se rompería.** Sin RNG (`avanzarSpawnBandidos` no recibe `rng`), así que es seguro para la secuencia
-  aleatoria. Cuidado con *atascar un spawn*: si el trigger omite un caso, un asentamiento se queda sin campamento
-  para siempre.
-- **Acción.** **Medir primero** (ver §8). La salida barata no es un evento: es recordar "sin bosque libre para el
-  mundo tal" con una clave (la lista de zonas) y no repetir la búsqueda mientras no cambie.
-- **Riesgo:** bajo. **Esfuerzo:** bajo (S). **Impacto:** desconocido hasta medir.
-
-### (E) Títulos: cadencia arbitraria de un minuto sobre magnitudes continuas
-
-- **Ubicación.** `simulation.ts:304-306`, `titulos.ts:26-94`.
-- **Qué hace.** Recalcula los cuatro títulos cada tick sobre oro total, tropa total, nº de asentamientos y ligas, y
-  narra cada cambio de manos (`titulo.cambia_manos`). El propio comentario dice "recalculados periódicamente […]
-  no en tiempo real".
-- **Por qué es dudoso.** Dos de los títulos (oro, ejército) dependen de magnitudes que **cambian cada minuto**: no
-  hay hecho que dispare nada, así que *periódico* es la forma correcta. Lo dudoso es la cadencia: con dos
-  Facciones de oro o ejército parecidos el título puede **oscilar entre ellas** y el log de Aedas narrar cada
-  cambio. La cadencia no es una decisión, es un accidente de "1 tick = 1 min".
-- **Qué se rompería.** Dar a los títulos una cadencia propia (cada N minutos de mundo) o una histéresis cambia
-  *qué evento sale en qué tick* (`determinismo` lo detecta; `snapshot_baseline` no, no lee títulos) y los tests de
-  `eventosDominioTitulos.test.ts`.
-- **Acción.** Declarar la cadencia como constante nombrada. **No** convertirlo en evento.
-- **Riesgo:** bajo. **Esfuerzo:** bajo (S). **Impacto:** bajo (ruido de log).
-
-### (F) NPC: guarnición y loadout reescritos cada tick para todos los héroes bot
-
-- **Ubicación.** `npcGobernanza.ts:689-735` (`guarnecerNpc`, `prepararDefensaNpc`), bucle en `1644-1647`.
-- **Qué hace.** Para cada plaza NPC y cada héroe bot residente, reasigna guarnición y **reescribe el loadout
-  activo**. `guardarLoadout` (`heroe.ts:83`) devuelve siempre un héroe y unos `loadouts` nuevos, aunque no cambie
-  nada; `asignarGuarnicion` rechaza con `HeroeInvalidoError` y se captura **como flujo de control** cada vez que no
-  cabe.
-- **Hechos que lo disparan.** Escuadra nueva (`reclutarTropa`), héroe vuelve a casa (`reintegrar`, dentro del
-  motor), cambio de residencia, sanar. **Cuatro caminos, uno de ellos dentro del tick del motor**: no hay un único
-  sitio donde colgarlo (pregunta 1).
-- **Acción.** No mover. Hacerlo **idempotente**: si el resultado coincide con lo que ya hay, devolver el mismo
-  objeto. Es churn de estado y excepciones, no un fallo de orden.
-- **Riesgo:** bajo. **Esfuerzo:** bajo (S). **Impacto:** bajo.
-
-### (G) Derivados que se recomputan enteros cada tick
-
-No es el principio de eventos —son **lecturas**, no consecuencias— pero es el mismo síntoma que Doc 6 E3 ya midió
-("el motor recalculaba en cada tick cosas que solo cambian al construir").
-
-- `computeTodasLasZonas`, `reclamosDeFuentes`, `encontrarCapital` por Facción: `simulation.ts:127,130,137` (y otra
-  vez en `npcGobernanza.ts:1551-1553`). Solo cambian al fundar, arruinar, conquistar o crecer `radioPotencial`.
-- `factorLineaProduccion` / `fuentesDeRecurso`: `construction.ts:1122,1159`, O(edificios²) por receta y tick;
-  solo cambia al completarse un edificio.
-- `campamentoDe(asentamiento, heroes)` por plaza: O(asentamientos × héroes).
-- **Qué se rompería.** Nada de comportamiento si la clave es completa; la lección de Doc 6 es que *"un campo de más
-  en la clave solo cuesta aciertos; uno de menos da una respuesta equivocada"*, y que la primera memoización de la
-  red de calles falló por omitir `avance`. Aquí la clave de zonas es (id, posición, `radioPotencial`, `faccionId`).
-- **Acción.** **Medir con un perfil por etapa antes de tocar** (hoy no existe: `medicion-escala.ts` mide el tick
-  entero). Si no pesa, no se hace.
-- **Riesgo:** medio (claves). **Esfuerzo:** bajo-medio. **Impacto:** desconocido.
-
-### (H) Memoria de niebla: grabar lo visto cada tick
-
-- **Ubicación.** `simulation.ts:322-330`, `memoria.ts:96-142`, `ubicacion.ts:269-292`.
-- **Qué hace.** Para cada Facción, para cada "ojo" (plaza o columna), `marcarVisto` decodifica la máscara hex y
-  la vuelve a marcar; para cada plaza ajena a la vista **reescribe su ficha con `conocidoEn = instante`**, de modo
-  que `if (exploracion === previa && asentamientos === previa)` (la guarda "un tick tranquilo no ensucia el
-  estado") **no se cumple nunca mientras haya una plaza ajena a la vista**.
-- **Hechos que lo disparan.** Moverse una columna (continuo en marcha), crecer el radio de una plaza, fundar o
-  conquistar. Para una columna parada o una plaza quieta el resultado es idempotente.
-- **Por qué NO moverlo a eventos.** (1) `conocidoEn` es "la última vez que la vi": mientras está a la vista, esa
-  fecha **es** ahora, y la única forma de tener la última fecha exacta es escribirla mientras se mira —o saber
-  cuándo dejó de verse, que es otro barrido—. (2) Habría que enganchar **cada** mutación de posición (movimiento
-  del tick, `salirAlMundo`, `marcharA`, desalojo, fundación…). (3) La ventana ya la cubre a propósito la proyección:
-  `nieblaDe` calcula `visibles` en vivo y los une con la memoria (`jugador.ts:495-529`, comentario de "la ventana de
-  un tick"). Está bien resuelto.
-- **Acción.** Como mucho, una micro-optimización medible: no re-decodificar un ojo cuya posición y alcance no han
-  cambiado desde el tick anterior. **Medir antes.**
-- **Riesgo:** bajo. **Esfuerzo:** bajo. **Impacto:** bajo.
-
-### (I) NPC: responder propuestas de trueque en su turno
-
-- **Ubicación.** `npcGobernanza.ts:513-551`, llamada en `1601`.
-- **Hecho.** `proponerTrueque` (comando de un jugador con destino a una plaza NPC).
-- **Por qué es 3 y no 2.** El NPC responde a las propuestas pendientes en su turno, o sea con **≤1 tick de
-  latencia**. Es una decisión de comportamiento ("tarda un poco en contestar") que además mantiene el principio
-  rector: el NPC juega después del tick, como un jugador. Responder dentro del comando del jugador metería la
-  decisión del NPC (y su RNG, si lo hubiera) en un comando ajeno.
-- **Acción.** Dejarlo. Si algún día se quiere que conteste "al instante", será una decisión de diseño con
-  `Docs/Game` delante, no una corrección.
-
-### (J) Columna esperando a la puerta
-
-- **Ubicación.** `ejercitos.ts:1582-1590`.
-- **Qué hace.** Una columna NPC que llega a una plaza enemiga que está en batalla (Doc 5.15.1) o cuyos héroes están
-  todos heridos se queda `marchando` con la ruta acabada y **"la llegada se vuelve a mirar cada tick"**.
-- **Hechos que la liberan.** Cierra la batalla (`resultadoBatalla.ts`, `vencerBatallas`) o sana un héroe
-  (`heridoHasta`, que **no** es un evento: caduca perezosamente por `estaHerido`).
-- **Acción.** No mover. Sanar no tiene punto de disparo —solo un scheduler lo tendría—, el bucle de ejércitos ya
-  pasa por cada columna y el coste añadido es una comparación. Se anota por si llega el scheduler.
+| | Qué | Medido | Veredicto |
+|---|---|---|---|
+| **(D)** | Spawn de bandidos: guarda por conteo (`bandidos.ts:79`) y reintento cada tick si no hay bosque libre | 0,1-0,2 ms | **no** por coste; la guarda se arregla como bug (**B1**) |
+| **(E)** | Títulos recalculados cada minuto sobre oro y tropa, y narrados en cada cambio de manos | 0,2-0,4 ms | dudoso por **ruido**: con dos Facciones parecidas el título puede oscilar y narrarse cada vez. Darle cadencia propia o histéresis cambia qué evento sale en qué tick (`determinismo`, `eventosDominioTitulos.test.ts`). No es un evento |
+| **(F)** | NPC: guarnición y loadout reescritos cada tick; `guardarLoadout` (`heroe.ts:83`) siempre devuelve objetos nuevos y `asignarGuarnicion` falla por excepción | 0,4 ms | hacerlo idempotente si se toca el NPC; **no mover**: cuatro caminos de ruptura, uno dentro del motor |
+| **(G)** | Zonas, reclamos, `factorLineaProduccion`, `campamentoDe`, derivados recalculados | ~1 ms (zonas) | **no** por ahora |
+| **(H)** | Memoria de niebla: `marcarVisto` por ojo y ficha reescrita con `conocidoEn` mientras se ve | ~0,6 ms | **no mover** (§7); la micro-optimización no compensa |
+| **(I)** | NPC: responder propuestas en su turno (≤1 tick de latencia) | ~0 | decisión de comportamiento, no corrección |
+| **(J)** | Columna `marchando` con la ruta acabada esperando a que sane un héroe o acabe una batalla (`ejercitos.ts:1582`) | ~0 | sanar no tiene punto de disparo (`heridoHasta` es perezoso); dejar |
 
 ---
 
-## 6. Lo que NO conviene mover, y por qué
-
-Para no sobre-aplicar el principio. Cada punto con la pregunta de §2 que lo descarta.
+## 7. Lo que NO conviene mover, y por qué
 
 | Qué | Por qué se queda |
 |---|---|
-| **Caducidades por fecha** (políticas, trueques, órdenes de mercado, obras, mejoras, ascenso, `preparaHasta`, ocupación, batallas, regeneración, respawn de bandidos) | Ya son "eventos baratos": la fecha vive **en la entidad** (Doc 10 §6, "Instantes"; D3 sustituyó los contadores por `completaEn`). Cada una son comparaciones sobre listas pequeñas. Un scheduler añadiría una **segunda fuente de verdad** (la fecha en la entidad y en la cola) y su orden de disparo, y sacaría los efectos del punto exacto del pipeline donde hoy se encadenan (`avanzarAscenso` va **antes** de la nutrición y el crecimiento, así que el techo de población del nivel nuevo aplica ese mismo tick; terminar un edificio sube `radioPotencial` y XP en el mismo paso). Solo revisar cuando llegue el scheduler de comandos programados (D5, aplazado), y entonces migrar de uno en uno. (Preguntas 3 y 4) |
-| **Producción, consumo, crecimiento, mantenimiento, ración, tributo, reputación** | Tasas continuas por minuto. No hay hecho. |
-| **Auto-construcción, mejoras automáticas, recetas, obra de muralla** | Decisiones por **umbral de stock**: el "hecho" es cruzar una cantidad que cambia cada minuto. Ya están memoizadas y con guardián de impagables (Doc 6 E3). |
-| **El NPC por umbrales** (granjas, comercio, núcleo militar, ascenso, trueque de supervivencia, reclutar, atacar, campañas, órdenes, persecuciones, expandir) | Es el agente mirando variables continuas, igual que lo haría un jugador. Moverlas a los comandos rompería el principio rector del NPC y su orden de evaluación, y el batch (donde sí corre) dejaría de ser comparable con los diarios. |
-| **`asegurarGobernanzaBase` y la disolución de columnas vacías** | Sostienen un **invariante con varios caminos de ruptura** (cargo vacío, plaza conquistada, héroe que se va, `nivelActual`; participantes que salen). Un evento por camino deja un caso atrás; el barrido barato es la garantía. Es la excepción a "resolver en el momento del hecho": aplica cuando los hechos son enumerables (como la residencia), no cuando son abiertos. (Pregunta 1) |
-| **`materializarFundadoresNpc`** | Crear el héroe bot **dentro** de la fundación obligaría a que el motor construyese `Heroe` con `controlador: 'bot'` (`heroeBot` vive en `session/npcGobernanza.ts`): cruza la separación `engine`/`session`. Y la ventana es nula: el turno del NPC va en el **mismo** `aplicarYPersistir` que el tick (`runnerDePartida.ts:346-352`). |
-| **Fichas de la memoria de niebla** | Ver (H): el barrido es la forma de mantener "última vez visto". |
-| **Proyección, precios de referencia, geometría por frame** | Ya derivan **al leer** (`runnerDePartida.ts:240-267`, `jugador.ts`). Es el patrón correcto; añadir un evento sería guardar lo derivable. |
-| **`heridoHasta` y `ocupacionHasta` (lógica)** | Ya perezosos: `estaHerido`, `estaOcupado` comparan con `instante` al preguntar. El único barrido que queda en ocupación es limpiar el campo y narrar (fila 19); no hay lógica que mover. |
-| **Reloj de mundo, mantenimiento de disco, catch-up** | Infraestructura periódica por naturaleza, fuera del estado de partida. |
-| **Evento `ejercito.llega` y asedio al llegar** | Ya son one-shot al cruzar `progreso >= 1` (`98f4e4c`). |
+| **Caducidades por fecha** (políticas, trueques, órdenes, obras, mejoras, ascenso, `preparaHasta`, ocupación, batallas, regeneración, respawn) | Ya son "eventos baratos": la fecha vive en la entidad (Doc 10 §6; D3 cambió contadores por `completaEn`). Un scheduler añadiría una segunda fuente de verdad y sacaría los efectos del punto exacto del pipeline (`avanzarAscenso` va antes de la nutrición y el crecimiento, así que el techo de población del nivel nuevo aplica ese mismo tick). Lo que sí conviene es que no recorran los **terminales** (N2). Revisar solo si llega el scheduler de comandos programados (D5) |
+| **Producción, consumo, crecimiento, mantenimiento, ración, tributo, reputación** | Tasas por minuto. No hay hecho |
+| **Auto-construcción, mejoras automáticas, recetas, muralla** | Umbral de stock. Ya memoizadas y con guardián (Doc 6 E3) |
+| **El NPC por umbrales** (granjas, comercio, ascenso, trueque de supervivencia, atacar, campañas, persecuciones, expandir) | Es el agente mirando variables continuas, como un jugador. Moverlas a los comandos rompe su principio rector (decidir después del tick, con las funciones públicas) y la comparabilidad del batch. Medido, ninguna pesa |
+| **`asegurarGobernanzaBase` y la disolución de columnas vacías** | Sostienen un **invariante con caminos de ruptura abiertos**. Un evento por camino deja un caso atrás. Es la excepción a "resolver en el hecho": aplica cuando los hechos son enumerables (la residencia), no cuando son abiertos |
+| **`materializarFundadoresNpc`** | Crear el héroe bot dentro de la fundación obligaría al motor a construir `Heroe` bot (`heroeBot` vive en `session/`): cruza capas. La ventana es nula: el NPC va en el mismo `aplicarYPersistir` que el tick (`runnerDePartida.ts:346-352`) |
+| **Fichas de la memoria de niebla** | `conocidoEn` es "la última vez que la vi". Mientras se ve, es ahora, y la única forma de tener la última fecha exacta es escribirla mientras se mira. Habría que enganchar cada mutación de posición. La ventana ya la cubre la proyección, que calcula `visibles` en vivo (`jugador.ts:498-529`) |
+| **Proyección, precios, geometría** | Ya derivan al leer; un evento sería guardar lo derivable |
+| **`heridoHasta`, `ocupacionHasta` (lógica)** | Ya perezosos (`estaHerido`, `estaOcupado`) |
+| **Reloj de mundo, mantenimiento de disco** | Infraestructura periódica por naturaleza |
 
-**Dónde el principio ya está bien aplicado** (útil como ejemplos de cómo se ve): cupo y gates del ascenso al
-**pedirlo** (`ascenso.ts:119-190`), asedio como orden (`98f4e4c`), la conquista en `aplicarConquista` +
-`desalojarResidentes` en el momento, `radioPotencial` por edificio completado, combates de Unity abiertos desde el
-hecho (`avanzarTick.ts:70`).
+**Dónde el principio ya está bien aplicado** (útil como ejemplo): cupo y gates del ascenso al **pedirlo**
+(`ascenso.ts:119-190`), asedio como orden (`98f4e4c`), conquista con `aplicarConquista` + `desalojarResidentes` en el
+acto, `radioPotencial` por edificio completado, combates de Unity abiertos desde el hecho (`avanzarTick.ts:70`).
 
 ---
 
-## 7. Bugs y observaciones aparte
+## 8. Bugs y observaciones aparte
 
-### Bugs claros
+Todos los bugs están **reproducidos** con scripts sobre el motor real (`avanzarSimulacion`) o la sesión real
+(`GameSession`), sin tocar el repositorio.
 
-**B1. Campamentos de bandidos huérfanos.** Una ruina no retira el campamento asignado (`simulation.ts:226` filtra
-asentamientos; nadie toca `campamentosBandidos`), y `avanzarSpawnBandidos` decide con
-`campamentos.length >= asentamientos.length` (`bandidos.ts:79`). Con 3 plazas y 3 campamentos, si una cae hay 2
-plazas y 3 campamentos: `3 >= 2` y **la plaza nueva que se funde después nunca recibe campamento** mientras el
-huérfano siga vivo — y el huérfano sigue atacando caravanas (`avanzarAtaquesBandidos` recorre todos). Solo se
-retira si alguien lo destruye; el NPC lo excluye expresamente ("si el asentamiento asignado sigue vivo",
-`npcGobernanza.ts:732`). Hallazgo **por lectura, no reproducido**: no existe test que ejercite ruina + spawn
-(`bandidos.test.ts` no menciona ruinas). La guarda correcta es "¿hay algún asentamiento sin campamento?", que ya
-calcula `asentamientoSinCampamento` (`bandidos.ts:42`).
+### Bugs
 
-**B2. Penalización de reputación por una ruina ajena.** Un trueque `activo` con una plaza que cae en ruinas no se
-cierra: la otra parte ya no puede lanzar caravanas (`trade.ts:936` descarta los lados cuyo destino ya no existe) y al vencer
-`expiraEn` se le aplica `penalizacionTruequeIncumplido` (`trade.ts:898-901`) porque `cantidadEntregada <
-cantidadTotal`. La Facción superviviente pierde reputación por incumplir un pacto que no pudo cumplir. Mismo
-origen que **(B)**; hallazgo por lectura, no reproducido.
+**B0 · Todos los campamentos de bandidos se llaman `campamento-0`. Grave.** `avanzarSpawnBandidos` construye el id
+con un `contador` que por defecto vale 0 (`bandidos.ts:77,90`), y `simulation.ts:247` no se lo pasa. Consecuencias,
+las tres por id:
+- `exigirCampamento` (`comandos/ayudas.ts:91`) devuelve **el primero** con ese id; `atacarCampamento` valida la
+  distancia contra **ese** (`ejercitos.ts:1187`). Un jugador al lado de cualquier otro campamento recibe "Hay que
+  estar a menos de N" y **solo puede atacar el primero que apareció en el mundo**.
+- Destruir uno **los borra todos**: `campamentosBandidos.filter((c) => c.id !== campamento.id)` en
+  `interaccion.ts:213`, `resultadoBatalla.ts:204` y en el NPC, `npcGobernanza.ts:815`.
+- La proyección (`jugador.ts`) y los eventos llevan ids repetidos al cliente.
 
-### Observaciones (a confirmar si son deliberadas)
+*Reproducido:* en la sesión con 20 NPC, al tick 1 250 había 3 campamentos con **1 id distinto**; al 1 500, 0 (el NPC
+destruyó uno). `bandidos.test.ts` no lo ve porque pasa `contador` a mano.
 
-**O1. Los ticks del reloj de mundo no se difunden por WebSocket.** `HubDeDifusion.difundir` solo se llama desde
-`rutas/comandos.ts:151`, `rutas/batallas.ts:156` y `rutas/admin.ts:418` (tick manual de administración). El camino
-`iniciarRelojDeMundo → sincronizarConReloj → unTickCompleto` (`runnerDePartida.ts:383-432`) persiste y anexa
-eventos al JSONL, pero no avisa a nadie: los suscriptores solo ven eventos de comandos. Además `ResultadoComando`
-de un tick solo trae los eventos de la primera mutación (`runnerDePartida.ts:517-521` lo documenta): ni siquiera el
-tick manual difunde lo que haga el NPC. Fuera del alcance de esta auditoría, pero es exactamente el problema
-inverso: un hecho (el tick) sin su consecuencia (avisar).
+**B1 · Campamentos huérfanos que bloquean el spawn.** Una ruina no retira el campamento asignado, y la guarda
+`campamentos.length >= asentamientos.length` (`bandidos.ts:79`) cuenta al huérfano. *Reproducido:* 3 plazas con 3
+campamentos; una cae (quedan 2 plazas y 3 campamentos); se funda otra; **60 ticks después sigue sin campamento** y el
+huérfano sigue en el mundo atacando caravanas. El NPC lo excluye a propósito ("si el asentamiento asignado sigue
+vivo", `npcGobernanza.ts:732`), así que nadie lo retira. La guarda correcta ya existe:
+`asentamientoSinCampamento` (`bandidos.ts:42`).
 
-**O2. Lo que sobrevive a una conquista.** `aplicarConquista` (`combate.ts:156-209`) reinicia cargos, fundadores,
-población, edificios, recintos, medidor y `ocupacionHasta`, pero **conserva** `politicasActivas`,
-`reservaManual` y `autoConstruccionPausada` del Gobernador/Tesorero derrotado. Las políticas siguen ocupando
-slots del cargo que ya no existe hasta que caduquen, y la reserva manual del antiguo Tesorero sigue bloqueando
-gasto del nuevo dueño. Puede ser deliberado ("la ciudad cambia de dueño entera"); el documento
+**B2 · Penalización de reputación por la ruina del socio.** Un trueque activo con una plaza que cae no se cierra; la
+otra parte ya no puede enviar (`trade.ts:936` descarta lados sin destino), y al vencer se le aplica
+`penalizacionTruequeIncumplido` (`trade.ts:898-901`). *Reproducido con control*, mismos datos y bandidos
+desactivados: **sin ruina**, A entrega 50/50 y su reputación queda en 0; **con la ruina del socio**, entrega 0/50 y
+cae a −8 (−3,6 tras el decaimiento).
+
+**B3 · Un id de asentamiento puede renacer.** `fundarAsentamiento` usa
+`asentamiento-${asentamientosExistentes.length}-${x}-${y}` (`settlement.ts:257`). Tras una ruina, la longitud baja, y
+refundar en la misma posición repite el id de la plaza perdida. *Reproducido:* arruinada `asentamiento-2-120-1440`,
+refundada en el mismo punto → `asentamiento-2-120-1440`. Cualquier referencia vieja por id (campamento huérfano,
+trueque aún activo, ejércitos y caravanas con ese origen, ficha de memoria, historial) se reengancha en silencio a
+una plaza que puede ser de otra Facción. Es más probable de lo que parece: la búsqueda de posición del NPC es
+determinista y tiende a repetir el mejor sitio (**C**).
+
+### Observaciones (confirmar si son deliberadas)
+
+**O1 · Los ticks del reloj de mundo no se difunden por WebSocket.** `HubDeDifusion.difundir` solo se llama desde
+`rutas/comandos.ts:151`, `rutas/batallas.ts:156` y `rutas/admin.ts:418`. El camino
+`iniciarRelojDeMundo → sincronizarConReloj → unTickCompleto` (`runnerDePartida.ts:383-432`) persiste y anexa al
+JSONL, pero no avisa a nadie. Y `ResultadoComando` de un tick solo trae los eventos de la primera mutación
+(`runnerDePartida.ts:517-521`), así que ni el tick manual difunde lo del NPC. Es el problema inverso al de esta
+auditoría: un hecho sin su consecuencia.
+
+**O2 · Lo que sobrevive a una conquista.** `aplicarConquista` (`combate.ts:156-209`) conserva `politicasActivas`,
+`reservaManual` y `autoConstruccionPausada` del dueño derrotado. Las políticas siguen ocupando slots de un cargo
+vacío hasta caducar, y la reserva del antiguo Tesorero bloquea gasto del nuevo dueño.
 `Ocupacion_Post_Conquista_Definicion.md` no lo trata.
 
-**O3. Tecnología y Eras.** No hay ninguna mecánica de tecnología por tick en el árbol (BA-006 sigue en diseño).
-Cuando llegue, conviene diseñarla **por hecho** desde el principio (completar un edificio o cumplir un hito que
-la desbloquea) y no como condición re-derivada cada minuto, que es el patrón de (A).
+**O3 · Excepciones como control de flujo en el NPC.** Además de N1 (el caso caro), pasa en
+`anadirEdificioManualmente`, `comprometerRecintoManualmente` y `asignarGuarnicion`: cada tick prueban y capturan.
+Hoy suman ~1 ms; es el mismo patrón y conviene saberlo antes de añadir más pasos al NPC.
+
+**O4 · Tecnología y Eras.** No hay ninguna mecánica de tecnología por tick (BA-006 sigue en diseño). Cuando llegue,
+conviene diseñarla **por hecho** (obra o hito que la desbloquea) y no como condición re-derivada cada minuto: es
+exactamente el patrón de N1 y (A).
 
 ---
 
-## 8. Tabla priorizada y orden recomendado
+## 9. Tabla priorizada y orden recomendado
 
-Impacto = lo que gana el usuario o el motor. Riesgo = probabilidad de cambiar el comportamiento observable o los
+Impacto = lo que gana el juego o el servidor. Riesgo = probabilidad de cambiar comportamiento observable o los
 guardianes de §2. Esfuerzo: S = horas, M = un día, L = varios.
 
-| # | Qué | Cat. | Impacto | Riesgo | Esfuerzo | Mueve el batch | Toca `snapshot_baseline` / `determinismo` |
+| # | Qué | Cat. | Impacto | Riesgo | Esfuerzo | Batch byte-idéntico | `snapshot_baseline` / `determinismo` |
 |---|---|---|---|---|---|---|---|
-| **B1** | Guarda de spawn de bandidos por "asentamiento sin campamento" y limpieza de huérfanos | bug | medio | bajo | S | solo si hay ruinas con campamento | no / no (ninguno cubre ruinas) |
-| **B2** | Cerrar trueques con una plaza arruinada sin penalizar | bug | medio | bajo | S | sí (ruinas) | no / no |
-| **A** | Nivel de Facción al ganar la XP | 2 | medio-bajo | bajo | S | **sí**, solo con combate NPC | no / no |
-| **—** | Perfil por etapa del tick en madurez (no cambia nada) | medir | decide G, D, H | nulo | S | no | no |
-| **D** | Spawn de bandidos: no repetir la búsqueda sin bosque libre | 3 | ¿medio? | bajo | S | no (sin RNG) | no / no |
-| **B** | Cerrar los dependientes de una ruina en el sitio de la ruina | 2 | medio | medio | M | **sí** (ruinas comunes) | no / sí si cambia el orden de eventos |
-| **C** | NPC: re-fundación al perder la última plaza y no cada tick | 2 | bajo | bajo | S-M (decisión) | no (no corre en batch) | no / no |
-| **E** | Cadencia/histéresis declarada de los títulos | 3 | bajo | bajo | S | sí (eventos) | no / **sí** |
-| **F** | NPC: `guarnecer`/`prepararDefensa` idempotentes | 3 | bajo | bajo | S | no (mismo resultado) | no / no |
-| **G** | Memoizar zonas, reclamos y `factorLineaProduccion` | 3 | ¿?, solo si el perfil lo pide | medio (claves) | S-M | no (mismo resultado) | no / no |
-| **H** | No re-decodificar ojos sin cambios | 3 | bajo | bajo | S | no | no / no |
-| **I, J** | Latencia del NPC, columna a la puerta | 3 | — | — | — | — | no tocar |
+| **B0** | Ids únicos de campamento | bug | **alto** (rompe el combate con bandidos) | bajo | S | no (ids) | no / no |
+| **N1** | NPC: no intentar reclutar lo que el motor va a rechazar | 2 | **alto** (−20 ms/tick, 44-64 % del tick completo) | bajo | S | no (ids), sí equivalente | no / no |
+| **N2a** | Índice de órdenes activas en `publicarOrdenesNpc` | 2 | **alto** a medio plazo (crece sin cota) | bajo | S | sí | no / no |
+| **B1** | Guarda de spawn por "plaza sin campamento" y retirar huérfanos | bug | medio | bajo | S | solo con ruinas | no / no |
+| **B2** | Cerrar trueques con una plaza arruinada sin penalizar | bug | medio | bajo | S | solo con ruinas | no / no |
+| **B3** | Ids de asentamiento que no se reutilicen | bug | medio (corrupción silenciosa de referencias) | medio (formato de id) | S | no (ids) | **sí** si el id aparece en el resumen o los eventos |
+| **A** | Nivel de Facción al ganar la XP | 2 | medio-bajo | bajo | S | no con combate NPC | no / no |
+| **N2b** | Archivar terminales (órdenes, trueques, batallas) y acotar el log en memoria | 2 | medio | medio (forma del estado) | M | depende | no / no |
+| **B** | Cerrar los dependientes de una ruina en el sitio de la ruina | 2 | medio | medio | M | no | no / según orden de eventos |
+| **C** | NPC: re-fundación al perder la última plaza, no cada tick | 2 | bajo | bajo | S-M (decisión) | sí (no corre en batch) | no / no |
+| **E** | Cadencia o histéresis declarada de los títulos | 3 | bajo (ruido) | bajo | S | no | no / **sí** |
+| **F** | NPC idempotente en guarnición y loadout | 3 | bajo | bajo | S | sí | no / no |
+| **D, G, H, I, J** | — | 3 | medido despreciable o decisión de diseño | — | — | — | no tocar |
 
 **Orden recomendado.**
 
-1. **B1 y B2 primero**, aunque no sean "mover nada": son bugs, tienen un arreglo local y no esperan a una decisión.
-2. **(A) nivel de Facción.** El caso más limpio del principio: un hecho, un punto único de escritura
-   (`aplicarAjustesExperiencia`), una ventana visible. Sirve de **ensayo** de "mover una consecuencia al hecho" con
-   riesgo bajo, antes de tocar la ruina.
-3. **Medir** un perfil por etapa del tick con una partida madura (muchas zonas, pocos bosques libres, columnas
-   paradas). Decide si (D), (G) y (H) son trabajo real o solo parecen. Doc 6 E3 ya enseñó que el coste de este motor
-   estaba donde nadie lo esperaba.
-4. **(B) la ruina como hecho**, que de paso fija B1 y B2 de raíz. Es el más grande de la lista y el único que reordena
-   el pipeline: conviene hacerlo con los sellos del batch delante y aceptando que cambian.
-5. **(C), (E), (F)** cuando haya hueco; ninguno bloquea nada.
-6. **Dejar (I) y (J)** como están y la lista de §6 como está. Si llega el scheduler de comandos programados (D5),
-   revisar entonces las caducidades una por una; no antes.
+1. **B0.** Es un arreglo de una línea con un efecto de juego grave.
+2. **N1 y N2a.** Juntas son ~32 ms de los ~45 del tick completo a los 3 días con 20 NPC, y N2a crece sin cota. Las dos
+   se resuelven **comprobando antes o indexando**, sin eventos ni cambio de reglas. Conviene aceptar a la vez el
+   desplazamiento de ids del batch (es el mismo trato que Doc 6 E3).
+3. **B1, B2 y B3.** Bugs con arreglo local; B3 antes de que haya partidas largas con ruinas y refundaciones.
+4. **(A).** El caso más limpio del principio. Sirve de ensayo de "mover una consecuencia al hecho" con riesgo bajo.
+5. **(B), y N2b si N2a no basta.** Son los más grandes; se hacen con los sellos del batch delante, aceptando que
+   cambian.
+6. **(C), (E), (F)** cuando haya hueco. **D, G, H, I, J y todo §7: dejar.**
 
-Un criterio que conviene dejar escrito junto al caso de la residencia: **mover al hecho cuando los hechos son pocos
-y enumerables y cada uno ya tiene un sitio de escritura** (residencia: conquista, ruina, dejar casa; nivel de Facción:
-`aplicarAjustesExperiencia`; ruina: un único `destruido`). **Mantener el barrido cuando sostiene un invariante que
-puede romperse por caminos abiertos**, y **memoizar con clave cuando lo que se recalcula es una lectura**. Tres
-herramientas distintas para tres problemas que se parecen desde fuera.
+**El criterio que conviene dejar escrito** junto al caso de la residencia:
+
+- **Mover al hecho** cuando los hechos son pocos y enumerables y cada uno ya tiene un sitio de escritura. Ejemplos:
+  residencia (conquista, ruina, dejar casa), nivel de Facción (`aplicarAjustesExperiencia`), ruina (un único
+  `destruido`), paso a estado terminal.
+- **Mantener el barrido** cuando sostiene un invariante que puede romperse por caminos abiertos.
+- **Comprobar barato antes, o memoizar con clave**, cuando lo que se recalcula es una lectura (N1).
+
+---
+
+## 10. Qué cambió respecto a la primera versión
+
+- **Las prioridades se invierten.** La primera versión, solo leyendo, ponía al frente el nivel de Facción y la ruina y
+  daba por hecho que el tick era barato. Medido, el coste está en el **turno del NPC** (N1, N2), que la primera
+  versión había dado por legítimo "por umbrales" sin ver que su paso más caro re-deriva una condición discreta.
+- **Nuevos:** N1, N2 (órdenes y log de eventos), **B0** (ids de campamento) y **B3** (ids de asentamiento).
+- **B1 y B2 pasan de "por lectura" a reproducidos.** B2 con escenario de control; el primer intento no lo aislaba.
+- **D, G y H dejan de ser "medir".** Están medidos y son despreciables. La recomendación de un perfil por etapa del
+  tick ya está hecha (§3).
+- **Se corrigen números de línea** de la primera versión que estaban desplazados.
