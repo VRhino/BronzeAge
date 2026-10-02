@@ -1882,6 +1882,11 @@ export const LOGISTICA = {
   factorConsumoEstacionado: 0.1,
   radioReabastecimiento: 60,
   /**
+   * Fracción de la capacidad del carro bajo la cual repostar es noticia (`ejercito.reabastecido`). Por encima es la ración
+   * de cada minuto de un ejército acampado junto a su plaza y no se narra (era el 39 % del log a los 3 días).
+   */
+  umbralNarrarReposte: 0.5,
+  /**
    * A qué distancia dos cosas que se mueven se TROPIEZAN (Paso 10). **15** (decisión del usuario,
    * 2026-09-04), frente a los 150 de visión: ver y chocar son cosas distintas y por eso los números no se
    * parecen. Con 15 un ejército divisa a otro con muchísima antelación y puede evitarlo, interceptarlo o

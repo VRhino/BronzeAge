@@ -774,6 +774,27 @@ describe('reabastecimiento en ruta', () => {
       'y con más que el mismo ejército sin plaza al lado'
     ).toBeGreaterThan(enRuta[0]!.suministro['trigo']!);
   });
+
+  it('narra el reposte de quien llega con el carro vacío, no la ración de cada minuto de quien ya está lleno', () => {
+    const { asentamiento } = base();
+    const correr = (inicial: EjercitoConTropa, ticks: number) => {
+      let ejercitos = [inicial];
+      let asentamientos = [asentamiento];
+      let reabastecidos = 0;
+      for (let i = 0; i < ticks; i++) {
+        const r = avanzar(ejercitos, asentamientos);
+        reabastecidos += r.eventos.filter((e) => e.codigo === 'ejercito.reabastecido').length;
+        ejercitos = r.ejercitos;
+        asentamientos = r.asentamientos;
+      }
+      return reabastecidos;
+    };
+    const vacio = juntoA(asentamiento, asentamiento);
+    const lleno = { ...vacio, suministro: { trigo: LOGISTICA.capacidadCarroPorJugador } };
+
+    expect(correr({ ...vacio, suministro: { trigo: 0 } }, 1), 'llega con hambre: se cuenta').toBe(1);
+    expect(correr(lleno, 50), '50 minutos acampado y lleno: la ración no se narra').toBe(0);
+  });
 });
 
 // ---------------------------------------------------------------------------------------------------------
