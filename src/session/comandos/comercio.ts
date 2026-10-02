@@ -19,7 +19,7 @@ import {
 import { puedeLlevar } from '../../engine/liderazgo';
 import { esCiudadano } from '../../engine/faccion';
 import { alCampamentoPorIds, conEscuadrones } from '../../engine/tropa';
-import { colocarOrdenMercado as colocarOrdenMercadoEngine, comerciarEnPlaza as comerciarEnPlazaEngine } from '../../engine/market';
+import { anexarAlHistorialDeOrdenes, colocarOrdenMercado as colocarOrdenMercadoEngine, comerciarEnPlaza as comerciarEnPlazaEngine } from '../../engine/market';
 import { capacidadCargaDe } from '../../engine/ejercitos';
 import { computeTodasLasZonas } from '../../engine/zones';
 import { RED_VACIA } from '../../engine/redCaminos';
@@ -240,7 +240,7 @@ export const comerciarEnPlaza = comando<ParamsComerciarEnPlaza, { cantidad: numb
         ? { ordenes: estado.ordenes.map((o) => (o.id === resultado.orden.id ? resultado.orden : o)) }
         : {
             ordenes: estado.ordenes.filter((o) => o.id !== resultado.orden.id),
-            historialOrdenes: [...(estado.historialOrdenes ?? []), resultado.orden],
+            historialOrdenes: anexarAlHistorialDeOrdenes(estado.historialOrdenes, [resultado.orden]),
           }),
     };
 

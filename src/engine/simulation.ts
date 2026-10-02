@@ -7,11 +7,11 @@ import { computeTodasLasZonas } from './zones';
 import { avanzarConstruccion, reclamosDeFuentes } from './construction';
 import { avanzarNutricionPoblacion, crecerPoblacion, recaudacionOro } from './population';
 import { agregarRecurso } from './almacen';
-import { avanzarComercio } from './trade';
+import { avanzarComercio, podarAcuerdosTerminados } from './trade';
 import { RED_VACIA } from './redCaminos';
 import { avanzarCaravanasFundacion } from './expansion';
 import { alCampamentoPorIds, campamentoDe, conEscolta, conEscuadrones, conTropa, indiceTropa, sinEscolta } from './tropa';
-import { caducarOrdenes } from './market';
+import { anexarAlHistorialDeOrdenes, caducarOrdenes } from './market';
 import { avanzarPoliticas } from './politicas';
 import { avanzarTributos } from './diplomacia';
 import { aplicarExperiencia, registrarDerrota, type AjusteExperiencia } from './faccion';
@@ -387,9 +387,9 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     facciones: faccionesFinal,
     caravanas: trasEjercitos.caravanas,
     ejercitos: trasEjercitos.ejercitos,
-    acuerdos: trasComercio.acuerdos,
+    acuerdos: podarAcuerdosTerminados(trasComercio.acuerdos, trasEjercitos.caravanas, instante),
     ordenes: trasMercado.ordenes,
-    historialOrdenes: trasMercado.cerradas.length > 0 ? [...(estado.historialOrdenes ?? []), ...trasMercado.cerradas] : estado.historialOrdenes,
+    historialOrdenes: anexarAlHistorialDeOrdenes(estado.historialOrdenes, trasMercado.cerradas),
     relaciones: estado.relaciones,
     titulos: titulosActuales,
     red: trasComercio.red,

@@ -1387,6 +1387,12 @@ export const ASIGNACION_CARAVANA = {
  * republica cuando la anterior ha caducado.
  */
 export const MERCADO = {
+  /**
+   * Cuántas órdenes cerradas (cumplidas o expiradas) recuerda cada plaza en `historialOrdenes`: las últimas. Es el
+   * "historial de tu mercado" que ve su dueño; sin tope crecía sin techo (219 362 órdenes y 65 MB a las 5 semanas de
+   * batch, copiadas enteras en cada tick con órdenes cerradas).
+   */
+  historialPorPlaza: 200,
   plazoOrdenMinutos: 200,
 };
 
@@ -1394,6 +1400,12 @@ export const TRUEQUE = {
   // Un día de mundo (2026-09-28, decisión del usuario): con 200 min, en la Era I medida, 2.633 de 2.720 trueques
   // caducaban sin que ninguna caravana llegara a salir.
   plazoMinutosPorDefecto: 1440,
+  /**
+   * Cuánto se conserva un trueque ya terminado (cumplido, expirado o rechazado) en `acuerdos`, contado desde su `expiraEn`: una
+   * semana de mundo, el historial que ve su dueño. Pasado eso sale del estado, salvo que una caravana aún lo cite. Sin esto
+   * crecía sin techo (1 050 a las 5 semanas de batch).
+   */
+  retencionTerminadosMinutos: 10_080,
 };
 
 // Precio de referencia por defecto, según escasez/abundancia GLOBAL (Doc 3.4, sin componente de distancia).

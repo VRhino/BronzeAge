@@ -1048,6 +1048,16 @@ function asignarCaravanasATrueque(
   return { caravanas: [...caravanasPorId.values()], red };
 }
 
+/** Quita de `acuerdos` los trueques terminados hace más de `TRUEQUE.retencionTerminadosMinutos` que ninguna caravana cita. Mismo array si no hay ninguno. */
+export function podarAcuerdosTerminados(acuerdos: AcuerdoTrueque[], caravanas: readonly Caravana[], instante: Instante): AcuerdoTrueque[] {
+  const citados = new Set(caravanas.map((c) => c.origenAcuerdoId).filter((id): id is string => id !== undefined));
+  const sobran = (a: AcuerdoTrueque): boolean =>
+    (a.estado === 'cumplido' || a.estado === 'expirado' || a.estado === 'rechazado') &&
+    instante > sumar(a.expiraEn, minutos(TRUEQUE.retencionTerminadosMinutos)) &&
+    !citados.has(a.id);
+  return acuerdos.some(sobran) ? acuerdos.filter((a) => !sobran(a)) : acuerdos;
+}
+
 export function avanzarComercio(
   asentamientos: Asentamiento[],
   facciones: Faccion[],
