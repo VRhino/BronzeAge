@@ -221,8 +221,8 @@ Cada paso deja los tests en verde y se puede fusionar por separado.
 - [x] Modelo de datos compartido (doc 01): recursos, edificios, tabla de tropas y §21 Tecnología. Respuesta a BA-006
   con lo que necesita Conquest, pedido en CQ-006 (`Conquest_prototype/Docs/Coordinacion/propuestas/`): 15 escuadras
   nuevas, tres cambios de escalón, tipo montado, modelos de Caballerizas y Sala del Consejo.
-- [ ] Cliente de administración (`cliente/`): panel de tecnología y Eras. **Aplazado**: el cliente y `lab/` no
-  compilan desde antes de este plan (`capacidadCasas`, `bandidosProximoSpawnEn`); primero hay que ponerlos al día.
+- [x] Cliente de administración (`cliente/`): sección «Tecnología» en el detalle de cada Facción (Era, estado de cada
+  tecnología, logro con su contador y quién fue primera), vía `gameStore.tecnologiaInfo`. Compila (2026-10-02).
   BronzeAgeClient: su propio trabajo sobre `ProyeccionJugador.tecnologia` y el comando.
 
 ### Paso 12 — Calibrar los logros con batch (lo corre la sesión de balance)

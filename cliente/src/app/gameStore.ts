@@ -35,8 +35,10 @@ import type {
   ZonaBosque,
   ZonaFaccion,
   ZonaInfluencia,
+  TecnologiaId,
 } from '@motor/domain/types';
-import { EDIFICIO_CATALOGO, IMPUESTOS, MANTENIMIENTO, NECESIDADES, NIVEL_FACCION, OCUPACION, POLITICAS, POLITICA_CATALOGO, RECLUTAMIENTO_ORO_POR_ESCALON, REJILLA_ASENTAMIENTO, SIMULACION, TROPAS_RECLUTABLES } from '@motor/constants';
+import type { Instante } from '@motor/domain/tiempo';
+import { EDIFICIO_CATALOGO, IMPUESTOS, MANTENIMIENTO, NECESIDADES, NIVEL_FACCION, OCUPACION, POLITICAS, POLITICA_CATALOGO, RECLUTAMIENTO_ORO_POR_ESCALON, REJILLA_ASENTAMIENTO, SIMULACION, TECNOLOGIAS, ERAS, TROPAS_RECLUTABLES } from '@motor/constants';
 import { crearMapa, type EstadoMapa, type Mapa } from '@motor/world/mapa';
 import {
   produccionPorMinuto,
@@ -454,6 +456,26 @@ export class GameStore {
    * Progreso de nivel de FACCIÓN (Doc 1.7/Fase_0_5 §8): experiencia acumulada contra el umbral que falta
    * para el siguiente nivel — mismo dato que decide `cupoAsentamientosFaccion`/`capFundacion` de esta Facción.
    */
+  /** Tecnología de una Facción (Doc 6): Era vigente y, por tecnología, su estado para esa Facción. `logro` es el
+   * contador del servidor frente a su X (`null` si es de arranque). */
+  tecnologiaInfo(faccionId: string): {
+    era: string;
+    eraDesde: Instante;
+    tecnologias: { id: string; nombre: string; era: string; estado: 'adoptada' | 'aparecida' | 'oculta'; logro: { contador: string; umbral: number; actual: number; cumplidoEn: Instante | null } | null; primero: string | null }[];
+  } {
+    const t = this.state.tecnologia;
+    const { aparecidas, adoptadas } = tecnologiasDe(t, faccionId);
+    const tecnologias = (Object.entries(TECNOLOGIAS) as [TecnologiaId, (typeof TECNOLOGIAS)[TecnologiaId]][]).map(([id, def]) => ({
+      id,
+      nombre: def.nombre,
+      era: ERAS[def.era].nombre,
+      estado: adoptadas.includes(id) ? ('adoptada' as const) : aparecidas.includes(id) ? ('aparecida' as const) : ('oculta' as const),
+      logro: def.logro ? { contador: def.logro.contador, umbral: def.logro.umbral, actual: t.contadores[def.logro.contador] ?? 0, cumplidoEn: t.logros[id] ?? null } : null,
+      primero: t.primeros[id]?.faccionId ?? null,
+    }));
+    return { era: ERAS[t.era].nombre, eraDesde: t.eraDesde, tecnologias };
+  }
+
   nivelFaccionInfo(faccion: Faccion): { nivel: number; esMaximo: boolean; experiencia: number; umbralActual: number; umbralSiguiente: number | null } {
     const esMaximo = faccion.nivel >= NIVEL_FACCION.nivelMaximo;
     return {

@@ -1304,6 +1304,17 @@ function renderDetalleFaccion(faccion: Faccion, state: GameState): string {
        }`
     : '<p class="legend-note">No pertenece a ninguna Liga.</p>';
 
+  const tec = gameStore.tecnologiaInfo(faccion.id);
+  const tecnologiaHtml = `<p class="legend-note">Era vigente: <b>${tec.era}</b> (desde ${fmtTiempoMundo(tec.eraDesde)}).</p><div class="kv-grid">${tec.tecnologias
+    .map((t) => {
+      const logro = t.logro
+        ? ` · logro ${t.logro.contador} ${Math.round(t.logro.actual)}/${t.logro.umbral}${t.logro.cumplidoEn !== null ? ` ✓ ${fmtTiempoMundo(t.logro.cumplidoEn)}` : ''}`
+        : ' · de arranque';
+      const primero = t.primero ? ` · primera: ${state.facciones.find((f) => f.id === t.primero)?.nombre ?? t.primero}` : '';
+      return `<div class="kv-row"><span>${t.nombre} <small>(${t.era})</small></span><span>${t.estado}${logro}${primero}</span></div>`;
+    })
+    .join('')}</div>`;
+
   const titulosDeLaFaccion = state.titulos.filter((t) => t.poseedorId === faccion.id);
   const titulosHtml = titulosDeLaFaccion.length
     ? `<div class="chip-row">${titulosDeLaFaccion.map((t) => `<span class="chip">${t.nombre}</span>`).join('')}</div>`
@@ -1350,6 +1361,11 @@ function renderDetalleFaccion(faccion: Faccion, state: GameState): string {
       <div class="detail-section">
         <h3>Liga</h3>
         ${ligaHtml}
+      </div>
+
+      <div class="detail-section">
+        <h3>Tecnología (Doc 6)</h3>
+        ${tecnologiaHtml}
       </div>
 
       <div class="detail-section">
