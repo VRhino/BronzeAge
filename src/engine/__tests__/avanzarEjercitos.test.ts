@@ -783,7 +783,7 @@ describe('reabastecimiento en ruta', () => {
       let reabastecidos = 0;
       for (let i = 0; i < ticks; i++) {
         const r = avanzar(ejercitos, asentamientos);
-        reabastecidos += r.eventos.filter((e) => e.codigo === 'ejercito.reabastecido').length;
+        reabastecidos += r.eventos.filter((e) => typeof e !== 'string' && e.codigo === 'ejercito.reabastecido').length;
         ejercitos = r.ejercitos;
         asentamientos = r.asentamientos;
       }
