@@ -51,6 +51,7 @@ import type {
   Asentamiento,
   RedCaminos,
   CampamentoBandido,
+  CampamentoMercenarios,
   Caravana,
   CargosAsentamiento,
   Edificio,
@@ -402,6 +403,9 @@ export interface ProyeccionJugador {
   /** Entidades del MUNDO (bandidos). Solo los que se están VIENDO ahora mismo, sin memoria — ver
    * `campamentosAvistados`. */
   campamentosBandidos: CampamentoBandido[];
+  /** Campamentos de mercenarios (Doc 1.9b) que la Facción CONOCE: como un camino, los que ha explorado alguna vez, no solo los
+   * que ve ahora — ver `campamentosMercenariosConocidos`. */
+  campamentosMercenarios: CampamentoMercenarios[];
   /** Sin `asentamientoId` (eventos globales/de Facción) o con uno propio. Es el mismo criterio que evita la
    * fuga que el doc 7 §7.1 señalaba en el log administrativo: el log global narra TODO el mundo. */
   /* `eventosDominio` NO viaja aquí (follow-up de C13, cerrado el 2026-09-05) — ver la nota de cabecera. */
@@ -567,6 +571,16 @@ function caminosConocidos(red: RedCaminos, niebla: NieblaProyectada): CaminoProy
   const rejilla: Rejilla = { columnas: niebla.columnas, filas: niebla.filas, tamanoCelda: niebla.tamanoCelda };
   const explorado = (p: Point) => estaExplorado(niebla.celdas, rejilla, p);
   return tramosDeRed(red, (a, b) => explorado(a) || explorado(b)).map((t, i) => ({ id: `tramo-${i}`, ...t }));
+}
+
+/**
+ * Los campamentos de mercenarios que la Facción CONOCE (Doc 1.9b): como un camino, "explorado", no "visible ahora". A
+ * diferencia de los de bandidos, un campamento de mercenarios no aparece ni desaparece una vez nace —es un enclave fijo—,
+ * así que recordarlo no miente: el sitio donde lo viste sigue siendo suyo. Se mide contra la máscara que ya viaja.
+ */
+function campamentosMercenariosConocidos(campamentos: readonly CampamentoMercenarios[], niebla: NieblaProyectada): CampamentoMercenarios[] {
+  const rejilla: Rejilla = { columnas: niebla.columnas, filas: niebla.filas, tamanoCelda: niebla.tamanoCelda };
+  return campamentos.filter((c) => estaExplorado(niebla.celdas, rejilla, c.posicion));
 }
 
 /**
@@ -816,6 +830,7 @@ export function proyectarParaJugador(
     titulos: estado.titulos,
     caminos: caminosConocidos(estado.red ?? RED_VACIA, exploracion),
     campamentosBandidos: campamentosAvistados(estado.campamentosBandidos, ojosAsent, ojosEjercito, tropa),
+    campamentosMercenarios: campamentosMercenariosConocidos(estado.campamentosMercenarios, exploracion),
     historial: estado.historialHeroes[heroeId] ?? [],
     zonas: zonasPropias,
     zonasFusionadas: geometria.zonasFusionadas.filter((zf) => zf.faccionId === faccionId),

@@ -9,6 +9,7 @@ import type {
   AcuerdoTrueque,
   Asentamiento,
   CampamentoBandido,
+  CampamentoMercenarios,
   Caravana,
   Faccion,
   OrdenMercado,
@@ -89,6 +90,8 @@ export interface GameSessionState {
    * `caminos` (uno por par), que se ignora — la red se rehace sola con las próximas caravanas. */
   red?: RedCaminos;
   campamentosBandidos: CampamentoBandido[];
+  /** Campamentos de mercenarios (Doc 1.9b): enclaves neutrales. El del día 1 lo crea el primer tick (`engine/mercenarios.ts`). */
+  campamentosMercenarios: CampamentoMercenarios[];
   /** Facciones que gobierna el NPC en vez de un jugador humano. Vive en la partida y no en el runner
    * (doc 7 §7.2): cambia el resultado del tick, así que un reinicio con otra configuración divergiría de lo
    * que el snapshot dice haber pasado. En partida real no cambia en caliente una vez elegida. */
@@ -154,6 +157,7 @@ export function estadoSimulacionDe(estado: GameSessionState): EstadoSimulacion {
     titulos: estado.titulos,
     red: estado.red,
     campamentosBandidos: estado.campamentosBandidos,
+    campamentosMercenarios: estado.campamentosMercenarios,
     memoriaPorFaccion: estado.memoriaPorFaccion,
     heroes: estado.heroes,
     tecnologia: estado.tecnologia,
@@ -176,6 +180,7 @@ export function conResultadoDeSimulacion(estado: GameSessionState, simulacion: E
     titulos: simulacion.titulos,
     red: simulacion.red,
     campamentosBandidos: simulacion.campamentosBandidos,
+    campamentosMercenarios: simulacion.campamentosMercenarios,
     memoriaPorFaccion: simulacion.memoriaPorFaccion,
     heroes: simulacion.heroes,
     tecnologia: simulacion.tecnologia,

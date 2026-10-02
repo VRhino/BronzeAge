@@ -67,6 +67,7 @@ import { leerEventos } from './eventosDePartida';
  *
  * v20 (2026-10-02): el trueque compuesto (Doc 3.2): `AcuerdoTrueque` guarda `lineasA`/`lineasB` en vez de
  *   `recursoA`/`cantidadTotalA`/... Sin migración: un acuerdo viejo no se puede leer sin inventar las líneas.
+ *   También `state.campamentosMercenarios` (Doc 1.9b), que sale del primer tick.
  */
 export const FORMATO_SNAPSHOT_VERSION = 20;
 

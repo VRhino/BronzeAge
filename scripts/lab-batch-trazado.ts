@@ -212,6 +212,7 @@ function correrSeed(seed: number): ResultadoSeed {
     relaciones: [],
     titulos: [],
     campamentosBandidos: [],
+    campamentosMercenarios: [],
     heroes: [],
   };
   let tick = 0;

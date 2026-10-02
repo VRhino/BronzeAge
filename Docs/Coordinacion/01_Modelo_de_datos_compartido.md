@@ -54,7 +54,7 @@ campo distinto y explícitamente no comparable con ningún `Instante` de mundo �
 7. Comercio (`AcuerdoTrueque`, `OrdenMercado`, `RedCaminos`)
 8. `RelacionPolitica`
 9. `Titulo`
-10. `CampamentoBandido`
+10. `CampamentoBandido` / `CampamentoMercenarios`
 11. Mundo / worldgen (`WorldConfig`, `NodoRecurso`, `ZonaBosque`, `RioZona`, terreno/bioma/región)
 12. `Heroe` (nuevo)
 13. `Escuadron` (actualizado)
@@ -482,6 +482,16 @@ CampamentoBandido
   bosqueId              bosque que ocupa
   asentamientoId          a qué asentamiento "atiende" — como mucho uno por asentamiento
   poder                  poder de combate fijo (placeholder), sin escuadrones propios
+
+CampamentoMercenarios      enclave neutral (Doc 1.9b) — NUEVO 2026-10-02; en el estado, `campamentosMercenarios[]`
+  id
+  posicion: Point
+  origen: number          variante de aspecto, 0..2: solo cambia cómo se ve
+  edificios[]             'taberna' | 'vivienda' | 'mercado' | 'barracon' | 'galeriaDeTiro' | 'caballerizas' — layout fijo
+  creadoEn: Instante
+                        No es de ninguna Facción ni tiene zona. En la proyección del jugador viaja solo si la Facción
+                        ha explorado el sitio (como un camino). Conquest: entidad y escena con las 3 variantes de
+                        layout — pendiente de contrato en `src/contratos/v1/`.
 ```
 
 ## 11. Mundo / worldgen

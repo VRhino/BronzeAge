@@ -1,4 +1,4 @@
-import type { ContadorLogro, EdificioTipo, EraId, GrupoPuerta, RecursoTipo, TecnologiaId } from './domain/types';
+import type { ContadorLogro, EdificioCampamentoTipo, EdificioTipo, EraId, GrupoPuerta, RecursoTipo, TecnologiaId } from './domain/types';
 
 // Valores numéricos PLACEHOLDER — ver Consideraciones/Preguntas_Abiertas.md.
 // Centralizados aquí para poder re-balancear sin tocar la lógica del motor.
@@ -1899,6 +1899,32 @@ export const LOGISTICA = {
  *
  * PLACEHOLDER a calibrar por simulación, como el resto de constantes militares.
  */
+/**
+ * Campamentos de mercenarios (Doc 1.9b, `Docs/Mecanicas a desarrollar.md` §40). Cifras decididas el 2026-10-02 pero PLACEHOLDER:
+ * sin calibrar por simulación.
+ */
+export const MERCENARIOS = {
+  /** Aparecen donde hay zonas de al menos este número de Facciones distintas a menos de `radioZonas` del punto. */
+  facciones: 2,
+  radioZonas: 150,
+  topePorServidor: 6,
+  /** Entre campamentos. */
+  distanciaMinima: 400,
+  /** Cada cuántos minutos de mundo se busca sitio para uno nuevo (la búsqueda recorre todos los pares de plazas). */
+  cadaMinutos: 60,
+  /** Variantes de aspecto, elegidas al nacer: no cambian nada de lo que hace. */
+  origenes: 3,
+  /** Siempre los tiene; el militar se elige al azar entre `edificiosMilitares`. */
+  edificiosFijos: ['taberna', 'vivienda', 'vivienda', 'mercado'] as readonly EdificioCampamentoTipo[],
+  edificiosMilitares: ['barracon', 'galeriaDeTiro', 'caballerizas'] as readonly EdificioCampamentoTipo[],
+  /** Preferencia por un bosque: si hay uno a menos de esto del punto, el campamento se pega a su borde. */
+  margenBosque: 100,
+  pegadoAlBorde: 10,
+  /** Búsqueda de un punto válido (tierra firme) alrededor del ancla, en anillos. */
+  radioBusqueda: 400,
+  pasoBusqueda: 20,
+} as const;
+
 /** La puerta de los asentamientos (Doc 1.10.5). */
 export const PUERTA = {
   /** Lo que cierra una plaza que nadie ha tocado: deja entrar a los suyos y a los amigos, y a nadie más. */

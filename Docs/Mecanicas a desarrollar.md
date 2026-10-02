@@ -34,7 +34,7 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 36 | HÉROE | Comportamiento de los héroes bot en el mundo | ✘ nada |
 | 38 | MILITAR | Tope de héroes en asedio: volver a 15 cuando entren jugadores | ◐ 5 mientras se prueba con NPC |
 | 39 | MILITAR | Escala de la experiencia de escuadra de Unity | ✘ espera a CQ-001 |
-| 40 | MUNDO | Campamentos de mercenarios: enclave neutral, residencia, reclutamiento y mercado | ✘ nada |
+| 40 | MUNDO | Campamentos de mercenarios: enclave neutral, residencia, reclutamiento y mercado | ◐ paso 1 de 5 (entidad y niebla) |
 | 42 | TECNOLOGÍA | Aedas: difusión y venta de tecnología, residentes y lore | ◐ diseño parcial, sin código |
 
 **Pospuesto explícitamente, fuera de esta lista:** el **Attack Timer** (Doc 5.6, decidido y aplazado a
@@ -369,8 +369,9 @@ misma curva: cuando Conquest publique su escala (CQ-001), comprobar que encaja o
 
 ## 40. Campamentos de mercenarios
 
-**Estado: diseñado con el usuario el 2026-09-28, `código: ✘`. NO está en el canon: se pasa al implementarlo
-(ver "Qué toca del canon", al final).**
+**Estado: diseñado con el usuario el 2026-09-28; implementación en 5 pasos desde el 2026-10-02, `código: ◐` (paso 1 hecho:
+entidad, aparición y niebla, en `engine/mercenarios.ts`). El canon se va pasando con cada paso: Doc 1.9b y glosario ya recogen el
+paso 1; el resto, en "Qué toca del canon", al final.**
 Amplía y sustituye en parte D26 (`Consideraciones/BA-006_Revision_Tecnologia_Eras.md`): desaparece el roster
 mercenario propio y la cultura. Cifras N, R, X, T, K y topes: PLACEHOLDER.
 
@@ -427,6 +428,16 @@ barracón, galería de tiro y caballeriza. Sin extractores, fabricación ni zona
 **Taberna.** Por ahora, lugar neutral de rumores; la versión completa va con la entrada 18.
 
 **Afecta a Conquest:** entidad nueva en `src/contratos/v1/` y escena con las variantes de layout.
+
+**Cifras decididas el 2026-10-02** (siguen siendo placeholder, en `MERCENARIOS` de `constants.ts`):
+- Aparición: N=2 Facciones distintas con zona a menos de R=150; tope 6 por servidor y 400 de distancia mínima entre campamentos. El del día 1, en el centro del mapa, en tierra firme y junto a un bosque si lo hay.
+- Forma: 3 variantes de aspecto (origen); fijos taberna, 2 viviendas y mercado, más 1 edificio militar al azar (barracón, galería de tiro o caballeriza).
+- Población: tope = viviendas × `poblacionPorVivienda` (50: dos viviendas dan 100, y sube sola si se añaden más); recupera 10 por hora, ajustable.
+- Tecnología propia: X=50 % de las Facciones humanas vivas o T=72 horas desde la primera.
+- Precio de reclutar: ×1,5 en el campamento, ×0,6 sobre eso si la Facción no tiene asentamientos.
+- Almacén personal del héroe: 1000 unidades en total. Fundación de supervivencia: 75 % del coste normal.
+- Mercado: reposición cada K=3 h, 3 % de lo comerciado, tope 300 por bien; vende a +30 % sobre el precio de referencia.
+- Implementación en 5 pasos: entidad y niebla; residencia y almacén personal; reclutamiento; mercado; refundar.
 
 **Qué toca del canon al implementarlo:**
 - **Doc 0 (Glosario):** entrada nueva *Campamento de mercenarios*; *Huérfano* se borra (o queda como histórico)

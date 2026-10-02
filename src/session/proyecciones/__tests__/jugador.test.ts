@@ -1021,6 +1021,26 @@ describe('caminos: solo los que la Faccion ha PISADO', () => {
   });
 });
 
+describe('campamentosMercenarios: los que la Facción ha explorado, como un camino', () => {
+  const mercenarios = (posicion: { x: number; y: number }) =>
+    ({ id: `mercenarios-${posicion.x}`, posicion, origen: 0, edificios: ['taberna'], creadoEn: 0 }) as unknown as GameSessionState['campamentosMercenarios'][number];
+
+  it('uno en terreno que la Facción ha visto viaja; uno en terreno sin explorar no', () => {
+    const { sesion, fundador } = partidaConAsentamiento();
+    const visto = mercenarios({ x: 440, y: 400 }); // dentro de lo que vigila la propia plaza
+    const estado = { ...sesion.getState(), campamentosMercenarios: [visto, mercenarios(LEJOS)] };
+
+    expect(proyectarParaJugador(estado, fundador, SIN_GEOMETRIA).campamentosMercenarios).toEqual([visto]);
+  });
+
+  it('quien no ha explorado nada no sabe de ninguno', () => {
+    const { sesion } = partidaConAsentamiento();
+    const estado = { ...sesion.getState(), campamentosMercenarios: [mercenarios({ x: 440, y: 400 })] };
+
+    expect(proyectarParaJugador(estado, 'forastero', SIN_GEOMETRIA).campamentosMercenarios).toEqual([]);
+  });
+});
+
 describe('campamentosBandidos: solo los que se ven AHORA', () => {
   it('un campamento lejos de todo lo propio no aparece por ningun lado', () => {
     const { sesion, fundador } = partidaConAsentamiento();

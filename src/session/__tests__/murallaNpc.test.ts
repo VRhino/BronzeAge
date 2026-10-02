@@ -42,6 +42,7 @@ function estadoBase(nivel: number): { estado: EstadoSimulacion; mapa: ReturnType
       relaciones: [],
       titulos: [],
       campamentosBandidos: [],
+      campamentosMercenarios: [],
       memoriaPorFaccion: {},
       heroes: [],
       tecnologia: estadoTecnologiaInicial(instante(0)),

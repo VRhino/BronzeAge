@@ -994,6 +994,24 @@ export interface CampamentoBandido {
   poder: number;
 }
 
+/** Edificios de un campamento de mercenarios (Doc 1.9b): layout fijo, no se construyen ni crecen. */
+export type EdificioCampamentoTipo = 'taberna' | 'vivienda' | 'mercado' | 'barracon' | 'galeriaDeTiro' | 'caballerizas';
+
+/**
+ * Campamento de mercenarios (Doc 1.9b, `Docs/Mecanicas a desarrollar.md` §40): enclave NEUTRAL del mundo abierto. No es de
+ * ninguna Facción, no tiene zona de influencia, no crece y no desaparece; se entra en él como en un asentamiento. A
+ * diferencia de un campamento de bandidos, no se puede atacar. Nace en `engine/mercenarios.ts`.
+ */
+export interface CampamentoMercenarios {
+  id: string;
+  posicion: Point;
+  /** Variante de aspecto (0..`MERCENARIOS.origenes`-1): solo cambia cómo se ve, nunca lo que hace. */
+  origen: number;
+  /** Lo que tiene, de layout fijo: los edificios fijos más uno militar elegido al nacer. */
+  edificios: EdificioCampamentoTipo[];
+  creadoEn: Instante;
+}
+
 /**
  * Contrato marco abierto en el tiempo entre dos asentamientos (Doc 3.2). "Funciona en ambas direcciones":
  * A se compromete a entregar sus `lineasA` y B sus `lineasB` (cada línea, un recurso y su cantidad); cada lado

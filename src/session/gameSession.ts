@@ -97,6 +97,7 @@ export class GameSession {
       relaciones: [],
       titulos: [],
       campamentosBandidos: [],
+      campamentosMercenarios: [],
       memoriaPorFaccion: {},
       tecnologia: estadoTecnologiaInicial(instanteDeTick(0)),
       faccionesNpcIds: [],

@@ -29,6 +29,9 @@ Son **tres conceptos distintos** y conviene no mezclarlos — la jerarquía de e
 - **Unidad:** cada soldado individual dentro de un escuadrón. Las bajas son permanentes (permadeath, Doc 5.4).
 
 > **"Tropa" se usa además en sentido colectivo** en todos los documentos ("las tropas consumen raciones", "mantenimiento de tropas", "reclutar tropas"), igual que en castellano corriente. Eso es deliberado y no choca: en singular y referido a un catálogo es el tipo; en plural y genérico es el colectivo. **La entidad contable es siempre el escuadrón** — y por eso lleva ese nombre, para que "tropa" quede libre para los otros dos usos.
+## Campamento de mercenarios
+Enclave neutral del mundo abierto (Doc 1.9b): no es de ninguna Facción, no tiene zona de influencia, no se puede atacar y no desaparece. Hoy solo existe como entidad que aparece y se conoce explorándola; residir en él, reclutar y comprar llegan en los siguientes pasos (`Docs/Mecanicas a desarrollar.md` §40). No confundir con el *Campamento* de un héroe (arriba) ni con un campamento de bandidos (Doc 1.9).
+
 ## Guarnición
 Los escuadrones que cada Héroe residente **asigna** a la guarnición de su asentamiento, dentro de un cupo por héroe que dan los edificios y las políticas de ese asentamiento; no gasta su Liderazgo. Los maneja la IA del juego y defienden aunque su héroe no esté. El resto de escuadrones guardados en el asentamiento no combaten sin su héroe. Un asentamiento recién conquistado queda sin guarnición (Doc 5.15.3 y 5.15.5).
 
