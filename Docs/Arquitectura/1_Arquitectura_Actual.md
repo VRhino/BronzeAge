@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Versión** | 2.5 |
-| **Actualizado** | 2026-09-15 |
-| **Verificado contra** | `eef7fe6`, rama `heroe-dominio` (sin mergear a `main`) — 1309 tests en 118 archivos, todos en verde |
+| **Versión** | 2.6 |
+| **Actualizado** | 2026-10-03 |
+| **Verificado contra** | `ac0590d` (`main` + rama de trabajo `claude/eager-bell-hbwzwu`) — `npm run typecheck` limpio y 1576 tests en 156 archivos, todos en verde |
 
 > **Por qué existe este campo.** La v1.0 se escribió el 2026-08-26 y para el 2026-09-05 había derivado en
 > ocho puntos concretos (número de comandos, número de tests, tamaño de `constants.ts`, estado de la niebla
@@ -19,6 +19,7 @@
 
 | Versión | Fecha | Cambio |
 |---|---|---|
+| 2.6 | 2026-10-03 | Reconciliación con `ac0590d`, tras el merge de `heroe-dominio` a `main` y 95 commits más. Novedades de arquitectura: **tecnología por Eras** (`engine/tecnologia.ts`, `session/comandos/tecnologia.ts`, `state.tecnologia`); **campamentos de mercenarios** (`engine/mercenarios.ts`, `mercadoMercenario.ts`, `reclutamientoMercenario.ts`, `almacenPersonal.ts`); **grafo de navegación global** (`world/grafoNavegacion.ts`) bajo la red de caminos; adaptador **libSQL** del almacén (`server/almacen/enLibsql.ts`, `ALMACEN_URL`/`ALMACEN_TOKEN`); el reloj de mundo **difunde por WebSocket** los eventos de cada tick; el log de eventos en memoria **se acota** (`MAX_EVENTOS_EN_MEMORIA`) y el historial de órdenes y trueques cerrados también; reacciones por hecho en vez de barridos por tick (ruina, conquista, derrota NPC). Snapshot v18 → **v20** sin migración, `WORLDGEN_VERSION` 15 → **17**, `BALANCE_VERSION` 11 → **12**. Comandos 76 → **91**, rutas HTTP documentadas 29 → **31**, tests 1309/118 → **1576/156**, `constants.ts` 63/1955 → **74/2576**, `engine/` 36/12.988 → **47/16.608**, `domain/` ~1.130 → ~1.430 líneas. Retirado el aviso de que el modelo de Héroe vive solo en una rama. |
 | 2.5 | 2026-09-15 | Reconciliación con la rama `heroe-dominio`: modelo de **Héroe** (dueño de todo en el juego, `heroes` en el estado, `crearHeroe`, `sinHeroe`) y estado Herido; **contrato con Conquest** (`src/contratos/v1/`, capa nueva en `arquitectura.test.ts`); **batallas de Unity**, fase 1 (`session/batallas.ts`, `server/rutas/batallas.ts`, opt-in `SERVIDORES_BATALLA`, candado de batalla en el registro de comandos). Snapshot v13 → **v18** sin migración. Comandos 69 → 76, rutas HTTP ~22 → 29, tests 1222/112 → 1309/118, `constants.ts` 60/2004 → 63/1955, `engine/` 34 → 36 módulos. `ajv` pasa a dependencia de producción. |
 | 2.4 | 2026-09-10 | Reconciliación de documentación operativa con el árbol de trabajo: `npm run typecheck` limpio y 1222 tests en 112 archivos en verde. Se corrigen las referencias obsoletas de arranque (`INTERVALO_TICK_MS`, `POST .../tick`) y del cliente de administración (la niebla de guerra ya no es pendiente). |
 | 2.3 | 2026-09-09 | Puerto **`AlmacenDeObjetos`** (`server/almacen/`): toda la persistencia salvo respaldos —snapshots, eventos, auditoría, identidad— pasa por `leer`/`escribir`/`anexar`/`listar` por clave, con un adaptador de disco (`enDisco.ts`) como único hoy. `persistenciaPartida`/`eventosDePartida`/`auditoria`/`persistenciaIdentidad` dejan de tocar `node:fs`; `crearServidor` acepta un `almacen` inyectado (disco por defecto). Prepara el cambio limpio de proveedor (object storage, SQLite/HTTP, Postgres) para desplegar en un free tier con disco efímero. `repositorioEnDisco.ts` → `repositorioPersistente.ts`. Tests 1203/110 → 1211/111. |
@@ -38,8 +39,8 @@ se conectan a la misma instancia de partida.
 Este repositorio es **solo servidor** desde la Fase C0. Queda aquí un único cliente, `cliente/` (proyecto
 aparte con su propio `package.json`), que es la herramienta de administración y depuración y **todavía no
 cumple el criterio de cierre de la Fase C**: sigue importando el motor de este repo por un alias (`@motor/*`)
-en vez de hablar solo por red. Medido el 2026-09-05: **30 sentencias de import sobre 20 módulos distintos**
-del motor — 11 de ellos de `engine/`, más `session/`, `domain/`, `worldgen/`, `world/` y `constants`. La
+en vez de hablar solo por red. Medido el 2026-10-03: **36 sentencias de import sobre 24 módulos distintos**
+del motor — 15 de ellos de `engine/`, más `session/`, `domain/`, `worldgen/`, `world/` y `constants`. La
 dependencia no es simbólica: alcanza el corazón de las reglas, no solo los tipos. Ver `cliente/README.md`.
 
 El cliente de JUGADOR ya no vive aquí: `cliente-jugador/` se movió a su propio repositorio
@@ -50,7 +51,7 @@ pérdida. Cualquier referencia a un directorio `cliente-jugador/` dentro de este
 Cuánto de esta superficie tiene hoy consumidor está medido en `docs/Analisis_Brecha_Backend.md` de ese
 repositorio (2026-09-06, cifra pendiente de re-medir): consumía entonces 5 de los 9 endpoints y una fracción
 de los comandos, y no usaba todavía el WebSocket, el cursor de eventos ni `GET /v1/balance`. Es brecha de
-interfaz, no de backend — la matriz de `autorizacion.ts` ya admite al rol `jugador` en **75 de los 76** comandos
+interfaz, no de backend — la matriz de `autorizacion.ts` ya admite al rol `jugador` en **90 de los 91** comandos
 (el que falta, `crearFaccionNpc`, es del admin).
 
 Por el lado del BACKEND, la Fase C está **completa** (C0–C13) y la Fase D **estructuralmente completa**
@@ -100,21 +101,21 @@ apunta "hacia arriba". Dos invariantes tienen además su propio test en lenguaje
 `session/` es el único punto que ve los dos dominios —juego y acceso— porque la autorización de comandos lo
 exige: qué rol técnico tiene el actor Y qué relación de juego guarda con la entidad objetivo.
 
-**1309 tests en 118 archivos** cubren todas las capas con código (medido 2026-09-15, `npm run test:run`). Reparto
-por capa: `engine/` 58 archivos, `session/` 25, `server/` 23, `world/` 5, `acceso/` 3, `__tests__/` 2 (los de
+**1576 tests en 156 archivos** cubren todas las capas con código (medido 2026-10-03, `npm run test:run`). Reparto
+por capa: `engine/` 84 archivos, `session/` 37, `server/` 23, `world/` 5, `acceso/` 3, `__tests__/` 2 (los de
 frontera), `worldgen/` 1, `contratos/` 1. Ese último número es el punto más fino de la red: `worldgen/` es la capa con la
-promesa más fuerte —semilla + `WORLDGEN_VERSION` (hoy **15**) reproducen el mapa exactamente— y la que menos
+promesa más fuerte —semilla + `WORLDGEN_VERSION` (hoy **17**) reproducen el mapa exactamente— y la que menos
 test tiene.
 
 ## Capas y responsabilidades
 
 ### Dominio: `src/domain/`
 
-Tres archivos, ~1.130 líneas (`types.ts` 998), y es el punto de mayor fan-in de todo el repo: **cientos de
+Tres archivos, ~1.430 líneas (`types.ts` 1.283), y es el punto de mayor fan-in de todo el repo: **cientos de
 aristas de import entran aquí** desde el resto de capas (413 medidas sobre el grafo del código el 2026-09-05).
 
 - `types.ts` — contratos de datos centrales: facciones, asentamientos, edificios, población, escuadrones,
-  caravanas, mercado, relaciones políticas, recursos, nodos de mapa, ejércitos, héroes (con sus escuadrones, loadouts, inventario y equipo) y geometría básica. También
+  caravanas, mercado, relaciones políticas, recursos, nodos de mapa, ejércitos, héroes (con sus escuadrones, loadouts, inventario y equipo), tecnología por Eras, campamentos de mercenarios y geometría básica. También
   vive aquí `WorldConfig`, porque es entidad de dominio y `worldgen/` depende de `domain/`, nunca al revés.
 - `tiempo.ts` — `Instante`, `Duracion` y las conversiones del modelo temporal (ver
   [10_Modelo_Temporal.md](10_Modelo_Temporal.md)).
@@ -128,8 +129,8 @@ héroes bot de las Facciones NPC. La cadena completa es `Sesion → Usuario → 
 
 ### Configuración: `src/constants.ts`
 
-63 tablas exportadas, 1955 líneas (medido 2026-09-15; `BALANCE_VERSION` va por 11 y `LAYOUT_VERSION` por 2): recursos, edificios,
-economía, población, construcción, combate, política, mundo, murallas, visión y balance. **Servida completa y sin autenticar en `GET /v1/balance`** desde el hito **C7** (2026-08-26), con
+74 tablas exportadas, 2576 líneas (medido 2026-10-03; `BALANCE_VERSION` va por 12 y `LAYOUT_VERSION` por 2): recursos, edificios,
+economía, población, construcción, combate, política, mundo, murallas, visión, tecnología (Eras y catálogo), mercenarios y balance. **Servida completa y sin autenticar en `GET /v1/balance`** desde el hito **C7** (2026-08-26), con
 `BALANCE_VERSION` estampada en cada partida al crearla. Sigue siendo **global al proceso** — la parte
 "versionado por partida/temporada, con overrides reales" del hito queda deliberadamente sin construir, sin un
 consumidor que la necesite todavía. Clasificación completa de qué puede viajar a un cliente y qué no:
@@ -139,8 +140,8 @@ consumidor que la necesite todavía. Clasificación completa de qué puede viaja
 
 Genera un `MapaGenerado` a partir de una configuración y una semilla: elevación, fertilidad, biomas, ríos,
 bosques, nodos de recurso y regiones. RNG propio, reproducible si se conserva la versión del algoritmo
-(`WORLDGEN_VERSION`, hoy **15**) y la semilla. (Chokepoints existieron entre v7 y v14; eliminados por completo
-en v15, 2026-08-26 — ver doc 9.)
+(`WORLDGEN_VERSION`, hoy **17**) y la semilla. (Chokepoints existieron entre v7 y v14; eliminados por completo
+en v15, 2026-08-26 — ver doc 9. La v17, 2026-10-01, añadió 40 yacimientos de estaño de frecuencia intermedia.)
 
 El mundo generado es inmutable durante la partida salvo sus recursos agotables, cuyo consumo se mantiene
 separado en `EstadoMapa`. Por ser función pura de la seed, se sirve como **asset cacheable** en vez de viajar
@@ -164,16 +165,25 @@ rutas. (El export de terreno a Unity Terrain, `exportUnity.ts`, se retiró: era 
 de administración —nunca parte del juego— que no llegó a usarse y dejaba un test lento e intermitente
 lastrando la suite.)
 
+`world/grafoNavegacion.ts` es una rejilla 8-conexa sobre todo el mapa con el coste de cada arista ya integrado
+(relieve, bosque, agua infranqueable, ríos salvo vado). Se calcula una vez por mundo y se **cachea**: es una caché
+derivada del campo continuo, nunca se guarda en el mapa ni en la partida. `world/rutas.ts` corre el A* encima. Lo que
+sí se persiste es la red de caminos (`engine/redCaminos.ts`: las aristas que alguien ha recorrido).
+
 `world/poligonos.ts` resuelve la unión de siluetas que se solapan. Sus dos consumidores son de presentación:
 `Mapa.contornosBosques()` y `engine/zones.ts` (fusión de zonas de influencia por facción).
 
 ### Motor: `src/engine/`
 
-**36 módulos, 12.988 líneas** (sin tests, medido 2026-09-15) — el mayor bloque de código de producción del repo.
+**47 módulos, 16.608 líneas** (sin tests, medido 2026-10-03) — el mayor bloque de código de producción del repo.
 Reglas por subsistema: fundación, expansión, zonas, construcción, trazado urbano, murallas, población,
 mantenimiento, almacenamiento, mercado, comercio, caravanas, caminos, movimiento, facciones, pertenencia, cargos,
 liderazgo, diplomacia, ligas, fusión, combate, tropas, ejércitos, bandidos, reputación, títulos, exploración y
-memoria (las dos mitades de la niebla de guerra) y —desde 2026-09-14— el héroe (`heroe.ts`: progresión, loadouts,
+memoria (las dos mitades de la niebla de guerra), tecnología por Eras (`tecnologia.ts`: contadores y logros del servidor,
+avance de Era, aparición por hito, adopción por el Rey en la capital; reclutar, construir, mejorar y producir piden
+la tecnología), campamentos de mercenarios (`mercenarios.ts`, `mercadoMercenario.ts`, `reclutamientoMercenario.ts`,
+`almacenPersonal.ts`, `refundacion.ts`), ruina y capital (`ruina.ts`, `capital.ts`: lo que dependía de una plaza que cae
+se cierra en el momento del hecho, no en un barrido por tick) y —desde 2026-09-14— el héroe (`heroe.ts`: progresión, loadouts,
 Herido) y la tropa (`tropa.ts`: las escuadras viven en su héroe, y el motor militar trabaja sobre vistas de
 columna y de escolta con la tropa puesta). Libre de dependencias de `session/`, `server/` o de cualquier capa de
 presentación.
@@ -209,7 +219,7 @@ juego").
 `GameState` de una partida, deliberadamente **síncrona y sin E/S** (ninguna llamada a disco, red o reloj sin
 que se lo pasen por parámetro) — así es fácil de probar y la async vive en la capa de encima (`server/`).
 
-- `session/comandos/` — los **76** comandos de juego (`registro.ts`, contados el 2026-09-15), y `autorizacion.ts`: una matriz con una fila
+- `session/comandos/` — los **91** comandos de juego (`registro.ts`, contados el 2026-10-03), y `autorizacion.ts`: una matriz con una fila
   por comando (rol técnico mínimo + condición de dominio), exhaustividad garantizada en compilación. El actor
   manda una intención `{tipo, params}`; nunca ejecuta motor directamente. El actor es el héroe de la membresía,
   y todos los comandos pasan por el candado de batalla (`comandos/batalla.ts`) salvo los dos que actúan sobre la
@@ -223,6 +233,7 @@ que se lo pasen por parámetro) — así es fácil de probar y la async vive en 
   lo ajeno viaja redactado (`asentamientosAvistados`, `ejercitosAvistados`), lo del mundo se filtra por lo
   visto ahora (`campamentosAvistados`) o por lo explorado (`caminosConocidos`), y `seVeAhora` se **deriva**
   en cada proyección en vez de guardarse.
+- `session/estado.ts` acota `eventosDominio` en memoria a `MAX_EVENTOS_EN_MEMORIA` (5.000); lo anterior se lee del JSONL.
 - `session/canales.ts` — qué canal de WebSocket puede suscribir cada actor.
 - `session/__tests__/memoriaNiebla.test.ts` — cubre los tres estados de visibilidad sobre la proyección.
 - `session/npcGobernanza.ts` — automatización de facciones NPC tras el tick, separada del motor puro. Una Facción
@@ -231,10 +242,10 @@ que se lo pasen por parámetro) — así es fácil de probar y la async vive en 
 
 ### Servidor: `src/server/`
 
-El único punto async del backend, ~4.240 líneas (12 archivos de raíz + 10 de `rutas/` + 8 de `identidad/` + el
-hub). `api.ts` es la raíz de composición: monta
+El único punto async del backend, ~4.660 líneas (12 archivos de raíz + 10 de `rutas/` + 8 de `identidad/` + 3 de
+`almacen/` + el hub). `api.ts` es la raíz de composición: monta
 Fastify, CORS, WebSocket, OpenAPI, y registra las superficies bajo `/v1` (Fase C6 — versionado por prefijo de
-ruta, sin alias sin versión). En total 30 rutas HTTP:
+ruta, sin alias sin versión). En total 31 rutas HTTP documentadas en OpenAPI (más `GET /salud` fuera de `/v1` y el WebSocket):
 
 - **`/v1/sesiones`** — `POST /sesiones` (login: `Authorization: <esquema> <credencial>` — hoy `clave
   <nick>:<contraseña>` para jugadores, `dev <sujeto>` para el cliente de administración en local),
@@ -263,16 +274,18 @@ ruta, sin alias sin versión). En total 30 rutas HTTP:
 Piezas de soporte:
 
 - `server/almacen/` — **puerto `AlmacenDeObjetos`** (`leer`/`escribir`/`anexar`/`listar` por clave plana) y
-  su único adaptador hoy, `enDisco.ts` (un archivo por clave, `.tmp` + `rename` para la escritura atómica).
+  dos adaptadores: `enDisco.ts` (un archivo por clave, `.tmp` + `rename` para la escritura atómica; el de por defecto) y
+  `enLibsql.ts` (libSQL/Turso/sqld, tabla KV `objetos(clave, contenido)`; `anexar` es un UPSERT con concatenación nativa),
+  que `index.ts` elige si hay `ALMACEN_URL` (`ALMACEN_TOKEN` es el authToken).
   Es la ÚNICA frontera que sabe DÓNDE viven los bytes de la persistencia (snapshots, eventos, auditoría,
   identidad). Cambiar de proveedor —disco → object storage → base de datos, para desplegar en un free tier
-  sin disco persistente— es escribir otro adaptador y elegirlo en `index.ts`; ningún módulo de persistencia
+  sin disco persistente— es escribir otro adaptador y elegirlo en `index.ts` (el de libSQL ya está); ningún módulo de persistencia
   se entera. `respaldos.ts` es la excepción: sigue siendo de disco a propósito (ver abajo).
 - `server/persistenciaPartida.ts` — snapshot de partida (vía el almacén): estado, tick, IDs, `config`/semilla
   del mundo y **el estado del RNG**; comprobación de versión como red de seguridad contra dos procesos
   escribiendo el mismo `gameId`. Desde el formato **v13** NO guarda el terreno (se regenera de la seed al
   cargar) ni el historial de eventos (vive en `eventosDePartida.ts`) — ver "Persistencia" más abajo.
-  `FORMATO_SNAPSHOT_VERSION` (hoy **18**) rechaza cualquier otro formato; ya no hay cadena de migraciones.
+  `FORMATO_SNAPSHOT_VERSION` (hoy **20**) rechaza cualquier otro formato; ya no hay cadena de migraciones.
   También rechaza un `worldgenVersion` o un `layoutVersion` distintos de los de la build (ver "Persistencia").
 - `server/eventosDePartida.ts` — el historial de `EventoDominio` de una partida en un JSONL append-only
   hermano del snapshot (`<gameId>.eventos.jsonl`), mismo patrón que `auditoria.ts`. `anexarEventos` añade una
@@ -287,7 +300,7 @@ Piezas de soporte:
   comandos por `actor:idempotencyKey` (reconexión sin duplicar acciones, Fase C5), el anexado del historial de
   eventos al JSONL tras cada guardado (`eventosDePartida.ts`), caché con TTL de un minuto real de
   `preciosReferencia()` (regla de entrada privilegiada, C10), caché de geometría por frame (C10), el **reloj
-  de mundo** con catch-up (Fase D5) e instrumentación por partida (E3). Recibe las `OpcionesSesion` del proceso
+  de mundo** con catch-up (Fase D5), que tras persistir cada tick **difunde sus eventos por WebSocket** (antes solo lo hacían las rutas de comando), e instrumentación por partida (E3). Recibe las `OpcionesSesion` del proceso
   (hoy, si las batallas con humanos van a Unity) y las conserva al reconstruir la sesión tras un fallo de
   escritura.
 - `server/registroDePartidas.ts` — qué partidas están abiertas en este proceso (un `Map`; `abrir` lanza si ya
@@ -443,9 +456,9 @@ descubre qué partidas existen en disco, incluidas las que nadie ha reabierto to
   estado completo (`EstadoAdmin`/`ProyeccionJugador`) ya no traían `eventosDominio` desde el follow-up de C13
   (2026-09-05).
 - El snapshot incluye estado, tick, RNG, IDs y `config`/semilla del mundo — no el terreno, no el historial.
-- **`FORMATO_SNAPSHOT_VERSION` es 18 y no hay cadena de migraciones.** La hubo (v1→v12) mientras había
-  partidas de builds anteriores que arrastrar; se retiró el 2026-09-09 al no quedar ninguna. De v14 a v18
-  (2026-09-14/15: modelo de Héroe, Herido, batallas de Unity) subió sin migración, por decisión del usuario: una
+- **`FORMATO_SNAPSHOT_VERSION` es 20 y no hay cadena de migraciones.** La hubo (v1→v12) mientras había
+  partidas de builds anteriores que arrastrar; se retiró el 2026-09-09 al no quedar ninguna. De v14 a v20
+  (2026-09-14 a 10-02: modelo de Héroe, Herido, batallas de Unity, tecnología por Eras, trueque compuesto y campamentos de mercenarios) subió sin migración, por decisión del usuario: una
   partida de un formato anterior se descarta. `cargarPartida`
   acepta solo el formato vigente y rechaza el resto con `FormatoSnapshotNoSoportadoError` — mismo criterio que
   `persistenciaIdentidad.ts` desde el principio. La próxima mecánica que cambie la forma del snapshot sube el
@@ -502,7 +515,7 @@ descubre qué partidas existen en disco, incluidas las que nadie ha reabierto to
 
 - Dirección de dependencias congelada por test (`arquitectura.test.ts`); `acceso/` sin dependencias y
   `session/` síncrona y sin E/S, lo que hace ambas capas triviales de probar con dobles.
-- 1309 tests en 118 archivos cubren motor, sesión, acceso, servidor y contrato (medido 2026-09-15).
+- 1576 tests en 156 archivos cubren motor, sesión, acceso, servidor y contrato (medido 2026-10-03).
 - El contrato con Conquest es verificable y no solo declarado: cada mensaje tiene su fixture, validado contra el
   schema en la suite, y lo que llega por `/v1/batallas/*` se valida contra ese mismo schema.
 - El mundo generado tiene semilla y versión, y se sirve como asset inmutable cacheado (C11a) en vez de viajar
@@ -536,9 +549,8 @@ descubre qué partidas existen en disco, incluidas las que nadie ha reabierto to
 - El WebSocket difunde eventos en bruto, no deltas de estado aplicables — la única reacción de un cliente sin
   motor a un evento es releer, aunque desde C13 puede releer solo lo nuevo (`?desde=`) en vez del estado
   completo.
-- `RunnerDePartida` mantiene el historial de eventos entero en RAM (rehidratado al cargar). ~300 KB a 35 000
-  ticks — nada hoy, pero crece sin techo; el disco ya no (formato v13, JSONL append-only). El día que la RAM
-  importe, acotar la cola en memoria y leer lo antiguo del archivo para un `?desde=` profundo.
+- El historial de eventos en memoria está **acotado** a los últimos `MAX_EVENTOS_EN_MEMORIA` (5.000); un cursor
+  `?desde=` anterior a eso lee del JSONL. También se acotan el historial de órdenes y los trueques terminados.
 - Niebla de guerra: **implementada** salvo el Paso 6 (calibración de los márgenes de visión contra la vista de
   ejército). Detalle y estado en la sección propia más abajo.
 - **Un proceso, una partida activa.** `RegistroDePartidas` es un `Map` en memoria; nada shardea ni coordina
@@ -549,24 +561,24 @@ descubre qué partidas existen en disco, incluidas las que nadie ha reabierto to
   acepta cualquier sujeto sin verificar, así que la superficie de admin **no debe exponerse en público** tal
   cual. El repositorio de identidad por defecto de `crearServidor` es el **en memoria** (el proceso real usa
   el de disco).
-- Persistencia: hay puerto (`AlmacenDeObjetos`) pero **solo el adaptador de disco**. Un adaptador remoto
-  (object storage, SQLite/HTTP, Postgres) está por escribir — es lo que haría falta para un free tier con
-  disco efímero. `respaldos.ts` sigue siendo de disco por diseño.
+- Persistencia: hay puerto (`AlmacenDeObjetos`) y dos adaptadores, disco y libSQL (`ALMACEN_URL`; es lo que hace
+  falta con disco efímero). Sin `ALMACEN_URL` el proceso avisa por consola. `respaldos.ts` sigue siendo de disco
+  por diseño: con libSQL el respaldo lo da el proveedor.
 - Respaldos y poda **apagados por defecto** (`MANTENIMIENTO_INTERVALO_MS`): un despliegue que lo olvide no
   tiene copias.
-- Producción corre TypeScript vía `tsx` directo — no hay target de build para el servidor.
+- Producción corre TypeScript vía `tsx` directo — no hay target de build para el servidor. Hay un `Dockerfile`
+  genérico (Node 22, `npm ci --omit=dev`); la configuración de cada proveedor vive en su rama de despliegue
+  (`deploy/render`).
 - El terreno se evalúa en dos sitios: aquí y en el cliente de jugador, que ahora está en otro repositorio.
   Nada verifica automáticamente que sigan de acuerdo (ver la nota de deuda en "Generación de mundo").
 - El cliente jugable completo (UI de comandos, etc.) es trabajo de un repo de interfaz aparte — fuera del
   alcance de este repo, que es solo servidor. Aquí solo queda `cliente/`, la herramienta de admin/dev, que
-  todavía importa el motor por `@motor/*` (30 imports sobre 20 módulos, 11 de ellos de `engine/`) y por eso
+  todavía importa el motor por `@motor/*` (36 imports sobre 24 módulos, 15 de ellos de `engine/`, medido 2026-10-03) y por eso
   sigue sin cerrar el criterio de la Fase C.
 - Batallas de Unity sin canal de tiempo real (fase 3): el jugador ve su estado en la proyección, no por un canal
   propio. Las cerradas no se podan de `GameSessionState.batallas`. La IA de una Facción NPC con algo en batalla se pausa
   entera, no por plaza (`ponytail:`), y una batalla se busca recorriendo las partidas abiertas del proceso, sin
   índice `battleId → gameId`.
-- El modelo de Héroe, el contrato con Conquest y las batallas viven en la rama `heroe-dominio`: `main` sigue en el
-  modelo anterior hasta que se mergee.
 
 ## Decisión de evolución adoptada
 
