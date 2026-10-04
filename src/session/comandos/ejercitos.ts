@@ -23,6 +23,7 @@ import {
   type ObjetivoEjercito,
 } from '../../engine/ejercitos';
 import { liderazgoComprometido } from '../../engine/liderazgo';
+import { situarHeroes } from '../../engine/ubicacion';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito, sinCambios } from './tipos';
 import { campamentoEn, comando, conColumnas, conTropaDe, exigirAsentamiento, exigirCaravana, exigirEjercito, conAsentamiento } from './ayudas';
@@ -85,7 +86,9 @@ export const movilizarEjercito = comando<ParamsMovilizarEjercito, { ejercitoId: 
   // deshace por hambre a los pocos ticks, así que se dice en el propio mensaje y no solo en el payload.
   const conElCarro =
     trigoCargado > 0 ? `con ${Math.floor(trigoCargado)} de trigo en el carro` : 'CON EL CARRO VACÍO (el almacén no da más sin dejar la ciudad en riesgo)';
-  const siguiente = conColumnas(conAsentamiento(estado, origen), [ejercito]);
+  // Quien sale de campaña va en su ejército, no en la plaza (Doc 5.12): mismo trato que `salirAlMundo`.
+  const conEjercito = conColumnas(conAsentamiento(estado, origen), [ejercito]);
+  const siguiente = { ...conEjercito, heroes: situarHeroes(conEjercito.heroes, [params.heroeId], { tipo: 'columna', ejercitoId: ejercito.id }) };
 
   return exito(
     conHistorialDeJugador(siguiente, params.heroeId, `Sale de campaña desde ${asentamiento.id} hacia ${destino}.`),
@@ -140,7 +143,8 @@ export const unirseAEjercito = comando<ParamsUnirseAEjercito, void>((estado, _ma
     estado.caravanas
   );
 
-  const siguiente = conColumnas(conAsentamiento(estado, origen), [ejercito]);
+  const conEjercito = conColumnas(conAsentamiento(estado, origen), [ejercito]);
+  const siguiente = { ...conEjercito, heroes: situarHeroes(conEjercito.heroes, [params.heroeId], { tipo: 'columna', ejercitoId: ejercito.id }) };
   return exito(
     conHistorialDeJugador(siguiente, params.heroeId, `Se une al ejército ${ejercito.id} desde ${asentamiento.id}.`),
     [

@@ -65,8 +65,6 @@ import { cederLiderazgo, responderPeticionDeUnion, separarseDelEjercito, unirseE
 import { atacar, dejarDePerseguir, inspeccionar, perseguir } from './interaccion';
 import { aplicarResultado, cancelarBatalla, conCandadoDeBatalla, confirmarInicio, registrarAsignacion, registrarTokens, unirseABatalla } from './batalla';
 import { avanzarTick } from './avanzarTick';
-import { avanzarAutoComercio } from './avanzarAutoComercio';
-import { avanzarFaccionesNpc } from './avanzarFaccionesNpc';
 
 const MANEJADORES = {
   fundarAsentamiento,
@@ -188,8 +186,6 @@ export const REGISTRO_DIARIO = {
   registrarTokens,
   aplicarResultado,
   avanzarTick,
-  avanzarAutoComercio,
-  avanzarFaccionesNpc,
 } satisfies Record<string, ManejadorComando<any, any>>;
 
 export type TipoDiario = keyof typeof REGISTRO_DIARIO;

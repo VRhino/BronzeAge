@@ -2132,27 +2132,6 @@ export const REGENERACION_NODOS = {
   livestock: { cooldownMinutos: 3 },
 };
 
-/**
- * ⚠️ SOLO PARA SIMULACIÓN — NO ES PARTE DEL JUEGO REAL (Fase_0_5_Definicion_Especializacion_y_Cupos.md §"lo
- * primero que hay que hacer"). El juego real sigue siendo 100% manual: un Tesorero/Gobernador humano propone
- * el trueque desde la UI (Doc 3.2). Este interruptor activa `engine/simulacionAutoComercio.ts`, un NPC
- * virtual que hace ese mismo trabajo automáticamente dentro de una Facción — para poder correr batches
- * largos y medir si la dependencia entre niveles/asentamientos (excedente de un asentamiento cubriendo el
- * déficit de otro) funciona, sin depender de que haya un jugador humano interactuando en cada tick.
- * `activo: 0` (apagado) por defecto — el juego real nunca lo ve encendido a menos que se active a propósito
- * desde este panel de balance. Para ELIMINAR este mecanismo por completo: borra este bloque, borra
- * `engine/simulacionAutoComercio.ts`, y borra la llamada gateada en `gameStore.ts` (buscar
- * "SIMULACION_AUTO_COMERCIO").
- */
-export const SIMULACION_AUTO_COMERCIO = {
-  activo: 0,
-  // Colchón mínimo de stock (fracción de la capacidad) que un asentamiento debe conservar de un recurso
-  // antes de poder ofrecerlo como excedente a otro — evita que el NPC vacíe su propia reserva de seguridad.
-  colchonExcedente: 0.3,
-  // Cantidad pactada por lado en cada trueque automático propuesto (placeholder, sin calibrar).
-  cantidadPorTrueque: 30,
-};
-
 // --- Sprint 6: Cierre (Doc 4.5 mantenimiento, Doc 2.7 reputación, Doc 2.9 progresión) ---
 
 /**

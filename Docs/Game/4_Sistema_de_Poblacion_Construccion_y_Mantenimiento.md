@@ -257,7 +257,7 @@ Dos edificios lo amplían, y no compiten: el **Almacén** sube la capacidad de T
   - Sus trueques activos o propuestos se cancelan **sin penalizar a nadie** (Doc 2.7): el socio no puede cumplir un pacto con una plaza que ya no existe.
   - Las caravanas que iban hacia él dan la vuelta y **vuelven a casa con su carga**; las que se preparaban para salir hacia él la devuelven al almacén; las aparcadas en él vuelven a su origen. Sin camino por tierra de vuelta, se pierden.
   - Las caravanas que salían de él se pierden, y su escolta vuelve al campamento de su héroe.
-  - Si era la última plaza de su Facción, esta queda derrotada. Si es una Facción NPC, se disuelve con sus héroes bot en el acto (si la vence en combate otra Facción NPC, en cambio, se une a ella).
+  - Si era la última plaza de su Facción, esta queda derrotada, sea de humanos o de bots: no se disuelve ni se une a quien la venció, y sus héroes pasan a residir en un campamento, desde donde pueden volver a empezar.
 - Cantidades por nivel, velocidad de degradación/regeneración y duración del período de gracia: placeholder (`MANTENIMIENTO`).
 
 ## 4.6 Entrada tardía y mundo lleno

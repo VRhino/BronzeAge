@@ -48,7 +48,6 @@ import {
   RESERVA_CONSTRUCCION,
   SCORE_BANDAS,
   SIMULACION,
-  SIMULACION_AUTO_COMERCIO,
   SITIO,
   TRAZADO,
   TROPAS_RECLUTABLES,
@@ -80,7 +79,7 @@ function balancePublicado() {
     // Modelo temporal (Fase D / doc 10): un cliente necesita `epocaInicial` + `duracionTickMs` para
     // traducir el `tick` de una partida a fecha de mundo (`instante = epocaInicial + tick × duracionTickMs`).
     temporal: { SIMULACION },
-    internas: { CAMPAMENTOS_BANDIDOS, REGENERACION_NODOS, SCORE_BANDAS, EXTRACTOR_DESEMPATE, LINEAS_PRODUCCION, EXTRACCION_MAXIMOS, SIMULACION_AUTO_COMERCIO },
+    internas: { CAMPAMENTOS_BANDIDOS, REGENERACION_NODOS, SCORE_BANDAS, EXTRACTOR_DESEMPATE, LINEAS_PRODUCCION, EXTRACCION_MAXIMOS },
   };
 }
 

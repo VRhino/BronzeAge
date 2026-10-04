@@ -13,7 +13,12 @@ import type { PayloadAsedio, PayloadCombateResuelto } from '../../src/engine/com
 import type { PayloadAsentamientoFundado } from '../../src/engine/expansion';
 import type { PayloadAsentamientoRuinas, PayloadNivelSubio } from '../../src/engine/mantenimiento';
 import type { PayloadTruequeCumplido } from '../../src/engine/trade';
-import type { StatsNpcGobernanza } from '../../src/session/npcGobernanza';
+/** Lo que hicieron los bots en un tick, contado por los eventos de sus comandos (`run-batch-sim.ts`). */
+export interface StatsBots {
+  reclutamientosExitosos: number;
+  campanasLanzadas: number;
+  repliegues: number;
+}
 import { NIVEL_FACCION } from '../../src/constants';
 
 const TICKS_POR_SEMANA = 10_080;
@@ -106,7 +111,7 @@ export class MedidorGuerra {
     antes: EstadoSimulacion,
     trasMotor: EstadoSimulacion & { eventosDominio: EventoDominio[] },
     trasNpc: EstadoSimulacion,
-    stats: StatsNpcGobernanza
+    stats: StatsBots
   ): void {
     const s = this.semana(tick);
     s.campanas += stats.campanasLanzadas;

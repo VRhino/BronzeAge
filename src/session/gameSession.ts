@@ -17,7 +17,6 @@ import { createRng, generarMapa, MAPA_DEFAULT, restaurarRng, WORLDGEN_VERSION, t
 import { crearEstadoMapa, crearMapa, type EstadoMapa, type Mapa } from '../world/mapa';
 import { GeneradorIds } from './idGenerator';
 import { anteponerEventos, eventoAdministrativo, instanteDeTick, isoDeInstante, type GameSessionState } from './estado';
-import { avanzarFaccionesNpc } from './comandos/avanzarFaccionesNpc';
 import { avanzarTick } from './comandos/avanzarTick';
 import { mercadoMercenarioInicial } from '../engine/mercadoMercenario';
 import {
@@ -237,9 +236,5 @@ export class GameSession {
 
   avanzarTick(): ResultadoComando<void> {
     return this.ejecutar(avanzarTick, undefined, { actor: ACTOR_SISTEMA });
-  }
-
-  avanzarFaccionesNpc(): ResultadoComando<void> {
-    return this.ejecutar(avanzarFaccionesNpc, undefined, { actor: ACTOR_SISTEMA });
   }
 }

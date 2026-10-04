@@ -84,7 +84,7 @@ export class RunnerDePartida {
   private readonly ahora: () => string;
   private readonly opcionesSesion: OpcionesSesion;
   private readonly alEmitir?: OpcionesRunner['alEmitir'];
-  /** Los eventos del último tick completo (tick + auto-comercio + NPC), para difundirlos tras persistir. */
+  /** Los eventos del último tick, para difundirlos tras persistir. */
   private eventosDelUltimoTick: EventoDominioConVersion[] = [];
 
   /**
@@ -376,27 +376,22 @@ export class RunnerDePartida {
    * Avanza un tick, en la misma cola que los comandos de jugador — comparten la misma restricción (doc 7
    * §8.1: "el estado solo admite un mutador a la vez"), así que comparten la misma cola.
    *
-   * Encadena tick → auto-comercio (apagado por defecto) → turno del NPC de gobernanza, mismo orden que tenía
-   * `GameStore.avanzarTick` antes de que existiera este runner. Las tres líneas van al diario en UNA escritura,
-   * y después se guarda la partida entera y se vacía el diario (doc 12 §5.1).
+   * El tick es solo el tick: los bots juegan desde fuera, con comandos, como cualquier jugador (doc 12 §2). Su línea
+   * va al diario, y después se guarda la partida entera y se vacía el diario (doc 12 §5.1).
    */
   avanzarTick(): Promise<ResultadoComando<void>> {
     return this.encolar(() => this.aplicarYAnotar((lineas) => this.unTickCompleto(lineas), true));
   }
 
-  /** Un tick "completo" tal y como lo entiende este runner: tick puro + auto-comercio + turno del NPC. Sin
-   * encolar — lo llaman `avanzarTick` (una entrada de cola) y el reloj de mundo (`sincronizarConReloj`, también
-   * una sola entrada por pasada). */
+  /** Un tick, cronometrado. Sin encolar — lo llaman `avanzarTick` (una entrada de cola) y el reloj de mundo
+   * (`sincronizarConReloj`, también una sola entrada por pasada). */
   private unTickCompleto(lineas: LineaDiario[]): ResultadoComando<void> {
     const t0 = performance.now();
     const resultado = this.aplicar<void>(lineas, 'avanzarTick', undefined, ACTOR_SISTEMA);
     if (!resultado.ok) return resultado;
-    const trasAuto = this.aplicar<void>(lineas, 'avanzarAutoComercio', undefined, ACTOR_SISTEMA);
-    const trasNpc = this.aplicar<void>(lineas, 'avanzarFaccionesNpc', undefined, ACTOR_SISTEMA);
-    this.eventosDelUltimoTick = [...resultado.eventos, ...trasAuto.eventos, ...trasNpc.eventos];
-    // Se cronometra el tick COMPLETO (puro + auto-comercio + turno NPC), que es la unidad que ocupa la cola,
-    // no el `avanzarSimulacion` puro que mide `scripts/medicion-escala.ts`. Los dos números no son
-    // comparables a ciegas, y es correcto: aquí interesa lo que bloquea a un jugador.
+    this.eventosDelUltimoTick = resultado.eventos;
+    // Se cronometra el comando entero (`avanzarTick`, con las batallas), que es la unidad que ocupa la cola, no el
+    // `avanzarSimulacion` puro que mide `scripts/medicion-escala.ts`: aquí interesa lo que bloquea a un jugador.
     const ms = performance.now() - t0;
     this.instrumentos.ticks++;
     this.instrumentos.msTotal += ms;

@@ -10,7 +10,7 @@ Nace de dos decisiones del usuario (`Consideraciones/Campamentos_Entrada_Fundaci
   escalonada, tres perfiles), con esa lógica fuera del motor.
 
 > **Estado (2026-10-04):** decidido el bot como cliente (§3), auto-comercio, ritmo y alta de bots (§8) y el orden
-> de trabajo (§9). **Paso 1 hecho: diario de comandos implementado (§5.1).** Siguiente: paso 2 del §9.
+> de trabajo (§9). **Hechos el paso 1 (diario, §5.1) y el paso 2 (runner de bots, §10.3).** Siguiente: paso 3.
 
 ## 1. Cómo es hoy (medido en el código)
 
@@ -327,3 +327,22 @@ plaza. El batch actual (estado crudo + `avanzarNpcGobernanza`) no sirve para est
    `avanzarAutoComercio`, `simulacionAutoComercio` y `npcGobernanza`.
 4. **Batch sobre `GameSession`** con el adaptador en proceso. La fundación inicial de Facciones de bots queda como
    andamio hasta el paso 4.
+
+### 10.3 Hecho (2026-10-04)
+
+- **Motor sin asimetrías**: llegar no asedia y alcanzar no combate, para nadie; el tick ya no abre batallas;
+  `session/derrotas.ts` borrado (D59). `inspeccionar` acepta una plaza. Encontrado de paso y arreglado:
+  `movilizarEjercito` y `unirseAEjercito` dejaban al héroe «dentro» de la plaza mientras marchaba (la gobernanza
+  lo tapaba situándolo a mano); ahora va en su columna, como con `salirAlMundo`.
+- **`src/bots/`**: `puerto.ts` (observar, actuar con autorización, mapa), `runner.ts` (ritmo, despertar por
+  eventos, orden por id, RNG por bot, `intentar` con espera tras rechazo), `pizarra.ts`, y `cerebro/` (gobierno:
+  Rey, Gobernador, Tesorero; militar: residente, cazador, campaña, explorador, mudanza, columna).
+- **El tick sin NPC**: borrados `npcGobernanza`, `simulacionAutoComercio`, `avanzarFaccionesNpc`,
+  `avanzarAutoComercio` y `SIMULACION_AUTO_COMERCIO`. `crearFaccionNpc` queda como andamio con su sitio inicial y
+  su héroe bot.
+- **Batch**: `run-batch-sim.ts` corre sobre `GameSession` con el runner de bots; checkpoint formato 2
+  (`exportar()`), sin memoria de bots. Borrado `bench-batch-checkpoint.ts`. Sin corridas hasta terminar el bloque.
+- **Lo que el cerebro hace distinto de la gobernanza**, además de lo decidido en §10.1: cada bot actúa sobre la
+  vista con la que empezó a pensar (encadenar Rey → Gobernador → Tesorero cuesta un turno por paso); el Rey adopta
+  tecnología solo desde dentro de una plaza y con lo que ve en su almacén; el destino de fundación se busca con las
+  fichas de las plazas que ve, no con las completas; el reparto de héroes se cuenta con la pizarra.

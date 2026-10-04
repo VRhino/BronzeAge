@@ -120,17 +120,14 @@ describe('RunnerDePartida — aplicar -> anotar -> confirmar', () => {
   });
 });
 
-describe('RunnerDePartida.avanzarTick — bundlea auto-comercio y turno NPC', () => {
-  it('el turno del NPC de gobernanza ocurre DENTRO de avanzarTick, sin un comando aparte', async () => {
+describe('RunnerDePartida.avanzarTick — el tick no gobierna a nadie (doc 12 §2)', () => {
+  it('una Facción de bots no recibe decisiones dentro del tick: los bots juegan desde fuera, con comandos', async () => {
     const r = runner('g-npc');
     await r.ejecutar('crearFaccionNpc', { nombre: 'Micenas' });
 
-    // Antes de este fix, `avanzarTick()` del runner solo aplicaba el tick puro — la primera decisión de
-    // gobernanza del NPC (asignar Gobernador, determinista, no depende de ticks previos) no llegaba a
-    // ocurrir sin una llamada aparte a `avanzarFaccionesNpc`.
     await r.avanzarTick();
 
-    expect(r.getState().asentamientos[0]!.cargos.gobernadorId).toBeTruthy();
+    expect(r.getState().asentamientos[0]!.cargos.gobernadorId).toBeNull();
   });
 });
 

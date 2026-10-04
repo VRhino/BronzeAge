@@ -74,6 +74,15 @@ function conTrigo(base: ReturnType<typeof partidaConTropas>, cantidad: number) {
 }
 
 describe('movilizarEjercito', () => {
+  it('quien sale de campaña va en su ejército: deja de estar dentro de la plaza (Doc 5.12)', () => {
+    const { sesion, asentamientoId, fundador } = partidaConTropas();
+
+    const r = sesion.ejecutar(movilizarEjercito, { asentamientoId, heroeId: fundador, escuadronIds: ['esc-milicia'], objetivo: PUNTO_LEJOS }, OPC);
+
+    expect(r.ok).toBe(true);
+    expect(sesion.getState().heroes.find((h) => h.id === fundador)!.ubicacion).toEqual({ tipo: 'columna', ejercitoId: r.datos!.ejercitoId });
+  });
+
   it('saca los escuadrones DE VERDAD del asentamiento y crea el ejército', () => {
     const { sesion, asentamientoId, fundador } = partidaConTropas();
     const escuadronId = 'esc-milicia';

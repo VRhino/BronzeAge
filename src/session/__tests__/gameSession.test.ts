@@ -167,34 +167,6 @@ describe('operaciones del sistema — avanzarTick', () => {
   });
 });
 
-describe('operaciones del sistema — avanzarFaccionesNpc', () => {
-  // Todavía no existe el comando administrativo para fijar `faccionesNpcIds` (pendiente, ver doc 4), así que
-  // se construye el estado vía `importar()`, que acepta cualquier `GameSessionState` válido.
-  function partidaConFaccionNpc(): GameSession {
-    const { sesion, faccionId } = partidaConFaccion();
-    sesion.ejecutar(fundarAsentamiento, { faccionId }, { actor: ACTOR });
-    const payload = sesion.exportar();
-    return GameSession.importar({ ...payload, state: { ...payload.state, faccionesNpcIds: [faccionId] } });
-  }
-
-  it('sin Facciones NPC no hace nada y no sube la versión', () => {
-    const { sesion } = partidaConFaccion();
-    const antes = sesion.getState();
-    const resultado = sesion.avanzarFaccionesNpc();
-    expect(resultado).toEqual({ ok: true, eventos: [], version: antes.version });
-    expect(sesion.getState()).toBe(antes);
-  });
-
-  it('con una Facción NPC toma decisiones de gobernanza sobre su asentamiento', () => {
-    const sesion = partidaConFaccionNpc();
-    const resultado = sesion.avanzarFaccionesNpc();
-
-    expect(resultado.ok).toBe(true);
-    // La primera decisión de gobernanza base es asignar Gobernador; no depende de ticks previos.
-    expect(sesion.getState().asentamientos[0]!.cargos.gobernadorId).toBeTruthy();
-  });
-});
-
 describe('GameSession — el mapa es estado devuelto, no efecto lateral', () => {
   // Prerrequisito de la persistencia de Fase B3: si el tick escribiera el mapa por dentro de la fachada
   // compartida, descartar su estado resultante (por un fallo al guardar) dejaría igualmente los yacimientos

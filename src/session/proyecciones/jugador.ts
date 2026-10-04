@@ -144,6 +144,8 @@ export type HeroeProyectado = Omit<Heroe, 'plazasRecordadas' | 'exploracionPerso
   loadouts: (Loadout & { liderazgoTotal: number })[];
   cupoGuarnicion: number;
   guarnicionOcupada: number;
+  /** La plaza donde reside, o `null` si es huérfano o reside en un campamento: un dato suyo, esté donde esté. */
+  residenciaId: string | null;
 };
 
 function heroeProyectado(heroe: Heroe, asentamientos: readonly Asentamiento[]): HeroeProyectado {
@@ -155,6 +157,7 @@ function heroeProyectado(heroe: Heroe, asentamientos: readonly Asentamiento[]): 
     loadouts: heroe.loadouts.map((l) => ({ ...l, liderazgoTotal: liderazgoDeLoadout(heroe, l) })),
     cupoGuarnicion: residencia ? cupoGuarnicion(residencia) : 0,
     guarnicionOcupada: guarnicionOcupada(heroe),
+    residenciaId: residencia?.id ?? null,
   };
 }
 

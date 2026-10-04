@@ -30,7 +30,7 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 33 | COMERCIO | Cabos sueltos de diseño comercial | ✘ sin decidir |
 | 34 | SUMINISTRO | La economía no llena el carro de un ejército | ✘ sin decidir |
 | 35 | VARIOS | Cabos sueltos de mundo, población y militar | ✘ sin decidir |
-| 36 | HÉROE | Héroes bot que juegan como jugadores (NPC fuera del motor) | ◐ diario hecho; gobernanza a comandos en curso |
+| 36 | HÉROE | Héroes bot que juegan como jugadores (NPC fuera del motor) | ◐ pasos 1-2 hechos; faltan presencia, sin plaza, remoto |
 | 38 | MILITAR | Tope de héroes en asedio: volver a 15 cuando entren jugadores | ◐ 5 mientras se prueba con NPC |
 | 39 | MILITAR | Escala de la experiencia de escuadra de Unity | ✘ espera a CQ-001 |
 | 40 | MUNDO | Campamentos de mercenarios: enclave neutral, residencia, reclutamiento y mercado | ◐ hecho; quedan cabos (ver entrada) |
@@ -335,19 +335,17 @@ producción de la Granja (Doc 4.2.1); falta volver a medir. Cifras, causa y las 
 
 ## 36. Héroes bot que juegan como jugadores (NPC fuera del motor)
 
-Plan y orden: `Docs/Arquitectura/12_NPC_Fuera_Del_Motor.md` (§9 orden, §10 inventario de la gobernanza). Reglas
-ya en el canon que el código aún no cumple:
+Plan y orden: `Docs/Arquitectura/12_NPC_Fuera_Del_Motor.md` (§9 orden, §10 inventario de la gobernanza). Hechos el
+diario de comandos (paso 1) y el runner de bots con la gobernanza pasada a comandos (paso 2, `src/bots/`). Falta:
 
-- **Inspeccionar una plaza ajena** desde el anillo de 40: revela su defensa (guarnición y héroes dentro), nunca el
-  almacén; su Facción recibe aviso (Doc 5.12.3, 5.12.7). Hoy `inspeccionar` solo acepta columnas y caravanas.
-- **Los héroes bot no asedian ni atacan solos** (Doc 5.12.3): al llegar o al alcanzar a su presa se les ofrece
-  atacar, como a un humano. Hoy el motor hace asediar a una columna sin humanos al llegar y combatir al alcanzar.
-- **Una Facción de bots derrotada no se anexiona ni se disuelve** (D59): sus héroes vuelven a un campamento. Hoy
-  `session/derrotas.ts` aplica las reglas solo-NPC.
-
-Comportamiento de bot (no son reglas, viven en el runner de bots): explorador de Facción que recorre el mapa,
-inspecciona plazas y apunta en la pizarra lo que venden y compran en su mostrador; el Tesorero comercia con eso y
-con órdenes de mercado; las campañas solo salen contra plazas inspeccionadas.
+- **Presencia e identidad de bot** (paso 3, D33/D55): entrar y salir del mundo con horario; cuentas de bot con
+  `CODIGO_REGISTRO_BOTS`, alta por `POST /v1/registro` + `crearHeroe`.
+- **Cerebro «sin plaza»** (paso 4, D53-D59): bots-héroe que llegan escalonados a los campamentos, con los tres
+  perfiles; un bot sin residencia hoy no hace nada. Con él se borra el andamio `crearFaccionNpc` y
+  `faccionesNpcIds`.
+- **Adaptador remoto** (proceso aparte por HTTP + tiempo real) para el servidor.
+- **Calibrar con batch** el ritmo (cada 5 ticks), las prudencias heredadas de la gobernanza y el margen sobre la
+  defensa inspeccionada antes de una campaña.
 
 ## 38. Tope de héroes en asedio: volver a 15 cuando entren jugadores
 

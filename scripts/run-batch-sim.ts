@@ -1,13 +1,11 @@
-import type { Asentamiento, Edificio, Faccion, Point } from '../src/domain/types';
+import type { Asentamiento, Edificio, Point } from '../src/domain/types';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { createRng, generarMapa, MAPA_DEFAULT, restaurarRng, WORLDGEN_VERSION } from '../src/worldgen';
-import { crearMapa, type EstadoMapa, type Mapa } from '../src/world/mapa';
-import { avanzarSimulacion, type EstadoSimulacion } from '../src/engine/simulation';
-import { crearFaccion } from '../src/engine/faccion';
-import { asignarRey } from '../src/engine/cargos';
-import { contadoresDeEventos, estadoTecnologiaInicial, sumarContadores, tecnologiasDe } from '../src/engine/tecnologia';
-import { evaluarViabilidadFundacion, fundarAsentamiento } from '../src/engine/settlement';
+import { WORLDGEN_VERSION } from '../src/worldgen';
+import type { Mapa } from '../src/world/mapa';
+import type { EstadoSimulacion } from '../src/engine/simulation';
+import { tecnologiasDe } from '../src/engine/tecnologia';
+import { evaluarViabilidadFundacion } from '../src/engine/settlement';
 import { nivelActualDe, tieneMercadoActivo, edificiosPorTipoYEstado, nutricionPoblacionDe } from '../src/engine/asentamientoQuery';
 import { alcanzoTopeDeViviendas, reclamosDeFuentes } from '../src/engine/construction';
 import { esResidente } from '../src/engine/pertenencia';
@@ -20,7 +18,14 @@ import { consumoRacionDeEscuadrones, reservaDeTrigo } from '../src/engine/tropas
 import { campamentoDe } from '../src/engine/tropa';
 import { NECESIDADES } from '../src/constants';
 const NECESIDADES_UMBRAL_AMPLIACION = NECESIDADES.umbralAlmacenAmpliacion;
-import { avanzarNpcGobernanza, heroeBot, type ConfigNpcGobernanza, MINERALES_BONUS_FUNDACION } from '../src/session/npcGobernanza';
+import { GameSession, type PartidaExportada } from '../src/session/gameSession';
+import { crearFaccionNpc } from '../src/session/comandos/crearFaccionNpc';
+import { puertoEnProceso } from '../src/bots/puerto';
+import { RunnerDeBots } from '../src/bots/runner';
+import { cerebroDeBot } from '../src/bots/cerebro';
+import type { RecursoTipo } from '../src/domain/types';
+/** Minerales que desempatan el sitio inicial de cada Facción (los mismos que usa `crearFaccionNpc`). */
+const MINERALES_BONUS_FUNDACION: RecursoTipo[] = ['cobre', 'estano', 'oro', 'livestock'];
 import {
   CATEGORIA_POR_TIPO,
   celdaMinimaDeEdificio,
@@ -33,7 +38,7 @@ import {
 } from '../src/engine/trazado';
 import { costoDeTrazo, areaEncerradaDeRecinto, edificiosExtramurosDe } from '../src/engine/muralla';
 import { EDIFICIO_CATALOGO, LAYOUT_VERSION, LOGISTICA, NIVEL_ASENTAMIENTO, PERFILES_TRAZADO, SIMULACION, TRAZADO, ZONA_INFLUENCIA, type PerfilTrazado } from '../src/constants';
-import { instanteDeTick, isoDeInstante } from '../src/session/estado';
+import { instanteDeTick } from '../src/session/estado';
 import { MedidorGuerra } from './batch/medidorGuerra';
 import { MedidorTecnologia } from './batch/medidorTecnologia';
 
@@ -70,7 +75,6 @@ if (DESDE && (process.env['BATCH_SEED'] || process.env['BATCH_FACCIONES'] || pro
 }
 const SEED = DESDE?.seed ?? num('BATCH_SEED', 7);
 const NUM_FACCIONES = DESDE?.facciones ?? num('BATCH_FACCIONES', 100);
-const JUGADORES_POR_ASENTAMIENTO = 5;
 const TICKS = num('BATCH_TICKS', 3000);
 /** Primer y último tick ABSOLUTOS de esta corrida: al reanudar, el reloj sigue donde lo dejó el checkpoint. */
 const TICK_INICIAL = DESDE?.tick ?? 0;
@@ -114,7 +118,7 @@ if (PERFIL_FORZADO !== undefined) {
  * §9.4): la aritmética dice que un asentamiento nivel 1 a tope de población come 30 trigo/tick mientras una
  * Granja nivel 1 produce 15, así que el asentamiento nace en déficit estructural y eso es ANTERIOR a los
  * ejércitos. Esta palanca permite medir 1× / 2× / 3× con la misma seed sin tocar `constants.ts` entre
- * corridas — mismo criterio que `BATCH_SIN_RECLUTAMIENTO`/`BATCH_SIN_ATAQUES`.
+ * corridas.
  *
  * Muta el catálogo, que es el punto ÚNICO de lectura (`produccionTrigoDeGranja`, constants.ts). Sin la
  * variable no se toca nada y la corrida es idéntica a las de siempre.
@@ -128,9 +132,9 @@ if (Number.isFinite(TRIGO_X) && TRIGO_X > 0 && TRIGO_X !== 1) {
   }
 }
 
-/** Lo que guarda un punto de control (ver `BATCH_CHECKPOINT_TICKS`). `worldgenVersion`/`layoutVersion` se
- * añadieron el 2026-09-26 para poder reanudar: sin ellas no hay forma de saber si el checkpoint es de este motor.
- * `version` sigue en 1 porque el cambio es solo aditivo (`scripts/bench-batch-checkpoint.ts` los ignora). */
+/** Lo que guarda un punto de control (ver `BATCH_CHECKPOINT_TICKS`): la partida entera, como la exporta `GameSession`.
+ * Formato 2 desde que los bots juegan desde fuera (doc 12 §10): la memoria de los bots no se guarda porque es
+ * desechable (§3), y al reanudar rehacen sus planes mirando el mundo. */
 interface CheckpointBatch {
   version: number;
   worldgenVersion?: number;
@@ -138,18 +142,14 @@ interface CheckpointBatch {
   seed: number;
   facciones: number;
   tick: number;
-  estado: EstadoSimulacion;
-  estadoMapa: EstadoMapa;
-  estadoRng: number;
-  contadorNpc: number;
-  configNpc: ConfigNpcGobernanza;
+  partida: PartidaExportada;
   perfilForzado: string | null;
   trigoX: number;
 }
 
 function leerCheckpointCompatible(ruta: string): CheckpointBatch {
   const cp = JSON.parse(readFileSync(ruta, 'utf8')) as CheckpointBatch;
-  if (cp.version !== 1) throw new Error(`${ruta}: formato de checkpoint ${cp.version}, este script lee el 1.`);
+  if (cp.version !== 2) throw new Error(`${ruta}: formato de checkpoint ${cp.version}, este script lee el 2.`);
   if (cp.worldgenVersion === undefined || cp.layoutVersion === undefined) {
     throw new Error(`${ruta}: checkpoint sin versión de mundo (anterior a la reanudación): no se puede comprobar que sea de este motor. Vuelve a generarlo.`);
   }
@@ -183,9 +183,8 @@ interface CandidatoFundacion {
 }
 
 /**
- * Selección de posiciones para la fundación INICIAL del batch — alineada con
- * `buscarPosicionFundacionInicialPorDefecto` (`src/session/npcGobernanza.ts`), que ya resolvió las mismas dos
- * decisiones para la partida real. La divergencia previa entre ambas (piedra como puntuación blanda en vez de
+ * Selección de posiciones para la fundación INICIAL del batch — alineada con el sitio inicial de `crearFaccionNpc`
+ * (`src/session/comandos/crearFaccionNpc.ts`), que ya resolvió las mismas dos decisiones para la partida real. La divergencia previa entre ambas (piedra como puntuación blanda en vez de
  * requisito, y un barrido que arrancaba en paso 100) hacía que el 76% de los asentamientos del batch fundaran
  * sin piedra alcanzable — sin Cantera, el gate de nivel 2 (Doc Fase_0_6: 3 de 6 extractores) es inalcanzable
  * sin importar cuánto avance la simulación (ver `issues/granjas_no_escalan_con_poblacion.md`, que arrancó
@@ -199,7 +198,7 @@ interface CandidatoFundacion {
  *   más fino (10) sigue disponible como refuerzo SOLO si 25 no basta para separar `cantidad` posiciones — el
  *   batch, a diferencia del NPC, tiene que colocar muchas a la vez y necesita más candidatos que el NPC
  *   (que solo busca una).
- * - **El desempate usa `MINERALES_BONUS_FUNDACION`** (importada de `npcGobernanza.ts`, no duplicada): cuenta
+ * - **El desempate usa `MINERALES_BONUS_FUNDACION`** (la misma lista que `crearFaccionNpc`): cuenta
  *   de 0 a 4 según cuántos de esos minerales tiene alcanzables, igual que el NPC — antes el batch usaba su
  *   propia lista de 3 sin oro, que además es uno de los 6 tipos del gate de nivel 2 (`mina`).
  */
@@ -1030,23 +1029,11 @@ function construirFotoResumen(
 }
 
 async function main() {
-  const rng = DESDE ? restaurarRng(DESDE.estadoRng) : createRng(SEED);
-
-  const mapaGenerado = generarMapa({ ancho: MAPA_DEFAULT.ancho, alto: MAPA_DEFAULT.alto, seed: SEED });
-  // Una sola fachada para toda la corrida: es dueña de su propio estado de partida del mapa, así que los
-  // yacimientos que se agotan y regeneran se acumulan tick a tick igual que en una partida real.
-  const mapa = crearMapa(mapaGenerado, DESDE?.estadoMapa);
-
-  // Reanudando no se funda nada: el mundo entero viene del checkpoint (`candidatos` vacío deja los bucles de
-  // fundación y su diagnóstico sin nada que hacer).
-  let facciones: Faccion[] = [];
-  if (!DESDE) {
-    for (let i = 0; i < NUM_FACCIONES; i++) {
-      facciones.push(crearFaccion(`faccion-${i + 1}`, `Faccion ${i + 1}`));
-    }
-  } else {
-    console.log(`[reanudado] ${process.env['BATCH_DESDE']} · seed ${SEED} · ${NUM_FACCIONES} Facciones · ticks ${TICK_INICIAL + 1}-${TICK_FINAL}`);
-  }
+  // La partida corre en una `GameSession`, como en el servidor: el tick es solo el tick, y los bots juegan desde fuera
+  // por el puerto, con comandos (doc 12 §10). Reanudando, la partida entera viene del checkpoint.
+  const sesion = DESDE ? GameSession.importar(DESDE.partida) : GameSession.crear('batch', { seed: SEED });
+  let mapa: Mapa = sesion.getMapa();
+  if (DESDE) console.log(`[reanudado] ${process.env['BATCH_DESDE']} · seed ${SEED} · ${NUM_FACCIONES} Facciones · ticks ${TICK_INICIAL + 1}-${TICK_FINAL}`);
 
   const candidatos = DESDE ? [] : elegirPosicionesFundacion(mapa, NUM_FACCIONES);
   if (!DESDE) {
@@ -1056,18 +1043,17 @@ async function main() {
     console.log(`Posiciones con algún otro mineral alcanzable: ${conOtroMineral}/${candidatos.length}`);
   }
 
-  let asentamientos: Asentamiento[] = [];
+  // Andamio hasta el paso 4 (doc 12 §9): las Facciones de bots nacen ya asentadas, cada una con sus cinco héroes bot.
   const idsFundados: string[] = [];
   for (let i = 0; i < candidatos.length; i++) {
-    const faccion = facciones[i]!;
-    const posicion = candidatos[i]!.posicion;
-    const heroes = Array.from({ length: JUGADORES_POR_ASENTAMIENTO }, (_, j) => `jugador-${faccion.id}-${j + 1}`);
-    const resultado = fundarAsentamiento(mapa, facciones, faccion.id, posicion, heroes, asentamientos, instanteDeTick(0));
-    asentamientos.push(resultado.asentamiento);
-    idsFundados.push(resultado.asentamiento.id);
-    // Toda Facción tiene Rey (Doc 2.2): el primer fundador, como en `crearFaccionNpc`. Adopta la tecnología (Doc 6.5).
-    facciones = resultado.facciones.map((f) => (f.id === faccion.id ? asignarRey(f, heroes[0]!) : f));
+    const r = sesion.ejecutar(crearFaccionNpc, { nombre: `Faccion ${i + 1}`, posicion: candidatos[i]!.posicion });
+    if (r.ok && r.datos) idsFundados.push(r.datos.asentamientoId);
   }
+  const bots = new RunnerDeBots(puertoEnProceso(sesion), cerebroDeBot, { semilla: SEED });
+  const darDeAltaBots = () => {
+    for (const h of sesion.getState().heroes) if (h.controlador === 'bot') bots.alta(h.id);
+  };
+  darDeAltaBots();
 
   // `BATCH_RUINAS_DIAG=1`: bosques alcanzables al fundar, medidos al RADIO INICIAL (30) y al techo de nivel 1
   // (60) — no al radio maduro de nivel 2 (90) que usa el filtro de fundación. La hipótesis: un sitio se funda
@@ -1099,40 +1085,7 @@ async function main() {
     );
   }
 
-  // Un checkpoint anterior a la tecnología (Doc 6) arranca la Era I en su propio instante.
-  let estado: EstadoSimulacion = DESDE ? { ...DESDE.estado, tecnologia: DESDE.estado.tecnologia ?? estadoTecnologiaInicial(instanteDeTick(DESDE.tick)) } : {
-    asentamientos,
-    facciones,
-    caravanas: [],
-    ejercitos: [],
-    memoriaPorFaccion: {},
-    tecnologia: estadoTecnologiaInicial(instanteDeTick(0)),
-    acuerdos: [],
-    ordenes: [],
-    relaciones: [],
-    titulos: [],
-    campamentosBandidos: [],
-    campamentosMercenarios: [],
-    mercadoMercenario: { contadores: {}, reponeEn: 0 as never },
-    // Los fundadores son héroes bot: sin registro no tendrían dónde guardar las escuadras que recluten.
-    heroes: asentamientos.flatMap((a) =>
-      a.heroesFundadoresIds.map((id) => heroeBot(id, id, { tipo: 'asentamiento', asentamientoId: a.id }))
-    ),
-  };
-
-  // Palancas de EXPERIMENTO, ninguna cambia el comportamiento por defecto:
-  // - `BATCH_SIN_RECLUTAMIENTO=1`: apunta `tropaId` a una tropa que no existe en `TROPAS_RECLUTABLES`, así
-  //   que `reclutarTropa` lanza `ReclutamientoInvalidoError` y `reclutarParaTodos` lo traga en silencio —
-  //   reclutamiento desactivado sin tocar una línea de la lógica del NPC.
-  // - `BATCH_SIN_ATAQUES=1`: `atacarCampamentos: false` — el NPC deja de atacar campamentos de bandidos.
-  // Sirven para aislar qué sostiene el reclutamiento continuo medido en el batch (`reclutamientosAcumulados`
-  // sube sin que `tropasVivas` crezca): ¿deserción por hambre (moral colapsada, `avanzarMantenimientoTropas`)
-  // o reposición de bajas de combate (`atacarCampamentosCercanos`, permadeath real)? Con las dos activas a la
-  // vez se aísla cada mecanismo por separado — ver `issues/granjas_no_escalan_con_poblacion.md`.
-  const config: ConfigNpcGobernanza = DESDE ? DESDE.configNpc : {
-    ...(process.env['BATCH_SIN_RECLUTAMIENTO'] === '1' ? { tropaId: '__experimento_sin_reclutamiento__' } : {}),
-    ...(process.env['BATCH_SIN_ATAQUES'] === '1' ? { atacarCampamentos: false } : {}),
-  };
+  let estado: EstadoSimulacion = sesion.getState();
 
   const fotos: Foto[] = [];
   let excepcionesAcumuladas = 0;
@@ -1195,12 +1148,6 @@ async function main() {
   const edadAlPedirNivel = new Map<number, number[]>();
   const obraVista = new Set<string>();
 
-  // Contador de ids del NPC, hilado tick a tick igual que `session/comandos/avanzarFaccionesNpc.ts`: sin esto
-  // arranca en 0 cada tick y `anadirEdificioManualmente` genera ids `edificio-<asent>-manual-<n>` que chocan
-  // entre ticks. `avanzarConstruccion` indexa su `Map` de resultados por id, así que dos edificios con el
-  // mismo id se pisan — el Barracón/Galería que el NPC re-encola cada tick corrompía la cola y ni él ni la
-  // Curtiduría auto llegaban nunca a construirse (edificios de transformación a 0 en ~la mitad de las seeds).
-  let contadorNpc = DESDE?.contadorNpc ?? 0;
 
   const guerra = new MedidorGuerra(estado, TICK_INICIAL);
   const tecnologia = new MedidorTecnologia(estado.tecnologia, TICK_INICIAL);
@@ -1210,8 +1157,6 @@ async function main() {
       // `instante`/`momento` derivados del tick con la misma fórmula que el backend (`instanteDeTick`,
       // Fase D / doc 10): una corrida de batch tiene que ser reproducible (mismo SEED -> mismo resultado),
       // así que nada del contexto puede depender del reloj de la máquina.
-      const instante = instanteDeTick(tick);
-      const contexto = { instante, momento: isoDeInstante(instante), rng };
       const asentamientosPrevios = diagFundacion ? estado.asentamientos : [];
       const estadoPrevio = diagFundacion
         ? new Map(
@@ -1231,10 +1176,10 @@ async function main() {
             })
           )
         : new Map();
-      const trasMotorCrudo = avanzarSimulacion(estado, mapa, contexto);
-      // Los logros que salen de eventos los cuenta `exito` en la partida real; aquí no hay comandos, así que se cuentan a mano.
-      const trasMotorContado = { ...trasMotorCrudo, tecnologia: sumarContadores(trasMotorCrudo.tecnologia, contadoresDeEventos(trasMotorCrudo.eventosDominio)) };
-      const trasMotor = trasMotorContado;
+      const antes = estado;
+      const tickR = sesion.avanzarTick();
+      const trasMotor = { ...sesion.getState(), eventosDominio: tickR.eventos };
+      mapa = sesion.getMapa();
       if (diagFundacion) {
         for (const ev of trasMotor.eventosDominio) {
           if (ev.codigo === 'expansion.asentamiento_fundado') {
@@ -1283,17 +1228,28 @@ async function main() {
           }
         }
       }
-      const trasNpc = avanzarNpcGobernanza(trasMotor, mapa, contexto, { ...config, contadorInicial: contadorNpc });
-      guerra.registrarTick(tick, estado, trasMotor, trasNpc.estado, trasNpc.stats);
-      tecnologia.registrarTick(tick, trasNpc.estado.tecnologia);
-      contadorNpc = trasNpc.contadorFinal;
-      estado = trasNpc.estado;
-      reclutamientosAcumulados += trasNpc.stats.reclutamientosExitosos;
-      campamentosDestruidosAcumulados += trasNpc.stats.campamentosDestruidos;
-      truequesSupervivenciaAcumulados += trasNpc.stats.truequesSupervivenciaPropuestos;
-      caravanasFundacionLanzadasAcumuladas += trasNpc.stats.caravanasFundacionLanzadas;
-      campanasLanzadasAcumuladas += trasNpc.stats.campanasLanzadas;
-      replieguesAcumulados += trasNpc.stats.repliegues;
+      bots.trasTick(tick, tickR.eventos);
+      darDeAltaBots();
+      estado = sesion.getState();
+      // Lo que hicieron los bots este tick, por sus eventos (los de sus comandos, posteriores al del tick).
+      const deBots = sesion.getState().eventosDominio.filter((e) => e.version > tickR.version);
+      const cuenta = (codigo: string, filtro: (e: (typeof deBots)[number]) => boolean = () => true) => deBots.filter((e) => e.codigo === codigo && filtro(e)).length;
+      const stats = {
+        reclutamientosExitosos: cuenta('tropas.reclutadas'),
+        campamentosDestruidos: cuenta('combate.campamento_destruido'),
+        truequesSupervivenciaPropuestos: cuenta('comercio.trueque_propuesto'),
+        caravanasFundacionLanzadas: cuenta('expansion.caravana_lanzada'),
+        campanasLanzadas: cuenta('ejercito.movilizado', (e) => (e.payload as { objetivo?: { tipo?: string } }).objetivo?.tipo === 'asentamiento'),
+        repliegues: cuenta('ejercito.repliegue'),
+      };
+      guerra.registrarTick(tick, antes, { ...trasMotor, eventosDominio: [...tickR.eventos, ...deBots] }, estado, stats);
+      tecnologia.registrarTick(tick, estado.tecnologia);
+      reclutamientosAcumulados += stats.reclutamientosExitosos;
+      campamentosDestruidosAcumulados += stats.campamentosDestruidos;
+      truequesSupervivenciaAcumulados += stats.truequesSupervivenciaPropuestos;
+      caravanasFundacionLanzadasAcumuladas += stats.caravanasFundacionLanzadas;
+      campanasLanzadasAcumuladas += stats.campanasLanzadas;
+      replieguesAcumulados += stats.repliegues;
       for (const a of estado.asentamientos) {
         const antes = duenoPorAsentamiento.get(a.id);
         if (antes !== undefined && antes !== a.faccionId) {
@@ -1353,17 +1309,13 @@ async function main() {
       const destino = resolve(CHECKPOINT_DIR!, `batch-seed${SEED}-f${NUM_FACCIONES}-tick${tick}.json`);
       mkdirSync(dirname(destino), { recursive: true });
       writeFileSync(destino, JSON.stringify({
-        version: 1,
+        version: 2,
         worldgenVersion: WORLDGEN_VERSION,
         layoutVersion: LAYOUT_VERSION,
         seed: SEED,
         facciones: NUM_FACCIONES,
         tick,
-        estado,
-        estadoMapa: mapa.estadoActual(),
-        estadoRng: rng.estado(),
-        contadorNpc,
-        configNpc: config,
+        partida: sesion.exportar(),
         perfilForzado: PERFIL_FORZADO ?? null,
         trigoX: TRIGO_X,
       }));
@@ -1613,7 +1565,7 @@ async function main() {
   for (const linea of guerra.informe()) console.log(linea);
   for (const linea of tecnologia.informe(estado.tecnologia, tickDeInstante)) console.log(linea);
 
-  // Trueques para crecer (npcGobernanza, 2026-09-27): los que piden algo que no es de Mantenimiento.
+  // Trueques para crecer (Tesorero bot): los que piden algo que no es de Mantenimiento.
   const paraCrecer = new Map<string, Map<string, number>>();
   // Trueque compuesto (Doc 3.2): lo pedido son las líneas del lado B; cada recurso pedido cuenta una vez por acuerdo.
   for (const ac of estado.acuerdos) {
