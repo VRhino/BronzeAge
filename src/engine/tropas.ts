@@ -202,7 +202,7 @@ export function consumoRacionDeEscuadrones(escuadrones: readonly Escuadron[], fa
 
 /** Lo que come una COLUMNA (Doc 5.13): sus soldados más sus jugadores. El sumando por participante es lo que
  * impide que un viajero sin tropas viaje gratis — con cero escuadrones el término de arriba es 0. */
-function consumoRacionDeColumna(escuadrones: readonly Escuadron[], participantes: number, factorConsumo = 1): number {
+export function consumoRacionDeColumna(escuadrones: readonly Escuadron[], participantes: number, factorConsumo = 1): number {
   return consumoRacionDeEscuadrones(escuadrones, factorConsumo) + participantes * MOVIMIENTO.consumoPorParticipante * factorConsumo;
 }
 

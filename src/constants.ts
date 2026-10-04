@@ -1929,8 +1929,10 @@ export const MERCENARIOS = {
   intentosColocacion: 2000,
   /** Se mezcla con la seed del mapa: semilla derivada (D35), no consume el RNG de la partida. */
   salSemilla: 0x6d657263,
-  /** Ración gratis del residente (D24, §8.1): este trigo al salir de su campamento, una vez cada tanto; no se acumula. PLACEHOLDER. */
-  racion: { trigo: 60, cadaMinutos: 30 },
+  /** Ración gratis del residente (D24, D51, §8.1): al salir de su campamento, el trigo que come la columna con la que sale en
+   * estos minutos de marcha —medida en tropa, no en trigo fijo, para que llegue al anillo de bandidos y vuelva—; una vez cada
+   * tanto; no se acumula. PLACEHOLDER. */
+  racion: { minutos: 45, cadaMinutos: 30 },
   /** Tropa prestada al residente (D25, D45, D80): escuadras de leva comunal de estas unidades, gratis al pedirlas y al reponerlas. PLACEHOLDER. */
   prestamo: { unidades: 15 },
   /** Ningún asentamiento se funda a menos de esto de un campamento (D16, §8.2): protección (60) + zona inicial (30) + margen. */

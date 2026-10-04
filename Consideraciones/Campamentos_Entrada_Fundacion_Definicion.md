@@ -171,6 +171,7 @@ la desconexión: se hace **inútil para huir**.
 | D77 | **Cualquier héroe puede entrar en cualquier campamento** (enclave neutral), como en un asentamiento que no es el suyo: entra **con su columna**, y al salir elige solo entre las unidades que trajo y lo que lleva en el carro. |
 | D78 | **Protección (M4)**: a menos de 60 de un campamento nadie inicia un combate, ni jugadores ni bandidos. |
 | D80 | **El préstamo es gratis, al pedirlo y al reponerlo, y sin deuda** (corrige D25b y el préstamo del §8.1). El residente elige **una, dos o las tres** tropas de leva comunal (milicia de lanceros, leñadores, granjeros), una escuadra de cada. Es la forma fácil de tener tropa al principio y aprender a usarla antes de tener la propia. |
+| D81 | **La ración gratis se mide en minutos de marcha de la columna con la que se sale, no en trigo fijo** (corrige la cifra de D24 y el §8.1; 2026-10-04). Con el coste de terreno real (`mapa.costeEnPunto`, ≈2× en bosque o colina), ir y volver del anillo (150-250) con 15 lanceros cuesta de 41 a 650 de trigo según semilla y dirección, casi siempre más de 100: con 60 no cazaba nadie. Ahora: `consumo de la columna por minuto × 45` (15 lanceros + héroe ≈ 124), cada 30 min, sin acumular y hasta el hueco del carro. PLACEHOLDER. |
 | D79 | **Contador doble (M3)**: cada campamento guarda cuántos lo eligieron como inicial, además de sus residentes actuales; la pantalla de elección muestra los dos. |
 
 ## 3. Lo que ya existe y se reutiliza (medido en el código)
@@ -384,8 +385,9 @@ queda para lo que la exceda: niveles altos, más gente, viaje de fundación.
 
 Propuesta:
 
-- **Ración gratis**: **60 trigo** por residente, que se rellenan **cada 30 min** en su campamento (una salida de
-  nivel 1 con margen). Lo que sobra vuelve al campamento (D50). No acumulable.
+- **Ración gratis**: lo que come **la columna con la que sale durante 45 min de marcha** (D81), que se rellena **cada
+  30 min** en su campamento. Lo que sobra vuelve al campamento (D50). No acumulable. *(Antes 60 trigo fijos: con el
+  coste real del terreno no llegaba al anillo y volvía; ver D81.)*
 - **Ciclo de una salida de nivel 1**: 10 min de ida + combate (≤ 15 min en Unity, inmediato con números) + 10 min
   de vuelta ≈ **30 min → 2 salidas por hora**.
 - **Botín** (oro, D22), por héroe y salida, con D21 (prima pequeña por agruparse):

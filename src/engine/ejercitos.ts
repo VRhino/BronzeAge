@@ -39,7 +39,7 @@ import { avanzarPosicionEnRuta } from './movimiento';
 import { aristasDeRed, RED_VACIA } from './redCaminos';
 import { enRefugio } from './zones';
 import { agregarRecurso, cantidadDisponible, descontarRecursos } from './almacen';
-import { avanzarRacion, consumoRacionDeEscuadrones, reservaDeTrigo } from './tropas';
+import { avanzarRacion, consumoRacionDeColumna, consumoRacionDeEscuadrones, reservaDeTrigo } from './tropas';
 import { puedeLlevar } from './liderazgo';
 import { esResidente, estanAliadas } from './pertenencia';
 import { lineasPendientes, type LadoTrueque } from './trueque';
@@ -578,9 +578,10 @@ export function salirDelCampamento(
     suministro[recurso] = (suministro[recurso] ?? 0) + pedido;
     hueco -= pedido;
   }
-  // La ración gratis del residente (D24): al salir, si ya pasó el plazo desde la última. No se acumula: sobra y vuelve al entrar.
+  // La ración gratis del residente (D24, D51): al salir, si ya pasó el plazo desde la última, lo que come en marcha esta columna
+  // durante `MERCENARIOS.racion.minutos`. No se acumula: sobra y vuelve al entrar.
   const toca = heroe.racionEn === undefined || instante - heroe.racionEn >= MERCENARIOS.racion.cadaMinutos * 60_000;
-  const racion = toca ? Math.min(MERCENARIOS.racion.trigo, Math.max(0, hueco)) : 0;
+  const racion = toca ? Math.min(Math.round(consumoRacionDeColumna(escuadrones, 1) * MERCENARIOS.racion.minutos), Math.max(0, hueco)) : 0;
   if (racion > 0) suministro['trigo'] = (suministro['trigo'] ?? 0) + racion;
   const columnaId = aparcada?.id ?? id;
   const comoEjercito = politicaDeUnion !== 'rechazar';
