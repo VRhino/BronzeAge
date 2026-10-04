@@ -10,6 +10,7 @@ import { GameSession } from '../gameSession';
 import { crearHeroe } from '../comandos/crearHeroe';
 import { entrarEnCampamento, salirDelCampamento } from '../comandos/presencia';
 import { atacar } from '../comandos/interaccion';
+import { separarseDelEjercito, unirseEnCampo } from '../comandos/columna';
 import { escuadronDePrueba } from '../../engine/__tests__/fixtures';
 
 const PARAMS = { displayName: 'Ana', classDefinitionId: 'Spear', genero: 'femenino' as const, avatar: { cabezaId: '', peloId: '', barbaId: '', cejasId: '' } };
@@ -118,6 +119,17 @@ describe('protección del campamento (M4/D78)', () => {
 });
 
 describe('la ración gratis del residente (D24, D50)', () => {
+  it('unirse y separarse en campo no la convierte en trigo guardable (bug del cerebro sin plaza)', () => {
+    const { sesion, heroeId, heroe, opc } = nacido();
+    const otro = sesion.ejecutar(crearHeroe, { ...PARAMS, displayName: 'Bea', campamentoId: 'mercenarios-0' }, { actor: 'jugador-2' }).datos!.heroeId;
+    const ejercitoId = sesion.ejecutar(salirDelCampamento, { campamentoId: 'mercenarios-0', heroeId: otro, escuadronIds: [], carga: {}, politicaDeUnion: 'aceptar' }, { actor: otro }).datos!.ejercitoId;
+    sesion.ejecutar(salirDelCampamento, { campamentoId: 'mercenarios-0', heroeId, escuadronIds: [], carga: {} }, opc);
+    expect(sesion.ejecutar(unirseEnCampo, { ejercitoId, heroeId }, opc).ok).toBe(true);
+    expect(sesion.ejecutar(separarseDelEjercito, { heroeId }, opc).ok).toBe(true);
+    expect(sesion.ejecutar(entrarEnCampamento, { campamentoId: 'mercenarios-0', heroeId }, opc).ok).toBe(true);
+    expect(heroe().almacenPersonal?.['trigo'] ?? 0, 'nada de ración en el almacén').toBe(0);
+  });
+
   it('se da al salir una vez por plazo, se come la primera y no se puede guardar', () => {
     const { sesion, heroeId, columna, opc } = nacido();
     sesion.ejecutar(salirDelCampamento, { campamentoId: 'mercenarios-0', heroeId, escuadronIds: [], carga: {} }, opc);

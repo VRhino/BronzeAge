@@ -967,11 +967,14 @@ export function unirseEnCampo(ejercito: EjercitoConTropa, columna: EjercitoConTr
     suministro[recurso] = (suministro[recurso] ?? 0) + cantidad;
   }
 
+  // La ración gratis de cada uno sigue siendo ración en el carro común (D50): si no, unirse la convertiría en trigo guardable.
+  const racion = racionQueQueda(ejercito) + racionQueQueda(columna);
   return {
     ...ejercito,
     participantes: [...ejercito.participantes, ...columna.participantes.map((p) => ({ ...p, unidoEn: instante }))],
     escuadrones: [...ejercito.escuadrones, ...columna.escuadrones],
     suministro,
+    racion: racion > 0 ? racion : undefined,
     // La petición atendida se retira: ya no hay nada que contestar.
     peticionesDeUnion: ejercito.peticionesDeUnion?.filter((p) => !columna.participantes.some((q) => q.heroeId === p.heroeId)),
   };
@@ -1051,6 +1054,9 @@ export function desgajar(ejercito: EjercitoConTropa, heroeId: string, id: string
     if (cantidad - parte > 0) suministroResto[recurso] = cantidad - parte;
   }
 
+  // La ración se reparte igual que el trigo, a prorrata (D50): separarse no la convierte en trigo guardable.
+  const racionTotal = racionQueQueda(ejercito);
+  const racionSuya = racionTotal * fraccion;
   const idsSuyos = new Set(suyos.map((e) => e.id));
   return {
     ejercito: {
@@ -1058,6 +1064,7 @@ export function desgajar(ejercito: EjercitoConTropa, heroeId: string, id: string
       participantes: ejercito.participantes.filter((p) => p.heroeId !== heroeId),
       escuadrones: ejercito.escuadrones.filter((e) => !idsSuyos.has(e.id)),
       suministro: suministroResto,
+      racion: racionTotal - racionSuya > 0 ? racionTotal - racionSuya : undefined,
     },
     columna: {
       id,
@@ -1071,6 +1078,7 @@ export function desgajar(ejercito: EjercitoConTropa, heroeId: string, id: string
       escuadronIds: suyos.map((e) => e.id),
       escuadrones: suyos,
       suministro: suministroColumna,
+      ...(racionSuya > 0 ? { racion: racionSuya } : {}),
       caravanasAdjuntasIds: [],
       objetivo: { tipo: 'punto', punto: ejercito.posicionActual },
       ruta: [],
